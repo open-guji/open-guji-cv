@@ -209,6 +209,24 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
 
+def _with_yolo_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`CellShrinkParams.yolo_weights_fp`：闸开着时按权重**内容**算（Y1，overview#373）。路径是机器属性、
+    不进指纹（`path_params`），内容进。同 `_with_witness_fingerprint` 的理由：`model_post_init` 没有
+    环境，只能在 `params_for` 里补，引擎指纹与 `run_page` 才拿到同一份。读不到权重 = 空串（闸弃权）。"""
+    if not getattr(p, "yolo_gate", False) or getattr(p, "yolo_weights_fp", ""):
+        return p
+    import hashlib
+
+    from ..utils.yolo_boxes import resolve_weights, sibling_layout, weights_fingerprint
+    slide = resolve_weights(getattr(p, "yolo_weights", ""))
+    fps = (weights_fingerprint(slide),
+           weights_fingerprint(getattr(p, "yolo_layout_weights", "") or sibling_layout(slide)))
+    if not all(fps):
+        return p                                     # 缺任一份权重 = 闸弃权，指纹留空
+    fp = hashlib.sha256("|".join(fps).encode()).hexdigest()[:16]
+    return type(p)(**{**p.model_dump(), "yolo_weights_fp": fp})
+
+
 def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """`AlignRefParams.witness_fingerprint` 按**这册书的 `references` 文件**算
     （2026-09-27，任务书-D-多证人对齐策略）。只对 `witness_strategy != "legacy"`
@@ -367,6 +385,7 @@ class RunContext:
         p = _with_book_corpus(p, self)
         p = _with_book_real_proto(p, self)
         p = _with_witness_fingerprint(p, self)
+        p = _with_yolo_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
         return p

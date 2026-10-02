@@ -46,6 +46,12 @@ gpu = [
 onnx = [
     "rapidocr-onnxruntime>=1.3",
 ]
+# YOLO 收框复核闸（utils/yolo_boxes.py，cell_shrink.yolo_gate，缺省关）：只要 onnxruntime（CPU，
+# 装后 ~62 MB 实测），不要 torch。懒导入 + 缺件弃权。权重不进本仓：指向 yolo_tool 仓的
+# model/{slide,type}/best.onnx（12.5 + 104 MB），路径参数 `yolo_weights` 或环境变量 GUJI_YOLO_WEIGHTS。
+yolo = [
+    "onnxruntime>=1.16",
+]
 # torch 模型：生僻字 CNN 候选（clustering/cnn_candidates.py：分类头 + embedding 检索）
 # 与切点 U-Net 判官（utils/cut_select.py）。两处都**懒导入 + 缺件降级**，不装也能跑
 # （`CnnCandidates.available` 为 False 时候选退回字体 HOG，UNetJudge 任何异常返回 None），

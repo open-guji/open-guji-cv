@@ -12,7 +12,7 @@ P0 的已知简化：Step3 已拆好的夹注 a/b 半格在这里合成一个满
 from __future__ import annotations
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec, cell_key, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
@@ -31,9 +31,103 @@ class CellShrinkParams(BaseModel):
     `steps/occlusion.page_occluded`（与 seed_admit 入库闸同一入口、同一组默认阈值），**只打标不改几何**——
     框、char/blank、字块一概不动，非遮挡格产物逐字节不变。此前切分完全不知道印章：字块裁得过宽、
     吞进半幅印泥，下游（定字裁决、人审卡）拿不到任何标记。"""
+    yolo_gate: bool = False
+    """YOLO 收框复核闸（Y1，overview#373，缺省关）。同一格里 yolo_tool 单字模型（**原生喂法**：整页版面
+    模型出列条 → 裁条 → 单字模型，跑在原图上）的框比 CV 紧框
+    **多包进来**的墨占比 > `yolo_extra_ink` → 给这格打 `yolo_box` 旗，`seed_admit.yolo_box_review`
+    开着时它不放行、落人审。专抓「首字只框到最上一笔」「把下版框线当末字」「整列切成半宽框」。
+    **只打标，不改框**（YOLO 框兜底没做：YOLO 框在页坐标，字块要在列图坐标重裁，ColumnMapper 只有
+    列→页的正向映射，见 HANDOFF_Y1.md）。缺 onnxruntime／权重、推理失败、印章多的页
+    （`yolo_max_seal`）一律弃权。关着时 `yolo_*` 都不进 dump，产物与参数哈希逐字节不变。"""
+    yolo_weights: str = ""
+    """yolo_tool 的 `model/slide/best.onnx` 路径（空 = 取环境变量 `GUJI_YOLO_WEIGHTS`）。路径不进指纹
+    （`path_params`），权重**内容**指纹在 `yolo_weights_fp`。"""
+    yolo_layout_weights: str = ""
+    """版面模型 `model/type/best.onnx` 路径（空 = 与 `yolo_weights` 并排的 `../type/best.onnx`）。同样不进指纹。"""
+    yolo_weights_fp: str = ""
+    """自动填（`RunContext.params_for`）：两份权重内容的联合指纹（sha256 前 16 位）。读不到权重 = ""。"""
+    yolo_extra_ink: float = 0.05
+    """多出墨占比门槛（见 `utils/yolo_boxes.extra_ink_ratio`）。**0.05 是 vol02/vol03 共 294 页、4.6 万格上标的**
+    （不是 yolo_tool 评测里的 0.25：贴版框那一侧的墨已按首/末格跳过，剩下的真错最多 0.14，0.25 一格都不命中；
+    0.05 命中 38 格＝每页 0.13 格，目视约 1/4–1/3 是 CV 真错——言／益只框到一半、藏內两字合一格）。
+    见 HANDOFF_Y1.md。"""
+    yolo_max_seal: int = 2
+    """一页里 `seal_region` 格数 > 这个数 = 印章页，闸整页弃权（YOLO 在印泥散点上成片出假字）。
+    依赖 `seal_flag`；`seal_flag` 关着这条不起作用。"""
     frame_guard: bool = True
     """首/末格端区抹「版框横条行」（extractor.mask_frame_bars_outside）。刻本开；现代排印本
     （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_yolo_when_off(self, handler):
+        """`yolo_gate` 关着时 `yolo_*` 不进 dump：没开的书参数哈希与加字段前逐位相同。
+        闸开着时 `yolo_weights`（路径）仍进 dump，由 `path_params` 剔出指纹。"""
+        d = handler(self)
+        if isinstance(d, dict):
+            if not self.yolo_gate:
+                for k in ("yolo_gate", "yolo_weights", "yolo_weights_fp", "yolo_extra_ink",
+                          "yolo_max_seal", "yolo_layout_weights"):
+                    d.pop(k, None)
+        return d
+
+
+def _yolo_weights(p: CellShrinkParams, seal: dict) -> tuple[str, str] | None:
+    """闸这一页要不要跑：开着、两份权重都可读、不是印章页 → (单字, 版面) 权重路径；否则 None（弃权，不报错）。"""
+    if not p.yolo_gate or len(seal) > p.yolo_max_seal:
+        return None
+    from pathlib import Path
+
+    from ..utils.yolo_boxes import resolve_weights, sibling_layout
+    slide = resolve_weights(p.yolo_weights)
+    layout = p.yolo_layout_weights or sibling_layout(slide)
+    return (slide, layout) if slide and Path(slide).is_file() and Path(layout).is_file() else None
+
+
+class _YoloPage:
+    """一页原图上的 YOLO 单字框 + 墨图（页坐标，左上原点），供逐格复核（`utils/yolo_boxes`）。"""
+
+    def __init__(self, boxes, ink):
+        self.boxes, self.ink = boxes, ink
+
+    @classmethod
+    def of(cls, weights: tuple[str, str], raw: np.ndarray) -> "_YoloPage | None":
+        from ..utils import yolo_boxes as yb
+        try:
+            det = yb.detect_page(weights[0], weights[1], raw)
+        except yb.YoloUnavailable:
+            return None
+        return cls([(x0, y0, x1, y1) for x0, y0, x1, y1, _, _ in det], (raw < 128).astype(np.uint8))
+
+
+def _page_box(mapper: ColumnMapper, box) -> tuple[float, float, float, float]:
+    """列图矩形 → 原图（左上原点）外包框。"""
+    x0, y0, x1, y1 = (float(v) for v in box)
+    pts = [mapper.to_page_tl(x, y) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
+    xs, ys = [q[0] for q in pts], [q[1] for q in pts]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _yolo_ratio(yp: _YoloPage, mapper: ColumnMapper, bbox, cell_rect,
+                skip_top: bool = False, skip_bottom: bool = False):
+    """这一格 YOLO 框比 CV 紧框多出的墨占比。返回 `(占比, 页坐标 YOLO 框)`；这格 YOLO 没出字、
+    坐标映射失败 = `(None, None)`（弃权）。"""
+    from ..utils import yolo_boxes as yb
+    try:
+        cv = _page_box(mapper, bbox)
+        cell = _page_box(mapper, cell_rect)
+    except Exception:                                     # noqa: BLE001 —— 映射不了就弃权
+        return None, None
+    y = yb.match_yolo(cv, (cell[1], cell[3]), yp.boxes, (cell[0], cell[2]))
+    if y is None:
+        return None, None
+    return yb.extra_ink_ratio(yp.ink, cv, y, (cell[1], cell[3]), skip_top, skip_bottom), y
+
+
+def _yolo_check(yp: _YoloPage, mapper: ColumnMapper, bbox, cell_rect, thr: float,
+                skip_top: bool = False, skip_bottom: bool = False):
+    """占比 > thr → 命中的 YOLO 框（页坐标），否则 None。"""
+    r, y = _yolo_ratio(yp, mapper, bbox, cell_rect, skip_top, skip_bottom)
+    return y if r is not None and r > thr else None
 
 
 def _upright(ctx: RunContext, patch):
@@ -88,12 +182,13 @@ class CellShrinkStep(Step):
         id="cell_shrink", title="Step4 字框收缩", version="1.6", unit="cell",
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
+        path_params=("yolo_weights", "yolo_layout_weights"),     # 权重路径是机器属性；内容指纹走 yolo_weights_fp
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
-                   "open_guji_cv.steps.occlusion"),
+                   "open_guji_cv.steps.occlusion", "open_guji_cv.utils.yolo_boxes"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
@@ -219,6 +314,14 @@ class CellShrinkStep(Step):
             from .seed_admit import SeedAdmitParams
             seal = page_occluded(ctx, page, SeedAdmitParams())
         out: list[ColumnChars] = []
+        p: CellShrinkParams = ctx.params_for(self)  # type: ignore[assignment]
+        yolo_w = _yolo_weights(p, seal)
+        yolo = None
+        if yolo_w:
+            try:
+                yolo = _YoloPage.of(yolo_w, ctx.raw_page(page))
+            except FileNotFoundError:
+                yolo = None
         for cc in cells.columns:
             if not cc.ok:
                 out.append(ColumnChars(col=cc.col, ok=False, error=cc.error))
@@ -230,6 +333,9 @@ class CellShrinkStep(Step):
             step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
             pos_to_slot = {c.pos: c.slot for c in cc.cells}
             slot_to_pos = {c.slot: c.pos for c in cc.cells}
+            x_lo, x_hi = cc.content_x or (0.0, float(img.shape[1]))
+            cell_rect = {c.pos: (float(x_lo), float(c.y0), float(x_hi), float(c.y1)) for c in cc.cells}
+            first_pos, last_pos = min(c.pos for c in cc.cells), max(c.pos for c in cc.cells)
             seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                      if c.kind == "char" and (c.seam_top or c.seam_bottom)}
             # 多候选切点，只收 candidates ≥2 的（单一候选＝算法有把握，见
@@ -265,6 +371,13 @@ class CellShrinkStep(Step):
                 frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
                 if frame_bar:
                     cell_type, has_patch = "empty", False
+                yolo_flags: list[str] = []
+                if (yolo is not None and mapper is not None and not inst.sub and has_patch
+                        and cell_type == "char" and pos in cell_rect and (cc.col, slot, "") not in seal):
+                    hit = _yolo_check(yolo, mapper, bbox, cell_rect[pos], p.yolo_extra_ink,
+                                      skip_top=pos == first_pos, skip_bottom=pos == last_pos)
+                    if hit is not None:
+                        yolo_flags.append("yolo_box")
                 cand_variants: list[CandidatePatch] = []
                 if not inst.sub and has_patch and cell_type == "char":
                     cand_variants = self._cand_variants(
@@ -273,7 +386,7 @@ class CellShrinkStep(Step):
                 if has_patch and cell_type == "char":
                     ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
                     patch_key = key
-                flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
+                flags = list(inst.flags) + (["frame_bar"] if frame_bar else []) + yolo_flags
                 if (cc.col, slot, inst.sub or "") in seal:
                     flags.append("seal_region")
                 s3_kind = step3_kind.get(pos, "char")
