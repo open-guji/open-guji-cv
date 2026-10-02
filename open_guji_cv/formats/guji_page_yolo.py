@@ -46,7 +46,7 @@ import math
 import sys
 from pathlib import Path
 
-SCHEMA_ID = "guji-page/0"
+SCHEMA_ID = "guji-page/0.1"
 LANE_OF_CLS = {"text": "main", "subText": "jz_r", "subText2": "jz_l",
                "midText": "main", "midSubText": "jz_r"}
 REGION_OF_CLS = {"midText": "banxin", "midSubText": "banxin"}
@@ -203,6 +203,9 @@ def page_to_guji(key: str, p: dict, *, book_id: str, volume: int, size=None, sou
         "volume": {"index": int(volume)},
         "page": {"index": page_index},
         "image": image,
+        # yolo 的坐标在 PDF 渲染图上，没有 IIIF canvas：id/seq 留 null，canvas 帧 = 渲染图
+        "canvas": {"id": None, "seq": None, "width": image["width"], "height": image["height"]},
+        "zi": [],
         "producers": {"yolo": {"tool": "yolo_tool"}},
         "text": tokens,
         "norm": [],

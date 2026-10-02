@@ -19,7 +19,8 @@ from ..core.spec import page_key
 from ..errors import ProductMissing
 from ..products.store import ProductStore
 from ..report.slots import cells_step, page_slots
-from .guji_page import (SCHEMA_ID, intersects, mint_id, quad_bounds, tr_bbox_to_xywh,
+from .guji_page import (SCHEMA_ID, canvas_frame, ia_image_id, make_canvas, remap_geometry,
+                         seq_for_ws_page, intersects, mint_id, quad_bounds, tr_bbox_to_xywh,
                         tr_point_to_tl, union_xywh)
 
 LANE_OF_KIND = {"char": "main", "jiazhu_a": "jz_r", "jiazhu_b": "jz_l", "jiazhu_solo": "solo"}
@@ -226,16 +227,68 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
         "volume": meta["volume"],
         "page": meta["page"],
         "image": image,
+        "canvas": None,
         "producers": producers,
         "text": text,
         "norm": list(meta.get("norm") or []),
+        "zi": list(meta.get("zi") or []),
         "regions": [region],
         "glyphs": glyphs,
         "marks": marks,
     }
-    if stale:
-        page_obj["warnings"] = [f"Step3/Step7 对不上（产物过期）：{x}" for x in stale]
+    warnings = [f"Step3/Step7 对不上（产物过期）：{x}" for x in stale]
+    page_obj["canvas"] = _canvas(meta, page, image, warnings, page_obj)
+    if warnings:
+        page_obj["warnings"] = warnings
     return page_obj
+
+
+def _canvas(meta: dict, page: int, image: dict, warnings: list, page_obj: dict) -> dict:
+    """定 canvas（网站总管 #357 约定），必要时把几何从 CV 跑批那张图搬到 canvas 上。
+
+    - `meta.canvas` 显式给了就用它；
+    - 否则按 `meta.split_rows`（该册在整理总管「合扫拆页裁剪框」表里的行）把工作区页号换成页序：
+      拆块页 canvas = 裁剪框（`source.selector`），其余 canvas = 整张原叶 = 本页图；
+    - CV 跑批那张图的帧（`image.region`）与 canvas 帧不同 → `remap_geometry` 搬过去并记一条 warning。
+    """
+    book_id, vol = meta["book"]["id"], int(meta["volume"]["index"])
+    item = meta["volume"].get("ia_item")
+    W, H = image["width"], image["height"]
+    if meta.get("canvas"):
+        c = dict(meta["canvas"])
+        if c.get("seq") and not c.get("id"):
+            from .guji_page import canvas_id
+            c["id"] = canvas_id(book_id, vol, c["seq"])
+    else:
+        seq, row = seq_for_ws_page(page, meta.get("split_rows"))
+        if row:
+            c = make_canvas(book_id, vol, seq, width=row["xywh"][2], height=row["xywh"][3],
+                            source_id=ia_image_id(item, row["ia_leaf"]) if item else None,
+                            source_size=row["orig_size"], xywh=row["xywh"])
+        else:
+            c = make_canvas(book_id, vol, seq, width=W, height=H)
+    dst = canvas_frame(c)
+    reg = image.get("region")
+    if reg is None:
+        if (W, H) != (dst["width"], dst["height"]):
+            warnings.append(f"CV 跑批的图 {W}×{H} 与 canvas {dst['width']}×{dst['height']} 尺寸不同、"
+                            "又没给 image.region，坐标没法换到 canvas——按原样保留，需人核")
+        elif dst.get("region"):
+            image["region"] = list(dst["region"])          # 跑批的图就是这一块：region ⇔ selector
+        return c
+    src = {"width": W, "height": H, "region": reg,
+           "source": {"width": (image.get("source") or {}).get("width"),
+                      "height": (image.get("source") or {}).get("height")}}
+    if dst.get("region") is None:
+        dst = dict(dst, region=[0, 0, dst["width"], dst["height"]])
+    if [float(v) for v in reg] != [float(v) for v in dst["region"]] or (W, H) != (dst["width"], dst["height"]):
+        had = {g["id"] for g in page_obj["glyphs"] if g.get("box")}
+        n = remap_geometry(page_obj, src, dst)
+        lost = [g["cv_id"] for g in page_obj["glyphs"] if g["id"] in had and not g.get("box")]
+        warnings.append(f"坐标已从 CV 跑批的图（原叶上 xywh={','.join(map(str, reg))}）换到 canvas "
+                        f"{c.get('seq')}（xywh={','.join(map(str, dst['region']))}），裁到 canvas 内 {n} 个框"
+                        + (f"；整个落在 canvas 外、box 置 null 的字框 {len(lost)} 个：{','.join(lost)}" if lost else ""))
+    return c
 
 
 def export_page(products_root: Path | str | None, book: str, page: int, meta: dict,
