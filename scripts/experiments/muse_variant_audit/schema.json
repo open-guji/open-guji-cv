@@ -1,0 +1,10 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["relation", "same_char", "reason"],
+  "properties": {
+    "relation": {"type": "string", "enum": ["同字异形", "通假借用", "形近易混", "义近相关", "简繁古今", "无关", "拿不准"]},
+    "same_char": {"type": "string", "enum": ["是", "否", "拿不准"]},
+    "reason": {"type": "string", "maxLength": 60}
+  }
+}
