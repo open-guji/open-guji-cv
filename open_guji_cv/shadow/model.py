@@ -29,10 +29,11 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-from .signals import FEATURES, SIGNAL_VERSION
+from .signals import COMPATIBLE_VERSIONS, FEATURES, SIGNAL_VERSION
 
 FORMAT = 1
 DEFAULT_MODEL = Path(__file__).resolve().parents[2] / "models" / "shadow_admit" / "shadow_gate_v1.joblib"
+PROMOTE_MODEL = Path(__file__).resolve().parents[2] / "models" / "shadow_admit" / "shadow_gate_v2.joblib"
 
 
 class ShadowModelError(RuntimeError):
@@ -51,6 +52,10 @@ class ShadowModel:
     clf: object
     meta: dict
     fingerprint: str
+
+    @property
+    def signal_version(self) -> str:
+        return str(self.meta.get("signal_version", "1"))
 
     @property
     def version(self) -> str:
@@ -87,8 +92,8 @@ def load_model(path: str | Path | None = None) -> ShadowModel:
     meta = doc["meta"]
     if meta.get("format") != FORMAT:
         raise ShadowModelError(f"模型格式 {meta.get('format')} ≠ {FORMAT}")
-    if meta.get("signal_version") != SIGNAL_VERSION:
-        raise ShadowModelError(f"模型信号口径 {meta.get('signal_version')} ≠ 当前 {SIGNAL_VERSION}，需重训")
+    if meta.get("signal_version") not in COMPATIBLE_VERSIONS:
+        raise ShadowModelError(f"模型信号口径 {meta.get('signal_version')} 不在本版支持的 {COMPATIBLE_VERSIONS} 内，需重训")
     mm = lambda v: ".".join(str(v).split(".")[:2])  # noqa: E731
     if mm(meta.get("sklearn", "")) != mm(sklearn.__version__):
         raise ShadowModelError(f"模型用 scikit-learn {meta.get('sklearn')} 训练，当前 {sklearn.__version__}")
