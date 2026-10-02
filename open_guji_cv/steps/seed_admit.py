@@ -285,6 +285,24 @@ class SeedAdmitParams(BaseModel):
     approx_fingerprint: str = ""
     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
 
+    context_guard_diff: bool = False
+    """context 通道放行前，库判 `diff` 且 `cov < context_guard_cov` 就不放行（doubt
+    `ctx_guard_diff`，overview#333 建议 1 前半）。库已经明确说「不像」，上下文单凭文意不该
+    把它抬成字。缺省关；五个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
+    context_guard_cov: float = 0.8
+    """`context_guard_diff` 的 cov 门槛。"""
+    context_guard_flags: bool = False
+    """context 通道放行前，这一格在 Step4 `char_index` 上带 `context_guard_flag_set` 里任一
+    标记就不放行（doubt `ctx_guard_flag`，建议 1 后半）。没有 `char_index` 产物 = 弃权。"""
+    context_guard_flag_set: str = "rule_bar,suspect_empty,bad_seg"
+    context_guard_ref_blank: bool = False
+    """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
+    时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
+    context_guard_ref_prefer: bool = False
+    """坐标对位给出整理本字、与 context 定字语义不同、库判又不是 `same` 时，不放行 context 字，
+    落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
+    独立形状证据，放不放留给标定结果。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -302,7 +320,15 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and not self._context_guard_on():
+            for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
+                      "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
+                d.pop(k, None)
         return d
+
+    def _context_guard_on(self) -> bool:
+        return (self.context_guard_diff or self.context_guard_flags
+                or self.context_guard_ref_blank or self.context_guard_ref_prefer)
 
     def model_post_init(self, _ctx) -> None:
         if not self.db_path:
@@ -449,6 +475,7 @@ class SeedAdmitStep(Step):
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
+        coord_cache: dict = {}
         always = set(p.always_review or "")
         context_verdicts = frozenset(
             s.strip() for s in (p.context_verdicts or "").split(",") if s.strip())
@@ -774,6 +801,10 @@ class SeedAdmitStep(Step):
                     elif p.context_blank_gate and _ir is not None \
                             and _ir.ink_ratio < p.context_min_ink:
                         doubts.append("context_blank_cell")
+                    elif p._context_guard_on() and (_g := _context_guard(
+                            p, r, d.char, _ir, _coord_refs(ctx, page, coord_cache), vm_here)):
+                        doubts.append(_g[0])
+                        char = _g[1] or char
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -1275,6 +1306,41 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             else:
                 out[r.id] = (dens, None, "none")
     return out
+
+
+def _coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:
+    """本页 `align_ref.coord` → {字位 id: 整理本字（空串 = 坐标对位说是空格位）}；页内缓存。"""
+    if "coord" not in cache:
+        ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+        cache["coord"] = {c.id: c.ref_char for c in (ref.coord if ref else [])}
+    return cache["coord"]
+
+
+def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, im, coord: dict[str, str],
+                   vmap) -> tuple[str, str | None] | None:
+    """context 通道放行前的最后一道闸（overview#333，G1 道）。命中返回 `(doubt, 默认字|None)`，
+    不命中 None。四条各有开关（`context_guard_*`），依次判，先中先返回；缺信号一律弃权：
+    没有 `char_index` 就不看标记，没有坐标对位就不看整理本。
+
+    - `ctx_guard_diff`：库判 diff 且 cov < `context_guard_cov`；
+    - `ctx_guard_flag`：字块带 rule_bar／suspect_empty／bad_seg（界行杆、空薄片、坏切）；
+    - `ctx_guard_ref_blank`：坐标对位说此位是空格、库又不是 same → 字块不是字；
+    - `ctx_guard_ref`：坐标对位的整理本字与 context 字语义不同、库不是 same → 默认字取整理本。
+    """
+    if p.context_guard_diff and r.verdict == "diff" and r.cov < p.context_guard_cov:
+        return "ctx_guard_diff", None
+    if p.context_guard_flags and im is not None:
+        bad = set(p.context_guard_flag_set.split(",")) & set(im.flags)
+        if bad:
+            return "ctx_guard_flag", None
+    ref = coord.get(r.id)
+    if ref is not None and r.verdict != "same" and ref != "〓":
+        if ref == "":
+            if p.context_guard_ref_blank:
+                return "ctx_guard_ref_blank", None
+        elif p.context_guard_ref_prefer and vmap.semantic(ref) != vmap.semantic(ctx_char):
+            return "ctx_guard_ref", ref
+    return None
 
 
 def _approx_fingerprint(db_path: str) -> str:
