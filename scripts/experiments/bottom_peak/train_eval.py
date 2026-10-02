@@ -53,6 +53,9 @@ def make_clf(kind: str, seed: int = 0):
     return make_pipeline(StandardScaler(), LogisticRegression(C=0.5, max_iter=2000))
 
 
+LABEL = "pos"          # "pos"：与金标 ≤TOL_POS；"oneside"：单侧口径过（线在金标下方 0~TOL_ONESIDE，两端都算）
+
+
 def cand_frame(pages) -> pd.DataFrame:
     recs = []
     for pi, p in enumerate(pages):
@@ -62,7 +65,8 @@ def cand_frame(pages) -> pd.DataFrame:
             if "y_left_abs" in p:
                 e, _ = page_err(p, r["final"])
                 d["err"] = e
-                d["y"] = int(e <= TOL_POS)
+                _, w_ = page_err(p, r["final"])
+                d["y"] = int(e <= TOL_POS) if LABEL == "pos" else int(0 <= w_ <= TOL_ONESIDE)
             recs.append(d)
     return pd.DataFrame(recs)
 
@@ -138,18 +142,21 @@ def main() -> int:
     ap.add_argument("--margin", type=float, default=GUARD_DEFAULTS["margin"])
     ap.add_argument("--min-prob", type=float, default=GUARD_DEFAULTS["min_prob"])
     ap.add_argument("--up-slack", type=float, default=GUARD_DEFAULTS["up_slack"])
+    ap.add_argument("--label", default="pos", choices=["pos", "oneside"])
     ap.add_argument("--drop", default="", help="消融：逗号分隔的特征名，训练时去掉")
     ap.add_argument("--save-model", default="")
     ap.add_argument("--model-id", default="bottompeak_v1")
     a = ap.parse_args()
 
+    global LABEL
+    LABEL = a.label
     pages = pickle.loads(Path(a.table).read_bytes())
     df = cand_frame(pages)
     feats = [f for f in FEATURES if f not in set(filter(None, a.drop.split(",")))]
     guard = {**GUARD_DEFAULTS, "margin": a.margin, "min_prob": a.min_prob, "up_slack": a.up_slack}
     gold_idx = [i for i, p in enumerate(pages) if p["kind"] == "gold"]
     other_idx = [i for i, p in enumerate(pages) if p["kind"] != "gold"]
-    print(f"# 候选模型 vs 现行规则（{a.kind}，特征 {len(feats)}，护栏 {guard}）\n")
+    print(f"# 候选模型 vs 现行规则（{a.kind}，标签 {a.label}，特征 {len(feats)}，护栏 {guard}）\n")
     print(f"gold {len(gold_idx)} 页；候选 {len(df[df.pi.isin(gold_idx)])} 条；有正例的页（天花板）"
           f"{int(df[df.pi.isin(gold_idx)].groupby('pi').y.max().sum())}/{len(gold_idx)}\n")
 
@@ -159,7 +166,15 @@ def main() -> int:
         best = min(pages[i]["rows"], key=lambda r: page_err(pages[i], r["final"])[0])
         orc.append(page_err(pages[i], best["final"]))
     out = [summarize("现行规则", [e for e, _ in rule], [w for _, w in rule])]
-    out.append(summarize("候选里最佳(天花板)", [e for e, _ in orc], [w for _, w in orc]))
+    out.append(summarize("候选里最佳(天花板·距离)", [e for e, _ in orc], [w for _, w in orc]))
+    orc2 = []
+    for i in gold_idx:      # 单侧口径天花板：有「过」的候选就取其中离规则最近的；没有就取距离最小的
+        p = pages[i]
+        okc = [r for r in p["rows"] if 0 <= page_err(p, r["final"])[1] <= TOL_ONESIDE]
+        pick = min(okc, key=lambda r: abs(r["final"] - p["rule_final"])) if okc else \
+            min(p["rows"], key=lambda r: page_err(p, r["final"])[0])
+        orc2.append(page_err(p, pick["final"]))
+    out.append(summarize("候选里最佳(天花板·单侧)", [e for e, _ in orc2], [w for _, w in orc2]))
 
     # 1) 页分组 5 折 × 3 种子
     sel_by_seed, _ = evaluate(pages, gold_idx, df, a.kind, feats, guard)[0], None
