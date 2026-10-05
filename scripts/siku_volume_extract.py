@@ -10,6 +10,11 @@
     # 抽检核对表：标点 200 处、命中实体 50 个（TSV，带上下文与书影坐标）
     python scripts/siku_volume_extract.py sample --vol 2 --lines-md … --out <输出目录> --book-index …
 
+    # #401 交 Gemini：按段切份（一行一段 `[P012] 原文`，约 5,000 字一份）；收回来对齐成同样的产物
+    python scripts/siku_volume_extract.py gemini-export --vol 2 --lines-md … --out-dir <original>/gemini/002/in
+    python scripts/siku_volume_extract.py gemini-import --vol 2 --lines-md … --in-dir <original>/gemini/002/out \
+        --parts 1 --book-index … --out <original>/gemini/002/result
+
     # 人裁完收回：一致率 / 误挂率
     python scripts/siku_volume_extract.py score <核对表.tsv>
 
@@ -82,14 +87,62 @@ def cmd_run(args) -> int:
     res.report.update({"vol": args.vol, "lines_md": str(args.lines_md), "pages": args.pages,
                        "model": f"{args.provider}:{client.model}", "seconds": round(time.time() - t0, 1)})
     paths = sx.write_outputs(res, Path(args.out), args.vol, book_id=BOOK_ID,
-                             title=f"{TITLE}·第{args.vol}册", creator=f"{args.provider}:{client.model}")
-    r = res.report
+                             title=f"{TITLE}·第{args.vol}册", creator=f"{args.provider}:{client.model}",
+                             version=args.version, text_version=text_version(args))
+    print_summary(res.report, paths)
+    return 0
+
+
+def text_version(args) -> str | None:
+    return args.text_version or sx.chapter_text_version(Path(args.lines_md))
+
+
+def print_summary(r: dict, paths: dict) -> None:
     print(f"字 {r['chars']}（底本对不上 {r['unmatched_chars']}）；段 {r['paragraphs']}；块 {r['chunks']}"
           f"（作废 {r['chunks_failed']}，{r['chars_unpunctuated']} 字未标点）")
     print(f"标点 {r['points']}，分段 {r['breaks']}；实体 {r['entities']}（命中 {r['matched']}，"
           f"新候选 {r['new_candidate']}）{r['by_type']}")
     for k, p in paths.items():
         print(f"  {k}: {p}")
+
+
+def cmd_gemini_export(args) -> int:
+    """一段一行切份，给用户贴进 Gemini 客户端（#401）。"""
+    text = select_pages(Path(args.lines_md).read_text(encoding="utf-8"), args.pages)
+    prep = sx.prepare_volume(text, limit=10 ** 9)
+    out = Path(args.out_dir)
+    out.mkdir(parents=True, exist_ok=True)
+    parts = sx.export_paragraph_parts(prep, args.part_chars)
+    for i, body in enumerate(parts, 1):
+        (out / f"part{i:02d}.txt").write_text(body, encoding="utf-8")
+        lines = body.splitlines()
+        n = sum(1 for ln in lines for c in ln.split("] ", 1)[1] if c not in "<>")
+        print(f"part{i:02d}.txt  {lines[0][:6]}–{lines[-1][:6]}  {len(lines)} 段  {n} 字")
+    return 0
+
+
+def cmd_gemini_import(args) -> int:
+    """Gemini 输出 → punct / entity / rich.md，与 GLM 流水线同一套对齐、作废与挂接规则。"""
+    text = select_pages(Path(args.lines_md).read_text(encoding="utf-8"), args.pages)
+    prep = sx.prepare_volume(text, limit=10 ** 9)
+    answers: dict[int, str] = {}
+    files = sorted(Path(args.in_dir).glob("part*.txt"))
+    if args.parts:
+        keep = {f"part{int(x):02d}.txt" for x in args.parts.split(",")}
+        files = [f for f in files if f.name in keep]
+    for f in files:
+        answers.update(sx.parse_paragraph_file(f.read_text(encoding="utf-8")))
+    matcher = BookIndexMatcher(args.book_index)
+    matcher.load_index()
+    results = sx.results_from_paragraphs(prep, answers, args.max_bad_ratio)
+    res = sx.assemble_volume(prep, results, matcher, source=args.source)
+    res.report.update({"vol": args.vol, "lines_md": str(args.lines_md), "model": args.source,
+                       "parts": [f.name for f in files], "paragraphs_returned": len(answers)})
+    paths = sx.write_outputs(res, Path(args.out), args.vol, book_id=BOOK_ID,
+                             title=f"{TITLE}·第{args.vol}册", creator=args.source,
+                             version=args.version, text_version=text_version(args))
+    print(f"交回 {len(answers)} 段（{', '.join(f.name for f in files)}），未提供 {res.report['chunks_missing']} 段")
+    print_summary(res.report, paths)
     return 0
 
 
@@ -127,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
         p.add_argument("--out", required=True, help="输出目录")
         p.add_argument("--pages", help="只跑这些页，如 3-15（演练用）")
 
+    def versions(p):
+        p.add_argument("--version", default="0.1.0", help="这一层的内容版本（流水线不自升，见 overview#400）")
+        p.add_argument("--text-version", help="对着哪一版 lines.md；不给就读 original/index.json 该章的 text_version")
+
     r = sub.add_parser("run", help="整册标点＋实体")
     common(r)
     r.add_argument("--book-index", required=True, help="book-index 仓根目录")
@@ -139,7 +196,26 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--timeout", type=int, default=180)
     r.add_argument("--retries", type=int, default=6, help="单次调用重试次数（429 限流按指数退避）")
     r.add_argument("--count-blank-columns", action="store_true", help="空行也占一个列号")
+    versions(r)
     r.set_defaults(func=cmd_run)
+
+    ge = sub.add_parser("gemini-export", help="按段切份给 Gemini（#401）")
+    ge.add_argument("--vol", type=int, required=True)
+    ge.add_argument("--lines-md", required=True)
+    ge.add_argument("--out-dir", required=True, help="如 <original>/gemini/002/in")
+    ge.add_argument("--part-chars", type=int, default=5000, help="每份约多少字")
+    ge.add_argument("--pages", help="只导这些页")
+    ge.set_defaults(func=cmd_gemini_export)
+
+    gi = sub.add_parser("gemini-import", help="收 Gemini 输出，出 punct/entity/rich.md")
+    common(gi)
+    gi.add_argument("--in-dir", required=True, help="Gemini 输出目录（partNN.txt），如 gemini/002/out")
+    gi.add_argument("--parts", help="只收这几份，如 1 或 1,2")
+    gi.add_argument("--book-index", required=True)
+    gi.add_argument("--source", default="gemini", help="写进产物的来源/模型名")
+    gi.add_argument("--max-bad-ratio", type=float, default=0.02, help="增删＋换字超过此比例整段作废")
+    versions(gi)
+    gi.set_defaults(func=cmd_gemini_import)
 
     s = sub.add_parser("sample", help="出抽检核对表")
     common(s)

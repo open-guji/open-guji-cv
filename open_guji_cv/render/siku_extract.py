@@ -300,13 +300,22 @@ class Asker(Protocol):
     def ask(self, user: str) -> str: ...
 
 
+def accept(plain: str, bad: int, subs: list, max_bad_ratio: float = 0.02,
+           max_sub_ratio: float | None = 0.05) -> bool:
+    """收不收这一块：增删 ≤ max_bad_ratio；等长换字 ≤ max_sub_ratio（至少容 1 个）。
+    `max_sub_ratio=None`：换字与增删合并计入 max_bad_ratio（#401 验收口径「改字超 2% 的段作废」）。"""
+    if max_sub_ratio is None:
+        return bad + len(subs) <= max_bad_ratio * len(plain)
+    return bad <= max_bad_ratio * len(plain) and len(subs) <= max(1, max_sub_ratio * len(plain))
+
+
 def run_chunk(plain: str, client: Asker, max_bad_ratio: float = 0.02,
               prompt: str = SIKU_PROMPT, max_sub_ratio: float = 0.05) -> ChunkResult:
     user = prompt.format(text=plain)
     best: tuple[dict[int, str], list, int, list] | None = None
 
     def ok(r) -> bool:
-        return r[2] <= max_bad_ratio * len(plain) and len(r[3]) <= max(1, max_sub_ratio * len(plain))
+        return accept(plain, r[2], r[3], max_bad_ratio, max_sub_ratio)
 
     err = ""
     for attempt in range(2):
@@ -446,17 +455,36 @@ def name_before(chars: list[str], s: int, prev: EntityAnnotation | None,
     return None
 
 
-def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *,
-               limit: int = 300, workers: int = 4, max_bad_ratio: float = 0.02,
-               source: str = "llm", count_blank_columns: bool = False,
-               progress: Callable[[int, int], None] | None = None) -> VolumeResult:
+@dataclass
+class Prepared:
+    """整册的底本侧：字流、坐标、分段、分块。LLM 结果从哪来（GLM 现问 / Gemini 文件）与此无关。"""
+    slots: list[Slot]
+    paras_text: list[str]
+    rstats: dict[str, Any]
+    chunks: list[Chunk]
+    render_chars: list[str]
+    para_last: list[int]
+    smap: StreamMap
+    anchors: list[str | None]
+
+
+def prepare_volume(lines_md: str, limit: int = 300, count_blank_columns: bool = False) -> Prepared:
+    """`limit` 为每块字数上限；给极大值即一段一块（Gemini 按段编号收发）。"""
     slots = parse_lines_md(lines_md, count_blank_columns)
     paras, rstats = reflow(to_reflow_md(lines_md), "default")
     paras_text = [p.text for p in paras]
     chunks, render_chars, para_last = build_chunks(paras_text, limit)
     smap = StreamMap.build(render_chars, slots)
     anchors = [slots[j].anchor if j is not None else None for j in smap.to_slot]
+    return Prepared(slots, paras_text, rstats, chunks, render_chars, para_last, smap, anchors)
 
+
+def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *,
+               limit: int = 300, workers: int = 4, max_bad_ratio: float = 0.02,
+               source: str = "llm", count_blank_columns: bool = False,
+               progress: Callable[[int, int], None] | None = None) -> VolumeResult:
+    prep = prepare_volume(lines_md, limit, count_blank_columns)
+    chunks = prep.chunks
     done = [0]
 
     def work(ch: Chunk) -> ChunkResult:
@@ -468,12 +496,23 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
 
     with ThreadPoolExecutor(max(1, workers)) as ex:
         results = list(ex.map(work, chunks))
+    return assemble_volume(prep, results, matcher, source)
 
+
+def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookIndexMatcher | None,
+                    source: str) -> VolumeResult:
+    """各块结果 → 标点、实体（含 book-index 挂接）、rich.md 与报告。"""
+    slots, paras_text, rstats, chunks = prep.slots, prep.paras_text, prep.rstats, prep.chunks
+    render_chars, para_last, smap, anchors = prep.render_chars, prep.para_last, prep.smap, prep.anchors
     puncts: list[PunctAnnotation] = []
     raw_ents: list[tuple[str, int, int]] = []
     failed: list[dict[str, Any]] = []
     substitutions: list[dict[str, Any]] = []
+    missing = 0
     for ch, cr in zip(chunks, results):
+        if not cr.ok and cr.note == "未提供":          # 只导入了部分份（如只有 part01）
+            missing += 1
+            continue
         if not cr.ok:
             first = next((i for i in ch.render_idx if i is not None), None)
             failed.append({"para": ch.para, "anchor": anchors[first] if first is not None else None,
@@ -533,7 +572,8 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
     failed_chars = sum(f["chars"] for f in failed)
     report = {
         "chars": n_chars, "slots": len(slots), "unmatched_chars": smap.unmatched,
-        "paragraphs": len(paras), "chunks": len(chunks), "chunks_failed": len(failed),
+        "paragraphs": len(paras_text), "chunks": len(chunks), "chunks_failed": len(failed),
+        "chunks_missing": missing,
         "chars_unpunctuated": failed_chars,
         "points": sum(1 for p in puncts if p.kind == "point"),
         "breaks": sum(1 for p in puncts if p.kind == "break"),
@@ -552,13 +592,36 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
 
 # ── 5. 写盘 ─────────────────────────────────────────────────────────────
 
+def chapter_text_version(lines_md: Path) -> str | None:
+    """`original/index.json` 里该章的 `text_version`（overview#400）；没有就 None。"""
+    idx = lines_md.parent / "index.json"
+    try:
+        chapters = json.loads(idx.read_text(encoding="utf-8")).get("chapters", [])
+    except (OSError, ValueError):
+        return None
+    for c in chapters:
+        if c.get("lines_file") == lines_md.name:
+            return c.get("text_version")
+    return None
+
+
 def write_outputs(res: VolumeResult, out_dir: Path, vol: int, *, book_id: str, title: str,
-                  creator: str) -> dict[str, Path]:
+                  creator: str, version: str = "0.1.0", text_version: str | None = None) -> dict[str, Path]:
+    """`version`：这一层的内容版本；`text_version`：对着哪一版 lines.md 做的（overview#400）。
+    流水线不自己升版本号，由调用方给（升级走 overview `bump_original.py`）。"""
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{vol:03d}"
     pj = build_punct_json(book_id, title, res.puncts, creator=creator)
     pj["volume"] = vol
     ej = build_entity_json(book_id, title, vol, res.entities, creator=creator)
+    def stamp(d: dict[str, Any]) -> dict[str, Any]:          # text_version 紧跟 version
+        out: dict[str, Any] = {}
+        for k, v in d.items():
+            out[k] = version if k == "version" else v
+            if k == "version" and text_version:
+                out["text_version"] = text_version
+        return out
+    pj, ej = stamp(pj), stamp(ej)
     paths = {
         "punct": out_dir / f"{stem}.punct.json",
         "entity": out_dir / f"{stem}.entity.json",
@@ -680,3 +743,71 @@ def score_tsv(path: Path) -> dict[str, Any]:
     from collections import Counter
     out["verdicts"] = dict(Counter(verdicts))
     return out
+
+
+# ── 7. 外部模型按段收发（#401：Gemini 只能由用户在本地客户端跑）─────────────
+#
+# 出：一段一行 `[P012] 原文`（繁体无标点，夹注 `<…>`，阙文 `□`，无页码标记），约 5,000 字一份；
+# 收：同格式加了标点、《》、`{人:…}` 的文本，逐段走 `align_chunk`，与 GLM 流水线同一套
+# 对齐、作废与挂接规则，产物格式不变。段号＝reflow 自然段序号（从 1 起），换底本须重导。
+
+_PID = re.compile(r"^\s*[\[［]\s*P(\d+)\s*[\]］]\s*")
+
+
+def export_paragraph_parts(prep: Prepared, part_chars: int = 5000) -> list[str]:
+    """`prep` 须一段一块（`prepare_volume(..., limit=10**9)`）。按段累计到约 `part_chars` 字切份。"""
+    parts: list[str] = []
+    cur: list[str] = []
+    n = 0
+    for ch in prep.chunks:
+        k = sum(1 for c in ch.plain if _is_char(c))
+        if cur and n + k > part_chars:
+            parts.append("\n".join(cur) + "\n")
+            cur, n = [], 0
+        cur.append(f"[P{ch.para + 1:03d}] {ch.plain}")
+        n += k
+    if cur:
+        parts.append("\n".join(cur) + "\n")
+    return parts
+
+
+def parse_paragraph_file(text: str) -> dict[int, str]:
+    """模型输出 → {段号: 标注文本}。容忍：代码围栏、段内折行（无段号的行接到上一段）、
+    「继续」接续造成的重复段（留较长那份）、全角方括号、〈〉代 <>。"""
+    out: dict[int, str] = {}
+    cur: int | None = None
+    buf: dict[int, list[str]] = {}
+    for line in text.splitlines():
+        if line.strip().startswith("```"):
+            continue
+        m = _PID.match(line)
+        if m:
+            cur = int(m.group(1))
+            if cur in buf:                      # 接续重复：另起一份，收尾时取长
+                out.setdefault(cur, "")
+                out[cur] = max(out[cur], "".join(buf[cur]), key=len)
+            buf[cur] = [line[m.end():]]
+        elif cur is not None and line.strip():
+            buf[cur].append(line.strip())
+    for k, v in buf.items():
+        out[k] = max(out.get(k, ""), "".join(v), key=len)
+    return {k: v.replace("〈", "<").replace("〉", ">") for k, v in out.items()}
+
+
+def results_from_paragraphs(prep: Prepared, answers: dict[int, str], max_bad_ratio: float = 0.02,
+                            max_sub_ratio: float | None = None) -> list[ChunkResult]:
+    """逐段对齐。没交回来的段记「未提供」（不标点）。默认按 #401 口径：增删＋换字超 2% 整段作废。"""
+    results: list[ChunkResult] = []
+    for ch in prep.chunks:
+        n = sum(1 for c in ch.plain if _is_char(c))
+        ans = answers.get(ch.para + 1)
+        if ans is None:
+            results.append(ChunkResult(False, 0, n, {}, [], "未提供"))
+            continue
+        punct, spans, bad, subs = align_chunk(ch.plain, ans)
+        if accept(ch.plain, bad, subs, max_bad_ratio, max_sub_ratio):
+            results.append(ChunkResult(True, bad, n, punct, spans, subs=subs))
+        else:
+            results.append(ChunkResult(False, bad + len(subs), n, {}, [],
+                                       f"增删 {bad}、换字 {len(subs)}/{len(ch.plain)}，本段作废"))
+    return results
