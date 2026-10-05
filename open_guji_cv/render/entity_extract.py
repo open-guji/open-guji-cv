@@ -71,56 +71,94 @@ class BookIndexMatcher:
         self.root = Path(book_index_root)
         self.works: dict[str, str] = {}    # title -> work_id
         self.people: dict[str, str] = {}   # name -> entity_id
+        self.entities_by_type: dict[str, dict[str, str]] = {} # type -> (name -> entity_id)
         self._loaded = False
 
-    def load_index(self, max_records: int = 2000) -> None:
+    def load_index(self, max_records: int = 100000) -> None:
         if self._loaded or not self.root.exists():
             return
 
         import os
-        # 快速扫描 Work
-        work_dir = self.root / "Work"
-        if work_dir.exists():
-            w_count = 0
-            for r, _, files in os.walk(work_dir):
-                for f in files:
-                    if f.endswith(".json"):
-                        try:
-                            with open(os.path.join(r, f), "r", encoding="utf-8") as fp:
-                                data = json.load(fp)
-                            title = data.get("title")
-                            wid = data.get("id")
+        # 1. 优先从预构建的快速分片索引加载 (book-index/index/works 与 book-index/index/entities)
+        idx_works_dir = self.root / "index" / "works"
+        if idx_works_dir.exists():
+            for f in os.listdir(idx_works_dir):
+                if f.endswith(".json"):
+                    try:
+                        with open(idx_works_dir / f, "r", encoding="utf-8") as fp:
+                            data = json.load(fp)
+                        for item in data.values():
+                            title = item.get("title")
+                            wid = item.get("id")
                             if title and wid:
                                 self.works[title] = wid
-                                w_count += 1
-                        except Exception:
-                            pass
+                    except Exception:
+                        pass
+
+        idx_entities_dir = self.root / "index" / "entities"
+        if idx_entities_dir.exists():
+            for f in os.listdir(idx_entities_dir):
+                if f.endswith(".json"):
+                    try:
+                        with open(idx_entities_dir / f, "r", encoding="utf-8") as fp:
+                            data = json.load(fp)
+                        for item in data.values():
+                            name = item.get("primary_name")
+                            eid = item.get("id")
+                            st = item.get("subtype", "people")
+                            if name and eid:
+                                if st not in self.entities_by_type:
+                                    self.entities_by_type[st] = {}
+                                self.entities_by_type[st][name] = eid
+                                if st == "people":
+                                    self.people[name] = eid
+                    except Exception:
+                        pass
+
+        # 2. 回退到直接目录扫描（若未加载到预构建索引）
+        if not self.works:
+            work_dir = self.root / "Work"
+            if work_dir.exists():
+                w_count = 0
+                for r, _, files in os.walk(work_dir):
+                    for f in files:
+                        if f.endswith(".json"):
+                            try:
+                                with open(os.path.join(r, f), "r", encoding="utf-8") as fp:
+                                    data = json.load(fp)
+                                title = data.get("title")
+                                wid = data.get("id")
+                                if title and wid:
+                                    self.works[title] = wid
+                                    w_count += 1
+                            except Exception:
+                                pass
+                        if w_count >= max_records:
+                            break
                     if w_count >= max_records:
                         break
-                if w_count >= max_records:
-                    break
 
-        # 快速扫描 Entity (people)
-        entity_dir = self.root / "Entity"
-        if entity_dir.exists():
-            p_count = 0
-            for r, _, files in os.walk(entity_dir):
-                for f in files:
-                    if f.endswith(".json"):
-                        try:
-                            with open(os.path.join(r, f), "r", encoding="utf-8") as fp:
-                                data = json.load(fp)
-                            name = data.get("primary_name")
-                            eid = data.get("id")
-                            if name and eid:
-                                self.people[name] = eid
-                                p_count += 1
-                        except Exception:
-                            pass
+        if not self.people:
+            entity_dir = self.root / "Entity"
+            if entity_dir.exists():
+                p_count = 0
+                for r, _, files in os.walk(entity_dir):
+                    for f in files:
+                        if f.endswith(".json"):
+                            try:
+                                with open(os.path.join(r, f), "r", encoding="utf-8") as fp:
+                                    data = json.load(fp)
+                                name = data.get("primary_name")
+                                eid = data.get("id")
+                                if name and eid:
+                                    self.people[name] = eid
+                                    p_count += 1
+                            except Exception:
+                                pass
+                        if p_count >= max_records:
+                            break
                     if p_count >= max_records:
                         break
-                if p_count >= max_records:
-                    break
 
         self._loaded = True
 
@@ -140,9 +178,19 @@ class BookIndexMatcher:
                     "canonical_name": text,
                     "href": f"book-index://Work/{wid}"
                 }
-        elif ent_type == "people":
-            # 优先精确匹配人名
-            if text in self.people:
+        elif ent_type in ("people", "place", "office", "dynasty"):
+            # 优先从具体类型的实体库匹配
+            if ent_type in self.entities_by_type and text in self.entities_by_type[ent_type]:
+                eid = self.entities_by_type[ent_type][text]
+                return {
+                    "status": "matched",
+                    "entity_type": ent_type,
+                    "entity_id": eid,
+                    "canonical_name": text,
+                    "href": f"book-index://Entity/{eid}"
+                }
+            # 其次匹配通用 people 库
+            if ent_type == "people" and text in self.people:
                 eid = self.people[text]
                 return {
                     "status": "matched",
