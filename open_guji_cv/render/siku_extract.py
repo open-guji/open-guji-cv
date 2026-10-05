@@ -811,3 +811,99 @@ def results_from_paragraphs(prep: Prepared, answers: dict[int, str], max_bad_rat
             results.append(ChunkResult(False, bad + len(subs), n, {}, [],
                                        f"增删 {bad}、换字 {len(subs)}/{len(ch.plain)}，本段作废"))
     return results
+
+
+# ── 8. 多模型对照（#401：Gemini／GLM／Claude）───────────────────────────────
+#
+# 各家标点落到同一套「字间位置」上比：位置 b 指第 b-1 字与第 b 字之间（render 下标），
+# 收尾标点（挂前字之后）与起首标点（挂后字之前）在同一位置按先后拼成一串，如「，「」。
+# 段间分段符不比（各家分段一样，都来自 reflow）。
+
+def boundary_marks(puncts: list[PunctAnnotation], lo: int, hi: int) -> dict[int, str]:
+    """[lo, hi) 字范围内各位置的标点串。"""
+    out: dict[int, str] = {}
+    for p in sorted((p for p in puncts if p.kind == "point"),
+                    key=lambda p: (p.char_offset + (p.pos == "after"), p.pos == "before")):
+        b = p.char_offset + 1 if p.pos == "after" else p.char_offset
+        if lo <= b <= hi:
+            out[b] = out.get(b, "") + p.mark
+    return out
+
+
+def puncts_from_json(pj: dict) -> list[PunctAnnotation]:
+    return [PunctAnnotation(mark=p["mark"], kind=p["kind"], pos=p["pos"], char_offset=p["char_offset"],
+                            pre_char=p.get("pre_char", ""), anchor=p.get("anchor")) for p in pj["punctuations"]]
+
+
+def spans_from_entities(ents: list[dict] | list[EntityAnnotation], lo: int, hi: int) -> set[tuple[str, int, int]]:
+    out = set()
+    for e in ents:
+        if isinstance(e, EntityAnnotation):
+            t, s, x = e.type, e.start_offset, e.end_offset
+        else:
+            t, s, x = e["type"], e["span"]["start_offset"], e["span"]["end_offset"]
+        if lo <= s and x <= hi:
+            out.add((t, s, x))
+    return out
+
+
+def compare_punct(prep: Prepared, marks: dict[str, dict[int, str]], ref: str,
+                  para_of: dict[int, int]) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """各家对参照（Claude）的标点对照表与统计。
+
+    一致率（precision）＝该家标的位置里与参照标得一模一样的占比；
+    漏标率＝参照标了、该家没标的位置占参照位置的比例；多标＝参照没标、该家标了。"""
+    chars, anchors = prep.render_chars, prep.anchors
+    names = list(marks)
+    rows = []
+    for b in sorted(set().union(*[set(m) for m in marks.values()])):
+        ai = b - 1 if b > 0 else 0
+        row = {"段": f"P{para_of.get(ai, -1) + 1:03d}", "坐标": anchors[ai] or "",
+               "上下文": "".join(chars[max(0, b - 10):b]) + "｜" + "".join(chars[b:b + 10])}
+        for n in names:
+            row[n] = marks[n].get(b, "")
+        row["一致"] = "是" if len({row[n] for n in names}) == 1 else ""
+        rows.append(row)
+    stats: dict[str, Any] = {}
+    refm = marks[ref]
+    for n in names:
+        if n == ref:
+            stats[n] = {"marks": len(refm)}
+            continue
+        m = marks[n]
+        same = sum(1 for b, v in m.items() if refm.get(b) == v)
+        diff = sum(1 for b, v in m.items() if b in refm and refm[b] != v)
+        extra = sum(1 for b in m if b not in refm)
+        missed = sum(1 for b in refm if b not in m)
+        stats[n] = {"marks": len(m), "same_as_ref": same, "diff_mark": diff, "extra": extra, "missed": missed,
+                    "precision_vs_ref": round(same / len(m), 4) if m else None,
+                    "miss_rate": round(missed / len(refm), 4) if refm else None}
+    return rows, stats
+
+
+def compare_entities(spans: dict[str, set[tuple[str, int, int]]], ref: str) -> dict[str, Any]:
+    """专名：对参照的区间＋类型全对、只区间对、参照里有而该家没有。"""
+    out: dict[str, Any] = {}
+    r = spans[ref]
+    rb = {(s, e) for _, s, e in r}
+    for n, sp in spans.items():
+        if n == ref:
+            out[n] = {"entities": len(sp)}
+            continue
+        exact = len(sp & r)
+        bound = sum(1 for _, s, e in sp if (s, e) in rb)
+        out[n] = {"entities": len(sp), "exact_vs_ref": exact, "boundary_vs_ref": bound,
+                  "ref_missed": len(rb - {(s, e) for _, s, e in sp}),
+                  "precision_exact": round(exact / len(sp), 4) if sp else None,
+                  "recall_exact": round(exact / len(r), 4) if r else None}
+    return out
+
+
+def para_index(prep: Prepared) -> dict[int, int]:
+    """render 下标 → 段序号（0 起）。"""
+    out = {}
+    for ch in prep.chunks:
+        for i in ch.render_idx:
+            if i is not None:
+                out[i] = ch.para
+    return out
