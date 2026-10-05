@@ -1,0 +1,1655 @@
+{
+ "book": "vol02",
+ "pages": 188,
+ "chars": 30402,
+ "skipped": [],
+ "legacy": {
+  "行首排除/留白": 532,
+  "列中排除格": 343,
+  "抬头": 209,
+  "夹注": 45,
+  "Step3/7 不同步": 20,
+  "列中空格": 19,
+  "记号误数": 11
+ },
+ "fixed": {
+  "行首排除/留白": 532,
+  "列中排除格": 343,
+  "抬头": 144,
+  "Step3/7 不同步": 20,
+  "列中空格": 19,
+  "夹注": 13
+ },
+ "legacy_bad": 1179,
+ "fixed_bad": 1071,
+ "examples": {
+  "legacy": {
+   "抬头": [
+    {
+     "page": 3,
+     "cv": "3:2:1",
+     "derived": "3:2:-1",
+     "char": "經"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:2",
+     "derived": "3:2:0",
+     "char": "部"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:3",
+     "derived": "3:2:1",
+     "char": "總"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:4",
+     "derived": "3:2:2",
+     "char": "敘"
+    },
+    {
+     "page": 11,
+     "cv": "11:4:1",
+     "derived": "11:4:0",
+     "char": "定"
+    },
+    {
+     "page": 11,
+     "cv": "11:4:2",
+     "derived": "11:4:1",
+     "char": "易"
+    }
+   ],
+   "行首排除/留白": [
+    {
+     "page": 3,
+     "cv": "3:3:3",
+     "derived": "3:3:1",
+     "char": "經"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:4",
+     "derived": "3:3:2",
+     "char": "禀"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:5",
+     "derived": "3:3:3",
+     "char": "聖"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:6",
+     "derived": "3:3:4",
+     "char": "裁"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:7",
+     "derived": "3:3:5",
+     "char": "□"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:8",
+     "derived": "3:3:6",
+     "char": "型"
+    }
+   ],
+   "记号误数": [
+    {
+     "page": 4,
+     "cv": "4:3:5a",
+     "derived": null,
+     "char": "□"
+    },
+    {
+     "page": 19,
+     "cv": "19:9:6a",
+     "derived": null,
+     "char": "□"
+    },
+    {
+     "page": 19,
+     "cv": "19:9:7a",
+     "derived": null,
+     "char": "□"
+    },
+    {
+     "page": 19,
+     "cv": "19:9:8a",
+     "derived": null,
+     "char": "□"
+    },
+    {
+     "page": 63,
+     "cv": "63:9:8a",
+     "derived": null,
+     "char": "□"
+    },
+    {
+     "page": 88,
+     "cv": "88:6:13b",
+     "derived": null,
+     "char": "□"
+    }
+   ],
+   "夹注": [
+    {
+     "page": 4,
+     "cv": "4:3:6a",
+     "derived": "4:3:9a",
+     "char": "王"
+    },
+    {
+     "page": 4,
+     "cv": "4:3:7a",
+     "derived": "4:3:10a",
+     "char": "柏"
+    },
+    {
+     "page": 4,
+     "cv": "4:3:8a",
+     "derived": "4:3:11a",
+     "char": "吳"
+    },
+    {
+     "page": 4,
+     "cv": "4:3:9a",
+     "derived": "4:3:12a",
+     "char": "澄"
+    },
+    {
+     "page": 4,
+     "cv": "4:3:10a",
+     "derived": "4:3:13a",
+     "char": "攻"
+    },
+    {
+     "page": 4,
+     "cv": "4:3:11a",
+     "derived": "4:3:14a",
+     "char": "駁"
+    }
+   ],
+   "Step3/7 不同步": [
+    {
+     "page": 16,
+     "cv": "16:9:2",
+     "derived": "16:9:1",
+     "char": "□"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:3",
+     "derived": "16:9:2",
+     "char": "五"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:4",
+     "derived": "16:9:3",
+     "char": "條"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:5",
+     "derived": "16:9:4",
+     "char": "移"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:6",
+     "derived": "16:9:5",
+     "char": "應"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:7",
+     "derived": "16:9:6",
+     "char": "麟"
+    }
+   ],
+   "列中空格": [
+    {
+     "page": 17,
+     "cv": "17:2:3",
+     "derived": "17:2:2",
+     "char": "十"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:4",
+     "derived": "17:2:3",
+     "char": "二"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:5",
+     "derived": "17:2:4",
+     "char": "月"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:6",
+     "derived": "17:2:5",
+     "char": "爻"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:7",
+     "derived": "17:2:6",
+     "char": "辰"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:8",
+     "derived": "17:2:7",
+     "char": "圖"
+    }
+   ],
+   "列中排除格": [
+    {
+     "page": 28,
+     "cv": "28:9:5",
+     "derived": "28:9:4",
+     "char": "殊"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:8",
+     "derived": "28:9:5",
+     "char": "竇"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:9",
+     "derived": "28:9:6",
+     "char": "今"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:10",
+     "derived": "28:9:7",
+     "char": "考"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:11",
+     "derived": "28:9:8",
+     "char": "序"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:13",
+     "derived": "28:9:9",
+     "char": "稱"
+    }
+   ]
+  },
+  "fixed": {
+   "抬头": [
+    {
+     "page": 3,
+     "cv": "3:2:1",
+     "derived": "3:2:-1",
+     "char": "經"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:2",
+     "derived": "3:2:1",
+     "char": "部"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:3",
+     "derived": "3:2:2",
+     "char": "總"
+    },
+    {
+     "page": 3,
+     "cv": "3:2:4",
+     "derived": "3:2:3",
+     "char": "敘"
+    },
+    {
+     "page": 22,
+     "cv": "22:4:3",
+     "derived": "22:4:-1",
+     "char": "四"
+    },
+    {
+     "page": 22,
+     "cv": "22:4:4",
+     "derived": "22:4:1",
+     "char": "門"
+    }
+   ],
+   "行首排除/留白": [
+    {
+     "page": 3,
+     "cv": "3:3:3",
+     "derived": "3:3:1",
+     "char": "經"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:4",
+     "derived": "3:3:2",
+     "char": "禀"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:5",
+     "derived": "3:3:3",
+     "char": "聖"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:6",
+     "derived": "3:3:4",
+     "char": "裁"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:7",
+     "derived": "3:3:5",
+     "char": "□"
+    },
+    {
+     "page": 3,
+     "cv": "3:3:8",
+     "derived": "3:3:6",
+     "char": "型"
+    }
+   ],
+   "Step3/7 不同步": [
+    {
+     "page": 16,
+     "cv": "16:9:2",
+     "derived": "16:9:1",
+     "char": "□"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:3",
+     "derived": "16:9:2",
+     "char": "五"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:4",
+     "derived": "16:9:3",
+     "char": "條"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:5",
+     "derived": "16:9:4",
+     "char": "移"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:6",
+     "derived": "16:9:5",
+     "char": "應"
+    },
+    {
+     "page": 16,
+     "cv": "16:9:7",
+     "derived": "16:9:6",
+     "char": "麟"
+    }
+   ],
+   "列中空格": [
+    {
+     "page": 17,
+     "cv": "17:2:3",
+     "derived": "17:2:2",
+     "char": "十"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:4",
+     "derived": "17:2:3",
+     "char": "二"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:5",
+     "derived": "17:2:4",
+     "char": "月"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:6",
+     "derived": "17:2:5",
+     "char": "爻"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:7",
+     "derived": "17:2:6",
+     "char": "辰"
+    },
+    {
+     "page": 17,
+     "cv": "17:2:8",
+     "derived": "17:2:7",
+     "char": "圖"
+    }
+   ],
+   "列中排除格": [
+    {
+     "page": 28,
+     "cv": "28:9:5",
+     "derived": "28:9:4",
+     "char": "殊"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:8",
+     "derived": "28:9:5",
+     "char": "竇"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:9",
+     "derived": "28:9:6",
+     "char": "今"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:10",
+     "derived": "28:9:7",
+     "char": "考"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:11",
+     "derived": "28:9:8",
+     "char": "序"
+    },
+    {
+     "page": 28,
+     "cv": "28:9:13",
+     "derived": "28:9:9",
+     "char": "稱"
+    }
+   ],
+   "夹注": [
+    {
+     "page": 42,
+     "cv": "42:5:8a",
+     "derived": "42:5:7a",
+     "char": "浙"
+    },
+    {
+     "page": 42,
+     "cv": "42:5:9a",
+     "derived": "42:5:8a",
+     "char": "江"
+    },
+    {
+     "page": 42,
+     "cv": "42:5:10a",
+     "derived": "42:5:9a",
+     "char": "吳"
+    },
+    {
+     "page": 42,
+     "cv": "42:5:11a",
+     "derived": "42:5:10a",
+     "char": "玉"
+    },
+    {
+     "page": 42,
+     "cv": "42:5:8b",
+     "derived": "42:5:7b",
+     "char": "墀"
+    },
+    {
+     "page": 42,
+     "cv": "42:5:9b",
+     "derived": "42:5:8b",
+     "char": "家"
+    }
+   ]
+  }
+ },
+ "per_page": [
+  {
+   "page": 1,
+   "chars": 0,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 2,
+   "chars": 0,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 3,
+   "chars": 150,
+   "legacy": 137,
+   "fixed": 137
+  },
+  {
+   "page": 4,
+   "chars": 212,
+   "legacy": 17,
+   "fixed": 0
+  },
+  {
+   "page": 5,
+   "chars": 161,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 6,
+   "chars": 127,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 7,
+   "chars": 162,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 8,
+   "chars": 154,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 9,
+   "chars": 179,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 10,
+   "chars": 161,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 11,
+   "chars": 100,
+   "legacy": 10,
+   "fixed": 0
+  },
+  {
+   "page": 12,
+   "chars": 123,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 13,
+   "chars": 179,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 14,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 15,
+   "chars": 144,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 16,
+   "chars": 172,
+   "legacy": 20,
+   "fixed": 20
+  },
+  {
+   "page": 17,
+   "chars": 161,
+   "legacy": 19,
+   "fixed": 19
+  },
+  {
+   "page": 18,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 19,
+   "chars": 157,
+   "legacy": 4,
+   "fixed": 0
+  },
+  {
+   "page": 20,
+   "chars": 178,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 21,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 22,
+   "chars": 171,
+   "legacy": 95,
+   "fixed": 95
+  },
+  {
+   "page": 23,
+   "chars": 152,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 24,
+   "chars": 175,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 25,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 26,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 27,
+   "chars": 148,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 28,
+   "chars": 166,
+   "legacy": 13,
+   "fixed": 13
+  },
+  {
+   "page": 29,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 30,
+   "chars": 175,
+   "legacy": 8,
+   "fixed": 8
+  },
+  {
+   "page": 31,
+   "chars": 174,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 32,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 33,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 34,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 35,
+   "chars": 153,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 36,
+   "chars": 168,
+   "legacy": 28,
+   "fixed": 28
+  },
+  {
+   "page": 37,
+   "chars": 170,
+   "legacy": 13,
+   "fixed": 13
+  },
+  {
+   "page": 38,
+   "chars": 65,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 39,
+   "chars": 133,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 40,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 41,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 42,
+   "chars": 154,
+   "legacy": 8,
+   "fixed": 8
+  },
+  {
+   "page": 43,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 44,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 45,
+   "chars": 152,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 46,
+   "chars": 170,
+   "legacy": 1,
+   "fixed": 1
+  },
+  {
+   "page": 47,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 48,
+   "chars": 172,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 49,
+   "chars": 159,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 50,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 51,
+   "chars": 153,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 52,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 53,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 54,
+   "chars": 153,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 55,
+   "chars": 171,
+   "legacy": 38,
+   "fixed": 38
+  },
+  {
+   "page": 56,
+   "chars": 146,
+   "legacy": 12,
+   "fixed": 12
+  },
+  {
+   "page": 57,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 58,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 59,
+   "chars": 154,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 60,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 61,
+   "chars": 164,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 62,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 63,
+   "chars": 148,
+   "legacy": 4,
+   "fixed": 0
+  },
+  {
+   "page": 64,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 65,
+   "chars": 156,
+   "legacy": 38,
+   "fixed": 38
+  },
+  {
+   "page": 66,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 67,
+   "chars": 148,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 68,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 69,
+   "chars": 171,
+   "legacy": 38,
+   "fixed": 38
+  },
+  {
+   "page": 70,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 71,
+   "chars": 160,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 72,
+   "chars": 164,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 73,
+   "chars": 164,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 74,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 75,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 76,
+   "chars": 142,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 77,
+   "chars": 123,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 78,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 79,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 80,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 81,
+   "chars": 146,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 82,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 83,
+   "chars": 150,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 84,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 85,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 86,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 87,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 88,
+   "chars": 159,
+   "legacy": 3,
+   "fixed": 0
+  },
+  {
+   "page": 89,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 90,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 91,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 92,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 93,
+   "chars": 147,
+   "legacy": 24,
+   "fixed": 24
+  },
+  {
+   "page": 94,
+   "chars": 173,
+   "legacy": 97,
+   "fixed": 97
+  },
+  {
+   "page": 95,
+   "chars": 170,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 96,
+   "chars": 169,
+   "legacy": 2,
+   "fixed": 2
+  },
+  {
+   "page": 97,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 98,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 99,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 100,
+   "chars": 164,
+   "legacy": 20,
+   "fixed": 9
+  },
+  {
+   "page": 101,
+   "chars": 157,
+   "legacy": 21,
+   "fixed": 0
+  },
+  {
+   "page": 102,
+   "chars": 138,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 103,
+   "chars": 163,
+   "legacy": 19,
+   "fixed": 19
+  },
+  {
+   "page": 104,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 105,
+   "chars": 155,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 106,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 107,
+   "chars": 158,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 108,
+   "chars": 162,
+   "legacy": 2,
+   "fixed": 0
+  },
+  {
+   "page": 109,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 110,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 111,
+   "chars": 150,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 112,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 113,
+   "chars": 171,
+   "legacy": 38,
+   "fixed": 38
+  },
+  {
+   "page": 114,
+   "chars": 149,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 115,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 116,
+   "chars": 147,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 117,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 118,
+   "chars": 167,
+   "legacy": 48,
+   "fixed": 48
+  },
+  {
+   "page": 119,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 120,
+   "chars": 151,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 121,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 122,
+   "chars": 161,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 123,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 124,
+   "chars": 151,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 125,
+   "chars": 164,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 126,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 127,
+   "chars": 163,
+   "legacy": 14,
+   "fixed": 14
+  },
+  {
+   "page": 128,
+   "chars": 162,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 129,
+   "chars": 168,
+   "legacy": 28,
+   "fixed": 28
+  },
+  {
+   "page": 130,
+   "chars": 160,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 131,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 132,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 133,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 134,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 135,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 136,
+   "chars": 159,
+   "legacy": 1,
+   "fixed": 1
+  },
+  {
+   "page": 137,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 138,
+   "chars": 152,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 139,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 140,
+   "chars": 159,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 141,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 142,
+   "chars": 151,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 143,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 144,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 145,
+   "chars": 150,
+   "legacy": 31,
+   "fixed": 29
+  },
+  {
+   "page": 146,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 147,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 148,
+   "chars": 158,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 149,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 150,
+   "chars": 162,
+   "legacy": 19,
+   "fixed": 19
+  },
+  {
+   "page": 151,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 152,
+   "chars": 159,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 153,
+   "chars": 171,
+   "legacy": 19,
+   "fixed": 19
+  },
+  {
+   "page": 154,
+   "chars": 154,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 155,
+   "chars": 166,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 156,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 157,
+   "chars": 151,
+   "legacy": 61,
+   "fixed": 45
+  },
+  {
+   "page": 158,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 159,
+   "chars": 160,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 160,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 161,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 162,
+   "chars": 166,
+   "legacy": 28,
+   "fixed": 28
+  },
+  {
+   "page": 163,
+   "chars": 171,
+   "legacy": 57,
+   "fixed": 57
+  },
+  {
+   "page": 164,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 165,
+   "chars": 146,
+   "legacy": 1,
+   "fixed": 1
+  },
+  {
+   "page": 166,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 167,
+   "chars": 156,
+   "legacy": 83,
+   "fixed": 83
+  },
+  {
+   "page": 168,
+   "chars": 165,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 169,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 170,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 171,
+   "chars": 168,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 172,
+   "chars": 159,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 173,
+   "chars": 170,
+   "legacy": 3,
+   "fixed": 3
+  },
+  {
+   "page": 174,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 175,
+   "chars": 170,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 176,
+   "chars": 160,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 177,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 178,
+   "chars": 161,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 179,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 180,
+   "chars": 150,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 181,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 182,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 183,
+   "chars": 152,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 184,
+   "chars": 171,
+   "legacy": 19,
+   "fixed": 19
+  },
+  {
+   "page": 185,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 186,
+   "chars": 164,
+   "legacy": 18,
+   "fixed": 0
+  },
+  {
+   "page": 187,
+   "chars": 171,
+   "legacy": 0,
+   "fixed": 0
+  },
+  {
+   "page": 188,
+   "chars": 166,
+   "legacy": 20,
+   "fixed": 20
+  }
+ ]
+}
