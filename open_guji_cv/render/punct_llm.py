@@ -103,6 +103,9 @@ class PunctClient:
     cache_dir: Path | None = None
     timeout: int = 30
     retries: int = 3
+    #: 并进请求体的额外字段，例如 glm-4.5 系关思考：{"thinking": {"type": "disabled"}}。
+    #: 不进缓存键（只影响怎么问，不影响问什么）。
+    extra: dict | None = None
 
     def __post_init__(self) -> None:
         env, self.url, default_model = ENDPOINTS[self.provider]
@@ -121,7 +124,8 @@ class PunctClient:
             return json.loads(cf.read_text(encoding="utf-8"))["out"]
         body = json.dumps({"model": self.model, "temperature": 0,
                            "messages": [{"role": "system", "content": SYSTEM},
-                                        {"role": "user", "content": user}]}).encode()
+                                        {"role": "user", "content": user}],
+                           **(self.extra or {})}).encode()
         last: Exception | None = None
         for i in range(self.retries):
             req = urllib.request.Request(self.url, data=body, headers={
@@ -141,6 +145,7 @@ class PunctClient:
 # ── 对齐：只取标点，插回原文 ────────────────────────────────────────────
 
 def clean_output(o: str) -> str:
+    o = re.sub(r"<think>.*?</think>", "", o, flags=re.S)
     o = re.sub(r"^```[a-z]*\n?|\n?```$", "", o.strip())
     return re.sub(r"\s+", "", o)
 

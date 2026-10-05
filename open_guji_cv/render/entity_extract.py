@@ -31,6 +31,7 @@ class EntityAnnotation:
     target_id: str | None = None
     target_name: str | None = None
     target_href: str | None = None
+    note: str | None = None         # 例如「同名 3 条待消歧」
     confidence: float = 1.0
     source: str = "auto"
 
@@ -57,6 +58,8 @@ class EntityAnnotation:
             d["target"]["canonical_name"] = self.target_name
         if self.target_href:
             d["target"]["href"] = self.target_href
+        if self.note:
+            d["target"]["note"] = self.note
         if self.confidence < 1.0:
             d["confidence"] = round(self.confidence, 4)
         if self.source:
@@ -72,7 +75,27 @@ class BookIndexMatcher:
         self.works: dict[str, str] = {}    # title -> work_id
         self.people: dict[str, str] = {}   # name -> entity_id
         self.entities_by_type: dict[str, dict[str, str]] = {} # type -> (name -> entity_id)
+        # 同名全收（上面三张 dict 后写覆盖前写，同名只剩一条）：判"同名多条不挂"用
+        self.ids_by_name: dict[tuple[str, str], list[str]] = {}  # (work|people|…, 名) -> [id]
+        self.meta: dict[str, dict[str, Any]] = {}                 # id -> 分片索引原条
         self._loaded = False
+
+    def _add(self, kind: str, name: str, oid: str, item: dict[str, Any]) -> None:
+        ids = self.ids_by_name.setdefault((kind, name), [])
+        if oid not in ids:
+            ids.append(oid)
+        self.meta[oid] = item
+
+    def describe(self, oid: str) -> str:
+        """条目一行摘要（抽检表里给人判误挂用）：朝代、生卒、路径。"""
+        m = self.meta.get(oid)
+        if not m:
+            return ""
+        bits = [m.get("dynasty") or ""]
+        if m.get("birth_year") or m.get("death_year"):
+            bits.append(f"{m.get('birth_year') or '?'}–{m.get('death_year') or '?'}")
+        bits.append(m.get("path", ""))
+        return " ".join(b for b in bits if b)
 
     def load_index(self, max_records: int = 100000) -> None:
         if self._loaded or not self.root.exists():
@@ -92,6 +115,7 @@ class BookIndexMatcher:
                             wid = item.get("id")
                             if title and wid:
                                 self.works[title] = wid
+                                self._add("work", title, wid, item)
                     except Exception:
                         pass
 
@@ -107,6 +131,7 @@ class BookIndexMatcher:
                             eid = item.get("id")
                             st = item.get("subtype", "people")
                             if name and eid:
+                                self._add(st, name, eid, item)
                                 if st not in self.entities_by_type:
                                     self.entities_by_type[st] = {}
                                 self.entities_by_type[st][name] = eid
@@ -162,10 +187,36 @@ class BookIndexMatcher:
 
         self._loaded = True
 
-    def match(self, ent_type: str, text: str) -> dict[str, Any]:
-        """根据实体类型与文本匹配知识库。"""
+    def match(self, ent_type: str, text: str, dynasty_hint: str | None = None) -> dict[str, Any]:
+        """根据实体类型与文本匹配知识库。
+
+        `dynasty_hint`：紧挨在名字前的朝代（四庫提要「漢鄭玄注」「魏王弼撰」的写法）。
+        同名多条时用它筛：条目朝代含该字样的恰好一条才挂，否则不挂。
+        """
         if not self._loaded:
             self.load_index()
+
+        same = self.ids_by_name.get((ent_type, text), [])
+        n_same = len(same)
+        if n_same > 1 and dynasty_hint:
+            hit = [i for i in same if dynasty_hint in (self.meta.get(i, {}).get("dynasty") or "")]
+            if len(hit) == 1:
+                kind = "Work" if ent_type == "work" else "Entity"
+                return {
+                    "status": "matched",
+                    "entity_type": ent_type,
+                    "entity_id": hit[0],
+                    "canonical_name": text,
+                    "href": f"book-index://{kind}/{hit[0]}",
+                    "note": f"同名 {n_same} 条，按朝代「{dynasty_hint}」消歧",
+                }
+        if n_same > 1:
+            # 同名多条：精确名匹配分不出是哪一条，挂上去就是误挂，留给建档消歧
+            return {
+                "status": "new_candidate",
+                "canonical_name": text,
+                "note": f"同名 {n_same} 条待消歧: " + " ".join(self.ids_by_name[(ent_type, text)][:5]),
+            }
 
         if ent_type == "work":
             # 优先精确匹配书名
@@ -312,6 +363,20 @@ def apply_entities_and_punctuations_to_markdown(
     out: list[str] = []
     pi = 0
     pending_marks: list[str] = []
+    pending_breaks: list[str] = []
+
+    def flush_marks() -> None:
+        # 版面记号的次序：先收小注（`>`、`]{…}`），再分段，再页码标记/开小注。
+        # 否则段末字在注内时分段符会落进注里（`藏本\n\n>`），开书名号会跑到
+        # 页码标记前面（`《<!-- p4 -->周易`）。
+        k = 0
+        while k < len(pending_marks) and pending_marks[k][:1] in (">", "]"):
+            k += 1
+        out.extend(pending_marks[:k])
+        out.extend(pending_breaks)
+        out.extend(pending_marks[k:])
+        pending_marks.clear()
+        pending_breaks.clear()
 
     for orig, ch in plain_tokens:
         if ch == "":
@@ -319,6 +384,8 @@ def apply_entities_and_punctuations_to_markdown(
                 continue
             pending_marks.append(orig)
             continue
+
+        flush_marks()
 
         # 1. 字符前点号
         if pi in punct_map:
@@ -339,8 +406,6 @@ def apply_entities_and_punctuations_to_markdown(
                 else:
                     out.append("/")
 
-        out.extend(pending_marks)
-        pending_marks.clear()
         out.append(orig)
 
         # 3. 实体后闭合
@@ -356,15 +421,15 @@ def apply_entities_and_punctuations_to_markdown(
                 else:
                     out.append("/")
 
-        # 4. 字符后标点与分段符
+        # 4. 字符后标点；分段符等后面的版面记号收完再出
         if pi in punct_map:
             for p in punct_map[pi]:
                 if p.pos == "after":
-                    out.append(p.mark)
+                    (pending_breaks if p.kind == "break" else out).append(p.mark)
 
         pi += 1
 
-    out.extend(pending_marks)
+    flush_marks()
     return "".join(out)
 
 
