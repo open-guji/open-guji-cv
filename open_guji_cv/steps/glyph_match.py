@@ -321,12 +321,10 @@ class GlyphMatchStep(Step):
                     recs.append(reuse[r.id])
                     n_reused += 1
                     continue
-                try:
-                    img = ctx.image("char_patch", r.patch_key)
-                except Exception as e:              # 图块再生不出来就跳过，不炸整页
-                    recs.append(MatchRec(id=r.id, slot=r.slot, sub=r.sub,
-                                         verdict="diff", guard=f"no_patch:{e}"))
-                    continue
+                # 图块读不到 / 再生不出来 → 整页失败（引擎记 failed、旧产物不动），不降级。
+                # 2026-10-05 前这里吞异常记成 diff+`no_patch`，接着往下放行，读图出问题时
+                # 整页静默变质而状态显示正常（overview#407）。
+                img = _patch(ctx, r.patch_key, page)
                 is_punct = (getattr(r, "step3_kind", None) == "punct")
                 m = matcher.match(normalize_patch(img, is_punct),
                                   exclude_id=(r.id if p.exclude_self else None))
@@ -334,8 +332,11 @@ class GlyphMatchStep(Step):
                 for cv in (r.cand_variants or []):
                     try:
                         cimg = ctx.image("char_patch", cv.patch_key)
-                    except Exception:
-                        continue    # 候选试切图块再生不出来就跳过，不炸整页
+                    except (KeyError, ValueError):
+                        # 候选试切的键（`…_L0`）按设计不可再生（cell_shrink.render 反解不了）：
+                        # 缓存里没有就是没有（云端快照不带 cache/），只少这一路证据、不影响本格判决。
+                        # 文件在却读不出来是 OSError，不在这里接——照样停页（overview#407）。
+                        continue
                     cm = matcher.match(normalize_patch(cimg, is_punct),
                                        exclude_id=(r.id if p.exclude_self else None))
                     cand_variants.append(CandidateMatch(
@@ -368,6 +369,17 @@ class GlyphMatchStep(Step):
         log_reuse(ctx, self, page, n_reused, n_total)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
+
+
+class PatchUnavailable(RuntimeError):
+    """本页某个字块读不到也再生不出来——这一页必须停下，不能降级成垃圾判决（overview#407）。"""
+
+
+def _patch(ctx: RunContext, key: str, page: int):
+    try:
+        return ctx.image("char_patch", key)
+    except Exception as e:                  # noqa: BLE001 —— 换成带页号与键的错误再抛，不吞
+        raise PatchUnavailable(f"p{page} 字块 {key} 读不到: {type(e).__name__}: {e}") from e
 
 
 def glyph_match_summary(book_id: str, pages: list[int] | None = None,
