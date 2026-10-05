@@ -39,7 +39,7 @@
   - `seg_defect` 不带字的格不算已裁，也不进 `stale`；
   - `cards(skip_decided=True)` 会出失效格，包括排除名单上的失效带字格，并带 `stale_verdict`；有效格和名单上有效带字的格不出卡；
   - `closure_gaps` 的列出和不列出（`human_char`、遮挡格、改判非字、已放行）。
-- 全量（`python -m pytest tests/ -q -s -p no:cacheprovider`，云端）：**2639 过、1 败、30 跳过**。唯一失败的是 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`，在 base `73fa8b3` 上同样失败。原因是云端没有缺省 U-Net 权重文件（`ckpt_fingerprint()` 返回空串），和本次改动无关；本机有权重文件，应当能过。
+- 全量（`python -m pytest tests/ -q -s -p no:cacheprovider`，云端）：第一轮 2639 过；**第二轮（f0d3b5a 之后）2642 过、1 败、30 跳过**。唯一失败的是 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`，在 base `73fa8b3` 上同样失败。原因是云端没有缺省 U-Net 权重文件（`ckpt_fingerprint()` 返回空串），和本次改动无关；本机有权重文件，应当能过。
 - 前端：`npm run build`（含 `tsc -b`）通过。
 
 ## 本地要做的
