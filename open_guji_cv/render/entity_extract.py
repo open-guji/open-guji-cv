@@ -67,6 +67,30 @@ class EntityAnnotation:
         return d
 
 
+#: 經傳篇名：《易》十翼等是經書的一部分，不是某人撰的書；book-index 里却有同名 Work
+#: （如韓元吉《繫辭傳》），精确名匹配会误挂。一律不挂、不建档。
+CLASSIC_SECTIONS = frozenset(
+    "繫辭 繫辭傳 繫辭上傳 繫辭下傳 說卦 說卦傳 序卦 序卦傳 雜卦 雜卦傳 彖 彖傳 彖上傳 彖下傳 "
+    "象 象傳 象上傳 象下傳 大象 小象 文言 文言傳 上經 下經 十翼".split())
+
+_NAME_NORM = str.maketrans("吕郞", "呂郎")
+
+#: 三字及以下的书名多是简称（「集解」「唐志」「本義」「考」），同名 Work 往往是别人的书：
+#: vol02 实测 集解→淩唐佐、唐志→王沿、易本義→劉霖、五經→王弼 全是误挂。所以短书名只在
+#: 「撰人在同段出现」或「前接人名核对为撰人」时才挂；下面这些经史名著例外，见名即挂。
+WELL_KNOWN_SHORT = frozenset(
+    "經義考 左傳 公羊傳 穀梁傳 孟子 論語 爾雅 史記 漢書 後漢書 三國志 晉書 宋書 南齊書 梁書 陳書 "
+    "魏書 北齊書 周書 隋書 南史 北史 舊唐書 新唐書 宋史 遼史 金史 元史 明史 玉海 通典 通志 七略 七志 "
+    "初學記 說文 文選 山海經 水經注 乾鑿度".split())
+SHORT_TITLE_MAX = 3
+
+#: 清代避諱改字：四庫提要里「鄭元」即鄭玄、「周宏正」即周弘正。book-index 里另有唐人鄭元，
+#: 不还原就会误挂。还原后的名字在库里有才用它。
+TABOO_RESTORE = str.maketrans("元宏", "玄弘")
+#: 书名别称 → book-index 的条目名（库里「春秋左傳」是明包瑜的书，经本身题作「左傳」）
+WORK_ALIAS = {"春秋左傳": "左傳", "春秋左氏傳": "左傳", "左氏傳": "左傳"}
+
+
 class BookIndexMatcher:
     """轻量级 book-index 实体匹配器。"""
 
@@ -85,6 +109,28 @@ class BookIndexMatcher:
         if oid not in ids:
             ids.append(oid)
         self.meta[oid] = item
+
+    def work_authors(self, wid: str) -> list[tuple[str, str | None]]:
+        """Work 的撰人 [(名, entity_id)]，按需读条目 JSON（分片索引里没有撰人）。"""
+        m = self.meta.get(wid) or {}
+        path = self.root / m.get("path", "") if m.get("path") else None
+        if path is None or not path.is_file():
+            return []
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            return []
+        out = []
+        for a in d.get("authors") or []:
+            for n in (a.get("name"), a.get("original_name")):
+                if n:
+                    out.append((n, a.get("entity_id")))
+        return out
+
+    def _author_ok(self, wid: str, name: str, eid: str | None) -> bool:
+        key = name.translate(_NAME_NORM)
+        return any((eid and aid == eid) or n.translate(_NAME_NORM) == key
+                   for n, aid in self.work_authors(wid))
 
     def describe(self, oid: str) -> str:
         """条目一行摘要（抽检表里给人判误挂用）：朝代、生卒、路径。"""
@@ -187,17 +233,74 @@ class BookIndexMatcher:
 
         self._loaded = True
 
-    def match(self, ent_type: str, text: str, dynasty_hint: str | None = None) -> dict[str, Any]:
+    def match(self, ent_type: str, text: str, dynasty_hint: str | None = None,
+              author_hint: tuple[str, str | None] | None = None,
+              context: str | None = None) -> dict[str, Any]:
         """根据实体类型与文本匹配知识库。
 
         `dynasty_hint`：紧挨在名字前的朝代（四庫提要「漢鄭玄注」「魏王弼撰」的写法）。
         同名多条时用它筛：条目朝代含该字样的恰好一条才挂，否则不挂。
+        `author_hint`：紧挨在书名前的人名 (名, entity_id)（「焦竑經籍志」「陸游老學庵筆記」）。
+        书名只有一条时撰人对不上就不挂（vol02 抽检 5 例误挂有 2 例是这种），同名多条时用它消歧。
+        `context`：书名附近的原文（前几个字＋提要书名行的下一段开头）。给了它，短书名
+        （见 `WELL_KNOWN_SHORT`）要撰人在其中出现才挂。整段太宽：一条提要提到的人很多，
+        vol02 抽检里「易傳」挂到同段提过的丁易東、「易解」挂到胡瑗，都是这么错的。
         """
         if not self._loaded:
             self.load_index()
 
+        if ent_type == "work" and text in WORK_ALIAS:
+            r = self.match(ent_type, WORK_ALIAS[text], dynasty_hint, author_hint, context)
+            if r.get("status") == "matched":
+                r["note"] = f"别称，按「{WORK_ALIAS[text]}」挂"
+            return r
+        if ent_type == "people":
+            restored = text.translate(TABOO_RESTORE)
+            if restored != text and self.ids_by_name.get(("people", restored)):
+                r = self.match(ent_type, restored, dynasty_hint, author_hint, context)
+                r["note"] = f"避諱字還原「{text}」→「{restored}」" + (f"；{r['note']}" if r.get("note") else "")
+                return r
+
         same = self.ids_by_name.get((ent_type, text), [])
         n_same = len(same)
+        if ent_type == "work" and text in CLASSIC_SECTIONS:
+            return {"status": "new_candidate", "canonical_name": text, "note": "經傳篇名，不挂、不建档"}
+        if ent_type == "work" and author_hint and same:
+            hit = [w for w in same if self._author_ok(w, *author_hint)]
+            if len(hit) == 1:
+                return {
+                    "status": "matched",
+                    "entity_type": "work",
+                    "entity_id": hit[0],
+                    "canonical_name": text,
+                    "href": f"book-index://Work/{hit[0]}",
+                    "note": f"按撰人「{author_hint[0]}」核对" + (f"（同名 {n_same} 条）" if n_same > 1 else ""),
+                }
+            if not hit and any(self.work_authors(w) for w in same):
+                return {
+                    "status": "new_candidate",
+                    "canonical_name": text,
+                    "note": f"前接人名「{author_hint[0]}」与同名 {n_same} 条撰人皆不合",
+                }
+        if (ent_type == "work" and context is not None and same and len(text) <= SHORT_TITLE_MAX
+                and text not in WELL_KNOWN_SHORT):
+            ctx = context.translate(_NAME_NORM)
+            hit = [w for w in same
+                   if any(len(n) >= 2 and n.translate(_NAME_NORM) in ctx for n, _ in self.work_authors(w))]
+            if len(hit) == 1:
+                return {
+                    "status": "matched",
+                    "entity_type": "work",
+                    "entity_id": hit[0],
+                    "canonical_name": text,
+                    "href": f"book-index://Work/{hit[0]}",
+                    "note": "短书名，撰人见于书名近旁",
+                }
+            return {
+                "status": "new_candidate",
+                "canonical_name": text,
+                "note": "短书名（多为简称），近旁不见 book-index 同名条目的撰人，不挂",
+            }
         if n_same > 1 and dynasty_hint:
             hit = [i for i in same if dynasty_hint in (self.meta.get(i, {}).get("dynasty") or "")]
             if len(hit) == 1:

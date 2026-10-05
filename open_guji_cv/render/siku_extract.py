@@ -255,18 +255,28 @@ class ChunkResult:
     punct: dict[int, str]                           # chunk plain 下标 → 插在该位置前
     spans: list[tuple[str, int, int]]               # chunk plain 下标区间
     note: str = ""
+    subs: list[tuple[int, str, str]] = field(default_factory=list)   # (plain 下标, 底本字, 模型字)
 
 
-def align_chunk(plain: str, out: str) -> tuple[dict[int, str], list[tuple[str, int, int]], int]:
-    """模型输出 → (标点 {plain 下标: 插在其前}, 专名 [(type, s, e)], 对不上的字数)。"""
+def align_chunk(plain: str, out: str
+                ) -> tuple[dict[int, str], list[tuple[str, int, int]], int, list[tuple[int, str, str]]]:
+    """模型输出 → (标点 {plain 下标: 插在其前}, 专名 [(type, s, e)], 增删的字数, 等长换字)。
+
+    等长换字（没→沒、日→曰）不挪位置，标点照样落得准，单算、不计入增删；
+    原文仍一字不动，换字记进报告供底本定字参考。增删（模型补出整条小注）才是要作废的。
+    """
     p = parse_annotated(clean_output(out))
     sm = difflib.SequenceMatcher(None, plain, p.stripped, autojunk=False)
     qmap: dict[int, int] = {}
     bad = 0
+    subs: list[tuple[int, str, str]] = []
     for tag, i1, i2, j1, j2 in sm.get_opcodes():
-        if tag == "equal":
+        if tag == "equal" or (tag == "replace" and i2 - i1 == j2 - j1
+                              and all(_is_char(plain[i]) for i in range(i1, i2))):
             for k in range(i2 - i1):
                 qmap[j1 + k] = i1 + k
+            if tag == "replace":
+                subs += [(i1 + k, plain[i1 + k], p.stripped[j1 + k]) for k in range(i2 - i1)]
         else:
             bad += max(i2 - i1, j2 - j1)
     keys = sorted(qmap)
@@ -283,7 +293,7 @@ def align_chunk(plain: str, out: str) -> tuple[dict[int, str], list[tuple[str, i
     for typ, s, e in p.spans:
         if all(q in qmap for q in range(s, e)) and qmap[e - 1] - qmap[s] == e - 1 - s:
             spans.append((typ, qmap[s], qmap[e - 1] + 1))
-    return punct, spans, bad
+    return punct, spans, bad, subs
 
 
 class Asker(Protocol):
@@ -291,9 +301,13 @@ class Asker(Protocol):
 
 
 def run_chunk(plain: str, client: Asker, max_bad_ratio: float = 0.02,
-              prompt: str = SIKU_PROMPT) -> ChunkResult:
+              prompt: str = SIKU_PROMPT, max_sub_ratio: float = 0.05) -> ChunkResult:
     user = prompt.format(text=plain)
-    best: tuple[dict[int, str], list, int] | None = None
+    best: tuple[dict[int, str], list, int, list] | None = None
+
+    def ok(r) -> bool:
+        return r[2] <= max_bad_ratio * len(plain) and len(r[3]) <= max(1, max_sub_ratio * len(plain))
+
     err = ""
     for attempt in range(2):
         try:
@@ -302,17 +316,18 @@ def run_chunk(plain: str, client: Asker, max_bad_ratio: float = 0.02,
             err = f"LLM 调用失败：{e}"
             continue
         res = align_chunk(plain, out)
-        if best is None or res[2] < best[2]:
+        if best is None or (ok(res), -res[2], -len(res[3])) > (ok(best), -best[2], -len(best[3])):
             best = res
-        if res[2] <= max_bad_ratio * len(plain):
+        if ok(res):
             break
     n = sum(1 for c in plain if _is_char(c))
     if best is None:
         return ChunkResult(False, len(plain), n, {}, [], err)
-    punct, spans, bad = best
-    if bad > max_bad_ratio * len(plain):
-        return ChunkResult(False, bad, n, {}, [], f"LLM 改字 {bad}/{len(plain)}，本块不标点")
-    return ChunkResult(True, bad, n, punct, spans)
+    punct, spans, bad, subs = best
+    if not ok(best):
+        return ChunkResult(False, bad + len(subs), n, {}, [],
+                           f"LLM 增删 {bad}、换字 {len(subs)}/{len(plain)}，本块不标点")
+    return ChunkResult(True, bad, n, punct, spans, subs=subs)
 
 
 # ── 4. 整册 ─────────────────────────────────────────────────────────────
@@ -414,6 +429,23 @@ def dynasty_before(chars: list[str], s: int, prev: EntityAnnotation | None) -> s
     return None
 
 
+CONTEXT_BEFORE = 8
+CONTEXT_NEXT_HEAD = 30
+
+
+def name_before(chars: list[str], s: int, prev: EntityAnnotation | None,
+                matcher: BookIndexMatcher) -> tuple[str, None] | None:
+    """书名前紧挨着、模型没标出来的人名（「焦竑經籍志」「劉克莊後山集」）：前 3/2 字是
+    book-index 里的人名就当撰人线索。不跨进前一个专名。"""
+    floor = prev.end_offset if prev is not None else 0
+    for n in (3, 2):
+        if s - n >= floor:
+            name = "".join(chars[s - n:s])
+            if matcher.ids_by_name.get(("people", name)):
+                return (name, None)
+    return None
+
+
 def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *,
                limit: int = 300, workers: int = 4, max_bad_ratio: float = 0.02,
                source: str = "llm", count_blank_columns: bool = False,
@@ -440,6 +472,7 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
     puncts: list[PunctAnnotation] = []
     raw_ents: list[tuple[str, int, int]] = []
     failed: list[dict[str, Any]] = []
+    substitutions: list[dict[str, Any]] = []
     for ch, cr in zip(chunks, results):
         if not cr.ok:
             first = next((i for i in ch.render_idx if i is not None), None)
@@ -447,6 +480,10 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
                            "chars": cr.n, "bad": cr.bad, "note": cr.note, "head": ch.plain[:20]})
             continue
         pts, ents = _chunk_to_render(ch, cr)
+        for t, a, b in cr.subs:
+            ri = ch.render_idx[t]
+            substitutions.append({"anchor": anchors[ri] if ri is not None else None, "base": a, "model": b,
+                                  "context": context(render_chars, ri, ri + 1, 8) if ri is not None else ""})
         for mark, ri, pos in pts:
             puncts.append(PunctAnnotation(mark=mark, kind="point", pos=pos, char_offset=ri,
                                           pre_char=render_chars[ri], anchor=anchors[ri], source=source))
@@ -464,8 +501,20 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
             continue
         taken.update(range(s, e))
         text = "".join(render_chars[s:e])
-        hint = dynasty_before(render_chars, s, entities[-1] if entities else None)
-        tgt = (matcher.match(typ, text, dynasty_hint=hint) if matcher
+        prev = entities[-1] if entities else None
+        hint = dynasty_before(render_chars, s, prev)
+        author = ((prev.text, prev.target_id) if typ == "work" and prev is not None
+                  and prev.type == "people" and prev.end_offset == s else None)
+        if typ == "work" and author is None and matcher is not None:
+            author = name_before(render_chars, s, prev, matcher)
+        # 书名近旁：前 8 字（「蘇洵作易傳」「王與之周禮訂義」）；书名打头的段（提要书名行
+        # 自成一段）再加下一段开头 30 字（撰人「宋沈該撰」在那里）
+        pi = bisect.bisect_left(para_last, s)
+        p_start = para_last[pi - 1] + 1 if pi else 0
+        ctx = "".join(render_chars[max(p_start, s - CONTEXT_BEFORE):s])
+        if s == p_start and pi + 1 < len(para_last):
+            ctx += "|" + "".join(render_chars[para_last[pi] + 1:para_last[pi] + 1 + CONTEXT_NEXT_HEAD])
+        tgt = (matcher.match(typ, text, dynasty_hint=hint, author_hint=author, context=ctx) if matcher
                else {"status": "new_candidate", "canonical_name": text})
         entities.append(EntityAnnotation(
             id=f"e{len(entities) + 1:05d}", type=typ, text=text,
@@ -493,7 +542,10 @@ def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *
         "new_candidate": sum(1 for e in entities if e.target_status == "new_candidate"),
         "by_type": {t: sum(1 for e in entities if e.type == t) for t in sorted({e.type for e in entities})},
         "reflow": {k: v for k, v in rstats.items() if isinstance(v, (int, str, list))},
+        "model_substitutions": len(substitutions),
         "failed": failed,
+        # 模型想换的字：原文没动，列出来给底本定字（A3）参考，日→曰 这类可能是底本错
+        "substitutions": substitutions,
     }
     return VolumeResult(puncts, entities, rich, render_chars, anchors, report)
 

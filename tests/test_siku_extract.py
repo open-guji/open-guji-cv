@@ -211,3 +211,52 @@ def test_dynasty_hint_from_untagged_prefix():
     assert sx.dynasty_before(chars, 1, None) == "漢"
     assert sx.dynasty_before(chars, 6, None) == "魏"
     assert sx.dynasty_before(chars, 4, None) is None
+
+
+def test_equal_length_substitution_kept_but_insertion_rejected():
+    plain = "子曰學而時習之不亦說乎"
+    punct, _, bad, subs = sx.align_chunk(plain, "子日：學而時習之，不亦說乎？")
+    assert bad == 0 and subs == [(1, "曰", "日")] and punct[2] == "："
+    llm = FakeLLM({plain: "子曰：學而時習之，不亦樂乎？"})
+    cr = sx.run_chunk(plain, llm, max_sub_ratio=0.1)
+    assert cr.ok and cr.subs == [(9, "說", "樂")]
+    llm = FakeLLM({plain: "子曰：<朱注>學而時習之，不亦說乎？"})
+    assert not sx.run_chunk(plain, llm).ok
+
+
+def test_work_author_check_and_classic_sections(tmp_path):
+    root = tmp_path / "bi"
+    m = _matcher(root)
+    (root / "Work").mkdir()
+    (root / "Work" / "jjz.json").write_text(json.dumps(
+        {"title": "經籍志", "authors": [{"name": "余道邈"}]}, ensure_ascii=False), encoding="utf-8")
+    (root / "Work" / "xc.json").write_text(json.dumps(
+        {"title": "繫辭傳", "authors": [{"name": "韓元吉"}]}, ensure_ascii=False), encoding="utf-8")
+    for wid, title in (("w2", "經籍志"), ("w3", "繫辭傳")):
+        m._add("work", title, wid, {"id": wid, "title": title, "path": f"Work/{'jjz' if wid == 'w2' else 'xc'}.json"})
+        m.works[title] = wid
+    assert m.match("work", "經籍志")["status"] == "matched"
+    r = m.match("work", "經籍志", author_hint=("焦竑", None))
+    assert r["status"] == "new_candidate" and "撰人皆不合" in r["note"]
+    assert m.match("work", "經籍志", author_hint=("余道邈", None))["entity_id"] == "w2"
+    assert m.match("work", "繫辭傳")["status"] == "new_candidate"
+
+
+def test_short_title_needs_author_in_paragraph(tmp_path):
+    root = tmp_path / "bi"
+    m = _matcher(root)
+    (root / "Work").mkdir()
+    (root / "Work" / "jj.json").write_text(json.dumps(
+        {"title": "集解", "authors": [{"name": "淩唐佐"}]}, ensure_ascii=False), encoding="utf-8")
+    m._add("work", "集解", "w9", {"id": "w9", "title": "集解", "path": "Work/jj.json"})
+    m.works["集解"] = "w9"
+    assert m.match("work", "集解", context="李鼎祚集解所引")["status"] == "new_candidate"
+    assert m.match("work", "集解", context="淩唐佐集解")["entity_id"] == "w9"
+    assert m.match("work", "子夏易傳", context="無關")["status"] == "matched"     # 四字以上照挂
+    m._add("people", "焦竑", "p9", {"id": "p9"})
+    m._add("people", "鄭元", "p10", {"id": "p10", "dynasty": "唐"})
+    r = m.match("people", "鄭元")
+    assert r["status"] == "new_candidate" and "同名 2 条" in r["note"]
+    assert "避諱" in r["note"]
+    assert m.match("people", "鄭元", dynasty_hint="漢")["entity_id"] == "p1"
+    assert sx.name_before(list("焦竑經籍志"), 2, None, m) == ("焦竑", None)
