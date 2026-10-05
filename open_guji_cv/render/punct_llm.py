@@ -26,6 +26,7 @@ from __future__ import annotations
 import difflib
 import hashlib
 import json
+import random
 import re
 import time
 import urllib.error
@@ -138,7 +139,12 @@ class PunctClient:
                 return out
             except Exception as e:
                 last = e
-                time.sleep(1 * (i + 1))
+                # 429 限流：并发一高就成片出现（vol02 整册 6 并发时 252 块里 137 块），
+                # 1~2 秒的重试间隔不够，按指数退避等到 60 秒
+                if isinstance(e, urllib.error.HTTPError) and e.code == 429:
+                    time.sleep(min(60, 5 * 2 ** i) + random.random() * 3)
+                else:
+                    time.sleep(1 * (i + 1))
         raise RuntimeError(f"LLM 调用失败：{last}")
 
 
