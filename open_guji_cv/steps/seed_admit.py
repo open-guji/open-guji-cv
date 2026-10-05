@@ -412,7 +412,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.10", unit="cell",   # 1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.11", unit="cell",   # 1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -587,6 +587,14 @@ class SeedAdmitStep(Step):
                         evd["damaged"] = True
                         if guess:
                             evd["guess"] = guess
+                    elif exrec.get("reason") != "not_a_char":
+                        # 切坏／裁坏（seg_defect／crop_defect）但人已给了字（overview#403 缺口 B）：
+                        # 图块照旧不进库、不出卡，字挂在 evidence 上供文本层出字——「不入库」说的是
+                        # 这块图不当范本，不是「这个字没定」（同 `lookup.human_chars` 的口径）。
+                        hs_x, ht_x = human_shapes.get(r.id), human_texts.get(r.id)
+                        hc = ht_x if (ht_x and hs_x in _JYS and ht_x in _JYS) else (hs_x or ht_x)
+                        if hc:
+                            evd["human_char"] = hc
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=False,
                         channel=None, char=("□" if damaged else None), provenance="",

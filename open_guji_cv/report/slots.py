@@ -112,7 +112,7 @@ class SlotRec:
     excluded: bool
     unreadable: bool
     human: bool                  # 人裁过（channel == "human"）
-    defect: bool = False         # 在排除名单上但**是字**（seg_defect/damaged）：占位，文本出阙文；见 _to_slot
+    defect: bool = False         # 在排除名单上但**是字**（seg_defect/damaged，或人已给字）：占位，没给字出阙文；见 _to_slot
     guess: str | None = None     # damaged 格人给的「最像哪个字」（Step7 evidence.guess），9.1 出 □{guess=X}
     doubts: list[str] = field(default_factory=list)
 
@@ -194,6 +194,11 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     # 老产物没有 evidence（Step7 早期）→ 按原来的口径当非字。
     reason = str((rec.evidence or {}).get("excluded", "")).split(":")[-1]
     defect = on_list and reason in ("seg_defect", "damaged")
+    # 名单上但人已给了字（Step7 `evidence.human_char`，overview#403 缺口 B）：字位占住、
+    # 文本出人给的字；`defect=True` 留给下游知道图块有缺陷（文本里不带标记）。非字不算。
+    human_char = (rec.evidence or {}).get("human_char") if on_list and reason != "not_a_char" else None
+    if human_char:
+        defect = True
     excluded = on_list and not defect
     # 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：不放行，但用户定「文本产物
     # 照常输出这个字」——`char` 是整理本的默认字（坐标对位优先），不是机器猜测，照出；
@@ -223,13 +228,15 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     if not admit and not on_list and not (occ and char):
         guess = guess or char
         char = None
+    if human_char:
+        char = human_char
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,
         char=char, admit=admit,
         channel=rec.channel, excluded=excluded, defect=defect,
         guess=guess,
         unreadable=(not admit and char is None and not excluded),
-        human=(rec.channel == "human"),
+        human=(rec.channel == "human" or bool(human_char)),
         doubts=[d.split("(")[0] for d in (rec.doubts or [])],
     )
 
