@@ -50,8 +50,27 @@ def _book_bindings(book: str, log, bindings):
         return {}
 
 
+def _withdrawn_marks(book: str, log, withdrawn):
+    """字形库撤下标记 `{字位: 撤下时刻}`（`lookup.stale_human_marks`）。缺省口径同 `_book_bindings`。"""
+    if withdrawn is not None:
+        return withdrawn
+    if log is not None:
+        return {}
+    try:
+        from ..feedback.lookup import stale_human_marks
+        return stale_human_marks(book)
+    except Exception:
+        return {}
+
+
+def _cut_before(ts: str, cut: str | None) -> bool:
+    """事件时刻是否在撤下标记（只到日 / 到分钟）当时或之前——口径同 `lookup.human_chars`。"""
+    return bool(cut) and ts.replace("-", "").replace(":", "")[:len(cut)] <= cut
+
+
 def decided_view(book: str, log: EventLog | None = None,
-                 bindings: dict[str, dict] | None = None) -> tuple[set[str], dict[str, dict]]:
+                 bindings: dict[str, dict] | None = None,
+                 withdrawn: dict[str, str] | None = None) -> tuple[set[str], dict[str, dict]]:
     """→ (`decided` 现在仍有效的已裁字位, `stale` 失效老裁决 `{字位: 当时的裁决}`)。
 
     **只收现在仍然有效的裁决**（overview#403 缺口 A）。Step7 读人裁要过绑定表
@@ -64,9 +83,14 @@ def decided_view(book: str, log: EventLog | None = None,
     没有绑定行（`skip`／`relabel` 等非 confirm 事件、或事件自带锚点却还没进绑定表、或绑定表
     算不出来）→ 照原编号算有效。一格只要有一条有效裁决就算已裁。
 
+    **字形库撤下标记**（`human_stale_*`／`stale_verdicts.tsv`，`lookup.stale_human_marks`）：撤下时刻
+    当时或之前的定字事件同样不算（`human_chars` 也是这么丢的），格回队列；撤下之后再裁的照常有效。
+
     `stale`：有裁决、但没有一条仍有效的字位 → 最后一条失效裁决读回成定字台的形状
-    （同 `review_verdicts`，`{"verdict": {shape, done, ...}, "ts", "batch", "status"}`），
-    卡片拿它当预勾——人点一下确认就写出带现行锚点的新事件。
+    （同 `review_verdicts`，`{"verdict": {shape, done, ...}, "ts", "batch", "status", "withdrawn"}`）。
+    绑定失效的（`withdrawn=False`）卡片拿它当预勾——人点一下确认就写出带现行锚点的新事件；
+    **撤下的（`withdrawn=True`）不预勾**（CV 总管 10-05）：撤下是人确认过钉错了格，再预勾旧字会误导，
+    卡头只标「旧裁「X」已撤」让人重新看。
     """
     from ..feedback.bindings import usable
     decided: set[str] = set()
@@ -77,10 +101,14 @@ def decided_view(book: str, log: EventLog | None = None,
     except FileNotFoundError:
         return decided, {}     # 新工作区还没有事件目录
     rows = _book_bindings(book, log, bindings)
+    marks = _withdrawn_marks(book, log, withdrawn)
     for e in evs:
         if not _is_decision(e, pre):
             continue
         k = e.target.key
+        if e.kind == "confirm" and (e.payload or {}).get("shape") and _cut_before(e.ts, marks.get(k)):
+            last_stale[k] = (e, None)
+            continue
         row = rows.get(e.id)
         if row is None:
             decided.add(k)
@@ -97,7 +125,9 @@ def decided_view(book: str, log: EventLog | None = None,
         v = _verdict_of(e)
         if v is None:
             continue
-        stale[k] = {"verdict": v, "ts": e.ts, "batch": e.batch, "status": row.get("status")}
+        stale[k] = {"verdict": v, "ts": e.ts, "batch": e.batch,
+                    "status": "withdrawn" if row is None else row.get("status"),
+                    "withdrawn": row is None}
     return decided, stale
 
 
@@ -143,6 +173,54 @@ def shape_decided_cells(book: str, log: EventLog | None = None) -> dict[str, str
     return out
 
 
+def closure_mismatches(book: str, pages: list[int], store=None,
+                       log: EventLog | None = None) -> list[dict]:
+    """收尾闸的**报告项**（overview#403，整理总管 10-05 补充）：**不要求为 0**，列出来给人扫一眼。
+
+    「最新定字裁决的字 ≠ 现行放行的字」——老裁决被丢（绑定失效／撤下）后机器放行了别的字：vol02
+    `22:4:20` 人裁「璹」（原图「邢璹」），老事件无锚被丢，机器放行「邢」。多数是正常的（老事件钉在
+    移位的格上、被正确丢掉），不能自动判。同一位多条裁决按最新那条比（`shape_decided_cells`）。
+
+    己／已／巳 一族（`utils/ji_yi_si.py`）两边都在族内的，字形与读法本就可能分岔，`kind="jys"` 单独归类，
+    不混进正文（`kind="main"`）。→ `[{"id", "page", "shape", "char", "kind"}]`，按页序。
+    """
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+    from ..report.slots import ADMIT_KIND, ADMIT_STEP
+    from ..utils.ji_yi_si import FAMILY as JYS
+    shapes = shape_decided_cells(book, log)
+    if not shapes:
+        return []
+    st = store or ProductStore()
+    want = _by_page(shapes)
+    out: list[dict] = []
+    for pg in pages:
+        ids = want.get(pg)
+        if not ids:
+            continue
+        a = st.read(book, ADMIT_STEP, page_key(pg), ADMIT_KIND)
+        if a is None:
+            continue
+        for cc in a.columns:
+            for r in cc.chars:
+                if r.id not in ids or not r.admit or not r.char or r.char == shapes[r.id]:
+                    continue
+                kind = "jys" if (r.char in JYS and shapes[r.id] in JYS) else "main"
+                out.append({"id": r.id, "page": pg, "shape": shapes[r.id], "char": r.char, "kind": kind})
+    return out
+
+
+def _by_page(keys) -> dict[int, set[str]]:
+    want: dict[int, set[str]] = {}
+    for k in keys:
+        try:
+            pg = int(k.split(":")[1])
+        except (IndexError, ValueError):
+            continue
+        want.setdefault(pg, set()).add(k)
+    return want
+
+
 def closure_gaps(book: str, pages: list[int], store=None, log: EventLog | None = None) -> list[dict]:
     """收尾不变量（overview#403 缺口 C）：**收尾前必须为空**。
 
@@ -162,13 +240,7 @@ def closure_gaps(book: str, pages: list[int], store=None, log: EventLog | None =
     if not shapes:
         return []
     st = store or ProductStore()
-    want: dict[int, set[str]] = {}
-    for k in shapes:
-        try:
-            pg = int(k.split(":")[1])
-        except (IndexError, ValueError):
-            continue
-        want.setdefault(pg, set()).add(k)
+    want = _by_page(shapes)
     out: list[dict] = []
     for pg in pages:
         ids = want.get(pg)

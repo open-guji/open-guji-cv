@@ -50,6 +50,16 @@
    - 补完再跑 seed_admit，收尾闸应为 0（验收第 3 条）。
 3. 验收第 1 条：vol03 `9:8:4` 在默认视图里出卡，并预勾「困」。
 
-## 没做 / 留意
-- 字形库里的撤下标记（`human_stale_*`、`stale_verdicts.tsv`）这次没并进 `decided_view`。`human_chars` 会按这类标记丢弃旧事件，所以被标记撤下的格 `decided_cells` 仍会算已裁。这类格会被收尾闸 C 报出来，所以不会再被悄悄漏掉。要不要也让它们回到队列，请总管定。
+## 第二轮（CV 总管 10-05 22:41 回复，三项）
+1. **排除名单上人给过字、裁决已失效的格**：维持回队列并预勾，只限定过字的格（总管同意）。
+2. **字形库撤下标记**（`human_stale_*`、`stale_verdicts.tsv`）：并进了 `decided_view(..., withdrawn=)`，缺省读 `lookup.stale_human_marks`。
+   - 撤下时刻当时及以前的定字事件不算已裁，格回到队列；撤下之后再裁的照常有效。时间比较口径和 `human_chars` 一致。
+   - `stale_verdict.withdrawn=True` 时前端**不预勾**，卡头标「旧裁「X」已撤 · 请重新看」。
+3. **收尾闸的报告项**：新增 `verdict_view.closure_mismatches`，列出「最新定字裁决的字 ≠ 现行放行的字」的格（`admit=True`），**不要求为 0**。
+   - 同一位置有多条裁决的，按最新那条比。
+   - 两边都在己、已、巳 族内的，记 `kind="jys"` 单独列出，不混进正文。
+   - `guji status` 文字输出在收尾闸下面多一行「报告 · 人裁字≠放行字 N 格」，己已巳 族另起一行；`--json` 多一个 `closure_mismatches` 字段。
+- 单测新增 3 条：撤下标记让格回队列且标 `withdrawn`、绑定失效的不算 `withdrawn`、报告项的正文／己已巳 分类加按最新裁决比。前端 build 通过，dist 已重建。手册 status 一节同步更新。
+
+## 留意
 - 收尾闸目前只看 `admit=False`。如果 Step7 产物过期，闸会把「已有效裁决、但还没重跑」的格也报出来（单测里 `keben:1:1:4` 就是这种），处理办法是先重跑 Step7。

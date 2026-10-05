@@ -12,7 +12,7 @@ import pytest
 
 import open_guji_cv.steps  # noqa: F401  注册产物种类
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
-from open_guji_cv.review.verdict_view import closure_gaps, decided_cells, decided_view
+from open_guji_cv.review.verdict_view import closure_gaps, closure_mismatches, decided_cells, decided_view
 
 
 def _ev(key: str, payload: dict, seq: int, *, kind: str = "confirm", batch: str = "b"):
@@ -76,6 +76,30 @@ def test_seg_defect_without_shape_still_not_decided_nor_stale(tmp_path):
     e = _ev("vol01:5:2:9", {"v": "seg_defect", "quality": "contaminated"}, 1)
     log.append([e])
     assert decided_view("vol01", log, {e.id: _row(e, "unanchored", None)}) == (set(), {})
+
+
+def test_withdrawn_mark_requeues_without_prefill(tmp_path):
+    """字形库撤下标记（human_stale_*）：撤下时刻及以前的裁决不算，格回队列、标 withdrawn（前端不预勾）；
+    撤下之后再裁的照常有效（CV 总管 10-05）。"""
+    log = EventLog(tmp_path)
+    a = _ev("vol02:20:1:1", {"v": "confirm", "shape": "甲"}, 1)
+    b = _ev("vol02:20:1:2", {"v": "confirm", "shape": "乙"}, 2)
+    log.append([a, b])
+    rows = {a.id: _row(a, "valid", a.target.key), b.id: _row(b, "valid", b.target.key)}
+    cut_after = (a.ts[:4] + a.ts[5:7] + a.ts[8:10])           # 撤于裁决当天：作废
+    marks = {"vol02:20:1:1": cut_after, "vol02:20:1:2": "19990101"}   # 撤于裁决之前：裁决照常
+    decided, stale = decided_view("vol02", log, rows, marks)
+    assert decided == {"vol02:20:1:2"}
+    assert stale["vol02:20:1:1"]["withdrawn"] is True
+    assert stale["vol02:20:1:1"]["verdict"]["shape"] == "甲"
+
+
+def test_binding_stale_is_not_withdrawn(tmp_path):
+    log = EventLog(tmp_path)
+    e = _ev("vol03:9:8:4", {"v": "confirm", "shape": "困"}, 1)
+    log.append([e])
+    _, stale = decided_view("vol03", log, {e.id: _row(e, "unanchored", None)}, {})
+    assert stale["vol03:9:8:4"]["withdrawn"] is False
 
 
 # ── A：cards(skip_decided=True) ──────────────────────────────────────
@@ -170,3 +194,26 @@ def test_closure_gaps_zero_when_text_has_char(tmp_path):
                 _ev("bk:2:1:3", {"v": "confirm", "shape": "之"}, 3),
                 _ev("bk:2:1:3", {"v": "not_a_char"}, 4)])           # 后来改判非字：不算定了字
     assert closure_gaps("bk", [2], st, log) == []
+
+
+def test_closure_mismatches_report(tmp_path):
+    """报告项：人裁字 ≠ 现行放行字（不要求为 0）；己已巳族单列；同一位按最新裁决比。"""
+    from open_guji_cv.core.spec import page_key
+    from open_guji_cv.products.kinds.recog import ColumnAdmit, PageAdmit
+    from open_guji_cv.products.store import ProductStore
+    st = ProductStore(tmp_path / "products")
+    recs = [_rec("vol02:22:4:20", 20, admit=True, char="邢"),     # 人裁 璹、机器放行 邢
+            _rec("vol02:22:4:21", 21, admit=True, char="已"),     # 人裁 巳：己已巳族
+            _rec("vol02:22:4:22", 22, admit=True, char="天"),     # 先裁 地 后改 天：按最新比，一致
+            _rec("vol02:22:4:23", 23, admit=False, char="玄")]    # 没放行：归收尾闸，不进报告项
+    st.write("vol02", "seed_admit", page_key(22),
+             {"seed_admit": PageAdmit(page=22, columns=[ColumnAdmit(col=4, chars=recs)])})
+    log = EventLog(tmp_path / "ev")
+    log.append([_ev("vol02:22:4:20", {"v": "confirm", "shape": "璹"}, 1),
+                _ev("vol02:22:4:21", {"v": "confirm", "shape": "巳"}, 2),
+                _ev("vol02:22:4:22", {"v": "confirm", "shape": "地"}, 3),
+                _ev("vol02:22:4:22", {"v": "confirm", "shape": "天"}, 4),
+                _ev("vol02:22:4:23", {"v": "confirm", "shape": "黃"}, 5)])
+    got = closure_mismatches("vol02", [22], st, log)
+    assert [(m["id"], m["shape"], m["char"], m["kind"]) for m in got] == [
+        ("vol02:22:4:20", "璹", "邢", "main"), ("vol02:22:4:21", "巳", "已", "jys")]

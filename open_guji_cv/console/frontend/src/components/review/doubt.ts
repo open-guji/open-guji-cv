@@ -44,9 +44,10 @@ export const doubtName = (code: string) => DOUBT_NAMES[code] ?? code
 /** 卡片默认裁决：印章遮挡卡在 `load()` 里预填的那份（整理本字 / 假格非字）。缺默认字返回 null。 */
 /**
  * 失效老裁决的预勾（overview#403 缺口 A）：当时裁的照原样填上、算本轮动过，人点提交就写出带现行
- * 锚点的新事件。「跳过」不是裁决，不预勾。没有 → null。
+ * 锚点的新事件。「跳过」不是裁决、撤下的旧裁（`withdrawn`）会误导，都不预勾。没有 → null。
  */
 export function staleDefault(c: ReviewCard, now: number): Verdict | null {
+  if (c.stale_verdict?.withdrawn) return null       // 撤下的旧裁：人确认过钉错了格，不预勾
   const v = c.stale_verdict?.verdict
   if (!v || !v.done || v.done === 'skip') return null
   return { ...v, ts: now }
