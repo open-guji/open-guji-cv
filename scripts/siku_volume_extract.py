@@ -146,6 +146,44 @@ def cmd_gemini_import(args) -> int:
     return 0
 
 
+def cmd_compare(args) -> int:
+    """#401 三方对照：段文件（Gemini、Claude…）与流水线产物（GLM）对参照逐位置比。"""
+    prep = sx.prepare_volume(Path(args.lines_md).read_text(encoding="utf-8"), limit=10 ** 9)
+    paras = set(sx.parse_paragraph_file(Path(args.part).read_text(encoding="utf-8")))
+    idx = [i for ch in prep.chunks if ch.para + 1 in paras for i in ch.render_idx if i is not None]
+    lo, hi = min(idx), max(idx) + 1
+    para_of = sx.para_index(prep)
+    marks: dict[str, dict[int, str]] = {}
+    spans: dict[str, set] = {}
+    changes: dict[str, dict] = {}
+    for spec in args.text:
+        name, path = spec.split("=", 1)
+        ans = {k: v for k, v in sx.parse_paragraph_file(Path(path).read_text(encoding="utf-8")).items() if k in paras}
+        results = sx.results_from_paragraphs(prep, ans, args.max_bad_ratio)
+        res = sx.assemble_volume(prep, results, None, name)
+        marks[name] = sx.boundary_marks(res.puncts, lo, hi)
+        spans[name] = sx.spans_from_entities(res.entities, lo, hi)
+        mine = [(ch, r) for ch, r in zip(prep.chunks, results) if ch.para + 1 in paras]
+        changes[name] = {"paragraphs": len(paras), "returned": len(ans),
+                         "voided": [f"P{ch.para + 1:03d} {r.note}" for ch, r in mine if not r.ok],
+                         "substitutions": sum(len(r.subs) for _, r in mine if r.ok)}
+    for spec in args.json:
+        name, d = spec.split("=", 1)
+        pj = json.loads((Path(d) / f"{args.vol:03d}.punct.json").read_text(encoding="utf-8"))
+        ej = json.loads((Path(d) / f"{args.vol:03d}.entity.json").read_text(encoding="utf-8"))
+        marks[name] = sx.boundary_marks(sx.puncts_from_json(pj), lo, hi)
+        spans[name] = sx.spans_from_entities(ej["entities"], lo, hi)
+    rows, pstats = sx.compare_punct(prep, marks, args.ref, para_of)
+    estats = sx.compare_entities(spans, args.ref)
+    sx.write_tsv(rows, Path(args.out))
+    summary = {"part": args.part, "chars": hi - lo, "ref": args.ref, "punct": pstats, "entity": estats,
+               "changes": changes}
+    Path(args.out).with_suffix(".summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(json.dumps(summary, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_sample(args) -> int:
     out = Path(args.out)
     stem = f"{args.vol:03d}"
@@ -216,6 +254,17 @@ def main(argv: list[str] | None = None) -> int:
     gi.add_argument("--max-bad-ratio", type=float, default=0.02, help="增删＋换字超过此比例整段作废")
     versions(gi)
     gi.set_defaults(func=cmd_gemini_import)
+
+    cp = sub.add_parser("compare", help="#401 三方对照（对参照逐位置比标点、专名）")
+    cp.add_argument("--vol", type=int, required=True)
+    cp.add_argument("--lines-md", required=True)
+    cp.add_argument("--part", required=True, help="输入份 in/partNN.txt，定比哪些段")
+    cp.add_argument("--text", action="append", default=[], help="名=段文件，如 gemini=out/part01.txt（可多次）")
+    cp.add_argument("--json", action="append", default=[], help="名=产物目录（读 NNN.punct/entity.json），如 glm=<original>")
+    cp.add_argument("--ref", default="claude", help="参照名")
+    cp.add_argument("--max-bad-ratio", type=float, default=0.02)
+    cp.add_argument("--out", required=True, help="对照表 TSV，如 gemini/002/compare_part01.tsv")
+    cp.set_defaults(func=cmd_compare)
 
     s = sub.add_parser("sample", help="出抽检核对表")
     common(s)

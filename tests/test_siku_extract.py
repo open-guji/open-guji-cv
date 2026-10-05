@@ -304,3 +304,17 @@ def test_write_outputs_versions(tmp_path):
     pj = json.loads(paths["punct"].read_text(encoding="utf-8"))
     assert list(pj)[1:4] == ["version", "text_version", "book_id"] and pj["text_version"] == "0.3.0"
     assert pj["version"] == "0.2.0"
+
+
+def test_compare_punct_and_entities():
+    prep = sx.prepare_volume(LINES, limit=10 ** 9)
+    ref = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, {2: A1 + A2}), None, "ref")
+    alt = sx.assemble_volume(prep, sx.results_from_paragraphs(
+        prep, {2: A1.replace("，舊本", "舊本") + A2.replace("撰，", "撰；")}), None, "alt")
+    n = len(prep.render_chars)
+    marks = {"claude": sx.boundary_marks(ref.puncts, 0, n), "x": sx.boundary_marks(alt.puncts, 0, n)}
+    rows, st = sx.compare_punct(prep, marks, "claude", sx.para_index(prep))
+    assert st["x"]["missed"] == 1 and st["x"]["diff_mark"] == 1 and st["x"]["extra"] == 0
+    assert any(r["claude"] == "，" and r["x"] == "；" for r in rows)
+    sp = {"claude": sx.spans_from_entities(ref.entities, 0, n), "x": sx.spans_from_entities(alt.entities, 0, n)}
+    assert sx.compare_entities(sp, "claude")["x"]["precision_exact"] == 1.0
