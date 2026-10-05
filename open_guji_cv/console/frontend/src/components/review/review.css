@@ -30,6 +30,7 @@
   background: var(--ochre-soft); color: var(--ochre); white-space: nowrap; }
 .rvapproxin { display: flex; gap: .3rem; margin: .2rem 0; flex-wrap: wrap; }
 .rvapproxin input { flex: 1 1 8rem; min-width: 0; font-size: .75rem; padding: .1rem .25rem; }
+.rvstale { margin-left: .4rem; font-size: .7rem; padding: 0 .25rem; border-radius: 2px; border: 1px dashed var(--zhu); color: var(--zhu); }
 .rvoccl { order: 10; flex-basis: 100%; box-sizing: border-box; font-size: .78rem; font-weight: 600; padding: .15rem .4rem; border: 1px solid var(--zhu); background: var(--zhu-soft); color: var(--zhu); border-radius: 3px; }
 .rv-doubts { display: flex; gap: .35rem; flex-wrap: wrap; align-items: center; margin-bottom: .5rem; font-size: .8rem; }
 .rv-doubts button { font-size: .78rem; padding: .1rem .5rem; }

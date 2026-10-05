@@ -92,6 +92,12 @@ export interface ReviewCard {
   occluded?: { char: string; via: string | null; ref_blank: boolean } | null
   /** 库给的字靠的是近似例（人裁勾过「无匹配（近似字）」的刻例，overview#276）；Step7 evidence.approx。 */
   approx?: { source: string; via: string; exemplar: string | null; ids: string | null; note: string | null } | null
+  /** 失效老裁决（overview#403 缺口 A）：人裁过、但绑定表已不采信（切分改了 / 老事件补不出锚），
+   * 这一格回到待审。`verdict` 是当时裁的（定字台裁决形状），载入时当预勾；确认后写出带现行锚点的新事件。
+   * `withdrawn`：字形库撤下标记（人确认过钉错了格）——不预勾，只标「已撤」。 */
+  stale_verdict?: { verdict: { shape: string; done: string; noGlyphLib?: boolean; guess?: string;
+                               approx?: boolean; approxIds?: string; approxNote?: string };
+                    ts: string; batch: string; status: string | null; withdrawn?: boolean } | null
   /** 按类别审（overview#247）：请求带了 `cls` 才有。一张卡只归优先级最高的一类。 */
   cls?: string
   /** 类别细项（overview#265）：目前只有「对齐改字层」有——grid / tail / manual。 */

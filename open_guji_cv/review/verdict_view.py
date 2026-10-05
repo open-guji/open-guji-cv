@@ -19,8 +19,121 @@ from ..feedback.events import EventLog
 DECIDED_KINDS = frozenset({"confirm", "not_a_char", "skip", "seg_defect", "relabel"})
 
 
-def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
-    """这本书**所有批次**里已经裁过的字位 id。
+def _is_decision(e, pre: str) -> bool:
+    """这条事件算不算「对这一格表过态」（`decided_cells` 的口径，不看是否仍有效）。"""
+    if e.kind not in DECIDED_KINDS or e.target.unit != "cell" or not e.target.key.startswith(pre):
+        return False
+    # 「切坏 / 带残留」**不带字**时不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是
+    # "这块图先别用"，没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格
+    # 回到待审队列，`skip_decided` 却把它们永远藏起来——bxgb 42 个「已裁未放行」里
+    # 31 个从没定过字，定字台上也看不见，人以为剩下的无处可做。这类的去处是 Step3
+    # 的打回台账，不是这里。
+    #
+    # **带字就算裁过**（同日用户加的两可档）：人一边说这块图切坏了、一边指出是哪个字，
+    # 定字这件事已经做完，不该再出卡；缺陷另走 gold_add 与打回通道。
+    p = e.payload or {}
+    return not (e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape"))
+
+
+def _book_bindings(book: str, log, bindings):
+    """绑定表 `{event_id: row}`。缺省同 `lookup.human_chars(bind=None)`：读工作区事件日志时现算，
+    传入测试日志时不绑（测试直接给 `bindings`）。算不出来退回不绑——与改前一致，不因此把全书
+    已裁都当失效端回队列。"""
+    if bindings is not None:
+        return bindings
+    if log is not None:
+        return {}
+    try:
+        from ..feedback.bindings import book_bindings
+        return book_bindings(book)
+    except Exception:
+        return {}
+
+
+def _withdrawn_marks(book: str, log, withdrawn):
+    """字形库撤下标记 `{字位: 撤下时刻}`（`lookup.stale_human_marks`）。缺省口径同 `_book_bindings`。"""
+    if withdrawn is not None:
+        return withdrawn
+    if log is not None:
+        return {}
+    try:
+        from ..feedback.lookup import stale_human_marks
+        return stale_human_marks(book)
+    except Exception:
+        return {}
+
+
+def _cut_before(ts: str, cut: str | None) -> bool:
+    """事件时刻是否在撤下标记（只到日 / 到分钟）当时或之前——口径同 `lookup.human_chars`。"""
+    return bool(cut) and ts.replace("-", "").replace(":", "")[:len(cut)] <= cut
+
+
+def decided_view(book: str, log: EventLog | None = None,
+                 bindings: dict[str, dict] | None = None,
+                 withdrawn: dict[str, str] | None = None) -> tuple[set[str], dict[str, dict]]:
+    """→ (`decided` 现在仍有效的已裁字位, `stale` 失效老裁决 `{字位: 当时的裁决}`)。
+
+    **只收现在仍然有效的裁决**（overview#403 缺口 A）。Step7 读人裁要过绑定表
+    （`feedback/bindings.py::usable`）：老批次事件 `anchor: null`、补不出锚 → `unanchored`、
+    `bound=None`，不予采信（防「切分改了、人裁钉在错格上」）。以前这里不看绑定、凡有裁决事件
+    就算已裁 → 绑定表说不采信、队列说已裁不出卡，这一格两边都不管、文本出 `[[]]`，对勘才发现
+    （vol03 `9:8:4` 09-10 裁「困」）。
+
+    每条裁决事件：有绑定行 → 落到 `usable(row)`（`rebound` 落到新编号；None = 失效）；
+    没有绑定行（`skip`／`relabel` 等非 confirm 事件、或事件自带锚点却还没进绑定表、或绑定表
+    算不出来）→ 照原编号算有效。一格只要有一条有效裁决就算已裁。
+
+    **字形库撤下标记**（`human_stale_*`／`stale_verdicts.tsv`，`lookup.stale_human_marks`）：撤下时刻
+    当时或之前的定字事件同样不算（`human_chars` 也是这么丢的），格回队列；撤下之后再裁的照常有效。
+
+    `stale`：有裁决、但没有一条仍有效的字位 → 最后一条失效裁决读回成定字台的形状
+    （同 `review_verdicts`，`{"verdict": {shape, done, ...}, "ts", "batch", "status", "withdrawn"}`）。
+    绑定失效的（`withdrawn=False`）卡片拿它当预勾——人点一下确认就写出带现行锚点的新事件；
+    **撤下的（`withdrawn=True`）不预勾**（CV 总管 10-05）：撤下是人确认过钉错了格，再预勾旧字会误导，
+    卡头只标「旧裁「X」已撤」让人重新看。
+    """
+    from ..feedback.bindings import usable
+    decided: set[str] = set()
+    last_stale: dict[str, tuple] = {}
+    pre = f"{book}:"
+    try:
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
+    except FileNotFoundError:
+        return decided, {}     # 新工作区还没有事件目录
+    rows = _book_bindings(book, log, bindings)
+    marks = _withdrawn_marks(book, log, withdrawn)
+    for e in evs:
+        if not _is_decision(e, pre):
+            continue
+        k = e.target.key
+        if e.kind == "confirm" and (e.payload or {}).get("shape") and _cut_before(e.ts, marks.get(k)):
+            last_stale[k] = (e, None)
+            continue
+        row = rows.get(e.id)
+        if row is None:
+            decided.add(k)
+            continue
+        nk = usable(row)
+        if nk:
+            decided.add(nk)
+        else:
+            last_stale[k] = (e, row)
+    stale: dict[str, dict] = {}
+    for k, (e, row) in last_stale.items():
+        if k in decided:
+            continue
+        v = _verdict_of(e)
+        if v is None:
+            continue
+        stale[k] = {"verdict": v, "ts": e.ts, "batch": e.batch,
+                    "status": "withdrawn" if row is None else row.get("status"),
+                    "withdrawn": row is None}
+    return decided, stale
+
+
+def decided_cells(book: str, log: EventLog | None = None,
+                  bindings: dict[str, dict] | None = None) -> set[str]:
+    """这本书**所有批次**里已经裁过、且**现在仍有效**的字位 id（有效的口径见 `decided_view`）。
 
     给定字审查的载入用（用户 2026-09-16）：以前后端不看事件、只按页序数满
     `limit` 就返回，前端再把已裁的隐藏掉——于是每次载入都从第一页重数，稳定
@@ -34,31 +147,117 @@ def decided_cells(book: str, log: EventLog | None = None) -> set[str]:
     按 key 前缀认书：事件的 `target.book` 实测多为 None（写入方没填），而 key
     形如 `<book>:<页>:<列>:<格>`，前缀是可靠的。
     """
-    out: set[str] = set()
+    return decided_view(book, log, bindings)[0]
+
+
+def shape_decided_cells(book: str, log: EventLog | None = None) -> dict[str, str]:
+    """事件日志里**定过字**的字位 → 最后定的字（不看绑定是否仍有效）。收尾闸用（`closure_gaps`）。
+
+    定字 = `confirm` 事件 `v ∈ {confirm, seg_defect}` 且带 `shape`（同 `lookup.human_chars`
+    的口径；非字／原刻残／只说切坏不算）。
+    """
+    out: dict[str, str] = {}
     pre = f"{book}:"
     try:
-        evs = (log or EventLog()).iter_all()
+        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
-        return out     # 新工作区还没有事件目录
+        return out
     for e in evs:
-        if e.kind not in DECIDED_KINDS:
+        if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
-        if e.target.unit != "cell":
-            continue
-        # 「切坏 / 带残留」**不带字**时不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是
-        # "这块图先别用"，没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格
-        # 回到待审队列，`skip_decided` 却把它们永远藏起来——bxgb 42 个「已裁未放行」里
-        # 31 个从没定过字，定字台上也看不见，人以为剩下的无处可做。这类的去处是 Step3
-        # 的打回台账，不是这里。
-        #
-        # **带字就算裁过**（同日用户加的两可档）：人一边说这块图切坏了、一边指出是哪个字，
-        # 定字这件事已经做完，不该再出卡；缺陷另走 gold_add 与打回通道。
         p = e.payload or {}
-        if e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape"):
+        if p.get("v") in ("confirm", "seg_defect") and p.get("shape"):
+            out[e.target.key] = str(p["shape"])
+        elif p.get("v") in ("not_a_char", "damaged"):
+            out.pop(e.target.key, None)      # 后来改判非字／原刻残：不再是「定了字」
+    return out
+
+
+def closure_mismatches(book: str, pages: list[int], store=None,
+                       log: EventLog | None = None) -> list[dict]:
+    """收尾闸的**报告项**（overview#403，整理总管 10-05 补充）：**不要求为 0**，列出来给人扫一眼。
+
+    「最新定字裁决的字 ≠ 现行放行的字」——老裁决被丢（绑定失效／撤下）后机器放行了别的字：vol02
+    `22:4:20` 人裁「璹」（原图「邢璹」），老事件无锚被丢，机器放行「邢」。多数是正常的（老事件钉在
+    移位的格上、被正确丢掉），不能自动判。同一位多条裁决按最新那条比（`shape_decided_cells`）。
+
+    己／已／巳 一族（`utils/ji_yi_si.py`）两边都在族内的，字形与读法本就可能分岔，`kind="jys"` 单独归类，
+    不混进正文（`kind="main"`）。→ `[{"id", "page", "shape", "char", "kind"}]`，按页序。
+    """
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+    from ..report.slots import ADMIT_KIND, ADMIT_STEP
+    from ..utils.ji_yi_si import FAMILY as JYS
+    shapes = shape_decided_cells(book, log)
+    if not shapes:
+        return []
+    st = store or ProductStore()
+    want = _by_page(shapes)
+    out: list[dict] = []
+    for pg in pages:
+        ids = want.get(pg)
+        if not ids:
             continue
-        k = e.target.key
-        if k.startswith(pre):
-            out.add(k)
+        a = st.read(book, ADMIT_STEP, page_key(pg), ADMIT_KIND)
+        if a is None:
+            continue
+        for cc in a.columns:
+            for r in cc.chars:
+                if r.id not in ids or not r.admit or not r.char or r.char == shapes[r.id]:
+                    continue
+                kind = "jys" if (r.char in JYS and shapes[r.id] in JYS) else "main"
+                out.append({"id": r.id, "page": pg, "shape": shapes[r.id], "char": r.char, "kind": kind})
+    return out
+
+
+def _by_page(keys) -> dict[int, set[str]]:
+    want: dict[int, set[str]] = {}
+    for k in keys:
+        try:
+            pg = int(k.split(":")[1])
+        except (IndexError, ValueError):
+            continue
+        want.setdefault(pg, set()).add(k)
+    return want
+
+
+def closure_gaps(book: str, pages: list[int], store=None, log: EventLog | None = None) -> list[dict]:
+    """收尾不变量（overview#403 缺口 C）：**收尾前必须为空**。
+
+    「事件日志里有定字裁决的格」∩「现行 seed_admit 里 `admit=False` 且文本没出字」。
+
+    这类格是两处状态对不上、又不报错的死角——队列以为裁过了、文本层没采信（缺口 A：
+    老裁决绑定失效；缺口 B：排除名单格人给了字），对勘才发现。「出字」看 Step7 记录本身：
+    `admit=True`、带 `evidence.human_char`（排除名单格人给的字，缺口 B）、或遮挡格带默认字
+    （`occluded` 且 `char`，文本照出），都算出了字。
+
+    → `[{"id", "page", "shape", "excluded"}]`，按页序。没有 Step7 产物的页跳过（那是「过期／缺失」的账）。
+    """
+    from ..core.spec import page_key
+    from ..products.store import ProductStore
+    from ..report.slots import ADMIT_KIND, ADMIT_STEP
+    shapes = shape_decided_cells(book, log)
+    if not shapes:
+        return []
+    st = store or ProductStore()
+    want = _by_page(shapes)
+    out: list[dict] = []
+    for pg in pages:
+        ids = want.get(pg)
+        if not ids:
+            continue
+        a = st.read(book, ADMIT_STEP, page_key(pg), ADMIT_KIND)
+        if a is None:
+            continue
+        for cc in a.columns:
+            for r in cc.chars:
+                if r.id not in ids or r.admit:
+                    continue
+                ev = r.evidence or {}
+                if ev.get("human_char") or (ev.get("occluded") and r.char):
+                    continue
+                out.append({"id": r.id, "page": pg, "shape": shapes[r.id],
+                            "excluded": "excluded" in (r.doubts or [])})
     return out
 
 
@@ -105,6 +304,36 @@ def flagged_cells(book: str, log: EventLog | None = None) -> set[str]:
     return {k for k, v in last.items() if v}
 
 
+def _verdict_of(e) -> dict | None:
+    """一条定字事件 → 定字台前端的裁决形状（`review_verdicts` 与失效老裁决预勾共用）；不认识的 → None。"""
+    p = e.payload or {}
+    v = p.get("v") or e.kind
+    if v == "not_a_char":
+        return {"shape": "", "done": "non"}
+    elif v == "skip":
+        return {"shape": "", "done": "skip"}
+    elif v == "damaged":
+        # 原图破损（2026-09-19）：`guess` 要一并读回，否则刷新后括注里的
+        # 「最像哪个字」凭空消失，人以为没填过、又填一遍。
+        return {"shape": "", "done": "damaged", "guess": p.get("guess") or ""}
+    elif v == "seg_defect":
+        # 「小注当正文」（overview#265）：事件照旧是 seg_defect，靠 `reason` 读回成前端那一档，
+        # 否则刷新后显示成「字形不完整」，人以为标错了又改一遍。
+        done = ("jiazhu" if p.get("reason") == "jiazhu_as_main"
+                else p.get("quality") or "contaminated")
+        return {"shape": p.get("shape") or "", "done": done}
+    elif v == "confirm":
+        d = {"shape": p.get("shape") or "",
+             "done": "1",
+             "noGlyphLib": bool(p.get("no_glyph_lib"))}
+        # 无匹配（近似字，overview#276）：勾选与 IDS／备注要读回，否则刷新后勾选丢了、人以为没勾
+        # 又勾一遍。没带 `approx` 的老事件不加任何键——形状与原来逐字相同。
+        if p.get("approx"):
+            d.update(approx=True, approxIds=p.get("ids") or "", approxNote=p.get("note") or "")
+        return d
+    return None
+
+
 def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
     """读回某批次已经裁过的字位——**刷新页面不该重审一遍**。
 
@@ -116,31 +345,8 @@ def review_verdicts(batch: str, log: EventLog | None = None) -> dict:
     """
     out: dict[str, dict] = {}
     for e in sorted((log or EventLog()).read(batch), key=lambda x: (x.batch, x.seq)):
-        p = e.payload
-        v = p.get("v") or e.kind
-        if v == "not_a_char":
-            out[e.target.key] = {"shape": "", "done": "non"}
-        elif v == "skip":
-            out[e.target.key] = {"shape": "", "done": "skip"}
-        elif v == "damaged":
-            # 原图破损（2026-09-19）：`guess` 要一并读回，否则刷新后括注里的
-            # 「最像哪个字」凭空消失，人以为没填过、又填一遍。
-            out[e.target.key] = {"shape": "", "done": "damaged",
-                                 "guess": p.get("guess") or ""}
-        elif v == "seg_defect":
-            # 「小注当正文」（overview#265）：事件照旧是 seg_defect，靠 `reason` 读回成前端那一档，
-            # 否则刷新后显示成「字形不完整」，人以为标错了又改一遍。
-            done = ("jiazhu" if p.get("reason") == "jiazhu_as_main"
-                    else p.get("quality") or "contaminated")
-            out[e.target.key] = {"shape": p.get("shape") or "", "done": done}
-        elif v == "confirm":
-            d = {"shape": p.get("shape") or "",
-                 "done": "1",
-                 "noGlyphLib": bool(p.get("no_glyph_lib"))}
-            # 无匹配（近似字，overview#276）：勾选与 IDS／备注要读回，否则刷新后勾选丢了、人以为没勾
-            # 又勾一遍。没带 `approx` 的老事件不加任何键——形状与原来逐字相同。
-            if p.get("approx"):
-                d.update(approx=True, approxIds=p.get("ids") or "", approxNote=p.get("note") or "")
+        d = _verdict_of(e)
+        if d is not None:
             out[e.target.key] = d
     return {"batch": batch, "n": len(out), "verdicts": out}
 

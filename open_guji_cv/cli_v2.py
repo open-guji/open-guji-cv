@@ -86,6 +86,9 @@ def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     pages = eng.book.resolve_pages(args.pages)
     st = eng.status(pages=pages)
+    gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
+    st["closure_gaps"] = gaps
+    st["closure_mismatches"] = mism
     if args.json:
         print(json.dumps(st, ensure_ascii=False))
         return
@@ -104,6 +107,53 @@ def cmd_status(args) -> None:
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
+    _print_closure_gaps(gaps)
+    _print_closure_mismatches(mism)
+
+
+def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
+    """收尾不变量（overview#403 缺口 C，`verdict_view.closure_gaps`）与报告项（`closure_mismatches`）；
+    算不出来 → None，不拖垮 status。"""
+    from .review.verdict_view import closure_gaps, closure_mismatches
+    out = []
+    for name, fn in (("收尾闸", closure_gaps), ("裁放不一致", closure_mismatches)):
+        try:
+            out.append(fn(book, pages, store))
+        except Exception as e:  # noqa: BLE001
+            print(f"  （{name}没算出来：{type(e).__name__}: {e}）", file=sys.stderr)
+            out.append(None)
+    return out[0], out[1]
+
+
+def _print_closure_mismatches(mism: list[dict] | None, show: int = 30) -> None:
+    """报告项，不要求为 0：人裁的字 ≠ 现行放行的字，人扫一眼（己已巳族单列）。"""
+    if mism is None:
+        return
+    main = [m for m in mism if m["kind"] == "main"]
+    jys = [m for m in mism if m["kind"] == "jys"]
+    print(f"  报告 · 人裁字≠放行字 {len(main)} 格（不要求为 0，扫一眼：多为老裁决钉在移位格上被正确丢掉）"
+          + (f"；己已巳族 {len(jys)} 格另列" if jys else ""))
+    for m in main[:show]:
+        print(f"      {m['id']}  人裁 {m['shape']} → 放行 {m['char']}")
+    if len(main) > show:
+        print(f"      …另 {len(main) - show} 格（--json 看全部）")
+    if jys:
+        print("      己已巳：" + "  ".join(f"{m['id']} {m['shape']}→{m['char']}" for m in jys[:show])
+              + (" …" if len(jys) > show else ""))
+
+
+def _print_closure_gaps(gaps: list[dict] | None, show: int = 30) -> None:
+    if gaps is None:
+        return
+    if not gaps:
+        print("  收尾闸 ✓ 已定字却没出字 0 格")
+        return
+    print(f"  收尾闸 ✗ 已定字却没出字 {len(gaps)} 格（收尾前必须为 0；"
+          "Step7 过期先重跑，仍在的去控制台审查页补确认——失效老裁决会带预勾出卡）")
+    for g in gaps[:show]:
+        print(f"      {g['id']}  {g['shape']}{'  [排除名单]' if g['excluded'] else ''}")
+    if len(gaps) > show:
+        print(f"      …另 {len(gaps) - show} 格（--json 看全部）")
 
 
 def cmd_fp_migrate(args) -> None:
