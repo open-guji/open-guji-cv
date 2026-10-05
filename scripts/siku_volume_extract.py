@@ -93,8 +93,16 @@ def cmd_run(args) -> int:
     return 0
 
 
-def text_version(args) -> str | None:
-    return args.text_version or sx.chapter_text_version(Path(args.lines_md))
+#: wip 阶段文本线还没编号时的 text_version（guji-format#2 起 schema 必填；规矩允许 wip 写 0.x）
+WIP_TEXT_VERSION = "0.1.0"
+
+
+def text_version(args) -> str:
+    tv = args.text_version or sx.chapter_text_version(Path(args.lines_md))
+    if not tv:
+        print(f"注意：{args.lines_md} 所在 index.json 没有该章 text_version，按 wip 写 {WIP_TEXT_VERSION}")
+        tv = WIP_TEXT_VERSION
+    return tv
 
 
 def print_summary(r: dict, paths: dict) -> None:
@@ -220,7 +228,7 @@ def main(argv: list[str] | None = None) -> int:
 
     def versions(p):
         p.add_argument("--version", default="0.1.0", help="这一层的内容版本（流水线不自升，见 overview#400）")
-        p.add_argument("--text-version", help="对着哪一版 lines.md；不给就读 original/index.json 该章的 text_version")
+        p.add_argument("--text-version", help="对着哪一版 lines.md；不给就读 original/index.json 该章的 text_version，再没有就写 0.1.0（wip）")
 
     r = sub.add_parser("run", help="整册标点＋实体")
     common(r)
