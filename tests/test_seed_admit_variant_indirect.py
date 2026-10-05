@@ -13,6 +13,8 @@
 """
 from __future__ import annotations
 
+import numpy as np
+
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_decision, page_match, write_product
 from open_guji_cv.clustering.variants import VariantMap
@@ -28,6 +30,10 @@ BOOK, PAGE, COL, SLOT = "tbook", 1, 1, 18
 def _run(tmp_path, monkeypatch, *, candidates, align_char, margin=None,
          align_op="replace", params=None):
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    # 组内定形（`_image_ranks`）要看本格字块；读不到会整页报错（overview#407），
+    # 所以摆一张空白字块——本文件测的是关系层，不是图像检索的结果。
+    ctx.cache.put(BOOK, "char_patch", f"p{PAGE:04d}c{COL:02d}s{SLOT}",
+                  np.full((40, 40), 255, np.uint8))
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[
             dict(slot=SLOT, verdict="unsure", cov=candidates[0][1], wmax=45.31,
