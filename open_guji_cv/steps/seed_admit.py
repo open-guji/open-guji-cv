@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
-from pydantic import BaseModel, model_serializer
+from pydantic import BaseModel, field_validator, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -324,6 +324,17 @@ class SeedAdmitParams(BaseModel):
     落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
     独立形状证据，放不放留给标定结果。"""
 
+    patch_missing: str = "error"
+    """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
+
+    - `error`（缺省，本地真书）：抛 `PatchUnavailable`，这一页 failed。
+    - `skip`（云端快照沙箱：只带 products、不带原图与 cache，字块现算不出来）：这几路**不参与**
+      这一格，但不静默——该格 `evidence.patch_missing` 记下跳过了哪几路（`iron_scale`／`iron`／
+      `cnn`／`form`），日志汇总一行。真书别开：开了等于回到 10-05 前「没图就悄悄关掉」。
+
+    `glyph_match` 没有这个开关：本格没图就没法判，停页是对的。
+    缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -349,11 +360,20 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and self.patch_missing == "error":
+            d.pop("patch_missing", None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
                       "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
                 d.pop(k, None)
         return d
+
+    @field_validator("patch_missing")
+    @classmethod
+    def _check_patch_missing(cls, v: str) -> str:
+        if v not in ("error", "skip"):
+            raise ValueError(f"seed_admit.patch_missing 只能是 error/skip，不是 {v!r}")
+        return v
 
     def _context_guard_on(self) -> bool:
         return (self.context_guard_diff or self.context_guard_flags
@@ -520,7 +540,21 @@ class SeedAdmitStep(Step):
         # 零额外开销，不影响没开这个开关的书。
         iron_ns = getattr(ctx.book, "norm_stroke", None)
         iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
-        iron_scale = (_iron_page_scale(ctx, page, match) if iron_ctx else None)
+        # 读不到字块：`patch_missing=error` 抛错停页；`skip` 记到 {格 id: [跳过的路]}，落进 evidence。
+        patch_missing: dict[str, list[str]] = {}
+
+        def soft_patch(rid: str, lane: str, fn, *a):
+            try:
+                return fn(*a)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                patch_missing.setdefault(rid, []).append(lane)
+                return None
+        iron_scale = (_iron_page_scale(ctx, page, match,
+                                       on_missing=(None if p.patch_missing != "skip" else
+                                                   lambda rid: patch_missing.setdefault(rid, []).append("iron_scale")))
+                      if iron_ctx else None)
         # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
         occ = _occluded(ctx, page, match, p, amap) if p.occluded_gate else {}
         # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
@@ -674,7 +708,7 @@ class SeedAdmitStep(Step):
                 cnn_char = None
                 if (align_char is None and r.verdict != "same" and r.candidates
                         and max(c for _, c in r.candidates) >= MATCH_SOLO_OCR_COV):
-                    cnn_char = _cnn_top(ctx, page, cc.col, r.slot, r.sub)
+                    cnn_char = soft_patch(r.id, "cnn", _cnn_top, ctx, page, cc.col, r.slot, r.sub)
                 ok, channel = admission_decision(
                     ocr=ocr_in, align_char=align_char, ref_char=None,
                     doubts=doubts, vmap=vm_here,
@@ -780,7 +814,8 @@ class SeedAdmitStep(Step):
                         ranks = None
                         fd = decide_form(align_char, forms, list(r.candidates), ledger)
                         if fd.state == "open":
-                            ranks = _image_ranks(ctx, page, cc.col, r.slot, r.sub, forms)
+                            ranks = soft_patch(r.id, "form", _image_ranks,
+                                               ctx, page, cc.col, r.slot, r.sub, forms)
                             if ranks:
                                 fd = decide_form(align_char, forms, list(r.candidates), ledger, ranks)
                         form_ev = fd.to_evidence()
@@ -890,8 +925,8 @@ class SeedAdmitStep(Step):
                 # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
                 # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
                 if not ok and iron_ctx is not None:
-                    iron_char = _iron_decide(ctx, page, cc.col, r, iron_ctx,
-                                             iron_scale, iron_ns)
+                    iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
+                                           iron_ctx, iron_scale, iron_ns)
                     if iron_char is not None and p.iron_ref_guard \
                             and context_conflicts_ref(iron_char, align_char, vm_here):
                         doubts.append("iron_vs_ref")
@@ -936,7 +971,9 @@ class SeedAdmitStep(Step):
                               **({"form": form_ev} if form_ev else {}),
                               **({"rare": _rare_agree(r, rtop.get(r.id))}
                                  if p.rare_agree else {}),
-                              **({"approx": apx_ev} if apx_ev else {})}))
+                              **({"approx": apx_ev} if apx_ev else {}),
+                              **({"patch_missing": patch_missing[r.id]}
+                                 if r.id in patch_missing else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
@@ -953,6 +990,13 @@ class SeedAdmitStep(Step):
             d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
             n_auto += d_pro
             n_review -= d_pro
+        if patch_missing:
+            lanes: dict[str, int] = {}
+            for v in patch_missing.values():
+                for k in v:
+                    lanes[k] = lanes.get(k, 0) + 1
+            ctx.log(f"seed_admit p{page}: patch_missing=skip，{len(patch_missing)} 格读不到字块、"
+                    f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
 
@@ -1305,14 +1349,23 @@ def _page_patch(src, page: int, col: int, slot, sub):
         raise PatchUnavailable(f"p{page} 字块 {key} 读不到: {type(e).__name__}: {e}") from e
 
 
-def _iron_page_scale(book, page: int, match: PageMatch) -> float:
+def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> float:
     """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
     原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
     的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
     几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
     from ..clustering.iron_evidence import book_scale_from_patches
-    patches = [_page_patch(book, page, cc.col, r.slot, r.sub)
-               for cc in match.columns if cc.ok for r in cc.chars]
+    patches = []
+    for cc in match.columns:
+        if not cc.ok:
+            continue
+        for r in cc.chars:
+            try:
+                patches.append(_page_patch(book, page, cc.col, r.slot, r.sub))
+            except PatchUnavailable:
+                if on_missing is None:          # 缺省（patch_missing=error）：停页
+                    raise
+                on_missing(r.id)                # skip：尺度用读得到的那些算，缺的记账
     return book_scale_from_patches(patches)
 
 
