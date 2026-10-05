@@ -462,6 +462,13 @@ def apply_entities_and_punctuations_to_markdown(
     for e in entities:
         ent_starts[e.start_offset] = e
         ent_ends[e.end_offset - 1] = e
+    # 书名两层都记（guji-format#3）：标点层里与 work 实体同位的《》由实体包装出，这里跳过免得重出
+    work_open = {e.start_offset for e in entities if e.type == "work"}
+    work_close = {e.end_offset - 1 for e in entities if e.type == "work"}
+    for k, ps in list(punct_map.items()):
+        punct_map[k] = [p for p in ps
+                        if not (p.mark == "《" and p.pos == "before" and k in work_open)
+                        and not (p.mark == "》" and p.pos == "after" and k in work_close)]
 
     out: list[str] = []
     pi = 0

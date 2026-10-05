@@ -318,3 +318,25 @@ def test_compare_punct_and_entities():
     assert any(r["claude"] == "，" and r["x"] == "；" for r in rows)
     sp = {"claude": sx.spans_from_entities(ref.entities, 0, n), "x": sx.spans_from_entities(alt.entities, 0, n)}
     assert sx.compare_entities(sp, "claude")["x"]["precision_exact"] == 1.0
+
+
+def test_work_title_marks_in_punct_layer_match_entity_anchors(tmp_path):
+    probe, _ = _run(tmp_path, {})
+    _, res = _run(tmp_path, _answers(probe.asked))
+    work = next(e for e in res.entities if e.text == "子夏易傳")
+    opens = [p for p in res.puncts if p.mark == "《"]
+    closes = [p for p in res.puncts if p.mark == "》"]
+    assert len(opens) == len(closes) == sum(e.type == "work" for e in res.entities)
+    o = next(p for p in opens if p.char_offset == work.start_offset)
+    c = next(p for p in closes if p.char_offset == work.end_offset - 1)
+    assert (o.pos, o.anchor) == ("before", work.anchor_start) and (c.pos, c.anchor) == ("after", work.anchor_end)
+    assert "《《" not in res.rich_md and "》》" not in res.rich_md
+    assert res.rich_md.count("《") == len(opens)
+    # 只渲染标点层（不带实体）也有书名号，且》在逗号前
+    from open_guji_cv.render.entity_extract import apply_entities_and_punctuations_to_markdown
+    from open_guji_cv.render.punct_extract import tokenize
+    toks = tokenize("周易注十卷")
+    ps = [sx.PunctAnnotation("《", "point", "before", 0), sx.PunctAnnotation("，", "point", "after", 2),
+          sx.PunctAnnotation("》", "point", "after", 2)]
+    ps.sort(key=sx.punct_order)
+    assert apply_entities_and_punctuations_to_markdown(toks, ps, []) == "《周易注》，十卷"

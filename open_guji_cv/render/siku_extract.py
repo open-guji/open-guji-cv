@@ -9,7 +9,7 @@
 1. **底本 → 字流 + 坐标**（`parse_lines_md`）：每个"纯字"（夹注字、`[[]]`/`□` 记
    作 `□`）一个 `Slot`，坐标 `页:列:格[子列]`。超框抬头用负格位，`^` 抬一格的
    首字是 −1、第二字直接是 1（**没有第 0 格**——旧脚本会数出 0）。夹注
-   `<左|右>` 左行子列 `a`、右行子列 `b`，各自从同一格起数。
+   `<甲|乙>` 甲为右列（先读）记子列 `a`、乙为左列记子列 `b`，各自从同一格起数。
 2. **分段**：沿用 `reflow_text.reflow`；段落的纯字顺序与第 1 步逐字对账
    （`StreamMap`），对不上的字记入报告、坐标留空，不猜。
 3. **LLM 一问两答**：每块（≤`limit` 字，只在小注外切）问一次，同时要标点与专名
@@ -116,17 +116,18 @@ def parse_lines_md(text: str, count_blank_columns: bool = False) -> list[Slot]:
         g = (dots + 1) if dots else (-raised if raised else 1)
         for u in _UNIT.finditer(body):
             if u.group("jz") is not None:
-                left, _, right = u.group("jz").partition("|")
-                lc, rc = _inner_chars(left), _inner_chars(right)
+                # `<甲|乙>`：甲是右列（先读）→ 子列 a，乙是左列 → 子列 b
+                first, _, second = u.group("jz").partition("|")
+                ac, bc = _inner_chars(first), _inner_chars(second)
                 ga = g
-                for c in lc:
+                for c in ac:
                     slots.append(Slot(c, page, col, ga, "a"))
                     ga = _next_grid(ga)
                 gb = g
-                for c in rc:
+                for c in bc:
                     slots.append(Slot(c, page, col, gb, "b"))
                     gb = _next_grid(gb)
-                g = _advance(g, max(len(lc), len(rc)))
+                g = _advance(g, max(len(ac), len(bc)))
             elif u.group("dj") is not None:
                 for c in _inner_chars(u.group("dj")):
                     slots.append(Slot(c, page, col, g))
@@ -455,6 +456,13 @@ def name_before(chars: list[str], s: int, prev: EntityAnnotation | None,
     return None
 
 
+def punct_order(a: PunctAnnotation) -> tuple:
+    """同一字上的先后：before 在 after 前、分段符最后；before 里《排在「后（「《易》」），
+    after 里》排在最前（《易》，）。"""
+    inner = (a.mark == "《") if a.pos == "before" else (a.mark != "》")
+    return (a.char_offset, a.pos != "before", a.kind == "break", inner)
+
+
 @dataclass
 class Prepared:
     """整册的底本侧：字流、坐标、分段、分块。LLM 结果从哪来（GLM 现问 / Gemini 文件）与此无关。"""
@@ -531,7 +539,7 @@ def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookInd
         if ri >= 0 and (pi == 0 or para_last[pi - 1] != ri):
             puncts.append(PunctAnnotation(mark="\n\n", kind="break", pos="after", char_offset=ri,
                                           pre_char=render_chars[ri], anchor=anchors[ri], source="rule:reflow"))
-    puncts.sort(key=lambda a: (a.char_offset, a.pos != "before", a.kind == "break"))
+    puncts.sort(key=punct_order)
 
     entities: list[EntityAnnotation] = []
     taken: set[int] = set()
@@ -562,6 +570,17 @@ def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookInd
             target_status=tgt.get("status", "new_candidate"), target_id=tgt.get("entity_id"),
             target_name=tgt.get("canonical_name", text), target_href=tgt.get("href"),
             note=tgt.get("note"), source=source))
+
+    # 书名两层都记（guji-format#3）：每个 work 实体在标点层也出一对《》，
+    # 《 before 锚书名首字、》 after 锚末字，起止与实体 anchor.start/end 一致
+    for e in entities:
+        if e.type == "work":
+            s0, e1 = e.start_offset, e.end_offset - 1
+            puncts.append(PunctAnnotation(mark="《", kind="point", pos="before", char_offset=s0,
+                                          pre_char=render_chars[s0], anchor=anchors[s0], source=source))
+            puncts.append(PunctAnnotation(mark="》", kind="point", pos="after", char_offset=e1,
+                                          pre_char=render_chars[e1], anchor=anchors[e1], source=source))
+    puncts.sort(key=punct_order)
 
     tokens = []
     for pi, text in enumerate(paras_text):
