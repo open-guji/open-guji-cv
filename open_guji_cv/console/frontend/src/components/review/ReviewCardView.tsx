@@ -127,9 +127,11 @@ export function ReviewCardView({
         )}
         {c.stale_verdict && (
           <span className="rvstale"
-                title={`这一格 ${c.stale_verdict.ts.slice(0, 10)}（批次 ${c.stale_verdict.batch}）裁过，但切分改了或老裁决补不出锚，`
-                  + `现在不作数（绑定 ${c.stale_verdict.status ?? '?'}）。已按当时的裁决预勾，看一眼图确认即可，会写出带现行锚点的新裁决（overview#403）`}>
-            旧裁{c.stale_verdict.verdict.shape ? `「${c.stale_verdict.verdict.shape}」` : ''}已失效 · 已预勾
+                title={c.stale_verdict.withdrawn
+                  ? `这一格 ${c.stale_verdict.ts.slice(0, 10)}（批次 ${c.stale_verdict.batch}）裁过，后来确认钉错了格、已从字形库撤下。没有预勾，请按图重新定字（overview#403）`
+                  : `这一格 ${c.stale_verdict.ts.slice(0, 10)}（批次 ${c.stale_verdict.batch}）裁过，但切分改了或老裁决补不出锚，`
+                    + `现在不作数（绑定 ${c.stale_verdict.status ?? '?'}）。已按当时的裁决预勾，看一眼图确认即可，会写出带现行锚点的新裁决（overview#403）`}>
+            旧裁{c.stale_verdict.verdict.shape ? `「${c.stale_verdict.verdict.shape}」` : ''}{c.stale_verdict.withdrawn ? '已撤 · 请重新看' : '已失效 · 已预勾'}
           </span>
         )}
         {c.approx && (
