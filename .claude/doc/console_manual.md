@@ -115,6 +115,11 @@ uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimple
 （manifest 新记了 `book_deps` 原值）；老产物报「代码或册配置变了（…；旧条目没记册配置原值）」。
 `calibrate` 发现先验漂了时也会提示改 yaml 后哪些步要重跑（`period_prior` → `column_gate`）。
 
+`status` 末尾还有一行**收尾闸**（2026-10-05，overview#403 缺口 C）：「事件里定过字的格」∩「seed_admit
+`admit=False` 且文本没出字」，**交付前必须为 0**。非零时先看 Step7 是否过期（过期就重跑）；重跑后仍在的，多半是
+失效的老人裁（切分改了／老事件补不出锚，绑定表不采信）——它们已回到审查页待审队列，卡头标「旧裁「X」已失效 ·
+已预勾」，看一眼图点提交即可（写出带现行锚点的新事件）。`--json` 里是 `closure_gaps`。
+
 **拆页前找版心**：`guji locate-gutter <原图> [--band y0,y1] [--json]`——整叶扫描图 → 版心 x（原图坐标，
 左原点）与置信度；一张图上下两叶就用 `--band` 分开找。置信度 < 0.3 一律人看。判据与实测见
 `utils/locate_gutter.py` 模块头。
