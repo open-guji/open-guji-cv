@@ -14,10 +14,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-# 常用中文与西文标点集合
-PUNCT_CHARS = set("，。、；：？！「」『』《》（）…—·,.;:?!\"'“”‘’")
-OPENER_MARKS = set("「『《（“‘")
-CLOSER_MARKS = set("」』》）”’，。、；：？！…—·,.;:?!")
+# 常用句读点号（不含实体书名号《》，书名号由 entity 模块作为实体边界独立处理）
+PUNCT_CHARS = set("，。、；：？！「」『』（）…—·,.;:?!\"'“”‘’")
+OPENER_MARKS = set("「『（“‘")
+CLOSER_MARKS = set("」』）”’，。、；：？！…—·,.;:?!")
 
 _TOK = re.compile(
     r"(?P<mark><!--\s*p\d+\s*-->|\x00p\d+\x00)"
