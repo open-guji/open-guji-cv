@@ -27,7 +27,7 @@
 | `open_guji_cv/core/step.py` | `RunContext.image` 用 `strict=True`，读不出来抛 `FileNotFoundError`（带路径）；`raw_page` 只改报错文字 |
 | `open_guji_cv/steps/glyph_match.py` | 本格字块读不到/再生不出 → 抛 `PatchUnavailable`，**整页失败**（引擎记 failed、旧产物不动），不再写 `no_patch` 记录。候选试切图块（`…_L0` 键，按设计不可再生）缓存里没有时仍跳过（只接 `KeyError/ValueError`），文件在却读不出（OSError）照样停页 |
 | `open_guji_cv/steps/seed_admit.py` | 新 `_page_patch(src, page, col, slot, sub)`：管线里走 `ctx.image`（验页戳、缺了现算），读不到抛 `PatchUnavailable`；四处调用改用它，调用点传 `ctx`（离线脚本传册 id 字符串仍可用，只查缓存）。`_cnn_top` 先看 CNN 通道开没开（没 checkpoint/没 torch 不读图），开着才读、读不到抛。铁证对照图（别页/别册人裁刻例）缓存里没有仍跳过，文件在却坏了抛 |
-| `tests/test_imread_strict.py` | 新增 13 条（参数化展开后 15 个用例）：中文路径读图且不调 `cv2.imread`、两种口径的缺文件/坏文件、`RunContext.image` 抛错、glyph_match 读不到整页抛错（冻结样页跑真 Step1→4）、候选试切的两种失败分开处理、seed_admit 四处抛错、册 id 模式 |
+| `tests/test_imread_strict.py` | 新增 11 个测试函数（参数化展开后 13 个用例）：中文路径读图且不调 `cv2.imread`、两种口径的缺文件/坏文件、`RunContext.image` 抛错、glyph_match 读不到整页抛错（冻结样页跑真 Step1→4）、候选试切的两种失败分开处理、seed_admit 四处抛错、册 id 模式 |
 | `tests/test_cutline.py` | 原来桩打在 `cv2.imread` 上，现在读图不经它，桩改打在 `cv_imread` 引用上 |
 | `tests/test_seed_admit_variant_indirect.py` | 组内定形要读本格字块，测试里摆一张空白字块（原来靠「读不到 → None」走过去） |
 
