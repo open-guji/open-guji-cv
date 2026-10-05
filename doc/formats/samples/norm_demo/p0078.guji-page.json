@@ -1,0 +1,7062 @@
+{
+ "schema": "guji-page/0.2",
+ "page_id": "96mid1ogzk/3/78",
+ "book": {
+  "id": "96mid1ogzk",
+  "edition": "siku-zongmu",
+  "title": "欽定四庫全書總目（武英殿刻本）"
+ },
+ "volume": {
+  "index": 3,
+  "cv_book": "vol03",
+  "label": "經部四~五·易類四~五·卷四~卷五",
+  "juan_range": "4-5",
+  "ia_item": "06061302.cn"
+ },
+ "page": {
+  "index": 78
+ },
+ "image": {
+  "width": 2371,
+  "height": 3075,
+  "sha256": "0f81ee0a79d00ec018a2e4907d0e822fc91260f67ed5daf4b0f37c2a5aab1ca1"
+ },
+ "canvas": {
+  "id": "https://data.kaiyuanguji.com/iiif/96mid1ogzk/canvas/03/0078",
+  "seq": "0078",
+  "width": 2371,
+  "height": 3075
+ },
+ "producers": {
+  "cv": {
+   "tool": "open-guji-cv",
+   "rev": "1332c01734",
+   "pipeline": "keben_body_v2",
+   "steps": {
+    "border_detect": "b961082",
+    "row_segment": "b961082",
+    "cell_shrink": "b961082",
+    "seed_admit": "1332c01734"
+   },
+   "products_sha": {
+    "border_detect": "87434c6c7a8c986c32186426d0db461459a1568317fdcbf56bcf5c8fac8c0e43",
+    "row_segment": "8c8606423a8f885711a397d0c1ab9e8fa53ddf00e00aa441ef3b1fba3921d960",
+    "cell_shrink": "b27e7024c7f563394a7cb1ea67edc2550f70a5ffb4e5d3a00c4964e24c2b2aab",
+    "seed_admit": "80d54131c882eec38862dcba30eceaf259800af63c3a39a01dfc0e2718ae7071"
+   },
+   "snapshot": "guji-workspace snap/96mid1ogzk/vol03/20260928T1708-full"
+  },
+  "manual": {
+   "tool": "manual",
+   "who": "F1 道目测（2026-10-02）"
+  }
+ },
+ "text": [
+  "題",
+  "歸",
+  "雲",
+  "别",
+  "集",
+  "卷",
+  "數",
+  "自",
+  "五",
+  "十",
+  "八",
+  "至",
+  "六",
+  "十",
+  "一",
+  "葢",
+  "當",
+  "時",
+  "編",
+  "書",
+  "□",
+  "全",
+  "集",
+  "如",
+  "李",
+  "石",
+  "方",
+  "□",
+  "集",
+  "收",
+  "易",
+  "互",
+  "體",
+  "之",
+  "例",
+  "其",
+  "序",
+  "又",
+  "稱",
+  "往",
+  "爲",
+  "彚",
+  "解",
+  "二",
+  "卷",
+  "括",
+  "其",
+  "大",
+  "凡",
+  "考",
+  "明",
+  "史",
+  "藝",
+  "文",
+  "志",
+  "載",
+  "士",
+  "元",
+  "易",
+  "象",
+  "鈎",
+  "解",
+  "四",
+  "卷",
+  "易",
+  "象",
+  "彚",
+  "解",
+  "二",
+  "卷",
+  "則",
+  "彚",
+  "解",
+  "亦",
+  "發",
+  "明",
+  "象",
+  "學",
+  "者",
+  "今",
+  "以",
+  "未",
+  "見",
+  "其",
+  "書",
+  "故",
+  "不",
+  "著",
+  "錄",
+  "焉",
+  "周",
+  "易",
+  "集",
+  "注",
+  "十",
+  "六",
+  "卷",
+  "浙",
+  "江",
+  "巡",
+  "撫",
+  "採",
+  "進",
+  "本",
+  "明",
+  "來",
+  "知",
+  "德",
+  "撰",
+  "知",
+  "德",
+  "字",
+  "矣",
+  "□",
+  "梁",
+  "山",
+  "人",
+  "嘉",
+  "靖",
+  "壬",
+  "子",
+  "舉",
+  "人",
+  "萬",
+  "歴",
+  "三",
+  "十",
+  "年",
+  "總",
+  "督",
+  "王",
+  "象",
+  "乾",
+  "巡",
+  "撫",
+  "郭",
+  "子",
+  "章",
+  "薦",
+  "授",
+  "翰",
+  "林",
+  "院",
+  "待",
+  "詔",
+  "知",
+  "德",
+  "以",
+  "老",
+  "疾",
+  "辭",
+  "詔",
+  "以",
+  "所",
+  "授",
+  "官",
+  "致",
+  "□",
+  "事",
+  "跡",
+  "具"
+ ],
+ "lacuna": [
+  20,
+  27,
+  113,
+  157
+ ],
+ "norm": [],
+ "zi": [],
+ "regions": [
+  {
+   "id": "r1",
+   "kind": "body",
+   "box": [
+    334,
+    375,
+    1649,
+    2391
+   ],
+   "rules": [
+    [
+     [
+      1980,
+      344
+     ],
+     [
+      1984,
+      2752
+     ]
+    ],
+    [
+     [
+      1793,
+      344
+     ],
+     [
+      1801,
+      2752
+     ]
+    ],
+    [
+     [
+      1611,
+      344
+     ],
+     [
+      1621,
+      2752
+     ]
+    ],
+    [
+     [
+      1433,
+      344
+     ],
+     [
+      1439,
+      2752
+     ]
+    ],
+    [
+     [
+      1248,
+      344
+     ],
+     [
+      1256,
+      2752
+     ]
+    ],
+    [
+     [
+      1065,
+      344
+     ],
+     [
+      1077,
+      2752
+     ]
+    ],
+    [
+     [
+      879,
+      344
+     ],
+     [
+      889,
+      2752
+     ]
+    ],
+    [
+     [
+      699,
+      344
+     ],
+     [
+      707,
+      2752
+     ]
+    ],
+    [
+     [
+      521,
+      344
+     ],
+     [
+      523,
+      2752
+     ]
+    ],
+    [
+     [
+      333,
+      344
+     ],
+     [
+      335,
+      2752
+     ]
+    ]
+   ],
+   "columns": [
+    {
+     "id": "c1",
+     "n": 1,
+     "kind": "body",
+     "box": [
+      1797,
+      375,
+      186,
+      2391
+     ],
+     "raised": 0,
+     "lead_blank": 2,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        0,
+        19
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c2",
+     "n": 2,
+     "kind": "body",
+     "box": [
+      1616,
+      375,
+      182,
+      2391
+     ],
+     "raised": 1,
+     "lead_blank": 1,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        19,
+        39
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c3",
+     "n": 3,
+     "kind": "body",
+     "box": [
+      1436,
+      375,
+      181,
+      2391
+     ],
+     "raised": 1,
+     "lead_blank": 2,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        39,
+        58
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c4",
+     "n": 4,
+     "kind": "body",
+     "box": [
+      1252,
+      375,
+      185,
+      2391
+     ],
+     "raised": 0,
+     "lead_blank": 0,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        58,
+        77
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c5",
+     "n": 5,
+     "kind": "body",
+     "box": [
+      1071,
+      375,
+      182,
+      2391
+     ],
+     "raised": 1,
+     "lead_blank": 1,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        77,
+        90
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c6",
+     "n": 6,
+     "kind": "body",
+     "box": [
+      884,
+      375,
+      188,
+      2391
+     ],
+     "raised": 0,
+     "lead_blank": 0,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        90,
+        97
+       ]
+      },
+      {
+       "lane": "jz_r",
+       "text": [
+        97,
+        101
+       ]
+      },
+      {
+       "lane": "jz_l",
+       "text": [
+        101,
+        104
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c7",
+     "n": 7,
+     "kind": "body",
+     "box": [
+      703,
+      375,
+      182,
+      2391
+     ],
+     "raised": 0,
+     "lead_blank": 2,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        104,
+        123
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c8",
+     "n": 8,
+     "kind": "body",
+     "box": [
+      522,
+      375,
+      182,
+      2391
+     ],
+     "raised": 0,
+     "lead_blank": 0,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        123,
+        142
+       ]
+      }
+     ]
+    },
+    {
+     "id": "c9",
+     "n": 9,
+     "kind": "body",
+     "box": [
+      334,
+      375,
+      189,
+      2391
+     ],
+     "raised": 1,
+     "lead_blank": 2,
+     "runs": [
+      {
+       "lane": "main",
+       "text": [
+        142,
+        161
+       ]
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "glyphs": [
+  {
+   "id": "gac564ss47g",
+   "text": [
+    0,
+    1
+   ],
+   "box": [
+    1824,
+    591,
+    119,
+    107
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:1:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "題",
+    "rare": "題",
+    "ref": "題"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9858
+    }
+   }
+  },
+  {
+   "id": "gsf5iryihp3",
+   "text": [
+    1,
+    2
+   ],
+   "box": [
+    1831,
+    702,
+    115,
+    115
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:1:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "歸",
+    "rare": "歸",
+    "ref": "歸"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9878
+    }
+   }
+  },
+  {
+   "id": "gjqd2msiqiy",
+   "text": [
+    2,
+    3
+   ],
+   "box": [
+    1823,
+    816,
+    125,
+    112
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:1:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "雲",
+    "rare": "雲",
+    "ref": "雲"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9806
+    }
+   }
+  },
+  {
+   "id": "gavyjqm36fv",
+   "text": [
+    3,
+    4
+   ],
+   "box": [
+    1826,
+    931,
+    117,
+    115
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:1:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "别",
+    "rare": "別",
+    "ref": "别"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.993
+    }
+   }
+  },
+  {
+   "id": "grizcekvspn",
+   "text": [
+    4,
+    5
+   ],
+   "box": [
+    1829,
+    1045,
+    124,
+    116
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:1:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "集",
+    "rare": "集",
+    "ref": "集"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9956
+    }
+   }
+  },
+  {
+   "id": "gorcfa4rc4p",
+   "text": [
+    5,
+    6
+   ],
+   "box": [
+    1827,
+    1160,
+    123,
+    103
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:1:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "卷",
+    "rare": "卷",
+    "ref": "卷"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9826
+    }
+   }
+  },
+  {
+   "id": "gkpeifdsfcy",
+   "text": [
+    6,
+    7
+   ],
+   "box": [
+    1828,
+    1268,
+    123,
+    113
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:1:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "數",
+    "rare": "數",
+    "ref": "數"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9858
+    }
+   }
+  },
+  {
+   "id": "g7m7djlygik",
+   "text": [
+    7,
+    8
+   ],
+   "box": [
+    1858,
+    1375,
+    83,
+    119
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:1:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "自",
+    "rare": "自",
+    "ref": "自"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9962
+    }
+   }
+  },
+  {
+   "id": "g7ivzjtmfkz",
+   "text": [
+    8,
+    9
+   ],
+   "box": [
+    1828,
+    1505,
+    128,
+    100
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:1:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "五",
+    "rare": "五",
+    "ref": "五"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.999
+    }
+   }
+  },
+  {
+   "id": "gflsikxw45c",
+   "text": [
+    9,
+    10
+   ],
+   "box": [
+    1826,
+    1619,
+    152,
+    107
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:1:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "十",
+    "rare": "十",
+    "ref": "十"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9996
+    }
+   }
+  },
+  {
+   "id": "gfja6e7vhee",
+   "text": [
+    10,
+    11
+   ],
+   "box": [
+    1827,
+    1732,
+    128,
+    101
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:1:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "八",
+    "rare": "八",
+    "ref": "八"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.999
+    }
+   }
+  },
+  {
+   "id": "geqdm4vhxef",
+   "text": [
+    11,
+    12
+   ],
+   "box": [
+    1827,
+    1833,
+    123,
+    114
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:1:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "至",
+    "rare": "至",
+    "ref": "至"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9971
+    }
+   }
+  },
+  {
+   "id": "gur2gxsuivz",
+   "text": [
+    12,
+    13
+   ],
+   "box": [
+    1826,
+    1943,
+    122,
+    115
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:1:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "六",
+    "rare": "六",
+    "ref": "六"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9961
+    }
+   }
+  },
+  {
+   "id": "grau7w3qml2",
+   "text": [
+    13,
+    14
+   ],
+   "box": [
+    1828,
+    2071,
+    121,
+    107
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:1:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "十",
+    "rare": "十",
+    "ref": "十"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9997
+    }
+   }
+  },
+  {
+   "id": "gk7lewn573i",
+   "text": [
+    14,
+    15
+   ],
+   "box": [
+    1827,
+    2219,
+    125,
+    24
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:1:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "一",
+    "rare": "一",
+    "ref": "一"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9999
+    }
+   }
+  },
+  {
+   "id": "gdntflz6xsy",
+   "text": [
+    15,
+    16
+   ],
+   "box": [
+    1828,
+    2284,
+    127,
+    109
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:1:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "葢",
+    "rare": "葢",
+    "ref": "葢"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9799
+    }
+   }
+  },
+  {
+   "id": "gyt5qnxlylr",
+   "text": [
+    16,
+    17
+   ],
+   "box": [
+    1842,
+    2399,
+    109,
+    113
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:1:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "當",
+    "rare": "當",
+    "ref": "當"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9927
+    }
+   }
+  },
+  {
+   "id": "g3pfu4dn25c",
+   "text": [
+    17,
+    18
+   ],
+   "box": [
+    1826,
+    2514,
+    123,
+    114
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:1:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "時",
+    "rare": "時",
+    "ref": "時"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9933
+    }
+   }
+  },
+  {
+   "id": "gyuuxnwt4zu",
+   "text": [
+    18,
+    19
+   ],
+   "box": [
+    1805,
+    2632,
+    175,
+    126
+   ],
+   "col": "c1",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:1:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "編",
+    "rare": "編",
+    "ref": "編"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9843
+    }
+   }
+  },
+  {
+   "id": "g3jznp2axw4",
+   "text": [
+    19,
+    20
+   ],
+   "box": [
+    1672,
+    587,
+    48,
+    28
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 2,
+   "cv_id": "vol03:78:2:2",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:context",
+   "review": "auto",
+   "conf": null,
+   "channel": "context",
+   "cand": {
+    "lib": "書",
+    "rare": "一"
+   },
+   "ext": {
+    "cv": {
+     "channel": "context",
+     "doubts": [],
+     "cov": 0.7838
+    }
+   }
+  },
+  {
+   "id": "goeupc5zhar",
+   "text": [
+    20,
+    21
+   ],
+   "box": [
+    1642,
+    601,
+    119,
+    96
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:2:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:pending",
+   "review": "pending",
+   "conf": null,
+   "channel": null,
+   "cand": {
+    "lib": "人",
+    "rare": "入",
+    "ref": "入"
+   },
+   "lacuna": "unreadable",
+   "guess": "人",
+   "ext": {
+    "cv": {
+     "channel": null,
+     "doubts": [
+      "库 unsure",
+      "上下文 margin 不足",
+      "near_form"
+     ],
+     "cov": 0.9876
+    }
+   }
+  },
+  {
+   "id": "g3hmi5gruda",
+   "text": [
+    21,
+    22
+   ],
+   "box": [
+    1643,
+    700,
+    122,
+    110
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:2:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "全",
+    "rare": "全",
+    "ref": "全"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9984
+    }
+   }
+  },
+  {
+   "id": "g7bshuhoa6k",
+   "text": [
+    22,
+    23
+   ],
+   "box": [
+    1644,
+    812,
+    123,
+    118
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:2:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "集",
+    "rare": "集",
+    "ref": "集"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9954
+    }
+   }
+  },
+  {
+   "id": "gnqu24stsec",
+   "text": [
+    23,
+    24
+   ],
+   "box": [
+    1649,
+    933,
+    110,
+    107
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:2:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "如",
+    "rare": "如",
+    "ref": "如"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9947
+    }
+   }
+  },
+  {
+   "id": "gopj576yqkj",
+   "text": [
+    24,
+    25
+   ],
+   "box": [
+    1646,
+    1040,
+    118,
+    116
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:2:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "李",
+    "rare": "李",
+    "ref": "李"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9961
+    }
+   }
+  },
+  {
+   "id": "gqe4fmevlry",
+   "text": [
+    25,
+    26
+   ],
+   "box": [
+    1644,
+    1164,
+    116,
+    108
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:2:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "石",
+    "rare": "石",
+    "ref": "石"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9958
+    }
+   }
+  },
+  {
+   "id": "gfhc4esng2r",
+   "text": [
+    26,
+    27
+   ],
+   "box": [
+    1645,
+    1271,
+    118,
+    118
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:2:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "方",
+    "rare": "方",
+    "ref": "方"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9914
+    }
+   }
+  },
+  {
+   "id": "ga65jrbed2z",
+   "text": [
+    27,
+    28
+   ],
+   "box": [
+    1648,
+    1370,
+    118,
+    124
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:2:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:pending",
+   "review": "pending",
+   "conf": null,
+   "channel": null,
+   "cand": {
+    "lib": "丹",
+    "rare": "舟",
+    "ref": "舟"
+   },
+   "lacuna": "unreadable",
+   "guess": "丹",
+   "ext": {
+    "cv": {
+     "channel": null,
+     "doubts": [
+      "库 unsure",
+      "上下文 margin 不足",
+      "replace_align"
+     ],
+     "cov": 0.9535
+    }
+   }
+  },
+  {
+   "id": "glty2zxvfsm",
+   "text": [
+    28,
+    29
+   ],
+   "box": [
+    1646,
+    1490,
+    121,
+    118
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:2:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "集",
+    "rare": "集",
+    "ref": "集"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9899
+    }
+   }
+  },
+  {
+   "id": "gylf5444bbn",
+   "text": [
+    29,
+    30
+   ],
+   "box": [
+    1653,
+    1612,
+    113,
+    117
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:2:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "收",
+    "rare": "收",
+    "ref": "收"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9856
+    }
+   }
+  },
+  {
+   "id": "gbim57xpsdt",
+   "text": [
+    30,
+    31
+   ],
+   "box": [
+    1649,
+    1710,
+    111,
+    120
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:2:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "易",
+    "rare": "易",
+    "ref": "易"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9834
+    }
+   }
+  },
+  {
+   "id": "g5ho76z7fpf",
+   "text": [
+    31,
+    32
+   ],
+   "box": [
+    1648,
+    1825,
+    114,
+    110
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:2:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "互",
+    "rare": "互",
+    "ref": "互"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9802
+    }
+   }
+  },
+  {
+   "id": "go6lyx24awz",
+   "text": [
+    32,
+    33
+   ],
+   "box": [
+    1653,
+    1944,
+    116,
+    115
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:2:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "體",
+    "rare": "體",
+    "ref": "體"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9897
+    }
+   }
+  },
+  {
+   "id": "gy4e5d7ec2f",
+   "text": [
+    33,
+    34
+   ],
+   "box": [
+    1649,
+    2060,
+    120,
+    106
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:2:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "之",
+    "rare": "之",
+    "ref": "之"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9992
+    }
+   }
+  },
+  {
+   "id": "galjjn746no",
+   "text": [
+    34,
+    35
+   ],
+   "box": [
+    1645,
+    2173,
+    117,
+    114
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:2:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "例",
+    "rare": "例",
+    "ref": "例"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9879
+    }
+   }
+  },
+  {
+   "id": "gubemecxzzo",
+   "text": [
+    35,
+    36
+   ],
+   "box": [
+    1649,
+    2291,
+    115,
+    106
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:2:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "其",
+    "rare": "其",
+    "ref": "其"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9951
+    }
+   }
+  },
+  {
+   "id": "gh7slmknbel",
+   "text": [
+    36,
+    37
+   ],
+   "box": [
+    1647,
+    2396,
+    118,
+    114
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:2:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "序",
+    "rare": "序",
+    "ref": "序"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9831
+    }
+   }
+  },
+  {
+   "id": "gvrj4vtrz7m",
+   "text": [
+    37,
+    38
+   ],
+   "box": [
+    1647,
+    2514,
+    116,
+    111
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:2:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "又",
+    "rare": "又",
+    "ref": "又"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9975
+    }
+   }
+  },
+  {
+   "id": "gm3iweoytxe",
+   "text": [
+    38,
+    39
+   ],
+   "box": [
+    1628,
+    2634,
+    142,
+    120
+   ],
+   "col": "c2",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:2:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "稱",
+    "rare": "稱",
+    "ref": "稱"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9896
+    }
+   }
+  },
+  {
+   "id": "gj4y4mma4yl",
+   "text": [
+    39,
+    40
+   ],
+   "box": [
+    1463,
+    586,
+    118,
+    109
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:3:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "往",
+    "rare": "往",
+    "ref": "往"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.996
+    }
+   }
+  },
+  {
+   "id": "gcgrzgv6la7",
+   "text": [
+    40,
+    41
+   ],
+   "box": [
+    1462,
+    699,
+    117,
+    109
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:3:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "爲",
+    "rare": "爲",
+    "ref": "爲"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9898
+    }
+   }
+  },
+  {
+   "id": "g6t5w5l3ckt",
+   "text": [
+    41,
+    42
+   ],
+   "box": [
+    1463,
+    811,
+    118,
+    120
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:3:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "彚",
+    "rare": "彚",
+    "ref": "彚"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9818
+    }
+   }
+  },
+  {
+   "id": "gt4u6hehsxm",
+   "text": [
+    42,
+    43
+   ],
+   "box": [
+    1465,
+    930,
+    117,
+    111
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:3:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "解",
+    "rare": "解",
+    "ref": "解"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9887
+    }
+   }
+  },
+  {
+   "id": "gjnhl6jjayf",
+   "text": [
+    43,
+    44
+   ],
+   "box": [
+    1471,
+    1066,
+    110,
+    78
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:3:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "二",
+    "rare": "二",
+    "ref": "二"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9993
+    }
+   }
+  },
+  {
+   "id": "gdfyjewxui2",
+   "text": [
+    44,
+    45
+   ],
+   "box": [
+    1463,
+    1157,
+    126,
+    103
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:3:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "卷",
+    "rare": "卷",
+    "ref": "卷"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9868
+    }
+   }
+  },
+  {
+   "id": "gx5baiwu4zu",
+   "text": [
+    45,
+    46
+   ],
+   "box": [
+    1470,
+    1269,
+    115,
+    113
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:3:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "括",
+    "rare": "括",
+    "ref": "括"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9901
+    }
+   }
+  },
+  {
+   "id": "gs6uuql3ytw",
+   "text": [
+    46,
+    47
+   ],
+   "box": [
+    1466,
+    1380,
+    119,
+    114
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:3:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "其",
+    "rare": "其",
+    "ref": "其"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9961
+    }
+   }
+  },
+  {
+   "id": "g6kyscs3ahq",
+   "text": [
+    47,
+    48
+   ],
+   "box": [
+    1464,
+    1496,
+    121,
+    114
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:3:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "大",
+    "rare": "大",
+    "ref": "大"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9993
+    }
+   }
+  },
+  {
+   "id": "ghjml24tmwz",
+   "text": [
+    48,
+    49
+   ],
+   "box": [
+    1464,
+    1615,
+    119,
+    105
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:3:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "凡",
+    "rare": "凡",
+    "ref": "凡"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9984
+    }
+   }
+  },
+  {
+   "id": "gf4qwdhzqnc",
+   "text": [
+    49,
+    50
+   ],
+   "box": [
+    1466,
+    1716,
+    118,
+    118
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:3:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "考",
+    "rare": "考",
+    "ref": "考"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9907
+    }
+   }
+  },
+  {
+   "id": "gfcndigd4ni",
+   "text": [
+    50,
+    51
+   ],
+   "box": [
+    1483,
+    1837,
+    92,
+    105
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:3:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "明",
+    "rare": "明",
+    "ref": "明"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9978
+    }
+   }
+  },
+  {
+   "id": "giu75eaktpm",
+   "text": [
+    51,
+    52
+   ],
+   "box": [
+    1465,
+    1945,
+    121,
+    112
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:3:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "史",
+    "rare": "史",
+    "ref": "史"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9962
+    }
+   }
+  },
+  {
+   "id": "gwzzzk2yctu",
+   "text": [
+    52,
+    53
+   ],
+   "box": [
+    1470,
+    2056,
+    106,
+    116
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:3:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "藝",
+    "rare": "藝",
+    "ref": "藝"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9734
+    }
+   }
+  },
+  {
+   "id": "gtyk6q4xeld",
+   "text": [
+    53,
+    54
+   ],
+   "box": [
+    1469,
+    2176,
+    125,
+    100
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:3:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "文",
+    "rare": "文",
+    "ref": "文"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9984
+    }
+   }
+  },
+  {
+   "id": "gznjj3fuimw",
+   "text": [
+    54,
+    55
+   ],
+   "box": [
+    1467,
+    2283,
+    113,
+    115
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:3:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "志",
+    "rare": "志",
+    "ref": "志"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9951
+    }
+   }
+  },
+  {
+   "id": "gllrawzixkk",
+   "text": [
+    55,
+    56
+   ],
+   "box": [
+    1471,
+    2397,
+    117,
+    118
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:3:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "載",
+    "rare": "載",
+    "ref": "載"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9845
+    }
+   }
+  },
+  {
+   "id": "gg7houcpeo5",
+   "text": [
+    56,
+    57
+   ],
+   "box": [
+    1469,
+    2515,
+    112,
+    99
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:3:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:context",
+   "review": "auto",
+   "conf": null,
+   "channel": "context",
+   "cand": {
+    "lib": "土",
+    "rare": "士",
+    "ref": "士"
+   },
+   "ext": {
+    "cv": {
+     "channel": "context",
+     "doubts": [],
+     "cov": 0.9959
+    }
+   }
+  },
+  {
+   "id": "gbvqlnb5xqy",
+   "text": [
+    57,
+    58
+   ],
+   "box": [
+    1467,
+    2638,
+    109,
+    102
+   ],
+   "col": "c3",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:3:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "元",
+    "rare": "元",
+    "ref": "元"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9961
+    }
+   }
+  },
+  {
+   "id": "gn3fbxe7kzz",
+   "text": [
+    58,
+    59
+   ],
+   "box": [
+    1285,
+    578,
+    112,
+    126
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:4:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "易",
+    "rare": "易",
+    "ref": "易"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.992
+    }
+   }
+  },
+  {
+   "id": "gk5gn66yvkd",
+   "text": [
+    59,
+    60
+   ],
+   "box": [
+    1286,
+    695,
+    111,
+    111
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:4:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "象",
+    "rare": "象",
+    "ref": "象"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9753
+    }
+   }
+  },
+  {
+   "id": "gbkgaoulovj",
+   "text": [
+    60,
+    61
+   ],
+   "box": [
+    1284,
+    813,
+    115,
+    113
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:4:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "鈎",
+    "rare": "鈎",
+    "ref": "鈎"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9838
+    }
+   }
+  },
+  {
+   "id": "gwwanhblzxw",
+   "text": [
+    61,
+    62
+   ],
+   "box": [
+    1283,
+    927,
+    121,
+    117
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:4:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "解",
+    "rare": "解",
+    "ref": "解"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9761
+    }
+   }
+  },
+  {
+   "id": "gsafif3asyb",
+   "text": [
+    62,
+    63
+   ],
+   "box": [
+    1313,
+    1040,
+    81,
+    106
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:4:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "四",
+    "rare": "四",
+    "ref": "四"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9991
+    }
+   }
+  },
+  {
+   "id": "gdm4rxd4kmj",
+   "text": [
+    63,
+    64
+   ],
+   "box": [
+    1283,
+    1152,
+    122,
+    108
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:4:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "卷",
+    "rare": "卷",
+    "ref": "卷"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9892
+    }
+   }
+  },
+  {
+   "id": "ggjo4tgcxrr",
+   "text": [
+    64,
+    65
+   ],
+   "box": [
+    1288,
+    1265,
+    112,
+    117
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:4:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "易",
+    "rare": "易",
+    "ref": "易"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9919
+    }
+   }
+  },
+  {
+   "id": "ggw3222upcw",
+   "text": [
+    65,
+    66
+   ],
+   "box": [
+    1286,
+    1378,
+    113,
+    109
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:4:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "象",
+    "rare": "象",
+    "ref": "象"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9868
+    }
+   }
+  },
+  {
+   "id": "g5o4ldevuyb",
+   "text": [
+    66,
+    67
+   ],
+   "box": [
+    1289,
+    1495,
+    116,
+    122
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:4:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "彚",
+    "rare": "彚",
+    "ref": "彚"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.984
+    }
+   }
+  },
+  {
+   "id": "gqpwfkwmh2b",
+   "text": [
+    67,
+    68
+   ],
+   "box": [
+    1288,
+    1612,
+    110,
+    111
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:4:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "解",
+    "rare": "解",
+    "ref": "解"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9921
+    }
+   }
+  },
+  {
+   "id": "go5hqrl5sm2",
+   "text": [
+    68,
+    69
+   ],
+   "box": [
+    1287,
+    1739,
+    115,
+    78
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:4:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "二",
+    "rare": "二",
+    "ref": "二"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9995
+    }
+   }
+  },
+  {
+   "id": "g4r2adyibup",
+   "text": [
+    69,
+    70
+   ],
+   "box": [
+    1287,
+    1827,
+    117,
+    110
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:4:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "卷",
+    "rare": "卷",
+    "ref": "卷"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9832
+    }
+   }
+  },
+  {
+   "id": "gnw3cltvdhm",
+   "text": [
+    70,
+    71
+   ],
+   "box": [
+    1259,
+    1941,
+    134,
+    114
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:4:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "則",
+    "rare": "則",
+    "ref": "則"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9972
+    }
+   }
+  },
+  {
+   "id": "gr6hlgc22f4",
+   "text": [
+    71,
+    72
+   ],
+   "box": [
+    1286,
+    2056,
+    118,
+    119
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:4:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "彚",
+    "rare": "窠",
+    "ref": "彚"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9709
+    }
+   }
+  },
+  {
+   "id": "guuqfvf4iyl",
+   "text": [
+    72,
+    73
+   ],
+   "box": [
+    1286,
+    2172,
+    114,
+    109
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:4:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "解",
+    "rare": "解",
+    "ref": "解"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9855
+    }
+   }
+  },
+  {
+   "id": "gayqnukuh4r",
+   "text": [
+    73,
+    74
+   ],
+   "box": [
+    1288,
+    2280,
+    109,
+    111
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:4:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "亦",
+    "rare": "亦",
+    "ref": "亦"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9959
+    }
+   }
+  },
+  {
+   "id": "gjx44djxqjq",
+   "text": [
+    74,
+    75
+   ],
+   "box": [
+    1290,
+    2390,
+    110,
+    113
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:4:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "發",
+    "rare": "發",
+    "ref": "發"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9726
+    }
+   }
+  },
+  {
+   "id": "gqntg5mcfpj",
+   "text": [
+    75,
+    76
+   ],
+   "box": [
+    1304,
+    2516,
+    88,
+    102
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:4:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "明",
+    "rare": "明",
+    "ref": "明"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9939
+    }
+   }
+  },
+  {
+   "id": "giqb3zgwcqd",
+   "text": [
+    76,
+    77
+   ],
+   "box": [
+    1285,
+    2614,
+    114,
+    124
+   ],
+   "col": "c4",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:4:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "象",
+    "rare": "象",
+    "ref": "象"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9805
+    }
+   }
+  },
+  {
+   "id": "getboixhqgu",
+   "text": [
+    77,
+    78
+   ],
+   "box": [
+    1093,
+    576,
+    129,
+    116
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 2,
+   "cv_id": "vol03:78:5:2",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "學",
+    "rare": "學",
+    "ref": "學"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9821
+    }
+   }
+  },
+  {
+   "id": "g7ydyt5hzfk",
+   "text": [
+    78,
+    79
+   ],
+   "box": [
+    1096,
+    695,
+    121,
+    112
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:5:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "者",
+    "rare": "者",
+    "ref": "者"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9918
+    }
+   }
+  },
+  {
+   "id": "gh3nkhttskr",
+   "text": [
+    79,
+    80
+   ],
+   "box": [
+    1096,
+    807,
+    124,
+    114
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:5:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "今",
+    "rare": "今",
+    "ref": "今"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9867
+    }
+   }
+  },
+  {
+   "id": "g2z6cenkrwr",
+   "text": [
+    80,
+    81
+   ],
+   "box": [
+    1118,
+    925,
+    96,
+    110
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:5:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "以",
+    "rare": "以",
+    "ref": "以"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9991
+    }
+   }
+  },
+  {
+   "id": "gmwzgqpdwjx",
+   "text": [
+    81,
+    82
+   ],
+   "box": [
+    1100,
+    1042,
+    115,
+    111
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:5:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "未",
+    "rare": "未",
+    "ref": "未"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9989
+    }
+   }
+  },
+  {
+   "id": "gsqxxnfgdsr",
+   "text": [
+    82,
+    83
+   ],
+   "box": [
+    1102,
+    1151,
+    114,
+    113
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:5:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "見",
+    "rare": "見",
+    "ref": "見"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9924
+    }
+   }
+  },
+  {
+   "id": "gl2d3wcms6k",
+   "text": [
+    83,
+    84
+   ],
+   "box": [
+    1103,
+    1264,
+    117,
+    110
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:5:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "其",
+    "rare": "其",
+    "ref": "其"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9969
+    }
+   }
+  },
+  {
+   "id": "gatrzxuglp7",
+   "text": [
+    84,
+    85
+   ],
+   "box": [
+    1104,
+    1370,
+    113,
+    119
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:5:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "書",
+    "rare": "書",
+    "ref": "書"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9948
+    }
+   }
+  },
+  {
+   "id": "gzyoqx3kk7d",
+   "text": [
+    85,
+    86
+   ],
+   "box": [
+    1104,
+    1491,
+    115,
+    120
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:5:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "故",
+    "rare": "故",
+    "ref": "故"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9897
+    }
+   }
+  },
+  {
+   "id": "gbmoy3stlpl",
+   "text": [
+    86,
+    87
+   ],
+   "box": [
+    1102,
+    1609,
+    109,
+    98
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:5:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "不",
+    "rare": "不",
+    "ref": "不"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.999
+    }
+   }
+  },
+  {
+   "id": "gqo7cfkxui3",
+   "text": [
+    87,
+    88
+   ],
+   "box": [
+    1100,
+    1705,
+    118,
+    121
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:5:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "著",
+    "rare": "著",
+    "ref": "著"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.993
+    }
+   }
+  },
+  {
+   "id": "gse54bpfz4e",
+   "text": [
+    88,
+    89
+   ],
+   "box": [
+    1099,
+    1826,
+    123,
+    109
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:5:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "錄",
+    "rare": "錄",
+    "ref": "錄"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9715
+    }
+   }
+  },
+  {
+   "id": "gqychitah2p",
+   "text": [
+    89,
+    90
+   ],
+   "box": [
+    1102,
+    1931,
+    112,
+    123
+   ],
+   "col": "c5",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:5:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "焉",
+    "rare": "焉",
+    "ref": "焉"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9763
+    }
+   }
+  },
+  {
+   "id": "gm2ar5tnj4y",
+   "text": [
+    90,
+    91
+   ],
+   "box": [
+    913,
+    348,
+    112,
+    122
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 1,
+   "cv_id": "vol03:78:6:1",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "周",
+    "rare": "周",
+    "ref": "周"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9938
+    }
+   }
+  },
+  {
+   "id": "gvxr7fxya7h",
+   "text": [
+    91,
+    92
+   ],
+   "box": [
+    917,
+    462,
+    113,
+    124
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 2,
+   "cv_id": "vol03:78:6:2",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "易",
+    "rare": "易",
+    "ref": "易"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9975
+    }
+   }
+  },
+  {
+   "id": "gmx3y2ppuv2",
+   "text": [
+    92,
+    93
+   ],
+   "box": [
+    917,
+    577,
+    120,
+    116
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:6:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "集",
+    "rare": "集",
+    "ref": "集"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9961
+    }
+   }
+  },
+  {
+   "id": "g5zcxivpckx",
+   "text": [
+    93,
+    94
+   ],
+   "box": [
+    925,
+    696,
+    112,
+    110
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:6:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "注",
+    "rare": "注",
+    "ref": "注"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9967
+    }
+   }
+  },
+  {
+   "id": "goeh2cadjfc",
+   "text": [
+    94,
+    95
+   ],
+   "box": [
+    917,
+    812,
+    121,
+    114
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:6:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "十",
+    "rare": "十",
+    "ref": "十"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9996
+    }
+   }
+  },
+  {
+   "id": "ggeanbovytw",
+   "text": [
+    95,
+    96
+   ],
+   "box": [
+    918,
+    924,
+    117,
+    103
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:6:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "六",
+    "rare": "六",
+    "ref": "六"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9979
+    }
+   }
+  },
+  {
+   "id": "gpm2uscvaoa",
+   "text": [
+    96,
+    97
+   ],
+   "box": [
+    918,
+    1039,
+    124,
+    101
+   ],
+   "col": "c6",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:6:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "卷",
+    "rare": "卷",
+    "ref": "卷"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9853
+    }
+   }
+  },
+  {
+   "id": "gfvmbksz6gq",
+   "text": [
+    97,
+    98
+   ],
+   "box": [
+    982,
+    1158,
+    82,
+    100
+   ],
+   "col": "c6",
+   "lane": "jz_r",
+   "slot": 8,
+   "cv_id": "vol03:78:6:8a",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "浙",
+    "rare": "浙",
+    "ref": "浙"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9785
+    }
+   }
+  },
+  {
+   "id": "g7khzmrtg3e",
+   "text": [
+    98,
+    99
+   ],
+   "box": [
+    990,
+    1269,
+    74,
+    95
+   ],
+   "col": "c6",
+   "lane": "jz_r",
+   "slot": 9,
+   "cv_id": "vol03:78:6:9a",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "江",
+    "rare": "江",
+    "ref": "江"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9905
+    }
+   }
+  },
+  {
+   "id": "gstcvhbwsxi",
+   "text": [
+    99,
+    100
+   ],
+   "box": [
+    982,
+    1380,
+    83,
+    99
+   ],
+   "col": "c6",
+   "lane": "jz_r",
+   "slot": 10,
+   "cv_id": "vol03:78:6:10a",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "巡",
+    "rare": "巡",
+    "ref": "巡"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.976
+    }
+   }
+  },
+  {
+   "id": "gq52hqyo6yd",
+   "text": [
+    100,
+    101
+   ],
+   "box": [
+    977,
+    1490,
+    88,
+    108
+   ],
+   "col": "c6",
+   "lane": "jz_r",
+   "slot": 11,
+   "cv_id": "vol03:78:6:11a",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "撫",
+    "rare": "撫",
+    "ref": "撫"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9792
+    }
+   }
+  },
+  {
+   "id": "g2dfysve7ts",
+   "text": [
+    101,
+    102
+   ],
+   "box": [
+    888,
+    1154,
+    89,
+    99
+   ],
+   "col": "c6",
+   "lane": "jz_l",
+   "slot": 8,
+   "cv_id": "vol03:78:6:8b",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "採",
+    "rare": "採",
+    "ref": "採"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9782
+    }
+   }
+  },
+  {
+   "id": "gbvxohyw3z7",
+   "text": [
+    102,
+    103
+   ],
+   "box": [
+    888,
+    1265,
+    83,
+    103
+   ],
+   "col": "c6",
+   "lane": "jz_l",
+   "slot": 9,
+   "cv_id": "vol03:78:6:9b",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "進",
+    "rare": "進",
+    "ref": "進"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9854
+    }
+   }
+  },
+  {
+   "id": "gnq3oopfxif",
+   "text": [
+    103,
+    104
+   ],
+   "box": [
+    889,
+    1374,
+    83,
+    110
+   ],
+   "col": "c6",
+   "lane": "jz_l",
+   "slot": 10,
+   "cv_id": "vol03:78:6:10b",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "本",
+    "rare": "本",
+    "ref": "本"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9964
+    }
+   }
+  },
+  {
+   "id": "god7c7ck5ki",
+   "text": [
+    104,
+    105
+   ],
+   "box": [
+    748,
+    576,
+    92,
+    111
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:7:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "明",
+    "rare": "明",
+    "ref": "明"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9974
+    }
+   }
+  },
+  {
+   "id": "gojcbcppneb",
+   "text": [
+    105,
+    106
+   ],
+   "box": [
+    730,
+    683,
+    118,
+    109
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:7:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "來",
+    "rare": "來",
+    "ref": "來"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9974
+    }
+   }
+  },
+  {
+   "id": "gswkei45ve7",
+   "text": [
+    106,
+    107
+   ],
+   "box": [
+    731,
+    807,
+    109,
+    102
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:7:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "知",
+    "rare": "知",
+    "ref": "知"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9945
+    }
+   }
+  },
+  {
+   "id": "gu3bjzybcav",
+   "text": [
+    107,
+    108
+   ],
+   "box": [
+    731,
+    921,
+    120,
+    109
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:7:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "德",
+    "rare": "德",
+    "ref": "德"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9839
+    }
+   }
+  },
+  {
+   "id": "gxe3k5oijll",
+   "text": [
+    108,
+    109
+   ],
+   "box": [
+    732,
+    1031,
+    115,
+    113
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:7:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "撰",
+    "rare": "撰",
+    "ref": "撰"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9903
+    }
+   }
+  },
+  {
+   "id": "ggae3vwtt3u",
+   "text": [
+    109,
+    110
+   ],
+   "box": [
+    736,
+    1144,
+    111,
+    108
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:7:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "知",
+    "rare": "知",
+    "ref": "知"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9928
+    }
+   }
+  },
+  {
+   "id": "gp73oyfdvty",
+   "text": [
+    110,
+    111
+   ],
+   "box": [
+    733,
+    1252,
+    117,
+    115
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:7:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "德",
+    "rare": "德",
+    "ref": "德"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9944
+    }
+   }
+  },
+  {
+   "id": "gv3ikrfofin",
+   "text": [
+    111,
+    112
+   ],
+   "box": [
+    737,
+    1367,
+    113,
+    115
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:7:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "字",
+    "rare": "字",
+    "ref": "字"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9956
+    }
+   }
+  },
+  {
+   "id": "grd6uovzb4r",
+   "text": [
+    112,
+    113
+   ],
+   "box": [
+    733,
+    1482,
+    118,
+    116
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:7:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "矣",
+    "rare": "矣",
+    "ref": "矣"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9942
+    }
+   }
+  },
+  {
+   "id": "gfaagszukxb",
+   "text": [
+    113,
+    114
+   ],
+   "box": [
+    740,
+    1601,
+    107,
+    110
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:7:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:pending",
+   "review": "pending",
+   "conf": null,
+   "channel": null,
+   "cand": {
+    "lib": "解",
+    "rare": "鮮",
+    "ref": "鮮"
+   },
+   "lacuna": "unreadable",
+   "guess": "解",
+   "ext": {
+    "cv": {
+     "channel": null,
+     "doubts": [
+      "库 unsure",
+      "上下文 margin 不足",
+      "replace_align"
+     ],
+     "cov": 0.9434
+    }
+   }
+  },
+  {
+   "id": "gr5euj7jz65",
+   "text": [
+    114,
+    115
+   ],
+   "box": [
+    735,
+    1710,
+    117,
+    111
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:7:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "梁",
+    "rare": "梁",
+    "ref": "梁"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.981
+    }
+   }
+  },
+  {
+   "id": "gpagx5ipb3p",
+   "text": [
+    115,
+    116
+   ],
+   "box": [
+    761,
+    1830,
+    81,
+    103
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:7:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "山",
+    "rare": "山",
+    "ref": "山"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9982
+    }
+   }
+  },
+  {
+   "id": "gtcztprkxvs",
+   "text": [
+    116,
+    117
+   ],
+   "box": [
+    733,
+    1943,
+    116,
+    101
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:7:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "人",
+    "rare": "人",
+    "ref": "人"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9993
+    }
+   }
+  },
+  {
+   "id": "gekd7cdtdlg",
+   "text": [
+    117,
+    118
+   ],
+   "box": [
+    734,
+    2043,
+    117,
+    118
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:7:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "嘉",
+    "rare": "嘉",
+    "ref": "嘉"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9899
+    }
+   }
+  },
+  {
+   "id": "gqyl4qwmb35",
+   "text": [
+    118,
+    119
+   ],
+   "box": [
+    732,
+    2160,
+    123,
+    116
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:7:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "靖",
+    "rare": "靖",
+    "ref": "靖"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9628
+    }
+   }
+  },
+  {
+   "id": "gp2cqf7sh7m",
+   "text": [
+    119,
+    120
+   ],
+   "box": [
+    734,
+    2280,
+    117,
+    99
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:7:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "壬",
+    "rare": "壬",
+    "ref": "壬"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9951
+    }
+   }
+  },
+  {
+   "id": "ghihfbosnkb",
+   "text": [
+    120,
+    121
+   ],
+   "box": [
+    734,
+    2388,
+    119,
+    106
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:7:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "子",
+    "rare": "子",
+    "ref": "子"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9992
+    }
+   }
+  },
+  {
+   "id": "gb6hx4wpcmo",
+   "text": [
+    121,
+    122
+   ],
+   "box": [
+    732,
+    2496,
+    124,
+    126
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:7:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "舉",
+    "rare": "舉",
+    "ref": "舉"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9773
+    }
+   }
+  },
+  {
+   "id": "gsvsvdrowka",
+   "text": [
+    122,
+    123
+   ],
+   "box": [
+    731,
+    2623,
+    141,
+    121
+   ],
+   "col": "c7",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:7:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "人",
+    "rare": "人",
+    "ref": "人"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9899
+    }
+   }
+  },
+  {
+   "id": "g2gl64omcy3",
+   "text": [
+    123,
+    124
+   ],
+   "box": [
+    555,
+    572,
+    105,
+    119
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:8:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "萬",
+    "rare": "萬",
+    "ref": "萬"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9923
+    }
+   }
+  },
+  {
+   "id": "gtbjuub7fui",
+   "text": [
+    124,
+    125
+   ],
+   "box": [
+    550,
+    688,
+    118,
+    111
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:8:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "歴",
+    "rare": "歷",
+    "ref": "歴"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9893
+    }
+   }
+  },
+  {
+   "id": "gd5p3ied5in",
+   "text": [
+    125,
+    126
+   ],
+   "box": [
+    551,
+    813,
+    119,
+    98
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:8:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "三",
+    "rare": "三",
+    "ref": "三"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.999
+    }
+   }
+  },
+  {
+   "id": "gwwo4nbwtq5",
+   "text": [
+    126,
+    127
+   ],
+   "box": [
+    551,
+    922,
+    119,
+    102
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:8:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "十",
+    "rare": "十",
+    "ref": "十"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9997
+    }
+   }
+  },
+  {
+   "id": "gakso6ncnuw",
+   "text": [
+    127,
+    128
+   ],
+   "box": [
+    554,
+    1033,
+    117,
+    113
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:8:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "年",
+    "rare": "年",
+    "ref": "年"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9989
+    }
+   }
+  },
+  {
+   "id": "gpov5xddykl",
+   "text": [
+    128,
+    129
+   ],
+   "box": [
+    557,
+    1143,
+    113,
+    112
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:8:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "總",
+    "rare": "總",
+    "ref": "總"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9835
+    }
+   }
+  },
+  {
+   "id": "gkbblnrbipr",
+   "text": [
+    129,
+    130
+   ],
+   "box": [
+    554,
+    1257,
+    122,
+    111
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:8:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "督",
+    "rare": "督",
+    "ref": "督"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9889
+    }
+   }
+  },
+  {
+   "id": "gxsb77gpicz",
+   "text": [
+    130,
+    131
+   ],
+   "box": [
+    552,
+    1375,
+    115,
+    96
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:8:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "王",
+    "rare": "王",
+    "ref": "王"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9992
+    }
+   }
+  },
+  {
+   "id": "gftvzprbhlv",
+   "text": [
+    131,
+    132
+   ],
+   "box": [
+    552,
+    1472,
+    123,
+    120
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:8:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "象",
+    "rare": "象",
+    "ref": "象"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9838
+    }
+   }
+  },
+  {
+   "id": "gz4zkht6dru",
+   "text": [
+    132,
+    133
+   ],
+   "box": [
+    552,
+    1595,
+    114,
+    118
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:8:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "乾",
+    "rare": "乾",
+    "ref": "乾"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9745
+    }
+   }
+  },
+  {
+   "id": "gjho5svsm5x",
+   "text": [
+    133,
+    134
+   ],
+   "box": [
+    556,
+    1713,
+    114,
+    108
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:8:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "巡",
+    "rare": "巡",
+    "ref": "巡"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9697
+    }
+   }
+  },
+  {
+   "id": "gpfwy3rbylj",
+   "text": [
+    134,
+    135
+   ],
+   "box": [
+    556,
+    1820,
+    116,
+    107
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:8:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "撫",
+    "rare": "撫",
+    "ref": "撫"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9722
+    }
+   }
+  },
+  {
+   "id": "g5h3twaygja",
+   "text": [
+    135,
+    136
+   ],
+   "box": [
+    559,
+    1933,
+    107,
+    116
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:8:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "郭",
+    "rare": "郭",
+    "ref": "郭"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9633
+    }
+   }
+  },
+  {
+   "id": "gcpvbi7as5h",
+   "text": [
+    136,
+    137
+   ],
+   "box": [
+    554,
+    2051,
+    116,
+    114
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:8:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "子",
+    "rare": "子",
+    "ref": "子"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9991
+    }
+   }
+  },
+  {
+   "id": "gxghyoegvmx",
+   "text": [
+    137,
+    138
+   ],
+   "box": [
+    556,
+    2145,
+    114,
+    133
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:8:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "章",
+    "rare": "章",
+    "ref": "章"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9933
+    }
+   }
+  },
+  {
+   "id": "gaeo3fx3v7m",
+   "text": [
+    138,
+    139
+   ],
+   "box": [
+    557,
+    2271,
+    108,
+    123
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:8:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "薦",
+    "rare": "薦",
+    "ref": "薦"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9815
+    }
+   }
+  },
+  {
+   "id": "gj6ikcier22",
+   "text": [
+    139,
+    140
+   ],
+   "box": [
+    557,
+    2386,
+    114,
+    111
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:8:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "授",
+    "rare": "授",
+    "ref": "授"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9854
+    }
+   }
+  },
+  {
+   "id": "gzyvarybc42",
+   "text": [
+    140,
+    141
+   ],
+   "box": [
+    555,
+    2497,
+    124,
+    120
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:8:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "翰",
+    "rare": "翰",
+    "ref": "翰"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9827
+    }
+   }
+  },
+  {
+   "id": "gie5hm3okrt",
+   "text": [
+    141,
+    142
+   ],
+   "box": [
+    555,
+    2615,
+    126,
+    114
+   ],
+   "col": "c8",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:8:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "林",
+    "rare": "林",
+    "ref": "林"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.996
+    }
+   }
+  },
+  {
+   "id": "gucocp33ugy",
+   "text": [
+    142,
+    143
+   ],
+   "box": [
+    382,
+    569,
+    99,
+    124
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 3,
+   "cv_id": "vol03:78:9:3",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "院",
+    "rare": "院",
+    "ref": "院"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9925
+    }
+   }
+  },
+  {
+   "id": "gbjktwtjwar",
+   "text": [
+    143,
+    144
+   ],
+   "box": [
+    365,
+    691,
+    110,
+    116
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 4,
+   "cv_id": "vol03:78:9:4",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "待",
+    "rare": "待",
+    "ref": "待"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9837
+    }
+   }
+  },
+  {
+   "id": "gri2dpxahpw",
+   "text": [
+    144,
+    145
+   ],
+   "box": [
+    362,
+    803,
+    117,
+    118
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 5,
+   "cv_id": "vol03:78:9:5",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "詔",
+    "rare": "詔",
+    "ref": "詔"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9865
+    }
+   }
+  },
+  {
+   "id": "gfmqbpx5zmx",
+   "text": [
+    145,
+    146
+   ],
+   "box": [
+    365,
+    918,
+    112,
+    106
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 6,
+   "cv_id": "vol03:78:9:6",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "知",
+    "rare": "知",
+    "ref": "知"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9789
+    }
+   }
+  },
+  {
+   "id": "gkzuf4fvuj4",
+   "text": [
+    146,
+    147
+   ],
+   "box": [
+    363,
+    1022,
+    129,
+    120
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 7,
+   "cv_id": "vol03:78:9:7",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "德",
+    "rare": "德",
+    "ref": "德"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.99
+    }
+   }
+  },
+  {
+   "id": "ggoi4rf2jss",
+   "text": [
+    147,
+    148
+   ],
+   "box": [
+    378,
+    1149,
+    106,
+    107
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 8,
+   "cv_id": "vol03:78:9:8",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "以",
+    "rare": "以",
+    "ref": "以"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9958
+    }
+   }
+  },
+  {
+   "id": "gj55ob7qtbd",
+   "text": [
+    148,
+    149
+   ],
+   "box": [
+    363,
+    1254,
+    126,
+    106
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 9,
+   "cv_id": "vol03:78:9:9",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "老",
+    "rare": "老",
+    "ref": "老"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9881
+    }
+   }
+  },
+  {
+   "id": "gsfygyyhgsd",
+   "text": [
+    149,
+    150
+   ],
+   "box": [
+    366,
+    1364,
+    122,
+    117
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 10,
+   "cv_id": "vol03:78:9:10",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "疾",
+    "rare": "疾",
+    "ref": "疾"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9683
+    }
+   }
+  },
+  {
+   "id": "gtqa5udodst",
+   "text": [
+    150,
+    151
+   ],
+   "box": [
+    365,
+    1480,
+    119,
+    114
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 11,
+   "cv_id": "vol03:78:9:11",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "辭",
+    "rare": "辭",
+    "ref": "辭"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9566
+    }
+   }
+  },
+  {
+   "id": "gv4xfsgadir",
+   "text": [
+    151,
+    152
+   ],
+   "box": [
+    363,
+    1597,
+    118,
+    117
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 12,
+   "cv_id": "vol03:78:9:12",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "詔",
+    "rare": "詔",
+    "ref": "詔"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9887
+    }
+   }
+  },
+  {
+   "id": "gldiwjzru3j",
+   "text": [
+    152,
+    153
+   ],
+   "box": [
+    381,
+    1716,
+    103,
+    107
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 13,
+   "cv_id": "vol03:78:9:13",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "以",
+    "rare": "以",
+    "ref": "以"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.999
+    }
+   }
+  },
+  {
+   "id": "gqg3q7ko453",
+   "text": [
+    153,
+    154
+   ],
+   "box": [
+    367,
+    1828,
+    119,
+    105
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 14,
+   "cv_id": "vol03:78:9:14",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "所",
+    "rare": "所",
+    "ref": "所"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9923
+    }
+   }
+  },
+  {
+   "id": "gtuzs3blxxc",
+   "text": [
+    154,
+    155
+   ],
+   "box": [
+    372,
+    1937,
+    117,
+    110
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 15,
+   "cv_id": "vol03:78:9:15",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "授",
+    "rare": "授",
+    "ref": "授"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9803
+    }
+   }
+  },
+  {
+   "id": "g3377hrv6h3",
+   "text": [
+    155,
+    156
+   ],
+   "box": [
+    385,
+    2045,
+    103,
+    112
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 16,
+   "cv_id": "vol03:78:9:16",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "官",
+    "rare": "官",
+    "ref": "官"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9966
+    }
+   }
+  },
+  {
+   "id": "grtnctkj2n6",
+   "text": [
+    156,
+    157
+   ],
+   "box": [
+    367,
+    2164,
+    124,
+    113
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 17,
+   "cv_id": "vol03:78:9:17",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "致",
+    "rare": "致",
+    "ref": "致"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.988
+    }
+   }
+  },
+  {
+   "id": "g255ise7tjq",
+   "text": [
+    157,
+    158
+   ],
+   "box": [
+    369,
+    2274,
+    119,
+    109
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 18,
+   "cv_id": "vol03:78:9:18",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:pending",
+   "review": "pending",
+   "conf": null,
+   "channel": null,
+   "cand": {
+    "lib": "任",
+    "rare": "仕",
+    "ref": "仕"
+   },
+   "lacuna": "unreadable",
+   "guess": "任",
+   "ext": {
+    "cv": {
+     "channel": null,
+     "doubts": [
+      "库 unsure",
+      "上下文 margin 不足",
+      "replace_align"
+     ],
+     "cov": 0.9737
+    }
+   }
+  },
+  {
+   "id": "gkfggx5vjz2",
+   "text": [
+    158,
+    159
+   ],
+   "box": [
+    372,
+    2378,
+    122,
+    124
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 19,
+   "cv_id": "vol03:78:9:19",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "事",
+    "rare": "事",
+    "ref": "事"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9956
+    }
+   }
+  },
+  {
+   "id": "g63omdbeose",
+   "text": [
+    159,
+    160
+   ],
+   "box": [
+    372,
+    2494,
+    119,
+    119
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 20,
+   "cv_id": "vol03:78:9:20",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "跡",
+    "rare": "跡",
+    "ref": "跡"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9846
+    }
+   }
+  },
+  {
+   "id": "g3l4goiboua",
+   "text": [
+    160,
+    161
+   ],
+   "box": [
+    349,
+    2617,
+    148,
+    122
+   ],
+   "col": "c9",
+   "lane": "main",
+   "slot": 21,
+   "cv_id": "vol03:78:9:21",
+   "glyph_id": null,
+   "by": {
+    "box": "cv",
+    "text": "cv"
+   },
+   "method": "cv:match_ref",
+   "review": "auto",
+   "conf": null,
+   "channel": "match_ref",
+   "cand": {
+    "lib": "具",
+    "rare": "具",
+    "ref": "具"
+   },
+   "ext": {
+    "cv": {
+     "channel": "match_ref",
+     "doubts": [],
+     "cov": 0.9912
+    }
+   }
+  }
+ ],
+ "marks": [
+  {
+   "id": "mt6h7mtbnko",
+   "kind": "blank",
+   "col": "c1",
+   "slot": 1,
+   "box": [
+    1797,
+    348,
+    178,
+    109
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mp35u6bowt3",
+   "kind": "blank",
+   "col": "c1",
+   "slot": 2,
+   "box": [
+    1798,
+    456,
+    178,
+    123
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mxew4jann5g",
+   "kind": "blank",
+   "col": "c2",
+   "slot": 1,
+   "box": [
+    1615,
+    426,
+    174,
+    101
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "m6p3rg56qei",
+   "kind": "blank",
+   "col": "c3",
+   "slot": 1,
+   "box": [
+    1437,
+    406,
+    170,
+    85
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "ms3rrkcccif",
+   "kind": "blank",
+   "col": "c3",
+   "slot": 2,
+   "box": [
+    1437,
+    490,
+    171,
+    94
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "m6sooicd5oh",
+   "kind": "blank",
+   "col": "c4",
+   "slot": 2,
+   "box": [
+    1253,
+    442,
+    173,
+    133
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mgtdorehrqs",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 1,
+   "box": [
+    1069,
+    443,
+    174,
+    130
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "m7pymwxg7dt",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 15,
+   "box": [
+    1077,
+    2053,
+    172,
+    98
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "muncystssny",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 16,
+   "box": [
+    1077,
+    2150,
+    172,
+    94
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "msssbp2hv3a",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 17,
+   "box": [
+    1078,
+    2243,
+    171,
+    100
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mclnlylwdsz",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 18,
+   "box": [
+    1078,
+    2342,
+    172,
+    99
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "m2lab35cv3t",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 19,
+   "box": [
+    1079,
+    2440,
+    171,
+    100
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mgjdtbfdhxg",
+   "kind": "blank",
+   "col": "c5",
+   "slot": 20,
+   "box": [
+    1079,
+    2539,
+    171,
+    99
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "m7jzv5lnmfm",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 12,
+   "box": [
+    890,
+    1613,
+    176,
+    107
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mypnqbyeetr",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 13,
+   "box": [
+    890,
+    1719,
+    177,
+    115
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mincvkooovz",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 14,
+   "box": [
+    891,
+    1833,
+    176,
+    107
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mjdfhwyh7gb",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 15,
+   "box": [
+    891,
+    1939,
+    177,
+    116
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mi3ixd4ndpc",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 16,
+   "box": [
+    892,
+    2054,
+    177,
+    107
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mn7rmg2tgac",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 17,
+   "box": [
+    892,
+    2160,
+    177,
+    115
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mshc6shzmpi",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 18,
+   "box": [
+    893,
+    2274,
+    177,
+    108
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mjetb4qdqyo",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 19,
+   "box": [
+    893,
+    2381,
+    177,
+    115
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mij3uojtusr",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 20,
+   "box": [
+    894,
+    2495,
+    177,
+    122
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mmicigmragu",
+   "kind": "blank",
+   "col": "c6",
+   "slot": 21,
+   "box": [
+    894,
+    2616,
+    177,
+    122
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mhw7u4iiuyb",
+   "kind": "blank",
+   "col": "c7",
+   "slot": 1,
+   "box": [
+    704,
+    353,
+    169,
+    105
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mp7gyqyc3zj",
+   "kind": "blank",
+   "col": "c7",
+   "slot": 2,
+   "box": [
+    704,
+    457,
+    169,
+    119
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "ms7ldygynqh",
+   "kind": "blank",
+   "col": "c8",
+   "slot": 2,
+   "box": [
+    525,
+    433,
+    171,
+    135
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mgipduufskv",
+   "kind": "blank",
+   "col": "c9",
+   "slot": 1,
+   "box": [
+    338,
+    417,
+    176,
+    78
+   ],
+   "by": "cv"
+  },
+  {
+   "id": "mf7zvbgqyuy",
+   "kind": "blank",
+   "col": "c9",
+   "slot": 2,
+   "box": [
+    338,
+    494,
+    176,
+    75
+   ],
+   "by": "cv"
+  }
+ ]
+}
