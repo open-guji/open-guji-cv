@@ -606,9 +606,12 @@ def chapter_text_version(lines_md: Path) -> str | None:
 
 
 def write_outputs(res: VolumeResult, out_dir: Path, vol: int, *, book_id: str, title: str,
-                  creator: str, version: str = "0.1.0", text_version: str | None = None) -> dict[str, Path]:
-    """`version`：这一层的内容版本；`text_version`：对着哪一版 lines.md 做的（overview#400）。
-    流水线不自己升版本号，由调用方给（升级走 overview `bump_original.py`）。"""
+                  creator: str, version: str = "0.1.0", text_version: str = "0.1.0") -> dict[str, Path]:
+    """`version`：这一层的内容版本；`text_version`：对着哪一版 lines.md 做的（overview#400；
+    guji-format#2 起 schema 必填，wip 阶段可写 0.x）。流水线不自己升版本号，由调用方给
+    （升级走 overview `bump_original.py`，第一次并 main 用 `--init` 定 1.0.0）。"""
+    if not text_version:
+        raise ValueError("text_version 必填（guji-format#2）")
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = f"{vol:03d}"
     pj = build_punct_json(book_id, title, res.puncts, creator=creator)
@@ -618,7 +621,7 @@ def write_outputs(res: VolumeResult, out_dir: Path, vol: int, *, book_id: str, t
         out: dict[str, Any] = {}
         for k, v in d.items():
             out[k] = version if k == "version" else v
-            if k == "version" and text_version:
+            if k == "version":
                 out["text_version"] = text_version
         return out
     pj, ej = stamp(pj), stamp(ej)
