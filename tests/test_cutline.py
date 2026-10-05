@@ -326,7 +326,10 @@ def test_escalated_boundaries_reads_escalate_flag_from_products(tmp_path, monkey
 
     monkeypatch.setattr(T, "_col_profile", lambda *a, **kw: np.zeros(400), raising=False)
     monkeypatch.setattr("open_guji_cv.products.cache.ImageCache", lambda *a, **kw: _IC())
-    monkeypatch.setattr("cv2.imread", lambda *a, **kw: np.zeros((400, 160), np.uint8))
+    # 读图走 `utils.image_io.imread`（字节读入，不经 cv2.imread，overview#407），桩打在它的引用上
+    import open_guji_cv.eval.rulers as R
+    for mod in (T, R):
+        monkeypatch.setattr(mod, "cv_imread", lambda *a, **kw: np.zeros((400, 160), np.uint8))
     out, skipped = T.escalated_boundaries("vol02", [3], _St())
     assert [c["id"] for c in out] == ["vol02:3:1:2"]          # 只出 escalate 的那条
     c = out[0]
