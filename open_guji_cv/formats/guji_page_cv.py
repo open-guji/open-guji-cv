@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""CV v2 产物 → guji-page v0（刻本竖排链）。
+"""CV v2 产物 → guji-page v0.2（刻本竖排链）。
 
 只读产物、不写产物：吃 Step1 `border_detect`（版框/界行/列带）、Step3 `row_segment`
 （格、抬头、留白）、Step4 `cell_shrink`（字框 `bbox_page`）、Step7 `seed_admit`（定字/通道），
@@ -9,6 +9,16 @@
 CV 自己不知道的东西（Book ID、IIIF 册号、IA 原叶号、合扫页拆分的裁切区域、印章框）
 由调用方以 `meta` 传入，规范 §3。印章 CV 目前没有产物（自校草案 §七·4），`meta.marks`
 里人工给的框会被原样带上，并按几何算出它压住了哪些字框。
+
+v0.2「记录先行」（用户 10-02 裁定 #361·10）：每个字框补 `cand`（各路证据的首位字）与 `channel`
+（`seed_admit` 的放行通道），供网站校对模式用。候选取自**已有**产物，缺哪步就缺哪路，不补跑：
+
+| 键 | 来源 | 取法 |
+|---|---|---|
+| `lib` | Step5-a `glyph_match` | same 档的 `char`，否则 `candidates[0]` |
+| `ocr` | Step5-c `ocr_candidates` | `topk[0]` |
+| `rare` | Step5-b `rare_candidates` | `candidates[0].char` |
+| `ref` | Step5-d `align_ref` | 过闸对齐的 `align_char`，没有则坐标对位的 `ref_char`（非空） |
 """
 from __future__ import annotations
 
@@ -19,12 +29,43 @@ from ..core.spec import page_key
 from ..errors import ProductMissing
 from ..products.store import ProductStore
 from ..report.slots import cells_step, page_slots
-from .guji_page import (SCHEMA_ID, canvas_frame, ia_image_id, make_canvas, remap_geometry,
+from .guji_page import (LACUNA_CHAR, SCHEMA_ID, canvas_frame, ia_image_id, make_canvas, remap_geometry,
                          seq_for_ws_page, intersects, mint_id, quad_bounds, tr_bbox_to_xywh,
                         tr_point_to_tl, union_xywh)
 
 LANE_OF_KIND = {"char": "main", "jiazhu_a": "jz_r", "jiazhu_b": "jz_l", "jiazhu_solo": "solo"}
 STEPS = ("border_detect", "row_segment", "cell_shrink", "seed_admit")
+
+
+def _candidates(store: ProductStore, book: str, key: str) -> dict[str, dict[str, str]]:
+    """字位 id → `{lib, ocr, rare, ref}` 各路首位字（只读已有产物，缺件留空）。"""
+    out: dict[str, dict[str, str]] = {}
+
+    def put(cid, k, ch):
+        if ch:
+            out.setdefault(cid, {})[k] = ch
+
+    gm = store.read(book, "glyph_match", key, "glyph_match")
+    for col in (gm.columns if gm else []):
+        for r in col.chars:
+            put(r.id, "lib", r.char if r.verdict == "same" and r.char else
+                (r.candidates[0][0] if r.candidates else None))
+    ocr = store.read(book, "ocr_candidates", key, "ocr_candidates")
+    for col in (ocr.columns if ocr else []):
+        for r in col.chars:
+            put(r.id, "ocr", r.topk[0][0] if r.topk else None)
+    rare = store.read(book, "rare_candidates", key, "rare_candidates")
+    for col in (rare.columns if rare else []):
+        for r in col.chars:
+            put(r.id, "rare", r.candidates[0].char if r.candidates else None)
+    ar = store.read(book, "align_ref", key, "align_ref")
+    if ar:
+        for r in ar.coord:
+            put(r.id, "ref", r.ref_char)
+        for r in ar.chars:                    # 过闸对齐优先于坐标对位
+            if r.align_char:
+                out.setdefault(r.id, {})["ref"] = r.align_char
+    return out
 
 
 def _manifest_row(store: ProductStore, book: str, step: str, key: str) -> dict | None:
@@ -81,6 +122,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
     slots = page_slots(store, book, page, stale)
     admit_raw = store.read(book, "seed_admit", key, "seed_admit")
     admit_by_id = {r.id: r for c in admit_raw.columns for r in c.chars} if admit_raw else {}
+    cands = _candidates(store, book, key)
 
     # ── 图像与来历 ──
     rows = {s: _manifest_row(store, book, s, key) for s in STEPS}
@@ -128,6 +170,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
 
     # ── 文本流、列、字框、标记 ──
     text: list[str] = []
+    lacuna: list[int] = []
     glyphs: list[dict] = []
     marks: list[dict] = []
     columns: list[dict] = []
@@ -165,7 +208,11 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                 continue
             lane = LANE_OF_KIND.get(s.kind, "main")
             i = len(text)
-            text.append(s.char if s.char is not None else "")
+            if s.char is None:                 # 不知道原字：v0.2 写可见的「□」并记进页上 lacuna
+                text.append(LACUNA_CHAR)
+                lacuna.append(i)
+            else:
+                text.append(s.char)
             runs = col["runs"]
             if runs and runs[-1]["lane"] == lane and runs[-1]["text"][1] == i:
                 runs[-1]["text"][1] = i + 1
@@ -186,7 +233,9 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                  "box": box, "col": cid, "lane": lane, "slot": s.slot,
                  "cv_id": s.id, "glyph_id": glyph_ids.get(s.id),
                  "by": {"box": "cv" if box else None, "text": "cv"},
-                 "method": method, "review": review, "conf": None}
+                 "method": method, "review": review, "conf": None, "channel": s.channel}
+            if cands.get(s.id):
+                g["cand"] = {k: cands[s.id][k] for k in ("lib", "ocr", "rare", "ref") if k in cands[s.id]}
             if box and s.id not in box_by_id:
                 g["box_from"] = "cell_quad"
             if s.unreadable:
@@ -230,6 +279,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
         "canvas": None,
         "producers": producers,
         "text": text,
+        "lacuna": lacuna,
         "norm": list(meta.get("norm") or []),
         "zi": list(meta.get("zi") or []),
         "regions": [region],
