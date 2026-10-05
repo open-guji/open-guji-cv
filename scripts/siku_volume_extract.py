@@ -59,7 +59,8 @@ def make_client(args):
     if args.provider == "glm" and not os.environ.get(env):
         os.environ[env] = "proxy-injected"
     extra = {"thinking": {"type": "disabled"}} if (args.model or "").startswith("glm-4.5") else None
-    return PunctClient(args.provider, args.model, cache_dir=args.cache, timeout=args.timeout, extra=extra)
+    return PunctClient(args.provider, args.model, cache_dir=args.cache, timeout=args.timeout,
+                       retries=args.retries, extra=extra)
 
 
 def cmd_run(args) -> int:
@@ -132,10 +133,11 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--cache", help="LLM 缓存目录（默认 lines.md 同目录 .punct_cache）")
     r.add_argument("--provider", default="glm", choices=["glm", "qwen"])
     r.add_argument("--model", default="glm-4.5-flash")
-    r.add_argument("--workers", type=int, default=4)
+    r.add_argument("--workers", type=int, default=3)
     r.add_argument("--limit", type=int, default=300, help="每块字数上限")
     r.add_argument("--max-bad-ratio", type=float, default=0.02, help="改字超过此比例整块作废")
     r.add_argument("--timeout", type=int, default=180)
+    r.add_argument("--retries", type=int, default=6, help="单次调用重试次数（429 限流按指数退避）")
     r.add_argument("--count-blank-columns", action="store_true", help="空行也占一个列号")
     r.set_defaults(func=cmd_run)
 
