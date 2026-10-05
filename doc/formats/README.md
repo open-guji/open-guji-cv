@@ -30,9 +30,10 @@
     改按本规范作内容版本解释（格式版本看 `$schema` URL）；
   - `text_version`：这一层是对着哪一版文本做的。流水线产出时填当时 `index.json` 里该章的 `text_version`
     （还没编号的 wip 阶段可写 `0.x` 或不写）。
+- **书名两层都记**（guji-format#3）：每个 `work` 实体在标点层也有一对《》，《 `pos: before` 锚书名首字、》 `pos: after` 锚末字，与实体 `anchor.start`／`anchor.end` 一致。
 - **锚点校验字**：标点每条带 `anchor`（`页:列:格[子列]`）和 `pre_char`（该格的字）；实体每条带
   `anchor.start`／`anchor.end` 和 `text`（区间内的字）。坐标口径以 `siku_extract.parse_lines_md` 为准
-  （空行不占列；夹注左行子列 a、右行 b；超框抬头负格位、无第 0 格；`[[…]]`／`□` 记作 □）。
+  （空行不占列；夹注 `<甲|乙>` 甲为右列（先读）记子列 a、乙为左列记 b；超框抬头负格位、无第 0 格；`[[…]]`／`□` 记作 □）。
   文本改了以后，book-text 的校验器（overview `validate_text_format.py` 规则 F-OV-02）靠这两样逐个核对；
   改坐标口径必须同步改 overview `项目进展/古籍文本/scripts/original_version.py`。
 - **major = 质量等级**（1 可用／2 出版级／3 定本），门槛从严、要用户点头；第一次并 book-text main 时三线定 `1.0.0`，
