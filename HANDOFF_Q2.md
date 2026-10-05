@@ -27,27 +27,29 @@
 | `open_guji_cv/core/step.py` | `RunContext.image` 用 `strict=True`，读不出来抛 `FileNotFoundError`（带路径）；`raw_page` 只改报错文字 |
 | `open_guji_cv/steps/glyph_match.py` | 本格字块读不到/再生不出 → 抛 `PatchUnavailable`，**整页失败**（引擎记 failed、旧产物不动），不再写 `no_patch` 记录。候选试切图块（`…_L0` 键，按设计不可再生）缓存里没有时仍跳过（只接 `KeyError/ValueError`），文件在却读不出（OSError）照样停页 |
 | `open_guji_cv/steps/seed_admit.py` | 新 `_page_patch(src, page, col, slot, sub)`：管线里走 `ctx.image`（验页戳、缺了现算），读不到抛 `PatchUnavailable`；四处调用改用它，调用点传 `ctx`（离线脚本传册 id 字符串仍可用，只查缓存）。`_cnn_top` 先看 CNN 通道开没开（没 checkpoint/没 torch 不读图），开着才读、读不到抛。铁证对照图（别页/别册人裁刻例）缓存里没有仍跳过，文件在却坏了抛 |
-| `tests/test_imread_strict.py` | 新增 11 个测试函数（参数化展开后 13 个用例）：中文路径读图且不调 `cv2.imread`、两种口径的缺文件/坏文件、`RunContext.image` 抛错、glyph_match 读不到整页抛错（冻结样页跑真 Step1→4）、候选试切的两种失败分开处理、seed_admit 四处抛错、册 id 模式 |
+| `open_guji_cv/steps/seed_admit.py`（第二轮，总管验收意见） | 新参数 **`patch_missing: error｜skip`，缺省 `error`**（真书照严格口径）。`skip` 给云端快照沙箱用（只带 products、不带原图与 cache，字块现算不出来）：铁证（尺度+判定）／CNN 背书／组内检索三路读不到字块就**不参与这一格**，但不静默——该格 `evidence.patch_missing` 记下跳过了哪几路（`iron_scale`／`iron`／`cnn`／`form`），每页日志汇总一行 `seed_admit pN: patch_missing=skip，K 格读不到字块、跳过 {…}`。只收 error/skip；缺省值不进 dump，`params_hash` 与加字段前逐位相同；记在每格 evidence 而不加页级字段，`error` 口径下产物字节不变。glyph_match **不加开关**，照旧严格 |
+| `tests/test_imread_strict.py` | 新增 16 个测试函数（参数化展开后 18 个用例）：中文路径读图且不调 `cv2.imread`、两种口径的缺文件/坏文件、`RunContext.image` 抛错、glyph_match 读不到整页抛错（冻结样页跑真 Step1→4）、候选试切的两种失败分开处理、seed_admit 四处抛错、册 id 模式；`patch_missing`：缺省 error 停页、skip 跑完且逐格记账与日志计数对得上、通道没开时不算缺、参数校验与哈希不变、铁证尺度 skip 记账 |
 | `tests/test_cutline.py` | 原来桩打在 `cv2.imread` 上，现在读图不经它，桩改打在 `cv_imread` 引用上 |
 | `tests/test_seed_admit_variant_indirect.py` | 组内定形要读本格字块，测试里摆一张空白字块（原来靠「读不到 → None」走过去） |
 
 ## 行为变化（要知道的）
 
-- glyph_match / seed_admit 某页任何一个本格字块读不到，**这一页 failed**，日志里是
+- glyph_match / seed_admit（`patch_missing=error`，缺省）某页任何一个本格字块读不到，**这一页 failed**，日志里是
   `PatchUnavailable: pN 字块 pNNNNcCCsS 读不到: …`。以前同样情况会静默产出降级结果。
-- seed_admit 在缓存缺字块时会**现算**（走 `ctx.image`），云端无 cache 的快照上跑 seed_admit 会比以前慢一些，
-  但铁证/CNN 两路不再因为没缓存而悄悄关掉——**这意味着云端无 cache 时的 seed_admit 放行结果可能与以前不同（以前是少了这两路的结果）**。
+- seed_admit 在缓存缺字块时会**现算**（走 `ctx.image`）。云端快照没有原图，现算不出来：缺省口径下会停页，
+  **云端沙箱跑 seed_admit 要设 `seed_admit.patch_missing: skip`**（册 yaml 或管线 yaml 的 `params:` 段，或 CLI `--params`）——结果与 10-05 前「悄悄关掉」相同，
+  只是现在每格 evidence 与日志里看得见。
 - `scripts/audit_iron_recheck_0927.py` 传册 id 调 `_iron_page_scale`，缓存缺字块时现在抛错而不是跳过。
 
 未改（看过、判断不属静默降级或不在本卡范围，列出供总管定）：
 `ocr_candidates` 读不到字块记 `error` 并计入 `fail_threshold`（有记账，不静默）；
-`rare_candidates` 读不到字块记一条空 `RareRec`（候选为空，是一路可选证据，属降级但不出错字）——要不要也停页，请拍板。
+`rare_candidates` 读不到字块记一条空 `RareRec`（候选为空，是一路可选证据，属降级但不出错字）——**总管 10-05 定：不动**。
 
 ## 测试结果（云端 Linux）
 
 ```
 python -m pytest tests/ -q -s -p no:cacheprovider
-1 failed, 2644 passed, 30 skipped, 5 deselected
+1 failed, 2649 passed, 30 skipped, 5 deselected
 ```
 唯一失败 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file` 在 main 上同样失败
 （云端没有 U-Net checkpoint，与本改动无关）。改动前同一命令曾红 18 条（seed_admit 测试只造产物不造图），已逐条处理。

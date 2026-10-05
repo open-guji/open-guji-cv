@@ -248,3 +248,95 @@ def test_seed_admit_page_patch_book_id_mode(tmp_path, monkeypatch):
     (root / "vol02" / "char_patch" / "p0020c01s3.png").write_bytes(b"")
     with pytest.raises(PatchUnavailable, match="ImageReadError"):
         _page_patch("vol02", 20, 1, 3, None)
+
+
+# ── 5. seed_admit 的 `patch_missing` 开关（云端快照沙箱，CV 总管 10-05 验收意见）──
+
+_SA_BOOK, _SA_PAGE, _SA_COL = "tbook", 1, 1
+
+
+def _seed_admit_page(tmp_path, monkeypatch, *, patch_missing, cnn_on=True, logs=None):
+    """一页两格、缓存里一张字块都没有（= 快照沙箱）：
+    slot 18 match_replace 放行（整理本「𠮓」，库首位「變」，D #178 那组）后走组内定形 → 要读图；
+    slot 19 没整理本、库在灰区 → CNN 背书要读图。"""
+    from helpers import make_book, make_ctx, page_match, write_product
+
+    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.clustering import cnn_candidates
+    from open_guji_cv.core.step import STEPS
+    from open_guji_cv.products.kinds.recog import AlignRec, PageAlignRef
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+
+    class _Cnn:
+        available = cnn_on
+
+        def emb_topk(self, *a, **k):
+            return [("甲", 0.9)]
+    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Cnn())
+
+    ctx = make_ctx(tmp_path, make_book(_SA_BOOK), monkeypatch=monkeypatch)
+    if logs is not None:
+        ctx.log = logs.append
+    write_product(ctx, "glyph_match", _SA_PAGE, glyph_match=page_match(
+        _SA_PAGE, _SA_BOOK, col=_SA_COL, recs=[
+            dict(slot=18, verdict="unsure", cov=0.9549, wmax=45.31,
+                 candidates=[("變", 0.9549), ("泊", 0.95)]),
+            dict(slot=19, verdict="unsure", cov=0.97, wmax=20.0,
+                 candidates=[("甲", 0.97), ("乙", 0.90)])]))
+    write_product(ctx, "align_ref", _SA_PAGE, align_ref=PageAlignRef(
+        page=_SA_PAGE, anchored=True,
+        chars=[AlignRec(id=f"{_SA_BOOK}:{_SA_PAGE}:{_SA_COL}:18", col=_SA_COL, slot=18,
+                        align_char="𠮓", align_op="replace")]))
+    ctx.params["seed_admit"] = SeedAdmitParams(patch_missing=patch_missing)
+    return STEPS["seed_admit"].run_page(ctx, _SA_PAGE)["seed_admit"]
+
+
+def test_seed_admit_patch_missing_error_is_default_and_stops_page(tmp_path, monkeypatch):
+    from open_guji_cv.steps.seed_admit import PatchUnavailable, SeedAdmitParams
+
+    assert SeedAdmitParams().patch_missing == "error"
+    with pytest.raises(PatchUnavailable):
+        _seed_admit_page(tmp_path, monkeypatch, patch_missing="error")
+
+
+def test_seed_admit_patch_missing_skip_finishes_and_counts(tmp_path, monkeypatch):
+    """skip：页跑得完；跳过的格逐格记在 evidence.patch_missing，日志一行汇总，数对得上。"""
+    logs: list[str] = []
+    d = _seed_admit_page(tmp_path, monkeypatch, patch_missing="skip", logs=logs)
+    recs = {r.slot: r for cc in d.columns for r in cc.chars}
+    assert set(recs) == {18, 19}
+    assert recs[18].evidence["patch_missing"] == ["form"]
+    assert recs[19].evidence["patch_missing"] == ["cnn"]
+    n_missing = sum(1 for r in recs.values() if "patch_missing" in r.evidence)
+    summary = [s for s in logs if "patch_missing=skip" in s]
+    assert len(summary) == 1 and f"{n_missing} 格读不到字块" in summary[0], logs
+    assert "'form': 1" in summary[0] and "'cnn': 1" in summary[0]
+
+
+def test_seed_admit_patch_missing_skip_quiet_when_lane_off(tmp_path, monkeypatch):
+    """CNN 通道没开（没 checkpoint）时根本不读图，不算「读不到」。"""
+    d = _seed_admit_page(tmp_path, monkeypatch, patch_missing="skip", cnn_on=False)
+    recs = {r.slot: r for cc in d.columns for r in cc.chars}
+    assert "patch_missing" not in recs[19].evidence
+
+
+def test_seed_admit_patch_missing_param_validation_and_hash():
+    """只收 error/skip；缺省值不进 dump（params_hash 与加字段前逐位相同）。"""
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+
+    with pytest.raises(ValueError):
+        SeedAdmitParams(patch_missing="ignore")
+    assert "patch_missing" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(patch_missing="skip").model_dump()["patch_missing"] == "skip"
+
+
+def test_seed_admit_iron_page_scale_skip_records_missing():
+    from open_guji_cv.products.kinds.recog import ColumnMatch, MatchRec, PageMatch
+    from open_guji_cv.steps.seed_admit import _iron_page_scale
+
+    pm = PageMatch(page=20, db_fingerprint="x", columns=[ColumnMatch(col=1, ok=True, chars=[
+        MatchRec(id="b:20:1:1", slot=1, verdict="diff"),
+        MatchRec(id="b:20:1:2", slot=2, verdict="diff")])])
+    seen: list[str] = []
+    scale = _iron_page_scale(_CtxNoPatch(), 20, pm, on_missing=seen.append)
+    assert seen == ["b:20:1:1", "b:20:1:2"] and scale > 0
