@@ -23,7 +23,7 @@ from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
 from .shadow import SHADOW_THR, load_shadow, shadow_view
-from .verdict_view import decided_cells, defect_only_cells, flagged_cells
+from .verdict_view import decided_view, defect_only_cells, flagged_cells
 
 
 def parse_cells_spec(pages: str, book: str) -> set[str]:
@@ -237,6 +237,11 @@ def _align_ref_maps(st: ProductStore, book: str, pg: int) -> tuple[dict, dict]:
     return main, coord
 
 
+def _stale_shape(sv: dict | None) -> str:
+    """失效老裁决里人定的字（没有 / 非字 / 只说切坏 → ""）。"""
+    return ((sv or {}).get("verdict") or {}).get("shape") or ""
+
+
 def cards(book: str, pages: str = "dev_set", limit: int = 400,
           only: str = "review", store: ProductStore | None = None,
           gate_cut: bool = True, skip_decided: bool = True,
@@ -335,7 +340,11 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     out_blocked: list[dict] = []
     blocked = cut_pending(book, pgs, st) if gate_cut else {}
     # 全书已裁字位（跨批次）。点名清单模式不去重——见 docstring。
-    decided = decided_cells(book) if (skip_decided and only_ids is None) else set()
+    # 只算**仍有效**的裁决（overview#403 缺口 A）：老裁决绑定失效的格回到队列，`stale` 是当时
+    # 裁的字，卡片带上当预勾（`stale_verdict`）。不去重时也照样带——人复核时也该知道这格的旧裁决不作数了。
+    decided, stale = decided_view(book)
+    if not (skip_decided and only_ids is None):
+        decided = set()
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -363,7 +372,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     # "这是什么字"的问题——非字无字可定，切坏的是 Step3 的打回待办（总览/13）。
                     # 2026-09-20 前靠 `decided` 顺带藏住（seg_defect 事件曾算"裁过"），
                     # seg_defect 不再算裁过之后要显式挡，否则 bxgb 4 个「仍切坏」又冒出来。
-                    if "excluded" in (r.doubts or []):
+                    # 例外：名单上人给过字、但那条裁决已失效（缺口 A）——Step7 不再挂 `human_char`，
+                    # 文本出阙文；不放回来就又是两边都不管。只放「定过字」的，非字/只说切坏的照旧挡。
+                    if "excluded" in (r.doubts or []) and not _stale_shape(stale.get(r.id)):
                         continue
                     if only == "review" and r.admit:
                         continue
@@ -437,6 +448,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "occluded": occluded,
                     # 靠近似例定的字（Step7 evidence.approx，overview#276）：卡片显示「近似」
                     "approx": (r.evidence or {}).get("approx"),
+                    # 失效老裁决（overview#403 缺口 A）：当时裁的（定字台裁决形状）+ 时间/批次/绑定状态，
+                    # 前端当预勾；人确认后写出带现行锚点的新事件。没有就是 None。
+                    "stale_verdict": stale.get(r.id),
                     "db": {"verdict": mr.verdict, "cov": round(mr.cov, 4),
                            "wmax": round(mr.wmax, 1),
                            "candidates": mr.candidates[:5]} if mr else None,

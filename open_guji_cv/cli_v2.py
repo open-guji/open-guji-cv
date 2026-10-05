@@ -86,6 +86,8 @@ def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     pages = eng.book.resolve_pages(args.pages)
     st = eng.status(pages=pages)
+    gaps = _closure_gaps(eng.book.id, pages, eng.store)
+    st["closure_gaps"] = gaps
     if args.json:
         print(json.dumps(st, ensure_ascii=False))
         return
@@ -104,6 +106,31 @@ def cmd_status(args) -> None:
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
+    _print_closure_gaps(gaps)
+
+
+def _closure_gaps(book: str, pages: list[int], store) -> list[dict] | None:
+    """收尾不变量（overview#403 缺口 C，`verdict_view.closure_gaps`）；算不出来 → None，不拖垮 status。"""
+    try:
+        from .review.verdict_view import closure_gaps
+        return closure_gaps(book, pages, store)
+    except Exception as e:  # noqa: BLE001
+        print(f"  （收尾闸没算出来：{type(e).__name__}: {e}）", file=sys.stderr)
+        return None
+
+
+def _print_closure_gaps(gaps: list[dict] | None, show: int = 30) -> None:
+    if gaps is None:
+        return
+    if not gaps:
+        print("  收尾闸 ✓ 已定字却没出字 0 格")
+        return
+    print(f"  收尾闸 ✗ 已定字却没出字 {len(gaps)} 格（收尾前必须为 0；"
+          "Step7 过期先重跑，仍在的去控制台审查页补确认——失效老裁决会带预勾出卡）")
+    for g in gaps[:show]:
+        print(f"      {g['id']}  {g['shape']}{'  [排除名单]' if g['excluded'] else ''}")
+    if len(gaps) > show:
+        print(f"      …另 {len(gaps) - show} 格（--json 看全部）")
 
 
 def cmd_fp_migrate(args) -> None:

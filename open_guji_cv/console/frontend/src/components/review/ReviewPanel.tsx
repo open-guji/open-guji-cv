@@ -6,7 +6,7 @@ import type { AroundContext, RareCandidate, ReviewCard, ReviewClassMeta } from '
 import { aiAccepted, defaultShape } from './ai'
 import { keyList } from './candidates'
 import { ReviewCardView } from './ReviewCardView'
-import { occludedDefault, occludedGroupRows } from './doubt'
+import { occludedDefault, occludedGroupRows, staleDefault } from './doubt'
 import { CLASS_HELP, classHelpKey, DEFAULT_HELP, countShadowPre, dropOffScreen, gridFlagRows, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
          keepApprox, nextGridState, pickVerdict, screenRows } from './reviewClass'
 import type { GridState } from './reviewClass'
@@ -173,6 +173,14 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       if (c.occluded) {
         verdicts.current[c.id] = occludedDefault(c, Date.now()) ?? { shape: '', done: '', ts: Date.now(), noGlyphLib: true }
         if (verdicts.current[c.id].done) { touched.current.add(c.id); autoTouched.current.add(c.id) }
+        continue
+      }
+      // 失效老裁决（overview#403 缺口 A）：人当时裁的字当预勾，比 AI／CNN 默认优先
+      const sv = staleDefault(c, Date.now())
+      if (sv) {
+        verdicts.current[c.id] = sv
+        touched.current.add(c.id)
+        autoTouched.current.add(c.id)
         continue
       }
       // 借库书（`c.first`）没有 Step6-AI 默认时用 CNN／融合首选（defaultShape，2026-09-27）
