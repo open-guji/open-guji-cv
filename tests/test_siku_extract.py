@@ -260,3 +260,47 @@ def test_short_title_needs_author_in_paragraph(tmp_path):
     assert "避諱" in r["note"]
     assert m.match("people", "鄭元", dynasty_hint="漢")["entity_id"] == "p1"
     assert sx.name_before(list("焦竑經籍志"), 2, None, m) == ("焦竑", None)
+
+
+# ── #401：按段收发（Gemini）────────────────────────────────────────────
+
+def test_paragraph_export_format_and_split():
+    prep = sx.prepare_volume(LINES, limit=10 ** 9)
+    parts = sx.export_paragraph_parts(prep, part_chars=10)
+    lines = [ln for p in parts for ln in p.splitlines()]
+    assert lines[0] == "[P001] 經部總敘"
+    assert lines[1].startswith("[P002] 子夏易傳十一卷<內府藏本>舊本題")
+    assert "<!--" not in "".join(lines) and "[[" not in "".join(lines) and "<周□易>" in lines[1]
+    assert len(parts) == 2                                    # 第二段超过 10 字，另起一份
+
+
+def test_parse_paragraph_file_tolerates_fences_wraps_and_repeats():
+    text = "```\n[P001] 經部總敘\n［P002］《子夏易傳》十一卷〈內府藏本〉，\n舊本題撰。\n[P002] 《子夏\n```\n"
+    got = sx.parse_paragraph_file(text)
+    assert got == {1: "經部總敘", 2: "《子夏易傳》十一卷<內府藏本>，舊本題撰。"}
+
+
+def test_import_paragraphs_same_result_as_pipeline_and_voids_changed(tmp_path):
+    prep = sx.prepare_volume(LINES, limit=10 ** 9)
+    p2 = prep.chunks[1].plain
+    answers = {2: A1 + A2}
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, answers), _matcher(tmp_path), "gemini")
+    assert res.report["chunks_missing"] == 1 and res.report["chunks_failed"] == 0
+    assert {e.text for e in res.entities} >= {"子夏易傳", "鄭玄", "王弼"}
+    # 换 1 字在 32 字里超 2%：按 #401 口径整段作废
+    bad = {2: (A1 + A2).replace("鄭玄", "郑玄")}
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, bad), None, "gemini")
+    assert res.report["chunks_failed"] == 1 and "换字 1" in res.report["failed"][0]["note"]
+    assert p2.startswith("子夏")
+
+
+def test_write_outputs_versions(tmp_path):
+    prep = sx.prepare_volume(LINES, limit=10 ** 9)
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, {}), None, "x")
+    (tmp_path / "index.json").write_text(json.dumps(
+        {"chapters": [{"lines_file": "002.lines.md", "text_version": "0.3.0"}]}), encoding="utf-8")
+    tv = sx.chapter_text_version(tmp_path / "002.lines.md")
+    paths = sx.write_outputs(res, tmp_path, 2, book_id="b", title="t", creator="x", version="0.2.0", text_version=tv)
+    pj = json.loads(paths["punct"].read_text(encoding="utf-8"))
+    assert list(pj)[1:4] == ["version", "text_version", "book_id"] and pj["text_version"] == "0.3.0"
+    assert pj["version"] == "0.2.0"
