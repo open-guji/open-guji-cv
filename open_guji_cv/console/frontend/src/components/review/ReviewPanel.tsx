@@ -540,6 +540,8 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', 'truncated'); focus(cur + 1); ev.preventDefault() }
       // Z = 小注当正文（overview#265）：字形不完整的一种，事件多带 reason=jiazhu_as_main
       else if (ev.key === 'z' || ev.key === 'Z') { setVerdict(cur, '', 'jiazhu'); focus(cur + 1); ev.preventDefault() }
+      // M = 正文当小注（overview#415/#436）：反向，事件多带 reason=main_as_jiazhu
+      else if (ev.key === 'm' || ev.key === 'M') { setVerdict(cur, '', 'main'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'c' || ev.key === 'C') { setVerdict(cur, '', 'contaminated'); focus(cur + 1); ev.preventDefault() }
       // D = 原图破损。**不自动跳下一张**：人多半要接着在「最像」框里填一个字。
       else if (ev.key === 'd' || ev.key === 'D') { setVerdict(cur, '', 'damaged'); ev.preventDefault() }
