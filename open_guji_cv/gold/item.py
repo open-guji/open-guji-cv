@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-LabelOrigin = Literal["human", "align", "synth", "model", "derived"]
+LabelOrigin = Literal["human", "align", "synth", "model", "derived", "vision"]   # vision = 看图结论（overview#428）
 """human=人工标注；align=v2 对齐产生，带噪声；synth=合成；model=模型自评（不能当验收基准）；
 derived=算法某次运行的确定性输出，经人核实后固化为**行为回归基准**（不是标"世界的真值"，
 是标"这段逻辑当时该给出的正确答案"）。2026-09-13 补充：2026-09-11 新增的三个回归集分片——

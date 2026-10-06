@@ -19,6 +19,7 @@ from pathlib import Path
 
 from ..core.book import load_book
 from ..core.spec import cell_key, page_key
+from ..feedback.vision import VISION_DOUBT, flag_active, vision_flags
 from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
@@ -345,6 +346,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     decided, stale = decided_view(book)
     if not (skip_decided and only_ids is None):
         decided = set()
+    # 看图结论（overview#428）：模型看图判「放行字错」的格**捞回待审**，挂 doubt `vision_flag` 与 `vision`
+    # 字段（判的字、模型名）。只送审、不改字；人裁过（`decided`）的照旧不出——人裁压过模型。
+    vflags = vision_flags(book)
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
         m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
@@ -359,6 +363,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
             if not cc.ok:
                 continue
             for r in cc.chars:
+                _vf = vflags.get(r.id) if flag_active(vflags.get(r.id), r.char) else None
+                _doubts = (list(r.doubts or []) + [VISION_DOUBT]) if _vf else r.doubts
                 # 点名清单：只认 id，**不受 only / 顺序闸约束**——点名要看的就得出得来，
                 # 否则「这个字自动进库了」或「旁边切线没裁」会把它静默吞掉，人对着空面板
                 # 不知道是没问题还是没出卡。
@@ -376,7 +382,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     # 文本出阙文；不放回来就又是两边都不管。只放「定过字」的，非字/只说切坏的照旧挡。
                     if "excluded" in (r.doubts or []) and not _stale_shape(stale.get(r.id)):
                         continue
-                    if only == "review" and r.admit:
+                    if only == "review" and r.admit and not _vf:
                         continue
                     if only == "auto" and not r.admit:
                         continue
@@ -389,7 +395,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                                             "slot": r.slot, "pending": _pend})
                     continue
                 if counting:
-                    _codes = doubt_codes(r.doubts) or [DOUBT_NONE]
+                    _codes = doubt_codes(_doubts) or [DOUBT_NONE]
                     n_counted += 1
                     for _c in dict.fromkeys(_codes):
                         doubt_counts[_c] = doubt_counts.get(_c, 0) + 1
@@ -411,14 +417,14 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 _cls = _sub = None
                 if csel is not None:
                     _lib = (mr.candidates[0][0] if mr and mr.candidates else None)
-                    _cls = card_class(r.doubts, r.evidence, r.char,
+                    _cls = card_class(_doubts, r.evidence, r.char,
                                       gc[0] if gc else coord.get(r.id), _lib)
                     n_cls += 1
                     class_counts[_cls] = class_counts.get(_cls, 0) + 1
                     if _cls == "replace_align":
                         if _defect_only is None:
                             _defect_only = defect_only_cells(book) | flagged_cells(book)
-                        _sub = replace_align_sub(r.slot, r.doubts, ref, r.id in _defect_only)
+                        _sub = replace_align_sub(r.slot, _doubts, ref, r.id in _defect_only or bool(_vf))
                         _sc = class_sub_counts.setdefault(_cls, {})
                         _sc[_sub] = _sc.get(_sub, 0) + 1
                     if full or (csel != "*" and _cls != csel):
@@ -444,7 +450,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     "ref": ref,
                     # 「义定形未定」的组内候选与三源证据（variant_form），卡片按它只列组内形
                     "form": (r.evidence or {}).get("form"),
-                    "doubts": r.doubts,
+                    "doubts": _doubts,
                     "occluded": occluded,
                     # 靠近似例定的字（Step7 evidence.approx，overview#276）：卡片显示「近似」
                     "approx": (r.evidence or {}).get("approx"),
@@ -465,6 +471,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     **({"cls": _cls} if _cls is not None else {}),
                     **({"cls_sub": _sub} if _sub is not None else {}),
                     **({"shadow": _sv} if _sv else {}),
+                    # 看图结论判错（overview#428）：{v, char, shown, judge, note, group, ts, id}；没有就不带这个键
+                    **({"vision": _vf} if _vf else {}),
                 })
                 if len(out) >= _limit:
                     if not counting and csel is None:
