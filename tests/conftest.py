@@ -270,3 +270,19 @@ def cnn_test_ckpt(tmp_path_factory) -> Path:
     p = d / "best.pt"
     p.write_bytes(DEFAULT_CKPT.read_bytes())
     return p
+
+
+@pytest.fixture
+def no_cnn(monkeypatch):
+    """把 Step7 的 CNN 背书通道关掉（`cnn_candidates.shared().available=False`）。
+
+    这条通道开不开取决于本机有没有装 torch、有没有 checkpoint——单测不能跟着环境变。
+    2026-10-05 起（overview#407）通道开着时读不到字块会停页，只摆了 glyph_match 的单测
+    在有 checkpoint 的机器上就会红；用这个夹具钉成「通道关」，与没装 torch 的环境一致。
+    """
+    from open_guji_cv.clustering import cnn_candidates
+
+    class _Off:
+        available = False
+
+    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Off())

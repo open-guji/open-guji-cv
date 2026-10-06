@@ -299,6 +299,7 @@ def test_downstream_ignores_reason(tmp_path):
     assert b["rv"]["vol01:4:1:21"] == {"shape": "", "done": "jiazhu"}
 
 
+@pytest.mark.usefixtures("no_cnn")
 def test_seed_admit_same_with_or_without_reason(tmp_path, monkeypatch):
     """seed_admit 读事件侧人裁（`human_chars`）：带字的 seg_defect 一票定案成 human，不带字的照常走
     自动通道——多一个 `reason` 两次跑出来的产物逐条相同。"""
