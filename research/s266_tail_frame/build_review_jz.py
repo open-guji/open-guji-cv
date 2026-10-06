@@ -2,7 +2,7 @@
 import sys, json, random, base64, os, cv2
 from pathlib import Path
 S = Path(os.environ.get("S266_DIR", "."))
-ROOT = Path(__file__).resolve().parents[3] if (Path(__file__).resolve().parents[3] / "open_guji_cv").exists() else Path("/home/user/open-guji-cv")
+ROOT = Path(__file__).resolve().parents[2] if (Path(__file__).resolve().parents[2] / "open_guji_cv").exists() else Path("/home/user/open-guji-cv")
 sys.path.insert(0, str(ROOT / ".claude/skills/review-artifact/scripts")); sys.path.insert(0, str(ROOT))
 from review_shell import render
 from open_guji_cv.core.book import load_book

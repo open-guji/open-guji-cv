@@ -10,7 +10,7 @@
 
 ```bash
 pip install onnxruntime
-python scripts/experiments/yolo_tool_probe/probe.py <yolo_tool 仓> <工作区 data_full/zongmu/vol03> <出图目录> > result.json
+python research/yolo_tool_probe/probe.py <yolo_tool 仓> <工作区 data_full/zongmu/vol03> <出图目录> > result.json
 ```
 
 p107 的 CV 框按 `meta.json` 的 `canvas_image` 换算到工作区现行 `107.png` 上比（产物建在旧裁法的图上，见 guji-page 样张 README）。

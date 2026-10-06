@@ -33,7 +33,7 @@ from pathlib import Path
 
 from scipy.stats import beta
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 
 _HAN = re.compile(r"[㐀-鿿\U00020000-\U0003134f豈-﫿]")

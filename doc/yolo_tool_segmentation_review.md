@@ -2,7 +2,7 @@
 
 > F1 道追加（用户 2026-10-02 问「它有没有详细写 yolo 算法怎么算、值不值得我们的切分参考」）。
 > 读的是 open-guji/yolo_tool `15c5f88`（`core/workers.py`、`train_*.py`、`model/*/type.yaml`、`train_data/`、`runs/detect/*`）。
-> 实测脚本与结果：`scripts/experiments/yolo_tool_probe/`（用仓里的 `best.onnx` + onnxruntime，不装 torch）。
+> 实测脚本与结果：`research/yolo_tool_probe/`（用仓里的 `best.onnx` + onnxruntime，不装 torch）。
 > yolo_tool 仓**没改**；它的工程文件格式已并进 guji-page v0（`doc/formats/guji_page_v0.md` §九）。
 
 ## 〇、结论
@@ -62,7 +62,7 @@
 
 没有：倾斜/弯曲处理、版框检测、抬头级数、行首留白、阙文、置信校准、留出评测。
 
-## 二、四庫 vol03 实测（`scripts/experiments/yolo_tool_probe/`）
+## 二、四庫 vol03 实测（`research/yolo_tool_probe/`）
 
 做法：p3（卷端，抬头＋夹注＋印章）、p107（拆页）各跑一次版面模型（整页）；单字模型跑在 **CV 的列框**裁出的竖条上
 （左右各放 8px、上下 40px），与 CV 的 guji-page 样张逐框比 IoU。前处理照 ultralytics（等比到 1024、补 114 灰）。
@@ -106,7 +106,7 @@
 **样本**：vol03 27 页（含 dev_set 3/6/8/9/49 与 20/50/80/100 普通页）、vol02 11 页（真抬头页 3/11/101/157/186 + 普通页）。
 全部用产物 manifest 记的原图 sha 核对过，与现行原图一致（vol03 p105–108 拆页过期，不进样本）。
 脚本：`probe2.py`（两种喂法、分场景命中）、`inkcheck.py`（墨被谁漏掉）、`framecheck.py`（压版框线）、`sheets.py`（分歧拼图）；
-结果与拼图在 `scripts/experiments/yolo_tool_probe/r2/`。
+结果与拼图在 `research/yolo_tool_probe/r2/`。
 
 **两种喂法**：「原生」照 yolo_tool 自己的流程（版面框 → 裁条 → 单字）；「CV 列条」把 CV 列框上下各多带 40px，故意把版框线喂进去。
 

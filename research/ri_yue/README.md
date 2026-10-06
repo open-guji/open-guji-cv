@@ -15,7 +15,7 @@
 | 逻辑回归 [rel, 墨密度] / [+中横接右竖] | 13.6% / 14.1% | 35.7% / 33.9% |
 
 ¹ 平衡错分率 = 日、曰两类各自错分率的均值（曰 ≈ 7.6× 日，总体准确率会被多数类抬高）。
-分册/分版面完整表在 `scripts/experiments/ri_yue/analysis.json`。要点：
+分册/分版面完整表在 `research/ri_yue/analysis.json`。要点：
 - 分册差很大：w/h 单阈值 vol02 7.8%、vol03 20.5%、vol09 15.4%、vol10 9.2%；w/period 在 vol08/vol10 能到 1.3%/1.5%，vol04 却 16.9%——**阈值随册漂**，一套全局阈值不稳。
 - 正文 11.6%，列尾 31%（n=37，样本太小）。夹注格 0 个（库里日/曰样本全是正文或列尾）。
 - 次要特征（中横是否接右竖、上下留白、墨密度）基本没增益：中横在两个字里都有接/不接两种。
@@ -35,7 +35,7 @@
 
 ## 重叠样本：真分不开，不是标签错
 
-- `scripts/experiments/ri_yue/overlap_extremes.png`：前 16 张是 w/h 最大的 日、后 16 张是 w/h 最小的 曰。
+- `research/ri_yue/overlap_extremes.png`：前 16 张是 w/h 最大的 日、后 16 张是 w/h 最小的 曰。
   整理本字与放行字都一致（标签可信），形状确实「日写得宽、曰写得窄」。（图里小字标注因字体把 曰 显示成了日，**前 16 日、后 16 曰**。）
 - 日 w/h>0.97 的 3 个（vol02/188 c6s8、vol04/13 c9s21、vol09/5 c9s17）是**量法伪影**（裁块里混进邻字/界行残墨，紧墨框被撑宽），不是真宽；要修需换更严的连通域筛。
 - 全部清单：可信合集里 日 ≥0.76 的 16 个、曰 ≤0.72 的 16 个，见 `overlap_extremes.png` 与复现命令。
@@ -64,7 +64,7 @@
 - 版面：body / tail（列尾 = 该列最后一个正文格）。库里无夹注样本。
 - 量法：`cell_shrink.bbox_page`（右上角原点）用 `core.anchor.crop_patch` 切原图，Otsu 二值，丢掉贴边又细又长的连通域，取并集紧墨框。
   抽 20 张目视核对无误（`random20_ri_yue.png`：前行 10 日、后行 10 曰）。字距 period = 同列同类相邻格中心距的中位数；邻字 = 同列同类 ±3 格紧墨框的均值。
-- 图：`scripts/experiments/ri_yue/ri_yue_dist.png`（三个特征的双类分布 + 宽高散点 + 人裁散点）。
+- 图：`research/ri_yue/ri_yue_dist.png`（三个特征的双类分布 + 宽高散点 + 人裁散点）。
 - 没碰工作区正式 products，没跑上游。**未改任何包内代码**，所以没有「默认关的规则」与单测；全量测试没跑（无代码改动）。
 
 ## 复现
@@ -72,8 +72,8 @@
 ```bash
 # 解快照到沙箱（每册一个目录 $S/volNN/products/volNN），原图读 guji-workspace/96mid1ogzk-*/data_full/zongmu/
 export GUJI_SNAP_ROOT=$S
-python scripts/experiments/ri_yue/extract.py $S/out                      # → samples.jsonl + crops/
-python scripts/experiments/ri_yue/analyze.py $S/out scripts/experiments/ri_yue   # → analysis.json + ri_yue_dist.png
-python scripts/experiments/ri_yue/context.py $S/out/samples.jsonl
+python research/ri_yue/extract.py $S/out                      # → samples.jsonl + crops/
+python research/ri_yue/analyze.py $S/out research/ri_yue   # → analysis.json + ri_yue_dist.png
+python research/ri_yue/context.py $S/out/samples.jsonl
 ```
 依赖：numpy、opencv-python-headless、scikit-learn、matplotlib；`pip install -e .`（要 `open_guji_cv.core.anchor`）。

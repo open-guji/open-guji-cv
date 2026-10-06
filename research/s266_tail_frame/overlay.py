@@ -1,7 +1,7 @@
 """列图左右两半画 旧(红)/新(绿) 格线与格类型。用法: overlay.py BASE NEW OUTDIR [tail|full] [pg:col ...]"""
 import sys, json, cv2, numpy as np
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.core.spec import column_key
