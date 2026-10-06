@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from .. import deps
 from ..auth import require_admin
-from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ...utils.image_io import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 

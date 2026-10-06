@@ -171,12 +171,6 @@ BLOCKING = {"side": ("eat",), "end": ("glued",)}
 REVIEW = {"side": ("idk",), "end": ("idk",)}
 
 
-def is_blocking(t: dict) -> bool:
-    return (t["side_class"] in BLOCKING["side"]
-            or t["top_class"] in BLOCKING["end"]
-            or t["bot_class"] in BLOCKING["end"])
-
-
 def needs_review(t: dict) -> bool:
     return (t["side_class"] in REVIEW["side"]
             or t["top_class"] in REVIEW["end"]

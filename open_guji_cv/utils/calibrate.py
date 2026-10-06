@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import statistics
 from dataclasses import dataclass
-from pathlib import Path
 
 #: 实测值与 yaml 现值相差超过这个比例就标「漂了」。
 #: 3% 是按现有标定的稳定度定的：正文页 period 的册内 std 实测 vol01 1.67px /

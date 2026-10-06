@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import difflib
-import json
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -202,24 +201,6 @@ def evaluate_book(text_dir: str | Path, corpus: str,
         "total_matched": total_matched,
         "accuracy": round(total_matched / total_chars, 4) if total_chars else 0.0,
         "pages": [asdict(r) for r in results],
-    }
-
-
-def evaluate_books(text_dirs: dict[str, str | Path], corpus_path: str | Path) -> dict:
-    """多册合并评测：{册名: text_dir}，语料索引只建一次。"""
-    corpus = Path(corpus_path).read_text(encoding="utf-8")
-    index = build_ngram_index(corpus)
-    per_book = {name: evaluate_book(d, corpus, index)
-                for name, d in text_dirs.items()}
-    total_chars = sum(b["total_chars"] for b in per_book.values())
-    total_matched = sum(b["total_matched"] for b in per_book.values())
-    return {
-        "books": per_book,
-        "overall": {
-            "total_chars": total_chars,
-            "total_matched": total_matched,
-            "accuracy": round(total_matched / total_chars, 4) if total_chars else 0.0,
-        },
     }
 
 

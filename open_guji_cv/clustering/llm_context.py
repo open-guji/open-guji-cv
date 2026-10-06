@@ -341,6 +341,3 @@ class MockJudge:
                          parse_ok=ok, latency_s=0.0)
 
 
-def available_providers() -> list[str]:
-    """有环境变量 key 的 provider 名字列表（不发请求，只查 key 在不在）。"""
-    return [name for name, cfg in ENDPOINTS.items() if os.environ.get(cfg["env"])]

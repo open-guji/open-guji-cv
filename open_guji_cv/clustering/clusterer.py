@@ -21,7 +21,7 @@ from pathlib import Path
 import numpy as np
 
 from ..utils.image_io import imread, imwrite
-from .extractor import CharInstance, load_index
+from .extractor import load_index
 from .features import DEFAULT_FEATURE, get_feature
 from .normalize import NORM_SIZE, normalize_patch
 from .verify import (COV_HIGH, COV_LOW, DIFF_BLOB_RATIO,

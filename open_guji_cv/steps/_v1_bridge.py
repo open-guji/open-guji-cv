@@ -37,7 +37,6 @@ from pathlib import Path
 from typing import Iterable
 
 from ..core.book import load_book
-from ..core.pipeline import load_pipeline
 from ..core.spec import page_key
 from ..products.cache import ImageCache
 from ..products.store import ProductStore

@@ -29,7 +29,7 @@ import cv2
 import numpy as np
 
 from .normalize import skeletonize
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 _KERNEL_CROSS = np.array([[1, 1, 1], [1, 0, 1], [1, 1, 1]], dtype=np.uint8)
 

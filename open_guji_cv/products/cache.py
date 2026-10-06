@@ -23,11 +23,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import time
 from pathlib import Path
 from typing import Callable
 
-import cv2
 import numpy as np
 
 from ..utils.image_io import imwrite

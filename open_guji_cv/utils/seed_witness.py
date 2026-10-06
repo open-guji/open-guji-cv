@@ -33,7 +33,6 @@ SKIP_FLAGS = ("boundary_ink", "truncated", "contaminated", "frame_bars", "bad_se
 def _prep_one(args):
     """一个字位：读 png → 解码 → 归一。进程池的 worker（模块级函数才能 pickle）。"""
     key, path, isotropic, norm_stroke = args
-    import cv2
     import numpy as np
     from ..clustering.normalize import normalize_patch
     p = Path(path)
@@ -65,7 +64,6 @@ def _binarized_png(gray: "np.ndarray") -> bytes:
     与整页副本 `utils/binarized.binarize_page` **共用同一个二值化**（Sauvola
     31/0.2），所以「库里那张」与「人裁看的那张」是同一把尺子出来的。
     """
-    import cv2
     from .binarized import binarize_page
     ok, buf = cv2.imencode(".png", binarize_page(gray))
     if not ok:
@@ -116,7 +114,6 @@ def seed_from_witness(db, book, *, labels_path: Path, cache_root: Path, font_edi
     （缓存键含 exemplar 条数），下一次检索重建整张表，25 分钟只进了 4,101 条；
     拆成两阶段后检索 ~15ms/次、进库 ~10ms/条。"""
     from ..clustering.normalize import normalize_patch
-    from ..core.spec import cell_key
 
     edition = edition_tag or f"modern:{book.id}"
     # 标点也播种（2026-09-15）。此前只收 `kind=char`，于是库里一个逗号句号都没有，

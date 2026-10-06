@@ -114,12 +114,6 @@ def load_labels(path: str | Path) -> list[PageTypeLabel]:
             for r in json.loads(Path(path).read_text(encoding="utf-8"))]
 
 
-def save_labels(items: list[PageTypeLabel], path: str | Path) -> None:
-    Path(path).write_text(
-        json.dumps([i.to_dict() for i in items], ensure_ascii=False, indent=1),
-        encoding="utf-8")
-
-
 # ── 结构特征 ──────────────────────────────────────────────
 
 def page_features(gray: np.ndarray) -> dict:

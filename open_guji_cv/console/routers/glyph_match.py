@@ -69,7 +69,7 @@ def api_glyph_match_query(book: str, page: int, col: int, slot: int,
     """
     from ...clustering.normalize import normalize_patch
     from ...clustering.seeding import cached_matcher_from_db
-    from ...steps.glyph_match import GlyphMatchParams, db_fingerprint
+    from ...steps.glyph_match import db_fingerprint
 
     ck = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
     path = deps.image_cache().get(book, "char_patch", ck)

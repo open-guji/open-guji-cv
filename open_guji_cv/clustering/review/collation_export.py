@@ -35,7 +35,7 @@ import cv2
 import numpy as np
 
 from .persist_js import PERSIST_JS
-from ..seed_queue import SEED_EVENT_PREFIX, SeedItem
+from ..seed_queue import SeedItem
 from ..variants import VariantMap
 from ...utils.image_io import imread as cv_imread
 

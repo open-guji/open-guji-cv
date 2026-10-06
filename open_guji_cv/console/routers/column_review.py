@@ -20,7 +20,6 @@ from __future__ import annotations
 import random
 
 import cv2
-import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from ...core.book import load_book
@@ -29,7 +28,7 @@ from ...utils.column_triage import BLOCKING, REVIEW, triage_column
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ...utils.image_io import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -215,7 +214,6 @@ def api_column_review_img(book: str, page: int, col: int, src: str = "bin",
     而 `INTER_AREA` 压 1px 宽的线会把它抹淡，所以线加粗到 `squeeze` 像素补偿。
     """
     import cv2
-    import numpy as np
 
     from ...utils.binarized import binarize_page
     from ...utils.column_projection import column_text_band, denoise_column

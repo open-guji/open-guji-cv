@@ -53,13 +53,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
 
     字体候选是**纯形状**证据，没有文本兜底，所以只出候选、永不放行。
     """
-    import cv2
 
-    from ...clustering.font_candidates import book_charset, candidates
-    from ...clustering.ids_guard import ids_of
-    from ...clustering.normalize import normalize_patch
-    from ...products.cache import ImageCache
-    from ...steps.align_ref import DEFAULT_CORPUS
 
     img = rare_patch(book, page, col, slot, sub, deps.image_cache())
     if img is None:

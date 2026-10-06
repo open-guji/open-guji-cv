@@ -30,6 +30,12 @@ dependencies = [
     "PyYAML>=6.0",
     # char_patch 现算字块、多处插值要用；缺了不报错，截条图静默出空白（overview#274），所以进核心依赖
     "scipy>=1.10",
+    # 对勘（report/collate）与候选生成的繁简转换；纯 Python 小包。以前没声明，缺了对勘直接报错（overview#413 R6）
+    "opencc-python-reimplemented>=0.1.7",
+    # guji-page 导出自检（formats/guji_page.check）
+    "jsonschema>=4.0",
+    # 读字体 cmap：glyph-db import-font、字表构建要用（原先只在 dev 里）
+    "fontTools>=4.0",
 ]
 
 [project.optional-dependencies]
@@ -61,7 +67,12 @@ onnx = [
 torch = [
     "torch>=2.0",
 ]
-# 影子放行闸（steps/seed_admit 的 shadow_veto，缺省关）与其训练/评估脚本要 scikit-learn；
+# PDF 抽页（guji import-pdf）
+pdf = [
+    "pymupdf>=1.23",
+]
+# 影子放行闸（steps/seed_admit 的 shadow_veto，缺省关）、页型模型闸（border_detect_gate 的 pagetype_model，缺省关）
+# 与其训练/评估脚本要 scikit-learn（joblib 随它装）；
 # 不开 shadow_veto 就不需要。模型文件口径闸要求 major.minor 与训练一致（见 doc/shadow_gate.md）。
 shadow = [
     "scikit-learn>=1.5",
@@ -77,11 +88,6 @@ console = [
 ]
 dev = [
     "pytest>=7.0",
-    # `clustering/font_glyphs.py` 与 `scripts/build_charset.py` 读字体 cmap 要它。
-    # 生产代码里是**惰性 import**（不导字体字形就用不到），但测试要覆盖那条路，
-    # 所以进 dev。2026-09-20 之前它一处都没声明，tests/clustering/test_font_glyphs.py
-    # 因此在没装它的机器上整片报 ModuleNotFoundError。
-    "fontTools>=4.0",
     "build>=1.0",
     "twine>=4.0",
     "ruff>=0.4",
@@ -94,8 +100,8 @@ guji-cv = "open_guji_cv.__main__:main"
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]
-Repository = "https://github.com/your-org/open-guji-cv"
-Issues = "https://github.com/your-org/open-guji-cv/issues"
+Repository = "https://github.com/open-guji/open-guji-cv"
+Issues = "https://github.com/open-guji/open-guji-cv/issues"
 
 # ── 包发现 ──────────────────────────────────────────────────────────────
 [tool.setuptools.packages.find]

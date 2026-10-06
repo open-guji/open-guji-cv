@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Callable
 
 import numpy as np
-from ..utils.image_io import imread as cv_imread
+from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
 
 MANIFEST_NAME = "_split_manifest.json"
 

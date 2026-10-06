@@ -36,7 +36,7 @@ from ...review.cell_shrink_rand import rand_sample
 from ...review.verdict_view import review_verdicts, verdicts_by_question
 from ...steps._warpmap import ColumnMapper
 from ...utils.preclean import effective_raw_path
-from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ...utils.image_io import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 

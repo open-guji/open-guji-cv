@@ -21,7 +21,7 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 
 @dataclass

@@ -33,7 +33,7 @@ from ..seed_queue import (ALL_DOUBTS, DOUBT_LABELS, SEED_EVENT_PREFIX,
                           STATUS_CONFIRMED, STATUS_NOT_A_CHAR, STATUS_PENDING,
                           STATUS_REJECTED, STATUS_SKIPPED, SeedItem,
                           parse_seed_events)
-from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ...utils.image_io import imread as cv_imread
 
 # 已裁决 = 不再需要出现在待审批次里的状态（auto_admitted 也算：免审进库；
 # confirmed_label_only = 定了字但字形不入库，同样已裁决）

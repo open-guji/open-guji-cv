@@ -41,7 +41,7 @@ import numpy as np
 from ..core.spec import column_key, page_key
 from ..products.cache import ImageCache
 from ..products.store import ProductStore
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 CARD_KIND = "slot-count"
 

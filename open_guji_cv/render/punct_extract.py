@@ -8,10 +8,8 @@
 from __future__ import annotations
 
 import difflib
-import json
 import re
-from dataclasses import dataclass, field
-from pathlib import Path
+from dataclasses import dataclass
 from typing import Any
 
 # 常用句读点号（不含实体书名号《》，书名号由 entity 模块作为实体边界独立处理）

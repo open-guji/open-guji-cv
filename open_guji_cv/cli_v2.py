@@ -19,6 +19,8 @@ import json
 import sys
 from pathlib import Path
 
+from .utils.image_io import imread as cv_imread  # 中文路径安全的读图（裸 cv2.imread 遇中文路径静默返回 None）
+
 DEFAULT_PIPELINE = "keben_body_v2"
 DEFAULT_CONSOLE_PORT = 8640
 
@@ -673,7 +675,6 @@ def cmd_events(args) -> None:
     from .feedback.events import EventLog
     from .feedback.harvest import harvest_file
     from .feedback.routes import RouteTable
-    from .gold.store import GoldStore
     from .review.batches import BatchStore
     log = EventLog()
     if args.action == "harvest":
@@ -1314,11 +1315,10 @@ def cmd_product(args) -> None:
     对应控制台第二类 6 条路由。图像类要 `--out`——云端跑完把 PNG 交回本地看，
     这是「云端能出叠图」那条路的落点。
     """
-    from .core.spec import cell_key, page_key
+    from .core.spec import cell_key
     from .products.cache import ImageCache
     from .products.store import ProductStore
     from .render.overlay import encode_png, overlay
-    import cv2
 
     from .core.step import resolve_step_id
     st = ProductStore()

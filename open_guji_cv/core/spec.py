@@ -231,5 +231,3 @@ def parse_key(key: str) -> tuple[int, int | None, int | None]:
     return page, col, slot
 
 
-def page_of(key: str) -> int:
-    return parse_key(key)[0]

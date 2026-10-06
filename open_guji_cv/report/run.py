@@ -37,7 +37,7 @@ from ..products.store import ProductStore
 from .collate import Diff, collate_page
 from .collation_grade import adapt_diff, misanchored_pages
 from .collation_grade import summarize as grade_summarize
-from .witness import Witness, load_witnesses
+from .witness import Witness
 
 
 def collate_book(book: str, pages: list[int], witnesses: list[Witness],
