@@ -21,3 +21,7 @@
 - **请用户裁约 17 格**（量少而精）：`clf_candidates.json` 里「分歧」11 格 + 「待审:整理本=分类器」p≥0.8 的 6 格。裁完：分歧格里放行字错几个＝放行错率的第一个直接证据；6 格对＝可放出。我没出审查页（review_pages.py 在 G1 分支，用户累）。
 - 之后给 Step6 接分类器：产物记（组名、字、p），Step7 只当一路证据；接之前先加质量闸（线噪/斑点）与「非组内」弃权。
 - 复现：`pip install scikit-learn opencv-python-headless scipy`；`cd research/char_groups/rr && python3 run_final.py`（`GUJI_DATASET` 指 dataset）；`python3 loo_weak.py`。
+
+## 追加（第二步：质量闸 + 非组内弃权，+17 格审查页）
+- 审查页 17 格：https://claude.ai/artifact/D7epPjixiwqPTt3g2PXZDz （卡 id 冻结 dataset `char-groups/review/rr17_cards.jsonl`，脚本 `research/char_groups/rr/review_rr17.py`，复用 G1 的 `review_pages.py`，已拷入本分支，内容与 G1 分支一致）。收回用 `harvest_verdicts.py`。
+- `rr/clf2.py`：质量闸（长线/散斑/贴边）+ 第 4 类「其他」。结果与局限见 dataset rr/README「质量闸与非组内弃权」与 `clf2_eval.txt`。要点：强真值不变（41–42/46 全对）；负例 5 折拦下 36–37/37（但负例只有久火尺今又，有同字泄漏）；弱标签放行格上阈值 0.5 弃权 0–4%，0.8 弃权 10–15%，**建议 0.5 + 质量闸**；闸阈值是看候选格定的，无独立验证。
