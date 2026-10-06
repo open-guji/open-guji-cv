@@ -5,6 +5,7 @@
 整列连成串，没有整理本或 OCR 背书，context 仍给 margin 高分放行。数据全是自造的产物。"""
 from __future__ import annotations
 
+import pytest
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, page_chars, page_decision, page_match, write_product
 from open_guji_cv.core.step import STEPS, RunContext
@@ -12,6 +13,8 @@ from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.kinds.recog import CoordRec, PageAlignRef
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _rare_run_ids
+
+pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
 
 BOOK, PAGE, COL = "tbook", 1, 1
 
