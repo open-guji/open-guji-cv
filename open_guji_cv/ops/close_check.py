@@ -71,7 +71,7 @@ def _store_committed(ws: Path) -> dict:
     lines = [ln for ln in out.splitlines() if ln.strip()]
     return _item("8", "字形库与人裁已提交", PASS if not lines else FAIL,
                  "工作区 git 干净" if not lines else
-                 f"{len(lines)} 个未提交改动（先 `guji-cv glyph-db export`，查 numstat 无成片删除后提交）",
+                 f"{len(lines)} 个未提交改动（`guji store commit -w <工作区> --push`）",
                  lines[:50] or None)
 
 

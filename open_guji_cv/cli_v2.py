@@ -196,6 +196,16 @@ def cmd_audit(args) -> None:
         (out_dir / f"{book}.放行错穷举.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
         print(f"{book} 放行错穷举：{res['n']} 格（认字差异 {res['n_non_systematic']} 要逐格看图；"
               f"异体 {res['n_variant']}；系统性 {res['n_systematic']}）→ {md}")
+    elif args.action == "sheet":
+        from .review.cards import cards
+        from .review.verdict_view import closure_gaps, closure_mismatches
+        pages = eng.book.resolve_pages("all")
+        q = cards(book, "all", limit=1, only="review", store=eng.store, gate_cut=False,
+                  skip_decided=True, cls="*").get("class_counts") or {}
+        md = out_dir / f"{book}.请审单.md"
+        md.write_text(A.review_sheet(book, q, closure_gaps(book, pages, eng.store),
+                                     closure_mismatches(book, pages, eng.store)), encoding="utf-8")
+        print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
     elif args.action == "count":
         from .core.workspace import feedback_root
         if not args.since:
@@ -218,6 +228,32 @@ def cmd_audit(args) -> None:
         md.write_text(A.jys_md(res, book), encoding="utf-8")
         (out_dir / f"{book}.己已巳.muse_input.jsonl").write_text(A.jys_muse_jsonl(res), encoding="utf-8")
         print(f"{book} 己/已/巳：{res['n']} 格 {res['by_char']}，人裁过 {res['n_human']} → {md}")
+
+
+def cmd_store(args) -> None:
+    """`guji store check|commit -w <工作区>`：字形库导出到真源、查有没有成片删除、提交（runbook S14）。"""
+    import os
+    from .core.workspace import workspace_root
+    from .ops import store_commit as SC
+    if not args.workspace:
+        print("✗ 要 -w <工作区>", file=sys.stderr); sys.exit(2)
+    os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+    ws = workspace_root()
+    res = SC.run(ws, commit=args.action == "commit", push=args.push, allow_deletions=args.allow_deletions,
+                 no_export=args.no_export, message=args.message, fetch=not args.no_fetch)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+    ch = res.get("changes") or {}
+    if ch:
+        print(f"改动：{ch['n_changed']} 个文件（+{ch['added_lines']} −{ch['deleted_lines']} 行，新文件 {ch['untracked']}，"
+              f"删文件 {len(ch['deleted_files'])}）")
+    if res.get("blocked"):
+        print(f"✗ {res['blocked']}", file=sys.stderr); sys.exit(1)
+    if args.action == "commit":
+        print(f"已提交 {res['committed']}" + ("，已推送" if res.get("pushed") else "（未推送，加 --push）")
+              if res.get("committed") else "没有改动，不提交")
+    else:
+        print("检查通过（check 不提交；要提交用 `guji store commit`）")
 
 
 def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
@@ -1911,6 +1947,7 @@ COMMANDS_V2 = {
     "close-check": cmd_close_check,
     "export": cmd_export,
     "audit": cmd_audit,
+    "store": cmd_store,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
     "console": cmd_console,
@@ -2271,8 +2308,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
 
     p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
-                                     "count = 用户审完当场核数（只读）")
-    p.add_argument("action", choices=["admitted", "jys", "count"])
+                                     "count = 用户审完当场核数；sheet = 生成请审单（只读）")
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet"])
     p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
     p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
     p.add_argument("book")
@@ -2281,6 +2318,16 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--export-dir", default=None, help="jys：guji export format 的输出目录")
     p.add_argument("--chapter", default=None)
     p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
+
+    p = sub.add_parser("store", help="[v2] 字形库与人裁落真源：check = 导出并查有无成片删除；commit = 再提交（--push 推送）")
+    p.add_argument("action", choices=["check", "commit"])
+    p.add_argument("-w", "--workspace", default=None, help="书的工作区目录")
+    p.add_argument("--push", action="store_true", help="commit 后 pull --rebase 再推送")
+    p.add_argument("--allow-deletions", action="store_true", help="确认过「成片删除」是对的，放行")
+    p.add_argument("--no-export", action="store_true", help="不重新导出（store 已是最新时用）")
+    p.add_argument("--no-fetch", action="store_true", help="不先 fetch 远端（离线时用）")
+    p.add_argument("-m", "--message", default=None)
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("recheck",
                        help="[v2] Step5-a 点名重算：库变了不自动重跑，要吃新库就在这里点名格")

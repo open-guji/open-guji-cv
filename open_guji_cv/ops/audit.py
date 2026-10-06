@@ -153,3 +153,53 @@ def review_count(events_dir: Path, book: str, since: str, expect: list[str] | No
         res["missing"] = sorted(exp - set(keys))
         res["extra"] = sorted(set(keys) - exp)
     return res
+
+
+SECS_PER_CELL = 5          # 控制台一格约 5 秒（vol03 实测，#164）
+
+
+def review_sheet(book: str, queue: dict, gaps: list[dict], mismatches: list[dict],
+                 console: str = "http://127.0.0.1:8640/") -> str:
+    """请审单（runbook S11 的格式）：一类活一节，每节写在哪、几格、几分钟、不审的默认。
+
+    `queue` = 待审卡按类计数（`cards(...)["class_counts"]`）；`gaps` = 收尾闸格（有定字裁决却没出字，
+    卡上已预勾旧裁的字）；`mismatches` = 人裁字≠放行字的报告项，只列正文一类（己已巳族由会话自己按文意过）。
+    放行错穷举里判为错的格不在这里：会话看完图后把那几格按字位追加到第 4 节。
+    """
+    from ..review.cards import REVIEW_CLASSES
+    names = {k: label for k, label, _h in REVIEW_CLASSES}
+
+    def mins(n):
+        return max(1, round(n * SECS_PER_CELL / 60))
+    n_q = sum(queue.values())
+    main = [m for m in mismatches if m.get("kind") == "main"]
+    out = [f"# {book} 请审单", "",
+           f"控制台：{console} → 选本册。共 {n_q + len(gaps) + len(main)} 格，约 {mins(n_q + len(gaps) + len(main))} 分钟；"
+           "可以分几次，进度自动保存。**一节审完再开下一节。**", ""]
+    out += ["## 1. 待审队列", ""]
+    if n_q:
+        out += [f"Step7 →「定字裁决」标签，勾「跳过已裁」。共 {n_q} 格，约 {mins(n_q)} 分钟。", "",
+                "| 类别 | 格数 |", "|---|---|"]
+        out += [f"| {names.get(k, k)} | {v} |" for k, v in sorted(queue.items(), key=lambda kv: -kv[1])]
+        out += ["", "不审的默认：这些格不放行，文本里出阙文。"]
+    else:
+        out += ["无。"]
+    out += ["", "## 2. 失效的老裁决（卡上已预勾当时裁的字，点一下确认）", ""]
+    if gaps:
+        out += [f"默认视图里会出卡，卡头写「旧裁「X」已失效 · 已预勾」。共 {len(gaps)} 格，约 {mins(len(gaps))} 分钟。", "",
+                "| 字位 | 当时裁的字 | 备注 |", "|---|---|---|"]
+        out += [f"| `{g['id']}` | {g['shape']} | {'排除名单格' if g.get('excluded') else ''} |" for g in gaps]
+        out += ["", "不审的默认：这些格在文本里出阙文（收尾闸不过，不能交付）。"]
+    else:
+        out += ["无。"]
+    out += ["", "## 3. 人裁字与放行字不同（扫一眼即可）", ""]
+    if main:
+        out += [f"共 {len(main)} 格。多数是老裁决钉在移过位的格上被正确丢掉；看到真错的，按字位打开改判。", "",
+                "| 字位 | 人裁 | 现放行 |", "|---|---|---|"]
+        out += [f"| `{m['id']}` | {m['shape']} | {m['char']} |" for m in main]
+        out += ["", "不审的默认：照现放行字出文本。"]
+    else:
+        out += ["无。"]
+    out += ["", "## 4. 按字位改判（放行错穷举、己/已/巳 看图判为错的格，由会话追加）", "",
+            "| 字位 | 现在 | 建议 | 理由 |", "|---|---|---|---|", "", "不审的默认：照现放行字出文本。", ""]
+    return "\n".join(out)
