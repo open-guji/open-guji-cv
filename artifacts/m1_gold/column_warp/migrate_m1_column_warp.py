@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """M1·A 道：column-warp 金标 → 现行 v2 链的迁移报告（2026-09-30）。
 
-    python scripts/migrate_m1_column_warp.py ../open-guji-dataset/char-segmentation/column-warp \\
+    python research/scripts_oneoff/migrate_m1_column_warp.py ../open-guji-dataset/char-segmentation/column-warp \\
         --out artifacts/m1_gold/column_warp
 
 对每条原始标注（`samples/*.json` 全部，不只看「当前还留着的」）：取 v2 链产物

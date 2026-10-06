@@ -1,6 +1,6 @@
 """GlyphDB：跨書字形數據庫（SQLite 單檔，M8 字形庫升級）。
 
-設計見 .claude/doc/char_clustering_design.md 第 19 節。要點：
+設計見 doc/design/char_clustering_design.md 第 19 節。要點：
 
 - 原始字形 PNG 是唯一不可變真源；歸一化/骨架/特徵是帶版本的派生物；
 - 字形層（char=精確異體字形）與語義層（semantic=正字）分離；

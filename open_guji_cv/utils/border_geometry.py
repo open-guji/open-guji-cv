@@ -1,4 +1,4 @@
-"""Step 1（边框探测）的新坐标系接口——见 `.claude/doc/segmentation_v2_pipeline.md`。
+"""Step 1（边框探测）的新坐标系接口——见 `doc/segmentation_v2_pipeline.md`。
 
 新坐标系跟 `peak_line_search.py` 内部使用的标准图像坐标（左上角原点，x
 向右、y 向下）不一样：**原点在页面右上角，x 向左递增，y 向下递增不变**，

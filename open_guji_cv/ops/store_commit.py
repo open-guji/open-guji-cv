@@ -29,9 +29,14 @@ def export(ws: Path) -> dict:
         raise SystemExit(f"没有字形库索引 {db_path}：先 `guji glyph-db rebuild -w {ws}`")
     db = GlyphDB(db_path)
     try:
-        return export_store(db, glyph_store_path())
+        summary = export_store(db, glyph_store_path())
     finally:
         db.close()
+    # 与 scripts/snapshot_glyph_store.py 同：只记实例数、不记时间戳，重导同一个库应当零改动
+    import json
+    (Path(glyph_store_path()) / "_snapshot.json").write_text(
+        json.dumps({"instances": summary.get("instances", 0)}, ensure_ascii=False, indent=1), encoding="utf-8")
+    return summary
 
 
 def changes(ws: Path) -> dict:
@@ -82,6 +87,9 @@ def run(ws: Path, *, commit: bool, push: bool, allow_deletions: bool, no_export:
             return res
     if not no_export:
         res["export"] = export(ws)
+        if not res["export"].get("instances"):
+            res["blocked"] = "导出了 0 个实例：库是空的或指错了库（workspace_layout §四 的老坑），什么都没提交"
+            return res
     ch = changes(ws)
     res["changes"] = ch
     why = mass_deletion(ch)

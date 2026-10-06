@@ -16,7 +16,7 @@
    或裁切引入的残余倾斜），单纯竖直/水平投影会把斜线的峰"拖宽拖低"甚至完全看丢。
    对每个候选，允许峰的位置也跟着倾角一起变（重要：**不能把位置锁死在初始候选
    x₀ 上再单独搜角度**——峰的真实锚点会随倾角挪动，锁死位置等于把最优解排除在
-   搜索范围外，这是本算法早期版本踩过的坑，参见 `.claude/doc/peak_line_search.md`）。
+   搜索范围外，这是本算法早期版本踩过的坑，参见 `doc/design/peak_line_search.md`）。
 4. **性能优化**：a) 只在投影曲线自己的局部极大值上算半高宽分数，不用扫窗口里
    每个位置；b) 角度先粗后细两段扫（粗扫定位大致方向，细扫在附近精确定位），
    比一次性细扫全范围快，且因为最终分辨率更高，找到的分数往往还更高。
@@ -36,7 +36,7 @@
   接入自动选线逻辑**，只作为诊断量导出——细节和试过的几种失败整合方式见
   函数自身的 docstring。
 
-详见 `.claude/doc/peak_line_search.md`（算法设计记录 + 踩过的坑 + 五页试跑结果）。
+详见 `doc/design/peak_line_search.md`（算法设计记录 + 踩过的坑 + 五页试跑结果）。
 """
 
 from __future__ import annotations
@@ -336,7 +336,7 @@ def flank_dirty_frac(mask: np.ndarray, y: int, width: float, w: int,
 
     **结论：先留作诊断量（暴露给上层做人工复核/跨页一致性分析用），不接入
     `find_horizontal_border` 的自动选线逻辑**——这条路目前证明是死路，跟
-    `.claude/doc/peak_line_search.md` 记录的"扩窗口/降阈值"是同一类教训：
+    `doc/design/peak_line_search.md` 记录的"扩窗口/降阈值"是同一类教训：
     单页内的几何判据已经吃干榨尽，下一步大概率要靠跨页先验（同一本书同一
     版式，真实版框位置应该聚在窄范围内）才可能破局。
     """
@@ -901,7 +901,7 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
     受影响），再只在 `primary` 位置附近 ±`secondary_window` px 的窄窗口内
     （不能扩大到整个条带——之前试过带内多候选+相对分数阈值+"离中心最近"
     的方案，结果远处噪声峰把好几个本来正确的页面带崩了，见
-    `.claude/doc/peak_line_search.md`）找一个"比 primary 更靠近页面中心、
+    `doc/design/peak_line_search.md`）找一个"比 primary 更靠近页面中心、
     且匹配度达到 primary 一定比例"的候选，找到就换成它，否则保留 primary。
 
     **搜索带边界锁死**（2026-09-12 补，vol03/7、vol02/26 实测，仅 `bottom`）：

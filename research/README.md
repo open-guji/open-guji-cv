@@ -18,6 +18,7 @@
 | `s279_vol02_recompute/` | 09-29 | vol02 整册重算后旧人裁重绑定核账（overview#279） |
 | `step6_dict_ai/` | 09-27 | Step6 词典 + AI 排除法评测框架（北行日錄），含各模型跑数 |
 | `stroke_disc/` | 09-26 | 小笔画判别器：verify 的 cov/wmax 能否分开铁证冲突与一致 |
+| `scripts_oneoff/` | 10-06 | 从 `scripts/` 挪来的 21 个一次性脚本：修数据（evict、relabel、backfill、rebind、repair）、迁移（migrate_*）、一次性评测与 A/B（eval_*、*_ab） |
 | `yolo_tool_probe/` | 10-02 | yolo_tool 的 YOLO 模型在四庫 vol03 上的探针（F1） |
 
 **生产模型的出处**（代码 docstring 引用这里）：

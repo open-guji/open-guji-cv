@@ -189,7 +189,7 @@ class GlyphKnnSource(CandidateSource):
     （scripts/bench_font_glyphs.py）字体命中的「对」与「错」f1 分布是重叠
     的（正确命中 p10 反而低于错误命中 p90 0.06~0.13），阈值划不出来，
     当精确字形用只会注入错字。字体字形的用法见
-    .claude/doc/glyph_db_expansion_research.md §5 P1。
+    doc/research/glyph_db_expansion_research.md §5 P1。
     """
 
     name = "glyph_knn"

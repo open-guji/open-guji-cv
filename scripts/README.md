@@ -16,9 +16,6 @@
 ## 评测（`guji eval run` 调用或手动跑；对真书数据的质量量法，不是测试）（51）
 
 - `eval_align_replace_gate.py`：Step5-d `replace` 段采信闸评测：长度闸（现役） vs 代价闸（emb 余弦 ⊕ IDS/异体关系）。
-- `eval_beixing_real_proto.py`：北行 383 条用户裁决当真刻例多原型档（R2/T11）的额外靶——任务书「有就报」，
-- `eval_bottom_offset_gold.py`：在冻结的 68 页下版框金标（绝对页面坐标）上直接测 `find_horizontal_border`
-- `eval_bottom_offset_oneside.py`：下版框金标的**单侧**评估：宁可往下留白，绝不可靠上切字。
 - `eval_char_drop.py`：丢字普查：单字墨段有没有被**字格**接住（char-segmentation/char-drop）。
 - `eval_char_ocr.py`：char-ocr 评测：在冻结图块上量各引擎的 top1 / top5 / 异体字子集。
 - `eval_clustering.py`：保守聚类 purity benchmark（open-guji-dataset/char-clustering）。
@@ -33,37 +30,30 @@
 - `eval_font_fallback.py`：字体字形当「兜底候选源」值不值：在真实待审字位上量。
 - `eval_frame_residue.py`：Step2 版框残留：按 `column_border_trim` 自己的判档（a/b/c/d/e）分桶计数，
 - `eval_frame_strip.py`：评测列端格「去框后」的干净度（char-segmentation/frame-strip）。
-- `eval_gate2_columns.py`：闸2 可用列：`column_gate` 交接闸放行了多少列（char-segmentation 相关，Step2→3）。
 - `eval_geometry.py`：版面几何 benchmark（v2 链口径）：界行有没有被列框圈进去 + 列带里界行还歪多少。
 - `eval_guard_ceiling.py`：覆盖率天花板：硬约束 precision ≥ 0.999 下，闸能开多低、recall 有多少。
 - `eval_instance_quality.py`：评测管线对切分缺陷的自检能力（char-segmentation/instances）。
 - `eval_jiazhu_tail.py`：夹注段端收编回归（char-segmentation/jiazhu-tail）。
 - `eval_layout.py`：行列识别（列型判别）评测：当前管线 vs 金标。
-- `eval_left_cut.py`：左缘穿边救援回归（char-segmentation/left-cut）——right-cut 的镜像。
 - `eval_llm_context.py`：跑 llm_context 评测集：真调用（有 key）或 --mock（没 key 也能跑通全链路）。
 - `eval_match_pairs.py`：匹配判据的**操作点**基准（glyph-match/pairs）。
 - `eval_match_triplets.py`：匹配三元组基准：同字形必须比形近异字更匹配。
 - `eval_normalize.py`：归一化 golden 回归门（open-guji-dataset/char-normalization）。
 - `eval_oov.py`：类外评测：金标字在 CNN `classes` **之外**时，各候选源能给出什么。
 - `eval_oracle_llm.py`：接生产评测：`oracle_llm` 策略（外部 LLM 答案表）vs 纯 `gated_ngram` 基线。
-- `eval_page_crop.py`：上游裁切吃掉最外列：列窗越出页图多少（char-segmentation/page-crop）。
 - `eval_pagetype.py`：页型判别 benchmark。
 - `eval_rare_char.py`：量 `rare-char` 集上的候选召回：现状 vs 加了字体模板之后。
 - `eval_recrop.py`：review_recrop 分片回归：**切分算法自己**的框 vs 人工拖框金标。
-- `eval_right_cut.py`：右缘穿边救援回归（char-segmentation/right-cut）。
 - `eval_row_boundaries.py`：Step3 格线位置 vs 人工金标：逐像素误差（char-segmentation/row-boundaries）。
 - `eval_seam.py`：切缝墨率：格线是不是切在字上（char-segmentation/seam）。
-- `eval_seen_test_single_proto.py`：`seen_test` 单原型协议（R2/T11 的验收协议之一，`zero_shot_ccr_survey.md` §五.A）：
 - `eval_side_rule.py`：评测侧边界行残余剥离（char-segmentation/side-rule）。
 - `eval_step7_replay.py`：Step7（seed_admit）放行判定 · 人裁事件回放评测（只读，不写任何事件 / 产物 / 库）。
 - `eval_struct_heads.py`：Step A（结构头 + 槽位部件头）的验收：在 oov_bench 上量三件事。
 - `eval_struct_rerank.py`：M0 零训练结构重排的验收：在 oov_bench 上量「开 / 关」的 top-1 / top-5 / top-10。
-- `eval_t4_gates.py`：T4 变体形模板闸检查：GW 开关前后，`cache/glyph_bench`（unseen 严格）与
 - `eval_t4_variant.py`：T4 变体形模板：在四庫「shape≠reading」异体分歧冻结子集上报 GW 开关前后的 top-1/5/10。
 - `eval_text_band.py`：文字带窗口够不够装下一整列（char-segmentation/text-band）。
 - `eval_touching_cuts.py`：粘连格线：现役 Step3 切点 vs 人工理想切点（char-segmentation/touching-cuts）。
 - `eval_truncation.py`：字身截断率：格线切进字身多深（char-segmentation/truncation）。
-- `eval_unsupported_layout.py`：闸3「版式未支持」判据 vs page-type 金标。
 - `eval_zero_shot.py`：零样本识别评测：字形库 unseen 档上，比较「整字 HOG 检索」与「拆字重排」。
 - `eval_zero_shot_fusion.py`：零样本正面对比：HOG 字体检索 vs CNN 分类 vs 两者融合。同一批样本、同一字表。
 
@@ -130,7 +120,6 @@
 - `glyph_crosscheck.py`：字形库 × 工作区记录 对账：库里的刻例，与这一格现在的裁决、排除名单、管线决定、字块图是否还对得上。
 - `glyph_near_forms_sync.py`：体检里人判「形近 / 异体」的字对 → 形近字人裁表 `config/confusable_human.json`（任务书 H §四·5）。
 - `glyph_rekey_drift.py`：重切之后，把库里「id 已指到别的字」的刻例挪回它现在所在的格（字形库 08，2026-09-26）。
-- `glyph_selfproof_ab.py`：「摘掉自证」的单变量对照：同一份 Step1–4 产物，Step5-a 只差 `exclude_self`，比 Step7 放行（字形库 10）。
 - `glyph_store_sync.py`：字形库 store ＋ 人裁事件/裁决定时导出：db → output/glyph_store/，
 - `glyph_triage.py`：字形库机器分诊（2026-09-25）：OCR + CNN 两路独立识别 + 整理本对齐字，对照库里定的字。
 - `glyph_triage_sheet.py`：分诊结果出联系表：每卡一格 = 本例 | 本书对手 | 字体(定的字) | 字体(OCR1) | 字体(CNN1)，下注文字。
@@ -142,9 +131,7 @@
 - `migrate_column_warp_gold.py`：上游改了 Step1 之后，把 column-warp 金标**能迁的自动迁、不能迁的挑出来**。
 - `migrate_font_fingerprint_keys.py`：把用「字体 mtime」算出来的旧 `emb_*.npz` 按新 key（字体内容）改名，不重建。
 - `migrate_labels_after_resegment.py`：重切分之后把旧裁决平移到新字位，避免重复校对。
-- `migrate_m1_column_warp.py`：M1·A 道：column-warp 金标 → 现行 v2 链的迁移报告（2026-09-30）。
 - `migrate_manifest_eol.py`：把「只因行尾翻转而过期」的产物记录迁到行尾归一后的指纹（一次性，2026-09-20）。
-- `migrate_soft_params.py`：把「只因软参数改制而过期」的产物记录迁到新指纹（一次性，2026-09-25）。
 
 ## 审计（一次性核查）（5）
 
@@ -178,7 +165,6 @@
 - `apply_crop_exclusions.py`：按排除名单把已进库的坏图块撤库。
 - `apply_exclusion_recheck.py`：按复核裁决撤排除名单（配 build_exclusion_recheck_review.py）。
 - `backfill_anchors.py`：老裁决补锚：给没有锚的逐格裁决事件写一份持久补锚档（设计见 `feedback/anchor_backfill.py` 模块头）。
-- `backfill_self_hash.py`：给 2026-09-20 之前写出的 manifest 条目补 `self_hash`，让第一轮重跑就能格级复用。
 - `bench_font_glyphs.py`：字体字形 vs 刻本字形：分来源的匹配力实测。
 - `book_lib_auto.py`：机器高可信格进书级库（`source: auto`），与人裁刻例分开记、可整批撤回（H 道，2026-09-27 全唐文 #64）。
 - `book_lib_sync.py`：书级字形库增量回收：人裁事件 → 本书自有库（H 道，2026-09-27 全唐文 #64 起）。**可重复跑、幂等**。
@@ -194,7 +180,6 @@
 - `diff_grid.py`：比两份 phase3 网格目录：骑线比 + 每列格线位移 + 复切列清单。
 - `dzg_import.py`：daizhige 逐列整理本导入（overview#195 P 道）。
 - `evict_v1_conflict_human_reading_errors.py`：v1 重键 `conflict_human` 里「v1 把字形记成了读法」的例子：撤 v1 实例（不动人裁）。
-- `evict_vol01_48_2_neg1.py`：`v2:vol01:48:2:-1`（"王"）—— 撤库，不改标。
 - `find_border_lines.py`：投影峰匹配找版框线：批量跑竖直界行/边框 + 上下边框，画到图上，出报告页。
 - `freeze_bottom_offset_gold.py`：把 `border-detection/bottom-offset` 的 68 条人工金标转成**绝对页面坐标**并冻结。
 - `harvest_shadow_review.py`：把「影子≠现字」审查页（Artifact）上的人裁收回来，写成人裁事件。幂等。
@@ -210,28 +195,23 @@
 - `patch_identity.py`：字块金标 ↔ 现行 v2 链（cell_shrink）的对接与「人当时看的图块还在不在」判据（M1·A 道，2026-09-30）。
 - `prepare_corpus.py`：语料预处理：外部古文语料 → 可直接训 n-gram 的单文件（可选简→繁）。
 - `probe_struct_heads.py`：Step A′：冻结现役 CNN 主干，只在它的 256-d embedding 上训结构头 + 槽位部件头（线性探针 / 小 MLP）。
-- `rebind_verdicts.py`：人裁重绑定：重算全书绑定表并报告（设计见 overview 总览/15）。
 - `reconcile_lines_anchors.py`：锚点对账（F3，overview#398）：CV 产物 → guji-page → lines.md，再数 lines.md 推锚点，与 CV 格 id 逐位比。
 - `reflow_md.py`：Step9 结果整理 · 9.2' 文本版分段 + 标点：命令行入口。
 - `regen_step2_columns.py`：用 Step 1 的新结果重算 Step 2 的输入（单列矫正图）。
 - `rekey_instances.py`：切分层重建后的金标重键（(col,idx) 按格位面积重叠映射到新网格）。
 - `rekey_triplets_by_patch.py`：三元组集按**自带的图**重键到当前管线（不借外部映射表）。
 - `relabel_vol01_48_2_neg1.py`：`v2:vol01:48:2:-1`：库里存的字是「王」，目视核对后应为「聖」——改字命令。
-- `relabel_vol03_7_8_17.py`：`v2:vol03:7:8:17`：人裁历史回放判"日"，目视核对（+ align_ref 独立证据）应为"曰"——改字命令。
 - `remap_cutline_gold.py`：切线金标按列窗几何**精确重映射**：旧列图行号 → 页面坐标 → 新列图行号。
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `render_guji_page_overlay.py`：guji-page 校验图：把字框画回一张图（本页图、源叶、缩放档都行），并量一下对没对准。
 - `render_self_assess.py`：把自评样本渲染成判读表：〔语境图（红框=紧裁框）｜成品图块〕。
-- `repair_glyphdb_canonical.py`：修复人裁刻例的 canonical 图（2026-09-19）。
 - `repair_seed_queue.py`：种子队列体检 + 修复：唯一性、幽灵行、上下文错位。
 - `replay_recrops.py`：把数据集里的人工重切框重新贴回产物（整册重跑之后必跑）。
 - `report_collate_group.py`：Step8 复核报告：把某一类人裁结论逐处列出（带图、字对、前后各 10 字上下文），出 md + html（+ pdf）。
 - `report_intrusions.py`：版面线侵入全书扫描 → 回流上游（G2 行列识别 / G3 字符网格）的证据报告。
-- `research_split_ab.py`：调查脚本：直线切 vs 曲线切 全册 A/B（P2 #12）。
 - `research_split_scan.py`：调查脚本：全册扫描 _split_touching 的工作面（P2 #12 曲线切分前置量面）。
 - `reshift_cutline_gold.py`：切线金标坐标整体平移：Step2 列窗上界变了，把金标搬到当前坐标系。
 - `resync_human_verdicts.py`：把字形库里的人裁记录对齐到**最新**人裁事件：改判被幂等闸挡住的，撤旧进新。
-- `retighten_crop_exclusions.py`：按人裁的**分类**结论重排排除名单：把没证据的那几类放回来。
 - `round_check.py`：一轮审阅的体检（命令行外壳）。判据与阈值在 `open_guji_cv/eval/round_check.py`。
 - `run_llm_context_eval.py`：一条命令：出题 → 调外部大模型 API → 算分 → 出报告。
 - `sample_live.py`：无偏 rand 抽样 + **现场提取**（不依赖 phase4 产物，免整册重建）。
@@ -245,7 +225,6 @@
 - `snapshot_glyph_store.py`：字形库快照：output/glyph.db → output/glyph_store/（真源，进 Git）。
 - `snapshot_recognize_profile.py`：recognize-profile 全量样本巡检（**脚本，不是 pytest 测试**）。
 - `stat_verdict_evidence.py`：只读统计：各书现有人裁事件里带 anchor / bbox / 图像指纹 / 产物版本的比例。
-- `step4_end_harness.py`：Step4 端格（列首/列尾）截断离线复现台：不重跑管线，在内存里跑 CharExtractor，
 - `struct_gold_residual.py`：结构金标：把 300 张卡按「模型预测 vs IDS 表全部拆法」分三类，只把真有分歧的留给人裁。
 - `survey_review_queue.py`：人审队列普查：谁在队列里、为什么、哪路信号对、哪条新通道能吃掉多少。
 - `test_vol02_extract.py`：四库总目第二册 (vol02) 标点、分段与实体链接抽取测试脚本。

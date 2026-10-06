@@ -8,15 +8,19 @@
 数据集与评测在隔壁仓 `open-guji-dataset`；各书的数据（原图、产物、人裁、字形库）在 `guji-workspace`。
 
 ## 先看哪份
+文档都在仓根 `doc/`（2026-10-06 起；原 `.claude/doc/` 已并入，旧路径对照见 `.claude/doc/README.md`）。
+
 | 要做什么 | 读 |
 |---|---|
 | **整理一册书（从开工到交付）** | **[doc/runbook/整理一册书.md](../doc/runbook/整理一册书.md)** |
-| 用控制台、`guji` 命令 | [.claude/doc/console_manual.md](doc/console_manual.md) |
-| 开新书、找数据在哪 | [.claude/doc/workspace_layout.md](doc/workspace_layout.md) |
-| 改算法之前 | [.claude/doc/pipeline_handbook.md](doc/pipeline_handbook.md)（§4 踩坑、§5 量法、负结果）、[segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md)（切分四步） |
-| 产物指纹、过期、跨册新鲜度 | skill `cv-pipeline-ops` |
+| 用控制台、`guji` 命令 | [doc/console_manual.md](../doc/console_manual.md) |
+| 开新书、找数据在哪 | [doc/workspace_layout.md](../doc/workspace_layout.md) |
+| 改算法之前 | [doc/pipeline_handbook.md](../doc/pipeline_handbook.md)（踩坑、量法、负结果）、[doc/segmentation_v2_pipeline.md](../doc/segmentation_v2_pipeline.md)（切分四步） |
+| 各步的设计与失败案例 | [doc/design/](../doc/design/) |
+| 调研、文献、基准、负结果 | [doc/research/](../doc/research/) |
 | 格式（guji-page、guji-format、pages.json） | [doc/formats/](../doc/formats/) |
-| 各文档的详细摘要（旧索引原文） | [.claude/doc/_archive/claude_md_doc_index_2026-10-06.md](doc/_archive/claude_md_doc_index_2026-10-06.md) |
+| 产物指纹、过期、跨册新鲜度 | skill `cv-pipeline-ops` |
+| 已退役与过期的文档 | [doc/archive/](../doc/archive/)（含旧 CLAUDE.md 的长索引原文） |
 
 ## 怎么干活
 - **前台用控制台，后台用 `guji` 命令**：`pipeline` / `step` / `status` / `close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` …
@@ -40,7 +44,7 @@
 ## 字形库
 - 一本书的字形真源在**工作区** `output/glyph_store/`（加 `feedback/events/`），SQLite 索引 `output/glyph.db` 可重建：
   `guji-cv glyph-db rebuild -w <工作区>`。
-- 本仓 `output/glyph_store/` 是测试用的样本库；根目录 `glyph_store/` 是早期遗留（约 94 条），去留在 overview#413 清理中定；字体字形不进 git，由 `fonts/` 确定性重建（见 `fonts/README.md`）。
+- 本仓 `output/glyph_store/` 是测试用的样本库；根目录早期遗留的跨书 `glyph_store/` 已于 2026-10-06 删除（可从分支 archive/pre-cleanup-2026-10-06 找回）；字体字形不进 git，由 `fonts/` 确定性重建（见 `fonts/README.md`）。
 
 ## 云服务器（2026-09-30 起搁置）
 - 内存额度、systemd 托管控制台等旧说明见 `doc/snap_autoimport.md` 与 overview `机器清单.md`。整理一本书一律在本地做。

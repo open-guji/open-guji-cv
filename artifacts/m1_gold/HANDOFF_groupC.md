@@ -42,9 +42,9 @@ vol01/15 两条（NCC 0.843/0.827）、vol01/9:3:20（金标框仅 33px 高，v2
 范围：vol01 10 页（5,6,8,11,14~18,20，即迁移条目所在页）。
 
 **与 doc 上次值对照**：
-- `.claude/doc/pipeline_handbook.md` §12（2026-08-28 裁边迁移后）：`recrop 32/40 → 33/40`；`char_clustering_design.md:4034`：含住+盖墨 32（无声放行 3→6）；
+- `doc/pipeline_handbook.md` §12（2026-08-28 裁边迁移后）：`recrop 32/40 → 33/40`；`char_clustering_design.md:4034`：含住+盖墨 32（无声放行 3→6）；
   r14：`recrop 28/33`；
-- `.claude/doc/review_feedback_loops.md:44` / `segmentation_border_feedback.md:100`：IoU 基线 **0.671**（24 条，2026-08-25）。
+- `doc/design/review_feedback_loops.md:44` / `segmentation_border_feedback.md:100`：IoU 基线 **0.671**（24 条，2026-08-25）。
 - v2：26/31（84%）vs 旧 33/40（82.5%）、28/33（85%）；IoU 0.712 vs 0.671。**样本不同（40→31，丢的多是 50 页等坐标系存疑页），不能直接比**；
   量级持平，无退步迹象。
 
@@ -121,7 +121,7 @@ v2：**2**。**口径变化为主**：列图上的墨段更干净（基数 29791
 **迁移结果**：**旧金标整体失效（58 列/114 点，无图像凭证、裁切边定义已换），同一纯墨迹判据在 v2 列图上重扫重冻**（`left-cut/expected_v2.json`，脚本 `left_cut/scan_cut_crossings_v2.py`）。
 扫描范围 291 页（body 294 去掉用户排除页 vol02/3、159、160）2619 列 → 9 列 9 点。见 `left_cut/MIGRATION.md`。
 
-**新基线**：`python scripts/eval_left_cut.py ../open-guji-dataset/char-segmentation` → `穿边点 9，救回 5/5（100%），无承载格 4（人工过目）；回归门：通过`。
+**新基线**：`python research/scripts_oneoff/eval_left_cut.py ../open-guji-dataset/char-segmentation` → `穿边点 9，救回 5/5（100%），无承载格 4（人工过目）；回归门：通过`。
 改动：可评点为 0 时改为明确报「空跑，不算通过」。
 
 **与 doc 上次值对照**：commit c1f5860c62 / README：58 列 114 点，救回 **88/97=91%**；`pipeline_handbook.md` §12（08-28）`87/96→82/96`。
@@ -137,7 +137,7 @@ v2 5/5。**可评点 97→5 是口径变化**（裁切边是 Step3 content_x，�
 
 **迁移结果**：旧金标（51 列/213 点）整体失效；v2 列图重扫：15 列 16 点。试过镜像左缘「不贴窗左缘」防线：右缘点 42→11，把「一」「大」的真长横/捺杀了，撤掉，保持 v1 口径（`right_cut/MIGRATION.md` 写了）。
 
-**新基线**：`python scripts/eval_right_cut.py ../open-guji-dataset/char-segmentation` → `穿边点 16，救回 7/10（70%），无承载格 6；回归门：**失败**`。
+**新基线**：`python research/scripts_oneoff/eval_right_cut.py ../open-guji-dataset/char-segmentation` → `穿边点 16，救回 7/10（70%），无承载格 6；回归门：**失败**`。
 3 条仍被剪逐条查因：vol02/188:7 两点（墨到 185、框到 182）= **撞救援上限 `RIGHT_RESCUE_MAX=16`**（裁切边 166+16=182）；vol01/153:7 y=2424 = 列尾一条贯穿的横向版框残段。
 **门是如实失败，不是脚本坏了**；要变绿得改算法（提上限 / 挡栏线残段），超出本任务边界。
 

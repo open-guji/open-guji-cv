@@ -1,6 +1,6 @@
 # yolo_tool 的 YOLO 模型在四庫 vol03 上的探针（F1，2026-10-02）
 
-结论与解读见 `doc/yolo_tool_segmentation_review.md`。本目录只放可复现的东西：
+结论与解读见 `doc/research/yolo_tool_segmentation_review.md`。本目录只放可复现的东西：
 
 | 文件 | 内容 |
 |---|---|
@@ -20,4 +20,4 @@ p107 的 CV 框按 `meta.json` 的 `canvas_image` 换算到工作区现行 `107.
 `probe2.py`（两种喂法、按场景打标签算命中）→ `inkcheck.py`（墨被谁的框漏掉）/ `framecheck.py`（压版框线）/
 `sheets.py`（分歧拼图，左 CV 蓝、右 YOLO 红）。vol03 27 页 + vol02 11 页，产物取自 guji-workspace 快照
 `snap/96mid1ogzk/vol03/20260928T1708-full` 与 `vol02/20260929T1023|1024|20260930T0339`，guji-page 用 `export_guji_page.py` 先导出。
-`r2/` 是输出与挑出来的拼图；解读见 `doc/yolo_tool_segmentation_review.md` §四。
+`r2/` 是输出与挑出来的拼图；解读见 `doc/research/yolo_tool_segmentation_review.md` §四。

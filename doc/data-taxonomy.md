@@ -78,7 +78,7 @@ STEP_MAP.md 记载一致，不需要改动。
 不用"的猜测一致，实地 grep 已证实，结论不改。但发现**guardrail 的产出方
 与消费方可能不是同一个 Step**：`crop_exclusions.jsonl` 里 `origin: human`
 的条目部分源自 Step3/Step4 切分审阅反馈（见
-`.claude/doc/jiazhu_defects_for_segmentation.md`），只是写入后只在 Step5+
+`doc/design/jiazhu_defects_for_segmentation.md`），只是写入后只在 Step5+
 被读取用于拦截——判断"这份 guardrail 归哪个 Step"时，要分清"谁写入"和
 "谁读取来拦截"，不能只看写入来源。
 

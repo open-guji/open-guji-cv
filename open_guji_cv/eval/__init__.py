@@ -10,7 +10,7 @@
 **分层的分层报**（确定层与疑似层用途不同，合成一个数会同时掩盖两件事），
 **先查漂移再谈数字**（stale 金标数必须露出来）。
 
-设计文档：.claude/doc/console_architecture.md §3.7
+设计文档：doc/console_architecture.md §3.7
 """
 
 from .registry import EVALS, EvalSpec, find_eval  # noqa: F401
