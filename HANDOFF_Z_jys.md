@@ -46,3 +46,7 @@ python research/char_groups/jys/export_preds.py <llm_dir>
 1. **放行复核审查页**（pool vol05–10 里 S1 给了字的格，按「给的字×通道」分层抽 30 格 + `vol02:186:7:3` 复核 1 格，共 31）：https://claude.ai/artifact/Uk8Pedp2PkEzvh42PNh1S3 ；卡片冻在 dataset `char-groups/review/jys2_cards.jsonl`（带 `stratum`、`stratum_weight`）；卡面不印分类器结论；本机没有原图，整列小图缺省。收回：`harvest_verdicts.py` → `review/jys2_verdicts.jsonl`。
 2. **规则例外**：「而→已」遇后字「易」弃权（书名《己易》），`rules.py` + `tests/test_char_groups_jys_rules.py`（4 条过）。注意 `vol05:36:6:15` 现在落到「大模型∧分类器」路，二者仍判已，**还是错**——靠例外挡不住，得靠知道这是书名（要大模型看书目语境或人裁）。
 3. 大模型臂：**待在有 muse 的地方复核**（现为 sonnet 子代理代跑）。
+
+## 追加二：放行复核页收回（用户已裁 31 格）
+见 dataset `char-groups/jys/README.md`「放行复核页」。要点：`vol02:186:7:3` 人裁「已」（旧真值「己」有误，已改）；pool 抽样可用 29 格错 1（规则 0/19、llm+lr 1/10）；全强真值上规则通道 0/129（上界 2.9%）、llm+lr 2/76（上界 9.1%）；`vol05:36:6:15` 真值仍为「己」，现仍被 llm+lr 路判成「已」。脚本 `research/char_groups/jys/merge_jys2.py`。
+**建议**：cv 脚本/测试与 dataset 数据可合 main（不碰 Step、不入 code_deps）；分类器接进 Step6 时，**规则通道可放行**，**llm+lr 通道先不放行、继续送审**（样本小、两个错方向不一，等 muse 复核与更多随机样本）。
