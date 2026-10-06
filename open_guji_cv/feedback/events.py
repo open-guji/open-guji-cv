@@ -86,10 +86,34 @@ Kind = Literal[
                       #   （payload: via, client_ts）。后来有了定字裁决即作废（取最新）。
     "admit_candidate",# 还没进库的候选格收不收（payload: v∈admit/reject/unclear, char,
                       #   shape, list, evidence）。**路由表不配消费者**：控制台只写事件，
-                      #   进库由 H 道重放完成（人裁状态单写者）。
+                      #   进库由 H 道重放完成（人裁状态单写者）。    # ── 看图结论（2026-10-06，overview#428）。见 feedback/vision.py。
+    "vision_check",   # 模型看图判的「这格放行字对不对」（payload: source="vision", judge, v∈ok/wrong/
+                      #   unsure, char, shown, note）。**不是人裁**：actor="model"，不进字形库、不算已裁、
+                      #   human_chars 不认；只存 `feedback/vision/`（不进 events/），金标来源记 vision，
+                      #   判 wrong 的格送回待审队列（doubt `vision_flag`）。
 ]
 
 Actor = Literal["user", "model", "align"]
+
+
+#: 「模型的判断」类来源：`payload.source` 取这些值的事件**不当人裁用**（overview#428）。
+MODEL_JUDGMENT_SOURCES = frozenset({"vision"})
+
+
+def counts_as_human(e) -> bool:
+    """这条事件能不能**当人裁用**（进字形库、算已裁、human_chars 认、进绑定表）。
+
+    看图结论（`kind="vision_check"`，或任何 `payload.source="vision"` 的事件）一律不算——模型判的
+    可能有错，不能和人亲裁混在一起。
+
+    ⚠️ **不按 `actor="model"` 一刀切**：`events/` 里早有两类 `actor="model"` 的 confirm，语义各有
+    来路，不能跟着改：①人裁的**机械更正**（`scripts/glyph_codepoint_unify.py` 码位统一、
+    `scripts/mojibake_census.py` 乱码还原）——它们压的就是人裁本身，不认的话旧码位／乱码那条人裁
+    会原样复活；②`scripts/book_lib_auto.py` 的机器高可信刻例（`source="auto"`），有自己的口径
+    （replay 已跳过）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
+    if getattr(e, "kind", None) == "vision_check":
+        return False
+    return (getattr(e, "payload", None) or {}).get("source") not in MODEL_JUDGMENT_SOURCES
 
 
 class EventTarget(BaseModel):

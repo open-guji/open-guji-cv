@@ -91,6 +91,7 @@ def cmd_status(args) -> None:
     gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
     st["closure_gaps"] = gaps
     st["closure_mismatches"] = mism
+    st["vision_pending"] = _vision_pending(eng.book.id, pages, eng.store)
     if args.json:
         print(json.dumps(st, ensure_ascii=False))
         return
@@ -111,6 +112,27 @@ def cmd_status(args) -> None:
               "要重算点名格用 `guji recheck`）")
     _print_closure_gaps(gaps)
     _print_closure_mismatches(mism)
+    _print_vision_pending(st["vision_pending"])
+
+
+def _vision_pending(book: str, pages: list[int], store) -> list[dict] | None:
+    """报告项（overview#428）：看图判错、人还没裁的格。不要求为 0；算不出来 → None。"""
+    try:
+        from .feedback.vision import vision_pending
+        return vision_pending(book, pages, store)
+    except Exception as e:  # noqa: BLE001
+        print(f"  （看图待审没算出来：{type(e).__name__}: {e}）", file=sys.stderr)
+        return None
+
+
+def _print_vision_pending(rows: list[dict] | None) -> None:
+    if not rows:
+        return
+    print(f"  看图判错待人审 {len(rows)} 格（报告项，不挡收尾；控制台 doubt=vision_flag 筛出来裁）：")
+    for r in rows[:10]:
+        print(f"      {r['id']:20s} 放行「{r['char'] or ''}」 看图「{r.get('vision') or '?'}」 {r.get('judge') or ''}")
+    if len(rows) > 10:
+        print(f"      …另 {len(rows) - 10} 格")
 
 
 def cmd_close_check(args) -> None:
@@ -712,6 +734,9 @@ def cmd_events(args) -> None:
     from .feedback.harvest import harvest_file
     from .feedback.routes import RouteTable
     from .review.batches import BatchStore
+    if args.action == "import-vision":
+        _import_vision(args)
+        return
     log = EventLog()
     if args.action == "harvest":
         b = BatchStore().get(args.batch)
@@ -738,6 +763,32 @@ def cmd_events(args) -> None:
         for e in evs[-args.limit:]:
             print(f"  {e.id}  {e.kind:12s} {e.target.key:28s} {json.dumps(e.payload, ensure_ascii=False)}")
         print(f"  共 {len(evs)} 条")
+
+
+def _import_vision(args) -> None:
+    """`guji events import-vision <jsonl> -w <工作区> [--book 册]`：看图结论 → `feedback/vision/`
+    （overview#428；格式见 `feedback/vision.py` 模块头与 runbook S8/S10）。不是人裁：不进字形库、
+    不算已裁，判错的格回待审队列（doubt `vision_flag`）。"""
+    from .feedback.vision import import_vision
+    if not args.workspace:
+        print("✗ import-vision 要 -w <工作区>（看图结论写进工作区的 feedback/vision/）", file=sys.stderr)
+        sys.exit(2)
+    if not args.batch:
+        print("✗ 要给 jsonl 路径：guji events import-vision reports/vol04/看图结论.jsonl -w <工作区>",
+              file=sys.stderr)
+        sys.exit(2)
+    path = Path(args.batch)
+    if not path.exists():
+        print(f"✗ 文件不存在：{path}", file=sys.stderr)
+        sys.exit(2)
+    res = import_vision(path, batch=args.as_batch, judge=args.judge, book=args.book,
+                        gold=not args.no_gold, dry_run=args.dry_run)
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    if res["errors"]:
+        print(f"✗ {len(res['errors'])} 处格式错，整批没写", file=sys.stderr)
+        sys.exit(1)
+    if args.dry_run:
+        print("（试算，未写入；去掉 --dry-run 才导入）")
 
 
 def cmd_gold(args) -> None:
@@ -778,6 +829,10 @@ def cmd_gold(args) -> None:
         from .gold.transfer import rebuild_verdicts
         out = rebuild_verdicts(EventLog(), verdict_store(),
                                batches=[args.shard] if args.shard else None)
+        if not args.shard:
+            # 看图结论另放 feedback/vision/（overview#428），全量重建时一并重放，label_origin=vision
+            from .feedback.vision import rebuild_vision_gold
+            out["vision"] = rebuild_vision_gold(store=verdict_store())
         print(json.dumps(out, ensure_ascii=False, indent=1))
         return
     if args.action == "shards":
@@ -2424,15 +2479,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dataset", default=None, help="测试集仓路径（缺省 GUJI_DATASET_DIR 或 ../open-guji-dataset）")
 
-    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts")
-    p.add_argument("action", choices=["harvest", "route", "list", "verdicts"])
-    p.add_argument("batch", nargs="?", default=None)
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision")
+    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision"])
+    p.add_argument("batch", nargs="?", default=None, help="批次名；import-vision 时是 jsonl 路径")
     p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
     p.add_argument("--step", default=None)
     p.add_argument("--unit", default="page")
     p.add_argument("--kind", default="verdict")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--limit", type=int, default=30)
+    # import-vision（overview#428）：看图结论 jsonl → feedback/vision/
+    p.add_argument("--book", default=None, help="import-vision：只认这一册的格（给了就校验 books/<册>.yaml）")
+    p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
+    p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
+    p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
 
     p = sub.add_parser("eval", help="[v2] 评测：list | run")
     p.add_argument("action", choices=["list", "run"])

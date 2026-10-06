@@ -46,10 +46,13 @@ def _cache(eng, pages) -> dict:
 def _queue(book: str, store) -> dict:
     from ..review.cards import cards
     res = cards(book, "all", limit=1, only="review", store=store, gate_cut=False,
-                skip_decided=True, cls="*")
+                skip_decided=True, cls="*", doubt="*")
     cc = res.get("class_counts") or {}
     n = sum(cc.values())
-    return _item("2", "待审清零", PASS if not n else FAIL, f"待审 {n} 格", cc or None)
+    # 看图判错送回人审的格（overview#428）也在待审里，单列出来：清它要人在控制台裁，不是重跑
+    nv = (res.get("doubt_counts") or {}).get("vision_flag", 0)
+    return _item("2", "待审清零", PASS if not n else FAIL,
+                 f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else ""), cc or None)
 
 
 def _closure(book: str, pages, store) -> dict:
