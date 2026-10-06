@@ -86,7 +86,7 @@ class RowSegmentGateParams(BaseModel):
 @register_step
 class RowSegmentGateStep(Step):
     spec = StepSpec(
-        id="row_segment_gate", title="Step3→4 交接闸", version="1.3", unit="column",
+        id="row_segment_gate", title="Step3→4 交接闸", version="1.4", unit="column",   # 1.4：职名分支列不按版式格数拦（overview#450）
         consumes=("cells", "border_detect_gate_manifest"), produces=("row_segment_gate_manifest",),
         params=RowSegmentGateParams,
         code_deps=("open_guji_cv.eval.rulers", "open_guji_cv.clustering.page_type"),
@@ -113,8 +113,14 @@ class RowSegmentGateStep(Step):
         for cc in cells.columns:
             reject: list[str] = []
             flags: list[str] = []
+            roster = "roster" in cc.flags      # Step3 职名页分支切的列（overview#450）：字数本就不定
             if not cc.ok:
                 reject.append(f"dp_no_solution：DP 无解（{cc.error or '未知原因'}）")
+            elif roster:
+                if "roster_dense_guess" in cc.flags:
+                    flags.append("roster_dense_guess：职名列有粘连密排段，字数是推出来的，待人核")
+                if "roster_overlap" in cc.flags:
+                    flags.append("roster_overlap：相邻两字 y 重叠（多是「臣」贴官衔末字），Step4 满宽裁会互相带墨")
             elif expected is not None and abs(cc.n_body_slots - expected) > p.slot_tol:
                 reject.append(
                     f"slot_count：格数 {cc.n_body_slots} 偏离版式格数 {expected} "
@@ -146,7 +152,7 @@ class RowSegmentGateStep(Step):
             # 错位，而**列格数是对的，逐列字数对账查不出来**
             # （`row_boundaries.BLANK_MIN_RATIO` 注释记过这个病）。
             sliver: list[int] = []
-            if not reject and cc.ok and (cc.period or 0) > 0:
+            if not reject and cc.ok and not roster and (cc.period or 0) > 0:
                 lim = p.sliver_ratio * cc.period
                 for k, cell in enumerate(cc.cells):
                     if (cell.y1 - cell.y0) < lim:
