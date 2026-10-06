@@ -479,7 +479,7 @@ def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
     .npz 后缀，所以临时文件必须自己以 .npz 结尾，否则 savez 写的是
     `x.tmp.npz`、replace 找的是 `x.tmp`。"""
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f.name + ".tmp.npz")
+    tmp = f.with_name(f"{f.name}.{os.getpid()}.tmp.npz")  # 带进程号：多进程冷建同一张表不互踩（#429）
     np.savez(tmp, mat=mat.astype(np.float32), chars=np.array(names))
     os.replace(tmp, f)
 
@@ -1147,7 +1147,7 @@ class CnnCandidates:
                         vecs.append((e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy())
                 G = np.concatenate(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
                 f.parent.mkdir(parents=True, exist_ok=True)
-                tmp = f.with_name(f.name + ".tmp.npz")
+                tmp = f.with_name(f"{f.name}.{os.getpid()}.tmp.npz")  # 带进程号：多进程冷建同一张表不互踩（#429）
                 np.savez(tmp, emb=G); os.replace(tmp, f)
             self._gw = (G, grel, gnames, gsrc)
         G, grel, gnames, gsrc = self._gw
