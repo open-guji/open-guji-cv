@@ -33,26 +33,80 @@ _code_hash_cache: dict[str, str] = {}
 
 
 def _module_source_hash(mod_name: str) -> str:
-    """模块源码的哈希，**行尾归一**（CRLF→LF）后再算（2026-09-20）。
+    """模块源码的哈希，**只认代码**（2026-10-06，overview#413 用户定）：去掉注释和 docstring、
+    行尾归一（CRLF→LF）、去空行和行尾空白之后再算。
 
-    此前直接哈希文件字节。这个仓 `.gitattributes` 是 `text=auto`、本机 `autocrlf=input`，
-    磁盘上 LF/CRLF 混着（历史文件有 CRLF，Python `write_text` 在 Windows 上也会把 LF
-    写成 CRLF），而 git 看两种行尾是同一份内容。实锤：bxgb 全书跑完，另一个会话用
-    编辑器把 `row_boundaries.py` 从 CRLF 存回 LF——内容一字未改，`git status` 干净——
-    `column_gate` / `row_segment` 的 code_hash 却变了，Step2 闸以下 11 步 54 页全线过期。
-    行尾不是代码，指纹不该认它。
+    沿革：最早直接哈希文件字节；2026-09-20 改成行尾归一——实锤过编辑器把 CRLF 存回 LF，
+    内容一字未改，Step2 闸以下 11 步 54 页全线过期。2026-10-06 再进一步：改注释、补 docstring
+    也会让各书产物整体过期，逼得大家不敢整理代码，所以注释和 docstring 也不进指纹。
+    改代码本身（哪怕只改一个常量）照样判过期。见 `code_only_text`。
     """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
     mod = importlib.import_module(mod_name)
     src = inspect.getsourcefile(mod)
-    h = hashlib.sha256(_normalize_eol(Path(src).read_bytes())).hexdigest() if src else "nosrc"
+    h = hashlib.sha256(code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() \
+        if src else "nosrc"
     _code_hash_cache[mod_name] = h
     return h
 
 
+_legacy_hash_cache: dict[str, str] = {}
+
+
+def _module_source_hash_legacy(mod_name: str) -> str:
+    """2026-09-20 至 10-06 的老公式（整份源码、只做行尾归一）。只给 `guji fp-migrate --code-formula`
+    回放老指纹用：老公式算出来与 manifest 记的逐位相等，才证明代码自那以后没变、可以只改写指纹。"""
+    if mod_name not in _legacy_hash_cache:
+        src = inspect.getsourcefile(importlib.import_module(mod_name))
+        _legacy_hash_cache[mod_name] = (hashlib.sha256(_normalize_eol(Path(src).read_bytes())).hexdigest()
+                                        if src else "nosrc")
+    return _legacy_hash_cache[mod_name]
+
+
 def _normalize_eol(raw: bytes) -> bytes:
     return raw.replace(b"\r\n", b"\n")
+
+
+def code_only_text(src: str) -> str:
+    """源码去掉注释与 docstring、去掉空行与行尾空白后的文本（指纹用，不保证还是合法 Python）。
+
+    做法是从原文里**挖掉区间**：docstring 区间由 ast 给，注释区间由 tokenize 给。
+    不用 `ast.dump` / `ast.unparse`、也不把 token 拼起来——这几样的输出随 Python 小版本变
+    （3.12 改了 f-string 的 token 化、3.13 改了 `ast.dump` 的缺省字段），会让不同机器算出不同指纹。
+    """
+    import ast
+    import io
+    import tokenize
+    import warnings
+    src = src.replace("\r\n", "\n")
+    lines = src.split("\n")
+
+    def char_col(ln: int, byte_off: int) -> int:          # ast 的列是 utf-8 字节偏移
+        return len(lines[ln - 1].encode("utf-8")[:byte_off].decode("utf-8", "ignore"))
+
+    spans: list[tuple[tuple[int, int], tuple[int, int]]] = []
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")                   # 老代码里的非法转义只是 SyntaxWarning
+        tree = ast.parse(src)
+    for node in ast.walk(tree):
+        body = getattr(node, "body", None)
+        if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and body:
+            d = body[0]
+            if isinstance(d, ast.Expr) and isinstance(d.value, ast.Constant) and isinstance(d.value.value, str):
+                spans.append(((d.lineno, char_col(d.lineno, d.col_offset)),
+                              (d.end_lineno, char_col(d.end_lineno, d.end_col_offset))))
+    for tok in tokenize.generate_tokens(io.StringIO(src).readline):
+        if tok.type == tokenize.COMMENT:
+            spans.append((tok.start, tok.end))
+    buf = lines[:]
+    for (sl, sc), (el, ec) in sorted(spans, reverse=True):   # 从后往前挖，前面的偏移不受影响
+        if sl == el:
+            buf[sl - 1] = buf[sl - 1][:sc] + buf[sl - 1][ec:]
+        else:
+            buf[sl - 1] = buf[sl - 1][:sc] + buf[el - 1][ec:]
+            del buf[sl:el]
+    return "\n".join(ln.rstrip() for ln in buf if ln.strip())
 
 
 def rare_candidates_consumed(pipeline_steps: list[str], params_for: Callable, book) -> bool:
@@ -68,12 +122,14 @@ def rare_candidates_consumed(pipeline_steps: list[str], params_for: Callable, bo
     return False
 
 
-def code_hash(step: Step) -> str:
+def code_hash(step: Step, legacy: bool = False) -> str:
+    """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。"""
     mods = [type(step).__module__, *step.spec.code_deps]
+    fn = _module_source_hash_legacy if legacy else _module_source_hash
     h = hashlib.sha256()
     for m in mods:
         h.update(m.encode())
-        h.update(_module_source_hash(m).encode())
+        h.update(fn(m).encode())
     return h.hexdigest()[:16]
 
 
@@ -159,12 +215,12 @@ class RunReport:
         }
 
 
-def _self_payload(step: Step, book: BookSpec, ph: str) -> dict:
+def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False) -> dict:
     """指纹里**不含上游**的那部分：步 id、版本、参数、代码、册配置。
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
     键集与 2026-09-20 之前的 `fingerprint` payload 逐位相同，现有产物指纹不变。"""
     payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
-               "code": code_hash(step)}
+               "code": code_hash(step, legacy=legacy_code)}
     # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
     # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
     # 保证现有产物的指纹逐位不变、不触发全量重跑。
