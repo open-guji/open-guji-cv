@@ -345,6 +345,25 @@ class SeedAdmitParams(BaseModel):
     """坐标对位给出整理本字、与 context 定字语义不同、库判又不是 `same` 时，不放行 context 字，
     落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
     独立形状证据，放不放留给标定结果。"""
+    context_garble_guard: bool = True
+    """context 通道放行乱码的护栏（overview#427，C1 道，缺省开）。列切窄、卷末印章被切成字格时，
+    字块只剩笔画边缘或印文，库判 diff/低 cov、整理本对不上，Step6 仍可能给 margin 1.0——
+    vol04 这样放行了 93 格乱码（`𬑹小𢍺箵㫖是𠳋訁…`）。**没有证人背书**（整理本对齐字、
+    坐标对位字、OCR 候选里没有一个与 context 字语义相同；全空也算）时，三条判据任一命中就
+    不放行、落人审（字照旧，只是 admit=False）：
+
+    - `ctx_garble_shape`：库 top 相似度 `cov < context_garble_cov`——字块不像任何一个刻例；
+    - `ctx_garble_rare`：码位不在 U+4E00–9FFF、且 `cov < context_garble_rare_cov`——
+      㫖/㕘/𢑴 这类本书常刻的扩展区字 cov 都在 0.96 以上，不拦；
+    - `ctx_garble_run`：本列库 top 字里罕用码位（同上口径）在 ±`context_garble_run` 格窗口内
+      达到 `context_garble_run` 个——整列切坏的特征；0 = 关这一条。
+
+    vol04（快照 20261006T0716）：乱码列 context 放行 93 格拦 89；其余 339 格拦 43，看图
+    全是错放或非字（版框角、圈号、半字、错位夹注），没有一格是对的。vol03 拦 7/93，同样全是
+    错放。数字见 HANDOFF_C1.md（合并后移入 doc/handoffs/），重放脚本 research/garble_guard/replay.py。"""
+    context_garble_cov: float = 0.90
+    context_garble_rare_cov: float = 0.95
+    context_garble_run: int = 3
 
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
@@ -624,6 +643,8 @@ class SeedAdmitStep(Step):
                             for r, ch in zip(rs, phrase):
                                 note_char[r.id] = ch
                                 note_sim[r.id] = sim
+            garble_run = (_rare_run_ids(cc.chars, p.context_garble_run)
+                          if p.context_garble_guard else frozenset())
             for r in cc.chars:
                 # 排除名单命中：这块图人已判过切坏/带残留/非字。既不进库也不出
                 # 审查卡，只落一行留账（v1 的 seeding 同款处理）。放在最前面——
@@ -900,6 +921,11 @@ class SeedAdmitStep(Step):
                     elif p.context_blank_gate and _ir is not None \
                             and _ir.ink_ratio < p.context_min_ink:
                         doubts.append("context_blank_cell")
+                    elif p.context_garble_guard and (_gg := _garble_guard(
+                            p, r, d.char, (align_char, _coord_refs(ctx, page, coord_cache).get(r.id),
+                                           *(c for c, _ in (o.topk if o else []))),
+                            garble_run, vm_here)):
+                        doubts.append(_gg)
                     elif p._context_guard_on() and (_g := _context_guard(
                             p, r, d.char, _ir, _coord_refs(ctx, page, coord_cache), vm_here)):
                         doubts.append(_g[0])
@@ -1605,6 +1631,38 @@ def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, im, coord: dict[str, 
                 return "ctx_guard_ref_blank", None
         elif p.context_guard_ref_prefer and vmap.semantic(ref) != vmap.semantic(ctx_char):
             return "ctx_guard_ref", ref
+    return None
+
+
+def _rare_cp(ch: str | None) -> bool:
+    """码位不在 CJK 基本区（U+4E00–9FFF）：扩展区、部首、兼容区都算罕用。"""
+    return bool(ch) and not ("一" <= ch <= "鿿")
+
+
+def _rare_run_ids(recs, k: int) -> frozenset[str]:
+    """本列（`glyph_match` 一列的字位，按列内顺序）里，库 top 字是罕用码位、在 ±k 格窗口内
+    凑满 k 个的那些格的 id——整列切坏时的乱码串（overview#427）。k ≤ 0 = 关。"""
+    if k <= 0:
+        return frozenset()
+    rare = [_rare_cp(r.char or (r.candidates[0][0] if r.candidates else None)) for r in recs]
+    return frozenset(r.id for i, r in enumerate(recs)
+                     if sum(rare[max(0, i - k):i + k + 1]) >= k)
+
+
+def _garble_guard(p: "SeedAdmitParams", r, ctx_char: str, witnesses, run_ids, vmap) -> str | None:
+    """context 通道放行乱码的护栏（`context_garble_guard`，overview#427）。命中返回 doubt 名。
+
+    `witnesses`：整理本对齐字、坐标对位字、OCR 候选（None/空串/〓 不算证人）。有一个与
+    context 字语义相同就是有背书，不拦；其余按 shape → rare → run 依次判。"""
+    sem = vmap.semantic(ctx_char)
+    if any(w and w != "〓" and vmap.semantic(w) == sem for w in witnesses):
+        return None
+    if r.cov < p.context_garble_cov:
+        return "ctx_garble_shape"
+    if _rare_cp(ctx_char) and r.cov < p.context_garble_rare_cov:
+        return "ctx_garble_rare"
+    if r.id in run_ids:
+        return "ctx_garble_run"
     return None
 
 
