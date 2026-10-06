@@ -20,7 +20,7 @@ class _Gate:
 
 
 class _VMap:
-    _sem = {"㫖": "旨", "旨": "旨", "曰": "曰", "日": "日"}
+    _sem = {"㫖": "旨", "旨": "旨", "旣": "既", "既": "既", "曰": "曰", "日": "日"}
 
     def semantic(self, c):
         return self._sem.get(c, c)
@@ -41,7 +41,7 @@ def _run(monkeypatch, cur, pick, abstain=True):
 
 
 def test_variant_pick_abstains(monkeypatch):
-    n, rec = _run(monkeypatch, cur="㫖", pick="旨")
+    n, rec = _run(monkeypatch, cur="旣", pick="既")
     assert n == 0 and rec.admit and "shadow_veto" not in rec.doubts
 
 
@@ -52,4 +52,11 @@ def test_different_char_still_vetoes(monkeypatch):
 
 def test_switch_off_restores_old_behaviour(monkeypatch):
     n, rec = _run(monkeypatch, cur="㫖", pick="旨", abstain=False)
+    assert n == 1 and not rec.admit
+
+
+def test_rare_codepoint_cur_does_not_abstain(monkeypatch):
+    """#431：放行字是罕用码位（𠮓，扩展区）时不弃权，照常降级。"""
+    _VMap._sem.update({"𠮓": "變", "變": "變"})
+    n, rec = _run(monkeypatch, cur="𠮓", pick="變")
     assert n == 1 and not rec.admit
