@@ -10,6 +10,14 @@ channel/cand）、`NNN.norm.json`、`NNN.zi.json`；给了 `--punct`/`--entity` 
         [--punct 002.punct.json --entity 002.entity.json] [--only pages]
 
 `--meta` 同 `export_guji_page.py`。`--only pages` 只写 pages.json（A2 的最小交付）。
+
+`--format char-cord`（F4，overview#419）出 book-text 新形态：`NNN.char.json`（字，文本真源）、`NNN.cord.json`
+（只存像素框）、`NNN.norm.json`（按格位记例外），见 `open_guji_cv/formats/guji_char_cord.py`。走法是先照旧在内存里
+出 pages.json，再纯转换；写出前核 schema、cord↔char 格位与页列号，并核 char 生成的分行稿与同一次导出的
+lines.md 逐字相同。`--keys cv|lines` 选格位口径（缺省 cv，照 spec 02）。缺省 `--format legacy` = 原来那组文件。
+
+    python scripts/export_guji_format.py --products <products 根> --book vol02 --chapter 002 \\
+        --meta meta.json --out out/ --format char-cord [--keys cv] [--text-version 0.1.0]
 """
 from __future__ import annotations
 
@@ -20,7 +28,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from convert_pages_to_char_cord import report as char_cord_report  # noqa: E402
 from export_guji_page import page_meta  # noqa: E402
+
+from open_guji_cv.formats import guji_char_cord as cc  # noqa: E402
 from open_guji_cv.formats import guji_format as gf  # noqa: E402
 from open_guji_cv.formats import guji_page as gp  # noqa: E402
 from open_guji_cv.formats.guji_page_cv import export_page  # noqa: E402
@@ -52,7 +63,11 @@ def main(argv=None) -> int:
     ap.add_argument("--split-table", default=None)
     ap.add_argument("--punct", default=None)
     ap.add_argument("--entity", default=None)
-    ap.add_argument("--only", choices=("pages",), default=None)
+    ap.add_argument("--only", choices=("pages",), default=None, help="只对 legacy")
+    ap.add_argument("--format", choices=("legacy", "char-cord"), default="legacy",
+                    help="legacy = lines.md＋pages/proof/norm/zi.json；char-cord = char.json＋cord.json＋norm.json")
+    ap.add_argument("--keys", choices=cc.KEYS, default="cv", help="char-cord 的格位口径")
+    ap.add_argument("--text-version", default="0.1.0", help="char-cord：char 的 version")
     a = ap.parse_args(argv)
 
     meta = json.loads(Path(a.meta).read_text(encoding="utf-8"))
@@ -80,6 +95,15 @@ def main(argv=None) -> int:
     if back != [gp.strip_ext(p) for p in pages]:
         print("   ✗ 往返自检不过：guji-format 读回的 guji-page 与原页不同")
         bad += 1
+    if a.format == "char-cord":
+        new, rep = cc.from_pages_json(pj, zi=files[f"{a.chapter}.zi.json"], norm=files[f"{a.chapter}.norm.json"],
+                                      version=a.text_version, keys=a.keys, chapter=a.chapter)
+        cc.write_files(new, a.out)
+        st = cc.stats(new[f"{a.chapter}.char.json"], new[f"{a.chapter}.cord.json"])
+        print(f"{a.book} 章 {a.chapter}（char-cord，keys={a.keys}）：{st['pages']} 页、{st['cells']} 格（有框 {st['boxed']}）、"
+              f"阙文 {st['lacuna']}；没写进 cord 的 {rep['dropped']} → {a.out}")
+        bad += char_cord_report(new, md)
+        return 1 if bad else 0
     if a.only == "pages":
         files = {k: v for k, v in files.items() if k.endswith(".pages.json")}
     gf.write_files(files, a.out)
