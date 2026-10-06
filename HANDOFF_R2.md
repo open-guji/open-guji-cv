@@ -93,4 +93,4 @@ params:
 ## 测试
 
 - 新增 `tests/test_seed_admit_lanes.py`，30 条全过。
-- 全量结果见下一节。
+- 全量 `pytest tests/ -s -p no:cacheprovider`（未装 torch）：2648 过、1 败、30 跳过。败的是 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`，在 main `d5e7b37` 上不带本改动也一样败（C1 交单记过，环境问题）。
