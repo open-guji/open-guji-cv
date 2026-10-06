@@ -25,3 +25,10 @@
 ## 追加（第二步：质量闸 + 非组内弃权，+17 格审查页）
 - 审查页 17 格：https://claude.ai/artifact/D7epPjixiwqPTt3g2PXZDz （卡 id 冻结 dataset `char-groups/review/rr17_cards.jsonl`，脚本 `research/char_groups/rr/review_rr17.py`，复用 G1 的 `review_pages.py`，已拷入本分支，内容与 G1 分支一致）。收回用 `harvest_verdicts.py`。
 - `rr/clf2.py`：质量闸（长线/散斑/贴边）+ 第 4 类「其他」。结果与局限见 dataset rr/README「质量闸与非组内弃权」与 `clf2_eval.txt`。要点：强真值不变（41–42/46 全对）；负例 5 折拦下 36–37/37（但负例只有久火尺今又，有同字泄漏）；弱标签放行格上阈值 0.5 弃权 0–4%，0.8 弃权 10–15%，**建议 0.5 + 质量闸**；闸阈值是看候选格定的，无独立验证。
+
+## 追加（第三步：17 格人裁收回 + 最终评测）
+- 裁决：八 6、人 5、入 4、看不清 2。已存 dataset `char-groups/review/rr17_verdicts.jsonl`，用 `rr/apply_rr17.py` 并进 `rr/items.jsonl`（15 格 A 档，2 格 X_unclear；`metadata.json`/格数表未重算）。评测脚本 `rr/run_v2.py`，结果 dataset `rr/clf_eval_v2.{json,txt}`，详述见 dataset rr/README「17 格人裁收回与最终评测」。
+- **放行错**：分歧格里放行字被推翻 1/9（`vol09:134:9:5` 放行八→入，**整理本也错**）；随机样本 0/33。分歧格是挑出来的，不外推。
+- **分类器在分歧格上 8/9 错**（含 `vol08:36:2:15` p=0.88），只能「分歧→送审」，不能改字。待审 6 格（整理本=分类器 p≥0.8）人裁 6/6 全对。
+- 强真值 61 格（4 类+闸，p≥0.5）：给字 50 对 47（94.0%，CI 83.5–98.7%）；非分类器挑出的原 46 格 40/40（CI 91–100%）。p≥0.8 不更安全（弃权 28%，仍错 1）。3 类版在 vol04 错 2 格，4 类版弃权，别用 3 类。
+- 建议：阈值 0.5 + 质量闸 + 4 类；分歧送审、整理本=分类器且 p≥0.8 放出待审（小规模先试）；不让分类器单独改字/放行。合 main：cv 只加研究脚本与 doc，不碰 Step/code_deps，可合；要不要合由总管定（我没合）。
