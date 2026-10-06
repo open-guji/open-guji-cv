@@ -12,7 +12,7 @@
 候选的 seam 用**列图坐标**（与 `SeamCandidate.y` 同口径，从 content_x[0] 起每 x 一个 y；直线传 None）。
 
 权重：`models/partition_unet_v2/model.pt`（11 MB，与 `glyph_cnn_r4` 同理进 Git——合成对训练 16 轮要 GPU 约 1 小时，
-不可确定性重建）。训练脚本与实验记录在 `experiments/touch_resolve/train_partition_unet_v2.py`。
+不可确定性重建）。训练脚本与实验记录在 `research/touch_resolve/train_partition_unet_v2.py`。
 **换权重会让 Step3 产物过期**：`ckpt_fingerprint()`（mtime_ns:size）进 `RowSegmentParams.judge_fingerprint`。
 
 归属图口径（与实验一致，别改）：
@@ -73,7 +73,7 @@ ESCALATE_BLOB = 100
 门槛来历：673 条金标里选对的条目分歧块 p95=51 / p99=124 px；几何候选全错、只有 U-Net 对的 4 条 241–983 px。
 100 把后者全部抓住、误升级约 5%（升级总量 ≈3% 的粘连切点，≈0.4 条/页）。"""
 """改选门槛：最优候选的一致率要比现役规则选中的高出这么多才改选。2026-09-14 在 673 条金标列上扫过
-（`experiments/touch_resolve/verify_prod_judge.py`）：δ=0 改选 81 条（变好 47 / 变差 34），δ=0.005 改选 47 条
+（`research/touch_resolve/verify_prod_judge.py`）：δ=0 改选 81 条（变好 47 / 变差 34），δ=0.005 改选 47 条
 （36 / 11），大块错都是 5.6%→1.9%，≤20px 85.7%→86.8%——同样的收益，少引入三分之二的小倒退。"""
 
 DEFAULT_CKPT = Path(__file__).resolve().parents[2] / "models" / "partition_unet_v2" / "model.pt"

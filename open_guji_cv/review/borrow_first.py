@@ -38,7 +38,7 @@
 一行未改。「两路一致」精确率达不到 1% 门槛（R 实测维基集 97.6%、难例 90.7%），
 **不许**拿它当放行通道（任务书「不做」）。
 
-口径与 R 的 `scripts/experiments/qtw_libfail/a5_cnn.py` 相同：库里全部 exemplar
+口径与 R 的 `research/qtw_libfail/a5_cnn.py` 相同：库里全部 exemplar
 的 `derived.norm` → r5 embedding → 按字取均值再单位化；查询字块 → `normalize_patch`
 缺省参数 → embedding，与全部原型取余弦。字集 = 库里的字（闭集）。
 """

@@ -281,7 +281,7 @@ vol02_135.json`（含每列的矫正几何参数 + 人工核校边界）。
 让裁判再去翻那些，是没评测过的行为。**为什么不让 U-Net 直接出切线**：它边界毛（≤20px 只有 77%），
 几何候选干净；让它当裁判，取两者之长。
 
-**数字**（同一 673 条；`experiments/touch_resolve/verify_prod_judge.py` 用与 RowSegmentStep 相同入参在内存里跑）：
+**数字**（同一 673 条；`research/touch_resolve/verify_prod_judge.py` 用与 RowSegmentStep 相同入参在内存里跑）：
 见 overview 05 卡「一天的总结论」表与本节末尾的落地核对记录。
 
 **代价**：每列多 ~0.1 s（GPU），只在有多候选的切点上前向。torch / 权重不可用时 `get_judge()` 返回 None，

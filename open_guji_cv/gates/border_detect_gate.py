@@ -53,7 +53,7 @@ class BorderDetectGateParams(BaseModel):
     {border_detect_gate: {pagetype_model: true}}` 才开。只拦不放——现行规则判 skip 的页不动，
     模型很有把握（门槛见模型文件，训练折 OOF 正文最高分）判为非正文（职名/目录等）才 reject。
     关着时本字段不进参数 dump、manifest 不多任何键，产物与加字段前逐字节相同。
-    效果与门槛见 scripts/experiments/pagetype_model/README.md。"""
+    效果与门槛见 research/pagetype_model/README.md。"""
     pagetype_model_path: str = ""       # 模型文件；空 = models/pagetype/pagetype_v1.joblib。路径不进指纹（path_params）
     pagetype_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
 

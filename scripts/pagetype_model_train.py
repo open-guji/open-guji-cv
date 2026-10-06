@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """训练页型「正文/非正文」闸模型（P1 道）。
 
-输入：scripts/experiments/pagetype_model/extract.py 产的 features csv（page-type 金标页 × 信号）。
+输入：research/pagetype_model/extract.py 产的 features csv（page-type 金标页 × 信号）。
 成员 = HGB(step1+col 两组信号)；门槛 = 训练集多种子折外（OOF）正文最高得分 + margin，
 零容忍误判正文。写 models/pagetype/pagetype_v1.joblib(+json)。
 用法：python scripts/pagetype_model_train.py --feats feats_all.csv [--holdout-feats ...]
@@ -67,7 +67,7 @@ def main():
         "train_gold": {g: int((d.gold == g).sum()) for g in sorted(set(d.gold))},
         "n_pages": int(len(d)), "cv_commit": rev,
         "trained_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "notes": "只判非正文（roster/toc 为主）；极少类 cover/label/blank 保留现行规则。见 scripts/experiments/pagetype_model/README.md"})
+        "notes": "只判非正文（roster/toc 为主）；极少类 cover/label/blank 保留现行规则。见 research/pagetype_model/README.md"})
     print("thr", round(thr, 4), "fingerprint", fp, "->", a.out)
 
 

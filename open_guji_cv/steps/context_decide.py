@@ -66,7 +66,7 @@ accuracy.py` 后续跟人审的反馈事件（`feedback/events.py`，按 cell id
 集合内选这三条都没动。5-b 与库首位一致 → 先验更尖、margin 更高；不一致 → margin
 被摊薄、更多落人审——后者正是它挡住错放的方式。
 
-实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+实测（沙箱，k=5；`research/rare_downstream/`）：
 
 | rare_weight | vol03 待审率 | vol03 放出格与光盘版字面不同（sub.*） |
 |---|---|---|

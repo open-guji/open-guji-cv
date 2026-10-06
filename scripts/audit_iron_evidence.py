@@ -11,7 +11,7 @@ cov < 0.80。库里 align 来源的实例不参与（只算辅助证据），本
 只出报表，不改任何产物。
 
 **判据实现在** `open_guji_cv.clustering.iron_evidence`（生产 `steps/seed_admit.py` 的
-`iron` 通道与这里、`scripts/experiments/shadow_admit/` 共用同一份代码，2026-09-27 转正时
+`iron` 通道与这里、`research/shadow_admit/` 共用同一份代码，2026-09-27 转正时
 从本文件搬过去的，见模块头的四条护栏）。本文件只剩 CLI 壳与「跟现字比对」这一种报表逻辑。
 """
 from __future__ import annotations

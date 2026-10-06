@@ -3,7 +3,7 @@
 
 三件事：入库闸不信事件的 `no_glyph_lib`（`glyphdb_admit`）；判据与 seed_admit 同源
 （`steps.occlusion.page_occluded`）；已入库的遮挡格能找出来、撤库走审计
-（`scripts/experiments/seal_nolib/find_and_evict.py`）。
+（`research/seal_nolib/find_and_evict.py`）。
 """
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams
 from test_glyphdb_admit import BOOK, PAGE, _confirm, lib  # noqa: F401
 from test_seed_admit_occluded import BOOK as SBOOK, PAGE as SPAGE, _page_and_cells
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "experiments" / "seal_nolib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "research" / "seal_nolib"))
 import find_and_evict as fe  # noqa: E402
 
 

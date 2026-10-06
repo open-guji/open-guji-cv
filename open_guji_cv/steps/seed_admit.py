@@ -1351,7 +1351,7 @@ def _page_patch(src, page: int, col: int, slot, sub):
 
 def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> float:
     """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
-    原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
+    原图取中位边长——影子验收（research/shadow_admit/iron_shadow.py）验证过
     的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
     几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
     from ..clustering.iron_evidence import book_scale_from_patches

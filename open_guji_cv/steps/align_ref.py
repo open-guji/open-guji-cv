@@ -121,7 +121,7 @@ overview 仓 `进度/inbox/D-多证人/` 的 done 单。
 OCR 比较、锚定与采信闸一概不动。缺省 0 = 关：不读 5-b、不进指纹
 （`StepSpec.optional_consumes_when`）、不进参数哈希。
 
-实测（沙箱，k=5；`scripts/experiments/rare_downstream/`）：
+实测（沙箱，k=5；`research/rare_downstream/`）：
 
 | | 锚定页 | 待审率 |
 |---|---|---|
@@ -413,7 +413,7 @@ class AlignRefParams(BaseModel):
     锚不住，**猜测**是诏令/制书体裁骈俪套语多、同一 8-gram 在语料里多处命中、
     票被摊薄（"套语碰撞"）。本卡在 v006 全书 86 页上实测（`glyph-db rebuild
     --store <四庫真库>` 借四庫库、Kanripo 语料，见
-    `scripts/experiments/align_anchor_recall/diagnose_v006.py`）：14 个
+    `research/align_anchor_recall/diagnose_v006.py`）：14 个
     「最高票簇 1-4 票，低于绝对下限 5」失败页里，**12 个 `avg_hits_per_hit_gram`
     ≈1、`n_clusters`==1**（唯一命中的极少数 8-gram 各自在语料里只出现一次，
     彼此又聚成同一个偏移簇，没有第二个候选位置）——这与"套语碰撞"的特征

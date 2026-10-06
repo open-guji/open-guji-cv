@@ -23,7 +23,7 @@ import pandas as pd
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-sys.path.insert(0, str(REPO / "scripts" / "experiments" / "shadow_admit"))
+sys.path.insert(0, str(REPO / "research" / "shadow_admit"))
 
 
 def make_clf():

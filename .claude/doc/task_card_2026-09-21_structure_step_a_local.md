@@ -72,7 +72,7 @@ PYTHONIOENCODING=utf-8 .venv/Scripts/python scripts/eval_zero_shot_fusion.py --m
 | 重排 slot-head vs baseline | top-1、top-10 不掉 |
 
 过线 → 拷到 `models/glyph_cnn_r6/best.pt`、改 `cnn_candidates._resolve_default_ckpt` 的优先级、
-**重标 `escalate_threshold`**（`experiments/metric_loss/calib_escalate.py`，换 checkpoint 必做）、
+**重标 `escalate_threshold`**（`research/metric_loss/calib_escalate.py`，换 checkpoint 必做）、
 `FORM_EMB_GAP` 复核（r5 换上时那个坑）。不过线 → 把数字记进设计稿 §13，不换。
 
 ### 5. 给云端一个数据包（一次，几十 MB）

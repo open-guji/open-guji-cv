@@ -1,8 +1,8 @@
 # 影子放行闸（shadow_veto）—— 只降级不升级的第二意见
 
 > 2026-09-30 用户批准第一阶段，N1 道落地（overview #305）。**缺省关，不改任何书的默认行为。**
-> 实验脚本在 `scripts/experiments/shadow_admit/`，线上模块在 `open_guji_cv/shadow/`。
-> 实测与推荐门槛见 `HANDOFF_N1.md`、`scripts/experiments/shadow_admit/results_vol03/gate_eval_cv_0928.md`。
+> 实验脚本在 `research/shadow_admit/`，线上模块在 `open_guji_cv/shadow/`。
+> 实测与推荐门槛见 `HANDOFF_N1.md`、`research/shadow_admit/results_vol03/gate_eval_cv_0928.md`。
 
 ## 它做什么
 
