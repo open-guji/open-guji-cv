@@ -325,6 +325,11 @@ export function ReviewCardView({
         <button className={`rvmark${v.done === 'jiazhu' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'jiazhu' ? (v.shape ? '1' : '') : 'jiazhu') }}
                 title="双行小注被当成正文切成了一格（Z）。属字形不完整：不入库、退回切分">小注当正文</button>
+        {/* 「正文当小注」（overview#415/#436）：反向——整宽正文字被劈成了 a/b 两半（并进了小注段）。
+            事件照旧 seg_defect（quality=truncated），多带 reason=main_as_jiazhu；该页 Step3 重跑时按整格出。 */}
+        <button className={`rvmark${v.done === 'main' ? ' on' : ''}`}
+                onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'main' ? (v.shape ? '1' : '') : 'main') }}
+                title="整宽正文字被劈成了 a/b 两半（M）。属字形不完整：不入库、退回切分按整格重切">正文当小注</button>
         <button className={`rvmark${v.done === 'contaminated' ? ' on' : ''}`}
                 onClick={(e) => { e.stopPropagation(); onFocus(); onSet(v.shape, v.done === 'contaminated' ? (v.shape ? '1' : '') : 'contaminated') }}
                 title="混进了邻字残墨 / 界行 / 版框（C）。可同时选/填这是哪个字">有噪声</button>

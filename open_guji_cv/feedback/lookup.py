@@ -128,6 +128,11 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
 
 _FORCED_JZ_CACHE: dict = {}
 
+#: 定字台「小注当正文」：这格是 Step3 没拆的雙行小注 → 从中间拆（overview#265）。
+JIAZHU_AS_MAIN = "jiazhu_as_main"
+#: 反向：「正文当小注」——这格是整宽正文，Step3 把它劈成了 a/b（并进了小注段）→ 别拆（overview#415/#436）。
+MAIN_AS_JIAZHU = "main_as_jiazhu"
+
 
 def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int]]:
     """人裁「这一格是雙行小注、从中间拆」：`(page, col) → {slot, …}`（2026-09-30）。
@@ -141,6 +146,22 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
     `routes.py` 那条 `reason=jiazhu_as_main` 规则会把该页 Step3 显式失效。按事件目录的
     (名, mtime, 大小) 缓存，逐页调用不会反复解析全部日志。
     """
+    return _resolved_forced(book, JIAZHU_AS_MAIN, False, log)
+
+
+def resolved_forced_main(book: str, log=None) -> dict[tuple[int, int], set[int]]:
+    """人裁「这一格是整宽正文、别拆」：`(page, col) → {slot, …}`（2026-10-06，overview#415/#436）。
+
+    `resolved_forced_jiazhu` 的反向：事件是 `seg_defect` + `reason=main_as_jiazhu`（「正文当小注」）。
+    人看到的是**已经劈开的半格**（vol02 p100c4 的 `17a`「匕」、`17b`），所以 key 收 `…a`/`…b`
+    子格（也收整格），一律归到整格 slot；同一格两半任一半当前是这条裁决就算。取最新一条的规矩同上：
+    之后对**同一个 key** 改判就不再强制；重切成整格后对整格 key 定字（「此」）不撤销它——那正是
+    这条裁决要的结果。生效时机、失效路由与 `resolved_forced_jiazhu` 对称（`routes.py`）。
+    """
+    return _resolved_forced(book, MAIN_AS_JIAZHU, True, log)
+
+
+def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[tuple[int, int], set[int]]:
     from .events import EventLog
     el = log or EventLog()
     try:
@@ -148,7 +169,7 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
             (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
     except OSError:
         return {}
-    hit = _FORCED_JZ_CACHE.get((book, sig[0]))
+    hit = _FORCED_JZ_CACHE.get((book, sig[0], reason))
     if hit and hit[0] == sig:
         return hit[1]
     pre = f"{book}:"
@@ -163,21 +184,26 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
-        if e.kind not in ("confirm", "not_a_char", "skip", "relabel")                 or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
+        if e.kind not in ("confirm", "not_a_char", "skip", "relabel") \
+                or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
             continue
         order = (e.ts, e.batch, e.seq)
         k = e.target.key
         if k not in last or order >= last[k][0]:
-            last[k] = (order, v == "seg_defect" and p.get("reason") == "jiazhu_as_main")
+            last[k] = (order, v == "seg_defect" and p.get("reason") == reason)
     out: dict[tuple[int, int], set[int]] = {}
     for k, (_o, forced) in last.items():
         if not forced:
             continue
         parts = k.split(":")
-        if len(parts) != 4 or not all(x.lstrip("-").isdigit() for x in parts[1:]):
+        if len(parts) != 4:
+            continue
+        if allow_sub and parts[3][-1:] in ("a", "b"):
+            parts[3] = parts[3][:-1]
+        if not all(x.lstrip("-").isdigit() for x in parts[1:]):
             continue
         out.setdefault((int(parts[1]), int(parts[2])), set()).add(int(parts[3]))
-    _FORCED_JZ_CACHE[(book, sig[0])] = (sig, out)
+    _FORCED_JZ_CACHE[(book, sig[0], reason)] = (sig, out)
     return out
 
 

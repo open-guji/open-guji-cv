@@ -5,8 +5,9 @@
 （文档要求「逐列单独去斜」），网格字典只有一列，格子来自 Step3。
 
 P0 的已知简化：Step3 已拆好的夹注 a/b 半格在这里合成一个满宽格交给 extract_page，
-由它内部的夹注逻辑再拆一次（网格字典表达不了半宽格）。两套判据一致时结果相同；
-不一致的列会在 flags 里露出来，留待接口打通后改成直接喂半宽框。
+由它内部的夹注逻辑再拆一次（网格字典表达不了半宽格）。**拆哪几格、每格发哪几半照 Step3**
+（`jiazhu_from_step3`，2026-10-06，overview#436）：extractor 只在 Step3 拆了的格上拆、只发 Step3 发过的半，
+两步格位一致；缝位两边都认的格仍取 extractor 自己量的。
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ class CellShrinkParams(BaseModel):
     frame_guard: bool = True
     """首/末格端区抹「版框横条行」（extractor.mask_frame_bars_outside）。刻本开；现代排印本
     （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
+    jiazhu_from_step3: bool = True
+    """雙行小注拆哪几格、每格发哪几半，**一律照 Step3**（2026-10-06，overview#436）。此前 extractor 在
+    清理后的图块上把 v1 判据（段端收编、桥接）再跑一遍，两步各留一套格位：Step3 记整格、这里拆 a/b
+    （#434 vol04 p218c2:13/21），下游用的是这里那套，Step3 的产物就成了错的。关掉 = 旧行为（两套判据
+    取并集）。缝位不受影响：两边都认的格仍用这里自己量的缝。"""
 
 
 def _upright(ctx: RunContext, patch):
@@ -85,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.6", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.7", unit="cell",   # 1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
@@ -124,6 +130,7 @@ class CellShrinkStep(Step):
                 d["seam_bottom"] = c.seam_bottom
             if c.kind in ("jiazhu_a", "jiazhu_b") and c.gap_center is not None:
                 d["jiazhu_cx"] = float(c.gap_center)
+                d.setdefault("jiazhu_subs", []).append(c.sub or ("a" if c.kind == "jiazhu_a" else "b"))
         # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
         # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
         # Step3 认下的雙行夹注：缝中心（列图坐标）+ 是否只有 a 半（段尾单字）。extractor 自己那套
@@ -131,7 +138,8 @@ class CellShrinkStep(Step):
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
                   "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
-                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"]}
+                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"],
+                      "jiazhu_subs": sorted(d["jiazhu_subs"])}
                      if "jiazhu_cx" in d else {})}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))
@@ -147,7 +155,8 @@ class CellShrinkStep(Step):
                      # 用下面这两条线定位版框，它们是**列图坐标**：border_top=0 表示
                      # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
                      # 落在 y≈0 与 y≈border_bottom 附近。
-                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap")},
+                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap"),
+                     **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }

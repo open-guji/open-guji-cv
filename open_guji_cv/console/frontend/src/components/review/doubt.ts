@@ -88,8 +88,9 @@ export function occludedGroupRows(cards: ReviewCard[], verdicts: Record<string, 
                   client_ts: v.ts ?? now, ...via })
       continue
     }
-    if (v.done === 'jiazhu') {   // 小注当正文（overview#265），与 reviewClass.verdictRow 同形
-      rows.push({ id: c.id, v: 'seg_defect', quality: 'truncated', reason: 'jiazhu_as_main',
+    if (v.done === 'jiazhu' || v.done === 'main') {   // 小注当正文（overview#265）/ 正文当小注（#436），与 reviewClass.verdictRow 同形
+      rows.push({ id: c.id, v: 'seg_defect', quality: 'truncated',
+                  reason: v.done === 'main' ? 'main_as_jiazhu' : 'jiazhu_as_main',
                   shape: v.shape || '', client_ts: v.ts ?? now, ...via })
       continue
     }
