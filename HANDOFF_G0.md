@@ -1,7 +1,7 @@
 # HANDOFF G0 — 字组测试集 char-groups（overview#437）
 
 分支：cv `claude/G0-char-groups-1006`（只加 `research/char_groups/` 与本档，**没改任何 Step、没改管线代码**，各书产物不会判过期）；
-dataset `claude/G0-char-groups-1006`（提交 `9982f51`）。**没合 main、没开 PR。**
+dataset `claude/G0-char-groups-1006`（提交 `9982f51` 建集，`4d9d857` README 补分工：字组分类器在 Step6、Step7 只判断，照 #437 用户 10-06 更正）。**没合 main、没开 PR。**
 
 ## 做了什么
 1. **dataset `char-groups/`**：一组一个目录 `jys/`（己已巳）、`ry/`（日曰）、`rr/`（入人八），每组 `README.md`、`items.jsonl`、`crops/`、`baseline.json`、`context_stats.json`；
