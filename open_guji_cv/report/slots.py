@@ -210,7 +210,10 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
     # 比少一格的后果大。
-    kind = cell.kind if cell is not None else "char"
+    # 例外：Step3 记成一整格正文、Step4 extractor 自己把它拆成了 a/b 两半（夹注段尾，
+    # vol04 218:2:13a/13b「下」「傳」，overview#434）——`sub` 已经说明了左右，不是猜，
+    # 按 sub 记夹注；否则 9.1 把这两半各写到 `<>` 外，与 char-cord 按格位后缀定左右的口径打架。
+    kind = cell.kind if cell is not None else {"a": "jiazhu_a", "b": "jiazhu_b"}.get(rec.sub or "", "char")
     admit = bool(rec.admit)
     char = rec.char
     guess = (rec.evidence or {}).get("guess") or None
