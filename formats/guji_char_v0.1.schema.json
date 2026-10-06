@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-guji.org/schema/char/v0.1.json",
+  "title": "GujiChar",
+  "description": "定字文本 (guji-char v0.1)，book-text original 每章一份，文本唯一真源；不带坐标、不带候选",
+  "type": "object",
+  "required": ["$schema", "version", "book_id", "volume", "pages"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-3]\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "description": "文本线内容版本；index.json 该章 text_version 是它的镜像"
+    },
+    "review": {
+      "type": "object",
+      "description": "验收记录，文本线 major ≥2 时必填",
+      "required": ["date", "signed_by", "sample"],
+      "properties": {
+        "date": { "type": "string", "minLength": 1 },
+        "signed_by": { "type": "string", "minLength": 1 },
+        "sample": {
+          "anyOf": [
+            { "type": "string", "minLength": 1 },
+            { "type": "object", "minProperties": 1 }
+          ]
+        }
+      }
+    },
+    "book_id": { "type": "string" },
+    "volume": { "type": "integer", "minimum": 1, "description": "册号，等于 book-text original/index.json 该章的 n" },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page", "columns"],
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "label": { "type": "string" },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["col", "cells"],
+              "properties": {
+                "col": { "type": "integer", "minimum": 1 },
+                "raised": { "type": "integer", "minimum": 0 },
+                "lead_blank": { "type": "integer", "minimum": 0 },
+                "kind": { "type": "string", "enum": ["body", "banxin", "blank"] },
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["a", "c"],
+                    "properties": {
+                      "a": { "type": "string", "pattern": "^\\d+:\\d+:-?[1-9]\\d*[ab]?$" },
+                      "c": { "type": "string", "minLength": 1 },
+                      "lane": { "type": "string", "enum": ["main", "solo", "jz_r", "jz_l"] },
+                      "lacuna": { "type": "boolean" },
+                      "guess": { "type": "boolean" },
+                      "zi": { "type": "string" }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "if": { "properties": { "version": { "pattern": "^[2-3]\\." } }, "required": ["version"] },
+  "then": { "required": ["review"] }
+}
