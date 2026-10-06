@@ -1,6 +1,6 @@
 """M3 两两配准验证 —— 保守聚类的核心判据。
 
-两套判据（.claude/doc/g3g4_error_analysis.md 的实测结论）：
+两套判据（doc/research/g3g4_error_analysis.md 的实测结论）：
 
 **coverage（默认，2026-08-23 起）**：有界位移覆盖率 + 局部窗口残差。
 同一个字在不同字位是**不同的手工雕刻**，天然带 2~3px 局部笔画位移——

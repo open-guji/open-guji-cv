@@ -18,5 +18,5 @@ v2 列图 = `cache/<册>/column_raw/pNNNNcNN.png`（Step2 矫正+去噪，与旧
 **没有用「算法现在判得对不对」**留用任何一条。
 
 ## 脚本
-`migrate_m1_column_warp.py`（本目录）：`python scripts/migrate_m1_column_warp.py ../open-guji-dataset/char-segmentation/column-warp --out artifacts/m1_gold/column_warp`；
+`migrate_m1_column_warp.py`（本目录）：`python research/scripts_oneoff/migrate_m1_column_warp.py ../open-guji-dataset/char-segmentation/column-warp --out artifacts/m1_gold/column_warp`；
 评测 `scripts/eval_column_warp.py`（默认 `--source v2`，评测时现场过同一道闸，数据集样本文件本身没改）。

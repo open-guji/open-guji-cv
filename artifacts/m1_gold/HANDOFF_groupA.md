@@ -5,7 +5,7 @@ text_band / page_crop 基线读主沙箱 `products`（vol01 108 页全、vol02 b
 五个评测经 `python -m open_guji_cv eval --from-raw --timeout 3000 run column_warp frame_strip side_rule text_band page_crop`（GUJI_PRODUCTS_DIR=A_products）全部「通过 5 / 失败 0 / 跑不起来 0」。
 共同改动：脚本默认读 v2 产物（`--source v2`，`--source v1` 保留旧读法）；registry 里 side_rule/text_band/page_crop 的 needs 去掉 `v1_output`；
 **评测现场先过「人当时看的图还在不在」闸，金标文件本身没改**（数据集仓只新增 `text-band/expected_v2.json`、`page-crop/expected_v2.json`，已拷入本目录）。
-新增脚本：`scripts/column_warp_v2.py`、`scripts/patch_identity.py`、`scripts/migrate_m1_column_warp.py`（各评测目录有副本）。
+新增脚本：`scripts/column_warp_v2.py`、`scripts/patch_identity.py`、`research/scripts_oneoff/migrate_m1_column_warp.py`（各评测目录有副本）。
 
 ## column_warp
 - 空跑原因：评测读 `output/<册>/step2_columns/*.png`（`regen_step2_columns.py` 预导、v1 时代落点），云端没有；`border_class` 那一半——metadata 写 64 条，但本克隆 samples/items 里 **0 条**（bxgb 31 条类别无指纹/无图）。
@@ -44,6 +44,6 @@ text_band / page_crop 基线读主沙箱 `products`（vol01 108 页全、vol02 b
 ## page_crop
 - 空跑原因：读 v1 `phase3_char_grid` 的 cell_left/right_x；金标是算法快照。病根（s3 预处理裁窄）在 v2 链不存在（直接读原图）。
 - 迁移结果：不迁，冻 v2 基线 `page_crop/expected_v2.json`（最外两条竖线 vs 页宽，阈值 8px 不变）。
-- 新基线：`python scripts/eval_page_crop.py ../open-guji-dataset/char-segmentation --update`：扫 **318 页**（vol01 109/vol02 186/bxgb 23），越界 **0 页**；最外线离页边最小余量 右 255px/左 245px（bxgb），vol01/02 ≥300px。
+- 新基线：`python research/scripts_oneoff/eval_page_crop.py ../open-guji-dataset/char-segmentation --update`：扫 **318 页**（vol01 109/vol02 186/bxgb 23），越界 **0 页**；最外线离页边最小余量 右 255px/左 245px（bxgb），vol01/02 ≥300px。
 - 与 doc 对照（page-crop/README.md）：6 页/387（vol01/167 左10.9、178 右12.3、18 右20.8、vol02/136 8.6、64 9.9、70 12.3）。v2：18/136/64/70 均未越界；167/178 非正文页 v2 无产物，未验。**真变化**（口径与对象都换了：v1 是裁窄后的网格窗，v2 是原图上的界行）。
 - 仍跑不了：无。

@@ -161,7 +161,7 @@ def measure(book: str, pages: list[int], store=None, full: bool = False) -> dict
     # 2026-09-05 用户：「R2s 从现在起不该被忽略，可以单独存在——但是也要优化」。
     # 它不再是"不算错"的备注项：单独报、带明细、有目标线（dev_set 2.63% 起步，
     # 黄 3% / 红 5%，见 round_check 的 limits）。真粘连的切法要靠识别引导，
-    # 不靠墨谷，实验与路线见 .claude/doc/step3_touching_and_jiazhu.md。
+    # 不靠墨谷，实验与路线见 doc/design/step3_touching_and_jiazhu.md。
     r2s = Ruler("R2s", "格线穿字（真粘连）", goal="<2%",
                 note="两侧都无墨谷；投影法到此为止，要靠识别引导切分")
     # R2x（2026-09-05，切线金标第一批暴露）：±12px 内没谷、但 ±半格内有净谷——

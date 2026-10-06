@@ -16,7 +16,7 @@
 > | 样张（四庫 vol03 p3、p107）＋校验图 | `doc/formats/samples/guji_page_v0/` |
 > | yolo_tool 互转（yolo_tool 仓不改，其格式并入本设计） | `open_guji_cv/formats/guji_page_yolo.py`（只用标准库）、`tests/test_guji_page_yolo.py` |
 > | 测试 | `tests/test_guji_page_format.py`（自造数据，10 条）、`tests/test_guji_page_yolo.py`（6 条） |
-> | yolo_tool 的 YOLO 切分算法评估 | `doc/yolo_tool_segmentation_review.md` |
+> | yolo_tool 的 YOLO 切分算法评估 | `doc/research/yolo_tool_segmentation_review.md` |
 
 ## 〇、一句话
 

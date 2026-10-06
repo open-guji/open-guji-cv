@@ -21,7 +21,7 @@
 
 原始裁切的尺寸/bbox 元数据仍在 instances 表（width/height/bbox），
 canonical 化不抹掉相对字号信息。设计讨论见
-.claude/doc/glyph_canonical_format.md。
+doc/design/glyph_canonical_format.md。
 """
 
 from __future__ import annotations

@@ -8,7 +8,7 @@
 （`build_cutline_flip_review.py`）已删除——它挑样本用的判据「候选切法下
 上下两格 top1 都命中整理本期望字」**已被这批裁决证伪**：准确率 6/58 = 10%，
 且系统性偏向 straight（字形库刻例多为 straight 切出，切法一致就更像，是数据
-自证的循环）。详见 `.claude/doc/row_boundaries_design.md` 的「负结果」一节。
+自证的循环）。详见 `doc/design/row_boundaries_design.md` 的「负结果」一节。
 别照着这个脚本再挖一批同口径的样本。
 
 ## 为什么走事件而不是直接写 items.jsonl

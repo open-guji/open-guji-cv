@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """外部真刻本字形源（康熙字典字头切图 / 字统网字形图）→ 64² 归一二值图。
 
-实验用（`.claude/doc/external_glyph_sources_experiment.md`）。两种目录布局：
+实验用（`doc/research/external_glyph_sources_experiment.md`）。两种目录布局：
 
 - ``kangxi:<dir>``            `<dir>/KX1078.020_蚤.png`（`scripts/kangxi_headwords.py run` 的产物，
                               文件名末段 `_<字>.png` 是标签；`_unk.png` 跳过）

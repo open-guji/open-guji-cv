@@ -1,7 +1,7 @@
 """投影峰匹配找版框线：批量跑竖直界行/边框 + 上下边框，画到图上，出报告页。
 
 核心算法在 `open_guji_cv/utils/peak_line_search.py`，算法设计记录见
-`.claude/doc/peak_line_search.md`。这个脚本只是调用入口 + 画图 + 拼报告页。
+`doc/design/peak_line_search.md`。这个脚本只是调用入口 + 画图 + 拼报告页。
 
 用法：
     # 单页，只打印结果 + 存一张叠加图

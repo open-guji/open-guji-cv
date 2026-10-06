@@ -111,7 +111,7 @@ frame_strip/side_rule 那条线应在后续收拾，我没动。
 # 环境见 doc/cloud_eval.md；overlay 工作区 /tmp/ws_overlay，改前/改后产物目录不同
 export GUJI_WORKSPACE=/tmp/ws_overlay GUJI_PRODUCTS_DIR=/tmp/q1_products_after
 python -m open_guji_cv eval --from-raw --timeout 6000 run right_cut left_cut recrop frame_strip instance_quality
-python scripts/eval_right_cut.py ../open-guji-dataset/char-segmentation        # 看逐条
+python research/scripts_oneoff/eval_right_cut.py ../open-guji-dataset/char-segmentation        # 看逐条
 python artifacts/q1_rightcut/scan_overshoot.py out.jsonl                        # 越界量（Step1-3）
 python artifacts/q1_rightcut/blast_radius.py 28                                 # 波及面
 python artifacts/q1_rightcut/recrop_overshoot.py 5:6:6 15:6:21 8:9:12 5:5:17 5:6:5

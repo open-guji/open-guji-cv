@@ -6,7 +6,7 @@
 事件消费到落库反馈这一段，统称 **Step8**（`step8.py`）：路由表是它的配置，
 `gold_add` / `glyphdb_admit` / `crop_exclude` 三个消费者是它的三个出口。
 
-设计文档：.claude/doc/console_architecture.md §3.6
+设计文档：doc/console_architecture.md §3.6
 """
 
 from .events import Event, EventLog, EventTarget  # noqa: F401

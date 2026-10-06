@@ -22,7 +22,7 @@ x 标准差 0.7~1.1px（直线页 0.6px），弯线确实被拉直了。
 单页 Step2 的活加起来不到 0.1s（`warp_page_columns` 0.02s、`clean_column`×9
 0.08s、写盘 0.02s），99% 在它调用的 Step1 `detect_borders`。`detect_borders`
 内部已经上了线程池（14 页金标 2.17x，结果逐位相同），完整的分阶段实测和三条
-否掉的路子记在 `.claude/doc/segmentation_v2_pipeline.md`「Step 1 性能」一节。
+否掉的路子记在 `doc/segmentation_v2_pipeline.md`「Step 1 性能」一节。
 
 这里只管**页级并行**（`--jobs`，`ProcessPoolExecutor`，每页完全独立）。
 **`--jobs` 不要超过 CPU 数**：Step1 内部已经没有线程池了（分块 BLAS 之后线程

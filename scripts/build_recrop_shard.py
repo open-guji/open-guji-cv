@@ -13,7 +13,7 @@ recrop 事件，纯几何、不定字）。每条重切都是一对金标：
 - **新框**（用户拖的 corrected_bbox）= 该字位的正确外接框，金标。
 
 首批 9 条（14/15 页）的模式统计见
-`.claude/doc/segmentation_border_feedback.md`：列尾格框整体偏高
+`doc/design/segmentation_border_feedback.md`：列尾格框整体偏高
 35~55px（grid_shift）、最左列吃进断续内边框、最右列同理。
 
 ## 溯源纪律

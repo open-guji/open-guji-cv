@@ -7,5 +7,5 @@
 - engine.py    指纹、stale、执行
 - anchor.py    坐标空间
 
-设计文档：.claude/doc/console_architecture.md
+设计文档：doc/console_architecture.md
 """

@@ -4,7 +4,7 @@
 三模式方案 §五.1 的 `calibrate font`：拿**已有标签**的字位（现代链来自 `witness-align`，
 刻本链可来自人裁）当查询，只在一套字体来源里检索（`GlyphDB.query(editions=[...])`），
 看正确字排第几、正确命中的 cov 与错误命中的 cov 分不分得开——量法照搬
-`.claude/doc/glyph_db_expansion_research.md` §6.2（那里的负结果是「字体 vs 刻本不可分」；
+`doc/research/glyph_db_expansion_research.md` §6.2（那里的负结果是「字体 vs 刻本不可分」；
 现代排印本是「字体 vs 同一类字体的扫描」，这里就是把它量出来）。
 
 结果每套字体一行：覆盖率、recall@1/@5、正确命中 cov 的 p10/中位、错误命中 cov 的中位/p90、

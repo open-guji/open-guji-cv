@@ -4,7 +4,7 @@
 控制台「审查」页顶部有同一套（`/api/round`），两边共用那个模块——
 阈值只写一处，免得过一阵子对不上。
 
-用法（见 `.claude/doc/review_loop_sop.md`）：
+用法（见 `doc/design/review_loop_sop.md`）：
     python scripts/round_check.py --pages 44,45,46,...   这批要不要停下修算法
     python scripts/round_check.py --next                 下一批审哪几页
     python scripts/round_check.py --regression           改完有没有退

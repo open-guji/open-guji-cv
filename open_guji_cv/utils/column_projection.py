@@ -1,4 +1,4 @@
-"""Step 2（单列射影变换 + 去噪）—— 见 `.claude/doc/segmentation_v2_pipeline.md`。
+"""Step 2（单列射影变换 + 去噪）—— 见 `doc/segmentation_v2_pipeline.md`。
 
 给定 Step 1（`border_geometry.detect_borders`）里某一列的左右两条边线
 （`VLine`，新坐标系：右上角原点、y 向下），把该列从原图裁出并做射影

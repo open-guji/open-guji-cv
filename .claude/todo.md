@@ -8,7 +8,7 @@
 
 > 来源：overview 项目下发（2026-09-03 更新）。此前 2026-02 下发的「Volume 1 / Volume 2」任务
 > 已完成或挂起，归档在文末。
-> **算法层**的待办仍以 `.claude/doc/pipeline_handbook.md` §3 与 `segmentation_v2_pipeline.md`
+> **算法层**的待办仍以 `doc/pipeline_handbook.md` §3 与 `segmentation_v2_pipeline.md`
 > 「下一步」为准；本文件只放 overview 下发的**架构层**任务。
 
 ## 🎯 全流程 review 下发（2026-09-03 晚）：Step 1–4 冲 100%，Step 5/6 接进 v2

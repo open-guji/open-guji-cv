@@ -9,7 +9,7 @@
 block 那条 flag」，这道闸自己在 `run_page` 里按判据分别决定写 `reject`（block）
 还是 `flags`（flag）。L2b 只在 115 列金标上验证过一种机制（背景印章），不确定
 未来会不会在没见过的书页上误伤，先用 flag 形式进生产、积累人审证据，跟
-`row_segment_gate.py` 的 R2/R2s 先例一致（见 `.claude/doc/segmentation_v2_pipeline.md`
+`row_segment_gate.py` 的 R2/R2s 先例一致（见 `doc/segmentation_v2_pipeline.md`
 「Step2→3 交接」节的 2026-09-11 记录）。
 """
 

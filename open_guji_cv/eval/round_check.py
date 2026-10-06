@@ -5,7 +5,7 @@
 控制台 `/api/round` 把它渲染成卡片——两边共用这里，免得阈值各写一套、
 过一阵子对不上。
 
-判据含义与「什么时候修算法」见 `.claude/doc/review_loop_sop.md`。
+判据含义与「什么时候修算法」见 `doc/design/review_loop_sop.md`。
 
 ## 灯的语义
 

@@ -1,6 +1,6 @@
 """刻本古籍字符聚类识别（Phase 4~7）。
 
-模块总览（详细设计见 .claude/doc/char_clustering_design.md）：
+模块总览（详细设计见 doc/design/char_clustering_design.md）：
 
 - ids            全局字符实例 ID（book:page:col:idx）
 - extractor      M1 字符提取（phase3 网格 → 单字图块数据集）
