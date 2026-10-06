@@ -1,0 +1,211 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/open-guji/open-guji-cv/formats/guji_page_v0.schema.json",
+  "title": "guji-page v0：每字带坐标的页面文本",
+  "description": "一页一个文件。规范正本 doc/formats/guji_page_v0.md；Schema 管不到的结构约束（runs 铺满 text、区间不越界、id 唯一）见规范 §7，由 open_guji_cv.formats.guji_page.check 实现。",
+  "type": "object",
+  "required": ["schema", "page_id", "book", "volume", "page", "image", "text", "regions", "glyphs"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {"const": "guji-page/0"},
+    "page_id": {
+      "type": "string",
+      "pattern": "^[0-9a-z]+/[0-9]+/[0-9]+$",
+      "description": "<bookId>/<册>/<页>，与影像路径 images/{bookId}/{volume}/{page} 同构"
+    },
+    "book": {
+      "type": "object",
+      "required": ["id"],
+      "properties": {
+        "id": {"type": "string", "description": "book-index 正式版 Book ID（base36）"},
+        "edition": {"type": "string", "description": "版本键，与字形库 edition 同口径（CV 审定 §八·2）"},
+        "title": {"type": "string"}
+      }
+    },
+    "volume": {
+      "type": "object",
+      "required": ["index"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 1, "description": "册号，从 1 起，与 IIIF 路径的 {volume} 一致"},
+        "cv_book": {"type": "string", "description": "CV 跑批单元（books/<id>.yaml），如 vol03"},
+        "label": {"type": "string"},
+        "juan_range": {"type": "string"}
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": ["index"],
+      "properties": {
+        "index": {"type": "integer", "minimum": 1, "description": "影像顺序页号，从 1 起（拆过合扫页的册以拆后页序为准）"},
+        "label": {"type": ["string", "null"], "description": "书上的叶次（版心页码），元数据，不作主键"},
+        "page_type": {"type": "string", "description": "body / toc / roster / preface / colophon / blank / cover …"}
+      }
+    },
+    "image": {"$ref": "#/$defs/image"},
+    "producers": {
+      "type": "object",
+      "description": "来历表：键在 glyphs[].by / marks[].by 里引用",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["tool"],
+        "properties": {
+          "tool": {"type": "string"},
+          "rev": {"type": ["string", "null"]},
+          "who": {"type": "string"},
+          "at": {"type": "string"}
+        }
+      }
+    },
+    "text": {
+      "type": "array",
+      "description": "原样层文本流（阅读顺序）。一个元素 = 一个字元；\"\" = 阙文",
+      "items": {"type": "string"}
+    },
+    "norm": {
+      "type": "array",
+      "description": "规范层：只记与原样层不同的位",
+      "items": {
+        "type": "object",
+        "required": ["i", "t"],
+        "additionalProperties": false,
+        "properties": {
+          "i": {"type": "integer", "minimum": 0},
+          "t": {"type": "string", "description": "通行字（可多字、可为空串表示规范层删去）"},
+          "by": {"type": "string"},
+          "why": {"type": "string", "description": "异体 / 避讳 / 俗字 / 讹字 …"}
+        }
+      }
+    },
+    "regions": {"type": "array", "items": {"$ref": "#/$defs/region"}},
+    "glyphs": {"type": "array", "items": {"$ref": "#/$defs/glyph"}},
+    "marks": {"type": "array", "items": {"$ref": "#/$defs/mark"}},
+    "warnings": {"type": "array", "items": {"type": "string"}},
+    "ext": {"type": "object", "description": "工具私有扩展（如 ext.yolo），格式本身不解释"}
+  },
+  "$defs": {
+    "xywh": {
+      "type": "array",
+      "description": "本页图像整数像素，左上原点，[x, y, w, h]",
+      "items": {"type": "integer"},
+      "minItems": 4,
+      "maxItems": 4
+    },
+    "range": {
+      "type": "array",
+      "description": "text 的半开区间 [start, end)",
+      "items": {"type": "integer", "minimum": 0},
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "point": {"type": "array", "items": {"type": "integer"}, "minItems": 2, "maxItems": 2},
+    "image": {
+      "type": "object",
+      "required": ["width", "height", "sha256"],
+      "properties": {
+        "width": {"type": "integer", "minimum": 1},
+        "height": {"type": "integer", "minimum": 1},
+        "sha256": {"type": ["string", "null"], "pattern": "^[0-9a-f]{64}$", "description": "坐标所在那张图的文件 sha256"},
+        "path": {"type": "string", "description": "工作区内相对路径（参考，不作身份）"},
+        "source": {
+          "type": "object",
+          "description": "原始影像（如 IA 一张 leaf）",
+          "properties": {
+            "kind": {"type": "string"},
+            "item": {"type": "string"},
+            "leaf": {"type": "integer"},
+            "width": {"type": "integer"},
+            "height": {"type": "integer"},
+            "sha256": {"type": "string"},
+            "note": {"type": "string"}
+          }
+        },
+        "region": {"$ref": "#/$defs/xywh", "description": "本图在 source 上的裁切区域；缺省 = 整张"},
+        "edits": {
+          "type": "array",
+          "description": "裁切之外改过的像素（抹白残条等）。只说明，不影响坐标",
+          "items": {"type": "object", "required": ["op"], "properties": {"op": {"type": "string"}, "box": {"$ref": "#/$defs/xywh"}, "note": {"type": "string"}}}
+        },
+        "render": {"type": "object", "description": "图来自 PDF 渲染等非文件来源时的参数（yolo_tool）"},
+        "note": {"type": "string"}
+      }
+    },
+    "region": {
+      "type": "object",
+      "required": ["id", "kind", "columns"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"enum": ["body", "banxin", "margin", "title", "other"]},
+        "box": {"oneOf": [{"$ref": "#/$defs/xywh"}, {"type": "null"}]},
+        "rules": {"type": "array", "description": "界行折线，右→左", "items": {"type": "array", "items": {"$ref": "#/$defs/point"}}},
+        "columns": {"type": "array", "items": {"$ref": "#/$defs/column"}}
+      }
+    },
+    "column": {
+      "type": "object",
+      "required": ["id", "runs"],
+      "properties": {
+        "id": {"type": "string"},
+        "n": {"type": "integer", "description": "列号，右→左从 1 起"},
+        "kind": {"type": "string", "description": "body / margin / edge（CV line_index）"},
+        "box": {"oneOf": [{"$ref": "#/$defs/xywh"}, {"type": "null"}]},
+        "raised": {"type": "integer", "minimum": 0, "description": "抬头级数"},
+        "lead_blank": {"type": "integer", "minimum": 0, "description": "行首留白格数（挪抬/低格）"},
+        "runs": {
+          "type": "array",
+          "description": "本列文字按阅读顺序分段，每段一条 lane",
+          "items": {
+            "type": "object",
+            "required": ["lane", "text"],
+            "additionalProperties": false,
+            "properties": {
+              "lane": {"enum": ["main", "jz_r", "jz_l", "solo"]},
+              "text": {"$ref": "#/$defs/range"}
+            }
+          }
+        },
+        "note": {"type": "string"}
+      }
+    },
+    "glyph": {
+      "type": "object",
+      "required": ["id", "text", "box", "review"],
+      "properties": {
+        "id": {"type": "string", "description": "稳定 ID（不透明；重切后按规范 §6 承接）"},
+        "text": {"$ref": "#/$defs/range"},
+        "box": {"oneOf": [{"$ref": "#/$defs/xywh"}, {"type": "null"}]},
+        "quad": {"type": "array", "items": {"$ref": "#/$defs/point"}, "minItems": 4, "maxItems": 4},
+        "box_from": {"type": "string", "description": "box 取自何处，缺省 = 字框本身；cell_quad = 退到格四角外接框"},
+        "col": {"type": "string"},
+        "lane": {"enum": ["main", "jz_r", "jz_l", "solo"]},
+        "slot": {"type": "integer"},
+        "cv_id": {"type": "string", "description": "CV 字位主键 book:page:col:slot[a|b]（会随重切变）"},
+        "glyph_id": {"type": ["string", "null"], "description": "字形库刻例 id，与 cv_id 同构但不保证相等"},
+        "by": {"type": "object", "properties": {"box": {"type": ["string", "null"]}, "text": {"type": ["string", "null"]}}},
+        "method": {"type": "string", "description": "human / cv:<通道> / cv:occluded_default / cv:pending / ocr / yolo / manual …"},
+        "review": {"enum": ["pending", "auto", "human", "disputed"]},
+        "conf": {"type": ["number", "null"]},
+        "lacuna": {"enum": ["unreadable", "defect"]},
+        "guess": {"type": "string"},
+        "flags": {"type": "array", "items": {"type": "string"}},
+        "prev": {"type": "array", "items": {"type": "string"}, "description": "重切时压到的旧 ID（未承接时）"},
+        "ext": {"type": "object"}
+      }
+    },
+    "mark": {
+      "type": "object",
+      "required": ["id", "kind"],
+      "properties": {
+        "id": {"type": "string"},
+        "kind": {"enum": ["blank", "excluded", "seal", "banxin", "fishtail", "page_number", "head_raise", "stain", "other"]},
+        "box": {"oneOf": [{"$ref": "#/$defs/xywh"}, {"type": "null"}]},
+        "col": {"type": "string"},
+        "slot": {"type": "integer"},
+        "text": {"type": "string", "description": "印文、页码等（不进正文流）"},
+        "occludes": {"type": "array", "items": {"type": "string"}},
+        "by": {"type": "string"},
+        "cv_id": {"type": "string"},
+        "note": {"type": "string"}
+      }
+    }
+  }
+}

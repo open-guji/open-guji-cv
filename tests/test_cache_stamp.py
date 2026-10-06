@@ -55,3 +55,18 @@ def test_best_offset_flags_a_one_cell_shift_only_when_neighbour_is_clearly_close
     assert best_offset(a, b, a, c) == -1                 # 缓存其实是上一格的图
     assert best_offset(c, b, a, c) == 1
     assert best_offset(b, b, None, None) == 0            # 列首尾没有邻格不误报
+
+
+def test_stale_column_images_flags_shape_mismatch_only(tmp_path, monkeypatch):
+    """缓存列图与现渲染形状不同 → 判过期；相同的不报。"""
+    import numpy as np
+    from types import SimpleNamespace
+    from open_guji_cv.core.step import STEPS
+    from open_guji_cv.ops import cache_verify as cv
+    cache = ImageCache(tmp_path)
+    cache.put("b", "column_image", "p0001c01", np.zeros((100, 20), np.uint8))   # 与渲染同形
+    cache.put("b", "column_image", "p0001c02", np.zeros((115, 20), np.uint8))   # 顶部多 15px
+    renders = {"p0001c01": np.zeros((100, 20), np.uint8), "p0001c02": np.zeros((100, 20), np.uint8)}
+    monkeypatch.setitem(STEPS, "column_warp", SimpleNamespace(render=lambda ctx, kind, key: renders[key]))
+    eng = SimpleNamespace(cache=cache, book=SimpleNamespace(id="b"), ctx=None)
+    assert cv.stale_column_images(eng, [1]) == {1: [2]}

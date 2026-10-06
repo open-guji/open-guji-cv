@@ -40,7 +40,7 @@ from __future__ import annotations
 import logging
 from functools import lru_cache
 
-from pydantic import BaseModel, model_serializer
+from pydantic import BaseModel, field_validator, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -236,6 +236,20 @@ class SeedAdmitParams(BaseModel):
     **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
     达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
     不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
+    rare_ref: bool = False
+    """规则 A「5-b × 整理本」放行通道 `rare_ref`（2026-10-02，D3 道 overview#349），缺省关。
+
+    给**走完所有现行通道仍待审**的格补一次机会：整理本是 `replace` 段、有整理本字，而 5-b
+    （`rare_candidates`，字体模板 emb/CNN，与整理本互相独立）首位**逐字**等于整理本字 → 放行，
+    字 = 整理本字，`channel`/`provenance` = `rare_ref`。动机：新册字形库冷启动时整理本字不在库
+    候选里，库 unsure 一片，而 5-b 首位就是整理本字（vol02/03 人裁 560 格命中、字形全对 558）。
+
+    硬条件（缺一不放）：整理本字不是己已巳；格上没有 `occluded`／`excluded`／`near_form`／
+    `context_blank_cell`／`form_open`／`approx_exemplar` 疑问，库匹配无护栏（`never_match`／`conflict`）；
+    库没有 `verdict=same` 认成别的字；库首位不是整理本字的异体（`variants.are_variants`；
+    注意这条**只拦不放**——「异体就取库形」实测 75 格只对 11，别用）。
+    只会把待审挪到放行，不改任何已放行格；人裁位不经这里。evidence 记 `rare_ref={rare, ref, lib, cov}`。
+    关着时不读 5-b、不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_ref: true}}` 打开。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -282,8 +296,44 @@ class SeedAdmitParams(BaseModel):
     shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
     shadow_low_conf: float = 0.0        # >0：影子最大把握度低于它也降级（缺省关）
     shadow_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
+    shadow_promote: bool = False
+    """影子升级（与 `shadow_veto` 并列，缺省关）：对**待审**（admit=False）、无硬护栏、非人裁的格，
+    影子首选字必须**等于整理本字或库首位**（至少有一路独立背书），且把握度 ≥ `shadow_promote_conf` →
+    放行，字 = 影子首选，`channel`/`provenance` = `shadow`，evidence 记 `shadow_promote`。
+    只升不降；人裁、遮挡、排除名单、护栏、形近、空白字块都不碰；信号缺失／本格自身在库里／异常 → 弃权。
+    关着时 `shadow_promote*` 不进 dump，产物逐字节不变。"""
+    shadow_promote_conf: float = 0.95   # 放行把握度门槛；推荐值与证据见 HANDOFF_D3.md
     approx_fingerprint: str = ""
     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
+
+    context_guard_diff: bool = False
+    """context 通道放行前，库判 `diff` 且 `cov < context_guard_cov` 就不放行（doubt
+    `ctx_guard_diff`，overview#333 建议 1 前半）。库已经明确说「不像」，上下文单凭文意不该
+    把它抬成字。缺省关；五个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
+    context_guard_cov: float = 0.8
+    """`context_guard_diff` 的 cov 门槛。"""
+    context_guard_flags: bool = False
+    """context 通道放行前，这一格在 Step4 `char_index` 上带 `context_guard_flag_set` 里任一
+    标记就不放行（doubt `ctx_guard_flag`，建议 1 后半）。没有 `char_index` 产物 = 弃权。"""
+    context_guard_flag_set: str = "rule_bar,suspect_empty,bad_seg"
+    context_guard_ref_blank: bool = False
+    """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
+    时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
+    context_guard_ref_prefer: bool = False
+    """坐标对位给出整理本字、与 context 定字语义不同、库判又不是 `same` 时，不放行 context 字，
+    落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
+    独立形状证据，放不放留给标定结果。"""
+
+    patch_missing: str = "error"
+    """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
+
+    - `error`（缺省，本地真书）：抛 `PatchUnavailable`，这一页 failed。
+    - `skip`（云端快照沙箱：只带 products、不带原图与 cache，字块现算不出来）：这几路**不参与**
+      这一格，但不静默——该格 `evidence.patch_missing` 记下跳过了哪几路（`iron_scale`／`iron`／
+      `cnn`／`form`），日志汇总一行。真书别开：开了等于回到 10-05 前「没图就悄悄关掉」。
+
+    `glyph_match` 没有这个开关：本格没图就没法判，停页是对的。
+    缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
@@ -296,13 +346,38 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.rare_agree:
             d.pop("rare_agree", None)
         if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_veto", "shadow_model", "shadow_conf", "shadow_low_conf", "shadow_model_fingerprint"):
+            for k in ("shadow_veto", "shadow_conf", "shadow_low_conf"):
+                d.pop(k, None)
+        if isinstance(d, dict) and not self.rare_ref:
+            d.pop("rare_ref", None)
+        if isinstance(d, dict) and not self.shadow_promote:
+            d.pop("shadow_promote", None)
+            d.pop("shadow_promote_conf", None)
+        if isinstance(d, dict) and not (self.shadow_veto or self.shadow_promote):
+            for k in ("shadow_model", "shadow_model_fingerprint"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.approx_gate:
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and self.patch_missing == "error":
+            d.pop("patch_missing", None)
+        if isinstance(d, dict) and not self._context_guard_on():
+            for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
+                      "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
+                d.pop(k, None)
         return d
+
+    @field_validator("patch_missing")
+    @classmethod
+    def _check_patch_missing(cls, v: str) -> str:
+        if v not in ("error", "skip"):
+            raise ValueError(f"seed_admit.patch_missing 只能是 error/skip，不是 {v!r}")
+        return v
+
+    def _context_guard_on(self) -> bool:
+        return (self.context_guard_diff or self.context_guard_flags
+                or self.context_guard_ref_blank or self.context_guard_ref_prefer)
 
     def model_post_init(self, _ctx) -> None:
         if not self.db_path:
@@ -342,10 +417,10 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
-        if self.shadow_veto and not self.shadow_model_fingerprint:
-            from ..shadow.model import DEFAULT_MODEL, file_fingerprint
+        if (self.shadow_veto or self.shadow_promote) and not self.shadow_model_fingerprint:
+            from ..shadow.model import file_fingerprint
             object.__setattr__(self, "shadow_model_fingerprint",
-                               file_fingerprint(self.shadow_model or DEFAULT_MODEL) or "missing")
+                               file_fingerprint(_shadow_model_path(self)) or "missing")
         if not self.approx_fingerprint:
             object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
         if not self.iron_config_fingerprint:
@@ -357,10 +432,11 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.10", unit="cell",   # 1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.11", unit="cell",   # 1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
+                                ("rare_candidates", "rare_ref"), ("rare_candidates", "shadow_promote"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -445,10 +521,11 @@ class SeedAdmitStep(Step):
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         rtop: dict[str, list[str]] = {}
-        if p.rare_agree:
+        if p.rare_agree or p.rare_ref:
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
+        coord_cache: dict = {}
         always = set(p.always_review or "")
         context_verdicts = frozenset(
             s.strip() for s in (p.context_verdicts or "").split(",") if s.strip())
@@ -463,7 +540,21 @@ class SeedAdmitStep(Step):
         # 零额外开销，不影响没开这个开关的书。
         iron_ns = getattr(ctx.book, "norm_stroke", None)
         iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
-        iron_scale = (_iron_page_scale(ctx.book.id, page, match) if iron_ctx else None)
+        # 读不到字块：`patch_missing=error` 抛错停页；`skip` 记到 {格 id: [跳过的路]}，落进 evidence。
+        patch_missing: dict[str, list[str]] = {}
+
+        def soft_patch(rid: str, lane: str, fn, *a):
+            try:
+                return fn(*a)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                patch_missing.setdefault(rid, []).append(lane)
+                return None
+        iron_scale = (_iron_page_scale(ctx, page, match,
+                                       on_missing=(None if p.patch_missing != "skip" else
+                                                   lambda rid: patch_missing.setdefault(rid, []).append("iron_scale")))
+                      if iron_ctx else None)
         # 印章／污损遮挡（`occluded_gate`，overview#195）：{字位 id: (密度, 默认字, 来源)}
         occ = _occluded(ctx, page, match, p, amap) if p.occluded_gate else {}
         # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
@@ -530,6 +621,14 @@ class SeedAdmitStep(Step):
                         evd["damaged"] = True
                         if guess:
                             evd["guess"] = guess
+                    elif exrec.get("reason") != "not_a_char":
+                        # 切坏／裁坏（seg_defect／crop_defect）但人已给了字（overview#403 缺口 B）：
+                        # 图块照旧不进库、不出卡，字挂在 evidence 上供文本层出字——「不入库」说的是
+                        # 这块图不当范本，不是「这个字没定」（同 `lookup.human_chars` 的口径）。
+                        hs_x, ht_x = human_shapes.get(r.id), human_texts.get(r.id)
+                        hc = ht_x if (ht_x and hs_x in _JYS and ht_x in _JYS) else (hs_x or ht_x)
+                        if hc:
+                            evd["human_char"] = hc
                     recs.append(AdmitRec(
                         id=r.id, slot=r.slot, sub=r.sub, admit=False,
                         channel=None, char=("□" if damaged else None), provenance="",
@@ -609,7 +708,7 @@ class SeedAdmitStep(Step):
                 cnn_char = None
                 if (align_char is None and r.verdict != "same" and r.candidates
                         and max(c for _, c in r.candidates) >= MATCH_SOLO_OCR_COV):
-                    cnn_char = _cnn_top(ctx.book.id, page, cc.col, r.slot, r.sub)
+                    cnn_char = soft_patch(r.id, "cnn", _cnn_top, ctx, page, cc.col, r.slot, r.sub)
                 ok, channel = admission_decision(
                     ocr=ocr_in, align_char=align_char, ref_char=None,
                     doubts=doubts, vmap=vm_here,
@@ -715,7 +814,8 @@ class SeedAdmitStep(Step):
                         ranks = None
                         fd = decide_form(align_char, forms, list(r.candidates), ledger)
                         if fd.state == "open":
-                            ranks = _image_ranks(ctx.book.id, page, cc.col, r.slot, r.sub, forms)
+                            ranks = soft_patch(r.id, "form", _image_ranks,
+                                               ctx, page, cc.col, r.slot, r.sub, forms)
                             if ranks:
                                 fd = decide_form(align_char, forms, list(r.candidates), ledger, ranks)
                         form_ev = fd.to_evidence()
@@ -774,6 +874,10 @@ class SeedAdmitStep(Step):
                     elif p.context_blank_gate and _ir is not None \
                             and _ir.ink_ratio < p.context_min_ink:
                         doubts.append("context_blank_cell")
+                    elif p._context_guard_on() and (_g := _context_guard(
+                            p, r, d.char, _ir, _coord_refs(ctx, page, coord_cache), vm_here)):
+                        doubts.append(_g[0])
+                        char = _g[1] or char
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -821,8 +925,8 @@ class SeedAdmitStep(Step):
                 # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
                 # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
                 if not ok and iron_ctx is not None:
-                    iron_char = _iron_decide(ctx.book.id, page, cc.col, r, iron_ctx,
-                                             iron_scale, iron_ns)
+                    iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
+                                           iron_ctx, iron_scale, iron_ns)
                     if iron_char is not None and p.iron_ref_guard \
                             and context_conflicts_ref(iron_char, align_char, vm_here):
                         doubts.append("iron_vs_ref")
@@ -867,31 +971,107 @@ class SeedAdmitStep(Step):
                               **({"form": form_ev} if form_ev else {}),
                               **({"rare": _rare_agree(r, rtop.get(r.id))}
                                  if p.rare_agree else {}),
-                              **({"approx": apx_ev} if apx_ev else {})}))
+                              **({"approx": apx_ev} if apx_ev else {}),
+                              **({"patch_missing": patch_missing[r.id]}
+                                 if r.id in patch_missing else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
         n_auto += d_auto
         n_review += d_review
+        if p.rare_ref:
+            d_rr = _rare_ref_pass(out, mmap, amap, rtop)
+            n_auto += d_rr
+            n_review -= d_rr
         if p.shadow_veto:
             d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
             n_auto -= d_veto
             n_review += d_veto
+        if p.shadow_promote:
+            d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
+            n_auto += d_pro
+            n_review -= d_pro
+        if patch_missing:
+            lanes: dict[str, int] = {}
+            for v in patch_missing.values():
+                for k in v:
+                    lanes[k] = lanes.get(k, 0) + 1
+            ctx.log(f"seed_admit p{page}: patch_missing=skip，{len(patch_missing)} 格读不到字块、"
+                    f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+_RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+
+
+def _hard_blocked(doubts, guard) -> bool:
+    """规则 A／影子升级共用的硬护栏：这些格任何新增通道都不碰。"""
+    return (guard in ("never_match", "conflict")
+            or any(d.startswith("护栏:") or d in _RARE_REF_HARD for d in doubts))
+
+
+def rare_ref_decide(*, doubts, guard, verdict, lib_char, lib_top, ref, op, rare_top, are_variants) -> str | None:
+    """规则 A（`SeedAdmitParams.rare_ref`）的判据，纯函数（离线评测与线上共用）。→ 放行字（=整理本字）或 None。
+
+    `lib_char`：库判 same 时的字（否则 None）；`lib_top`：库首位（same 取 char，否则候选第一名）；
+    `rare_top`：5-b 首位；`are_variants(a, b)`：两字有无直接异体关系。"""
+    if op != "replace" or not ref or ref in _JYS or not rare_top or rare_top != ref:
+        return None
+    if _hard_blocked(doubts, guard):
+        return None
+    if verdict == "same" and lib_char and lib_char != ref:
+        return None                       # 库明确认成了别的字
+    if lib_top and lib_top != ref and are_variants(lib_top, ref):
+        return None                       # 库首位是整理本字的异体：形取谁说不准，留给人
+    return ref
+
+
+def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict) -> int:
+    """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。"""
+    from ..variants import are_variants
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            m = mmap.get(rec.id)
+            al = amap.get(rec.id)
+            top5 = rtop.get(rec.id)
+            if m is None or al is None or not top5:
+                continue
+            lib_top = (m.char if m.verdict == "same" and m.char
+                       else (m.candidates[0][0] if m.candidates else None))
+            ch = rare_ref_decide(doubts=rec.doubts, guard=m.guard, verdict=m.verdict,
+                                 lib_char=m.char if m.verdict == "same" else None, lib_top=lib_top,
+                                 ref=al[0], op=al[1], rare_top=top5[0], are_variants=are_variants)
+            if ch is None:
+                continue
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "rare_ref", "rare_ref", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "rare_ref": {
+                "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov}}
+            n += 1
+    return n
 
 
 _SHADOW_GATES: dict = {}
 
 
+def _shadow_model_path(p: "SeedAdmitParams"):
+    """缺省模型：只开 veto 用 v1（老口径，行为不变）；开了 promote 用 v2（要名次类特征）。"""
+    from ..shadow.model import DEFAULT_MODEL, PROMOTE_MODEL
+    return p.shadow_model or (PROMOTE_MODEL if p.shadow_promote else DEFAULT_MODEL)
+
+
 def _shadow_gate(p: "SeedAdmitParams"):
     """进程内缓存：同一 (模型指纹, db, 门槛) 只建一次（字形库人裁表要扫 sqlite）。"""
-    key = (p.shadow_model_fingerprint, p.db_path, p.variants, p.shadow_conf, p.shadow_low_conf)
+    key = (p.shadow_model_fingerprint, str(_shadow_model_path(p)), p.db_path, p.variants, p.shadow_conf, p.shadow_low_conf)
     g = _SHADOW_GATES.get(key)
     if g is None:
         from ..shadow.gate import ShadowGate
         from ..shadow.model import load_model
         from ..shadow.signals import load_context
-        g = ShadowGate(load_model(p.shadow_model or None), load_context(p.db_path, p.variants or None),
+        g = ShadowGate(load_model(_shadow_model_path(p)), load_context(p.db_path, p.variants or None),
                        p.shadow_conf, p.shadow_low_conf)
         _SHADOW_GATES.clear()
         _SHADOW_GATES[key] = g
@@ -927,6 +1107,43 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
+            n += 1
+    return n
+
+
+def _shadow_promote_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
+    """影子升级（`shadow_promote`）：待审格里，影子首选 = 整理本字或库首位且把握度够 → 放行。→ 升级格数。
+
+    只升不降，只碰 admit=False、非人裁、无硬护栏、没被 `shadow_veto` 降过的格；放在 veto 之后，
+    所以本遍放行的格不会再被 veto 回头否掉。模型读不到／口径不符 → 抛错（同 veto）。"""
+    from ..shadow.gate import promote_judge
+    from ..shadow.signals import CellEvidence, jmerge
+    gate = _shadow_gate(p)
+    rare = _opt(ctx, "rare_candidates", page)
+    rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human" or "shadow_veto" in rec.doubts:
+                continue
+            m = mmap.get(rec.id)
+            if m is None or _hard_blocked(rec.doubts, m.guard):
+                continue
+            rr = rmap.get(rec.id)
+            ref = (amap.get(rec.id) or (None, None))[0]
+            ev = CellEvidence(
+                id=rec.id, lib=[(c, v) for c, v in (m.candidates or [])],
+                rare=[(x.char, x.score) for x in ((rr.candidates if rr else None) or [])],
+                ref=ref, cur=rec.char)
+            v = promote_judge(gate, ev, p.shadow_promote_conf)
+            if not v.promote:
+                continue
+            lib_top = max(ev.lib, key=lambda t: t[1])[0] if ev.lib else None
+            char = ref if (ref and jmerge(ref) == v.pick) else lib_top
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "shadow", "shadow", char
+            rec.evidence = {**rec.evidence, "shadow_promote": {**v.evidence(gate.model, p.shadow_promote_conf),
+                                                                "prev_doubts": list(rec.doubts)}}
+            rec.doubts = []
             n += 1
     return n
 
@@ -1105,31 +1322,54 @@ def _iron_context(db_path: str, norm_stroke: int | None):
     return matcher, human_chars_set, partners_map, human_ids
 
 
-def _iron_page_scale(book: str, page: int, match: PageMatch) -> float:
+class PatchUnavailable(RuntimeError):
+    """本页字块读不到也再生不出来——这一页停下，不降级（overview#407）。"""
+
+
+def _page_patch(src, page: int, col: int, slot, sub):
+    """读**本页**一格的字块，读不到就抛 `PatchUnavailable`。
+
+    `src` 是 `RunContext`（管线里）就走 `ctx.image`：验页戳、缓存没有就现算；
+    是册 id 字符串（离线审计脚本）就只查缓存。2026-10-05 前这四处（铁证尺度 / 铁证判定 /
+    CNN 背书 / 组内检索）都是 `ImageCache().get()` 不验戳不再生、没图 `return None`——
+    缓存缺了或读不出来，铁证与 CNN 两路就**悄悄关掉**，放行结果变了而状态显示正常。
+    """
+    import cv2
+
+    key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
+    try:
+        if hasattr(src, "image"):
+            return src.image("char_patch", key)
+        from ..products.cache import ImageCache
+        path = ImageCache().get(src, "char_patch", key)
+        if path is None:
+            raise FileNotFoundError(f"缓存里没有 {src}/char_patch/{key}")
+        return cv_imread(str(path), cv2.IMREAD_GRAYSCALE, strict=True)
+    except Exception as e:                  # noqa: BLE001 —— 换成带页号与键的错误再抛，不吞
+        raise PatchUnavailable(f"p{page} 字块 {key} 读不到: {type(e).__name__}: {e}") from e
+
+
+def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> float:
     """书级判别器归一尺度（`iron_evidence.book_scale_from_patches`）：从**这一页**的字块
     原图取中位边长——影子验收（scripts/experiments/shadow_admit/iron_shadow.py）验证过
     的口径是抽样几百个字块算一次全书通用值，这里改成逐页现算（一页的字数通常也有
     几百个，够稳），免得要在 `run_page` 的单页边界之外维护跨页状态。"""
-    import cv2
-
     from ..clustering.iron_evidence import book_scale_from_patches
-    from ..products.cache import ImageCache
-    cache = ImageCache()
     patches = []
     for cc in match.columns:
         if not cc.ok:
             continue
         for r in cc.chars:
-            path = cache.get(book, "char_patch", f"p{page:04d}c{cc.col:02d}s{r.slot}{r.sub or ''}")
-            if path is None:
-                continue
-            img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
-            if img is not None:
-                patches.append(img)
+            try:
+                patches.append(_page_patch(book, page, cc.col, r.slot, r.sub))
+            except PatchUnavailable:
+                if on_missing is None:          # 缺省（patch_missing=error）：停页
+                    raise
+                on_missing(r.id)                # skip：尺度用读得到的那些算，缺的记账
     return book_scale_from_patches(patches)
 
 
-def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
+def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
                  norm_stroke: int | None) -> str | None:
     """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
     （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
@@ -1141,13 +1381,7 @@ def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
     from ..products.cache import ImageCache
     cache = ImageCache()
     matcher, human_chars_set, partners_map, human_ids = iron_ctx
-    key = f"p{page:04d}c{col:02d}s{r.slot}{r.sub or ''}"
-    path = cache.get(book, "char_patch", key)
-    if path is None:
-        return None
-    img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
-    if img is None:
-        return None
+    img = _page_patch(book, page, col, r.slot, r.sub)
     res = matcher.match(normalize_patch(img, stroke_width=norm_stroke), exclude_id=f"v2:{r.id}")
     cands = [(c, float(v)) for c, v in res.candidates]
     if res.verdict == "same" and res.char and all(c != res.char for c, _ in cands):
@@ -1170,8 +1404,11 @@ def _iron_decide(book: str, page: int, col: int, r, iron_ctx, scale: float,
             bk_, p_, c_, s_ = parts
             sub = s_[-1] if s_[-1] in "ab" else ""
             s_ = s_.rstrip("ab")
+            # 对照图是别页/别册的人裁刻例，缓存里没有属正常（跳过这一例）；
+            # 文件在却解不出来是坏缓存，照样报错（strict），不当「没有」处理。
             pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
-            raw_cache[cid] = None if pth is None else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE)
+            raw_cache[cid] = (None if pth is None
+                              else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE, strict=True))
         return raw_cache[cid]
 
     def ex_raws(ch: str):
@@ -1277,6 +1514,41 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
     return out
 
 
+def _coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:
+    """本页 `align_ref.coord` → {字位 id: 整理本字（空串 = 坐标对位说是空格位）}；页内缓存。"""
+    if "coord" not in cache:
+        ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+        cache["coord"] = {c.id: c.ref_char for c in (ref.coord if ref else [])}
+    return cache["coord"]
+
+
+def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, im, coord: dict[str, str],
+                   vmap) -> tuple[str, str | None] | None:
+    """context 通道放行前的最后一道闸（overview#333，G1 道）。命中返回 `(doubt, 默认字|None)`，
+    不命中 None。四条各有开关（`context_guard_*`），依次判，先中先返回；缺信号一律弃权：
+    没有 `char_index` 就不看标记，没有坐标对位就不看整理本。
+
+    - `ctx_guard_diff`：库判 diff 且 cov < `context_guard_cov`；
+    - `ctx_guard_flag`：字块带 rule_bar／suspect_empty／bad_seg（界行杆、空薄片、坏切）；
+    - `ctx_guard_ref_blank`：坐标对位说此位是空格、库又不是 same → 字块不是字；
+    - `ctx_guard_ref`：坐标对位的整理本字与 context 字语义不同、库不是 same → 默认字取整理本。
+    """
+    if p.context_guard_diff and r.verdict == "diff" and r.cov < p.context_guard_cov:
+        return "ctx_guard_diff", None
+    if p.context_guard_flags and im is not None:
+        bad = set(p.context_guard_flag_set.split(",")) & set(im.flags)
+        if bad:
+            return "ctx_guard_flag", None
+    ref = coord.get(r.id)
+    if ref is not None and r.verdict != "same" and ref != "〓":
+        if ref == "":
+            if p.context_guard_ref_blank:
+                return "ctx_guard_ref_blank", None
+        elif p.context_guard_ref_prefer and vmap.semantic(ref) != vmap.semantic(ctx_char):
+            return "ctx_guard_ref", ref
+    return None
+
+
 def _approx_fingerprint(db_path: str) -> str:
     """近似字侧表的内容戳；库不存在、没有这张表、表空 → ""（见 `SeedAdmitParams.approx_gate`）。"""
     import hashlib
@@ -1364,49 +1636,38 @@ class _PairAwareMap:
         return getattr(self._base, name)
 
 
-def _cnn_top(book: str, page: int, col: int, slot: int, sub: str | None) -> str | None:
+def _cnn_top(book, page: int, col: int, slot: int, sub: str | None) -> str | None:
     """CNN embedding 检索的 top1 字（模板 = 字体 + 康熙字头 + 字统网真刻本）。
 
     只给 `match_solo_cnn` 用：无整理本 + 库形状落在 0.95~0.99 灰区时的第二路背书。
-    没图 / 没 checkpoint → None（通道自动不触发）。
+    没 checkpoint / 没装 torch → None（通道自动不触发）；**没图 → 抛 `PatchUnavailable`**
+    （2026-10-05 前是 None，图读不到这一路就悄悄关了，overview#407）。
     """
     try:
-        import cv2
-
         from ..clustering.cnn_candidates import shared
+        cc = shared()
+        if not cc.available:
+            return None
+    except Exception:
+        return None
+    img = _page_patch(book, page, col, slot, sub)     # 通道开着才读图；读不到抛错
+    try:
         from ..clustering.font_candidates import book_charset
         from ..clustering.normalize import normalize_patch
-        from ..products.cache import ImageCache
-        key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
-        path = ImageCache().get(book, "char_patch", key)
-        if path is None:
-            return None
-        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return None
-        cc = shared()
         top = cc.emb_topk(normalize_patch(img), tuple(book_charset()), k=1)
         return top[0][0] if top else None
     except Exception:
         return None
 
 
-def _image_ranks(book: str, page: int, col: int, slot: int, sub: str | None,
+def _image_ranks(book, page: int, col: int, slot: int, sub: str | None,
                  forms: list[str]) -> dict | None:
-    """组内 closed-set 检索要看图：从 Step4 落的 `char_patch` 缓存取字块。没图 → None。"""
+    """组内 closed-set 检索要看图：取 Step4 的 `char_patch`。**没图 → 抛 `PatchUnavailable`**
+    （2026-10-05 前是 None，overview#407）；检索本身出错仍是 None。"""
+    img = _page_patch(book, page, col, slot, sub)
     try:
-        import cv2
-
         from ..clustering.normalize import normalize_patch
         from ..clustering.variant_form import image_ranks_for
-        from ..products.cache import ImageCache
-        key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
-        path = ImageCache().get(book, "char_patch", key)
-        if path is None:
-            return None
-        img = cv_imread(str(path), cv2.IMREAD_GRAYSCALE)
-        if img is None:
-            return None
         return image_ranks_for(normalize_patch(img), forms)
     except Exception:
         return None

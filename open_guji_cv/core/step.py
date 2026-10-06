@@ -412,7 +412,7 @@ class RunContext:
         path = self._page_path(page)
         img = imread(str(path), 0) if path.exists() else None
         if img is None:
-            raise FileNotFoundError(f"原图缺失: {path}")
+            raise FileNotFoundError(f"原图缺失或读不出来: {path}")
         if img.ndim == 3:
             import cv2
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
@@ -476,10 +476,13 @@ class RunContext:
             stamp=self.cache_stamp(kind_id, key))
 
     def image(self, kind_id: str, key: str) -> np.ndarray:
-        img = imread(str(self.materialize(kind_id, key)), 0)
-        if img is None:
-            raise FileNotFoundError(f"缓存图像读不出来: {kind_id} {key}")
-        return img
+        """读派生图像（缓存没有就现算）。读不出来一律抛错（`strict`），不返回 None——
+        调用方拿到的要么是图、要么是异常，没有第三种（overview#407）。"""
+        path = self.materialize(kind_id, key)
+        try:
+            return imread(str(path), 0, strict=True)
+        except OSError as e:
+            raise FileNotFoundError(f"缓存图像读不出来: {kind_id} {key}（{path}）: {e}") from e
 
 
 # ── Step 基类 ─────────────────────────────────────────────────────────

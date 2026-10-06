@@ -193,7 +193,17 @@ def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
     if b.status == "draft":
         b.status = "open"
     out = {"appended": n, "batch": req.batch}
-    if req.consume and n:
+    from ...review.label_batches import is_label_batch
+    if req.consume and n and is_label_batch(req.batch, deps.batch_store().root):
+        # L3 补标签批（`guji label-batch make` 冻结了卡片文件）：**只写事件，不消费**。
+        # 路由表会把 cutline/glued/none 事件落进工作区裁决表并把 Step3/Step2 产物标 invalidated——
+        # 补标签不该动现行产物；收割走 `guji label-batch harvest`，直接进 dataset。
+        out_skip = "L3 补标签批：只写事件，不自动消费（收割用 guji label-batch harvest）"
+    else:
+        out_skip = None
+    if out_skip:
+        out["consume_skipped"] = out_skip
+    if req.consume and n and not out_skip:
         # 写完直接消费（见 EventsIn.consume）。**失败不抛**：事件已经落盘，
         # 消费只是把它送进字形库/金标，出了岔子在「收割与消费」那块补跑即可——
         # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。

@@ -98,12 +98,13 @@ export const BORDER_REVIEW_SPECS: Record<BorderReviewKind, {
   colborder: {
     question: 'column_warp.page.border_class',
     title: '单列矫正·上下版框核校',
-    howto: '一张卡是一列的一端（上端或下端）。图已经把两侧界行清掉了、只留文字带那一段宽度，并且一律转成「版框在上、字在下」。右边那条是沿水平方向的投影。只需要点一个类别，不用标坐标。',
+    howto: '一张卡是一列的一端（上端或下端）。图是**削版框之前**的样子，已把两侧界行清掉、只留文字带那一段宽度，并且一律转成「版框在上、字在下」。右边那条是沿水平方向的投影。只需要点一个类别，不用标坐标：无框＝这一端没有版框墨；可削＝版框与首字之间有间隙、整段削掉不伤字；粘字＝版框粘着首字、削不开；双层＝版框是两道（外粗内细等）要连第二道一起削。',
     eventKind: 'border_class',
     options: [
-      { key: 'clean', label: '有间隙', color: 'var(--ok)', soft: 'var(--ok-soft)' },
-      { key: 'glued', label: '粘连', color: 'var(--zhu)', soft: 'var(--zhu-soft)' },
-      { key: 'none', label: '没残墨', color: 'var(--indigo)', soft: 'var(--indigo-soft)' },
+      { key: 'none', label: '无框', color: 'var(--indigo)', soft: 'var(--indigo-soft)' },
+      { key: 'trim', label: '可整段削', color: 'var(--ok)', soft: 'var(--ok-soft)' },
+      { key: 'glued', label: '粘字', color: 'var(--zhu)', soft: 'var(--zhu-soft)' },
+      { key: 'double', label: '双层框', color: 'var(--ochre)', soft: 'var(--ochre-soft)' },
       { key: 'idk', label: '拿不准', color: 'var(--faint)', soft: 'var(--faint-soft)' },
     ],
   },

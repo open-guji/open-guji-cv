@@ -110,6 +110,8 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
            "skip_decided": skip_decided, "group": group, "sample_limit": sample_limit}
     if group in ("char", "shape"):
         req.update(cluster=cluster, cluster_thr=cluster_thr)
+    elif group == "cluster":
+        req.update(cluster_thr=cluster_thr)
     try:
         parse_doubt_filter(doubt)
     except ValueError as e:
@@ -140,6 +142,10 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
             return cards_by_shape(book, pages, only, st, gate_cut=gate_cut,
                                   skip_decided=skip_decided, sample_limit=sample_limit,
                                   cluster=cluster, cluster_thr=cluster_thr, doubt=doubt)
+        if group == "cluster":
+            return cards_by_cluster(book, pages, only, st, gate_cut=gate_cut,
+                                    skip_decided=skip_decided, sample_limit=sample_limit,
+                                    cluster_thr=cluster_thr, doubt=doubt)
         if group == "char":
             return cards_by_char(book, pages, only, st, gate_cut=gate_cut,
                                  skip_decided=skip_decided, sample_limit=sample_limit,
@@ -711,6 +717,66 @@ def cards_by_shape(book: str, pages: str, only: str, store,
            "blocked": d.get("blocked", []), "groups": groups}
     if on:
         res["cluster"] = _cluster_summary(groups, emb, cluster_thr)
+    _copy_doubt_counts(d, res)
+    return res
+
+
+def cards_by_cluster(book: str, pages: str, only: str, store, gate_cut: bool, skip_decided: bool,
+                     sample_limit: int, cluster_thr: float | None = None, doubt: str = "") -> dict:
+    """**先纯按形聚类、每类标一次**（用户 2026-10-01）：对全部待审格取字块图的 CNN embedding，
+    **不预设是什么字**（键恒定）直接聚簇，一簇一组，人给一个字、整簇提交，簇里不对的格点掉。
+
+    与 `group=shape` 的区别：那个先按「首选字/形近对池」分池、池内再拆；整理本或 AI 首选错了，
+    整池跟着带偏。这里分簇完全由形状决定，建议字只是簇内整理本字（缺则首选字）的多数票。
+    阈值缺省 `CLUSTER_THR`（0.95）；键恒定意味着形近对（今/令）可能并进一簇——`purity` 与
+    `ref_majority` 给出一致程度，组内逐格可剔。CNN 不可用时退回按首选字分组并写 `hint`。
+    """
+    emb: dict = {}
+    d = cards(book, pages, 10**9, only, store, gate_cut=gate_cut,
+              skip_decided=skip_decided, emb_out=emb, doubt=doubt)
+    cs = d["cards"]
+    cnn = cnn_candidates.shared()
+    missing = [c for c in cs if c["id"] not in emb]
+    if missing and cnn.available:
+        ctx = RunContext(load_book(book), store, deps.image_cache(), log=lambda s: None)
+        pats = [(c["id"], _card_norm_patch(book, ctx, c)) for c in missing]
+        pats = [(i, p) for i, p in pats if p is not None]
+        for s in range(0, len(pats), 256):
+            part = pats[s:s + 256]
+            for (i, _), v in zip(part, cnn.embed([p for _, p in part])):
+                emb[i] = np.asarray(v, np.float32)
+    thr = CLUSTER_THR if cluster_thr is None else float(cluster_thr)
+    by_id = {c["id"]: c for c in cs}
+    clusters = cluster_tiles(cs, lambda c: emb.get(c["id"]), lambda c: 0, thr) if emb else []
+    groups: list[dict] = []
+    for cl in clusters:
+        tiles_c = [by_id[m["id"]] for m in cl["members"] if m["id"] in by_id]
+        sims = {m["id"]: m.get("sim") for m in cl["members"]}
+        ai_char, ai_n = _majority([_top_pick(t) for t in tiles_c])
+        ref_char, ref_n = _majority([(t.get("ref") or {}).get("char") for t in tiles_c])
+        char, n_maj = (ref_char, ref_n) if ref_char is not None else (ai_char, ai_n)
+        pages_n: dict[int, int] = {}
+        for t in tiles_c:
+            pages_n[t["page"]] = pages_n.get(t["page"], 0) + 1
+        n = len(tiles_c)
+        groups.append({
+            "pool": f"簇{cl['id']}", "char": char, "candidates": _shape_candidates(tiles_c, char),
+            "ai_majority": {"char": ai_char, "n": ai_n} if ai_char is not None else None,
+            "ref_majority": {"char": ref_char, "n": ref_n} if ref_char is not None else None,
+            "purity": round(n_maj / n, 4) if n else 0.0, "clustered": True, "n": n,
+            "pages": [{"page": p, "n": v} for p, v in sorted(pages_n.items())],
+            # 与代表图最像的排前面、最不像的（最可能混进来的）排最后，限 sample_limit
+            "tiles": sorted(tiles_c, key=lambda t: -(sims.get(t["id"]) or 0.0))[:sample_limit],
+            "truncated": n > sample_limit,
+        })
+    if not emb:                          # 没有 embedding：退回按首选字分组，不比 group=char 更差
+        groups = _build_shape_groups(cs, sample_limit, get_patch=lambda c: None, embed=None)
+    groups.sort(key=lambda g: (-g["n"], g["pool"]))
+    hint = (None if cnn.available else
+            "CNN checkpoint 不可用（缺 torch 或 models/glyph_cnn_r5/best.pt），没法按形聚类——已按字种分组。")
+    res = {"book": book, "mode": "cluster", "cluster_ready": bool(emb), "hint": hint,
+           "thr": thr, "n_total": len(cs), "n_decided": d.get("n_decided", 0),
+           "blocked": d.get("blocked", []), "groups": groups}
     _copy_doubt_counts(d, res)
     return res
 

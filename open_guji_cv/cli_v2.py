@@ -86,6 +86,9 @@ def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
     pages = eng.book.resolve_pages(args.pages)
     st = eng.status(pages=pages)
+    gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
+    st["closure_gaps"] = gaps
+    st["closure_mismatches"] = mism
     if args.json:
         print(json.dumps(st, ensure_ascii=False))
         return
@@ -104,6 +107,53 @@ def cmd_status(args) -> None:
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
+    _print_closure_gaps(gaps)
+    _print_closure_mismatches(mism)
+
+
+def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
+    """收尾不变量（overview#403 缺口 C，`verdict_view.closure_gaps`）与报告项（`closure_mismatches`）；
+    算不出来 → None，不拖垮 status。"""
+    from .review.verdict_view import closure_gaps, closure_mismatches
+    out = []
+    for name, fn in (("收尾闸", closure_gaps), ("裁放不一致", closure_mismatches)):
+        try:
+            out.append(fn(book, pages, store))
+        except Exception as e:  # noqa: BLE001
+            print(f"  （{name}没算出来：{type(e).__name__}: {e}）", file=sys.stderr)
+            out.append(None)
+    return out[0], out[1]
+
+
+def _print_closure_mismatches(mism: list[dict] | None, show: int = 30) -> None:
+    """报告项，不要求为 0：人裁的字 ≠ 现行放行的字，人扫一眼（己已巳族单列）。"""
+    if mism is None:
+        return
+    main = [m for m in mism if m["kind"] == "main"]
+    jys = [m for m in mism if m["kind"] == "jys"]
+    print(f"  报告 · 人裁字≠放行字 {len(main)} 格（不要求为 0，扫一眼：多为老裁决钉在移位格上被正确丢掉）"
+          + (f"；己已巳族 {len(jys)} 格另列" if jys else ""))
+    for m in main[:show]:
+        print(f"      {m['id']}  人裁 {m['shape']} → 放行 {m['char']}")
+    if len(main) > show:
+        print(f"      …另 {len(main) - show} 格（--json 看全部）")
+    if jys:
+        print("      己已巳：" + "  ".join(f"{m['id']} {m['shape']}→{m['char']}" for m in jys[:show])
+              + (" …" if len(jys) > show else ""))
+
+
+def _print_closure_gaps(gaps: list[dict] | None, show: int = 30) -> None:
+    if gaps is None:
+        return
+    if not gaps:
+        print("  收尾闸 ✓ 已定字却没出字 0 格")
+        return
+    print(f"  收尾闸 ✗ 已定字却没出字 {len(gaps)} 格（收尾前必须为 0；"
+          "Step7 过期先重跑，仍在的去控制台审查页补确认——失效老裁决会带预勾出卡）")
+    for g in gaps[:show]:
+        print(f"      {g['id']}  {g['shape']}{'  [排除名单]' if g['excluded'] else ''}")
+    if len(gaps) > show:
+        print(f"      …另 {len(gaps) - show} 格（--json 看全部）")
 
 
 def cmd_fp_migrate(args) -> None:
@@ -472,6 +522,40 @@ def cmd_batch(args) -> None:
             print(f"没有批次 {args.id}")
             sys.exit(1)
         print(json.dumps(store.refresh_counts(b, log).to_dict(), ensure_ascii=False, indent=1))
+
+
+def cmd_label_batch(args) -> None:
+    """L3 补标签两批：make（出批次）| harvest（收割进 dataset）| migrate-legacy（旧 overview 列端卡入新分片）。"""
+    from .review import label_batches as LB
+    try:
+        if args.action == "make":
+            fn = {"cutline-gold": LB.build_cutline_gold, "column-end": LB.build_column_end}[args.kind]
+            if not args.book:
+                raise ValueError("make 需要册 id：guji label-batch make <cutline-gold|column-end> <册>")
+            n = args.n or (200 if args.kind == "cutline-gold" else 240)
+            out = fn(args.book, n=n, batch_id=args.id, pages=args.pages, seed=args.seed)
+            print(json.dumps(out, ensure_ascii=False, indent=1))
+            where = ("Step3「拖切线」页码框填 " + out["console_pages"] if "console_pages" in out
+                     else "Step1 页「Step2 上下版框核校」页码框填 batch:" + out["batch"])
+            print(f"\n控制台：{where}；批次框填 {out['batch']}")
+        elif args.action == "harvest":
+            from .gold.store import GoldStore
+            ds = GoldStore(Path(args.dataset)) if args.dataset else None
+            print(json.dumps(LB.harvest_batch(args.kind, dataset=ds), ensure_ascii=False, indent=1))
+        elif args.action == "migrate-legacy":
+            from .gold.store import GoldStore
+            ds = GoldStore(Path(args.dataset)) if args.dataset else None
+            print(json.dumps(LB.migrate_legacy_overview(Path(args.kind), book=args.book or "vol02", dataset=ds),
+                             ensure_ascii=False, indent=1))
+    except (FileNotFoundError, FileExistsError, ValueError) as e:
+        print(f"错误：{e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:                                  # noqa: BLE001
+        from .errors import ProductMissing
+        if isinstance(e, ProductMissing):
+            print(f"错误：{e}", file=sys.stderr)
+            sys.exit(1)
+        raise
 
 
 def cmd_events(args) -> None:
@@ -1698,6 +1782,7 @@ def cmd_runs(args) -> None:
 
 
 COMMANDS_V2 = {
+    "label-batch": cmd_label_batch,
     "preclean": cmd_preclean,
     "binarize": cmd_binarize,
     "split": cmd_split,
@@ -2133,6 +2218,16 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--n-cards", type=int, default=0)
     p.add_argument("--json", action="store_true")
     p.add_argument("--md", action="store_true", help="出台账 markdown")
+
+    p = sub.add_parser("label-batch", help="[v2] L3 补标签两批：make cutline-gold|column-end <册> | harvest <批次> | migrate-legacy <文件>")
+    p.add_argument("action", choices=["make", "harvest", "migrate-legacy"])
+    p.add_argument("kind", help="make 时：cutline-gold | column-end；harvest 时：批次 id；migrate-legacy 时：旧 verdicts.jsonl 路径")
+    p.add_argument("book", nargs="?", default=None, help="make：册 id；migrate-legacy：册（缺省 vol02）")
+    p.add_argument("--n", type=int, default=0, help="张数（缺省：切线 200 / 列端 240）")
+    p.add_argument("--id", default=None, help="批次 id（缺省自动命名）")
+    p.add_argument("--pages", default="body", help="body（缺省，21 格标准版式页）| dev_set | 页号表达式")
+    p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--dataset", default=None, help="测试集仓路径（缺省 GUJI_DATASET_DIR 或 ../open-guji-dataset）")
 
     p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts")
     p.add_argument("action", choices=["harvest", "route", "list", "verdicts"])

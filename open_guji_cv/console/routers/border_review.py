@@ -21,6 +21,7 @@ from ..auth import require_reviewer
 from ..errors import maps_http
 from ...core.book import load_book
 from ...core.step import RunContext
+from ...errors import ProductMissing
 from ...review import border_cards as bc
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
@@ -41,6 +42,15 @@ def api_border_review_cards(book: str, kind: str, pages: str = "dev_set") -> dic
     build = _CARD_BUILDERS.get(kind)
     if build is None:
         raise HTTPException(404, f"没有这一类裁决卡：{kind}")
+    if pages.startswith("batch:"):
+        # L3 补标签批：卡片在出批次时冻结（分层抽样 + 权重 + 指纹），这里只回放
+        if kind != "colborder":
+            raise HTTPException(400, "batch: 只支持 colborder（列端版框分档）")
+        try:
+            cards = bc.batch_cards(pages[6:].strip())
+        except ProductMissing as e:
+            raise HTTPException(404, str(e)) from e
+        return {"book": book, "kind": kind, "pages": pages, "n": len(cards), "cards": cards}
     bk = load_book(book)
     pg = bk.resolve_pages(pages)
     cards = build(deps.product_store(), book, pg)
@@ -97,7 +107,8 @@ def _encode(img, q: int = 82) -> Response:
 @router.get("/api/border-review/img/{book}/{page}.jpg")
 @maps_http
 def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
-                          col: int = 0, w: int = 560, overlay: int = 1) -> Response:
+                          col: int = 0, w: int = 560, overlay: int = 1,
+                          src: str = "image") -> Response:
     """各类卡片各自的图。**不缓存**——画的是产物，重跑一步就变了（同
     `products.py::_png` 的教训：2026-09-10 缓存过一次「重跑完还是旧图」）。
     """
@@ -114,7 +125,7 @@ def api_border_review_img(book: str, page: int, kind: str, side: str = "top",
     if kind == "colborder":
         b = load_book(book)
         ctx = RunContext(b, st, deps.image_cache(), log=lambda s: None)
-        crop, prof = bc.render_colborder_img(ctx, book, page, col, side)
+        crop, prof = bc.render_colborder_img(ctx, book, page, col, side, src=src)
         # 投影曲线随图一起画在右侧，避免前端再单独拉一个数据端点
         h, _cw = crop.shape
         strip = np.zeros((h, 48), dtype=np.uint8)

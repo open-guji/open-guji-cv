@@ -75,11 +75,12 @@ import os
 from pathlib import Path
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec, cell_key, column_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.chars import PageChars
+from ..clustering.near_shape import NearShapeConfig
 from ..products.kinds.recog import CandidateMatch, ColumnMatch, MatchRec, PageMatch
 
 def _default_db() -> str:
@@ -173,6 +174,20 @@ class GlyphMatchParams(BaseModel):
     只在候选首位落在这 8 个字上时改候选排序，别的字不受影响（任务书
     R-形近四对：「别动全局阈值」）。书级 yaml `params: {glyph_match: {shape_pair_rerank: true}}`
     可开。"""
+    near_shape: dict | bool | None = None
+    """近形决胜（`clustering.near_shape`，2026-10-01 M5）。None/false = 关（缺省，产物与参数指纹
+    逐字节不变）；`true` 或 `{}` = 按默认值开；`{tau: 0.9, ...}` 覆盖 `NearShapeConfig` 的个别字段。
+    开了以后：首选与次优异字 cov 差 < 0.03 时用两字人裁刻例求差异区域局部决胜，决出的字挪到候选
+    首位，证据落 `MatchRec.near_shape`；匹配器没判护栏的 unsure 格再升 same（`via="near_shape:<s>"`）。
+    书级 yaml `params: {glyph_match: {near_shape: true}}` 可开。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_near_shape(self, handler):
+        # 没开时不进 model_dump：params_hash 靠它算，否则加这个字段就会把全部现役产物判过期
+        d = handler(self)
+        if isinstance(d, dict) and d.get("near_shape") in (None, False):
+            d.pop("near_shape", None)
+        return d
 
     def model_post_init(self, _ctx) -> None:
         # pydantic v2 的 model_post_init 里改字段要绕过校验（模型非 frozen，
@@ -258,7 +273,8 @@ class GlyphMatchStep(Step):
         # 产物里记的 db_fingerprint 三处必须是同一个值，否则边跑边审时三者会各说各话
         matcher, _chars = cached_matcher_from_db(
             p.db_path, p.db_fingerprint, edition=p.edition, knn_k=p.knn_k,
-            norm_stroke=p.norm_stroke, local_shape_rerank=p.shape_pair_rerank)
+            norm_stroke=p.norm_stroke, local_shape_rerank=p.shape_pair_rerank,
+            near_shape=NearShapeConfig.from_any(p.near_shape))
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -274,6 +290,7 @@ class GlyphMatchStep(Step):
             # 现代链：库域默认 = 这本书自己长的库（三模式方案 §五.2）
             p = p.model_copy(update={"edition": f"modern:{ctx.book.id}"})
         matcher = self._matcher(p)
+        ns_cfg = NearShapeConfig.from_any(p.near_shape)
         # 共识升档要的人裁例数：一次 run 里几十页共用，按库指纹缓存在 step 实例上
         key = (p.db_path, p.db_fingerprint)
         if getattr(self, "_confirmed_key", None) != key:
@@ -304,12 +321,10 @@ class GlyphMatchStep(Step):
                     recs.append(reuse[r.id])
                     n_reused += 1
                     continue
-                try:
-                    img = ctx.image("char_patch", r.patch_key)
-                except Exception as e:              # 图块再生不出来就跳过，不炸整页
-                    recs.append(MatchRec(id=r.id, slot=r.slot, sub=r.sub,
-                                         verdict="diff", guard=f"no_patch:{e}"))
-                    continue
+                # 图块读不到 / 再生不出来 → 整页失败（引擎记 failed、旧产物不动），不降级。
+                # 2026-10-05 前这里吞异常记成 diff+`no_patch`，接着往下放行，读图出问题时
+                # 整页静默变质而状态显示正常（overview#407）。
+                img = _patch(ctx, r.patch_key, page)
                 is_punct = (getattr(r, "step3_kind", None) == "punct")
                 m = matcher.match(normalize_patch(img, is_punct),
                                   exclude_id=(r.id if p.exclude_self else None))
@@ -317,8 +332,11 @@ class GlyphMatchStep(Step):
                 for cv in (r.cand_variants or []):
                     try:
                         cimg = ctx.image("char_patch", cv.patch_key)
-                    except Exception:
-                        continue    # 候选试切图块再生不出来就跳过，不炸整页
+                    except (KeyError, ValueError):
+                        # 候选试切的键（`…_L0`）按设计不可再生（cell_shrink.render 反解不了）：
+                        # 缓存里没有就是没有（云端快照不带 cache/），只少这一路证据、不影响本格判决。
+                        # 文件在却读不出来是 OSError，不在这里接——照样停页（overview#407）。
+                        continue
                     cm = matcher.match(normalize_patch(cimg, is_punct),
                                        exclude_id=(r.id if p.exclude_self else None))
                     cand_variants.append(CandidateMatch(
@@ -334,6 +352,11 @@ class GlyphMatchStep(Step):
                                          p.consensus_min_confirmed)
                     if hit:
                         verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
+                ns = m.near_shape
+                if (ns_cfg is not None and verdict == "unsure" and ns and ns.get("winner")
+                        and (m.guard is None or ns_cfg.allow_guarded)):
+                    # 近形决胜升档（与共识升档同层、互不重叠：触发要求差距 < 0.03，共识要求 ≥ 0.03）
+                    verdict, char, via = "same", ns["winner"], f"near_shape:{ns['score']:+.2f}"
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
                     verdict=verdict, char=char, matched_id=m.matched_id,
@@ -341,11 +364,22 @@ class GlyphMatchStep(Step):
                     candidates=[(c, round(float(v), 4))
                                 for c, v in m.candidates[:p.max_candidates]],
                     guard=m.guard, n_verified=int(m.n_verified), via=via,
-                    cand_variants=cand_variants))
+                    cand_variants=cand_variants, near_shape=m.near_shape))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         log_reuse(ctx, self, page, n_reused, n_total)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
+
+
+class PatchUnavailable(RuntimeError):
+    """本页某个字块读不到也再生不出来——这一页必须停下，不能降级成垃圾判决（overview#407）。"""
+
+
+def _patch(ctx: RunContext, key: str, page: int):
+    try:
+        return ctx.image("char_patch", key)
+    except Exception as e:                  # noqa: BLE001 —— 换成带页号与键的错误再抛，不吞
+        raise PatchUnavailable(f"p{page} 字块 {key} 读不到: {type(e).__name__}: {e}") from e
 
 
 def glyph_match_summary(book_id: str, pages: list[int] | None = None,

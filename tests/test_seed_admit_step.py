@@ -17,8 +17,11 @@ OCR 置信度不参与自动判断；库匹配按 cov 分档、0.99 是拐点。
 from __future__ import annotations
 
 import open_guji_cv.steps  # noqa: F401
+import pytest
 from helpers import make_book, make_ctx, page_decision, page_match, write_product
 from open_guji_cv.core.step import KINDS, STEPS
+
+pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
 
 BOOK, PAGE, COL = "tbook", 1, 1
 

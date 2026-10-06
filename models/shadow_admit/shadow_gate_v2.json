@@ -1,0 +1,36 @@
+{
+ "format": 1,
+ "signal_version": "2",
+ "features": [
+  "lib_cov",
+  "lib_in",
+  "lib_top1",
+  "lib_margin",
+  "lib_top_cov",
+  "human_n",
+  "human_any",
+  "rare_score",
+  "ref_eq",
+  "ref_sem",
+  "ref_none",
+  "confusable",
+  "rare_rank",
+  "rare_top1",
+  "ref_rare1",
+  "lib_ref_var"
+ ],
+ "sklearn": "1.9.1",
+ "model_id": "shadow_gate_v2",
+ "classifier": "HistGradientBoostingClassifier(max_iter=300, lr=0.05, max_leaf_nodes=15, l2=1.0, seed=0)",
+ "calibration": "无单独校准：逐格归一 predict_proba 作把握度；门槛按人裁集实测错误率定（HANDOFF_D3.md）",
+ "train_books": {
+  "vol02": 1237,
+  "vol03": 500
+ },
+ "n_cells": 1737,
+ "n_rows": 9704,
+ "cv_commit": "eec5a184d43db639c7cbf197e3576645a99e7752",
+ "trained_at": "2026-10-02T04:08:17Z",
+ "notes": "D3 影子升级；训练域 all；标签 = vol02/vol03 人裁；无 LM 窗口分（未做）。",
+ "fingerprint": "f4c6f41e528c06e6"
+}

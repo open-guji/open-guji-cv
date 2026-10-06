@@ -188,3 +188,13 @@ def test_theirs_after_rerun_with_new_ref_goes_pending():
     evs = [_ev(1, "collate_verdict", {"pair": ["甲", "乙"], "who": "theirs"})]
     items = build_items([_diff(1, "乙", "丙")], human_verdicts(evs, "bxgb"), _tier())
     assert [(tuple(it["pair"]), it["who"]) for it in items] == [(("乙", "丙"), "pending")]
+
+
+def test_seg_payload_jiazhu_is_truncated_plus_reason_and_reads_back():
+    """「小注当正文」（Step8 复核卡的第三个勾）：quality=truncated + reason=jiazhu_as_main，与定字台按钮同一形。"""
+    p = seg_payload(["jiazhu"])
+    assert p["quality"] == "truncated" and p["reason"] == "jiazhu_as_main" and p["defect"] == "jiazhu"
+    assert "reason" not in seg_payload(["truncated"])
+    both = seg_payload(["contaminated", "jiazhu"])
+    assert both["quality"] == "contaminated" and both["reason"] == "jiazhu_as_main"
+    assert both["defect"] == "contaminated,jiazhu"

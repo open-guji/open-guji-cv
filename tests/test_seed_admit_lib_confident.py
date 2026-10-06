@@ -8,10 +8,13 @@
 from __future__ import annotations
 
 import open_guji_cv.steps  # noqa: F401
+import pytest
 from helpers import (make_book, make_ctx, page_align_ref, page_decision,
                      page_match, write_product)
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _confusable_char
+
+pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
 
 BOOK, PAGE, COL, SLOT = "tbook", 1, 1, 15
 TOP, SECOND = "耶", "則"          # 实例取自 vol04:154:3:19（Z10 点名的放宽候选）

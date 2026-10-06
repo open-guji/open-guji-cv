@@ -40,7 +40,7 @@ TODO = tuple(k for k in COLS if k not in ("excluded", "review_decided"))
 def page_progress(book: str, pages: list[int], store: ProductStore | None = None) -> dict:
     """→ `{"book", "pages": [{"page", 七个数, "stale_steps": [...]}], "totals": {...}}`。"""
     from ..review.cards import cut_pending
-    from ..review.verdict_view import decided_cells
+    from ..review.verdict_view import decided_view
 
     st = store or ProductStore()
     bk = load_book(book)
@@ -55,7 +55,10 @@ def page_progress(book: str, pages: list[int], store: ProductStore | None = None
     cut_by_page: dict[int, int] = {}
     for (pg, _col, _slot) in cut:
         cut_by_page[pg] = cut_by_page.get(pg, 0) + 1
-    decided = decided_cells(book)
+    decided, stale = decided_view(book)
+    # 名单上人给过字、但那条裁决已失效（overview#403 缺口 A）：定字台把它放回来出卡（`cards`），
+    # 这里同口径记进待人裁，`review_new` 才与出卡数逐 id 相等。
+    requeued = {k for k, v in stale.items() if (v.get("verdict") or {}).get("shape")}
     rebind_by_page = _rebind_pending(book, pages, st)
 
     step3 = cells_step(book)
@@ -75,7 +78,9 @@ def page_progress(book: str, pages: list[int], store: ProductStore | None = None
                 for s in page_slots(st, book, pg, []):
                     if s.kind == "blank":
                         continue
-                    if s.excluded:
+                    if (s.excluded or s.defect) and s.id in requeued and not s.char:
+                        row["review_new"] += 1
+                    elif s.excluded:
                         row["excluded"] += 1
                     elif s.defect:
                         row["defect"] += 1
