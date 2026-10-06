@@ -10,13 +10,8 @@ import sys
 from pathlib import Path
 
 
-def _book_out_dir(args) -> Path:
-    """`import` 用：书输出目录 -o/<书名>/。path 仅用于取书名。"""
-    return Path(getattr(args, "output", "output")) / Path(args.path).name
-
-
 def cmd_glyph_db(args):
-    """M8 跨书字形数据库：import 收尾入库 / stats 概览。
+    """M8 跨书字形数据库：stats / export / rebuild / import-font / 自检。
 
     索引库（SQLite）的落盘位置统一交给 `core.workspace.glyph_db_path()` 解析
     （`GUJI_GLYPH_DB` → `GUJI_WORKSPACE/output/glyph.db` → 仓内默认），不再由
@@ -92,15 +87,6 @@ def cmd_glyph_db(args):
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
                 jobs=args.jobs, vertical=args.vertical)
-        elif args.action == "import":
-            if not args.path:
-                print("import 需要书目录参数"); sys.exit(1)
-            meta = {"collection": args.collection,
-                    "script_style": args.script_style,
-                    "title": args.title}
-            summary = db.import_book(_book_out_dir(args),
-                                     edition_tag=args.edition,
-                                     source_meta=meta)
         elif args.action == "set-edition":
             # 一本书一个 edition：把库里全部刻本字形并到 --edition（字形库 06）
             if not args.edition:
@@ -148,7 +134,7 @@ def add_parser(sub) -> None:
     """在 `sub`（argparse 子命令表）上注册 `glyph-db`。"""
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
-                   choices=["import", "stats", "export", "rebuild",
+                   choices=["stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
                             "set-edition"])
     p.add_argument("-w", "--workspace", default=None,
@@ -162,7 +148,6 @@ def add_parser(sub) -> None:
                    help="selfcheck 用：只在本书内比，不拿兄弟工作区的库当参照")
     p.add_argument("--apply", action="store_true",
                    help="repair / set-edition 用：真写库（不加只报告）")
-    p.add_argument("path", nargs="?", help="书文件夹路径（import 用）")
     p.add_argument("--store", default=None,
                    help="字形库目录（真源）。不传按 core.workspace 解析"
                         "（GUJI_WORKSPACE 设了就是 <工作区>/output/glyph_store，"
@@ -177,8 +162,8 @@ def add_parser(sub) -> None:
     p.add_argument("--no-borrow", action="store_true",
                    help="rebuild 用：不借任何库（无视 workspace.yaml 的 glyph_lib.borrow），只用本书自有库")
     p.add_argument("--edition", default=None,
-                   help="版本 edition_tag（import 默认=书名；"
-                        "import-font 用于只导 manifest 里的某一套字体）")
+                   help="版本 edition_tag（import-font 用于只导 manifest 里的某一套字体；"
+                        "drop-edition / set-edition 用）")
     p.add_argument("--manifest", default="config/fonts/manifest.json",
                    help="字体清单（import-font 用）")
     p.add_argument("--vertical", action="store_true",
@@ -192,8 +177,5 @@ def add_parser(sub) -> None:
     p.add_argument("--jobs", type=int, default=1,
                    help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
                         "写库仍单线程）")
-    p.add_argument("--collection", default=None, help="丛书（如 武英殿聚珍版）")
-    p.add_argument("--script-style", default=None, help="字体（宋体刻/写刻/手写）")
     p.add_argument("--title", default=None, help="书名")
-    p.add_argument("-o", "--output", default="output", help="import 用：老的书输出目录根（v1 遗留口径）")
 
