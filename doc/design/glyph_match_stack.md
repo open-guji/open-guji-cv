@@ -105,7 +105,7 @@ same 闸则**按各自的量尺重新钉**，两个消费方分开——它们�
 | 集 | 量法 | 守什么 |
 |---|---|---|
 | glyph-match/triplets control | eval_match_triplets.py | 良例排序不回退 |
-| char-clustering 三分片 + hard_pairs | eval_clustering.py | purity ≥ 基线，难例对 never-make-worse |
+| char-clustering 三分片 + hard_pairs | eval_clustering.py（2026-10-06 随 v1 聚类评测删除） | purity ≥ 基线，难例对 never-make-worse |
 | char-normalization golden | eval_normalize.py | 归一化回归门 33/33（改 normalize 时）|
 | **glyph-match/pairs**（71497 对）| eval_match_pairs.py | **对级操作点**：knn 层 `precision ≥ 0.999` 下的最大 recall。改阈值/改判据必看 |
 | 库匹配协议基线 | eval_db_match.py | same 档 `match_precision` **≥ 0.999 硬约束**；覆盖率是另一本账 |

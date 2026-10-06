@@ -1,5 +1,5 @@
 {
-  "_doc": "字体字形来源清单。字体档随仓库提交在 fonts/（见 fonts/README.md：两套都是允许再分发的自由字体），字形图本身不进 Git——由字体档 + 字表确定性重建：python -m open_guji_cv glyph-db import-font。$GUJI_FONT_DIR 不设时默认指向仓库的 fonts/。取字与许可见 .claude/doc/glyph_db_expansion_research.md §2.2，渲染与几何约定见 glyph_canonical_format.md §4。",
+  "_doc": "字体字形来源清单。字体档随仓库提交在 fonts/（见 fonts/README.md：两套都是允许再分发的自由字体），字形图本身不进 Git——由字体档 + 字表确定性重建：python -m open_guji_cv glyph-db import-font。$GUJI_FONT_DIR 不设时默认指向仓库的 fonts/。取字与许可见 doc/research/glyph_db_expansion_research.md §2.2，渲染与几何约定见 glyph_canonical_format.md §4。",
   "charset": "config/charset/charset.ranges.tsv",
   "fonts": [
     {

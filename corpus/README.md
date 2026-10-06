@@ -87,4 +87,4 @@ OCR 原始錯誤未清）。
 
 簡→繁是**用可控噪聲換語料量**：opencc 一對多（發→發/髮）必然引入錯誤，
 故通用語料只配拿低權重，本書的乾淨語料才拿高權重。詳見
-`.claude/doc/charset_and_lm.md`。
+`doc/design/charset_and_lm.md`。

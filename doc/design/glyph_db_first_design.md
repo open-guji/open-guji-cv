@@ -229,7 +229,7 @@ context-margin 准入后重量一次，差值就是「裁决分支的贡献」�
   按页断点续跑）与 `guji-cv seed-ingest`（GUJI-SEED-EVENT →
   confirmed 以 human 进库，admissions 表幂等闸）。GlyphDB 新增
   `admit_instance`（原始图块真源 + 派生 + 证据 JSON + 审计行）。
-- **页面侧**：`review/seed_export.py` + `scripts/export_seed_review.py`
+- **页面侧**（2026-10-06 已删，审阅改走控制台）：`review/seed_export.py` + `scripts/export_seed_review.py`
   ——按页出 pending 卡片（原图+归一图、OCR 候选带 prob、对齐徽标、
   库内 cov、疑问中文说明），数字键/手输/N/S/U 单键裁决，三层持久化。
 - **接口契约**：`seed_queue.py`（疑问码 / SeedItem / 事件格式 / 应用

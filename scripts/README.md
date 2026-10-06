@@ -18,7 +18,6 @@
 - `eval_align_replace_gate.py`：Step5-d `replace` 段采信闸评测：长度闸（现役） vs 代价闸（emb 余弦 ⊕ IDS/异体关系）。
 - `eval_char_drop.py`：丢字普查：单字墨段有没有被**字格**接住（char-segmentation/char-drop）。
 - `eval_char_ocr.py`：char-ocr 评测：在冻结图块上量各引擎的 top1 / top5 / 异体字子集。
-- `eval_clustering.py`：保守聚类 purity benchmark（open-guji-dataset/char-clustering）。
 - `eval_column_warp.py`：拿 column-warp 金标量 Step2（单列矫正 + 界行清除）的准确度。
 - `eval_confusable_lm.py`：形近对消歧的 n-gram 语言模型臂。
 - `eval_confusable_recall.py`：校准形近对表（overview#128）：拿实测混淆对量召回，报表大小/门槛。**只读**——
@@ -34,7 +33,6 @@
 - `eval_guard_ceiling.py`：覆盖率天花板：硬约束 precision ≥ 0.999 下，闸能开多低、recall 有多少。
 - `eval_instance_quality.py`：评测管线对切分缺陷的自检能力（char-segmentation/instances）。
 - `eval_jiazhu_tail.py`：夹注段端收编回归（char-segmentation/jiazhu-tail）。
-- `eval_layout.py`：行列识别（列型判别）评测：当前管线 vs 金标。
 - `eval_llm_context.py`：跑 llm_context 评测集：真调用（有 key）或 --mock（没 key 也能跑通全链路）。
 - `eval_match_pairs.py`：匹配判据的**操作点**基准（glyph-match/pairs）。
 - `eval_match_triplets.py`：匹配三元组基准：同字形必须比形近异字更匹配。
@@ -101,13 +99,11 @@
 ## 导出（格式、审查材料、金标）（11）
 
 - `export_border_review_cards.py`：为 Step1 的三个金标标注页一次性备料（探测跑一遍，出三种卡片素材）。
-- `export_collation_review.py`：导出对勘复审页：我的定字 × 整理本的差异，逐条可改判、可打印 PDF。
 - `export_column_border_gold.py`：把「单列矫正·上下版框核校」的人裁结果并进 column-warp 金标。
 - `export_column_warp_gold.py`：把「单列矫正·文字带核校」标注页里的人裁结果导成 column-warp 金标。
 - `export_confusable_prompt.py`：把形近对消歧集导成**不含答案**的题面，供大模型（或人）盲测。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
 - `export_guji_page.py`：CV 产物 → guji-page v0.2（每字带坐标的页面文本）。只读产物，不改任何现有导出。
-- `export_seed_review.py`：导出「种子审查」单页 HTML（glyph_db_first_design.md §3.5 页面侧）。
 - `export_step3_input.py`：把 Step2 已经处理好、且**过了金标**的列推给 Step3 当输入。
 - `export_train_bundle.py`：把本机才有的训练/评测数据打成一个包，给没有工作区的机器（云端会话）用。
 - `export_wikisource.py`：Step9 结果整理 · 一键导出维基文库 `Page:` 页 wikitext。
