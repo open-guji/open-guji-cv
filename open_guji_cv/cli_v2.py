@@ -111,6 +111,23 @@ def cmd_status(args) -> None:
     _print_closure_mismatches(mism)
 
 
+def cmd_close_check(args) -> None:
+    """一册书交付前逐项体检（只读）。标准见 doc/runbook/整理一册书.md 第五节。"""
+    from .core.workspace import workspace_root, reports_root
+    from .ops import close_check as CC
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    res = CC.run(eng, workspace_root() or Path.cwd(), pages,
+                 export_dir=Path(args.export_dir) if args.export_dir else None,
+                 chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
+                 reports=reports_root())
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        CC.print_report(res)
+    sys.exit(0 if res["machine_ok"] else 1)
+
+
 def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
     """收尾不变量（overview#403 缺口 C，`verdict_view.closure_gaps`）与报告项（`closure_mismatches`）；
     算不出来 → None，不拖垮 status。"""
@@ -1798,6 +1815,7 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "close-check": cmd_close_check,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
     "console": cmd_console,
@@ -2135,6 +2153,16 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("close-check",
+                       help="[v2] 一册书交付前逐项体检（只读）：新鲜、缓存、待审、收尾闸、真源已提交、lines/pages 自洽、Step9")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--export-dir", default=None, help="export_guji_format 的输出目录（查 lines.md 与 pages.json）")
+    p.add_argument("--chapter", default=None, help="章号 NNN；目录里有多章时用")
+    p.add_argument("--notes", default=None, help="overview 里本册的记录目录（查避諱表、收尾记录）")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("recheck",
