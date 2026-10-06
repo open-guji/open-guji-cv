@@ -13,17 +13,17 @@ export const CLASS_HELP: Record<string, string> = {
     + '<b>1</b> 采信首选 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡',
   form_open: '义定形未定：只在「组内形」里挑本书刻的那个形。<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>S</b> 跳过 · <b>←/→</b> 翻卡',
   lib_miss: '库里没有：多半是生僻字，当前卡自动「查候选」（字体模板 + CNN 10 个）。'
-    + '<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>T/C</b> 切分缺陷 · <b>Z</b> 小注当正文 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损',
+    + '<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>T/C</b> 切分缺陷 · <b>Z</b> 小注当正文 · <b>M</b> 正文当小注 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损',
   // 对齐改字层按细项分（overview#265）：键 = `replace_align:<细项>`，见 `classHelpKey`
   'replace_align:grid': '对齐改字层 · 网格：每张缺省<b>采信整理本</b>（下面那个字，<b>不点 = 字对、其余也对</b>）。'
     + '有疑问（有噪声、整理本字不对、字形不完整…）的<b>点一下</b>标「要细审」，再点取消；'
     + '「提交这一屏」后，标了的转到「逐张」去选具体原因，其余整屏采信。',
   'replace_align:tail': '对齐改字层 · 列尾（第 20 格起，易混框线）：常见<b>下版框线混进字块</b>（<b>C</b> 有噪声）'
-    + '或<b>末字被切掉</b>（<b>T</b> 字形不完整）。<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>Z</b> 小注当正文 · '
+    + '或<b>末字被切掉</b>（<b>T</b> 字形不完整）。<b>1</b> 采信首选 · <b>2/3</b> 次选 · <b>Z</b> 小注当正文 · <b>M</b> 正文当小注 · '
     + '<b>N</b> 非字 · <b>S</b> 跳过 · <b>←/→</b> 翻卡',
 }
 
-export const DEFAULT_HELP = '<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>Z</b> 小注当正文 · '
+export const DEFAULT_HELP = '<b>1</b> 采信首选 · <b>2/3</b> 选次选 · <b>T</b> 字形不完整 · <b>Z</b> 小注当正文 · <b>M</b> 正文当小注 · '
   + '<b>C</b> 有噪声 · <b>N</b> 非字 · <b>S</b> 跳过 · <b>D</b> 原图破损 · <b>←/→</b> 翻卡。字一律按图上刻的录。'
 
 /** 帮助行查 `CLASS_HELP` 用的键：对齐改字层带细项（`replace_align:grid` 等），其余就是类别键。 */
@@ -32,7 +32,7 @@ export function classHelpKey(cls: string, sub: string): string {
 }
 
 /** 切分缺陷几档（`done` 值）：改字时都要保住，见 `pickVerdict`。 */
-export const DEFECT_DONES: ReadonlyArray<string> = ['truncated', 'contaminated', 'jiazhu']
+export const DEFECT_DONES: ReadonlyArray<string> = ['truncated', 'contaminated', 'jiazhu', 'main']
 
 /**
  * 「小注当正文」（overview#265）：列尾双行小注被当成正文切成了一格。放在「字形不完整」那一组，
@@ -40,6 +40,12 @@ export const DEFECT_DONES: ReadonlyArray<string> = ['truncated', 'contaminated',
  * 只多一个 `reason` 说清是哪种不完整——下游不认这个字段，行为不变。
  */
 export const JIAZHU_REASON = 'jiazhu_as_main'
+
+/**
+ * 「正文当小注」（overview#415/#436）：反向——整宽正文字被劈成了 a/b（并进了小注段）。同在「字形不完整」
+ * 那一组，事件 `v=seg_defect`、`quality=truncated`、`reason=main_as_jiazhu`；后端让该页 Step3 重跑时按整格出。
+ */
+export const MAIN_REASON = 'main_as_jiazhu'
 
 /** 己已巳三选一：键 → 字。提示只讲文意，不讲字形（本族刻法不分）。 */
 export const JYS_OPTIONS: ReadonlyArray<{ key: string; ch: string; hint: string }> = [
@@ -116,9 +122,9 @@ export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = n
   if (v.done === 'truncated' || v.done === 'contaminated') {
     return { id, v: 'seg_defect', quality: v.done, shape: v.shape || '', client_ts: v.ts, dwell_ms: v.dwell }
   }
-  if (v.done === 'jiazhu') {
-    return { id, v: 'seg_defect', quality: 'truncated', reason: JIAZHU_REASON, shape: v.shape || '',
-             client_ts: v.ts, dwell_ms: v.dwell }
+  if (v.done === 'jiazhu' || v.done === 'main') {
+    return { id, v: 'seg_defect', quality: 'truncated', reason: v.done === 'main' ? MAIN_REASON : JIAZHU_REASON,
+             shape: v.shape || '', client_ts: v.ts, dwell_ms: v.dwell }
   }
   return {
     id, v: 'confirm', shape: v.shape,

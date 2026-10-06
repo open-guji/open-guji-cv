@@ -2735,6 +2735,26 @@ class CharExtractor:
                 tinst.flags = [f for f in tinst.flags if f != "wide_gap"]
                 if "jiazhu" not in tinst.flags:
                     tinst.flags.append("jiazhu")
+            # ── Step3 说了算（2026-10-06，overview#436）──────────
+            # 上面这套 v1 判据（段端收编、桥接）在 Step4 的清理后图块上**再判一遍**，与 Step3 各留一套
+            # 格位：vol04 p218c2 第 13、21 格 Step3 记整格正文、这里拆成 a/b，下游 glyph_match /
+            # seed_admit 用的是这里那套（#434）；反过来 Step3 劈错的整宽正文（#415 vol02 p100c4「此」）
+            # 这里也照拆。v2 调用方给 `jiazhu_authority=step3` 时，**拆哪几格、每格发哪几半**一律照
+            # Step3：Step3 没拆的格这里不拆（摘掉 v1 打的 jiazhu 旗），Step3 拆了的格只发 Step3 发过
+            # 的那几半（`jiazhu_subs`）。缝位仍按原规矩：两边都认的格用这里自己量的，只 Step3 认的用
+            # Step3 的。不给就是旧行为（v1 链 / 老调用方）。
+            jz_subs: dict[int, set[str]] = {}
+            if gmeta.get("jiazhu_authority") == "step3":
+                s3_cells = {int(c["index"]): c for c in cells if c.get("jiazhu_cx") is not None}
+                for i in [i for i in jz_runs if i not in s3_cells]:
+                    del jz_runs[i]
+                    jz_tail_a.discard(i)
+                    tinst = by_idx.get(i)
+                    if tinst is not None:
+                        tinst.flags = [f for f in tinst.flags if f != "jiazhu"]
+                for i, cell in s3_cells.items():
+                    if i in jz_runs:
+                        jz_subs[i] = set(cell.get("jiazhu_subs") or ("a", "b"))
             # ── 夹注 a/b 拆分（2026-08-25 用户定）────────────────
             # 确认成夹注段的格，整格实例替换为两个半宽实例：a=右子列、
             # b=左子列（读序：段内先 a 全部、后 b 全部——见
@@ -2750,7 +2770,10 @@ class CharExtractor:
                 cxi = int(round(cx))
                 halves = []
                 for sub, xs, xe in (("a", cxi, pre.shape[1]), ("b", 0, cxi)):
-                    if sub == "b" and i in jz_tail_a:
+                    if i in jz_subs:
+                        if sub not in jz_subs[i]:
+                            continue  # Step3 没发这一半（段尾单字 / 半边墨不够）
+                    elif sub == "b" and i in jz_tail_a:
                         continue      # 单字尾：b 侧只有残渣，不发实例
                     hp = pre[:, xs:xe]
                     ty, tx = np.nonzero(hp < BINARY_THRESHOLD_PATCH)

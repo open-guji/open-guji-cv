@@ -47,6 +47,8 @@ const SEG: { key: Step8Seg; label: string }[] = [
   { key: 'contaminated', label: '有噪声' },
   // 小注当正文 = 打回重做：这格其实是雙行小注、Step3 没拆。勾上就让该页从 Step3 起重跑（强制从中间拆开）
   { key: 'jiazhu', label: '小注当正文（打回重切）' },
+  // 正文当小注 = 反向（overview#415/#436）：整宽正文字被劈成了 a/b。勾上就让该页从 Step3 起重跑（按整格出）
+  { key: 'main', label: '正文当小注（打回重切）' },
 ]
 const MAX_IMGS = 12
 const MAX_CTX = 4
