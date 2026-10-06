@@ -41,3 +41,8 @@ python research/char_groups/jys/cascade.py <llm_dir> dev|val|vol05
 python research/char_groups/jys/export_preds.py <llm_dir>
 ```
 判官原始输出在 dataset `char-groups/jys/llm_judge/`。需要 `pip install scikit-learn`。
+
+## 追加（总管 10-06 三件事）
+1. **放行复核审查页**（pool vol05–10 里 S1 给了字的格，按「给的字×通道」分层抽 30 格 + `vol02:186:7:3` 复核 1 格，共 31）：https://claude.ai/artifact/Uk8Pedp2PkEzvh42PNh1S3 ；卡片冻在 dataset `char-groups/review/jys2_cards.jsonl`（带 `stratum`、`stratum_weight`）；卡面不印分类器结论；本机没有原图，整列小图缺省。收回：`harvest_verdicts.py` → `review/jys2_verdicts.jsonl`。
+2. **规则例外**：「而→已」遇后字「易」弃权（书名《己易》），`rules.py` + `tests/test_char_groups_jys_rules.py`（4 条过）。注意 `vol05:36:6:15` 现在落到「大模型∧分类器」路，二者仍判已，**还是错**——靠例外挡不住，得靠知道这是书名（要大模型看书目语境或人裁）。
+3. 大模型臂：**待在有 muse 的地方复核**（现为 sonnet 子代理代跑）。

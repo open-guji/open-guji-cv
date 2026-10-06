@@ -46,7 +46,12 @@ BATCHES = {
     "ry": {"name": "日曰", "plan": [("vol02", "admit", 100), ("vol03", "admit", 100), ("vol04", "admit", 100)]},
     "rr": {"name": "入人八", "plan": [("vol02", "admit", 100), ("vol03", "admit", 100), ("vol04", "admit", 100)]},
     "jys": {"name": "己已巳", "plan": [("vol04", "pending", None), ("vol05", "all", 50)]},
+    # Z-jys（overview#443）：pool vol05–10 里分类器 S1 给了字的格，按「给的字 × 通道」分层抽；另加 1 格人裁疑误的复核
+    "jys2": {"name": "己已巳·放行复核", "base": "jys",
+             "plan": [("pool", "已:rule", 5), ("pool", "已:llm+lr", 6), ("pool", "己:rule", 6),
+                      ("pool", "己:llm+lr", 5), ("pool", "巳:rule", 8), ("recheck", "vol02:186:7:3", 1)]},
 }
+RECHECK = ["vol02:186:7:3"]
 
 
 def in_frame(r, frame):
@@ -57,6 +62,26 @@ def in_frame(r, frame):
     if frame == "pending":
         return not r["admit"] and r["channel"] != "human"
     return True
+
+
+def sample_jys2(items, gk, root):
+    """分类器 S1 在 pool（vol05–10）无强真值 core 格上给了字的格：按「给的字:通道」分层抽（种子同 SEED）。"""
+    preds = [json.loads(l) for l in open(f"{root}/jys/classifier_preds.jsonl", encoding="utf-8")]
+    rng = random.Random(f"{SEED}:{gk}")
+    cards = []
+    for kind, key, n in BATCHES[gk]["plan"]:
+        if kind == "recheck":
+            cards.append({"id": key, "stratum": "recheck", "frame_n": 1, "picked": 1, "stratum_weight": 0})
+            continue
+        ch, by = key.split(":")
+        pool = sorted(o["id"] for o in preds if o["split"] == "pool" and o["gold_tier"] not in ("A_human", "B_vision")
+                      and o["final"] == ch and o["by"] == by)
+        pick = rng.sample(pool, min(n, len(pool)))
+        for i in pick:
+            cards.append({"id": i, "stratum": f"pool:{key}", "frame_n": len(pool), "picked": len(pick),
+                          "stratum_weight": round(len(pool) / len(pick), 4)})
+    rng.shuffle(cards)
+    return cards
 
 
 def sample(items, gk):
@@ -300,23 +325,27 @@ def main():
     ap.add_argument("--seed-verdicts", help="上一轮收回的 verdicts.jsonl，嵌进页里续裁")
     a = ap.parse_args()
     gk, root = a.group, a.root
-    items = {r["id"]: r for r in (json.loads(l) for l in open(f"{root}/{gk}/items.jsonl", encoding="utf-8"))}
+    gdir = BATCHES[gk].get("base", gk)       # 数据目录（jys2 复用 jys 的 items/crops）
+    items = {r["id"]: r for r in (json.loads(l) for l in open(f"{root}/{gdir}/items.jsonl", encoding="utf-8"))}
     cpath = Path(root) / "review" / f"{gk}_cards.jsonl"
     if cpath.exists():
         cards = [json.loads(l) for l in open(cpath, encoding="utf-8")]
         print(f"照读冻结卡片 {cpath}（{len(cards)} 张）", file=sys.stderr)
     else:
-        cards = sample(items.values(), gk)
+        cards = sample_jys2(items.values(), gk, root) if gk == "jys2" else sample(items.values(), gk)
         cpath.parent.mkdir(parents=True, exist_ok=True)
         with open(cpath, "w", encoding="utf-8") as f:
             for c in cards:
                 f.write(json.dumps({**c, "group": gk, "seed": SEED}, ensure_ascii=False) + "\n")
-    members = list(GROUPS[gk]["members"])
+    members = list(GROUPS[gdir]["members"])
     rows, imgs, cache = [], {}, {}
     for i, c in enumerate(cards, 1):
         r = items[c["id"]]
-        crop = crop_img(root, gk, r)
-        col = column_strip(a.snap_root, r, cache)
+        crop = crop_img(root, gdir, r)
+        try:
+            col = column_strip(a.snap_root, r, cache)
+        except (FileNotFoundError, KeyError, OSError, ImportError):
+            col = None            # 本机没有原图/快照：整列小图缺省（卡面其余不受影响）
         if crop:
             imgs[f"c:{r['id']}"] = crop
         if col:
@@ -334,15 +363,17 @@ def main():
             x = json.loads(l)
             verdicts[x["id"]] = {"v": x["verdict"], "t": x.get("t") or 0}
     name = BATCHES[gk]["name"]
-    plan = "、".join(f"{b} {sum(1 for c in cards if c['stratum'].startswith(b))} 格" for b, _, _ in BATCHES[gk]["plan"])
+    plan = ("、".join(f"{b} {sum(1 for c in cards if c['stratum'].startswith(b))} 格" for b, _, _ in BATCHES[gk]["plan"][:1] + BATCHES[gk]["plan"][-1:])
+            if gk == "jys2" else "、".join(f"{b} {sum(1 for c in cards if c['stratum'].startswith(b))} 格" for b, _, _ in BATCHES[gk]["plan"]))
     frame_txt = {"ry": "机器已放行的格里随机抽", "rr": "机器已放行的格里随机抽",
-                 "jys": "vol04 全部待审格，加 vol05 随机抽 50 格"}[gk]
+                 "jys": "vol04 全部待审格，加 vol05 随机抽 50 格",
+                 "jys2": "vol05–10 里机器已给字的格，按给的字与通道分层随机抽（含 1 格上轮人裁疑有误的复核）"}[gk]
     intro = f"字组「{name}」人裁：{frame_txt}（{plan}，共 {len(rows)} 格）。看字块和上下文，点这一格实际是哪个字。"
     title = f"{name}人裁"
     js = (PAGE_JS.replace("__MEMBERS__", json.dumps(members, ensure_ascii=False))
           .replace("__TITLE__", title).replace("__INTRO__", intro))
     css = VERDICT_CSS.replace("NMEM", str(len(members)))
-    html = render(title, f"char-groups-{gk}-review-g1", verdicts=verdicts, css=css, page_js=js,
+    html = render(title, f"char-groups-{gk}-review-" + ("z1" if gk == "jys2" else "g1"), verdicts=verdicts, css=css, page_js=js,
                   payload={"rows": rows, "imgs": imgs, "group": gk, "seed": SEED})
     Path(a.out).write_text(html, encoding="utf-8")
     print(f"{a.out}  {len(html) / 1024 / 1024:.2f} MB  {len(rows)} 卡  {plan}", file=sys.stderr)

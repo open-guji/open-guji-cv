@@ -57,6 +57,8 @@ def classify(left: str, right: str) -> tuple[str | None, str]:
         return "己", "搭配:爲己有"
     # 4 已（虚词）
     if p == "而":
+        if n == "易":            # 例外（Z-jys）：「而【己】易」是书名《己易》；「而已易」也常是「而已。易」，都不在此判
+            return None, "例外:而_易"
         return "已", "搭配:而已"
     if p in YI_PREV:
         return "已", "搭配:業已类"
