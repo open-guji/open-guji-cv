@@ -15,3 +15,7 @@ N1 的 `research/near_form/`（上下文决策表、规则回放）照旧在，�
 环境：`build.py` 写死了 `/home/user/guji-workspace/96mid1ogzk-*`（工作区）与 `/home/user/overview`（看图清单）两个路径，
 dataset 默认 `/home/user/open-guji-dataset`（`GUJI_DATASET` 可改）。快照的解法见 dataset `char-groups/README.md`「快照与复现」。
 人裁用 `human_chars(book, bind=False)`：快照不在工作区里，绑定表算不出来；早于快照、快照又没采信的人裁记成 `X_stale`，不当真值。
+
+## rr/ — 入人八字形分类器（Z-rr，overview#442，离线评测，不进管线）
+`feat.py`（二值化→去碎点→24×24 网格 + 行列投影 + 顶部带结构）、`eval_clf.py`（logreg/rf 对照）、`run_final.py`（定稿评测，写 dataset `char-groups/rr/clf_eval.json`）、`loo_weak.py`（弱标签格按册留出的分歧）。
+依赖 numpy/opencv/scikit-learn；读 dataset `char-groups/rr/{items.jsonl,crops/}`，不需要工作区与快照。结果见 dataset rr/README「字形分类器」与 `doc/handoffs/HANDOFF_Z_rr.md`。
