@@ -4,150 +4,43 @@
 - 默认使用中文进行交流
 
 ## 项目概述
-古籍图像 OCR 分析项目，使用 PaddleOCR 对古籍扫描图片进行逐字识别和位置分析。
+古籍刻本图像 → 逐字转写的引擎：切分（Step1–4）、识别与定字（Step5–7）、人裁回流（Step8）、导出（Step9）。
+数据集与评测在隔壁仓 `open-guji-dataset`；各书的数据（原图、产物、人裁、字形库）在 `guji-workspace`。
 
-## 当前策略（2026-08 起）
-**只优化正文页。** 目录、职名、序跋、牌记等非正文版式先放着——各有各的
-排版规矩，混在一起调参会互相牵扯。指标一律按「正文/非正文」分开报。
-正文页由 `open-guji-dataset/page-type` 金标里 `page_type == "body"` 筛出
-（vol01 **108** 页 / vol02 **全书 186 页**——vol01 全书 206 页只标了 108 页
-正文，其余是目录 47/职名 44/空白 3/等；旧文档一直写"296"，2026-09-02 查证
-是错的，已更正）；管线自己目前**分不出来**
-（`classify_page_type` 把 roster/toc/edict 都归 body），这本身是待办。
-
----
-## 怎么干活（2026-09-03 定）
-
-**前台优先用控制台，后台优先用新命令。**
-
-```bash
-.venv/Scripts/python -m open_guji_cv console      # → http://127.0.0.1:8640/
-```
-
-跑管线、看产物叠图、收人裁、跑评测、查金标，都在控制台里做，别再一个个手敲脚本。
-控制台干不了或要脚本化的，用 `python -m open_guji_cv` 的新命令（`pipeline` / `step` /
-`status` / `eval` / `gold` / `batch` / `events` / `cache`），**别直接调 `scripts/` 下的
-脚本**——那些脚本的参数约定互相打架（`--out` 有两种相反语义、位置参数有四种名字），
-新命令已经把这些差异抹平并加了防护。
-
-怎么用看 **[doc/console_manual.md](doc/console_manual.md)**：8 个 tab（总览／运行／
-产物／审查／切线／夹注／评测／异体）各干什么、三条典型工作流、排错表。
-**有问题先查手册。**
-
-旧的 `python -m open_guji_cv run/extract/preprocess` 等 v1 命令仍然可用，但那条链已退役，
-不要在它上面加新东西。
-
----
-## 文档
-
-**用这套东西干活 → [doc/console_manual.md](doc/console_manual.md)**（怎么用）
-**改算法之前 → [doc/pipeline_handbook.md](doc/pipeline_handbook.md)**（分步现状、
-各步的测试集在哪、哪些步骤能并行、踩过的坑）
-
-| 文档 | 内容 |
+## 先看哪份
+| 要做什么 | 读 |
 |---|---|
-| **[workspace_layout.md](doc/workspace_layout.md)** | **开新书 / 找数据先看这份**：工作区 = 一本书的数据仓（标准布局表、哪些进 git）；**字库与模型的三层落点**（A 通用源料在引擎仓 `fonts/` `models/`、B 共享库、C 本书字形在工作区 `output/glyph_store/`），一本书的字形先落工作区、整理完才谈升格；已知缺口：跨书共享刻例库尚不存在、北行日錄的库只在 db 里没有 store。人读正本，代码正本是 `core/workspace.py` |
-| **[console_manual.md](doc/console_manual.md)** | **要用这套东西干活先看这份**：控制台 8 个 tab（总览／运行／产物／审查／切线／夹注／评测／异体）、命令行等价写法、三条典型工作流、排错表 |
-| [modern_print_pipeline.md](doc/modern_print_pipeline.md) | **现代印刷链 `modern_body`**（2026-09-14）：Step0 分页 `guji split` / Step1 `line_detect` / Step2 `column_crop` / Step3 `row_segment_runs` 顶替刻本链前三步，产同种产物、Step4 起复用；三处地基（yaml `params:`、按管线找产物、工作区 `books/` 优先）；北行日錄实测与校對本对账 29/40 页全等。横排旋转未接 |
-| [snap_autoimport.md](doc/snap_autoimport.md) | **快照自动导入**（2026-09-27，K 道）：云端 `guji snap pack` 推 guji-workspace 孤儿分支 `snap/<ws>/<book>/<ts>`，服务器 `guji-snap-watch.timer` 每 15 分钟 `guji snap watch` 校验 sha256／跑批锁／cv 兼容／防降级后原子替换并往 overview `inbox/导入/` 写记录；display-only 包只看不算、部署器过期步队列跳过。取代手抄导入命令。**大模板索引（rare emb / 字体 HOG）云端预建、`pack --rare-index/--font-index` 分发**（09-28）：一张表一条 `idx/<kind>/<key>` 孤儿分支，包里只写引用，打包/导入都按 key 去重 |
-| [console_architecture.md](doc/console_architecture.md) | **总体架构**：Step / Product / Gold / Event 四个抽象 + 本地控制台 + 存储分层 + 分阶段落地记录（P0–P2 已完成，§8.1–8.4）。改这套东西之前先读 |
-| [segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md) | **切分管线重定义（进行中）**：边框探测/单列射影变换/单列文字切分/字框收缩四步，每步严格输入输出+测试集现状；坐标系改为右上角原点+从1计数。Step1（边框探测）已定版含内外边框+抬头框，金标 14 页 `open-guji-dataset/border-detection`；**外边框自动探测 `detect_outer_borders()` 已接入**（口径=外延；先测竖直外框拿 `abs(v_outer_offset)` 当页级间距先验、按边校正后在其 ±16px 里找）。**用户判据「内外间距全页一致」已修正为「只在同一条边上成立」**——四边不等距，清楚页同页实测竖直外延间距比 top 大 10.8±4.5px、比 bottom 大 5.9±4.2px（n=5）；原先看着「全页一致」是取样偏差（只量了竖直和抬头框，都属竖直一族）。按边校正后对真墨外延 top 1.6→1.2px、bottom 5.6→0.9px（`v_outer_side` 14/14、`v_outer_offset` 2.9px）。**这一项必须拿真墨当基准**：top 对金标反而「变差」3.3→5.5px，是金标错——vol01/14 金标 38.6px、真墨外延 21.2px、算法 20.5px。**上下外框有一半不该报数**、一律 None（降门槛凑覆盖率是负结果，弱档 6 例里 3 例超 10px）。**版框几何常数**（`scripts/measure_frame_geometry.py` 抽 90 页、106 条清楚边实测，px 均值±标准差，口径=内框线心为 0 向外）：上框 线宽 5.8±0.7 / 外条宽 16.3±5.5 / 近沿 19.6±4.6 / 外延 35.9±6.6；下框 5.7±0.6 / 16.4±3.3 / 17.8±2.4 / 34.3±3.7；竖直 4.5±0.6 / 19.6±2.1 / 20.4±2.3 / 40.1±3.1。**四边不等距**：同页配对差 竖直外延比上框大 4.2±6.5（中位 3.6, n=23）、比下框大 6.3±3.9（中位 6.8, n=12）。**负结果：这两个差不能用小样本拟**——头一版拿 5 页拟出 top=−10.8/bottom=−5.9，扩到 90 页后 top 差了 2.5 倍（真值 −4.2），而 14 页金标评测在 −3~−10.8 之间分辨不出来（都 1.2~1.3px），挑不出对的值，只能直接量。「清楚」这道闸必须含**内框线宽 ≤10px**，否则末行字的墨会混进来（下框外延 34.3±3.7 会被拉成 30.3±9.8）。**负结果：外条近沿不可用**（外条从内侧磨掉，近沿 +15→+34 漂，远沿只 +33→+45），只有远沿可用来反推。**vol01/137/138/141 的 `bottom_inner` 金标是对的**（一度误判为脱靶）——两个量法教训：旧 `eval_border_hlines_vs_ink` 只拿金标当脊线种子、结构上不可能输，它报的「47 top 差 23.9px」「51 bottom 差 15.5px」都是假象（换中立量法后 28 条边 23 条本来就重合）；判「有没有线」不能用绝对墨门槛，要用**相对本底的局部峰 + 空间相干性**（本底 0.000，金标处 0.02~0.10 已是 8~39 倍；清楚页 250~450 倍，是连续衰减谱）。算法在这三页反而都错（咬末行字 / 落在外条上）。审查页 artifacts/README.md 有台账；`find_horizontal_border` 窄窗口第二候选修复 + `find_vertical_lines` 精修去重bug修复均已落地（top 1.9px、bottom 7.0px、竖直线 2.7px 均值）。**抬头框自动探测 `detect_head_raise()` 已定版并接入**（13/13 可观测金标全中、8 页普通页零误报、**inner 0.6px / outer 0.4px**——原本报 6.9px / 3.3px，金标按真墨重拟后双双降到亚像素，那几个 px 全是标注口径的差）——关键在于先把 18 个金标的墨占比/半高宽逐个量出来再设计判据：outer 有"粗满墨条"和"整条没印上"两种形态所以不能要求内外成对（v3 那版召回崩到 28%），墙线检查必须是块级不是列级。真抬头判据也踩过坑——"边框上方有字凸出"不可靠，正确判据是"边框线本身有台阶"。**Step2 已扩为「射影变换+去噪+界行清除+上下版框清除」并收了真实页面金标**（`char-segmentation/column-warp`）：新增 `clean_column` 固化收尾顺序（原来"先抹白再定文字带"会把水平投影稀释 9%，负结果已记）。金标**按输入口径拆成两套**（`samples/`=算法边线+逐列窗口，端到端 17 列命中 30/34、切字 0 列；`legacy-page-anchor/`=人工金标边线+页级锚点，隔离 Step1 误差 25 列命中 43/50）——两条链路边线差 0.76~27.6px、列图宽差 38px，不能混比。金标已被上游改动作废过三轮，**复核必须对全部原始标注跑**（有 2 条上一轮失效、这一轮又有效）——这套复核已固化成 `scripts/migrate_column_warp_gold.py`：文字带按"人标点处墨量还≈0 吗"留用、上下版框按**端裁剪图的指纹**留用（**不拿算法一致性当判据，那是循环论证**），主判据是**图像指纹**「人当时看的那张图还在不在」、零墨只当 clean 列的补救通道（拿零墨当主判据会把 mixed 列全误报成失效，已修）；两页各 32 列/64 条端裁决**全部标完**，文字带命中 58/64、上下版框类别一致 60/63；「先清左右再做上下」漏过一种界行（弯界行只在列的一端探进带里，整列一个带看不见）——已改分横条 + 补内缩档，负结果：内缩条只看峰值分不开（字身腹地峰 0.533 vs 界行条 0.40）；`border_class` 因窗口口径变更**一条都不能迁**（新窗口故意把版框线放在第 0 行，上端"没残墨"从 24 列掉到 6）；判据改过一版（旧的"体+裙边"两头翻车：糊掉的界行漏判、淡竖痕啃穿 21px），现在是"扫到窗口最低点"。上下版框按用户给的 a/b/c 三档实现、实测补出第四档 d「内缩版框」（x=0 锚点越过真实版框的后果），金标**只记类别不记坐标**、已收 23 条端裁决**一致 22/22**；「行墨占比当判据」是负结果（字身行最高 0.747 跟版框线完全重叠，只能靠"墨段厚度"分：版框线 3~13 行 vs 首字 91~121 行）。`out_w=max` 会不会压扁内容已查清=不会（射影映射把每行都归一到 out_w，max/min 只改整体分辨率）。**Step3（单列文字切分）已定版**：输出格式冻结成带类型的字格（字/空白/抬头/夹注a/夹注b + 列内读序，`row_boundaries.segment_column`），生产的双行小注 a/b 拆分已迁移进新链路（`jiazhu_split.py`，逐条保留原阈值 + 漂移护栏单测）；新链路独有的坑是列图两侧压着界行会让夹注跨度判据整体失效，已加 `find_content_window` 剥墙。vol02 40 页对照生产标注：Step1 把列切对的 26 页里 29 个夹注列 27 列逐格全对、1 列差一格相位、1 列比生产多检出一格（目视是生产漏了）。顺带用金标复测推翻了「抬头列多一格修不好」的旧结论——根因只是 `top_slack=1×period` 不够，开到列图顶端后误差 88.2px→12.3px。**vol01/47「竖直线系统偏斜」已查明是假问题**：金标是人工拖的直线、界行本身是弯的，用真墨脊线当第三方基准重量，**算法比人工金标更贴真墨、没有一页反过来**（47 上贴近 3.25px），原定的「挖抬头墙线」修法作废。**金标已按真墨重拟并入库**（用户授权；140 条改 119 条，金标离真墨 2.20→1.41px、天花板 1.28px，现在 14/14 页金标都比算法贴；人工原值留档 `verticals_inner_manual`，脚本 `open-guji-dataset/scripts/refit_border_vlines.py --apply` 幂等）。**抬头框同样重拟并定版了坐标口径**：`inner_y`=线心（13 例，原值全部同号偏低 4~11px、根本不在墨上）、`outer_y`=外延（11 例；探测器也一并改成外延，否则带 +2~4px 系统偏差），金标新增 `inner_observed`/`outer_observed` 标注每个坐标是不是量出来的（vol01/51 c2/c8 外框根本没印上）。坑在于墨占比门槛必须是绝对值，外框满墨时相对门槛会把浅的内框整批杀掉。两个教训：目视叠加图只能说明两条线不一样、不能说明谁对；量法本身要先验证——第一版脊线提取太松（窗口 ±50px、无亚像素、无剔外点、含最外两条），把距离和弯曲幅度一起虚高了约 3 倍。**Step2→Step3 交接闸已落地**（`scripts/export_step3_input.py`）：三级准入L1 页级(Step1 切对列) / L2 列级自检(两侧找得到零墨边界) / L3 人裁金标，vol01 126 列推出 24 列 12 页、`segment_column` 24/24 有解；页级 `period`/`ref_w` **用该页全部 9 列算**（准入闸管的是推哪些列去切，不是谁参与算页级先验），`content_x` 必须随图传（图是抹白不裁切的，Step3 的 `find_content_window` 在上面一堵墙都找不到、24 列全返回整幅宽，宽 9.6%）。**负结果：除 L1 外没有第二条经过验证的列级筛选力**——「清理后带内残墨」是循环论证（mixed 列 0.008 反而低于 clean 列的 0.088）、「带宽偏离页中位数」区分不出来、L2 现用的「两侧最低墨」clean 上限 0.0109 vs mixed 下限 0.0136 只差 24% 且 mixed 只有 n=2、实测一列都没多筛掉。下一步：**专门去标 mixed 形态的列**把 L2 真正标定出来 / **Step1 列探测已用 60 页人裁直接量过：正确率 56/60 = 93.3%**（ok 56 / 线压在字上 2 / 有缝漏切 2 / 拿不准 0；等距抽样 page_type==body，不是按可疑度挑的，95% 区间约 84~98%）——**这推翻了此前一直沿用的「40 页里 13 页没把列切对」（67%）**，那个数字来自另一条链路的间接统计、不是直接人裁，却被当成「准确率的封顶因素」用了很久，**封顶因素需要重新找**。金标 `open-guji-dataset/border-detection/column-split/`。**弯页已换三段折线**（用户方案，已落地）：`VLine` 从 (x,k) 扩成 (x,k1,k2,k3)+折点 y1/y2，`k2 is None` 即直线、下游只调 `x_at()` 的代码不用改；整页统一（`vline_segments`），直线拟合下 w80 中位≥**7** 或单条≥24 才切（7 是量出来的：7~9 档 18/18 页强制折线后全降到 4~5，切约 31% 的页）。拟合直接搜四个折点 x（不按 k1→k2→k3 贪心，误差会下传），目标=相邻段墨落在线上的加权行数（三角核 {0:3,±1:2,±2:1}，±1 硬窗口在 5px 宽的线上有平台定不到线心）。Step2 `warp_column` 按折点分带射影再拼。真页：vol01/151 w80 16.5→5、47 14→5、vol02/95 18→5、119 21→7、11 9→4。**量改前必须用 `verticals_straight`**（拟合前留下的直线）——三段页的 `x_at_top/slope` 是第一段外推值，拿它当原直线量出来的改前数全偏（151 曾报 20、47 报 25）。**三段折线的表达上限已记死**：每段都是直线，只能吃「整条平滑弯曲」（151/47/95 型全修到 w80 4~5）；吃不住**段内还带曲率**的——vol01/119 L1 真线是「直—弯—直」，中间那段用直线表示不了，用户裁定**不增段就调不动、按现状收金标**，别再往 KNOT_SEARCH/窗口上使劲。另：**有些线墨少到指标量不出来**（vol01/11 L1 很虚，算法线和人工金标线的 w80 都是 null，靠人拖定位、`gold_origin=human`）——**拿 w80 自动评测要排除 null 的线**，否则当成回归失败。折线金标 `open-guji-dataset/border-detection/vline-polyline/`（3 页 90 段，approved 83/90）。**行过滤必须有局部一致性闸**（相邻 9 行 x 中位差 >3px 剔）：vol02/3 曾被判最弯（w80 36）其实是直线断处混进笔画碎片。**界行「直不直」已有指标**（用户给的判据）：整条界行投到 x 轴，越直峰越高越窄；用 `w80`（装下 80% 墨的最窄 x 跨度），`scripts/measure_gutter_straightness.py`。200 页实测（加一致性闸、用拟合前直线量）**w80 中位 6.0px**（75 分位 7.0 / 90 分位 10.0 / 最大 17），门槛 7 切 **35%** 的页；最弯：vol01/119 (21.0)、vol02/95 (17.0)、vol01/151 (16.5)、vol01/69 (16.0)、vol01/47 (13.0)。**旧榜单 20+ 的数字是错的**（拿三段线第一段外推当原直线量的），vol02/3 (曾报 36) 其实是直线。**必须同时看 `w80_max`**——vol02/3 峰值 0.827 却宽 20，vol01/11 页级中位仅 9.5 但单条 `w80_max` 到 64，这种「一条线跑飞」看中位会漏。该指标独立复核了旧结论「vol01/47 是界行本身弯、不是算法偏斜」。**外框「条外必须是纸」闸已落地**（`_paper_beyond`，门槛 0.11 由 108 条人裁标定）：健康页外条之外行墨恒为 0.000，而 vol02/153、vol02/75 的 bottom 一直 0.126~0.178——根因是 bottom 内框线没落在下版框上、外框探测在正文里挑了最黑一段，线直接穿过文字；**门槛压不到更低因为抬头页是真例外**（抬头框就在上框外，vol01/52/49/58/134 有 0.028~0.094 且人裁 ok）。已知两种坏形态（用户实审点名）：vol01/151 界行**S 形弯**、端到端偏离直线约 30px（清楚页 3.6px），线上墨 0.44~0.57 vs 印得好的 0.79~0.99，直线 VLine 模型跟不上；vol01/11 界行**顶端向右勾**约 20px，另有第 10 条是**落在正文笔画上的假线**（线上墨 0.162、末档列距 155px vs 其余 179~187px）。**图源确认干净**：`rebuild_src/vol02` 与下载源 `data_zongmu/zongmu_v01` **187/187 字节相同**，没跑过任何预处理；`peak_line_search.py`/`border_geometry.py` 里一个 cv2 调用都没有，不存在直线增强。看着「像增强过」是因为**扫描件本身就是 1-bit 双值 TIFF（CCITT G4）**，全库没有灰度原图可退。扩大抬头框金标（现仅 6 页 18 例，形态常数有过拟合风险） |
-| [pipeline_handbook.md](doc/pipeline_handbook.md) | **踩坑库与量法总入口**。⚠️ §1「分步现状」讲的是**已退役的 v1 链**，看现状请看上面两份；但 §4 踩过的坑、§5 怎么量、§9/§11/§12 三条负结果是通用的，改任何一步之前都该读 |
-| [formats/guji_page_v0.2.md](doc/formats/guji_page_v0.2.md) | **每字带坐标的页面文本格式 guji-page v0.2**（2026-10-02，F1 定 v0.1、F2 升 v0.2，overview#357/#361/#381；v0、v0.1 留档可读、`upgrade()` 升级）。**v0.2**：阙文 = text 里「□」+ 页上 `lacuna`（不带标记的□是真刻的□）、未收字两层（text 近似字 + `zi` 的 ids/desc/rel）、字框补 `cand`（库/OCR/5-b/整理本首位）与 `channel`；规范层方案调研见 [norm_layer_proposal.md](doc/formats/norm_layer_proposal.md)（推荐：共享归一表＋页上逐位例外，简体档派生不存）。以下为 v0.1 起的口径：一页一个 JSON，坐标落 **IIIF canvas** 整数像素左上原点 `[x,y,w,h]`（canvas = IA 原叶，合扫拆块各一 canvas、`source.selector` 记裁剪框，canvas id `…/iiif/<bookId>/canvas/<册2位>/<leaf4位+a–d>`）；`image` 记 CV 跑批那张图的 sha256 + region，与 canvas 不同时导出器已换算；阙文 `""` 只给不知道原字的位、「□」是真字、`norm` 只记异体、组字 `zi` 稀疏标导出 `:zi[…]`、册级索引预留页→book-text 章；文本流为真源，区→列→段（正文/夹注右/夹注左/单行）→字框都引区间；原样层/规范层；字级 method/review；稳定 ID 按 bindings 同口径承接。导出 `scripts/export_guji_page.py`（只读产物），md 与 Step9 逐字相同；yolo_tool 工程文件互转在 `formats/guji_page_yolo.py`（yolo_tool 仓不改）。待定 10 条见 `HANDOFF_F1.md` |
-| [yolo_tool_segmentation_review.md](doc/yolo_tool_segmentation_review.md) | yolo_tool 的 YOLO 版面/单字检测拆解 + 四庫 vol03 两页实测：干净列与 CV 字框几乎一致，印章/夹注区更差；**它的版面模型能抓 Step1「有缝漏切」**（p107 两列并一列），建议当列探测第二意见先用 60 页人裁量一遍。仓里 mAP 是训练集拟合（val=train） |
-| [char_clustering_design.md](doc/char_clustering_design.md) | 刻本字符切分与聚类的完整设计与实测记录（最厚的一份）。改 `jiazhu_split.py` 等模块的常量前必读它记的失败案例 |
-| [row_boundaries_design.md](doc/row_boundaries_design.md) | 列内字格纵向边界（弹性 DP）。**已是 v2 的 Step 3**（`steps/row_segment.py`）；本篇讲 DP 内核与十几版失败尝试各自的坑，对外契约见 segmentation_v2_pipeline §Step 3 |
-| [peak_line_search.md](doc/peak_line_search.md) | 投影峰匹配找版框线（半高宽 + 位置角度联合搜索）。**v2 Step1 的底层算法**，内边框种子取自它 |
-| [segmentation_border_feedback.md](doc/segmentation_border_feedback.md) | 进库实审回流给切分层的反馈：边框混入四个惯犯位置 + 重切 bbox 金标 |
-| [review_feedback_loops.md](doc/review_feedback_loops.md) | **审阅反馈三环总入口**：切分回流 / 匹配回流 / 准入规则标定 |
-| [charset_and_lm.md](doc/charset_and_lm.md) | 字表标准（字体 cmap + Unihan）与语言模型混合（通用低权重 + 本书高权重）|
-| [glyph_db_first_design.md](doc/glyph_db_first_design.md) | **字形库优先的增量识别**：不再先聚簇再定字，新图块先与已验证字形库匹配。`match.py` / `recognize_flow.py` / `seeding.py` / `seed_queue.py` 都指回它 |
-| [glyph_match_stack.md](doc/glyph_match_stack.md) | **字形相似度匹配栈交接**：四层算法链 + 测试集 + 回归护栏 + 已知失败形态 |
-| [rare_char_matching_survey.md](doc/rare_char_matching_survey.md) | **生僻字匹配现状盘点（2026-09-21）**：5a 判 diff 之后走的那条路（Step5-b 三源 RRF + 按册字表）逐层拆解、「更大的字形库」资产表、实测账与 11 条负结果、8 个结构缺口（无级联 / 下游不消费 / 真刻例不进模板 / IDS 只有护栏没检索 / genmin 三套字体零引用）+ 建议路线 |
-| [structure_aware_recognition_design.md](doc/structure_aware_recognition_design.md) | **结构感知识别方案草案（2026-09-21）**：用户「识别要和 IDS 拆分结合、输出结构 + 每槽位像什么」的想法在文献里对应 RZCR/ACCID 显式检测支 vs CCR-CLIP/GRSTR 隐式对齐支的地图（20 篇 + 4 个历史文献数据集）、对「不依赖字体/噪点」能兑现多少的评估、IDS 表实测（停集 K=20 → 1,710 部件）、三步方案（结构头+槽位部件头 → IDS 树编码器 → 槽位级检索）与验收，全部只出候选不放行；**第二部分 §8–12 实施方案**（范围收窄到楷／行、IDS 数据源盘点、数据流、**云端 CPU vs 本机 GPU 分工表**、里程碑 M0–M4）；**§13 落地记录**：M0 三块 + M1 云端侧已做（`ids_struct.py`、`components_v1.tsv`、重排开关、IDS 兜底、训练脚本 `--struct-heads`），本机待办见 [task_card_2026-09-21_structure_step_a_local.md](doc/task_card_2026-09-21_structure_step_a_local.md) |
-| [ccr_rare_char_literature_review.md](doc/ccr_rare_char_literature_review.md) | **汉字识别生僻字扩展与 IDS／笔画结构识别文献综述（2026-09-21）**：按用户「先广搜、再分类写摘要、最后想新点子」三步组织——arXiv 37 组查询 369 条 + 定点 75 篇 + 约 40 次网页检索（清单 `doc/lit/ccr_rare_char_papers.tsv`）；评测协议对照表（字零样本／部首零样本／加模板／开放集／类外）；两轴分类（文本侧表示 R0–R6 × 建模范式 P1–P8）；约 120 篇逐篇摘要分七组（结构化零样本主线／笔画层／历史文献与基准／字形生成／通用引擎与 VLM／文本侧／综述）；横向数字对照（允许字体模板时 CCR-CLIP 93.8–95.7 与我们 unseen 96.9 同档；真难题档 78.6 才是要攻的数）；文献对本项目 7 条负结果的印证；**§6 十六条新想法 N1–N16** 按零训练云端／一次训练 GPU／长线分级，前六项零训练（IDS 派生形近对表、四角号码查字与辅助头、5-b 拒识→自动兜底、固定退化协议、结构感知对齐代价、两项评测口径），中段是真刻例部件重组合成（KAGE 框投影取部件块）、多原型+按册适配、独体字笔画头；反面清单 7 条 |
-| [unencoded_char_sources_survey.md](doc/unencoded_char_sources_survey.md) | **Unicode 未收字：字统网怎么做、数据从哪来、我们能拿到什么（2026-09-21）**：逆向 `zi.tools /api/zi/<字或IDS串>`——未收字以 IDS 串当身份、「同 X」抄自《汉字海》/《漢語大字典》/教育部異體字字典原文、字形是 KAGE 动态组字、IDS 是站长白易自拆且**未开源**（`yi-bai/ids` 只有已收字），站点无许可；公开替代全部实测：**GlyphWiki dump**（自由许可，215 万条：IDS 命名 77,444 / 中华字海 63,167 / 大漢和 51,127 …，关联到整理本字种的未收/异体字形 33,804 条、覆盖 4,637 字种的 89.2%）、kage-engine 离线渲染已跑通（`scripts/kage_render_glyphwiki.py`，9 字 14 ms）、全字庫开放数据（104,680 码位中 20,659 在 PUA、部件表 97,086）、教育部異體字字典（106,303 字无开放数据）、CHISE CBETA/大漢和/CDP 未收字 IDS、IRG ORT（unify-to 判定）；三层做法：层 1 GlyphWiki 目录 + 渲染进模板库当第六套字体（零训练）、层 2 字统网按字补 IDS（先联系站长）、层 3 刻本 IDS 登记回流 |
-| [task_card_2026-09-22_next_plan.md](doc/task_card_2026-09-22_next_plan.md) | **下一步规划任务卡（2026-09-22）**：综合本机三实测（r6 不过线、重排只买 top-1 卖 top-5、genmin 留下）+ 文献综述 + 未收字调研；T1 冻结 r5 线性探针训结构头/槽位头（云端 CPU）、T2 重排重测加 diff 门控、T3 结构金标 300 条审查页、T4 GlyphWiki 未收字当第六套字体、T5 三个评测口径、T6 形近对表 + 四角查字、T7 对齐代价闸；本机 T9 改主干仅当 T1 < 95%、T10 部件块库、T11 真刻例多原型；闸表与不做清单。云端新能力：`guji-workspace` 可挂、bundle 已解到 `cache/`、CPU torch 跑 r5 9.4 ms/字 |
-| [glyph_match_research.md](doc/glyph_match_research.md) | 匹配算法调研：我们这层在文献谱系里的位置（IDM 零阶形变模型）+ 四条改进路线 |
-| [glyph_db_expansion_research.md](doc/glyph_db_expansion_research.md) | 字形库扩展：开源字形/异体字数据地图 + **字体字形匹配力实测（§6，负结果）** |
-| [glyph_canonical_format.md](doc/glyph_canonical_format.md) | 字形图块统一存储格式（256×256 灰度、只缩不放、质心居中）与迁移记录 |
-| [g3g4_error_analysis.md](doc/g3g4_error_analysis.md) | 归一化/聚类的错误分析与待办。**核心负结果**：形近字对与同字对在任何全局相似度下分布重合，调阈值无解 |
-| [technical_learning.md](doc/technical_learning.md) | PaddleOCR 版本/环境坑（oneDNN bug、Windows 长路径、2.x→3.x API 迁移表）|
-| [table_cell_format.md](doc/table_cell_format.md) | 表格页 Cell 输出格式（`detectors/table_detector.py` 用；不属正文链）|
-| [_archive/](doc/_archive/) | **v1 退役文档存档**：design（v1 总图）、phase2_detectors、phase3_char_grid、edge_border_analysis（负结果）、jiazhu_detection（设计稿）、split_curve_boundary_research（负结果）。**不要照它们写代码**，留档是因为记着不可再生的负结果与口径沿革 |
-| [../artifacts/README.md](../artifacts/README.md) | **Artifact 登记处**：各审查页的 URL 台账 + HTML 快照 + 再生方法（更新必须重发布到同一 URL）|
+| **整理一册书（从开工到交付）** | **[doc/runbook/整理一册书.md](../doc/runbook/整理一册书.md)** |
+| 用控制台、`guji` 命令 | [.claude/doc/console_manual.md](doc/console_manual.md) |
+| 开新书、找数据在哪 | [.claude/doc/workspace_layout.md](doc/workspace_layout.md) |
+| 改算法之前 | [.claude/doc/pipeline_handbook.md](doc/pipeline_handbook.md)（§4 踩坑、§5 量法、负结果）、[segmentation_v2_pipeline.md](doc/segmentation_v2_pipeline.md)（切分四步） |
+| 产物指纹、过期、跨册新鲜度 | skill `cv-pipeline-ops` |
+| 格式（guji-page、guji-format、pages.json） | [doc/formats/](../doc/formats/) |
+| 各文档的详细摘要（旧索引原文） | [.claude/doc/_archive/claude_md_doc_index_2026-10-06.md](doc/_archive/claude_md_doc_index_2026-10-06.md) |
 
-数据集与评测在隔壁仓库 `open-guji-dataset`，入口见其
-`doc/making-datasets.md`（怎么定义和准备一个测试集）。
+## 怎么干活
+- **前台用控制台，后台用 `guji` 命令**：`pipeline` / `step` / `status` / `close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` …
+  别直接调 `scripts/` 下的散脚本做书的整理，runbook 里点名的除外。
+- 当前只优化**正文页**；目录、职名、序跋、牌记先不管，指标按正文与非正文分开报。
+- 旧的 v1 命令（`python -m open_guji_cv run/extract/preprocess`）已退役，不要在上面加东西。
 
-----
-测试数据：
-data/ 文件夹下边 有5本古籍 每本古籍有10个截图 和一个read me文件 来介绍它的基本的排版信息
+## 改代码的规矩
+- **产物指纹**：Step 模块和它的 `code_deps` 一改，各书产物就判过期。动这些文件前想清楚是否值得让各书重算。
+- **测试只依赖本仓库、只依赖 `tests/` 下冻结的数据**；单元测试自己造数据（`tests/helpers.py`），对真书数据的质量断言归评测（`guji eval run`），不进测试。细则见 `tests/conftest.py` 模块头、`tests/fixtures/README.md`；`tests/test_suite_hygiene.py` 是守卫。
+- 跑全量：`.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider`（`-s` 必须带；Windows 下要结果就加 `--junitxml=…` 再解析）。
+- 装了 torch 才跑的约 7 条，装了 `rapidocr-onnxruntime` 才跑的 3 条，缺件是跳过不是失败。
 
-### 字形库
-跨书字形库真源在 `glyph_store/`（随仓库提交），SQLite 索引可重建：
-```bash
-python -m open_guji_cv glyph-db rebuild        # 刻本字形（真源在 glyph_store/）
-python -m open_guji_cv glyph-db import-font --jobs 4   # 字体字形（约 10 分钟）
-```
-字体字形不进 Git，由 `fonts/` 里的字体档 + 字表确定性重建，详见
-[fonts/README.md](../fonts/README.md) 与 glyph_db_expansion_research.md §6。
+## 环境
+- Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[console,torch,dev]"`。仓里旧的 `venv/` 是死的。
+- **装完自检** `python -c "import torch, scipy, cv2"`：缺件不报错，只会悄悄降级。
+- 环境变量：`PYTHONIOENCODING=utf-8`（Windows 必设）、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`、`GUJI_WORKSPACE=<书的工作区>`。
+- 带 book 的命令都要 `-w <工作区>`。
+- 产物在 `<工作区>/products/<book>/<step>/p0024.json`，列图和字块在 `cache/`，任务记录在 `runs/`。
 
-### 环境变量
-- `PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True` — 跳过模型源连接检查，加快启动速度
-- `PYTHONIOENCODING=utf-8` — Windows 控制台中文输出必须设置
+## 字形库
+- 一本书的字形真源在**工作区** `output/glyph_store/`（加 `feedback/events/`），SQLite 索引 `output/glyph.db` 可重建：
+  `guji-cv glyph-db rebuild -w <工作区>`。
+- 本仓 `output/glyph_store/` 是测试用的样本库；根目录 `glyph_store/` 是早期遗留（约 94 条），去留在 overview#413 清理中定；字体字形不进 git，由 `fonts/` 确定性重建（见 `fonts/README.md`）。
 
-### 云服务器上的内存额度（2026-09-26）
-- 云服务器只有 7.5G，跑批曾多次把整机拖进 OOM。所有跑批共用 `guji-batch.slice`（上限 3.5G），超了只杀跑批本身。
-- `python -m open_guji_cv` / `guji` 的跑批子命令会**自动**进这个 slice（见 `utils/batch_slice.py`）；`console`/`ui`/`review`/`status`/`cache` 不进。
-- **自己写的临时脚本**（scratchpad 里的 `ab_book.py` 之类）不会自动进，要包一层：`guji-batch .venv/bin/python xxx.py ...`。
-- cv 控制台由 systemd 托管（`systemctl --user status guji-cv-console`），挂了自动拉起；重启用 `runs/restart_console.sh`，**不要再用 nohup 起第二个**。
-
-### 本机环境（2026-09-03）
-- 仓里的 `venv/` 指向已卸载的 Store Python 3.13，**是死的**。用 `.venv/`（uv 建，Python 3.12）：
-  `uv venv .venv --python 3.12 && uv pip install -e . pytest fastapi uvicorn pydantic pyyaml opencc-python-reimplemented fontTools scipy`
-- pytest 在本机会吞掉终端输出，要结果就加 `--junitxml=…` 再解析。
-
-### 测试（2026-09-20 用户定的口径）
-
-> **测试只依赖本仓库，且只依赖 `tests/` 下冻结的数据。**
-
-在这之前，37 个测试文件、94 条用例挂在三种**活数据**上——隔壁测试集仓
-`open-guji-dataset`、某本书的工作区（`GUJI_WORKSPACE` 下的原图/产物/缓存/
-字形库）、以及引擎仓里跟着跑批变的 `output/` `corpus/` `data/`。后果是
-**数据一变就红、数据不在就整条 skip**（云端 94 条静默跳过，绿得毫无意义）。
-
-现在的规矩：
-
-- **单元测试自己造数据**。产物都是 pydantic 模型，直接构造就行，
-  不要去扫 `products/` 看碰巧有什么（`tests/helpers.py` 备好了构造器）。
-- **要真图像的少数集成测试用 `tests/fixtures/` 里冻结的样本**（三张从
-  `data/book1` 复制来的真扫描页，共 ~400 KB），**长期不动**。
-- **对真书数据的质量断言不是测试，是评测**，归 `guji eval run` / `scripts/eval_*.py`。
-- 确实要真工作区的人工验收工具标 `@pytest.mark.manual`（默认不跑，`-m manual` 才跑）。
-
-跑法与踩过的坑见 **`tests/conftest.py` 模块头**，冻结数据的内容与改动规矩见
-**`tests/fixtures/README.md`**；`tests/test_suite_hygiene.py` 是这条口径的守卫，
-会扫测试源码把重新长出来的仓外依赖拦回去。
-
-```bash
-.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider      # 全量（-s 必须带）
-.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider -m manual   # 人工验收那几条
-```
-
-装了 `torch` 才跑的有 7 条（生僻字 CNN 候选、U-Net 切点裁判），
-装了 `rapidocr-onnxruntime` 才跑的有 3 条——那是**可选件**缺席，不是数据依赖。
-
-### 新命令速查（详见 [console_manual.md](doc/console_manual.md)）
-```bash
-P=.venv/Scripts/python
-$P -m open_guji_cv console                              # 控制台，前台首选
-$P -m open_guji_cv pipeline keben_body_v2 vol01         # dev_set 12 页跑 Step1→Step4
-$P -m open_guji_cv step border_detect vol01 --pages 24  # 只跑一步
-$P -m open_guji_cv status vol01                         # 各步各页 新鲜/过期/缺失
-$P -m open_guji_cv eval run                             # 跑全部轻量评测
-$P -m open_guji_cv gold shards                          # 金标分片一览
-$P -m open_guji_cv batch list / events harvest / cache usage
-```
-产物在 `products/<book>/<step>/p0024.json`（只有数值），列图 / 字块在 `cache/`，任务记录在 `runs/`。
-
+## 云服务器（2026-09-30 起搁置）
+- 内存额度、systemd 托管控制台等旧说明见 `doc/snap_autoimport.md` 与 overview `机器清单.md`。整理一本书一律在本地做。
