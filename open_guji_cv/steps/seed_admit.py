@@ -317,6 +317,11 @@ class SeedAdmitParams(BaseModel):
     shadow_model: str = ""              # 模型文件；空 = models/shadow_admit/shadow_gate_v1.joblib。路径不进指纹（path_params）
     shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
     shadow_low_conf: float = 0.0        # >0：影子最大把握度低于它也降级（缺省关）
+    shadow_veto_variant_abstain: bool = True
+    """影子选的字与现放行字**语义同字**（`vmap.semantic` 相同，即异体／简繁）时影子弃权、不降级
+    （overview#431）：vol04 影子拦 61 格只 5 格真错，56 格是放行字＝证人字＝图上字形的刻本异体
+    （㫖/旨、旣/既、尙、郞、刋…），影子 pick 的是通用正字——那是标签口径差，不是认错字。
+    只在 `shadow_veto` 开着时进 dump。"""
     shadow_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
     shadow_promote: bool = False
     """影子升级（与 `shadow_veto` 并列，缺省关）：对**待审**（admit=False）、无硬护栏、非人裁的格，
@@ -387,7 +392,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.rare_agree:
             d.pop("rare_agree", None)
         if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_veto", "shadow_conf", "shadow_low_conf"):
+            for k in ("shadow_veto", "shadow_conf", "shadow_low_conf", "shadow_veto_variant_abstain"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.rare_ref:
             d.pop("rare_ref", None)
@@ -1144,6 +1149,10 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
     是配置错误，不静默当没开）；单格信号异常 → 该格弃权。"""
     from ..shadow.signals import CellEvidence
     gate = _shadow_gate(p)
+    vmap = None
+    if p.shadow_veto_variant_abstain:
+        from ..clustering.variants import VariantMap
+        vmap = VariantMap.load(p.variants or None)
     rare = _opt(ctx, "rare_candidates", page)
     rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
     n = 0
@@ -1162,6 +1171,9 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             v = gate.judge(ev)
             if not v.veto:
                 continue
+            if (vmap is not None and v.pick and rec.char and v.pick != rec.char
+                    and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
+                continue                      # 异体同字：标签口径差，不是认错字（#431）
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
