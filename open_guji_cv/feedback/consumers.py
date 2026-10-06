@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
-from .events import Event, EventLog
+from .events import Event, EventLog, counts_as_human
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
 
@@ -52,6 +52,9 @@ _META_KEYS = ("question", "client_ts", "dwell_ms", "t")
 def _expected_of(e: Event) -> dict:
     """事件 payload → 金标 expected。不同 kind 的金标内容不同。"""
     p = {k: v for k, v in e.payload.items() if k not in _META_KEYS}
+    if e.kind == "vision_check":
+        # 看图结论（overview#428）：模型判的放行字对不对。`source` 已体现在 label_origin，不进 expected。
+        return {k: p[k] for k in ("v", "char", "shown", "judge", "note", "group", "ref") if p.get(k)}
     if e.kind == "verdict":
         return {"verdict": p.get("verdict")}
     if e.kind == "band":
@@ -171,6 +174,16 @@ def verdict_store() -> GoldStore:
 from ..gold.atomic import CUTLINE_KEYS, merge_expected  # noqa: E402
 
 
+def label_origin_of(e: Event) -> str:
+    """金标来源：看图结论（`payload.source="vision"`，overview#428）→ `vision`，评测按来源分层报；
+    其余照旧 user→human、align→align、model→model。"""
+    if (e.payload or {}).get("source") == "vision":
+        return "vision"
+    if e.actor == "user":
+        return "human"
+    return "align" if e.actor == "align" else "model"
+
+
 def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = None,
              why: str = "", dry_run: bool = False) -> ConsumeResult:
     store = store or verdict_store()
@@ -201,10 +214,12 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             anchor=Anchor(book=t.book, page=t.page, col=t.col, slot=t.slot,
                           **(t.anchor or {})),
             expected=expected,
-            label_origin="human" if e.actor == "user" else ("align" if e.actor == "align" else "model"),
+            label_origin=label_origin_of(e),
             stratum=e.payload.get("stratum"),
             stratum_weight=e.payload.get("stratum_weight"),
-            status="uncertain" if e.payload.get("verdict") in ("idk", "uncertain") else "active",
+            status="uncertain" if (e.payload.get("verdict") in ("idk", "uncertain")
+                                   or (e.kind == "vision_check" and e.payload.get("v") == "unsure"))
+            else "active",
             source_events=[e.id],
         )
         if d.extra:
@@ -320,8 +335,10 @@ def glyphdb_admit(events, db_path: str | None = None,
     命名空间；将来要合并得先做真正的重键（阶段 B2），不是靠巧合对齐。
     """
     res = ConsumeResult("glyphdb_admit", n_events=len(events))
+    # 看图结论（`source="vision"`，overview#428）不进库：字形库只收人定的字，模型判错一个就钉死
+    # 一个错范本。口径见 `events.counts_as_human`（码位统一／乱码还原这类人裁的机械更正照旧进）。
     admits = [(e, d) for e, d in events
-              if e.kind == "confirm" and (e.payload.get("v") or "confirm") == "confirm"]
+              if e.kind == "confirm" and (e.payload.get("v") or "confirm") == "confirm" and counts_as_human(e)]
     res.skipped = len(events) - len(admits)
     if not admits:
         return res
