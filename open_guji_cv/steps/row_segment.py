@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, model_validator
 
+from ..core.book import _expand_pages
 from ..core.spec import StepSpec, column_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..utils.cut_select import ckpt_fingerprint, get_judge
+from ..utils.roster_segment import segment_roster_page
 from ..utils.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
                                     segment_column)
 from ._warpmap import ColumnMapper
@@ -32,6 +34,11 @@ class RowSegmentParams(BaseModel):
     cut_judge: str = "unet"              # 候选池裁判：unet（utils/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
+    #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
+    #: `utils/roster_segment`（不定字数、二维递归切）。默认空 = 关，别的书别的页产物逐字节不变。
+    #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
+    #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
+    roster_pages: list[int | str] = []
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
@@ -45,12 +52,12 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.13", unit="column",   # 1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.14", unit="column",   # 1.14：职名页分支 roster_pages（overview#450，默认关）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
                    "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
-                   "open_guji_cv.utils.cut_select"),
+                   "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -59,6 +66,8 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
+        if p.roster_pages and page in set(_expand_pages(p.roster_pages)):
+            return {"cells": self._run_roster(ctx, p, page, gate, wins)}
         # 人裁回流：workspace 裁决表里这本书已裁决的切点（feedback/lookup.py，
         # **不读 open-guji-dataset**），按 (页,列) 筛出 slot_above → kind 传给
         # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
@@ -175,6 +184,81 @@ class RowSegmentStep(Step):
                                        ) for cp in r.cut_candidates],
                                    **base))
         return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}
+
+
+    # ── 职名页分支 ────────────────────────────────────────────────────
+    def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
+                    gate: GateManifest, wins: PageWindows) -> PageCells:
+        """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
+
+        雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
+        `gap_center` = 两行之间的缝——Step4 按 pos 合成满宽格再从缝拆开，与正文雙行同一条路。
+        列级 flags 一律带 `roster`（闸3 据此不按版式格数拦）；字数是推出来的列另带
+        `roster_dense_guess`，相邻字 y 重叠的带 `roster_overlap`（见 utils/roster_segment）。"""
+        page_w = wins.page_size[0]
+        admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
+        imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
+        results = dict(zip((gc.col for gc in admitted),
+                           segment_roster_page(imgs, ink_threshold=p.ink_threshold)))
+        out: list[ColumnCells] = []
+        for gc in gate.columns:
+            base = dict(col=gc.col, n_raised=0, period=gate.period, ref_w=gate.ref_w,
+                        content_x=gc.content_x, border_top=gc.border_top,
+                        border_bottom=gc.border_bottom, top_slack=0.0)
+            if gc.col not in results:
+                out.append(ColumnCells(ok=False, n_body_slots=0,
+                                       error="未过交接闸: " + "; ".join(gc.reject), **base))
+                continue
+            rc = results[gc.col]
+            wrec = wins.column(gc.col)
+            mapper = None
+            if wrec is not None:
+                mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                      wrec.top_y, wrec.bottom_y)
+            # 物理位：正文字各占一位；雙行按「右行第 i 字 ↔ 左行第 i 字」配对共占一位
+            pos_of: list[int] = []
+            gap_of: list[float | None] = []
+            pos, i, items = 0, 0, rc.items
+            while i < len(items):
+                if items[i].kind != "jiazhu_a":
+                    pos += 1
+                    pos_of.append(pos)
+                    gap_of.append(None)
+                    i += 1
+                    continue
+                j = i
+                while j < len(items) and items[j].kind == "jiazhu_a":
+                    j += 1
+                k = j
+                while k < len(items) and items[k].kind == "jiazhu_b":
+                    k += 1
+                a_run, b_run = items[i:j], items[j:k]
+                gap = (min(it.x0 for it in a_run) + max((it.x1 for it in b_run),
+                                                        default=min(it.x0 for it in a_run))) / 2.0
+                n_pair = max(len(a_run), len(b_run))
+                for n in range(len(a_run)):
+                    pos_of.append(pos + 1 + n)
+                    gap_of.append(gap)
+                for n in range(len(b_run)):
+                    pos_of.append(pos + 1 + n)
+                    gap_of.append(gap)
+                pos += n_pair
+                i = k
+            cells: list[CellRec] = []
+            for order, (it, ps, gp) in enumerate(zip(items, pos_of, gap_of)):
+                cells.append(CellRec(
+                    slot=ps, pos=ps, y0=float(it.y0), y1=float(it.y1),
+                    x0=float(it.x0), x1=float(it.x1), kind=it.kind,
+                    sub={"jiazhu_a": "a", "jiazhu_b": "b"}.get(it.kind), order=order,
+                    gap_center=gp, raised=False,
+                    flags=["dense_guess"] if it.dense_guess else [],
+                    quad_page=(None if mapper is None else
+                               [(round(x, 2), round(y, 2))
+                                for x, y in mapper.quad_tr(it.x0, it.y0, it.x1, it.y1)]),
+                ))
+            out.append(ColumnCells(ok=True, n_body_slots=pos, cells=cells, boundaries=[],
+                                   em=float(rc.em), flags=["roster", *rc.flags], **base))
+        return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
 
 
 def _slot_to_pos(slot: int, n_raised: int) -> int:
