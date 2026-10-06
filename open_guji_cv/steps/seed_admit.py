@@ -38,6 +38,7 @@ dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 7
 from __future__ import annotations
 
 import logging
+import re
 from functools import lru_cache
 
 from pydantic import BaseModel, field_validator, model_serializer
@@ -370,6 +371,37 @@ class SeedAdmitParams(BaseModel):
     context_garble_rare_cov: float = 0.95
     context_garble_run: int = 3
 
+    # ── 待审补放三通道（overview#433，R2 道）。各一个开关，缺省都关，书 yaml 打开 ──────────
+    # 接在 iron／ji_yi_si／rare_ref／shadow 之后（页末 `_review_lanes_pass`），只碰仍待审的格：
+    # 只升不降、只出文本（`evidence.no_glyph_lib`），人裁位与排除名单不经这里，己/已/巳 一族
+    # 一律不走（仍归 `ji_yi_si`）。放行格 `channel`/`provenance` 是通道名，`doubts` 记
+    # `lane_<通道名>`，原疑问挪进 `evidence.lane.prev_doubts`。三个开关全关时这一段不进 dump。
+    lane_witness3: bool = False
+    """R1 三证人一致（通道 `witness3`）：整理本对位来自 `replace` 段、待审类别是 对齐改字层／
+    与整理本冲突／形近字（`review.cards.card_class` 同口径），而 `lane_witnesses` 里每家证人
+    （逐格读法见 `clustering.witness_cells`）、整理本字、坐标对位字语义全同 → 放行，字 = 整理本字。
+    护栏：库首位（刻本原字）与整理本字是已知异体对（语义同、字面不同）→ 不放，照旧送审
+    （免得把刻本上的 獘 改成整理本的 弊）。"""
+    lane_coord: bool = False
+    """R4 坐标对位兜底（通道 `coord_fallback`）：只碰「其余」类待审格。二选一：库首位 == 坐标
+    对位字 == 主证人（`lane_witnesses` 质量最高的那家，四庫即 daizhige 逐列本）→ 字取库首位；
+    或每家证人 + 坐标对位字全同、库无护栏 → 字取坐标对位字。库首位与坐标对位字是已知异体对时
+    两支都不放（同 R1 的护栏）。"""
+    lane_seal: bool = False
+    """R5 印章区（通道 `seal`）：`occluded_gate` 拦下的格，默认字来源在 `lane_seal_via` 里且有字 →
+    放行默认字；坐标对位说这一位是空格（`via=coord_blank`）→ 判非字（`admit=True`、`char=None`、
+    `evidence.occluded.ref_blank`，文本层跳过不占位）。护栏：本列坐标对位字连起来含
+    `lane_seal_title_marks` 里任一串（卷端／版心题，坐标对位常错位）→ 整列不放。"""
+    lane_witnesses: str = ""
+    """R1/R4 用哪几家证人：书 yaml `references` 的文件名，逗号分隔；空 = 全部。某家这一位
+    缺席（锚不上、不覆盖本册、difflib 没配上）就不算一致。"""
+    lane_seal_via: str = "coord"
+    """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。"""
+    lane_seal_title_marks: str = "總目,四庫全書"
+    lane_witness_fingerprint: str = ""
+    """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
+    （`core.step._with_witness_fingerprint`）。"""
+
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
 
@@ -408,6 +440,10 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_fingerprint", None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
+        if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
+            for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
+                      "lane_seal_title_marks", "lane_witness_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
                       "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
@@ -481,7 +517,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.12", unit="cell",   # 1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.13", unit="cell",   # 1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -500,7 +536,9 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
                    # 间接进了指纹，原图不变，所以不必加进 consumes。
-                   "open_guji_cv.steps.occlusion"),
+                   "open_guji_cv.steps.occlusion",
+                   # 待审补放三通道（overview#433）的证人逐格读法
+                   "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
@@ -1053,6 +1091,12 @@ class SeedAdmitStep(Step):
             d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
             n_auto += d_pro
             n_review -= d_pro
+        if p.lane_witness3 or p.lane_coord or p.lane_seal:
+            d_lane = _review_lanes_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap,
+                                        (lambda: _lane_witnesses(ctx.book, p))
+                                        if (p.lane_witness3 or p.lane_coord) else None)
+            n_auto += d_lane
+            n_review -= d_lane
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1214,6 +1258,171 @@ def _shadow_promote_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: 
             rec.evidence = {**rec.evidence, "shadow_promote": {**v.evidence(gate.model, p.shadow_promote_conf),
                                                                 "prev_doubts": list(rec.doubts)}}
             rec.doubts = []
+            n += 1
+    return n
+
+
+#: `review.cards` 的类别码（`_CLS_CODES`）照抄一份——那是控制台模块，进 `code_deps` 会让卡片 UI
+#: 的改动也判本步过期。`tests/test_seed_admit_lanes.py` 逐类核两边判得一样。
+_LANE_CLS_CODES = {
+    "ref_conflict": {"context_vs_ref", "iron_vs_ref", "signal_conflict"},
+    "near_form": {"near_form", "solo_confusable"},
+    "variant": {"variant_indirect", "replace_form", "channel_off", "ref_lib_variant"},
+    "replace_align": {"replace_align"},
+}
+_LANE_R1_CLASSES = frozenset({"replace_align", "ref_conflict", "near_form"})
+#: 三通道都不碰的疑问：字块本身不成立（空白、近似例）或形未定。
+_LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar"})
+#: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
+#: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
+_LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
+
+
+def _lane_class(doubts, evidence: dict | None, char, ref_char, lib_top) -> str:
+    """待审格归哪一类——`review.cards.card_class` 的镜像（见 `_LANE_CLS_CODES`）。"""
+    ds = [d for d in (doubts or []) if isinstance(d, str)]
+    codes = {d for d in ds if re.match(r"^[a-z][a-z0-9_]*$", d)}
+    ev = evidence or {}
+    if "occluded" in codes or ev.get("occluded"):
+        return "occluded"
+    if "ji_yi_si_review" in codes or ev.get("ji_yi_si") or any(c and c in _JYS for c in (char, ref_char, lib_top)):
+        return "ji_yi_si"
+    if "form_open" in codes:
+        return "form_open"
+    for k in ("ref_conflict", "near_form"):
+        if codes & _LANE_CLS_CODES[k]:
+            return k
+    if any(d.startswith("库里没有") for d in ds):
+        return "lib_miss"
+    for k in ("variant", "replace_align"):
+        if codes & _LANE_CLS_CODES[k]:
+            return k
+    return "other"
+
+
+def _lane_witnesses(book, p: "SeedAdmitParams") -> list:
+    """R1/R4 用的证人（质量降序，`steps.align_ref` 那份进程级缓存），按 `lane_witnesses` 筛。"""
+    from .align_ref import _witnesses_for_book
+    from pathlib import Path
+    want = {s.strip() for s in (p.lane_witnesses or "").split(",") if s.strip()}
+    return [w for w in _witnesses_for_book(book) if not want or Path(w.name).name in want]
+
+
+def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
+                       vmap, witnesses_fn) -> int:
+    """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
+
+    只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
+    `witnesses_fn()` → 证人列表（只在 R1/R4 真要看证人时才调，装载与锚定都是懒的）。"""
+    from pathlib import Path
+
+    from ..clustering.witness_cells import witness_readings
+    from ..utils.jiazhu_order import sort_by_reading
+    sem = vmap.semantic
+
+    def same(*cs) -> bool:
+        return all(cs) and len({sem(c) for c in cs}) == 1
+
+    def variant_pair(a, b) -> bool:
+        """已知异体对：语义同、字面不同（刻本原字 vs 整理本字）。"""
+        return bool(a and b and a != b and sem(a) == sem(b))
+
+    def lib_top_of(rid):
+        m = mmap.get(rid)
+        return (m.char or (m.candidates[0][0] if m.candidates else None)) if m else None
+
+    def guard_of(rid):
+        m = mmap.get(rid)
+        return getattr(m, "guard", None) if m else None
+
+    cache: dict = {}
+
+    def readings() -> list[tuple[str, dict]]:
+        """[(证人文件名, {字位 id: 证人字})]，质量降序；第一次用到才算。"""
+        if "r" not in cache:
+            ws = witnesses_fn() if witnesses_fn else []
+            seq = []
+            for col in sorted(out, key=lambda c: c.col):
+                for rec in sort_by_reading(col.chars or []):
+                    if "excluded" in (rec.doubts or []) and rec.char is None:
+                        continue
+                    ch = rec.char or (amap.get(rec.id) or (None,))[0] or lib_top_of(rec.id)
+                    if ch and len(ch) == 1:
+                        seq.append((rec.id, ch))
+            cache["r"] = [(Path(w.name).name, witness_readings(seq, w.text, w.index, vmap.normalize_text)) for w in ws]
+        return cache["r"]
+
+    seal_vias = {s.strip() for s in (p.lane_seal_via or "").split(",") if s.strip()}
+    marks = [s.strip() for s in (p.lane_seal_title_marks or "").split(",") if s.strip()]
+    title_cols = set()
+    if p.lane_seal and marks:
+        for col in out:
+            s = "".join(coord.get(r.id) or "" for r in sort_by_reading(col.chars or []))
+            if any(mk in s for mk in marks):
+                title_cols.add(col.col)
+
+    garble_cols = {col.col for col in out for r in (col.chars or []) if set(r.doubts or []) & _LANE_GARBLE}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if (rec.admit or rec.channel == "human" or rec.provenance == "human"
+                    or "excluded" in (rec.doubts or []) or set(rec.doubts or []) & _LANE_HARD):
+                continue
+            al = amap.get(rec.id)
+            ref, op = (al[0], al[1]) if al else (None, None)
+            co = coord.get(rec.id)
+            if co == "〓":                       # 逐列本的 PUA 生僻字占位：知道有字、不知道是哪个
+                co = None
+            lib = lib_top_of(rec.id)
+            ev = rec.evidence or {}
+            occ = ev.get("occluded")
+            hit = None                           # (通道, 字, 证据)
+            if occ:
+                if not p.lane_seal or col.col in title_cols or (rec.char and rec.char in _JYS):
+                    continue
+                if occ.get("via") == "coord_blank" and occ.get("ref_blank") and rec.char is None:
+                    hit = ("seal", None, {"via": "coord_blank", "nonchar": True})
+                elif rec.char and occ.get("via") in seal_vias:
+                    hit = ("seal", rec.char, {"via": occ.get("via")})
+            else:
+                cls = _lane_class(rec.doubts, ev, rec.char, ref, lib)
+                if cls == "ji_yi_si" or co in _JYS or col.col in garble_cols:
+                    continue
+                if p.lane_witness3 and cls in _LANE_R1_CLASSES and op == "replace" and ref:
+                    rs = readings()
+                    wc = {name: r.get(rec.id) for name, r in rs}
+                    if rs and not any(c in _JYS for c in wc.values() if c) and same(ref, co, *wc.values()):
+                        if variant_pair(lib, ref):
+                            rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_variant", "lib": lib}}
+                        else:
+                            hit = ("witness3", ref, {"cls": cls, "ref": ref, "coord": co, "lib": lib,
+                                                     "guard": guard_of(rec.id), "witnesses": wc})
+                elif p.lane_coord and cls == "other" and co:
+                    rs = readings()
+                    wc = {name: r.get(rec.id) for name, r in rs}
+                    if any(c in _JYS for c in wc.values() if c):
+                        continue
+                    d = wc.get(rs[0][0]) if rs else None
+                    if variant_pair(lib, co):
+                        # 库首位与坐标对位字是异体对：哪个是刻本形说不准（vol03 彝/𢑴 人裁取证人形，
+                        # vol04 𨽾/𨽻 看图是库形），同 R1 的护栏，送审。
+                        rec.evidence = {**ev, "lane_skip": {"lane": "coord_fallback", "why": "lib_variant", "lib": lib}}
+                    elif same(lib, co, d):
+                        hit = ("coord_fallback", lib, {"via": "lib_coord_primary", "coord": co, "lib": lib,
+                                                       "witnesses": wc})
+                    elif (rs and same(co, *wc.values()) and not variant_pair(lib, co)
+                          and guard_of(rec.id) is None):
+                        # 这一支没有字形背书（库首位是别的字），库再带护栏（never_match／conflict：
+                        # 库明说「不是这个字」）就不放——vol04 60:9:9 库 一 cov 0.999、证人 二。
+                        hit = ("coord_fallback", co, {"via": "witnesses_coord", "coord": co, "lib": lib,
+                                                      "witnesses": wc})
+            if hit is None:
+                continue
+            name, char, lev = hit
+            rec.admit, rec.channel, rec.provenance, rec.char = True, name, name, char
+            rec.evidence = {**ev, "lane": {"lane": name, **lev, "prev_doubts": list(rec.doubts or [])},
+                            "no_glyph_lib": True}
+            rec.doubts = [f"lane_{name}"]
             n += 1
     return n
 
