@@ -1,4 +1,4 @@
-"""run_update（M7）与 bench 报告的集成测试。"""
+"""run_update（M7）的集成测试（bench 报告随 clustering/bench.py 于 2026-10-06 删除，overview#413）。"""
 
 import json
 
@@ -74,20 +74,6 @@ def test_corpus_export_only_full_columns(synth_book, tmp_path):
     assert len(lines) == summary["corpus_columns"]
     for line in lines:
         assert len(line) == 6    # 每列 6 字，全部已确认
-
-
-def test_bench_reports(tmp_path):
-    from open_guji_cv.clustering.bench import (bench_cluster, bench_verify,
-                                               write_report)
-    rv = bench_verify(n_chars=6, n_per_char=3, wear=0.4)
-    assert rv["metrics"]["false_same"] == 0        # 硬指标
-    assert rv["metrics"]["same_recall"] > 0.5
-    rc = bench_cluster(n_chars=8, n_per_char=4, wear=0.4, feature="raw")
-    assert rc["metrics"]["purity"] >= 0.999        # 硬指标
-    path = write_report(rc, tmp_path / "results")
-    assert path.exists()
-    assert json.loads(path.read_text(encoding="utf-8"))["module"] == "cluster"
-
 
 def test_impure_flag_feeds_hard_negatives(synth_book, tmp_path):
     """impure 簇标记 → 簇内成员对进入标定的难负样本（不被采样截断）。"""

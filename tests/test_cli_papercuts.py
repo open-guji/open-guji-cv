@@ -311,7 +311,7 @@ def test_load_verdicts_explicit_root_still_works(tmp_path, monkeypatch):
 
 # ── K13：`glyph-db` 认 `-w`，没有工作区时报错退出（不再静默写进 cv 仓 output/） ──
 def test_glyph_db_requires_workspace_or_explicit_sample_db_opt_in():
-    from open_guji_cv.__main__ import cmd_glyph_db
+    from open_guji_cv.cli_glyph_db import cmd_glyph_db
 
     args = argparse.Namespace(action="stats", workspace=None, allow_sample_db=False,
                               store=None, no_others=False, apply=False, path=None,
@@ -325,7 +325,7 @@ def test_glyph_db_requires_workspace_or_explicit_sample_db_opt_in():
 def test_glyph_db_dash_w_overrides_and_is_respected(tmp_path, monkeypatch):
     """`-w` 传了之后要真的落到 `GUJI_WORKSPACE`，`glyph_db_path()` 按它解析
     ——以前这个命令只认环境变量，`-w` 传了也没用。"""
-    from open_guji_cv.__main__ import cmd_glyph_db
+    from open_guji_cv.cli_glyph_db import cmd_glyph_db
     from open_guji_cv.core.workspace import glyph_db_path
 
     monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
@@ -341,7 +341,7 @@ def test_glyph_db_dash_w_overrides_and_is_respected(tmp_path, monkeypatch):
 
 
 def test_glyph_db_allow_sample_db_opt_in_does_not_error(tmp_path, monkeypatch, capsys):
-    from open_guji_cv.__main__ import cmd_glyph_db
+    from open_guji_cv.cli_glyph_db import cmd_glyph_db
 
     monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
     monkeypatch.chdir(tmp_path)   # 别真的碰 cv 仓自己的 output/

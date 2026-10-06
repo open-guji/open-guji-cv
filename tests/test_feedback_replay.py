@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import pytest
 
-import open_guji_cv.__main__ as main_mod
+import open_guji_cv.cli_glyph_db as main_mod
 from open_guji_cv.clustering.glyph_db import GlyphDB, export_store
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 
