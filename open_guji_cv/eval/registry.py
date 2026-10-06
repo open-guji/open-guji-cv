@@ -1,7 +1,7 @@
-"""评测器注册表：把 27 个 `eval_*.py` 的调用契约记成数据。
+"""评测器注册表：把各 `eval_*.py`（2026-10-06 共 40 个） 的调用契约记成数据。
 
 **不改脚本**，只把差异写下来：
-- 位置参数传的路径不同：分片根（多数）、`samples/` 子目录（column-layout）、
+- 位置参数传的路径不同：分片根（多数）、`samples/` 子目录（目前没有评测用）、
   册产物目录（eval_font_fallback）；
 - 报告选项三种写法：`--out`（多数）、`--json-out`（pagetype / geometry）、无（column-warp）；
 - 有的要 `PYTHONPATH=.`，有的要 GPU / OCR 引擎。
@@ -22,7 +22,7 @@ from typing import Literal
 OutFlag = Literal["--out", "--json-out", "--report", ""]
 # 位置参数传什么：
 #   shard         分片根目录（多数）
-#   shard_samples 分片下的 samples/ 子目录（column-layout）
+#   shard_samples 分片下的 samples/ 子目录（目前没有评测用）
 #   shard_parent  **分片的父目录**——脚本自己拼子目录名。char-segmentation 下
 #                 seam / side-rule / text-band / page-crop / crop-margin / char-drop
 #                 等一批都是这样，传完整路径会拼成 char-segmentation/seam/seam
@@ -91,8 +91,6 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     _e("geometry", "page-geometry", out_flag="--json-out", pythonpath=True,
        title="版面几何", needs=("products",),
        note="2026-09-30 起读 v2 Step2 column_windows（金标已迁到原图帧）；不再依赖 v1 output"),
-    _e("layout", "column-layout", arg_kind="shard_samples", pythonpath=True,
-       title="行列识别", note="位置参数是 samples/ 子目录，不是分片根"),
     _e("column_warp", "char-segmentation/column-warp", out_flag="", pythonpath=True,
        title="Step2 单列矫正", needs=("products",),
        note="没有报告选项，只印 stdout；列图从 input.column_image 重建"),
@@ -186,8 +184,6 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
     # 归一化 / 聚类 / 匹配 / 识别（多为重活）
     _e("normalize", "char-normalization", pythonpath=True,
        title="归一化回归门", note="纯函数 golden，最快"),
-    _e("clustering", "char-clustering", pythonpath=True,
-       title="保守聚类", needs=("products", "heavy")),
     _e("match_triplets", "glyph-match/triplets", out_flag="--report", pythonpath=True,
        title="匹配排序", needs=("heavy",)),
     _e("match_pairs", "glyph-match/pairs", pythonpath=True,

@@ -79,7 +79,7 @@ def test_update_flag_is_never_passed():
 
 def test_target_path_kinds(tmp_path):
     ds = tmp_path
-    assert EVALS["layout"].target(ds).name == "samples"           # samples 子目录
+    assert EvalSpec(id="x", script="eval_x.py", shard="y", arg_kind="shard_samples").target(ds).name == "samples"
     assert EVALS["seam"].target(ds) == ds / "char-segmentation"   # 父目录，脚本自己拼
     assert EVALS["pagetype"].target(ds) == ds / "page-type"       # 分片根
     assert EVALS["guard_ceiling"].target(ds) is None              # 没有位置参数

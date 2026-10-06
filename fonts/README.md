@@ -13,7 +13,7 @@ python -m open_guji_cv glyph-db import-font --edition font:iming
 
 ## 为什么这两套字体可以进仓库
 
-`.claude/doc/charset_and_lm.md` 有「字体只取 cmap，不取字形」的纪律，那条
+`doc/design/charset_and_lm.md` 有「字体只取 cmap，不取字形」的纪律，那条
 针对的是**商业字体**——字形外框受版权保护。这里两套都是明确允许再分发的
 自由字体，随附完整授权文本：
 
@@ -34,4 +34,4 @@ IPA License 允许再分发，条件是随附授权全文（见 `iming/LICENSE.m
 Jigmo 三档按 Unicode 区段分工，对本项目字表的独家贡献分别是 28,057 /
 61,494 / 9,131 字，缺一不可。
 
-字形匹配力实测见 `.claude/doc/glyph_db_expansion_research.md` §6。
+字形匹配力实测见 `doc/research/glyph_db_expansion_research.md` §6。

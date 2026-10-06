@@ -9,7 +9,6 @@ import pytest
 
 from open_guji_cv.clustering.extractor import (CharExtractor, _assign_column,
                                                _split_touching, clean_patch)
-from open_guji_cv.clustering import seg_eval
 
 
 CELL_H = 100.0
@@ -129,22 +128,6 @@ def test_extractor_strategy_switch():
     assert len(a) == len(b) == 6
     with pytest.raises(ValueError):
         CharExtractor(strategy="nope")
-
-
-def test_seg_eval_scores_and_ranks(tmp_path):
-    """benchmark 打分自洽：完美预测得满分，全空得零召回。"""
-    gold = np.zeros((10, 10), bool); gold[2:6, 2:6] = True
-    perfect = seg_eval.score_cell(gold.copy(), gold, 0)
-    assert perfect.keep_recall == 1.0 and perfect.drop_precision == 1.0
-    empty = seg_eval.score_cell(np.zeros_like(gold), gold, 0)
-    assert empty.keep_recall == 0.0
-    agg = seg_eval.aggregate([perfect, empty])
-    assert agg["n"] == 2 and agg["intact_rate"] == 0.5
-
-
-def test_all_strategies_registered():
-    assert set(seg_eval.STRATEGIES) >= {"padding_box", "gap_threshold",
-                                        "component_owner"}
 
 
 # ── boundary_ink：切分缺陷自检 ────────────────────────────

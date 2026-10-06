@@ -16,23 +16,17 @@
 cd open-guji-cv
 export PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True PYTHONIOENCODING=utf-8
 
-# 跑一册（vol02 全书 186 页都是正文，是正文专用的干净基准册）
-python -m open_guji_cv segment output/vol02 --chars-per-line 21   # 网格切分
-python -m open_guji_cv chars   output/vol02                       # 单字图块
+# 跑一册：一律走 guji 命令（v1 的 segment / chars 已于 2026-10-06 删除），完整流程见 doc/runbook/整理一册书.md
+guji pipeline keben_body_v2 <册> --pages all -w <工作区>
 
 # 量（数据集在隔壁仓库 ../open-guji-dataset）
 PYTHONPATH=. python scripts/eval_pagetype.py        ../open-guji-dataset/page-type
 PYTHONPATH=. python scripts/eval_geometry.py        ../open-guji-dataset/page-geometry
-PYTHONPATH=. python scripts/eval_layout.py          ../open-guji-dataset/column-layout/samples
 PYTHONPATH=. python scripts/eval_instance_quality.py ../open-guji-dataset/char-segmentation/instances
 
 # 测试（本环境 pytest 的输出捕获有毛病，必须加 --capture=no）
 python -m pytest tests/ -q -p no:cacheprovider --capture=no
 ```
-
-`segment` / `chars` 的第一个参数是**书的输出目录**（`output/vol01`），
-不是书名——`profile.json` 在那里。传书名会静默退化：读不到 profile →
-`n_cols=None` → 整个列网格拟合被跳过，产物看着正常其实全错。
 
 ### 怎么筛正文页
 
@@ -132,8 +126,8 @@ vol02 从 21.1% 降到 17.9%、vol01 从 8.9% 降到 8.3%；纵向那一半基�
 ### 对勘复审：我的定字 × 整理本（2026-08-24）
 
 ```bash
+# ⚠ 2026-10-06 起已删（overview#413）：v1 的独立审查页导出，对勘复审改在控制台里做。下面留作历史。
 PYTHONPATH=. python scripts/export_collation_review.py output/vol01
-# → phase9_seed/collation_review.html：自含单文件，可改判 / 可打印 PDF / 可发布分享
 ```
 
 只出**已定字位与整理本不一致**的条目，四类分开（分类本身是信息，
@@ -264,7 +258,7 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
    —— 它同时修队列的两类硬伤（幽灵行 = id 已不在 index 里；重号 = 同一
    instance_id 两行），`--apply` 落地。重号会让审查页拿 A 的证据配 B 的
    图，实锤见下面「踩过的坑」。
-6. **重导出 + 发布**：`python scripts/export_seed_review.py output/vol01
+6. **重导出 + 发布**（⚠ v1 做法，脚本 2026-10-06 已删，审阅改走控制台）：`python scripts/export_seed_review.py output/vol01
    --page <下一批> --out <scratchpad>/vol01_seed_p4.html`，发布到
    **同一个 artifact URL**（用户书签不换）。各页 URL 台账、快照与
    再生方法在 **[artifacts/README.md](../artifacts/README.md)**，
