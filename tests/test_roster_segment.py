@@ -86,6 +86,7 @@ def test_double_line_small_text_reads_right_line_then_left_line():
     b = [it for it in rc.items if it.kind == "jiazhu_b"]
     assert all(it.x0 > W / 2 - 10 for it in a) and all(it.x1 < W / 2 + 10 for it in b)
     assert [it.y0 for it in a] == sorted(it.y0 for it in a)
+    assert "roster_jiazhu" in rc.flags
 
 
 def test_compressed_run_keeps_flat_glyphs_apart():
@@ -101,12 +102,27 @@ def test_compressed_run_keeps_flat_glyphs_apart():
     assert len(rc.items) == 8
 
 
-def test_touching_glyphs_are_split_and_flagged_as_guess():
+def test_touching_full_size_glyphs_are_split_without_guess_flag():
     g = _column()
     _glyph(g, 100, 35, EM)
-    _glyph(g, 100 + EM, 35, EM)                              # 两个大字物理粘连，没有墨谷
+    _glyph(g, 100 + EM, 35, EM)                              # 两个正常字号的方字物理粘连（两字人名常见）
     rc = _seg_one(g)
     assert len(rc.items) == 2
+    assert "roster_dense_guess" not in rc.flags
+
+
+def test_touching_flat_glyphs_are_flagged_as_guess():
+    g = _column()
+    _glyph(g, 100, 35, EM)                                   # 先有孤立大字，em 才量得准
+    _glyph(g, 400, 35, EM)
+    y = 700
+    for _ in range(3):                                       # 三个压扁字（高 ≈ 0.55 宽）上下粘连，无墨谷
+        g[y:y + 7, 35:145] = 0
+        g[y + 28:y + 34, 35:145] = 0
+        g[y:y + 60, 35:42] = 0
+        g[y:y + 60, 138:145] = 0
+        y += 60
+    rc = _seg_one(g)
     assert "roster_dense_guess" in rc.flags
 
 
@@ -173,3 +189,33 @@ def test_gate_flags_dense_guess_and_skips_slot_count_for_roster_columns(tmp_path
     assert all(c.admitted for c in gm.columns)
     assert not gm.columns[0].flags
     assert any(f.startswith("roster_dense_guess") for f in gm.columns[1].flags)
+
+
+def test_isolated_speck_between_spread_glyphs_is_dropped_but_chen_is_kept():
+    g, ys = _roster_column()
+    g[1300:1312, 70:110] = 0                                # 两字之间一条孤立短划（40×12）
+    rc = _seg_one(g)
+    assert [it.y0 for it in rc.items] == ys                 # 短划丢了，「臣」还在
+
+
+def test_phase_aligned_double_line_rows_become_jiazhu_pairs():
+    """雙行两行逐行对齐（vol01 p89）：每条横带里左右各一个小方字，带不比一字高。"""
+    g = _column()
+    _glyph(g, 100, 35, EM)
+    for k in range(5):
+        _glyph(g, 300 + k * 70, 100, 52, stroke=5)
+        _glyph(g, 300 + k * 70, 25, 52, stroke=5)
+    _glyph(g, 750, 35, EM)
+    rc = _seg_one(g)
+    assert [it.kind for it in rc.items] == ["char"] + ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5 + ["char"]
+
+
+def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
+    g = _column()
+    for k in range(4):                                       # 四个「林」式左右结构字，各自窄偏旁、字间拉开
+        y = 100 + k * 300
+        for x in (35, 95):
+            g[y:y + EM, x:x + 7] = 0
+            g[y + 20:y + 27, x - 15:x + 30] = 0
+    rc = _seg_one(g)
+    assert len(rc.items) == 4 and all(it.kind == "char" for it in rc.items)

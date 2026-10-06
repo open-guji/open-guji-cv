@@ -20,8 +20,8 @@
    （思、吉、文 这类上下分离的字）。
 5. 比一字高（> 1.25em）的带找**左右分栏**：中线 30–70% 内墨最少的竖缝墨量
    ≤ 4% 带高，就把**连通体按质心**分到左右（不按像素硬切——双行两行相位不齐，
-   笔画会越过中线）。两侧都是小字 → 雙行，读序右行→左行（`jiazhu_a` / `jiazhu_b`）；
-   一大一小（官衔末字旁的「臣」）→ 按 y 排读序。
+   笔画会越过中线）。雙行读序右行→左行（`jiazhu_a` / `jiazhu_b`）；
+   一侧只有一个字（官衔末字旁的「臣」）→ 按 y 排读序；两侧都 ≥2 字 → 雙行（字号不一定小）。
 6. 仍过高（> 1.45×max(宽, 0.85em)）的带 = 粘连密排：投影谷点 DP 切，字数在候选里
    挑（≥3em 的段用投影自相关估字距，短段用「字近方形」先验）。**这一类字数是推
    出来的不是看出来的**，列级标 `dense_guess` 交人核。
@@ -30,14 +30,15 @@
 字号 em 取**全页**孤立大字（宽 > 0.45 列宽、高宽比 0.6–1.25）高的中位数——单列估在
 雙行列上会偏小。
 
-量与已知局限（dataset column-layout 职名样本，逐列字数对账，2026-10-06）
-------------------------------------------------------------------------
-- 字距拉开/官衔人名页（108–123，7 页 62 列）：59/62 列字数全对，剩下 3 列：
-  2 列斑点、1 列 Step2 没清掉的斜界行；
-- p93（官衔有压缩小字）8/8（除去 Step2 切坏的 1 列）；
-- **p90（大字压扁粘连 + 雙行）只有 1/8**——粘连压扁字投影上没有可靠周期，靠
-  几何分不清「两个压扁字」与「一个上下结构字」；这类列全部标 `dense_guess`。
-  按 page-type 特征，全册只有 p89–95 前后几页是这种密排。
+量与已知局限（2026-10-07，vol01 真原图 p89–132，逐列字数对 12 页 106 列目测小金标）
+-----------------------------------------------------------------------------------
+- 106 列里 101 列字数全对（main 固定 21 格：非空格计数只对 30/90，而 44 页**全部过闸**）；
+- 错的 5 列全在 p90（大字压扁粘连 + 雙行），都带 `roster_dense_guess` / `roster_jiazhu`，
+  全卷 44 页 396 列共 24 列（6%）带这两个标，交人核；
+- 雙行另有一型「相位对齐」（p89：每条横带左右各一字），靠「连续 ≥3 条带都能分成两侧方字」
+  认；个别行（一侧空、或一侧是窄偏旁字）认不出，会当一字——这类列也都带 `roster_jiazhu`；
+- 粘连压扁字投影上没有可靠周期（p90 自相关峰仅 0.15），靠几何分不清「两个压扁字」与
+  「一个上下结构字」——负结果，下一步要靠识别参与切分。
 """
 
 from __future__ import annotations
@@ -54,9 +55,12 @@ FRAG_MAX_ASPECT = 1.2      # 碎块并字：并后高 ≤ 此 × max(宽, 0.5em)
 LR_MIN_H = 1.25            # 带高 > 此 × em 才试左右分栏
 LR_GAP_INK = 0.04          # 分栏缝墨量 ≤ 此 × 带高
 LR_SIDE_MIN = 0.15         # 分栏后每侧墨量至少占带墨量的比例
-SMALL_W = 0.7              # 字宽 < 此 × em 算小字（雙行判定）
 DENSE_H = 1.45             # 带高 > 此 × max(宽, 0.85em) 算粘连密排
+PAIR_RUN = 3               # 相位对齐雙行：至少连续这么多条「左右两方字」带
+PAIR_MAX_ASPECT = 1.6      # 两侧各自高/宽 ≤ 此（窄偏旁高宽比常 >1.8）
 SPECK = 0.3                # 字框长边 < 此 × em 当碎屑丢
+ISOLATED_SMALL = 0.45      # 长边 < 此 × em、且上或下离邻字 ≥ ISOLATED_GAP × em 的孤立小块当墨点丢
+ISOLATED_GAP = 0.5         # （「臣」也小，但上贴官衔末字、下贴人名，两侧都近）
 
 
 @dataclass
@@ -243,6 +247,20 @@ def _split_lr(band: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
     return right, left
 
 
+def _pair_split(band: np.ndarray, em: float) -> tuple[np.ndarray, np.ndarray] | None:
+    """一条带是不是「左右两个方字」：能分栏，且两侧各自近方、宽 ≥ 0.25em。"""
+    sp = _split_lr(band)
+    if sp is None:
+        return None
+    for side in sp:
+        ys = np.flatnonzero(side.any(1))
+        x0, x1 = _xext(side)
+        h, w = (ys[-1] - ys[0] + 1) if len(ys) else 0, x1 - x0
+        if w < 0.25 * em or h / max(1, w) > PAIR_MAX_ASPECT:
+            return None
+    return sp
+
+
 # ── 粘连密排的谷点切分 ────────────────────────────────────────────────────
 def _run_pitch(sm: np.ndarray, base: float) -> float | None:
     """≥3 字长段的字距：投影自相关取够强（≥0.75 峰）的最小滞后，防 2 倍字距谐波。"""
@@ -306,6 +324,11 @@ def _valley_split(m: np.ndarray, y0: int, y1: int, em: float,
     return [(y0 + a, y0 + b) for a, b in zip(ys, ys[1:])]
 
 
+def _full_square(t: list[int], em: float) -> bool:
+    h, w = t[2] - t[0], t[3] - t[1]
+    return 0.8 * em <= h <= 1.25 * em and 0.75 <= h / max(1, w) <= 1.3
+
+
 # ── 递归主体 ─────────────────────────────────────────────────────────────
 def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
     out: list[RosterItem] = []
@@ -323,7 +346,40 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
             buf.append(b)
     groups += [(x, None) for x in _merge_frags(m, buf, em)]
 
-    for (y0, y1), hint in groups:
+    # 相位对齐的雙行：每条带里左右各一个小字，带本身不比一字高、上面的「高带分栏」不触发。
+    # 连续 ≥ PAIR_RUN 条带都能分成两侧方字（不是「林」「鮑」那种窄偏旁）才认，单条不认。
+    pair_sides = [(_pair_split(m[g[0][0]:g[0][1]], em) if depth == 0 else None) for g in groups]
+    pair_run = [False] * len(groups)
+    i = 0
+    while i < len(groups):
+        j = i
+        while (j < len(groups) and pair_sides[j] is not None
+               and (j == i or groups[j][0][0] - groups[j - 1][0][1] < RUN_GAP * em)):
+            j += 1
+        if j - i >= PAIR_RUN:
+            for k in range(i, j):
+                pair_run[k] = True
+        i = max(j, i + 1)
+    k = 0
+    while k < len(groups):
+        if pair_run[k]:
+            right_items: list[RosterItem] = []
+            left_items: list[RosterItem] = []
+            while k < len(groups) and pair_run[k]:
+                (y0, y1), _ = groups[k]
+                for side, bucket in zip(pair_sides[k], (right_items, left_items)):
+                    t = _tight(side, 0, y1 - y0)
+                    if t is not None:
+                        bucket.append(RosterItem(y0 + t[0], t[1], y0 + t[2], t[3]))
+                k += 1
+            for it in right_items:
+                it.kind = "jiazhu_a"
+            for it in left_items:
+                it.kind = "jiazhu_b"
+            out += right_items + left_items
+            continue
+        (y0, y1), hint = groups[k]
+        k += 1
         h = y1 - y0
         x0, x1 = _xext(m, y0, y1)
         w = x1 - x0
@@ -335,9 +391,9 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
                 rx, lx = _xext(rm), _xext(lm)
                 right = _seg_mask(rm, min(em, 0.95 * (rx[1] - rx[0])), depth + 1)
                 left = _seg_mask(lm, min(em, 0.95 * (lx[1] - lx[0])), depth + 1)
-                small_r = max((it.x1 - it.x0 for it in right), default=0) < SMALL_W * em
-                small_l = max((it.x1 - it.x0 for it in left), default=0) < SMALL_W * em
-                if small_r and small_l and len(right) + len(left) >= 3:
+                # 「臣」贴官衔末字：一侧只有它一个字。两侧都 ≥2 字就是雙行——字号不一定小
+                # （vol01 p89 有中号字的雙行），不能拿字宽判
+                if min(len(right), len(left)) >= 2:
                     for it in right:
                         it.kind = "jiazhu_a"
                     for it in left:
@@ -354,20 +410,37 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
             guess = True
         else:
             spans, guess = [(y0, y1)], False
-        for a, b in spans:
-            t = _tight(m, a, b)
-            if t is not None:
-                out.append(RosterItem(t[0], t[1], t[2], t[3], "char", guess))
+        boxes = [t for t in (_tight(m, a, b) for a, b in spans) if t is not None]
+        if guess and all(_full_square(t, em) for t in boxes):
+            guess = False                 # 切出来的每块都是正常字号的方字（多是两字人名粘连），不算推的
+        for t in boxes:
+            out.append(RosterItem(t[0], t[1], t[2], t[3], "char", guess))
     return out
+
+
+def _drop_isolated_specks(items: list[RosterItem], em: float) -> list[RosterItem]:
+    """字距拉开的官衔段里，两字之间常有扫描墨点/短划（vol01 p103、p117 实测 38×22、40×12）。"""
+    keep: list[RosterItem] = []
+    for i, it in enumerate(items):
+        if it.kind == "char" and max(it.y1 - it.y0, it.x1 - it.x0) < ISOLATED_SMALL * em:
+            gap_up = it.y0 - items[i - 1].y1 if i > 0 else it.y0
+            gap_dn = items[i + 1].y0 - it.y1 if i + 1 < len(items) else float("inf")
+            if max(gap_up, gap_dn) >= ISOLATED_GAP * em:
+                continue
+        keep.append(it)
+    return keep
 
 
 def segment_roster_column(ink: np.ndarray, em: float) -> RosterColumn:
     """一列（已 prepare 过的墨 mask）→ 读序排好的字。"""
     items = [it for it in _seg_mask(ink, em)
              if max(it.y1 - it.y0, it.x1 - it.x0) >= SPECK * em]
+    items = _drop_isolated_specks(items, em)
     flags: list[str] = []
     if any(it.dense_guess for it in items):
         flags.append("roster_dense_guess")
+    if any(it.kind != "char" for it in items):
+        flags.append("roster_jiazhu")         # 雙行列：两行相位不齐、字小，vol01 只有 7 列，一律交人核
     body = [it for it in items if it.kind == "char"]
     if any(b.y0 < a.y1 for a, b in zip(body, body[1:])):
         flags.append("roster_overlap")        # 相邻两字 y 有重叠（多是「臣」贴着官衔末字），Step4 满宽裁会互相带墨
