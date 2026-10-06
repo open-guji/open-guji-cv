@@ -6,7 +6,7 @@ margin 不足而落审」的格，按库置信度分档，量人裁一致率与�
 不关的话人裁过的格已经走 `human` 通道放行了，池子里恰好少掉有真值的那一批。
 
     GUJI_WORKSPACE=<ws> GUJI_PRODUCTS_DIR=<沙箱> GUJI_GLYPH_DB=<沙箱库> \\
-      .venv/bin/python scripts/experiments/relax_margin/pool.py vol04 \\
+      .venv/bin/python research/relax_margin/pool.py vol04 \\
         --admit <关人裁重跑的 seed_admit 目录> --out pool_vol04.jsonl
 
 每格一行 JSON：id、库候选、Step6 ranked、整理本对齐、疑问、各项排除标记、人裁真值。
@@ -20,7 +20,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 MARGIN_DOUBT = "上下文 margin 不足"
 

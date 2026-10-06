@@ -34,9 +34,9 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **vol03 列尾版框 A/B**（overview#266：列里残留的下版框线当 Step3 下界，改前/改后 100 列盲评，左右随机）| https://claude.ai/artifact/QQKNgCkHJSW5fUYZPrZNv7 | [s266_tail_frame_review.html](s266_tail_frame_review.html)；A/B 映射冻结在 [s266_tail_frame_cards.jsonl](s266_tail_frame_cards.jsonl)（`a_is` = A 边是 base 还是 new）| `scripts/experiments/s266_tail_frame/`（README）；收回 `harvest_verdicts.py`，按 cards 换算新/旧。**发布覆盖同一 URL** |
-| **vol03 小注拆分 A/B**（overview#266 补查：Step3 认下的雙行小注在 Step4 被整格发成正文，改前/改后 18 格盲评）| https://claude.ai/artifact/2DQo7AEHt1EzuDXXYin7oq | [s266_jiazhu_split_review.html](s266_jiazhu_split_review.html)；A/B 映射 [s266_jiazhu_split_cards.jsonl](s266_jiazhu_split_cards.jsonl) | `scripts/experiments/s266_tail_frame/build_review_jz.py`（先跑 `jz_diff.py`）。**发布覆盖同一 URL** |
-| **vol03 Step1 p49 + 105–108 重切 A/B**（overview#266 批次 b：p49 胖峰假竖线修复；105–108 按版心中线重切）| https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb | [s266_s1_review.html](s266_s1_review.html)；A/B 映射 [s266_s1_cards.jsonl](s266_s1_cards.jsonl)；列号对应 [s266_col_remap_vol03.json](s266_col_remap_vol03.json) | `scripts/experiments/s266_tail_frame/build_review_s1.py`。**发布覆盖同一 URL** |
+| **vol03 列尾版框 A/B**（overview#266：列里残留的下版框线当 Step3 下界，改前/改后 100 列盲评，左右随机）| https://claude.ai/artifact/QQKNgCkHJSW5fUYZPrZNv7 | [s266_tail_frame_review.html](s266_tail_frame_review.html)；A/B 映射冻结在 [s266_tail_frame_cards.jsonl](s266_tail_frame_cards.jsonl)（`a_is` = A 边是 base 还是 new）| `research/s266_tail_frame/`（README）；收回 `harvest_verdicts.py`，按 cards 换算新/旧。**发布覆盖同一 URL** |
+| **vol03 小注拆分 A/B**（overview#266 补查：Step3 认下的雙行小注在 Step4 被整格发成正文，改前/改后 18 格盲评）| https://claude.ai/artifact/2DQo7AEHt1EzuDXXYin7oq | [s266_jiazhu_split_review.html](s266_jiazhu_split_review.html)；A/B 映射 [s266_jiazhu_split_cards.jsonl](s266_jiazhu_split_cards.jsonl) | `research/s266_tail_frame/build_review_jz.py`（先跑 `jz_diff.py`）。**发布覆盖同一 URL** |
+| **vol03 Step1 p49 + 105–108 重切 A/B**（overview#266 批次 b：p49 胖峰假竖线修复；105–108 按版心中线重切）| https://claude.ai/artifact/BESuoDAYjHNPyjThXbGShb | [s266_s1_review.html](s266_s1_review.html)；A/B 映射 [s266_s1_cards.jsonl](s266_s1_cards.jsonl)；列号对应 [s266_col_remap_vol03.json](s266_col_remap_vol03.json) | `research/s266_tail_frame/build_review_s1.py`。**发布覆盖同一 URL** |
 
 ## 边框判读（Step1）
 

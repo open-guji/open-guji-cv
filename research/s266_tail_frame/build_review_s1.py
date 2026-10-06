@@ -2,7 +2,7 @@
 import sys, json, random, base64, os, cv2, numpy as np
 from pathlib import Path
 S = Path(os.environ.get("S266_DIR", "."))
-ROOT = Path("/home/user/open-guji-cv") if not (Path(__file__).resolve().parents[3] / "open_guji_cv").exists() else Path(__file__).resolve().parents[3]
+ROOT = Path("/home/user/open-guji-cv") if not (Path(__file__).resolve().parents[2] / "open_guji_cv").exists() else Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / ".claude/skills/review-artifact/scripts"))
 from review_shell import render
 RAW = os.environ["GUJI_WORKSPACE"] + "/data_full/zongmu/vol03/{}.png"

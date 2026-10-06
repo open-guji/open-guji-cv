@@ -2,7 +2,7 @@
 """读 `pool.py` 的 jsonl，按库 top1 置信度（cov）× 领先第二名（gap）分档，出人裁一致率、
 整理本一致率与 95% 单侧上界（Clopper-Pearson）。
 
-    python scripts/experiments/relax_margin/bins.py pool_vol0*.jsonl [--md]
+    python research/relax_margin/bins.py pool_vol0*.jsonl [--md]
 
 「可放行」子池（任务书 item 2 的硬约束）：不碰 己／已／巳 一族、不碰形近对表
 （`confusable.partners` 手工＋人裁＋字体表、铁证补充表；top1 本身在 `NEVER_MATCH_FAMILIES`

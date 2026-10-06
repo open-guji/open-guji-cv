@@ -3,8 +3,8 @@ import sys, json, random, base64, cv2, numpy as np
 from pathlib import Path
 import os
 S = Path(os.environ.get("S266_DIR", "."))
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / ".claude/skills/review-artifact/scripts"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / ".claude/skills/review-artifact/scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from review_shell import render
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext

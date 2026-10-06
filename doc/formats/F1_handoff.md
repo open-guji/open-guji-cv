@@ -15,7 +15,7 @@
 | 3 | CV 产物 → 新格式 | `open_guji_cv/formats/guji_page_cv.py` + `scripts/export_guji_page.py` | ✅ 独立脚本，没挂进 Step9，现有导出零改动 |
 | 3 | 格式工具 + md / IIIF 导出器 | `open_guji_cv/formats/guji_page.py` | ✅ md 与 Step9 `render_page` 逐字相同（测试钉住 + 两页实测） |
 | 3 | yolo_tool ↔ 新格式 + 往返测试 | `open_guji_cv/formats/guji_page_yolo.py`、`tests/test_guji_page_yolo.py` | ✅ 6/6。**用户 10-02 定：yolo_tool 仓不改**，它的格式并进本设计，互转放 cv 仓 |
-| — | yolo_tool 的 YOLO 切分算法评估（用户追加） | `doc/yolo_tool_segmentation_review.md`、`scripts/experiments/yolo_tool_probe/` | ✅ 读代码＋两页实测 |
+| — | yolo_tool 的 YOLO 切分算法评估（用户追加） | `doc/yolo_tool_segmentation_review.md`、`research/yolo_tool_probe/` | ✅ 读代码＋两页实测 |
 | 4 | 待定清单 | 本文 §四 | ✅ 10 条 |
 | — | 测试 | `tests/test_guji_page_format.py` | ✅ 10/10；`test_suite_hygiene` 照过（只用自造数据） |
 

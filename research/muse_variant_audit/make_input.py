@@ -11,7 +11,7 @@ seed_admit 定字 ∪ align_ref 整理本字，CV 总管 10-02 统计，4,141 �
 import json, random, sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 P = json.load(open(ROOT / "config/variants/variants.json"))["pairs"]
 chars = set(json.load(open(sys.argv[1]))["chars"]) if len(sys.argv) > 1 else None
 rng = random.Random(20261002)

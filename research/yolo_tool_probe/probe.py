@@ -1,7 +1,7 @@
 """把 yolo_tool 的 type/slide ONNX 模型跑在四庫 vol03 两页上，与 CV 的列与字框对比。
 
     pip install onnxruntime      # 不用 torch / ultralytics，直接跑仓里的 best.onnx
-    python scripts/experiments/yolo_tool_probe/probe.py <yolo_tool 仓> <vol03 原图目录> <输出目录> > result.json
+    python research/yolo_tool_probe/probe.py <yolo_tool 仓> <vol03 原图目录> <输出目录> > result.json
 
 CV 一侧取 doc/formats/samples/guji_page_v0/ 的两张 guji-page 样张（列框、字框、排除标记）。
 单字模型的输入 = CV 列框左右各放 8px、上下各放 40px 的竖条（yolo_tool 自己是拿版面模型的框去裁）。

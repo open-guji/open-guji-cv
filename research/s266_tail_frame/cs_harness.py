@@ -2,7 +2,7 @@
 用法: cs_harness.py CELLDIR OUTDIR pages..."""
 import sys, json
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.products import kinds as _k  # noqa

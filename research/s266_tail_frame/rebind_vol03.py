@@ -29,7 +29,7 @@ from open_guji_cv.products.store import ProductStore
 
 PAGES = (49, 105, 106, 107, 108)
 SHIFTED = (105, 106, 107, 108)          # 原图换过的页
-REMAP = json.loads((Path(__file__).resolve().parents[3] / "artifacts/s266_col_remap_vol03.json").read_text())
+REMAP = json.loads((Path(__file__).resolve().parents[2] / "artifacts/s266_col_remap_vol03.json").read_text())
 KEY_RE = re.compile(r"^vol03:(\d+):(\d+):(\d+)([ab]?)$")
 
 

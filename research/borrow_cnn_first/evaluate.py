@@ -19,7 +19,7 @@ import sys
 from collections import Counter
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+REPO = Path(__file__).resolve().parents[2]
 _v = json.loads((REPO / "config/variants/variants.json").read_text(encoding="utf-8"))
 
 
