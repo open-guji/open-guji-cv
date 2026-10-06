@@ -277,8 +277,11 @@ def cmd_fp_migrate(args) -> None:
     steps = [s for s in (args.steps or "").split(",") if s] or None
     try:
         with book_run_lock(eng.book.id, wait=False):
+            if getattr(args, "code_formula", False) and (old or args.trust):
+                raise ValueError("--code-formula 不与 --old-path / --trust 混用")
             rep = migrate_book(eng, pages, old_paths=old, trust=args.trust,
-                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False))
+                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False),
+                               code_formula=getattr(args, "code_formula", False))
     except (RunLockHeld, ValueError) as e:
         print(f"✗ {e}", file=sys.stderr)
         sys.exit(3)
@@ -2303,6 +2306,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--trust", action="store_true",
                    help="不验老指纹（老路径说不清时）：只查上游 sha 与产物 sha。"
                         "发现不了代码/参数变了，慎用")
+    p.add_argument("--code-formula", action="store_true",
+                   help="2026-10-06 代码指纹改成「只认代码、不认注释和 docstring」后的迁移：每一步按老口径回放指纹，"
+                        "逐位相等（代码、参数、册配置、上游都没变）才改写成新公式，免得各书白白重算")
     p.add_argument("--apply", action="store_true", help="真写 manifest（缺省干跑）")
     p.add_argument("--explain", action="store_true",
                    help="对每个被跳过的页打印 manifest 记录的 upstream 与现算 upstream 的逐键差异"
