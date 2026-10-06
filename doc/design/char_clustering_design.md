@@ -1,6 +1,6 @@
 # 刻本古籍字符聚类识别系统 — 详细设计
 
-> **注意（2026-10-06，overview#413）**：本文的命令示例（`python -m open_guji_cv chars / cluster / label / review / update / bench`）属于已删除的 v1 命令，只作设计与负结果留档；现行用法见 `doc/runbook/整理一册书.md`。
+> **注意（2026-10-06，overview#413）**：本文的命令示例（`python -m open_guji_cv chars / cluster / label / review / update / bench`）属于已删除的 v1 命令，只作设计与负结果留档；现行用法见 `doc/runbook/整理一册书.md`。对应代码 `clusterer.py`、`labeling.py`、`review/state.py`（ReviewSession）、`feedback.run_update`、`GlyphDB.import_book`、`glyph-db import` 已于 2026-10-06 随 overview#418 删除（`CandidateGenerator` 因是 `ocr_candidates` 的 code_deps 暂留），要找回从 tag `pre-cleanup-2026-10-06` 起。
 
 > Phase 4~7：字符提取 → 保守聚类 → OCR 候选 → 上下文排序 → 人工审查 → 反馈训练 → 跨书字形库
 

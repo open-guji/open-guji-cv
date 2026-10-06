@@ -7,8 +7,8 @@
 - glyphs 按 edition_tag 分域，同字不同版永不合併；
 - 簇號只存在於 cluster_run 作用域，可累積標註只掛實例 id；
 - 用戶反饋事件 (source,batch,seq) 冪等入庫，狀態=重放；
-- exemplar 政策：K_MIN=3 / K_MAX=12，medoid + 最遠點採樣，
-  近重複剔除（f1>0.95），用戶改判過的邊界例強制保留。
+- exemplar 政策：K_MIN=3 以下標 sparse；入庫一律走 admit_instance（逐實例準入，
+  v1 的 import_book 全量入庫與 medoid/FPS 選例隨 overview#418 刪除）。
 """
 
 from __future__ import annotations
@@ -23,17 +23,12 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from .canonical import canonical_png, encode_png, to_canonical
-from .extractor import load_index
-from .feedback import load_events, remap_events, replay_events
+from .canonical import encode_png, to_canonical
 from .features import DEFAULT_FEATURE, get_feature
 from .normalize import normalize_patch, skeletonize
-from .variants import VariantMap
 from .verify import verify_pair
 
 K_MIN = 3            # 低於 → glyph 標 sparse
-K_MAX = 12           # 每字形類 exemplar 上限（該版總數 ≤ 上限則全留）
-DUP_F1 = 0.95        # 近重複判定
 ALGO_VERSIONS = {"norm": "n1", "skeleton": "s1", "feat": "f1"}
 
 # 「易混字組」——同一組內的字在刻本裡經常混用（技術限制/書手習慣），字形
@@ -249,202 +244,6 @@ class GlyphDB:
     def close(self) -> None:
         self.conn.close()
 
-    # ── 導入 ─────────────────────────────────────────────
-
-    def import_book(self, book_out_dir: str | Path,
-                    edition_tag: str | None = None,
-                    source_meta: dict | None = None,
-                    k_max: int = K_MAX) -> dict:
-        """一本書處理收尾後全量入庫（冪等，可重跑）。"""
-        book_dir = Path(book_out_dir)
-        source_id = book_dir.name
-        edition = edition_tag or source_id
-        meta = source_meta or {}
-        cur = self.conn.cursor()
-        cur.execute(
-            """INSERT INTO sources (source_id, collection, title, volume,
-                 edition_tag, script_style, era, cols_per_page, chars_per_col,
-                 pipeline_version, notes, kind, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-               ON CONFLICT(source_id) DO UPDATE SET
-                 edition_tag=excluded.edition_tag,
-                 collection=COALESCE(excluded.collection, collection),
-                 script_style=COALESCE(excluded.script_style, script_style)""",
-            (source_id, meta.get("collection"), meta.get("title"),
-             meta.get("volume"), edition, meta.get("script_style"),
-             meta.get("era"), meta.get("cols_per_page"),
-             meta.get("chars_per_col"), meta.get("pipeline_version"),
-             meta.get("notes"), meta.get("kind", "woodblock"), _now()))
-
-        instances = load_index(book_dir / "phase4_chars")
-        pos_of = {i.id: k for k, i in enumerate(instances)}
-        with open(book_dir / "phase5_clusters" / "clusters.json",
-                  encoding="utf-8") as f:
-            payload = json.load(f)
-        clusters = payload["clusters"]
-        members_of = {c["cluster_id"]: c["members"] for c in clusters}
-        cluster_of = {m: cid for cid, ms in members_of.items() for m in ms}
-        reps_of = {c["cluster_id"]: c.get("reps", []) for c in clusters}
-
-        # 事件：冪等入庫 + 重綁重放
-        raw_events = load_events(book_dir / "phase7_review" / "labels.jsonl")
-        n_events = 0
-        for ev in raw_events:
-            ev_json = json.dumps(ev, ensure_ascii=False)
-            batch, seq = ev.get("batch"), ev.get("seq")
-            if batch is None or seq is None:
-                # SQLite UNIQUE 视 NULL 各不相同——无批次号的事件
-                # （本地 review 界面产生）按 payload 内容判重
-                dup = cur.execute(
-                    "SELECT 1 FROM events WHERE source_id=? AND payload=?",
-                    (source_id, ev_json)).fetchone()
-                if dup:
-                    continue
-            cur.execute(
-                "INSERT OR IGNORE INTO events "
-                "(source_id, batch, seq, ts, op, payload) "
-                "VALUES (?,?,?,?,?,?)",
-                (source_id, batch, seq, ev.get("ts"), ev.get("op", "?"),
-                 ev_json))
-            n_events += cur.rowcount
-        events, _ = remap_events(raw_events, cluster_of)
-        state = replay_events(events)
-
-        # 聚類運行
-        run_id = f"{source_id}:{payload.get('stats', {}).get('n_clusters', len(clusters))}:{len(instances)}"
-        cur.execute("INSERT OR REPLACE INTO cluster_runs VALUES (?,?,?,?,?)",
-                    (run_id, source_id,
-                     json.dumps(payload.get("params", {}), ensure_ascii=False),
-                     json.dumps(payload.get("stats", {}), ensure_ascii=False),
-                     _now()))
-        cur.executemany(
-            "INSERT OR REPLACE INTO cluster_members VALUES (?,?,?)",
-            [(run_id, m, cid) for cid, ms in members_of.items() for m in ms])
-
-        # 實例（圖塊統一轉 canonical 格式後為真源，見 canonical.py）
-        vmap = VariantMap.load()
-        n_inst = n_labeled = 0
-        for inst in instances:
-            p = book_dir / "phase4_chars" / inst.patch_path
-            if not p.exists():
-                continue
-            raw = cv2.imdecode(np.frombuffer(p.read_bytes(), np.uint8),
-                               cv2.IMREAD_GRAYSCALE)
-            label = state.label_of(inst.id, cluster_of.get(inst.id))
-            status = None
-            if label:
-                status = ("confirmed" if inst.id in state.instance_labels
-                          else "propagated")
-                n_labeled += 1
-            sem = vmap.semantic(label) if label else None
-            cp = ord(label) if label and len(label) == 1 else None
-            cur.execute(
-                """INSERT INTO instances (instance_id, source_id, page, col,
-                     idx, bbox, patch_png, ink_ratio, width, height,
-                     quality_flags, label, label_status, label_confidence,
-                     semantic, unicode_cp, ids, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT(instance_id) DO UPDATE SET
-                     label=excluded.label,
-                     label_status=excluded.label_status,
-                     semantic=excluded.semantic,
-                     unicode_cp=excluded.unicode_cp,
-                     quality_flags=excluded.quality_flags,
-                     updated_at=excluded.updated_at""",
-                (inst.id, source_id, inst.page, inst.col, inst.idx,
-                 json.dumps(list(inst.bbox)), canonical_png(raw),
-                 inst.ink_ratio, inst.width, inst.height,
-                 json.dumps(inst.flags, ensure_ascii=False),
-                 label, status, 1.0 if label else None,
-                 sem, cp, None, _now()))
-            n_inst += 1
-
-        # 字形類 + exemplars + 派生物
-        npz = np.load(book_dir / "phase5_clusters" / "features.npz")
-        patches, feats = npz["patches"], npz["feats"]
-        boundary = set(state.instance_labels)
-        for cid, moved in state.removed.items():
-            boundary |= moved
-        for cid, flag in state.cluster_flags.items():
-            if flag == "impure":
-                boundary |= set(members_of.get(cid, []))
-
-        by_char: dict[str, list[str]] = {}
-        for inst in instances:
-            label = state.label_of(inst.id, cluster_of.get(inst.id))
-            if label and inst.id in pos_of:
-                by_char.setdefault(label, []).append(inst.id)
-
-        n_glyphs = n_ex = 0
-        for char, ids in by_char.items():
-            chosen = self._select_exemplars(ids, pos_of, patches, feats,
-                                            boundary, k_max)
-            sem = vmap.semantic(char)
-            cp = ord(char) if len(char) == 1 else None
-            status = "sparse" if len(ids) < K_MIN else "stable"
-            cur.execute(
-                """INSERT INTO glyphs (edition_tag, char, semantic,
-                     unicode_cp, ids, status, n_confirmed, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?)
-                   ON CONFLICT(edition_tag, char) DO UPDATE SET
-                     n_confirmed=excluded.n_confirmed,
-                     status=excluded.status,
-                     updated_at=excluded.updated_at""",
-                (edition, char, sem, cp, None, status, len(ids), _now()))
-            gid = cur.execute(
-                "SELECT glyph_id FROM glyphs WHERE edition_tag=? AND char=?",
-                (edition, char)).fetchone()[0]
-            n_glyphs += 1
-            for iid, role in chosen:
-                cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
-                            (gid, iid, role, _now()))
-                self._write_derived(cur, iid, patches[pos_of[iid]])
-                n_ex += 1
-
-        n_pairs = self._extract_pairs(cur, state, members_of, reps_of,
-                                      pos_of, source_id)
-        self.conn.commit()
-        return {"source": source_id, "edition": edition,
-                "instances": n_inst, "labeled": n_labeled,
-                "events_new": n_events, "glyphs": n_glyphs,
-                "exemplars": n_ex, "pairs_new": n_pairs}
-
-    def _select_exemplars(self, ids, pos_of, patches, feats,
-                          boundary, k_max) -> list[tuple[str, str]]:
-        """medoid + 邊界例強制 + FPS 補足；近重複剔除。"""
-        f = np.stack([feats[pos_of[i]] for i in ids])
-        if len(ids) <= k_max:
-            base = [(i, "boundary" if i in boundary else "diverse")
-                    for i in ids]
-            med = int(np.argmin(((f[:, None] - f[None]) ** 2).sum(-1).mean(1)))
-            base[med] = (ids[med], "medoid")
-            return base
-        d2 = ((f[:, None] - f[None]) ** 2).sum(-1)
-        order = [int(np.argmin(d2.mean(1)))]              # medoid
-        forced = [k for k, i in enumerate(ids)
-                  if i in boundary and k != order[0]]
-        order += forced[:max(0, k_max - 1)]
-        rejected: set[int] = set()                         # 近重複，永久排除
-        while len(order) < k_max:                          # FPS
-            rest = [k for k in range(len(ids))
-                    if k not in order and k not in rejected]
-            if not rest:
-                break
-            far = max(rest, key=lambda k: min(d2[k][o] for o in order))
-            # 近重複剔除：與最近選入的幾個 verify 過高則排除該候選
-            pk = patches[pos_of[ids[far]]]
-            if any(verify_pair(pk, patches[pos_of[ids[o]]]).f1 > DUP_F1
-                   for o in order[-3:]):
-                rejected.add(far)
-            else:
-                order.append(far)
-        out = []
-        for pos, k in enumerate(order):
-            role = ("medoid" if pos == 0
-                    else "boundary" if ids[k] in boundary else "diverse")
-            out.append((ids[k], role))
-        return out
-
     def _feat_kind(self) -> str:
         return f"feat_{self.feature_name}"
 
@@ -460,49 +259,6 @@ class GlyphDB:
                    feat.astype(np.float32).tobytes())
         cur.executemany("INSERT OR REPLACE INTO derived VALUES (?,?,?,?)",
                         rows)
-
-    def _extract_pairs(self, cur, state, members_of, reps_of,
-                       pos_of, source_id) -> int:
-        n = 0
-        def put(a, b, rel, origin):
-            nonlocal n
-            a, b = sorted((a, b))
-            cur.execute("INSERT OR IGNORE INTO pairs VALUES (?,?,?,?,?,?)",
-                        (a, b, rel, origin, source_id, _now()))
-            n += cur.rowcount
-        # diff：split 移出 vs 原簇代表
-        for cid, moved in state.removed.items():
-            reps = [r for r in reps_of.get(cid, []) if r in pos_of]
-            for m in moved:
-                if reps and m in pos_of:
-                    put(reps[0], m, "diff", "split")
-        # diff：impure 簇內兩兩（截頂 15 對/簇——错绑到大簇时
-        # C(n,2) 会生成上万毒化对，见 feedback.remap_events 法定人数注）
-        for cid, flag in state.cluster_flags.items():
-            if flag != "impure":
-                continue
-            ms = [m for m in members_of.get(cid, []) if m in pos_of]
-            got = 0
-            for i in range(len(ms)):
-                if got >= 15:
-                    break
-                for j in range(i + 1, len(ms)):
-                    if got >= 15:
-                        break
-                    put(ms[i], ms[j], "diff", "impure_flag")
-                    got += 1
-        # same：確認簇內兩兩（截頂 6 對/簇）
-        for cid, char in state.cluster_labels.items():
-            ms = [m for m in members_of.get(cid, [])
-                  if m in pos_of and state.label_of(m, cid) == char]
-            got = 0
-            for i in range(len(ms)):
-                for j in range(i + 1, len(ms)):
-                    if got >= 6:
-                        break
-                    put(ms[i], ms[j], "same", "confirm_same")
-                    got += 1
-        return n
 
     # ── 近似字侧表（overview#276）──────────────────────────
 
@@ -558,10 +314,10 @@ class GlyphDB:
                        height: float | None = None,
                        semantic: str | None = None,
                        shape: str | None = None) -> bool:
-        """單個已裁決實例進庫（逐頁種子流程用，區別於 import_book 全量）。
+        """單個已裁決實例進庫（逐頁種子流程用；v1 全量入庫 import_book 已刪）。
 
         寫入：canonical 圖塊（真源，256×256 質心居中——十九輪起與
-        import_book 同一標準，此前種子路徑存的是原始裁切，全庫展示/
+        此前種子路徑存的是原始裁切，全庫展示/
         比較不可比）、派生表示（norm/skeleton/feat，一律從 canonical
         圖重算——單一標準，不收調用方的 norm）、glyph 條目
         （n_confirmed 累加）、exemplar（role='seed'，逐實例可檢索）、

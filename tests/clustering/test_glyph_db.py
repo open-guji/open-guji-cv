@@ -1,14 +1,13 @@
-"""GlyphDB 跨书字形数据库测试。"""
-
-import json
+"""GlyphDB 跨书字形数据库测试（库数据一律用 admit_instance 直接造，见 conftest.seed_glyphs）。"""
 
 import numpy as np
 import pytest
 
-from open_guji_cv.clustering.extractor import load_index
-from open_guji_cv.clustering.feedback import append_event
-from open_guji_cv.clustering.glyph_db import GlyphDB, K_MIN
-from open_guji_cv.clustering.review.state import ReviewSession
+from conftest import seed_glyphs
+from open_guji_cv.clustering.canonical import to_canonical
+from open_guji_cv.clustering.glyph_db import (CONFUSABLE_SAMPLE_CAP, K_MIN,
+                                              GlyphDB, _unpng)
+from open_guji_cv.clustering.normalize import normalize_patch
 
 
 @pytest.fixture()
@@ -18,40 +17,34 @@ def db(tmp_path):
     d.close()
 
 
-def _prepare_labels(synth_book):
-    """合成书上补反馈：确认最大两簇 + 一个 impure 标记（幂等：只写一次）。"""
-    s = ReviewSession(synth_book)
-    ordered = sorted(s.clusters.values(), key=lambda c: -c["size"])
-    big, second = ordered[0], ordered[1]
-    lp = s.labels_path
-    if not s.state.cluster_labels:                    # module 级共享，防重复追加
-        append_event(lp, {"op": "confirm", "cluster": big["cluster_id"],
-                          "char": "甲", "members": big["members"]})
-        append_event(lp, {"op": "confirm", "cluster": second["cluster_id"],
-                          "char": "乙", "members": second["members"]})
-        if len(ordered) > 2 and ordered[2]["size"] >= 2:
-            append_event(lp, {"op": "flag",
-                              "cluster": ordered[2]["cluster_id"],
-                              "flag": "impure",
-                              "members": ordered[2]["members"]})
-    return big, second
+def _norm_of(db, iid):
+    """库里某实例的 norm 图（查询用的探针）。"""
+    (blob,) = db.conn.execute(
+        "SELECT data FROM derived WHERE instance_id=? AND kind='norm'",
+        (iid,)).fetchone()
+    return _unpng(blob)
 
 
-def test_import_book_populates_tables(db, synth_book):
-    big, _ = _prepare_labels(synth_book)
-    summary = db.import_book(synth_book, edition_tag="ed1",
-                             source_meta={"collection": "測試叢書",
-                                          "script_style": "宋體刻"})
-    assert summary["instances"] == 36
-    assert summary["labeled"] >= big["size"]
-    assert summary["glyphs"] == 2                     # 甲、乙
-    st = db.stats()
-    assert st["instances"] == 36
-    assert st["pairs"].get("same", 0) > 0
+def _add_pairs_and_events(db):
+    """库里补几条 pairs / events（导出重建要保住它们；admit_instance 不产这两张表）。"""
     cur = db.conn.cursor()
-    row = cur.execute("SELECT collection, script_style, edition_tag "
-                      "FROM sources").fetchone()
-    assert row == ("測試叢書", "宋體刻", "ed1")
+    cur.executemany("INSERT INTO pairs VALUES (?,?,?,?,?,?)", [
+        ("tbook:乙:0", "tbook:甲:0", "diff", "impure_flag", "tbook", "t"),
+        ("tbook:甲:0", "tbook:甲:1", "same", "confirm_same", "tbook", "t")])
+    cur.executemany(
+        "INSERT INTO events (source_id, batch, seq, ts, op, payload) "
+        "VALUES (?,?,?,?,?,?)",
+        [("tbook", "b1", 1, "t", "confirm", '{"op": "confirm"}'),
+         ("tbook", "b1", 2, "t", "flag", '{"op": "flag"}')])
+    db.conn.commit()
+
+
+def test_admit_populates_tables(db):
+    ids = seed_glyphs(db, n_each=5)
+    st = db.stats()
+    assert st["instances"] == 10
+    cur = db.conn.cursor()
+    assert cur.execute("SELECT COUNT(*) FROM glyphs").fetchone()[0] == 2
     # 派生物齐备：norm + 骨架 + 特征
     kinds = {k for (k,) in cur.execute("SELECT DISTINCT kind FROM derived")}
     assert kinds == {"norm", "skeleton", "feat_hog"}
@@ -59,73 +52,71 @@ def test_import_book_populates_tables(db, synth_book):
     ch, cp = cur.execute("SELECT char, unicode_cp FROM glyphs "
                          "WHERE char='甲'").fetchone()
     assert cp == ord("甲")
+    # 审计行：每个实例一条
+    assert cur.execute("SELECT COUNT(*) FROM admissions").fetchone()[0] == 10
+    assert len(ids["甲"]) == 5
 
 
-def test_import_idempotent(db, synth_book):
-    _prepare_labels(synth_book)
-    s1 = db.import_book(synth_book, edition_tag="ed1")
-    s2 = db.import_book(synth_book, edition_tag="ed1")
-    assert s2["events_new"] == 0                      # 事件冪等
-    assert s2["pairs_new"] == 0                       # 对冪等
-    st = db.stats()
-    assert st["instances"] == 36                      # 无重复行
+def test_admit_idempotent(db):
+    seed_glyphs(db, n_each=3)
+    again = seed_glyphs(db, n_each=3)           # 同 id 再来一遍
+    assert again == {}                           # 第二次一个都没进
+    assert db.stats()["instances"] == 6          # 无重复行
+    (n,) = db.conn.execute("SELECT n_confirmed FROM glyphs "
+                           "WHERE char='甲'").fetchone()
+    assert n == 3                                # 计数没被二次入库累加
 
 
-def test_exemplar_cap_and_min(db, synth_book):
-    big, _ = _prepare_labels(synth_book)
-    db.import_book(synth_book, edition_tag="ed1", k_max=4)
+def test_exemplar_floor_and_status(db):
+    seed_glyphs(db, chars=("甲", "乙"), n_each=5)
+    seed_glyphs(db, chars=("丙",), n_each=2, seed=5)
     cur = db.conn.cursor()
-    for (gid, char, status, n_conf) in cur.execute(
-            "SELECT glyph_id, char, status, n_confirmed FROM glyphs"):
+    rows = cur.execute("SELECT glyph_id, char, status, n_confirmed "
+                       "FROM glyphs").fetchall()
+    assert len(rows) == 3
+    for gid, char, status, n_conf in rows:
         n_ex = cur.execute("SELECT COUNT(*) FROM exemplars WHERE glyph_id=?",
                            (gid,)).fetchone()[0]
-        assert n_ex <= 4                              # 上限
-        assert n_ex >= min(n_conf, 1)
-        if n_conf < K_MIN:
-            assert status == "sparse"
-        roles = {r for (r,) in cur.execute(
-            "SELECT role FROM exemplars WHERE glyph_id=?", (gid,))}
-        assert "medoid" in roles                      # 必有代表
+        assert n_ex >= min(n_conf, 1)            # 下限：有确认就有代表
+        assert (status == "sparse") == (n_conf < K_MIN)
 
 
-def test_impure_flag_becomes_diff_pairs(db, synth_book):
-    _prepare_labels(synth_book)
-    db.import_book(synth_book, edition_tag="ed1")
-    st = db.stats()
-    s = ReviewSession(synth_book)
-    if s.state.cluster_flags:                         # 合成书有 ≥3 个多成员簇时
-        assert st["pairs"].get("diff", 0) > 0
+def test_confusable_exemplar_cap(db):
+    """己/已/巳 一类字形：exemplar 累积到上限后不再增，但实例与审计照常写。"""
+    n = CONFUSABLE_SAMPLE_CAP + 3
+    seed_glyphs(db, chars=("己",), n_each=n)
+    cur = db.conn.cursor()
+    gid = cur.execute("SELECT glyph_id FROM glyphs WHERE char='己'").fetchone()[0]
+    n_ex = cur.execute("SELECT COUNT(*) FROM exemplars WHERE glyph_id=?",
+                       (gid,)).fetchone()[0]
+    assert n_ex == CONFUSABLE_SAMPLE_CAP
+    assert cur.execute("SELECT COUNT(*) FROM instances").fetchone()[0] == n
+    assert cur.execute("SELECT COUNT(*) FROM admissions").fetchone()[0] == n
 
 
-def test_query_hits_confirmed_char(db, synth_book):
-    big, _ = _prepare_labels(synth_book)
-    db.import_book(synth_book, edition_tag="ed1")
-    # 用确认簇一个成员的归一化图/特征查询
-    npz = np.load(synth_book / "phase5_clusters" / "features.npz")
-    pos = {i.id: k for k, i in
-           enumerate(load_index(synth_book / "phase4_chars"))}
-    k = pos[big["members"][0]]
-    hits = db.query(npz["patches"][k], edition_hint="ed1")
+def test_query_hits_admitted_char(db):
+    ids = seed_glyphs(db)
+    probe = _norm_of(db, ids["甲"][0])
+    hits = db.query(probe, edition_hint="ed1")
     assert hits and hits[0].char == "甲"
     assert hits[0].f1 > 0.6
     # 异版提示查不到（分域隔离）
-    assert db.query(npz["patches"][k], edition_hint="other") == []
+    assert db.query(probe, edition_hint="other") == []
 
 
-def test_export_rebuild_roundtrip(db, synth_book, tmp_path):
+def test_export_rebuild_roundtrip(db, tmp_path):
     """导出到 Git 友好目录 → 重建 SQLite，知识与检索能力完全保留。"""
     from open_guji_cv.clustering.glyph_db import (export_store,
                                                   rebuild_from_store)
-    big, _ = _prepare_labels(synth_book)
-    db.import_book(synth_book, edition_tag="ed1",
-                   source_meta={"collection": "測試叢書"})
+    ids = seed_glyphs(db)
+    _add_pairs_and_events(db)
     before = db.stats()
+    assert before["pairs"] == {"diff": 1, "same": 1}
 
     store = tmp_path / "store"
     exported = export_store(db, store)
     assert exported["glyphs"] == 2 and exported["patches"] >= 2
-    # 只导出已标注/代表实例的图，未标注的不进真源
-    assert exported["instances"] < before["instances"]
+    assert exported["instances"] == before["instances"]
     assert (store / "glyphs.jsonl").exists()
     assert (store / "README.md").exists()
 
@@ -136,28 +127,26 @@ def test_export_rebuild_roundtrip(db, synth_book, tmp_path):
     assert rebuilt["events"] == before["events"]
 
     # 重建后仍能检索命中
-    from open_guji_cv.clustering.glyph_db import GlyphDB
+    probe = _norm_of(db, ids["甲"][0])
     db2 = GlyphDB(tmp_path / "new.sqlite")
     try:
-        npz = np.load(synth_book / "phase5_clusters" / "features.npz")
-        pos = {i.id: k for k, i in
-               enumerate(load_index(synth_book / "phase4_chars"))}
-        k = pos[big["members"][0]]
-        hits = db2.query(npz["patches"][k], edition_hint="ed1")
+        hits = db2.query(probe, edition_hint="ed1")
         assert hits and hits[0].char == "甲"
     finally:
         db2.close()
 
 
-def test_export_is_deterministic(db, synth_book, tmp_path):
+def test_export_is_deterministic(db, tmp_path):
     """两次导出字节一致——否则每次提交都是无意义 diff。"""
     from open_guji_cv.clustering.glyph_db import export_store
-    _prepare_labels(synth_book)
-    db.import_book(synth_book, edition_tag="ed1")
+    seed_glyphs(db)
+    _add_pairs_and_events(db)
     a, b = tmp_path / "a", tmp_path / "b"
     export_store(db, a)
     export_store(db, b)
-    for f in sorted(a.rglob("*.jsonl")):
+    files = sorted(a.rglob("*.jsonl"))
+    assert files
+    for f in files:
         assert f.read_bytes() == (b / f.relative_to(a)).read_bytes(), f.name
 
 
@@ -211,20 +200,20 @@ def test_empty_db_with_empty_or_missing_store_is_fine(tmp_path):
     assert_db_not_silently_empty(db_path, empty_store)                 # 真源没有 jsonl
 
 
-def test_nonempty_db_never_raises_regardless_of_store(tmp_path, synth_book):
+def test_nonempty_db_never_raises_regardless_of_store(tmp_path):
     """库里已经有数据就不该报——自检只管「空库」这一种状态。"""
     from open_guji_cv.clustering.glyph_db import assert_db_not_silently_empty
 
     db_path = tmp_path / "g.sqlite"
     db = GlyphDB(db_path)
-    db.import_book(synth_book, edition_tag="ed1")
+    seed_glyphs(db, n_each=2)
     db.close()
 
     assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
 
 
 def _seed_one_glyph(db, char, norm):
-    """直接塞一个 glyph+exemplar+derived，绕开 import_book 的整书依赖。"""
+    """直接塞一个 glyph+exemplar+derived，直接造库数据。"""
     from open_guji_cv.clustering.glyph_db import _now, _png
     cur = db.conn.cursor()
     iid = f"seed:{char}"

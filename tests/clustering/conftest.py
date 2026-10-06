@@ -1,4 +1,5 @@
-"""共享 fixture：合成一个完整的 output/<book>/ 目录（phase4~6 齐全）。"""
+"""共享 fixture：合成 output/<book>/ 目录（phase4 图块 + phase5 簇，簇按真值字分组）；
+外加直接往字形库塞合成字形的造数工具（v1 聚类链已删，不再靠它造库）。"""
 
 import json
 import random
@@ -7,22 +8,17 @@ import cv2
 import numpy as np
 import pytest
 
-from open_guji_cv.clustering.clusterer import ClusterParams, ConservativeClusterer
-from open_guji_cv.clustering.extractor import CharExtractor
-from open_guji_cv.clustering.labeling import rank_book
-from open_guji_cv.clustering.candidates import CandidateGenerator, PriorSource
-from open_guji_cv.clustering.lm import UniformLM
+from open_guji_cv.clustering.extractor import CharExtractor, load_index
 from open_guji_cv.clustering.synth import degrade, synthetic_glyph
-from open_guji_cv.clustering.variants import VariantMap
 
 TEXTS = ["甲", "乙", "丙", "丁", "戊", "己"]
 
 
 def build_synth_book(root, book="tbook", n_pages=2, n_cols=3, n_chars=6,
                      wear=0.3, seed=0):
-    """合成书：页面图 + phase3 网格 → 依次跑 M1/M3/M4/M5，返回书目录。
+    """合成书：页面图 + phase3 网格 → 跑 M1，簇直接按真值字分组写 clusters.json。
 
-    与 CLI 冒烟测试相同的数据形状，供 review/update 测试复用。
+    供 CandidateGenerator / vlm_assist 测试用（它们只读 phase4 + phase5 clusters.json）。
     真值：每格的字 = TEXTS[(seq + page) % 6]，也写进 phase3 的 text 字段。
     """
     book_dir = root / book
@@ -62,12 +58,38 @@ def build_synth_book(root, book="tbook", n_pages=2, n_cols=3, n_chars=6,
             json.dump({"columns": columns}, f, ensure_ascii=False)
 
     CharExtractor().run_book(book_dir)
-    ConservativeClusterer(ClusterParams(feature="raw")).run_book(
-        book_dir, montage=True)
-    vm = VariantMap({})
-    CandidateGenerator([PriorSource()], vm).run_book(book_dir)
-    rank_book(book_dir, UniformLM(), vm)
+    by_char: dict[str, list[str]] = {}
+    for inst in load_index(book_dir / "phase4_chars"):
+        by_char.setdefault(inst.ocr_text, []).append(inst.id)
+    clusters = [{"cluster_id": f"c{k:03d}", "size": len(ms), "members": ms,
+                 "reps": ms[:3]}
+                for k, (_, ms) in enumerate(sorted(by_char.items()))]
+    (book_dir / "phase5_clusters").mkdir()
+    with open(book_dir / "phase5_clusters" / "clusters.json", "w",
+              encoding="utf-8") as f:
+        json.dump({"clusters": clusters}, f, ensure_ascii=False)
     return book_dir
+
+
+def seed_glyphs(db, chars=("甲", "乙"), n_each=5, edition="ed1", seed=0):
+    """直接用 admit_instance 往库里塞合成字形：每字 n_each 个磨损变体。
+
+    返回 {char: [本次新入库的 instance_id, ...]}（已在库的不算，admit 幂等）。字形来自 synth.synthetic_glyph（每字固定种子）。
+    """
+    import cv2
+    rng = random.Random(seed)
+    out: dict[str, list[str]] = {}
+    for gi, ch in enumerate(chars):
+        base = synthetic_glyph(random.Random(100 + gi))
+        for k in range(n_each):
+            g = degrade(base, rng, wear=0.3)
+            ok, buf = cv2.imencode(".png", 255 - (g * 255).astype("uint8"))
+            assert ok
+            iid = f"tbook:{ch}:{k}"
+            if db.admit_instance(iid, ch, buf.tobytes(), provenance="test",
+                                 edition_tag=edition, page="1", col=gi, idx=k):
+                out.setdefault(ch, []).append(iid)
+    return out
 
 
 @pytest.fixture(scope="module")
