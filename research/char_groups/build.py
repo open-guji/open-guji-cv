@@ -13,12 +13,14 @@ overview 各册看图清单、cv `research/ri_yue/samples.jsonl`（#352）、dat
 一格可同属两组（如 已/日），每组各一行，按 `id` 去重做总数。
 
 真值档（`gold_tier`），一格多个来源都记在 `golds` 里，`gold` 取优先级最高的：
-  A_human   人裁事件（`human_chars`，后到覆盖）；`label_origin=human`
+  A_human   用户审查页人裁（G1，`review/<批>_verdicts.jsonl`，src=`user_review_<批>`，排最前）；
+            人裁事件（`human_chars`，后到覆盖）；`label_origin=human`
   B_vision  看图：`feedback/vision` 事件（后到覆盖）、overview 看图清单、#426 3 格、muse 试点里模型判的；
             `label_origin=vision`
   C_weak    已放行、非人裁、放行字＝整理本对位字＝坐标证人字（**对 match_ref 是循环的**，只作参考；
             己已巳不给这一档，这一族证人常讹）；`label_origin=witness`
-用法：python research/char_groups/build.py <snap_root> <dataset>/char-groups [--no-crops]
+用法：python research/char_groups/build.py <snap_root> <dataset>/char-groups [--no-crops] [--ctx N]
+  --ctx：上下文前后各取几个字，默认 30（G1 用户 10-06 定：先多放，以后按测试结果再定；G0 是 8）
 """
 from __future__ import annotations
 
@@ -40,8 +42,9 @@ OV = "/home/user/overview/项目进展/新书整理/书"
 CV = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATASET = os.environ.get("GUJI_DATASET", "/home/user/open-guji-dataset")
 ALL = set().union(*SETS.values())
-CTX = 8                     # 前后各取几个字（读序，跨列连读；未放行格用整理本字补，再没有记「□」）
-PRIO = {TIER_HUMAN: 0, TIER_VISION: 1, TIER_WEAK: 2, "X_stale": 3}
+# 前后各取几个字（读序，跨列连读；未放行格用整理本字补，再没有记「□」）。G0 取 8，G1 起 30
+CTX = int(sys.argv[sys.argv.index("--ctx") + 1]) if "--ctx" in sys.argv else 30
+PRIO = {TIER_HUMAN: 0, TIER_VISION: 1, TIER_WEAK: 2, "X_stale": 3, "X_unclear": 4}   # X_ 开头的不当真值，只记一笔
 
 
 def load(p):
@@ -153,6 +156,20 @@ def ri_yue_352():
     return out
 
 
+def user_reviews():
+    """用户亲自人裁的审查页（G1，`review_pages.py` 出页，`harvest_verdicts.py` 收回到 `<OUT>/review/<批>_verdicts.jsonl`）
+    → {id: (char|None, src, note)}。成员字 / `other:<字>` 记 A 档，src＝`user_review_<批>`；
+    「看不清」与没填字的「别的字」记 `X_unclear`（不当真值，留着看扎堆在哪）。"""
+    out = {}
+    for p in sorted(glob.glob(f"{OUT}/review/*_verdicts.jsonl")):
+        batch = os.path.basename(p)[:-len("_verdicts.jsonl")]
+        for r in jl(p):
+            v = r.get("verdict") or ""
+            ch = v[6:] if v.startswith("other:") else (None if v in ("other", "unclear") else v)
+            out[r["id"]] = (ch if ch and len(ch) == 1 else None, f"user_review_{batch}", f"{v} @{r.get('t')}")
+    return out
+
+
 def human_events(book):
     """人裁：`human_chars(book, bind=False)`（不走绑定表——快照不在工作区里，绑定表算不出来；
     按编号取，再在下面用快照里的 channel=human 复核）。"""
@@ -228,6 +245,7 @@ def main():
     from open_guji_cv.utils.jiazhu_order import order_keys
 
     looks = look_tables()
+    ureview = user_reviews()
     muse = muse_truth()
     r352 = ri_yue_352()
     pt = page_types()
@@ -280,6 +298,10 @@ def main():
                 ctx_top = cx.get("char") or ((cx.get("ranked") or [[None]])[0][0])
                 # 真值：所有来源都记，取优先级最高者
                 golds = []
+                if cid in ureview:
+                    # 用户亲自人裁（G1 审查页）排在 A 档最前：同档按出现先后取，它比工作区事件更新、更有意为之
+                    uch, usrc, unote = ureview[cid]
+                    golds.append({"char": uch, "tier": TIER_HUMAN if uch else "X_unclear", "src": usrc, "note": unote})
                 if cid in hum:
                     hch, hts = hum[cid]
                     # 快照之前的人裁，Step7 当时已按绑定表采信：快照里这格不是 channel=human 且同字，
@@ -301,7 +323,7 @@ def main():
                     golds.append({"char": r352[cid][0], "tier": TIER_HUMAN, "src": "r352_human"})
                 admitted_char = r.get("char") if r.get("admit") else None
                 core_set = {admitted_char, amap.get(cid), coord.get(cid), cands[0] if cands else None,
-                            *(x["char"] for x in golds if x["tier"] != "X_stale")} - {None}
+                            *(x["char"] for x in golds if not x["tier"].startswith("X_"))} - {None}
                 peri_set = core_set | {ctx_top, *cands, r.get("char"), *(x["char"] for x in golds)} - {None}
                 grp_core = [k for k, s in SETS.items() if core_set & s]
                 grp = [k for k, s in SETS.items() if peri_set & s]
@@ -312,7 +334,7 @@ def main():
                         and r["char"] not in SETS["jys"]):
                     golds.append({"char": r["char"], "tier": TIER_WEAK, "src": "witness_agree"})
                 golds.sort(key=lambda x: PRIO[x["tier"]])
-                top = golds[0] if golds and golds[0]["tier"] != "X_stale" else None
+                top = golds[0] if golds and not golds[0]["tier"].startswith("X_") else None
                 strong_chars = {x["char"] for x in golds if x["tier"] in (TIER_HUMAN, TIER_VISION)}
                 left = "".join(show(x[1]) for x in seq[max(0, i - CTX):i])
                 right = "".join(show(x[1]) for x in seq[i + 1:i + 1 + CTX])
