@@ -109,6 +109,8 @@ def column_strip(snap_root, r, cache):
     book, page = r["book"], r["page"]
     key = (book, page)
     if key not in cache:
+        if not os.path.exists(f"{WS}/data_full/zongmu/{book}/{page}.png"):
+            return None          # 没有工作区原图（云端沙箱）：不出整列小图
         s_cut = SNAPS[book][2]
         p = f"{snap_root}/{s_cut}/products/{book}/cell_shrink/p{page:04d}.json"
         img = cv2.imdecode(np.fromfile(f"{WS}/data_full/zongmu/{book}/{page}.png", np.uint8), 0)
@@ -323,11 +325,14 @@ def main():
     ap.add_argument("group", choices=sorted(BATCHES))
     ap.add_argument("-o", "--out", required=True)
     ap.add_argument("--seed-verdicts", help="上一轮收回的 verdicts.jsonl，嵌进页里续裁")
+    ap.add_argument("--cards", help="冻结卡片文件（默认 review/<组>_cards.jsonl）；专题小批用，如 ry 的相左旗 20 格")
+    ap.add_argument("--intro", help="覆盖页首说明")
+    ap.add_argument("--title", help="覆盖页标题")
     a = ap.parse_args()
     gk, root = a.group, a.root
     gdir = BATCHES[gk].get("base", gk)       # 数据目录（jys2 复用 jys 的 items/crops）
     items = {r["id"]: r for r in (json.loads(l) for l in open(f"{root}/{gdir}/items.jsonl", encoding="utf-8"))}
-    cpath = Path(root) / "review" / f"{gk}_cards.jsonl"
+    cpath = Path(a.cards) if a.cards else Path(root) / "review" / f"{gk}_cards.jsonl"
     if cpath.exists():
         cards = [json.loads(l) for l in open(cpath, encoding="utf-8")]
         print(f"照读冻结卡片 {cpath}（{len(cards)} 张）", file=sys.stderr)
@@ -368,8 +373,8 @@ def main():
     frame_txt = {"ry": "机器已放行的格里随机抽", "rr": "机器已放行的格里随机抽",
                  "jys": "vol04 全部待审格，加 vol05 随机抽 50 格",
                  "jys2": "vol05–10 里机器已给字的格，按给的字与通道分层随机抽（含 1 格上轮人裁疑有误的复核）"}[gk]
-    intro = f"字组「{name}」人裁：{frame_txt}（{plan}，共 {len(rows)} 格）。看字块和上下文，点这一格实际是哪个字。"
-    title = f"{name}人裁"
+    intro = a.intro or f"字组「{name}」人裁：{frame_txt}（{plan}，共 {len(rows)} 格）。看字块和上下文，点这一格实际是哪个字。"
+    title = a.title or f"{name}人裁"
     js = (PAGE_JS.replace("__MEMBERS__", json.dumps(members, ensure_ascii=False))
           .replace("__TITLE__", title).replace("__INTRO__", intro))
     css = VERDICT_CSS.replace("NMEM", str(len(members)))
