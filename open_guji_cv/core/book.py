@@ -471,10 +471,6 @@ class BookSpec:
             return "keben_body_v2"
 
 
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
-
-
 def _expand_pages(raw) -> list[int]:
     """页号表达式 → 页号列表。整数照收，字符串支持 `"10-380"` 与 `"3,9,12-15"`。
 

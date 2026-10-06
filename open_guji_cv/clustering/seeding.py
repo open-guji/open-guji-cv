@@ -41,7 +41,7 @@ from .align_label import (carrier_slots, clean_labels, is_han, label_book,
                           page_reference)
 from .crop_quality import assess_crop, detect_intrusion
 from .extractor import CharInstance, load_index
-from .glyph_db import CONFUSABLE_CHARS, CONFUSABLE_GROUPS, GlyphDB, _unpng
+from .glyph_db import CONFUSABLE_CHARS, GlyphDB, _unpng
 from .lm import BaseLM, CharNgramLM, InterpolatedLM, train_ngram
 from .match import NEVER_MATCH_FAMILIES, GlyphMatcher, MatchResult
 from .context_step import build_strategy

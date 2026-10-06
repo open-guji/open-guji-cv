@@ -390,33 +390,5 @@ def collate_page(store: ProductStore, book: str, page: int, witnesses: list[Witn
     return {w.label: diff_page(slots, w, page) for w in witnesses}
 
 
-def merge_verdict(per_witness: dict[str, list[Diff]], witnesses: list[Witness]
-                  ) -> dict[str, str]:
-    """同一字位上多个证人的裁定 → `{id: witness_verdict}`（05 §三 的表）。
-
-    按质量加权，**不是简单多数**：与最好的证人（光盘版）不一致优先怀疑我们错；
-    「我们＝杳冥 ≠ 光盘」反而可疑——09-11 前 vol01 是跟着杳冥本选的字。
-    """
-    if len(witnesses) < 2:
-        return {}
-    best = witnesses[0].label
-    by_id: dict[str, dict[str, Diff]] = {}
-    for label, diffs in per_witness.items():
-        for d in diffs:
-            by_id.setdefault(d.id, {})[label] = d
-
-    out: dict[str, str] = {}
-    for cid, m in by_id.items():
-        others = [lb for lb in m if lb != best]
-        if best in m and others:
-            refs = {m[lb].ref for lb in m}
-            out[cid] = "all_disagree" if len(refs) > 1 else "witnesses_agree"
-        elif best in m:
-            out[cid] = "best_only"          # 只有最好的证人有异议
-        else:
-            out[cid] = "lesser_only"        # 光盘版认同我们，次等证人有异议 → 多半它错
-    return out
-
-
 def to_json(d: Diff | ColDiff) -> dict:
     return asdict(d)

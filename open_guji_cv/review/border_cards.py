@@ -53,7 +53,7 @@ from ..utils.column_projection import (
     strip_column_rules,
 )
 from ..utils.preclean import effective_raw_path
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 HEAD_UP, HEAD_DN = 250, 45
 STRIP_W, STRIP_PAD = 480, 42

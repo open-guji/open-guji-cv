@@ -31,7 +31,7 @@ import numpy as np
 
 from .extractor import (MIN_COMP_AREA_RATIO, PADDING_RATIO, _assign_column,
                         _column_binary)
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 Cells = list[tuple[int, float, float]]
 Masks = dict[int, np.ndarray]

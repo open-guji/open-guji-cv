@@ -10,13 +10,11 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 
 import cv2
 import numpy as np
 
-from ..utils.image_io import imread
 
 
 def build_goldset(book_out_dir: str | Path, min_size: int = 2,
@@ -117,59 +115,3 @@ def make_engine(spec: str) -> Engine:
     raise ValueError(f"未知引擎: {spec}")
 
 
-def run_bench(book_out_dir: str | Path, engine_specs: list[str],
-              limit: int | None = None, mode: str = "vlm_only") -> dict:
-    """在黄金集上评测各引擎，并给出多引擎投票融合的效果。"""
-    book = Path(book_out_dir)
-    gold = build_goldset(book, mode=mode)
-    if limit:
-        gold = gold[:limit]
-    inst = {}
-    with open(book / "phase4_chars" / "index.jsonl", encoding="utf-8") as f:
-        for line in f:
-            d = json.loads(line)
-            inst[d["id"]] = d
-
-    patches = []
-    for g in gold:
-        img = imread(str(book / "phase4_chars" / inst[g["rep_id"]]["patch_path"]))
-        if img is not None and img.ndim == 3:
-            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        patches.append(img)
-
-    results: dict[str, dict] = {}
-    preds: dict[str, list[list[str]]] = {}
-    for spec in engine_specs:
-        eng = make_engine(spec)
-        t0 = time.time()
-        out = [eng.recognize(p) if p is not None else [] for p in patches]
-        dt = time.time() - t0
-        top1 = sum(1 for g, o in zip(gold, out) if o and o[0] == g["char"])
-        topk = sum(1 for g, o in zip(gold, out) if g["char"] in o)
-        w_top1 = sum(g["size"] for g, o in zip(gold, out)
-                     if o and o[0] == g["char"])
-        w_tot = sum(g["size"] for g in gold)
-        results[eng.name] = {
-            "top1": round(top1 / len(gold), 4),
-            "topk": round(topk / len(gold), 4),
-            "top1_weighted": round(w_top1 / w_tot, 4),
-            "chars_per_sec": round(len(gold) / dt, 1),
-        }
-        preds[eng.name] = out
-
-    # 多引擎投票：首选加权 1.0，次选 0.3；平票取先列引擎
-    if len(preds) > 1:
-        vote_ok = 0
-        for i, g in enumerate(gold):
-            score: dict[str, float] = {}
-            for k, (name, out) in enumerate(preds.items()):
-                for j, ch in enumerate(out[i][:3]):
-                    score[ch] = score.get(ch, 0.0) + (1.0 if j == 0 else 0.3) \
-                        * (1.0 - 0.01 * k)
-            if score and max(score, key=score.get) == g["char"]:
-                vote_ok += 1
-        results["投票融合"] = {"top1": round(vote_ok / len(gold), 4)}
-
-    return {"goldset_mode": mode, "goldset_size": len(gold),
-            "goldset_instances": sum(g["size"] for g in gold),
-            "engines": results}

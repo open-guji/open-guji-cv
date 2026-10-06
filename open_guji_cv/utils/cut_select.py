@@ -239,7 +239,6 @@ class UNetJudge:
 
         同一窗口按内容记忆（2026-09-25）：升级切点上 `assess` → 扩池 `guided_seam` → 扩池后
         再 `assess` 是**同一个窗口连跑三次前向**，CPU 上一次 ≈0.2 s。只留最近几个窗口。"""
-        import hashlib
         key = (win_gray.shape, ink_threshold, cc_max,
                hashlib.blake2b(np.ascontiguousarray(win_gray).tobytes(), digest_size=16).digest())
         cache = self.__dict__.setdefault("_owner_cache", {})

@@ -30,7 +30,7 @@ from .ids_guard import ids_of
 from .normalize import normalize_patch
 from ..products.cache import ImageCache
 from ..steps.align_ref import DEFAULT_CORPUS
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 
 def rare_patch(book: str, page: int, col: int, slot: int, sub: str = "",
@@ -80,7 +80,6 @@ def db_font_topk(norm, editions: list[str], k: int, norm_stroke: int | None = No
     """
     if not editions:
         return []
-    from .glyph_db import GlyphDB
     from .seeding import cached_matcher_from_db
     from ..steps.glyph_match import db_fingerprint, _default_db
     path = _default_db()
@@ -144,7 +143,7 @@ def _fuse(a, b, cnn_topk, emb_topk, k: int, db_topk=None) -> list[dict]:
     里最贵的部分，见 `font_candidates.candidates_batch` 模块头）就完全不用
     跑了——`a`/`b` 只在 CNN 不可用时才现算，见 `rare_for`/`rare_for_batch`。
     """
-    from .cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, HOG_WEIGHT, rrf
+    from .cnn_candidates import CNN_WEIGHT, EMB_WEIGHT, rrf
     cnn_order = [c for c, _ in cnn_topk]
     emb_order = [c for c, _ in emb_topk]
     db_order = [c for c, _ in (db_topk or [])]

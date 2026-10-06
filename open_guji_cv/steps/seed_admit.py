@@ -47,7 +47,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.recog import (AdmitRec, ColumnAdmit, PageAdmit,
                                     PageAlignRef, PageDecision, PageMatch,
                                     PageOcr)
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 from ..utils.ji_yi_si import FAMILY as _JYS
 
 _log = logging.getLogger(__name__)

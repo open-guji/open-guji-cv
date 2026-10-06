@@ -10,7 +10,7 @@ R2s 的判据与 `eval/rulers.py` 完全一致（格线处墨占比 > INK_ON_LIN
 from __future__ import annotations
 
 import random
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 SHARD = "char-segmentation/touching-cuts"
 
@@ -291,7 +291,7 @@ def drifted_boundaries(book: str, store=None, tol: int = 2,
     from ..products import kinds as _k  # noqa: F401
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    from .rulers import INK_ON_LINE, _col_profile
+    from .rulers import _col_profile
 
     st = store or ProductStore()
     ic = ImageCache()

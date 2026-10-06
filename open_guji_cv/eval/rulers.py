@@ -32,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 import numpy as np
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 # R2：格线处墨占比超过这个值就算「穿字」（口径同 step3_error_survey）
 INK_ON_LINE = 0.02

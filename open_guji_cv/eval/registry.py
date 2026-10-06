@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
@@ -251,10 +251,6 @@ def find_eval(key: str) -> EvalSpec | None:
     if key in EVALS:
         return EVALS[key]
     return next((s for s in EVALS.values() if s.shard == key), None)
-
-
-def evals_for_shard(shard: str) -> list[EvalSpec]:
-    return [s for s in EVALS.values() if s.shard == shard]
 
 
 def _need_met(name: str) -> bool:

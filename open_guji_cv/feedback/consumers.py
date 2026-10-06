@@ -15,7 +15,7 @@ from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
 from .events import Event, EventLog
 from .routes import Destination, RouteTable
-from ..utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ..utils.image_io import imread as cv_imread
 
 
 @dataclass
@@ -530,7 +530,6 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
     `evidence` 记触发的判据（quality 与人顺手认出的字）。已在名单里的跳过。
     """
     import json
-    from pathlib import Path
 
     from ..clustering.exclusions import default_path, load_exclusions
 

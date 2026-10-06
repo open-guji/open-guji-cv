@@ -236,7 +236,6 @@ def to_shell_verdicts(events: list[Event]) -> dict[str, dict]:
     `verdictOf` 取的是 `(state[id]||{}).v`，扁平串会让整轮裁决在页面上全部消失
     （`build_border_gold_reviews.py --verdicts` 现在就是这个 bug）。
     """
-    import calendar, time as _t
     out: dict[str, dict] = {}
     for e in sorted(events, key=lambda x: x.order):
         if e.kind == "band":
