@@ -400,6 +400,12 @@ class SeedAdmitParams(BaseModel):
     lane_seal_via: str = "coord"
     """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。"""
     lane_seal_title_marks: str = "總目,四庫全書"
+    lane_variant_guard: bool = True
+    """三通道统一的异体护栏（overview#433 vol04 实测）：要放的字与图上字形的线索——现候选字
+    `rec.char`、库匹配前 `lane_variant_topk` 名候选——任一是**已知异体对**（语义同、字面不同）时
+    不走通道、送审，免得把刻本异体改成通用字（vol04 coord_fallback 把 6 格刻本「㫖」放成「旨」：
+    库首位是「旨」，㫖 只在候选里）。只在三通道任一开着时进 dump。"""
+    lane_variant_topk: int = 3
     lane_witness_fingerprint: str = ""
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
@@ -444,7 +450,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
-                      "lane_seal_title_marks", "lane_witness_fingerprint"):
+                      "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
+                      "lane_variant_topk"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
@@ -1422,6 +1429,13 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             if hit is None:
                 continue
             name, char, lev = hit
+            if p.lane_variant_guard and char:
+                m = mmap.get(rec.id)
+                forms = [rec.char] + [c for c, _ in ((m.candidates or [])[:max(p.lane_variant_topk, 0)] if m else [])]
+                vf = next((f for f in forms if variant_pair(f, char)), None)
+                if vf is not None:      # 图上可能是刻本异体：别把它改成通用字（#433）
+                    rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
+                    continue
             rec.admit, rec.channel, rec.provenance, rec.char = True, name, name, char
             rec.evidence = {**ev, "lane": {"lane": name, **lev, "prev_doubts": list(rec.doubts or [])},
                             "no_glyph_lib": True}

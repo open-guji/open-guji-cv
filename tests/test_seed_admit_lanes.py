@@ -266,3 +266,27 @@ def test_slots_skip_seal_nonchar():
                    evidence={"occluded": {"via": "coord_blank", "ref_blank": True}})
     s = _to_slot("tbook", 1, 1, rec, None)
     assert s.excluded and not s.unreadable
+
+
+# ── 三通道统一异体护栏（#433 vol04：coord_fallback 把刻本「㫖」放成「旨」）──────────────
+
+def test_lane_variant_guard_blocks_when_candidate_is_variant():
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], char="旨")})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "旨" + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True)
+    mm = {f"{B}:1:5": NS(char=None, candidates=[("旨", 0.95), ("㫖", 0.94)], guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits)
+    r = out[0].chars[4]
+    assert n == 0 and not r.admit
+    assert r.evidence["lane_skip"]["why"] == "cand_variant" and r.evidence["lane_skip"]["form"] == "㫖"
+
+
+def test_lane_variant_guard_off_restores_old_behaviour():
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], char="旨")})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + "旨" + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True, lane_variant_guard=False)
+    mm = {f"{B}:1:5": NS(char=None, candidates=[("旨", 0.95), ("㫖", 0.94)], guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits)
+    assert n == 1 and out[0].chars[4].char == "旨"
