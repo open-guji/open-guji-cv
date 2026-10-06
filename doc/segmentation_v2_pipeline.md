@@ -1799,11 +1799,12 @@ Step 3 的输入契约就是「一列」。
   `n_body_slots` = 实际位数，`boundaries` 为空。雙行按「右行第 i 字 ↔ 左行第 i 字」
   共用一个 slot（`sub=a/b`），下游 `jiazhu_order` 读序照旧。
 - **闸3**：列级 flags 带 `roster` 的列不按版式格数拦，不查碎格；`roster_dense_guess`
-  （字数是推出来的）、`roster_overlap`（相邻字 y 重叠）只 flag。
+  （字数是推出来的）、`roster_jiazhu`（有雙行）、`roster_overlap`（相邻字 y 重叠）只 flag。
 - **Step4**：`roster` 列每格按 Step3 字框外扩 `padding_ratio` 直接裁，不过 CharExtractor
   的满宽网格收缩（雙行两行相位不齐、「臣」与官衔末字 y 重叠，满宽裁会互相带墨）。
-- **量**：字距拉开页 59/62 列字数全对；大字压扁粘连+雙行的 p90 只有 1/8，这类列由
-  `roster_dense_guess` 送人核。样本是裁过版框的图，真原图上的复核待做。
+- **量**（vol01 真原图 p89–132，12 页 106 列目测小金标）：101/106 列字数全对；main 非空格计数
+  30/90 且 44 页全部过闸（静默错）。错的 5 列全在 p90，都带标；全卷 24/396 列带
+  `roster_dense_guess`/`roster_jiazhu` 交人核。开关外的页（p88、p133）产物与关开关逐字节相同。
 
 ### Step 4：字框收缩
 
