@@ -202,9 +202,10 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     excluded = on_list and not defect
     # 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：不放行，但用户定「文本产物
     # 照常输出这个字」——`char` 是整理本的默认字（坐标对位优先），不是机器猜测，照出；
-    # 坐标对位说这一位是空格（印章切出来的假格）的，当非字跳过，不占位。
+    # 坐标对位说这一位是空格（印章切出来的假格）的，当非字跳过，不占位。seed_admit 的印章区
+    # 通道（`lane_seal`，overview#433）把这类格判成非字放行（`admit=True`、`char=None`），同样跳过。
     occ = (rec.evidence or {}).get("occluded") or None
-    if occ and occ.get("ref_blank") and not rec.admit:
+    if occ and occ.get("ref_blank") and (not rec.admit or rec.char is None):
         excluded = True
     # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
