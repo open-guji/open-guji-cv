@@ -7,6 +7,7 @@
 | 目录 | 时间 | 内容 |
 |---|---|---|
 | `borrow_cnn_first/` | 09-27 | 借库书审卡装配结果落成规范 JSON，改前改后比 sha256（C 道 borrow_cnn_first） |
+| `char_groups/` | 10-06 | 字组测试集（己已巳/日曰/入人八）建集、现行产物基线、语料搭配统计（overview#437，G0）；数据在 dataset `char-groups/` |
 | `l2_seal_seg/` | 09-30 | 印章遮挡格的 Step4 字框是否被撑大：框宽/列宽、高/格高 |
 | `muse_variant_audit/` | 10-02 | muse 批次 V1：异体关系表单来源边复核（overview#372；批次结果解冻后推这里） |
 | `muse_variant_pilot/` | 09-27 | muse 判异体关系的试点与自动真值校准集 |
