@@ -5,7 +5,8 @@
     guji status <book> [--pipeline P] [--pages …] [--json]
     guji console [--port 8640] [--no-browser]
     guji cache usage|prune [--limit-gb N]
-    guji cache build-rare-index --book <book>              # 云端预建 Step5-b embedding 索引，供服务器分发命中
+    guji cache build-rare-index --book <book> [--jobs 4]   # 云端预建 Step5-b embedding 索引，供服务器分发命中
+    guji cache warm --book <book> [--pages all] [--jobs 4]  # 多进程预渲字块缓存（快照导入后用）
     guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
@@ -55,6 +56,31 @@ def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
     return enabled
 
 
+def _warn_rare_index_missing(book: str) -> None:
+    """Step5-b 的 embedding 模板表没预建时先出声（overview#429）。
+
+    缺表时第一页要现建：字表 × 8 套字体逐字渲染 + 前向，单核约 25 字/秒，四庫一册两档
+    约 7.2 万字 ≈ 45–50 分钟，期间只有每千字一行进度，看着像卡死在第一页。只提示，不拦。"""
+    try:
+        from .clustering import cnn_candidates as cc
+        from .clustering.rare_panel import book_charsets
+        from .steps.align_ref import book_corpus
+        inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
+        if not inst.available:
+            return
+        cs_base, cs_esc, _ = book_charsets(book, book_corpus(book))
+        miss = [(n, len(cs), f.name) for n, cs in (("base", cs_base), ("escalate", cs_esc)) if cs
+                for _k, f, _x in [inst.emb_index_key(cs)] if not f.exists()]
+    except Exception:  # noqa: BLE001 —— 只是提示，算不出来就不提示
+        return
+    if miss:
+        n = sum(m[1] for m in miss)
+        print(f"⚠️ Step5-b 模板索引未预建：{', '.join(f'{a} {b} 字（{c}）' for a, b, c in miss)}。"
+              f"若有页要算，第一页会现建 {n} 字（单核约 {n // 25 // 60} 分钟）。建议先 "
+              f"`guji cache build-rare-index --book {book} --jobs 4 -w <工作区>`，"
+              f"或导入带这几个 key 的索引包（runbook S5）", flush=True)
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -64,6 +90,8 @@ def cmd_pipeline(args) -> None:
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
+    if "rare_candidates" in steps:
+        _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
     try:
@@ -107,6 +135,11 @@ def cmd_status(args) -> None:
         for r, n in sorted(own.items(), key=lambda kv: -kv[1]):
             tail = "，须重跑" if r.startswith("册配置") else ""
             print(f"      ↳ 过期 {n:3d} 页：{r}{tail}")
+        # 开关开着、可选上游没产物（overview#429）：步骤照跑，但那一路通道在这些页没生效
+        for g in d.get("optional_gaps") or ():
+            sw = "/".join(g["switches"])
+            print(f"      ⚠ {sw} 开着但 {g['producer']} 缺 {len(g['missing']):3d} 页，"
+                  f"这些页 {sw} 通道未生效（先跑 --from {g['producer']} --to {g['producer']}）")
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
@@ -542,6 +575,26 @@ def cmd_cache(args) -> None:
         y0 = max(0, min(h - 1, args.y0)); y1 = max(y0 + 1, min(h, args.y1 or h))
         from .render.overlay import encode_png
         _write(args.out, encode_png(img[y0:y1]))
+    elif args.action == "warm":
+        # 多进程预渲字块（overview#429）：快照导入后 cache/ 是空的，串行步（rare_candidates）
+        # 逐格现切字块占了每页九成时间。并发安全的做法见 ops/cache_warm.py 模块头。
+        from .core.book import load_book
+        from .core.pipeline import default_pipeline_id, load_pipeline
+        from .core.step import RunContext
+        from .ops.cache_warm import warm
+        from .products.store import ProductStore
+        from . import steps as _s  # noqa: F401
+        if not args.book:
+            print("必须给 --book"); sys.exit(1)
+        book = load_book(args.book)
+        pid = args.pipeline or default_pipeline_id(book)
+        ctx = RunContext(book, ProductStore(), cache, log=lambda _: None, pipeline=load_pipeline(pid))
+        res = warm(ctx, pid, book.resolve_pages(args.pages), max(1, args.jobs or 1),
+                   log=lambda s: print(s, flush=True))
+        print(f"预渲完成：{res['pages']} 页，{res['patches']} 个字块，{res['seconds']}s，"
+              f"失败 {len(res['failed'])} 页")
+        for pg, err in sorted(res["failed"].items())[:20]:
+            print(f"  p{pg}: {err}")
     elif args.action == "verify":
         # 缓存是不是对着现行产物切的（产物从别处换进来没清缓存的话会错位，见 ops/cache_verify.py）
         from .ops.cache_verify import main_print, verify_book
@@ -601,7 +654,16 @@ def _cmd_cache_build_rare_index(args) -> None:
             print(f"{name}：已有缓存 {f}（key={key}），跳过重建；如需强制重建先删掉这个文件")
             continue
         t0 = time.time()
-        mat, names = inst._emb_index(cs)
+        jobs = getattr(args, "jobs", 1) or 1
+        if jobs > 1:
+            # 分片多进程建（overview#429）：与单进程逐位相同，见 `ops.rare_index_build`
+            from .ops.rare_index_build import build_parallel
+            mat, names = build_parallel(inst, cs, jobs)
+            if mat.shape[0] == 0:
+                print(f"{name}：建成 0 行（字表 {len(cs)} 字），不落盘。检查 fonts/。"); sys.exit(1)
+            cc._save_emb_index(f, mat, names)
+        else:
+            mat, names = inst._emb_index(cs)
         dt = time.time() - t0
         print(f"{name}：{f} 建好，{len(names)}/{len(cs)} 字，{dt:.1f}s")
 
@@ -2437,15 +2499,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | "
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | warm | "
                                      "build-rare-index | build-font-index")
-    p.add_argument("action", choices=["usage", "prune", "get", "column", "verify",
+    p.add_argument("action", choices=["usage", "prune", "get", "column", "verify", "warm",
                                       "build-rare-index", "build-font-index"])
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
-    p.add_argument("--pages", default="all", help="verify：页表达式，缺省 all")
+    p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="build-rare-index：分片多进程建（逐位相同；云端 4 核给 4，约快 4 倍）；"
+                        "warm：预渲字块的进程数")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
     p.add_argument("--key", default="", help="get：缓存键，如 p0024c01s10")
     p.add_argument("--page", type=int, default=0, help="column：页号")
