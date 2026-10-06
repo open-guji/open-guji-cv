@@ -146,6 +146,21 @@ class SeedAdmitParams(BaseModel):
     数字见任务书对应 done 单，没实现为第二个开关值——需要时改这一个布尔量的调用点
     即可，不必新增字段。缺省关：用户 09-06/09-11 定的规矩是「整理本给了就放行」，
     这一族默认继续全放行，开不开等用户看完两种做法的数字再定。"""
+    ji_yi_si_ctx_rule: bool = False
+    """己/已/巳 一族的上下文表放行规则（overview#428，N1，缺省关）。
+
+    开了之后，非「干支/时辰」的路径（搭配/整理本/默认）不再放行整理本或默认字，改为：
+    **上下文表**（`utils/near_form_ctx.py`，外部语料建的前后 1–2 字决策表，纯度 ≥ `ji_yi_si_ctx_purity`、
+    次数 ≥ `ji_yi_si_ctx_min_n`）高把握定字就放行（通道 `ji_yi_si`，证据 `ji_yi_si.why` 记「上下文表…」），
+    定不下来的**一律送人审**（`doubts` 记 `ji_yi_si_ctx_review`）。人裁位不动。
+    与 `ji_yi_si_review`（三方一致闸）二选一，本开关开着时以本开关为准。
+    数字：强真值格（人裁＋看图）上，现行 `resolve(use_ref=all)` 整理本路 vol02 42/45、vol03 16/28、
+    vol04 5/7 错；规则放行的格 vol02 7、vol03 10、vol04 13，全部 0 错；代价是人审率上升
+    （全册本族格 vol02 47/60、vol03 32/47、vol04 14/27 送审）。上下文表在整套里**新增**放行的只有
+    vol02 8 格、vol03 3 格、vol04 0 格，大头仍是干支/时辰。"""
+    ji_yi_si_ctx_purity: float = 0.98
+    ji_yi_si_ctx_min_n: int = 5
+    ji_yi_si_ctx_fingerprint: str = ""      # 自动填（仅开关开时）：表文件变了产物过期
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -430,6 +445,9 @@ class SeedAdmitParams(BaseModel):
                                file_fingerprint(_shadow_model_path(self)) or "missing")
         if not self.approx_fingerprint:
             object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
+        if self.ji_yi_si_ctx_rule and not self.ji_yi_si_ctx_fingerprint:
+            from ..utils.near_form_ctx import CONFIG as _CTX_CONFIG
+            object.__setattr__(self, "ji_yi_si_ctx_fingerprint", corpus_fingerprint([str(_CTX_CONFIG)]))
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -439,7 +457,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.11", unit="cell",   # 1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.12", unit="cell",   # 1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -453,6 +471,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.variant_ledger",
                    "open_guji_cv.clustering.note_lexicon",
                    "open_guji_cv.utils.jiazhu_order",
+                   "open_guji_cv.utils.near_form_ctx",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -987,7 +1006,8 @@ class SeedAdmitStep(Step):
                               **({"patch_missing": patch_missing[r.id]}
                                  if r.id in patch_missing else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
-        d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review)
+        d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review,
+                                              ctx_rule=(p.ji_yi_si_ctx_purity, p.ji_yi_si_ctx_min_n) if p.ji_yi_si_ctx_rule else None)
         n_auto += d_auto
         n_review += d_review
         if p.rare_ref:
@@ -1161,7 +1181,7 @@ def _shadow_promote_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: 
 
 
 def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
-                      review_gate: bool = False) -> tuple[int, int]:
+                      review_gate: bool = False, ctx_rule: tuple[float, int] | None = None) -> tuple[int, int]:
     """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
 
     按本页读序取前后字：
@@ -1224,6 +1244,23 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
             r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
             continue
+        if ctx_rule is not None:
+            # 上下文表规则（overview#428）：表定得下就放行，定不下就送审；不看整理本、不走默认「已」
+            from ..utils.near_form_ctx import decide as _ctx_decide
+            c2, why2 = _ctx_decide(_ctx_known(seq, i, -1), _ctx_known(seq, i, 1), ctx_rule[0], ctx_rule[1])
+            r.evidence = {**(r.evidence or {}), "ji_yi_si": {"char": c2, "why": why2}}
+            if c2:
+                if not r.admit:
+                    d_auto += 1
+                    d_review -= 1
+                r.char, r.admit, r.channel, r.provenance = c2, True, "ji_yi_si", "context"
+                r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
+            elif r.admit:
+                r.char, r.admit, r.channel, r.provenance = None, False, None, ""
+                r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_ctx_review"]))
+                d_auto -= 1
+                d_review += 1
+            continue
         m = mmap.get(r.id)
         top1 = (m.candidates[0][0] if m and m.candidates else (m.char if m else None))
         d = dmap.get(r.id)
@@ -1246,6 +1283,16 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
                 d_auto += 1
                 d_review -= 1
     return d_auto, d_review
+
+
+def _ctx_known(seq: list, i: int, step: int, width: int = 2) -> str:
+    """第 i 格前（step=-1）/ 后（step=1）连续已知的至多 width 个字；碰到未知字就停（不跨过空位拼接）。"""
+    out: list[str] = []
+    j = i + step
+    while 0 <= j < len(seq) and len(out) < width and seq[j].char:
+        out.append(seq[j].char)
+        j += step
+    return "".join(reversed(out)) if step < 0 else "".join(out)
 
 
 @lru_cache(maxsize=4)
