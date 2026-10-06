@@ -22,10 +22,13 @@ products 与 cache 分家…）。那段说明本身就是这套测试设计不�
 from __future__ import annotations
 
 import open_guji_cv.steps  # noqa: F401
+import pytest
 from helpers import make_book, make_ctx, page_decision, page_match, write_product
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.gold.v2_align import align_book
 from open_guji_cv.steps.align_ref import AlignRefParams
+
+pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
 
 BOOK, PAGE, COL = "tbook", 1, 1
 
