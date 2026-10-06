@@ -2504,6 +2504,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("-f", "--follow", action="store_true", help="log：跟着刷")
 
+    # glyph-db（2026-10-06 从 v1 入口搬来，自带 -w，不走 install_workspace_option）
+    from .cli_glyph_db import add_parser as _add_glyph_db, cmd_glyph_db
+    _add_glyph_db(sub)
+    COMMANDS_V2["glyph-db"] = cmd_glyph_db
     install_workspace_option(sub)
 
 

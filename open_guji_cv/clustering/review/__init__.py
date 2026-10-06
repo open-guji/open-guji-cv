@@ -1,8 +1,7 @@
-"""M6 人工审查 Web 界面。
+"""审查数据装配：state.ReviewSession（纯逻辑），以及种子／对勘审查材料导出（seed_export、collation_export）。
 
-- state.py  : ReviewSession —— 数据装配 + 标签事件（纯逻辑，可单测）
-- server.py : 本地 HTTP 服务（API + 静态页 + 图块服务）
-- static/   : 单页前端（原生 JS，无外部依赖）
+2026-10-06 cv 大清理（overview#413）：v1 的本地审查 HTTP 服务（server.py + static/）与 artifact_export 随 v1 `review` 命令一起删除；
+审阅一律走控制台。
 """
 
 from .state import ReviewSession
