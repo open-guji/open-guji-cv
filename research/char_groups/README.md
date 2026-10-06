@@ -31,3 +31,7 @@ dataset 默认 `/home/user/open-guji-dataset`（`GUJI_DATASET` 可改）。快�
 人裁用 `human_chars(book, bind=False)`：快照不在工作区里，绑定表算不出来；早于快照、快照又没采信的人裁记成 `X_stale`，不当真值。
 
 第一轮收回（10-06，用户太累没裁完）：ry 18/276、rr 33/300、jys 53/120（看不清 7）已并入 dataset，记 A 档；交单与用户对三组的判法见 `doc/handoffs/G1_437.md`。
+
+## rr/ — 入人八字形分类器（Z-rr，overview#442，离线评测，不进管线）
+`feat.py`（二值化→去碎点→24×24 网格 + 行列投影 + 顶部带结构）、`eval_clf.py`（logreg/rf 对照）、`run_final.py`（定稿评测，写 dataset `char-groups/rr/clf_eval.json`）、`loo_weak.py`（弱标签格按册留出的分歧）。
+依赖 numpy/opencv/scikit-learn；读 dataset `char-groups/rr/{items.jsonl,crops/}`，不需要工作区与快照。结果见 dataset rr/README「字形分类器」与 `doc/handoffs/HANDOFF_Z_rr.md`。
