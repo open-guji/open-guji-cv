@@ -49,6 +49,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Callable, Iterable
 
+from .events import counts_as_human
+
 WHO = ("ours", "theirs", "neither")
 CATS = ("variant", "jiajie", "taboo", "other")
 BUCKETS = ("pending",) + WHO
@@ -145,7 +147,7 @@ def human_verdicts(events: Iterable, book: str,
             # 的旧事件一律不认——新事件 `collate_verdict` 由接口校验过字位，不受此限。
             if len(pair) == 2 and (row.get("char"), row.get("ref")) == pair:
                 out[key] = Verdict(key, pair, "ours", None, "", e.ts, e.id)
-        elif e.kind == "confirm" and (p.get("v") or "confirm") == "confirm":
+        elif e.kind == "confirm" and (p.get("v") or "confirm") == "confirm" and counts_as_human(e):
             row = row_of(key) or {}
             pair = tuple(p.get("pair") or ()) or (
                 (row["char"], row["ref"]) if row.get("char") and row.get("ref") else None)

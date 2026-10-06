@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from ..feedback.events import EventLog
+from ..feedback.events import EventLog, counts_as_human
 
 
 #: 算「这个字位已经裁过了」的动作。`relabel`（改判字）也算——人已经对它表过态。
@@ -22,6 +22,10 @@ DECIDED_KINDS = frozenset({"confirm", "not_a_char", "skip", "seg_defect", "relab
 def _is_decision(e, pre: str) -> bool:
     """这条事件算不算「对这一格表过态」（`decided_cells` 的口径，不看是否仍有效）。"""
     if e.kind not in DECIDED_KINDS or e.target.unit != "cell" or not e.target.key.startswith(pre):
+        return False
+    # 看图结论不算「已裁」（overview#428，`events.counts_as_human`）：算了格就被藏出队列，
+    # 人永远看不到。
+    if not counts_as_human(e):
         return False
     # 「切坏 / 带残留」**不带字**时不是定字裁决（2026-09-20，总览/13 §一·3）：人说的是
     # "这块图先别用"，没说这是什么字。此前把它也算作"裁过"，排除名单撤了之后这些格
@@ -165,6 +169,8 @@ def shape_decided_cells(book: str, log: EventLog | None = None) -> dict[str, str
     for e in evs:
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
+        if not counts_as_human(e):
+            continue
         p = e.payload or {}
         if p.get("v") in ("confirm", "seg_defect") and p.get("shape"):
             out[e.target.key] = str(p["shape"])
@@ -276,6 +282,8 @@ def defect_only_cells(book: str, log: EventLog | None = None) -> set[str]:
     for e in evs:
         if e.kind not in DECIDED_KINDS or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
+        if not counts_as_human(e):
+            continue
         p = e.payload or {}
         last[e.target.key] = e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape")
     return {k for k, v in last.items() if v}
@@ -299,7 +307,7 @@ def flagged_cells(book: str, log: EventLog | None = None) -> set[str]:
             continue
         if e.kind == "needs_review":
             last[e.target.key] = True
-        elif e.kind in DECIDED_KINDS:
+        elif e.kind in DECIDED_KINDS and counts_as_human(e):
             last[e.target.key] = False
     return {k for k, v in last.items() if v}
 
