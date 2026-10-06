@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """影子放行模型的预测文件（overview#269）：给「对齐改字层 · 网格」排序＋预勾用。
 
-影子模型（`scripts/experiments/shadow_admit/`，梯度提升树）的价值在**排序和预选，不在自动改判**：
+影子模型（`research/shadow_admit/`，梯度提升树）的价值在**排序和预选，不在自动改判**：
 网格里影子把握 ≥ 0.9 且影子字 == 整理本字的卡排最前、预先标上「影子预勾」，人仍要点提交。
 
 文件约定（缺省不存在，一切照旧、不报错）：`<ws>/cache/shadow/<book>.json`
@@ -9,7 +9,7 @@
     {"version": 1, "book": "vol03", "cells": {"vol03:12:3:5": {"char": "之", "conf": 0.97}, ...}}
 
 `cells` 的键 = 字位 id（与卡片 `id` 同），`char` = 影子字，`conf` = 影子把握度（0~1）。
-由 `scripts/experiments/shadow_admit/export_for_cards.py` 从 `shadow_picks.jsonl` 导出。
+由 `research/shadow_admit/export_for_cards.py` 从 `shadow_picks.jsonl` 导出。
 """
 from __future__ import annotations
 

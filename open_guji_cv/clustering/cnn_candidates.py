@@ -84,7 +84,7 @@ def _resolve_default_ckpt() -> Path:
 DEFAULT_CKPT = _resolve_default_ckpt()
 """现役 checkpoint。
 
-**2026-09-17 起 `glyph_cnn_r5`**（`experiments/metric_loss/`，结论正本在 overview
+**2026-09-17 起 `glyph_cnn_r5`**（`research/metric_loss/`，结论正本在 overview
 `Step5-字符识别/5b-生僻字候选/06-给embedding加独立度量损失.md` §九）。
 r5 与 r4 **同一份配方、同一份数据，只把训练轮数 160 → 60**：
 

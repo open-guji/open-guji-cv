@@ -101,7 +101,7 @@ C1    seed_admit      进库准入（读 5-a/5-c/5-d/Step6，**不读 5-b**）
 | **`oov_bench` 类外真刻例** | 314 | emb top-1 / top-10 | r4 67.8/89.2 → **r5 73.2/90.4** | 同上；集的来历见 `scripts/build_oov_bench.py` |
 | 北行 383 条**用户裁决** | 383 | 不升级 top-1/top-10 | 75.5 / 94.3 | `charset_spec` 模块头阈值扫描 |
 | 同上，阶梯 0.85 | 383 | top-1/top-10 | **76.8 / 96.3** | 同上（甜点） |
-| 同上，**换 r5 之后** | 类外子集 | 册配置门 top-1 | **40.6**，平字表不设门 53.6 / top-10 97.1 | `experiments/metric_loss/calib_escalate.py` 模块头 |
+| 同上，**换 r5 之后** | 类外子集 | 册配置门 top-1 | **40.6**，平字表不设门 53.6 / top-10 97.1 | `research/metric_loss/calib_escalate.py` 模块头 |
 | `rare-char` | 21 | top-10 | 100 | external §5.3；**已知全落 classes 内，参考价值有限** |
 | 组内定形 `fixed_form` | — | 放行率 / 错 | r5 + gap 0.03：**77.4% 零错** | `cnn_candidates.DEFAULT_CKPT` |
 | C 刀验收（历史） | rare-char 真难题档 | top-10 召回 | 0% → **78.6%**，命中时中位名次 1 | pipeline_review_2026-09-04 §0 |
@@ -127,7 +127,7 @@ C1    seed_admit      进库准入（读 5-a/5-c/5-d/Step6，**不读 5-b**）
 5. **康熙收字表挡不住简体**（国/学/体/这/说 都在表里带页码）；有判别力的是 OpenCC。
 6. **HOG 在 CNN 可用时零贡献**（vol01 全量逐字比对零差异）。
 7. **度量损失（ArcFace/CosFace/纯余弦头）在真刻例上一律为负**；真正涨点的是
-   训练轮数 160 → 60（`experiments/metric_loss/README.md`）。
+   训练轮数 160 → 60（`research/metric_loss/README.md`）。
 8. **类外评测集靠字典源撑大会把结论带反**（大集 margin 为正、真刻例集为负）；
    **字统网模板不限书体会变成跨书体识别**（基线被压到 34.7%）。
 9. **自切康熙扫描图 ≯ 康熙字典体 OTF**：96.0 vs 96.4，赢在覆盖率 100% vs 76%，
@@ -144,7 +144,7 @@ C1    seed_admit      进库准入（读 5-a/5-c/5-d/Step6，**不读 5-b**）
 设计稿写的是「只在三种情况调用：库 unsure 且 cov<0.95 / OCR 不可达 / 用户点生僻字」
 （pipeline_review §4.3 L1），实现是**全字位无条件跑**。算力上无所谓（1.5 s/页），
 问题在**量不出来**：`RareRec` 里没有该字位的 5-a 档位/cov，于是「真难题档 top-10」
-这个 KPI 没法从产物直接算，只能另起脚本对账（`experiments/metric_loss/reconcile_bxgb.py`
+这个 KPI 没法从产物直接算，只能另起脚本对账（`research/metric_loss/reconcile_bxgb.py`
 就是这么干的）。
 
 **G2 · 下游一行都不读 5-b。**
@@ -227,7 +227,7 @@ Top-30 精排，标价半天）、以及「候选里一个都不对时人怎么�
 `clustering/rare_panel.py`、`clustering/cnn_candidates.py`、`clustering/font_candidates.py`、
 `clustering/charset_spec.py`、`clustering/ids_guard.py`、`console/routers/rare.py`、
 `console/routers/glyph_match.py`、`console/frontend/src/pages/Step5Page.tsx`、
-`pipelines/keben_body_v2.yaml`、`experiments/metric_loss/*`。
+`pipelines/keben_body_v2.yaml`、`research/metric_loss/*`。
 
 文档：`step5_step6_benchmark.md`、`pipeline_review_2026-09-04.md`、
 `external_glyph_sources_experiment.md`、`glyph_db_expansion_research.md`、

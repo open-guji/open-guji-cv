@@ -250,7 +250,7 @@ def stale_human_marks(book: str) -> dict[str, str]:
     """字形库里已撤下的人裁：`{裸 id: 撤下时刻 YYYYMMDD 或 YYYYMMDDTHHMM（UTC）}`（`admissions.provenance='human_stale_<日期>'`）。
 
     撤法见 `scripts/check_stale_human.py`（重字签名）与 2026-09-25 的漂移检查
-    （`scripts/experiments/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
+    （`research/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
     库读不到就当没有——事件侧的人裁照旧生效，不因为这张表缺席就全部作废。
     """
     import sqlite3

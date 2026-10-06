@@ -2,7 +2,7 @@
 """影子放行·逐格信号抽取（线上线下共用的单一口径）。
 
 一格 → 若干行 `(字位, 候选)` 信号。候选集 = 库 top5 ∪ 5b top3 ∪ 整理本字 ∪ 现字（己已巳合并成「己」）。
-特征 = `FEATURES`（12 个，与 `scripts/experiments/shadow_admit/vol03_eval.py` 的 F1N 同名同义）：
+特征 = `FEATURES`（12 个，与 `research/shadow_admit/vol03_eval.py` 的 F1N 同名同义）：
 
 - 字形库（Step5-a 产物 `glyph_match.candidates`）：lib_cov / lib_in / lib_top1 / lib_margin / lib_top_cov / human_n / human_any
 - 5b 生僻字：rare_score

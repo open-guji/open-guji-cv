@@ -20,7 +20,18 @@
 | `stroke_disc/` | 09-26 | 小笔画判别器：verify 的 cov/wmax 能否分开铁证冲突与一致 |
 | `yolo_tool_probe/` | 10-02 | yolo_tool 的 YOLO 模型在四庫 vol03 上的探针（F1） |
 
-**还没搬进来的**（被生产代码的 docstring 引用为出处，随 Step 模块整理一起搬，免得产物指纹无谓变动）：
-`experiments/touch_resolve`（切点 U-Net 训练）、`experiments/metric_loss`（字形 CNN r5 训练）、
-`scripts/experiments/` 下的 `shadow_admit`、`replace_gate`、`pagetype_model`、`context_guard`、`rare_downstream`、
-`align_anchor_recall`、`qtw_libfail`、`seal_nolib`、`verdict_drift_check.py`。
+**生产模型的出处**（代码 docstring 引用这里）：
+
+| 目录 | 内容 |
+|---|---|
+| `touch_resolve/` | 切点判官 U-Net 的训练与验证（`utils/cut_select.py` 用的模型） |
+| `metric_loss/` | 字形 CNN `glyph_cnn_r5` 的训练（`clustering/cnn_candidates.py` 用的模型） |
+| `shadow_admit/` | 影子放行模型（梯度提升树）训练、评估与审卡导出（`review/shadow.py`） |
+| `pagetype_model/` | 页型判别模型（`gates/border_detect_gate.py`） |
+| `replace_gate/` | Step5-d `replace` 段采信闸的数据与训练 |
+| `context_guard/` | context 通道护栏的标定 |
+| `rare_downstream/` | 生僻字候选下游消费的沙箱实测（`steps/align_ref.py`） |
+| `align_anchor_recall/` | 整理本锚定召回诊断（`steps/align_ref.py`） |
+| `qtw_libfail/` | 全唐文库缺字诊断（`review/borrow_first.py`） |
+| `seal_nolib/` | 印章遮挡格不进库（`tests/test_seal_nolib.py` 引用） |
+| `verdict_drift_check.py` | 人裁入库图块与现图块的漂移核查（`feedback/lookup.py`） |

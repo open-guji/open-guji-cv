@@ -294,7 +294,7 @@ def test_load_verdicts_falls_back_to_dataset_and_warns_when_both_empty(tmp_path,
 
 
 def test_load_verdicts_explicit_root_still_works(tmp_path, monkeypatch):
-    """显式传 `root`（老调用点如 `experiments/metric_loss/*.py` 传的是工作区根，
+    """显式传 `root`（老调用点如 `research/metric_loss/*.py` 传的是工作区根，
     不是 events 目录本身）行为不变：函数自己拼 `feedback/events`。"""
     from open_guji_cv.eval import round_check as rc
     import json as _json

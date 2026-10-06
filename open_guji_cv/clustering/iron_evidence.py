@@ -3,7 +3,7 @@
 不看 OCR，只认字形库里已经被人确认过的刻例。总览/14 §二的证据等级、§八 的小笔画判别器
 （成对倒角距离），加上 D 道影子验收（2026-09-25～27，bxgb／vol03 全书）三轮实测踩出来
 的四条护栏，在这一份模块里定型，`steps/seed_admit.py`（生产）与
-`scripts/experiments/shadow_admit/`（影子验收）共用，不再各查各的。
+`research/shadow_admit/`（影子验收）共用，不再各查各的。
 
 **证据来源只认人裁**：`human_matcher()` 建的匹配器只吃 `instances.label_status='human'`
 的库实例，align/播种等机器来源的实例一律不算数——这是「铁证」这个名字的字面意思。
