@@ -128,6 +128,96 @@ def cmd_close_check(args) -> None:
     sys.exit(0 if res["machine_ok"] else 1)
 
 
+def cmd_export(args) -> None:
+    """`guji export md|format <册>`：把 runbook 里两条易错的散脚本收成固定口径（overview#413 C2）。
+
+    md     → scripts/render_guji_markdown.py（全部页逐个列出，不用手抄页号）→ reports/<册>/<册>.md
+    format → scripts/export_guji_format.py（章号、meta、拆页表按约定自动填）→ lines/pages/norm
+    两者都只读产物。子进程跑原脚本，口径与直接调脚本完全一致。
+    """
+    import re
+    import subprocess
+    from .core.workspace import products_root, reports_root
+    repo = Path(__file__).resolve().parents[1]
+    scripts = repo / "scripts"
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    book = eng.book.id
+    out_dir = Path(args.out) if args.out else reports_root() / book
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # 只导有 Step7 产物的页（目录、空白页等没跑到 seed_admit 的页跳过，免得整条命令因缺产物退出）
+    have = {int(f.stem[1:]) for f in (products_root() / book / "seed_admit").glob("p*.json")}
+    skipped = [p for p in pages if p not in have]
+    pages = [p for p in pages if p in have]
+    if skipped:
+        print(f"（跳过 {len(skipped)} 页：没有 seed_admit 产物 {skipped[:10]}{'…' if len(skipped) > 10 else ''}）",
+              file=sys.stderr)
+    if not pages:
+        print("✗ 没有可导出的页（seed_admit 产物为空）", file=sys.stderr); sys.exit(1)
+    if args.action == "md":
+        cmd = [sys.executable, str(scripts / "render_guji_markdown.py"), book, *map(str, pages),
+               "--out", str(out_dir / f"{book}.md")]
+    else:
+        m = re.fullmatch(r"vol(\d+)", book)
+        chapter = args.chapter or (f"{int(m.group(1)):03d}" if m else None)
+        if not chapter:
+            print(f"✗ 册号 {book} 推不出章号，请给 --chapter NNN", file=sys.stderr); sys.exit(2)
+        meta = Path(args.meta) if args.meta else repo / "doc/formats/samples/guji_format_v0.1" / f"meta_{book}.json"
+        if not meta.exists():
+            print(f"✗ 没有 meta：{meta}。照同目录 meta_vol03.json 改 volume 两项另存，或用 --meta 指定", file=sys.stderr)
+            sys.exit(2)
+        split = Path(args.split_table) if args.split_table else repo / "doc/formats/samples/guji_page_v0.2/split_table_siku.json"
+        cmd = [sys.executable, str(scripts / "export_guji_format.py"), "--products", str(products_root()),
+               "--book", book, "--chapter", chapter, "--meta", str(meta), "--out", str(out_dir),
+               "--pages", ",".join(map(str, pages))]
+        if split.exists():
+            cmd += ["--split-table", str(split)]
+    print("→ " + " ".join(cmd[1:]), file=sys.stderr)
+    sys.exit(subprocess.run(cmd).returncode)
+
+
+def cmd_audit(args) -> None:
+    """`guji audit admitted|jys <册>`：定版检查清单（只读；runbook S8、S10）。"""
+    from .core.workspace import reports_root
+    from .ops import audit as A
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    book = eng.book.id
+    out_dir = Path(args.out) if args.out else reports_root() / book
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.action == "admitted":
+        col = Path(args.collation) if args.collation else A.latest_collation(reports_root() / book)
+        if not col or not col.exists():
+            print("✗ 没有对勘 JSON：先跑 `guji collate <册> --console \"\" -w <工作区>`", file=sys.stderr); sys.exit(2)
+        res = A.admitted(col)
+        md = out_dir / f"{book}.放行错穷举.md"
+        md.write_text(A.admitted_md(res), encoding="utf-8")
+        (out_dir / f"{book}.放行错穷举.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"{book} 放行错穷举：{res['n']} 格（认字差异 {res['n_non_systematic']} 要逐格看图；"
+              f"异体 {res['n_variant']}；系统性 {res['n_systematic']}）→ {md}")
+    elif args.action == "count":
+        from .core.workspace import feedback_root
+        if not args.since:
+            print("✗ count 要 --since（请审单发出的时间）", file=sys.stderr); sys.exit(2)
+        exp = None
+        if args.expect:
+            exp = [ln.strip().strip("`") for ln in Path(args.expect).read_text(encoding="utf-8").splitlines() if ln.strip()]
+        res = A.review_count(feedback_root() / "events", book, args.since, exp)
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+        bad = res["no_anchor"] or res.get("missing")
+        print(f"\n{book} 自 {args.since}：{res['n_events']} 条事件、{res['n_cells']} 个字位；"
+              f"同格多次 {len(res['repeated'])}；没带锚点 {len(res['no_anchor'])}"
+              + (f"；漏审 {len(res['missing'])}、单外 {len(res['extra'])}" if exp is not None else ""))
+        sys.exit(1 if bad else 0)
+    else:
+        if not args.export_dir:
+            print("✗ jys 要 --export-dir（先跑 `guji export format <册>`）", file=sys.stderr); sys.exit(2)
+        res = A.jys(Path(args.export_dir), args.chapter, book=book)
+        md = out_dir / f"{book}.己已巳.md"
+        md.write_text(A.jys_md(res, book), encoding="utf-8")
+        (out_dir / f"{book}.己已巳.muse_input.jsonl").write_text(A.jys_muse_jsonl(res), encoding="utf-8")
+        print(f"{book} 己/已/巳：{res['n']} 格 {res['by_char']}，人裁过 {res['n_human']} → {md}")
+
+
 def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
     """收尾不变量（overview#403 缺口 C，`verdict_view.closure_gaps`）与报告项（`closure_mismatches`）；
     算不出来 → None，不拖垮 status。"""
@@ -1816,6 +1906,8 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "close-check": cmd_close_check,
+    "export": cmd_export,
+    "audit": cmd_audit,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
     "console": cmd_console,
@@ -2164,6 +2256,28 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--chapter", default=None, help="章号 NNN；目录里有多章时用")
     p.add_argument("--notes", default=None, help="overview 里本册的记录目录（查避諱表、收尾记录）")
     p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
+    p.add_argument("action", choices=["md", "format"])
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
+    p.add_argument("--chapter", default=None, help="format：章号 NNN，缺省按 volNN 推")
+    p.add_argument("--meta", default=None, help="format：缺省 doc/formats/samples/guji_format_v0.1/meta_<册>.json")
+    p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
+
+    p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
+                                     "count = 用户审完当场核数（只读）")
+    p.add_argument("action", choices=["admitted", "jys", "count"])
+    p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
+    p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--collation", default=None, help="admitted：对勘 JSON，缺省 reports/<册>/ 下最新一份")
+    p.add_argument("--export-dir", default=None, help="jys：guji export format 的输出目录")
+    p.add_argument("--chapter", default=None)
+    p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
 
     p = sub.add_parser("recheck",
                        help="[v2] Step5-a 点名重算：库变了不自动重跑，要吃新库就在这里点名格")
