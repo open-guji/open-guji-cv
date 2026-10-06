@@ -28,6 +28,8 @@ dependencies = [
     # 四个抽象（core / products）：产物契约用 pydantic，pipeline / book 定义用 yaml
     "pydantic>=2.0",
     "PyYAML>=6.0",
+    # char_patch 现算字块、多处插值要用；缺了不报错，截条图静默出空白（overview#274），所以进核心依赖
+    "scipy>=1.10",
 ]
 
 [project.optional-dependencies]
