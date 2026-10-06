@@ -324,6 +324,18 @@ class SeedAdmitParams(BaseModel):
     落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
     独立形状证据，放不放留给标定结果。"""
 
+    juan_rule: bool = False
+    """「数字＋卷」放行（Y1，overview#454，缺省关）：库 top1 是「卷」、cov ≥ `juan_cov`、这一格
+    前一个正文字是数字（一…十百千）或「幾」，且别无护栏／疑问（只允许 `replace_align`、
+    `context_vs_ref` 两条）→ 放行，字取库形「卷」，通道 `juan`。
+
+    起因：vol05 与整理本冲突 45 格里 42 格是书名后的「一卷」，整理本（daizhige）排的是异体
+    「巻」，`vmap` 不把巻卷并成同义，于是 `context_vs_ref` 拦下、`replace_align` 再记一笔。
+    书名后「数字＋卷」是闭集套语，库形又高覆盖，两路互证。只作用于正文格（夹注格的
+    相邻字要按阅读序排，另议）；整理本给了别的字（不是 卷／巻／空）一律不放。"""
+    juan_cov: float = 0.98
+    """`juan_rule` 的库 top1 cov 门槛（任务书口径）。"""
+
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
 
@@ -360,6 +372,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and not self.juan_rule:
+            d.pop("juan_rule", None)
+            d.pop("juan_cov", None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not self._context_guard_on():
@@ -916,6 +931,18 @@ class SeedAdmitStep(Step):
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
 
+                # 「数字＋卷」（`juan_rule`，Y1）。放在 context／ref_lib 之后、铁证之前：前面都
+                # 没放行才补，不覆盖任何已放行的判决。
+                if (not ok and p.juan_rule and not form_open and not r.sub and r.guard is None
+                        and r.candidates and r.candidates[0][0] == "卷"
+                        and r.candidates[0][1] >= p.juan_cov
+                        and set(doubts) <= _JUAN_DOUBTS
+                        and (align_char is None or align_char in _JUAN_FORMS)
+                        and recs and not recs[-1].sub
+                        and _after_number(recs[-1], amap, dmap, mmap)):
+                    ok, channel, char, prov = True, "juan", "卷", "match"
+                    doubts = []
+
                 # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
                 # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
                 # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
@@ -1002,6 +1029,23 @@ class SeedAdmitStep(Step):
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+
+
+_JUAN_FORMS = frozenset("卷巻")
+_JUAN_DOUBTS = frozenset({"replace_align", "context_vs_ref"})
+_NUMERALS = frozenset("一二三四五六七八九十百千幾")
+
+
+def _after_number(prev: AdmitRec, amap: dict, dmap: dict, mmap: dict) -> bool:
+    """前一格（正文）的字是数字？取已定的字，没定就看整理本对齐字、再看库 top1。"""
+    ch = prev.char
+    if not ch and prev.id in amap:
+        ch = amap[prev.id][0]
+    if not ch and prev.id in dmap:
+        ch = dmap[prev.id].char
+    if not ch and prev.id in mmap:
+        ch = mmap[prev.id].char
+    return bool(ch) and ch in _NUMERALS
 
 
 def _hard_blocked(doubts, guard) -> bool:
