@@ -106,6 +106,13 @@ class SeedAdmitParams(BaseModel):
     对齐字**语义不同**就不放行、落人审（同 `context_conflicts_ref`）。vol03 铁证放行
     11 格错 3（曰/白、夬/夫、而/面），三格 align_ref 都标了 replace——库里够像的刻例
     是形近字，整理本早就说了不是它。没有对齐字的格不拦。"""
+    iron_confusable_guard: bool = True
+    """铁证首选与证人（整理本）是**已知形近对**、字又不同就不放行、落人审（overview#426，
+    doubt `iron_confusable_ref`）。证人取现役对位字和坐标对位字（`align_ref.coord`）两路——
+    vol04 铁证放行 20 格错 3（曰/日×2、人/八），三格现役对位都被库分歧过滤掉了
+    （`n_lib_dropped`），`iron_ref_guard` 看不到证人，坐标对位里证人是对的。形近对只认现成表：
+    `confusable.partners()`（手工核过 + 人裁确认 + 字体 τ≥0.988）与铁证补充表
+    `iron_extra_confusable.json`。语义同字（异体、码位）不拦。"""
     context_blank_gate: bool = True
     """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
     是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
@@ -930,6 +937,11 @@ class SeedAdmitStep(Step):
                     if iron_char is not None and p.iron_ref_guard \
                             and context_conflicts_ref(iron_char, align_char, vm_here):
                         doubts.append("iron_vs_ref")
+                    elif iron_char is not None and p.iron_confusable_guard \
+                            and _iron_confusable_witness(
+                                iron_char, (align_char, _coord_refs(ctx, page, coord_cache).get(r.id)),
+                                vm_here):
+                        doubts.append("iron_confusable_ref")
                     elif iron_char is not None:
                         ok, channel, char, prov = True, "iron", iron_char, "iron"
                         doubts = []
@@ -1699,6 +1711,18 @@ def _confusable_char(ch: str) -> bool:
     from ..clustering.seeding import NEAR_FORM_CHARS
     return (ch in NEAR_FORM_CHARS or ch in partners()
             or ch in extra_confusable_partners())
+
+
+def _iron_confusable_witness(iron_char: str, witnesses, vmap) -> str | None:
+    """`iron_confusable_guard` 用：证人里与铁证首选语义不同、又同在一张形近表里的那个字，
+    没有返回 None。`〓`（逐列本的 PUA 占位）与空串（空格位）不算证人。"""
+    from ..clustering.confusable import partners
+    from ..clustering.iron_evidence import extra_confusable_partners
+    near = partners().get(iron_char, frozenset()) | extra_confusable_partners().get(iron_char, frozenset())
+    for w in witnesses:
+        if w and w != "〓" and w in near and vmap.semantic(w) != vmap.semantic(iron_char):
+            return w
+    return None
 
 
 def _trusted_variant_edge(top: str, align_char: str, ledger, book) -> bool:
