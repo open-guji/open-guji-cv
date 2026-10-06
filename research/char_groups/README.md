@@ -18,8 +18,8 @@
 | 批 | 抽样 | 页面 |
 |---|---|---|
 | ry 日曰 | vol02/03/04 正文机器放行格（core、admit、channel≠human）每册随机 100（vol03 只有 76，全收），共 276 | https://claude.ai/artifact/9azjKLvjySe3N5mFCvZCr2 |
-| rr 入人八 | 同上 | （待发） |
-| jys 己已巳 | vol04 正文待审格全收 + vol05 正文 core 格随机 50 | （待发） |
+| rr 入人八 | 同上，每册 100，共 300 | https://claude.ai/artifact/DYTqgw68uAG2HGbEeNyzzz |
+| jys 己已巳 | vol04 正文待审格全收（70）+ vol05 正文 core 格随机 50，共 120 | https://claude.ai/artifact/29RYYYYqyawNSWgUpkmNnN |
 
 收回：`Artifact action:"read"` 读回页面 → `python .claude/skills/review-artifact/scripts/harvest_verdicts.py <html> -o <dataset>/char-groups/review/<组>_verdicts.jsonl`
 → 重跑 `build.py`（裁决记 A 档、`label_origin=human`、src `user_review_<组>`；「看不清」记 `X_unclear` 不当真值）→ `baseline.py` → `summary.py`。
