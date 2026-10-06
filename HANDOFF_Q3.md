@@ -90,6 +90,10 @@
 2. **`_save_emb_index` 的临时文件名固定**：多进程同时冷建同一个 key 时会互相踩。目前靠书级跑批锁和「先预建」规避；要改就得动 `cnn_candidates`。这次没改。
 3. **预建表的分发**：`idx/*` 分支两个仓里都没有，现在能用的只有 09-28 那份老式附件包。要不要拿 `guji snap pack … --rare-index` 把四庫这两张表正式挂成 `idx/rare_emb/<key>`，由总管定。本道没推任何 idx 或 snap 分支。
 
+## 六·补：Z17 那个 `models-snap/rare-index-sk-20260927`（#430 并入的线索）
+
+guji-workspace 里的这个分支，两张表的**内容与现行表逐位相同**，sha 与 vol08 包一致。但**文件名是 09-27 的旧 key**：`6138816db38c8cc0`、`0bdf23c3928fd2ba`，那时 key 里还带 mtime。现行 key 是 `c58003867002d48b`、`bec61ba15252b3bc`。所以照 NOTE.md 原名落盘不会命中，要按新 key 改名才行；它也不是 `idx/*` 格式，`snap import-index` 导不了。p3 在表在盘上时是 36.6 秒（进程第一页的预热），之后的页见第二节。
+
 ## 七、没做的事
 
 - 没有推任何书的 products 和快照。vol04 的 5-b、seed_admit 只在本会话本地算过。
