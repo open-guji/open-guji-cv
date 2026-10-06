@@ -71,3 +71,14 @@ def test_review_count(tmp_path):
     assert (res["n_events"], res["n_cells"]) == (3, 2)
     assert res["repeated"] == ["v:1:1:1"] and res["no_anchor"] == ["v:1:1:2"]
     assert res["missing"] == ["v:1:1:9"] and res["extra"] == ["v:1:1:2"]
+
+
+def test_review_sheet_sections():
+    md = A.review_sheet("v", {"ji_yi_si": 3, "other": 1},
+                        [{"id": "v:9:8:4", "shape": "困", "excluded": False}],
+                        [{"id": "v:22:4:20", "shape": "璹", "char": "邢", "kind": "main"},
+                         {"id": "v:1:1:1", "shape": "已", "char": "巳", "kind": "jys"}])
+    assert "共 6 格" in md                                     # 4 待审 + 1 失效老裁 + 1 正文不一致（己已巳族不列）
+    assert "| 己已巳 | 3 |" in md and "| `v:9:8:4` | 困 |" in md and "| `v:22:4:20` | 璹 | 邢 |" in md
+    assert "v:1:1:1" not in md
+    assert md.count("不审的默认") >= 4
