@@ -29,3 +29,5 @@ N1 的 `research/near_form/`（上下文决策表、规则回放）照旧在，�
 环境：`build.py` 写死了 `/home/user/guji-workspace/96mid1ogzk-*`（工作区）与 `/home/user/overview`（看图清单）两个路径，
 dataset 默认 `/home/user/open-guji-dataset`（`GUJI_DATASET` 可改）。快照的解法见 dataset `char-groups/README.md`「快照与复现」。
 人裁用 `human_chars(book, bind=False)`：快照不在工作区里，绑定表算不出来；早于快照、快照又没采信的人裁记成 `X_stale`，不当真值。
+
+第一轮收回（10-06，用户太累没裁完）：ry 18/276、rr 33/300、jys 53/120（看不清 7）已并入 dataset，记 A 档；交单与用户对三组的判法见 `doc/handoffs/G1_437.md`。
