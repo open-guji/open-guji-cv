@@ -61,3 +61,10 @@ pool 机器放行相左候选 20 格（τ=1）：vol05:10:9:19 22:9:16 23:2:5 23
 
 ## 可合并性
 本分支相对 main 只动 `research/char_groups/`（含 `review_pages.py` 加三个可选参数）与 `HANDOFF_Z_ry.md`，不碰 Step、不在任何 `code_deps` 里；`tests/test_suite_hygiene.py` 7 passed（本环境没装 torch，其余测试未跑，未改任何被测代码）。dataset 分支只增 `char-groups/ry/{features,clf_scores}.json`、README 一节、`review/ry_flag_*`、`ry_verdicts.jsonl` 追加 20 行。
+
+## 补 4（10-07，分支 claude/Z-ry-1007）：大模型臂试了，弱
+前序结论（字形+搭配分类器、相左旗精度低、不进 Step）全部沿用，没有重做。本轮只补大模型一路，用环境里已接的 GLM（open.bigmodel.cn）。
+- `glm-5.2`、`glm-4.6`：一律 HTTP 429（串行也是），没有数据。
+- `glm-4-flash`（只给前后各 18 字，挖空，不给字形）：强真值 dev 37/54=69%，val(vol04) 12/17=71%。错误几乎都是曰→日（「一曰…二曰」「某曰」被读成日）；`confidence` 恒为 0.8，无法当把握用。
+- 结论：这个档位的模型文意判不比字形+搭配好（τ=1 给字准确率 95%），也不能做弃权依据；不值得接进分类器。要再试需要更强的模型（muse 或 glm-5.2 的额度），提示词与导出不变。
+- 改动：`ry/llm.py` 并发 3→1（限流下不连环撞）。缓存 dataset `char-groups/ry/llm_cache.jsonl`（含 glm-4-flash 的 71 行）。

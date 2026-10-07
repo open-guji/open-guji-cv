@@ -34,7 +34,7 @@ def run(root, rows, model='glm-5.2'):
         try: a, c = ask(model, ctx_text(r))
         except Exception as e: return dict(id=r['id'], model=model, error=str(e)[:200])
         return dict(id=r['id'], model=model, answer=a, conf=c, text=ctx_text(r))
-    with cf.ThreadPoolExecutor(3) as ex, open(cache, 'a') as f:
+    with cf.ThreadPoolExecutor(1) as ex, open(cache, 'a') as f:
         for d in ex.map(job, todo):
             if 'error' in d:
                 print('ERR', d['id'], d['error']); 
