@@ -1492,5 +1492,5 @@ s4_enhance_lines（画线增强，本意把磨损界行描粗帮版面检测）�
 
 **引擎核对（2026-10-07）**
 - 已一致：`variants.py`「字形层保留精确异体、绝不合并」；`variant_form` 用形状证据定形，定不了落人审；`coord_fallback` 遇库首位是通行字时送审，不改成通行字。
-- **冲突一处**：`seed_admit.replace_form` 缺省 `align`——`match_replace` 通道在整理本字与库 top1 语义同、字面不同时放行**整理本字**，等于并到整理本用的通行形。A 要求取刻本形：书 yaml 写 `params: {seed_admit: {replace_form: lib}}`。缺省不改（改了各书 seed_admit 判过期），新整理的书一律开 `lib`。
+- **冲突一处**：`seed_admit.replace_form` 缺省 `align`——`match_replace` 通道在整理本字与库 top1 语义同、字面不同时放行**整理本字**，等于并到整理本用的通行形。A 要求取刻本形：书 yaml 写 `params: {seed_admit: {replace_form: lib}}`。缺省不改（改了各书 seed_admit 判过期）。**按书实测再开，不可一律开**（10-07 vol04 实测：库 top1 多为通行字，`lib` 使 107 格放行字由刻本异体变通行形——旣→既、刋→刊等——与口径 A 相反，已撤；「库 top1 就是刻本形」在 vol04 不成立）。
 - 待量：`shadow_veto` 把「放行字＝证人字＝图形」的异体送审（vol04 误伤 56 格，#360 已定该册关），与 A 同向，不需另改。
