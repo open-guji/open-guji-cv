@@ -32,6 +32,7 @@ guji exp list -w $WS
   labels.jsonl        本次用到的标签（合并后，一格一行，带 source/selection）
   labels_extra.jsonl  翻转格审查页收回的裁决
   report.json / report.md / charts/*.svg
+  （上一级）mlflow.db、mlartifacts/  MLflow 账本与附件（装了 .[exp] 才有）
   flips/cards.jsonl, flips/review.html
 ```
 
@@ -103,6 +104,22 @@ seed: 0
 - **McNemar 精确检验**：对逐格的「放行错」指示做检验，分 random 和全部标签两档。
 - **判准**：逐条给达标、不达标或判不了，末尾一句「判准 k/n 达标，开不开由人定」。
 - **图**：`charts/<变体>-forest.svg`（各指标差值与 95% CI）、`charts/<变体>-channels.svg`（按通道放行格数），纯 SVG、零依赖，亮暗两套颜色，嵌在 report.md 里。
+
+## 五·一、跨实验看板（MLflow）
+
+用户 10-07 定：跨实验的记录与图表用 MLflow（完整版）。可选依赖：`uv pip install -e ".[exp]"`。不装照常出 `report.md`，只是不记账。
+
+```bash
+guji exp report <实验名> -w $WS          # 出报告时顺手记一份（--no-mlflow 不记）
+guji exp ui -w $WS [--port 5000]         # 本地看板 http://127.0.0.1:5000
+```
+
+- **存储**：纯本地文件，不要服务器。`<实验根>/mlflow.db`（sqlite）加 `<实验根>/mlartifacts/`；设了 `MLFLOW_TRACKING_URI` 就用它。
+- **MLflow 实验 = 我们的实验名**。每出一次报告记一个父 run（`<实验名> @ <code_rev>`），附件是 report.md/json、charts/、翻转审查页、exp.yaml、labels.jsonl。每个变体（基线也算）记一个子 run：
+  - 参数：实际跑的参数，拍平成 `seed_admit.shadow_conf` 这样的键；
+  - 指标：`body.admit_rate` 等各范围的放行率、送审率、排除率、放行错误率；非基线再加 `.diff`、`.ci_lo`、`.ci_hi`、`flips.*`、`guardrails.pass/fail/unknown`、`mcnemar.*.p`。
+- 同一实验目录重出报告时，先删掉旧 run，看板上始终是最新一份。
+- 在看板里勾几个子 run，用 Compare 看参数差异和指标对比图。跨实验对比时，按 tag `guji.books` 筛同一册。
 
 ## 六、翻转格抽样页
 

@@ -453,3 +453,29 @@ def test_match_exact_vs_semantic():
     lab = LB.Label("c", "human", LB.RANDOM, truth="窺")
     assert C.correct(rec, lab, C.make_same("exact")) is False
     assert C.correct(rec, lab, lambda a, b: True) is True       # semantic 的替身：等价即对
+
+
+def test_mlflow_tracking(tmp_path, monkeypatch):
+    """报告记进 MLflow（纯本地 sqlite）：父 run + 每变体子 run；同一实验目录重记先删旧的。"""
+    pytest.importorskip("mlflow")
+    from mlflow.tracking import MlflowClient
+
+    from open_guji_cv.exp import tracking as TR
+    monkeypatch.delenv("MLFLOW_TRACKING_URI", raising=False)
+    monkeypatch.chdir(tmp_path)                                   # 防止 mlflow 往当前目录落 mlruns/
+    edir = _fake_exp(tmp_path)
+    rep = RP.build(edir, same=lambda a, b: bool(a) and a == b)
+    info = TR.log_report(edir, rep, RN.read_state(edir))
+    assert info["uri"].startswith("sqlite:///") and (edir.parent / "mlflow.db").exists()
+    c = MlflowClient(tracking_uri=info["uri"])
+    b = c.get_run(info["runs"]["B"]).data
+    assert b.params["seed_admit.shadow_veto"] == "True"
+    assert b.metrics["body.cells"] == 90 and b.metrics["flips.admit_to_review"] == 2
+    assert "body.review_rate.diff" in b.metrics
+    assert "flips.admit_to_review" not in c.get_run(info["runs"]["A"]).data.metrics
+    arts = {a.path for a in c.list_artifacts(info["parent_run_id"])}
+    assert {"report.md", "report.json", "charts"} <= arts
+    info2 = TR.log_report(edir, rep, RN.read_state(edir))
+    live = c.search_runs([info2["experiment_id"]])
+    assert len(live) == 3 and info["parent_run_id"] not in {r.info.run_id for r in live}
+    assert not (tmp_path / "mlruns").exists()

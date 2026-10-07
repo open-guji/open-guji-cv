@@ -6,6 +6,7 @@
     guji exp report <exp名|exp目录> -w <工作区> [--root …]
     guji exp flips  <exp> sample|page|harvest [verdicts.jsonl] [--n 60] [-o …]
     guji exp list   -w <工作区> [--root …]
+    guji exp ui     -w <工作区> [--root …] [--port 5000]      # MLflow 看板（要装 .[exp]）
 """
 from __future__ import annotations
 
@@ -41,6 +42,22 @@ def _summary(rep: dict) -> None:
 
 def _p(x) -> str:
     return "—" if x is None else f"{x * 100:.2f}%"
+
+
+def _report(edir: Path, args) -> None:
+    from .exp import report as RP
+    from .exp import tracking as TR
+    from .exp.runner import read_state
+    rep = RP.build(edir)
+    _summary(rep)
+    print(f"报告：{edir / 'report.md'}")
+    if getattr(args, "no_mlflow", False):
+        return
+    info = TR.log_report(edir, rep, read_state(edir))
+    if info is None:
+        print('（没装 mlflow，跳过记录；要跨实验看板：uv pip install -e ".[exp]"）')
+    else:
+        print(f"已记进 MLflow：{info['uri']} 实验 {info['experiment_id']}；看板 guji exp ui")
 
 
 def cmd_exp(args) -> None:
@@ -79,14 +96,18 @@ def cmd_exp(args) -> None:
         for k, v in st["runs"].items():
             print(f"  {k}: {v['pages']} 页 {v['counts']} {v['elapsed']}s")
         if not args.no_report:
-            rep = RP.build(edir)
-            _summary(rep)
-            print(f"报告：{edir / 'report.md'}")
+            _report(edir, args)
     elif args.action == "report":
-        edir = _edir(args)
-        rep = RP.build(edir)
-        _summary(rep)
-        print(f"报告：{edir / 'report.md'}")
+        _report(_edir(args), args)
+    elif args.action == "ui":
+        import subprocess
+        from .exp import tracking as TR
+        if not TR.available():
+            raise BadRequest('没装 mlflow：uv pip install -e ".[exp]"')
+        root = Path(args.root).expanduser() if args.root else RN.default_root()
+        cmd = TR.ui_command(root, args.port)
+        print(f"MLflow 看板：http://127.0.0.1:{args.port}  （{TR.tracking_uri(root)}；Ctrl-C 退出）")
+        subprocess.run(cmd, check=False)
     elif args.action == "flips":
         edir = _edir(args)
         if args.flips_action == "sample":
@@ -108,8 +129,8 @@ def cmd_exp(args) -> None:
 
 
 def add_parser(sub) -> None:
-    p = sub.add_parser("exp", help="[v2] A/B 实验：run | report | flips | list（overview#457）")
-    p.add_argument("action", choices=["run", "report", "flips", "list"])
+    p = sub.add_parser("exp", help="[v2] A/B 实验：run | report | flips | list | ui（overview#457）")
+    p.add_argument("action", choices=["run", "report", "flips", "list", "ui"])
     p.add_argument("exp", nargs="?", default=None,
                    help="run：实验 yaml；report/flips：实验名或实验目录")
     p.add_argument("flips_action", nargs="?", choices=["sample", "page", "harvest"], default="sample")
@@ -133,3 +154,5 @@ def add_parser(sub) -> None:
     p.add_argument("--resample", action="store_true", help="flips sample：已有 cards.jsonl 也重抽（id 会变）")
     p.add_argument("--no-images", action="store_true", help="flips page：不带字块图")
     p.add_argument("-o", "--out", default=None, help="flips page：输出 html")
+    p.add_argument("--no-mlflow", action="store_true", help="run/report：不记进 MLflow")
+    p.add_argument("--port", type=int, default=5000, help="ui：端口")
