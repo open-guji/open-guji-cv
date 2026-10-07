@@ -422,6 +422,18 @@ class SeedAdmitParams(BaseModel):
     juan_cov: float = 0.98
     """`juan_rule` 的库 top1 cov 门槛（任务书口径）。"""
 
+    variant_tie: bool = False
+    """异体并列放行（Y1，overview#471，缺省关）：库候选里 top1 与另一个候选在 `variants.json` 里有**直接异体边**
+    （同一个字的两个码位，如 𫎇／蒙、𢑴／彝、㸃／點），它们并列让上下文 margin 不足、库又判 unsure 而送审。
+    口径 A（忠实原刻）下不归并、不改字，要的就是库形最近的那个码位——top1——所以变体之间的 margin 小
+    不该拦：top1 cov ≥ `variant_tie_cov`、无护栏、`doubts` 只有 replace_align／context_vs_ref、top-3 里 cov 与
+    top1 相差不到 0.03 的候选**全部**是 top1 的直接异体（有非异体的近邻＝真歧义，不放）、整理本字缺省或也
+    与 top1 同组 → 放行 top1，通道 `variant_tie`。组级「刻形到底是哪个码位」的裁决回来后再按组收窄。"""
+    variant_tie_cov: float = 0.97
+    variant_tie_extra: str = ""
+    """额外的并列组，逗号分隔，每项是一串码位（组内两两互为异体），如 `"𫎇蒙䝉,𢑴彝"`：`variants.json` 没收的组
+    （𫎇／蒙 就没有边）靠这里补；缺省空。"""
+
     nonchar_gate: bool = False
     """非字过滤（Y1，overview#454 第4条，缺省关）：已放行的格若 Step4 `char_index` 标了
     `nonchar_flags` 里任一标记，或放行字是单笔画字符（`nonchar_strokes`，界行竖线／污点读成
@@ -470,6 +482,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
+        if isinstance(d, dict) and not self.variant_tie:
+            d.pop("variant_tie", None)
+            d.pop("variant_tie_cov", None)
         if isinstance(d, dict) and not self.nonchar_gate:
             for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
                 d.pop(k, None)
@@ -1059,6 +1074,14 @@ class SeedAdmitStep(Step):
                     ok, channel, char, prov = True, "juan", "卷", "match"
                     doubts = []
 
+                # 异体并列放行（`variant_tie`，Y1）：前面通道都没放行才补。
+                if (not ok and p.variant_tie and not form_open and r.guard is None and r.candidates
+                        and r.candidates[0][1] >= p.variant_tie_cov
+                        and set(doubts) <= _JUAN_DOUBTS
+                        and _variant_tie_ok(r.candidates, align_char, p.variant_tie_extra)):
+                    ok, channel, char, prov = True, "variant_tie", r.candidates[0][0], "match"
+                    doubts = []
+
                 # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
                 # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
                 # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
@@ -1165,6 +1188,21 @@ class SeedAdmitStep(Step):
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+
+
+def _variant_tie_ok(cands, align_char, extra: str = "") -> bool:
+    """top1 有异体近邻，且 cov 与 top1 相差不到 0.03 的候选（top-3 内）都是它的异体；top1 属形近家族不放。"""
+    groups = [g for g in (extra or "").split(",") if g]
+
+    def edge(a: str, b: str) -> bool:
+        return a == b or any(a in g and b in g for g in groups) or _direct_variant_edge(a, b)
+    top, c1 = cands[0]
+    if _confusable_char(top):
+        return False
+    near = [c for c, v in cands[1:3] if c1 - v < 0.03]
+    if not near or not all(edge(top, c) for c in near):
+        return False
+    return align_char is None or edge(top, align_char) or align_char in near
 
 
 _JUAN_FORMS = frozenset("卷巻")
