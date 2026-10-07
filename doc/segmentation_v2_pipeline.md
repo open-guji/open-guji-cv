@@ -1785,6 +1785,27 @@ Step 3 的输入契约就是「一列」。
   类型判定、夹注拆半、读序、抬头标记、无解返回 None）。迁移是副本不是重写，
   两边任何一侧改了阈值都应该让护栏红掉。
 
+#### 职名页分支 `roster_pages`（2026-10-06，overview#450，S4）
+
+职名页（四庫總目 vol01 p89–132）每列 =「官衔段 + 偏右小字『臣』+ 人名段」，字数 1～20
+不等、匀开/密排/压扁/雙行混着来，固定 `chars_per_line` 的 DP 前提不成立——更糟的是
+它常常**切得出来、过得了闸、字数是错的**（dataset column-layout 12 页职名样本，main
+逐列字数全对 21/97）。
+
+- **开关**：`RowSegmentParams.roster_pages`（默认空 = 关）。册配置点名开：
+  `params: {row_segment: {roster_pages: ["89-132"]}}`。不自动判页型（闸1 判不出职名页）。
+- **算法**：`utils/roster_segment.py`（模块头有全文）——墨带 → 压扁密排段保护 → 并碎块 →
+  左右分栏（连通体按质心分，雙行右→左读、「臣」按 y）→ 粘连段谷点 DP。不定字数，
+  `n_body_slots` = 实际位数，`boundaries` 为空。雙行按「右行第 i 字 ↔ 左行第 i 字」
+  共用一个 slot（`sub=a/b`），下游 `jiazhu_order` 读序照旧。
+- **闸3**：列级 flags 带 `roster` 的列不按版式格数拦，不查碎格；`roster_dense_guess`
+  （字数是推出来的）、`roster_jiazhu`（有雙行）、`roster_overlap`（相邻字 y 重叠）只 flag。
+- **Step4**：`roster` 列每格按 Step3 字框外扩 `padding_ratio` 直接裁，不过 CharExtractor
+  的满宽网格收缩（雙行两行相位不齐、「臣」与官衔末字 y 重叠，满宽裁会互相带墨）。
+- **量**（vol01 真原图 p89–132，12 页 106 列目测小金标）：101/106 列字数全对；main 非空格计数
+  30/90 且 44 页全部过闸（静默错）。错的 5 列全在 p90，都带标；全卷 24/396 列带
+  `roster_dense_guess`/`roster_jiazhu` 交人核。开关外的页（p88、p133）产物与关开关逐字节相同。
+
 ### Step 4：字框收缩
 
 **定义**：把 Step 3 给出的粗字格（矩形）收缩成贴合字身墨迹的最小矩形框。
