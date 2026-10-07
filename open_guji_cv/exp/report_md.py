@@ -48,7 +48,10 @@ def render(rep: dict) -> str:
          f"- 书：{', '.join(rep['books'])}；跑 {' → '.join(rep['steps'])}；代码 `{rep.get('code_rev') or '?'}`",
          f"- 快照：`{rep.get('snapshot')}`",
          f"- 参数覆盖：" + "；".join(f"{v}=`{p}`" for v, p in rep["params"].items()),
-         f"- 评测口径：`{rep['eval_params']}`（各变体相同）",
+         f"- 评测口径：`{rep['eval_params']}`（各变体相同）；书 yaml 的 params: "
+         + ("算进基线（book_params: keep）" if rep.get("book_params", "keep") == "keep" else "不算（book_params: ignore）"),
+         *[f"- 实际参数 {vn}·{bk}：`{p.get('seed_admit', p)}`"
+           for vn, per in (rep.get("effective_params") or {}).items() for bk, p in per.items()],
          f"- 统计：区间是以**页**为簇的配对自助法 95% CI（{rep['bootstrap']} 次，种子 {rep['seed']}）；"
          f"区间跨 0 标「与噪声不可分」", ""]
     lab = rep["labels"]

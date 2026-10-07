@@ -413,3 +413,24 @@ def test_flips_sample_page_harvest(tmp_path):
 def test_allocate():
     q = FL.allocate({"a": 100, "b": 3, "c": 0}, 20)
     assert q["b"] == 3 and "c" not in q and 15 <= q["a"] <= 18
+
+
+def test_book_params_kept_and_explicit_default_wins(tmp_path):
+    """书 yaml 开着某开关（keep：算进基线）；变体显式写回默认值 `flag: false` 必须生效——
+    引擎的书级覆盖只替换「仍是默认值」的字段，不经框架先合并的话 B 会被改回 true，两边跑成一样。"""
+    snap = _snapshot(tmp_path)
+    cfg = _cfg(variants={"B": {"params": {"t_exp_down_step": {"flag": False}}}}, eval={})
+    book = lambda b: make_book(b, params={"t_exp_down_step": {"flag": True}})   # noqa: E731
+    st = RN.run(cfg, snapshot=snap, root=tmp_path / "exps", pipeline=PL, book_loader=book,
+                cache=ImageCache(tmp_path / "cache"), log=lambda s: None)
+    edir = tmp_path / "exps" / "t1"
+    a = ProductStore(edir / "A").read("tb", "t_exp_down_step", "p0002", "t_exp_down")
+    b = ProductStore(edir / "B").read("tb", "t_exp_down_step", "p0002", "t_exp_down")
+    assert (a.v, b.v) == (102.0, 2.0)
+    assert st["effective_params"]["A"]["tb"]["t_exp_down_step"] == {"flag": True}
+    cfg2 = _cfg(variants={"B": {"params": {"t_exp_down_step": {"gain": 3.0}}}}, eval={}, book_params="ignore",
+                name="t2")
+    RN.run(cfg2, snapshot=snap, root=tmp_path / "exps", pipeline=PL, book_loader=book,
+           cache=ImageCache(tmp_path / "cache"), log=lambda s: None)
+    a2 = ProductStore(tmp_path / "exps" / "t2" / "A").read("tb", "t_exp_down_step", "p0002", "t_exp_down")
+    assert a2.v == 2.0

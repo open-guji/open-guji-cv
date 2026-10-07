@@ -1,25 +1,30 @@
 # 第一批试用（overview#457）：在 vol05 上验 shadow_veto 与框架本身。
-# 跑：guji exp run doc/exp/shadow_veto-vol05.yaml -w $WS --snapshot <vol05 快照产物根>
+# 跑：guji exp run doc/exp/shadow_veto-vol05.yaml -w $WS --snapshot <vol05 快照产物根> [--root <实验根>]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol05/20261006T2008 的 products/（cv 205bf8b 算的）
 name: shadow_veto-vol05
 books: [vol05]
 from: seed_admit
 to: seed_admit
 pages: all
-base: {}                                  # 当前 main 默认参数（shadow_veto 关）
+book_params: keep              # 基线 = vol05.yaml 现行 params:（它开着 shadow_veto conf 0.8）
+base:
+  note: 关 shadow_veto（显式写 false，框架保证压过书 yaml）
+  params:
+    seed_admit: {shadow_veto: false}
 variants:
   veto080:
-    note: vol04 当时开的阈值
+    note: vol04/vol05 当时开的阈值
     params:
       seed_admit: {shadow_veto: true, shadow_conf: 0.8}
   veto097:
     note: 代码缺省阈值
     params:
-      seed_admit: {shadow_veto: true}
+      seed_admit: {shadow_veto: true, shadow_conf: 0.97}
 eval:
   use_human_verdicts: false
 labels:
   - {source: human_events}
-  - {source: vision, path: reports/vol05/看图结论.jsonl}
+  - {source: vision, path: reports/vol05/看图结论.jsonl}     # 缺省 picked；是否随机抽检待整理总管确认
 guardrails:
   - {metric: admit_err_rate, scope: body, op: "<=", ref: base}
   - {metric: review_rate, scope: body, op: "<=", ref: base, delta: 0.005}
