@@ -215,13 +215,16 @@ function payload(){
 
 
 def build_page(edir: str | Path, out: str | Path | None = None,
-               image_fn: Callable[[str], str | None] | None = None) -> Path:
+               image_fn: Callable[[str], str | None] | None = None, *, cards: list[dict] | None = None,
+               title: str | None = None, key: str | None = None) -> Path:
+    """出审查页。缺省出翻转格（`sample`）；`cards` 给了就出这组卡（`sample.py` 的分层抽样用同一个页）。"""
     edir = Path(edir)
-    cards = sample(edir)
+    kind = "flips" if cards is None else "sample"
+    cards = sample(edir) if cards is None else cards
     if not cards:
-        raise BadRequest("没有可出题的翻转格（都已有标签，或没有翻转）")
+        raise BadRequest("没有可出题的格（都已有标签，或没有翻转）")
     name = edir.name
-    title = f"翻转格 · {name}"
+    title = title or f"翻转格 · {name}"
     imgs, rows = {}, []
     for i, c in enumerate(cards):
         uri = image_fn(c["id"]) if image_fn else None
@@ -230,20 +233,24 @@ def build_page(edir: str | Path, out: str | Path | None = None,
             key = f"i{i}"
             imgs[key] = uri
         rows.append({"id": c["id"], "options": c["options"], "img": key})
-    html = _shell().render(title, f"exp-flips-{name}", verdicts={}, css=CSS,
+    html = _shell().render(title, key or f"exp-{kind}-{name}", verdicts={}, css=CSS,
                            page_js=PAGE_JS.replace("__TITLE__", title),
                            payload={"rows": rows, "imgs": imgs})
-    out = Path(out) if out else edir / "flips" / "review.html"
+    out = Path(out) if out else edir / kind / "review.html"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(html, encoding="utf-8")
     return out
 
 
 # ── 收回 ─────────────────────────────────────────────────────────────────
-def harvest(edir: str | Path, verdicts_jsonl: str | Path) -> dict:
-    """`harvest_verdicts.py -o` 的输出 → `labels_extra.jsonl`（同格后到覆盖）。"""
+def harvest(edir: str | Path, verdicts_jsonl: str | Path, *, cards: list[dict] | None = None,
+            ref_prefix: str = "flips") -> dict:
+    """`harvest_verdicts.py -o` 的输出 → `labels_extra.jsonl`（同格后到覆盖）。
+
+    卡上带 `selection`（缺省 picked）、`stratum`、`stratum_weight` 的，原样记进标签——分层抽样的随机层
+    记 random，才进得了错率。"""
     edir = Path(edir)
-    cards = {c["id"]: c for c in sample(edir)}
+    cards = {c["id"]: c for c in (sample(edir) if cards is None else cards)}
     got: dict[str, Label] = {x.cell: x for x in read_jsonl(edir / EXTRA)}
     tally = {"chars": 0, "none": 0, "defect": 0, "idk": 0, "unknown": 0}
     for ln in Path(verdicts_jsonl).read_text(encoding="utf-8").splitlines():
@@ -255,7 +262,9 @@ def harvest(edir: str | Path, verdicts_jsonl: str | Path) -> dict:
         if c is None or not v:
             tally["unknown"] += 1
             continue
-        lab = Label(cell=c["id"], source="human", selection=PICKED, ref=f"flips:{c['stratum']}")
+        lab = Label(cell=c["id"], source="human", selection=c.get("selection") or PICKED,
+                    ref=f"{ref_prefix}:{c['stratum']}", stratum=c.get("stratum") or "",
+                    weight=c.get("stratum_weight"))
         if v.startswith("c") and v[1:].isdigit() and int(v[1:]) < len(c["options"]):
             lab.truth = c["options"][int(v[1:])]
             tally["chars"] += 1
