@@ -78,6 +78,11 @@ shadow = [
     "scikit-learn>=1.5",
     "pandas>=2.0",
 ]
+# A/B 实验的跨实验记录与看板（guji exp report 记进 MLflow，guji exp ui 起看板；overview#457）。
+# 不装照常出 report.md，只是不记账。
+exp = [
+    "mlflow>=3.0",
+]
 # 开发依赖：pip install open-guji-cv[dev]
 # 本地控制台：pip install open-guji-cv[console]
 console = [

@@ -5,8 +5,9 @@
 （文档要求「逐列单独去斜」），网格字典只有一列，格子来自 Step3。
 
 P0 的已知简化：Step3 已拆好的夹注 a/b 半格在这里合成一个满宽格交给 extract_page，
-由它内部的夹注逻辑再拆一次（网格字典表达不了半宽格）。两套判据一致时结果相同；
-不一致的列会在 flags 里露出来，留待接口打通后改成直接喂半宽框。
+由它内部的夹注逻辑再拆一次（网格字典表达不了半宽格）。**拆哪几格、每格发哪几半照 Step3**
+（`jiazhu_from_step3`，2026-10-06，overview#436）：extractor 只在 Step3 拆了的格上拆、只发 Step3 发过的半，
+两步格位一致；缝位两边都认的格仍取 extractor 自己量的。
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ class CellShrinkParams(BaseModel):
     frame_guard: bool = True
     """首/末格端区抹「版框横条行」（extractor.mask_frame_bars_outside）。刻本开；现代排印本
     （modern_body.yaml）关——没有版框，列末字的底横会被当框线抹掉（2026-09-15 北行日錄）。"""
+    jiazhu_from_step3: bool = True
+    """雙行小注拆哪几格、每格发哪几半，**一律照 Step3**（2026-10-06，overview#436）。此前 extractor 在
+    清理后的图块上把 v1 判据（段端收编、桥接）再跑一遍，两步各留一套格位：Step3 记整格、这里拆 a/b
+    （#434 vol04 p218c2:13/21），下游用的是这里那套，Step3 的产物就成了错的。关掉 = 旧行为（两套判据
+    取并集）。缝位不受影响：两边都认的格仍用这里自己量的缝。"""
 
 
 def _upright(ctx: RunContext, patch):
@@ -85,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.6", unit="cell",
+        id="cell_shrink", title="Step4 字框收缩", version="1.8", unit="cell",   # 1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
@@ -101,6 +107,8 @@ class CellShrinkStep(Step):
                         img: np.ndarray) -> list[tuple[object, np.ndarray | None]]:
         from ..clustering.extractor import CharExtractor
         p: CellShrinkParams = ctx.params_for(self)  # type: ignore[assignment]
+        if "roster" in cc.flags:
+            return _roster_crops(ctx.book.id, page, cc, img, p.padding_ratio)
         h, w = img.shape[:2]
         # Step3 每个物理位置一格；夹注 a/b 合成一格（满宽），空白格给 empty
         pos_count: dict[int, int] = {}
@@ -124,6 +132,7 @@ class CellShrinkStep(Step):
                 d["seam_bottom"] = c.seam_bottom
             if c.kind in ("jiazhu_a", "jiazhu_b") and c.gap_center is not None:
                 d["jiazhu_cx"] = float(c.gap_center)
+                d.setdefault("jiazhu_subs", []).append(c.sub or ("a" if c.kind == "jiazhu_a" else "b"))
         # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
         # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
         # Step3 认下的雙行夹注：缝中心（列图坐标）+ 是否只有 a 半（段尾单字）。extractor 自己那套
@@ -131,7 +140,8 @@ class CellShrinkStep(Step):
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
                   "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
-                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"]}
+                  **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"],
+                      "jiazhu_subs": sorted(d["jiazhu_subs"])}
                      if "jiazhu_cx" in d else {})}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))
@@ -147,7 +157,8 @@ class CellShrinkStep(Step):
                      # 用下面这两条线定位版框，它们是**列图坐标**：border_top=0 表示
                      # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
                      # 落在 y≈0 与 y≈border_bottom 附近。
-                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap")},
+                     "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap"),
+                     **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
@@ -262,7 +273,8 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                # 职名列的框屑 Step3 已剥掉（utils/roster_segment._denoise），首格就是字，不再猜框条
+                frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
                 if frame_bar:
                     cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
@@ -349,3 +361,30 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
         return masked, bbox
     r0, r1, c0, c1 = int(rows[0]), int(rows[-1]) + 1, int(cols[0]), int(cols[-1]) + 1
     return masked[r0:r1, c0:c1], (float(x0 + c0), float(y0 + r0), float(x0 + c1), float(y0 + r1))
+
+
+def _roster_crops(book: str, page: int, cc: ColumnCells, img: np.ndarray,
+                  padding_ratio: float) -> list[tuple[object, np.ndarray | None]]:
+    """职名列（Step3 `roster_pages` 分支切的列，overview#450）：每格按它自己的字框裁。
+
+    正文链按 pos 满宽裁、雙行 a/b 合成一格再从缝拆——前提是两行逐格对齐、一格一字
+    满宽。职名列两条都不成立：雙行两行相位不齐（按 pos 并 y 会一格裹进上下两字），
+    「臣」偏右小字可能与官衔末字 y 重叠。Step3 已给了逐字紧框（x0..x1, y0..y1），
+    这里外扩 padding 直接裁，不再过 CharExtractor 的网格收缩。"""
+    from ..clustering.extractor import CharInstance
+    h, w = img.shape[:2]
+    out: list[tuple[object, np.ndarray | None]] = []
+    for c in sorted(cc.cells, key=lambda c: (c.pos, c.sub or "")):
+        bw, bh = c.x1 - c.x0, c.y1 - c.y0
+        pad = padding_ratio * max(bw, bh)
+        x0, y0 = max(0, int(round(c.x0 - pad))), max(0, int(round(c.y0 - pad)))
+        x1, y1 = min(w, int(round(c.x1 + pad))), min(h, int(round(c.y1 + pad)))
+        patch = img[y0:y1, x0:x1]
+        ink = float((patch < 128).mean()) if patch.size else 0.0
+        inst = CharInstance(
+            id=f"{book}:{page}:{cc.col}:{c.slot}{c.sub or ''}", book=book, page=str(page),
+            col=cc.col, idx=c.pos - 1, bbox=(float(x0), float(y0), float(x1), float(y1)),
+            cell_type="char", ocr_text=None, ocr_confidence=0.0, patch_path="",
+            ink_ratio=ink, height=float(bh), width=float(bw), flags=[], sub=c.sub)
+        out.append((inst, patch))
+    return out

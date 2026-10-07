@@ -1334,6 +1334,15 @@ def _frame_mask(col_ink: np.ndarray, period: float) -> np.ndarray:
     return m
 
 
+def _dash_only(ink: np.ndarray, period: float, band_w: float, h_frac: float, w_frac: float) -> bool:
+    """这一格的墨是不是只有一小撮残段：墨的外接框竖向 ≤ h_frac×period 且横向 ≤ w_frac×列宽。
+    虚线残段（竖向短、横向窄）命中；一横（「一」）横向宽、整字横向更宽，都不命中。"""
+    ys, xs = np.nonzero(ink)
+    if ys.size == 0:
+        return False
+    return (ys.max() - ys.min() + 1) <= h_frac * period and (xs.max() - xs.min() + 1) <= w_frac * band_w
+
+
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
@@ -1472,6 +1481,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     pinned_cuts: "dict[int, float] | None" = None,
                     forced_solo: "set[int] | None" = None,
                     forced_jiazhu: "set[int] | None" = None,
+                    forced_main: "set[int] | None" = None,
+                    dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
@@ -1541,6 +1552,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       （缝 2px / 缝偏出窗口 / 搭档量不出缝凑不成段）由人指出来，**不看判据直接从中间拆开**
       （`jiazhu_split.forced_split_center`）。已被雙行段收走的格不动；紧随其后的右半单字照常被段端收编。
       空白格、墨太少量不出缝的格忽略。
+    - `forced_main`：`forced_jiazhu` 的反向——人裁指认为**整宽正文、别拆**的格（对外 `slot` 编号，
+      来自 `feedback/lookup.resolved_forced_main`，2026-10-06，overview#415/#436）。夹注段多延一格、
+      把紧随其后的整宽正文字劈成 a/b（vol02 p100c4:17「此」）这一型，几何量不开（见
+      `jiazhu_split` 的「段尾疑似闸」：自动裁段 18 处命中 16 处假阳性），只能人指出来。这些格在
+      连段、强制拆、段端收编**之后**从段里摘掉，按整格出（char）；也不再参与單行小注判定。
+      同一格两条强制都在时它赢（人后来又说「这是正文」）。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
@@ -1657,6 +1674,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if _frame_only(col_ink[y0i:y1i], frame[y0i:y1i], period, min_ink_ratio):
                 nonblank.discard(pos)
 
+    # 列端的虚线残段（overview#376 后续）：首格/末格/抬头格里只剩一小撮又矮又窄的墨，是版框外虚线或污点，
+    # 不是字——记空白，别让它当一格没字的 char 混进下游。只看列端：中间格的细小墨可能是真字（丶）。
+    if dash_blank is not None:
+        h_frac, w_frac = dash_blank
+        for k in range(n_slots):
+            pos = k + 1
+            if pos not in nonblank or not (pos == 1 or pos == n_slots or _pos_to_slot(pos, n_raised) <= 0):
+                continue
+            y0i = max(0, min(h, int(round(bounds[k]))))
+            y1i = max(0, min(h, int(round(bounds[k + 1]))))
+            if _dash_only(col_ink[y0i:y1i], period, float(x_hi - x_lo), h_frac, w_frac):
+                nonblank.discard(pos)
+
     runs: dict[int, float] = {}
     tail_a: set[int] = set()
     solo: dict[int, float] = {}
@@ -1682,6 +1712,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
                 runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
+        # 人指认的整宽正文：从段里摘掉（见 `forced_main` 说明）。放在段端收编之后——收编是从段端往下
+        # 一格看，先摘的话被摘格的下一格不会再被收；它被收进来正是要摘掉的那一型（段多延一格）。
+        main_pos = {pos for pos in patches if forced_main and _pos_to_slot(pos, n_raised) in forced_main}
+        for pos in main_pos:
+            runs.pop(pos, None)
+            tail_a.discard(pos)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
@@ -1692,7 +1728,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 奇数字末行（7a+6b 必然一体）——用户 2026-09-20 定：不会有两段"独立"
         # 的注紧挨着，所以这里不存在"單行注被当段尾收走"的歧义。
         solo = jiazhu_split.solo_notes(
-            {p: patches[p] for p in nonblank}, runs, ruler, ink_threshold)
+            {p: patches[p] for p in nonblank if p not in main_pos}, runs, ruler, ink_threshold)
         for pos in sorted(nonblank):
             if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
                     and pos not in runs and pos not in solo:
