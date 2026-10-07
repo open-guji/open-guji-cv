@@ -87,6 +87,46 @@ def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
     return jiazhu_split.column_frac(patches, ref_w, ink_threshold)
 
 
+def trim_dash_ends(mask: np.ndarray, period: float, run_max_frac: float,
+                   gap_min_frac: float, merge_frac: float) -> tuple[int, int] | None:
+    """行有墨掩码的首尾各剥掉「孤立的虚线残段」，返回剩下的 (首行, 末行)；全无墨 → None。
+
+    列图两端偶尔留着版框内侧那条**虚线**的残段：几行厚的细墨、常成簇（相隔十几行的
+    两三小段），跟正文之间隔着一两格以上的空白。`n_raised_hint` 量的是「首末墨行之间
+    装得下几格」，这簇薄墨把跨度撑大 2 格左右，凭空多出一格抬头（vol03 p28c2：残段在
+    第 19~23 行，首字要到 272 行才起，跨度/period 21.68 → hint=1；剥掉后 19.4）。
+
+    做法：相隔 < `merge_frac×period` 的墨段并成一簇；从端部起，簇的纵向跨度
+    ≤ `run_max_frac×period` **且**到下一簇的空隙 ≥ `gap_min_frac×period` 的簇整簇剥掉，
+    直到碰上第一簇「不像虚线」的墨为止；只剩一簇时不再剥。
+    判据靠**尺寸与孤立度**、不靠墨浓度——实测 vol03 90 个兜底 hint 列：虚线簇跨度
+    ≤29 行、后接空隙 ≥185 行（1.7 格）；真首字簇跨度 ≥147 行或紧贴下一字（空隙 ≤41），
+    两头都有大余量，而残段的峰值墨占比 0.05~0.84 都有（混着满宽版框条残渣），分不开。
+    """
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return None
+    breaks = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate(([idx[0]], idx[breaks + 1]))
+    ends = np.concatenate((idx[breaks], [idx[-1]]))
+    merge = merge_frac * period
+    cs, ce = [int(starts[0])], [int(ends[0])]
+    for a, b in zip(starts[1:], ends[1:]):
+        if a - ce[-1] - 1 < merge:
+            ce[-1] = int(b)
+        else:
+            cs.append(int(a))
+            ce.append(int(b))
+    thin_max = run_max_frac * period
+    gap_min = gap_min_frac * period
+    lo, hi = 0, len(cs) - 1
+    while lo < hi and (ce[lo] - cs[lo] + 1) <= thin_max and (cs[lo + 1] - ce[lo] - 1) >= gap_min:
+        lo += 1
+    while hi > lo and (ce[hi] - cs[hi] + 1) <= thin_max and (cs[hi] - ce[hi - 1] - 1) >= gap_min:
+        hi -= 1
+    return cs[lo], ce[hi]
+
+
 CONTRACT = [
     "页级共享量 period / ref_w 用该页的正文列算（剔掉 L1c 宽度异常与 L0c 非正文列），"
     "不按 admitted 筛——L2/L2b 拒掉的列几何仍是正文，照样参与共识",
@@ -120,6 +160,12 @@ class ColumnGateParams(BaseModel):
     top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
+    #: 兜底 hint 量跨度前先剥掉两端孤立的薄虚线段（见 `trim_dash_ends`）。**默认关**，
+    #: 关着时产物逐字节不变。（2026-10-02 S2 道：vol03 p28c2/p39c9 一类假抬头）
+    hint_ignore_dash: bool = False
+    hint_dash_run_max_frac: float = 0.3    # 虚线簇纵向跨度上限 ×period（实测 ≤29 行 ≈ 0.26；真字簇 ≥147 行）
+    hint_dash_gap_min_frac: float = 1.2    # 簇与下一簇墨的最小空隙 ×period（实测 ≥185 行 ≈ 1.67；真字 ≤41）
+    hint_dash_merge_frac: float = 0.25     # 相隔小于此 ×period 的墨段并成一簇
     #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
     #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
     #: 而 b 档（框字粘连）最小 6，两侧都有余量。标定见
@@ -321,6 +367,13 @@ class ColumnGateStep(Step):
                         p.max_raised_hint)
                 else:
                     ink = np.flatnonzero(prof > p.span_ink)
+                    if p.hint_ignore_dash and ink.size:
+                        ends = trim_dash_ends(prof > p.span_ink, period,
+                                              p.hint_dash_run_max_frac,
+                                              p.hint_dash_gap_min_frac,
+                                              p.hint_dash_merge_frac)
+                        if ends is not None:
+                            ink = np.array(ends)
                     if ink.size:
                         span = float(ink[-1] - ink[0])
                         extra = int(span / period - expected_slots + p.span_margin)
