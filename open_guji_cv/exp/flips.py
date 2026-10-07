@@ -106,6 +106,7 @@ def cache_image_fn(cache=None, h: int = 128) -> Callable[[str], str | None]:
     from ..core.spec import cell_key
     from ..feedback.anchor import parse_cell_key
     from ..products.cache import ImageCache
+    from ..utils.image_io import imread as cv_imread
     cache = cache or ImageCache()
 
     def fn(cell: str) -> str | None:
@@ -114,7 +115,7 @@ def cache_image_fn(cache=None, h: int = 128) -> Callable[[str], str | None]:
             return None
         book, page, col, slot, sub = k
         p = cache.get(book, "char_patch", cell_key(page, col, slot) + (sub or ""))
-        img = cv2.imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
+        img = cv_imread(str(p), cv2.IMREAD_GRAYSCALE) if p else None
         if img is None:
             return None
         if img.shape[0] != h:
