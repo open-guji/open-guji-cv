@@ -422,6 +422,15 @@ class SeedAdmitParams(BaseModel):
     juan_cov: float = 0.98
     """`juan_rule` 的库 top1 cov 门槛（任务书口径）。"""
 
+    nonchar_gate: bool = False
+    """非字过滤（Y1，overview#454 第4条，缺省关）：已放行的格若 Step4 `char_index` 标了
+    `nonchar_flags` 里任一标记，或放行字是单笔画字符（`nonchar_strokes`，界行竖线／污点读成
+    「丨」「亅」…），撤回放行、落人审（doubt `nonchar`）。人裁的格不碰（人裁在最前面一票定案）。
+    依据：vol04 已放行格里带 `bad_seg`／`rule_bar` 的 36 格、放行字为单笔画的 3 格，有看图
+    结论的全是放行错，零个看图 ok（见 #454 评论的前后对比）。没有 `char_index` 产物的格弃权。"""
+    nonchar_flags: str = "bad_seg,rule_bar"
+    nonchar_strokes: str = "丨亅丿丶"
+
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
 
@@ -461,6 +470,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
+        if isinstance(d, dict) and not self.nonchar_gate:
+            for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
@@ -1084,6 +1096,14 @@ class SeedAdmitStep(Step):
                             and not (align_char and vm_here.semantic(align_char)
                                      != vm_here.semantic(_top))):
                         ok, channel, char, prov = True, "lib_confident", _top, "match"
+                # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
+                if ok and p.nonchar_gate:
+                    _ir2 = imap.get(r.id)
+                    _bad = ({f for f in (p.nonchar_flags or "").split(",") if f}
+                            & set(getattr(_ir2, "flags", None) or ()))
+                    if _bad or (char and char in (p.nonchar_strokes or "")):
+                        ok, channel, prov = False, None, ""
+                        doubts.append("nonchar")
                 # 近似例（overview#276）：这一格的字就是库给的字、而库给它的依据是近似例 →
                 # 缺省照常放行、在 evidence 里标注（文本侧表与卡片读它）；开了闸才挪去人审。
                 # 放在所有通道之后：闸只会把格从放行挪到待审，不改字、不会反过来。
