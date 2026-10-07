@@ -144,6 +144,7 @@ guji exp report <实验名> -w $WS
 ```bash
 guji exp sample <实验名> scan  -w $WS     # 基线的每个放行格离线过一遍影子闸 → sample/shadow_scan.jsonl
 guji exp sample <实验名> cards -w $WS --n 34   # 出题：影子不同意的层普查，同意层简单随机抽 n 格
+#   不同意的格太多时加 --cap 35：超过 35 格的层改层内随机抽 35 格（记权重），估计按层折算（vol04：35+35+14+16=100）
 guji exp sample <实验名> page  -w $WS     # 审查页（同翻转页的壳），用 Artifact 发布
 guji exp sample <实验名> harvest v.jsonl -w $WS
 guji exp sample <实验名> estimate -w $WS  # → sample/estimate.md

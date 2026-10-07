@@ -77,7 +77,7 @@ def _sample(edir: Path, args) -> None:
         from collections import Counter
         print(f"{len(rows)} 个放行格；分层 {dict(Counter(SP.band(r) for r in rows))} → {edir / SP.SCAN}")
     elif sub == "cards":
-        cards = SP.build_cards(edir, n_random=args.n or 35, seed=args.seed, resample=args.resample)
+        cards = SP.build_cards(edir, n_random=args.n or 35, seed=args.seed, resample=args.resample, cap=args.cap)
         from collections import Counter
         print(f"{len(cards)} 张卡 {dict(Counter(c['stratum'] for c in cards))} → {edir / SP.CARDS}")
     elif sub == "page":
@@ -199,4 +199,5 @@ def add_parser(sub) -> None:
     p.add_argument("--no-images", action="store_true", help="flips page：不带字块图")
     p.add_argument("-o", "--out", default=None, help="flips page：输出 html")
     p.add_argument("--no-mlflow", action="store_true", help="run/report：不记进 MLflow")
+    p.add_argument("--cap", type=int, default=None, help="sample cards：影子不同意的每层最多出几题，超出就层内随机抽")
     p.add_argument("--port", type=int, default=5000, help="ui：端口")
