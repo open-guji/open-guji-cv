@@ -171,6 +171,13 @@ class ColumnGateParams(BaseModel):
     #: 而 b 档（框字粘连）最小 6，两侧都有余量。标定见
     #: `steps/column_warp.FRAME_RESIDUE_*`（含被证伪的「端部峰值」候选）。
     frame_residue_min_run: int = 3
+    #: L1n 列宽下限（overview#427）：文字带宽 < 本页中位数 × 此比例 → flag `column_narrow`。
+    #: 四庫 vol04 p63c1/p80c5/p80c6/p217c2/p217c3 这 5 列切进了字里，列图只剩笔画边缘，
+    #: 下游认出一串乱码（context 放行 93 格）；vol04 全书 1962 列里 <0.75 的正好这 5 列。
+    #: vol05–10 再命中 18 列，多数同样是乱码，但「X卷採進本」这类本来就窄的小字行、vol03 p49c7/c8
+    #: 窄列也读得对——所以缺省只标记；书里确认窄列都是切坏时，`narrow_reject` 打开整列拒。
+    narrow_ratio: float = 0.75
+    narrow_reject: bool = False
 
 
 @register_step
@@ -458,6 +465,12 @@ class ColumnGateStep(Step):
                 flags.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
                              f"{med_w:.0f}px {wide_cols[c.col]:+.0%}"
                              "（可能圈进了界行/夹注双栏，flag 不算错）")
+            band_w = c.band[1] - c.band[0]
+            if med_w and band_w < p.narrow_ratio * med_w and not is_jiazhu_col \
+                    and c.col not in non_body:
+                msg = (f"column_narrow：本列文字带宽 {band_w:.0f}px 不到本页中位数 {med_w:.0f}px 的 "
+                       f"{p.narrow_ratio:.0%}（{band_w / med_w:.0%}），列界多半切进了字里")
+                (reasons if p.narrow_reject else flags).append(msg)
             if c.side_floor > p.side_floor_max and not is_jiazhu_col:
                 # flag 级，不进 reject（2026-09-19 从 block 降下来）。判据本身没错——
                 # vol02 58 条 column-warp 金标上 >0.045 命中 1/3 mixed、0/55 clean 误伤——
@@ -548,6 +561,9 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="本列宽是否偏离本页中位数过多——flag 不是 block（2026-09-19 降级）："
                        "边列的窗口本来就带进版框内侧余白，vol02 被它拦下的 4 列"
                        "逐列看图全是干净单列，强行送进 Step3 全部有解", name="column_width"),
+        GateLevel(id="L1n", unit="column",
+                  desc="本列宽是否窄过本页中位数的下限比例（列界切进字里）——缺省 flag，"
+                       "`narrow_reject` 打开才拒", name="column_narrow"),
         GateLevel(id="L2", unit="column",
                   desc="两侧外沿最低墨占比是否超界——flag 不是 block（2026-09-19 降级）："
                        "量的是界行残墨/纸面污渍，不影响 Step3 切字缝，"
