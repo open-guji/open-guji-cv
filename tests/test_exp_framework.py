@@ -382,6 +382,9 @@ def test_report_end_to_end(tmp_path):
     assert "picked 是被挑过的样本" in md and "无检验力" in md and "不达标" in md
     assert json.loads((edir / "report.json").read_text(encoding="utf-8"))["name"] == "e1"
     assert len(LB.read_jsonl(edir / "labels.jsonl")) == 1
+    for f in ("charts/B-forest.svg", "charts/B-channels.svg"):
+        svg = (edir / f).read_text(encoding="utf-8")
+        assert svg.startswith("<svg") and "prefers-color-scheme:dark" in svg and f"]({f})" in md
 
 
 def test_flips_sample_page_harvest(tmp_path):

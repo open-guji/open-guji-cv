@@ -69,6 +69,9 @@ def render(rep: dict) -> str:
         for sc, blk in comp["overall"].items():
             L += [f"### 总体 · {SCOPE_ZH.get(sc, sc)}（{blk['cells']} 格 / {blk['pages']} 页）", "",
                   f"| 指标 | {base} | {vn} | 差 | 95% CI |", "|---|---|---|---|---|", *_metric_rows(blk), ""]
+        ch = (rep.get("charts") or {}).get(vn) or {}
+        if ch.get("forest"):
+            L += [f"![{vn} 相对 {base} 的指标差值]({ch['forest']})", ""]
         L += ["### 分层 · 按书（正文）", "", f"| 书 | 格 | 放行率 {base} | 放行率 {vn} | 差 | 送审率差 | 放行错误率 {base} | {vn} |",
               "|---|---|---|---|---|---|---|---|"]
         for bk, sc in comp["by_book"].items():
@@ -82,6 +85,8 @@ def render(rep: dict) -> str:
         for r in comp["by_channel"]:
             L.append(f"| {r['channel']} | {r['A']} | {r['B']} | {r['B'] - r['A']:+d} | {r['A_err']}/{r['A_judged']} | "
                      f"{r['B_err']}/{r['B_judged']} | {r['A_picked_err']}/{r['B_picked_err']} |")
+        if ch.get("channels"):
+            L += ["", f"![按通道放行格数]({ch['channels']})"]
         L += ["", "### 分层 · 按成因（送审格的 doubts 码，一格多码各计）", "",
               f"| 成因 | {base} | {vn} | 差 |", "|---|---|---|---|"]
         for r in comp["by_doubt"][:30]:

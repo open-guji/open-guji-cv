@@ -56,6 +56,14 @@ def build(edir: str | Path, *, same=None, write: bool = True) -> dict:
            "bootstrap": cfg.bootstrap, "seed": cfg.seed,
            "labels": C.label_summary(merged, cells, conflicts, sources), "comparisons": comps}
     if write:
+        from .charts import channels, forest
+        (edir / "charts").mkdir(exist_ok=True)
+        rep["charts"] = {}
+        for vn, comp in comps.items():
+            f1, f2 = f"charts/{vn}-forest.svg", f"charts/{vn}-channels.svg"
+            (edir / f1).write_text(forest(comp, cfg.base.name, vn), encoding="utf-8")
+            (edir / f2).write_text(channels(comp, cfg.base.name, vn), encoding="utf-8")
+            rep["charts"][vn] = {"forest": f1, "channels": f2}
         LB.write_jsonl(sorted(merged.values(), key=lambda x: x.cell), edir / "labels.jsonl")
         (edir / "report.json").write_text(json.dumps(rep, ensure_ascii=False, indent=1), encoding="utf-8")
         (edir / "report.md").write_text(render(rep), encoding="utf-8")
