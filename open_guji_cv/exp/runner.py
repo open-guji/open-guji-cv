@@ -175,9 +175,11 @@ def page_types(products_root: Path, book: str) -> dict[int, str]:
     d = Path(products_root) / book / "border_detect_gate"
     for f in sorted(d.glob("p*.json")) if d.is_dir() else []:
         try:
-            g = json.loads(f.read_text(encoding="utf-8")).get("border_detect_gate") or {}
+            d = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
+        # 种类名是 `border_detect_gate_manifest`（不是步名）；按「哪一项带 page_type」找，不写死
+        g = next((v for v in d.values() if isinstance(v, dict) and "page_type" in v), {})
         out[int(f.stem[1:])] = str(g.get("page_type") or "unknown")
     return out
 
@@ -279,7 +281,10 @@ def run(cfg: ExpConfig, *, snapshot: str | Path | None = None, root: str | Path 
              "runs": runs, "effective_params": effective}
     old = read_state(edir)
     if old and old.get("runs"):
-        state["runs"] = {**old["runs"], **runs}
+        # 全部新鲜跳过的一轮不覆盖上次真跑的计数
+        keep = {k: v for k, v in old["runs"].items()
+                if k not in runs or not any(c.get("ok") or c.get("failed") for c in runs[k]["counts"].values())}
+        state["runs"] = {**runs, **keep}
         state["effective_params"] = {**(old.get("effective_params") or {}), **effective}
     (edir / "exp.yaml").write_text(yaml.safe_dump(state, allow_unicode=True, sort_keys=False),
                                    encoding="utf-8")

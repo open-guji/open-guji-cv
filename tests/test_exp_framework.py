@@ -343,7 +343,8 @@ def _write_seed_admit(root: Path, book: str, cells: dict):
         st = c["state"]
         by_page.setdefault(c["page"], []).append(
             {"id": k, "char": c["char"], "admit": st in ("admit", "human"), "channel": c["channel"],
-             "provenance": "human" if st == "human" else "auto", "doubts": c["doubts"]})
+             "provenance": "human" if st == "human" else "auto", "doubts": c["doubts"],
+             "evidence": {"shadow_veto": {"pick": "曰"}} if "shadow_veto" in c["doubts"] else {}})
     for p, chars in by_page.items():
         f = root / book / "seed_admit" / f"p{p:04d}.json"
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -358,7 +359,7 @@ def _fake_exp(tmp_path) -> Path:
     for p in range(1, 11):
         g = edir / RN.UPSTREAM / "vb" / "border_detect_gate" / f"p{p:04d}.json"
         g.parent.mkdir(parents=True, exist_ok=True)
-        g.write_text(json.dumps({"border_detect_gate": {"page_type": "toc" if p == 10 else "body"}}), encoding="utf-8")
+        g.write_text(json.dumps({"border_detect_gate_manifest": {"page_type": "toc" if p == 10 else "body"}}), encoding="utf-8")
     vis = tmp_path / "vis.jsonl"
     vis.write_text(json.dumps({"cell": "vb:1:1:0", "v": "wrong", "char": "曰", "shown": "日"}, ensure_ascii=False),
                    encoding="utf-8")
@@ -397,6 +398,7 @@ def test_flips_sample_page_harvest(tmp_path):
     assert FL.sample(edir, n=1) == cards                   # id 冻住：不 --resample 就不重抽
     html = FL.build_page(edir, image_fn=lambda c: None).read_text(encoding="utf-8")
     assert 'id="data"' in html and "B 把" not in html and "shadow_veto" not in html   # 卡上不印机器判断
+    assert "曰" in next(c for c in cards if c["id"] == "vb:2:1:0")["options"]   # 影子认的字也当候选
     c4 = next(c for c in cards if c["id"] == "vb:4:1:0")
     vj = tmp_path / "v.jsonl"
     vj.write_text("\n".join(json.dumps(r) for r in [
@@ -434,3 +436,9 @@ def test_book_params_kept_and_explicit_default_wins(tmp_path):
            cache=ImageCache(tmp_path / "cache"), log=lambda s: None)
     a2 = ProductStore(tmp_path / "exps" / "t2" / "A").read("tb", "t_exp_down_step", "p0002", "t_exp_down")
     assert a2.v == 2.0
+
+
+def test_doubt_code_strips_numbers():
+    assert C.doubt_code("库 unsure(cov=0.979)") == "库 unsure"
+    assert C.doubt_code("上下文 margin 不足(0.00)") == "上下文 margin 不足"
+    assert C.doubt_code("shadow_veto") == "shadow_veto"
