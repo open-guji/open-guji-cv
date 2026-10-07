@@ -17,6 +17,10 @@ variants:
     note: vol04/vol05 当时开的阈值
     params:
       seed_admit: {shadow_veto: true, shadow_conf: 0.8}
+  veto080na:
+    note: conf 0.8 且关掉异体弃权（overview#457 CV 经理 10-07 定验）
+    params:
+      seed_admit: {shadow_veto: true, shadow_conf: 0.8, shadow_veto_variant_abstain: false}
   veto097:
     note: 代码缺省阈值
     params:
