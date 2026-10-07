@@ -53,6 +53,7 @@ def build(edir: str | Path, *, same=None, write: bool = True) -> dict:
            "code_rev": st.get("code_rev"), "snapshot": st.get("snapshot"),
            "snapshot_stamp": st.get("snapshot_stamp"),
            "params": {v.name: v.params for v in cfg.variants}, "eval_params": cfg.eval_params,
+           "book_params": cfg.book_params, "effective_params": st.get("effective_params") or {},
            "bootstrap": cfg.bootstrap, "seed": cfg.seed,
            "labels": C.label_summary(merged, cells, conflicts, sources), "comparisons": comps}
     if write:

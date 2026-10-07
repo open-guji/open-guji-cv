@@ -16,6 +16,7 @@
 """
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -28,7 +29,7 @@ from typing import Callable
 import yaml
 
 from ..errors import BadRequest
-from .config import EXP_REL, ExpConfig, validate_params
+from .config import EXP_REL, ExpConfig, effective_params, validate_params
 
 UPSTREAM = "_upstream"
 #: 不随上游一起搬的东西：上一代产物（格级复用用，实验里不需要）与临时文件。
@@ -251,11 +252,15 @@ def run(cfg: ExpConfig, *, snapshot: str | Path | None = None, root: str | Path 
     stamps = prepare_upstream(cfg, edir, snap, steps)
     want = variants or [v.name for v in cfg.variants]
     runs: dict[str, dict] = {}
+    effective: dict[str, dict] = {}
     for v in cfg.variants:
         if v.name not in want:
             continue
         for book in cfg.books:
             bk = book_loader(book)
+            eff = effective_params(cfg, v, getattr(bk, "params", None))
+            effective.setdefault(v.name, {})[book] = eff
+            bk = dataclasses.replace(bk, params={})      # 书级参数已合进 eff，见 effective_params
             pages = select_pages(cfg, edir / UPSTREAM, book, pl, steps, bk)
             vroot = seed_variant(edir, v.name, book)
             if force:
@@ -265,16 +270,17 @@ def run(cfg: ExpConfig, *, snapshot: str | Path | None = None, root: str | Path 
             t0 = time.time()
             with _products_env(vroot):
                 eng = Engine(bk, pl, store=ProductStore(vroot), cache=cache,
-                             params=cfg.run_params(v), log=log)
+                             params=eff, log=log)
                 rep = eng.run(steps=list(steps), pages=pages, jobs=jobs)
             runs[f"{v.name}/{book}"] = {"pages": len(pages), "counts": rep.counts(),
                                         "elapsed": round(time.time() - t0, 1)}
     state = {"config": cfg.to_dict(), "code_rev": git_rev(), "snapshot": str(snap),
              "snapshot_stamp": stamps, "steps": steps, "ran_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-             "runs": runs}
+             "runs": runs, "effective_params": effective}
     old = read_state(edir)
     if old and old.get("runs"):
         state["runs"] = {**old["runs"], **runs}
+        state["effective_params"] = {**(old.get("effective_params") or {}), **effective}
     (edir / "exp.yaml").write_text(yaml.safe_dump(state, allow_unicode=True, sort_keys=False),
                                    encoding="utf-8")
     return state

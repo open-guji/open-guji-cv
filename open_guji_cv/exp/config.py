@@ -14,6 +14,7 @@ variants:
   B:
     params:
       seed_admit: {shadow_veto: true, shadow_conf: 0.8}
+book_params: keep                  # keep：基线 = 书 yaml 现行 params:；ignore：基线 = 代码默认值
 eval:                              # 评测口径，所有变体一样，与产品默认值无关
   use_human_verdicts: false        # 缺省就是 false：不让 Step7 抄人裁再拿人裁考它
 labels:
@@ -59,6 +60,7 @@ class ExpConfig:
     to_step: str = "seed_admit"
     pipeline: str = "keben_body_v2"
     pages: str | list[int] = "all"
+    book_params: str = "keep"                  # keep / ignore：书 yaml 的 params: 算不算进基线
     snapshot: str | None = None
     root: str | None = None
     eval_params: dict[str, dict] = field(default_factory=dict)
@@ -85,7 +87,7 @@ class ExpConfig:
     def to_dict(self) -> dict:
         return {
             "name": self.name, "books": list(self.books), "from": self.from_step, "to": self.to_step,
-            "pipeline": self.pipeline, "pages": self.pages, "snapshot": self.snapshot, "root": self.root,
+            "pipeline": self.pipeline, "pages": self.pages, "book_params": self.book_params, "snapshot": self.snapshot, "root": self.root,
             "base": {"name": self.base.name, "params": self.base.params, "note": self.base.note},
             "variants": {v.name: {"params": v.params, "note": v.note} for v in self.variants[1:]},
             "eval": {"params": self.eval_params},
@@ -137,7 +139,7 @@ def _eval_block(d: Any) -> dict[str, dict]:
 def from_dict(d: dict, source: str | None = None) -> ExpConfig:
     if not isinstance(d, dict):
         raise BadRequest("实验 yaml 顶层要是 mapping")
-    known = {"name", "books", "from", "to", "pipeline", "pages", "snapshot", "root", "base",
+    known = {"name", "books", "from", "to", "pipeline", "pages", "book_params", "snapshot", "root", "base",
              "variants", "eval", "labels", "guardrails", "bootstrap", "seed"}
     extra = set(d) - known
     if extra:
@@ -167,9 +169,12 @@ def from_dict(d: dict, source: str | None = None) -> ExpConfig:
         name=str(name), books=[str(b) for b in books], variants=variants,
         from_step=str(d.get("from") or "seed_admit"), to_step=str(d.get("to") or "seed_admit"),
         pipeline=str(d.get("pipeline") or "keben_body_v2"), pages=d.get("pages") or "all",
+        book_params=str(d.get("book_params") or "keep"),
         snapshot=d.get("snapshot"), root=d.get("root"), eval_params=_eval_block(d.get("eval")),
         labels=list(d.get("labels") or []), guardrails=list(d.get("guardrails") or []),
         bootstrap=int(d.get("bootstrap", 2000)), seed=int(d.get("seed", 0)), source=source)
+    if cfg.book_params not in ("keep", "ignore"):
+        raise BadRequest(f"book_params 只能是 keep / ignore：{cfg.book_params!r}")
     if not cfg.name or "/" in cfg.name or cfg.name.startswith("_"):
         raise BadRequest(f"实验名不合法：{cfg.name!r}")
     return cfg
@@ -202,6 +207,16 @@ def from_pair(base: str | Path | None, var: list[str | Path], *, books: list[str
     d = {"name": name or "_".join(variants) or "exp", "books": books, "from": from_step, "to": to_step,
          "base": base_d, "variants": variants, **{k: v for k, v in kw.items() if v is not None}}
     return from_dict(d)
+
+
+def effective_params(cfg: ExpConfig, v: Variant, book_params: dict | None) -> dict[str, dict]:
+    """一个变体在一册书上**实际**跑的参数：(书 yaml 的 params:，若 keep) ∪ 评测口径 ∪ 变体覆盖。
+
+    为什么框架自己合并、再把书级参数清空交给引擎：引擎的书级覆盖（`core/step.py::_with_book_params`）
+    只替换「仍是默认值」的字段——变体显式写成默认值（如 `shadow_veto: false`）时分不清，会被书 yaml
+    改回去，A/B 两边就跑成一样。这里先合好，引擎那层就不再起作用。"""
+    base = (book_params or {}) if cfg.book_params == "keep" else {}
+    return merge_params(base, cfg.run_params(v))
 
 
 def validate_params(cfg: ExpConfig) -> None:
