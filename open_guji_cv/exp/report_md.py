@@ -52,6 +52,8 @@ def render(rep: dict) -> str:
          + ("算进基线（book_params: keep）" if rep.get("book_params", "keep") == "keep" else "不算（book_params: ignore）"),
          *[f"- 实际参数 {vn}·{bk}：`{p.get('seed_admit', p)}`"
            for vn, per in (rep.get("effective_params") or {}).items() for bk, p in per.items()],
+         "- 判对口径：" + ("**逐码位**（exact，口径 A：放行了异体码位算错）" if rep.get("match", "exact") == "exact"
+                          else "**异体等价**（semantic：异体码位也算对）"),
          f"- 统计：区间是以**页**为簇的配对自助法 95% CI（{rep['bootstrap']} 次，种子 {rep['seed']}）；"
          f"区间跨 0 标「与噪声不可分」", ""]
     lab = rep["labels"]

@@ -47,13 +47,14 @@ def build(edir: str | Path, *, same=None, write: bool = True) -> dict:
                         "picked": sum(x.selection == LB.PICKED for x in extra)})
     merged, conflicts = LB.merge(raw + extra)
 
+    same = same or C.make_same(cfg.match)
     comps = C.compare(cells, cfg.base.name, merged, lambda b, p: pts.get(b, {}).get(p), same=same,
                       guardrails=cfg.guardrails, n_boot=cfg.bootstrap, seed=cfg.seed, books=cfg.books)
     rep = {"name": cfg.name, "base": cfg.base.name, "books": cfg.books, "steps": st["steps"],
            "code_rev": st.get("code_rev"), "snapshot": st.get("snapshot"),
            "snapshot_stamp": st.get("snapshot_stamp"),
            "params": {v.name: v.params for v in cfg.variants}, "eval_params": cfg.eval_params,
-           "book_params": cfg.book_params, "effective_params": st.get("effective_params") or {},
+           "book_params": cfg.book_params, "match": cfg.match, "effective_params": st.get("effective_params") or {},
            "bootstrap": cfg.bootstrap, "seed": cfg.seed,
            "labels": C.label_summary(merged, cells, conflicts, sources), "comparisons": comps}
     if write:
