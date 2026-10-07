@@ -103,8 +103,12 @@ def _options(row: dict, rng: random.Random) -> list[str]:
     return opts
 
 
-def build_cards(edir: str | Path, *, n_random: int = 35, seed: int = 0, resample: bool = False) -> list[dict]:
-    """影子不同意的层全出题（已有人裁的跳过），同意层简单随机抽 `n_random` 格。卡片 id 冻住。"""
+def build_cards(edir: str | Path, *, n_random: int = 35, seed: int = 0, resample: bool = False,
+                cap: int | None = None) -> list[dict]:
+    """影子不同意的层全出题（已有人裁的跳过），同意层简单随机抽 `n_random` 格。卡片 id 冻住。
+
+    `cap`：不同意的某层待出题格数超过它，就在层内简单随机抽 `cap` 格（记 random 与权重），估计时按层折算
+    ——vol04 不同意的格有 114 格，全出题超过一次审得完的量。"""
     edir = Path(edir)
     cp = edir / CARDS
     if cp.exists() and not resample:
@@ -118,10 +122,15 @@ def build_cards(edir: str | Path, *, n_random: int = 35, seed: int = 0, resample
         by.setdefault(band(r), []).append(r)
     cards = []
     for name, _, _ in BANDS:
-        for r in by.get(name, []):
-            if r["cell"] not in human:
-                cards.append({"id": r["cell"], "stratum": name, "stratum_weight": 1.0, "selection": PICKED,
-                              "options": _options(r, rng)})
+        todo = [r for r in by.get(name, []) if r["cell"] not in human]
+        if cap and len(todo) > cap:
+            w, sel = len(todo) / cap, RANDOM
+            todo = rng.sample(todo, cap)
+        else:
+            w, sel = 1.0, PICKED
+        for r in todo:
+            cards.append({"id": r["cell"], "stratum": name, "stratum_weight": round(w, 3), "selection": sel,
+                          "options": _options(r, rng)})
     agree = by.get("agree", [])
     pick = rng.sample(agree, min(n_random, len(agree)))
     w = len(agree) / max(1, len(pick))
@@ -157,7 +166,23 @@ def estimate(edir: str | Path, *, match: str = "exact", variant: str = "A") -> d
             ok += c is True
             err += c is False
             unk += c is None
-        strata[name] = {"N": len(by.get(name, [])), "ok": ok, "err": err, "unlabeled": unk, "kind": "census"}
+        x = {"N": len(by.get(name, [])), "ok": ok, "err": err, "unlabeled": unk, "kind": "census"}
+        # 层内抽样（build_cards 的 cap）：只用本层随机抽中的人裁折算全层；已人裁过的格另算精确数
+        smp = [r for r in by.get(name, []) if (labs.get(r["cell"]) is not None and labs[r["cell"]].stratum == name
+                                               and labs[r["cell"]].selection == RANDOM)]
+        if smp:
+            cs = [judge(r, labs[r["cell"]]) for r in smp]
+            sk, sn = sum(c is False for c in cs), sum(c is not None for c in cs)
+            ids = {r["cell"] for r in smp}
+            hum = [r for r in by.get(name, []) if r["cell"] not in ids and labs.get(r["cell"]) is not None
+                   and labs[r["cell"]].source == "human"]
+            known_err = sum(judge(r, labs[r["cell"]]) is False for r in hum)
+            rest = len(by.get(name, [])) - len(smp) - len(hum)   # 既没抽中也没人裁过的格，按抽样错率折算
+            ci = wilson(sk, sn)
+            x.update(kind="sampled", n=sn, sample_err=sk,
+                     est_err=None if not sn else known_err + sk + rest * sk / sn,
+                     est_err_ci=None if ci is None else (known_err + sk + rest * ci[0], known_err + sk + rest * ci[1]))
+        strata[name] = x
     agree = by.get("agree", [])
     k = n = 0
     for r in agree:
@@ -175,11 +200,14 @@ def estimate(edir: str | Path, *, match: str = "exact", variant: str = "A") -> d
                        "est_err": len(agree) * k / n if n else None,
                        "est_err_ci": None if ci is None else (len(agree) * ci[0], len(agree) * ci[1])}
     census_err = sum(strata[b]["err"] for b, _, _ in BANDS)
+    sampled_extra = sum((strata[b]["est_err"] or 0) - strata[b]["err"] for b, _, _ in BANDS
+                        if strata[b]["kind"] == "sampled")
     total_n = len(rows)
     tot = None
     if strata["agree"]["est_err"] is not None:
         lo, hi = strata["agree"]["est_err_ci"]
-        tot = {"est": census_err + strata["agree"]["est_err"], "ci": (census_err + lo, census_err + hi)}
+        tot = {"est": census_err + sampled_extra + strata["agree"]["est_err"],
+               "ci": (census_err + sampled_extra + lo, census_err + sampled_extra + hi)}
     thr = []
     dis = [r for r in rows if band(r) != "agree"]
     for t in THRESHOLDS:
@@ -199,12 +227,18 @@ def render(est: dict, name: str) -> str:
     L = [f"# 影子开关分层抽样估计 · {name}", "",
          f"- 基线变体 {est['variant']} 的放行格 {est['admitted']} 格（非人裁）；判对口径 "
          f"{'逐码位（exact，口径 A）' if est['match'] == 'exact' else '异体等价（semantic）'}",
-         "- 影子不同意的三层是**普查**（数是精确的，未裁的格单列）；影子同意层是**简单随机抽样**（给估计与 95% 区间）。",
+         "- 影子不同意的三层是**普查**（数是精确的，未裁的格单列；格数超过 `--cap` 的层改层内随机抽，按层折算）；影子同意层是**简单随机抽样**（给估计与 95% 区间）。",
          "- 阈值表**不套线上的「异体弃权」**：按口径 A 那正是要拦的错码位。", "",
          "| 层 | 格数 | 已裁 | 放行字错 | 放行字对 | 未裁 |", "|---|---|---|---|---|---|"]
     for b, _, _ in BANDS:
         x = s[b]
-        L.append(f"| {b}（普查）| {x['N']} | {x['ok'] + x['err']} | {x['err']} | {x['ok']} | {x['unlabeled']} |")
+        if x["kind"] == "sampled":
+            ci = x["est_err_ci"]
+            e = "—" if x["est_err"] is None else f"折算约 {x['est_err']:.0f}（{ci[0]:.0f}–{ci[1]:.0f}）"
+            L.append(f"| {b}（层内随机 {x['n']} 格）| {x['N']} | {x['ok'] + x['err']} | {x['err']}；{e} | "
+                     f"{x['ok']} | {x['unlabeled']} |")
+        else:
+            L.append(f"| {b}（普查）| {x['N']} | {x['ok'] + x['err']} | {x['err']} | {x['ok']} | {x['unlabeled']} |")
     a = s["agree"]
     ci = a["rate_ci"]
     L.append(f"| agree（随机 {a['n']} 格）| {a['N']} | {a['n']} | {a['err']} | {a['n'] - a['err']} | — |")

@@ -522,3 +522,30 @@ def test_shadow_sample_cards_harvest_estimate(tmp_path):
     assert (t[0.5]["caught"], t[0.5]["wrongly_blocked"]) == (1, 1)
     md = SP.render(est, "e1")
     assert "普查" in md and "区间很宽" in md and "上界" in md
+
+
+def test_shadow_sample_cap_band(tmp_path):
+    """`cap`：不同意层格数超上限就层内随机抽（记 random 与权重），估计按层折算。"""
+    from open_guji_cv.exp import sample as SP
+    edir = _fake_exp(tmp_path)
+    rows = [{"cell": f"vb:{p}:1:0", "char": "甲", "reason": "differs", "pick": "申", "conf": 0.9, "lib": []}
+            for p in range(1, 11)]
+    rows += [{"cell": f"vb:{p}:2:1", "char": "甲", "reason": "agree", "pick": "甲", "conf": 0.99, "lib": []}
+             for p in range(1, 6)]
+    (edir / "sample").mkdir()
+    (edir / SP.SCAN).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    cards = SP.build_cards(edir, n_random=5, seed=2, cap=4)
+    hi = [c for c in cards if c["stratum"] == "disagree_hi"]
+    assert len(hi) == 4 and all(c["selection"] == LB.RANDOM for c in hi)
+    assert hi[0]["stratum_weight"] == pytest.approx(2.5)
+    vj = tmp_path / "v.jsonl"
+    picks = [{"id": c["id"], "verdict": f"c{c['options'].index('申' if i < 2 else '甲')}"} for i, c in enumerate(hi)]
+    picks += [{"id": c["id"], "verdict": f"c{c['options'].index('甲')}"} for c in cards if c["stratum"] == "agree"]
+    vj.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in picks), encoding="utf-8")
+    FL.harvest(edir, vj, cards=cards, ref_prefix="sample")
+    est = SP.estimate(edir, match="exact")
+    h = est["strata"]["disagree_hi"]
+    assert h["kind"] == "sampled" and (h["n"], h["sample_err"]) == (4, 2)
+    assert h["est_err"] == pytest.approx(5.0)                                  # 2 + 6 × 2/4
+    assert est["total"]["est"] == pytest.approx(5.0)
+    assert "层内随机 4 格" in SP.render(est, "e1")
