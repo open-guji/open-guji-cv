@@ -216,16 +216,23 @@ def render(est: dict, name: str) -> str:
         n_txt = f"{a['est_err']:.0f}（{lo:.0f}–{hi:.0f}）"
     L += ["", f"- 影子同意层的放行错误率：{pct(a['rate'])}，95% 区间 {ci_txt}；折成格数约 {n_txt}。"]
     if a["n"] and a["n"] < 300:
-        L.append(f"- ⚠ 随机层只抽了 {a['n']} 格，区间很宽：0 错时上界也有约 {pct(3 / a['n'])}。"
+        L.append(f"- ⚠ 随机层只抽了 {a['n']} 格，区间很宽（上界 {pct(ci[1]) if ci else '—'}）。"
                  "要把全册错误率估准，需几百上千格随机标签（例如确认 `看图结论.jsonl` 那批是随机抽检后并进来）。")
     t = est["total"]
+    known = est["census_err"]
     if t:
-        L.append(f"- 全册放行错估计：{t['est']:.0f} 格（{t['ci'][0]:.0f}–{t['ci'][1]:.0f}），"
-                 f"占放行 {pct(t['est'] / est['admitted'])}。")
+        L.append(f"- 全册放行错：已发现 {known} 格（影子不同意的层里，精确数）；加上影子同意层的估计，"
+                 f"合计约 {t['est']:.0f} 格，95% 区间 {t['ci'][0]:.0f}–{t['ci'][1]:.0f}。")
     L += ["", "## 各阈值下影子会拦什么（影子不同意的格，按把握度 ≥ 阈值）", "",
-          "| 阈值 | 会拦 | 拦对（放行字错）| 误拦（放行字对）| 未裁 | 占全册放行错 |", "|---|---|---|---|---|---|"]
+          f"「占已发现的放行错」以 {known} 格为分母，是影子能抓到的比例的**上界**：影子同意层里还藏着多少错，"
+          "随机层太小，说不准。", "",
+          "| 阈值 | 会拦 | 拦对（放行字错）| 误拦（放行字对）| 未裁 | 拦准率 | 占已发现的放行错 |",
+          "|---|---|---|---|---|---|---|"]
     for r in est["thresholds"]:
+        judged = r["caught"] + r["wrongly_blocked"]
+        prec = pct(r["caught"] / judged) if judged else "—"
+        share = pct(r["caught"] / known) if known else "—"
         L.append(f"| {r['conf']} | {r['vetoed']} | {r['caught']} | {r['wrongly_blocked']} | {r['unlabeled']} | "
-                 f"{pct(r['recall'])} |")
+                 f"{prec} | {share} |")
     return "\n".join(L) + "\n"
 
