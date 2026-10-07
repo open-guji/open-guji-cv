@@ -16,6 +16,7 @@ from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, Pag
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..utils.cut_select import ckpt_fingerprint, get_judge
+from ..utils.roster_glyph import load_scorer
 from ..utils.roster_segment import segment_roster_page
 from ..utils.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
                                     segment_column)
@@ -39,6 +40,11 @@ class RowSegmentParams(BaseModel):
     #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
     #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
     roster_pages: list[int | str] = []
+    #: 职名页密排段**按本书字形库重切**（overview#450，2026-10-07，`utils/roster_glyph`）：
+    #: 压扁粘连字几何上数不准字数，拿库里刻例比相似度定切法。默认关；开了才读库、才填指纹。
+    roster_glyph_refine: bool = False
+    roster_glyph_db: str = ""            # 空 = 工作区 output/glyph.db（core.workspace.glyph_db_path）
+    roster_glyph_fingerprint: str = ""   # 库内容指纹，开关开着时自动填；soft：库变只记漂移不判过期（同 glyph_match）
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
@@ -46,18 +52,29 @@ class RowSegmentParams(BaseModel):
         # 不进指纹的话换了权重产物还显示 fresh。权重缺失时为空串 → 与裁判可用时指纹不同。
         if self.cut_judge == "unet" and not self.judge_fingerprint:
             object.__setattr__(self, "judge_fingerprint", ckpt_fingerprint())
+        # 字形库精修：只在开关开着时解析库路径、填指纹——关着时参数逐字段不变（同 seed_admit.human_fingerprint）
+        if self.roster_glyph_refine:
+            if not self.roster_glyph_db:
+                from ..core.workspace import glyph_db_path
+                object.__setattr__(self, "roster_glyph_db", str(glyph_db_path()))
+            if not self.roster_glyph_fingerprint:
+                from .glyph_match import db_fingerprint
+                object.__setattr__(self, "roster_glyph_fingerprint", db_fingerprint(self.roster_glyph_db))
         return self
 
 
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.14", unit="column",   # 1.14：职名页分支 roster_pages（overview#450，默认关）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.15", unit="column",   # 1.15：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.14：职名页分支 roster_pages（overview#450，默认关）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
                    "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
-                   "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment"),
+                   "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment",
+                   "open_guji_cv.utils.roster_glyph"),
+        soft_params=("roster_glyph_fingerprint",),
+        path_params=("roster_glyph_db",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -198,8 +215,12 @@ class RowSegmentStep(Step):
         page_w = wins.page_size[0]
         admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
+        scorer = None
+        if p.roster_glyph_refine:
+            # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
+            scorer = load_scorer(p.roster_glyph_db, p.roster_glyph_fingerprint)
         results = dict(zip((gc.col for gc in admitted),
-                           segment_roster_page(imgs, ink_threshold=p.ink_threshold)))
+                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer)))
         out: list[ColumnCells] = []
         for gc in gate.columns:
             base = dict(col=gc.col, n_raised=0, period=gate.period, ref_w=gate.ref_w,
