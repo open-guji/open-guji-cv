@@ -20,7 +20,7 @@ from pydantic import BaseModel
 
 from .book import BookSpec
 from .pipeline import Pipeline, _produces
-from .spec import live_optional_consumes, page_key
+from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
 from ..products.manifest import ManifestEntry
@@ -120,6 +120,12 @@ def rare_candidates_consumed(pipeline_steps: list[str], params_for: Callable, bo
         if "rare_candidates" in live_optional_consumes(spec, params_for(sid), book):
             return True
     return False
+
+
+def _page_list(pages: list[int], limit: int = 8) -> str:
+    """日志里点名的页：`p3,p4,…` 最多 `limit` 个，多了写「等」。"""
+    head = ",".join(f"p{p}" for p in pages[:limit])
+    return head + (" 等" if len(pages) > limit else "")
 
 
 def code_hash(step: Step, legacy: bool = False) -> str:
@@ -347,6 +353,28 @@ class Engine:
             return entry.sha256
         return self.store.sha(self.book.id, prod.spec.id, page_key(page))
 
+    def optional_gaps(self, step: Step, pages: list[int]) -> list[dict]:
+        """开关开着、可选上游却缺产物的页（overview#429）。
+
+        `optional_consumes_when` 的上游缺席时步骤照跑（不阻塞、不进指纹），只是那一路
+        证据没有——典型是 `seed_admit.rare_ref` 开着而 Step5-b `rare_candidates` 没跑：
+        seed_admit 照常出结果，`rare_ref` 通道 0 格，看着像开了，其实没生效。这里只**报**，
+        不改放行逻辑、不改指纹；5-b 补跑后它的 sha 进指纹，下游自然判过期重算。
+
+        → `[{kind, producer, switches, missing: [页...]}]`，没有缺口返回 `[]`。"""
+        on = gated_optional_on(step.spec, self.ctx.params_for(step), self.book)
+        out: list[dict] = []
+        for kind, switches in on.items():
+            try:
+                producer = self.pipeline.producer_of(kind).spec.id
+            except Exception:  # noqa: BLE001 —— 这条 pipeline 里没有产出它的步：照样算缺
+                producer = kind
+            missing = [pg for pg in pages if self._upstream_sha(kind, pg) is None]
+            if missing:
+                out.append({"kind": kind, "producer": producer, "switches": switches,
+                            "missing": missing})
+        return out
+
     def missing_upstream(self, step: Step, page: int) -> list[str]:
         """真正缺的那些硬依赖——报错要点名它们，不是把 `consumes` 整串印出来。"""
         return [k for k in step.spec.consumes if self._upstream_sha(k, page) is None]
@@ -462,6 +490,9 @@ class Engine:
             row, page_state = self._page_status_row(step, pages, upstream_fresh)
             seen[sid] = page_state
             if sid in steps:
+                gaps = self.optional_gaps(step, pages)
+                if gaps:
+                    row["optional_gaps"] = gaps
                 out[sid] = row
             gate = step.spec.gate
             if gate:
@@ -481,6 +512,11 @@ class Engine:
         `jobs > 1` 且 `step.spec.parallel_safe` 时走页级并行（见 `_run_one_step_parallel`）；
         否则串行——`parallel_safe=False` 是默认值，没标过的 Step 一律串行，标记本身
         就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
+        for g in self.optional_gaps(step, pages):
+            self.log(f"⚠️ {step.spec.id}：{'/'.join(g['switches'])} 开着，但 {g['producer']} 缺 "
+                     f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
+                     f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
+                     f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
         if jobs > 1 and step.spec.parallel_safe:
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)

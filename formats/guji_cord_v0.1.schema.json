@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-guji.org/schema/cord/v0.1.json",
+  "title": "GujiCord",
+  "description": "字框坐标 (guji-cord v0.1)，book-text original 每章一份；只记几何，不记字，按格位 key 对到 char",
+  "type": "object",
+  "required": ["$schema", "book_id", "volume", "pages"],
+  "$defs": {
+    "box": { "type": "array", "items": { "type": "number" }, "minItems": 4, "maxItems": 4, "description": "IIIF Canvas 像素 [x, y, w, h]，左上原点" }
+  },
+  "properties": {
+    "$schema": { "type": "string" },
+    "book_id": { "type": "string" },
+    "volume": { "type": "integer", "minimum": 1 },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["page", "canvas", "cells"],
+        "properties": {
+          "page": { "type": "integer", "minimum": 1 },
+          "image": { "type": "object" },
+          "canvas": {
+            "type": "object",
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string" },
+              "seq": { "type": "string" },
+              "width": { "type": "integer" },
+              "height": { "type": "integer" }
+            }
+          },
+          "producers": { "type": "object" },
+          "regions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "box"],
+              "properties": {
+                "id": { "type": "string" },
+                "kind": { "type": "string", "enum": ["body", "banxin", "margin"] },
+                "box": { "$ref": "#/$defs/box" },
+                "rules": { "type": "array" }
+              }
+            }
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["col", "box"],
+              "properties": {
+                "col": { "type": "integer", "minimum": 1 },
+                "kind": { "type": "string" },
+                "box": { "$ref": "#/$defs/box" }
+              }
+            }
+          },
+          "cells": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["a", "box"],
+              "properties": {
+                "a": { "type": "string", "pattern": "^\\d+:\\d+:-?[1-9]\\d*[ab]?$" },
+                "box": { "$ref": "#/$defs/box" },
+                "id": { "type": "string" }
+              },
+              "not": { "anyOf": [ { "required": ["c"] }, { "required": ["char"] }, { "required": ["text"] } ] }
+            }
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "box"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["blank", "seal", "excluded"] },
+                "box": { "$ref": "#/$defs/box" },
+                "col": { "type": "integer" },
+                "slot": { "type": "integer" },
+                "occludes": { "type": "array", "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

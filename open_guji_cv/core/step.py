@@ -220,10 +220,14 @@ def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     `Engine.fingerprint()` 与 `run_page` 拿到同一份。只在字段仍是空串（未算过）
     时才填，显式传值的不动。
     """
-    if not hasattr(p, "witness_strategy") or not hasattr(p, "witness_fingerprint"):
-        return p
-    if getattr(p, "witness_strategy") == "legacy" or getattr(p, "witness_fingerprint"):
-        return p
+    # seed_admit 的待审补放 R1/R4（overview#433）也逐格读全部证人：同一份指纹，填进它自己的字段
+    lane = (hasattr(p, "lane_witness_fingerprint") and not getattr(p, "lane_witness_fingerprint")
+            and (getattr(p, "lane_witness3", False) or getattr(p, "lane_coord", False)))
+    if not lane:
+        if not hasattr(p, "witness_strategy") or not hasattr(p, "witness_fingerprint"):
+            return p
+        if getattr(p, "witness_strategy") == "legacy" or getattr(p, "witness_fingerprint"):
+            return p
     from ..core.workspace import corpus_path
     from ..steps.align_ref import book_corpus
     from ..steps.context_decide import corpus_fingerprint
@@ -232,7 +236,7 @@ def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     if not names:
         names = [Path(book_corpus(ctx.book.id)).name]
     fp = corpus_fingerprint([str(corpus_path(n)) for n in names])
-    return type(p)(**{**p.model_dump(), "witness_fingerprint": fp})
+    return type(p)(**{**p.model_dump(), ("lane_witness_fingerprint" if lane else "witness_fingerprint"): fp})
 
 
 def _with_book_gw(p: BaseModel, ctx: "RunContext") -> BaseModel:

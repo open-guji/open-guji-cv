@@ -157,8 +157,9 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
         evs = list(el.iter_all())
     except FileNotFoundError:
         return {}
+    from .events import counts_as_human
     for e in evs:
-        if e.target.unit != "cell" or not e.target.key.startswith(pre):
+        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_human(e):
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
@@ -319,7 +320,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             bound = book_bindings(book, log)
         except Exception:
             bound = {}            # 绑定表算不出来就退回按编号（与 09-25 之前一致），不因此丢掉全部人裁
-    from .events import EventLog
+    from .events import EventLog, counts_as_human
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
     try:
@@ -331,6 +332,10 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         return out
     for e in evs:
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_human`）：混进来的话
+        # seed_admit 会当人裁一票定案。
+        if not counts_as_human(e):
             continue
         p = e.payload or {}
         # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是

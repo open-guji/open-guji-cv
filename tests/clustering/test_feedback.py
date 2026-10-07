@@ -1,10 +1,6 @@
-"""feedback.py 单测：事件流重放的确定性 + 阈值标定。"""
+"""feedback.py 单测：事件流重放的确定性 + 簇号重绑。"""
 
-import numpy as np
-import pytest
-
-from open_guji_cv.clustering.feedback import (calibrate_threshold,
-                                              replay_events)
+from open_guji_cv.clustering.feedback import remap_events, replay_events
 
 
 def test_confirm_and_relabel_precedence():
@@ -51,29 +47,13 @@ def test_mark():
     assert state.marks["b:1:1:3"] == "damaged"
 
 
-def test_calibrate_threshold_separable():
-    """same/diff 分布可分时，选出的阈值应落在两分布之间且满足纯度。"""
-    rng = np.random.default_rng(0)
-    same = np.clip(rng.normal(0.9, 0.03, 500), 0, 1)
-    diff = np.clip(rng.normal(0.5, 0.08, 500), 0, 1)
-    result = calibrate_threshold(same, diff, max_impurity=0.01)
-    theta = result["theta_high"]
-    assert 0.6 < theta < 0.9
-    assert result["same_recall"] > 0.8
-    # 验证纯度约束确实满足
-    accepted_diff = np.count_nonzero(diff >= theta)
-    accepted = accepted_diff + np.count_nonzero(same >= theta)
-    assert accepted_diff / accepted <= 0.01
-
-
-def test_calibrate_threshold_inseparable_rejects_all():
-    """完全重叠的分布 → theta=1.0（拒绝一切合并），绝不牺牲纯度。"""
-    same = np.full(100, 0.7)
-    diff = np.full(100, 0.7)
-    result = calibrate_threshold(same, diff, max_impurity=0.001)
-    assert result["theta_high"] == 1.0
-
-
-def test_calibrate_requires_same_samples():
-    with pytest.raises(ValueError):
-        calibrate_threshold(np.array([]), np.array([0.5]))
+def test_remap_requires_quorum():
+    """重绑法定人数：得票不足原成员半数 → 保留原簇号（事件失效）。"""
+    ev = {"op": "flag", "cluster": "cOLD", "flag": "impure",
+          "members": ["a", "b", "c", "d", "e", "f"]}
+    # 6 成员只有 2 个还在，且都落在大簇 cBIG → 不足半数，拒绑
+    out, n = remap_events([ev], {"a": "cBIG", "b": "cBIG"})
+    assert n == 0 and out[0]["cluster"] == "cOLD"
+    # 4/6 落在同簇 → 过半，重绑
+    out, n = remap_events([ev], {m: "cNEW" for m in "abcd"})
+    assert n == 1 and out[0]["cluster"] == "cNEW"
