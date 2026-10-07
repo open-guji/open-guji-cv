@@ -24,3 +24,10 @@ judge=claude-sonnet-5-5，ts=2026-10-07。**这是看图标注，不是人裁**�
 `conf`：high／mid／low（low 只配 unsure）；`agree_ref`：char 是否等于整理本字（无整理本为 null）；`note` 依据。
 口径：mid 里大量是异体之别（蒙/𫎇、彝/𢑴、槪/慨、點/㸃、别/別、叙/敘、參/叅 等），库首选与 char 是同字异形，标定阈值时宜按「同字」处理而不是真错。
 `unsure` 含：版框／界行／鱼尾墨迹无字、框切偏只剩半字、夹注窄列认不出、污损；这类格不是 ok／wrong 样本，不要拿去标定。
+
+## 字组裁决（10-07，用户在字组页点完）与 variant_tie 按组收窄
+`group_verdicts.tsv`：12 组里 7 组「刻形＝系统码位」（𫎇蒙、㸃點、㕘參、䜟讖識、𨽾隸、慎愼、㫖旨）、3 组「刻形＝正字」（顛顚、厯歷、水氷：库码位误挂，交 H 道）、
+2 组拿不准（𢑴彝異、官宮：样例含不同字形）。`apply_group_verdicts.py` 把整理看图在那 7 组上的「图是正字」改记对，出 `gold2_vol0X.jsonl`。
+`variant_tie_extra` 给了组表就只认组表。A/B（`doc/exp/variant_tie_groups-vol04-vol05.yaml`，cov 0.95／0.97 结果相同）：
+新增放行 31（vol04 22、vol05 9）：27 个看图 ok、3 个 wrong（全是 㫖→首／肯，整理看图高置信）、1 个 unsure。**去掉 㫖 组后 27 放行、0 放错**：
+vol04 待审 487→469，vol05 348→339（−27），金标新增放行错 0。㫖 组在 `variant_tie_extra` 里不要列。
