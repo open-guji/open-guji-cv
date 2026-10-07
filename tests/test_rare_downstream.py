@@ -161,6 +161,27 @@ def test_gated_upstream_on_behaves_like_optional_upstream(tmp_path):
     assert eng2.status(pages=[1])["steps"]["t_rare_step_c"]["pages"][1]["status"] == STALE
 
 
+def test_gate_on_but_upstream_missing_is_reported(tmp_path):
+    """overview#429：开关开着、可选上游没产物 → 步骤照跑（不阻塞），但运行日志与
+    status 都点名「通道未生效」；上游补跑后缺口消失、本步判过期。开关关着不报。"""
+    on = {"t_rare_step_c": {"use_a": True}}
+    logs: list[str] = []
+    eng = _engine(tmp_path, params=on)
+    eng.log = logs.append
+    eng.run(pages=[1], steps=["t_rare_step_c"])            # 只跑 C，A 没跑
+    assert any("use_a 开着" in s and "t_rare_step_a 缺 1/1 页" in s for s in logs)
+    row = eng.status(pages=[1])["steps"]["t_rare_step_c"]
+    assert eng.store.exists("tb", "t_rare_step_c", "p0001")   # 缺可选上游不阻塞，照常出产物
+    assert row["optional_gaps"] == [{"kind": "t_rare_a", "producer": "t_rare_step_a",
+                                     "switches": ["use_a"], "missing": [1]}]
+    eng.run(pages=[1], steps=["t_rare_step_a"])
+    row = eng.status(pages=[1])["steps"]["t_rare_step_c"]
+    assert "optional_gaps" not in row and row["pages"][1]["status"] == STALE   # A 的 sha 进了指纹
+    (tmp_path / "off").mkdir()
+    off = _engine(tmp_path / "off")
+    assert off.optional_gaps(STEPS["t_rare_step_c"], [1]) == []
+
+
 # ── align_ref：5-b 候选进锚定载体 ────────────────────────────────────────
 def test_rare_topk_map_uses_rank_and_dedupes():
     pr = page_rare(PAGE, BOOK, {1: ["甲", "甲", "乙", "丙"], 2: []})

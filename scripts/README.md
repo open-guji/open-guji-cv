@@ -8,6 +8,7 @@
 ## 整理一册书会用到的（runbook 点名）
 
 - `check_pages_json_boxes.py`：pages.json 抽字核对（A2 验收，F3 overview#398）：抽 N 个格，把框画回原图，出一张对照图 + 对位量。
+- `zhengli/zl.py`：整理一册书**执行脚本**（幂等、可断点续跑，只在需看图／人裁处停；见 runbook〇·五）；`zhengli/snap_import.py`：容忍 CRLF 的 `guji snap import` 包装。
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `snapshot_glyph_store.py`：字形库快照：output/glyph.db → output/glyph_store/（真源，进 Git）。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。

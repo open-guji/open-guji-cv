@@ -479,7 +479,7 @@ def _save_emb_index(f: Path, mat: np.ndarray, names: list[str]) -> None:
     .npz 后缀，所以临时文件必须自己以 .npz 结尾，否则 savez 写的是
     `x.tmp.npz`、replace 找的是 `x.tmp`。"""
     f.parent.mkdir(parents=True, exist_ok=True)
-    tmp = f.with_name(f.name + ".tmp.npz")
+    tmp = f.with_name(f"{f.name}.{os.getpid()}.tmp.npz")  # 带进程号：多进程冷建同一张表不互踩（#429）
     np.savez(tmp, mat=mat.astype(np.float32), chars=np.array(names))
     os.replace(tmp, f)
 
@@ -589,9 +589,16 @@ class CnnCandidates:
         写法，理由见其文档：只存 `id()` 整数会被垃圾回收后复用的地址撞车；这里
         `charset` 由 `book_charsets` 的 lru_cache 一直强引用着，其实不会被回收，
         但还是照抄这个更安全的写法，不留后患）。"""
-        self._real_cs: tuple[tuple, tuple | None] | None = None
-        """`_real_index` 的内存缓存：((charset, exclude_ids), 结果)。真刻例池比
-        GlyphWiki 小两个量级（千级 vs 万级），**不落盘**——见该方法文档。"""
+        self._real_slots: list[tuple[tuple, tuple | None]] = []
+        """`_real_index` 的内存缓存：`[(key, 结果), ...]`，按最近使用排、最多
+        `_REAL_CACHE_MAX` 档。真刻例池比 GlyphWiki 小两个量级（千级 vs 万级），
+        **不落盘**——见该方法文档。
+
+        2026-10-06（overview#429）从单档改成两档：`rare_for_batch` 每页先查基集、
+        有字位走升级档时再查升级档，单档缓存于是被升级档挤掉，下一页回到基集要重建——
+        四庫 vol04 基集那份前向约 30 秒（升级档 0.4 秒），p62–82 里 21 页有 4 页
+        各多花 30 秒，整册约多 18 分钟。两档后同一本书只各建一次，候选逐位不变。
+        `_real_cs`（属性）仍是最近一档；测试里 `cnn._real_cs = None` 清空整份缓存。"""
         self._fwd_cache: tuple[list, tuple] | None = None
         """最近一批 `self._net(x)` 的原始前向结果缓存：`(norm_patches 那个 list
         对象本身, (e, lg, cp))`。`topk_batch`/`emb_topk_batch` 原来对同一批字块图
@@ -1140,7 +1147,7 @@ class CnnCandidates:
                         vecs.append((e / (e.norm(dim=1, keepdim=True) + 1e-9)).cpu().numpy())
                 G = np.concatenate(vecs).astype(np.float32) if vecs else np.zeros((0, 256), np.float32)
                 f.parent.mkdir(parents=True, exist_ok=True)
-                tmp = f.with_name(f.name + ".tmp.npz")
+                tmp = f.with_name(f"{f.name}.{os.getpid()}.tmp.npz")  # 带进程号：多进程冷建同一张表不互踩（#429）
                 np.savez(tmp, emb=G); os.replace(tmp, f)
             self._gw = (G, grel, gnames, gsrc)
         G, grel, gnames, gsrc = self._gw
@@ -1152,6 +1159,22 @@ class CnnCandidates:
             res = (G[keep], np.array([pos[grel[i]] for i in keep], dtype=np.int64), gnames[keep], gsrc[keep])
         self._gw_cs = (charset, res)
         return res
+
+    _REAL_CACHE_MAX = 2
+    """基集 + 升级档两档（见 `_real_slots`）。"""
+
+    @property
+    def _real_cs(self) -> tuple[tuple, tuple | None] | None:
+        """最近用过的一档 `(key, 结果)`；赋值 = 存一档（LRU，满了淘汰最久未用），赋 None = 清空。"""
+        return self._real_slots[-1] if self._real_slots else None
+
+    @_real_cs.setter
+    def _real_cs(self, v) -> None:
+        if v is None:
+            self._real_slots = []
+            return
+        self._real_slots = [kv for kv in self._real_slots if kv[0] != v[0]] + [v]
+        del self._real_slots[:-self._REAL_CACHE_MAX]
 
     def _real_index(self, charset, names: list[str], exclude_ids: frozenset = frozenset(),
                     specs: tuple | None = None):
@@ -1174,8 +1197,10 @@ class CnnCandidates:
         """
         sp = REAL_PROTO_SPECS if specs is None else specs
         key = (charset, exclude_ids, sp)
-        if self._real_cs is not None and self._real_cs[0] == key:
-            return self._real_cs[1]
+        for i, (k, res) in enumerate(self._real_slots):
+            if k == key:
+                self._real_slots.append(self._real_slots.pop(i))   # LRU：命中的挪到末尾
+                return res
         if not sp or not self._ensure():
             self._real_cs = (key, None)
             return None

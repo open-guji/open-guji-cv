@@ -23,7 +23,9 @@ def _ctx(tmp_path, monkeypatch, **params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
-    kwargs = {"seed_admit": SeedAdmitParams(**params)} if params else {}
+    # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 G1 四条
+    params.setdefault("context_garble_guard", False)
+    kwargs = {"seed_admit": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 
