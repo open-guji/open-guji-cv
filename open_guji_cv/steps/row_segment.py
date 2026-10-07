@@ -39,6 +39,12 @@ class RowSegmentParams(BaseModel):
     #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
     #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
     roster_pages: list[int | str] = []
+    #: **列端虚线残段记空白**（overview#376 后续，2026-10-07）：缺省关，关时产物逐字节不变。开了以后，
+    #: 首格/末格/抬头格里墨的外接框竖向 ≤ `dash_h_frac`×period 且横向 ≤ `dash_w_frac`×列宽的，kind 记 `blank`
+    #: 而不是没字的 `char`。阈值未经真图标定（云端没有原图），先按 S2 实测「虚线跨度 ≤29 行 ≈ 0.25 period」取。
+    dash_blank: bool = False
+    dash_h_frac: float = 0.3
+    dash_w_frac: float = 0.25
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
@@ -52,7 +58,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.15", unit="column",   # 1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.16", unit="column",   # 1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -139,6 +145,7 @@ class RowSegmentStep(Step):
                 forced_jiazhu=book_forced_jz.get((page, gc.col)),
                 forced_main=book_forced_main.get((page, gc.col)),
                 detect_bottom_bar=p.detect_bottom_bar,
+                **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                 **({} if slot_override is None or slot_override.uniform
                    else {"lam": NONUNIFORM_LAM}))
             if r is None:
