@@ -72,6 +72,7 @@ class RosterItem:
     x1: int
     kind: str = "char"
     dense_guess: bool = False
+    glyph: str | None = None        # 字形库精修切出的片：库里最像的字（只作诊断，不当识别结果）
 
 
 @dataclass
@@ -431,11 +432,7 @@ def _drop_isolated_specks(items: list[RosterItem], em: float) -> list[RosterItem
     return keep
 
 
-def segment_roster_column(ink: np.ndarray, em: float) -> RosterColumn:
-    """一列（已 prepare 过的墨 mask）→ 读序排好的字。"""
-    items = [it for it in _seg_mask(ink, em)
-             if max(it.y1 - it.y0, it.x1 - it.x0) >= SPECK * em]
-    items = _drop_isolated_specks(items, em)
+def _column_flags(items: list[RosterItem]) -> list[str]:
     flags: list[str] = []
     if any(it.dense_guess for it in items):
         flags.append("roster_dense_guess")
@@ -444,12 +441,96 @@ def segment_roster_column(ink: np.ndarray, em: float) -> RosterColumn:
     body = [it for it in items if it.kind == "char"]
     if any(b.y0 < a.y1 for a, b in zip(body, body[1:])):
         flags.append("roster_overlap")        # 相邻两字 y 有重叠（多是「臣」贴着官衔末字），Step4 满宽裁会互相带墨
-    return RosterColumn(items=items, em=em, flags=flags)
+    if any(it.glyph is not None for it in items):
+        flags.append("roster_glyph_refined")  # 有密排段按字形库重切过（utils/roster_glyph）
+    return flags
+
+
+def segment_roster_column(ink: np.ndarray, em: float) -> RosterColumn:
+    """一列（已 prepare 过的墨 mask）→ 读序排好的字。"""
+    items = [it for it in _seg_mask(ink, em)
+             if max(it.y1 - it.y0, it.x1 - it.x0) >= SPECK * em]
+    items = _drop_isolated_specks(items, em)
+    return RosterColumn(items=items, em=em, flags=_column_flags(items))
+
+
+def _chen_row(cols: list[RosterColumn], prepared: list[tuple[np.ndarray, float]],
+              xs: list[float], em: float) -> float | None:
+    """全页「臣」行：各列第一个「偏右小字」（宽 < 0.6em、中心在列右 45%、位于列下 60%）y 的中位数。"""
+    ys: list[int] = []
+    for rc, (ink, width), x0 in zip(cols, prepared, xs):
+        h = ink.shape[0]
+        for it in rc.items:
+            if (it.kind == "char" and it.x1 - it.x0 < 0.6 * em
+                    and (it.x0 + it.x1) / 2 > x0 + 0.55 * width and it.y0 > 0.4 * h):
+                ys.append(it.y0)
+                break
+    return float(np.median(ys)) if ys else None
+
+
+def _glyph_refine(rc: RosterColumn, ink: np.ndarray, chen_row: float, scorer) -> None:
+    """官衔区（「臣」行以上）≥ RUN_MIN_EM 的连续密排段按字形库重切，就地改 rc。雙行列不碰。
+
+    只修「疑似两字合一」的段：段内几何切出的片至少 MERGED_MIN 个比一字高（> MERGED_H × em），
+    或带 dense_guess。正常字号段几何本来就切对了，交给库反而会把上下结构字劈开
+    （正→一止、主→一上、走→一史，vol01 p89/119/95 实测）；单个高块多半是字下挂了墨点（p119「部」）。
+    采纳闸：库切法的片平均相似度要比几何切法高 ACCEPT_GAIN。整段切而不是逐片切——逐片切实测更差
+    （段内正常字给 DP 当字距参照）。"""
+    from .roster_glyph import ACCEPT_GAIN, MERGED_H, MERGED_MIN, RUN_GAP_EM, RUN_MIN_EM, glyph_dp
+    em = rc.em
+    if any(it.kind != "char" for it in rc.items):
+        return
+    runs: list[list[int]] = []
+    for b in _bands(ink):
+        if runs and b[0] - runs[-1][1] < RUN_GAP_EM * em:
+            runs[-1][1] = b[1]
+        else:
+            runs.append(list(b))
+    items = list(rc.items)
+    for a, b in runs:
+        b = min(b, int(chen_row - 0.15 * em))
+        if b - a < RUN_MIN_EM * em:
+            continue
+        inside = [it for it in items if a <= (it.y0 + it.y1) / 2 <= b]
+        if not inside:
+            continue
+        b = max(b, max(it.y1 for it in inside))          # 被截线切到的格整格纳入，免得半格重切
+        n_tall = sum(it.y1 - it.y0 > MERGED_H * em for it in inside)
+        if n_tall < MERGED_MIN and not any(it.dense_guess for it in inside):
+            continue
+        x0, x1 = min(it.x0 for it in inside), max(it.x1 for it in inside)
+        segs = glyph_dp(ink, a, b, x0, x1, scorer)
+        if not segs:
+            continue
+        geo = scorer.best([ink[it.y0:it.y1, x0:x1] for it in inside])
+        if np.mean([s for *_, s in segs]) - np.mean([s for s, _ in geo]) < ACCEPT_GAIN:
+            continue
+        sub = np.zeros_like(ink)
+        sub[:, x0:x1] = ink[:, x0:x1]
+        new = []
+        for y0, y1, ch, _sim in segs:
+            t = _tight(sub, y0, y1)
+            if t is not None:
+                new.append(RosterItem(t[0], t[1], t[2], t[3], "char", False, ch))
+        k = items.index(inside[0])
+        items = items[:k] + new + [it for it in items[k:] if it not in inside]
+    rc.items = items
+    rc.flags = _column_flags(items)
 
 
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
-                        ink_threshold: int = 128) -> list[RosterColumn]:
-    """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。"""
+                        ink_threshold: int = 128, scorer=None) -> list[RosterColumn]:
+    """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
+
+    给了 `scorer`（`roster_glyph.GlyphScorer`）就再把官衔区的连续密排段按本书字形库重切
+    （overview#450：p90 类压扁粘连字，几何数不准字数）。"""
     prepared = [prepare(g, cx, ink_threshold) for g, cx in cols]
     em_page = page_em(prepared)
-    return [segment_roster_column(ink, em_page or 0.65 * width) for ink, width in prepared]
+    out = [segment_roster_column(ink, em_page or 0.65 * width) for ink, width in prepared]
+    if scorer is not None and out:
+        xs = [float(cx[0]) if cx is not None else 0.0 for _, cx in cols]
+        chen = _chen_row(out, prepared, xs, em_page or out[0].em)
+        if chen is not None:
+            for rc, (ink, _w) in zip(out, prepared):
+                _glyph_refine(rc, ink, chen, scorer)
+    return out
