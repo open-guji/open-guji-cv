@@ -77,7 +77,7 @@ def sample(edir: str | Path, n: int = 60, seed: int = 0, resample: bool = False)
             if card is None:
                 card = seen[r["cell"]] = {"id": r["cell"], "stratum": st,
                                          "stratum_weight": len(rows) / max(1, q), "options": []}
-            for c in (r["A"], r["B"]):
+            for c in (r["A"], r["B"], *(r.get("alts") or [])):
                 if c and c not in card["options"]:
                     card["options"].append(c)
     cards = list(seen.values())
@@ -136,7 +136,9 @@ CSS = """
 .verdicts{display:flex; flex-wrap:wrap; gap:6px; margin-top:10px;}
 .verdicts button{flex:1 1 64px; min-height:44px; border:1px solid var(--rule-hard); border-radius:3px;
   background:var(--surface); color:var(--ink); font-size:13px; cursor:pointer;}
-.verdicts button.c{font-family:var(--serif); font-size:22px;}
+.verdicts button.c{font-family:var(--serif); font-size:22px; line-height:1.1;}
+.verdicts button.c small{display:block; font-family:var(--mono, monospace); font-size:10px; color:var(--muted);}
+.verdicts button.c[aria-pressed="true"] small{color:inherit}
 .verdicts button:focus-visible{outline:2px solid var(--indigo); outline-offset:2px;}
 .verdicts button[aria-pressed="true"]{color:var(--on-solid); border-color:transparent;}
 .verdicts button.c[aria-pressed="true"]{background:var(--ok)}
@@ -155,7 +157,7 @@ const BODY = `
 <div class="wrap">
   <details class="intro" id="intro" open>
     <summary>怎么裁</summary>
-    <p>每张卡是一格刻本字。看图，点它是哪个字；都不是就点「都不对」，切坏了或不是字点「切坏/非字」，
+    <p>每张卡是一格刻本字。看图，点它是哪个字（生僻字显示不出来时看按钮下的码位）；都不是就点「都不对」，切坏了或不是字点「切坏/非字」，
        看不清点「拿不准」。点错再点一次取消。裁决自动存回本页（右上角牌子）；存不上就用「复制」贴回对话。</p>
   </details>
   <div class="ctrl">
@@ -181,7 +183,9 @@ const rowId = r => r.id;
 function card(r){
   const v = verdictOf(r.id);
   const b = (k, t, cls) => `<button class="${cls}" data-v="${k}" aria-pressed="${v===k}">${esc(t)}</button>`;
-  const opts = r.options.map((c, i) => b('c' + i, c, 'c')).join('');
+  const cp = c => 'U+' + c.codePointAt(0).toString(16).toUpperCase();
+  const opts = r.options.map((c, i) =>
+    `<button class="c" data-v="c${i}" aria-pressed="${v==='c'+i}">${esc(c)}<small>${cp(c)}</small></button>`).join('');
   return `<article class="card" data-id="${r.id}"${v ? ` data-v="${v}"` : ''}>
     <h3>${esc(r.id)}</h3>
     ${r.img ? `<img data-src="${r.img}" alt="">` : '<div class="noimg">（无字块图）</div>'}

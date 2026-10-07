@@ -70,6 +70,9 @@ def render(rep: dict) -> str:
             L += [f"⚠ 两边格集合不一致：只在 {base} {comp['only_in_base']} 格，只在 {vn} {comp['only_in_variant']} 格"
                   "（上游不同？只比两边都有的格）", ""]
         for sc, blk in comp["overall"].items():
+            if not blk["cells"]:
+                L += [f"### 总体 · {SCOPE_ZH.get(sc, sc)}：没有格", ""]
+                continue
             L += [f"### 总体 · {SCOPE_ZH.get(sc, sc)}（{blk['cells']} 格 / {blk['pages']} 页）", "",
                   f"| 指标 | {base} | {vn} | 差 | 95% CI |", "|---|---|---|---|---|", *_metric_rows(blk), ""]
         ch = (rep.get("charts") or {}).get(vn) or {}

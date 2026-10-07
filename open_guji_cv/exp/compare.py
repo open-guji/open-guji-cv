@@ -27,6 +27,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Callable
@@ -61,7 +62,18 @@ def load_cells(vroot: Path, book: str, step: str = "seed_admit") -> dict[str, di
         for col in sa.get("columns") or []:
             for r in col.get("chars") or []:
                 out[r["id"]] = {"page": page, "book": book, "state": cell_state(r), "char": r.get("char") or "",
-                                "channel": r.get("channel") or "", "doubts": list(r.get("doubts") or [])}
+                                "channel": r.get("channel") or "", "doubts": list(r.get("doubts") or []),
+                                "alts": _alts(r)}
+    return out
+
+
+def _alts(r: dict) -> list[str]:
+    """证据里别的通道「认为该是」的字（如 `evidence.shadow_veto.pick`）——翻转审查页拿来当候选。"""
+    out = []
+    for v in (r.get("evidence") or {}).values():
+        pick = v.get("pick") if isinstance(v, dict) else None
+        if isinstance(pick, str) and pick and pick != r.get("char") and pick not in out:
+            out.append(pick)
     return out
 
 
@@ -172,7 +184,8 @@ def flips(cells_a: dict, cells_b: dict, keys: list[str], labels: dict[str, Label
         a, b = cells_a[k], cells_b[k]
         lab = labels.get(k)
         aa, ba = a["state"] in ADMITTED, b["state"] in ADMITTED
-        row = {"cell": k, "A": a["char"], "B": b["char"], "A_state": a["state"], "B_state": b["state"],
+        row = {"cell": k, "A": a["char"], "B": b["char"],
+               "alts": sorted(set(a.get("alts") or []) | set(b.get("alts") or [])), "A_state": a["state"], "B_state": b["state"],
                "A_channel": a["channel"], "B_channel": b["channel"], "doubts": b["doubts"] if aa else a["doubts"],
                "label": None if lab is None else ("∅" if lab.defect else lab.truth or f"≠{''.join(sorted(lab.wrong))}"),
                "label_source": None if lab is None else f"{lab.source}/{lab.selection}"}
@@ -255,14 +268,22 @@ def by_channel(cells_a: dict, cells_b: dict, keys: list[str], labels: dict[str, 
     return [{"channel": ch, **v} for ch, v in sorted(acc.items(), key=lambda x: -(x[1]["A"] + x[1]["B"]))]
 
 
+_PAREN = re.compile(r"\s*[(（][^()（）]*[)）]")
+
+
+def doubt_code(d: str) -> str:
+    """成因码去掉括号里的数值（`库 unsure(cov=0.979)` → `库 unsure`），否则分层碎成几十行。"""
+    return _PAREN.sub("", d).strip() or d
+
+
 def by_doubt(cells_a: dict, cells_b: dict, keys: list[str]) -> list[dict]:
-    """送审格的成因（doubts 码；一格多码各计一次）。"""
+    """送审格的成因（doubts 码去掉括号里的数值；一格多码各计一次）。"""
     acc: dict[str, Counter] = defaultdict(Counter)
     for k in keys:
         for side, rec in (("A", cells_a[k]), ("B", cells_b[k])):
             if rec["state"] != "review":
                 continue
-            for d in rec["doubts"] or ["(无)"]:
+            for d in {doubt_code(x) for x in rec["doubts"]} or {"(无)"}:
                 acc[d][side] += 1
     return [{"doubt": d, "A": c["A"], "B": c["B"], "diff": c["B"] - c["A"]}
             for d, c in sorted(acc.items(), key=lambda x: -abs(x[1]["B"] - x[1]["A"]) * 1e6 - x[1]["A"])]
@@ -313,16 +334,18 @@ def eval_guardrails(comp: dict, rules: list[dict]) -> list[dict]:
             res.update(verdict="unknown", value=val, target=target, msg="无检验力（分母为 0），判不了")
         else:
             ok = _OPS[op](val, target)
+            rate = not metric.startswith("flips.")
+            where = f"[{scope}]" if rate else ""
             res.update(verdict="pass" if ok else "fail", value=val, target=target,
-                       msg=f"{metric}[{scope}] = {_fmt(val)} {op} {what} = {_fmt(target)}")
+                       msg=f"{metric}{where} = {_fmt(val, rate)} {op} {what} = {_fmt(target, rate)}")
         out.append(res)
     return out
 
 
-def _fmt(x) -> str:
-    if isinstance(x, float):
-        return f"{x:.4%}" if abs(x) < 1 else f"{x:g}"
-    return str(x)
+def _fmt(x, rate: bool = True) -> str:
+    if rate and isinstance(x, float):
+        return f"{x:.4%}"
+    return f"{x:g}" if isinstance(x, float) else str(x)
 
 
 # ── 汇总 ─────────────────────────────────────────────────────────────────

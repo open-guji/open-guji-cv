@@ -44,6 +44,10 @@ def _p(x) -> str:
 
 
 def cmd_exp(args) -> None:
+    # 影子模型（sklearn HistGradientBoosting）逐格预测，缺省按核数开 OpenMP 线程；按变体并行开几个进程时
+    # 线程互相抢，vol05 实测每页 244s，限单线程后 ~1s（overview#457）。用户显式设了就不动。
+    for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        os.environ.setdefault(k, "1")
     from .errors import BadRequest
     from .exp import config as EC
     from .exp import flips as FL
