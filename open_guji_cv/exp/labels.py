@@ -39,15 +39,21 @@ class Label:
     wrong: set[str] = field(default_factory=set)   # 已知不是这些字（看图判错但没认出该是什么）
     defect: bool = False                # 切坏 / 非字
     ref: str = ""                       # 出处（批名 / 文件名）
+    stratum: str = ""                   # 分层抽样的层名（`sample.py`）；空 = 不属于分层样本
+    weight: float | None = None         # 该层总格数 / 该层抽中格数（普查层 = 1）
 
     def to_dict(self) -> dict:
-        return {"cell": self.cell, "source": self.source, "selection": self.selection,
-                "truth": self.truth, "wrong": sorted(self.wrong), "defect": self.defect, "ref": self.ref}
+        d = {"cell": self.cell, "source": self.source, "selection": self.selection,
+             "truth": self.truth, "wrong": sorted(self.wrong), "defect": self.defect, "ref": self.ref}
+        if self.stratum:
+            d.update(stratum=self.stratum, weight=self.weight)
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "Label":
         return cls(cell=d["cell"], source=d["source"], selection=d["selection"], truth=d.get("truth"),
-                   wrong=set(d.get("wrong") or ()), defect=bool(d.get("defect")), ref=d.get("ref") or "")
+                   wrong=set(d.get("wrong") or ()), defect=bool(d.get("defect")), ref=d.get("ref") or "",
+                   stratum=d.get("stratum") or "", weight=d.get("weight"))
 
 
 def _book_of(cell: str) -> str:

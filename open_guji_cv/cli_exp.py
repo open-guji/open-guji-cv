@@ -5,6 +5,7 @@
     guji exp run    --base A.yaml --var B.yaml --books vol05 --from seed_admit --snapshot … -w …
     guji exp report <exp名|exp目录> -w <工作区> [--root …]
     guji exp flips  <exp> sample|page|harvest [verdicts.jsonl] [--n 60] [-o …]
+    guji exp sample <exp> scan|cards|page|harvest|estimate [verdicts.jsonl] [--n 35]   # 影子开关分层抽样
     guji exp list   -w <工作区> [--root …]
     guji exp ui     -w <工作区> [--root …] [--port 5000]      # MLflow 看板（要装 .[exp]）
 """
@@ -60,6 +61,44 @@ def _report(edir: Path, args) -> None:
         print(f"已记进 MLflow：{info['uri']} 实验 {info['experiment_id']}；看板 guji exp ui")
 
 
+def _sample(edir: Path, args) -> None:
+    """影子开关的分层抽样（`exp/sample.py`）：scan → cards → page → （人裁）→ harvest → estimate。"""
+    from .errors import BadRequest
+    from .exp import flips as FL
+    from .exp import sample as SP
+    from .exp.config import from_dict
+    from .exp.runner import read_state
+    sub = args.flips_action or "cards"
+    st = read_state(edir) or {}
+    cfg = from_dict(dict(st["config"])) if st.get("config") else None
+    base = cfg.base.name if cfg else "A"
+    if sub == "scan":
+        rows = SP.scan(edir, base)
+        from collections import Counter
+        print(f"{len(rows)} 个放行格；分层 {dict(Counter(SP.band(r) for r in rows))} → {edir / SP.SCAN}")
+    elif sub == "cards":
+        cards = SP.build_cards(edir, n_random=args.n or 35, seed=args.seed, resample=args.resample)
+        from collections import Counter
+        print(f"{len(cards)} 张卡 {dict(Counter(c['stratum'] for c in cards))} → {edir / SP.CARDS}")
+    elif sub == "page":
+        cards = SP.build_cards(edir)
+        fn = None if args.no_images else FL.cache_image_fn()
+        out = FL.build_page(edir, args.out, image_fn=fn, cards=cards, title=f"随机抽检 · {edir.name}")
+        print(f"审查页：{out}（用 Artifact 发布，capabilities 带 artifact，见 skill review-artifact）")
+    elif sub == "harvest":
+        if not args.verdicts:
+            raise BadRequest("harvest 要给裁决 jsonl（harvest_verdicts.py -o 的输出）")
+        print(FL.harvest(edir, args.verdicts, cards=SP.build_cards(edir), ref_prefix="sample"),
+              f"→ {edir / FL.EXTRA}；再 guji exp sample {edir.name} estimate")
+    elif sub == "estimate":
+        est = SP.estimate(edir, match=cfg.match if cfg else "exact", variant=base)
+        md = SP.render(est, edir.name)
+        (edir / SP.ESTIMATE).write_text(md, encoding="utf-8")
+        print(md)
+    else:
+        raise BadRequest("sample 后面是 scan | cards | page | harvest | estimate")
+
+
 def cmd_exp(args) -> None:
     # 影子模型（sklearn HistGradientBoosting）逐格预测，缺省按核数开 OpenMP 线程；按变体并行开几个进程时
     # 线程互相抢，vol05 实测每页 244s，限单线程后 ~1s（overview#457）。用户显式设了就不动。
@@ -108,10 +147,14 @@ def cmd_exp(args) -> None:
         cmd = TR.ui_command(root, args.port)
         print(f"MLflow 看板：http://127.0.0.1:{args.port}  （{TR.tracking_uri(root)}；Ctrl-C 退出）")
         subprocess.run(cmd, check=False)
+    elif args.action == "sample":
+        _sample(_edir(args), args)
     elif args.action == "flips":
         edir = _edir(args)
-        if args.flips_action == "sample":
-            cards = FL.sample(edir, n=args.n, seed=args.seed, resample=args.resample)
+        if args.flips_action not in (None, "sample", "page", "harvest"):
+            raise BadRequest("flips 后面是 sample | page | harvest")
+        if args.flips_action in (None, "sample"):
+            cards = FL.sample(edir, n=args.n or 60, seed=args.seed, resample=args.resample)
             print(f"{len(cards)} 张卡 → {edir / FL.CARDS}")
         elif args.flips_action == "page":
             fn = None if args.no_images else FL.cache_image_fn()
@@ -130,10 +173,11 @@ def cmd_exp(args) -> None:
 
 def add_parser(sub) -> None:
     p = sub.add_parser("exp", help="[v2] A/B 实验：run | report | flips | list | ui（overview#457）")
-    p.add_argument("action", choices=["run", "report", "flips", "list", "ui"])
+    p.add_argument("action", choices=["run", "report", "flips", "sample", "list", "ui"])
     p.add_argument("exp", nargs="?", default=None,
                    help="run：实验 yaml；report/flips：实验名或实验目录")
-    p.add_argument("flips_action", nargs="?", choices=["sample", "page", "harvest"], default="sample")
+    p.add_argument("flips_action", nargs="?", default=None,
+                   help="flips：sample | page | harvest；sample：scan | cards | page | harvest | estimate")
     p.add_argument("verdicts", nargs="?", default=None, help="flips harvest：裁决 jsonl")
     p.add_argument("-w", "--workspace", default=None, help="工作区（册配置、人裁事件、实验根缺省在 <工作区>/experiments）")
     p.add_argument("--root", default=None, help="实验根；缺省 <工作区>/experiments。不得落在 products/ 之内")
@@ -149,7 +193,7 @@ def add_parser(sub) -> None:
     p.add_argument("--jobs", type=int, default=1)
     p.add_argument("--force", action="store_true", help="run：删掉变体已有的本段产物重跑")
     p.add_argument("--no-report", action="store_true", help="run：跑完不出报告")
-    p.add_argument("--n", type=int, default=60, help="flips sample：抽几格")
+    p.add_argument("--n", type=int, default=None, help="flips sample：抽几格（缺省 60）；sample cards：影子同意层随机抽几格（缺省 35）")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--resample", action="store_true", help="flips sample：已有 cards.jsonl 也重抽（id 会变）")
     p.add_argument("--no-images", action="store_true", help="flips page：不带字块图")

@@ -479,3 +479,46 @@ def test_mlflow_tracking(tmp_path, monkeypatch):
     live = c.search_runs([info2["experiment_id"]])
     assert len(live) == 3 and info["parent_run_id"] not in {r.info.run_id for r in live}
     assert not (tmp_path / "mlruns").exists()
+
+
+def test_shadow_sample_cards_harvest_estimate(tmp_path):
+    """分层抽样：影子不同意的层普查、已人裁的跳过；同意层简单随机记 random 与权重；估计用逐码位口径。"""
+    from open_guji_cv.exp import sample as SP
+    edir = _fake_exp(tmp_path)
+    rows = [{"cell": f"vb:{p}:1:{s}", "char": "甲", "reason": "agree", "pick": "甲", "conf": 0.99, "lib": ["甲", "申"]}
+            for p in range(1, 11) for s in range(1, 10)]
+    rows += [{"cell": "vb:1:1:0", "char": "𥨖", "reason": "differs", "pick": "窺", "conf": 0.9, "lib": ["𥨖"]},
+             {"cell": "vb:2:1:0", "char": "甲", "reason": "differs_below_thr", "pick": "申", "conf": 0.6, "lib": []},
+             {"cell": "vb:3:1:0", "char": "已", "reason": "agree", "pick": "己", "conf": 0.99, "lib": []},  # 己已巳合类
+             {"cell": "vb:4:1:0", "char": "乙", "reason": "differs_below_thr", "pick": "丙", "conf": 0.3, "lib": []}]
+    (edir / "sample").mkdir()
+    (edir / SP.SCAN).write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), encoding="utf-8")
+    assert SP.band(rows[-2]) == "agree" and SP.band(rows[-1]) == "disagree_lo"
+    LB.write_jsonl([LB.Label("vb:4:1:0", "human", LB.PICKED, truth="乙")], edir / "labels_extra.jsonl")
+    cards = SP.build_cards(edir, n_random=10, seed=1)
+    by = {c["id"]: c for c in cards}
+    assert {"vb:1:1:0", "vb:2:1:0"} <= set(by) and "vb:4:1:0" not in by      # 普查；已人裁的不再问
+    rnd = [c for c in cards if c["stratum"] == "agree"]
+    assert len(rnd) == 10 and all(c["selection"] == LB.RANDOM for c in rnd)
+    assert rnd[0]["stratum_weight"] == pytest.approx(91 / 10)
+    assert set(by["vb:1:1:0"]["options"]) == {"𥨖", "窺"}
+    assert SP.build_cards(edir, n_random=3) == cards                           # id 冻住
+    vj = tmp_path / "v.jsonl"
+    picks = [{"id": "vb:1:1:0", "verdict": f"c{by['vb:1:1:0']['options'].index('窺')}"},
+             {"id": "vb:2:1:0", "verdict": f"c{by['vb:2:1:0']['options'].index('甲')}"}]
+    picks += [{"id": c["id"], "verdict": f"c{c['options'].index('甲')}"} for c in rnd[:9]]
+    picks += [{"id": rnd[9]["id"], "verdict": "none"}]
+    vj.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in picks), encoding="utf-8")
+    FL.harvest(edir, vj, cards=cards, ref_prefix="sample")
+    lab = {x.cell: x for x in LB.read_jsonl(edir / "labels_extra.jsonl")}
+    assert lab[rnd[0]["id"]].selection == LB.RANDOM and lab[rnd[0]["id"]].stratum == "agree"
+    est = SP.estimate(edir, match="exact")
+    s = est["strata"]
+    assert (s["disagree_hi"]["err"], s["disagree_mid"]["ok"], s["disagree_lo"]["ok"]) == (1, 1, 1)
+    assert (s["agree"]["n"], s["agree"]["err"]) == (10, 1)
+    assert est["total"]["est"] == pytest.approx(1 + 91 / 10)
+    t = {r["conf"]: r for r in est["thresholds"]}
+    assert (t[0.8]["caught"], t[0.8]["wrongly_blocked"]) == (1, 0)
+    assert (t[0.5]["caught"], t[0.5]["wrongly_blocked"]) == (1, 1)
+    md = SP.render(est, "e1")
+    assert "普查" in md and "区间很宽" in md
