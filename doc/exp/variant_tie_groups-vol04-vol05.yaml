@@ -1,0 +1,28 @@
+# Y1（overview#471）：variant_tie 按字组裁决收窄的 A/B。组表 = 用户 10-07 字组页裁决里「刻形＝系统码位」的 7 组
+# （𫎇蒙䝉、㸃點、㕘參、䜟讖識、𨽾隸、慎愼、㫖旨），给了组表就只认组表。
+# 金标 = gold2_vol0X.jsonl（用户＞整理看图；整理看图在这 7 组上的「图是正字」按字组裁决改记对，见 apply_group_verdicts.py）。
+# 跑：guji exp run doc/exp/variant_tie_groups-vol04-vol05.yaml -w $WS --snapshot <快照产物根> --root <实验根>
+name: variant_tie_groups-vol04-vol05
+books: [vol04, vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  params:
+    seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: false}
+variants:
+  g095:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.95, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼,㫖旨"}
+  g097:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼,㫖旨"}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol05.jsonl}
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol04.jsonl}
+guardrails:
+  - {metric: flips.right_to_wrong, op: "==", value: 0}
