@@ -431,8 +431,9 @@ class SeedAdmitParams(BaseModel):
     与 top1 同组 → 放行 top1，通道 `variant_tie`。组级「刻形到底是哪个码位」的裁决回来后再按组收窄。"""
     variant_tie_cov: float = 0.97
     variant_tie_extra: str = ""
-    """额外的并列组，逗号分隔，每项是一串码位（组内两两互为异体），如 `"𫎇蒙䝉,𢑴彝"`：`variants.json` 没收的组
-    （𫎇／蒙 就没有边）靠这里补；缺省空。"""
+    """并列组表，逗号分隔，每项是一串码位（组内两两互为异体），如 `"𫎇蒙䝉,㸃點"`。**给了就只认这张表**
+    （用户按组裁决过「刻形＝系统码位」的组；`variants.json` 里有不干净的边，如 雨／兩、辦／辨，也没收 𫎇／蒙）；
+    缺省空＝退回 `variants.json` 的直接异体边。"""
 
     nonchar_gate: bool = False
     """非字过滤（Y1，overview#454 第4条，缺省关）：已放行的格若 Step4 `char_index` 标了
@@ -1195,7 +1196,11 @@ def _variant_tie_ok(cands, align_char, extra: str = "") -> bool:
     groups = [g for g in (extra or "").split(",") if g]
 
     def edge(a: str, b: str) -> bool:
-        return a == b or any(a in g and b in g for g in groups) or _direct_variant_edge(a, b)
+        if a == b:
+            return True
+        if groups:       # 给了组表就**只认组表**（用户按组裁决过的组），不再认 variants.json 的边
+            return any(a in g and b in g for g in groups)
+        return _direct_variant_edge(a, b)
     top, c1 = cands[0]
     if _confusable_char(top):
         return False
