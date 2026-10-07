@@ -82,3 +82,14 @@ def test_review_sheet_sections():
     assert "| 己已巳 | 3 |" in md and "| `v:9:8:4` | 困 |" in md and "| `v:22:4:20` | 璹 | 邢 |" in md
     assert "v:1:1:1" not in md
     assert md.count("不审的默认") >= 4
+
+
+def test_admitted_missing_kind_fills_char_from_ctx(tmp_path):
+    """missing 类对勘项没有 char，放行字在上下文【】里（Z1 #476 第 7 条）。"""
+    d = _diff("v:2:1:1", None, "旨", "missing")
+    d["hyp_ctx"] = "甲【㫖】乙"
+    col = tmp_path / "collation_y.json"
+    col.write_text(json.dumps({"book": "v", "diffs": [d]}, ensure_ascii=False), encoding="utf-8")
+    res = A.admitted(col)
+    assert res["rows"][0]["char"] == "㫖"
+    assert "| `v:2:1:1` | 㫖 |" in A.admitted_md(res)

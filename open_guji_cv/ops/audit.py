@@ -10,10 +10,17 @@
 from __future__ import annotations
 
 import json
+import re
 from collections import Counter, defaultdict
 from pathlib import Path
 
 JYS = set("己已巳")
+_CTX_CHAR = re.compile(r"【([^】]+)】")
+
+
+def _admit_char(x: dict) -> str | None:
+    """放行字：对勘项自带 char；`missing`（证人有、我们漏）一类没有，字在上下文【】里。"""
+    return x.get("char") or (m.group(1) if (m := _CTX_CHAR.search(x.get("hyp_ctx") or "")) else None)
 
 
 def latest_collation(reports_book: Path) -> Path | None:
@@ -27,7 +34,7 @@ def admitted(collation: Path) -> dict:
     for x in d.get("diffs", []):
         if not x.get("admit") or x.get("human"):
             continue
-        c = cells.setdefault(x["id"], {"id": x["id"], "page": x["page"], "char": x.get("char"),
+        c = cells.setdefault(x["id"], {"id": x["id"], "page": x["page"], "char": _admit_char(x),
                                        "channel": x.get("channel"), "grades": set(), "kinds": set(),
                                        "witness": {}, "ctx": x.get("hyp_ctx")})
         c["grades"].add(x.get("grade") or "")
