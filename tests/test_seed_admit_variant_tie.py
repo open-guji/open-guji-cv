@@ -60,3 +60,10 @@ def test_low_cov_and_guard_block(tmp_path, monkeypatch):
 
 def test_confusable_top1_blocked(tmp_path, monkeypatch):
     assert not _run(tmp_path, monkeypatch, [("土", 0.98), ("士", 0.975)], ON).admit
+
+
+def test_extra_table_replaces_variants_json_edges(tmp_path, monkeypatch):
+    """给了组表就只认组表：𢑴／彝 在 variants.json 里有边，但组表里没有它们 → 不放。"""
+    c = [("𢑴", 0.975), ("彝", 0.972)]
+    assert _run(tmp_path, monkeypatch, c, ON).admit
+    assert not _run(tmp_path, monkeypatch, c, {**ON, "variant_tie_extra": "𫎇蒙"}).admit
