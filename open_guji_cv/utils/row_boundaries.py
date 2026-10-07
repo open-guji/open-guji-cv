@@ -1334,6 +1334,15 @@ def _frame_mask(col_ink: np.ndarray, period: float) -> np.ndarray:
     return m
 
 
+def _dash_only(ink: np.ndarray, period: float, band_w: float, h_frac: float, w_frac: float) -> bool:
+    """这一格的墨是不是只有一小撮残段：墨的外接框竖向 ≤ h_frac×period 且横向 ≤ w_frac×列宽。
+    虚线残段（竖向短、横向窄）命中；一横（「一」）横向宽、整字横向更宽，都不命中。"""
+    ys, xs = np.nonzero(ink)
+    if ys.size == 0:
+        return False
+    return (ys.max() - ys.min() + 1) <= h_frac * period and (xs.max() - xs.min() + 1) <= w_frac * band_w
+
+
 def _frame_only(ink: np.ndarray, frame: np.ndarray, period: float, min_ink_ratio: float) -> bool:
     """这一格的墨是不是只有框线（2026-09-26）：必须有跨格长竖穿过；去掉它（连同贴着它的几像素）
     后剩下的要么够不上 `min_ink_ratio`，要么只剩又矮又不宽的细横（框的上下边）。"""
@@ -1473,6 +1482,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     forced_solo: "set[int] | None" = None,
                     forced_jiazhu: "set[int] | None" = None,
                     forced_main: "set[int] | None" = None,
+                    dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
@@ -1662,6 +1672,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             y0i = max(0, min(h, int(round(bounds[k]))))
             y1i = max(0, min(h, int(round(bounds[k + 1]))))
             if _frame_only(col_ink[y0i:y1i], frame[y0i:y1i], period, min_ink_ratio):
+                nonblank.discard(pos)
+
+    # 列端的虚线残段（overview#376 后续）：首格/末格/抬头格里只剩一小撮又矮又窄的墨，是版框外虚线或污点，
+    # 不是字——记空白，别让它当一格没字的 char 混进下游。只看列端：中间格的细小墨可能是真字（丶）。
+    if dash_blank is not None:
+        h_frac, w_frac = dash_blank
+        for k in range(n_slots):
+            pos = k + 1
+            if pos not in nonblank or not (pos == 1 or pos == n_slots or _pos_to_slot(pos, n_raised) <= 0):
+                continue
+            y0i = max(0, min(h, int(round(bounds[k]))))
+            y1i = max(0, min(h, int(round(bounds[k + 1]))))
+            if _dash_only(col_ink[y0i:y1i], period, float(x_hi - x_lo), h_frac, w_frac):
                 nonblank.discard(pos)
 
     runs: dict[int, float] = {}
