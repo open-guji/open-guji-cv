@@ -91,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.7", unit="cell",   # 1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.8", unit="cell",   # 1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
@@ -107,6 +107,8 @@ class CellShrinkStep(Step):
                         img: np.ndarray) -> list[tuple[object, np.ndarray | None]]:
         from ..clustering.extractor import CharExtractor
         p: CellShrinkParams = ctx.params_for(self)  # type: ignore[assignment]
+        if "roster" in cc.flags:
+            return _roster_crops(ctx.book.id, page, cc, img, p.padding_ratio)
         h, w = img.shape[:2]
         # Step3 每个物理位置一格；夹注 a/b 合成一格（满宽），空白格给 empty
         pos_count: dict[int, int] = {}
@@ -271,7 +273,8 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                frame_bar = _is_raised_frame_bar(slot, cell_type, bbox, cc)
+                # 职名列的框屑 Step3 已剥掉（utils/roster_segment._denoise），首格就是字，不再猜框条
+                frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
                 if frame_bar:
                     cell_type, has_patch = "empty", False
                 cand_variants: list[CandidatePatch] = []
@@ -358,3 +361,30 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
         return masked, bbox
     r0, r1, c0, c1 = int(rows[0]), int(rows[-1]) + 1, int(cols[0]), int(cols[-1]) + 1
     return masked[r0:r1, c0:c1], (float(x0 + c0), float(y0 + r0), float(x0 + c1), float(y0 + r1))
+
+
+def _roster_crops(book: str, page: int, cc: ColumnCells, img: np.ndarray,
+                  padding_ratio: float) -> list[tuple[object, np.ndarray | None]]:
+    """职名列（Step3 `roster_pages` 分支切的列，overview#450）：每格按它自己的字框裁。
+
+    正文链按 pos 满宽裁、雙行 a/b 合成一格再从缝拆——前提是两行逐格对齐、一格一字
+    满宽。职名列两条都不成立：雙行两行相位不齐（按 pos 并 y 会一格裹进上下两字），
+    「臣」偏右小字可能与官衔末字 y 重叠。Step3 已给了逐字紧框（x0..x1, y0..y1），
+    这里外扩 padding 直接裁，不再过 CharExtractor 的网格收缩。"""
+    from ..clustering.extractor import CharInstance
+    h, w = img.shape[:2]
+    out: list[tuple[object, np.ndarray | None]] = []
+    for c in sorted(cc.cells, key=lambda c: (c.pos, c.sub or "")):
+        bw, bh = c.x1 - c.x0, c.y1 - c.y0
+        pad = padding_ratio * max(bw, bh)
+        x0, y0 = max(0, int(round(c.x0 - pad))), max(0, int(round(c.y0 - pad)))
+        x1, y1 = min(w, int(round(c.x1 + pad))), min(h, int(round(c.y1 + pad)))
+        patch = img[y0:y1, x0:x1]
+        ink = float((patch < 128).mean()) if patch.size else 0.0
+        inst = CharInstance(
+            id=f"{book}:{page}:{cc.col}:{c.slot}{c.sub or ''}", book=book, page=str(page),
+            col=cc.col, idx=c.pos - 1, bbox=(float(x0), float(y0), float(x1), float(y1)),
+            cell_type="char", ocr_text=None, ocr_confidence=0.0, patch_path="",
+            ink_ratio=ink, height=float(bh), width=float(bw), flags=[], sub=c.sub)
+        out.append((inst, patch))
+    return out
