@@ -251,8 +251,9 @@ def api_step8_seg(d: SegIn) -> dict:
         out["consume_error"] = f"{type(exc).__name__}: {exc}"
     # 「小注当正文」= 打回重做（用户 2026-10-01）：这些格所在的页从 Step3 起重跑（Step3 读到强制拆分，
     # 下游 Step4–7 跟着重算）。只对**新勾上**的页下单；重跑完后对勘要重新生成才看得到结果。
+    # 反向「正文当小注」（main）同理：重跑时 Step3 按整格出（overview#415/#436）。
     jz_pages = sorted({int(it.id.split(":")[1]) for it in todo
-                       if "jiazhu" in it.flags and "jiazhu" not in have.get(it.id, [])})
+                       if any(f in it.flags and f not in have.get(it.id, []) for f in ("jiazhu", "main"))})
     if jz_pages:
         try:
             out["rerun"] = _submit_rerun(d.book, jz_pages)

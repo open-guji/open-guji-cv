@@ -87,6 +87,46 @@ def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
     return jiazhu_split.column_frac(patches, ref_w, ink_threshold)
 
 
+def trim_dash_ends(mask: np.ndarray, period: float, run_max_frac: float,
+                   gap_min_frac: float, merge_frac: float) -> tuple[int, int] | None:
+    """行有墨掩码的首尾各剥掉「孤立的虚线残段」，返回剩下的 (首行, 末行)；全无墨 → None。
+
+    列图两端偶尔留着版框内侧那条**虚线**的残段：几行厚的细墨、常成簇（相隔十几行的
+    两三小段），跟正文之间隔着一两格以上的空白。`n_raised_hint` 量的是「首末墨行之间
+    装得下几格」，这簇薄墨把跨度撑大 2 格左右，凭空多出一格抬头（vol03 p28c2：残段在
+    第 19~23 行，首字要到 272 行才起，跨度/period 21.68 → hint=1；剥掉后 19.4）。
+
+    做法：相隔 < `merge_frac×period` 的墨段并成一簇；从端部起，簇的纵向跨度
+    ≤ `run_max_frac×period` **且**到下一簇的空隙 ≥ `gap_min_frac×period` 的簇整簇剥掉，
+    直到碰上第一簇「不像虚线」的墨为止；只剩一簇时不再剥。
+    判据靠**尺寸与孤立度**、不靠墨浓度——实测 vol03 90 个兜底 hint 列：虚线簇跨度
+    ≤29 行、后接空隙 ≥185 行（1.7 格）；真首字簇跨度 ≥147 行或紧贴下一字（空隙 ≤41），
+    两头都有大余量，而残段的峰值墨占比 0.05~0.84 都有（混着满宽版框条残渣），分不开。
+    """
+    idx = np.flatnonzero(mask)
+    if idx.size == 0:
+        return None
+    breaks = np.flatnonzero(np.diff(idx) > 1)
+    starts = np.concatenate(([idx[0]], idx[breaks + 1]))
+    ends = np.concatenate((idx[breaks], [idx[-1]]))
+    merge = merge_frac * period
+    cs, ce = [int(starts[0])], [int(ends[0])]
+    for a, b in zip(starts[1:], ends[1:]):
+        if a - ce[-1] - 1 < merge:
+            ce[-1] = int(b)
+        else:
+            cs.append(int(a))
+            ce.append(int(b))
+    thin_max = run_max_frac * period
+    gap_min = gap_min_frac * period
+    lo, hi = 0, len(cs) - 1
+    while lo < hi and (ce[lo] - cs[lo] + 1) <= thin_max and (cs[lo + 1] - ce[lo] - 1) >= gap_min:
+        lo += 1
+    while hi > lo and (ce[hi] - cs[hi] + 1) <= thin_max and (cs[hi] - ce[hi - 1] - 1) >= gap_min:
+        hi -= 1
+    return cs[lo], ce[hi]
+
+
 CONTRACT = [
     "页级共享量 period / ref_w 用该页的正文列算（剔掉 L1c 宽度异常与 L0c 非正文列），"
     "不按 admitted 筛——L2/L2b 拒掉的列几何仍是正文，照样参与共识",
@@ -104,6 +144,11 @@ class ColumnGateParams(BaseModel):
     side_floor_max: float = 0.045
     stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
     jiazhu_frac_min: float = jiazhu_split.COLUMN_FRAC_T  # 夹注列豁免门槛，见 L1c/L2 的豁免说明
+    #: 两倍宽的列不享夹注豁免（overview#447）。0 = 关（缺省，产物逐字节不变）；
+    #: >0 = 本列文字带宽 ≥ 此比例×本页中位宽时，**撤销夹注列豁免并拒收待审**。
+    #: 夹注列是「一列里并排两行小字」，宽度仍是一列；宽到两倍的只可能是两列正文被并成一列
+    #: （vol04 p216c6、p218c2，中间那条界行被当夹注缝）。建议 1.8。
+    double_width_ratio: float = 0.0
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
     # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
@@ -115,17 +160,30 @@ class ColumnGateParams(BaseModel):
     top_flush_min_frac: float = 0.25   # 顶格判定：顶端一格内 >8% 墨的行数 ≥ 此比例×period 才算字（毛边只有几行）
     span_margin: float = 0.5       # 跨度/period 超出版式格数多少才判「多一格」
     max_raised_hint: int = 2       # hint 上限，防跨度估歪时暴走
+    #: 兜底 hint 量跨度前先剥掉两端孤立的薄虚线段（见 `trim_dash_ends`）。**默认关**，
+    #: 关着时产物逐字节不变。（2026-10-02 S2 道：vol03 p28c2/p39c9 一类假抬头）
+    hint_ignore_dash: bool = False
+    hint_dash_run_max_frac: float = 0.3    # 虚线簇纵向跨度上限 ×period（实测 ≤29 行 ≈ 0.26；真字簇 ≥147 行）
+    hint_dash_gap_min_frac: float = 1.2    # 簇与下一簇墨的最小空隙 ×period（实测 ≥185 行 ≈ 1.67；真字 ≤41）
+    hint_dash_merge_frac: float = 0.25     # 相隔小于此 ×period 的墨段并成一簇
     #: `frame_residue`：端部残留满宽段达到多少行判「版框没削干净」。
     #: 3 是实测定的——正常削干净的 d/e 两档 1065 个端口最长段**全是 0**，
     #: 而 b 档（框字粘连）最小 6，两侧都有余量。标定见
     #: `steps/column_warp.FRAME_RESIDUE_*`（含被证伪的「端部峰值」候选）。
     frame_residue_min_run: int = 3
+    #: L1n 列宽下限（overview#427）：文字带宽 < 本页中位数 × 此比例 → flag `column_narrow`。
+    #: 四庫 vol04 p63c1/p80c5/p80c6/p217c2/p217c3 这 5 列切进了字里，列图只剩笔画边缘，
+    #: 下游认出一串乱码（context 放行 93 格）；vol04 全书 1962 列里 <0.75 的正好这 5 列。
+    #: vol05–10 再命中 18 列，多数同样是乱码，但「X卷採進本」这类本来就窄的小字行、vol03 p49c7/c8
+    #: 窄列也读得对——所以缺省只标记；书里确认窄列都是切坏时，`narrow_reject` 打开整列拒。
+    narrow_ratio: float = 0.75
+    narrow_reject: bool = False
 
 
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.10", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.11", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -316,6 +374,13 @@ class ColumnGateStep(Step):
                         p.max_raised_hint)
                 else:
                     ink = np.flatnonzero(prof > p.span_ink)
+                    if p.hint_ignore_dash and ink.size:
+                        ends = trim_dash_ends(prof > p.span_ink, period,
+                                              p.hint_dash_run_max_frac,
+                                              p.hint_dash_gap_min_frac,
+                                              p.hint_dash_merge_frac)
+                        if ends is not None:
+                            ink = np.array(ends)
                     if ink.size:
                         span = float(ink[-1] - ink[0])
                         extra = int(span / period - expected_slots + p.span_margin)
@@ -377,6 +442,15 @@ class ColumnGateStep(Step):
             # 不是正文。
             jz_frac = jz_fracs.get(c.col, 0.0)
             is_jiazhu_col = jz_frac >= p.jiazhu_frac_min
+            double_wide = (p.double_width_ratio > 0 and med_w and c.col not in non_body
+                           and (c.band[1] - c.band[0]) >= p.double_width_ratio * med_w)
+            if double_wide:
+                # 先于豁免：两倍宽不是夹注列，豁免撤销；拒收让人看，Step3 不对它硬切。
+                is_jiazhu_col = False
+                reasons.append(
+                    f"double_width：本列文字带宽 {c.band[1] - c.band[0]:.0f}px 是本页中位数 "
+                    f"{med_w:.0f}px 的 {(c.band[1] - c.band[0]) / med_w:.1f} 倍，疑为两列正文并成一列"
+                    "（夹注列宽仍是一列，不享豁免）")
             if is_jiazhu_col:
                 flags.append(f"column_width/side_ink 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
                              "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")
@@ -391,6 +465,12 @@ class ColumnGateStep(Step):
                 flags.append(f"column_width：本列文字带宽 {band_w}px 偏离本页中位数 "
                              f"{med_w:.0f}px {wide_cols[c.col]:+.0%}"
                              "（可能圈进了界行/夹注双栏，flag 不算错）")
+            band_w = c.band[1] - c.band[0]
+            if med_w and band_w < p.narrow_ratio * med_w and not is_jiazhu_col \
+                    and c.col not in non_body:
+                msg = (f"column_narrow：本列文字带宽 {band_w:.0f}px 不到本页中位数 {med_w:.0f}px 的 "
+                       f"{p.narrow_ratio:.0%}（{band_w / med_w:.0%}），列界多半切进了字里")
+                (reasons if p.narrow_reject else flags).append(msg)
             if c.side_floor > p.side_floor_max and not is_jiazhu_col:
                 # flag 级，不进 reject（2026-09-19 从 block 降下来）。判据本身没错——
                 # vol02 58 条 column-warp 金标上 >0.045 命中 1/3 mixed、0/55 clean 误伤——
@@ -481,6 +561,9 @@ COLUMN_GATE_SPEC = GateSpec(
                   desc="本列宽是否偏离本页中位数过多——flag 不是 block（2026-09-19 降级）："
                        "边列的窗口本来就带进版框内侧余白，vol02 被它拦下的 4 列"
                        "逐列看图全是干净单列，强行送进 Step3 全部有解", name="column_width"),
+        GateLevel(id="L1n", unit="column",
+                  desc="本列宽是否窄过本页中位数的下限比例（列界切进字里）——缺省 flag，"
+                       "`narrow_reject` 打开才拒", name="column_narrow"),
         GateLevel(id="L2", unit="column",
                   desc="两侧外沿最低墨占比是否超界——flag 不是 block（2026-09-19 降级）："
                        "量的是界行残墨/纸面污渍，不影响 Step3 切字缝，"

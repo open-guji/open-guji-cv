@@ -327,8 +327,9 @@ def _verdict_of(e) -> dict | None:
     elif v == "seg_defect":
         # 「小注当正文」（overview#265）：事件照旧是 seg_defect，靠 `reason` 读回成前端那一档，
         # 否则刷新后显示成「字形不完整」，人以为标错了又改一遍。
-        done = ("jiazhu" if p.get("reason") == "jiazhu_as_main"
-                else p.get("quality") or "contaminated")
+        # 反向「正文当小注」（reason=main_as_jiazhu，overview#415/#436）读回成 `main` 那一档
+        done = {"jiazhu_as_main": "jiazhu", "main_as_jiazhu": "main"}.get(
+            p.get("reason") or "", p.get("quality") or "contaminated")
         return {"shape": p.get("shape") or "", "done": done}
     elif v == "confirm":
         d = {"shape": p.get("shape") or "",
