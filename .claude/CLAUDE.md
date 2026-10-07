@@ -19,6 +19,7 @@
 | 各步的设计与失败案例 | [doc/design/](../doc/design/) |
 | 调研、文献、基准、负结果 | [doc/research/](../doc/research/) |
 | 格式（guji-page、guji-format、pages.json） | [doc/formats/](../doc/formats/) |
+| 开关开不开（A/B 实验、开关登记）| [doc/exp_framework.md](../doc/exp_framework.md)、[doc/开关登记表.md](../doc/开关登记表.md) |
 | 产物指纹、过期、跨册新鲜度 | skill `cv-pipeline-ops` |
 | 已退役与过期的文档 | [doc/archive/](../doc/archive/)（含旧 CLAUDE.md 的长索引原文） |
 

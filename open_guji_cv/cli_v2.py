@@ -2680,6 +2680,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_glyph_db import add_parser as _add_glyph_db, cmd_glyph_db
     _add_glyph_db(sub)
     COMMANDS_V2["glyph-db"] = cmd_glyph_db
+    # exp（overview#457）：A/B 实验，自带 -w（没有 book 位置参数）
+    from .cli_exp import add_parser as _add_exp, cmd_exp
+    _add_exp(sub)
+    COMMANDS_V2["exp"] = cmd_exp
     install_workspace_option(sub)
 
 
