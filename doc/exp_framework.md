@@ -18,6 +18,10 @@ guji exp list -w $WS
 2. **每个变体**：`<exp>/<变体>/<book>/` 再从 `_upstream` 硬链接，然后 `Engine(params=评测口径∪变体覆盖)` 只跑 `from…to`。指纹照常判，同一实验再跑一次已新鲜的不重算（要重算加 `--force`）。
 3. **护栏**：实验目录落在工作区 `products/`、仓内 `products/` 或快照之内，直接拒跑。
 
+**并行**：seed_admit 没标页级并行，单进程每页十来秒。变体之间互不相干，可以各开一个进程（`--only <变体> --no-report`），都跑完再不带 `--only` 跑一次（全部新鲜、直接跳过）补齐 `exp.yaml` 并出报告。
+
+**依赖**：变体开 `shadow_veto` 要装 `.[shadow]`（scikit-learn 版本须与模型训练时一致，见 `models/shadow_admit/*.json`）；seed_admit 要原图（切字块）和 `glyph.db`（`guji-cv glyph-db rebuild -w $WS`）。
+
 ## 二、目录
 
 ```
@@ -60,6 +64,7 @@ seed: 0
 ```
 
 - **参数名逐个对 Step 的 Params 校验**。pydantic 缺省会静默吞掉多余字段，开关名写错（或开关还在别的分支上，如 `juan_rule`）两边就跑成一样，这里直接报错。
+- **`book_params`**：`keep`（缺省）时基线 = 书 yaml 现行的 `params:`，变体在它上面再覆盖；`ignore` 时基线 = 代码默认值。框架自己把「书 ∪ 评测口径 ∪ 变体」合好再交给引擎，并清空书级参数：引擎的书级覆盖只替换「仍是默认值」的字段，变体显式写回默认值（如 `shadow_veto: false`）会被书 yaml 改回去。实际参数逐变体逐册记在 `exp.yaml` 的 `effective_params` 和报告开头。
 - **评测口径 `eval`** 对所有变体一样。`use_human_verdicts: false` 是为了去循环：Step7 会把人裁直接抄进产物，再拿同一批人裁考它没有意义（[step7_replay_eval.md](step7_replay_eval.md) §2）。它只在实验里关，不改 Step 的默认值。
 - 判准里的 `metric`：`admit_rate`、`review_rate`、`excluded_rate`、`admit_err_rate`、`flips.<键>[.<子键>]`；`scope`：`body`（缺省）、`nonbody`、`all`；`ref: base` 加可选 `delta`，或 `value: 常数`。
 
