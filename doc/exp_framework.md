@@ -137,6 +137,26 @@ guji exp report <实验名> -w $WS
 - 已有标签的格不出题。
 - 收回的裁决记 `source=human, selection=picked`，只写实验目录，**不写工作区 `feedback/`**。要落成正式人裁仍走 H 道的规矩。
 
+## 六·一、影子开关的分层抽样（估全册错率）
+
+翻转格是被挑出来的，外推不了全册。要估「全册放行错有多少、影子在各阈值下拦对／误拦几格」，用 `guji exp sample`（`open_guji_cv/exp/sample.py`）：
+
+```bash
+guji exp sample <实验名> scan  -w $WS     # 基线的每个放行格离线过一遍影子闸 → sample/shadow_scan.jsonl
+guji exp sample <实验名> cards -w $WS --n 34   # 出题：影子不同意的层普查，同意层简单随机抽 n 格
+guji exp sample <实验名> page  -w $WS     # 审查页（同翻转页的壳），用 Artifact 发布
+guji exp sample <实验名> harvest v.jsonl -w $WS
+guji exp sample <实验名> estimate -w $WS  # → sample/estimate.md
+```
+
+注意：子动作（scan/cards/…）要写在 `-w` 等选项之前。
+
+- **分层**按影子闸自己的判定：`differs`／`differs_below_thr` 才算「不同意」，再按把握度分成 ≥0.8、0.5–0.8、<0.5 三层。己已巳在影子里合为一类，字面不同也算同意。
+- **不同意的层全数出题**（一册只有几十格），得到的是精确数。已有人裁的格不再出题；只有看图结论（模型判）的格照样出题，因为口径 A 下要人认码位。
+- **同意层简单随机抽**，标签记 `selection=random`、`stratum=agree`、`weight` = 层格数 ÷ 抽中格数。
+- 估计表**不套线上的「异体弃权」**：按口径 A，异体码位放行算错，正是要量的东西。
+- 随机层只抽几十格时区间很宽（0 错时 95% 上界约 3/n），报告里照实写。要把全册错误率估准，需要几百上千格随机标签。
+
 ## 七、已知限制
 
 - 变体只能改参数，不能换代码。要比较两份代码（如 Y1 分支上的 `juan_rule`），等代码合 main，或另开一张卡做 `code: <git ref>` + `git worktree`。
