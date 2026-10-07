@@ -2,6 +2,8 @@
 """Step7 异体并列放行（`variant_tie`，Y1 / overview#471）：top1 与近邻是同一个字的两个码位而并列 → 放行 top1；缺省关。"""
 from __future__ import annotations
 
+import pytest
+
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_decision, page_match, write_product
 from open_guji_cv.core.step import STEPS
@@ -10,13 +12,21 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams
 BOOK, PAGE, COL = "tbook", 1, 1
 
 
+@pytest.fixture(autouse=True)
+def _isolate_variant_graph(monkeypatch):
+    """`_direct_variant_edge` 会懒加载 `open_guji_cv.variants` 的全局图单例；测完把它还原，不污染别的测试。"""
+    import open_guji_cv.variants as vm
+    monkeypatch.setattr(vm, "_GRAPH", vm._GRAPH)
+
+
 def _run(tmp_path, monkeypatch, cands, params=None, guard=None):
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, col=COL, recs=[
         dict(slot=1, verdict="unsure", cov=cands[0][1], wmax=10.0, candidates=list(cands), guard=guard)]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.1, source="prior")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
+    # 灰区无整理本时会走 CNN 背书去读字块；测试不造 cells，字块读不到就跳过这一路（不依赖本机缓存）
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
     return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns[0].chars[0]
 
 

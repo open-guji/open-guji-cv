@@ -31,7 +31,7 @@ def _run(tmp_path, monkeypatch, *, prev="一", cov=0.984, top="卷", align="巻"
     if align is not None:
         arecs.append(dict(slot=2, align_char=align, align_op="replace"))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(PAGE, BOOK, recs=arecs, col=COL))
-    ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
     sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
     return sa.columns[0].chars[1]
 
