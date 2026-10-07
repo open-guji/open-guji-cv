@@ -27,7 +27,7 @@ guji exp list -w $WS
   A/<book>/<step>/    基线产物；B/…、C/… 同理
   labels.jsonl        本次用到的标签（合并后，一格一行，带 source/selection）
   labels_extra.jsonl  翻转格审查页收回的裁决
-  report.json / report.md
+  report.json / report.md / charts/*.svg
   flips/cards.jsonl, flips/review.html
 ```
 
@@ -97,6 +97,7 @@ seed: 0
   `report.json` 里有全部格号，md 只列前 20 格。
 - **McNemar 精确检验**：对逐格的「放行错」指示做检验，分 random 和全部标签两档。
 - **判准**：逐条给达标、不达标或判不了，末尾一句「判准 k/n 达标，开不开由人定」。
+- **图**：`charts/<变体>-forest.svg`（各指标差值与 95% CI）、`charts/<变体>-channels.svg`（按通道放行格数），纯 SVG、零依赖，亮暗两套颜色，嵌在 report.md 里。
 
 ## 六、翻转格抽样页
 
