@@ -7,6 +7,7 @@ from: seed_admit
 to: seed_admit
 pages: all
 book_params: keep              # 基线 = vol05.yaml 现行 params:（它开着 shadow_veto conf 0.8）
+match: exact                   # 口径 A：码位相同才算对
 base:
   note: 关 shadow_veto（显式写 false，框架保证压过书 yaml）
   params:

@@ -15,6 +15,7 @@ variants:
     params:
       seed_admit: {shadow_veto: true, shadow_conf: 0.8}
 book_params: keep                  # keep：基线 = 书 yaml 现行 params:；ignore：基线 = 代码默认值
+match: exact                       # exact：码位相同才算对（口径 A，忠于刻本原形，用户 10-07 定）；semantic：异体等价也算对
 eval:                              # 评测口径，所有变体一样，与产品默认值无关
   use_human_verdicts: false        # 缺省就是 false：不让 Step7 抄人裁再拿人裁考它
 labels:
@@ -61,6 +62,7 @@ class ExpConfig:
     pipeline: str = "keben_body_v2"
     pages: str | list[int] = "all"
     book_params: str = "keep"                  # keep / ignore：书 yaml 的 params: 算不算进基线
+    match: str = "exact"                       # exact / semantic：放行字与标签字怎样算「对」
     snapshot: str | None = None
     root: str | None = None
     eval_params: dict[str, dict] = field(default_factory=dict)
@@ -87,7 +89,8 @@ class ExpConfig:
     def to_dict(self) -> dict:
         return {
             "name": self.name, "books": list(self.books), "from": self.from_step, "to": self.to_step,
-            "pipeline": self.pipeline, "pages": self.pages, "book_params": self.book_params, "snapshot": self.snapshot, "root": self.root,
+            "pipeline": self.pipeline, "pages": self.pages, "book_params": self.book_params,
+            "match": self.match, "snapshot": self.snapshot, "root": self.root,
             "base": {"name": self.base.name, "params": self.base.params, "note": self.base.note},
             "variants": {v.name: {"params": v.params, "note": v.note} for v in self.variants[1:]},
             "eval": {"params": self.eval_params},
@@ -139,7 +142,7 @@ def _eval_block(d: Any) -> dict[str, dict]:
 def from_dict(d: dict, source: str | None = None) -> ExpConfig:
     if not isinstance(d, dict):
         raise BadRequest("实验 yaml 顶层要是 mapping")
-    known = {"name", "books", "from", "to", "pipeline", "pages", "book_params", "snapshot", "root", "base",
+    known = {"name", "books", "from", "to", "pipeline", "pages", "book_params", "match", "snapshot", "root", "base",
              "variants", "eval", "labels", "guardrails", "bootstrap", "seed"}
     extra = set(d) - known
     if extra:
@@ -169,10 +172,12 @@ def from_dict(d: dict, source: str | None = None) -> ExpConfig:
         name=str(name), books=[str(b) for b in books], variants=variants,
         from_step=str(d.get("from") or "seed_admit"), to_step=str(d.get("to") or "seed_admit"),
         pipeline=str(d.get("pipeline") or "keben_body_v2"), pages=d.get("pages") or "all",
-        book_params=str(d.get("book_params") or "keep"),
+        book_params=str(d.get("book_params") or "keep"), match=str(d.get("match") or "exact"),
         snapshot=d.get("snapshot"), root=d.get("root"), eval_params=_eval_block(d.get("eval")),
         labels=list(d.get("labels") or []), guardrails=list(d.get("guardrails") or []),
         bootstrap=int(d.get("bootstrap", 2000)), seed=int(d.get("seed", 0)), source=source)
+    if cfg.match not in ("exact", "semantic"):
+        raise BadRequest(f"match 只能是 exact / semantic：{cfg.match!r}")
     if cfg.book_params not in ("keep", "ignore"):
         raise BadRequest(f"book_params 只能是 keep / ignore：{cfg.book_params!r}")
     if not cfg.name or "/" in cfg.name or cfg.name.startswith("_"):

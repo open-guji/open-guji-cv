@@ -84,6 +84,14 @@ def scope_of(page_type: str | None) -> str:
 
 
 # ── 判对错 ───────────────────────────────────────────────────────────────
+def make_same(match: str = "exact") -> Callable[[str, str], bool]:
+    """`exact`：码位相同才算对——口径 A（忠于刻本原形，用户 10-07 定，overview#414）下，刻本是「窺」
+    而放行了异体码位「𥨖」就是错。`semantic`：异体等价也算对（`eval_step7_replay.py` 的老口径）。"""
+    if match == "exact":
+        return lambda a, b: bool(a) and a == b
+    return default_same()
+
+
 def default_same() -> Callable[[str, str], bool]:
     """放行字与标签字语义同（异体等价）算对；异体表读不到就退回逐字相等。"""
     try:

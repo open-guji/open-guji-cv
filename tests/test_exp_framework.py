@@ -442,3 +442,14 @@ def test_doubt_code_strips_numbers():
     assert C.doubt_code("库 unsure(cov=0.979)") == "库 unsure"
     assert C.doubt_code("上下文 margin 不足(0.00)") == "上下文 margin 不足"
     assert C.doubt_code("shadow_veto") == "shadow_veto"
+
+
+def test_match_exact_vs_semantic():
+    """口径 A：放行了异体码位算错；semantic 口径下算对。"""
+    assert EC.from_dict({"name": "m", "books": ["b"], "variants": {"B": {}}}).match == "exact"
+    with pytest.raises(BadRequest):
+        EC.from_dict({"name": "m", "books": ["b"], "variants": {"B": {}}, "match": "fuzzy"})
+    rec = {"state": "admit", "char": "𥨖"}
+    lab = LB.Label("c", "human", LB.RANDOM, truth="窺")
+    assert C.correct(rec, lab, C.make_same("exact")) is False
+    assert C.correct(rec, lab, lambda a, b: True) is True       # semantic 的替身：等价即对
