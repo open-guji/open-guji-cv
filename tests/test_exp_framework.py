@@ -521,4 +521,4 @@ def test_shadow_sample_cards_harvest_estimate(tmp_path):
     assert (t[0.8]["caught"], t[0.8]["wrongly_blocked"]) == (1, 0)
     assert (t[0.5]["caught"], t[0.5]["wrongly_blocked"]) == (1, 1)
     md = SP.render(est, "e1")
-    assert "普查" in md and "区间很宽" in md
+    assert "普查" in md and "区间很宽" in md and "上界" in md
