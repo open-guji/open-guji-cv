@@ -303,7 +303,12 @@ def counts(items: list[dict]) -> dict:
 #: `jiazhu` = 小注当正文（2026-10-01，用户 vol02 p5:3:3）：这格其实是雙行小注，Step3 没拆。事件仍是
 #: `seg_defect`（quality=truncated）多带 `reason=jiazhu_as_main`，与定字台那个按钮同一形——路由据此让该页
 #: Step3 失效、重跑时 `lookup.resolved_forced_jiazhu` 从中间拆开（见 routes.py）。
-SEG_FLAGS = ("truncated", "contaminated", "jiazhu")      # 字形不完整 / 有噪声 / 小注当正文
+#: `main` = 正文当小注（2026-10-06，overview#415/#436）：反向——这格是整宽正文、Step3 把它劈成了 a/b。
+#: 事件 `seg_defect`（quality=truncated）多带 `reason=main_as_jiazhu`，路由让该页 Step3 失效、重跑时
+#: `lookup.resolved_forced_main` 按整格出。与 `jiazhu` 互斥：两个都勾时以 `main` 为准。
+SEG_FLAGS = ("truncated", "contaminated", "jiazhu", "main")   # 字形不完整 / 有噪声 / 小注当正文 / 正文当小注
+#: 这两档是「拆法错了」，金标 quality 记 truncated，但那不是人另勾了「字形不完整」
+_SPLIT_FLAGS = {"jiazhu": "jiazhu_as_main", "main": "main_as_jiazhu"}
 SEG_VIA = "seg_flag"
 
 
@@ -318,14 +323,18 @@ def seg_payload(flags: list[str], note: str = "") -> dict:
       这一维不该碰定字。
     """
     fl = [f for f in SEG_FLAGS if f in flags]
-    q = next((f for f in fl if f != "jiazhu"), None) or ("truncated" if "jiazhu" in fl else "clean")
+    q = next((f for f in fl if f not in _SPLIT_FLAGS), None) or (
+        "truncated" if any(f in _SPLIT_FLAGS for f in fl) else "clean")
     out = {"v": "seg_defect", "quality": q,
            # 全不勾写 "none" 而不是空串：金标按键合并，空串不落键，旧的 defect 会留下来
            "defect": ",".join(fl) or "none", "via": SEG_VIA,
            "note": note or ("Step8 复核：" + ("、".join(
-               {"truncated": "字形不完整", "contaminated": "有噪声", "jiazhu": "小注当正文"}[f] for f in fl)
+               {"truncated": "字形不完整", "contaminated": "有噪声", "jiazhu": "小注当正文",
+                "main": "正文当小注"}[f] for f in fl)
                or "取消切分标记"))}
-    if "jiazhu" in fl:
+    if "main" in fl:
+        out["reason"] = "main_as_jiazhu"          # 强制按整格出（lookup.resolved_forced_main）
+    elif "jiazhu" in fl:
         out["reason"] = "jiazhu_as_main"          # 强制按雙行小注拆（lookup.resolved_forced_jiazhu）
     return out
 
@@ -342,10 +351,11 @@ def seg_flags(events: Iterable, book: str) -> dict[str, list[str]]:
     for e in sorted(evs, key=lambda e: (e.ts, e.batch, e.seq)):
         p = e.payload or {}
         toks = set(str(p.get("defect") or "").split(",")) | {p.get("quality")}
-        if p.get("reason") == "jiazhu_as_main":
-            # 小注当正文自带 quality=truncated（金标单值），但那不是人另勾了「字形不完整」：quality 不算，
-            # 只认 defect 里明写的别的项
-            toks = (set(str(p.get("defect") or "").split(",")) - {"none"}) | {"jiazhu"}
+        split = {v: k for k, v in _SPLIT_FLAGS.items()}.get(p.get("reason"))
+        if split:
+            # 小注当正文 / 正文当小注自带 quality=truncated（金标单值），但那不是人另勾了「字形不完整」：
+            # quality 不算，只认 defect 里明写的别的项
+            toks = (set(str(p.get("defect") or "").split(",")) - {"none"}) | {split}
         fl = [f for f in SEG_FLAGS if f in toks]
         if fl:
             out[e.target.key] = fl

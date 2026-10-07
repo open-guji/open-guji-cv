@@ -12,7 +12,7 @@ export interface Step8Sample {
 }
 
 // 切分反馈：字形不完整 / 有噪声。与「谁对 / 哪一类」独立，只留作 Step3 的反馈。
-export type Step8Seg = 'truncated' | 'contaminated' | 'jiazhu'
+export type Step8Seg = 'truncated' | 'contaminated' | 'jiazhu' | 'main'
 
 // 每处各自的勾选状态；「N 处一起裁」时一次提交 N 处
 export function postStep8Seg(book: string, items: { id: string; flags: Step8Seg[] }[]) {
