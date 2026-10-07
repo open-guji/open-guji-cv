@@ -219,3 +219,88 @@ def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
             g[y + 20:y + 27, x - 15:x + 30] = 0
     rc = _seg_one(g)
     assert len(rc.items) == 4 and all(it.kind == "char" for it in rc.items)
+
+
+# ── 字形库参与切分（utils/roster_glyph，2026-10-07）─────────────────────────
+
+def _shape(kind: str, size: int = 100, stroke: int = 8) -> np.ndarray:
+    """两种区分度高的笔画字：A =「目」型（框 + 三横），B =「十」叉型（一竖一横 + 两斜撇）。"""
+    g = np.zeros((size, size), bool)
+    if kind == "A":
+        g[:, :stroke] = g[:, -stroke:] = True
+        for t in (0, size // 3, 2 * size // 3, size - stroke):
+            g[t:t + stroke, :] = True
+    else:
+        g[:, size // 2 - stroke // 2:size // 2 + stroke // 2] = True
+        g[size // 3:size // 3 + stroke, :] = True
+        for k in range(size):
+            g[k, max(0, k - stroke // 2):k + stroke // 2] = True
+            g[k, max(0, size - 1 - k - stroke // 2):size - 1 - k + stroke // 2] = True
+    return g
+
+
+def _scorer():
+    import io
+    from PIL import Image as _I
+    from open_guji_cv.utils.roster_glyph import GlyphScorer
+    rows = []
+    for ch in "AB":
+        for k in range(3):
+            im = np.full((256, 256), 255, np.uint8)
+            m = _shape(ch, 150 + 10 * k)
+            im[40:40 + m.shape[0], 40:40 + m.shape[1]][m] = 0
+            buf = io.BytesIO()
+            _I.fromarray(im).save(buf, format="PNG")
+            rows.append((ch, buf.getvalue()))
+    return GlyphScorer.from_rows(rows)
+
+
+def _squash(m: np.ndarray, h: int) -> np.ndarray:
+    from PIL import Image as _I
+    return np.asarray(_I.fromarray(m.astype(np.uint8) * 255).resize((m.shape[1], h))) > 127
+
+
+def test_glyph_dp_splits_two_squashed_touching_glyphs():
+    from open_guji_cv.utils.roster_glyph import glyph_dp
+    ink = np.zeros((400, 120), bool)
+    a, b = _squash(_shape("A"), 55), _squash(_shape("B"), 55)
+    ink[100:155, 10:110] = a                                  # 两个压扁字上下紧贴（没有白行）
+    ink[155:210, 10:110] |= b
+    segs = glyph_dp(ink, 100, 210, 10, 110, _scorer())
+    assert [s[2] for s in segs] == ["A", "B"]
+    assert abs(segs[0][1] - 155) <= 6
+
+
+def test_page_glyph_refine_only_touches_merged_compressed_runs():
+    """一页两列：第 1 列官衔是 4 对压扁合字（几何会当成 4 个字），第 2 列正常字号拉开。
+    给了字形库才把第 1 列拆成 8 字；第 2 列不动。「臣」行在两列同一高度。"""
+    def col(merged: bool) -> np.ndarray:
+        g = np.full((1600, W), 255, np.uint8)
+        y = 60
+        for _ in range(4):
+            if merged:
+                g[y:y + 60, 35:145][_squash(_shape("A", 110), 60)] = 0
+                g[y + 60:y + 120, 35:145][_squash(_shape("B", 110), 60)] = 0
+                y += 130
+            else:
+                g[y:y + 110, 35:145][_shape("A", 110)] = 0
+                y += 160
+        _glyph(g, 1180, 110, 50, stroke=5)                     # 臣
+        _glyph(g, 1300, 35, EM)                                # 人名
+        return g
+    cols = [(col(True), (10.0, W - 10.0)), (col(False), (10.0, W - 10.0)),
+            (col(False), (10.0, W - 10.0))]
+    plain = segment_roster_page(cols)
+    refined = segment_roster_page(cols, scorer=_scorer())
+    assert len(refined[0].items) == len(plain[0].items) + 4
+    assert "roster_glyph_refined" in refined[0].flags
+    assert [len(r.items) for r in refined[1:]] == [len(r.items) for r in plain[1:]]
+    assert [it.glyph for it in refined[0].items[:8]] == list("AB" * 4)
+
+
+def test_roster_glyph_switch_off_keeps_params_unchanged():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    off = RowSegmentParams(cut_judge="rule")
+    assert off.roster_glyph_db == "" and off.roster_glyph_fingerprint == ""
+    on = RowSegmentParams(cut_judge="rule", roster_glyph_refine=True, roster_glyph_db="/no/such.db")
+    assert on.roster_glyph_fingerprint == "nodb"
