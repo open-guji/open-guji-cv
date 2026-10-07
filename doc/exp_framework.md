@@ -82,7 +82,7 @@ seed: 0
 - 某层「放行且有 random 标签」的分母为 0 时，报告写「无检验力」，判准记「判不了」，不输出 0% 或 100%。
 - 人裁通道（`provenance=human`）的格不进任何错率（循环）。
 - 同一格多来源：human > gold > vision；真值不一致的列在报告的「来源冲突」里。
-- 字对不对由 `match:` 定。缺省 `exact`：码位相同才算对，这是口径 A（忠于刻本原形，用户 10-07 定），刻本是「窺」而放行了异体码位「𥨖」就算错。`semantic`：异体等价（`VariantMap.semantic`）也算对，是 `eval_step7_replay.py` 的老口径。vol05 实测两种口径结论相反（overview#457）。
+- 字对不对由 `match:` 定。缺省 `exact`：码位相同才算对，这是口径 A（忠于刻本原形，用户 10-07 定；同日用户再明确「异体码位放行算错」），刻本是「窺」而放行了异体码位「𥨖」就算错。`semantic`：异体等价（`VariantMap.semantic`）也算对，是 `eval_step7_replay.py` 的老口径。vol05 实测两种口径结论相反（overview#457）。
 
 ## 五、报告
 
