@@ -104,6 +104,11 @@ class ColumnGateParams(BaseModel):
     side_floor_max: float = 0.045
     stamp_noise_max: float = 0.007      # L2b：见 column_projection.STAMP_NOISE_MAX 的标定记录
     jiazhu_frac_min: float = jiazhu_split.COLUMN_FRAC_T  # 夹注列豁免门槛，见 L1c/L2 的豁免说明
+    #: 两倍宽的列不享夹注豁免（overview#447）。0 = 关（缺省，产物逐字节不变）；
+    #: >0 = 本列文字带宽 ≥ 此比例×本页中位宽时，**撤销夹注列豁免并拒收待审**。
+    #: 夹注列是「一列里并排两行小字」，宽度仍是一列；宽到两倍的只可能是两列正文被并成一列
+    #: （vol04 p216c6、p218c2，中间那条界行被当夹注缝）。建议 1.8。
+    double_width_ratio: float = 0.0
     tier: str = "gate"                  # gate | gold（gold 需接数据集，P2）
     # 名字像 guardrail 配置，实际不是：这只是一个尚未生效的枚举参数，不落
     # 文件、不是名单，按 doc/data-taxonomy.md 的判断标准仍是普通算法参数
@@ -125,7 +130,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.10", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.11", unit="column",
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -377,6 +382,15 @@ class ColumnGateStep(Step):
             # 不是正文。
             jz_frac = jz_fracs.get(c.col, 0.0)
             is_jiazhu_col = jz_frac >= p.jiazhu_frac_min
+            double_wide = (p.double_width_ratio > 0 and med_w and c.col not in non_body
+                           and (c.band[1] - c.band[0]) >= p.double_width_ratio * med_w)
+            if double_wide:
+                # 先于豁免：两倍宽不是夹注列，豁免撤销；拒收让人看，Step3 不对它硬切。
+                is_jiazhu_col = False
+                reasons.append(
+                    f"double_width：本列文字带宽 {c.band[1] - c.band[0]:.0f}px 是本页中位数 "
+                    f"{med_w:.0f}px 的 {(c.band[1] - c.band[0]) / med_w:.1f} 倍，疑为两列正文并成一列"
+                    "（夹注列宽仍是一列，不享豁免）")
             if is_jiazhu_col:
                 flags.append(f"column_width/side_ink 豁免：本列 {jz_frac:.0%} 的非空白格呈双列小字，"
                              "判为夹注列（两侧顶满列宽是版式如此，不是列窗没对）")

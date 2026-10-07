@@ -238,3 +238,33 @@ def test_jiazhu_column_frac_zero_without_period():
 
     img = _synth_column(700, 110, 70.0, seam=55)
     assert jiazhu_column_frac(img, (0.0, 110.0), 0.0, 700.0, None, 110.0) == 0.0
+
+
+# ── 两倍宽的列不享夹注豁免（overview#447，开关 double_width_ratio）──────────
+
+def _double_wide_page():
+    """第 6 列与第 7 列之间少一条界行 → 一列装下两列的宽（vol04 p218c2 的形态）。"""
+    xs = column_xs(n_cols=NCOLS)
+    del xs[6]
+    return synth_page(xs=xs, n_cols=NCOLS - 1)
+
+
+def _gate_cols(tmp_path, ratio):
+    gray, borders = _double_wide_page()
+    book = make_book(expected_cols=NCOLS - 1,
+                     params={"column_gate": {"double_width_ratio": ratio}} if ratio else {})
+    _, out = run_border_to_column_gate(tmp_path, gray, borders, book=book)
+    return out["gate_manifest"].columns
+
+
+def test_double_width_switch_off_changes_nothing(tmp_path):
+    """缺省关：没有 double_width 拒因，产物与加开关之前一致。"""
+    cols = _gate_cols(tmp_path, 0.0)
+    assert not any(r.startswith("double_width") for c in cols for r in c.reject)
+
+
+def test_double_width_switch_on_rejects_only_the_double_wide_column(tmp_path):
+    cols = _gate_cols(tmp_path, 1.8)
+    hit = [c.col for c in cols if any(r.startswith("double_width") for r in c.reject)]
+    assert len(hit) == 1, [(c.col, c.reject, c.flags) for c in cols]
+    assert all(c.admitted for c in cols if c.col not in hit)
