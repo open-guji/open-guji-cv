@@ -14,6 +14,7 @@ from review_shell import render
 from lib import load_step
 
 book, prod, src, cache, out = sys.argv[1:6]
+prior = sys.argv[6] if len(sys.argv) > 6 else None   # 线上旧页（带用户裁决），重发时把裁决带过去
 cards = [json.loads(l) for l in open(HERE / f"pending_{book}.jsonl", encoding="utf-8")]
 sa = load_step(prod, book, "seed_admit"); ci = load_step(src, book, "cell_shrink")
 cols = {}
@@ -73,6 +74,7 @@ const BODY = `
 <div class="bar"><i id="prog"></i></div></header>
 <div class="wrap">
 <details class="intro" id="intro" open><summary>怎么裁</summary>
+<p><b>每一格问的只有一件事：这一格的字认成哪个字。</b>不问放不放行，也不问切得对不对（框切偏、看不清就点「拿不准」）。你的选择当金标用：已放行格验误放行，待审格标定阈值，不会因为点「对」就放松。</p>
 <p>看字块图，判<b>系统建议字</b>对不对。<b>对</b>＝图上就是这个字；<b>错</b>＝不是，在下面填图上的正字（残缺／看不出就点「拿不准」）。
 异体按图上刻形填（口径 A，不并通行字）。点错再点一次取消。裁决自动存回本页。</p></details>
 <div class="ctrl"><div class="seg" id="filter">
@@ -106,6 +108,10 @@ function afterVerdict(){ /* 「错」的卡要留着填正字，其余裁完在�
     if ((filter==='todo' && v && v!=='wrong') || (filter==='done' && !v)) el.remove(); }); }
 function payload(){ return D.rows.filter(r => verdictOf(r.id)).map(r => JSON.stringify({id:r.id, verdict:verdictOf(r.id), char:(state[r.id]||{}).c||''})).join('\\n'); }
 """.replace("__TITLE__", TITLE)
-html = render(TITLE, f"y1-pending-{book}-v1", verdicts={}, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
+import re
+verd = {}
+if prior:
+    verd = json.loads(re.search(r'<script[^>]*id="data"[^>]*>(.*?)</script>', open(prior, encoding="utf-8").read(), re.S).group(1).replace("<\\/", "</")).get("verdicts") or {}
+html = render(TITLE, f"y1-pending-{book}-v1", verdicts=verd, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
 Path(out).write_text(html, encoding="utf-8")
 print(out, f"{len(html)/1024:.0f} KB", len(rows), "卡")
