@@ -410,6 +410,39 @@ class SeedAdmitParams(BaseModel):
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
 
+    juan_rule: bool = False
+    """「数字＋卷」放行（Y1，overview#454，缺省关）：库 top1 是「卷」、cov ≥ `juan_cov`、这一格
+    前一个正文字是数字（一…十百千）或「幾」，且别无护栏／疑问（只允许 `replace_align`、
+    `context_vs_ref` 两条）→ 放行，字取库形「卷」，通道 `juan`。
+
+    起因：vol05 与整理本冲突 45 格里 42 格是书名后的「一卷」，整理本（daizhige）排的是异体
+    「巻」，`vmap` 不把巻卷并成同义，于是 `context_vs_ref` 拦下、`replace_align` 再记一笔。
+    书名后「数字＋卷」是闭集套语，库形又高覆盖，两路互证。只作用于正文格（夹注格的
+    相邻字要按阅读序排，另议）；整理本给了别的字（不是 卷／巻／空）一律不放。"""
+    juan_cov: float = 0.98
+    """`juan_rule` 的库 top1 cov 门槛（任务书口径）。"""
+
+    variant_tie: bool = False
+    """异体并列放行（Y1，overview#471，缺省关）：库候选里 top1 与另一个候选在 `variants.json` 里有**直接异体边**
+    （同一个字的两个码位，如 𫎇／蒙、𢑴／彝、㸃／點），它们并列让上下文 margin 不足、库又判 unsure 而送审。
+    口径 A（忠实原刻）下不归并、不改字，要的就是库形最近的那个码位——top1——所以变体之间的 margin 小
+    不该拦：top1 cov ≥ `variant_tie_cov`、无护栏、`doubts` 只有 replace_align／context_vs_ref、top-3 里 cov 与
+    top1 相差不到 0.03 的候选**全部**是 top1 的直接异体（有非异体的近邻＝真歧义，不放）、整理本字缺省或也
+    与 top1 同组 → 放行 top1，通道 `variant_tie`。组级「刻形到底是哪个码位」的裁决回来后再按组收窄。"""
+    variant_tie_cov: float = 0.97
+    variant_tie_extra: str = ""
+    """额外的并列组，逗号分隔，每项是一串码位（组内两两互为异体），如 `"𫎇蒙䝉,𢑴彝"`：`variants.json` 没收的组
+    （𫎇／蒙 就没有边）靠这里补；缺省空。"""
+
+    nonchar_gate: bool = False
+    """非字过滤（Y1，overview#454 第4条，缺省关）：已放行的格若 Step4 `char_index` 标了
+    `nonchar_flags` 里任一标记，或放行字是单笔画字符（`nonchar_strokes`，界行竖线／污点读成
+    「丨」「亅」…），撤回放行、落人审（doubt `nonchar`）。人裁的格不碰（人裁在最前面一票定案）。
+    依据：vol04 已放行格里带 `bad_seg`／`rule_bar` 的 36 格、放行字为单笔画的 3 格，有看图
+    结论的全是放行错，零个看图 ok（见 #454 评论的前后对比）。没有 `char_index` 产物的格弃权。"""
+    nonchar_flags: str = "bad_seg,rule_bar"
+    nonchar_strokes: str = "丨亅丿丶"
+
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
 
@@ -446,6 +479,15 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and not self.juan_rule:
+            d.pop("juan_rule", None)
+            d.pop("juan_cov", None)
+        if isinstance(d, dict) and not self.variant_tie:
+            d.pop("variant_tie", None)
+            d.pop("variant_tie_cov", None)
+        if isinstance(d, dict) and not self.nonchar_gate:
+            for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
@@ -1020,6 +1062,26 @@ class SeedAdmitStep(Step):
                         ok, channel, prov = True, "ref_ctx", "context"
                         char = align_char
 
+                # 「数字＋卷」（`juan_rule`，Y1）。放在 context／ref_lib 之后、铁证之前：前面都
+                # 没放行才补，不覆盖任何已放行的判决。
+                if (not ok and p.juan_rule and not form_open and not r.sub and r.guard is None
+                        and r.candidates and r.candidates[0][0] == "卷"
+                        and r.candidates[0][1] >= p.juan_cov
+                        and set(doubts) <= _JUAN_DOUBTS
+                        and (align_char is None or align_char in _JUAN_FORMS)
+                        and recs and not recs[-1].sub
+                        and _after_number(recs[-1], amap, dmap, mmap)):
+                    ok, channel, char, prov = True, "juan", "卷", "match"
+                    doubts = []
+
+                # 异体并列放行（`variant_tie`，Y1）：前面通道都没放行才补。
+                if (not ok and p.variant_tie and not form_open and r.guard is None and r.candidates
+                        and r.candidates[0][1] >= p.variant_tie_cov
+                        and set(doubts) <= _JUAN_DOUBTS
+                        and _variant_tie_ok(r.candidates, align_char, p.variant_tie_extra)):
+                    ok, channel, char, prov = True, "variant_tie", r.candidates[0][0], "match"
+                    doubts = []
+
                 # 铁证放行（用户 2026-09-27 批准转正，`iron_evidence` 模块）：本格与一个
                 # 人裁过、别的格的实例比对，够像就放行文本——不看整理本、不看 OCR，只认
                 # 字形库里已确认的刻例。**只当兜底**：放在这里、`if not ok` 之后——只给
@@ -1057,6 +1119,14 @@ class SeedAdmitStep(Step):
                             and not (align_char and vm_here.semantic(align_char)
                                      != vm_here.semantic(_top))):
                         ok, channel, char, prov = True, "lib_confident", _top, "match"
+                # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
+                if ok and p.nonchar_gate:
+                    _ir2 = imap.get(r.id)
+                    _bad = ({f for f in (p.nonchar_flags or "").split(",") if f}
+                            & set(getattr(_ir2, "flags", None) or ()))
+                    if _bad or (char and char in (p.nonchar_strokes or "")):
+                        ok, channel, prov = False, None, ""
+                        doubts.append("nonchar")
                 # 近似例（overview#276）：这一格的字就是库给的字、而库给它的依据是近似例 →
                 # 缺省照常放行、在 evidence 里标注（文本侧表与卡片读它）；开了闸才挪去人审。
                 # 放在所有通道之后：闸只会把格从放行挪到待审，不改字、不会反过来。
@@ -1118,6 +1188,38 @@ class SeedAdmitStep(Step):
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+
+
+def _variant_tie_ok(cands, align_char, extra: str = "") -> bool:
+    """top1 有异体近邻，且 cov 与 top1 相差不到 0.03 的候选（top-3 内）都是它的异体；top1 属形近家族不放。"""
+    groups = [g for g in (extra or "").split(",") if g]
+
+    def edge(a: str, b: str) -> bool:
+        return a == b or any(a in g and b in g for g in groups) or _direct_variant_edge(a, b)
+    top, c1 = cands[0]
+    if _confusable_char(top):
+        return False
+    near = [c for c, v in cands[1:3] if c1 - v < 0.03]
+    if not near or not all(edge(top, c) for c in near):
+        return False
+    return align_char is None or edge(top, align_char) or align_char in near
+
+
+_JUAN_FORMS = frozenset("卷巻")
+_JUAN_DOUBTS = frozenset({"replace_align", "context_vs_ref"})
+_NUMERALS = frozenset("一二三四五六七八九十百千幾")
+
+
+def _after_number(prev: AdmitRec, amap: dict, dmap: dict, mmap: dict) -> bool:
+    """前一格（正文）的字是数字？取已定的字，没定就看整理本对齐字、再看库 top1。"""
+    ch = prev.char
+    if not ch and prev.id in amap:
+        ch = amap[prev.id][0]
+    if not ch and prev.id in dmap:
+        ch = dmap[prev.id].char
+    if not ch and prev.id in mmap:
+        ch = mmap[prev.id].char
+    return bool(ch) and ch in _NUMERALS
 
 
 def _hard_blocked(doubts, guard) -> bool:

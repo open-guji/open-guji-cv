@@ -1,0 +1,31 @@
+# Y1（overview#471）：异体并列放行 variant_tie 的 A/B。口径 A 假设「所有组放行库 top1」，组级裁决回来后按组收窄。
+# 标签 = research/y1_admit/gold_vol0X.jsonl（用户裁决 > 整理看图；merge_labels.py 按口径 A 把「ok 却给不同正字」记 wrong）。全是 picked，只看逐格翻转。
+# 跑：guji exp run doc/exp/variant_tie-vol04-vol05.yaml -w $WS --snapshot <快照产物根> --root <实验根>
+name: variant_tie-vol04-vol05
+books: [vol04, vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: 书 yaml 现行 params，Y1 各开关关
+  params:
+    seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: false}
+variants:
+  tie095:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.95, variant_tie_extra: "𫎇蒙䝉"}
+  tie097:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉"}
+  tie099:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.99, variant_tie_extra: "𫎇蒙䝉"}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold_vol05.jsonl}
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold_vol04.jsonl}
+guardrails:
+  - {metric: flips.right_to_wrong, op: "==", value: 0}

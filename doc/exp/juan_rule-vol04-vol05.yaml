@@ -1,0 +1,27 @@
+# Y1（overview#454／#471）：「数字＋卷」放行规则 juan_rule 的 A/B。
+# 跑：guji exp run doc/exp/juan_rule-vol04-vol05.yaml -w $WS --snapshot <快照产物根> --root <实验根>
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol05/20261006T2008、vol04/20261006T1208 的 products/ 并到同一根
+name: juan_rule-vol04-vol05
+books: [vol04, vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: 书 yaml 现行 params，juan_rule 关
+  params:
+    seed_admit: {patch_missing: skip, juan_rule: false}
+variants:
+  juan098:
+    note: 数字＋卷，库 cov≥0.98
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: true, juan_cov: 0.98}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: vision, path: reports/vol05/看图结论.jsonl}
+  - {source: vision, path: reports/vol04/看图结论.jsonl}
+guardrails:
+  - {metric: admit_err_rate, scope: body, op: "<=", ref: base}
+  - {metric: flips.right_to_wrong, op: "==", value: 0}
