@@ -1,0 +1,27 @@
+# 第一批试用（overview#457）：在 vol05 上验 shadow_veto 与框架本身。
+# 跑：guji exp run doc/exp/shadow_veto-vol05.yaml -w $WS --snapshot <vol05 快照产物根>
+name: shadow_veto-vol05
+books: [vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+base: {}                                  # 当前 main 默认参数（shadow_veto 关）
+variants:
+  veto080:
+    note: vol04 当时开的阈值
+    params:
+      seed_admit: {shadow_veto: true, shadow_conf: 0.8}
+  veto097:
+    note: 代码缺省阈值
+    params:
+      seed_admit: {shadow_veto: true}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
+  - {source: vision, path: reports/vol05/看图结论.jsonl}
+guardrails:
+  - {metric: admit_err_rate, scope: body, op: "<=", ref: base}
+  - {metric: review_rate, scope: body, op: "<=", ref: base, delta: 0.005}
+  - {metric: flips.admit_to_review.wrongly_blocked, op: "<=", value: 10}
+  - {metric: flips.right_to_wrong, op: "==", value: 0}
