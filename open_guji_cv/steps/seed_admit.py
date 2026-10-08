@@ -438,6 +438,13 @@ class SeedAdmitParams(BaseModel):
     与 top1 同组 → 放行 top1，通道 `variant_tie`。组级「刻形到底是哪个码位」的裁决回来后再按组收窄。"""
     variant_tie_cov: float = 0.97
     variant_tie_extra: str = ""
+    variant_tie_margin: bool = False
+    """`variant_tie` 的放宽档（Y1，overview#471，缺省关；需同开 `variant_tie` 并给 `variant_tie_extra` 组表）：
+    组表字的 cov 门槛降到 `variant_tie_margin_cov`（0.96），`doubts` 白名单加 `ctx_guard_ref`（上下文首位
+    与整理本字不同被 `context_guard_ref_prefer` 拦下的格；「库 unsure」「上下文 margin 不足」本来就是
+    收尾时才写进 doubts 的，不在白名单之内）。近邻 gap<0.03 须全在组内、无护栏、`ctx_garble*`／
+    `form_open` 等其余 doubts 仍拦——这些一概不放松。"""
+    variant_tie_margin_cov: float = 0.96
     """并列组表，逗号分隔，每项是一串码位（组内两两互为异体），如 `"𫎇蒙䝉,㸃點"`。**给了就只认这张表**
     （用户按组裁决过「刻形＝系统码位」的组；`variants.json` 里有不干净的边，如 雨／兩、辦／辨，也没收 𫎇／蒙）；
     缺省空＝退回 `variants.json` 的直接异体边。"""
@@ -493,6 +500,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.variant_tie:
             d.pop("variant_tie", None)
             d.pop("variant_tie_cov", None)
+        if isinstance(d, dict) and not self.variant_tie_margin:
+            d.pop("variant_tie_margin", None)
+            d.pop("variant_tie_margin_cov", None)
         if isinstance(d, dict) and not self.nonchar_gate:
             for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
                 d.pop(k, None)
@@ -1086,9 +1096,11 @@ class SeedAdmitStep(Step):
                     doubts = []
 
                 # 异体并列放行（`variant_tie`，Y1）：前面通道都没放行才补。
+                _vt_wide = p.variant_tie_margin and bool(p.variant_tie_extra)
                 if (not ok and p.variant_tie and not form_open and r.guard is None and r.candidates
-                        and r.candidates[0][1] >= p.variant_tie_cov
-                        and set(doubts) <= _JUAN_DOUBTS
+                        and r.candidates[0][1] >= (min(p.variant_tie_cov, p.variant_tie_margin_cov)
+                                                   if _vt_wide else p.variant_tie_cov)
+                        and set(doubts) <= (_JUAN_DOUBTS | {"ctx_guard_ref"} if _vt_wide else _JUAN_DOUBTS)
                         and _variant_tie_ok(r.candidates, align_char, p.variant_tie_extra)):
                     ok, channel, char, prov = True, "variant_tie", r.candidates[0][0], "match"
                     doubts = []

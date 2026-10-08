@@ -1,0 +1,24 @@
+# Y1（overview#471）：variant_tie_margin——组表字 cov 门槛 0.97→0.96，doubts 白名单加 ctx_guard_ref。
+# 基线 = juan_rule＋variant_tie 6 组表（不含 㫖旨）；金标 = gold2。
+# 跑：guji exp run doc/exp/variant_tie_margin-vol04-vol05.yaml -w $WS --snapshot <快照产物根> --root <实验根>
+name: variant_tie_margin-vol04-vol05
+books: [vol04, vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  params:
+    seed_admit: {patch_missing: skip, juan_rule: true, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼", variant_tie_margin: false}
+variants:
+  A:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: true, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼", variant_tie_margin: true}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol05.jsonl}
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol04.jsonl}
+guardrails:
+  - {metric: flips.right_to_wrong, op: "==", value: 0}

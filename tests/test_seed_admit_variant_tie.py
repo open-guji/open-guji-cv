@@ -67,3 +67,31 @@ def test_extra_table_replaces_variants_json_edges(tmp_path, monkeypatch):
     c = [("𢑴", 0.975), ("彝", 0.972)]
     assert _run(tmp_path, monkeypatch, c, ON).admit
     assert not _run(tmp_path, monkeypatch, c, {**ON, "variant_tie_extra": "𫎇蒙"}).admit
+
+
+# ── variant_tie_margin：组表字 cov 门槛降到 0.96（Y1，overview#471）──────────────
+
+TAB = {"variant_tie_extra": "𫎇蒙"}
+WIDE = {**ON, **TAB, "variant_tie_margin": True}
+
+
+def test_margin_off_by_default_and_not_in_dump():
+    d = SeedAdmitParams(variant_tie=True).model_dump()
+    assert "variant_tie_margin" not in d and "variant_tie_margin_cov" not in d
+    d = SeedAdmitParams(variant_tie=True, variant_tie_margin=True).model_dump()
+    assert d["variant_tie_margin"] is True and d["variant_tie_margin_cov"] == 0.96
+
+
+def test_margin_lowers_cov_gate_for_table_group(tmp_path, monkeypatch):
+    c = [("𫎇", 0.965), ("蒙", 0.96)]
+    assert not _run(tmp_path, monkeypatch, c, {**ON, **TAB}).admit          # 0.965 < 0.97
+    r = _run(tmp_path, monkeypatch, c, WIDE)
+    assert r.admit and r.channel == "variant_tie" and r.char == "𫎇"
+
+
+def test_margin_keeps_floor_neighbour_and_table_rules(tmp_path, monkeypatch):
+    assert not _run(tmp_path, monkeypatch, [("𫎇", 0.955), ("蒙", 0.95)], WIDE).admit          # 低于 0.96 照拦
+    assert not _run(tmp_path, monkeypatch, [("𫎇", 0.975), ("蒙", 0.97), ("家", 0.955)], WIDE).admit   # 近邻 gap<0.03 不在组内
+    assert not _run(tmp_path, monkeypatch, [("𫎇", 0.965), ("蒙", 0.96)], WIDE, guard="never_match").admit
+    # 没给组表时不放宽（只有给了组表才有「组表字」可言）
+    assert not _run(tmp_path, monkeypatch, [("𢑴", 0.965), ("彝", 0.96)], {**ON, "variant_tie_margin": True}).admit
