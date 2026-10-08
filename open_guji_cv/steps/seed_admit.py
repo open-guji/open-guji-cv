@@ -394,6 +394,13 @@ class SeedAdmitParams(BaseModel):
     放行默认字；坐标对位说这一位是空格（`via=coord_blank`）→ 判非字（`admit=True`、`char=None`、
     `evidence.occluded.ref_blank`，文本层跳过不占位）。护栏：本列坐标对位字连起来含
     `lane_seal_title_marks` 里任一串（卷端／版心题，坐标对位常错位）→ 整列不放。"""
+    seal_lib_agree: bool = False
+    """R5 的补充（Y1，overview#471「去章」，缺省关；需同开 `lane_seal`）：印章区格的默认字（坐标对位或
+    现役对位字）与**库首位同字**且库首位覆盖度 ≥ `seal_lib_cov` → 放行，**不受卷端题列整列不放的限制**，
+    `via=align` 也认。卷端题列（欽定四庫全書總目卷…）与卷端 p130 这类页，印章压住的是整理本能对上的
+    固定套语，坐标对位常是对的但没有第二证据，这条用库首位当第二证据；库首位与默认字不同（含异体）、
+    己已巳一族、`lane_variant_guard` 命中仍照旧送审。关着时不进参数哈希。"""
+    seal_lib_cov: float = 0.9
     lane_witnesses: str = ""
     """R1/R4 用哪几家证人：书 yaml `references` 的文件名，逗号分隔；空 = 全部。某家这一位
     缺席（锚不上、不覆盖本册、difflib 没配上）就不算一致。"""
@@ -496,6 +503,9 @@ class SeedAdmitParams(BaseModel):
                       "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
                       "lane_variant_topk"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.seal_lib_agree:
+            d.pop("seal_lib_agree", None)
+            d.pop("seal_lib_cov", None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
                       "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
@@ -1495,12 +1505,22 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             occ = ev.get("occluded")
             hit = None                           # (通道, 字, 证据)
             if occ:
-                if not p.lane_seal or col.col in title_cols or (rec.char and rec.char in _JYS):
+                if not p.lane_seal or (rec.char and rec.char in _JYS):
+                    continue
+                lib_agree = None
+                if p.seal_lib_agree and rec.char and occ.get("via") in ("coord", "align"):
+                    m = mmap.get(rec.id)
+                    top = (m.candidates[0] if m and m.candidates else None)
+                    if top and top[0] == rec.char and top[1] >= p.seal_lib_cov:
+                        lib_agree = round(float(top[1]), 4)
+                if col.col in title_cols and lib_agree is None:
                     continue
                 if occ.get("via") == "coord_blank" and occ.get("ref_blank") and rec.char is None:
                     hit = ("seal", None, {"via": "coord_blank", "nonchar": True})
-                elif rec.char and occ.get("via") in seal_vias:
+                elif rec.char and occ.get("via") in seal_vias and col.col not in title_cols:
                     hit = ("seal", rec.char, {"via": occ.get("via")})
+                elif lib_agree is not None:
+                    hit = ("seal", rec.char, {"via": occ.get("via"), "lib_agree": lib_agree})
             else:
                 cls = _lane_class(rec.doubts, ev, rec.char, ref, lib)
                 if cls == "ji_yi_si" or co in _JYS or col.col in garble_cols:

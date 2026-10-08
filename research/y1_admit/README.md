@@ -31,3 +31,9 @@ judge=claude-sonnet-5-5，ts=2026-10-07。**这是看图标注，不是人裁**�
 `variant_tie_extra` 给了组表就只认组表。A/B（`doc/exp/variant_tie_groups-vol04-vol05.yaml`，cov 0.95／0.97 结果相同）：
 新增放行 31（vol04 22、vol05 9）：27 个看图 ok、3 个 wrong（全是 㫖→首／肯，整理看图高置信）、1 个 unsure。**去掉 㫖 组后 27 放行、0 放错**：
 vol04 待审 487→469，vol05 348→339（−27），金标新增放行错 0。㫖 组在 `variant_tie_extra` 里不要列。
+
+## 去章（overview#471，2026-10-08）：seal_lib_agree
+
+印章遮挡待审 59 格（vol04 44、vol05 15），`lane_seal` 已放掉其余 334 格。剩下的成因：
+卷端题列整列拦 26（vol04 p3 13、vol05 p3 13）；整理本坐标对位缺失 `via=none` 24（vol04 p130 第 1、5 列）；`via=align` 8（p130）；异体护栏拦 4（類/𩔖、亭、鬱、㫖）；其余 coord_blank 在题列。
+新开关 `seal_lib_agree`（缺省关，需同开 `lane_seal`）：默认字与库首位同字且 cov≥0.9 → 放行（题列、`via=align` 也认）。vol04 487→476（+11：p3 题列 3、p130 align 8），vol05 348→345（+3，p3 题列）；14 格人工看图全对，金标不含这些格，金标误放行 0（无检验力，已如实标注）。
