@@ -217,3 +217,139 @@ def test_contact_md_marks_failed_and_sheet():
     md = zl.contact_md("v", [{"n": 1, "id": "v:1:1:1", "char": "未", "witness": {"W": "末"}, "ctx": "甲【未】乙", "ok": True, "sheet_idx": 0},
                              {"n": 2, "id": "v:1:1:2", "char": "", "ok": False, "why": "没有这一格的字框"}], ["v.联系页01.png"])
     assert "v.联系页01.png" in md and "⚠ 没有这一格的字框" in md
+
+
+# ───────── Z1 #476 回炉三处 ─────────
+def _run_args(**kw):
+    base = dict(book="vol07", ws="/w", jobs=0, snap=None, bg=True, only=None, from_=None, to=None, redo=None,
+                preset=None, no_shadow_veto=False)
+    return SimpleNamespace(**{**base, **kw})
+
+
+# 2) --bg 完整转发
+def test_child_args_forward_all_run_options():
+    a = _run_args(only="contact", from_="audit", to="close", redo="yaml", jobs=3, snap="br", preset="siku", no_shadow_veto=True)
+    out = zl.child_args(a)
+    assert out[:5] == ["run", "--book", "vol07", "--ws", "/w"] and "--bg" not in out
+    for flag, val in (("--only", "contact"), ("--from", "audit"), ("--to", "close"), ("--redo", "yaml"),
+                      ("--jobs", "3"), ("--snap", "br"), ("--preset", "siku")):
+        assert out[out.index(flag) + 1] == val
+    assert "--no-shadow-veto" in out
+    assert zl.child_args(_run_args()) == ["run", "--book", "vol07", "--ws", "/w"]
+
+
+def test_run_bg_spawns_child_with_flags_given_before_bg(tmp_path, monkeypatch):
+    """旧实现按 sys.argv 里 --bg 之后切片：`--only X --bg` 时参数丢光。"""
+    ctx = make_ctx(tmp_path, monkeypatch)
+    spawned = []
+    monkeypatch.setattr(zl.subprocess, "Popen", lambda args, **kw: spawned.append(args))
+    monkeypatch.setattr(sys, "argv", ["zl.py", "run", "--book", "vol07", "--ws", str(ctx.ws), "--only", "contact", "--bg"])
+    a = zl.argparse.Namespace(book="vol07", ws=str(ctx.ws), jobs=0, snap=None, bg=True, only="contact", from_=None,
+                              to=None, redo=None)
+    assert zl.cmd_run(a) == 0
+    assert spawned and spawned[0][spawned[0].index("--only") + 1] == "contact"
+
+
+def test_main_parses_preset_and_only():
+    ap_args = []
+    orig = zl.cmd_run
+    try:
+        zl.cmd_run = lambda a: ap_args.append(a) or 0
+        # main 里 set_defaults(fn=cmd_run) 在 main() 内取名字，故直接用 parse 结果核对
+        assert zl.main(["run", "--book", "v", "--ws", "/w", "--only", "yaml", "--preset", "siku", "--no-shadow-veto"]) == 0
+    finally:
+        zl.cmd_run = orig
+    a = ap_args[0]
+    assert (a.only, a.preset, a.no_shadow_veto) == ("yaml", "siku", True)
+
+
+# 3) 预设
+def test_standard_config_has_no_siku_keys():
+    w = zl.seed_admit_want()
+    assert len(w) == 11 and "juan_rule" not in w and "variant_tie" not in w and "shadow_veto_variant_abstain" not in w
+
+
+def test_siku_preset_adds_only_verified_keys():
+    w = zl.seed_admit_want("siku")
+    assert w["juan_rule"] is True and w["variant_tie"] is True and w["shadow_veto_variant_abstain"] is False
+    assert w["shadow_veto"] is True and w["shadow_conf"] == 0.8
+    assert set(zl.STD_SEED_ADMIT) <= set(w)
+    with pytest.raises(SystemExit):
+        zl.seed_admit_want("nope")
+
+
+def test_siku_variant_tie_groups_match_exp_yaml():
+    yaml = pytest.importorskip("yaml")
+    d = yaml.safe_load((Path(__file__).resolve().parents[1] / "doc/exp/variant_tie_groups-vol04-vol05.yaml").read_text(encoding="utf-8"))
+    sa = d["variants"]["g6_097"]["params"]["seed_admit"]
+    assert zl.PRESETS["siku"]["variant_tie_extra"] == sa["variant_tie_extra"]
+    assert zl.PRESETS["siku"]["variant_tie_cov"] == sa["variant_tie_cov"]
+
+
+def test_no_shadow_veto_override_for_vol04():
+    w = zl.seed_admit_want("siku", no_shadow_veto=True)
+    assert w["shadow_veto"] is False and "shadow_conf" not in w and "shadow_veto_variant_abstain" not in w
+    assert w["juan_rule"] is True and w["variant_tie"] is True
+
+
+def test_st_yaml_writes_preset_and_is_idempotent(tmp_path, monkeypatch):
+    yaml = pytest.importorskip("yaml")
+    ctx = make_ctx(tmp_path, monkeypatch)
+    ctx.preset = "siku"
+    (ctx.ws / "books").mkdir()
+    f = ctx.ws / "books" / "vol07.yaml"
+    f.write_bytes("# 说明\nbook: vol07\nperiod_prior: 1\nbottom_gap: 2\n".encode("utf-8"))
+    zl.st_yaml(ctx)
+    d = yaml.safe_load(f.read_text(encoding="utf-8"))["params"]["seed_admit"]
+    assert d["juan_rule"] is True and d["variant_tie_extra"] == zl.PRESETS["siku"]["variant_tie_extra"]
+    assert d["shadow_veto_variant_abstain"] is False and d["shadow_conf"] == 0.8
+    once = f.read_bytes()
+    zl.st_yaml(ctx)
+    assert f.read_bytes() == once and ctx.st["preset"] == "siku"
+
+
+def test_plan_prints_preset(tmp_path, monkeypatch, capsys):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    a = SimpleNamespace(book="vol07", ws=str(ctx.ws), jobs=0, snap=None, preset="siku", no_shadow_veto=False)
+    zl.cmd_plan(a)
+    assert "预设 siku" in capsys.readouterr().out
+    zl.cmd_plan(SimpleNamespace(book="vol08", ws=str(ctx.ws), jobs=0, snap=None))
+    assert "无预设" in capsys.readouterr().out
+
+
+# 1) contact 失败要计数并判步失败
+def test_contact_verdict_and_threshold(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    ok = [{"ok": True}] * 9
+    zl.check_contact(ctx, ok + [{"ok": False, "why": "没有这一格的字框"}])            # 10%：只警告
+    assert not (ctx.reports / "NEXT.md").exists() if ctx.reports else True
+    allbad = [{"ok": False, "why": "KeyError: 未注册的产物种类: char_index"}] * 74
+    n, rate, why = zl.contact_verdict(allbad)
+    assert (n, rate) == (74, 1.0) and why[0][1] == 74
+    with pytest.raises(zl.Stop):
+        zl.check_contact(ctx, allbad, ctx.reports / "x.md")
+    nxt = (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+    assert "74/74" in nxt and "未注册的产物种类" in nxt
+    assert zl.contact_verdict([]) == (0, 0.0, [])
+
+
+def test_st_contact_all_cells_failing_stops_and_registers_kinds(tmp_path, monkeypatch):
+    """端到端：认字差异里的格在产物里都不存在 → 整步 Stop＋NEXT.md；且入口已 import steps（不再 KeyError 未注册）。"""
+    pytest.importorskip("cv2")
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+    from tests.helpers import make_book
+    import open_guji_cv.core.book as bookmod
+    ctx = make_ctx(tmp_path, monkeypatch)
+    monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(tmp_path / "products"))
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
+    monkeypatch.setattr(bookmod, "load_book", lambda b: make_book(b))
+    ctx.reports.mkdir(parents=True)
+    rows = [{"id": f"vol07:{p}:1:2", "tier": "real", "char": "字", "witness": {"W": "子"}, "ctx": "甲【字】乙"} for p in range(1, 6)]
+    (ctx.reports / "vol07.放行错穷举.json").write_text(json.dumps({"rows": rows}, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(zl.Stop):
+        zl.st_contact(ctx)
+    assert "open_guji_cv.steps" in sys.modules
+    nxt = (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+    assert "5/5" in nxt and "未注册" not in nxt
+    md = (ctx.reports / "联系页" / "vol07.看图联系页.md").read_text(encoding="utf-8")
+    assert "⚠" in md

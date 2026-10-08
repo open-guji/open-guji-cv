@@ -37,6 +37,30 @@ STD_SEED_ADMIT = {
     "context_guard_ref_prefer": True, "shadow_veto": True, "shadow_conf": 0.8,
     "lane_witness3": True, "lane_coord": True, "lane_seal": True,
 }
+#: 显式预设（默认不启用）。只在四庫 vol04／vol05 上验过，不并进标准配置。
+#: variant_tie 组表 = doc/exp/variant_tie_groups-vol04-vol05.yaml 的 g6_097（不含 㫖旨：3 格放错），测试核对两处一致。
+PRESETS = {
+    "siku": {
+        "juan_rule": True,
+        "shadow_veto": True, "shadow_conf": 0.8, "shadow_veto_variant_abstain": False,
+        "variant_tie": True, "variant_tie_cov": 0.97,
+        "variant_tie_extra": "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼",
+    },
+}
+
+
+def seed_admit_want(preset: str | None = None, no_shadow_veto: bool = False) -> dict:
+    """要补进书 yaml `params.seed_admit` 的开关：标准 11 键 ＋ 预设；`no_shadow_veto` 关掉影子否决（vol04 用）。"""
+    if preset and preset not in PRESETS:
+        raise SystemExit(f"未知预设 {preset!r}，可用：{', '.join(PRESETS)}")
+    want = {**STD_SEED_ADMIT, **PRESETS.get(preset or "", {})}
+    if no_shadow_veto:
+        want["shadow_veto"] = False
+        for k in ("shadow_conf", "shadow_veto_variant_abstain"):
+            want.pop(k, None)
+    return want
+
+
 SELF_CHECK = "import torch, scipy, cv2, joblib, sklearn, yaml; print('torch', torch.__version__, 'sklearn', sklearn.__version__)"
 # 失败分类：(正则, 动作, 说明)。动作：pip=补装模块重试；stop=停；retry-lowjobs=降并行重试一次
 CLASSIFY = [
@@ -67,6 +91,9 @@ class Ctx:
         self.st = json.loads(self.state_f.read_text()) if self.state_f.exists() else {"stages": {}, "interventions": []}
         self.reports = (self.ws / "reports" / self.book) if self.ws else None
         self.snap_branch = getattr(a, "snap", None)
+        # 预设：本次命令行给的 > 上次记在状态里的（plan/status 不带参数也能说明用了哪个）
+        self.preset = getattr(a, "preset", None) or self.st.get("preset")
+        self.no_shadow_veto = bool(getattr(a, "no_shadow_veto", False) or self.st.get("no_shadow_veto"))
 
     def _venv_py(self):
         for p in (CV / ".venv/bin/python", CV / ".venv/Scripts/python.exe"):
@@ -271,7 +298,11 @@ def _find_key(lines: list[str], lo: int, hi: int, key: str, ind: int | None = No
 
 
 def _fmt(v) -> str:
-    return str(v).lower() if isinstance(v, bool) else str(v)
+    if isinstance(v, bool):
+        return str(v).lower()
+    if isinstance(v, str):                       # 字串一律加引号：含逗号、冒号、井号、非 ASCII 的裸写法 yaml 解析易出岔子
+        return json.dumps(v, ensure_ascii=False)
+    return str(v)
 
 
 def _set_scalar(lines: list[str], i: int, v) -> str | None:
@@ -334,7 +365,7 @@ def patch_yaml_text(text: str, want: dict, iron_gate: bool = True):
             continue
         cur = re.match(r"^\s*[\w\-]+\s*:\s*([^#]*?)\s*(#.*)?$", lines[j].rstrip("\n"))
         curv = cur.group(1).strip() if cur else None
-        if curv == _fmt(v) or (isinstance(v, float) and curv is not None and _is_float(curv) and float(curv) == v):
+        if curv == _fmt(v) or (isinstance(v, str) and curv is not None and curv.strip("\"'") == v) or (isinstance(v, float) and curv is not None and _is_float(curv) and float(curv) == v):
             continue
         old = _set_scalar(lines, j, v)
         if old is None:
@@ -352,6 +383,10 @@ def _is_float(x: str) -> bool:
         return False
 
 
+def preset_label(ctx) -> str:
+    return (f"预设 {ctx.preset}" if ctx.preset else "标准配置（无预设）") + ("，关 shadow_veto" if ctx.no_shadow_veto else "")
+
+
 def st_yaml(ctx):
     """把标准 Step7 开关补进书 yaml：已有键保留（同名项以标准值为准），其余文字、注释、排版一字不动。"""
     f = ctx.ws / "books" / f"{ctx.book}.yaml"
@@ -359,11 +394,14 @@ def st_yaml(ctx):
         write_next(ctx, "缺书 yaml", [f"`{f}` 不存在。拷一份同类册的 yaml 改册号、page_split、版面先验；缺 `period_prior` 会被闸 2/3 拦。"])
         raise Stop("缺书 yaml")
     old_t = f.read_bytes().decode("utf-8")
-    new_t, changed = patch_yaml_text(old_t, STD_SEED_ADMIT)
+    want = seed_admit_want(ctx.preset, ctx.no_shadow_veto)
+    ctx.st["preset"], ctx.st["no_shadow_veto"] = ctx.preset, ctx.no_shadow_veto
+    ctx.log(f"yaml 开关：{preset_label(ctx)}")
+    new_t, changed = patch_yaml_text(old_t, want)
     if new_t is None:
         snip = ctx.reports / "yaml-标准开关.片段.yaml"
         ctx.reports.mkdir(parents=True, exist_ok=True)
-        snip.write_text("iron_gate: true\nparams:\n  seed_admit:\n" + "".join(f"    {k}: {_fmt(v)}\n" for k, v in STD_SEED_ADMIT.items()), encoding="utf-8")
+        snip.write_text("iron_gate: true\nparams:\n  seed_admit:\n" + "".join(f"    {k}: {_fmt(v)}\n" for k, v in want.items()), encoding="utf-8")
         write_next(ctx, "书 yaml 需手贴标准开关", [f"yaml 写法超出自动补丁范围（{changed}）。把 `{snip}` 里的键合并进 `{f}`，然后原样重跑。"])
         raise Stop("书 yaml 需手贴开关")
     if changed:
@@ -516,9 +554,34 @@ def contact_md(book: str, entries: list[dict], sheets: list[str]) -> str:
     return "\n".join(out) + "\n"
 
 
+#: 联系页单格失败占比超过它，整步判失败（全失败必然超）。个别格找不到字框是常事，成片失败说明环境或产物坏了。
+CONTACT_MAX_FAIL = 0.2
+
+
+def contact_verdict(entries: list[dict]) -> tuple[int, float, list[tuple[str, int]]]:
+    """(失败格数, 失败率, 按原因计数从多到少)。"""
+    from collections import Counter
+    bad = [e for e in entries if not e.get("ok")]
+    why = Counter(e.get("why") or "未知" for e in bad)
+    return len(bad), (len(bad) / len(entries) if entries else 0.0), why.most_common()
+
+
+def check_contact(ctx, entries: list[dict], md_path=None):
+    nbad, rate, why = contact_verdict(entries)
+    if not nbad:
+        return
+    if rate > CONTACT_MAX_FAIL:
+        write_next(ctx, f"联系页失败 {nbad}/{len(entries)} 格（{rate:.0%}），超过 {CONTACT_MAX_FAIL:.0%}", [
+            "失败原因（次数）：", *[f"- {w}：{n}" for w, n in why[:8]],
+            f"明细见 `{md_path}`（⚠ 行）。常见原因：产物缺（先确认 cell_shrink 产物在 GUJI_PRODUCTS_DIR／<ws>/products）、列图缓存读不出来、环境缺件。修好后 `zl.py run --only contact`。"])
+        raise Stop(f"联系页 {nbad}/{len(entries)} 格失败")
+    ctx.log(f"⚠ 联系页 {nbad}/{len(entries)} 格失败（{rate:.0%}，未超 {CONTACT_MAX_FAIL:.0%}）：{why[:3]}")
+
+
 def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     """读 `<册>.放行错穷举.json`，给认字差异每格出一块「列图 + 上下各一格」，拼成联系页 PNG 并写索引 md。"""
     import cv2
+    import open_guji_cv.steps  # noqa: F401  注册产物种类（char_index 等）；不 import 则每格 KeyError「未注册的产物种类」
     from open_guji_cv.core.book import load_book
     from open_guji_cv.core.spec import column_key, page_key
     from open_guji_cv.core.step import RunContext
@@ -580,6 +643,7 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     mdp = outd / f"{ctx.book}.看图联系页.md"
     mdp.write_text(md, encoding="utf-8")
     ctx.log(f"联系页：{len(ok_entries)}/{len(rows)} 格成图，{len(sheets)} 页 → {outd}")
+    check_contact(ctx, entries, mdp)
     return mdp
 
 
@@ -700,6 +764,21 @@ STAGES = [
 MANUAL = {"human-count"}
 
 
+def child_args(a) -> list[str]:
+    """`run --bg` 转发给后台子进程的参数：由解析结果重建（--bg 除外），不靠 sys.argv 切片——
+    切片只带得走 `--bg` 之后的参数，`--only/--from/--to/--redo` 写在前面就丢了，整套重放。"""
+    out = ["run", "--book", a.book, "--ws", str(a.ws)]
+    if getattr(a, "jobs", 0):
+        out += ["--jobs", str(a.jobs)]
+    for flag, val in (("--snap", a.snap), ("--only", a.only), ("--from", a.from_), ("--to", a.to),
+                      ("--redo", a.redo), ("--preset", getattr(a, "preset", None))):
+        if val:
+            out += [flag, str(val)]
+    if getattr(a, "no_shadow_veto", False):
+        out.append("--no-shadow-veto")
+    return out
+
+
 def ensure_venv_python(ctx):
     """已有 .venv 而当前不是它的 python 时，原参数换 venv 的 python 重启（状态文件让已完成步自动跳过）。
     ZL_NO_REEXEC=1 关闭（测试用）。"""
@@ -714,7 +793,7 @@ def cmd_run(a):
     ctx = Ctx(a)
     ensure_venv_python(ctx)
     if a.bg:
-        args = [ctx.venv_py, __file__, "run", "--book", a.book, "--ws", str(a.ws)] + [x for x in sys.argv[sys.argv.index("--bg") + 1:] if x != "--bg"]
+        args = [ctx.venv_py, __file__, *child_args(a)]
         lf = ctx.log_f.with_name(f"{ctx.book}.driver.log")
         subprocess.Popen(args, stdout=lf.open("ab"), stderr=subprocess.STDOUT, start_new_session=True)
         print(f"已后台启动，日志 {lf}；看进度：zl.py status --book {a.book} --ws {a.ws}")
@@ -774,6 +853,7 @@ def cmd_run(a):
 
 def cmd_plan(a):
     ctx = Ctx(a)
+    print(f"配置：{preset_label(ctx)}")
     for n, _, d in STAGES:
         r = ctx.st["stages"].get(n, {})
         mark = "✓" if r.get("ok") else ("■" if r.get("gate") else ("✗" if r.get("err") else ("–" if r.get("skipped") else "·")))
@@ -823,6 +903,8 @@ def main(argv=None):
             p.add_argument("--from", dest="from_")
             p.add_argument("--to")
             p.add_argument("--redo")
+            p.add_argument("--preset", choices=sorted(PRESETS), help="显式开关预设（默认不启用）；siku＝四庫 vol04/vol05 验过的一组")
+            p.add_argument("--no-shadow-veto", action="store_true", help="预设里关掉 shadow_veto（vol04 用）")
         if name == "intervene":
             p.add_argument("--step", required=True)
             p.add_argument("--why", required=True)
