@@ -151,6 +151,29 @@ def write_fixes(root: Path, rows: list[dict], batch: str, dry_run: bool) -> list
     return [r["target_key"] for r, _ in to_fix]
 
 
+def uncovered(root: Path) -> list[dict]:
+    """重放语义（按 ts/批次/seq，后到覆盖）下，**最终生效**的那条 confirm 仍是乱码的字位。
+
+    普查（`scan_root`）只看单条记录合不合法；老乱码若已有更晚的合法更正事件压着，就不再有害。
+    这里只报没被压住的——整理重跑前跑一遍，非空就先 `--write-fixes`。"""
+    sys.path.insert(0, str(REPO_ROOT))
+    from open_guji_cv.feedback.events import EventLog
+
+    final: dict[str, object] = {}
+    for e in sorted(EventLog(root=root).iter_all(), key=lambda e: (e.ts, e.batch, e.seq)):
+        if e.kind == "confirm" and e.target.unit == "cell":
+            final[e.target.key] = e
+    out = []
+    for key, e in sorted(final.items()):
+        p = e.payload or {}
+        for field in FIELDS:
+            val = p.get(field)
+            if val is not None and not is_legal_shape(val):
+                out.append({"target_key": key, "event_id": e.id, "field": field, "raw": val,
+                            "class": classify_shape_field(val)})
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("roots", nargs="+", type=Path, help="每本书的 feedback/ 目录（含 events/ 子目录）")
@@ -161,7 +184,16 @@ def main() -> int:
                     help="更正事件写进哪个批次（--write-fixes 时用）")
     ap.add_argument("--apply", action="store_true",
                     help="真的落盘（不给就是 dry-run，只打印会写什么）")
+    ap.add_argument("--check", action="store_true",
+                    help="只报「最终生效的那条仍是乱码」的字位；有就退出码 1（整理重跑前自检）")
     args = ap.parse_args()
+
+    if args.check:
+        bad = [r for root in args.roots for r in uncovered(root)]
+        for r in bad:
+            print(f"未被更正覆盖：{r['target_key']} {r['field']}={r['raw']!r}（{r['class']}）")
+        print(f"共 {len(bad)} 个字位仍受乱码影响" if bad else "OK：没有未被更正覆盖的乱码字位")
+        return 1 if bad else 0
 
     all_rows: list[dict] = []
     for root in args.roots:
