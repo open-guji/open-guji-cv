@@ -18,6 +18,10 @@ from .mojibake import is_legal_shape
 # 同名会在函数体内把这个 logger 遮住（`log.warning(...)` 变成调 EventLog 不存在的方法）。
 _logger = logging.getLogger(__name__)
 
+#: 已经警告过的 (book, key, 值)。`human_chars` 每页调用一次（vol01 206 页），不去重的话
+#: 同一条老乱码会重复打印 206 遍（2026-10-08 vol01：56 条 × 206 = 11536 行，淹没真问题）。
+_WARNED_BAD_SHAPE: set[tuple[str, str, str]] = set()
+
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
 CUT_KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")   # 后三种 = L3 扩池（2026-09-15）
 
@@ -382,8 +386,11 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         # 那批走的是追加更正事件（`scripts/mojibake_census.py`），这里只挡
         # 未来/未覆盖到的意外坏数据。
         if not is_legal_shape(p["shape"]):
-            _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
-                            book, e.target.key, p["shape"])
+            tag = (book, e.target.key, str(p["shape"]))
+            if tag not in _WARNED_BAD_SHAPE:
+                _WARNED_BAD_SHAPE.add(tag)
+                _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
+                                book, e.target.key, p["shape"])
             continue
         key = e.target.key
         if bind:
