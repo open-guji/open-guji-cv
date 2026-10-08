@@ -28,6 +28,14 @@ MOJIBAKE_NEI = "å†…"       # 「内」被 cp1252 误解码
 MOJIBAKE_CHOU = "é·¹"      # 「鷹」被 cp1252 误解码
 
 
+@pytest.fixture(autouse=True)
+def _reset_warn_once():
+    from open_guji_cv.feedback import lookup
+    lookup._WARNED_BAD_SHAPE.clear()
+    yield
+    lookup._WARNED_BAD_SHAPE.clear()
+
+
 def _ev(key: str, payload: dict, seq: int, batch: str = "b", ts: str | None = None):
     _, pg, col, slot = key.split(":")
     e = make_event(batch, seq, "confirm",
@@ -193,3 +201,49 @@ def test_human_shapes_skips_illegal_db_char(tmp_path, caplog):
     _human_shapes.cache_clear()
     assert got == {"vol01:4:1:4": "内"}
     assert any("不合法" in r.message for r in caplog.records)
+
+
+def _write_legacy(log, batch, evs):
+    import json
+    path = log.batch_path(batch)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        for e in evs:
+            f.write(json.dumps(e.model_dump(mode="json"), ensure_ascii=False) + "\n")
+
+
+def test_human_chars_warns_once_per_bad_event_across_calls(tmp_path, caplog):
+    """每页调一次 human_chars：同一条老乱码只警告一次（vol01 曾刷出 11536 行）。"""
+    log = EventLog(tmp_path)
+    _write_legacy(log, "legacy", [_ev("vol01:4:1:3", {"v": "confirm", "shape": MOJIBAKE_NEI}, 1, batch="legacy"),
+                                  _ev("vol01:4:1:4", {"v": "confirm", "shape": MOJIBAKE_CHOU}, 2, batch="legacy")])
+    with caplog.at_level("WARNING"):
+        for _ in range(50):
+            assert human_chars("vol01", log) == {}
+    assert len([r for r in caplog.records if "不合法" in r.message]) == 2     # 两个字位各一次，不是 100 次
+
+
+# ── scripts/mojibake_census.py --check：最终生效的那条还是乱码的字位 ──────────
+
+def _census():
+    import importlib.util
+    from pathlib import Path
+    sp = Path(__file__).resolve().parents[1] / "scripts" / "mojibake_census.py"
+    spec = importlib.util.spec_from_file_location("mojibake_census_t", sp)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m
+
+
+def test_census_uncovered_reports_only_unfixed(tmp_path):
+    m = _census()
+    log = EventLog(tmp_path)
+    _write_legacy(log, "legacy", [
+        _ev("vol01:4:1:3", {"v": "confirm", "shape": MOJIBAKE_NEI}, 1, batch="legacy", ts="2026-09-16T23:23:49Z"),
+        _ev("vol01:4:1:4", {"v": "confirm", "shape": MOJIBAKE_CHOU}, 2, batch="legacy", ts="2026-09-16T23:23:49Z"),
+    ])
+    log.append([_ev("vol01:4:1:3", {"v": "confirm", "shape": "内"}, 1, batch="fix", ts="2026-09-27T00:00:00Z")])
+    bad = m.uncovered(tmp_path)
+    assert [(r["target_key"], r["class"]) for r in bad] == [("vol01:4:1:4", "recoverable")]
+    log.append([_ev("vol01:4:1:4", {"v": "confirm", "shape": "鷹"}, 2, batch="fix", ts="2026-09-27T00:00:01Z")])
+    assert m.uncovered(tmp_path) == []
