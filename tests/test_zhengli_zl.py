@@ -353,3 +353,19 @@ def test_st_contact_all_cells_failing_stops_and_registers_kinds(tmp_path, monkey
     assert "5/5" in nxt and "未注册" not in nxt
     md = (ctx.reports / "联系页" / "vol07.看图联系页.md").read_text(encoding="utf-8")
     assert "⚠" in md
+
+
+def test_plan_and_status_accept_preset_flag(tmp_path, monkeypatch, capsys):
+    """`plan --preset siku` 曾报 unrecognized arguments；plan/status 与 run 一致认 --preset／--no-shadow-veto。"""
+    make_ctx(tmp_path, monkeypatch)
+    ws = str(tmp_path / "ws")
+    assert zl.main(["plan", "--book", "vol07", "--ws", ws, "--preset", "siku"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "配置：预设 siku"
+    assert zl.main(["plan", "--book", "vol07", "--ws", ws, "--preset", "siku", "--no-shadow-veto"]) == 0
+    assert capsys.readouterr().out.splitlines()[0] == "配置：预设 siku，关 shadow_veto"
+    assert zl.main(["status", "--book", "vol07", "--ws", ws, "--preset", "siku"]) == 0
+    assert "配置：预设 siku" in capsys.readouterr().out
+    assert zl.main(["plan", "--book", "vol07", "--ws", ws]) == 0
+    assert "无预设" in capsys.readouterr().out.splitlines()[0]
+    with pytest.raises(SystemExit):
+        zl.main(["plan", "--book", "vol07", "--ws", ws, "--preset", "nope"])
