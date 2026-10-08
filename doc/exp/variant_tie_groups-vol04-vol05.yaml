@@ -19,6 +19,9 @@ variants:
   g097:
     params:
       seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼,㫖旨"}
+  g6_097:   # 6 组（不含 㫖旨：整理看图高置信判 㫖→首／肯，3 格放错）
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: true, variant_tie_cov: 0.97, variant_tie_extra: "𫎇蒙䝉,㸃點,㕘參,䜟讖識,𨽾隸,慎愼"}
 eval:
   use_human_verdicts: false
 labels:
