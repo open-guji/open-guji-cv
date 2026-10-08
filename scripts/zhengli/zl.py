@@ -903,6 +903,7 @@ def main(argv=None):
             p.add_argument("--from", dest="from_")
             p.add_argument("--to")
             p.add_argument("--redo")
+        if name in ("run", "plan", "status"):       # plan/status 也认，与 run 一致；不给则回落到状态文件里记的
             p.add_argument("--preset", choices=sorted(PRESETS), help="显式开关预设（默认不启用）；siku＝四庫 vol04/vol05 验过的一组")
             p.add_argument("--no-shadow-veto", action="store_true", help="预设里关掉 shadow_veto（vol04 用）")
         if name == "intervene":
