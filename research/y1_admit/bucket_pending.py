@@ -12,12 +12,14 @@
 import json, sys, re, collections, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 ex_f, book = sys.argv[1:3]
-gold_f = next((a for a in sys.argv[3:] if a.endswith(".jsonl")), None)
+gold_f = next((a for a in sys.argv[3:] if a.endswith(".jsonl") and not a.startswith("--b1=")), None)
+b1_f = next((a[5:] for a in sys.argv[3:] if a.startswith("--b1=")), None)   # 几何变了的册（如 vol05 A 组）：只在与 B1 格号集合相同的页上计标签
 ex = [json.loads(l) for l in open(ex_f, encoding="utf-8")]
 pend = [d for d in ex if not d["admit"]]
 norm = lambda x: re.sub(r"[（(].*", "", x)
 
 ORDER = [
+    ("被排除 excluded（职名页等）", lambda s: "excluded" in s),
     ("印章遮挡", lambda s: "occluded" in s),
     ("己已巳", lambda s: "ji_yi_si_ctx_review" in s or "ji_yi_si_review" in s),
     ("库里没有（含乱码形）", lambda s: "库里没有这个字" in s or "ctx_garble_shape" in s or "ctx_garble_rare" in s),
@@ -51,6 +53,15 @@ if gold_f:
         g = json.loads(l)
         T[g["cell"]] = (tr(g), "人裁" if g.get("src") == "用户" else "看图")
 
+if b1_f and T:
+    ids_pg = collections.defaultdict(set); ids_b = collections.defaultdict(set)
+    for d in ex:
+        ids_pg[d["id"].split(":")[1]].add(d["id"])
+    for l in open(b1_f, encoding="utf-8"):
+        d = json.loads(l); ids_b[d["id"].split(":")[1]].add(d["id"])
+    same = {pg for pg in ids_pg if ids_pg[pg] == ids_b.get(pg)}
+    T = {k: v for k, v in T.items() if k.split(":")[1] in same}
+    print(f"（几何相同的页 {len(same)}／{len(ids_pg)}，标签只计这些页）")
 B = collections.defaultdict(lambda: collections.Counter())
 for d in pend:
     b = bucket(d)
@@ -72,6 +83,12 @@ for b, c in sorted(B.items(), key=lambda kv: -kv[1]["n"]):
     if T:
         row += f"｜{c['lab']}｜{c['ok']}｜{c['bad']}｜{c['unsure']}"
     print(row)
+pg = collections.defaultdict(collections.Counter)
+for d in pend:
+    pg[bucket(d)][d["id"].split(":")[1]] += 1
+print("各桶最集中的页（页:格数，前3）：" + "；".join(
+    f"{b} {'/'.join(f'p{p}:{n}' for p, n in c.most_common(3))}（前3页占{100*sum(n for _, n in c.most_common(3))/sum(c.values()):.0f}%）"
+    for b, c in sorted(pg.items(), key=lambda kv: -sum(kv[1].values()))[:5]))
 call = collections.Counter()
 for d in pend:
     for x in {norm(y) for y in d["doubts"]}:
