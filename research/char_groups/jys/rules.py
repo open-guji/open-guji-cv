@@ -39,7 +39,7 @@ def classify(left: str, right: str) -> tuple[str | None, str]:
     # 1 干支：前为天干 → 巳
     if p in GAN and p != "己":      # 前字是「己」时不判：它可能刚被放行成「自己」的己（自己＋已經），不能当干支
         return "巳", "干支:前天干"
-    if p in ZHI and n == "間":
+    if p == "辰" and n == "間":     # 只认「辰巳間」；其他地支后接「間」不是巳
         return "巳", "干支:辰巳間"
     # 2 干支：后为地支 → 己
     if n in ZHI_SAFE:

@@ -32,6 +32,13 @@ def test_ganzhi_prev_ji_is_not_gan():
     assert clf.classify("康熙己", "年")[0] is None
 
 
+def test_ganzhi_chen_si_jian():
+    assert clf.classify("辰", "間")[0] == "巳"
+    assert clf.classify("寅", "間")[0] is None            # 只认辰巳間，其他地支＋間不判
+    assert clf.classify("午", "間")[0] is None
+    assert clf.classify("某", "間")[0] is None
+
+
 def test_ganzhi_next_zhi():
     assert clf.classify("順治", "丑")[0] == "己"
     assert clf.classify("某", "酉")[0] == "己"
