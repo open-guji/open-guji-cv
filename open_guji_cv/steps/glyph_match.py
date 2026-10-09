@@ -71,6 +71,8 @@ vol02 一轮一个半小时，而新进的几个字形绝大多数格的判决�
 from __future__ import annotations
 
 import hashlib
+import logging
+import time
 from pathlib import Path
 
 from pydantic import BaseModel, model_serializer
@@ -78,8 +80,12 @@ from pydantic import BaseModel, model_serializer
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.chars import PageChars
+from ..clustering.match import MatchTimeout
 from ..clustering.near_shape import NearShapeConfig
 from ..products.kinds.recog import CandidateMatch, ColumnMatch, MatchRec, PageMatch
+
+log = logging.getLogger(__name__)
+
 
 def _default_db() -> str:
     """默认库路径。空串表示「按 workspace 解析」——不在导入时定死，
@@ -179,12 +185,21 @@ class GlyphMatchParams(BaseModel):
     首位，证据落 `MatchRec.near_shape`；匹配器没判护栏的 unsure 格再升 same（`via="near_shape:<s>"`）。
     书级 yaml `params: {glyph_match: {near_shape: true}}` 可开。"""
 
+    cell_budget_s: float = 0.0
+    """每格时间预算（秒，2026-10-09，overview#493）。0 = 不设限（缺省，产物与参数指纹不变）。
+    >0 时一格（含它的候选试切）匹配超时就放弃：记 `verdict="diff"`、`guard="timeout"`、无候选，
+    落进人审，不再让一个病态格拖死整页。书级 yaml `params: {glyph_match: {cell_budget_s: 20}}` 可开。
+    只在逐个刻例验证之间检查，所以单次验证本身的耗时不在预算内。"""
+
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
         # 没开时不进 model_dump：params_hash 靠它算，否则加这个字段就会把全部现役产物判过期
         d = handler(self)
-        if isinstance(d, dict) and d.get("near_shape") in (None, False):
-            d.pop("near_shape", None)
+        if isinstance(d, dict):
+            if d.get("near_shape") in (None, False):
+                d.pop("near_shape", None)
+            if not d.get("cell_budget_s"):
+                d.pop("cell_budget_s", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -304,7 +319,7 @@ class GlyphMatchStep(Step):
         # 格级复用（core/reuse.py）：本步没变、只是上游重写了时，几何没动的格搬旧记录。
         from ..core.reuse import cell_reuse, log_reuse
         reuse = cell_reuse(ctx, self, page, "glyph_match")
-        n_reused = n_total = 0
+        n_reused = n_total = n_timeout = 0
         out: list[ColumnMatch] = []
         for cc in chars.columns:
             if not cc.ok:
@@ -324,9 +339,17 @@ class GlyphMatchStep(Step):
                 # 整页静默变质而状态显示正常（overview#407）。
                 img = _patch(ctx, r.patch_key, page)
                 is_punct = (getattr(r, "step3_kind", None) == "punct")
-                m = matcher.match(normalize_patch(img, is_punct),
-                                  exclude_id=(r.id if p.exclude_self else None))
+                deadline = (time.monotonic() + p.cell_budget_s) if p.cell_budget_s > 0 else None
+                try:
+                    m = matcher.match(normalize_patch(img, is_punct),
+                                      exclude_id=(r.id if p.exclude_self else None),
+                                      deadline=deadline)
+                except MatchTimeout:
+                    recs.append(_timeout_rec(r, p.cell_budget_s))
+                    n_timeout += 1
+                    continue
                 cand_variants: list[CandidateMatch] = []
+                timed_out = False
                 for cv in (r.cand_variants or []):
                     try:
                         cimg = ctx.image("char_patch", cv.patch_key)
@@ -335,13 +358,22 @@ class GlyphMatchStep(Step):
                         # 缓存里没有就是没有（云端快照不带 cache/），只少这一路证据、不影响本格判决。
                         # 文件在却读不出来是 OSError，不在这里接——照样停页（overview#407）。
                         continue
-                    cm = matcher.match(normalize_patch(cimg, is_punct),
-                                       exclude_id=(r.id if p.exclude_self else None))
+                    try:
+                        cm = matcher.match(normalize_patch(cimg, is_punct),
+                                           exclude_id=(r.id if p.exclude_self else None),
+                                           deadline=deadline)
+                    except MatchTimeout:
+                        timed_out = True
+                        break
                     cand_variants.append(CandidateMatch(
                         side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
                         candidates=[(cc, round(float(vv), 4))
                                     for cc, vv in cm.candidates[:p.max_candidates]]))
+                if timed_out:
+                    recs.append(_timeout_rec(r, p.cell_budget_s))
+                    n_timeout += 1
+                    continue
                 verdict, char, via = m.verdict, m.char, None
                 if verdict == "unsure" and m.guard is None:
                     # 共识升档（见模块头）。匹配器判了护栏（never_match / conflict）的不动。
@@ -365,8 +397,16 @@ class GlyphMatchStep(Step):
                     cand_variants=cand_variants, near_shape=m.near_shape))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         log_reuse(ctx, self, page, n_reused, n_total)
+        if n_timeout:
+            log.warning("glyph_match p%s: %d/%d 格超过 %.0fs 预算，记 timeout 转人审",
+                        page, n_timeout, n_total, p.cell_budget_s)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
+
+
+def _timeout_rec(r, budget_s: float) -> MatchRec:
+    """超时格：没有任何库证据，当「库里没有」处理，但带 `guard="timeout"`，下游不当护栏外的普通 diff。"""
+    return MatchRec(id=r.id, slot=r.slot, sub=r.sub, verdict="diff", guard="timeout")
 
 
 class PatchUnavailable(RuntimeError):
