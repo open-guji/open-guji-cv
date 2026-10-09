@@ -237,6 +237,12 @@ class SeedAdmitParams(BaseModel):
     `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
     起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
     这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+    solo_ctx_veto: float = 0.0
+    """match_solo 系的上下文否决（2026-10-09，overview#450）：`context_decide.ranked` 第一名与
+    放行字**语义不同**（异体码点差不算），且第一名概率 ≥ 此值，就不单独放行，记 doubt
+    `solo_ctx_veto`、落人审。起因：vol05 `147:9:9` 金标士，库候选 土 0.9955／士 0.9813（纯形状），
+    而 context_decide 的 ranked 是 士 0.6327／土 0.2218——系统里已有对的答案，match_solo 这条路
+    不看。vol05 377 格 match_solo 里 ranked[0] 与放行字不同仅 27 格。0 = 关（旧行为，不进 dump）。"""
     replace_form: str = "align"
     """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
     - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
@@ -487,6 +493,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_gate", None)
         if isinstance(d, dict) and not self.approx_fingerprint:
             d.pop("approx_fingerprint", None)
+        if isinstance(d, dict) and not self.solo_ctx_veto:
+            d.pop("solo_ctx_veto", None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
@@ -877,6 +885,10 @@ class SeedAdmitStep(Step):
                       and r.candidates and _confusable_char(r.candidates[0][0])):
                     ok, channel = False, None
                     doubts.append("solo_confusable")
+                elif (ok and p.solo_ctx_veto and channel in _SOLO_CHANNELS
+                      and _solo_ctx_vetoed(dmap.get(r.id), r.candidates, vm_here, p.solo_ctx_veto)):
+                    ok, channel = False, None
+                    doubts.append("solo_ctx_veto")
                 # 异体等价只经间接路径成立的撤回（`variant_indirect_guard`）。库形取
                 # 这几条通道自己比的那个字：match_ref 库 same 时是 r.char，其余是 cov 最高的候选。
                 if (ok and p.variant_indirect_guard and align_char and r.candidates
@@ -1868,6 +1880,16 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
     winner, _top, _second, _why, _disc = iron_with_disc(
         cands, human_chars_set, partners_map, img, ex_raws, scale)
     return winner
+
+
+def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
+    """`solo_ctx_veto`：上下文第一名与库 top1 语义不同、且概率 ≥ thresh（无 ranked／候选 = 不拦）。"""
+    ranked = getattr(dec, "ranked", None)
+    if not ranked or not cands:
+        return False
+    top, prob = ranked[0]
+    lib = max(cands, key=lambda t: t[1])[0]
+    return prob >= thresh and vmap.semantic(top) != vmap.semantic(lib)
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_confusable_guard` 用）
