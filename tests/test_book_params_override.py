@@ -109,3 +109,17 @@ def test_book_params_does_not_affect_other_steps(tmp_path, monkeypatch):
     # align_ref 的书级语料替换（`_with_book_corpus`）另有测试覆盖，这里只
     # 断言没被 seed_admit 那条覆盖误伤（字段都是各自默认值该有的样子）。
     assert isinstance(got, AlignRefParams)
+
+
+def test_caller_value_equal_to_default_is_overridden_by_book_params(tmp_path, monkeypatch):
+    """调用方把字段显式设成与 Step 默认值相同的值（`SeedAdmitParams()`）时，书 yaml 仍会覆盖它。
+
+    这是 `_with_book_params` 文档里承认的近似：分不清「没设过」与「设成默认值」，
+    两者都只看值是否等于默认。本测试只用来**钉住现状**——将来换成更精确的机制
+    （比如看 `model_fields_set`）时，这条要一起改，不是期望行为。
+    """
+    book = make_book("tbook", params={"seed_admit": {"context_margin": 0.90}})
+    ctx = make_ctx(tmp_path, book, monkeypatch=monkeypatch)
+    ctx.params["seed_admit"] = SeedAdmitParams()
+    got = ctx.params_for(STEPS["seed_admit"])
+    assert got.context_margin == 0.90
