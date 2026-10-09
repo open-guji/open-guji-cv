@@ -21,6 +21,11 @@ JI_NEXT_GATED = frozenset("見說論")                                     # 己
 JI_GATE_PREV = frozenset("以參斷附申從就徇逞矜騁各據發出持執伸抒肆縱隨存自爲主")
 YI_PREV = frozenset("業既久早無勿弗")                                   # 業已、既已、久已
 YI_NEXT = frozenset("經矣佚亡失著足甚多備極盡無非成刻具來上下後前去歿卒故沒")   # 已經、已矣、已佚…
+# 「已＋動詞／時間詞」「X＋已」（overview#443，10-10）：语料（daizhige）里「己已巳字位＋后/前一字」，已＋巳（巳多是已的讹写）占比
+# ≥0.97、样本 ≥30，再逐条读「己」的例子（多是「已久」「已經」被误写成己）人工筛过；己的真搭配（己見/己說/克己…）不进来。
+YI_NEXT2 = frozenset("久定降墾逾滿乆詳畢入嘗")     # 已久、已定、已降、已墾、已逾、已滿、已詳、已畢、已入、已嘗
+YI_PREV2 = frozenset("既前現早久所品")   # 既已、前已、現已、早已、久已、所已(言)、品已(上)。
+# 「書／中／民／氣／國」语料纯度也高，但名词＋已不稳：vol04:40:4:6「中書【己】未召試」被「書＋已」判错，剔除。
 FAM = frozenset("己已巳")
 
 
@@ -66,4 +71,10 @@ def classify(left: str, right: str) -> tuple[str | None, str]:
         return "已", "搭配:不得已"
     if n in YI_NEXT and p not in JI_PREV:
         return "已", "搭配:已經类"
+    if n in YI_NEXT2 and p not in JI_PREV:
+        return "已", "搭配:已＋動詞/時間词"
+    if n == "然" and n2 != "後" and p not in JI_PREV:      # 已然；「己|然後」是句读被吞（無諸己然後非諸人）
+        return "已", "搭配:已然"
+    if p in YI_PREV2 and n not in JI_NEXT_SURE and n not in ZHI:      # 后字是地支时留给干支规则
+        return "已", "搭配:时间词/主语＋已"
     return None, "无规则"
