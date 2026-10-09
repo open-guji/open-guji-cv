@@ -10,7 +10,7 @@ from __future__ import annotations
 import open_guji_cv.steps  # noqa: F401
 from helpers import (make_book, make_ctx, page_decision, page_match, write_product)
 from open_guji_cv.core.step import STEPS
-from open_guji_cv.steps.seed_admit import SeedAdmitParams
+from open_guji_cv.steps.seed_admit import SeedAdmitParams, _solo_ctx_vetoed
 
 BOOK, PAGE, COL, SLOT = "tbook", 1, 1, 7
 CANDS = [("土", 0.9955), ("士", 0.9813), ("圡", 0.9733)]
@@ -72,3 +72,50 @@ def test_no_ranked_untouched(tmp_path, monkeypatch):
 def test_off_params_dump_unchanged():
     assert "solo_ctx_veto" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(solo_ctx_veto=0.5).model_dump()["solo_ctx_veto"] == 0.5
+
+
+# ── _solo_ctx_vetoed 边界：直接测函数，用最小替身（不走整页流水线）──────
+
+class _Dec:
+    def __init__(self, ranked):
+        self.ranked = ranked
+
+
+class _IdMap:
+    def semantic(self, ch):
+        return ch
+
+
+class _CollapseMap:
+    """把 為／爲 映成同一语义值（模拟异体表并组）。"""
+    def semantic(self, ch):
+        return "同" if ch in ("為", "爲") else ch
+
+
+def test_fn_veto_at_threshold_exact():
+    # 代码是 >=：概率恰等于门槛也判 veto
+    assert _solo_ctx_vetoed(_Dec([("士", 0.5), ("土", 0.3)]), [("土", 0.99)], _IdMap(), 0.5)
+
+
+def test_fn_no_veto_just_below_threshold():
+    assert not _solo_ctx_vetoed(_Dec([("士", 0.4999), ("土", 0.3)]), [("土", 0.99)], _IdMap(), 0.5)
+
+
+def test_fn_no_veto_without_ranked():
+    assert not _solo_ctx_vetoed(_Dec([]), [("土", 0.99)], _IdMap(), 0.5)
+    assert not _solo_ctx_vetoed(None, [("土", 0.99)], _IdMap(), 0.5)
+
+
+def test_fn_no_veto_without_candidates():
+    assert not _solo_ctx_vetoed(_Dec([("士", 0.9)]), [], _IdMap(), 0.5)
+
+
+def test_fn_no_veto_when_top_matches_library_top():
+    # ranked 第一名与库 top1 同字（库 top1 按概率取，不看列表次序）
+    assert not _solo_ctx_vetoed(_Dec([("土", 0.9), ("士", 0.1)]),
+                                [("士", 0.9), ("土", 0.99)], _IdMap(), 0.5)
+
+
+def test_fn_no_veto_when_semantics_collapse():
+    # 码位不同但语义同：不算分歧，即使概率远超门槛
+    assert not _solo_ctx_vetoed(_Dec([("為", 0.9)]), [("爲", 0.99)], _CollapseMap(), 0.5)
