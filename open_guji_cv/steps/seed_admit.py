@@ -299,6 +299,18 @@ class SeedAdmitParams(BaseModel):
     """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
     occluded_min_contrast: float = 2.5
     """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
+    seal_blank_page: bool = False
+    """盖章空栏判空（2026-10-09，道 B 规格 overview#493，缺省关；需同开 `lane_seal`）。
+
+    固定印「乾隆御覽之寶」（`config/seal_templates/`）NCC 命中、印框与格重叠 ≥ `seal_blank_overlap`
+    的格，若同时满足：坐标对位无字、且未被强通道（match_ref／match_solo／witness3／match_margin／iron）
+    放行、不是人裁格 → 挪成「遮挡待审、默认字 None」，再由 `lane_seal` 的 coord_blank 分支判非字
+    （admit=True、char=None、文本层跳过）。context 通道**不算**强通道。只按格判，绝不按列判：印压真字的页
+    框内有字的格不动。关着时不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {seal_blank_page: true}}`。"""
+    seal_blank_thr: float = 0.35
+    """印框 NCC 门槛（留一法 5/5 召回，非印页最高 0.282，阈值两侧余量 ≥0.07）。"""
+    seal_blank_overlap: float = 0.5
+    """格与印框重叠面积 ÷ 格面积 的下限。"""
 
     approx_gate: bool = False
     """匹配到的库例是**近似字**时拦不拦自动放行（overview#276；书级参数）。
@@ -495,6 +507,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_fingerprint", None)
         if isinstance(d, dict) and not self.solo_ctx_veto:
             d.pop("solo_ctx_veto", None)
+        if isinstance(d, dict) and not self.seal_blank_page:
+            for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
@@ -1199,6 +1214,12 @@ class SeedAdmitStep(Step):
             d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
             n_auto += d_pro
             n_review -= d_pro
+        if p.seal_blank_page and p.lane_seal:
+            from .occlusion import page_seal_blank
+            d_seal = _seal_blank_flip(out, page_seal_blank(ctx, page, p),
+                                      _coord_refs(ctx, page, coord_cache))
+            n_auto -= d_seal
+            n_review += d_seal
         if p.lane_witness3 or p.lane_coord or p.lane_seal:
             d_lane = _review_lanes_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap,
                                         (lambda: _lane_witnesses(ctx.book, p))
@@ -1451,6 +1472,43 @@ def _lane_witnesses(book, p: "SeedAdmitParams") -> list:
     from pathlib import Path
     want = {s.strip() for s in (p.lane_witnesses or "").split(",") if s.strip()}
     return [w for w in _witnesses_for_book(book) if not want or Path(w.name).name in want]
+
+
+#: 盖章空栏判空不碰的强通道（context 不在内：vol04 p220 那个经 context 误放行的「一」要能改掉）
+_SEAL_STRONG = frozenset({"match_ref", "match_solo", "witness3", "match_margin", "iron"})
+
+
+def _seal_blank_flip(out: list, seal: dict, coord: dict) -> int:
+    """盖章空栏判空的格级保险（`seal_blank_page`，道 B 规格 overview#493）。→ 从放行挪走的格数。
+
+    `seal` 是 `occlusion.page_seal_blank` 的候选格（印框内、重叠够）。候选格同时满足下列三条才挪：
+    ①坐标对位无字（缺失或空串；`〓` 占位算有字）；②未被强通道放行（`_SEAL_STRONG`）；③非人裁、非排除、
+    不是已被密度遮挡闸（`occluded`）管着的格。挪法：`admit=False`、`char=None`、doubts 记 `occluded`、
+    evidence 记 `occluded.via=coord_blank、ref_blank=True`——与 `_review_lanes_pass` 的 coord_blank 分支接上。
+    只改格、不改别的；不做任何判空，判非字由 lane 的 `lane_seal` 来做。"""
+    if not seal:
+        return 0
+    demoted = 0
+    for col in out:
+        for rec in col.chars or []:
+            hit = seal.get((col.col, rec.slot, rec.sub or ""))
+            if hit is None or rec.channel == "human" or rec.provenance == "human":
+                continue
+            doubts = set(rec.doubts or [])
+            if "excluded" in doubts or "occluded" in doubts:
+                continue
+            if rec.admit and rec.channel in _SEAL_STRONG:
+                continue
+            if coord.get(rec.id):                # 坐标对位有字（非空串）：不是空栏
+                continue
+            if rec.admit:
+                demoted += 1
+            rec.admit, rec.channel, rec.char, rec.provenance = False, None, None, ""
+            rec.doubts = sorted(doubts | {"occluded"})
+            rec.evidence = {**(rec.evidence or {}),
+                            "occluded": {"via": "coord_blank", "ref_blank": True,
+                                         "seal_blank": hit["seal_score"], "overlap": hit["overlap"]}}
+    return demoted
 
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
