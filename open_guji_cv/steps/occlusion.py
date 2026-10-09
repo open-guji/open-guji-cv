@@ -208,17 +208,25 @@ def load_seal_templates() -> tuple[np.ndarray, ...]:
     return tuple(out)
 
 
+SEAL_COVER_DILATE = 5   # 印章笔画覆盖区：命中模板二值化（<128）膨胀的像素数（道 A 量法，overview#493）
+
+
 def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
-                     overlap: float) -> dict[tuple[int, int, str], dict]:
-    """找印框，返回框内候选格 {(col, slot, sub): {"seal_score", "overlap"}}。
+                     overlap: float, ink_out: float | None = None
+                     ) -> dict[tuple[int, int, str], dict]:
+    """找印框，返回框内候选格 {(col, slot, sub): {"seal_score", "overlap", "ink_out"}}。
 
     印框 = 窗口先验内 NCC 最高（≥ `thr`）的那个模板位置。格与印框重叠面积 ÷ 格面积 ≥ `overlap`
-    才入选。找不到印框、没有模板、窗口超出页图都返回空表。只给候选，不判空。"""
+    才入选。找不到印框、没有模板、窗口超出页图都返回空表。只给候选，不判空。
+
+    `ink_out`（第四条保险，道 A 量法）：格内「模板外墨」＝格框内 <128 且落在覆盖区外的像素 ÷ 格面积；
+    ≥ `ink_out` 的格退出候选（仍走原路径，即待审）。覆盖区 ＝ 命中的那个模板在命中位置的二值化（<128）
+    膨胀 `SEAL_COVER_DILATE` 像素，与 NCC 命中同一坐标系、不另起对位。`ink_out=None` 不做这道过滤。"""
     import cv2
     if not templates or gray is None:
         return {}
     H, W = gray.shape[:2]
-    best, box = -1.0, None
+    best, box, best_tpl = -1.0, None, None
     x0, y0 = SEAL_WIN_XY[0] - SEAL_WIN_HALF, SEAL_WIN_XY[1] - SEAL_WIN_HALF
     for tpl in templates:
         th, tw = tpl.shape[:2]
@@ -231,10 +239,17 @@ def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
         res = cv2.matchTemplate(gray[ry0:ry1, rx0:rx1], tpl, cv2.TM_CCOEFF_NORMED)
         _mn, mx, _mnl, (px, py) = cv2.minMaxLoc(res)
         if mx > best:
-            best, box = float(mx), (rx0 + px, ry0 + py, tw, th)
+            best, box, best_tpl = float(mx), (rx0 + px, ry0 + py, tw, th), tpl
     if box is None or best < thr:
         return {}
     bx, by, bw, bh = box
+    # 覆盖区：命中模板在命中位置的笔画（<128）膨胀；只在页图尺寸内
+    cov = np.zeros((H, W), np.uint8)
+    stroke = (best_tpl < 128).astype(np.uint8)
+    kern = np.ones((2 * SEAL_COVER_DILATE + 1, 2 * SEAL_COVER_DILATE + 1), np.uint8)
+    dil = cv2.dilate(stroke, kern)
+    ch, cw = min(bh, H - by), min(bw, W - bx)
+    cov[by:by + ch, bx:bx + cw] = dil[:ch, :cw]
     out: dict[tuple[int, int, str], dict] = {}
     for c in cells.columns:
         for x in c.cells:
@@ -249,14 +264,22 @@ def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
             ix = max(0.0, min(gx1, bx + bw) - max(gx0, bx))
             iy = max(0.0, min(gy1, by + bh) - max(gy0, by))
             ov = ix * iy / area
-            if ov >= overlap:
-                out[(c.col, x.slot, x.sub or "")] = {"seal_score": round(best, 4),
-                                                     "overlap": round(ov, 3)}
+            if ov < overlap:
+                continue
+            xi0, yi0 = max(0, int(np.floor(gx0))), max(0, int(np.floor(gy0)))
+            xi1, yi1 = min(W, int(np.ceil(gx1))), min(H, int(np.ceil(gy1)))
+            g_win = gray[yi0:yi1, xi0:xi1] < 128
+            ink = float(np.count_nonzero(g_win & (cov[yi0:yi1, xi0:xi1] == 0))) / area
+            if ink_out is not None and ink >= ink_out:
+                continue
+            out[(c.col, x.slot, x.sub or "")] = {"seal_score": round(best, 4),
+                                                 "overlap": round(ov, 3),
+                                                 "ink_out": round(ink, 4)}
     return out
 
 
 def page_seal_blank(ctx, page: int, p) -> dict[tuple[int, int, str], dict]:
-    """本页盖章空栏候选格（读不到 Step3 字格或原图就当没有）。`p` 带 `seal_blank_thr`／`seal_blank_overlap`。"""
+    """本页盖章空栏候选格（读不到 Step3 字格或原图就当没有）。`p` 带 `seal_blank_thr`／`seal_blank_overlap`／`seal_blank_ink_out`。"""
     try:
         cells = ctx.product("cells", page)
         gray = ctx.raw_page(page)
@@ -265,4 +288,5 @@ def page_seal_blank(ctx, page: int, p) -> dict[tuple[int, int, str], dict]:
     if cells is None:
         return {}
     return seal_blank_cells(gray, cells, templates=load_seal_templates(),
-                            thr=p.seal_blank_thr, overlap=p.seal_blank_overlap)
+                            thr=p.seal_blank_thr, overlap=p.seal_blank_overlap,
+                            ink_out=p.seal_blank_ink_out)

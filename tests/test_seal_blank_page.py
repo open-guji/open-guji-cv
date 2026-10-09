@@ -190,3 +190,53 @@ def test_seal_blank_params_off_not_in_dump():
     assert not {"seal_blank_page", "seal_blank_thr", "seal_blank_overlap"} & set(d)
     on = SeedAdmitParams(seal_blank_page=True).model_dump()
     assert on["seal_blank_page"] is True and on["seal_blank_thr"] == 0.35
+
+
+# ── 第四条保险：格内模板外墨 < seal_blank_ink_out（Haiku 试验 7，道 A 量法 overview#493）────
+
+def test_ink_out_only_template_strokes_stays_blank():
+    # ① 格里只有模板笔画（落在覆盖区内）→ 模板外墨 ≈ 0 → 仍判空
+    tpl = _template()
+    gray = _page(True, tpl)
+    cells = _cells((1, _quad(880, 620, 980, 720)))      # 落在环带内，有模板笔画
+    hit = occlusion.seal_blank_cells(gray, cells, templates=[tpl], thr=0.35, overlap=0.5,
+                                     ink_out=0.005)
+    assert (3, 1, "") in hit
+    assert hit[(3, 1, "")]["ink_out"] == 0.0
+
+
+def test_ink_out_uncovered_ink_excludes_cell():
+    # ② 格里有模板笔画，覆盖区外另有一横一竖（占比 ≈ 0.02 > 0.01）→ 不判空（退出候选）
+    tpl = _template()
+    gray = _page(True, tpl)
+    gray[700, 1110:1210] = 0          # 横：圆心区，模板外
+    gray[620:720, 1160] = 0           # 竖：圆心区，模板外
+    cells = _cells((1, _quad(1110, 620, 1210, 720)))
+    assert occlusion.seal_blank_cells(gray, cells, templates=[tpl], thr=0.35, overlap=0.5,
+                                      ink_out=0.005) == {}
+    free = occlusion.seal_blank_cells(gray, cells, templates=[tpl], thr=0.35, overlap=0.5)
+    assert free[(3, 1, "")]["ink_out"] > 0.01          # 不过滤时仍在，只是带着外墨值
+
+
+def test_ink_out_threshold_boundary():
+    # ③ 边界：ink_out 恰等于门槛 → 退出（>=）；略低 → 保留
+    tpl = _template()
+    base = _page(True, tpl)
+    cells = _cells((1, _quad(1110, 620, 1210, 720)))    # 100×100 = 10000 px，圆心区无覆盖
+    on_edge = base.copy()
+    on_edge[700, 1110:1160] = 0                          # 50 px → 50/10000 = 0.005
+    assert occlusion.seal_blank_cells(on_edge, cells, templates=[tpl], thr=0.35, overlap=0.5,
+                                      ink_out=0.005) == {}
+    just_under = base.copy()
+    just_under[700, 1110:1159] = 0                       # 49 px → 0.0049
+    kept = occlusion.seal_blank_cells(just_under, cells, templates=[tpl], thr=0.35, overlap=0.5,
+                                      ink_out=0.005)
+    assert kept[(3, 1, "")]["ink_out"] == 0.0049
+
+
+def test_ink_out_param_dump_rule():
+    # ④ 开关关：dump 不含 seal_blank_ink_out；开关开：含，缺省 0.005
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams as SP
+    assert "seal_blank_ink_out" not in SP().model_dump()
+    on = SP(seal_blank_page=True).model_dump()
+    assert on["seal_blank_ink_out"] == 0.005

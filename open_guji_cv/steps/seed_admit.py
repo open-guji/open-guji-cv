@@ -311,6 +311,10 @@ class SeedAdmitParams(BaseModel):
     """印框 NCC 门槛（留一法 5/5 召回，非印页最高 0.282，阈值两侧余量 ≥0.07）。"""
     seal_blank_overlap: float = 0.5
     """格与印框重叠面积 ÷ 格面积 的下限。"""
+    seal_blank_ink_out: float = 0.005
+    """第四条保险：格内「模板外墨」＝格框内 <128 且落在本页命中模板覆盖区（二值化＋5px 膨胀）外的像素 ÷ 格面积；
+    ≥ 此值的格不算空（退出候选，仍待审）。只收窄。道 A 量法（overview#493）：真字页 vol02 p188 的 4 格真字
+    模板外墨 ≥ 0.045，阈值 0.005 与之有 9 倍空档；不是已校准的阈值，只是已知真字都在它外面。"""
 
     approx_gate: bool = False
     """匹配到的库例是**近似字**时拦不拦自动放行（overview#276；书级参数）。
@@ -508,7 +512,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.solo_ctx_veto:
             d.pop("solo_ctx_veto", None)
         if isinstance(d, dict) and not self.seal_blank_page:
-            for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap"):
+            for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
