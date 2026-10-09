@@ -24,6 +24,14 @@ def test_ganzhi_prev_gan():
     assert clf.classify("乙", "")[0] == "巳"
 
 
+def test_ganzhi_prev_ji_is_not_gan():
+    # 前字是「己」（可能刚被放行成「自己」的己）：不当天干判巳
+    assert clf.classify("自己", "經")[0] == "已"          # 自己＋已經
+    assert clf.classify("克己", "矣")[0] == "已"
+    assert clf.classify("克己", "")[0] is None            # 不得是「巳」
+    assert clf.classify("康熙己", "年")[0] is None
+
+
 def test_ganzhi_next_zhi():
     assert clf.classify("順治", "丑")[0] == "己"
     assert clf.classify("某", "酉")[0] == "己"
@@ -170,3 +178,22 @@ def test_llm_switch_admits_with_margin(tmp_path, monkeypatch):
     t2 = _table(tmp_path, {"tbook:1:1:2": {**cell, "lr_margin": 0.1}})
     ctx = _ctx(tmp_path, monkeypatch, SeedAdmitParams(ji_yi_si_clf=True, ji_yi_si_clf_llm=True, ji_yi_si_clf_table=t2))
     assert not _run(ctx, "山", "水", ref="巳").admit
+
+
+def test_neighbor_pending_default_char_is_not_used(tmp_path, monkeypatch):
+    """待审邻格的 `char` 是库 top1 默认字（可能乱码），规则只用已放行字，否则用整理本字。"""
+    ctx = _ctx(tmp_path, monkeypatch, SeedAdmitParams(ji_yi_si_clf=True))
+    recs = [
+        # 左邻待审：默认字「而」（库 top1），整理本是「山」
+        dict(slot=1, verdict="unsure", cov=0.3, wmax=0.0, candidates=[("而", 0.5), ("山", 0.4)]),
+        dict(slot=2, verdict="unsure", cov=0.5, wmax=0.0, candidates=[("巳", 0.5), ("已", 0.4)]),
+        dict(slot=3, verdict="same", cov=1.0, wmax=0.0, char="水", candidates=[("水", 1.0)]),
+    ]
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+    write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
+        PAGE, BOOK, recs=[dict(slot=1, align_char="山"), dict(slot=2, align_char="巳"),
+                          dict(slot=3, align_char="水")], col=COL))
+    sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    r = {c.slot: c for cc in sa.columns for c in cc.chars}[2]
+    assert not r.admit                                  # 若误用默认字「而」，会命中「而已」放行
+    assert r.evidence["ji_yi_si_clf"]["rule"] is None

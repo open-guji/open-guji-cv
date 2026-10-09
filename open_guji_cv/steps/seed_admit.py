@@ -1733,11 +1733,13 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
 
 
 def _clf_ctx(seq: list, amap: dict, i: int, step: int, width: int = 30) -> str:
-    """第 i 格前（step=-1）/后（step=1）至多 width 字，读序；邻格没放行字就用整理本对位字补，再没有记「□」。"""
+    """第 i 格前（step=-1）/后（step=1）至多 width 字，读序；只用邻格**已放行**的字，否则用整理本对位字，再没有记「□」。
+    与离线 G0 快照的取法一致（`research/char_groups/build.py`：未放行格用整理本字补）。"""
     out: list[str] = []
     j = i + step
     while 0 <= j < len(seq) and len(out) < width:
-        out.append(seq[j].char or (amap.get(seq[j].id) or (None, None))[0] or "□")
+        # 只用已放行的字：待审格的 `char` 是库 top1 默认字（`_pick_char`），可能是乱码，不是读法
+        out.append((seq[j].char if seq[j].admit else None) or (amap.get(seq[j].id) or (None, None))[0] or "□")
         j += step
     return "".join(reversed(out)) if step < 0 else "".join(out)
 
