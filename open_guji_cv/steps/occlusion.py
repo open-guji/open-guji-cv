@@ -59,6 +59,9 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
+from pathlib import Path
+
 import numpy as np
 
 OCC_AREA_MIN = 3
@@ -174,3 +177,116 @@ def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
     return occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
                           min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
                           min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+
+
+# ── 盖章空栏判空（`seal_blank_page`，2026-10-09，道 B 规格 overview#493）─────────
+#
+# 固定印「乾隆御覽之寶」（约 660×680 px，印在卷末页，位置约 (830,330)）：NCC 模板匹配找印框，
+# 再看框内格：格与印框重叠 ≥ `overlap` 的才是候选。候选还要过 seed_admit 里的格级保险
+# （无坐标字 ∧ 未被强通道放行），缺一不可——印压真字的页（vol02 p188、vol03 p110、vol10 p175）
+# 命中了模板，但框内是字，不能整列判空。判空本身在 seed_admit（`_seal_blank_flip`）做。
+
+SEAL_TPL_DIR = Path(__file__).resolve().parents[2] / "config" / "seal_templates"
+#: 模板左上角的搜索先验：x∈[830−150, 830+150]、y∈[330−150, 330+150]（按已有 4 册页图标定）
+SEAL_WIN_XY = (830, 330)
+SEAL_WIN_HALF = 150
+
+
+@lru_cache(maxsize=1)
+def load_seal_templates() -> tuple[np.ndarray, ...]:
+    """`config/seal_templates/*.png` 的灰度模板；目录缺失或读不出就是空元组（判不出印）。"""
+    import cv2
+
+    from ..utils.image_io import imread
+    if not SEAL_TPL_DIR.is_dir():
+        return ()
+    out = []
+    for f in sorted(SEAL_TPL_DIR.glob("*.png")):
+        im = imread(str(f), cv2.IMREAD_GRAYSCALE)
+        if im is not None:
+            out.append(im)
+    return tuple(out)
+
+
+SEAL_COVER_DILATE = 5   # 印章笔画覆盖区：命中模板二值化（<128）膨胀的像素数（道 A 量法，overview#493）
+
+
+def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
+                     overlap: float, ink_out: float | None = None
+                     ) -> dict[tuple[int, int, str], dict]:
+    """找印框，返回框内候选格 {(col, slot, sub): {"seal_score", "overlap", "ink_out"}}。
+
+    印框 = 窗口先验内 NCC 最高（≥ `thr`）的那个模板位置。格与印框重叠面积 ÷ 格面积 ≥ `overlap`
+    才入选。找不到印框、没有模板、窗口超出页图都返回空表。只给候选，不判空。
+
+    `ink_out`（第四条保险，道 A 量法）：格内「模板外墨」＝格框内 <128 且落在覆盖区外的像素 ÷ 格面积；
+    ≥ `ink_out` 的格退出候选（仍走原路径，即待审）。覆盖区 ＝ 命中的那个模板在命中位置的二值化（<128）
+    膨胀 `SEAL_COVER_DILATE` 像素，与 NCC 命中同一坐标系、不另起对位。`ink_out=None` 不做这道过滤。"""
+    import cv2
+    if not templates or gray is None:
+        return {}
+    H, W = gray.shape[:2]
+    best, box, best_tpl = -1.0, None, None
+    x0, y0 = SEAL_WIN_XY[0] - SEAL_WIN_HALF, SEAL_WIN_XY[1] - SEAL_WIN_HALF
+    for tpl in templates:
+        th, tw = tpl.shape[:2]
+        # 模板左上角在 [x0, x0+2·half] × [y0, y0+2·half] 内 → ROI 要能容下整块模板
+        rx0, ry0 = max(0, x0), max(0, y0)
+        rx1 = min(W, x0 + 2 * SEAL_WIN_HALF + tw)
+        ry1 = min(H, y0 + 2 * SEAL_WIN_HALF + th)
+        if rx1 - rx0 < tw or ry1 - ry0 < th:
+            continue
+        res = cv2.matchTemplate(gray[ry0:ry1, rx0:rx1], tpl, cv2.TM_CCOEFF_NORMED)
+        _mn, mx, _mnl, (px, py) = cv2.minMaxLoc(res)
+        if mx > best:
+            best, box, best_tpl = float(mx), (rx0 + px, ry0 + py, tw, th), tpl
+    if box is None or best < thr:
+        return {}
+    bx, by, bw, bh = box
+    # 覆盖区：命中模板在命中位置的笔画（<128）膨胀；只在页图尺寸内
+    cov = np.zeros((H, W), np.uint8)
+    stroke = (best_tpl < 128).astype(np.uint8)
+    kern = np.ones((2 * SEAL_COVER_DILATE + 1, 2 * SEAL_COVER_DILATE + 1), np.uint8)
+    dil = cv2.dilate(stroke, kern)
+    ch, cw = min(bh, H - by), min(bw, W - bx)
+    cov[by:by + ch, bx:bx + cw] = dil[:ch, :cw]
+    out: dict[tuple[int, int, str], dict] = {}
+    for c in cells.columns:
+        for x in c.cells:
+            if not x.quad_page:
+                continue
+            q = np.asarray(x.quad_page, dtype=float)
+            gx0, gy0 = q.min(0)
+            gx1, gy1 = q.max(0)
+            area = (gx1 - gx0) * (gy1 - gy0)
+            if area <= 0:
+                continue
+            ix = max(0.0, min(gx1, bx + bw) - max(gx0, bx))
+            iy = max(0.0, min(gy1, by + bh) - max(gy0, by))
+            ov = ix * iy / area
+            if ov < overlap:
+                continue
+            xi0, yi0 = max(0, int(np.floor(gx0))), max(0, int(np.floor(gy0)))
+            xi1, yi1 = min(W, int(np.ceil(gx1))), min(H, int(np.ceil(gy1)))
+            g_win = gray[yi0:yi1, xi0:xi1] < 128
+            ink = float(np.count_nonzero(g_win & (cov[yi0:yi1, xi0:xi1] == 0))) / area
+            if ink_out is not None and ink >= ink_out:
+                continue
+            out[(c.col, x.slot, x.sub or "")] = {"seal_score": round(best, 4),
+                                                 "overlap": round(ov, 3),
+                                                 "ink_out": round(ink, 4)}
+    return out
+
+
+def page_seal_blank(ctx, page: int, p) -> dict[tuple[int, int, str], dict]:
+    """本页盖章空栏候选格（读不到 Step3 字格或原图就当没有）。`p` 带 `seal_blank_thr`／`seal_blank_overlap`／`seal_blank_ink_out`。"""
+    try:
+        cells = ctx.product("cells", page)
+        gray = ctx.raw_page(page)
+    except Exception:
+        return {}
+    if cells is None:
+        return {}
+    return seal_blank_cells(gray, cells, templates=load_seal_templates(),
+                            thr=p.seal_blank_thr, overlap=p.seal_blank_overlap,
+                            ink_out=p.seal_blank_ink_out)
