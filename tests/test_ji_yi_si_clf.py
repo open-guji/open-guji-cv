@@ -51,7 +51,7 @@ def test_ji_self():
     assert clf.classify("參以", "見")[0] == "己"
     assert clf.classify("克", "復禮")[0] == "己"
     assert clf.classify("據爲", "有")[0] == "己"
-    assert clf.classify("前", "見於")[0] is None            # 「已見」不是「己見」：前字不在 gate 里，不判
+    assert clf.classify("某", "見於")[0] is None            # 「已見」不是「己見」：前字不在 gate 里，不判
 
 
 def test_yi_function_words():
@@ -61,6 +61,33 @@ def test_yi_function_words():
     assert clf.classify("不得", "")[0] == "已"
     assert clf.classify("某書", "經")[0] == "已"
     assert clf.classify("自", "經")[0] == "己"              # 自己 压过 已經
+
+
+def test_yi_verb_time_next():
+    # 已＋動詞/時間词（语料筛出，见 mine_yi_rules.py）
+    assert clf.classify("某書", "久")[0] == "已"
+    assert clf.classify("某書", "定")[0] == "已"
+    assert clf.classify("田", "墾")[0] == "已"
+    assert clf.classify("某", "畢")[0] == "已"
+    assert clf.classify("某", "譏")[0] is None            # 语料里「譏」样本不足，不判
+    assert clf.classify("自", "久")[0] == "己"            # 自己 压过 已久
+
+
+def test_yi_ran():
+    assert clf.classify("某", "然")[0] == "已"
+    assert clf.classify("某", "然其")[0] == "已"
+    assert clf.classify("無諸", "然後非諸人")[0] is None   # 「己|然後」：句读被吞，不判
+    assert clf.classify("利", "然後")[0] == "己"           # 利己 + 然後
+
+
+def test_yi_prev_time_words():
+    assert clf.classify("既", "")[0] == "已"
+    assert clf.classify("前", "有")[0] == "已"
+    assert clf.classify("勝凡他人所", "言者")[0] == "已"   # 所已言
+    assert clf.classify("五品", "上")[0] == "已"
+    assert clf.classify("中書", "未召試")[0] is None       # 「書＋已」已剔除：中書己未
+    assert clf.classify("前", "未")[0] is None             # 后字是地支留给干支规则
+    assert clf.classify("既", "意")[0] == "己"             # 己意 优先
 
 
 def test_er_yi_exception_title():
@@ -79,7 +106,7 @@ def test_research_rules_parity():
     spec = importlib.util.spec_from_file_location("jys_rules_research", p)
     rs = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(rs)
-    chars = "癸子丑未自克以而業得不意見說經矣有爲間月康熙某"
+    chars = "癸子丑未自克以而業得不意見說經矣有爲間月康熙某久然既前所品書後定畢"
     for l, r in itertools.product(chars, repeat=2):
         for pre in ("", "不"):
             assert clf.classify(pre + l, r)[0] == rs.classify(pre + l, r)[0], (pre + l, r)
