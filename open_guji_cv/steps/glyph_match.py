@@ -339,11 +339,12 @@ class GlyphMatchStep(Step):
                 # 整页静默变质而状态显示正常（overview#407）。
                 img = _patch(ctx, r.patch_key, page)
                 is_punct = (getattr(r, "step3_kind", None) == "punct")
-                deadline = (time.monotonic() + p.cell_budget_s) if p.cell_budget_s > 0 else None
+                # 预算关着就不传 deadline 关键字（老接口的匹配器替身不认它）
+                dl = ({"deadline": time.monotonic() + p.cell_budget_s}
+                      if p.cell_budget_s > 0 else {})
                 try:
                     m = matcher.match(normalize_patch(img, is_punct),
-                                      exclude_id=(r.id if p.exclude_self else None),
-                                      deadline=deadline)
+                                      exclude_id=(r.id if p.exclude_self else None), **dl)
                 except MatchTimeout:
                     recs.append(_timeout_rec(r, p.cell_budget_s))
                     n_timeout += 1
@@ -360,8 +361,7 @@ class GlyphMatchStep(Step):
                         continue
                     try:
                         cm = matcher.match(normalize_patch(cimg, is_punct),
-                                           exclude_id=(r.id if p.exclude_self else None),
-                                           deadline=deadline)
+                                           exclude_id=(r.id if p.exclude_self else None), **dl)
                     except MatchTimeout:
                         timed_out = True
                         break
@@ -398,7 +398,7 @@ class GlyphMatchStep(Step):
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         log_reuse(ctx, self, page, n_reused, n_total)
         if n_timeout:
-            log.warning("glyph_match p%s: %d/%d 格超过 %.0fs 预算，记 timeout 转人审",
+            log.warning("glyph_match p%s: %d/%d 格超过 %gs 预算，记 timeout 转人审",
                         page, n_timeout, n_total, p.cell_budget_s)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
