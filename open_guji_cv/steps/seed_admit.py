@@ -162,6 +162,25 @@ class SeedAdmitParams(BaseModel):
     ji_yi_si_ctx_purity: float = 0.98
     ji_yi_si_ctx_min_n: int = 5
     ji_yi_si_ctx_fingerprint: str = ""      # 自动填（仅开关开时）：表文件变了产物过期
+    ji_yi_si_clf: bool = False
+    """己/已/巳 词组分类器放行（overview#443，Z-jys，缺省关；关时下面四个字段都不进 dump，`params_hash` 不变）。
+
+    用户 2026-10-09 四条原则：不靠字形区分、自动通过的必须准、靠前后的词定字、第一候选明显优于第二才放行。
+    开了之后（压过 `ji_yi_si_ctx_rule`／`ji_yi_si_review`），非「干支/时辰」的本族格：
+    - **规则路**（`utils/ji_yi_si_clf.classify`，纯函数，读前后各 30 字，未放行邻格用整理本字补）命中 →
+      放行（通道 `ji_yi_si`，`evidence.ji_yi_si_clf.rule`）；与强通道放行的字冲突、或已是人裁位时不动
+      （冲突送审，`doubts` 记 `ji_yi_si_clf_conflict`）；
+    - 规则不命中 → **送人审**，并把答案表（`ji_yi_si_clf_table`，离线大模型两遍＋语料分类器）的建议字写进
+      `evidence.ji_yi_si_clf.suggest`，让人审时一眼看到；**不放行**，除非另开 `ji_yi_si_clf_llm`；
+    - 退役对本族的放行：默认→已、整理本路、`split_ref` 放巳（规则不命中的 `split_ref` 放行格改送审）。
+    人裁位不动。累计证据：强真值 0/129、新留出 0/36（见 overview#443）。"""
+    ji_yi_si_clf_llm: bool = False
+    """答案表路也放行（缺省关）：两遍大模型一致 ∧ 语料分类器同字 ∧ 分类器 top−second ≥ `ji_yi_si_clf_margin`。
+    历史上这一路有语义错（「是己出自入者」被判已，差值 0.975 也没挡住），放开条件见 overview#443：
+    独立再判一遍仍一致，且 ≥100 个新抽样格 0 错。"""
+    ji_yi_si_clf_margin: float = 0.2
+    ji_yi_si_clf_table: str = ""            # 答案表 json 路径（可空：没有表就只有规则路）
+    ji_yi_si_clf_fingerprint: str = ""      # 自动填（开关开且有表时）：表内容变了产物过期
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -476,6 +495,13 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        if isinstance(d, dict) and not self.ji_yi_si_clf:
+            for k in ("ji_yi_si_clf", "ji_yi_si_clf_llm", "ji_yi_si_clf_margin",
+                      "ji_yi_si_clf_table", "ji_yi_si_clf_fingerprint"):
+                d.pop(k, None)
+        if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
+            d.pop("ji_yi_si_clf_llm", None)
+            d.pop("ji_yi_si_clf_margin", None)
         if isinstance(d, dict) and not self.rare_agree:
             d.pop("rare_agree", None)
         if isinstance(d, dict) and not self.shadow_veto:
@@ -578,6 +604,9 @@ class SeedAdmitParams(BaseModel):
         if self.ji_yi_si_ctx_rule and not self.ji_yi_si_ctx_fingerprint:
             from ..utils.near_form_ctx import CONFIG as _CTX_CONFIG
             object.__setattr__(self, "ji_yi_si_ctx_fingerprint", corpus_fingerprint([str(_CTX_CONFIG)]))
+        if self.ji_yi_si_clf and self.ji_yi_si_clf_table and not self.ji_yi_si_clf_fingerprint:
+            object.__setattr__(self, "ji_yi_si_clf_fingerprint",
+                               corpus_fingerprint([self.ji_yi_si_clf_table]))
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -587,7 +616,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.13", unit="cell",   # 1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.14", unit="cell",   # 1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -602,6 +631,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.clustering.note_lexicon",
                    "open_guji_cv.utils.jiazhu_order",
                    "open_guji_cv.utils.near_form_ctx",
+                   "open_guji_cv.utils.ji_yi_si_clf",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -1184,7 +1214,8 @@ class SeedAdmitStep(Step):
                                  if r.id in patch_missing else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review,
-                                              ctx_rule=(p.ji_yi_si_ctx_purity, p.ji_yi_si_ctx_min_n) if p.ji_yi_si_ctx_rule else None)
+                                              ctx_rule=(p.ji_yi_si_ctx_purity, p.ji_yi_si_ctx_min_n) if p.ji_yi_si_ctx_rule else None,
+                                              clf=p if p.ji_yi_si_clf else None)
         n_auto += d_auto
         n_review += d_review
         if p.rare_ref:
@@ -1590,7 +1621,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
 
 
 def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
-                      review_gate: bool = False, ctx_rule: tuple[float, int] | None = None) -> tuple[int, int]:
+                      review_gate: bool = False, ctx_rule: tuple[float, int] | None = None,
+                      clf=None) -> tuple[int, int]:
     """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
 
     按本页读序取前后字：
@@ -1654,6 +1686,11 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
             r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
             continue
+        if clf is not None:
+            da, dr = _ji_yi_si_clf_cell(r, seq, i, amap, clf)
+            d_auto += da
+            d_review += dr
+            continue
         if ctx_rule is not None:
             # 上下文表规则（overview#428）：表定得下就放行，定不下就送审；不看整理本、不走默认「已」
             from ..utils.near_form_ctx import decide as _ctx_decide
@@ -1693,6 +1730,53 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
                 d_auto += 1
                 d_review -= 1
     return d_auto, d_review
+
+
+def _clf_ctx(seq: list, amap: dict, i: int, step: int, width: int = 30) -> str:
+    """第 i 格前（step=-1）/后（step=1）至多 width 字，读序；邻格没放行字就用整理本对位字补，再没有记「□」。"""
+    out: list[str] = []
+    j = i + step
+    while 0 <= j < len(seq) and len(out) < width:
+        out.append(seq[j].char or (amap.get(seq[j].id) or (None, None))[0] or "□")
+        j += step
+    return "".join(reversed(out)) if step < 0 else "".join(out)
+
+
+def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
+    """`ji_yi_si_clf` 开着时一格的处理（规则放行／答案表只写建议／退役 split_ref 放行）→ (新增放行, 新增人审)。
+
+    见 `SeedAdmitParams.ji_yi_si_clf` 与 `utils/ji_yi_si_clf.py`。人裁位调用方已跳过。"""
+    from ..utils.ji_yi_si_clf import FAMILY, STRONG_CHANNELS, classify, suggest
+    left, right = _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1)
+    rule, rwhy = classify(left, right)
+    ev: dict = {"rule": rule, "why": rwhy}
+    sug = suggest(p.ji_yi_si_clf_table, r.id, left, right) if p.ji_yi_si_clf_table else None
+    if sug:
+        ev["suggest"] = sug
+    by = "rule" if rule else None
+    ch = rule
+    if (not ch and p.ji_yi_si_clf_llm and sug and sug.get("char")
+            and (sug.get("lr_margin") or 0) >= p.ji_yi_si_clf_margin):
+        ch, by = sug["char"], "llm+lr"
+    ev["via"] = by
+    r.evidence = {**(r.evidence or {}), "ji_yi_si_clf": ev, "ji_yi_si": {"char": ch, "why": rwhy}}
+    strong = bool(r.admit and r.channel in STRONG_CHANNELS and r.char in FAMILY)
+    if ch:
+        if strong and r.char == ch:
+            return 0, 0
+        if strong:        # 强通道放行的字与规则冲突：两边都不信，送审
+            r.char, r.admit, r.channel, r.provenance = None, False, None, ""
+            r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_conflict"]))
+            return -1, 1
+        da, dr = (0, 0) if r.admit else (1, -1)
+        r.char, r.admit, r.channel, r.provenance = ch, True, "ji_yi_si", "context"
+        r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
+        return da, dr
+    if r.admit and r.channel == "split_ref":      # 退役：整理本路放行
+        r.char, r.admit, r.channel, r.provenance = None, False, None, ""
+        r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_review"]))
+        return -1, 1
+    return 0, 0
 
 
 def _ctx_known(seq: list, i: int, step: int, width: int = 2) -> str:
