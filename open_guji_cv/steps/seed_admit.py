@@ -1158,6 +1158,12 @@ class SeedAdmitStep(Step):
                 if ok and apx_ev and p.approx_gate:
                     ok, channel, prov = False, None, ""
                     doubts.append("approx_exemplar")
+                # 库匹配超时（Step5-a `cell_budget_s`，overview#493）：没有任何库证据，哪条通道都不放行
+                # （含 match_solo／OCR／上下文／CNN）。放在所有通道之后；后面各遍用 _LANE_HARD／
+                # _hard_blocked 认这个码，也不会补放。没开预算就没有 timeout 格，缺省行为不变。
+                if r.guard == "timeout":
+                    ok, channel, prov = False, None, ""
+                    doubts.append("glyph_timeout")
                 if ok:
                     n_auto += 1
                 else:
@@ -1251,7 +1257,7 @@ def _after_number(prev: AdmitRec, amap: dict, dmap: dict, mmap: dict) -> bool:
 
 def _hard_blocked(doubts, guard) -> bool:
     """规则 A／影子升级共用的硬护栏：这些格任何新增通道都不碰。"""
-    return (guard in ("never_match", "conflict")
+    return (guard in ("never_match", "conflict", "timeout")
             or any(d.startswith("护栏:") or d in _RARE_REF_HARD for d in doubts))
 
 
@@ -1411,7 +1417,7 @@ _LANE_CLS_CODES = {
 }
 _LANE_R1_CLASSES = frozenset({"replace_align", "ref_conflict", "near_form"})
 #: 三通道都不碰的疑问：字块本身不成立（空白、近似例）或形未定。
-_LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar"})
+_LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar", "glyph_timeout"})
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
 #: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
 _LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
@@ -1631,7 +1637,8 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
            if not (r.doubts and "excluded" in r.doubts)]
     d_auto = d_review = 0
     for i, r in enumerate(seq):
-        if r.channel == "human" or r.char not in _JYS or "occluded" in (r.doubts or []):
+        if (r.channel == "human" or r.char not in _JYS or "occluded" in (r.doubts or [])
+                or "glyph_timeout" in (r.doubts or [])):
             continue
         prev = seq[i - 1].char if i else None
         nxt = seq[i + 1].char if i + 1 < len(seq) else None

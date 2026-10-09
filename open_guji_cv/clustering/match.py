@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import dataclasses
 import os
+import time
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -118,6 +119,10 @@ def _crop_dice(a: np.ndarray, b: np.ndarray) -> float:
         return 0.0
     inter = int(np.logical_and(a, b).sum())
     return 2.0 * inter / (na + nb)
+
+
+class MatchTimeout(Exception):
+    """单格匹配超过时间预算（`match(deadline=)`）。"""
 
 
 @dataclass
@@ -365,19 +370,24 @@ class GlyphMatcher:
 
     def match(self, norm: np.ndarray,
               feat: np.ndarray | None = None,
-              exclude_id: str | None = None) -> MatchResult:
-        """见 `_match`；开了近形决胜（`near_shape`）时在其结果上再走一道 `_apply_near_shape`。"""
+              exclude_id: str | None = None,
+              deadline: float | None = None) -> MatchResult:
+        """见 `_match`；开了近形决胜（`near_shape`）时在其结果上再走一道 `_apply_near_shape`。
+
+        ``deadline``：`time.monotonic()` 的绝对时刻，None = 不设限。逐个库刻例验证之间检查，
+        到点抛 `MatchTimeout`（由 Step5-a 的每格预算接住，记 timeout 转人审）。"""
         if getattr(self, "near_shape", None) is None or not self._ids:
-            return self._match(norm, feat, exclude_id)
+            return self._match(norm, feat, exclude_id, deadline)
         if feat is None:
             feat = self._feature.extract(norm[None, ...])[0]
-        r = self._match(norm, feat, exclude_id)
+        r = self._match(norm, feat, exclude_id, deadline)
         excl = self._same_cell_rows(exclude_id) if exclude_id is not None else set()
         return self._apply_near_shape(r, norm, feat, excl)
 
     def _match(self, norm: np.ndarray,
                feat: np.ndarray | None = None,
-               exclude_id: str | None = None) -> MatchResult:
+               exclude_id: str | None = None,
+               deadline: float | None = None) -> MatchResult:
         """``exclude_id`` 把该实例自己从库里摘掉再比（2026-08-25 加）。
 
         字位一旦进过库，重跑 seed / 复裁时它自己就在 matcher 里，于是
@@ -422,6 +432,8 @@ class GlyphMatcher:
         n_verified = 0
         for j in top:
             j = int(j)
+            if deadline is not None and time.monotonic() > deadline:
+                raise MatchTimeout(f"已验证 {n_verified}/{len(top)} 个刻例")
             v = self._verify(norm, self._patches[j],
                              cov_high=self.cov_high,
                              miss_wmax=self.miss_wmax)
