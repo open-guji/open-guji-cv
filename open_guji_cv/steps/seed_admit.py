@@ -256,6 +256,15 @@ class SeedAdmitParams(BaseModel):
     `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
     起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
     这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+    rare_cp_ctx_review: bool = False
+    """罕用码位 × `context` 通道落审（2026-10-10，overview#437 异体组方案 A，缺省关）：放行字不在
+    U+4E00–9FFF（扩展区、部首、兼容区，同 `_rare_cp`／`context_garble_guard` 口径）、且放行通道恰为
+    `context`，就退回待审，doubt `rare_cp_context`，`evidence.rare_cp_context` 记放行字与码位。
+    **只降级，不改字、不放行**；人裁、排除、别的通道（match_replace／match_solo／coord_fallback…）不碰。
+    起因：vol04／vol05 有标签放行格里，罕用码位放行错率 17%／5.6%（常用区 4.5%／1.3%），
+    错的 11 格里 `context` 占 8；罕用码位上 match_replace／match_solo／coord_fallback 的有标签格全对。
+    放在 `_review_lanes_pass` 之后：三条新放行通道（witness3／coord／seal）仍可重新放行这些格。
+    关着时不进参数 dump，产物逐字节不变。"""
     solo_ctx_veto: float = 0.0
     """match_solo 系的上下文否决（2026-10-09，overview#450）：`context_decide.ranked` 第一名与
     放行字**语义不同**（异体码点差不算），且第一名概率 ≥ 此值，就不单独放行，记 doubt
@@ -537,6 +546,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_fingerprint", None)
         if isinstance(d, dict) and not self.solo_ctx_veto:
             d.pop("solo_ctx_veto", None)
+        if isinstance(d, dict) and not self.rare_cp_ctx_review:
+            d.pop("rare_cp_ctx_review", None)
         if isinstance(d, dict) and not self.seal_blank_page:
             for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
@@ -1261,6 +1272,10 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.rare_cp_ctx_review:
+            d_rcp = _rare_cp_ctx_pass(out, mmap)
+            n_auto -= d_rcp
+            n_review += d_rcp
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1270,6 +1285,23 @@ class SeedAdmitStep(Step):
                     f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
+    """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。"""
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if (not rec.admit or rec.channel != "context" or rec.provenance == "human"
+                    or not _rare_cp(rec.char)):
+                continue
+            m = mmap.get(rec.id)
+            rec.admit, rec.channel, rec.provenance = False, None, ""
+            rec.doubts = (_doubts(m, None) if m is not None else []) + list(rec.doubts) + ["rare_cp_context"]
+            rec.evidence = {**(rec.evidence or {}),
+                            "rare_cp_context": {"char": rec.char, "cp": f"U+{ord(rec.char[0]):04X}"}}
+            n += 1
+    return n
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
