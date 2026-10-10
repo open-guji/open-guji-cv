@@ -758,6 +758,7 @@ def cmd_batch(args) -> None:
 
 def cmd_label_batch(args) -> None:
     """L3 补标签两批：make（出批次）| harvest（收割进 dataset）| migrate-legacy（旧 overview 列端卡入新分片）。"""
+    from . import steps as _s  # noqa: F401 —— 兜底：确保 Step 先注册，否则 store.read 的 kind_of() 查不到产物种类
     from .review import label_batches as LB
     try:
         if args.action == "make":
