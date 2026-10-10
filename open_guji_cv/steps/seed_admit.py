@@ -181,6 +181,19 @@ class SeedAdmitParams(BaseModel):
     ji_yi_si_clf_margin: float = 0.2
     ji_yi_si_clf_table: str = ""            # 答案表 json 路径（可空：没有表就只有规则路）
     ji_yi_si_clf_fingerprint: str = ""      # 自动填（开关开且有表时）：表内容变了产物过期
+    rr_clf: bool = False
+    """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
+
+    用户 2026-10-06：「入」撇捺连着且上头有一横，「八」上面也有一横但与左撇不连，「人」连写、没有横——字形可分。
+    `utils/rr_clf.py`（numpy 随机森林，4 类＝人入八＋其他，离线训练，模型 `models/rr_clf/forest.npz`）读本格字块：
+    已放行（非人裁）、放行字属人入八，而分类器给字（p ≥ `rr_clf_p`、质量闸过、非「其他」）**且不同于放行字** →
+    **退回待审**（`doubts` 记 `rr_clf_disagree`，`evidence.rr_clf` 存四类概率）。**只降级：不改字、不放行**。
+    读不到字块时按 `patch_missing` 处理（`skip`：该格不动并记 `evidence.patch_missing`）。
+    数字（Z-rr，用户人裁）：分歧格里放行字被推翻 1/9，其余是虚惊；p≥0.5 全量分歧约放行格的 0.5%。
+    「待审→放出」不在这里（要整理看图对全部候选 0 错才开，另开关）。"""
+    rr_clf_p: float = 0.5
+    rr_clf_model: str = ""                  # 空＝仓内 models/rr_clf/forest.npz
+    rr_clf_fingerprint: str = ""            # 自动填（开关开时）：模型文件变了产物过期
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -511,6 +524,9 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        if isinstance(d, dict) and not self.rr_clf:
+            for k in ("rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.ji_yi_si_clf:
             for k in ("ji_yi_si_clf", "ji_yi_si_clf_llm", "ji_yi_si_clf_margin",
                       "ji_yi_si_clf_table", "ji_yi_si_clf_fingerprint"):
@@ -626,6 +642,9 @@ class SeedAdmitParams(BaseModel):
         if self.ji_yi_si_clf and self.ji_yi_si_clf_table and not self.ji_yi_si_clf_fingerprint:
             object.__setattr__(self, "ji_yi_si_clf_fingerprint",
                                corpus_fingerprint([self.ji_yi_si_clf_table]))
+        if self.rr_clf and not self.rr_clf_fingerprint:
+            from ..utils.rr_clf import model_fingerprint as _rr_fp
+            object.__setattr__(self, "rr_clf_fingerprint", _rr_fp(self.rr_clf_model or None) or "missing")
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -635,7 +654,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.14", unit="cell",   # 1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.15", unit="cell",   # 1.15：入人八字形分类器「分歧→送审」rr_clf（缺省关，overview#437）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -651,6 +670,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.utils.jiazhu_order",
                    "open_guji_cv.utils.near_form_ctx",
                    "open_guji_cv.utils.ji_yi_si_clf",
+                   "open_guji_cv.utils.rr_clf",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -665,7 +685,7 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ji_yi_si_clf_table", "rr_clf_model"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -1261,6 +1281,10 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.rr_clf:
+            d_rr2 = _rr_clf_pass(ctx, page, p, out, patch_missing)
+            n_auto -= d_rr2
+            n_review += d_rr2
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1423,6 +1447,33 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
             n += 1
+    return n
+
+
+def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, patch_missing: dict) -> int:
+    """入人八字形分类器的「分歧→送审」（只降级，放在所有通道与各遍之后）。→ 降级格数。见 `SeedAdmitParams.rr_clf`。"""
+    from ..utils import rr_clf
+    model = p.rr_clf_model or None
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if (not rec.admit or rec.provenance == "human" or rec.channel == "human"
+                    or not rec.char or rec.char not in rr_clf.CLASSES):
+                continue
+            try:
+                patch = _page_patch(ctx, page, col.col, rec.slot, rec.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                patch_missing.setdefault(rec.id, []).append("rr_clf")
+                rec.evidence = {**(rec.evidence or {}), "patch_missing": list(patch_missing[rec.id])}
+                continue
+            c = rr_clf.classify(patch, model, p.rr_clf_p)
+            rec.evidence = {**(rec.evidence or {}), "rr_clf": c}
+            if c["pick"] and c["pick"] != rec.char:
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["rr_clf_disagree"]))
+                n += 1
     return n
 
 
