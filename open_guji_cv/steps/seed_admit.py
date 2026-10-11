@@ -181,6 +181,13 @@ class SeedAdmitParams(BaseModel):
     ji_yi_si_clf_margin: float = 0.2
     ji_yi_si_clf_table: str = ""            # 答案表 json 路径（可空：没有表就只有规则路）
     ji_yi_si_clf_fingerprint: str = ""      # 自动填（开关开且有表时）：表内容变了产物过期
+    ry_group: bool = False
+    """日／曰 v2 答案表（overview#441，缺省关）：待审的日曰核心格，若离线 muse∧Gemini 两遍同字（haiku 不否决）
+    且与整理本对位字相同，则抬为放行（通道 `ry_group`）；只抬待审、不改字、不降已放行格。不同字 → 仍待审，
+    `doubts` 记 `ry_disagree`；表缺格／上下文哈希不符／弃权 → 不动。证据写 `evidence.ry_group`。
+    缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
+    ry_group_cache: str = ""                # 答案表 json 路径（utils/ry_group.py 格式）
+    ry_group_fingerprint: str = ""          # 自动填（开关开且有表时）
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -515,6 +522,9 @@ class SeedAdmitParams(BaseModel):
             for k in ("ji_yi_si_clf", "ji_yi_si_clf_llm", "ji_yi_si_clf_margin",
                       "ji_yi_si_clf_table", "ji_yi_si_clf_fingerprint"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.ry_group:
+            for k in ("ry_group", "ry_group_cache", "ry_group_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
@@ -626,6 +636,8 @@ class SeedAdmitParams(BaseModel):
         if self.ji_yi_si_clf and self.ji_yi_si_clf_table and not self.ji_yi_si_clf_fingerprint:
             object.__setattr__(self, "ji_yi_si_clf_fingerprint",
                                corpus_fingerprint([self.ji_yi_si_clf_table]))
+        if self.ry_group and self.ry_group_cache and not self.ry_group_fingerprint:
+            object.__setattr__(self, "ry_group_fingerprint", corpus_fingerprint([self.ry_group_cache]))
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -635,7 +647,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.14", unit="cell",   # 1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.15", unit="cell",   # 1.15：日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -651,6 +663,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.utils.jiazhu_order",
                    "open_guji_cv.utils.near_form_ctx",
                    "open_guji_cv.utils.ji_yi_si_clf",
+                   "open_guji_cv.utils.ry_group",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -665,7 +678,7 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -1241,6 +1254,10 @@ class SeedAdmitStep(Step):
             d_rr = _rare_ref_pass(out, mmap, amap, rtop)
             n_auto += d_rr
             n_review -= d_rr
+        if p.ry_group and p.ry_group_cache:
+            d_ry = _ry_group_pass(out, amap, p.ry_group_cache)
+            n_auto += d_ry
+            n_review -= d_ry
         if p.shadow_veto:
             d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
             n_auto -= d_veto
@@ -1841,6 +1858,33 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
         r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_review"]))
         return -1, 1
     return 0, 0
+
+
+def _ry_group_pass(out: list, amap: dict, cache: str) -> int:
+    """日／曰 v2 答案表只读证据（overview#441）→ 新增放行数。只抬待审的日曰格，不改字、不降放行格。"""
+    from ..utils.ry_group import FAMILY, decide
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in c.chars
+           if not (r.doubts and "excluded" in r.doubts)]
+    n = 0
+    for i, r in enumerate(seq):
+        ref = (amap.get(r.id) or (None, None))[0]
+        if (r.admit or r.channel == "human" or ref not in FAMILY
+                or any(d in ("occluded", "glyph_timeout") or "seal" in d for d in (r.doubts or []))):
+            continue
+        res = decide(cache, r.id, _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1))
+        if not res:
+            continue
+        r.evidence = {**(r.evidence or {}), "ry_group": res}
+        ch = res.get("char")
+        if not ch:
+            continue
+        if ch != ref:
+            r.doubts = list(dict.fromkeys((r.doubts or []) + ["ry_disagree"]))
+            continue
+        r.char, r.admit, r.channel, r.provenance = ch, True, "ry_group", "context"
+        r.doubts = [d for d in (r.doubts or []) if d != "always_review"]
+        n += 1
+    return n
 
 
 def _ctx_known(seq: list, i: int, step: int, width: int = 2) -> str:
