@@ -65,7 +65,7 @@ def test_branch_ganzhi_post_zhi_date_context():       # 干支:后地支(日期�
 
 def test_branch_self_ji_prev():                       # 搭配:自己类 → 己
     assert rules.classify("克", "復禮") == ("己", "搭配:自己类")
-    assert rules.classify("知", "人") == ("己", "搭配:自己类")
+    assert rules.classify("自", "人") == ("己", "搭配:自己类")   # 10-11 收窄后「知」已不在 JI_PREV（Evan）
     assert rules.classify("文", "人") == (None, "无规则")
     assert rules.classify("而", "之") == ("已", "搭配:而已")      # 而 ∉ JI_PREV，不走自己类
 
