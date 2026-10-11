@@ -12,8 +12,8 @@
   snap `snap/96mid1ogzk/vol02/20261009T2340`,cv `2356bec`),不是真值。
 
 ## 标签口径
-`label` = dataset 人判:none / trim / double / glued。**本 fixture 的标签含 10-11 c 档 11 条 trim→none 的复核**
-(dataset 分支 `claude/C5-colend-relabel` `4200eb4`,待抽查合 main;分布 trim 142/double 57/glued 18/none 14,共 231 端,不含另 9 条无引擎字段的覆盖条)。
+`label` = dataset 人判:none / trim / double / glued。**本 fixture 的标签含 10-11 c 档 10 条 trim→none 的复核**
+(dataset main `d7f732f`;Mila 抽查后 `32:1:bot` 保留 trim,端口有断续下框碎片;分布 trim 143/double 57/glued 18/none 13,共 231 端,不含另 9 条无引擎字段的覆盖条)。
 评测口径(Mila 10-11):trim 与 double **互通**(任一都算对),"人眼难分"不当缺陷;glued ≈「框与首字零间隙」,规则按内框线补削(Xi)是对的。
 
 ## 怎么用
