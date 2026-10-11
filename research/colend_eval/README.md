@@ -167,3 +167,8 @@ n=210;规则对这些端的结论分布:
 
 - **glued**(18): vol02:105:4:bot[bi→double], vol02:106:5:bot[b→glued], vol02:109:2:bot[d3→double], vol02:113:8:bot[a3i→double], vol02:114:6:bot[ei→double], vol02:114:7:bot[bi→double], vol02:123:1:bot[b→glued], vol02:123:3:bot[d3→double], vol02:131:2:bot[ci→double], vol02:133:1:bot[ci→double], vol02:134:1:bot[bi→double], vol02:134:2:bot[ci→double], vol02:136:4:top[e→trim], vol02:137:2:bot[bi→double], vol02:137:3:bot[bi→double], vol02:137:5:bot[bi→double], vol02:138:3:bot[e→trim], vol02:138:8:bot[ci→double]
 - **none**(3): vol02:3:2:top[e→trim], vol02:3:7:top[e→trim], vol02:15:7:top[a→trim]
+## 叠图覆核结果(10-11 晚)
+- `overlays/c_miss_sheet*.png`(c 档 12 端,人判 trim 11):多数端图里**看不到框墨**(只有侧线),规则"不削"看上去是对的 → 这 11 条"人判 trim"更像是**标签口径/裁法问题**(版框在文字带外?),列入标签复核。
+- `overlays/trim_overcut_sheet*.png`(28 条人判 trim、规则判多层):图上确有"粗条+细线"两道,规则的削线落在**第二道的下沿**、字未被削 → 规则对**削位**判对了,"trim vs double"在这批上只是**类别口径**问题(用户说的边界模糊),不是削错。
+- `cut_probe.py`(探针,K=3 行 T=0.10):削线两侧都有连续墨的端 11/231;叠图确认**像是削进字的 3 条**:`47:2:bot`(a3,cut=76,人判 double)、`70:8:bot`(d2,cut=82,人判 trim)、`106:5:bot`(b,cut=66,人判 glued);其余(20:9、21:3、21:6、108:7、109:2、114:6、136:4)削线在框下沿、字笔画贴线,3:2:top 是印章/污渍页。图见 `overlays/cut_cross_sheet*.png`。
+- 结论:现行规则**削位基本是对的**(231 端里可见伤字 3 条),分类标签(trim/double)与规则层数的出入大多是口径;真正的问题是 ①多层累计削得过深的少数(a3/d2 76–82 行)②c 档与标签的分歧 ③阈值膨胀(33 个阈值)带来的可维护性。
