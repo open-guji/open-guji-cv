@@ -27,6 +27,8 @@ workspace/                 一个最小的工作区（布局同 core/workspace.p
   raw/keben/{1,2,3}.png    **真扫描页**，从 data/book1 复制（四庫全書簡明目錄，
                            黑白、已剪切半页、双层版框有界行、八列二十一字）
   corpus/reference.txt     17 KB 小语料，从 corpus/ 复制
+colend/                    列端(Step2 上/下端版框)回归 fixture:vol02 B 批 231 端的整列 1-bit 图 + 冻结档位 + 人判
+                           (≈2.5 MB,2026-10-11,Esme;见 colend/README.md)。`test_colend_fixture.py` 钉行为
 yolo_tool/001_project_p0.json
                            yolo_tool 真实工程文件（open-guji/yolo_tool `15c5f88`
                            pdfs_demo/diff/001_project.json）的第 0 页，51 KB；

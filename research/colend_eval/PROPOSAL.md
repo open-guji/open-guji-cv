@@ -43,3 +43,8 @@
 1. 请用户复看 c 档 11 条 + 5 张 trim↔double 叠图(约 10 分钟)。
 2. 是否先开卡做 #6(回归 fixture)。
 3. #2 的预警走"评测外挂/缺省关"还是直接进 triage(影响过期范围)。
+
+## 七、Mila 10-11 16:20 的决定(已落实)
+1. c 档 11 条标签改 none(dataset 分支 `claude/C5-colend-relabel` `4200eb4`,待 Elena/Mila 抽 3 条复看后合 main)。**评测口径:trim 与 double 互通(任一都算对),"人眼难分"不当缺陷**;81:1:bot 入观察。
+2. 回归 fixture 已做:`tests/fixtures/colend/` + `tests/test_colend_fixture.py`(行为钉子)+ `research/colend_eval/{build_fixture,eval_fixture}.py`。
+3. `deep_cut` 预警只放评测脚本(`eval_fixture.py`:多层下端累计 cut>内框线距+25px,命中 10 端、含 2 个确认伤字端),**不动 `column_projection.py`/`column_triage.py`**。方案 3/5 不做。
