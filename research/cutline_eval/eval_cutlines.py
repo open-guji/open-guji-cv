@@ -64,7 +64,13 @@ def main():
                 H = wc.warped_size[1] if wc is not None else None
                 if e.get("col_h") and H and abs(H - e["col_h"]) > 2: rec["cls"] = "coord_stale"; rec["H_now"] = H; rec["col_h"] = e["col_h"]
                 else:
-                    y_eng = float(cc.boundaries[slot]); rec["y_eng"] = y_eng; dy = float(e["y"]) - y_eng; rec["dy"] = round(dy, 1); rec["cls"] = bin_dy(dy)
+                    y_idx = float(cc.boundaries[slot]); rec["y_eng_idx"] = y_idx
+                    # 按槽下标取线在含 raised/夹注的列里可能错一格:另取"离金标出卡时引擎切点 y_old 最近的现役边界"核对
+                    ref = float(e["y_old"]) if e.get("y_old") is not None else float(e["y"])
+                    y_near = min((float(b) for b in cc.boundaries), key=lambda b: abs(b - ref)); rec["y_eng_near"] = y_near
+                    y_eng = y_near if abs(y_near - ref) <= T_OK and abs(y_idx - ref) > 25 else y_idx
+                    rec["idx_mismatch"] = bool(y_eng != y_idx); rec["y_eng"] = y_eng
+                    dy = float(e["y"]) - y_eng; rec["dy"] = round(dy, 1); rec["cls"] = bin_dy(dy)
         out.append(rec)
     c = collections.Counter(r["cls"] for r in out); cw_ = collections.defaultdict(float)
     for r in out: cw_[r["cls"]] += r["w"]
