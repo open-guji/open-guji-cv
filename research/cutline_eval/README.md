@@ -37,3 +37,10 @@ python3 -I research/cutline_eval/valley_probe.py old_vol02_report.json old_vol02
 | 2 | **矮格预警(只在评测/gate 外挂)**:字格高<0.6×period 且无 flag 的 → 送审/记数。vol02 仅 3 格,含 A 批唯一真错。 | vol02 圈出 3 格(1 个已确认伤字);成本≈0 | 若进 `row_segment`/gate 的 triage 会让 row_segment 起产物过期;先放评测脚本,等下个有改动的窗口并入 |
 | 3 | **Step3 回归 fixture**:把 A 批 196 条+旧金标可比条冻结(列图+现役切点+金标),仿 `tests/fixtures/colend`,之后改 `row_segment`/U-Net judge 阈值有尺子。 | 之后才敢改 Step3 | 零引擎风险(只加 fixture/测试) |
 | 4 | 现役 U-Net judge(`cut_select.py`)在"cand 多候选、无谷"线上与人眼差 3–25px:**需要更多"该切哪"的金标**(含"人眼难分"标记)才能谈学习排序;A 批的 `ok` 太多(分层是按引擎难度抽的,仍 97% ok),说明难例在 A 批没抽够。建议下一批只抽 `cand`+无零墨走廊的线。 | 才有可批量改的类 | 只花人审(约 15 分钟/批) |
+
+## 矮格预警 + 送审清单(Mila 10-11 17:05,放评测外挂,不碰 row_segment/triage)
+`runt_cells.py <row_segment 目录>…`:字格(kind=char)高 <0.6×period、无 flag、非 raised/sub。只读产物。
+- **vol02**(188 页/29,916 格):**3 格,叠图 `overlays/runt_cells_vol02.png` 目视全是切进字中间/多切一格**:`15:9 slot20`(高 37px,线从「元」下半穿过)、`113:1 slot4`(41px,A 批已确认伤字,「老|莊」)、`188:4 slot20`(39px,线从「足」下半穿过)。→ 送审清单。
+- **vol04**(221 页/34,152 格):9 格——`127:7`(slot2/11/12/13/17/20,高 6–9px,period 89)是整列黑边的非文字列(书口/订口)被当文字列切成碎格,不是字格切错;`14:5 slot21` 空列末格(ink 0.02)、`196:2/196:8 slot21` 66px(末格)。
+- **vol05**(188 页/28,212 格):4 格,全是 slot21 末格 49–67px;**vol07**(135 页/21,048 格):1 格(87:8 slot21,65px)。
+- **末格(slot21)矮 0.43–0.6×period 共 7 例(vol04×3、vol05×4、vol07×1)**,有墨(ink 0.07–0.27)、列里字格数 21–22;叠图 `overlays/runt_tail_slot21.png` 4 例看,削线似落在末字下部笔画附近,**需逐格人眼确认**才能判是否切错——vol02 无此类。**只记观察,不下结论。**
