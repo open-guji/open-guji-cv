@@ -1,0 +1,47 @@
+[
+ {
+  "book": "vol04",
+  "page": 216,
+  "col": 6,
+  "x_left_origin_range": [
+   882,
+   1248
+  ],
+  "split_x_left_origin": 1064,
+  "split_x_right_origin": 1447,
+  "mid_offset": -1,
+  "peak": 0.7,
+  "how": "几何中点≈界线峰(偏 -1px)",
+  "verified_by_eye": true
+ },
+ {
+  "book": "vol04",
+  "page": 218,
+  "col": 2,
+  "x_left_origin_range": [
+   1598,
+   1963
+  ],
+  "split_x_left_origin": 1780,
+  "split_x_right_origin": 803,
+  "mid_offset": 0,
+  "peak": 0.57,
+  "how": "几何中点(肉眼核:与真竖线重合);峰值搜索误取了字的竖笔",
+  "verified_by_eye": true
+ },
+ {
+  "book": "vol09",
+  "page": 132,
+  "col": 7,
+  "x_left_origin_range": [
+   742,
+   1105
+  ],
+  "split_x_left_origin": 906,
+  "split_x_right_origin": 1431,
+  "mid_offset": -17,
+  "peak": 0.17,
+  "how": "界线峰(偏离中点 -17px=9%);不能取中点",
+  "verified_by_eye": true
+ }
+]
