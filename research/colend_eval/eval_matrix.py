@@ -88,7 +88,7 @@ def main(p, outdir="."):
     P("类型 | id | 端 | 档位 | 削行数 | triage end_class | 人判 | 规则结论"); P("---|---|---|---|---|---|---|---")
     def kind(r):
         a, b = r["label"], r["pred"]
-        if a == "glued" and b in ("trim", "double"): return "★漏判粘字(会伤字)"
+        if a == "glued" and b in ("trim", "double"): return "漏判粘字(叠图后:削线在框下沿,未见伤字)"
         if a in ("trim", "double") and b in ("glued", "none"): return "漏削(残框)"
         if a == "double" and b == "trim": return "漏内框(少削一道)"
         if a == "trim" and b == "double": return "多削内框(trim↔double 边界,人眼也可能难分)"
