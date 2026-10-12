@@ -201,6 +201,15 @@ class SeedAdmitParams(BaseModel):
     rr_clf_p: float = 0.5
     rr_clf_model: str = ""                  # 空＝仓内 models/rr_clf/forest.npz
     rr_clf_fingerprint: str = ""            # 自动填（开关开时）：模型文件变了产物过期
+    runt_last_cell_review: bool = False
+    """末格矮转人审（overview#554，缺省关；关时 `runt_last_cell_review`／`runt_ratio` 不进 dump，`params_hash` 不变）。
+
+    列实际只有 20 字却被硬塞进 21 格时，DP 在末尾造出一个「矮格」：末字被劈成 slot20＋slot21，或某字被腰斩。
+    条件：Step3 `cells` 里该列 `slot == n_body_slots`、`kind=char`、非 raised／sub、`flags` 为空、
+    高 < `runt_ratio`×period，且本格已放行（非人裁）→ **退回待审**（`doubts` 记 `runt_last_cell`，
+    `evidence.runt_last_cell` 存高度与 period）。**只降级：不改字、不放行**；人裁位不动。
+    读不到 `cells`／period 时该页不动。只拦「放行」，成因（20 字列误按 21 格切）另走 `resolved_slots`。"""
+    runt_ratio: float = 0.6
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -540,6 +549,9 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        if isinstance(d, dict) and not self.runt_last_cell_review:
+            d.pop("runt_last_cell_review", None)
+            d.pop("runt_ratio", None)
         if isinstance(d, dict) and not self.rr_clf:
             for k in ("rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint"):
                 d.pop(k, None)
@@ -677,7 +689,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.15", unit="cell",   # 1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.16", unit="cell",   # 1.16：末格矮转人审 runt_last_cell_review（缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -1317,6 +1329,10 @@ class SeedAdmitStep(Step):
             d_rr2 = _rr_clf_pass(ctx, page, p, out, patch_missing)
             n_auto -= d_rr2
             n_review += d_rr2
+        if p.runt_last_cell_review:
+            d_runt = _runt_last_cell_pass(ctx, page, p, out)
+            n_auto -= d_runt
+            n_review += d_runt
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1495,6 +1511,34 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
+            n += 1
+    return n
+
+
+def _runt_last_cell_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list) -> int:
+    """末格矮转人审（只降级，放在所有通道与各遍之后）。→ 降级格数。见 `SeedAdmitParams.runt_last_cell_review`。"""
+    cells = _opt(ctx, "cells", page)
+    if cells is None:
+        return 0
+    runt: dict[tuple[int, int], tuple[float, float]] = {}
+    for cc in cells.columns:
+        if not cc.ok or not cc.period or not cc.n_body_slots:
+            continue
+        for x in cc.cells:
+            if (x.slot == cc.n_body_slots and x.kind == "char" and not x.raised and not x.sub
+                    and not x.flags and (x.y1 - x.y0) < p.runt_ratio * cc.period):
+                runt[(cc.col, x.slot)] = (x.y1 - x.y0, cc.period)
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            hit = runt.get((col.col, rec.slot))
+            if (hit is None or rec.sub or not rec.admit
+                    or rec.provenance == "human" or rec.channel == "human"):
+                continue
+            rec.admit, rec.channel, rec.provenance = False, None, ""
+            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["runt_last_cell"]))
+            rec.evidence = {**(rec.evidence or {}),
+                            "runt_last_cell": {"h": round(hit[0], 1), "period": round(hit[1], 1)}}
             n += 1
     return n
 
