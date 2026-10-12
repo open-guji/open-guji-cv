@@ -77,7 +77,7 @@ def test_yi_ran():
     assert clf.classify("某", "然")[0] == "已"
     assert clf.classify("某", "然其")[0] == "已"
     assert clf.classify("無諸", "然後非諸人")[0] is None   # 「己|然後」：句读被吞，不判
-    assert clf.classify("利", "然後")[0] == "己"           # 利己 + 然後
+    assert clf.classify("克", "然後")[0] == "己"           # 克己 + 然後
 
 
 def test_yi_prev_time_words():
@@ -88,6 +88,15 @@ def test_yi_prev_time_words():
     assert clf.classify("中書", "未召試")[0] is None       # 「書＋已」已剔除：中書己未
     assert clf.classify("前", "未")[0] is None             # 后字是地支留给干支规则
     assert clf.classify("既", "意")[0] == "己"             # 己意 优先
+
+
+def test_ji_prev_narrowed():
+    # 人名／书名／固定词尾后的「已」不能因前字在旧表里就判成己
+    assert clf.classify("然歐陽修", "稱今但存")[0] is None       # 歐陽修已稱
+    assert clf.classify("有周易說異", "著錄是編")[0] == "已"      # 說異已著錄（后字「著」→ 已＋動詞）
+    assert clf.classify("現在", "有")[0] is None                   # 現在已有
+    assert clf.classify("自", "性徹入")[0] == "己"                 # 自己：保留
+    assert clf.classify("捨", "從人")[0] == "己"
 
 
 def test_er_yi_exception_title():
