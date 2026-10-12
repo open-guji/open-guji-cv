@@ -265,6 +265,15 @@ class SeedAdmitParams(BaseModel):
     错的 11 格里 `context` 占 8；罕用码位上 match_replace／match_solo／coord_fallback 的有标签格全对。
     放在 `_review_lanes_pass` 之后：三条新放行通道（witness3／coord／seal）仍可重新放行这些格。
     关着时不进参数 dump，产物逐字节不变。"""
+    rare_cp_ctx_whitelist: bool = False
+    """`rare_cp_ctx_review` 的白名单版（2026-10-12，overview#431，缺省关）：同样把罕用码位 × `context` 通道放行
+    退回待审，**但人裁确认过的格不动**。确认表 `config/variants/rare_x_confirmed.json`（工作区，H 道写；
+    `GUJI_RARE_X` 可覆盖），按 `entries[].book`＋`cell_ids` 逐格匹配：只有本书、放行字等于该条 `x`、
+    格 id 在 `cell_ids` 里的格保持放行（用户逐格点过的覆盖范围，不外推到没看过的同字格）。表不存在
+    ＝空白名单＝等同 `rare_cp_ctx_review`（全部送审）。**只降级、不改字、不放行**：比 `rare_cp_ctx_review`
+    只会少送审，不会多放行；与它同开时以本开关为准。起因：S 层 79 格（vol04＋vol05A）用户独立人裁
+    38 格确认为原刻（㫖／㕘 等）、其余 41 格送审（𠮓→變、𫎇→蒙 等错放）。关着时不进参数 dump。"""
+    rare_x_fingerprint: str = ""        # 自动填（仅 rare_cp_ctx_whitelist 开时）：确认表变了产物过期
     solo_ctx_veto: float = 0.0
     """match_solo 系的上下文否决（2026-10-09，overview#450）：`context_decide.ranked` 第一名与
     放行字**语义不同**（异体码点差不算），且第一名概率 ≥ 此值，就不单独放行，记 doubt
@@ -548,6 +557,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("solo_ctx_veto", None)
         if isinstance(d, dict) and not self.rare_cp_ctx_review:
             d.pop("rare_cp_ctx_review", None)
+        if isinstance(d, dict) and not self.rare_cp_ctx_whitelist:
+            d.pop("rare_cp_ctx_whitelist", None)
+            d.pop("rare_x_fingerprint", None)
         if isinstance(d, dict) and not self.seal_blank_page:
             for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
@@ -608,6 +620,9 @@ class SeedAdmitParams(BaseModel):
             from ..variants import DEFAULT_VARIANTS_JSON
             object.__setattr__(self, "variant_graph_fingerprint",
                                corpus_fingerprint([str(DEFAULT_VARIANTS_JSON)]))
+        if self.rare_cp_ctx_whitelist and not self.rare_x_fingerprint:
+            from ..core.workspace import rare_x_path
+            object.__setattr__(self, "rare_x_fingerprint", corpus_fingerprint([str(rare_x_path())]))
         if self.use_exclusions and not self.exclusions_fingerprint:
             from ..clustering.exclusions import default_path as _ex_default
             object.__setattr__(self, "exclusions_fingerprint",
@@ -1272,8 +1287,8 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
-        if p.rare_cp_ctx_review:
-            d_rcp = _rare_cp_ctx_pass(out, mmap)
+        if p.rare_cp_ctx_review or p.rare_cp_ctx_whitelist:
+            d_rcp = _rare_cp_ctx_pass(out, mmap, _rare_x_keep(ctx.book.id) if p.rare_cp_ctx_whitelist else None)
             n_auto -= d_rcp
             n_review += d_rcp
         if patch_missing:
@@ -1287,13 +1302,31 @@ class SeedAdmitStep(Step):
                                         n_review=n_review, columns=out)}
 
 
-def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
-    """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。"""
+def _rare_x_keep(book: str) -> frozenset[tuple[str, str]]:
+    """确认表里本书的 {(格 id, 放行字)}；表不存在或读不了＝空（保守：全部送审）。"""
+    import json
+    from ..core.workspace import rare_x_path
+    p = rare_x_path()
+    if not p.exists():
+        return frozenset()
+    try:
+        doc = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return frozenset()
+    return frozenset((cid, e["x"]) for e in doc.get("entries", []) if e.get("book") == book
+                     for cid in e.get("cell_ids", []))
+
+
+def _rare_cp_ctx_pass(out: list, mmap: dict, keep: frozenset | None = None) -> int:
+    """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。
+    `keep`（`rare_cp_ctx_whitelist`）：{(格 id, 放行字)} 里的格是人裁确认过的原刻，不降级。"""
     n = 0
     for col in out:
         for rec in col.chars or []:
             if (not rec.admit or rec.channel != "context" or rec.provenance == "human"
                     or not _rare_cp(rec.char)):
+                continue
+            if keep is not None and (rec.id, rec.char) in keep:
                 continue
             m = mmap.get(rec.id)
             rec.admit, rec.channel, rec.provenance = False, None, ""

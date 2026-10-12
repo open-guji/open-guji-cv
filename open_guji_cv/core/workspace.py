@@ -29,6 +29,7 @@
   feedback/{events,consumed}/  人裁事件日志与消费记账
   feedback/verdicts/<shard>/   裁决表（事件消费后的落点；金标同格式，导入测试集从这里挑）
   config/crop_exclusions.jsonl 图块排除名单
+  config/variants/rare_x_confirmed.json 罕用码位忠实字确认表（人裁确认，H 道写）
 ```
 
 `open-guji-dataset`（测试集仓）**不在这张图里**：运行时不读不写，只放显式导入的标注。
@@ -65,6 +66,7 @@ PRODUCTS_REL = "products"
 CACHE_REL = "cache"
 BATCHES_REL = "review/batches"
 EXCLUSIONS_REL = "config/crop_exclusions.jsonl"
+RARE_X_REL = "config/variants/rare_x_confirmed.json"
 FEEDBACK_REL = "feedback"
 VERDICTS_REL = "feedback/verdicts"
 REPORTS_REL = "reports"
@@ -148,6 +150,11 @@ def batches_root() -> Path:
 def exclusions_path() -> Path:
     """图块排除名单（人裁 / 闸判定的坏图块）。`GUJI_EXCLUSIONS` > 工作区 > 仓内。"""
     return _resolve("GUJI_EXCLUSIONS", EXCLUSIONS_REL)
+
+
+def rare_x_path() -> Path:
+    """罕用码位忠实字确认表（H 道写，`seed_admit.rare_cp_ctx_whitelist` 读）。`GUJI_RARE_X` > 工作区 > 仓内。"""
+    return _resolve("GUJI_RARE_X", RARE_X_REL)
 
 
 def feedback_root() -> Path:

@@ -77,3 +77,69 @@ def test_pass_only_touches_context_channel_and_not_human():
                                         _R(channel="coord_fallback"), _R(channel="ref_ctx"),
                                         _R(channel="human"), _R(channel="context"), _R(char="變"),
                                         _R(admit=False, channel=None)]))
+
+
+# ---- rare_cp_ctx_whitelist（overview#431）：人裁确认过的格保持放行，其余同 rare_cp_ctx_review ----
+
+def _write_rare_x(tmp_path, monkeypatch, entries):
+    import json
+    f = tmp_path / "rare_x_confirmed.json"
+    f.write_text(json.dumps({"schema": 1, "entries": entries}, ensure_ascii=False), encoding="utf-8")
+    monkeypatch.setenv("GUJI_RARE_X", str(f))
+
+
+def _cid():
+    return f"{BOOK}:{PAGE}:{COL}:{SLOT}"
+
+
+def test_whitelist_confirmed_cell_stays_admitted(tmp_path, monkeypatch):
+    _write_rare_x(tmp_path, monkeypatch, [{"book": BOOK, "x": "㫖", "cell_ids": [_cid()]}])
+    r = _run(tmp_path, monkeypatch, char="㫖", params={"rare_cp_ctx_whitelist": True})
+    assert r.admit and r.channel == "context" and r.char == "㫖"
+
+
+def test_whitelist_unconfirmed_cell_goes_to_review(tmp_path, monkeypatch):
+    _write_rare_x(tmp_path, monkeypatch, [{"book": BOOK, "x": "㫖", "cell_ids": [_cid()]}])
+    r = _run(tmp_path, monkeypatch, char="𠮓", params={"rare_cp_ctx_whitelist": True})
+    assert not r.admit and "rare_cp_context" in r.doubts and r.char == "𠮓"
+
+
+def test_whitelist_matches_cell_id_not_char_only(tmp_path, monkeypatch):
+    # 同字但不是人裁点过的格：不外推
+    _write_rare_x(tmp_path, monkeypatch, [{"book": BOOK, "x": "㫖", "cell_ids": [f"{BOOK}:9:9:9"]}])
+    r = _run(tmp_path, monkeypatch, char="㫖", params={"rare_cp_ctx_whitelist": True})
+    assert not r.admit
+
+
+def test_whitelist_other_book_entry_ignored(tmp_path, monkeypatch):
+    _write_rare_x(tmp_path, monkeypatch, [{"book": "other", "x": "㫖", "cell_ids": [_cid()]}])
+    r = _run(tmp_path, monkeypatch, char="㫖", params={"rare_cp_ctx_whitelist": True})
+    assert not r.admit
+
+
+def test_whitelist_missing_file_equals_review(tmp_path, monkeypatch):
+    monkeypatch.setenv("GUJI_RARE_X", str(tmp_path / "nope.json"))
+    r = _run(tmp_path, monkeypatch, char="㫖", params={"rare_cp_ctx_whitelist": True})
+    assert not r.admit
+
+
+def test_whitelist_common_codepoint_untouched(tmp_path, monkeypatch):
+    monkeypatch.setenv("GUJI_RARE_X", str(tmp_path / "nope.json"))
+    r = _run(tmp_path, monkeypatch, char="變", params={"rare_cp_ctx_whitelist": True})
+    assert r.admit and r.channel == "context"
+
+
+def test_whitelist_off_params_dump_unchanged(monkeypatch, tmp_path):
+    monkeypatch.setenv("GUJI_RARE_X", str(tmp_path / "nope.json"))
+    d = SeedAdmitParams().model_dump()
+    assert "rare_cp_ctx_whitelist" not in d and "rare_x_fingerprint" not in d
+    from open_guji_cv.core.engine import params_hash
+    assert params_hash(SeedAdmitParams()) == params_hash(SeedAdmitParams(rare_cp_ctx_whitelist=False))
+    assert params_hash(SeedAdmitParams()) != params_hash(SeedAdmitParams(rare_cp_ctx_whitelist=True))
+
+
+def test_whitelist_fingerprint_follows_table(tmp_path, monkeypatch):
+    _write_rare_x(tmp_path, monkeypatch, [{"book": BOOK, "x": "㫖", "cell_ids": [_cid()]}])
+    a = SeedAdmitParams(rare_cp_ctx_whitelist=True).rare_x_fingerprint
+    _write_rare_x(tmp_path, monkeypatch, [{"book": BOOK, "x": "㫖", "cell_ids": [_cid(), "x:1:1:1"]}])
+    assert a and SeedAdmitParams(rare_cp_ctx_whitelist=True).rare_x_fingerprint != a
