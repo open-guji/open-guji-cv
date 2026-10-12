@@ -29,14 +29,14 @@ def test_off_not_in_dump():
     assert on["runt_cell_review"] is True and on["runt_ratio"] == 0.6
 
 
-def _run(tmp_path, monkeypatch, params, cells_by_slot, n_body=N, human=False):
+def _run(tmp_path, monkeypatch, params, cells_by_slot, n_body=N, human=False, sub3=None):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                      params={"seed_admit": params}, log=lambda s: None)
     chars = ["山", "水", "木"]
-    recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
+    recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)], **({"sub": sub3} if sub3 and i == 2 else {}))
             for i, c in enumerate(chars)]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
@@ -86,3 +86,15 @@ def test_not_triggered_cases(tmp_path, monkeypatch):
                   {1: (100, {}), 2: (100, {}), 3: (100, {})}):
         got = _run(tmp_path / str(id(cells)), monkeypatch, P, cells)
         assert all(r.admit for r in got.values()), cells
+
+
+def test_short_jiazhu_sub_cell_demoted(tmp_path, monkeypatch):
+    """列尾残留的矮夹注半格(vol02:94:9:21a):sub 格也按高度降级;正常高度的夹注对不动。"""
+    P = SeedAdmitParams(runt_cell_review=True)
+    cells = {1: (100, {}), 2: (100, {}), 3: (40, {"sub": "a", "kind": "jiazhu_a"})}
+    off = _run(tmp_path, monkeypatch, SeedAdmitParams(), cells, sub3="a")
+    on = _run(tmp_path / "b", monkeypatch, P, cells, sub3="a")
+    assert off[3].admit and not on[3].admit and "runt_cell" in on[3].doubts
+    assert on[1].admit and on[2].admit
+    ok = {1: (100, {}), 2: (100, {}), 3: (100, {"sub": "a", "kind": "jiazhu_a"})}
+    assert all(r.admit for r in _run(tmp_path / "c", monkeypatch, P, ok, sub3="a").values())

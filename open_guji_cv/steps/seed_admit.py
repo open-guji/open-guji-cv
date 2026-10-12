@@ -206,7 +206,7 @@ class SeedAdmitParams(BaseModel):
 
     列实际只有 20 字却被硬塞进 21 格时，DP 在末尾造出一个「矮格」：末字被劈成 slot20＋slot21，或某字被腰斩。
     条件：Step3 `cells` 里该列任一正文格（`slot > 0`）`kind=char`、有墨（`ink_ratio` ≥ `runt_min_ink`）、
-    非 raised／sub、`flags` 为空、高 < `runt_ratio`×period，且本格已放行（非人裁）→ **退回待审**（`doubts` 记 `runt_cell`，
+    非 raised、`flags` 为空（夹注半格 `jiazhu_a/b` 也算：列尾残留的矮夹注格，vol02:94:9:21a 起因）、高 < `runt_ratio`×period，且本格已放行（非人裁）→ **退回待审**（`doubts` 记 `runt_cell`，
     `evidence.runt_cell` 存高度与 period）。**只降级：不改字、不放行**；人裁位不动。
     读不到 `cells`／period 时该页不动。只拦「放行」，不修成因（误判抬头格、切点错放、真 20 字列各有各的修法）。
     起因：独立看图 7/7 矮放行格全是半个字（vol02 15:9:20、188:4:20 是 slot 20 而非末格，所以不限末格）。"""
@@ -1523,19 +1523,20 @@ def _runt_cell_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list)
     cells = _opt(ctx, "cells", page)
     if cells is None:
         return 0
-    runt: dict[tuple[int, int], tuple[float, float]] = {}
+    runt: dict[tuple[int, int, str | None], tuple[float, float]] = {}
     for cc in cells.columns:
         if not cc.ok or not cc.period or not cc.n_body_slots:
             continue
         for x in cc.cells:
-            if (x.slot > 0 and x.kind == "char" and not x.raised and not x.sub and not x.flags
+            if (x.slot > 0 and (x.kind == "char" or (x.sub and str(x.kind).startswith("jiazhu")))
+                    and not x.raised and not x.flags
                     and x.ink_ratio >= p.runt_min_ink and (x.y1 - x.y0) < p.runt_ratio * cc.period):
-                runt[(cc.col, x.slot)] = (x.y1 - x.y0, cc.period)
+                runt[(cc.col, x.slot, x.sub or None)] = (x.y1 - x.y0, cc.period)
     n = 0
     for col in out:
         for rec in col.chars or []:
-            hit = runt.get((col.col, rec.slot))
-            if (hit is None or rec.sub or not rec.admit
+            hit = runt.get((col.col, rec.slot, rec.sub or None))
+            if (hit is None or not rec.admit
                     or rec.provenance == "human" or rec.channel == "human"):
                 continue
             rec.admit, rec.channel, rec.provenance = False, None, ""
