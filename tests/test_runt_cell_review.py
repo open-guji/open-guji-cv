@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""末格矮转人审（`seed_admit.runt_last_cell_review`，overview#554）：只降级、缺省关、关时 params_hash 不变。自造数据。"""
+"""矮格转人审(任意 slot)（`seed_admit.runt_cell_review`，overview#554）：只降级、缺省关、关时 params_hash 不变。自造数据。"""
 from __future__ import annotations
 
 from types import SimpleNamespace as NS
@@ -17,16 +17,16 @@ PERIOD, N = 100.0, 3
 
 
 def _cell(slot, h, **kw):
-    d = dict(slot=slot, kind="char", raised=False, sub=None, flags=[], y0=0.0, y1=float(h))
+    d = dict(slot=slot, kind="char", raised=False, sub=None, flags=[], ink_ratio=0.2, y0=0.0, y1=float(h))
     return NS(**{**d, **kw})
 
 
 def test_off_not_in_dump():
     d = SeedAdmitParams().model_dump()
-    assert SeedAdmitParams().runt_last_cell_review is False
-    assert "runt_last_cell_review" not in d and "runt_ratio" not in d
-    on = SeedAdmitParams(runt_last_cell_review=True).model_dump()
-    assert on["runt_last_cell_review"] is True and on["runt_ratio"] == 0.6
+    assert SeedAdmitParams().runt_cell_review is False
+    assert "runt_cell_review" not in d and "runt_ratio" not in d and "runt_min_ink" not in d
+    on = SeedAdmitParams(runt_cell_review=True).model_dump()
+    assert on["runt_cell_review"] is True and on["runt_ratio"] == 0.6
 
 
 def _run(tmp_path, monkeypatch, params, cells_by_slot, n_body=N, human=False):
@@ -57,21 +57,32 @@ def test_default_off_changes_nothing(tmp_path, monkeypatch):
     assert all(r.admit for r in base.values())
 
 
-def test_on_demotes_only_runt_last_cell(tmp_path, monkeypatch):
+def test_on_demotes_runt_tail_cell(tmp_path, monkeypatch):
     off = _run(tmp_path, monkeypatch, SeedAdmitParams(), SHORT)
-    on = _run(tmp_path / "b", monkeypatch, SeedAdmitParams(runt_last_cell_review=True), SHORT)
-    assert not on[3].admit and "runt_last_cell" in on[3].doubts and on[3].char == off[3].char
-    assert on[3].evidence["runt_last_cell"] == {"h": 40.0, "period": 100.0}
+    on = _run(tmp_path / "b", monkeypatch, SeedAdmitParams(runt_cell_review=True), SHORT)
+    assert not on[3].admit and "runt_cell" in on[3].doubts and on[3].char == off[3].char
+    assert on[3].evidence["runt_cell"] == {"h": 40.0, "period": 100.0}
     assert on[1].admit and on[2].admit
     assert sum(r.admit for r in on.values()) <= sum(r.admit for r in off.values())   # 只降级，0 格变放行
 
 
+def test_mid_slot_runt_demoted_too(tmp_path, monkeypatch):
+    """C 类:矮格不在末格(vol02 15:9:20 是 slot 20 而非 21)也要降级;其余格不动。"""
+    cells = {1: (100, {}), 2: (40, {}), 3: (100, {})}
+    off = _run(tmp_path, monkeypatch, SeedAdmitParams(), cells)
+    on = _run(tmp_path / "b", monkeypatch, SeedAdmitParams(runt_cell_review=True), cells)
+    assert not on[2].admit and "runt_cell" in on[2].doubts and on[2].char == off[2].char
+    assert on[1].admit and on[3].admit
+    assert sum(r.admit for r in on.values()) <= sum(r.admit for r in off.values())
+
+
 def test_not_triggered_cases(tmp_path, monkeypatch):
-    P = SeedAdmitParams(runt_last_cell_review=True)
-    # 不矮 / 带 flag / 不是末格 / raised：都不动
+    P = SeedAdmitParams(runt_cell_review=True)
+    # 不矮 / 带 flag / raised / 无墨(空白格) / 正常格:都不动
     for cells in ({1: (100, {}), 2: (100, {}), 3: (70, {})},
                   {1: (100, {}), 2: (100, {}), 3: (40, {"flags": ["small"]})},
-                  {1: (100, {}), 2: (40, {}), 3: (100, {})},
-                  {1: (100, {}), 2: (100, {}), 3: (40, {"raised": True})}):
+                  {1: (100, {}), 2: (100, {}), 3: (40, {"raised": True})},
+                  {1: (100, {}), 2: (40, {"ink_ratio": 0.0}), 3: (100, {})},
+                  {1: (100, {}), 2: (100, {}), 3: (100, {})}):
         got = _run(tmp_path / str(id(cells)), monkeypatch, P, cells)
         assert all(r.admit for r in got.values()), cells
