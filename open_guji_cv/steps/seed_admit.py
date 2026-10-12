@@ -181,6 +181,26 @@ class SeedAdmitParams(BaseModel):
     ji_yi_si_clf_margin: float = 0.2
     ji_yi_si_clf_table: str = ""            # 答案表 json 路径（可空：没有表就只有规则路）
     ji_yi_si_clf_fingerprint: str = ""      # 自动填（开关开且有表时）：表内容变了产物过期
+    ry_group: bool = False
+    """日／曰 v2 答案表（overview#441，缺省关）：待审的日曰核心格，若离线 muse∧Gemini 两遍同字（haiku 不否决）
+    且与整理本对位字相同，则抬为放行（通道 `ry_group`）；只抬待审、不改字、不降已放行格。不同字 → 仍待审，
+    `doubts` 记 `ry_disagree`；表缺格／上下文哈希不符／弃权 → 不动。证据写 `evidence.ry_group`。
+    缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
+    ry_group_cache: str = ""                # 答案表 json 路径（utils/ry_group.py 格式）
+    ry_group_fingerprint: str = ""          # 自动填（开关开且有表时）
+    rr_clf: bool = False
+    """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
+
+    用户 2026-10-06：「入」撇捺连着且上头有一横，「八」上面也有一横但与左撇不连，「人」连写、没有横——字形可分。
+    `utils/rr_clf.py`（numpy 随机森林，4 类＝人入八＋其他，离线训练，模型 `models/rr_clf/forest.npz`）读本格字块：
+    已放行（非人裁）、放行字属人入八，而分类器给字（p ≥ `rr_clf_p`、质量闸过、非「其他」）**且不同于放行字** →
+    **退回待审**（`doubts` 记 `rr_clf_disagree`，`evidence.rr_clf` 存四类概率）。**只降级：不改字、不放行**。
+    读不到字块时按 `patch_missing` 处理（`skip`：该格不动并记 `evidence.patch_missing`）。
+    数字（Z-rr，用户人裁）：分歧格里放行字被推翻 1/9，其余是虚惊；p≥0.5 全量分歧约放行格的 0.5%。
+    「待审→放出」不在这里（要整理看图对全部候选 0 错才开，另开关）。"""
+    rr_clf_p: float = 0.5
+    rr_clf_model: str = ""                  # 空＝仓内 models/rr_clf/forest.npz
+    rr_clf_fingerprint: str = ""            # 自动填（开关开时）：模型文件变了产物过期
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -256,6 +276,15 @@ class SeedAdmitParams(BaseModel):
     `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
     起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
     这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+    rare_cp_ctx_review: bool = False
+    """罕用码位 × `context` 通道落审（2026-10-10，overview#437 异体组方案 A，缺省关）：放行字不在
+    U+4E00–9FFF（扩展区、部首、兼容区，同 `_rare_cp`／`context_garble_guard` 口径）、且放行通道恰为
+    `context`，就退回待审，doubt `rare_cp_context`，`evidence.rare_cp_context` 记放行字与码位。
+    **只降级，不改字、不放行**；人裁、排除、别的通道（match_replace／match_solo／coord_fallback…）不碰。
+    起因：vol04／vol05 有标签放行格里，罕用码位放行错率 17%／5.6%（常用区 4.5%／1.3%），
+    错的 11 格里 `context` 占 8；罕用码位上 match_replace／match_solo／coord_fallback 的有标签格全对。
+    放在 `_review_lanes_pass` 之后：三条新放行通道（witness3／coord／seal）仍可重新放行这些格。
+    关着时不进参数 dump，产物逐字节不变。"""
     solo_ctx_veto: float = 0.0
     """match_solo 系的上下文否决（2026-10-09，overview#450）：`context_decide.ranked` 第一名与
     放行字**语义不同**（异体码点差不算），且第一名概率 ≥ 此值，就不单独放行，记 doubt
@@ -511,9 +540,15 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        if isinstance(d, dict) and not self.rr_clf:
+            for k in ("rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.ji_yi_si_clf:
             for k in ("ji_yi_si_clf", "ji_yi_si_clf_llm", "ji_yi_si_clf_margin",
                       "ji_yi_si_clf_table", "ji_yi_si_clf_fingerprint"):
+                d.pop(k, None)
+        if isinstance(d, dict) and not self.ry_group:
+            for k in ("ry_group", "ry_group_cache", "ry_group_fingerprint"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
@@ -537,6 +572,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_fingerprint", None)
         if isinstance(d, dict) and not self.solo_ctx_veto:
             d.pop("solo_ctx_veto", None)
+        if isinstance(d, dict) and not self.rare_cp_ctx_review:
+            d.pop("rare_cp_ctx_review", None)
         if isinstance(d, dict) and not self.seal_blank_page:
             for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
@@ -626,6 +663,11 @@ class SeedAdmitParams(BaseModel):
         if self.ji_yi_si_clf and self.ji_yi_si_clf_table and not self.ji_yi_si_clf_fingerprint:
             object.__setattr__(self, "ji_yi_si_clf_fingerprint",
                                corpus_fingerprint([self.ji_yi_si_clf_table]))
+        if self.ry_group and self.ry_group_cache and not self.ry_group_fingerprint:
+            object.__setattr__(self, "ry_group_fingerprint", corpus_fingerprint([self.ry_group_cache]))
+        if self.rr_clf and not self.rr_clf_fingerprint:
+            from ..utils.rr_clf import model_fingerprint as _rr_fp
+            object.__setattr__(self, "rr_clf_fingerprint", _rr_fp(self.rr_clf_model or None) or "missing")
         if not self.iron_config_fingerprint:
             from ..clustering.iron_evidence import _CONFIG as _IRON_CONFIG
             object.__setattr__(self, "iron_config_fingerprint",
@@ -635,7 +677,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.14", unit="cell",   # 1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.15", unit="cell",   # 1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
         optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
@@ -651,6 +693,8 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.utils.jiazhu_order",
                    "open_guji_cv.utils.near_form_ctx",
                    "open_guji_cv.utils.ji_yi_si_clf",
+                   "open_guji_cv.utils.ry_group",
+                   "open_guji_cv.utils.rr_clf",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -665,7 +709,7 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -1241,6 +1285,10 @@ class SeedAdmitStep(Step):
             d_rr = _rare_ref_pass(out, mmap, amap, rtop)
             n_auto += d_rr
             n_review -= d_rr
+        if p.ry_group and p.ry_group_cache:
+            d_ry = _ry_group_pass(out, amap, p.ry_group_cache)
+            n_auto += d_ry
+            n_review -= d_ry
         if p.shadow_veto:
             d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
             n_auto -= d_veto
@@ -1261,6 +1309,14 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.rare_cp_ctx_review:
+            d_rcp = _rare_cp_ctx_pass(out, mmap)
+            n_auto -= d_rcp
+            n_review += d_rcp
+        if p.rr_clf:
+            d_rr2 = _rr_clf_pass(ctx, page, p, out, patch_missing)
+            n_auto -= d_rr2
+            n_review += d_rr2
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1270,6 +1326,23 @@ class SeedAdmitStep(Step):
                     f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
+    """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。"""
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if (not rec.admit or rec.channel != "context" or rec.provenance == "human"
+                    or not _rare_cp(rec.char)):
+                continue
+            m = mmap.get(rec.id)
+            rec.admit, rec.channel, rec.provenance = False, None, ""
+            rec.doubts = (_doubts(m, None) if m is not None else []) + list(rec.doubts) + ["rare_cp_context"]
+            rec.evidence = {**(rec.evidence or {}),
+                            "rare_cp_context": {"char": rec.char, "cp": f"U+{ord(rec.char[0]):04X}"}}
+            n += 1
+    return n
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
@@ -1423,6 +1496,33 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
             n += 1
+    return n
+
+
+def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, patch_missing: dict) -> int:
+    """入人八字形分类器的「分歧→送审」（只降级，放在所有通道与各遍之后）。→ 降级格数。见 `SeedAdmitParams.rr_clf`。"""
+    from ..utils import rr_clf
+    model = p.rr_clf_model or None
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if (not rec.admit or rec.provenance == "human" or rec.channel == "human"
+                    or not rec.char or rec.char not in rr_clf.CLASSES):
+                continue
+            try:
+                patch = _page_patch(ctx, page, col.col, rec.slot, rec.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                patch_missing.setdefault(rec.id, []).append("rr_clf")
+                rec.evidence = {**(rec.evidence or {}), "patch_missing": list(patch_missing[rec.id])}
+                continue
+            c = rr_clf.classify(patch, model, p.rr_clf_p)
+            rec.evidence = {**(rec.evidence or {}), "rr_clf": c}
+            if c["pick"] and c["pick"] != rec.char:
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["rr_clf_disagree"]))
+                n += 1
     return n
 
 
@@ -1841,6 +1941,33 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
         r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_review"]))
         return -1, 1
     return 0, 0
+
+
+def _ry_group_pass(out: list, amap: dict, cache: str) -> int:
+    """日／曰 v2 答案表只读证据（overview#441）→ 新增放行数。只抬待审的日曰格，不改字、不降放行格。"""
+    from ..utils.ry_group import FAMILY, decide
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in c.chars
+           if not (r.doubts and "excluded" in r.doubts)]
+    n = 0
+    for i, r in enumerate(seq):
+        ref = (amap.get(r.id) or (None, None))[0]
+        if (r.admit or r.channel == "human" or ref not in FAMILY
+                or any(d in ("occluded", "glyph_timeout") or "seal" in d for d in (r.doubts or []))):
+            continue
+        res = decide(cache, r.id, _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1))
+        if not res:
+            continue
+        r.evidence = {**(r.evidence or {}), "ry_group": res}
+        ch = res.get("char")
+        if not ch:
+            continue
+        if ch != ref:
+            r.doubts = list(dict.fromkeys((r.doubts or []) + ["ry_disagree"]))
+            continue
+        r.char, r.admit, r.channel, r.provenance = ch, True, "ry_group", "context"
+        r.doubts = [d for d in (r.doubts or []) if d != "always_review"]
+        n += 1
+    return n
 
 
 def _ctx_known(seq: list, i: int, step: int, width: int = 2) -> str:
