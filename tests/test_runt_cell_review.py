@@ -1,0 +1,77 @@
+# -*- coding: utf-8 -*-
+"""末格矮转人审（`seed_admit.runt_last_cell_review`，overview#554）：只降级、缺省关、关时 params_hash 不变。自造数据。"""
+from __future__ import annotations
+
+from types import SimpleNamespace as NS
+
+import open_guji_cv.steps  # noqa: F401
+import open_guji_cv.steps.seed_admit as sa
+from helpers import make_book, page_align_ref, page_match, write_product
+from open_guji_cv.core.step import STEPS, RunContext
+from open_guji_cv.products.cache import ImageCache
+from open_guji_cv.products.store import ProductStore
+from open_guji_cv.steps.seed_admit import SeedAdmitParams
+
+BOOK, PAGE, COL = "tbook", 1, 1
+PERIOD, N = 100.0, 3
+
+
+def _cell(slot, h, **kw):
+    d = dict(slot=slot, kind="char", raised=False, sub=None, flags=[], y0=0.0, y1=float(h))
+    return NS(**{**d, **kw})
+
+
+def test_off_not_in_dump():
+    d = SeedAdmitParams().model_dump()
+    assert SeedAdmitParams().runt_last_cell_review is False
+    assert "runt_last_cell_review" not in d and "runt_ratio" not in d
+    on = SeedAdmitParams(runt_last_cell_review=True).model_dump()
+    assert on["runt_last_cell_review"] is True and on["runt_ratio"] == 0.6
+
+
+def _run(tmp_path, monkeypatch, params, cells_by_slot, n_body=N, human=False):
+    products, cache = tmp_path / "products", tmp_path / "cache"
+    monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
+    ctx = RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
+                     params={"seed_admit": params}, log=lambda s: None)
+    chars = ["山", "水", "木"]
+    recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
+            for i, c in enumerate(chars)]
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
+    write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
+        PAGE, BOOK, recs=[dict(slot=i + 1, align_char=c) for i, c in enumerate(chars)], col=COL))
+    cells = NS(columns=[NS(col=COL, ok=True, period=PERIOD, n_body_slots=n_body,
+                           cells=[_cell(s, h, **kw) for s, (h, kw) in cells_by_slot.items()])])
+    real = sa._opt
+    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: cells if k == "cells" else real(c, k, pg))
+    page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
+    return {r.slot: r for cc in page.columns for r in cc.chars}
+
+
+SHORT = {1: (100, {}), 2: (100, {}), 3: (40, {})}
+
+
+def test_default_off_changes_nothing(tmp_path, monkeypatch):
+    base = _run(tmp_path, monkeypatch, SeedAdmitParams(), SHORT)
+    assert all(r.admit for r in base.values())
+
+
+def test_on_demotes_only_runt_last_cell(tmp_path, monkeypatch):
+    off = _run(tmp_path, monkeypatch, SeedAdmitParams(), SHORT)
+    on = _run(tmp_path / "b", monkeypatch, SeedAdmitParams(runt_last_cell_review=True), SHORT)
+    assert not on[3].admit and "runt_last_cell" in on[3].doubts and on[3].char == off[3].char
+    assert on[3].evidence["runt_last_cell"] == {"h": 40.0, "period": 100.0}
+    assert on[1].admit and on[2].admit
+    assert sum(r.admit for r in on.values()) <= sum(r.admit for r in off.values())   # 只降级，0 格变放行
+
+
+def test_not_triggered_cases(tmp_path, monkeypatch):
+    P = SeedAdmitParams(runt_last_cell_review=True)
+    # 不矮 / 带 flag / 不是末格 / raised：都不动
+    for cells in ({1: (100, {}), 2: (100, {}), 3: (70, {})},
+                  {1: (100, {}), 2: (100, {}), 3: (40, {"flags": ["small"]})},
+                  {1: (100, {}), 2: (40, {}), 3: (100, {})},
+                  {1: (100, {}), 2: (100, {}), 3: (40, {"raised": True})}):
+        got = _run(tmp_path / str(id(cells)), monkeypatch, P, cells)
+        assert all(r.admit for r in got.values()), cells
