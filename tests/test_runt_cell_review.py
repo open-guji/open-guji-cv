@@ -88,13 +88,29 @@ def test_not_triggered_cases(tmp_path, monkeypatch):
         assert all(r.admit for r in got.values()), cells
 
 
-def test_short_jiazhu_sub_cell_demoted(tmp_path, monkeypatch):
-    """列尾残留的矮夹注半格(vol02:94:9:21a):sub 格也按高度降级;正常高度的夹注对不动。"""
-    P = SeedAdmitParams(runt_cell_review=True)
-    cells = {1: (100, {}), 2: (100, {}), 3: (40, {"sub": "a", "kind": "jiazhu_a"})}
-    off = _run(tmp_path, monkeypatch, SeedAdmitParams(), cells, sub3="a")
-    on = _run(tmp_path / "b", monkeypatch, P, cells, sub3="a")
-    assert off[3].admit and not on[3].admit and "runt_cell" in on[3].doubts
-    assert on[1].admit and on[2].admit
-    ok = {1: (100, {}), 2: (100, {}), 3: (100, {"sub": "a", "kind": "jiazhu_a"})}
-    assert all(r.admit for r in _run(tmp_path / "c", monkeypatch, P, ok, sub3="a").values())
+def _runt_direct(monkeypatch, channel, h=14, ink=0.0):
+    """直接喂 `_runt_cell_pass`：一列 3 格，slot3 为 a 夹注半格，通道由参数定。"""
+    cells = NS(columns=[NS(col=1, ok=True, period=PERIOD, n_body_slots=3, cells=[
+        _cell(1, 100), _cell(2, 100),
+        _cell(3, h, sub="a", kind="jiazhu_a", ink_ratio=ink)])])
+    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: cells)
+    mk = lambda slot, sub, ch: NS(slot=slot, sub=sub, admit=True, channel=ch, provenance="x", doubts=[], evidence={})
+    recs = [mk(1, None, "match_ref"), mk(2, None, "match_ref"), mk(3, "a", channel)]
+    n = sa._runt_cell_pass(None, 1, SeedAdmitParams(runt_cell_review=True), [NS(col=1, chars=recs)])
+    return n, recs
+
+
+def test_short_jiazhu_sub_demoted_zero_ink(monkeypatch):
+    """列尾矮夹注半格(vol02:94:9:21a context；vol01:90:7:20a match_solo、墨 0.0)：降级。"""
+    for ch in ("context", "match_solo"):
+        n, recs = _runt_direct(monkeypatch, ch)
+        assert n == 1 and not recs[2].admit and "runt_cell" in recs[2].doubts
+        assert recs[0].admit and recs[1].admit
+
+
+def test_short_jiazhu_sub_match_ref_and_normal_height_kept(monkeypatch):
+    """match_ref（整理本对位字也同字，vol01:90 三格真「一」）与正常高度的夹注不动。"""
+    n, recs = _runt_direct(monkeypatch, "match_ref")
+    assert n == 0 and recs[2].admit
+    n, recs = _runt_direct(monkeypatch, "context", h=100)
+    assert n == 0 and recs[2].admit
