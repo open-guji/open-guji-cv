@@ -61,9 +61,14 @@ def collate_book(book: str, pages: list[int], witnesses: list[Witness],
     unanchored: dict[str, list[int]] = {w.label: [] for w in witnesses}
     page_errors: list[dict] = []
 
+    # 书级用字账：𠮓/變 之类不算认错字。册定义读不到（只有产物、没有工作区 yaml）就当没配置。
+    try:
+        codepoints = load_book(book).codepoints
+    except FileNotFoundError:
+        codepoints = {}
     for n, page in enumerate(pages, 1):
         try:
-            per = collate_page(store, book, page, witnesses, stale)
+            per = collate_page(store, book, page, witnesses, stale, codepoints)
         except Exception as e:
             msg = str(e).splitlines()[0] if str(e) else ""
             page_errors.append({"page": page, "error_type": type(e).__name__,

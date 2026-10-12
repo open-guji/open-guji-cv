@@ -21,7 +21,7 @@ def _run(tmp_path, monkeypatch, *, char: str, params: dict | None = None):
                                         candidates=[("某", 0.50)])]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, char=char, margin=0.90, source="context")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False, **(params or {})})
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False, "context_head_check": False, **(params or {})})
     (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
     (r,) = col.chars
     return r

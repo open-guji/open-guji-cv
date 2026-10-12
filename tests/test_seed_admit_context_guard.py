@@ -25,6 +25,8 @@ def _ctx(tmp_path, monkeypatch, **params):
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 G1 四条
     params.setdefault("context_garble_guard", False)
+    # 列首非字护栏（D274）也不是本文件要测的：自造单格就是列首且无字块图，会被它拦下
+    params.setdefault("context_head_check", False)
     kwargs = {"seed_admit": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)

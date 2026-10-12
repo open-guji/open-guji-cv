@@ -31,8 +31,10 @@ def _run(tmp_path, monkeypatch, *, verdict: str, params: dict | None = None):
         PAGE, BOOK, col=COL, recs=[
             dict(slot=SLOT, char="X", margin=0.90, source="context"),
         ]))
-    # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 verdict 闸
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False, **(params or {})})
+    # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格；单格列里这格就是列首，
+    # 列首非字护栏（D274）也不是本文件要测的。本文件只测 verdict 闸，都关掉隔离
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False,
+                                                  "context_head_check": False, **(params or {})})
     return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
 
 
