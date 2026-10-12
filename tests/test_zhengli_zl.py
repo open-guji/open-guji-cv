@@ -369,3 +369,60 @@ def test_plan_and_status_accept_preset_flag(tmp_path, monkeypatch, capsys):
     assert "无预设" in capsys.readouterr().out.splitlines()[0]
     with pytest.raises(SystemExit):
         zl.main(["plan", "--book", "vol07", "--ws", ws, "--preset", "nope"])
+
+
+# 4) 书级 params（--set 节.键=值）：seed_admit 之外的节也能由脚本写入
+def test_parse_set_values_and_bad_format():
+    out = zl.parse_set(["column_gate.hint_ignore_dash=true", "column_gate.double_width_ratio=1.5",
+                        "row_segment.dash_blank=3", "row_segment.name=abc"])
+    assert out == {"column_gate": {"hint_ignore_dash": True, "double_width_ratio": 1.5},
+                   "row_segment": {"dash_blank": 3, "name": "abc"}}
+    with pytest.raises(SystemExit):
+        zl.parse_set(["nodot=1"])
+    with pytest.raises(SystemExit):
+        zl.parse_set(["column_gate.x"])
+
+
+def test_patch_yaml_extra_section_added_then_idempotent():
+    import yaml
+    extra = {"column_gate": {"hint_ignore_dash": True, "double_width_ratio": 1.5}}
+    new, ch = zl.patch_yaml_text(YAML, zl.STD_SEED_ADMIT, extra=extra)
+    assert new is not None
+    assert ch["column_gate.hint_ignore_dash"] == (None, True)
+    d = yaml.safe_load(new)
+    assert d["params"]["column_gate"] == {"hint_ignore_dash": True, "double_width_ratio": 1.5}
+    assert d["params"]["other"] == 2 and d["params"]["seed_admit"]["rare_ref"] is True
+    again, ch2 = zl.patch_yaml_text(new, zl.STD_SEED_ADMIT, extra=extra)
+    assert again == new and ch2 == {}
+
+
+def test_patch_yaml_extra_section_changes_existing_value():
+    import yaml
+    base = YAML.replace("  other: 2\n", "  other: 2\n  column_gate:\n    hint_ignore_dash: false  # 旧\n")
+    new, ch = zl.patch_yaml_text(base, zl.STD_SEED_ADMIT, extra={"column_gate": {"hint_ignore_dash": True}})
+    assert ch["column_gate.hint_ignore_dash"] == ("false", True)
+    assert "    hint_ignore_dash: true  # 旧" in new
+    assert yaml.safe_load(new)["params"]["column_gate"]["hint_ignore_dash"] is True
+
+
+def test_patch_yaml_extra_flow_style_section_refused():
+    bad, why = zl.patch_yaml_text("params:\n  seed_admit:\n    rare_ref: true\n  column_gate: {a: 1}\n",
+                                  zl.STD_SEED_ADMIT, extra={"column_gate": {"hint_ignore_dash": True}})
+    assert bad is None and why == "column_gate 是流式写法"
+
+
+def test_child_args_forward_set_items():
+    out = zl.child_args(_run_args(set_items=["column_gate.hint_ignore_dash=true", "row_segment.dash_blank=3"]))
+    assert out.count("--set") == 2
+    assert out[out.index("--set") + 1] == "column_gate.hint_ignore_dash=true"
+
+
+def test_main_parses_set_items():
+    ap_args = []
+    orig = zl.cmd_run
+    try:
+        zl.cmd_run = lambda a: ap_args.append(a) or 0
+        assert zl.main(["run", "--book", "v", "--ws", "/w", "--set", "column_gate.hint_ignore_dash=true"]) == 0
+    finally:
+        zl.cmd_run = orig
+    assert ap_args[0].set_items == ["column_gate.hint_ignore_dash=true"]

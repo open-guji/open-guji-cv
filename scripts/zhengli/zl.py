@@ -94,6 +94,8 @@ class Ctx:
         # 预设：本次命令行给的 > 上次记在状态里的（plan/status 不带参数也能说明用了哪个）
         self.preset = getattr(a, "preset", None) or self.st.get("preset")
         self.no_shadow_veto = bool(getattr(a, "no_shadow_veto", False) or self.st.get("no_shadow_veto"))
+        # 书级 params（--set 节.键=值）：同预设，命令行给的 > 状态里记的
+        self.extra = parse_set(getattr(a, "set_items", None)) or self.st.get("extra", {})
 
     def _venv_py(self):
         for p in (CV / ".venv/bin/python", CV / ".venv/Scripts/python.exe"):
@@ -315,7 +317,7 @@ def _set_scalar(lines: list[str], i: int, v) -> str | None:
     return old
 
 
-def patch_yaml_text(text: str, want: dict, iron_gate: bool = True):
+def patch_yaml_text(text: str, want: dict, iron_gate: bool = True, extra: dict | None = None):
     """只补开关、不整体回写：逐行改/插，其余字节原样。返回 (新文本, 改动项 {键: (旧, 新)})，
     结构超出能安全处理的范围（流式 seed_admit 等）返回 (None, 原因)。"""
     lines = text.splitlines(keepends=True)
@@ -334,26 +336,37 @@ def patch_yaml_text(text: str, want: dict, iron_gate: bool = True):
             return None, "iron_gate 不是标量"
         if old != "true":
             changed["iron_gate"] = (old, True)
-    # params.seed_admit
+    # params.<节>：seed_admit 与书级 extra（如 column_gate、row_segment）各节走同一套补丁
+    for sec, sec_want in [("seed_admit", want), *(extra or {}).items()]:
+        why = _patch_params_section(lines, sec, sec_want, changed)
+        if why:
+            return None, why
+    return "".join(lines), changed
+
+
+def _patch_params_section(lines: list[str], section: str, want: dict, changed: dict) -> str | None:
+    """在 lines（原地）里把 params.<section> 的键补齐或改成 want；改动记进 changed（非 seed_admit 的键带节名前缀）。
+    结构超出能安全处理的范围返回原因，否则返回 None。"""
+    def tag(k):
+        return k if section == "seed_admit" else f"{section}.{k}"
     n = len(lines)
     pi = _find_key(lines, 0, n, "params", 0)
     if pi is not None and re.match(r"^params\s*:\s*(\{|\[|null|~)", lines[pi].strip()):
-        return None, "params 是流式写法"
+        return "params 是流式写法"
     if pi is None:
-        body = ["params:\n", "  seed_admit:\n"] + [f"    {k}: {_fmt(v)}\n" for k, v in want.items()]
-        lines += body
-        changed.update({k: (None, v) for k, v in want.items()})
-        return "".join(lines), changed
+        lines += ["params:\n", f"  {section}:\n"] + [f"    {k}: {_fmt(v)}\n" for k, v in want.items()]
+        changed.update({tag(k): (None, v) for k, v in want.items()})
+        return None
     pend = _block_end(lines, pi, 0)
     child = next((_indent(l) for l in lines[pi + 1:pend] if _is_content(l)), 2)
-    si = _find_key(lines, pi + 1, pend, "seed_admit", child)
+    si = _find_key(lines, pi + 1, pend, section, child)
     if si is None:
-        ins = [f"{' ' * child}seed_admit:\n"] + [f"{' ' * (child * 2)}{k}: {_fmt(v)}\n" for k, v in want.items()]
+        ins = [f"{' ' * child}{section}:\n"] + [f"{' ' * (child * 2)}{k}: {_fmt(v)}\n" for k, v in want.items()]
         lines[pend:pend] = ins
-        changed.update({k: (None, v) for k, v in want.items()})
-        return "".join(lines), changed
-    if re.match(r"^\s*seed_admit\s*:\s*(\{|\[)", lines[si]):
-        return None, "seed_admit 是流式写法"
+        changed.update({tag(k): (None, v) for k, v in want.items()})
+        return None
+    if re.match(rf"^\s*{re.escape(section)}\s*:\s*(\{{|\[)", lines[si]):
+        return f"{section} 是流式写法"
     send = _block_end(lines, si, child)
     kid = next((_indent(l) for l in lines[si + 1:send] if _is_content(l)), child * 2)
     add = []
@@ -361,7 +374,7 @@ def patch_yaml_text(text: str, want: dict, iron_gate: bool = True):
         j = _find_key(lines, si + 1, send, k, kid)
         if j is None:
             add.append(f"{' ' * kid}{k}: {_fmt(v)}\n")
-            changed[k] = (None, v)
+            changed[tag(k)] = (None, v)
             continue
         cur = re.match(r"^\s*[\w\-]+\s*:\s*([^#]*?)\s*(#.*)?$", lines[j].rstrip("\n"))
         curv = cur.group(1).strip() if cur else None
@@ -369,10 +382,32 @@ def patch_yaml_text(text: str, want: dict, iron_gate: bool = True):
             continue
         old = _set_scalar(lines, j, v)
         if old is None:
-            return None, f"{k} 不是标量"
-        changed[k] = (old, v)
+            return f"{k} 不是标量"
+        changed[tag(k)] = (old, v)
     lines[si + 1:si + 1] = add
-    return "".join(lines), changed
+    return None
+
+
+def parse_set(items) -> dict:
+    """`--set 节.键=值`（可重复）→ {节: {键: 值}}。值按 yaml 标量读：true/false、整数、小数，其余当字串。"""
+    out: dict = {}
+    for raw in items or []:
+        lhs, sep, val = raw.partition("=")
+        sec, dot, key = lhs.strip().partition(".")
+        if not (sep and dot and sec and key):
+            raise SystemExit(f"--set 格式应为 节.键=值：{raw!r}")
+        out.setdefault(sec, {})[key] = _parse_scalar(val.strip())
+    return out
+
+
+def _parse_scalar(x: str):
+    if x in ("true", "false"):
+        return x == "true"
+    if re.fullmatch(r"-?\d+", x):
+        return int(x)
+    if re.fullmatch(r"-?\d+\.\d+", x):
+        return float(x)
+    return x
 
 
 def _is_float(x: str) -> bool:
@@ -396,12 +431,15 @@ def st_yaml(ctx):
     old_t = f.read_bytes().decode("utf-8")
     want = seed_admit_want(ctx.preset, ctx.no_shadow_veto)
     ctx.st["preset"], ctx.st["no_shadow_veto"] = ctx.preset, ctx.no_shadow_veto
-    ctx.log(f"yaml 开关：{preset_label(ctx)}")
-    new_t, changed = patch_yaml_text(old_t, want)
+    ctx.st["extra"] = ctx.extra
+    ctx.log(f"yaml 开关：{preset_label(ctx)}" + (f"；书级 params {ctx.extra}" if ctx.extra else ""))
+    new_t, changed = patch_yaml_text(old_t, want, extra=ctx.extra)
     if new_t is None:
         snip = ctx.reports / "yaml-标准开关.片段.yaml"
         ctx.reports.mkdir(parents=True, exist_ok=True)
-        snip.write_text("iron_gate: true\nparams:\n  seed_admit:\n" + "".join(f"    {k}: {_fmt(v)}\n" for k, v in want.items()), encoding="utf-8")
+        blocks = [("seed_admit", want), *ctx.extra.items()]
+        snip.write_text("iron_gate: true\nparams:\n" + "".join(
+            f"  {sec}:\n" + "".join(f"    {k}: {_fmt(v)}\n" for k, v in kv.items()) for sec, kv in blocks), encoding="utf-8")
         write_next(ctx, "书 yaml 需手贴标准开关", [f"yaml 写法超出自动补丁范围（{changed}）。把 `{snip}` 里的键合并进 `{f}`，然后原样重跑。"])
         raise Stop("书 yaml 需手贴开关")
     if changed:
@@ -776,6 +814,8 @@ def child_args(a) -> list[str]:
             out += [flag, str(val)]
     if getattr(a, "no_shadow_veto", False):
         out.append("--no-shadow-veto")
+    for item in getattr(a, "set_items", None) or []:
+        out += ["--set", item]
     return out
 
 
@@ -906,6 +946,8 @@ def main(argv=None):
         if name in ("run", "plan", "status"):       # plan/status 也认，与 run 一致；不给则回落到状态文件里记的
             p.add_argument("--preset", choices=sorted(PRESETS), help="显式开关预设（默认不启用）；siku＝四庫 vol04/vol05 验过的一组")
             p.add_argument("--no-shadow-veto", action="store_true", help="预设里关掉 shadow_veto（vol04 用）")
+            p.add_argument("--set", dest="set_items", action="append", metavar="节.键=值",
+                           help="书级 params 开关，写进 yaml 的 params.<节>（可重复），如 column_gate.hint_ignore_dash=true")
         if name == "intervene":
             p.add_argument("--step", required=True)
             p.add_argument("--why", required=True)
