@@ -114,6 +114,14 @@ class SeedAdmitParams(BaseModel):
     （`n_lib_dropped`），`iron_ref_guard` 看不到证人，坐标对位里证人是对的。形近对只认现成表：
     `confusable.partners()`（手工核过 + 人裁确认 + 字体 τ≥0.988）与铁证补充表
     `iron_extra_confusable.json`。语义同字（异体、码位）不拦。"""
+    iron_ex_missing_guard: bool = True
+    """铁证判别器取候选字的人裁刻例原图做成对复核（每字最多 8 例，`_iron_decide.ex_raws`），
+    原图在缓存（`GUJI_CACHE_DIR`）里别册别页的 `char_patch`；缓存没有那一例就静默跳过——
+    同输入、同代码、同 yaml，**只因缓存里有没有别册的字块**，放行结果就会变（overview#554，
+    vol01:90:1:17a／91:1:15 复现：只有 vol01 缓存 vs vol01–07 全在，结果不同）。
+    开着：铁证本要放行、但判别时有刻例原图缺失（缓存里没有），**不放行**，转待审并记 doubt
+    `iron_ex_missing`，`evidence.iron_ex_missing` 记缺的例数。只会收紧，缓存齐全时与关着逐格一致。
+    v1 旧坐标等「本来就认不出的形状」不算缺（与缓存无关，各环境一样）。"""
     context_blank_gate: bool = True
     """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
     是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
@@ -793,6 +801,7 @@ class SeedAdmitStep(Step):
         iron_ctx = (_iron_context(p.db_path, iron_ns) if ctx.book.iron_gate else None)
         # 读不到字块：`patch_missing=error` 抛错停页；`skip` 记到 {格 id: [跳过的路]}，落进 evidence。
         patch_missing: dict[str, list[str]] = {}
+        iron_ex_missing: dict[str, int] = {}     # {格 id: 铁证判别时缺的刻例原图数}（iron_ex_missing_guard）
 
         def soft_patch(rid: str, lane: str, fn, *a):
             try:
@@ -1207,8 +1216,15 @@ class SeedAdmitStep(Step):
                 # 那种谨慎口子该配的谨慎版本：铁证闸更擅长的「揪出 dual/match_ref 语义对
                 # 但字形错的位」（王/玉 那类）这次先不做，只扩覆盖率，不动存量判决。
                 if not ok and iron_ctx is not None:
+                    ex_miss: list[str] = []
                     iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
-                                           iron_ctx, iron_scale, iron_ns)
+                                           iron_ctx, iron_scale, iron_ns,
+                                           ex_miss if p.iron_ex_missing_guard else None)
+                    if iron_char is not None and ex_miss:
+                        # 对照刻例原图缺（缓存里没有）：结果随缓存内容变，不放，转待审（overview#554）
+                        doubts.append("iron_ex_missing")
+                        iron_ex_missing[r.id] = len(ex_miss)
+                        iron_char = None
                     if iron_char is not None and p.iron_ref_guard \
                             and context_conflicts_ref(iron_char, align_char, vm_here):
                         doubts.append("iron_vs_ref")
@@ -1274,7 +1290,9 @@ class SeedAdmitStep(Step):
                                  if p.rare_agree else {}),
                               **({"approx": apx_ev} if apx_ev else {}),
                               **({"patch_missing": patch_missing[r.id]}
-                                 if r.id in patch_missing else {})}))
+                                 if r.id in patch_missing else {}),
+                              **({"iron_ex_missing": iron_ex_missing[r.id]}
+                                 if r.id in iron_ex_missing else {})}))
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review,
                                               ctx_rule=(p.ji_yi_si_ctx_purity, p.ji_yi_si_ctx_min_n) if p.ji_yi_si_ctx_rule else None,
@@ -2114,7 +2132,7 @@ def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> floa
 
 
 def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
-                 norm_stroke: int | None) -> str | None:
+                 norm_stroke: int | None, missing: list | None = None) -> str | None:
     """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
     （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
     `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
@@ -2151,6 +2169,8 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
             # 对照图是别页/别册的人裁刻例，缓存里没有属正常（跳过这一例）；
             # 文件在却解不出来是坏缓存，照样报错（strict），不当「没有」处理。
             pth = cache.get(bk_, "char_patch", f"p{int(p_):04d}c{int(c_):02d}s{s_}{sub}")
+            if pth is None and missing is not None:
+                missing.append(cid)
             raw_cache[cid] = (None if pth is None
                               else cv_imread(str(pth), cv2.IMREAD_GRAYSCALE, strict=True))
         return raw_cache[cid]
