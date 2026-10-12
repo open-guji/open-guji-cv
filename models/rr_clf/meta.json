@@ -1,0 +1,25 @@
+{
+ "doc": "入人八 4 类森林（人入八＋其他），overview#437/#442/Z-jys 接线",
+ "classes": "人入八其他",
+ "trees": 300,
+ "train": {
+  "pos": 1854,
+  "neg": 37,
+  "books": [
+   "vol02",
+   "vol03",
+   "vol05",
+   "vol06",
+   "vol07",
+   "vol08",
+   "vol09",
+   "vol10"
+  ],
+  "excludes": "强真值格、vol04"
+ },
+ "thresholds": {
+  "p": 0.5,
+  "release_p": 0.8
+ },
+ "sha256_16": "6c5c7916884efa72"
+}
