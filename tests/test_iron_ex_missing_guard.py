@@ -62,3 +62,41 @@ def test_nothing_missing_same_as_guard_off(tmp_path, monkeypatch):
 def test_guard_off_keeps_old_behaviour(tmp_path, monkeypatch):
     got = _run(tmp_path, monkeypatch, SeedAdmitParams(iron_ex_missing_guard=False), n_missing=3)
     assert got[1].admit and got[1].channel == "iron"
+
+
+def test_real_iron_decide_collects_only_cache_misses(tmp_path, monkeypatch):
+    """真走 `_iron_decide` 里的 `raw_of`：有图／缓存无图／`v1:` 旧坐标各一例，
+    `missing` 只含缓存无图那一例（`v1:` 属「本来就认不出」，不算缺）。"""
+    import numpy as np
+    import open_guji_cv.clustering.iron_evidence as ie
+    import open_guji_cv.clustering.normalize as nm
+
+    cache_root = tmp_path / "cache"
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(cache_root))
+    ImageCache(cache_root).put("vol02", "char_patch", "p0005c03s7", np.full((20, 20), 200, np.uint8))
+
+    class _Match:
+        verdict, char, cov = "unsure", None, 0.5
+        candidates = [("山", 0.5)]
+
+    class _Matcher:
+        def match(self, *a, **k):
+            return _Match()
+
+    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: np.zeros((20, 20), np.uint8))
+    monkeypatch.setattr(nm, "normalize_patch", lambda img, **k: img)
+    seen = {}
+
+    def fake_iron_with_disc(cands, human_chars_set, partners_map, img, ex_raws, scale):
+        seen["n_raw"] = len(ex_raws("山"))
+        return "山", None, None, None, None
+
+    monkeypatch.setattr(ie, "iron_with_disc", fake_iron_with_disc)
+    ids = ["vol02:5:3:7", "vol02:6:4:8", "v1:5:3:7"]
+    r = type("R", (), dict(id="tbook:1:1:1", slot=1, sub=None))()
+    ctx = (_Matcher(), {"山"}, {}, {"山": ids})
+    missing: list = []
+    assert sa._iron_decide(object(), 1, 1, r, ctx, 1.0, None, missing) == "山"
+    assert missing == ["vol02:6:4:8"] and seen["n_raw"] == 1
+    # 不传 missing（护栏关）：行为不变
+    assert sa._iron_decide(object(), 1, 1, r, ctx, 1.0, None) == "山"
