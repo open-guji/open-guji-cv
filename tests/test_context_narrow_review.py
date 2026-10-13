@@ -34,3 +34,16 @@ def test_narrow_slice():
     assert not _narrow_slice(_rec(1, 56, 56), med, 0.5)
     assert not _narrow_slice(None, med, 0.5)
     assert not _narrow_slice(_rec(1, 1, 1), (0.0, 0.0), 0.5)
+
+
+def test_narrow_col():
+    from types import SimpleNamespace as N
+    from open_guji_cv.steps.seed_admit import _gate_band_widths, _narrow_col
+    gm = N(columns=[N(col=1, band_width=100.0), N(col=2, band_width=110.0),
+                    N(col=3, band_width=60.0), N(col=4, band_width=105.0)])
+    g = _gate_band_widths(gm)
+    assert _narrow_col(g, "b:1:3:5", 0.75)
+    assert not _narrow_col(g, "b:1:1:5", 0.75)
+    assert not _narrow_col({}, "b:1:3:5", 0.75)
+    assert _gate_band_widths(None) == {}
+    assert SeedAdmitParams().context_narrow_col_review is False
