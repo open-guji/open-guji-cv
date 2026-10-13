@@ -125,6 +125,11 @@ class SeedAdmitParams(BaseModel):
     给了就用它（整册中位，由调用方量好传入）。只收紧，只管 context 通道。"""
     context_narrow_ratio: float = 0.5
     context_narrow_ref: tuple[float, float] | None = None
+    context_narrow_col_review: bool = False
+    """N3（Esme B4 窄列扫描，默认关）：context 通道要放行、且这一列的文字带宽（`gate_manifest` 的
+    `band_width`）< `context_narrow_col_ratio`×本页各列带宽中位数 → 转待审，doubt `context_narrow_col`。
+    只管 context 通道，不碰 match_ref 等通道。没有 `gate_manifest` 产物 = 弃权。"""
+    context_narrow_col_ratio: float = 0.75
     context_blank_gate: bool = True
     """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
     是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
@@ -781,6 +786,8 @@ class SeedAdmitStep(Step):
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
+        gate_cols = (_gate_band_widths(_opt(ctx, "gate_manifest", page))
+                     if p.context_narrow_col_review else {})
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         rtop: dict[str, list[str]] = {}
         if p.rare_agree or p.rare_ref:
@@ -1144,6 +1151,9 @@ class SeedAdmitStep(Step):
                         doubts.append("context_blank_cell")
                     elif p.context_single_stroke_review and d.char in _SINGLE_STROKES:
                         doubts.append("context_single_stroke")
+                    elif p.context_narrow_col_review and _narrow_col(
+                            gate_cols, r.id, p.context_narrow_col_ratio):
+                        doubts.append("context_narrow_col")
                     elif p.context_narrow_review and _narrow_slice(
                             _ir, p.context_narrow_ref or _page_med_wh(imap), p.context_narrow_ratio):
                         doubts.append("context_narrow_slice")
@@ -2199,6 +2209,25 @@ def _narrow_slice(rec, med: tuple[float, float], ratio: float) -> bool:
     if rec is None or not med[0] or not med[1]:
         return False
     return rec.width < ratio * med[0] or rec.height < ratio * med[1]
+
+
+def _gate_band_widths(gm) -> dict:
+    """{col: (本列带宽, 本页带宽中位数)}；无 gate_manifest → {}（弃权）。"""
+    import statistics
+    if gm is None or not getattr(gm, "columns", None):
+        return {}
+    med = statistics.median(c.band_width for c in gm.columns)
+    return {c.col: (c.band_width, med) for c in gm.columns}
+
+
+def _narrow_col(gate_cols: dict, cell_id: str, ratio: float) -> bool:
+    """N3：格 id（book:page:col:idx）所在列的带宽 < ratio×页中位。"""
+    try:
+        col = int(cell_id.split(":")[2])
+    except (IndexError, ValueError):
+        return False
+    bw = gate_cols.get(col)
+    return bool(bw and bw[1] and bw[0] < ratio * bw[1])
 
 
 def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
