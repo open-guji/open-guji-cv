@@ -520,6 +520,11 @@ class SeedAdmitParams(BaseModel):
     结论的全是放行错，零个看图 ok（见 #454 评论的前后对比）。没有 `char_index` 产物的格弃权。"""
     nonchar_flags: str = "bad_seg,rule_bar"
     nonchar_strokes: str = "丨亅丿丶"
+    nonchar_ctx_strokes: str = ""
+    """只对 `context` 通道生效的额外单笔画字（GUJI-156，缺省空＝不动，建议 `一乀乁乚乛`）：放行通道恰为
+    `context` 且放行字在此串里，也撤回待审（doubt `nonchar`）。「一」不能进 `nonchar_strokes`——全通道撤会伤
+    match_ref 里真的「一」；context 按字频补出的「一」才是残片上最常见的假字（vol04 217:2:15／220:4:4 同类）。
+    其余通道不碰；只收紧、不改字；随 `nonchar_gate` 一起生效。"""
 
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
@@ -584,8 +589,10 @@ class SeedAdmitParams(BaseModel):
             d.pop("variant_tie", None)
             d.pop("variant_tie_cov", None)
         if isinstance(d, dict) and not self.nonchar_gate:
-            for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
+            for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes", "nonchar_ctx_strokes"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.nonchar_ctx_strokes:
+            d.pop("nonchar_ctx_strokes", None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
@@ -1240,7 +1247,8 @@ class SeedAdmitStep(Step):
                     _ir2 = imap.get(r.id)
                     _bad = ({f for f in (p.nonchar_flags or "").split(",") if f}
                             & set(getattr(_ir2, "flags", None) or ()))
-                    if _bad or (char and char in (p.nonchar_strokes or "")):
+                    if (_bad or (char and char in (p.nonchar_strokes or ""))
+                            or (char and channel == "context" and char in (p.nonchar_ctx_strokes or ""))):
                         ok, channel, prov = False, None, ""
                         doubts.append("nonchar")
                 # 近似例（overview#276）：这一格的字就是库给的字、而库给它的依据是近似例 →
