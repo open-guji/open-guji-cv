@@ -77,6 +77,38 @@ def test_default_off_and_unanchored_are_empty(tmp_path):
     assert _run(tmp_path, {"ry": t}, anchored=False).cells == []
 
 
+def test_pagewide_vs_percolumn_context(tmp_path):
+    """页宽口径（208bz）：邻格窗口跨列。两列：列1＝山 水 木，列2＝日 山；目标是列2 首格（日）。
+    页宽：左「山水木」右「山」；逐列（旧口径）：左「」右「山」。列在产物里故意倒序存，要按列号升序展平。"""
+    from open_guji_cv.products.kinds.recog import ColumnMatch, MatchRec, PageMatch
+    book = make_book(group_decide=True)
+    ctx = make_ctx(tmp_path, book)
+
+    def col(c, recs):
+        return ColumnMatch(col=c, ok=True, chars=[
+            MatchRec(id=f"tbook:{PAGE}:{c}:{i}", slot=i, **r) for i, r in enumerate(recs, 1)])
+    same = lambda ch: dict(verdict="same", char=ch)           # noqa: E731
+    match = PageMatch(page=PAGE, db_fingerprint="testdb", columns=[
+        col(2, [dict(verdict="unsure"), same("山")]),
+        col(1, [same("山"), same("水"), same("木")])])
+    write_product(ctx, "glyph_match", PAGE, glyph_match=match)
+    align = [dict(id=f"tbook:{PAGE}:{c}:{i}", col=c, slot=i, align_char=ch, align_op="equal")
+             for c, chs in ((1, "山水木"), (2, "日山")) for i, ch in enumerate(chs, 1)]
+    from open_guji_cv.products.kinds.recog import AlignRec, PageAlignRef
+    write_product(ctx, "align_ref", PAGE,
+                  align_ref=PageAlignRef(page=PAGE, anchored=True, chars=[AlignRec(**a) for a in align]))
+    tid = f"tbook:{PAGE}:2:1"
+
+    def run(table_ctx):
+        t = _table(tmp_path, {tid: _cell("曰", table_ctx)})
+        p = gd.GroupDecideParams(group_tables={"ry": t})
+        ctx.params_for = lambda s, _p=p: _p
+        return {c.id: c for c in STEPS["group_decide"].run_page(ctx, PAGE)["group_decision"].cells}[tid]
+    assert run(ctx_key("山水木", "山")).char == "曰"                 # 页宽：命中
+    old = run(ctx_key("", "山"))                                    # 旧的逐列口径：现在对不上
+    assert old.char is None and old.why == "ctx_mismatch"
+
+
 def test_book_switch_filters_step(tmp_path):
     from open_guji_cv.core.pipeline import load_pipeline
     pl = load_pipeline("keben_body_v2")
