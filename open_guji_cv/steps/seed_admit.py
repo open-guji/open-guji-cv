@@ -1309,6 +1309,12 @@ class SeedAdmitStep(Step):
                                               clf=p if p.ji_yi_si_clf else None)
         n_auto += d_auto
         n_review += d_review
+        # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
+        #   0 _resolve_ji_yi_si（己已巳，上面）→ 1 rare_ref（升）→ 2 ry_group（升）→ 3 shadow_veto（降）→
+        #   4 shadow_promote（升，不碰 veto 降过的）→ 5 seal_blank_flip（降）→ 6 _review_lanes_pass（升）→
+        #   7 rare_cp_ctx_review（降）→ 8 rr_clf（降）→ 9 oversplit hint（只加提示）→ 10 runt_cell_review（降）。
+        #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
+        #   主循环内就地置空（放行记录生成之前）的不记。
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop)
             n_auto += d_rr
@@ -1358,6 +1364,15 @@ class SeedAdmitStep(Step):
                                         n_review=n_review, columns=out)}
 
 
+def _demote(rec, by: str) -> None:
+    """W5（GUJI-49）：后处理遍把**已放行**格降回待审之前，在 `evidence.demoted_from` 记下放行时的通道与降级遍
+    （`{"channel": <放行时 channel>, "by": <遍名>}`，字段格式 Mila 10-14 代定、Eliot 如有异议 10-16 中午前提）。
+    只在 `rec.admit` 为真时记（没放行过的格不是「降级」，不加键）；只追加 evidence 键，不改放行结果。
+    **必须在 `rec.channel` 被置空之前调用。**"""
+    if rec.admit:
+        rec.evidence = {**(rec.evidence or {}), "demoted_from": {"channel": rec.channel, "by": by}}
+
+
 def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
     """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。"""
     n = 0
@@ -1367,6 +1382,7 @@ def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
                     or not _rare_cp(rec.char)):
                 continue
             m = mmap.get(rec.id)
+            _demote(rec, "rare_cp_ctx_review")
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = (_doubts(m, None) if m is not None else []) + list(rec.doubts) + ["rare_cp_context"]
             rec.evidence = {**(rec.evidence or {}),
@@ -1522,6 +1538,7 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
                 continue                      # 异体同字：标签口径差，不是认错字（#431）
+            _demote(rec, "shadow_veto")
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
@@ -1553,6 +1570,7 @@ def _runt_cell_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list)
                 continue
             if rec.sub and rec.channel == "match_ref":
                 continue      # 夹注矮格：整理本对位字也一致的不动（vol01:90 三格真「一」都是 match_ref；错放的是 context／match_solo）
+            _demote(rec, "runt_cell_review")
             rec.admit, rec.channel, rec.provenance = False, None, ""
             rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["runt_cell"]))
             rec.evidence = {**(rec.evidence or {}),
@@ -1630,6 +1648,7 @@ def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, pa
             c = rr_clf.classify(patch, model, p.rr_clf_p)
             rec.evidence = {**(rec.evidence or {}), "rr_clf": c}
             if c["pick"] and c["pick"] != rec.char:
+                _demote(rec, "rr_clf")
                 rec.admit, rec.channel, rec.provenance = False, None, ""
                 rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["rr_clf_disagree"]))
                 n += 1
@@ -1711,6 +1730,7 @@ def _seal_blank_flip(out: list, seal: dict, coord: dict) -> int:
                 continue
             if rec.admit:
                 demoted += 1
+            _demote(rec, "seal_blank_flip")
             rec.admit, rec.channel, rec.char, rec.provenance = False, None, None, ""
             rec.doubts = sorted(doubts | {"occluded"})
             rec.evidence = {**(rec.evidence or {}),
@@ -1941,6 +1961,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
                 r.char, r.admit, r.channel, r.provenance = c2, True, "ji_yi_si", "context"
                 r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
             elif r.admit:
+                _demote(r, "ji_yi_si_ctx_review")
                 r.char, r.admit, r.channel, r.provenance = None, False, None, ""
                 r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_ctx_review"]))
                 d_auto -= 1
@@ -1954,6 +1975,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
         blocked = review_gate and not agree
         if r.admit:
             if blocked:
+                _demote(r, "ji_yi_si_review")
                 r.char, r.admit, r.channel, r.provenance = None, False, None, ""
                 r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_review"]))
                 d_auto -= 1
@@ -2005,6 +2027,7 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
         if strong and r.char == ch:
             return 0, 0
         if strong:        # 强通道放行的字与规则冲突：两边都不信，送审
+            _demote(r, "ji_yi_si_clf_conflict")
             r.char, r.admit, r.channel, r.provenance = None, False, None, ""
             r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_conflict"]))
             return -1, 1
@@ -2013,6 +2036,7 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
         r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
         return da, dr
     if r.admit and r.channel == "split_ref":      # 退役：整理本路放行
+        _demote(r, "ji_yi_si_clf_review")
         r.char, r.admit, r.channel, r.provenance = None, False, None, ""
         r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_review"]))
         return -1, 1
