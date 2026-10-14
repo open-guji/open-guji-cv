@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""规则 A（`seed_admit.rare_ref`）vs 影子升级（`shadow_promote`）vs 两者合用——同一人裁集上的正面比（overview#349 D3 道）。
+"""（W2 2026-10-14：`shadow_promote` 开关已删，本脚本仅作历史记录，不再能在线上代码上复现。）
+规则 A（`seed_admit.rare_ref`）vs 影子升级（`shadow_promote`）vs 两者合用——同一人裁集上的正面比（overview#349 D3 道）。
 
 输入（全部来自 guji-workspace 孤儿分支 snap/<ws>/<vol>/<ts> 解出的 products，见 HANDOFF_D3.md「复现」）：
   --up    book=<上游 products 目录>   含 glyph_match / rare_candidates / align_ref（Step5–7 产物，人裁前口径）

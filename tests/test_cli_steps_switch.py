@@ -34,7 +34,7 @@ def test_pipeline_cli_keeps_optional_step_when_switch_on_or_named_explicitly():
 
 
 def test_rare_candidates_consumed_only_when_a_downstream_reads_it():
-    """Step5-b 没有下游真在读（seed_admit.rare_agree / context_decide.rare_topk 都关）时，常规批量不跑它。"""
+    """Step5-b 没有下游真在读（seed_admit.rare_ref / context_decide.rare_topk 都关）时，常规批量不跑它。"""
     import open_guji_cv.steps  # noqa: F401  注册 Step
     from open_guji_cv.core.engine import rare_candidates_consumed
     from open_guji_cv.core.step import STEPS
@@ -48,5 +48,5 @@ def test_rare_candidates_consumed_only_when_a_downstream_reads_it():
 
     book = SimpleNamespace(ocr_candidates=False)
     assert rare_candidates_consumed(pipe, params_for(), book) is False
-    assert rare_candidates_consumed(pipe, params_for(seed_admit={"rare_agree": True}), book) is True
+    assert rare_candidates_consumed(pipe, params_for(seed_admit={"rare_ref": True}), book) is True
     assert rare_candidates_consumed(pipe, params_for(context_decide={"rare_topk": 3}), book) is True
