@@ -57,6 +57,7 @@ from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..utils import jiazhu_split
+from ..utils.column_pair_merge import has_pair_merged
 from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
 
 
@@ -188,7 +189,8 @@ class ColumnGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
-        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
+        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection",
+                   "open_guji_cv.utils.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
         book_deps=("period_prior", "expected_cols", "chars_per_line"),
@@ -223,8 +225,9 @@ class ColumnGateStep(Step):
         # 2026-09-15 补齐。）
         page_type_gate: BorderDetectGateManifest = ctx.product(
             "border_detect_gate_manifest", page)
-        # 窄对合并页（见 `border_detect_gate`）：闸1 记的期望列数比书级少一列——按它判列数。
-        if any(f.startswith("pair_merged") for f in page_type_gate.flags):
+        # 窄对合并页（见 `border_detect_gate`）：闸1 认了合并旗、且记的期望列数＝本闸期望−1，才按它判列数；
+        # 对不上（闸1 留的是 `pair_merged_inconsistent`、或两闸期望不同）就不放宽。
+        if has_pair_merged(page_type_gate.flags) and page_type_gate.expected_cols == expected - 1:
             expected = page_type_gate.expected_cols
         if page_type_gate.page_type_policy == "skip":
             page_reject.append(

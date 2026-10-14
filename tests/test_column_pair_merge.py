@@ -200,3 +200,96 @@ def test_column_gate_follows_gate1_expected_cols_on_merged_page(tmp_path):
         tmp_path / "p", gray, borders, book=book,
         gate1=make_gate1(PAGE, n_cols=8, expected_cols=8))        # 没有 pair_merged 旗：照旧拒收
     assert any(r.startswith("column_count") for r in plain["gate_manifest"].reject)
+
+
+# ── 产物不自洽（Elena 评审条件 5①）：有 pair_merged 旗，但列数对不上 ──────────
+
+def _gate1_with_flag(tmp_path, xs, *, borders_expected, book_expected=9, gate_param=None):
+    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
+    borders = make_borders(w=1900, xs=xs).model_copy(update={"expected_cols": borders_expected})
+    ctx = make_ctx(tmp_path, make_book(expected_cols=book_expected), raw={PAGE: blank_page(1900, 1400)})
+    if gate_param is not None:
+        ctx.params["border_detect_gate"] = BorderDetectGateParams(expected_cols=gate_param)
+    ctx.store.write(ctx.book.id, "border_detect", f"p{PAGE:04d}",
+                    {"borders": borders, "line_index": _line_index_with_flag(xs)})
+    return STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
+
+
+def test_gate1_flag_but_borders_expected_cols_disagrees_is_not_relaxed(tmp_path):
+    """旗＋8 列，但 Step1 记的列数是 9（不自洽）：不放宽，仍按书级 9 列拒收，并留 `pair_merged_inconsistent`。"""
+    m = _gate1_with_flag(tmp_path, _xs([180] * 8, 60.0), borders_expected=9)
+    assert any(r.startswith("column_count") for r in m.reject) and m.expected_cols == 9
+    names = [f.split("：")[0] for f in m.flags]
+    assert "pair_merged_inconsistent" in names and "pair_merged" not in names
+
+
+def test_gate1_flag_but_n_cols_equals_book_expected_only_flags(tmp_path):
+    """旗＋9 列、Step1 记 8 列：列数本身没问题（9＝书级），不拒收，但留不自洽提示，不当合并页。"""
+    m = _gate1_with_flag(tmp_path, _xs([180] * 9, 60.0), borders_expected=8)
+    assert not any(r.startswith("column_count") for r in m.reject) and m.expected_cols == 9
+    names = [f.split("：")[0] for f in m.flags]
+    assert "pair_merged_inconsistent" in names and "pair_merged" not in names
+
+
+def test_gate1_aligns_with_its_own_expected_cols_param(tmp_path):
+    """合并页的期望＝**闸自己的**期望−1：闸参数设成 10 时，8 列合并页（Step1 记 8）对不上 9，不放宽。"""
+    m = _gate1_with_flag(tmp_path, _xs([180] * 8, 60.0), borders_expected=8, gate_param=10)
+    assert any(r.startswith("column_count") for r in m.reject)
+    assert "pair_merged_inconsistent" in [f.split("：")[0] for f in m.flags]
+    ok = _gate1_with_flag(tmp_path / "ok", _xs([180] * 8, 60.0), borders_expected=8, gate_param=9)
+    assert not any(r.startswith("column_count") for r in ok.reject)
+    assert "pair_merged" in [f.split("：")[0] for f in ok.flags]
+
+
+def test_gate1_only_swallows_missing_line_index(tmp_path, monkeypatch):
+    """`line_index` 缺失（FileNotFoundError）当没合并过；别的异常不吞。"""
+    borders = make_borders(w=1900, xs=_xs([180] * 9, 60.0))
+    ctx = make_ctx(tmp_path, make_book(expected_cols=9), raw={PAGE: blank_page(1900, 1400)})
+    ctx.store.write(ctx.book.id, "border_detect", f"p{PAGE:04d}", {"borders": borders})   # 没写 line_index
+    STEPS["border_detect_gate"].run_page(ctx, PAGE)                                      # 不抛
+    real = ctx.product
+
+    def boom(kind, page):
+        if kind == "line_index":
+            raise ValueError("坏产物")
+        return real(kind, page)
+
+    monkeypatch.setattr(ctx, "product", boom)
+    with pytest.raises(ValueError):
+        STEPS["border_detect_gate"].run_page(ctx, PAGE)
+
+
+def test_border_detect_gate_declares_line_index_as_optional_upstream():
+    assert "line_index" in STEPS["border_detect_gate"].spec.optional_consumes
+    assert "open_guji_cv.utils.column_pair_merge" in STEPS["border_detect_gate"].spec.code_deps
+    assert "open_guji_cv.utils.column_pair_merge" in STEPS["column_gate"].spec.code_deps
+
+
+def test_pair_merged_flag_helpers_do_not_confuse_inconsistent_with_merged():
+    assert cpm.has_pair_merged(["x", "pair_merged：说明"])
+    assert not cpm.has_pair_merged(["pair_merged_inconsistent：说明"])
+    assert not cpm.has_pair_merged([])
+
+
+# ── 端到端（Elena 评审条件 5②）：Step1 → 闸1 → Step2 → 闸2 连跑，8 列合并页放行 ──
+
+def test_end_to_end_merged_page_passes_both_gates(tmp_path, monkeypatch):
+    import open_guji_cv.steps.border_detect as bd
+    from helpers import run_steps, synth_page
+    from open_guji_cv.steps.border_detect import BorderDetectParams
+
+    xs9 = _xs(P217, 60.0)
+    xs8 = [x for i, x in enumerate(xs9) if i != 2]
+    gray, _ = synth_page(w=1900, xs=xs8)                                  # 真的是 8 列的页
+    table = {9: make_borders(w=1900, xs=xs9).to_result(), 8: make_borders(w=1900, xs=xs8).to_result()}
+    monkeypatch.setattr(bd, "detect_borders", lambda g, expected_cols, **kw: table[expected_cols])
+    ctx = make_ctx(tmp_path, make_book(expected_cols=9), raw={PAGE: gray}, monkeypatch=monkeypatch)
+    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=True)
+
+    out = run_steps(ctx, PAGE, ["border_detect", "border_detect_gate", "column_warp", "column_gate"])
+    g1, g2 = out["border_detect_gate_manifest"], out["gate_manifest"]
+    assert g1.admitted and g1.n_cols == 8 and g1.expected_cols == 8
+    assert "pair_merged" in [f.split("：")[0] for f in g1.flags]
+    assert len(g2.columns) == 8
+    assert not any(r.startswith("column_count") for r in g2.reject)
+    assert g2.admitted and all(c.admitted for c in g2.columns)

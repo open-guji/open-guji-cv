@@ -24,6 +24,22 @@ from dataclasses import dataclass
 from .column_types import classify_columns
 
 
+#: `line_index` 合并列、闸1 manifest 上的旗名（旗文本是「旗名：说明」）。三处（Step1 打旗、闸1 认旗、闸2 认旗）
+#: 都走这里，不各自写字符串前缀。`pair_merged_inconsistent` 是闸1 发现「有旗但列数不自洽」时留的提示，
+#: 它的名字以 `pair_merged` 开头但**不是**合并旗——所以认旗一律比整段旗名，不用 `startswith`。
+PAIR_MERGED_FLAG = "pair_merged"
+PAIR_MERGED_INCONSISTENT_FLAG = "pair_merged_inconsistent"
+
+
+def flag_name(flag: str) -> str:
+    return flag.split("：", 1)[0]
+
+
+def has_pair_merged(flags) -> bool:
+    """旗列表里有没有合并旗（整段旗名＝`pair_merged`）。"""
+    return any(flag_name(f) == PAIR_MERGED_FLAG for f in flags)
+
+
 @dataclass(frozen=True)
 class PairMergeParams:
     narrow_ratio: float = 0.7      # 窄列：< 此比例 × 页中位列宽

@@ -23,7 +23,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..utils.border_geometry import detect_borders
-from ..utils.column_pair_merge import merge_narrow_pair
+from ..utils.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..utils.column_types import classify_columns
 
 
@@ -104,7 +104,7 @@ class BorderDetectStep(Step):
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
             if merged_col is not None and c.col == merged_col:
-                flags.append("pair_merged：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
+                flags.append(f"{PAIR_MERGED_FLAG}：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
                              f"已用 {cols} 列重探去掉那条线")
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
