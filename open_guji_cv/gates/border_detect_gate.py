@@ -110,6 +110,19 @@ class BorderDetectGateStep(Step):
         page_type, policy = classify_page_type(raw)
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
+        # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上
+        # 打 `pair_merged` 旗、并把期望列数记在 `Borders.expected_cols`。显式认旗，不靠两个数相等去猜。
+        pair_merged = False
+        try:                                   # 老产物／造数据的用例没有 line_index：当没合并过
+            li = ctx.product("line_index", page)
+        except Exception:
+            li = None
+        if li is not None:
+            pair_merged = any(f.startswith("pair_merged") for ln in li.lines for f in ln.flags)
+        if pair_merged and n_cols == b.expected_cols:
+            expected = b.expected_cols
+        else:
+            pair_merged = False
 
         reject: list[str] = []
         if policy == "skip":
@@ -126,6 +139,8 @@ class BorderDetectGateStep(Step):
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
         flags: list[str] = []
+        if pair_merged:
+            flags.append(f"pair_merged：Step1 判本页是 {expected} 列（多余竖线已去），不是书级列数")
         # 任务卡 #54 第22条：Step0 页面预检判定尺寸异常——白名单页/关着开关时
         # 只 flag；开了 `page_survey_block` 且不在白名单才真拦（待拆/待核）。
         survey = ctx.product("page_survey", page) if ctx.has_product("page_survey", page) else None

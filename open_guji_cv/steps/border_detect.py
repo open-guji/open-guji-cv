@@ -23,12 +23,17 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..utils.border_geometry import detect_borders
+from ..utils.column_pair_merge import merge_narrow_pair
 from ..utils.column_types import classify_columns
 
 
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
+    merge_narrow_pair: bool = False
+    """窄对合并（`utils/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
+    用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
+    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
 
 @register_step
@@ -37,7 +42,7 @@ class BorderDetectStep(Step):
         id="border_detect", title="Step1 边框探测", version="1.2", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
-                   "open_guji_cv.utils.column_types"),
+                   "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
         # `column_grid` / `col_pitch` / `frame_height` / `vline_polyline` 决定竖线
         # 走哪条路、用哪组阈值，同理。
@@ -62,17 +67,26 @@ class BorderDetectStep(Step):
         H, W = gray.shape[:2]
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
-        res = detect_borders(gray, expected_cols=cols, ink_threshold=p.ink_threshold,
-                             book_bottom_gap=ctx.book.bottom_gap,
-                             top_band_frac=ctx.book.top_band_frac,
-                             bottom_band_frac=ctx.book.bottom_band_frac,
-                             column_grid=ctx.book.column_grid,
-                             col_pitch=ctx.book.col_pitch,
-                             frame_height=ctx.book.frame_height,
-                             outer_shift=ctx.book.outer_shift,
-                             book_outer_gap=ctx.book.outer_gap,
-                             frame_layers=ctx.book.frame_layers,
-                             vline_polyline=ctx.book.vline_polyline)
+        def _detect(n_cols: int):
+            return detect_borders(gray, expected_cols=n_cols, ink_threshold=p.ink_threshold,
+                                  book_bottom_gap=ctx.book.bottom_gap,
+                                  top_band_frac=ctx.book.top_band_frac,
+                                  bottom_band_frac=ctx.book.bottom_band_frac,
+                                  column_grid=ctx.book.column_grid,
+                                  col_pitch=ctx.book.col_pitch,
+                                  frame_height=ctx.book.frame_height,
+                                  outer_shift=ctx.book.outer_shift,
+                                  book_outer_gap=ctx.book.outer_gap,
+                                  frame_layers=ctx.book.frame_layers,
+                                  vline_polyline=ctx.book.vline_polyline)
+
+        res = _detect(cols)
+        # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
+        # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
+        merged_col = None
+        if p.merge_narrow_pair:
+            res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
+                                                      leaf_layout=ctx.book.leaf_layout)
         borders = Borders.from_result(res, cols)
 
         # 列类型：`borders.verticals` 已是右上原点空间、x 升序（右→左），与
@@ -89,6 +103,9 @@ class BorderDetectStep(Step):
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
+            if merged_col is not None and c.col == merged_col:
+                flags.append("pair_merged：原相邻两条窄列（宽度和≈一列）被多余竖线劈开，"
+                             f"已用 {cols} 列重探去掉那条线")
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")

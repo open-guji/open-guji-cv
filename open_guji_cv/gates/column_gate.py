@@ -223,6 +223,9 @@ class ColumnGateStep(Step):
         # 2026-09-15 补齐。）
         page_type_gate: BorderDetectGateManifest = ctx.product(
             "border_detect_gate_manifest", page)
+        # 窄对合并页（见 `border_detect_gate`）：闸1 记的期望列数比书级少一列——按它判列数。
+        if any(f.startswith("pair_merged") for f in page_type_gate.flags):
+            expected = page_type_gate.expected_cols
         if page_type_gate.page_type_policy == "skip":
             page_reject.append(
                 f"page_type_skip：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
