@@ -10,6 +10,8 @@ vision-gate 步调 `guji events import-vision` 完成）。不改 `zl.py`、Step
   gen    联系页：给格清单（`--cells vol03:22:8:7,…` 或 `--cells-file`；不给则取
          `<册>.放行错穷举.json` 的「认字差异」档），出 `reports/<册>/s8/联系页/*.png`、索引 md，
          以及一份待填简表 `看图简表.tsv`（verdict 列留空）。
+  overlay 整页叠图：每格出整页缩略图（红框＝目标格，浅蓝＝同列其它格）＋局部 1:1，看「框到底落在原图哪里」。
+         **坑**：`char_index` 的 `bbox_page`／`quad_page` 的 x 是镜像坐标（W−x），叠原图前必须翻回来（`mirror_x`）。
   check  校验简表或 jsonl：格式错（含缺 judge/ts、未知键）报行号；简表里还有空 verdict 的格也报。
   fill   简表 → `reports/<册>/看图结论.jsonl`（只追加；`ts`、`judge` 在这里填），随后
          `zl.py run --book <册> --ws <ws> --only vision-gate` 即可导入并过闸。
@@ -79,6 +81,51 @@ def read_cells(book: str, cells: str | None, cells_file: str | None, main_report
         r = known.get(cid, {})
         out.append({"id": cid, "tier": "real", "char": r.get("char"), "witness": r.get("witness"), "ctx": r.get("ctx")})
     return out
+
+
+def mirror_x(bbox, width: int):
+    """`bbox_page`（x0,y0,x1,y1）的 x 是镜像坐标（W−x）。翻回原图坐标；已用 `ink_ratio` 与记录值核对过（vol02 p113/130/165 等）。"""
+    return [int(width - bbox[2]), int(bbox[1]), int(width - bbox[0]), int(bbox[3])]
+
+
+def cmd_overlay(a) -> int:
+    import cv2
+    os.environ.setdefault("GUJI_WORKSPACE", str(Path(a.ws).resolve()))
+    import open_guji_cv.steps  # noqa: F401  注册产物种类
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.core.spec import page_key
+    from open_guji_cv.products.store import ProductStore
+    ctx = _ctx(a.book, a.ws)
+    book, st = load_book(a.book), ProductStore()
+    outd = ctx.reports / "叠图"
+    outd.mkdir(parents=True, exist_ok=True)
+    rows = read_cells(a.book, a.cells, a.cells_file, ctx.main_reports)
+    bad = 0
+    for r in rows:
+        pid = zl.parse_cell_id(r["id"])
+        if not pid:
+            print(f"✗ {r['id']}：字位格式不识"); bad += 1; continue
+        page, col, slot, sub = pid
+        ci = st.read(a.book, "cell_shrink", page_key(page), "char_index")
+        cc = ci.column(col) if ci else None
+        tgt = next((c for c in (cc.chars if cc else []) if c.slot == slot and (c.sub or "") == sub), None)
+        img = cv2.imread(str(book.raw_path(page)))
+        if tgt is None or img is None:
+            print(f"✗ {r['id']}：{'没有这一格' if tgt is None else '原图读不出来'}"); bad += 1; continue
+        W = img.shape[1]
+        for c in cc.chars:
+            b = mirror_x(c.bbox_page, W)
+            cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (255, 160, 0), 2)
+        b = mirror_x(tgt.bbox_page, W)
+        cv2.rectangle(img, (b[0], b[1]), (b[2], b[3]), (0, 0, 255), 4)
+        h, w = img.shape[:2]
+        name = r["id"].replace(":", "_")
+        cv2.imwrite(str(outd / f"{name}_整页.png"), cv2.resize(img, (int(w * 1100 / h), 1100), interpolation=cv2.INTER_AREA))
+        pad = 140
+        cv2.imwrite(str(outd / f"{name}_局部.png"),
+                    img[max(0, b[1] - pad):min(h, b[3] + pad), max(0, b[0] - pad - 90):min(w, b[2] + pad + 90)])
+    print(f"叠图 {len(rows) - bad}/{len(rows)} 格 → {outd}")
+    return 1 if bad else 0
 
 
 def cmd_gen(a) -> int:
@@ -211,15 +258,16 @@ def cmd_fill(a) -> int:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name, fn in (("gen", cmd_gen), ("check", cmd_check), ("fill", cmd_fill)):
+    for name, fn in (("gen", cmd_gen), ("overlay", cmd_overlay), ("check", cmd_check), ("fill", cmd_fill)):
         p = sub.add_parser(name)
         p.add_argument("--book", required=True)
         p.add_argument("--ws", required=True)
         p.set_defaults(fn=fn)
-        if name == "gen":
+        if name in ("gen", "overlay"):
             p.add_argument("--cells", help="逗号分隔的字位 id，如 vol03:22:8:7,vol03:90:5:16")
             p.add_argument("--cells-file", help="一行一个字位（# 后是注释）")
-            p.add_argument("--per", type=int, default=24, help="每张联系页放几格")
+            if name == "gen":
+                p.add_argument("--per", type=int, default=24, help="每张联系页放几格")
         else:
             p.add_argument("--wenyi-list", help="文意定人裁清单 jsonl；清单里的格 ok/wrong 拒收（unsure 允许）")
             p.add_argument("--tsv", help="简表路径（缺省 reports/<册>/s8/看图简表.tsv）")

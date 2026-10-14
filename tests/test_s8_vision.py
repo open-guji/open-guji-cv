@@ -104,3 +104,10 @@ def test_missing_header_columns(env, capsys):
     p.write_text("cell\tverdict\nvol03:1:1:1\tok\n", encoding="utf-8")
     assert run("check", "--book", "vol03", "--ws", str(env)) == 1
     assert "表头缺列" in capsys.readouterr().out
+
+
+def test_mirror_x_flips_page_x_and_keeps_y():
+    # bbox_page 的 x 是镜像（W−x）：vol02 165:1:3 存的 [367,625,481,692]，W=2345 页上原图 x∈[1864,1978]
+    assert s8.mirror_x([367, 625, 481, 692], 2345) == [1864, 625, 1978, 692]
+    b = [10, 5, 50, 9]
+    assert s8.mirror_x(s8.mirror_x(b, 100), 100) == b  # 翻两次回原样
