@@ -37,6 +37,7 @@ import csv
 import datetime as dt
 import json
 import os
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -189,7 +190,7 @@ def validate(book: str, rows: list[dict], judge: str, ts: str, wenyi: set[str] |
     """空 verdict 先报；其余交给 vision.parse_jsonl（同一套规则，不另立）。"""
     import tempfile
     errs = [f"简表第 {r['_line']} 行：{r['cell']} 在文意定清单里，ok/wrong 不是看图结论，走人裁（只许 unsure）"
-            for r in rows if wenyi and r["cell"] in wenyi and r["verdict"] in ("ok", "wrong")]
+            for r in rows if wenyi and re.sub(r"[ab]$", "", r["cell"]) in wenyi and r["verdict"] in ("ok", "wrong")]
     errs += [f"简表第 {r['_line']} 行：{r['cell']} 还没填 verdict" for r in rows if not r["verdict"]]
     todo = [r for r in rows if r["verdict"]]
     with tempfile.TemporaryDirectory() as td:
@@ -198,7 +199,6 @@ def validate(book: str, rows: list[dict], judge: str, ts: str, wenyi: set[str] |
         from open_guji_cv.feedback.vision import parse_jsonl
         res = parse_jsonl(p, "check", judge, book=book)
     for e in res.errors:  # parse_jsonl 报的是 todo 内的行号，换回简表行号
-        import re
         m = re.match(r"第 (\d+) 行", e)
         if m:
             e = e.replace(m.group(0), f"简表第 {todo[int(m.group(1)) - 1]['_line']} 行", 1)
@@ -243,10 +243,10 @@ def cmd_fill(a) -> int:
         for l in out.read_text(encoding="utf-8-sig").splitlines():
             if l.strip():
                 d = json.loads(l)
-                have.add((d.get("cell"), d.get("v"), d.get("char", "")))
-    new = [d for d in to_jsonl_rows(rows, a.judge, ts) if (d["cell"], d["v"], d.get("char", "")) not in have]
+                have.add((d.get("cell"), d.get("v"), d.get("char", ""), d.get("judge", "")))
+    new = [d for d in to_jsonl_rows(rows, a.judge, ts) if (d["cell"], d["v"], d.get("char", ""), d.get("judge", "")) not in have]
     skipped = len(rows) - len(new)
-    print(f"跳过 {skipped} 行（同 cell＋verdict＋char 已在 {out.name}）")
+    print(f"跳过 {skipped} 行（同 cell＋verdict＋char＋judge 已在 {out.name}）")
     lines = [json.dumps(d, ensure_ascii=False) for d in new]
     with out.open("a", encoding="utf-8", newline="\n") as f:  # 只追加：改结论就再追加一行，旧行不动
         for l in lines:

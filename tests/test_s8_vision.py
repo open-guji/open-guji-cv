@@ -111,3 +111,20 @@ def test_mirror_x_flips_page_x_and_keeps_y():
     assert s8.mirror_x([367, 625, 481, 692], 2345) == [1864, 625, 1978, 692]
     b = [10, 5, 50, 9]
     assert s8.mirror_x(s8.mirror_x(b, 100), 100) == b  # 翻两次回原样
+
+
+def test_fill_dedup_key_includes_judge(env):
+    # 格式验收的行（judge=格式验收）不能让真结论（同 cell/v/char、另一 judge）被当「已有」跳过
+    write_tsv(env, "vol03:22:8:7\tunsure\t\t日\t\t\n")
+    run("fill", "--book", "vol03", "--ws", str(env), "--judge", "格式验收，非真结论")
+    run("fill", "--book", "vol03", "--ws", str(env), "--judge", "Lucian")
+    jl = env / "reports" / "vol03" / "看图结论.jsonl"
+    assert len(jl.read_text(encoding="utf-8").splitlines()) == 2
+
+
+def test_wenyi_list_matches_jiazhu_ab_cells(env, capsys, tmp_path):
+    wl = tmp_path / "w.jsonl"
+    wl.write_text(json.dumps({"id": "vol03:22:8:7"}) + "\n", encoding="utf-8")
+    write_tsv(env, "vol03:22:8:7a\tok\t\t日\t\t\n")
+    assert run("check", "--book", "vol03", "--ws", str(env), "--wenyi-list", str(wl)) == 1
+    assert "走人裁" in capsys.readouterr().out
