@@ -291,7 +291,7 @@ def cmd_build(a) -> int:
         "code": {"cv_commit": head if rc == 0 else None, "cv_dirty": bool(dirty), "uv_lock_sha256": sha_file(lock) if lock.is_file() else None,
                  "versions": ver, "threads_env": {k: os.environ.get(k) for k in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS")},
                  "step_code_hash": chs},
-        "config": {"yaml_sha256": sha_bytes(ytxt), "yaml_sha256_lf": sha_bytes(ytxt.replace(b"\r\n", b"\n")),
+        "config": {"ref_snapshot_yaml_sha": a.ref_snapshot_yaml_sha, "yaml_sha256": sha_bytes(ytxt), "yaml_sha256_lf": sha_bytes(ytxt.replace(b"\r\n", b"\n")),
                    "yaml_sha256_crlf": sha_bytes(ytxt.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n"))},
         "products": {"root_hint": prod["root_hint"], "snap_branch": a.snap_branch, "snap_commit": a.snap_commit,
                      "snap_manifest_sha256": a.snap_manifest_sha, "steps": prod["steps"]},
@@ -393,7 +393,11 @@ def cmd_check(a) -> int:
             R.add("V3", "yaml", FAIL, f"工作区没有 {cur}")
         else:
             cb = cur.read_bytes()
-            if cb == pb:
+            ref = cfg.get("ref_snapshot_yaml_sha")
+            if cb == pb and ref and ref != cfg["yaml_sha256"]:
+                R.add("V3", "yaml", WARN if fz.get("rehearsal") else FAIL,
+                      f"包内＝工作区 {cfg['yaml_sha256'][:12]}；与参照快照 {ref[:12]} 不同（演练只提示，正式冻结须与交付快照一致）")
+            elif cb == pb:
                 R.add("V3", "yaml", PASS, f"字节一致 {cfg['yaml_sha256'][:12]}")
             elif cb.replace(b"\r\n", b"\n") == pb.replace(b"\r\n", b"\n"):
                 R.add("V3", "yaml", WARN, "仅行尾差异（LF／CRLF）")
@@ -482,7 +486,8 @@ def cmd_check(a) -> int:
     if d7:
         R.add("V7", "外部状态", FAIL, f"变了：{d7[:8]}（checkpoint／字体变＝全册 5a 过期，转 Mila）")
     else:
-        R.add("V7", "外部状态", WARN if sk7 else PASS, f"{len(ext) - len(sk7)} 项相等" + (f"；冻结时就没取到 {len(sk7)} 项：{sk7[:4]}" if sk7 else ""))
+        R.add("V7", "外部状态", (WARN if fz.get("rehearsal") else FAIL) if sk7 else PASS,
+              f"{len(ext) - len(sk7)} 项相等" + (f"；冻结时记 missing {len(sk7)} 项：{sk7[:4]}（演练提示不判败，正式冻结必须齐）" if sk7 else ""))
     # V8 字形库
     h = fz["human"]
     now_h = human_state(ws)
@@ -534,7 +539,7 @@ def cmd_check(a) -> int:
     # V11 交付物
     dv = fz.get("deliverables") or []
     if not dv:
-        R.add("V11", "交付物", SKIP, "演练冻结未登记交付物（--deliverable）；close-check 14 项也未复跑")
+        R.add("V11", "交付物", SKIP, "待 Morgan 确认交付册（演练不要求交付物清单）；close-check 14 项也未复跑")
     else:
         bad11 = [d["path"] for d in dv if not Path(d["path"]).is_file() or sha_file(Path(d["path"])) != d["sha256"]]
         R.add("V11", "交付物", FAIL if bad11 else PASS, f"{bad11[:4]}" if bad11 else f"{len(dv)} 个交付物哈希相等；lines.md 字数／close-check 重跑另列")
@@ -607,7 +612,7 @@ def cmd_selftest(a) -> int:
         base = tmp / "F"
         ns = argparse.Namespace(workspace=str(ws), book=book, products_dir=str(pr), out=str(base), id="F0", by="selftest",
                                 approved_by=None, note="selftest", rehearsal=True, snap_branch=None, snap_commit=None,
-                                snap_manifest_sha=None, cache_hash=False, deliverable=None)
+                                snap_manifest_sha=None, ref_snapshot_yaml_sha=None, cache_hash=False, deliverable=None)
         cmd_build(ns)
         # 工作区副本：只拷 books/ feedback/events config/crop_exclusions.jsonl corpus（缓存、库用原件，只读）
         w2 = tmp / "ws"
@@ -712,6 +717,7 @@ def main(argv=None) -> int:
     b.add_argument("--approved-by", default=None)
     b.add_argument("--note", default="")
     b.add_argument("--rehearsal", action="store_true", help="演练，非交付")
+    b.add_argument("--ref-snapshot-yaml-sha", help="参照快照的 book_yaml_sha256（只提示差异，不判败；正式交付冻结才要求一致）")
     b.add_argument("--snap-branch")
     b.add_argument("--snap-commit")
     b.add_argument("--snap-manifest-sha")
