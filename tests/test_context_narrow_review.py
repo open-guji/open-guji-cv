@@ -1,4 +1,6 @@
 """N1/N2：context 通道收紧开关（默认关）的纯函数与默认值。"""
+import pytest
+
 from open_guji_cv.products.kinds.chars import CharRec
 from open_guji_cv.steps.seed_admit import (
     SeedAdmitParams, _SINGLE_STROKES, _narrow_slice, _page_med_wh)
@@ -47,3 +49,27 @@ def test_narrow_col():
     assert not _narrow_col({}, "b:1:3:5", 0.75)
     assert _gate_band_widths(None) == {}
     assert SeedAdmitParams().context_narrow_col_review is False
+
+
+# ── 关时不进 dump（GUJI-208de）────────────────────────────────────────
+from open_guji_cv.steps.seed_admit import _N_KEYS  # noqa: E402
+
+
+def test_n_keys_default_not_in_dump():
+    d = SeedAdmitParams().model_dump()
+    assert not [k for k in _N_KEYS if k in d]
+
+
+@pytest.mark.parametrize("k,v", [("context_single_stroke_review", True), ("context_narrow_review", True),
+                                 ("context_narrow_ratio", 0.45), ("context_narrow_ref", (30.0, 40.0)),
+                                 ("context_narrow_col_review", True), ("context_narrow_col_ratio", 0.6)])
+def test_n_key_non_default_in_dump_and_changes_hash(k, v):
+    base = SeedAdmitParams().model_dump()
+    d = SeedAdmitParams(**{k: v}).model_dump()
+    assert d[k] == v and not [x for x in _N_KEYS if x != k and x in d]
+    assert {x: y for x, y in d.items() if x != k} == base
+
+
+def test_n_keys_off_equals_explicit_default():
+    assert SeedAdmitParams().model_dump() == SeedAdmitParams(
+        context_narrow_ratio=0.5, context_narrow_review=False, context_narrow_ref=None).model_dump()
