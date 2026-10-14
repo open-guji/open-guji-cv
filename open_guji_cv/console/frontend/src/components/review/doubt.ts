@@ -16,6 +16,7 @@ export const DOUBT_NAMES: Record<string, string> = {
   form_open: '义定形未定',
   ref_lib_variant: '库形异体',
   iron_vs_ref: '铁证≠整理本',
+  iron_ex_missing: '铁证缺对照刻例图（缓存）',
   context_vs_ref: '上下文≠整理本',
   context_verdict: '上下文档外',
   context_blank_cell: '空白字块',
