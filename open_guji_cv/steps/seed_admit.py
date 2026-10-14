@@ -307,36 +307,11 @@ class SeedAdmitParams(BaseModel):
     书级 `codepoints` 认过这一对的照放。**直接边（双向、单向）行为一概不变**。
     实测（四庫 vol01–04 快照 + 全唐文 v006–v010 快照，见 #178 评论）：靠异体等价放行的
     1,321 格里间接路径 2 格，都是 `𢑴`→`彝`→`彞`，1 格存形错；其余全是直接边。"""
-    lib_confident_cov: float = 0.0
-    """库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。0 = 关（缺省）。
-
-    对象：上面所有通道都没放行、库判 `unsure`、Step6 退回先验（`source=prior`，
-    即人审卡上的「上下文 margin 不足」）的格。库 top1 的 cov ≥ 本值、且领先第二名
-    ≥ `lib_confident_gap` 时放行 top1。硬约束（任务书 item 2）：
-    - 不碰 己／已／巳 一族（`always_review` 与 `ji_yi_si.FAMILY`）；
-    - 不碰形近对表里的字：top1 在 `confusable.partners()`（手工＋人裁＋字体表）或铁证
-      补充表（`iron_extra_confusable.json`）里有对手就不放——**按字不按对**，不要求
-      对手恰好在候选里；
-    - 库无护栏（`guard is None`）；本格没有任何流程内疑问（`near_form`／`replace_align`／
-      `context_vs_ref`／`form_open`／`iron_vs_ref` …）——**整理本说了不同（replace）一律不放**；
-    - 只当兜底：放在铁证之后、`if not ok` 里，只新增放行，不改动任何已放行格。
-    **缺省关、不推荐开**（四册 vol01–04 实测，open-guji-core/overview#59）：这个池子里有人裁的
-    109 格库 top1 错 94 格——真字多半库里没收，cov 0.95~0.98 只是「库里最像的那个」；最窄的
-    候选档（cov≥0.98、领先≥0.03）四册合计只有 130 格，全审 0 错也压不到 95% 上界 ≤1%。
-    留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
-    lib_confident_gap: float = 0.0
-    """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
     off_channels: str = ""
     """关掉 `admission_decision` 的哪几条通道（逗号分隔，如 `"match_solo"`；2026-09-28，
     overview#155）。命中的判决作废、记 doubt `channel_off`，后面的兜底通道（context／
     ref_lib／铁证…）照常有机会——关的是**这条路**，不是这个格。空串 = 全开（旧行为）。
     书级用：书 yaml `params: {seed_admit: {off_channels: match_solo}}`。"""
-    solo_confusable_guard: bool = False
-    """match_solo 系（`match_solo`/`match_solo_ocr`/`match_solo_cnn`）加形近闸（2026-09-28，
-    overview#155）：库 top1 在任何一张形近表里（`_confusable_char`：NEAR_FORM_CHARS、
-    `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
-    起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
-    这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
     rare_cp_ctx_review: bool = False
     """罕用码位 × `context` 通道落审（2026-10-10，overview#437 异体组方案 A，缺省关）：放行字不在
     U+4E00–9FFF（扩展区、部首、兼容区，同 `_rare_cp`／`context_garble_guard` 口径）、且放行通道恰为
@@ -367,13 +342,6 @@ class SeedAdmitParams(BaseModel):
     的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
     只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
-    rare_agree: bool = False
-    """记「像素与 CNN 两路首选是否一致」（2026-09-28，D 道 overview#126），缺省关。
-    开了读 `rare_candidates`（5-b），在每格 `evidence.rare` 记 `{pix, cnn, agree}`：
-    `pix` = 库（`glyph_match`）首位、`cnn` = 5-b 首位、`agree` = 两字相同。
-    **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
-    达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
-    不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
     rare_ref: bool = False
     """规则 A「5-b × 整理本」放行通道 `rare_ref`（2026-10-02，D3 道 overview#349），缺省关。
 
@@ -448,7 +416,6 @@ class SeedAdmitParams(BaseModel):
     关着时下面四个字段都不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
     shadow_model: str = ""              # 模型文件；空 = models/shadow_admit/shadow_gate_v1.joblib。路径不进指纹（path_params）
     shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
-    shadow_low_conf: float = 0.0        # >0：影子最大把握度低于它也降级（缺省关）
     shadow_veto_variant_abstain: bool = True
     """影子选的字与现放行字**语义同字**（`vmap.semantic` 相同，即异体／简繁）时影子弃权、不降级
     （overview#431）：vol04 影子拦 61 格只 5 格真错，56 格是放行字＝证人字＝图上字形的刻本异体
@@ -457,13 +424,6 @@ class SeedAdmitParams(BaseModel):
     vol04 弃权放回的 5 格真错（𠮓→變、𣼣→漏…）都是这一型；代价是 㫖、㓂 这类罕用区刻本异体也会照常降级。
     只在 `shadow_veto` 开着时进 dump。"""
     shadow_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
-    shadow_promote: bool = False
-    """影子升级（与 `shadow_veto` 并列，缺省关）：对**待审**（admit=False）、无硬护栏、非人裁的格，
-    影子首选字必须**等于整理本字或库首位**（至少有一路独立背书），且把握度 ≥ `shadow_promote_conf` →
-    放行，字 = 影子首选，`channel`/`provenance` = `shadow`，evidence 记 `shadow_promote`。
-    只升不降；人裁、遮挡、排除名单、护栏、形近、空白字块都不碰；信号缺失／本格自身在库里／异常 → 弃权。
-    关着时 `shadow_promote*` 不进 dump，产物逐字节不变。"""
-    shadow_promote_conf: float = 0.95   # 放行把握度门槛；推荐值与证据见 HANDOFF_D3.md
     approx_fingerprint: str = ""
     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
 
@@ -595,7 +555,7 @@ class SeedAdmitParams(BaseModel):
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
-        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
+        """关着的可选字段不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
 
         `approx_gate`／`approx_fingerprint` 同理（overview#276）：闸是缺省值（关）时不进 dump；
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
@@ -618,10 +578,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
-        if isinstance(d, dict) and not self.rare_agree:
-            d.pop("rare_agree", None)
         if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_veto", "shadow_conf", "shadow_low_conf", "shadow_veto_variant_abstain"):
+            for k in ("shadow_veto", "shadow_conf", "shadow_veto_variant_abstain"):
                 d.pop(k, None)
         if isinstance(d, dict):
             # N1/N2/N3（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
@@ -635,10 +593,7 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.rare_ref:
             d.pop("rare_ref", None)
-        if isinstance(d, dict) and not self.shadow_promote:
-            d.pop("shadow_promote", None)
-            d.pop("shadow_promote_conf", None)
-        if isinstance(d, dict) and not (self.shadow_veto or self.shadow_promote):
+        if isinstance(d, dict) and not self.shadow_veto:
             for k in ("shadow_model", "shadow_model_fingerprint"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.approx_gate:
@@ -726,7 +681,7 @@ class SeedAdmitParams(BaseModel):
             from ..clustering.note_lexicon import DEFAULT_LEXICON
             object.__setattr__(self, "note_fingerprint",
                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
-        if (self.shadow_veto or self.shadow_promote) and not self.shadow_model_fingerprint:
+        if self.shadow_veto and not self.shadow_model_fingerprint:
             from ..shadow.model import file_fingerprint
             object.__setattr__(self, "shadow_model_fingerprint",
                                file_fingerprint(_shadow_model_path(self)) or "missing")
@@ -755,8 +710,7 @@ class SeedAdmitStep(Step):
         id="seed_admit", title="C1 进库准入", version="1.16", unit="cell",   # 1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
-                                ("rare_candidates", "rare_ref"), ("rare_candidates", "shadow_promote"),),
+        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_ref"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -849,7 +803,7 @@ class SeedAdmitStep(Step):
                      if p.context_narrow_col_review else {})
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         rtop: dict[str, list[str]] = {}
-        if p.rare_agree or p.rare_ref:
+        if p.rare_ref:
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
@@ -1052,10 +1006,6 @@ class SeedAdmitStep(Step):
                 if ok and channel in off_channels:
                     ok, channel = False, None
                     doubts.append("channel_off")
-                elif (ok and p.solo_confusable_guard and channel in _SOLO_CHANNELS
-                      and r.candidates and _confusable_char(r.candidates[0][0])):
-                    ok, channel = False, None
-                    doubts.append("solo_confusable")
                 elif (ok and p.solo_ctx_veto and channel in _SOLO_CHANNELS
                       and _solo_ctx_vetoed(dmap.get(r.id), r.candidates, vm_here, p.solo_ctx_veto)):
                     ok, channel = False, None
@@ -1313,21 +1263,6 @@ class SeedAdmitStep(Step):
                     elif iron_char is not None:
                         ok, channel, char, prov = True, "iron", iron_char, "iron"
                         doubts = []
-                # 库高置信兜底（`lib_confident_cov`，缺省关）：只补「库已经很像、只因 Step6
-                # 帮不上（退回先验）」的格。约束见参数文档；`doubts` 非空说明流程里已有别的
-                # 理由拦它（整理本 replace、形近、互证冲突……），一律不碰。
-                if (not ok and p.lib_confident_cov > 0 and not doubts and not form_open
-                        and r.verdict == "unsure" and r.guard is None and r.candidates
-                        and d is not None and d.source == "prior"):
-                    _top, _c1 = r.candidates[0]
-                    _c2 = r.candidates[1][1] if len(r.candidates) > 1 else 0.0
-                    if (_c1 >= p.lib_confident_cov and _c1 - _c2 >= p.lib_confident_gap
-                            and _top not in always and _top not in _JYS
-                            and not (align_char and align_char in _JYS)
-                            and not _confusable_char(_top)
-                            and not (align_char and vm_here.semantic(align_char)
-                                     != vm_here.semantic(_top))):
-                        ok, channel, char, prov = True, "lib_confident", _top, "match"
                 # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
                 if ok and p.nonchar_gate:
                     _ir2 = imap.get(r.id)
@@ -1363,8 +1298,6 @@ class SeedAdmitStep(Step):
                               "ocr": (o.topk[:3] if o else []),
                               "ctx_margin": (d.margin if d else None),
                               **({"form": form_ev} if form_ev else {}),
-                              **({"rare": _rare_agree(r, rtop.get(r.id))}
-                                 if p.rare_agree else {}),
                               **({"approx": apx_ev} if apx_ev else {}),
                               **({"patch_missing": patch_missing[r.id]}
                                  if r.id in patch_missing else {}),
@@ -1388,10 +1321,6 @@ class SeedAdmitStep(Step):
             d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
             n_auto -= d_veto
             n_review += d_veto
-        if p.shadow_promote:
-            d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
-            n_auto += d_pro
-            n_review -= d_pro
         if p.seal_blank_page and p.lane_seal:
             from .occlusion import page_seal_blank
             d_seal = _seal_blank_flip(out, page_seal_blank(ctx, page, p),
@@ -1540,20 +1469,20 @@ _SHADOW_GATES: dict = {}
 
 def _shadow_model_path(p: "SeedAdmitParams"):
     """缺省模型：只开 veto 用 v1（老口径，行为不变）；开了 promote 用 v2（要名次类特征）。"""
-    from ..shadow.model import DEFAULT_MODEL, PROMOTE_MODEL
-    return p.shadow_model or (PROMOTE_MODEL if p.shadow_promote else DEFAULT_MODEL)
+    from ..shadow.model import DEFAULT_MODEL
+    return p.shadow_model or DEFAULT_MODEL
 
 
 def _shadow_gate(p: "SeedAdmitParams"):
     """进程内缓存：同一 (模型指纹, db, 门槛) 只建一次（字形库人裁表要扫 sqlite）。"""
-    key = (p.shadow_model_fingerprint, str(_shadow_model_path(p)), p.db_path, p.variants, p.shadow_conf, p.shadow_low_conf)
+    key = (p.shadow_model_fingerprint, str(_shadow_model_path(p)), p.db_path, p.variants, p.shadow_conf)
     g = _SHADOW_GATES.get(key)
     if g is None:
         from ..shadow.gate import ShadowGate
         from ..shadow.model import load_model
         from ..shadow.signals import load_context
         g = ShadowGate(load_model(_shadow_model_path(p)), load_context(p.db_path, p.variants or None),
-                       p.shadow_conf, p.shadow_low_conf)
+                       p.shadow_conf)
         _SHADOW_GATES.clear()
         _SHADOW_GATES[key] = g
     return g
@@ -1704,43 +1633,6 @@ def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, pa
                 rec.admit, rec.channel, rec.provenance = False, None, ""
                 rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["rr_clf_disagree"]))
                 n += 1
-    return n
-
-
-def _shadow_promote_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
-    """影子升级（`shadow_promote`）：待审格里，影子首选 = 整理本字或库首位且把握度够 → 放行。→ 升级格数。
-
-    只升不降，只碰 admit=False、非人裁、无硬护栏、没被 `shadow_veto` 降过的格；放在 veto 之后，
-    所以本遍放行的格不会再被 veto 回头否掉。模型读不到／口径不符 → 抛错（同 veto）。"""
-    from ..shadow.gate import promote_judge
-    from ..shadow.signals import CellEvidence, jmerge
-    gate = _shadow_gate(p)
-    rare = _opt(ctx, "rare_candidates", page)
-    rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
-    n = 0
-    for col in out:
-        for rec in col.chars or []:
-            if rec.admit or rec.provenance == "human" or rec.channel == "human" or "shadow_veto" in rec.doubts:
-                continue
-            m = mmap.get(rec.id)
-            if m is None or _hard_blocked(rec.doubts, m.guard):
-                continue
-            rr = rmap.get(rec.id)
-            ref = (amap.get(rec.id) or (None, None))[0]
-            ev = CellEvidence(
-                id=rec.id, lib=[(c, v) for c, v in (m.candidates or [])],
-                rare=[(x.char, x.score) for x in ((rr.candidates if rr else None) or [])],
-                ref=ref, cur=rec.char)
-            v = promote_judge(gate, ev, p.shadow_promote_conf)
-            if not v.promote:
-                continue
-            lib_top = max(ev.lib, key=lambda t: t[1])[0] if ev.lib else None
-            char = ref if (ref and jmerge(ref) == v.pick) else lib_top
-            rec.admit, rec.channel, rec.provenance, rec.char = True, "shadow", "shadow", char
-            rec.evidence = {**rec.evidence, "shadow_promote": {**v.evidence(gate.model, p.shadow_promote_conf),
-                                                                "prev_doubts": list(rec.doubts)}}
-            rec.doubts = []
-            n += 1
     return n
 
 
@@ -2400,7 +2292,7 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
     return prob >= thresh and vmap.semantic(top) != vmap.semantic(lib)
 
 
-#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_confusable_guard` 用）
+#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
 _SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_cnn"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
@@ -2616,16 +2508,6 @@ def _approx_hit(r, char: str | None, apx_ids: dict[str, tuple], apx_only: frozen
     return None
 
 
-def _rare_agree(match_rec, cnn: list[str] | None) -> dict:
-    """`SeedAdmitParams.rare_agree` 记的那一笔：库首位、5-b 首位、两者是否相同。
-    库判 `same` 时首位取 `char`，否则取候选第一名；任一路没有 → `agree` 为 None。"""
-    pix = (match_rec.char if match_rec.verdict == "same" and match_rec.char
-           else (match_rec.candidates[0][0] if match_rec.candidates else None))
-    c1 = cnn[0] if cnn else None
-    return {"pix": pix, "cnn": c1,
-            "agree": (pix == c1) if (pix is not None and c1 is not None) else None}
-
-
 def _opt(ctx: RunContext, kind: str, page: int):
     """可选上游：缺了就 None，不炸——OCR 要引擎、上下文要语料，都可能没有。"""
     try:
@@ -2705,7 +2587,7 @@ def _doubts(match_rec, dec_rec) -> list[str]:
 
 
 def _confusable_char(ch: str) -> bool:
-    """`lib_confident` 用：这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
+    """这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
     from ..clustering.confusable import partners
     from ..clustering.iron_evidence import extra_confusable_partners
     from ..clustering.seeding import NEAR_FORM_CHARS

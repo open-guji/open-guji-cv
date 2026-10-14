@@ -31,7 +31,7 @@ from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.align_ref import (AlignRefParams, rare_topk_map, rrf_carrier,
                                           slots_from_evidence)
 from open_guji_cv.steps.context_decide import ContextDecideParams, rare_priors
-from open_guji_cv.steps.seed_admit import SeedAdmitParams, _rare_agree
+from open_guji_cv.steps.seed_admit import SeedAdmitParams
 
 BOOK, PAGE, COL = "tbook", 1, 1
 
@@ -48,7 +48,7 @@ def page_rare(page: int, book: str, cands: dict[int, list[str]], col: int = 1) -
 # ── 声明 ────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("sid,field", [("align_ref", "rare_topk"),
                                        ("context_decide", "rare_topk"),
-                                       ("seed_admit", "rare_agree")])
+                                       ("seed_admit", "rare_ref")])
 def test_declared_as_gated_optional_upstream(sid, field):
     spec = STEPS[sid].spec
     assert "rare_candidates" in spec.optional_consumes
@@ -63,7 +63,7 @@ def test_declared_as_gated_optional_upstream(sid, field):
 @pytest.mark.parametrize("P,kw,fields", [
     (AlignRefParams, {"rare_topk": 5}, ("rare_topk",)),
     (ContextDecideParams, {"rare_topk": 5}, ("rare_topk", "rare_weight")),
-    (SeedAdmitParams, {"rare_agree": True}, ("rare_agree",)),
+    (SeedAdmitParams, {"rare_ref": True}, ("rare_ref",)),
 ])
 def test_switch_off_keeps_params_dump_unchanged(P, kw, fields):
     """关着时新字段不进 dump → `params_hash` 与加字段之前逐位相同（产物不过期）。"""
@@ -248,12 +248,3 @@ def test_rare_priors_by_rank_sum_to_one():
     assert abs(sum(w for _, w in pr) - 1.0) < 1e-9
     assert pr[0][1] > pr[1][1] > pr[2][1]
     assert rare_priors([]) == []
-
-
-def test_rare_agree_record():
-    from open_guji_cv.products.kinds.recog import MatchRec
-    same = MatchRec(id="x", slot=1, verdict="same", char="文", cov=0.999, candidates=[("文", 0.999)])
-    uns = MatchRec(id="y", slot=2, verdict="unsure", cov=0.97, candidates=[("大", 0.97)])
-    assert _rare_agree(same, ["文", "丈"]) == {"pix": "文", "cnn": "文", "agree": True}
-    assert _rare_agree(uns, ["太"]) == {"pix": "大", "cnn": "太", "agree": False}
-    assert _rare_agree(uns, None)["agree"] is None

@@ -22,7 +22,7 @@ params:
     shadow_veto: true
     shadow_conf: 0.8          # 缺省 0.97；推荐值与证据见 HANDOFF_N1.md
     # shadow_model: <路径>     # 缺省 models/shadow_admit/shadow_gate_v1.joblib；路径不进指纹
-    # shadow_low_conf: 0.0     # >0：影子最大把握度低于它也降级。缺省关（实测无标签可验，见 HANDOFF）
+    # （shadow_low_conf 已于 W2 删除；gate 内部 low_conf 恒为 0）
 ```
 
 关着时五个 `shadow_*` 字段不进 `model_dump`：参数指纹与加字段前逐位相同（`tests/test_shadow_gate.py`）。

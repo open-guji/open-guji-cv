@@ -282,7 +282,7 @@ class Engine:
 
         - `ocr_candidates`（Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）；
         - `rare_candidates`（Step5-b 生僻字候选）**没有任何下游真正在读它时**（2026-10-01）：
-          读它的只有 `seed_admit.rare_agree` 与 `context_decide.rare_topk`，缺省都关；两个都关的
+          读它的只有 `seed_admit.rare_ref` 与 `context_decide.rare_topk`，缺省都关；两个都关的
           书（vol02/vol03）跑它是白花时间——vol03 104 页 ≈12 分钟，而且指纹里带着字形库内容
           （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
           `/api/rare` 现算，不读这一步的产物。
