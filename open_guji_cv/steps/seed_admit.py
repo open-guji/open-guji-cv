@@ -209,6 +209,27 @@ class SeedAdmitParams(BaseModel):
     rr_clf_p: float = 0.5
     rr_clf_model: str = ""                  # 空＝仓内 models/rr_clf/forest.npz
     rr_clf_fingerprint: str = ""            # 自动填（开关开时）：模型文件变了产物过期
+    witness3_no_diff: bool = False
+    """T11 A 档（缺省关；关时 `witness3_no_diff` 不进 dump，`params_hash` 不变）：`lane_witness3` 本要放行的格，
+    若字形库对它的判定是 `diff`（`glyph_match.verdict`）→ **不放**，留待审并记 `doubts: witness3_diff`、
+    `evidence.lane_skip = {lane: witness3, why: lib_diff}`。三证人一致压过库「不是这个字」的那 31 格里
+    Lucian 看图约 4 格放错（含半字红线 vol02:15:9:20）。θ 档（`witness3_min_cov`）不做。只影响 witness3 通道。"""
+    oversplit_gate: str = ""
+    """过切提示（缺省 `""`＝关；`"hint"`＝只在待审格上加 doubt `oversplit_pair`，**放行集不变**；关时本组 `oversplit_*` 不进 dump）。
+
+    同列相邻两格合起来恰是一个字的高度（Eden 设计 A）：高度和在页正文中位高的 [`oversplit_sum_lo`, `oversplit_sum_hi`] 倍、
+    较高者 ≤ `oversplit_tall_max` 倍、两格宽 ≥ `oversplit_w_min` 倍中位宽、较矮者高 ≥ `oversplit_h_min` 倍。
+    排除：任一格 `flags` 含 `seal_region`；较矮者高/中位 ≤ `oversplit_short_h_ratio`（单笔横画）或 `ink_ratio` < `oversplit_short_ink`；
+    页正文格 < `oversplit_min_body` 跳过。只看 `step3_kind=char`、非夹注、同列、idx 连续。
+    提示落在待审格上：`doubts += oversplit_pair`、`evidence.oversplit = {partner, sum_ratio, short_ratio}`。"""
+    oversplit_sum_lo: float = 0.8
+    oversplit_sum_hi: float = 1.25
+    oversplit_tall_max: float = 0.75
+    oversplit_w_min: float = 0.6
+    oversplit_h_min: float = 0.15
+    oversplit_short_h_ratio: float = 0.28
+    oversplit_short_ink: float = 0.16
+    oversplit_min_body: int = 20
     runt_cell_review: bool = False
     """矮格转人审（任意 slot，overview#554，缺省关；关时 `runt_cell_review`／`runt_ratio` 不进 dump，`params_hash` 不变）。
 
@@ -580,6 +601,11 @@ class SeedAdmitParams(BaseModel):
             d.pop("rare_agree", None)
         if isinstance(d, dict) and not self.shadow_veto:
             for k in ("shadow_veto", "shadow_conf", "shadow_low_conf", "shadow_veto_variant_abstain"):
+                d.pop(k, None)
+        if isinstance(d, dict) and not self.witness3_no_diff:
+            d.pop("witness3_no_diff", None)
+        if isinstance(d, dict) and not self.oversplit_gate:
+            for k in [k for k in d if k.startswith("oversplit_")]:
                 d.pop(k, None)
         if isinstance(d, dict) and not self.rare_ref:
             d.pop("rare_ref", None)
@@ -1350,6 +1376,8 @@ class SeedAdmitStep(Step):
             d_rr2 = _rr_clf_pass(ctx, page, p, out, patch_missing)
             n_auto -= d_rr2
             n_review += d_rr2
+        if p.oversplit_gate == "hint":
+            _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:
             d_runt = _runt_cell_pass(ctx, page, p, out)
             n_auto -= d_runt
@@ -1564,6 +1592,54 @@ def _runt_cell_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list)
             rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["runt_cell"]))
             rec.evidence = {**(rec.evidence or {}),
                             "runt_cell": {"h": round(hit[0], 1), "period": round(hit[1], 1)}}
+            n += 1
+    return n
+
+
+def _oversplit_hint_pass(p: "SeedAdmitParams", out: list, chars) -> int:
+    """过切提示（`oversplit_gate="hint"`）：相邻两格合起来是一个字 → 只给**待审**格加 `oversplit_pair`。→ 加提示的格数。
+    不改 admit／channel／char；没有 `char_index` 产物 = 弃权。几何与排除见 `SeedAdmitParams.oversplit_gate`。"""
+    if chars is None:
+        return 0
+    import statistics as st
+    allc = [c for cc in chars.columns for c in cc.chars]
+    body = [c for c in allc if c.cell_type == "char" and c.step3_kind == "char" and not c.sub]
+    if len(body) < p.oversplit_min_body:
+        return 0
+    mh = st.median(c.height for c in body)
+    mw = st.median(c.width for c in body)
+    if mh <= 0 or mw <= 0:
+        return 0
+    hits: dict[str, dict] = {}
+    for cc in chars.columns:
+        cs = sorted((c for c in cc.chars if not c.sub), key=lambda c: c.idx)
+        for a, b in zip(cs, cs[1:]):
+            if b.idx != a.idx + 1 or a.step3_kind != "char" or b.step3_kind != "char":
+                continue
+            ha, hb = a.height, b.height
+            if not (p.oversplit_sum_lo * mh <= ha + hb <= p.oversplit_sum_hi * mh):
+                continue
+            if max(ha, hb) > p.oversplit_tall_max * mh:
+                continue
+            if min(a.width, b.width) < p.oversplit_w_min * mw or min(ha, hb) < p.oversplit_h_min * mh:
+                continue
+            if "seal_region" in (a.flags or ()) or "seal_region" in (b.flags or ()):
+                continue
+            s = a if ha <= hb else b
+            if min(ha, hb) / mh <= p.oversplit_short_h_ratio or s.ink_ratio < p.oversplit_short_ink:
+                continue
+            ev = {"sum_ratio": round((ha + hb) / mh, 3), "short_ratio": round(min(ha, hb) / mh, 3)}
+            hits[a.id] = {"partner": b.id, **ev}
+            hits[b.id] = {"partner": a.id, **ev}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            h = hits.get(rec.id)
+            if (h is None or rec.admit or rec.provenance == "human" or rec.channel == "human"
+                    or "excluded" in (rec.doubts or [])):
+                continue
+            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["oversplit_pair"]))
+            rec.evidence = {**(rec.evidence or {}), "oversplit": h}
             n += 1
     return n
 
@@ -1811,6 +1887,9 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                     if rs and not any(c in _JYS for c in wc.values() if c) and same(ref, co, *wc.values()):
                         if variant_pair(lib, ref):
                             rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_variant", "lib": lib}}
+                        elif p.witness3_no_diff and getattr(mmap.get(rec.id), "verdict", None) == "diff":
+                            rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_diff", "lib": lib}}
+                            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["witness3_diff"]))
                         else:
                             hit = ("witness3", ref, {"cls": cls, "ref": ref, "coord": co, "lib": lib,
                                                      "guard": guard_of(rec.id), "witnesses": wc})
