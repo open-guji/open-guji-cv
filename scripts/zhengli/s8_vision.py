@@ -27,6 +27,7 @@ import argparse
 import csv
 import datetime as dt
 import json
+import os
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -75,6 +76,7 @@ def read_cells(book: str, cells: str | None, cells_file: str | None, main_report
 
 def cmd_gen(a) -> int:
     ctx = _ctx(a.book, a.ws)
+    os.environ.setdefault("GUJI_WORKSPACE", str(ctx.ws))  # load_book/ProductStore 靠它找 books/ 与 products/
     rows = read_cells(a.book, a.cells, a.cells_file, ctx.main_reports)
     # 联系页生成器读 `<reports>/<册>.放行错穷举.json` 的 tier=="real" 行；这里写进 s8 子目录，不动真文件
     (ctx.reports / f"{a.book}.放行错穷举.json").write_text(
