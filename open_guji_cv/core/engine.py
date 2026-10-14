@@ -291,6 +291,8 @@ class Engine:
         out = list(steps)
         if not self.book.ocr_candidates:
             out = [s for s in out if s != "ocr_candidates"]
+        if not self.book.group_decide:     # Step6b（GUJI-49 PR1）：书级开关，缺省关
+            out = [s for s in out if s != "group_decide"]
         if "rare_candidates" in out and not rare_candidates_consumed(
                 self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
             out = [s for s in out if s != "rare_candidates"]
