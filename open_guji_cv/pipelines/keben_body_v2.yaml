@@ -24,6 +24,7 @@ steps:
   - rare_candidates      # Step5-b 生僻字候选：字体模板 + CNN 分类/embedding 的 RRF 融合（needs=model，指纹带 checkpoint+模板集+字体集指纹）
   - align_ref            # Step5-d 整理本对齐：文本证据一路。2026-09-10 去掉对 context_decision 的依赖（锚定串改用库/OCR 最高信度候选，不再借 Step6），四路真正互相独立，排到 context_decide 之前（needs=corpus，指纹带语料指纹）
   - context_decide       # Step6 上下文裁决：库+OCR 候选融合 → 门槛化定字（needs=corpus，指纹带语料指纹）
+  - group_decide         # Step6b 形近字组分类（GUJI-49 PR1）：叶子，只出证据；书级 `group_decide:` 缺省关，关时不跑、status 不列
   - seed_admit           # C1 进库准入：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
 notes: |
   坐标：Step1 产物存规范空间 raw_page_px@top-right；Step2–4 的列内坐标是 column_px，
