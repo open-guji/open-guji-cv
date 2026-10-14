@@ -122,6 +122,23 @@ class SeedAdmitParams(BaseModel):
     开着：铁证本要放行、但判别时有刻例原图缺失（缓存里没有），**不放行**，转待审并记 doubt
     `iron_ex_missing`，`evidence.iron_ex_missing` 记缺的例数。只会收紧，缓存齐全时与关着逐格一致。
     v1 旧坐标等「本来就认不出的形状」不算缺（与缓存无关，各环境一样）。"""
+
+    context_single_stroke_review: bool = False
+    """N1（Esme 规则面，默认关）：context 通道要放行的字是单笔画字（`_SINGLE_STROKES`：一 丨 亅 丶 丿 乀 乁 乚 乛）
+    → 不放，转待审并记 doubt `context_single_stroke`。理由：乱码残片上 context 按字频补出的最常见假字；
+    真「一」「丨」被降级只是多审几张。只收紧，只管 context 通道。"""
+    context_narrow_review: bool = False
+    """N2（Esme 规则面，默认关）：context 通道要放行、且切片宽 < `context_narrow_ratio`×中位宽
+    或高 < `context_narrow_ratio`×中位高 → 转待审，doubt `context_narrow_slice`。中位＝本页 `char_index`
+    正文格（cell_type=char、step3_kind=char、非夹注）宽／高的中位数；`context_narrow_ref`＝(宽,高)
+    给了就用它（整册中位，由调用方量好传入）。只收紧，只管 context 通道。"""
+    context_narrow_ratio: float = 0.5
+    context_narrow_ref: tuple[float, float] | None = None
+    context_narrow_col_review: bool = False
+    """N3（Esme B4 窄列扫描，默认关）：context 通道要放行、且这一列的文字带宽（`gate_manifest` 的
+    `band_width`）< `context_narrow_col_ratio`×本页各列带宽中位数 → 转待审，doubt `context_narrow_col`。
+    只管 context 通道，不碰 match_ref 等通道。没有 `gate_manifest` 产物 = 弃权。"""
+    context_narrow_col_ratio: float = 0.75
     context_blank_gate: bool = True
     """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
     是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
@@ -793,6 +810,8 @@ class SeedAdmitStep(Step):
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
+        gate_cols = (_gate_band_widths(_opt(ctx, "gate_manifest", page))
+                     if p.context_narrow_col_review else {})
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         rtop: dict[str, list[str]] = {}
         if p.rare_agree or p.rare_ref:
@@ -1155,6 +1174,14 @@ class SeedAdmitStep(Step):
                     elif p.context_blank_gate and _ir is not None \
                             and _ir.ink_ratio < p.context_min_ink:
                         doubts.append("context_blank_cell")
+                    elif p.context_single_stroke_review and d.char in _SINGLE_STROKES:
+                        doubts.append("context_single_stroke")
+                    elif p.context_narrow_col_review and _narrow_col(
+                            gate_cols, r.id, p.context_narrow_col_ratio):
+                        doubts.append("context_narrow_col")
+                    elif p.context_narrow_review and _narrow_slice(
+                            _ir, p.context_narrow_ref or _page_med_wh(imap), p.context_narrow_ratio):
+                        doubts.append("context_narrow_slice")
                     elif p.context_garble_guard and (_gg := _garble_guard(
                             p, r, d.char, (align_char, _coord_refs(ctx, page, coord_cache).get(r.id),
                                            *(c for c, _ in (o.topk if o else []))),
@@ -2233,6 +2260,46 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
     winner, _top, _second, _why, _disc = iron_with_disc(
         cands, human_chars_set, partners_map, img, ex_raws, scale)
     return winner
+
+
+#: N1：单笔画字（context 通道放出这些字一律转待审，`context_single_stroke_review`）
+_SINGLE_STROKES = frozenset("一丨亅丶丿乀乁乚乛")
+
+
+def _page_med_wh(imap: dict) -> tuple[float, float]:
+    """本页正文格（char_index）宽、高的中位数；缺数据返回 (0, 0)（= 不判窄）。"""
+    import statistics
+    ws = [r.width for r in imap.values() if r.cell_type == "char" and r.step3_kind == "char"
+          and not r.sub and r.width > 0]
+    hs = [r.height for r in imap.values() if r.cell_type == "char" and r.step3_kind == "char"
+          and not r.sub and r.height > 0]
+    return (statistics.median(ws) if ws else 0.0, statistics.median(hs) if hs else 0.0)
+
+
+def _narrow_slice(rec, med: tuple[float, float], ratio: float) -> bool:
+    """N2：切片宽或高不到中位的 `ratio` 倍。无字块记录／无中位 → False。"""
+    if rec is None or not med[0] or not med[1]:
+        return False
+    return rec.width < ratio * med[0] or rec.height < ratio * med[1]
+
+
+def _gate_band_widths(gm) -> dict:
+    """{col: (本列带宽, 本页带宽中位数)}；无 gate_manifest → {}（弃权）。"""
+    import statistics
+    if gm is None or not getattr(gm, "columns", None):
+        return {}
+    med = statistics.median(c.band_width for c in gm.columns)
+    return {c.col: (c.band_width, med) for c in gm.columns}
+
+
+def _narrow_col(gate_cols: dict, cell_id: str, ratio: float) -> bool:
+    """N3：格 id（book:page:col:idx）所在列的带宽 < ratio×页中位。"""
+    try:
+        col = int(cell_id.split(":")[2])
+    except (IndexError, ValueError):
+        return False
+    bw = gate_cols.get(col)
+    return bool(bw and bw[1] and bw[0] < ratio * bw[1])
 
 
 def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
