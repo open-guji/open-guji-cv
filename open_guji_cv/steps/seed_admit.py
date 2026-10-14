@@ -1316,8 +1316,8 @@ class SeedAdmitStep(Step):
         n_review += d_review
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
         #   0 _resolve_ji_yi_si（己已巳，上面）→ 1 rare_ref（升）→ 2 ry_group（升）→ 3 shadow_veto（降）→
-        #   4 shadow_promote（升，不碰 veto 降过的）→ 5 seal_blank_flip（降）→ 6 _review_lanes_pass（升）→
-        #   7 rare_cp_ctx_review（降）→ 8 rr_clf（降）→ 9 oversplit hint（只加提示）→ 10 runt_cell_review（降）。
+        #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ 6 rare_cp_ctx_review（降）→ 7 rr_clf（降）→
+        #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）。（shadow_promote 已于 W2 删除）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
         #   主循环内就地置空（放行记录生成之前）的不记。
         if p.rare_ref:
