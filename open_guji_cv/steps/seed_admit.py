@@ -40,6 +40,7 @@ from __future__ import annotations
 import logging
 import re
 from functools import lru_cache
+from typing import Literal
 
 from pydantic import BaseModel, field_validator, model_serializer
 
@@ -233,16 +234,20 @@ class SeedAdmitParams(BaseModel):
     witness3_no_diff: bool = False
     """T11 A 档（缺省关；关时 `witness3_no_diff` 不进 dump，`params_hash` 不变）：`lane_witness3` 本要放行的格，
     若字形库对它的判定是 `diff`（`glyph_match.verdict`）→ **不放**，留待审并记 `doubts: witness3_diff`、
-    `evidence.lane_skip = {lane: witness3, why: lib_diff}`。三证人一致压过库「不是这个字」的那 31 格里
+    `evidence.lane_skip = {lane: witness3, why: lib_diff}`。`mmap` 缺该格或没有 verdict 时按「非 diff」处理，保持旧放行（fail-open：库没给判定不收紧）。
+    三证人一致压过库「不是这个字」的那 31 格里
     Lucian 看图约 4 格放错（含半字红线 vol02:15:9:20）。θ 档（`witness3_min_cov`）不做。只影响 witness3 通道。"""
-    oversplit_gate: str = ""
+    oversplit_gate: Literal["", "hint"] = ""
     """过切提示（缺省 `""`＝关；`"hint"`＝只在待审格上加 doubt `oversplit_pair`，**放行集不变**；关时本组 `oversplit_*` 不进 dump）。
 
     同列相邻两格合起来恰是一个字的高度（Eden 设计 A）：高度和在页正文中位高的 [`oversplit_sum_lo`, `oversplit_sum_hi`] 倍、
     较高者 ≤ `oversplit_tall_max` 倍、两格宽 ≥ `oversplit_w_min` 倍中位宽、较矮者高 ≥ `oversplit_h_min` 倍。
     排除：任一格 `flags` 含 `seal_region`；较矮者高/中位 ≤ `oversplit_short_h_ratio`（单笔横画）或 `ink_ratio` < `oversplit_short_ink`；
     页正文格 < `oversplit_min_body` 跳过。只看 `step3_kind=char`、非夹注、同列、idx 连续。
-    提示落在待审格上：`doubts += oversplit_pair`、`evidence.oversplit = {partner, sum_ratio, short_ratio}`。"""
+    提示落在待审格上：`doubts += oversplit_pair`、`evidence.oversplit = {partner, sum_ratio, short_ratio}`。
+    只接受 `""`／`"hint"`，其它值（拼错、`"both"`）pydantic 直接拒，免得指纹变了而行为是关。
+    **与 `runt_cell_review`（T9）的次序**：本遍在 T9 之前，只给「hint 时刻已是待审」的格加提示；hint 时刻已放行、之后被 T9 降级的格
+    **不会**有 `oversplit_pair`（只有 `runt_cell`）。两者重叠须用不看 admit 的纯几何口径量（`_oversplit_pairs`）。"""
     oversplit_sum_lo: float = 0.8
     oversplit_sum_hi: float = 1.25
     oversplit_tall_max: float = 0.75
@@ -1582,17 +1587,35 @@ def _runt_cell_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list)
 def _oversplit_hint_pass(p: "SeedAdmitParams", out: list, chars) -> int:
     """过切提示（`oversplit_gate="hint"`）：相邻两格合起来是一个字 → 只给**待审**格加 `oversplit_pair`。→ 加提示的格数。
     不改 admit／channel／char；没有 `char_index` 产物 = 弃权。几何与排除见 `SeedAdmitParams.oversplit_gate`。"""
-    if chars is None:
+    hits = _oversplit_pairs(p, chars)
+    if not hits:
         return 0
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            h = hits.get(rec.id)
+            if (h is None or rec.admit or rec.provenance == "human" or rec.channel == "human"
+                    or "excluded" in (rec.doubts or [])):
+                continue
+            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["oversplit_pair"]))
+            rec.evidence = {**(rec.evidence or {}), "oversplit": h}
+            n += 1
+    return n
+
+
+def _oversplit_pairs(p: "SeedAdmitParams", chars) -> dict[str, dict]:
+    """过切几何命中集：`{格 id: {partner, sum_ratio, short_ratio}}`，**不看 admit**（供提示遍与 T9 重叠核对共用）。"""
+    if chars is None:
+        return {}
     import statistics as st
     allc = [c for cc in chars.columns for c in cc.chars]
     body = [c for c in allc if c.cell_type == "char" and c.step3_kind == "char" and not c.sub]
     if len(body) < p.oversplit_min_body:
-        return 0
+        return {}
     mh = st.median(c.height for c in body)
     mw = st.median(c.width for c in body)
     if mh <= 0 or mw <= 0:
-        return 0
+        return {}
     hits: dict[str, dict] = {}
     for cc in chars.columns:
         cs = sorted((c for c in cc.chars if not c.sub), key=lambda c: c.idx)
@@ -1614,17 +1637,7 @@ def _oversplit_hint_pass(p: "SeedAdmitParams", out: list, chars) -> int:
             ev = {"sum_ratio": round((ha + hb) / mh, 3), "short_ratio": round(min(ha, hb) / mh, 3)}
             hits[a.id] = {"partner": b.id, **ev}
             hits[b.id] = {"partner": a.id, **ev}
-    n = 0
-    for col in out:
-        for rec in col.chars or []:
-            h = hits.get(rec.id)
-            if (h is None or rec.admit or rec.provenance == "human" or rec.channel == "human"
-                    or "excluded" in (rec.doubts or [])):
-                continue
-            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["oversplit_pair"]))
-            rec.evidence = {**(rec.evidence or {}), "oversplit": h}
-            n += 1
-    return n
+    return hits
 
 
 def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, patch_missing: dict) -> int:
