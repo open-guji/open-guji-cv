@@ -54,6 +54,10 @@ from ..utils.ji_yi_si import FAMILY as _JYS
 _log = logging.getLogger(__name__)
 
 
+_N_KEYS = ("context_single_stroke_review", "context_narrow_review", "context_narrow_ratio",
+           "context_narrow_ref", "context_narrow_col_review", "context_narrow_col_ratio")
+
+
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
@@ -619,6 +623,11 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.shadow_veto:
             for k in ("shadow_veto", "shadow_conf", "shadow_low_conf", "shadow_veto_variant_abstain"):
                 d.pop(k, None)
+        if isinstance(d, dict):
+            # N1/N2/N3（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
+            for k in _N_KEYS:
+                if k in d and d[k] == type(self).model_fields[k].default:
+                    d.pop(k)
         if isinstance(d, dict) and not self.witness3_no_diff:
             d.pop("witness3_no_diff", None)
         if isinstance(d, dict) and not self.oversplit_gate:
