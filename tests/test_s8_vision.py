@@ -46,12 +46,37 @@ def test_fill_appends_jsonl_and_gate_format(env):
     assert not parse_jsonl(jl, "b", book="vol03").errors
 
 
-def test_fill_is_append_only(env):
+def test_fill_rerun_skips_duplicates_but_changed_verdict_appends(env, capsys):
     write_tsv(env, "vol03:22:8:7\tok\t\t日\t\t\n")
     run("fill", "--book", "vol03", "--ws", str(env), "--judge", "t")
     run("fill", "--book", "vol03", "--ws", str(env), "--judge", "t")
+    assert "跳过 1 行" in capsys.readouterr().out
     jl = env / "reports" / "vol03" / "看图结论.jsonl"
-    assert len(jl.read_text(encoding="utf-8").splitlines()) == 2
+    assert len(jl.read_text(encoding="utf-8").splitlines()) == 1
+    write_tsv(env, "vol03:22:8:7\twrong\t曰\t日\t\t\n")  # 改结论 = 追加新行，旧行不动
+    run("fill", "--book", "vol03", "--ws", str(env), "--judge", "t")
+    vs = [json.loads(l)["v"] for l in jl.read_text(encoding="utf-8").splitlines()]
+    assert vs == ["ok", "wrong"]
+
+
+def test_wenyi_list_rejects_ok_wrong_allows_unsure(env, capsys, tmp_path):
+    wl = tmp_path / "文意定人裁清单.jsonl"
+    wl.write_text(json.dumps({"id": "vol03:22:8:7"}) + "\n", encoding="utf-8")
+    write_tsv(env, "vol03:22:8:7\tok\t\t日\t\t\nvol03:90:5:16\tok\t\t凶\t\t\n")
+    assert run("fill", "--book", "vol03", "--ws", str(env), "--judge", "t", "--wenyi-list", str(wl)) == 1
+    assert "走人裁" in capsys.readouterr().err
+    assert not (env / "reports" / "vol03" / "看图结论.jsonl").exists()
+    write_tsv(env, "vol03:22:8:7\tunsure\t\t日\t\t\nvol03:90:5:16\tok\t\t凶\t\t\n")
+    assert run("fill", "--book", "vol03", "--ws", str(env), "--judge", "t", "--wenyi-list", str(wl)) == 0
+    # 不给参数行为不变
+    write_tsv(env, "vol03:22:8:7\tok\t\t日\t\t\n")
+    assert run("check", "--book", "vol03", "--ws", str(env)) == 0
+
+
+def test_wrong_without_shown_is_reminder_only(env, capsys):
+    write_tsv(env, "vol03:22:8:7\twrong\t曰\t\t\t\n")
+    assert run("check", "--book", "vol03", "--ws", str(env)) == 0
+    assert "shown 空" in capsys.readouterr().out
 
 
 def test_empty_verdict_blocks_and_writes_nothing(env, capsys):
