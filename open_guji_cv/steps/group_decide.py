@@ -11,8 +11,9 @@
 
 弃权语义（B1 §2.1）：`char: null`＝不给字；缺格、`ctx` 不符、`ver` 不符一律弃权并写 `why`。
 
-ctx 口径（与 `seed_admit._clf_ctx` 不同，见说明页 §五·1）：本步在 `seed_admit` 之前，
-拿不到「邻格已放行字」，邻格取 `glyph_match` 的 same 档字，否则整理本字，否则 `□`。
+ctx 口径（GUJI-208bz 起）：序列范围与 `seed_admit._clf_ctx` 相同——**整页**列号升序展平、
+窗口可跨列；取字仍不同：本步在 `seed_admit` 之前，拿不到「邻格已放行字」，邻格取
+`glyph_match` 的 same 档字，否则整理本字，否则 `□`。（seed_admit 另剔 `excluded` 格，本步拿不到名单，不剔。）
 """
 from __future__ import annotations
 
@@ -119,15 +120,18 @@ class GroupDecideStep(Step):
         same = {r.id: (r.char if r.verdict == "same" else None)
                 for col in match.columns for r in col.chars}
         tables = {g: _load_table(path) for g, path in p.group_tables.items()}
-        for col in sorted(match.columns, key=lambda c: c.col):
-            seq = [(same.get(r.id) or "", amap.get(r.id) or "") for r in col.chars]
-            for i, r in enumerate(col.chars):
-                rc = amap.get(r.id)
-                if not rc:
+        # 页宽口径（GUJI-208bz）：整页列号升序展平成**一条**序列，邻格窗口可跨列——与
+        # `seed_admit._ry_group_pass` 的 `seq` 同一取法（口径差 2）。取字仍是 same→整理本→□。
+        cols = sorted(match.columns, key=lambda c: c.col)
+        flat = [r for col in cols for r in col.chars]
+        seq = [(same.get(r.id) or "", amap.get(r.id) or "") for r in flat]
+        for i, r in enumerate(flat):
+            rc = amap.get(r.id)
+            if not rc:
+                continue
+            for g, members in GROUP_MEMBERS.items():
+                if g not in tables or rc not in members:
                     continue
-                for g, members in GROUP_MEMBERS.items():
-                    if g not in tables or rc not in members:
-                        continue
-                    res = lookup(tables[g], g, r.id, _neighbour_ctx(seq, i, -1), _neighbour_ctx(seq, i, 1))
-                    out.cells.append(GroupDecRec(id=r.id, group=g, ref=rc, **res))
+                res = lookup(tables[g], g, r.id, _neighbour_ctx(seq, i, -1), _neighbour_ctx(seq, i, 1))
+                out.cells.append(GroupDecRec(id=r.id, group=g, ref=rc, **res))
         return {"group_decision": out}
