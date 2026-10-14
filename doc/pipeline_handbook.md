@@ -1531,7 +1531,7 @@ s4_enhance_lines（画线增强，本意把磨损界行描粗帮版面检测）�
 
 ### 15.3 bbox_page 的 x 是镜像坐标（页宽 W − x）
 - **现象**：把 `char_index` 的 `bbox_page` 直接叠到原图，框落在对侧列上，看起来「字对不上」。
-- **原因**：`quad_page` 与 `bbox_page` 是右上原点；cv2 读图是左上原点。遮挡闸 `steps/occlusion.py::cell_densities` 直接用 quad_page 的 x 索引原图，同样出错（occluded镜像核查-Ethan.md：8 页格级出入，每页 0–16 格）。
+- **原因**：`quad_page` 与 `bbox_page` 是右上原点；cv2 读图是左上原点。遮挡闸 `open_guji_cv/steps/occlusion.py::cell_densities` 直接用 quad_page 的 x 索引原图，同样出错（occluded镜像核查-Ethan.md：8 页格级出入，每页 0–16 格）。
 - **怎么量**：用 `ink_ratio` 核对——列图裁出的墨量应与记录值逐位相等，镜像后的原图裁剪也应对得上（vol02-19格逐格判-Ezio.md，130:2:20＝0.183、165:1:3＝0.278）。
 - **怎么避免**：叠图前先做 W − x 换算；镜像修复是双向的（只 A 去掉遮挡＝放宽，只 B 新增＝收紧），不能只改一侧。改 `occlusion.py` 会令 seed_admit 产物判过期，需先定清单。
 
@@ -1539,7 +1539,7 @@ s4_enhance_lines（画线增强，本意把磨损界行描粗帮版面检测）�
 - **现象**：vol04 p80 有两个宽框同压一列，且最左列真漏列；vol07 p130 的夹注被切成两个窄框（col2＋col3 合为一列）。
 - **原因**：窄框里有凑数的，会把真列挤掉；但夹注双框又会被「窄列」规则误报。
 - **怎么量**：页内列宽与页中位比较（<0.5× 中位为离群）；p130 的两窄框宽度和 ≈ 一列，p80 的列号整体偏一。
-- **怎么避免**：T10 只做边缘列版（`seed_admit.col_width_outlier_review`，缺省关，后置 pass，不改 column_gate，免得 Step2→3 全链过期）。若做全列版，会放过 p80，所以不做。
+- **怎么避免**：T10 只做边缘列版（拟用开关 `seed_admit.col_width_outlier_review`，缺省关，后置 pass，不改 column_gate，免得 Step2→3 全链过期；目前只在规则候选清单里，代码未落）。全列版按规则清单估计会误伤约 500 格（内部窄列页 vol04:80、vol07:130 不应整页降），所以不做。
 
 ### 15.5 交付基线：目前无一册被认定
 - **现象**：vol02–vol10 的 main yaml 与最新快照 sha256 均不一致；vol06 为沙箱试跑，从未交付；vol01 无快照分支。
