@@ -2,7 +2,7 @@
 """规则 A 放行通道 `rare_ref`（2026-10-02，D3 道 overview#349）。全部自造数据（影子升级 `shadow_promote` 开关已随 W2 删，`shadow/gate.py` 的 `decide_promote`／`promote_judge` 留作离线评测口径，下面两条单测仍测它们）。
 
 规则 A：整理本 replace 段、5-b 首位**逐字**等于整理本字 → 放行整理本字；一串硬护栏照拦；缺省关、关着产物逐字节不变。
-影子升级：待审格上影子首选 == 整理本字或库首位且把握度够 → 放行；缺省关。
+影子升级（`shadow_promote`）已随 W2 删除；下面只留 `shadow/gate.py` 离线评测口径的单测。
 """
 from __future__ import annotations
 
