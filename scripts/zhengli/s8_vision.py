@@ -14,6 +14,13 @@ vision-gate 步调 `guji events import-vision` 完成）。不改 `zl.py`、Step
   fill   简表 → `reports/<册>/看图结论.jsonl`（只追加；`ts`、`judge` 在这里填），随后
          `zl.py run --book <册> --ws <ws> --only vision-gate` 即可导入并过闸。
 
+边界（Mila 审阅 10-14）：
+- 沙箱里只做到 `fill`，**不跑 vision-gate 的正式导入**——`import-vision` 的裁决表分片会写进工作区本体，
+  不认 `GUJI_FEEDBACK_DIR`；导入由 CV 经理或 H 道做。
+- 「文意定、字形分不出」的格（曰/日、曰/目…）不是看图结论：`--wenyi-list 文意定人裁清单.jsonl`
+  给了就拒收清单里 `id` 的 ok/wrong（unsure 允许），这些格必须走人裁。
+- `fill` 同一份简表可重跑：同 cell＋v＋char 已在 jsonl 里的行跳过。
+
 简表 `看图简表.tsv`（UTF-8，TAB 分隔，首行表头）：
 
   cell    verdict    char    shown    group    note
@@ -125,10 +132,18 @@ def to_jsonl_rows(rows: list[dict], judge: str, ts: str) -> list[dict]:
     return out
 
 
-def validate(book: str, rows: list[dict], judge: str, ts: str) -> list[str]:
+def load_wenyi(path: str | None) -> set[str]:
+    if not path:
+        return set()
+    return {json.loads(l)["id"] for l in Path(path).read_text(encoding="utf-8-sig").splitlines() if l.strip()}
+
+
+def validate(book: str, rows: list[dict], judge: str, ts: str, wenyi: set[str] | None = None) -> list[str]:
     """空 verdict 先报；其余交给 vision.parse_jsonl（同一套规则，不另立）。"""
     import tempfile
-    errs = [f"简表第 {r['_line']} 行：{r['cell']} 还没填 verdict" for r in rows if not r["verdict"]]
+    errs = [f"简表第 {r['_line']} 行：{r['cell']} 在文意定清单里，ok/wrong 不是看图结论，走人裁（只许 unsure）"
+            for r in rows if wenyi and r["cell"] in wenyi and r["verdict"] in ("ok", "wrong")]
+    errs += [f"简表第 {r['_line']} 行：{r['cell']} 还没填 verdict" for r in rows if not r["verdict"]]
     todo = [r for r in rows if r["verdict"]]
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "t.jsonl"
@@ -144,6 +159,8 @@ def validate(book: str, rows: list[dict], judge: str, ts: str) -> list[str]:
     for r in todo:
         if r["verdict"] == "wrong" and not r["char"]:
             errs.append(f"简表第 {r['_line']} 行：{r['cell']} 判 wrong 但没填 char（可留空照样送审，这里只提醒）")
+        if r["verdict"] == "wrong" and not r["shown"]:
+            errs.append(f"简表第 {r['_line']} 行：{r['cell']} 判 wrong 但 shown 空（没有 audit 就手填放行字；照样送审，这里只提醒）")
     return errs
 
 
@@ -154,7 +171,7 @@ def _now() -> str:
 def cmd_check(a) -> int:
     ctx = _ctx(a.book, a.ws)
     rows, errs = load_tsv(Path(a.tsv) if a.tsv else ctx.reports / TSV)
-    errs += validate(a.book, rows, a.judge or "check", _now())
+    errs += validate(a.book, rows, a.judge or "check", _now(), load_wenyi(a.wenyi_list))
     hard = [e for e in errs if "照样送审" not in e]
     for e in errs:
         print(("✗ " if e in hard else "· ") + e)
@@ -166,7 +183,7 @@ def cmd_fill(a) -> int:
     ctx = _ctx(a.book, a.ws)
     rows, errs = load_tsv(Path(a.tsv) if a.tsv else ctx.reports / TSV)
     ts = _now()
-    errs += validate(a.book, rows, a.judge, ts)
+    errs += validate(a.book, rows, a.judge, ts, load_wenyi(a.wenyi_list))
     hard = [e for e in errs if "照样送审" not in e]
     if hard:
         for e in hard:
@@ -174,7 +191,16 @@ def cmd_fill(a) -> int:
         print("没写。先改简表。", file=sys.stderr)
         return 1
     out = ctx.main_reports / "看图结论.jsonl"
-    lines = [json.dumps(d, ensure_ascii=False) for d in to_jsonl_rows(rows, a.judge, ts)]
+    have = set()
+    if out.exists():
+        for l in out.read_text(encoding="utf-8-sig").splitlines():
+            if l.strip():
+                d = json.loads(l)
+                have.add((d.get("cell"), d.get("v"), d.get("char", "")))
+    new = [d for d in to_jsonl_rows(rows, a.judge, ts) if (d["cell"], d["v"], d.get("char", "")) not in have]
+    skipped = len(rows) - len(new)
+    print(f"跳过 {skipped} 行（同 cell＋verdict＋char 已在 {out.name}）")
+    lines = [json.dumps(d, ensure_ascii=False) for d in new]
     with out.open("a", encoding="utf-8", newline="\n") as f:  # 只追加：改结论就再追加一行，旧行不动
         for l in lines:
             f.write(l + "\n")
@@ -195,6 +221,7 @@ def main(argv=None) -> int:
             p.add_argument("--cells-file", help="一行一个字位（# 后是注释）")
             p.add_argument("--per", type=int, default=24, help="每张联系页放几格")
         else:
+            p.add_argument("--wenyi-list", help="文意定人裁清单 jsonl；清单里的格 ok/wrong 拒收（unsure 允许）")
             p.add_argument("--tsv", help="简表路径（缺省 reports/<册>/s8/看图简表.tsv）")
             p.add_argument("--judge", required=(name == "fill"), help="谁看的图：模型名或人名（写进 judge）")
     a = ap.parse_args(argv)
