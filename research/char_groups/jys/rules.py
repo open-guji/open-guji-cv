@@ -15,12 +15,19 @@ ZHI_SAFE = frozenset("丑卯酉亥")                 # 后接这几个几乎只�
 ZHI_NEED_DATE = frozenset("寅辰午申子戌未")      # 「已申」「已未」「已子」另有读法，需日期语境
 YEAR_AFTER = frozenset("年歲歳科")
 DATE_PREV = frozenset("日月年歲歳朔旬熙治厯曆歷隆正德啓禎慶光豐元")   # 年号末字 / 日期字
-JI_PREV = frozenset("自克知利舍捨修反推律責由在屈損恕勵厲異")             # 自己、克己、知己…
+JI_PREV = frozenset("自克捨推恕律責由屈")                                  # 自己、克己、捨己、推己、恕己、律己…
+# 10-11 收窄：原表还有 知利舍修反在損厲勵異，语料里这些字后接「己」只占 40–60%，且会在人名／书名／固定词尾误中——
+# 「歐陽修【已】稱」「說異【已】著錄」「現在【已】有」都被判成己（vol09:158:5:10、vol07:118:4:13 等），所以剔除。
 JI_NEXT_SURE = frozenset("意私欲")                                      # 己意、己私、己欲（几乎无「已意」）
 JI_NEXT_GATED = frozenset("見說論")                                     # 己見/己說/己論：要前字是「以參斷…」
 JI_GATE_PREV = frozenset("以參斷附申從就徇逞矜騁各據發出持執伸抒肆縱隨存自爲主")
 YI_PREV = frozenset("業既久早無勿弗")                                   # 業已、既已、久已
 YI_NEXT = frozenset("經矣佚亡失著足甚多備極盡無非成刻具來上下後前去歿卒故沒")   # 已經、已矣、已佚…
+# 「已＋動詞／時間詞」「X＋已」（overview#443，10-10）：语料（daizhige）里「己已巳字位＋后/前一字」，已＋巳（巳多是已的讹写）占比
+# ≥0.97、样本 ≥30，再逐条读「己」的例子（多是「已久」「已經」被误写成己）人工筛过；己的真搭配（己見/己說/克己…）不进来。
+YI_NEXT2 = frozenset("久定降墾逾滿乆詳畢入嘗")     # 已久、已定、已降、已墾、已逾、已滿、已詳、已畢、已入、已嘗
+YI_PREV2 = frozenset("既前現早久所品")   # 既已、前已、現已、早已、久已、所已(言)、品已(上)。
+# 「書／中／民／氣／國」语料纯度也高，但名词＋已不稳：vol04:40:4:6「中書【己】未召試」被「書＋已」判错，剔除。
 FAM = frozenset("己已巳")
 
 
@@ -37,9 +44,9 @@ def classify(left: str, right: str) -> tuple[str | None, str]:
     p, p2 = _g(left, -1), _g(left, -2)
     n, n2 = _g(right, 0), _g(right, 1)
     # 1 干支：前为天干 → 巳
-    if p in GAN:
+    if p in GAN and p != "己":      # 前字是「己」时不判：它可能刚被放行成「自己」的己（自己＋已經），不能当干支
         return "巳", "干支:前天干"
-    if p in ZHI and n == "間":
+    if p == "辰" and n == "間":     # 只认「辰巳間」；其他地支后接「間」不是巳
         return "巳", "干支:辰巳間"
     # 2 干支：后为地支 → 己
     if n in ZHI_SAFE:
@@ -66,4 +73,10 @@ def classify(left: str, right: str) -> tuple[str | None, str]:
         return "已", "搭配:不得已"
     if n in YI_NEXT and p not in JI_PREV:
         return "已", "搭配:已經类"
+    if n in YI_NEXT2 and p not in JI_PREV:
+        return "已", "搭配:已＋動詞/時間词"
+    if n == "然" and n2 != "後" and p not in JI_PREV:      # 已然；「己|然後」是句读被吞（無諸己然後非諸人）
+        return "已", "搭配:已然"
+    if p in YI_PREV2 and n not in JI_NEXT_SURE and n not in ZHI:      # 后字是地支时留给干支规则
+        return "已", "搭配:时间词/主语＋已"
     return None, "无规则"
