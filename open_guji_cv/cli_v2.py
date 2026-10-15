@@ -822,10 +822,26 @@ def cmd_events(args) -> None:
         fn = cutline_verdicts if args.kind == "cutline" else review_verdicts
         _out(fn(args.batch, log))
     elif args.action == "list":
-        evs = log.read(args.batch) if args.batch else sorted(log.iter_all(), key=lambda e: e.order)
+        evs = _select_events(log, args.batch, args.book)
         for e in evs[-args.limit:]:
             print(f"  {e.id}  {e.kind:12s} {e.target.key:28s} {json.dumps(e.payload, ensure_ascii=False)}")
         print(f"  共 {len(evs)} 条")
+
+
+def _select_events(log, batch: str | None, book: str | None = None) -> list:
+    """`events list` 的取数：批次名可带通配（`vol03-*`，按文件名匹配后合并）；`book` 只留
+    target.key 以 `<册>:` 开头的事件——通配批次里混进别册的 key 时（GUJI-77）不串册。只读。"""
+    import fnmatch
+    if batch and any(c in batch for c in "*?["):
+        evs = sorted((e for b in log.batches() if fnmatch.fnmatch(b, batch)
+                      for e in log.read(b)), key=lambda e: e.order)
+    elif batch:
+        evs = log.read(batch)
+    else:
+        evs = sorted(log.iter_all(), key=lambda e: e.order)
+    if book:
+        evs = [e for e in evs if e.target.key.startswith(f"{book}:")]
+    return evs
 
 
 def _import_vision(args) -> None:
@@ -2555,7 +2571,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--limit", type=int, default=30)
     # import-vision（overview#428）：看图结论 jsonl → feedback/vision/
-    p.add_argument("--book", default=None, help="import-vision：只认这一册的格（给了就校验 books/<册>.yaml）")
+    p.add_argument("--book", default=None, help="list：只列 target.key 以 <册>: 开头的事件（批次名可带通配 *）；import-vision：只认这一册的格（给了就校验 books/<册>.yaml）")
     p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
     p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
     p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
