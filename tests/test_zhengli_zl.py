@@ -128,18 +128,19 @@ tail: 9
 
 
 def test_patch_yaml_minimal_diff():
-    new, ch = zl.patch_yaml_text(YAML, zl.STD_SEED_ADMIT)
+    conflicts: dict = {}
+    new, ch = zl.patch_yaml_text(YAML, zl.STD_SEED_ADMIT, conflicts=conflicts)
     assert new is not None
     old_lines = YAML.splitlines()
     removed = [l for l in old_lines if l not in new.splitlines()]
-    assert removed == ["    rare_ref: false  # 旧值", "    shadow_conf: 0.5"]   # 只有被改的两行
-    assert "    rare_ref: true  # 旧值" in new and "    shadow_conf: 0.8" in new
+    assert removed == []                                  # 已有键一行不改，只补缺的
+    assert conflicts["rare_ref"] == ("false", True) and conflicts["shadow_conf"] == ("0.5", 0.8)
+    assert "    rare_ref: false  # 旧值" in new and "    shadow_conf: 0.5" in new
     assert "# 书说明" in new and "    custom_keep: 1" in new and "tail: 9" in new
     assert "iron_gate: true" in new and ch["iron_gate"] == (None, True)
     import yaml
     d = yaml.safe_load(new)
     assert d["params"]["other"] == 2 and d["params"]["seed_admit"]["ji_yi_si_review"] is True
-    assert all(d["params"]["seed_admit"][k] == v for k, v in zl.STD_SEED_ADMIT.items())
     # 幂等
     again, ch2 = zl.patch_yaml_text(new, zl.STD_SEED_ADMIT)
     assert again == new and ch2 == {}
@@ -391,7 +392,7 @@ def test_patch_yaml_extra_section_added_then_idempotent():
     assert ch["column_gate.hint_ignore_dash"] == (None, True)
     d = yaml.safe_load(new)
     assert d["params"]["column_gate"] == {"hint_ignore_dash": True, "double_width_ratio": 1.5}
-    assert d["params"]["other"] == 2 and d["params"]["seed_admit"]["rare_ref"] is True
+    assert d["params"]["other"] == 2 and d["params"]["seed_admit"]["rare_ref"] is False   # 已有值不动
     again, ch2 = zl.patch_yaml_text(new, zl.STD_SEED_ADMIT, extra=extra)
     assert again == new and ch2 == {}
 
@@ -426,3 +427,34 @@ def test_main_parses_set_items():
     finally:
         zl.cmd_run = orig
     assert ap_args[0].set_items == ["column_gate.hint_ignore_dash=true"]
+
+
+def test_patch_yaml_existing_keys_report_only_zero_diff():
+    """已按标准写好的 yaml 再跑一遍：文本逐字节不变，冲突为空；有差异的键只进 conflicts。"""
+    std = "book: v\niron_gate: true\nparams:\n  seed_admit:\n" + "".join(
+        f"    {k}: {zl._fmt(v)}\n" for k, v in zl.STD_SEED_ADMIT.items())
+    conflicts: dict = {}
+    new, ch = zl.patch_yaml_text(std, zl.STD_SEED_ADMIT, conflicts=conflicts)
+    assert new == std and ch == {} and conflicts == {}
+    k = next(iter(zl.STD_SEED_ADMIT))
+    odd = std.replace(f"    {k}: {zl._fmt(zl.STD_SEED_ADMIT[k])}\n", f"    {k}: 12345\n")
+    new2, ch2 = zl.patch_yaml_text(odd, zl.STD_SEED_ADMIT, conflicts=conflicts)
+    assert new2 == odd and ch2 == {} and conflicts[k][0] == "12345"
+
+
+def test_ws_remote_url_from_origin(tmp_path):
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    assert zl.ws_remote_url(tmp_path) is None                      # 无 remote → 交给默认值
+    subprocess.run(["git", "remote", "add", "origin", "https://github.com/someorg/open-guji-cv.git"], cwd=tmp_path, check=True)
+    assert zl.ws_remote_url(tmp_path) == "https://github.com/someorg/guji-workspace.git"
+    subprocess.run(["git", "remote", "set-url", "origin", "https://example.com/other.git"], cwd=tmp_path, check=True)
+    assert zl.ws_remote_url(tmp_path) is None
+
+
+def test_next_text_says_jiyisi_never_high(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    with pytest.raises(zl.Gate):
+        zl.st_vision_gate(ctx)
+    t = (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+    assert "己已巳族" in t and "不记「高」" in t

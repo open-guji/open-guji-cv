@@ -1,0 +1,144 @@
+<title>拆字识别是怎么做的</title>
+<style>
+  :root{
+    --paper:#f6f3ec; --ink:#1e1c19; --ink-2:#4b4740; --mute:#7c766a; --rule:#d8d1c2;
+    --zhu:#a33a2c; --ok:#2e6a4e; --card:#fffdf8; --shade:#efeadf;
+    --serif:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",SimSun,serif;
+    --sans:"Noto Sans CJK SC","Source Han Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+    --mono:"JetBrains Mono","Sarasa Mono SC",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --paper:#1a1815; --ink:#ebe5d9; --ink-2:#c8c0b1; --mute:#8e8779; --rule:#3a352d;
+    --zhu:#e0705c; --ok:#7dbb97; --card:#221f1b; --shade:#2a2620; } }
+  :root[data-theme="dark"]{
+    --paper:#1a1815; --ink:#ebe5d9; --ink-2:#c8c0b1; --mute:#8e8779; --rule:#3a352d;
+    --zhu:#e0705c; --ok:#7dbb97; --card:#221f1b; --shade:#2a2620; }
+  body{background:var(--paper);color:var(--ink);font-family:var(--sans);line-height:1.75;margin:0}
+  main{max-width:46rem;margin:0 auto;padding:2.5rem 1.4rem 5rem}
+  h1{font-family:var(--serif);font-weight:600;font-size:1.9rem;line-height:1.3;margin:0 0 .3rem;text-wrap:balance}
+  .sub{color:var(--mute);font-size:.88rem;margin-bottom:2rem}
+  h2{font-family:var(--serif);font-size:1.3rem;margin:2.6rem 0 .8rem;padding-top:1.2rem;border-top:1px solid var(--rule)}
+  h3{font-size:1rem;margin:1.5rem 0 .4rem}
+  p{margin:.6rem 0}
+  strong{color:var(--ink)}
+  table{border-collapse:collapse;width:100%;font-size:.88rem;margin:.8rem 0}
+  th,td{text-align:left;padding:.38rem .6rem;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-weight:600;color:var(--ink-2);font-size:.78rem;letter-spacing:.04em}
+  td.n{font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+  .wrap{overflow-x:auto}
+  .glyph{font-family:var(--serif);font-size:1.08em}
+  .flow{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:.9rem 1.1rem;font-family:var(--mono);font-size:.82rem;line-height:1.9;white-space:pre;overflow-x:auto}
+  .note{background:var(--shade);border-left:3px solid var(--zhu);padding:.7rem 1rem;margin:1rem 0;font-size:.92rem}
+  .note.good{border-left-color:var(--ok)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(10rem,1fr));gap:.8rem;margin:1.2rem 0}
+  .kpi{background:var(--card);border:1px solid var(--rule);padding:.7rem .9rem;border-radius:4px}
+  .kpi .k{font-size:.72rem;color:var(--mute);letter-spacing:.05em}
+  .kpi .v{font-family:var(--mono);font-size:1.6rem;line-height:1.2;font-variant-numeric:tabular-nums}
+  .kpi .s{font-size:.76rem;color:var(--ink-2)}
+  .ok{color:var(--ok)} .bad{color:var(--zhu)}
+  .aug{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.6rem;margin:.8rem 0}
+  .aug div{background:var(--card);border:1px solid var(--rule);border-radius:4px;padding:.55rem .8rem;font-size:.84rem}
+  .aug b{display:block;font-size:.78rem;color:var(--mute);margin-bottom:.15rem}
+  code{font-family:var(--mono);font-size:.86em;background:var(--card);padding:0 .25em;border:1px solid var(--rule);border-radius:3px}
+  .legend{font-size:.78rem;color:var(--mute)}
+</style>
+<main>
+<h1>拆字识别是怎么做的</h1>
+<div class="sub">写给不做机器学习的人 · open-guji-cv · 2026-09-05 · 台账正本 <code>.claude/doc/ocr_engine_and_zero_shot.md</code></div>
+
+<div class="kpis">
+  <div class="kpi"><div class="k">早上的基线（HOG 字体检索）</div><div class="v">75.5%</div><div class="s">unseen 1,327 字位 top-1</div></div>
+  <div class="kpi"><div class="k">现在（三源融合）</div><div class="v ok">95.0%</div><div class="s">top-10 99.0%</div></div>
+  <div class="kpi"><div class="k">最难的 21 条（rare-char）</div><div class="v ok">100%</div><div class="s">top-5 / top-10 命中，top-1 81%</div></div>
+  <div class="kpi"><div class="k">一轮训练</div><div class="v">1–25 分</div><div class="s">RTX 3080，不到 300 万参数</div></div>
+</div>
+
+<h2>一、要解决的问题：没见过的字，怎么认</h2>
+<p>字形库有 15,482 个定好字的刻本字块，覆盖 1,958 个字种。可整理本里有 4,636 个字种，<strong>39.7% 的字只出现 ≤3 次</strong>——库里要么没刻例，要么只有一两个。换一本新书更糟：所有字一开始都是库里没有的。</p>
+<p>所以问题不是「认库里有的字」（那已经 99.5%），而是<strong>「认库里从来没见过刻例的字」</strong>。机器学习里叫<strong>零样本识别</strong>。</p>
+<p>量它的办法：把字形库按每字样本数切成两档。</p>
+<div class="wrap"><table>
+<tr><th>档</th><th class="n">字种</th><th class="n">实例</th><th>用途</th></tr>
+<tr><td>seen（≥5 个刻例）</td><td class="n">658</td><td class="n">13,206</td><td>训练 + 普通测试</td></tr>
+<tr><td><strong>unseen（≤2 个刻例）</strong></td><td class="n"><strong>1,022</strong></td><td class="n"><strong>1,327</strong></td><td><strong>只做测试</strong>，训练时一个刻例都不给</td></tr>
+</table></div>
+<p>unseen 档的成绩，就是「生僻字能不能认」的成绩。</p>
+
+<h2>二、先试的路：手工拆字（失败了）</h2>
+<p>最直观的想法：识别结构和部件，再找对应的字。<span class="glyph">諭</span> 是 ⿰言俞，<span class="glyph">論</span> 是 ⿰言侖——左边一样，右边差一个部件。IDS 拆字表（10 万字）把每个字的结构和部件都写好了。</p>
+<p>第一版：按结构把字块切成两半，两半各自和字体模板比。试了四种切法，<strong>全部输给「整字直接比」的基线</strong>（top-1 从 73% 掉到 52%~70%）。</p>
+<div class="note">为什么会输：字块只有 64×64 像素，「整字直接比」用的 HOG 特征本来就隐含了「左半边什么样、右半边什么样」。手工切开只丢不增——切点估错一点整个半边就错位，切开再各自缩放又丢掉两半的相对位置。<br><strong>结论：部件的知识有用，但不能用「切图」的方式喂进去。</strong></div>
+
+<h2>三、走通的路：让网络自己学部件</h2>
+<h3>3.1 用什么模型</h3>
+<p>一个小的卷积神经网络。可以把它想成一叠越来越粗的「筛子」：</p>
+<div class="flow">64×64 的字块
+  → 第 1 层  看 3×3 小窗口，学出 横 竖 撇 捺 转角 这类基本笔形
+  → 第 2 层  把笔形拼成 氵 亻 口 艹 这类部件
+  → 第 3、4 层  把部件拼成「左边是言、右边是俞」这种整字布局
+  → 压成一个 256 维向量（下面叫 embedding）</div>
+
+<h3>3.2 训练时给它两个任务</h3>
+<p>那个 256 维向量后面接了<strong>两个头</strong>：</p>
+<p><strong>头 1 · 这是哪个字？</strong>（分类头，4,636 类）——覆盖整理本全部字种，不只是库里见过的 658 个。</p>
+<p><strong>头 2 · 这个字含哪些部件？</strong>（部件头，多标签）——从 IDS 表取部件，出现在 ≥3 个字里的约 500 个。<span class="glyph">諭</span> 的标签是 {言, 俞}，<span class="glyph">論</span> 是 {言, 侖}。两个头要同时答对。</p>
+<div class="note good"><strong>这就是「拆字」真正起作用的地方。</strong>网络被迫在向量里编码「含言字旁」「含俞」这种信息，否则头 2 答不对。这些部件特征是<strong>可迁移的</strong>：训练时在 語 說 諭 里见过「言」，测试时碰到没见过的 諛，「言」那部分照样认。对比手工拆字——那是我在图上硬切；这里是网络自己学「言字旁在哪、长什么样」，切分是软的、自适应的。</div>
+
+<h3>3.3 unseen 的字训练时没有刻例，怎么办</h3>
+<p><strong>用字体渲染当替身。</strong>I.Ming（传承字形）+ Jigmo 1/2/3 四套字体能渲染 Unihan 全部 10 万字。每一类——包括库里一个刻例都没有的类——每轮训练都喂 4~16 张字体渲染图。</p>
+<p>字体图太干净，跟刻本差得远，所以每张都要<strong>故意弄脏</strong>：</p>
+<div class="aug">
+  <div><b>腐蚀 / 膨胀</b>笔画变细变粗 → 刻工深浅、印墨多少</div>
+  <div><b>横条 / 竖条抹白</b>→ 断墨、磨损、版裂</div>
+  <div><b>小角度旋转、缩放、平移</b>→ 刻歪、扫描形变</div>
+  <div><b>贴边加黑线</b>→ 版框、界行残渣</div>
+</div>
+<p>这样 unseen 的字对分类器不是「没见过」，而是「只见过字体版，且见过它各种弄脏的样子」——正是生僻字的真实处境。用户点名的<strong>字符磨损</strong>就靠这一步：实测模拟磨损下 CNN 几乎不掉分（84.3% → 84.3%），老方法 HOG 掉 14 个点。</p>
+
+<h3>3.4 一轮训练是什么样</h3>
+<p>每一轮：把 10,585 张真刻例 + 4,636 类 × N 张字体渲染混在一起打乱；每张过一遍随机增广；256 张一批送进网络，算两个头答错多少，反向调参数；轮末在 seen_test 和 unseen 上各测一次，存下 unseen top-10 最好的那个模型。</p>
+<div class="wrap"><table>
+<tr><th class="n">轮</th><th>epoch × 每类字体样本</th><th class="n">用时</th><th class="n">unseen top-1 / 5 / 10</th></tr>
+<tr><td class="n">1</td><td>12 × 4</td><td class="n">1 分</td><td class="n">70.6 / 95.9 / 98.0</td></tr>
+<tr><td class="n">2</td><td>40 × 8</td><td class="n">3 分</td><td class="n">83.9 / 96.8 / 98.2</td></tr>
+<tr><td class="n">3</td><td>60 × 12</td><td class="n">8 分</td><td class="n">87.3 / 98.0 / 98.9</td></tr>
+<tr><td class="n">4</td><td>100 × 16</td><td class="n">25 分</td><td class="n">91.3 / 98.7 / 99.4</td></tr>
+<tr><td class="n"><strong>5</strong></td><td><strong>160 × 24</strong></td><td class="n">60 分</td><td class="n"><strong>93.7 / 98.6 / 99.2</strong></td></tr>
+</table></div>
+<p>seen_test 一直 99.5%+。unseen 一路涨到第五轮；之后<strong>第六轮（200 × 32）只多 0.2 个点，第七轮（300 × 48）反而不如</strong>——「多喂字体版」这条路到第五轮到头了，现役就是第五轮。</p>
+
+<h2>四、同一个网络的第二种读法：不问分类头，直接比向量</h2>
+<p>中间那个 256 维向量本身就是一种「字形指纹」。于是：把 4,636 个字的字体渲染图各过一遍网络取指纹（四套字体平均）当模板；查询字块也取指纹，跟模板算夹角，最像的排前。这叫 <strong>embedding 检索</strong>。</p>
+<p>实测它比分类头还准：第二轮模型分类头 83.9%，检索 <strong>91.9%</strong>；第五轮 94.3% 对 <strong>95.9%</strong>。原因：unseen 类的分类头权重只在字体渲染上训过，本质是一组线性权重；检索比的是归一化空间里的夹角，对训练分布依赖更小。学界 CCR-CLIP 一路的结论，我们复现了。</p>
+
+<h2>五、三个源怎么合成一张候选表</h2>
+<div class="wrap"><table>
+<tr><th>源</th><th>强项</th><th>弱项</th></tr>
+<tr><td>HOG 字体检索（老方法）</td><td>干净字块上还行</td><td>磨损下掉 14 点；最难那撮只有 47.6%</td></tr>
+<tr><td>CNN 分类头</td><td>稳</td><td>unseen 上略低于检索</td></tr>
+<tr><td>CNN embedding 检索</td><td><strong>最强单源</strong></td><td>—</td></tr>
+</table></div>
+<p>合成用<strong>倒数排名融合（RRF）</strong>：某字在某源排第 r 名得 <code>w / (60 + r)</code> 分，三源加总排序。只看名次不看分数——三个源的分数量纲完全不同，相加没有意义。权重扫了六组，定为 <strong>HOG 0.5 / 分类头 1 / 检索 3</strong>。</p>
+<div class="wrap"><table>
+<tr><th></th><th class="n">top-1</th><th class="n">top-5</th><th class="n">top-10</th></tr>
+<tr><td>早上的基线：HOG 字体检索</td><td class="n">75.5%</td><td class="n">91.9%</td><td class="n">94.7%</td></tr>
+<tr><td><strong>三源融合（第五轮模型）</strong></td><td class="n"><strong>95.0%</strong></td><td class="n"><strong>98.6%</strong></td><td class="n"><strong>99.0%</strong></td></tr>
+</table></div>
+<p class="legend">rare-char 集（用户裁决里系统三路都给不出答案的 21 条最难的字）：top-1 81.0%，top-5 / top-10 100%。异体字算对。</p>
+
+<h2>六、它在系统里的位置：只出候选，永不放行</h2>
+<p>这是纪律，不是技术限制。候选 top-1 95% 听着很高，但<strong>自动进库的门槛是精度 ≥ 99.9%</strong>——差着两个数量级。所以卡片载入时自动带出 10 个候选（㕔 / 䙝 / 殫 / 暉 现在都排第一），<strong>人点一下</strong>；自动放行仍然只走两路零同源证据互证的通道；模型文件的指纹进产物指纹，换了模型相关产物自动过期。</p>
+
+<h2>七、试过但不采用的</h2>
+<div class="wrap"><table>
+<tr><th>尝试</th><th>结果</th></tr>
+<tr><td>手工按 IDS 切半再比对（四种切法）</td><td>全输整字基线</td></tr>
+<tr><td>测试时增广（5 个视角平均）</td><td>83.9 → 82.9，训练时的增广已经覆盖</td></tr>
+<tr><td>模板指纹取逐字体最大相似而非均值</td><td>90.1 vs 91.9，单一字体更像那套字体、离刻本更远</td></tr>
+<tr><td>模板指纹掺退化渲染</td><td>与均值持平</td></tr>
+<tr><td>IDS 护栏接进自动放行</td><td>拦 490 条里 487 条本来是对的，净亏</td></tr>
+</table></div>
+
+<h2>八、还能往哪走</h2>
+<p><strong>数据</strong>：字体样本这条轴已经饱和（六、七轮都不超过第五轮）；真正的上限是刻本字样与字体渲染的差距，再往上要么更多真刻例（人裁回流会自然长），要么用 GlyphWiki 的异体写法补一字多形——换数据来源，不是再堆量。<strong>进裁决卡片主候选栏</strong>：现在是面板第四行，可以直接并进库匹配候选的排序。<strong>更大的骨干网</strong>：现在不到 300 万参数，还有余量；数据轴既已饱和，这是下一个值得试的变量。</p>
+</main>
