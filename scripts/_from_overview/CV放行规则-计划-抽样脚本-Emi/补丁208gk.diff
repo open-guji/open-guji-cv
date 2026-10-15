@@ -1,0 +1,66 @@
+diff --git "a/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py" "b/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
+index 6b671639..3f6dc41a 100644
+--- "a/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
++++ "b/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
+@@ -22,7 +22,7 @@
+   force、hint 与 juan_rule 层**全看**（不抽）；other 层按册各取 `--quota` 格，按 sha256(seed|格号) 升序。
+   注：208gc 干跑核实，vol05 A 臂 provenance 里**没有** hint 标记（只有 match／rare_ref／context／witness3／seal／iron／coord_fallback 等），
+   hint 格要靠 `--force-all` 名单进全看层，不能只靠 provenance。
+-  `--force-all` 名单（每行一个格号，`#` 开头为注释）里不在新放行总体的格不计入，摘要里列出。
++  `--force-all` 名单（每行一个格号，`#` 开头为注释）里不在新放行总体的格不计入：基线同号未放行的列为「已忽略」；基线同号已放行的单列为「强制名单但基线同号已放行：对位待核」（208gk），逐格列出。
+   other 层里来源串非空的格计为「未认出」（provenance 写法可能没认上），摘要里逐串列出。
+ variant_tie 不在新放行总体里；基线带 variant_tie、A 臂待审的格另列「回退集」（退出 variant_tie 时的看图对象）。
+ 取法：总体 ≤ --max-total（缺省 60）则全看；超过则 force＋hint＋juan_rule 全进清单、other 按册抽 quota；
+@@ -286,6 +286,10 @@ def write_outputs(out: Path, args, mode, chosen, pop, retreat, paths, info):
+     ]
+     for src, n in unrec_count.most_common(20):
+         md.append(f"  - `{src}` × {n}")
++    if info["force_base_admit"]:
++        md += ["", "## 强制名单但基线同号已放行：对位待核", "",
++               "以下格在 --force-all 名单里，基线同号已是放行，不在新放行总体，未进看图清单；须人核对位后再定去留：", ""]
++        md += [f"- `{c}`" for c in info["force_base_admit"]]
+     (out / "摘要.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+     return len(unrec)
+ 
+@@ -308,7 +312,11 @@ def run(args) -> int:
+ 
+     force = read_force(args.force_all) if getattr(args, "force_all", None) else frozenset()
+     pop, retreat = classify(base, arm, args.source_field, red, force)
+-    force_ignored = sorted(force - {p["cid"] for p in pop})
++    pop_ids = {p["cid"] for p in pop}
++    force_missing = sorted(force - pop_ids)
++    # 强制名单里基线同号已放行的格：不算「已忽略」，单列待对位核（208gk）
++    force_base_admit = [c for c in force_missing if base.get(c, {}).get("admit")]
++    force_ignored = [c for c in force_missing if not base.get(c, {}).get("admit")]
+     unmatched = [p for p in pop if not p["matched"]]
+     limit = nomatch_limit(arm)
+     if len(unmatched) > limit:
+@@ -322,7 +330,8 @@ def run(args) -> int:
+         return 2
+     paths = {"base": args.base, "arm": args.arm, "remap": args.remap, "force_all": getattr(args, "force_all", None)}
+     info = {"unmatched": len(unmatched), "limit": limit, "collided": collided, "red_problems": red_problems,
+-            "red_unchecked": red_unchecked, "force_n": len(force), "force_ignored": force_ignored}
++            "red_unchecked": red_unchecked, "force_n": len(force), "force_ignored": force_ignored,
++            "force_base_admit": force_base_admit}
+     unrec = write_outputs(Path(args.out), args, mode, chosen, pop, retreat, paths, info)
+     print(f"已写入 {args.out}：模式 {mode}，总体 {len(pop)}，进清单 {len(chosen)} 格，回退集 {len(retreat)} 格，"
+           f"无对位 {len(unmatched)}（报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号")
+@@ -510,6 +519,18 @@ def selftest() -> int:
+         rc = run(args_for("run14", red=set()))
+         check("退出码 3", rc == 3)
+ 
++        print("== 自测十二：强制名单里基线同号已放行的格 → 不计「已忽略」，单列「对位待核」")
++        adm_both = next(c for c in sorted(base_rows) if base_rows[c]["admit"] and arm_tbl.get(c, {}).get("admit") and c not in FAKE_RED)
++        force2_p = tdp / "force2.txt"
++        force2_p.write_text(adm_both + "\nvol09:9:9:9\n", encoding="utf-8")
++        rc = run(args_for("run15", force_all=str(force2_p)))
++        check("退出码 0", rc == 0)
++        sm12 = (tdp / "run15" / "摘要.md").read_text(encoding="utf-8")
++        parts12 = sm12.split("## 强制名单但基线同号已放行：对位待核", 1)
++        check("对位待核节列出基线已放行的格", len(parts12) == 2 and f"`{adm_both}`" in parts12[1])
++        check("对位待核节不列未入基线的 vol09:9:9:9", len(parts12) == 2 and "vol09:9:9:9" not in parts12[1])
++        check("已忽略只计 vol09:9:9:9 1 格", "已忽略 1 格：vol09:9:9:9" in sm12)
++
+         print("--- 摘要.md（run1）---")
+         print((tdp / "run1" / "摘要.md").read_text(encoding="utf-8").replace(str(tdp), "<tmp>"))
+ 

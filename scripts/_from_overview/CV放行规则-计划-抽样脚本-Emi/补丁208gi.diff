@@ -1,0 +1,256 @@
+--- a/sample_newadmit.py
++++ b/sample_newadmit.py
+@@ -11,17 +11,22 @@
+ 新放行格 = A 臂 admit 为真，且（对位后的）基线 admit 不为真。
+   A 臂有、对不上基线的格：记为「无对位」，**仍进看图清单**，不静默丢。
+   无对位超线即停（退出码 4）：阈值 = min(20, 5% × A 臂放行格数)，超过则要先补 remap 再跑。
+-红线（Eden 全局 2，九格）：
+-  · 九格有任一在 A 臂或（对位后的）基线里找不到 → 停（退出码 3），逐个列出，不静默通过；
+-  · 九格有任一在基线里已是放行（不是待审）→ 停（退出码 3）；
+-  · 九格有任一从待审变放行 → 停（退出码 3）。
++红线（Eden 全局 2，九格）：只检查 A 臂表里出现的册（红线格的册在 A 臂里有任一格即算「本册」）：
++  · 本册的红线格有任一在 A 臂或（对位后的）基线里找不到 → 停（退出码 3），逐个列出，不静默通过；
++  · 本册的红线格有任一在基线里已是放行（不是待审）→ 停（退出码 3）；
++  · 本册的红线格有任一从待审变放行 → 停（退出码 3）。
++  不在 A 臂册内的红线格不停线，逐条列为「本次未检」；只要有未检的，摘要首行写「红线未全覆盖，不得报 0」。
++  合并总跑必须覆盖九格全部，才能报「红线 0」。红线集合为空＝停线（退出码 3），不回落到全局九格。
+   其余新放行格的停线只有一条：看图为错 → 该规则（该册）退出，不由脚本判。
+-分层：provenance 含 hint／juan_rule 归该层；都不含归 other。
+-  hint 与 juan_rule 层**全看**（不抽）；other 层按册各取 `--quota` 格，按 sha256(seed|格号) 升序。
++分层：`--force-all` 名单里的格归「force」层（强制全看，不抽）；否则 provenance 含 hint／juan_rule 归该层；都不含归 other。
++  force、hint 与 juan_rule 层**全看**（不抽）；other 层按册各取 `--quota` 格，按 sha256(seed|格号) 升序。
++  注：208gc 干跑核实，vol05 A 臂 provenance 里**没有** hint 标记（只有 match／rare_ref／context／witness3／seal／iron／coord_fallback 等），
++  hint 格要靠 `--force-all` 名单进全看层，不能只靠 provenance。
++  `--force-all` 名单（每行一个格号，`#` 开头为注释）里不在新放行总体的格不计入，摘要里列出。
+   other 层里来源串非空的格计为「未认出」（provenance 写法可能没认上），摘要里逐串列出。
+ variant_tie 不在新放行总体里；基线带 variant_tie、A 臂待审的格另列「回退集」（退出 variant_tie 时的看图对象）。
+-取法：总体 ≤ --max-total（缺省 60）则全看；超过则 hint＋juan_rule 全进清单、other 按册抽 quota；
+-  hint＋juan_rule 本身超过上限，或抽样后总数仍超上限，退出码 2（需人定：调高上限或收窄规则）。抽样只是超上限时的补充，不替代逐格看图。
++取法：总体 ≤ --max-total（缺省 60）则全看；超过则 force＋hint＋juan_rule 全进清单、other 按册抽 quota；
++  force＋hint＋juan_rule 本身超过上限，或抽样后总数仍超上限，退出码 2（需人定：调高上限或收窄规则）。抽样只是超上限时的补充，不替代逐格看图。
+ 
+ 输出（`--out` 目录）：
+   抽样.tsv        模式｜层｜秩｜册｜格号｜对位｜红线｜放行字｜来源串（模式为「全看」或「抽样」）
+@@ -33,10 +38,10 @@
+ 
+ 用法：
+   python sample_newadmit.py --base <零臂表> --arm <A臂表> --out <目录> \\
+-        [--remap <对位表.tsv>] [--seed 20261014] [--quota 5] [--max-total 60] [--source-field provenance]
++        [--remap <对位表.tsv>] [--force-all <格号名单.txt>] [--seed 20261014] [--quota 5] [--max-total 60] [--source-field provenance]
+   python sample_newadmit.py --selftest     # 造假数据自测，不读真书
+ 
+-退出码：0 正常；1 自测失败；2 超上限；3 红线停线（缺失／已放行／从待审变放行）；4 无对位超线（先补 remap）。
++退出码：0 正常；1 自测失败；2 超上限；3 红线停线（本册缺失／已放行／从待审变放行，或红线集合为空）；4 无对位超线（先补 remap）。
+ """
+ from __future__ import annotations
+ 
+@@ -49,8 +54,9 @@
+ import tempfile
+ from pathlib import Path
+ 
+-LAYERS = ("hint", "juan_rule", "other")
++LAYERS = ("force", "hint", "juan_rule", "other")
+ RULE_NAMES = ("hint", "juan_rule")
++FULL_LAYERS = ("force",) + RULE_NAMES  # 全看（不抽）的层
+ RETREAT_RULE = "variant_tie"
+ # Eden 全局 2：红线五格＋附四格（以 窗口验收口径-Eden.md 原文为准）
+ RED_LINE = frozenset({
+@@ -115,7 +121,18 @@
+     return out, sorted(collided)
+ 
+ 
+-def layer_of(row: dict, field: str) -> str:
++def read_force(path) -> frozenset:
++    cids = set()
++    for line in Path(path).read_text(encoding="utf-8").splitlines():
++        s = line.strip()
++        if s and not s.startswith("#"):
++            cids.add(s.split("\t")[0].strip())
++    return frozenset(cids)
++
++
++def layer_of(row: dict, field: str, cid: str = "", force=frozenset()) -> str:
++    if cid in force:
++        return "force"
+     text = str(row.get(field) or "")
+     for name in RULE_NAMES:
+         if name in text:
+@@ -131,7 +148,7 @@
+     return hashlib.sha256(f"{seed}|{cell_id}".encode("utf-8")).hexdigest()
+ 
+ 
+-def classify(base: dict, arm: dict, field: str, red) -> tuple:
++def classify(base: dict, arm: dict, field: str, red, force=frozenset()) -> tuple:
+     pop = []
+     for cid in sorted(arm):
+         row = arm[cid]
+@@ -142,7 +159,7 @@
+             continue
+         pop.append({
+             "cid": cid,
+-            "layer": layer_of(row, field),
++            "layer": layer_of(row, field, cid, force),
+             "vol": vol_of(cid),
+             "matched": b is not None,
+             "red": cid in red,
+@@ -157,10 +174,14 @@
+     return pop, retreat
+ 
+ 
+-def red_check(base: dict, arm: dict, red) -> list:
+-    """红线九格的停线检查。返回需停线的说明行（空＝通过）。"""
+-    problems = []
++def red_check(base: dict, arm: dict, red) -> tuple:
++    """红线格的停线检查（只管 A 臂表里出现的册）。返回 (需停线的说明行, 本次未检的红线格)。空说明行＝通过。"""
++    problems, unchecked = [], []
++    arm_vols = {vol_of(c) for c in arm}
+     for cid in sorted(red):
++        if vol_of(cid) not in arm_vols:
++            unchecked.append(cid)
++            continue
+         if cid not in arm or cid not in base:
+             where = "A 臂" if cid not in arm else "基线（对位后）"
+             problems.append(f"{cid}：{where}表里找不到，无法核是否从待审变放行（须人工确认）")
+@@ -168,16 +189,16 @@
+             problems.append(f"{cid}：基线里已是放行，不是待审（须人工确认）")
+         elif arm[cid].get("admit"):
+             problems.append(f"{cid}：从待审变放行")
+-    return problems
++    return problems, unchecked
+ 
+ 
+ def pick(pop: list, seed: int, quota: int, max_total: int):
+     order = lambda p: (LAYERS.index(p["layer"]), p["vol"], p["cid"])
+     if len(pop) <= max_total:
+         return "全看", sorted(pop, key=order)
+-    full = [p for p in pop if p["layer"] in RULE_NAMES]
++    full = [p for p in pop if p["layer"] in FULL_LAYERS]
+     if len(full) > max_total:
+-        raise OverflowError(f"hint＋juan_rule 全看需 {len(full)} 格，超过上限 {max_total}（需人定：调高上限或收窄规则）")
++        raise OverflowError(f"force＋hint＋juan_rule 全看需 {len(full)} 格，超过上限 {max_total}（需人定：调高上限或收窄规则）")
+     strata = collections.defaultdict(list)
+     for p in pop:
+         if p["layer"] == "other":
+@@ -225,24 +246,29 @@
+     limit = info["limit"]
+     collided = info["collided"]
+ 
+-    md = [
++    red_unchecked = info["red_unchecked"]
++    md = (["红线未全覆盖，不得报 0：本次未检 " + "、".join(red_unchecked)] if red_unchecked else []) + [
+         "# 看图清单摘要",
+         "",
+         f"- 模式：**{mode}**（总体 {len(pop)}，上限 {args.max_total}）"
+         + ("：全看，每个新放行格都看" if mode == "全看"
+-           else "：超上限，hint／juan_rule 全看，other 按册抽样，不替代逐格看图"),
++           else "：超上限，force／hint／juan_rule 全看，other 按册抽样，不替代逐格看图"),
+         f"- 进看图清单：{len(chosen)} 格",
+         f"- 种子：{args.seed}；other 层每册上限：{args.quota}（仅抽样模式用）",
+         f"- 来源字段：`{args.source_field}`",
+         f"- 基线：`{paths['base']}`（须为零臂产物，见方案 §一）",
+         f"- A 臂：`{paths['arm']}`",
+         f"- 对位表：`{paths['remap'] or '（未给，按格号对位）'}`",
++        f"- 强制全看名单：`{paths['force_all'] or '（未给）'}`",
+         f"- 多对一碰撞（多个旧号映到同一新号，取「任一为放行则放行」）：{len(collided)} 个新号"
+         + (f"：{', '.join(collided[:COLLIDE_SHOW])}" + ("…" if len(collided) > COLLIDE_SHOW else "") if collided else ""),
+         f"- 无对位格（A 臂放行，按格号／对位表对不上基线）：{info['unmatched']}，报警线 {limit:.1f}"
+         f"（min({NOMATCH_CAP}, {NOMATCH_RATE:.0%}×A 臂放行格数)；超线即停，退出码 4）。已计入总体、进看图清单，不算错",
+-        f"- 红线九格：{'齐全，且均为待审、未从待审变放行' if not info['red_problems'] else '有问题，见下'}"
+-        + ("" if not info["red_problems"] else "：" + "；".join(info["red_problems"])),
++        f"- 红线：{'本册内齐全，且均为待审、未从待审变放行' if not info['red_problems'] else '有问题，见下'}"
++        + ("" if not info["red_problems"] else "：" + "；".join(info["red_problems"]))
++        + (f"；本次未检 {len(red_unchecked)} 格（不在 A 臂册内，不停线）：{'、'.join(red_unchecked)}" if red_unchecked else ""),
++        f"- 强制全看名单（--force-all）：{info['force_n']} 格；其中不在新放行总体、已忽略 {len(info['force_ignored'])} 格"
++        + (f"：{'、'.join(info['force_ignored'][:COLLIDE_SHOW])}" if info["force_ignored"] else ""),
+         f"- 回退集（variant_tie 退出时：基线带 variant_tie 放行、A 臂待审）：{len(retreat)} 格，另列，不计入新放行总体（见 回退.tsv）",
+         f"- 脚本：`{Path(__file__).as_posix()}`",
+         "",
+@@ -268,16 +294,21 @@
+     base_raw = read_table(Path(args.base))
+     arm = read_table(Path(args.arm))
+     base, collided = apply_remap(base_raw, load_remap(args.remap))
+-    red = getattr(args, "red", None) or RED_LINE
++    red = RED_LINE if getattr(args, "red", None) is None else args.red
++    if not red:
++        print("停线：红线集合为空，不得跳过红线检查（不回落到全局九格，也不放行）。", file=sys.stderr)
++        return 3
+ 
+-    red_problems = red_check(base, arm, red)
++    red_problems, red_unchecked = red_check(base, arm, red)
+     if red_problems:
+-        print("停线：红线九格检查未过：", file=sys.stderr)
++        print("停线：红线检查未过：", file=sys.stderr)
+         for line in red_problems:
+             print("  " + line, file=sys.stderr)
+         return 3
+ 
+-    pop, retreat = classify(base, arm, args.source_field, red)
++    force = read_force(args.force_all) if getattr(args, "force_all", None) else frozenset()
++    pop, retreat = classify(base, arm, args.source_field, red, force)
++    force_ignored = sorted(force - {p["cid"] for p in pop})
+     unmatched = [p for p in pop if not p["matched"]]
+     limit = nomatch_limit(arm)
+     if len(unmatched) > limit:
+@@ -289,8 +320,9 @@
+     except OverflowError as e:
+         print(str(e), file=sys.stderr)
+         return 2
+-    paths = {"base": args.base, "arm": args.arm, "remap": args.remap}
+-    info = {"unmatched": len(unmatched), "limit": limit, "collided": collided, "red_problems": red_problems}
++    paths = {"base": args.base, "arm": args.arm, "remap": args.remap, "force_all": getattr(args, "force_all", None)}
++    info = {"unmatched": len(unmatched), "limit": limit, "collided": collided, "red_problems": red_problems,
++            "red_unchecked": red_unchecked, "force_n": len(force), "force_ignored": force_ignored}
+     unrec = write_outputs(Path(args.out), args, mode, chosen, pop, retreat, paths, info)
+     print(f"已写入 {args.out}：模式 {mode}，总体 {len(pop)}，进清单 {len(chosen)} 格，回退集 {len(retreat)} 格，"
+           f"无对位 {len(unmatched)}（报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号")
+@@ -426,8 +458,8 @@
+               all(p["matched"] for p in pop2 if p["cid"] == "vol00:99:1:1") and
+               not any(p["cid"] == "vol00:99:1:1" and not p["matched"] for p in pop2))
+ 
+-        print("== 自测三：红线缺失 → 退出码 3（假红线里混一个不存在的 id）")
+-        rc = run(args_for("run7", red=set(FAKE_RED) | {"vol09:1:1:1"}))
++        print("== 自测三：红线缺失（本册内）→ 退出码 3（假红线里混一个 vol00 册内不存在的 id）")
++        rc = run(args_for("run7", red=set(FAKE_RED) | {"vol00:1:999:1"}))
+         check("退出码 3", rc == 3)
+ 
+         print("== 自测四：多对一映射碰撞有计数；任一为放行则放行")
+@@ -453,6 +485,31 @@
+         rc = run(args_for("run5", max_total=3))
+         check("退出码 2", rc == 2)
+ 
++        print("== 自测八：强制全看（--force-all）：名单格全进 force 层、不被抽样；名单外的格忽略")
++        pop_other = [p["cid"] for p in classify(base_map, arm_tbl, "provenance", FAKE_RED)[0] if p["layer"] == "other"]
++        force_two = pop_other[:2]
++        force_p = tdp / "force.txt"
++        force_p.write_text("# 测试名单\n" + "\n".join(force_two) + "\nvol09:9:9:9\n", encoding="utf-8")
++        rc = run(args_for("run11", force_all=str(force_p)))
++        check("退出码 0", rc == 0)
++        fr = [l.split("\t") for l in (tdp / "run11" / "抽样.tsv").read_text(encoding="utf-8").splitlines()[1:]]
++        forced = [r for r in fr if r[1] == "force"]
++        check("强制名单两格都进 force 层", sorted(r[4] for r in forced) == sorted(force_two))
++        check("名单外的格不进 force 层（vol09:9:9:9 不在新放行总体）", not any(r[4] == "vol09:9:9:9" for r in fr))
++        check("摘要写出强制名单忽略 1 格", "已忽略 1 格" in (tdp / "run11" / "摘要.md").read_text(encoding="utf-8"))
++        print("== 自测九：force＋hint＋juan_rule 超上限 → 退出码 2（force 格不能被抽掉）")
++        rc = run(args_for("run12", max_total=1, force_all=str(force_p)))
++        check("退出码 2", rc == 2)
++
++        print("== 自测十：红线按册——不在 A 臂册内的红线格不停线，列为本次未检，摘要首行写「红线未全覆盖，不得报 0」")
++        rc = run(args_for("run13", red=set(FAKE_RED) | {"vol09:1:1:1"}))
++        check("退出码 0（不停线）", rc == 0)
++        head = (tdp / "run13" / "摘要.md").read_text(encoding="utf-8").splitlines()[0]
++        check("摘要首行为未全覆盖警告，且点名 vol09:1:1:1", head.startswith("红线未全覆盖，不得报 0") and "vol09:1:1:1" in head)
++        print("== 自测十一：红线集合为空 → 退出码 3（不回落到全局九格，也不放行）")
++        rc = run(args_for("run14", red=set()))
++        check("退出码 3", rc == 3)
++
+         print("--- 摘要.md（run1）---")
+         print((tdp / "run1" / "摘要.md").read_text(encoding="utf-8").replace(str(tdp), "<tmp>"))
+ 
+@@ -470,6 +527,7 @@
+     p.add_argument("--quota", type=int, default=QUOTA_DEFAULT)
+     p.add_argument("--max-total", dest="max_total", type=int, default=MAX_TOTAL_DEFAULT)
+     p.add_argument("--source-field", dest="source_field", default="provenance")
++    p.add_argument("--force-all", dest="force_all", default=None, help="强制全看格号名单（每行一个格号）")
+     p.add_argument("--selftest", action="store_true")
+     args = p.parse_args(argv)
+     if args.selftest:
