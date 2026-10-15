@@ -38,7 +38,11 @@ cmd_status_one() {
   cur="$(cat "$jd/current" 2>/dev/null || true)"; ndone=$(ls "$jd/done" 2>/dev/null | wc -l)
   if [ -f "$jd/COMPLETE" ]; then st="完成"
   elif is_running "$jd"; then st="运行中"
-  elif [ -f "$jd/FAILED" ]; then st="失败（$(cat "$jd/FAILED")）"
+  elif [ -f "$jd/FAILED" ]; then
+    case "$(cat "$jd/FAILED")" in
+      *rc=137|*rc=143|*rc=130) st="被外部终止（$(cat "$jd/FAILED")，多为只杀了子进程；resume 可续）" ;;   # 137=SIGKILL 143=SIGTERM 130=SIGINT
+      *) st="失败（$(cat "$jd/FAILED")）" ;;
+    esac
   else st="已中断（runner 不在；resume 可续）"; fi
   last="$(ls -t "$jd"/logs/*.log 2>/dev/null | head -1)"
   echo "$1｜$st｜已完成 ${ndone} 步｜当前步：${cur:--}｜续跑 $(cat "$jd/restarts" 2>/dev/null || echo 0) 次"
