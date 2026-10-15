@@ -23,7 +23,7 @@
 #   · 步骤失败：runner 停在该步（状态 failed，日志有原因），不会往下跑；排除后 resume 原样续。
 #   · 只写 $GUJI_LONGRUN_DIR；产物落哪由 job 里的命令决定（用沙箱 GUJI_PRODUCTS_DIR，别写正式 products/）。
 set -uo pipefail
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${LONGRUN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"   # runner 跑的是任务目录里的副本，仓根由 LONGRUN_ROOT 传入
 SELF="$ROOT/scripts/longrun.sh"
 LR="${GUJI_LONGRUN_DIR:-$HOME/guji-longrun}"
 export GUJI_VENV="${GUJI_VENV:-$ROOT/.venv}"
@@ -50,7 +50,8 @@ launch() {  # $1=名字；调用前已确认不在跑、没完成
   local jd="$LR/$1"
   echo $(( $(cat "$jd/restarts" 2>/dev/null || echo -1) + 1 )) > "$jd/restarts"
   rm -f "$jd/FAILED"
-  setsid nohup bash "$SELF" _run "$1" >> "$jd/runner.log" 2>&1 < /dev/null &
+  cp "$SELF" "$jd/runner.sh.tmp" && mv "$jd/runner.sh.tmp" "$jd/runner.sh"   # bash 是边读边执行的：runner 跑副本，之后改仓里的 longrun.sh 不会搅乱在跑的 runner
+  LONGRUN_ROOT="$ROOT" setsid nohup bash "$jd/runner.sh" _run "$1" >> "$jd/runner.log" 2>&1 < /dev/null &
   echo "[$(now)] 已起 runner（第 $(cat "$jd/restarts") 次；pid $!）" | tee -a "$jd/runner.log"
 }
 
@@ -63,7 +64,7 @@ case "${1:-}" in
     jd="$LR/$name"; mkdir -p "$jd/done" "$jd/logs"
     if is_running "$jd"; then echo "$name 已在跑，不重起。"; cmd_status_one "$name"; exit 0; fi
     cp "$jobfile" "$jd/job.sh.tmp" && mv "$jd/job.sh.tmp" "$jd/job.sh"
-    { for v in ${envs//,/ }; do [ -n "${!v+x}" ] && printf 'export %s=%q\n' "$v" "${!v}"; done; } > "$jd/env.sh.tmp" && mv "$jd/env.sh.tmp" "$jd/env.sh"
+    { for v in GUJI_VENV ${envs//,/ }; do [ -n "${!v+x}" ] && printf 'export %s=%q\n' "$v" "${!v}"; done; } > "$jd/env.sh.tmp" && mv "$jd/env.sh.tmp" "$jd/env.sh"
     chmod 600 "$jd/env.sh"   # 别往 --env 里放密码；这里只存路径之类的变量
     if [ -f "$jd/COMPLETE" ]; then echo "$name 已完成（$jd/COMPLETE）；要重来先删该目录。"; cmd_status_one "$name"; exit 0; fi
     launch "$name"; sleep 1; cmd_status_one "$name" ;;
@@ -138,11 +139,11 @@ PY
     exec 9>"$jd/lock"; flock -n 9 || exit 0        # 已有 runner 就退出
     echo $$ > "$jd/runner.pid"
     [ -f "$jd/env.sh" ] && source "$jd/env.sh"
-    [ -d "$GUJI_VENV/bin" ] && export PATH="$GUJI_VENV/bin:$PATH"
     if ! GUJI_VENV="$GUJI_VENV" bash "$ROOT/scripts/bootstrap_cloud.sh" --check >/dev/null 2>&1; then
       echo "[$(now)] env 自检不过，先跑 bootstrap_cloud.sh（装好才继续）"
       GUJI_VENV="$GUJI_VENV" bash "$ROOT/scripts/bootstrap_cloud.sh" || { echo "bootstrap 失败" > "$jd/FAILED"; exit 1; }
     fi
+    export PATH="$GUJI_VENV/bin:$PATH"   # 必须在 bootstrap 之后：venv 可能是刚装出来的
     export JOB_DIR="$jd" LONGRUN_SCRIPTS="$ROOT/scripts"   # job 文件里用 $LONGRUN_SCRIPTS 引用本目录的帮手脚本
     step() {
       local sn="$1" cmd="$2" ver="${3:-true}" h; h="$(hashof "$sn" "$cmd" "$ver")"
