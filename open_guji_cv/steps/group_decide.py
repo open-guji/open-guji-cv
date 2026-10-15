@@ -11,9 +11,9 @@
 
 弃权语义（B1 §2.1）：`char: null`＝不给字；缺格、`ctx` 不符、`ver` 不符一律弃权并写 `why`。
 
-ctx 口径（GUJI-208bz 起）：序列范围与 `seed_admit._clf_ctx` 相同——**整页**列号升序展平、
-窗口可跨列；取字仍不同：本步在 `seed_admit` 之前，拿不到「邻格已放行字」，邻格取
-`glyph_match` 的 same 档字，否则整理本字，否则 `□`。（seed_admit 另剔 `excluded` 格，本步拿不到名单，不剔。）
+ctx 口径（方案 D，GUJI-208lf）：**整页**列号升序展平、窗口可跨列；邻格**只取整理本对位字**（缺则 `□`），
+不看 same 档、不看放行态——与 `seed_admit` 在 `ctx_align_ref` 开时共用 `utils/ctx_window`，键逐位相同。
+骨架不剔 `excluded` 格（本步也拿不到名单）。（GUJI-208bz 的 same 档取字口径随本改动作废；本步未合入主线、无旧产物。）
 """
 from __future__ import annotations
 
@@ -28,6 +28,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.group import GroupDecRec, PageGroupDecision
 from ..products.kinds.recog import PageAlignRef, PageMatch
+from ..utils.ctx_window import CTX_WIDTH, ref_ctx
 from ..utils.ji_yi_si_clf import FAMILY as JYS_FAMILY
 from ..utils.ji_yi_si_clf import ctx_key
 from ..utils.ry_group import FAMILY as RY_FAMILY
@@ -35,7 +36,6 @@ from ..utils.ry_group import FAMILY as RY_FAMILY
 #: 字组 id → 成员字。与现有分类器同一份常量；新组先在这里登记，不另起判据。
 GROUP_MEMBERS: dict[str, frozenset[str]] = {"ry": frozenset(RY_FAMILY), "jys": frozenset(JYS_FAMILY)}
 
-CTX_WIDTH = 30
 
 
 class GroupDecideParams(BaseModel):
@@ -86,16 +86,6 @@ def _opt(ctx: RunContext, kind: str, page: int):
         return None
 
 
-def _neighbour_ctx(seq: list[tuple[str, str]], i: int, step: int) -> str:
-    """第 i 格前（-1）／后（+1）至多 CTX_WIDTH 字，读序；邻格取 same 档字，否则整理本字，否则 □。"""
-    out: list[str] = []
-    j = i + step
-    while 0 <= j < len(seq) and len(out) < CTX_WIDTH:
-        out.append(seq[j][0] or seq[j][1] or "□")
-        j += step
-    return "".join(reversed(out)) if step < 0 else "".join(out)
-
-
 @register_step
 class GroupDecideStep(Step):
     spec = StepSpec(
@@ -103,7 +93,7 @@ class GroupDecideStep(Step):
         consumes=("glyph_match",), optional_consumes=("align_ref",),
         produces=("group_decision",),
         params=GroupDecideParams,
-        code_deps=("open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.ry_group"),
+        code_deps=("open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.ry_group", "open_guji_cv.utils.ctx_window"),
         path_params=("group_tables",),
     )
 
@@ -116,22 +106,19 @@ class GroupDecideStep(Step):
         ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
         if match is None or ref is None or not ref.anchored:
             return {"group_decision": out}
-        amap = {c.id: c.align_char for c in ref.chars}
-        same = {r.id: (r.char if r.verdict == "same" else None)
-                for col in match.columns for r in col.chars}
+        ref_chars = {c.id: c.align_char for c in ref.chars}
         tables = {g: _load_table(path) for g, path in p.group_tables.items()}
-        # 页宽口径（GUJI-208bz）：整页列号升序展平成**一条**序列，邻格窗口可跨列——与
-        # `seed_admit._ry_group_pass` 的 `seq` 同一取法（口径差 2）。取字仍是 same→整理本→□。
+        # 方案 D（GUJI-208lf）：骨架＝整页列号升序展平的所有格；邻字只取整理本对位字（缺 □）。
         cols = sorted(match.columns, key=lambda c: c.col)
         flat = [r for col in cols for r in col.chars]
-        seq = [(same.get(r.id) or "", amap.get(r.id) or "") for r in flat]
+        ids = [r.id for r in flat]
         for i, r in enumerate(flat):
-            rc = amap.get(r.id)
+            rc = ref_chars.get(r.id)
             if not rc:
                 continue
             for g, members in GROUP_MEMBERS.items():
                 if g not in tables or rc not in members:
                     continue
-                res = lookup(tables[g], g, r.id, _neighbour_ctx(seq, i, -1), _neighbour_ctx(seq, i, 1))
+                res = lookup(tables[g], g, r.id, *ref_ctx(ids, ref_chars, i, CTX_WIDTH))
                 out.cells.append(GroupDecRec(id=r.id, group=g, ref=rc, **res))
         return {"group_decision": out}

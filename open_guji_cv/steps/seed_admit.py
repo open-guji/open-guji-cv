@@ -187,6 +187,11 @@ class SeedAdmitParams(BaseModel):
     `doubts` 记 `ry_disagree`；表缺格／上下文哈希不符／弃权 → 不动。证据写 `evidence.ry_group`。
     缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
     ry_group_cache: str = ""                # 答案表 json 路径（utils/ry_group.py 格式）
+    ctx_align_ref: bool = False
+    """方案 D（overview GUJI-49 PR2，GUJI-208lf，缺省关）：查答案表（`ry_group`／`ji_yi_si_clf_table`）的 ctx 键改取
+    `utils/ctx_window` 的整理本对位字窗口——邻字只取 `align_ref` 对位字（缺 □），骨架不剔 `excluded` 格，
+    与 `group_decide` 逐位同键，不随放行集合漂移。只换**查表键**：`ji_yi_si_clf` 的规则 `classify` 仍用旧窗口。
+    关着不进 dump，`params_hash` 与加字段前逐位相同；关着时本步产物字节不变。"""
     ry_group_fingerprint: str = ""          # 自动填（开关开且有表时）
     rr_clf: bool = False
     """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
@@ -550,6 +555,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.ry_group:
             for k in ("ry_group", "ry_group_cache", "ry_group_fingerprint"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.ctx_align_ref:
+            d.pop("ctx_align_ref", None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
@@ -694,6 +701,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.utils.near_form_ctx",
                    "open_guji_cv.utils.ji_yi_si_clf",
                    "open_guji_cv.utils.ry_group",
+                   "open_guji_cv.utils.ctx_window",
                    "open_guji_cv.utils.rr_clf",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
@@ -1278,7 +1286,8 @@ class SeedAdmitStep(Step):
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         d_auto, d_review = _resolve_ji_yi_si(out, amap, dmap, mmap, p.ji_yi_si_review,
                                               ctx_rule=(p.ji_yi_si_ctx_purity, p.ji_yi_si_ctx_min_n) if p.ji_yi_si_ctx_rule else None,
-                                              clf=p if p.ji_yi_si_clf else None)
+                                              clf=p if p.ji_yi_si_clf else None,
+                                              ctx_ref=p.ctx_align_ref)
         n_auto += d_auto
         n_review += d_review
         if p.rare_ref:
@@ -1286,7 +1295,7 @@ class SeedAdmitStep(Step):
             n_auto += d_rr
             n_review -= d_rr
         if p.ry_group and p.ry_group_cache:
-            d_ry = _ry_group_pass(out, amap, p.ry_group_cache)
+            d_ry = _ry_group_pass(out, amap, p.ry_group_cache, ctx_ref=p.ctx_align_ref)
             n_auto += d_ry
             n_review -= d_ry
         if p.shadow_veto:
@@ -1784,7 +1793,7 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
 
 def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dict,
                       review_gate: bool = False, ctx_rule: tuple[float, int] | None = None,
-                      clf=None) -> tuple[int, int]:
+                      clf=None, ctx_ref: bool = False) -> tuple[int, int]:
     """己/已/巳 一族：字形只定「是这一族」，哪个字由文意定（用户 2026-09-26，`utils/ji_yi_si.py`）。
 
     按本页读序取前后字：
@@ -1830,6 +1839,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
     seq = [r for c in sorted(cols, key=lambda c: c.col) for r in sort_by_reading(c.chars)
            if not (r.doubts and "excluded" in r.doubts)]
     d_auto = d_review = 0
+    dctx = _d_skeleton(cols, amap) if (ctx_ref and clf is not None) else None
     for i, r in enumerate(seq):
         if (r.channel == "human" or r.char not in _JYS or "occluded" in (r.doubts or [])
                 or "glyph_timeout" in (r.doubts or [])):
@@ -1849,7 +1859,7 @@ def _resolve_ji_yi_si(cols: list[ColumnAdmit], amap: dict, dmap: dict, mmap: dic
             r.doubts = [d for d in (r.doubts or []) if d not in ("always_review", "ji_yi_si")]
             continue
         if clf is not None:
-            da, dr = _ji_yi_si_clf_cell(r, seq, i, amap, clf)
+            da, dr = _ji_yi_si_clf_cell(r, seq, i, amap, clf, dctx)
             d_auto += da
             d_review += dr
             continue
@@ -1906,7 +1916,7 @@ def _clf_ctx(seq: list, amap: dict, i: int, step: int, width: int = 30) -> str:
     return "".join(reversed(out)) if step < 0 else "".join(out)
 
 
-def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
+def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p, dctx=None) -> tuple[int, int]:
     """`ji_yi_si_clf` 开着时一格的处理（规则放行／答案表只写建议／退役 split_ref 放行）→ (新增放行, 新增人审)。
 
     见 `SeedAdmitParams.ji_yi_si_clf` 与 `utils/ji_yi_si_clf.py`。人裁位调用方已跳过。"""
@@ -1914,7 +1924,12 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
     left, right = _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1)
     rule, rwhy = classify(left, right)
     ev: dict = {"rule": rule, "why": rwhy}
-    sug = suggest(p.ji_yi_si_clf_table, r.id, left, right) if p.ji_yi_si_clf_table else None
+    if dctx is not None:      # 方案 D：只有查表键换成对位字窗口，规则 classify 仍用上面的旧窗口
+        from ..utils.ctx_window import ref_ctx
+        tl, tr = ref_ctx(dctx[0], dctx[1], dctx[2][r.id])
+    else:
+        tl, tr = left, right
+    sug = suggest(p.ji_yi_si_clf_table, r.id, tl, tr) if p.ji_yi_si_clf_table else None
     if sug:
         ev["suggest"] = sug
     by = "rule" if rule else None
@@ -1943,18 +1958,29 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
     return 0, 0
 
 
-def _ry_group_pass(out: list, amap: dict, cache: str) -> int:
+def _d_skeleton(cols: list, amap: dict) -> tuple[list[str], dict, dict]:
+    """方案 D 的窗口骨架 → (ids, {id: 对位字}, {id: 下标})：整页列号升序展平、列内存储序、**不剔 excluded**。"""
+    ids = [r.id for c in sorted(cols, key=lambda c: c.col) for r in c.chars]
+    return ids, {k: v[0] for k, v in amap.items()}, {k: n for n, k in enumerate(ids)}
+
+
+def _ry_group_pass(out: list, amap: dict, cache: str, ctx_ref: bool = False) -> int:
     """日／曰 v2 答案表只读证据（overview#441）→ 新增放行数。只抬待审的日曰格，不改字、不降放行格。"""
     from ..utils.ry_group import FAMILY, decide
     seq = [r for c in sorted(out, key=lambda c: c.col) for r in c.chars
            if not (r.doubts and "excluded" in r.doubts)]
+    dctx = _d_skeleton(out, amap) if ctx_ref else None
     n = 0
     for i, r in enumerate(seq):
         ref = (amap.get(r.id) or (None, None))[0]
         if (r.admit or r.channel == "human" or ref not in FAMILY
                 or any(d in ("occluded", "glyph_timeout") or "seal" in d for d in (r.doubts or []))):
             continue
-        res = decide(cache, r.id, _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1))
+        if dctx is not None:
+            from ..utils.ctx_window import ref_ctx
+            res = decide(cache, r.id, *ref_ctx(dctx[0], dctx[1], dctx[2][r.id]))
+        else:
+            res = decide(cache, r.id, _clf_ctx(seq, amap, i, -1), _clf_ctx(seq, amap, i, 1))
         if not res:
             continue
         r.evidence = {**(r.evidence or {}), "ry_group": res}
