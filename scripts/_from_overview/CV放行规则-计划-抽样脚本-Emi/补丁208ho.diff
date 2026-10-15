@@ -1,0 +1,171 @@
+--- /tmp/claude-0/-home-user/51233880-a3fc-5d95-8aa6-01e3e2294fee/scratchpad/sample_newadmit.before208ho.py	2026-10-14 22:49:15.583333380 +0000
++++ sample_newadmit.py	2026-10-14 22:50:11.017575052 +0000
+@@ -6,6 +6,7 @@
+   --arm    窗口 A 臂产物（main yaml 原样）。
+   --remap  可选；hint_ignore_dash 等改格框的页用。TSV，每行「旧格号⇥新格号」，新格号留空＝已删。
+            基线格号先经它映射，再与 A 臂对位。多个旧号映到同一新号（多对一）时取「任一为放行则放行」，碰撞数写进摘要。
++           同号碰撞（208ho）：新号同时被改号的旧格和 B 里未映射的同号格占用时不合并，未映射的那格去掉，对应 A 格按无对位进清单，摘要单列「同号碰撞」并打印格号。
+            cell table 没有 bbox 字段，位置对位须由产出 remap 的一方给出（hint 页：Ethan 或 Eden 的 remap_gold）。
+ 
+ 新放行格 = A 臂 admit 为真，且（对位后的）基线 admit 不为真。
+@@ -104,21 +105,30 @@
+ 
+ 
+ def apply_remap(base: dict, remap: dict):
+-    """返回 (映射后的表, 碰撞新号列表)。多对一：任一旧格放行则新格放行；取放行的那条的字段。"""
++    """返回 (映射后的表, 多对一新号列表, 同号碰撞格号列表)。
++    多对一：任一旧格放行则新格放行；取放行的那条的字段。
++    同号碰撞（208ho）：新号 N 同时被「remap 到它的旧号」与「B 里不在 remap 键中的同号格 N」占用。
++    这是两个物理格，不合并：保留 remap 那条，未映射的 N 格从表中去掉，列入碰撞格号；
++    调用方须把对应 A 臂格按「无对位」处理、进看图清单。"""
+     groups = collections.defaultdict(list)
+     for cid, row in base.items():
+         new = remap.get(cid, cid)
+         if not new:  # 已删
+             continue
+         groups[new].append(row)
+-    out, collided = {}, []
++    out, collided, colliding = {}, [], []
+     for new, rows in groups.items():
++        remapped = [r for r in rows if r["id"] in remap and r["id"] != new]
++        plain = [r for r in rows if r["id"] not in remap]  # 未映射的同号格（plain 的 id 必等于 new）
++        if remapped and plain:
++            colliding.extend(r["id"] for r in plain)
++            rows = remapped
+         if len(rows) > 1:
+             collided.append(new)
+         admitted = [r for r in rows if r.get("admit")]
+         src = admitted[0] if admitted else rows[0]
+         out[new] = dict(src, id=new, admit=bool(admitted))
+-    return out, sorted(collided)
++    return out, sorted(collided), sorted(colliding)
+ 
+ 
+ def read_force(path) -> frozenset:
+@@ -148,14 +158,16 @@
+     return hashlib.sha256(f"{seed}|{cell_id}".encode("utf-8")).hexdigest()
+ 
+ 
+-def classify(base: dict, arm: dict, field: str, red, force=frozenset()) -> tuple:
++def classify(base: dict, arm: dict, field: str, red, force=frozenset(), colliding=frozenset()) -> tuple:
+     pop = []
+     for cid in sorted(arm):
+         row = arm[cid]
+         if not row.get("admit"):
+             continue
+         b = base.get(cid)
+-        if b is not None and b.get("admit"):
++        if cid in colliding:  # 同号碰撞（208ho）：不沿用基线同号状态，一律无对位、进清单
++            b = None
++        elif b is not None and b.get("admit"):
+             continue
+         pop.append({
+             "cid": cid,
+@@ -262,7 +274,11 @@
+         f"- 强制全看名单：`{paths['force_all'] or '（未给）'}`",
+         f"- 多对一碰撞（多个旧号映到同一新号，取「任一为放行则放行」）：{len(collided)} 个新号"
+         + (f"：{', '.join(collided[:COLLIDE_SHOW])}" + ("…" if len(collided) > COLLIDE_SHOW else "") if collided else ""),
+-        f"- 无对位格（A 臂放行，按格号／对位表对不上基线）：{info['unmatched']}，报警线 {limit:.1f}"
++        f"- 同号碰撞（208ho）：{len(info['colliding'])} 格"
++        + (f"：{', '.join(info['colliding'])}（未合并；B 侧未映射的同号格已去掉，对应 A 格按无对位进清单）"
++           if info["colliding"] else "")
++        + "；不计入停线",
++        f"- 无对位格（A 臂放行，按格号／对位表对不上基线，不含同号碰撞）：{info['unmatched']}，报警线 {limit:.1f}"
+         f"（min({NOMATCH_CAP}, {NOMATCH_RATE:.0%}×A 臂放行格数)；超线即停，退出码 4）。已计入总体、进看图清单，不算错",
+         f"- 红线：{'本册内齐全，且均为待审、未从待审变放行' if not info['red_problems'] else '有问题，见下'}"
+         + ("" if not info["red_problems"] else "：" + "；".join(info["red_problems"]))
+@@ -297,7 +313,9 @@
+ def run(args) -> int:
+     base_raw = read_table(Path(args.base))
+     arm = read_table(Path(args.arm))
+-    base, collided = apply_remap(base_raw, load_remap(args.remap))
++    base, collided, colliding = apply_remap(base_raw, load_remap(args.remap))
++    if colliding:
++        print(f"同号碰撞 {len(colliding)} 格（未合并，按无对位进看图清单）：{', '.join(colliding)}", file=sys.stderr)
+     red = RED_LINE if getattr(args, "red", None) is None else args.red
+     if not red:
+         print("停线：红线集合为空，不得跳过红线检查（不回落到全局九格，也不放行）。", file=sys.stderr)
+@@ -311,16 +329,18 @@
+         return 3
+ 
+     force = read_force(args.force_all) if getattr(args, "force_all", None) else frozenset()
+-    pop, retreat = classify(base, arm, args.source_field, red, force)
++    pop, retreat = classify(base, arm, args.source_field, red, force, frozenset(colliding))
+     pop_ids = {p["cid"] for p in pop}
+     force_missing = sorted(force - pop_ids)
+     # 强制名单里基线同号已放行的格：不算「已忽略」，单列待对位核（208gk）
+     force_base_admit = [c for c in force_missing if base.get(c, {}).get("admit")]
+     force_ignored = [c for c in force_missing if not base.get(c, {}).get("admit")]
+     unmatched = [p for p in pop if not p["matched"]]
++    # 停线计数不含同号碰撞格（208ho：停线规则本次不改，碰撞数是否入停线由 Mila 定，见回执）
++    unmatched_stop = [p for p in unmatched if p["cid"] not in colliding]
+     limit = nomatch_limit(arm)
+-    if len(unmatched) > limit:
+-        print(f"停线：无对位 {len(unmatched)} 格，超过报警线 {limit:.1f}。"
++    if len(unmatched_stop) > limit:
++        print(f"停线：无对位 {len(unmatched_stop)} 格，超过报警线 {limit:.1f}。"
+               "请由 remap 产出方（Ethan／Eden）给出对位表后重跑，不得默认放进清单。", file=sys.stderr)
+         return 4
+     try:
+@@ -329,12 +349,14 @@
+         print(str(e), file=sys.stderr)
+         return 2
+     paths = {"base": args.base, "arm": args.arm, "remap": args.remap, "force_all": getattr(args, "force_all", None)}
+-    info = {"unmatched": len(unmatched), "limit": limit, "collided": collided, "red_problems": red_problems,
++    info = {"unmatched": len(unmatched_stop), "limit": limit, "collided": collided, "colliding": colliding,
++            "red_problems": red_problems,
+             "red_unchecked": red_unchecked, "force_n": len(force), "force_ignored": force_ignored,
+             "force_base_admit": force_base_admit}
+     unrec = write_outputs(Path(args.out), args, mode, chosen, pop, retreat, paths, info)
+     print(f"已写入 {args.out}：模式 {mode}，总体 {len(pop)}，进清单 {len(chosen)} 格，回退集 {len(retreat)} 格，"
+-          f"无对位 {len(unmatched)}（报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号")
++          f"无对位 {len(unmatched_stop)}（报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号，"
++          f"同号碰撞 {len(colliding)} 格")
+     if unrec:
+         print(f"提示：other 层有 {unrec} 格来源串非空但未含规则名，请核 provenance 写法（摘要.md 列出）", file=sys.stderr)
+     return 0
+@@ -472,7 +494,7 @@
+         check("退出码 3", rc == 3)
+ 
+         print("== 自测四：多对一映射碰撞有计数；任一为放行则放行")
+-        merged, collided_ids = apply_remap(base_tbl, load_remap(str(coll_p)))
++        merged, collided_ids, _ = apply_remap(base_tbl, load_remap(str(coll_p)))
+         check(f"碰撞新号数 {len(collided_ids)}（应为 1）", collided_ids == ["vol01:98:1:1"])
+         check("合并后新号放行（c1 基线放行，c2 待审）", merged["vol01:98:1:1"].get("admit") is True)
+         rc = run(args_for("run8", remap=str(coll_p)))
+@@ -480,6 +502,35 @@
+         sm = (tdp / "run8" / "摘要.md").read_text(encoding="utf-8")
+         check("摘要写出多对一碰撞计数 1", "多对一碰撞（多个旧号映到同一新号，取「任一为放行则放行」）：1 个新号" in sm)
+ 
++        print("== 自测十三（208ho）：同号碰撞——未映射的同号格不合并，对应 A 格进无对位清单")
++        def row(cid, admit):
++            return {"id": cid, "admit": admit, "char": "字", "provenance": "match"}
++        cb = {"v:1:1:1": row("v:1:1:1", True), "v:1:1:2": row("v:1:1:2", False),
++              "v:1:1:3": row("v:1:1:3", True)}
++        # (a) 碰撞：v:1:1:2 改号到 v:1:1:3，而 B 自有 v:1:1:3 已放行
++        cm, cl, cc = apply_remap(cb, {"v:1:1:2": "v:1:1:3"})
++        check("(a) 碰撞格列出未映射的 v:1:1:3", cc == ["v:1:1:3"])
++        check("(a) 碰撞时不合并：新号保留 remap 那条（待审），不沿用 B 自有的放行", cm["v:1:1:3"]["admit"] is False)
++        check("(a) 无碰撞的旧格不受影响", cm["v:1:1:1"]["admit"] is True)
++        arm_c = {"v:1:1:3": {"admit": True, "provenance": "match", "char": "字"}}
++        pc, _ = classify(cm, arm_c, "provenance", set(), frozenset(cc), frozenset(cc))
++        check("(a) 碰撞格进看图清单，且按无对位（matched 为假）",
++              len(pc) == 1 and pc[0]["cid"] == "v:1:1:3" and pc[0]["matched"] is False)
++        pc0, _ = classify(cm, arm_c, "provenance", set())
++        check("(a) 不给碰撞集合时，按对位后的基线算（remap 那条待审，故为对位上的新放行）",
++              len(pc0) == 1 and pc0[0]["matched"] is True)
++        # (b) 无碰撞：与原来逐格相同（多对一、已删、一对一）
++        nb = {"v:1:1:1": row("v:1:1:1", True), "v:1:1:2": row("v:1:1:2", False)}
++        nm, nl, nc = apply_remap(nb, {"v:1:1:2": "v:1:1:9", "v:1:1:1": ""})
++        check("(b) 无碰撞：碰撞集合为空、多对一为空", nc == [] and nl == [])
++        check("(b) 无碰撞：已删格不进表，改号格保留原字段",
++              "v:1:1:1" not in nm and nm["v:1:1:9"] == dict(nb["v:1:1:2"], id="v:1:1:9", admit=False))
++        mm, ml, mc = apply_remap(cb, {"v:1:1:1": "v:1:1:3", "v:1:1:3": "v:1:1:4"})
++        check("(b) 链式改号（1→3、3→4）：无碰撞，3 的旧格已在 remap 键中", mc == [] and mm["v:1:1:4"]["admit"] is True)
++        # (c) 恒等行（同号）不算碰撞
++        ib = {"v:1:1:1": row("v:1:1:1", True), "v:1:1:2": row("v:1:1:2", False)}
++        im, il, ic = apply_remap(ib, {"v:1:1:1": "v:1:1:1", "v:1:1:2": "v:1:1:2"})
++        check("(c) 恒等行不误判为碰撞", ic == [] and il == [] and im["v:1:1:1"]["admit"] is True)
+         print("== 自测五：无对位超线 → 退出码 4（停，不写输出）")
+         rc = run(args_for("run9", arm=over_p))
+         check("退出码 4", rc == 4)

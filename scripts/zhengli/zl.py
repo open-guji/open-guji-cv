@@ -252,9 +252,18 @@ def in_git_repo(path: Path) -> bool:
     return r.returncode == 0 and r.stdout.strip() == "true"
 
 
+def ws_remote_url(cv_repo) -> str | None:
+    """cv 仓的 origin 地址换成同组织的 guji-workspace；取不到返回 None（调用方再用 WS_URL）。"""
+    r = subprocess.run(["git", "remote", "get-url", "origin"], cwd=cv_repo, capture_output=True, text=True)
+    url = r.stdout.strip()
+    if r.returncode != 0 or not url or "open-guji-cv" not in url:
+        return None
+    return url.replace("open-guji-cv", "guji-workspace")
+
+
 def st_ws(ctx):
     if not in_git_repo(ctx.ws):
-        url = os.environ.get("ZL_WS_URL", WS_URL)
+        url = os.environ.get("ZL_WS_URL") or ws_remote_url(ctx.cv) or WS_URL
         sh(ctx, ["git", "clone", "--filter=blob:none", "--sparse", url, str(ctx.ws)], cwd=ctx.ws.parent)
         # 只要本书原图：data_full/<册>，其余顶层目录照常
         sh(ctx, ["git", "sparse-checkout", "set", "--no-cone", "/*", "!/data_full/*/", f"/data_full/{ctx.book}/"], cwd=ctx.ws)
@@ -317,8 +326,10 @@ def _set_scalar(lines: list[str], i: int, v) -> str | None:
     return old
 
 
-def patch_yaml_text(text: str, want: dict, iron_gate: bool = True, extra: dict | None = None):
-    """只补开关、不整体回写：逐行改/插，其余字节原样。返回 (新文本, 改动项 {键: (旧, 新)})，
+def patch_yaml_text(text: str, want: dict, iron_gate: bool = True, extra: dict | None = None,
+                    conflicts: dict | None = None):
+    """只补开关、不整体回写：逐行补，其余字节原样。已有键只报告不改值：与标准值不同的记进 conflicts
+    （{键: (现值, 标准值)}），只有 extra（命令行 --set 明确要求的）才覆盖已有值。返回 (新文本, 改动项 {键: (旧, 新)})，
     结构超出能安全处理的范围（流式 seed_admit 等）返回 (None, 原因)。"""
     lines = text.splitlines(keepends=True)
     if lines and not lines[-1].endswith("\n"):
@@ -338,14 +349,17 @@ def patch_yaml_text(text: str, want: dict, iron_gate: bool = True, extra: dict |
             changed["iron_gate"] = (old, True)
     # params.<节>：seed_admit 与书级 extra（如 column_gate、row_segment）各节走同一套补丁
     for sec, sec_want in [("seed_admit", want), *(extra or {}).items()]:
-        why = _patch_params_section(lines, sec, sec_want, changed)
+        why = _patch_params_section(lines, sec, sec_want, changed,
+                                    overwrite=sec != "seed_admit" or sec in (extra or {}), conflicts=conflicts)
         if why:
             return None, why
     return "".join(lines), changed
 
 
-def _patch_params_section(lines: list[str], section: str, want: dict, changed: dict) -> str | None:
-    """在 lines（原地）里把 params.<section> 的键补齐或改成 want；改动记进 changed（非 seed_admit 的键带节名前缀）。
+def _patch_params_section(lines: list[str], section: str, want: dict, changed: dict,
+                          overwrite: bool = True, conflicts: dict | None = None) -> str | None:
+    """在 lines（原地）里把 params.<section> 缺的键补齐；已有键 overwrite 才改成 want，否则只记进 conflicts；
+    改动记进 changed（非 seed_admit 的键带节名前缀）。
     结构超出能安全处理的范围返回原因，否则返回 None。"""
     def tag(k):
         return k if section == "seed_admit" else f"{section}.{k}"
@@ -379,6 +393,10 @@ def _patch_params_section(lines: list[str], section: str, want: dict, changed: d
         cur = re.match(r"^\s*[\w\-]+\s*:\s*([^#]*?)\s*(#.*)?$", lines[j].rstrip("\n"))
         curv = cur.group(1).strip() if cur else None
         if curv == _fmt(v) or (isinstance(v, str) and curv is not None and curv.strip("\"'") == v) or (isinstance(v, float) and curv is not None and _is_float(curv) and float(curv) == v):
+            continue
+        if not overwrite:
+            if conflicts is not None:
+                conflicts[tag(k)] = (curv, v)
             continue
         old = _set_scalar(lines, j, v)
         if old is None:
@@ -423,7 +441,7 @@ def preset_label(ctx) -> str:
 
 
 def st_yaml(ctx):
-    """把标准 Step7 开关补进书 yaml：已有键保留（同名项以标准值为准），其余文字、注释、排版一字不动。"""
+    """把标准 Step7 开关补进书 yaml：只补缺的键；已有键不改，与标准值不同的只报告（--set 除外），其余文字、注释、排版一字不动。"""
     f = ctx.ws / "books" / f"{ctx.book}.yaml"
     if not f.exists():
         write_next(ctx, "缺书 yaml", [f"`{f}` 不存在。拷一份同类册的 yaml 改册号、page_split、版面先验；缺 `period_prior` 会被闸 2/3 拦。"])
@@ -433,7 +451,10 @@ def st_yaml(ctx):
     ctx.st["preset"], ctx.st["no_shadow_veto"] = ctx.preset, ctx.no_shadow_veto
     ctx.st["extra"] = ctx.extra
     ctx.log(f"yaml 开关：{preset_label(ctx)}" + (f"；书级 params {ctx.extra}" if ctx.extra else ""))
-    new_t, changed = patch_yaml_text(old_t, want, extra=ctx.extra)
+    conflicts: dict = {}
+    new_t, changed = patch_yaml_text(old_t, want, extra=ctx.extra, conflicts=conflicts)
+    if new_t is not None and conflicts:
+        ctx.log(f"⚠ yaml 已有键与标准值不同，未改（要改请 --set 节.键=值）：{conflicts}")
     if new_t is None:
         snip = ctx.reports / "yaml-标准开关.片段.yaml"
         ctx.reports.mkdir(parents=True, exist_ok=True)
@@ -697,7 +718,7 @@ def st_vision_gate(ctx):
     if not jl.exists():
         write_next(ctx, "要看图（S8 / S10）", [
             f"1. 读 `reports/{ctx.book}/{ctx.book}.放行错穷举.md` 的「认字差异」档，逐格看图（带上下文、放大）；",
-            f"2. 按 runbook S8 分层再抽 300 格；己已巳读 `{ctx.book}.己已巳.md` 按文意判；",
+            f"2. 按 runbook S8 分层再抽 300 格；己已巳族读 `{ctx.book}.己已巳.md` 按文意判，且不记「高」把握（只给倾向，转人审）；",
             f"3. 结论写 `reports/{ctx.book}/看图结论.jsonl`（`ts` 要填；格式见 `open_guji_cv/feedback/vision.py`），再 `zl.py run --only vision-gate`。",
         ])
         raise Gate("等看图结论")

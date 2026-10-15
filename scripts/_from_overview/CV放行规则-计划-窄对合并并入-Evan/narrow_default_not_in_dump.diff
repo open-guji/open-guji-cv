@@ -1,0 +1,49 @@
+diff --git a/open_guji_cv/steps/border_detect.py b/open_guji_cv/steps/border_detect.py
+index 43f8142..14feb0a 100644
+--- a/open_guji_cv/steps/border_detect.py
++++ b/open_guji_cv/steps/border_detect.py
+@@ -16,7 +16,7 @@
+ 
+ from __future__ import annotations
+ 
+-from pydantic import BaseModel, Field
++from pydantic import BaseModel, Field, model_serializer
+ 
+ from ..core.spec import StepSpec
+ from ..core.step import RunContext, Step, register_step
+@@ -33,7 +33,16 @@ class BorderDetectParams(BaseModel):
+     merge_narrow_pair: bool = False
+     """窄对合并（`utils/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
+     用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
+-    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
++    关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。
++    缺省值（关）不进 dump，没开的书 `params_hash` 与加字段前逐位相同。"""
++
++    @model_serializer(mode="wrap")
++    def _drop_off_merge_narrow_pair(self, handler):
++        """关着的 `merge_narrow_pair` 不进 dump（照 `SeedAdmitParams._drop_off_rare`）。"""
++        d = handler(self)
++        if isinstance(d, dict) and not self.merge_narrow_pair:
++            d.pop("merge_narrow_pair", None)
++        return d
+ 
+ 
+ @register_step
+diff --git a/tests/test_column_pair_merge.py b/tests/test_column_pair_merge.py
+index 234d217..d98fbf7 100644
+--- a/tests/test_column_pair_merge.py
++++ b/tests/test_column_pair_merge.py
+@@ -200,3 +200,13 @@ def test_column_gate_follows_gate1_expected_cols_on_merged_page(tmp_path):
+         tmp_path / "p", gray, borders, book=book,
+         gate1=make_gate1(PAGE, n_cols=8, expected_cols=8))        # 没有 pair_merged 旗：照旧拒收
+     assert any(r.startswith("column_count") for r in plain["gate_manifest"].reject)
++
++
++def test_merge_narrow_pair_default_not_in_params_dump():
++    """缺省（关）不进 dump → params_hash 与加字段前相同；开了才进 dump 并改 hash。"""
++    from open_guji_cv.core.engine import params_hash
++    from open_guji_cv.steps.border_detect import BorderDetectParams as P
++    assert "merge_narrow_pair" not in P().model_dump()
++    assert params_hash(P()) == params_hash(P(merge_narrow_pair=False))
++    assert P(merge_narrow_pair=True).model_dump()["merge_narrow_pair"] is True
++    assert params_hash(P(merge_narrow_pair=True)) != params_hash(P())

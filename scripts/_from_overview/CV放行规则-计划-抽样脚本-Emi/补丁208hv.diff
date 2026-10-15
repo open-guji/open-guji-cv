@@ -1,0 +1,104 @@
+diff --git "a/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py" "b/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
+index d4dd01a2..713c6afe 100644
+--- "a/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
++++ "b/\351\241\271\347\233\256\350\277\233\345\261\225/CV\346\224\276\350\241\214\350\247\204\345\210\231/\350\256\241\345\210\222/\346\212\275\346\240\267\350\204\232\346\234\254-Emi/sample_newadmit.py"
+@@ -277,8 +277,9 @@ def write_outputs(out: Path, args, mode, chosen, pop, retreat, paths, info):
+         f"- 同号碰撞（208ho）：{len(info['colliding'])} 格"
+         + (f"：{', '.join(info['colliding'])}（未合并；B 侧未映射的同号格已去掉，对应 A 格按无对位进清单）"
+            if info["colliding"] else "")
+-        + "；不计入停线",
+-        f"- 无对位格（A 臂放行，按格号／对位表对不上基线，不含同号碰撞）：{info['unmatched']}，报警线 {limit:.1f}"
++        + "；计入停线（208hv 方案 A）",
++        f"- 无对位格（A 臂放行，按格号／对位表对不上基线，不含同号碰撞）：{info['n_nomatch']}，报警线 {limit:.1f}",
++        f"- 停线合计（无对位＋同号碰撞）：{info['unmatched']}，报警线 {limit:.1f}（超线才停，阈值 min(20, 5%×放行数) 不变）"
+         f"（min({NOMATCH_CAP}, {NOMATCH_RATE:.0%}×A 臂放行格数)；超线即停，退出码 4）。已计入总体、进看图清单，不算错",
+         f"- 红线：{'本册内齐全，且均为待审、未从待审变放行' if not info['red_problems'] else '有问题，见下'}"
+         + ("" if not info["red_problems"] else "：" + "；".join(info["red_problems"]))
+@@ -336,12 +337,14 @@ def run(args) -> int:
+     force_base_admit = [c for c in force_missing if base.get(c, {}).get("admit")]
+     force_ignored = [c for c in force_missing if not base.get(c, {}).get("admit")]
+     unmatched = [p for p in pop if not p["matched"]]
+-    # 停线计数不含同号碰撞格（208ho：停线规则本次不改，碰撞数是否入停线由 Mila 定，见回执）
+-    unmatched_stop = [p for p in unmatched if p["cid"] not in colliding]
++    # 208hv（Mila 定方案 A）：同号碰撞计入停线分子，无对位与碰撞合计过线即停；阈值不改
++    n_collide = sum(1 for p in unmatched if p["cid"] in colliding)
++    n_nomatch = len(unmatched) - n_collide
+     limit = nomatch_limit(arm)
+-    if len(unmatched_stop) > limit:
+-        print(f"停线：无对位 {len(unmatched_stop)} 格，超过报警线 {limit:.1f}。"
+-              "请由 remap 产出方（Ethan／Eden）给出对位表后重跑，不得默认放进清单。", file=sys.stderr)
++    if len(unmatched) > limit:
++        kinds = f"无对位 {n_nomatch} 格、同号碰撞 {n_collide} 格，合计 {len(unmatched)}"
++        print(f"停线：{kinds}，超过报警线 {limit:.1f}。"
++              "请由 remap 产出方（Ethan／Eden）补对位表后重跑，不得默认放进清单。", file=sys.stderr)
+         return 4
+     try:
+         mode, chosen = pick(pop, args.seed, args.quota, args.max_total)
+@@ -349,13 +352,14 @@ def run(args) -> int:
+         print(str(e), file=sys.stderr)
+         return 2
+     paths = {"base": args.base, "arm": args.arm, "remap": args.remap, "force_all": getattr(args, "force_all", None)}
+-    info = {"unmatched": len(unmatched_stop), "limit": limit, "collided": collided, "colliding": colliding,
++    info = {"unmatched": len(unmatched), "n_nomatch": n_nomatch, "n_collide": n_collide,
++            "limit": limit, "collided": collided, "colliding": colliding,
+             "red_problems": red_problems,
+             "red_unchecked": red_unchecked, "force_n": len(force), "force_ignored": force_ignored,
+             "force_base_admit": force_base_admit}
+     unrec = write_outputs(Path(args.out), args, mode, chosen, pop, retreat, paths, info)
+     print(f"已写入 {args.out}：模式 {mode}，总体 {len(pop)}，进清单 {len(chosen)} 格，回退集 {len(retreat)} 格，"
+-          f"无对位 {len(unmatched_stop)}（报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号，"
++          f"无对位 {n_nomatch}、同号碰撞 {n_collide}（合计 {len(unmatched)}，报警线 {limit:.1f}），多对一碰撞 {len(collided)} 个新号，"
+           f"同号碰撞 {len(colliding)} 格")
+     if unrec:
+         print(f"提示：other 层有 {unrec} 格来源串非空但未含规则名，请核 provenance 写法（摘要.md 列出）", file=sys.stderr)
+@@ -531,6 +535,50 @@ def selftest() -> int:
+         ib = {"v:1:1:1": row("v:1:1:1", True), "v:1:1:2": row("v:1:1:2", False)}
+         im, il, ic = apply_remap(ib, {"v:1:1:1": "v:1:1:1", "v:1:1:2": "v:1:1:2"})
+         check("(c) 恒等行不误判为碰撞", ic == [] and il == [] and im["v:1:1:1"]["admit"] is True)
++        print("== 自测十四（208hv）：同号碰撞计入停线（方案 A），与无对位合计过线即停；摘要两项分列")
++
++        def write_tbl(name, rows):
++            p = tdp / name
++            p.write_text("\n".join([json.dumps({"book": "t"})] + [json.dumps(r, ensure_ascii=False) for r in rows]) + "\n",
++                         encoding="utf-8")
++            return str(p)
++
++        def stop_case(tag, n_coll, n_unm):
++            # 200 格基线一致的放行格：限额 = min(20, 5%×A 放行数) = 10 + 0.05×(碰撞＋无对位)
++            brows = [R_(f"vol00:1:{i}:1", False) for i in range(200)]
++            arows = [R_(f"vol00:1:{i}:1", True) for i in range(200)]
++            rm = []
++            for j in range(n_coll):
++                brows += [R_(f"vol00:5:{j}:1", False), R_(f"vol00:5:{j}:2", True)]
++                arows.append(R_(f"vol00:5:{j}:2", True))
++                rm.append(f"vol00:5:{j}:1\tvol00:5:{j}:2")
++            arows += [R_(f"vol00:9:{j}:1", True) for j in range(n_unm)]
++            rp = tdp / f"{tag}_remap.tsv"
++            rp.write_text("\n".join(rm) + ("\n" if rm else ""), encoding="utf-8")
++            a = types.SimpleNamespace(base=write_tbl(f"{tag}_base.jsonl", brows), arm=write_tbl(f"{tag}_arm.jsonl", arows),
++                                      out=str(tdp / tag), remap=str(rp), seed=SEED_DEFAULT, quota=QUOTA_DEFAULT,
++                                      max_total=TEST_MAX, source_field="provenance", red=frozenset({"vol99:1:1:1"}))
++            return run(a), tdp / tag
++
++        def R_(cid, admit):
++            return {"id": cid, "admit": admit, "char": "字", "provenance": "match"}
++
++        rc, d = stop_case("s10", 10, 0)
++        check("碰撞 10 格（刚好压线，10 ≤ 10.5）→ 不停", rc == 0)
++        check("摘要写出同号碰撞 10 格，且说明计入停线", "同号碰撞（208ho）：10 格" in (d / "摘要.md").read_text(encoding="utf-8")
++              and "计入停线" in (d / "摘要.md").read_text(encoding="utf-8"))
++        rc, d = stop_case("s11", 11, 0)
++        check("碰撞 11 格（超线）→ 停（退出码 4）", rc == 4 and not d.exists())
++        rc, d = stop_case("s0u11", 0, 11)
++        check("无对位 11 格（超线，无碰撞）→ 停（退出码 4，与改前一致）", rc == 4 and not d.exists())
++        rc, d = stop_case("s6u5", 6, 5)
++        check("碰撞 6＋无对位 5＝11（合计超线）→ 停", rc == 4 and not d.exists())
++        rc, d = stop_case("s6u4", 6, 4)
++        check("碰撞 6＋无对位 4＝10（合计未超线）→ 不停", rc == 0)
++        sm14 = (d / "摘要.md").read_text(encoding="utf-8")
++        check("两项分列：无对位 4 与 同号碰撞 6 各自单列", "无对位格" in sm14 and "：4，" in sm14 and "同号碰撞（208ho）：6 格" in sm14)
++        check("合计行写出 10", "停线合计（无对位＋同号碰撞）：10" in sm14)
++
+         print("== 自测五：无对位超线 → 退出码 4（停，不写输出）")
+         rc = run(args_for("run9", arm=over_p))
+         check("退出码 4", rc == 4)
