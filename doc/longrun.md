@@ -5,7 +5,7 @@
 
 ## 0. 前提（一次）
 ```bash
-git fetch origin bootstrap-cloud-1020 && git checkout bootstrap-cloud-1020    # 或把 scripts/ 下三个文件拷来：bootstrap_cloud.sh longrun.sh longrun_fresh_check.py
+# 已在 cv main：在 main 的检出里直接用 scripts/（bootstrap_cloud.sh、longrun.sh、longrun_fresh_check.py、longrun_sandbox_ws.sh、jobs/），不需要任何分支
 bash scripts/bootstrap_cloud.sh        # 环境（装好后重跑秒过）；runner 每次起来也会自检，缺件自己补
 ```
 
