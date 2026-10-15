@@ -184,6 +184,10 @@ def _need_products(store, book: str, step: str, kind: str, pages: list[int]) -> 
         try:
             if store.read(book, step, page_key(pg), kind) is not None:
                 have.append(pg)
+        except KeyError:
+            # kind_of() 查不到产物种类：Step 没注册（调用方漏了 `from . import steps`），
+            # 是代码/调用错误，不是「这页没有产物」，不能吞掉当成后者。
+            raise
         except Exception:                                   # noqa: BLE001
             continue
     if not have:
