@@ -557,6 +557,11 @@ def parse_cell_id(cid: str):
     return (int(m["page"]), int(m["col"]), int(m["slot"]), m["sub"] or "") if m else None
 
 
+def jiazhu_side(sub: str | None) -> str | None:
+    """夹注格的子号：a＝右半，b＝左半；无子号返回 None。"""
+    return {"a": "右半", "b": "左半"}.get(sub or "")
+
+
 def contact_window(boxes: list, pos: int, around: int = 1, pad: int = 6, height: int | None = None):
     """boxes = 同列按 slot 排好的 bbox_col；取第 pos 格及其上下各 around 格的 y 范围（列图坐标）。"""
     lo, hi = max(0, pos - around), min(len(boxes), pos + around + 1)
@@ -573,7 +578,7 @@ def contact_rows(admitted_json: dict) -> list[dict]:
     return [r for r in admitted_json.get("rows", []) if r.get("tier") == "real"]
 
 
-def render_contact_tile(col_img, y0: int, y1: int, box, num: int, tile_h: int = 360):
+def render_contact_tile(col_img, y0: int, y1: int, box, num: int, tile_h: int = 360, tag: str = ""):
     """列图（灰度）切 y0..y1，目标格 box 画框，左上角写序号；高度统一成 tile_h。返回 BGR ndarray。"""
     import cv2
     crop = cv2.cvtColor(col_img[y0:y1], cv2.COLOR_GRAY2BGR) if col_img.ndim == 2 else col_img[y0:y1].copy()
@@ -581,6 +586,8 @@ def render_contact_tile(col_img, y0: int, y1: int, box, num: int, tile_h: int = 
     sc = tile_h / max(1, crop.shape[0])
     crop = cv2.resize(crop, (max(1, int(crop.shape[1] * sc)), tile_h), interpolation=cv2.INTER_AREA)
     cv2.putText(crop, str(num), (2, 18), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
+    if tag:
+        cv2.putText(crop, tag, (2, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 0), 2)
     return crop
 
 
@@ -608,7 +615,9 @@ def contact_md(book: str, entries: list[dict], sheets: list[str]) -> str:
     for e in entries:
         sh_ = sheets[e["sheet_idx"]] if "sheet_idx" in e else "—"
         wit = "；".join(f"{k}:{v}" for k, v in (e.get("witness") or {}).items())
-        out.append(f"| {e['n']} | {sh_} | `{e['id']}` | {e.get('char') or ''} | {wit} | {e.get('ctx') or ''} |"
+        pid = parse_cell_id(e["id"])
+        side = f"（夹注{jiazhu_side(pid[3])}）" if pid and jiazhu_side(pid[3]) else ""
+        out.append(f"| {e['n']} | {sh_} | `{e['id']}`{side} | {e.get('char') or ''} | {wit} | {e.get('ctx') or ''} |"
                    + ("" if e.get("ok", True) else f" ⚠ {e.get('why','')}"))
     return "\n".join(out) + "\n"
 
@@ -685,7 +694,7 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
                 e["why"] = "列图读不出来"
                 continue
             y0, y1 = contact_window([x.bbox_col for x in recs], pos, 1, height=img.shape[0])
-            tiles.append(render_contact_tile(img, y0, y1, recs[pos].bbox_col, n))
+            tiles.append(render_contact_tile(img, y0, y1, recs[pos].bbox_col, n, tag=jiazhu_side(sub) or ""))
             e["ok"] = True
         except Exception as ex:  # noqa: BLE001  单格失败只标注，不拖垮整册
             e["why"] = f"{type(ex).__name__}: {ex}"
