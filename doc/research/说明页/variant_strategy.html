@@ -1,0 +1,415 @@
+<title>異體字策略</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;700;900&family=Noto+Sans+TC:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --paper: #F4F4F1;
+    --panel: #EBECE7;
+    --ink: #1B1F24;
+    --mute: #6A7383;
+    --rule: #D3D6D1;
+    --indigo: #2B4C7E;
+    --indigo-soft: #DCE5F2;
+    --zhu: #B3261E;
+    --zhu-soft: #F5E1DE;
+    --serif: "Noto Serif TC", "Source Han Serif TC", "PMingLiU", "SimSun-ExtB", serif;
+    --sans: "Noto Sans TC", "Source Han Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, "Noto Sans TC", monospace;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper: #15181D; --panel: #1D2127; --ink: #E4E3DD; --mute: #9AA3B2; --rule: #2C323B;
+      --indigo: #8FB0E0; --indigo-soft: #22314A; --zhu: #E57368; --zhu-soft: #3A2220;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper: #15181D; --panel: #1D2127; --ink: #E4E3DD; --mute: #9AA3B2; --rule: #2C323B;
+    --indigo: #8FB0E0; --indigo-soft: #22314A; --zhu: #E57368; --zhu-soft: #3A2220;
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--paper); color: var(--ink);
+    font-family: var(--sans); font-size: 16.5px; line-height: 1.85;
+    font-variant-numeric: tabular-nums;
+  }
+  a { color: var(--indigo); text-decoration-thickness: 1px; text-underline-offset: .15em; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+  .page { max-width: 1080px; margin: 0 auto; padding: 2.5rem 1.5rem 5rem; }
+  .read { max-width: 46em; }
+
+  /* 版心：题头 */
+  header.mast { border-bottom: 2px solid var(--ink); padding-bottom: 1.4rem; margin-bottom: 2.2rem; }
+  .eyebrow { font-family: var(--mono); font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); }
+  h1 { font-family: var(--serif); font-weight: 900; font-size: clamp(2rem, 4.6vw, 3.1rem); line-height: 1.2; margin: .35rem 0 .6rem; letter-spacing: .01em; text-wrap: balance; }
+  .mast p.sub { margin: 0; color: var(--mute); max-width: 46em; }
+  .decree { margin: 1.4rem 0 0; padding: .9rem 1.1rem; border-left: 4px solid var(--indigo); background: var(--indigo-soft); font-family: var(--serif); font-weight: 700; font-size: 1.1rem; line-height: 1.7; max-width: 46em; }
+  .decree small { display: block; font-family: var(--mono); font-weight: 400; font-size: .74rem; color: var(--mute); margin-top: .3rem; letter-spacing: .04em; }
+
+  /* 目录 */
+  nav.toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: .25rem 1.4rem; margin: 0 0 2.6rem; padding: 0; list-style: none; font-size: .9rem; }
+  nav.toc a { text-decoration: none; display: flex; gap: .6rem; padding: .18rem 0; border-bottom: 1px solid var(--rule); color: var(--ink); }
+  nav.toc a:hover { color: var(--indigo); }
+  nav.toc .n { font-family: var(--mono); color: var(--indigo); min-width: 2.2ch; }
+
+  /* 章节 */
+  section { margin: 0 0 3.2rem; }
+  h2 { font-family: var(--serif); font-weight: 700; font-size: 1.55rem; line-height: 1.35; margin: 0 0 1rem; padding-top: .6rem; border-top: 1px solid var(--rule); display: flex; gap: .8rem; align-items: baseline; text-wrap: balance; }
+  h2 .n { font-family: var(--mono); font-weight: 500; font-size: .95rem; color: var(--indigo); letter-spacing: .04em; }
+  h3 { font-family: var(--serif); font-weight: 700; font-size: 1.15rem; margin: 1.8rem 0 .6rem; text-wrap: balance; }
+  p { margin: 0 0 1rem; }
+  ul, ol { padding-left: 1.4em; margin: 0 0 1rem; }
+  li { margin: .25rem 0; }
+  strong { font-weight: 700; }
+  code { font-family: var(--mono); font-size: .86em; background: var(--panel); padding: .05em .35em; border-radius: 3px; }
+  pre { font-family: var(--mono); font-size: .82rem; line-height: 1.6; background: var(--panel); padding: .9rem 1.1rem; overflow-x: auto; border-left: 3px solid var(--rule); margin: 0 0 1.2rem; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  /* 表格 */
+  .tw { overflow-x: auto; margin: 0 0 1.4rem; border-top: 2px solid var(--ink); border-bottom: 1px solid var(--rule); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; line-height: 1.6; }
+  th, td { text-align: left; vertical-align: top; padding: .5rem .7rem; border-bottom: 1px solid var(--rule); }
+  th { font-weight: 700; font-size: .8rem; letter-spacing: .04em; color: var(--mute); background: var(--panel); white-space: nowrap; }
+  td:first-child { font-weight: 500; }
+  .num { font-family: var(--mono); font-size: .86em; white-space: nowrap; }
+  .id { font-family: var(--mono); font-size: .84em; }
+
+  /* 字样 */
+  .gl { font-family: var(--serif); font-weight: 500; font-size: 1.35em; line-height: 1; }
+  .specimen { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin: 0 0 1.4rem; }
+  .specimen > div { background: var(--paper); padding: 1rem 1rem 1.1rem; }
+  .specimen .tier { font-family: var(--mono); font-size: .76rem; letter-spacing: .06em; color: var(--indigo); }
+  .specimen .tier.zhu { color: var(--zhu); }
+  .specimen .chars { font-family: var(--serif); font-size: 2.3rem; line-height: 1.25; margin: .3rem 0 .2rem; letter-spacing: .06em; }
+  .specimen .chars span { white-space: nowrap; }
+  .specimen .desc { font-size: .86rem; color: var(--mute); }
+  @media (max-width: 640px) { .specimen { grid-template-columns: 1fr; } }
+
+  /* 徽记 */
+  .tag { display: inline-block; font-family: var(--mono); font-size: .72rem; letter-spacing: .05em; padding: .05em .5em; border: 1px solid var(--indigo); color: var(--indigo); border-radius: 2px; vertical-align: middle; }
+  .tag.zhu { border-color: var(--zhu); color: var(--zhu); }
+  .tag.fill { background: var(--indigo); color: var(--paper); }
+
+  /* 三层图 */
+  .layers { display: grid; grid-template-columns: 1fr; gap: 0; margin: 0 0 1.6rem; max-width: 46em; }
+  .layer { display: grid; grid-template-columns: 7.5rem 1fr; gap: 1rem; padding: .9rem 1.1rem; border: 1px solid var(--rule); background: var(--panel); }
+  .layer .name { font-family: var(--serif); font-weight: 700; font-size: 1.05rem; }
+  .layer .name small { display: block; font-family: var(--mono); font-weight: 400; font-size: .72rem; color: var(--mute); }
+  .layer .what { font-size: .92rem; }
+  .arrow { text-align: center; color: var(--indigo); font-family: var(--mono); font-size: .8rem; padding: .35rem 0; }
+  .arrow::before { content: "↓ "; }
+  @media (max-width: 560px) { .layer { grid-template-columns: 1fr; } }
+
+  /* 一页结论的缺口 */
+  .gap { display: grid; grid-template-columns: 11rem 1fr; gap: .4rem 1.2rem; padding: .9rem 0; border-bottom: 1px solid var(--rule); }
+  .gap:first-of-type { border-top: 2px solid var(--ink); }
+  .gap .k { font-family: var(--serif); font-weight: 700; }
+  .gap .v { font-size: .94rem; }
+  .gap .v p { margin: 0 0 .4rem; }
+  @media (max-width: 560px) { .gap { grid-template-columns: 1fr; } }
+
+  .callout { border-left: 3px solid var(--zhu); background: var(--zhu-soft); padding: .8rem 1rem; margin: 0 0 1.2rem; max-width: 46em; }
+  .callout.blue { border-left-color: var(--indigo); background: var(--indigo-soft); }
+  .foot { color: var(--mute); font-size: .84rem; border-top: 1px solid var(--rule); padding-top: 1rem; margin-top: 3rem; font-family: var(--mono); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+  html { scroll-behavior: smooth; }
+</style>
+
+<div class="page">
+<header class="mast">
+  <div class="eyebrow">open-guji-cv · Step 5 / 6 · 2026-09-05 · 正本 .claude/doc/variant_strategy.md</div>
+  <h1>異體字策略</h1>
+  <p class="sub">忠於刻本字形之下的識別、自動確認與資料積累。回答六個問題：原則與邊界；公開資料庫有哪些、好不好用、一對一與一對多；怎麼積累「這本書用哪個異體」；整理本怎麼當校驗器；保留異體同時怎麼提高自動率；審閱界面怎麼改。所有數字為本日實測。</p>
+  <div class="decree">字形層忠於刻本；歸一到通行字，只為方便理解含義、以及積累關於異體字的數據。<small>用戶方針 · 2026-09-05</small></div>
+</header>
+
+<nav class="toc">
+  <a href="#s0"><span class="n">§0</span>一頁結論</a>
+  <a href="#s1"><span class="n">§1</span>原則與邊界</a>
+  <a href="#s2"><span class="n">§2</span>公開資料庫盤點</a>
+  <a href="#s3"><span class="n">§3</span>三層表</a>
+  <a href="#s4"><span class="n">§4</span>準入：義定形未定</a>
+  <a href="#s5"><span class="n">§5</span>審閱界面</a>
+  <a href="#s6"><span class="n">§6</span>落地順序</a>
+  <a href="#s7"><span class="n">§7</span>風險與口徑</a>
+</nav>
+
+<section id="s0">
+  <h2><span class="n">§0</span>一頁結論</h2>
+  <div class="read">
+    <p><strong>骨架已經對了，缺的是三樣東西。</strong>對的部分：<code>AdmitRec</code> 分 <code>char</code>（刻本形）/ <code>reading</code>（文意）兩欄，整理本字永遠不覆蓋 <code>char</code>；準入十條通道全部在 <code>vmap.semantic()</code> 空間比較；人裁事件帶 shape / reading / conversion；關係圖 <code>config/variants/variants.json</code>（47,935 字、47,181 邊、12 個來源）已入庫；釋義表 <code>gloss.json</code> 69,835 字；<code>_char_hint.std</code> 已會「在異體組裡找整理本實際用的那個」。</p>
+  </div>
+  <div class="gap"><div class="k">語義層默認表只有 21 行</div><div class="v"><p><code>VariantMap</code> 讀 <code>config/dicts/variants.tsv</code>（手工 21 行）；2,727 條自動表在 <code>config/charset/</code> 沒接、只用 Unihan、比關係圖舊。</p><p>後果：<span class="gl">髪/髮 䙝/褻 㕔/廳 鍾/鐘</span> 與已解決的 <span class="gl">卽/即 㫖/旨 彚/彙</span> <strong>同一機制</strong>，卻仍在燒人審——剩 7 條人審裡 4 條是它。</p></div></div>
+  <div class="gap"><div class="k">沒有「本書用字賬」這一層</div><div class="v"><p>字形套方案層 4 寫了設計，未落地；E5 是手算的 6 組。</p><p>後果：同一異體每次出現都當新問題；無法量「這本書用哪個形」。</p></div></div>
+  <div class="gap"><div class="k">義定了、形沒定時會靜默歸一</div><div class="v"><p><code>_pick_char</code>：庫 unsure + 文本兩路一致 → <code>char = align_char</code>。刻 髪、OCR 讀 髮（字典偏通行字）、整理本 髮 → 存 髮，字形庫錯標一例，後續 髪 實例繼承錯。</p><p><strong>現在沒發生只因語義表小；一擴表這個洞就打開</strong>，所以擴表必須與新狀態同時上。</p></div></div>
+  <div class="read" style="margin-top:1.2rem">
+    <p>方案一句話：<strong>三層表（關係層 → 本書用字賬 → 語義層派生）+ 準入加一個狀態「義定形未定」+ 按組審閱</strong>。人審率預期從 1.1% 再降（4/7 異體橋消失），字形保真率變成可量的數。</p>
+  </div>
+</section>
+
+<section id="s1">
+  <h2><span class="n">§1</span>原則與邊界</h2>
+  <h3>1.1 三種關係必須分開，這是全文的基礎</h3>
+  <div class="specimen">
+    <div><div class="tier">T1 · 純異體</div><div class="chars"><span>髪髮</span> <span>卽即</span> <span>㫖旨</span> <span>彚彙</span> <span>㕔廳</span> <span>无無</span></div><div class="desc">同一個詞的不同寫法，任何語境可互換。語義層可合併；準入可橋。</div></div>
+    <div><div class="tier">T2 · 互通 / 一對多</div><div class="chars"><span>鍾鐘</span> <span>注註</span> <span>后後</span> <span>于於</span> <span>囘→回迴</span></div><div class="desc">各自是正字，只在某些義項互通，或一形對多個正字。不可全局合併；可橋但 reading 取整理本字。</div></div>
+    <div><div class="tier zhu">T3 · 形近 / 通假 / 古文</div><div class="chars"><span>己已巳</span> <span>人入</span> <span>日曰</span> <span>上二</span> <span>王玉</span></div><div class="desc">不同的詞；或字典收錄但刻本不會用的關係。永不橋。界面紅色「形近·非異體」。</div></div>
+  </div>
+  <div class="read">
+    <p>關係圖裡的來源標籤<strong>不能直接對應到這三類</strong>——<code>twedu</code> 既給 㕔~廳（T1）也給 上~二（T3 古文），<code>unihan:kSemanticVariant</code> 既給 䙝~褻（T1）也給 子~只（T3）。來源白名單只是第一道粗篩，<strong>真正的分類器是本書語料</strong>（§3）。</p>
+    <h3>1.2 Unicode 邊界</h3>
+    <ul>
+      <li>現階段只記 Unicode 已收字（含擴展區，<span class="gl">𠮓</span> U+20B93、<span class="gl">𨽾</span> 都已在庫）。</li>
+      <li><strong>未收字</strong>三條出路：① IDS 文本錨（字形套方案層 5 已定，唯一對口的通用機制）；② IVS（Unicode 官方「同碼位異形」機制，IVD 登記很重，私用 IVS 互操作差）；③ 字形庫原型本身——圖像就是最忠實的記錄，<code>glyph.db</code> 已在做。<strong>建議</strong>：未收字 = 圖像 + IDS，不造 PUA。</li>
+      <li>IRG 的 UCV（可認同部件變體）決定了哪些差異<strong>不會</strong>有獨立碼位（者有無點、辶一點二點）。這類差異只能活在字形庫的圖像層，碼點層不可能「忠於刻本」到這一級——這是邊界，不是缺陷。</li>
+      <li><strong>不做 NFC/NFKC 歸一</strong>：兼容區（U+F900–FAFF）會被折疊到統一區。待核：全倉 grep <code>unicodedata.normalize</code>。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s2">
+  <h2><span class="n">§2</span>公開異體字資料庫盤點</h2>
+  <h3>2.1 逐個看</h3>
+  <div class="tw"><table>
+    <thead><tr><th>來源</th><th>規模</th><th>格式</th><th>方向</th><th>關係分型</th><th>授權</th><th>對本項目好不好用</th><th>倉裡狀態</th></tr></thead>
+    <tbody>
+      <tr><td>Unihan Variants</td><td class="num">kSemantic 4,322 / kSpecialized 608 / kZ 170 / 簡繁 6,562 / kSpoofing 362</td><td>TSV，值帶出處（&lt;kMatthews）</td><td>無（語義類對稱）</td><td><strong>有</strong>：kZVariant = 純字形（T1）；<strong>kSpecializedSemanticVariant = 只在某些義項同 = T2 的官方定義</strong>；kSpoofing = 形近（T3）</td><td>Unicode License</td><td>權威但淺，俗字覆蓋差；分型是現成的 T1/T2/T3 種子</td><td>已入圖（6 屬性分標籤）</td></tr>
+      <tr><td>教育部《異體字字典》（台灣）</td><td class="num">正字約 2.9 萬、異體約 7 萬</td><td>網站；<strong>無開放數據</strong>（公眾授權網 CC BY-ND 只放國語辭典系列；data.gov.tw 只有正字表）</td><td><strong>有</strong>：正字 → 異體</td><td>有字書出處</td><td>網站內容有版權</td><td>繁體刻本最對口——收俗字、明清字書出處、有正字方向；含古文（上/二）要過濾</td><td>經 cjkvi 抽取版入圖，<strong>方向被丟了</strong></td></tr>
+      <tr><td>cjkvi twedu-variants.txt</td><td class="num">24,741 邊</td><td>CSV <code>正字,twedu/variant,異體</code></td><td><strong>有</strong></td><td>單一標籤</td><td>無 LICENSE，按事實數據用</td><td>上一條唯一的機器可讀渠道</td><td>已入圖 twedu</td></tr>
+      <tr><td>cjkvi hydzd-variants.txt（漢語大字典）</td><td class="num">29,159 邊</td><td>CSV，標籤 variant / proper / traditional / simplified</td><td><strong>有</strong></td><td>粗分</td><td>同上</td><td>量大噪聲多，當召回</td><td>已入圖 hydzd</td></tr>
+      <tr><td>cjkvi hydzd-borrowed.txt</td><td class="num">3,380 邊</td><td>同上</td><td>—</td><td><strong>通假 / 借用</strong></td><td>同上</td><td>T3，永不當異體；可作徽記「通假」</td><td>已入圖，默認排除</td></tr>
+      <tr><td>第一批異體字整理表（1955）</td><td class="num">1,051 邊</td><td>CSV</td><td>有（PRC 選定字在前）</td><td>無</td><td>公版</td><td>關係可用，<strong>方向對繁體刻本是反的</strong>（卻/却、並/并、於/于、牀/床）</td><td>已入圖 dypytz</td></tr>
+      <tr><td>通用規範漢字表 附表 1（2013）</td><td class="num">796 組</td><td>多個 GitHub 數字化版（xlsx/json）</td><td>有</td><td>無</td><td>公版</td><td>同上，只作關係證據</td><td>未入</td></tr>
+      <tr><td>yitizi（nk2028）</td><td class="num">11,456 條 / 17,376 邊</td><td>npm <code>get(字) → […]</code></td><td>無（對稱）</td><td>README 分等價/交叉/簡化，數據不帶標籤</td><td><strong>CC0</strong></td><td>方便，但來源（ytenx + OpenCC）已混合；單獨出現的邊最可疑（來~勅、某~私、藝~芸 都只有它）</td><td>已入圖 yitizi</td></tr>
+      <tr><td>OpenCC 詞典</td><td class="num">ST/TS + TW/HK/JP Variants</td><td>TSV <code>字&nbsp;字 字</code>（一對多顯式）</td><td>有</td><td>簡繁 / 地區異體</td><td>Apache-2.0</td><td>一對多（发→發 髮）列得最清楚，適合生成 T2 候選</td><td>cjkvi-simplified 部分覆蓋</td></tr>
+      <tr><td>CHISE 字元本體</td><td class="num">全集</td><td>RDF/Turtle 或 Lisp 屬性</td><td>有</td><td><strong>最細</strong>：古字/俗字/本字/同/訛/簡化/互通/形近</td><td>GPL</td><td>分型正是 T1/T2/T3，但格式重；第二輪精修來源</td><td>未入</td></tr>
+      <tr><td>GlyphWiki</td><td class="num">全集字形（KAGE）</td><td>dump；命名 <code>uXXXX-itaiji-NNN</code>（非認同差異）/ <code>-var-NNN</code>（認同範圍內）</td><td>隱含（掛基字下）</td><td>itaiji vs var 恰對應「有無獨立碼位」</td><td>dump 附 LICENSE，自述可自由使用（待核）</td><td><strong>未收字</strong>與同碼位多寫法的唯一大規模來源</td><td>未入（層 5 已列）</td></tr>
+      <tr><td>IDS 數據（cjkvi-ids / CHISE-IDS / BabelStone）</td><td class="num">全集拆分</td><td>TSV</td><td>—</td><td>—</td><td>GPLv2 / 各異</td><td>形近護欄、未收字描述；不是異體關係</td><td>ids_guard 已用</td></tr>
+      <tr><td>異體字圖譜 / zi.tools</td><td class="num">自稱 14 萬字 6.9 萬組</td><td>網站</td><td>有</td><td>按字書出處</td><td><strong>無授權條款，不可抓</strong></td><td>人工查證參照 + 深鏈</td><td>只鏈接</td></tr>
+      <tr><td>Wiktionary</td><td>—</td><td><code>{{zh-forms|alt=…}}</code> 可從 dump 抽</td><td>有</td><td>variant/obsolete/vulgar</td><td>CC BY-SA</td><td>補充源，噪聲中等</td><td>gloss.json 已用其釋義</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="read">
+    <h3>2.2 一對一 vs 一對多：沒有現成的乾淨表，只能自己算</h3>
+    <ol>
+      <li><strong>沒有任何公開資料庫直接標「一對多」</strong>。要自己算：一個形在 T1/T2 邊下連到 ≥2 個整理本用字，就是一對多。本書實測：字形庫 18 個整理本沒有的形裡，2 個一對多（囘→回/迴、蓋→葢/盖）；整理本自身多形的組 362 個。</li>
+      <li><strong>一對多有三種來路，處理各不同</strong>：簡化合併（发→發/髮、后→後/后）與繁體刻本無關，但簡繁邊把它帶進了圖，<strong>必須排除出準入橋</strong>；義項互通（鍾/鐘、注/註）兩邊都是正字，整理本 注 748 / 註 526 並用，說明它在區分，這時整理本字是形的證據；古文/篆文異體（上/二、人/几、王/玉）字典真有、刻本不會用，<strong>只有本書語料能過濾</strong>。</li>
+      <li><strong>「明確的規範化繁體字」有兩個候選，建議都存</strong>：<code>canonical</code>——跨書統一鍵，取教育部正字（twedu 方向），沒有時取整理本用形裡碼位最小的；<code>reading</code>——本書文意字，取整理本實際用形。兩者常不同（教育部正字 蓋，本書整理本 <span class="gl">葢</span> ×791、蓋 ×0）。</li>
+      <li><strong>方向信息原始文件裡有，現在的構建把它丟了</strong>。twedu、hydzd 都是正字在前；<code>build_variants.py</code> 只存 <code>ord(a)&lt;ord(b)</code> 一側的無向邊。重建時保留每條邊的 (正字, 異體) 方向與來源。</li>
+    </ol>
+    <h3>2.3 關係圖現狀的兩個問題（實測）</h3>
+    <ul>
+      <li><code>HIGH_CONFIDENCE_SOURCES</code> 對準入橋<strong>過寬</strong>。用它給字形庫 1,958 字種分組，「本書刻了 ≥2 種形」的組有 99 個，大半是假的：四×86/肆×6、二×40/上×40（twedu 古文）、人×69/几×1、王×18/玉×10、子/祇/祗/只、後/后、乾/干（簡繁）、來/勅、某/私、藝/芸（只有 yitizi）。真異體組（卽/即 18/15、彚/彙 11/4、畧/略 15/1、歷/厯 14/1、註/注 12/6、鑒/鑑 11/7、製/制 10/7、抄/鈔 13/4、迹/跡/蹟）混在裡面。</li>
+      <li>自動表 <code>config/charset/variants.tsv</code>（2,727 條，只用 Unihan，語料限定）對本書 12 個可橋的刻本特有形只覆蓋 7 個，漏 <span class="gl">彚 㓂 㕔 厯 𠮓</span>——它建於關係圖之前。應改為從關係圖派生（§3.4）。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s3">
+  <h2><span class="n">§3</span>三層表：關係層 → 本書用字賬 → 語義層</h2>
+  <div class="layers">
+    <div class="layer"><div class="name">關係層<small>variants.json</small></div><div class="what">字典知識：無向→改有向，帶來源，T1/T2/T3 粗分。通用、有噪聲。</div></div>
+    <div class="arrow">用本書語料 + 裁決過濾</div>
+    <div class="layer"><div class="name">本書用字賬<small>books/&lt;edition&gt;.json</small></div><div class="what">這本書：每個語義組刻了哪些形、整理本印了哪些形、(刻本形→整理本形) 對的次數與來源。自動派生，可重建。</div></div>
+    <div class="arrow">派生</div>
+    <div class="layer"><div class="name">語義層<small>variants.tsv</small></div><div class="what">LM / 準入用的 字形→代表字：只收 T1 + 賬本確認的 T2 對；方向 = 整理本用形；手工表覆蓋。</div></div>
+  </div>
+
+  <div class="read">
+    <h3>3.1 關係層：改三處，不重寫</h3>
+    <ol>
+      <li><strong>保留方向</strong>：邊存 (正字, 異體, 來源)，<code>ord</code> 排序只做去重。</li>
+      <li><strong>來源分級</strong>（先驗，最終由賬本定）：橋候選 twedu、hydzd/variant、kSemanticVariant、kZVariant、yitizi（單獨出現降權）；T2 標記 kSpecializedSemanticVariant、hydzd/proper、OpenCC 一對多；永不橋 kSpoofingVariant、hydzd-borrowed、<strong>沒有異體來源背書的</strong>簡繁邊（无/無 有 twedu 背書可留，后/後 只靠簡繁邊不可）、dypytz 單獨出現。</li>
+      <li><strong>不傳遞</strong>照舊。組的定義改為以 canonical 為中心的一跳星形，不做連通分量。</li>
+    </ol>
+    <h3>3.2 本書用字賬（新，<code>config/variants/books/&lt;edition_tag&gt;.json</code>）</h3>
+    <p>這就是「關於本書常用哪個異體字的資料庫」，也是字形套方案層 4 的落地。<strong>只由腳本從產物派生，永不手編</strong>——來源三處：</p>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>來源</th><th>字段</th><th>現有數據</th></tr></thead>
+    <tbody>
+      <tr><td><code>seed_admit</code> 產物 AdmitRec(char, reading, channel)</td><td>自動轉換對</td><td class="num">41,366 條記錄；自動進庫且 reading≠char 的 38 條：卽→即 ×19、彚→彙 ×10、㫖→旨 ×5、厯→歷、櫽→檃、𨽾→隸、註→注 各 1；全走 match_replace</td></tr>
+      <tr><td>人裁 confirm 事件 (shape, reading, conversion)</td><td>人確認的轉換對（含 己/已/巳）</td><td class="num">273 + 132 條裁決；label≠semantic：卽→即 13、註→注 12、㫖→旨 9、巳→已 5、彚→彙 5…</td></tr>
+      <tr><td>整理本語料字頻</td><td>整理本用形</td><td class="num">341,240 字次 / 4,636 字種</td></tr>
+    </tbody>
+  </table></div>
+<pre><code>"髮": {
+  "canonical": "髮",
+  "book_forms":  {"髪": 17, "髮": 0},          // 刻本刻了什麼（來自 char）
+  "ref_forms":   {"髮": 41},                   // 整理本印了什麼（語料頻次）
+  "pairs": {"髪→髮": {"n": 17, "human": 3, "auto": 14, "first": "vol01:60:4:15"}},
+  "ref_policy":  "single",                     // 整理本對這一組：single 歸一 / multi 保留區分
+  "tier": "T1"
+}</code></pre>
+  <div class="read">
+    <p>五個用處：(a) 準入先驗（§4）；(b) 候選排序（本書常用 卽 就把 卽 排前）；(c) 默認 reading；(d) 新書按時代/版本繼承最近的賬當初值；(e) <strong>直接導出為研究數據</strong>——「武英殿本《四庫總目》異體用字表」本身就是可發布的成果，每冊跑完自動更新。</p>
+    <p>規模感：字形庫 1,958 字種裡只有 <strong>18 種是整理本沒有的</strong>（59 例），60 頁挖出 21 個異體組，整冊估 100–200 組。<strong>賬本很短、很尖</strong>，這決定了 §4 的人審成本是 O(組數) 而不是 O(字次)。</p>
+    <h3>3.3 整理本作為校驗器</h3>
+    <p>整理本不是全歸一的，是<strong>半歸一</strong>的。對刻本用到的 1,851 個組：整理本只用 1 種形的 <strong>1,489</strong> 組，用 ≥2 種形的 <strong>362</strong> 組（注/註 748/526、於/于 3055/171、无/無 41/1370、攷/考 31/1256、疎/疏/踈/䟽、弁/辨/辯、据/據 17/541、鑒/鑑…）。這個劃分決定了整理本字能當什麼證據：</p>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>組的 ref_policy</th><th>整理本字能證明什麼</th><th>形從哪來</th><th>準入要求</th></tr></thead>
+    <tbody>
+      <tr><td><strong>single</strong>（1,489 組）</td><td>只證明<strong>語義</strong>；整理本自己不區分形，髪/髮 一律印 髮</td><td>只能來自圖像（庫 same / 組內定形器）</td><td>語義兩路一致即可橋；形另定（§4.2）</td></tr>
+      <tr><td><strong>multi</strong>（362 組）</td><td>語義 <strong>+ 形</strong>（它在區分，印 註 就是 註）</td><td>整理本字兼作形證據</td><td>要求精確一致；不一致時只有賬本裡有人確認過的轉換對才橋</td></tr>
+    </tbody>
+  </table></div>
+  <div class="read">
+    <ol>
+      <li><strong>確認我們的異體判斷</strong>：橋放行的每一對進賬本；賬本裡出現<strong>關係圖裡沒有的對</strong> → 三選一（新異體 / OCR 錯 / 整理本錯）進審隊列。現役 38 條裡 㫖→旨 就是「關係圖沒有」（UCV 認同形），靠手工表兜的。</li>
+      <li><strong>推斷整理本的凡例</strong>：ref_policy 就是整理本對每組的取捨，可導出成表，反過來給整理本做校勘（无/無 41:1370 多半是漏改）。</li>
+      <li><strong>分層報數</strong>：align 金標與整理本同源，驗異體橋必須用 human 層（273 條）單獨報。</li>
+    </ol>
+    <h3>3.4 語義層派生</h3>
+    <p><code>config/dicts/variants.tsv</code> 改為<strong>生成物</strong>：從關係層取 T1 邊 + 賬本裡人確認過的 T2 對，方向 = 整理本用形（single 組）或不派生（multi 組：注/註 各算各的）；一對多形（囘、蓋）不派生；手工 21 行留作 override。LM 收益小但方向正確：髪/髮 等計數合併，n-gram 不再被同詞分票。<code>glyph_layer_immutability</code> 硬斷言不動。</p>
+  </div>
+</section>
+
+<section id="s4">
+  <h2><span class="n">§4</span>準入：保留異體的同時提高自動率</h2>
+  <div class="read">
+    <h3>4.1 現役唯一的系統性漏洞：首例靜默歸一</h3>
+    <p><code>_pick_char</code>：庫 same → char = 庫形（對）；庫 unsure 且整理本通道放行 → <code>char = align_char</code>。註釋裡的理由成立（unsure 時庫 top1 不可信，敷/數 那 8 條實錘），但它默認「整理本形 = 刻本形」。對 single 組這個假設<strong>必然錯在首例上</strong>：</p>
+  </div>
+<pre><code>刻本刻 髪（庫裡還沒有 髪）→ 庫 unsure
+OCR 讀 髮（字典 15,907 字含 髪，但模型偏通行字）
+整理本 髮
+→ dual 放行，char = 髮        ← 字形庫多一個錯標的 髮，下一個 髪 實例繼承它</code></pre>
+  <div class="callout">現在沒發生，只因為 VariantMap 太小、這些位都落人審了。<strong>把語義表擴大而不補這一步，等於把人審換成靜默錯標</strong>——這是保真最要防的事，也是本文所有改動必須一起上的原因。</div>
+
+  <div class="read"><h3>4.2 新狀態「義定形未定」（semantic-fixed, form-open）</h3></div>
+  <div class="tw"><table>
+    <tbody>
+      <tr><td>進入條件</td><td>現有通道判「語義兩路一致、可放行」（dual / match_ref / match_replace / match_margin / match_ref_weak）<strong>且</strong> 庫 ≠ same <strong>且</strong> 組內候選形 ≥ 2（組 ∩ (賬本 book_forms ∪ OCR 字典 ∪ 字體模板集)）</td></tr>
+      <tr><td>處理</td><td><strong>組內定形器</strong>：現成的三源檢索（HOG 0.5 / CNN 分類頭 1 / embedding 3，第五輪 checkpoint）<strong>限定在組內 2–4 個形之間</strong>。closed-set 比開放集容易得多；本書原型（glyph.db exemplar）優先於字體模板</td></tr>
+      <tr><td>自動放行</td><td>margin ≥ τ <strong>且</strong> 該形在賬本 book_forms 裡已有人確認 ≥ 1 次 → 放行，<code>channel = variant_form</code>，reading = 整理本字，產物打 <code>form_auto</code> 標記可審計</td></tr>
+      <tr><td>人審（一次）</td><td>該形是本書<strong>首次出現</strong> → 組視圖人審；確認後賬本 +1，之後同形自動</td></tr>
+      <tr><td>人審</td><td>margin &lt; τ → 組視圖人審</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="read"><h3>4.3 決策表</h3></div>
+  <div class="tw"><table>
+    <thead><tr><th>ref_policy</th><th>庫 verdict</th><th>賬本狀態</th><th>決定</th></tr></thead>
+    <tbody>
+      <tr><td>single</td><td>same（形 X）</td><td>—</td><td>放行，char=X，reading=整理本字（現役 match_ref 行為，只是語義表擴了）</td></tr>
+      <tr><td>single</td><td>unsure，組內只 1 個候選形</td><td>—</td><td>放行，char=該形（現役行為）</td></tr>
+      <tr><td>single</td><td>unsure，組內 ≥2 形</td><td>X 已確認過</td><td><strong>定形器</strong> → 放行 / 人審</td></tr>
+      <tr><td>single</td><td>unsure，組內 ≥2 形</td><td>X 首次</td><td>組視圖人審一次</td></tr>
+      <tr><td>multi</td><td>same（形 X）且 X == 整理本字</td><td>—</td><td>放行（現役）</td></tr>
+      <tr><td>multi</td><td>same（形 X）且 X ≠ 整理本字</td><td>X→整理本字 有人確認對</td><td>放行，reading=整理本字</td></tr>
+      <tr><td>multi</td><td>same（形 X）且 X ≠ 整理本字</td><td>無</td><td>人審（可能整理本歸一不一致，也可能庫錯）</td></tr>
+      <tr><td>multi</td><td>unsure</td><td>—</td><td>現役行為（整理本字兼作形證據，精確一致才放）</td></tr>
+      <tr><td>任意</td><td>涉及 <span class="gl">己已巳</span></td><td>—</td><td><span class="tag zhu">always_review</span> 不變</td></tr>
+      <tr><td>任意</td><td>對在 T3 / NEVER_MATCH / 借用</td><td>—</td><td>不橋，走現役形近路徑</td></tr>
+    </tbody>
+  </table></div>
+
+  <div class="read">
+    <h3>4.4 護欄一條不動</h3>
+    <p>己已巳 always_review；NEVER_MATCH_FAMILIES（手工 20 對，每對有案底）；SEMANTIC_MERGED_PAIRS 只有 (已,巳)；kSpoofingVariant / hydzd-borrowed 永不進；OCR 永不投票；match_precision ≥ 0.999；glyph_layer_immutability。新通道 variant_form 是<strong>第三路證據（形狀）補在文本兩路之上</strong>，不是替代。</p>
+    <h3>4.5 驗收：三把尺子，成對報</h3>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>尺子</th><th>定義</th><th>現值</th><th>目標 / 護欄</th></tr></thead>
+    <tbody>
+      <tr><td>人審率 ↔ 自動放行錯誤率</td><td>60 頁 1,936 字位</td><td class="num">1.1% ↔ 0/9,848（整理本）、0/132（人裁）</td><td>人審再降（7 條裡 4 條消失）；錯誤率仍 0</td></tr>
+      <tr><td><strong>字形保真率</strong>（新）</td><td>自動放行裡 char == 實刻形；組視圖抽審 ≥200 例，按 form_auto / 非 form_auto 分層</td><td>無（現在無法量）</td><td>Wilson 下界 ≥ 99%；form_auto 層單獨報</td></tr>
+      <tr><td>賬本一致性</td><td>橋放行的對裡不在關係圖的數 / 總數</td><td class="num">38 裡 5（㫖→旨，手工表兜）</td><td>全部有來源（關係圖或人確認）</td></tr>
+    </tbody>
+  </table></div>
+  <div class="read"><p>回放集：全部歷史人裁（273 + 132）、38 條自動轉換、rare-char 21 條。每步改動跑 <code>survey_review_queue.py</code> + <code>round_check.py</code> 判據 A/B/D，口徑不變。</p></div>
+</section>
+
+<section id="s5">
+  <h2><span class="n">§5</span>審閱界面</h2>
+  <div class="read">
+    <p>現有卡片已有：圖塊、庫/OCR/上下文三路、候選按鈕 1-3、shape/reading 雙值（只對己已巳顯示 reading 框）、「查候選」（字體模板 + CNN 融合 10 個，帶釋義與整理本對應字）、dwell 計時。下面都是增量。</p>
+    <h3>5.1 組視圖（新頁「異體」）——首例確認與保真抽審都在這裡</h3>
+    <p>一組一屏：<strong>列 = 形，格 = 圖塊縮略圖</strong>。頂欄：語義字 · 釋義 · 整理本用形與頻次 · 本書各形計數 · 關係徽記。每格默認在系統判的那一列。操作：<code>Enter</code> 整組照準；點格 → 換列；<code>N</code> 非此字；<code>1–4</code> 把焦點格移到第 k 列。輸出沿用 confirm 事件協議，不新造。組按「含首例形」「待審數」排序。</p>
+    <p>一個 5×10 的網格人眼幾秒就能掃出異類，比逐卡快一個量級；這也是 §4.5 字形保真率的抽審台。</p>
+    <h3>5.2 單卡增強（只在「義定形未定」時變樣）</h3>
+    <ul>
+      <li>候選<strong>只列組內形</strong>（2–4 個大按鈕），每個帶：本書原型縮略圖（glyph.db exemplar；沒有就字體渲染）、本書計數「髪 ×17」、整理本字徽記、釋義、關係徽記（<span class="tag">異體</span> <span class="tag">互通</span> <span class="tag zhu">形近·非異體</span>）。</li>
+      <li>默認焦點 = 本書慣用形，<code>Enter</code> 接受；reading 默認整理本字，非己已巳折疊顯示、不強制填。</li>
+      <li>去掉拼音/碼點（用戶 2026-09-05 已定）。</li>
+      <li>形近對卡上明寫「形近·看字形」，異體對寫「異體·同義·本書慣用 X」——兩類問題人要用的判斷完全不同，界面必須先告訴人是哪一類。</li>
+    </ul>
+    <h3>5.3 卡片 API 加字段</h3>
+    <p><code>/api/review/cards</code> 每張卡加：<code>align_char</code>、<code>reading</code>、<code>state</code>（semantic_fixed 等）、<code>group: {canonical, forms: [{ch, book_n, ref_n, exemplar_url, tier}]}</code>。數據全部來自賬本 + glyph.db，不新增計算。</p>
+    <h3>5.4 計時</h3>
+    <p>dwell 已有；組視圖按組計時，報「每組秒數」與「每格秒數」。UI 改動唯一的驗收指標是它。</p>
+  </div>
+</section>
+
+<section id="s6">
+  <h2><span class="n">§6</span>落地順序</h2>
+  <div class="tw"><table>
+    <thead><tr><th>序</th><th>動作</th><th>產出</th><th>量</th></tr></thead>
+    <tbody>
+      <tr><td class="num">1</td><td>關係層重建：保留方向、來源分級、報一對多清單（build_variants.py）</td><td>variants.json v2 + 一對多表</td><td>半天</td></tr>
+      <tr><td class="num">2</td><td>本書用字賬導出腳本 + 控制台只讀視圖（兌現字形套方案層 4 動作 3）</td><td>books/wuyingdian.json；異體用字表可導出</td><td>半天</td></tr>
+      <tr><td class="num">3</td><td>語義層派生替換 21 行表（手工表轉 override）；60 頁回放：人審率、自動錯誤率、賬本一致性</td><td>新 variants.tsv；回放報告</td><td>半天</td></tr>
+      <tr><td class="num">4</td><td>「義定形未定」狀態 + 組內定形器 + variant_form 通道；歷史裁決全量回放</td><td>準入改動 + 回放報告</td><td>1–2 天</td></tr>
+      <tr><td class="num">5</td><td>組視圖 + 單卡增強 + API 字段</td><td>控制台</td><td>1 天</td></tr>
+      <tr><td class="num">6</td><td>字形保真率抽審 200 例 → 定 τ；進體檢判據</td><td>判據 E</td><td>審閱節奏</td></tr>
+      <tr><td class="num">7</td><td>清賬：4 條 semantic 為 x/y/z/s 的人裁髒數據（<span class="id">v2:vol01:17:4:8</span> 墀、<span class="id">22:9:14</span> 頌、<span class="id">38:9:21</span> 耶、<span class="id">52:8:15</span> 衷）；char-ocr 分片用 dev_set 金標建起來（is_variant 字段正好用上）</td><td>—</td><td>1 小時</td></tr>
+    </tbody>
+  </table></div>
+  <div class="callout blue"><strong>第 3 步不能單獨上</strong>（§4.1）：擴語義表與第 4 步的新狀態必須同一次接進生產。步驟 1–2 與現役行為無關，可以先做。</div>
+  <div class="read"><p><strong>不做</strong>：PUA 造字；把關係圖連通分量當等價；把 twedu 古文邊當刻本異體；用 dypytz 定方向；在沒有組視圖抽審之前把 variant_form 的 τ 放低。</p></div>
+</section>
+
+<section id="s8">
+  <h2><span class="n">§8</span>落地記錄（2026-09-05）</h2>
+  <div class="read">
+    <h3>步驟 1–2：關係層保留方向 + 本書用字賬</h3>
+    <ul>
+      <li><code>variants.json</code> 新增 <code>directed[異體][正字]</code> 43,127 條有向邊；一對多實測 4,801（只看異體來源）/ 5,420（連簡繁）。查詢層加 <code>canonical_of / edge_tier / regulars_of</code>，來源分級 BRIDGE / T2 / SIMPLIFIED / NEVER。</li>
+      <li>用字賬 <code>config/variants/books/wuyingdian_zongmu.json</code>：<strong>87 組</strong>（整理本單形 29 / 多形 58）、轉換對 7、關係圖外 2（㫖→旨、巳→己）。分組只走 T1 一跳、每形只歸一頭、<strong>永不按共享成員並組</strong>（叁 曾把 三/參 串成一團）；只有本書記過轉換的 T2 對才並。</li>
+      <li>坑：教育部正字表沒有機器可讀版，<code>is_regular</code> 只能從「名下有異體」反推，仲/串/了 被 hydzd 一條邊掛到 中/穿/瞭 名下——<code>ref_policy=multi</code> 讓準入仍要求精確一致，不出錯，賬本上多幾組噪聲。</li>
+    </ul>
+    <h3>步驟 3–7：語義層派生 + 義定形未定 + 組視圖 + 判據 E + 清賬</h3>
+    <ul>
+      <li>語義表 <code>variants.auto.tsv</code> <strong>9,067 條</strong>（賬本 32 + 關係圖 9,035），手工 21 行覆蓋；兩頭都在整理本的一律不派生（无/無、注/註、已/巳）。</li>
+      <li>準入三檔 <code>fixed_lib</code>（庫組內 top1 ≥ 0.95、對手不貼到 0.01 內、形人確認過）/ <code>fixed_form</code>（組內三源一致、餘弦差 ≥ 0.03、人確認過）/ <code>open</code>（落人審，上下文不兜底）。賬本人確認過的 T2 對按同義看。</li>
+    </ul>
+  </div>
+  <div class="tw"><table>
+    <thead><tr><th>集</th><th>字位</th><th>自動</th><th>人審</th><th>A 對整理本</th><th>A 對人裁</th><th>義定形未定</th></tr></thead>
+    <tbody>
+      <tr><td>dev_set 12 頁（改前）</td><td class="num">1,936</td><td class="num">1,914</td><td class="num">22（1.14%）</td><td class="num">100%</td><td class="num">132/132</td><td>—</td></tr>
+      <tr><td>dev_set 12 頁（改後）</td><td class="num">1,936</td><td class="num">1,915</td><td class="num"><strong>21（1.08%）</strong></td><td class="num">1,906/1,906</td><td class="num">124/124</td><td class="num">1</td></tr>
+      <tr><td>58 頁（4–56 + 5 頁）</td><td class="num">9,660</td><td class="num">9,573</td><td class="num"><strong>87（0.90%）</strong></td><td class="num"><strong>9,510/9,510</strong></td><td class="num"><strong>139/139</strong></td><td class="num">8</td></tr>
+    </tbody>
+  </table></div>
+  <div class="read">
+    <ul>
+      <li>髮/褻/廳 三個異體位改前人審，改後按刻本形自動放行（<code>char=髪 reading=髮</code>）。8 條 <code>open</code> 逐條看過都該停：復/覆 兩形各人裁過一次、庫 0.924/0.916；即/卽 ×3 庫 0.9995 vs 0.9961；畧 庫 0.934 沒過 0.95；彝 組五形；碍/礙 首例。剩 7 條老人審：5 條己已巳、鍾/鐘（T2，賬本沒人確認對）、𢑴→彝（無邊）、囘→回（一形多正）。</li>
+      <li>控制台：單卡 <code>open</code> 時多一行組內形按鈕（<span class="tag">人N</span> / <span class="tag zhu">新</span> 標首例，點它 = 形取按鈕、文意取整理本字）；「異體」頁組視圖——列 = 形、格 = 圖塊，紅虛框待審，點格挪列、N 非字，「提交待審與改動」/「照准全部」走既有 confirm 事件。</li>
+      <li>判據 E 字形保真率進體檢：分母 = 自動放行裡 reading≠char 或走了定形的位，分子 = 人裁核過且 <code>char</code> 完全等於人裁字形（不許異體算對）；抽審 &lt; 50 不亮燈，現 3/3——要去組視圖攢。</li>
+      <li>清賬：4 條 x/y/z/s 釋讀改回（只動語義層）；<code>char-ocr</code> 分片建成（58 頁 9,570 條，人裁 147 / 對齊 9,423，replace 段 96，異體位 95，凍結 OCR top-10）。</li>
+      <li>自測（另起 8641 控制台 + 獨立 Chrome，CDP 驅動）：異體頁表格、組視圖 72 組、單卡組內形按鈕、體檢 A–E 全部渲染，零報錯；提交路徑寫 2 條 confirm + 自動登記批次 + 路由 dry-run 通（模擬人裁事後刪淨）。測出並修了兩處：有轉換的組被折疊、體檢面板未渲染 E。</li>
+      <li>待辦：教育部正字表；τ 標定（組視圖抽審 ≥ 200 例）；8640 舊控制台進程重啟（8641 跑著新代碼）；兩倉提交。</li>
+    </ul>
+  </div>
+</section>
+
+<section id="s7">
+  <h2><span class="n">§7</span>風險與口徑</h2>
+  <div class="read">
+    <ul>
+      <li>組內定形器對只差一筆的形（髪/髮、鑒/鑑）分辨力要<strong>實測</strong>，closed-set 容易但不是免費的；沒數字之前 τ 取高，寧可多進組視圖。</li>
+      <li>整理本自己的錯（漏改、誤改）會進賬本；賬本按 human / auto 分列來源，報數分層。</li>
+      <li>一對多形（囘、蓋）：LM 不歸一、reading 按整理本、char 按圖。</li>
+      <li>賬本是<strong>先驗不是規則</strong>：本書 髪 ×17 不禁止第 18 次刻 髮，只是讓它進組視圖而不是自動放行。</li>
+      <li>報數紀律照 step5_step6_benchmark §4：成對報、帶基線、align/human 分層、語料挖洞。</li>
+    </ul>
+  </div>
+</section>
+
+<div class="foot">正本 open-guji-cv/.claude/doc/variant_strategy.md · 副本 overview/項目進展/圖片初步數字化/ · 數據：60 頁 dev_set 體檢、glyph.db 15,482 例、整理本 341,240 字次、variants.json 47,181 邊 · 2026-09-05</div>
+</div>

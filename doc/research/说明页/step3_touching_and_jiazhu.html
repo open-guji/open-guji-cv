@@ -1,0 +1,190 @@
+<title>Step3 粘连切分与双行小注</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@600;700&family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root{
+  --bg:#F5F7F4; --paper:#FFFFFF; --ink:#1A2230; --ink-2:#4B5563; --muted:#7A8390;
+  --line:#D6DCD8; --line-2:#E7ECE8; --accent:#2A5D8F; --accent-soft:#E3EDF6;
+  --warn:#B0432C; --warn-soft:#F8E8E3; --ok:#2F6B4F; --ok-soft:#E3F0E9; --code-bg:#EEF2EE;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --mono:"JetBrains Mono","SFMono-Regular",Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#12171D; --paper:#1A2027; --ink:#E6EAEE; --ink-2:#B9C1CA; --muted:#8B95A1;
+    --line:#2F3944; --line-2:#252E38; --accent:#7FB0DF; --accent-soft:#1F2F40;
+    --warn:#E38A75; --warn-soft:#3A2420; --ok:#7FC49E; --ok-soft:#1E3128; --code-bg:#222B34;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#12171D; --paper:#1A2027; --ink:#E6EAEE; --ink-2:#B9C1CA; --muted:#8B95A1;
+  --line:#2F3944; --line-2:#252E38; --accent:#7FB0DF; --accent-soft:#1F2F40;
+  --warn:#E38A75; --warn-soft:#3A2420; --ok:#7FC49E; --ok-soft:#1E3128; --code-bg:#222B34;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15.5px;line-height:1.75;-webkit-font-smoothing:antialiased}
+.wrap{max-width:860px;margin:0 auto;padding:40px 24px 96px}
+header{border-bottom:1px solid var(--line);padding-bottom:22px;margin-bottom:34px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+h1{font-family:var(--serif);font-size:32px;line-height:1.25;margin:8px 0 12px;text-wrap:balance}
+.lede{color:var(--ink-2);max-width:66ch;margin:0}
+nav{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:18px;font-size:13.5px}
+nav a{color:var(--accent);text-decoration:none;border-bottom:1px solid transparent}
+nav a:hover,nav a:focus-visible{border-bottom-color:var(--accent);outline:none}
+h2{font-family:var(--serif);font-size:23px;margin:52px 0 14px;text-wrap:balance}
+h2 .num{font-family:var(--mono);font-size:13px;color:var(--muted);margin-right:10px;vertical-align:2px}
+h3{font-family:var(--serif);font-size:18px;margin:30px 0 8px;text-wrap:balance}
+p{margin:0 0 12px;max-width:72ch}
+ul,ol{padding-left:1.4em;max-width:72ch;margin:0 0 12px}
+li{margin:4px 0}
+code{font-family:var(--mono);font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+.tbl{overflow-x:auto;margin:14px 0 20px;border:1px solid var(--line);border-radius:6px;background:var(--paper)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{padding:8px 11px;border-bottom:1px solid var(--line-2);text-align:left;vertical-align:top}
+th{font-weight:600;color:var(--ink-2);background:var(--code-bg);white-space:nowrap}
+tr:last-child td{border-bottom:none}
+td.n{font-family:var(--mono);text-align:right;white-space:nowrap}
+.hi{background:var(--accent-soft);font-weight:700}
+.bad{color:var(--warn);font-weight:700}
+.callout{border-left:3px solid var(--accent);background:var(--paper);padding:12px 16px;margin:16px 0 20px;max-width:72ch}
+.callout.warn{border-left-color:var(--warn)}
+.callout p:last-child{margin-bottom:0}
+.read{font-size:14px;color:var(--ink-2);border-left:2px solid var(--line);padding-left:12px;margin:6px 0 14px;max-width:70ch}
+.tag{display:inline-block;font-family:var(--mono);font-size:11.5px;font-weight:600;padding:1px 7px;border-radius:3px;margin-left:8px;vertical-align:2px}
+.t-ok{color:var(--ok);background:var(--ok-soft)}.t-no{color:var(--warn);background:var(--warn-soft)}.t-mid{color:var(--accent);background:var(--accent-soft)}
+footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+@media (max-width:600px){.wrap{padding:28px 16px 72px}h1{font-size:26px}}
+</style>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">open-guji-cv · Step3 文字切分 · 2026-09-05</div>
+  <h1>粘连切分与双行小注</h1>
+  <p class="lede">R2s（真粘连）不再"默认交人审"：量它有多大、伤在哪，试了局部与整列的识别引导切分，读了 transcript mapping 一路的文献，定下一步走哪条路。</p>
+  <nav><a href="#s1">一 现状</a><a href="#s2">二 测试集审计</a><a href="#s3">三 实验</a><a href="#s4">四 文献</a><a href="#s5">五 判断与路线</a><a href="#s6">补记</a></nav>
+</header>
+
+<h2 id="s1"><span class="num">一</span>现状：R2s 到底有多大、伤在哪</h2>
+<p>R2s 的定义：格线处行墨占比 &gt; 0.02，且 ±12px 内没有 ≤ 0.02 的墨谷。投影法在这里没有任何信号可用，之前记成"图像极限、标 flag 不算错"。</p>
+<div class="tbl"><table>
+<thead><tr><th>范围</th><th class="n">内部格线</th><th class="n">R2 可改善</th><th class="n">R2s 真粘连</th><th class="n">R2s 相邻字位人审率</th><th class="n">全体人审率</th></tr></thead>
+<tbody>
+<tr><td>vol01 dev_set 12 页</td><td class="n">1,905</td><td class="n">0.14%</td><td class="n">2.63%</td><td class="n">—</td><td class="n">—</td></tr>
+<tr><td>vol01 新鲜 60 页</td><td class="n">10,829</td><td class="n">0.24%</td><td class="n hi">3.10%（336）</td><td class="n hi">4.34%</td><td class="n">1.65%</td></tr>
+<tr><td>vol02 新鲜 24 页</td><td class="n">3,981</td><td class="n">0.48%</td><td class="n hi">8.69%（346）</td><td class="n hi">10.20%</td><td class="n">6.66%</td></tr>
+</tbody></table></div>
+<ol>
+<li><strong>dev_set 低估了 R2s</strong>：vol01 全量 3.1%、vol02（挤排多）8.7%，是 dev_set 的 1.2 到 3.3 倍。</li>
+<li>粘连格线旁的字位人审率是全体的 1.5 到 2.6 倍——但 §三.3 会说明，<strong>这不是切点造成的</strong>。</li>
+<li>从此 R2s 单独报、带明细、有目标线：goal &lt; 2%，回归门黄 3% / 红 5%（已改）。</li>
+</ol>
+<p><strong>双行小注（夹注）</strong>：vol01 卷首一没有一处夹注，只能在 vol02 上量。重跑夹注金标涉及的 45 页后：411 格夹注（a 225 / b 186）、50 列；夹注格人审率 <span class="bad">19.2%</span>，同页普通字 6.1%，是 3.2 倍。段端金标 57 条现役丢字 1 条（vol02/63 col9：夹注段比金标多延了一格）。<strong>夹注不能说"趋于完美"。</strong></p>
+
+<h2 id="s2"><span class="num">二</span>测试集审计：最近的反馈在不在里面</h2>
+<div class="tbl"><table>
+<thead><tr><th>金标</th><th>条数</th><th>来源</th><th>现役能否直接评</th></tr></thead>
+<tbody>
+<tr><td>instances（缺陷四分类）</td><td>614，其中 <strong>56 条来自人裁事件</strong>（vol01 p11–p56 各批）</td><td>控制台「缺陷」→ 事件 → gold_add</td><td>能（instance_quality / recrop 已注册）</td></tr>
+<tr><td>row-boundaries（逐像素格线）</td><td>2 页 × 9 列 × 22 条</td><td>2026-09-03 前人工拖拽</td><td><strong>旧坐标系</strong>；本轮写了互相关重锚定评测（§三.5）</td></tr>
+<tr><td>cell-truncation（格线三选一）</td><td>23 条（vol02 四页）</td><td>人工</td><td>旧坐标系，未重锚定</td></tr>
+<tr><td>jiazhu-tail（夹注段端）</td><td>57 条</td><td>人工</td><td>能；涉及页多为旧产物，本轮已重跑 48 页</td></tr>
+<tr><td>人拖过框的 corrected_bbox</td><td>40 条</td><td>控制台 recrop</td><td>能（33 过 / 7 无声放行）</td></tr>
+</tbody></table></div>
+<div class="callout"><p><strong>反馈事件全部已路由进金标</strong>（无未路由项），第六批审完会自动进来。缺的不是"进没进"，是 <strong>R2s 没有位置金标</strong>：人裁只说"这格被切坏"，不说"该切在哪"；旧的逐像素金标又不在现役坐标系。要优化 R2s，需要一个粘连点金标集：从两册 682 条 R2s 里抽 200 到 300 条，控制台出"拖切线"卡片让人定位。这是本轮最重要的数据缺口。</p></div>
+
+<h2 id="s3"><span class="num">三</span>本轮实验（不改生产代码）</h2>
+<h3>3.1 用例集</h3>
+<p>从新鲜页的 R2s 格线里取"上下两格都有整理本金标"的：vol01 312 条、vol02 318 条。判据用与优化目标无关的裁判：HOG 字体检索 top-1（库一路的形状证据）、CNN 分类头 top-1、PP-OCRv5 top-1。</p>
+
+<h3>3.2 三种局部切法（±14px 窗口）</h3>
+<div class="tbl"><table>
+<thead><tr><th>切法</th><th class="n">vol01 HOG@1</th><th class="n">vol01 CNN@1</th><th class="n">vol02 HOG@1</th><th class="n">vol02 CNN@1</th><th class="n">动了切点</th><th class="n">HOG 变差例</th></tr></thead>
+<tbody>
+<tr><td>现役弹性 DP</td><td class="n">72.1%</td><td class="n">92.5%</td><td class="n">64.6%</td><td class="n">91.2%</td><td class="n">0</td><td class="n">0</td></tr>
+<tr><td>墨颈（最短墨段行，经典粘连启发式）</td><td class="n">72.3%</td><td class="n">92.0%</td><td class="n">64.3%</td><td class="n">90.7%</td><td class="n">158 / 182</td><td class="n">14 / 15</td></tr>
+<tr><td><strong>识别引导</strong>（期望字模板余弦最大）</td><td class="n hi">74.4%</td><td class="n hi">94.4%</td><td class="n hi">66.2%</td><td class="n hi">92.5%</td><td class="n">270 / 283</td><td class="n">14 / 24</td></tr>
+</tbody></table></div>
+<p class="read">识别引导稳定 +1.3 到 +2.3 点，墨颈无效。粘连处只靠图像信号（墨谷、墨颈）确实到头了，靠字形知识能再走一步，但幅度小。</p>
+
+<h3>3.3 能救回多少人审？（端到端代理）</h3>
+<p>紧邻 R2s 格线且现役判人审的字位，两册共 50 个。现役切点与识别引导切点各裁一格，过 OCR：</p>
+<div class="tbl"><table>
+<thead><tr><th></th><th class="n">OCR@1 = 期望字</th><th class="n">HOG@1 = 期望字</th></tr></thead>
+<tbody>
+<tr><td>现役切点</td><td class="n">6 / 50</td><td class="n">7 / 50</td></tr>
+<tr><td>识别引导切点</td><td class="n">5 / 50</td><td class="n">8 / 50</td></tr>
+<tr><td>救回 / 弄坏</td><td class="n bad">0 / 1</td><td class="n">+1</td></tr>
+</tbody></table></div>
+<div class="callout warn"><p><strong>这 50 个人审字位，切点挪 ±14px 一个也救不回。</strong>它们被人审是因为字本身难认（生僻、挤排磨损：庋 猜成 炭、驥 猜成 鍼），不是切错了。R2s 相邻人审率高是"挤排页整体更难"的副作用。局部精修切点不是减少人审的杠杆。</p></div>
+
+<h3>3.4 整列联合精修（forced alignment 风格）</h3>
+<p id="joint">以现役切点为初值，全列 20 条内部格线在 ±16px 内联合 DP，目标 Σ cos(格, 期望字模板)。结果见文末补记：可识别性小幅上下，R2s 反而增加。</p>
+
+<h3>3.5 逐像素金标重锚定（新评测 row_boundaries）</h3>
+<div class="tbl"><table>
+<thead><tr><th></th><th class="n">n</th><th class="n">中位</th><th class="n">p90</th><th class="n">≤3px</th><th class="n">≤10px</th></tr></thead>
+<tbody>
+<tr><td>内部格线（两页）</td><td class="n">221</td><td class="n">5.6px</td><td class="n">27px</td><td class="n">28.5%</td><td class="n">67%</td></tr>
+<tr><td>其中现役 R2s</td><td class="n">28</td><td class="n">6.8px</td><td class="n">32px</td><td class="n">21.4%</td><td class="n">64%</td></tr>
+<tr><td>其中非粘连</td><td class="n">193</td><td class="n">5.4px</td><td class="n">24.5px</td><td class="n">29.5%</td><td class="n">67%</td></tr>
+</tbody></table></div>
+<p class="read">vol01/33 有 7 列对齐相关 &lt; 0.9 被跳过（抬头列、22 格），列 7 中段一格错位。这个数字的可信度受重锚定限制，只能当趋势看：粘连处与非粘连处误差差别不大。真正的逐像素评测要等新坐标系的金标（§二）。</p>
+
+<h2 id="s4"><span class="num">四</span>文献怎么说</h2>
+<p>我们的问题在文献里叫 <strong>transcript mapping / forced alignment</strong>，不是通用字检测：文本已知时，任务只剩"在候选切点上找恰好 n 段的最优路径"。</p>
+<div class="tbl"><table>
+<thead><tr><th>路线</th><th>代表</th><th>机制</th><th>对粘连的解法</th><th>数据 / 算力</th></tr></thead>
+<tbody>
+<tr><td><strong>1. 网格锚候选 + 单字分类器 + 21 格先验的 DP</strong></td><td>Yin/Wang/Liu PR 2013（CASIA 字级对齐 99.04%）；KESAR AAAI 2024 的 OSR</td><td>候选 = 每条格线 ±δ 所有位置；打分 = 分类器置信 + 格线偏差/字高一致先验；DP 恰好 21 段</td><td>粘连处照样有候选，靠字形打分</td><td>1 万核对字位训分类器；CPU 毫秒级</td></tr>
+<tr><td>2. 文本条件的 1D 切点热图</td><td>Zheng 2016；Peng TMM 2022；CRAFT 亲和度</td><td>列图 → 逐行"这是切点"概率（&lt;1M 参数）；DP 取 20 个 + 网格先验；期望字嵌入拼进特征</td><td>网络看字形上下文不看墨量</td><td>1 万边界 ≈ 500 列偏小；粘连样本要过采样/补标</td></tr>
+<tr><td>3. 列级 CRNN + CTC 强制对齐</td><td>Peer 2025（弱模型对齐更准 88.5 vs 86.1）；DTLR 2024</td><td>只需列级文本即可训；Viterbi 给每字帧区间</td><td>与墨量无关</td><td>需较多列或合成预训练；只给粗位置</td></tr>
+</tbody></table></div>
+<p><strong>Yin 2013 的关键数字</strong>：过切分 + DTW 后仍有 4.46% 字欠切分（真粘连），DTW 补不了——和我们的 3.1% 是同一失败模式；他们的答案也是靠字形打分而非墨量。双行小注：MTHv2 按字尺寸把小字单独分组；Lee 2024 用相邻字关系区分正文/夹注，阅读顺序 98.6%。我们的整理本里夹注文本已知，子列字数直接得到，夹注的格数先验比正文还硬。</p>
+
+<h2 id="s5"><span class="num">五</span>判断与路线</h2>
+<ol>
+<li><strong>R2s 是真实存在但危害有限的指标。</strong>切点挪动救不回人审（§三.3），说明当前 3 到 9% 的 R2s 大多是"切在墨上但字仍完整可认"（cell-truncation 金标里 8/23 的 overlap 就是它）。它该被优化，但优先级低于识别层。</li>
+<li><strong>投影法在粘连处确实到头了</strong>，识别引导能再拿 +1.3 到 +2.3 点。要更多，得换路线 1（联合 DP + 学出来的打分），这是文献与实验一致的方向。</li>
+<li><strong>夹注不能说"趋于完美"</strong>：vol02 夹注格人审率是普通字的 3.2 倍，且 vol01 无样本无法回归。要在 vol02 上建夹注专项批次。</li>
+</ol>
+<div class="tbl"><table>
+<thead><tr><th class="n">序</th><th>动作</th><th>产出</th><th>工作量</th></tr></thead>
+<tbody>
+<tr><td class="n">1</td><td><strong>粘连点金标集</strong>：从两册 R2s 里抽 250 条出"拖切线"卡片，人定位</td><td>R2s 逐像素评测的尺子（现役坐标系）</td><td>控制台加一种卡片 + 用户约 1 小时</td></tr>
+<tr><td class="n">2</td><td>夹注专项批次：vol02 含夹注的 50 列所在页按 SOP 审</td><td>夹注人审率、丢字率进体检</td><td>审阅节奏</td></tr>
+<tr><td class="n">3</td><td>路线 1 原型：联合 DP 的打分换成"分类器 + 先验"</td><td>在金标集 1 上比 px 误差 + 判据</td><td>2 天</td></tr>
+<tr><td class="n">4</td><td>若 3 有效：接进 row_segment 作可选第二遍，只在 R2s 格线触发</td><td>R2s、R2s 相邻人审率</td><td>1 天</td></tr>
+<tr><td class="n">5</td><td>路线 2（1D 热图）留作第二候选，等金标集 1 有 250+ 条再训</td><td>—</td><td>—</td></tr>
+</tbody></table></div>
+<p><span class="tag t-no">不做</span> CenterNet / Faster R-CNN 全页字检测（需全页字框标注 + GPU，且不用已知文本）；drop-fall / water reservoir（只是候选生成器，墨颈实验已证明图像启发式无效）。</p>
+
+<h2 id="s6"><span class="num">补</span>补记</h2>
+<h3>3.4 整列联合精修结果</h3>
+<div class="tbl"><table>
+<thead><tr><th></th><th class="n">列</th><th class="n">每列耗时</th><th class="n">字格</th><th class="n">HOG@1</th><th class="n">CNN@1</th><th class="n">HOG 救回 / 弄坏</th><th class="n">格线动了</th><th class="n">R2s 数</th></tr></thead>
+<tbody>
+<tr><td>vol01 六页（11/15/26/44/71/72）</td><td class="n">46</td><td class="n">7.1 s</td><td class="n">894</td><td class="n">70.6 → 73.3</td><td class="n">94.5 → 95.5</td><td class="n">50 / 26</td><td class="n">901 / 921</td><td class="n bad">46 → 52</td></tr>
+<tr><td>vol02 六页（10/13/18/19/33/135）</td><td class="n">47</td><td class="n">5.7 s</td><td class="n">858</td><td class="n">69.2 → 69.0</td><td class="n">95.0 → 95.5</td><td class="n">46 / 48</td><td class="n">904 / 940</td><td class="n bad">94 → 123</td></tr>
+</tbody></table></div>
+<p class="read">vol01 上比局部精修略多拿一点，vol02 上 HOG 持平；两册都几乎把每条格线挪了（&gt;96%），R2s 反而涨——因为目标函数只看"格像不像期望字"，不看切在哪。这正是路线 1 里"几何先验项别设太弱"的提醒：<strong>只有字形项没有先验项的联合 DP，会把切点往字身里拉。</strong>下一版打分要加格线偏差 / 字高一致性的惩罚，并在粘连点金标集上量 px 误差，而不是只量可识别性。每列 6 到 7 秒（HOG 判据占大头，DP 本身 &lt;1 s），接进管线只能在 R2s 格线触发。</p>
+<h3>修复：空白格弹性 + 列尾按墨算高 + 上界 1.5（2026-09-05）</h3>
+<p class="read">离线复现台（与现役产物逐条一致）诊断：21 条大幅错切的金标位置几乎全是候选集里墨为 0 的真波谷，候选没丢，是 DP 选不了——列里少一个字时硬下界 0.7·period 把缺格摊到邻字；列尾留白/残渣把末格顶过上界 1.35。改三处：两候选之间没墨即空白格（高度不设下界，收固定代价 0.05，上界 1.25 格）；末格只算到最后一行有墨处（墨跨 ≥ 0.5 格）；上界 1.35 → 1.5。吸附半径放大是负结果（≤3px 反降）。</p>
+<div class="tbl"><table>
+<thead><tr><th></th><th class="n">修前</th><th class="n">修后</th></tr></thead>
+<tbody>
+<tr><td>切线金标 124 条：mean / p90 / ≤3px / ≤10px</td><td class="n">7.2 / 38 / 80.6% / 83.1%</td><td class="n hi">1.0 / 2.0 / 94.4% / 98.4%</td></tr>
+<tr><td>剩余 &gt;10px</td><td class="n">21 条</td><td class="n">2 条（抬头列首格、真粘连）</td></tr>
+<tr><td>vol01 正文 108 页 R2 / R2x / R2s</td><td class="n">47 / 95 / 689</td><td class="n">46 / <strong>33</strong> / 692</td></tr>
+<tr><td>dev_set R2x</td><td class="n">0.42%</td><td class="n hi">0.28%</td></tr>
+<tr><td>双真值（dev_set / 60 页）</td><td class="n">100% / 100%</td><td class="n">100% / 100%</td></tr>
+<tr><td>60 页人审率</td><td class="n">1.65%</td><td class="n">1.59%</td></tr>
+<tr><td>单测</td><td class="n">284</td><td class="n">291 全绿</td></tr>
+</tbody></table></div>
+<p class="read">第一次重跑暴露两个副作用并已修：24px 版框残渣被兜成"末格"送进识别（21 列）；单个 160px 空白格让 vol01/141 c3 格位比人裁时少 1，裁决键错位 2 条。要记住：人裁 verdict 按 book:page:col:slot 键，切分改了格位数就会错位——"对你的裁决"掉了先看是不是格位平移。</p>
+<h3>夹注</h3>
+<p class="read">重跑 48 页后段端金标 56/57 一致，唯一丢字（vol02/63 col9）是夹注段多延了一格；夹注格人审率 19.2%（普通字 6.1%）——数字已并入 §一。</p>
+<h3>回归</h3>
+<p class="read">284 单测全绿；四把尺子 dev_set：R1 100% / R2 0.14% / <strong>R2s 2.63%（新独立行，绿）</strong> / R3 0 / R4 0.05%；双真值 1905/1905、121/121。</p>
+
+<footer>正本：open-guji-cv <code>.claude/doc/step3_touching_and_jiazhu.md</code>；调研全文 <code>step3_segmentation_survey.md</code>；新评测 <code>scripts/eval_row_boundaries.py</code>（已注册 row_boundaries）。</footer>
+</div>

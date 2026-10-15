@@ -1,0 +1,13 @@
+--- sample_newadmit.py.orig	2026-10-15 00:50:11.242378935 +0000
++++ sample_newadmit.py	2026-10-15 00:50:11.256528323 +0000
+@@ -165,7 +165,9 @@
+     for line in Path(path).read_text(encoding="utf-8").splitlines():
+         s = line.strip()
+         if s and not s.startswith("#"):
+-            cids.add(s.split("\t")[0].strip())
++            cid = s.split("#", 1)[0].split("\t")[0].strip()
++            if cid:
++                cids.add(cid)
+     return frozenset(cids)
+ 
+ 
