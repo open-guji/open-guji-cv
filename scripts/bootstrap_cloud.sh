@@ -53,8 +53,8 @@ if [ "$MODE" = check ]; then
 fi
 
 # —— 排队：同一个 venv 同一时刻只有一个安装在跑 ——
-mkdir -p "$(dirname "$VENV")"
-LOCK="$(dirname "$VENV")/.$(basename "$VENV").bootstrap.lock"
+mkdir -p "$(dirname "$VENV")" "${TMPDIR:-/tmp}"
+LOCK="${TMPDIR:-/tmp}/guji-bootstrap-$(printf '%s' "$VENV" | sha256sum | cut -c1-10).lock"   # 锁只在装的过程中有意义，放 /tmp，不往仓里留文件
 exec 9>"$LOCK"
 if ! flock -n 9; then log "另一个 bootstrap 正在装，排队等它…"; flock 9; fi
 
