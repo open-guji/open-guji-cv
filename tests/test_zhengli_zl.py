@@ -220,6 +220,22 @@ def test_contact_md_marks_failed_and_sheet():
     assert "v.联系页01.png" in md and "⚠ 没有这一格的字框" in md
 
 
+def test_jiazhu_side_right_is_a_left_is_b():
+    # 夹注格：子号 a＝右半，b＝左半（分块-Z1 第 9 项）；无子号不标
+    assert zl.jiazhu_side("a") == "右半"
+    assert zl.jiazhu_side("b") == "左半"
+    assert zl.jiazhu_side("") is None
+
+
+def test_contact_md_marks_jiazhu_half():
+    md = zl.contact_md("v", [{"n": 1, "id": "v:63:9:8a", "char": "亦", "ok": True, "sheet_idx": 0},
+                             {"n": 2, "id": "v:63:9:8b", "char": "亦", "ok": True, "sheet_idx": 0},
+                             {"n": 3, "id": "v:63:9:8", "char": "亦", "ok": True, "sheet_idx": 0}], ["s.png"])
+    assert "`v:63:9:8a`（夹注右半）" in md
+    assert "`v:63:9:8b`（夹注左半）" in md
+    assert "| `v:63:9:8` |" in md
+
+
 # ───────── Z1 #476 回炉三处 ─────────
 def _run_args(**kw):
     base = dict(book="vol07", ws="/w", jobs=0, snap=None, bg=True, only=None, from_=None, to=None, redo=None,
