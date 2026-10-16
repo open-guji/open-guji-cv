@@ -93,7 +93,14 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
   }
 
   // 挂载时自动载入一次；Step7 顶部统一页数选择区切页时跟着重载。
+  // dev_set 是 Step7 的默认页范围，整册对齐很慢，所以这一档不自动载，
+  // 等人点「载入」才算（GUJI-525）。切到别的页范围仍自动载。
   useEffect(() => {
+    if (pages === 'dev_set') {
+      setCases([])
+      setMsg('默认页范围 dev_set 较慢，点「载入」再取待裁切点')
+      return
+    }
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book, pages])
@@ -271,7 +278,7 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
     <div className="card">
       <h2>切分裁决 <span className="muted">顺序闸挡住的多候选切点：裁完这批，被挡的字卡才会出来</span></h2>
       <div className="cl-toolbar">
-        <button onClick={load}>刷新</button>
+        <button onClick={load}>{pages === 'dev_set' && cases.length === 0 ? '载入' : '刷新'}</button>
         <span className="muted">{msg}</span>
       </div>
       {cases.length > 0 && (
