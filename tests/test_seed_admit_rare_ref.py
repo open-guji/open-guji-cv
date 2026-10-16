@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""规则 A 放行通道 `rare_ref`（2026-10-02，D3 道 overview#349）与影子升级 `shadow_promote`。全部自造数据。
+"""规则 A 放行通道 `rare_ref`（2026-10-02，D3 道 overview#349）。全部自造数据（影子升级 `shadow_promote` 开关已随 W2 删，`shadow/gate.py` 的 `decide_promote`／`promote_judge` 留作离线评测口径，下面两条单测仍测它们）。
 
 规则 A：整理本 replace 段、5-b 首位**逐字**等于整理本字 → 放行整理本字；一串硬护栏照拦；缺省关、关着产物逐字节不变。
-影子升级：待审格上影子首选 == 整理本字或库首位且把握度够 → 放行；缺省关。
+影子升级（`shadow_promote`）已随 W2 删除；下面只留 `shadow/gate.py` 离线评测口径的单测。
 """
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ ON = {"rare_ref": True}
 # ── 声明与指纹 ───────────────────────────────────────────────────────────
 def test_declared_as_gated_optional_upstream():
     spec = STEPS["seed_admit"].spec
-    for field in ("rare_ref", "shadow_promote"):
+    for field in ("rare_ref",):
         assert ("rare_candidates", field) in spec.optional_consumes_when
         on = spec.params().model_copy(update={field: True})
         assert "rare_candidates" in live_optional_consumes(spec, on)
@@ -66,7 +66,7 @@ def test_params_off_is_invisible(tmp_path):
     """关着时新增字段一个都不进 dump → params_hash 与加字段前逐位相同；开着时进。"""
     db = str(tmp_path / "g.db")
     off = SeedAdmitParams(db_path=db)
-    assert not any(k.startswith(("rare_ref", "shadow_promote")) for k in off.model_dump())
+    assert not any(k.startswith(("rare_ref",)) for k in off.model_dump())
     assert SeedAdmitParams(db_path=db, rare_ref=False).model_dump() == off.model_dump()
     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
     h = lambda p: params_hash(p, sp, pt)  # noqa: E731
@@ -188,27 +188,3 @@ def test_v2_features_and_v1_candidate_set():
 
 def _VCtx():
     return S.SignalContext(vm=_VM(), partners={}, human_ids={}, lib_ids=frozenset())
-
-
-def test_seed_admit_promote_only_promotes(tmp_path, monkeypatch):
-    """端到端：关 = 与不带参数逐字一致；开 = 待审格被放行、evidence 留痕；无背书／把握度不够不动。"""
-    base = _run(tmp_path, monkeypatch, rare=[REF, LIB])
-    assert not base.admit
-    off = _run(tmp_path, monkeypatch, rare=[REF, LIB], params={"shadow_promote": False})
-    assert off.model_dump() == base.model_dump()
-
-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .95, LIB: .02}))
-    prm = {"shadow_promote": True, "shadow_promote_conf": 0.9, "shadow_model_fingerprint": "x"}
-    on = _run(tmp_path, monkeypatch, rare=[REF, LIB], params=prm)
-    assert on.admit and on.channel == "shadow" and on.provenance == "shadow" and on.char == REF
-    ev = on.evidence["shadow_promote"]
-    assert ev["pick"] == REF and ev["backed_by"] == ["ref"] and ev["conf"] >= 0.9 and "replace_align" in ev["prev_doubts"]
-    # 把握度不够 → 不动
-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .5, LIB: .45}))
-    assert not _run(tmp_path, monkeypatch, rare=[REF, LIB], params=prm).admit
-    # 影子选了无背书的字 → 不动
-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({"書": .95}))
-    assert not _run(tmp_path, monkeypatch, rare=[REF, LIB, "書"], params=prm).admit
-    # 硬护栏（库护栏）→ 不动
-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .95}))
-    assert not _run(tmp_path, monkeypatch, rare=[REF], guard="never_match", params=prm).admit

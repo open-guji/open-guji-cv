@@ -1,5 +1,7 @@
 # HANDOFF D3 — 规则 A（`rare_ref`）vs 影子升级（`shadow_promote`）（overview#349）
 
+> **（2026-10-14，W2）本文提到的 `rare_agree`／`shadow_promote`／`lib_confident` 等开关已从代码删除，本文仅作历史记录，命令不能再原样复现。**
+
 分支 `claude/D3-shadow-promote-1002`。两个开关都**默认关**，关着时参数 dump 不多键、产物逐字节不变（有单测）。
 没跑整册上游、没打包、没导入、没碰工作区正式 products（沙箱用 `GUJI_PRODUCTS_DIR` / `GUJI_GLYPH_DB` 指到 /tmp）。
 
