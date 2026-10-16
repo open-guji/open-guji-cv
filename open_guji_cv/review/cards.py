@@ -265,8 +265,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     `verdict_view.decided_cells` 的注释）。传 False 回到旧行为（复核自己裁过的、
     或想改主意时用）。`n_decided` 一并返回，面板显示「全书已裁 N」。
 
-    ⚠️ 点名清单模式（`pages=list:…`）**不受本开关约束**——点名要看的就得出得来，
-    与 `only` / 顺序闸同一条纪律：别让人对着空面板猜是没问题还是被吞了。
+    点名清单模式（`pages=list:…`）也受本开关约束（2026-10-16 起；此前不受，提交后已裁格
+    仍在，用户以为没入库）。`cells:` 显式点格号不受约束——点名要看的就得出得来。
 
     `emb_out`（#166）：给一个 dict，借库书（开了 `first_pick`）算 CNN 首选时顺手把
     `{卡片 id: r5 embedding}` 填进去，批审组内聚簇复用；不改返回值。
@@ -345,7 +345,10 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     # 裁的字，卡片带上当预勾（`stale_verdict`）。不去重时也照样带——人复核时也该知道这格的旧裁决不作数了。
     # 点名清单模式只看清单里的页：不用把全书绑定表重算一遍（GUJI-525）
     decided, stale = decided_view(book, pages=pgs if only_ids is not None else None)
-    if not (skip_decided and only_ids is None):
+    # 点名清单（`list:`）也按 `skip_decided` 跳过仍有效的人裁（用户 2026-10-16：提交一屏后已裁的格
+    # 还显示待审，以为没入库，同一批连提三次）。要复核清单里裁过的格，传 skip_decided=false。
+    # `cells:`（显式点格号）照旧不去重：点名要看的就得出得来。
+    if not skip_decided or pages.startswith("cells:"):
         decided = set()
     # 看图结论（overview#428）：模型看图判「放行字错」的格**捞回待审**，挂 doubt `vision_flag` 与 `vision`
     # 字段（判的字、模型名）。只送审、不改字；人裁过（`decided`）的照旧不出——人裁压过模型。
@@ -370,7 +373,7 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                 # 否则「这个字自动进库了」或「旁边切线没裁」会把它静默吞掉，人对着空面板
                 # 不知道是没问题还是没出卡。
                 if only_ids is not None:
-                    if r.id not in only_ids:
+                    if r.id not in only_ids or r.id in decided:
                         continue
                 else:
                     if r.id in decided:
