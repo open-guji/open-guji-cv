@@ -43,8 +43,21 @@ def _cache(eng, pages) -> dict:
                  f"错位 {n} 列" + ("（`guji cache verify --fix`）" if n else ""), res.get("bad_pages") or None)
 
 
-def _queue(book: str, store) -> dict:
+def _glyph_store_missing(ws: Path) -> str | None:
+    """工作区没有字形库（glyph_store 目录与 glyph.db 都没有）→ 返回缺什么；齐了返回 None。"""
+    out = Path(ws) / "output"
+    if (out / "glyph_store").is_dir() or (out / "glyph.db").is_file():
+        return None
+    return f"{out} 下没有 glyph_store 也没有 glyph.db"
+
+
+def _queue(book: str, store, ws: Path | None = None) -> dict:
     from ..review.cards import cards
+    # 没有字形库的工作区上，待审卡片出不来，会报「待审 0 ✓」——假绿（GUJI-364 评论 12573，vol01 实有 290 格待审）。
+    # 缺库就当体检出错，不当通过。
+    miss = _glyph_store_missing(ws) if ws is not None else None
+    if miss:
+        raise RuntimeError(f"工作区缺字形库，待审数不可信：{miss}（须在带 store 的 H 道工作区跑）")
     res = cards(book, "all", limit=1, only="review", store=store, gate_cut=False,
                 skip_decided=True, cls="*", doubt="*")
     cc = res.get("class_counts") or {}
@@ -141,7 +154,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
     checks = [
         ("1a", "产物新鲜", lambda: [_fresh(eng, pages)]),
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
-        ("2", "待审清零", lambda: [_queue(book, eng.store)]),
+        ("2", "待审清零", lambda: [_queue(book, eng.store, ws)]),
         ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store)]),
         ("8", "字形库与人裁已提交", lambda: [_store_committed(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
