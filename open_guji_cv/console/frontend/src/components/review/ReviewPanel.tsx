@@ -599,14 +599,16 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
           )}
         </div>
       )}
+      <div className="rv-toolbar">
+        <label className="muted" title="默认只出全书从未裁过的字位（跨批次去重），所以「条数」数的是净新卡。勾上则把已裁过的也一并载入——复核自己裁过的、或想改主意时用（此时提交后不自动翻下一批）。">
+          <input type="checkbox" checked={inclDecided} onChange={(e) => setInclDecided(e.target.checked)} /> 含已裁决
+        </label>
+      </div>
       <details className="rv-detail">
         <summary className="muted">本类细项</summary>
         <div className="rv-toolbar">
           <label className="muted" title="一批载入多少张卡。缺省 30 = 一屏能裁完的量；改了点「重新载入」。">
             条数 <input value={limit} onChange={(e) => setLimit(+e.target.value || 30)} size={4} />
-          </label>
-          <label className="muted" title="默认只出全书从未裁过的字位（跨批次去重），所以「条数」数的是净新卡。勾上则把已裁过的也一并载入——复核自己裁过的、或想改主意时用（此时提交后不自动翻下一批）。">
-            <input type="checkbox" checked={inclDecided} onChange={(e) => setInclDecided(e.target.checked)} /> 含已裁决
           </label>
           <label className="muted" title="顺序闸：字位旁边那条切分线有多种切法且还没 review 时，这个字位先不出卡。取消勾选可整批看全部。">
             <input type="checkbox" checked={gate} onChange={(e) => setGate(e.target.checked)} /> 先切线后字符
