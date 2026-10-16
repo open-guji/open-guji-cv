@@ -343,7 +343,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     # 全书已裁字位（跨批次）。点名清单模式不去重——见 docstring。
     # 只算**仍有效**的裁决（overview#403 缺口 A）：老裁决绑定失效的格回到队列，`stale` 是当时
     # 裁的字，卡片带上当预勾（`stale_verdict`）。不去重时也照样带——人复核时也该知道这格的旧裁决不作数了。
-    decided, stale = decided_view(book)
+    # 点名清单模式只看清单里的页：不用把全书绑定表重算一遍（GUJI-525）
+    decided, stale = decided_view(book, pages=pgs if only_ids is not None else None)
     if not (skip_decided and only_ids is None):
         decided = set()
     # 看图结论（overview#428）：模型看图判「放行字错」的格**捞回待审**，挂 doubt `vision_flag` 与 `vision`

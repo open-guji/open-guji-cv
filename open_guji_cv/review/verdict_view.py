@@ -39,7 +39,7 @@ def _is_decision(e, pre: str) -> bool:
     return not (e.kind == "confirm" and p.get("v") == "seg_defect" and not p.get("shape"))
 
 
-def _book_bindings(book: str, log, bindings):
+def _book_bindings(book: str, log, bindings, pages: list[int] | None = None):
     """绑定表 `{event_id: row}`。缺省同 `lookup.human_chars(bind=None)`：读工作区事件日志时现算，
     传入测试日志时不绑（测试直接给 `bindings`）。算不出来退回不绑——与改前一致，不因此把全书
     已裁都当失效端回队列。"""
@@ -49,7 +49,7 @@ def _book_bindings(book: str, log, bindings):
         return {}
     try:
         from ..feedback.bindings import book_bindings
-        return book_bindings(book)
+        return book_bindings(book, pages=pages)
     except Exception:
         return {}
 
@@ -72,9 +72,16 @@ def _cut_before(ts: str, cut: str | None) -> bool:
     return bool(cut) and ts.replace("-", "").replace(":", "")[:len(cut)] <= cut
 
 
+def _key_page(key: str) -> int | None:
+    """字位 id `<book>:<页>:<列>:<格>` → 页号；解析不了 None。"""
+    parts = key.split(":")
+    return int(parts[1]) if len(parts) >= 4 and parts[1].isdigit() else None
+
+
 def decided_view(book: str, log: EventLog | None = None,
                  bindings: dict[str, dict] | None = None,
-                 withdrawn: dict[str, str] | None = None) -> tuple[set[str], dict[str, dict]]:
+                 withdrawn: dict[str, str] | None = None,
+                 pages: list[int] | None = None) -> tuple[set[str], dict[str, dict]]:
     """→ (`decided` 现在仍有效的已裁字位, `stale` 失效老裁决 `{字位: 当时的裁决}`)。
 
     **只收现在仍然有效的裁决**（overview#403 缺口 A）。Step7 读人裁要过绑定表
@@ -95,6 +102,9 @@ def decided_view(book: str, log: EventLog | None = None,
     绑定失效的（`withdrawn=False`）卡片拿它当预勾——人点一下确认就写出带现行锚点的新事件；
     **撤下的（`withdrawn=True`）不预勾**（CV 总管 10-05）：撤下是人确认过钉错了格，再预勾旧字会误导，
     卡头只标「旧裁「X」已撤」让人重新看。
+
+    `pages`：只算这些页的裁决（点名清单模式只关心清单里的页，不必把全书绑定表重算一遍；GUJI-525）。
+    这些页内的结果与不传时逐项相同；缺省 None = 全书。
     """
     from ..feedback.bindings import usable
     decided: set[str] = set()
@@ -104,12 +114,15 @@ def decided_view(book: str, log: EventLog | None = None,
         evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
         return decided, {}     # 新工作区还没有事件目录
-    rows = _book_bindings(book, log, bindings)
+    rows = _book_bindings(book, log, bindings, pages)
     marks = _withdrawn_marks(book, log, withdrawn)
+    pset = set(pages) if pages is not None else None
     for e in evs:
         if not _is_decision(e, pre):
             continue
         k = e.target.key
+        if pset is not None and _key_page(k) not in pset:
+            continue
         if e.kind == "confirm" and (e.payload or {}).get("shape") and _cut_before(e.ts, marks.get(k)):
             last_stale[k] = (e, None)
             continue

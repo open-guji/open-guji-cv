@@ -181,8 +181,8 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     path = (pipelines_dir or PIPELINES_DIR) / f"{pid}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
-    with open(path, encoding="utf-8") as f:
-        d = yaml.safe_load(f) or {}
+    from .yaml_cache import load_yaml_cached
+    d = load_yaml_cached(path)
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")

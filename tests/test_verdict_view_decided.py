@@ -36,3 +36,31 @@ def test_seg_defect_then_confirm_is_decided(tmp_path):
     log.append([_ev("vol01:5:2:9", "confirm", {"v": "seg_defect", "quality": "truncated"}, 1)])
     log.append([_ev("vol01:5:2:9", "confirm", {"v": "confirm", "shape": "手", "reading": "手"}, 2)])
     assert decided_cells("vol01", log) == {"vol01:5:2:9"}
+
+
+def test_decided_view_pages_filter_matches_full(tmp_path):
+    """点名清单模式只算清单里的页（GUJI-525）：这些页内的结果与全书逐项相同，别的页不出现。"""
+    from open_guji_cv.review.verdict_view import decided_view
+    log = EventLog(tmp_path)
+    log.append([_ev("vol01:5:2:9", "confirm", {"v": "confirm", "shape": "手", "reading": "手"}, 1)])
+    log.append([_ev("vol01:7:2:9", "confirm", {"v": "confirm", "shape": "足", "reading": "足"}, 2)])
+    log.append([_ev("vol01:7:3:1", "confirm", {"v": "confirm", "shape": "目", "reading": "目"}, 3)])
+    full_d, full_s = decided_view("vol01", log, bindings={}, withdrawn={})
+    d, s = decided_view("vol01", log, bindings={}, withdrawn={}, pages=[7])
+    assert d == {k for k in full_d if k.split(":")[1] == "7"} == {"vol01:7:2:9", "vol01:7:3:1"}
+    assert s == {k: v for k, v in full_s.items() if k.split(":")[1] == "7"}
+
+
+def test_yaml_cache_follows_file_and_isolates_callers(tmp_path):
+    """load_book / load_pipeline 的 yaml 按 mtime 缓存（GUJI-525）：文件改了重读；调用方改返回值不串。"""
+    import os
+
+    from open_guji_cv.core.yaml_cache import load_yaml_cached
+    f = tmp_path / "a.yaml"
+    f.write_text("x: [1, 2]\n", encoding="utf-8")
+    a = load_yaml_cached(f)
+    a["x"].append(99)
+    assert load_yaml_cached(f) == {"x": [1, 2]}
+    f.write_text("x: [3]\ny: 1\n", encoding="utf-8")
+    os.utime(f, ns=(1, 1))      # 保证 mtime 变，不依赖文件系统时间精度
+    assert load_yaml_cached(f) == {"x": [3], "y": 1}
