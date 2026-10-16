@@ -176,3 +176,13 @@ def test_http_post_validation_codes(http):
     ok = {**base, "events": [{"id": "vol01:24:3:5", "verdict": "none", "t": 1}]}
     r = http.post("/api/events", json=ok)
     assert r.status_code == 200 and r.json()["appended"] == 1
+
+
+def test_cell_order_is_numeric_not_lexical():
+    """格按 页/列/行 数值排：`:10` 在 `:9` 之后，`:9b` 紧跟 `:9`；认不出的格垫在最后。"""
+    ids = ["vol01:24:3:10", "vol01:24:3:9", "vol01:24:3:9b", "vol01:9:1:1", "vol01:24:10:1",
+           "vol01:24:3:7a", "vol01:24:3:7", "bogus"]
+    rows = [{"cell_id": i, "char": "字"} for i in ids]
+    got = [r[0] for r in cr.tsv_rows(rows, {})]
+    assert got == ["vol01:9:1:1", "vol01:24:3:7", "vol01:24:3:7a", "vol01:24:3:9", "vol01:24:3:9b",
+                   "vol01:24:3:10", "vol01:24:10:1", "bogus"]

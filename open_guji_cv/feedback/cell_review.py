@@ -16,7 +16,7 @@
 **路由表不配消费者**：不写定字事件，不进 glyph.db，不让任何产物过期。同一格多次裁决取最新一条。
 
 ## 导出
-`tsv(...)`：一行一格、按 `cell_id` 排序、取每格最新一条；没裁的格 verdict 等列留空，行数 = 清单行数。
+`tsv(...)`：一行一格、按 页/列/行 数值排序（`order_key`），取每格最新一条；没裁的格 verdict 等列留空，行数 = 清单行数。
 `t` 列取服务端时间（事件的 `ts`），不取前端的 `client_ts`。
 """
 from __future__ import annotations
@@ -113,9 +113,17 @@ def _clean(v) -> str:
     return str(v).replace("\t", " ").replace("\r", " ").replace("\n", " ")
 
 
+def order_key(cell_id: str) -> tuple:
+    """格的排序键：书、页、列、行按数值比（`:10` 排在 `:9` 后面），行内 a/b 子格随后。认不出的格序列在最后。"""
+    pc = cand.parse_cell(cell_id)
+    if not pc:
+        return ("\uffff", 1 << 30, 1 << 30, 1 << 30, "", cell_id)
+    return (pc["book"], pc["page"], pc["col"], pc["slot"], pc["sub"] or "", cell_id)
+
+
 def tsv_rows(rows: list[dict], dec: dict[str, dict]) -> list[list[str]]:
     out = []
-    for r in sorted(rows, key=lambda r: r["cell_id"]):
+    for r in sorted(rows, key=lambda r: order_key(r["cell_id"])):
         pc = cand.parse_cell(r["cell_id"]) or {}
         d = dec.get(r["cell_id"], {})
         out.append([
