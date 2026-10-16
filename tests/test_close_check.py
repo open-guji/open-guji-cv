@@ -75,3 +75,13 @@ def test_report_prints(capsys):
     CC.print_report(res)
     out = capsys.readouterr().out
     assert "✗   2 待审清零" in out and "机器项未通过" in out
+
+
+def test_queue_errors_when_glyph_store_missing(tmp_path):
+    """没有字形库的工作区上待审数不可信：_queue 必须报错，不能给「待审 0 ✓」（GUJI-364）。"""
+    import pytest
+    assert CC._glyph_store_missing(tmp_path) is not None
+    with pytest.raises(RuntimeError, match="缺字形库"):
+        CC._queue("vol01", None, tmp_path)
+    (tmp_path / "output" / "glyph_store").mkdir(parents=True)
+    assert CC._glyph_store_missing(tmp_path) is None
