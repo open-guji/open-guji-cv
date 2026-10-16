@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { fetchCandLists } from '../../api/glyphCandidates'
 import type { CandListInfo } from '../../api/glyphCandidates'
 import { aroundKey, fetchAroundBatch } from '../../api/review'
@@ -25,7 +26,10 @@ function ctxText(s: AroundSlot | undefined): string {
 
 export function CellReviewPanel() {
   const [lists, setLists] = useState<CandListInfo[] | null>(null)
-  const [lid, setLid] = useState('')
+  const [sp] = useSearchParams()
+  // `?list=<清单 id>` 直接载入目标清单；没有才落到下拉框第一项（先载第一项会白打它的字块图请求）
+  const [lid, setLid] = useState(() => sp.get('list') ?? '')
+  const [imgErr, setImgErr] = useState(false)
   const [view, setView] = useState<CellReviewView | null>(null)
   const [idx, setIdx] = useState(0)
   const [local, setLocal] = useState<Record<string, Local>>({})
@@ -55,8 +59,9 @@ export function CellReviewPanel() {
 
   // 当前格的前后上下文：一次请求，取 at 位置前后各 2 字
   useEffect(() => {
-    setAround([]); setAt(-1); setOther(''); setNote('')
+    setAround([]); setAt(-1); setOther(''); setNote(''); setImgErr(false)
     if (!cur) return
+    setMsg('')                       // 换格即清掉上一格的提示（如「其他」报错）
     let live = true
     fetchAroundBatch(cur.book, 2, 2, [{ page: cur.page, col: cur.col, slot: cur.slot, sub: cur.sub || '' }])
       .then((r) => {
@@ -161,7 +166,11 @@ export function CellReviewPanel() {
           <div className="cr-stage">
             <div className="cr-ctx">{before.map((s, i) => <span key={`b${i}`}>{ctxText(s)}</span>)}</div>
             <div className="cr-focus">
-              <BinaryToggleImage src={cellPatchSrc(cur)} alt={cur.cell_id} />
+              {imgErr
+                ? <div className="muted">此格没有字块图（本工作区无该格产物）</div>
+                : <div onErrorCapture={() => setImgErr(true)}>
+                    <BinaryToggleImage src={cellPatchSrc(cur)} alt={cur.cell_id} />
+                  </div>}
               <div className="cr-ocr">原读：<strong>{cur.char || '—'}</strong></div>
             </div>
             <div className="cr-ctx">{after.map((s, i) => <span key={`a${i}`}>{ctxText(s)}</span>)}</div>

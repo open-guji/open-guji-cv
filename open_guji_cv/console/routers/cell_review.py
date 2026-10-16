@@ -48,7 +48,7 @@ def api_cell_review(list_id: str) -> dict:
     meta, rows, problems = cr.load(_path(list_id))
     dec = cr.latest(deps.event_log(), list_id)
     cells = []
-    for r in sorted(rows, key=lambda r: r["cell_id"]):
+    for r in sorted(rows, key=lambda r: cr.order_key(r["cell_id"])):
         cells.append({**r, **(cand.parse_cell(r["cell_id"]) or {}), "decision": dec.get(r["cell_id"])})
     tally = {v: 0 for v in cr.VERDICTS}
     for c in cells:
