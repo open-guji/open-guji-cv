@@ -5,7 +5,8 @@
     guji status <book> [--pipeline P] [--pages …] [--json]
     guji console [--port 8640] [--no-browser]
     guji cache usage|prune [--limit-gb N]
-    guji cache build-rare-index --book <book>              # 云端预建 Step5-b embedding 索引，供服务器分发命中
+    guji cache build-rare-index --book <book> [--jobs 4]   # 云端预建 Step5-b embedding 索引，供服务器分发命中
+    guji cache warm --book <book> [--pages all] [--jobs 4]  # 多进程预渲字块缓存（快照导入后用）
     guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
@@ -18,6 +19,8 @@ import argparse
 import json
 import sys
 from pathlib import Path
+
+from .utils.image_io import imread as cv_imread  # 中文路径安全的读图（裸 cv2.imread 遇中文路径静默返回 None）
 
 DEFAULT_PIPELINE = "keben_body_v2"
 DEFAULT_CONSOLE_PORT = 8640
@@ -53,6 +56,31 @@ def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
     return enabled
 
 
+def _warn_rare_index_missing(book: str) -> None:
+    """Step5-b 的 embedding 模板表没预建时先出声（overview#429）。
+
+    缺表时第一页要现建：字表 × 8 套字体逐字渲染 + 前向，单核约 25 字/秒，四庫一册两档
+    约 7.2 万字 ≈ 45–50 分钟，期间只有每千字一行进度，看着像卡死在第一页。只提示，不拦。"""
+    try:
+        from .clustering import cnn_candidates as cc
+        from .clustering.rare_panel import book_charsets
+        from .steps.align_ref import book_corpus
+        inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
+        if not inst.available:
+            return
+        cs_base, cs_esc, _ = book_charsets(book, book_corpus(book))
+        miss = [(n, len(cs), f.name) for n, cs in (("base", cs_base), ("escalate", cs_esc)) if cs
+                for _k, f, _x in [inst.emb_index_key(cs)] if not f.exists()]
+    except Exception:  # noqa: BLE001 —— 只是提示，算不出来就不提示
+        return
+    if miss:
+        n = sum(m[1] for m in miss)
+        print(f"⚠️ Step5-b 模板索引未预建：{', '.join(f'{a} {b} 字（{c}）' for a, b, c in miss)}。"
+              f"若有页要算，第一页会现建 {n} 字（单核约 {n // 25 // 60} 分钟）。建议先 "
+              f"`guji cache build-rare-index --book {book} --jobs 4 -w <工作区>`，"
+              f"或导入带这几个 key 的索引包（runbook S5）", flush=True)
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -62,6 +90,8 @@ def cmd_pipeline(args) -> None:
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
+    if "rare_candidates" in steps:
+        _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
     try:
@@ -89,6 +119,7 @@ def cmd_status(args) -> None:
     gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
     st["closure_gaps"] = gaps
     st["closure_mismatches"] = mism
+    st["vision_pending"] = _vision_pending(eng.book.id, pages, eng.store)
     if args.json:
         print(json.dumps(st, ensure_ascii=False))
         return
@@ -104,11 +135,180 @@ def cmd_status(args) -> None:
         for r, n in sorted(own.items(), key=lambda kv: -kv[1]):
             tail = "，须重跑" if r.startswith("册配置") else ""
             print(f"      ↳ 过期 {n:3d} 页：{r}{tail}")
+        # 开关开着、可选上游没产物（overview#429）：步骤照跑，但那一路通道在这些页没生效
+        for g in d.get("optional_gaps") or ():
+            sw = "/".join(g["switches"])
+            print(f"      ⚠ {sw} 开着但 {g['producer']} 缺 {len(g['missing']):3d} 页，"
+                  f"这些页 {sw} 通道未生效（先跑 --from {g['producer']} --to {g['producer']}）")
     if any(d.get("drift") for d in st["steps"].values()):
         print("  （漂移 = 产物对着旧的外部状态判的，如字形库变了；不算过期、不自动重跑。"
               "要重算点名格用 `guji recheck`）")
     _print_closure_gaps(gaps)
     _print_closure_mismatches(mism)
+    _print_vision_pending(st["vision_pending"])
+
+
+def _vision_pending(book: str, pages: list[int], store) -> list[dict] | None:
+    """报告项（overview#428）：看图判错、人还没裁的格。不要求为 0；算不出来 → None。"""
+    try:
+        from .feedback.vision import vision_pending
+        return vision_pending(book, pages, store)
+    except Exception as e:  # noqa: BLE001
+        print(f"  （看图待审没算出来：{type(e).__name__}: {e}）", file=sys.stderr)
+        return None
+
+
+def _print_vision_pending(rows: list[dict] | None) -> None:
+    if not rows:
+        return
+    print(f"  看图判错待人审 {len(rows)} 格（报告项，不挡收尾；控制台 doubt=vision_flag 筛出来裁）：")
+    for r in rows[:10]:
+        print(f"      {r['id']:20s} 放行「{r['char'] or ''}」 看图「{r.get('vision') or '?'}」 {r.get('judge') or ''}")
+    if len(rows) > 10:
+        print(f"      …另 {len(rows) - 10} 格")
+
+
+def cmd_close_check(args) -> None:
+    """一册书交付前逐项体检（只读）。标准见 doc/runbook/整理一册书.md 第五节。"""
+    from .core.workspace import workspace_root, reports_root
+    from .ops import close_check as CC
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    res = CC.run(eng, workspace_root() or Path.cwd(), pages,
+                 export_dir=Path(args.export_dir) if args.export_dir else None,
+                 chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
+                 reports=reports_root())
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        CC.print_report(res)
+    sys.exit(0 if res["machine_ok"] else 1)
+
+
+def cmd_export(args) -> None:
+    """`guji export md|format <册>`：把 runbook 里两条易错的散脚本收成固定口径（overview#413 C2）。
+
+    md     → scripts/render_guji_markdown.py（全部页逐个列出，不用手抄页号）→ reports/<册>/<册>.md
+    format → scripts/export_guji_format.py（章号、meta、拆页表按约定自动填）→ lines/pages/norm
+    两者都只读产物。子进程跑原脚本，口径与直接调脚本完全一致。
+    """
+    import re
+    import subprocess
+    from .core.workspace import products_root, reports_root
+    repo = Path(__file__).resolve().parents[1]
+    scripts = repo / "scripts"
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    book = eng.book.id
+    out_dir = Path(args.out) if args.out else reports_root() / book
+    out_dir.mkdir(parents=True, exist_ok=True)
+    # 只导有 Step7 产物的页（目录、空白页等没跑到 seed_admit 的页跳过，免得整条命令因缺产物退出）
+    have = {int(f.stem[1:]) for f in (products_root() / book / "seed_admit").glob("p*.json")}
+    skipped = [p for p in pages if p not in have]
+    pages = [p for p in pages if p in have]
+    if skipped:
+        print(f"（跳过 {len(skipped)} 页：没有 seed_admit 产物 {skipped[:10]}{'…' if len(skipped) > 10 else ''}）",
+              file=sys.stderr)
+    if not pages:
+        print("✗ 没有可导出的页（seed_admit 产物为空）", file=sys.stderr); sys.exit(1)
+    if args.action == "md":
+        cmd = [sys.executable, str(scripts / "render_guji_markdown.py"), book, *map(str, pages),
+               "--out", str(out_dir / f"{book}.md")]
+    else:
+        m = re.fullmatch(r"vol(\d+)", book)
+        chapter = args.chapter or (f"{int(m.group(1)):03d}" if m else None)
+        if not chapter:
+            print(f"✗ 册号 {book} 推不出章号，请给 --chapter NNN", file=sys.stderr); sys.exit(2)
+        meta = Path(args.meta) if args.meta else repo / "doc/formats/samples/guji_format_v0.1" / f"meta_{book}.json"
+        if not meta.exists():
+            print(f"✗ 没有 meta：{meta}。照同目录 meta_vol03.json 改 volume 两项另存，或用 --meta 指定", file=sys.stderr)
+            sys.exit(2)
+        split = Path(args.split_table) if args.split_table else repo / "doc/formats/samples/guji_page_v0.2/split_table_siku.json"
+        cmd = [sys.executable, str(scripts / "export_guji_format.py"), "--products", str(products_root()),
+               "--book", book, "--chapter", chapter, "--meta", str(meta), "--out", str(out_dir),
+               "--pages", ",".join(map(str, pages))]
+        if split.exists():
+            cmd += ["--split-table", str(split)]
+    print("→ " + " ".join(cmd[1:]), file=sys.stderr)
+    sys.exit(subprocess.run(cmd).returncode)
+
+
+def cmd_audit(args) -> None:
+    """`guji audit admitted|jys <册>`：定版检查清单（只读；runbook S8、S10）。"""
+    from .core.workspace import reports_root
+    from .ops import audit as A
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    book = eng.book.id
+    out_dir = Path(args.out) if args.out else reports_root() / book
+    out_dir.mkdir(parents=True, exist_ok=True)
+    if args.action == "admitted":
+        col = Path(args.collation) if args.collation else A.latest_collation(reports_root() / book)
+        if not col or not col.exists():
+            print("✗ 没有对勘 JSON：先跑 `guji collate <册> --console \"\" -w <工作区>`", file=sys.stderr); sys.exit(2)
+        res = A.admitted(col)
+        md = out_dir / f"{book}.放行错穷举.md"
+        md.write_text(A.admitted_md(res), encoding="utf-8")
+        (out_dir / f"{book}.放行错穷举.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        print(f"{book} 放行错穷举：{res['n']} 格（认字差异 {res['n_non_systematic']} 要逐格看图；"
+              f"异体 {res['n_variant']}；系统性 {res['n_systematic']}）→ {md}")
+    elif args.action == "sheet":
+        from .review.cards import cards
+        from .review.verdict_view import closure_gaps, closure_mismatches
+        pages = eng.book.resolve_pages("all")
+        q = cards(book, "all", limit=1, only="review", store=eng.store, gate_cut=False,
+                  skip_decided=True, cls="*").get("class_counts") or {}
+        md = out_dir / f"{book}.请审单.md"
+        md.write_text(A.review_sheet(book, q, closure_gaps(book, pages, eng.store),
+                                     closure_mismatches(book, pages, eng.store)), encoding="utf-8")
+        print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
+    elif args.action == "count":
+        from .core.workspace import feedback_root
+        if not args.since:
+            print("✗ count 要 --since（请审单发出的时间）", file=sys.stderr); sys.exit(2)
+        exp = None
+        if args.expect:
+            exp = [ln.strip().strip("`") for ln in Path(args.expect).read_text(encoding="utf-8").splitlines() if ln.strip()]
+        res = A.review_count(feedback_root() / "events", book, args.since, exp)
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+        bad = res["no_anchor"] or res.get("missing")
+        print(f"\n{book} 自 {args.since}：{res['n_events']} 条事件、{res['n_cells']} 个字位；"
+              f"同格多次 {len(res['repeated'])}；没带锚点 {len(res['no_anchor'])}"
+              + (f"；漏审 {len(res['missing'])}、单外 {len(res['extra'])}" if exp is not None else ""))
+        sys.exit(1 if bad else 0)
+    else:
+        if not args.export_dir:
+            print("✗ jys 要 --export-dir（先跑 `guji export format <册>`）", file=sys.stderr); sys.exit(2)
+        res = A.jys(Path(args.export_dir), args.chapter, book=book)
+        md = out_dir / f"{book}.己已巳.md"
+        md.write_text(A.jys_md(res, book), encoding="utf-8")
+        (out_dir / f"{book}.己已巳.muse_input.jsonl").write_text(A.jys_muse_jsonl(res), encoding="utf-8")
+        print(f"{book} 己/已/巳：{res['n']} 格 {res['by_char']}，人裁过 {res['n_human']} → {md}")
+
+
+def cmd_store(args) -> None:
+    """`guji store check|commit -w <工作区>`：字形库导出到真源、查有没有成片删除、提交（runbook S14）。"""
+    import os
+    from .core.workspace import workspace_root
+    from .ops import store_commit as SC
+    if not args.workspace:
+        print("✗ 要 -w <工作区>", file=sys.stderr); sys.exit(2)
+    os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+    ws = workspace_root()
+    res = SC.run(ws, commit=args.action == "commit", push=args.push, allow_deletions=args.allow_deletions,
+                 no_export=args.no_export, message=args.message, fetch=not args.no_fetch)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+    ch = res.get("changes") or {}
+    if ch:
+        print(f"改动：{ch['n_changed']} 个文件（+{ch['added_lines']} −{ch['deleted_lines']} 行，新文件 {ch['untracked']}，"
+              f"删文件 {len(ch['deleted_files'])}）")
+    if res.get("blocked"):
+        print(f"✗ {res['blocked']}", file=sys.stderr); sys.exit(1)
+    if args.action == "commit":
+        print(f"已提交 {res['committed']}" + ("，已推送" if res.get("pushed") else "（未推送，加 --push）")
+              if res.get("committed") else "没有改动，不提交")
+    else:
+        print("检查通过（check 不提交；要提交用 `guji store commit`）")
 
 
 def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
@@ -170,8 +370,11 @@ def cmd_fp_migrate(args) -> None:
     steps = [s for s in (args.steps or "").split(",") if s] or None
     try:
         with book_run_lock(eng.book.id, wait=False):
+            if getattr(args, "code_formula", False) and (old or args.trust):
+                raise ValueError("--code-formula 不与 --old-path / --trust 混用")
             rep = migrate_book(eng, pages, old_paths=old, trust=args.trust,
-                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False))
+                               apply=args.apply, steps=steps, explain=getattr(args, 'explain', False),
+                               code_formula=getattr(args, "code_formula", False))
     except (RunLockHeld, ValueError) as e:
         print(f"✗ {e}", file=sys.stderr)
         sys.exit(3)
@@ -372,6 +575,26 @@ def cmd_cache(args) -> None:
         y0 = max(0, min(h - 1, args.y0)); y1 = max(y0 + 1, min(h, args.y1 or h))
         from .render.overlay import encode_png
         _write(args.out, encode_png(img[y0:y1]))
+    elif args.action == "warm":
+        # 多进程预渲字块（overview#429）：快照导入后 cache/ 是空的，串行步（rare_candidates）
+        # 逐格现切字块占了每页九成时间。并发安全的做法见 ops/cache_warm.py 模块头。
+        from .core.book import load_book
+        from .core.pipeline import default_pipeline_id, load_pipeline
+        from .core.step import RunContext
+        from .ops.cache_warm import warm
+        from .products.store import ProductStore
+        from . import steps as _s  # noqa: F401
+        if not args.book:
+            print("必须给 --book"); sys.exit(1)
+        book = load_book(args.book)
+        pid = args.pipeline or default_pipeline_id(book)
+        ctx = RunContext(book, ProductStore(), cache, log=lambda _: None, pipeline=load_pipeline(pid))
+        res = warm(ctx, pid, book.resolve_pages(args.pages), max(1, args.jobs or 1),
+                   log=lambda s: print(s, flush=True))
+        print(f"预渲完成：{res['pages']} 页，{res['patches']} 个字块，{res['seconds']}s，"
+              f"失败 {len(res['failed'])} 页")
+        for pg, err in sorted(res["failed"].items())[:20]:
+            print(f"  p{pg}: {err}")
     elif args.action == "verify":
         # 缓存是不是对着现行产物切的（产物从别处换进来没清缓存的话会错位，见 ops/cache_verify.py）
         from .ops.cache_verify import main_print, verify_book
@@ -431,7 +654,16 @@ def _cmd_cache_build_rare_index(args) -> None:
             print(f"{name}：已有缓存 {f}（key={key}），跳过重建；如需强制重建先删掉这个文件")
             continue
         t0 = time.time()
-        mat, names = inst._emb_index(cs)
+        jobs = getattr(args, "jobs", 1) or 1
+        if jobs > 1:
+            # 分片多进程建（overview#429）：与单进程逐位相同，见 `ops.rare_index_build`
+            from .ops.rare_index_build import build_parallel
+            mat, names = build_parallel(inst, cs, jobs)
+            if mat.shape[0] == 0:
+                print(f"{name}：建成 0 行（字表 {len(cs)} 字），不落盘。检查 fonts/。"); sys.exit(1)
+            cc._save_emb_index(f, mat, names)
+        else:
+            mat, names = inst._emb_index(cs)
         dt = time.time() - t0
         print(f"{name}：{f} 建好，{len(names)}/{len(cs)} 字，{dt:.1f}s")
 
@@ -526,6 +758,7 @@ def cmd_batch(args) -> None:
 
 def cmd_label_batch(args) -> None:
     """L3 补标签两批：make（出批次）| harvest（收割进 dataset）| migrate-legacy（旧 overview 列端卡入新分片）。"""
+    from . import steps as _s  # noqa: F401 —— 兜底：确保 Step 先注册，否则 store.read 的 kind_of() 查不到产物种类
     from .review import label_batches as LB
     try:
         if args.action == "make":
@@ -563,8 +796,10 @@ def cmd_events(args) -> None:
     from .feedback.events import EventLog
     from .feedback.harvest import harvest_file
     from .feedback.routes import RouteTable
-    from .gold.store import GoldStore
     from .review.batches import BatchStore
+    if args.action == "import-vision":
+        _import_vision(args)
+        return
     log = EventLog()
     if args.action == "harvest":
         b = BatchStore().get(args.batch)
@@ -587,10 +822,52 @@ def cmd_events(args) -> None:
         fn = cutline_verdicts if args.kind == "cutline" else review_verdicts
         _out(fn(args.batch, log))
     elif args.action == "list":
-        evs = log.read(args.batch) if args.batch else sorted(log.iter_all(), key=lambda e: e.order)
+        evs = _select_events(log, args.batch, args.book)
         for e in evs[-args.limit:]:
             print(f"  {e.id}  {e.kind:12s} {e.target.key:28s} {json.dumps(e.payload, ensure_ascii=False)}")
         print(f"  共 {len(evs)} 条")
+
+
+def _select_events(log, batch: str | None, book: str | None = None) -> list:
+    """`events list` 的取数：批次名可带通配（`vol03-*`，按文件名匹配后合并）；`book` 只留
+    target.key 以 `<册>:` 开头的事件——通配批次里混进别册的 key 时（GUJI-77）不串册。只读。"""
+    import fnmatch
+    if batch and any(c in batch for c in "*?["):
+        evs = sorted((e for b in log.batches() if fnmatch.fnmatch(b, batch)
+                      for e in log.read(b)), key=lambda e: e.order)
+    elif batch:
+        evs = log.read(batch)
+    else:
+        evs = sorted(log.iter_all(), key=lambda e: e.order)
+    if book:
+        evs = [e for e in evs if e.target.key.startswith(f"{book}:")]
+    return evs
+
+
+def _import_vision(args) -> None:
+    """`guji events import-vision <jsonl> -w <工作区> [--book 册]`：看图结论 → `feedback/vision/`
+    （overview#428；格式见 `feedback/vision.py` 模块头与 runbook S8/S10）。不是人裁：不进字形库、
+    不算已裁，判错的格回待审队列（doubt `vision_flag`）。"""
+    from .feedback.vision import import_vision
+    if not args.workspace:
+        print("✗ import-vision 要 -w <工作区>（看图结论写进工作区的 feedback/vision/）", file=sys.stderr)
+        sys.exit(2)
+    if not args.batch:
+        print("✗ 要给 jsonl 路径：guji events import-vision reports/vol04/看图结论.jsonl -w <工作区>",
+              file=sys.stderr)
+        sys.exit(2)
+    path = Path(args.batch)
+    if not path.exists():
+        print(f"✗ 文件不存在：{path}", file=sys.stderr)
+        sys.exit(2)
+    res = import_vision(path, batch=args.as_batch, judge=args.judge, book=args.book,
+                        gold=not args.no_gold, dry_run=args.dry_run)
+    print(json.dumps(res, ensure_ascii=False, indent=1))
+    if res["errors"]:
+        print(f"✗ {len(res['errors'])} 处格式错，整批没写", file=sys.stderr)
+        sys.exit(1)
+    if args.dry_run:
+        print("（试算，未写入；去掉 --dry-run 才导入）")
 
 
 def cmd_gold(args) -> None:
@@ -631,6 +908,10 @@ def cmd_gold(args) -> None:
         from .gold.transfer import rebuild_verdicts
         out = rebuild_verdicts(EventLog(), verdict_store(),
                                batches=[args.shard] if args.shard else None)
+        if not args.shard:
+            # 看图结论另放 feedback/vision/（overview#428），全量重建时一并重放，label_origin=vision
+            from .feedback.vision import rebuild_vision_gold
+            out["vision"] = rebuild_vision_gold(store=verdict_store())
         print(json.dumps(out, ensure_ascii=False, indent=1))
         return
     if args.action == "shards":
@@ -1204,11 +1485,10 @@ def cmd_product(args) -> None:
     对应控制台第二类 6 条路由。图像类要 `--out`——云端跑完把 PNG 交回本地看，
     这是「云端能出叠图」那条路的落点。
     """
-    from .core.spec import cell_key, page_key
+    from .core.spec import cell_key
     from .products.cache import ImageCache
     from .products.store import ProductStore
     from .render.overlay import encode_png, overlay
-    import cv2
 
     from .core.step import resolve_step_id
     st = ProductStore()
@@ -1798,6 +2078,10 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "close-check": cmd_close_check,
+    "export": cmd_export,
+    "audit": cmd_audit,
+    "store": cmd_store,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
     "console": cmd_console,
@@ -2137,6 +2421,48 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("close-check",
+                       help="[v2] 一册书交付前逐项体检（只读）：新鲜、缓存、待审、收尾闸、真源已提交、lines/pages 自洽、Step9")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--export-dir", default=None, help="export_guji_format 的输出目录（查 lines.md 与 pages.json）")
+    p.add_argument("--chapter", default=None, help="章号 NNN；目录里有多章时用")
+    p.add_argument("--notes", default=None, help="overview 里本册的记录目录（查避諱表、收尾记录）")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
+    p.add_argument("action", choices=["md", "format"])
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all")
+    p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
+    p.add_argument("--chapter", default=None, help="format：章号 NNN，缺省按 volNN 推")
+    p.add_argument("--meta", default=None, help="format：缺省 doc/formats/samples/guji_format_v0.1/meta_<册>.json")
+    p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
+
+    p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
+                                     "count = 用户审完当场核数；sheet = 生成请审单（只读）")
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet"])
+    p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
+    p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--collation", default=None, help="admitted：对勘 JSON，缺省 reports/<册>/ 下最新一份")
+    p.add_argument("--export-dir", default=None, help="jys：guji export format 的输出目录")
+    p.add_argument("--chapter", default=None)
+    p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
+
+    p = sub.add_parser("store", help="[v2] 字形库与人裁落真源：check = 导出并查有无成片删除；commit = 再提交（--push 推送）")
+    p.add_argument("action", choices=["check", "commit"])
+    p.add_argument("-w", "--workspace", default=None, help="书的工作区目录")
+    p.add_argument("--push", action="store_true", help="commit 后 pull --rebase 再推送")
+    p.add_argument("--allow-deletions", action="store_true", help="确认过「成片删除」是对的，放行")
+    p.add_argument("--no-export", action="store_true", help="不重新导出（store 已是最新时用）")
+    p.add_argument("--no-fetch", action="store_true", help="不先 fetch 远端（离线时用）")
+    p.add_argument("-m", "--message", default=None)
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("recheck",
                        help="[v2] Step5-a 点名重算：库变了不自动重跑，要吃新库就在这里点名格")
     p.add_argument("book")
@@ -2161,6 +2487,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--trust", action="store_true",
                    help="不验老指纹（老路径说不清时）：只查上游 sha 与产物 sha。"
                         "发现不了代码/参数变了，慎用")
+    p.add_argument("--code-formula", action="store_true",
+                   help="2026-10-06 代码指纹改成「只认代码、不认注释和 docstring」后的迁移：每一步按老口径回放指纹，"
+                        "逐位相等（代码、参数、册配置、上游都没变）才改写成新公式，免得各书白白重算")
     p.add_argument("--apply", action="store_true", help="真写 manifest（缺省干跑）")
     p.add_argument("--explain", action="store_true",
                    help="对每个被跳过的页打印 manifest 记录的 upstream 与现算 upstream 的逐键差异"
@@ -2187,15 +2516,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "10 月上旬才有 PR，本机开发/测试先用这个）。跟 --no-auth 不是一回事："
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
-    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | "
+    p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | warm | "
                                      "build-rare-index | build-font-index")
-    p.add_argument("action", choices=["usage", "prune", "get", "column", "verify",
+    p.add_argument("action", choices=["usage", "prune", "get", "column", "verify", "warm",
                                       "build-rare-index", "build-font-index"])
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
-    p.add_argument("--pages", default="all", help="verify：页表达式，缺省 all")
+    p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
+    p.add_argument("--jobs", type=int, default=1,
+                   help="build-rare-index：分片多进程建（逐位相同；云端 4 核给 4，约快 4 倍）；"
+                        "warm：预渲字块的进程数")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
     p.add_argument("--key", default="", help="get：缓存键，如 p0024c01s10")
     p.add_argument("--page", type=int, default=0, help="column：页号")
@@ -2229,15 +2561,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dataset", default=None, help="测试集仓路径（缺省 GUJI_DATASET_DIR 或 ../open-guji-dataset）")
 
-    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts")
-    p.add_argument("action", choices=["harvest", "route", "list", "verdicts"])
-    p.add_argument("batch", nargs="?", default=None)
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision")
+    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision"])
+    p.add_argument("batch", nargs="?", default=None, help="批次名；import-vision 时是 jsonl 路径")
     p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
     p.add_argument("--step", default=None)
     p.add_argument("--unit", default="page")
     p.add_argument("--kind", default="verdict")
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--limit", type=int, default=30)
+    # import-vision（overview#428）：看图结论 jsonl → feedback/vision/
+    p.add_argument("--book", default=None, help="list：只列 target.key 以 <册>: 开头的事件（批次名可带通配 *）；import-vision：只认这一册的格（给了就校验 books/<册>.yaml）")
+    p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
+    p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
+    p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
 
     p = sub.add_parser("eval", help="[v2] 评测：list | run")
     p.add_argument("action", choices=["list", "run"])
@@ -2356,6 +2693,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--limit", type=int, default=50)
     p.add_argument("-f", "--follow", action="store_true", help="log：跟着刷")
 
+    # glyph-db（2026-10-06 从 v1 入口搬来，自带 -w，不走 install_workspace_option）
+    from .cli_glyph_db import add_parser as _add_glyph_db, cmd_glyph_db
+    _add_glyph_db(sub)
+    COMMANDS_V2["glyph-db"] = cmd_glyph_db
+    # exp（overview#457）：A/B 实验，自带 -w（没有 book 位置参数）
+    from .cli_exp import add_parser as _add_exp, cmd_exp
+    _add_exp(sub)
+    COMMANDS_V2["exp"] = cmd_exp
     install_workspace_option(sub)
 
 

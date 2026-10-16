@@ -15,10 +15,8 @@
 
 from __future__ import annotations
 
-import json
 import statistics as _stats
 from collections import Counter
-from pathlib import Path
 
 from ..core.book import load_book
 from ..core.spec import page_key

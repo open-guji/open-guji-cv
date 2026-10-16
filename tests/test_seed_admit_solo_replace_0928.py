@@ -2,11 +2,11 @@
 """Step7 书级收紧三参数（2026-09-28，overview#155 D：全唐文 match_solo / match_replace 单独核）。
 
 - `off_channels`：关掉 `admission_decision` 的某几条通道，判决作废、记 `channel_off`；
-- `solo_confusable_guard`：match_solo 系的库 top1 在形近表里就落审（`solo_confusable`）；
+- `solo_confusable_guard` 已随 W2（GUJI-49）删除（缺省关、十册 yaml 零使用）；
 - `replace_form`：match_replace 整理本字与库 top1 字面不同时取整理本（align，旧行为）
   ／取库形（lib）／落审（review）。
 
-三个缺省值都等于旧行为。
+其余缺省值都等于旧行为。
 """
 from __future__ import annotations
 
@@ -67,13 +67,6 @@ def test_off_channels_other_channel_untouched(tmp_path, monkeypatch):
              params={"off_channels": "match_replace, match_margin"})
     assert r.admit and r.channel == "match_solo"
 
-
-def test_solo_confusable_guard(tmp_path, monkeypatch):
-    on = {"solo_confusable_guard": True}
-    r = _run(tmp_path, monkeypatch, cands=SOLO_CONF, verdict="same", params=on)
-    assert not r.admit and "solo_confusable" in r.doubts
-    r = _run(tmp_path, monkeypatch, cands=SOLO_PLAIN, verdict="same", params=on)
-    assert r.admit and r.channel == "match_solo"
 
 
 # match_replace：整理本 replace 层给「旣」，库 top1「既」（语义同、字面不同），库 unsure。

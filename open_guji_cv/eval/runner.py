@@ -11,7 +11,6 @@ import json
 import os
 import re
 import subprocess
-import sys
 import time
 from pathlib import Path
 
@@ -263,5 +262,3 @@ def _merge_json_metrics(existing: list[Metric], data: dict, limit: int = 12) -> 
     return out
 
 
-def run_many(keys: list[str], **kw) -> list[EvalReport]:
-    return [run_eval(k, **kw) for k in keys]

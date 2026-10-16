@@ -21,7 +21,7 @@ from ...core.step import KINDS, RunContext
 from ...errors import EncodeFailed, ImageMissing
 from ...gates.query import GATES, gate_summary
 from ...render.overlay import encode_png, overlay, preclean_overlay, preclean_report
-from ...utils.image_io import imread as cv_imread, imwrite as cv_imwrite
+from ...utils.image_io import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 

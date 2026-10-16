@@ -5,7 +5,7 @@
 比对。用户提供的《总目》整理本（corpus/）就是这份真值，但它是**连续
 长文本、按卷排列**，不知道某一页对应文本里的哪一段——要先"锚定"。
 
-两步法（见 .claude/doc/char_clustering_design.md 18.11）：
+两步法（见 doc/design/char_clustering_design.md 18.11）：
 
 1. **页内 n-gram 投票锚定**：取页转写文本的所有 GRAM 连续子串，在参考
    语料里查重复出现位置，每次命中给 (语料位置 - 页内位置) 投一票——
@@ -24,7 +24,6 @@
 from __future__ import annotations
 
 import difflib
-import json
 from collections import Counter
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -202,24 +201,6 @@ def evaluate_book(text_dir: str | Path, corpus: str,
         "total_matched": total_matched,
         "accuracy": round(total_matched / total_chars, 4) if total_chars else 0.0,
         "pages": [asdict(r) for r in results],
-    }
-
-
-def evaluate_books(text_dirs: dict[str, str | Path], corpus_path: str | Path) -> dict:
-    """多册合并评测：{册名: text_dir}，语料索引只建一次。"""
-    corpus = Path(corpus_path).read_text(encoding="utf-8")
-    index = build_ngram_index(corpus)
-    per_book = {name: evaluate_book(d, corpus, index)
-                for name, d in text_dirs.items()}
-    total_chars = sum(b["total_chars"] for b in per_book.values())
-    total_matched = sum(b["total_matched"] for b in per_book.values())
-    return {
-        "books": per_book,
-        "overall": {
-            "total_chars": total_chars,
-            "total_matched": total_matched,
-            "accuracy": round(total_matched / total_chars, 4) if total_chars else 0.0,
-        },
     }
 
 

@@ -11,11 +11,11 @@ from __future__ import annotations
 import difflib
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .punct_extract import tokenize, PunctAnnotation
+from .punct_extract import PunctAnnotation
 
 
 @dataclass

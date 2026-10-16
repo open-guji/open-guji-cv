@@ -135,17 +135,6 @@ def _wdist(q, m, w) -> float:
     return float((w * (q - m) ** 2).sum() / (w.sum() + 1e-9))
 
 
-def diff_map(A: list[np.ndarray], B: list[np.ndarray], cfg: NearShapeConfig = NearShapeConfig()):
-    """两组刻例 → (μA, μB, Fisher 比, 差异区域 W)；可视化与证据用。"""
-    Ap = [_prep(a, cfg.sigma) for a in A]
-    Bp = [_prep(b, cfg.sigma) for b in B]
-    c = (np.mean(Ap, 0) + np.mean(Bp, 0)) / 2
-    Ap = [_shift_to(a, c, cfg.align) for a in Ap]
-    Bp = [_shift_to(b, c, cfg.align) for b in Bp]
-    ma, mb, fisher = _stats(Ap, Bp, cfg.lam)
-    return ma, mb, fisher, _region(fisher, cfg.top)
-
-
 def decide_pair(query: np.ndarray, A: list[np.ndarray], B: list[np.ndarray],
                 cfg: NearShapeConfig = NearShapeConfig(),
                 pair: tuple[str, str] = ("A", "B")) -> NearShapeDecision:

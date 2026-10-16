@@ -189,7 +189,7 @@ class GlyphKnnSource(CandidateSource):
     （scripts/bench_font_glyphs.py）字体命中的「对」与「错」f1 分布是重叠
     的（正确命中 p10 反而低于错误命中 p90 0.06~0.13），阈值划不出来，
     当精确字形用只会注入错字。字体字形的用法见
-    .claude/doc/glyph_db_expansion_research.md §5 P1。
+    doc/research/glyph_db_expansion_research.md §5 P1。
     """
 
     name = "glyph_knn"
@@ -533,39 +533,6 @@ class RapidOcrSource(CandidateSource):
                 votes[ch] = votes.get(ch, 0.0) + p
         return props_from_votes(votes, self.name, self.s2t,
                                 top_k=self.topk)
-
-
-class TesseractSource(CandidateSource):
-    """Tesseract 5 chi_tra 补充候选源（低权重兜底）。
-
-    黄金集实测 top-1 仅 52.8%，但错误模式与 PP-OCR 不同：能救回
-    rapidocr 错误中的 8.8%。**只宜作补充候选，绝不平权**
-    （平权投票把整体从 85.2% 拖到 82.0%）——融合权重见 SOURCE_WEIGHTS。
-    """
-
-    name = "tess"
-
-    def __init__(self, lang: str = "chi_tra", scale: float = 3.0):
-        self.lang = lang
-        self.scale = scale
-
-    def propose(self, rep_patches, members) -> list[Proposal]:
-        import pytesseract
-        from PIL import Image
-        votes: dict[str, float] = {}
-        for patch in rep_patches:
-            img = patch
-            if img.ndim == 3:
-                img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            img = cv2.resize(img, None, fx=self.scale, fy=self.scale,
-                             interpolation=cv2.INTER_CUBIC)
-            txt = pytesseract.image_to_string(
-                Image.fromarray(img), lang=self.lang,
-                config="--psm 10").strip().replace(" ", "")
-            for ch in txt[:1]:
-                if not ch.isascii():
-                    votes[ch] = votes.get(ch, 0.0) + 1.0
-        return props_from_votes(votes, self.name, s2t=False)
 
 
 class VlmSeedSource(CandidateSource):

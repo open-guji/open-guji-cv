@@ -50,10 +50,12 @@ def parse_old_paths(items: Iterable[str]) -> dict[str, dict[str, str]]:
     return out
 
 
-def _fp(step, book, params, ups: dict[str, str], *, path_in_hash: bool) -> tuple[str, str]:
-    """(fingerprint, params_hash)。`path_in_hash=True` = 2026-09-29 之前的老公式。"""
+def _fp(step, book, params, ups: dict[str, str], *, path_in_hash: bool,
+        legacy_code: bool = False) -> tuple[str, str]:
+    """(fingerprint, params_hash)。`path_in_hash=True` = 2026-09-29 之前的路径口径；
+    `legacy_code=True` = 2026-10-06 之前的代码指纹口径（整份源码，注释、docstring 也算）。"""
     ph = params_hash(params, step.spec.soft_params, () if path_in_hash else step.spec.path_params)
-    payload = {**_self_payload(step, book, ph), "upstream": ups}
+    payload = {**_self_payload(step, book, ph, legacy_code=legacy_code), "upstream": ups}
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24], ph
 
 
@@ -150,9 +152,14 @@ def rare_fingerprint_parts(eng: Engine) -> list[dict]:
 
 def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str, str]] | None = None,
                  trust: bool = False, apply: bool = False,
-                 steps: list[str] | None = None, explain: bool = False) -> dict:
+                 steps: list[str] | None = None, explain: bool = False,
+                 code_formula: bool = False) -> dict:
     """逐步逐页迁移。返回 {step: {"migrated": n, "already": n, "skipped": {原因: n}}}。
-    `apply=False` 是干跑：算得一模一样，只是不写 manifest。"""
+    `apply=False` 是干跑：算得一模一样，只是不写 manifest。
+
+    `code_formula=True`（2026-10-06，overview#413）：代码指纹改成「只认代码」之后的迁移。对**每一步**
+    用老代码口径回放指纹，与条目记的逐位相等——即代码、版本、参数、册配置、上游都没变——才改写成新公式；
+    对不上的原样不动（那是代码真改了，本来就该重算）。不与 `old_paths`／`trust` 混用。"""
     old_paths = old_paths or {}
     report: dict[str, dict] = {}
     for name in steps or ():
@@ -162,8 +169,8 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
         step = STEPS[sid]
         if steps and sid not in steps:
             continue
-        whole = sid in WHOLE_HASH_STEPS
-        if not step.spec.path_params and not whole:
+        whole = sid in WHOLE_HASH_STEPS and not code_formula
+        if not code_formula and not step.spec.path_params and not whole:
             if steps:      # 点了名的步不许静默
                 report[sid] = {"na": "无路径参数，不适用"}
             continue
@@ -211,7 +218,12 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
             if sha is None or (entry.sha256 and entry.sha256 != sha):
                 skip("产物文件缺失或与条目记的 sha 不符", pg)
                 continue
-            if whole:
+            if code_formula:
+                old_fp, old_ph = _fp(step, eng.book, params, ups, path_in_hash=False, legacy_code=True)
+                if entry.fingerprint != old_fp or entry.params_hash != old_ph:
+                    skip("按老代码口径回放对不上（代码、参数或册配置真变了，该重算）", pg)
+                    continue
+            elif whole:
                 # 整体哈希：没有「老公式」可重算来证明只变了路径，只剩 trust（上游 sha 与
                 # 产物文件 sha 已在上面查过）。不 trust 就一律不动。
                 if not trust:

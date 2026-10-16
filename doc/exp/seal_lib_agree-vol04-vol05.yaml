@@ -1,0 +1,24 @@
+# Y1（overview#471「去章」）：seal_lib_agree——印章区格的默认字与库首位同字（cov≥0.9）→ 放行，题列也过。
+# 金标覆盖不到这些格（印章区 59 格里没有一格在 gold2 里），所以判准只能是翻转格全数过目；本表 14 格人工看图全对。
+# 跑：guji exp run doc/exp/seal_lib_agree-vol04-vol05.yaml -w $WS --snapshot <快照产物根> --root <实验根>
+name: seal_lib_agree-vol04-vol05
+books: [vol04, vol05]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  params:
+    seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: false, seal_lib_agree: false}
+variants:
+  A:
+    params:
+      seed_admit: {patch_missing: skip, juan_rule: false, variant_tie: false, seal_lib_agree: true}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol05.jsonl}
+  - {source: vision, path: /home/user/open-guji-cv/research/y1_admit/gold2_vol04.jsonl}
+guardrails:
+  - {metric: flips.right_to_wrong, op: "==", value: 0}

@@ -31,7 +31,7 @@ from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.align_ref import (AlignRefParams, rare_topk_map, rrf_carrier,
                                           slots_from_evidence)
 from open_guji_cv.steps.context_decide import ContextDecideParams, rare_priors
-from open_guji_cv.steps.seed_admit import SeedAdmitParams, _rare_agree
+from open_guji_cv.steps.seed_admit import SeedAdmitParams
 
 BOOK, PAGE, COL = "tbook", 1, 1
 
@@ -48,7 +48,7 @@ def page_rare(page: int, book: str, cands: dict[int, list[str]], col: int = 1) -
 # ── 声明 ────────────────────────────────────────────────────────────────
 @pytest.mark.parametrize("sid,field", [("align_ref", "rare_topk"),
                                        ("context_decide", "rare_topk"),
-                                       ("seed_admit", "rare_agree")])
+                                       ("seed_admit", "rare_ref")])
 def test_declared_as_gated_optional_upstream(sid, field):
     spec = STEPS[sid].spec
     assert "rare_candidates" in spec.optional_consumes
@@ -63,7 +63,7 @@ def test_declared_as_gated_optional_upstream(sid, field):
 @pytest.mark.parametrize("P,kw,fields", [
     (AlignRefParams, {"rare_topk": 5}, ("rare_topk",)),
     (ContextDecideParams, {"rare_topk": 5}, ("rare_topk", "rare_weight")),
-    (SeedAdmitParams, {"rare_agree": True}, ("rare_agree",)),
+    (SeedAdmitParams, {"rare_ref": True}, ("rare_ref",)),
 ])
 def test_switch_off_keeps_params_dump_unchanged(P, kw, fields):
     """关着时新字段不进 dump → `params_hash` 与加字段之前逐位相同（产物不过期）。"""
@@ -161,6 +161,27 @@ def test_gated_upstream_on_behaves_like_optional_upstream(tmp_path):
     assert eng2.status(pages=[1])["steps"]["t_rare_step_c"]["pages"][1]["status"] == STALE
 
 
+def test_gate_on_but_upstream_missing_is_reported(tmp_path):
+    """overview#429：开关开着、可选上游没产物 → 步骤照跑（不阻塞），但运行日志与
+    status 都点名「通道未生效」；上游补跑后缺口消失、本步判过期。开关关着不报。"""
+    on = {"t_rare_step_c": {"use_a": True}}
+    logs: list[str] = []
+    eng = _engine(tmp_path, params=on)
+    eng.log = logs.append
+    eng.run(pages=[1], steps=["t_rare_step_c"])            # 只跑 C，A 没跑
+    assert any("use_a 开着" in s and "t_rare_step_a 缺 1/1 页" in s for s in logs)
+    row = eng.status(pages=[1])["steps"]["t_rare_step_c"]
+    assert eng.store.exists("tb", "t_rare_step_c", "p0001")   # 缺可选上游不阻塞，照常出产物
+    assert row["optional_gaps"] == [{"kind": "t_rare_a", "producer": "t_rare_step_a",
+                                     "switches": ["use_a"], "missing": [1]}]
+    eng.run(pages=[1], steps=["t_rare_step_a"])
+    row = eng.status(pages=[1])["steps"]["t_rare_step_c"]
+    assert "optional_gaps" not in row and row["pages"][1]["status"] == STALE   # A 的 sha 进了指纹
+    (tmp_path / "off").mkdir()
+    off = _engine(tmp_path / "off")
+    assert off.optional_gaps(STEPS["t_rare_step_c"], [1]) == []
+
+
 # ── align_ref：5-b 候选进锚定载体 ────────────────────────────────────────
 def test_rare_topk_map_uses_rank_and_dedupes():
     pr = page_rare(PAGE, BOOK, {1: ["甲", "甲", "乙", "丙"], 2: []})
@@ -227,12 +248,3 @@ def test_rare_priors_by_rank_sum_to_one():
     assert abs(sum(w for _, w in pr) - 1.0) < 1e-9
     assert pr[0][1] > pr[1][1] > pr[2][1]
     assert rare_priors([]) == []
-
-
-def test_rare_agree_record():
-    from open_guji_cv.products.kinds.recog import MatchRec
-    same = MatchRec(id="x", slot=1, verdict="same", char="文", cov=0.999, candidates=[("文", 0.999)])
-    uns = MatchRec(id="y", slot=2, verdict="unsure", cov=0.97, candidates=[("大", 0.97)])
-    assert _rare_agree(same, ["文", "丈"]) == {"pix": "文", "cnn": "文", "agree": True}
-    assert _rare_agree(uns, ["太"]) == {"pix": "大", "cnn": "太", "agree": False}
-    assert _rare_agree(uns, None)["agree"] is None

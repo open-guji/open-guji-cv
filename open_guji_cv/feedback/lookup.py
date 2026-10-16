@@ -18,6 +18,10 @@ from .mojibake import is_legal_shape
 # 同名会在函数体内把这个 logger 遮住（`log.warning(...)` 变成调 EventLog 不存在的方法）。
 _logger = logging.getLogger(__name__)
 
+#: 已经警告过的 (book, key, 值)。`human_chars` 每页调用一次（vol01 206 页），不去重的话
+#: 同一条老乱码会重复打印 206 遍（2026-10-08 vol01：56 条 × 206 = 11536 行，淹没真问题）。
+_WARNED_BAD_SHAPE: set[tuple[str, str, str]] = set()
+
 TOUCHING_CUTS_SHARD = "char-segmentation/touching-cuts"
 CUT_KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")   # 后三种 = L3 扩池（2026-09-15）
 
@@ -128,6 +132,11 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
 
 _FORCED_JZ_CACHE: dict = {}
 
+#: 定字台「小注当正文」：这格是 Step3 没拆的雙行小注 → 从中间拆（overview#265）。
+JIAZHU_AS_MAIN = "jiazhu_as_main"
+#: 反向：「正文当小注」——这格是整宽正文，Step3 把它劈成了 a/b（并进了小注段）→ 别拆（overview#415/#436）。
+MAIN_AS_JIAZHU = "main_as_jiazhu"
+
 
 def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int]]:
     """人裁「这一格是雙行小注、从中间拆」：`(page, col) → {slot, …}`（2026-09-30）。
@@ -141,6 +150,22 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
     `routes.py` 那条 `reason=jiazhu_as_main` 规则会把该页 Step3 显式失效。按事件目录的
     (名, mtime, 大小) 缓存，逐页调用不会反复解析全部日志。
     """
+    return _resolved_forced(book, JIAZHU_AS_MAIN, False, log)
+
+
+def resolved_forced_main(book: str, log=None) -> dict[tuple[int, int], set[int]]:
+    """人裁「这一格是整宽正文、别拆」：`(page, col) → {slot, …}`（2026-10-06，overview#415/#436）。
+
+    `resolved_forced_jiazhu` 的反向：事件是 `seg_defect` + `reason=main_as_jiazhu`（「正文当小注」）。
+    人看到的是**已经劈开的半格**（vol02 p100c4 的 `17a`「匕」、`17b`），所以 key 收 `…a`/`…b`
+    子格（也收整格），一律归到整格 slot；同一格两半任一半当前是这条裁决就算。取最新一条的规矩同上：
+    之后对**同一个 key** 改判就不再强制；重切成整格后对整格 key 定字（「此」）不撤销它——那正是
+    这条裁决要的结果。生效时机、失效路由与 `resolved_forced_jiazhu` 对称（`routes.py`）。
+    """
+    return _resolved_forced(book, MAIN_AS_JIAZHU, True, log)
+
+
+def _resolved_forced(book: str, reason: str, allow_sub: bool, log=None) -> dict[tuple[int, int], set[int]]:
     from .events import EventLog
     el = log or EventLog()
     try:
@@ -148,7 +173,7 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
             (p.name, p.stat().st_mtime_ns, p.stat().st_size) for p in el.events_dir.glob("*.jsonl"))))
     except OSError:
         return {}
-    hit = _FORCED_JZ_CACHE.get((book, sig[0]))
+    hit = _FORCED_JZ_CACHE.get((book, sig[0], reason))
     if hit and hit[0] == sig:
         return hit[1]
     pre = f"{book}:"
@@ -157,26 +182,32 @@ def resolved_forced_jiazhu(book: str, log=None) -> dict[tuple[int, int], set[int
         evs = list(el.iter_all())
     except FileNotFoundError:
         return {}
+    from .events import counts_as_human
     for e in evs:
-        if e.target.unit != "cell" or not e.target.key.startswith(pre):
+        if e.target.unit != "cell" or not e.target.key.startswith(pre) or not counts_as_human(e):
             continue
         p = e.payload or {}
         v = p.get("v") or e.kind
-        if e.kind not in ("confirm", "not_a_char", "skip", "relabel")                 or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
+        if e.kind not in ("confirm", "not_a_char", "skip", "relabel") \
+                or v not in ("confirm", "not_a_char", "skip", "damaged", "seg_defect", "relabel"):
             continue
         order = (e.ts, e.batch, e.seq)
         k = e.target.key
         if k not in last or order >= last[k][0]:
-            last[k] = (order, v == "seg_defect" and p.get("reason") == "jiazhu_as_main")
+            last[k] = (order, v == "seg_defect" and p.get("reason") == reason)
     out: dict[tuple[int, int], set[int]] = {}
     for k, (_o, forced) in last.items():
         if not forced:
             continue
         parts = k.split(":")
-        if len(parts) != 4 or not all(x.lstrip("-").isdigit() for x in parts[1:]):
+        if len(parts) != 4:
+            continue
+        if allow_sub and parts[3][-1:] in ("a", "b"):
+            parts[3] = parts[3][:-1]
+        if not all(x.lstrip("-").isdigit() for x in parts[1:]):
             continue
         out.setdefault((int(parts[1]), int(parts[2])), set()).add(int(parts[3]))
-    _FORCED_JZ_CACHE[(book, sig[0])] = (sig, out)
+    _FORCED_JZ_CACHE[(book, sig[0], reason)] = (sig, out)
     return out
 
 
@@ -250,7 +281,7 @@ def stale_human_marks(book: str) -> dict[str, str]:
     """字形库里已撤下的人裁：`{裸 id: 撤下时刻 YYYYMMDD 或 YYYYMMDDTHHMM（UTC）}`（`admissions.provenance='human_stale_<日期>'`）。
 
     撤法见 `scripts/check_stale_human.py`（重字签名）与 2026-09-25 的漂移检查
-    （`scripts/experiments/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
+    （`research/verdict_drift_check.py`：人裁时入库的图块 vs 同一编号现在的图块）。
     库读不到就当没有——事件侧的人裁照旧生效，不因为这张表缺席就全部作废。
     """
     import sqlite3
@@ -319,7 +350,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             bound = book_bindings(book, log)
         except Exception:
             bound = {}            # 绑定表算不出来就退回按编号（与 09-25 之前一致），不因此丢掉全部人裁
-    from .events import EventLog
+    from .events import EventLog, counts_as_human
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
     try:
@@ -331,6 +362,10 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         return out
     for e in evs:
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
+            continue
+        # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_human`）：混进来的话
+        # seed_admit 会当人裁一票定案。
+        if not counts_as_human(e):
             continue
         p = e.payload or {}
         # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是
@@ -351,8 +386,11 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         # 那批走的是追加更正事件（`scripts/mojibake_census.py`），这里只挡
         # 未来/未覆盖到的意外坏数据。
         if not is_legal_shape(p["shape"]):
-            _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
-                            book, e.target.key, p["shape"])
+            tag = (book, e.target.key, str(p["shape"]))
+            if tag not in _WARNED_BAD_SHAPE:
+                _WARNED_BAD_SHAPE.add(tag)
+                _logger.warning("human_chars(%s): %s 字形字段不合法，跳过：%r",
+                                book, e.target.key, p["shape"])
             continue
         key = e.target.key
         if bind:

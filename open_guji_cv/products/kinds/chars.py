@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-from ...core.spec import COLUMN_PX, RAW_TR, ProductKindSpec
+from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
 
 

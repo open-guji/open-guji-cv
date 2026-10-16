@@ -901,8 +901,8 @@ def test_exclusions_block_admission_and_review(tmp_path, monkeypatch):
     重跑管线绝不能把它们悄悄填回来。
     """
     from open_guji_cv.clustering import seeding as S
-    from open_guji_cv.clustering.review.seed_export import _REVIEWABLE
-    from open_guji_cv.clustering.seed_queue import STATUS_EXCLUDED
+    from open_guji_cv.clustering.seed_queue import (STATUS_EXCLUDED, STATUS_PENDING,
+                                                    STATUS_SKIPPED)
 
     root = tmp_path
     book_dir, corpus_path, variants_path = build_book(root)
@@ -918,7 +918,7 @@ def test_exclusions_block_admission_and_review(tmp_path, monkeypatch):
              .read_text(encoding="utf-8").splitlines() if l.strip()}
         it = q[victim]
         assert it.status == STATUS_EXCLUDED          # 落账
-        assert it.status not in _REVIEWABLE          # 不出审查卡
+        assert it.status not in (STATUS_PENDING, STATUS_SKIPPED)  # 不出审查卡
         assert not db.conn.execute(                  # 不进库
             "SELECT 1 FROM admissions WHERE instance_id=?",
             (victim,)).fetchone()
@@ -1125,3 +1125,15 @@ def test_force_pages_runs_only_those_pages(tmp_path):
         assert set(s4["per_page"]) >= {"2", "4", "5", "6", "7"}
     finally:
         db.close()
+
+
+def test_recrop_event_is_parsed_and_validated():
+    """recrop 事件：bbox 必须是四个数且右下大于左上，坏框宁可丢掉。"""
+    # 2026-10-06 从已删的 test_seed_export.py 挪来：测的是 seed_queue，不是审查页
+    good = ('GUJI-SEED-EVENT {"op":"recrop","instance_id":"b:5:2:15",'
+            '"char":"言","bbox":[1304,1753,1473,1913],"batch":"x","seq":1}')
+    assert len(parse_seed_events(good)) == 1
+    for bad in ('"bbox":[1,2,3]', '"bbox":[9,9,1,1]', '"bbox":"nope"'):
+        line = ('GUJI-SEED-EVENT {"op":"recrop","instance_id":"b:5:2:15",'
+                f'"char":"言",{bad},"batch":"x","seq":2}}')
+        assert parse_seed_events(line) == []

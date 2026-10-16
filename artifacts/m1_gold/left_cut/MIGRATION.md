@@ -30,7 +30,7 @@
 ## 评测与新基线
 
 ```
-python scripts/eval_left_cut.py ../open-guji-dataset/char-segmentation        # 直接
+python research/scripts_oneoff/eval_left_cut.py ../open-guji-dataset/char-segmentation        # 直接
 python -m open_guji_cv eval --from-raw --timeout 3000 run left_cut            # 经评测层
 → left-cut：穿边点 9，救回 5/5（100%），无承载格 4（人工过目）；回归门：通过
 ```
@@ -39,8 +39,8 @@ python -m open_guji_cv eval --from-raw --timeout 3000 run left_cut            # 
 ## 与 doc 上次值对照
 
 - 分片 README：58 列 114 点；commit c1f5860c62：救回 **88/97 = 91%**（2026-08-26，修后首测）；
-- `.claude/doc/char_clustering_design.md` 2026-08-26 收尾表：left-cut **91%**；
-- `.claude/doc/pipeline_handbook.md` §12（2026-08-28 裁边修复后）：`left_cut` **87/96 → 82/96**「卡在 90% 及格线边缘」。
+- `doc/design/char_clustering_design.md` 2026-08-26 收尾表：left-cut **91%**；
+- `doc/pipeline_handbook.md` §12（2026-08-28 裁边修复后）：`left_cut` **87/96 → 82/96**「卡在 90% 及格线边缘」。
 - v2：**5/5 = 100%（仅 5 个可评点）**。**点数从 97 个可评点掉到 5 个，是口径变化，不是「左缘问题消失了」**（成因是推测、未逐页验证）：v1 的裁切边按界行内缘贴着裁
   （`cell_left_x` 紧，README 原话），撇尖常穿边；v2 的 `content_x` 来自 Step3 的内容窗，边的位置与语义都换了，穿边点自然稀少。
   n=5 分辨不出任何回归——这把尺子在 v2 下「灵敏度」已经很低，建议它降级为烟雾测试。

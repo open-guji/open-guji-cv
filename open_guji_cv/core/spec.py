@@ -190,17 +190,32 @@ class StepSpec:
 def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:
     """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
     只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
-    # 同一种类可以挂多个开关（`rare_agree`／`rare_ref`／`shadow_promote` 都读 5-b）：任一为真即算数
+    # 同一种类可以挂多个开关（历史上 `rare_agree`／`rare_ref`／`shadow_promote` 都读 5-b，W2 后只剩 `rare_ref`，机制保留）：任一为真即算数
     gates: dict[str, list[str]] = {}
     for k, g in spec.optional_consumes_when:
         gates.setdefault(k, []).append(g)
+    return tuple(k for k in spec.optional_consumes
+                 if k not in gates or any(_gate_on(g, params, book) for g in gates[k]))
 
-    def _on(g: str) -> bool:
-        # `@book.<字段>`：开关在书级（`BookSpec`），不在步骤参数里（见 optional_consumes_when）
-        if g.startswith("@book."):
-            return bool(getattr(book, g[len("@book."):], False))
-        return bool(getattr(params, g, None))
-    return tuple(k for k in spec.optional_consumes if k not in gates or any(_on(g) for g in gates[k]))
+
+def _gate_on(g: str, params, book) -> bool:
+    # `@book.<字段>`：开关在书级（`BookSpec`），不在步骤参数里（见 optional_consumes_when）
+    if g.startswith("@book."):
+        return bool(getattr(book, g[len("@book."):], False))
+    return bool(getattr(params, g, None))
+
+
+def gated_optional_on(spec: StepSpec, params, book=None) -> dict[str, list[str]]:
+    """带开关的可选上游里**开关开着**的那些：`{产物种类: [开着的开关名, ...]}`。
+
+    给「开关开着、上游却没产物」的提示用（`Engine.optional_gaps`，overview#429）：
+    可选上游缺席时步骤照跑、只是那一路证据没有——`rare_ref` 开着而 5-b 没跑，
+    seed_admit 照常出结果、`rare_ref` 通道 0 格，看上去像开了，其实没生效。"""
+    out: dict[str, list[str]] = {}
+    for k, g in spec.optional_consumes_when:
+        if _gate_on(g, params, book):
+            out.setdefault(k, []).append(g)
+    return out
 
 
 # ── 单位键 ───────────────────────────────────────────────────────────
@@ -231,5 +246,3 @@ def parse_key(key: str) -> tuple[int, int | None, int | None]:
     return page, col, slot
 
 
-def page_of(key: str) -> int:
-    return parse_key(key)[0]

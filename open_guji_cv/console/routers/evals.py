@@ -114,7 +114,7 @@ def api_round(book: str = "vol01", pages: str = "") -> dict:
     判据与阈值在 `eval/round_check.py`（唯一事实源），`scripts/round_check.py`
     与这里共用——阈值只写一处，免得过一阵子两边对不上。
 
-    含义与「什么时候修算法」见 `.claude/doc/review_loop_sop.md`：
+    含义与「什么时候修算法」见 `doc/design/review_loop_sop.md`：
     绿=继续跑，黄=记着别动算法（样本不够时改算法是在拟合噪声），红=停下修。
     """
     from ...eval import round_check as rc

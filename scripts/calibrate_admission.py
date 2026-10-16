@@ -4,7 +4,7 @@
     PYTHONPATH=. python scripts/calibrate_admission.py output/vol01
 
 这是「对进库这一步自己的反馈」的固定入口（三条反馈环之三，见
-.claude/doc/review_feedback_loops.md）。每轮 seed-ingest 回收人裁之后跑：
+doc/design/review_feedback_loops.md）。每轮 seed-ingest 回收人裁之后跑：
 
 1. **存量复裁提示**：待审行里有多少按**现行**规则已能自动进
    （规则升级后没回填的旧行）→ 提示跑 readjudicate_pending；

@@ -128,7 +128,7 @@ console.log(JSON.stringify({ plain, on, off, flag, n: R.countShadowPre(cards) })
 def test_export_script(tmp_path):
     import importlib.util
     from pathlib import Path
-    sp = Path(__file__).resolve().parents[1] / "scripts/experiments/shadow_admit/export_for_cards.py"
+    sp = Path(__file__).resolve().parents[1] / "research/shadow_admit/export_for_cards.py"
     spec = importlib.util.spec_from_file_location("export_for_cards", sp)
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)

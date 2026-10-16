@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from .page_type import SKIP_TYPES, PageTypeLabel, policy_of
+from .page_type import SKIP_TYPES, PageTypeLabel
 
 
 def evaluate(gold: list[PageTypeLabel],

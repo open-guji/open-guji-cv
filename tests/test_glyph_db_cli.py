@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-import open_guji_cv.__main__ as main_mod
+import open_guji_cv.cli_glyph_db as main_mod
 from open_guji_cv.clustering import glyph_db as glyph_db_mod
 from open_guji_cv.core import workspace as workspace_mod
 

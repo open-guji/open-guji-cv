@@ -47,8 +47,8 @@ v2 口径：某 `(col, slot)` 上实例里同时有 sub=a、sub=b → row；只�
 
 ## 与 doc 上次值对照
 
-- 分片 README 回归口径：不许丢字、不许吞正文；2026-08-28 裁边修复后 `.claude/doc/pipeline_handbook.md` §12 记「`jiazhu-tail` 丢字 **2→1**」；
-  `.claude/doc/char_clustering_design.md` 收尾表：「jiazhu-tail 丢字 **0**（金标重键 2 条）」。
+- 分片 README 回归口径：不许丢字、不许吞正文；2026-08-28 裁边修复后 `doc/pipeline_handbook.md` §12 记「`jiazhu-tail` 丢字 **2→1**」；
+  `doc/design/char_clustering_design.md` 收尾表：「jiazhu-tail 丢字 **0**（金标重键 2 条）」。
 - v2：丢字 **0**、吞正文 **0**（44 条全部判对）。可比：同一条回归口径，v2 下 44/44 与目视一致；
   原 57 条里 10 条是排除页、3 条键漂移/标签存疑，所以**样本比旧的少 13 条**，不是同一批样本。
 

@@ -1,8 +1,8 @@
 # 影子放行闸（shadow_veto）—— 只降级不升级的第二意见
 
 > 2026-09-30 用户批准第一阶段，N1 道落地（overview #305）。**缺省关，不改任何书的默认行为。**
-> 实验脚本在 `scripts/experiments/shadow_admit/`，线上模块在 `open_guji_cv/shadow/`。
-> 实测与推荐门槛见 `HANDOFF_N1.md`、`scripts/experiments/shadow_admit/results_vol03/gate_eval_cv_0928.md`。
+> 实验脚本在 `research/shadow_admit/`，线上模块在 `open_guji_cv/shadow/`。
+> 实测与推荐门槛见 `HANDOFF_N1.md`、`research/shadow_admit/results_vol03/gate_eval_cv_0928.md`。
 
 ## 它做什么
 
@@ -22,7 +22,7 @@ params:
     shadow_veto: true
     shadow_conf: 0.8          # 缺省 0.97；推荐值与证据见 HANDOFF_N1.md
     # shadow_model: <路径>     # 缺省 models/shadow_admit/shadow_gate_v1.joblib；路径不进指纹
-    # shadow_low_conf: 0.0     # >0：影子最大把握度低于它也降级。缺省关（实测无标签可验，见 HANDOFF）
+    # （shadow_low_conf 已于 W2 删除；gate 内部 low_conf 恒为 0）
 ```
 
 关着时五个 `shadow_*` 字段不进 `model_dump`：参数指纹与加字段前逐位相同（`tests/test_shadow_gate.py`）。

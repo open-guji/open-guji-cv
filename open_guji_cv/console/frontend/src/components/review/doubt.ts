@@ -16,6 +16,7 @@ export const DOUBT_NAMES: Record<string, string> = {
   form_open: '义定形未定',
   ref_lib_variant: '库形异体',
   iron_vs_ref: '铁证≠整理本',
+  iron_ex_missing: '铁证缺对照刻例图（缓存）',
   context_vs_ref: '上下文≠整理本',
   context_verdict: '上下文档外',
   context_blank_cell: '空白字块',
@@ -88,8 +89,9 @@ export function occludedGroupRows(cards: ReviewCard[], verdicts: Record<string, 
                   client_ts: v.ts ?? now, ...via })
       continue
     }
-    if (v.done === 'jiazhu') {   // 小注当正文（overview#265），与 reviewClass.verdictRow 同形
-      rows.push({ id: c.id, v: 'seg_defect', quality: 'truncated', reason: 'jiazhu_as_main',
+    if (v.done === 'jiazhu' || v.done === 'main') {   // 小注当正文（overview#265）/ 正文当小注（#436），与 reviewClass.verdictRow 同形
+      rows.push({ id: c.id, v: 'seg_defect', quality: 'truncated',
+                  reason: v.done === 'main' ? 'main_as_jiazhu' : 'jiazhu_as_main',
                   shape: v.shape || '', client_ts: v.ts ?? now, ...via })
       continue
     }

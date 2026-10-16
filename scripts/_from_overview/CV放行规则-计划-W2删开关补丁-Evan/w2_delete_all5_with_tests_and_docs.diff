@@ -1,0 +1,641 @@
+diff --git a/doc/handoffs/Q3_429.md b/doc/handoffs/Q3_429.md
+index 34fe468..60ec8e0 100644
+--- a/doc/handoffs/Q3_429.md
++++ b/doc/handoffs/Q3_429.md
+@@ -8,7 +8,7 @@
+ | A `272e9af` | 报警、`build-rare-index --jobs`、`cache warm`、runbook S5-b | **不过期**。没有动任何 Step 模块或 code_deps；18 个 Step 的 code_hash 前后逐个比对，全部一致 |
+ | B `4c1ca6b` | `cnn_candidates` 的真刻例原型缓存从一档改成两档 | 只有 **rare_candidates** 的 code_hash 变，别的步不变 |
+ 
+-关于 B 的影响：现在工作区里没有一册书开着读 5-b 的开关（rare_ref / rare_agree / shadow_promote），这一步对它们自动跳过，不会触发重算。真正受影响的只有将来开开关的册，而那些册本来就要跑 5-b。总管不要 B 的话，revert 这一个提交即可。
++关于 B 的影响：现在工作区里没有一册书开着读 5-b 的开关（rare_ref；当时还有 rare_agree / shadow_promote，W2 已删），这一步对它们自动跳过，不会触发重算。真正受影响的只有将来开开关的册，而那些册本来就要跑 5-b。总管不要 B 的话，revert 这一个提交即可。
+ 
+ ## 一、慢在哪（第 1 问）
+ 
+@@ -60,7 +60,7 @@
+   `⚠️ seed_admit：rare_ref 开着，但 rare_candidates 缺 4/20 页（p101,p102,p103,p104）——这些页 rare_ref 通道未生效……`。
+   vol04 实测点名的就是没跑 5-b 的那 4 页。
+ 
+-实现是通用的：`StepSpec.optional_consumes_when` 里任一开关开着、上游却没有产物，就会报（rare_agree、shadow_promote、ocr_candidates 同样适用）。另外，`guji pipeline` 要跑 rare_candidates 而表没预建时，会先提示缺哪张表、多少字、预计多久、怎么备。
++实现是通用的：`StepSpec.optional_consumes_when` 里任一开关开着、上游却没有产物，就会报（rare_ref、ocr_candidates 同样适用；rare_agree、shadow_promote 已于 W2 删除）。另外，`guji pipeline` 要跑 rare_candidates 而表没预建时，会先提示缺哪张表、多少字、预计多久、怎么备。
+ 
+ 有了 5-b 以后 rare_ref 的效果（本地产物，**没推**，留给整理那边量对错）：p3–12 有 14 格走 rare_ref 放行，p95–100 有 15 格。#429 原来那次 p3–12 是 0 格。
+ 
+diff --git "a/doc/runbook/\346\225\264\347\220\206\344\270\200\345\206\214\344\271\246.md" "b/doc/runbook/\346\225\264\347\220\206\344\270\200\345\206\214\344\271\246.md"
+index d31f36a..e8be1fb 100644
+--- "a/doc/runbook/\346\225\264\347\220\206\344\270\200\345\206\214\344\271\246.md"
++++ "b/doc/runbook/\346\225\264\347\220\206\344\270\200\345\206\214\344\271\246.md"
+@@ -151,7 +151,7 @@ python scripts/zhengli/zl.py metrics --book vol05 --ws $WS         # 度量表
+   - 换过字形库后，glyph_match 不会自动判过期，此时要 `--from glyph_match --force`。这是本文唯一允许 `--force` 的地方。
+ 
+ #### S5-b 生僻字候选（`rare_candidates`）：什么时候要跑、怎么跑（overview#429）
+-- **什么时候要跑**：书 yaml `params.seed_admit` / `align_ref` / `context_decide` 里开了 `rare_ref`、`rare_agree`、`shadow_promote` 任一个时，`guji status` 会多出 `rare_candidates` 这一步；都没开就自动跳过，不用管。
++- **什么时候要跑**：书 yaml `params.seed_admit` / `align_ref` / `context_decide` 里开了 `rare_ref`（`rare_agree`、`shadow_promote` 已于 W2 删除）或 `rare_topk` 时，`guji status` 会多出 `rare_candidates` 这一步；都没开就自动跳过，不用管。
+   - 开了开关却没跑 5-b，seed_admit 照常出结果，但相应通道 **0 格**，等于没开。现在会有两处提示：
+     - `guji status` 在那一步下面印「⚠ rare_ref 开着但 rare_candidates 缺 N 页，这些页 rare_ref 通道未生效」；
+     - 跑批日志开头印同一句。
+diff --git a/doc/shadow_gate.md b/doc/shadow_gate.md
+index 7ea6d5a..aa3946c 100644
+--- a/doc/shadow_gate.md
++++ b/doc/shadow_gate.md
+@@ -22,7 +22,7 @@ params:
+     shadow_veto: true
+     shadow_conf: 0.8          # 缺省 0.97；推荐值与证据见 HANDOFF_N1.md
+     # shadow_model: <路径>     # 缺省 models/shadow_admit/shadow_gate_v1.joblib；路径不进指纹
+-    # shadow_low_conf: 0.0     # >0：影子最大把握度低于它也降级。缺省关（实测无标签可验，见 HANDOFF）
++    # （shadow_low_conf 已于 W2 删除；gate 内部 low_conf 恒为 0）
+ ```
+ 
+ 关着时五个 `shadow_*` 字段不进 `model_dump`：参数指纹与加字段前逐位相同（`tests/test_shadow_gate.py`）。
+diff --git "a/doc/\345\274\200\345\205\263\347\231\273\350\256\260\350\241\250.md" "b/doc/\345\274\200\345\205\263\347\231\273\350\256\260\350\241\250.md"
+index 97ae69f..1d3d801 100644
+--- "a/doc/\345\274\200\345\205\263\347\231\273\350\256\260\350\241\250.md"
++++ "b/doc/\345\274\200\345\205\263\347\231\273\350\256\260\350\241\250.md"
+@@ -16,7 +16,7 @@
+ | `seed_admit.shadow_veto`（`shadow_conf`）| 关（0.97）| 影子模型只降不升：已放行、但模型很有把握是别的字的格拉回待审 |  N1、#360：vol03 降 14 格、有标签 13 格都是错字；**vol04 精度只有 8%**（异体字多，#431）；vol05 `guji exp` 试跑（overview#457）：conf 0.8 拦 11 格全是「刻本异体 vs 通行字」；用户看图裁 10 格，按口径 A（逐码位）**拦对 7、误拦 3**（按异体等价算则拦对 2、误拦 8，口径决定结论）；conf 0.97 只拦 1 格、拦对 ；vol05 分层抽检（用户裁 100 格，影子不同意的 76 格普查）：conf ≥0.8 共 25 格，**拦准 18/24＝75%**；其中线上拦了 11 格（错 7 对 3），被「异体弃权」放过 14 格（**错 11 对 3**）；阈值 0.5/0.6/0.7/0.9 拦准 47%/58%/65%/67%；影子同意层随机 34 格 0 错（95% 上界 10%，太宽）；**vol04 `guji exp`**（看图结论 795 格，口径 A）：conf 0.8 误放行 24→21、误拦 6；关异体弃权 24→20、误拦 17；conf 0.97 不动；**vol05 A 组整册关它重放（overview#493，10-09，`hint_ignore_dash` 开、完整库）**：待审 309→284（多放 25 格、丢 0），金标两栏不变（25 格都不在金标里）；25 格看图（整理复判 7 格）：**明确误放行 3（38:2:17 圓→圖、179:9:14 符号×被放成又、67:6:19 𢓝→佻）＋倾向 1（116:5:11）**、3 不确定、其余 18 与放行字一致。**结论：vol05 缺省继续开着，别关**（关了换 25 格放行，至少 3 个错） 〔用户 10-07 定「异体码位放行算错」：照此 vol05 上 conf 0.8 拦对 7/10，#431 原定根治方向（异体关系不拦）要重议；开不开待 CV 总管据此再定〕 | vol05（书级 `shadow_veto: true`、`shadow_conf: 0.8`，10-09 核；vol04 曾开 0.8、10-06 定关、10-07 撤） | CV 总管 | 关（缺省）；vol05 开 |
+ | `seed_admit.shadow_veto_variant_abstain` | 开 | `shadow_veto` 的「异体弃权」：影子认的字与放行字语义同字（异体／简繁）时不拦；放行字是罕用码位时例外照拦（#431）| vol05 `guji exp`（overview#457）：关掉它、conf 0.8 时拦 23 格，**拦对 17、误拦 5**、拿不准 1；开着时只拦 11 格（拦对 7、误拦 3）。分层普查：被它放过的 14 格错 11 对 3。**vol04 `guji exp`**（看图结论，口径 A）：关掉它多拦 19 格，只多拦对 1 格、多误拦 11 格（徤/竒/茘/帯 等放行的刻本异体被影子认成通行字，旨→㫖 7 格）——与 vol05 相反，Y1 金标全在待审格、与此无交集 | vol05 书级覆盖为 false（10-07 定）；其余册缺省开，只在 shadow_veto 开时起作用 | CV 总管 | 开（缺省）。CV 经理 10-07 定作为可关开关保留缺省；vol04 验完：按册定，vol05 可关，vol04 不关 |
+ | `seed_admit.ry_group`（`ry_group_cache`）| 关 | 日／曰 v2 答案表：待审的日曰格，离线 muse∧Gemini 两遍同字（haiku 只否决）且与整理本对位字相同 → 抬为放行（通道 `ry_group`）；只抬待审、不改字、不降已放行 | overview#441：99 格强真值 muse∧Gemini 52/52 对；待审核心格 11 格有强真值放行 7 全对（样本小，预计全册放行 <2% 待审）| 无（PR1 只落代码，等 Ethan 重放、Mila 排窗口）| CV（Evan）| 关 |
+-| `seed_admit.shadow_promote`（`shadow_promote_conf`）| 关（0.95）| 影子模型把待审格放出去 | #349、#360：与 rare_ref 打平，另多放 1–2%，**没有真值可验** | 无 | CV 总管 | 关（用户 10-02 定先不开）|
++| `seed_admit.shadow_promote`（`shadow_promote_conf`）| 关（0.95）| 影子模型把待审格放出去 | #349、#360：与 rare_ref 打平，另多放 1–2%，**没有真值可验** | 无 | CV 总管 | **已删（W2，2026-10-14）**；原：关（用户 10-02 定先不开）|
+ | `seed_admit.juan_rule` | 关 | 「数字＋卷」放行规则 | Y1（overview#454 第 1 条、#471）：沙箱回放 vol05 待审 348→323（−25），金标误放行 0；整理 10-07 在 vol05 开（ws main `03449023`）；已合 main | vol05（vol04 未验）| Y1／CV 总管 | 开（vol05）；其余册待 `guji exp` 验 |
+ | `seed_admit.solo_ctx_veto` | 关（0） | match_solo 系放行前看 `context_decide.ranked`：第一名与放行字语义不同且概率 ≥ 值就落审（doubt `solo_ctx_veto`） | CV 总管（overview#450，2026-10-09）：vol05 金标 147:9:9 土 0.9955／士 0.9813 被放行而 ranked 士 0.6327；377 格 match_solo 里 ranked[0]≠放行字 27 格（含异体码点差，默认语义表不并奥/奧、𠄞/二）；vol05 1–184 实测 e0（10-08）：0.3/0.5/0.7 翻 13/10/3 格全在 match_solo，金标 23 格仅 147 变（0.7 漏 147）；已合 main（open-guji-cv#14，2026-10-09；取代试验开关 solo_margin） | 已量，推荐 0.5（vol05 书级打开，缺省仍 0）| CV 总管 | 关 |
+ | `seed_admit.variant_tie`（`variant_tie_cov` 0.97、`variant_tie_extra` 组表）| 关 | 库首位与整理本字在用户裁过的异体组内并列且近邻都在组内 → 放行首位（通道 `variant_tie`）。代码：`steps/seed_admit.py` 中 `variant_tie`（bool，缺省 False）是开关；`variant_tie_cov`（缺省 0.97）是阈值；`variant_tie_extra`（组表，缺省空）只收窄「异体边」来源，空则认 `variants.json` 的直接异体边。组表不是开关，「给组表才生效」的说法不准 | Y1（overview#471）：6 组表 `doc/exp/variant_tie_groups-vol04-vol05.yaml`（不含 㫖），vol04 487→469、vol05 339→314 前后，金标误放行 0；已合 main（`e468942a10`）| 无（main 上没有任何书 yaml 含 `variant_tie`；原写 vol04、vol05 不实，2026-10-09 核）| Y1／CV 总管 | 关（缺省）；册上实际未开。原表「开（给组表时）」与 yaml／代码不符，已更正；叅／參等并组待用户按组裁 |
+diff --git a/open_guji_cv/core/engine.py b/open_guji_cv/core/engine.py
+index 6371774..03419a9 100644
+--- a/open_guji_cv/core/engine.py
++++ b/open_guji_cv/core/engine.py
+@@ -282,7 +282,7 @@ class Engine:
+ 
+         - `ocr_candidates`（Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）；
+         - `rare_candidates`（Step5-b 生僻字候选）**没有任何下游真正在读它时**（2026-10-01）：
+-          读它的只有 `seed_admit.rare_agree` 与 `context_decide.rare_topk`，缺省都关；两个都关的
++          读它的只有 `seed_admit.rare_ref` 与 `context_decide.rare_topk`，缺省都关；两个都关的
+           书（vol02/vol03）跑它是白花时间——vol03 104 页 ≈12 分钟，而且指纹里带着字形库内容
+           （`real_proto`），每次导出字形库都会让它整册过期重算。审字卡上的「查候选」走
+           `/api/rare` 现算，不读这一步的产物。
+diff --git a/open_guji_cv/core/spec.py b/open_guji_cv/core/spec.py
+index 7201575..4232d11 100644
+--- a/open_guji_cv/core/spec.py
++++ b/open_guji_cv/core/spec.py
+@@ -190,7 +190,7 @@ class StepSpec:
+ def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:
+     """`optional_consumes` 里**这次真正算数**的那些：带开关的（`optional_consumes_when`）
+     只在参数字段为真时留下。指纹与过期传播都走它，两边口径一致。"""
+-    # 同一种类可以挂多个开关（`rare_agree`／`rare_ref`／`shadow_promote` 都读 5-b）：任一为真即算数
++    # 同一种类可以挂多个开关（历史上 `rare_agree`／`rare_ref`／`shadow_promote` 都读 5-b，W2 后只剩 `rare_ref`，机制保留）：任一为真即算数
+     gates: dict[str, list[str]] = {}
+     for k, g in spec.optional_consumes_when:
+         gates.setdefault(k, []).append(g)
+diff --git a/open_guji_cv/steps/seed_admit.py b/open_guji_cv/steps/seed_admit.py
+index fd7f747..9d40c0c 100644
+--- a/open_guji_cv/steps/seed_admit.py
++++ b/open_guji_cv/steps/seed_admit.py
+@@ -307,36 +307,11 @@ class SeedAdmitParams(BaseModel):
+     书级 `codepoints` 认过这一对的照放。**直接边（双向、单向）行为一概不变**。
+     实测（四庫 vol01–04 快照 + 全唐文 v006–v010 快照，见 #178 评论）：靠异体等价放行的
+     1,321 格里间接路径 2 格，都是 `𢑴`→`彝`→`彞`，1 格存形错；其余全是直接边。"""
+-    lib_confident_cov: float = 0.0
+-    """库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。0 = 关（缺省）。
+-
+-    对象：上面所有通道都没放行、库判 `unsure`、Step6 退回先验（`source=prior`，
+-    即人审卡上的「上下文 margin 不足」）的格。库 top1 的 cov ≥ 本值、且领先第二名
+-    ≥ `lib_confident_gap` 时放行 top1。硬约束（任务书 item 2）：
+-    - 不碰 己／已／巳 一族（`always_review` 与 `ji_yi_si.FAMILY`）；
+-    - 不碰形近对表里的字：top1 在 `confusable.partners()`（手工＋人裁＋字体表）或铁证
+-      补充表（`iron_extra_confusable.json`）里有对手就不放——**按字不按对**，不要求
+-      对手恰好在候选里；
+-    - 库无护栏（`guard is None`）；本格没有任何流程内疑问（`near_form`／`replace_align`／
+-      `context_vs_ref`／`form_open`／`iron_vs_ref` …）——**整理本说了不同（replace）一律不放**；
+-    - 只当兜底：放在铁证之后、`if not ok` 里，只新增放行，不改动任何已放行格。
+-    **缺省关、不推荐开**（四册 vol01–04 实测，open-guji-core/overview#59）：这个池子里有人裁的
+-    109 格库 top1 错 94 格——真字多半库里没收，cov 0.95~0.98 只是「库里最像的那个」；最窄的
+-    候选档（cov≥0.98、领先≥0.03）四册合计只有 130 格，全审 0 错也压不到 95% 上界 ≤1%。
+-    留着开关是给「人审过这一档之后」用的，不是现成的放宽。"""
+-    lib_confident_gap: float = 0.0
+-    """`lib_confident` 通道要求库 top1 领先第二候选的最小 cov 差。"""
+     off_channels: str = ""
+     """关掉 `admission_decision` 的哪几条通道（逗号分隔，如 `"match_solo"`；2026-09-28，
+     overview#155）。命中的判决作废、记 doubt `channel_off`，后面的兜底通道（context／
+     ref_lib／铁证…）照常有机会——关的是**这条路**，不是这个格。空串 = 全开（旧行为）。
+     书级用：书 yaml `params: {seed_admit: {off_channels: match_solo}}`。"""
+-    solo_confusable_guard: bool = False
+-    """match_solo 系（`match_solo`/`match_solo_ocr`/`match_solo_cnn`）加形近闸（2026-09-28，
+-    overview#155）：库 top1 在任何一张形近表里（`_confusable_char`：NEAR_FORM_CHARS、
+-    `confusable.partners()`、铁证追加表）就不单独放行，记 doubt `solo_confusable`、落人审。
+-    起因：全唐文 v006 match_solo 放行「屢動千戈」的「千」，图与整理本都是「干」——
+-    这一路只有形状一条证据，千/干 这种形近对 cov 照样过 0.99。缺省关（旧行为）。"""
+     rare_cp_ctx_review: bool = False
+     """罕用码位 × `context` 通道落审（2026-10-10，overview#437 异体组方案 A，缺省关）：放行字不在
+     U+4E00–9FFF（扩展区、部首、兼容区，同 `_rare_cp`／`context_garble_guard` 口径）、且放行通道恰为
+@@ -367,13 +342,6 @@ class SeedAdmitParams(BaseModel):
+     的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
+     只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
+     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
+-    rare_agree: bool = False
+-    """记「像素与 CNN 两路首选是否一致」（2026-09-28，D 道 overview#126），缺省关。
+-    开了读 `rare_candidates`（5-b），在每格 `evidence.rare` 记 `{pix, cnn, agree}`：
+-    `pix` = 库（`glyph_match`）首位、`cnn` = 5-b 首位、`agree` = 两字相同。
+-    **只记、不放行**——R 道实测两路一致时精确率 97.6%（维基锚定集）／90.7%（人裁难例），
+-    达不到 1% 错判门槛（#86）；记下来是给以后按书标定用的。关着时不读 5-b、不进指纹、
+-    不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_agree: true}}` 打开。"""
+     rare_ref: bool = False
+     """规则 A「5-b × 整理本」放行通道 `rare_ref`（2026-10-02，D3 道 overview#349），缺省关。
+ 
+@@ -448,7 +416,6 @@ class SeedAdmitParams(BaseModel):
+     关着时下面四个字段都不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+     shadow_model: str = ""              # 模型文件；空 = models/shadow_admit/shadow_gate_v1.joblib。路径不进指纹（path_params）
+     shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
+-    shadow_low_conf: float = 0.0        # >0：影子最大把握度低于它也降级（缺省关）
+     shadow_veto_variant_abstain: bool = True
+     """影子选的字与现放行字**语义同字**（`vmap.semantic` 相同，即异体／简繁）时影子弃权、不降级
+     （overview#431）：vol04 影子拦 61 格只 5 格真错，56 格是放行字＝证人字＝图上字形的刻本异体
+@@ -457,13 +424,6 @@ class SeedAdmitParams(BaseModel):
+     vol04 弃权放回的 5 格真错（𠮓→變、𣼣→漏…）都是这一型；代价是 㫖、㓂 这类罕用区刻本异体也会照常降级。
+     只在 `shadow_veto` 开着时进 dump。"""
+     shadow_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
+-    shadow_promote: bool = False
+-    """影子升级（与 `shadow_veto` 并列，缺省关）：对**待审**（admit=False）、无硬护栏、非人裁的格，
+-    影子首选字必须**等于整理本字或库首位**（至少有一路独立背书），且把握度 ≥ `shadow_promote_conf` →
+-    放行，字 = 影子首选，`channel`/`provenance` = `shadow`，evidence 记 `shadow_promote`。
+-    只升不降；人裁、遮挡、排除名单、护栏、形近、空白字块都不碰；信号缺失／本格自身在库里／异常 → 弃权。
+-    关着时 `shadow_promote*` 不进 dump，产物逐字节不变。"""
+-    shadow_promote_conf: float = 0.95   # 放行把握度门槛；推荐值与证据见 HANDOFF_D3.md
+     approx_fingerprint: str = ""
+     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
+ 
+@@ -595,7 +555,7 @@ class SeedAdmitParams(BaseModel):
+ 
+     @model_serializer(mode="wrap")
+     def _drop_off_rare(self, handler):
+-        """`rare_agree` 关着时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
++        """关着的可选字段不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
+ 
+         `approx_gate`／`approx_fingerprint` 同理（overview#276）：闸是缺省值（关）时不进 dump；
+         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
+@@ -618,10 +578,8 @@ class SeedAdmitParams(BaseModel):
+         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
+             d.pop("ji_yi_si_clf_llm", None)
+             d.pop("ji_yi_si_clf_margin", None)
+-        if isinstance(d, dict) and not self.rare_agree:
+-            d.pop("rare_agree", None)
+         if isinstance(d, dict) and not self.shadow_veto:
+-            for k in ("shadow_veto", "shadow_conf", "shadow_low_conf", "shadow_veto_variant_abstain"):
++            for k in ("shadow_veto", "shadow_conf", "shadow_veto_variant_abstain"):
+                 d.pop(k, None)
+         if isinstance(d, dict):
+             # N1/N2/N3（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
+@@ -635,10 +593,7 @@ class SeedAdmitParams(BaseModel):
+                 d.pop(k, None)
+         if isinstance(d, dict) and not self.rare_ref:
+             d.pop("rare_ref", None)
+-        if isinstance(d, dict) and not self.shadow_promote:
+-            d.pop("shadow_promote", None)
+-            d.pop("shadow_promote_conf", None)
+-        if isinstance(d, dict) and not (self.shadow_veto or self.shadow_promote):
++        if isinstance(d, dict) and not self.shadow_veto:
+             for k in ("shadow_model", "shadow_model_fingerprint"):
+                 d.pop(k, None)
+         if isinstance(d, dict) and not self.approx_gate:
+@@ -726,7 +681,7 @@ class SeedAdmitParams(BaseModel):
+             from ..clustering.note_lexicon import DEFAULT_LEXICON
+             object.__setattr__(self, "note_fingerprint",
+                                corpus_fingerprint([self.note_lexicon or str(DEFAULT_LEXICON)]))
+-        if (self.shadow_veto or self.shadow_promote) and not self.shadow_model_fingerprint:
++        if self.shadow_veto and not self.shadow_model_fingerprint:
+             from ..shadow.model import file_fingerprint
+             object.__setattr__(self, "shadow_model_fingerprint",
+                                file_fingerprint(_shadow_model_path(self)) or "missing")
+@@ -755,8 +710,7 @@ class SeedAdmitStep(Step):
+         id="seed_admit", title="C1 进库准入", version="1.16", unit="cell",   # 1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
+         optional_consumes=("ocr_candidates", "rare_candidates"),
+-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_agree"),
+-                                ("rare_candidates", "rare_ref"), ("rare_candidates", "shadow_promote"),),
++        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_ref"),),
+         produces=("seed_admit",),
+         params=SeedAdmitParams,
+         needs=("db",),
+@@ -849,7 +803,7 @@ class SeedAdmitStep(Step):
+                      if p.context_narrow_col_review else {})
+         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
+         rtop: dict[str, list[str]] = {}
+-        if p.rare_agree or p.rare_ref:
++        if p.rare_ref:
+             from .align_ref import rare_topk_map
+             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
+         amap = _align(ctx, page)
+@@ -1052,10 +1006,6 @@ class SeedAdmitStep(Step):
+                 if ok and channel in off_channels:
+                     ok, channel = False, None
+                     doubts.append("channel_off")
+-                elif (ok and p.solo_confusable_guard and channel in _SOLO_CHANNELS
+-                      and r.candidates and _confusable_char(r.candidates[0][0])):
+-                    ok, channel = False, None
+-                    doubts.append("solo_confusable")
+                 elif (ok and p.solo_ctx_veto and channel in _SOLO_CHANNELS
+                       and _solo_ctx_vetoed(dmap.get(r.id), r.candidates, vm_here, p.solo_ctx_veto)):
+                     ok, channel = False, None
+@@ -1313,21 +1263,6 @@ class SeedAdmitStep(Step):
+                     elif iron_char is not None:
+                         ok, channel, char, prov = True, "iron", iron_char, "iron"
+                         doubts = []
+-                # 库高置信兜底（`lib_confident_cov`，缺省关）：只补「库已经很像、只因 Step6
+-                # 帮不上（退回先验）」的格。约束见参数文档；`doubts` 非空说明流程里已有别的
+-                # 理由拦它（整理本 replace、形近、互证冲突……），一律不碰。
+-                if (not ok and p.lib_confident_cov > 0 and not doubts and not form_open
+-                        and r.verdict == "unsure" and r.guard is None and r.candidates
+-                        and d is not None and d.source == "prior"):
+-                    _top, _c1 = r.candidates[0]
+-                    _c2 = r.candidates[1][1] if len(r.candidates) > 1 else 0.0
+-                    if (_c1 >= p.lib_confident_cov and _c1 - _c2 >= p.lib_confident_gap
+-                            and _top not in always and _top not in _JYS
+-                            and not (align_char and align_char in _JYS)
+-                            and not _confusable_char(_top)
+-                            and not (align_char and vm_here.semantic(align_char)
+-                                     != vm_here.semantic(_top))):
+-                        ok, channel, char, prov = True, "lib_confident", _top, "match"
+                 # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
+                 if ok and p.nonchar_gate:
+                     _ir2 = imap.get(r.id)
+@@ -1363,8 +1298,6 @@ class SeedAdmitStep(Step):
+                               "ocr": (o.topk[:3] if o else []),
+                               "ctx_margin": (d.margin if d else None),
+                               **({"form": form_ev} if form_ev else {}),
+-                              **({"rare": _rare_agree(r, rtop.get(r.id))}
+-                                 if p.rare_agree else {}),
+                               **({"approx": apx_ev} if apx_ev else {}),
+                               **({"patch_missing": patch_missing[r.id]}
+                                  if r.id in patch_missing else {}),
+@@ -1388,10 +1321,6 @@ class SeedAdmitStep(Step):
+             d_veto = _shadow_veto_pass(ctx, page, p, out, mmap, amap)
+             n_auto -= d_veto
+             n_review += d_veto
+-        if p.shadow_promote:
+-            d_pro = _shadow_promote_pass(ctx, page, p, out, mmap, amap)
+-            n_auto += d_pro
+-            n_review -= d_pro
+         if p.seal_blank_page and p.lane_seal:
+             from .occlusion import page_seal_blank
+             d_seal = _seal_blank_flip(out, page_seal_blank(ctx, page, p),
+@@ -1540,20 +1469,20 @@ _SHADOW_GATES: dict = {}
+ 
+ def _shadow_model_path(p: "SeedAdmitParams"):
+     """缺省模型：只开 veto 用 v1（老口径，行为不变）；开了 promote 用 v2（要名次类特征）。"""
+-    from ..shadow.model import DEFAULT_MODEL, PROMOTE_MODEL
+-    return p.shadow_model or (PROMOTE_MODEL if p.shadow_promote else DEFAULT_MODEL)
++    from ..shadow.model import DEFAULT_MODEL
++    return p.shadow_model or DEFAULT_MODEL
+ 
+ 
+ def _shadow_gate(p: "SeedAdmitParams"):
+     """进程内缓存：同一 (模型指纹, db, 门槛) 只建一次（字形库人裁表要扫 sqlite）。"""
+-    key = (p.shadow_model_fingerprint, str(_shadow_model_path(p)), p.db_path, p.variants, p.shadow_conf, p.shadow_low_conf)
++    key = (p.shadow_model_fingerprint, str(_shadow_model_path(p)), p.db_path, p.variants, p.shadow_conf)
+     g = _SHADOW_GATES.get(key)
+     if g is None:
+         from ..shadow.gate import ShadowGate
+         from ..shadow.model import load_model
+         from ..shadow.signals import load_context
+         g = ShadowGate(load_model(_shadow_model_path(p)), load_context(p.db_path, p.variants or None),
+-                       p.shadow_conf, p.shadow_low_conf)
++                       p.shadow_conf)
+         _SHADOW_GATES.clear()
+         _SHADOW_GATES[key] = g
+     return g
+@@ -1707,43 +1636,6 @@ def _rr_clf_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, pa
+     return n
+ 
+ 
+-def _shadow_promote_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
+-    """影子升级（`shadow_promote`）：待审格里，影子首选 = 整理本字或库首位且把握度够 → 放行。→ 升级格数。
+-
+-    只升不降，只碰 admit=False、非人裁、无硬护栏、没被 `shadow_veto` 降过的格；放在 veto 之后，
+-    所以本遍放行的格不会再被 veto 回头否掉。模型读不到／口径不符 → 抛错（同 veto）。"""
+-    from ..shadow.gate import promote_judge
+-    from ..shadow.signals import CellEvidence, jmerge
+-    gate = _shadow_gate(p)
+-    rare = _opt(ctx, "rare_candidates", page)
+-    rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
+-    n = 0
+-    for col in out:
+-        for rec in col.chars or []:
+-            if rec.admit or rec.provenance == "human" or rec.channel == "human" or "shadow_veto" in rec.doubts:
+-                continue
+-            m = mmap.get(rec.id)
+-            if m is None or _hard_blocked(rec.doubts, m.guard):
+-                continue
+-            rr = rmap.get(rec.id)
+-            ref = (amap.get(rec.id) or (None, None))[0]
+-            ev = CellEvidence(
+-                id=rec.id, lib=[(c, v) for c, v in (m.candidates or [])],
+-                rare=[(x.char, x.score) for x in ((rr.candidates if rr else None) or [])],
+-                ref=ref, cur=rec.char)
+-            v = promote_judge(gate, ev, p.shadow_promote_conf)
+-            if not v.promote:
+-                continue
+-            lib_top = max(ev.lib, key=lambda t: t[1])[0] if ev.lib else None
+-            char = ref if (ref and jmerge(ref) == v.pick) else lib_top
+-            rec.admit, rec.channel, rec.provenance, rec.char = True, "shadow", "shadow", char
+-            rec.evidence = {**rec.evidence, "shadow_promote": {**v.evidence(gate.model, p.shadow_promote_conf),
+-                                                                "prev_doubts": list(rec.doubts)}}
+-            rec.doubts = []
+-            n += 1
+-    return n
+-
+-
+ #: `review.cards` 的类别码（`_CLS_CODES`）照抄一份——那是控制台模块，进 `code_deps` 会让卡片 UI
+ #: 的改动也判本步过期。`tests/test_seed_admit_lanes.py` 逐类核两边判得一样。
+ _LANE_CLS_CODES = {
+@@ -2400,7 +2292,7 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
+     return prob >= thresh and vmap.semantic(top) != vmap.semantic(lib)
+ 
+ 
+-#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_confusable_guard` 用）
++#: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
+ _SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_cnn"})
+ 
+ _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
+@@ -2616,16 +2508,6 @@ def _approx_hit(r, char: str | None, apx_ids: dict[str, tuple], apx_only: frozen
+     return None
+ 
+ 
+-def _rare_agree(match_rec, cnn: list[str] | None) -> dict:
+-    """`SeedAdmitParams.rare_agree` 记的那一笔：库首位、5-b 首位、两者是否相同。
+-    库判 `same` 时首位取 `char`，否则取候选第一名；任一路没有 → `agree` 为 None。"""
+-    pix = (match_rec.char if match_rec.verdict == "same" and match_rec.char
+-           else (match_rec.candidates[0][0] if match_rec.candidates else None))
+-    c1 = cnn[0] if cnn else None
+-    return {"pix": pix, "cnn": c1,
+-            "agree": (pix == c1) if (pix is not None and c1 is not None) else None}
+-
+-
+ def _opt(ctx: RunContext, kind: str, page: int):
+     """可选上游：缺了就 None，不炸——OCR 要引擎、上下文要语料，都可能没有。"""
+     try:
+@@ -2705,7 +2587,7 @@ def _doubts(match_rec, dec_rec) -> list[str]:
+ 
+ 
+ def _confusable_char(ch: str) -> bool:
+-    """`lib_confident` 用：这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
++    """这个字在不在任何一张形近表里（按字，不看对手是否在候选里）。"""
+     from ..clustering.confusable import partners
+     from ..clustering.iron_evidence import extra_confusable_partners
+     from ..clustering.seeding import NEAR_FORM_CHARS
+diff --git a/research/rare_downstream/README.md b/research/rare_downstream/README.md
+index 42efb4b..c2e56ea 100644
+--- a/research/rare_downstream/README.md
++++ b/research/rare_downstream/README.md
+@@ -1,5 +1,7 @@
+ # 5-b 生僻字候选接进下游：开/关对照（2026-09-28，D 道，overview#126）
+ 
++> **（2026-10-14，W2）本文提到的 `rare_agree`／`shadow_promote`／`lib_confident` 等开关已从代码删除，本文仅作历史记录，命令不能再原样复现。**
++
+ 只在沙箱里跑，不写任何书的正式产物。
+ 
+ ## 输入
+diff --git a/research/shadow_admit/promote_vs_rule.py b/research/shadow_admit/promote_vs_rule.py
+index 09f9b50..fe055ea 100644
+--- a/research/shadow_admit/promote_vs_rule.py
++++ b/research/shadow_admit/promote_vs_rule.py
+@@ -1,5 +1,6 @@
+ # -*- coding: utf-8 -*-
+-"""规则 A（`seed_admit.rare_ref`）vs 影子升级（`shadow_promote`）vs 两者合用——同一人裁集上的正面比（overview#349 D3 道）。
++"""（W2 2026-10-14：`shadow_promote` 开关已删，本脚本仅作历史记录，不再能在线上代码上复现。）
++规则 A（`seed_admit.rare_ref`）vs 影子升级（`shadow_promote`）vs 两者合用——同一人裁集上的正面比（overview#349 D3 道）。
+ 
+ 输入（全部来自 guji-workspace 孤儿分支 snap/<ws>/<vol>/<ts> 解出的 products，见 HANDOFF_D3.md「复现」）：
+   --up    book=<上游 products 目录>   含 glyph_match / rare_candidates / align_ref（Step5–7 产物，人裁前口径）
+diff --git a/research/shadow_admit/results_d3/README.md b/research/shadow_admit/results_d3/README.md
+index 18d29e6..5d3b01c 100644
+--- a/research/shadow_admit/results_d3/README.md
++++ b/research/shadow_admit/results_d3/README.md
+@@ -1,5 +1,7 @@
+ # HANDOFF D3 — 规则 A（`rare_ref`）vs 影子升级（`shadow_promote`）（overview#349）
+ 
++> **（2026-10-14，W2）本文提到的 `rare_agree`／`shadow_promote`／`lib_confident` 等开关已从代码删除，本文仅作历史记录，命令不能再原样复现。**
++
+ 分支 `claude/D3-shadow-promote-1002`。两个开关都**默认关**，关着时参数 dump 不多键、产物逐字节不变（有单测）。
+ 没跑整册上游、没打包、没导入、没碰工作区正式 products（沙箱用 `GUJI_PRODUCTS_DIR` / `GUJI_GLYPH_DB` 指到 /tmp）。
+ 
+diff --git a/tests/test_cli_steps_switch.py b/tests/test_cli_steps_switch.py
+index 475dd96..bb9bdfb 100644
+--- a/tests/test_cli_steps_switch.py
++++ b/tests/test_cli_steps_switch.py
+@@ -34,7 +34,7 @@ def test_pipeline_cli_keeps_optional_step_when_switch_on_or_named_explicitly():
+ 
+ 
+ def test_rare_candidates_consumed_only_when_a_downstream_reads_it():
+-    """Step5-b 没有下游真在读（seed_admit.rare_agree / context_decide.rare_topk 都关）时，常规批量不跑它。"""
++    """Step5-b 没有下游真在读（seed_admit.rare_ref / context_decide.rare_topk 都关）时，常规批量不跑它。"""
+     import open_guji_cv.steps  # noqa: F401  注册 Step
+     from open_guji_cv.core.engine import rare_candidates_consumed
+     from open_guji_cv.core.step import STEPS
+@@ -48,5 +48,5 @@ def test_rare_candidates_consumed_only_when_a_downstream_reads_it():
+ 
+     book = SimpleNamespace(ocr_candidates=False)
+     assert rare_candidates_consumed(pipe, params_for(), book) is False
+-    assert rare_candidates_consumed(pipe, params_for(seed_admit={"rare_agree": True}), book) is True
++    assert rare_candidates_consumed(pipe, params_for(seed_admit={"rare_ref": True}), book) is True
+     assert rare_candidates_consumed(pipe, params_for(context_decide={"rare_topk": 3}), book) is True
+diff --git a/tests/test_rare_downstream.py b/tests/test_rare_downstream.py
+index 40a91a1..efa6ea5 100644
+--- a/tests/test_rare_downstream.py
++++ b/tests/test_rare_downstream.py
+@@ -31,7 +31,7 @@ from open_guji_cv.products.store import ProductStore
+ from open_guji_cv.steps.align_ref import (AlignRefParams, rare_topk_map, rrf_carrier,
+                                           slots_from_evidence)
+ from open_guji_cv.steps.context_decide import ContextDecideParams, rare_priors
+-from open_guji_cv.steps.seed_admit import SeedAdmitParams, _rare_agree
++from open_guji_cv.steps.seed_admit import SeedAdmitParams
+ 
+ BOOK, PAGE, COL = "tbook", 1, 1
+ 
+@@ -48,7 +48,7 @@ def page_rare(page: int, book: str, cands: dict[int, list[str]], col: int = 1) -
+ # ── 声明 ────────────────────────────────────────────────────────────────
+ @pytest.mark.parametrize("sid,field", [("align_ref", "rare_topk"),
+                                        ("context_decide", "rare_topk"),
+-                                       ("seed_admit", "rare_agree")])
++                                       ("seed_admit", "rare_ref")])
+ def test_declared_as_gated_optional_upstream(sid, field):
+     spec = STEPS[sid].spec
+     assert "rare_candidates" in spec.optional_consumes
+@@ -63,7 +63,7 @@ def test_declared_as_gated_optional_upstream(sid, field):
+ @pytest.mark.parametrize("P,kw,fields", [
+     (AlignRefParams, {"rare_topk": 5}, ("rare_topk",)),
+     (ContextDecideParams, {"rare_topk": 5}, ("rare_topk", "rare_weight")),
+-    (SeedAdmitParams, {"rare_agree": True}, ("rare_agree",)),
++    (SeedAdmitParams, {"rare_ref": True}, ("rare_ref",)),
+ ])
+ def test_switch_off_keeps_params_dump_unchanged(P, kw, fields):
+     """关着时新字段不进 dump → `params_hash` 与加字段之前逐位相同（产物不过期）。"""
+@@ -248,12 +248,3 @@ def test_rare_priors_by_rank_sum_to_one():
+     assert abs(sum(w for _, w in pr) - 1.0) < 1e-9
+     assert pr[0][1] > pr[1][1] > pr[2][1]
+     assert rare_priors([]) == []
+-
+-
+-def test_rare_agree_record():
+-    from open_guji_cv.products.kinds.recog import MatchRec
+-    same = MatchRec(id="x", slot=1, verdict="same", char="文", cov=0.999, candidates=[("文", 0.999)])
+-    uns = MatchRec(id="y", slot=2, verdict="unsure", cov=0.97, candidates=[("大", 0.97)])
+-    assert _rare_agree(same, ["文", "丈"]) == {"pix": "文", "cnn": "文", "agree": True}
+-    assert _rare_agree(uns, ["太"]) == {"pix": "大", "cnn": "太", "agree": False}
+-    assert _rare_agree(uns, None)["agree"] is None
+diff --git a/tests/test_seed_admit_lib_confident.py b/tests/test_seed_admit_lib_confident.py
+index de6b2a3..01b0747 100644
+--- a/tests/test_seed_admit_lib_confident.py
++++ b/tests/test_seed_admit_lib_confident.py
+@@ -1,10 +1,6 @@
+ # -*- coding: utf-8 -*-
+-"""Step7 库高置信兜底通道 `lib_confident`（2026-09-28，D 高置信落审放宽候选）。
+-
+-对象是「库判 unsure、Step6 退回先验（人审卡上的『上下文 margin 不足』）」的格；
+-开关缺省关（`lib_confident_cov=0`），开了也只许多出放行，不碰整理本 replace、
+-己已巳、形近表里的字、有护栏的格。
+-"""
++"""库高置信兜底通道 `lib_confident` 已随 W2（GUJI-49）删除；这里只留「库判 unsure、Step6 退回先验」的格
++**仍落审**这条回归（`lib_confident_cov/gap` 字段不存在了，旧 yaml 里写了也被忽略，十册 yaml 零使用）。"""
+ from __future__ import annotations
+ 
+ import open_guji_cv.steps  # noqa: F401
+@@ -18,7 +14,6 @@ pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境
+ 
+ BOOK, PAGE, COL, SLOT = "tbook", 1, 1, 15
+ TOP, SECOND = "耶", "則"          # 实例取自 vol04:154:3:19（Z10 点名的放宽候选）
+-ON = {"lib_confident_cov": 0.98, "lib_confident_gap": 0.03}
+ 
+ 
+ def _run(tmp_path, monkeypatch, *, cands, verdict="unsure", guard=None,
+@@ -54,44 +49,3 @@ def test_default_off_is_noop(tmp_path, monkeypatch):
+     r = _run(tmp_path, monkeypatch, cands=HIGH)
+     assert r.admit is False and r.channel is None
+     assert any("上下文 margin 不足" in d for d in r.doubts)
+-
+-
+-def test_on_admits_high_confidence_prior_cell(tmp_path, monkeypatch):
+-    r = _run(tmp_path, monkeypatch, cands=HIGH, params=ON)
+-    assert r.admit is True and r.channel == "lib_confident" and r.char == TOP
+-    assert r.provenance == "match"
+-
+-
+-def test_below_cov_or_gap_stays_in_review(tmp_path, monkeypatch):
+-    r = _run(tmp_path, monkeypatch, cands=[(TOP, 0.975), (SECOND, 0.90)], params=ON)
+-    assert r.admit is False
+-    r = _run(tmp_path, monkeypatch, cands=[(TOP, 0.993), (SECOND, 0.970)], params=ON)
+-    assert r.admit is False
+-
+-
+-def test_replace_align_never_admitted(tmp_path, monkeypatch):
+-    """整理本说了不同（replace）——vol04:151:5:15 库「理」整理本「埋」那一型——不放。"""
+-    r = _run(tmp_path, monkeypatch, cands=HIGH, params=ON,
+-             align={"align_char": "郎", "align_op": "replace"})
+-    assert r.admit is False and r.channel is None
+-    assert "replace_align" in r.doubts
+-
+-
+-def test_context_decided_cell_not_touched(tmp_path, monkeypatch):
+-    """Step6 自己下了判断（source=context，只是没过 margin 门槛）的格不归这条通道管。"""
+-    r = _run(tmp_path, monkeypatch, cands=HIGH, params=ON, source="context")
+-    assert r.channel != "lib_confident"
+-
+-
+-def test_guard_and_verdicts(tmp_path, monkeypatch):
+-    r = _run(tmp_path, monkeypatch, cands=HIGH, params=ON, guard="conflict")
+-    assert r.channel != "lib_confident"
+-    r = _run(tmp_path, monkeypatch, cands=HIGH, params=ON, verdict="diff")
+-    assert r.channel != "lib_confident"
+-
+-
+-def test_ji_yi_si_and_confusable_excluded(tmp_path, monkeypatch):
+-    r = _run(tmp_path, monkeypatch, cands=[("已", 0.995), ("田", 0.90)], params=ON)
+-    assert r.channel != "lib_confident"
+-    r = _run(tmp_path, monkeypatch, cands=[("諭", 0.995), ("田", 0.90)], params=ON)
+-    assert r.channel != "lib_confident", "諭 在 NEVER_MATCH_FAMILIES 里，按字就该拦"
+diff --git a/tests/test_seed_admit_rare_ref.py b/tests/test_seed_admit_rare_ref.py
+index 0fce180..d001248 100644
+--- a/tests/test_seed_admit_rare_ref.py
++++ b/tests/test_seed_admit_rare_ref.py
+@@ -1,5 +1,5 @@
+ # -*- coding: utf-8 -*-
+-"""规则 A 放行通道 `rare_ref`（2026-10-02，D3 道 overview#349）与影子升级 `shadow_promote`。全部自造数据。
++"""规则 A 放行通道 `rare_ref`（2026-10-02，D3 道 overview#349）。全部自造数据（影子升级 `shadow_promote` 开关已随 W2 删，`shadow/gate.py` 的 `decide_promote`／`promote_judge` 留作离线评测口径，下面两条单测仍测它们）。
+ 
+ 规则 A：整理本 replace 段、5-b 首位**逐字**等于整理本字 → 放行整理本字；一串硬护栏照拦；缺省关、关着产物逐字节不变。
+ 影子升级：待审格上影子首选 == 整理本字或库首位且把握度够 → 放行；缺省关。
+@@ -55,7 +55,7 @@ ON = {"rare_ref": True}
+ # ── 声明与指纹 ───────────────────────────────────────────────────────────
+ def test_declared_as_gated_optional_upstream():
+     spec = STEPS["seed_admit"].spec
+-    for field in ("rare_ref", "shadow_promote"):
++    for field in ("rare_ref",):
+         assert ("rare_candidates", field) in spec.optional_consumes_when
+         on = spec.params().model_copy(update={field: True})
+         assert "rare_candidates" in live_optional_consumes(spec, on)
+@@ -66,7 +66,7 @@ def test_params_off_is_invisible(tmp_path):
+     """关着时新增字段一个都不进 dump → params_hash 与加字段前逐位相同；开着时进。"""
+     db = str(tmp_path / "g.db")
+     off = SeedAdmitParams(db_path=db)
+-    assert not any(k.startswith(("rare_ref", "shadow_promote")) for k in off.model_dump())
++    assert not any(k.startswith(("rare_ref",)) for k in off.model_dump())
+     assert SeedAdmitParams(db_path=db, rare_ref=False).model_dump() == off.model_dump()
+     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
+     h = lambda p: params_hash(p, sp, pt)  # noqa: E731
+@@ -188,27 +188,3 @@ def test_v2_features_and_v1_candidate_set():
+ 
+ def _VCtx():
+     return S.SignalContext(vm=_VM(), partners={}, human_ids={}, lib_ids=frozenset())
+-
+-
+-def test_seed_admit_promote_only_promotes(tmp_path, monkeypatch):
+-    """端到端：关 = 与不带参数逐字一致；开 = 待审格被放行、evidence 留痕；无背书／把握度不够不动。"""
+-    base = _run(tmp_path, monkeypatch, rare=[REF, LIB])
+-    assert not base.admit
+-    off = _run(tmp_path, monkeypatch, rare=[REF, LIB], params={"shadow_promote": False})
+-    assert off.model_dump() == base.model_dump()
+-
+-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .95, LIB: .02}))
+-    prm = {"shadow_promote": True, "shadow_promote_conf": 0.9, "shadow_model_fingerprint": "x"}
+-    on = _run(tmp_path, monkeypatch, rare=[REF, LIB], params=prm)
+-    assert on.admit and on.channel == "shadow" and on.provenance == "shadow" and on.char == REF
+-    ev = on.evidence["shadow_promote"]
+-    assert ev["pick"] == REF and ev["backed_by"] == ["ref"] and ev["conf"] >= 0.9 and "replace_align" in ev["prev_doubts"]
+-    # 把握度不够 → 不动
+-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .5, LIB: .45}))
+-    assert not _run(tmp_path, monkeypatch, rare=[REF, LIB], params=prm).admit
+-    # 影子选了无背书的字 → 不动
+-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({"書": .95}))
+-    assert not _run(tmp_path, monkeypatch, rare=[REF, LIB, "書"], params=prm).admit
+-    # 硬护栏（库护栏）→ 不动
+-    monkeypatch.setattr(sa, "_shadow_gate", lambda _p: _gate({REF: .95}))
+-    assert not _run(tmp_path, monkeypatch, rare=[REF], guard="never_match", params=prm).admit
+diff --git a/tests/test_seed_admit_solo_replace_0928.py b/tests/test_seed_admit_solo_replace_0928.py
+index 068da1e..bab5275 100644
+--- a/tests/test_seed_admit_solo_replace_0928.py
++++ b/tests/test_seed_admit_solo_replace_0928.py
+@@ -2,11 +2,11 @@
+ """Step7 书级收紧三参数（2026-09-28，overview#155 D：全唐文 match_solo / match_replace 单独核）。
+ 
+ - `off_channels`：关掉 `admission_decision` 的某几条通道，判决作废、记 `channel_off`；
+-- `solo_confusable_guard`：match_solo 系的库 top1 在形近表里就落审（`solo_confusable`）；
++- `solo_confusable_guard` 已随 W2（GUJI-49）删除（缺省关、十册 yaml 零使用）；
+ - `replace_form`：match_replace 整理本字与库 top1 字面不同时取整理本（align，旧行为）
+   ／取库形（lib）／落审（review）。
+ 
+-三个缺省值都等于旧行为。
++其余缺省值都等于旧行为。
+ """
+ from __future__ import annotations
+ 
+@@ -68,13 +68,6 @@ def test_off_channels_other_channel_untouched(tmp_path, monkeypatch):
+     assert r.admit and r.channel == "match_solo"
+ 
+ 
+-def test_solo_confusable_guard(tmp_path, monkeypatch):
+-    on = {"solo_confusable_guard": True}
+-    r = _run(tmp_path, monkeypatch, cands=SOLO_CONF, verdict="same", params=on)
+-    assert not r.admit and "solo_confusable" in r.doubts
+-    r = _run(tmp_path, monkeypatch, cands=SOLO_PLAIN, verdict="same", params=on)
+-    assert r.admit and r.channel == "match_solo"
+-
+ 
+ # match_replace：整理本 replace 层给「旣」，库 top1「既」（语义同、字面不同），库 unsure。
+ # （原例 嚐/嘗：2026-09-28 overview#201 登记进 never_group、语义层不再同义，改用 旣/既）

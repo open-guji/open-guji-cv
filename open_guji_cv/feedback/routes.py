@@ -157,6 +157,10 @@ DEFAULT_ROUTES: list[dict] = [
     # 同时命中（一个事件多个去处）。
     {"match": {"kind": "confirm", "payload.reason": "jiazhu_as_main"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
+    # 反向「正文当小注」（reason=main_as_jiazhu，2026-10-06，overview#415/#436）：人指认这格是整宽正文、
+    # Step3 把它劈成了 a/b → 该页 Step3 失效，重跑时 `lookup.resolved_forced_main` 让它按整格出。
+    {"match": {"kind": "confirm", "payload.reason": "main_as_jiazhu"},
+     "to": [{"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
     # 判非字同理：名单变了 seed_admit 该重算。
     {"match": {"kind": "not_a_char"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},

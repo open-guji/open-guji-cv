@@ -92,6 +92,9 @@ class BookSpec:
     #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
     #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
     ocr_candidates: bool = False
+    #: Step6b 形近字组分类（yaml 的 `group_decide:`，GUJI-49 PR1）。**默认关闭**：只出证据、没有任何
+    #: 现有 Step 读它；关时 Engine 把它从整条链里滤掉（同 `ocr_candidates`），不进任何 Step 的指纹。
+    group_decide: bool = False
     #: Step7 铁证放行通道（yaml 的 `iron_gate:`）。**默认关闭**——D 道影子验收
     #: 2026-09-25～27 全书实测（bxgb、vol03，`open_guji_cv.clustering.iron_evidence`）
     #: 对人裁核对累计 348 格 0 错，2026-09-27 用户批准转正、按书开（先只给测过的
@@ -424,6 +427,7 @@ class BookSpec:
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
             "ocr_candidates": self.ocr_candidates,
+            "group_decide": self.group_decide,
             "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
@@ -469,10 +473,6 @@ class BookSpec:
             return default_pipeline_id(self)
         except Exception:
             return "keben_body_v2"
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
 
 
 def _expand_pages(raw) -> list[int]:
@@ -616,6 +616,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
         ocr_candidates=bool(d.get("ocr_candidates", False)),
+        group_decide=bool(d.get("group_decide", False)),
         iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),

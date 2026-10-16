@@ -178,3 +178,26 @@ def test_diff_verdict_still_reports_best_candidate():
     empty = GlyphMatcher.__new__(GlyphMatcher)
     empty._ids = []
     assert empty.match(np.zeros((8, 8), np.uint8)).candidates == []
+
+
+def test_cell_budget_default_off_keeps_params_hash():
+    """每格预算缺省 0 = 关：不进 model_dump，旧产物的参数指纹逐位不变；开了才进指纹。"""
+    soft = STEPS["glyph_match"].spec.soft_params
+    a = GlyphMatchParams(db_fingerprint="aaaa")
+    assert "cell_budget_s" not in a.model_dump(mode="json")
+    assert params_hash(a, soft) == params_hash(GlyphMatchParams(db_fingerprint="aaaa", cell_budget_s=0), soft)
+    assert params_hash(a, soft) != params_hash(GlyphMatchParams(db_fingerprint="aaaa", cell_budget_s=20), soft)
+
+
+def test_match_deadline_raises_timeout():
+    """deadline 已过 → 逐个刻例验证之前就抛 MatchTimeout；不给 deadline 照常出结果。"""
+    import time
+    import numpy as np
+    from open_guji_cv.clustering.match import GlyphMatcher, MatchTimeout
+    m = GlyphMatcher()
+    patch = np.zeros((64, 64), dtype=np.uint8)
+    patch[10:50, 30:34] = 255
+    m.add("x:1:1:1", "一", patch)
+    m.match(patch)                                     # 不设限：正常
+    with pytest.raises(MatchTimeout):
+        m.match(patch, deadline=time.monotonic() - 1)

@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import open_guji_cv.steps  # noqa: F401
 from helpers import make_book, make_ctx, page_decision, page_match, write_product
@@ -25,6 +26,15 @@ from open_guji_cv.steps.seed_admit import (SeedAdmitParams, _direct_variant_edge
 from open_guji_cv.variant_ledger import BookLedger
 
 BOOK, PAGE, COL, SLOT = "tbook", 1, 1, 18
+
+
+@pytest.fixture(autouse=True)
+def _cnn_on_tmp_ckpt(monkeypatch, cnn_test_ckpt):
+    """本文件摆了一张空白字块，灰区格会走 `_cnn_top`→`shared().emb_topk`，它把模板索引落盘到
+    `<ckpt 目录>/emb_*.npz`。装了 torch 的机器上会把索引写进 `models/glyph_cnn_r5/`（守卫
+    `_no_new_files_in_models` 报错）；改成指向 `cnn_test_ckpt` 的 tmp 拷贝。"""
+    import open_guji_cv.clustering.cnn_candidates as cc
+    monkeypatch.setattr(cc, "shared", lambda ckpt=None: cc.CnnCandidates(cnn_test_ckpt))
 
 
 def _run(tmp_path, monkeypatch, *, candidates, align_char, margin=None,
