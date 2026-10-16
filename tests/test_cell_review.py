@@ -91,6 +91,21 @@ def test_other_single_codepoint_only(env):
     assert out["appended"] == 1            # 扩展区一个码位也算一个字符
 
 
+def test_pick_must_be_single_codepoint_even_without_cands(env):
+    _, fb = env
+    # 无候选的格（vol01:24:3:7a）：pick 仍须是单个码位
+    with pytest.raises(HTTPException) as e:
+        _post(fb, [{"id": "vol01:24:3:7a", "verdict": "pick", "picked": "士仕", "t": 1}])
+    assert e.value.status_code == 400 and "单个码位" in e.value.detail
+    with pytest.raises(HTTPException):
+        _post(fb, [{"id": "vol01:24:3:7a", "verdict": "pick", "picked": " ", "t": 1}])
+    # 有候选的格：多字同样拒
+    with pytest.raises(HTTPException):
+        _post(fb, [{"id": "vol01:24:3:5", "verdict": "pick", "picked": "仕任", "t": 1}])
+    out = _post(fb, [{"id": "vol01:24:3:7a", "verdict": "pick", "picked": "士", "t": 1}])
+    assert out["appended"] == 1            # 无候选的格，单字 pick 合法
+
+
 def test_unknown_cell_and_wrong_batch_rejected(env):
     _, fb = env
     with pytest.raises(HTTPException):

@@ -17,6 +17,7 @@
 
 ## 导出
 `tsv(...)`：一行一格、按 `cell_id` 排序、取每格最新一条；没裁的格 verdict 等列留空，行数 = 清单行数。
+`t` 列取服务端时间（事件的 `ts`），不取前端的 `client_ts`。
 """
 from __future__ import annotations
 
@@ -76,8 +77,8 @@ def check_payload(payload: dict, cands: list[str]) -> str | None:
         return f"verdict 必须是 {'/'.join(VERDICTS)} 之一：{v!r}"
     if v == "pick":
         picked = payload.get("picked")
-        if not isinstance(picked, str) or not picked:
-            return "pick 必须带 picked（候选字）"
+        if not isinstance(picked, str) or len(picked) != 1 or picked.isspace():
+            return "pick 的 picked 只收单个码位字符"
         if cands and picked not in cands:
             return f"picked {picked!r} 不在这格的候选字里：{cands}"
     if v == "other":
