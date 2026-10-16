@@ -93,7 +93,13 @@ export function BlockingCutlinePanel({ book, pages, onDecided }: {
   }
 
   // 挂载时自动载入一次；Step7 顶部统一页数选择区切页时跟着重载。
+  // StrictMode（仅开发模式）会把挂载 effect 跑两遍，不加守卫就是两次整册拉取（GUJI-525）。
+  // 同一 book|pages 只自动载一次；切页、切册会换 key 重载，切回 tab 是新挂载，也会重载。
+  const autoKey = useRef('')
   useEffect(() => {
+    const key = `${book}|${pages}`
+    if (autoKey.current === key) return
+    autoKey.current = key
     load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [book, pages])
