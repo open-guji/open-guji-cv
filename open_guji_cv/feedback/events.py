@@ -86,7 +86,12 @@ Kind = Literal[
                       #   （payload: via, client_ts）。后来有了定字裁决即作废（取最新）。
     "admit_candidate",# 还没进库的候选格收不收（payload: v∈admit/reject/unclear, char,
                       #   shape, list, evidence）。**路由表不配消费者**：控制台只写事件，
-                      #   进库由 H 道重放完成（人裁状态单写者）。    # ── 看图结论（2026-10-06，overview#428）。见 feedback/vision.py。
+                      #   进库由 H 道重放完成（人裁状态单写者）。
+    # ── 格级审阅（GUJI-364b，2026-10）。见 feedback/cell_review.py。
+    "cell_review",    # 单字特写逐格裁「是哪个字」（payload: verdict∈pick/none/unsure/other,
+                      #   picked, other_char, note, client_ts）。**路由表不配消费者**：不写定字
+                      #   事件、不进 glyph.db、不让产物过期；同格取最新一条。
+    # ── 看图结论（2026-10-06，overview#428）。见 feedback/vision.py。
     "vision_check",   # 模型看图判的「这格放行字对不对」（payload: source="vision", judge, v∈ok/wrong/
                       #   unsure, char, shown, note）。**不是人裁**：actor="model"，不进字形库、不算已裁、
                       #   human_chars 不认；只存 `feedback/vision/`（不进 events/），金标来源记 vision，
