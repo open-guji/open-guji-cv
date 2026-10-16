@@ -74,6 +74,7 @@ IOU_GONE = 0.15       # 低于这个算「那一格没了」
 SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：未动的 1,122 条 ≥0.9，漂移的 30 条 <0.9
 USE_STATUSES = ("valid", "rebound")
 _MEMO: dict = {}
+_PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
 _VERSION = 6          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff）
 
 
@@ -405,13 +406,15 @@ def _sig(events, return_events: list | None = None, backfill: dict | None = None
 
 def page_bindings(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
                   refresh: bool = False, return_events: list | None = None,
-                  backfill: dict | None = None) -> list[dict]:
-    """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。"""
+                  backfill: dict | None = None, cells_sha: str | None = None) -> list[dict]:
+    """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。
+    `cells_sha` 调用方（`book_bindings`）已按页算好就传进来，免得每页再查一遍 Step3 是哪步。"""
     from ..core.spec import page_key
     from ..products.store import ProductStore
     from ..report.slots import cells_step
     store = store or ProductStore()
-    cells_sha = store.sha(book, cells_step(book), page_key(page))
+    if cells_sha is None:
+        cells_sha = store.sha(book, cells_step(book), page_key(page))
     f = _bindings_dir(book) / f"p{page:04d}.json"
     if backfill is None:
         from .anchor_backfill import load_backfill
@@ -453,9 +456,10 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     from ..report.slots import cells_step
     step = cells_step(book)
     all_pages = sorted(set(by_page) | set(by_page_returns))
-    sig = (book, str(store.root),
-           tuple((pg, _sig(by_page.get(pg, []), by_page_returns.get(pg), backfill),
-                 store.sha(book, step, page_key(pg))) for pg in all_pages),
+    want = [pg for pg in all_pages if pages is None or pg in pages]
+    page_sig = {pg: (_sig(by_page.get(pg, []), by_page_returns.get(pg), backfill),
+                     store.sha(book, step, page_key(pg))) for pg in want}
+    sig = (book, str(store.root), tuple((pg, *page_sig[pg]) for pg in want),
            tuple(pages) if pages is not None else None)
     hit = _MEMO.get(sig)
     if hit and not refresh and time.time() - hit[0] < 120:
@@ -466,12 +470,19 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     except Exception:
         gdb = None
     out: dict[str, dict] = {}
-    for page in all_pages:
-        if pages is not None and page not in pages:
-            continue
+    for page in want:
         evs = by_page.get(page, [])
-        for r in page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh,
-                               return_events=by_page_returns.get(page), backfill=backfill):
+        psig, cells_sha = page_sig[page]
+        pkey = (book, str(store.root), page)
+        pm = _PAGE_MEMO.get(pkey)
+        if pm and not refresh and pm[0] == cells_sha and pm[1] == psig:
+            rows = pm[2]                     # 这一页没动：不用再读盘上的缓存
+        else:
+            rows = page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh,
+                                 return_events=by_page_returns.get(page), backfill=backfill,
+                                 cells_sha=cells_sha)
+            _PAGE_MEMO[pkey] = (cells_sha, psig, rows)
+        for r in rows:
             out[r["event"]] = r
     _MEMO.clear()
     _MEMO[sig] = (time.time(), out)

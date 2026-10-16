@@ -585,8 +585,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
     path = _book_yaml_path(book_id, books_dir)
     if not path.exists():
         raise FileNotFoundError(f"没有这册书的定义: {path}")
-    with open(path, encoding="utf-8") as f:
-        d = yaml.safe_load(f) or {}
+    from .yaml_cache import load_yaml_cached
+    d = load_yaml_cached(path)
     raw_dir = Path(d["raw_dir"])
     if not raw_dir.is_absolute():
         # 相对路径优先按工作区解释（原图已随书迁到 guji-workspace 的书目录），
