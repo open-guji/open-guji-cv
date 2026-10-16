@@ -38,6 +38,8 @@ export interface StepLayoutProps {
   overview?: ReactNode
   /** 板块③：裁决台。空数组 = 这一步没有裁决 */
   reviews?: StepLayoutReviewTab[]
+  /** 进页时先开哪个 tab（按 id）；未给或找不到就用第一个 */
+  defaultTab?: string
   /** 板块④：产物台 */
   product?: ReactNode
   /** 页范围之下、总览之上的提示条（深链提示等） */
@@ -45,9 +47,10 @@ export interface StepLayoutProps {
 }
 
 export function StepLayout({ book, stepId, pages, onPagesChange, typeFilter,
-                            overview, reviews = [], product, banner }: StepLayoutProps) {
+                            overview, reviews = [], product, banner, defaultTab }: StepLayoutProps) {
   const tabs = reviews.filter(Boolean)
-  const [cur, setCur] = useState(0)
+  // 只有当前 tab 会挂载（见下），所以默认 tab 决定进页时哪一台会去拉数据
+  const [cur, setCur] = useState(() => Math.max(0, tabs.findIndex((t) => t.id === defaultTab)))
   // tab 数量会随 caps 门控变化（换册时某些面板会消失），越界就落回第一个
   const idx = cur < tabs.length ? cur : 0
   const active = tabs[idx]

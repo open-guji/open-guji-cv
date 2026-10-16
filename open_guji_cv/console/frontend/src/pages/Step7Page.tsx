@@ -48,6 +48,8 @@ function Step7PageInner({ book }: { book: string }) {
   return (
     <StepLayout
       book={book} stepId={STEP_ID} pages={pageSel} onPagesChange={setPageSel}
+      // 进页默认开「定字裁决」：切分裁决的整册对齐（dev_set 约 3.2 秒）要切到它才去查（GUJI-525）
+      defaultTab="decide"
       banner={deep.active ? (
         <div className="card" style={{ borderLeft: '3px solid #7a5c2e' }}>
           从对勘报告跳转而来：<b>{deep.id || `p${deep.page}`}</b>
