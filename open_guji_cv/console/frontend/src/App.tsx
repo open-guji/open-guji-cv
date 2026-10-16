@@ -17,6 +17,7 @@ import { RunsPage } from './pages/RunsPage'
 import { EvalsPage } from './pages/EvalsPage'
 import { GlyphLibraryPage } from './pages/GlyphLibraryPage'
 import { VariantLibraryPage } from './pages/VariantLibraryPage'
+import { CellReviewPage } from './pages/CellReviewPage'
 import { WorkspacePickerPage } from './pages/WorkspacePickerPage'
 
 // 路由表见方案 §二。Step9（结果整理）2026-09-11 落地第一件事：坐标转字符位。
@@ -32,6 +33,7 @@ export default function App() {
         <Route path="/:ws/" element={<HomePage />} />
         <Route path="/:ws/glyphlib/" element={<GlyphLibraryPage />} />
         <Route path="/:ws/variantlib/" element={<VariantLibraryPage />} />
+        <Route path="/:ws/cell-review/" element={<CellReviewPage />} />
         <Route path="/:ws/:book/" element={<BookOverviewPage />} />
         <Route path="/:ws/:book/step/step0/" element={<Step0Page />} />
         <Route path="/:ws/:book/step/step1/" element={<Step1Page />} />

@@ -151,7 +151,33 @@ def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) ->
         return _api_events(req, identity.email)
 
 
+def _check_cell_review(req: EventsIn) -> None:
+    """格级审阅（GUJI-364b）写入前校验：批次须是 cellreview-<清单 id>，格须在清单里，裁决须合法。
+    不合法整批拒掉（400），不写半截。"""
+    from ...feedback import cell_review as cr
+    from ...feedback import candidates as cand
+    if not req.batch.startswith(cr.BATCH_PREFIX):
+        raise HTTPException(400, f"cell_review 的批次须以 {cr.BATCH_PREFIX} 开头：{req.batch!r}")
+    try:
+        path = cand.list_path(req.batch[len(cr.BATCH_PREFIX):], deps.event_log().root / "candidates")
+    except ValueError as e:
+        raise HTTPException(400, str(e)) from e
+    if not path.exists():
+        raise HTTPException(404, f"没有这份候选清单：{path.name}")
+    _, rows, _ = cr.load(path)
+    cands = {r["cell_id"]: r["cands"] for r in rows}
+    for row in req.events:
+        cid = row.get("id")
+        if cid not in cands:
+            raise HTTPException(400, f"{cid!r} 不在清单里")
+        why = cr.check_payload(row, cands[cid])
+        if why:
+            raise HTTPException(400, f"{cid}：{why}")
+
+
 def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
+    if req.kind == "cell_review":
+        _check_cell_review(req)
     if req.request_id and any(e.payload.get("request_id") == req.request_id
                               for e in deps.event_log().read(req.batch)):
         return {"appended": 0, "batch": req.batch, "duplicate": True,
