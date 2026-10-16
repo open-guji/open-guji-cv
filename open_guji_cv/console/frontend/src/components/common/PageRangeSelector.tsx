@@ -9,6 +9,8 @@
 // 页范围表达式复用 `usePages`/`fetchStatus` 已支持的语法（`dev_set` / `body` /
 // `all` / `3-6,9`），不在前端另造一套解析——展开成具体页码的活交给后端。
 
+import { useEffect, useRef, useState } from 'react'
+
 const KEY_PREFIX = 'guji-'
 
 export function loadSavedPageRange(stepId: string, book: string, fallback = 'all'): string {
@@ -52,10 +54,36 @@ export interface PageRangeSelectorProps {
   typeFilter?: PageRangeTypeFilter
 }
 
+//: 手输框停手多久才把值交给外层（GUJI-525）。外层各板块拿 `value` 去拉接口，
+//: 每敲一个字就交一次的话，敲一个 `list:<名字>` 会按每个前缀各请求一遍。
+export const PAGE_RANGE_DEBOUNCE_MS = 300
+
 export function PageRangeSelector({ book, stepId, value, onChange, typeFilter }: PageRangeSelectorProps) {
-  function handleChange(v: string) {
+  // 手输框先改本地草稿；停手 PAGE_RANGE_DEBOUNCE_MS、回车或失焦才交给外层。
+  // 下拉快选是一次性选定，立即交。
+  const [draft, setDraft] = useState(value)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // 外层改了值（换册、别处重置）就同步草稿
+  useEffect(() => { setDraft(value) }, [value])
+  useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
+
+  function commit(v: string) {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    if (v === value) return
     onChange(v)
     saveSavedPageRange(stepId, book, v)
+  }
+
+  function handleType(v: string) {
+    setDraft(v)
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => commit(v), PAGE_RANGE_DEBOUNCE_MS)
+  }
+
+  function handleChange(v: string) {
+    setDraft(v)
+    commit(v)
   }
 
   // 预设值用下拉快选，手输框仍在——`list:<名字>` / `3-6,9` / `cells:<坐标>`
@@ -65,7 +93,9 @@ export function PageRangeSelector({ book, stepId, value, onChange, typeFilter }:
   return (
     <div className="card">
       <label className="muted">
-        页范围 <input value={value} onChange={(e) => handleChange(e.target.value)} size={12}
+        页范围 <input value={draft} onChange={(e) => handleType(e.target.value)} size={12}
+                     onBlur={() => commit(draft)}
+                     onKeyDown={(e) => { if (e.key === 'Enter') commit(draft) }}
                      title="dev_set / body / all / drift，或 3-6,9 页号表达式、list:<名字>、cells:<坐标表>；控制本页下面所有板块" />
       </label>
       <select className="muted" value={preset} style={{ marginLeft: '.4rem' }}
