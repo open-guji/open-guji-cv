@@ -64,8 +64,11 @@ export function PageRangeSelector({ book, stepId, value, onChange, typeFilter }:
   const [draft, setDraft] = useState(value)
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // 外层改了值（换册、别处重置）就同步草稿
-  useEffect(() => { setDraft(value) }, [value])
+  // 外层改了值（换册、别处重置）就同步草稿，并作废还没到点的旧草稿提交
+  useEffect(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    setDraft(value)
+  }, [value])
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current) }, [])
 
   function commit(v: string) {
