@@ -46,9 +46,14 @@ def _cache(eng, pages) -> dict:
 def _glyph_store_missing(ws: Path) -> str | None:
     """工作区没有字形库（glyph_store 目录与 glyph.db 都没有）→ 返回缺什么；齐了返回 None。"""
     out = Path(ws) / "output"
-    if (out / "glyph_store").is_dir() or (out / "glyph.db").is_file():
+    gs = out / "glyph_store"
+    if (out / "glyph.db").is_file():
         return None
-    return f"{out} 下没有 glyph_store 也没有 glyph.db"
+    # 空目录不算有库：要有字形账本或人裁事件文件才算
+    if gs.is_dir() and ((gs / "glyphs.jsonl").is_file() or (gs / "feedback" / "events").is_dir()
+                        or (gs / "events").is_dir()):
+        return None
+    return f"{out} 下没有 glyph.db，glyph_store 也缺或是空目录"
 
 
 def _queue(book: str, store, ws: Path | None = None) -> dict:
@@ -68,8 +73,11 @@ def _queue(book: str, store, ws: Path | None = None) -> dict:
                  f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else ""), cc or None)
 
 
-def _closure(book: str, pages, store) -> dict:
+def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
     from ..review.verdict_view import closure_gaps, closure_mismatches
+    miss = _glyph_store_missing(ws) if ws is not None else None
+    if miss:
+        raise RuntimeError(f"工作区缺字形库，收尾闸不可信：{miss}（须在带 store 的 H 道工作区跑）")
     gaps = closure_gaps(book, pages, store)
     mism = closure_mismatches(book, pages, store)
     return _item("2b", "收尾闸", PASS if not gaps else FAIL,
@@ -155,7 +163,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
         ("1a", "产物新鲜", lambda: [_fresh(eng, pages)]),
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
         ("2", "待审清零", lambda: [_queue(book, eng.store, ws)]),
-        ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store)]),
+        ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store, ws)]),
         ("8", "字形库与人裁已提交", lambda: [_store_committed(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
          [_item("10", "lines.md", SKIP, "没给 --export-dir"), _item("11", "pages.json", SKIP, "没给 --export-dir")]),

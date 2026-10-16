@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+
+import pytest
 import subprocess
 
 from open_guji_cv.ops import close_check as CC
@@ -79,9 +81,19 @@ def test_report_prints(capsys):
 
 def test_queue_errors_when_glyph_store_missing(tmp_path):
     """没有字形库的工作区上待审数不可信：_queue 必须报错，不能给「待审 0 ✓」（GUJI-364）。"""
-    import pytest
     assert CC._glyph_store_missing(tmp_path) is not None
     with pytest.raises(RuntimeError, match="缺字形库"):
         CC._queue("vol01", None, tmp_path)
+    (tmp_path / "output").mkdir()
+    (tmp_path / "output" / "glyph.db").write_text("")
+    assert CC._glyph_store_missing(tmp_path) is None
+
+
+def test_empty_glyph_store_dir_counts_as_missing(tmp_path):
+    """空 glyph_store 目录不算有库；2b 收尾闸同样报错。"""
     (tmp_path / "output" / "glyph_store").mkdir(parents=True)
+    assert CC._glyph_store_missing(tmp_path)
+    with pytest.raises(RuntimeError):
+        CC._closure("vol01", [], None, tmp_path)
+    (tmp_path / "output" / "glyph_store" / "glyphs.jsonl").write_text("")
     assert CC._glyph_store_missing(tmp_path) is None
