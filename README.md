@@ -252,6 +252,14 @@ pipeline.run_all("data/book1/", output_format="combined", clean=True)
 
 ---
 
+## 版本与历史
+
+- 版本号规则见 [`doc/版本号规矩.md`](doc/版本号规矩.md)（`vMAJOR.MINOR.PATCH`，rc 仅用于窗口候选）。
+- 基线 `v1.0.0` = main `26657f84`。
+- 历史于 2026-10-16 分 7 段重写，旧历史见备份分支 `archive/pre-compress-2026-10`（同树瘦身备份）和 Owen 的 bundle。
+
+---
+
 ## 许可证
 
 详见 [LICENSE](LICENSE)。
