@@ -117,9 +117,10 @@ export function ReviewCardView({
 
   return (
     <div id={`rvc${idx}`} className={`rvcard${isCurrent ? ' cur' : ''}`} data-done={v.done || ''} data-nolib={v.noGlyphLib ? '1' : ''} data-approx={v.approx ? '1' : ''}
-         data-cls={cls || undefined} onClick={onFocus}>
+         data-cls={cls || undefined} data-decided={c.decided ? '1' : undefined} onClick={onFocus}>
       <div className="rvhead">
         <b className="rvsel">{c.id}</b><span className="muted">{c.channel || '待审'}</span>
+        {c.decided && <span className="rvhad" title="这一格已有现行有效的人裁（早先或刚提交的）。想改主意可直接重裁，不用重复提交。">已裁</span>}
         {c.occluded && (
           <span className="rvoccl" title="印章／大片污损遮挡：默认用整理本的字，字形不进字形库（overview#195）。确认一下即可，也可在上方「按原因」里整组一键确认">
             印章遮挡 · {c.occluded.ref_blank ? '默认非字（整理本此位空）' : c.occluded.char ? `默认整理本字「${c.occluded.char}」` : '无默认字，请填'}

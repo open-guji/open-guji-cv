@@ -162,13 +162,16 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 批次还不存在就是没裁过
     }
     verdicts.current = { ...done, ...verdicts.current }
+    // 点名清单／含已裁决：现行有效已裁的格（`decided`）置灰沉到末尾，下一张待裁的自然排到前面（GUJI-525）。
+    // 稳定排序，其余顺序不动；它们不吃任何自动预勾，免得下一次提交把已裁的又写一遍。
+    if (d.cards.some((c) => c.decided)) d.cards = [...d.cards.filter((c) => !c.decided), ...d.cards.filter((c) => c.decided)]
     // Step6-AI 默认预选（任务书-C-人审卡按AI预选，2026-09-27）：只对**这一格
     // 还没有任何裁决**（服务端没裁过、本地也没动过）且 AI 首组只有一个字的
     // 卡片生效——首组多个字时不替人选（`aiDefaultShape` 返回 null），组内
     // 字形仍由人看图点。视为「已裁」（标 touched）会跟着提交按钮走，人看图
     // 发现不对时点别的候选/输入框覆盖即可，跟人工选完再改主意的路径一样。
     for (const c of d.cards) {
-      if (verdicts.current[c.id]) continue
+      if (verdicts.current[c.id] || c.decided) continue
       // 印章遮挡格（overview#195）：默认整理本字、字形不入库；假格（整理本空格位）默认「非字」
       if (c.occluded) {
         verdicts.current[c.id] = occludedDefault(c, Date.now()) ?? { shape: '', done: '', ts: Date.now(), noGlyphLib: true }
@@ -225,7 +228,9 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // 「已裁」= 本轮在这一屏里刚裁的。已裁过的卡默认压根不载入（后端 skip_decided），
     // 所以这个数从 0 涨到 n 就是本屏的进度条；`nDecided` 是全书累计，另计。
     const nDone = list.filter((c) => st(c)).length
+    const nHad = list.filter((c) => c.decided).length     // 点名清单里早已有效裁过的（置灰沉底）
     setMsg(`${n} 张 · 已裁 ${nDone}`
+      + (nHad ? ` · 其中 ${nHad}／${n} 格早已有有效人裁（灰色，在末尾）` : '')
       + (nDec ? ` · 全书已裁 ${nDec}${inclDecided ? '（含在本屏）' : '，已跳过'}` : ''))
     bump()
   }
@@ -392,6 +397,11 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
         const d = await load(true, cls)
         const left = cls === '*' ? (d.class_total ?? 0) : (d.class_counts?.[cls] ?? 0)
         setMsg(`${done}；已载入本类下一批 ${d.cards.length} 张，本类还剩 ${left}`)
+      } else if (pages.startsWith('list:') || pages.startsWith('cells:')) {
+        // 点名清单不去重：重载一遍，刚提交的格带上「已裁」标记、沉到末尾，别让人以为没入库而重复提交
+        const d = await load(false)
+        const nHad = d.cards.filter((c) => c.decided).length
+        setMsg(`${done}；已重载：${nHad}／${d.cards.length} 格已裁（灰色，在末尾），还剩 ${d.cards.length - nHad} 格待裁`)
       } else {
         setMsg(done)
       }

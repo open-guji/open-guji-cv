@@ -267,6 +267,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
 
     点名清单模式（`pages=list:…`）也受本开关约束（2026-10-16 起；此前不受，提交后已裁格
     仍在，用户以为没入库）。`cells:` 显式点格号不受约束——点名要看的就得出得来。
+    不去重时（`skip_decided=false` 或 `cells:`）现行有效已裁的卡带 `"decided": true`
+    （GUJI-525），前端据此置灰沉底。
 
     `emb_out`（#166）：给一个 dict，借库书（开了 `first_pick`）算 CNN 首选时顺手把
     `{卡片 id: r5 embedding}` 填进去，批审组内聚簇复用；不改返回值。
@@ -348,6 +350,9 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     # 点名清单（`list:`）也按 `skip_decided` 跳过仍有效的人裁（用户 2026-10-16：提交一屏后已裁的格
     # 还显示待审，以为没入库，同一批连提三次）。要复核清单里裁过的格，传 skip_decided=false。
     # `cells:`（显式点格号）照旧不去重：点名要看的就得出得来。
+    # 不去重时 `decided` 清空（卡照出），但记住哪些格现行有效已裁——卡片带 `decided` 标记，
+    # 前端置灰沉底（GUJI-525）。
+    decided_mark = decided
     if not skip_decided or pages.startswith("cells:"):
         decided = set()
     # 看图结论（overview#428）：模型看图判「放行字错」的格**捞回待审**，挂 doubt `vision_flag` 与 `vision`
@@ -477,6 +482,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     **({"shadow": _sv} if _sv else {}),
                     # 看图结论判错（overview#428）：{v, char, shown, judge, note, group, ts, id}；没有就不带这个键
                     **({"vision": _vf} if _vf else {}),
+                    # 现行有效的人裁已有（只在不去重的模式下会出现在这里）；没有就不带这个键
+                    **({"decided": True} if r.id in decided_mark and r.id not in decided else {}),
                 })
                 if len(out) >= _limit:
                     if not counting and csel is None:
@@ -777,7 +784,7 @@ def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
 # 命中与否只走响应头（`X-Cards-Cache`，路由层加），**不往响应体里加字段**——四庫、北行
 # 的审卡数据要与改前逐字节一致（#166 验收）。
 
-CARDS_CACHE_VERSION = "2"   # 2：整理本对位改读 align_ref 产物（#247）
+CARDS_CACHE_VERSION = "3"   # 2：整理本对位改读 align_ref 产物（#247）；3：卡片加 decided 标记（GUJI-525）
 _CARDS_MEM_MAX = 8
 _CARDS_DISK_KEEP = 16
 """每本书磁盘上留几份（按 mtime 留最新的），其余在写新份时顺手删。"""
