@@ -497,13 +497,15 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [reloadSignal])
 
-  // `pages` 现在是 Step7 顶部统一页数选择区传下来的受控值（overview
-  // 2026-09-11 下发）；切页时随之重新载入，跟点「载入」按钮等效。同样
-  // 跳过首次挂载——初始页数由外层决定，不该一进页面就自动拉取。
+  // `pages` 是 Step7 顶部统一页数选择区传下来的受控值。页范围输入框每敲一个
+  // 字就会改一次 `pages`，所以这里不能无条件 load()——否则输入一个列表名就会
+  // 发出十几二十次 /api/review/cards（GUJI-525 余项，Eliot 实测）。与 `[only]`
+  // 同一条规矩：只有已经载入过（`classCounts` 非空）才按新范围重载；没载入过就
+  // 等用户点「载入」。首次挂载同样不拉取。
   const pagesLoadedOnce = useRef(false)
   useEffect(() => {
     if (!pagesLoadedOnce.current) { pagesLoadedOnce.current = true; return }
-    load()
+    if (classCounts) load()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pages])
 
