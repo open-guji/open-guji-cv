@@ -95,6 +95,8 @@ export interface ReviewCard {
   /** 失效老裁决（overview#403 缺口 A）：人裁过、但绑定表已不采信（切分改了 / 老事件补不出锚），
    * 这一格回到待审。`verdict` 是当时裁的（定字台裁决形状），载入时当预勾；确认后写出带现行锚点的新事件。
    * `withdrawn`：字形库撤下标记（人确认过钉错了格）——不预勾，只标「已撤」。 */
+  /** 点名清单等不去重的模式下，这一格现行有效的人裁已有（GUJI-525）：置灰沉底，不预勾 */
+  decided?: boolean
   stale_verdict?: { verdict: { shape: string; done: string; noGlyphLib?: boolean; guess?: string;
                                approx?: boolean; approxIds?: string; approxNote?: string };
                     ts: string; batch: string; status: string | null; withdrawn?: boolean } | null
