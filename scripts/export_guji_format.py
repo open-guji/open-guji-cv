@@ -76,9 +76,12 @@ def main(argv=None) -> int:
         meta.setdefault("defaults", {})["split_rows"] = rows
     products = Path(a.products) if a.products else None
     pages, bad = [], 0
-    for p in _pages(a.pages, products, a.book):
+    plist = _pages(a.pages, products, a.book)
+    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    pend = vision_pending_ids(a.book, plist, a.products)
+    for p in plist:
         try:
-            page = export_page(a.products, a.book, p, page_meta(meta, p))
+            page = export_page(a.products, a.book, p, page_meta(meta, p), pending_ids=pend)
         except Exception as e:  # noqa: BLE001 — 缺产物的页报出来、不中断整章
             print(f"   ✗ p{p}: {type(e).__name__}: {e}")
             bad += 1

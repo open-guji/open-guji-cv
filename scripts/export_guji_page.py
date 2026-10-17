@@ -61,9 +61,12 @@ def main(argv=None) -> int:
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     bad = 0
-    for p in [int(x) for x in a.pages.split(",") if x.strip()]:
+    plist = [int(x) for x in a.pages.split(",") if x.strip()]
+    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    pend = vision_pending_ids(a.book, plist, a.products)
+    for p in plist:
         m = page_meta(meta, p)
-        page = export_page(a.products, a.book, p, m)
+        page = export_page(a.products, a.book, p, m, pending_ids=pend)
         errs = gp.check(page) + [e for e in gp.validate_schema(page) if "未安装" not in e]
         stem = f"p{p:04d}"
         gp.dump(page, out / f"{stem}.guji-page.json")
