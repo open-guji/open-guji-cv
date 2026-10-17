@@ -234,7 +234,7 @@ def cmd_close_check(args) -> None:
     res = CC.run(eng, workspace_root() or Path.cwd(), pages,
                  export_dir=Path(args.export_dir) if args.export_dir else None,
                  chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
-                 reports=reports_root())
+                 reports=reports_root(), tier=getattr(args, "tier", "final"))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
@@ -2490,6 +2490,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--export-dir", default=None, help="export_guji_format 的输出目录（查 lines.md 与 pages.json）")
     p.add_argument("--chapter", default=None, help="章号 NNN；目录里有多章时用")
     p.add_argument("--notes", default=None, help="overview 里本册的记录目录（查避諱表、收尾记录）")
+    p.add_argument("--tier", choices=["final", "rough"], default="final",
+                   help="final（缺省，终校档）：待审必须清零；rough（粗校档）：第 2 项待审只报数、不计"
+                        "（出 0.1.0 用；整理设计 R5）")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")

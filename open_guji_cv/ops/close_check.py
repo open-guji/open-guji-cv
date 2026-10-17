@@ -5,7 +5,7 @@
 
 能机器判的项：
   1 产物新鲜（status）＋ 缓存不错位（cache verify，只读）
-  2 待审清零（待审卡片按类计数）
+  2 待审清零（待审卡片按类计数；`--tier rough` 粗校档只报数、不计，终校档 `final`（缺省）才计）
   2b 收尾闸 closure_gaps = 0（有定字裁决却没出字）
   8 字形库真源已提交（工作区 git 里 feedback/、output/glyph_store/ 没有未提交改动）
   10/11 lines.md 与 pages.json 自洽（给了 --export-dir 才查）
@@ -56,7 +56,7 @@ def _glyph_store_missing(ws: Path) -> str | None:
     return f"{out} 下没有 glyph.db，glyph_store 也缺或是空目录"
 
 
-def _queue(book: str, store, ws: Path | None = None) -> dict:
+def _queue(book: str, store, ws: Path | None = None, tier: str = "final") -> dict:
     from ..review.cards import cards
     # 没有字形库的工作区上，待审卡片出不来，会报「待审 0 ✓」——假绿（GUJI-364 评论 12573，vol01 实有 290 格待审）。
     # 缺库就当体检出错，不当通过。
@@ -69,8 +69,10 @@ def _queue(book: str, store, ws: Path | None = None) -> dict:
     n = sum(cc.values())
     # 看图判错送回人审的格（overview#428）也在待审里，单列出来：清它要人在控制台裁，不是重跑
     nv = (res.get("doubt_counts") or {}).get("vision_flag", 0)
-    return _item("2", "待审清零", PASS if not n else FAIL,
-                 f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else ""), cc or None)
+    detail = f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else "")
+    if tier == "rough":     # 粗校档（整理设计 R5，Maren 10-17 定）：待审留给精校，只报数不计
+        return _item("2", "待审清零", PASS, detail + "（粗校档不计，终校档才计）", cc or None)
+    return _item("2", "待审清零", PASS if not n else FAIL, detail, cc or None)
 
 
 def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
@@ -156,13 +158,13 @@ MANUAL_ITEMS = [
 
 
 def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | None = None,
-        notes: Path | None = None, reports: Path | None = None) -> dict:
+        notes: Path | None = None, reports: Path | None = None, tier: str = "final") -> dict:
     book = eng.book.id
     items: list[dict] = []
     checks = [
         ("1a", "产物新鲜", lambda: [_fresh(eng, pages)]),
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
-        ("2", "待审清零", lambda: [_queue(book, eng.store, ws)]),
+        ("2", "待审清零", lambda: [_queue(book, eng.store, ws, tier)]),
         ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store, ws)]),
         ("8", "字形库与人裁已提交", lambda: [_store_committed(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
@@ -181,7 +183,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
                                          "10", "11", "12", "13", "14"])}
     items.sort(key=lambda it: order.get(it["no"], 99))
     machine = [it for it in items if it["status"] not in (MANUAL, SKIP)]
-    return {"book": book, "workspace": str(ws), "pages": len(pages),
+    return {"book": book, "workspace": str(ws), "pages": len(pages), "tier": tier,
             "machine_ok": all(it["status"] == PASS for it in machine),
             "counts": {s: sum(1 for it in items if it["status"] == s) for s in (PASS, FAIL, ERROR, MANUAL, SKIP)},
             "items": items}
@@ -191,7 +193,7 @@ ICON = {PASS: "✓", FAIL: "✗", ERROR: "!", MANUAL: "·", SKIP: "-"}
 
 
 def print_report(res: dict) -> None:
-    print(f"{res['book']} 交付体检 · {res['pages']} 页 · {res['workspace']}")
+    print(f"{res['book']} 交付体检（{'粗校档' if res.get('tier') == 'rough' else '终校档'}）· {res['pages']} 页 · {res['workspace']}")
     for it in res["items"]:
         print(f"  {ICON[it['status']]} {it['no']:>3} {it['name']}" + (f"：{it['detail']}" if it["detail"] else ""))
     c = res["counts"]

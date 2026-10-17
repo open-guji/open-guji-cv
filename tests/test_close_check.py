@@ -97,3 +97,48 @@ def test_empty_glyph_store_dir_counts_as_missing(tmp_path):
         CC._closure("vol01", [], None, tmp_path)
     (tmp_path / "output" / "glyph_store" / "glyphs.jsonl").write_text("")
     assert CC._glyph_store_missing(tmp_path) is None
+
+
+# ── 粗校档／终校档（Maren 10-17 定，GUJI-555）：第 2 项待审清零 ────────────────
+def _fake_cards(monkeypatch, n: int, nv: int = 0):
+    import open_guji_cv.review.cards as RC
+    monkeypatch.setattr(RC, "cards", lambda *a, **k: {
+        "class_counts": {"near_form": n} if n else {}, "doubt_counts": {"vision_flag": nv} if nv else {}})
+    monkeypatch.setattr(CC, "_glyph_store_missing", lambda ws: None)
+
+
+def test_final_tier_fails_when_pending(monkeypatch, tmp_path):
+    _fake_cards(monkeypatch, 466)
+    it = CC._queue("b", None, tmp_path)               # 缺省＝终校档
+    assert it["status"] == CC.FAIL and "466" in it["detail"]
+
+
+def test_rough_tier_reports_but_does_not_count_pending(monkeypatch, tmp_path):
+    _fake_cards(monkeypatch, 466, nv=3)
+    it = CC._queue("b", None, tmp_path, tier="rough")
+    assert it["status"] == CC.PASS
+    assert "466" in it["detail"] and "粗校档不计" in it["detail"] and "vision_flag" in it["detail"]
+
+
+def test_both_tiers_pass_when_nothing_pending(monkeypatch, tmp_path):
+    _fake_cards(monkeypatch, 0)
+    assert CC._queue("b", None, tmp_path)["status"] == CC.PASS
+    assert CC._queue("b", None, tmp_path, tier="rough")["status"] == CC.PASS
+
+
+def test_rough_tier_does_not_hide_a_missing_glyph_store(monkeypatch, tmp_path):
+    """粗校档只放过『待审数』，不放过『待审数不可信』（缺字形库照样出错，不能假绿）。"""
+    import open_guji_cv.review.cards as RC
+    monkeypatch.setattr(RC, "cards", lambda *a, **k: {"class_counts": {}})
+    monkeypatch.setattr(CC, "_glyph_store_missing", lambda ws: "缺库")
+    with pytest.raises(RuntimeError):
+        CC._queue("b", None, tmp_path, tier="rough")
+
+
+def test_cli_tier_defaults_to_final():
+    import argparse
+    from open_guji_cv import cli_v2
+    root = argparse.ArgumentParser()
+    cli_v2.register_subcommands(root.add_subparsers(dest="command"))
+    assert root.parse_args(["close-check", "b", "-w", "/x"]).tier == "final"
+    assert root.parse_args(["close-check", "b", "-w", "/x", "--tier", "rough"]).tier == "rough"
