@@ -546,6 +546,11 @@ class SeedAdmitParams(BaseModel):
     结论的全是放行错，零个看图 ok（见 #454 评论的前后对比）。没有 `char_index` 产物的格弃权。"""
     nonchar_flags: str = "bad_seg,rule_bar"
     nonchar_strokes: str = "丨亅丿丶"
+    nonchar_jiazhu_ignore_rule_bar: bool = False
+    """夹注格不吃 `rule_bar`（缺省关，方案 A，cv#103 诊断）：开了，`nonchar_gate` 对夹注格（`sub` 非空）
+    忽略 `nonchar_flags` 里的 `rule_bar`，`bad_seg` 与单笔画判断照旧。起因：夹注是双行小字，窄格里
+    相邻一行的竖笔常被 `rule_bar` 判成界行杆，vol04 p216／p218 夹注 76 格有 40 格未放行、其中 31 格
+    是被 `nonchar_gate` 撤回的。需同开 `nonchar_gate`；关着时不进参数哈希。"""
 
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
@@ -621,6 +626,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.nonchar_gate:
             for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.nonchar_jiazhu_ignore_rule_bar:
+            d.pop("nonchar_jiazhu_ignore_rule_bar", None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
@@ -1271,8 +1278,10 @@ class SeedAdmitStep(Step):
                 # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
                 if ok and p.nonchar_gate:
                     _ir2 = imap.get(r.id)
-                    _bad = ({f for f in (p.nonchar_flags or "").split(",") if f}
-                            & set(getattr(_ir2, "flags", None) or ()))
+                    _nc_flags = {f for f in (p.nonchar_flags or "").split(",") if f}
+                    if p.nonchar_jiazhu_ignore_rule_bar and r.sub:
+                        _nc_flags.discard("rule_bar")
+                    _bad = _nc_flags & set(getattr(_ir2, "flags", None) or ())
                     if _bad or (char and char in (p.nonchar_strokes or "")):
                         ok, channel, prov = False, None, ""
                         doubts.append("nonchar")
