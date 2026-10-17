@@ -29,7 +29,7 @@ LAYER: dict[str, int] = {
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
     "core": 1, "products": 1, "utils": 1, "formats": 1,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
-    "clustering": 2, "gold": 2, "report": 2, "render": 2, "pagetype_model": 2,
+    "clustering": 2, "gold": 2, "report": 2, "render": 2, "pagetype_model": 2, "groups": 2,
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
