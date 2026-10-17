@@ -55,3 +55,23 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 ### 回滚目标
 
 - `cv-2026.09.26-base`
+
+## cv-v0.1.1
+
+- 提交：本节所在 PR 合入后的 main（tag 由 Owen 在 main 上打，tag 名 `cv-v0.1.1`；规矩见 `doc/版本号规矩.md`，**不推 `v*` 标签**）
+- 对比 `cv-v0.1.0`（基线 `26657f84`）。
+
+### 改动摘要
+
+- 形近字组统一接口 S0/S1：新增 `open_guji_cv/groups/`（注册表、后端协议、适配器、升降执行函数）与 `open_guji_cv/eval/groups.py`（统一评测）。**只新增文件，不被任何 Step 引用**。
+- 字组参数守卫：`tests/test_group_params_guard.py`，不许再往 `SeedAdmitParams` 加新的字组参数（存量 17 个登记在测试里）。
+- guji-proof 0.2 新增字段模块：`proof_fields.py`（GUJI-557，审阅卡 → 新增字段，引擎不动）。
+- 另：包分层守卫 `tests/test_architecture.py` 与 `doc/module_map.md`；删 `steps/step6_signals.py`、v1 桥等死代码。
+
+### 影响清单（`code_hash` 变了的步）
+
+- 无。Step 默认输出无变化（升位依据：新增模块／测试／文档，不影响任何 Step 的 `code_hash`，记 PATCH：v0.1.0 已含窗口甲代码，本次只加接口／守卫／字段模块）。
+
+### 回滚目标
+
+- `cv-v0.1.0`
