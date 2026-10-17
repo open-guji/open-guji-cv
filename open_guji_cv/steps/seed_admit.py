@@ -42,7 +42,7 @@ import re
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import BaseModel, field_validator, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
@@ -218,6 +218,12 @@ class SeedAdmitParams(BaseModel):
     缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
     ry_group_cache: str = ""                # 答案表 json 路径（utils/ry_group.py 格式）
     ry_group_fingerprint: str = ""          # 自动填（开关开且有表时）
+    m7_groups: tuple[str, ...] = ()
+    """M7 上下文路（GUJI-563）：开哪些字组（注册表 id，如 `("jys","ry","rr")`），缺省空＝关。L1 规则先行，弃权再查
+    `m7_l2_tables[组]` 的 v3 答案表；升降按注册表声明的策略（`groups/apply.py`）。旧的各组 `_pass` 照旧先跑，本遍在
+    rr_clf 之后补跑。证据写 `evidence.m7_group`。关着不进参数 dump（`params_hash` 不变）。"""
+    m7_l2_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → group_clf/1（ctx_ver 3）答案表路径
+    m7_fingerprint: str = ""                # 自动填（开关开时）：规则文件＋答案表内容哈希
     rr_clf: bool = False
     """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
 
@@ -580,6 +586,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.ry_group:
             for k in ("ry_group", "ry_group_cache", "ry_group_fingerprint"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.m7_groups:
+            for k in ("m7_groups", "m7_l2_tables", "m7_fingerprint"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
@@ -700,6 +709,9 @@ class SeedAdmitParams(BaseModel):
                                corpus_fingerprint([self.ji_yi_si_clf_table]))
         if self.ry_group and self.ry_group_cache and not self.ry_group_fingerprint:
             object.__setattr__(self, "ry_group_fingerprint", corpus_fingerprint([self.ry_group_cache]))
+        if self.m7_groups and not self.m7_fingerprint:
+            from ..groups.m7_pass import fingerprint as _m7_fp
+            object.__setattr__(self, "m7_fingerprint", _m7_fp(self.m7_groups, self.m7_l2_tables))
         if self.rr_clf and not self.rr_clf_fingerprint:
             from ..utils.rr_clf import model_fingerprint as _rr_fp
             object.__setattr__(self, "rr_clf_fingerprint", _rr_fp(self.rr_clf_model or None) or "missing")
@@ -729,6 +741,9 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.utils.ji_yi_si_clf",
                    "open_guji_cv.utils.ry_group",
                    "open_guji_cv.utils.rr_clf",
+                   # M7 上下文路（GUJI-563）：缺省关，关着时不影响输出；模块一改就判过期，因为开了的册要重算
+                   "open_guji_cv.groups.m7_pass", "open_guji_cv.groups.apply", "open_guji_cv.groups.registry",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -743,7 +758,7 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model", "m7_l2_tables"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -1353,6 +1368,10 @@ class SeedAdmitStep(Step):
             d_rr2 = _rr_clf_pass(ctx, page, p, out, patch_missing)
             n_auto -= d_rr2
             n_review += d_rr2
+        if p.m7_groups:
+            d_m7 = _m7_group_pass(p, out, amap)
+            n_auto += d_m7
+            n_review -= d_m7
         if p.oversplit_gate == "hint":
             _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:
@@ -2055,6 +2074,18 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
         r.doubts = list(dict.fromkeys((r.doubts or []) + ["ji_yi_si_clf_review"]))
         return -1, 1
     return 0, 0
+
+
+def _m7_group_pass(p, out: list, amap: dict) -> int:
+    """M7 上下文路（GUJI-563）：见 `groups/m7_pass.py`。→ 放行数净增（升减降）。"""
+    from ..groups.context import WIDTH
+    from ..groups.m7_pass import m7_pass
+    from ..utils.jiazhu_order import sort_by_reading
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+           if not (r.doubts and "excluded" in r.doubts)]      # 双行夹注按读序（先右行后左行），与 ji_yi_si 一遍一致
+    res = m7_pass(seq, amap, p.m7_groups, p.m7_l2_tables,
+                  lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH))
+    return sum(x.lifted - x.demoted for x in res.values())
 
 
 def _ry_group_pass(out: list, amap: dict, cache: str) -> int:
