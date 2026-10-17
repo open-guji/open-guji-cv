@@ -70,3 +70,30 @@ def split_parts(gray: np.ndarray, mask: np.ndarray, fill: int = 255) -> list[np.
         part[mask == k] = gray[mask == k]
         out.append(part)
     return out
+
+
+def seam_polyline(ink: np.ndarray, y0: float, band: float = 0.12, lam: float = 0.6, pull: float = 4.0, step: int = 4):
+    """折线切分（自动版）：在 `y0±band`（占图高比例）内，找一条从左到右穿过墨迹最少的缝。
+    DP 逐列走，每步可上下 ±1 行；代价＝本格墨迹 + `lam`×|行变化| + `pull`×偏离 y0 的比例。
+    返回归一化折线 `[[x,y],…]`，每 `step` 列取一点（两端各取一点）。"""
+    h, w = ink.shape
+    lo, hi = max(int((y0 - band) * h), 0), min(int((y0 + band) * h) + 1, h)
+    cost = ink[lo:hi].astype(float)
+    ys = np.arange(lo, hi)
+    cost = cost + pull * np.abs(ys - y0 * h)[:, None] / h
+    n = hi - lo
+    acc = np.full((n, w), np.inf); back = np.zeros((n, w), dtype=np.int16)
+    acc[:, 0] = cost[:, 0]
+    for x in range(1, w):
+        prev = acc[:, x - 1]
+        cand = np.stack([np.r_[np.inf, prev[:-1]] + lam, prev, np.r_[prev[1:], np.inf] + lam])
+        k = cand.argmin(axis=0)
+        acc[:, x] = cand[k, np.arange(n)] + cost[:, x]
+        back[:, x] = k - 1
+    i = int(acc[:, -1].argmin()); path = [0] * w
+    for x in range(w - 1, -1, -1):
+        path[x] = i
+        i = min(max(i + int(back[i, x]), 0), n - 1) if x else i
+    # 回溯时 back 记的是"来自 i+back"，故上面按 i+back 回退
+    xs = list(range(0, w, step)) + [w - 1]
+    return [[(x + 0.5) / w, (lo + path[x] + 0.5) / h] for x in xs]

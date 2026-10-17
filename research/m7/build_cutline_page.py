@@ -92,6 +92,7 @@ function card(r){
     <div class="seg2"><button class="b0" data-act="0" aria-pressed="${a===0}">① 画 上/中 线（红）</button>
       <button class="b1" data-act="1" aria-pressed="${a===1}">② 画 中/下 线（蓝）</button></div>
     <div class="cv" data-id="${r.id}"><img data-src="${r.img}" alt="">${overlay(r.id)}</div>
+    ${r.auto && !v ? `<div class="tools"><button data-adopt="${r.id}" style="grid-column:1/-1;background:var(--ok-soft);border-color:var(--ok)">✓ 机器画得对，采纳</button></div>` : ''}
     <div class="tools"><button data-undo="${r.id}">撤销当前线的上一点</button><button data-clear="${r.id}">这张全部重画</button></div>
     <div class="verdicts">${[['idk','看不清'],['bad','图不对']].map(btn).join('')}</div></article>`;
 }
@@ -111,6 +112,8 @@ document.addEventListener('click', e => {
   if (f){ filter = f.dataset.f; [...f.parentElement.children].forEach(x=>x.setAttribute('aria-pressed',String(x===f))); draw(); return; }
   const a = e.target.closest('.seg2 button');
   if (a){ const id = a.closest('.card').dataset.id; act[id] = +a.dataset.act; [...a.parentElement.children].forEach(x=>x.setAttribute('aria-pressed',String(x===a))); return; }
+  const ad = e.target.closest('[data-adopt]');
+  if (ad){ commit(ad.dataset.adopt); draw(); return; }
   const u = e.target.closest('[data-undo]');
   if (u){ const id = u.dataset.undo, p = plOf(id), k = act[id] ?? 0; p[k].pop(); commit(id); return; }
   const c = e.target.closest('[data-clear]');
@@ -168,13 +171,23 @@ def main() -> None:
             if str(r.get("verdict", "")).startswith("cut:"):
                 y1, y2 = map(float, r["verdict"][4:].split(","))
                 pre[r["id"]] = [[[0.05, y1], [0.95, y1]], [[0.05, y2], [0.95, y2]]]
+    auto = {}
+    if "--predicted" in sys.argv:     # 机器预测折线 jsonl {"id","pre"}：预填，并出「采纳」按钮；人改或采纳后才算数
+        for line in Path(sys.argv[sys.argv.index("--predicted") + 1]).read_text(encoding="utf-8").splitlines():
+            r = json.loads(line); pre[r["id"]] = r["pre"]; auto[r["id"]] = True
+    done = {}
+    if "--done" in sys.argv:          # 人已标的折线（harvest 出来的 jsonl）→ 种进页面的已有裁决
+        for line in Path(sys.argv[sys.argv.index("--done") + 1]).read_text(encoding="utf-8").splitlines():
+            r = json.loads(line)
+            if str(r.get("verdict", "")).startswith("poly:"):
+                done[r["id"]] = {"v": r["verdict"], "t": r.get("t", 0)}
     rows, imgs = [], {}
     for i in ids:
         lb = labels[i]; fn = i.replace(":", "_") + ".png"
         imgs[i] = "data:image/png;base64," + base64.b64encode((d / "crops" / fn).read_bytes()).decode()
-        rows.append({"id": i, "img": i, "title": f"{i}", **({"pre": pre[i]} if i in pre else {}),
-                     "note": f"你之前标的读法：上 {lb['top']}　中 {lb['mid']}　下 {lb['bot']}"})
-    html = render(TITLE, KEY, verdicts={}, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
+        rows.append({"id": i, "img": i, "title": f"{i}", **({"pre": pre[i]} if i in pre else {}), **({"auto": True} if i in auto else {}),
+                     "note": f"你之前标的读法：上 {lb['top']}　中 {lb['mid']}　下 {lb['bot']}" + ("　｜　折线是机器按你已标的那批预测的" if i in auto else "")})
+    html = render(TITLE, KEY, verdicts=done, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
     out.write_text(html, encoding="utf-8")
     print(f"{out}  {len(html)/1024:.0f} KB  {len(rows)} 卡")
 
