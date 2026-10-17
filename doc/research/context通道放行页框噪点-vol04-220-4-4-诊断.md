@@ -54,3 +54,26 @@
 ## 同批记录：`3:2:-1` 槽位号错位一格（印章区）——低优先，仅记录
 
 GUJI-555 Lucian 粗校所见：`3:2:-1`（页3 列2 槽位 −1）的槽位号在印章区比实际字位错一格。**只记录，不排查**；后续要查时从 `cell_shrink` 的 `pos_to_slot` 与 seal 区（`seal_region` 标记）的槽位换算入手。
+
+## 处理决定与方案 1 的现成 yaml（Mila 10-17 定）
+
+- **现在不改 vol04 的 `seed_admit` params**（改了 `params_hash`，vol04 的 `seed_admit` 判过期；vol04 已按现状出 0.1.0，单格错按放宽口径落地后修）。`220:4:4` 先走人裁改非字。
+- **方案 1 记为 vol04 下次重落时一并开。** 方案 2（改缺省）并进统一窗口，与 S2a 同批，不单做。
+- **下次重落前**再让 Owen 提供 `p0220` 第 4 列 slot 4 的 `char_index`（`flags`／`ink_ratio`／`bbox`／`cell_type`）与 `seed_admit` evidence，确认这一格走的是上面哪条路再开。
+
+### `books/vol04.yaml` 的 `params.seed_admit` 追加项（合并，不是整段替换，见 runbook S3）
+
+```yaml
+params:
+  seed_admit:
+    # —— 本诊断方案 1 ——
+    context_single_stroke_review: true     # context 通道要放行「一丨亅丶丿乀乁乚乛」→ 转待审（doubt context_single_stroke）
+    # 下面两行**只有在 Owen 确认这一格 Step4 真标了 frame_bars／edge_blob 时才加**；否则别开，白添误拦
+    context_guard_flags: true
+    context_guard_flag_set: "rule_bar,suspect_empty,bad_seg,frame_bars,edge_blob"
+```
+
+- 只收紧、只管 context 通道；开了以后 vol04 里 context 放行的真「一」「丨」会转待审（多审几十张，预期内）。
+- 只影响 `seed_admit`：后加开关，`guji pipeline … --from seed_admit --to seed_admit` 重落即可；其他步、其他册不受影响。
+- 不用 `nonchar_gate`：它对**所有**通道已放行的格生效（撤回放行），把「一」放进 `nonchar_strokes` 会误撤 match 通道里真「一」的放行，不如上面只管 context 的两个闸。
+- A/B 量法：照 `doc/exp/shadow_veto-vol04.yaml` 的写法起一个 `guji exp run`（`base` 关、`variants` 开），对比放行格数与看图结论，再定要不要常开。
