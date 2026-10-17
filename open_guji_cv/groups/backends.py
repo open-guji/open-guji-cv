@@ -155,5 +155,5 @@ class RrImageBackend:
             raise PatchUnavailable(cell.id)
         c = rr_clf.classify(cell.patch(), self.model_path, self.p_thr)
         pick = c["pick"]
-        why = "agree" if pick else ("abstain:gated" if c["gated"] else "abstain:low_p")
-        return GroupVerdict(pick, conf=c["p"], why=why, via="image", extra={"legacy": c, "probs": c["probs"]})
+        why = "agree" if pick else ("abstain:gated" if c.get("gated") else "abstain:low_p")
+        return GroupVerdict(pick, conf=c.get("p"), why=why, via="image", extra={"legacy": c, "probs": c.get("probs")})
