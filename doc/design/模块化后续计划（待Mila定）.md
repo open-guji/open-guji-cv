@@ -60,4 +60,4 @@
 1. 窗口后第一轮是否把第二节 18 条并进来，还是单独再开一次窗口？（单独开＝十册 `seed_admit` 再过期一次）
 2. 第三节 M1–M4 先做哪批？是否允许在窗口甲前做不碰 `steps/`／`core/`／`code_deps` 的那几批？
 3. `clustering` 拆包是否立项。
-4. 另（上一轮遗留）：`steps/step6_signals.py` 的删除已报备，等她登记后单开 PR；`scripts/_from_overview/` 等 10-20 后她逐目录点头再删，我出「目录→是否在 main→删/留」表。
+4. 另（上一轮遗留）：`steps/step6_signals.py` 已删除（Mila 已核无影响，见 `module_map.md` 第五节）；`scripts/_from_overview/` 等 10-20 后她逐目录点头再删，我出「目录→是否在 main→删/留」表。
