@@ -28,7 +28,8 @@ CSS = """
 .card h3{margin:0;font-family:var(--serif);font-size:15px}
 .card p{margin:6px 0 0;font-size:13px;color:var(--muted)}
 .cv{position:relative;display:inline-block;margin-top:10px;touch-action:none;user-select:none;-webkit-user-select:none;background:var(--tile);cursor:crosshair}
-.cv img{display:block;width:280px;max-width:100%;image-rendering:pixelated}
+.cv{width:280px;max-width:100%;aspect-ratio:14/15}
+.cv img{display:block;width:100%;height:100%;object-fit:fill;image-rendering:pixelated}
 .cv svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 .cv .pl{fill:none;stroke-width:2;vector-effect:non-scaling-stroke}
 .cv .pl.b0{stroke:#e0412f}.cv .pl.b1{stroke:#2f6fe0}

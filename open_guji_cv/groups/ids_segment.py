@@ -131,3 +131,16 @@ def vertical_seam(ink: np.ndarray, mid_mask: np.ndarray, band: float = 0.18, lam
             i = min(max(i + int(back[r, i]), 0), wd - 1)
     rows = list(range(0, n, step)) + [n - 1]
     return [[(lo + path[r] + 0.5) / w, (y0 + r + 0.5) / h] for r in rows]
+
+
+def right_part(gray: np.ndarray, mid_mask: np.ndarray, vcut, fill: int = 255) -> np.ndarray:
+    """中段里竖折线 `vcut`（归一化 `[[x,y],…]`，自上而下）右边的像素；其余置 `fill`。"""
+    h, w = gray.shape
+    pts = np.asarray(vcut, dtype=float)
+    order = np.argsort(pts[:, 1])
+    xs = np.interp(np.arange(h) + 0.5, pts[order, 1] * h, pts[order, 0] * w)
+    cols = np.arange(w)[None, :]
+    keep = (mid_mask == 1) & (cols >= xs[:, None])
+    out = np.full_like(gray, fill)
+    out[keep] = gray[keep]
+    return out
