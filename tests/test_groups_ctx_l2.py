@@ -1,6 +1,7 @@
 """M7 块 E：L2 的纯函数部分（建批、解析、两遍合并、查表）。不调任何模型。"""
 from pathlib import Path
 
+from open_guji_cv.groups.context import CTX_VER
 from open_guji_cv.groups.ctx_l2 import CtxL2Backend, build_batch, load_prompt, merge_runs, parse_output
 from open_guji_cv.groups.protocol import JudgeInput, window_from_text
 from open_guji_cv.groups.registry import GROUPS
@@ -36,7 +37,7 @@ def _runs(a, b):
 def test_merge_requires_all_runs_agree():
     ctx = {"c": ("二月十一", "奉")}
     t = merge_runs("ry", "日曰", "ry-l2-1", _runs(("日", "high"), ("日", "mid")), ctx)
-    assert t["cells"]["c"]["char"] == "日" and t["ctx_ver"] == 2 and t["schema"] == "group_clf/1"
+    assert t["cells"]["c"]["char"] == "日" and t["ctx_ver"] == CTX_VER and t["schema"] == "group_clf/1"
     for a, b, why in ((("日", "high"), ("曰", "high"), "disagree"), (("日", "high"), ("日", "low"), "abstain:low_conf"),
                       (("日", "high"), ("其他", "high"), "abstain:other"), (("日", "high"), ("口", "high"), "abstain:non_member")):
         c = merge_runs("ry", "日曰", "ry-l2-1", _runs(a, b), ctx)["cells"]["c"]

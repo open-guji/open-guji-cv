@@ -12,7 +12,7 @@ from open_guji_cv.groups.ctx_l1 import CtxL1Backend
 from open_guji_cv.groups.ctx_l2 import parse_output
 from open_guji_cv.groups.registry import GROUPS
 
-R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse"); MIN_SIDE = 8
+R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse", "gemini"); MIN_SIDE = 8
 V = {}
 for l in (R / "review_round1_verdicts.jsonl").open(encoding="utf-8"):
     x = json.loads(l); V[x["id"]] = x["verdict"]
@@ -42,15 +42,18 @@ def main(verbose=False):
             if min(len(l), len(rt)) < MIN_SIDE: tot["excl_short_ctx"] += 1; continue
             tot["eval"] += 1
             c1, w1, _ = l1.decide(l, rt)
-            hv = runs["haiku"].get(i, {}); hc = hv.get("char") if hv.get("conf") == "high" and hv.get("char") in fam else None
-            for nm, ch in (("L1", c1), ("haiku_high", hc), ("L1→haiku", c1 or hc)):
+            picks = [("L1", c1)]
+            for m in MODELS:
+                hv = runs[m].get(i, {}); hc = hv.get("char") if hv.get("conf") == "high" and hv.get("char") in fam else None
+                picks += [(m + "_high", hc), ("L1→" + m, c1 or hc)]
+            for nm, ch in picks:
                 tot[nm + ":give"] += ch is not None; tot[nm + ":ok"] += ch == gold
                 if ch is not None and ch != gold: errs.append((nm, i, gold, ch, l[-8:] + "？" + rt[:8]))
         out[g] = (tot, errs)
         print(f"\n== {g}  强真值 {tot['strong']}  可评 {tot['eval']}（剔: 复审其他/拿不准 {tot['excl_review_other_idk']}, 成员字外 {tot['excl_out_of_family']}, 无图 {tot['excl_no_img']}, 上下文短 {tot['excl_short_ctx']}）")
-        for nm in ("L1", "haiku_high", "L1→haiku"):
+        for nm in ["L1"] + [x for m in MODELS for x in (m + "_high", "L1→" + m)]:
             n, k, ok = tot["eval"], tot[nm + ":give"], tot[nm + ":ok"]
-            print(f"  {nm:11s} 给字 {k}/{n} 覆盖 {k/n:.1%}  对 {ok}  准确率 {ok/k:.1%}  Wilson下界 {wilson_lo(ok,k):.3f}" if k else f"  {nm} 无")
+            print(f"  {nm:14s} 给字 {k}/{n} 覆盖 {k/n:.1%}  对 {ok}  准确率 {ok/k:.1%}  Wilson下界 {wilson_lo(ok,k):.3f}" if k else f"  {nm} 无")
         for e in errs: print("   ERR", e)
     return out
 if __name__ == "__main__": main()

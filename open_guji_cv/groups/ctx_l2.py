@@ -4,7 +4,7 @@
   1. `build_batch(group, cells)`：把格（id＋前后各 20 字）排成给模型的消息（提示词＝`config/groups/<组>/prompt.md`）；
   2. 各家模型各跑一遍，输出 JSON 数组（`parse_output`）；
   3. `merge_runs`：**所有遍一致才给字**（且没有一遍说「其他」、置信都不是 low），否则弃权并写明原因，出 `group_clf/1` 表
-     （`ctx_ver: 2`，键＝`context.ctx_key` 的 `v2:` 键，与旧 30 字窗口的表不混）；
+     （`ctx_ver` 跟随 `context.CTX_VER`，键＝`context.ctx_key`，与旧版本的表不混）；
   4. `CtxL2Backend`：查表，ctx 对不上／版本对不上一律弃权。
 本模块不被任何 Step 引用，不改产物指纹。
 """
