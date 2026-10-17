@@ -157,6 +157,35 @@ def occluded_cells(dens: dict[tuple[int, int, str], float], *, min_density: floa
     return out
 
 
+def text_ink_fraction(gray: np.ndarray, cells) -> dict[tuple[int, int, str], float]:
+    """每格（**不扩框**，就是格本身）里「大块墨」占格面积的比例，{(col, slot, sub): 0~1}。
+
+    大块墨＝连通块面积 > `OCC_AREA_MAX` 的墨（字的笔画主体；印泥斑点、斑驳底纸的碎点都是中等以下的小块，
+    不算）。vol04 p130 实测：真字格 0.13~0.35，只有斑点的空格 ≤0.14，多数 ≤0.10（见
+    `doc/research/遮挡判据误伤清楚字-vol04-p130-诊断.md`）。用于 `occluded_rescue_ink` 把「判成遮挡、
+    其实是清楚的字」的格救回来。"""
+    import cv2
+    b = (gray < 128).astype(np.uint8)
+    _n, lab, st, _cen = cv2.connectedComponentsWithStats(b, connectivity=8)
+    big = st[:, cv2.CC_STAT_AREA] > OCC_AREA_MAX
+    big[0] = False
+    bigmask = big[lab]
+    H, W = b.shape
+    out: dict[tuple[int, int, str], float] = {}
+    for c in cells.columns:
+        for x in c.cells:
+            if not x.quad_page:
+                continue
+            q = np.asarray(x.quad_page, dtype=float)
+            x0, y0 = q.min(0)
+            x1, y1 = q.max(0)
+            X0, X1, Y0, Y1 = int(max(0, x0)), int(min(W, x1)), int(max(0, y0)), int(min(H, y1))
+            if X1 <= X0 or Y1 <= Y0:
+                continue
+            out[(c.col, x.slot, x.sub or "")] = float(bigmask[Y0:Y1, X0:X1].mean())
+    return out
+
+
 def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
     """本页的遮挡格 {(col, slot, sub): 密度}——**判据的唯一入口**。
 
@@ -174,9 +203,16 @@ def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
         gray = ctx.raw_page(page)
     except Exception:
         return {}
-    return occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
-                          min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
-                          min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+    occ = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
+                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
+                         min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+    # 清楚的字救回：块里夹着的、格内大块墨 ≥ `occluded_rescue_ink` 的格不算遮挡（0＝关，缺省，行为不变）。
+    # getattr：别的调用方（`feedback.consumers`、`cell_shrink` 的缺省参数）传的参数对象可能没有这个字段。
+    rescue = float(getattr(p, "occluded_rescue_ink", 0.0) or 0.0)
+    if occ and rescue > 0:
+        frac = text_ink_fraction(gray, cells)
+        occ = {k: v for k, v in occ.items() if frac.get(k, 0.0) < rescue}
+    return occ
 
 
 # ── 盖章空栏判空（`seal_blank_page`，2026-10-09，道 B 规格 overview#493）─────────
