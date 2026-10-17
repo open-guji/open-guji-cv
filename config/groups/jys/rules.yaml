@@ -1,0 +1,11 @@
+schema: ctx_l1/1
+group: jys
+# L1 规则集（D3）：先收编现有规则路 `utils.ji_yi_si_clf.classify`（行为逐格不变，tests/test_groups_ctx_l1.py 对拍）。
+# 其上新增的规则：理由与证据见 doc/design/M7-分块-D-上下文L1.md。语料（總目校对本）里己已巳互讹严重
+# （「以己意」写成「以巳意」52 次、「已著」写成「巳著」744 次），所以语料纯度只作线索，每条都要在强真值上 0 错且文意站得住。
+legacy: open_guji_cv.utils.ji_yi_si_clf:classify
+rules:
+  - {id: jys-已+不有稱先屬在言引別别編全入改, char: 已, src: mined+hand,
+     re: '(?<![自克捨推恕律責由屈知利異])◎[不有稱先屬在言引別别編全入改]',
+     note: 已＋虚词/动词（已不、已有、已稱…）；语料后字为这些字时「己」0 次（n≥15）；前字不是「自己/克己」类}
+  - {id: jys-已著, char: 已, src: mined+hand, re: '(?<![自克捨推恕律責由屈知利異])◎著', note: 已著錄；语料 2519:12}

@@ -1,0 +1,15 @@
+schema: ctx_l1/1
+group: ry
+# 日曰 L1：只在把握十足时给字。手写规则 + 外部语料（殆知阁，与《總目》无重叠）纯度≥0.99、n≥25 的单侧键。
+# 生成/审计见 research/m7/ctx/gen_rules.py、lab.py。《總目》自身校对本里日曰互讹，不用它挖键；C 弱真值（证人一致）循环，
+# 只作参照，验收看强真值。
+rules:
+  - {id: ry-月X日, char: 日, src: hand, re: '月[初一二三四五六七八九十廿卅]{1,3}◎', note: 「X月X日」日期}
+  - {id: ry-干支日, char: 日, src: hand, re: '[甲乙丙丁戊己庚辛壬癸][子丑寅卯辰巳午未申酉戌亥]◎', note: 干支纪日（辛巳日）}
+  - {id: ry-日知錄, char: 日, src: hand, re: '◎知錄', note: 書名《日知錄》}
+  - {id: ry-排比曰, char: 曰, src: hand, re: '曰[^日曰]{1,4}◎[^日曰]{1,4}曰', note: 「曰易曰書曰詩」式排比：两侧各 1–4 字外都是「曰」}
+  - {id: ry-子曰, char: 曰, src: hand, re: '(?<![甲乙丙丁戊己庚辛壬癸])子◎', note: 子曰；前字是天干则是干支日（甲子日）}
+  - {id: ry-ext-l1-日, char: 日, src: external-pure, re: '[每近限擇到昨剋任累暇]◎', note: 外部语料 l1→日；n≥25 纯度≥0.99}
+  - {id: ry-ext-l1-曰, char: 曰, src: external-pure, re: '[象氏彖疏梁號諡答羊弨嘆諭爻禹雅貢玄誘笑父伯仲句雍叔歟手荅祝周陶凱舒訓璞固張誓祖逵頌泣預孟虔璠]◎', note: 外部语料 l1→曰；n≥25 纯度≥0.99}
+  - {id: ry-ext-r1-日, char: 日, src: external-pure, re: '◎[干矣蝕另]', note: 外部语料 r1→日；n≥25 纯度≥0.99}
+  - {id: ry-ext-r1-曰, char: 曰, src: external-pure, re: '◎[古剛禹堯伯坤包桓訟屯幽澤婦志震敦匪賁艮諾童亢括卦噬廟丨鳴邦唯渙亨嗚惠]', note: 外部语料 r1→曰；n≥25 纯度≥0.99}
