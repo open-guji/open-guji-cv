@@ -35,12 +35,12 @@ def select():
                                   models={m: [v[m].get("char"), v[m].get("conf")] for m in MODELS}))
     return cards
 
-def crop_uri(g, cid):
+def crop_uri(g, cid, h=72, q=60):
     p = CG / g / "crops" / (cid.replace(":", "_") + ".png")
     if not p.exists(): return None
     im = cv2.imread(str(p), 0)
-    h = 72; w = max(1, int(im.shape[1] * h / im.shape[0])); im = cv2.resize(im, (w, h), interpolation=cv2.INTER_AREA)
-    ok, buf = cv2.imencode(".jpg", im, [cv2.IMWRITE_JPEG_QUALITY, 60])
+    w = max(1, int(im.shape[1] * h / im.shape[0])); im = cv2.resize(im, (w, h), interpolation=cv2.INTER_AREA)
+    ok, buf = cv2.imencode(".jpg", im, [cv2.IMWRITE_JPEG_QUALITY, q])
     return "data:image/jpeg;base64," + base64.b64encode(buf).decode()
 
 TITLE = "形近字复审"; KEY = "m7-ctx-review-v1"
@@ -49,7 +49,7 @@ CSS = """
 .card[data-v="other"]{border-left-color:var(--ochre)} .card[data-v="idk"]{border-left-color:var(--faint)} .card[data-v]:not([data-v="other"]):not([data-v="idk"]){border-left-color:var(--ok)}
 .grp{font-size:12px;color:var(--muted)} .ctx{font-family:var(--serif);font-size:17px;line-height:1.7;margin:6px 0;word-break:break-all}
 .ctx b{background:var(--ochre);color:var(--on-solid);padding:0 4px;border-radius:2px;font-size:20px}
-.card img{height:72px;background:var(--tile);border-radius:2px;display:block;margin:6px 0}
+.card img{height:var(--imgh,72px);background:var(--tile);border-radius:2px;display:block;margin:6px 0}
 .verdicts{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
 .verdicts button{min-height:44px;min-width:64px;flex:1;border:1px solid var(--rule-hard);border-radius:3px;background:var(--surface);color:var(--ink);font-family:var(--serif);font-size:20px;cursor:pointer}
 .verdicts button.s{font-family:var(--sans);font-size:13px}
@@ -75,6 +75,7 @@ function card(r){
   const chars = [...r.chars].map(c => `<button class="c" data-v="${c}" aria-pressed="${v===c}">${c}</button>`).join('');
   return `<article class="card" data-id="${r.id}"${v?` data-v="${v}"`:''}>
    <div class="grp">${NAMES[r.group]} · ${esc(r.id)}</div>
+   ${r.note?`<div class="grp">${esc(r.note)}</div>`:''}
    <div class="ctx">${esc(r.left)}<b>？</b>${esc(r.right)}</div>
    ${r.img ? `<img data-src="${r.id}" alt="">` : ''}
    <div class="verdicts">${chars}<button class="s other" data-v="other" aria-pressed="${v==='other'}">其他字</button><button class="s idk" data-v="idk" aria-pressed="${v==='idk'}">拿不准</button></div></article>`;
@@ -99,8 +100,8 @@ def main():
     for c in order:
         u = crop_uri(c["group"], c["id"])
         if u: imgs[c["id"]] = u
-        rows.append(dict(id=c["id"], group=c["group"], left=c["left"], right=c["right"], chars=FAMILY[c["group"]], img=bool(u)))
+        rows.append(dict(id=c["id"], group=c["group"], left=c["left"], right=c["right"], chars=FAMILY[c["group"]], img=bool(u), note=c.get("note","")))
     html = render(TITLE, KEY, verdicts={}, css=CSS, page_js=PAGE_JS, payload={"rows": rows, "imgs": imgs})
     Path(sys.argv[1]).write_text(html, encoding="utf-8")
     print(sys.argv[1], f"{len(html)/1024:.0f} KB", len(rows), collections.Counter(c["group"] for c in cards))
-main()
+if __name__ == "__main__": main()

@@ -13,3 +13,4 @@ rules:
   - {id: ry-ext-l1-曰, char: 曰, src: external-pure, re: '[象氏彖疏梁號諡答羊弨嘆諭爻禹雅貢玄誘笑父伯仲句雍叔歟手荅祝周陶凱舒訓璞固張誓祖逵頌泣預孟虔璠]◎', note: 外部语料 l1→曰；n≥25 纯度≥0.99}
   - {id: ry-ext-r1-日, char: 日, src: external-pure, re: '◎[干矣蝕另]', note: 外部语料 r1→日；n≥25 纯度≥0.99}
   - {id: ry-ext-r1-曰, char: 曰, src: external-pure, re: '◎[古剛禹堯伯坤包桓訟屯幽澤婦志震敦匪賁艮諾童亢括卦噬廟丨鳴邦唯渙亨嗚惠]', note: 外部语料 r1→曰；n≥25 纯度≥0.99}
+  - {id: ry-日鈔書名, char: 日, src: hand+user-2026-10-17, re: '(?:讀易|黃震|黃氏)◎鈔', note: 書名《讀易日鈔》《黃氏日鈔》；用户 10-17 点名}
