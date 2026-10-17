@@ -36,7 +36,7 @@ for k, f in enumerate(folds):
         pl = U.prob_to_polylines(U.predict_prob(net, G[i]))
         want = tuple(NM[labs[i][s]] for s in ("top", "mid", "bot"))
         for m in res:
-            v = solve(G[i], bank, IdsResolver(list(NM), "config/groups/yi_560"), pl, min_margin=m)
+            v = solve(G[i], bank, IdsResolver(list("彝彞彜彛𢑴𢑱"), "config/groups/yi_560"), pl, min_margin=m)
             c = "abstain" if v.char is None else "right" if v.slots == want else "wrong"
             res[m][c] += 1
             if m == 0.0 and c == "wrong": wrong.append((i, want, v.slots, v.margins))
