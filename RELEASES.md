@@ -58,7 +58,7 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 ## cv-v0.1.1
 
-- 提交：本节所在 PR 合入后的 main（tag 由 Owen 在 main 上打，tag 名 `cv-v0.1.1`；规矩见 `doc/版本号规矩.md`，**不推 `v*` 标签**）
+- 提交：本节所在 PR 合入后的 main（tag 由 Owen 在 main 上打，tag 名 `cv-v0.1.1`；规矩见 `doc/版本号规矩.md`，**不推 `v*` 标签**）。旧 exe 流水线已停用（`release.yml` 移至 `doc/archive/release.yml.legacy`），`v*` 发布待正规化后重开。
 - 对比 `cv-v0.1.0`（基线 `26657f84`）。
 
 ### 改动摘要
