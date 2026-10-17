@@ -388,8 +388,10 @@ def _print_closure_mismatches(mism: list[dict] | None, show: int = 30) -> None:
         return
     main = [m for m in mism if m["kind"] == "main"]
     jys = [m for m in mism if m["kind"] == "jys"]
+    canon = [m for m in mism if m["kind"] == "canon"]
     print(f"  报告 · 人裁字≠放行字 {len(main)} 格（不要求为 0，扫一眼：多为老裁决钉在移位格上被正确丢掉）"
-          + (f"；己已巳族 {len(jys)} 格另列" if jys else ""))
+          + (f"；己已巳族 {len(jys)} 格另列" if jys else "")
+          + (f"；字形↔规范字等价 {len(canon)} 格另列" if canon else ""))
     for m in main[:show]:
         print(f"      {m['id']}  人裁 {m['shape']} → 放行 {m['char']}")
     if len(main) > show:

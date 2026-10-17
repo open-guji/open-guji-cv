@@ -192,6 +192,14 @@ def shape_decided_cells(book: str, log: EventLog | None = None) -> dict[str, str
     return out
 
 
+def _is_variant(a: str, b: str) -> bool:
+    try:
+        from ..variants import are_variants
+        return bool(are_variants(a, b))
+    except Exception:
+        return False
+
+
 def closure_mismatches(book: str, pages: list[int], store=None,
                        log: EventLog | None = None) -> list[dict]:
     """收尾闸的**报告项**（overview#403，整理总管 10-05 补充）：**不要求为 0**，列出来给人扫一眼。
@@ -201,7 +209,8 @@ def closure_mismatches(book: str, pages: list[int], store=None,
     移位的格上、被正确丢掉），不能自动判。同一位多条裁决按最新那条比（`shape_decided_cells`）。
 
     己／已／巳 一族（`utils/ji_yi_si.py`）两边都在族内的，字形与读法本就可能分岔，`kind="jys"` 单独归类，
-    不混进正文（`kind="main"`）。→ `[{"id", "page", "shape", "char", "kind"}]`，按页序。
+    不混进正文（`kind="main"`）。字形与放行字互为异体／规范字（`variants.are_variants`，埀↔垂 类）的
+    单列 `kind="canon"`，同样不进正文一类。→ `[{"id", "page", "shape", "char", "kind"}]`，按页序。
     """
     from ..core.spec import page_key
     from ..products.store import ProductStore
@@ -225,6 +234,8 @@ def closure_mismatches(book: str, pages: list[int], store=None,
                 if r.id not in ids or not r.admit or not r.char or r.char == shapes[r.id]:
                     continue
                 kind = "jys" if (r.char in JYS and shapes[r.id] in JYS) else "main"
+                if kind == "main" and _is_variant(r.char, shapes[r.id]):
+                    kind = "canon"        # 字形↔规范字等价（埀/垂 类）：放出的是规范字，不是错字
                 out.append({"id": r.id, "page": pg, "shape": shapes[r.id], "char": r.char, "kind": kind})
     return out
 
