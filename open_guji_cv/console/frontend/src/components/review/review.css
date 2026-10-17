@@ -147,3 +147,8 @@
 .rvjys-pick.pick { background: var(--indigo); color: #fff; border-color: var(--indigo); }
 .rvjys-pick.pick kbd { color: #fff; opacity: .85; }
 .rvjys-none { font-size: .74rem; color: var(--mute); border-style: dashed; padding: .1rem .35rem; white-space: nowrap; }
+
+/* 点名清单里已有现行有效人裁的格（GUJI-525）：置灰沉底，仍可点开重裁 */
+.rvcard[data-decided="1"] { opacity: .55; }
+.rvcard[data-decided="1"]:hover, .rvcard[data-decided="1"].cur { opacity: .9; }
+.rvhad { margin-left: .4rem; padding: 0 .35rem; border-radius: 3px; background: var(--ok-soft); color: var(--ok); font-size: .8em; }

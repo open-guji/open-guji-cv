@@ -98,6 +98,8 @@ export interface ReviewCard {
   stale_verdict?: { verdict: { shape: string; done: string; noGlyphLib?: boolean; guess?: string;
                                approx?: boolean; approxIds?: string; approxNote?: string };
                     ts: string; batch: string; status: string | null; withdrawn?: boolean } | null
+  /** 点名清单等不去重的模式下，这一格现行有效的人裁已有（GUJI-525）：置灰沉底，不预勾 */
+  decided?: boolean
   /** 按类别审（overview#247）：请求带了 `cls` 才有。一张卡只归优先级最高的一类。 */
   cls?: string
   /** 类别细项（overview#265）：目前只有「对齐改字层」有——grid / tail / manual。 */
