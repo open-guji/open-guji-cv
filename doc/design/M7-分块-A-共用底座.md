@@ -13,3 +13,9 @@
 - 原表里 彜＝`⿱彑𪪷`、𢑱＝`⿱𫜹𡙢`／`⿱彑𡙢`、彛＝`⿱彐𪪷`：展开后六字**全是** `⿳上⿰米X下`，与用户的上中下读法一致。
 - 上段：原表用 𫜹（`⿼コ一`）表示「⺕」形，按别名并入 彐；用户标注里的 ⺕（U+2E95）与 彐（U+5F50）用户 10-17 已确认是同一部件。
 - 用户的 42 格标注里「中」写作 `糸` 或 `米+分`，对应 IDS 的 `⿰米糸`／`⿰米分`。
+
+## C2 切线页（已出，给用户点）
+`research/m7/build_cutline_page.py` 用 skill `review-artifact` 的壳建页；卡 id 冻在 `research/m7/cutline_cards.jsonl`（42 格，按目标字、id 排序）。
+每张卡点两下放两条横线（上/中、中/下），可拖；裁决值 `cut:<y1>,<y2>`（占图高比例），`idk` 看不清，`bad` 图不对。
+收回：`Artifact(action="read")` → `harvest_verdicts.py`。发布 URL：https://claude.ai/artifact/TV1gPAJwyoNWpfLMgjwpPX 。
+本机 playwright 实测：两次点击出两条线、拖动改线、计数 1/42。
