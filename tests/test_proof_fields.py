@@ -2,7 +2,7 @@
 """审阅卡 → guji-proof 0.2 字段（GUJI-557）：只加字段、键序固定、空值不出。纯函数，不读任何产物。"""
 from __future__ import annotations
 
-from open_guji_cv.formats.proof_fields import pending_fields, slim_fields, why_codes
+from open_guji_cv.review.proof_fields import pending_fields, slim_fields, why_codes
 
 CARD = {
     "id": "vol01:9:7:17", "doubts": ["护栏:never_match", "库 unsure(cov=0.997)", "near_form", "ref_conflict"],

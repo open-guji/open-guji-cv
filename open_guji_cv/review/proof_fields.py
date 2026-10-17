@@ -10,7 +10,7 @@
 """
 from __future__ import annotations
 
-from ..review.cards import doubt_codes
+from .cards import doubt_codes
 
 PROOF_FIELDS_SCHEMA = "guji-proof/0.2"
 LIB_TOP_N = 5
