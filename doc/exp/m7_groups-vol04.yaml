@@ -1,0 +1,29 @@
+# M7 形近字（GUJI-563）：上下文路（日曰／己已巳／入人八）接进 seed_admit 的 A/B，vol04。
+# 跑：guji exp run doc/exp/m7_groups-vol04.yaml -w $WS --snapshot <vol04 快照产物根> [--root <实验根>] [--jobs N]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/
+# 答案表：research/m7/ctx/l2_make_book.py 从 A 的产物里取 L1 弃权的格 → haiku 批跑 → l2_ingest_book.py 合表。
+name: m7_groups-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: vol04 现行配置，不开 M7
+  params:
+    seed_admit: {}
+variants:
+  B:
+    note: 开 M7 上下文路（jys／ry／rr），L1 先行，L2 查 v3 表
+    params:
+      seed_admit:
+        m7_groups: [jys, ry, rr]
+        m7_l2_tables:
+          jys: /tmp/claude-0/m7/jys_table.json
+          ry: /tmp/claude-0/m7/ry_table.json
+          rr: /tmp/claude-0/m7/rr_table.json
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
