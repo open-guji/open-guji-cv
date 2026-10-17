@@ -61,8 +61,8 @@
 
 - 删 `steps/_v1_bridge.py` 与 `tests/test_v1_bridge.py`：v1 `CharInstance` 桥（阶段 B0），无任何 src 引用，只有它自己的测试在用。
 - 根目录 `HANDOFF_S2/S3/Z_jys/Z_ry.md` 归档到 `doc/handoffs/`。
-- **没删、留给后面**：`steps/step6_signals.py`（X1 实验件，约 2 周，设计档 `design/16-各步决策改学习模型-盘点.md` 仍引用）；
-  vulture 扫出的约 30 个未引用函数（如 `GlyphKnnSource`、`scrub_nonchar`、`synth.make_dataset`、`reflow_page`、`measure_book_*`）。
+- 删 `steps/step6_signals.py`（X1 实验空壳 54 行，无注册、无调用方、不在任何 `code_deps`）。X1 完整代码在存档分支 `archive/pre-compress-2026-10` 的 `2401bb5a`，结论与取回办法见 `design/16-各步决策改学习模型-盘点.md` 末尾。
+- **没删、留给后面**：vulture 扫出的约 30 个未引用函数（如 `GlyphKnnSource`、`scrub_nonchar`、`synth.make_dataset`、`reflow_page`、`measure_book_*`）。
   Step 类、路由处理函数是装饰器注册，不是死代码，别按 vulture 的结果删。
 
 ## 六、后续
