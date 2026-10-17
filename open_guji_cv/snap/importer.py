@@ -74,13 +74,23 @@ def default_url_fetch(url: str, dest: Path) -> None:
         shutil.copyfileobj(r, f, 1 << 20)
 
 
+def products_root_for(ws_dir: Path) -> Path:
+    """导入落在哪个产物根：设了 `GUJI_PRODUCTS_DIR`（沙箱）就是它，否则 `<ws>/products`。
+
+    与 `core.workspace.products_root()`、`guji snap pack` 同一个优先级。此前导入一律写
+    `<ws>/products`，沙箱里设了 `GUJI_PRODUCTS_DIR` 也照写进工作区本体——与 runbook 的
+    「沙箱不碰正式」相悖（GUJI-555 Lucian 粗校发现）。"""
+    env = os.environ.get("GUJI_PRODUCTS_DIR")
+    return Path(env).expanduser() if env else Path(ws_dir) / "products"
+
+
 def default_freshness(ws_dir: Path, book: str, pages: list[int] | None) -> dict:
     """`guji status` 同一套逻辑，进程内跑：{step: {fresh: n, stale: n, …}}。
-    临时把 `GUJI_WORKSPACE` 指到这个工作区、摘掉 `GUJI_PRODUCTS_DIR`，跑完还原。"""
+    临时把 `GUJI_WORKSPACE` 指到这个工作区，跑完还原；`GUJI_PRODUCTS_DIR` 保持原样
+    （设了就量沙箱产物根，与 `products_root_for` 一致）。"""
     keys = ("GUJI_WORKSPACE", "GUJI_PRODUCTS_DIR")
     saved = {k: os.environ.get(k) for k in keys}
     os.environ["GUJI_WORKSPACE"] = str(ws_dir)
-    os.environ.pop("GUJI_PRODUCTS_DIR", None)
     try:
         from ..core.book import load_book
         from ..core.engine import Engine
@@ -513,7 +523,7 @@ def import_pack(branch: str, *, ws_repo: Path, ws_roots: list[Path], cv_repo: Pa
         return ImportResult(NO_WORKSPACE, branch, {**base, "workspace": m["workspace"],
                                                    "searched": [str(r) for r in ws_roots]})
     base["workspace"] = ws_dir.name
-    products_root = ws_dir / "products"
+    products_root = products_root_for(ws_dir)
     book_dir = products_root / m["book"]
     if dry_run:     # 演练不在书目录里留任何东西（连空的 products/<book> 都不建）
         staging = Path(tempfile.mkdtemp(prefix=STAGING_PREFIX))
