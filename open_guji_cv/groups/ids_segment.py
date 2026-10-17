@@ -97,3 +97,37 @@ def seam_polyline(ink: np.ndarray, y0: float, band: float = 0.12, lam: float = 0
     # 回溯时 back 记的是"来自 i+back"，故上面按 i+back 回退
     xs = list(range(0, w, step)) + [w - 1]
     return [[(x + 0.5) / w, (lo + path[x] + 0.5) / h] for x in xs]
+
+
+def vertical_seam(ink: np.ndarray, mid_mask: np.ndarray, band: float = 0.18, lam: float = 0.5, pull: float = 6.0, step: int = 4):
+    """中段左右竖切（米｜右部）：在中段（`mid_mask`==1）里，从上到下找一条穿过墨迹最少的缝。
+    先取中段墨迹外框，竖缝先验在框的 50% 处±`band`×框宽；DP 逐行走，每步左右 ±1 列；
+    代价＝墨迹 + `lam`×|列变化| + `pull`×偏离先验（占图宽比例）。返回归一化折线 `[[x,y],…]`（自上而下），
+    起止行取中段在缝所在列的上下边。中段没墨迹返回 None。"""
+    h, w = ink.shape
+    m = (mid_mask == 1) & ink
+    if not m.any():
+        return None
+    ys, xs = np.where(m)
+    bx0, bx1 = xs.min(), xs.max() + 1
+    x0 = bx0 + 0.5 * (bx1 - bx0)
+    lo, hi = max(int(x0 - band * (bx1 - bx0)), 0), min(int(x0 + band * (bx1 - bx0)) + 1, w)
+    y0, y1 = int(ys.min()), int(ys.max()) + 1
+    cost = np.where(mid_mask[y0:y1, lo:hi] == 1, ink[y0:y1, lo:hi].astype(float), 0.0)
+    cost = cost + pull * np.abs(np.arange(lo, hi) - x0)[None, :] / w
+    n, wd = cost.shape
+    acc = np.full((n, wd), np.inf); back = np.zeros((n, wd), dtype=np.int16)
+    acc[0] = cost[0]
+    for r in range(1, n):
+        prev = acc[r - 1]
+        cand = np.stack([np.r_[np.inf, prev[:-1]] + lam, prev, np.r_[prev[1:], np.inf] + lam])
+        k = cand.argmin(axis=0)
+        acc[r] = cand[k, np.arange(wd)] + cost[r]
+        back[r] = k - 1
+    i = int(acc[-1].argmin()); path = [0] * n
+    for r in range(n - 1, -1, -1):
+        path[r] = i
+        if r:
+            i = min(max(i + int(back[r, i]), 0), wd - 1)
+    rows = list(range(0, n, step)) + [n - 1]
+    return [[(lo + path[r] + 0.5) / w, (y0 + r + 0.5) / h] for r in rows]
