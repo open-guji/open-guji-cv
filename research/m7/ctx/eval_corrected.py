@@ -14,7 +14,7 @@ from open_guji_cv.groups.registry import GROUPS
 
 R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse", "gemini"); MIN_SIDE = 8
 V = {}
-for f in ("review_round1_verdicts.jsonl", "review_round2_verdicts.jsonl"):   # 后一轮覆盖前一轮
+for f in ("review_round1_verdicts.jsonl", "review_round2_verdicts.jsonl", "review_semantic_overrides.jsonl"):      # 后者覆盖前者；semantic_overrides＝形近字按文意定（sheldon 10-17），覆盖按刻字选的两格
     for l in (R / f).open(encoding="utf-8"):
         x = json.loads(l); V[x["id"]] = x["verdict"]
 
