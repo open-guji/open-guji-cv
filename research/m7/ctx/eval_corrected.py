@@ -14,8 +14,9 @@ from open_guji_cv.groups.registry import GROUPS
 
 R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse", "gemini"); MIN_SIDE = 8
 V = {}
-for l in (R / "review_round1_verdicts.jsonl").open(encoding="utf-8"):
-    x = json.loads(l); V[x["id"]] = x["verdict"]
+for f in ("review_round1_verdicts.jsonl", "review_round2_verdicts.jsonl"):   # 后一轮覆盖前一轮
+    for l in (R / f).open(encoding="utf-8"):
+        x = json.loads(l); V[x["id"]] = x["verdict"]
 
 def has_img(g, i): return (CG / g / "crops" / (i.replace(":", "_") + ".png")).exists()
 
