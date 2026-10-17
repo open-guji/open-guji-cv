@@ -1,9 +1,12 @@
 # -*- coding: utf-8 -*-
-"""`apply_group_verdicts` 与 `seed_admit` 里现有三处实现的**对拍**（S0 的核心验收，S2 的前提）。
+"""`apply_group_verdicts` 与旧实现的**对拍**（S0 的核心验收，S2 的前提）。
 
-做法：同一批合成记录，深拷贝两份，一份跑旧函数（`_ry_group_pass`／`_rr_clf_pass`／`_ji_yi_si_clf_cell`），
-一份走「后端 judge → apply_group_verdicts」，然后逐字段比 `admit／char／channel／provenance／doubts／evidence`。
+做法：同一批合成记录，深拷贝几份，一份跑**冻结的旧实现**，一份走「后端 judge → apply_group_verdicts」，
+一份跑 `seed_admit` 里的生产函数，然后逐字段比 `admit／char／channel／provenance／doubts／evidence`。
 全部自造数据与桩（桩 `rr_clf.classify`／`_page_patch`），不读真书。
+
+**旧实现的出处**：ry、rr 两遍在 S2a 里已被 `seed_admit` 改成走 `groups`，所以参考实现是 `legacy_group_passes.py`
+里冻结的原样副本（S2a 之前的代码），否则对拍会变成自己对自己。jys 的 `_ji_yi_si_clf_cell` 还没迁，仍直接对拍 `seed_admit` 里的原函数。
 
 已知且文档化的差别（S2 要解决，不是 bug）：旧的 jys 遍**边走边改**——前一格被改字后，后一格的窗口会变
 （`_clf_ctx` 取邻格「已放行字」）。批量 apply 的窗口来自遍前状态。所以 jys 在这里按「单格隔离」对拍；
@@ -26,6 +29,7 @@ from open_guji_cv.groups import GROUPS, JudgeInput, apply_group_verdicts, window
 from open_guji_cv.groups.backends import JysRuleBackend, RrImageBackend, RyV2TableBackend
 from open_guji_cv.utils import ji_yi_si_clf, ry_group
 from open_guji_cv.utils.ji_yi_si_clf import ctx_key
+from legacy_group_passes import ry_group_pass_legacy, rr_clf_pass_legacy
 
 
 def rec(i, *, admit=False, char="", channel=None, provenance="", doubts=(), evidence=None, ref=None, col=1):
@@ -92,7 +96,11 @@ def test_apply_equals_ry_group_pass(tmp_path):
     path = _ry_table(tmp_path, cells)
     amap = amap_of(cells)
     old = copy.deepcopy(cells)
-    n_old = sa._ry_group_pass([SimpleNamespace(col=1, chars=old)], amap, path)
+    n_old = ry_group_pass_legacy([SimpleNamespace(col=1, chars=old)], amap, path)
+
+    prod = copy.deepcopy(cells)                          # S2a 之后 seed_admit 里的生产函数
+    n_prod = sa._ry_group_pass([SimpleNamespace(col=1, chars=prod)], amap, path)
+    assert [snap(r) for r in prod] == [snap(r) for r in old] and n_prod == n_old
 
     new = copy.deepcopy(cells)
     seq = [r for r in new if "excluded" not in r.doubts]
@@ -142,7 +150,11 @@ def test_apply_equals_rr_clf_pass(monkeypatch):
     cells = _rr_scenario()
     old = copy.deepcopy(cells)
     p = SimpleNamespace(rr_clf_model="", rr_clf_p=0.5, patch_missing="raise")
-    n_old = sa._rr_clf_pass(None, 1, p, [SimpleNamespace(col=1, chars=old)], {})
+    n_old = rr_clf_pass_legacy(None, 1, p, [SimpleNamespace(col=1, chars=old)], {})
+
+    prod = copy.deepcopy(cells)                          # S2a 之后 seed_admit 里的生产函数
+    n_prod = sa._rr_clf_pass(None, 1, p, [SimpleNamespace(col=1, chars=prod)], {})
+    assert [snap(r) for r in prod] == [snap(r) for r in old] and n_prod == n_old
 
     new = copy.deepcopy(cells)
     be, spec = RrImageBackend(p_thr=0.5), GROUPS["rr"]
@@ -212,3 +224,55 @@ def test_known_difference_sequential_window_dependence():
     pre = sa._clf_ctx(seq, amap, 1, -1)              # 前一格未放行 → 用整理本字「己」
     a.admit, a.char = True, "巳"                     # 旧遍把前一格改成了「巳」并放行
     assert sa._clf_ctx(seq, amap, 1, -1) == "巳" != pre
+
+
+# =================================================================== rr 缺图语义（Ethan 评审：不能静默弃权）
+def _rr_patch_missing_setup(monkeypatch, missing_slots):
+    def fake_patch(src, page, col, slot, sub):
+        if slot in missing_slots:
+            raise sa.PatchUnavailable(f"p{page}c{col}s{slot}")
+        return np.full((2, 2), slot, np.uint8)
+    monkeypatch.setattr(sa, "_page_patch", fake_patch)
+    monkeypatch.setattr(rr, "classify", lambda gray, model, p: dict(_RR_RESULT[int(gray[0, 0])]))
+
+
+@pytest.mark.parametrize("mode", ["skip", "raise"])
+def test_rr_patch_missing_semantics_same_as_legacy(monkeypatch, mode):
+    _rr_patch_missing_setup(monkeypatch, {1, 8})            # 1 与 8 本来都会被降级，现在读不到字块
+    p = SimpleNamespace(rr_clf_model="", rr_clf_p=0.5, patch_missing=mode)
+
+    def run(fn):
+        cells, pm = copy.deepcopy(_rr_scenario()), {}
+        try:
+            n = fn(None, 1, p, [SimpleNamespace(col=1, chars=cells)], pm)
+        except sa.PatchUnavailable as e:
+            return ("raised", str(e))
+        return ("ok", n, [snap(r) for r in cells], pm)
+
+    legacy, prod = run(rr_clf_pass_legacy), run(sa._rr_clf_pass)
+    assert prod == legacy
+    if mode == "raise":
+        assert prod[0] == "raised"                              # raise：抛出，不静默
+    else:                                                       # skip：跳过并留痕，其余格照常处理
+        assert prod[1] == 0 and all(r["doubts"] != ["rr_clf_disagree"] for r in prod[2])
+        assert prod[3] == {"t:1:1:1": ["rr_clf"], "t:1:1:8": ["rr_clf"]}
+        assert prod[2][0]["evidence"]["patch_missing"] == ["rr_clf"] and prod[2][0]["admit"] is True
+
+
+@pytest.mark.parametrize("model,p_thr,want_model", [("/x/forest.npz", 0.77, "/x/forest.npz"), ("", 0.5, None)])
+def test_rr_passes_model_and_threshold_through_like_legacy(monkeypatch, model, p_thr, want_model):
+    """桩 classify 必须看到和旧实现完全相同的 (模型路径, 阈值)：空串模型要变成 None，阈值原样透传。"""
+    seen = {}
+
+    def run(fn, tag):
+        calls = []
+        monkeypatch.setattr(sa, "_page_patch", lambda src, page, col, slot, sub: np.full((2, 2), slot, np.uint8))
+        monkeypatch.setattr(rr, "classify", lambda gray, m, t: (calls.append((m, t)), dict(_RR_RESULT[int(gray[0, 0])]))[1])
+        p = SimpleNamespace(rr_clf_model=model, rr_clf_p=p_thr, patch_missing="raise")
+        fn(None, 1, p, [SimpleNamespace(col=1, chars=copy.deepcopy(_rr_scenario()))], {})
+        seen[tag] = calls
+
+    run(rr_clf_pass_legacy, "legacy")
+    run(sa._rr_clf_pass, "prod")
+    assert seen["prod"] == seen["legacy"] and seen["prod"]
+    assert all(c == (want_model, p_thr) for c in seen["prod"])

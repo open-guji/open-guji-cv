@@ -21,19 +21,19 @@ import hashlib
 import json
 from functools import lru_cache
 from pathlib import Path
+from types import SimpleNamespace
 
 from pydantic import BaseModel, Field
 
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.group import GroupDecRec, PageGroupDecision
+from ..groups import GROUPS, JudgeInput, window_from_text
+from ..groups.backends import GroupClfTableBackend
 from ..products.kinds.recog import PageAlignRef, PageMatch
-from ..utils.ji_yi_si_clf import FAMILY as JYS_FAMILY
-from ..utils.ji_yi_si_clf import ctx_key
-from ..utils.ry_group import FAMILY as RY_FAMILY
 
-#: 字组 id → 成员字。与现有分类器同一份常量；新组先在这里登记，不另起判据。
-GROUP_MEMBERS: dict[str, frozenset[str]] = {"ry": frozenset(RY_FAMILY), "jys": frozenset(JYS_FAMILY)}
+#: 字组 id → 成员字。S2a 起取自 `groups.registry.GROUPS`（单一真源），本步目前只服务 ry／jys 两组的答案表。
+GROUP_MEMBERS: dict[str, frozenset[str]] = {g: GROUPS[g].members for g in ("ry", "jys")}
 
 CTX_WIDTH = 30
 
@@ -65,18 +65,12 @@ def _load_table(path: str) -> dict:
 
 
 def lookup(table: dict, group: str, cell_id: str, left: str, right: str) -> dict:
-    """查一张 `group_clf/1` 表 → `{char, conf, why}`；一切不确定都弃权并写明原因。"""
-    if table.get("schema") != "group_clf/1" or table.get("group") != group:
-        return {"char": None, "conf": None, "why": "ver_mismatch"}
-    e = (table.get("cells") or {}).get(cell_id)
-    if not e:
-        return {"char": None, "conf": None, "why": "cache_miss"}
-    if e.get("ctx") != ctx_key(left, right, CTX_WIDTH):
-        return {"char": None, "conf": None, "why": "ctx_mismatch"}
-    ch = e.get("char")
-    if ch is not None and ch not in GROUP_MEMBERS.get(group, frozenset()):
-        ch = None
-    return {"char": ch, "conf": e.get("conf"), "why": str(e.get("why") or "")}
+    """查一张 `group_clf/1` 表 → `{char, conf, why}`；一切不确定都弃权并写明原因。
+
+    S2a：读表实现已搬到 `groups.GroupClfTableBackend`（统一的后端），这里只是保留旧名与旧返回形状的薄包装。"""
+    spec = SimpleNamespace(id=group, members=GROUP_MEMBERS.get(group, frozenset()))
+    v = GroupClfTableBackend(table).judge(spec, JudgeInput(cell_id, None, window_from_text(left, right)))
+    return {"char": v.char, "conf": v.conf, "why": v.why}
 
 
 def _opt(ctx: RunContext, kind: str, page: int):
@@ -103,7 +97,8 @@ class GroupDecideStep(Step):
         consumes=("glyph_match",), optional_consumes=("align_ref",),
         produces=("group_decision",),
         params=GroupDecideParams,
-        code_deps=("open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.ry_group"),
+        code_deps=("open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.ry_group",
+                   "open_guji_cv.groups.registry", "open_guji_cv.groups.protocol", "open_guji_cv.groups.backends"),
         path_params=("group_tables",),
     )
 

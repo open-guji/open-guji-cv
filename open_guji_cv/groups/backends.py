@@ -139,8 +139,15 @@ class RrImageBackend:
     def __init__(self, model_path: str | Path | None = None, p_thr: float = 0.5):
         self.model_path = str(model_path) if model_path else None
         self.p_thr = p_thr
-        from ..utils import rr_clf
-        self.fingerprint = rr_clf.model_fingerprint(self.model_path) or ""
+        self._fp: str | None = None
+
+    @property
+    def fingerprint(self) -> str:
+        """模型文件哈希；惰性算（`seed_admit` 每页都会构造后端，不能每次读一遍模型文件）。"""
+        if self._fp is None:
+            from ..utils import rr_clf
+            self._fp = rr_clf.model_fingerprint(self.model_path) or ""
+        return self._fp
 
     def judge(self, spec, cell: JudgeInput) -> GroupVerdict:
         from ..utils import rr_clf
