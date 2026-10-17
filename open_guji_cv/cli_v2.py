@@ -81,6 +81,52 @@ def _warn_rare_index_missing(book: str) -> None:
               f"或导入带这几个 key 的索引包（runbook S5）", flush=True)
 
 
+def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
+    """`--isolate-steps`：把 `guji pipeline` 里的一步翻译成 `guji step <sid>` 的子进程命令行。
+
+    只透传会影响这一步怎么跑的参数（页范围、force、stop-on-error、params、jobs、sample-db），
+    不透传 `--json`／`--wait`（锁由父进程持有，见 `_run_steps_isolated`）。"""
+    argv = [sys.executable, "-m", "open_guji_cv", "step", sid, args.book,
+            "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace]
+    if args.force:
+        argv.append("--force")
+    if args.stop_on_error:
+        argv.append("--stop-on-error")
+    if getattr(args, "params", None):
+        argv += ["--params", args.params]
+    if getattr(args, "jobs", None):
+        argv += ["--jobs", str(args.jobs)]
+    if getattr(args, "allow_sample_db", False):
+        argv.append("--allow-sample-db")
+    return argv
+
+
+def _run_steps_isolated(args, steps: list[str]) -> int:
+    """`--isolate-steps`：每个 Step 一个子进程，跑完整个进程退出，操作系统回收它加载的
+    一切（torch、字形库匹配器、embedding／HOG 矩阵、OCR 引擎……）。
+
+    动机（GUJI-555，`doc/research/pipeline单进程内存诊断-2026-10-17.md`）：单进程连跑多步时，
+    各 Step 惰性加载的大对象跑完不释放、逐步叠加，服务器 3G 软上限下被节流到每页几分钟。
+    闸跟着它挂的 Step 在子进程里自动跑（与 `Engine.run` 同一规矩）。
+    步序、产物落点、指纹都与单进程一致——这里只改「进程怎么切」，不碰任何 Step。
+    父进程持有书级跑批锁，子进程设 `GUJI_NO_RUN_LOCK=1` 免得自己抢自己；子进程不再进批处理切片
+    （父进程已经在里面，cgroup 随子进程继承）。返回码：第一个失败子进程的返回码，全过 0。"""
+    import os
+    import subprocess
+    ws = os.environ["GUJI_WORKSPACE"]
+    env = {**os.environ, "GUJI_NO_RUN_LOCK": "1", "GUJI_NO_BATCH_SLICE": "1"}
+    rc = 0
+    for i, sid in enumerate(steps, 1):
+        print(f"── [{i}/{len(steps)}] {sid}（独立子进程）", flush=True)
+        r = subprocess.run(isolated_step_argv(args, sid, ws), env=env)
+        if r.returncode != 0:
+            rc = rc or r.returncode
+            if args.stop_on_error:
+                print(f"✗ {sid} 返回码 {r.returncode}，--stop-on-error 停", file=sys.stderr)
+                break
+    return rc
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -94,6 +140,17 @@ def cmd_pipeline(args) -> None:
         _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
+    if getattr(args, "isolate_steps", False):
+        if getattr(args, "json", False):
+            print("✗ --isolate-steps 不支持 --json（每步一个子进程，没有合并报告）", file=sys.stderr)
+            sys.exit(2)
+        try:
+            with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
+                rc = _run_steps_isolated(args, steps)
+        except RunLockHeld as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(3)
+        sys.exit(1 if rc and args.stop_on_error else 0)
     try:
         with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
             rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
@@ -2205,6 +2262,10 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "混跑一条 pipeline 时不用分开调。别超过 CPU 数——超订只会更慢，"
                         "有一次性初始化（模型/字形库）的 Step 并行时这部分开销按进程数摊，"
                         "不是按页摊，进程数越多单个 worker 越快建好摊得越薄，但仍不该超核数")
+    p.add_argument("--isolate-steps", action="store_true",
+                   help="每个 Step 一个独立子进程跑（默认关，行为不变）：跑完进程退出、内存整体回收。"
+                        "整册跑、服务器有内存上限（MemoryHigh）时用它，免得 torch／字形库／索引逐步叠加把"
+                        "进程拖进换页（GUJI-555）。代价是每步多付一次 import 与模型加载；不支持 --json")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"

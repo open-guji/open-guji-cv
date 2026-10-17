@@ -5,6 +5,9 @@
 
 ## [Unreleased]
 
+### Added
+- `guji pipeline --isolate-steps`：每个 Step 一个独立子进程跑（默认关），整册跑时内存不再逐步叠加（GUJI-555）。PATCH；仅改 `cli_v2`，19 步 `code_hash` 不变。
+
 ## [0.2.0] - 2026-10-17
 
 ### Added
