@@ -72,3 +72,16 @@ def test_policy_is_consistent(gid):
 def test_policy_defaults_are_inert():
     p = GroupPolicy()
     assert not p.lift and not p.demote and not p.strong_channels and p.evidence == ()
+
+
+def test_m7_solvers_declared_and_config_dirs_exist():
+    """M7：每组声明解法；异体组走 ids，形近不同义组走上下文；config_dir 若已建则必须真存在。"""
+    from pathlib import Path
+    from open_guji_cv.groups import GROUPS
+    root = Path(__file__).resolve().parents[1]
+    assert GROUPS["yi_560"].kind == "variant" and GROUPS["yi_560"].solvers == ("ids",)
+    for gid in ("jys", "ry", "rr"):
+        assert GROUPS[gid].kind == "near_form" and GROUPS[gid].solvers[:2] == ("ctx_l1", "ctx_l2")
+    assert (root / GROUPS["yi_560"].config_dir / "ids_override.tsv").exists()
+    for g in GROUPS.values():
+        assert set(g.solvers) <= {"ids", "ctx_l1", "ctx_l2", "image"}
