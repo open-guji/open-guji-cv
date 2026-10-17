@@ -32,3 +32,15 @@ def test_slot_options_match_user_three_part_reading():
 
 def test_atomic_char_returns_itself():
     assert [str(n) for n in expand("人", set())] == ["人"]
+
+
+def test_resolver_identify_ids_then_char():
+    from open_guji_cv.groups.ids import IdsResolver
+    r = IdsResolver(YI, GROUP_DIR)
+    assert r.canonical["𢑱"] == "⿳彑⿰米分大"                      # 用户 10-17：最准确 IDS
+    assert r.resolve("⿳彑⿰米分大").kind == "exact"
+    x = r.resolve("⿳彐⿰米分大")                                    # 字形可能写成 彐，仍精确归 𢑱
+    assert (x.char, x.kind, x.flag) == ("𢑱", "form", None)
+    n = r.resolve("⿳彑⿰米糸大")                                    # 无对应字符 → 最近异体 + 旗
+    assert (n.char, n.kind, n.flag) == ("𢑴", "nearest", "nearest_variant")
+    assert r.resolve("⿳彑⿰米糸日").char is None                    # 不认识就弃权

@@ -75,6 +75,7 @@ def parse(seq: str) -> Node:
 def load_override(group_dir: Path) -> dict:
     """读 `ids_override.tsv`：`stop`（集合）和 `alias`（字典）。"""
     stop: set[str] = set(); alias: dict[str, str] = {}
+    canon: dict[str, str] = {}; form: dict[str, str] = {}; nearest: dict[str, str] = {}
     f = group_dir / "ids_override.tsv"
     if f.exists():
         for line in f.read_text(encoding="utf-8").splitlines():
@@ -85,7 +86,13 @@ def load_override(group_dir: Path) -> dict:
                 stop.add(parts[1])
             elif parts[0] == "alias":
                 alias[parts[1]] = parts[2]
-    return {"stop": stop, "alias": alias}
+            elif parts[0] == "canon":
+                canon[parts[1]] = parts[2]
+            elif parts[0] == "form":
+                form[parts[2]] = parts[1]          # 字形 IDS → 字
+            elif parts[0] == "nearest":
+                nearest[parts[1]] = parts[2]       # 无对应字符的 IDS → 最近字
+    return {"stop": stop, "alias": alias, "canon": canon, "form": form, "nearest": nearest}
 
 
 def _flatten(idc: str, kids: list[Node]) -> Node:
@@ -155,3 +162,47 @@ def slot_options(structs: dict, idc: str) -> list[set]:
                     cols.append(set())
                 cols[i].add(str(k))
     return cols
+
+
+@dataclass(frozen=True)
+class Resolution:
+    char: str | None          # 定出的字；None＝无法唯一确定（弃权）
+    ids: str                  # 观察到的 IDS（已压平）
+    kind: str                 # "exact" | "form" | "nearest" | "none"
+    flag: str | None = None   # "nearest_variant"
+
+
+class IdsResolver:
+    """先认最准确的 IDS，再匹配字符：`resolve(观察到的 IDS 串)`。
+
+    顺序：①等于某成员的标准 IDS → exact；②等于登记的字形写法 → form（仍精确）；
+    ③登记的「无对应字符」→ nearest（打 nearest_variant 旗）；④其余 → none（弃权，不猜）。
+    标准 IDS：`canon` 行指定的，否则取该字展开写法里的第一个。
+    """
+
+    def __init__(self, members, group_dir, table: dict | None = None):
+        ov = load_override(Path(group_dir))
+        structs = group_structures(members, group_dir, table)
+        self.canonical: dict[str, str] = {}
+        self.exact: dict[str, str] = {}
+        for ch, seqs in structs.items():
+            c = ov["canon"].get(ch) or (seqs[0] if seqs else None)
+            if c:
+                self.canonical[ch] = c
+                self.exact[c] = ch
+        # 非标准写法（展开出的别的写法）也算字形写法，除非已被别的字占用
+        self.form = dict(ov["form"])
+        for ch, seqs in structs.items():
+            for s in seqs:
+                if s not in self.exact:
+                    self.form.setdefault(s, ch)
+        self.nearest = dict(ov["nearest"])
+
+    def resolve(self, ids: str) -> Resolution:
+        if ids in self.exact:
+            return Resolution(self.exact[ids], ids, "exact")
+        if ids in self.form:
+            return Resolution(self.form[ids], ids, "form")
+        if ids in self.nearest:
+            return Resolution(self.nearest[ids], ids, "nearest", "nearest_variant")
+        return Resolution(None, ids, "none")
