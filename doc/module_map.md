@@ -64,3 +64,8 @@
 - **没删、留给后面**：`steps/step6_signals.py`（X1 实验件，约 2 周，设计档 `design/16-各步决策改学习模型-盘点.md` 仍引用）；
   vulture 扫出的约 30 个未引用函数（如 `GlyphKnnSource`、`scrub_nonchar`、`synth.make_dataset`、`reflow_page`、`measure_book_*`）。
   Step 类、路由处理函数是装饰器注册，不是死代码，别按 vulture 的结果删。
+
+## 六、后续
+
+- 剩余的包级向上依赖怎么分批清理：[design/模块化后续计划（待Mila定）.md](design/模块化后续计划（待Mila定）.md)（**待 Mila 定，未执行**）。
+- 形近字这一小块的接口与流程如何统一：[design/形近字组统一接口设计.md](design/形近字组统一接口设计.md)（研究草案，未改代码）。
