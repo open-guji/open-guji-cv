@@ -56,6 +56,26 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.3.0
+
+对比 `v0.2.1`（`d5c84d8b`）。`v0.3.0-rc.1` 只作集成起点；用户 2026-10-18 定免做组合 A/B，`rc/v0.3.0` 合 main 后直接在 main 上打正式 `v0.3.0`（annotated，Owen 打）；规矩见 `doc/版本号规矩.md`。
+
+### Added
+- M7 形近字优化算法库 `open_guji_cv/groups/`：IDS 路（彝六字形）与上下文路（日曰／己已巳／入人八），含注册表 `solvers`、`config/groups/<组>/`。
+- 粗校出口一键取数 `scripts/zhengli/collect_exit.py`；`guji close-check --tier rough|final`；`guji pipeline --isolate-steps`；`scripts/relanding/`。
+
+### Changed
+- `seed_admit` 新增 M7 接线开关 `m7_groups`／`m7_l2_tables`（缺省关，关时不进产物指纹）：己已巳／日曰／入人八的上下文判别（规则先行、答案表补位）按注册表策略升降放行。vol04 单项 A/B：组外 33899 格逐格不变，己已巳 3 格送审→放行无错放，入人八 1 格放行→送审（GUJI-563）。
+- `border_detect` 新增 `merge_narrow_pair`（缺省关）：窄对合并，去掉把大字列劈成窄条的伪竖线；vol04 全书只在 p80、p217 触发（GUJI-572）。
+
+### Fixed
+- `guji snap import` 认 `GUJI_PRODUCTS_DIR`；导出把看图判错未裁的放行格记 `review: pending`。
+
+### Removed
+- 无。
+
+影响清单：`border_detect`、`border_detect_gate`、`column_gate`、`seed_admit` 4 步 `code_hash` 相对 `v0.2.1` 变化，其余 15 步不变（两个 Step 的新参数缺省关、关时不进参数 dump；各册产物是否过期以 `guji status` 为准）。全量测试：除 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`（缺检查点的环境问题，base 上同样失败）外全过。
+
 ## v0.2.0
 
 对比 `cv-v0.1.0`（`26657f84`）。tag 为 `v0.2.0`（annotated），由 Owen 在 main 上打；规矩见 `doc/版本号规矩.md`。

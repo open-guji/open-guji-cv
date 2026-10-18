@@ -264,3 +264,20 @@ def test_closure_mismatches_report(tmp_path):
     got = closure_mismatches("vol02", [22], st, log)
     assert [(m["id"], m["shape"], m["char"], m["kind"]) for m in got] == [
         ("vol02:22:4:20", "璹", "邢", "main"), ("vol02:22:4:21", "巳", "已", "jys")]
+
+
+def test_closure_mismatches_canon_variant_listed_apart(tmp_path):
+    """字形与放行字互为规范字／异体（埀↔垂）→ kind=canon，不混进正文一类；真不同的字仍是 main。"""
+    from open_guji_cv.core.spec import page_key
+    from open_guji_cv.products.kinds.recog import ColumnAdmit, PageAdmit
+    from open_guji_cv.products.store import ProductStore
+    st = ProductStore(tmp_path / "products")
+    recs = [_rec("vol02:22:4:20", 20, admit=True, char="垂"),
+            _rec("vol02:22:4:21", 21, admit=True, char="邢")]
+    st.write("vol02", "seed_admit", page_key(22),
+             {"seed_admit": PageAdmit(page=22, columns=[ColumnAdmit(col=4, chars=recs)])})
+    log = EventLog(tmp_path / "ev")
+    log.append([_ev("vol02:22:4:20", {"v": "confirm", "shape": "埀"}, 1),
+                _ev("vol02:22:4:21", {"v": "confirm", "shape": "璹"}, 2)])
+    got = closure_mismatches("vol02", [22], st, log)
+    assert [(m["id"], m["kind"]) for m in got] == [("vol02:22:4:20", "canon"), ("vol02:22:4:21", "main")]
