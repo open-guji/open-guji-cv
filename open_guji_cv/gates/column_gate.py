@@ -49,7 +49,7 @@ import statistics
 
 import numpy as np
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import GateLevel, GateSpec, StepSpec, column_key
 from ..core.step import RunContext, Step, attach_gate, register_step
@@ -57,7 +57,10 @@ from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
 from ..utils import jiazhu_split
-from ..utils.row_boundaries import estimate_shared_period, row_ink_projection
+from ..utils.column_pair_merge import has_pair_merged
+from ..core.book import _expand_pages
+from ..utils.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
+                                    row_ink_projection)
 
 
 def jiazhu_column_frac(cleaned: np.ndarray, band: tuple[float, float],
@@ -178,6 +181,28 @@ class ColumnGateParams(BaseModel):
     #: 窄列也读得对——所以缺省只标记；书里确认窄列都是切坏时，`narrow_reject` 打开整列拒。
     narrow_ratio: float = 0.75
     narrow_reject: bool = False
+    #: **点名页直接用书级 period 先验**（GUJI-364／GUJI-622，vol01 p196）。缺省空 = 关，
+    #: 关时不进参数指纹、产物逐字节不变。列在这里的页不估页级周期，直接用 `period_prior`，
+    #: 记 flag `period_fallback`。用在目录页这类字稀的页：自相关最大值卡在窗口下界
+    #: （vol01 p196 估出 80px＝115×0.7，真值≈115），Step3 拿它当格距「弹性 DP 无解」，整列 0 格。
+    #: 写法同 `row_segment.roster_pages`：`params: {column_gate: {period_prior_pages: [196]}}`。
+    period_prior_pages: list[int | str] = []
+    #: **页级周期贴窗口下界时回落书级先验**（Ethan 10-15 的 column_gate_period_edge 补丁）。
+    #: 缺省关，关时不进参数指纹、产物逐字节不变。开了以后估值 ≤ int(period_prior×PERIOD_WINDOW_LO)+1
+    #: 的页改用 `period_prior`。四庫基线上命中 vol01 23 页（22 页职名页几何不变）、vol03 p57/58、
+    #: vol06 p150、vol07 p91；草稿册重跑时用，冻结册不要开（会改 period 值让下游过期）。
+    period_edge_fallback: bool = False
+
+    @model_serializer(mode="wrap")
+    def _drop_off_period_override(self, handler):
+        # 两个开关关着时剔出 dump：params_hash 与加开关前逐位相同（同 border_detect_gate 写法）
+        d = handler(self)
+        if isinstance(d, dict):
+            if not self.period_prior_pages:
+                d.pop("period_prior_pages", None)
+            if not self.period_edge_fallback:
+                d.pop("period_edge_fallback", None)
+        return d
 
 
 @register_step
@@ -188,7 +213,8 @@ class ColumnGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
-        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection"),
+        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection",
+                   "open_guji_cv.utils.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
         book_deps=("period_prior", "expected_cols", "chars_per_line"),
@@ -223,6 +249,10 @@ class ColumnGateStep(Step):
         # 2026-09-15 补齐。）
         page_type_gate: BorderDetectGateManifest = ctx.product(
             "border_detect_gate_manifest", page)
+        # 窄对合并页（见 `border_detect_gate`）：闸1 认了合并旗、且记的期望列数＝本闸期望−1，才按它判列数；
+        # 对不上（闸1 留的是 `pair_merged_inconsistent`、或两闸期望不同）就不放宽。
+        if has_pair_merged(page_type_gate.flags) and page_type_gate.expected_cols == expected - 1:
+            expected = page_type_gate.expected_cols
         if page_type_gate.page_type_policy == "skip":
             page_reject.append(
                 f"page_type_skip：闸1判定页型「{page_type_gate.page_type}」，非正文，已跳过切列")
@@ -280,10 +310,27 @@ class ColumnGateStep(Step):
             if len(projs) < need:
                 page_reject.append(
                     f"period_fallback：几何正常的列只剩 {len(projs)} 条，不足以定页级先验")
+            elif (p.period_prior_pages and ctx.book.period_prior
+                  and page in set(_expand_pages(p.period_prior_pages))):
+                period = float(ctx.book.period_prior)
+                period_from_prior = True
+                page_flags.append(
+                    f"period_fallback：本页在册配置 period_prior_pages 里点名，"
+                    f"不估页级周期，直接用书级先验 {period:g}px")
+                ref_w = float(statistics.median(band_ws)) if band_ws else None
             else:
                 try:
-                    period = round(float(estimate_shared_period(
+                    period = period_est = round(float(estimate_shared_period(
                         projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
+                    # 窗口边缘卡死（GUJI-364）：自相关最大值落在窗口下界，说明真峰在窗外或
+                    # 本页字稀，估值不可信。开关开着时回落书级先验。
+                    if (p.period_edge_fallback and ctx.book.period_prior
+                            and period <= int(ctx.book.period_prior * PERIOD_WINDOW_LO) + 1):
+                        period = float(ctx.book.period_prior)
+                        period_from_prior = True
+                        page_flags.append(
+                            f"period_fallback：页级周期估值贴窗口下界（{period_est:g}px），"
+                            f"已用书级先验 {period:g}px 兜底")
                 except ValueError as e:
                     # 空栏页兜底（2026-09-13）：栏内没有字就推不出纵向节律，
                     # 这不是故障——界行齐全、九列切得出来，该正常产出一个
