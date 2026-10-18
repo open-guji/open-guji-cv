@@ -31,7 +31,7 @@ def rules_path(group: str) -> Path:
     return _REPO / GROUPS[group].config_dir / "rules.yaml"
 
 
-def fingerprint(groups, tables: dict[str, str]) -> str:
+def fingerprint(groups, tables: dict[str, str], bars=()) -> str:
     """规则文件与答案表的内容哈希；换了任何一个，seed_admit 产物判过期。"""
     h = hashlib.sha256()
     for g in sorted(groups):
@@ -40,6 +40,8 @@ def fingerprint(groups, tables: dict[str, str]) -> str:
         h.update(hashlib.sha256(p.read_bytes()).digest() if p.exists() else b"missing")
         t = tables.get(g)
         h.update(hashlib.sha256(Path(t).read_bytes()).digest() if t and Path(t).exists() else b"-")
+    if bars:                              # 量横开着才进哈希；关着与加字段前逐位相同
+        h.update(b"bars:" + ",".join(sorted(bars)).encode())
     return h.hexdigest()[:16]
 
 
@@ -68,9 +70,37 @@ def judge(g: str, cid: str, ref, left: str, right: str, table: str | None) -> Gr
     return v
 
 
+def _with_bars(g: str, v: GroupVerdict, cid: str, ref, patch_fn) -> GroupVerdict:
+    """量横合并（`seed_admit.m7_bars`）：文意有字用文意；文意弃权才按量横取字；两路字不同则弃权并留痕（不抬不降）。
+    `patch_fn(cid)` 返回字块灰度图；读不到时由调用方按 `patch_missing` 处理（error 抛 `PatchUnavailable`，skip 返回 None）。"""
+    from .bars import BarsImageBackend
+    img = patch_fn(cid)
+    if img is None:                       # 调用方按 patch_missing=skip 放过：本格不量，维持文意路结果
+        return v
+    bv = BarsImageBackend().judge(GROUPS[g], JudgeInput(id=cid, ref=ref, window=window_from_text("", ""),
+                                                      patch=lambda: img))
+    bars_ev = {"char": bv.char, "ratio": bv.extra.get("ratio"), "why": bv.why}
+    if v.char is None:
+        if bv.char is None:
+            return GroupVerdict(None, why=v.why, via=v.via, extra={**v.extra, "bars": bars_ev})
+        return GroupVerdict(bv.char, conf=bv.conf, why="bars_only", via="bars", extra={**v.extra, "bars": bars_ev})
+    if bv.char is not None and bv.char != v.char:
+        return GroupVerdict(None, why="bars_conflict", via=v.via,
+                            extra={**v.extra, "bars": bars_ev, "ctx_char": v.char})
+    return GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "bars": bars_ev})
+
+
+def _bars_wanted(r, ref, spec) -> bool:
+    """与 `apply._selected` 同口径先筛一遍，免得对不会被处理的格白读字块：人裁位、本组外的不量。"""
+    from .apply import _selected
+    return _selected(r, ref, spec)
+
+
 def m7_pass(seq: list, amap: dict, groups: tuple, tables: dict[str, str],
-            ctx_fn: Callable[[list, int, int], str]) -> dict[str, ApplyResult]:
-    """`seq`：本页读序展平后的格记录（已剔除排除名单格）；`amap`：{id: (整理本字, op)}。→ 逐组执行结果。"""
+            ctx_fn: Callable[[list, int, int], str],
+            bars: tuple = (), patch_fn: Callable[[str], object] | None = None) -> dict[str, ApplyResult]:
+    """`seq`：本页读序展平后的格记录（已剔除排除名单格）；`amap`：{id: (整理本字, op)}。→ 逐组执行结果。
+    `bars`：开量横的组（须同时在 `groups` 里）；`patch_fn`：id → 字块灰度图，`bars` 非空时必给。"""
     verdicts: dict[str, dict[str, GroupVerdict]] = {g: {} for g in groups}
     refs: dict[str, str | None] = {}
     for i, r in enumerate(seq):
@@ -83,17 +113,21 @@ def m7_pass(seq: list, amap: dict, groups: tuple, tables: dict[str, str],
                 continue
             if left is None:
                 left, right = ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)
-            verdicts[g][r.id] = judge(g, r.id, ref, left, right, tables.get(g))
+            v = judge(g, r.id, ref, left, right, tables.get(g))
+            if g in bars and patch_fn is not None and _bars_wanted(r, ref, GROUPS[g]):
+                v = _with_bars(g, v, r.id, ref, patch_fn)
+            verdicts[g][r.id] = v
     res: dict[str, ApplyResult] = {}
     for g in groups:
         res[g] = apply_group_verdicts(seq, verdicts[g], GROUPS[g], refs)
     by_id = {r.id: r for r in seq}
     for g in groups:
         for cid, v in verdicts[g].items():
-            if v.char is None:
+            if v.char is None and v.why != "bars_conflict":
                 continue
             r = by_id[cid]
             ev = {**(r.evidence or {}).get("m7_group", {}), g: {"char": v.char, "via": v.via, "why": v.why,
-                                                              "rules": v.extra.get("rules")}}
+                                                              "rules": v.extra.get("rules"),
+                                                              **({"bars": v.extra["bars"]} if "bars" in v.extra else {})}}
             r.evidence = {**(r.evidence or {}), "m7_group": ev}
     return res

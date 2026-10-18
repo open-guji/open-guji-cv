@@ -593,8 +593,8 @@ class Engine:
     def _run_one_step_parallel(self, step: Step, pages: list[int], report: RunReport,
                                 force: bool, stop_on_error: bool, total: int, done: int,
                                 jobs: int) -> tuple[int, bool]:
-        """`_run_one_step` 的并行版：**计算在子进程、落盘在主进程**——子进程各自
-        `load_book`/`load_pipeline` 建一份独立 `RunContext`（不 pickle `self.ctx`，
+        """`_run_one_step` 的并行版：**计算在子进程、落盘在主进程**——子进程用主进程
+        传来的册、管线、参数与产物/缓存根目录建一份独立 `RunContext`（不 pickle `self.ctx`，
         它拖带 `store`/`cache` 这类跨进程共享不安全的对象），只跑纯函数
         `step.run_page`；指纹判断、`store.write`、`manifest.put`、图像缓存失效
         全部留在主进程串行做，与 `_run_one_step` 落盘代码逐行同形，保证产物
@@ -646,9 +646,14 @@ class Engine:
         # U-Net 权重等）在 worker **进程启动时**建一次 `RunContext`，之后这个
         # worker 处理的每一页都复用它——不是每页各自冷启动。`initializer` 只在
         # 进程刚起时跑一次，跟 worker 后续处理几页无关，工作量小的 Step（如
-        # `border_detect`）多这一次 `load_book`/`load_pipeline` 也无害。
+        # `border_detect`）多建这一次 ctx 也无害。
+        # worker 要拿到和主进程**同一份**册、管线、参数与产物/缓存根目录：以前只传
+        # id、在子进程里 `load_book`/`load_pipeline` 再建一个空参数的 ctx，CLI
+        # `--params` 与管线 yaml 的 `params:` 全丢，指纹却按覆盖后的参数记（GUJI-580）。
+        initargs = (self.book, self.pipeline, sid, dict(self.ctx.params),
+                    self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes)
         with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
-                                 initargs=(self.book.id, self.pipeline.id, sid)) as ex:
+                                 initargs=initargs) as ex:
             for pg, products, err, elapsed in ex.map(_parallel_worker, todo, chunksize=1):
                 fp, ups, ph = fps[pg]
                 key = page_key(pg)
@@ -739,21 +744,24 @@ _worker_ctx: "RunContext | None" = None
 _worker_step: "Step | None" = None
 
 
-def _parallel_worker_init(book_id: str, pipeline_id: str, step_id: str) -> None:
+def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
+                          params: "dict[str, BaseModel]", store_root: Path,
+                          cache_root: Path, cache_limit: int) -> None:
     """`ProcessPoolExecutor(initializer=...)`：每个 worker 进程启动时跑一次。
     像 `glyph_match`（字形库）、`row_segment`（U-Net 权重）这类 Step 把重资源
     缓存在 `Step` 实例的 `self.<attr>` 上（进程内单例，见各 Step 源码），这里
     建的 `step` 实例正是后续 `run_page` 调用会用到的那个，一次初始化、整个
-    worker 生命周期内的所有页都复用，不是每页各自冷启动。"""
+    worker 生命周期内的所有页都复用，不是每页各自冷启动。
+
+    册、管线、已合并的参数（Step 默认 < 管线 yaml < 调用方覆盖）与产物/缓存根目录
+    都由主进程原样传进来，worker 不再自己按 id 重新加载（GUJI-580：重新加载会丢
+    `--params` 与管线参数，产物按缺省参数算、指纹却记覆盖后的参数）。"""
     global _worker_ctx, _worker_step
-    from .book import load_book
-    from .pipeline import load_pipeline
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    book = load_book(book_id)
-    pipeline = load_pipeline(pipeline_id)
     _worker_step = STEPS[step_id]
-    _worker_ctx = RunContext(book, ProductStore(), ImageCache(), log=lambda s: None, pipeline=pipeline)
+    _worker_ctx = RunContext(book, ProductStore(store_root), ImageCache(cache_root, cache_limit),
+                             params, log=lambda s: None, pipeline=pipeline)
 
 
 def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float]:
