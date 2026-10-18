@@ -228,6 +228,24 @@ class SeedAdmitParams(BaseModel):
     """M7 量横长短（土士 `ts`、未末 `wm`，须同时在 `m7_groups` 里；缺省空＝关）：看字块上两横谁长（`groups/bars.py`）。
     文意路有字用文意；文意弃权才按量横取字（比值离 1 不足 0.1 仍弃权）；两路字不同则弃权并留痕（`evidence.m7_group[组].bars`、
     `why=bars_conflict`），不抬不降。读不到字块按 `patch_missing` 处理。关着不进参数 dump（`params_hash` 不变）。"""
+    group_flow: tuple[str, ...] = ()
+    """字组统一流程（新 variant-tie，2026-10-18 sheldon 定，缺省空＝关）：点名注册表里声明了 `flow` 的字组 id
+    （首批 `mn dian can chen li shen zhi` 七个异体组，`jys ry rr` 三个形近组）。放在所有通道与后处理遍之后：
+
+    - **补放**：没放行、没撞硬护栏的格，库 top1 cov ≥ `group_flow_min_cov`，与 top1 分差 < `group_flow_delta` 的候选
+      ＋整理本字（按书级 `codepoints` 归一后）全落在同一组 → 按组声明的解法（字频 `freq`、IDS、库形最近 `top1`、
+      文意 `ctx`、量横、入人八字形分类器）给字放行（通道 `group_flow`），给不出就留人审（`group_flow_abstain`／`_conflict`）；
+    - **复核**：组声明了 `review`（己已巳、入人八），已放行字在组里的格也过一遍，解法给了别的字就降为人审（`group_flow_disagree`）。
+
+    证据写 `evidence.group`（组、入口、每个解法的给字与理由、结论）。见 `groups/flow.py`、
+    doc/design/M7-字组统一流程-variant-tie改造方案.md。关着不进参数 dump（`params_hash` 不变）。"""
+    group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
+    group_flow_freq_major: int = 20         # 主形人裁数下限；其余成员须为 0
+    group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 上下文 L2 答案表（ctx_ver 3）
+    group_flow_delta: float = 0.03
+    group_flow_min_cov: float = 0.85
+    group_flow_top1_cov: float = 0.97
+    group_flow_fingerprint: str = ""        # 自动填（开关开时）：字频表、规则文件、答案表内容哈希
     rr_clf: bool = False
     """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
 
@@ -609,6 +627,9 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.m7_bars:
             d.pop("m7_bars", None)
+        if isinstance(d, dict) and not self.group_flow:
+            for k in [k for k in d if k.startswith("group_flow")]:
+                d.pop(k, None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
@@ -734,6 +755,19 @@ class SeedAdmitParams(BaseModel):
         if self.m7_groups and not self.m7_fingerprint:
             from ..groups.m7_pass import fingerprint as _m7_fp
             object.__setattr__(self, "m7_fingerprint", _m7_fp(self.m7_groups, self.m7_l2_tables, self.m7_bars))
+        if self.group_flow:
+            from ..groups.flow import check_groups
+            check_groups(self.group_flow)
+            if not self.group_flow_fingerprint:
+                from ..groups.freq import fingerprint as _fq_fp
+                from ..groups.m7_pass import fingerprint as _m7_fp
+                from ..utils.rr_clf import model_fingerprint as _rr_fp
+                from ..groups.registry import GROUPS as _G
+                _ctx_groups = tuple(g for g in self.group_flow if "ctx" in _G[g].flow.solvers)
+                parts = [_fq_fp(self.group_flow_freq), _m7_fp(_ctx_groups, self.group_flow_tables)]
+                if "rr" in self.group_flow:
+                    parts.append(_rr_fp(self.rr_clf_model or None) or "missing")
+                object.__setattr__(self, "group_flow_fingerprint", ":".join(parts))
         if self.rr_clf and not self.rr_clf_fingerprint:
             from ..utils.rr_clf import model_fingerprint as _rr_fp
             object.__setattr__(self, "rr_clf_fingerprint", _rr_fp(self.rr_clf_model or None) or "missing")
@@ -767,6 +801,8 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.m7_pass", "open_guji_cv.groups.apply", "open_guji_cv.groups.registry",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars",
+                   # 字组统一流程（group_flow，缺省关）
+                   "open_guji_cv.groups.flow", "open_guji_cv.groups.freq",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -781,7 +817,8 @@ class SeedAdmitStep(Step):
         # 路径不进指纹（2026-09-29 K238）：db_path 留空填本机绝对路径；其余三个是「显式
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
-        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model", "m7_l2_tables"),
+        path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model", "m7_l2_tables",
+                     "group_flow_freq", "group_flow_tables"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -1397,6 +1434,10 @@ class SeedAdmitStep(Step):
             d_m7 = _m7_group_pass(p, out, amap, ctx, page, patch_missing)
             n_auto += d_m7
             n_review -= d_m7
+        if p.group_flow:
+            d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+            n_auto += d_gf
+            n_review -= d_gf
         if p.oversplit_gate == "hint":
             _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:
@@ -2128,6 +2169,56 @@ def _m7_group_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                   lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                   bars=tuple(g for g in p.m7_bars if g in p.m7_groups), patch_fn=patch_fn)
     return sum(x.lifted - x.demoted for x in res.values())
+
+
+#: 字组统一流程不碰的格：硬护栏（同规则 A）＋待审补放不碰的＋乱码护栏＋排除、非字、超时
+_GROUP_FLOW_HARD = frozenset(_RARE_REF_HARD) | _LANE_HARD | _LANE_GARBLE | {"excluded", "nonchar", "glyph_timeout"}
+
+
+def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
+                     patch_missing: dict | None = None) -> int:
+    """字组统一流程（`SeedAdmitParams.group_flow`）：见 `groups/flow.py`。→ 放行数净增（补放减降级）。"""
+    from ..groups.context import WIDTH
+    from ..groups.flow import FlowConfig, group_flow_pass
+    from ..groups.freq import load as _load_freq
+    from ..groups.registry import GROUPS
+    from ..utils.jiazhu_order import sort_by_reading
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)]
+    cfg = FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov,
+                     top1_cov=p.group_flow_top1_cov, freq_major=p.group_flow_freq_major,
+                     freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
+                     l2_tables=dict(p.group_flow_tables), rr_model=p.rr_clf_model or None, rr_p=p.rr_clf_p)
+
+    def blocked(r) -> bool:
+        m = mmap.get(r.id)
+        guard = getattr(m, "guard", None)
+        ds = [d for d in (r.doubts or []) if isinstance(d, str)]
+        return _hard_blocked(ds, guard) or any(d in _GROUP_FLOW_HARD for d in ds)
+
+    def cands_of(cid: str):
+        m = mmap.get(cid)
+        return list(m.candidates or []) if m is not None else []
+    patch_fn = None
+    if any(s in ("bars", "rr_img") for g in p.group_flow for s in GROUPS[g].flow.solvers):
+        slots = {r.id: (c.col, r.slot, r.sub) for c in out for r in c.chars or []}
+        recs = {r.id: r for c in out for r in c.chars or []}
+        miss = patch_missing if patch_missing is not None else {}
+
+        def patch_fn(cid: str):
+            col, slot, sub = slots[cid]
+            try:
+                return _page_patch(ctx, page, col, slot, sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(cid, []).append("group_flow")
+                recs[cid].evidence = {**(recs[cid].evidence or {}), "patch_missing": list(miss[cid])}
+                return None
+    canon = ctx.book.canonical_char if ctx is not None else (lambda c: c)
+    res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
+                          ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
+                          patch_fn=patch_fn, canon=canon)
+    return res.lifted - res.demoted
 
 
 def _ry_group_pass(out: list, amap: dict, cache: str) -> int:

@@ -13,4 +13,4 @@
 """
 from .apply import ApplyResult, apply_group_verdicts  # noqa: F401
 from .protocol import GroupBackend, GroupVerdict, JudgeInput, PatchUnavailable, window_from_text  # noqa: F401
-from .registry import GROUPS, GroupPolicy, GroupSpec, get_group, groups_of  # noqa: F401
+from .registry import GROUPS, FlowSpec, GroupPolicy, GroupSpec, get_group, groups_of  # noqa: F401
