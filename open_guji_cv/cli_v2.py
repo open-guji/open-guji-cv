@@ -1926,6 +1926,22 @@ def cmd_deploy(args) -> None:
         sys.exit(1)
 
 
+def cmd_archive(args) -> None:
+    """`guji archive fetch <tag> --out <空目录>`：取回 dataset Release 的归档包、核 sha256、解包（GUJI-601）。"""
+    from .ops.archive_fetch import ArchiveError, DEFAULT_REPO, fetch
+    try:
+        res = fetch(args.tag, Path(args.out), repo=args.repo or DEFAULT_REPO, sha256=args.sha256,
+                    asset=args.asset, keep_tar=args.keep_tar, no_verify=args.no_verify)
+    except ArchiveError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(2)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"下一步：guji glyph-db rebuild -w {res['out']} --no-replay"
+              "（完整恢复步骤见 ai-team team/整理/GUJI-562/恢复演练步骤.md）")
+
+
 def cmd_snap(args) -> None:
     """`guji snap pack|import|watch|list`：快照自动导入（K 道，2026-09-27）。
     见 `open_guji_cv/snap/__init__.py` 模块头与 overview 任务书-K-快照自动导入。"""
@@ -2177,6 +2193,7 @@ COMMANDS_V2 = {
     "release": cmd_release,
     "deploy": cmd_deploy,
     "snap": cmd_snap,
+    "archive": cmd_archive,
 }
 
 
@@ -2455,6 +2472,17 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--workspace", default=None, help="部署成功后 guji status 各书要用的工作区")
     p.add_argument("--overview", default=None, help="overview 仓路径，成功/失败都写一张部署记录并推")
     p.add_argument("--dry-run", action="store_true", help="只打印会做什么，不改任何东西")
+
+    p = sub.add_parser("archive", help="[v2] 归档包：fetch 取回 open-guji-dataset Release 上的归档 tar，核 sha256 后解到空目录")
+    p.add_argument("action", choices=["fetch"])
+    p.add_argument("tag", help="Release tag，如 archive-96mid1ogzk-vol03-0.1.0-1")
+    p.add_argument("--out", required=True, help="解到哪个目录（必须不存在或为空）")
+    p.add_argument("--repo", default=None, help="默认 open-guji/open-guji-dataset")
+    p.add_argument("--sha256", default=None, help="应有的 sha256；不给就用 Release 资产自带的 digest")
+    p.add_argument("--asset", default=None, help="Release 里有多个 .tar 时指定文件名")
+    p.add_argument("--keep-tar", action="store_true", help="解完把 tar 留在 --out 旁边")
+    p.add_argument("--no-verify", action="store_true", help="没有 sha256 可核时仍然解（不建议）")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("snap", help="[v2] 快照自动导入：pack（云端打包推分支）/ import / watch（服务器定时器）/ list")
     p.add_argument("action", choices=["pack", "import", "watch", "list", "import-index"])

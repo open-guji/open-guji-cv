@@ -315,6 +315,11 @@ class BookSpec:
     #: 只做护栏用：`guji step`／`pipeline` 发现装的版本不同就拒跑（`core/cv_version.py`，
     #: GUJI-577）。不进任何 Step 的 `book_deps`，不进指纹；None = 没固定，不设防。
     cv_version: str | None = None
+    #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
+    #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
+    #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
+    #: 产物 sha，不再因 cv 升版、人裁进库报过期。不进 `book_deps`、不进指纹；空 = 草稿册。
+    freeze: dict = field(default_factory=dict)
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -645,7 +650,18 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
         cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
+        freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _load_freeze(v, book_id: str) -> dict:
+    """册 yaml 的 `freeze:` 段（GUJI-601）必须是映射；写错了给一句清楚的错，别让所有命令崩在 .items()。"""
+    if not v:
+        return {}
+    if not isinstance(v, dict):
+        raise ValueError(f"册 {book_id} 的 freeze: 应是映射（at、cv_version、snapshot 或 manifest），"
+                         f"现在是 {type(v).__name__}：{v!r}")
+    return {str(k): x for k, x in v.items()}
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:
