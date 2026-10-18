@@ -50,6 +50,22 @@ class GroupSpec:
     backends: tuple               # 判别后端名，按优先级："rule"|"ctx_table"|"table"|"image"
     policy: GroupPolicy
     note: str = ""
+    # —— M7（GUJI-563）：解法声明。旧字段不动，缺省值不改变任何现有行为 ——
+    kind: str = "near_form"       # "variant"（异体，靠 IDS）| "near_form"（形近不同义，靠上下文）
+    solvers: tuple = ()           # 有序："ids" | "ctx_l1" | "ctx_l2" | "image"；可多个（一组可同时挂两种）
+    config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
+
+
+_JYS_POLICY = GroupPolicy(
+    target="any", membership="char",
+    skip_doubts=frozenset({"occluded", "glyph_timeout", "excluded"}),
+    lift=True, lift_overwrites_admitted=True, lift_channel="ji_yi_si", lift_provenance="context",
+    lift_clear_doubts=("always_review", "ji_yi_si"),
+    strong_channels=_JYS_STRONG, conflict_doubt="ji_yi_si_clf_conflict",
+    demote_clears_char=True,
+    abstain_demote_channels=frozenset({"split_ref"}), abstain_doubt="ji_yi_si_clf_review",
+)
+"""新增三组沿用 jys 的升降策略（不写证据键）；后端待上下文线接好再声明，现在只登记成员与解法。"""
 
 
 GROUPS: dict[str, GroupSpec] = {
@@ -66,6 +82,7 @@ GROUPS: dict[str, GroupSpec] = {
             abstain_demote_channels=frozenset({"split_ref"}), abstain_doubt="ji_yi_si_clf_review",
             evidence=(("ji_yi_si_clf", "clf_ev"), ("ji_yi_si", "ji_yi_si")),
         ),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
         note="按文意定；现行规则路对应 seed_admit.ji_yi_si_clf。表路（suggest）与 llm 路、ctx_rule 路、review 闸 S0 不覆盖，见设计档第七节。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
@@ -78,6 +95,7 @@ GROUPS: dict[str, GroupSpec] = {
             disagree_doubt="ry_disagree",
             evidence=(("ry_group", "legacy"),),
         ),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
         note="离线多模型答案表，只抬待审、不改字、不降放行。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -87,11 +105,32 @@ GROUPS: dict[str, GroupSpec] = {
             demote=True, demote_by="rr_clf", disagree_doubt="rr_clf_disagree",
             evidence=(("rr_clf", "legacy"),),
         ),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
         note="字形分类器，只降级、不改字、不放行。"),
+    # —— 上下文线（cv#118）登记：解法走 ctx_l1/ctx_l2，策略同 jys（按文意定） ——
+    "wxs": GroupSpec(
+        id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/wxs",
+        note="按文意定；只登记，后端待上下文线接入。"),
+    "wm": GroupSpec(
+        id="wm", name="未末", members=frozenset("未末"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/wm",
+        note="按文意定；文意弃权时按量横长短（groups/bars.py，开关 seed_admit.m7_bars）。"),
+    "ts": GroupSpec(
+        id="ts", name="土士", members=frozenset("土士"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/ts",
+        note="按文意定；文意弃权时按量横长短（groups/bars.py，开关 seed_admit.m7_bars）。"),
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         policy=GroupPolicy(),
+        kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
         note="异体字组（#560）：只登记成员。没有判别器（42 格训不出「大 vs 廾」读字器），走人裁数据路，不抬不降。"),
 }
 

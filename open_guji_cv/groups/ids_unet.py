@@ -1,0 +1,117 @@
+"""IDS 路切分器（M7 块 C3，GUJI-563）：小 U-Net，只吃一个组的样本，把字块按像素分成 0 上／1 中／2 下。
+
+用户 10-17 设计：非均匀切分用小 U-Net，只在该组样本上训练。训练标签＝人标的两条折线（`ids_segment.polylines_to_mask`）。
+预测→折线：每列把"属于上/中的概率之和"当两条界线的位置，所以折线连续、不交叉，可直接回到标注页给人改。
+torch 是可选依赖：没装就 import 报错，只影响这个模块。
+"""
+from __future__ import annotations
+
+import numpy as np
+
+SIZE = 96
+
+
+def _torch():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    return torch, nn, F
+
+
+def make_net(base: int = 12):
+    torch, nn, F = _torch()
+
+    def blk(i, o):
+        return nn.Sequential(nn.Conv2d(i, o, 3, padding=1), nn.BatchNorm2d(o), nn.ReLU(inplace=True),
+                             nn.Conv2d(o, o, 3, padding=1), nn.BatchNorm2d(o), nn.ReLU(inplace=True))
+
+    class Net(nn.Module):
+        def __init__(self):
+            super().__init__()
+            # 输入 3 通道：灰度、归一化 y、归一化 x（位置先验；折线大体在 y≈0.3/0.65）
+            self.e1, self.e2, self.e3 = blk(3, base), blk(base, base * 2), blk(base * 2, base * 4)
+            self.b = blk(base * 4, base * 8)
+            self.u3, self.d3 = nn.ConvTranspose2d(base * 8, base * 4, 2, 2), blk(base * 8, base * 4)
+            self.u2, self.d2 = nn.ConvTranspose2d(base * 4, base * 2, 2, 2), blk(base * 4, base * 2)
+            self.u1, self.d1 = nn.ConvTranspose2d(base * 2, base, 2, 2), blk(base * 2, base)
+            self.out = nn.Conv2d(base, 3, 1)
+
+        def forward(self, x):
+            e1 = self.e1(x); e2 = self.e2(F.max_pool2d(e1, 2)); e3 = self.e3(F.max_pool2d(e2, 2))
+            b = self.b(F.max_pool2d(e3, 2))
+            d3 = self.d3(torch.cat([self.u3(b), e3], 1)); d2 = self.d2(torch.cat([self.u2(d3), e2], 1))
+            d1 = self.d1(torch.cat([self.u1(d2), e1], 1))
+            return self.out(d1)
+
+    return Net()
+
+
+def _coords():
+    yy, xx = np.mgrid[0:SIZE, 0:SIZE].astype(np.float32) / (SIZE - 1)
+    return yy, xx
+
+
+def to_input(gray: np.ndarray) -> np.ndarray:
+    """灰度原图 → (3,SIZE,SIZE) float32：墨为 1、底为 0 的灰度 + y + x。"""
+    import cv2
+    g = cv2.resize(gray, (SIZE, SIZE), interpolation=cv2.INTER_AREA).astype(np.float32)
+    ink = 1.0 - g / 255.0
+    yy, xx = _coords()
+    return np.stack([ink, yy, xx])
+
+
+def augment(gray: np.ndarray, mask: np.ndarray, rng: np.random.Generator):
+    """同一仿射作用于图和掩码（掩码最近邻）；再随机浓淡/对比。返回 (3,S,S) 输入与 (S,S) int64 标签。"""
+    import cv2
+    h, w = gray.shape
+    ang = rng.uniform(-4, 4); sc = rng.uniform(0.9, 1.1)
+    tx, ty = rng.uniform(-0.05, 0.05) * w, rng.uniform(-0.05, 0.05) * h
+    M = cv2.getRotationMatrix2D((w / 2, h / 2), ang, sc); M[:, 2] += (tx, ty)
+    g = cv2.warpAffine(gray, M, (w, h), borderValue=255, flags=cv2.INTER_LINEAR)
+    m = cv2.warpAffine(mask.astype(np.uint8), M, (w, h), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_REPLICATE)
+    g = np.clip((g.astype(np.float32) - 128) * rng.uniform(0.8, 1.2) + 128 + rng.uniform(-20, 20), 0, 255).astype(np.uint8)
+    x = to_input(g)
+    y = cv2.resize(m, (SIZE, SIZE), interpolation=cv2.INTER_NEAREST).astype(np.int64)
+    return x, y
+
+
+def train(cells, epochs: int = 150, seed: int = 0, base: int = 12, lr: float = 3e-3):
+    """cells = [(gray, mask)]。返回训练好的网络（CPU）。"""
+    torch, nn, F = _torch()
+    torch.manual_seed(seed); rng = np.random.default_rng(seed)
+    net = make_net(base); opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-3)
+    sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=epochs * ((len(cells) * 4 + 15) // 16))
+    for ep in range(epochs):
+        net.train()
+        batch = [augment(g, m, rng) for g, m in cells for _ in range(4)]
+        order = rng.permutation(len(batch))
+        for s in range(0, len(order), 16):
+            idx = order[s:s + 16]
+            x = torch.from_numpy(np.stack([batch[i][0] for i in idx])); y = torch.from_numpy(np.stack([batch[i][1] for i in idx]))
+            loss = F.cross_entropy(net(x), y)
+            opt.zero_grad(); loss.backward(); opt.step(); sched.step()
+    net.eval()
+    return net
+
+
+def predict_prob(net, gray: np.ndarray) -> np.ndarray:
+    """→ (3,H,W) 概率，回到原图尺寸。"""
+    import cv2
+    torch, _, F = _torch()
+    with torch.no_grad():
+        p = F.softmax(net(torch.from_numpy(to_input(gray))[None]), 1)[0].numpy()
+    h, w = gray.shape
+    return np.stack([cv2.resize(c, (w, h), interpolation=cv2.INTER_LINEAR) for c in p])
+
+
+def prob_to_polylines(prob: np.ndarray, step: int = 4, smooth: int = 5):
+    """概率 → 两条折线（归一化）。第 x 列：上/中界＝上段概率之和÷h，中/下界＝(上＋中)之和÷h。"""
+    _, h, w = prob.shape
+    y1 = prob[0].sum(axis=0) / h; y2 = (prob[0] + prob[1]).sum(axis=0) / h
+    k = np.ones(smooth) / smooth
+    pad = smooth // 2
+    sm = lambda a: np.convolve(np.r_[[a[0]] * pad, a, [a[-1]] * pad], k, mode="valid")
+    y1, y2 = sm(y1), sm(y2)
+    y2 = np.maximum(y2, y1)
+    xs = list(range(0, w, step)) + [w - 1]
+    return ([[(x + 0.5) / w, float(y1[x])] for x in xs], [[(x + 0.5) / w, float(y2[x])] for x in xs])

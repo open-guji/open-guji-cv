@@ -96,3 +96,71 @@ def test_prior_never_overrides_a_page_that_can_estimate(tmp_path):
     gm = _run(_ctx(tmp_path, _body_page(), period_prior=60.0))
     assert gm.period == 60.0, f"正常页该估出真周期 60，实得 period={gm.period}"
     assert gm.period_from_prior is False, "这一页估得出来，不该走兜底"
+
+
+# ── 点名页用先验／贴窗口下界回落（GUJI-364、GUJI-622：vol01 p196）────────────
+# 合成图上很难稳定造出「自相关卡在窗口下界」，贴下界的两条用 monkeypatch 把估值钉成
+# 80.0（＝int(115×0.7)，vol01 p196 的实测值），只测闸2 拿到这个估值后怎么处置。
+
+
+def _pin_estimate(monkeypatch, value=80.0):
+    import open_guji_cv.gates.column_gate as cg
+    monkeypatch.setattr(cg, "estimate_shared_period", lambda *a, **k: value)
+
+def _ctx_params(tmp_path, gray, period_prior, **gate_params):
+    book = make_book(expected_cols=NCOLS, period_prior=period_prior,
+                     params={"column_gate": gate_params} if gate_params else {})
+    ctx = make_ctx(tmp_path, book, raw={PAGE: gray})
+    ctx.store.write(book.id, "border_detect", f"p{PAGE:04d}",
+                    {"borders": make_borders(W, H, NCOLS)})
+    ctx.store.write(book.id, "border_detect_gate", f"p{PAGE:04d}",
+                    {"border_detect_gate_manifest": make_gate1(
+                        PAGE, n_cols=NCOLS, expected_cols=NCOLS, page_type="body")})
+    return ctx
+
+
+def test_switches_off_keep_params_hash():
+    """两个开关关着：参数 dump 与加开关前一样，params_hash 不变。"""
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.gates.column_gate import ColumnGateParams
+    d = ColumnGateParams().model_dump(mode="json")
+    assert "period_prior_pages" not in d and "period_edge_fallback" not in d
+    assert params_hash(ColumnGateParams()) != params_hash(ColumnGateParams(period_prior_pages=[196]))
+    assert params_hash(ColumnGateParams()) != params_hash(ColumnGateParams(period_edge_fallback=True))
+
+
+def test_edge_estimate_unchanged_when_off(tmp_path, monkeypatch):
+    """开关关着：贴下界的估值照旧用（行为与加开关前一致）。"""
+    _pin_estimate(monkeypatch)
+    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0))
+    assert gm.period == 80.0
+    assert gm.period_from_prior is False
+
+
+def test_named_page_uses_book_prior(tmp_path):
+    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0, period_prior_pages=["1-2"]))
+    assert gm.period == 115.0
+    assert gm.period_from_prior is True
+    assert any(f.startswith("period_fallback") and "period_prior_pages" in f for f in gm.flags)
+
+
+def test_unnamed_page_not_affected(tmp_path):
+    base = _run(_ctx_params(tmp_path / "a", _body_page(), 115.0))
+    other = _run(_ctx_params(tmp_path / "b", _body_page(), 115.0, period_prior_pages=[196]))
+    assert other.model_dump() == base.model_dump()
+
+
+def test_edge_fallback_switch(tmp_path, monkeypatch):
+    _pin_estimate(monkeypatch)
+    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0, period_edge_fallback=True))
+    assert gm.period == 115.0
+    assert gm.period_from_prior is True
+    assert any("贴窗口下界" in f for f in gm.flags)
+
+
+def test_edge_fallback_leaves_good_estimate(tmp_path):
+    """估值正常（不贴下界）的页，开关开着也用当场估的值。"""
+    base = _run(_ctx_params(tmp_path / "a", _body_page(), 60.0))
+    on = _run(_ctx_params(tmp_path / "b", _body_page(), 60.0, period_edge_fallback=True))
+    assert on.model_dump() == base.model_dump()
+    assert on.period_from_prior is False
