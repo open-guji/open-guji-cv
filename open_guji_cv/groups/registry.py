@@ -107,7 +107,7 @@ GROUPS: dict[str, GroupSpec] = {
         ),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
         note="字形分类器，只降级、不改字、不放行。"),
-    # —— 上下文线（cv#118）登记：解法走 ctx_l1/ctx_l2，策略同 jys（按文意定）；wm、ts 之后还会挂笔画长度解法（#119），solvers 为有序元组，届时追加即可 ——
+    # —— 上下文线（cv#118）登记：解法走 ctx_l1/ctx_l2，策略同 jys（按文意定） ——
     "wxs": GroupSpec(
         id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
         backends=(),
@@ -118,14 +118,14 @@ GROUPS: dict[str, GroupSpec] = {
         id="wm", name="未末", members=frozenset("未末"),
         backends=(),
         policy=_JYS_POLICY,
-        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/wm",
-        note="按文意定；只登记。之后还会挂笔画长度解法（#119）。"),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/wm",
+        note="按文意定；文意弃权时按量横长短（groups/bars.py，开关 seed_admit.m7_bars）。"),
     "ts": GroupSpec(
         id="ts", name="土士", members=frozenset("土士"),
         backends=(),
         policy=_JYS_POLICY,
-        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ts",
-        note="按文意定；只登记。之后还会挂笔画长度解法（#119）。"),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/ts",
+        note="按文意定；文意弃权时按量横长短（groups/bars.py，开关 seed_admit.m7_bars）。"),
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
