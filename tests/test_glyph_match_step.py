@@ -27,7 +27,7 @@ REPO = Path(__file__).resolve().parent.parent
 
 def test_step_and_kinds_are_registered():
     assert "glyph_match" in STEPS
-    assert "glyph_match" in KINDS and "ocr_candidates" in KINDS
+    assert "glyph_match" in KINDS
 
 
 def test_db_fingerprint_lands_in_params_automatically():

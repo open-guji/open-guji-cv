@@ -12,7 +12,9 @@
   有注文的字，刻本侧漏掉夹注格会让两边对不齐、每处小注断一次块）；
   版心（`line_index.kind == "margin"`）与非 `body` 列一律跳过；
 - 证人侧：去掉标点、页码行、脚注行，只留汉字；
-- 用 OCR top-1 当**锚**：`difflib.SequenceMatcher` 在「OCR 字流 ↔ 证人字流」上求最长
+- 用 OCR top-1 当**锚**（读工作区里**已有的** `products/<book>/ocr_candidates/` 产物文件；
+  产出它的 Step5-c 已于 2026-10-18 删除，没有这份旧产物的书走「缺产物」路径：
+  OCR 覆盖为 0，字位全占位、对不上任何块，不出标签）：`difflib.SequenceMatcher` 在「OCR 字流 ↔ 证人字流」上求最长
   匹配块，只有落在 `equal` 块里、且块长 ≥ `min_block` 的字位才给标签。
 
 ⚠️ **这不是金标，是文本一路的证据**（provenance=align）。按「自动放行必须两路零同源
@@ -164,7 +166,7 @@ def align_stream(book, *, witness: Path, products_root: Path,
         return res
     if res.n_ocr < len(cells) * 0.5:
         log(f"[stream-align] ⚠️ OCR 只覆盖 {res.n_ocr}/{len(cells)} 个字位，"
-            f"锚定会很稀疏——先把 ocr_candidates 跑全")
+            f"锚定会很稀疏（产出 ocr_candidates 的 Step5-c 已于 2026-10-18 删除，只能用旧产物）")
 
     sm = difflib.SequenceMatcher(None, ocr_seq, list(wit), autojunk=False)
     for a, b, n in sm.get_matching_blocks():

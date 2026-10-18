@@ -1,5 +1,8 @@
 """Step6 上下文裁决：库候选 + OCR 候选 + 同列前文 → 定字。
 
+**2026-10-18（sheldon 定）：Step5-c `ocr_candidates` 已删**，本步不再声明它为可选上游，
+OCR 这一路恒缺席（`omap` 恒空，等价于此前书级开关关着的行为）。下文提到 OCR 的地方是历史说明。
+
 包的是 `clustering/context_step`（策略注册表）+ `recognize_flow.fuse_priors`
 （两路候选融合）+ `seeding.build_seed_lm`（本书 3-gram 0.9 + 通用 0.1 线性
 插值）。**算法一行没改。**
@@ -92,7 +95,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
 from ..products.kinds.recog import (AiEvidence, ColumnDecision, DecisionRec,
-                                    GroupRec, PageDecision, PageMatch, PageOcr)
+                                    GroupRec, PageDecision, PageMatch)
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 core.workspace.corpus_path，不要写死相对路径——见 align_ref.py 模块头
@@ -269,8 +272,8 @@ def rare_priors(chars: list[str]) -> list[tuple[str, float]]:
 class ContextDecideStep(Step):
     spec = StepSpec(
         id="context_decide", title="Step6 上下文裁决", version="1.0", unit="cell",
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
+        consumes=("glyph_match",), optional_consumes=("rare_candidates",),
+        optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("context_decision",),
         params=ContextDecideParams,
         needs=("corpus",),
@@ -395,17 +398,11 @@ class ContextDecideStep(Step):
         # 「人」比「入」常见，于是每个「入」都判成「人」（见 `book_corpus` docstring）。
         p = _with_book_corpus(p, ctx)
         match: PageMatch = ctx.product("glyph_match", page)
-        try:
-            ocr: PageOcr | None = (ctx.product("ocr_candidates", page)
-                                   if ctx.book.ocr_candidates else None)
-        except Exception:
-            ocr = None                     # 没装引擎时只用库候选，不炸
         decider = self._decider(p)
         ai_map = (load_ai_evidence(p.ai_evidence, p.ai_evidence_fingerprint)
                   if p.ai_evidence else {})
 
-        omap = ({r.id: r for cc in ocr.columns for r in cc.chars}
-                if ocr is not None else {})
+        omap: dict = {}                    # Step5-c 已删（2026-10-18）：OCR 这一路恒缺席
         rmap: dict[str, list[str]] = {}
         if p.rare_topk:
             from .align_ref import _opt, rare_topk_map

@@ -69,7 +69,7 @@ def main() -> int:
         if not g.anchored:
             stats["page_unanchored"] += 1
             continue
-        ocr = st.read(a.book, "ocr_candidates", page_key(g.page), "ocr_candidates")
+        ocr = None   # Step5-c `ocr_candidates` 已删（2026-10-18）：冻结 OCR top-k 恒空，评测时现算
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         for c in g.chars:
             sub = c.id[-1] if c.id and c.id[-1] in "ab" else ""

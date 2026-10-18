@@ -13,7 +13,7 @@ import type { Book } from './types/registry'
 //    有没有版框界行（`frame: ruled`），不是它是刻本还是排印本。将来若有
 //    「无界行的刻本」，它自然落到对的一侧，不必再改一次判断。
 // 2. **能力从 Book 的版式字段推**（`frame` / `writing_mode` / `edition` /
-//    `ocr_candidates`），那些字段本就是 book yaml 里声明的，是唯一真源。
+//    …），那些字段本就是 book yaml 里声明的，是唯一真源。
 // 3. **默认可见。** 新面板不写进这张表就一直显示——宁可多显示一个空面板，
 //    也别让人以为功能丢了。要藏必须在这里显式声明理由。
 
@@ -29,8 +29,6 @@ export interface Caps {
   hasJiazhu: boolean
   /** 这一步有闸（现代链 Step3 是墨段 DP，没有闸3）。 */
   hasStep3Gate: boolean
-  /** 启用了 Step5-c OCR 候选（book yaml 的 `ocr_candidates`）。 */
-  hasOcrCandidates: boolean
   /** 登记了整理本（`references`），Step5-d 锚定才有意义。
    *
    *  ⚠️ 这一条**只在明确声明了 references 时才收紧**，没声明一律当有。
@@ -47,7 +45,7 @@ export function capsOf(book: Book | null | undefined): Caps {
   if (!book) {
     return {
       hasFrame: true, hasGridCells: true, hasHeadRaise: true, hasJiazhu: true,
-      hasStep3Gate: true, hasOcrCandidates: true, hasReference: true,
+      hasStep3Gate: true, hasReference: true,
     }
   }
   const modern = book.edition === 'modern'
@@ -66,7 +64,6 @@ export function capsOf(book: Book | null | undefined): Caps {
     hasHeadRaise: !modern,
     hasJiazhu: !modern,
     hasStep3Gate: !modern,
-    hasOcrCandidates: book.ocr_candidates !== false,
     // `undefined` = 后端版本旧/字段没传 → 当有；只有明确回 0 才算没有。
     // 但即便回 0 也只是「没声明」，不代表没在用（见上面 vol01 的坑），
     // 所以这里暂时一律当有，等 book yaml 那边理清再收紧。

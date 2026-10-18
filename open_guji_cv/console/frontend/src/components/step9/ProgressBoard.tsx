@@ -17,7 +17,7 @@ import type { Step9ProgressResponse, Step9ProgressRow } from '../../api/step9'
 // 裁决台只给前者的卡，人以为剩下的无处可做。
 
 const STEP_ORDER = ['border_detect', 'border_detect_gate', 'column_warp', 'column_gate', 'row_segment',
-  'row_segment_gate', 'cell_shrink', 'glyph_match', 'ocr_candidates', 'rare_candidates',
+  'row_segment_gate', 'cell_shrink', 'glyph_match', 'rare_candidates',
   'align_ref', 'context_decide', 'seed_admit']
 
 function staleChip(steps: string[]): { text: string; from: string } | null {

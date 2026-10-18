@@ -115,9 +115,7 @@ export function AppLayout() {
                     <NavLink to={at(`/${book}/step/step5/`)} end>{s.title}</NavLink>
                     <div className="sidebar-step5-subs">
                       {STEP5_SUBS.filter((sub) => (
-                        sub.id === 'ocr' ? caps.hasOcrCandidates
-                          : sub.id === 'align-ref' ? caps.hasReference
-                            : true
+                        sub.id === 'align-ref' ? caps.hasReference : true
                       )).map((sub) => (
                         <NavLink key={sub.id} to={at(`/${book}/step/step5/${sub.id}/`)}>{sub.title}</NavLink>
                       ))}

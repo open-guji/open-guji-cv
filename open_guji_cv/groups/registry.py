@@ -43,6 +43,19 @@ class GroupPolicy:
 
 
 @dataclass(frozen=True)
+class FlowSpec:
+    """字组统一流程（`seed_admit.group_flow`，新 variant-tie，2026-10-18 sheldon 定）里这一组怎么判。
+
+    - `solvers`：有序，取值见 `groups.flow.SOLVERS`（`freq` 字频、`ids` 部件拆分、`top1` 库形最近、`ctx` 文意、
+      `bars` 量横、`rr_img` 入人八字形分类器）；
+    - `combine`：`first`＝按顺序第一个给字的说了算（字频成立就不再看 IDS）；`agree`＝所有给字的必须一致，不一致送审；
+    - `review`：已被别的通道放行、放行字在组里的格也进流程复核——解法给了**别的字**就降为人审（只降不改字）。"""
+    solvers: tuple
+    combine: str = "agree"
+    review: bool = False
+
+
+@dataclass(frozen=True)
 class GroupSpec:
     id: str                       # 与 dataset `char-groups/groups.json` 的 id 一致
     name: str
@@ -54,6 +67,7 @@ class GroupSpec:
     kind: str = "near_form"       # "variant"（异体，靠 IDS）| "near_form"（形近不同义，靠上下文）
     solvers: tuple = ()           # 有序："ids" | "ctx_l1" | "ctx_l2" | "image"；可多个（一组可同时挂两种）
     config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
+    flow: FlowSpec | None = None  # 字组统一流程里的判法；None＝不进 `group_flow`
 
 
 _JYS_POLICY = GroupPolicy(
@@ -83,6 +97,7 @@ GROUPS: dict[str, GroupSpec] = {
             evidence=(("ji_yi_si_clf", "clf_ev"), ("ji_yi_si", "ji_yi_si")),
         ),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
+        flow=FlowSpec(("ctx",), review=True),
         note="按文意定；现行规则路对应 seed_admit.ji_yi_si_clf。表路（suggest）与 llm 路、ctx_rule 路、review 闸 S0 不覆盖，见设计档第七节。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
@@ -96,6 +111,7 @@ GROUPS: dict[str, GroupSpec] = {
             evidence=(("ry_group", "legacy"),),
         ),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
+        flow=FlowSpec(("ctx",)),
         note="离线多模型答案表，只抬待审、不改字、不降放行。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -106,6 +122,7 @@ GROUPS: dict[str, GroupSpec] = {
             evidence=(("rr_clf", "legacy"),),
         ),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
+        flow=FlowSpec(("ctx", "rr_img"), review=True),
         note="字形分类器，只降级、不改字、不放行。"),
     # —— 上下文线（cv#118）登记：解法走 ctx_l1/ctx_l2，策略同 jys（按文意定） ——
     "wxs": GroupSpec(
@@ -132,6 +149,16 @@ GROUPS: dict[str, GroupSpec] = {
         policy=GroupPolicy(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
         note="异体字组（#560）：只登记成员。没有判别器（42 格训不出「大 vs 廾」读字器），走人裁数据路，不抬不降。"),
+    # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。
+    #    判法：字频成立就定；否则 IDS（尚未在线，弃权）；再否则沿用旧 variant_tie「库形最近的码位」（top1 cov ≥ 0.97）。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(), policy=GroupPolicy(),
+        kind="variant", solvers=("ids",), config_dir=cfg,
+        flow=FlowSpec(("freq", "ids", "top1"), combine="first"),
+        note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
+       for gid, name, cfg in (("mn", "蒙𫎇", None), ("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
+                              ("chen", "讖識䜟", None), ("li", "隸𨽾", None), ("shen", "慎愼", "config/groups/shen"),
+                              ("zhi", "旨㫖", None))},
 }
 
 

@@ -24,8 +24,6 @@ export interface Book {
   writing_mode?: string
   /** 'trad' | 'simp'。 */
   script?: string
-  /** 是否启用 Step5-c OCR 候选。 */
-  ocr_candidates?: boolean
   /** 登记的整理本数量；0 = Step5-d 锚定没有意义。 */
   n_references?: number
   dev_set: number[]

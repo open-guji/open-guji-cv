@@ -125,7 +125,7 @@ def page_slots(book: str, page: int, st: ProductStore, truth: dict[str, str]) ->
     """→ 阅读顺序的字位列表，每格 {id,col,slot,sub,char,source,admit,excluded}。"""
     a = st.read(book, "seed_admit", page_key(page), "seed_admit")
     m = st.read(book, "glyph_match", page_key(page), "glyph_match")
-    o = st.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
+    o = None   # Step5-c `ocr_candidates` 已删（2026-10-18），OCR 这一路恒缺席
     d = st.read(book, "context_decide", page_key(page), "context_decision")
     if a is None:
         return []

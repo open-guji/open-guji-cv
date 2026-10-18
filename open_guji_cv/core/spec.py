@@ -93,7 +93,7 @@ class StepSpec:
     None、整步阻塞；可选上游缺席 → 不阻塞，只是不进指纹（在的时候照常进，改了
     照样让下游过期）。
 
-    2026-09-13 加：`ocr_candidates`（Step5-c）是书级开关 `BookSpec.ocr_candidates`
+    2026-09-13 加（以下是历史；Step5-c 已于 2026-10-18 删除）：`ocr_candidates`（Step5-c）是书级开关 `BookSpec.ocr_candidates`
     控制的可选步骤（默认关），关掉时 `Engine._enabled` 直接把它从 steps 里滤掉。
     但 `align_ref`/`context_decide`/`seed_admit` 当初把它写进了 `consumes`，于是
     指纹层 `upstream_shas` 认它是硬依赖、短路返回 None，**三步全部阻塞**——而这
@@ -112,10 +112,10 @@ class StepSpec:
     问题，是因为它关着时压根没跑、没有产物；5-b 是常开的。
 
     开关名以 `@book.` 开头时读 `BookSpec` 的同名字段（书级开关不在步骤参数里）：
-    2026-09-29（K#238c）`ocr_candidates` 用 `("ocr_candidates", "@book.ocr_candidates")`
-    接书级 `ocr_candidates:`（缺省关）。选它而非把开关塞进 params：开关本来就是
-    书级、Engine 也读 `book.ocr_candidates`，一处真源，不必在三步的 params 里再造
-    一个会与之打架的字段（也就不会改 `params_hash`）。
+    2026-09-29（K#238c）为 `ocr_candidates` 加的（`("ocr_candidates", "@book.ocr_candidates")`），
+    选它而非把开关塞进 params：开关本来就是书级，一处真源，不必在三步的 params 里再造
+    一个会与之打架的字段（也就不会改 `params_hash`）。Step5-c 于 2026-10-18 删除后
+    现役 Step 已无人用这个写法，机制留着（`tests/test_book_gate_fp.py` 盯着）。
 
     拓扑序与 `Pipeline.validate` 照旧按 `optional_consumes` 全量算（开关开的时候上游
     得排在前面），只有指纹（`Engine.upstream_shas`）与过期传播（`Engine.status`）

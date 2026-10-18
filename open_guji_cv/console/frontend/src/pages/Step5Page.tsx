@@ -4,8 +4,8 @@ import { useWsPath } from '../hooks/useWsPath'
 import { STEP5_SUBS } from '../steps'
 import { RarePanel } from '../components/rare/RarePanel'
 import { GlyphMatchPanel } from '../components/glyph-match/GlyphMatchPanel'
-import { fetchAlignRefSummary, fetchOcrCandidatesSummary } from '../api/products'
-import type { AlignRefSummary, OcrCandidatesSummary } from '../api/products'
+import { fetchAlignRefSummary } from '../api/products'
+import type { AlignRefSummary } from '../api/products'
 import { fetchGlyphMatchSummary } from '../api/glyphMatch'
 import type { GlyphMatchSummary } from '../api/glyphMatch'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
@@ -17,7 +17,6 @@ import { fetchStatus } from '../api/status'
 import type { StatusResponse } from '../types/status'
 
 const ALIGN_REF_STEP_ID = 'step5-align-ref'
-const OCR_CANDIDATES_STEP_ID = 'step5-ocr-candidates'
 const GLYPH_MATCH_STEP_ID = 'step5-glyph-match'
 
 // 四小步各自对应的后端 step id（core/step.py 的 StepSpec.id），供总览页
@@ -27,7 +26,6 @@ const GLYPH_MATCH_STEP_ID = 'step5-glyph-match'
 const STEP5_BACKEND_IDS: Record<string, string> = {
   'glyph-match': 'glyph_match',
   'rare': 'rare_candidates',
-  'ocr': 'ocr_candidates',
   'align-ref': 'align_ref',
 }
 
@@ -53,10 +51,6 @@ export function Step5Page() {
 
   if (sub === 'align-ref') {
     return <AlignRefPanel book={book} />
-  }
-
-  if (sub === 'ocr') {
-    return <OcrCandidatesPanel book={book} />
   }
 
   return (
@@ -171,61 +165,6 @@ function GlyphMatchOverview({ book }: { book: string }) {
         <GlyphMatchPanel book={book} />
         <ProductViewer book={book} step={STEP5_BACKEND_IDS['glyph-match']} pages={pageNums} />
       </>}
-    />
-  )
-}
-
-// Step5-c OCR 候选：07号任务卡判断这一路平时自动跑、大概率不需要独立
-// 查询页（OCR 候选没有「人查某个字位」的场景，Step7 定字卡片已能看
-// top-2）——本任务书（2026-09-11）核实这个判断仍成立（`ocr_candidates.py`
-// 是逐字全自动产出，见 steps/ocr_candidates.py 模块头），所以不建单点
-// 查询接口/页面，只做板块②聚合数字：引擎在线状态 + 候选覆盖率。
-//
-// 五点结构核对：①页面选择器 已加；②进度摘要 本组件本体；③待裁决 无
-// （OCR 候选不是人裁的候选池，裁决在 Step7）；④产物 复用现成的
-// ProductViewer 展示 ocr_candidates 逐页 JSON 即可，本次先不接（同 5-d，
-// 属于「缺口小顺手做」以外的范围，留给以后）；⑤标注 无。
-function OcrCandidatesPanel({ book }: { book: string }) {
-  const [pageSel, setPageSel] = useState(() => loadSavedPageRange(OCR_CANDIDATES_STEP_ID, book))
-  const pageNums = usePages(book, pageSel)
-  const [summary, setSummary] = useState<OcrCandidatesSummary | null>(null)
-  const [err, setErr] = useState('')
-
-  useEffect(() => {
-    setPageSel(loadSavedPageRange(OCR_CANDIDATES_STEP_ID, book))
-  }, [book])
-
-  useEffect(() => {
-    setSummary(null)
-    setErr('')
-    if (!book) return
-    fetchOcrCandidatesSummary(book, pageSel).then(setSummary).catch((e) => setErr((e as Error).message))
-  }, [book, pageSel])
-
-  const metrics = summary ? [
-    { label: '引擎状态', value: summary.n_unavailable > 0
-        ? `${summary.n_unavailable}/${summary.n_pages} 页引擎不在线`
-        : Object.entries(summary.engines).map(([e, n]) => `${e} ×${n}`).join(' ') || '无产物',
-      tone: (summary.n_unavailable > 0 ? 'bad' : 'ok') as 'bad' | 'ok' },
-    { label: '候选覆盖率',
-      value: summary.coverage == null ? '—' : `${(summary.coverage * 100).toFixed(2)}%（${summary.n_with_candidates}/${summary.n_chars}）`,
-      tone: (summary.coverage != null && summary.coverage < 0.9 ? 'bad' : 'ok') as 'bad' | 'ok' },
-    { label: '缺产物页数', value: String(summary.n_missing), tone: (summary.n_missing > 0 ? 'bad' : 'ok') as 'bad' | 'ok' },
-  ] : undefined
-
-  return (
-    <StepLayout
-      book={book} stepId={OCR_CANDIDATES_STEP_ID} pages={pageSel} onPagesChange={setPageSel}
-      overview={err
-        ? <div className="card"><p className="muted">{err}</p></div>
-        : <ProgressGatePanel
-            book={book}
-            title="Step5-c OCR 候选 —— 逐字全自动产出，无需单点查询（07号任务卡结论核实仍成立）"
-            customMetrics={metrics}
-          />}
-      // 板块④（2026-09-18 补）：本组件注释原本写着「复用现成的 ProductViewer
-      // 展示 ocr_candidates 逐页 JSON 即可，本次先不接」——现在接上。
-      product={<ProductViewer book={book} step={STEP5_BACKEND_IDS['ocr']} pages={pageNums} />}
     />
   )
 }

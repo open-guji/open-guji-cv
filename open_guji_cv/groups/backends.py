@@ -4,14 +4,14 @@
 |---|---|---|
 | `JysRuleBackend` | `utils.ji_yi_si_clf.classify` | 己已巳规则路（前后各 30 字搭配），纯函数，无指纹 |
 | `CtxTableBackend` | `utils.near_form_ctx.decide` | 己已巳语料决策表（前后 1–2 字），指纹＝表文件哈希 |
-| `GroupClfTableBackend` | main 的 `steps.group_decide.lookup` 同一读法 | `group_clf/1` 答案表（B1 §2.1）；原样返回 `votes` 进 `extra` |
+| `GroupClfTableBackend` | 原 `steps.group_decide.lookup` 同一读法（该步 2026-10-18 已删） | `group_clf/1` 答案表（B1 §2.1）；原样返回 `votes` 进 `extra` |
 | `RyV2TableBackend` | `utils.ry_group.decide` | 日曰 ry-v2 答案表（旧格式） |
 | `JysSuggestBackend` | `utils.ji_yi_si_clf.suggest` | 己已巳答案表（大模型两遍＋语料分类器，旧格式） |
 | `RrImageBackend` | `utils.rr_clf.classify` | 入人八图像模型（numpy 随机森林），缺图抛 `PatchUnavailable` |
 
 窗口只从 `JudgeInput.window` 取（文本类后端各自要的宽度不同：规则／表 30，近形表 2）。
-`GroupClfTableBackend` 与 `steps.group_decide.lookup` 是两份读法（S0 不改 Step）；`tests/test_groups_backends.py`
-有对拍测试盯着它们逐格一致，S2 会让 `group_decide` 改用这里的实现。
+`GroupClfTableBackend` 原与 `steps.group_decide.lookup` 是两份读法、有对拍测试盯着；Step6b `group_decide`
+已于 2026-10-18 删除（sheldon 定），这里成了唯一实现，`tests/test_groups_backends.py` 改为对写死的逐格答案。
 """
 from __future__ import annotations
 

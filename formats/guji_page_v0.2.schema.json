@@ -640,7 +640,7 @@
       "ocr": {
        "type": "string",
        "minLength": 1,
-       "description": "OCR 首位（Step5-c）"
+       "description": "OCR 首位（原 Step5-c，2026-10-18 已删；CV 不再产出，键留着兼容老页）"
       },
       "rare": {
        "type": "string",

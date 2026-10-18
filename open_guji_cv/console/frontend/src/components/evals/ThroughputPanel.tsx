@@ -5,7 +5,7 @@ import type { ThroughputResponse } from '../../types/evals'
 const STEP_LABEL: Record<string, string> = {
   preclean: '预清理', border_detect: '边框界行', column_warp: '单列射影',
   row_segment: '逐字切分', cell_shrink: '字框收缩', glyph_match: '库匹配',
-  ocr_candidates: 'OCR候选', align_ref: '整理本匹配', context_decide: '上下文裁决',
+  align_ref: '整理本匹配', context_decide: '上下文裁决',
   seed_admit: '放行判定',
 }
 
