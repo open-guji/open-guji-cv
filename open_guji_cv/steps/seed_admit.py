@@ -758,6 +758,7 @@ class SeedAdmitParams(BaseModel):
         if self.group_flow:
             from ..groups.flow import check_groups
             check_groups(self.group_flow)
+            _resolve_group_flow_paths(self)
             if not self.group_flow_fingerprint:
                 from ..groups.freq import fingerprint as _fq_fp
                 from ..groups.m7_pass import fingerprint as _m7_fp
@@ -2170,6 +2171,31 @@ def _m7_group_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                   lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                   bars=tuple(g for g in p.m7_bars if g in p.m7_groups), patch_fn=patch_fn)
     return sum(x.lifted - x.demoted for x in res.values())
+
+
+def _resolve_group_flow_paths(p) -> None:
+    """`group_flow` 的表路径：相对路径按工作区解释；没给时找工作区约定位置
+    （字频 `config/groups/freq.json`、文意 L2 表 `config/groups/l2/<组>.json`），找不到就空着（该解法弃权）。
+    路径不进参数哈希，表内容哈希进 `group_flow_fingerprint`。"""
+    from pathlib import Path
+    from ..core.workspace import REPO_ROOT, workspace_root
+    from ..groups.registry import GROUPS
+    base = workspace_root() or REPO_ROOT
+
+    def _abs(v: str) -> str:
+        q = Path(v).expanduser()
+        return str(q if q.is_absolute() else base / q)
+    freq = _abs(p.group_flow_freq) if p.group_flow_freq else ""
+    if not freq and (base / "config" / "groups" / "freq.json").exists():
+        freq = str(base / "config" / "groups" / "freq.json")
+    tables = {g: _abs(v) for g, v in p.group_flow_tables.items()}
+    for g in p.group_flow:
+        if "ctx" in GROUPS[g].flow.solvers and g not in tables:
+            t = base / "config" / "groups" / "l2" / f"{g}.json"
+            if t.exists():
+                tables[g] = str(t)
+    object.__setattr__(p, "group_flow_freq", freq)
+    object.__setattr__(p, "group_flow_tables", tables)
 
 
 #: 字组统一流程不碰的格：硬护栏（同规则 A）＋待审补放不碰的＋乱码护栏＋排除、非字、超时

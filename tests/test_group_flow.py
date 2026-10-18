@@ -180,3 +180,16 @@ def test_seed_admit_group_flow_freq(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, [("旨", 0.98), ("㫖", 0.975)],
              {"group_flow": ("zhi",), "group_flow_freq": str(t)})
     assert r.admit and r.char == "㫖" and r.evidence["group"]["solvers"][0]["counts"] == {"㫖": 40, "旨": 0}
+
+
+def test_group_flow_paths_default_to_workspace(tmp_path, monkeypatch):
+    """没给表路径时找工作区约定位置；相对路径按工作区解释。"""
+    (tmp_path / "config" / "groups" / "l2").mkdir(parents=True)
+    F.write({"version": 1, "source": {}, "groups": {"zhi": {"㫖": 1}}}, tmp_path / "config" / "groups" / "freq.json")
+    (tmp_path / "config" / "groups" / "l2" / "jys.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    p = SeedAdmitParams(db_path="x", group_flow=("zhi", "jys"))
+    assert p.group_flow_freq == str(tmp_path / "config" / "groups" / "freq.json")
+    assert p.group_flow_tables == {"jys": str(tmp_path / "config" / "groups" / "l2" / "jys.json")}
+    q = SeedAdmitParams(db_path="x", group_flow=("zhi",), group_flow_freq="other.json")
+    assert q.group_flow_freq == str(tmp_path / "other.json")
