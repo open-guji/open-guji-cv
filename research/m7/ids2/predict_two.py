@@ -13,7 +13,7 @@ from open_guji_cv.groups import ids_two as T
 from open_guji_cv.groups.ids import IdsResolver
 
 CFG = {"shen": dict(members="慎愼", orient="v", prior=0.33, frame="⿰忄{}", dir="config/groups/shen"),
-       "can": dict(members="參㕘", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
+       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
 g, cells, done, crops, out = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5])
 mm = float(sys.argv[6]) if len(sys.argv) > 6 else 0.02
 c = CFG[g]; rs = IdsResolver(list(c["members"]), c["dir"])

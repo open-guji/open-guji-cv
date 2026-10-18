@@ -23,9 +23,9 @@ CFG = {
     "shen": dict(title="慎愼 字形与切线", key="m7-ids2-shen-v1", orient="v", forms=["愼", "慎"],
                  cut_hint="竖线：把左边的竖心旁（忄）和右边的「真/眞」分开。沿分界线从上到下点点。",
                  form_hint="右半是「眞」（上面匕，中间目，下面八）选愼；右半是「真」（上面十，下面具）选慎。"),
-    "can": dict(title="參㕘 字形与切线", key="m7-ids2-can-v1", orient="h", forms=["參", "㕘"],
+    "can": dict(title="參㕘 字形与切线", key="m7-ids2-can-v1", orient="h", forms=["參", "㕘", "叅"],
                 cut_hint="横线：把上面的「厽」和下面的部分分开。沿分界线从左到右点点。",
-                form_hint="下半是三撇（彡）选參；下半是「小」形（尒）选㕘。"),
+                form_hint="下半是三撇（彡）选參；下半是「小」形（钩的左右各一点）选㕘；下半钩右边只有一点选叅。"),
 }
 
 CSS = """

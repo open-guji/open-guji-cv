@@ -19,7 +19,7 @@ from open_guji_cv.groups.ids import IdsResolver
 from open_guji_cv.groups.ids_segment import ink_of
 
 CFG = {"shen": dict(members="慎愼", orient="v", prior=0.33, frame="⿰忄{}", dir="config/groups/shen"),
-       "can": dict(members="參㕘", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
+       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
 c = CFG[sys.argv[1]]
 rows = [json.loads(l) for l in open(sys.argv[2], encoding="utf-8") if l.strip()]
 rows = [r for r in rows if r["f"] in c["members"] and len(r["p"]) >= 2]
