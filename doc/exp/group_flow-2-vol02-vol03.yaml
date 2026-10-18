@@ -1,0 +1,33 @@
+# 字组统一流程第二批 A/B，vol02／vol03（即卽、變𠮓、彙彚在 vol04 没有格，换这两册看）。
+# A＝首批十组＋旧字频表；B＝重算字频表（清 3 格误标）；C＝B＋即卽、卿𨜊、變𠮓、彙彚。
+# 上下文 L2 表只有 vol04 的，这里不挂（三臂相同）。快照分支 snap/96mid1ogzk/vol02/20261017T2040、vol03/20261017T1825。
+name: group_flow-2-vol02-vol03
+books: [vol02, vol03]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: 首批十组，旧字频表
+  params:
+    seed_admit:
+      group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr]
+      group_flow_freq: /tmp/abwork/freq_old.json
+variants:
+  B:
+    note: 重算字频表，组不变
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr]
+        group_flow_freq: /tmp/abwork/freq_new.json
+  C:
+    note: B＋即卽、卿𨜊、變𠮓、彙彚
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr, ji, qing, bian, hui]
+        group_flow_freq: /tmp/abwork/freq_new.json
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}

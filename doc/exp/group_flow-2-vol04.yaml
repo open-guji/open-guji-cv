@@ -1,0 +1,46 @@
+# 字组统一流程第二批 A/B，vol04：A＝首批十组＋旧字频表，B＝同十组＋重算字频表（清 3 格次形误标），
+#   C＝B＋第二批四组（即卽、卿𨜊、變𠮓、彙彚，只看字频）。
+# 跑：guji exp run doc/exp/group_flow-2-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/；路径按本机改。
+name: group_flow-2b-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: vol04，首批十组，旧字频表
+  params:
+    seed_admit:
+      group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr]
+      group_flow_freq: /tmp/abwork/freq_old.json
+      group_flow_tables:
+        jys: /tmp/abwork/tables/jys_table.json
+        ry: /tmp/abwork/tables/ry_table.json
+        rr: /tmp/abwork/tables/rr_table.json
+variants:
+  B:
+    note: 重算字频表（撤 變 2、旨 1 误标），组不变
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr]
+        group_flow_freq: /tmp/abwork/freq_new.json
+        group_flow_tables:
+          jys: /tmp/abwork/tables/jys_table.json
+          ry: /tmp/abwork/tables/ry_table.json
+          rr: /tmp/abwork/tables/rr_table.json
+  C:
+    note: B＋即卽、卿𨜊、變𠮓、彙彚
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr, ji, qing, bian, hui]
+        group_flow_freq: /tmp/abwork/freq_new.json
+        group_flow_tables:
+          jys: /tmp/abwork/tables/jys_table.json
+          ry: /tmp/abwork/tables/ry_table.json
+          rr: /tmp/abwork/tables/rr_table.json
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
