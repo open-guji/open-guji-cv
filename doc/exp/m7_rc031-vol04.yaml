@@ -1,0 +1,29 @@
+# rc/v0.3.1 组合 A/B，vol04：A＝M7 全关，B＝本版本所有 M7 开关全开（上下文路 6 组＋量横）。
+# 跑：guji exp run doc/exp/m7_rc031-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>] [--jobs N]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/；L2 表见项目文件夹 m7-ab/tables（按本机路径改）。
+name: m7_rc031-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: vol04 现行配置，M7 全关
+  params:
+    seed_admit: {}
+variants:
+  B:
+    note: 开 M7 上下文路（jys／ry／rr／ts／wm／wxs）＋量横（ts／wm）
+    params:
+      seed_admit:
+        m7_groups: [jys, ry, rr, ts, wm, wxs]
+        m7_bars: [ts, wm]
+        m7_l2_tables:
+          jys: /mnt/project-files/m7-ab/tables/jys_table.json
+          ry: /mnt/project-files/m7-ab/tables/ry_table.json
+          rr: /mnt/project-files/m7-ab/tables/rr_table.json
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
