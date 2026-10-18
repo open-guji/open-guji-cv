@@ -135,6 +135,8 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     readers: list = []
 
     def call(url, data, method, headers):
+        # Cloudflare 拦默认的 Python-urllib UA（error 1010），带自己的 UA
+        headers = {"user-agent": "open-guji-cv-datastore", **headers}
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         try:
             with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
