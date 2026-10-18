@@ -52,16 +52,6 @@ def test_decide_cases(tmp_path):
     assert ry.decide("", "ok", "山", "水") is None
 
 
-def test_param_default_off_and_hash_unchanged(tmp_path):
-    base = SeedAdmitParams().model_dump()
-    assert not any(k.startswith("ry_group") for k in base)
-    t = _cache(tmp_path, {"a": _e(_v())})
-    on = SeedAdmitParams(ry_group=True, ry_group_cache=t)
-    assert on.model_dump()["ry_group_fingerprint"]
-    t2 = _cache(tmp_path, {"a": _e(_v(muse=("曰", "曰")))})
-    assert on.ry_group_fingerprint != SeedAdmitParams(ry_group=True, ry_group_cache=t2).ry_group_fingerprint
-
-
 def _ctx(tmp_path, monkeypatch, params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
@@ -84,26 +74,3 @@ def _run(ctx, ref="日"):
     return {r.slot: r for cc in sa.columns for r in cc.chars}[2]
 
 
-def test_off_is_noop(tmp_path, monkeypatch):
-    t = _cache(tmp_path, {CID: _e(_v())})
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(ry_group_cache=t)))
-    assert r.channel != "ry_group" and "ry_group" not in (r.evidence or {})
-
-
-def test_agree_with_ref_lifts_pending(tmp_path, monkeypatch):
-    t = _cache(tmp_path, {CID: _e(_v())})
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(ry_group=True, ry_group_cache=t)))
-    assert r.admit and r.char == "日" and r.channel == "ry_group"
-
-
-def test_ref_mismatch_stays_pending(tmp_path, monkeypatch):
-    t = _cache(tmp_path, {CID: _e(_v())})
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(ry_group=True, ry_group_cache=t)), ref="曰")
-    assert not r.admit and "ry_disagree" in r.doubts
-
-
-def test_miss_or_abstain_stays_pending(tmp_path, monkeypatch):
-    for cells in ({}, {CID: _e(_v(gemini=("日", "不确定")))}, {CID: _e(_v(), ctx="xxxx")}):
-        t = _cache(tmp_path, cells)
-        r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(ry_group=True, ry_group_cache=t)))
-        assert r.channel != "ry_group" and not (r.admit and r.channel == "ry_group")

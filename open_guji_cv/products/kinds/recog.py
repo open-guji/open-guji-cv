@@ -1,6 +1,10 @@
-"""Step5 识别层的产物：`glyph_match`（库匹配）与 `ocr_candidates`（OCR 候选）。
+"""Step5 识别层的产物：`glyph_match`（库匹配）等。
 
-两者都是 **numeric**：逐字位存判决与候选，图块本身仍在 `char_patch` 缓存里。
+原 Step5-c `ocr_candidates`（OCR 候选）这一步与产物种类已删（2026-10-18，sheldon 定）；
+`PageOcr`/`ColumnOcr`/`OcrRec` 模型留着，只当类型用：下游几步与 `gold.v2_align` 等函数
+仍收一个 `ocr` 参数（恒传 None），老产物文件也还能按这个模型读。
+
+都是 **numeric**：逐字位存判决与候选，图块本身仍在 `char_patch` 缓存里。
 归一图（64×64 {0,1}）不单独立产物——它是 `normalize_patch` 的确定性输出，
 现算只要几毫秒，存了反而多一份要失效的东西（设计 §3.8「数值长期、图像即算」）。
 
@@ -98,7 +102,7 @@ class OcrRec(BaseModel):
     #                                        # (字, prob)，已含简→繁扩展
     engine: str = ""
     error: str | None = None
-    """这一格识别本身失败的原因（2026-09-26 加，`steps/ocr_candidates.py` 写）。
+    """这一格识别本身失败的原因（2026-09-26 加，原 `steps/ocr_candidates.py` 写，该步已删）。
     `topk` 为空且这个字段也是 None：正常跑完但引擎没吐出候选；这个字段非空：
     `rec_topk` 对这一格抛了异常，`ocr_candidates.py` 拿它算整页失败率的分子。"""
 
@@ -322,10 +326,6 @@ class PageAlignRef(BaseModel):
 GLYPH_MATCH = register_kind(ProductKindSpec(
     id="glyph_match", title="Step5-a 库匹配判决", storage="numeric", unit="cell",
     schema=PageMatch, coord_space=COLUMN_PX))
-
-OCR_CANDIDATES = register_kind(ProductKindSpec(
-    id="ocr_candidates", title="Step5-c OCR 候选", storage="numeric", unit="cell",
-    schema=PageOcr, coord_space=COLUMN_PX))
 
 RARE_CANDIDATES = register_kind(ProductKindSpec(
     id="rare_candidates", title="Step5-b 生僻字候选", storage="numeric", unit="cell",

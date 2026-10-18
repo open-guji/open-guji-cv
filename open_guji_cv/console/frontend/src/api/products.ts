@@ -71,21 +71,3 @@ export function fetchAlignRefSummary(book: string, pages?: string) {
   const q = pages ? `?pages=${encodeURIComponent(pages)}` : ''
   return api<AlignRefSummary>(`/api/align-ref/${encodeURIComponent(book)}/summary${q}`)
 }
-
-export interface OcrCandidatesSummary {
-  n_pages: number
-  n_missing: number
-  n_unavailable: number
-  engines: Record<string, number>
-  n_chars: number
-  n_with_candidates: number
-  coverage: number | null
-}
-
-// Step5-c OCR 候选板块②聚合数字（引擎在线状态+候选覆盖率），见
-// open_guji_cv/steps/ocr_candidates.py::ocr_candidates_summary。07号任务卡
-// 判断这一路不需要独立查询页，此接口只服务聚合数字。
-export function fetchOcrCandidatesSummary(book: string, pages?: string) {
-  const q = pages ? `?pages=${encodeURIComponent(pages)}` : ''
-  return api<OcrCandidatesSummary>(`/api/ocr-candidates/${encodeURIComponent(book)}/summary${q}`)
-}

@@ -853,7 +853,7 @@ def _page_maps(st, book: str, page: int, cache: dict):
     if key not in cache:
         d = st.read(book, "context_decide", page_key(page), "context_decision")
         m = st.read(book, "glyph_match", page_key(page), "glyph_match")
-        o = st.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
+        o = None        # Step5-c `ocr_candidates` 已删（2026-10-18）：OCR 这一路恒缺席
         a = st.read(book, "seed_admit", page_key(page), "seed_admit")
         dm = {r.id: r for cc in (d.columns if d else []) for r in cc.chars}
         om = {r.id: r for cc in (o.columns if o else []) for r in cc.chars}

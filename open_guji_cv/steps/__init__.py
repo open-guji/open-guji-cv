@@ -19,8 +19,7 @@
 from ..products import kinds  # noqa: F401  —— 先注册产物种类
 from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条），排最前
 from . import (border_detect, column_warp, row_segment,  # noqa: F401
-               cell_shrink, glyph_match, ocr_candidates, rare_candidates,
+               cell_shrink, glyph_match, rare_candidates,
                context_decide, align_ref, seed_admit)
-from . import group_decide  # noqa: F401  —— Step6b 形近字组分类（GUJI-49 PR1，书级开关默认关）
 from . import line_detect, column_crop, row_segment_runs  # noqa: F401  —— 现代印刷链（modern_body.yaml）
 from .. import gates  # noqa: F401  —— 闸挂在对应 Step 的 spec 上，必须晚于上面几行

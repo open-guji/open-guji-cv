@@ -9,8 +9,7 @@
     "tests.clustering.test_font_glyphs::test_render_missing_char_returns_none",
     "tests.clustering.test_ocr_sources::test_all_ocr_sources_have_s2t_attribute",
     "tests.clustering.test_recognize_flow::test_s2t_expansion_promotes_traditional_form",
-    "tests.test_cut_select::test_ckpt_fingerprint_empty_for_missing_file",
-    "tests.test_ocr_candidates_step::test_s2t_expansion_reaches_traditional_forms"
+    "tests.test_cut_select::test_ckpt_fingerprint_empty_for_missing_file"
   ],
   "skipped": [
     "::tests.test_cnn_probe_hook",

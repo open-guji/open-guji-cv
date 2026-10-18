@@ -3,6 +3,23 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.3.3] - 2026-10-18
+
+PATCH。字组统一流程 group_flow（新 variant-tie）：收编全部旧字组开关、字频与在线 IDS 两个新解法；删 Step5-c／Step6b。
+
+### Added
+- 字组统一流程 `seed_admit.group_flow`（新 variant-tie，2026-10-18 sheldon 定，缺省关）：点名注册表里声明了 `flow` 的字组（首批七个异体组 蒙𫎇／點㸃／參㕘叅／讖識䜟／隸𨽾／慎愼／旨㫖，三个形近组 己已巳／日曰／入人八）；没放行的格若库候选（与 top1 分差 <0.03）＋整理本字全在一组，按组声明的解法给字放行（通道 `group_flow`）或留人审，己已巳、入人八另对已放行格复核；每格写 `evidence.group`。新解法「字频」：按人裁刻形冻结每套书一张表（`python -m open_guji_cv.groups.freq <工作区>`），主形 ≥20 且次形为 0 才给字。`groups/registry.py` 新增 `FlowSpec` 与七组（`groups/flow.py`、`groups/freq.py` 进 `seed_admit` 的 `code_deps`）。PATCH；**`seed_admit` 的 `code_hash` 变**（与下面删 5-c 合计 a995ac96→03ad95f1），关时产物不变。
+- `group_flow` 的 `ids` 解法接上在线判别（方案 S7，sheldon 10-18 定）：新模块 `groups/ids_online.py`，字块图自动缝一刀 → 决定字的那一段在冻结模板库里最近邻 → margin ≥ 门槛且该类刻例 ≥8 才给字，否则弃权，`evidence.group` 里留 IDS、部件、margin、各部件分数。首批只开 參㕘叅（`can`，门槛 0.04；人标池 74 格留一 59 对／15 弃权／0 错，留一册 57／17／0；叅只 2 例永不给），模板库 `config/groups/can/ids_bank.json` 由 `python -m open_guji_cv.groups.ids_online build can --dataset <dataset>` 从 dataset 人标池建（工作区 `config/groups/ids/<组>.json` 优先）；模板库、判法参数、`ids_override.tsv`、`ids_lv1.txt` 的哈希进 `group_flow_fingerprint`（没有在线 IDS 的组不加，旧指纹不变）。其余组（彝、慎愼、旨㫖…）没有模板库，照旧弃权且不取图。`groups/ids_online`、`ids`、`ids_two`、`ids_parts`、`ids_segment`、`ids_solver` 进 `seed_admit` 的 `code_deps`。PATCH；**`seed_admit` 的 `code_hash` 变**（ce3a31cce2908038→332a5956257e5a6b），关时产物不变。
+- `group_flow` 的表路径：相对路径按工作区解释；没给时用工作区 `config/groups/freq.json`、`config/groups/l2/<组>.json`（有才用）。PATCH；`seed_admit` 的 `code_hash` 变，关时产物不变。
+- 字频表计数也认字形库体检的改字／撤库事件（`glyph_audit` relabel／evict），同格按时间取最晚。PATCH；`seed_admit` 的 `code_hash` 变，关时产物不变。
+
+### Changed
+- 字组统一流程 `group_flow` 收编旧 m7 的全部字组（方案 S6，2026-10-18 sheldon 定「旧的都并进来、旧的删掉、每册都开」）：注册表给 土士 `ts`、未末 `wm`（文意＋量横）、戊戌戍 `wxs`（文意）补 `FlowSpec`；`FlowSpec` 加三个旋钮——`review_fix`（复核时文意给了别的字就改字，己已巳用）、`review_abstain`（复核时文意弃权就降审，己已巳用，接替旧 `ji_yi_si_clf` 对规则不命中的 `split_ref` 退役）、`lift_needs`（补放必须有这几路之一给字；入人八要文意，字形分类器不许单独补放）；复核时解法互相冲突也降审；形近护栏（`never_match`／`conflict`／`near_form`）不再挡字组；取上下文窗口时剔除排除名单格（与建 L2 表同一取法）。`always_review` 缺省仍是「己已巳」：vol04 A/B 上留着它比改成空多放 3 格对的、少 2 格错降（报告 `doc/exp/group_flow-S6-vol04-报告.md`）。**没在 `group_flow` 里点名 `jys` 的书，`split_ref` 放行的就是整理本字、不再复核**（旧 `_resolve_ji_yi_si` 删了）。vol04 A/B（旧开关全删＋13 组 vs 现行配置）：组外格逐格不变，放行 +47，强真值上放行 72 对 0 错 → 81 对 0 错，错降 1。PATCH；**`seed_admit` 的 `code_hash` 变**（与下条删旧开关合计，以 S7 之后为底 332a5956257e5a6b → 9d3e5deb232d84f2），各册该步判过期，其余 16 步不变。
+
+### Removed
+- 旧字组开关并进 `group_flow` 后删除（方案 S6）：`SeedAdmitParams` 删 `ji_yi_si_review`、`ji_yi_si_ctx_rule`（`_purity`／`_min_n`／`_fingerprint`）、`ji_yi_si_clf`（`_llm`／`_margin`／`_table`／`_fingerprint`）、`ry_group`（`_cache`／`_fingerprint`）、`rr_clf`（`_p`／`_model`／`_fingerprint`）、`m7_groups`／`m7_l2_tables`／`m7_fingerprint`／`m7_bars`、`variant_tie`（`_cov`／`_extra`）共 24 个字段；删 `_resolve_ji_yi_si`、`_ji_yi_si_clf_cell`、`_ctx_known`、`_ry_group_pass`、`_rr_clf_pass`、`_m7_group_pass`、`_variant_tie_ok` 与主循环的 `variant_tie` 通道；删 `groups/m7_pass.py`（`judge`／`fingerprint` 挪进 `groups/flow.py` 为 `ctx_judge`／`ctx_fingerprint`）、`groups/apply.py` 与注册表的 `GroupPolicy`／`GroupSpec.policy`、`utils/ji_yi_si_clf.STRONG_CHANNELS`。`seed_admit` 的 `code_deps` 去掉 `utils.near_form_ctx`、`utils.ry_group`、`groups.m7_pass`、`groups.apply`（`utils/ry_group.py`、`utils/near_form_ctx.py` 只剩离线评测用）。书 yaml 里的旧键读进来被忽略（pydantic 缺省忽略多余字段，不报错），应从十册 yaml 里删掉；`tests/test_group_params_guard.py` 的白名单清空。PATCH；`code_hash` 见上条。
+- 删两个不再用的步骤（2026-10-18，sheldon 定）：Step6b `group_decide`（连同产物 `group_decision`、书级 `group_decide:`）与 Step5-c `ocr_candidates`（连同产物种类、书级 `ocr_candidates:`、控制台开关 `PUT /api/books/{book}/ocr_candidates` 与汇总 `GET /api/ocr-candidates/{book}/summary`、前端 5-c 子页）；两条 pipeline yaml 去掉这两步，老 yaml 里的两个键读进来无作用。`align_ref`／`context_decide`／`seed_admit` 不再把 `ocr_candidates` 列为可选上游，OCR 一路恒缺席（等价于原先开关关着，四庫 vol01–10 输出语义不变）。**这三步 `code_hash` 变**（215217611967ce6c→e66b1c3f632c469a、043c75a9ba56ddae→4a12db2db381a543、a995ac964c981e29→03ad95f1c34eb510（连同本版 group_flow）），各册这三步判过期；其余 14 步不变。
+
 ## [0.3.2] - 2026-10-17
 
 PATCH。版本护栏、冻结基线、`archive fetch`、`rerun --stale`、规矩文档（没赶上 0.3.1 的 4 个 PR），中心库导入（`datastore`），以及 GUJI-555／622 积下的几个缺省关开关（夹注忽略 rule_bar、遮挡救回、绑定严格档、column_gate 周期先验）。

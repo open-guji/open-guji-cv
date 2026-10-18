@@ -7,13 +7,13 @@
 ## 两个身份分开了（2026-09-09，Step5-d 归位）
 
 **对齐**（8-gram 锚定 + `difflib` 过闸，产出逐字位 `align_char`/`align_op`）
-挪去了 `steps/align_ref.py`，成了与 `glyph_match`/`ocr_candidates`/
+挪去了 `steps/align_ref.py`，成了与 `glyph_match`/
 `context_decision` 平级的正式 Step——它同时是四路证据里的文本那一路，
 之前挤在这个「金标生成器」模块里，导致它的产物没有独立指纹与过期传播。
 
 本模块现在只做**金标派生**：优先读 `align_ref` 的产物（指纹对得上才用，
 见 `_aligned_chars`），把 `shape`（v2 定的刻本形，仍从 `context_decision`/
-`glyph_match`/`ocr_candidates` 现算——这部分本来就不是"对齐"）与
+`glyph_match` 现算——这部分本来就不是"对齐"；原 Step5-c `ocr_candidates` 2026-10-18 已删）与
 `align_ref` 给的整理本字 `ref`/`align_op`/`op_run` 拼成 `GoldChar`。
 
 调用方传了非默认 `corpus_path`（`build_rare_char_set.py`/
@@ -135,10 +135,10 @@ def align_page(book: str, page: int, store, corpus: str, corpus_index: "dict | C
     dec = store.read(book, "context_decide", page_key(page), "context_decision")
     if dec is None:
         return PageGold(book=book, page=page, anchored=False, note="没有定字产物")
-    # 库/OCR 供弃权位兜底（见 slots_from_decision）；缺了也能跑，只是覆盖低
+    # 库供弃权位兜底（见 slots_from_decision）；缺了也能跑，只是覆盖低。
+    # OCR 那一路（原 Step5-c）2026-10-18 已删，恒传 None。
     match = store.read(book, "glyph_match", page_key(page), "glyph_match")
-    ocr = store.read(book, "ocr_candidates", page_key(page), "ocr_candidates")
-    slots, meta = slots_from_decision(dec, match, ocr)
+    slots, meta = slots_from_decision(dec, match, None)
     if len(slots) < 12:
         return PageGold(book=book, page=page, anchored=False,
                         note=f"定字太少（{len(slots)}），锚不住")

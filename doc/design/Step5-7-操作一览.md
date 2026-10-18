@@ -8,13 +8,13 @@
 Step4 字框收缩
   ├─ Step5-a glyph_match     字块 ↔ 字形库比对            →「形状」证据
   ├─ Step5-b rare_candidates 字体模板+CNN 生僻字候选      →「生僻字」证据
-  ├─ Step5-c ocr_candidates  RapidOCR top-k（含简→繁）    →「OCR」证据
+  ├─ （Step5-c ocr_candidates 已删（2026-10-18，sheldon 定））
   └─ Step5-d align_ref       定字串对位整理本             →「文本」证据
 Step6  context_decide        候选 + 同列前文 → 门槛化重排
-Step6b group_decide          形近字组答案表出口（只出证据，缺省关）
+（Step6b group_decide 已删（2026-10-18，sheldon 定））
 Step7  seed_admit（C1 进库准入） 综合所有信号 → 放行 / 送审
 ```
-Step5 四路互相独立、并行收集证据；Step6 只在候选内重排；**只有 Step7 决定放行与否**。
+Step5 三路（原四路，5-c 已删）互相独立、并行收集证据；Step6 只在候选内重排；**只有 Step7 决定放行与否**。
 
 ## Step5：四路取证（不做定字）
 
@@ -22,15 +22,15 @@ Step5 四路互相独立、并行收集证据；Step6 只在候选内重排；**
 |---|---|---|
 | **5-a `glyph_match`** | 字块与 GlyphDB 已验证字形比对：HOG kNN＋弹性对齐验证＋形近家族护栏 | 三档：same（cov≥0.996 且 wmax≤12）、unsure（0.85≤cov<0.996，进候选）、diff（<0.85，库里多半没有）。**共识升档**：unsure 里 top 字 cov≥0.99、比次优异字高≥0.03、且该字已有≥3 例人裁，升 same。产物指纹带库内容指纹，库变了会过期 |
 | **5-b `rare_candidates`** | 字体模板＋CNN 分类＋CNN embedding 三源 RRF 融合 top-k | 整页批处理；checkpoint 缺席不炸，退回纯字体候选；指纹带 checkpoint 与模板集 |
-| **5-c `ocr_candidates`** | RapidOCR（PP-OCRv4）CTC top-k＋简→繁扩展 | 只出候选，**置信度不参与任何自动判断**（「人/入」给 0.95 仍错）；引擎拿不到或逐格失败>5% 整页判失败 |
-| **5-d `align_ref`** | 把定字串对位到整理本，出逐字位 `{align_char, align_op, ref_run}` | 现役两种：①8-gram 锚定＋`difflib`；②`align: coord` 坐标对位（按列→行、按几何行号逐格配字，印章压住时也能配，格数对不上退回①）。锚定串取每位 glyph_match 与 ocr 里信度最高者，不依赖 Step6 |
+| ~~**5-c `ocr_candidates`**~~ | **已删（2026-10-18，sheldon 定）**。原：RapidOCR（PP-OCRv4）CTC top-k＋简→繁扩展 | 下游 5-d／6／7 的 OCR 一路恒缺席（等价于原先开关关着）|
+| **5-d `align_ref`** | 把定字串对位到整理本，出逐字位 `{align_char, align_op, ref_run}` | 现役两种：①8-gram 锚定＋`difflib`；②`align: coord` 坐标对位（按列→行、按几何行号逐格配字，印章压住时也能配，格数对不上退回①）。锚定串取每位 glyph_match（5-c 已删，原还比 ocr）里信度最高者，不依赖 Step6 |
 
 ## Step6：上下文裁决 `context_decide`
-- 输入：库候选＋OCR 候选＋同列前文，输出 `context_decision`。
+- 输入：库候选＋同列前文（OCR 候选随 5-c 已删），输出 `context_decision`。
 - 两条铁律：**字形层不可改写**（只在候选内重排）；**门槛化**（语义 margin 过 0.70 才动手，不做全局重排）。
 - 语言模型：本书 3-gram 0.9＋通用 0.1 线性插值；上下文只看前文，按阅读顺序（夹注先 a 后 b），跨列不接。指纹带语料。
 - 可选线上大模型（缺省关）：`gated_ngram` 过不了 margin 才问；**只调候选顺序，不自动放行**；每次调用记日志。
-- **Step6b `group_decide`**：形近字组 `group_clf/1` 答案表出口，只出证据、`action` 恒 none、缺省关，目前只登记 ry、jys；M7 没走这条。
+- ~~**Step6b `group_decide`**~~：**已删（2026-10-18，sheldon 定）**。原为形近字组 `group_clf/1` 答案表出口，只出证据、缺省关、无书开、无下游读；答案表读法留在 `groups/backends.GroupClfTableBackend`。
 
 ## Step7：`seed_admit` 放行判定
 

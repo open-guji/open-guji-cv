@@ -52,7 +52,7 @@ def load_truth(paths: list[Path]) -> dict[str, tuple[str, str]]:
 def anchor_slots(match, dec, ocr) -> list[tuple[int, int, str]]:
     """锚定串：定字 → 库 top1 → OCR top1，位位有字。"""
     dm = {r.id: r for cc in dec.columns for r in cc.chars}
-    om = {r.id: r for cc in ocr.columns for r in cc.chars}
+    om = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
     out = []
     for cc in sorted(match.columns, key=lambda c: c.col):
         for r in sorted(cc.chars, key=lambda x: (x.slot, x.sub or "")):
@@ -105,10 +105,10 @@ def main() -> int:
         if adm is None:
             continue
         mt = st.read(a.book, "glyph_match", page_key(pg), "glyph_match")
-        oc = st.read(a.book, "ocr_candidates", page_key(pg), "ocr_candidates")
+        oc = None   # Step5-c `ocr_candidates` 已删（2026-10-18），OCR 这一路恒缺席
         dc = st.read(a.book, "context_decide", page_key(pg), "context_decision")
         mm = {r.id: r for cc in mt.columns for r in cc.chars}
-        om = {r.id: r for cc in oc.columns for r in cc.chars}
+        om = {r.id: r for cc in (oc.columns if oc else []) for r in cc.chars}
         dm = {r.id: r for cc in dc.columns for r in cc.chars}
         labs, ok = label_page(str(pg), anchor_slots(mt, dc, oc), a.book, text, idx)
         al = {l.instance_id: l for l in labs} if ok else {}

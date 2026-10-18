@@ -6,7 +6,7 @@
 模型：RandomForest 4 类（人入八＋其他），离线训练（`research/char_groups/rr/export_forest.py`），导出成 npz，这里用 numpy 推理——
 管线不依赖 sklearn，结果确定。质量闸：贴边长线、散斑、贴边墨多 → 不给字。
 
-只作证据：给字（p≥阈值、质量闸过、非「其他」）与放行字相左 → 送审（`seed_admit.rr_clf`）；不单独改字、不单独放行。
+只作证据：给字（p≥阈值、质量闸过、非「其他」）与放行字相左 → 送审（`seed_admit.group_flow` 入人八组的 `rr_img` 解法；原开关 `rr_clf` 已删）；不单独改字、不单独放行。
 """
 from __future__ import annotations
 

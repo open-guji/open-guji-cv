@@ -4,10 +4,12 @@
 两路：
 - **规则路** `classify(left, right)`：纯函数，只放「语言上站得住、几乎无例外」的搭配（干支前天干/后地支、
   而已、已經类、己意/以己見/自己类）；拿不准一律 None。强真值 0/129 错、新留出 0/36 错（见 overview#443）。
-  管线里命中即可放行（`seed_admit.ji_yi_si_clf`）。
+  管线里经字组统一流程用：`config/groups/jys/rules.yaml` 的 `legacy` 收编了它（`seed_admit.group_flow` 的 jys 组，
+  文意解法 L1；原开关 `seed_admit.ji_yi_si_clf` 已于 2026-10-18 删除）。
 - **答案表路** `Table`：离线批量判出的「大模型两遍 + 语料分类器」答案，按 cell id + 上下文哈希为键，管线只查表
   （不在线调模型，保持确定性）。只在两遍一致且与分类器同字时给出建议；历史上有语义错
-  （「是己出自入者」被判已），所以缺省**只写建议、不放行**（`ji_yi_si_clf_llm` 另开）。
+  （「是己出自入者」被判已）。管线已不读它（原 `ji_yi_si_clf_table`／`ji_yi_si_clf_llm` 已删），只留给离线评测
+  （`groups/backends.JysSuggestBackend`）。
 
 用户 2026-10-09 四条原则：①不靠字形区分；②自动通过的必须准；③靠前后词定字；④第一候选明显优于第二才放行。
 研究脚本与评测见 `research/char_groups/jys/`；本模块是它的管线内定型版，两处规则以本模块为准
@@ -40,9 +42,6 @@ YI_NEXT = frozenset("經矣佚亡失著足甚多備極盡無非成刻具來上�
 YI_NEXT2 = frozenset("久定降墾逾滿乆詳畢入嘗")     # 已久、已定、已降、已墾、已逾、已滿、已詳、已畢、已入、已嘗
 YI_PREV2 = frozenset("既前現早久所品")   # 既已、前已、現已、早已、久已、所已(言)、品已(上)。
 # 「書／中／民／氣／國」语料纯度也高，但名词＋已不稳：vol04:40:4:6「中書【己】未召試」被「書＋已」判错，剔除。
-
-#: 管线里算「强通道」的放行通道：规则字与它们冲突时不放行，送人审（见 `seed_admit._resolve_ji_yi_si`）
-STRONG_CHANNELS = frozenset({"match_ref", "match_solo", "match_margin", "iron", "lane_witness3"})
 
 
 def _g(s: str, i: int) -> str:

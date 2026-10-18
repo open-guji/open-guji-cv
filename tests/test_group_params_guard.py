@@ -4,7 +4,7 @@
 为什么：每加一个字组就多一串扁平参数、一个 `_xxx_pass`、一套证据键／疑问码，`seed_admit.py` 越来越乱，
 而且每改一次都让十册 `seed_admit` 过期。形近字组的统一接口（`open_guji_cv/groups/`）已经有了：
 **新字组只许在 `groups/registry.py` 的 `GROUPS` 里登记＋配后端**，不许再往 `SeedAdmitParams` 加参数。
-设计与分期见 `doc/design/形近字组统一接口设计.md`；S2 把这 17 个旧参数收进统一配置前，它们先冻结在下面的白名单里。
+设计与分期见 `doc/design/形近字组统一接口设计.md`；17 个旧参数曾冻结在下面的白名单里，S6（2026-10-18）已全部删除。
 
 规则（和 `tests/test_architecture.py` 同一种棘轮）：
 1. `SeedAdmitParams` 里名字属于某个字组的字段，必须在 `ALLOWED_LEGACY` 里——新增一个就红；
@@ -26,16 +26,9 @@ SRC = Path(__file__).resolve().parents[1] / "open_guji_cv" / "steps" / "seed_adm
 #: 历史前缀：jys 的旧名、近形家族。新字组的前缀由注册表自动给出。
 LEGACY_PREFIXES = ("ji_yi_si", "near_form")
 
-#: 2026-10-17 的存量（17 个）。只许删，不许加。
-ALLOWED_LEGACY: frozenset[str] = frozenset({
-    # 己已巳
-    "ji_yi_si_review", "ji_yi_si_ctx_rule", "ji_yi_si_ctx_purity", "ji_yi_si_ctx_min_n", "ji_yi_si_ctx_fingerprint",
-    "ji_yi_si_clf", "ji_yi_si_clf_llm", "ji_yi_si_clf_margin", "ji_yi_si_clf_table", "ji_yi_si_clf_fingerprint",
-    # 日曰
-    "ry_group", "ry_group_cache", "ry_group_fingerprint",
-    # 入人八
-    "rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint",
-})
+#: 2026-10-17 的存量 17 个（己已巳 `ji_yi_si_*` 10、日曰 `ry_group*` 3、入人八 `rr_clf*` 4）已于 2026-10-18
+#: 并进 `group_flow` 后全部删除（方案 S6）。只许删，不许加——现在是空的，就一直空着。
+ALLOWED_LEGACY: frozenset[str] = frozenset()
 
 
 def _params_fields() -> list[str]:

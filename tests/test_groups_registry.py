@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
-"""字组注册表（`open_guji_cv/groups/registry.py`，S0）：成员与现有各处常量一致，策略合法。自造数据，不读真书。"""
+"""字组注册表（`open_guji_cv/groups/registry.py`）：成员与现有各处常量一致，判法合法。自造数据，不读真书。"""
 from __future__ import annotations
 
-import pytest
 
-from open_guji_cv.groups import GROUPS, GroupPolicy, get_group, groups_of
+from open_guji_cv.groups import GROUPS, get_group, groups_of
 from open_guji_cv.utils import ji_yi_si, ji_yi_si_clf, ry_group, rr_clf
 
 BACKEND_NAMES = {"rule", "ctx_table", "table", "image"}
@@ -18,8 +17,10 @@ def test_members_match_legacy_constants():
 
 
 def test_group_ids_match_dataset_registry():
-    """id 与 dataset `char-groups/groups.json` 的 id 一致（jys／ry／rr／yi_560／wxs／wm／ts）。"""
-    assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts"}
+    """id 与 dataset `char-groups/groups.json` 的 id 一致（jys／ry／rr／yi_560／wxs／wm／ts）；
+    另有字组统一流程首批七个异体组（mn／dian／can／chen／li／shen／zhi，2026-10-18）。"""
+    assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
+                           "mn", "dian", "can", "chen", "li", "shen", "zhi"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 
@@ -30,10 +31,9 @@ def test_backend_names_valid_and_members_nonempty():
 
 
 def test_yi_560_is_inert():
-    """#560 异体组只登记成员：没有判别器，不抬不降，走人裁数据路。"""
+    """#560 异体组只登记成员：没有判别器，不进字组统一流程，走人裁数据路。"""
     g = get_group("yi_560")
-    assert g.backends == ()
-    assert not g.policy.lift and not g.policy.demote
+    assert g.backends == () and g.flow is None
     assert g.members == frozenset("彝彛彜彞𢑱𢑴")
 
 
@@ -51,27 +51,12 @@ def test_members_of_different_groups_do_not_overlap():
             seen[ch] = g.id
 
 
-@pytest.mark.parametrize("gid", ["jys", "ry", "rr"])
-def test_policy_is_consistent(gid):
-    p = GROUPS[gid].policy
-    assert p.target in {"pending", "admitted", "any"}
-    assert p.membership in {"ref", "char"}
-    if p.lift:
-        assert p.lift_channel                      # 抬升必须有通道名
-    if p.lift_needs_ref_agree or p.demote:
-        assert p.disagree_doubt                    # 有「不一致」分支就要有疑问码
-    if p.demote:
-        assert p.demote_by
-    if p.strong_channels:
-        assert p.conflict_doubt
-    if p.abstain_demote_channels:
-        assert p.abstain_doubt
-    assert "human" in p.skip_channels               # 人裁位任何遍都不动
-
-
-def test_policy_defaults_are_inert():
-    p = GroupPolicy()
-    assert not p.lift and not p.demote and not p.strong_channels and p.evidence == ()
+def test_old_m7_groups_all_covered_by_group_flow():
+    """S6（2026-10-18）：旧 m7 上下文路覆盖的六组都在字组统一流程里有判法；土士、未末加量横。"""
+    for gid in ("jys", "ry", "rr", "wxs", "wm", "ts"):
+        assert GROUPS[gid].flow is not None and "ctx" in GROUPS[gid].flow.solvers, gid
+    assert GROUPS["ts"].flow.solvers == GROUPS["wm"].flow.solvers == ("ctx", "bars")
+    assert GROUPS["jys"].flow.review and GROUPS["jys"].flow.review_fix and GROUPS["jys"].flow.review_abstain
 
 
 def test_m7_solvers_declared_and_config_dirs_exist():

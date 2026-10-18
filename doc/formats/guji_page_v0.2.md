@@ -236,7 +236,7 @@ Book ID、IIIF 册号、IA item（`volume.ia_item`）、`page.label`（书上叶
 | `glyph_id` | | 字形库刻例 id；不知道就 null |
 | `by` | | `{"box": 来历键, "text": 来历键}`，引 `producers` |
 | `channel` | | v0.2：放行通道，CV `seed_admit` 的 `channel` 原样（`human` / `match_ref` / `match_solo` / `context` / `iron` …）；未放行 null。与 `method` 的差别：`method` 是归一过的「怎么定的字」，`channel` 是原始通道名，校对模式按它分组 |
-| `cand` | | v0.2：候选字，各路证据的**首位**：`lib`（Step5-a 库匹配：same 档取认定字，否则候选首位）、`ocr`（Step5-c OCR topk 首位）、`rare`（Step5-b 生僻字候选首位）、`ref`（Step5-d 整理本：过闸对齐的字，没有则坐标对位的字，整理本是空格不算）。缺哪步的产物就没有那个键；全缺则不写 `cand`。分数留在 `ext.cv`，不进这里（`conf` 只给真概率） |
+| `cand` | | v0.2：候选字，各路证据的**首位**：`lib`（Step5-a 库匹配：same 档取认定字，否则候选首位）、`ocr`（Step5-c OCR topk 首位；**5-c 已删（2026-10-18，sheldon 定），CV 不再产出这个键，schema 留着兼容老页**）、`rare`（Step5-b 生僻字候选首位）、`ref`（Step5-d 整理本：过闸对齐的字，没有则坐标对位的字，整理本是空格不算）。缺哪步的产物就没有那个键；全缺则不写 `cand`。分数留在 `ext.cv`，不进这里（`conf` 只给真概率） |
 | `method` | | 定字方式：`human`、`cv:<通道>`（match_ref / match_solo / context / iron …）、`cv:occluded_default`（印章压字，取整理本坐标对位的默认字）、`cv:pending`（未放行）、`ocr`、`yolo`、`yolo:human`、`manual` |
 | `review` | ✓ | `pending`（没人看过）/ `auto`（过了自动放行闸）/ `human`（人裁过）/ `disputed` |
 | `conf` | | **只在有真概率时填**（OCR 分数）；CV 一律 null |

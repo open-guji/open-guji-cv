@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 from open_guji_cv.groups.context import WIDTH
 from open_guji_cv.groups.ctx_l2 import build_batch
-from open_guji_cv.groups.m7_pass import judge
+from open_guji_cv.groups.flow import ctx_judge as judge
 from open_guji_cv.groups.registry import GROUPS
 from open_guji_cv.steps.seed_admit import _clf_ctx
 from open_guji_cv.utils.jiazhu_order import sort_by_reading
@@ -27,7 +27,7 @@ for f in sorted(glob.glob(str(Path(a.seed_dir) / "*.json"))):
     seq = [SimpleNamespace(**{k: getattr(c, k, None) for k in ("id", "char", "admit", "doubts")})
            for col in sorted(d["columns"], key=lambda c: c["col"])
            for c in sort_by_reading([SimpleNamespace(**c) for c in col["chars"]])
-           if not (c.doubts and "excluded" in c.doubts)]      # 夹注读序，与 seed_admit._m7_group_pass 一致
+           if not (c.doubts and "excluded" in c.doubts)]      # 夹注读序，与 seed_admit._group_flow_pass 一致
     for i, r in enumerate(seq):
         ref = (amap.get(r.id) or (None, None))[0]
         left = right = None

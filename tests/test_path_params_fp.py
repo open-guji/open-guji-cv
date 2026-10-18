@@ -29,7 +29,8 @@ from open_guji_cv.products.store import ProductStore
 def test_registered_path_params_exist_and_leave_hash():
     expect = {
         "glyph_match": ("db_path",),
-        "seed_admit": ("db_path", "variants", "note_lexicon", "exclusions", "shadow_model", "ry_group_cache", "ji_yi_si_clf_table", "rr_clf_model", "m7_l2_tables"),
+        "seed_admit": ("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
+                       "group_flow_freq", "group_flow_tables"),
         "context_decide": ("corpus", "general_corpus_dir", "ai_evidence", "llm_log_dir"),
         "align_ref": ("corpus",),
     }

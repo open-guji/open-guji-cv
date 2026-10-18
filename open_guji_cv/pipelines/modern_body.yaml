@@ -17,7 +17,6 @@ steps:
   - row_segment_runs     # Step3 墨段切分：→ cells（char / punct / blank）
   - cell_shrink          # Step4 字框收缩（复用）
   - glyph_match          # Step5-a 库匹配（复用；库域 edition=modern:<book>）
-  - ocr_candidates       # Step5-c OCR 候选（复用；Book.ocr_candidates 控制）
   - rare_candidates      # Step5-b 生僻字候选（复用）
   - align_ref            # Step5-d 整理本对齐（复用）
   - context_decide       # Step6 上下文裁决（复用）

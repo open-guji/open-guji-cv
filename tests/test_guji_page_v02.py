@@ -19,8 +19,8 @@ import pytest
 from open_guji_cv.formats import guji_page as gp
 from open_guji_cv.formats import guji_page_yolo as gy
 from open_guji_cv.formats.guji_page_cv import from_cv_products
-from open_guji_cv.products.kinds.recog import (AlignRec, ColumnMatch, ColumnOcr, ColumnRare, CoordRec, MatchRec,
-                                               OcrRec, PageAlignRef, PageMatch, PageOcr, PageRare, RareCand,
+from open_guji_cv.products.kinds.recog import (AlignRec, ColumnMatch, ColumnRare, CoordRec, MatchRec,
+                                               PageAlignRef, PageMatch, PageRare, RareCand,
                                                RareRec)
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.render.guji_markdown import render_page
@@ -33,16 +33,14 @@ def cid(col, slot, sub=""):
     return f"{BOOK}:{PAGE}:{col}:{slot}{sub}"
 
 
-def _write_candidates(st: ProductStore, *, ocr=True):
-    """Step5 四路：库（same 档与 diff 档各一）、OCR、5-b、整理本（过闸对齐 + 坐标对位）。"""
+def _write_candidates(st: ProductStore):
+    """Step5 三路：库（same 档与 diff 档各一）、5-b、整理本（过闸对齐 + 坐标对位）。
+    （原 Step5-c OCR 那一路 2026-10-18 已删。）"""
     gm = PageMatch(page=PAGE, columns=[
         ColumnMatch(col=1, chars=[MatchRec(id=cid(1, 2), slot=2, verdict="same", char="臣", candidates=[("巨", 0.9)]),
                                   MatchRec(id=cid(1, 3), slot=3, verdict="diff", candidates=[("等", 0.8), ("笇", 0.7)])]),
         ColumnMatch(col=2, chars=[MatchRec(id=cid(2, 2), slot=2, verdict="diff", candidates=[])])])
     st.write(BOOK, "glyph_match", KEY, {"glyph_match": gm})
-    if ocr:
-        st.write(BOOK, "ocr_candidates", KEY, {"ocr_candidates": PageOcr(page=PAGE, columns=[
-            ColumnOcr(col=2, chars=[OcrRec(id=cid(2, 1), slot=1, topk=[("謹", 0.95), ("勤", 0.02)])])])})
     st.write(BOOK, "rare_candidates", KEY, {"rare_candidates": PageRare(page=PAGE, columns=[
         ColumnRare(col=2, chars=[RareRec(id=cid(2, 2), slot=2, candidates=[RareCand(char="𠀤", score=0.4)])])])})
     st.write(BOOK, "align_ref", KEY, {"align_ref": PageAlignRef(
@@ -163,7 +161,7 @@ def test_candidates_and_channel(store):
     assert _g(p, cid(1, 2))["channel"] == "human"
     assert _g(p, cid(1, 3))["cand"] == {"lib": "等", "ref": "等"}          # diff 档取 candidates[0]；对齐优先于坐标
     assert _g(p, cid(1, 3))["channel"] == "match_ref"
-    assert _g(p, cid(2, 1))["cand"] == {"ocr": "謹"}
+    assert "cand" not in _g(p, cid(2, 1))                                  # 只有 OCR 能给它候选，OCR 已删
     assert _g(p, cid(2, 2))["cand"] == {"rare": "𠀤", "ref": "之"}         # 阙文位也记候选
     assert _g(p, cid(2, 2))["channel"] is None                            # 未放行
     assert "cand" not in _g(p, cid(2, 5))                                  # 整理本空格不算候选
@@ -175,9 +173,9 @@ def test_candidates_and_channel(store):
 
 def test_candidates_missing_products_left_empty(store, page):
     assert all("cand" not in g for g in page["glyphs"])                    # 一步都没有 → 全空，不报错
-    _write_candidates(store, ocr=False)
+    _write_candidates(store)
     p = from_cv_products(store, BOOK, PAGE, copy.deepcopy(META))
-    assert "cand" not in _g(p, cid(2, 1))                                  # 只缺 OCR 那一路
+    assert "cand" not in _g(p, cid(2, 1))                                  # 没有哪一路给它候选
     page_bad = copy.deepcopy(p)
     _g(page_bad, cid(1, 2))["cand"]["llm"] = "臣"
     assert any("cand 只认" in e for e in gp.check(page_bad))
