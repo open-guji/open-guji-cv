@@ -391,6 +391,13 @@ class SeedAdmitParams(BaseModel):
     """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
     occluded_min_contrast: float = 2.5
     """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
+    occluded_rescue_ink: float = 0.0
+    """清楚的字救回（GUJI-555，vol04 p130；**缺省 0＝关**，行为不变）：遮挡块里夹着的格，若格内「大块墨」
+    （连通块面积 > 150 像素的墨，`occlusion.text_ink_fraction`）占格面积 ≥ 此值，不算遮挡、不进遮挡待审。
+    起因：p130 斑驳底纸＋黑框把「欽定四庫全書總目卷七」前 8 格这类**清楚的字**也连进了遮挡块（块内外
+    密度分不开，墨点密度挡不住），而真字格的大块墨占比 0.13~0.35、只有斑点的空格 ≤0.14。建议值 0.15。
+    只收紧遮挡、放更多格走正常通道；书 yaml `params: {seed_admit: {occluded_rescue_ink: 0.15}}`。
+    关着时不进参数哈希。**注意**：vol03 p3 那种真印章压字的页，印下面的字格也会被救回——要不要开按册定。"""
     seal_blank_page: bool = False
     """盖章空栏判空（2026-10-09，道 B 规格 overview#493，缺省关；需同开 `lane_seal`）。
 
@@ -556,6 +563,11 @@ class SeedAdmitParams(BaseModel):
     结论的全是放行错，零个看图 ok（见 #454 评论的前后对比）。没有 `char_index` 产物的格弃权。"""
     nonchar_flags: str = "bad_seg,rule_bar"
     nonchar_strokes: str = "丨亅丿丶"
+    nonchar_jiazhu_ignore_rule_bar: bool = False
+    """夹注格不吃 `rule_bar`（缺省关，方案 A，cv#103 诊断）：开了，`nonchar_gate` 对夹注格（`sub` 非空）
+    忽略 `nonchar_flags` 里的 `rule_bar`，`bad_seg` 与单笔画判断照旧。起因：夹注是双行小字，窄格里
+    相邻一行的竖笔常被 `rule_bar` 判成界行杆，vol04 p216／p218 夹注 76 格有 40 格未放行、其中 31 格
+    是被 `nonchar_gate` 撤回的。需同开 `nonchar_gate`；关着时不进参数哈希。"""
 
     patch_missing: str = "error"
     """铁证 / CNN 背书 / 组内检索三路读本格字块读不到时怎么办（overview#407，2026-10-05）。
@@ -580,6 +592,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("runt_cell_review", None)
             d.pop("runt_ratio", None)
             d.pop("runt_min_ink", None)
+        if isinstance(d, dict) and not self.occluded_rescue_ink:
+            d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.rr_clf:
             for k in ("rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint"):
                 d.pop(k, None)
@@ -636,6 +650,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.nonchar_gate:
             for k in ("nonchar_gate", "nonchar_flags", "nonchar_strokes"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.nonchar_jiazhu_ignore_rule_bar:
+            d.pop("nonchar_jiazhu_ignore_rule_bar", None)
         if isinstance(d, dict) and self.patch_missing == "error":
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
@@ -1293,8 +1309,10 @@ class SeedAdmitStep(Step):
                 # 非字过滤（`nonchar_gate`，Y1）：放在所有通道之后，只会把放行挪去待审。
                 if ok and p.nonchar_gate:
                     _ir2 = imap.get(r.id)
-                    _bad = ({f for f in (p.nonchar_flags or "").split(",") if f}
-                            & set(getattr(_ir2, "flags", None) or ()))
+                    _nc_flags = {f for f in (p.nonchar_flags or "").split(",") if f}
+                    if p.nonchar_jiazhu_ignore_rule_bar and r.sub:
+                        _nc_flags.discard("rule_bar")
+                    _bad = _nc_flags & set(getattr(_ir2, "flags", None) or ())
                     if _bad or (char and char in (p.nonchar_strokes or "")):
                         ok, channel, prov = False, None, ""
                         doubts.append("nonchar")

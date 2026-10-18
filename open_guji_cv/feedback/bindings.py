@@ -73,6 +73,20 @@ IOU_OK = 0.6          # 重合到这个程度、且图块也像，才算「还�
 IOU_GONE = 0.15       # 低于这个算「那一格没了」
 SIM_OK = 0.90         # 图块相似度（elastic cov）；vol02 漂移检查：未动的 1,122 条 ≥0.9，漂移的 30 条 <0.9
 USE_STATUSES = ("valid", "rebound")
+COL_SHIFT_MIN = 3     # R3 整列同量偏移：同页同列 rebound ≥ 这么多条、偏移一致
+COL_SHIFT_EQUAL_OK = 2  # …且其中 ctx=equal 的旁证少于这么多条 → 整列回待审
+
+
+def strict_enabled() -> bool:
+    """R1/R3 严格绑定开关（缺省关，环境变量 `GUJI_BINDINGS_STRICT=1` 开；GUJI-555，Milo 10-17）。
+
+    关时 `compute_page`／`human_chars` 行为与改前逐字节一致。开时：
+    R3-1 补锚 ink 路径 rebound 且上下文核对 `differ` → `review`；
+    R3-2 同页同列 ≥`COL_SHIFT_MIN` 条 rebound 偏移一致、ctx=equal 旁证 < `COL_SHIFT_EQUAL_OK` → 整列 `review`；
+    R1  `lookup.human_chars`：同一格有更晚的事件且它不可用（unanchored／review／void）→ 更早的事件不再顶上。
+    """
+    import os
+    return os.environ.get("GUJI_BINDINGS_STRICT", "").strip().lower() in ("1", "true", "yes", "on")
 _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
 _VERSION = 6          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff）
@@ -271,7 +285,7 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     """
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    from .anchor_backfill import bind_ink, ink_hits, load_backfill
+    from .anchor_backfill import bind_ink, ink_hits, load_backfill, load_backfill_ctx
     store = store or ProductStore()
     cache = cache or ImageCache()
     if backfill is None:
@@ -280,6 +294,8 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     current = versions[-1] if versions and versions[-1][0] == "current" else None
     cur_idx = _cell_index(current[3]) if current else {}
     cur_start = current[1] if current else 0.0
+    strict = strict_enabled()
+    ctx_of = load_backfill_ctx(book) if strict else {}
     rows = []
     for ev in events:
         _, _, col, slot, sub = parse_cell_key(ev.target.key)
@@ -293,6 +309,8 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
                "shape": (ev.payload or {}).get("shape") or None,
                "status": "void", "iou": 0.0, "sim": None,
                "anchor": None if anchor is None else anchor.get("source", "live")}
+        if strict and ev.id in ctx_of:
+            row["ctx"] = ctx_of[ev.id]
         if anchor is not None and anchor.get("ink_bbox"):
             # 补锚档的墨框：当时那块墨落在现在哪一格（anchor_backfill.bind_ink）
             cell, ins, _ = bind_ink(anchor["ink_bbox"], cur_idx)
@@ -302,6 +320,10 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
                 row["status"] = "valid" if row["bound"] == ev.target.key else "rebound"
             elif ink_hits(anchor["ink_bbox"], cur_idx) and ins >= IOU_GONE:
                 row["status"] = "review"          # 墨跨两格（切开/合并）
+            if strict and row["status"] == "rebound":
+                if row.get("ctx") == "differ":        # R3-1：整理本在目标格是另一个字 → 不认这次顺移
+                    row["status"] = "review"
+                    row["why"] = "rebound_ctx_differ"
             rows.append(row)                      # 其余 void：那块墨处已经没有格
             continue
         if anchor is None or not anchor.get("bbox"):
@@ -361,6 +383,9 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
             row["status"] = "review"
         rows.append(row)
 
+    if strict:
+        _col_shift_gate(rows)
+
     # ── 打回：折进已有行（2026-09-27，总览/13 并入总览/15）───────────────────
     from .returns import affected_slots, classify_return, resolve_status
     by_key: dict[str, list] = {}          # 格键 → 这一格全部「打回相关」事件（触发 + 结案）
@@ -394,8 +419,29 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     return rows
 
 
+def _col_shift_gate(rows: list[dict]) -> None:
+    """R3-2：同页同列 ≥COL_SHIFT_MIN 条 rebound 偏移一致，而 ctx=equal 的旁证 < COL_SHIFT_EQUAL_OK → 整列回待审。"""
+    by_col: dict[tuple, list[dict]] = {}
+    for r in rows:
+        if r["status"] != "rebound" or not r.get("bound") or "ctx" not in r:
+            continue                      # 没有上下文核对记录的（现场锚）不参与
+        a, b = parse_cell_key(r["key"]), parse_cell_key(r["bound"])
+        if a is None or b is None or a[2] != b[2]:
+            continue
+        by_col.setdefault((a[1], a[2], b[3] - a[3]), []).append(r)
+    for (_pg, _col, _off), rs in by_col.items():
+        keys = {r["key"] for r in rs}
+        eq = {r["key"] for r in rs if r.get("ctx") == "equal"}
+        if len(keys) >= COL_SHIFT_MIN and len(eq) < COL_SHIFT_EQUAL_OK:
+            for r in rs:
+                r["status"] = "review"
+                r["why"] = "col_shift_no_ctx"
+
+
 def _sig(events, return_events: list | None = None, backfill: dict | None = None) -> str:
     base = f"{len(events)}:{events[-1].id if events else ''}"
+    if strict_enabled():
+        base += "|strict"
     if backfill:
         from .anchor_backfill import page_signature
         base = f"{base}|bf:{page_signature(backfill, [e.id for e in events])}"

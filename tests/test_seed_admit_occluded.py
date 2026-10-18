@@ -132,3 +132,53 @@ def test_pua_placeholder_is_not_used_as_default(tmp_path, monkeypatch):
     got, _ = _run_seed(tmp_path, monkeypatch, coord=coord)
     assert not got[3].admit and got[3].char is None
     assert got[3].evidence["occluded"]["via"] == "coord_pua"
+
+
+# ── 清楚的字救回 `occluded_rescue_ink`（GUJI-555，vol04 p130）────────────────────
+def _ctx_with(img, cells):
+    from types import SimpleNamespace
+    return SimpleNamespace(product=lambda kind, page: cells, raw_page=lambda page: img)
+
+
+def _with_clear_char(cell=(3, 4)):
+    """遮挡块里 (3,4) 这一格写了一个清楚的大字（一大块实心墨），其余仍是斑点。"""
+    img, cells = _page_and_cells()
+    c, s = cell
+    x0, y0 = 100 + (NCOL - c) * CW, 100 + (s - 1) * CH
+    img[y0 + 20:y0 + 80, x0 + 25:x0 + 75] = 0
+    return img, cells, cell
+
+
+def test_rescue_is_off_by_default_so_clear_char_stays_occluded():
+    from open_guji_cv.steps.occlusion import page_occluded
+    img, cells, cell = _with_clear_char()
+    hit = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams())
+    assert (cell[0], cell[1], "") in hit
+
+
+def test_rescue_returns_only_the_clear_char_cell_not_the_speckled_ones():
+    from open_guji_cv.steps.occlusion import page_occluded, text_ink_fraction
+    img, cells, cell = _with_clear_char()
+    frac = text_ink_fraction(img, cells)
+    assert frac[(cell[0], cell[1], "")] >= 0.29
+    assert all(v < 0.05 for k, v in frac.items() if k != (cell[0], cell[1], "") and k[0] in (2, 3, 4, 5)
+               and 2 <= k[1] <= 8), "斑点格的大块墨占比应接近 0"
+    base = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams())
+    on = page_occluded(_ctx_with(img, cells), PAGE, SeedAdmitParams(occluded_rescue_ink=0.15))
+    assert (cell[0], cell[1], "") in base and (cell[0], cell[1], "") not in on
+    assert set(base) - set(on) == {(cell[0], cell[1], "")}, "只救这一格，别的遮挡格不动"
+
+
+def test_rescue_param_is_absent_from_dump_when_off():
+    assert "occluded_rescue_ink" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(occluded_rescue_ink=0.15).model_dump()["occluded_rescue_ink"] == 0.15
+
+
+def test_callers_without_the_field_keep_working():
+    """`feedback.consumers`／`cell_shrink` 传的参数对象可能没有这个字段——getattr 缺省 0＝关。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps.occlusion import page_occluded
+    img, cells, cell = _with_clear_char()
+    p = SimpleNamespace(occluded_min_density=4.0, occluded_min_cells=12, occluded_min_cols=3,
+                        occluded_min_peak=8.0, occluded_min_contrast=2.5)
+    assert (cell[0], cell[1], "") in page_occluded(_ctx_with(img, cells), PAGE, p)
