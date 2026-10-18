@@ -4,7 +4,7 @@
 只用于异体组（读音相同、各书只偏用一形，如 即卽、㫖旨、彚彙）；形近不同义组（己已巳、日曰）各字都常见，字频说明不了问题。
 
 计数来源**只认人裁**（字形库 `instances` 里 `label_status=human` 的刻例，加 `feedback/events` 里 `confirm` 事件的
-`shape`，同一格以最晚的事件为准；`not_a_char`／`seg_defect`／`skip`／`damaged` 视为这一格没有刻形）。不用产物
+`shape`、字形库体检 `glyph_audit` 的改字／撤库，同一格以最晚的事件为准；`not_a_char`／`seg_defect`／`skip`／`damaged` 视为这一格没有刻形）。不用产物
 （流水线自己放的，循环论证），不用整理本（已规范化，异体写法全是 0）。
 
 **冻结成表**：离线算成一张 json（`build` → `write`），`seed_admit.group_flow_freq` 指向它，内容哈希进指纹。
@@ -53,15 +53,23 @@ def human_shapes(workspace: Path) -> dict[str, str]:
                 e = json.loads(line)
             except ValueError:
                 continue
-            if e.get("kind") != "confirm":
+            kind = e.get("kind")
+            if kind not in ("confirm", "glyph_audit"):
                 continue
-            key = (e.get("target") or {}).get("key")
+            p = e.get("payload") or {}
+            key = (p.get("instance_id") if kind == "glyph_audit" else None) or (e.get("target") or {}).get("key")
             if key:
-                evs.append((e.get("ts") or "", _cell_key(key), e.get("payload") or {}))
-    for _, key, p in sorted(evs, key=lambda x: x[0]):
-        if p.get("v") == "confirm" and p.get("shape") and len(p["shape"]) == 1:
+                evs.append((e.get("ts") or "", _cell_key(key), kind, p))
+    for _, key, kind, p in sorted(evs, key=lambda x: x[0]):
+        v = p.get("v")
+        if kind == "glyph_audit":                 # 字形库体检：改字／撤库
+            if v == "relabel" and p.get("char") and len(p["char"]) == 1:
+                out[key] = p["char"]
+            elif v == "evict" and _cell_key(p.get("target") or key) in out:
+                out.pop(_cell_key(p.get("target") or key), None)
+        elif v == "confirm" and p.get("shape") and len(p["shape"]) == 1:
             out[key] = p["shape"]
-        elif p.get("v") in _NO_SHAPE:
+        elif v in _NO_SHAPE:
             out.pop(key, None)
     return out
 
