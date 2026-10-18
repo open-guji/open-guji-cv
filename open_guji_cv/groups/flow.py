@@ -102,7 +102,11 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
     if name == "freq":
         return _freq.decide(cfg.freq_table.get(g), spec.members, cfg.freq_major)
     if name == "ids":
-        return GroupVerdict(None, why="abstain:offline_only", via="ids")   # IDS 还没有在线入口（方案 S7）
+        # 方案 S7：有在线判法与模板库的组（`ids_online.SPECS`）才取图判；其余弃权，且不去取图
+        from . import ids_online
+        if not ids_online.has_bank(g):
+            return GroupVerdict(None, why="abstain:no_bank", via="ids")
+        return ids_online.judge(g, patch_fn(r.id) if patch_fn is not None else None)
     if name == "top1":
         if not cands:
             return GroupVerdict(None, why="abstain:no_cands", via="top1")
