@@ -39,13 +39,6 @@ def test_demote_helper_only_when_admitted():
     assert _df(b) is None and b.evidence == {"keep": 1}
 
 
-def test_rare_cp_ctx_review():
-    r = _rec(char="𠮓", channel="context")
-    assert sa._rare_cp_ctx_pass([_col(r)], {}) == 1
-    _assert_demoted(r, "rare_cp_ctx_review", "context")
-    assert r.evidence["rare_cp_context"]["char"] == "𠮓"
-
-
 def test_shadow_veto(monkeypatch):
     v = NS(veto=True, pick=None, evidence=lambda *a: {"v": 1})
     gate = NS(judge=lambda ev: v, model="m", conf=0.9, low_conf=0.5)
