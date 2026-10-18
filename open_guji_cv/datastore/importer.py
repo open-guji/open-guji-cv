@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import psycopg
 
 from . import gitsource
-from .scope import TABLES, Row, ScanResult, fingerprint, scan_files
+from .scope import TABLES, Row, ScanResult, fingerprint, scan_files, sha256
 
 SCHEMA_FILE = "schema.sql"
 
@@ -240,6 +240,12 @@ def import_commit(conn, repo, commit: str = "HEAD", *, only_ws: set[str] | None 
             if dry_run:
                 continue
             ups = plan.inserts + plan.updates
+            if _is_bulk(plan):
+                # 首次灌这张表：整批记一条变更、共用一个 rev（逐行记会让 changes 白占约 60 MB）
+                rev = _alloc_revs(cur, 1)[0]
+                _write_rows(cur, tbl, ws, ups, [rev] * len(ups))
+                _log_bulk(cur, rep.import_id, tbl, ws, ups, rev)
+                continue
             revs = _alloc_revs(cur, len(ups))
             _write_rows(cur, tbl, ws, ups, revs)
             _write_rows(cur, tbl, ws, plan.moves, None, keep_rev=True)
@@ -259,6 +265,24 @@ def import_commit(conn, repo, commit: str = "HEAD", *, only_ws: set[str] | None 
         if dry_run:
             raise psycopg.Rollback()
     return rep
+
+
+#: 一张表（某工作区）首次导入超过这么多行就整批记一条变更
+BULK_MIN_ROWS = 1000
+
+
+def _is_bulk(plan: Plan) -> bool:
+    return (len(plan.inserts) >= BULK_MIN_ROWS and not plan.updates and not plan.deletes
+            and not plan.moves and not plan.old_sha)
+
+
+def _log_bulk(cur, import_id, tbl, ws, rows: list[Row], rev: int) -> None:
+    """整批一条：pk 记行数，new_sha 是全部行 fingerprint 按主键排序后再取 sha256。"""
+    fps = "\n".join(fingerprint(r) for r in sorted(rows, key=lambda r: [str(k) for k in r.key]))
+    cur.execute("INSERT INTO changes (rev, import_id, tbl, op, ws, pk, old_sha, new_sha) "
+                "VALUES (%s, %s, %s, 'insert', %s, %s, NULL, %s)",
+                (rev, import_id, tbl, ws, json.dumps({"bulk_rows": len(rows)}),
+                 sha256(fps.encode())))
 
 
 def _log_changes(cur, import_id, tbl, ws, plan: Plan, revs, drevs) -> None:

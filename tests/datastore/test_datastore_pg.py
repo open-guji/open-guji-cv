@@ -135,3 +135,24 @@ def test_verify_catches_tampered_rows(repo, conn):
     joined = "\n".join(mism)
     assert "feedback/events/b.jsonl" in joined
     assert "feedback/consumed/glyphdb_admit.jsonl" in joined
+
+
+def test_first_import_logs_one_change_per_table(repo, conn, monkeypatch):
+    from open_guji_cv.datastore import importer
+    from open_guji_cv.datastore.verify import verify_commit
+
+    monkeypatch.setattr(importer, "BULK_MIN_ROWS", 2)
+    c1 = _commit(repo, _base(), "c1")
+    importer.import_commit(conn, repo, c1)
+    n = conn.execute("SELECT count(*) FROM changes WHERE tbl = 'events'").fetchone()[0]
+    revs = conn.execute("SELECT count(DISTINCT rev) FROM events").fetchone()[0]
+    assert (n, revs) == (1, 1)
+    assert conn.execute("SELECT pk FROM changes WHERE tbl = 'events'").fetchone()[0] == {
+        "bulk_rows": 2}
+    assert verify_commit(conn, repo, c1)["ok"]
+    # 之后的增量仍逐行记
+    files = _base()
+    files["W/feedback/events/b.jsonl"] += (_line(id="evt_b_3", batch="b", seq=3) + "\n").encode()
+    c2 = _commit(repo, files, "c2")
+    importer.import_commit(conn, repo, c2)
+    assert conn.execute("SELECT count(*) FROM changes WHERE tbl = 'events'").fetchone()[0] == 2

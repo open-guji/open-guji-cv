@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS changes (
     tbl        text NOT NULL,
     op         text NOT NULL CHECK (op IN ('insert', 'update', 'delete')),
     ws         text,
-    pk         jsonb NOT NULL,
+    pk         jsonb NOT NULL,                -- 主键数组；整批首导为 {"bulk_rows": n}
     old_sha    text,                         -- 旧内容的 sha256（insert 为空）
     new_sha    text                          -- 新内容的 sha256（delete 为空）
     -- 「内容」= raw；glyph_instances 是 raw || '\n' || patch_sha（只换图也算变更）
