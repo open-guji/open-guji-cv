@@ -56,6 +56,18 @@ class GroupSpec:
     config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
 
 
+_JYS_POLICY = GroupPolicy(
+    target="any", membership="char",
+    skip_doubts=frozenset({"occluded", "glyph_timeout", "excluded"}),
+    lift=True, lift_overwrites_admitted=True, lift_channel="ji_yi_si", lift_provenance="context",
+    lift_clear_doubts=("always_review", "ji_yi_si"),
+    strong_channels=_JYS_STRONG, conflict_doubt="ji_yi_si_clf_conflict",
+    demote_clears_char=True,
+    abstain_demote_channels=frozenset({"split_ref"}), abstain_doubt="ji_yi_si_clf_review",
+)
+"""新增三组沿用 jys 的升降策略（不写证据键）；后端待上下文线接好再声明，现在只登记成员与解法。"""
+
+
 GROUPS: dict[str, GroupSpec] = {
     "jys": GroupSpec(
         id="jys", name="己已巳", members=frozenset("己已巳"),
@@ -95,6 +107,25 @@ GROUPS: dict[str, GroupSpec] = {
         ),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
         note="字形分类器，只降级、不改字、不放行。"),
+    # —— 上下文线（cv#118）登记：解法走 ctx_l1/ctx_l2，策略同 jys（按文意定）；wm、ts 之后还会挂笔画长度解法（#119），solvers 为有序元组，届时追加即可 ——
+    "wxs": GroupSpec(
+        id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/wxs",
+        note="按文意定；只登记，后端待上下文线接入。"),
+    "wm": GroupSpec(
+        id="wm", name="未末", members=frozenset("未末"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/wm",
+        note="按文意定；只登记。之后还会挂笔画长度解法（#119）。"),
+    "ts": GroupSpec(
+        id="ts", name="土士", members=frozenset("土士"),
+        backends=(),
+        policy=_JYS_POLICY,
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ts",
+        note="按文意定；只登记。之后还会挂笔画长度解法（#119）。"),
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
