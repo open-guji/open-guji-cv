@@ -105,13 +105,16 @@ def test_freq_table_roundtrip_and_build(tmp_path):
         "\n".join(json.dumps(x, ensure_ascii=False) for x in inst), encoding="utf-8")
     evs = [{"kind": "confirm", "ts": "2026-10-01", "target": {"key": "v:1:1:3"}, "payload": {"v": "confirm", "shape": "㫖"}},
            {"kind": "confirm", "ts": "2026-10-01", "target": {"key": "v:1:1:4"}, "payload": {"v": "confirm", "shape": "㫖"}},
-           {"kind": "confirm", "ts": "2026-10-02", "target": {"key": "v:1:1:4"}, "payload": {"v": "not_a_char"}}]
+           {"kind": "confirm", "ts": "2026-10-02", "target": {"key": "v:1:1:4"}, "payload": {"v": "not_a_char"}},
+           {"kind": "confirm", "ts": "2026-10-01", "target": {"key": "v:1:1:5"}, "payload": {"v": "confirm", "shape": "旨"}},
+           {"kind": "glyph_audit", "ts": "2026-10-03", "target": {"key": "v2:v:1:1:5"},
+            "payload": {"v": "relabel", "char": "㫖", "instance_id": "v2:v:1:1:5"}}]   # 体检改字压过更早的 confirm
     (ws / "feedback" / "events" / "e.jsonl").write_text(
         "\n".join(json.dumps(x, ensure_ascii=False) for x in evs), encoding="utf-8")
     t = F.build(ws, {"zhi": frozenset("旨㫖")})
-    assert t["groups"]["zhi"] == {"㫖": 2, "旨": 0}     # align 不算；事件覆盖库标注；not_a_char 撤掉
+    assert t["groups"]["zhi"] == {"㫖": 3, "旨": 0}     # align 不算；事件覆盖库标注；not_a_char 撤掉
     F.write(t, tmp_path / "freq.json")
-    assert F.load(tmp_path / "freq.json") == {"zhi": {"㫖": 2, "旨": 0}}
+    assert F.load(tmp_path / "freq.json") == {"zhi": {"㫖": 3, "旨": 0}}
     assert F.fingerprint(tmp_path / "freq.json") != F.fingerprint(None)
 
 
