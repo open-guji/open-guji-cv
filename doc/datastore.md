@@ -17,6 +17,15 @@ python -m open_guji_cv.datastore verify  --repo <guji-workspace> --commit <sha> 
 python -m open_guji_cv.datastore r2-plan --repo <guji-workspace> --commit <sha> --manifest plan.jsonl
 ```
 
+**只通 443 的环境（云会话）**：5432 出不去，先起本地桥，经 Neon 的 WebSocket（443）连库，导入、核对代码不变：
+
+```bash
+python -m open_guji_cv.datastore.wsbridge <Neon 端点 host> --port 15432 &
+export GUJI_DATA_PG_DSN="host=127.0.0.1 port=15432 dbname=neondb user=<角色> password=<口令> sslmode=disable options=endpoint=<端点 id>"
+```
+
+本地端口用 `sslmode=disable`（加密在 wss 那层），不要 `channel_binding`。服务器能直连 5432，用不着桥。
+
 - `import --dry-run` 只算差别不写库；`--ws <id>` 只导一个工作区。
 - `verify` 退出码 0 = 库与提交逐行一致。
 - `r2-plan` 默认只出清单；设了 `GUJI_DATA_PG_DSN` 会顺便和库里的 sha 对一遍。
@@ -75,3 +84,13 @@ sha256、行数、末尾换行，空文件也在。核对就是从库里把文�
 **数据问题（导入照收，等人定）**：四庫 `feedback/events/vol01-cutline.jsonl` 与
 `vol01-cutline-split_char.jsonl` 里有 14 个事件 id 相同、内容不同（`evt_vol01-cutline-split_char_000001…`）。
 库里两份都留（主键带 src_path）。`consumed/glyphdb_admit.jsonl` 等有 178 处同一事件记了两次（99 处整行重复），按行号都留。
+
+## 四、Neon ci 试灌（2026-10-18，云会话经 wsbridge，guji-workspace main `7a05390`）
+
+| 项 | 结果 |
+|---|---|
+| 首次导入 | 3 个工作区 188,404 行进库，import_id 1，rev 0 → 1,327，约 59 秒 |
+| 核对 `verify` | 0 差异（同本地口径：逐行、逐文件、逐图 sha） |
+| 同一提交 `import --dry-run` | 0 变更 |
+| 库大小 | 161 MB（`pg_database_size`，未 VACUUM FULL） |
+| R2 计划对库 | 30,480 个对象 90.7 MB，与库里 sha 集合完全相同 |

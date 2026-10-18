@@ -71,6 +71,7 @@ torch = [
 datastore = [
     "psycopg[binary]>=3.1",
     "boto3>=1.28",
+    "websockets>=13",
 ]
 # PDF 抽页（guji import-pdf）
 pdf = [
