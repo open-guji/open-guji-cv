@@ -98,6 +98,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv += ["--jobs", str(args.jobs)]
     if getattr(args, "allow_sample_db", False):
         argv.append("--allow-sample-db")
+    if getattr(args, "allow_cv_mismatch", False):
+        argv.append("--allow-cv-mismatch")
     return argv
 
 
@@ -127,6 +129,20 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     return rc
 
 
+def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
+    """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
+    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
+    from .core.cv_version import mismatch
+    msg = mismatch(getattr(book, "cv_version", None))
+    if not msg:
+        return
+    if allow or warn_only:
+        print(f"⚠️ {msg}", file=sys.stderr, flush=True)
+        return
+    print(f"✗ {msg}", file=sys.stderr, flush=True)
+    sys.exit(2)
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -134,6 +150,7 @@ def cmd_pipeline(args) -> None:
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     if "rare_candidates" in steps:
@@ -164,6 +181,39 @@ def cmd_pipeline(args) -> None:
     sys.exit(1 if n_failed and args.stop_on_error else 0)
 
 
+def cmd_rerun(args) -> None:
+    """`guji rerun --stale <册>`：只重跑显式标了失效的页及其下游（GUJI-578）。"""
+    if not args.stale:
+        print("✗ 目前只支持 --stale（只跑显式失效的页）", file=sys.stderr)
+        sys.exit(2)
+    from .core.workspace import assert_workspace_declared
+    assert_workspace_declared()
+    from .ops import rerun_stale as RS
+    eng = _engine(args.book, args.pipeline, None)
+    # 写产物，和 pipeline／step 一样过 cv 版本护栏（GUJI-577）；--dry-run 只提醒
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False),
+                      warn_only=args.dry_run)
+    pages = eng.book.resolve_pages(args.pages)
+
+    def steps_after(first, to):
+        return cli_steps(eng, first, to)
+
+    if args.dry_run:
+        RS.run(eng, steps_after, pages=pages, to_step=args.to_step, dry_run=True)
+        return
+    from .core.runlock import RunLockHeld, book_run_lock
+    try:
+        with book_run_lock(eng.book.id, wait=args.wait):
+            _, rep = RS.run(eng, steps_after, pages=pages, to_step=args.to_step, jobs=args.jobs)
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
+    if rep is not None and args.json:
+        print(json.dumps(rep.to_dict(), ensure_ascii=False))
+    n_failed = sum(1 for o in (rep.outcomes if rep else []) if o.status == "failed")
+    sys.exit(1 if n_failed else 0)
+
+
 def cmd_step(args) -> None:
     args.from_step = args.to_step = args.step
     cmd_pipeline(args)
@@ -171,6 +221,7 @@ def cmd_step(args) -> None:
 
 def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
+    _guard_cv_version(eng.book, warn_only=True)
     pages = eng.book.resolve_pages(args.pages)
     st = eng.status(pages=pages)
     gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
@@ -1824,6 +1875,7 @@ def cmd_progress(args) -> None:
     from .core.book import load_book
     from .report.progress import format_table, page_progress
     bk = load_book(args.book)
+    _guard_cv_version(bk, warn_only=True)
     doc = page_progress(args.book, bk.resolve_pages(args.pages))
     if args.json:
         _out(doc)
@@ -1905,6 +1957,22 @@ def cmd_deploy(args) -> None:
         print(f"部署记录：{path}", file=sys.stderr)
     if result.status in (dc.FETCH_FAILED, dc.RESOLVE_FAILED, dc.MERGE_FAILED, dc.ROLLED_BACK):
         sys.exit(1)
+
+
+def cmd_archive(args) -> None:
+    """`guji archive fetch <tag> --out <空目录>`：取回 dataset Release 的归档包、核 sha256、解包（GUJI-601）。"""
+    from .ops.archive_fetch import ArchiveError, DEFAULT_REPO, fetch
+    try:
+        res = fetch(args.tag, Path(args.out), repo=args.repo or DEFAULT_REPO, sha256=args.sha256,
+                    asset=args.asset, keep_tar=args.keep_tar, no_verify=args.no_verify)
+    except ArchiveError as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(2)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"下一步：guji glyph-db rebuild -w {res['out']} --no-replay"
+              "（完整恢复步骤见 ai-team team/整理/GUJI-562/恢复演练步骤.md）")
 
 
 def cmd_snap(args) -> None:
@@ -2158,6 +2226,8 @@ COMMANDS_V2 = {
     "release": cmd_release,
     "deploy": cmd_deploy,
     "snap": cmd_snap,
+    "archive": cmd_archive,
+    "rerun": cmd_rerun,
 }
 
 
@@ -2266,6 +2336,9 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                    help="每个 Step 一个独立子进程跑（默认关，行为不变）：跑完进程退出、内存整体回收。"
                         "整册跑、服务器有内存上限（MemoryHigh）时用它，免得 torch／字形库／索引逐步叠加把"
                         "进程拖进换页（GUJI-555）。代价是每步多付一次 import 与模型加载；不支持 --json")
+    p.add_argument("--allow-cv-mismatch", action="store_true",
+                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
+                        "做实验、临时核对时用，产物 manifest 照实记装的版本")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"
@@ -2285,6 +2358,19 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     _add_pages(p)
+
+    p = sub.add_parser("rerun", help="[v2] --stale：只重跑显式标了失效（人裁落定等）的页及其下游")
+    p.add_argument("book")
+    p.add_argument("--stale", action="store_true", help="只跑 manifest 里 invalidated 的页（目前必须给）")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all", help="只在这些页里找失效（默认全书）")
+    p.add_argument("--to", dest="to_step", default=None, help="跑到哪一步为止（含），默认管线末尾")
+    p.add_argument("--dry-run", action="store_true", help="只列要跑哪些步哪些页")
+    p.add_argument("--jobs", type=int, default=1, help="页级并行进程数（只对 parallel_safe 的步生效）")
+    p.add_argument("--wait", action="store_true", help="这本书正有别的跑批时排队等")
+    p.add_argument("--json", action="store_true")
+    p.add_argument("--allow-cv-mismatch", action="store_true",
+                   help="册配置固定了 cv_version 而装的不是它时照跑（只提醒）")
 
     p = sub.add_parser("binarize",
                        help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
@@ -2433,6 +2519,17 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--workspace", default=None, help="部署成功后 guji status 各书要用的工作区")
     p.add_argument("--overview", default=None, help="overview 仓路径，成功/失败都写一张部署记录并推")
     p.add_argument("--dry-run", action="store_true", help="只打印会做什么，不改任何东西")
+
+    p = sub.add_parser("archive", help="[v2] 归档包：fetch 取回 open-guji-dataset Release 上的归档 tar，核 sha256 后解到空目录")
+    p.add_argument("action", choices=["fetch"])
+    p.add_argument("tag", help="Release tag，如 archive-96mid1ogzk-vol03-0.1.0-1")
+    p.add_argument("--out", required=True, help="解到哪个目录（必须不存在或为空）")
+    p.add_argument("--repo", default=None, help="默认 open-guji/open-guji-dataset")
+    p.add_argument("--sha256", default=None, help="应有的 sha256；不给就用 Release 资产自带的 digest")
+    p.add_argument("--asset", default=None, help="Release 里有多个 .tar 时指定文件名")
+    p.add_argument("--keep-tar", action="store_true", help="解完把 tar 留在 --out 旁边")
+    p.add_argument("--no-verify", action="store_true", help="没有 sha256 可核时仍然解（不建议）")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("snap", help="[v2] 快照自动导入：pack（云端打包推分支）/ import / watch（服务器定时器）/ list")
     p.add_argument("action", choices=["pack", "import", "watch", "list", "import-index"])

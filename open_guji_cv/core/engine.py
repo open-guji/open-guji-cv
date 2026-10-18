@@ -269,6 +269,9 @@ class Engine:
             resolved[sid] = STEPS[sid].spec.params(**kv)
         self.ctx = RunContext(book, self.store, self.cache, resolved, self.log, pipeline=pipeline)
         self._rev = git_rev()
+        from .cv_version import manifest_fields
+        #: 每条 manifest 记生成它的 cv 版本与完整 commit（版本号规矩第五节，GUJI-577）
+        self._cv = manifest_fields()
 
     def _stamp_cache(self, step: Step, key: str, sha: str) -> None:
         """这一步刚写完一页产物：它顺手 `cache.put` 的图像类缓存，记上「对着这版产物切的」戳。"""
@@ -535,7 +538,7 @@ class Engine:
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
                 report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
                 manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
-                                           upstream={}, code_rev=self._rev,
+                                           upstream={}, code_rev=self._rev, **self._cv,
                                            status="failed", error=msg))
                 if stop_on_error:
                     return done, True
@@ -569,7 +572,7 @@ class Engine:
                 elapsed = time.time() - t0
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                            params_hash=ph, upstream=ups or {},
-                                           code_rev=self._rev, elapsed=round(elapsed, 3),
+                                           code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
                                            self_hash=self.self_hash(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
                                            book=book_dep_values(step, self.book)))
@@ -579,7 +582,7 @@ class Engine:
                 elapsed = time.time() - t0
                 err = f"{type(e).__name__}: {e}"
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                           upstream=ups or {}, code_rev=self._rev,
+                                           upstream=ups or {}, code_rev=self._rev, **self._cv,
                                            elapsed=round(elapsed, 3), status="failed", error=err))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 失败 {err}")
                 report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
@@ -617,7 +620,7 @@ class Engine:
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
                 report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
                 manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
-                                           upstream={}, code_rev=self._rev,
+                                           upstream={}, code_rev=self._rev, **self._cv,
                                            status="failed", error=msg))
                 if stop_on_error:
                     return done, True
@@ -656,7 +659,7 @@ class Engine:
                 key = page_key(pg)
                 if err is not None:
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev,
+                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
                                                elapsed=round(elapsed, 3), status="failed", error=err))
                     self.log(f"{sid} p{pg}: 失败 {err}")
                     report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
@@ -672,7 +675,7 @@ class Engine:
                     self._stamp_cache(step, key, sha)
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
                                                params_hash=ph, upstream=ups or {},
-                                               code_rev=self._rev, elapsed=round(elapsed, 3),
+                                               code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
                                                self_hash=self.self_hash(step),
                                                soft=soft_values(step, self.ctx.params_for(step)),
                                                book=book_dep_values(step, self.book)))
@@ -681,7 +684,7 @@ class Engine:
                 except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
                     err2 = f"{type(e).__name__}: {e}"
                     manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev,
+                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
                                                elapsed=round(elapsed, 3), status="failed", error=err2))
                     self.log(f"{sid} p{pg}: 失败 {err2}")
                     report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))

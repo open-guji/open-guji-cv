@@ -4,7 +4,7 @@
 全部 pass（manual 由人另行确认）才算机器这一侧过关。
 
 能机器判的项：
-  1 产物新鲜（status）＋ 缓存不错位（cache verify，只读）
+  1 产物新鲜（status；册配置登记了冻结基线 `freeze:` 时改比快照产物 sha，见 ops/freeze.py）＋ 缓存不错位（cache verify，只读）
   2 待审清零（待审卡片按类计数；`--tier rough` 粗校档只报数、不计，终校档 `final`（缺省）才计）
   2b 收尾闸 closure_gaps = 0（有定字裁决却没出字）
   8 字形库真源已提交（工作区 git 里 feedback/、output/glyph_store/ 没有未提交改动）
@@ -33,6 +33,15 @@ def _fresh(eng, pages) -> dict:
     bad = {k: v for k, v in bad.items() if v}
     return _item("1a", "产物新鲜", PASS if not bad else FAIL,
                  "全部新鲜" if not bad else f"{len(bad)} 步有过期/缺失/失败", bad or None)
+
+
+def _fresh_or_frozen(eng, pages, ws: Path) -> dict:
+    """册配置登记了冻结基线（`freeze:`）就比快照，否则照旧比现行指纹（GUJI-601）。"""
+    from .freeze import fresh_frozen, is_frozen
+    if not is_frozen(eng.book):
+        return _fresh(eng, pages)
+    from ..core.workspace import feedback_root
+    return fresh_frozen(eng, pages, ws, feedback_root=feedback_root())
 
 
 def _cache(eng, pages) -> dict:
@@ -162,7 +171,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
     book = eng.book.id
     items: list[dict] = []
     checks = [
-        ("1a", "产物新鲜", lambda: [_fresh(eng, pages)]),
+        ("1a", "产物新鲜", lambda: [_fresh_or_frozen(eng, pages, ws)]),
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
         ("2", "待审清零", lambda: [_queue(book, eng.store, ws, tier)]),
         ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store, ws)]),

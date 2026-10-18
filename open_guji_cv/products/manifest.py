@@ -45,6 +45,11 @@ class ManifestEntry:
     含这些值，但只存了哈希——`calibrate` 后改了 yaml 的 `period_prior`，`status` 只能
     报「过期」、说不出为什么。记下原值，`status` 就能报「册配置 period_prior 180→204」。
     没有 book_deps 的步、以及此前的老条目都是 None。"""
+    cv_version: str | None = None
+    """生成这条产物的 cv 版本：最近正式 tag 去掉 `v`，不在 tag 上写 `0.3.0+N`
+    （`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
+    cv_commit: str | None = None
+    """生成这条产物时 cv 的完整 commit sha（`code_rev` 只是短 sha）。不进指纹。"""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
