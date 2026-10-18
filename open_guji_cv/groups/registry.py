@@ -3,7 +3,7 @@
 `seed_admit` 里字组只有一条路：`group_flow`（`groups/flow.py`）。旧的各组开关（`ji_yi_si_*`、`ry_group`、`rr_clf`、
 `m7_*`、`variant_tie*`）与它们的升降策略 `GroupPolicy`／`apply.py` 已于 2026-10-18 并进 `group_flow` 后删除（方案 S6）。
 
-⚠ 现有各处还有自己的成员常量（`ji_yi_si_clf.FAMILY`、`ry_group.FAMILY`、`rr_clf.CLASSES`…）；
+⚠ 现有各处还有自己的成员常量（`ji_yi_si_clf.FAMILY`、`rr_clf.CLASSES`…）；
 `tests/test_groups_registry.py` 断言这里的成员与它们一致，防漂移。
 """
 from __future__ import annotations
@@ -101,6 +101,14 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, cfg in (("mn", "蒙𫎇", None), ("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
                               ("chen", "讖識䜟", None), ("li", "隸𨽾", None), ("shen", "慎愼", "config/groups/shen"),
                               ("zhi", "旨㫖", None))},
+    # —— 第二批异体组（2026-10-18 sheldon 定）：只靠字频。人裁数不够（主形 <20 或次形不为 0）时弃权、送人审，
+    #    不退到 IDS／库形最近；字频表重算后数据攒够就自动放行。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=(), config_dir=None,
+        flow=FlowSpec(("freq",), combine="first"),
+        note="异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。")
+       for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"))},
 }
 
 
