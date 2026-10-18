@@ -309,6 +309,10 @@ class BookSpec:
     #: 只做护栏用：`guji step`／`pipeline` 发现装的版本不同就拒跑（`core/cv_version.py`，
     #: GUJI-577）。不进任何 Step 的 `book_deps`，不进指纹；None = 没固定，不设防。
     cv_version: str | None = None
+    #: 本册钉住的语料库版本（yaml 的 `corpus: 1` 或 `v1`；设计见 doc/design/语料库版本化方案.md）。
+    #: 钉了之后，语料类内容指纹（`core/corpus_pin.PIN_FIELDS`）在 `params_for` 里换成 `corpus-vN`，
+    #: 指纹只认版本号；不写 = 照旧按内容哈希，行为与加这个字段之前逐位相同。
+    corpus: int | None = None
     #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
     #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
@@ -640,8 +644,14 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
         cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
+        corpus=_parse_corpus_pin(d.get("corpus")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _parse_corpus_pin(v) -> int | None:
+    from .corpus_pin import parse_pin
+    return parse_pin(v)
 
 
 def _load_freeze(v, book_id: str) -> dict:

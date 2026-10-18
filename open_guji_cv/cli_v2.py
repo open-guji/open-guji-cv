@@ -1809,6 +1809,37 @@ def cmd_rare(args) -> None:
           "candidates": rare_for(img, args.k)})
 
 
+def cmd_corpus(args) -> None:
+    """语料库（corpus-vN）清单：build 出新版、verify 对当前文件、list 列版本。P0 只登记，不改 Step／指纹。"""
+    from .ops import corpus_pack as cp
+    if not args.workspace:
+        print("✗ 要给 -w 工作区", file=sys.stderr)
+        sys.exit(2)
+    ws = Path(args.workspace).expanduser().resolve()
+    if not ws.is_dir():
+        print(f"✗ 工作区 {ws} 不存在", file=sys.stderr)
+        sys.exit(2)
+    if args.action == "build":
+        try:
+            out = cp.build(ws, args.version, args.note)
+        except FileExistsError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✓ 已写 {out}")
+    elif args.action == "verify":
+        vs = cp.versions(ws)
+        v = args.version or (vs[-1] if vs else 0)
+        try:
+            r = cp.verify(ws, v)
+        except FileNotFoundError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(r)
+        sys.exit(0 if r["clean"] else 1)
+    else:
+        _out(cp.summary(ws))
+
+
 def cmd_variants(args) -> None:
     """本书用字账（只读）。账本由 `scripts/build_book_variants.py` 派生，这里不算任何东西。"""
     from .variant_ledger import DEFAULT_EDITION, ledger_path
@@ -2220,6 +2251,7 @@ COMMANDS_V2 = {
     "cards": cmd_cards,
     "rare": cmd_rare,
     "variants": cmd_variants,
+    "corpus": cmd_corpus,
     "collate": cmd_collate,
     "progress": cmd_progress,
     "runs": cmd_runs,
@@ -2824,6 +2856,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--slot-comp", action="append", default=[], metavar="槽=部件",
                    help="IDS 兜底：某槽位的部件，如 L=言（可重复）")
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
+
+    p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list（P0 只登记）")
+    p.add_argument("action", choices=["build", "verify", "list"])
+    p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
+    p.add_argument("--note", default="", help="build：写进清单的备注")
+    p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])

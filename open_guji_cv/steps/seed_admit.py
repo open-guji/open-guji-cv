@@ -280,15 +280,6 @@ class SeedAdmitParams(BaseModel):
     overview#155）。命中的判决作废、记 doubt `channel_off`，后面的兜底通道（context／
     ref_lib／铁证…）照常有机会——关的是**这条路**，不是这个格。空串 = 全开（旧行为）。
     书级用：书 yaml `params: {seed_admit: {off_channels: match_solo}}`。"""
-    rare_cp_ctx_review: bool = False
-    """罕用码位 × `context` 通道落审（2026-10-10，overview#437 异体组方案 A，缺省关）：放行字不在
-    U+4E00–9FFF（扩展区、部首、兼容区，同 `_rare_cp`／`context_garble_guard` 口径）、且放行通道恰为
-    `context`，就退回待审，doubt `rare_cp_context`，`evidence.rare_cp_context` 记放行字与码位。
-    **只降级，不改字、不放行**；人裁、排除、别的通道（match_replace／match_solo／coord_fallback…）不碰。
-    起因：vol04／vol05 有标签放行格里，罕用码位放行错率 17%／5.6%（常用区 4.5%／1.3%），
-    错的 11 格里 `context` 占 8；罕用码位上 match_replace／match_solo／coord_fallback 的有标签格全对。
-    放在 `_review_lanes_pass` 之后：三条新放行通道（witness3／coord／seal）仍可重新放行这些格。
-    关着时不进参数 dump，产物逐字节不变。"""
     solo_ctx_veto: float = 0.0
     """match_solo 系的上下文否决（2026-10-09，overview#450）：`context_decide.ranked` 第一名与
     放行字**语义不同**（异体码点差不算），且第一名概率 ≥ 此值，就不单独放行，记 doubt
@@ -561,8 +552,6 @@ class SeedAdmitParams(BaseModel):
             d.pop("approx_fingerprint", None)
         if isinstance(d, dict) and not self.solo_ctx_veto:
             d.pop("solo_ctx_veto", None)
-        if isinstance(d, dict) and not self.rare_cp_ctx_review:
-            d.pop("rare_cp_ctx_review", None)
         if isinstance(d, dict) and not self.seal_blank_page:
             for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
@@ -1268,7 +1257,7 @@ class SeedAdmitStep(Step):
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
         #   0 group_flow（字组统一流程，升／降，缺省关）→ 1 rare_ref（升）→ 3 shadow_veto（降）→
-        #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ 6 rare_cp_ctx_review（降）→
+        #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ （6 rare_cp_ctx_review 已于 2026-10-18 删除）→
         #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
         #   ry_group、rr_clf、m7 各遍已于 2026-10-18 并进 group_flow 删除，编号留空不改）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
@@ -1299,10 +1288,6 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
-        if p.rare_cp_ctx_review:
-            d_rcp = _rare_cp_ctx_pass(out, mmap)
-            n_auto -= d_rcp
-            n_review += d_rcp
         if p.oversplit_gate == "hint":
             _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:
@@ -1327,24 +1312,6 @@ def _demote(rec, by: str) -> None:
     **必须在 `rec.channel` 被置空之前调用。**"""
     if rec.admit:
         rec.evidence = {**(rec.evidence or {}), "demoted_from": {"channel": rec.channel, "by": by}}
-
-
-def _rare_cp_ctx_pass(out: list, mmap: dict) -> int:
-    """`rare_cp_ctx_review`：放行字是罕用码位且通道为 `context` → 退回待审（只降级，不改字）。→ 降级格数。"""
-    n = 0
-    for col in out:
-        for rec in col.chars or []:
-            if (not rec.admit or rec.channel != "context" or rec.provenance == "human"
-                    or not _rare_cp(rec.char)):
-                continue
-            m = mmap.get(rec.id)
-            _demote(rec, "rare_cp_ctx_review")
-            rec.admit, rec.channel, rec.provenance = False, None, ""
-            rec.doubts = (_doubts(m, None) if m is not None else []) + list(rec.doubts) + ["rare_cp_context"]
-            rec.evidence = {**(rec.evidence or {}),
-                            "rare_cp_context": {"char": rec.char, "cp": f"U+{ord(rec.char[0]):04X}"}}
-            n += 1
-    return n
 
 
 _RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")

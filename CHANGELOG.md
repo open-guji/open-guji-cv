@@ -3,6 +3,20 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.3.4] - 2026-10-18
+
+PATCH。语料库 corpus-vN（清单、册钉子、补指纹缺口）、group_flow 第二批异体组、清理旧字组代码。相对 v0.3.3 只有 `seed_admit` 的 `code_hash` 变（9d3e5deb232d84f2 → 6a4e2bd27c35fa8a），其余 16 步不变；各册 Step7 本来就要用新字组重算，下面各条自述的中间 `code_hash` 以此为准。没写 `corpus:` 的册其余指纹逐位不变。
+
+### Added
+- 册钉了语料库版本（`corpus: N`）后，读语料的 5 步（`glyph_match`、`rare_candidates`、`context_decide`、`align_ref`、`seed_admit`）的指纹整步多带一个 `corpus-vN`（P2，2026-10-18）：补上此前没有内容指纹的输入——形近表（`confusable_*`、`NEVER_MATCH_FAMILIES`）、`context_decide`／`align_ref` 的异体表、`rare_candidates` 的字表与部件库。几何步不受语料库升级影响。名单登记在 `core/corpus_pin.CORPUS_STEPS`（不放进 `StepSpec`，免得改 Step 源码让 `code_hash` 变）。没钉的册指纹逐位不变，17 步 `code_hash` 不变。
+- 册 yaml 可钉语料库版本 `corpus: 1`（P1，2026-10-18，sheldon 定）：钉了之后，`params_for` 把参数里的语料类内容指纹（`core/corpus_pin.PIN_FIELDS`：整理本参考文本、证人、用字账、异体表、异体图、夹注词表、铁证形近、group_flow 字频／规则／答案表共 9 个字段）整体换成 `corpus-v1`，**指纹只认版本号，不看内容**；钉的版本没有清单就报错，清单之后文件被改只警告一次。**不写 `corpus:` 的册一字不变**；17 步 `code_hash` 全部不变（逐步对照 rc/v0.3.4 验过）。字形库、人裁排除名单、模型不属语料，指纹照旧。`ops/corpus_pack.py` 的清单读取与扫描挪进 `core/corpus_pin.py`。
+- `guji corpus build|verify|list`（P0，2026-10-18，sheldon 定）：语料库 corpus-vN 的清单，登记流程里读的 51 份语料类文件（整理本参考文本、字频表、L2 答案表、规则、IDS、异体表、形近表、字表）的 sha256 和 `NEVER_MATCH_FAMILIES` 哈希，落 `<工作区>/corpus-pack/vN/manifest.json`；版本号递增、不覆盖；`verify` 发现清单之后又被改的文件。**只登记，Step 仍读原位置，指纹不变，17 步 `code_hash` 全部不变。** 方案见 `doc/design/语料库版本化方案.md`。
+- group_flow 第二批异体组（2026-10-18，sheldon 定）：即卽（`ji`）、卿𨜊（`qing`）、變𠮓（`bian`）、彙彚（`hui`），只看字频：主形人裁 ≥20 且次形 0 才放行，数据不够送人审，重算字频表后自动放行。缺省关，按册在 `group_flow` 里点名。`seed_admit` 的 `code_hash` 6f24d51db9b8ebcb → 51a72b61d8354196（注册表在其 `code_deps` 里），其余 16 步不变。字形库清了 3 格误标（變 2、旨 1，工作区 events）。A/B 配置 `doc/exp/group_flow-2-vol04.yaml`、`group_flow-2-vol02-vol03.yaml`：vol04、vol02、vol03 三册新增放行共 3 格（都是卿），變 1 格弃权送审，旨㫖字频解封后放行不变，其余格一格没变。
+
+### Removed
+- 清理被 `group_flow` 取代、已无调用的旧字组代码（2026-10-18，sheldon 定）：删 `utils/ry_group.py`（日曰 ry-v2 答案表）、`utils/ji_yi_si_clf.suggest`（己已巳旧答案表）、`groups/backends.py` 的 `RyV2TableBackend`／`JysSuggestBackend`、`eval/groups` 的 `suggest:` 后端与 ry-v2 表识别（`table:` 只认 `group_clf/1`），及对应测试、`research/char_groups/{ry/build_cache,jys/build_clf_table}.py`、`scripts/_from_overview` 里量 group_decide 口径的 `ctx_caliber_compare.py`。`seed_admit` 的 `code_hash` 9d3e5deb232d84f2 → 6f24d51db9b8ebcb（改了 `utils/ji_yi_si_clf` 源码，在其 `code_deps` 里），其余 18 步不变。vol04 A/B：旧码 vs 新码，`seed_admit` 产物逐格一致。
+- 删 `seed_admit.rare_cp_ctx_review`（罕用码位×context 落审，缺省关，无书在用；2026-10-18 sheldon 定）：参数、`_rare_cp_ctx_pass`、测试 `test_seed_admit_rare_cp_ctx.py` 及 `test_w5_demoted_from` 里的一条。`seed_admit` 的 `code_hash` 6f24d51db9b8ebcb → eba68e984cd2a5ae，其余 18 步不变。
+
 ## [0.3.3] - 2026-10-18
 
 PATCH。字组统一流程 group_flow（新 variant-tie）：收编全部旧字组开关、字频与在线 IDS 两个新解法；删 Step5-c／Step6b。

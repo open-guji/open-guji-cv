@@ -209,6 +209,12 @@ def _with_book_real_proto(p: BaseModel, ctx: "RunContext") -> BaseModel:
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
 
+def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """册 yaml `corpus: N` → 语料类内容指纹换成 `corpus-vN`（见 `core/corpus_pin.py`）。"""
+    from .corpus_pin import with_corpus_pin
+    return with_corpus_pin(p, ctx.book)
+
+
 def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """`AlignRefParams.witness_fingerprint` 按**这册书的 `references` 文件**算
     （2026-09-27，任务书-D-多证人对齐策略）。只对 `witness_strategy != "legacy"`
@@ -373,6 +379,7 @@ class RunContext:
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
+        p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——
