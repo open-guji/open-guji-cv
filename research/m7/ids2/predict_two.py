@@ -13,7 +13,7 @@ from open_guji_cv.groups import ids_two as T
 from open_guji_cv.groups.ids import IdsResolver
 
 CFG = {"shen": dict(members="慎愼", orient="v", prior=0.33, frame="⿰忄{}", dir="config/groups/shen"),
-       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
+       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can", sub_prior=0.45)}
 g, cells, done, crops, out = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4]), Path(sys.argv[5])
 mm = float(sys.argv[6]) if len(sys.argv) > 6 else 0.02
 c = CFG[g]; rs = IdsResolver(list(c["members"]), c["dir"])
@@ -26,8 +26,8 @@ for r in rows:
     i = r["id"]; gray = G[i] if i in G else img(i)
     bank = {}
     for o in lab.values():
-        if o["id"] != i: T.add_real(bank, G[o["id"]], T.slot_name(rs, o["f"], c.get("which", 1)), o["p"], c["orient"], c.get("which", 1))
-    v = T.solve_two(gray, bank, rs, c["frame"], c["orient"], c["prior"], which=c.get("which", 1), min_margin=mm)
+        if o["id"] != i: T.add_real(bank, G[o["id"]], T.slot_name(rs, o["f"], c.get("which", 1)), o["p"], c["orient"], c.get("which", 1), c.get("sub_prior"))
+    v = T.solve_two(gray, bank, rs, c["frame"], c["orient"], c["prior"], which=c.get("which", 1), min_margin=mm, sub_prior=c.get("sub_prior"))
     ev.append({"id": i, "ids": v.ids, "char": v.char, "kind": v.kind, "flag": v.flag, "slots": list(v.slots),
                "margins": list(v.margins), "ref": r["ref"], "admit": r["admit_char"], "labeled": i in lab, "gold": lab[i]["f"] if i in lab else None})
 json.dump(ev, open(out, "w", encoding="utf-8"), ensure_ascii=False, indent=1)

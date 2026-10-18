@@ -19,7 +19,7 @@ from open_guji_cv.groups.ids import IdsResolver
 from open_guji_cv.groups.ids_segment import ink_of
 
 CFG = {"shen": dict(members="慎愼", orient="v", prior=0.33, frame="⿰忄{}", dir="config/groups/shen"),
-       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can")}
+       "can": dict(members="參㕘叅", orient="h", prior=0.52, frame="⿱厽{}", dir="config/groups/can", sub_prior=0.45)}
 c = CFG[sys.argv[1]]
 rows = [json.loads(l) for l in open(sys.argv[2], encoding="utf-8") if l.strip()]
 rows = [r for r in rows if r["f"] in c["members"] and len(r["p"]) >= 2]
@@ -40,11 +40,11 @@ for r in rows:
     bank = {}
     for o in rows:
         if o["id"] != r["id"]:
-            T.add_real(bank, G[o["id"]], T.slot_name(resolver, o["f"], c.get("which", 1)), o["p"], c["orient"], c.get("which", 1))
+            T.add_real(bank, G[o["id"]], T.slot_name(resolver, o["f"], c.get("which", 1)), o["p"], c["orient"], c.get("which", 1), c.get("sub_prior"))
     for m in (0.0, 0.02, 0.05):
         for cut in ("oracle", "auto"):
             v = T.solve_two(G[r["id"]], bank, resolver, c["frame"], c["orient"], c["prior"],
-                            polyline=r["p"] if cut == "oracle" else None, which=c.get("which", 1), min_margin=m)
+                            polyline=r["p"] if cut == "oracle" else None, which=c.get("which", 1), min_margin=m, sub_prior=c.get("sub_prior"))
             k = "abstain" if v.char is None else "right" if v.char == r["f"] else "wrong"
             out[(m, cut)][k] += 1
             if k == "wrong" and m == 0.02: wrong.append((r["id"], r["f"], v.char, cut, v.margins))

@@ -57,3 +57,28 @@ def test_solve_two_picks_by_template_and_abstains_on_tie():
     assert v.char is None and v.kind == "abstain_slot"
     blank = np.full((100, 100), 255, np.uint8)
     assert T.solve_two(blank, bank, r, "⿱厽{}", "h", 0.45).kind == "abstain_blank"
+
+
+def _glyph3(bottom: str) -> np.ndarray:
+    """三层：上块（厽）、中块（人）、下块（彡 的替身三横／小 的替身一竖）。"""
+    g = np.full((120, 100), 255, np.uint8)
+    g[6:30, 25:75] = 0
+    g[40:62, 35:65] = 0
+    if bottom == "bar":
+        for y in (74, 88, 102):
+            g[y:y + 5, 25:75] = 0
+    else:
+        g[72:112, 45:55] = 0
+    return g
+
+
+def test_second_cut_isolates_bottom_slot():
+    r = IdsResolver(list("參㕘"), "config/groups/can")
+    bank = {}
+    for name, kind in (("彡", "bar"), ("小", "col")):
+        g = _glyph3(kind)
+        T.add_real(bank, g, name, T.auto_cut(g, "h", 0.5), "h", sub_prior=0.5)
+    assert set(bank) == {"彡", "小"}
+    for kind, want in (("bar", "參"), ("col", "㕘")):
+        v = T.solve_two(_glyph3(kind), bank, r, "⿱厽{}", "h", 0.5, sub_prior=0.5)
+        assert v.char == want
