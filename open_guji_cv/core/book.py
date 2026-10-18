@@ -311,6 +311,11 @@ class BookSpec:
     #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
     #: 已有 Step 的参数取值）。
     params: dict[str, dict] = field(default_factory=dict)
+    #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
+    #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
+    #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
+    #: 产物 sha，不再因 cv 升版、人裁进库报过期。不进 `book_deps`、不进指纹；空 = 草稿册。
+    freeze: dict = field(default_factory=dict)
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -640,6 +645,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
+        freeze={str(k): v for k, v in (d.get("freeze") or {}).items()},
     )
 
 

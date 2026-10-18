@@ -1,7 +1,13 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 在 `## [Unreleased]
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 在 `## [Unreleased]` 下加一行；打 tag 时把 Unreleased 改成该版本节。
+
+## [Unreleased]
+
+### Added
+- 冻结基线（GUJI-601，规矩见 ai-team `domain/CV/规范/冻结基线与重跑分级.md`）：册 yaml 写 `freeze: {at, cv_version, snapshot|manifest}` 后，`guji close-check` 1a 改比快照 manifest 的产物 sha256，不再因 cv 升版、人裁进库报过期；只有产物被改／缺、册配置被改才不过；另报「基线后新人裁 N 条待落地」（`ops/freeze.py`）。PATCH；`ops/`、`core/book.py` 不在任何 Step 的 `code_deps`，`freeze` 不进 `book_deps`，19 步 `code_hash` 不变。
+- 新命令 `guji archive fetch <tag> --out <空目录>`：取回 open-guji-dataset Release 上的归档 tar，按 `--sha256` 或资产自带 digest 核对后安全解包（拒越界路径、设备文件）（`ops/archive_fetch.py`，GUJI-601）。按规矩新 CLI 命令算 MINOR；不碰任何 Step。
 
 ## [0.3.0] - 2026-10-17
 
