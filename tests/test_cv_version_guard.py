@@ -53,6 +53,32 @@ def test_describe_on_real_git(tmp_path):
     assert cvv.describe.__wrapped__(tmp_path)[0] == "0.3.0+1"
 
 
+def test_describe_dirty_and_foreign_repo(tmp_path):
+    repo = tmp_path / "cv"
+    (repo / "open_guji_cv").mkdir(parents=True)
+    (repo / "open_guji_cv" / "a.py").write_text("x = 1\n")
+    _git(repo, "init", "-q")
+    _git(repo, "add", ".")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "-m", "a")
+    _git(repo, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v0.3.0", "-m", "x")
+    assert cvv.describe.__wrapped__(repo)[0] == "0.3.0"
+    (repo / "notes.md").write_text("未跟踪、也不在 open_guji_cv/ 下，不算改动")
+    assert cvv.describe.__wrapped__(repo)[0] == "0.3.0"
+    (repo / "open_guji_cv" / "a.py").write_text("x = 2\n")
+    assert cvv.describe.__wrapped__(repo)[0] == "0.3.0+dirty"
+    # 包目录在外层 git 仓的子目录里（不是仓根）：不读外层仓的 HEAD
+    sub = repo / "open_guji_cv"
+    ver, commit = cvv.describe.__wrapped__(sub)
+    assert commit is None
+
+
+def test_mismatch_explains_dirty_and_shallow(monkeypatch):
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.3.0+dirty", "d" * 40))
+    assert "没提交的改动" in cvv.mismatch("0.3.0")
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: (None, "d" * 40))
+    assert "浅克隆" in cvv.mismatch("0.3.0")
+
+
 def test_mismatch():
     assert cvv.mismatch(None, "0.3.0") is None
     assert cvv.mismatch("0.3.0", "0.3.0") is None

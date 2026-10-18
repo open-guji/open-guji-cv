@@ -49,13 +49,22 @@ def _package_version() -> str | None:
 
 @lru_cache(maxsize=4)
 def describe(repo: Path | None = None) -> tuple[str | None, str | None]:
-    """(cv_version, cv_commit)。是 git 检出就按 tag 算；否则用安装包的版本号，commit 为 None。"""
-    root = Path(repo) if repo else _REPO
-    commit = _git("rev-parse", "HEAD", repo=root)
+    """(cv_version, cv_commit)。是 cv 自己的 git 检出就按 tag 算；否则用安装包的版本号，commit 为 None。
+
+    - `open_guji_cv/` 下有没提交的改动：版本后加 `+dirty`（如 `0.3.0+dirty`），
+      固定了版本的册会因此拒跑——本地改过的代码跑出的产物不算这个版本。
+    - 只认仓根就是 `repo` 的检出：包装在别的 git 仓里（如工作区仓下的 .venv）时
+      不去读外层仓的 HEAD，退回包版本号。
+    - 浅克隆或没拉 tag 时 describe 失败，版本记 None（`mismatch` 的提示里会说原因）。"""
+    root = (Path(repo) if repo else _REPO).resolve()
+    top = _git("rev-parse", "--show-toplevel", repo=root)
+    commit = _git("rev-parse", "HEAD", repo=root) if top and Path(top).resolve() == root else None
     if commit:
         d = _git("describe", "--tags", "--long", "--abbrev=40",
                  "--match", "v[0-9]*.[0-9]*.[0-9]*", "--exclude", "*-*", repo=root)
         ver = parse_describe(d) if d else None
+        if ver and _git("status", "--porcelain", "-uno", "--", "open_guji_cv", repo=root):
+            ver = f"{ver}+dirty"
         return ver, commit
     return _package_version(), None
 
@@ -79,8 +88,16 @@ def mismatch(book_cv_version: str | None, installed: str | None = None) -> str |
     want = normalize(book_cv_version)
     if not want:
         return None
-    have = installed if installed is not None else describe()[0]
+    if installed is not None:
+        have, commit = installed, None
+    else:
+        have, commit = describe()
     if have == want:
         return None
-    return (f"册配置固定 cv_version={want}，装的是 {have or '未知版本'}。"
+    why = ""
+    if have is None and commit:
+        why = "（git describe 找不到正式 tag：可能是浅克隆或没拉 tag，先 `git fetch --tags --unshallow`）"
+    elif have and have.endswith("+dirty"):
+        why = "（open_guji_cv/ 下有没提交的改动）"
+    return (f"册配置固定 cv_version={want}，装的是 {have or '未知版本'}{why}。"
             f"请检出 v{want} 再跑；确要用当前代码（如做实验）加 --allow-cv-mismatch")
