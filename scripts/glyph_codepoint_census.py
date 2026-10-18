@@ -7,7 +7,7 @@
 - 库：`instances.label` 计数，按来路分 v1 / v2（人裁）/ 其余；
 - 人裁：`feedback.lookup.human_chars(book, bind=False)`（每格最后一条定字事件，不过绑定表）；
 - OCR：两种口径，给了哪个报哪个——
-  - `--ocr-products`：Step5-c 产物（`ocr_candidates`）逐格 top-1（这本书开了 OCR 才有）；
+  - `--ocr-products`：Step5-c 产物（`ocr_candidates`）逐格 top-1（只有旧产物；Step5-c 已于 2026-10-18 删除）；
   - `--ocr-lib`：拿 PP-OCRv5（Step5-c 同款引擎）对**库里标成这几对字**的刻例现算 top-1；
 - 整理本：册配置 `references` 里每份语料的字频（整份语料，不限册）。
 - `--sheet-dir`：每对出一张样图（每个码位最多 6 张库刻例，附实例 id）。

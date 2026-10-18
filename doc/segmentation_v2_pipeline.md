@@ -457,7 +457,7 @@ above」而非数组边界）上一度写出了 off-by-one，语义对齐的代�
 `border_detect` 本身不需要但无害。CLI `guji pipeline`/`guji step` 新增
 `--jobs`（默认=本机 CPU 数），**同样不要超过 CPU 数**（上面的教训原样成立，
 超订只会更慢）。当前只标记了 `border_detect` 和 `line_detect`（两条链各自
-的 Step1，均已 sha256 验证）；`glyph_match`/`ocr_candidates`/
+的 Step1，均已 sha256 验证）；`glyph_match`/`ocr_candidates`（已删（2026-10-18，sheldon 定））/
 `context_decide`/`row_segment`/`rare_candidates` 审查过无跨页冲突但涉及
 字形库/模型权重的重资源初始化与可能的非只读访问，标记前要逐个深入验证，
 暂缓。16 核机器实测 `border_detect` 4 进程 12 页：11.4s → 6.6s（多页读图/

@@ -44,7 +44,6 @@ export interface Step5Sub {
 export const STEP5_SUBS: Step5Sub[] = [
   { id: 'glyph-match', title: '5-a 字形库匹配' },
   { id: 'rare', title: '5-b 生僻字候选' },
-  { id: 'ocr', title: '5-c OCR 候选' },
   { id: 'align-ref', title: '5-d 整理本匹配' },
 ]
 

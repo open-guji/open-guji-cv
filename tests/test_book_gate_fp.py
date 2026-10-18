@@ -1,4 +1,7 @@
-"""书级开关门（`@book.<字段>`）+ 整体哈希步迁移 + real_proto 路径可移植（K#238c）。"""
+"""书级开关门（`@book.<字段>`）+ 整体哈希步迁移 + real_proto 路径可移植（K#238c）。
+
+门的测试借 `BookSpec.iron_gate` 这个现成的书级布尔字段当开关（原先借的 `ocr_candidates`
+已随 Step5-c 于 2026-10-18 删除）；它在这里只当一个书级布尔量，与铁证通道本身无关。"""
 from __future__ import annotations
 
 import dataclasses
@@ -42,18 +45,18 @@ class _Opt(Step):
                     consumes=("raw_page",), produces=("t_bg_opt",), params=_P)
 
     def run_page(self, ctx, page):
-        return {"t_bg_opt": _Out(page=page, v=float(ctx.book.ocr_candidates))}
+        return {"t_bg_opt": _Out(page=page, v=float(ctx.book.iron_gate))}
 
 
 @register_step
 class _Down(Step):
     spec = StepSpec(id="t_bg_down", title="d", version="1", unit="page",
                     consumes=("raw_page",), optional_consumes=("t_bg_opt",),
-                    optional_consumes_when=(("t_bg_opt", "@book.ocr_candidates"),),
+                    optional_consumes_when=(("t_bg_opt", "@book.iron_gate"),),
                     produces=("t_bg_down",), params=_P)
 
     def run_page(self, ctx, page):
-        got = ctx.book.ocr_candidates and ctx.has_product("t_bg_opt", page)
+        got = ctx.book.iron_gate and ctx.has_product("t_bg_opt", page)
         READS.append(bool(got))
         return {"t_bg_down": _Out(page=page, v=1.0)}
 
@@ -63,7 +66,7 @@ def _world(tmp_path, ocr: bool):
     raw.mkdir(exist_ok=True)
     for pg in (1, 2):
         cv2.imwrite(str(raw / f"{pg}.png"), np.full((20, 20), 200, np.uint8))
-    book = BookSpec(id="tbg", title="t", raw_dir=raw, dev_set=[1, 2], ocr_candidates=ocr)
+    book = BookSpec(id="tbg", title="t", raw_dir=raw, dev_set=[1, 2], iron_gate=ocr)
     pl = Pipeline(id="tbg", title="t", steps=["t_bg_optstep", "t_bg_down"])
     pl.validate()
     return book, pl, ProductStore(tmp_path / "products"), ImageCache(tmp_path / "cache")

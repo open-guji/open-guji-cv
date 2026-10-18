@@ -16,7 +16,7 @@ v0.2「记录先行」（用户 10-02 裁定 #361·10）：每个字框补 `cand
 | 键 | 来源 | 取法 |
 |---|---|---|
 | `lib` | Step5-a `glyph_match` | same 档的 `char`，否则 `candidates[0]` |
-| `ocr` | Step5-c `ocr_candidates` | `topk[0]` |
+| `ocr` | （原 Step5-c `ocr_candidates`，2026-10-18 已删） | 不再产出；schema 里的键留着兼容老页 |
 | `rare` | Step5-b `rare_candidates` | `candidates[0].char` |
 | `ref` | Step5-d `align_ref` | 过闸对齐的 `align_char`，没有则坐标对位的 `ref_char`（非空） |
 """
@@ -38,7 +38,7 @@ STEPS = ("border_detect", "row_segment", "cell_shrink", "seed_admit")
 
 
 def _candidates(store: ProductStore, book: str, key: str) -> dict[str, dict[str, str]]:
-    """字位 id → `{lib, ocr, rare, ref}` 各路首位字（只读已有产物，缺件留空）。"""
+    """字位 id → `{lib, rare, ref}` 各路首位字（只读已有产物，缺件留空）。"""
     out: dict[str, dict[str, str]] = {}
 
     def put(cid, k, ch):
@@ -50,10 +50,6 @@ def _candidates(store: ProductStore, book: str, key: str) -> dict[str, dict[str,
         for r in col.chars:
             put(r.id, "lib", r.char if r.verdict == "same" and r.char else
                 (r.candidates[0][0] if r.candidates else None))
-    ocr = store.read(book, "ocr_candidates", key, "ocr_candidates")
-    for col in (ocr.columns if ocr else []):
-        for r in col.chars:
-            put(r.id, "ocr", r.topk[0][0] if r.topk else None)
     rare = store.read(book, "rare_candidates", key, "rare_candidates")
     for col in (rare.columns if rare else []):
         for r in col.chars:

@@ -717,9 +717,11 @@ def test_route_inventory():
     2026-09-28 部署版本条（overview#258，C 道）：新增 `GET /api/version`（免鉴权）。111 → 112。
     2026-10-16 格级审阅（GUJI-364b）：新增 `GET /api/cell-review/{list_id}`（清单、候选与裁决）、
     `GET /api/cell-review/{list_id}.tsv`（导出）；写入走既有 `POST /api/events`（kind=cell_review）。112 → 114。
+    2026-10-18 删 Step5-c `ocr_candidates`（sheldon 定）：撤掉 `GET /api/ocr-candidates/{book}/summary`
+    与 `PUT /api/books/{book}/ocr_candidates`。114 → 112。
     """
     got = sorted(_endpoints())
-    assert len(got) == 114,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 112,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -858,7 +860,7 @@ EXPECTED_ROUTES = [
     "GET /api/glyph-match/{book}/summary", "GET /api/glyph-match/{book}/{page}/{col}/{slot}",
     "GET /api/gold", "GET /api/jiazhu/segments",
     "GET /api/kinds", "GET /api/llm_online_stats", "GET /api/llm_online_calls/{book}",
-    "GET /api/manifest/{book}/{step}", "GET /api/ocr-candidates/{book}/summary",
+    "GET /api/manifest/{book}/{step}",
     "GET /api/overlay/{book}/{step}/{page}.png",
     "GET /api/overview_summary",
     "GET /api/pipelines", "GET /api/preclean/{book}/{page}",
@@ -884,7 +886,6 @@ EXPECTED_ROUTES = [
     "POST /api/gold/{shard:path}/migrate", "POST /api/rare/batch", "POST /api/review/around/batch",
     "POST /api/review/rate-history",
     "POST /api/runs", "POST /api/runs/{job_id}/cancel",
-    "PUT /api/books/{book}/ocr_candidates",
 ]
 
 

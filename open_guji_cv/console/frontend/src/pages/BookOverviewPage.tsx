@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useWsPath } from '../hooks/useWsPath'
-import { fetchStatus, setOcrCandidates } from '../api/status'
+import { fetchStatus } from '../api/status'
 import { fetchOverviewSummary } from '../api/evals'
 import { fetchLlmOnlineStats } from '../api/llmOnline'
 import type { StatusResponse } from '../types/status'
@@ -13,13 +13,11 @@ import type { Book } from '../types/registry'
 
 // Step5「字符识别」在 steps.ts 里 backendIds 是空的（它是四小步的容器，没有单一
 // 后端 step），于是总进度里整个 Step5 看不见——而 5-a/5-b/5-d 恰恰是全书跑得最
-// 慢的三步。2026-09-13 补：总览页单独把它们展开成子行（5-c OCR 候选默认关闭，
-// 只在本书启用时才显示）。这里不动 steps.ts 的 backendIds，因为 StepPage 拿
+// 慢的三步。2026-09-13 补：总览页单独把它们展开成子行（5-c OCR 候选 2026-10-18 已删）。这里不动 steps.ts 的 backendIds，因为 StepPage 拿
 // backendIds[0] 当唯一后端步用，填上会让 Step5 页面错关联到 5-a。
-const STEP5_ROWS: { id: string; title: string; backendId: string; optional?: boolean }[] = [
+const STEP5_ROWS: { id: string; title: string; backendId: string }[] = [
   { id: 'glyph-match', title: '　5-a 字形库匹配', backendId: 'glyph_match' },
   { id: 'rare', title: '　5-b 生僻字候选', backendId: 'rare_candidates' },
-  { id: 'ocr', title: '　5-c OCR 候选', backendId: 'ocr_candidates', optional: true },
   { id: 'align-ref', title: '　5-d 整理本匹配', backendId: 'align_ref' },
 ]
 import './overview.css'
@@ -46,8 +44,6 @@ export function BookOverviewPage() {
   const [summary, setSummary] = useState<OverviewSummaryResponse | null>(null)
   const [llmStats, setLlmStats] = useState<LlmOnlineStats | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [ocrBusy, setOcrBusy] = useState(false)
-  const [ocrErr, setOcrErr] = useState<string | null>(null)
   const [bookMeta, setBookMeta] = useState<Book | null>(null)
 
   useEffect(() => {
@@ -56,7 +52,6 @@ export function BookOverviewPage() {
     setSummary(null)
     setLlmStats(null)
     setError(null)
-    setOcrErr(null)
     // 总进度是**全书**口径（`all`，vol01 为 206 页，实测 ~2.5s）。2026-09-13 修：
     // 此前不传 pages，走 fetchStatus 的默认 `dev_set`，只统计 12 页分层小集，
     // 标题却写「全书页数」——名实不符，看着像整本书跑完了，其实只跑了 12 页。
@@ -79,19 +74,6 @@ export function BookOverviewPage() {
   const total = status?.pages.length || 0
   const devTotal = devStatus?.pages.length || 0
 
-  async function toggleOcrCandidates(next: boolean) {
-    setOcrBusy(true)
-    setOcrErr(null)
-    try {
-      await setOcrCandidates(book, next)
-      setStatus((s) => (s ? { ...s, ocr_candidates_enabled: next } : s))
-    } catch (e) {
-      setOcrErr(String(e))
-    } finally {
-      setOcrBusy(false)
-    }
-  }
-
   return (
     <div>
       {error && <div className="card"><p className="error">{error}</p></div>}
@@ -103,10 +85,9 @@ export function BookOverviewPage() {
         <h2>{book} 总进度 <span className="muted">每步 fresh 产物 / 全书 {total || '…'} 页（括号内为 dev_set {devTotal || '…'} 页小集）</span></h2>
         {!status && !error && <p className="muted">加载中…（全书状态约需数秒）</p>}
         {status && STEPS.flatMap((s) => {
-          // Step5 展开成 5-a/5-b/(5-c)/5-d 四条子行；其余步一步一行。
+          // Step5 展开成 5-a/5-b/5-d 三条子行；其余步一步一行。
           if (s.id === 'step5') {
             return STEP5_ROWS
-              .filter((r) => !r.optional || status.ocr_candidates_enabled)
               .map((r) => ({ key: `step5-${r.id}`, href: `/${book}/step/step5/${r.id}/`,
                              title: r.title, sid: r.backendId }))
           }
@@ -195,27 +176,6 @@ export function BookOverviewPage() {
         )}
       </div>
 
-      <div className="card">
-        <h2>运行参数 <span className="muted">按本书写回 books/{book}.yaml</span></h2>
-        {!status && !error && <p className="muted">加载中…</p>}
-        {status && (
-          <label className="qs" style={{ display: 'flex', alignItems: 'center', gap: '.5rem', cursor: ocrBusy ? 'wait' : 'pointer' }}>
-            <input
-              type="checkbox"
-              checked={!!status.ocr_candidates_enabled}
-              disabled={ocrBusy}
-              onChange={(e) => toggleOcrCandidates(e.target.checked)}
-            />
-            <span>
-              启用 Step5-c OCR候选
-              <span className="muted">
-                {' '}（默认关闭：整理本已足够准，主要依赖 5-a 库匹配 + 5-b 生僻字候选；勾选后本书批量跑会带上 5-c）
-              </span>
-            </span>
-          </label>
-        )}
-        {ocrErr && <p className="error">{ocrErr}</p>}
-      </div>
     </div>
   )
 }
