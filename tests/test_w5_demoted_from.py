@@ -70,18 +70,6 @@ def test_runt_cell_review(monkeypatch):
     _assert_demoted(r, "runt_cell_review", "context")
 
 
-def test_rr_clf(monkeypatch):
-    import open_guji_cv.utils.rr_clf as rc
-    ch = sorted(rc.CLASSES)[0]
-    other = sorted(rc.CLASSES)[1]
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: object())
-    monkeypatch.setattr(rc, "classify", lambda patch, model, p: {"pick": other})
-    r = _rec(char=ch, channel="match_solo")
-    p = NS(rr_clf_model="", rr_clf_p=0.5, patch_missing="raise")
-    assert sa._rr_clf_pass(NS(), 1, p, [_col(r)], {}) == 1
-    _assert_demoted(r, "rr_clf", "match_solo")
-
-
 def test_seal_blank_flip():
     r = _rec(channel="context")
     seal = {(1, 1, ""): {"seal_score": 0.9, "overlap": 0.8}}
@@ -98,40 +86,8 @@ def _jys(monkeypatch):
     monkeypatch.setattr(jys, "resolve", lambda *a, **k: ("已", "默认"))
 
 
-def test_ji_yi_si_ctx_review(monkeypatch):
-    import open_guji_cv.utils.near_form_ctx as nf
-    _jys(monkeypatch)
-    monkeypatch.setattr(nf, "decide", lambda *a, **k: (None, "x"))
-    r = _rec(char="已", channel="context")
-    sa._resolve_ji_yi_si([_col(r)], {}, {}, {}, False, ctx_rule=(0.98, 5))
-    _assert_demoted(r, "ji_yi_si_ctx_review", "context")
-
-
-def test_ji_yi_si_review(monkeypatch):
-    _jys(monkeypatch)
-    r = _rec(char="已", channel="context")
-    sa._resolve_ji_yi_si([_col(r)], {}, {}, {}, True)
-    _assert_demoted(r, "ji_yi_si_review", "context")
-
-
 def _clf_p():
     return NS(ji_yi_si_clf_table="", ji_yi_si_clf_llm=False, ji_yi_si_clf_margin=0.0)
-
-
-def test_ji_yi_si_clf_conflict(monkeypatch):
-    import open_guji_cv.utils.ji_yi_si_clf as c
-    monkeypatch.setattr(c, "classify", lambda l, r: ("己", "x"))
-    r = _rec(char="已", channel="match_ref")
-    assert sa._ji_yi_si_clf_cell(r, [r], 0, {}, _clf_p()) == (-1, 1)
-    _assert_demoted(r, "ji_yi_si_clf_conflict", "match_ref")
-
-
-def test_ji_yi_si_clf_review(monkeypatch):
-    import open_guji_cv.utils.ji_yi_si_clf as c
-    monkeypatch.setattr(c, "classify", lambda l, r: (None, "x"))
-    r = _rec(char="已", channel="split_ref")
-    assert sa._ji_yi_si_clf_cell(r, [r], 0, {}, _clf_p()) == (-1, 1)
-    _assert_demoted(r, "ji_yi_si_clf_review", "split_ref")
 
 
 def test_diff_script(tmp_path):

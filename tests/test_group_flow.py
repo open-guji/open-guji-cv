@@ -37,10 +37,10 @@ def _cfg(**kw):
 
 def test_flow_groups_declared_and_valid():
     flows = {g for g, s in GROUPS.items() if s.flow}
-    assert {"mn", "dian", "can", "chen", "li", "shen", "zhi", "jys", "ry", "rr"} <= flows
+    assert {"mn", "dian", "can", "chen", "li", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
     check_groups(tuple(flows))
     with pytest.raises(ValueError):
-        check_groups(("ts",))           # 没声明 flow
+        check_groups(("yi_560",))       # 没声明 flow
     with pytest.raises(ValueError):
         check_groups(("nope",))
 
@@ -121,7 +121,7 @@ def test_freq_table_roundtrip_and_build(tmp_path):
 # —— 整遍 ——
 
 def test_pass_lift_review_and_evidence():
-    seq = [Rec("a"), Rec("b", "己", True, "context"), Rec("c"), Rec("d", doubts=["occluded"])]
+    seq = [Rec("a"), Rec("b", "人", True, "context"), Rec("c"), Rec("d", doubts=["occluded"])]
     cands = {"a": [("𫎇", 0.98), ("蒙", 0.975)], "c": [("𫎇", 0.95), ("蒙", 0.949)], "d": [("𫎇", 0.99)]}
     res = group_flow_pass(seq, {}, lambda cid: cands.get(cid, []),
                           lambda r: "occluded" in r.doubts, _cfg())
@@ -130,18 +130,58 @@ def test_pass_lift_review_and_evidence():
     assert a.evidence["group"]["decision"] == "admit" and a.evidence["group"]["id"] == "mn"
     assert not c.admit and "group_flow_abstain" in c.doubts and c.evidence["group"]["decision"] == "review"
     assert "group" not in d.evidence                         # 硬护栏不进
-    assert b.admit and b.evidence["group"]["mode"] == "review"   # 没有文意窗口：弃权 → 不动
+    assert b.admit and b.evidence["group"]["mode"] == "review"   # 入人八：没有文意窗口、没有字块，弃权 → 不动
     assert (res.lifted, res.demoted, res.entered) == (1, 0, 3)
 
 
 def test_review_demotes_on_disagree(monkeypatch):
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("已", via=name))
-    r = Rec("b", "己", True, "context", "context")
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("八", via=name))
+    r = Rec("b", "人", True, "context", "context")
     res = group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
-    assert not r.admit and r.char == "己" and "group_flow_disagree" in r.doubts
+    assert not r.admit and r.char == "人" and "group_flow_disagree" in r.doubts
     assert r.evidence["demoted_from"] == {"channel": "context", "by": "group_flow"} and res.demoted == 1
+
+
+def test_review_conflict_demotes(monkeypatch):
+    """复核时两路解法给了不同的字（必有一路≠放行字）→ 降审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ctx": "人", "rr_img": "入"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    r = Rec("b", "人", True, "match_ref", "match")
+    group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
+    assert not r.admit and "group_flow_disagree" in r.doubts
+
+
+def test_review_fix_and_abstain_for_jys(monkeypatch):
+    """己已巳（`review_fix`＋`review_abstain`）：文意给了别的字就改字（仍放行）；文意弃权就降审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {"b": "已", "c": None}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(out[r.id], via=name))
+    b, c = Rec("b", "巳", True, "split_ref", "match"), Rec("c", "巳", True, "split_ref", "match")
+    res = group_flow_pass([b, c], {}, lambda cid: [], lambda r: False, _cfg())
+    assert b.admit and b.char == "已" and b.channel == "group_flow" and b.provenance == "context"
+    assert b.evidence["fixed_from"] == {"channel": "split_ref", "char": "巳"} and b.evidence["group"]["decision"] == "fix"
+    assert not c.admit and "group_flow_abstain" in c.doubts and c.evidence["demoted_from"]["channel"] == "split_ref"
+    assert (res.lifted, res.demoted) == (0, 1)
+
+
+def test_lift_needs_blocks_image_only_lift(monkeypatch):
+    """入人八 `lift_needs=("ctx",)`：只有字形分类器给字时不补放（留人审 `group_flow_weak`）。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ctx": None, "rr_img": "人"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    r = Rec("x")
+    group_flow_pass([r], {}, lambda cid: [("入", 0.96), ("人", 0.94)], lambda r: False, _cfg())
+    assert not r.admit and "group_flow_weak" in r.doubts
+    picks["ctx"] = "人"
+    r = Rec("y")
+    group_flow_pass([r], {}, lambda cid: [("入", 0.96), ("人", 0.94)], lambda r: False, _cfg())
+    assert r.admit and r.char == "人"
 
 
 def test_agree_combine_conflict(monkeypatch):
@@ -183,6 +223,14 @@ def test_seed_admit_group_flow_freq(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, [("旨", 0.98), ("㫖", 0.975)],
              {"group_flow": ("zhi",), "group_flow_freq": str(t)})
     assert r.admit and r.char == "㫖" and r.evidence["group"]["solvers"][0]["counts"] == {"㫖": 40, "旨": 0}
+
+
+def test_seed_admit_near_form_cells_enter_group(tmp_path, monkeypatch):
+    """形近护栏（疑问 `near_form`、匹配器 `never_match`）不挡字组：己已巳格进流程，文意弃权就留人审并留证据。"""
+    r = _run(tmp_path, monkeypatch, [("已", 0.99), ("巳", 0.985)], {"group_flow": ("jys",)})
+    assert "near_form" in r.doubts and not r.admit
+    assert r.evidence["group"]["id"] == "jys" and r.evidence["group"]["decision"] == "review"
+    assert "group_flow_abstain" in r.doubts
 
 
 def test_group_flow_paths_default_to_workspace(tmp_path, monkeypatch):

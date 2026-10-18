@@ -1,0 +1,28 @@
+# 方案 S6 A/B，vol04：A＝旧字组开关（现行 vol04 配置，rc/v0.3.3 5297b85 的代码），B＝旧开关删除后的代码＋group_flow 开全部 13 组。
+# A、B 是两份代码，同一份 yaml 分两次跑（同一个 --root）：
+#   A：在 5297b85 的检出里  guji exp run doc/exp/group_flow-S6-vol04.yaml -w $WS --snapshot <快照 products 根> --root <实验根> --only A
+#      （B 的 group_flow 点名了 ts/wm/wxs，旧代码校验不过：跑 A 时把 variants 段换成一个空变体，见报告）
+#   B：在本版代码里            同上，--only B
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/。字频表、L2 表取工作区约定位置
+#   （config/groups/freq.json、config/groups/l2/<组>.json）。报告：research/m7/flow/s6_report.py <实验目录> B
+name: s6-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep          # 书 yaml 里的旧键（ji_yi_si_clf 等）在新代码里读进来被忽略
+match: exact
+base:
+  note: vol04 现行配置（旧字组开关）
+  params:
+    seed_admit: {}
+variants:
+  B:
+    note: 旧开关删除后的代码，group_flow 开全部 13 组
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr, ts, wm, wxs]
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
