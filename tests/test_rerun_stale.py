@@ -105,3 +105,20 @@ def test_dry_run_and_page_filter(eng):
 
 def test_fmt_pages():
     assert RS._fmt_pages([1, 2, 3, 7, 9, 10]) == "1-3,7,9-10"
+
+
+def test_rerun_cli_goes_through_cv_guard(monkeypatch):
+    """`guji rerun` 写产物，册配置固定了别的 cv_version 时要和 pipeline 一样拒跑。"""
+    import types
+    from open_guji_cv import cli_v2
+    from open_guji_cv.core import cv_version as cvv
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.3.0+2", "d" * 40))
+    book = types.SimpleNamespace(id="x", cv_version="0.3.0", resolve_pages=lambda p: None)
+    eng = types.SimpleNamespace(book=book)
+    monkeypatch.setattr(cli_v2, "_engine", lambda *a, **k: eng)
+    monkeypatch.setattr("open_guji_cv.core.workspace.assert_workspace_declared", lambda: None)
+    args = types.SimpleNamespace(stale=True, book="x", pipeline="p", pages="all", to_step=None,
+                                 dry_run=False, jobs=1, wait=False, json=False, allow_cv_mismatch=False)
+    with pytest.raises(SystemExit) as e:
+        cli_v2.cmd_rerun(args)
+    assert e.value.code == 2

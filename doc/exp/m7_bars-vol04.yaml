@@ -1,0 +1,27 @@
+# M7 量横长短（土士、未末）接进 seed_admit 的 A/B，vol04。
+# 跑：guji exp run doc/exp/m7_bars-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>] [--jobs N]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/
+# A＝只开文意路 L1（ts、wm，无 L2 答案表）；B＝A＋量横。差别只在量横，组外格必须逐格不变。
+name: m7_bars-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: vol04 现行配置＋文意路 L1（土士、未末），不开量横
+  params:
+    seed_admit:
+      m7_groups: [ts, wm]
+variants:
+  B:
+    note: 开量横：文意弃权才按量横取字，两路不一致弃权留痕
+    params:
+      seed_admit:
+        m7_groups: [ts, wm]
+        m7_bars: [ts, wm]
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
