@@ -391,6 +391,13 @@ class SeedAdmitParams(BaseModel):
     """块内最高密度门槛（真印章 9.2~20.2，vol05 p68 碎笔画误报 6.1）。"""
     occluded_min_contrast: float = 2.5
     """块内密度中位 / 本页其余格中位 的下限（真印章 ≥3.1 倍，碎笔画 1.9 倍）。"""
+    occluded_rescue_ink: float = 0.0
+    """清楚的字救回（GUJI-555，vol04 p130；**缺省 0＝关**，行为不变）：遮挡块里夹着的格，若格内「大块墨」
+    （连通块面积 > 150 像素的墨，`occlusion.text_ink_fraction`）占格面积 ≥ 此值，不算遮挡、不进遮挡待审。
+    起因：p130 斑驳底纸＋黑框把「欽定四庫全書總目卷七」前 8 格这类**清楚的字**也连进了遮挡块（块内外
+    密度分不开，墨点密度挡不住），而真字格的大块墨占比 0.13~0.35、只有斑点的空格 ≤0.14。建议值 0.15。
+    只收紧遮挡、放更多格走正常通道；书 yaml `params: {seed_admit: {occluded_rescue_ink: 0.15}}`。
+    关着时不进参数哈希。**注意**：vol03 p3 那种真印章压字的页，印下面的字格也会被救回——要不要开按册定。"""
     seal_blank_page: bool = False
     """盖章空栏判空（2026-10-09，道 B 规格 overview#493，缺省关；需同开 `lane_seal`）。
 
@@ -585,6 +592,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("runt_cell_review", None)
             d.pop("runt_ratio", None)
             d.pop("runt_min_ink", None)
+        if isinstance(d, dict) and not self.occluded_rescue_ink:
+            d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.rr_clf:
             for k in ("rr_clf", "rr_clf_p", "rr_clf_model", "rr_clf_fingerprint"):
                 d.pop(k, None)
