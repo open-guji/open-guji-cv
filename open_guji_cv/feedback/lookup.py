@@ -314,6 +314,36 @@ def stale_human_marks(book: str) -> dict[str, str]:
     return out
 
 
+def _superseded_events(evs: list, bound: dict[str, dict], pre: str) -> set[str]:
+    """R1（`bindings.strict_enabled`）：同一原始格上更晚的定字事件不可用（绑定为 None），
+    更早的事件不再顶上——否则新裁被丢后旧裁静默生效（vol02 10-02 shiftfix 批）。
+    另：rebound 到别格的事件，若目标格自己有更晚的原生定字事件，也让位。
+
+    只看带 `shape` 的 confirm／seg_defect 事件（与 `human_chars` 取字口径一致）。"""
+    from .bindings import usable
+    mine = []
+    for e in evs:
+        p = e.payload or {}
+        if (e.kind == "confirm" and e.target.unit == "cell" and e.target.key.startswith(pre)
+                and p.get("v") in ("confirm", "seg_defect") and p.get("shape")):
+            mine.append(e)
+    latest: dict[str, object] = {}
+    for e in mine:                       # evs 已按 ts 升序
+        latest[e.target.key] = e
+    out: set[str] = set()
+    for e in mine:
+        lt = latest[e.target.key]
+        if lt is not e and usable(bound.get(lt.id)) is None:
+            out.add(e.id)                # 同格更晚的事件不可用：更早的不顶上
+            continue
+        u = usable(bound.get(e.id))
+        if u and u != e.target.key:
+            own = latest.get(u)
+            if own is not None and (own.ts, own.batch, own.seq) > (e.ts, e.batch, e.seq):
+                out.add(e.id)            # rebound 的落点有更晚的原生事件：让位
+    return out
+
+
 def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                 bind: bool | None = None) -> dict[str, str]:
     """人在定字台上定过的字 → `{裸 id: 字}`，同一位**后到覆盖**。
@@ -360,7 +390,14 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
         return out
+    superseded: set[str] = set()
+    if bind:
+        from .bindings import strict_enabled
+        if strict_enabled():
+            superseded = _superseded_events(evs, bound, pre)
     for e in evs:
+        if e.id in superseded:
+            continue
         if e.kind != "confirm" or e.target.unit != "cell" or not e.target.key.startswith(pre):
             continue
         # 看图结论不算人裁定字（overview#428，口径见 `events.counts_as_human`）：混进来的话

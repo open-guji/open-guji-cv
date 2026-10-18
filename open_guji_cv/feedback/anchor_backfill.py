@@ -60,6 +60,22 @@ def load_backfill(book: str) -> dict[str, dict]:
     return out
 
 
+def load_backfill_ctx(book: str) -> dict[str, str]:
+    """`{event_id: evidence.ctx}`（equal/variant/differ/none）；只给绑定的 R3 闸用。没有档 → 空。"""
+    f = anchors_path(book)
+    if not f.exists():
+        return {}
+    out: dict[str, str] = {}
+    for line in f.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        d = json.loads(line)
+        if d.get("anchor"):
+            out[d["event"]] = (d.get("evidence") or {}).get("ctx") or ""
+    return out
+
+
 def page_signature(anchors: dict[str, dict], event_ids: list[str]) -> str:
     """本页事件对应的补锚内容摘要：补锚档改了，这一页的绑定缓存就要重算。"""
     h = hashlib.sha1()
