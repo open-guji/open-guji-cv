@@ -2901,6 +2901,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_exp import add_parser as _add_exp, cmd_exp
     _add_exp(sub)
     COMMANDS_V2["exp"] = cmd_exp
+    # db（GUJI-606）：中心库客户端，自带 -w
+    from .cli_db import add_parser as _add_db, cmd_db
+    _add_db(sub)
+    COMMANDS_V2["db"] = cmd_db
     install_workspace_option(sub)
 
 
