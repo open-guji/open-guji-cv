@@ -590,8 +590,8 @@ class Engine:
     def _run_one_step_parallel(self, step: Step, pages: list[int], report: RunReport,
                                 force: bool, stop_on_error: bool, total: int, done: int,
                                 jobs: int) -> tuple[int, bool]:
-        """`_run_one_step` 的并行版：**计算在子进程、落盘在主进程**——子进程各自
-        `load_book`/`load_pipeline` 建一份独立 `RunContext`（不 pickle `self.ctx`，
+        """`_run_one_step` 的并行版：**计算在子进程、落盘在主进程**——子进程用主进程
+        传来的册、管线、参数与产物/缓存根目录建一份独立 `RunContext`（不 pickle `self.ctx`，
         它拖带 `store`/`cache` 这类跨进程共享不安全的对象），只跑纯函数
         `step.run_page`；指纹判断、`store.write`、`manifest.put`、图像缓存失效
         全部留在主进程串行做，与 `_run_one_step` 落盘代码逐行同形，保证产物
@@ -643,7 +643,7 @@ class Engine:
         # U-Net 权重等）在 worker **进程启动时**建一次 `RunContext`，之后这个
         # worker 处理的每一页都复用它——不是每页各自冷启动。`initializer` 只在
         # 进程刚起时跑一次，跟 worker 后续处理几页无关，工作量小的 Step（如
-        # `border_detect`）多这一次 `load_book`/`load_pipeline` 也无害。
+        # `border_detect`）多建这一次 ctx 也无害。
         # worker 要拿到和主进程**同一份**册、管线、参数与产物/缓存根目录：以前只传
         # id、在子进程里 `load_book`/`load_pipeline` 再建一个空参数的 ctx，CLI
         # `--params` 与管线 yaml 的 `params:` 全丢，指纹却按覆盖后的参数记（GUJI-580）。
