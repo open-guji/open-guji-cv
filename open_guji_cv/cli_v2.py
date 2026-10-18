@@ -98,6 +98,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv += ["--jobs", str(args.jobs)]
     if getattr(args, "allow_sample_db", False):
         argv.append("--allow-sample-db")
+    if getattr(args, "allow_cv_mismatch", False):
+        argv.append("--allow-cv-mismatch")
     return argv
 
 
@@ -127,6 +129,20 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     return rc
 
 
+def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
+    """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
+    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
+    from .core.cv_version import mismatch
+    msg = mismatch(getattr(book, "cv_version", None))
+    if not msg:
+        return
+    if allow or warn_only:
+        print(f"⚠️ {msg}", file=sys.stderr, flush=True)
+        return
+    print(f"✗ {msg}", file=sys.stderr, flush=True)
+    sys.exit(2)
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -134,6 +150,7 @@ def cmd_pipeline(args) -> None:
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     if "rare_candidates" in steps:
@@ -171,6 +188,7 @@ def cmd_step(args) -> None:
 
 def cmd_status(args) -> None:
     eng = _engine(args.book, args.pipeline, quiet=True)
+    _guard_cv_version(eng.book, warn_only=True)
     pages = eng.book.resolve_pages(args.pages)
     st = eng.status(pages=pages)
     gaps, mism = _closure_gaps(eng.book.id, pages, eng.store)
@@ -1824,6 +1842,7 @@ def cmd_progress(args) -> None:
     from .core.book import load_book
     from .report.progress import format_table, page_progress
     bk = load_book(args.book)
+    _guard_cv_version(bk, warn_only=True)
     doc = page_progress(args.book, bk.resolve_pages(args.pages))
     if args.json:
         _out(doc)
@@ -2283,6 +2302,9 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                    help="每个 Step 一个独立子进程跑（默认关，行为不变）：跑完进程退出、内存整体回收。"
                         "整册跑、服务器有内存上限（MemoryHigh）时用它，免得 torch／字形库／索引逐步叠加把"
                         "进程拖进换页（GUJI-555）。代价是每步多付一次 import 与模型加载；不支持 --json")
+    p.add_argument("--allow-cv-mismatch", action="store_true",
+                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
+                        "做实验、临时核对时用，产物 manifest 照实记装的版本")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"
