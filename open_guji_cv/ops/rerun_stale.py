@@ -82,19 +82,23 @@ def run(eng, steps_after, pages: list[int] | None = None, to_step: str | None = 
         return p, None
     # 一步一步跑：本步要跑的页 = 本步显式失效的页 ∪ 上游这一轮真重算了（ok）的页。
     # 上游跳过（新鲜）的页不往下传，免得把只因 cv 升版而过期的下游也一并重算。
+    import time
+    from ..core.engine import RunReport
     carried: set[int] = set()
-    outcomes = []
-    rep = None
+    total = RunReport(book=eng.book.id, pipeline=eng.pipeline.id, steps=[], pages=[])
+    ran = False
     for sid in steps:
         run_pages = sorted(set(p.by_step.get(sid, [])) | carried)
         if not run_pages:
             continue
         rep = eng.run(steps=[sid], pages=run_pages, jobs=jobs)
-        outcomes.extend(rep.outcomes)
+        ran = True
+        total.steps.append(sid)
+        total.pages = sorted(set(total.pages) | set(run_pages))
+        total.outcomes.extend(rep.outcomes)
         carried |= {o.page for o in rep.outcomes if o.status == "ok"}
-    if rep is not None:
-        rep.outcomes = outcomes
-    return p, rep
+    total.finished_at = time.time()
+    return p, (total if ran else None)
 
 
 def _fmt_pages(pages: list[int]) -> str:

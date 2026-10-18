@@ -89,6 +89,8 @@ def test_only_invalidated_pages_and_downstream(eng):
     assert sorted(CALLS) == [("a", 2), ("b", 3)]
     assert {(o.step, o.page, o.status) for o in rep.outcomes} >= {("t_rs_step_b", 2, "skipped")}
     assert all(o.status in ("ok", "skipped") for o in rep.outcomes)
+    # --json 报告汇总各步，不是最后一步那一次
+    assert rep.steps == ["t_rs_step_a", "t_rs_step_b"] and rep.pages == [2, 3]
     st = eng.status(pages=[1, 2, 3])
     assert all(d["counts"]["stale"] == 0 for d in st["steps"].values())
 
