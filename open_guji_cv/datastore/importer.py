@@ -15,8 +15,6 @@ import json
 from collections import Counter
 from dataclasses import dataclass, field
 
-import psycopg
-
 from . import gitsource
 from .scope import TABLES, Row, ScanResult, fingerprint, scan_files, sha256
 
@@ -263,6 +261,7 @@ def import_commit(conn, repo, commit: str = "HEAD", *, only_ws: set[str] | None 
                                              "problems": rep.problems}, ensure_ascii=False),
                      rep.import_id))
         if dry_run:
+            import psycopg          # 只在连库时用；纯逻辑（diff 等）不装 psycopg 也能导入
             raise psycopg.Rollback()
     return rep
 
