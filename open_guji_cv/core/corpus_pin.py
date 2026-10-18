@@ -110,6 +110,20 @@ PIN_FIELDS: tuple[str, ...] = (
 )
 
 
+#: 读语料库的 Step。册钉了版本后，这些步的指纹**整步**多带一个 `corpus-vN`（`engine._self_payload`），
+#: 补上没有内容指纹的输入：形近表、`NEVER_MATCH_FAMILIES`、异体表／异体图、`rare_candidates` 的字表与部件库。
+#: 登记在这里而不是各 Step 的 `StepSpec`：改 Step 模块源码会让 `code_hash` 变，没钉的册也跟着过期。
+CORPUS_STEPS: frozenset[str] = frozenset({
+    "glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit",
+})
+
+
+def step_pin_token(step_id: str, book) -> str | None:
+    """这一步这册书该带的语料库版本串；没钉或这步不读语料 → None（指纹不变）。"""
+    v = getattr(book, "corpus", None)
+    return pin_token(v) if v and step_id in CORPUS_STEPS else None
+
+
 def parse_pin(v) -> int | None:
     """册 yaml 的 `corpus:`：`1`／`"1"`／`"v1"` → 1；空 → None。"""
     if v is None or v == "":
