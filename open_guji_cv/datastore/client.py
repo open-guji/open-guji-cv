@@ -1,0 +1,242 @@
+"""读中心库的两种来源：经 guji-data Worker（HTTPS），或直连 Postgres（GUJI-606，设计第五节）。
+
+两者给出同一组只读方法，``materialize`` / ``pull`` 只认这组方法：
+
+- ``status()``：当前分支的全局 ``rev``；
+- ``rows(table, ws)``：一张表里某工作区的全部行（dict）；
+- ``changes_since(ws, rev)``：该工作区在 ``rev`` 之后还有几条变更（``limit`` 封顶）；
+- ``fetch_blobs(shas, bucket)``：按 sha 取图字节（不经本地缓存，缓存在 ``BlobCache``）。
+
+云会话只通 443，用 ``WorkerSource``（环境变量 ``GUJI_DATA_URL``、``GUJI_DATA_TOKEN``、
+``GUJI_DATA_BRANCH``）。服务器能直连 5432，也可以用 ``PgSource``（``GUJI_DATA_PG_DSN``）。
+令牌只从环境变量读，不打印、不落盘。
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import ssl
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Iterable, Iterator
+
+DEFAULT_URL = "https://data.open-guji.com"
+PAGE = 5000              # Worker /v1/tables 每页上限
+SIGN_BATCH = 1000        # Worker /v1/assets/sign-batch 下载每批上限
+
+
+class CentralError(RuntimeError):
+    def __init__(self, status: int, code: str, message: str, detail=None):
+        super().__init__(f"{status} {code}: {message}")
+        self.status, self.code, self.detail = status, code, detail
+
+
+def _sha(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+class WorkerSource:
+    """经 guji-data Worker 读写。分支用 ``?branch=``；写接口按令牌角色由 Worker 把关。"""
+
+    def __init__(self, url: str | None = None, token: str | None = None,
+                 branch: str | None = None, timeout: float = 120):
+        self.url = (url or os.environ.get("GUJI_DATA_URL") or DEFAULT_URL).rstrip("/")
+        self.token = token if token is not None else os.environ.get("GUJI_DATA_TOKEN")
+        if not self.token:
+            raise SystemExit("缺环境变量 GUJI_DATA_TOKEN（中心库令牌；会话里一般用读令牌）")
+        self.branch = branch or os.environ.get("GUJI_DATA_BRANCH") or "main"
+        self.timeout = timeout
+        ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+        self._ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
+        self.requests = 0                      # 本进程发了几次 Worker 请求（免费档每天 10 万次）
+
+    def describe(self) -> str:
+        return f"{self.url} 分支 {self.branch}"
+
+    # ---- HTTP ----
+    def _call(self, method: str, path: str, *, query: dict | None = None, body=None,
+              auth: bool = True, raw: bool = False):
+        url = path if path.startswith("http") else self.url + path
+        if query:
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query)
+        headers = {"user-agent": "open-guji-cv-datastore"}  # Cloudflare 拦默认的 Python-urllib UA
+        data = None
+        if body is not None:
+            data = json.dumps(body, ensure_ascii=False).encode("utf-8")
+            headers["content-type"] = "application/json"
+        if auth:
+            headers["authorization"] = f"Bearer {self.token}"
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        last = None
+        for attempt in range(5):               # 网络抖动、429、5xx 退避重试；本模块的请求都幂等
+            self.requests += 1
+            try:
+                with urllib.request.urlopen(req, context=self._ctx, timeout=self.timeout) as r:
+                    payload = r.read()
+                    return payload if raw else json.loads(payload or b"null")
+            except urllib.error.HTTPError as e:
+                payload = e.read()
+                if e.code != 429 and e.code < 500:
+                    try:
+                        j = json.loads(payload)
+                    except ValueError:
+                        j = {}
+                    raise CentralError(e.code, j.get("error", "http"), j.get("message", payload[:200].decode("utf-8", "replace")),
+                                       j.get("detail")) from None
+                last = CentralError(e.code, "http", payload[:200].decode("utf-8", "replace"))
+            except (urllib.error.URLError, OSError) as e:
+                last = e
+            time.sleep(min(2 ** attempt, 20))
+        raise last  # type: ignore[misc]
+
+    def _q(self, **kw) -> dict:
+        return {"branch": self.branch, **kw}
+
+    # ---- 读 ----
+    def whoami(self) -> dict:
+        return self._call("GET", "/v1/whoami")
+
+    def status(self) -> int:
+        return int(self._call("GET", "/v1/status", query=self._q())["rev"])
+
+    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+        q = self._q(limit=PAGE, **filters)
+        if ws is not None:
+            q["ws"] = ws
+        while True:
+            page = self._call("GET", f"/v1/tables/{table}", query=q)
+            yield from page["rows"]
+            if not page.get("next"):
+                return
+            q["after"] = page["next"]
+
+    def changes_since(self, ws: str, rev: int, limit: int = 1) -> int:
+        page = self._call("GET", "/v1/tables/changes",
+                          query=self._q(ws=ws, since_rev=int(rev), limit=limit))
+        return len(page["rows"])
+
+    def fetch_blobs(self, shas: Iterable[str], bucket: str = "main",
+                    workers: int = 8) -> Iterator[tuple[str, bytes]]:
+        shas = sorted(set(shas))
+        for i in range(0, len(shas), SIGN_BATCH):
+            chunk = shas[i:i + SIGN_BATCH]
+            urls = self._sign_get(bucket, chunk)
+
+            def get(sha: str) -> tuple[str, bytes]:
+                return sha, self._call("GET", urls[sha], auth=False, raw=True)
+
+            with ThreadPoolExecutor(workers) as ex:
+                yield from ex.map(get, chunk)
+
+    def _sign_get(self, bucket: str, shas: list[str]) -> dict[str, str]:
+        if not getattr(self, "_no_batch", False):
+            try:
+                signed = self._call("POST", "/v1/assets/sign-batch",
+                                    body={"bucket": bucket, "op": "get", "sha256s": shas})
+                return {it["sha256"]: it["url"] for it in signed["items"]}
+            except CentralError as e:
+                if e.status != 404 or e.code != "not_found":
+                    raise
+                self._no_batch = True          # 旧版 Worker 没有批量签名：退回逐张签
+        return {s: self._call("POST", "/v1/assets/sign",
+                              body={"bucket": bucket, "op": "get", "sha256": s})["url"] for s in shas}
+
+    # ---- 分支与写 ----
+    def branches(self) -> list[dict]:
+        return self._call("GET", "/v1/branches")["branches"]
+
+    def create_branch(self, name: str, from_rev: int | None = None) -> dict:
+        body = {"name": name, **({"from_rev": int(from_rev)} if from_rev is not None else {})}
+        return self._call("POST", "/v1/branches", body=body)
+
+    def delete_branch(self, name: str) -> dict:
+        return self._call("DELETE", "/v1/branches", query={"name": name})
+
+    def append_events(self, ws: str, src_path: str, lines: list[str], branch: str | None = None) -> dict:
+        return self._call("POST", "/v1/events", query={"branch": branch or self.branch},
+                          body={"ws": ws, "src_path": src_path, "lines": lines})
+
+
+class PgSource:
+    """直连 Postgres（服务器、测试用）。只读；``search_path`` 由连接决定。"""
+
+    def __init__(self, conn, branch: str = "main"):
+        self.conn = conn
+        self.branch = branch
+
+    def describe(self) -> str:
+        return f"Postgres（{self.branch}）"
+
+    def status(self) -> int:
+        cur = self.conn.cursor()
+        cur.execute("SELECT to_regclass('changes')::text")
+        if not cur.fetchone()[0]:
+            return 0
+        cur.execute("SELECT coalesce(max(rev), 0) FROM changes")
+        return int(cur.fetchone()[0])
+
+    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+        from psycopg import sql
+        conds, args = [], []
+        if ws is not None:
+            filters = {"ws": ws, **filters}
+        for k, v in filters.items():
+            conds.append(sql.SQL("{}::text = %s").format(sql.Identifier(k)))
+            args.append(str(v))
+        q = sql.SQL("SELECT * FROM {}").format(sql.Identifier(table))
+        if conds:
+            q += sql.SQL(" WHERE ") + sql.SQL(" AND ").join(conds)
+        cur = self.conn.cursor()
+        cur.execute(q, args)
+        names = [d.name for d in cur.description]
+        for r in cur.fetchall():
+            yield dict(zip(names, r))
+
+    def changes_since(self, ws: str, rev: int, limit: int = 1) -> int:
+        cur = self.conn.cursor()
+        cur.execute("SELECT count(*) FROM (SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT %s) t",
+                    (ws, int(rev), limit))
+        return int(cur.fetchone()[0])
+
+    def fetch_blobs(self, shas, bucket: str = "main", workers: int = 8):
+        raise CentralError(0, "no_blobs", "直连 Postgres 拿不到图：图在 R2，请经 Worker（GUJI_DATA_TOKEN）或预先填好本地缓存")
+
+
+class BlobCache:
+    """本地图缓存：``<根>/sha256/<前两位>/<sha>.png``，按 sha 去重，取回时核 sha。
+
+    根目录：``GUJI_DATA_CACHE``，缺省 ``~/.cache/guji-data``。
+    """
+
+    def __init__(self, root: str | Path | None = None):
+        self.root = Path(root or os.environ.get("GUJI_DATA_CACHE") or Path.home() / ".cache" / "guji-data")
+
+    def path(self, sha: str) -> Path:
+        return self.root / "sha256" / sha[:2] / f"{sha}.png"
+
+    def has(self, sha: str) -> bool:
+        return self.path(sha).exists()
+
+    def put(self, sha: str, data: bytes) -> Path:
+        if _sha(data) != sha:
+            raise CentralError(0, "sha_mismatch", f"下载的图 sha 不符：{sha}")
+        p = self.path(sha)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        tmp = p.with_suffix(f".tmp{os.getpid()}")
+        tmp.write_bytes(data)
+        tmp.replace(p)
+        return p
+
+    def ensure(self, src, shas: Iterable[str], bucket: str = "main") -> dict:
+        """把缺的图拉进缓存。返回 {have, fetched}。"""
+        want = sorted(set(shas))
+        missing = [s for s in want if not self.has(s)]
+        for sha, data in (src.fetch_blobs(missing, bucket=bucket) if missing else ()):
+            self.put(sha, data)
+        return {"have": len(want) - len(missing), "fetched": len(missing)}
