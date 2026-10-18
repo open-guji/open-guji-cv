@@ -122,6 +122,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     每张图两次 Worker 请求（免费档每天 10 万次），``limit`` 用来分批。
     """
     import ssl
+    import time
     import urllib.error
     import urllib.request
     token = os.environ.get("GUJI_DATA_TOKEN")
@@ -138,11 +139,18 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
         # Cloudflare 拦默认的 Python-urllib UA（error 1010），带自己的 UA
         headers = {"user-agent": "open-guji-cv-datastore", **headers}
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        try:
-            with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
-                return r.status, r.read()
-        except urllib.error.HTTPError as e:
-            return e.code, e.read()
+        for attempt in range(5):           # 网络抖动、429、5xx 退避重试；签名和 PUT 都幂等
+            try:
+                with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+                    return r.status, r.read()
+            except urllib.error.HTTPError as e:
+                if e.code != 429 and e.code < 500:
+                    return e.code, e.read()
+                err = e.code
+            except (urllib.error.URLError, OSError) as e:
+                err = type(e).__name__
+            time.sleep(2 ** attempt)
+        return err, b""
 
     def one(o: Obj) -> str:
         st, body = call(f"{base}/v1/assets/sign", json.dumps(
