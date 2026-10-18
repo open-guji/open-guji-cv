@@ -40,11 +40,11 @@ for r in rows:
     bank = {}
     for o in rows:
         if o["id"] != r["id"]:
-            T.add_real(bank, G[o["id"]], T.slot_name(resolver, o["f"]), o["p"], c["orient"])
+            T.add_real(bank, G[o["id"]], T.slot_name(resolver, o["f"], c.get("which", 1)), o["p"], c["orient"], c.get("which", 1))
     for m in (0.0, 0.02, 0.05):
         for cut in ("oracle", "auto"):
             v = T.solve_two(G[r["id"]], bank, resolver, c["frame"], c["orient"], c["prior"],
-                            polyline=r["p"] if cut == "oracle" else None, min_margin=m)
+                            polyline=r["p"] if cut == "oracle" else None, which=c.get("which", 1), min_margin=m)
             k = "abstain" if v.char is None else "right" if v.char == r["f"] else "wrong"
             out[(m, cut)][k] += 1
             if k == "wrong" and m == 0.02: wrong.append((r["id"], r["f"], v.char, cut, v.margins))

@@ -59,9 +59,17 @@ def add_real(bank: dict, gray: np.ndarray, name: str, polyline, orient: str, whi
         bank.setdefault(name, []).append(p)
 
 
-def solve_two(gray: np.ndarray, bank: dict, resolver: IdsResolver, frame: str, orient: str, prior: float,
+def ids_of_slot(resolver: IdsResolver, name: str, which: int = 1) -> str | None:
+    """部件名 → 该部件所在成员的标准 IDS（两字顶层结构不同时没法用统一的 `frame`，如 點 ⿰黑占 ／ 㸃 ⿺黒占）。"""
+    for ch, ids in resolver.canonical.items():
+        if str(parse(ids).kids[which]) == name:
+            return ids
+    return None
+
+
+def solve_two(gray: np.ndarray, bank: dict, resolver: IdsResolver, frame: str | None, orient: str, prior: float,
               polyline=None, which: int = 1, min_margin: float = 0.02) -> IdsVerdict:
-    """一格 → 判字。`frame` 如 `⿱厽{}`。弃权：无墨迹、没有第 `which` 段墨迹、margin 不够、IDS 对不上成员。"""
+    """一格 → 判字。`frame` 如 `⿱厽{}`；顶层结构不同的组给 None，改按 `ids_of_slot` 取标准 IDS。弃权：无墨迹、没有第 `which` 段墨迹、margin 不够、IDS 对不上成员。"""
     if not ink_of(gray).any():
         return IdsVerdict(None, None, "abstain_blank")
     pl = polyline if polyline is not None else auto_cut(gray, orient, prior)
@@ -73,6 +81,6 @@ def solve_two(gray: np.ndarray, bank: dict, resolver: IdsResolver, frame: str, o
     best, margin, scores = choose(part, bank, min_margin=min_margin)
     if best is None:
         return IdsVerdict(None, None, "abstain_slot", slots=(None,), margins=(round(margin, 4),), extra={"scores": scores})
-    ids = frame.format(best)
+    ids = frame.format(best) if frame else ids_of_slot(resolver, best, which)
     r = resolver.resolve(ids)
     return IdsVerdict(r.char, ids, r.kind, r.flag, (best,), (round(margin, 4),), {"scores": {k: round(v, 4) for k, v in scores.items()}})

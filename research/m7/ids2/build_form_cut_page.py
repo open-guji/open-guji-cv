@@ -154,7 +154,9 @@ function payload(){
 
 
 def main() -> None:
-    cfg = CFG[sys.argv[1]]
+    cfg = dict(CFG[sys.argv[1]])
+    if "--key" in sys.argv:           # 换一张页必须换 key（localStorage 键），否则两页裁决互相灌
+        cfg["key"] = sys.argv[sys.argv.index("--key") + 1]
     cells, crops, out = Path(sys.argv[2]), Path(sys.argv[3]), Path(sys.argv[4])
     done = {}
     if "--done" in sys.argv:
@@ -170,7 +172,7 @@ def main() -> None:
         b = io.BytesIO(); im.save(b, "PNG", optimize=True)
         imgs[i] = "data:image/png;base64," + base64.b64encode(b.getvalue()).decode()
         rows.append({"id": i, **({"pre": c["pre"]} if c.get("pre") else {}),
-                     "note": f"整理本：{c.get('hint') or '—'}（仅供参考）"})
+                     "note": f"整理本：{c['hint']}（仅供参考）" if c.get("hint") else ""})
     js = (PAGE_JS.replace("__TITLE__", cfg["title"]).replace("__FORMHINT__", cfg["form_hint"]).replace("__CUTHINT__", cfg["cut_hint"]))
     html = render(cfg["title"], cfg["key"], verdicts=done, css=CSS, page_js=js,
                   payload={"rows": rows, "imgs": imgs, "orient": cfg["orient"], "forms": cfg["forms"]})
