@@ -1,0 +1,129 @@
+# -*- coding: utf-8 -*-
+"""GUJI-577：manifest 记 cv_version／cv_commit；册配置固定版本与装的不符时 step／pipeline 拒跑。"""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from types import SimpleNamespace
+
+import cv2
+import numpy as np
+import pytest
+
+import open_guji_cv.steps  # noqa: F401
+from open_guji_cv import cli_v2
+from open_guji_cv.core import cv_version as cvv
+from open_guji_cv.core.book import BookSpec, load_book
+from open_guji_cv.core.engine import Engine, code_hash
+from open_guji_cv.core.pipeline import Pipeline
+from open_guji_cv.core.step import STEPS
+from open_guji_cv.products.cache import ImageCache
+from open_guji_cv.products.manifest import Manifest
+from open_guji_cv.products.store import ProductStore
+
+
+# ── 版本号口径 ────────────────────────────────────────────────────────
+@pytest.mark.parametrize("s,want", [
+    ("v0.3.0-0-g" + "a" * 40, "0.3.0"),
+    ("v0.3.0-2-g" + "b" * 40, "0.3.0+2"),
+    ("v10.20.30-15-gabc1234", "10.20.30+15"),
+    ("cv-v0.1.0-3-gabc", None),
+    ("garbage", None),
+])
+def test_parse_describe(s, want):
+    assert cvv.parse_describe(s) == want
+
+
+def _git(repo, *a):
+    subprocess.run(["git", *a], cwd=repo, check=True, capture_output=True)
+
+
+def test_describe_on_real_git(tmp_path):
+    _git(tmp_path, "init", "-q")
+    _git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+         "--allow-empty", "-m", "a")
+    _git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v0.3.0", "-m", "x")
+    ver, commit = cvv.describe.__wrapped__(tmp_path)
+    assert ver == "0.3.0" and len(commit) == 40
+    _git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q",
+         "--allow-empty", "-m", "b")
+    # rc tag 不算正式版本
+    _git(tmp_path, "-c", "user.name=t", "-c", "user.email=t@t", "tag", "-a", "v0.4.0-rc.1", "-m", "x")
+    assert cvv.describe.__wrapped__(tmp_path)[0] == "0.3.0+1"
+
+
+def test_mismatch():
+    assert cvv.mismatch(None, "0.3.0") is None
+    assert cvv.mismatch("0.3.0", "0.3.0") is None
+    assert cvv.mismatch("v0.3.0", "0.3.0") is None
+    assert "0.3.0+2" in cvv.mismatch("0.3.0", "0.3.0+2")
+    assert "未知版本" in cvv.mismatch("0.3.0", None)
+
+
+# ── 册配置字段 ────────────────────────────────────────────────────────
+def test_book_yaml_cv_version(tmp_path):
+    (tmp_path / "b1.yaml").write_text('id: b1\ntitle: t\nraw_dir: raw\ncv_version: "0.3.0"\n',
+                                      encoding="utf-8")
+    (tmp_path / "b2.yaml").write_text("id: b2\ntitle: t\nraw_dir: raw\n", encoding="utf-8")
+    assert load_book("b1", books_dir=tmp_path).cv_version == "0.3.0"
+    assert load_book("b2", books_dir=tmp_path).cv_version is None
+
+
+def test_cv_version_not_in_any_fingerprint():
+    """新字段与新模块都不进 19 步的 code_hash／book_deps。"""
+    for sid, st in STEPS.items():
+        assert "cv_version" not in (st.spec.book_deps or ())
+        assert "open_guji_cv.core.cv_version" not in st.spec.code_deps, sid
+    assert all(code_hash(s) for s in STEPS.values())
+
+
+# ── manifest 记版本 ───────────────────────────────────────────────────
+def test_manifest_records_cv_version(tmp_path, monkeypatch):
+    import open_guji_cv.core.engine as eng_mod
+    monkeypatch.setattr(cvv, "manifest_fields",
+                        lambda: {"cv_version": "0.3.0+1", "cv_commit": "c" * 40})
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    cv2.imwrite(str(raw / "1.png"), np.zeros((20, 20), np.uint8))
+    book = BookSpec(id="tcv", title="t", raw_dir=raw)
+    sid = "border_detect"
+    pl = Pipeline(id="tcvp", title="t", steps=[sid])
+    eng = Engine(book, pl, store=ProductStore(tmp_path / "p"), cache=ImageCache(tmp_path / "c"),
+                 log=lambda s: None)
+    assert eng._cv == {"cv_version": "0.3.0+1", "cv_commit": "c" * 40}
+    eng.run(steps=[sid], pages=[1])
+    line = (tmp_path / "p" / "tcv" / sid / "_manifest.jsonl")
+    rows = [json.loads(x) for x in line.read_text(encoding="utf-8").splitlines() if x.strip()]
+    assert rows and all(r["cv_version"] == "0.3.0+1" and r["cv_commit"] == "c" * 40 for r in rows)
+    # 读回不丢字段；老条目（没有这两个键）读成 None
+    m = Manifest(line)
+    assert m.get("p0001").cv_version == "0.3.0+1"
+    old = tmp_path / "old.jsonl"
+    old.write_text(json.dumps({"key": "p0001", "fingerprint": "x"}) + "\n", encoding="utf-8")
+    assert Manifest(old).get("p0001").cv_version is None
+    assert eng_mod  # 引用一下，免 lint
+
+
+# ── CLI 护栏 ──────────────────────────────────────────────────────────
+def test_guard_refuses_and_allows(monkeypatch, capsys):
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.3.0+2", "d" * 40))
+    book = SimpleNamespace(cv_version="0.3.0")
+    with pytest.raises(SystemExit) as e:
+        cli_v2._guard_cv_version(book)
+    assert e.value.code == 2
+    assert "cv_version=0.3.0" in capsys.readouterr().err
+    cli_v2._guard_cv_version(book, allow=True)           # 放行但提醒
+    assert "⚠️" in capsys.readouterr().err
+    cli_v2._guard_cv_version(book, warn_only=True)
+    assert "⚠️" in capsys.readouterr().err
+    cli_v2._guard_cv_version(SimpleNamespace(cv_version=None))   # 没固定：不出声
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.3.0", "d" * 40))
+    cli_v2._guard_cv_version(book)                        # 一致：不出声
+    assert capsys.readouterr().err == ""
+
+
+def test_isolated_argv_passes_allow_flag():
+    args = SimpleNamespace(book="b", pipeline="p", pages="all", force=False, stop_on_error=False,
+                           params=None, jobs=None, allow_sample_db=False, allow_cv_mismatch=True)
+    assert "--allow-cv-mismatch" in cli_v2.isolated_step_argv(args, "s", "/ws")

@@ -311,6 +311,10 @@ class BookSpec:
     #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
     #: 已有 Step 的参数取值）。
     params: dict[str, dict] = field(default_factory=dict)
+    #: 本册固定的 cv 版本（yaml 的 `cv_version: "0.3.0"`，不带 `v`；设计 §2a 第 1 条）。
+    #: 只做护栏用：`guji step`／`pipeline` 发现装的版本不同就拒跑（`core/cv_version.py`，
+    #: GUJI-577）。不进任何 Step 的 `book_deps`，不进指纹；None = 没固定，不设防。
+    cv_version: str | None = None
 
     def canonical_char(self, ch: str) -> str:
         """`ch` 是本书 `codepoints` 配置里「该统一掉的那个码位」时，返回本书指定的
@@ -640,6 +644,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
+        cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
     )
 
 
