@@ -86,15 +86,9 @@ class BookSpec:
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
     notes: str = ""
-    #: Step5-c OCR候选（yaml 的 `ocr_candidates:`）。**默认关闭**——用户
-    #: 2026-09-11 定的口径：整理本已经足够准，主要靠 5-a 库匹配 + 5-b 生僻字
-    #: 候选，5-c 只在个别书需要时按需显式打开（`ocr_candidates: true`）。
-    #: 关闭只是 Engine 执行时跳过这一步，不改 pipeline 拓扑——`context_decide`
-    #: 本来就要处理「这一位没有 OCR 候选」（见 context_decide.py run_page）。
-    ocr_candidates: bool = False
-    #: Step6b 形近字组分类（yaml 的 `group_decide:`，GUJI-49 PR1）。**默认关闭**：只出证据、没有任何
-    #: 现有 Step 读它；关时 Engine 把它从整条链里滤掉（同 `ocr_candidates`），不进任何 Step 的指纹。
-    group_decide: bool = False
+    #: 已删：Step5-c `ocr_candidates` 与 Step6b `group_decide` 两步连同书级开关
+    #: `ocr_candidates:` / `group_decide:`（2026-10-18，sheldon 定）。老 yaml 里还写着
+    #: 这两个键的照常能读，只是不再有任何作用。
     #: Step7 铁证放行通道（yaml 的 `iron_gate:`）。**默认关闭**——D 道影子验收
     #: 2026-09-25～27 全书实测（bxgb、vol03，`open_guji_cv.clustering.iron_evidence`）
     #: 对人裁核对累计 348 格 0 错，2026-09-27 用户批准转正、按书开（先只给测过的
@@ -435,8 +429,6 @@ class BookSpec:
             "preclean_pages": sorted(self.preclean),
             "preclean": {str(k): v for k, v in sorted(self.preclean.items())},
             "notes": self.notes,
-            "ocr_candidates": self.ocr_candidates,
-            "group_decide": self.group_decide,
             "iron_gate": self.iron_gate,
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
@@ -624,8 +616,6 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         notes=d.get("notes", ""),
-        ocr_candidates=bool(d.get("ocr_candidates", False)),
-        group_decide=bool(d.get("group_decide", False)),
         iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
@@ -676,28 +666,6 @@ def list_books(books_dir: Path | None = None) -> list[str]:
     return sorted(p.stem for p in d.glob("*.yaml"))
 
 
-_OCR_CANDIDATES_LINE_RE = re.compile(r"^ocr_candidates:\s*(true|false)\s*$", re.MULTILINE)
-
-
-def set_ocr_candidates(book_id: str, enabled: bool, books_dir: Path | None = None) -> None:
-    """定向文本编辑 book yaml 的顶层 `ocr_candidates:` 字段，写控制台的
-    开关用。这份 yaml 满是手写中文注释（版本考据、专项集来由等），用
-    `yaml.safe_dump` 整体重写会把这些注释全部冲掉，所以只在原文里
-    改/插这一行，不碰其余内容。"""
-    path = _book_yaml_path(book_id, books_dir)
-    if not path.exists():
-        raise FileNotFoundError(f"没有这册书的定义: {path}")
-    text = path.read_text(encoding="utf-8")
-    line = f"ocr_candidates: {'true' if enabled else 'false'}"
-    if _OCR_CANDIDATES_LINE_RE.search(text):
-        text = _OCR_CANDIDATES_LINE_RE.sub(line, text, count=1)
-    else:
-        if not text.endswith("\n"):
-            text += "\n"
-        text += line + "\n"
-    path.write_text(text, encoding="utf-8")
-
-
 #: 顶层 `codepoints:` 块——键行以两个空格缩进（yaml 里手写的都是这个缩进）。
 _CODEPOINTS_BLOCK_RE = re.compile(r"^codepoints:\n(?:[ \t]+\S.*\n?)*", re.MULTILINE)
 
@@ -705,7 +673,7 @@ _CODEPOINTS_BLOCK_RE = re.compile(r"^codepoints:\n(?:[ \t]+\S.*\n?)*", re.MULTIL
 def set_codepoints(book_id: str, mapping: dict[str, str], books_dir: Path | None = None) -> None:
     """定向文本编辑 book yaml 的顶层 `codepoints:` 字段（书级码位配置，字形库 11 §〇）。
 
-    与 `set_ocr_candidates` 同一个理由：这份 yaml 满是手写中文注释，`yaml.safe_dump`
+    理由：这份 yaml 满是手写中文注释，`yaml.safe_dump`
     整体重写会把注释冲掉，所以只在原文里改/插这一块，不碰其余内容。
 
     `mapping` 空字典时删掉整块（等于不配置，回到加这个字段之前的行为）；

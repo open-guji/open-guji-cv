@@ -93,10 +93,10 @@ def main() -> int:
         if adm is None:
             continue
         mt = st.read(a.book, "glyph_match", page_key(pg), "glyph_match")
-        oc = st.read(a.book, "ocr_candidates", page_key(pg), "ocr_candidates")
+        oc = None   # Step5-c `ocr_candidates` 已删（2026-10-18），OCR 这一路恒缺席
         dc = st.read(a.book, "context_decide", page_key(pg), "context_decision")
         mm = {r.id: r for cc in mt.columns for r in cc.chars}
-        om = {r.id: r for cc in oc.columns for r in cc.chars}
+        om = {r.id: r for cc in (oc.columns if oc else []) for r in cc.chars}
         dm = {r.id: r for cc in dc.columns for r in cc.chars}
         for cc in adm.columns:
             for r in cc.chars:

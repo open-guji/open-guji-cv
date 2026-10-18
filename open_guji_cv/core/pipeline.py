@@ -70,7 +70,7 @@ class Pipeline:
 
         **可选上游也算图上的边**——硬/可选的区别只在"缺席时阻不阻塞"（见
         `StepSpec.optional_consumes`），拓扑序与过期传播两件事上两者一样：
-        `ocr_candidates` 重跑了，`align_ref` 那一页照样该标 stale。
+        `rare_candidates` 重跑了（开关开着时），`align_ref` 那一页照样该标 stale。
         """
         me = STEPS[sid]
         wants = (*me.spec.consumes, *me.spec.optional_consumes)

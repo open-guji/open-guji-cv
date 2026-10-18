@@ -91,7 +91,7 @@ def channel_breakdown(book: str, pages: list[int] | None, st: ProductStore) -> d
 #: `step_timing` 覆盖的步骤。顺序即管线顺序，跟 `流程与模块.md` 的 Step0-8 对齐。
 _STEPS = [
     "preclean", "border_detect", "column_warp", "row_segment", "cell_shrink",
-    "glyph_match", "ocr_candidates", "align_ref", "context_decide", "seed_admit",
+    "glyph_match", "align_ref", "context_decide", "seed_admit",
 ]
 
 

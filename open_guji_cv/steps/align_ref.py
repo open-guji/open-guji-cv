@@ -1,5 +1,10 @@
 """Step5-d 整理本对齐：四路证据里的文本那一路。
 
+**2026-10-18（sheldon 定）：Step5-c `ocr_candidates` 已删**，本步不再声明它为可选上游，
+`run_page` 里 OCR 这一路恒为 None（等价于此前书级开关关着的行为）。下文提到 OCR 的
+地方是历史说明；`slots_from_evidence` 等函数仍留着 `ocr` 参数（传 None），
+`gold.v2_align` 等调用方照用。
+
 ## 从 `gold/v2_align.py` 挪出来的理由
 
 对齐这个动作（v2 定字串 → 8-gram 锚到整理本 → `difflib` 过闸对齐）此前住在
@@ -505,8 +510,8 @@ def _corpus_index(path: str):
 class AlignRefStep(Step):
     spec = StepSpec(
         id="align_ref", title="Step5-d 整理本对齐", version="2.1", unit="cell",   # 2.1：按坐标对位 coord（overview#195）
-        consumes=("glyph_match",), optional_consumes=("ocr_candidates", "rare_candidates", "cells"),
-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_topk"),),
+        consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
+        optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
         params=AlignRefParams,
         needs=("corpus",),
@@ -526,8 +531,7 @@ class AlignRefStep(Step):
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
-        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
-                               if ctx.book.ocr_candidates else None)
+        ocr: PageOcr | None = None          # Step5-c 已删（2026-10-18）：OCR 这一路恒缺席
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)

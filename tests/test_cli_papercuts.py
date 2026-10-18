@@ -215,7 +215,7 @@ def test_cmd_product_manifest_autocorrects_kind_id_and_warns(tmp_path, monkeypat
     eng.ctx.params["context_decide"] = ContextDecideParams(
         corpus=str(corpus), general_corpus_dir=str(tmp_path / "no_general_corpus"))
     # 只跑 context_decide 真正硬依赖的那几步（`consumes=("glyph_match",)`）——
-    # 不带 rare_candidates/ocr_candidates/align_ref：一装了 torch，rare_candidates
+    # 不带 rare_candidates/align_ref：一装了 torch，rare_candidates
     # 就会去建「unicode-cjk-a」那张几万字的 CNN embedding 索引，几分钟起步，
     # 这条用例只想测 CLI 的 kind_id/step_id 纠错，不该陪跑那条冷启动。
     rep = eng.run(steps=["border_detect", "column_warp", "row_segment", "cell_shrink",

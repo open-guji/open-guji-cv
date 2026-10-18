@@ -748,8 +748,8 @@ class SeedAdmitStep(Step):
     spec = StepSpec(
         id="seed_admit", title="C1 进库准入", version="1.16", unit="cell",   # 1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
-        optional_consumes=("ocr_candidates", "rare_candidates"),
-        optional_consumes_when=(("ocr_candidates", "@book.ocr_candidates"), ("rare_candidates", "rare_ref"),),
+        optional_consumes=("rare_candidates",),
+        optional_consumes_when=(("rare_candidates", "rare_ref"),),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -834,8 +834,7 @@ class SeedAdmitStep(Step):
             rec = _ex_records().get(iid, {})
             return f"{rec.get('origin', '?')}:{rec.get('reason', '?')}"
         match: PageMatch = ctx.product("glyph_match", page)
-        ocr: PageOcr | None = (_opt(ctx, "ocr_candidates", page)
-                               if ctx.book.ocr_candidates else None)
+        ocr: PageOcr | None = None          # Step5-c 已删（2026-10-18，sheldon 定）：OCR 这一路恒缺席
         dec: PageDecision | None = _opt(ctx, "context_decision", page)
         chars = _opt(ctx, "char_index", page)
 

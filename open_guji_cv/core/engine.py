@@ -283,7 +283,6 @@ class Engine:
     def _enabled(self, steps: list[str]) -> list[str]:
         """过滤掉本书没开启的可选步骤：
 
-        - `ocr_candidates`（Step5-c OCR候选，`BookSpec.ocr_candidates` 控制，默认 False）；
         - `rare_candidates`（Step5-b 生僻字候选）**没有任何下游真正在读它时**（2026-10-01）：
           读它的只有 `seed_admit.rare_ref` 与 `context_decide.rare_topk`，缺省都关；两个都关的
           书（vol02/vol03）跑它是白花时间——vol03 104 页 ≈12 分钟，而且指纹里带着字形库内容
@@ -292,10 +291,6 @@ class Engine:
 
         只跳过执行，不改 pipeline 拓扑，下游本来就处理得了「这一路证据没有」。"""
         out = list(steps)
-        if not self.book.ocr_candidates:
-            out = [s for s in out if s != "ocr_candidates"]
-        if not self.book.group_decide:     # Step6b（GUJI-49 PR1）：书级开关，缺省关
-            out = [s for s in out if s != "group_decide"]
         if "rare_candidates" in out and not rare_candidates_consumed(
                 self.pipeline.steps, lambda sid: self.ctx.params_for(STEPS[sid]), self.book):
             out = [s for s in out if s != "rare_candidates"]
@@ -303,7 +298,7 @@ class Engine:
 
     def _default_steps(self, steps: list[str] | None) -> tuple[list[str], bool]:
         """`steps` 为 None（调用方走默认整条 pipeline）时应用可选步骤开关；
-        调用方显式点名了子集（如控制台单独跑 `ocr_candidates` 调试）则原样
+        调用方显式点名了子集（如控制台单独跑 `rare_candidates` 调试）则原样
         尊重——开关只管「常规批量跑不跑」，不挡人手工点名。返回
         (steps, was_default)。"""
         if steps is None:
@@ -478,7 +473,7 @@ class Engine:
         跟闸迁移前、它还是 pipeline 里一个独立节点时的 status 输出**同名同形**。
 
         DAG 传播必须按 `self._enabled(...)` 过滤后的列表遍历，不能用原始
-        `self.pipeline.steps`：书级开关关掉的 step（如 `ocr_candidates`）若
+        `self.pipeline.steps`：可选开关关掉的 step（如 `rare_candidates`）若
         manifest 里留着旧记录，指纹对不上当前代码/上游会判 stale；`run()`
         看开关是 false 根本不会去跑它，这条 stale 永远洗不掉。之前遍历未过滤
         列表时，这个 stale 会被记进 `seen`，沿 DAG 一路拖垮 `align_ref` 等

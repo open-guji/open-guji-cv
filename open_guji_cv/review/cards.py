@@ -633,7 +633,8 @@ _CASES_IRRELEVANT = frozenset({"glyph_match", "ocr_candidates", "rare_candidates
                                "context_decide", "seed_admit", "page_survey"})
 """识别段的步：切线用例只看切分产物（row_segment 的 cells）与列图，不读它们。键里剔掉——
 人裁一条 confirm 就会把那一页的 seed_admit 标失效（manifest 追加一行），不剔的话每提交一批
-记忆就作废。只剔**确知无关**的；新加的步默认进键（宁可多算一次，不会读到旧的）。"""
+记忆就作废。只剔**确知无关**的；新加的步默认进键（宁可多算一次，不会读到旧的）。
+`ocr_candidates`（Step5-c）已于 2026-10-18 删除，留在这里是因为老书盘上可能还有它的旧产物目录。"""
 
 
 def _cutline_cases(book: str, pgs: list[int], st: ProductStore

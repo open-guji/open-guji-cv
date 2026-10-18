@@ -188,19 +188,6 @@ def test_align_ref_summary_route_accepts_cells_and_bad_is_400(monkeypatch):
     assert exc_info.value.status_code == 400
 
 
-def test_ocr_candidates_summary_route_accepts_list(tmp_path, monkeypatch):
-    from open_guji_cv.console.routers import products as m
-
-    bk = make_book("vol01")
-    monkeypatch.setattr(m, "load_book", lambda book: bk)
-    monkeypatch.setattr("open_guji_cv.steps.ocr_candidates.ocr_candidates_summary",
-                        lambda book, pages, store: {"pages": pages})
-
-    _write_list(tmp_path, monkeypatch, "mylist", ["vol01:4:1:1"])
-    out = m.api_ocr_candidates_summary(book="vol01", pages="list:mylist")
-    assert out["pages"] == [4]
-
-
 # ── runs ─────────────────────────────────────────────────────────────────
 def test_runs_status_accepts_cells_and_list(tmp_path, monkeypatch):
     from open_guji_cv.console.routers import runs as m

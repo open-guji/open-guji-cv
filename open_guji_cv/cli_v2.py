@@ -38,20 +38,19 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
 
 
 def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
-    """`guji pipeline` 要跑的步骤：按 --from/--to 切片，再套**书级可选步骤开关**。
+    """`guji pipeline` 要跑的步骤：按 --from/--to 切片，再套**可选步骤开关**（`Engine._enabled`）。
 
-    2026-09-15 实锤：`Engine._default_steps` 只在 steps=None 时应用 `BookSpec.ocr_candidates`
-    开关，而这里总是先切片再传显式列表——于是 vol02（整理本质量高、开关默认关）跑
-    `guji pipeline keben_body_v2 vol02` 时 Step5-c OCR 候选照跑不误，一页 7 秒、188 页 22 分钟白花。
+    2026-09-15 实锤：`Engine._default_steps` 只在 steps=None 时应用可选步骤开关，而这里总是
+    先切片再传显式列表——当年 Step5-c OCR 候选（已于 2026-10-18 删除）因此照跑不误。
     控制台同一条 pipeline 走的是 steps=None，开关生效，CLI 与控制台不同参不同输出。
-    只有 `guji step ocr_candidates`（from == to == 那一步，人手工点名）才不套开关。"""
+    只有 `guji step rare_candidates`（from == to == 那一步，人手工点名）才不套开关。"""
     steps = eng.pipeline.slice(from_step, to_step)
     if from_step is not None and from_step == to_step:
         return steps
     enabled = eng._enabled(steps)
     skipped = [s for s in steps if s not in enabled]
     if skipped:
-        print(f"按书级开关跳过：{', '.join(skipped)}（ocr_candidates 看 {eng.book.id}.yaml 的开关；"
+        print(f"按可选步骤开关跳过：{', '.join(skipped)}（"
               "rare_candidates 无下游在读时自动跳过，点名 `guji step rare_candidates` 才跑）", flush=True)
     return enabled
 
