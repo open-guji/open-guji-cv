@@ -224,6 +224,10 @@ class SeedAdmitParams(BaseModel):
     rr_clf 之后补跑。证据写 `evidence.m7_group`。关着不进参数 dump（`params_hash` 不变）。"""
     m7_l2_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → group_clf/1（ctx_ver 3）答案表路径
     m7_fingerprint: str = ""                # 自动填（开关开时）：规则文件＋答案表内容哈希
+    m7_bars: tuple[str, ...] = ()
+    """M7 量横长短（土士 `ts`、未末 `wm`，须同时在 `m7_groups` 里；缺省空＝关）：看字块上两横谁长（`groups/bars.py`）。
+    文意路有字用文意；文意弃权才按量横取字（比值离 1 不足 0.1 仍弃权）；两路字不同则弃权并留痕（`evidence.m7_group[组].bars`、
+    `why=bars_conflict`），不抬不降。读不到字块按 `patch_missing` 处理。关着不进参数 dump（`params_hash` 不变）。"""
     rr_clf: bool = False
     """入／人／八 字形分类器的「分歧→送审」（overview#437/#442，Z-jys 接线，缺省关；关时下面三个字段不进 dump，`params_hash` 不变）。
 
@@ -587,8 +591,10 @@ class SeedAdmitParams(BaseModel):
             for k in ("ry_group", "ry_group_cache", "ry_group_fingerprint"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.m7_groups:
-            for k in ("m7_groups", "m7_l2_tables", "m7_fingerprint"):
+            for k in ("m7_groups", "m7_l2_tables", "m7_fingerprint", "m7_bars"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.m7_bars:
+            d.pop("m7_bars", None)
         if isinstance(d, dict) and self.ji_yi_si_clf and not self.ji_yi_si_clf_llm:
             d.pop("ji_yi_si_clf_llm", None)
             d.pop("ji_yi_si_clf_margin", None)
@@ -711,7 +717,7 @@ class SeedAdmitParams(BaseModel):
             object.__setattr__(self, "ry_group_fingerprint", corpus_fingerprint([self.ry_group_cache]))
         if self.m7_groups and not self.m7_fingerprint:
             from ..groups.m7_pass import fingerprint as _m7_fp
-            object.__setattr__(self, "m7_fingerprint", _m7_fp(self.m7_groups, self.m7_l2_tables))
+            object.__setattr__(self, "m7_fingerprint", _m7_fp(self.m7_groups, self.m7_l2_tables, self.m7_bars))
         if self.rr_clf and not self.rr_clf_fingerprint:
             from ..utils.rr_clf import model_fingerprint as _rr_fp
             object.__setattr__(self, "rr_clf_fingerprint", _rr_fp(self.rr_clf_model or None) or "missing")
@@ -744,6 +750,7 @@ class SeedAdmitStep(Step):
                    # M7 上下文路（GUJI-563）：缺省关，关着时不影响输出；模块一改就判过期，因为开了的册要重算
                    "open_guji_cv.groups.m7_pass", "open_guji_cv.groups.apply", "open_guji_cv.groups.registry",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
+                   "open_guji_cv.groups.bars",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -1369,7 +1376,7 @@ class SeedAdmitStep(Step):
             n_auto -= d_rr2
             n_review += d_rr2
         if p.m7_groups:
-            d_m7 = _m7_group_pass(p, out, amap)
+            d_m7 = _m7_group_pass(p, out, amap, ctx, page, patch_missing)
             n_auto += d_m7
             n_review -= d_m7
         if p.oversplit_gate == "hint":
@@ -2076,15 +2083,32 @@ def _ji_yi_si_clf_cell(r, seq: list, i: int, amap: dict, p) -> tuple[int, int]:
     return 0, 0
 
 
-def _m7_group_pass(p, out: list, amap: dict) -> int:
+def _m7_group_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
     """M7 上下文路（GUJI-563）：见 `groups/m7_pass.py`。→ 放行数净增（升减降）。"""
     from ..groups.context import WIDTH
     from ..groups.m7_pass import m7_pass
     from ..utils.jiazhu_order import sort_by_reading
     seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
            if not (r.doubts and "excluded" in r.doubts)]      # 双行夹注按读序（先右行后左行），与 ji_yi_si 一遍一致
+    patch_fn = None
+    if p.m7_bars:
+        slots = {r.id: (c.col, r.slot, r.sub) for c in out for r in c.chars or []}
+        recs = {r.id: r for c in out for r in c.chars or []}
+        miss = patch_missing if patch_missing is not None else {}
+
+        def patch_fn(cid: str):
+            col, slot, sub = slots[cid]
+            try:
+                return _page_patch(ctx, page, col, slot, sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(cid, []).append("m7_bars")
+                recs[cid].evidence = {**(recs[cid].evidence or {}), "patch_missing": list(miss[cid])}
+                return None
     res = m7_pass(seq, amap, p.m7_groups, p.m7_l2_tables,
-                  lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH))
+                  lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
+                  bars=tuple(g for g in p.m7_bars if g in p.m7_groups), patch_fn=patch_fn)
     return sum(x.lifted - x.demoted for x in res.values())
 
 
