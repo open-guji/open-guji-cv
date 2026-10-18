@@ -768,6 +768,9 @@ class SeedAdmitParams(BaseModel):
                 parts = [_fq_fp(self.group_flow_freq), _m7_fp(_ctx_groups, self.group_flow_tables)]
                 if "rr" in self.group_flow:
                     parts.append(_rr_fp(self.rr_clf_model or None) or "missing")
+                from ..groups.ids_online import fingerprint as _ids_fp
+                if _ids_fp(self.group_flow):        # IDS 模板库＋判法（方案 S7）；没有在线 IDS 的组不加，旧指纹不变
+                    parts.append(_ids_fp(self.group_flow))
                 object.__setattr__(self, "group_flow_fingerprint", ":".join(parts))
         if self.rr_clf and not self.rr_clf_fingerprint:
             from ..utils.rr_clf import model_fingerprint as _rr_fp
@@ -804,6 +807,9 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.bars",
                    # 字组统一流程（group_flow，缺省关）
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq",
+                   # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
+                   "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
+                   "open_guji_cv.groups.ids_parts", "open_guji_cv.groups.ids_segment", "open_guji_cv.groups.ids_solver",
                    "open_guji_cv.clustering.iron_evidence",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
@@ -2226,7 +2232,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         m = mmap.get(cid)
         return list(m.candidates or []) if m is not None else []
     patch_fn = None
-    if any(s in ("bars", "rr_img") for g in p.group_flow for s in GROUPS[g].flow.solvers):
+    if any(s in ("bars", "rr_img", "ids") for g in p.group_flow for s in GROUPS[g].flow.solvers):
         slots = {r.id: (c.col, r.slot, r.sub) for c in out for r in c.chars or []}
         recs = {r.id: r for c in out for r in c.chars or []}
         miss = patch_missing if patch_missing is not None else {}
