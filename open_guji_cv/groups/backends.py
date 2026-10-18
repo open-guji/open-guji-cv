@@ -5,8 +5,6 @@
 | `JysRuleBackend` | `utils.ji_yi_si_clf.classify` | 己已巳规则路（前后各 30 字搭配），纯函数，无指纹 |
 | `CtxTableBackend` | `utils.near_form_ctx.decide` | 己已巳语料决策表（前后 1–2 字），指纹＝表文件哈希 |
 | `GroupClfTableBackend` | 原 `steps.group_decide.lookup` 同一读法（该步 2026-10-18 已删） | `group_clf/1` 答案表（B1 §2.1）；原样返回 `votes` 进 `extra` |
-| `RyV2TableBackend` | `utils.ry_group.decide` | 日曰 ry-v2 答案表（旧格式） |
-| `JysSuggestBackend` | `utils.ji_yi_si_clf.suggest` | 己已巳答案表（大模型两遍＋语料分类器，旧格式） |
 | `RrImageBackend` | `utils.rr_clf.classify` | 入人八图像模型（numpy 随机森林），缺图抛 `PatchUnavailable` |
 
 窗口只从 `JudgeInput.window` 取（文本类后端各自要的宽度不同：规则／表 30，近形表 2）。
@@ -90,46 +88,6 @@ class GroupClfTableBackend:
             ch = None
         return GroupVerdict(ch, conf=e.get("conf"), why=str(e.get("why") or ""), via="table",
                             extra={"votes": e.get("votes")})
-
-
-#: ry-v2 旧表里的 why → group_clf/1 词汇（其余原样透传：cache_miss／ctx_mismatch／ver_mismatch／abstain:<来源>／disagree）
-_RY_WHY = {"muse∧gemini 两遍一致": "agree", "haiku_veto": "veto:haiku"}
-
-
-class RyV2TableBackend:
-    name = "table"
-
-    def __init__(self, path: str | Path):
-        self.path = str(path)
-        self.fingerprint = _file_fp(path)
-
-    def judge(self, spec, cell: JudgeInput) -> GroupVerdict:
-        from ..utils.ry_group import decide
-        left, right = cell.window(CTX_WIDTH)
-        res = decide(self.path, cell.id, left, right)
-        if res is None:                       # 没配表：证据不写（与现行 `_ry_group_pass` 一致）
-            return GroupVerdict(None, why="abstain:no_table", via="table", extra={"legacy": None})
-        why = res.get("why") or ""
-        return GroupVerdict(res.get("char"), why=_RY_WHY.get(why, why), via="table",
-                            extra={"legacy": res, "votes": res.get("votes")})
-
-
-class JysSuggestBackend:
-    name = "table"
-
-    def __init__(self, path: str | Path):
-        self.path = str(path)
-        self.fingerprint = _file_fp(path)
-
-    def judge(self, spec, cell: JudgeInput) -> GroupVerdict:
-        from ..utils.ji_yi_si_clf import suggest
-        left, right = cell.window(CTX_WIDTH)
-        sug = suggest(self.path, cell.id, left, right)
-        if sug is None:
-            return GroupVerdict(None, why="cache_miss", via="table", extra={"suggest": None})
-        ch = sug.get("char")
-        why = "agree" if ch else ("ctx_mismatch" if sug.get("why") == "ctx_mismatch" else "disagree")
-        return GroupVerdict(ch, conf=sug.get("lr_margin"), why=why, via="table", extra={"suggest": sug})
 
 
 class RrImageBackend:

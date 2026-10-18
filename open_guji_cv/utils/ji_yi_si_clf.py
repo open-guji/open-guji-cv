@@ -1,15 +1,11 @@
 # -*- coding: utf-8 -*-
 """己/已/巳 分类器（overview#443，Z-jys）：不靠字形、不靠整理本，靠前后的词定字。
 
-两路：
 - **规则路** `classify(left, right)`：纯函数，只放「语言上站得住、几乎无例外」的搭配（干支前天干/后地支、
   而已、已經类、己意/以己見/自己类）；拿不准一律 None。强真值 0/129 错、新留出 0/36 错（见 overview#443）。
   管线里经字组统一流程用：`config/groups/jys/rules.yaml` 的 `legacy` 收编了它（`seed_admit.group_flow` 的 jys 组，
   文意解法 L1；原开关 `seed_admit.ji_yi_si_clf` 已于 2026-10-18 删除）。
-- **答案表路** `Table`：离线批量判出的「大模型两遍 + 语料分类器」答案，按 cell id + 上下文哈希为键，管线只查表
-  （不在线调模型，保持确定性）。只在两遍一致且与分类器同字时给出建议；历史上有语义错
-  （「是己出自入者」被判已）。管线已不读它（原 `ji_yi_si_clf_table`／`ji_yi_si_clf_llm` 已删），只留给离线评测
-  （`groups/backends.JysSuggestBackend`）。
+- 答案表路 `Table`/`suggest`（离线大模型两遍＋语料分类器）已于 2026-10-18 删除，管线早不读它，文意 L2 答案表走 `groups/ctx_l2`。
 
 用户 2026-10-09 四条原则：①不靠字形区分；②自动通过的必须准；③靠前后词定字；④第一候选明显优于第二才放行。
 研究脚本与评测见 `research/char_groups/jys/`；本模块是它的管线内定型版，两处规则以本模块为准
@@ -18,9 +14,6 @@
 from __future__ import annotations
 
 import hashlib
-import json
-from functools import lru_cache
-from pathlib import Path
 
 FAMILY = frozenset("己已巳")
 GAN = frozenset("甲乙丙丁戊己庚辛壬癸")
@@ -101,27 +94,3 @@ def ctx_key(left: str, right: str, width: int = 30) -> str:
     l = left.rsplit("□", 1)[-1][-width:]
     r = right.split("□", 1)[0][:width]
     return hashlib.sha1(f"{l}|{r}".encode("utf-8")).hexdigest()[:12]
-
-
-@lru_cache(maxsize=4)
-def _load(path: str) -> dict:
-    return json.loads(Path(path).read_text(encoding="utf-8"))["cells"]
-
-
-def suggest(table_path: str, cell_id: str, left: str, right: str) -> dict | None:
-    """查答案表 → 建议（字 + 依据）或 None。表项：{ctx, llm:[a,b], lr, lr_margin}。
-
-    建议字 = 两遍大模型一致 ∧ 与语料分类器同字，否则 `char=None`（仍返回表项供看图页参考）。
-    上下文哈希对不上（页上读序与离线不同）→ `{"char": None, "why": "ctx_mismatch"}`。"""
-    if not table_path:
-        return None
-    e = _load(table_path).get(cell_id)
-    if not e:
-        return None
-    if e.get("ctx") != ctx_key(left, right):
-        return {"char": None, "why": "ctx_mismatch"}
-    a, b = (e.get("llm") or [None, None])[:2]
-    lr = e.get("lr")
-    ch = a if a and a == b and a == lr and a in FAMILY else None
-    return {"char": ch, "llm": [a, b], "lr": lr, "lr_margin": e.get("lr_margin"),
-            "why": "大模型两遍一致∧语料分类器同字" if ch else "大模型与分类器不一致"}
