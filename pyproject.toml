@@ -67,6 +67,12 @@ onnx = [
 torch = [
     "torch>=2.0",
 ]
+# 中心库（open_guji_cv/datastore，GUJI-603/605）：直连 Postgres 导入与核对；boto3 只有真上传 R2 才用
+datastore = [
+    "psycopg[binary]>=3.1",
+    "boto3>=1.28",
+    "websockets>=13",
+]
 # PDF 抽页（guji import-pdf）
 pdf = [
     "pymupdf>=1.23",
@@ -116,7 +122,7 @@ exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
 open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/*",
-                "clustering/review/static/*"]
+                "clustering/review/static/*", "datastore/*.sql"]
 
 # ── 测试 ────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
