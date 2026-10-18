@@ -1,7 +1,12 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 在 `## [Unreleased]
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 在 `## [Unreleased]` 下加一行；打 tag 时把 Unreleased 改成该版本节。
+
+## [Unreleased]
+
+### Added
+- 新命令 `guji rerun --stale <册>`：只重跑 manifest 里显式标了失效（人裁落定等）的页，逐步往下传，只把上游真重算了的页交给下游；上游跳过的页不往下传，因 cv 升版、字形库变化而过期的页不跑（`ops/rerun_stale.py`，GUJI-578，设计 §5.2 第 4 条）。按规矩新 CLI 命令算 MINOR；不碰任何 Step，19 步 `code_hash` 不变。
 
 ## [0.3.0] - 2026-10-17
 

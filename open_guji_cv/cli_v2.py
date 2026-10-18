@@ -164,6 +164,36 @@ def cmd_pipeline(args) -> None:
     sys.exit(1 if n_failed and args.stop_on_error else 0)
 
 
+def cmd_rerun(args) -> None:
+    """`guji rerun --stale <册>`：只重跑显式标了失效的页及其下游（GUJI-578）。"""
+    if not args.stale:
+        print("✗ 目前只支持 --stale（只跑显式失效的页）", file=sys.stderr)
+        sys.exit(2)
+    from .core.workspace import assert_workspace_declared
+    assert_workspace_declared()
+    from .ops import rerun_stale as RS
+    eng = _engine(args.book, args.pipeline, None)
+    pages = eng.book.resolve_pages(args.pages)
+
+    def steps_after(first, to):
+        return cli_steps(eng, first, to)
+
+    if args.dry_run:
+        RS.run(eng, steps_after, pages=pages, to_step=args.to_step, dry_run=True)
+        return
+    from .core.runlock import RunLockHeld, book_run_lock
+    try:
+        with book_run_lock(eng.book.id, wait=args.wait):
+            _, rep = RS.run(eng, steps_after, pages=pages, to_step=args.to_step, jobs=args.jobs)
+    except RunLockHeld as e:
+        print(f"✗ {e}", file=sys.stderr)
+        sys.exit(3)
+    if rep is not None and args.json:
+        print(json.dumps(rep.to_dict(), ensure_ascii=False))
+    n_failed = sum(1 for o in (rep.outcomes if rep else []) if o.status == "failed")
+    sys.exit(1 if n_failed else 0)
+
+
 def cmd_step(args) -> None:
     args.from_step = args.to_step = args.step
     cmd_pipeline(args)
@@ -2158,6 +2188,7 @@ COMMANDS_V2 = {
     "release": cmd_release,
     "deploy": cmd_deploy,
     "snap": cmd_snap,
+    "rerun": cmd_rerun,
 }
 
 
@@ -2285,6 +2316,17 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     _add_pages(p)
+
+    p = sub.add_parser("rerun", help="[v2] --stale：只重跑显式标了失效（人裁落定等）的页及其下游")
+    p.add_argument("book")
+    p.add_argument("--stale", action="store_true", help="只跑 manifest 里 invalidated 的页（目前必须给）")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all", help="只在这些页里找失效（默认全书）")
+    p.add_argument("--to", dest="to_step", default=None, help="跑到哪一步为止（含），默认管线末尾")
+    p.add_argument("--dry-run", action="store_true", help="只列要跑哪些步哪些页")
+    p.add_argument("--jobs", type=int, default=1, help="页级并行进程数（只对 parallel_safe 的步生效）")
+    p.add_argument("--wait", action="store_true", help="这本书正有别的跑批时排队等")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("binarize",
                        help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
