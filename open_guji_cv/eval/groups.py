@@ -8,9 +8,9 @@ dataset README 规定的「分类器层」三个数：**给字率 / 给字准确
 用法（不依赖工作区与快照，只要 dataset 在本地）::
 
     python -m open_guji_cv.eval.groups jys --dataset ../open-guji-dataset/char-groups --backend rule
-    python -m open_guji_cv.eval.groups ry  --dataset ... --backend table:<ry-v2 答案表或 group_clf/1 表>
+    python -m open_guji_cv.eval.groups ry  --dataset ... --backend table:<group_clf/1 表>
     python -m open_guji_cv.eval.groups rr  --dataset ... --backend image[:<模型 npz>] --splits val
-    python -m open_guji_cv.eval.groups jys --dataset ... --backend rule --backend suggest:<答案表> --json out.json
+    python -m open_guji_cv.eval.groups jys --dataset ... --backend rule --backend ctx_table --json out.json
 
 口径（照 dataset README「评测口径」）：
 - 只在强真值上数：`A_human`、`B_vision`；`C_weak`（证人一致，对 match_ref 是循环的）不数；两档分开报；
@@ -208,24 +208,18 @@ def render_markdown(group: str, arms: dict[str, list[Row]], skipped: dict, n_ite
 
 # ------------------------------------------------------------------ 命令行
 def make_backend(spec_text: str, group: str):
-    """`rule` | `ctx_table[:路径]` | `table:<路径>`（自动识别 group_clf/1 与 ry-v2） | `suggest:<路径>` | `image[:<模型>]`。"""
-    from ..groups.backends import (CtxTableBackend, GroupClfTableBackend, JysRuleBackend, JysSuggestBackend,
-                                   RrImageBackend, RyV2TableBackend)
+    """`rule` | `ctx_table[:路径]` | `table:<路径>`（group_clf/1） | `image[:<模型>]`。"""
+    from ..groups.backends import CtxTableBackend, GroupClfTableBackend, JysRuleBackend, RrImageBackend
     kind, _, arg = spec_text.partition(":")
     if kind == "rule":
         return JysRuleBackend()
     if kind == "ctx_table":
         return CtxTableBackend(path=arg or None)
-    if kind == "suggest":
-        return JysSuggestBackend(arg)
     if kind == "image":
         return RrImageBackend(model_path=arg or None)
     if kind == "table":
-        data = json.loads(Path(arg).read_text(encoding="utf-8"))
-        if data.get("schema") == "group_clf/1":
-            return GroupClfTableBackend(arg)
-        return RyV2TableBackend(arg)
-    raise SystemExit(f"未知后端 {spec_text!r}；可用：rule | ctx_table[:路径] | table:路径 | suggest:路径 | image[:模型]")
+        return GroupClfTableBackend(arg)
+    raise SystemExit(f"未知后端 {spec_text!r}；可用：rule | ctx_table[:路径] | table:路径 | image[:模型]")
 
 
 def main(argv: list[str] | None = None) -> int:

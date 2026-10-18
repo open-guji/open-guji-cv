@@ -122,28 +122,6 @@ def test_research_rules_parity():
 
 
 # ---- 答案表 ----
-def _table(tmp_path, cells):
-    p = tmp_path / "clf_table.json"
-    p.write_text(json.dumps({"cells": cells}), encoding="utf-8")
-    clf._load.cache_clear()
-    return str(p)
-
-
-def test_suggest_needs_both_passes_and_lr(tmp_path):
-    k = clf.ctx_key("山", "水")
-    t = _table(tmp_path, {
-        "a": {"ctx": k, "llm": ["己", "己"], "lr": "己", "lr_margin": 0.9},
-        "b": {"ctx": k, "llm": ["己", "已"], "lr": "己", "lr_margin": 0.9},
-        "c": {"ctx": k, "llm": ["己", "己"], "lr": "已", "lr_margin": 0.9},
-        "d": {"ctx": "xxxx", "llm": ["己", "己"], "lr": "己", "lr_margin": 0.9}})
-    assert clf.suggest(t, "a", "山", "水")["char"] == "己"
-    assert clf.suggest(t, "b", "山", "水")["char"] is None
-    assert clf.suggest(t, "c", "山", "水")["char"] is None
-    assert clf.suggest(t, "d", "山", "水") == {"char": None, "why": "ctx_mismatch"}
-    assert clf.suggest(t, "zz", "山", "水") is None
-    assert clf.suggest("", "a", "山", "水") is None
-
-
 def test_ctx_key_cuts_at_unknown():
     assert clf.ctx_key("甲□乙丙", "丁□戊") == clf.ctx_key("乙丙", "丁")
 

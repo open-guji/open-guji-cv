@@ -126,12 +126,10 @@ def test_image_backend_reports_patch_missing_not_silent(tmp_path, capsys):
     assert "缺图 1" in capsys.readouterr().out
 
 
-def test_make_backend_detects_table_format(tmp_path):
-    from open_guji_cv.groups.backends import GroupClfTableBackend, RyV2TableBackend
-    a, b = tmp_path / "a.json", tmp_path / "b.json"
+def test_make_backend_table_and_unknown(tmp_path):
+    from open_guji_cv.groups.backends import GroupClfTableBackend
+    a = tmp_path / "a.json"
     a.write_text(json.dumps({"schema": "group_clf/1", "group": "ry", "cells": {}}), encoding="utf-8")
-    b.write_text(json.dumps({"cells": {}}), encoding="utf-8")
     assert isinstance(eg.make_backend(f"table:{a}", "ry"), GroupClfTableBackend)
-    assert isinstance(eg.make_backend(f"table:{b}", "ry"), RyV2TableBackend)
     with pytest.raises(SystemExit):
         eg.make_backend("nope", "ry")

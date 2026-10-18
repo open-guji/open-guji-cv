@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 from open_guji_cv.groups import GROUPS, get_group, groups_of
-from open_guji_cv.utils import ji_yi_si, ji_yi_si_clf, ry_group, rr_clf
+from open_guji_cv.utils import ji_yi_si, ji_yi_si_clf, rr_clf
 
 BACKEND_NAMES = {"rule", "ctx_table", "table", "image"}
 
@@ -12,7 +12,7 @@ BACKEND_NAMES = {"rule", "ctx_table", "table", "image"}
 def test_members_match_legacy_constants():
     """注册表是单一真源，但现有代码里还有各自的成员常量（在 Step 的 code_deps 里，S0 不动它们）——两边不许漂。"""
     assert GROUPS["jys"].members == ji_yi_si_clf.FAMILY == ji_yi_si.FAMILY
-    assert GROUPS["ry"].members == ry_group.FAMILY
+    assert GROUPS["ry"].members == frozenset("日曰")
     assert GROUPS["rr"].members == frozenset(rr_clf.CLASSES)
 
 

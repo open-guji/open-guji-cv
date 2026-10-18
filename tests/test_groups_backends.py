@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """字组判别后端适配器（`open_guji_cv/groups/backends.py`，S0）。自造数据与桩模型，不读真书。
 
-重点：适配器必须与它包住的现有函数**逐格一致**——`RyV2TableBackend`／`JysRuleBackend`／`JysSuggestBackend`／`CtxTableBackend` 对拍各自的 utils 函数。
+重点：适配器必须与它包住的现有函数**逐格一致**——`JysRuleBackend`／`CtxTableBackend` 对拍各自的 utils 函数。
 `GroupClfTableBackend` 原先对拍 `steps.group_decide.lookup`；Step6b `group_decide` 已于 2026-10-18 删除
 （sheldon 定），改成对着当时对拍过的逐格答案写死期望值。
 """
@@ -16,8 +16,8 @@ import open_guji_cv.steps  # noqa: F401
 import open_guji_cv.utils.rr_clf as rr
 from open_guji_cv.groups import GROUPS, JudgeInput, PatchUnavailable, window_from_text
 from open_guji_cv.groups.backends import (CtxTableBackend, GroupClfTableBackend, JysRuleBackend,
-                                          JysSuggestBackend, RrImageBackend, RyV2TableBackend)
-from open_guji_cv.utils import ji_yi_si_clf, ry_group
+                                          RrImageBackend)
+from open_guji_cv.utils import ji_yi_si_clf
 from open_guji_cv.utils.ji_yi_si_clf import ctx_key
 
 
@@ -93,54 +93,6 @@ def test_group_clf_backend_from_file_has_fingerprint(tmp_path):
     assert len(be.fingerprint) == 16
     p.write_text(json.dumps(_gc_table("ry", {"x": {}})), encoding="utf-8")
     assert GroupClfTableBackend(p).fingerprint != be.fingerprint        # 表一变指纹变
-
-
-# ---------------------------------------------------------------- ry-v2 旧表
-def _ry_votes(muse=("日", "日"), gemini=("日", "日"), haiku=("日",)):
-    return {"muse": list(muse), "gemini": list(gemini), "haiku": list(haiku)}
-
-
-def test_ry_v2_backend_equals_decide_and_maps_why(tmp_path):
-    left, right = "某", "也"
-    key = ctx_key(left, right)
-    cells = {
-        "agree": {"ctx": key, "ver": "ry-v2", "votes": _ry_votes()},
-        "veto": {"ctx": key, "ver": "ry-v2", "votes": _ry_votes(haiku=("曰",))},
-        "disagree": {"ctx": key, "ver": "ry-v2", "votes": _ry_votes(gemini=("曰", "曰"))},
-        "abstain": {"ctx": key, "ver": "ry-v2", "votes": {"muse": ["日", "不确定"], "gemini": ["日", "日"]}},
-        "badver": {"ctx": key, "ver": "ry-v1", "votes": _ry_votes()},
-        "badctx": {"ctx": "0000", "ver": "ry-v2", "votes": _ry_votes()},
-    }
-    p = tmp_path / "ry.json"
-    p.write_text(json.dumps({"cells": cells}), encoding="utf-8")
-    ry_group._load.cache_clear()
-    be = RyV2TableBackend(p)
-    want_why = {"agree": "agree", "veto": "veto:haiku", "disagree": "disagree", "abstain": "abstain:muse",
-                "badver": "ver_mismatch", "badctx": "ctx_mismatch", "missing": "cache_miss"}
-    for cid, why in want_why.items():
-        old = ry_group.decide(str(p), cid, left, right)
-        v = be.judge(GROUPS["ry"], _cell(cid=cid, left=left, right=right))
-        assert v.char == old["char"] and v.why == why, cid
-        assert v.extra["legacy"] == old               # 原始返回原样保留，旧证据键 `ry_group` 靠它
-    assert be.judge(GROUPS["ry"], _cell(cid="agree", left=left, right=right)).char == "日"
-
-
-# ---------------------------------------------------------------- jys 答案表（suggest）
-def test_jys_suggest_backend(tmp_path):
-    left, right = "而", ""
-    key = ctx_key(left, right)
-    cells = {"ok": {"ctx": key, "llm": ["已", "已"], "lr": "已", "lr_margin": 0.4},
-             "split": {"ctx": key, "llm": ["已", "己"], "lr": "已", "lr_margin": 0.1},
-             "badctx": {"ctx": "0000", "llm": ["已", "已"], "lr": "已"}}
-    p = tmp_path / "jys.json"
-    p.write_text(json.dumps({"cells": cells}), encoding="utf-8")
-    ji_yi_si_clf._load.cache_clear()
-    be = JysSuggestBackend(p)
-    ok = be.judge(GROUPS["jys"], _cell(cid="ok", left=left, right=right))
-    assert (ok.char, ok.why, ok.conf) == ("已", "agree", 0.4)
-    assert be.judge(GROUPS["jys"], _cell(cid="split", left=left, right=right)).why == "disagree"
-    assert be.judge(GROUPS["jys"], _cell(cid="badctx", left=left, right=right)).why == "ctx_mismatch"
-    assert be.judge(GROUPS["jys"], _cell(cid="none", left=left, right=right)).why == "cache_miss"
 
 
 # ---------------------------------------------------------------- jys 语料决策表
