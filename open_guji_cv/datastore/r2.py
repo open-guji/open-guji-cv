@@ -113,6 +113,67 @@ def _client():
     return s3, os.environ["R2_BUCKET"]
 
 
+def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: int = 8,
+                      limit: int | None = None) -> dict:
+    """经 guji-data Worker 传：POST /v1/assets/sign → 已有就跳过，否则 PUT 到返回的 url。
+
+    要 ``GUJI_DATA_TOKEN``（exp 令牌只能传 exp 桶，main 桶要正式令牌）；地址默认
+    https://data.open-guji.com（``GUJI_DATA_URL`` 可改）。Worker 端核 sha256，不符回 400。
+    每张图两次 Worker 请求（免费档每天 10 万次），``limit`` 用来分批。
+    """
+    import ssl
+    import urllib.error
+    import urllib.request
+    token = os.environ.get("GUJI_DATA_TOKEN")
+    if not token:
+        raise SystemExit("缺环境变量 GUJI_DATA_TOKEN，不能上传（dry-run 不需要）")
+    base = os.environ.get("GUJI_DATA_URL", "https://data.open-guji.com").rstrip("/")
+    ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
+    ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
+    stats = Counter()
+    local = threading.local()
+    readers: list = []
+
+    def call(url, data, method, headers):
+        req = urllib.request.Request(url, data=data, method=method, headers=headers)
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+                return r.status, r.read()
+        except urllib.error.HTTPError as e:
+            return e.code, e.read()
+
+    def one(o: Obj) -> str:
+        st, body = call(f"{base}/v1/assets/sign", json.dumps(
+            {"bucket": bucket, "op": "put", "sha256": o.sha, "ext": "png"}).encode(), "POST",
+            {"authorization": f"Bearer {token}", "content-type": "application/json"})
+        if st != 200:
+            return f"sign_{st}"
+        sig = json.loads(body)
+        if sig.get("exists"):
+            return "exists"
+        if sig.get("key") != r2_key(o.sha):
+            return "key_mismatch"
+        if not hasattr(local, "reader"):
+            local.reader = gitsource.BlobReader(repo)
+            readers.append(local.reader)
+        data = local.reader.read(o.oid)
+        if sha256(data) != o.sha:
+            return "sha_mismatch"
+        hdr = {"authorization": f"Bearer {token}", **(sig.get("headers") or {})}
+        st, _ = call(sig["url"], data, sig.get("method", "PUT"), hdr)
+        return "uploaded" if st in (200, 201) else f"put_{st}"
+
+    todo = sorted(objs.values(), key=lambda o: o.sha)[:limit]
+    try:
+        with ThreadPoolExecutor(workers) as ex:
+            for res in ex.map(one, todo):
+                stats[res] += 1
+    finally:
+        for r in readers:
+            r.close()
+    return dict(stats)
+
+
 def upload(repo, objs: dict[str, Obj], workers: int = 8) -> dict:
     """HEAD → 没有才 PUT；PUT 后核 ETag（单段上传的 ETag 是 MD5）。返回计数。"""
     s3, bucket = _client()

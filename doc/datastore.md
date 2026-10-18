@@ -29,7 +29,9 @@ export GUJI_DATA_PG_DSN="host=127.0.0.1 port=15432 dbname=neondb user=<角色> p
 - `import --dry-run` 只算差别不写库；`--ws <id>` 只导一个工作区。
 - `verify` 退出码 0 = 库与提交逐行一致。
 - `r2-plan` 默认只出清单；设了 `GUJI_DATA_PG_DSN` 会顺便和库里的 sha 对一遍。
-  真上传加 `--execute`，要 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`。
+  真上传加 `--execute`：默认走 R2 S3 接口，要 `R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET`；
+  `--via worker` 经 guji-data Worker（`/v1/assets/sign` 拿链接再 PUT），要 `GUJI_DATA_TOKEN`，
+  `--bucket exp|main`，每张图两次 Worker 请求（免费档每天 10 万次），用 `--limit` 分批。
 
 ## 二、口径
 

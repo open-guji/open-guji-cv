@@ -58,6 +58,10 @@ def main(argv=None) -> int:
     p.add_argument("--manifest", help="把对象清单写到这个 jsonl")
     p.add_argument("--execute", action="store_true", help="真上传（要 R2_* 环境变量）")
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--via", choices=["s3", "worker"], default="s3",
+                   help="s3：R2 S3 接口（要 R2_*）；worker：经 guji-data Worker 签名上传（要 GUJI_DATA_TOKEN）")
+    p.add_argument("--bucket", choices=["exp", "main"], default="exp", help="--via worker 时传哪个桶")
+    p.add_argument("--limit", type=int, help="--via worker 时只传前 N 个（按 sha 排序，分批用）")
 
     args = ap.parse_args(argv)
 
@@ -104,7 +108,11 @@ def main(argv=None) -> int:
             with _connect(args) as conn:
                 out["db_check"] = r2.check_against_db(conn, objs)
         if args.execute:
-            out["upload"] = r2.upload(args.repo, objs, workers=args.workers)
+            if args.via == "worker":
+                out["upload"] = r2.upload_via_worker(args.repo, objs, bucket=args.bucket,
+                                                     workers=args.workers, limit=args.limit)
+            else:
+                out["upload"] = r2.upload(args.repo, objs, workers=args.workers)
         _print(out)
         return 0
     return 1
