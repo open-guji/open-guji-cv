@@ -1,0 +1,1 @@
+{"type":"object","properties":{"results":{"type":"array","items":{"type":"object","properties":{"id":{"type":"string"},"char":{"type":"string"},"conf":{"type":"string","enum":["high","mid","low"]},"why":{"type":"string"}},"required":["id","char","conf"]}}},"required":["results"]}
