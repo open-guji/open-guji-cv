@@ -53,3 +53,32 @@ def test_other_flags_and_normal_char_untouched(tmp_path, monkeypatch):
 
 def test_one_is_not_a_stroke_char(tmp_path, monkeypatch):
     assert _run(tmp_path, monkeypatch, char="一", params=ON).admit
+
+
+def _run_jz(tmp_path, monkeypatch, *, flags, params):
+    from open_guji_cv.products.kinds.chars import CharRec  # noqa: F401
+    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
+        PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, sub="a", verdict="same", char="之", cov=0.999,
+                                        wmax=10.0, candidates=[("之", 0.999)])]))
+    write_product(ctx, "cell_shrink", PAGE, char_index=page_chars(
+        PAGE, BOOK, col=COL, recs=[dict(slot=SLOT, sub="a", ink_ratio=0.3, flags=list(flags))]))
+    ctx.params["seed_admit"] = SeedAdmitParams(**params)
+    return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns[0].chars[0]
+
+
+def test_jiazhu_rule_bar_default_still_withdrawn(tmp_path, monkeypatch):
+    assert not _run_jz(tmp_path, monkeypatch, flags=["rule_bar"], params=ON).admit
+    assert "nonchar_jiazhu_ignore_rule_bar" not in SeedAdmitParams(**ON).model_dump()
+
+
+def test_jiazhu_rule_bar_ignored_when_on(tmp_path, monkeypatch):
+    p = {**ON, "nonchar_jiazhu_ignore_rule_bar": True}
+    assert _run_jz(tmp_path, monkeypatch, flags=["rule_bar"], params=p).admit
+    # bad_seg 照旧撤回
+    assert not _run_jz(tmp_path, monkeypatch, flags=["bad_seg"], params=p).admit
+
+
+def test_body_cell_rule_bar_unaffected_by_jiazhu_switch(tmp_path, monkeypatch):
+    p = {**ON, "nonchar_jiazhu_ignore_rule_bar": True}
+    assert not _run(tmp_path, monkeypatch, flags=["rule_bar"], params=p).admit
