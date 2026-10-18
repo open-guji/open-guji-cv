@@ -79,7 +79,9 @@ def test_mismatch_explains_dirty_and_shallow(monkeypatch):
     assert "浅克隆" in cvv.mismatch("0.3.0")
 
 
-def test_mismatch():
+def test_mismatch(monkeypatch):
+    # installed=None 表示「自己去探装的版本」；固定成探不到，免得结果随检出的 tag 变
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: (None, None))
     assert cvv.mismatch(None, "0.3.0") is None
     assert cvv.mismatch("0.3.0", "0.3.0") is None
     assert cvv.mismatch("v0.3.0", "0.3.0") is None
