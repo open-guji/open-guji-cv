@@ -33,6 +33,21 @@ def _db_path(ws_dir: Path | None) -> Path | None:
     return Path(glyph_db_path())
 
 
+def rebuild_db(ws_dir: Path, store: Path, db_path: Path) -> dict:
+    """同 ``guji glyph-db rebuild --no-replay --no-borrow --store <store>``。"""
+    import yaml
+    from .clustering.glyph_db import assert_db_not_silently_empty, rebuild_from_store
+    wcfg = yaml.safe_load((Path(ws_dir) / "workspace.yaml").read_text(encoding="utf-8")) or {}
+    if ((wcfg.get("glyph_lib") or {}).get("borrow")):
+        raise SystemExit("workspace.yaml 配了 glyph_lib.borrow（借库）：db pull 暂不支持借库，"
+                         "请先用 guji glyph-db rebuild")
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    summary = rebuild_from_store(store, db_path)
+    assert_db_not_silently_empty(db_path, store)
+    return summary
+
+
+
 def cmd_db(args) -> None:
     from .datastore.client import WorkerSource
     src = WorkerSource(branch=args.branch)
@@ -48,7 +63,7 @@ def cmd_db(args) -> None:
             raise SystemExit("db pull 要 -w <工作区>（或 GUJI_WORKSPACE）")
         from .datastore.pull import pull
         res = pull(src, ws_dir, _db_path(ws_dir), rev=args.rev, with_feedback=args.with_feedback,
-                   rebuild=not args.no_rebuild, bucket=args.bucket)
+                   rebuild=None if args.no_rebuild else rebuild_db, bucket=args.bucket)
         res["worker_requests"] = src.requests
         _print(res)
         return

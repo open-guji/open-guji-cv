@@ -115,7 +115,7 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
 - **pull 怎么做**：按 `source_files` 把 `output/glyph_store/` 下每个文件从库里拼回（口径同 `verify`），
   每个文件核整文件 sha256，有一个不对就整次报错、不落盘；刻例图按 `glyph_instances.patch_sha`
   从本地缓存取，缺的经 `/v1/assets/sign-batch` 一次签 1000 张再下载（旧版 Worker 退回逐张签）。
-  还原到 `<工作区>/output/central/<分支>/glyph_store/`，再走与 `guji glyph-db rebuild --no-replay --no-borrow`
+  还原到 `<工作区>/output/central/<分支>/output/glyph_store/`，再走与 `guji glyph-db rebuild --no-replay --no-borrow`
   相同的 `rebuild_from_store`。工作区里 git 管着的 `output/glyph_store/` 不动。
 - 读的过程中该工作区有新写入就重读（最多 3 次），保证拿到的是同一个版本。
 - `glyph.db.central.json`（库旁）记分支、rev、拉取时间，`status` 用它算落后几条。
@@ -126,3 +126,8 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
 验收（`tests/datastore/test_datastore_pull.py`）：真字形库（admit → export）进 git → 导入 Postgres →
 `pull`：还原的每个文件与提交逐字节相同；重建的 glyph.db 与直接从 git 的字形库 rebuild 出的库**全部表逐行相同**；
 `--rev` 钉版本、篡改库内容被拒、实验分支事件导入、假 Worker 上的分页与批量签名。17 步 `code_hash` 不变。
+
+**在线实测（2026-10-18，云会话，读令牌，main 分支 rev 1346）**：北行日錄（beixing-guben）`guji db pull`
+还原 13 个文件、4,851 张刻例图（实验桶，Worker 尚未部署批量签名，逐张签，9,719 次 Worker 请求，约 17 分钟）；
+还原的字形库与 guji-workspace `888cd82` 的 `output/glyph_store/` 逐字节相同（`diff -r` 无差别），
+重建的 glyph.db 与从 git 字形库 rebuild 的库 14 张表逐行相同。

@@ -1,7 +1,7 @@
 """``guji db status / pull / import`` 的实现（GUJI-606，设计第五节）。
 
 ``pull``：按中心库某分支的当前版本把字形库账本还原到
-``<工作区>/output/central/<分支>/glyph_store/``，再用它重建本地 ``glyph.db``，等价于
+``<工作区>/output/central/<分支>/output/glyph_store/``，再用它重建本地 ``glyph.db``，等价于
 ``guji glyph-db rebuild --no-replay --no-borrow --store <还原目录>``。工作区里 git 管着的
 ``output/glyph_store/`` 不动。拉完在库旁写 ``glyph.db.central.json``，记分支、rev、时间。
 
@@ -71,7 +71,9 @@ def _check_pin(src, ws: str, rev: int) -> None:
 
 
 def pull(src, ws_dir: Path, db_path: Path, rev: int | None = None, with_feedback: bool = False,
-         rebuild: bool = True, cache=None, bucket: str = "main", retries: int = 3) -> dict:
+         rebuild=None, cache=None, bucket: str = "main", retries: int = 3) -> dict:
+    """``rebuild(ws_dir, store, db_path) -> dict``：重建 glyph.db 的函数（cli_db.rebuild_db）；
+    None 只还原文件。由调用方传进来，datastore（L1）不 import clustering（L2）。"""
     ws_dir = Path(ws_dir)
     ws = workspace_id(ws_dir)
     branch = getattr(src, "branch", "main")
@@ -95,7 +97,7 @@ def pull(src, ws_dir: Path, db_path: Path, rev: int | None = None, with_feedback
     ws_rev = rev if rev is not None else r0
     out = {"ws": ws, "branch": branch, "rev": ws_rev, "store": str(dest / GS), **stats}
     if rebuild:
-        out["glyph_db"] = rebuild_db(ws_dir, dest / GS, db_path)
+        out["glyph_db"] = rebuild(ws_dir, dest / GS, db_path)
     meta = {"ws": ws, "branch": branch, "rev": ws_rev, "source": src.describe(),
             "store": str(dest / GS), "pulled_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "with_feedback": with_feedback}
@@ -103,20 +105,6 @@ def pull(src, ws_dir: Path, db_path: Path, rev: int | None = None, with_feedback
         meta_path(db_path).write_text(json.dumps(meta, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     out["seconds"] = round(time.time() - t0, 1)
     return out
-
-
-def rebuild_db(ws_dir: Path, store: Path, db_path: Path) -> dict:
-    """同 ``guji glyph-db rebuild --no-replay --no-borrow --store <store>``。"""
-    import yaml
-    from ..clustering.glyph_db import assert_db_not_silently_empty, rebuild_from_store
-    wcfg = yaml.safe_load((Path(ws_dir) / "workspace.yaml").read_text(encoding="utf-8")) or {}
-    if ((wcfg.get("glyph_lib") or {}).get("borrow")):
-        raise SystemExit("workspace.yaml 配了 glyph_lib.borrow（借库）：db pull 暂不支持借库，"
-                         "请先用 guji glyph-db rebuild")
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    summary = rebuild_from_store(store, db_path)
-    assert_db_not_silently_empty(db_path, store)
-    return summary
 
 
 def import_events(src_from, dst, ws: str, ids: set[str] | None, dst_branch: str,

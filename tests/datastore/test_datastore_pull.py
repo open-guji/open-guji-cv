@@ -83,6 +83,7 @@ def test_pull_matches_git_store_and_rebuild(repo, conn, tmp_path):  # noqa: F811
     from open_guji_cv.clustering.glyph_db import rebuild_from_store
     from open_guji_cv.datastore.client import PgSource
     from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.cli_db import rebuild_db
     from open_guji_cv.datastore.pull import pull, read_meta
 
     files = _workspace(tmp_path)
@@ -94,7 +95,7 @@ def test_pull_matches_git_store_and_rebuild(repo, conn, tmp_path):  # noqa: F811
     ws.mkdir()
     (ws / "workspace.yaml").write_bytes(files["W/workspace.yaml"])
     db_path = ws / "output" / "glyph.db"
-    res = pull(src, ws, db_path, with_feedback=True,
+    res = pull(src, ws, db_path, with_feedback=True, rebuild=rebuild_db,
                cache=_Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()}))
     assert res["rev"] == src.status() and res["ws"] == "tws"
 
@@ -117,7 +118,7 @@ def test_pull_matches_git_store_and_rebuild(repo, conn, tmp_path):  # noqa: F811
 
     # 3. 钉版本：没变就能按旧 rev 拉；该工作区有新写入后再钉旧 rev 就报错
     r_old = res["rev"]
-    assert pull(src, ws, db_path, rev=r_old, cache=_Cache(tmp_path / "cache", {}))["rev"] == r_old
+    assert pull(src, ws, db_path, rev=r_old, rebuild=rebuild_db, cache=_Cache(tmp_path / "cache", {}))["rev"] == r_old
     files["W/feedback/events/b.jsonl"] += (_line(id="evt_b_2", batch="b", seq=2) + "\n").encode()
     import_commit(conn, repo, _commit(repo, files, "c2"))
     with pytest.raises(SystemExit, match="之后已有变更"):
