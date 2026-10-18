@@ -56,6 +56,25 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.3.0
+
+对比 `v0.2.1`（`d5c84d8b`）。先打 `v0.3.0-rc.1` 验收，通过后在同一提交打正式 `v0.3.0`（annotated，main 上）；规矩见 `doc/版本号规矩.md`。
+
+### Added
+- M7 形近字优化算法库 `open_guji_cv/groups/`：IDS 路（彝六字形）与上下文路（日曰／己已巳／入人八），含注册表 `solvers`、`config/groups/<组>/`。**未接进任何 Step，缺省不生效。**
+- 粗校出口一键取数 `scripts/zhengli/collect_exit.py`；`guji close-check --tier rough|final`；`guji pipeline --isolate-steps`；`scripts/relanding/`。
+
+### Changed
+- 无。
+
+### Fixed
+- `guji snap import` 认 `GUJI_PRODUCTS_DIR`；导出把看图判错未裁的放行格记 `review: pending`。
+
+### Removed
+- 无。
+
+影响清单：19 步 `code_hash` 相对 `v0.2.1` 无变化（静态依赖比对）。全量测试：3143 通过、1 失败（`test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`，main 上同样失败，在基线内）、32 跳过（未装 torch）。
+
 ## v0.2.0
 
 对比 `cv-v0.1.0`（`26657f84`）。tag 为 `v0.2.0`（annotated），由 Owen 在 main 上打；规矩见 `doc/版本号规矩.md`。
