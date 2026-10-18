@@ -99,7 +99,8 @@ def test_freq_table_roundtrip_and_build(tmp_path):
     (ws / "feedback" / "events").mkdir(parents=True)
     inst = [{"instance_id": "v:1:1:1", "label": "㫖", "label_status": "human"},
             {"instance_id": "v:1:1:2", "label": "旨", "label_status": "align"},
-            {"instance_id": "v:1:1:3", "label": "旨", "label_status": "human"}]
+            {"instance_id": "v:1:1:3", "label": "旨", "label_status": "human"},
+            {"instance_id": "v2:v:1:1:1", "label": "㫖", "label_status": "human"}]   # 同一格带来源前缀，不重复计
     (ws / "output" / "glyph_store" / "instances" / "v.jsonl").write_text(
         "\n".join(json.dumps(x, ensure_ascii=False) for x in inst), encoding="utf-8")
     evs = [{"kind": "confirm", "ts": "2026-10-01", "target": {"key": "v:1:1:3"}, "payload": {"v": "confirm", "shape": "㫖"}},

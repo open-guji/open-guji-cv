@@ -1391,12 +1391,18 @@ class SeedAdmitStep(Step):
         n_auto += d_auto
         n_review += d_review
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
-        #   0 _resolve_ji_yi_si（己已巳，上面；**不是只升**：它和它调的 `_ji_yi_si_clf_cell` 有降级，
+        #   0 _resolve_ji_yi_si（己已巳，上面；其后 0b group_flow（升／降，缺省关）；**不是只升**：它和它调的 `_ji_yi_si_clf_cell` 有降级，
         #     遍名 ji_yi_si_ctx_review／ji_yi_si_review／ji_yi_si_clf_conflict／ji_yi_si_clf_review，都调 `_demote`）→ 1 rare_ref（升）→ 2 ry_group（升）→ 3 shadow_veto（降）→
         #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ 6 rare_cp_ctx_review（降）→ 7 rr_clf（降）→
         #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）。（shadow_promote 已于 W2 删除）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
         #   主循环内就地置空（放行记录生成之前）的不记。
+        # 字组统一流程（group_flow）紧接主循环与己已巳一遍：组内格先按组判，免得 rare_ref 等补放遍把整理本字
+        # 放进来（vol04 A/B：rare_ref 把刻作 𫎇 的格放成整理本的 蒙）
+        if p.group_flow:
+            d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
+            n_auto += d_gf
+            n_review -= d_gf
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop)
             n_auto += d_rr
@@ -1433,10 +1439,6 @@ class SeedAdmitStep(Step):
             d_m7 = _m7_group_pass(p, out, amap, ctx, page, patch_missing)
             n_auto += d_m7
             n_review -= d_m7
-        if p.group_flow:
-            d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
-            n_auto += d_gf
-            n_review -= d_gf
         if p.oversplit_gate == "hint":
             _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:

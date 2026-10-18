@@ -30,6 +30,11 @@ MAJOR = 20
 _NO_SHAPE = frozenset({"not_a_char", "seg_defect", "skip", "damaged"})
 
 
+def _cell_key(k: str) -> str:
+    """同一格在字形库里可能带来源前缀（`v2:vol02:132:8:17`），统一成 `册:页:列:格` 再去重。"""
+    return ":".join(k.split(":")[-4:])
+
+
 def human_shapes(workspace: Path) -> dict[str, str]:
     """{格 key（`vol01:10:1:10`）: 人裁刻形}。字形库 human 标注打底，confirm 事件按时间覆盖。"""
     out: dict[str, str] = {}
@@ -40,7 +45,7 @@ def human_shapes(workspace: Path) -> dict[str, str]:
             except ValueError:
                 continue
             if r.get("label_status") == "human" and r.get("label") and r.get("instance_id"):
-                out[r["instance_id"]] = r["label"]
+                out[_cell_key(r["instance_id"])] = r["label"]
     evs = []
     for f in sorted(glob.glob(str(workspace / "feedback" / "events" / "*.jsonl"))):
         for line in open(f, encoding="utf-8"):
@@ -52,7 +57,7 @@ def human_shapes(workspace: Path) -> dict[str, str]:
                 continue
             key = (e.get("target") or {}).get("key")
             if key:
-                evs.append((e.get("ts") or "", key, e.get("payload") or {}))
+                evs.append((e.get("ts") or "", _cell_key(key), e.get("payload") or {}))
     for _, key, p in sorted(evs, key=lambda x: x[0]):
         if p.get("v") == "confirm" and p.get("shape") and len(p["shape"]) == 1:
             out[key] = p["shape"]
