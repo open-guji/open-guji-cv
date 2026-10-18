@@ -7,7 +7,7 @@
 
 放行判据（`decide`）：muse、gemini 都给字、两遍都在、四票同字；haiku 只有否决权（给了另一个字即否决，
 弃权／缺票不否决）。缺格、上下文哈希对不上、版本不符、任一遍弃权／不一致 → `char=None` 并写明原因。
-本模块只给证据；是否放行由 `seed_admit` 按「只抬待审、不改字」处理。"""
+本模块只给证据；管线已不读它（原开关 `seed_admit.ry_group` 已于 2026-10-18 并进 `group_flow` 删除），只留给离线评测（`groups/backends.RyV2TableBackend`）。"""
 from __future__ import annotations
 
 import json

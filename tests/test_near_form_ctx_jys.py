@@ -46,10 +46,6 @@ def test_decide_context_too_short(tmp_path):
     assert nfc.decide("", "矣", path=p)[0] is None        # 没有前文，(1,1) 用不了；(0,1) 键不存在
 
 
-def test_param_default_off():
-    assert SeedAdmitParams().ji_yi_si_ctx_rule is False
-
-
 def _ctx(tmp_path, monkeypatch, params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
@@ -72,24 +68,3 @@ def _run(ctx, left, right, ref):
     return {r.slot: r for cc in sa.columns for r in cc.chars}[2]
 
 
-def test_rule_on_admits_when_table_decides_and_ignores_ref(tmp_path, monkeypatch):
-    monkeypatch.setattr(nfc, "CONFIG", tmp_path / "ctx.json")
-    _table(tmp_path, {"11|而|矣": [0, 30, 0]})
-    ctx = _ctx(tmp_path, monkeypatch, SeedAdmitParams(ji_yi_si_ctx_rule=True))
-    r = _run(ctx, "而", "矣", ref="巳")     # 整理本给「巳」，表说「已」：以表为准
-    assert r.admit and r.char == "已" and r.channel == "ji_yi_si"
-    assert "上下文表" in r.evidence["ji_yi_si"]["why"]
-
-
-def test_rule_on_sends_to_review_when_table_silent(tmp_path, monkeypatch):
-    monkeypatch.setattr(nfc, "CONFIG", tmp_path / "ctx.json")
-    _table(tmp_path, {"11|而|矣": [0, 30, 0]})
-    ctx = _ctx(tmp_path, monkeypatch, SeedAdmitParams(ji_yi_si_ctx_rule=True))
-    r = _run(ctx, "山", "水", ref="巳")
-    assert not r.admit and "ji_yi_si_ctx_review" in r.doubts
-
-
-def test_rule_off_keeps_old_behavior(tmp_path, monkeypatch):
-    ctx = _ctx(tmp_path, monkeypatch, SeedAdmitParams())
-    r = _run(ctx, "山", "水", ref="巳")
-    assert r.admit and r.char == "巳"          # 同 test_seed_admit_ji_yi_si_0927 的老行为

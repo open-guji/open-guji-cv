@@ -2,7 +2,7 @@
 
 **判别输入与决策输入拆开**（Ethan、Evan 评审）：后端只吃 `JudgeInput`、只出 `GroupVerdict`（pick）。
 现行放行字要等 `seed_admit` 的全部通道跑完才定，判别时（原 Step6b，已删）根本没有，所以**放行字不得进 `judge`，
-也不得进上下文键**；「抬／降」由 `apply_group_verdicts` 拿 pick 与放行状态比。
+也不得进上下文键**；「抬／降」由 `flow.group_flow_pass` 拿 pick 与放行状态比。
 """
 from __future__ import annotations
 

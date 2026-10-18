@@ -1,4 +1,5 @@
 # 字组统一流程 group_flow 单项 A/B，vol04：A＝现行配置（group_flow 关），B＝开首批十组。
+# （原有对照 C＝旧 variant_tie，S6 删了该开关后去掉；S6 的 A/B 见 group_flow-S6-vol04.yaml）
 # 跑：guji exp run doc/exp/group_flow-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>]
 # 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/；字频表用
 #   python -m open_guji_cv.groups.freq $WS --out <路径> 冻结；L2 表见项目文件夹 m7-ab/tables（按本机路径改）。
@@ -24,12 +25,6 @@ variants:
           jys: /mnt/project-files/m7-ab/tables/jys_table.json
           ry: /mnt/project-files/m7-ab/tables/ry_table.json
           rr: /mnt/project-files/m7-ab/tables/rr_table.json
-  C:
-    note: 对照：旧 variant_tie（用户 10-07 裁过的组表，不含 㫖）
-    params:
-      seed_admit:
-        variant_tie: true
-        variant_tie_extra: "𫎇蒙,㸃點,㕘參,䜟讖識,𨽾隸,慎愼"
 eval:
   use_human_verdicts: false
 labels:

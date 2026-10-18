@@ -88,13 +88,6 @@ def test_classify_decision_rules(monkeypatch):
 
 
 # ---- seed_admit 接线 ----
-def test_params_off_not_in_dump_and_fingerprint():
-    d = SeedAdmitParams().model_dump()
-    assert SeedAdmitParams().rr_clf is False and not any(k.startswith("rr_clf") for k in d)
-    on = SeedAdmitParams(rr_clf=True).model_dump()
-    assert on["rr_clf"] is True and on["rr_clf_p"] == 0.5 and on["rr_clf_fingerprint"]
-
-
 def _ctx(tmp_path, monkeypatch, params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
@@ -119,35 +112,3 @@ def _stub(monkeypatch, pick, gated=False, p=0.9):
     monkeypatch.setattr(rr, "classify", lambda g, m=None, t=0.5: {"probs": {"人": p}, "pick": pick, "gated": gated, "p": p})
 
 
-def test_off_by_default_does_nothing(tmp_path, monkeypatch):
-    _stub(monkeypatch, "入")
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams()))
-    assert r.admit and r.char == "人" and "rr_clf" not in r.evidence
-
-
-def test_disagreement_demotes_without_changing_char(tmp_path, monkeypatch):
-    _stub(monkeypatch, "入")
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(rr_clf=True)))
-    assert not r.admit and "rr_clf_disagree" in r.doubts and r.char == "人"
-    assert r.evidence["rr_clf"]["pick"] == "入"
-
-
-def test_agreement_or_abstain_keeps_admit(tmp_path, monkeypatch):
-    for pick in ("人", None):
-        _stub(monkeypatch, pick)
-        r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(rr_clf=True)))
-        assert r.admit and r.char == "人" and r.evidence["rr_clf"]["pick"] == pick
-
-
-def test_cell_outside_group_not_touched(tmp_path, monkeypatch):
-    called = []
-    monkeypatch.setattr(sa, "_page_patch", lambda *a, **k: called.append(1) or _glyph("人"))
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(rr_clf=True)), char="山")
-    assert r.admit and not called
-
-
-def test_patch_missing_skip_records(tmp_path, monkeypatch):
-    def boom(*a, **k): raise sa.PatchUnavailable("无图")
-    monkeypatch.setattr(sa, "_page_patch", boom)
-    r = _run(_ctx(tmp_path, monkeypatch, SeedAdmitParams(rr_clf=True, patch_missing="skip")))
-    assert r.admit and "rr_clf" in r.evidence.get("patch_missing", [])

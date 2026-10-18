@@ -8,8 +8,11 @@
 - 复核：组声明了 `review`，格已被别的通道放行、放行字在 G 里（人裁位不碰）。
 
 **判**：按组的 `FlowSpec.solvers` 顺序跑解法，`combine=first` 取第一个给字的，`agree` 要求给字的全一致。
-- 补放：有字 → 放行（通道 `group_flow`）；无字或冲突 → 留人审，疑问码 `group_flow_abstain`／`group_flow_conflict`。
-- 复核：给了与放行字不同的字 → 降为人审（`group_flow_disagree`，不改字）；一致或弃权 → 不动。
+- 补放：有字 → 放行（通道 `group_flow`）；无字或冲突 → 留人审，疑问码 `group_flow_abstain`／`group_flow_conflict`；
+  组声明了 `lift_needs` 而给字的解法里没有它们 → 留人审（`group_flow_weak`）。
+- 复核：给了与放行字不同的字、或解法之间不一致 → 降为人审（`group_flow_disagree`，不改字）；组声明了
+  `review_fix` 时前者改成解法的字（通道 `group_flow`，`evidence.fixed_from` 记原通道与原字）；声明了
+  `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
 
 每个进了流程的格都写 `evidence.group`：组、入口、每个解法的给字与理由、最终结论。
 
@@ -18,7 +21,9 @@
 """
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from . import freq as _freq
@@ -60,6 +65,8 @@ def check_groups(groups) -> None:
         bad = set(f.solvers) - SOLVERS
         if bad:
             raise ValueError(f"group_flow：字组 {g!r} 的解法 {sorted(bad)} 不认得")
+        if set(f.lift_needs) - set(f.solvers):
+            raise ValueError(f"group_flow：字组 {g!r} 的 lift_needs {f.lift_needs} 不在它的解法里")
         if f.combine not in ("first", "agree"):
             raise ValueError(f"group_flow：字组 {g!r} 的 combine={f.combine!r} 只能是 first/agree")
 
@@ -115,8 +122,7 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
             return GroupVerdict(top, conf=c1, why="agree", via="top1", extra={"cov": c1})
         return GroupVerdict(None, conf=c1, why="abstain:low_cov", via="top1", extra={"cov": c1})
     if name == "ctx":
-        from .m7_pass import judge
-        v = judge(g, r.id, ref, left or "", right or "", cfg.l2_tables.get(g))
+        v = ctx_judge(g, r.id, ref, left or "", right or "", cfg.l2_tables.get(g))
         return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx",
                             extra={"rules": v.extra.get("rules")} if v.extra.get("rules") else {})
     img = patch_fn(r.id) if patch_fn is not None else None
@@ -181,6 +187,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     res = FlowResult(entered=len(plans))
     for r, g, mode, ch, why, trail in plans:
         if mode == "lift":
+            needs = GROUPS[g].flow.lift_needs
+            if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail):
+                ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
             if ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"
@@ -190,14 +199,64 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 decision = "review"
                 r.doubts = list(dict.fromkeys(list(r.doubts or []) + [f"group_flow_{why}"]))
         else:
-            if ch is not None and ch != r.char:
+            f = GROUPS[g].flow
+            code = ("group_flow_disagree" if (ch is not None and ch != r.char and not f.review_fix) or why == "conflict"
+                    else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
+            if ch is not None and ch != r.char and f.review_fix:
+                decision = "fix"
+                r.evidence = {**(r.evidence or {}), "fixed_from": {"channel": r.channel, "char": r.char}}
+                r.char, r.channel, r.provenance = ch, CHANNEL, "context"
+                r.doubts = [d for d in (r.doubts or []) if d != "always_review"]
+            elif code:
                 decision = "demote"
                 r.evidence = {**(r.evidence or {}), "demoted_from": {"channel": r.channel, "by": CHANNEL}}
                 r.admit, r.channel, r.provenance = False, None, ""
-                r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["group_flow_disagree"]))
+                r.doubts = list(dict.fromkeys(list(r.doubts or []) + [code]))
                 res.demoted += 1
             else:
                 decision = "keep"
         r.evidence = {**(r.evidence or {}), "group": {"id": g, "mode": mode, "pick": ch, "why": why,
                                                        "decision": decision, "solvers": trail}}
     return res
+
+
+# —— 文意解法 `ctx`：L1 规则先行，弃权再查 L2 答案表（原 `groups/m7_pass.py`，2026-10-18 S6 挪来） ——
+#    窗口由调用方给（`seed_admit._clf_ctx`，宽 `context.WIDTH`），建表（`research/m7/ctx/l2_make_book.py`）须用同一取法。
+
+_REPO = Path(__file__).resolve().parents[2]
+_L1: dict = {}
+_L2: dict = {}
+
+
+def rules_path(group: str) -> Path:
+    return _REPO / GROUPS[group].config_dir / "rules.yaml"
+
+
+def ctx_fingerprint(groups, tables: dict) -> str:
+    """规则文件与答案表的内容哈希；换了任何一个，seed_admit 产物判过期。"""
+    h = hashlib.sha256()
+    for g in sorted(groups):
+        p = rules_path(g)
+        h.update(g.encode())
+        h.update(hashlib.sha256(p.read_bytes()).digest() if p.exists() else b"missing")
+        t = tables.get(g)
+        h.update(hashlib.sha256(Path(t).read_bytes()).digest() if t and Path(t).exists() else b"-")
+    return h.hexdigest()[:16]
+
+
+def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None) -> GroupVerdict:
+    from .ctx_l1 import CtxL1Backend
+    from .ctx_l2 import CtxL2Backend
+    from .protocol import JudgeInput, window_from_text
+    spec = GROUPS[g]
+    cell = JudgeInput(id=cid, ref=ref, window=window_from_text(left, right))
+    if g not in _L1:
+        _L1[g] = CtxL1Backend(rules_path(g), spec.members)
+    v = _L1[g].judge(spec, cell)
+    if v.char is not None or not table:
+        return v
+    if table not in _L2:
+        _L2[table] = CtxL2Backend(table)
+    v2 = _L2[table].judge(spec, cell)
+    v2.extra = {**v2.extra, "l1_why": v.why}
+    return v2
