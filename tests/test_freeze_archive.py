@@ -74,12 +74,25 @@ def test_book_yaml_freeze(tmp_path):
 def test_frozen_passes_when_only_code_or_library_changed(frozen):
     ws, prod, book = frozen
     # cv 升版、人裁进库让 seed_admit 过期：冻结册不报
-    eng = FakeEng(prod, book, {"seed_admit": {"代码或版本变了": 2, "参数变了": 1}})
+    eng = FakeEng(prod, book, {"seed_admit": {"代码或版本变了": 3}})
     it = FZ.fresh_frozen(eng, [1, 2], ws, feedback_root=ws / "feedback")
     assert it["status"] == CC.PASS, it
     assert it["data"]["new_human_events"] == 1           # 只算基线后、本册、算人裁的
     assert it["data"]["stale_not_counted"] == 3
     assert "基线后新人裁 1 条" in it["detail"]
+
+
+def test_frozen_params_alarm_unclear_listed(frozen):
+    ws, prod, book = frozen
+    # 规矩表：参数变（含册 yaml 的 params:）要报警
+    it = FZ.fresh_frozen(FakeEng(prod, book, {"seed_admit": {"参数变了": 1}}), [1, 2], ws,
+                         feedback_root=ws / "feedback")
+    assert it["status"] == CC.FAIL and it["data"]["config_changed"] == {"seed_admit": 1}
+    # 旧条目分不清代码还是册配置：单列请人核，不判失败
+    it = FZ.fresh_frozen(FakeEng(prod, book, {"seed_admit": {"代码或册配置变了（period_prior；旧条目没记册配置原值）": 2}}),
+                         [1, 2], ws, feedback_root=ws / "feedback")
+    assert it["status"] == CC.PASS and it["data"]["unclear_code_or_config"] == {"seed_admit": 2}
+    assert "请人核" in it["detail"]
 
 
 def test_frozen_fails_when_product_changed_or_missing(frozen):
@@ -162,3 +175,37 @@ def test_fetch_rejects_path_escape(tmp_path):
     with pytest.raises(AF.ArchiveError, match="越界"):
         AF.fetch("t", tmp_path / "out", get_json=gj, download=dl, log=lambda s: None)
     assert not (tmp_path / "evil.txt").exists()
+
+
+def test_compare_skips_step_manifest(tmp_path):
+    """快照里的 `_manifest.jsonl` 是打包时重写的，和线上只追加的那份 sha 必然不同，不能算「被改」。"""
+    from open_guji_cv.ops.freeze import compare_products
+    from open_guji_cv.snap.manifest import sha256_file
+    root = tmp_path / "p" / "bk" / "s"
+    root.mkdir(parents=True)
+    (root / "p0001.json").write_text("{}")
+    (root / "_manifest.jsonl").write_text('{"k": 1}\n{"k": 1}\n')
+    base = {"files": {
+        "products/bk/s/p0001.json": {"sha256": sha256_file(root / "p0001.json")},
+        "products/bk/s/_manifest.jsonl": {"sha256": "0" * 64},
+    }}
+    assert compare_products(base, tmp_path / "p") == {"same": 1, "changed": [], "missing": []}
+
+
+def test_freeze_must_be_mapping(tmp_path):
+    import pytest as _pt
+    from open_guji_cv.core.book import load_book
+    (tmp_path / "bk.yaml").write_text("id: bk\ntitle: t\nraw_dir: raw\nfreeze: '2026-10-18'\n", encoding="utf-8")
+    with _pt.raises(ValueError, match="freeze"):
+        load_book("bk", books_dir=tmp_path)
+
+
+def test_redirect_drops_auth_across_hosts():
+    import urllib.request
+    from open_guji_cv.ops.archive_fetch import _DropAuthOnCrossHost
+    h = _DropAuthOnCrossHost()
+    req = urllib.request.Request("https://api.github.com/x", headers={"Authorization": "Bearer t"})
+    new = h.redirect_request(req, None, 302, "Found", {}, "https://objects.githubusercontent.com/y")
+    assert not any(k.lower() == "authorization" for k in new.headers)
+    same = h.redirect_request(req, None, 302, "Found", {}, "https://api.github.com/z")
+    assert any(k.lower() == "authorization" for k in same.headers)

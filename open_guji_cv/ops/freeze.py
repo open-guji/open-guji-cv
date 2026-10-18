@@ -65,6 +65,11 @@ def compare_products(baseline: dict, products_root: Path) -> dict:
     """快照里每个产物文件与现有产物逐个比 sha256。返回 {same, changed[], missing[]}。"""
     same, changed, missing = 0, [], []
     for rel, meta in sorted((baseline.get("files") or {}).items()):
+        # 各步的 `_manifest.jsonl` 不比：快照里那份是打包时去重、按页过滤后重写的，
+        # 线上那份只追加、导入也是追加，跑过就有历史行，sha 永远对不上。
+        # 产物本身逐个比 sha 已经够了；manifest 的新旧由下面的 stale 原因另算。
+        if rel.rsplit("/", 1)[-1] == "_manifest.jsonl":
+            continue
         # 快照里的路径是 `products/<册>/<步>/<文件>`，落到产物根下去掉 `products/`
         sub = rel[len("products/"):] if rel.startswith("products/") else rel
         f = Path(products_root) / sub
@@ -113,11 +118,15 @@ def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dic
     base = load_baseline(book, ws)
     cmp = compare_products(base, eng.store.root)
     st = eng.status(pages=pages)
-    cfg_changed, not_counted = {}, 0
+    # 规矩表：册配置／参数变 → 报警；代码、字形库、人裁变 → 不报警。
+    # 旧条目没记册配置原值时 engine 只能说「代码或册配置变了」，分不清，单列请人核，不判失败。
+    cfg_changed, unclear, not_counted = {}, {}, 0
     for sid, d in st["steps"].items():
         for reason, n in (d.get("stale_reasons") or {}).items():
-            if reason.startswith("册配置"):
+            if reason.startswith("册配置") or reason.startswith("参数变了"):
                 cfg_changed[sid] = cfg_changed.get(sid, 0) + n
+            elif reason.startswith("代码或册配置变了"):
+                unclear[sid] = unclear.get(sid, 0) + n
             else:
                 not_counted += n
     n_new = human_events_since(book.id, str(base.get("created") or ""), feedback_root)
@@ -128,11 +137,14 @@ def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dic
              f"产物与快照一致 {cmp['same']} 个文件",
              *([f"被改 {len(cmp['changed'])} 个"] if cmp["changed"] else []),
              *([f"缺 {len(cmp['missing'])} 个"] if cmp["missing"] else []),
-             *([f"册配置被改：{', '.join(f'{k} {v} 页' for k, v in cfg_changed.items())}"]
+             *([f"册配置或参数被改：{', '.join(f'{k} {v} 页' for k, v in cfg_changed.items())}"]
                if cfg_changed else []),
+             *([f"分不清是代码还是册配置变（旧条目没记原值，请人核）："
+                f"{', '.join(f'{k} {v} 页' for k, v in unclear.items())}"] if unclear else []),
              f"基线后新人裁 {n_new} 条待落地",
              f"代码／字形库变带来的过期 {not_counted} 页不计"]
     data = {"frozen": True, "changed": cmp["changed"][:50], "missing": cmp["missing"][:50],
-            "config_changed": cfg_changed or None, "new_human_events": n_new,
+            "config_changed": cfg_changed or None, "unclear_code_or_config": unclear or None,
+            "new_human_events": n_new,
             "stale_not_counted": not_counted}
     return _item("1a", "产物新鲜（冻结基线）", FAIL if bad else PASS, "；".join(parts), data)

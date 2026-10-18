@@ -645,8 +645,18 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
-        freeze={str(k): v for k, v in (d.get("freeze") or {}).items()},
+        freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _load_freeze(v, book_id: str) -> dict:
+    """册 yaml 的 `freeze:` 段（GUJI-601）必须是映射；写错了给一句清楚的错，别让所有命令崩在 .items()。"""
+    if not v:
+        return {}
+    if not isinstance(v, dict):
+        raise ValueError(f"册 {book_id} 的 freeze: 应是映射（at、cv_version、snapshot 或 manifest），"
+                         f"现在是 {type(v).__name__}：{v!r}")
+    return {str(k): x for k, x in v.items()}
 
 
 def list_books(books_dir: Path | None = None) -> list[str]:

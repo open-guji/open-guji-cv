@@ -37,9 +37,28 @@ def _auth_header() -> dict:
     return {"Authorization": f"Bearer {tok}"} if tok else {}
 
 
+class _DropAuthOnCrossHost(urllib.request.HTTPRedirectHandler):
+    """GitHub 资产下载会 302 到别的域（objects.githubusercontent.com 等）。urllib 跟随重定向时
+    原样带着 Authorization，token 会发到另一个域；跨域时去掉它（curl、requests 也是这么做）。"""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        new = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if new is not None:
+            from urllib.parse import urlsplit
+            if urlsplit(newurl).hostname != urlsplit(req.full_url).hostname:
+                for k in list(new.headers):
+                    if k.lower() == "authorization":
+                        del new.headers[k]
+                new.unredirected_hdrs.pop("Authorization", None)
+        return new
+
+
+_OPENER = urllib.request.build_opener(_DropAuthOnCrossHost)
+
+
 def _download(url: str, dest: Path) -> None:
     req = urllib.request.Request(url, headers={"Accept": "application/octet-stream", **_auth_header()})
-    with urllib.request.urlopen(req, timeout=600) as r, open(dest, "wb") as f:  # noqa: S310
+    with _OPENER.open(req, timeout=600) as r, open(dest, "wb") as f:
         while True:
             chunk = r.read(1 << 20)
             if not chunk:
@@ -125,7 +144,10 @@ def fetch(tag: str, out: Path, repo: str = DEFAULT_REPO, sha256: str | None = No
     kept = None
     if keep_tar:
         kept = out.parent / a["name"]
-        tar_path.replace(kept)
+        if kept.exists():   # 不悄悄覆盖旧包：留在 .part 名下，告诉调用方
+            log(f"⚠️ {kept} 已存在，没覆盖；这次下载的包留在 {tar_path}")
+        else:
+            tar_path.replace(kept)
     else:
         tar_path.unlink(missing_ok=True)
     log(f"已解到 {out}：{n} 个成员")
