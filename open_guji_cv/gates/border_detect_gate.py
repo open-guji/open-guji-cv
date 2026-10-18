@@ -37,6 +37,8 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders
 from ..utils.border_geometry import BEND_W80_MAX
+from ..utils.column_pair_merge import (PAIR_MERGED_FLAG, PAIR_MERGED_INCONSISTENT_FLAG,
+                                       has_pair_merged)
 
 
 class BorderDetectGateParams(BaseModel):
@@ -89,11 +91,12 @@ def _pagetype_gate(p: "BorderDetectGateParams"):
 class BorderDetectGateStep(Step):
     spec = StepSpec(
         id="border_detect_gate", title="Step1→2 交接闸", version="1.1", unit="page",
-        consumes=("borders",), optional_consumes=("page_survey",),
+        consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
         path_params=("pagetype_model_path",),
-        code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type"),
+        code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type",
+                   "open_guji_cv.utils.column_pair_merge"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -110,6 +113,23 @@ class BorderDetectGateStep(Step):
         page_type, policy = classify_page_type(raw)
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
+        # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
+        # `pair_merged` 旗、并把页上列数记在 `Borders.expected_cols`。**显式认旗，不靠两个数相等去猜**。
+        # 期望列数对着**本闸自己的**期望（`p.expected_cols or 书级`）减一：旗＋探出列数＝Step1 记的列数＝
+        # 闸期望−1 三者都对得上才放宽；只要有一个对不上（产物不自洽：旗是别的版本留的、闸参数与 Step1 不同…），
+        # **不放宽**，仍按本闸期望判（多半落成 `column_count` 拒收），并留一条 `pair_merged_inconsistent` 旗说明。
+        # `line_index` 是可选上游：老产物／造数据的用例没有它（`FileNotFoundError`）就当没合并过；别的异常不吞。
+        try:
+            li = ctx.product("line_index", page)
+        except FileNotFoundError:
+            li = None
+        pair_flag = li is not None and any(has_pair_merged(ln.flags) for ln in li.lines)
+        pair_merged = pair_inconsistent = False
+        if pair_flag:
+            if n_cols == b.expected_cols == expected - 1:
+                expected, pair_merged = expected - 1, True
+            else:
+                pair_inconsistent = True
 
         reject: list[str] = []
         if policy == "skip":
@@ -126,6 +146,11 @@ class BorderDetectGateStep(Step):
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
         flags: list[str] = []
+        if pair_merged:
+            flags.append(f"{PAIR_MERGED_FLAG}：Step1 判本页是 {expected} 列（多余竖线已去），不是书级列数")
+        if pair_inconsistent:
+            flags.append(f"{PAIR_MERGED_INCONSISTENT_FLAG}：line_index 有合并旗，但探出 {n_cols} 列、Step1 记 "
+                         f"{b.expected_cols} 列、本闸期望 {expected} 列（−1 后对不上），不放宽，按期望列数判")
         # 任务卡 #54 第22条：Step0 页面预检判定尺寸异常——白名单页/关着开关时
         # 只 flag；开了 `page_survey_block` 且不在白名单才真拦（待拆/待核）。
         survey = ctx.product("page_survey", page) if ctx.has_product("page_survey", page) else None
