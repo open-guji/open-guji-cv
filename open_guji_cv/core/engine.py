@@ -238,6 +238,12 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
     if getattr(book, "binarized_input", False):
         payload["bin_input"] = True
+    # 册钉了语料库版本，且这一步读语料：整步带上版本号（`core/corpus_pin.CORPUS_STEPS`）。
+    # 没钉的册不写这个键，指纹逐位不变。
+    from .corpus_pin import step_pin_token
+    tok = step_pin_token(step.spec.id, book)
+    if tok:
+        payload["corpus"] = tok
     return payload
 
 

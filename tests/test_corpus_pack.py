@@ -111,3 +111,16 @@ def _step(sid):
     import open_guji_cv.steps  # noqa: F401  注册全部 Step
     from open_guji_cv.core.step import STEPS
     return STEPS[sid]
+
+
+def test_step_payload_carries_pin_only_for_corpus_steps(tmp_path, monkeypatch):
+    from helpers import make_book
+    from open_guji_cv.core.engine import _self_payload
+    for sid in ("glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit"):
+        assert "corpus" not in _self_payload(_step(sid), make_book(), "x")          # 没钉：键都不出现
+        assert _self_payload(_step(sid), make_book(corpus=2), "x")["corpus"] == "corpus-v2"
+    for sid in ("border_detect", "row_segment", "cell_shrink", "column_gate"):
+        assert "corpus" not in _self_payload(_step(sid), make_book(corpus=2), "x")  # 几何步不受语料库升级影响
+    a = _self_payload(_step("glyph_match"), make_book(corpus=1), "x")
+    b = _self_payload(_step("glyph_match"), make_book(corpus=2), "x")
+    assert a != b
