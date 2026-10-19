@@ -247,7 +247,9 @@ def test_push_refuses_to_drop_anchor_patch_rows(repo, conn, tmp_path, monkeypatc
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
     a = _fresh(files, tmp_path / "a", src, cache)
     anchor = data_dir(a) / "feedback" / "anchor_patches" / "vol03" / "ab" / "abcdef.png"
-    assert anchor.exists()
+    assert anchor.exists()                                  # pull 要把锚图落回本地
+    from open_guji_cv.datastore.workcopy import local_changes
+    assert local_changes(a) == []
     anchor.unlink()
     (data_dir(a) / "books" / "vol04.yaml").write_bytes(b"id: vol04\n")
     with pytest.raises(FileDeleteRefused):

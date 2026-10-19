@@ -36,6 +36,9 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     dest = Path(dest)
     sel = lambda p: any(p.startswith(x) for x in prefixes)
     files = {r["src_path"]: r for r in src.rows("source_files", ws) if sel(r["src_path"])}
+    for r in src.rows("anchor_patches_meta", ws):          # 锚图不在 source_files 里，按自己的表还原
+        if sel(r["src_path"]):
+            files[r["src_path"]] = {"tbl": "anchor_patches_meta", "sha256": r["sha256"], "bytes": r["bytes"]}
     if not files:
         raise MaterializeError(f"库里工作区 {ws} 没有 {'、'.join(prefixes)} 下的文件")
 
