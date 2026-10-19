@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import hashlib
+import http.client
 import json
 import os
 import ssl
@@ -90,7 +91,7 @@ class WorkerSource:
                     raise CentralError(e.code, j.get("error", "http"), j.get("message", payload[:200].decode("utf-8", "replace")),
                                        j.get("detail")) from None
                 last = CentralError(e.code, "http", payload[:200].decode("utf-8", "replace"))
-            except (urllib.error.URLError, OSError) as e:
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:  # 含 IncompleteRead（断流）
                 last = e
             time.sleep(min(2 ** attempt, 20))
         raise last  # type: ignore[misc]
