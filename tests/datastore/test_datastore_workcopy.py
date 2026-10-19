@@ -10,7 +10,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from test_datastore_pg import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
 from test_datastore_pull import _Cache, _tables, _workspace
 
@@ -110,7 +109,13 @@ def test_migrate_refuses_differences_unless_keep_local(repo, conn, tmp_path):  #
 
 def test_pull_push_between_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
     from open_guji_cv.datastore.importer import DeleteRefused
-    from open_guji_cv.datastore.workcopy import FileDeleteRefused, StaleBase, data_dir, pull, push
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        StaleBase,
+        data_dir,
+        pull,
+        push,
+    )
     from open_guji_cv.ops.central_glyph import glyph_hooks
     src, files, cache, c1 = _setup(repo, conn, tmp_path)
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
@@ -155,7 +160,12 @@ def test_pull_push_between_two_machines(repo, conn, tmp_path, monkeypatch):  # n
 
 
 def test_glyph_db_changes_are_exported_before_push(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.datastore.workcopy import GlyphHooks, data_dir, local_changes, push
+    from open_guji_cv.datastore.workcopy import (
+        GlyphHooks,
+        data_dir,
+        local_changes,
+        push,
+    )
     src, files, cache, _ = _setup(repo, conn, tmp_path)
     db = tmp_path / "fake.db"
     db.write_text("v1")
@@ -166,7 +176,7 @@ def test_glyph_db_changes_are_exported_before_push(repo, conn, tmp_path):  # noq
         (Path(store) / "meta.jsonl").write_text('{"key": "k", "value": "' + Path(p).read_text() + '"}\n')
         return {}
     hooks = GlyphHooks(fingerprint=lambda p: Path(p).read_text(), export=export,
-                       rebuild=lambda w, s, p: {}, db_path=db)
+                       rebuild=lambda w, s, p, e=None: {}, db_path=db)
     ws = _fresh(files, tmp_path / "ws", src, cache, lambda d: hooks)
     assert local_changes(ws, hooks) == [] and not calls                 # 指纹没变不导出
     db.write_text("v2")
@@ -184,7 +194,12 @@ def test_not_migrated_workspace_is_refused(tmp_path):
 
 
 def test_sync_merges_appends_from_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
-    from open_guji_cv.datastore.workcopy import SyncConflict, data_dir, local_changes, sync
+    from open_guji_cv.datastore.workcopy import (
+        SyncConflict,
+        data_dir,
+        local_changes,
+        sync,
+    )
     src, files, cache, _ = _setup(repo, conn, tmp_path)
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
     a = _fresh(files, tmp_path / "a", src, cache)
@@ -259,7 +274,12 @@ def test_push_refuses_dropping_anchor_patches(repo, conn, tmp_path):  # noqa: F8
     """数据目录里缺了锚图（v0.4.0 及更早的 pull 不还原锚图）时，push 不能把库里的锚图删掉。"""
     from open_guji_cv.datastore.client import PgSource
     from open_guji_cv.datastore.importer import import_commit
-    from open_guji_cv.datastore.workcopy import FileDeleteRefused, data_dir, migrate, push
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        data_dir,
+        migrate,
+        push,
+    )
     files = _workspace(tmp_path)
     files["W/feedback/anchor_patches/vol03/ab/ab12.png"] = b"\\x89PNG anchor"
     import_commit(conn, repo, _commit(repo, files, "c1"))
@@ -311,8 +331,13 @@ def _migrated(repo, conn, tmp_path):  # noqa: F811
 def test_corpus_adopt_push_and_pull(repo, conn, tmp_path):  # noqa: F811
     """已迁过的工作区根上的 corpus/、corpus-pack/：migrate 补迁进数据目录 → push 进库（文本按 txt 进 R2）
     → 新机器 pull 还原；库里有的整理本本地删了，push 拒绝。"""
-    from open_guji_cv.datastore.workcopy import (FileDeleteRefused, data_dir, local_changes, migrate,
-                                                 push)
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        data_dir,
+        local_changes,
+        migrate,
+        push,
+    )
     src, cache, files, ws = _migrated(repo, conn, tmp_path)
     text = "欽定四庫全書總目\n卷一\n".encode("utf-8")
     man = b'{"corpus_version": 1}\n'
@@ -406,3 +431,129 @@ def test_blob_rows_tolerates_old_worker():
 
     assert blob_rows(Old(), "corpus_files", "tws") == []
     assert blob_rows(Old(), "anchor_patches_meta", "tws") == [{"src_path": "x", "sha256": "y"}]
+
+
+# ---- 借库与共享层只读（共享方案 S4）----
+
+def _lib_store(tmp_path) -> dict[str, bytes]:
+    """另一本书的字形库（字、实例号都和 ``_workspace`` 的不重）。"""
+    from test_datastore_pull import _cc
+
+    from open_guji_cv.clustering.glyph_db import GlyphDB, export_store
+    db = GlyphDB(tmp_path / "lib-seed.sqlite")
+    try:
+        _cc.seed_glyphs(db, chars=("丙",), n_each=3, edition="lib", seed=7)
+        store = tmp_path / "lib_store"
+        export_store(db, store)
+    finally:
+        db.close()
+    return {f"output/glyph_store/{p.relative_to(store).as_posix()}": p.read_bytes()
+            for p in sorted(store.rglob("*")) if p.is_file()}
+
+
+def _borrowing(repo, conn, tmp_path):  # noqa: F811
+    """库里两个工作区：tws 借 lib 的字形库（workspace.yaml 写工作区名）。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    files = _workspace(tmp_path)
+    files["W/workspace.yaml"] = b"id: tws\nglyph_lib:\n  borrow: [lib]\n"
+    lib = {"L/workspace.yaml": b"id: lib\n", **{f"L/{k}": v for k, v in _lib_store(tmp_path).items()}}
+    import_commit(conn, repo, _commit(repo, {**files, **lib}, "c1"))
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in {**files, **lib}.items()})
+    return PgSource(conn), files, lib, cache
+
+
+def _fake_hooks(db: Path, calls: list):
+    from open_guji_cv.datastore.workcopy import GlyphHooks
+    db.write_text("v1")
+    return GlyphHooks(fingerprint=lambda p: Path(p).read_text(), export=lambda p, s: {},
+                      rebuild=lambda w, s, p, e=None: calls.append(list(e or [])) or {}, db_path=db)
+
+
+def test_pull_materializes_borrowed_store_and_follows_its_updates(repo, conn, tmp_path):  # noqa: F811
+    """pull 把被借工作区的字形库拉成只读副本、带上它重建 glyph.db；被借库没变不重拉不重建，
+    有新写入（pull 或 sync）就重拉并重建。"""
+    from open_guji_cv.core.workspace import borrowed_root
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import BORROW_STATE, local_changes, pull, sync
+    src, files, lib, cache = _borrowing(repo, conn, tmp_path)
+    calls: list = []
+    hooks = _fake_hooks(tmp_path / "fake.db", calls)
+    ws = _fresh(files, tmp_path / "ws", src, cache, lambda d: hooks)
+    lib_dir = borrowed_root("lib") / "output" / "glyph_store"
+    assert calls == [[lib_dir]]
+    assert _data_files(lib_dir) == {k[len("L/output/glyph_store/"):]: v for k, v in lib.items()
+                                    if k.startswith("L/output/glyph_store/")}
+    assert not (borrowed_root("lib") / "workspace.yaml").exists()      # 只拉字形库
+    stamp = (borrowed_root("lib") / BORROW_STATE).read_text()
+    assert local_changes(ws, hooks) == []                               # 借来的库不算本地改动
+
+    out = pull(src, ws, cache=cache, glyph=hooks)
+    assert out["borrow"][0].startswith("lib@") and calls == [[lib_dir]]   # 没变：不重建
+    assert (borrowed_root("lib") / BORROW_STATE).read_text() == stamp     # 也不重拉
+
+    meta = b'{"key": "note", "value": "lib v2"}\n'
+    import_commit(conn, repo, _commit(repo, {"L/output/glyph_store/meta.jsonl": meta}, "c2"))
+    out = pull(src, ws, cache=cache, glyph=hooks)
+    assert len(calls) == 2 and (lib_dir / "meta.jsonl").read_bytes() == meta
+    assert out["borrow"] != [stamp]
+
+    meta3 = b'{"key": "note", "value": "lib v3"}\n'
+    import_commit(conn, repo, _commit(repo, {"L/output/glyph_store/meta.jsonl": meta3}, "c3"))
+    assert sync(src, conn, ws, actor="t", cache=cache, glyph=hooks)["action"] == "nothing"
+    assert len(calls) == 3 and (lib_dir / "meta.jsonl").read_bytes() == meta3
+    assert sync(src, conn, ws, actor="t", cache=cache, glyph=hooks)["action"] == "nothing"
+    assert len(calls) == 3
+
+
+def test_pull_rebuilds_glyph_db_with_borrowed_instances(repo, conn, tmp_path):  # noqa: F811
+    """真聚类层：重建出的 glyph.db 里有借来的字（丙），自己的字（甲乙）也在。"""
+    import sqlite3
+
+    from open_guji_cv.ops.central_glyph import glyph_hooks
+    src, files, _, cache = _borrowing(repo, conn, tmp_path)
+    ws = _fresh(files, tmp_path / "ws", src, cache, glyph_hooks)
+    c = sqlite3.connect(glyph_hooks(ws).db_path)
+    try:
+        chars = {r[0] for r in c.execute("SELECT DISTINCT label FROM instances")}
+    finally:
+        c.close()
+    assert {"甲", "乙", "丙"} <= chars
+
+
+def test_borrow_of_missing_or_self_workspace_is_refused(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    files = _workspace(tmp_path)
+    files["W/workspace.yaml"] = b"id: tws\nglyph_lib:\n  borrow: [tws]\n"
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    calls: list = []
+    with pytest.raises(SystemExit, match="写了自己"):
+        _fresh(files, tmp_path / "ws", src, cache, lambda d: _fake_hooks(tmp_path / "f.db", calls))
+
+
+def test_shared_workspaces_are_read_only(repo, conn, tmp_path):  # noqa: F811
+    """corpus-base、glyphlib-*：普通 push 拒绝；升级脚本（shared_writer）能写 corpus-base，
+    glyphlib-* 发布过就不能再写。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import data_dir, pull, push
+    files = {"C/workspace.yaml": b"id: corpus-base\n", "C/books/a.yaml": b"id: a\n",
+             "G/workspace.yaml": b"id: glyphlib-t1\n", "G/books/a.yaml": b"id: a\n"}
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    for name, top in (("corpus-base", "C"), ("glyphlib-t1", "G")):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "workspace.yaml").write_bytes(files[f"{top}/workspace.yaml"])
+        (d / ".central.json").write_text(f'{{"ws": "{name}", "branch": "main"}}')
+        pull(src, d)
+        (data_dir(d) / "books" / "b.yaml").write_bytes(b"id: b\n")
+        with pytest.raises(SystemExit, match="只读"):
+            push(conn, d, actor="t")
+    out = push(conn, tmp_path / "corpus-base", actor="t", shared_writer=True)
+    assert out["rev_to"] > out["rev_from"]
+    with pytest.raises(SystemExit, match="已经发布过"):
+        push(conn, tmp_path / "glyphlib-t1", actor="t", shared_writer=True)

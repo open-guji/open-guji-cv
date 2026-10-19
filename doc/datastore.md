@@ -125,7 +125,14 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
   旧版也一样。Worker 请求只剩查表和签名（每批 250 张一次）：从空目录整库拉殿本 173 次、全唐文 68 次、北行 59 次
   （原先每张图一次，殿本约 1.85 万次）。实验桶仍经 `/v1/blob`。上传照旧经 Worker（核 sha、不覆盖）。
   用量日报见 guji-workspace-data 仓 `scripts/usage_report.py`。
-- 借库（`workspace.yaml` 的 `glyph_lib.borrow`）暂不支持，配了就报错，照旧用 `glyph-db rebuild`。
+- **借库（2026-10-19 起，共享方案 S4）**：迁过的工作区在 `workspace.yaml` 的 `glyph_lib.borrow` 里写**被借工作区的名字**
+  （如 `borrow: [siku-zongmu]`，以后的共享刻例库写 `glyphlib-qkp-v1`）。`db pull`／`db sync` 顺带把那个工作区的
+  `output/glyph_store/` 拉到只读副本 `$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/`（与它自己的数据目录分开，本机同时在整理它也不互相盖），
+  带上它重建 glyph.db；副本旁 `.borrowed-state.json` 记拉到的 rev，被借工作区没新写入就不重拉、不重建。
+  借来的东西不算本地改动、不会被 push。`guji glyph-db rebuild` 也认工作区名（没 pull 过就报错让先 pull）。
+  写路径的条目（旧布局）照旧当本地目录；借自己报错。借来的人裁记成 `borrowed_human`（S3 修法），不当铁证。
+- **共享层只读**：`corpus-base` 和 `glyphlib-*` 工作区，普通 `db push`／`db sync` 一律拒绝；只有升级脚本
+  （`push(..., shared_writer=True)`）能写，`glyphlib-*` 还只能写一次（发布过就不可改，出新版开新工作区）。
 - 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。
 
 验收（`tests/datastore/test_datastore_pull.py`）：真字形库（admit → export）进 git → 导入 Postgres →
