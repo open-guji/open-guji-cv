@@ -242,3 +242,10 @@ def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypat
     with pytest.raises(AttributeError):                 # 走到后面真跑的地方（假引擎没有 store）
         Engine._run_one_step(e, _step("glyph_match"), [], None, False, False, 0, 0)
     assert seen == [2]
+
+
+def test_cv_version_reads_repo_pyproject(tmp_path):
+    """清单里的 cv_version 读引擎仓 pyproject（装包元数据在可编辑安装后会旧）。"""
+    from open_guji_cv.ops.corpus_pack import _cv_version
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "9.8.7"\n', encoding="utf-8")
+    assert _cv_version(tmp_path) == "9.8.7"
