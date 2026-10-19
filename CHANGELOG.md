@@ -15,6 +15,7 @@
 - 中心库借库（共享方案 S4）：迁过的工作区在 `workspace.yaml` 的 `glyph_lib.borrow` 写被借工作区的名字，`guji db pull`／`db sync` 把它的字形库拉成只读副本（`$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/`），带上它重建 glyph.db，被借库有新写入才重拉重建；`guji glyph-db rebuild` 也认工作区名。原来配了借库 `db pull` 直接报错。共享层工作区 `corpus-base`、`glyphlib-*` 普通 push／sync 拒绝，只有升级脚本能写，`glyphlib-*` 只写一次。见 `doc/datastore.md` 第六节。不碰任何 Step，17 步 `code_hash` 不变。
 - `border_detect_gate` 新参数 `body_pages`（缺省空；空时不进参数 dump、产物逐字节不变）：册配置点名的页不论页型规则判成什么都按正文切，manifest 记 flag `page_type_forced`。起因：殿本 vol06 p88 卷十末叶只有一列小注「部一卷皆附存目」、其余空栏，被判成 cover 整页跳过，丢 7 字；`params: {border_detect_gate: {body_pages: [88]}}` 后整页切出、7 字放行。`border_detect_gate` 的 `code_hash` 变（下游产物逐字节不变，不连带过期）。
 - Step1 `border_detect` 新参数 `column_grid_pages`／`grid_col_pitch`（缺省空；空时两项都不进参数 dump、产物逐字节不变）：点名的页竖线走网格模式，其余页照书级配置。起因：殿本 vol05 p55、p123，vol04 p80 界行断续，自由模式挑了假竖线或漏一条界行，整列没切出来（vol05 p55「明王宣撰…」、p123「行故居足之左右…」、vol04 p80「今說易諸書無所偏主…」），现有闸都拦不住；`params: {border_detect: {column_grid_pages: [55, 123], grid_col_pitch: 185}}` 后列距全回到 180–190px，正常页逐位不变。`border_detect` 的 `code_hash` 变。
+- `column_grid_pages` 点名页另做一步：最外一列窄于内列中位的 0.8 倍时，把那条外框线按中位列距往外推（记成插值线），只动外框两条。起因：殿本 vol04 p63 右框只下三分之一有墨，探到的「框」落在首列字上，首列只剩 117px、「聖人非因之以作易…」半列丢字；网格模式本身选不到这条残框。正常页不触发（vol04 p62、p80，vol05 p55、p123 逐位不变）。
 
 ## [0.4.5] - 2026-10-19
 
