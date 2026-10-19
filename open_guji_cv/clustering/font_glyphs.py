@@ -228,9 +228,32 @@ def import_font(db, spec: FontSpec, chars, batch_commit: int = 2000,
     if pool is not None:
         pool.close()
         pool.join()
+    _record_font_manifest(db, spec, chars, n_ok, vertical)
     db.conn.commit()
     return {"edition": spec.edition_tag, "glyphs": n_ok,
             "missing": n_missing, "requested": len(chars)}
+
+
+def _record_font_manifest(db, spec: FontSpec, chars, n_ok: int, vertical: bool) -> None:
+    """在库的 font_manifests 表记这套字体域是用哪些字体文件、哪份字表导的（GUJI-609）。
+
+    ``clustering.glyph_fp.font_domain_fingerprint`` 读它：换了字体文件或字表，读字体域的步骤才知道要过期。"""
+    import hashlib
+
+    from .glyph_fp import FONT_TABLE, FONT_TABLE_SQL
+
+    def _sha(p: Path) -> str:
+        h = hashlib.sha256()
+        with open(p, "rb") as f:
+            for blk in iter(lambda: f.read(1 << 20), b""):
+                h.update(blk)
+        return h.hexdigest()
+    man = {"fonts": {Path(p).name: _sha(Path(p)) for p in spec.font_paths},
+           "chars_sha256": hashlib.sha256("".join(chars).encode("utf-8")).hexdigest(),
+           "n_chars": len(chars), "glyphs": n_ok, "vertical": bool(vertical)}
+    db.conn.execute(FONT_TABLE_SQL)
+    db.conn.execute(f"INSERT OR REPLACE INTO {FONT_TABLE} (edition_tag, manifest) VALUES (?, ?)",
+                    (spec.edition_tag, json.dumps(man, sort_keys=True)))
 
 
 def _worker_render_serial(renderer, char):
