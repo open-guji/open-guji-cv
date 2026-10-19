@@ -840,13 +840,16 @@ def _pair_columns(dzg_cols: list[str], rel_cols: list[str], min_sim: float = 0.5
     return out
 
 
-def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | None = None) -> dict:
+def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | None = None,
+                   disagree_default: str | None = None) -> dict:
     """colgold 行 → open-guji-dataset `char-segmentation/column-counts/items.jsonl`（统一金标信封）。
 
     - 两源一致列：`label_origin=consensus`；
     - 人裁过的不一致列（甲乙卡裁成 dzg 或 release 对）：取被裁对的那份字数，`label_origin=human`；
     - 抽检卡裁成「字数不对」的一致列：`status=retired`（留痕，不参与评测）。
     `verdicts`：{卡 id: {"verdict": …, "A_is": "dzg"|"release"}}，由 harvest 结果 + 冻结卡表拼出。
+    `disagree_default`：没人裁的不一致列统一取哪份（"dzg"/"release"）；None = 不收。
+    用户 2026-10-19 定：不一致的都是夹注列被 release 按 x 聚列拆开，一律取 daizhige（人裁 7 张全选 daizhige）。
     """
     verdicts = verdicts or {}
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
@@ -858,14 +861,18 @@ def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | No
                "note": r["dzg"]["note"], "text": r["dzg"]["text"]}
         origin, status, why = "consensus", "active", "daizhige 与 release 字数一致"
         if not r["agree"]:
-            if not v or v["verdict"] not in ("A", "B"):
+            if v and v["verdict"] in ("A", "B"):
+                pick = v["A_is"] if v["verdict"] == "A" else ("release" if v["A_is"] == "dzg" else "dzg")
+                why = f"两源不一致，人裁取 {pick}"
+            elif disagree_default:
+                pick, why = disagree_default, f"两源不一致，用户 10-19 统一裁定取 {disagree_default}（夹注列 release 拆列）"
+            else:
                 stats["skipped_unresolved"] += 1
                 continue
-            pick = v["A_is"] if v["verdict"] == "A" else ("release" if v["A_is"] == "dzg" else "dzg")
             if pick == "release":
                 exp = {"n": r["release"]["n"], "n_main": None, "start": None, "note": None,
                        "text": r["release"]["text"]}
-            origin, why = "human", f"两源不一致，人裁取 {pick}"
+            origin = "human"
         elif v and v["verdict"] == "count":
             status, why = "retired", "抽检人裁：字数不对"
         stats[f"{origin}:{status}"] += 1
@@ -883,7 +890,7 @@ def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | No
 
 
 def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | None = None,
-                 verdicts: dict | None = None) -> None:
+                 verdicts: dict | None = None, disagree_default: str | None = None) -> None:
     halves = build_halves(source_files(ws))
     rel = load_release(release_dir)
     by_roll: dict[str, list[Half]] = defaultdict(list)
@@ -933,7 +940,8 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | Non
     print(json.dumps(stats, ensure_ascii=False))
     print(f"→ {dst}")
     if export:
-        print("export", json.dumps(export_colgold(out_rows, export, verdicts), ensure_ascii=False), f"→ {export}")
+        print("export", json.dumps(export_colgold(out_rows, export, verdicts, disagree_default), ensure_ascii=False),
+              f"→ {export}")
 
 
 def main(argv=None) -> int:
@@ -947,6 +955,8 @@ def main(argv=None) -> int:
     ap.add_argument("--export", help="colgold：写 open-guji-dataset 分片目录（char-segmentation/column-counts）")
     ap.add_argument("--verdicts", help="colgold：人裁收回的 jsonl（harvest_verdicts 输出）")
     ap.add_argument("--cards", help="colgold：冻结卡表（含甲乙对应），与 --verdicts 同给")
+    ap.add_argument("--disagree-default", choices=["dzg", "release"],
+                    help="colgold：没人裁的不一致列统一取哪份（用户 10-19 定 dzg）")
     a = ap.parse_args(argv)
     if not a.ws:
         ap.error("要 --ws 或 GUJI_WORKSPACE（四庫總目书目录）")
@@ -971,7 +981,7 @@ def main(argv=None) -> int:
                     d = json.loads(ln)
                     verdicts[d["id"]] = {"verdict": d["verdict"], "A_is": cards.get(d["id"], {}).get("A_is")}
         cmd_colgold(ws, Path(a.release), [v.zfill(2) for v in a.vols.split(",")],
-                    Path(a.export) if a.export else None, verdicts)
+                    Path(a.export) if a.export else None, verdicts, a.disagree_default)
     else:
         cmd_compare(ws, a.samples)
     return 0

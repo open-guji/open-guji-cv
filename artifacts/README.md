@@ -22,7 +22,7 @@
 
 | 页面 | URL | 快照/真源 | 再生 |
 |---|---|---|---|
-| **列字数金标人裁**（56 列两源不一致的甲乙裁 + 300 列一致列抽检）| https://claude.ai/artifact/7uz9XP9Frcr6FjevoqukWq | 卡 id 与甲乙对应：`research/yolo_release_compare/results/colgold_review_cards.jsonl` | `research/yolo_release_compare/build_colgold_review.py`（要先对卡涉及页跑 Step1）；收回 `.claude/skills/review-artifact/scripts/harvest_verdicts.py`。**重发布一律同一 URL** |
+| **列字数金标人裁**（56 列两源不一致的甲乙裁 + 300 列一致列抽检；**10-19 收口**：裁了 7 张全判 daizhige，用户定其余一律取 daizhige、抽检不做）| https://claude.ai/artifact/7uz9XP9Frcr6FjevoqukWq | 卡 id 与甲乙对应：`research/yolo_release_compare/results/colgold_review_cards.jsonl` | `research/yolo_release_compare/build_colgold_review.py`（要先对卡涉及页跑 Step1）；收回 `.claude/skills/review-artifact/scripts/harvest_verdicts.py`。**重发布一律同一 URL** |
 
 ## 研究台账（本轮调研与实测的导览页，2026-09-22）
 
