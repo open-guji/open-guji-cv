@@ -19,9 +19,9 @@ def test_members_match_legacy_constants():
 def test_group_ids_match_dataset_registry():
     """id 与 dataset `char-groups/groups.json` 的 id 一致（jys／ry／rr／yi_560／wxs／wm／ts）；
     另有字组统一流程首批七个异体组（mn／dian／can／chen／li／shen／zhi，2026-10-18）、第二批四个只看字频的（ji／qing／bian／hui）、
-    第三批五个形近不同义的（ly／dt／wj／zh／yh，2026-10-19）。"""
+    第三批五个形近不同义的（ly／dt／wj／zh／yh，2026-10-19）、第四批三个（xz／wyu／yt）。"""
     assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
-                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh"}
+                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 

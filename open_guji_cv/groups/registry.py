@@ -96,6 +96,14 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
                                ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會", "會＝會典、附會；曾＝曾經、姓氏。"),
                                ("yh", "遺還", "遺＝遺文、補遺；還＝還朝、返還。"))},
+    # —— 第四批（2026-10-19）：象彖、王玉、圓圖。同前，L1 零冲突＋逐册 L2 表。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("ctx",)),
+        note=f"按文意定（L1 规则，弃权查 L2 表）；只补放，不复核。{note}")
+       for gid, name, note in (("xz", "象彖", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
+                               ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
