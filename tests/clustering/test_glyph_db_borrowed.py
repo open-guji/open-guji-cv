@@ -94,3 +94,23 @@ def test_plain_rebuild_unchanged(two, tmp_path):
     assert not db.conn.execute("SELECT 1 FROM sqlite_master WHERE name='borrowed'").fetchone()
     assert export_store(db, tmp_path / "s2")["instances"] == 3
     db.close()
+
+
+def test_borrowed_human_not_counted_as_own(two, tmp_path):
+    """借来的人裁不算本书人裁（共享方案 S3）：人裁通道、铁证匹配器、共识计数都只见本书的。"""
+    from open_guji_cv.clustering.glyph_fp import HUMAN_SQL
+    from open_guji_cv.steps.glyph_match import human_confirmed_counts
+
+    siku, qtw = two
+    rebuild_from_store(qtw, tmp_path / "m.db", extra_stores=[siku])
+    db = GlyphDB(tmp_path / "m.db")
+    human = {r[0] for r in db.conn.execute(HUMAN_SQL)}
+    assert human == {"v2:v006:5:1:1", "v2:v006:5:1:2"}
+    iron = {r[0] for r in db.conn.execute(
+        "SELECT instance_id FROM instances WHERE label_status='human'")}
+    assert iron == human
+    st = dict(db.conn.execute(
+        "SELECT instance_id, label_status FROM instances WHERE instance_id LIKE '%vol01%'"))
+    assert set(st.values()) == {"borrowed_human"}
+    db.close()
+    assert human_confirmed_counts(str(tmp_path / "m.db")) == {"以": 1, "令": 1}
