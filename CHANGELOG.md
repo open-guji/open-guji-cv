@@ -7,6 +7,11 @@
 
 待发分支 `rc/v0.4.1`。
 
+### Fixed
+- `guji db sync|pull|migrate` 拉图提速（10-19 D 反馈：18,481 张刻例图拉了约 20 分钟）：签名本来就每 1000 张批量签，慢在取图一张一次 TLS 握手、只开 8 线程。`WorkerSource.fetch_blobs` 改为每线程留 HTTPS 长连接（走系统代理的 CONNECT 隧道）、缺省 32 线程（`GUJI_DATA_FETCH_WORKERS` 可改），闲置连接被关立刻重连；超过 2000 张时每 2000 张在 stderr 报一次进度。云端实测 3000 张小图：约 30 张/秒 → 约 220 张/秒。取图走 R2 签名直链，不占 Worker 请求额度。
+- 锚图（`feedback/anchor_patches/**.png`）只记在 `anchor_patches_meta`、不进 `source_files`，`pull`／`sync` 从没把它们还原到数据目录，`migrate` 则把检出里的每张锚图都报成「与中心库不一致」（服务器 siku-zongmu 报 1946 个）。`_db_manifest` 与 `materialize` 现在把这张表算进来。
+- 只动 `datastore/`（不进任何 Step 的 `code_deps`），17 步 `code_hash` 不变。
+
 ## [0.4.0] - 2026-10-18
 
 MINOR（用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次）。release note 见 `RELEASES.md`。

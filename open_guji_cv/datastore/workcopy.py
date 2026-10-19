@@ -133,7 +133,10 @@ def local_changes(ws_dir: Path, glyph: GlyphHooks | None = None) -> list[str]:
 
 
 def _db_manifest(src, ws: str) -> dict[str, str]:
-    return {r["src_path"]: r["sha256"] for r in src.rows("source_files", ws)}
+    """库里这个工作区的文件 {相对路径: sha}：文本在 source_files，锚图在 anchor_patches_meta。"""
+    out = {r["src_path"]: r["sha256"] for r in src.rows("source_files", ws)}
+    out.update({r["src_path"]: r["sha256"] for r in src.rows("anchor_patches_meta", ws)})
+    return out
 
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3) -> tuple[int, dict]:
