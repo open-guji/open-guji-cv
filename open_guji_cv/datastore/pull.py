@@ -75,3 +75,42 @@ def import_events(src_from, dst, ws: str, ids: set[str] | None, dst_branch: str,
                             "import_id": res.get("import_id"), "rev_to": res.get("rev_to")})
     out["results"] = results
     return out
+
+
+def diff_branches(a, b, ws: str, show: int = 20) -> dict:
+    """``guji db diff``：工作区 ``ws`` 在分支 ``a``（一般是实验分支）与 ``b``（一般是 main）上逐文件比。
+
+    只读 ``source_files``（文本文件的 sha、行数）与图表的清单，不下载内容。两边分开以后各自都可能有新写入，
+    所以报的是「现在不一样的」，不分谁改的；人裁事件另按 id 列出只在 ``a`` 上有的（即 ``guji db import`` 会导入的）。"""
+    from .materialize import blob_rows
+    from .scope import BLOB_TABLES
+
+    def files(src) -> dict[str, tuple[str, int | None]]:
+        out = {r["src_path"]: (r["sha256"], r.get("n_lines")) for r in src.rows("source_files", ws)}
+        for tbl in BLOB_TABLES:
+            out.update({r["src_path"]: (r["sha256"], None) for r in blob_rows(src, tbl, ws)})
+        return out
+
+    fa, fb = files(a), files(b)
+    only_a = sorted(set(fa) - set(fb))
+    only_b = sorted(set(fb) - set(fa))
+    changed = sorted(p for p in set(fa) & set(fb) if fa[p][0] != fb[p][0])
+
+    def group(paths: list[str]) -> dict[str, int]:
+        g: dict[str, int] = {}
+        for p in paths:
+            k = "/".join(p.split("/")[:2])
+            g[k] = g.get(k, 0) + 1
+        return dict(sorted(g.items()))
+
+    ev_b = {r["id"] for r in b.rows("events", ws)}
+    ev_only_a = sorted({r["id"] for r in a.rows("events", ws)} - ev_b)
+    return {
+        "ws": ws, "branch": a.branch, "against": b.branch, "rev": a.status(), "against_rev": b.status(),
+        "same": len(set(fa) & set(fb)) - len(changed),
+        "changed": {"n": len(changed), "by_dir": group(changed),
+                    "items": [{"path": p, "lines": fa[p][1], "against_lines": fb[p][1]} for p in changed[:show]]},
+        "only_in_branch": {"n": len(only_a), "by_dir": group(only_a), "items": only_a[:show]},
+        "only_in_against": {"n": len(only_b), "by_dir": group(only_b), "items": only_b[:show]},
+        "events_only_in_branch": {"n": len(ev_only_a), "ids": ev_only_a[:show]},
+    }

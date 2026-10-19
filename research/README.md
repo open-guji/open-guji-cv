@@ -22,6 +22,7 @@
 | `stroke_disc/` | 09-26 | 小笔画判别器：verify 的 cov/wmax 能否分开铁证冲突与一致 |
 | `scripts_oneoff/` | 10-06 | 从 `scripts/` 挪来的 21 个一次性脚本：修数据（evict、relabel、backfill、rebind、repair）、迁移（migrate_*）、一次性评测与 A/B（eval_*、*_ab） |
 | `yolo_tool_probe/` | 10-02 | yolo_tool 的 YOLO 模型在四庫 vol03 上的探针（F1） |
+| `yolo_release_compare/` | 10-19 | yolo_tool 切分 release（殿本全书 16,516 页）与 CV 同图对比、列字数先验实验 |
 
 **生产模型的出处**（代码 docstring 引用这里）：
 

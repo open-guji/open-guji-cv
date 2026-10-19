@@ -135,3 +135,29 @@ def test_cli_tier_defaults_to_final():
     cli_v2.register_subcommands(root.add_subparsers(dest="command"))
     assert root.parse_args(["close-check", "b", "-w", "/x"]).tier == "final"
     assert root.parse_args(["close-check", "b", "-w", "/x", "--tier", "rough"]).tier == "rough"
+
+
+def test_queue_skips_cells_on_recut_list(monkeypatch, tmp_path):
+    """重切清单上的格不算待审（D 10-19：book-text 手拼的列，cv 的格 id 对不上，落不了格事件）。"""
+    import open_guji_cv.review.cards as RC
+    from open_guji_cv.ops import release_gates as RG
+    cs = [{"page": 10, "col": 7, "slot": 3, "sub": "", "cls": "near_form", "doubts": []},
+          {"page": 89, "col": 2, "slot": 1, "sub": "a", "cls": "near_form", "doubts": ["vision_flag"]},
+          {"page": 90, "col": 1, "slot": 4, "sub": "", "cls": "no_ref", "doubts": []},
+          {"page": 12, "col": 1, "slot": 1, "sub": "", "cls": "near_form", "doubts": []}]
+
+    def fake(*a, **k):
+        if k.get("limit") == 1:
+            return {"class_counts": {"near_form": 3, "no_ref": 1}, "doubt_counts": {"vision_flag": 1}}
+        return {"cards": cs, "truncated": False}
+    monkeypatch.setattr(RC, "cards", fake)
+    monkeypatch.setattr(CC, "_glyph_store_missing", lambda ws: None)
+    monkeypatch.setattr(RG, "lists_dir", lambda: tmp_path / "lists")
+    assert "4 格" in CC._queue("b", None, tmp_path)["detail"]       # 没有重切清单：照旧
+    RG.recut_path("b", tmp_path / "lists").parent.mkdir(parents=True)
+    RG.recut_path("b", tmp_path / "lists").write_text("位置\t原因\n10:7\t手拼\n89\t职名页\n90:1:4\tx\n", encoding="utf-8")
+    it = CC._queue("b", None, tmp_path)
+    assert it["status"] == CC.FAIL and "待审 1 格" in it["detail"] and "3 格在重切清单上" in it["detail"]
+    assert it["data"] == {"near_form": 1} and "vision_flag" not in it["detail"]
+    RG.recut_path("b", tmp_path / "lists").write_text("位置\t原因\n10:7\t手拼\n89\t职名页\n90:1:4\tx\n12\ty\n", encoding="utf-8")
+    assert CC._queue("b", None, tmp_path)["status"] == CC.PASS

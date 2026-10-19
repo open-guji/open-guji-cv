@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """工作区路径解析：把「引擎」与「某本书的数据」分开。
 
 ## 为什么有这个模块
@@ -50,6 +49,7 @@ pytest tests/ -s -p no:cacheprovider
 from __future__ import annotations
 
 import os
+import re
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -117,7 +117,10 @@ def data_home() -> Path:
 
 
 def central_marker(ws: Path | None = None) -> dict | None:
-    """工作区根的 ``.central.json``（{ws, branch}）；没有返回 None（旧布局）。"""
+    """工作区根的 ``.central.json``（{ws, branch}）；没有返回 None（旧布局）。
+
+    设了 ``GUJI_DATA_BRANCH`` 就以它为准（如 ``exp/GUJI-612-try``）：同一个工作区换到实验分支的数据目录，
+    下面所有路径函数、pull／push／sync 都跟着走，不改标记文件。"""
     import json
     ws = ws if ws is not None else workspace_root()
     if ws is None:
@@ -125,11 +128,54 @@ def central_marker(ws: Path | None = None) -> dict | None:
     f = Path(ws) / CENTRAL_MARKER
     if not f.is_file():
         return None
-    return json.loads(f.read_text(encoding="utf-8"))
+    m = json.loads(f.read_text(encoding="utf-8"))
+    over = os.environ.get("GUJI_DATA_BRANCH")
+    if over:
+        m = {**m, "branch": over}
+    return m
+
+
+def active_branch(ws: Path | None = None) -> str:
+    """当前工作区读写的中心库分支：``GUJI_DATA_BRANCH`` > 标记里的 > main。"""
+    m = central_marker(ws)
+    return str((m or {}).get("branch") or os.environ.get("GUJI_DATA_BRANCH") or "main")
+
+
+def _branch_local(rel: str) -> Path | None:
+    """实验分支上，可重建的本地文件（glyph.db、products）放进该分支的数据目录，免得与正式库的那份互相覆盖。"""
+    ws = workspace_root()
+    m = central_marker(ws) if ws is not None else None
+    if not m or str(m.get("branch") or "main") == "main":
+        return None
+    return central_data_dir(str(m["ws"]), str(m["branch"])) / rel
 
 
 def central_data_dir(ws_id: str, branch: str = "main") -> Path:
     return data_home() / branch.replace("/", "__") / ws_id
+
+
+#: 借库条目是中心库工作区名的样子（不含 /）；否则当路径（旧布局，相对工作区根）
+_CENTRAL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def borrowed_root(ws_id: str, branch: str = "main") -> Path:
+    """借来的中心库工作区的只读副本（``db pull`` 拉，共享方案 S4）：``$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/``。
+
+    与那个工作区自己的数据目录分开：本机也在整理它时，拉借库不会盖掉那边没推的改动。"""
+    return data_home() / branch.replace("/", "__") / ".borrowed" / ws_id
+
+
+def resolve_borrow(entry: str, ws: Path) -> Path:
+    """``workspace.yaml`` 的 ``glyph_lib.borrow`` 一条 → 被借字形库目录。
+
+    迁过的工作区写中心库工作区名（``siku-zongmu``、``glyphlib-qkp-v1``）→ 借库只读副本；
+    写路径的（旧布局，绝对或相对工作区根）照旧当路径。"""
+    ws = Path(ws)
+    m = central_marker(ws)
+    if m and _CENTRAL_NAME.match(entry) and not (ws / entry).exists():
+        return borrowed_root(entry, str(m.get("branch") or "main")) / "output" / "glyph_store"
+    p = Path(entry).expanduser()
+    return p if p.is_absolute() else ws / p
 
 
 def data_root(ws: Path | None = None) -> Path | None:
@@ -174,7 +220,11 @@ def _resolve(env_key: str, rel: str, override: str | Path | None = None, data: b
 
 
 def glyph_db_path(override: str | Path | None = None) -> Path:
-    """字形库 SQLite 索引。可重建，不进 git。"""
+    """字形库 SQLite 索引。可重建，不进 git。实验分支上缺省在该分支的数据目录里（见 ``_branch_local``）。"""
+    if not os.environ.get("GUJI_GLYPH_DB") and not override:
+        p = _branch_local(GLYPH_DB_REL)
+        if p is not None:
+            return p
     return _resolve("GUJI_GLYPH_DB", GLYPH_DB_REL, override)
 
 
@@ -184,7 +234,12 @@ def glyph_store_path(override: str | Path | None = None) -> Path:
 
 
 def products_root() -> Path:
-    """数值产物 `products/<book>/<step>/`。`GUJI_PRODUCTS_DIR` > 工作区 > 仓内默认。"""
+    """数值产物 `products/<book>/<step>/`。`GUJI_PRODUCTS_DIR` > 工作区 > 仓内默认。
+    实验分支上缺省在该分支的数据目录里（见 ``_branch_local``）。"""
+    if not os.environ.get("GUJI_PRODUCTS_DIR"):
+        p = _branch_local(PRODUCTS_REL)
+        if p is not None:
+            return p
     return _resolve("GUJI_PRODUCTS_DIR", PRODUCTS_REL)
 
 

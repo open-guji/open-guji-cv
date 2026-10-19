@@ -135,6 +135,20 @@ def test_extra_store_cli_wins_and_ignores_glyph_store_env(monkeypatch, tmp_path,
     assert capture_extras["extras"] == [Path("/abs/other/glyph_store"), ws / "rel/store"]
 
 
+def test_borrow_by_central_name_uses_pulled_copy(monkeypatch, tmp_path, capture_extras):
+    """迁到中心库的工作区写被借工作区的名字 → 用 db pull 拉好的只读副本；没拉过就报错退出（共享方案 S4）。"""
+    from open_guji_cv.core.workspace import borrowed_root
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home"))
+    ws = _ws_with_borrow(monkeypatch, tmp_path, ["lib-ws"])
+    (ws / ".central.json").write_text('{"ws": "qtw", "branch": "main"}')
+    with pytest.raises(SystemExit):
+        main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None))
+    lib = borrowed_root("lib-ws") / "output" / "glyph_store"
+    lib.mkdir(parents=True)
+    main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None))
+    assert capture_extras["extras"] == [lib]
+
+
 def test_empty_borrow_means_own_library_only(monkeypatch, tmp_path, capture_extras):
     _ws_with_borrow(monkeypatch, tmp_path, [])
     main_mod.cmd_glyph_db(Namespace(action="rebuild", path=None, store=None))

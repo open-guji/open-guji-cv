@@ -117,6 +117,9 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        title="上游裁切", needs=("products",)),
     _e("char_drop", "char-segmentation/char-drop", arg_kind="shard_parent", out_flag="", pythonpath=True,
        title="字墨丢失", needs=("products",), note="2026-09-30 M1：改读 v2 列图/cell_shrink，基线 expected_v2.json（新口径首个基线）"),
+    _e("column_counts", "char-segmentation/column-counts", out_flag="--json-out", pythonpath=True,
+       title="逐列字数", needs=("products",),
+       note="殿本 vol01–10 双源一致列字数（doc/design/19）；报告型，无回归门"),
     # 生僻字候选召回（C 刀 L1）：库/OCR/上下文都给不出答案的字位，字体模板能
     # 不能把答案捞进 top-10。主指标是**召回**不是准确率——目标是人在候选里点。
     # 位置参数是数据集分片目录（--dataset），不是分片父目录。

@@ -16,8 +16,11 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 from pydantic import BaseModel, Field, model_serializer
 
+from ..core.book import _expand_pages
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
@@ -25,6 +28,38 @@ from ..products.kinds.line_index import LineIndex, LineRec
 from ..utils.border_geometry import detect_borders
 from ..utils.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..utils.column_types import classify_columns
+
+#: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
+OUTER_NARROW_FRAC = 0.8
+
+
+def pad_outer_columns(res) -> int:
+    """`column_grid_pages` 点名页专用：最外一列明显窄于内列（< `OUTER_NARROW_FRAC` × 内列
+    中位），说明那侧版框没印全、外框线落到了字上（殿本 vol04 p63：右框只下三分之一有墨，
+    探到的「框」是第一列字的笔画，首列只剩 117px，半列字丢了）。把那条外框线按内列中位
+    列距往外推、记成插值线。只动外框两条，内部界行不动；推出图外就不推。返回推了几条。"""
+    v = res.verticals
+    if len(v) < 5:
+        return 0
+    y = res.height / 2.0
+    xs = [float(line.x_at(y)) for line in v]
+    gaps = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    inner = sorted(gaps[1:-1])
+    med = inner[len(inner) // 2]
+    filled = list(res.vline_filled) or [False] * len(v)
+    n = 0
+    for idx, gap, sign in ((0, gaps[0], -1.0), (len(v) - 1, gaps[-1], 1.0)):
+        if gap >= OUTER_NARROW_FRAC * med:
+            continue
+        shift = sign * (med - gap)
+        if not 0 <= xs[idx] + shift <= res.width - 1:
+            continue
+        v[idx] = replace(v[idx], x_at_top=v[idx].x_at_top + shift)
+        filled[idx] = True
+        n += 1
+    if n:
+        res.vline_filled = filled
+    return n
 
 
 class BorderDetectParams(BaseModel):
@@ -35,12 +70,24 @@ class BorderDetectParams(BaseModel):
     用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
     关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
+    column_grid_pages: list[int | str] = []
+    """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。
+    用在界行断续、自由模式挑了假竖线或漏了一条界行、整列没切出来的页，例如殿本 vol05 p55／
+    p123、vol04 p80（2026-10-19）。写法同 `column_gate.period_prior_pages`：
+    `params: {border_detect: {column_grid_pages: [55, 123], grid_col_pitch: 185}}`。
+    缺省空，空时本字段与 `grid_col_pitch` 都不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_col_pitch: float | None = None
+    """`column_grid_pages` 那些页用的列距先验（px）；None = 用书级 `col_pitch`。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
         d = handler(self)
         if isinstance(d, dict) and not self.merge_narrow_pair:
             d.pop("merge_narrow_pair", None)
+        if isinstance(d, dict) and not self.column_grid_pages:
+            d.pop("column_grid_pages", None)
+            d.pop("grid_col_pitch", None)
         return d
 
 
@@ -73,6 +120,12 @@ class BorderDetectStep(Step):
         cols = p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
         H, W = gray.shape[:2]
+        grid = ctx.book.column_grid
+        col_pitch = ctx.book.col_pitch
+        grid_page = bool(p.column_grid_pages) and page in set(_expand_pages(p.column_grid_pages))
+        if grid_page:
+            grid = True
+            col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int):
@@ -80,8 +133,8 @@ class BorderDetectStep(Step):
                                   book_bottom_gap=ctx.book.bottom_gap,
                                   top_band_frac=ctx.book.top_band_frac,
                                   bottom_band_frac=ctx.book.bottom_band_frac,
-                                  column_grid=ctx.book.column_grid,
-                                  col_pitch=ctx.book.col_pitch,
+                                  column_grid=grid,
+                                  col_pitch=col_pitch,
                                   frame_height=ctx.book.frame_height,
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
@@ -89,6 +142,8 @@ class BorderDetectStep(Step):
                                   vline_polyline=ctx.book.vline_polyline)
 
         res = _detect(cols)
+        if grid_page:
+            pad_outer_columns(res)
         # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
         # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
         merged_col = None
