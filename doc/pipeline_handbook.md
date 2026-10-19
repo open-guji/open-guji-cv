@@ -298,7 +298,7 @@ vol01 全书 24588 块命中 1345（5.5%），`frame_bar_bottom` 占 1002（其�
 （`seed="review_recrop"`）。模式：列尾格**整体上飘 35~55px**（同页四个
 列尾全中，系统性格线偏移，不是「多裁了框」）、最左/最右列吃进**断续
 内边框**（版面检测目前根本不认这条线）。四个惯犯位置与给 G2/G3 的
-整改诉求 → **[segmentation_border_feedback.md](design/segmentation_border_feedback.md)**。
+整改诉求 → **[segmentation_border_feedback.md](archive/design/segmentation_border_feedback.md)**。
 
 ### 上下文纠正第二轮基线（2026-08-24，种子队列实集）
 

@@ -13,12 +13,12 @@
 | `.claude/doc/_archive/phase3_char_grid.md` | `doc/archive/phase3_char_grid.md` |
 | `.claude/doc/_archive/split_curve_boundary_research.md` | `doc/archive/split_curve_boundary_research.md` |
 | `.claude/doc/ccr_rare_char_literature_review.md` | `doc/research/ccr_rare_char_literature_review.md` |
-| `.claude/doc/char_clustering_design.md` | `doc/design/char_clustering_design.md` |
+| `.claude/doc/char_clustering_design.md` | `doc/archive/design/char_clustering_design.md` |
 | `.claude/doc/charset_and_lm.md` | `doc/design/charset_and_lm.md` |
 | `.claude/doc/console_architecture.md` | `doc/console_architecture.md` |
 | `.claude/doc/console_manual.md` | `doc/console_manual.md` |
 | `.claude/doc/external_glyph_sources_experiment.md` | `doc/research/external_glyph_sources_experiment.md` |
-| `.claude/doc/fingerprint_shared_db_contention.md` | `doc/design/fingerprint_shared_db_contention.md` |
+| `.claude/doc/fingerprint_shared_db_contention.md` | `doc/archive/design/fingerprint_shared_db_contention.md` |
 | `.claude/doc/g3g4_error_analysis.md` | `doc/research/g3g4_error_analysis.md` |
 | `.claude/doc/glyph_canonical_format.md` | `doc/design/glyph_canonical_format.md` |
 | `.claude/doc/glyph_cnn_explained.md` | `doc/design/glyph_cnn_explained.md` |
@@ -27,7 +27,7 @@
 | `.claude/doc/glyph_match_research.md` | `doc/research/glyph_match_research.md` |
 | `.claude/doc/glyph_match_stack.md` | `doc/design/glyph_match_stack.md` |
 | `.claude/doc/glyph_set_roadmap.md` | `doc/design/glyph_set_roadmap.md` |
-| `.claude/doc/jiazhu_defects_for_segmentation.md` | `doc/design/jiazhu_defects_for_segmentation.md` |
+| `.claude/doc/jiazhu_defects_for_segmentation.md` | `doc/archive/design/jiazhu_defects_for_segmentation.md` |
 | `.claude/doc/jiazhu_plan_vol02.md` | `doc/archive/jiazhu_plan_vol02.md` |
 | `.claude/doc/lit/ccr_rare_char_papers.tsv` | `doc/research/lit/ccr_rare_char_papers.tsv` |
 | `.claude/doc/modern_print_pipeline.md` | `doc/modern_print_pipeline.md` |
@@ -38,9 +38,9 @@
 | `.claude/doc/pipeline_review_2026-09-04.md` | `doc/archive/pipeline_review_2026-09-04.md` |
 | `.claude/doc/rare_char_matching_survey.md` | `doc/research/rare_char_matching_survey.md` |
 | `.claude/doc/review_feedback_loops.md` | `doc/design/review_feedback_loops.md` |
-| `.claude/doc/review_loop_sop.md` | `doc/design/review_loop_sop.md` |
+| `.claude/doc/review_loop_sop.md` | `doc/archive/design/review_loop_sop.md` |
 | `.claude/doc/row_boundaries_design.md` | `doc/design/row_boundaries_design.md` |
-| `.claude/doc/segmentation_border_feedback.md` | `doc/design/segmentation_border_feedback.md` |
+| `.claude/doc/segmentation_border_feedback.md` | `doc/archive/design/segmentation_border_feedback.md` |
 | `.claude/doc/segmentation_v2_pipeline.md` | `doc/segmentation_v2_pipeline.md` |
 | `.claude/doc/step3_error_survey.md` | `doc/research/step3_error_survey.md` |
 | `.claude/doc/step3_segmentation_survey.md` | `doc/research/step3_segmentation_survey.md` |
@@ -50,7 +50,7 @@
 | `.claude/doc/table_cell_format.md` | `doc/archive/table_cell_format.md` |
 | `.claude/doc/task_card_2026-09-21_structure_step_a_local.md` | `doc/archive/task_card_2026-09-21_structure_step_a_local.md` |
 | `.claude/doc/task_card_2026-09-22_next_plan.md` | `doc/archive/task_card_2026-09-22_next_plan.md` |
-| `.claude/doc/technical_learning.md` | `doc/design/technical_learning.md` |
+| `.claude/doc/technical_learning.md` | `doc/archive/design/technical_learning.md` |
 | `.claude/doc/unencoded_char_sources_survey.md` | `doc/research/unencoded_char_sources_survey.md` |
 | `.claude/doc/variant_strategy.md` | `doc/design/variant_strategy.md` |
 | `.claude/doc/workspace_layout.md` | `doc/workspace_layout.md` |
