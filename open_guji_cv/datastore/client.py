@@ -32,6 +32,7 @@ from typing import Iterable, Iterator
 
 DEFAULT_URL = "https://data.open-guji.com"
 PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
+FETCH_BATCH = 200        # /v1/assets/get-batch 每批张数（Worker 上限 200），一批算一次 Worker 请求
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 
 
@@ -135,18 +136,64 @@ class WorkerSource:
 
     def fetch_blobs(self, shas: Iterable[str], bucket: str = "main",
                     workers: int | None = None, ext: str = "png") -> Iterator[tuple[str, bytes]]:
-        """每 1000 张批量签一次，再并发直取 R2。
+        """按 sha 取图字节，一次请求带一批（``/v1/assets/get-batch``，每批 ``FETCH_BATCH`` 张）。
 
-        每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
-        （``GUJI_DATA_FETCH_WORKERS`` 可改）。签名直链指向 Worker 的 /v1/blob，每张图算一次 Worker 请求（免费档每天 10 万次）。
-        10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。"""
+        免费档按 Worker 请求计数（每天 10 万次），逐张取一册书就是几万次（10-19 撞过上限）；
+        批量取把请求数降到约 1/200。几批并发（缺省 8，``GUJI_DATA_FETCH_WORKERS`` 可改），
+        每个线程留着自己的 HTTPS 长连接。旧版 Worker 没有这个接口时退回逐张签名直取。"""
         shas = sorted(set(shas))
-        workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
+        if not shas:
+            return
         getter = _KeepAliveGetter(self._ctx)
+        if not getattr(self, "_no_get_batch", False):
+            first = shas[:FETCH_BATCH]
+            try:
+                got = self._get_batch(getter, bucket, first, ext)
+            except CentralError as e:
+                if e.status != 404 or e.code != "not_found":
+                    raise
+                self._no_get_batch = True      # 旧版 Worker：退回逐张
+            else:
+                yield from got
+                rest = shas[FETCH_BATCH:]
+                workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 8)
+                chunks = [rest[i:i + FETCH_BATCH] for i in range(0, len(rest), FETCH_BATCH)]
+                with ThreadPoolExecutor(workers) as ex:
+                    for items in ex.map(lambda c: self._get_batch(getter, bucket, c, ext), chunks):
+                        yield from items
+                return
+        yield from self._fetch_one_by_one(getter, shas, bucket, workers, ext)
+
+    def _get_batch(self, getter: "_KeepAliveGetter", bucket: str, shas: list[str],
+                   ext: str) -> list[tuple[str, bytes]]:
+        body = json.dumps({"bucket": bucket, "ext": ext, "sha256s": shas}).encode()
+        for attempt in range(3):               # 流断在半截、字节不对：整批重取
+            self.requests += 1
+            try:
+                data = getter.request("POST", self.url + "/v1/assets/get-batch", body=body,
+                                      headers={"authorization": f"Bearer {self.token}",
+                                               "content-type": "application/json"})
+            except CentralError as e:
+                if e.status == 503 and len(shas) > 10:   # Worker 超资源（1102）：对半拆开
+                    h = len(shas) // 2
+                    return (self._get_batch(getter, bucket, shas[:h], ext)
+                            + self._get_batch(getter, bucket, shas[h:], ext))
+                raise
+            try:
+                return _parse_batch(data, shas)
+            except _BadBatch:
+                if attempt == 2:
+                    raise CentralError(0, "bad_batch", f"批量取图的回包不完整（{len(shas)} 张），重试 3 次仍不对")
+                time.sleep(2 ** attempt)
+        raise AssertionError("unreachable")
+
+    def _fetch_one_by_one(self, getter, shas, bucket, workers, ext):
+        workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
         with ThreadPoolExecutor(workers) as ex:
             for i in range(0, len(shas), SIGN_BATCH):
                 chunk = shas[i:i + SIGN_BATCH]
                 urls = self._sign_get(bucket, chunk, ext)
+                self.requests += len(chunk)
                 yield from ex.map(lambda sha: (sha, getter.get(urls[sha])), chunk)
 
     def _sign_get(self, bucket: str, shas: list[str], ext: str = "png") -> dict[str, str]:
@@ -231,23 +278,29 @@ class _KeepAliveGetter:
             c.close()
 
     def get(self, url: str) -> bytes:
+        return self.request("GET", url)
+
+    def request(self, method: str, url: str, body: bytes | None = None,
+                headers: dict | None = None) -> bytes:
         u = urllib.parse.urlsplit(url)
         key = (u.scheme, u.hostname, u.port or (80 if u.scheme == "http" else 443))
         path = u.path + ("?" + u.query if u.query else "")
+        hdrs = {"user-agent": "open-guji-cv-datastore", **(headers or {})}
         last: Exception | None = None
         for attempt in range(5):
             try:
                 c = self._conn(*key)
-                c.request("GET", path, headers={"user-agent": "open-guji-cv-datastore"})
+                c.request(method, path, body=body, headers=hdrs)
                 r = c.getresponse()
                 data = r.read()
                 if r.will_close:
                     self._drop(key)
                 if r.status == 200:
                     return data
+                err = _http_error(r.status, data)
                 if r.status != 429 and r.status < 500:
-                    raise CentralError(r.status, "http", data[:200].decode("utf-8", "replace"))
-                last = CentralError(r.status, "http", data[:200].decode("utf-8", "replace"))
+                    raise err
+                last = err
             except (OSError, http.client.HTTPException) as e:   # 连接断了：丢掉重连
                 self._drop(key)
                 last = e
@@ -256,6 +309,48 @@ class _KeepAliveGetter:
                     continue                           # 闲置长连接被对端关了：立刻重连，不等
             time.sleep(min(2 ** attempt, 20))
         raise last  # type: ignore[misc]
+
+
+def _http_error(status: int, data: bytes) -> CentralError:
+    try:
+        j = json.loads(data)
+    except ValueError:
+        j = None
+    if isinstance(j, dict) and "error" in j:
+        return CentralError(status, j["error"], j.get("message", ""), j.get("detail"))
+    return CentralError(status, "http", data[:200].decode("utf-8", "replace"))
+
+
+class _BadBatch(ValueError):
+    pass
+
+
+def _parse_batch(data: bytes, shas: list[str]) -> list[tuple[str, bytes]]:
+    """拆 get-batch 的回包：逐张 ``"<sha> <字节数>\\n"`` + 字节，没有的图字节数为 -1。
+    回包短了、顺序不对、字节与 sha 不符都算坏包（调用方整批重取）；图确实没有就报 404。"""
+    out, i = [], 0
+    for want in shas:
+        nl = data.find(b"\n", i, i + 100)
+        if nl < 0:
+            raise _BadBatch("回包短了")
+        try:
+            sha, n = data[i:nl].decode("ascii").split(" ")
+            n = int(n)
+        except ValueError:
+            raise _BadBatch("头行不对") from None
+        if sha != want:
+            raise _BadBatch("顺序不对")
+        i = nl + 1
+        if n < 0:
+            raise CentralError(404, "missing_blob", f"中心库里没有这张图：{sha}")
+        blob = data[i:i + n]
+        if len(blob) != n or _sha(blob) != sha:
+            raise _BadBatch("字节不对")
+        out.append((sha, blob))
+        i += n
+    if i != len(data):
+        raise _BadBatch("回包多出字节")
+    return out
 
 
 class PgSource:

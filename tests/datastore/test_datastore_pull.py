@@ -129,7 +129,15 @@ def test_import_events_from_exp_branch(repo, conn, tmp_path):  # noqa: F811
 
 # ---- 经 Worker 读：假 Worker，验证分页、批量签名、旧版 Worker 退回逐张签 ----
 
-def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool):
+def _framed(blobs: dict[str, bytes], shas: list[str]) -> bytes:
+    out = b""
+    for s in shas:
+        b = blobs.get(s)
+        out += f"{s} {len(b) if b is not None else -1}\n".encode() + (b or b"")
+    return out
+
+
+def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool, get_batch: bool = False):
     calls = []
 
     class H(BaseHTTPRequestHandler):
@@ -164,6 +172,9 @@ def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool):
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             calls.append(("POST", self.path))
             base = f"http://127.0.0.1:{self.server.server_port}/blob/"
+            if self.path == "/v1/assets/get-batch" and get_batch:
+                assert self.headers["authorization"] == "Bearer tok"
+                return self._send(200, raw=_framed(blobs, body["sha256s"]))
             if self.path == "/v1/assets/sign-batch" and batch:
                 return self._send(200, {"items": [{"sha256": s, "url": base + s} for s in body["sha256s"]]})
             if self.path == "/v1/assets/sign":
@@ -175,15 +186,15 @@ def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool):
     return srv, calls
 
 
-@pytest.mark.parametrize("batch", [True, False])
-def test_worker_source_paging_and_blobs(monkeypatch, tmp_path, batch):
+@pytest.mark.parametrize("batch,get_batch", [(True, True), (True, False), (False, False)])
+def test_worker_source_paging_and_blobs(monkeypatch, tmp_path, batch, get_batch):
     from open_guji_cv.datastore import client
     from open_guji_cv.datastore.client import BlobCache, WorkerSource
 
     monkeypatch.setattr(client, "PAGE", 2)
     rows = [{"i": i, "src_path": f"f{i}"} for i in range(5)]
     blobs = {hashlib.sha256(b).hexdigest(): b for b in (b"a", b"b", b"c")}
-    srv, calls = _fake_worker(rows, blobs, batch)
+    srv, calls = _fake_worker(rows, blobs, batch, get_batch)
     try:
         src = WorkerSource(url=f"http://127.0.0.1:{srv.server_port}", token="tok", branch="ci")
         assert src.status() == 7
@@ -195,7 +206,11 @@ def test_worker_source_paging_and_blobs(monkeypatch, tmp_path, batch):
     finally:
         srv.shutdown()
     signs = [p for m, p in calls if m == "POST"]
-    assert signs == (["/v1/assets/sign-batch"] if batch else ["/v1/assets/sign-batch"] + ["/v1/assets/sign"] * 3)
+    if get_batch:   # 新版 Worker：一次请求取回三张，不签名、不逐张 GET
+        assert signs == ["/v1/assets/get-batch"] and not any(p.startswith("/blob/") for _, p in calls)
+    else:           # 旧版 Worker：没有 get-batch 就退回签名直取
+        assert signs == ["/v1/assets/get-batch"] + (["/v1/assets/sign-batch"] if batch
+                                                     else ["/v1/assets/sign-batch"] + ["/v1/assets/sign"] * 3)
 
 
 def test_blob_cache_rejects_wrong_bytes(tmp_path):
@@ -235,6 +250,8 @@ def test_fetch_blobs_reuses_connections_and_retries(monkeypatch):
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            if self.path == "/v1/assets/get-batch":    # 旧版 Worker
+                return self._send(404, b'{"error": "not_found", "message": "x"}')
             base = f"http://127.0.0.1:{self.server.server_port}/blob/"
             self._send(200, json.dumps({"items": [{"sha256": s, "url": base + s}
                                                   for s in body["sha256s"]]}).encode())
@@ -248,6 +265,53 @@ def test_fetch_blobs_reuses_connections_and_retries(monkeypatch):
         srv.shutdown()
     assert got == blobs
     assert len(peers) <= 4 + 1                     # 4 个取图线程各一条，加签名那一条
+
+
+def test_get_batch_chunks_splits_and_retries(monkeypatch):
+    """批量取图：按 FETCH_BATCH 分批；503（1102）对半拆；回包断在半截整批重取；图确实没有报 missing_blob。"""
+    from open_guji_cv.datastore import client
+    from open_guji_cv.datastore.client import CentralError, WorkerSource
+
+    monkeypatch.setattr(client.time, "sleep", lambda s: None)
+    monkeypatch.setattr(client, "FETCH_BATCH", 50)
+    blobs = {hashlib.sha256(b).hexdigest(): b for b in (bytes([i, 10]) * (i + 1) for i in range(120))}
+    sizes, truncated = [], set()
+
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, raw):
+            self.send_response(code)
+            self.send_header("content-length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            shas = body["sha256s"]
+            sizes.append(len(shas))
+            if len(shas) > 30:                             # 超资源
+                return self._send(503, b"error code: 1102")
+            raw = _framed(blobs, shas)
+            if shas[0] not in truncated:                   # 每批第一次只回一半
+                truncated.add(shas[0])
+                raw = raw[: len(raw) // 2]
+            self._send(200, raw)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        src = WorkerSource(url=f"http://127.0.0.1:{srv.server_port}", token="tok")
+        got = dict(src.fetch_blobs(list(blobs), workers=3))
+        with pytest.raises(CentralError, match="missing_blob"):
+            list(src.fetch_blobs(["ee" * 32]))
+    finally:
+        srv.shutdown()
+    assert got == blobs
+    assert max(sizes) == 50 and all(n <= 30 for n in sizes if n not in (50, 20))
 
 
 def test_worker_resource_limit_shrinks_pages(monkeypatch):
