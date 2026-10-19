@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.7`。
 
+### Fixed
+- `row_segment` 缺省关的新开关（`colgold_prior`／`yolo_*`／`layout_prior` 及其指纹字段）不再进参数 dump（同 `border_detect` 的做法）：v0.4.6 把它们加进 `RowSegmentParams`，所有册的 `params_hash` 都变了，已冻结的册（`freeze:`）用 v0.4.6 跑 close-check 1a 被归成「册配置或参数被改：row_segment N 页」报警，而规矩是代码变只计数不报警。现在关着时参数哈希与 v0.4.5 逐位相同，开着照常进指纹。PATCH；`row_segment` 的 `code_hash` 因改了该模块变一次（对 v0.4.6）。
+
 ## [0.4.6] - 2026-10-19
 
 PATCH。中心库拉取省流量与实验分支、借库与两级语料库清单、共享刻例库与升格候选命令；Step1／Step3 的新开关（`column_grid_pages`、`body_pages`、`colgold_prior`、`layout_prior`，缺省全关）；close-check 第 2 项不数重切清单上的格；殿本四联叶拆页表修正。

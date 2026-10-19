@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, model_serializer, model_validator
 
 from ..core.book import _expand_pages
 from ..core.spec import StepSpec, column_key
@@ -353,6 +353,23 @@ class RowSegmentParams(BaseModel):
                 _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
         return self
+
+    @model_serializer(mode="wrap")
+    def _drop_off_switches(self, handler):
+        """缺省关的开关不进 dump（同 `border_detect`）：没开的书 `params_hash` 与加这些字段之前（v0.4.5）逐位相同，
+        冻结册升 cv 版本不会被判成「参数变了」报警（D 10-19）。开着时照常进指纹。"""
+        d = handler(self)
+        if isinstance(d, dict):
+            if not self.colgold_prior:
+                d.pop("colgold_prior", None)
+                d.pop("colgold_fingerprint", None)
+            if not self.yolo_merge:
+                for k in ("yolo_merge", "yolo_model_dir", "yolo_fingerprint", "yolo_conf", "yolo_cover", "yolo_max_h"):
+                    d.pop(k, None)
+            if not self.layout_prior:
+                d.pop("layout_prior", None)
+                d.pop("layout_fingerprint", None)
+        return d
 
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
