@@ -23,10 +23,10 @@
 | 块 | 落地物 | 实测（vol04/05 测试 B 100 页，纯算法基线 97.0%） | 全书 10 册（现行生产带人裁，基线 96.84%） |
 |---|---|---|---|
 | A 金标 | `scripts/dzg_import.py colgold`：daizhige × release 双源一致；数据集分片 `char-segmentation/column-counts`（14,989 列） | 两源一致 99.63%；不一致 56 列用户裁定取 daizhige |
-| B 评测 | `guji eval run column_counts`（`scripts/eval_column_counts.py`） | — | 各册 93.9%（vol08）～98.9%（vol02），合计 14,515/14,989 = 96.84% |
+| B 评测 | `guji eval run column_counts`（`scripts/eval_column_counts.py`） | — | 各册 93.9%（vol08）～98.9%（vol02），合计 14,514/14,987 = 96.84% |
 | C 金标字数先验 | `row_segment.colgold_prior`（缺省关） | 98.1%，新错 0 | — |
 | D 原生 YOLO 并格 | `row_segment.yolo_merge`（缺省关，`utils/yolo_tool_infer`） | 97.8%，新错 0；北行日錄 54 页零误并 | — |
-| C+D | 两个开关同开（先 D 后 C） | **98.44%**，新错 0；除 Step1 列错位页 **99.7%** | **97.92%**（14,677/14,989），修 163、新错 1（金标抬头位记错的一列）；夹注列不动 |
+| C+D | 两个开关同开（先 D 后 C） | **98.44%**，新错 0；除 Step1 列错位页 **99.7%** | **97.83%**（14,662/14,987），修 149、新错 1（金标抬头位记错的一列）；夹注列、人裁过的列不动 |
 
 ## 〇、结论
 

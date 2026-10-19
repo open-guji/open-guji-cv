@@ -25,7 +25,17 @@ from ._warpmap import ColumnMapper
 
 #: 逐列字数先验一次最多改几个字（差得更多多半是列错位或页对错，硬改会把整列切乱）
 COLGOLD_MAX_DIFF = 2
-_COLGOLD_CACHE: dict[tuple[str, str], dict] = {}
+_COLGOLD_CACHE: dict[tuple, dict] = {}
+_FP_CACHE: dict[tuple, str] = {}
+
+
+def _sig(*paths) -> tuple:
+    """文件签名（路径、mtime、大小）：进程内缓存按它失效——表或模型换了，长驻进程（控制台）也读新的。"""
+    out = []
+    for q in paths:
+        st = q.stat()
+        out.append((str(q), st.st_mtime_ns, st.st_size))
+    return tuple(out)
 
 
 def _colgold_path(rel: str):
@@ -48,17 +58,18 @@ def load_colgold(rel: str, book: str) -> dict[tuple[int, int], dict]:
     （另一分支用光盘版表实测，vol04 坏 232 列）。"""
     import json
     p = _colgold_path(rel)
-    key = (str(p), book)
+    if not p.exists():
+        raise FileNotFoundError(f"colgold_prior 指的表不存在：{p}（先跑 scripts/dzg_import.py colgold）")
+    key = (_sig(p), book)
     if key not in _COLGOLD_CACHE:
         out = {}
-        if p.exists():
-            for ln in p.read_text(encoding="utf-8").splitlines():
-                if not ln.strip():
-                    continue
-                r = json.loads(ln)
-                if (r.get("vol") == book and r.get("agree") and not r["dzg"].get("note")
-                        and r["dzg"].get("start") is not None):
-                    out[(int(r["page"]), int(r["col"]))] = r
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            if not ln.strip():
+                continue
+            r = json.loads(ln)
+            if (r.get("vol") == book and r.get("agree") and not r["dzg"].get("note")
+                    and r["dzg"].get("start") is not None):
+                out[(int(r["page"]), int(r["col"]))] = r
         _COLGOLD_CACHE[key] = out
     return _COLGOLD_CACHE[key]
 
@@ -86,15 +97,16 @@ def apply_count_target(r, seg, n_body: int, want: int, tag: str,
     return r, n_body, [f"{tag}_conflict：切出 {got} 字，目标 {want}，按差值重切仍对不上"]
 
 
-_YOLO_CACHE: dict[str, object] = {}
+_YOLO_CACHE: dict[tuple, object] = {}
 
 
 def _yolo(model_dir: str):
     from ..utils.yolo_tool_infer import YoloTool
-    d = str(_colgold_path(model_dir))
-    if d not in _YOLO_CACHE:
-        _YOLO_CACHE[d] = YoloTool(d)
-    return _YOLO_CACHE[d]
+    d = _colgold_path(model_dir)
+    key = _sig(d / "type" / "best.onnx", d / "slide" / "best.onnx")
+    if key not in _YOLO_CACHE:
+        _YOLO_CACHE[key] = YoloTool(d)
+    return _YOLO_CACHE[key]
 
 
 def _cover(box, y) -> float:
@@ -187,7 +199,7 @@ def colgold_count(g: dict, img=None, thr: int = 128):
     与金标字段之间没有空格隔开（隔着空格的列端孤格是残墨，Step4 会按 `tail_junk` 丢掉）、
     且（给了列图时）有整字级连通体的（版框横线不算）。"""
     start = int(g["start"] or 0)
-    lo, hi = (-1 if start < 0 else start + 1), start + int(g["n"])   # start -1 = 抬头字，占 -1 格，后接 1 号格
+    lo, hi = (start if start < 0 else start + 1), start + int(g["n"])   # start < 0 = 抬头字，占 start…-1 格，后接 1 号格
 
     def out_ok(c) -> bool:
         return c.ink_ratio >= COLGOLD_JUNK_INK and (img is None or _looks_like_char(img, c, thr))
@@ -256,6 +268,8 @@ class RowSegmentParams(BaseModel):
     #: 字格的墨迹框都有 ≥`yolo_cover` 落进同一个**正常高**（≤`yolo_max_h`×本页中位）的 YOLO 字框，
     #: 记一对「一字被切成两格」；有 k 对就把目标字数定为「现字数 − k」走 `apply_count_target` 重切，
     #: 字数恰好对上才采用。两个开关都开时先 D 后 C（D 改过的列 C 再按金标核一遍）。
+    #: 输入是管线的 `ctx.raw_page`（灰度；`binarized_input` 的书是二值化后的图）转三通道，不是 yolo-tool 训练时的彩图。
+    #: 门槛（0.6 / 1.3）只在殿本（灰度）和北行日錄上量过；二值化或预清理的书要开，先在该书上重量误并。
     yolo_merge: bool = False
     yolo_model_dir: str = ""             # yolo-tool 的 model/ 目录（内含 type/ slide/ 两个 best.onnx）；相对工作区根或绝对路径
     yolo_fingerprint: str = ""           # 两份 onnx 的 sha，开关开着时自动填（换模型 → Step3 判过期）
@@ -269,18 +283,27 @@ class RowSegmentParams(BaseModel):
     def _fill_yolo_fingerprint(self):
         if self.yolo_merge and not self.yolo_fingerprint:
             d = _colgold_path(self.yolo_model_dir)
-            if (d / "type" / "best.onnx").exists():
+            onnx = (d / "type" / "best.onnx", d / "slide" / "best.onnx")
+            if not all(q.exists() for q in onnx):
+                raise ValueError(f"yolo_merge 开着但 yolo_model_dir 下没有 type/、slide/ 的 best.onnx：{d}")
+            key = ("yolo",) + _sig(*onnx)       # 每页都要建一次参数，两份模型约 116 MB，按签名缓存
+            if key not in _FP_CACHE:
                 from ..utils.yolo_tool_infer import model_fingerprint
-                object.__setattr__(self, "yolo_fingerprint", model_fingerprint(d))
+                _FP_CACHE[key] = model_fingerprint(d)
+            object.__setattr__(self, "yolo_fingerprint", _FP_CACHE[key])
         return self
 
     @model_validator(mode="after")
     def _fill_colgold_fingerprint(self):
         if self.colgold_prior and not self.colgold_fingerprint:
             p = _colgold_path(self.colgold_prior)
-            if p.exists():
+            if not p.exists():
+                raise ValueError(f"colgold_prior 开着但表不存在：{p}（先跑 scripts/dzg_import.py colgold）")
+            key = ("colgold",) + _sig(p)
+            if key not in _FP_CACHE:
                 import hashlib
-                object.__setattr__(self, "colgold_fingerprint", hashlib.sha256(p.read_bytes()).hexdigest()[:16])
+                _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+            object.__setattr__(self, "colgold_fingerprint", _FP_CACHE[key])
         return self
 
     @model_validator(mode="after")
@@ -407,19 +430,25 @@ class RowSegmentStep(Step):
                        else {"lam": NONUNIFORM_LAM}))
             r = _seg(n_body_col)
             prior_flags: list[str] = []
+            # C、D 会改格数重切；人裁（切点、钉线、强制正文/小注）都按格号传给 DP，格数一变就对不上号，
+            # 所以带任何人裁的列一律不动（人裁为终裁）
+            human_col = (slot_override is not None or bool(col_resolved)
+                         or any(pg_ == page and c_ == gc.col for (pg_, c_, _s) in book_pins)
+                         or (page, gc.col) in book_solo or (page, gc.col) in book_forced_jz
+                         or (page, gc.col) in book_forced_main)
             g = colgold.get((page, gc.col))
             k_pairs = 0
-            if r is not None and yolo_boxes and slot_override is None and not _has_jiazhu(r.cells):
+            if r is not None and yolo_boxes and not human_col and not _has_jiazhu(r.cells):
                 k_pairs = self._yolo_pairs(r, img, wins, gc.col, page_w, yolo_boxes, p)
             # 先 D 后 C：两者修好的列几乎不重叠（测试 B：C 修 10、D 修 11、并集 13），
             # 「有金标时只让 D 提议、金标定采不采」那版实测漏掉 D 独有的两列（设计变更记录）。
-            if r is not None and k_pairs and slot_override is None:
+            if r is not None and k_pairs and not human_col:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, _n_chars(r.cells) - k_pairs, "yolo")
                 prior_flags += fl
                 if n_new != n_body_col:
                     n_body_col = n_new
                     base = dict(base, n_body_slots=n_body_col)
-            if r is not None and g is not None and slot_override is None:
+            if r is not None and g is not None and not human_col:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, int(g["dzg"]["n"]), "colgold",
                                                   count=colgold_count(g["dzg"], img, p.ink_threshold))
                 prior_flags += fl

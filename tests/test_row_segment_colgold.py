@@ -197,3 +197,32 @@ def test_colgold_count_raised_start_includes_slot_minus_one():
     cells = ([SimpleNamespace(kind="char", slot=-1, ink_ratio=0.01)]
              + [SimpleNamespace(kind="char", slot=s, ink_ratio=0.2) for s in range(1, 22)])
     assert colgold_count({"start": -1, "n": 22})(cells) == 22
+
+
+def test_colgold_switch_on_with_missing_table_fails_loudly(tmp_path):
+    # 开关开着、表不存在：不许悄悄当没开（产物还标新鲜）
+    import pytest
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        RowSegmentParams(cut_judge="rule", colgold_prior=str(tmp_path / "nope.jsonl"))
+    with pytest.raises(FileNotFoundError):
+        load_colgold(str(tmp_path / "nope.jsonl"), "volX")
+
+
+def test_load_colgold_rereads_after_table_changes(tmp_path):
+    # 进程内缓存按文件签名失效：长驻进程里重导了表，读到的是新表
+    p = tmp_path / "colgold.jsonl"
+    row = {"vol": "volX", "page": 3, "col": 1, "agree": True, "dzg": {"n": 19, "start": 0, "note": None}}
+    p.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    assert set(load_colgold(str(p), "volX")) == {(3, 1)}
+    p.write_text(json.dumps(row) + "\n" + json.dumps(dict(row, col=2)) + "\n", encoding="utf-8")
+    assert set(load_colgold(str(p), "volX")) == {(3, 1), (3, 2)}
+
+
+def test_colgold_count_two_raised_slots():
+    # start -2：字在 -2、-1、1、2 格，-2 上的细笔也在字段内照算
+    from open_guji_cv.steps.row_segment import colgold_count
+    cells = ([SimpleNamespace(kind="char", slot=-2, ink_ratio=0.01),
+              SimpleNamespace(kind="char", slot=-1, ink_ratio=0.2)]
+             + [SimpleNamespace(kind="char", slot=s, ink_ratio=0.2) for s in (1, 2)])
+    assert colgold_count({"start": -2, "n": 4})(cells) == 4

@@ -767,7 +767,10 @@ def load_release(release_dir: Path) -> dict[str, list[tuple[int, list[str]]]]:
                     cols.append({"cx": cx, "s": [ch]})
             if cols:
                 pages.append((r["p"], ["".join(c["s"]) for c in cols]))
-        out[_roll_key(rows[0].get("t"))] = pages
+        key = _roll_key(rows[0].get("t"))
+        if key is None or key in out:            # 撞名会静默覆盖前一卷、该卷的列整片掉出金标
+            raise ValueError(f"release 卷题归一后{'为空' if key is None else '重名'}：{d.name} → {key}")
+        out[key] = pages
     return out
 
 
@@ -855,6 +858,9 @@ def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | No
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     items, stats = [], Counter()
     for r in rows:
+        if r.get("dup"):
+            stats["skipped_dup"] += 1
+            continue
         cid = f"{r['vol']}:{r['page']}:{r['col']}"
         v = verdicts.get(cid)
         exp = {"n": r["dzg"]["n"], "n_main": r["dzg"]["n_main"], "start": r["dzg"]["start"],
@@ -931,6 +937,14 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | Non
                                                     "p": rp[0], "n": len(rc), "text": rc},
                 "agree": agree, "label_origin": "consensus" if agree else None,
             })
+    # 一个 (册,页,列) 只能有一行：职名页 daizhige 把一物理列的上下两段记成两列时会撞号
+    # （vol01 p102 c1「翰林院庶吉士臣蔡廷舉」「收掌官」），哪一行都不可信，全标不一致、不进金标
+    dup = Counter((r["vol"], r["page"], r["col"]) for r in out_rows)
+    for r in out_rows:
+        if dup[(r["vol"], r["page"], r["col"])] > 1:
+            r.update(agree=False, label_origin=None, dup=True)
+            stats["dup_cols"] += 1
+    stats["agree"] = sum(r["agree"] for r in out_rows)
     dst = _corpus(ws) / "daizhige" / "colgold.jsonl"
     with open(dst, "w", encoding="utf-8") as f:
         for r in out_rows:
@@ -974,12 +988,17 @@ def main(argv=None) -> int:
             ap.error("colgold 要 --release")
         verdicts = None
         if a.verdicts:
-            cards = {c["id"]: c for c in map(json.loads, Path(a.cards).read_text(encoding="utf-8").splitlines()) if c}
+            if not a.cards:
+                ap.error("--verdicts 要和 --cards 同给（卡表里有甲乙各是哪一源）")
+            cards = {c["id"]: c for c in map(json.loads, filter(str.strip, Path(a.cards).read_text(encoding="utf-8").splitlines()))}
             verdicts = {}
             for ln in Path(a.verdicts).read_text(encoding="utf-8").splitlines():
                 if ln.strip():
                     d = json.loads(ln)
-                    verdicts[d["id"]] = {"verdict": d["verdict"], "A_is": cards.get(d["id"], {}).get("A_is")}
+                    a_is = cards.get(d["id"], {}).get("A_is")
+                    if a_is not in ("dzg", "release"):
+                        ap.error(f"裁决 {d['id']} 在卡表里查不到甲乙对应（A_is={a_is!r}）")
+                    verdicts[d["id"]] = {"verdict": d["verdict"], "A_is": a_is}
         cmd_colgold(ws, Path(a.release), [v.zfill(2) for v in a.vols.split(",")],
                     Path(a.export) if a.export else None, verdicts, a.disagree_default)
     else:
