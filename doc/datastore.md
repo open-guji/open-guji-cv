@@ -269,6 +269,22 @@ guji db branch delete $B                              # 用完就删（Neon 免�
 书库只登记工作区文件、verify 两级一起对、本机没有底库报错；硬校验改动拒绝、新增只警告、`warn` 绕过、只对钉了的读语料步生效；
 build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 push 拒绝；新机器 pull 顺带拉底库清单。
 
+### 共享刻例库（2026-10-19 起，共享方案 S5）
+
+- **出新版**：`guji glyphlib build -w <来源书工作区> --name glyphlib-<族>-v<N> [--min-confirm 2] [--per-char 3] [--note …]`。
+  从来源书的字形库真源与人裁事件里挑：人裁过（`label_status='human'`）、在至少 `--min-confirm` 个不同批次确认过
+  （`confirm` 的 `v=confirm` 且字形一致，或 `cell_review` 选了这个字）、体检没标异常、不是近似字，每字最多 `--per-char` 张
+  （确认批次多的优先）。门槛待 sheldon 定（方案第六节），缺省是「确认两次」那一档。
+- **出什么**：本机数据目录 `$GUJI_DATA_HOME/<分支>/glyphlib-…/` 下的 `output/glyph_store/`（edition 是族名 `glyphlib-<族>`，
+  跨版本不变；实例 id 加来源前缀 `<来源工作区>:`，来源 id 写成 `<来源工作区>.<原来源>`）和升格记录
+  `feedback/events/promote.jsonl`（一张刻例一行：来源工作区、来源实例、确认批次数、门槛）。刻例图逐字节照搬，R2 里同 sha 不另存。
+  出完先装一遍库（`rebuild_from_store`）核对能装，再规范导出。
+- **推**：加 `--push` 以升级脚本身份推（`push(shared_writer=True)`），第一次新开工作区；同一版再推拒绝，出新版开新名字。
+- **用**：别的书在 `workspace.yaml` 写 `glyph_lib: {borrow: [glyphlib-qkp-v1]}`，`guji db pull` 拉只读副本、带上它重建 glyph.db；
+  借来的实例记成 `borrowed_human`，不当本书铁证。匹配降一档信任是 S6 的事（要改 `glyph_match`，单独一个 MINOR）。
+- **10-19 本地试算（殿本，不推）**：人裁 4,374 例 → 确认两批以上且体检干净 1,149 例 → 每字 3 张 **1,076 例、827 字**；
+  图与来源逐字节相同；借进全唐文重建，1,076 例都是 `borrowed_human`。
+
 ## 七、备份与恢复（GUJI-611）
 
 每日例行任务（云端定时会话）跑 `python -m open_guji_cv.datastore backup`：同一快照里导出全部表（`COPY` 文本格式、gzip），
