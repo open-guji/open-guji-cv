@@ -98,7 +98,7 @@ def _cover(box, y) -> float:
     return iw * ih / max(1e-6, (box[2] - box[0]) * (box[3] - box[1]))
 
 
-def yolo_merge_pairs(ink_boxes: list, yolo_boxes: list, cover: float = 0.5, max_h: float = 1.3) -> int:
+def yolo_merge_pairs(ink_boxes: list, yolo_boxes: list, cover: float = 0.6, max_h: float = 1.3) -> int:
     """同列按读序排好的正文字格墨迹框（左上原点页坐标，`None` = 空格）× 本页 YOLO 字框 → 「一字两格」对数。
 
     `yolo_boxes` 已按置信度筛过；框高超过本页中位 `max_h` 倍的不用——YOLO 偶尔把两个字并成一个
@@ -203,7 +203,9 @@ class RowSegmentParams(BaseModel):
     yolo_model_dir: str = ""             # yolo-tool 的 model/ 目录（内含 type/ slide/ 两个 best.onnx）；相对工作区根或绝对路径
     yolo_fingerprint: str = ""           # 两份 onnx 的 sha，开关开着时自动填（换模型 → Step3 判过期）
     yolo_conf: float = 0.25
-    yolo_cover: float = 0.5
+    #: 0.5 → 0.6（10-19）：北行日錄 p18 列尾一格残墨 + 末字被同一个 YOLO 框各盖住 0.55/0.58，误并后整列切点挪位；
+    #: 殿本测试 B 上 0.5 与 0.6 抓到的多切列一样（13/19，误报 0）。
+    yolo_cover: float = 0.6
     yolo_max_h: float = 1.3
 
     @model_validator(mode="after")
