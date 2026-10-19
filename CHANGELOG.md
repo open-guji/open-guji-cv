@@ -11,7 +11,7 @@
 - 受控重跑三件工具（[doc/受控重跑.md](doc/受控重跑.md)；方法论在 ai-team `domain/CV/规范/受控重跑方法论.md`）。都缺省关，不进任何 Step 的 `code_deps`，17 步 `code_hash` 不变：
   - 册钉字形库 `glyph_pin: N`（`core/glyph_pin.py`）：seed_admit 的人裁、近似字指纹换成 `glyph-gN`，别的对话推上来的人裁不再让本册 seed_admit 过期；号加一才落地新人裁。起因：重跑 vol04–10 时每次 `guji db sync` 都让已过粗校的册判过期、重跑、重做出口检查。不写 = 指纹逐位不变；第一次写上会让该册 seed_admit 过期一次。
   - `guji products diff <册> --a <前> [--b <后>] [--images N]`（`ops/products_diff.py`）：两份产物按位置逐列对比（切分变了也能比），出人审率前后、变了的列（切分／字／状态／框）、逐格翻转（含「放行字变」），`--images` 出原图并排看图页。
-  - `guji products pack push|fetch|list` 与 `push-index|fetch-index`（`datastore/packs.py`）：一册 products、生僻字 embedding 索引存进 R2（guji-data Worker 新接口 `/v1/packs`，guji-workspace-data#15），新会话直接取，不再整册现算（云上一册 1.5–2.5 小时）、不再冷建索引（云上 4 核约半小时）。按名字只增不改，取回先核 sha256。
+  - `guji products pack push|fetch|list` 与 `push-index|fetch-index`（`datastore/packs.py`）：一册 products、生僻字 embedding 索引存进 R2（guji-data Worker 新接口 `/v1/packs`，guji-workspace-data#15），新会话直接取，不再整册现算（云上一册 1.5–2.5 小时）、不再冷建索引（云上单进程约半小时，`--jobs 4` 约 8 分钟；取回 30 MB 约 4 秒）。按名字只增不改，取回先核 sha256。
 
 ## [0.4.6] - 2026-10-19
 
