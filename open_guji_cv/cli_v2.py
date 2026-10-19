@@ -1881,6 +1881,20 @@ def cmd_glyphlib(args) -> None:
     _out(res)
 
 
+def cmd_promote(args) -> None:
+    """升格候选（共享方案 S7，先做语料部分）：只读、只出清单。"""
+    from .ops.promote import mine_corpus
+    if not args.workspace:
+        print("✗ 要给 -w 工作区", file=sys.stderr)
+        sys.exit(2)
+    res = mine_corpus(Path(args.workspace).expanduser().resolve(), min_confusable=args.min_confusable)
+    if args.out:
+        Path(args.out).write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        print(f"✓ 已写 {args.out}（形近新候选 {res['new']['confusable']}，异体新候选 {res['new']['variants']}）")
+        return
+    _out(res)
+
+
 def cmd_variants(args) -> None:
     """本书用字账（只读）。账本由 `scripts/build_book_variants.py` 派生，这里不算任何东西。"""
     from .variant_ledger import DEFAULT_EDITION, ledger_path
@@ -2295,6 +2309,7 @@ COMMANDS_V2 = {
     "variants": cmd_variants,
     "corpus": cmd_corpus,
     "glyphlib": cmd_glyphlib,
+    "promote": cmd_promote,
     "collate": cmd_collate,
     "progress": cmd_progress,
     "runs": cmd_runs,
@@ -2918,6 +2933,12 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--per-char", type=int, default=3, help="每字最多几张（缺省 3）")
     p.add_argument("--note", default="", help="写进升格记录的备注")
     p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
+
+    p = sub.add_parser("promote", help="[v2] 升格候选：mine 从本书人裁挖形近对、异体对（只读，出清单待人审）")
+    p.add_argument("action", choices=["mine"])
+    p.add_argument("-w", "--workspace", default=None, help="书的工作区（已迁到中心库、已 db pull）")
+    p.add_argument("--min-confusable", type=int, default=3, help="形近对在本书至少出现几次（缺省 3）")
+    p.add_argument("--out", default=None, help="清单写到这个 JSON 文件；不给就打印")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])

@@ -8,6 +8,7 @@
 待发分支 `rc/v0.4.6`。
 
 ### Added
+- 升格候选命令（共享方案 S7，语料部分）：`guji promote mine -w <工作区>` 只读，从对勘裁决挖形近对、异体对候选，对照引擎仓的形近表、异体表标出已有的，出清单待人审。新文件 `ops/promote.py`，不碰任何 Step，17 步 `code_hash` 不变。
 - 共享刻例库命令（共享方案 S5）：`guji glyphlib build -w <来源书> --name glyphlib-<族>-v<N>` 按门槛（人裁在几个不同批次确认过、体检干净、非近似字、每字几张）从一本书精选刻例，出共享刻例库工作区（刻例图逐字节照搬，实例 id 加来源前缀，附升格记录 `feedback/events/promote.jsonl`）；`--push` 以升级脚本身份推进中心库，每版只写一次。新文件 `ops/glyphlib.py`，不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「共享刻例库」。
 - 中心库实验分支能整套用了：`guji db pull/push/sync --branch exp/GUJI-<号>-…`（或 `GUJI_DATA_BRANCH`）把整个工作区换到实验分支，数据目录、glyph.db、products 都放进该分支自己的目录（`$GUJI_DATA_HOME/exp__GUJI-…/<工作区>/`），不碰 main 的副本；push 经 Neon API 找到分支端点，新图进实验桶，拉图时正式桶没有的去实验桶取。新命令 `guji db diff` 逐文件比实验分支与 main。原来 push／sync 只许 main，`pull --branch` 会把实验分支的数据拉进 main 的数据目录。不设分支时行为不变；不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「实验分支」。
 - 两级语料库清单（共享方案 S2）：引擎仓的语料文件登记进底库 `b<M>`（中心库只读工作区 `corpus-base`，`guji corpus build-base` 出、记 `repo_commit`）；书库清单可写 `base: M`，只登记工作区里的文件（`guji corpus build --base latest`，新书 `guji corpus init`）；`db pull`／`sync` 顺带拉底库清单的只读副本。旧的单级清单（殿本 v1）不变。**起跑前硬校验**：册钉了 `corpus: N` 时，读语料的五步开跑前清单里的文件有改动或缺失就拒绝（`GUJI_CORPUS_DRIFT=warn` 临时绕过），新出现的文件只警告；殿本 v1 现在改动 0、缺失 0。改 `core/engine.py`、`core/corpus_pin.py`、`ops/corpus_pack.py`、`datastore/workcopy.py`，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「两级语料库清单」。
