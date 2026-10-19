@@ -16,7 +16,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 PASS, FAIL, MANUAL, SKIP, ERROR = "pass", "fail", "manual", "skip", "error"
@@ -54,8 +53,9 @@ def _cache(eng, pages) -> dict:
 
 def _glyph_store_missing(ws: Path) -> str | None:
     """工作区没有字形库（glyph_store 目录与 glyph.db 都没有）→ 返回缺什么；齐了返回 None。"""
+    from ..core.workspace import data_root
     out = Path(ws) / "output"
-    gs = out / "glyph_store"
+    gs = (data_root(Path(ws)) or Path(ws)) / "output" / "glyph_store"
     if (out / "glyph.db").is_file():
         return None
     # 空目录不算有库：要有字形账本或人裁事件文件才算
@@ -97,17 +97,20 @@ def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
 
 
 def _store_committed(ws: Path) -> dict:
-    rel = ["feedback", "output/glyph_store", "config", "review"]
-    try:
-        out = subprocess.run(["git", "-C", str(ws), "status", "--porcelain", "--", *rel],
-                             capture_output=True, text=True, timeout=120).stdout
-    except Exception as e:  # noqa: BLE001
-        return _item("8", "字形库与人裁已提交", ERROR, f"{type(e).__name__}: {e}")
-    lines = [ln for ln in out.splitlines() if ln.strip()]
-    return _item("8", "字形库与人裁已提交", PASS if not lines else FAIL,
-                 "工作区 git 干净" if not lines else
-                 f"{len(lines)} 个未提交改动（`guji store commit -w <工作区> --push`）",
-                 lines[:50] or None)
+    from ..core.workspace import central_marker
+    if central_marker(Path(ws)):
+        # 迁到中心库后（GUJI-608）：看数据目录有没有没推的改动（不连网，对上次拉／推的基准）
+        try:
+            from .central_glyph import glyph_hooks
+            from ..datastore.workcopy import local_changes
+            dirty = local_changes(Path(ws), glyph_hooks(Path(ws)))
+        except BaseException as e:  # noqa: BLE001  （含 SystemExit：还没拉过）
+            return _item("8", "字形库与人裁已推进中心库", ERROR, f"{type(e).__name__}: {e}")
+        return _item("8", "字形库与人裁已推进中心库", PASS if not dirty else FAIL,
+                     "数据目录与中心库一致" if not dirty else f"{len(dirty)} 个文件没推（`guji db push -w <工作区>`）",
+                     dirty[:50] or None)
+    return _item("8", "字形库与人裁已推进中心库", FAIL,
+                 f"工作区还没迁进中心库（`guji db migrate -w {ws}`）；字形库与人裁不再提交进工作区 git")
 
 
 def _export(export_dir: Path, chapter: str | None) -> list[dict]:
@@ -175,7 +178,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
         ("2", "待审清零", lambda: [_queue(book, eng.store, ws, tier)]),
         ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store, ws)]),
-        ("8", "字形库与人裁已提交", lambda: [_store_committed(ws)]),
+        ("8", "字形库与人裁已推进中心库", lambda: [_store_committed(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
          [_item("10", "lines.md", SKIP, "没给 --export-dir"), _item("11", "pages.json", SKIP, "没给 --export-dir")]),
         ("12", "Step9 产物", lambda: [_step9(reports or ws / "reports", book)]),

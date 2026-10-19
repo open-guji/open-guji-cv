@@ -26,22 +26,28 @@
 
 ## 二、标准布局
 
-| 路径 | 内容 | 进 git？ | 由谁写 |
+> **2026-10-19 起（GUJI-608）**：下表标「中心库」的数据**不再放在工作区里**，也不进 git。它们在中心库，
+> 本机的副本在工作区外的数据目录 `$GUJI_DATA_HOME/<分支>/<工作区 id>/`（缺省 `~/.guji-data`），布局同下表；
+> 工作区根只留 `workspace.yaml` 和标记 `.central.json`。旧工作区用 `guji db migrate -w <工作区>` 迁一次，
+> 之后 `guji db pull` / `guji db push` 同步，细则见 [datastore.md](datastore.md) 第六节。`core/workspace.py`
+> 的路径函数见到标记就指向数据目录，代码里不许从工作区根直接拼这些目录（守卫 `tests/test_central_paths.py`）。
+
+| 路径 | 内容 | 存哪 | 由谁写 |
 |---|---|---|---|
-| `books/<book>.yaml` | 册配置（版式字段、raw_dir、语料引用） | **是** | 人 |
-| `workspace.yaml` | 可选。写 `id:` 覆盖控制台 URL 里的工作区 id（默认 = 目录名去掉 `-workspace`） | 是 | 人 |
+| `books/<book>.yaml` | 册配置（版式字段、raw_dir、语料引用） | **中心库** | 人 |
+| `workspace.yaml` | 可选。写 `id:` 覆盖控制台 URL 里的工作区 id（默认 = 目录名去掉 `-workspace`） | 工作区＋中心库 | 人 |
 | `data_full/<book>_scan/` | **原始扫描页**，永不改写 | 看体积 | `guji import-pdf` |
 | `data_full/<book>/` | **逻辑页**（分页后；不分页就等于扫描页）+ `manifest.json` 记来源 | 看体积 | `guji split` |
 | `source/` | 原始来源档：PDF、docx、校對本 txt 等**没进管线的东西** | 否（体积） | 人 |
 | `corpus/<name>.txt` | 整理本 / 校對本语料（`align_ref` 读） | 是 | 人 |
-| `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **是** | `admit_instance` |
+| `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **中心库**（图在 R2） | `admit_instance` |
 | `output/glyph.db` | 库的 SQLite 索引，可从 store + 共享库重建 | **否** | 引擎 |
 | `products/<book>/<step>/` | 数值产物，可重算 | 否 | 引擎 |
 | `cache/<book>/<kind>/` | 派生图像 LRU 缓存（按页戳 `_stamps.json` 自检；产物外部换入后要 `guji cache verify` / 清掉，见 `products/cache.py` 模块头） | 否 | 引擎 |
-| `review/batches/` | 人裁批次登记 | 是 | 控制台 |
-| `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 是 | 控制台 |
-| `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 是 | 引擎 |
-| `config/crop_exclusions.jsonl` | 图块排除名单 | 是 | 人 |
+| `review/batches/` | 人裁批次登记 | 中心库 | 控制台 |
+| `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 中心库 | 控制台 |
+| `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 中心库 | 引擎 |
+| `config/crop_exclusions.jsonl` | 图块排除名单（`config/` 下人工配置都是） | 中心库 | 人 |
 | `reports/<book>/` | 对账 / 评测报告 | 是 | 脚本 |
 | `scripts/` | **只放这本书专用**的一次性脚本；通用的归引擎仓 | 是 | 人 |
 | `bench/` | 可选。这本书的评测台（口径正本在 overview，这里只放实现） | 是 | 人 |
@@ -114,7 +120,7 @@ guji glyph-db import-font
 > 工作区仍不在任何仓（无 book-index ID）。
 >
 > ⚠️ **只读导出的坑**：`GlyphDB()` 打开老库会跑 `_migrate()` 加列，**会写库**。要不动原库地导出，先拷一份字节副本，
-> `GUJI_GLYPH_DB` 指副本再跑 `snapshot_glyph_store.py`。
+> `GUJI_GLYPH_DB` 指副本再 `glyph-db export`（`ops/central_glyph.export_db`）。
 
 新书不要走这条路：**播种进库之后就 `glyph-db export` 出 store**，
 让真源是文本 + PNG，db 退回成可重建的索引。
@@ -123,9 +129,9 @@ guji glyph-db import-font
 
 - **字形库是不可再生的人工产出。** 改判走「撤库 + 重放」，不要直接覆盖——
   `admit_instance` 的幂等闸是防重复入库的，不是改判入口（这个坑咬过三次）。
-- **同步真源用 `guji store check|commit -w <工作区>`**（2026-10-06 起；runbook S14）：库文件不存在就停、导出 0 个实例就停、
-  成片删除就停，只 add `feedback/ config/ review/ output/glyph_store/`。别直接调 `glyph-db export`——那条路径在库文件
-  不存在时会建空库、读到 0 行、把 store 里的 PNG 全当孤儿删掉。`scripts/snapshot_glyph_store.py --force` 仍可用（同一个导出函数）。
+- **同步真源用 `guji db sync -w <工作区>`**（2026-10-19 起，GUJI-608/611；runbook S14）：glyph.db 改过先导出成账本，
+  再与中心库合并、推送；不再提交进 guji-workspace git（它只存原图）。旧的 `guji store commit` 的 git 路径、
+  `scripts/glyph_store_sync.py`（服务器定时器）、`scripts/snapshot_glyph_store.py` 已退役。
 - **字形与释读分开存**：`shape` 进字形索引，`reading` 进释读列，
   整理本字永远不覆盖 `char`。
 - **库路径变了产物就该过期**——`glyph_match` / `seed_admit` 的指纹带库指纹，

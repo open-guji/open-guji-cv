@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 
 import pytest
-import subprocess
 
 from open_guji_cv.ops import close_check as CC
 
@@ -58,16 +57,10 @@ def test_notes_and_step9(tmp_path):
     assert CC._step9(rep, "vol09")["status"] == CC.PASS
 
 
-def test_store_committed(tmp_path):
-    def git(*a):
-        subprocess.run(["git", "-C", str(tmp_path), *a], check=True, capture_output=True)
-    git("init", "-q")
-    git("config", "user.email", "t@t"); git("config", "user.name", "t")
-    (tmp_path / "feedback").mkdir()
-    (tmp_path / "feedback" / "e.jsonl").write_text("{}\n", encoding="utf-8")
-    assert CC._store_committed(tmp_path)["status"] == CC.FAIL
-    git("add", "-A"); git("commit", "-qm", "x")
-    assert CC._store_committed(tmp_path)["status"] == CC.PASS
+def test_store_committed_requires_migration(tmp_path):
+    (tmp_path / "workspace.yaml").write_text("id: x\n", encoding="utf-8")
+    r = CC._store_committed(tmp_path)
+    assert r["status"] == CC.FAIL and "db migrate" in r["detail"]
 
 
 def test_report_prints(capsys):

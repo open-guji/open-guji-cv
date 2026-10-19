@@ -6,8 +6,10 @@ id＝vol:page:col:slot[a/b]（col＝整理本行序 + 1，与产物格键一致�
 import argparse, json, re, collections
 from pathlib import Path
 GROUPS = {"wxs": "戊戌戍", "wm": "未末", "ts": "土士"}
-ap = argparse.ArgumentParser(); ap.add_argument("ws"); ap.add_argument("out"); ap.add_argument("--vols", default="vol02,vol03,vol04,vol05,vol06,vol07,vol08,vol09,vol10")
-a = ap.parse_args(); ws = Path(a.ws); vols = set(a.vols.split(","))
+ap = argparse.ArgumentParser(); ap.add_argument("--groups", default="", help="id=字,id=字；缺省＝戊戌戍/未末/土士"); ap.add_argument("ws"); ap.add_argument("out"); ap.add_argument("--vols", default="vol02,vol03,vol04,vol05,vol06,vol07,vol08,vol09,vol10")
+a = ap.parse_args()
+if a.groups: GROUPS = dict(x.split("=") for x in a.groups.split(","))
+ws = Path(a.ws); vols = set(a.vols.split(","))
 m = {}
 for l in open(ws / "corpus/daizhige/page_map.jsonl", encoding="utf-8"):
     r = json.loads(l)

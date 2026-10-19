@@ -6,11 +6,11 @@ from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv")
 from open_guji_cv.groups.ctx_l1 import CtxL1Backend
 from open_guji_cv.groups.ctx_l2 import build_batch
-ap = argparse.ArgumentParser(); ap.add_argument("cells"); ap.add_argument("out"); ap.add_argument("--extra", default=""); ap.add_argument("--size", type=int, default=40)
+ap = argparse.ArgumentParser(); ap.add_argument("--groups", default="wxs,wm,ts"); ap.add_argument("cells"); ap.add_argument("out"); ap.add_argument("--extra", default=""); ap.add_argument("--size", type=int, default=40)
 a = ap.parse_args(); out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
 extra = set(json.load(open(a.extra)) if a.extra else [])
 cells = [json.loads(l) for l in open(a.cells, encoding="utf-8")]
-for g in ("wxs", "wm", "ts"):
+for g in a.groups.split(","):
     b = CtxL1Backend(f"/home/user/open-guji-cv/config/groups/{g}/rules.yaml")
     sel, l1 = [], {}
     for c in cells:

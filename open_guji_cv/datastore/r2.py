@@ -114,16 +114,19 @@ def _client():
 
 
 def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: int = 8,
-                      limit: int | None = None) -> dict:
+                      limit: int | None = None, read=None) -> dict:
     """经 guji-data Worker 传：POST /v1/assets/sign → 已有就跳过，否则 PUT 到返回的 url。
 
     要 ``GUJI_DATA_TOKEN``（exp 令牌只能传 exp 桶，main 桶要正式令牌）；地址默认
     https://data.open-guji.com（``GUJI_DATA_URL`` 可改）。Worker 端核 sha256，不符回 400。
-    每张图两次 Worker 请求（免费档每天 10 万次），``limit`` 用来分批。
+    先用 ``/v1/assets/sign-batch`` 每 200 张签一次（已有的跳过），再逐张 PUT；
+    旧版 Worker 没有批量接口就退回逐张签。``limit`` 用来分批。
+    ``read(obj) -> bytes`` 给了就不从 git 读（``db push`` 传本地文件用）。
     """
     import ssl
     import time
     import urllib.error
+    import http.client
     import urllib.request
     token = os.environ.get("GUJI_DATA_TOKEN")
     if not token:
@@ -147,41 +150,75 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
                 if e.code != 429 and e.code < 500:
                     return e.code, e.read()
                 err = e.code
-            except (urllib.error.URLError, OSError) as e:
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:  # 含 IncompleteRead（断流）
                 err = type(e).__name__
             time.sleep(2 ** attempt)
         return err, b""
+
+    def put(o: Obj, sig: dict) -> str:
+        if sig.get("exists"):
+            return "exists"
+        if sig.get("key") != r2_key(o.sha):
+            return "key_mismatch"
+        if read is not None:
+            data = read(o)
+        else:
+            if not hasattr(local, "reader"):
+                local.reader = gitsource.BlobReader(repo)
+                readers.append(local.reader)
+            data = local.reader.read(o.oid)
+        if sha256(data) != o.sha:
+            return "sha_mismatch"
+        st, _ = call(sig["url"], data, "PUT", {"content-type": "image/png"})
+        return "uploaded" if st in (200, 201) else f"put_{st}"
 
     def one(o: Obj) -> str:
         st, body = call(f"{base}/v1/assets/sign", json.dumps(
             {"bucket": bucket, "op": "put", "sha256": o.sha, "ext": "png"}).encode(), "POST",
             {"authorization": f"Bearer {token}", "content-type": "application/json"})
+        return put(o, json.loads(body)) if st == 200 else f"sign_{st}"
+
+    def batch(chunk: list[Obj]) -> list[str] | None:
+        """一次签 200 张（/v1/assets/sign-batch，已有的直接判 exists）；旧版 Worker 回 None。"""
+        st, body = call(f"{base}/v1/assets/sign-batch", json.dumps(
+            {"bucket": bucket, "op": "put", "ext": "png", "sha256s": [o.sha for o in chunk]}).encode(),
+            "POST", {"authorization": f"Bearer {token}", "content-type": "application/json"})
+        if st == 404:
+            return None
         if st != 200:
-            return f"sign_{st}"
-        sig = json.loads(body)
-        if sig.get("exists"):
-            return "exists"
-        if sig.get("key") != r2_key(o.sha):
-            return "key_mismatch"
-        if not hasattr(local, "reader"):
-            local.reader = gitsource.BlobReader(repo)
-            readers.append(local.reader)
-        data = local.reader.read(o.oid)
-        if sha256(data) != o.sha:
-            return "sha_mismatch"
-        hdr = {"authorization": f"Bearer {token}", **(sig.get("headers") or {})}
-        st, _ = call(sig["url"], data, sig.get("method", "PUT"), hdr)
-        return "uploaded" if st in (200, 201) else f"put_{st}"
+            return [f"sign_{st}"] * len(chunk)
+        sigs = {it["sha256"]: it for it in json.loads(body)["items"]}
+        with ThreadPoolExecutor(workers) as ex:
+            return list(ex.map(lambda o: put(o, sigs[o.sha]), chunk))
 
     todo = sorted(objs.values(), key=lambda o: o.sha)[:limit]
     try:
-        with ThreadPoolExecutor(workers) as ex:
-            for res in ex.map(one, todo):
-                stats[res] += 1
+        rest = todo
+        for i in range(0, len(todo), 200):
+            res = batch(todo[i:i + 200])
+            if res is None:                     # 旧版 Worker：退回逐张签
+                rest = todo[i:]
+                break
+            for r in res:
+                stats[r] += 1
+        else:
+            rest = []
+        if rest:
+            with ThreadPoolExecutor(workers) as ex:
+                for res in ex.map(one, rest):
+                    stats[res] += 1
     finally:
         for r in readers:
             r.close()
     return dict(stats)
+
+
+def upload_files(images: dict, bucket: str = "main", workers: int = 8) -> dict:
+    """``{sha: 本地路径}`` 经 Worker 传进 R2（已有跳过）。``db push`` 用。"""
+    from pathlib import Path
+    objs = {sha: Obj(sha, Path(p).stat().st_size, str(p)) for sha, p in images.items()}
+    return upload_via_worker(None, objs, bucket=bucket, workers=workers,
+                             read=lambda o: Path(o.oid).read_bytes())
 
 
 def upload(repo, objs: dict[str, Obj], workers: int = 8) -> dict:

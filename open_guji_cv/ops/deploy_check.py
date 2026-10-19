@@ -286,9 +286,11 @@ def collect_stale_summary(workspace: Path, *, pages: str = "all") -> dict[str, l
     from ..snap.manifest import display_only_steps
     os.environ["GUJI_WORKSPACE"] = str(workspace)
     out: dict[str, list[str]] = {}
-    for bid in list_books(workspace / "books"):
+    from ..core.workspace import books_dir
+    bdir = books_dir(Path(workspace))
+    for bid in list_books(bdir):
         try:
-            book = load_book(bid, workspace / "books")
+            book = load_book(bid, bdir)
             pl = load_pipeline(default_pipeline_id(book))
             eng = Engine(book, pl, log=lambda s: None)
             st = eng.status(pages=book.resolve_pages(pages))

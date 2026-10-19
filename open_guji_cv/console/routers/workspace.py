@@ -86,7 +86,8 @@ def discover_workspaces(current: Path | None = None) -> list[dict]:
     cur_res = current.resolve() if current else None
     out: list[dict] = []
     for d in cands:
-        books = d / "books"
+        from ...core.workspace import books_dir
+        books = books_dir(d)
         if not books.is_dir():
             continue
         ids = sorted(y.stem for y in books.glob("*.yaml"))

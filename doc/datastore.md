@@ -96,3 +96,103 @@ sha256、行数、末尾换行，空文件也在。核对就是从库里把文�
 | 同一提交 `import --dry-run` | 0 变更 |
 | 库大小 | 161 MB（`pg_database_size`，未 VACUUM FULL） |
 | R2 计划对库 | 30,480 个对象 90.7 MB，与库里 sha 集合完全相同 |
+
+## 五、客户端 `guji db`（GUJI-606，工作包 8.5）
+
+会话、本机用的命令，全部经 guji-data Worker（只通 443 也能用），不要连接串：
+
+```bash
+export GUJI_DATA_TOKEN=<读令牌>          # 环境变量里的 GUJI_DATA_TOKEN_READ；不进仓、不打印
+guji db status -w <工作区>               # 分支、rev、令牌角色、本地快照落后几条
+guji db pull   -w <工作区>               # 还原字形库并重建 glyph.db
+guji db pull   -w <工作区> --rev 1346    # 钉版本（该工作区 1346 之后没变才放行）
+guji db branch list
+guji db branch create exp/GUJI-606-try --from-rev 1346   # 要实验令牌
+guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论导入正式库（写入切换后）
+```
+
+- `GUJI_DATA_URL` 缺省 `https://data.open-guji.com`；`GUJI_DATA_BRANCH` 或 `--branch` 选分支，缺省 `main`。
+- **pull 怎么做**：按 `source_files` 把 `output/glyph_store/` 下每个文件从库里拼回（口径同 `verify`），
+  每个文件核整文件 sha256，有一个不对就整次报错、不落盘；刻例图按 `glyph_instances.patch_sha`
+  从本地缓存取，缺的经 `/v1/assets/sign-batch` 一次签 1000 张再下载（旧版 Worker 退回逐张签）。
+  还原到 `<工作区>/output/central/<分支>/output/glyph_store/`，再走与 `guji glyph-db rebuild --no-replay --no-borrow`
+  相同的 `rebuild_from_store`。工作区里 git 管着的 `output/glyph_store/` 不动。
+- 读的过程中该工作区有新写入就重读（最多 3 次），保证拿到的是同一个版本。
+- `glyph.db.central.json`（库旁）记分支、rev、拉取时间，`status` 用它算落后几条。
+- 图缓存：`GUJI_DATA_CACHE`，缺省 `~/.cache/guji-data`，按 sha 存、取回时核 sha，同一张图只下一次。
+- 借库（`workspace.yaml` 的 `glyph_lib.borrow`）暂不支持，配了就报错，照旧用 `glyph-db rebuild`。
+- 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。
+
+验收（`tests/datastore/test_datastore_pull.py`）：真字形库（admit → export）进 git → 导入 Postgres →
+`pull`：还原的每个文件与提交逐字节相同；重建的 glyph.db 与直接从 git 的字形库 rebuild 出的库**全部表逐行相同**；
+`--rev` 钉版本、篡改库内容被拒、实验分支事件导入、假 Worker 上的分页与批量签名。17 步 `code_hash` 不变。
+
+**在线实测（2026-10-18，云会话，读令牌，main 分支 rev 1346）**：北行日錄（beixing-guben）`guji db pull`
+还原 13 个文件、4,851 张刻例图（实验桶，Worker 尚未部署批量签名，逐张签，9,719 次 Worker 请求，约 17 分钟）；
+还原的字形库与 guji-workspace `888cd82` 的 `output/glyph_store/` 逐字节相同（`diff -r` 无差别），
+重建的 glyph.db 与从 git 字形库 rebuild 的库 14 张表逐行相同。
+
+## 六、写入切换后（GUJI-608，2026-10-19 起）：中心库是唯一的家
+
+guji-workspace 的 git **不再存数据**（人裁、台账、批次、人工配置、字形库、册 yaml）；最后一次从 git 灌进中心库的是
+guji-workspace `6bef1ada`（main 分支 rev 1356，`verify` 0 差异）。原图、products、cache、glyph.db 不在中心库，照旧在工作区。
+
+**布局**：工作区根只留 `workspace.yaml`（身份，库里也有一份）和标记 `.central.json`（`{ws, branch}`）。
+数据在工作区外的**数据目录** `$GUJI_DATA_HOME/<分支>/<工作区 id>/`（缺省 `~/.guji-data`），布局同旧工作区。
+`core/workspace.py` 见到标记就把 `feedback_root`、`verdicts_root`、`batches_root`、`exclusions_path`、
+`glyph_store_path`、`books_dir`、`ws_config_dir` 指向数据目录；没有标记照旧（测试、没迁的工作区）。
+
+```bash
+export GUJI_DATA_TOKEN=<正式令牌>             # GUJI_DATA_TOKEN_PROD；只读的话读令牌就够
+guji db migrate -w <工作区> --dry-run         # 一次性：先看工作区里的数据与库是否一致
+guji db migrate -w <工作区>                   # 数据挪进数据目录、工作区里删掉、写标记；glyph.db 不动
+guji db pull    -w <工作区>                   # 中心库 → 数据目录；拉到新字形库才重建 glyph.db
+#   …照常跑 cv（控制台、step、H 道）…
+guji db push    -w <工作区> [--dry-run]       # 数据目录 → 中心库（guji store commit 在迁过的工作区上也走这里）
+guji db status  -w <工作区>                   # 落后几条、哪些文件没推
+guji db sync    -w <工作区> [--dry-run]       # 拉＋合并＋推一步做完（日常用这个）
+guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退出（服务器上替代旧的 glyph_store_sync 定时器）
+```
+
+- **范围**：`books/`、`feedback/`、`review/`、`config/`、`output/glyph_store/` 下 `scope.classify` 认的文件，加 `workspace.yaml`，
+  与导入器同一口径。
+- **migrate**：工作区里的文件与库不一致就停下列出来（多半是检出旧了）；确认本地的才对加 `--keep-local`，
+  数据目录先按库还原，再用这些文件盖上去，成为待推改动。glyph.db 不重建（库指纹会变、产物会判过期）。
+- **基准**：数据目录的 `.central-state.json` 记拉取／推送时的 rev、每个文件的 sha、glyph.db 指纹。
+  「本地改动」对的是基准，不连网；glyph.db 指纹变了（人裁消费者改了库）就先导出成字形库账本再比。
+- **pull**：先在旁边拼好、逐文件核 sha，再换进数据目录（镜像；没被引用的刻例图留着）。本地有没推的改动就拒绝，`--force` 丢掉。
+- **push 先比版本号**：拿到库锁（`LOCK TABLE changes`）后查该工作区在基准 rev 之后有没有别人写过
+  （导入、push、Worker `/v1/events` 都算），有就整次拒绝（`StaleBase`），先 pull——同 git 的 non-fast-forward。
+  只追加的台账（events、consumed、anchors）少了行拒绝；库里有的整个文件本地没了也拒绝，确认是真删加 `--allow-delete`。
+  写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`），`changes` 逐行留痕。新图先经 Worker 传正式桶。
+- **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程起 WebSocket 桥（云会话只通 443）。
+- `push` 只写 `main`；实验照旧用 `guji exp` 和实验分支。
+- **sync（自动合并）**：库里在基准 rev 之后没人写过就直接推；有人写过，先把库里的拼到旁边逐文件比：
+  库里改了、本地没改的用库里的；本地改了、库里没改的留本地的；两边都改了的，只追加台账（events、consumed、anchors）
+  按「共同前缀＋库里新行＋本地新行」合（同一行只留一份），别的文件两边都改了就整次停下（`SyncConflict`），什么都不动，
+  要库里的用 `pull --force`，要本地的手工合。合完拉到新字形库就重建 glyph.db，再推本地剩下的改动。
+  `--watch` 下冲突、断网只记一行到 stderr，下一轮再试。
+- close-check 第 8 项在迁过的工作区上查「数据目录有没有没推的改动」，不再查 git。
+
+验收（`tests/datastore/test_datastore_workcopy.py`，本地 Postgres）：migrate 后工作区里只剩 workspace.yaml、标记、
+glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，路径函数指向数据目录；不一致时 migrate 拒绝、`--keep-local`
+后成为待推改动并推成功；两台机器之间 pull／push、旧版本被拒、`--force` 重拉、删文件与台账少行被拒、库里删了本地也删；
+新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出；两台机器各自追加事件后 sync，两边的行都进库、另一台再 sync 拿到同一份文件，
+书 yaml 两边都改则 `SyncConflict` 且本地不动。
+守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
+
+**在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图
+（6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即试推（自动经 443 桥连 Neon main）全部表 0 变更。
+
+## 七、备份与恢复（GUJI-611）
+
+每日例行任务（云端定时会话）跑 `python -m open_guji_cv.datastore backup`：同一快照里导出全部表（`COPY` 文本格式、gzip），
+附 `manifest.json`（每表列、行数、逐行排序后的 sha256、序列值、rev），经 Worker `PUT /v1/backups/<日期>/<文件>`
+存进正式桶 `backup/<日期>/`，清单最后传（有清单才算完整），清掉 30 天前的。每周日再跑
+`restore-check --endpoint <ci 分支端点>`：取最新完整备份，删表、按 `schema.sql` 重建、`COPY` 回去、设序列，
+按同样口径重算逐表对。恢复只许打到 main 以外的端点。
+
+要从备份救 main：先在 Neon 开一个新分支，`restore-check --endpoint <新分支端点> --date <日期>` 恢复并核对，
+确认后在 Neon 控制台把它设为主分支（或把 main 重置到它）。这一步要用户点头。
+
+**首次演练（2026-10-19，rev 1356）**：26 张表 189,964 行，备份 27 个文件 12 MB，31 秒；恢复到 ci 分支 39 秒，逐表行数与哈希全部一致。

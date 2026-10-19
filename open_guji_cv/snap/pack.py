@@ -113,12 +113,13 @@ def _pipeline_params(book: str, ws_dir: Path, steps: list[str]) -> tuple[dict, s
     """管线 yaml 的 `params:`（这条链对各步的覆盖）+ 书 yaml 的 sha256。读不到就空着——
     打包不该因为 manifest 少一栏信息失败。"""
     from .manifest import sha256_file as _sha
-    yml = ws_dir / "books" / f"{book}.yaml"
+    from ..core.workspace import books_dir
+    yml = books_dir(ws_dir) / f"{book}.yaml"
     book_sha = _sha(yml) if yml.is_file() else None
     try:
         from ..core.book import load_book
         from ..core.pipeline import default_pipeline_id, load_pipeline
-        bk = load_book(book, ws_dir / "books")
+        bk = load_book(book, books_dir(ws_dir))
         pl = load_pipeline(default_pipeline_id(bk))
         pp = getattr(pl, "params", None) or {}
         out = {s: dict(pp[s]) for s in steps if s in pp}

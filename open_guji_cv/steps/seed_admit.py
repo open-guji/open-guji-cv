@@ -1779,20 +1779,21 @@ def _resolve_group_flow_paths(p) -> None:
     （字频 `config/groups/freq.json`、文意 L2 表 `config/groups/l2/<组>.json`），找不到就空着（该解法弃权）。
     路径不进参数哈希，表内容哈希进 `group_flow_fingerprint`。"""
     from pathlib import Path
-    from ..core.workspace import REPO_ROOT, workspace_root
+    from ..core.workspace import REPO_ROOT, data_root, workspace_root
     from ..groups.registry import GROUPS
     base = workspace_root() or REPO_ROOT
+    cfg = (data_root() or REPO_ROOT) / "config" / "groups"     # 迁到中心库后在数据目录（GUJI-608）
 
     def _abs(v: str) -> str:
         q = Path(v).expanduser()
         return str(q if q.is_absolute() else base / q)
     freq = _abs(p.group_flow_freq) if p.group_flow_freq else ""
-    if not freq and (base / "config" / "groups" / "freq.json").exists():
-        freq = str(base / "config" / "groups" / "freq.json")
+    if not freq and (cfg / "freq.json").exists():
+        freq = str(cfg / "freq.json")
     tables = {g: _abs(v) for g, v in p.group_flow_tables.items()}
     for g in p.group_flow:
         if "ctx" in GROUPS[g].flow.solvers and g not in tables:
-            t = base / "config" / "groups" / "l2" / f"{g}.json"
+            t = cfg / "l2" / f"{g}.json"
             if t.exists():
                 tables[g] = str(t)
     object.__setattr__(p, "group_flow_freq", freq)

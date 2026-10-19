@@ -48,12 +48,21 @@ def _sha256(p: Path) -> str:
     return sha256_file(p)
 
 
+def _base(root: str, pat: str, ws: Path) -> Path:
+    """根目录。工作区里 ``config/`` 下的表迁到中心库数据目录后在 ``data_root``（GUJI-608）。"""
+    if root == "repo":
+        return REPO_ROOT
+    if pat.startswith("config/"):
+        from .workspace import data_root
+        return data_root(ws) or ws
+    return ws
+
+
 def collect(ws: Path) -> list[dict]:
     """按 ITEMS 扫出当前所有语料文件，返回 manifest 的 items（按 (root, path) 排序，输出稳定）。"""
-    roots = {"repo": REPO_ROOT, "ws": ws}
     seen: dict[tuple[str, str], dict] = {}
     for group, root, pat in ITEMS:
-        base = roots[root]
+        base = _base(root, pat, ws)
         for p in sorted(base.glob(pat)):
             if not p.is_file() or p.name in _SKIP_NAMES:
                 continue
@@ -85,11 +94,10 @@ def manifest_path(ws: Path, version: int) -> Path:
 
 def check_files(ws: Path, man: dict) -> dict:
     """拿清单对当前文件：changed／missing／extra（清单之外新出现的）。"""
-    roots = {"repo": REPO_ROOT, "ws": ws}
     changed, missing, listed = [], [], set()
     for it in man["items"]:
         listed.add((it["root"], it["path"]))
-        p = roots[it["root"]] / it["path"]
+        p = _base(it["root"], it["path"], ws) / it["path"]
         if not p.is_file():
             missing.append(f'{it["root"]}:{it["path"]}')
         elif _sha256(p) != it["sha256"]:

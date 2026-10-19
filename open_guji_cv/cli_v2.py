@@ -393,29 +393,29 @@ def cmd_audit(args) -> None:
 
 
 def cmd_store(args) -> None:
-    """`guji store check|commit -w <工作区>`：字形库导出到真源、查有没有成片删除、提交（runbook S14）。"""
+    """`guji store check|commit -w <工作区>`：glyph.db 导出成字形库账本、推进中心库（GUJI-608/611）。
+
+    等同 `guji db push`（check = `--dry-run`）。字形库与人裁不再提交进工作区 git；没迁的工作区先
+    `guji db migrate`。"""
     import os
-    from .core.workspace import workspace_root
-    from .ops import store_commit as SC
+    from .core.workspace import central_marker, workspace_root
     if not args.workspace:
         print("✗ 要 -w <工作区>", file=sys.stderr); sys.exit(2)
     os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
     ws = workspace_root()
-    res = SC.run(ws, commit=args.action == "commit", push=args.push, allow_deletions=args.allow_deletions,
-                 no_export=args.no_export, message=args.message, fetch=not args.no_fetch)
+    if not central_marker(ws):
+        print(f"✗ 工作区 {ws} 还没迁进中心库：字形库与人裁不再提交进工作区 git，"
+              f"先 `guji db migrate -w {ws}`", file=sys.stderr)
+        sys.exit(2)
+    from .cli_db import push_workspace
+    res = push_workspace(ws, dry_run=args.action != "commit", allow_delete=args.allow_deletions)
     if args.json:
-        print(json.dumps(res, ensure_ascii=False, indent=1))
-    ch = res.get("changes") or {}
-    if ch:
-        print(f"改动：{ch['n_changed']} 个文件（+{ch['added_lines']} −{ch['deleted_lines']} 行，新文件 {ch['untracked']}，"
-              f"删文件 {len(ch['deleted_files'])}）")
-    if res.get("blocked"):
-        print(f"✗ {res['blocked']}", file=sys.stderr); sys.exit(1)
+        print(json.dumps(res, ensure_ascii=False, indent=1, default=str))
+    n = sum(v.get("changes", 0) for v in (res.get("per_ws") or {}).values())
     if args.action == "commit":
-        print(f"已提交 {res['committed']}" + ("，已推送" if res.get("pushed") else "（未推送，加 --push）")
-              if res.get("committed") else "没有改动，不提交")
+        print(f"已推进中心库：{n} 处变更，rev {res.get('rev_from')} → {res.get('rev_to')}" if n else "没有改动")
     else:
-        print("检查通过（check 不提交；要提交用 `guji store commit`）")
+        print(f"检查通过：推送会写 {n} 处变更（check 不写；要推用 `guji store commit` 或 `guji db push`）")
 
 
 def _closure_gaps(book: str, pages: list[int], store) -> tuple[list[dict] | None, list[dict] | None]:
@@ -2039,7 +2039,8 @@ def cmd_snap(args) -> None:
         pages = args.pages
         if pages and pages != "all" and not pages[:1].isdigit():
             from .core.book import load_book
-            pages = ",".join(str(p) for p in load_book(args.target, ws_dir / "books").resolve_pages(pages))
+            from .core.workspace import books_dir
+            pages = ",".join(str(p) for p in load_book(args.target, books_dir(ws_dir)).resolve_pages(pages))
         overrides: dict[str, dict] = {}
         for kv in args.param or []:
             key, _, val = kv.partition("=")
@@ -2312,7 +2313,8 @@ def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") 
                      f"`-w D:/workspace/<book>-workspace`（books/{args.book}.yaml 所在的仓根）。"
                      "不再读 GUJI_WORKSPACE 兜底。")
     root = Path(ws).expanduser().resolve()
-    spec = root / "books" / f"{args.book}.yaml"
+    from .core.workspace import books_dir
+    spec = books_dir(root) / f"{args.book}.yaml"
     if not spec.exists():
         parser.error(f"--workspace {root} 下没有 books/{args.book}.yaml——路径给错了，或这不是「{args.book}」的工作区")
     env = os.environ.get("GUJI_WORKSPACE")
@@ -2647,14 +2649,11 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--chapter", default=None)
     p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
 
-    p = sub.add_parser("store", help="[v2] 字形库与人裁落真源：check = 导出并查有无成片删除；commit = 再提交（--push 推送）")
+    p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
     p.add_argument("action", choices=["check", "commit"])
     p.add_argument("-w", "--workspace", default=None, help="书的工作区目录")
-    p.add_argument("--push", action="store_true", help="commit 后 pull --rebase 再推送")
-    p.add_argument("--allow-deletions", action="store_true", help="确认过「成片删除」是对的，放行")
-    p.add_argument("--no-export", action="store_true", help="不重新导出（store 已是最新时用）")
-    p.add_argument("--no-fetch", action="store_true", help="不先 fetch 远端（离线时用）")
-    p.add_argument("-m", "--message", default=None)
+    p.add_argument("--push", action="store_true", help=argparse.SUPPRESS)        # 旧参数，已无作用（总是推进中心库）
+    p.add_argument("--allow-deletions", action="store_true", help="确认过删整个文件是对的，放行")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("recheck",
@@ -2901,6 +2900,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_exp import add_parser as _add_exp, cmd_exp
     _add_exp(sub)
     COMMANDS_V2["exp"] = cmd_exp
+    # db（GUJI-606）：中心库客户端，自带 -w
+    from .cli_db import add_parser as _add_db, cmd_db
+    _add_db(sub)
+    COMMANDS_V2["db"] = cmd_db
     install_workspace_option(sub)
 
 

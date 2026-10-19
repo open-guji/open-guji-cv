@@ -972,7 +972,7 @@ E 的错例清零。判据 A 那 1 条不一致是 [vol01:73:5:19](../../cache/v
 
 > ⚠️ 同步真源踩的坑：`glyph.db` 已于提交 `5036023` 移出 Git（83MB 二进制，历史 63 版
 > 占仓库九成），真源改为 `output/glyph_store/`（PNG + JSONL，git 存增量）。
-> 同步要用 `scripts/snapshot_glyph_store.py --force`；**别直接调 `glyph-db export`**
+> 同步要用 `scripts/snapshot_glyph_store.py --force`（2026-10-19 起退役，改 `guji db sync`）；**别直接调 `glyph-db export`**
 > ——那条 CLI 路径写死打开 `<store>/glyphdb.sqlite`（另一个文件，通常不存在），
 > sqlite 自动建空库 → 读到 0 行 → 把 store 里 15913 张 PNG 全当孤儿删掉。
 > 当场 `git checkout -- output/glyph_store/` 恢复，无损失。
