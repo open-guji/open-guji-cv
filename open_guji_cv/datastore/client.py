@@ -3,7 +3,8 @@
 两者给出同一组只读方法，``materialize`` / ``pull`` 只认这组方法：
 
 - ``status()``：当前分支的全局 ``rev``；
-- ``rows(table, ws)``：一张表里某工作区的全部行（dict）；
+- ``rows(table, ws, cols=None, **filters)``：一张表里某工作区的行（dict）；``cols`` 只取这几列（Worker 另带主键），
+  过滤值给列表表示「取其一」（每次最多 ``MAX_IN`` 个值）；
 - ``changes_since(ws, rev)``：该工作区在 ``rev`` 之后还有几条变更（``limit`` 封顶）；
 - ``fetch_blobs(shas, bucket)``：按 sha 取图字节（不经本地缓存，缓存在 ``BlobCache``）。
 
@@ -34,6 +35,7 @@ from pathlib import Path
 
 DEFAULT_URL = "https://data.open-guji.com"
 PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
+MAX_IN = 200            # 同列多值过滤一次最多几个值（Worker tables.ts 的 MAX_IN）
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 
 
@@ -79,7 +81,7 @@ class WorkerSource:
               content_type: str = "application/octet-stream", tries: int = 5):
         url = path if path.startswith("http") else self.url + path
         if query:
-            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query)
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query, doseq=True)
         headers = {"user-agent": "open-guji-cv-datastore"}  # Cloudflare 拦默认的 Python-urllib UA
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -121,10 +123,44 @@ class WorkerSource:
     def status(self) -> int:
         return int(self._call("GET", "/v1/status", query=self._q())["rev"])
 
-    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+    def _tables_v2(self) -> bool:
+        """Worker 认不认 ``cols`` 与同列多值（10-19 起）。旧 Worker 把多值当「同时等于」，静默回空，所以先探一次。"""
+        if not hasattr(self, "_v2"):
+            try:
+                self._call("GET", "/v1/tables/workspaces", query=self._q(limit=1, cols="ws"), tries=2)
+                self._v2 = True
+            except CentralError as e:
+                if e.status != 400:
+                    raise
+                self._v2 = False
+        return self._v2
+
+    def rows(self, table: str, ws: str | None = None, cols: Iterable[str] | None = None,
+             **filters) -> Iterator[dict]:
+        multi = {k: sorted({str(x) for x in v}) for k, v in filters.items() if isinstance(v, (list, tuple, set, frozenset))}
+        if len(multi) > 1:
+            raise ValueError(f"多值过滤一次只能一列：{sorted(multi)}")
+        if multi or cols is not None:
+            v2 = self._tables_v2()
+            if not v2:
+                cols = None                        # 旧 Worker：整行取，多值逐个查
+            (k, vs), = multi.items() if multi else ((None, None),)
+            if k is not None:
+                if not vs:
+                    return
+                step = MAX_IN if v2 else 1
+                for i in range(0, len(vs), step):
+                    chunk = vs[i:i + step]
+                    yield from self._rows(table, ws, cols, {**filters, k: chunk if v2 else chunk[0]})
+                return
+        yield from self._rows(table, ws, cols, filters)
+
+    def _rows(self, table: str, ws: str | None, cols, filters: dict) -> Iterator[dict]:
         q = self._q(limit=PAGE, **filters)
         if ws is not None:
             q["ws"] = ws
+        if cols is not None:
+            q["cols"] = ",".join(cols)
         while True:
             try:
                 page = self._call("GET", f"/v1/tables/{table}", query=q, tries=2)
@@ -297,15 +333,21 @@ class PgSource:
         cur.execute("SELECT coalesce(max(rev), 0) FROM changes")
         return int(cur.fetchone()[0])
 
-    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+    def rows(self, table: str, ws: str | None = None, cols: Iterable[str] | None = None,
+             **filters) -> Iterator[dict]:
         from psycopg import sql
         conds, args = [], []
         if ws is not None:
             filters = {"ws": ws, **filters}
         for k, v in filters.items():
-            conds.append(sql.SQL("{}::text = %s").format(sql.Identifier(k)))
-            args.append(str(v))
-        q = sql.SQL("SELECT * FROM {}").format(sql.Identifier(table))
+            if isinstance(v, (list, tuple, set, frozenset)):
+                conds.append(sql.SQL("{}::text = ANY(%s)").format(sql.Identifier(k)))
+                args.append([str(x) for x in v])
+            else:
+                conds.append(sql.SQL("{}::text = %s").format(sql.Identifier(k)))
+                args.append(str(v))
+        what = sql.SQL("*") if cols is None else sql.SQL(", ").join(map(sql.Identifier, cols))
+        q = sql.SQL("SELECT {} FROM {}").format(what, sql.Identifier(table))
         if conds:
             q += sql.SQL(" WHERE ") + sql.SQL(" AND ").join(conds)
         cur = self.conn.cursor()

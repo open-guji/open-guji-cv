@@ -619,3 +619,76 @@ def test_glyphlib_publish_creates_once(repo, conn, tmp_path):  # noqa: F811
     assert PgSource(conn).rows("glyph_instances", "glyphlib-t-v1")
     with pytest.raises(SystemExit, match="已经发布过"):
         publish(conn, "glyphlib-t-v1", actor="t")
+
+
+# ---- 省流量：只向库要变了的文件、只取要用的列（Neon 免费档每月 5 GiB 公网流量）----
+
+class _Counting:
+    """包一层数据源，记下每次 rows 的表、列、过滤，和回了几行。"""
+
+    def __init__(self, src):
+        self.src, self.calls = src, []
+
+    def __getattr__(self, k):
+        return getattr(self.src, k)
+
+    def rows(self, table, ws=None, cols=None, **filters):
+        out = list(self.src.rows(table, ws, cols=cols, **filters))
+        self.calls.append((table, cols, filters, len(out)))
+        return iter(out)
+
+
+def test_pull_fetches_only_changed_files(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.materialize import LINE_COLS
+    from open_guji_cv.datastore.workcopy import data_dir, pull
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    a = _fresh(files, tmp_path / "a", src, cache)
+    da = data_dir(a)
+
+    # 库里改一个事件文件；本机另把一个没变的文件改坏
+    rel = "feedback/events/b.jsonl"
+    files2 = dict(files)
+    files2["W/" + rel] = files["W/" + rel] + (_line(id="evt_b_9", batch="b", seq=9) + "\n").encode()
+    import_commit(conn, repo, _commit(repo, files2, "c2"))
+    other = next(p for p in _data_files(da) if p.endswith(".jsonl") and p != rel)
+    good = (da / other).read_bytes()
+    (da / other).write_bytes(b"tampered\n")
+
+    cs = _Counting(src)
+    out = pull(cs, a, cache=cache, force=True)
+    assert out["fetched"] == 2 and out["reused"] >= 1
+    assert (da / rel).read_bytes() == files2["W/" + rel]
+    assert (da / other).read_bytes() == good                               # 改坏的照样从库里取回
+    line_calls = [c for c in cs.calls if c[1] == LINE_COLS]
+    assert line_calls and all(set(c[2].get("src_path", [])) <= {rel, other} and c[2] for c in line_calls)
+
+    # 再拉一次：什么都没变，一个文本文件都不向库要
+    cs.calls.clear()
+    out = pull(cs, a, cache=cache)
+    assert out["fetched"] == 0
+    assert not [c for c in cs.calls if c[1] == LINE_COLS]
+
+
+def test_worker_rows_multi_value_and_old_worker(monkeypatch):
+    from open_guji_cv.datastore.client import CentralError, WorkerSource
+    w = WorkerSource(url="https://x", token="t")
+    seen = []
+
+    def call(method, path, *, query=None, tries=5, **kw):
+        seen.append((path, dict(query or {})))
+        if "cols" in (query or {}) and old:
+            raise CentralError(400, "bad_filter", "表 workspaces 没有列 cols")
+        return {"rows": [{"q": dict(query)}], "next": None}
+
+    monkeypatch.setattr(w, "_call", call)
+    old = False
+    rows = list(w.rows("events", "tws", cols=("src_path", "raw"), src_path=["b", "a"]))
+    assert len(rows) == 1 and rows[0]["q"]["src_path"] == ["a", "b"] and rows[0]["q"]["cols"] == "src_path,raw"
+
+    w2 = WorkerSource(url="https://x", token="t")
+    monkeypatch.setattr(w2, "_call", call)
+    old = True
+    rows = list(w2.rows("events", "tws", cols=("raw",), src_path=["b", "a"]))
+    assert [r["q"]["src_path"] for r in rows] == ["a", "b"]               # 旧 Worker：逐值查、整行取
+    assert all("cols" not in r["q"] for r in rows)

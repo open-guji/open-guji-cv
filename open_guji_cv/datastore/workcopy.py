@@ -151,19 +151,27 @@ def local_changes(ws_dir: Path, glyph: GlyphHooks | None = None) -> list[str]:
 
 def _db_manifest(src, ws: str) -> dict[str, str]:
     """库里这个工作区的文件 {相对路径: sha}：文本在 source_files，锚图、整理本在 BLOB_TABLES。"""
-    out = {r["src_path"]: r["sha256"] for r in src.rows("source_files", ws)}
-    from .materialize import blob_rows
+    from .materialize import _rows, blob_rows
+    out = {r["src_path"]: r["sha256"] for r in _rows(src, "source_files", ws, ("src_path", "sha256"))}
     for tbl in BLOB_TABLES:
         out.update({r["src_path"]: r["sha256"] for r in blob_rows(src, tbl, ws)})
     return out
 
 
+def _local(ws_dir: Path, data: Path):
+    """``materialize`` 的 ``reuse``：相对路径 → 本机现有文件（workspace.yaml 在工作区，别的在数据目录）。"""
+    def f(rel: str) -> Path | None:
+        p = (Path(ws_dir) if rel == WS_YAML else Path(data)) / rel
+        return p if p.is_file() else None
+    return f
+
+
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
-                 prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE) -> tuple[int, dict]:
+                 prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
     from .materialize import materialize
     for _ in range(retries):
         r0 = src.status()
-        stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket)
+        stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
         if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
             return r0, stats
     raise SystemExit("读的过程中工作区一直有新写入，稍后再拉")
@@ -211,7 +219,8 @@ def readonly_copy(src, name: str, branch: str, prefixes: tuple[str, ...], *, cac
     tmp = root.parent / f".{name}.borrow.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, _ = _materialize(src, name, tmp, cache, bucket, prefixes=prefixes)
+    rev, _ = _materialize(src, name, tmp, cache, bucket, prefixes=prefixes,
+                          reuse=(lambda rel: (root / rel) if (root / rel).is_file() else None) if root.exists() else None)
     (tmp / BORROW_STATE).write_text(json.dumps({"ws": name, "branch": branch, "rev": rev,
                                                 "prefixes": list(prefixes)}) + "\n", encoding="utf-8")
     if root.exists():
@@ -294,7 +303,7 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     tmp = data.parent / f".{data.name}.pull.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, stats = _materialize(src, ws, tmp, cache, bucket)
+    rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=_local(ws_dir, data))
     written, removed = _install(tmp, ws_dir, data)
     base = _db_manifest(src, ws)
     store_changed = any(old_base.get(k) != base.get(k) for k in set(old_base) | set(base) if k.startswith(GS))
@@ -586,7 +595,7 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     tmp = data.parent / f".{data.name}.sync.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, _ = _materialize(src, ws, tmp, cache, bucket)
+    rev, _ = _materialize(src, ws, tmp, cache, bucket, reuse=_local(ws_dir, data))
     remote = _db_manifest(src, ws)
     theirs = set(_diff(base, remote))
     both = sorted(mine & theirs)
