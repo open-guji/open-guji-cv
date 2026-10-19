@@ -1,0 +1,31 @@
+# 字组统一流程第三批 A/B，vol04：A＝现行 vol04 配置（十七组），B＝A＋論諭、大太、問間、曾會、遺還（形近不同义，按文意：L1＋haiku 表）。
+# 跑：guji exp run doc/exp/group_flow-3-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>] [--pages 1-56]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/。五张 L2 表放工作区 config/groups/l2/<组>.json 后可不写 group_flow_tables。
+name: group_flow-3-vol04
+books: [vol04]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: vol04 现行配置（十七组）
+  params:
+    seed_admit:
+      group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr, ts, wm, wxs, ji, qing, bian, hui]
+variants:
+  B:
+    note: 十七组＋第三批五组
+    params:
+      seed_admit:
+        group_flow: [mn, dian, can, chen, li, shen, zhi, jys, ry, rr, ts, wm, wxs, ji, qing, bian, hui, ly, dt, wj, zh, yh]
+        group_flow_tables:
+          ly: <答案表目录>/ly_table.json
+          dt: <答案表目录>/dt_table.json
+          wj: <答案表目录>/wj_table.json
+          zh: <答案表目录>/zh_table.json
+          yh: <答案表目录>/yh_table.json
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
