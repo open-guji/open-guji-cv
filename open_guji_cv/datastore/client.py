@@ -222,6 +222,25 @@ class WorkerSource:
         return {s: self._call("POST", "/v1/assets/sign",
                               body={"bucket": bucket, "op": "get", "ext": ext, "sha256": s})["url"] for s in shas}
 
+    # ---- 工作区快照（R2，省 Neon 流量；只当缓存，用的人逐文件核 sha）----
+    def get_snapshot(self, ws: str) -> tuple[int, bytes] | None:
+        """该分支上工作区 ``ws`` 最新的快照 (rev, tar.gz 字节)；没有或 Worker 不支持返回 None。"""
+        url = f"{self.url}/v1/snapshots/{urllib.parse.quote(ws)}?" + urllib.parse.urlencode({"branch": self.branch})
+        req = urllib.request.Request(url, headers={"user-agent": "open-guji-cv-datastore",
+                                                   "authorization": f"Bearer {self.token}"})
+        self.requests += 1
+        try:
+            with urllib.request.urlopen(req, context=self._ctx, timeout=self.timeout) as r:
+                return int(r.headers.get("x-guji-rev") or 0), r.read()
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 403, 404):
+                return None
+            raise
+
+    def put_snapshot(self, ws: str, rev: int, data: bytes) -> dict:
+        return self._call("PUT", f"/v1/snapshots/{urllib.parse.quote(ws)}",
+                          query=self._q(rev=int(rev)), data=data, content_type="application/gzip", tries=2)
+
     # ---- 分支与写 ----
     def branches(self) -> list[dict]:
         return self._call("GET", "/v1/branches")["branches"]
