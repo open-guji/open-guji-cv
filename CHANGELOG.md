@@ -3,6 +3,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.4.3] - 2026-10-18
+
+PATCH。push 只上传库里没有的图（只动 `datastore/`），17 步 `code_hash` 不变。
+
+### Fixed
+- `guji db push`／`sync` 推送时只把库里没有的图交给上传（先查一次该工作区 `glyph_instances.patch_sha` 与 `anchor_patches_meta.sha256`）。原先每次推都把全部约两万张图逐批签名核对一遍，要十几分钟，期间数据库连接闲置被 Neon 断掉，事务一开就失败（10-19 D 推 vol01 裁决两次失败，库里没有写入）。只动 `datastore/workcopy.py`，17 步 `code_hash` 不变。
+
 ## [0.4.2] - 2026-10-18
 
 PATCH。push 删除检查算上锚图（只动 `datastore/`），17 步 `code_hash` 不变。
