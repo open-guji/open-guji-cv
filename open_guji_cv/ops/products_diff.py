@@ -190,7 +190,7 @@ def _rates(c: Counter) -> dict:
     n = c["cells"]
     return {"cells": n, "review": c["review"], "admit": c["admit"], "human": c["human"],
             "excluded": c["excluded"], "no_seed_admit": c["none"],
-            "review_rate": round(c["review"] / n, 5) if n else None}
+            "review_rate": round(c["review"] / n, 5) if n and c["none"] < n else None}
 
 
 def _impact(cd: ColDiff) -> tuple:
@@ -220,6 +220,8 @@ def write_report(res: dict, out: Path, a_label: str, b_label: str) -> Path:
              "| | 格 | 送审 | 人审率 | 机器放行 | 人裁 | 排除 |", "|---|---|---|---|---|---|---|",
              f"| A | {a['cells']} | {a['review']} | {pct(a['review_rate'])} | {a['admit']} | {a['human']} | {a['excluded']} |",
              f"| B | {b['cells']} | {b['review']} | {pct(b['review_rate'])} | {b['admit']} | {b['human']} | {b['excluded']} |",
+             *([""] + ["（有一边没有 seed_admit 产物：人审率不可比，只比切分。）"]
+               if a["review_rate"] is None or b["review_rate"] is None else []),
              "", "**变了的列**：" + ("、".join(f"{k} {s['columns'].get(k, 0)}" for k in KINDS)) +
              f"（没变 {s['columns'].get('same', 0)}）", "",
              "**逐格**：" + ("、".join(f"{k} {v}" for k, v in sorted(s["flips"].items())) or "无"), "",
