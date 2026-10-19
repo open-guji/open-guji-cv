@@ -7,6 +7,7 @@
     guji db migrate -w <工作区> [--keep-local] [--dry-run]   # 一次性：工作区里的数据挪进数据目录
     guji db pull    -w <工作区> [--force]                     # 中心库 → 数据目录（有新字形库才重建 glyph.db）
     guji db push    -w <工作区> [--dry-run] [--allow-delete]  # 数据目录 → 中心库，先比版本号
+    guji db sync    -w <工作区> [--dry-run] [--watch 秒]      # 拉＋合并＋推一步做完；--watch 定时反复做
     guji db status  [-w <工作区>]                             # rev、令牌角色、本地落后几条、没推的文件
     guji db branch  list | create <exp/GUJI-号-说明> [--from-rev N] | delete <名>
     guji db import  --from exp/<名> -w <工作区> [--events ids.txt] [--to main] [--dry-run]
@@ -56,10 +57,44 @@ def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = 
                     uploader=lambda imgs: upload_files(imgs, bucket="main"), glyph=glyph_hooks(ws_dir))
 
 
+def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
+    """``guji db sync`` 一轮：库里有新改动先合进来（只追加台账两边的新行都留），再推本地的。"""
+    from .datastore.client import BlobCache, WorkerSource
+    from .datastore.r2 import upload_files
+    from .datastore.workcopy import sync
+    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    src = src or WorkerSource()
+    with _pg_conn() as conn:
+        return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
+                    uploader=lambda imgs: upload_files(imgs, bucket="main"), glyph=glyph_hooks(ws_dir))
+
+
+def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
+    """定时 sync（替代旧的 guji-glyph-store-sync.timer）。冲突、网络错都只记一行，下一轮再试。"""
+    import sys
+    import time
+    from datetime import datetime
+
+    from .datastore.workcopy import SyncConflict
+    while True:
+        at = datetime.now().isoformat(timespec="seconds")
+        try:
+            res = sync_workspace(ws_dir, dry_run=dry_run)
+            print(json.dumps({"at": at, "action": res["action"], "local": len(res["local_changes"]),
+                              "merged": res.get("merged", []), "rev": res.get("rev_remote")},
+                             ensure_ascii=False), flush=True)
+        except SyncConflict as e:
+            print(json.dumps({"at": at, "conflict": str(e)}, ensure_ascii=False), file=sys.stderr, flush=True)
+        except (Exception, SystemExit) as e:  # noqa: BLE001  断网、连库失败、读到一半有人写都下一轮再试
+            print(json.dumps({"at": at, "error": f"{type(e).__name__}: {e}"}, ensure_ascii=False),
+                  file=sys.stderr, flush=True)
+        time.sleep(interval)
+
+
 def cmd_db(args) -> None:
     from .datastore.client import BlobCache, WorkerSource
     ws_dir = _ws_dir(args)
-    need_ws = {"pull", "push", "migrate", "import"}
+    need_ws = {"pull", "push", "sync", "migrate", "import"}
     if args.action in need_ws and ws_dir is None:
         raise SystemExit(f"db {args.action} 要 -w <工作区>（或 GUJI_WORKSPACE）")
 
@@ -67,6 +102,14 @@ def cmd_db(args) -> None:
         if (args.branch or os.environ.get("GUJI_DATA_BRANCH") or "main") != "main":
             raise SystemExit("db push 只写 main；实验照旧用 guji exp 和实验分支")
         _print(push_workspace(ws_dir, dry_run=args.dry_run, allow_delete=args.allow_delete))
+        return
+
+    if args.action == "sync":
+        if (args.branch or os.environ.get("GUJI_DATA_BRANCH") or "main") != "main":
+            raise SystemExit("db sync 只写 main")
+        if args.watch:
+            _watch(ws_dir, args.watch, args.dry_run)
+        _print(sync_workspace(ws_dir, dry_run=args.dry_run))
         return
 
     src = WorkerSource(branch=args.branch)
@@ -119,7 +162,7 @@ def cmd_db(args) -> None:
 
 def add_parser(sub) -> None:
     p = sub.add_parser("db", help="中心库：migrate / pull / push / status / branch / import（GUJI-606/608）")
-    p.add_argument("action", choices=["status", "migrate", "pull", "push", "branch", "import"])
+    p.add_argument("action", choices=["status", "migrate", "pull", "push", "sync", "branch", "import"])
     p.add_argument("args", nargs="*", help="branch 的子命令与分支名")
     p.add_argument("-w", "--workspace", default=None, help="工作区仓根（含 workspace.yaml）；不给读 GUJI_WORKSPACE")
     p.add_argument("--branch", default=None, help="读哪个分支（缺省 GUJI_DATA_BRANCH 或 main）")
@@ -134,4 +177,5 @@ def add_parser(sub) -> None:
     p.add_argument("--from", dest="from_branch", default=None, help="import：实验分支名")
     p.add_argument("--to", default="main", help="import：导入到哪个分支（缺省 main）")
     p.add_argument("--events", default=None, help="import：事件 id 清单文件（一行一个）；不给就导入目标没有的全部")
-    p.add_argument("--dry-run", action="store_true", help="migrate/push/import：只列计划不写")
+    p.add_argument("--dry-run", action="store_true", help="migrate/push/sync/import：只列计划不写")
+    p.add_argument("--watch", type=int, default=None, metavar="秒", help="sync：每隔这么多秒做一轮，不退出")

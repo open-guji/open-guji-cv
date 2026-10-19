@@ -150,6 +150,8 @@ guji db pull    -w <工作区>                   # 中心库 → 数据目录；
 #   …照常跑 cv（控制台、step、H 道）…
 guji db push    -w <工作区> [--dry-run]       # 数据目录 → 中心库（guji store commit 在迁过的工作区上也走这里）
 guji db status  -w <工作区>                   # 落后几条、哪些文件没推
+guji db sync    -w <工作区> [--dry-run]       # 拉＋合并＋推一步做完（日常用这个）
+guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退出（服务器上替代旧的 glyph_store_sync 定时器）
 ```
 
 - **范围**：`books/`、`feedback/`、`review/`、`config/`、`output/glyph_store/` 下 `scope.classify` 认的文件，加 `workspace.yaml`，
@@ -165,12 +167,18 @@ guji db status  -w <工作区>                   # 落后几条、哪些文件�
   写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`），`changes` 逐行留痕。新图先经 Worker 传正式桶。
 - **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程起 WebSocket 桥（云会话只通 443）。
 - `push` 只写 `main`；实验照旧用 `guji exp` 和实验分支。
+- **sync（自动合并）**：库里在基准 rev 之后没人写过就直接推；有人写过，先把库里的拼到旁边逐文件比：
+  库里改了、本地没改的用库里的；本地改了、库里没改的留本地的；两边都改了的，只追加台账（events、consumed、anchors）
+  按「共同前缀＋库里新行＋本地新行」合（同一行只留一份），别的文件两边都改了就整次停下（`SyncConflict`），什么都不动，
+  要库里的用 `pull --force`，要本地的手工合。合完拉到新字形库就重建 glyph.db，再推本地剩下的改动。
+  `--watch` 下冲突、断网只记一行到 stderr，下一轮再试。
 - close-check 第 8 项在迁过的工作区上查「数据目录有没有没推的改动」，不再查 git。
 
 验收（`tests/datastore/test_datastore_workcopy.py`，本地 Postgres）：migrate 后工作区里只剩 workspace.yaml、标记、
 glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，路径函数指向数据目录；不一致时 migrate 拒绝、`--keep-local`
 后成为待推改动并推成功；两台机器之间 pull／push、旧版本被拒、`--force` 重拉、删文件与台账少行被拒、库里删了本地也删；
-新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出。
+新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出；两台机器各自追加事件后 sync，两边的行都进库、另一台再 sync 拿到同一份文件，
+书 yaml 两边都改则 `SyncConflict` 且本地不动。
 守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
 
 **在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图

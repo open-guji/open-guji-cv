@@ -12,6 +12,8 @@
 
 - **数据迁出工作区**（GUJI-608，2026-10-19，用户定）：中心库是册 yaml、人裁事件、台账、批次、人工配置、字形库唯一的家，工作区里只留 `workspace.yaml` 和标记 `.central.json`，数据在工作区外的数据目录 `$GUJI_DATA_HOME/<分支>/<工作区 id>/`（缺省 `~/.guji-data`）。`core/workspace` 加 `data_root`／`books_dir`／`ws_config_dir`，见到标记就把数据路径指向数据目录，没有标记照旧；各处从工作区根直拼的路径改走这些函数（`core/book`、`corpus_pin`、`seed_admit`、`groups/freq`、`groups/ids_online`、`collate_consumers`、`snap/*`、`deploy_check`、控制台工作区列表），守卫 `tests/test_central_paths.py`。新命令 `guji db migrate`（核对后挪数据、写标记，glyph.db 不动）、`guji db pull`（中心库 → 数据目录，拉到新字形库才重建 glyph.db）、`guji db push`（拿库锁后先比版本号，别人先写过整次拒绝；只追加台账少行、整个文件丢了也拒绝；glyph.db 改过先导出；新图先经 Worker 传正式桶；连库用 `GUJI_DATA_PG_DSN`，没有就从 `NEON_DATABASE_URL` 自动起 443 桥）。迁过的工作区上 `guji store commit|check` 改为推中心库，close-check 第 8 项改查没推的改动。新模块 `datastore/workcopy.py`、`ops/central_glyph.py`；`importer.import_scans` 从 `import_commit` 拆出（加 `guard` 钩子）；旧的 `db pull` 只读快照（`output/central/`）删掉。**`seed_admit` 的 `code_hash` 变**（50b4c7c96150b33d → f0f2713200ae880e，字组表改从数据目录找；本版字组第三批已经让它变过一次），其余 16 步不变。没迁的工作区行为一字不变。
 
+- `guji db sync -w <工作区> [--dry-run] [--watch 秒]`（GUJI-608 B 块）：拉＋合并＋推一步做完。别人先写过时不再整次拒绝：库里改了本地没改的取库里的，只追加台账（events、consumed、anchors）两边都追加了就把两边的新行都留下，其它文件两边都改了才停（`SyncConflict`，本地不动）。`--watch` 定时反复做，冲突与断网只记日志，用来替代服务器上 30 分钟一次的 `guji-glyph-store-sync.timer`（往 guji-workspace git 提交）。只动 `datastore/workcopy.py`、`cli_db.py`，17 步 `code_hash` 不变。
+
 - 中心库备份与恢复演练（GUJI-611）：`python -m open_guji_cv.datastore backup` 在一个只读快照里把全部表 `COPY` 出来、gzip，附清单（每表列、行数、排序后哈希、序列值、rev），经 Worker `/v1/backups` 存进正式桶 `backup/<日期>/`，清掉超过 30 天的；`restore-check --endpoint <ci 端点>` 取最新一份完整备份恢复到 main 以外的分支（给 main 的端点直接拒绝）并逐表核对。首次实测（10-19，rev 1356）：26 张表 189,964 行，备份 12 MB、31 秒；恢复到 ci 分支 39 秒，逐表行数与哈希全部一致。连库抽成 `datastore/connect.py`。
 
 ### Fixed
