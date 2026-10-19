@@ -3,9 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.2] - 待发
+## [0.4.2] - 2026-10-18
 
-待发分支 `rc/v0.4.2`。
+PATCH。push 删除检查算上锚图（只动 `datastore/`），17 步 `code_hash` 不变。
 
 ### Fixed
 - `guji db push`／`sync` 推送前的删除检查把锚图（`anchor_patches_meta`）也算进去：v0.4.0 及更早版本 pull 的数据目录里没有锚图，原先会把库里的锚图当本地删掉一并推走（10-19 D 推 vol01 裁决前在 dry-run 里发现，没推）。现在不加 `--allow-delete` 就整次拒绝。只动 `datastore/workcopy.py`，17 步 `code_hash` 不变。
