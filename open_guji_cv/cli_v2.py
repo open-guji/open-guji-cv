@@ -231,6 +231,8 @@ def cmd_status(args) -> None:
         print(json.dumps(st, ensure_ascii=False))
         return
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
+    if getattr(eng.book, "glyph_pin", None):
+        print(f"  字形库钉在 g{eng.book.glyph_pin}：别处人裁进库不让 seed_admit 过期；要落地新人裁把册 yaml 的 glyph_pin 加一")
     for sid, d in st["steps"].items():
         c = d["counts"]
         drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
@@ -2982,6 +2984,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_db import add_parser as _add_db, cmd_db
     _add_db(sub)
     COMMANDS_V2["db"] = cmd_db
+    # products：前后对比、产物包（受控重跑，doc/受控重跑.md），自带 -w
+    from .cli_products import add_parser as _add_products, cmd_products_entry
+    _add_products(sub)
+    COMMANDS_V2["products"] = cmd_products_entry
     install_workspace_option(sub)
 
 
