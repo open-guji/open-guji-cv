@@ -49,6 +49,9 @@ def test_build_maps_half_leaf_columns(tmp_path):
     (dz / "page_map.jsonl").write_text("".join(json.dumps(m) + "\n" for m in pm), encoding="utf-8")
     rows = dl.build(tmp_path)
     assert [(r["page"], r["col"], r["slots"]) for r in rows] == [(7, 1, [1]), (7, 3, [2, 3])]
+    # 同一页被 page_map 映了两次（同一列出两行）：不知信哪行，整列剔除
+    (dz / "page_map.jsonl").write_text("".join(json.dumps(m) + "\n" for m in pm + pm[:1]), encoding="utf-8")
+    assert dl.build(tmp_path) == []
 
 
 def test_row_segment_load_layout_and_fingerprint(tmp_path):

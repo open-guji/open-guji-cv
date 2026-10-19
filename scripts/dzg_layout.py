@@ -3,7 +3,7 @@
 
     python scripts/dzg_layout.py --ws <四庫總目书目录> [--out corpus/daizhige/layout_slots.jsonl] [--vols 04,05]
 
-一行一列（只收 `page_map.jsonl` 里 kind=text、dzg_kind=full 的页，空列不写）：
+一行一列（只收 `page_map.jsonl` 里 kind=text、dzg_kind=full 的页，空列不写；同一列出现多行的全部剔除）：
 
     {"vol": "vol04", "page": 23, "col": 1, "dzg": "0001-0141h0",
      "slots": [3, 4, …, 21],   # 有字的 slot（夹注两半共用一个 slot）
@@ -21,6 +21,7 @@ import argparse
 import json
 import os
 import sys
+from collections import Counter
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -69,7 +70,9 @@ def build(ws: Path, vols: set[str] | None = None) -> list[dict]:
             if lay:
                 out.append({"vol": m["vol"], "page": m["page"], "col": c["no"] % NCOL + 1,
                             "dzg": f"{m['dzg_id']}h{m['side']}", **lay})
-    return out
+    # 同一 (册,页,列) 出现多行（vol01 p102 c1 职名页）不知道信哪行，全部剔除（同 dzg_import colgold 的 dup）
+    n = Counter((r["vol"], r["page"], r["col"]) for r in out)
+    return [r for r in out if n[(r["vol"], r["page"], r["col"])] == 1]
 
 
 def main(argv=None) -> int:
