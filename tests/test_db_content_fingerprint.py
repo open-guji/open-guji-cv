@@ -119,5 +119,6 @@ def test_seed_admit_params_use_human_only_fingerprint(db, tmp_path):
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     path = tmp_path / "glyph.db"
     p = SeedAdmitParams(db_path=str(path))
-    assert p.human_fingerprint == human_verdicts_fingerprint(path)
+    from open_guji_cv.clustering.glyph_fp import human_shapes_fingerprint   # GUJI-609 起取内容哈希
+    assert p.human_fingerprint == human_shapes_fingerprint(path)
     assert p.human_fingerprint != db_fingerprint(path)

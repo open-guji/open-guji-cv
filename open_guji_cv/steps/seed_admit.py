@@ -619,10 +619,12 @@ class SeedAdmitParams(BaseModel):
         # 它自己重跑，不会让本步过期（人裁进库时 match 产物可能没变）。
         # 只看 provenance='human' 那部分（2026-09-20）：机器 align 进库、字头改判与本步
         # 的人裁通道无关，用整库指纹会让本步跟着白跑。
+        # 2026-10-19 起（GUJI-609，v0.4.0）取人裁通道真正读到的 (实例 id, 字头) 的内容哈希：
+        # glyph.db 改成从中心库重建后 rowid 会重排，旧的 (条数, 最大 rowid, 时间戳) 会白白变。
         if self.use_human_verdicts and not self.human_fingerprint:
-            from .glyph_match import human_verdicts_fingerprint
+            from ..clustering.glyph_fp import human_shapes_fingerprint
             object.__setattr__(self, "human_fingerprint",
-                               human_verdicts_fingerprint(self.db_path))
+                               human_shapes_fingerprint(self.db_path))
         # 版本注词表也是派生物（scripts/build_note_lexicon.py），同理
         if self.use_note_lexicon and not self.note_fingerprint:
             from ..clustering.note_lexicon import DEFAULT_LEXICON
@@ -1901,11 +1903,8 @@ def _human_shapes(db_path: str) -> dict[str, str]:
     except sqlite3.Error:
         return {}
     try:
-        rows = conn.execute(
-            "SELECT a.instance_id, g.char FROM admissions a "
-            "  JOIN exemplars e ON e.instance_id = a.instance_id "
-            "  JOIN glyphs g ON g.glyph_id = e.glyph_id "
-            " WHERE a.provenance = 'human' AND a.instance_id LIKE 'v2:%'").fetchall()
+        from ..clustering.glyph_fp import HUMAN_SQL      # 与 human_fingerprint 同一条查询
+        rows = conn.execute(HUMAN_SQL).fetchall()
     except sqlite3.Error:
         return {}
     finally:
