@@ -8,6 +8,7 @@
 待发分支 `rc/v0.4.7`。
 
 ### Fixed
+- 语料库清单（`guji corpus build`／`init`／`build-base`）里的 `built_with.cv_version` 改读引擎仓 `pyproject.toml`：原来读装包元数据，可编辑安装后升了版本号它不更新，10-19 出的底库 b1 记成了 0.4.4（实为 v0.4.6 发版提交 `0194a152`，以清单里的 `repo_commit` 为准；b1 已发布不可改）。只是记录字段，不碰任何 Step，17 步 `code_hash` 不变。
 - `row_segment` 缺省关的新开关（`colgold_prior`／`yolo_*`／`layout_prior` 及其指纹字段）不再进参数 dump（同 `border_detect` 的做法）：v0.4.6 把它们加进 `RowSegmentParams`，所有册的 `params_hash` 都变了，已冻结的册（`freeze:`）用 v0.4.6 跑 close-check 1a 被归成「册配置或参数被改：row_segment N 页」报警，而规矩是代码变只计数不报警。现在关着时参数哈希与 v0.4.5 逐位相同，开着照常进指纹。PATCH；`row_segment` 的 `code_hash` 因改了该模块变一次（对 v0.4.6）。
 
 ## [0.4.6] - 2026-10-19
