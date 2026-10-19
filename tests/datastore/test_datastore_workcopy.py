@@ -181,3 +181,53 @@ def test_not_migrated_workspace_is_refused(tmp_path):
     (tmp_path / "workspace.yaml").write_text("id: x\n")
     with pytest.raises(SystemExit, match="db migrate"):
         data_dir(tmp_path)
+
+
+def test_sync_merges_appends_from_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    from open_guji_cv.datastore.workcopy import SyncConflict, data_dir, local_changes, sync
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", src, cache)
+    da = data_dir(a)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    b = _fresh(files, tmp_path / "b", src, cache)
+    db_ = data_dir(b)
+    rel = "feedback/events/b.jsonl"
+    la = _line(id="evt_b_a", batch="b", seq=2)
+    lb = _line(id="evt_b_b", batch="b", seq=3)
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    assert sync(src, conn, a, actor="a", cache=cache)["action"] == "nothing"
+    (da / rel).write_bytes((da / rel).read_bytes() + (la + "\n").encode())
+    (da / "books" / "vol04.yaml").write_bytes(b"id: vol04\n")
+    assert sync(src, conn, a, actor="a", cache=cache)["action"] == "push"
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    (db_ / rel).write_bytes((db_ / rel).read_bytes() + (lb + "\n").encode())
+    out = sync(src, conn, b, actor="b", cache=cache)
+    assert out["action"] == "merged+push" and out["merged"] == [rel]
+    assert (db_ / "books" / "vol04.yaml").exists()                      # 库里新的文件拉下来
+    assert local_changes(b) == []
+    ids = {r["id"] for r in src.rows("events", "tws")}
+    assert {"evt_b_1", "evt_b_a", "evt_b_b"} <= ids                     # 两边追加的行都在
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    assert sync(src, conn, a, actor="a", cache=cache)["action"] == "pulled"
+    assert (da / rel).read_bytes() == (db_ / rel).read_bytes()
+
+    # 非追加文件两边都改 → 整次停下，本地不动
+    (da / "books" / "vol03.yaml").write_bytes(b"id: vol03\nnote: a\n")
+    sync(src, conn, a, actor="a", cache=cache)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    (db_ / "books" / "vol03.yaml").write_bytes(b"id: vol03\nnote: b\n")
+    with pytest.raises(SyncConflict):
+        sync(src, conn, b, actor="b", cache=cache)
+    assert (db_ / "books" / "vol03.yaml").read_bytes() == b"id: vol03\nnote: b\n"
+    assert not any(p.name.endswith(".sync.tmp") for p in db_.parent.iterdir())
+
+
+def test_merge_append_keeps_both_tails():
+    from open_guji_cv.datastore.workcopy import _merge_append
+    assert _merge_append(b"x\na\n", b"x\nb\n") == b"x\nb\na\n"
+    assert _merge_append(b"x\na\n", b"x\na\nb\n") == b"x\na\nb\n"
+    assert _merge_append(b"", b"") == b""

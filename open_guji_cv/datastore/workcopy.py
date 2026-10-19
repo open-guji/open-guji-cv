@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Callable
 
 from ..core.workspace import CENTRAL_MARKER, central_data_dir, central_marker
-from .scope import GS, classify, sha256
+from .scope import GS, TABLES, classify, sha256
 
 SCOPE = ("books/", "feedback/", "review/", "config/", GS)
 STATE = ".central-state.json"
@@ -299,3 +299,110 @@ def migrate(src, ws_dir: Path, *, cache=None, bucket: str = "main", keep_local: 
     report.update(rev=rev, written=written, removed_from_workspace=removed, pending=len(differ),
                   **{k: v for k, v in stats.items() if k != "ws"})
     return report
+
+
+# ---- 同步：拉库里的新改动、与本地改动合并、再推（GUJI-608 B 块）----
+
+class SyncConflict(RuntimeError):
+    pass
+
+
+APPEND_ONLY = {t for t, spec in TABLES.items() if spec.append_only}
+
+
+def _merge_append(local: bytes, remote: bytes) -> bytes | None:
+    """两边都只在共同前缀后面追加了行 → 前缀＋库里的新行＋本地的新行（本地与库里相同的行不重复）。
+
+    不知道基准内容，共同前缀就当基准：若有一边其实改了前缀里的行，合出来的文件会少那一边的旧行，
+    推的时候只追加台账少行会被导入器拒掉（``DeleteRefused``），不会悄悄丢数据。"""
+    lo, re_ = local.decode("utf-8").splitlines(), remote.decode("utf-8").splitlines()
+    n = 0
+    while n < min(len(lo), len(re_)) and lo[n] == re_[n]:
+        n += 1
+    tail_r = re_[n:]
+    seen = set(tail_r)
+    tail_l = [x for x in lo[n:] if x not in seen]
+    merged = lo[:n] + tail_r + tail_l
+    return ("\n".join(merged) + "\n").encode("utf-8") if merged else b""
+
+
+def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str = "main",
+         uploader=None, glyph: GlyphHooks | None = None, dry_run: bool = False) -> dict:
+    """拉 → 合并 → 推，一步做完（控制台写完、定时任务都用它）。
+
+    库里在基准 rev 之后没人写过：直接推。有人写过：库里改了、本地没改的文件取库里的；本地改了、库里没改的
+    留本地的；两边都改了的只追加台账（events、consumed、anchors）按「共同前缀＋库里新行＋本地新行」合，
+    别的文件两边都改了就整次停下（``SyncConflict``），什么都不动。"""
+    ws_dir = Path(ws_dir)
+    data = data_dir(ws_dir)
+    st = read_state(data)
+    if st is None:
+        raise SystemExit(f"数据目录 {data} 没有 {STATE}：先 guji db pull -w {ws_dir}")
+    ws = str(st["ws"])
+    exported = _export_if_changed(glyph, data, st)
+    base = st["base"]
+    local = manifest(ws_dir, data)
+    mine = set(_diff(base, local))
+    out: dict = {"ws": ws, "local_changes": sorted(mine), "glyph_exported": exported}
+    if not src.changes_since(ws, int(st["rev"]), limit=1):
+        if not mine:
+            return {**out, "action": "nothing"}
+        return {**out, "action": "push", "push": push(conn, ws_dir, actor=actor, dry_run=dry_run,
+                                                       uploader=uploader, glyph=glyph)}
+    # 库里有新改动：拉到旁边，逐文件合
+    tmp = data.parent / f".{data.name}.sync.tmp"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    rev, _ = _materialize(src, ws, tmp, cache, bucket)
+    remote = _db_manifest(src, ws)
+    theirs = set(_diff(base, remote))
+    both = sorted(mine & theirs)
+    merged: dict[str, bytes] = {}
+    conflicts = []
+    for rel in both:
+        lp = (ws_dir if rel == WS_YAML else data) / rel
+        rp = tmp / rel
+        if local.get(rel) == remote.get(rel):
+            continue                                       # 两边改成一样
+        if classify(rel) in APPEND_ONLY and lp.exists() and rp.exists():
+            m = _merge_append(lp.read_bytes(), rp.read_bytes())
+            if m is not None:
+                merged[rel] = m
+                continue
+        conflicts.append(rel)
+    if conflicts:
+        shutil.rmtree(tmp, ignore_errors=True)
+        raise SyncConflict(f"这些文件本地和库里都改了，合不了（如 {conflicts[:5]}）；"
+                           f"要库里的：guji db pull --force；要本地的：手工合进去再推")
+    out.update(remote_changes=sorted(theirs), merged=sorted(merged), rev_remote=rev)
+    if dry_run:
+        shutil.rmtree(tmp, ignore_errors=True)
+        return {**out, "action": "merge (dry-run)"}
+    # 库里改了、本地没改的 → 用库里的；本地删了而库里没动的保持删除
+    store_changed = False
+    for rel in sorted(theirs - mine):
+        dst = (ws_dir if rel == WS_YAML else data) / rel
+        if (tmp / rel).exists():
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(tmp / rel, dst)
+        elif dst.exists():
+            dst.unlink()
+        store_changed |= rel.startswith(GS)
+    patches = tmp / GS / "patches"                         # 库里新实例的刻例图
+    if patches.is_dir():
+        for p in patches.iterdir():
+            q = data / GS / "patches" / p.name
+            if not q.exists():
+                q.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(p, q)
+    for rel, b in merged.items():
+        (data / rel).write_bytes(b)
+    shutil.rmtree(tmp, ignore_errors=True)
+    fp = st.get("glyph_db_fp")
+    if glyph is not None and store_changed and Path(glyph.db_path).exists():
+        out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path)
+        fp = glyph.fingerprint(glyph.db_path)
+    write_state(data, ws=ws, branch=st.get("branch", "main"), rev=rev, base=remote, glyph_db_fp=fp)
+    if not _diff(remote, manifest(ws_dir, data)):
+        return {**out, "action": "pulled"}
+    return {**out, "action": "merged+push", "push": push(conn, ws_dir, actor=actor, uploader=uploader, glyph=glyph)}
