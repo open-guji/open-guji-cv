@@ -389,6 +389,21 @@ def cmd_audit(args) -> None:
         dst = Path(args.cards_out) if args.cards_out else out_dir / f"{book}.cards.alt.json"
         dst.write_text(json.dumps(cs, ensure_ascii=False), encoding="utf-8")
         print(f"{book} 相似字：待审 {len(todo)} 格，出 alt {n} 格（字统网新取 {zi.n_fetched} 字）→ {dst}")
+    elif args.action == "alt-eval":
+        # 相似字效果：人裁过之后，拿人定的字回头看 alt 里排第几（doc/research/人审找字-…md §6）
+        from .feedback.lookup import human_chars
+        from .review.alt_cands import alt_eval
+        src = Path(args.cards) if args.cards else out_dir / f"{book}.cards.alt.json"
+        if not src.exists():
+            print(f"✗ 没有 {src}：先跑 `guji audit alt {book} -w <工作区>`", file=sys.stderr); sys.exit(2)
+        doc = json.loads(src.read_text(encoding="utf-8"))
+        res = alt_eval(doc["cards"] if isinstance(doc, dict) else doc, human_chars(book))
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+        for name, label in (("all", "全部"), ("hard", "难格（人定的字不在卡上原有候选里）")):
+            t = res[name]
+            if t["n"]:
+                print(f"{label} {t['n']} 格：第 1 名 {t['top1']}，前 5 {t['top5']}，前 10 {t['top10']}"
+                      f"（{t['top10'] / t['n']:.0%}），在相似字里的平均名次 {t['mean_rank_when_hit']}", file=sys.stderr)
     elif args.action == "count":
         from .core.workspace import feedback_root
         if not args.since:
@@ -2718,8 +2733,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
                                      "count = 用户审完当场核数；sheet = 生成请审单（只读）；"
-                                     "alt = 给待审卡算好相似字（并进待审单）")
-    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "alt"])
+                                     "alt = 给待审卡算好相似字（并进待审单）；alt-eval = 人裁后量相似字命中")
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "alt", "alt-eval"])
     p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
     p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
     p.add_argument("book")
@@ -2728,7 +2743,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--export-dir", default=None, help="jys：guji export format 的输出目录")
     p.add_argument("--chapter", default=None)
     p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
-    p.add_argument("--cards", default=None, help="alt：卡片列表 JSON（cards(cls='*') 的输出）；缺省现算全册")
+    p.add_argument("--cards", default=None, help="alt：卡片列表 JSON（cards(cls='*') 的输出），缺省现算全册；"
+                                                 "alt-eval：带 alt 的卡片 JSON，缺省 reports/<册>/<册>.cards.alt.json")
     p.add_argument("--cards-out", default=None, help="alt：带 alt 的卡片 JSON 写到这里；缺省 reports/<册>/<册>.cards.alt.json")
     p.add_argument("--k", type=int, default=0, help="alt：每格最多几个相似字（缺省 30）")
     p.add_argument("--fetch-zi", action="store_true",

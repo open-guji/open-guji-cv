@@ -112,3 +112,18 @@ def test_pending_fields_carries_alt():
     out = pending_fields(card)
     assert out["alt"] == [{"c": "𡚁", "s": 0.9123, "p": "弊", "src": "v,zi"}]
     assert "alt" not in pending_fields({"id": "x", "doubts": []})
+
+
+def test_alt_eval_ranks_and_hard_tier():
+    from open_guji_cv.review.alt_cands import alt_eval
+    cards = [
+        {"id": "b:1", "ref": {"char": "弊"}, "alt": [{"c": "弊"}, {"c": "𡚁"}]},          # 整理本字即答案：不算难格
+        {"id": "b:2", "ref": {"char": "弊"}, "db": {"candidates": [["敝", 0.9]]},
+         "alt": [{"c": "斃"}, {"c": "獘"}, {"c": "𡚁"}]},                                 # 难格，排第 3
+        {"id": "b:3", "ref": {"char": "歷"}, "alt": [{"c": "歷"}]},                      # 难格，没找到
+        {"id": "b:4", "alt": [{"c": "甲"}]},                                             # 没人裁，不算
+    ]
+    res = alt_eval(cards, {"b:1": "弊", "b:2": "𡚁", "b:3": "厯"})
+    assert res["all"]["n"] == 3 and res["all"]["top1"] == 1 and res["all"]["top3"] == 2
+    assert res["hard"] == {"n": 2, "top1": 0, "top3": 1, "top5": 1, "top10": 1, "in_alt": 1, "mean_rank_when_hit": 3.0}
+    assert res["hard_examples"][0] == {"g": "𡚁", "rank": 3, "old": "弊敝"}

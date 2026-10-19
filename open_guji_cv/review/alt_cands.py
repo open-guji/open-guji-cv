@@ -158,3 +158,42 @@ def attach(cards: list[dict], alt: dict[str, list[dict]]) -> int:
             c["alt"] = a
             n += 1
     return n
+
+
+def _old_cands(card: dict) -> list[str]:
+    """卡上原有的几路候选（整理本字、上下文字、库前 3、己已巳）——相似字上线前人能直接点的那些。"""
+    out: list[str] = []
+    for c in [(card.get("ref") or {}).get("char"), (card.get("ctx") or {}).get("char")] + \
+             [x[0] if isinstance(x, (list, tuple)) else (x or {}).get("c")
+              for x in ((card.get("db") or {}).get("candidates") or [])[:3]] + \
+             [(card.get("jys") or {}).get("char") if isinstance(card.get("jys"), dict) else card.get("jys")]:
+        if isinstance(c, str) and len(c) == 1 and c not in out:
+            out.append(c)
+    return out
+
+
+def alt_eval(cards: list[dict], human: dict[str, str]) -> dict:
+    """人裁字 vs 卡上 alt：两个指标——前 5／10 名里有没有人最后定的字（召回），排第几（首位率、平均名次）。
+
+    `human`＝`{格 id: 人定的字}`（`feedback.lookup.human_chars`）。只算带 alt、有人裁字的卡。
+    分两档报：**全部**，和**难格**（人定的字不在卡上原有候选里——相似字上线前只能手输或去字统网查的那些）。"""
+    def tier(rows: list[tuple[str, list[str], list[str]]]) -> dict:
+        n = len(rows)
+        ranks = [alt.index(g) + 1 if g in alt else None for g, alt, _ in rows]
+        hit = [r for r in ranks if r]
+        return {"n": n, **{f"top{k}": sum(1 for r in ranks if r and r <= k) for k in (1, 3, 5, 10)},
+                "in_alt": len(hit), "mean_rank_when_hit": round(sum(hit) / len(hit), 2) if hit else None}
+
+    rows, hard = [], []
+    for c in cards:
+        alt = [a["c"] for a in c.get("alt") or ()]
+        g = human.get(c.get("id", ""))
+        if not alt or not g:
+            continue
+        old = _old_cands(c)
+        rows.append((g, alt, old))
+        if g not in old:
+            hard.append((g, alt, old))
+    return {"all": tier(rows), "hard": tier(hard),
+            "hard_examples": [{"g": g, "rank": (alt.index(g) + 1 if g in alt else None), "old": "".join(old)}
+                              for g, alt, old in hard[:30]]}
