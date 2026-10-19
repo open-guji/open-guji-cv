@@ -125,6 +125,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     import ssl
     import time
     import urllib.error
+    import http.client
     import urllib.request
     token = os.environ.get("GUJI_DATA_TOKEN")
     if not token:
@@ -148,7 +149,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
                 if e.code != 429 and e.code < 500:
                     return e.code, e.read()
                 err = e.code
-            except (urllib.error.URLError, OSError) as e:
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:  # 含 IncompleteRead（断流）
                 err = type(e).__name__
             time.sleep(2 ** attempt)
         return err, b""
