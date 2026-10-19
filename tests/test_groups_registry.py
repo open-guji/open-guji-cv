@@ -21,7 +21,7 @@ def test_group_ids_match_dataset_registry():
     另有字组统一流程首批七个异体组（mn／dian／can／chen／li／shen／zhi，2026-10-18）、第二批四个只看字频的（ji／qing／bian／hui）、
     第三批五个形近不同义的（ly／dt／wj／zh／yh，2026-10-19）、第四批三个（xz／wyu／yt）。"""
     assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
-                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt"}
+                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 
@@ -39,17 +39,23 @@ def test_yi_560_is_inert():
 
 
 def test_groups_of_handles_unregistered_and_multi():
-    assert [g.id for g in groups_of("日")] == ["ry"]
+    assert sorted(g.id for g in groups_of("日")) == ["rm", "ry"]
     assert [g.id for g in groups_of("𢑴")] == ["yi_560"]
     assert groups_of("天") == []
 
 
 def test_members_of_different_groups_do_not_overlap():
+    """成员不许重叠，除非两个组在 `overlaps` 里互相声明（日曰 ry／日目 rm 共用「日」）。"""
     seen: dict[str, str] = {}
     for g in GROUPS.values():
         for ch in g.members:
-            assert ch not in seen, f"{ch} 同属 {seen[ch]} 和 {g.id}"
+            if ch in seen:
+                other = GROUPS[seen[ch]]
+                assert g.id in other.overlaps and other.id in g.overlaps, f"{ch} 同属 {seen[ch]} 和 {g.id}"
             seen[ch] = g.id
+    for g in GROUPS.values():
+        for o in g.overlaps:
+            assert g.id in GROUPS[o].overlaps, f"{g.id} 声明与 {o} 重叠但对方没声明"
 
 
 def test_old_m7_groups_all_covered_by_group_flow():
