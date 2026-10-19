@@ -10,6 +10,8 @@
 | `run_constrained.py` | 在真管线里跑：①DP 换替身；②`resolved_forced_jiazhu/main` 换成 daizhige 的夹注格（只强制两半都有的格，段尾单 a 格交给现有段端收编）/ 正文格；③`CONSTRAINED_RAISE_EXACT=1` 时抬头级数按 daizhige 定；④`CONSTRAINED_KIND=narrow` 时 Step4 之后只对「列端、扁而宽」的格按转写二选一（框线 / 「一」） |
 | `analyze.py` | 把错列归到 劈字 / 首末渣 / 丢字 / 夹注 / 格号平移 / 空列有字 |
 | `viewcols.py` / `audit.py` | 基线与约束版并排叠框；被改了类型的格拼图——**数字之外一律看图** |
+| `cell_ocr.py` | 「整理本不分行」实测（研究文档 §十一）：Step4 字块小图逐格 rapidocr 识别 top1，作对位载体串。要另装 `rapidocr-onnxruntime` |
+| `unsplit_colcount.py` | 不分行的整理本 → 对位分列 → colgold 同格式的逐列字数表，喂 `row_segment.colgold_prior`。要另装 `opencc-python-reimplemented` |
 
 ## 复现
 
@@ -26,6 +28,15 @@ python research/dzg_struct_prior/structcmp.py $WS_CON/products vol05 --out con_v
 python research/dzg_struct_prior/analyze.py base_vol05.json con_vol05.json $WS_BASE $WS_CON
 ```
 
+不分行实测（§十一）：
+
+```bash
+python cell_ocr.py --ws $WS_BASE --vol vol04 --out ocr_vol04.jsonl            # 约 100 格/秒
+python unsplit_colcount.py --ws $WS_BASE --vol vol04 --ocr ocr_vol04.jsonl \
+  --text <整理本 txt，换行会被去掉，小注 <右左>> --region 80000,130000 --start-from-image --out gp_vol04.jsonl
+# 册 yaml 或 --params：{"row_segment": {"colgold_prior": "<gp_vol04.jsonl>"}}（feat/yolo-colcount-prior 的代码）
+```
+
 没装 torch（U-Net 裁判关），基线与约束版同条件；裁判只改粘连处的缝形，不改格数和类型。
 
 ## 踩过的坑（都已修，留着防再犯）
@@ -33,3 +44,4 @@ python research/dzg_struct_prior/analyze.py base_vol05.json con_vol05.json $WS_B
 - **按 `border_top`/`content_x` 认列会认错**：同页多列这两个值相同，别列的格位被套上来，看起来像「约束改坏了 16 列」。改成从 `ctx.image('column_image', pXXXXcYY)` 取列号。
 - **`CONSTRAINED_KIND=1`（按转写全面改格子类型）不能用**：真字被改成空（书名列首字、抬头字的格号口径差一格，卷端大字题名），空框被改成字（掩盖了上面的并格）。只留 `narrow`。
 - **夹注段尾单 a 格不能进 `forced_jiazhu`**：会被拆出一个空的 b 半。
+- **喂 `colgold_prior` 的表 `start` 不能留空**：C 按 `start`+`n` 定格位段，留空当 0，提要正文（缩进两格）段尾两格落到段外，末格常过不了「像字」检验，C 把末字切丢。vol04 一册坏 216 列。按图推 start（纯算法第一个非空格）就没事，比真 start 还稳。
