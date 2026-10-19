@@ -16,7 +16,7 @@
 
 据此补测了第 4 条（§四-4′），执行计划见 [../design/19-yolo-release列字数先验与全书评测-总设计.md](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
 
-## 落地情况（2026-10-19，分支 `feat/yolo-colcount-prior`，待并 `rc/v0.4.5`）
+## 落地情况（2026-10-19，分支 `feat/yolo-colcount-prior`，待并 `rc/v0.4.6`）
 
 执行计划与变更记录见 [../design/19-yolo-release列字数先验与全书评测-总设计.md](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
 
