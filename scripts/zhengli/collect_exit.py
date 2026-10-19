@@ -78,13 +78,15 @@ def _supports_tier(guji: str) -> bool:
     return "--tier" in out + err
 
 
-def _close_check(book, ws, export_dir, guji, notes=None) -> tuple[dict | None, str, str | None]:
+def _close_check(book, ws, export_dir, guji, notes=None, pending=None) -> tuple[dict | None, str, str | None]:
     """返回 (close-check JSON, 命令串, 错误)。cv 没有 --tier 时不带，粗校档在 _r5 里手工剔第 2 项。"""
     cmd = [guji, "close-check", book, "-w", str(ws), "--json"]
     if export_dir:
         cmd += ["--export-dir", str(export_dir)]
     if notes:
         cmd += ["--notes", str(notes)]
+    if pending:
+        cmd += ["--pending", str(pending)]     # 2c：□ 在公众待审单上也算有去向（GUJI-624）
     tier = _supports_tier(guji)
     if tier:
         cmd += ["--tier", "rough"]
@@ -267,13 +269,14 @@ def _r3(cc, export_dir: Path | None, reason: str | None) -> dict:
 
 # ---------------------------------------------------------------- 主函数
 def collect(book: str, ws, export_dir=None, anomaly=None, reason: str | None = None,
-            guji: str = "guji") -> dict:
+            guji: str = "guji", pending=None) -> dict:
     ws = Path(ws)
     os.environ["GUJI_WORKSPACE"] = str(ws)      # 进程内调 cv（R2）要它；guji 子命令走 -w
     export_dir = Path(export_dir) if export_dir else None
     anomaly = Path(anomaly) if anomaly else None
     export_err = _export(book, ws, export_dir, guji) if export_dir else "没给 --export-dir"
-    cc, cc_cmd, cc_err = _close_check(book, ws, export_dir if not export_err else None, guji)
+    cc, cc_cmd, cc_err = _close_check(book, ws, export_dir if not export_err else None, guji,
+                                    pending=pending)
     r4, rows = _r4(anomaly)
     items = {
         "R1": _r1(book, ws, cc, guji),
@@ -293,11 +296,12 @@ def main(argv=None) -> int:
     ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji export format")
     ap.add_argument("--anomaly", help="R4 异常表 md（模板 异常表模板.md）")
     ap.add_argument("--reason", help="R3 原因归并一句话（人写）")
+    ap.add_argument("--pending", help="book-text 本章 NNN.pending.json；close-check 第 2c 项□去向用（GUJI-624）")
     ap.add_argument("--guji", default="guji")
     ap.add_argument("-o", "--out", help="input.json 输出路径（缺省打印到 stdout）")
     ap.add_argument("--report", help="同时用 exit_report.py 拼出 Markdown 报告到此路径")
     a = ap.parse_args(argv)
-    data = collect(a.book, a.workspace, a.export_dir, a.anomaly, a.reason, a.guji)
+    data = collect(a.book, a.workspace, a.export_dir, a.anomaly, a.reason, a.guji, a.pending)
     text = json.dumps(data, ensure_ascii=False, indent=1)
     if a.out:
         Path(a.out).write_text(text + "\n", encoding="utf-8")
