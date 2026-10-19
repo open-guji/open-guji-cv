@@ -1,0 +1,94 @@
+name: group_flow-4-vol04
+books:
+- vol04
+from: seed_admit
+to: seed_admit
+pipeline: keben_body_v2
+pages: 113-168
+book_params: keep
+match: exact
+snapshot: null
+root: null
+base:
+  name: A
+  params:
+    seed_admit:
+      group_flow:
+      - mn
+      - dian
+      - can
+      - chen
+      - li
+      - shen
+      - zhi
+      - jys
+      - ry
+      - rr
+      - ts
+      - wm
+      - wxs
+      - ji
+      - qing
+      - bian
+      - hui
+      - ly
+      - dt
+      - wj
+      - zh
+      - yh
+      group_flow_tables:
+        ly: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/ly_table.json
+        dt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/dt_table.json
+        wj: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/wj_table.json
+        zh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/zh_table.json
+        yh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/yh_table.json
+  note: vol04 现行配置（二十二组）
+variants:
+  B:
+    params:
+      seed_admit:
+        group_flow:
+        - mn
+        - dian
+        - can
+        - chen
+        - li
+        - shen
+        - zhi
+        - jys
+        - ry
+        - rr
+        - ts
+        - wm
+        - wxs
+        - ji
+        - qing
+        - bian
+        - hui
+        - ly
+        - dt
+        - wj
+        - zh
+        - yh
+        - xz
+        - wyu
+        - yt
+        group_flow_tables:
+          ly: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/ly_table.json
+          dt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/dt_table.json
+          wj: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/wj_table.json
+          zh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/zh_table.json
+          yh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/yh_table.json
+          xz: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/xz_table.json
+          wyu: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/wyu_table.json
+          yt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/yt_table.json
+    note: 二十二组＋第四批三组
+eval:
+  params:
+    seed_admit:
+      use_human_verdicts: false
+labels:
+- source: human_events
+guardrails: []
+bootstrap: 2000
+seed: 0
