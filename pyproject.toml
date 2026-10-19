@@ -67,6 +67,11 @@ onnx = [
 torch = [
     "torch>=2.0",
 ]
+# 原生 YOLO 并格闸（row_segment.yolo_merge，doc/design/19 块 D）：跑 yolo-tool 的 best.onnx。
+# 缺省关，不开不用装；模型文件不随包分发，册 yaml 给 yolo_model_dir。
+yolo = [
+    "onnxruntime>=1.16",
+]
 # 中心库（open_guji_cv/datastore，GUJI-603/605）：直连 Postgres 导入与核对；boto3 只有真上传 R2 才用
 datastore = [
     "psycopg[binary]>=3.1",

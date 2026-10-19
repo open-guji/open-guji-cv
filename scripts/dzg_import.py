@@ -6,6 +6,7 @@
     python scripts/dzg_import.py convert    [--ws DIR]
     python scripts/dzg_import.py map        [--ws DIR] [--vols 01,03]
     python scripts/dzg_import.py compare    [--ws DIR] [--samples 10]
+    python scripts/dzg_import.py colgold    [--ws DIR] --release DIR [--vols 01,03]
 
 `--ws` 缺省读 `GUJI_WORKSPACE`（四庫總目书目录那一层）。
 
@@ -726,13 +727,250 @@ def cmd_compare(ws: Path, n_samples: int = 10) -> None:
                                            "diff_sites", "diff_chars")}, ensure_ascii=False, indent=1))
 
 
+# ── colgold：逐列字数金标（daizhige × release 双源一致）──────────────
+#
+# 设计见 doc/design/19-yolo-release列字数先验与全书评测-总设计.md §三、§五。
+# release = open-guji-core/file_archive `siku-qiefen`（96mid1ogzk.zip 解压后的目录）：
+# 逐卷 `<n>/text.jsonl.gz`，首行卷头 {h,b,c,t,ps}，之后每页一行 {p,x,y,w,hgt,c,s}，
+# x/y 为字框**左上角**，c 为逐框的字（与框一一对应），s 为小字段 [[起点,长度],…]。
+
+RELEASE_COL_DX = 55        # release 页内按框中心 x 聚列的容差（字宽约 95px，夹注两小行相距 <50）
+COLGOLD_MIN_RATIO = 0.8    # 双源一致除字数相等外，文本相似度也要过这条（防页对错）
+
+
+def _roll_key(name: str | None) -> str | None:
+    """release 卷题「卷之六」「卷首一_聖諭」与 daizhige roll「卷六」「卷首一」统一成后者。"""
+    if not name:
+        return None
+    name = name.split("_")[0]
+    return name.replace("卷之", "卷")
+
+
+def load_release(release_dir: Path) -> dict[str, list[tuple[int, list[str]]]]:
+    """release → {卷名: [(页号, [列串 右→左]) …]}；列串为读序（正文、小字按框序）。空页不收。"""
+    import gzip
+    out: dict[str, list] = {}
+    for d in sorted(release_dir.iterdir(), key=lambda p: int(p.name) if p.name.isdigit() else 1 << 30):
+        f = d / "text.jsonl.gz"
+        if not f.exists():
+            continue
+        with gzip.open(f, "rt", encoding="utf-8") as fh:
+            rows = [json.loads(ln) for ln in fh if ln.strip()]
+        pages = []
+        for r in rows[1:]:
+            cols: list[dict] = []
+            for x, w, ch in zip(r["x"], r["w"], r["c"]):
+                cx = x + w / 2
+                if cols and abs(cols[-1]["cx"] - cx) < RELEASE_COL_DX:
+                    cols[-1]["s"].append(ch)
+                else:
+                    cols.append({"cx": cx, "s": [ch]})
+            if cols:
+                pages.append((r["p"], ["".join(c["s"]) for c in cols]))
+        key = _roll_key(rows[0].get("t"))
+        if key is None or key in out:            # 撞名会静默覆盖前一卷、该卷的列整片掉出金标
+            raise ValueError(f"release 卷题归一后{'为空' if key is None else '重名'}：{d.name} → {key}")
+        out[key] = pages
+    return out
+
+
+def _col_struct(col: dict) -> dict:
+    """daizhige 一列 → {start, n_main, note, n, text}。start 取首个 run 的格位（-1 出格抬头）。"""
+    runs = col.get("runs", [])
+    start = runs[0].get("start") if runs else None
+    n_main = sum(len(r.get("s", "")) for r in runs if r.get("t") != "note")
+    note = None
+    for r in runs:
+        if r.get("t") == "note":
+            nr = sum(len(s) for _, s in r.get("r", []))
+            nl = sum(len(s) for _, s in r.get("l", []))
+            note = {"start": r.get("start"), "r": nr, "l": nl} if note is None else \
+                {"start": note["start"], "r": note["r"] + nr, "l": note["l"] + nl}
+    text = column_plain(col)
+    return {"start": start, "n_main": n_main, "note": note, "n": len(text), "text": text}
+
+
+def _match_pages(halves_in_roll: list[Half], rel_pages: list[tuple[int, list[str]]]) -> dict[int, tuple[int, list[str]]]:
+    """同一卷内，有字半叶 ↔ release 页，单调贪心：每个半叶在指针后 6 页内取文本最像的一页。"""
+    out, ptr = {}, 0
+    for h in halves_in_roll:
+        a = "".join(column_plain(c) for c in h.cols)
+        if not a:
+            continue
+        best = None
+        for j in range(ptr, min(len(rel_pages), ptr + 6)):
+            b = "".join(rel_pages[j][1])
+            sc = difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+            if best is None or sc > best[0]:
+                best = (sc, j)
+        if best and best[0] >= COLGOLD_MIN_RATIO:
+            out[h.idx] = rel_pages[best[1]]
+            ptr = best[1] + 1
+    return out
+
+
+def _sim(a: str, b: str) -> float:
+    return difflib.SequenceMatcher(None, a, b, autojunk=False).ratio()
+
+
+def _pua_as_unmapped(s: str) -> str:
+    """release 保留 PUA 原码，daizhige 映不上的记 〓——比对前统一成 〓。"""
+    return "".join(UNMAPPED if _is_pua(ch) else ch for ch in s)
+
+
+def _pair_columns(dzg_cols: list[str], rel_cols: list[str], min_sim: float = 0.5) -> dict[int, int]:
+    """两边列按读序做单调 DP 配对（允许跳列），得分 = 文本相似度（< min_sim 不配）。
+
+    release 按框中心 x 聚列，夹注、抬头偶尔会多拆或并掉一列，所以不能要求两边列数相等。
+    """
+    n, m = len(dzg_cols), len(rel_cols)
+    rel_n = [_pua_as_unmapped(r) for r in rel_cols]
+    sim = [[_sim(rel_n[j], dzg_cols[i]) for j in range(m)] for i in range(n)]
+    best = [[0.0] * (m + 1) for _ in range(n + 1)]
+    for i in range(n - 1, -1, -1):
+        for j in range(m - 1, -1, -1):
+            take = sim[i][j] + best[i + 1][j + 1] if sim[i][j] >= min_sim else -1.0
+            best[i][j] = max(take, best[i + 1][j], best[i][j + 1])
+    out, i, j = {}, 0, 0
+    while i < n and j < m:
+        if sim[i][j] >= min_sim and abs(best[i][j] - (sim[i][j] + best[i + 1][j + 1])) < 1e-9:
+            out[i] = j
+            i, j = i + 1, j + 1
+        elif best[i][j] == best[i + 1][j]:
+            i += 1
+        else:
+            j += 1
+    return out
+
+
+def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | None = None,
+                   disagree_default: str | None = None) -> dict:
+    """colgold 行 → open-guji-dataset `char-segmentation/column-counts/items.jsonl`（统一金标信封）。
+
+    - 两源一致列：`label_origin=consensus`；
+    - 人裁过的不一致列（甲乙卡裁成 dzg 或 release 对）：取被裁对的那份字数，`label_origin=human`；
+    - 抽检卡裁成「字数不对」的一致列：`status=retired`（留痕，不参与评测）。
+    `verdicts`：{卡 id: {"verdict": …, "A_is": "dzg"|"release"}}，由 harvest 结果 + 冻结卡表拼出。
+    `disagree_default`：没人裁的不一致列统一取哪份（"dzg"/"release"）；None = 不收。
+    用户 2026-10-19 定：不一致的都是夹注列被 release 按 x 聚列拆开，一律取 daizhige（人裁 7 张全选 daizhige）。
+    """
+    verdicts = verdicts or {}
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    items, stats = [], Counter()
+    for r in rows:
+        if r.get("dup"):
+            stats["skipped_dup"] += 1
+            continue
+        cid = f"{r['vol']}:{r['page']}:{r['col']}"
+        v = verdicts.get(cid)
+        exp = {"n": r["dzg"]["n"], "n_main": r["dzg"]["n_main"], "start": r["dzg"]["start"],
+               "note": r["dzg"]["note"], "text": r["dzg"]["text"]}
+        origin, status, why = "consensus", "active", "daizhige 与 release 字数一致"
+        if not r["agree"]:
+            if v and v["verdict"] in ("A", "B"):
+                pick = v["A_is"] if v["verdict"] == "A" else ("release" if v["A_is"] == "dzg" else "dzg")
+                why = f"两源不一致，人裁取 {pick}"
+            elif disagree_default:
+                pick, why = disagree_default, f"两源不一致，用户 10-19 统一裁定取 {disagree_default}（夹注列 release 拆列）"
+            else:
+                stats["skipped_unresolved"] += 1
+                continue
+            if pick == "release":
+                exp = {"n": r["release"]["n"], "n_main": None, "start": None, "note": None,
+                       "text": r["release"]["text"]}
+            origin = "human"
+        elif v and v["verdict"] == "count":
+            status, why = "retired", "抽检人裁：字数不对"
+        stats[f"{origin}:{status}"] += 1
+        items.append({"id": cid, "anchor": {"book": r["vol"], "page": r["page"], "col": r["col"]},
+                      "input": {"dzg_half": r["dzg"]["half"], "release": None if not r["release"] else
+                                {k: r["release"][k] for k in ("ch", "p", "n")}},
+                      "expected": exp, "label_origin": origin, "status": status,
+                      "stratum": "audit" if v and r["agree"] else None,
+                      "source_events": [], "history": [{"ts": ts, "change": "created", "why": why}]})
+    shard.mkdir(parents=True, exist_ok=True)
+    with open(shard / "items.jsonl", "w", encoding="utf-8") as f:
+        for it in items:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+    return dict(stats)
+
+
+def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | None = None,
+                 verdicts: dict | None = None, disagree_default: str | None = None) -> None:
+    halves = build_halves(source_files(ws))
+    rel = load_release(release_dir)
+    by_roll: dict[str, list[Half]] = defaultdict(list)
+    for h in halves:
+        if h.cols:
+            by_roll[h.roll].append(h)
+    matched: dict[int, tuple[int, list[str]]] = {}
+    for roll, hs in by_roll.items():
+        if roll in rel:
+            matched.update(_match_pages(hs, rel[roll]))
+    rel_ch = {roll: i for i, roll in enumerate(rel)}
+    pm = [json.loads(ln) for ln in open(_corpus(ws) / "daizhige" / "page_map.jsonl", encoding="utf-8")]
+    out_rows, stats = [], Counter()
+    for m in pm:
+        if m["vol"][3:] not in vols or m.get("half") is None:
+            continue
+        h = halves[m["half"]]
+        if not h.cols:
+            continue
+        stats["pages"] += 1
+        rp = matched.get(h.idx)
+        if rp is None:
+            stats["pages_no_release"] += 1
+        structs = [_col_struct(c) for c in h.cols]
+        pairing = _pair_columns([s_["text"] for s_ in structs], rp[1]) if rp else {}
+        if rp and len(rp[1]) != len(h.cols):
+            stats["pages_colcount_differs"] += 1
+        for k, (c, st) in enumerate(zip(h.cols, structs)):
+            rc = rp[1][pairing[k]] if k in pairing else None
+            agree = bool(rc is not None and len(rc) == st["n"]
+                         and _sim(_pua_as_unmapped(rc), st["text"]) >= COLGOLD_MIN_RATIO)
+            stats["cols"] += 1
+            stats["agree"] += agree
+            out_rows.append({
+                "vol": m["vol"], "page": m["page"], "col": c["no"] % NCOL + 1,
+                "dzg": {"half": f"{h.rid}h{h.side}", **st},
+                "release": None if rc is None else {"roll": h.roll, "ch": rel_ch.get(h.roll, -1) + 1,
+                                                    "p": rp[0], "n": len(rc), "text": rc},
+                "agree": agree, "label_origin": "consensus" if agree else None,
+            })
+    # 一个 (册,页,列) 只能有一行：职名页 daizhige 把一物理列的上下两段记成两列时会撞号
+    # （vol01 p102 c1「翰林院庶吉士臣蔡廷舉」「收掌官」），哪一行都不可信，全标不一致、不进金标
+    dup = Counter((r["vol"], r["page"], r["col"]) for r in out_rows)
+    for r in out_rows:
+        if dup[(r["vol"], r["page"], r["col"])] > 1:
+            r.update(agree=False, label_origin=None, dup=True)
+            stats["dup_cols"] += 1
+    stats["agree"] = sum(r["agree"] for r in out_rows)
+    dst = _corpus(ws) / "daizhige" / "colgold.jsonl"
+    with open(dst, "w", encoding="utf-8") as f:
+        for r in out_rows:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    stats = dict(stats)
+    stats["agree_rate"] = round(stats.get("agree", 0) / max(1, stats.get("cols", 0)), 4)
+    print(json.dumps(stats, ensure_ascii=False))
+    print(f"→ {dst}")
+    if export:
+        print("export", json.dumps(export_colgold(out_rows, export, verdicts, disagree_default), ensure_ascii=False),
+              f"→ {export}")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=["download", "manifest", "convert", "map", "compare"])
+    ap.add_argument("cmd", choices=["download", "manifest", "convert", "map", "compare", "colgold"])
     ap.add_argument("--ws", default=os.environ.get("GUJI_WORKSPACE"))
     ap.add_argument("--max", type=int, default=60)
     ap.add_argument("--vols", default=",".join(VOLS))
     ap.add_argument("--samples", type=int, default=10)
+    ap.add_argument("--release", help="colgold：release zip 解压后的 96mid1ogzk/ 目录")
+    ap.add_argument("--export", help="colgold：写 open-guji-dataset 分片目录（char-segmentation/column-counts）")
+    ap.add_argument("--verdicts", help="colgold：人裁收回的 jsonl（harvest_verdicts 输出）")
+    ap.add_argument("--cards", help="colgold：冻结卡表（含甲乙对应），与 --verdicts 同给")
+    ap.add_argument("--disagree-default", choices=["dzg", "release"],
+                    help="colgold：没人裁的不一致列统一取哪份（用户 10-19 定 dzg）")
     a = ap.parse_args(argv)
     if not a.ws:
         ap.error("要 --ws 或 GUJI_WORKSPACE（四庫總目书目录）")
@@ -745,6 +983,24 @@ def main(argv=None) -> int:
         cmd_convert(ws)
     elif a.cmd == "map":
         cmd_map(ws, [v.zfill(2) for v in a.vols.split(",")])
+    elif a.cmd == "colgold":
+        if not a.release:
+            ap.error("colgold 要 --release")
+        verdicts = None
+        if a.verdicts:
+            if not a.cards:
+                ap.error("--verdicts 要和 --cards 同给（卡表里有甲乙各是哪一源）")
+            cards = {c["id"]: c for c in map(json.loads, filter(str.strip, Path(a.cards).read_text(encoding="utf-8").splitlines()))}
+            verdicts = {}
+            for ln in Path(a.verdicts).read_text(encoding="utf-8").splitlines():
+                if ln.strip():
+                    d = json.loads(ln)
+                    a_is = cards.get(d["id"], {}).get("A_is")
+                    if a_is not in ("dzg", "release"):
+                        ap.error(f"裁决 {d['id']} 在卡表里查不到甲乙对应（A_is={a_is!r}）")
+                    verdicts[d["id"]] = {"verdict": d["verdict"], "A_is": a_is}
+        cmd_colgold(ws, Path(a.release), [v.zfill(2) for v in a.vols.split(",")],
+                    Path(a.export) if a.export else None, verdicts, a.disagree_default)
     else:
         cmd_compare(ws, a.samples)
     return 0
