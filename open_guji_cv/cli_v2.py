@@ -1861,6 +1861,26 @@ def cmd_corpus(args) -> None:
         _out(cp.summary(ws))
 
 
+def cmd_glyphlib(args) -> None:
+    """共享刻例库（共享方案 S5）：build 从一本书精选刻例出 glyphlib-<族>-v<N>，加 --push 推进中心库。"""
+    import os
+
+    from .ops import glyphlib as gl
+    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    if not args.workspace:
+        print("✗ 要给 -w 来源书的工作区", file=sys.stderr)
+        sys.exit(2)
+    res = gl.build(Path(args.workspace).expanduser().resolve(), args.name, min_batches=args.min_confirm,
+                   per_char=args.per_char, actor=actor, note=args.note)
+    if args.push:
+        from .cli_db import _pg_conn
+        from .datastore.r2 import upload_files
+        with _pg_conn() as conn:
+            res["push"] = gl.publish(conn, args.name, actor=actor,
+                                     uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext))
+    _out(res)
+
+
 def cmd_variants(args) -> None:
     """本书用字账（只读）。账本由 `scripts/build_book_variants.py` 派生，这里不算任何东西。"""
     from .variant_ledger import DEFAULT_EDITION, ledger_path
@@ -2274,6 +2294,7 @@ COMMANDS_V2 = {
     "rare": cmd_rare,
     "variants": cmd_variants,
     "corpus": cmd_corpus,
+    "glyphlib": cmd_glyphlib,
     "collate": cmd_collate,
     "progress": cmd_progress,
     "runs": cmd_runs,
@@ -2888,6 +2909,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
     p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
+
+    p = sub.add_parser("glyphlib", help="[v2] 共享刻例库：build 从一本书精选刻例出新版本（--push 推进中心库）")
+    p.add_argument("action", choices=["build"])
+    p.add_argument("--name", required=True, help="新版本的工作区名，如 glyphlib-qkp-v1（每版只能写一次）")
+    p.add_argument("-w", "--workspace", default=None, help="来源书的工作区（已迁到中心库、已 db pull）")
+    p.add_argument("--min-confirm", type=int, default=2, help="人裁至少在几个不同批次确认过（缺省 2）")
+    p.add_argument("--per-char", type=int, default=3, help="每字最多几张（缺省 3）")
+    p.add_argument("--note", default="", help="写进升格记录的备注")
+    p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])

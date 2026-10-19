@@ -599,3 +599,23 @@ def test_corpus_base_published_and_pulled_with_book(repo, conn, tmp_path, monkey
     assert (data_dir(fresh) / "config/corpus-pack/v1/manifest.json").exists()
     assert sorted(p.name for p in (borrowed_root(BASE_WS) / BASE_DIR).iterdir()) == ["b1", "b2"]
     assert cp.verify(fresh, 1)["base"] == 1
+
+
+def test_glyphlib_publish_creates_once(repo, conn, tmp_path):  # noqa: F811
+    """共享刻例库：升级脚本第一次推新开工作区、图按 png 进 R2；同一版再推拒绝（版本不可改）。"""
+    from open_guji_cv.core.workspace import central_data_dir
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import apply_schema
+    from open_guji_cv.ops.glyphlib import publish
+    apply_schema(conn)                                                  # 空库（真库早有表）
+    data = central_data_dir("glyphlib-t-v1")
+    for rel, b in _lib_store(tmp_path).items():
+        p = data / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b)
+    calls = []
+    out = publish(conn, "glyphlib-t-v1", actor="t", uploader=lambda imgs, ext="png": calls.append(ext) or {})
+    assert out["rev_to"] > out["rev_from"] and calls == ["png"]
+    assert PgSource(conn).rows("glyph_instances", "glyphlib-t-v1")
+    with pytest.raises(SystemExit, match="已经发布过"):
+        publish(conn, "glyphlib-t-v1", actor="t")
