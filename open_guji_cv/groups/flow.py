@@ -72,35 +72,44 @@ def check_groups(groups) -> None:
 
 
 def group_of(ch: str | None, groups) -> str | None:
+    gs = groups_in(ch, groups)
+    return gs[0] if gs else None
+
+
+def groups_in(ch: str | None, groups) -> list[str]:
+    """点名的组里含 `ch` 的全部组（按点名顺序）。成员原则上不重叠，只有登记表里互相声明了 `overlaps` 的组可以共字（如日曰／日目）。"""
     if not ch:
-        return None
-    for g in groups:
-        if ch in GROUPS[g].members:
-            return g
-    return None
+        return []
+    return [g for g in groups if ch in GROUPS[g].members]
 
 
 def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c: c) -> tuple[str, str] | None:
-    """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。"""
+    """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。
+
+    一个字属于多个组（`overlaps`）时：补放选第一个能把「分差内全部候选＋整理本字」都装下的组，复核选第一个
+    声明了 `review` 且装得下整理本字的组。"""
     if r.provenance == "human" or r.channel in ("human", CHANNEL):
         return None
     if r.admit:
-        g = group_of(r.char, cfg.groups)
-        return (g, "review") if g and GROUPS[g].flow.review else None
+        gs = [g for g in groups_in(r.char, cfg.groups) if GROUPS[g].flow.review]
+        for g in gs:
+            mem = GROUPS[g].members
+            if not ref or ref in mem or canon(ref) in mem:
+                return g, "review"
+        return None
     if not cands:
         return None
     top, c1 = cands[0]
     if c1 < cfg.min_cov:
         return None
-    g = group_of(top, cfg.groups)
-    if g is None:
-        return None
-    mem = GROUPS[g].members
-    if not all(c in mem for c, v in cands[1:] if c1 - v < cfg.delta):
-        return None
-    if ref and ref not in mem and canon(ref) not in mem:
-        return None
-    return g, "lift"
+    for g in groups_in(top, cfg.groups):
+        mem = GROUPS[g].members
+        if not all(c in mem for c, v in cands[1:] if c1 - v < cfg.delta):
+            continue
+        if ref and ref not in mem and canon(ref) not in mem:
+            continue
+        return g, "lift"
+    return None
 
 
 def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, right: str | None,

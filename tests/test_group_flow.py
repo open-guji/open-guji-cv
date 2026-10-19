@@ -244,3 +244,19 @@ def test_group_flow_paths_default_to_workspace(tmp_path, monkeypatch):
     assert p.group_flow_tables == {"jys": str(tmp_path / "config" / "groups" / "l2" / "jys.json")}
     q = SeedAdmitParams(db_path="x", group_flow=("zhi",), group_flow_freq="other.json")
     assert q.group_flow_freq == str(tmp_path / "other.json")
+
+
+def test_entry_overlapping_groups_pick_the_one_that_holds_all_close_candidates():
+    """日曰 ry／日目 rm 共用「日」：分差内候选全在 ry 归 ry，全在 rm 归 rm，三者混杂（或整理本字不在组内）留人审。"""
+    r = Rec("x")
+    cfg = FlowConfig(groups=("ry", "rm"))
+    assert entry(r, [("日", 0.98), ("曰", 0.975)], None, cfg) == ("ry", "lift")
+    assert entry(r, [("日", 0.98), ("目", 0.975)], None, cfg) == ("rm", "lift")
+    assert entry(r, [("日", 0.98), ("曰", 0.975), ("目", 0.972)], None, cfg) is None
+    assert entry(r, [("日", 0.98)], "目", cfg) == ("rm", "lift")
+    assert entry(r, [("日", 0.98)], "曰", cfg) == ("ry", "lift")
+    assert entry(r, [("目", 0.98), ("日", 0.975)], "曰", cfg) is None
+    adm = Rec("y", char="日", admit=True, channel="match", provenance="match")
+    assert entry(adm, [], "目", cfg) == ("rm", "review")
+    assert entry(adm, [], "曰", cfg) == ("ry", "review")
+    assert entry(adm, [], None, cfg) == ("ry", "review")
