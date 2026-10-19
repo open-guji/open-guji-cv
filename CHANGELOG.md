@@ -3,9 +3,11 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.6] - 待发
+## [0.4.6] - 2026-10-19
 
-待发分支 `rc/v0.4.6`。
+PATCH。中心库拉取省流量与实验分支、借库与两级语料库清单、共享刻例库与升格候选命令；Step1／Step3 的新开关（`column_grid_pages`、`body_pages`、`colgold_prior`、`layout_prior`，缺省全关）；close-check 第 2 项不数重切清单上的格；殿本四联叶拆页表修正。
+
+**`code_hash` 有变（对 v0.4.5，发版时实算）**：`border_detect` e7568862 → d452c5ab、`border_detect_gate` 8c0a7903 → fbc1b48d、`column_gate` 25658f2b → 922057a9、`row_segment` e5572a66 → f773bd3a；其余 13 步不变。新开关缺省关、关着时产物逐字节不变，各册这几步可以不重算；已登记 `freeze:` 的册代码变只计数不报警。
 
 ### Changed
 - `guji close-check` 第 2 项「待审清零」不再数重切清单（`feedback/lists/<册>-重切清单.tsv`）上的格，detail 里另报「N 格在重切清单上，不计」。起因：vol01 有 66 格待审落在 cv 切不对、book-text 里手拼的列（职名表、p10:7、p196），格 id 与 cv 切分对不上，落不了格事件，永远清不掉；它们的去向由 2c／2d 把关。清单为空时行为不变。PATCH；只动 `ops/close_check.py`，`code_hash` 不变。
