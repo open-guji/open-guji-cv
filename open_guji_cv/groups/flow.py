@@ -94,7 +94,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         gs = [g for g in groups_in(r.char, cfg.groups) if GROUPS[g].flow.review]
         for g in gs:
             mem = GROUPS[g].members
-            if not ref or ref in mem or canon(ref) in mem:
+            if GROUPS[g].ref_free or not ref or ref in mem or canon(ref) in mem:
                 return g, "review"
         return None
     if not cands:
@@ -106,7 +106,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         mem = GROUPS[g].members
         if not all(c in mem for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
-        if ref and ref not in mem and canon(ref) not in mem:
+        if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
             continue
         return g, "lift"
     return None
@@ -191,7 +191,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         g, mode = e
         need_ctx = "ctx" in GROUPS[g].flow.solvers and ctx_fn is not None
         left, right = (ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)) if need_ctx else (None, None)
-        ch, why, trail = decide(g, r, cands, ref, cfg, left, right, patch_fn)
+        ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
         plans.append((r, g, mode, ch, why, trail))
     res = FlowResult(entered=len(plans))
     for r, g, mode, ch, why, trail in plans:
