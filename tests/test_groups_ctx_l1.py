@@ -56,7 +56,7 @@ def test_judge_uses_window_and_members(tmp_path):
     assert (v.char, v.via, v.why) == ("日", "ctx_l1", "agree")
 
 
-@pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh"])
+@pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt"])
 def test_shipped_rules_load_and_stay_in_group(g):
     spec = GROUPS[g]
     be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
@@ -100,6 +100,10 @@ def test_jys_shipped_rules_are_superset_of_legacy():
     ("wj", "中", "有訛字", "間"), ("wj", "學", "答", "問"), ("wj", "後去其", "而存其答", None),
     ("zh", "穿鑿附", "", "會"), ("zh", "", "鞏南豐人", "曾"), ("zh", "陳", "同撰", None),
     ("yh", "補", "", "遺"), ("yh", "召", "朝", "還"), ("yh", "以", "其舊", None),
+    # 第四批：象彖／王玉／圓圖。彖傳象傳、玉篇／帝王篇、方圓等两可词必须弃权。
+    ("xz", "易", "數論", "象"), ("xz", "取", "於天", "象"), ("xz", "孔子", "傳", None), ("xz", "諸卦", "言利涉", None),
+    ("wyu", "魏", "弼", "王"), ("wyu", "浙江吳", "墀家藏本", "玉"), ("wyu", "應帝", "篇", "王"), ("wyu", "", "篇", None),
+    ("yt", "於河", "洛書", "圖"), ("yt", "", "轉", "圓"), ("yt", "渾", "", "圓"), ("yt", "六十四卦", "圖分配", None),
 ])
 def test_batch3_groups_rules(g, left, right, want):
     spec = GROUPS[g]
