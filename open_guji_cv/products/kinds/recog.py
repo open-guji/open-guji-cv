@@ -69,7 +69,7 @@ class MatchRec(BaseModel):
     #                                        # unsure 档：字 → cov 先验，降序
     guard: str | None = None                 # never_match | conflict
     n_verified: int = 0
-    via: str | None = None                   # same 档的来源：None = 匹配器直接判；"consensus:<n>" = 共识升档（见 steps/glyph_match.consensus_same）
+    via: str | None = None                   # same 档的来源：None = 匹配器直接判；"consensus:<n>" = 共识升档（见 steps/glyph_match.consensus_same）；unsure 档的 "borrowed:<条目 id>" = 只有借来的刻例判了 same、降一档（共享方案 S6）
     cand_variants: list[CandidateMatch] = Field(default_factory=list)
     """`char_index` 里同字位 `CharRec.cand_variants` 每个候选试切字块各自的
     库匹配结果；空列表 = 该字位两侧都是单一候选，见 `CharRec.cand_variants`

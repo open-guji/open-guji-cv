@@ -13,6 +13,9 @@
   - `guji products diff <册> --a <前> [--b <后>] [--images N]`（`ops/products_diff.py`）：两份产物按位置逐列对比（切分变了也能比），出人审率前后、变了的列（切分／字／状态／框）、逐格翻转（含「放行字变」），`--images` 出原图并排看图页。
   - `guji products pack push|fetch|list` 与 `push-index|fetch-index`（`datastore/packs.py`）：一册 products、生僻字 embedding 索引存进 R2（guji-data Worker 新接口 `/v1/packs`，guji-workspace-data#15），新会话直接取，不再整册现算（云上一册 1.5–2.5 小时）、不再冷建索引（云上单进程约半小时，`--jobs 4` 约 8 分钟；取回 30 MB 约 4 秒）。按名字只增不改，取回先核 sha256。
 
+### Changed
+- Step5-a `glyph_match`：借来的刻例降一档（共享方案 S6）。判 same 的库条目里有本书的，就用本书那条当证据；只有借来的条目（`glyph_lib.borrow` 装进来的，如共享刻例库 `glyphlib-qkp-v1`）判 same 时降成 unsure，字进候选交上下文裁决，记 `via="borrowed:<条目 id>"`，不再走共识升档与近形决胜。新硬参数 `borrow_fingerprint` 自动填被借库的名字，借的库换版本这一步判过期；没借库时是空串、不进参数 dump。**`glyph_match` 的 `code_hash` 变了**（改了 `steps/glyph_match.py` 与 `clustering/match.py`，`MatchResult` 多一个只在内存里用的 `same_hits`）；现在没有书借库，各册判决与参数哈希都不变，按版本号规矩算 PATCH，可以不重算。
+
 ### Fixed
 - 语料库清单（`guji corpus build`／`init`／`build-base`）里的 `built_with.cv_version` 改读引擎仓 `pyproject.toml`：原来读装包元数据，可编辑安装后升了版本号它不更新，10-19 出的底库 b1 记成了 0.4.4（实为 v0.4.6 发版提交 `0194a152`，以清单里的 `repo_commit` 为准；b1 已发布不可改）。只是记录字段，不碰任何 Step，17 步 `code_hash` 不变。
 - `row_segment` 缺省关的新开关（`colgold_prior`／`yolo_*`／`layout_prior` 及其指纹字段）不再进参数 dump（同 `border_detect` 的做法）：v0.4.6 把它们加进 `RowSegmentParams`，所有册的 `params_hash` 都变了，已冻结的册（`freeze:`）用 v0.4.6 跑 close-check 1a 被归成「册配置或参数被改：row_segment N 页」报警，而规矩是代码变只计数不报警。现在关着时参数哈希与 v0.4.5 逐位相同，开着照常进指纹。PATCH；`row_segment` 的 `code_hash` 因改了该模块变一次（对 v0.4.6）。
