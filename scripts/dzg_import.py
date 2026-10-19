@@ -840,7 +840,50 @@ def _pair_columns(dzg_cols: list[str], rel_cols: list[str], min_sim: float = 0.5
     return out
 
 
-def cmd_colgold(ws: Path, release_dir: Path, vols: list[str]) -> None:
+def export_colgold(rows: list[dict], shard: Path, verdicts: dict[str, dict] | None = None) -> dict:
+    """colgold 行 → open-guji-dataset `char-segmentation/column-counts/items.jsonl`（统一金标信封）。
+
+    - 两源一致列：`label_origin=consensus`；
+    - 人裁过的不一致列（甲乙卡裁成 dzg 或 release 对）：取被裁对的那份字数，`label_origin=human`；
+    - 抽检卡裁成「字数不对」的一致列：`status=retired`（留痕，不参与评测）。
+    `verdicts`：{卡 id: {"verdict": …, "A_is": "dzg"|"release"}}，由 harvest 结果 + 冻结卡表拼出。
+    """
+    verdicts = verdicts or {}
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    items, stats = [], Counter()
+    for r in rows:
+        cid = f"{r['vol']}:{r['page']}:{r['col']}"
+        v = verdicts.get(cid)
+        exp = {"n": r["dzg"]["n"], "n_main": r["dzg"]["n_main"], "start": r["dzg"]["start"],
+               "note": r["dzg"]["note"], "text": r["dzg"]["text"]}
+        origin, status, why = "consensus", "active", "daizhige 与 release 字数一致"
+        if not r["agree"]:
+            if not v or v["verdict"] not in ("A", "B"):
+                stats["skipped_unresolved"] += 1
+                continue
+            pick = v["A_is"] if v["verdict"] == "A" else ("release" if v["A_is"] == "dzg" else "dzg")
+            if pick == "release":
+                exp = {"n": r["release"]["n"], "n_main": None, "start": None, "note": None,
+                       "text": r["release"]["text"]}
+            origin, why = "human", f"两源不一致，人裁取 {pick}"
+        elif v and v["verdict"] == "count":
+            status, why = "retired", "抽检人裁：字数不对"
+        stats[f"{origin}:{status}"] += 1
+        items.append({"id": cid, "anchor": {"book": r["vol"], "page": r["page"], "col": r["col"]},
+                      "input": {"dzg_half": r["dzg"]["half"], "release": None if not r["release"] else
+                                {k: r["release"][k] for k in ("ch", "p", "n")}},
+                      "expected": exp, "label_origin": origin, "status": status,
+                      "stratum": "audit" if v and r["agree"] else None,
+                      "source_events": [], "history": [{"ts": ts, "change": "created", "why": why}]})
+    shard.mkdir(parents=True, exist_ok=True)
+    with open(shard / "items.jsonl", "w", encoding="utf-8") as f:
+        for it in items:
+            f.write(json.dumps(it, ensure_ascii=False) + "\n")
+    return dict(stats)
+
+
+def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | None = None,
+                 verdicts: dict | None = None) -> None:
     halves = build_halves(source_files(ws))
     rel = load_release(release_dir)
     by_roll: dict[str, list[Half]] = defaultdict(list)
@@ -889,6 +932,8 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str]) -> None:
     stats["agree_rate"] = round(stats.get("agree", 0) / max(1, stats.get("cols", 0)), 4)
     print(json.dumps(stats, ensure_ascii=False))
     print(f"→ {dst}")
+    if export:
+        print("export", json.dumps(export_colgold(out_rows, export, verdicts), ensure_ascii=False), f"→ {export}")
 
 
 def main(argv=None) -> int:
@@ -899,6 +944,9 @@ def main(argv=None) -> int:
     ap.add_argument("--vols", default=",".join(VOLS))
     ap.add_argument("--samples", type=int, default=10)
     ap.add_argument("--release", help="colgold：release zip 解压后的 96mid1ogzk/ 目录")
+    ap.add_argument("--export", help="colgold：写 open-guji-dataset 分片目录（char-segmentation/column-counts）")
+    ap.add_argument("--verdicts", help="colgold：人裁收回的 jsonl（harvest_verdicts 输出）")
+    ap.add_argument("--cards", help="colgold：冻结卡表（含甲乙对应），与 --verdicts 同给")
     a = ap.parse_args(argv)
     if not a.ws:
         ap.error("要 --ws 或 GUJI_WORKSPACE（四庫總目书目录）")
@@ -914,7 +962,16 @@ def main(argv=None) -> int:
     elif a.cmd == "colgold":
         if not a.release:
             ap.error("colgold 要 --release")
-        cmd_colgold(ws, Path(a.release), [v.zfill(2) for v in a.vols.split(",")])
+        verdicts = None
+        if a.verdicts:
+            cards = {c["id"]: c for c in map(json.loads, Path(a.cards).read_text(encoding="utf-8").splitlines()) if c}
+            verdicts = {}
+            for ln in Path(a.verdicts).read_text(encoding="utf-8").splitlines():
+                if ln.strip():
+                    d = json.loads(ln)
+                    verdicts[d["id"]] = {"verdict": d["verdict"], "A_is": cards.get(d["id"], {}).get("A_is")}
+        cmd_colgold(ws, Path(a.release), [v.zfill(2) for v in a.vols.split(",")],
+                    Path(a.export) if a.export else None, verdicts)
     else:
         cmd_compare(ws, a.samples)
     return 0

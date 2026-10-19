@@ -15,7 +15,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-LabelOrigin = Literal["human", "align", "synth", "model", "derived", "vision"]   # vision = 看图结论（overview#428）
+LabelOrigin = Literal["human", "align", "synth", "model", "derived", "vision", "consensus"]   # vision = 看图结论（overview#428）；consensus = 两份独立来源一致（doc/design/19）
 """human=人工标注；align=v2 对齐产生，带噪声；synth=合成；model=模型自评（不能当验收基准）；
 derived=算法某次运行的确定性输出，经人核实后固化为**行为回归基准**（不是标"世界的真值"，
 是标"这段逻辑当时该给出的正确答案"）。2026-09-13 补充：2026-09-11 新增的三个回归集分片——
@@ -23,7 +23,11 @@ derived=算法某次运行的确定性输出，经人核实后固化为**行为�
 （Step5-d 采信闸回归）、`guji-markdown-render`（Step9 坐标转字符位回归）——一直用这个值
 （各分片 100% derived，无缝隙），但这个 Literal 当时没跟着扩。不是数据脏，是类型定义
 漏更新：这三类都是「用户验证过某次算法输出符合预期，把这次输出本身当回归金标钉死」，
-与 align（对齐算法当场产生、允许噪声、需要人再筛）语义不同，不能合并成同一个值。"""
+与 align（对齐算法当场产生、允许噪声、需要人再筛）语义不同，不能合并成同一个值。
+
+2026-10-19 加 consensus：**两份互相独立的来源**对同一项给出同一答案时取该答案（殿本逐列字数：
+daizhige 人工逐列校对 × release 的 YOLO 框加人修，`char-segmentation/column-counts`）。
+残错率靠随机抽检人看来估（记在分片 README），比单源 align 可信，但不等于逐条人裁的 human。"""
 Status = Literal["active", "stale", "uncertain", "retired"]
 
 
