@@ -32,6 +32,7 @@ from __future__ import annotations
 from pydantic import BaseModel, model_serializer
 
 from ..clustering.page_type import classify_page_type
+from ..core.book import _expand_pages
 from ..core.spec import GateLevel, GateSpec, StepSpec
 from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
@@ -58,6 +59,12 @@ class BorderDetectGateParams(BaseModel):
     效果与门槛见 research/pagetype_model/README.md。"""
     pagetype_model_path: str = ""       # 模型文件；空 = models/pagetype/pagetype_v1.joblib。路径不进指纹（path_params）
     pagetype_model_fingerprint: str = ""  # 自动填：模型文件内容戳——换模型本步要过期
+    body_pages: list[int | str] = []
+    """册配置点名的正文页：不论 `classify_page_type` 判成什么，一律按正文（body／standard）走，
+    manifest 记 flag `page_type_forced`。用在页型规则误判的页，例如殿本 vol06 p88：卷末叶只有
+    一列小注、其余空栏，被判成 cover 整页跳过，丢了 7 字（2026-10-19）。写法同
+    `column_gate.period_prior_pages`：`params: {border_detect_gate: {body_pages: [88]}}`。
+    缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
@@ -65,6 +72,8 @@ class BorderDetectGateParams(BaseModel):
         if isinstance(d, dict) and not self.pagetype_model:
             for k in ("pagetype_model", "pagetype_model_path", "pagetype_model_fingerprint"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.body_pages:
+            d.pop("body_pages", None)
         return d
 
     def model_post_init(self, __context) -> None:
@@ -111,6 +120,11 @@ class BorderDetectGateStep(Step):
                 n_cols=0, expected_cols=expected)}
         raw = ctx.raw_page(page)
         page_type, policy = classify_page_type(raw)
+        forced_from = None
+        if p.body_pages and page in set(_expand_pages(p.body_pages)) and \
+                (page_type, policy) != ("body", "standard"):
+            forced_from = f"{page_type}/{policy}"
+            page_type, policy = "body", "standard"
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
         # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
@@ -132,6 +146,10 @@ class BorderDetectGateStep(Step):
                 pair_inconsistent = True
 
         reject: list[str] = []
+        if forced_from:
+            flags_forced = [f"page_type_forced：页型规则判「{forced_from}」，册配置 body_pages 点名按正文走"]
+        else:
+            flags_forced = []
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
         pt_ev = None
@@ -145,7 +163,7 @@ class BorderDetectGateStep(Step):
         if n_cols != expected:
             reject.append(f"column_count：探出 {n_cols} 列（版式应为 {expected}）")
 
-        flags: list[str] = []
+        flags: list[str] = list(flags_forced)
         if pair_merged:
             flags.append(f"{PAIR_MERGED_FLAG}：Step1 判本页是 {expected} 列（多余竖线已去），不是书级列数")
         if pair_inconsistent:
