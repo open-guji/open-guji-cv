@@ -198,7 +198,8 @@ class RowSegmentParams(BaseModel):
     #: 开了以后整页跑一遍 yolo-tool 两段模型（`utils/yolo_tool_infer`，onnxruntime），同列相邻两个
     #: 字格的墨迹框都有 ≥`yolo_cover` 落进同一个**正常高**（≤`yolo_max_h`×本页中位）的 YOLO 字框，
     #: 记一对「一字被切成两格」；有 k 对就把目标字数定为「现字数 − k」走 `apply_count_target` 重切，
-    #: 字数恰好对上才采用。有逐列字数先验（colgold）的列不走这条——金标说了算。
+    #: 字数恰好对上才采用。有逐列字数先验（colgold）的列：YOLO 只提议并哪几对，按金标计数对上才采用，
+    #: 否则退回 colgold 的按差值重切——金标说了算。
     yolo_merge: bool = False
     yolo_model_dir: str = ""             # yolo-tool 的 model/ 目录（内含 type/ slide/ 两个 best.onnx）；相对工作区根或绝对路径
     yolo_fingerprint: str = ""           # 两份 onnx 的 sha，开关开着时自动填（换模型 → Step3 判过期）
@@ -349,31 +350,32 @@ class RowSegmentStep(Step):
             r = _seg(n_body_col)
             prior_flags: list[str] = []
             g = colgold.get((page, gc.col))
+            k_pairs = 0
+            if r is not None and yolo_boxes and slot_override is None and not _has_jiazhu(r.cells):
+                k_pairs = self._yolo_pairs(r, img, wins, gc.col, page_w, yolo_boxes, p)
             if r is not None and g is not None and slot_override is None:
-                r, n_new, prior_flags = apply_count_target(r, _seg, n_body_col, int(g["dzg"]["n"]), "colgold",
-                                                           count=colgold_count(g["dzg"]))
+                want = int(g["dzg"]["n"])
+                cnt = colgold_count(g["dzg"])
+                done = False
+                if k_pairs and cnt(r.cells) != want:
+                    # 有金标时 YOLO 只提议「并哪几对」，采不采由金标定：重切后按金标格位计数恰好对上才用
+                    r2 = _seg(n_body_col - k_pairs)
+                    if r2 is not None and not _has_jiazhu(r2.cells) and cnt(r2.cells) == want:
+                        prior_flags.append(f"yolo_colgold_prior：并 {k_pairs} 对，字数→{want}（格数 {n_body_col}→{n_body_col - k_pairs}）")
+                        r, n_body_col, done = r2, n_body_col - k_pairs, True
+                        base = dict(base, n_body_slots=n_body_col)
+                if not done:
+                    r, n_new, fl = apply_count_target(r, _seg, n_body_col, want, "colgold", count=cnt)
+                    prior_flags += fl
+                    if n_new != n_body_col:
+                        n_body_col = n_new
+                        base = dict(base, n_body_slots=n_body_col)
+            elif r is not None and k_pairs and slot_override is None:
+                r, n_new, fl = apply_count_target(r, _seg, n_body_col, _n_chars(r.cells) - k_pairs, "yolo")
+                prior_flags += fl
                 if n_new != n_body_col:
                     n_body_col = n_new
                     base = dict(base, n_body_slots=n_body_col)
-            if r is not None and yolo_boxes and g is None and slot_override is None:
-                wr = wins.column(gc.col)
-                if wr is not None:
-                    mp = ColumnMapper(page_w, wr.left_line.to_vline(), wr.right_line.to_vline(), wr.top_y, wr.bottom_y)
-                    ink = []
-                    for c in sorted((c for c in r.cells if c.kind == "char"), key=lambda c: c.y0):
-                        ib = _ink_box(img, c, p.ink_threshold)
-                        if ib is None:
-                            ink.append(None)
-                            continue
-                        bx0, by0, bx1, by1 = mp.bbox_tr(*ib)
-                        ink.append((page_w - 1 - bx1, by0, page_w - 1 - bx0, by1))   # 规范空间 → 左上原点
-                    k = yolo_merge_pairs(ink, yolo_boxes, p.yolo_cover, p.yolo_max_h)
-                    if k:
-                        r, n_new, yf = apply_count_target(r, _seg, n_body_col, _n_chars(r.cells) - k, "yolo")
-                        prior_flags += yf
-                        if n_new != n_body_col:
-                            n_body_col = n_new
-                            base = dict(base, n_body_slots=n_body_col)
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
@@ -422,6 +424,23 @@ class RowSegmentStep(Step):
                                    **base))
         return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}
 
+
+    @staticmethod
+    def _yolo_pairs(r, img, wins, col: int, page_w: int, yolo_boxes: list, p) -> int:
+        """本列 DP 结果里「一字两格」的对数（块 D）：正文格墨迹框映回原图（左上原点）后交给 yolo_merge_pairs。"""
+        wr = wins.column(col)
+        if wr is None:
+            return 0
+        mp = ColumnMapper(page_w, wr.left_line.to_vline(), wr.right_line.to_vline(), wr.top_y, wr.bottom_y)
+        ink = []
+        for c in sorted((c for c in r.cells if c.kind == "char"), key=lambda c: c.y0):
+            ib = _ink_box(img, c, p.ink_threshold)
+            if ib is None:
+                ink.append(None)
+                continue
+            bx0, by0, bx1, by1 = mp.bbox_tr(*ib)
+            ink.append((page_w - 1 - bx1, by0, page_w - 1 - bx0, by1))   # 规范空间（右上原点）→ 左上原点
+        return yolo_merge_pairs(ink, yolo_boxes, p.yolo_cover, p.yolo_max_h)
 
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
