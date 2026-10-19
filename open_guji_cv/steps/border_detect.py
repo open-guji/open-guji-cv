@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field, model_serializer
 
+from ..core.book import _expand_pages
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
@@ -35,12 +36,24 @@ class BorderDetectParams(BaseModel):
     用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
     关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
+    column_grid_pages: list[int | str] = []
+    """页级网格模式：点名的页竖线走 `column_grid`（版框定死、列距均匀），其余页照书级配置。
+    用在界行断续、自由模式挑了假竖线或漏了一条界行、整列没切出来的页，例如殿本 vol05 p55／
+    p123、vol04 p80（2026-10-19）。写法同 `column_gate.period_prior_pages`：
+    `params: {border_detect: {column_grid_pages: [55, 123], grid_col_pitch: 185}}`。
+    缺省空，空时本字段与 `grid_col_pitch` 都不进参数 dump，产物与加字段前逐字节相同。"""
+    grid_col_pitch: float | None = None
+    """`column_grid_pages` 那些页用的列距先验（px）；None = 用书级 `col_pitch`。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
         d = handler(self)
         if isinstance(d, dict) and not self.merge_narrow_pair:
             d.pop("merge_narrow_pair", None)
+        if isinstance(d, dict) and not self.column_grid_pages:
+            d.pop("column_grid_pages", None)
+            d.pop("grid_col_pitch", None)
         return d
 
 
@@ -73,6 +86,11 @@ class BorderDetectStep(Step):
         cols = p.expected_cols or ctx.book.expected_cols
         gray = ctx.raw_page(page)
         H, W = gray.shape[:2]
+        grid = ctx.book.column_grid
+        col_pitch = ctx.book.col_pitch
+        if p.column_grid_pages and page in set(_expand_pages(p.column_grid_pages)):
+            grid = True
+            col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int):
@@ -80,8 +98,8 @@ class BorderDetectStep(Step):
                                   book_bottom_gap=ctx.book.bottom_gap,
                                   top_band_frac=ctx.book.top_band_frac,
                                   bottom_band_frac=ctx.book.bottom_band_frac,
-                                  column_grid=ctx.book.column_grid,
-                                  col_pitch=ctx.book.col_pitch,
+                                  column_grid=grid,
+                                  col_pitch=col_pitch,
                                   frame_height=ctx.book.frame_height,
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
