@@ -231,3 +231,24 @@ def test_merge_append_keeps_both_tails():
     assert _merge_append(b"x\na\n", b"x\nb\n") == b"x\nb\na\n"
     assert _merge_append(b"x\na\n", b"x\na\nb\n") == b"x\na\nb\n"
     assert _merge_append(b"", b"") == b""
+
+
+def test_push_refuses_to_drop_anchor_patch_rows(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """锚图行不在 source_files 里；本地没有 feedback/anchor_patches/ 时 push 不能把库里的行当成删除推上去。"""
+    from open_guji_cv.datastore.workcopy import FileDeleteRefused, data_dir, pull, push
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    files = _workspace(tmp_path)
+    files["W/feedback/anchor_patches/vol03/ab/abcdef.png"] = b"\x89PNG-anchor"
+    c1 = _commit(repo, files, "c1")
+    import_commit(conn, repo, c1)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    src = PgSource(conn)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", src, cache)
+    anchor = data_dir(a) / "feedback" / "anchor_patches" / "vol03" / "ab" / "abcdef.png"
+    assert anchor.exists()
+    anchor.unlink()
+    (data_dir(a) / "books" / "vol04.yaml").write_bytes(b"id: vol04\n")
+    with pytest.raises(FileDeleteRefused):
+        push(conn, a, actor="a")
