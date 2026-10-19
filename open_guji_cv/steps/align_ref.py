@@ -497,7 +497,9 @@ def _corpus_text(path: str) -> str:
     p = Path(path)
     if not p.exists():
         return ""
-    return _NON_HAN_RE.sub("", p.read_text(encoding="utf-8"))
+    # 兼容汉字（U+F900–FAFF）先折成统一汉字再筛：不折的话它们落在筛子外被整个删掉，对位从那里错开一格
+    from ..utils.cjk_compat import fold_compat
+    return _NON_HAN_RE.sub("", fold_compat(p.read_text(encoding="utf-8")))
 
 
 @lru_cache(maxsize=4)

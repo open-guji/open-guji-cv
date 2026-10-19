@@ -19,10 +19,17 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, field_validator, model_serializer
+
+from ...utils.cjk_compat import fold_compat
 
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
+
+
+def _fold_char(cls, v):
+    """产物里的字一律不含兼容汉字（福 U+FA1B → U+798F，见 utils/cjk_compat）。"""
+    return fold_compat(v) if isinstance(v, str) else v
 
 
 class CandidateMatch(BaseModel):
@@ -45,6 +52,8 @@ class CandidateMatch(BaseModel):
     `GlyphMatchParams.max_candidates`）。Step7「切分裁决」板块靠它才不用
     在 `char is None` 时只能显示一个问号——见该模块头 2026-09-11 补记。"""
 
+
+    _fold_char = field_validator("char", mode="after")(_fold_char)
 
 class MatchRec(BaseModel):
     """一个字位对库的匹配判决（沿用 `clustering.match.MatchResult` 的语义）。"""
@@ -77,6 +86,8 @@ class MatchRec(BaseModel):
             d.pop("near_shape", None)
         return d
 
+
+    _fold_char = field_validator("char", mode="after")(_fold_char)
 
 class ColumnMatch(BaseModel):
     col: int
@@ -130,6 +141,8 @@ class RareCand(BaseModel):
     score: float = 0.0
     font: str = ""          # 命中来源：某字体文件名 | "cnn"
 
+
+    _fold_char = field_validator("char", mode="after")(_fold_char)
 
 class RareRec(BaseModel):
     id: str
@@ -221,6 +234,8 @@ class DecisionRec(BaseModel):
     （2026-09-26 并行分工 §65 定的口径），四庫等未接这段的书留空。"""
 
 
+    _fold_char = field_validator("char", mode="after")(_fold_char)
+
 class ColumnDecision(BaseModel):
     col: int
     ok: bool = True
@@ -251,6 +266,8 @@ class AdmitRec(BaseModel):
     doubts: list[str] = Field(default_factory=list)
     evidence: dict = Field(default_factory=dict)
 
+
+    _fold_char = field_validator("char", mode="after")(_fold_char)
 
 class ColumnAdmit(BaseModel):
     col: int
