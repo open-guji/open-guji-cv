@@ -4,10 +4,15 @@
     guji db pull    -w <工作区> [--rev N] [--with-feedback] [--no-rebuild]
     guji db branch  list | create <exp/GUJI-号-说明> [--from-rev N] | delete <名>
     guji db import  --from exp/<名> -w <工作区> [--events ids.txt] [--to main] [--dry-run]
+    guji db pull    -w <工作区> --full [--force]         # 写入切换后（GUJI-608）：中心库 → 工作区本身
+    guji db push    -w <工作区> [--dry-run] [--allow-delete]   # 工作区改动 → 中心库，先比版本号
 
 连接：`GUJI_DATA_URL`（缺省 https://data.open-guji.com）、`GUJI_DATA_TOKEN`、`GUJI_DATA_BRANCH`
 （缺省 main；也可 `--branch`）。读令牌够 status/pull；开删实验分支要实验令牌；导入正式库要正式令牌，
 且写入切换（GUJI-608）之前 Worker 不接受写 main。
+
+push 直连 Postgres：``GUJI_DATA_PG_DSN``；没有就用 ``NEON_DATABASE_URL`` 自动在本进程起
+WebSocket 桥（云会话只通 443）。新图经 Worker 传 R2，要正式令牌（``GUJI_DATA_TOKEN``）。
 """
 from __future__ import annotations
 
@@ -48,10 +53,38 @@ def rebuild_db(ws_dir: Path, store: Path, db_path: Path) -> dict:
 
 
 
+def _pg_conn():
+    import psycopg
+    dsn = os.environ.get("GUJI_DATA_PG_DSN")
+    if not dsn:
+        url = os.environ.get("NEON_DATABASE_URL")
+        if not url:
+            raise SystemExit("db push 要连库：设 GUJI_DATA_PG_DSN，或 NEON_DATABASE_URL（自动经 443 桥）")
+        from .datastore.wsbridge import neon_dsn_via_bridge
+        dsn = neon_dsn_via_bridge(url)
+    return psycopg.connect(dsn)
+
+
 def cmd_db(args) -> None:
     from .datastore.client import WorkerSource
-    src = WorkerSource(branch=args.branch)
     ws_dir = _ws_dir(args)
+
+    if args.action == "push":
+        if ws_dir is None:
+            raise SystemExit("db push 要 -w <工作区>（或 GUJI_WORKSPACE）")
+        from .datastore.push import push_dir
+        from .datastore.r2 import upload_files
+        if (args.branch or os.environ.get("GUJI_DATA_BRANCH") or "main") != "main":
+            raise SystemExit("db push 只写 main；实验分支请用 guji exp")
+        actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+        with _pg_conn() as conn:
+            res = push_dir(conn, ws_dir, actor=actor, dry_run=args.dry_run,
+                           allow_delete=args.allow_delete,
+                           uploader=lambda imgs: upload_files(imgs, bucket="main"))
+        _print(res)
+        return
+
+    src = WorkerSource(branch=args.branch)
 
     if args.action == "status":
         from .datastore.pull import status
@@ -61,6 +94,15 @@ def cmd_db(args) -> None:
     if args.action == "pull":
         if ws_dir is None:
             raise SystemExit("db pull 要 -w <工作区>（或 GUJI_WORKSPACE）")
+        if args.full:
+            from .datastore.client import BlobCache
+            from .datastore.push import pull_full
+            res = pull_full(src, ws_dir, cache=BlobCache(), bucket=args.bucket, force=args.force)
+            if not args.no_rebuild:
+                res["glyph_db"] = rebuild_db(ws_dir, ws_dir / "output" / "glyph_store", _db_path(ws_dir))
+            res["worker_requests"] = src.requests
+            _print(res)
+            return
         from .datastore.pull import pull
         res = pull(src, ws_dir, _db_path(ws_dir), rev=args.rev, with_feedback=args.with_feedback,
                    rebuild=None if args.no_rebuild else rebuild_db, bucket=args.bucket)
@@ -96,8 +138,8 @@ def cmd_db(args) -> None:
 
 
 def add_parser(sub) -> None:
-    p = sub.add_parser("db", help="中心库：status / pull / branch / import（GUJI-606）")
-    p.add_argument("action", choices=["status", "pull", "branch", "import"])
+    p = sub.add_parser("db", help="中心库：status / pull / push / branch / import（GUJI-606/608）")
+    p.add_argument("action", choices=["status", "pull", "push", "branch", "import"])
     p.add_argument("args", nargs="*", help="branch 的子命令与分支名")
     p.add_argument("-w", "--workspace", default=None, help="工作区仓根（含 workspace.yaml）；不给读 GUJI_WORKSPACE")
     p.add_argument("--branch", default=None, help="读哪个分支（缺省 GUJI_DATA_BRANCH 或 main）")
@@ -110,4 +152,9 @@ def add_parser(sub) -> None:
     p.add_argument("--from", dest="from_branch", default=None, help="import：实验分支名")
     p.add_argument("--to", default="main", help="import：导入到哪个分支（缺省 main）")
     p.add_argument("--events", default=None, help="import：事件 id 清单文件（一行一个）；不给就导入目标没有的全部")
-    p.add_argument("--dry-run", action="store_true", help="import：只列计划不写")
+    p.add_argument("--dry-run", action="store_true", help="import/push：只列计划不写")
+    p.add_argument("--full", action="store_true",
+                   help="pull：还原进工作区本身（workspace.yaml、books/、feedback/、review/、config/、字形库），写 .central.json")
+    p.add_argument("--force", action="store_true", help="pull --full：丢掉本地没 push 的改动")
+    p.add_argument("--allow-delete", action="store_true",
+                   help="push：允许删库里的文件、只追加台账里的行（确认是真删）")

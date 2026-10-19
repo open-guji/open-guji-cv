@@ -114,13 +114,14 @@ def _client():
 
 
 def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: int = 8,
-                      limit: int | None = None) -> dict:
+                      limit: int | None = None, read=None) -> dict:
     """经 guji-data Worker 传：POST /v1/assets/sign → 已有就跳过，否则 PUT 到返回的 url。
 
     要 ``GUJI_DATA_TOKEN``（exp 令牌只能传 exp 桶，main 桶要正式令牌）；地址默认
     https://data.open-guji.com（``GUJI_DATA_URL`` 可改）。Worker 端核 sha256，不符回 400。
     先用 ``/v1/assets/sign-batch`` 每 200 张签一次（已有的跳过），再逐张 PUT；
     旧版 Worker 没有批量接口就退回逐张签。``limit`` 用来分批。
+    ``read(obj) -> bytes`` 给了就不从 git 读（``db push`` 传本地文件用）。
     """
     import ssl
     import time
@@ -159,10 +160,13 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
             return "exists"
         if sig.get("key") != r2_key(o.sha):
             return "key_mismatch"
-        if not hasattr(local, "reader"):
-            local.reader = gitsource.BlobReader(repo)
-            readers.append(local.reader)
-        data = local.reader.read(o.oid)
+        if read is not None:
+            data = read(o)
+        else:
+            if not hasattr(local, "reader"):
+                local.reader = gitsource.BlobReader(repo)
+                readers.append(local.reader)
+            data = local.reader.read(o.oid)
         if sha256(data) != o.sha:
             return "sha_mismatch"
         st, _ = call(sig["url"], data, "PUT", {"content-type": "image/png"})
@@ -207,6 +211,14 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
         for r in readers:
             r.close()
     return dict(stats)
+
+
+def upload_files(images: dict, bucket: str = "main", workers: int = 8) -> dict:
+    """``{sha: 本地路径}`` 经 Worker 传进 R2（已有跳过）。``db push`` 用。"""
+    from pathlib import Path
+    objs = {sha: Obj(sha, Path(p).stat().st_size, str(p)) for sha, p in images.items()}
+    return upload_via_worker(None, objs, bucket=bucket, workers=workers,
+                             read=lambda o: Path(o.oid).read_bytes())
 
 
 def upload(repo, objs: dict[str, Obj], workers: int = 8) -> dict:

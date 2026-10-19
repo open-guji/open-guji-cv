@@ -131,3 +131,40 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
 还原 13 个文件、4,851 张刻例图（实验桶，Worker 尚未部署批量签名，逐张签，9,719 次 Worker 请求，约 17 分钟）；
 还原的字形库与 guji-workspace `888cd82` 的 `output/glyph_store/` 逐字节相同（`diff -r` 无差别），
 重建的 glyph.db 与从 git 字形库 rebuild 的库 14 张表逐行相同。
+
+## 六、写入切换后（GUJI-608，2026-10-19 起）：中心库是真源
+
+guji-workspace 的 git **不再提交数据**（人裁、台账、字形库、配置、册 yaml）；最后一次灌进中心库的是
+guji-workspace `6bef1ada`（main 分支 rev 1356，`verify` 0 差异）。原图、products、cache 不在中心库，照旧从 git／本地来。
+工作区目录从此是中心库的一份**工作副本**：
+
+```bash
+export GUJI_DATA_TOKEN=<正式令牌>          # GUJI_DATA_TOKEN_PROD；只读的话读令牌就够
+guji db pull -w <工作区> --full            # 中心库 → 工作区本身，写 .central.json（分支、rev），重建 glyph.db
+#   …照常跑 cv（控制台、step、H 道）…
+guji db push -w <工作区> --dry-run         # 看会写什么
+guji db push -w <工作区>                   # 工作区 → 中心库
+```
+
+- **范围**：`workspace.yaml`、`books/`、`feedback/`、`review/`、`config/`、`output/glyph_store/` 下 `scope.classify`
+  认的文件，与导入器同一口径；还原与写回都是这些。
+- **pull --full**：先在 `<工作区>/.central-pull.tmp` 拼好、逐文件核 sha，再换进工作区；本地有、库里没有的同范围文件删掉
+  （镜像；刻例图例外，没被引用的图无害，留着）。本地有没 push 的改动（和库里 sha 不同的文件）就拒绝，`--force` 丢掉。
+  没 pull 过的目录（比如 guji-workspace 的 git 检出）只比本地已有的文件，库里有、本地没有的不算改动。
+- **push 先比版本号**：拿到库锁（`LOCK TABLE changes`）后查该工作区在 `.central.json` 的 rev 之后有没有别人写过
+  （导入、push、Worker `/v1/events` 都算），有就整次拒绝（`StaleBase`），要先 `pull --full`——等于 git 的
+  non-fast-forward，两个会话不会互相冲掉。只追加的台账（events、consumed、anchors）少了行拒绝；
+  库里有的整个文件本地没了也拒绝（多半是没拉全），确认是真删再加 `--allow-delete`。
+- 写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`，`git_commit` 记 `push:<ws>@<base rev>`），
+  所以 `changes` 逐行留痕、可追溯；写完把新 rev 写回 `.central.json`。
+- **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程里自动起 WebSocket 桥
+  （云会话只通 443），口令只在内存里。新刻例图、锚图在写库前经 Worker `/v1/assets/sign-batch` 传进正式桶（已有跳过）。
+- `push` 只写 `main`；实验照旧用 `guji exp` 和实验分支。
+
+验收（`tests/datastore/test_datastore_push.py`，本地 Postgres）：pull --full 还原与提交逐字节相同；改了再 push、
+另一份副本拉到相同内容；旧版本上的 push 被拒且库不变，`--force` 重拉后再 push 成功；删文件、台账少行被拒；
+没 pull 过不能 push。17 步 `code_hash` 不变（`datastore/` 不进任何 Step 的 `code_deps`）。
+
+**在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 空目录 `guji db pull --full`（读令牌）还原 33 个文件、6,506 张刻例图
+（6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即 `guji db push --dry-run`（不设 `GUJI_DATA_PG_DSN`，
+自动经 443 桥连 Neon main）全部表 0 变更。

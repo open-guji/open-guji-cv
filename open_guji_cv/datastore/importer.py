@@ -198,11 +198,23 @@ def import_commit(conn, repo, commit: str = "HEAD", *, only_ws: set[str] | None 
                   ) -> ImportReport:
     commit = gitsource.resolve(repo, commit)
     scans = scan_commit(repo, commit, only_ws)
+    return import_scans(conn, scans, label=commit, allow_delete=allow_delete, actor=actor,
+                        dry_run=dry_run, source=source)
+
+
+def import_scans(conn, scans: list[ScanResult], *, label: str, allow_delete: bool = False,
+                 actor: str | None = None, dry_run: bool = False, source: str = "",
+                 guard=None) -> ImportReport:
+    """把扫描结果写进库（幂等差分）。``guard(cur)`` 在拿到锁之后、写库之前调用，抛错即整次回滚
+    （``db push`` 用它比版本号）。``label`` 记进 ``imports.git_commit``。"""
+    commit = label
     rep = ImportReport(commit=commit, dry_run=dry_run)
     with conn.transaction():
         cur = conn.cursor()
         apply_schema(conn)
         cur.execute("LOCK TABLE changes IN EXCLUSIVE MODE")   # 同时只许一个导入
+        if guard is not None:
+            guard(cur)
         rep.rev_from = current_rev(cur)
         cur.execute("INSERT INTO imports (source, git_commit, actor, rev_from) "
                     "VALUES (%s, %s, %s, %s) RETURNING import_id",
