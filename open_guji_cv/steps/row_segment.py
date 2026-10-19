@@ -333,9 +333,9 @@ class RowSegmentParams(BaseModel):
 
     #: **逐列格位先验**（2026-10-19，`doc/research/切分现状梳理与新方向-2026-10-19.md` §六）：逐列格位表的路径
     #: （`scripts/dzg_layout.py` 由 daizhige 逐列本生成；相对工作区根或绝对路径）。空 = 关，关时产物逐字节不变。
-    #: 开了以后，表里有的列（人裁 `column-slots` 过的列不碰）：①抬头级数按表定（覆盖闸的 hint）；②DP 逐格
-    #: 软罚分——表说有字的格切成空、表说空的格切出字都付代价（`row_boundaries.slot_mask`）；③两半都有字的
-    #: 夹注格走 `forced_jiazhu`、正文格走 `forced_main`（这一列有人裁 forced 时只用人裁的）。只有一半有字的
+    #: 开了以后，表里有的列（带任何人裁的列不碰——人裁按格号记，抬头级数一改格号就错位）：①抬头级数按表定
+    #: （覆盖闸的 hint）；②DP 逐格软罚分——表说有字的格切成空、表说空的格切出字都付代价（`row_boundaries.slot_mask`）；
+    #: ③两半都有字的夹注格走 `forced_jiazhu`、正文格走 `forced_main`；这样的列不再跑 colgold_prior／yolo_merge。只有一半有字的
     #: 夹注格（段尾奇数字、行内空格）不强制，交给现有判据与段端收编。殿本十册离线：普通正文页逐格全对 95.76% → 98.51%，劈字 19 → 0，
     #: 改坏 4 列。只对有逐列本的书有意义。
     layout_prior: str = ""
@@ -447,9 +447,17 @@ class RowSegmentStep(Step):
             slot_override = book_slots.get((page, gc.col))
             if slot_override is not None:
                 n_body_col = slot_override.n_slots
+            col_resolved = {slot: kind for (pg, col, slot), kind in book_resolved.items()
+                            if pg == page and col == gc.col}
+            # 带任何人裁（逐列字数、切点、钉线、强制正文/小注）的列：人裁都按格号记，下面三个结构先验
+            # 一改格数或抬头级数，格号就对不上，所以一律不动（人裁为终裁）
+            human_col = (slot_override is not None or bool(col_resolved)
+                         or any(pg_ == page and c_ == gc.col for (pg_, c_, _s) in book_pins)
+                         or (page, gc.col) in book_solo or (page, gc.col) in book_forced_jz
+                         or (page, gc.col) in book_forced_main)
             # 逐列格位先验（layout_prior）：抬头级数按表定（不只往上补——闸给书名列多加的那格
             # 抬头余量会让书名首字编成 -1、整列格号差一格），DP 加逐格掩码，夹注 / 正文格强制
-            lay = layout.get((page, gc.col)) if slot_override is None else None
+            lay = layout.get((page, gc.col)) if not human_col else None
             top_slack = gc.top_slack
             lay_kw: dict = {}
             forced_jz = book_forced_jz.get((page, gc.col))
@@ -460,9 +468,8 @@ class RowSegmentStep(Step):
                 occ = set(lay["slots"])
                 lay_kw["slot_mask"] = slot_mask_from_occupied(occ, n_body_col, n_raised_col)
                 notes = set(lay.get("notes", ()))
-                if forced_jz is None and forced_main is None:
-                    forced_jz = notes or None
-                    forced_main = (occ - notes - set(lay.get("half", ()))) or None
+                forced_jz = notes or None
+                forced_main = (occ - notes - set(lay.get("half", ()))) or None
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
@@ -474,8 +481,6 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
-            col_resolved = {slot: kind for (pg, col, slot), kind in book_resolved.items()
-                            if pg == page and col == gc.col}
             def _seg(n_body: int):
                 return segment_column(
                     img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
@@ -495,27 +500,22 @@ class RowSegmentStep(Step):
                        else {"lam": NONUNIFORM_LAM}))
             r = _seg(n_body_col)
             prior_flags: list[str] = []
-            # C、D 会改格数重切；人裁（切点、钉线、强制正文/小注）都按格号传给 DP，格数一变就对不上号，
-            # 所以带任何人裁的列一律不动（人裁为终裁）
-            human_col = (slot_override is not None or bool(col_resolved)
-                         or any(pg_ == page and c_ == gc.col for (pg_, c_, _s) in book_pins)
-                         or (page, gc.col) in book_solo or (page, gc.col) in book_forced_jz
-                         or (page, gc.col) in book_forced_main)
-            # 同列互斥：逐列格位先验命中的列已按格位切，不再叠逐列字数先验与 YOLO 并格（两套先验叠在一列上会打架）
-            human_col = human_col or lay is not None
+            # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
+            # 逐列字数先验与 YOLO 并格（同列互斥，两套先验叠在一列上会打架）
+            skip_cd = human_col or lay is not None
             g = colgold.get((page, gc.col))
             k_pairs = 0
-            if r is not None and yolo_boxes and not human_col and not _has_jiazhu(r.cells):
+            if r is not None and yolo_boxes and not skip_cd and not _has_jiazhu(r.cells):
                 k_pairs = self._yolo_pairs(r, img, wins, gc.col, page_w, yolo_boxes, p)
             # 先 D 后 C：两者修好的列几乎不重叠（测试 B：C 修 10、D 修 11、并集 13），
             # 「有金标时只让 D 提议、金标定采不采」那版实测漏掉 D 独有的两列（设计变更记录）。
-            if r is not None and k_pairs and not human_col:
+            if r is not None and k_pairs and not skip_cd:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, _n_chars(r.cells) - k_pairs, "yolo")
                 prior_flags += fl
                 if n_new != n_body_col:
                     n_body_col = n_new
                     base = dict(base, n_body_slots=n_body_col)
-            if r is not None and g is not None and not human_col:
+            if r is not None and g is not None and not skip_cd:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, int(g["dzg"]["n"]), "colgold",
                                                   count=colgold_count(g["dzg"], img, p.ink_threshold))
                 prior_flags += fl
