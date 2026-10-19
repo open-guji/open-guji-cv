@@ -1,0 +1,12 @@
+schema: ctx_l1/1
+group: mb
+rules:
+  - {id: mb-本-l1, char: 本, src: corpus-pure, re: '[進藏此舊子原今典史傳易古疏書爲刋弼僞與定學别多有經善監注二葢所]◎', note: 整理本奇偶册交叉验证零冲突；n≥8}
+  - {id: mb-本-l2, char: 本, src: corpus-pure, re: '(?:採進|家藏|府藏|朱子|大典|明史|注疏|易之|卷此|本舊|宋史|王弼|無傳|閣藏|周易|與此|錢一)◎', note: 整理本奇偶册交叉验证零冲突；n≥8}
+  - {id: mb-本-r1, char: 本, src: corpus-pure, re: '◎[國明義傳不元也㫖題其以無舊故文惟亦十一經有又作所者乃末卦僅意皆古同與]', note: 整理本奇偶册交叉验证零冲突；n≥8}
+  - {id: mb-本-r2, char: 本, src: corpus-pure, re: '◎(?:國朝|義爲|傳是|舊本|不著|明陳|義而|明朱|明王)', note: 整理本奇偶册交叉验证零冲突；n≥8}
+  - {id: mb-本-m, char: 本, src: corpus-pure, re: '(?:進◎國|進◎明|藏◎明|史◎傳|藏◎國|子◎義|藏◎宋|進◎宋|典◎宋|之◎㫖|藏◎元|易◎義|舊◎題|進◎元|之◎也|以◎義|此◎爲|進◎舊|與◎義|藏◎不|於◎義)', note: 整理本奇偶册交叉验证零冲突；n≥8}
+  - {id: mb-木-r1, char: 木, src: corpus-pure, re: '◎[鳥]', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: mb-木-r2, char: 木, src: corpus-pure, re: '◎(?:鳥獸)', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: mb-木-m, char: 木, src: corpus-pure, re: '(?:草◎鳥)', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: mb-木-hand, char: 木, src: hand, re: '草◎(?=[蟲鳥魚禽疏])|◎(?:瓜|𤓰)', note: 草木、木瓜、木桃、木李、橫一木（「草本」「本草」不收）}
