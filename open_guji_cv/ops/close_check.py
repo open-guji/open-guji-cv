@@ -108,7 +108,7 @@ def _glyph_store_missing(ws: Path) -> str | None:
 
 
 def _queue(book: str, store, ws: Path | None = None, tier: str = "final") -> dict:
-    from ..review.cards import cards
+    from ..review.cards import cards, doubt_codes
     # 没有字形库的工作区上，待审卡片出不来，会报「待审 0 ✓」——假绿（GUJI-364 评论 12573，vol01 实有 290 格待审）。
     # 缺库就当体检出错，不当通过。
     miss = _glyph_store_missing(ws) if ws is not None else None
@@ -120,7 +120,30 @@ def _queue(book: str, store, ws: Path | None = None, tier: str = "final") -> dic
     n = sum(cc.values())
     # 看图判错送回人审的格（overview#428）也在待审里，单列出来：清它要人在控制台裁，不是重跑
     nv = (res.get("doubt_counts") or {}).get("vision_flag", 0)
-    detail = f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else "")
+    # 重切清单上的格不算待审（D 10-19）：那些列 cv 切不对、文本在 book-text 里手拼，格的 id 与 cv 切分
+    # 对不上，落不了格事件；它们的去向已经在 2c／2d 把关（要有交代），这里再算一遍就永远清不掉。
+    skipped = 0
+    if n:
+        from .release_gates import RecutList
+        rl = RecutList.load(book)
+        if rl.pages or rl.cols or rl.cells:
+            full = cards(book, "all", limit=1_000_000, only="review", store=store, gate_cut=False,
+                         skip_decided=True, cls="*", doubt="*")
+            lst = full.get("cards")
+            if lst is not None and not full.get("truncated"):
+                kept: dict[str, int] = {}
+                nv = 0
+                for c in lst:
+                    if rl.covers_cell(f"{c['page']}:{c['col']}:{c['slot']}{c.get('sub') or ''}"):
+                        skipped += 1
+                        continue
+                    kept[c.get("cls") or "_none"] = kept.get(c.get("cls") or "_none", 0) + 1
+                    if "vision_flag" in doubt_codes(c.get("doubts")):
+                        nv += 1
+                if skipped:
+                    cc, n = kept, sum(kept.values())
+    detail = (f"待审 {n} 格" + (f"（其中看图判错 {nv} 格，doubt=vision_flag）" if nv else "")
+              + (f"；另有 {skipped} 格在重切清单上，不计（见 2c／2d）" if skipped else ""))
     if tier == "rough":     # 粗校档（整理设计 R5，Maren 10-17 定）：待审留给精校，只报数不计
         return _item("2", "待审清零", PASS, detail + "（粗校档不计，终校档才计）", cc or None)
     return _item("2", "待审清零", PASS if not n else FAIL, detail, cc or None)
