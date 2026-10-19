@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.3`。
 
+### Fixed
+- 借库（`workspace.yaml` 的 `glyph_lib.borrow` → `rebuild_from_store(extra_stores=...)`）不再把被借库的人裁算成本书的人裁：被借库的 `admissions` 不装，借来实例的 `label_status='human'` 改记 `borrowed_human`；借来的刻例照旧参与匹配。原先人裁通道（`glyph_fp.HUMAN_SQL`）、铁证匹配器、`glyph_match` 共识升档都会把它们当本书人裁：中心库真数据实测全唐文借殿本，人裁查询 2,139 → 5,470 条，共识升档的字 126 → 491 个；修后回到只本书的数（共享方案 3.4 节，S3）。现在没有工作区开着借库。只动 `clustering/glyph_db.py`（不进任何 Step 的 `code_deps`），17 步 `code_hash` 不变。
+
 ## [0.4.2] - 2026-10-18
 
 PATCH。push 删除检查算上锚图（只动 `datastore/`），17 步 `code_hash` 不变。
