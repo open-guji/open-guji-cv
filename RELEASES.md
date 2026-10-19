@@ -56,6 +56,25 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.4.0
+
+对比 `v0.3.5`（`34035c10`）。用户 2026-10-19 同意升 MINOR：609 改指纹，没冻结的册重算一次。只此一项，不涉及判决逻辑，组合 A/B 不适用（见下「影响」）。tag 由 Deploy 在 main 上打（annotated）。
+
+### Added
+- `clustering/glyph_fp.py`：字形库内容指纹（人裁通道、字体域）。`glyph-db import-font` 在库里新表 `font_manifests` 记字体文件与字表的 sha256（不导出进账本）。
+
+### Changed
+- `seed_admit.human_fingerprint` 改取人裁通道真正读到的 `(实例 id, 字头)` 的哈希：glyph.db 从中心库重建、rowid 重排时不再白白过期（GUJI-609）。
+- `rare_candidates` 新参数 `db_font_fingerprint`：库里带不带字体域、导的哪版字体进指纹。
+
+### Fixed
+- 无（中心库导出漏推近似字标记已在 v0.3.5 修）。
+
+### Removed
+- 无。
+
+影响：`seed_admit`（f0f2713200ae880e → 50bdd1fb5f0bcbd1）、`rare_candidates`（ac757fe8b73ba312 → 4168770d80cbde67）两步 `code_hash` 与参数指纹变，其余 15 步不变。没冻结的册这两步及下游重算一次，**判决不变**（改的只是参数里的指纹字符串，`run_page` 一行没动；`_human_shapes` 换成同一条查询的常量）；冻结册按快照比，不受影响。全量测试 3204 过（除 `test_cut_select.py::test_ckpt_fingerprint_empty_for_missing_file`，缺检查点的环境问题，base 上同样失败）。
+
 ## v0.3.0
 
 对比 `v0.2.1`（`d5c84d8b`）。`v0.3.0-rc.1` 只作集成起点；用户 2026-10-18 定免做组合 A/B，`rc/v0.3.0` 合 main 后直接在 main 上打正式 `v0.3.0`（annotated，Owen 打）；规矩见 `doc/版本号规矩.md`。
