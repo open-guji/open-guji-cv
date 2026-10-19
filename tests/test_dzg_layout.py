@@ -69,3 +69,12 @@ def test_row_segment_load_layout_and_fingerprint(tmp_path):
         RS.RowSegmentParams(layout_prior=str(tmp_path / "nope.jsonl"))
     off = RS.RowSegmentParams()
     assert off.layout_prior == "" and off.layout_fingerprint == ""     # 关着时参数逐字段不变
+
+
+def test_layout_path_follows_corpus_dir(tmp_path, monkeypatch):
+    """表路径口径同 colgold：corpus/… 走整理本目录（#198 起迁过中心库的工作区在数据目录）。"""
+    from open_guji_cv.steps.row_segment import _layout_path
+    (tmp_path / "corpus" / "daizhige").mkdir(parents=True)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert _layout_path("corpus/daizhige/layout_slots.jsonl") == tmp_path / "corpus" / "daizhige" / "layout_slots.jsonl"
+    assert _layout_path(str(tmp_path / "x.jsonl")) == tmp_path / "x.jsonl"
