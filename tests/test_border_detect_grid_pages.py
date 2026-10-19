@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 import pytest
+from helpers import body_page, make_book, make_ctx
 
 import open_guji_cv.steps  # noqa: F401  —— 注册产物种类
-from helpers import body_page, make_book, make_ctx
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.steps.border_detect import BorderDetectParams
 
