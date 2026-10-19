@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.3`。
 
+### Fixed
+- `guji db push`／`sync` 推送时只把库里没有的图交给上传（先查一次该工作区 `glyph_instances.patch_sha` 与 `anchor_patches_meta.sha256`）。原先每次推都把全部约两万张图逐批签名核对一遍，要十几分钟，期间数据库连接闲置被 Neon 断掉，事务一开就失败（10-19 D 推 vol01 裁决两次失败，库里没有写入）。只动 `datastore/workcopy.py`，17 步 `code_hash` 不变。
+
 ## [0.4.2] - 2026-10-18
 
 PATCH。push 删除检查算上锚图（只动 `datastore/`），17 步 `code_hash` 不变。

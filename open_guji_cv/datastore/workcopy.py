@@ -234,7 +234,16 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     lost = sorted(str(p) for p in images.values() if not p.exists())
     if lost:
         raise SystemExit(f"实例引用的 {len(lost)} 张图本地没有（如 {lost[:3]}）")
-    up = uploader(images) if (uploader is not None and not dry_run) else None
+    if images and uploader is not None and not dry_run:
+        # 库里已有的图（导入或之前推过时已进桶）不再逐张签名核对：每次推都核两万张要十几分钟，
+        # 连接闲置被断，事务一开就死（10-19 D 推 vol01 裁决两次失败）
+        with conn.cursor() as cur:
+            cur.execute("SELECT patch_sha FROM glyph_instances WHERE ws = %s AND patch_sha IS NOT NULL "
+                        "UNION SELECT sha256 FROM anchor_patches_meta WHERE ws = %s", (sc.ws, sc.ws))
+            known = {r[0] for r in cur.fetchall()}
+        conn.commit()
+        images = {sha: p for sha, p in images.items() if sha not in known}
+    up = uploader(images) if (uploader is not None and not dry_run and images) else None
     rep = import_scans(conn, [sc], label=f"push:{sc.ws}@{base}", actor=actor, dry_run=dry_run,
                        source="push", guard=guard, allow_delete=allow_delete)
     out = rep.as_dict()

@@ -271,3 +271,23 @@ def test_push_refuses_dropping_anchor_patches(repo, conn, tmp_path):  # noqa: F8
     with pytest.raises(FileDeleteRefused, match="ab12.png"):
         push(conn, ws, actor="t")
     assert [r["src_path"] for r in src.rows("anchor_patches_meta", "tws")] == ["feedback/anchor_patches/vol03/ab/ab12.png"]
+
+
+def test_push_uploads_only_images_new_to_db(repo, conn, tmp_path):  # noqa: F811
+    """库里已有的图不再交给 uploader（每次推都核两万张会拖到连接被断）；只传新图。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import data_dir, migrate, push
+    files = _workspace(tmp_path)
+    files["W/feedback/anchor_patches/vol03/ab/ab12.png"] = b"\\x89PNG anchor"
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    ws = _checkout(files, tmp_path / "ws")
+    migrate(src, ws, cache=cache)
+    new = data_dir(ws) / "feedback/anchor_patches/vol03/cd/cd34.png"
+    new.parent.mkdir(parents=True)
+    new.write_bytes(b"\\x89PNG new anchor")
+    calls = []
+    push(conn, ws, actor="t", uploader=lambda imgs: calls.append(dict(imgs)) or {})
+    assert calls == [{hashlib.sha256(b"\\x89PNG new anchor").hexdigest(): new}]
