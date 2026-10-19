@@ -420,4 +420,5 @@ def book_charset(corpus_path: str, extra: list[str] | None = None) -> list[str]:
     text = Path(corpus_path).read_text(encoding="utf-8")
     cs = {ch for ch in text if "㐀" <= ch <= "鿿" or "\U00020000" <= ch <= "\U0002ffff"}
     cs.update(extra or [])
-    return sorted(cs)
+    from ..utils.cjk_compat import fold_compat
+    return sorted({fold_compat(c) for c in cs})

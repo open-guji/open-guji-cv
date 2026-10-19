@@ -248,6 +248,11 @@ class EventLog:
         if bad:
             detail = "; ".join(f"{eid}: {f}={v!r}" for eid, f, v in bad)
             raise BadRequest(f"字形字段不合法（不是单字，也不是合法多码位），拒绝写入：{detail}")
+        from ..utils.cjk_compat import fold_compat
+        for e in events:       # 人裁不写兼容汉字（福 U+FA1B → U+798F）
+            for f in ("shape", "reading", "char"):
+                if isinstance(e.payload.get(f), str):
+                    e.payload[f] = fold_compat(e.payload[f])
         n = 0
         by_batch: dict[str, list[Event]] = {}
         for e in events:
