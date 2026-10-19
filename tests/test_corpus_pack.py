@@ -115,6 +115,7 @@ def _step(sid):
 
 def test_step_payload_carries_pin_only_for_corpus_steps(tmp_path, monkeypatch):
     from helpers import make_book
+
     from open_guji_cv.core.engine import _self_payload
     for sid in ("glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit"):
         assert "corpus" not in _self_payload(_step(sid), make_book(), "x")          # 没钉：键都不出现
@@ -124,3 +125,120 @@ def test_step_payload_carries_pin_only_for_corpus_steps(tmp_path, monkeypatch):
     a = _self_payload(_step("glyph_match"), make_book(corpus=1), "x")
     b = _self_payload(_step("glyph_match"), make_book(corpus=2), "x")
     assert a != b
+
+
+# ── 两级清单：底库 b<M>（中心库 corpus-base）＋书库 v<N>（共享方案 S2）──────────────
+
+@pytest.fixture()
+def two_level(tmp_path, monkeypatch):
+    """迁过的书工作区＋本机已有底库 b1 的只读副本（同 db pull 拉下来的位置）。"""
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root, central_data_dir
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home"))
+    monkeypatch.setattr(cp, "_repo_dirty", lambda paths, repo=None: [])
+    monkeypatch.setattr(cp, "_repo_commit", lambda repo=None: "c0ffee")
+    base_ws = cp.base_workdir("main")
+    b1 = cp.build_base(base_ws, "first")
+    copy = borrowed_root(BASE_WS) / BASE_DIR / "b1" / "manifest.json"
+    copy.parent.mkdir(parents=True)
+    copy.write_bytes(b1.read_bytes())
+    book = tmp_path / "book"
+    book.mkdir()
+    (book / "workspace.yaml").write_text("id: tbk\n", encoding="utf-8")
+    (book / ".central.json").write_text('{"ws": "tbk", "branch": "main"}', encoding="utf-8")
+    data = central_data_dir("tbk")
+    (data / "corpus").mkdir(parents=True)
+    (data / "corpus" / "ref.txt").write_text("甲乙丙", encoding="utf-8")
+    return book, data, b1
+
+
+def test_build_base_lists_only_repo_files_and_never_overwrites(two_level):
+    _, _, b1 = two_level
+    m = json.loads(b1.read_text(encoding="utf-8"))
+    assert m["base_version"] == 1 and m["repo_commit"] == "c0ffee" and m["items"]
+    assert {i["root"] for i in m["items"]} == {"repo"} and "NEVER_MATCH_FAMILIES" in m["code_tables"]
+    assert cp.build_base(cp.base_workdir("main")).parent.name == "b2"     # 新版另开，不覆盖 b1
+    assert b1.read_text(encoding="utf-8") == json.dumps(m, ensure_ascii=False, indent=1) + "\n"
+
+
+def test_build_base_refuses_uncommitted_repo_files(two_level, monkeypatch):
+    monkeypatch.setattr(cp, "_repo_dirty", lambda paths, repo=None: ["config/ids/x.txt"])
+    with pytest.raises(SystemExit, match="没提交"):
+        cp.build_base(cp.base_workdir("main"))
+
+
+def test_build_base_refuses_non_base_workspace(two_level):
+    book, _, _ = two_level
+    with pytest.raises(SystemExit, match="不是 corpus-base"):
+        cp.build_base(book)
+
+
+def test_book_manifest_with_base_lists_workspace_files_and_verifies_both(two_level):
+    book, data, _ = two_level
+    out = cp.build(book, base="latest")
+    m = json.loads(out.read_text(encoding="utf-8"))
+    assert out == data / "config" / "corpus-pack" / "v1" / "manifest.json"
+    assert m["base"] == 1 and {i["root"] for i in m["items"]} == {"ws"}
+    assert "code_tables" not in m
+    r = cp.verify(book, 1)
+    assert r["clean"] and r["base"] == 1
+    assert cp.summary(book)[0]["base"] == 1
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    assert cp.verify(book, 1)["changed"] == ["ws:corpus/ref.txt"]
+
+
+def test_book_manifest_needs_the_base_locally(two_level):
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root
+    book, _, _ = two_level
+    with pytest.raises(FileNotFoundError, match="b7"):
+        cp.build(book, base=7)
+    cp.build(book, base=1)
+    import shutil
+    shutil.rmtree(borrowed_root(BASE_WS) / BASE_DIR)
+    with pytest.raises(FileNotFoundError, match="db pull"):
+        cp.verify(book, 1)
+
+
+def test_hard_check_refuses_drift_before_running(two_level, monkeypatch, capsys):
+    """钉住的版本：清单里的文件改了 → 起跑前拒绝；新出现的文件只警告；GUJI_CORPUS_DRIFT=warn 临时绕过。"""
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base="latest")
+    corpus_pin.require_pin_clean(book, 1)
+    (data / "corpus" / "new.txt").write_text("丁", encoding="utf-8")
+    corpus_pin._CLEAN.clear()
+    corpus_pin.require_pin_clean(book, 1)
+    assert "新出现 1 个" in capsys.readouterr().err
+    (data / "corpus" / "ref.txt").write_text("改了", encoding="utf-8")
+    with pytest.raises(corpus_pin.CorpusDrift, match="ref.txt"):
+        corpus_pin.require_pin_clean(book, 1)
+    monkeypatch.setenv(corpus_pin.DRIFT_ENV, "warn")
+    corpus_pin.require_pin_clean(book, 1)
+    with pytest.raises(corpus_pin.CorpusDrift, match="没有语料库 v3"):
+        corpus_pin.require_pin_clean(book, 3)
+
+
+def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypatch):
+    from helpers import make_book
+
+    from open_guji_cv.core import corpus_pin
+    from open_guji_cv.core.engine import Engine
+    seen = []
+    monkeypatch.setattr(corpus_pin, "require_pin_clean", lambda ws, v: seen.append(v) or (_ for _ in ()).throw(
+        corpus_pin.CorpusDrift("drift")))
+
+    class _E:
+        book = make_book(corpus=2)
+
+        def optional_gaps(self, step, pages):
+            return []
+
+    with pytest.raises(corpus_pin.CorpusDrift):
+        Engine._run_one_step(_E(), _step("glyph_match"), [], None, False, False, 0, 0)
+    assert seen == [2]
+    e = _E()
+    e.book = make_book()                                # 没钉：不查
+    with pytest.raises(AttributeError):                 # 走到后面真跑的地方（假引擎没有 store）
+        Engine._run_one_step(e, _step("glyph_match"), [], None, False, False, 0, 0)
+    assert seen == [2]

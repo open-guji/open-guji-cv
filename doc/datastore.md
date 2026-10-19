@@ -215,6 +215,27 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 **在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图
 （6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即试推（自动经 443 桥连 Neon main）全部表 0 变更。
 
+### 两级语料库清单（2026-10-19 起，共享方案 S2）
+
+- **底库 `b<M>`**：引擎仓里的语料文件（字表、IDS、异体、形近、规则……，`corpus_pin.ITEMS` 里根是 `repo` 的）登记在
+  中心库只读工作区 `corpus-base` 的 `config/corpus-base/b<M>/manifest.json`，记 `repo_commit`（这些文件必须都已提交，
+  还原就切到那个提交）和代码常量 `NEVER_MATCH_FAMILIES` 的哈希。`guji corpus build-base [--note …]` 出新版：
+  拉 `corpus-base`（库里还没有就新开）→ 写 `b<M+1>` → 以升级脚本身份推（`push(shared_writer=True)`）。旧版不动。
+  本机工作目录在 `$GUJI_DATA_HOME/<分支>/.shared/corpus-base/`。要写库权限（同 `db push`）。
+- **书库 `v<N>`**：`guji corpus build -w <工作区> --base latest|<M>` 出两级清单，写 `base: M`，只登记工作区里的文件
+  （整理本、字频、L2、工作区异体）；本机引擎仓文件与 b<M> 不符就拒绝（先出新底库，或切到它的提交）。
+  新书用 `guji corpus init -w <工作区>`（＝钉最新底库出 v1）。出完 `guji db push`。不给 `--base` 照旧出单级清单，
+  殿本 v1 是单级的，不变。
+- **拉**：书库清单写了 `base` 的工作区，`db pull`／`db sync` 顺带把底库清单拉成只读副本
+  `$GUJI_DATA_HOME/<分支>/.borrowed/corpus-base/`（同借库，记 rev，没新写入不重拉）；`build --base`、`init` 也会先拉。
+- **起跑前硬校验**：册钉了 `corpus: N`，读语料的五步（`corpus_pin.CORPUS_STEPS`）开跑前对清单（两级的连底库）核文件，
+  有改动或缺失就拒绝（`CorpusDrift`）；清单之后新出现的文件只警告（不在这版承诺里，出下一版收进去）。
+  临时绕过设 `GUJI_CORPUS_DRIFT=warn`。`guji status` 等只读命令照旧只警告。10-19 殿本 v1：改动 0、缺失 0、新增 27（新字组规则与 L2 表）。
+
+验收（`tests/test_corpus_pack.py`、`tests/datastore/test_datastore_workcopy.py`）：底库只登记引擎仓文件、不覆盖、未提交拒绝；
+书库只登记工作区文件、verify 两级一起对、本机没有底库报错；硬校验改动拒绝、新增只警告、`warn` 绕过、只对钉了的读语料步生效；
+build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 push 拒绝；新机器 pull 顺带拉底库清单。
+
 ## 七、备份与恢复（GUJI-611）
 
 每日例行任务（云端定时会话）跑 `python -m open_guji_cv.datastore backup`：同一快照里导出全部表（`COPY` 文本格式、gzip），

@@ -195,11 +195,37 @@ def borrow_entries(ws_dir: Path) -> list[str]:
     return [str(x) for x in ((cfg.get("glyph_lib") or {}).get("borrow") or [])]
 
 
+def readonly_copy(src, name: str, branch: str, prefixes: tuple[str, ...], *, cache=None,
+                  bucket: str = "main") -> tuple[int, bool]:
+    """把中心库工作区 ``name`` 里 ``prefixes`` 下的文件拉成本机只读副本（``core.workspace.borrowed_root``）。
+
+    副本旁 ``.borrowed-state.json`` 记拉到的 rev；库里那个工作区没新写入、要的目录都在就不重拉。
+    返回 (rev, 这次是否重拉了)。借字形库（S4）和底库清单（S2）共用。"""
+    root = borrowed_root(name, branch)
+    stf = root / BORROW_STATE
+    st = json.loads(stf.read_text(encoding="utf-8")) if stf.exists() else None
+    have = st is not None and list(st.get("prefixes") or [GS]) == list(prefixes) \
+        and all((root / p.rstrip("/")).exists() for p in prefixes)
+    if have and not src.changes_since(name, int(st["rev"]), limit=1):
+        return int(st["rev"]), False
+    tmp = root.parent / f".{name}.borrow.tmp"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    rev, _ = _materialize(src, name, tmp, cache, bucket, prefixes=prefixes)
+    (tmp / BORROW_STATE).write_text(json.dumps({"ws": name, "branch": branch, "rev": rev,
+                                                "prefixes": list(prefixes)}) + "\n", encoding="utf-8")
+    if root.exists():
+        shutil.rmtree(root)
+    root.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(tmp, root)
+    return rev, True
+
+
 def borrow_stores(src, ws_dir: Path, *, cache=None, bucket: str = "main") -> tuple[list[Path], list[str]]:
     """借来的字形库 → (目录列表, 签名)。签名变了才要重建 glyph.db。
 
     写中心库工作区名的条目：拉那个工作区的 ``output/glyph_store/`` 到 ``core.workspace.borrowed_root``
-    （只读副本，记着拉到的 rev；库里那个工作区没新写入就不重拉）。写路径的条目照旧当本地目录。"""
+    （只读副本，见 ``readonly_copy``）。写路径的条目照旧当本地目录。"""
     ws_dir = Path(ws_dir)
     m = central_marker(ws_dir) or {}
     own, branch = str(m.get("ws") or ""), str(m.get("branch") or "main")
@@ -210,28 +236,44 @@ def borrow_stores(src, ws_dir: Path, *, cache=None, bucket: str = "main") -> tup
         if m and _CENTRAL_NAME.match(e) and not (ws_dir / e).exists():
             if e == own:
                 raise SystemExit(f"workspace.yaml 的 glyph_lib.borrow 写了自己（{e}）")
-            root = borrowed_root(e, branch)
-            stf = root / BORROW_STATE
-            st = json.loads(stf.read_text(encoding="utf-8")) if stf.exists() else None
-            if st is None or not d.is_dir() or src.changes_since(e, int(st["rev"]), limit=1):
-                tmp = root.parent / f".{e}.borrow.tmp"
-                if tmp.exists():
-                    shutil.rmtree(tmp)
-                rev, _ = _materialize(src, e, tmp, cache, bucket, prefixes=(GS,))
-                (tmp / BORROW_STATE).write_text(json.dumps({"ws": e, "branch": branch, "rev": rev}) + "\n",
-                                                encoding="utf-8")
-                if root.exists():
-                    shutil.rmtree(root)
-                root.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(tmp, root)
-                st = {"rev": rev}
-            sig.append(f"{e}@{st['rev']}")
+            rev, _ = readonly_copy(src, e, branch, (GS,), cache=cache, bucket=bucket)
+            sig.append(f"{e}@{rev}")
         else:
             if not d.is_dir():
                 raise SystemExit(f"借库 {e} 不存在（{d}）；迁到中心库的工作区请写被借工作区的名字")
             sig.append(f"path:{d}")
         dirs.append(d)
     return dirs, sig
+
+
+def uses_corpus_base(ws_dir: Path) -> bool:
+    """这个工作区的书库清单有没有写 ``base:``（两级清单，共享方案 S2）。"""
+    from ..core.corpus_pin import BASE_WS, manifest_path, versions
+    ws_dir = Path(ws_dir)
+    if (central_marker(ws_dir) or {}).get("ws") == BASE_WS:
+        return False
+    for v in versions(ws_dir):
+        try:
+            if json.loads(manifest_path(ws_dir, v).read_text(encoding="utf-8")).get("base") is not None:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def refresh_corpus_base(src, ws_dir: Path, *, cache=None, bucket: str = "main", always: bool = False) -> int | None:
+    """书库清单用到底库（或 ``always``）时，把 ``corpus-base`` 的底库清单拉成只读副本。返回 rev；用不到返回 None。"""
+    from ..core.corpus_pin import BASE_DIR, BASE_WS
+    from .materialize import MaterializeError
+    m = central_marker(Path(ws_dir)) or {}
+    if not m or m.get("ws") == BASE_WS or not (always or uses_corpus_base(ws_dir)):
+        return None
+    try:
+        rev, _ = readonly_copy(src, BASE_WS, str(m.get("branch") or "main"), (BASE_DIR + "/",),
+                               cache=cache, bucket=bucket)
+    except MaterializeError as e:
+        raise SystemExit(f"中心库里还没有底库清单（{BASE_WS}）：先 guji corpus build-base（{e}）") from e
+    return rev
 
 
 def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = False,
@@ -258,6 +300,9 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     store_changed = any(old_base.get(k) != base.get(k) for k in set(old_base) | set(base) if k.startswith(GS))
     out = {"ws": ws, "rev": rev, "data_dir": str(data), "written": written, "removed": removed,
            **{k: v for k, v in stats.items() if k != "ws"}}
+    cb = refresh_corpus_base(src, ws_dir, cache=cache, bucket=bucket)
+    if cb is not None:
+        out["corpus_base"] = cb
     fp = (st or {}).get("glyph_db_fp")
     bsig = (st or {}).get("borrow", [])
     if glyph is not None:
@@ -281,6 +326,10 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     ws_dir = Path(ws_dir)
     data = data_dir(ws_dir)
     st = read_state(data)
+    creating = st is None and shared_writer and is_shared_ws(str((central_marker(ws_dir) or {}).get("ws") or ""))
+    if creating:                                       # 升级脚本开新的共享层工作区（库里还没有它）
+        m = central_marker(ws_dir) or {}
+        st = {"ws": str(m["ws"]), "branch": str(m.get("branch") or "main"), "rev": 0, "base": {}}
     if st is None:
         raise SystemExit(f"数据目录 {data} 没有 {STATE}：先 guji db pull -w {ws_dir}")
     base = int(st["rev"])
@@ -294,6 +343,10 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
                          f"由升级脚本出新版本")
 
     def guard(cur):
+        if creating:
+            cur.execute("SELECT 1 FROM changes WHERE ws = %s LIMIT 1", (sc.ws,))
+            if cur.fetchone():
+                raise StaleBase(f"中心库里已经有 {sc.ws}；先 guji db pull 再写")
         if shared_writer and sc.ws.startswith(SHARED_PREFIX):
             cur.execute("SELECT 1 FROM changes WHERE ws = %s LIMIT 1", (sc.ws,))
             if cur.fetchone():
@@ -520,6 +573,10 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
             st = {**st, "borrow": bsig, "glyph_db_fp": glyph.fingerprint(glyph.db_path)}
             write_state(data, **{k: v for k, v in st.items() if k != "at"})
             out["borrow"] = bsig
+    if not dry_run:                                    # 底库清单有新版：只更新只读副本
+        cb = refresh_corpus_base(src, ws_dir, cache=cache, bucket=bucket)
+        if cb is not None:
+            out["corpus_base"] = cb
     if not src.changes_since(ws, int(st["rev"]), limit=1):
         if not mine:
             return {**out, "action": "nothing"}

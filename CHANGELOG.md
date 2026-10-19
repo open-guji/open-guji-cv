@@ -8,6 +8,7 @@
 待发分支 `rc/v0.4.6`。
 
 ### Added
+- 两级语料库清单（共享方案 S2）：引擎仓的语料文件登记进底库 `b<M>`（中心库只读工作区 `corpus-base`，`guji corpus build-base` 出、记 `repo_commit`）；书库清单可写 `base: M`，只登记工作区里的文件（`guji corpus build --base latest`，新书 `guji corpus init`）；`db pull`／`sync` 顺带拉底库清单的只读副本。旧的单级清单（殿本 v1）不变。**起跑前硬校验**：册钉了 `corpus: N` 时，读语料的五步开跑前清单里的文件有改动或缺失就拒绝（`GUJI_CORPUS_DRIFT=warn` 临时绕过），新出现的文件只警告；殿本 v1 现在改动 0、缺失 0。改 `core/engine.py`、`core/corpus_pin.py`、`ops/corpus_pack.py`、`datastore/workcopy.py`，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「两级语料库清单」。
 - 中心库借库（共享方案 S4）：迁过的工作区在 `workspace.yaml` 的 `glyph_lib.borrow` 写被借工作区的名字，`guji db pull`／`db sync` 把它的字形库拉成只读副本（`$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/`），带上它重建 glyph.db，被借库有新写入才重拉重建；`guji glyph-db rebuild` 也认工作区名。原来配了借库 `db pull` 直接报错。共享层工作区 `corpus-base`、`glyphlib-*` 普通 push／sync 拒绝，只有升级脚本能写，`glyphlib-*` 只写一次。见 `doc/datastore.md` 第六节。不碰任何 Step，17 步 `code_hash` 不变。
 
 ## [0.4.5] - 2026-10-19

@@ -518,6 +518,10 @@ class Engine:
         `jobs > 1` 且 `step.spec.parallel_safe` 时走页级并行（见 `_run_one_step_parallel`）；
         否则串行——`parallel_safe=False` 是默认值，没标过的 Step 一律串行，标记本身
         就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
+        from .corpus_pin import require_pin_clean, step_pin_token
+        if step_pin_token(step.spec.id, self.book):     # 册钉了语料库、这步读语料：起跑前硬校验
+            from .workspace import workspace_root
+            require_pin_clean(workspace_root(), self.book.corpus)
         for g in self.optional_gaps(step, pages):
             self.log(f"⚠️ {step.spec.id}：{'/'.join(g['switches'])} 开着，但 {g['producer']} 缺 "
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
