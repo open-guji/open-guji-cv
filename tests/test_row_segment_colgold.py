@@ -125,3 +125,13 @@ def test_colgold_count_ignores_low_ink_cells_outside_gold_slots():
              SimpleNamespace(kind="char", slot=5, ink_ratio=0.2),
              SimpleNamespace(kind="char", slot=6, ink_ratio=0.15)]    # 金标外但墨足 → 算（真多切）
     assert colgold_count(g)(cells) == 4
+
+
+def test_colgold_path_follows_corpus_dir(tmp_path, monkeypatch):
+    # corpus/… 走 corpus_path：工作区根的 corpus/ 在就读它；其他相对路径按工作区根
+    from open_guji_cv.steps.row_segment import _colgold_path
+    (tmp_path / "corpus" / "daizhige").mkdir(parents=True)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert _colgold_path("corpus/daizhige/colgold.jsonl") == tmp_path / "corpus" / "daizhige" / "colgold.jsonl"
+    assert _colgold_path("models/yolo") == tmp_path / "models" / "yolo"
+    assert _colgold_path(str(tmp_path / "x.jsonl")) == tmp_path / "x.jsonl"

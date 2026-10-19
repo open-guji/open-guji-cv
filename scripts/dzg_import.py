@@ -902,7 +902,7 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | Non
         if roll in rel:
             matched.update(_match_pages(hs, rel[roll]))
     rel_ch = {roll: i for i, roll in enumerate(rel)}
-    pm = [json.loads(ln) for ln in open(ws / "corpus" / "daizhige" / "page_map.jsonl", encoding="utf-8")]
+    pm = [json.loads(ln) for ln in open(_corpus(ws) / "daizhige" / "page_map.jsonl", encoding="utf-8")]
     out_rows, stats = [], Counter()
     for m in pm:
         if m["vol"][3:] not in vols or m.get("half") is None:
@@ -931,7 +931,7 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | Non
                                                     "p": rp[0], "n": len(rc), "text": rc},
                 "agree": agree, "label_origin": "consensus" if agree else None,
             })
-    dst = ws / "corpus" / "daizhige" / "colgold.jsonl"
+    dst = _corpus(ws) / "daizhige" / "colgold.jsonl"
     with open(dst, "w", encoding="utf-8") as f:
         for r in out_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")

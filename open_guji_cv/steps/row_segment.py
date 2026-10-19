@@ -29,13 +29,16 @@ _COLGOLD_CACHE: dict[tuple[str, str], dict] = {}
 
 
 def _colgold_path(rel: str):
+    """相对路径按工作区解释；``corpus/…`` 走 ``corpus_path``（迁过中心库的工作区在数据目录）。"""
     from pathlib import Path
-    from ..core.workspace import workspace_root
+    from ..core.workspace import corpus_path, workspace_root
     p = Path(rel)
-    if not p.is_absolute():
-        root = workspace_root()
-        p = (root / p) if root is not None else p
-    return p
+    if p.is_absolute():
+        return p
+    if len(p.parts) > 1 and p.parts[0] == "corpus":
+        return corpus_path(str(Path(*p.parts[1:])))
+    root = workspace_root()
+    return (root / p) if root is not None else p
 
 
 def load_colgold(rel: str, book: str) -> dict[tuple[int, int], dict]:
