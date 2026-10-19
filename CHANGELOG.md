@@ -3,6 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.4.7] - 待发
+
+待发分支 `rc/v0.4.7`。
+
 ## [0.4.6] - 2026-10-19
 
 PATCH。中心库拉取省流量与实验分支、借库与两级语料库清单、共享刻例库与升格候选命令；Step1／Step3 的新开关（`column_grid_pages`、`body_pages`、`colgold_prior`、`layout_prior`，缺省全关）；close-check 第 2 项不数重切清单上的格；殿本四联叶拆页表修正。
