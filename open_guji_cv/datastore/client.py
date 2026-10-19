@@ -31,8 +31,8 @@ from pathlib import Path
 from typing import Iterable, Iterator
 
 DEFAULT_URL = "https://data.open-guji.com"
-PAGE = 5000              # Worker /v1/tables 每页上限
-SIGN_BATCH = 1000        # Worker /v1/assets/sign-batch 下载每批上限
+PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
+SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 
 
 class CentralError(RuntimeError):
@@ -66,7 +66,7 @@ class WorkerSource:
     # ---- HTTP ----
     def _call(self, method: str, path: str, *, query: dict | None = None, body=None,
               auth: bool = True, raw: bool = False, data: bytes | None = None,
-              content_type: str = "application/octet-stream"):
+              content_type: str = "application/octet-stream", tries: int = 5):
         url = path if path.startswith("http") else self.url + path
         if query:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query)
@@ -80,7 +80,7 @@ class WorkerSource:
             headers["authorization"] = f"Bearer {self.token}"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         last = None
-        for attempt in range(5):               # 网络抖动、429、5xx 退避重试；本模块的请求都幂等
+        for attempt in range(tries):           # 网络抖动、429、5xx 退避重试；本模块的请求都幂等
             self.requests += 1
             try:
                 with urllib.request.urlopen(req, context=self._ctx, timeout=self.timeout) as r:
@@ -116,7 +116,13 @@ class WorkerSource:
         if ws is not None:
             q["ws"] = ws
         while True:
-            page = self._call("GET", f"/v1/tables/{table}", query=q)
+            try:
+                page = self._call("GET", f"/v1/tables/{table}", query=q, tries=2)
+            except CentralError as e:
+                if e.status != 503 or q["limit"] <= 100:
+                    raise
+                q["limit"] //= 2                   # Worker 超资源（1102）：页减半再试
+                continue
             yield from page["rows"]
             if not page.get("next"):
                 return
@@ -132,7 +138,7 @@ class WorkerSource:
         """每 1000 张批量签一次，再并发直取 R2。
 
         每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
-        （``GUJI_DATA_FETCH_WORKERS`` 可改）。取图走签名直链、不经 Worker，不占 Worker 请求额度。
+        （``GUJI_DATA_FETCH_WORKERS`` 可改）。签名直链指向 Worker 的 /v1/blob，每张图算一次 Worker 请求（免费档每天 10 万次）。
         10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。"""
         shas = sorted(set(shas))
         workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
@@ -146,10 +152,13 @@ class WorkerSource:
     def _sign_get(self, bucket: str, shas: list[str]) -> dict[str, str]:
         if not getattr(self, "_no_batch", False):
             try:
-                signed = self._call("POST", "/v1/assets/sign-batch",
+                signed = self._call("POST", "/v1/assets/sign-batch", tries=2,
                                     body={"bucket": bucket, "op": "get", "sha256s": shas})
                 return {it["sha256"]: it["url"] for it in signed["items"]}
             except CentralError as e:
+                if e.status == 503 and len(shas) > 25:  # Worker 超资源（1102）：对半拆开再签
+                    h = len(shas) // 2
+                    return {**self._sign_get(bucket, shas[:h]), **self._sign_get(bucket, shas[h:])}
                 if e.status != 404 or e.code != "not_found":
                     raise
                 self._no_batch = True          # 旧版 Worker 没有批量签名：退回逐张签
