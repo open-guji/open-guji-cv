@@ -7,6 +7,9 @@
   1 产物新鲜（status；册配置登记了冻结基线 `freeze:` 时改比快照产物 sha，见 ops/freeze.py）＋ 缓存不错位（cache verify，只读）
   2 待审清零（待审卡片按类计数；`--tier rough` 粗校档只报数、不计，终校档 `final`（缺省）才计）
   2b 收尾闸 closure_gaps = 0（有定字裁决却没出字）
+  2c □ 有去向：导出文本里每个阙文格在公众待审单（`--pending`）或重切清单上（给了 --export-dir 才查）
+  2d 整理本对不上的列（align_ref `coord_fallback`）逐列有交代（列交代单或重切清单）
+     ——2c、2d 是用户 10-19 定的放行硬项（GUJI-624），粗校档、终校档都计，见 `ops/release_gates.py`
   8 字形库真源已提交（工作区 git 里 feedback/、output/glyph_store/ 没有未提交改动）
   10/11 lines.md 与 pages.json 自洽（给了 --export-dir 才查）
   12 Step9 产物在（reports/<册>/<册>.md 与对勘 html）
@@ -96,6 +99,30 @@ def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
                  {"gaps": [g["id"] for g in gaps], "mismatches": [m["id"] for m in mism]})
 
 
+def _lacuna(book: str, export_dir: Path, chapter: str | None, pending: Path | None) -> dict:
+    from .release_gates import check_lacuna
+    r = check_lacuna(book, export_dir, chapter, pending)
+    bad = r["loose"] or r["recut_bad"]
+    detail = (f"□ {r['lacuna']} 个：上人审页 {len(r['pending'])}，在重切清单 {len(r['recut'])}，"
+              f"没去向 {len(r['loose'])}" + ("" if pending else "（没给 --pending，只认重切清单）")
+              + (f"；重切清单有 {len(r['recut_bad'])} 行位置写坏" if r["recut_bad"] else ""))
+    return _item("2c", "□ 有去向", FAIL if bad else PASS, detail,
+                 {"loose": r["loose"][:200], "recut_bad": r["recut_bad"][:50]} if bad else None)
+
+
+def _fallback(book: str, pages, store) -> dict:
+    from .release_gates import check_fallback
+    r = check_fallback(book, pages, store)
+    bad = r["loose"] or r["ledger_bad"] or r["recut_bad"]
+    acts = "，".join(f"{k} {v}" for k, v in sorted(r["by_action"].items()))
+    detail = (f"整理本对不上的列 {r['columns']} 列：已交代 {r['columns'] - len(r['loose'])}"
+              + (f"（{acts}）" if acts else "") + f"，没交代 {len(r['loose'])}"
+              + (f"；列交代单有 {len(r['ledger_bad'])} 行写坏" if r["ledger_bad"] else ""))
+    return _item("2d", "整理本对不上的列有交代", FAIL if bad else PASS, detail,
+                 {"loose": r["loose"][:500], "ledger_bad": r["ledger_bad"][:50],
+                  "recut_bad": r["recut_bad"][:50]} if bad else None)
+
+
 def _store_committed(ws: Path) -> dict:
     from ..core.workspace import central_marker
     if central_marker(Path(ws)):
@@ -170,7 +197,8 @@ MANUAL_ITEMS = [
 
 
 def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | None = None,
-        notes: Path | None = None, reports: Path | None = None, tier: str = "final") -> dict:
+        notes: Path | None = None, reports: Path | None = None, tier: str = "final",
+        pending: Path | None = None) -> dict:
     book = eng.book.id
     items: list[dict] = []
     checks = [
@@ -178,6 +206,9 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
         ("2", "待审清零", lambda: [_queue(book, eng.store, ws, tier)]),
         ("2b", "收尾闸", lambda: [_closure(book, pages, eng.store, ws)]),
+        ("2c", "□ 有去向", lambda: [_lacuna(book, export_dir, chapter, pending)] if export_dir else
+         [_item("2c", "□ 有去向", SKIP, "没给 --export-dir")]),
+        ("2d", "整理本对不上的列有交代", lambda: [_fallback(book, pages, eng.store)]),
         ("8", "字形库与人裁已推进中心库", lambda: [_store_committed(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
          [_item("10", "lines.md", SKIP, "没给 --export-dir"), _item("11", "pages.json", SKIP, "没给 --export-dir")]),
@@ -191,7 +222,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
         except Exception as e:  # noqa: BLE001 —— 一项算不出来不拖垮整张体检表
             items.append(_item(no, name, ERROR, f"{type(e).__name__}: {e}"))
     items.extend(_item(no, txt, MANUAL) for no, txt in MANUAL_ITEMS)
-    order = {s: i for i, s in enumerate(["1a", "1b", "2", "2b", "3", "4", "5", "6", "7", "8", "9",
+    order = {s: i for i, s in enumerate(["1a", "1b", "2", "2b", "2c", "2d", "3", "4", "5", "6", "7", "8", "9",
                                          "10", "11", "12", "13", "14"])}
     items.sort(key=lambda it: order.get(it["no"], 99))
     machine = [it for it in items if it["status"] not in (MANUAL, SKIP)]
