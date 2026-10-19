@@ -9,7 +9,7 @@
 5. seed_admit：匹配到近似例缺省照常放行、evidence 标注（用户 09-29 裁定 #277 选 C）；开闸则落人审；
 6. 文本：缺省正文照填 + 侧表（来源 人裁/匹配），`inline_ids` 选项括注；
 7. 前端 `verdictRow`（node 跑 reviewClass.ts）。
-store 导出与三方同步的用例在 `test_approx_store_sync.py`。
+导出签名见 `ops.central_glyph.export_signature`（中心库 push／sync 前据此决定要不要先导出）。
 """
 from __future__ import annotations
 
@@ -174,27 +174,20 @@ def test_fingerprints_ignore_approx_tables(tmp_path):
     g.conn.execute("DROP TABLE approx_clears")
     g.conn.commit()
     g.close()
-    sync = _load_sync()
-    fp0, h0, sig0 = db_fingerprint(p), human_verdicts_fingerprint(p), sync.db_signature(p)
+    from open_guji_cv.ops.central_glyph import export_signature
+    fp0, h0, sig0 = db_fingerprint(p), human_verdicts_fingerprint(p), export_signature(p)
     g = GlyphDB(p)                       # 建空表
     g.close()
-    assert (db_fingerprint(p), human_verdicts_fingerprint(p), sync.db_signature(p)) == (fp0, h0, sig0)
+    assert (db_fingerprint(p), human_verdicts_fingerprint(p), export_signature(p)) == (fp0, h0, sig0)
     g = GlyphDB(p)
     assert g.set_approx(f"v2:{BOOK}:1:1:1", "之", ids="⿰丶之")
     assert not g.set_approx("v2:nope:1:1:1", "之"), "库里没有的实例不写"
     g.close()
     assert db_fingerprint(p) == fp0, "近似标记不改变匹配器看到的东西，库指纹不变"
     assert human_verdicts_fingerprint(p) == h0
-    assert sync.db_signature(p) != sig0, "同步签名要变：只标了近似也得导出"
+    assert export_signature(p) != sig0, "同步签名要变：只标了近似也得导出"
 
 
-def _load_sync():
-    import importlib.util
-    spec = importlib.util.spec_from_file_location(
-        "glyph_store_sync", Path(__file__).resolve().parent.parent / "scripts" / "glyph_store_sync.py")
-    m = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(m)
-    return m
 
 
 # ── 4. 查询 ──────────────────────────────────────────────────────────────

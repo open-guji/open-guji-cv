@@ -11,7 +11,7 @@
    这条路不经本脚本；本脚本只**补**当场消费失败的（字块缓存缺、库锁）——它们在
    `feedback/consumed/glyphdb_admit.jsonl` 里没有记账，这里重跑一次。
 2. **别处来的事件**（`--import-events`，可多个）：审查页收回的 jsonl 导成的事件（H 道 a4_import）、
-   或服务器 `glyph_store_sync` 定时器推到 ws main 的 `<工作区>/feedback/events/`。按事件原样追加进本工作区
+   或别处 `guji db sync` 推进中心库、本机再拉下来的 `<工作区数据目录>/feedback/events/`。按事件原样追加进本工作区
    （`EventLog.append`：同批次同序号同内容跳过 → 重复导入不灌重；乱码/非单字闸；人裁单写者锁）。
 
 然后对**本轮新消费**的 `confirm` 事件过进库闸（控制台当场消费的那部分已经进了，只体检不拦）：

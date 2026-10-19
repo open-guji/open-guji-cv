@@ -1,8 +1,8 @@
 """`glyph-db rebuild` 之后按人裁事件补放「db 里有、真源里还没有」的刻例（2026-09-27，值守 #115 查出的隐患）。
 
 ## 为什么要补
-控制台裁决是当场进 `glyph.db` 的，真源 `output/glyph_store/` 要等 `glyph_store_sync` 定时器
-（30 分钟一次）导出才跟上。两次导出之间谁 `glyph-db rebuild`（从真源重建库），这段时间审进库的格
+控制台裁决是当场进 `glyph.db` 的，真源 `output/glyph_store/` 要等导出才跟上（2026-10-19 起是 `guji db sync`；
+此前是服务器 30 分钟一次的 `glyph_store_sync` 定时器）。两次导出之间谁 `glyph-db rebuild`（从真源重建库），这段时间审进库的格
 就丢了——事件还在 `feedback/events/`，库里没了。
 
 ## 为什么不重放全部历史

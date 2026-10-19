@@ -40,12 +40,48 @@ def export_db(db_path: Path, store: Path) -> dict:
         db.close()
 
 
+def export_signature(db: Path) -> str:
+    """glyph.db 里会导出成字形库账本的那部分内容的哈希（字体域不导出，也不算）；库不存在 → ""。
+
+    「要不要先导出再比」靠它。不能用匹配器的库指纹（``glyph_match.db_fingerprint``）：只标了／撤了近似字、
+    改了实例的 label／ids 时匹配器指纹不变，账本却要变，用它就会漏推。原是 ``scripts/glyph_store_sync.py``
+    的 ``db_signature``（该脚本随 GUJI-611 退役）。"""
+    import hashlib
+    import sqlite3
+    if not Path(db).exists():
+        return ""
+    c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    h = hashlib.sha256()
+    try:
+        fe = {r[0] for r in c.execute("SELECT edition_tag FROM sources WHERE kind='font'")}
+        for q in ("SELECT e.instance_id, g.edition_tag, g.char FROM exemplars e "
+                  "JOIN glyphs g USING(glyph_id) ORDER BY e.instance_id",
+                  "SELECT instance_id, label, semantic, unicode_cp, ids, updated_at, "
+                  "length(patch_png) FROM instances ORDER BY instance_id",
+                  "SELECT instance_id, char, provenance, admitted_at FROM admissions ORDER BY instance_id",
+                  "SELECT edition_tag, char, semantic, unicode_cp, ids, status, n_confirmed FROM glyphs "
+                  "ORDER BY edition_tag, char",
+                  "SELECT * FROM sources ORDER BY source_id"):
+            for row in c.execute(q):
+                if any(isinstance(v, str) and v in fe for v in row[:2]):
+                    continue
+                h.update(repr(row).encode("utf-8"))
+        for q in ("SELECT key, value FROM meta WHERE key NOT LIKE 'font_manifest:%' ORDER BY key",
+                  "SELECT instance_id, label, ids, note, created_at FROM approx_labels ORDER BY instance_id",
+                  "SELECT instance_id, at FROM approx_clears ORDER BY instance_id, at"):
+            try:
+                for row in c.execute(q):
+                    h.update(repr(row).encode("utf-8"))
+            except sqlite3.OperationalError:
+                pass                                # 旧库没有这张表
+    finally:
+        c.close()
+    return h.hexdigest()
+
+
 def glyph_hooks(ws_dir: Path):
     from ..datastore.workcopy import GlyphHooks
-    from ..steps.glyph_match import db_fingerprint
-
-    def fp(p: Path) -> str:
-        return db_fingerprint(p) if Path(p).exists() else ""
-    return GlyphHooks(fingerprint=fp, export=export_db, rebuild=rebuild_db, db_path=_db_path(ws_dir))
+    return GlyphHooks(fingerprint=export_signature, export=export_db, rebuild=rebuild_db,
+                      db_path=_db_path(ws_dir))
 
 

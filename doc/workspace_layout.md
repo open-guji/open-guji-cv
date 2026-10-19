@@ -120,7 +120,7 @@ guji glyph-db import-font
 > 工作区仍不在任何仓（无 book-index ID）。
 >
 > ⚠️ **只读导出的坑**：`GlyphDB()` 打开老库会跑 `_migrate()` 加列，**会写库**。要不动原库地导出，先拷一份字节副本，
-> `GUJI_GLYPH_DB` 指副本再跑 `snapshot_glyph_store.py`。
+> `GUJI_GLYPH_DB` 指副本再 `glyph-db export`（`ops/central_glyph.export_db`）。
 
 新书不要走这条路：**播种进库之后就 `glyph-db export` 出 store**，
 让真源是文本 + PNG，db 退回成可重建的索引。
@@ -129,9 +129,9 @@ guji glyph-db import-font
 
 - **字形库是不可再生的人工产出。** 改判走「撤库 + 重放」，不要直接覆盖——
   `admit_instance` 的幂等闸是防重复入库的，不是改判入口（这个坑咬过三次）。
-- **同步真源用 `guji store check|commit -w <工作区>`**（2026-10-06 起；runbook S14）：库文件不存在就停、导出 0 个实例就停、
-  成片删除就停，只 add `feedback/ config/ review/ output/glyph_store/`。别直接调 `glyph-db export`——那条路径在库文件
-  不存在时会建空库、读到 0 行、把 store 里的 PNG 全当孤儿删掉。`scripts/snapshot_glyph_store.py --force` 仍可用（同一个导出函数）。
+- **同步真源用 `guji db sync -w <工作区>`**（2026-10-19 起，GUJI-608/611；runbook S14）：glyph.db 改过先导出成账本，
+  再与中心库合并、推送；不再提交进 guji-workspace git（它只存原图）。旧的 `guji store commit` 的 git 路径、
+  `scripts/glyph_store_sync.py`（服务器定时器）、`scripts/snapshot_glyph_store.py` 已退役。
 - **字形与释读分开存**：`shape` 进字形索引，`reading` 进释读列，
   整理本字永远不覆盖 `char`。
 - **库路径变了产物就该过期**——`glyph_match` / `seed_admit` 的指纹带库指纹，
