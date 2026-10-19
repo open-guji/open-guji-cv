@@ -915,7 +915,11 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
     - 刻例、字头照原 edition 装（四庫是 ``siku-zongmu``），与本书 edition 分开；
     - `meta`（含 ``book_edition``）、`events`、`pairs` 不装——库的身份仍是第一个 store 的；
     - 实例 id 记进 ``borrowed`` 表，`export_store` 导出时跳过，真源不会被借来的刻例污染；
-    - 与本书同 id 的实例不覆盖（本书优先）。
+    - 与本书同 id 的实例不覆盖（本书优先）；
+    - **借来的人裁不算本书的人裁**（2026-10-19，共享方案 S3）：别人的 `admissions`（准入台账，
+      人裁通道、共识升档、近形决胜都读它）不装；借来实例的 `label_status='human'` 改记
+      ``borrowed_human``（铁证匹配器、影子信号、`_iron_context` 只认 ``'human'``）。不改的话，
+      全唐文借殿本时殿本 3,331 条人裁会进本书人裁查询、共识升档的字从 126 个涨到 491 个。
     """
     store = Path(store_dir)
     db_file = Path(db_path)
@@ -947,6 +951,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                     continue
                 raw = png.read_bytes()
                 r = {**r, "patch_png": raw}
+                if borrowed and r.get("label_status") == "human":
+                    r["label_status"] = "borrowed_human"     # 借来的人裁不当本书人裁
                 cols = ",".join(r)
                 cur.execute(f"{verb} INTO instances ({cols}) "
                             f"VALUES ({','.join('?' * len(r))})",
@@ -990,7 +996,7 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
             cur.execute("INSERT OR REPLACE INTO exemplars VALUES (?,?,?,?)",
                         (row[0], r["instance_id"], r["role"], r["added_at"]))
             n_ex += 1
-        for r in read(st / "admissions.jsonl"):
+        for r in ([] if borrowed else read(st / "admissions.jsonl")):   # 借来的准入台账不装
             cols = ",".join(r.keys())
             cur.execute(f"{verb} INTO admissions ({cols}) "
                         f"VALUES ({','.join('?' * len(r))})", tuple(r.values()))
