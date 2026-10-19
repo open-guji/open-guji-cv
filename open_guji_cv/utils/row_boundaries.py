@@ -62,6 +62,7 @@ DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失�
 from __future__ import annotations
 
 import functools
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -351,6 +352,20 @@ TAIL_STROKE_FRAC = 0.3
 #: 就整体放宽，等于拿一列的收益赌其余列的先验，所以仍限定在勾选列。
 NONUNIFORM_LAM = 0.08
 
+SLOT_MASK_PEN = 0.5
+"""逐格结构先验（`slot_mask`，2026-10-19）的罚分：先验说这一格有字、切出来却是空格，罚这么多；
+先验说空、切出来有字，按「像字的墨行」占比罚（见 `SLOT_MASK_ROWS`）。
+
+来历：殿本 vol01–10 离线实测（`research/dzg_struct_prior/`，daizhige 逐列本当先验），普通正文页
+逐格全对 95.76% → 98.51%，劈字（三→一+二）19 → 0；PEN 只试了这一档，没有扫。
+**只给字数不够**：DP 的格数是物理格（空格也占一格），「三」被劈开时吃掉的是列尾一个空格，
+字数先验表达不了「哪一格该空」；掩码保住 21 格网格，格号不漂。"""
+
+SLOT_MASK_ROWS = 0.3
+"""「该空」格的罚分在像字的墨行（≥ 空白阈值、< 0.5 列宽的行，与 `drop_lam` 同口径）占 period 的
+这个比例时罚满。版框横线是满宽密行、不计——列首/列尾的框线墨不管怎么切都在那一格里，
+按总墨量罚会逼 DP 把上面的字并格来躲框线（离线首版实测，vol04「萬一」「等恪」被并）。"""
+
 CELL_KINDS = ("char", "blank", "jiazhu_a", "jiazhu_b", "jiazhu_solo")
 """`jiazhu_solo`（2026-09-20 加）＝**單行小注**：小字只占列宽右半、左半空着
 （bxgb 给人名作注的版式，`jiazhu_split.solo_notes`）。它**不是** `jiazhu_a`
@@ -500,7 +515,10 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                          mass_h: float = 0.79,
                          mass_min: float = 0.100,
                          cell_w: float = 0.0,
-                         ink_lam: float = INK_LAM) -> list[float] | None:
+                         ink_lam: float = INK_LAM,
+                         slot_mask: Sequence[bool | None] | None = None,
+                         slot_mask_pen: float = SLOT_MASK_PEN,
+                         slot_mask_rows: float = SLOT_MASK_ROWS) -> list[float] | None:
     """弹性 DP。三层约束见模块头；2026-09-05 按切线金标（250 条）加了两条规则：
 
     **空白格不吃间距下界。** 列里少一个字（段末、抬头留白、脱字）时，原来每格硬性
@@ -533,6 +551,12 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     （行墨 ≥ blank_thresh 且 < 0.5 列宽）：版框横线是密行，不该逼着锚点往框外跑。
 
     `curve` 为 None 时退回旧行为（无空白格规则、无尾裁）。
+
+    **逐格结构先验 `slot_mask`（2026-10-19，缺省 None = 关，关时逐位不变）。** 长度等于 `n_slots`，
+    第 k 项说物理第 k+1 格（从上往下）：True 该空、False 该有字、None 不管。每一格按自己的
+    k 加罚分——该有字却空罚 `slot_mask_pen`，该空却有字按像字墨行占比罚（上限同一个值，
+    口径见 `SLOT_MASK_ROWS`）。罚分是软的：先验与图像不一致（版本异文、转写错）时 DP 仍有解。
+    长度对不上（比如调用方给的是正文格数、这一列又补了抬头格）就当没给。
     """
     y1_max = y1_max_frac * period
     y2_max = y2_max_frac * period
@@ -787,6 +811,30 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             if c is not None:
                 C[mp, m] = c
     col_idx = np.arange(m_count)
+    mask = list(slot_mask) if slot_mask is not None and len(slot_mask) == n_slots else None
+
+    def _charlike(ya: float, yb: float) -> float:
+        return min(1.0, _dropped_rows(ya, yb) / period / slot_mask_rows) if drop_lam > 0 else 0.0
+
+    def _mask_pen(k: int, ya: float, yb: float) -> float:
+        if mask is None or mask[k] is None:
+            return 0.0
+        if mask[k]:
+            return slot_mask_pen * _charlike(ya, yb)
+        return slot_mask_pen * float(_is_blank(ya, yb))
+
+    # 中间格（第 k 步 = 物理第 k+1 格）的罚分只依赖 (mp, m) 与该格的先验，先按两种先验各算一张表
+    PK: list[np.ndarray | None] | None = None
+    if mask is not None:
+        pen_blank = np.zeros((m_count, m_count))     # 先验「该空」
+        pen_char = np.zeros((m_count, m_count))      # 先验「该有字」
+        for m in range(m_count):
+            for mp in range(m):
+                if np.isfinite(C[mp, m]):
+                    pen_blank[mp, m] = slot_mask_pen * _charlike(mid_y[mp], mid_y[m])
+                    pen_char[mp, m] = slot_mask_pen * float(_is_blank(mid_y[mp], mid_y[m]))
+        PK = [None if k == 0 or mask[k] is None else (pen_blank if mask[k] else pen_char)
+              for k in range(n_interior)]
     for v0, _ink0 in cand0:
         drop_cost_0 = drop_lam * _dropped_rows(x1_eff, v0) / period
         dp_cost = np.full((n_interior, m_count), np.inf)
@@ -795,9 +843,11 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
             y, ink = mid[m]
             c = step_cost(v0, y, interior=False)
             if c is not None:
-                dp_cost[0, m] = c + ink_lam * ink + eps + drop_cost_0
+                dp_cost[0, m] = c + ink_lam * ink + eps + drop_cost_0 + _mask_pen(0, v0, y)
         for k in range(1, n_interior):
             tot = dp_cost[k - 1][:, None] + C
+            if PK is not None and PK[k] is not None:
+                tot = tot + PK[k]
             tot = tot + mid_ink[None, :]
             tot = tot + eps
             arg = np.argmin(tot, axis=0)
@@ -814,7 +864,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
                 c = step_cost(y, vN, last=True, interior=False)
                 if c is None:
                     continue
-                total = dp_cost[k_last, m] + c + drop_cost_N[vN]
+                total = dp_cost[k_last, m] + c + drop_cost_N[vN] + _mask_pen(n_slots - 1, y, vN)
                 if best is None or total < best[0]:
                     path = [0.0] * n_interior
                     idx = m
@@ -846,7 +896,10 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
                         mass_lam: float = 1.0,
                         mass_h: float = 0.79,
                         mass_min: float = 0.100,
-                        ink_lam: float = INK_LAM) -> RowBoundaryResult | None:
+                        ink_lam: float = INK_LAM,
+                        slot_mask: Sequence[bool | None] | None = None,
+                        slot_mask_pen: float = SLOT_MASK_PEN,
+                        slot_mask_rows: float = SLOT_MASK_ROWS) -> RowBoundaryResult | None:
     """一列的行投影 → n_slots 个字格的 n_slots+1 条边界。
 
     `period` 是这一页的共享周期先验（调用方用 `estimate_shared_period` 算，
@@ -1007,7 +1060,8 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
         blank_lam_frac=blank_lam_frac, blank_min_ratio=blank_min_ratio,
         drop_lam=drop_lam, lam4=lam4,
         mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
-        ink_lam=ink_lam,
+        ink_lam=ink_lam, slot_mask=slot_mask, slot_mask_pen=slot_mask_pen,
+        slot_mask_rows=slot_mask_rows,
     )
     if boundaries is None and blank_min_ratio > 0.0:
         # 空白格下界是**偏好**不是硬约束：它挡的是「造碎空白格凑格数」，可有些列
@@ -1022,7 +1076,8 @@ def fit_row_boundaries(row_proj: np.ndarray, dst_w: int, border_top: float, bord
             blank_lam_frac=blank_lam_frac, blank_min_ratio=0.0,
             drop_lam=drop_lam, lam4=lam4,
             mass_lam=mass_lam, mass_h=mass_h, mass_min=mass_min, cell_w=float(dst_w),
-            ink_lam=ink_lam,
+            ink_lam=ink_lam, slot_mask=slot_mask, slot_mask_pen=slot_mask_pen,
+            slot_mask_rows=slot_mask_rows,
         )
     if boundaries is None:
         return None
@@ -1182,6 +1237,16 @@ def _pos_to_slot(pos: int, n_raised: int) -> int:
     会在这一格上出错。
     """
     return pos - n_raised - 1 if pos <= n_raised else pos - n_raised
+
+
+def slot_mask_from_occupied(occupied: "set[int] | frozenset[int]", n_body_slots: int,
+                            n_raised: int = 0) -> list[bool]:
+    """「这一列哪几个 slot 有字」→ `fit_row_boundaries(slot_mask=...)` 要的逐物理格掩码（True = 该空）。
+
+    `occupied` 用对外的 slot 号（正文 1..n_body_slots，抬头 -n_raised..-1；夹注 a/b 共用一个 slot）。
+    物理格与 slot 的换算只走 `_pos_to_slot`，不另写一遍。"""
+    return [_pos_to_slot(pos, n_raised) not in occupied
+            for pos in range(1, n_body_slots + n_raised + 1)]
 
 
 def effective_body_slots(n_body: int, border_top: float | None, border_bottom: float | None,

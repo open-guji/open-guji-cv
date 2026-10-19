@@ -68,6 +68,22 @@ def test_fallback_columns_need_ledger_or_recut(tmp_path):
     assert r["ledger_bad"] == ["10:2 处理是「一致」但没写说明"]
 
 
+def test_fallback_names_pages_with_many_loose_columns(tmp_path, monkeypatch):
+    """一页 ≥3 列没交代 → 点名整页（列错位、卷端页那种整页坏的，逐列交代是白费）；已交代的不算。"""
+    st = ProductStore(tmp_path / "products")
+    _align(st, 55, {str(c): "x" for c in (1, 2, 3, 4)})
+    _align(st, 56, {"1": "x", "2": "y"})
+    _align(st, 57, {"1": "x", "2": "y", "3": "z"})
+    lists = tmp_path / "lists"
+    _tsv(RG.ledger_path("vol01", lists), "页\t列\t处理\t说明", ["57\t3\t改字\t异文"])
+    r = RG.check_fallback("vol01", [55, 56, 57], st, lists)
+    assert r["hot_pages"] == [{"page": 55, "cols": 4}]      # 57 交代掉一列，只剩两列
+    monkeypatch.setattr(RG, "lists_dir", lambda: lists)
+    f = CC._fallback("vol01", [55, 56, 57], st)
+    assert f["status"] == CC.FAIL and "宜整页进重切清单（p55）" in f["detail"]
+    assert f["data"]["hot_pages"] == [{"page": 55, "cols": 4}]
+
+
 def test_ledger_rejects_unknown_action(tmp_path):
     _tsv(RG.ledger_path("b", tmp_path), "页\t列\t处理\t说明", ["1\t2\t忽略\t", "x\t2\t改字\t"])
     led, bad = RG.load_ledger("b", tmp_path)
