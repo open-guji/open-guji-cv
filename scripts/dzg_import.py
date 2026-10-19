@@ -77,6 +77,13 @@ VOLS = [f"{i:02d}" for i in range(1, 11)]
 _HAN_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿\U00020000-\U0003134f]")
 
 
+def _corpus(ws: Path) -> Path:
+    """整理本目录：迁到中心库的工作区在数据目录（``core.workspace.corpus_dir``）。"""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from open_guji_cv.core.workspace import corpus_dir
+    return corpus_dir(Path(ws))
+
+
 def is_han(ch: str) -> bool:
     return bool(_HAN_RE.fullmatch(ch))
 
@@ -245,7 +252,7 @@ def column_line(col: dict) -> str:
 # ── download / manifest ──────────────────────────────────
 
 def cmd_download(ws: Path, max_n: int = 60) -> None:
-    d = ws / "corpus" / "daizhige"
+    d = _corpus(ws) / "daizhige"
     d.mkdir(parents=True, exist_ok=True)
     for i in range(1, max_n + 1):
         url = URL.format(i)
@@ -270,7 +277,7 @@ def cmd_download(ws: Path, max_n: int = 60) -> None:
 
 
 def source_files(ws: Path) -> list[Path]:
-    return sorted((ws / "corpus" / "daizhige").glob("[0-9][0-9][0-9][0-9].jsonl"))
+    return sorted((_corpus(ws) / "daizhige").glob("[0-9][0-9][0-9][0-9].jsonl"))
 
 
 def cmd_manifest(ws: Path) -> dict:
@@ -293,7 +300,7 @@ def cmd_manifest(ws: Path) -> dict:
                    "0006 起為別書，不收。原文件未改動一個字節。",
            "fetched_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%MZ"),
            "files": items}
-    out = ws / "corpus" / "daizhige" / "manifest.json"
+    out = _corpus(ws) / "daizhige" / "manifest.json"
     out.write_text(json.dumps(man, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"manifest: {len(items)} 个文件 → {out}")
     return man
@@ -338,8 +345,8 @@ def convert(halves: list[Half]) -> tuple[list[str], list[dict], dict]:
 def cmd_convert(ws: Path) -> None:
     halves = build_halves(source_files(ws))
     lines, cols, stats = convert(halves)
-    (ws / "corpus" / TXT_NAME).write_text("\n".join(lines) + "\n", encoding="utf-8")
-    with open(ws / "corpus" / "daizhige" / "columns.jsonl", "w", encoding="utf-8") as f:
+    (_corpus(ws) / TXT_NAME).write_text("\n".join(lines) + "\n", encoding="utf-8")
+    with open(_corpus(ws) / "daizhige" / "columns.jsonl", "w", encoding="utf-8") as f:
         for c in cols:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
     print(json.dumps(stats, ensure_ascii=False))
@@ -507,7 +514,7 @@ def map_volume(vol: str, halves: list[Half], anchors: list, pages: dict[int, tup
 
 def cmd_map(ws: Path, vols: list[str]) -> None:
     halves = build_halves(source_files(ws))
-    anchors = json.loads((ws / "corpus" / "daizhige" / "anchors.json").read_text(encoding="utf-8"))
+    anchors = json.loads((_corpus(ws) / "daizhige" / "anchors.json").read_text(encoding="utf-8"))
     all_rows, sums = [], []
     for v in vols:
         d = ws / "data_full" / "zongmu" / f"vol{v}"
@@ -520,7 +527,7 @@ def cmd_map(ws: Path, vols: list[str]) -> None:
                          ensure_ascii=False))
         for x in summ["dzg_text_halves_missing_in_our_scan"]:
             print("   我们缺：", x)
-    out = ws / "corpus" / "daizhige"
+    out = _corpus(ws) / "daizhige"
     with open(out / "page_map.jsonl", "w", encoding="utf-8") as f:
         for r in all_rows:
             f.write(json.dumps(r, ensure_ascii=False) + "\n")
@@ -654,7 +661,7 @@ def cmd_compare(ws: Path, n_samples: int = 10) -> None:
     except Exception as e:  # noqa: BLE001 —— 没有异体表只是少一类
         print("VariantMap 装不上，异体不单列：", e)
         vm = None
-    gp = split_rolls(guangpan_lines(ws / "corpus" / GUANGPAN))
+    gp = split_rolls(guangpan_lines(_corpus(ws) / GUANGPAN))
     dz = split_rolls(dzg_lines(halves))
     cols_t, diffs, lens = Counter(), [], Counter()
     per_roll = {}
@@ -679,7 +686,7 @@ def cmd_compare(ws: Path, n_samples: int = 10) -> None:
                         "diffs": len(ds)}
     # page_map 反查：落在我们 vol01–10 哪一页
     inv = {}
-    pm = ws / "corpus" / "daizhige" / "page_map.jsonl"
+    pm = _corpus(ws) / "daizhige" / "page_map.jsonl"
     if pm.exists():
         for ln in pm.read_text(encoding="utf-8").splitlines():
             row = json.loads(ln)
@@ -713,7 +720,7 @@ def cmd_compare(ws: Path, n_samples: int = 10) -> None:
         "diff_sites": dict(cats), "diff_chars": dict(chars),
         "per_roll": per_roll, "samples": samples,
     }
-    out = ws / "corpus" / "daizhige" / "compare_guangpan.json"
+    out = _corpus(ws) / "daizhige" / "compare_guangpan.json"
     out.write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(json.dumps({k: res[k] for k in ("rolls_compared", "han", "columns", "column_rates",
                                            "diff_sites", "diff_chars")}, ensure_ascii=False, indent=1))

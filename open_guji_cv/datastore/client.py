@@ -134,7 +134,7 @@ class WorkerSource:
         return len(page["rows"])
 
     def fetch_blobs(self, shas: Iterable[str], bucket: str = "main",
-                    workers: int | None = None) -> Iterator[tuple[str, bytes]]:
+                    workers: int | None = None, ext: str = "png") -> Iterator[tuple[str, bytes]]:
         """每 1000 张批量签一次，再并发直取 R2。
 
         每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
@@ -146,24 +146,24 @@ class WorkerSource:
         with ThreadPoolExecutor(workers) as ex:
             for i in range(0, len(shas), SIGN_BATCH):
                 chunk = shas[i:i + SIGN_BATCH]
-                urls = self._sign_get(bucket, chunk)
+                urls = self._sign_get(bucket, chunk, ext)
                 yield from ex.map(lambda sha: (sha, getter.get(urls[sha])), chunk)
 
-    def _sign_get(self, bucket: str, shas: list[str]) -> dict[str, str]:
+    def _sign_get(self, bucket: str, shas: list[str], ext: str = "png") -> dict[str, str]:
         if not getattr(self, "_no_batch", False):
             try:
                 signed = self._call("POST", "/v1/assets/sign-batch", tries=2,
-                                    body={"bucket": bucket, "op": "get", "sha256s": shas})
+                                    body={"bucket": bucket, "op": "get", "ext": ext, "sha256s": shas})
                 return {it["sha256"]: it["url"] for it in signed["items"]}
             except CentralError as e:
                 if e.status == 503 and len(shas) > 25:  # Worker 超资源（1102）：对半拆开再签
                     h = len(shas) // 2
-                    return {**self._sign_get(bucket, shas[:h]), **self._sign_get(bucket, shas[h:])}
+                    return {**self._sign_get(bucket, shas[:h], ext), **self._sign_get(bucket, shas[h:], ext)}
                 if e.status != 404 or e.code != "not_found":
                     raise
                 self._no_batch = True          # 旧版 Worker 没有批量签名：退回逐张签
         return {s: self._call("POST", "/v1/assets/sign",
-                              body={"bucket": bucket, "op": "get", "sha256": s})["url"] for s in shas}
+                              body={"bucket": bucket, "op": "get", "ext": ext, "sha256": s})["url"] for s in shas}
 
     # ---- 分支与写 ----
     def branches(self) -> list[dict]:
@@ -299,7 +299,7 @@ class PgSource:
                     (ws, int(rev), limit))
         return int(cur.fetchone()[0])
 
-    def fetch_blobs(self, shas, bucket: str = "main", workers: int = 8):
+    def fetch_blobs(self, shas, bucket: str = "main", workers: int = 8, ext: str = "png"):
         raise CentralError(0, "no_blobs", "直连 Postgres 拿不到图：图在 R2，请经 Worker（GUJI_DATA_TOKEN）或预先填好本地缓存")
 
 
@@ -328,12 +328,13 @@ class BlobCache:
         tmp.replace(p)
         return p
 
-    def ensure(self, src, shas: Iterable[str], bucket: str = "main") -> dict:
-        """把缺的图拉进缓存。返回 {have, fetched}。"""
+    def ensure(self, src, shas: Iterable[str], bucket: str = "main", ext: str = "png") -> dict:
+        """把缺的图（``ext`` 是 R2 键后缀：图 png，整理本 txt）拉进缓存。返回 {have, fetched}。
+        缓存只按 sha 存，文件名一律 ``.png``（内容相同 sha 就相同，与后缀无关）。"""
         want = sorted(set(shas))
         missing = [s for s in want if not self.has(s)]
         t0 = time.time()
-        for n, (sha, data) in enumerate(src.fetch_blobs(missing, bucket=bucket) if missing else (), 1):
+        for n, (sha, data) in enumerate(src.fetch_blobs(missing, bucket=bucket, ext=ext) if missing else (), 1):
             self.put(sha, data)
             if n % 2000 == 0 or (n == len(missing) and n >= 2000):   # 大批量时报进度，免得像卡住
                 print(f"  取图 {n}/{len(missing)}（{n / max(time.time() - t0, 1e-6):.0f} 张/秒）",

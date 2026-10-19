@@ -21,7 +21,7 @@
 <workspace>/
   books/<book>.yaml            册配置
   data_full/…                  原图（raw_root）
-  corpus/<name>.txt            整理本语料
+  corpus/<name>.txt            整理本语料（迁到中心库后在数据目录，见 corpus_dir）
   output/glyph.db, glyph_store/  字形库索引 + 真源
   products/<book>/<step>/      数值产物（可重算，不进 git）
   cache/<book>/<kind>/         派生图像 LRU 缓存（不进 git）
@@ -242,8 +242,23 @@ def corpus_path(name: str) -> Path:
     小样本，在 `GUJI_WORKSPACE` 下跑才读到工作区真语料，两边一度分叉 4680 行
     却完全无感知（`align_ref` 锚定失败诊断明明很详细，但没人想到是读错了文件）。
     """
-    ws = workspace_root()
-    return (ws or REPO_ROOT) / "corpus" / name
+    d = corpus_dir()
+    return (d if d is not None else REPO_ROOT / "corpus") / name
+
+
+def corpus_dir(ws: Path | None = None) -> Path | None:
+    """整理本目录 ``corpus/``（见 ``data_root``；2026-10-19 起进中心库，共享方案 2.2 节）。
+
+    迁过的工作区在数据目录；数据目录里还没有、工作区根还留着旧的 ``corpus/``（新版收录范围之前迁的，
+    还没 ``guji db migrate`` 补迁）时退回工作区根，免得静默读到仓内小样本。没有工作区返回 None。"""
+    ws = ws if ws is not None else workspace_root()
+    if ws is None:
+        return None
+    d = data_root(ws)
+    old = Path(ws) / "corpus"
+    if d != Path(ws) and not (d / "corpus").is_dir() and old.is_dir():
+        return old
+    return d / "corpus"
 
 
 #: 仓内样本语料的量级上限。工作区真语料 275 万字（8.2 MB）、仓内样本各 6000 字

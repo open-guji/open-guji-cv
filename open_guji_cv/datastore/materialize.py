@@ -3,7 +3,8 @@
 还原规则与 ``verify`` 相同：逐行表按 ``src_line`` 拼回，整文件表取 ``raw``，空文件与文件末尾
 换行靠 ``source_files``；每个文件写完核一次整文件 sha256，对不上就整次报错，不留半成品。
 刻例图按 ``glyph_instances.patch_sha`` 从本地缓存（缺的经 Worker 从 R2 拉）落到
-``patches/<实例 id，':' 换成 '_'>.png``；锚图按 ``anchor_patches_meta`` 落回原路径。
+``patches/<实例 id，':' 换成 '_'>.png``；锚图（``anchor_patches_meta``）、整理本（``corpus_files``）
+按表里的 ``src_path`` 落回原路径（``scope.BLOB_TABLES``）。
 """
 
 from __future__ import annotations
@@ -13,14 +14,26 @@ import shutil
 from collections import defaultdict
 from pathlib import Path
 
-from .scope import GS, sha256
+from .scope import BLOB_TABLES, GS, sha256
 
 WHOLE_TABLES = ("workspaces", "books", "files")
-NOT_LINE = set(WHOLE_TABLES) | {"source_files", "anchor_patches_meta"}
+NOT_LINE = set(WHOLE_TABLES) | {"source_files"} | set(BLOB_TABLES)
 
 
 class MaterializeError(RuntimeError):
     pass
+
+
+def blob_rows(src, tbl: str, ws: str) -> list[dict]:
+    """读一张 BLOB 表。Worker 还没开放这张表（新表上线前的旧 Worker 回 404 ``no_table``）当空表，
+    免得新版客户端在 Worker 部署前连 pull 都做不了。"""
+    from .client import CentralError
+    try:
+        return list(src.rows(tbl, ws))
+    except CentralError as e:
+        if e.code == "no_table":
+            return []
+        raise
 
 
 def _safe(instance_id: str) -> str:            # 同 clustering.glyph_db._safe
@@ -36,7 +49,9 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     dest = Path(dest)
     sel = lambda p: any(p.startswith(x) for x in prefixes)
     files = {r["src_path"]: r for r in src.rows("source_files", ws) if sel(r["src_path"])}
-    if not files:
+    blobs = {tbl: {r["src_path"]: r["sha256"] for r in blob_rows(src, tbl, ws) if sel(r["src_path"])}
+             for tbl in BLOB_TABLES} if with_images else {}
+    if not files and not any(blobs.values()):
         raise MaterializeError(f"库里工作区 {ws} 没有 {'、'.join(prefixes)} 下的文件")
 
     by_tbl: dict[str, list[str]] = defaultdict(list)
@@ -46,7 +61,7 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     texts: dict[str, bytes] = {}
     for tbl, paths in sorted(by_tbl.items()):
         want = set(paths)
-        if tbl == "anchor_patches_meta":
+        if tbl in BLOB_TABLES:
             continue
         if tbl in WHOLE_TABLES:
             for r in src.rows(tbl, ws):
@@ -69,27 +84,29 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
 
     bad = [p for p, b in texts.items()
            if sha256(b) != files[p]["sha256"] or len(b) != int(files[p]["bytes"])]
-    missing = [p for p, f in files.items() if f["tbl"] != "anchor_patches_meta" and p not in texts]
+    missing = [p for p, f in files.items() if f["tbl"] not in BLOB_TABLES and p not in texts]
     if bad or missing:
         raise MaterializeError(f"还原后 sha 不符 {len(bad)} 个（如 {bad[:3]}），缺 {len(missing)} 个（如 {missing[:3]}）")
 
-    # 图：刻例图（只在还原字形库时）＋锚图（只在还原 feedback/ 时）
+    # R2 里的文件：刻例图（只在还原字形库时）＋锚图、整理本（不进 source_files，单在 BLOB_TABLES）
     images: dict[str, str] = {}                      # 相对路径 → sha
+    by_ext: dict[str, set[str]] = defaultdict(set)   # R2 键后缀 → sha
     if with_images and sel(GS + "patches/"):
         for r in src.rows("glyph_instances", ws):
             if r.get("patch_sha"):
                 images[f"{GS}patches/{_safe(r['instance_id'])}.png"] = r["patch_sha"]
-    ap = "feedback/anchor_patches/"
-    if with_images and any(ap.startswith(x) or x.startswith(ap) for x in prefixes):
-        for r in src.rows("anchor_patches_meta", ws):    # 锚图不进 source_files，单在这张表
-            if sel(r["src_path"]):
-                images[r["src_path"]] = r["sha256"]
+                by_ext["png"].add(r["patch_sha"])
+    for tbl, got in blobs.items():
+        images.update(got)
+        by_ext[BLOB_TABLES[tbl]].update(got.values())
     img_stats = {}
     if images:
         if cache is None:
             from .client import BlobCache
             cache = BlobCache()
-        img_stats = cache.ensure(src, images.values(), bucket=bucket)
+        for ext in sorted(by_ext):
+            st = cache.ensure(src, by_ext[ext], bucket=bucket, ext=ext)
+            img_stats = {k: img_stats.get(k, 0) + v for k, v in st.items()}
 
     # 落盘：先写进临时目录，全部成功再换上去
     tmp = dest.with_name(dest.name + f".tmp{os.getpid()}")
