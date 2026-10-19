@@ -101,6 +101,31 @@ def api_rare_batch(req: RareBatchIn) -> dict:
     return rare_batch(req.book, req.slots, req.k, deps.image_cache())
 
 
+@router.get("/api/rare/alt/{book}/{page}/{col}/{slot}")
+@maps_http
+def api_rare_alt(book: str, page: int, col: int, slot: int, sub: str = "",
+                 p: list[str] = Query(default=[]), q: str = "", k: int = 30) -> dict:
+    """**相似字（以字找字）**：近似字的异体族（本仓表＋部件檢索＋字统网）按这格字块图排序。
+
+    用户 10-19：人审最花时间的是先认出一个近似字、再去字统网翻它的异体、挑和图最像的。
+    `p`＝卡上已有的近似字（整理本字、上下文字、库前几名，前端从卡上取），字统网只读缓存；
+    `q`＝人键入的近似字，缓存里没有就去字统网取一次（约 2.5 秒，取到写缓存）。
+    出待审单时同一函数批量算好写进 pending（`guji audit alt`），网站只显示；控制台在这里现算。
+    引擎 `review/alt_cands.py`；只出候选、不进放行。"""
+    from ...clustering.variant_sources import shared_zi
+    from ...review.alt_cands import alt_for_image, pivots_of
+    img = rare_patch(book, page, col, slot, sub, deps.image_cache())
+    if img is None:
+        raise ImageMissing(f"没有字块 p{page:04d}c{col:02d}s{slot}{sub or ''}")
+    zi = shared_zi()
+    typed = [c for c in q if not c.isspace()][:1]
+    if typed:
+        zi.ensure(typed[0])                  # 只为人键入的那个字联网，取到写缓存
+    piv = typed + pivots_of({}, [c for c in p if len(c) == 1])
+    return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}", "pivots": piv,
+            "candidates": alt_for_image(book, img, piv, k=k, zi=zi)}
+
+
 @router.get("/api/rare/search/{book}")
 @maps_http
 def api_rare_ids_search(book: str, top: str = "", slot: list[str] = Query(default=[]),

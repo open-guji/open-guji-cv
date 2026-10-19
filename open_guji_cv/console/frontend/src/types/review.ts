@@ -264,6 +264,15 @@ export interface ReviewVerdictsResponse {
   verdicts: Record<string, ReviewVerdict>
 }
 
+/** 相似字（以字找字，/api/rare/alt）：近似字的异体族按这格字块图排序。
+ * `s` 相似度；`p` 从哪个近似字查来；`src` 哪几家（v 本仓异体表／rt 部件檢索／zi 字统网／near 形近表／piv 近似字本身）。 */
+export interface AltCand {
+  c: string
+  s: number
+  p: string
+  src: string
+}
+
 export interface RareCandidate {
   char: string
   score: number

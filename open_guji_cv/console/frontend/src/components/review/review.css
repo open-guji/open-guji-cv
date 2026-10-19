@@ -152,3 +152,14 @@
 .rvcard[data-decided="1"] { opacity: .55; }
 .rvcard[data-decided="1"]:hover, .rvcard[data-decided="1"].cur { opacity: .9; }
 .rvhad { margin-left: .4rem; padding: 0 .35rem; border-radius: 3px; background: var(--ok-soft); color: var(--ok); font-size: .8em; }
+
+/* 相似字（以字找字，AltPanel.tsx） */
+.rvalt { margin-top: .4rem; font-size: .74rem; }
+.rvalthead { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; }
+.rvaltq input { width: 3.5rem; font-size: .9rem; padding: .05rem .3rem; }
+.rvaltq button { font-size: .72rem; padding: .1rem .45rem; margin-left: .2rem; }
+.rvaltgrid { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .3rem; }
+.rvaltbtn { display: inline-flex; flex-direction: column; align-items: center; padding: .15rem; min-width: 3rem; }
+.rvaltimg { width: 2.6rem; height: 2.6rem; object-fit: contain; background: #fff; }
+.rvaltch { font-size: 1.8rem; line-height: 2.6rem; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+.rvaltmore { font-size: .72rem; align-self: center; }
