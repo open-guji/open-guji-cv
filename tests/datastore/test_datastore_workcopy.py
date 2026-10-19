@@ -231,3 +231,25 @@ def test_merge_append_keeps_both_tails():
     assert _merge_append(b"x\na\n", b"x\nb\n") == b"x\nb\na\n"
     assert _merge_append(b"x\na\n", b"x\na\nb\n") == b"x\na\nb\n"
     assert _merge_append(b"", b"") == b""
+
+
+def test_anchor_patches_round_trip(repo, conn, tmp_path):  # noqa: F811
+    """锚图只记在 anchor_patches_meta（不进 source_files）：迁移不该把它们当差异，新机器 pull 要还原出来。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import data_dir, local_changes, migrate
+    files = _workspace(tmp_path)
+    files["W/feedback/anchor_patches/vol03/ab/ab12.png"] = b"\x89PNG anchor"
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+
+    ws = _checkout(files, tmp_path / "ws")
+    rep = migrate(src, ws, cache=cache)
+    assert rep["n_differ"] == 0
+    assert (data_dir(ws) / "feedback/anchor_patches/vol03/ab/ab12.png").read_bytes() == b"\x89PNG anchor"
+    assert local_changes(ws) == []
+
+    fresh = _fresh(files, tmp_path / "m2", src, cache)
+    assert (data_dir(fresh) / "feedback/anchor_patches/vol03/ab/ab12.png").read_bytes() == b"\x89PNG anchor"
+    assert local_changes(fresh) == []

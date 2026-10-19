@@ -14,11 +14,14 @@
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import http.client
 import json
 import os
 import ssl
+import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -125,17 +128,20 @@ class WorkerSource:
         return len(page["rows"])
 
     def fetch_blobs(self, shas: Iterable[str], bucket: str = "main",
-                    workers: int = 8) -> Iterator[tuple[str, bytes]]:
+                    workers: int | None = None) -> Iterator[tuple[str, bytes]]:
+        """每 1000 张批量签一次，再并发直取 R2。
+
+        每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
+        （``GUJI_DATA_FETCH_WORKERS`` 可改）。取图走签名直链、不经 Worker，不占 Worker 请求额度。
+        10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。"""
         shas = sorted(set(shas))
-        for i in range(0, len(shas), SIGN_BATCH):
-            chunk = shas[i:i + SIGN_BATCH]
-            urls = self._sign_get(bucket, chunk)
-
-            def get(sha: str) -> tuple[str, bytes]:
-                return sha, self._call("GET", urls[sha], auth=False, raw=True)
-
-            with ThreadPoolExecutor(workers) as ex:
-                yield from ex.map(get, chunk)
+        workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
+        getter = _KeepAliveGetter(self._ctx)
+        with ThreadPoolExecutor(workers) as ex:
+            for i in range(0, len(shas), SIGN_BATCH):
+                chunk = shas[i:i + SIGN_BATCH]
+                urls = self._sign_get(bucket, chunk)
+                yield from ex.map(lambda sha: (sha, getter.get(urls[sha])), chunk)
 
     def _sign_get(self, bucket: str, shas: list[str]) -> dict[str, str]:
         if not getattr(self, "_no_batch", False):
@@ -178,6 +184,69 @@ class WorkerSource:
 
     def delete_backup(self, day: str) -> dict:
         return self._call("DELETE", f"/v1/backups/{day}")
+
+
+class _KeepAliveGetter:
+    """多线程 GET：每个线程按主机留一条 HTTPS 长连接，断了就重连；走系统代理（CONNECT 隧道）。
+
+    重试同 ``WorkerSource._call``：网络错、429、5xx 退避重试，最多 5 次；别的状态码直接报错。"""
+
+    def __init__(self, ctx: ssl.SSLContext, timeout: float = 120):
+        self.ctx, self.timeout = ctx, timeout
+        self.local = threading.local()
+
+    def _conn(self, scheme: str, host: str, port: int) -> http.client.HTTPConnection:
+        conns = self.local.__dict__.setdefault("conns", {})
+        c = conns.get((scheme, host, port))
+        if c is None and scheme == "http":             # 只有本机测试用 http
+            c = http.client.HTTPConnection(host, port, timeout=self.timeout)
+            conns[(scheme, host, port)] = c
+        elif c is None:
+            px = urllib.request.getproxies().get("https")
+            if px and not urllib.request.proxy_bypass(host):
+                pu = urllib.parse.urlsplit(px if "//" in px else "http://" + px)
+                c = http.client.HTTPSConnection(pu.hostname, pu.port or 80, context=self.ctx, timeout=self.timeout)
+                hdrs = {}
+                if pu.username:
+                    cred = f"{urllib.parse.unquote(pu.username)}:{urllib.parse.unquote(pu.password or '')}"
+                    hdrs["Proxy-Authorization"] = "Basic " + base64.b64encode(cred.encode()).decode()
+                c.set_tunnel(host, port, headers=hdrs)
+            else:
+                c = http.client.HTTPSConnection(host, port, context=self.ctx, timeout=self.timeout)
+            conns[(scheme, host, port)] = c
+        return c
+
+    def _drop(self, key: tuple) -> None:
+        c = self.local.__dict__.get("conns", {}).pop(key, None)
+        if c is not None:
+            c.close()
+
+    def get(self, url: str) -> bytes:
+        u = urllib.parse.urlsplit(url)
+        key = (u.scheme, u.hostname, u.port or (80 if u.scheme == "http" else 443))
+        path = u.path + ("?" + u.query if u.query else "")
+        last: Exception | None = None
+        for attempt in range(5):
+            try:
+                c = self._conn(*key)
+                c.request("GET", path, headers={"user-agent": "open-guji-cv-datastore"})
+                r = c.getresponse()
+                data = r.read()
+                if r.will_close:
+                    self._drop(key)
+                if r.status == 200:
+                    return data
+                if r.status != 429 and r.status < 500:
+                    raise CentralError(r.status, "http", data[:200].decode("utf-8", "replace"))
+                last = CentralError(r.status, "http", data[:200].decode("utf-8", "replace"))
+            except (OSError, http.client.HTTPException) as e:   # 连接断了：丢掉重连
+                self._drop(key)
+                last = e
+                if attempt == 0 and isinstance(e, (http.client.RemoteDisconnected, ConnectionResetError,
+                                                   BrokenPipeError)):
+                    continue                           # 闲置长连接被对端关了：立刻重连，不等
+            time.sleep(min(2 ** attempt, 20))
+        raise last  # type: ignore[misc]
 
 
 class PgSource:
@@ -254,6 +323,10 @@ class BlobCache:
         """把缺的图拉进缓存。返回 {have, fetched}。"""
         want = sorted(set(shas))
         missing = [s for s in want if not self.has(s)]
-        for sha, data in (src.fetch_blobs(missing, bucket=bucket) if missing else ()):
+        t0 = time.time()
+        for n, (sha, data) in enumerate(src.fetch_blobs(missing, bucket=bucket) if missing else (), 1):
             self.put(sha, data)
+            if n % 2000 == 0 or (n == len(missing) and n >= 2000):   # 大批量时报进度，免得像卡住
+                print(f"  取图 {n}/{len(missing)}（{n / max(time.time() - t0, 1e-6):.0f} 张/秒）",
+                      file=sys.stderr, flush=True)
         return {"have": len(want) - len(missing), "fetched": len(missing)}
