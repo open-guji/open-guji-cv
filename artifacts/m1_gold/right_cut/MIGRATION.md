@@ -34,6 +34,6 @@ python research/scripts_oneoff/eval_right_cut.py ../open-guji-dataset/char-segme
 ## 与 doc 上次值对照
 
 - 分片 README「修后首测」：救回 **166/175（95%）**，门槛容 10% 疑难；
-- `doc/design/char_clustering_design.md` 2026-08-26 收尾表：right-cut **97%**；
+- `doc/archive/design/char_clustering_design.md` 2026-08-26 收尾表：right-cut **97%**；
 - v2：**7/10 = 70%，门失败**。可评点 175→10：同 left_cut，应是裁切边定义变了（v1 贴界行内缘裁；v2 用 Step3 的 content_x，成因推测、未逐页验证）带来的口径变化；
   失败的 3 条里 2 条是 v1 就有的「救援上限」老局限（README「p93 之外留给疑难」），1 条是残段。**不能读成「右缘救援退步了 25 个点」**。
