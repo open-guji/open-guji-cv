@@ -8,6 +8,11 @@
 待发分支 `rc/v0.4.4`。
 
 ### Fixed
+- 中心库 Worker 超资源（Cloudflare 1102，客户端看到 503）不再让 `guji db sync|pull` 整次失败（10-19 服务器 siku 拉 4 条新改动时失败）：查表每页 5000 → 2000 条，遇 503 页减半再试（最小 100）；下载签名每批 1000 → 250 张，遇 503 对半拆开；上传签名每批 200 → 40 张（每张要在 Worker 里查一次桶）。10-19 05:00–06:00 UTC 有 65 次 exceededResources。
+- 更正 v0.4.1 的说法：取图的签名直链指向 Worker 自己（`/v1/blob/…`），**每张图算一次 Worker 请求**（免费档每天 10 万次）。新机器拉一遍 siku 约 1.8 万次；10-19 05:00 UTC 那一小时用了 7.6 万次。拉过的图在本地缓存里，不重复取。
+- 只动 `datastore/`，17 步 `code_hash` 不变。
+
+### Fixed
 - 借库（`workspace.yaml` 的 `glyph_lib.borrow` → `rebuild_from_store(extra_stores=...)`）不再把被借库的人裁算成本书的人裁：被借库的 `admissions` 不装，借来实例的 `label_status='human'` 改记 `borrowed_human`；借来的刻例照旧参与匹配。原先人裁通道（`glyph_fp.HUMAN_SQL`）、铁证匹配器、`glyph_match` 共识升档都会把它们当本书人裁：中心库真数据实测全唐文借殿本，人裁查询 2,139 → 5,470 条，共识升档的字 126 → 491 个；修后回到只本书的数（共享方案 3.4 节，S3）。现在没有工作区开着借库。只动 `clustering/glyph_db.py`（不进任何 Step 的 `code_deps`），17 步 `code_hash` 不变。
 
 ## [0.4.3] - 2026-10-18
@@ -29,7 +34,7 @@ PATCH。push 删除检查算上锚图（只动 `datastore/`），17 步 `code_ha
 PATCH。中心库拉图提速、锚图还原（只动 `datastore/`），17 步 `code_hash` 不变，不用重算。
 
 ### Fixed
-- `guji db sync|pull|migrate` 拉图提速（10-19 D 反馈：18,481 张刻例图拉了约 20 分钟）：签名本来就每 1000 张批量签，慢在取图一张一次 TLS 握手、只开 8 线程。`WorkerSource.fetch_blobs` 改为每线程留 HTTPS 长连接（走系统代理的 CONNECT 隧道）、缺省 32 线程（`GUJI_DATA_FETCH_WORKERS` 可改），闲置连接被关立刻重连；超过 2000 张时每 2000 张在 stderr 报一次进度。云端实测 3000 张小图：约 30 张/秒 → 约 220 张/秒。取图走 R2 签名直链，不占 Worker 请求额度。
+- `guji db sync|pull|migrate` 拉图提速（10-19 D 反馈：18,481 张刻例图拉了约 20 分钟）：签名本来就每 1000 张批量签，慢在取图一张一次 TLS 握手、只开 8 线程。`WorkerSource.fetch_blobs` 改为每线程留 HTTPS 长连接（走系统代理的 CONNECT 隧道）、缺省 32 线程（`GUJI_DATA_FETCH_WORKERS` 可改），闲置连接被关立刻重连；超过 2000 张时每 2000 张在 stderr 报一次进度。云端实测 3000 张小图：约 30 张/秒 → 约 220 张/秒。取图走签名直链（更正见 0.4.4：直链指向 Worker，每张图算一次 Worker 请求）。
 - 锚图（`feedback/anchor_patches/**.png`）只记在 `anchor_patches_meta`、不进 `source_files`，`pull`／`sync` 从没把它们还原到数据目录，`migrate` 则把检出里的每张锚图都报成「与中心库不一致」（服务器 siku-zongmu 报 1946 个）。`_db_manifest` 与 `materialize` 现在把这张表算进来。
 - 只动 `datastore/`（不进任何 Step 的 `code_deps`），17 步 `code_hash` 不变。
 

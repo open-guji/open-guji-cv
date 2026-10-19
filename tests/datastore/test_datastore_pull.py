@@ -248,3 +248,53 @@ def test_fetch_blobs_reuses_connections_and_retries(monkeypatch):
         srv.shutdown()
     assert got == blobs
     assert len(peers) <= 4 + 1                     # 4 个取图线程各一条，加签名那一条
+
+
+def test_worker_resource_limit_shrinks_pages(monkeypatch):
+    """Worker 超资源回 503（Cloudflare 1102）时：查表页减半、批量签名对半拆，不整次失败。"""
+    from open_guji_cv.datastore import client
+    from open_guji_cv.datastore.client import WorkerSource
+
+    monkeypatch.setattr(client.time, "sleep", lambda s: None)
+    rows = [{"i": i, "src_path": f"f{i}"} for i in range(1200)]
+    seen = {"limits": [], "signs": []}
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, obj):
+            raw = json.dumps(obj).encode()
+            self.send_response(code)
+            self.send_header("content-length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            q = dict(urllib.parse.parse_qsl(urllib.parse.urlparse(self.path).query))
+            lim = int(q["limit"])
+            seen["limits"].append(lim)
+            if lim > 500:
+                return self._send(503, {"error": "http", "message": "error code: 1102"})
+            start = json.loads(q["after"])[0] if "after" in q else -1
+            page = [r for r in rows if r["i"] > start][:lim]
+            self._send(200, {"rows": page, "next": json.dumps([page[-1]["i"]]) if len(page) == lim else None})
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            seen["signs"].append(len(body["sha256s"]))
+            if len(body["sha256s"]) > 60:
+                return self._send(503, {"error": "http", "message": "error code: 1102"})
+            self._send(200, {"items": [{"sha256": s, "url": "u" + s} for s in body["sha256s"]]})
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        src = WorkerSource(url=f"http://127.0.0.1:{srv.server_port}", token="tok")
+        assert [r["i"] for r in src.rows("events", "tws")] == list(range(1200))
+        shas = [f"{i:064x}" for i in range(200)]
+        assert src._sign_get("main", shas) == {s: "u" + s for s in shas}
+    finally:
+        srv.shutdown()
+    assert max(l for l in seen["limits"] if l <= 500) == 500
+    assert max(seen["signs"]) == 200 and max(n for n in seen["signs"] if n <= 60) <= 60

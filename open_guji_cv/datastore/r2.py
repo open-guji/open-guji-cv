@@ -113,13 +113,16 @@ def _client():
     return s3, os.environ["R2_BUCKET"]
 
 
+PUT_BATCH = 40   # 每张都要在 Worker 里查一次桶（R2 调用），一次 200 张会超免费档资源上限（1102）
+
+
 def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: int = 8,
                       limit: int | None = None, read=None) -> dict:
     """经 guji-data Worker 传：POST /v1/assets/sign → 已有就跳过，否则 PUT 到返回的 url。
 
     要 ``GUJI_DATA_TOKEN``（exp 令牌只能传 exp 桶，main 桶要正式令牌）；地址默认
     https://data.open-guji.com（``GUJI_DATA_URL`` 可改）。Worker 端核 sha256，不符回 400。
-    先用 ``/v1/assets/sign-batch`` 每 200 张签一次（已有的跳过），再逐张 PUT；
+    先用 ``/v1/assets/sign-batch`` 每 ``PUT_BATCH`` 张签一次（已有的跳过），再逐张 PUT；
     旧版 Worker 没有批量接口就退回逐张签。``limit`` 用来分批。
     ``read(obj) -> bytes`` 给了就不从 git 读（``db push`` 传本地文件用）。
     """
@@ -179,7 +182,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
         return put(o, json.loads(body)) if st == 200 else f"sign_{st}"
 
     def batch(chunk: list[Obj]) -> list[str] | None:
-        """一次签 200 张（/v1/assets/sign-batch，已有的直接判 exists）；旧版 Worker 回 None。"""
+        """一次签 ``PUT_BATCH`` 张（/v1/assets/sign-batch，已有的直接判 exists）；旧版 Worker 回 None。"""
         st, body = call(f"{base}/v1/assets/sign-batch", json.dumps(
             {"bucket": bucket, "op": "put", "ext": "png", "sha256s": [o.sha for o in chunk]}).encode(),
             "POST", {"authorization": f"Bearer {token}", "content-type": "application/json"})
@@ -194,8 +197,8 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     todo = sorted(objs.values(), key=lambda o: o.sha)[:limit]
     try:
         rest = todo
-        for i in range(0, len(todo), 200):
-            res = batch(todo[i:i + 200])
+        for i in range(0, len(todo), PUT_BATCH):
+            res = batch(todo[i:i + PUT_BATCH])
             if res is None:                     # 旧版 Worker：退回逐张签
                 rest = todo[i:]
                 break
