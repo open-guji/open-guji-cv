@@ -12,8 +12,8 @@
   - 册钉字形库 `glyph_pin: N`（`core/glyph_pin.py`）：seed_admit 的人裁、近似字指纹换成 `glyph-gN`，别的对话推上来的人裁不再让本册 seed_admit 过期；号加一才落地新人裁。起因：重跑 vol04–10 时每次 `guji db sync` 都让已过粗校的册判过期、重跑、重做出口检查。不写 = 指纹逐位不变；第一次写上会让该册 seed_admit 过期一次。
   - `guji products diff <册> --a <前> [--b <后>] [--images N]`（`ops/products_diff.py`）：两份产物按位置逐列对比（切分变了也能比），出人审率前后、变了的列（切分／字／状态／框）、逐格翻转（含「放行字变」），`--images` 出原图并排看图页。
   - `guji products pack push|fetch|list` 与 `push-index|fetch-index`（`datastore/packs.py`）：一册 products、生僻字 embedding 索引存进 R2（guji-data Worker 新接口 `/v1/packs`，guji-workspace-data#15），新会话直接取，不再整册现算（云上一册 1.5–2.5 小时）、不再冷建索引（云上单进程约半小时，`--jobs 4` 约 8 分钟；取回 30 MB 约 4 秒）。按名字只增不改，取回先核 sha256。
-
 - 相似字（以字找字，用户 10-19 定）：待审格的近似字（整理本字、上下文字、库前 3…）的异体族——本仓异体表＋部件檢索（新增 `config/variants/charcomp_rt.tsv`，非商业授权、文件头标来源）＋字统网一跳族（按需低频取、缓存在 `$GUJI_DATA_HOME/_shared/zitools/`，不进 git）——按字块图 CNN 余弦排序，每格 ≤30 个。`guji audit alt <册>` 出带 `alt` 的卡片 JSON 交 `pending_list.py`（`proof_fields` 带出 `alt`，网站精校页显示）；`guji audit alt-eval <册>` 人裁后量命中；控制台新路由 `GET /api/rare/alt/...`，定字卡与 Step8「都不对」下加「相似字」行和「以字找字」框。新模块 `clustering/variant_sources.py`、`review/alt_cands.py`；只出候选、不进放行；不碰任何 Step，17 步 `code_hash` 不变。PATCH。runbook S11-b，设计与读数 `doc/research/人审找字-以字找字与异体族按图排序.md`。
+
 ### Changed
 - Step5-a `glyph_match`：借来的刻例降一档（共享方案 S6）。判 same 的库条目里有本书的，就用本书那条当证据；只有借来的条目（`glyph_lib.borrow` 装进来的，如共享刻例库 `glyphlib-qkp-v1`）判 same 时降成 unsure，字进候选交上下文裁决，记 `via="borrowed:<条目 id>"`，不再走共识升档与近形决胜。新硬参数 `borrow_fingerprint` 自动填被借库的名字，借的库换版本这一步判过期；没借库时是空串、不进参数 dump。**`glyph_match` 的 `code_hash` 变了**（改了 `steps/glyph_match.py` 与 `clustering/match.py`，`MatchResult` 多一个只在内存里用的 `same_hits`）；现在没有书借库，各册判决与参数哈希都不变，按版本号规矩算 PATCH，可以不重算。
 
