@@ -18,6 +18,12 @@
 | **字形库体检**（/glyphdb-audit）| https://claude.ai/code/artifact/a9509695-aaa5-4842-a496-a09e164b5417 | `output/glyphdb_audit/review.html`（随库提交）| `scripts/audit_glyph_db.py run` |
 | **对勘复审**（我的定字 × 整理本，可改判/打印）| https://claude.ai/code/artifact/33403492-4d1c-4b32-bb2b-c66e01971684 | `output/vol01/phase9_seed/collation_review.html` | （2026-10-06 脚本已删，页面为历史快照）`scripts/export_collation_review.py output/vol01` |
 
+## 殿本逐列字数金标（doc/design/19，2026-10-19）
+
+| 页面 | URL | 快照/真源 | 再生 |
+|---|---|---|---|
+| **列字数金标人裁**（56 列两源不一致的甲乙裁 + 300 列一致列抽检）| https://claude.ai/artifact/7uz9XP9Frcr6FjevoqukWq | 卡 id 与甲乙对应：`research/yolo_release_compare/results/colgold_review_cards.jsonl` | `research/yolo_release_compare/build_colgold_review.py`（要先对卡涉及页跑 Step1）；收回 `.claude/skills/review-artifact/scripts/harvest_verdicts.py`。**重发布一律同一 URL** |
+
 ## 研究台账（本轮调研与实测的导览页，2026-09-22）
 
 | 页面 | URL | 快照/真源 | 再生 |
