@@ -85,7 +85,7 @@ def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
                              ensure_ascii=False), flush=True)
         except SyncConflict as e:
             print(json.dumps({"at": at, "conflict": str(e)}, ensure_ascii=False), file=sys.stderr, flush=True)
-        except (OSError, RuntimeError) as e:
+        except (Exception, SystemExit) as e:  # noqa: BLE001  断网、连库失败、读到一半有人写都下一轮再试
             print(json.dumps({"at": at, "error": f"{type(e).__name__}: {e}"}, ensure_ascii=False),
                   file=sys.stderr, flush=True)
         time.sleep(interval)
