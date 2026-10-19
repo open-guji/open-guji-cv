@@ -6,6 +6,8 @@
 **册钉子**：册 yaml 写 `corpus: 1`（或 `v1`）。钉了之后，`params_for` 把参数里**属于语料库的内容指纹**
 （`PIN_FIELDS`）统一换成 `corpus-v1`：指纹只认版本号，不看内容；没钉的册一字不变。
 钉住的版本必须有清单，否则报错；清单之后文件被改过只警告一次（该出新版本，或把文件改回去）。
+算指纹时（``guji status`` 等）只警告；真开跑读语料的步之前 ``require_pin_clean`` 硬校验，改了或缺了就拒绝。
+两级清单（共享方案 S2）：书库 ``v<N>`` 写 ``base: M`` 时并上底库 ``b<M>``（中心库 ``corpus-base``）的条目。
 """
 from __future__ import annotations
 
@@ -94,6 +96,65 @@ def pack_root(ws: Path) -> Path:
     return new
 
 
+# ── 底库（共享，两级清单，共享方案 2.1 节）────────────────────────────────────────
+
+#: 底库清单所在的中心库特殊工作区（只读，升级脚本 ``guji corpus build-base`` 才写）
+BASE_WS = "corpus-base"
+BASE_DIR = "config/corpus-base"
+
+
+def base_root(ws: Path) -> Path | None:
+    """本机的底库清单目录：``corpus-base`` 工作区自己 → 它的数据目录；别的迁过的工作区 →
+    ``db pull`` 拉的只读副本（``core.workspace.borrowed_root``）；没迁的工作区 → None（不能用底库）。"""
+    from .workspace import borrowed_root, central_marker, data_root
+    m = central_marker(Path(ws))
+    if not m:
+        return None
+    if m.get("ws") == BASE_WS:
+        return (data_root(Path(ws)) or Path(ws)) / BASE_DIR
+    return borrowed_root(BASE_WS, str(m.get("branch") or "main")) / BASE_DIR
+
+
+def base_versions(ws: Path) -> list[int]:
+    d = base_root(ws)
+    if d is None or not d.is_dir():
+        return []
+    return sorted(int(p.name[1:]) for p in d.iterdir()
+                  if p.is_dir() and p.name.startswith("b") and p.name[1:].isdigit()
+                  and (p / "manifest.json").exists())
+
+
+def base_manifest_path(ws: Path, version: int) -> Path:
+    d = base_root(ws)
+    if d is None:
+        raise FileNotFoundError(f"{ws} 没迁到中心库，用不了底库（共享方案 2.1 节）")
+    return d / f"b{version}" / "manifest.json"
+
+
+def load_manifest(ws: Path, version: int) -> dict:
+    """书库 v<N> 的清单；写了 ``base: M`` 的，底库 b<M> 的条目并进来（书库只登记工作区里的文件）。"""
+    import json
+    mp = manifest_path(ws, version)
+    if not mp.exists():
+        raise FileNotFoundError(f"没有语料库 v{version} 的清单：{mp}")
+    man = json.loads(mp.read_text(encoding="utf-8"))
+    b = man.get("base")
+    if b is None:
+        return man
+    bp = base_manifest_path(ws, int(b))
+    if not bp.exists():
+        raise FileNotFoundError(f"语料库 v{version} 写着底库 b{b}，本机没有它的清单 {bp}"
+                                f"（先 guji db pull -w {ws}）")
+    base = json.loads(bp.read_text(encoding="utf-8"))
+    bad = [i["path"] for i in base["items"] if i["root"] != "repo"] + \
+          [i["path"] for i in man["items"] if i["root"] != "ws"]
+    if bad:
+        raise ValueError(f"两级清单的条目根不对（底库只放引擎仓文件，书库只放工作区文件）：{bad[:5]}")
+    return {**man, "items": sorted(base["items"] + man["items"], key=lambda i: (i["root"], i["path"])),
+            "code_tables": base.get("code_tables", {}),
+            "base_manifest": {k: base.get(k) for k in ("base_version", "repo_commit", "created")}}
+
+
 def versions(ws: Path) -> list[int]:
     d = pack_root(ws)
     if not d.is_dir():
@@ -176,13 +237,65 @@ def _check_pin_once(ws: Path | None, version: int) -> None:
     if not mp.exists():
         raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但没有清单 {mp}"
                                 f"（先跑 guji corpus build -w {ws}）")
-    import json
-    r = check_files(ws, json.loads(mp.read_text(encoding="utf-8")))
+    r = check_files(ws, load_manifest(ws, version))
     _CHECKED[key] = None
     if r["changed"] or r["missing"]:
         print(f"  ⚠️  语料库 v{version} 的清单与当前文件不符（改了 {len(r['changed'])}，缺 {len(r['missing'])}）："
               f"{(r['changed'] + r['missing'])[:5]}——指纹只看版本号，这些改动不会让产物过期；"
               f"该出新版本就 guji corpus build，或把文件改回去", file=sys.stderr)
+
+
+class CorpusDrift(RuntimeError):
+    """钉住的语料库版本与当前文件不符：起跑前硬校验拒绝（共享方案 2.3 节）。"""
+
+
+#: 起跑前硬校验：设成 ``warn`` 只警告不拒绝（临时绕过，比如正在出新版本）
+DRIFT_ENV = "GUJI_CORPUS_DRIFT"
+_CLEAN: dict[tuple[str, int], tuple] = {}
+
+
+def _stat_sig(ws: Path, man: dict) -> tuple:
+    """清单里各文件的 (大小, 修改时间)：没变就不重算哈希（控制台常驻进程里每次起跑都会来问）。"""
+    out = []
+    for it in man["items"]:
+        p = _base(it["root"], it["path"], ws) / it["path"]
+        try:
+            st = p.stat()
+            out.append((st.st_size, st.st_mtime_ns))
+        except OSError:
+            out.append(None)
+    return tuple(out)
+
+
+def require_pin_clean(ws: Path | None, version: int) -> None:
+    """钉住的版本：清单里的文件有改动或缺失就拒绝跑（``CorpusDrift``）。
+
+    只看清单里登记过的文件；清单之外新出现的文件（``extra``）只警告——它们不在承诺里，
+    该进下一版。代码常量（``NEVER_MATCH_FAMILIES``）随 ``code_hash`` 管，``guji corpus verify`` 照报。"""
+    if ws is None:
+        raise CorpusDrift(f"册 yaml 钉了 corpus: {version}，但不知道工作区（设 GUJI_WORKSPACE 或给 -w）")
+    import os
+    try:
+        man = load_manifest(ws, version)
+    except FileNotFoundError as e:
+        raise CorpusDrift(str(e)) from e
+    key, sig = (str(ws), version), _stat_sig(ws, man)
+    if _CLEAN.get(key) == sig:
+        return
+    r = check_files(ws, man)
+    bad = r["changed"] + r["missing"]
+    if bad:
+        msg = (f"语料库 v{version} 的清单与当前文件不符（改了 {len(r['changed'])}，缺 {len(r['missing'])}）："
+               f"{bad[:5]}。出新版本（guji corpus build）并改钉，或把文件改回去；"
+               f"临时绕过设 {DRIFT_ENV}=warn")
+        if os.environ.get(DRIFT_ENV, "").lower() != "warn":
+            raise CorpusDrift(msg)
+        print(f"  ⚠️  {msg}", file=sys.stderr)
+        return
+    if r["extra"]:
+        print(f"  ⚠️  语料库 v{version} 之后新出现 {len(r['extra'])} 个语料文件（{r['extra'][:3]}），"
+              f"不在这版承诺里，出下一版时会收进去", file=sys.stderr)
+    _CLEAN[key] = sig
 
 
 def with_corpus_pin(p, book):

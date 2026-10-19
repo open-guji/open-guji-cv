@@ -557,3 +557,45 @@ def test_shared_workspaces_are_read_only(repo, conn, tmp_path):  # noqa: F811
     assert out["rev_to"] > out["rev_from"]
     with pytest.raises(SystemExit, match="已经发布过"):
         push(conn, tmp_path / "glyphlib-t1", actor="t", shared_writer=True)
+
+
+# ---- 两级语料库清单（共享方案 S2）----
+
+def test_corpus_base_published_and_pulled_with_book(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """build-base 第一次新开 corpus-base、之后加新版不动旧版；书库清单写了 base 的工作区，
+    pull 顺带把底库清单拉成只读副本，verify 两级一起对。"""
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root
+    from open_guji_cv.datastore.workcopy import data_dir, pull, push, uses_corpus_base
+    from open_guji_cv.ops import corpus_pack as cp
+    monkeypatch.setattr(cp, "_repo_dirty", lambda paths, repo=None: [])
+    monkeypatch.setattr(cp, "_repo_commit", lambda repo=None: "c0ffee")
+    src, cache, files, ws = _migrated(repo, conn, tmp_path)
+
+    r1 = cp.publish_base(src, conn, note="b1", actor="t")
+    assert r1["base_version"] == 1 and r1["push"]["rev_to"] > r1["push"]["rev_from"]
+    rows = {r["src_path"] for r in src.rows("files", BASE_WS)}
+    assert f"{BASE_DIR}/b1/manifest.json" in rows
+    with pytest.raises(SystemExit, match="只读"):                    # 普通 push 照旧拒绝
+        push(conn, cp.base_workdir("main"), actor="t")
+
+    assert not uses_corpus_base(ws)
+    pull(src, ws, cache=cache)
+    assert not (borrowed_root(BASE_WS) / BASE_DIR).exists()             # 用不到底库就不拉
+    # 本机拉一份底库（同 guji corpus init），出两级书库清单，推上去
+    from open_guji_cv.datastore.workcopy import refresh_corpus_base
+    refresh_corpus_base(src, ws, cache=cache, always=True)
+    cp.build(ws, base="latest")
+    push(conn, ws, actor="t")
+    assert uses_corpus_base(ws) and cp.verify(ws, 1)["base"] == 1
+
+    r2 = cp.publish_base(src, conn, note="b2", actor="t")
+    assert r2["base_version"] == 2
+    assert {f"{BASE_DIR}/b1/manifest.json", f"{BASE_DIR}/b2/manifest.json"} <= \
+        {r["src_path"] for r in src.rows("files", BASE_WS)}
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-m2"))       # 新机器
+    fresh = _fresh(files, tmp_path / "m2", src, cache)
+    assert (data_dir(fresh) / "config/corpus-pack/v1/manifest.json").exists()
+    assert sorted(p.name for p in (borrowed_root(BASE_WS) / BASE_DIR).iterdir()) == ["b1", "b2"]
+    assert cp.verify(fresh, 1)["base"] == 1
