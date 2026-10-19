@@ -178,7 +178,7 @@ guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退�
   只追加的台账（events、consumed、anchors）少了行拒绝；库里有的整个文件本地没了也拒绝，确认是真删加 `--allow-delete`。
   写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`），`changes` 逐行留痕。新图先经 Worker 传正式桶。
 - **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程起 WebSocket 桥（云会话只通 443）。
-- `push` 只写 `main`；实验照旧用 `guji exp` 和实验分支。
+- `push`／`sync` 写 `main`，或用 `--branch exp/…` 写实验分支（见下「实验分支」）；不写 `ci`。
 - **sync（自动合并）**：库里在基准 rev 之后没人写过就直接推；有人写过，先把库里的拼到旁边逐文件比：
   库里改了、本地没改的用库里的；本地改了、库里没改的留本地的；两边都改了的，只追加台账（events、consumed、anchors）
   按「共同前缀＋库里新行＋本地新行」合（同一行只留一份），别的文件两边都改了就整次停下（`SyncConflict`），什么都不动，
@@ -192,6 +192,39 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出；两台机器各自追加事件后 sync，两边的行都进库、另一台再 sync 拿到同一份文件，
 书 yaml 两边都改则 `SyncConflict` 且本地不动。
 守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
+
+### 实验分支（2026-10-19 起）
+
+试新功能、跑会写库的 A/B 时，不碰正式库：从 main 开一个 Neon 分支（写时复制，秒级），整个工作区换到那个分支上读写，
+完了比一比，要的显式导回 main，然后删分支。只比参数、不写库的 A/B 照旧用 `guji exp`（见 `exp_framework.md`），不用开分支。
+
+```bash
+export GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_EXP            # 实验令牌就够；导回 main 那一步才要正式令牌
+B=exp/GUJI-<卡号>-<小写说明>                           # 名字规矩同 Worker：必须带卡号，最多 63 字
+guji db branch create $B                              # 从 main 当前状态开；--from-rev N 从某个 rev 开
+export GUJI_DATA_BRANCH=$B                            # 之后本 shell 里一切都对这个分支（也可每条命令加 --branch $B）
+guji db pull -w <工作区>                              # 拉到 $GUJI_DATA_HOME/exp__GUJI-…/<工作区>/，重建该分支自己的 glyph.db
+#   …照常跑 cv：products 也落在该分支的数据目录里，不碰工作区的 products/ 和 glyph.db…
+guji db sync -w <工作区>                              # 推到实验分支（新图进实验桶）
+guji db diff -w <工作区>                              # 与 main 逐文件比：哪些文件不同、只在一边有、哪些人裁事件只在实验分支上
+unset GUJI_DATA_BRANCH
+guji db import --from $B -w <工作区> --dry-run        # 人裁事件导回 main（要正式令牌）；--events ids.txt 只导挑出的
+guji db branch delete $B                              # 用完就删（Neon 免费档整个项目最多 10 个分支）
+```
+
+- **怎么隔离**：`GUJI_DATA_BRANCH`（或 `--branch`）覆盖工作区标记 `.central.json` 里的分支（标记文件不改），
+  `core.workspace` 的路径函数都跟着走：数据目录 `$GUJI_DATA_HOME/<分支，/ 换成 __>/<工作区 id>/`；
+  glyph.db 缺省 `<该数据目录>/output/glyph.db`，products 缺省 `<该数据目录>/products/`（`GUJI_GLYPH_DB`、`GUJI_PRODUCTS_DIR` 显式给了仍优先）。
+  所以同一台机器、同一个工作区可以一边在 main 上整理，一边在实验分支上试，互不覆盖；`unset` 就回到 main。
+- **写哪里**：`push`／`sync` 只许 `main` 和 `exp/GUJI-<号>[-说明]`。实验分支经 Neon API（`NEON_API_KEY`，项目 `NEON_PROJECT_ID`，
+  缺省中心库项目）查到该分支的端点，再用 `NEON_DATABASE_URL` 的账号经 443 桥连（子分支继承口令）。新图传实验桶 `guji-assets-exp`。
+- **取图**：实验分支是从 main 分出来的，老图在正式桶；在实验分支上拉图时正式桶 404 的自动去实验桶取。
+- **比较** `guji db diff -w <工作区> [--branch $B] [--against main] [--show N]`：只读两边的 `source_files` 与图清单（不下载内容）：
+  `changed`（两边都有、sha 不同，带两边行数）、`only_in_branch`、`only_in_against`、`events_only_in_branch`（即 import 会导的）。
+  分开以后 main 也可能有新写入，所以报的是「现在不同的」，不分是谁改的。产物（products）的对比用 `guji exp report` 或直接比两个 products 目录。
+- **导回正式库**：只有显式的路，不整分支合并。人裁事件用 `guji db import`（经 Worker、按 id 幂等，要正式令牌）；
+  别的文件（册 yaml、配置、台账）把实验分支数据目录里要的那几个文件拷到 main 的数据目录，再在 main 上 `guji db sync`，留正常的 push 记录。
+- 实验分支的写入在 `imports`／`changes` 里照样留痕（`stats.branch`），开删分支记 Workers Logs。
 
 ### 整理本与语料库清单（2026-10-19 起，共享方案 S1）
 

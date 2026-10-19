@@ -19,6 +19,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import ssl
 import sys
 import threading
@@ -26,9 +27,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
-from typing import Iterable, Iterator
 
 DEFAULT_URL = "https://data.open-guji.com"
 PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
@@ -39,6 +41,14 @@ class CentralError(RuntimeError):
     def __init__(self, status: int, code: str, message: str, detail=None):
         super().__init__(f"{status} {code}: {message}")
         self.status, self.code, self.detail = status, code, detail
+
+
+#: 实验分支名，与 Worker ``policy.ts`` 的 EXP_BRANCH_RE、MAX_BRANCH_NAME 一致
+EXP_BRANCH_RE = re.compile(r"^exp/GUJI-\d+(?:-[a-z0-9]+)*$")
+
+
+def is_exp_branch(name: str) -> bool:
+    return len(name) <= 63 and bool(EXP_BRANCH_RE.match(name))
 
 
 def _sha(b: bytes) -> str:
@@ -143,11 +153,22 @@ class WorkerSource:
         shas = sorted(set(shas))
         workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
         getter = _KeepAliveGetter(self._ctx)
+        # 实验分支：库是从 main 分出来的，老图在正式桶，实验里新传的图在实验桶。正式桶 404 的再去实验桶取。
+        fallback = "exp" if bucket == "main" and self.branch.startswith("exp/") else None
+
+        def one(urls: dict, sha: str) -> tuple[str, bytes]:
+            try:
+                return sha, getter.get(urls[sha])
+            except CentralError as e:
+                if fallback is None or e.status not in (403, 404):
+                    raise
+                return sha, getter.get(self._sign_get(fallback, [sha], ext)[sha])
+
         with ThreadPoolExecutor(workers) as ex:
             for i in range(0, len(shas), SIGN_BATCH):
                 chunk = shas[i:i + SIGN_BATCH]
                 urls = self._sign_get(bucket, chunk, ext)
-                yield from ex.map(lambda sha: (sha, getter.get(urls[sha])), chunk)
+                yield from ex.map(partial(one, urls), chunk)
 
     def _sign_get(self, bucket: str, shas: list[str], ext: str = "png") -> dict[str, str]:
         if not getattr(self, "_no_batch", False):
