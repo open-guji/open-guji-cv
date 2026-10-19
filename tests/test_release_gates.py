@@ -98,3 +98,36 @@ def test_cli_has_pending_option():
     cli_v2.register_subcommands(root.add_subparsers(dest="command"))
     assert root.parse_args(["close-check", "b", "-w", "/x", "--pending", "x.json"]).pending == "x.json"
     assert root.parse_args(["close-check", "b", "-w", "/x"]).pending is None
+
+
+def test_close_check_1c_models(monkeypatch, tmp_path):
+    """1c：本机缺 torch／权重，或 Step5-b 产物没出 embedding 候选 → FAIL（D 10-19 报：没 torch 跑的产物 1a 照报新鲜）。"""
+    import importlib.util
+    import types
+    from open_guji_cv.clustering import cnn_candidates as CNN
+    from open_guji_cv.products.kinds.recog import ColumnRare, PageRare, RareRec
+    from open_guji_cv.utils import cut_select
+    w1, w2 = tmp_path / "judge.pt", tmp_path / "cnn.pt"
+    w1.write_bytes(b"x")
+    w2.write_bytes(b"x")
+    monkeypatch.setattr(cut_select, "DEFAULT_CKPT", w1)
+    monkeypatch.setattr(CNN, "DEFAULT_CKPT", w2)
+    real = importlib.util.find_spec
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: object() if n == "torch" else real(n, *a))
+    st = ProductStore(tmp_path / "products")
+    eng = types.SimpleNamespace(store=st, book=types.SimpleNamespace(id="vol01"))
+
+    def rare(page, sources, n=1):
+        st.write("vol01", "rare_candidates", page_key(page), {"rare_candidates": PageRare(
+            page=page, sources=sources, columns=[ColumnRare(col=1, chars=[RareRec(id=f"r{i}", slot=i) for i in range(n)])])})
+
+    rare(1, {"emb": 5, "cnn": 1})
+    rare(2, {}, n=0)                                  # 这页没有生僻字要查：不算
+    assert CC._models(eng, [1, 2, 3])["status"] == CC.PASS
+    rare(3, {"cnn": 4})
+    r = CC._models(eng, [1, 2, 3])
+    assert r["status"] == CC.FAIL and r["data"]["rare_no_emb"] == [3]
+    monkeypatch.setattr(importlib.util, "find_spec", lambda n, *a: None if n == "torch" else real(n, *a))
+    w1.unlink()
+    r = CC._models(eng, [1])
+    assert r["status"] == CC.FAIL and r["data"]["env"][0] == "没装 torch" and len(r["data"]["env"]) == 2
