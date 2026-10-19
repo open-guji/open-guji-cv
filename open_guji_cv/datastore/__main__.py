@@ -7,6 +7,8 @@
     python -m open_guji_cv.datastore import  --repo <guji-workspace> --commit <sha>
     python -m open_guji_cv.datastore verify  --repo <guji-workspace> --commit <sha>
     python -m open_guji_cv.datastore r2-plan --repo <guji-workspace> --commit <sha> --manifest plan.jsonl
+    python -m open_guji_cv.datastore backup                       # 每日备份（GUJI-611）
+    python -m open_guji_cv.datastore restore-check --endpoint <ci 端点>   # 恢复演练
 """
 
 from __future__ import annotations
@@ -63,7 +65,48 @@ def main(argv=None) -> int:
     p.add_argument("--bucket", choices=["exp", "main"], default="exp", help="--via worker 时传哪个桶")
     p.add_argument("--limit", type=int, help="--via worker 时只传前 N 个（按 sha 排序，分批用）")
 
+    p = sub.add_parser("backup", help="全部表导出存进 R2 backup/<日期>/（GUJI-611），清掉过保留期的")
+    p.add_argument("--keep-days", type=int, default=30)
+    p.add_argument("--date", default=None, help="存成哪天（缺省今天，UTC）")
+    p = sub.add_parser("restore-check", help="把某天的备份恢复到 main 以外的端点并逐表核对")
+    p.add_argument("--endpoint", required=True, help="Neon 端点 id（如 ci 分支的），不许是 main 的")
+    p.add_argument("--date", default=None, help="哪天的备份（缺省最新一份完整的）")
+
     args = ap.parse_args(argv)
+
+    if args.cmd in ("backup", "restore-check"):
+        from datetime import datetime, timezone
+        from . import backup as B
+        from .client import WorkerSource
+        from .connect import connect, main_endpoint
+        src = WorkerSource()
+        if args.cmd == "backup":
+            day = args.date or datetime.now(timezone.utc).date().isoformat()
+            with connect() as conn:
+                files, man = B.dump(conn)
+            out = B.upload(src, day, files, man)
+            out.update(rev=man["rev"], tables=len(man["tables"]),
+                       rows=sum(t["rows"] for t in man["tables"].values()),
+                       pruned=B.prune(src, args.keep_days))
+            _print(out)
+            return 0
+        if args.endpoint == main_endpoint():
+            raise SystemExit("拒绝：--endpoint 是正式库 main 的端点，恢复演练只许打到别的分支（如 ci）")
+        dates = B.complete_dates(src)
+        day = args.date or (dates[-1] if dates else None)
+        if day not in dates:
+            raise SystemExit(f"没有完整的备份 {day}（有：{dates[-5:]}）")
+        files, man = B.fetch(src, day)
+        with connect(endpoint=args.endpoint) as conn:
+            B.restore(conn, files, man)
+            res = B.check(conn, man)
+        res.update(date=day, rev=man["rev"], endpoint=args.endpoint)
+        if not res["ok"]:
+            _print(res)
+            return 1
+        res["tables"] = {t: v["rows"] for t, v in res["tables"].items()}
+        _print(res)
+        return 0
 
     if args.cmd == "schema":
         from .importer import apply_schema

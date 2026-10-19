@@ -69,6 +69,12 @@ class ImportResult:
 
 
 # ── 可注入的外部动作 ─────────────────────────────────────────────────
+
+def _books(ws_dir) -> Path:
+    """册配置目录：迁到中心库后在数据目录（GUJI-608）。"""
+    from ..core.workspace import books_dir
+    return books_dir(Path(ws_dir))
+
 def default_url_fetch(url: str, dest: Path) -> None:
     with urllib.request.urlopen(url, timeout=600) as r, open(dest, "wb") as f:  # noqa: S310
         shutil.copyfileobj(r, f, 1 << 20)
@@ -95,7 +101,7 @@ def default_freshness(ws_dir: Path, book: str, pages: list[int] | None) -> dict:
         from ..core.book import load_book
         from ..core.engine import Engine
         from ..core.pipeline import default_pipeline_id, load_pipeline
-        bk = load_book(book, Path(ws_dir) / "books")
+        bk = load_book(book, _books(ws_dir))
         eng = Engine(bk, load_pipeline(default_pipeline_id(bk)), log=lambda s: None)
         st = eng.status(pages=pages if pages else bk.resolve_pages("all"))
         return {sid: dict(d["counts"]) for sid, d in st["steps"].items()}
@@ -135,7 +141,7 @@ def default_raw_check(ws_dir: Path, book: str, want: dict[int, str]) -> dict:
         from ..core.book import load_book
         from ..utils.preclean import effective_raw_path
         try:
-            bk = load_book(book, Path(ws_dir) / "books")
+            bk = load_book(book, _books(ws_dir))
         except Exception as e:  # noqa: BLE001
             return {"skipped": f"{type(e).__name__}: {e}"}
         bad: dict = {}
@@ -167,7 +173,7 @@ def find_workspace(ws_roots: list[Path], key: str, dirname: str | None = None) -
     也可以直接是某个书目录。"""
     for root in ws_roots:
         root = Path(root)
-        if root.is_dir() and (root.name == dirname or ws_key(root.name) == key) and (root / "books").is_dir():
+        if root.is_dir() and (root.name == dirname or ws_key(root.name) == key) and (_books(root).is_dir() or (root / ".central.json").is_file()):
             return root
         if dirname and (root / dirname).is_dir():
             return root / dirname

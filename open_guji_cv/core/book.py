@@ -559,12 +559,9 @@ def _workspace_books_dir() -> Path | None:
     册配置是「这本书的数据」，按数据边界（overview `数据边界-三仓各管什么.md`）
     该落工作区。十册四庫的 yaml 在 `guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本/books/`。
     """
-    from .workspace import workspace_root
-    ws = workspace_root()
-    if ws is None:
-        return None
-    d = ws / "books"
-    return d if d.is_dir() else None
+    from .workspace import books_dir
+    d = books_dir()
+    return d if d is not None and d.is_dir() else None
 
 
 def _book_yaml_path(book_id: str, books_dir: Path | None = None) -> Path:

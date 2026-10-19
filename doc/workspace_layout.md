@@ -26,22 +26,28 @@
 
 ## 二、标准布局
 
-| 路径 | 内容 | 进 git？ | 由谁写 |
+> **2026-10-19 起（GUJI-608）**：下表标「中心库」的数据**不再放在工作区里**，也不进 git。它们在中心库，
+> 本机的副本在工作区外的数据目录 `$GUJI_DATA_HOME/<分支>/<工作区 id>/`（缺省 `~/.guji-data`），布局同下表；
+> 工作区根只留 `workspace.yaml` 和标记 `.central.json`。旧工作区用 `guji db migrate -w <工作区>` 迁一次，
+> 之后 `guji db pull` / `guji db push` 同步，细则见 [datastore.md](datastore.md) 第六节。`core/workspace.py`
+> 的路径函数见到标记就指向数据目录，代码里不许从工作区根直接拼这些目录（守卫 `tests/test_central_paths.py`）。
+
+| 路径 | 内容 | 存哪 | 由谁写 |
 |---|---|---|---|
-| `books/<book>.yaml` | 册配置（版式字段、raw_dir、语料引用） | **是** | 人 |
-| `workspace.yaml` | 可选。写 `id:` 覆盖控制台 URL 里的工作区 id（默认 = 目录名去掉 `-workspace`） | 是 | 人 |
+| `books/<book>.yaml` | 册配置（版式字段、raw_dir、语料引用） | **中心库** | 人 |
+| `workspace.yaml` | 可选。写 `id:` 覆盖控制台 URL 里的工作区 id（默认 = 目录名去掉 `-workspace`） | 工作区＋中心库 | 人 |
 | `data_full/<book>_scan/` | **原始扫描页**，永不改写 | 看体积 | `guji import-pdf` |
 | `data_full/<book>/` | **逻辑页**（分页后；不分页就等于扫描页）+ `manifest.json` 记来源 | 看体积 | `guji split` |
 | `source/` | 原始来源档：PDF、docx、校對本 txt 等**没进管线的东西** | 否（体积） | 人 |
 | `corpus/<name>.txt` | 整理本 / 校對本语料（`align_ref` 读） | 是 | 人 |
-| `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **是** | `admit_instance` |
+| `output/glyph_store/` | **本书字形库真源**（PNG + JSONL），不可再生 | **中心库**（图在 R2） | `admit_instance` |
 | `output/glyph.db` | 库的 SQLite 索引，可从 store + 共享库重建 | **否** | 引擎 |
 | `products/<book>/<step>/` | 数值产物，可重算 | 否 | 引擎 |
 | `cache/<book>/<kind>/` | 派生图像 LRU 缓存（按页戳 `_stamps.json` 自检；产物外部换入后要 `guji cache verify` / 清掉，见 `products/cache.py` 模块头） | 否 | 引擎 |
-| `review/batches/` | 人裁批次登记 | 是 | 控制台 |
-| `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 是 | 控制台 |
-| `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 是 | 引擎 |
-| `config/crop_exclusions.jsonl` | 图块排除名单 | 是 | 人 |
+| `review/batches/` | 人裁批次登记 | 中心库 | 控制台 |
+| `feedback/{events,consumed}/` | 人裁事件日志与消费记账 | 中心库 | 控制台 |
+| `feedback/verdicts/<shard>/` | 裁决表（导入测试集从这里挑） | 中心库 | 引擎 |
+| `config/crop_exclusions.jsonl` | 图块排除名单（`config/` 下人工配置都是） | 中心库 | 人 |
 | `reports/<book>/` | 对账 / 评测报告 | 是 | 脚本 |
 | `scripts/` | **只放这本书专用**的一次性脚本；通用的归引擎仓 | 是 | 人 |
 | `bench/` | 可选。这本书的评测台（口径正本在 overview，这里只放实现） | 是 | 人 |

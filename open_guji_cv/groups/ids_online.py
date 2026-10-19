@@ -58,11 +58,11 @@ SPECS: dict[str, IdsSpec] = {
 
 def bank_path(g: str) -> Path | None:
     """组 `g` 的模板库文件：工作区 `config/groups/ids/<g>.json` 优先，其次仓里 `<config_dir>/ids_bank.json`；都没有 → None。"""
-    from ..core.workspace import workspace_root
+    from ..core.workspace import ws_config_dir
     from .registry import GROUPS
-    ws = workspace_root()
-    if ws is not None and (ws / "config" / "groups" / "ids" / f"{g}.json").exists():
-        return ws / "config" / "groups" / "ids" / f"{g}.json"
+    cfg = ws_config_dir()
+    if cfg is not None and (cfg / "groups" / "ids" / f"{g}.json").exists():
+        return cfg / "groups" / "ids" / f"{g}.json"
     spec = GROUPS.get(g)
     if spec is not None and spec.config_dir and (_ROOT / spec.config_dir / "ids_bank.json").exists():
         return _ROOT / spec.config_dir / "ids_bank.json"

@@ -69,6 +69,12 @@ FEEDBACK_REL = "feedback"
 VERDICTS_REL = "feedback/verdicts"
 REPORTS_REL = "reports"
 
+#: 写入切换后（GUJI-608）中心库管的数据不放在工作区里，放「数据目录」：
+#: ``GUJI_DATA_HOME``（缺省 ``~/.guji-data``）/<分支>/<工作区 id>/，布局同工作区
+#: （books/ feedback/ review/ config/ output/glyph_store/）。工作区根有这个标记文件
+#: 才这样解析；没有就是旧布局（数据在工作区里），测试与没迁的工作区照旧。
+CENTRAL_MARKER = ".central.json"
+
 
 #: 每请求（或每任务）的工作区覆盖。**优先于环境变量**。
 #:
@@ -105,18 +111,65 @@ def workspace_root() -> Path | None:
     return Path(env).expanduser().resolve() if env else None
 
 
-def _resolve(env_key: str, rel: str, override: str | Path | None = None) -> Path:
-    """环境变量 > 显式覆盖 > 工作区 > 仓内默认。"""
+def data_home() -> Path:
+    """各工作区数据目录的总根：``GUJI_DATA_HOME``，缺省 ``~/.guji-data``。"""
+    return Path(os.environ.get("GUJI_DATA_HOME") or Path.home() / ".guji-data").expanduser()
+
+
+def central_marker(ws: Path | None = None) -> dict | None:
+    """工作区根的 ``.central.json``（{ws, branch}）；没有返回 None（旧布局）。"""
+    import json
+    ws = ws if ws is not None else workspace_root()
+    if ws is None:
+        return None
+    f = Path(ws) / CENTRAL_MARKER
+    if not f.is_file():
+        return None
+    return json.loads(f.read_text(encoding="utf-8"))
+
+
+def central_data_dir(ws_id: str, branch: str = "main") -> Path:
+    return data_home() / branch.replace("/", "__") / ws_id
+
+
+def data_root(ws: Path | None = None) -> Path | None:
+    """中心库管的数据（册 yaml、人裁、台账、配置、字形库）所在的根。
+
+    工作区迁到中心库后（有 ``.central.json``）是数据目录，否则就是工作区自己；
+    没有工作区返回 None。"""
+    ws = ws if ws is not None else workspace_root()
+    if ws is None:
+        return None
+    m = central_marker(ws)
+    if m:
+        return central_data_dir(str(m["ws"]), str(m.get("branch") or "main"))
+    return Path(ws)
+
+
+def books_dir(ws: Path | None = None) -> Path | None:
+    """册配置 ``books/``（见 ``data_root``）。"""
+    d = data_root(ws)
+    return d / "books" if d is not None else None
+
+
+def ws_config_dir(ws: Path | None = None) -> Path | None:
+    """工作区的人工配置 ``config/``（排除名单、字组字频与答案表等；见 ``data_root``）。"""
+    d = data_root(ws)
+    return d / "config" if d is not None else None
+
+
+def _resolve(env_key: str, rel: str, override: str | Path | None = None, data: bool = False) -> Path:
+    """环境变量 > 显式覆盖 > 工作区（``data`` 时是数据根）> 仓内默认。"""
     env = os.environ.get(env_key)
     if env:
         return Path(env).expanduser()
+    base = data_root() if data else workspace_root()
     if override:
         p = Path(override).expanduser()
-        # 相对路径按工作区解释，没有工作区就按仓根
-        return p if p.is_absolute() else (workspace_root() or REPO_ROOT) / p
-    ws = workspace_root()
-    if ws:
-        return ws / rel
+        # 相对路径按工作区（数据根）解释，没有工作区就按仓根
+        return p if p.is_absolute() else (base or REPO_ROOT) / p
+    if base:
+        return base / rel
     return REPO_ROOT / rel
 
 
@@ -127,7 +180,7 @@ def glyph_db_path(override: str | Path | None = None) -> Path:
 
 def glyph_store_path(override: str | Path | None = None) -> Path:
     """字形库真源（PNG + JSONL），进 git。"""
-    return _resolve("GUJI_GLYPH_STORE", GLYPH_STORE_REL, override)
+    return _resolve("GUJI_GLYPH_STORE", GLYPH_STORE_REL, override, data=True)
 
 
 def products_root() -> Path:
@@ -142,12 +195,12 @@ def cache_root() -> Path:
 
 def batches_root() -> Path:
     """人裁批次登记。`GUJI_BATCHES_DIR` > 工作区 > 仓内。"""
-    return _resolve("GUJI_BATCHES_DIR", BATCHES_REL)
+    return _resolve("GUJI_BATCHES_DIR", BATCHES_REL, data=True)
 
 
 def exclusions_path() -> Path:
     """图块排除名单（人裁 / 闸判定的坏图块）。`GUJI_EXCLUSIONS` > 工作区 > 仓内。"""
-    return _resolve("GUJI_EXCLUSIONS", EXCLUSIONS_REL)
+    return _resolve("GUJI_EXCLUSIONS", EXCLUSIONS_REL, data=True)
 
 
 def feedback_root() -> Path:
@@ -156,7 +209,7 @@ def feedback_root() -> Path:
 
     09-03 设计把它放在 open-guji-dataset/feedback/，09-13 改归 workspace：事件是
     「这本书」审查过程的账，不是测试集；进测试集要走显式导入。"""
-    return _resolve("GUJI_FEEDBACK_DIR", FEEDBACK_REL)
+    return _resolve("GUJI_FEEDBACK_DIR", FEEDBACK_REL, data=True)
 
 
 def verdicts_root() -> Path:
@@ -166,7 +219,7 @@ def verdicts_root() -> Path:
     载体与 open-guji-dataset 的金标分片**同一格式**（`gold.store.GoldStore` 直接指过来），
     所以「导入测试集」只是从这里挑一批复制到 dataset 同名分片（`guji gold import`），
     不用转格式。它是事件日志的派生物，丢了可从事件重放（`guji gold rebuild`）。"""
-    return _resolve("GUJI_VERDICTS_DIR", VERDICTS_REL)
+    return _resolve("GUJI_VERDICTS_DIR", VERDICTS_REL, data=True)
 
 
 def raw_root(override: str | Path | None = None) -> Path:
@@ -236,6 +289,7 @@ def describe() -> dict[str, str]:
     corpus = corpus_path("zongmu_wenyuange_wikisource.txt")
     return {
         "workspace": str(ws) if ws else "(未设 GUJI_WORKSPACE，用仓内默认)",
+        "data": str(data_root()) + ("（中心库数据目录）" if central_marker() else "") if ws else "",
         "glyph_db": str(glyph_db_path()),
         "glyph_store": str(glyph_store_path()),
         "raw_root": str(raw_root()),

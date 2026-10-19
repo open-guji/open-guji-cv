@@ -401,6 +401,19 @@ def cmd_store(args) -> None:
         print("✗ 要 -w <工作区>", file=sys.stderr); sys.exit(2)
     os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
     ws = workspace_root()
+    from .core.workspace import central_marker
+    if central_marker(ws):
+        # 迁到中心库后（GUJI-608）：导出 glyph.db 并推进中心库，不再碰 git
+        from .cli_db import push_workspace
+        res = push_workspace(ws, dry_run=args.action != "commit", allow_delete=args.allow_deletions)
+        if args.json:
+            print(json.dumps(res, ensure_ascii=False, indent=1, default=str))
+        n = sum(v.get("changes", 0) for v in (res.get("per_ws") or {}).values())
+        if args.action == "commit":
+            print(f"已推进中心库：{n} 处变更，rev {res.get('rev_from')} → {res.get('rev_to')}" if n else "没有改动")
+        else:
+            print(f"检查通过：推送会写 {n} 处变更（check 不写；要推用 `guji store commit` 或 `guji db push`）")
+        return
     res = SC.run(ws, commit=args.action == "commit", push=args.push, allow_deletions=args.allow_deletions,
                  no_export=args.no_export, message=args.message, fetch=not args.no_fetch)
     if args.json:
@@ -2039,7 +2052,8 @@ def cmd_snap(args) -> None:
         pages = args.pages
         if pages and pages != "all" and not pages[:1].isdigit():
             from .core.book import load_book
-            pages = ",".join(str(p) for p in load_book(args.target, ws_dir / "books").resolve_pages(pages))
+            from .core.workspace import books_dir
+            pages = ",".join(str(p) for p in load_book(args.target, books_dir(ws_dir)).resolve_pages(pages))
         overrides: dict[str, dict] = {}
         for kv in args.param or []:
             key, _, val = kv.partition("=")
@@ -2312,7 +2326,8 @@ def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") 
                      f"`-w D:/workspace/<book>-workspace`（books/{args.book}.yaml 所在的仓根）。"
                      "不再读 GUJI_WORKSPACE 兜底。")
     root = Path(ws).expanduser().resolve()
-    spec = root / "books" / f"{args.book}.yaml"
+    from .core.workspace import books_dir
+    spec = books_dir(root) / f"{args.book}.yaml"
     if not spec.exists():
         parser.error(f"--workspace {root} 下没有 books/{args.book}.yaml——路径给错了，或这不是「{args.book}」的工作区")
     env = os.environ.get("GUJI_WORKSPACE")
