@@ -16,6 +16,18 @@
 
 据此补测了第 4 条（§四-4′），执行计划见 [../design/19-yolo-release列字数先验与全书评测-总设计.md](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
 
+## 落地情况（2026-10-19，分支 `feat/yolo-colcount-prior`，待并 `rc/v0.4.1`）
+
+执行计划与变更记录见 [../design/19-yolo-release列字数先验与全书评测-总设计.md](../design/19-yolo-release列字数先验与全书评测-总设计.md)。
+
+| 块 | 落地物 | 实测（vol04/05 测试 B 100 页，纯算法基线 97.0%） |
+|---|---|---|
+| A 金标 | `scripts/dzg_import.py colgold`：daizhige × release 双源一致；数据集分片 `char-segmentation/column-counts`（14,989 列） | 两源一致 99.63%；不一致 56 列用户裁定取 daizhige |
+| B 评测 | `guji eval run column_counts`（`scripts/eval_column_counts.py`） | 现行生产各册：vol01 97.0%、vol02 98.9%、vol03 97.6%、vol04 96.8%、vol05 96.9% |
+| C 金标字数先验 | `row_segment.colgold_prior`（缺省关） | 98.1%，新错 0 |
+| D 原生 YOLO 并格 | `row_segment.yolo_merge`（缺省关，`utils/yolo_tool_infer`） | 97.8%，新错 0；北行日錄 54 页零误并 |
+| C+D | 两个开关同开（先 D 后 C） | **98.44%**，新错 0；除 Step1 列错位页 **99.7%** |
+
 ## 〇、结论
 
 1. **release 是「YOLO 粗切 + 大量人工整理」的成品，不是算法原始输出，质量很高。**
