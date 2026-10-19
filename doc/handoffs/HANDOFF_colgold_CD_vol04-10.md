@@ -1,8 +1,16 @@
-# HANDOFF：殿本 vol04–10 开 Step3 的 C（逐列字数先验）／D（原生 YOLO 并格），看效果
+# HANDOFF：殿本 vol04–10 开 Step3 的结构先验（逐列格位约束／C／D），看效果
 
 交给：跑殿本 vol04–10 的会话。交出：做 C／D 的会话（open-guji-cv#204，已合进 `rc/v0.4.6`）。2026-10-19。
 
-**要你做的**：在 vol04–10 上把 C、D 开起来跑，跟不开的比，报每册逐列字数「修好几列、改坏几列」，改坏的逐列看图，再定这两个开关要不要写进册 yaml。
+**要你做的**：在 vol04–10 上把 Step3 的结构先验开起来跑，跟不开的比，报每册「修好几列、改坏几列」。改坏的列逐列看图。最后建议哪个开关写进册 yaml。
+
+> **10-19 晚更新：先读这段。** 逐列格位约束 `layout_prior`（open-guji-cv#227）也合进 `rc/v0.4.6` 了。
+>
+> - **殿本首选 `layout_prior`，不是 C。** 殿本的整理本（daizhige）是逐列、带格位的，[选法表](../segmentation_v2_pipeline.md)（「Step3 结构先验：三个开关」一节）定的就是 `layout_prior`。
+> - **开了它，C、D 在殿本上几乎没列可动。** 两个开关同时开时，格位表里有的列自动跳过 C、D。格位表覆盖了 C 能用的全部 13,602 列。
+> - **下面第二节 C+D 的数，只在不开 `layout_prior` 时成立。**
+> - **那边的离线实测**（纯算法，vol04–10 去卷端页，10,521 列）：字数 97.03% → 98.81%，错列 503 → 139；逐格 95.22% → 98.68%。我这边 C+D（沙箱、带当时的人裁）是 96.41% → 97.73%，错列少了 140 个。两边口径不同，不能直接相减，所以要你在同一口径下并排量。
+> - **变体至少三个**：A 基线；B 只开 `layout_prior`；C C+D。可选 D：`layout_prior` + `yolo_merge`，让 D 去管格位表没覆盖的列。准备与跑法见第三、四节的补充。
 
 **开不开由用户定**（[开关登记表](../开关登记表.md) 的规矩）。你交的是证据（每册对比表、改坏的列看图结论），不要自己改册 yaml。
 
@@ -63,6 +71,8 @@
    - `corpus/` 归中心库管。要不要 `guji db push` 让别的机器也拿到，按你的授权规矩办，拿不准就问上级。
    - 开关开着但表不在，会直接报错。
 
+4. **格位表**（`layout_prior` 用）：`python scripts/dzg_layout.py --ws $WS`，输出 `corpus/daizhige/layout_slots.jsonl`。参数写 `{"row_segment":{"layout_prior":"corpus/daizhige/layout_slots.jsonl"}}`。和金标表一样，表不在会报错，表一变 Step3 就判过期。做法与实测见 `doc/research/切分现状梳理与新方向-2026-10-19.md` 第六节。
+
 ## 四、怎么跑、怎么比
 
 我用的是**两个并排的沙箱工作区**，不碰生产 `products/`。`guji exp` 的报告目前只比 seed_admit，Step3 的效果要用 `eval_column_counts` 量。
@@ -88,6 +98,9 @@ EOF
 ```
 
 - **只开 C**：`P` 里去掉 `yolo_merge` 那两项。**只开 D**：去掉 `colgold_prior`。
+- **只开 `layout_prior`**：`P='{"row_segment":{"layout_prior":"corpus/daizhige/layout_slots.jsonl"}}'`。它还改格位：抬头级数、空格、夹注拆法都按表定。所以字数之外还要看逐格。
+  - 逐格怎么量，见上面那份研究文档的第六节。
+  - 字数口径照样用 `eval_column_counts`。
 - **时间**：开 D 每页多一次 YOLO 推理。4 核云机上 Step3 大约 10–20 秒一页，比基线慢一倍左右，一册约 30–60 分钟。
 - 各册可以并行，但同一台机器开两三个就到头了。
 - **看哪动了**：Step3 产物 `cells.columns[].flags` 里有 `colgold_prior：字数 a→b（格数 m→n）`、`yolo_prior：…`、`colgold_conflict：…`、`yolo_conflict：…`。
@@ -95,12 +108,12 @@ EOF
 
 ## 五、交回什么（验收）
 
-1. 每册一行：基线、只开 C、只开 D、C+D 的准确率与修好／改坏数（至少 C+D）。
+1. 每册一行：每个变体的准确率与修好／改坏数。至少要有基线、只开 `layout_prior`、C+D 三个；`layout_prior` 加报逐格。
 2. 每个改坏的列：看图结论，归到下面三类之一：
    - 金标错：像 vol07 p44 c5，修 dataset 并记 `history`；
    - 框线／印章等残墨被算成字；
    - 别的原因。
-3. 你的建议：哪几册开 C、开 D。写进 overview 的卡，由用户定；定了再在 [开关登记表](../开关登记表.md) 那两行填「哪些书开」。
+3. 你的建议：每册开哪个，`layout_prior`、C+D 或都不开。写进 overview 的卡，由用户定；定了再在 [开关登记表](../开关登记表.md) 那两行填「哪些书开」。
 
 ## 六、已知的坑（都踩过）
 
