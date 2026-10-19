@@ -237,6 +237,8 @@ def render_images(res: dict, out: Path, raw_page, n: int, a_label: str, b_label:
     """前 n 个变了的列：原图上 A 红框、B 绿框并排，送审格虚线加粗；出 PNG 和 index.html。"""
     import cv2
     import numpy as np
+
+    from ..utils.image_io import imwrite
     cols = sorted(res["columns"], key=_impact)[:n]
     img_dir = out / "cols"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -268,7 +270,7 @@ def render_images(res: dict, out: Path, raw_page, n: int, a_label: str, b_label:
             tiles.append(t)
         gap = np.full((crop.shape[0], 10, 3), 255, np.uint8)
         name = f"p{cd.page:04d}c{cd.col:02d}.png"
-        cv2.imwrite(str(img_dir / name), np.hstack([tiles[0], gap, tiles[1]]))
+        imwrite(str(img_dir / name), np.hstack([tiles[0], gap, tiles[1]]))
         rows.append(f"<tr><td>{cd.page}:{cd.col}<br>{cd.kind}<br>送审 {cd.n_review('a')}→{cd.n_review('b')}</td>"
                     f"<td><img src='cols/{name}'></td><td class=t>A {html.escape(cd.text('a'))}<br><br>"
                     f"B {html.escape(cd.text('b'))}</td></tr>")

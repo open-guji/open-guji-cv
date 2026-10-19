@@ -70,7 +70,7 @@ class FakeSrc:
 
 def test_pack_roundtrip(tmp_path, monkeypatch):
     from open_guji_cv.datastore import packs as PK
-    monkeypatch.setattr(PK, "_ws_name", lambda: "siku-zongmu")
+    monkeypatch.setattr(PK, "_ws_name", lambda: "ws-x")
     monkeypatch.setattr(PK, "PART_BYTES", 300)             # 逼出多段
     root = tmp_path / "products"
     for step in ("cell_shrink", "seed_admit"):
@@ -83,7 +83,7 @@ def test_pack_roundtrip(tmp_path, monkeypatch):
     src = FakeSrc()
     man = PK.push_products("vol04", root, label="t1", src=src, note="测")
     assert man["files"] == 8 and len(man["parts"]) >= 2
-    assert [m["name"] for m in PK.list_packs("vol04", src=src)] == ["products/siku-zongmu/vol04/t1"]
+    assert [m["name"] for m in PK.list_packs("vol04", src=src)] == ["products/ws-x/vol04/t1"]
     out = tmp_path / "got"
     info = PK.fetch_products("vol04", out, src=src)
     assert info["files"] == 8
@@ -91,7 +91,7 @@ def test_pack_roundtrip(tmp_path, monkeypatch):
     assert not (out / "vol04" / "seed_admit" / "_prev").exists()
     with pytest.raises(FileExistsError):
         PK.fetch_products("vol04", out, label="t1", src=src)
-    k = "products/siku-zongmu/vol04/t1/part-000.tgz"
+    k = "products/ws-x/vol04/t1/part-000.tgz"
     src.objs[k] = b"x" + src.objs[k][1:]
     with pytest.raises(ValueError):
         PK.fetch_products("vol04", out, label="t1", src=src, force=True)
