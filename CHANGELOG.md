@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.7`。
 
+### Changed
+- `guji close-check` 1a（非冻结册）改口径（用户 10-19 定「在跑它的那个版本下新鲜就行，不要求最新版本」）：只因「代码或版本变了」过期、且 manifest 条目记着正式版 `cv_version`（不带 `+N`／`+dirty`）的页算新鲜，过期也不再往下游传；detail 里另报这类页数与本册产物用到的 cv 版本。册配置变、参数变、上游产物变、缺失、失败、显式失效、老条目（没记版本）照旧算 FAIL。新参数 `--strict-cv` 回到旧口径。`Engine.status(code_ok=True)` 是同一件事（缺省 False，`guji status` 不变）。冻结册的 1a 不受影响。PATCH；只动 `core/engine.py`（不在任何 Step 的 `code_deps`）、`ops/close_check.py`、`cli_v2.py`，`code_hash` 不变。
+
 ### Added
 - 受控重跑三件工具（[doc/受控重跑.md](doc/受控重跑.md)；方法论在 ai-team `domain/CV/规范/受控重跑方法论.md`）。都缺省关，不进任何 Step 的 `code_deps`，17 步 `code_hash` 不变：
   - 册钉字形库 `glyph_pin: N`（`core/glyph_pin.py`）：seed_admit 的人裁、近似字指纹换成 `glyph-gN`，别的对话推上来的人裁不再让本册 seed_admit 过期；号加一才落地新人裁。起因：重跑 vol04–10 时每次 `guji db sync` 都让已过粗校的册判过期、重跑、重做出口检查。不写 = 指纹逐位不变；第一次写上会让该册 seed_admit 过期一次。

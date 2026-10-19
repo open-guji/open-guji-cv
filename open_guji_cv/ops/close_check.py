@@ -30,20 +30,30 @@ def _item(no: str, name: str, status: str, detail: str = "", data=None) -> dict:
     return {"no": no, "name": name, "status": status, "detail": detail, "data": data}
 
 
-def _fresh(eng, pages) -> dict:
-    st = eng.status(pages=pages)
+def _fresh(eng, pages, strict_cv: bool = False) -> dict:
+    """第 1a 项。缺省（用户 10-19 定「在跑它的那个版本下新鲜就行」）：只因代码／版本变了过期、
+    产物记着正式版 cv_version 的页算新鲜，只计数并列出本册用到的 cv 版本；`strict_cv` 回到旧口径。"""
+    st = eng.status(pages=pages, code_ok=not strict_cv)
     bad = {sid: {k: d["counts"][k] for k in ("stale", "missing", "failed", "blocked") if d["counts"][k]}
            for sid, d in st["steps"].items()}
     bad = {k: v for k, v in bad.items() if v}
+    n_code = sum(d.get("code_only", 0) for d in st["steps"].values())
+    vers: dict[str, int] = {}
+    for d in st["steps"].values():
+        for v, n in (d.get("cv_versions") or {}).items():
+            vers[v] = vers.get(v, 0) + n
+    note = (f"（另有 {n_code} 页只是代码／版本变了，不计；产物用到的 cv 版本："
+            + "、".join(f"{v}×{n}" for v, n in sorted(vers.items())) + "）") if n_code else ""
     return _item("1a", "产物新鲜", PASS if not bad else FAIL,
-                 "全部新鲜" if not bad else f"{len(bad)} 步有过期/缺失/失败", bad or None)
+                 ("全部新鲜" if not bad else f"{len(bad)} 步有过期/缺失/失败") + note,
+                 bad or None)
 
 
-def _fresh_or_frozen(eng, pages, ws: Path) -> dict:
+def _fresh_or_frozen(eng, pages, ws: Path, strict_cv: bool = False) -> dict:
     """册配置登记了冻结基线（`freeze:`）就比快照，否则照旧比现行指纹（GUJI-601）。"""
     from .freeze import fresh_frozen, is_frozen
     if not is_frozen(eng.book):
-        return _fresh(eng, pages)
+        return _fresh(eng, pages, strict_cv)
     from ..core.workspace import feedback_root
     return fresh_frozen(eng, pages, ws, feedback_root=feedback_root())
 
@@ -264,11 +274,11 @@ MANUAL_ITEMS = [
 
 def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | None = None,
         notes: Path | None = None, reports: Path | None = None, tier: str = "final",
-        pending: Path | None = None) -> dict:
+        pending: Path | None = None, strict_cv: bool = False) -> dict:
     book = eng.book.id
     items: list[dict] = []
     checks = [
-        ("1a", "产物新鲜", lambda: [_fresh_or_frozen(eng, pages, ws)]),
+        ("1a", "产物新鲜", lambda: [_fresh_or_frozen(eng, pages, ws, strict_cv)]),
         ("1b", "缓存不错位", lambda: [_cache(eng, pages)]),
         ("1c", "模型在场", lambda: [_models(eng, pages)]),
         ("2", "待审清零", lambda: [_queue(book, eng.store, ws, tier)]),
