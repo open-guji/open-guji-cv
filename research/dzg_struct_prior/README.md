@@ -44,4 +44,4 @@ python unsplit_colcount.py --ws $WS_BASE --vol vol04 --ocr ocr_vol04.jsonl \
 - **按 `border_top`/`content_x` 认列会认错**：同页多列这两个值相同，别列的格位被套上来，看起来像「约束改坏了 16 列」。改成从 `ctx.image('column_image', pXXXXcYY)` 取列号。
 - **`CONSTRAINED_KIND=1`（按转写全面改格子类型）不能用**：真字被改成空（书名列首字、抬头字的格号口径差一格，卷端大字题名），空框被改成字（掩盖了上面的并格）。只留 `narrow`。
 - **夹注段尾单 a 格不能进 `forced_jiazhu`**：会被拆出一个空的 b 半。
-- **喂 `colgold_prior` 的表 `start` 不能留空**：C 按 `start`+`n` 定格位段，留空当 0，提要正文（缩进两格）段尾两格落到段外，末格常过不了「像字」检验，C 把末字切丢。vol04 一册坏 216 列。按图推 start（纯算法第一个非空格）就没事，比真 start 还稳。
+- **喂 `colgold_prior` 的表 `start` 不能留空**：C 按 `start`+`n` 定格位段，留空当 0，提要正文（缩进两格）段尾两格落到段外，末格常过不了「像字」检验，C 把末字切丢。vol04 一册坏 232 列。#204 起 `load_colgold` 不收 start 为空的行。按图推 start（纯算法第一个非空格）在 vol04/05 上没坏，但全书上会让 C 对 3,006 个本来对的列动手（真 start 79 列，设计 19 第八节），只当退路。
