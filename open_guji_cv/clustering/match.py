@@ -138,6 +138,8 @@ class MatchResult:
     guard: str | None = None        # 触发的护栏："never_match" | "conflict"
     n_verified: int = 0             # 本次做了几对 verify
     near_shape: dict | None = None  # 近形决胜证据（`near_shape.NearShapeDecision.to_dict`）；没开/没触发为 None
+    same_hits: tuple = ()           # same 档：全部判 same 的库条目 (id, cov, wmax)，cov 降序。只给
+    #                               # Step5-a 挑「本书优先」用（借来的刻例降一档，共享方案 S6），不进 to_dict
 
     def to_dict(self) -> dict:
         return {"verdict": self.verdict, "char": self.char,
@@ -474,7 +476,8 @@ class GlyphMatcher:
                     guard="never_match", n_verified=n_verified), norm, exclude_id)
             return MatchResult("same", char, iid, cov, wmax,
                                sorted(cands.items(), key=lambda t: -t[1]),
-                               n_verified=n_verified)
+                               n_verified=n_verified,
+                               same_hits=tuple((i, c, w) for c, w, _, i in same_hits))
         if unsure_best:
             return self._apply_shape_rerank(MatchResult(
                 "unsure", None, None, best_cov, best_wmax,

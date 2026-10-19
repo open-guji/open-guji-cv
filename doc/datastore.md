@@ -282,7 +282,10 @@ build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 pus
   出完先装一遍库（`rebuild_from_store`）核对能装，再规范导出。
 - **推**：加 `--push` 以升级脚本身份推（`push(shared_writer=True)`），第一次新开工作区；同一版再推拒绝，出新版开新名字。
 - **用**：别的书在 `workspace.yaml` 写 `glyph_lib: {borrow: [glyphlib-qkp-v1]}`，`guji db pull` 拉只读副本、带上它重建 glyph.db；
-  借来的实例记成 `borrowed_human`，不当本书铁证。匹配降一档信任是 S6 的事（要改 `glyph_match`，单独一个 MINOR）。
+  借来的实例记成 `borrowed_human`，不当本书铁证。
+- **匹配时降一档**（v0.4.7 起，S6）：Step5-a 判 same 的库条目里有本书的，用本书那条；只有借来的条目判 same 就降成 unsure，
+  字进候选交上下文裁决，记 `via="borrowed:<条目 id>"`，不再走共识升档、近形决胜。被借库的名字进 `glyph_match` 的硬参数
+  `borrow_fingerprint`，借的库换版本这一步判过期；没借库的书参数哈希、判决都不变。
 - **10-19 本地试算（殿本，不推）**：人裁 4,374 例 → 确认两批以上且体检干净 1,149 例 → 每字 3 张 **1,076 例、827 字**；
   图与来源逐字节相同；借进全唐文重建，1,076 例都是 `borrowed_human`。
 
