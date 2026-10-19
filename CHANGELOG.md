@@ -3,9 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.0] - 待发
+## [0.4.0] - 2026-10-18
 
-待发分支 `rc/v0.4.0`（MINOR，用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次）。
+MINOR（用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次）。release note 见 `RELEASES.md`。
 
 ### Changed
 - 字形库指纹改成「步骤读到的内容」的哈希（GUJI-609，工作包 8.8）。写入切换后 glyph.db 每拉到新字形库就从中心库整库重建，旧指纹的 `(条数, 最大 rowid, 时间戳)` 会随 rowid 重排白白变。新模块 `clustering/glyph_fp.py`（不进任何 Step 的 `code_deps`）：
