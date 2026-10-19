@@ -40,8 +40,8 @@ X2 实测切分重算后同一块像素上的格已经改成完整字，裁决�
 
 ## 缓存与及时性
 
-每页一份 `feedback/bindings/<book>/pNNNN.json`，记算它时的 Step3 产物 sha 与本页裁决事件的签名；
-二者任一变了（重切了 / 有新裁决）就在下一次读的时候重算。所以**不用记得去跑**，谁读谁触发。
+每页一份 `feedback/bindings/<book>/pNNNN.json`，记算它时的 Step3 产物 sha、字块那一步（`cell_shrink`）的产物 sha
+与本页裁决事件的签名；任一变了（重切了 / 字块重算了 / 有新裁决）就在下一次读的时候重算。所以**不用记得去跑**，谁读谁触发。
 
 ## `status` 与 `return_status`：两列，答的是两件不同的事（2026-09-27）
 
@@ -89,7 +89,10 @@ def strict_enabled() -> bool:
     return os.environ.get("GUJI_BINDINGS_STRICT", "").strip().lower() in ("1", "true", "yes", "on")
 _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
-_VERSION = 6          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff）
+_VERSION = 7          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳）
+
+#: 字块图（`char_patch`）是哪一步切的：它的产物 sha 就是缓存图上记的戳（`engine._stamp_cache`）。
+PATCH_STEP = "cell_shrink"
 
 
 def _ts(iso: str) -> float:
@@ -99,6 +102,18 @@ def _ts(iso: str) -> float:
 def _bindings_dir(book: str) -> Path:
     from ..core.workspace import feedback_root
     return feedback_root() / "bindings" / book
+
+
+def page_state(book: str, page: int, store) -> tuple[str | None, str | None]:
+    """这一页绑定依赖的两份产物 sha：Step3 切分（`cells`）、字块那一步（`char_patch` 的戳）。
+
+    2026-10-19 加第二个（D 在云端重跑 vol01 踩到）：缓存键原来只认 Step3 的 sha，可指纹比对
+    （`_fp_diff`）、图块比对（`_similar`）读的是字块图——Step3 没变、字块重切了，缓存照样采信，
+    行里的 fp/iou 却是对着旧字块算的，10-16 的人裁 100 多格判成 review、全册丢成 □。"""
+    from ..core.spec import page_key
+    from ..report.slots import cells_step
+    key = page_key(page)
+    return store.sha(book, cells_step(book), key), store.sha(book, PATCH_STEP, key)
 
 
 def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float, object]]:
@@ -272,7 +287,8 @@ def _return_trigger_events(book: str, log) -> dict[int, list]:
 
 
 def compute_page(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
-                 return_events: list | None = None, backfill: dict | None = None) -> list[dict]:
+                 return_events: list | None = None, backfill: dict | None = None,
+                 patch_stamp: str | None = None) -> list[dict]:
     """一页裁决的绑定（不读不写缓存）。
 
     `return_events`：这一页的 `cutline`／`n_body_slots`／`return_resolve` 事件（列级/结案，
@@ -291,6 +307,10 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     if backfill is None:
         backfill = load_backfill(book)
     versions = _cells_versions(book, page, store)
+    # 字块图要验戳（`patch_stamp` = 现在这版字块产物的 sha，`page_bindings` 传进来）：缓存里记的
+    # 不是这一版 → 当作没有图（退回几何规则），不拿旧字块比指纹。不传 = 不验（与 v7 之前一致）。
+    def _patch(c, s_, sb):
+        return cache.get(book, "char_patch", patch_key(page, c, s_, sb), stamp=patch_stamp)
     current = versions[-1] if versions and versions[-1][0] == "current" else None
     cur_idx = _cell_index(current[3]) if current else {}
     cur_start = current[1] if current else 0.0
@@ -329,14 +349,14 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         if anchor is None or not anchor.get("bbox"):
             # 补不出几何：裁于现行切分之后 → 同编号照用；之前 → 回待审（宁可重看不可错用）
             same = (col, slot, sub) in cur_idx
-            d0 = _fp_diff(evid, cache.get(book, "char_patch", patch_key(page, col, slot, sub))) if same else None
+            d0 = _fp_diff(evid, _patch(col, slot, sub)) if same else None
             if d0 is not None:
                 row["fp_diff"] = round(d0, 1)
                 row["bound"] = ev.target.key
                 row["status"] = "valid" if d0 <= FP_TOL else "review"
                 rows.append(row)
                 continue
-            sim = (_similar(anchor, book, cache.get(book, "char_patch", patch_key(page, col, slot, sub)))
+            sim = (_similar(anchor, book, _patch(col, slot, sub))
                    if anchor is not None and same else None)
             row["sim"] = None if sim is None else round(sim, 4)
             if sim is not None:
@@ -363,7 +383,7 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
         bkey = f"{book}:{page}:{best[0]}:{best[1]}{best[2]}"
         row["bound"] = bkey
         same = "valid" if bkey == ev.target.key else "rebound"
-        d1 = _fp_diff(evid, cache.get(book, "char_patch", patch_key(page, *best)))
+        d1 = _fp_diff(evid, _patch(*best))
         if d1 is not None:
             # 有当时的图指纹：相同/近似才认，其余回待审（几何只负责找候选格）
             row["fp_diff"] = round(d1, 1)
@@ -374,7 +394,7 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
             row["status"] = same
             rows.append(row)
             continue
-        sim = _similar(anchor, book, cache.get(book, "char_patch", patch_key(page, *best)))
+        sim = _similar(anchor, book, _patch(*best))
         row["sim"] = None if sim is None else round(sim, 4)
         contained = _inside(cur_idx[best][0], ab) >= 0.9 and inside == 1   # 格缩了（夹注只剩半边等）
         if (best_iou >= IOU_OK or contained) and inside <= 1 and (sim is None or sim >= SIM_OK):
@@ -454,13 +474,12 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
                   refresh: bool = False, return_events: list | None = None,
                   backfill: dict | None = None, cells_sha: str | None = None) -> list[dict]:
     """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。
-    `cells_sha` 调用方（`book_bindings`）已按页算好就传进来，免得每页再查一遍 Step3 是哪步。"""
-    from ..core.spec import page_key
+    `cells_sha` 调用方（`book_bindings`）已按页算好就传进来（Step3 与字块两份 sha，见 `page_state`）。"""
     from ..products.store import ProductStore
-    from ..report.slots import cells_step
     store = store or ProductStore()
     if cells_sha is None:
-        cells_sha = store.sha(book, cells_step(book), page_key(page))
+        cells_sha = "+".join(x or "" for x in page_state(book, page, store))
+    patch_stamp = cells_sha.split("+", 1)[1] if "+" in cells_sha else None
     f = _bindings_dir(book) / f"p{page:04d}.json"
     if backfill is None:
         from .anchor_backfill import load_backfill
@@ -474,7 +493,7 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
         except Exception:
             pass
     rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db,
-                       return_events=return_events, backfill=backfill)
+                       return_events=return_events, backfill=backfill, patch_stamp=patch_stamp or None)
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
                              "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
@@ -497,14 +516,11 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     by_page = _verdict_events(book, log)
     by_page_returns = _return_trigger_events(book, log)
     backfill = load_backfill(book)
-    # 同一次跑批里 Step7 每页都要读一遍全书绑定：事件与 Step3 产物都没变时直接用上一份（2 分钟内）
-    from ..core.spec import page_key
-    from ..report.slots import cells_step
-    step = cells_step(book)
+    # 同一次跑批里 Step7 每页都要读一遍全书绑定：事件与 Step3、字块产物都没变时直接用上一份（2 分钟内）
     all_pages = sorted(set(by_page) | set(by_page_returns))
     want = [pg for pg in all_pages if pages is None or pg in pages]
     page_sig = {pg: (_sig(by_page.get(pg, []), by_page_returns.get(pg), backfill),
-                     store.sha(book, step, page_key(pg))) for pg in want}
+                     "+".join(x or "" for x in page_state(book, pg, store))) for pg in want}
     sig = (book, str(store.root), tuple((pg, *page_sig[pg]) for pg in want),
            tuple(pages) if pages is not None else None)
     hit = _MEMO.get(sig)
