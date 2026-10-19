@@ -67,10 +67,11 @@ def test_under_split_adds_slot():
 
 def test_load_colgold_filters(tmp_path):
     rows = [
-        {"vol": "volX", "page": 3, "col": 1, "agree": True, "dzg": {"n": 19, "note": None}},
+        {"vol": "volX", "page": 3, "col": 1, "agree": True, "dzg": {"n": 19, "start": 0, "note": None}},
         {"vol": "volX", "page": 3, "col": 2, "agree": False, "dzg": {"n": 19, "note": None}},
         {"vol": "volX", "page": 3, "col": 3, "agree": True, "dzg": {"n": 25, "note": {"start": 5, "r": 3, "l": 3}}},
         {"vol": "volY", "page": 3, "col": 1, "agree": True, "dzg": {"n": 19, "note": None}},
+        {"vol": "volX", "page": 3, "col": 4, "agree": True, "dzg": {"n": 19, "start": None, "note": None}},
     ]
     p = tmp_path / "colgold.jsonl"
     p.write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")

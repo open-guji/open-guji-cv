@@ -42,7 +42,10 @@ def _colgold_path(rel: str):
 
 
 def load_colgold(rel: str, book: str) -> dict[tuple[int, int], dict]:
-    """逐列字数表 → {(页, 列): 行}，只收本册、双源一致（`agree`）且无夹注的列。"""
+    """逐列字数表 → {(页, 列): 行}，只收本册、双源一致（`agree`）、无夹注且有 `start` 的列。
+
+    `start` 为空（整理本不录行首留白）的不收：计数的格位段要靠它定，按 0 算会把缩进列的末字划到段外
+    （另一分支用光盘版表实测，vol04 坏 232 列）。"""
     import json
     p = _colgold_path(rel)
     key = (str(p), book)
@@ -53,7 +56,8 @@ def load_colgold(rel: str, book: str) -> dict[tuple[int, int], dict]:
                 if not ln.strip():
                     continue
                 r = json.loads(ln)
-                if r.get("vol") == book and r.get("agree") and not r["dzg"].get("note"):
+                if (r.get("vol") == book and r.get("agree") and not r["dzg"].get("note")
+                        and r["dzg"].get("start") is not None):
                     out[(int(r["page"]), int(r["col"]))] = r
         _COLGOLD_CACHE[key] = out
     return _COLGOLD_CACHE[key]
