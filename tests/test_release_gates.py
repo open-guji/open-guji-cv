@@ -147,3 +147,12 @@ def test_close_check_1c_models(monkeypatch, tmp_path):
     w1.unlink()
     r = CC._models(eng, [1])
     assert r["status"] == CC.FAIL and r["data"]["env"][0] == "没装 torch" and len(r["data"]["env"]) == 2
+
+
+def test_cli_has_strict_cv_option():
+    import argparse
+    from open_guji_cv import cli_v2
+    root = argparse.ArgumentParser()
+    cli_v2.register_subcommands(root.add_subparsers(dest="command"))
+    assert root.parse_args(["close-check", "b", "-w", "/x", "--strict-cv"]).strict_cv is True
+    assert root.parse_args(["close-check", "b", "-w", "/x"]).strict_cv is False

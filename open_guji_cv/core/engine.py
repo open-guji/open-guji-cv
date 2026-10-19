@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import re
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -155,6 +156,9 @@ def book_dep_values(step: Step, book: BookSpec) -> dict | None:
     if not step.spec.book_deps:
         return None
     return {k: _jsonable(getattr(book, k, None)) for k in sorted(step.spec.book_deps)}
+
+
+_FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 +N／+dirty）
 
 
 def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
@@ -437,8 +441,13 @@ class Engine:
         return "代码或版本变了"
 
     def _page_status_row(self, step: Step, pages: list[int],
-                          upstream_fresh: dict[int, bool]) -> tuple[dict, dict[int, str]]:
-        """算一个 Step（普通 Step 或闸）逐页状态，返回 (给 status() 用的行, {页: 状态} 供下游查过期)。"""
+                          upstream_fresh: dict[int, bool],
+                          code_ok: bool = False) -> tuple[dict, dict[int, str]]:
+        """算一个 Step（普通 Step 或闸）逐页状态，返回 (给 status() 用的行, {页: 状态} 供下游查过期)。
+
+        `code_ok`（用户 2026-10-19 定「在跑它的那个版本下新鲜就行」）：只因「代码或版本变了」过期、
+        且产物记着正式版 cv_version 的页，当新鲜往下传，另在行里记 `code_only` 页数与 `cv_versions`。
+        册配置、参数、上游产物变、缺失、失败、显式失效照旧；老条目没记版本、版本带 +N／+dirty 的不放过。"""
         per_page: dict[int, dict] = {}
         counts = {FRESH: 0, STALE: 0, MISSING: 0, FAILED: 0, BLOCKED: 0}
         page_state: dict[int, str] = {}
@@ -447,8 +456,16 @@ class Engine:
         soft_now = soft_values(step, self.ctx.params_for(step))
         n_drift = 0
         reasons: dict[str, int] = {}
+        code_only = 0
+        cv_versions: dict[str, int] = {}
         for pg in pages:
             st, entry = self.page_status(step, pg)
+            if (code_ok and st == STALE and entry is not None and not entry.invalidated
+                    and _FORMAL_CV.match(entry.cv_version or "")
+                    and self.stale_reason(step, pg, entry) == "代码或版本变了"):
+                st = FRESH
+                code_only += 1
+                cv_versions[entry.cv_version] = cv_versions.get(entry.cv_version, 0) + 1
             upstream_stale = st == FRESH and not upstream_fresh.get(pg, True)
             if upstream_stale:
                 st = STALE
@@ -467,10 +484,14 @@ class Engine:
                             "ts": entry.ts if entry else None,
                             "elapsed": entry.elapsed if entry else None,
                             "error": entry.error if entry else None}
-        return {"counts": counts, "pages": per_page, "drift": n_drift,
-                "stale_reasons": reasons}, page_state
+        row = {"counts": counts, "pages": per_page, "drift": n_drift, "stale_reasons": reasons}
+        if code_only:
+            row["code_only"] = code_only
+            row["cv_versions"] = cv_versions
+        return row, page_state
 
-    def status(self, pages: list[int] | None = None, steps: list[str] | None = None) -> dict:
+    def status(self, pages: list[int] | None = None, steps: list[str] | None = None,
+               code_ok: bool = False) -> dict:
         """每步每页的状态。**过期沿 DAG 向下传**：某页的任一直接上游不是 fresh，本步该页
         即使指纹还对得上也标 stale（`upstream_stale=True`）——上游一改，下游整链过期。
 
@@ -493,7 +514,7 @@ class Engine:
             step = STEPS[sid]                            # 书级开关关掉的 step 不进 seen，见下
             ups = [u for u in self._live_upstream(step) if u in seen]
             upstream_fresh = {pg: all(seen[u].get(pg) == FRESH for u in ups) for pg in pages}
-            row, page_state = self._page_status_row(step, pages, upstream_fresh)
+            row, page_state = self._page_status_row(step, pages, upstream_fresh, code_ok)
             seen[sid] = page_state
             if sid in steps:
                 gaps = self.optional_gaps(step, pages)
@@ -504,7 +525,7 @@ class Engine:
             if gate:
                 gate_step = STEPS[gate.id]
                 gate_upstream_fresh = {pg: page_state.get(pg) == FRESH for pg in pages}
-                grow, gpage_state = self._page_status_row(gate_step, pages, gate_upstream_fresh)
+                grow, gpage_state = self._page_status_row(gate_step, pages, gate_upstream_fresh, code_ok)
                 seen[gate.id] = gpage_state
                 out[gate.id] = grow
         return {"book": self.book.id, "pipeline": self.pipeline.id, "pages": pages, "steps": out}
