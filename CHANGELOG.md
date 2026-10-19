@@ -15,6 +15,9 @@
 - `guji close-check` 加两条放行硬项（用户 10-19 定，GUJI-624；粗校档、终校档都计）：2c「□ 有去向」，导出文本里每个阙文格要在公众待审单（新参数 `--pending <NNN.pending.json>`）或 `feedback/lists/<册>-重切清单.tsv` 上；2d「整理本对不上的列有交代」，align_ref `coord_fallback` 的每一列要在 `feedback/lists/<册>-对不上列交代.tsv`（处理：重切／改字／说明／一致）或重切清单上。`scripts/zhengli/collect_exit.py` 透传 `--pending`（`ops/release_gates.py`）。PATCH；不碰任何 Step，`code_hash` 不变。
 - `guji close-check` 加 1c「模型在场」：本机没装 torch 或缺切点裁判／识别权重时 FAIL（这时 1a 是拿「没模型」比「没模型」，照报新鲜）；Step5-b 产物里有字要查却一条 embedding 候选都没出的页也 FAIL（没 torch 跑的 Step5-b 指纹照样新鲜，只能看产物）。D 10-19 云端重跑 vol01 时踩到。PATCH；只动 `ops/close_check.py`，`code_hash` 不变。
 
+### Fixed
+- 人裁绑定表（`feedback/bindings.py`）的页缓存键加上字块那一步（`cell_shrink`）的产物 sha，比指纹时字块图也验戳：此前只认 Step3 的 sha，Step3 不变、字块重算了，旧缓存照样采信，行里的指纹是对着旧字块算的，人裁判成 review 不采信。D 10-19 云端整册重跑 vol01 时，10-16 的人裁 100 多格因此丢成 □。缓存版本 6→7，各机绑定缓存下次读时自动重算一遍。`seed_admit` 的指纹仍不含绑定结果，这类丢格靠 close-check 2b（已定字却没出字）兜底，2b 不为 0 的页 `guji step seed_admit … --force`。PATCH；`bindings.py` 不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
+
 ## [0.4.4] - 2026-10-18
 
 PATCH。Worker 超资源时自动缩批；借库不再把被借库的人裁算成本书的。17 步 `code_hash` 都不变，不用重算。

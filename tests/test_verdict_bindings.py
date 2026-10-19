@@ -101,3 +101,37 @@ def test_legacy_without_anchor_before_current_split_is_not_used(monkeypatch):
     cur = _cells({(1, 5, ""): (0, 400, 100, 500)})
     r = _run(monkeypatch, cur, [_ev("v:1:1:9", 1, None, ts="2026-09-10T00:00:00Z")], sim=None)[0]
     assert r["status"] == "unanchored" and B.usable(r) is None
+
+
+def test_page_cache_follows_patch_step_and_stamps_patches(monkeypatch, tmp_path):
+    """缓存键要含字块那一步（cell_shrink）的 sha，字块图要验戳（D 10-19 vol01 云端重跑踩到：
+    Step3 没变、字块重算了，旧缓存照样采信，行里的 fp 是对着旧字块算的，人裁 100 多格丢成 □）。"""
+    from open_guji_cv.core.spec import page_key
+    from open_guji_cv.products.store import ProductStore
+    st = ProductStore(tmp_path / "products")
+
+    def put(step, text):
+        p = st.path("v", step, page_key(1))
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text, encoding="utf-8")
+
+    put("row_segment", "cells-1")
+    put("cell_shrink", "shrink-1")
+    monkeypatch.setattr(B, "_bindings_dir", lambda book: tmp_path / "bindings" / book)
+    seen = []
+    monkeypatch.setattr(B, "compute_page", lambda *a, **k: seen.append(k["patch_stamp"]) or [])
+    B.page_bindings("v", 1, [], store=st, backfill={})
+    B.page_bindings("v", 1, [], store=st, backfill={})
+    assert seen == [st.sha("v", "cell_shrink", page_key(1))]          # 第二次命中缓存
+    put("cell_shrink", "shrink-2")                                       # Step3 不变、字块重算
+    B.page_bindings("v", 1, [], store=st, backfill={})
+    assert seen[-1] == st.sha("v", "cell_shrink", page_key(1)) and len(seen) == 2
+
+
+def test_compute_page_passes_patch_stamp_to_cache(monkeypatch):
+    got = []
+    monkeypatch.setattr(B, "_cells_versions", lambda *a, **k: [("current", 0.0, float("inf"), _cells({(1, 1, ""): (0, 0, 10, 10)}))])
+    cache = NS(get=lambda *a, **k: got.append(k.get("stamp")))
+    ev = _ev("v:1:1:1", 1, anchor={"bbox": [0, 0, 10, 10], "evidence": {"fp": "x"}})
+    B.compute_page("v", 1, [ev], store=object(), cache=cache, glyph_db=None, patch_stamp="S")
+    assert got and set(got) == {"S"}
