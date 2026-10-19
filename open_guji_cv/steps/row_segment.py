@@ -198,8 +198,7 @@ class RowSegmentParams(BaseModel):
     #: 开了以后整页跑一遍 yolo-tool 两段模型（`utils/yolo_tool_infer`，onnxruntime），同列相邻两个
     #: 字格的墨迹框都有 ≥`yolo_cover` 落进同一个**正常高**（≤`yolo_max_h`×本页中位）的 YOLO 字框，
     #: 记一对「一字被切成两格」；有 k 对就把目标字数定为「现字数 − k」走 `apply_count_target` 重切，
-    #: 字数恰好对上才采用。有逐列字数先验（colgold）的列：YOLO 只提议并哪几对，按金标计数对上才采用，
-    #: 否则退回 colgold 的按差值重切——金标说了算。
+    #: 字数恰好对上才采用。两个开关都开时先 D 后 C（D 改过的列 C 再按金标核一遍）。
     yolo_merge: bool = False
     yolo_model_dir: str = ""             # yolo-tool 的 model/ 目录（内含 type/ slide/ 两个 best.onnx）；相对工作区根或绝对路径
     yolo_fingerprint: str = ""           # 两份 onnx 的 sha，开关开着时自动填（换模型 → Step3 判过期）
@@ -353,25 +352,17 @@ class RowSegmentStep(Step):
             k_pairs = 0
             if r is not None and yolo_boxes and slot_override is None and not _has_jiazhu(r.cells):
                 k_pairs = self._yolo_pairs(r, img, wins, gc.col, page_w, yolo_boxes, p)
-            if r is not None and g is not None and slot_override is None:
-                want = int(g["dzg"]["n"])
-                cnt = colgold_count(g["dzg"])
-                done = False
-                if k_pairs and cnt(r.cells) != want:
-                    # 有金标时 YOLO 只提议「并哪几对」，采不采由金标定：重切后按金标格位计数恰好对上才用
-                    r2 = _seg(n_body_col - k_pairs)
-                    if r2 is not None and not _has_jiazhu(r2.cells) and cnt(r2.cells) == want:
-                        prior_flags.append(f"yolo_colgold_prior：并 {k_pairs} 对，字数→{want}（格数 {n_body_col}→{n_body_col - k_pairs}）")
-                        r, n_body_col, done = r2, n_body_col - k_pairs, True
-                        base = dict(base, n_body_slots=n_body_col)
-                if not done:
-                    r, n_new, fl = apply_count_target(r, _seg, n_body_col, want, "colgold", count=cnt)
-                    prior_flags += fl
-                    if n_new != n_body_col:
-                        n_body_col = n_new
-                        base = dict(base, n_body_slots=n_body_col)
-            elif r is not None and k_pairs and slot_override is None:
+            # 先 D 后 C：两者修好的列几乎不重叠（测试 B：C 修 10、D 修 11、并集 13），
+            # 「有金标时只让 D 提议、金标定采不采」那版实测漏掉 D 独有的两列（设计变更记录）。
+            if r is not None and k_pairs and slot_override is None:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, _n_chars(r.cells) - k_pairs, "yolo")
+                prior_flags += fl
+                if n_new != n_body_col:
+                    n_body_col = n_new
+                    base = dict(base, n_body_slots=n_body_col)
+            if r is not None and g is not None and slot_override is None:
+                r, n_new, fl = apply_count_target(r, _seg, n_body_col, int(g["dzg"]["n"]), "colgold",
+                                                  count=colgold_count(g["dzg"]))
                 prior_flags += fl
                 if n_new != n_body_col:
                     n_body_col = n_new
