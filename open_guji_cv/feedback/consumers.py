@@ -357,7 +357,8 @@ def glyphdb_admit(events, db_path: str | None = None,
     occ_of = occluded_of or _occluded_lookup
     occ_memo: dict = {}
     for e, _dest in admits:
-        shape = _unmojibake(e.payload.get("shape") or e.payload.get("char"))
+        from ..utils.cjk_compat import fold_compat
+        shape = fold_compat(_unmojibake(e.payload.get("shape") or e.payload.get("char")))
         if not shape:
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1

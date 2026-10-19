@@ -54,7 +54,7 @@ def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = 
     actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
     with _pg_conn() as conn:
         return push(conn, ws_dir, actor=actor, dry_run=dry_run, allow_delete=allow_delete,
-                    uploader=lambda imgs: upload_files(imgs, bucket="main"), glyph=glyph_hooks(ws_dir))
+                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext), glyph=glyph_hooks(ws_dir))
 
 
 def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
@@ -66,7 +66,7 @@ def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
     src = src or WorkerSource()
     with _pg_conn() as conn:
         return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
-                    uploader=lambda imgs: upload_files(imgs, bucket="main"), glyph=glyph_hooks(ws_dir))
+                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext), glyph=glyph_hooks(ws_dir))
 
 
 def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:

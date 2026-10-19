@@ -214,7 +214,17 @@ def _decorate(hits: list[tuple[str, str, float]]) -> list[dict]:
     `near`（2026-09-22，T6）：`config/ids/confusable_pairs_v1.tsv` 里该字的形近字前 3 个，
     带差在哪个槽（`⿰:R:俞/侖`）——告诉人该盯哪里看，不投票、不放行。"""
     from .confusables import near_forms
+    from ..utils.cjk_compat import fold_compat
     freq = _corpus_freq(DEFAULT_CORPUS)
+    # 兼容汉字（福 U+FA1B 之类）与统一汉字字形相同、分数并列，候选里不能出现；折完同字取先到的（分最高）
+    _seen: set[str] = set()
+    _hits = []
+    for ch, font, score in hits:
+        ch = fold_compat(ch)
+        if ch not in _seen:
+            _seen.add(ch)
+            _hits.append((ch, font, score))
+    hits = _hits
     return [{
         "char": ch, "score": round(score, 4), "font": font,
         "ids": ids_of(ch),

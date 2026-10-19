@@ -91,6 +91,8 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from ..utils.cjk_compat import fold_compat, fold_unique
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 #: 内置基集。值是 (起, 止) 码位区间列表，闭区间。
@@ -104,7 +106,8 @@ BASE_RANGES: dict[str, list[tuple[int, int]]] = {
     "unicode-cjk-ab": [(0x4E00, 0x9FFF), (0x3400, 0x4DBF), (0x20000, 0x2A6DF)],
     # 只有扩B，给 `escalate` 用。
     "unicode-ext-b": [(0x20000, 0x2A6DF)],
-    # 兼容汉字区，个别刻本会用到。
+    # 兼容汉字区。⚠️ 2026-10-19 起兼容汉字一律折成统一汉字（utils/cjk_compat），
+    # 这档折完只剩 12 个本就是统一汉字的码位；留名只为旧册配置不报错。
     "unicode-compat": [(0xF900, 0xFAFF)],
 }
 
@@ -187,7 +190,7 @@ def _load_file_charset(rel: str) -> tuple[str, ...]:
                     seen.add(ch)
                     out.append(ch)
                 break          # 每行只取一个字
-    return tuple(out)
+    return tuple(fold_unique(out))      # 兼容汉字折成统一汉字（utils/cjk_compat）
 
 
 @lru_cache(maxsize=16)
@@ -197,7 +200,8 @@ def base_charset(name: str) -> tuple[str, ...]:
     charset 的对象身份/值命中，每次现拼新元组会让索引反复重建（8 分钟一次）。
     """
     if name in BASE_RANGES:
-        return tuple(chr(c) for lo, hi in BASE_RANGES[name] for c in range(lo, hi + 1))
+        return tuple(fold_unique(chr(c) for lo, hi in BASE_RANGES[name]
+                                 for c in range(lo, hi + 1)))
     if name in BASE_FILES:
         return _load_file_charset(BASE_FILES[name])
     raise ValueError(f"未知基集 {name!r}；可用: "
@@ -310,8 +314,8 @@ def build_charsets(base: str, escalate: str | None, corpus: str | None,
 
     cs = set(base_set)
     if use_corpus:
-        cs.update(_corpus_chars(corpus))
-    cs.update(extra)
+        cs.update(fold_compat(c) for c in _corpus_chars(corpus))
+    cs.update(fold_compat(c) for c in extra)
 
     # ⚠️ **异体展开的产物必须留在基集的区段内**（2026-09-17 实测订正）。
     # 第一版直接把 `variants_of` 的结果无条件并进基集——实测 `unicode-cjk-a`
@@ -325,6 +329,7 @@ def build_charsets(base: str, escalate: str | None, corpus: str | None,
             for ch in list(cs):
                 for v in (variants_of(ch) or ()):
                     vv = v[0] if isinstance(v, (tuple, list)) else v
+                    vv = fold_compat(vv)      # 异体表里的兼容码位先折，再判区段
                     if vv in base_set or vv in cs:
                         continue
                     (spill if vv in esc_set else cs).add(vv)
@@ -332,8 +337,8 @@ def build_charsets(base: str, escalate: str | None, corpus: str | None,
         except Exception:
             pass
 
-    cs = {c for c in cs if _cjk(c)}
-    esc = {c for c in esc_set if _cjk(c)} - cs
+    cs = {fold_compat(c) for c in cs if _cjk(c)}
+    esc = {fold_compat(c) for c in esc_set if _cjk(c)} - cs
     return tuple(sorted(cs)), tuple(sorted(esc))
 
 

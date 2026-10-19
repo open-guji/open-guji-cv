@@ -270,6 +270,8 @@ class GlyphDB:
         内容（label/ids/note）与已有行完全相同时不动 `created_at`——同一条裁决重放不该让
         store 平白改动、也不该让同步的冲突裁决以为这边「刚改过」。
         """
+        from ..utils.cjk_compat import fold_compat
+        label = fold_compat(label)
         if not self.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
                                  (instance_id,)).fetchone():
             return False
@@ -343,6 +345,8 @@ class GlyphDB:
 
         冪等：同一 instance_id 第二次調用直接返回 False，什麼都不寫。
         """
+        from ..utils.cjk_compat import fold_compat
+        char, shape, semantic = fold_compat(char), fold_compat(shape), fold_compat(semantic)
         cur = self.conn.cursor()
         if cur.execute("SELECT 1 FROM admissions WHERE instance_id=?",
                        (instance_id,)).fetchone():

@@ -34,9 +34,14 @@ def fingerprint(row: Row) -> str:
     return sha256(text.encode("utf-8"))
 
 
-def r2_key(sha: str) -> str:
+def r2_key(sha: str, ext: str = "png") -> str:
     """R2 里的对象键：按内容寻址（设计 3.2 节）。"""
-    return f"sha256/{sha[:2]}/{sha}.png"
+    return f"sha256/{sha[:2]}/{sha}.{ext}"
+
+
+#: 只在库里记 sha、文件本身进 R2 的表 → R2 后缀。行不进 ``source_files``，按 ``src_path`` 落回原处。
+#: 锚图是 png；整理本（``corpus/**``，共享方案 2.2 节，殿本 47 MB）按 txt 存，不论原后缀。
+BLOB_TABLES: dict[str, str] = {"anchor_patches_meta": "png", "corpus_files": "txt"}
 
 
 @dataclass(frozen=True)
@@ -67,6 +72,7 @@ TABLES: dict[str, TableSpec] = {t.name: t for t in (
     TableSpec("consumed", ("consumer", "src_line"), append_only=True, has_doc=False),
     TableSpec("anchors", ("src_path", "event", "key"), append_only=True),
     TableSpec("anchor_patches_meta", ("src_path",), has_doc=False),
+    TableSpec("corpus_files", ("src_path",), has_doc=False),
     TableSpec("verdicts", ("src_path", "id")),
     TableSpec("files", ("src_path",)),
     TableSpec("glyph_sources", ("source_id",), has_doc=False),
@@ -86,6 +92,7 @@ TABLES: dict[str, TableSpec] = {t.name: t for t in (
 EXCLUDE_GLOBS = (
     "*.bak*", "*/*.bak*/*", "*.bak-*/*", "*_backup_*/*", "*/_backup_*/*",
     "*consumed_bak_*/*", "*.gitkeep", "*/.gitkeep",
+    "corpus/*/columns.jsonl",          # 殿本 daizhige 的逐列结构，40 MB，`convert` 可重生成（git 里也不收）
 )
 
 #: 字形库里逐行镜像的表：文件名 → 表
@@ -136,6 +143,8 @@ def classify(rel: str) -> str | None:
         return "files"
     if len(parts) >= 2 and parts[0] == "config":
         return "files"                     # 排除名单（crop_exclusions*）、异体表等人工维护的配置
+    if len(parts) >= 2 and parts[0] == "corpus":
+        return "corpus_files"              # 整理本（文本进 R2，库里记 sha）
     if rel.startswith(GS):
         sub = rel[len(GS):]
         sp = PurePosixPath(sub).parts
@@ -305,7 +314,7 @@ def scan_files(files: Iterable[tuple[str, Callable[[], bytes]]], ws_dir: str) ->
             continue
         data = read()
         fsha = sha256(data)
-        if tbl == "anchor_patches_meta":
+        if tbl in BLOB_TABLES:
             rows.append(Row(tbl, (rel,), {"sha256": fsha, "bytes": len(data)}, fsha, rel))
             continue
         lines, final = split_lines(data)

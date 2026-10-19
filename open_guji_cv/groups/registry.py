@@ -46,6 +46,7 @@ class GroupSpec:
     solvers: tuple = ()           # 有序："ids" | "ctx_l1" | "ctx_l2" | "image"；可多个（一组可同时挂两种）
     config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
     flow: FlowSpec | None = None  # 字组统一流程里的判法；None＝不进 `group_flow`
+    overlaps: tuple = ()          # 允许与哪些组共用成员（须互相声明）；入口按分差内候选＋整理本字选第一个装得下的组
 
 
 GROUPS: dict[str, GroupSpec] = {
@@ -59,8 +60,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec(("ctx",)),
-        note="按文意定（L1 规则，弃权查 L2 表）；只补放，不复核。"),
+        flow=FlowSpec(("ctx",), review=True), overlaps=("rm",),
+        note="按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
@@ -72,7 +73,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
         backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/wxs",
-        flow=FlowSpec(("ctx",)),
+        flow=FlowSpec(("ctx",), review=True),
         note="按文意定（只有 L1 规则）。"),
     "wm": GroupSpec(
         id="wm", name="未末", members=frozenset("未末"),
@@ -91,11 +92,25 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec(("ctx",)),
-        note=f"按文意定（L1 规则，弃权查 L2 表）；只补放，不复核。{note}")
+        flow=FlowSpec(("ctx",), review=True),
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
                                ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會", "會＝會典、附會；曾＝曾經、姓氏。"),
                                ("yh", "遺還", "遺＝遺文、補遺；還＝還朝、返還。"))},
+    # —— 第四批（2026-10-19）：象彖、王玉、圓圖。同前，L1 零冲突＋逐册 L2 表。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("ctx",), review=True),
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
+       for gid, name, note in (("xz", "象彖", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
+                               ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},
+    # —— 日目（2026-10-19）：与 ry 共用「日」（互相声明 overlaps），入口按分差内候选选组：日曰候选归 ry，日目候选归 rm，三者混杂留人审。
+    "rm": GroupSpec(
+        id="rm", name="日目", members=frozenset("日目"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/rm",
+        flow=FlowSpec(("ctx",), review=True), overlaps=("ry",),
+        note="按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"),
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),

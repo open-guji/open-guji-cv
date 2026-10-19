@@ -55,6 +55,9 @@ def _base(root: str, pat: str, ws: Path) -> Path:
     if pat.startswith("config/"):
         from .workspace import data_root
         return data_root(ws) or ws
+    if pat.startswith("corpus/"):                      # 整理本也进了中心库（共享方案 2.2 节）
+        from .workspace import corpus_dir
+        return corpus_dir(ws).parent
     return ws
 
 
@@ -76,7 +79,19 @@ def collect(ws: Path) -> list[dict]:
 
 
 def pack_root(ws: Path) -> Path:
-    return ws / PACK_DIR
+    """清单目录。迁到中心库的工作区在数据目录 ``config/corpus-pack/``（随 ``config/`` 进 ``files`` 表，
+    共享方案 2.2 节）；没迁的工作区照旧 ``<工作区>/corpus-pack/``。迁过但还没补迁、旧目录还在工作区根时
+    退回旧目录。只是挪地方：钉子指纹是 ``corpus-vN``，与清单放哪无关。"""
+    from .workspace import data_root
+    ws = Path(ws)
+    old = ws / PACK_DIR
+    d = data_root(ws)
+    if d is None or d == ws:
+        return old
+    new = d / "config" / PACK_DIR
+    if not new.is_dir() and old.is_dir():
+        return old
+    return new
 
 
 def versions(ws: Path) -> list[int]:

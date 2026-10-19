@@ -120,6 +120,11 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
 - 读的过程中该工作区有新写入就重读（最多 3 次），保证拿到的是同一个版本。
 - `glyph.db.central.json`（库旁）记分支、rev、拉取时间，`status` 用它算落后几条。
 - 图缓存：`GUJI_DATA_CACHE`，缺省 `~/.cache/guji-data`，按 sha 存、取回时核 sha，同一张图只下一次。
+- **取图不经 Worker（2026-10-19 起）**：正式桶挂了公开域名 `https://blob.open-guji.com/sha256/<2>/<sha>.<ext>`
+  （按 sha 寻址、不能列目录、走 CDN 缓存；sheldon 定「按哈希公开」）。Worker 签下载时直接回这个地址，客户端不用改，
+  旧版也一样。Worker 请求只剩查表和签名（每批 250 张一次）：从空目录整库拉殿本 173 次、全唐文 68 次、北行 59 次
+  （原先每张图一次，殿本约 1.85 万次）。实验桶仍经 `/v1/blob`。上传照旧经 Worker（核 sha、不覆盖）。
+  用量日报见 guji-workspace-data 仓 `scripts/usage_report.py`。
 - 借库（`workspace.yaml` 的 `glyph_lib.borrow`）暂不支持，配了就报错，照旧用 `glyph-db rebuild`。
 - 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。
 
@@ -180,6 +185,25 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出；两台机器各自追加事件后 sync，两边的行都进库、另一台再 sync 拿到同一份文件，
 书 yaml 两边都改则 `SyncConflict` 且本地不动。
 守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
+
+### 整理本与语料库清单（2026-10-19 起，共享方案 S1）
+
+- **收录**：`corpus/**`（整理本）进新表 `corpus_files`，做法同锚图：库里只记 `src_path`、`sha256`、`bytes`，
+  文件本身进 R2（`sha256/<2>/<sha>.txt`，Worker 的 `/v1/assets/sign*` 带 `"ext": "txt"`）。
+  语料库清单从 `<工作区>/corpus-pack/vN/` 挪到数据目录 `config/corpus-pack/vN/`，随 `config/` 进 `files` 表。
+  工作区根的旧 `corpus-pack/` 不再收录。
+- **补迁**：已经迁过的工作区，`guji db migrate -w <工作区>` 再跑一次，把工作区根留下的 `corpus/`、`corpus-pack/`
+  挪进数据目录，成为待推改动（同 sha 的直接删工作区里的那份；数据目录里有同名不同内容的就停下）。然后 `guji db push`。
+  第一次推会在库里建 `corpus_files` 表（`import_scans` 里 `apply_schema`）。
+- **路径**：`core/workspace.corpus_dir()` 迁过的工作区指数据目录 `corpus/`；数据目录里还没有、工作区根还有旧的时退回工作区根。
+  `corpus_pin.pack_root()` 同理。钉了版本的册指纹是 `corpus-vN`，没钉的册指纹按文件名＋内容算，都与文件放哪无关：
+  殿本 10 册×17 步搬家前后 `self_hash` 逐位相同，`guji corpus verify` v1 无 changed／missing。
+- **新旧版本混用**：旧版 cv 不认 `corpus_files`，pull 不还原整理本，读的仍是工作区根的 `corpus/`；新版 cv 碰到没部署新表的
+  旧 Worker（`no_table`）当作空表。所以 **guji-workspace 删掉 `corpus/`、`corpus-pack/` 要等带 S1 的版本（v0.4.5）发了、
+  各机升级之后**，否则旧版会静默退回本仓的样本语料。
+
+验收（`tests/datastore/test_datastore_workcopy.py`）：补迁后推、另一台 pull 逐字节相同；同名不同内容拒绝补迁；
+路径函数跟着数据目录走；旧 Worker 没有 `corpus_files` 时 pull 照常。
 
 **在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图
 （6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即试推（自动经 443 桥连 Neon main）全部表 0 变更。

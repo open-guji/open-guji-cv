@@ -195,6 +195,19 @@ CREATE TABLE IF NOT EXISTS anchor_patches_meta (
     PRIMARY KEY (ws, src_path)
 );
 
+-- 整理本（corpus/**，共享方案 2.2 节）：文本进 R2（键后缀 .txt），这里只记 sha，同锚图
+CREATE TABLE IF NOT EXISTS corpus_files (
+    ws          text NOT NULL REFERENCES workspaces(ws),
+    src_path    text NOT NULL,                -- corpus/<name>.txt、corpus/daizhige/…
+    sha256      text NOT NULL,
+    bytes       int NOT NULL,
+    src_line    int NOT NULL DEFAULT 0,
+    raw         text NOT NULL,                -- = sha256（核对与变更判断用）
+    rev         bigint NOT NULL,
+    ingested_at timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (ws, src_path)
+);
+
 -- 金标信封：feedback/verdicts/<task>/<file>.jsonl，原样进 doc
 CREATE TABLE IF NOT EXISTS verdicts (
     ws           text NOT NULL REFERENCES workspaces(ws),

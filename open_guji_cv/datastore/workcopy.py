@@ -30,9 +30,9 @@ from pathlib import Path
 from typing import Callable
 
 from ..core.workspace import CENTRAL_MARKER, central_data_dir, central_marker
-from .scope import GS, TABLES, classify, sha256
+from .scope import BLOB_TABLES, GS, TABLES, classify, sha256
 
-SCOPE = ("books/", "feedback/", "review/", "config/", GS)
+SCOPE = ("books/", "feedback/", "review/", "config/", "corpus/", GS)
 STATE = ".central-state.json"
 WS_YAML = "workspace.yaml"
 
@@ -133,9 +133,11 @@ def local_changes(ws_dir: Path, glyph: GlyphHooks | None = None) -> list[str]:
 
 
 def _db_manifest(src, ws: str) -> dict[str, str]:
-    """库里这个工作区的文件 {相对路径: sha}：文本在 source_files，锚图在 anchor_patches_meta。"""
+    """库里这个工作区的文件 {相对路径: sha}：文本在 source_files，锚图、整理本在 BLOB_TABLES。"""
     out = {r["src_path"]: r["sha256"] for r in src.rows("source_files", ws)}
-    out.update({r["src_path"]: r["sha256"] for r in src.rows("anchor_patches_meta", ws)})
+    from .materialize import blob_rows
+    for tbl in BLOB_TABLES:
+        out.update({r["src_path"]: r["sha256"] for r in blob_rows(src, tbl, ws)})
     return out
 
 
@@ -199,7 +201,7 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
 
 def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_delete: bool = False,
          uploader=None, glyph: GlyphHooks | None = None) -> dict:
-    """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images)`` 传新图。"""
+    """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images[, ext=])`` 传新图与整理本。"""
     from .importer import import_scans
     ws_dir = Path(ws_dir)
     data = data_dir(ws_dir)
@@ -217,33 +219,48 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
-        cur.execute("SELECT src_path FROM source_files WHERE ws = %s "
-                    "UNION ALL SELECT src_path FROM anchor_patches_meta WHERE ws = %s", (sc.ws, sc.ws))
+        cur.execute("SELECT src_path FROM source_files WHERE ws = %s"
+                    + "".join(f" UNION ALL SELECT src_path FROM {t} WHERE ws = %s" for t in BLOB_TABLES),
+                    (sc.ws,) * (1 + len(BLOB_TABLES)))
         gone = sorted({r[0] for r in cur.fetchall()} - local_paths)   # 锚图也算：v0.4.0 及更早 pull 不还原锚图
         if gone and not allow_delete:
             raise FileDeleteRefused(f"本地少了 {len(gone)} 个库里有的文件（如 {gone[:3]}）；"
                                     f"确认要删再加 --allow-delete")
 
-    images: dict[str, Path] = {}
+    # 要进 R2 的文件，按 R2 键后缀分组：刻例图、锚图是 png，整理本是 txt（scope.BLOB_TABLES）
+    images: dict[str, dict[str, Path]] = {}
     patch_dir = data / GS / "patches"
     for r in sc.rows:
         if r.tbl == "glyph_instances" and r.cols.get("patch_sha"):
-            images[r.cols["patch_sha"]] = patch_dir / f"{r.key[0].replace(':', '_')}.png"
-        elif r.tbl == "anchor_patches_meta":
-            images[r.cols["sha256"]] = data / r.src_path
-    lost = sorted(str(p) for p in images.values() if not p.exists())
+            images.setdefault("png", {})[r.cols["patch_sha"]] = patch_dir / f"{r.key[0].replace(':', '_')}.png"
+        elif r.tbl in BLOB_TABLES:
+            images.setdefault(BLOB_TABLES[r.tbl], {})[r.cols["sha256"]] = data / r.src_path
+    lost = sorted(str(p) for g in images.values() for p in g.values() if not p.exists())
     if lost:
         raise SystemExit(f"实例引用的 {len(lost)} 张图本地没有（如 {lost[:3]}）")
     if images and uploader is not None and not dry_run:
         # 库里已有的图（导入或之前推过时已进桶）不再逐张签名核对：每次推都核两万张要十几分钟，
         # 连接闲置被断，事务一开就死（10-19 D 推 vol01 裁决两次失败）
+        known: dict[str, set[str]] = {}
         with conn.cursor() as cur:
-            cur.execute("SELECT patch_sha FROM glyph_instances WHERE ws = %s AND patch_sha IS NOT NULL "
-                        "UNION SELECT sha256 FROM anchor_patches_meta WHERE ws = %s", (sc.ws, sc.ws))
-            known = {r[0] for r in cur.fetchall()}
+            cur.execute("SELECT patch_sha FROM glyph_instances WHERE ws = %s AND patch_sha IS NOT NULL",
+                        (sc.ws,))
+            known["png"] = {r[0] for r in cur.fetchall()}
+            for t, ext in BLOB_TABLES.items():
+                cur.execute("SELECT to_regclass(%s)", (t,))
+                if cur.fetchone()[0] is None:          # 新表还没建（导入时 apply_schema 才建）
+                    continue
+                cur.execute(f"SELECT sha256 FROM {t} WHERE ws = %s", (sc.ws,))
+                known.setdefault(ext, set()).update(r[0] for r in cur.fetchall())
         conn.commit()
-        images = {sha: p for sha, p in images.items() if sha not in known}
-    up = uploader(images) if (uploader is not None and not dry_run and images) else None
+        images = {ext: {sha: p for sha, p in g.items() if sha not in known.get(ext, ())}
+                  for ext, g in images.items()}
+        images = {ext: g for ext, g in images.items() if g}
+    up = None
+    if uploader is not None and not dry_run and images:
+        res = {ext: (uploader(g) if ext == "png" else uploader(g, ext=ext))   # 只收图的 uploader 照旧能用
+               for ext, g in sorted(images.items())}
+        up = res["png"] if list(res) == ["png"] else res
     rep = import_scans(conn, [sc], label=f"push:{sc.ws}@{base}", actor=actor, dry_run=dry_run,
                        source="push", guard=guard, allow_delete=allow_delete)
     out = rep.as_dict()
@@ -265,7 +282,10 @@ def migrate(src, ws_dir: Path, *, cache=None, bucket: str = "main", keep_local: 
     from .pull import workspace_id
     ws_dir = Path(ws_dir)
     if central_marker(ws_dir):
-        raise SystemExit(f"{ws_dir} 已经迁过（有 {CENTRAL_MARKER}）；要更新用 guji db pull")
+        rep = adopt(ws_dir, dry_run=dry_run)
+        if rep is None:
+            raise SystemExit(f"{ws_dir} 已经迁过（有 {CENTRAL_MARKER}）；要更新用 guji db pull")
+        return rep
     ws = workspace_id(ws_dir)
     branch = getattr(src, "branch", "main")
     db = _db_manifest(src, ws)
@@ -297,6 +317,7 @@ def migrate(src, ws_dir: Path, *, cache=None, bucket: str = "main", keep_local: 
         shutil.copy2(ws_dir / rel, dst)
     (ws_dir / CENTRAL_MARKER).write_text(json.dumps({"ws": ws, "branch": branch}, ensure_ascii=False) + "\n",
                                           encoding="utf-8")
+    adopted = adopt(ws_dir)                            # 工作区根的 corpus-pack/ 挪进数据目录 config/
     removed = 0
     for rel, p in list(_walk(ws_dir)):
         p.unlink()
@@ -309,8 +330,61 @@ def migrate(src, ws_dir: Path, *, cache=None, bucket: str = "main", keep_local: 
                     sub.rmdir()
             if not any(d.iterdir()):
                 d.rmdir()
-    report.update(rev=rev, written=written, removed_from_workspace=removed, pending=len(differ),
+    report.update(rev=rev, written=written, removed_from_workspace=removed,
+                  pending=len(differ) + (adopted or {}).get("adopt", 0),
                   **{k: v for k, v in stats.items() if k != "ws"})
+    return report
+
+
+#: 收录范围后来才扩进来的工作区根目录 → 数据目录里的落点（2026-10-19 共享方案 2.2 节：整理本、语料库清单）
+ADOPT = {"corpus": "corpus", "corpus-pack": "config/corpus-pack"}
+
+
+def adopt(ws_dir: Path, *, dry_run: bool = False) -> dict | None:
+    """补迁：已迁过的工作区，根上还留着后来才纳入中心库的目录（``ADOPT``），挪进数据目录成为待推改动。
+
+    数据目录里已有同路径同内容的文件直接删掉工作区里的；内容不同就整次停下，什么都不动。
+    没有可补迁的返回 None。挪完要 ``guji db push``（或 sync）才进库。"""
+    ws_dir = Path(ws_dir)
+    data = data_dir(ws_dir)
+    moves: list[tuple[Path, Path, str]] = []
+    for src_name, dst_rel in ADOPT.items():
+        root = ws_dir / src_name
+        if not root.is_dir():
+            continue
+        for p in sorted(root.rglob("*")):
+            if not p.is_file():
+                continue
+            rel = f"{dst_rel}/{p.relative_to(root).as_posix()}"
+            if classify(rel) is None:
+                continue
+            moves.append((p, data / rel, rel))
+    if not moves:
+        return None
+    clash = [rel for p, q, rel in moves if q.exists() and sha256(q.read_bytes()) != sha256(p.read_bytes())]
+    if clash:
+        raise SystemExit(f"补迁：数据目录里已有 {len(clash)} 个同路径但内容不同的文件（如 {clash[:3]}）；"
+                         f"先弄清哪份对，再手工处理")
+    same = sum(1 for _, q, _ in moves if q.exists())
+    report = {"ws_dir": str(ws_dir), "data_dir": str(data), "adopt": len(moves) - same, "already": same,
+              "files": [rel for *_, rel in moves][:50], "dry_run": dry_run}
+    if dry_run:
+        return report
+    for p, q, _ in moves:
+        if q.exists():
+            p.unlink()
+        else:
+            q.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(p), q)
+    for src_name in ADOPT:                              # 删空目录（不归库管的文件留着）
+        d = ws_dir / src_name
+        if d.is_dir():
+            for sub in sorted((x for x in d.rglob("*") if x.is_dir()), key=lambda x: -len(x.parts)):
+                if not any(sub.iterdir()):
+                    sub.rmdir()
+            if not any(d.iterdir()):
+                d.rmdir()
+    report["next"] = f"guji db push -w {ws_dir}"
     return report
 
 

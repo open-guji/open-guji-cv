@@ -36,6 +36,11 @@ def test_classify_routes_files_to_tables():
     assert classify("feedback/lists/x.txt") == "files"
     assert classify("review/batches/b.json") == "files"
     assert classify("config/crop_exclusions.jsonl") == "files"
+    assert classify("config/corpus-pack/v1/manifest.json") == "files"
+    assert classify("corpus/zongmu_wenyuange_wikisource.txt") == "corpus_files"
+    assert classify("corpus/daizhige/0001.jsonl") == "corpus_files"
+    assert classify("corpus-pack/v1/manifest.json") is None        # 旧位置不进库，migrate 补迁到 config/
+    assert classify("corpus/daizhige/columns.jsonl") is None           # 可重生成的大文件不进库
     assert classify("output/glyph_store/glyphs.jsonl") == "glyphs"
     assert classify("output/glyph_store/instances/v2.jsonl") == "glyph_instances"
     assert classify("output/glyph_store/patches/v2_a_1_2.png") == "patch"

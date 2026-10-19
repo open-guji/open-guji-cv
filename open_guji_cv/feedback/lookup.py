@@ -422,6 +422,9 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         # 对齐（那正是 vol01 7 页崩溃的根因）。跳过不等于丢数据：机械可还原的
         # 那批走的是追加更正事件（`scripts/mojibake_census.py`），这里只挡
         # 未来/未覆盖到的意外坏数据。
+        if isinstance(p.get("shape"), str):      # 老事件里的兼容汉字读出时折掉
+            from ..utils.cjk_compat import fold_compat
+            p = {**p, "shape": fold_compat(p["shape"])}
         if not is_legal_shape(p["shape"]):
             tag = (book, e.target.key, str(p["shape"]))
             if tag not in _WARNED_BAD_SHAPE:
