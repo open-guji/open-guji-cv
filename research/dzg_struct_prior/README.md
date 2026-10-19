@@ -10,6 +10,7 @@
 | `run_constrained.py` | 在真管线里跑：①DP 换替身；②`resolved_forced_jiazhu/main` 换成 daizhige 的夹注格（只强制两半都有的格，段尾单 a 格交给现有段端收编）/ 正文格；③`CONSTRAINED_RAISE_EXACT=1` 时抬头级数按 daizhige 定；④`CONSTRAINED_KIND=narrow` 时 Step4 之后只对「列端、扁而宽」的格按转写二选一（框线 / 「一」） |
 | `analyze.py` | 把错列归到 劈字 / 首末渣 / 丢字 / 夹注 / 格号平移 / 空列有字 |
 | `viewcols.py` / `audit.py` | 基线与约束版并排叠框；被改了类型的格拼图——**数字之外一律看图** |
+| `flipcmp.py` | 两份 structcmp 结果并排：逐格、字数两个口径各报准确率、修好、改坏，并列出改坏的列（交接单 `doc/handoffs/HANDOFF_殿本Step3结构先验.md` 用它验收） |
 | `cell_ocr.py` | 「整理本不分行」实测（研究文档 §十一）：Step4 字块小图逐格 rapidocr 识别 top1，作对位载体串。要另装 `rapidocr-onnxruntime` |
 | `unsplit_colcount.py` | 不分行的整理本 → 对位分列 → colgold 同格式的逐列字数表，喂 `row_segment.colgold_prior`。要另装 `opencc-python-reimplemented` |
 

@@ -8,9 +8,26 @@
 import json, os, sys, collections
 from pathlib import Path
 
-# 四庫總目工作区（guji-workspace 里那本书的目录）
+# 四庫總目工作区（guji-workspace 里那本书的目录）。daizhige 目录：GUJI_DZG 直接指定；否则按 corpus_dir 找
+# （迁过中心库的工作区，corpus/ 在数据目录里）；都不行就退回工作区根下的 corpus/daizhige。
 WS = Path(os.environ.get('GUJI_WS96', '../guji-workspace/96mid1ogzk-欽定四庫全書總目武英殿刻本'))
-DZ = WS / 'corpus/daizhige'
+
+
+def _dz_dir() -> Path:
+    if os.environ.get('GUJI_DZG'):
+        return Path(os.environ['GUJI_DZG'])
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+        from open_guji_cv.core.workspace import corpus_dir
+        d = corpus_dir(WS)
+        if d is not None and (d / 'daizhige').is_dir():
+            return d / 'daizhige'
+    except Exception:
+        pass
+    return WS / 'corpus/daizhige'
+
+
+DZ = _dz_dir()
 
 
 def load_dzg():
@@ -91,7 +108,7 @@ def main():
     pm = [json.loads(l) for l in open(DZ / 'page_map.jsonl', encoding='utf-8')]
     T = collections.Counter(); byvol = collections.defaultdict(collections.Counter)
     bykind = collections.defaultdict(collections.Counter)
-    rows = []; pages_bad = collections.Counter(); missing = []
+    rows = []; pages_bad = collections.Counter(); missing = []; ncols = collections.Counter()
     for m in pm:
         if m['vol'] not in vols or m['kind'] != 'text' or m.get('dzg_kind') != 'full':
             continue
@@ -111,7 +128,7 @@ def main():
             ck = 'note' if any(s for _, s in E) else ('raised' if any(sl < 0 for sl, _ in E) else 'body')
             if not E:
                 ck = 'empty'
-            T[k] += 1; byvol[m['vol']][k] += 1; bykind[ck][k] += 1
+            T[k] += 1; byvol[m['vol']][k] += 1; bykind[ck][k] += 1; ncols[f"{m['vol']}:{m['page']}"] += 1
             if k != 'exact':
                 nbad += 1
                 eb = sorted(E);
@@ -139,7 +156,7 @@ def main():
     if out:
         json.dump(dict(total=dict(T), byvol={k: dict(v) for k, v in byvol.items()},
                        bykind={k: dict(v) for k, v in bykind.items()}, rows=rows,
-                       pages_bad=dict(pages_bad)), open(out, 'w'), ensure_ascii=False, indent=0)
+                       pages_bad=dict(pages_bad), ncols=dict(ncols)), open(out, 'w'), ensure_ascii=False, indent=0)
 
 
 if __name__ == '__main__':
