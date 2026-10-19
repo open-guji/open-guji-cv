@@ -38,7 +38,9 @@ def _cell_key(k: str) -> str:
 def human_shapes(workspace: Path) -> dict[str, str]:
     """{格 key（`vol01:10:1:10`）: 人裁刻形}。字形库 human 标注打底，confirm 事件按时间覆盖。"""
     out: dict[str, str] = {}
-    for f in sorted(glob.glob(str(workspace / "output" / "glyph_store" / "instances" / "*.jsonl"))):
+    from ..core.workspace import data_root
+    data = data_root(Path(workspace)) or Path(workspace)      # 迁到中心库后在数据目录（GUJI-608）
+    for f in sorted(glob.glob(str(data / "output" / "glyph_store" / "instances" / "*.jsonl"))):
         for line in open(f, encoding="utf-8"):
             try:
                 r = json.loads(line)
@@ -47,7 +49,7 @@ def human_shapes(workspace: Path) -> dict[str, str]:
             if r.get("label_status") == "human" and r.get("label") and r.get("instance_id"):
                 out[_cell_key(r["instance_id"])] = r["label"]
     evs = []
-    for f in sorted(glob.glob(str(workspace / "feedback" / "events" / "*.jsonl"))):
+    for f in sorted(glob.glob(str(data / "feedback" / "events" / "*.jsonl"))):
         for line in open(f, encoding="utf-8"):
             try:
                 e = json.loads(line)
@@ -126,7 +128,9 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     groups = {g.id: g.members for g in GROUPS.values() if g.flow and "freq" in g.flow.solvers}
     table = build(a.workspace, groups)
-    out = a.out or a.workspace / "config" / "groups" / "freq.json"
+    from ..core.workspace import data_root
+    data = data_root(a.workspace) or a.workspace
+    out = a.out or data / "config" / "groups" / "freq.json"
     write(table, out)
     shapes = human_shapes(a.workspace)
     for gid, c in table["groups"].items():

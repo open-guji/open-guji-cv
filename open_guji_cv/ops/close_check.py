@@ -54,8 +54,9 @@ def _cache(eng, pages) -> dict:
 
 def _glyph_store_missing(ws: Path) -> str | None:
     """工作区没有字形库（glyph_store 目录与 glyph.db 都没有）→ 返回缺什么；齐了返回 None。"""
+    from ..core.workspace import data_root
     out = Path(ws) / "output"
-    gs = out / "glyph_store"
+    gs = (data_root(Path(ws)) or Path(ws)) / "output" / "glyph_store"
     if (out / "glyph.db").is_file():
         return None
     # 空目录不算有库：要有字形账本或人裁事件文件才算
@@ -97,6 +98,18 @@ def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
 
 
 def _store_committed(ws: Path) -> dict:
+    from ..core.workspace import central_marker
+    if central_marker(Path(ws)):
+        # 迁到中心库后（GUJI-608）：看数据目录有没有没推的改动（不连网，对上次拉／推的基准）
+        try:
+            from .central_glyph import glyph_hooks
+            from ..datastore.workcopy import local_changes
+            dirty = local_changes(Path(ws), glyph_hooks(Path(ws)))
+        except BaseException as e:  # noqa: BLE001  （含 SystemExit：还没拉过）
+            return _item("8", "字形库与人裁已推进中心库", ERROR, f"{type(e).__name__}: {e}")
+        return _item("8", "字形库与人裁已推进中心库", PASS if not dirty else FAIL,
+                     "数据目录与中心库一致" if not dirty else f"{len(dirty)} 个文件没推（`guji db push -w <工作区>`）",
+                     dirty[:50] or None)
     rel = ["feedback", "output/glyph_store", "config", "review"]
     try:
         out = subprocess.run(["git", "-C", str(ws), "status", "--porcelain", "--", *rel],

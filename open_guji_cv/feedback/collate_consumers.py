@@ -127,11 +127,11 @@ def char_convention(events, book_path: str = "", dry_run: bool = False,
 
 
 def _books_dir() -> Path:
-    from ..core.workspace import workspace_root
-    root = workspace_root()
-    if root is None:
+    from ..core.workspace import books_dir
+    d = books_dir()
+    if d is None:
         raise RuntimeError("没有工作区，定位不到 books/")
-    return root / "books"
+    return d
 
 
 def _rewrite_conventions(path: Path, rows: list[dict]) -> None:

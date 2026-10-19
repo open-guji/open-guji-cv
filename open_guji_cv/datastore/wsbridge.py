@@ -79,13 +79,16 @@ def start_in_thread(host: str) -> int:
     return port
 
 
-def neon_dsn_via_bridge(url: str) -> str:
-    """把 ``NEON_DATABASE_URL`` 换成经本地桥的 DSN（口令只在内存里）。"""
+def neon_dsn_via_bridge(url: str, endpoint: str | None = None) -> str:
+    """把 ``NEON_DATABASE_URL`` 换成经本地桥的 DSN（口令只在内存里）。``endpoint`` 换成同项目的别的端点。"""
     import urllib.parse as u
     p = u.urlparse(url)
-    host = p.hostname
-    endpoint = host.split(".")[0].removesuffix("-pooler")
-    port = start_in_thread(host.replace("-pooler", ""))
+    host = p.hostname.replace("-pooler", "")
+    first, _, rest = host.partition(".")
+    if endpoint:
+        host = f"{endpoint}.{rest}"
+    endpoint = endpoint or first
+    port = start_in_thread(host)
     db = (p.path or "/neondb").lstrip("/") or "neondb"
     from psycopg.conninfo import make_conninfo
     return make_conninfo(host="127.0.0.1", port=port, dbname=db, user=u.unquote(p.username or ""),

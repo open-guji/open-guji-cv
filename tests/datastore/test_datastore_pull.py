@@ -1,6 +1,5 @@
-"""``guji db pull`` 验收（GUJI-606）：从中心库还原的字形库与 git 里的逐字节相同，
-重建出的 glyph.db 与 ``glyph-db rebuild --no-replay`` 在全部表上逐行相同；``--rev`` 钉版本、
-实验分支事件显式导入、经 Worker 读（假 Worker）分页与批量签名。
+"""中心库读路径验收（GUJI-606）：篡改的库内容被拒、实验分支事件显式导入、经 Worker 读（假 Worker）
+分页与批量签名。拉、推、迁移见 ``test_datastore_workcopy.py``。
 
 要 ``GUJI_TEST_PG_DSN``（可建删 schema 的 Postgres），不给就跳过；假 Worker 那条不要库。
 """
@@ -76,53 +75,6 @@ def _tables(db_path: Path) -> dict[str, list]:
         return {n: sorted(map(repr, c.execute(f"SELECT * FROM {n}").fetchall())) for n in names}
     finally:
         c.close()
-
-
-@needs_pg
-def test_pull_matches_git_store_and_rebuild(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.clustering.glyph_db import rebuild_from_store
-    from open_guji_cv.datastore.client import PgSource
-    from open_guji_cv.datastore.importer import import_commit
-    from open_guji_cv.cli_db import rebuild_db
-    from open_guji_cv.datastore.pull import pull, read_meta
-
-    files = _workspace(tmp_path)
-    c1 = _commit(repo, files, "c1")
-    import_commit(conn, repo, c1)
-    src = PgSource(conn, branch="main")
-
-    ws = tmp_path / "local-ws"
-    ws.mkdir()
-    (ws / "workspace.yaml").write_bytes(files["W/workspace.yaml"])
-    db_path = ws / "output" / "glyph.db"
-    res = pull(src, ws, db_path, with_feedback=True, rebuild=rebuild_db,
-               cache=_Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()}))
-    assert res["rev"] == src.status() and res["ws"] == "tws"
-
-    # 1. 还原的文件与提交里逐字节相同（字形库全部文件、图，外加 feedback/）
-    got = Path(res["store"]).parent.parent
-    for rel, b in files.items():
-        rel = rel[2:]
-        if rel.startswith(("output/glyph_store/", "feedback/")):
-            assert (got / rel).read_bytes() == b, rel
-    n_local = sum(1 for p in (got / "output" / "glyph_store").rglob("*") if p.is_file())
-    assert n_local == sum(1 for k in files if k.startswith("W/output/glyph_store/"))
-
-    # 2. 重建的库与直接从 git 里的字形库 rebuild（不补放、不借库）全部表逐行相同
-    git_store = tmp_path / "git-ws"
-    _git(repo, "worktree", "add", "-q", str(git_store), c1)
-    ref = tmp_path / "ref.sqlite"
-    rebuild_from_store(git_store / "W" / "output" / "glyph_store", ref)
-    assert _tables(db_path) == _tables(ref)
-    assert read_meta(db_path)["rev"] == res["rev"]
-
-    # 3. 钉版本：没变就能按旧 rev 拉；该工作区有新写入后再钉旧 rev 就报错
-    r_old = res["rev"]
-    assert pull(src, ws, db_path, rev=r_old, rebuild=rebuild_db, cache=_Cache(tmp_path / "cache", {}))["rev"] == r_old
-    files["W/feedback/events/b.jsonl"] += (_line(id="evt_b_2", batch="b", seq=2) + "\n").encode()
-    import_commit(conn, repo, _commit(repo, files, "c2"))
-    with pytest.raises(SystemExit, match="之后已有变更"):
-        pull(src, ws, db_path, rev=r_old, cache=_Cache(tmp_path / "cache", {}))
 
 
 @needs_pg

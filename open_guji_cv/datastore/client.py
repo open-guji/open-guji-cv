@@ -62,15 +62,17 @@ class WorkerSource:
 
     # ---- HTTP ----
     def _call(self, method: str, path: str, *, query: dict | None = None, body=None,
-              auth: bool = True, raw: bool = False):
+              auth: bool = True, raw: bool = False, data: bytes | None = None,
+              content_type: str = "application/octet-stream"):
         url = path if path.startswith("http") else self.url + path
         if query:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query)
         headers = {"user-agent": "open-guji-cv-datastore"}  # Cloudflare 拦默认的 Python-urllib UA
-        data = None
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
             headers["content-type"] = "application/json"
+        elif data is not None:
+            headers["content-type"] = content_type
         if auth:
             headers["authorization"] = f"Bearer {self.token}"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
@@ -162,6 +164,20 @@ class WorkerSource:
     def append_events(self, ws: str, src_path: str, lines: list[str], branch: str | None = None) -> dict:
         return self._call("POST", "/v1/events", query={"branch": branch or self.branch},
                           body={"ws": ws, "src_path": src_path, "lines": lines})
+
+
+    # ---- 备份（GUJI-611，正式令牌）----
+    def put_backup(self, day: str, name: str, data: bytes, content_type: str) -> dict:
+        return self._call("PUT", f"/v1/backups/{day}/{name}", data=data, content_type=content_type)
+
+    def list_backups(self) -> list[dict]:
+        return self._call("GET", "/v1/backups")["dates"]
+
+    def get_backup(self, day: str, name: str) -> bytes:
+        return self._call("GET", f"/v1/backups/{day}/{name}", raw=True)
+
+    def delete_backup(self, day: str) -> dict:
+        return self._call("DELETE", f"/v1/backups/{day}")
 
 
 class PgSource:
