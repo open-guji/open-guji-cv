@@ -217,8 +217,9 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
-        cur.execute("SELECT src_path FROM source_files WHERE ws = %s", (sc.ws,))
-        gone = sorted({r[0] for r in cur.fetchall()} - local_paths)
+        cur.execute("SELECT src_path FROM source_files WHERE ws = %s "
+                    "UNION ALL SELECT src_path FROM anchor_patches_meta WHERE ws = %s", (sc.ws, sc.ws))
+        gone = sorted({r[0] for r in cur.fetchall()} - local_paths)   # 锚图也算：v0.4.0 及更早 pull 不还原锚图
         if gone and not allow_delete:
             raise FileDeleteRefused(f"本地少了 {len(gone)} 个库里有的文件（如 {gone[:3]}）；"
                                     f"确认要删再加 --allow-delete")
