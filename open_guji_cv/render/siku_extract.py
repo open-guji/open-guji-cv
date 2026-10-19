@@ -360,30 +360,44 @@ class VolumeResult:
     report: dict[str, Any]
 
 
-def build_chunks(paras_text: list[str], limit: int) -> tuple[list[Chunk], list[str], list[int]]:
-    """段落 → 块；同时给出段落拼接字序与每段末字的 render 下标。"""
+def build_chunks(paras_text: list[str], limit: int,
+                 soft: list[bool] | None = None) -> tuple[list[Chunk], list[str], list[int]]:
+    """段落 → 块；同时给出段落拼接字序与每段末字的 render 下标。
+
+    `soft[i]` 为真的段（段首是软分段：抬头／差一格，见 `reflow_text`）接在上一段后面一起
+    分块送模型，让模型看见整句；分不分段由 `assemble_volume` 看交界处有没有断句再定。
+    块的 `para` 是这一组的首段号。"""
     chunks: list[Chunk] = []
     render_chars: list[str] = []
     para_last: list[int] = []
-    for pi, text in enumerate(paras_text):
-        toks = para_tokens(text)
-        idx_map: list[int | None] = []
-        for _, p in toks:
-            if _is_char(p):
-                idx_map.append(len(render_chars))
-                render_chars.append(p)
-            else:
-                idx_map.append(None)
-        para_last.append(len(render_chars) - 1)
-        spans = _chunks(toks, limit)
-        for a, b in spans:
+    soft = soft or [False] * len(paras_text)
+
+    def emit(first: int, toks: list[tuple[str, str]], idx_map: list[int | None]) -> None:
+        for a, b in _chunks(toks, limit):
             sub = [(o, p) for o, p in toks[a:b]]
             plain = "".join(p for _, p in sub)
             if not any(_is_char(p) for _, p in sub):
                 continue
             ridx = [idx_map[a + k] for k, (_, p) in enumerate(sub) if p]
             rest = any(_is_char(p) for _, p in toks[b:])
-            chunks.append(Chunk(pi, plain, ridx, para_end=not rest))
+            chunks.append(Chunk(first, plain, ridx, para_end=not rest))
+
+    g_first, g_toks, g_idx = 0, [], []
+    for pi, text in enumerate(paras_text):
+        if pi and not soft[pi]:
+            emit(g_first, g_toks, g_idx)
+            g_first, g_toks, g_idx = pi, [], []
+        toks = para_tokens(text)
+        for _, p in toks:
+            if _is_char(p):
+                g_idx.append(len(render_chars))
+                render_chars.append(p)
+            else:
+                g_idx.append(None)
+        g_toks.extend(toks)
+        para_last.append(len(render_chars) - 1)
+    if paras_text:
+        emit(g_first, g_toks, g_idx)
     return chunks, render_chars, para_last
 
 
@@ -474,6 +488,11 @@ class Prepared:
     para_last: list[int]
     smap: StreamMap
     anchors: list[str | None]
+    soft: list[bool] = field(default_factory=list)   # 段首是软分段（抬头／差一格）
+
+
+#: 软分段处，模型在交界断了句（交界字后有这些标点）才保留分段
+SENTENCE_END = "。！？"
 
 
 def prepare_volume(lines_md: str, limit: int = 300, count_blank_columns: bool = False) -> Prepared:
@@ -481,10 +500,11 @@ def prepare_volume(lines_md: str, limit: int = 300, count_blank_columns: bool = 
     slots = parse_lines_md(lines_md, count_blank_columns)
     paras, rstats = reflow(to_reflow_md(lines_md), "default")
     paras_text = [p.text for p in paras]
-    chunks, render_chars, para_last = build_chunks(paras_text, limit)
+    soft = [p.soft for p in paras]
+    chunks, render_chars, para_last = build_chunks(paras_text, limit, soft)
     smap = StreamMap.build(render_chars, slots)
     anchors = [slots[j].anchor if j is not None else None for j in smap.to_slot]
-    return Prepared(slots, paras_text, rstats, chunks, render_chars, para_last, smap, anchors)
+    return Prepared(slots, paras_text, rstats, chunks, render_chars, para_last, smap, anchors, soft)
 
 
 def run_volume(lines_md: str, client: Asker, matcher: BookIndexMatcher | None, *,
@@ -517,7 +537,11 @@ def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookInd
     failed: list[dict[str, Any]] = []
     substitutions: list[dict[str, Any]] = []
     missing = 0
+    judged: set[int] = set()       # 模型给过标点的字（块成功、且不在块尾截断处）
     for ch, cr in zip(chunks, results):
+        if cr.ok:
+            idx = [i for i in ch.render_idx if i is not None]
+            judged.update(idx if ch.para_end or not idx else idx[:-1])
         if not cr.ok and cr.note == "未提供":          # 只导入了部分份（如只有 part01）
             missing += 1
             continue
@@ -535,8 +559,17 @@ def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookInd
             puncts.append(PunctAnnotation(mark=mark, kind="point", pos=pos, char_offset=ri,
                                           pre_char=render_chars[ri], anchor=anchors[ri], source=source))
         raw_ents.extend(ents)
+    ends = {p.char_offset for p in puncts if p.pos == "after" and p.mark in SENTENCE_END}
+    soft = prep.soft or [False] * len(para_last)
+    soft_joined: list[dict[str, Any]] = []
+    soft_kept = 0
     for pi, ri in enumerate(para_last[:-1]):
         if ri >= 0 and (pi == 0 or para_last[pi - 1] != ri):
+            if soft[pi + 1] and ri in judged and ri not in ends:
+                # 软分段（抬头／差一格）：模型连着读、交界处没断句 → 句子没完，不分段
+                soft_joined.append({"anchor": anchors[ri], "context": context(render_chars, ri, ri + 1, 8)})
+                continue
+            soft_kept += soft[pi + 1]
             puncts.append(PunctAnnotation(mark="\n\n", kind="break", pos="after", char_offset=ri,
                                           pre_char=render_chars[ri], anchor=anchors[ri], source="rule:reflow"))
     puncts.sort(key=punct_order)
@@ -596,6 +629,10 @@ def assemble_volume(prep: Prepared, results: list[ChunkResult], matcher: BookInd
         "chars_unpunctuated": failed_chars,
         "points": sum(1 for p in puncts if p.kind == "point"),
         "breaks": sum(1 for p in puncts if p.kind == "break"),
+        # 软分段（抬头／差一格）：模型在交界断句的保留分段；没断句的连成一段，列出来抽查
+        "soft_breaks_kept": soft_kept,
+        "soft_breaks_joined": len(soft_joined),
+        "soft_joined": soft_joined,
         "entities": len(entities),
         "matched": sum(1 for e in entities if e.target_status == "matched"),
         "new_candidate": sum(1 for e in entities if e.target_status == "new_candidate"),

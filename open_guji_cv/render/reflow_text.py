@@ -21,14 +21,20 @@ len a + len b；`[[]]`、`□{..}` 各占 1 格；单行小注 `:jz[x]{type=单�
    FULL 集合默认从整册占位数直方图自动找（占比 ≥ `peak_ratio` 的值，且 ≥ 本册最大
    众数 − 2），也可由调用方用 `full=` 显式给。
 2. 版心／空列（空行）不分段；页界（`#第N页`）不分段，只插页码标记。
-3. 行首抬头 `^` 且没有后随挪抬 `.`（真抬头：另起一行、高出版心）→ 在它**前面**也分段。
+3. 行首抬头 `^` 且没有后随挪抬 `.`（真抬头：另起一行、高出版心），或比上一条正文列
+   开头高的列（平抬：如正文低两格、这列顶格）→ 在它**前面**分段，但记为**软分段**
+   （`Para.soft`）。抬头多是敬称提行（「恭錄¶御定…」「仰𫎇¶指示」），句子并没有完；
+   也可能是条目书名行（四庫總目书名顶格）：顶格独占一列、下一列又是硬分段的，按书名行
+   算硬分段；其余判不出是哪种，交给下游：
+   `siku_extract` 把软分段两边连起来送 LLM，模型在交界处断句（。！？）才分段。
 4. 夹注 `<a|b>` 去掉 `|`；同一页内相邻的两条夹注（上一列尾 + 下一列头，实为一条
    跨列夹注）合并成一条。
 
 ## 不确定点（写进 `Para.notes`，交给 LLM/人复核）
 
 - 占位数 = FULL 最小值 − 1 的"差一格"列：多半是 Step3 把一个排除格（切坏/墨污）
-  丢了，而不是真的段尾。**不自动断也不自动连**——默认按"没排满"断，并记 note。
+  丢了，而不是真的段尾。**不自动断也不自动连**——默认按"没排满"断，记 note，并标软分段
+  （四庫總目 vol02–03 实测「故漢書¶藝文志」「熊凱撰江¶西通志」这类句中断段都出在这里）。
 - 同一列既有 `^` 又有 `.`（Step3 抬头误判，vol03 常见）：按挪抬处理，`^` 忽略。
 """
 from __future__ import annotations
@@ -128,6 +134,8 @@ class Para:
     pages: tuple[int, int]
     kind: str = "body"              # body | title
     notes: list[str] = field(default_factory=list)
+    soft: bool = False              # 段首是软分段（抬头／平抬／差一格）：版面判不准，可能并没有另起一段
+    lines: int = 0                  # 本段占几列
 
 
 PAGE_MARK = "\x00p{}\x00"
@@ -155,8 +163,11 @@ def segment(lines: list[Line], full: set[int] | tuple[set[int], set[int]] | None
     cur_page_seen: int | None = None
     stats = collections.Counter()
 
+    cur_soft = False                # 当前段的段首是不是软分段
+    cur_lines = 0
+
     def flush() -> None:
-        nonlocal cur, cur_pages, cur_notes
+        nonlocal cur, cur_pages, cur_notes, cur_lines
         if cur:
             text = "".join(cur)
             # 同一页内，上一列尾夹注 + 下一列头夹注 = 一条跨列夹注，合并
@@ -164,35 +175,53 @@ def segment(lines: list[Line], full: set[int] | tuple[set[int], set[int]] | None
             while prev != text:
                 prev = text
                 text = _JZ_ADJ.sub(lambda m: "<" + m.group(1) + m.group(2) + ">", text)
-            paras.append(Para(text, (cur_pages[0], cur_pages[-1]), "body", cur_notes))
+            paras.append(Para(text, (cur_pages[0], cur_pages[-1]), "body", cur_notes, cur_soft, cur_lines))
         cur, cur_pages, cur_notes = [], [], []
+        cur_lines = 0
 
     prev_full: bool | None = None   # 上一条非空列是否排满
     prev_line: Line | None = None
+    body_eff: int | None = None     # 最近一条非抬头列的开头点数（本段正文的缩进）
     for ln in lines:
         if ln.blank:
             continue
-        # 真抬头另起一段
-        if ln.true_raised and cur:
+        # 抬头：真抬头，或比正文列开头高（平抬）。敬称提行与书名顶格都长这样，记软分段
+        raised = ln.true_raised or (body_eff is not None and ln.eff < body_eff)
+        if raised and cur and (ln.true_raised or prev_full is False):
             flush()
+            cur_soft = True
             stats["break_raised"] += 1
+            if prev_line is not None:
+                paras[-1].notes.append(
+                    f"p{ln.page}c{ln.idx}: 抬头，软分段：「…{prev_line.body[-6:]}」→「{ln.body[:6]}…」")
         elif prev_full is False and cur:
             flush()
+            cur_soft = False
             stats["break_short"] += 1
             if prev_line is not None and prev_line.extent == near:
                 paras[-1].notes.append(
                     f"p{prev_line.page}c{prev_line.idx}: 占位 {prev_line.extent}=满列−1，"
                     f"疑似丢格（排除格）而非段尾：「…{prev_line.body[-6:]}」→「{ln.body[:6]}…」")
                 stats["near_full_break"] += 1
+                cur_soft = True
+        if not raised:
+            body_eff = ln.eff
         if ln.page != cur_page_seen:
             cur.append(PAGE_MARK.format(ln.page))
             cur_page_seen = ln.page
         if not cur_pages or cur_pages[-1] != ln.page:
             cur_pages.append(ln.page)
         cur.append(_clean_body(ln.body))
+        cur_lines += 1
         prev_full = (ln.slots in full_slots) or (ln.extent in full_ext)
         prev_line = ln
     flush()
+    # 顶格独占一列、后面接硬分段的（四庫總目的书名行：书名＋卷数＋来源，下一列低格起撰人）
+    # 是另起一段，不是敬称提行——敬称提行后面要么接着抬头、要么本列排满接正文。
+    for a, b in zip(paras, paras[1:]):
+        if a.soft and a.lines == 1 and not b.soft:
+            a.soft = False
+            stats["raised_title"] += 1
     stats["paragraphs"] = len(paras)
     stats["lines"] = sum(1 for l in lines if not l.blank)
     return paras, {"full_slots": sorted(full_slots), "full_extents": sorted(full_ext), **stats}

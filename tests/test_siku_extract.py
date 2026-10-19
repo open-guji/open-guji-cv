@@ -340,3 +340,61 @@ def test_work_title_marks_in_punct_layer_match_entity_anchors(tmp_path):
           sx.PunctAnnotation("》", "point", "after", 2)]
     ps.sort(key=sx.punct_order)
     assert apply_entities_and_punctuations_to_markdown(toks, ps, []) == "《周易注》，十卷"
+
+
+# ── 抬头软分段：敬称提行不是段首，交模型断句再定 ─────────────────────────────
+
+FULL = "甲乙丙丁戊己庚辛壬癸"
+TAITOU = f"""<!-- p11 -->
+..{FULL}
+..{FULL}
+..臣等初亦恭錄
+^御定易經仰𫎇
+指示命移冠
+.國朝之首{FULL[:5]}
+..{FULL}
+..{FULL}
+..{FULL}
+..是書之大略
+子夏易傳十一卷
+..舊本題卜子夏撰{FULL[:2]}
+..{FULL}
+..{FULL}
+"""
+
+
+def test_reflow_marks_raised_breaks_soft():
+    from open_guji_cv.render.reflow_text import reflow
+    paras, st = reflow(sx.to_reflow_md(TAITOU))
+    heads = [re.sub(r"\x00p\d+\x00", "", p.text)[:4] for p in paras]
+    assert heads == ["甲乙丙丁", "御定易經", "指示命移", "國朝之首", "子夏易傳", "舊本題卜"]
+    # 抬头（^）、平抬（比正文高）是软分段；顶格独占一列、下列又硬分段的是书名行，按硬分段
+    assert [p.soft for p in paras] == [False, True, True, True, False, False]
+    assert st["break_raised"] == 4 and st["raised_title"] == 1
+
+
+def test_soft_breaks_join_unless_model_ends_sentence(tmp_path):
+    prep = sx.prepare_volume(TAITOU, limit=10 ** 9)
+    assert len(prep.chunks) == 3                          # 软分段的几段连成一块送模型
+    first = prep.chunks[0].plain
+    assert "恭錄御定易經仰𫎇指示命移冠國朝" in first and first.endswith("是書之大略")
+    ans = first.replace("恭錄", "恭錄《").replace("易經", "易經》").replace("仰𫎇", "仰𫎇，").replace("大略", "大略。")
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, {1: ans}), None, "x")
+    brk = [p.pre_char for p in res.puncts if p.kind == "break"]
+    # 恭錄｜御定、仰𫎇｜指示、移冠｜國朝 没断句 → 连成一段；书名行前后是硬分段，照分
+    assert brk == ["略", "卷"]
+    assert res.report["soft_breaks_joined"] == 3 and res.report["soft_breaks_kept"] == 0
+
+
+def test_soft_breaks_kept_when_model_gave_nothing():
+    prep = sx.prepare_volume(TAITOU, limit=10 ** 9)
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, {}), None, "x")
+    assert sum(p.kind == "break" for p in res.puncts) == 5   # 没有模型判断：照旧全分段
+
+
+def test_soft_break_kept_where_model_ends_sentence():
+    prep = sx.prepare_volume(TAITOU, limit=10 ** 9)
+    ans = prep.chunks[0].plain.replace("移冠", "移冠。").replace("大略", "大略。")
+    res = sx.assemble_volume(prep, sx.results_from_paragraphs(prep, {1: ans}), None, "x")
+    assert [p.pre_char for p in res.puncts if p.kind == "break"] == ["冠", "略", "卷"]
+    assert res.report["soft_breaks_joined"] == 2 and res.report["soft_breaks_kept"] == 1
