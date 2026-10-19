@@ -3,9 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.1] - 待发
+## [0.4.1] - 2026-10-18
 
-待发分支 `rc/v0.4.1`。
+PATCH。中心库拉图提速、锚图还原（只动 `datastore/`），17 步 `code_hash` 不变，不用重算。
 
 ### Fixed
 - `guji db sync|pull|migrate` 拉图提速（10-19 D 反馈：18,481 张刻例图拉了约 20 分钟）：签名本来就每 1000 张批量签，慢在取图一张一次 TLS 握手、只开 8 线程。`WorkerSource.fetch_blobs` 改为每线程留 HTTPS 长连接（走系统代理的 CONNECT 隧道）、缺省 32 线程（`GUJI_DATA_FETCH_WORKERS` 可改），闲置连接被关立刻重连；超过 2000 张时每 2000 张在 stderr 报一次进度。云端实测 3000 张小图：约 30 张/秒 → 约 220 张/秒。取图走 R2 签名直链，不占 Worker 请求额度。
