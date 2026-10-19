@@ -10,4 +10,5 @@
 | `ours_prod.py` / `ours_md.py` | 读我们的 `cell_shrink` 产物（右上原点 → 左上）与整册报告 `volNN.md` |
 | `colcount.py` / `boxeval.py` | 逐列字数（YOLO 按版面框水平重叠聚列、轻清理）与贪心 IoU 匹配 |
 | `dzg_eval.py` / `cmp_md.py` | 对 daizhige 逐列本的列边界吻合；我们的整册报告 ↔ release 页面对齐 |
+| `gate_merge.py` | §四-4′：原生 YOLO 并格闸（相邻两格落进同一个正常高的 YOLO 字框）的召回/误报 |
 | `results/` | 抽样页表、YOLO 原始输出（`y*.jsonl.gz`）、release 逐卷对 daizhige 的结果 |
