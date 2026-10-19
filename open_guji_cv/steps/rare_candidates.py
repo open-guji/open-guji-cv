@@ -100,6 +100,12 @@ class RareCandidatesParams(BaseModel):
     `(大小,mtime)`），道理与 `real_proto_fingerprint` 那次一样。
     """
 
+    db_font_fingerprint: str = ""
+    """库里字体域的清单哈希（GUJI-609，v0.4.0；``clustering.glyph_fp.font_domain_fingerprint``），留空自动填，
+    没有字体域是 ``none``。``rare_panel`` 按册的 ``font.editions`` 查库里的字体域；中心库重建的 glyph.db
+    不带字体域，要另跑 ``glyph-db import-font``——带不带、导的哪版字体，从此进指纹。单独一个字段，
+    不掺进 ``model_fingerprint``（``core.step`` 按书重算那份时要拿它和模块级默认比）。"""
+
     def model_post_init(self, _ctx) -> None:
         if not self.model_fingerprint:
             from ..clustering.cnn_candidates import full_fingerprint
@@ -110,6 +116,10 @@ class RareCandidatesParams(BaseModel):
                 pp = Path(self.struct_probe)
                 fp += ":probe=" + (hashlib.sha1(pp.read_bytes()).hexdigest()[:12] if pp.exists() else "missing")
             object.__setattr__(self, "model_fingerprint", fp)
+        if not self.db_font_fingerprint:
+            from ..clustering.glyph_fp import font_domain_fingerprint
+            from ..core.workspace import glyph_db_path
+            object.__setattr__(self, "db_font_fingerprint", font_domain_fingerprint(glyph_db_path()))
 
 
 @register_step

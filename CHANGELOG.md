@@ -3,6 +3,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.4.0] - 待发
+
+待发分支 `rc/v0.4.0`（MINOR，用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次）。
+
+### Changed
+- 字形库指纹改成「步骤读到的内容」的哈希（GUJI-609，工作包 8.8）。写入切换后 glyph.db 每拉到新字形库就从中心库整库重建，旧指纹的 `(条数, 最大 rowid, 时间戳)` 会随 rowid 重排白白变。新模块 `clustering/glyph_fp.py`（不进任何 Step 的 `code_deps`）：
+  - `seed_admit.human_fingerprint` 改取人裁通道真正读的 `(实例 id, 字头)` 排序后的哈希（`h1:<条数>:<哈希>`），与 `_human_shapes` 同一条查询（`glyph_fp.HUMAN_SQL`）。复制、VACUUM、重建、撤了同字重进、机器准入都不变；人裁进库、撤裁、字头改判才变。
+  - `rare_candidates` 加参数 `db_font_fingerprint`（字体域清单哈希，自动填，库里没有字体域是 `none`）：中心库重建的 glyph.db 不带字体域，要另跑 `glyph-db import-font`，带不带、导的哪版字体从此看得见。`import-font` 导入时在新表 `font_manifests` 记字体文件 sha256、字表 sha256、渲染数（这张表不导出进账本）；更早导入的退回按实例数。
+  - 设计第六节写的是「库版本号 rev」。改用内容哈希：产物在各自机器上，同一份内容在不同机器、不同时候拉到的 rev 不同；本地人裁还没推时没有 rev；推完 rev 变了内容没变会白白再过期一次。精度相同。
+  - `glyph_match.db_fingerprint` 不动：它是软参数（只记漂移不判过期），重建后同内容的库戳本来就相同（实测两次重建逐位一致），为它改 `glyph_match` 会让最贵的一步全书重跑。
+  - **影响**：`seed_admit`（f0f2713200ae880e → 50bdd1fb5f0bcbd1）、`rare_candidates`（ac757fe8b73ba312 → 4168770d80cbde67）的 `code_hash` 变，参数指纹也变；没冻结的册这两步及其下游重算一次，判决不变（产物里只有指纹字段变）。冻结册按冻结基线比快照，不受影响。其余 15 步不变。
+
 ## [0.3.5] - 2026-10-18
 
 PATCH。中心库客户端与写入切换（数据迁出工作区、`guji db sync` 自动合并、每日备份；GUJI-606/608/611），group_flow 第三批形近字组。相对 v0.3.4 只有 `seed_admit` 的 `code_hash` 变（6a4e2bd27c35fa8a → f0f2713200ae880e），其余 16 步不变；没迁进中心库的工作区行为不变。
