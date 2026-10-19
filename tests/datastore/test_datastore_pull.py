@@ -202,3 +202,49 @@ def test_blob_cache_rejects_wrong_bytes(tmp_path):
     from open_guji_cv.datastore.client import BlobCache, CentralError
     with pytest.raises(CentralError):
         BlobCache(tmp_path).put("0" * 64, b"x")
+
+
+def test_fetch_blobs_reuses_connections_and_retries(monkeypatch):
+    """取图每个线程一条长连接（不再一张一握手）；5xx 退避重试。"""
+    from open_guji_cv.datastore import client
+    from open_guji_cv.datastore.client import WorkerSource
+
+    monkeypatch.setattr(client.time, "sleep", lambda s: None)
+    blobs = {hashlib.sha256(bytes([i])).hexdigest(): bytes([i]) for i in range(40)}
+    peers, failed = set(), set()
+
+    class H(BaseHTTPRequestHandler):
+        protocol_version = "HTTP/1.1"
+
+        def log_message(self, *a):
+            pass
+
+        def _send(self, code, raw):
+            self.send_response(code)
+            self.send_header("content-length", str(len(raw)))
+            self.end_headers()
+            self.wfile.write(raw)
+
+        def do_GET(self):
+            peers.add(self.client_address[1])
+            sha = self.path.rsplit("/", 1)[1]
+            if sha not in failed:                  # 每张第一次回 503
+                failed.add(sha)
+                return self._send(503, b"busy")
+            self._send(200, blobs[sha])
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            base = f"http://127.0.0.1:{self.server.server_port}/blob/"
+            self._send(200, json.dumps({"items": [{"sha256": s, "url": base + s}
+                                                  for s in body["sha256s"]]}).encode())
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        src = WorkerSource(url=f"http://127.0.0.1:{srv.server_port}", token="tok")
+        got = dict(src.fetch_blobs(list(blobs), workers=4))
+    finally:
+        srv.shutdown()
+    assert got == blobs
+    assert len(peers) <= 4 + 1                     # 4 个取图线程各一条，加签名那一条

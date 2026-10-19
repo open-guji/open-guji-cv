@@ -79,10 +79,11 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
         for r in src.rows("glyph_instances", ws):
             if r.get("patch_sha"):
                 images[f"{GS}patches/{_safe(r['instance_id'])}.png"] = r["patch_sha"]
-    if with_images:
-        for p, f in files.items():
-            if f["tbl"] == "anchor_patches_meta":
-                images[p] = f["sha256"]
+    ap = "feedback/anchor_patches/"
+    if with_images and any(ap.startswith(x) or x.startswith(ap) for x in prefixes):
+        for r in src.rows("anchor_patches_meta", ws):    # 锚图不进 source_files，单在这张表
+            if sel(r["src_path"]):
+                images[r["src_path"]] = r["sha256"]
     img_stats = {}
     if images:
         if cache is None:
