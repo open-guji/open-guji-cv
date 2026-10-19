@@ -3,9 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.3.5] - 待发
+## [0.3.5] - 2026-10-18
 
-待发分支 `rc/v0.3.5`。
+PATCH。中心库客户端与写入切换（数据迁出工作区、`guji db sync` 自动合并、每日备份；GUJI-606/608/611），group_flow 第三批形近字组。相对 v0.3.4 只有 `seed_admit` 的 `code_hash` 变（6a4e2bd27c35fa8a → f0f2713200ae880e），其余 16 步不变；没迁进中心库的工作区行为不变。
 
 ### Added
 - `guji db status|pull|branch|import`：中心库客户端（GUJI-606，工作包 8.5）。`pull -w <工作区>` 经 guji-data Worker 把字形库账本按当前版本还原到 `<工作区>/output/central/<分支>/output/glyph_store/`（每个文件核 sha256，刻例图按 sha 从 R2 拉进本地缓存 `GUJI_DATA_CACHE`、去重），再重建 `glyph.db`，等价于 `glyph-db rebuild --no-replay --no-borrow`；git 管着的 `output/glyph_store/` 不动，库旁写 `glyph.db.central.json` 记分支与 rev。`--rev N` 只在该工作区 N 之后没变时放行（中心库不存旧内容），`--with-feedback` 连 feedback/ 一起还原。`branch create|delete` 开删实验分支，`import --from exp/<名>` 把实验分支的事件显式导入正式库（经 Worker `/v1/events`，按事件 id 幂等；写入切换 GUJI-608 前 Worker 不接受写 main）。连接只认 `GUJI_DATA_URL`／`GUJI_DATA_TOKEN`／`GUJI_DATA_BRANCH`。新模块 `datastore/client.py`、`materialize.py`、`pull.py`、`cli_db.py`，不进任何 Step 的 `code_deps`，**17 步 `code_hash` 全部不变**（逐步对照验过）；不用就没有任何影响。`python -m open_guji_cv.datastore r2-plan --via worker` 改为每 200 张调一次 `/v1/assets/sign-batch`（旧版 Worker 退回逐张签）。
