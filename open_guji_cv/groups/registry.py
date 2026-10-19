@@ -86,6 +86,16 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/ts",
         flow=FlowSpec(("ctx", "bars")),
         note="按文意定；文意弃权时按量横长短（groups/bars.py）。"),
+    # —— 第三批形近不同义组（2026-10-19 sheldon 定）：按文意定（L1 规则＋haiku 查表）。只补放，不复核；
+    #    L1 零冲突于整理本，其余格由逐册 L2 表（haiku，只收 conf=high）决定，弃权送人审。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("ctx",)),
+        note=f"按文意定（L1 规则，弃权查 L2 表）；只补放，不复核。{note}")
+       for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
+                               ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會", "會＝會典、附會；曾＝曾經、姓氏。"),
+                               ("yh", "遺還", "遺＝遺文、補遺；還＝還朝、返還。"))},
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),

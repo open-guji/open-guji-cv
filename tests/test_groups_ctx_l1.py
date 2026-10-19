@@ -56,7 +56,7 @@ def test_judge_uses_window_and_members(tmp_path):
     assert (v.char, v.via, v.why) == ("日", "ctx_l1", "agree")
 
 
-@pytest.mark.parametrize("g", ["jys", "ry", "rr"])
+@pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh"])
 def test_shipped_rules_load_and_stay_in_group(g):
     spec = GROUPS[g]
     be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
@@ -89,3 +89,19 @@ def test_jys_shipped_rules_are_superset_of_legacy():
         new = be.decide(left, right)[0]
         if old:
             assert new in (old, None)
+
+
+# 第三批形近组（论諭／大太／問間／曾會／遺還）：每条各取一个有代表性的词，防规则被改坏；也要有「两可词必须弃权」的反例。
+@pytest.mark.parametrize("g,left,right,want", [
+    ("ly", "孔子", "語二十篇", "論"), ("ly", "欽奉", "旨", "諭"), ("ly", "曉", "天下", "諭"),
+    ("ly", "傳", "知之欽此", None), ("ly", "通", "知之欽此", None),                 # 通諭／傳諭：不给字
+    ("dt", "易", "極圖說", "太"), ("dt", "主持", "過", None), ("dt", "官至", "常博士", None),   # 太過、太常／大常：不给字
+    ("dt", "經", "學衍義", "大"), ("dt", "宋", "祖皇帝", "太"),
+    ("wj", "中", "有訛字", "間"), ("wj", "學", "答", "問"), ("wj", "後去其", "而存其答", None),
+    ("zh", "穿鑿附", "", "會"), ("zh", "", "鞏南豐人", "曾"), ("zh", "陳", "同撰", None),
+    ("yh", "補", "", "遺"), ("yh", "召", "朝", "還"), ("yh", "以", "其舊", None),
+])
+def test_batch3_groups_rules(g, left, right, want):
+    spec = GROUPS[g]
+    be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
+    assert be.decide(left, right)[0] == want
