@@ -16,16 +16,18 @@ def _db_path(ws_dir: Path) -> Path:
         reset_workspace_override(tok)
 
 
-def rebuild_db(ws_dir: Path, store: Path, db_path: Path) -> dict:
-    """同 ``guji glyph-db rebuild --no-replay --no-borrow --store <store>``。"""
+def rebuild_db(ws_dir: Path, store: Path, db_path: Path, extras: list[Path] | None = None) -> dict:
+    """同 ``guji glyph-db rebuild --no-replay --store <store>``；``extras`` 是借来的字形库（``datastore.workcopy.borrow_stores``）。
+
+    ``extras`` 为 None（调用方没解析借库）而 workspace.yaml 配了借库时报错，免得静默重建成不带借库的库。"""
     import yaml
     from ..clustering.glyph_db import assert_db_not_silently_empty, rebuild_from_store
     wcfg = yaml.safe_load((Path(ws_dir) / "workspace.yaml").read_text(encoding="utf-8")) or {}
-    if ((wcfg.get("glyph_lib") or {}).get("borrow")):
-        raise SystemExit("workspace.yaml 配了 glyph_lib.borrow（借库）：db pull 暂不支持借库，"
-                         "请先用 guji glyph-db rebuild")
+    if extras is None and ((wcfg.get("glyph_lib") or {}).get("borrow")):
+        raise SystemExit("workspace.yaml 配了 glyph_lib.borrow（借库），这条路径没解析借库；请用 guji db pull")
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    summary = rebuild_from_store(store, db_path)
+    summary = (rebuild_from_store(store, db_path, extra_stores=list(extras)) if extras
+               else rebuild_from_store(store, db_path))
     assert_db_not_silently_empty(db_path, store)
     return summary
 

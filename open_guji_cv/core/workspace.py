@@ -50,6 +50,7 @@ pytest tests/ -s -p no:cacheprovider
 from __future__ import annotations
 
 import os
+import re
 from contextvars import ContextVar
 from pathlib import Path
 
@@ -130,6 +131,30 @@ def central_marker(ws: Path | None = None) -> dict | None:
 
 def central_data_dir(ws_id: str, branch: str = "main") -> Path:
     return data_home() / branch.replace("/", "__") / ws_id
+
+
+#: 借库条目是中心库工作区名的样子（不含 /）；否则当路径（旧布局，相对工作区根）
+_CENTRAL_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def borrowed_root(ws_id: str, branch: str = "main") -> Path:
+    """借来的中心库工作区的只读副本（``db pull`` 拉，共享方案 S4）：``$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/``。
+
+    与那个工作区自己的数据目录分开：本机也在整理它时，拉借库不会盖掉那边没推的改动。"""
+    return data_home() / branch.replace("/", "__") / ".borrowed" / ws_id
+
+
+def resolve_borrow(entry: str, ws: Path) -> Path:
+    """``workspace.yaml`` 的 ``glyph_lib.borrow`` 一条 → 被借字形库目录。
+
+    迁过的工作区写中心库工作区名（``siku-zongmu``、``glyphlib-qkp-v1``）→ 借库只读副本；
+    写路径的（旧布局，绝对或相对工作区根）照旧当路径。"""
+    ws = Path(ws)
+    m = central_marker(ws)
+    if m and _CENTRAL_NAME.match(entry) and not (ws / entry).exists():
+        return borrowed_root(entry, str(m.get("branch") or "main")) / "output" / "glyph_store"
+    p = Path(entry).expanduser()
+    return p if p.is_absolute() else ws / p
 
 
 def data_root(ws: Path | None = None) -> Path | None:
