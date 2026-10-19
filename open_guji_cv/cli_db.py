@@ -11,9 +11,14 @@
     guji db status  [-w <工作区>]                             # rev、令牌角色、本地落后几条、没推的文件
     guji db branch  list | create <exp/GUJI-号-说明> [--from-rev N] | delete <名>
     guji db import  --from exp/<名> -w <工作区> [--events ids.txt] [--to main] [--dry-run]
+    guji db diff    -w <工作区> --branch exp/<名> [--against main]   # 实验分支与正式库逐文件比
 
 连接：`GUJI_DATA_URL`（缺省 https://data.open-guji.com）、`GUJI_DATA_TOKEN`、`GUJI_DATA_BRANCH`（缺省 main）。
 push 直连 Postgres：`GUJI_DATA_PG_DSN`，没有就用 `NEON_DATABASE_URL` 在本进程起 443 桥；新图经 Worker 传正式桶。
+
+实验分支（`--branch exp/GUJI-号-说明` 或 `GUJI_DATA_BRANCH`）：数据目录换成 `$GUJI_DATA_HOME/exp__GUJI-…/<工作区>/`，
+glyph.db 与 products 也放进去；pull／push／sync 都对那个分支，push 经 Neon API（`NEON_API_KEY`）找到该分支的端点，
+新图传实验桶。只许 main 与 `exp/*`；ci 只给测试。
 """
 from __future__ import annotations
 
@@ -42,9 +47,29 @@ def _db_path(ws_dir: Path | None) -> Path | None:
 from .ops.central_glyph import export_db, glyph_hooks, rebuild_db  # noqa: E402,F401  （旧入口）
 
 
-def _pg_conn():
+def _branch() -> str:
+    return os.environ.get("GUJI_DATA_BRANCH") or "main"
+
+
+def _check_write_branch(branch: str) -> None:
+    from .datastore.client import is_exp_branch
+    if branch != "main" and not is_exp_branch(branch):
+        raise SystemExit(f"只能写 main 或实验分支 exp/GUJI-<号>[-说明]，不能写 {branch}")
+
+
+def _pg_conn(branch: str | None = None):
+    """连 ``branch``（缺省 ``GUJI_DATA_BRANCH`` 或 main）的 Postgres。实验分支经 Neon API 找端点。"""
     from .datastore.connect import connect
-    return connect()
+    branch = branch or _branch()
+    if branch == "main":
+        return connect()
+    _check_write_branch(branch)
+    from .datastore.neonapi import branch_endpoint
+    return connect(endpoint=branch_endpoint(branch))
+
+
+def _bucket(branch: str) -> str:
+    return "main" if branch == "main" else "exp"
 
 
 def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = False) -> dict:
@@ -52,9 +77,12 @@ def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = 
     from .datastore.r2 import upload_files
     from .datastore.workcopy import push
     actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
-    with _pg_conn() as conn:
+    branch = _branch()
+    _check_write_branch(branch)
+    with _pg_conn(branch) as conn:
         return push(conn, ws_dir, actor=actor, dry_run=dry_run, allow_delete=allow_delete,
-                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext), glyph=glyph_hooks(ws_dir))
+                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
+                    glyph=glyph_hooks(ws_dir))
 
 
 def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
@@ -63,10 +91,13 @@ def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
     from .datastore.r2 import upload_files
     from .datastore.workcopy import sync
     actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
-    src = src or WorkerSource()
-    with _pg_conn() as conn:
+    branch = _branch()
+    _check_write_branch(branch)
+    src = src or WorkerSource(branch=branch)
+    with _pg_conn(branch) as conn:
         return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
-                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext), glyph=glyph_hooks(ws_dir))
+                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
+                    glyph=glyph_hooks(ws_dir))
 
 
 def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
@@ -95,24 +126,31 @@ def cmd_db(args) -> None:
     from .datastore.client import BlobCache, WorkerSource
     ws_dir = _ws_dir(args)
     need_ws = {"pull", "push", "sync", "migrate", "import"}
-    if args.action in need_ws and ws_dir is None:
+    if args.action in need_ws | {"diff"} and ws_dir is None:
         raise SystemExit(f"db {args.action} 要 -w <工作区>（或 GUJI_WORKSPACE）")
+    if args.branch and args.action not in ("branch", "import"):
+        # --branch 等于设 GUJI_DATA_BRANCH：数据目录、glyph.db、products、连库都跟着换（core.workspace.central_marker）
+        os.environ["GUJI_DATA_BRANCH"] = args.branch
 
     if args.action == "push":
-        if (args.branch or os.environ.get("GUJI_DATA_BRANCH") or "main") != "main":
-            raise SystemExit("db push 只写 main；实验照旧用 guji exp 和实验分支")
         _print(push_workspace(ws_dir, dry_run=args.dry_run, allow_delete=args.allow_delete))
         return
 
     if args.action == "sync":
-        if (args.branch or os.environ.get("GUJI_DATA_BRANCH") or "main") != "main":
-            raise SystemExit("db sync 只写 main")
         if args.watch:
             _watch(ws_dir, args.watch, args.dry_run)
         _print(sync_workspace(ws_dir, dry_run=args.dry_run))
         return
 
     src = WorkerSource(branch=args.branch)
+
+    if args.action == "diff":
+        from .datastore.pull import diff_branches, workspace_id
+        if src.branch == args.against:
+            raise SystemExit("db diff 要 --branch exp/<名>（与 --against 不同的分支）")
+        other = WorkerSource(token=src.token, branch=args.against)
+        _print(diff_branches(src, other, workspace_id(ws_dir), show=args.show))
+        return
 
     if args.action == "status":
         from .datastore.pull import status
@@ -162,10 +200,13 @@ def cmd_db(args) -> None:
 
 def add_parser(sub) -> None:
     p = sub.add_parser("db", help="中心库：migrate / pull / push / status / branch / import（GUJI-606/608）")
-    p.add_argument("action", choices=["status", "migrate", "pull", "push", "sync", "branch", "import"])
+    p.add_argument("action", choices=["status", "migrate", "pull", "push", "sync", "branch", "import", "diff"])
     p.add_argument("args", nargs="*", help="branch 的子命令与分支名")
     p.add_argument("-w", "--workspace", default=None, help="工作区仓根（含 workspace.yaml）；不给读 GUJI_WORKSPACE")
-    p.add_argument("--branch", default=None, help="读哪个分支（缺省 GUJI_DATA_BRANCH 或 main）")
+    p.add_argument("--branch", default=None,
+                   help="读写哪个分支（缺省 GUJI_DATA_BRANCH 或 main）；exp/* 时数据目录、glyph.db、products 换到该分支自己的")
+    p.add_argument("--against", default="main", help="diff：和哪个分支比（缺省 main）")
+    p.add_argument("--show", type=int, default=20, help="diff：每类最多列几个路径")
     p.add_argument("--no-rebuild", action="store_true", help="pull：不重建 glyph.db")
     p.add_argument("--force", action="store_true", help="pull：丢掉本地没推的改动")
     p.add_argument("--bucket", choices=["main", "exp"], default="main", help="pull/migrate：图从哪个桶拉")
