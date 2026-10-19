@@ -3,9 +3,18 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.6] - 待发
+## [0.4.7] - 待发
 
-待发分支 `rc/v0.4.6`。
+待发分支 `rc/v0.4.7`。
+
+### Added
+- 相似字（以字找字，用户 10-19 定）：待审格的近似字（整理本字、上下文字、库前 3…）的异体族——本仓异体表＋部件檢索（新增 `config/variants/charcomp_rt.tsv`，非商业授权、文件头标来源）＋字统网一跳族（按需低频取、缓存在 `$GUJI_DATA_HOME/_shared/zitools/`，不进 git）——按字块图 CNN 余弦排序，每格 ≤30 个。`guji audit alt <册>` 出带 `alt` 的卡片 JSON 交 `pending_list.py`（`proof_fields` 带出 `alt`，网站精校页显示）；`guji audit alt-eval <册>` 人裁后量命中；控制台新路由 `GET /api/rare/alt/...`，定字卡与 Step8「都不对」下加「相似字」行和「以字找字」框。新模块 `clustering/variant_sources.py`、`review/alt_cands.py`；只出候选、不进放行；不碰任何 Step，17 步 `code_hash` 不变。PATCH。runbook S11-b，设计与读数 `doc/research/人审找字-以字找字与异体族按图排序.md`。
+
+## [0.4.6] - 2026-10-19
+
+PATCH。中心库拉取省流量与实验分支、借库与两级语料库清单、共享刻例库与升格候选命令；Step1／Step3 的新开关（`column_grid_pages`、`body_pages`、`colgold_prior`、`layout_prior`，缺省全关）；close-check 第 2 项不数重切清单上的格；殿本四联叶拆页表修正。
+
+**`code_hash` 有变（对 v0.4.5，发版时实算）**：`border_detect` e7568862 → d452c5ab、`border_detect_gate` 8c0a7903 → fbc1b48d、`column_gate` 25658f2b → 922057a9、`row_segment` e5572a66 → f773bd3a；其余 13 步不变。新开关缺省关、关着时产物逐字节不变，各册这几步可以不重算；已登记 `freeze:` 的册代码变只计数不报警。
 
 ### Changed
 - `guji close-check` 第 2 项「待审清零」不再数重切清单（`feedback/lists/<册>-重切清单.tsv`）上的格，detail 里另报「N 格在重切清单上，不计」。起因：vol01 有 66 格待审落在 cv 切不对、book-text 里手拼的列（职名表、p10:7、p196），格 id 与 cv 切分对不上，落不了格事件，永远清不掉；它们的去向由 2c／2d 把关。清单为空时行为不变。PATCH；只动 `ops/close_check.py`，`code_hash` 不变。
@@ -13,7 +22,6 @@
 - `guji db pull`／`sync`／借库拉取省 Neon 公网流量：本机已有、整文件 sha 与库里一致的文件直接用本机字节，只向库要变了的文件（按 `src_path` 查）；向库要行只取 `src_path`、`src_line`、`raw`，刻例图清单只取 `instance_id`、`patch_sha`。起因：Neon 免费档每月 5 GiB 公网流量，10-18 建库后 1.6 天用掉 4.75 GB，因为每次 sync 只要库里有新写入就把整个工作区按 `SELECT *` 重读一遍（殿本约 120 MB）。改后小改动的一次 sync 只传变了的那几个文件。要 Worker 认 `cols` 与同列多值（guji-workspace-data#13）；旧 Worker 自动退回整行取、逐值查。新机器第一次拉仍是全量。不碰任何 Step，17 步 `code_hash` 不变。
 
 ### Added
-- 相似字（以字找字，用户 10-19 定）：待审格的近似字（整理本字、上下文字、库前 3…）的异体族——本仓异体表＋部件檢索（新增 `config/variants/charcomp_rt.tsv`，非商业授权、文件头标来源）＋字统网一跳族（按需低频取、缓存在 `$GUJI_DATA_HOME/_shared/zitools/`，不进 git）——按字块图 CNN 余弦排序，每格 ≤30 个。`guji audit alt <册>` 出带 `alt` 的卡片 JSON 交 `pending_list.py`（`proof_fields` 带出 `alt`，网站精校页显示）；`guji audit alt-eval <册>` 人裁后量命中；控制台新路由 `GET /api/rare/alt/...`，定字卡与 Step8「都不对」下加「相似字」行和「以字找字」框。新模块 `clustering/variant_sources.py`、`review/alt_cands.py`；只出候选、不进放行；不碰任何 Step，17 步 `code_hash` 不变。PATCH。runbook S11-b，设计与读数 `doc/research/人审找字-以字找字与异体族按图排序.md`。
 - 升格候选命令（共享方案 S7，语料部分）：`guji promote mine -w <工作区>` 只读，从对勘裁决挖形近对、异体对候选，对照引擎仓的形近表、异体表标出已有的，出清单待人审。新文件 `ops/promote.py`，不碰任何 Step，17 步 `code_hash` 不变。
 - 共享刻例库命令（共享方案 S5）：`guji glyphlib build -w <来源书> --name glyphlib-<族>-v<N>` 按门槛（人裁在几个不同批次确认过、体检干净、非近似字、每字几张）从一本书精选刻例，出共享刻例库工作区（刻例图逐字节照搬，实例 id 加来源前缀，附升格记录 `feedback/events/promote.jsonl`）；`--push` 以升级脚本身份推进中心库，每版只写一次。新文件 `ops/glyphlib.py`，不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「共享刻例库」。
 - 中心库实验分支能整套用了：`guji db pull/push/sync --branch exp/GUJI-<号>-…`（或 `GUJI_DATA_BRANCH`）把整个工作区换到实验分支，数据目录、glyph.db、products 都放进该分支自己的目录（`$GUJI_DATA_HOME/exp__GUJI-…/<工作区>/`），不碰 main 的副本；push 经 Neon API 找到分支端点，新图进实验桶，拉图时正式桶没有的去实验桶取。新命令 `guji db diff` 逐文件比实验分支与 main。原来 push／sync 只许 main，`pull --branch` 会把实验分支的数据拉进 main 的数据目录。不设分支时行为不变；不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「实验分支」。
