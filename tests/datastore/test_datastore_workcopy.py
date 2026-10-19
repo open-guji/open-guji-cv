@@ -10,7 +10,6 @@ import shutil
 from pathlib import Path
 
 import pytest
-
 from test_datastore_pg import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
 from test_datastore_pull import _Cache, _tables, _workspace
 
@@ -110,7 +109,13 @@ def test_migrate_refuses_differences_unless_keep_local(repo, conn, tmp_path):  #
 
 def test_pull_push_between_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
     from open_guji_cv.datastore.importer import DeleteRefused
-    from open_guji_cv.datastore.workcopy import FileDeleteRefused, StaleBase, data_dir, pull, push
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        StaleBase,
+        data_dir,
+        pull,
+        push,
+    )
     from open_guji_cv.ops.central_glyph import glyph_hooks
     src, files, cache, c1 = _setup(repo, conn, tmp_path)
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
@@ -155,7 +160,12 @@ def test_pull_push_between_two_machines(repo, conn, tmp_path, monkeypatch):  # n
 
 
 def test_glyph_db_changes_are_exported_before_push(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.datastore.workcopy import GlyphHooks, data_dir, local_changes, push
+    from open_guji_cv.datastore.workcopy import (
+        GlyphHooks,
+        data_dir,
+        local_changes,
+        push,
+    )
     src, files, cache, _ = _setup(repo, conn, tmp_path)
     db = tmp_path / "fake.db"
     db.write_text("v1")
@@ -166,7 +176,7 @@ def test_glyph_db_changes_are_exported_before_push(repo, conn, tmp_path):  # noq
         (Path(store) / "meta.jsonl").write_text('{"key": "k", "value": "' + Path(p).read_text() + '"}\n')
         return {}
     hooks = GlyphHooks(fingerprint=lambda p: Path(p).read_text(), export=export,
-                       rebuild=lambda w, s, p: {}, db_path=db)
+                       rebuild=lambda w, s, p, e=None: {}, db_path=db)
     ws = _fresh(files, tmp_path / "ws", src, cache, lambda d: hooks)
     assert local_changes(ws, hooks) == [] and not calls                 # 指纹没变不导出
     db.write_text("v2")
@@ -184,7 +194,12 @@ def test_not_migrated_workspace_is_refused(tmp_path):
 
 
 def test_sync_merges_appends_from_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
-    from open_guji_cv.datastore.workcopy import SyncConflict, data_dir, local_changes, sync
+    from open_guji_cv.datastore.workcopy import (
+        SyncConflict,
+        data_dir,
+        local_changes,
+        sync,
+    )
     src, files, cache, _ = _setup(repo, conn, tmp_path)
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
     a = _fresh(files, tmp_path / "a", src, cache)
@@ -259,7 +274,12 @@ def test_push_refuses_dropping_anchor_patches(repo, conn, tmp_path):  # noqa: F8
     """数据目录里缺了锚图（v0.4.0 及更早的 pull 不还原锚图）时，push 不能把库里的锚图删掉。"""
     from open_guji_cv.datastore.client import PgSource
     from open_guji_cv.datastore.importer import import_commit
-    from open_guji_cv.datastore.workcopy import FileDeleteRefused, data_dir, migrate, push
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        data_dir,
+        migrate,
+        push,
+    )
     files = _workspace(tmp_path)
     files["W/feedback/anchor_patches/vol03/ab/ab12.png"] = b"\\x89PNG anchor"
     import_commit(conn, repo, _commit(repo, files, "c1"))
@@ -311,8 +331,13 @@ def _migrated(repo, conn, tmp_path):  # noqa: F811
 def test_corpus_adopt_push_and_pull(repo, conn, tmp_path):  # noqa: F811
     """已迁过的工作区根上的 corpus/、corpus-pack/：migrate 补迁进数据目录 → push 进库（文本按 txt 进 R2）
     → 新机器 pull 还原；库里有的整理本本地删了，push 拒绝。"""
-    from open_guji_cv.datastore.workcopy import (FileDeleteRefused, data_dir, local_changes, migrate,
-                                                 push)
+    from open_guji_cv.datastore.workcopy import (
+        FileDeleteRefused,
+        data_dir,
+        local_changes,
+        migrate,
+        push,
+    )
     src, cache, files, ws = _migrated(repo, conn, tmp_path)
     text = "欽定四庫全書總目\n卷一\n".encode("utf-8")
     man = b'{"corpus_version": 1}\n'
@@ -406,3 +431,316 @@ def test_blob_rows_tolerates_old_worker():
 
     assert blob_rows(Old(), "corpus_files", "tws") == []
     assert blob_rows(Old(), "anchor_patches_meta", "tws") == [{"src_path": "x", "sha256": "y"}]
+
+
+# ---- 借库与共享层只读（共享方案 S4）----
+
+def _lib_store(tmp_path) -> dict[str, bytes]:
+    """另一本书的字形库（字、实例号都和 ``_workspace`` 的不重）。"""
+    from test_datastore_pull import _cc
+
+    from open_guji_cv.clustering.glyph_db import GlyphDB, export_store
+    db = GlyphDB(tmp_path / "lib-seed.sqlite")
+    try:
+        _cc.seed_glyphs(db, chars=("丙",), n_each=3, edition="lib", seed=7)
+        store = tmp_path / "lib_store"
+        export_store(db, store)
+    finally:
+        db.close()
+    return {f"output/glyph_store/{p.relative_to(store).as_posix()}": p.read_bytes()
+            for p in sorted(store.rglob("*")) if p.is_file()}
+
+
+def _borrowing(repo, conn, tmp_path):  # noqa: F811
+    """库里两个工作区：tws 借 lib 的字形库（workspace.yaml 写工作区名）。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    files = _workspace(tmp_path)
+    files["W/workspace.yaml"] = b"id: tws\nglyph_lib:\n  borrow: [lib]\n"
+    lib = {"L/workspace.yaml": b"id: lib\n", **{f"L/{k}": v for k, v in _lib_store(tmp_path).items()}}
+    import_commit(conn, repo, _commit(repo, {**files, **lib}, "c1"))
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in {**files, **lib}.items()})
+    return PgSource(conn), files, lib, cache
+
+
+def _fake_hooks(db: Path, calls: list):
+    from open_guji_cv.datastore.workcopy import GlyphHooks
+    db.write_text("v1")
+    return GlyphHooks(fingerprint=lambda p: Path(p).read_text(), export=lambda p, s: {},
+                      rebuild=lambda w, s, p, e=None: calls.append(list(e or [])) or {}, db_path=db)
+
+
+def test_pull_materializes_borrowed_store_and_follows_its_updates(repo, conn, tmp_path):  # noqa: F811
+    """pull 把被借工作区的字形库拉成只读副本、带上它重建 glyph.db；被借库没变不重拉不重建，
+    有新写入（pull 或 sync）就重拉并重建。"""
+    from open_guji_cv.core.workspace import borrowed_root
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import BORROW_STATE, local_changes, pull, sync
+    src, files, lib, cache = _borrowing(repo, conn, tmp_path)
+    calls: list = []
+    hooks = _fake_hooks(tmp_path / "fake.db", calls)
+    ws = _fresh(files, tmp_path / "ws", src, cache, lambda d: hooks)
+    lib_dir = borrowed_root("lib") / "output" / "glyph_store"
+    assert calls == [[lib_dir]]
+    assert _data_files(lib_dir) == {k[len("L/output/glyph_store/"):]: v for k, v in lib.items()
+                                    if k.startswith("L/output/glyph_store/")}
+    assert not (borrowed_root("lib") / "workspace.yaml").exists()      # 只拉字形库
+    stamp = (borrowed_root("lib") / BORROW_STATE).read_text()
+    assert local_changes(ws, hooks) == []                               # 借来的库不算本地改动
+
+    out = pull(src, ws, cache=cache, glyph=hooks)
+    assert out["borrow"][0].startswith("lib@") and calls == [[lib_dir]]   # 没变：不重建
+    assert (borrowed_root("lib") / BORROW_STATE).read_text() == stamp     # 也不重拉
+
+    meta = b'{"key": "note", "value": "lib v2"}\n'
+    import_commit(conn, repo, _commit(repo, {"L/output/glyph_store/meta.jsonl": meta}, "c2"))
+    out = pull(src, ws, cache=cache, glyph=hooks)
+    assert len(calls) == 2 and (lib_dir / "meta.jsonl").read_bytes() == meta
+    assert out["borrow"] != [stamp]
+
+    meta3 = b'{"key": "note", "value": "lib v3"}\n'
+    import_commit(conn, repo, _commit(repo, {"L/output/glyph_store/meta.jsonl": meta3}, "c3"))
+    assert sync(src, conn, ws, actor="t", cache=cache, glyph=hooks)["action"] == "nothing"
+    assert len(calls) == 3 and (lib_dir / "meta.jsonl").read_bytes() == meta3
+    assert sync(src, conn, ws, actor="t", cache=cache, glyph=hooks)["action"] == "nothing"
+    assert len(calls) == 3
+
+
+def test_pull_rebuilds_glyph_db_with_borrowed_instances(repo, conn, tmp_path):  # noqa: F811
+    """真聚类层：重建出的 glyph.db 里有借来的字（丙），自己的字（甲乙）也在。"""
+    import sqlite3
+
+    from open_guji_cv.ops.central_glyph import glyph_hooks
+    src, files, _, cache = _borrowing(repo, conn, tmp_path)
+    ws = _fresh(files, tmp_path / "ws", src, cache, glyph_hooks)
+    c = sqlite3.connect(glyph_hooks(ws).db_path)
+    try:
+        chars = {r[0] for r in c.execute("SELECT DISTINCT label FROM instances")}
+    finally:
+        c.close()
+    assert {"甲", "乙", "丙"} <= chars
+
+
+def test_borrow_of_missing_or_self_workspace_is_refused(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    files = _workspace(tmp_path)
+    files["W/workspace.yaml"] = b"id: tws\nglyph_lib:\n  borrow: [tws]\n"
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    calls: list = []
+    with pytest.raises(SystemExit, match="写了自己"):
+        _fresh(files, tmp_path / "ws", src, cache, lambda d: _fake_hooks(tmp_path / "f.db", calls))
+
+
+def test_shared_workspaces_are_read_only(repo, conn, tmp_path):  # noqa: F811
+    """corpus-base、glyphlib-*：普通 push 拒绝；升级脚本（shared_writer）能写 corpus-base，
+    glyphlib-* 发布过就不能再写。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import data_dir, pull, push
+    files = {"C/workspace.yaml": b"id: corpus-base\n", "C/books/a.yaml": b"id: a\n",
+             "G/workspace.yaml": b"id: glyphlib-t1\n", "G/books/a.yaml": b"id: a\n"}
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    for name, top in (("corpus-base", "C"), ("glyphlib-t1", "G")):
+        d = tmp_path / name
+        d.mkdir()
+        (d / "workspace.yaml").write_bytes(files[f"{top}/workspace.yaml"])
+        (d / ".central.json").write_text(f'{{"ws": "{name}", "branch": "main"}}')
+        pull(src, d)
+        (data_dir(d) / "books" / "b.yaml").write_bytes(b"id: b\n")
+        with pytest.raises(SystemExit, match="只读"):
+            push(conn, d, actor="t")
+    out = push(conn, tmp_path / "corpus-base", actor="t", shared_writer=True)
+    assert out["rev_to"] > out["rev_from"]
+    with pytest.raises(SystemExit, match="已经发布过"):
+        push(conn, tmp_path / "glyphlib-t1", actor="t", shared_writer=True)
+
+
+# ---- 两级语料库清单（共享方案 S2）----
+
+def test_corpus_base_published_and_pulled_with_book(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """build-base 第一次新开 corpus-base、之后加新版不动旧版；书库清单写了 base 的工作区，
+    pull 顺带把底库清单拉成只读副本，verify 两级一起对。"""
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root
+    from open_guji_cv.datastore.workcopy import data_dir, pull, push, uses_corpus_base
+    from open_guji_cv.ops import corpus_pack as cp
+    monkeypatch.setattr(cp, "_repo_dirty", lambda paths, repo=None: [])
+    monkeypatch.setattr(cp, "_repo_commit", lambda repo=None: "c0ffee")
+    src, cache, files, ws = _migrated(repo, conn, tmp_path)
+
+    r1 = cp.publish_base(src, conn, note="b1", actor="t")
+    assert r1["base_version"] == 1 and r1["push"]["rev_to"] > r1["push"]["rev_from"]
+    rows = {r["src_path"] for r in src.rows("files", BASE_WS)}
+    assert f"{BASE_DIR}/b1/manifest.json" in rows
+    with pytest.raises(SystemExit, match="只读"):                    # 普通 push 照旧拒绝
+        push(conn, cp.base_workdir("main"), actor="t")
+
+    assert not uses_corpus_base(ws)
+    pull(src, ws, cache=cache)
+    assert not (borrowed_root(BASE_WS) / BASE_DIR).exists()             # 用不到底库就不拉
+    # 本机拉一份底库（同 guji corpus init），出两级书库清单，推上去
+    from open_guji_cv.datastore.workcopy import refresh_corpus_base
+    refresh_corpus_base(src, ws, cache=cache, always=True)
+    cp.build(ws, base="latest")
+    push(conn, ws, actor="t")
+    assert uses_corpus_base(ws) and cp.verify(ws, 1)["base"] == 1
+
+    r2 = cp.publish_base(src, conn, note="b2", actor="t")
+    assert r2["base_version"] == 2
+    assert {f"{BASE_DIR}/b1/manifest.json", f"{BASE_DIR}/b2/manifest.json"} <= \
+        {r["src_path"] for r in src.rows("files", BASE_WS)}
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-m2"))       # 新机器
+    fresh = _fresh(files, tmp_path / "m2", src, cache)
+    assert (data_dir(fresh) / "config/corpus-pack/v1/manifest.json").exists()
+    assert sorted(p.name for p in (borrowed_root(BASE_WS) / BASE_DIR).iterdir()) == ["b1", "b2"]
+    assert cp.verify(fresh, 1)["base"] == 1
+
+
+def test_glyphlib_publish_creates_once(repo, conn, tmp_path):  # noqa: F811
+    """共享刻例库：升级脚本第一次推新开工作区、图按 png 进 R2；同一版再推拒绝（版本不可改）。"""
+    from open_guji_cv.core.workspace import central_data_dir
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import apply_schema
+    from open_guji_cv.ops.glyphlib import publish
+    apply_schema(conn)                                                  # 空库（真库早有表）
+    data = central_data_dir("glyphlib-t-v1")
+    for rel, b in _lib_store(tmp_path).items():
+        p = data / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(b)
+    calls = []
+    out = publish(conn, "glyphlib-t-v1", actor="t", uploader=lambda imgs, ext="png": calls.append(ext) or {})
+    assert out["rev_to"] > out["rev_from"] and calls == ["png"]
+    assert PgSource(conn).rows("glyph_instances", "glyphlib-t-v1")
+    with pytest.raises(SystemExit, match="已经发布过"):
+        publish(conn, "glyphlib-t-v1", actor="t")
+
+
+# ---- 省流量：只向库要变了的文件、只取要用的列（Neon 免费档每月 5 GiB 公网流量）----
+
+class _Counting:
+    """包一层数据源，记下每次 rows 的表、列、过滤，和回了几行。"""
+
+    def __init__(self, src):
+        self.src, self.calls = src, []
+
+    def __getattr__(self, k):
+        return getattr(self.src, k)
+
+    def rows(self, table, ws=None, cols=None, **filters):
+        out = list(self.src.rows(table, ws, cols=cols, **filters))
+        self.calls.append((table, cols, filters, len(out)))
+        return iter(out)
+
+
+def test_pull_fetches_only_changed_files(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.materialize import LINE_COLS
+    from open_guji_cv.datastore.workcopy import data_dir, pull
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    a = _fresh(files, tmp_path / "a", src, cache)
+    da = data_dir(a)
+
+    # 库里改一个事件文件；本机另把一个没变的文件改坏
+    rel = "feedback/events/b.jsonl"
+    files2 = dict(files)
+    files2["W/" + rel] = files["W/" + rel] + (_line(id="evt_b_9", batch="b", seq=9) + "\n").encode()
+    import_commit(conn, repo, _commit(repo, files2, "c2"))
+    other = next(p for p in _data_files(da) if p.endswith(".jsonl") and p != rel)
+    good = (da / other).read_bytes()
+    (da / other).write_bytes(b"tampered\n")
+
+    cs = _Counting(src)
+    out = pull(cs, a, cache=cache, force=True)
+    assert out["fetched"] == 2 and out["reused"] >= 1
+    assert (da / rel).read_bytes() == files2["W/" + rel]
+    assert (da / other).read_bytes() == good                               # 改坏的照样从库里取回
+    line_calls = [c for c in cs.calls if c[1] == LINE_COLS]
+    assert line_calls and all(set(c[2].get("src_path", [])) <= {rel, other} and c[2] for c in line_calls)
+
+    # 再拉一次：什么都没变，一个文本文件都不向库要
+    cs.calls.clear()
+    out = pull(cs, a, cache=cache)
+    assert out["fetched"] == 0
+    assert not [c for c in cs.calls if c[1] == LINE_COLS]
+
+
+def test_worker_rows_multi_value_and_old_worker(monkeypatch):
+    from open_guji_cv.datastore.client import CentralError, WorkerSource
+    w = WorkerSource(url="https://x", token="t")
+    seen = []
+
+    def call(method, path, *, query=None, tries=5, **kw):
+        seen.append((path, dict(query or {})))
+        if "cols" in (query or {}) and old:
+            raise CentralError(400, "bad_filter", "表 workspaces 没有列 cols")
+        return {"rows": [{"q": dict(query)}], "next": None}
+
+    monkeypatch.setattr(w, "_call", call)
+    old = False
+    rows = list(w.rows("events", "tws", cols=("src_path", "raw"), src_path=["b", "a"]))
+    assert len(rows) == 1 and rows[0]["q"]["src_path"] == ["a", "b"] and rows[0]["q"]["cols"] == "src_path,raw"
+
+    w2 = WorkerSource(url="https://x", token="t")
+    monkeypatch.setattr(w2, "_call", call)
+    old = True
+    rows = list(w2.rows("events", "tws", cols=("raw",), src_path=["b", "a"]))
+    assert [r["q"]["src_path"] for r in rows] == ["a", "b"]               # 旧 Worker：逐值查、整行取
+    assert all("cols" not in r["q"] for r in rows)
+
+
+class _WithSnapshots(_Counting):
+    """带快照接口的数据源（快照存内存，同 Worker 的 /v1/snapshots：只留 rev 最大的）。"""
+
+    def __init__(self, src, store):
+        super().__init__(src)
+        self.store = store
+
+    def get_snapshot(self, ws):
+        return self.store.get(ws)
+
+    def put_snapshot(self, ws, rev, data):
+        if ws not in self.store or self.store[ws][0] < rev:
+            self.store[ws] = (rev, data)
+        return {}
+
+
+def test_fresh_pull_seeds_from_snapshot(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.materialize import LINE_COLS
+    from open_guji_cv.datastore.workcopy import data_dir
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    store: dict = {}
+    sa = _WithSnapshots(src, store)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", sa, cache)
+    assert "tws" in store                                                  # 第一台整拉后存了快照
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    sb = _WithSnapshots(src, store)
+    b = _fresh(files, tmp_path / "b", sb, cache)
+    assert not [c for c in sb.calls if c[1] == LINE_COLS]                  # 文本全从快照来
+    assert _data_files(data_dir(b)) == _data_files(data_dir(a))
+
+    # 快照之后库里又改了一个文件：新机器只向库要这一个
+    rel = "feedback/events/b.jsonl"
+    files2 = dict(files)
+    files2["W/" + rel] = files["W/" + rel] + (_line(id="evt_b_9", batch="b", seq=9) + "\n").encode()
+    import_commit(conn, repo, _commit(repo, files2, "c2"))
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-c"))
+    sc = _WithSnapshots(src, store)
+    c = _fresh(files, tmp_path / "c", sc, cache)
+    got = [c_ for c_ in sc.calls if c_[1] == LINE_COLS]
+    assert got and all(c_[2].get("src_path") == [rel] for c_ in got)
+    assert (data_dir(c) / rel).read_bytes() == files2["W/" + rel]
+
+    # 坏快照：整拉照样对
+    store["tws"] = (store["tws"][0], b"not a tarball")
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-d"))
+    d = _fresh(files, tmp_path / "d", _WithSnapshots(src, {"tws": store["tws"]}), cache)
+    assert (data_dir(d) / rel).read_bytes() == files2["W/" + rel]

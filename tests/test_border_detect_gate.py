@@ -119,3 +119,35 @@ def test_bend_w80_uses_same_constant_as_detection():
     from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
     from open_guji_cv.utils.border_geometry import BEND_W80_MAX
     assert BorderDetectGateParams().bend_w80_max_gate == BEND_W80_MAX
+
+
+def _run_gate_params(tmp_path, monkeypatch, params, verdict):
+    """页型规则打桩成 `verdict`，带册级 `params` 跑闸1。"""
+    import open_guji_cv.gates.border_detect_gate as bdg
+    monkeypatch.setattr(bdg, "classify_page_type", lambda raw: verdict)
+    ctx = make_ctx(tmp_path, make_book(params=params), raw={PAGE: body_page(n_cols=NCOLS)})
+    ctx.store.write(ctx.book.id, "border_detect", f"p{PAGE:04d}", {"borders": make_borders(n_cols=NCOLS)})
+    return STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
+
+
+def test_body_pages_overrides_page_type_skip(tmp_path, monkeypatch):
+    """册配置 body_pages 点名的页：页型规则判 cover/skip 也按正文走，并留 flag（vol06 p88）。"""
+    m = _run_gate_params(tmp_path, monkeypatch, {"border_detect_gate": {"body_pages": [PAGE]}},
+                         ("cover", "skip"))
+    assert m.admitted, m.reject
+    assert (m.page_type, m.page_type_policy) == ("body", "standard")
+    assert any(f.startswith("page_type_forced") for f in m.flags)
+
+
+def test_body_pages_other_page_still_skipped(tmp_path, monkeypatch):
+    m = _run_gate_params(tmp_path, monkeypatch, {"border_detect_gate": {"body_pages": [PAGE + 1]}},
+                         ("cover", "skip"))
+    assert not m.admitted and m.page_type == "cover"
+    assert not any(f.startswith("page_type_forced") for f in m.flags)
+
+
+def test_body_pages_empty_not_in_params_dump():
+    """缺省空时不进参数 dump：指纹与加字段前相同。"""
+    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
+    assert "body_pages" not in BorderDetectGateParams().model_dump()
+    assert BorderDetectGateParams(body_pages=[88]).model_dump()["body_pages"] == [88]

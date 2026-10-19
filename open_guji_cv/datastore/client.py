@@ -3,7 +3,8 @@
 两者给出同一组只读方法，``materialize`` / ``pull`` 只认这组方法：
 
 - ``status()``：当前分支的全局 ``rev``；
-- ``rows(table, ws)``：一张表里某工作区的全部行（dict）；
+- ``rows(table, ws, cols=None, **filters)``：一张表里某工作区的行（dict）；``cols`` 只取这几列（Worker 另带主键），
+  过滤值给列表表示「取其一」（每次最多 ``MAX_IN`` 个值）；
 - ``changes_since(ws, rev)``：该工作区在 ``rev`` 之后还有几条变更（``limit`` 封顶）；
 - ``fetch_blobs(shas, bucket)``：按 sha 取图字节（不经本地缓存，缓存在 ``BlobCache``）。
 
@@ -19,6 +20,7 @@ import hashlib
 import http.client
 import json
 import os
+import re
 import ssl
 import sys
 import threading
@@ -26,12 +28,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from pathlib import Path
-from typing import Iterable, Iterator
 
 DEFAULT_URL = "https://data.open-guji.com"
 PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
+MAX_IN = 200            # 同列多值过滤一次最多几个值（Worker tables.ts 的 MAX_IN）
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 
 
@@ -39,6 +43,14 @@ class CentralError(RuntimeError):
     def __init__(self, status: int, code: str, message: str, detail=None):
         super().__init__(f"{status} {code}: {message}")
         self.status, self.code, self.detail = status, code, detail
+
+
+#: 实验分支名，与 Worker ``policy.ts`` 的 EXP_BRANCH_RE、MAX_BRANCH_NAME 一致
+EXP_BRANCH_RE = re.compile(r"^exp/GUJI-\d+(?:-[a-z0-9]+)*$")
+
+
+def is_exp_branch(name: str) -> bool:
+    return len(name) <= 63 and bool(EXP_BRANCH_RE.match(name))
 
 
 def _sha(b: bytes) -> str:
@@ -69,7 +81,7 @@ class WorkerSource:
               content_type: str = "application/octet-stream", tries: int = 5):
         url = path if path.startswith("http") else self.url + path
         if query:
-            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query)
+            url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query, doseq=True)
         headers = {"user-agent": "open-guji-cv-datastore"}  # Cloudflare 拦默认的 Python-urllib UA
         if body is not None:
             data = json.dumps(body, ensure_ascii=False).encode("utf-8")
@@ -111,10 +123,44 @@ class WorkerSource:
     def status(self) -> int:
         return int(self._call("GET", "/v1/status", query=self._q())["rev"])
 
-    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+    def _tables_v2(self) -> bool:
+        """Worker 认不认 ``cols`` 与同列多值（10-19 起）。旧 Worker 把多值当「同时等于」，静默回空，所以先探一次。"""
+        if not hasattr(self, "_v2"):
+            try:
+                self._call("GET", "/v1/tables/workspaces", query=self._q(limit=1, cols="ws"), tries=2)
+                self._v2 = True
+            except CentralError as e:
+                if e.status != 400:
+                    raise
+                self._v2 = False
+        return self._v2
+
+    def rows(self, table: str, ws: str | None = None, cols: Iterable[str] | None = None,
+             **filters) -> Iterator[dict]:
+        multi = {k: sorted({str(x) for x in v}) for k, v in filters.items() if isinstance(v, (list, tuple, set, frozenset))}
+        if len(multi) > 1:
+            raise ValueError(f"多值过滤一次只能一列：{sorted(multi)}")
+        if multi or cols is not None:
+            v2 = self._tables_v2()
+            if not v2:
+                cols = None                        # 旧 Worker：整行取，多值逐个查
+            (k, vs), = multi.items() if multi else ((None, None),)
+            if k is not None:
+                if not vs:
+                    return
+                step = MAX_IN if v2 else 1
+                for i in range(0, len(vs), step):
+                    chunk = vs[i:i + step]
+                    yield from self._rows(table, ws, cols, {**filters, k: chunk if v2 else chunk[0]})
+                return
+        yield from self._rows(table, ws, cols, filters)
+
+    def _rows(self, table: str, ws: str | None, cols, filters: dict) -> Iterator[dict]:
         q = self._q(limit=PAGE, **filters)
         if ws is not None:
             q["ws"] = ws
+        if cols is not None:
+            q["cols"] = ",".join(cols)
         while True:
             try:
                 page = self._call("GET", f"/v1/tables/{table}", query=q, tries=2)
@@ -143,11 +189,22 @@ class WorkerSource:
         shas = sorted(set(shas))
         workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
         getter = _KeepAliveGetter(self._ctx)
+        # 实验分支：库是从 main 分出来的，老图在正式桶，实验里新传的图在实验桶。正式桶 404 的再去实验桶取。
+        fallback = "exp" if bucket == "main" and self.branch.startswith("exp/") else None
+
+        def one(urls: dict, sha: str) -> tuple[str, bytes]:
+            try:
+                return sha, getter.get(urls[sha])
+            except CentralError as e:
+                if fallback is None or e.status not in (403, 404):
+                    raise
+                return sha, getter.get(self._sign_get(fallback, [sha], ext)[sha])
+
         with ThreadPoolExecutor(workers) as ex:
             for i in range(0, len(shas), SIGN_BATCH):
                 chunk = shas[i:i + SIGN_BATCH]
                 urls = self._sign_get(bucket, chunk, ext)
-                yield from ex.map(lambda sha: (sha, getter.get(urls[sha])), chunk)
+                yield from ex.map(partial(one, urls), chunk)
 
     def _sign_get(self, bucket: str, shas: list[str], ext: str = "png") -> dict[str, str]:
         if not getattr(self, "_no_batch", False):
@@ -164,6 +221,25 @@ class WorkerSource:
                 self._no_batch = True          # 旧版 Worker 没有批量签名：退回逐张签
         return {s: self._call("POST", "/v1/assets/sign",
                               body={"bucket": bucket, "op": "get", "ext": ext, "sha256": s})["url"] for s in shas}
+
+    # ---- 工作区快照（R2，省 Neon 流量；只当缓存，用的人逐文件核 sha）----
+    def get_snapshot(self, ws: str) -> tuple[int, bytes] | None:
+        """该分支上工作区 ``ws`` 最新的快照 (rev, tar.gz 字节)；没有或 Worker 不支持返回 None。"""
+        url = f"{self.url}/v1/snapshots/{urllib.parse.quote(ws)}?" + urllib.parse.urlencode({"branch": self.branch})
+        req = urllib.request.Request(url, headers={"user-agent": "open-guji-cv-datastore",
+                                                   "authorization": f"Bearer {self.token}"})
+        self.requests += 1
+        try:
+            with urllib.request.urlopen(req, context=self._ctx, timeout=self.timeout) as r:
+                return int(r.headers.get("x-guji-rev") or 0), r.read()
+        except urllib.error.HTTPError as e:
+            if e.code in (400, 403, 404):
+                return None
+            raise
+
+    def put_snapshot(self, ws: str, rev: int, data: bytes) -> dict:
+        return self._call("PUT", f"/v1/snapshots/{urllib.parse.quote(ws)}",
+                          query=self._q(rev=int(rev)), data=data, content_type="application/gzip", tries=2)
 
     # ---- 分支与写 ----
     def branches(self) -> list[dict]:
@@ -276,15 +352,21 @@ class PgSource:
         cur.execute("SELECT coalesce(max(rev), 0) FROM changes")
         return int(cur.fetchone()[0])
 
-    def rows(self, table: str, ws: str | None = None, **filters) -> Iterator[dict]:
+    def rows(self, table: str, ws: str | None = None, cols: Iterable[str] | None = None,
+             **filters) -> Iterator[dict]:
         from psycopg import sql
         conds, args = [], []
         if ws is not None:
             filters = {"ws": ws, **filters}
         for k, v in filters.items():
-            conds.append(sql.SQL("{}::text = %s").format(sql.Identifier(k)))
-            args.append(str(v))
-        q = sql.SQL("SELECT * FROM {}").format(sql.Identifier(table))
+            if isinstance(v, (list, tuple, set, frozenset)):
+                conds.append(sql.SQL("{}::text = ANY(%s)").format(sql.Identifier(k)))
+                args.append([str(x) for x in v])
+            else:
+                conds.append(sql.SQL("{}::text = %s").format(sql.Identifier(k)))
+                args.append(str(v))
+        what = sql.SQL("*") if cols is None else sql.SQL(", ").join(map(sql.Identifier, cols))
+        q = sql.SQL("SELECT {} FROM {}").format(what, sql.Identifier(table))
         if conds:
             q += sql.SQL(" WHERE ") + sql.SQL(" AND ").join(conds)
         cur = self.conn.cursor()

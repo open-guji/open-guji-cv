@@ -29,12 +29,29 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
-from ..core.workspace import CENTRAL_MARKER, central_data_dir, central_marker
+from ..core.workspace import (
+    _CENTRAL_NAME,
+    CENTRAL_MARKER,
+    borrowed_root,
+    central_data_dir,
+    central_marker,
+    resolve_borrow,
+)
 from .scope import BLOB_TABLES, GS, TABLES, classify, sha256
 
 SCOPE = ("books/", "feedback/", "review/", "config/", "corpus/", GS)
 STATE = ".central-state.json"
 WS_YAML = "workspace.yaml"
+BORROW_STATE = ".borrowed-state.json"
+
+#: 共享层的只读工作区（共享方案 3.2 节）：普通 push／sync 一律拒绝，只有升级脚本能写；
+#: ``glyphlib-*`` 每版一个工作区，只能写新开的版本（sheldon 10-19：升级时脚本可写）
+SHARED_PREFIX = "glyphlib-"
+SHARED_NAMES = frozenset({"corpus-base"})
+
+
+def is_shared_ws(ws: str) -> bool:
+    return ws.startswith(SHARED_PREFIX) or ws in SHARED_NAMES
 
 
 class StaleBase(RuntimeError):
@@ -50,7 +67,7 @@ class GlyphHooks:
     """glyph.db 相关的三件事（由 cli_db 用聚类层实现）。"""
     fingerprint: Callable[[Path], str]                 # (db_path) -> 指纹；库不存在返回 ""
     export: Callable[[Path, Path], dict]               # (db_path, store_dir) -> 统计
-    rebuild: Callable[[Path, Path, Path], dict]        # (ws_dir, store_dir, db_path) -> 统计
+    rebuild: Callable[..., dict]                       # (ws_dir, store_dir, db_path, extras) -> 统计；extras＝借来的字形库
     db_path: Path
 
 
@@ -134,18 +151,97 @@ def local_changes(ws_dir: Path, glyph: GlyphHooks | None = None) -> list[str]:
 
 def _db_manifest(src, ws: str) -> dict[str, str]:
     """库里这个工作区的文件 {相对路径: sha}：文本在 source_files，锚图、整理本在 BLOB_TABLES。"""
-    out = {r["src_path"]: r["sha256"] for r in src.rows("source_files", ws)}
-    from .materialize import blob_rows
+    from .materialize import _rows, blob_rows
+    out = {r["src_path"]: r["sha256"] for r in _rows(src, "source_files", ws, ("src_path", "sha256"))}
     for tbl in BLOB_TABLES:
         out.update({r["src_path"]: r["sha256"] for r in blob_rows(src, tbl, ws)})
     return out
 
 
-def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3) -> tuple[int, dict]:
+def _local(ws_dir: Path, data: Path):
+    """``materialize`` 的 ``reuse``：相对路径 → 本机现有文件（workspace.yaml 在工作区，别的在数据目录）。"""
+    def f(rel: str) -> Path | None:
+        p = (Path(ws_dir) if rel == WS_YAML else Path(data)) / rel
+        return p if p.is_file() else None
+    return f
+
+
+# ---- 工作区快照（Neon 免费档按公网流量计；新机器整拉殿本走 Neon 约 50 MB，快照包约 6–7 MB 走 R2 不收费）----
+
+SNAPSHOT_ENV = "GUJI_DATA_SNAPSHOT"      # 设 0 关掉快照（不下也不传）
+SNAPSHOT_SKIP_EXT = (".png",)            # 图另有 R2 缓存，不进快照
+
+
+def _snapshots_on(src) -> bool:
+    return os.environ.get(SNAPSHOT_ENV, "1") != "0" and hasattr(src, "get_snapshot")
+
+
+def _seed_from_snapshot(src, ws: str, seed: Path) -> int | None:
+    """把最新快照解到 ``seed``（只收普通文件、相对路径、不许 ..）。返回快照 rev；没有返回 None。出错只当没有。"""
+    import io
+    import sys
+    import tarfile
+    try:
+        got = src.get_snapshot(ws)
+        if not got:
+            return None
+        rev, blob = got
+        if seed.exists():
+            shutil.rmtree(seed)
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
+            for m in tf.getmembers():
+                name = m.name
+                if not m.isfile() or name.startswith("/") or ".." in Path(name).parts:
+                    continue
+                f = tf.extractfile(m)
+                if f is None:
+                    continue
+                out = seed / name
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(f.read())
+        return int(rev)
+    except Exception as e:                       # 快照只是缓存：坏了、断了都退回整拉
+        print(f"[db] 快照不可用，改从库里整拉：{e}", file=sys.stderr)
+        shutil.rmtree(seed, ignore_errors=True)
+        return None
+
+
+def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: dict[str, str]) -> int | None:
+    """把本机已与库一致的文本文件打成 tar.gz 存上去。只放 sha 与 ``base`` 一致的；令牌不能写就算了。返回字节数。"""
+    import io
+    import sys
+    import tarfile
+    if not hasattr(src, "put_snapshot"):
+        return None
+    local = _local(ws_dir, data)
+    buf = io.BytesIO()
+    try:
+        with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tf:
+            for rel in sorted(base):
+                if rel.endswith(SNAPSHOT_SKIP_EXT):
+                    continue
+                p = local(rel)
+                if p is None:
+                    continue
+                b = p.read_bytes()
+                if sha256(b) != base[rel]:
+                    continue
+                ti = tarfile.TarInfo(rel)
+                ti.size = len(b)
+                tf.addfile(ti, io.BytesIO(b))
+        src.put_snapshot(ws, rev, buf.getvalue())
+        return len(buf.getvalue())
+    except Exception as e:                       # 读令牌、旧 Worker、网络问题：不影响拉取
+        print(f"[db] 快照没存上（不影响本次拉取）：{e}", file=sys.stderr)
+        return None
+
+
+def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
+                 prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
     from .materialize import materialize
     for _ in range(retries):
         r0 = src.status()
-        stats = materialize(src, ws, tmp, (WS_YAML,) + SCOPE, cache=cache, bucket=bucket)
+        stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
         if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
             return r0, stats
     raise SystemExit("读的过程中工作区一直有新写入，稍后再拉")
@@ -167,6 +263,98 @@ def _install(tmp: Path, ws_dir: Path, data: Path) -> tuple[int, int]:
     return len(got), removed
 
 
+# ---- 借库（共享方案 S4）----
+
+def borrow_entries(ws_dir: Path) -> list[str]:
+    """``workspace.yaml`` 的 ``glyph_lib.borrow``（没配返回空表）。"""
+    import yaml
+    y = Path(ws_dir) / WS_YAML
+    cfg = (yaml.safe_load(y.read_text(encoding="utf-8")) or {}) if y.exists() else {}
+    return [str(x) for x in ((cfg.get("glyph_lib") or {}).get("borrow") or [])]
+
+
+def readonly_copy(src, name: str, branch: str, prefixes: tuple[str, ...], *, cache=None,
+                  bucket: str = "main") -> tuple[int, bool]:
+    """把中心库工作区 ``name`` 里 ``prefixes`` 下的文件拉成本机只读副本（``core.workspace.borrowed_root``）。
+
+    副本旁 ``.borrowed-state.json`` 记拉到的 rev；库里那个工作区没新写入、要的目录都在就不重拉。
+    返回 (rev, 这次是否重拉了)。借字形库（S4）和底库清单（S2）共用。"""
+    root = borrowed_root(name, branch)
+    stf = root / BORROW_STATE
+    st = json.loads(stf.read_text(encoding="utf-8")) if stf.exists() else None
+    have = st is not None and list(st.get("prefixes") or [GS]) == list(prefixes) \
+        and all((root / p.rstrip("/")).exists() for p in prefixes)
+    if have and not src.changes_since(name, int(st["rev"]), limit=1):
+        return int(st["rev"]), False
+    tmp = root.parent / f".{name}.borrow.tmp"
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    rev, _ = _materialize(src, name, tmp, cache, bucket, prefixes=prefixes,
+                          reuse=(lambda rel: (root / rel) if (root / rel).is_file() else None) if root.exists() else None)
+    (tmp / BORROW_STATE).write_text(json.dumps({"ws": name, "branch": branch, "rev": rev,
+                                                "prefixes": list(prefixes)}) + "\n", encoding="utf-8")
+    if root.exists():
+        shutil.rmtree(root)
+    root.parent.mkdir(parents=True, exist_ok=True)
+    os.replace(tmp, root)
+    return rev, True
+
+
+def borrow_stores(src, ws_dir: Path, *, cache=None, bucket: str = "main") -> tuple[list[Path], list[str]]:
+    """借来的字形库 → (目录列表, 签名)。签名变了才要重建 glyph.db。
+
+    写中心库工作区名的条目：拉那个工作区的 ``output/glyph_store/`` 到 ``core.workspace.borrowed_root``
+    （只读副本，见 ``readonly_copy``）。写路径的条目照旧当本地目录。"""
+    ws_dir = Path(ws_dir)
+    m = central_marker(ws_dir) or {}
+    own, branch = str(m.get("ws") or ""), str(m.get("branch") or "main")
+    dirs: list[Path] = []
+    sig: list[str] = []
+    for e in borrow_entries(ws_dir):
+        d = resolve_borrow(e, ws_dir)
+        if m and _CENTRAL_NAME.match(e) and not (ws_dir / e).exists():
+            if e == own:
+                raise SystemExit(f"workspace.yaml 的 glyph_lib.borrow 写了自己（{e}）")
+            rev, _ = readonly_copy(src, e, branch, (GS,), cache=cache, bucket=bucket)
+            sig.append(f"{e}@{rev}")
+        else:
+            if not d.is_dir():
+                raise SystemExit(f"借库 {e} 不存在（{d}）；迁到中心库的工作区请写被借工作区的名字")
+            sig.append(f"path:{d}")
+        dirs.append(d)
+    return dirs, sig
+
+
+def uses_corpus_base(ws_dir: Path) -> bool:
+    """这个工作区的书库清单有没有写 ``base:``（两级清单，共享方案 S2）。"""
+    from ..core.corpus_pin import BASE_WS, manifest_path, versions
+    ws_dir = Path(ws_dir)
+    if (central_marker(ws_dir) or {}).get("ws") == BASE_WS:
+        return False
+    for v in versions(ws_dir):
+        try:
+            if json.loads(manifest_path(ws_dir, v).read_text(encoding="utf-8")).get("base") is not None:
+                return True
+        except (OSError, ValueError):
+            continue
+    return False
+
+
+def refresh_corpus_base(src, ws_dir: Path, *, cache=None, bucket: str = "main", always: bool = False) -> int | None:
+    """书库清单用到底库（或 ``always``）时，把 ``corpus-base`` 的底库清单拉成只读副本。返回 rev；用不到返回 None。"""
+    from ..core.corpus_pin import BASE_DIR, BASE_WS
+    from .materialize import MaterializeError
+    m = central_marker(Path(ws_dir)) or {}
+    if not m or m.get("ws") == BASE_WS or not (always or uses_corpus_base(ws_dir)):
+        return None
+    try:
+        rev, _ = readonly_copy(src, BASE_WS, str(m.get("branch") or "main"), (BASE_DIR + "/",),
+                               cache=cache, bucket=bucket)
+    except MaterializeError as e:
+        raise SystemExit(f"中心库里还没有底库清单（{BASE_WS}）：先 guji corpus build-base（{e}）") from e
+    return rev
+
+
 def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = False,
          glyph: GlyphHooks | None = None) -> dict:
     """中心库 → 数据目录。本地有未推的改动就拒绝（``force`` 丢掉）。"""
@@ -185,27 +373,55 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     tmp = data.parent / f".{data.name}.pull.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, stats = _materialize(src, ws, tmp, cache, bucket)
+    reuse = _local(ws_dir, data)
+    seed = data.parent / f".{data.name}.seed"
+    seed_rev = _seed_from_snapshot(src, ws, seed) if st is None and _snapshots_on(src) else None
+    if seed_rev is not None:                     # 新机器：先用快照里的文件，库里只要之后变了的
+        here = reuse
+        reuse = lambda rel: here(rel) or ((seed / rel) if (seed / rel).is_file() else None)  # noqa: E731
+    try:
+        rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=reuse)
+    finally:
+        shutil.rmtree(seed, ignore_errors=True)
     written, removed = _install(tmp, ws_dir, data)
     base = _db_manifest(src, ws)
     store_changed = any(old_base.get(k) != base.get(k) for k in set(old_base) | set(base) if k.startswith(GS))
     out = {"ws": ws, "rev": rev, "data_dir": str(data), "written": written, "removed": removed,
            **{k: v for k, v in stats.items() if k != "ws"}}
+    cb = refresh_corpus_base(src, ws_dir, cache=cache, bucket=bucket)
+    if cb is not None:
+        out["corpus_base"] = cb
     fp = (st or {}).get("glyph_db_fp")
-    if glyph is not None and (store_changed or not Path(glyph.db_path).exists() or force):
-        out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path)
-        fp = glyph.fingerprint(glyph.db_path)
-    write_state(data, ws=ws, branch=str(m.get("branch") or "main"), rev=rev, base=base, glyph_db_fp=fp)
+    bsig = (st or {}).get("borrow", [])
+    if glyph is not None:
+        extras, bsig = borrow_stores(src, ws_dir, cache=cache, bucket=bucket)
+        if extras:
+            out["borrow"] = bsig
+        if store_changed or not Path(glyph.db_path).exists() or force or bsig != (st or {}).get("borrow", []):
+            out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path, extras)
+            fp = glyph.fingerprint(glyph.db_path)
+    write_state(data, ws=ws, branch=str(m.get("branch") or "main"), rev=rev, base=base, glyph_db_fp=fp,
+                borrow=bsig)
+    if seed_rev is not None:
+        out["snapshot_rev"] = seed_rev
+    if stats.get("fetched") and _snapshots_on(src):   # 这次向库要过文件：存一份新快照给下一台新机器
+        out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, base)
     return out
 
 
 def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_delete: bool = False,
-         uploader=None, glyph: GlyphHooks | None = None) -> dict:
-    """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images[, ext=])`` 传新图与整理本。"""
+         uploader=None, glyph: GlyphHooks | None = None, shared_writer: bool = False) -> dict:
+    """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images[, ext=])`` 传新图与整理本。
+
+    共享层的只读工作区（``is_shared_ws``）只有升级脚本能写（``shared_writer=True``），``glyphlib-*`` 还只能写一次。"""
     from .importer import import_scans
     ws_dir = Path(ws_dir)
     data = data_dir(ws_dir)
     st = read_state(data)
+    creating = st is None and shared_writer and is_shared_ws(str((central_marker(ws_dir) or {}).get("ws") or ""))
+    if creating:                                       # 升级脚本开新的共享层工作区（库里还没有它）
+        m = central_marker(ws_dir) or {}
+        st = {"ws": str(m["ws"]), "branch": str(m.get("branch") or "main"), "rev": 0, "base": {}}
     if st is None:
         raise SystemExit(f"数据目录 {data} 没有 {STATE}：先 guji db pull -w {ws_dir}")
     base = int(st["rev"])
@@ -214,8 +430,19 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     if sc.ws != st.get("ws"):
         raise SystemExit(f"数据目录记的工作区是 {st.get('ws')}，workspace.yaml 写的是 {sc.ws}")
     local_paths = {r.src_path for r in sc.rows}
+    if is_shared_ws(sc.ws) and not shared_writer:
+        raise SystemExit(f"{sc.ws} 是共享层的只读工作区（共享方案 3.2 节），普通 push／sync 不能写；"
+                         f"由升级脚本出新版本")
 
     def guard(cur):
+        if creating:
+            cur.execute("SELECT 1 FROM changes WHERE ws = %s LIMIT 1", (sc.ws,))
+            if cur.fetchone():
+                raise StaleBase(f"中心库里已经有 {sc.ws}；先 guji db pull 再写")
+        if shared_writer and sc.ws.startswith(SHARED_PREFIX):
+            cur.execute("SELECT 1 FROM changes WHERE ws = %s LIMIT 1", (sc.ws,))
+            if cur.fetchone():
+                raise SystemExit(f"{sc.ws} 已经发布过，版本不可改；出新版本请开新的工作区")
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
@@ -268,7 +495,7 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     if not dry_run:
         fp = glyph.fingerprint(glyph.db_path) if glyph is not None and Path(glyph.db_path).exists() else st.get("glyph_db_fp")
         write_state(data, ws=sc.ws, branch=st.get("branch", "main"), rev=rep.rev_to,
-                    base=manifest(ws_dir, data), glyph_db_fp=fp)
+                    base=manifest(ws_dir, data), glyph_db_fp=fp, borrow=st.get("borrow", []))
     return out
 
 
@@ -431,6 +658,17 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     local = manifest(ws_dir, data)
     mine = set(_diff(base, local))
     out: dict = {"ws": ws, "local_changes": sorted(mine), "glyph_exported": exported}
+    if glyph is not None and borrow_entries(ws_dir):    # 借来的库有新版：只重建 glyph.db，不算本地改动
+        extras, bsig = borrow_stores(src, ws_dir, cache=cache, bucket=bucket)
+        if bsig != st.get("borrow", []) and not dry_run and Path(glyph.db_path).exists():
+            out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path, extras)
+            st = {**st, "borrow": bsig, "glyph_db_fp": glyph.fingerprint(glyph.db_path)}
+            write_state(data, **{k: v for k, v in st.items() if k != "at"})
+            out["borrow"] = bsig
+    if not dry_run:                                    # 底库清单有新版：只更新只读副本
+        cb = refresh_corpus_base(src, ws_dir, cache=cache, bucket=bucket)
+        if cb is not None:
+            out["corpus_base"] = cb
     if not src.changes_since(ws, int(st["rev"]), limit=1):
         if not mine:
             return {**out, "action": "nothing"}
@@ -440,7 +678,7 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     tmp = data.parent / f".{data.name}.sync.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, _ = _materialize(src, ws, tmp, cache, bucket)
+    rev, _ = _materialize(src, ws, tmp, cache, bucket, reuse=_local(ws_dir, data))
     remote = _db_manifest(src, ws)
     theirs = set(_diff(base, remote))
     both = sorted(mine & theirs)
@@ -487,9 +725,13 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     shutil.rmtree(tmp, ignore_errors=True)
     fp = st.get("glyph_db_fp")
     if glyph is not None and store_changed and Path(glyph.db_path).exists():
-        out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path)
+        extras, _ = borrow_stores(src, ws_dir, cache=cache, bucket=bucket)
+        out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path, extras)
         fp = glyph.fingerprint(glyph.db_path)
-    write_state(data, ws=ws, branch=st.get("branch", "main"), rev=rev, base=remote, glyph_db_fp=fp)
+    write_state(data, ws=ws, branch=st.get("branch", "main"), rev=rev, base=remote, glyph_db_fp=fp,
+                borrow=st.get("borrow", []))
     if not _diff(remote, manifest(ws_dir, data)):
+        if _snapshots_on(src):
+            out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, remote)
         return {**out, "action": "pulled"}
     return {**out, "action": "merged+push", "push": push(conn, ws_dir, actor=actor, uploader=uploader, glyph=glyph)}

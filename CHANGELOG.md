@@ -3,6 +3,32 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.4.6] - 2026-10-19
+
+PATCH。中心库拉取省流量与实验分支、借库与两级语料库清单、共享刻例库与升格候选命令；Step1／Step3 的新开关（`column_grid_pages`、`body_pages`、`colgold_prior`、`layout_prior`，缺省全关）；close-check 第 2 项不数重切清单上的格；殿本四联叶拆页表修正。
+
+**`code_hash` 有变（对 v0.4.5，发版时实算）**：`border_detect` e7568862 → d452c5ab、`border_detect_gate` 8c0a7903 → fbc1b48d、`column_gate` 25658f2b → 922057a9、`row_segment` e5572a66 → f773bd3a；其余 13 步不变。新开关缺省关、关着时产物逐字节不变，各册这几步可以不重算；已登记 `freeze:` 的册代码变只计数不报警。
+
+### Changed
+- `guji close-check` 第 2 项「待审清零」不再数重切清单（`feedback/lists/<册>-重切清单.tsv`）上的格，detail 里另报「N 格在重切清单上，不计」。起因：vol01 有 66 格待审落在 cv 切不对、book-text 里手拼的列（职名表、p10:7、p196），格 id 与 cv 切分对不上，落不了格事件，永远清不掉；它们的去向由 2c／2d 把关。清单为空时行为不变。PATCH；只动 `ops/close_check.py`，`code_hash` 不变。
+- 新机器第一次 `guji db pull` 先从 R2 下工作区快照（殿本约 6–7 MB，R2 下载不收费），库里只要快照之后变了的文件；`pull` 向库要过文件后、`sync` 拉下库里新改动后，把本机与库一致的文本打包存成新快照（只有能写该分支的令牌存得上，存不上不影响拉取）。快照只当缓存，逐文件对库里的 sha，坏了、旧了都退回从库里取。`GUJI_DATA_SNAPSHOT=0` 关掉。要 Worker 的 `/v1/snapshots`（guji-workspace-data#14）。不碰任何 Step，17 步 `code_hash` 不变。
+- `guji db pull`／`sync`／借库拉取省 Neon 公网流量：本机已有、整文件 sha 与库里一致的文件直接用本机字节，只向库要变了的文件（按 `src_path` 查）；向库要行只取 `src_path`、`src_line`、`raw`，刻例图清单只取 `instance_id`、`patch_sha`。起因：Neon 免费档每月 5 GiB 公网流量，10-18 建库后 1.6 天用掉 4.75 GB，因为每次 sync 只要库里有新写入就把整个工作区按 `SELECT *` 重读一遍（殿本约 120 MB）。改后小改动的一次 sync 只传变了的那几个文件。要 Worker 认 `cols` 与同列多值（guji-workspace-data#13）；旧 Worker 自动退回整行取、逐值查。新机器第一次拉仍是全量。不碰任何 Step，17 步 `code_hash` 不变。
+
+### Added
+- 升格候选命令（共享方案 S7，语料部分）：`guji promote mine -w <工作区>` 只读，从对勘裁决挖形近对、异体对候选，对照引擎仓的形近表、异体表标出已有的，出清单待人审。新文件 `ops/promote.py`，不碰任何 Step，17 步 `code_hash` 不变。
+- 共享刻例库命令（共享方案 S5）：`guji glyphlib build -w <来源书> --name glyphlib-<族>-v<N>` 按门槛（人裁在几个不同批次确认过、体检干净、非近似字、每字几张）从一本书精选刻例，出共享刻例库工作区（刻例图逐字节照搬，实例 id 加来源前缀，附升格记录 `feedback/events/promote.jsonl`）；`--push` 以升级脚本身份推进中心库，每版只写一次。新文件 `ops/glyphlib.py`，不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「共享刻例库」。
+- 中心库实验分支能整套用了：`guji db pull/push/sync --branch exp/GUJI-<号>-…`（或 `GUJI_DATA_BRANCH`）把整个工作区换到实验分支，数据目录、glyph.db、products 都放进该分支自己的目录（`$GUJI_DATA_HOME/exp__GUJI-…/<工作区>/`），不碰 main 的副本；push 经 Neon API 找到分支端点，新图进实验桶，拉图时正式桶没有的去实验桶取。新命令 `guji db diff` 逐文件比实验分支与 main。原来 push／sync 只许 main，`pull --branch` 会把实验分支的数据拉进 main 的数据目录。不设分支时行为不变；不碰任何 Step，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「实验分支」。
+- 两级语料库清单（共享方案 S2）：引擎仓的语料文件登记进底库 `b<M>`（中心库只读工作区 `corpus-base`，`guji corpus build-base` 出、记 `repo_commit`）；书库清单可写 `base: M`，只登记工作区里的文件（`guji corpus build --base latest`，新书 `guji corpus init`）；`db pull`／`sync` 顺带拉底库清单的只读副本。旧的单级清单（殿本 v1）不变。**起跑前硬校验**：册钉了 `corpus: N` 时，读语料的五步开跑前清单里的文件有改动或缺失就拒绝（`GUJI_CORPUS_DRIFT=warn` 临时绕过），新出现的文件只警告；殿本 v1 现在改动 0、缺失 0。改 `core/engine.py`、`core/corpus_pin.py`、`ops/corpus_pack.py`、`datastore/workcopy.py`，17 步 `code_hash` 不变。见 `doc/datastore.md` 第六节「两级语料库清单」。
+- 中心库借库（共享方案 S4）：迁过的工作区在 `workspace.yaml` 的 `glyph_lib.borrow` 写被借工作区的名字，`guji db pull`／`db sync` 把它的字形库拉成只读副本（`$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/`），带上它重建 glyph.db，被借库有新写入才重拉重建；`guji glyph-db rebuild` 也认工作区名。原来配了借库 `db pull` 直接报错。共享层工作区 `corpus-base`、`glyphlib-*` 普通 push／sync 拒绝，只有升级脚本能写，`glyphlib-*` 只写一次。见 `doc/datastore.md` 第六节。不碰任何 Step，17 步 `code_hash` 不变。
+- `border_detect_gate` 新参数 `body_pages`（缺省空；空时不进参数 dump、产物逐字节不变）：册配置点名的页不论页型规则判成什么都按正文切，manifest 记 flag `page_type_forced`。起因：殿本 vol06 p88 卷十末叶只有一列小注「部一卷皆附存目」、其余空栏，被判成 cover 整页跳过，丢 7 字；`params: {border_detect_gate: {body_pages: [88]}}` 后整页切出、7 字放行。`border_detect_gate` 的 `code_hash` 变（下游产物逐字节不变，不连带过期）。
+- Step1 `border_detect` 新参数 `column_grid_pages`／`grid_col_pitch`（缺省空；空时两项都不进参数 dump、产物逐字节不变）：点名的页竖线走网格模式，其余页照书级配置。起因：殿本 vol05 p55、p123，vol04 p80 界行断续，自由模式挑了假竖线或漏一条界行，整列没切出来（vol05 p55「明王宣撰…」、p123「行故居足之左右…」、vol04 p80「今說易諸書無所偏主…」），现有闸都拦不住；`params: {border_detect: {column_grid_pages: [55, 123], grid_col_pitch: 185}}` 后列距全回到 180–190px，正常页逐位不变。`border_detect` 的 `code_hash` 变。
+- `column_grid_pages` 点名页另做一步：最外一列窄于内列中位的 0.8 倍时，把那条外框线按中位列距往外推（记成插值线），只动外框两条。起因：殿本 vol04 p63 右框只下三分之一有墨，探到的「框」落在首列字上，首列只剩 117px、「聖人非因之以作易…」半列丢字；网格模式本身选不到这条残框。正常页不触发（vol04 p62、p80，vol05 p55、p123 逐位不变）。
+- Step3（row_segment）加两个开关，**缺省都关，关着时产物与原来逐位相同**（殿本测试 B 100 页实测）（doc/design/19）：`colgold_prior` 读逐列字数金标（daizhige 与 yolo_tool release 两源字数一致的列，`scripts/dzg_import.py colgold` 生成 `corpus/daizhige/colgold.jsonl`），本列切出的字数与金标差 1–2 时按目标格数重切一次，重切后字数对上才采用；`yolo_merge` 用 yolo_tool 原生 ONNX 模型（`model_dir` 指过去，新可选依赖 `pip install -e ".[yolo]"`）提议并格（同一 YOLO 字框覆盖本列相邻两格），两者合用时先 D 后 C；带任何人裁（格数、切点、钉线、强制正文/小注）的列两个开关都不动；开关开着而表或模型不存在时报错。殿本测试 B（900 列）逐列字数 97.0% → 98.44%（修 13 列、新错 0），殿本全书 10 册（现行生产）96.84% → 97.83%（修 149、新错 1）。另加全书评测 `guji eval run column_counts`（金标分片 `char-segmentation/column-counts`，open-guji-dataset）。PATCH；只 `row_segment` 的 `code_hash` 变（e5572a664ad5b088 → a9f270b156c01af1），开关不开的书产物内容不变，但会按指纹判过期一次。
+- Step3 逐列格位先验 `row_segment.layout_prior`（缺省关，关时产物逐字节不变）：读 `scripts/dzg_layout.py` 由 daizhige 逐列本生成的逐列格位表（`corpus/daizhige/layout_slots.jsonl`），按表定抬头级数、DP 逐格软罚分（`row_boundaries.fit_row_boundaries(slot_mask=…)`，新函数 `slot_mask_from_occupied`）、两半都有字的夹注格与正文格强制。**与 `colgold_prior`／`yolo_merge` 同列互斥**：表里有的列不跑那两个；带任何人裁（逐列字数、切点、钉线、强制正文/小注）的列三个先验都不碰（人裁按格号记，抬头级数一改就错位；vol01 p40–80 实测修前会动 3 列人裁列）。殿本十册离线：普通正文页逐格全对 95.76% → 98.51%，劈字 19 → 0；vol04/05 同基线下与逐列字数先验对照，字数口径 98.80% vs 98.25%、逐格口径 98.64% vs 94.71%；选法见 `doc/segmentation_v2_pipeline.md`「Step3 结构先验」（`doc/research/切分现状梳理与新方向-2026-10-19.md` §六、§八）。`close-check` 2d 另报「一页 ≥3 列没交代」的页，提示整页进重切清单（只提示，不改判定）。PATCH；**`code_hash` 变：`column_gate` 25658f2bf469a339 → 922057a98646e7d7、`row_segment` a9f270b156c01af1 → f773bd3aa6c4cd11**（`row_boundaries` 是两步的 code_deps），各册从 Step2 交接闸起判过期一次，缺省输出不变。
+
+### Fixed
+- 拆页表 `doc/formats/samples/guji_page_v0.2/split_table_siku.json`：殿本 IA 四联叶 vol04 第 216 叶（页 216–218）、vol07 第 128 叶（页 128、130）、vol09 第 258 叶（页 258–261）9 个半叶的裁线没落在版心，右半叶丢一整列或多裁进版心和邻页两列。按原图在版心两条界行 ±8px 处改 x、w（y、h 不变），重裁后每张正好 9 列；guji-workspace 的原图同步替换。拆页算法本身的改进另见 GUJI-625。不碰任何 Step，`code_hash` 不变（图变了，这几页 Step1 起按内容判过期）。
+
 ## [0.4.5] - 2026-10-19
 
 PATCH。整理本和语料库清单进中心库；中心库取图不经 Worker；字组第四批与日目组补回；close-check 加 1c、2c、2d；人裁绑定缓存键修正；兼容汉字折成统一汉字。

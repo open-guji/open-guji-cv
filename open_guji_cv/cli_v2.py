@@ -1812,7 +1812,16 @@ def cmd_rare(args) -> None:
 
 def cmd_corpus(args) -> None:
     """语料库（corpus-vN）清单：build 出新版、verify 对当前文件、list 列版本。P0 只登记，不改 Step／指纹。"""
+    import os
+
     from .ops import corpus_pack as cp
+    if args.action == "build-base":                   # 底库：不要 -w，写中心库的 corpus-base（共享方案 S2）
+        from .cli_db import _pg_conn
+        from .datastore.client import WorkerSource
+        actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+        with _pg_conn() as conn:
+            _out(cp.publish_base(WorkerSource(), conn, note=args.note, actor=actor, dry_run=args.dry_run))
+        return
     if not args.workspace:
         print("✗ 要给 -w 工作区", file=sys.stderr)
         sys.exit(2)
@@ -1820,13 +1829,24 @@ def cmd_corpus(args) -> None:
     if not ws.is_dir():
         print(f"✗ 工作区 {ws} 不存在", file=sys.stderr)
         sys.exit(2)
-    if args.action == "build":
+    if args.action in ("build", "init"):
+        base = args.base
+        if args.action == "init":                     # 新书：钉最新底库出 v1（两级清单）
+            if cp.versions(ws):
+                print(f"✗ {ws} 已有语料库版本 {cp.versions(ws)}；出新版用 guji corpus build --base latest",
+                      file=sys.stderr)
+                sys.exit(1)
+            base = base or "latest"
+        if base is not None:                          # 先把中心库的底库清单拉到本机
+            from .datastore.client import BlobCache, WorkerSource
+            from .datastore.workcopy import refresh_corpus_base
+            refresh_corpus_base(WorkerSource(), ws, cache=BlobCache(), always=True)
         try:
-            out = cp.build(ws, args.version, args.note)
-        except FileExistsError as e:
+            out = cp.build(ws, args.version, args.note, base=base)
+        except (FileExistsError, FileNotFoundError, ValueError) as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
-        print(f"✓ 已写 {out}")
+        print(f"✓ 已写 {out}（迁过的工作区接着 guji db push -w {ws}）")
     elif args.action == "verify":
         vs = cp.versions(ws)
         v = args.version or (vs[-1] if vs else 0)
@@ -1839,6 +1859,40 @@ def cmd_corpus(args) -> None:
         sys.exit(0 if r["clean"] else 1)
     else:
         _out(cp.summary(ws))
+
+
+def cmd_glyphlib(args) -> None:
+    """共享刻例库（共享方案 S5）：build 从一本书精选刻例出 glyphlib-<族>-v<N>，加 --push 推进中心库。"""
+    import os
+
+    from .ops import glyphlib as gl
+    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    if not args.workspace:
+        print("✗ 要给 -w 来源书的工作区", file=sys.stderr)
+        sys.exit(2)
+    res = gl.build(Path(args.workspace).expanduser().resolve(), args.name, min_batches=args.min_confirm,
+                   per_char=args.per_char, actor=actor, note=args.note)
+    if args.push:
+        from .cli_db import _pg_conn
+        from .datastore.r2 import upload_files
+        with _pg_conn() as conn:
+            res["push"] = gl.publish(conn, args.name, actor=actor,
+                                     uploader=lambda imgs, ext="png": upload_files(imgs, bucket="main", ext=ext))
+    _out(res)
+
+
+def cmd_promote(args) -> None:
+    """升格候选（共享方案 S7，先做语料部分）：只读、只出清单。"""
+    from .ops.promote import mine_corpus
+    if not args.workspace:
+        print("✗ 要给 -w 工作区", file=sys.stderr)
+        sys.exit(2)
+    res = mine_corpus(Path(args.workspace).expanduser().resolve(), min_confusable=args.min_confusable)
+    if args.out:
+        Path(args.out).write_text(json.dumps(res, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+        print(f"✓ 已写 {args.out}（形近新候选 {res['new']['confusable']}，异体新候选 {res['new']['variants']}）")
+        return
+    _out(res)
 
 
 def cmd_variants(args) -> None:
@@ -2254,6 +2308,8 @@ COMMANDS_V2 = {
     "rare": cmd_rare,
     "variants": cmd_variants,
     "corpus": cmd_corpus,
+    "glyphlib": cmd_glyphlib,
+    "promote": cmd_promote,
     "collate": cmd_collate,
     "progress": cmd_progress,
     "runs": cmd_runs,
@@ -2859,11 +2915,30 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="IDS 兜底：某槽位的部件，如 L=言（可重复）")
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
-    p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list（P0 只登记）")
-    p.add_argument("action", choices=["build", "verify", "list"])
+    p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
+                                      "build-base 出底库／init 新书钉最新底库")
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
-    p.add_argument("--note", default="", help="build：写进清单的备注")
+    p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
+    p.add_argument("--base", default=None,
+                   help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
+    p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
     p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
+
+    p = sub.add_parser("glyphlib", help="[v2] 共享刻例库：build 从一本书精选刻例出新版本（--push 推进中心库）")
+    p.add_argument("action", choices=["build"])
+    p.add_argument("--name", required=True, help="新版本的工作区名，如 glyphlib-qkp-v1（每版只能写一次）")
+    p.add_argument("-w", "--workspace", default=None, help="来源书的工作区（已迁到中心库、已 db pull）")
+    p.add_argument("--min-confirm", type=int, default=2, help="人裁至少在几个不同批次确认过（缺省 2）")
+    p.add_argument("--per-char", type=int, default=3, help="每字最多几张（缺省 3）")
+    p.add_argument("--note", default="", help="写进升格记录的备注")
+    p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
+
+    p = sub.add_parser("promote", help="[v2] 升格候选：mine 从本书人裁挖形近对、异体对（只读，出清单待人审）")
+    p.add_argument("action", choices=["mine"])
+    p.add_argument("-w", "--workspace", default=None, help="书的工作区（已迁到中心库、已 db pull）")
+    p.add_argument("--min-confusable", type=int, default=3, help="形近对在本书至少出现几次（缺省 3）")
+    p.add_argument("--out", default=None, help="清单写到这个 JSON 文件；不给就打印")
 
     p = sub.add_parser("variants", help="[v2] 本书用字账（只读）")
     p.add_argument("action", nargs="?", default="book", choices=["book"])

@@ -125,7 +125,14 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
   旧版也一样。Worker 请求只剩查表和签名（每批 250 张一次）：从空目录整库拉殿本 173 次、全唐文 68 次、北行 59 次
   （原先每张图一次，殿本约 1.85 万次）。实验桶仍经 `/v1/blob`。上传照旧经 Worker（核 sha、不覆盖）。
   用量日报见 guji-workspace-data 仓 `scripts/usage_report.py`。
-- 借库（`workspace.yaml` 的 `glyph_lib.borrow`）暂不支持，配了就报错，照旧用 `glyph-db rebuild`。
+- **借库（2026-10-19 起，共享方案 S4）**：迁过的工作区在 `workspace.yaml` 的 `glyph_lib.borrow` 里写**被借工作区的名字**
+  （如 `borrow: [siku-zongmu]`，以后的共享刻例库写 `glyphlib-qkp-v1`）。`db pull`／`db sync` 顺带把那个工作区的
+  `output/glyph_store/` 拉到只读副本 `$GUJI_DATA_HOME/<分支>/.borrowed/<工作区>/`（与它自己的数据目录分开，本机同时在整理它也不互相盖），
+  带上它重建 glyph.db；副本旁 `.borrowed-state.json` 记拉到的 rev，被借工作区没新写入就不重拉、不重建。
+  借来的东西不算本地改动、不会被 push。`guji glyph-db rebuild` 也认工作区名（没 pull 过就报错让先 pull）。
+  写路径的条目（旧布局）照旧当本地目录；借自己报错。借来的人裁记成 `borrowed_human`（S3 修法），不当铁证。
+- **共享层只读**：`corpus-base` 和 `glyphlib-*` 工作区，普通 `db push`／`db sync` 一律拒绝；只有升级脚本
+  （`push(..., shared_writer=True)`）能写，`glyphlib-*` 还只能写一次（发布过就不可改，出新版开新工作区）。
 - 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。
 
 验收（`tests/datastore/test_datastore_pull.py`）：真字形库（admit → export）进 git → 导入 Postgres →
@@ -171,7 +178,7 @@ guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退�
   只追加的台账（events、consumed、anchors）少了行拒绝；库里有的整个文件本地没了也拒绝，确认是真删加 `--allow-delete`。
   写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`），`changes` 逐行留痕。新图先经 Worker 传正式桶。
 - **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程起 WebSocket 桥（云会话只通 443）。
-- `push` 只写 `main`；实验照旧用 `guji exp` 和实验分支。
+- `push`／`sync` 写 `main`，或用 `--branch exp/…` 写实验分支（见下「实验分支」）；不写 `ci`。
 - **sync（自动合并）**：库里在基准 rev 之后没人写过就直接推；有人写过，先把库里的拼到旁边逐文件比：
   库里改了、本地没改的用库里的；本地改了、库里没改的留本地的；两边都改了的，只追加台账（events、consumed、anchors）
   按「共同前缀＋库里新行＋本地新行」合（同一行只留一份），别的文件两边都改了就整次停下（`SyncConflict`），什么都不动，
@@ -185,6 +192,39 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 新机器 pull 重建的 glyph.db 与从 git 字形库 rebuild 的全部表逐行相同；glyph.db 改了 push 前先导出；两台机器各自追加事件后 sync，两边的行都进库、另一台再 sync 拿到同一份文件，
 书 yaml 两边都改则 `SyncConflict` 且本地不动。
 守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
+
+### 实验分支（2026-10-19 起）
+
+试新功能、跑会写库的 A/B 时，不碰正式库：从 main 开一个 Neon 分支（写时复制，秒级），整个工作区换到那个分支上读写，
+完了比一比，要的显式导回 main，然后删分支。只比参数、不写库的 A/B 照旧用 `guji exp`（见 `exp_framework.md`），不用开分支。
+
+```bash
+export GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_EXP            # 实验令牌就够；导回 main 那一步才要正式令牌
+B=exp/GUJI-<卡号>-<小写说明>                           # 名字规矩同 Worker：必须带卡号，最多 63 字
+guji db branch create $B                              # 从 main 当前状态开；--from-rev N 从某个 rev 开
+export GUJI_DATA_BRANCH=$B                            # 之后本 shell 里一切都对这个分支（也可每条命令加 --branch $B）
+guji db pull -w <工作区>                              # 拉到 $GUJI_DATA_HOME/exp__GUJI-…/<工作区>/，重建该分支自己的 glyph.db
+#   …照常跑 cv：products 也落在该分支的数据目录里，不碰工作区的 products/ 和 glyph.db…
+guji db sync -w <工作区>                              # 推到实验分支（新图进实验桶）
+guji db diff -w <工作区>                              # 与 main 逐文件比：哪些文件不同、只在一边有、哪些人裁事件只在实验分支上
+unset GUJI_DATA_BRANCH
+guji db import --from $B -w <工作区> --dry-run        # 人裁事件导回 main（要正式令牌）；--events ids.txt 只导挑出的
+guji db branch delete $B                              # 用完就删（Neon 免费档整个项目最多 10 个分支）
+```
+
+- **怎么隔离**：`GUJI_DATA_BRANCH`（或 `--branch`）覆盖工作区标记 `.central.json` 里的分支（标记文件不改），
+  `core.workspace` 的路径函数都跟着走：数据目录 `$GUJI_DATA_HOME/<分支，/ 换成 __>/<工作区 id>/`；
+  glyph.db 缺省 `<该数据目录>/output/glyph.db`，products 缺省 `<该数据目录>/products/`（`GUJI_GLYPH_DB`、`GUJI_PRODUCTS_DIR` 显式给了仍优先）。
+  所以同一台机器、同一个工作区可以一边在 main 上整理，一边在实验分支上试，互不覆盖；`unset` 就回到 main。
+- **写哪里**：`push`／`sync` 只许 `main` 和 `exp/GUJI-<号>[-说明]`。实验分支经 Neon API（`NEON_API_KEY`，项目 `NEON_PROJECT_ID`，
+  缺省中心库项目）查到该分支的端点，再用 `NEON_DATABASE_URL` 的账号经 443 桥连（子分支继承口令）。新图传实验桶 `guji-assets-exp`。
+- **取图**：实验分支是从 main 分出来的，老图在正式桶；在实验分支上拉图时正式桶 404 的自动去实验桶取。
+- **比较** `guji db diff -w <工作区> [--branch $B] [--against main] [--show N]`：只读两边的 `source_files` 与图清单（不下载内容）：
+  `changed`（两边都有、sha 不同，带两边行数）、`only_in_branch`、`only_in_against`、`events_only_in_branch`（即 import 会导的）。
+  分开以后 main 也可能有新写入，所以报的是「现在不同的」，不分是谁改的。产物（products）的对比用 `guji exp report` 或直接比两个 products 目录。
+- **导回正式库**：只有显式的路，不整分支合并。人裁事件用 `guji db import`（经 Worker、按 id 幂等，要正式令牌）；
+  别的文件（册 yaml、配置、台账）把实验分支数据目录里要的那几个文件拷到 main 的数据目录，再在 main 上 `guji db sync`，留正常的 push 记录。
+- 实验分支的写入在 `imports`／`changes` 里照样留痕（`stats.branch`），开删分支记 Workers Logs。
 
 ### 整理本与语料库清单（2026-10-19 起，共享方案 S1）
 
@@ -207,6 +247,52 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 
 **在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图
 （6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即试推（自动经 443 桥连 Neon main）全部表 0 变更。
+
+### 两级语料库清单（2026-10-19 起，共享方案 S2）
+
+- **底库 `b<M>`**：引擎仓里的语料文件（字表、IDS、异体、形近、规则……，`corpus_pin.ITEMS` 里根是 `repo` 的）登记在
+  中心库只读工作区 `corpus-base` 的 `config/corpus-base/b<M>/manifest.json`，记 `repo_commit`（这些文件必须都已提交，
+  还原就切到那个提交）和代码常量 `NEVER_MATCH_FAMILIES` 的哈希。`guji corpus build-base [--note …]` 出新版：
+  拉 `corpus-base`（库里还没有就新开）→ 写 `b<M+1>` → 以升级脚本身份推（`push(shared_writer=True)`）。旧版不动。
+  本机工作目录在 `$GUJI_DATA_HOME/<分支>/.shared/corpus-base/`。要写库权限（同 `db push`）。
+- **书库 `v<N>`**：`guji corpus build -w <工作区> --base latest|<M>` 出两级清单，写 `base: M`，只登记工作区里的文件
+  （整理本、字频、L2、工作区异体）；本机引擎仓文件与 b<M> 不符就拒绝（先出新底库，或切到它的提交）。
+  新书用 `guji corpus init -w <工作区>`（＝钉最新底库出 v1）。出完 `guji db push`。不给 `--base` 照旧出单级清单，
+  殿本 v1 是单级的，不变。
+- **拉**：书库清单写了 `base` 的工作区，`db pull`／`db sync` 顺带把底库清单拉成只读副本
+  `$GUJI_DATA_HOME/<分支>/.borrowed/corpus-base/`（同借库，记 rev，没新写入不重拉）；`build --base`、`init` 也会先拉。
+- **起跑前硬校验**：册钉了 `corpus: N`，读语料的五步（`corpus_pin.CORPUS_STEPS`）开跑前对清单（两级的连底库）核文件，
+  有改动或缺失就拒绝（`CorpusDrift`）；清单之后新出现的文件只警告（不在这版承诺里，出下一版收进去）。
+  临时绕过设 `GUJI_CORPUS_DRIFT=warn`。`guji status` 等只读命令照旧只警告。10-19 殿本 v1：改动 0、缺失 0、新增 27（新字组规则与 L2 表）。
+
+验收（`tests/test_corpus_pack.py`、`tests/datastore/test_datastore_workcopy.py`）：底库只登记引擎仓文件、不覆盖、未提交拒绝；
+书库只登记工作区文件、verify 两级一起对、本机没有底库报错；硬校验改动拒绝、新增只警告、`warn` 绕过、只对钉了的读语料步生效；
+build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 push 拒绝；新机器 pull 顺带拉底库清单。
+
+### 共享刻例库（2026-10-19 起，共享方案 S5）
+
+- **出新版**：`guji glyphlib build -w <来源书工作区> --name glyphlib-<族>-v<N> [--min-confirm 2] [--per-char 3] [--note …]`。
+  从来源书的字形库真源与人裁事件里挑：人裁过（`label_status='human'`）、在至少 `--min-confirm` 个不同批次确认过
+  （`confirm` 的 `v=confirm` 且字形一致，或 `cell_review` 选了这个字）、体检没标异常、不是近似字，每字最多 `--per-char` 张
+  （确认批次多的优先）。门槛 sheldon 10-19 定为「确认两次」（缺省值）。
+- **现有版本**：`glyphlib-qkp-v1`（殿本 `siku-zongmu` 出，1,076 例、827 字，10-19 推进中心库 rev 8296）。
+- **出什么**：本机数据目录 `$GUJI_DATA_HOME/<分支>/glyphlib-…/` 下的 `output/glyph_store/`（edition 是族名 `glyphlib-<族>`，
+  跨版本不变；实例 id 加来源前缀 `<来源工作区>:`，来源 id 写成 `<来源工作区>.<原来源>`）和升格记录
+  `feedback/events/promote.jsonl`（一张刻例一行：来源工作区、来源实例、确认批次数、门槛）。刻例图逐字节照搬，R2 里同 sha 不另存。
+  出完先装一遍库（`rebuild_from_store`）核对能装，再规范导出。
+- **推**：加 `--push` 以升级脚本身份推（`push(shared_writer=True)`），第一次新开工作区；同一版再推拒绝，出新版开新名字。
+- **用**：别的书在 `workspace.yaml` 写 `glyph_lib: {borrow: [glyphlib-qkp-v1]}`，`guji db pull` 拉只读副本、带上它重建 glyph.db；
+  借来的实例记成 `borrowed_human`，不当本书铁证。匹配降一档信任是 S6 的事（要改 `glyph_match`，单独一个 MINOR）。
+- **10-19 本地试算（殿本，不推）**：人裁 4,374 例 → 确认两批以上且体检干净 1,149 例 → 每字 3 张 **1,076 例、827 字**；
+  图与来源逐字节相同；借进全唐文重建，1,076 例都是 `borrowed_human`。
+
+### 升格候选（2026-10-19 起，共享方案 S7，先做语料部分）
+
+- `guji promote mine -w <工作区> [--min-confusable 3] [--out 清单.json]`：只读，从本书对勘裁决（`collate_verdict`）挖两类候选，
+  对照引擎仓已有的表标「已有」：**形近对**（人判整理本对、不是异体：CV 把 B 认成 A，同一对 ≥3 次；异体表里已有的字对不算），
+  **异体对**（人判是异体；表里没有的标 `needs_source`，要补字书出处才能升格）。审过的走引擎仓 PR 改表 → `guji corpus build-base`。
+- 10-19 殿本：对勘裁决 704 条 → 形近新候选 3 对（𨜊→卿 19、撰→𢰅 4、巳→已 3；日→曰 4 已在表里）、异体新候选 14 对（蒙𫎇 34、內内 20、別别 18 …）。
+  前两对形近其实像异体，人审时再分。门槛待 sheldon 定；归档时跑这一步要写进整理组的归档流程（验收后集成时再提）。
 
 ## 七、备份与恢复（GUJI-611）
 

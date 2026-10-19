@@ -5,6 +5,10 @@
 刻例图按 ``glyph_instances.patch_sha`` 从本地缓存（缺的经 Worker 从 R2 拉）落到
 ``patches/<实例 id，':' 换成 '_'>.png``；锚图（``anchor_patches_meta``）、整理本（``corpus_files``）
 按表里的 ``src_path`` 落回原路径（``scope.BLOB_TABLES``）。
+
+**省流量**（Neon 免费档按公网流量计，每月 5 GiB；10-19 一次 siku-zongmu 整拉约 120 MB）：
+给了 ``reuse``（本机已有的同路径文件）时，整文件 sha 与库里一致的直接用本机字节，只向库要变了的文件；
+向库要行时只取还原要用的列（``src_path``、``src_line``、``raw``），不取导入时拆出来的列。
 """
 
 from __future__ import annotations
@@ -12,11 +16,16 @@ from __future__ import annotations
 import os
 import shutil
 from collections import defaultdict
+from collections.abc import Callable
 from pathlib import Path
 
 from .scope import BLOB_TABLES, GS, sha256
 
 WHOLE_TABLES = ("workspaces", "books", "files")
+LINE_COLS = ("src_path", "src_line", "raw")
+WHOLE_COLS = ("src_path", "raw")
+#: 一张表里要向库要的文件超过这么多个，就整表按工作区取（按路径查要多次请求，省不了多少）
+BY_PATH_MAX = 400
 NOT_LINE = set(WHOLE_TABLES) | {"source_files"} | set(BLOB_TABLES)
 
 
@@ -40,11 +49,24 @@ def _safe(instance_id: str) -> str:            # 同 clustering.glyph_db._safe
     return instance_id.replace(":", "_")
 
 
+def _rows(src, tbl: str, ws: str, cols, **filters):
+    """带列裁剪的 ``src.rows``；测试里的简易数据源不认 ``cols`` 就整行取。"""
+    try:
+        return src.rows(tbl, ws, cols=cols, **filters)
+    except TypeError:
+        if filters:
+            raise
+        return src.rows(tbl, ws)
+
+
 def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,),
-                cache=None, bucket: str = "main", with_images: bool = True) -> dict:
+                cache=None, bucket: str = "main", with_images: bool = True,
+                reuse: Callable[[str], Path | None] | None = None) -> dict:
     """把工作区 ``ws`` 里路径以 ``prefixes`` 之一开头的文件还原到 ``dest``（目录结构同工作区）。
 
-    ``dest`` 下原有的同前缀目录先清空，保证不残留库里已经没有的文件。返回统计。
+    ``dest`` 下原有的同前缀目录先清空，保证不残留库里已经没有的文件。返回统计（``reused``＝用本机字节的文件数，
+    ``fetched``＝向库要的文件数）。``reuse(相对路径)`` 给出本机现有的同路径文件（没有给 None）；
+    只有整文件 sha256 与库里登记的相同才用，所以本机改过的文件照样从库里取。
     """
     dest = Path(dest)
     sel = lambda p: any(p.startswith(x) for x in prefixes)
@@ -59,20 +81,40 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
         by_tbl[f["tbl"]].append(p)
 
     texts: dict[str, bytes] = {}
+    reused = fetched = 0
     for tbl, paths in sorted(by_tbl.items()):
-        want = set(paths)
         if tbl in BLOB_TABLES:
             continue
+        need = []
+        for p in paths:
+            local = reuse(p) if reuse is not None else None
+            if local is not None:
+                try:
+                    b = Path(local).read_bytes()
+                except OSError:
+                    b = None
+                if b is not None and len(b) == int(files[p]["bytes"]) and sha256(b) == files[p]["sha256"]:
+                    texts[p] = b
+                    reused += 1
+                    continue
+            need.append(p)
+        if not need:
+            continue
+        fetched += len(need)
+        want = set(need)
+        cols = WHOLE_COLS if tbl in WHOLE_TABLES else LINE_COLS
+        rows = (_rows(src, tbl, ws, cols, src_path=sorted(want)) if reuse is not None and len(want) <= BY_PATH_MAX
+                else _rows(src, tbl, ws, cols))
         if tbl in WHOLE_TABLES:
-            for r in src.rows(tbl, ws):
+            for r in rows:
                 if r["src_path"] in want:
                     texts[r["src_path"]] = r["raw"].encode("utf-8")
             continue
         lines: dict[str, dict[int, str]] = defaultdict(dict)
-        for r in src.rows(tbl, ws):
+        for r in rows:
             if r["src_path"] in want:
                 lines[r["src_path"]][int(r["src_line"])] = r["raw"]
-        for p in paths:
+        for p in need:
             f = files[p]
             have = lines.get(p, {})
             n = int(f["n_lines"])
@@ -92,7 +134,7 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     images: dict[str, str] = {}                      # 相对路径 → sha
     by_ext: dict[str, set[str]] = defaultdict(set)   # R2 键后缀 → sha
     if with_images and sel(GS + "patches/"):
-        for r in src.rows("glyph_instances", ws):
+        for r in _rows(src, "glyph_instances", ws, ("instance_id", "patch_sha")):
             if r.get("patch_sha"):
                 images[f"{GS}patches/{_safe(r['instance_id'])}.png"] = r["patch_sha"]
                 by_ext["png"].add(r["patch_sha"])
@@ -135,5 +177,5 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
                     old.parent.mkdir(parents=True, exist_ok=True)
                     new.replace(old)
     shutil.rmtree(tmp, ignore_errors=True)
-    return {"ws": ws, "files": len(texts), "images": len(images),
+    return {"ws": ws, "files": len(texts), "reused": reused, "fetched": fetched, "images": len(images),
             "image_cache": img_stats, "bytes": sum(len(b) for b in texts.values())}
