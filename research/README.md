@@ -11,6 +11,7 @@
 | `l2_seal_seg/` | 09-30 | 印章遮挡格的 Step4 字框是否被撑大：框宽/列宽、高/格高 |
 | `muse_variant_audit/` | 10-02 | muse 批次 V1：异体关系表单来源边复核（overview#372；批次结果解冻后推这里） |
 | `muse_variant_pilot/` | 09-27 | muse 判异体关系的试点与自动真值校准集 |
+| `pivot_family/` | 10-19 | 人审「以字找字」：近似字 → 异体族按字块图排序 vs 现役全表检索 vs 不排序（结论见 doc/research/人审找字-以字找字与异体族按图排序.md） |
 | `qtw_booklib/` | 09-27 | 全唐文书级库：四批人裁合并、代表图、导入与测量 |
 | `qtw_solo_replace/` | 09-28 | 几套 seed_admit 书级参数产物对比（overview#155） |
 | `relax_margin/` | 09-28 | 库 top1 置信度 × 领先幅度分档，量人裁与整理本一致率 |
