@@ -120,6 +120,11 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
 - 读的过程中该工作区有新写入就重读（最多 3 次），保证拿到的是同一个版本。
 - `glyph.db.central.json`（库旁）记分支、rev、拉取时间，`status` 用它算落后几条。
 - 图缓存：`GUJI_DATA_CACHE`，缺省 `~/.cache/guji-data`，按 sha 存、取回时核 sha，同一张图只下一次。
+- **取图不经 Worker（2026-10-19 起）**：正式桶挂了公开域名 `https://blob.open-guji.com/sha256/<2>/<sha>.<ext>`
+  （按 sha 寻址、不能列目录、走 CDN 缓存；sheldon 定「按哈希公开」）。Worker 签下载时直接回这个地址，客户端不用改，
+  旧版也一样。Worker 请求只剩查表和签名（每批 250 张一次）：从空目录整库拉殿本 173 次、全唐文 68 次、北行 59 次
+  （原先每张图一次，殿本约 1.85 万次）。实验桶仍经 `/v1/blob`。上传照旧经 Worker（核 sha、不覆盖）。
+  用量日报见 guji-workspace-data 仓 `scripts/usage_report.py`。
 - 借库（`workspace.yaml` 的 `glyph_lib.borrow`）暂不支持，配了就报错，照旧用 `glyph-db rebuild`。
 - 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。
 

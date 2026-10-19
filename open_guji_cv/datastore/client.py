@@ -138,7 +138,7 @@ class WorkerSource:
         """每 1000 张批量签一次，再并发直取 R2。
 
         每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
-        （``GUJI_DATA_FETCH_WORKERS`` 可改）。签名直链指向 Worker 的 /v1/blob，每张图算一次 Worker 请求（免费档每天 10 万次）。
+        （``GUJI_DATA_FETCH_WORKERS`` 可改）。正式桶的签名直链是公开域名 blob.open-guji.com（10-19 起），下载不算 Worker 请求；实验桶仍指向 Worker 的 /v1/blob，每张图算一次。
         10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。"""
         shas = sorted(set(shas))
         workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
