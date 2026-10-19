@@ -1,0 +1,122 @@
+# 字组统一流程第五批 A/B，vol04：A＝现行二十六组，B＝A＋八组（目自、一二、千干、十卜、甲申、而面、傅傳、木本；形近不同义，按文意：L1＋haiku 表，一二只用 L1）。
+# 跑：guji exp run doc/exp/group_flow-6-vol04.yaml -w $WS --snapshot <vol04 快照 products 根> [--root <实验根>] [--pages 1-56] [--only B]
+# 快照：guji-workspace 分支 snap/96mid1ogzk/vol04/20261017T1243 的 products/；表路径按本机改。
+name: group_flow-6-vol04
+books:
+- vol04
+from: seed_admit
+to: seed_admit
+pipeline: keben_body_v2
+pages: all
+book_params: keep
+match: exact
+snapshot: null
+root: null
+base:
+  name: A
+  note: 现行二十六组（上一版 B 臂）
+  params:
+    seed_admit:
+      group_flow:
+      - mn
+      - dian
+      - can
+      - chen
+      - li
+      - shen
+      - zhi
+      - jys
+      - ry
+      - rr
+      - ts
+      - wm
+      - wxs
+      - ji
+      - qing
+      - bian
+      - hui
+      - ly
+      - dt
+      - wj
+      - zh
+      - yh
+      - xz
+      - wyu
+      - yt
+      - rm
+      group_flow_tables:
+        ly: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/ly_table.json
+        dt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/dt_table.json
+        wj: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/wj_table.json
+        zh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/zh_table.json
+        yh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/yh_table.json
+        xz: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/xz_table.json
+        wyu: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/wyu_table.json
+        yt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/yt_table.json
+        rm: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2rm/tables/rm_table.json
+variants:
+  B:
+    note: A＋第五批八组（目自 一二 千干 十卜 甲申 而面 傅傳 木本）；一二只用 L1（haiku 一二不稳）
+    params:
+      seed_admit:
+        group_flow:
+        - mn
+        - dian
+        - can
+        - chen
+        - li
+        - shen
+        - zhi
+        - jys
+        - ry
+        - rr
+        - ts
+        - wm
+        - wxs
+        - ji
+        - qing
+        - bian
+        - hui
+        - ly
+        - dt
+        - wj
+        - zh
+        - yh
+        - xz
+        - wyu
+        - yt
+        - rm
+        - mz
+        - yr
+        - qg
+        - sb
+        - js
+        - em
+        - fc
+        - mb
+        group_flow_tables:
+          ly: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/ly_table.json
+          dt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/dt_table.json
+          wj: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/wj_table.json
+          zh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/zh_table.json
+          yh: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/l2/tables/yh_table.json
+          xz: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/xz_table.json
+          wyu: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/wyu_table.json
+          yt: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2/tables/yt_table.json
+          rm: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b4/l2rm/tables/rm_table.json
+          mz: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/mz_table.json
+          qg: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/qg_table.json
+          sb: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/sb_table.json
+          js: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/js_table.json
+          em: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/em_table.json
+          fc: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/fc_table.json
+          mb: /tmp/claude-0/-home-user/aac4e25d-7ee0-59e6-94ca-43fb4f1613a6/scratchpad/b5/l2/tables/mb_table.json
+eval:
+  params:
+    seed_admit:
+      use_human_verdicts: false
+labels:
+- source: human_events
+guardrails: []
+bootstrap: 2000
+seed: 0

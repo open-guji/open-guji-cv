@@ -109,8 +109,24 @@ GROUPS: dict[str, GroupSpec] = {
     "rm": GroupSpec(
         id="rm", name="日目", members=frozenset("日目"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/rm",
-        flow=FlowSpec(("ctx",), review=True), overlaps=("ry",),
+        flow=FlowSpec(("ctx",), review=True), overlaps=("ry", "mz"),
         note="按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"),
+    # —— 第五批（2026-10-19）：目自、一二、千干、十卜、甲申、而面、傅傳、木本。同前：L1 规则（整理本奇偶册交叉验证零冲突）＋逐册 L2 表。
+    #    目自与 rm 共用「目」（互相声明 overlaps）。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("ctx",), review=True), overlaps=ov,
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
+       for gid, name, ov, note in (
+           ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
+           ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
+           ("qg", "千干", (), "千＝千百、千餘、千里；干＝干支、干戈、干預。"),
+           ("sb", "十卜", (), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
+           ("js", "甲申", (), "干支：甲子、甲乙；申＝申明、申屠、庚申。"),
+           ("em", "而面", (), "而＝虚词；面＝東面、南面、四面。"),
+           ("fc", "傅傳", (), "傳＝傳注、經傳、傳記；傅＝傅會、傅寅、傅以漸、太傅。"),
+           ("mb", "木本", (), "本＝版本、原本、本草；木＝草木、木瓜、木部。"))},
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),

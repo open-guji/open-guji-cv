@@ -56,7 +56,8 @@ def test_judge_uses_window_and_members(tmp_path):
     assert (v.char, v.via, v.why) == ("日", "ctx_l1", "agree")
 
 
-@pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt"])
+@pytest.mark.parametrize("g", ["jys", "ry", "rr", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
+                               "mz", "yr", "qg", "sb", "js", "em", "fc", "mb"])
 def test_shipped_rules_load_and_stay_in_group(g):
     spec = GROUPS[g]
     be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
@@ -104,6 +105,10 @@ def test_jys_shipped_rules_are_superset_of_legacy():
     ("xz", "易", "數論", "象"), ("xz", "取", "於天", "象"), ("xz", "孔子", "傳", None), ("xz", "諸卦", "言利涉", None),
     ("wyu", "魏", "弼", "王"), ("wyu", "浙江吳", "墀家藏本", "玉"), ("wyu", "應帝", "篇", "王"), ("wyu", "", "篇", None),
     ("yt", "於河", "洛書", "圖"), ("yt", "", "轉", "圓"), ("yt", "渾", "", "圓"), ("yt", "六十四卦", "圖分配", None),
+    # 第五批：蔡傳／王宗傳／太傳／草本等两可词必须不给傅或本以外的字；傅寅、草木蟲魚、兩面等才给。
+    ("fc", "宋", "寅撰", "傅"), ("fc", "書", "會選", None), ("fc", "", "", None),
+    ("mb", "毛詩草", "蟲魚疏", "木"), ("mb", "毛詩草", "考", None),
+    ("em", "南", "設主于戸内", "面"), ("em", "六十四", "加之", None),
 ])
 def test_batch3_groups_rules(g, left, right, want):
     spec = GROUPS[g]
