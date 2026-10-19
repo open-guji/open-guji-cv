@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.2`。
 
+### Fixed
+- `guji db push`／`sync` 推送前的删除检查把锚图（`anchor_patches_meta`）也算进去：v0.4.0 及更早版本 pull 的数据目录里没有锚图，原先会把库里的锚图当本地删掉一并推走（10-19 D 推 vol01 裁决前在 dry-run 里发现，没推）。现在不加 `--allow-delete` 就整次拒绝。只动 `datastore/workcopy.py`，17 步 `code_hash` 不变。
+
 ## [0.4.1] - 2026-10-18
 
 PATCH。中心库拉图提速、锚图还原（只动 `datastore/`），17 步 `code_hash` 不变，不用重算。

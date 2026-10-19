@@ -253,3 +253,21 @@ def test_anchor_patches_round_trip(repo, conn, tmp_path):  # noqa: F811
     fresh = _fresh(files, tmp_path / "m2", src, cache)
     assert (data_dir(fresh) / "feedback/anchor_patches/vol03/ab/ab12.png").read_bytes() == b"\x89PNG anchor"
     assert local_changes(fresh) == []
+
+
+def test_push_refuses_dropping_anchor_patches(repo, conn, tmp_path):  # noqa: F811
+    """数据目录里缺了锚图（v0.4.0 及更早的 pull 不还原锚图）时，push 不能把库里的锚图删掉。"""
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import FileDeleteRefused, data_dir, migrate, push
+    files = _workspace(tmp_path)
+    files["W/feedback/anchor_patches/vol03/ab/ab12.png"] = b"\\x89PNG anchor"
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    ws = _checkout(files, tmp_path / "ws")
+    migrate(src, ws, cache=cache)
+    (data_dir(ws) / "feedback/anchor_patches/vol03/ab/ab12.png").unlink()
+    with pytest.raises(FileDeleteRefused, match="ab12.png"):
+        push(conn, ws, actor="t")
+    assert [r["src_path"] for r in src.rows("anchor_patches_meta", "tws")] == ["feedback/anchor_patches/vol03/ab/ab12.png"]
