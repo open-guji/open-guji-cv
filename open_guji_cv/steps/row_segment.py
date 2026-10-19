@@ -144,13 +144,63 @@ def _ink_box(img, c, thr: int):
 COLGOLD_JUNK_INK = 0.08
 
 
-def colgold_count(g: dict):
-    """按金标格位计数：格位在金标字段（start+1 … start+n）里的非空格都算，之外的只算墨够的。"""
-    lo, hi = int(g["start"] or 0) + 1, int(g["start"] or 0) + int(g["n"])
+#: 金标字段之外的格要有「字证据」才算字（判据与阈值照 Step4 列端渣格闸 `is_end_cell_junk`
+#: 的主干，`clustering/extractor.py` 的 TAIL_JUNK_*，不 import 是免得它进 Step3 指纹）：
+#: 满宽且矮的是框线条渣、碎点不算；剩下的连通体有一个够高、或合起来纵跨够长（「二/三」）就是字。
+#: vol06 p40：上框线落在首字前一格、墨 0.11 → 不算；vol04 p12 c7：D 并好的「三」→ 算。
+COLGOLD_BAR_W = 0.92
+COLGOLD_BAR_H = 0.35
+COLGOLD_MIN_AREA = 60
+COLGOLD_CC_H = 0.30
+COLGOLD_SPAN = 0.35
+
+
+def _looks_like_char(img, c, thr: int) -> bool:
+    import cv2
+    import numpy as np
+    y0, y1 = max(0, int(c.y0)), min(img.shape[0], int(round(c.y1)))
+    x0, x1 = max(0, int(c.x0)), min(img.shape[1], int(round(c.x1)))
+    if y1 <= y0 or x1 <= x0:
+        return False
+    H, W = y1 - y0, x1 - x0
+    n, _lab, st, _c = cv2.connectedComponentsWithStats((img[y0:y1, x0:x1] < thr).astype(np.uint8), 8)
+    top = bot = None
+    for k in range(1, n):
+        y, w, h, area = int(st[k, 1]), int(st[k, 2]), int(st[k, 3]), int(st[k, 4])
+        if w >= COLGOLD_BAR_W * W and h < COLGOLD_BAR_H * H:
+            continue                      # 满宽且矮：框线
+        if area < COLGOLD_MIN_AREA or h < 4:
+            continue                      # 碎点
+        if h >= COLGOLD_CC_H * H:
+            return True
+        top = y if top is None else min(top, y)
+        bot = y + h if bot is None else max(bot, y + h)
+    return top is not None and bot - top >= COLGOLD_SPAN * H
+
+
+def colgold_count(g: dict, img=None, thr: int = 128):
+    """按金标格位计数：格位在金标字段（start+1 … start+n）里的非空格都算；之外的只算墨够、
+    与金标字段之间没有空格隔开（隔着空格的列端孤格是残墨，Step4 会按 `tail_junk` 丢掉）、
+    且（给了列图时）有整字级连通体的（版框横线不算）。"""
+    start = int(g["start"] or 0)
+    lo, hi = (-1 if start < 0 else start + 1), start + int(g["n"])   # start -1 = 抬头字，占 -1 格，后接 1 号格
+
+    def out_ok(c) -> bool:
+        return c.ink_ratio >= COLGOLD_JUNK_INK and (img is None or _looks_like_char(img, c, thr))
 
     def count(cells) -> int:
-        return sum(1 for c in cells if c.kind != "blank"
-                   and (lo <= c.slot <= hi or c.ink_ratio >= COLGOLD_JUNK_INK))
+        # 按格的先后往两端走（格位号不连续：抬头位 -1 后面直接是 1），遇到空格就停
+        seq = sorted(cells, key=lambda c: c.slot)
+        idx = [i for i, c in enumerate(seq) if lo <= c.slot <= hi]
+        n = sum(1 for i in idx if seq[i].kind != "blank")
+        if not idx:
+            return n + sum(1 for c in seq if c.kind != "blank" and out_ok(c))
+        for rng in (range(idx[-1] + 1, len(seq)), range(idx[0] - 1, -1, -1)):
+            for i in rng:
+                if seq[i].kind == "blank":
+                    break
+                n += out_ok(seq[i])
+        return n
     return count
 
 
@@ -367,7 +417,7 @@ class RowSegmentStep(Step):
                     base = dict(base, n_body_slots=n_body_col)
             if r is not None and g is not None and slot_override is None:
                 r, n_new, fl = apply_count_target(r, _seg, n_body_col, int(g["dzg"]["n"]), "colgold",
-                                                  count=colgold_count(g["dzg"]))
+                                                  count=colgold_count(g["dzg"], img, p.ink_threshold))
                 prior_flags += fl
                 if n_new != n_body_col:
                     n_body_col = n_new

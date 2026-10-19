@@ -135,3 +135,64 @@ def test_colgold_path_follows_corpus_dir(tmp_path, monkeypatch):
     assert _colgold_path("corpus/daizhige/colgold.jsonl") == tmp_path / "corpus" / "daizhige" / "colgold.jsonl"
     assert _colgold_path("models/yolo") == tmp_path / "models" / "yolo"
     assert _colgold_path(str(tmp_path / "x.jsonl")) == tmp_path / "x.jsonl"
+
+
+def test_colgold_count_skips_end_cell_cut_off_by_blank():
+    # vol03 p75 c3：金标 3–19 格 17 字，20 格空、21 格残墨 0.08 → 不算（原先算成 18，C 误并两字）
+    from open_guji_cv.steps.row_segment import colgold_count
+    g = {"start": 2, "n": 17}
+    cells = ([SimpleNamespace(kind="blank", slot=s, ink_ratio=0.0) for s in (1, 2)]
+             + [SimpleNamespace(kind="char", slot=s, ink_ratio=0.2) for s in range(3, 20)]
+             + [SimpleNamespace(kind="blank", slot=20, ink_ratio=0.0),
+                SimpleNamespace(kind="char", slot=21, ink_ratio=0.08)])
+    assert colgold_count(g)(cells) == 17
+    cells[-2] = SimpleNamespace(kind="char", slot=20, ink_ratio=0.2)   # 连着金标字段 → 真多切，都算
+    assert colgold_count(g)(cells) == 19
+
+
+def test_colgold_count_walks_cells_not_slot_numbers():
+    # vol04 p14 c4：抬头位 -1 后面直接是 1 号格，没有 0 号格；-1 上的墨不能因「0 号格不在」被当成隔开
+    from open_guji_cv.steps.row_segment import colgold_count
+    g = {"start": 0, "n": 3}
+    cells = ([SimpleNamespace(kind="char", slot=-1, ink_ratio=0.28)]
+             + [SimpleNamespace(kind="char", slot=s, ink_ratio=0.2) for s in (1, 2, 3)])
+    assert colgold_count(g)(cells) == 4
+
+
+def test_colgold_count_with_image_skips_frame_bar_next_to_text():
+    # vol06 p40 c9：上框线落在金标字段前一格、紧挨首字、墨也够——有列图时按连通体高度判它不是字
+    import numpy as np
+    from open_guji_cv.steps.row_segment import colgold_count
+    img = np.full((400, 100), 255, np.uint8)
+    img[30:42, 0:100] = 0                     # 1 号格：一条满宽横线（高 12，格高 100）
+    for y in (100, 200, 300):
+        img[y + 10:y + 90, 30:70] = 0         # 2–4 号格：整字
+    cells = [SimpleNamespace(kind="char", slot=s, ink_ratio=0.12 if s == 1 else 0.3,
+                             x0=0, x1=100, y0=(s - 1) * 100, y1=s * 100) for s in (1, 2, 3, 4)]
+    g = {"start": 1, "n": 3}
+    assert colgold_count(g)(cells) == 4            # 不给图：照旧按墨量算上
+    assert colgold_count(g, img)(cells) == 3       # 给图：横线不算
+    img[10:90, 30:70] = 0                          # 1 号格换成整字 → 算（真多切）
+    assert colgold_count(g, img)(cells) == 4
+
+
+def test_colgold_count_with_image_keeps_stacked_strokes():
+    # vol04 p12 c7：D 并好的「三」落在金标字段前一格——三横各自都矮，合起来纵跨够长 → 算字
+    import numpy as np
+    from open_guji_cv.steps.row_segment import colgold_count
+    img = np.full((300, 100), 255, np.uint8)
+    for y in (15, 45, 75):
+        img[y:y + 10, 20:80] = 0              # 1 号格：三横
+    for y in (100, 200):
+        img[y + 10:y + 90, 30:70] = 0
+    cells = [SimpleNamespace(kind="char", slot=s, ink_ratio=0.15,
+                             x0=0, x1=100, y0=(s - 1) * 100, y1=s * 100) for s in (1, 2, 3)]
+    assert colgold_count({"start": 1, "n": 2}, img)(cells) == 3
+
+
+def test_colgold_count_raised_start_includes_slot_minus_one():
+    # vol04 p7 c2：金标 start -1（抬头字），n 22 → 字在 -1、1…21 格
+    from open_guji_cv.steps.row_segment import colgold_count
+    cells = ([SimpleNamespace(kind="char", slot=-1, ink_ratio=0.01)]
+             + [SimpleNamespace(kind="char", slot=s, ink_ratio=0.2) for s in range(1, 22)])
+    assert colgold_count({"start": -1, "n": 22})(cells) == 22
