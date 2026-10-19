@@ -313,6 +313,10 @@ class BookSpec:
     #: 钉了之后，语料类内容指纹（`core/corpus_pin.PIN_FIELDS`）在 `params_for` 里换成 `corpus-vN`，
     #: 指纹只认版本号；不写 = 照旧按内容哈希，行为与加这个字段之前逐位相同。
     corpus: int | None = None
+    #: 本册钉住的字形库号（yaml 的 `glyph_pin: 1` 或 `g1`；见 `core/glyph_pin.py`）。钉了之后
+    #: seed_admit 的人裁、近似字指纹在 `params_for` 里换成 `glyph-gN`，别处人裁进库不让本册过期；
+    #: 不写 = 照旧按库内容哈希，行为与加这个字段之前逐位相同。
+    glyph_pin: int | None = None
     #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
     #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
@@ -642,12 +646,18 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         params=_load_book_params(d.get("params")),
         cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
         corpus=_parse_corpus_pin(d.get("corpus")),
+        glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
 
 
 def _parse_corpus_pin(v) -> int | None:
     from .corpus_pin import parse_pin
+    return parse_pin(v)
+
+
+def _parse_glyph_pin(v) -> int | None:
+    from .glyph_pin import parse_pin
     return parse_pin(v)
 
 

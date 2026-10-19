@@ -215,6 +215,12 @@ def _with_corpus_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
     return with_corpus_pin(p, ctx.book)
 
 
+def _with_glyph_pin(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """册 yaml `glyph_pin: N` → 字形库内容指纹换成 `glyph-gN`（见 `core/glyph_pin.py`）。"""
+    from .glyph_pin import with_glyph_pin
+    return with_glyph_pin(p, ctx.book)
+
+
 def _with_witness_fingerprint(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """`AlignRefParams.witness_fingerprint` 按**这册书的 `references` 文件**算
     （2026-09-27，任务书-D-多证人对齐策略）。只对 `witness_strategy != "legacy"`
@@ -379,6 +385,7 @@ class RunContext:
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
+        p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         return p
 
