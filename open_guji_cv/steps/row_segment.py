@@ -19,8 +19,33 @@ from ..utils.cut_select import ckpt_fingerprint, get_judge
 from ..utils.roster_glyph import load_scorer
 from ..utils.roster_segment import segment_roster_page
 from ..utils.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
-                                    segment_column)
+                                    segment_column, slot_mask_from_occupied)
 from ._warpmap import ColumnMapper
+
+_LAYOUT_CACHE: dict[tuple, dict[tuple[int, int], dict]] = {}
+
+
+def _layout_path(rel: str):
+    """同 `_colgold_path`：``corpus/…`` 走数据目录（#198 起整理本进中心库）。"""
+    return _colgold_path(rel)
+
+
+def load_layout(rel: str, book: str) -> dict[tuple[int, int], dict]:
+    """逐列格位表（`scripts/dzg_layout.py` 产出）→ 本册 {(页, 列): 行}。缓存按文件签名失效，同 `load_colgold`。"""
+    import json
+    p = _layout_path(rel)
+    if not p.exists():
+        raise FileNotFoundError(f"layout_prior 指的表不存在：{p}（先跑 scripts/dzg_layout.py）")
+    key = (_sig(p), book)
+    if key not in _LAYOUT_CACHE:
+        out: dict[tuple[int, int], dict] = {}
+        for ln in p.read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                r = json.loads(ln)
+                if r.get("vol") == book:
+                    out[(int(r["page"]), int(r["col"]))] = r
+        _LAYOUT_CACHE[key] = out
+    return _LAYOUT_CACHE[key]
 
 
 #: 逐列字数先验一次最多改几个字（差得更多多半是列错位或页对错，硬改会把整列切乱）
@@ -306,6 +331,29 @@ class RowSegmentParams(BaseModel):
             object.__setattr__(self, "colgold_fingerprint", _FP_CACHE[key])
         return self
 
+    #: **逐列格位先验**（2026-10-19，`doc/research/切分现状梳理与新方向-2026-10-19.md` §六）：逐列格位表的路径
+    #: （`scripts/dzg_layout.py` 由 daizhige 逐列本生成；相对工作区根或绝对路径）。空 = 关，关时产物逐字节不变。
+    #: 开了以后，表里有的列（人裁 `column-slots` 过的列不碰）：①抬头级数按表定（覆盖闸的 hint）；②DP 逐格
+    #: 软罚分——表说有字的格切成空、表说空的格切出字都付代价（`row_boundaries.slot_mask`）；③两半都有字的
+    #: 夹注格走 `forced_jiazhu`、正文格走 `forced_main`（这一列有人裁 forced 时只用人裁的）。只有一半有字的
+    #: 夹注格（段尾奇数字、行内空格）不强制，交给现有判据与段端收编。殿本十册离线：普通正文页逐格全对 95.76% → 98.51%，劈字 19 → 0，
+    #: 改坏 4 列。只对有逐列本的书有意义。
+    layout_prior: str = ""
+    layout_fingerprint: str = ""         # 表内容 sha，开关开着时自动填（表一改 → Step3 判过期）
+
+    @model_validator(mode="after")
+    def _fill_layout_fingerprint(self):
+        if self.layout_prior and not self.layout_fingerprint:
+            p = _layout_path(self.layout_prior)
+            if not p.exists():
+                raise ValueError(f"layout_prior 开着但表不存在：{p}（先跑 scripts/dzg_layout.py）")
+            key = ("layout",) + _sig(p)
+            if key not in _FP_CACHE:
+                import hashlib
+                _FP_CACHE[key] = hashlib.sha256(p.read_bytes()).hexdigest()[:16]
+            object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
+        return self
+
     @model_validator(mode="after")
     def _fill_judge_fingerprint(self):
         # 与 glyph_match.GlyphMatchParams.db_fingerprint 同一套路：模型是外部可变状态，
@@ -326,7 +374,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.18", unit="column",   # 1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.19", unit="column",   # 1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -334,7 +382,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment",
                    "open_guji_cv.utils.roster_glyph", "open_guji_cv.utils.yolo_tool_infer"),
         soft_params=("roster_glyph_fingerprint",),
-        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir"),
+        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -384,6 +432,7 @@ class RowSegmentStep(Step):
             bgr = cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR) if raw.ndim == 2 else raw
             _, ych = _yolo(p.yolo_model_dir).infer(bgr, slide_conf=p.yolo_conf)
             yolo_boxes = [(b.x0, b.y0, b.x1, b.y1) for b in ych if b.conf >= p.yolo_conf]
+        layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
         out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
@@ -398,10 +447,26 @@ class RowSegmentStep(Step):
             slot_override = book_slots.get((page, gc.col))
             if slot_override is not None:
                 n_body_col = slot_override.n_slots
+            # 逐列格位先验（layout_prior）：抬头级数按表定（不只往上补——闸给书名列多加的那格
+            # 抬头余量会让书名首字编成 -1、整列格号差一格），DP 加逐格掩码，夹注 / 正文格强制
+            lay = layout.get((page, gc.col)) if slot_override is None else None
+            top_slack = gc.top_slack
+            lay_kw: dict = {}
+            forced_jz = book_forced_jz.get((page, gc.col))
+            forced_main = book_forced_main.get((page, gc.col))
+            if lay is not None:
+                n_raised_col = int(lay.get("raised", 0))
+                top_slack = gc.border_top if n_raised_col else gc.top_slack
+                occ = set(lay["slots"])
+                lay_kw["slot_mask"] = slot_mask_from_occupied(occ, n_body_col, n_raised_col)
+                notes = set(lay.get("notes", ()))
+                if forced_jz is None and forced_main is None:
+                    forced_jz = notes or None
+                    forced_main = (occ - notes - set(lay.get("half", ()))) or None
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
-                        top_slack=gc.top_slack)
+                        top_slack=top_slack)
             if p.only_admitted and not gc.admitted:
                 out.append(ColumnCells(ok=False, error="未过交接闸: " + "; ".join(gc.reject), **base))
                 continue
@@ -415,16 +480,16 @@ class RowSegmentStep(Step):
                 return segment_column(
                     img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
                     border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
-                    top_slack=gc.top_slack, content_x=gc.content_x,
+                    top_slack=top_slack, content_x=gc.content_x,
                     ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
                     raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
                     resolved_cuts=col_resolved or None, cut_judge=judge,
                     pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                                  if pg_ == page and c_ == gc.col} or None,
                     forced_solo=book_solo.get((page, gc.col)),
-                    forced_jiazhu=book_forced_jz.get((page, gc.col)),
-                    forced_main=book_forced_main.get((page, gc.col)),
-                    detect_bottom_bar=p.detect_bottom_bar,
+                    forced_jiazhu=forced_jz,
+                    forced_main=forced_main,
+                    detect_bottom_bar=p.detect_bottom_bar, **lay_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
@@ -436,6 +501,8 @@ class RowSegmentStep(Step):
                          or any(pg_ == page and c_ == gc.col for (pg_, c_, _s) in book_pins)
                          or (page, gc.col) in book_solo or (page, gc.col) in book_forced_jz
                          or (page, gc.col) in book_forced_main)
+            # 同列互斥：逐列格位先验命中的列已按格位切，不再叠逐列字数先验与 YOLO 并格（两套先验叠在一列上会打架）
+            human_col = human_col or lay is not None
             g = colgold.get((page, gc.col))
             k_pairs = 0
             if r is not None and yolo_boxes and not human_col and not _has_jiazhu(r.cells):

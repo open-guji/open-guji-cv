@@ -173,16 +173,20 @@ def _lacuna(book: str, export_dir: Path, chapter: str | None, pending: Path | No
 
 
 def _fallback(book: str, pages, store) -> dict:
+    from .release_gates import HOT_PAGE_COLS as RG_HOT
     from .release_gates import check_fallback
     r = check_fallback(book, pages, store)
     bad = r["loose"] or r["ledger_bad"] or r["recut_bad"]
     acts = "，".join(f"{k} {v}" for k, v in sorted(r["by_action"].items()))
     detail = (f"整理本对不上的列 {r['columns']} 列：已交代 {r['columns'] - len(r['loose'])}"
               + (f"（{acts}）" if acts else "") + f"，没交代 {len(r['loose'])}"
-              + (f"；列交代单有 {len(r['ledger_bad'])} 行写坏" if r["ledger_bad"] else ""))
+              + (f"；列交代单有 {len(r['ledger_bad'])} 行写坏" if r["ledger_bad"] else "")
+              + (f"；其中 {len(r['hot_pages'])} 页各 ≥{RG_HOT} 列没交代，宜整页进重切清单（"
+                 + "、".join(f"p{h['page']}" for h in r["hot_pages"][:10])
+                 + ("…" if len(r["hot_pages"]) > 10 else "") + "）" if r["hot_pages"] else ""))
     return _item("2d", "整理本对不上的列有交代", FAIL if bad else PASS, detail,
                  {"loose": r["loose"][:500], "ledger_bad": r["ledger_bad"][:50],
-                  "recut_bad": r["recut_bad"][:50]} if bad else None)
+                  "recut_bad": r["recut_bad"][:50], "hot_pages": r["hot_pages"][:200]} if bad else None)
 
 
 def _store_committed(ws: Path) -> dict:

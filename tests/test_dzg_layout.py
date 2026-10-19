@@ -1,0 +1,71 @@
+# -*- coding: utf-8 -*-
+"""`scripts/dzg_layout.py`（daizhige 逐列本 → 逐列格位表）与 `row_segment.layout_prior` 读表。数据全在 tmp 里现造。"""
+from __future__ import annotations
+
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+_ROOT = Path(__file__).resolve().parent.parent / "scripts"
+sys.path.insert(0, str(_ROOT))
+_SPEC = importlib.util.spec_from_file_location("dzg_layout", _ROOT / "dzg_layout.py")
+dl = importlib.util.module_from_spec(_SPEC)
+sys.modules["dzg_layout"] = dl
+_SPEC.loader.exec_module(dl)
+
+
+def test_column_layout_slots_notes_and_halves():
+    """格位 pos → slot = pos+1；夹注右行 a、左行 b，两半都有的进 notes，只一半的进 half。
+
+    样例是殿本 vol05 p37 c6 的实形：小注右行「無卷數」「浙江」中间空一格，那一格只有左半。"""
+    col = {"no": 5, "runs": [
+        {"t": "text", "start": 0, "s": "易林疑說"},
+        {"t": "note", "start": 4, "r": [[0, "無卷數"], [4, "浙江"]], "l": [[0, "汪啟淑家藏本"]]}]}
+    lay = dl.column_layout(col)
+    assert lay["slots"] == list(range(1, 11))
+    assert lay["notes"] == [5, 6, 7, 9, 10]
+    assert lay["half"] == [8]                      # 右行空格：只有左半「家」
+    assert lay["raised"] == 0
+
+
+def test_column_layout_raised_and_empty():
+    lay = dl.column_layout({"no": 0, "runs": [{"t": "text", "start": -1, "s": "上諭朕"}]})
+    assert lay["slots"] == [-1, 1, 2] and lay["raised"] == 1      # 出格抬头：-1 之后是 1，跳过 0
+    assert dl.column_layout({"no": 0, "runs": []}) is None
+
+
+def test_build_maps_half_leaf_columns(tmp_path):
+    """我们一页 = daizhige 一个半叶：side=1 取 no 9–17，列号 no%9+1。"""
+    dz = tmp_path / "corpus" / "daizhige"
+    dz.mkdir(parents=True)
+    rec = {"id": "0001-0010", "page": "1-3a", "cols": [
+        {"no": 0, "runs": [{"t": "text", "start": 2, "s": "甲乙"}]},
+        {"no": 9, "runs": [{"t": "text", "start": 0, "s": "丙"}]},
+        {"no": 11, "runs": [{"t": "text", "start": 1, "s": "丁戊"}]}]}
+    (dz / "0001.jsonl").write_text(json.dumps(rec, ensure_ascii=False) + "\n", encoding="utf-8")
+    pm = [{"vol": "vol01", "page": 7, "kind": "text", "dzg_kind": "full", "dzg_id": "0001-0010", "side": 1},
+          {"vol": "vol01", "page": 8, "kind": "blank", "dzg_kind": "empty", "dzg_id": "0001-0010", "side": 0}]
+    (dz / "page_map.jsonl").write_text("".join(json.dumps(m) + "\n" for m in pm), encoding="utf-8")
+    rows = dl.build(tmp_path)
+    assert [(r["page"], r["col"], r["slots"]) for r in rows] == [(7, 1, [1]), (7, 3, [2, 3])]
+
+
+def test_row_segment_load_layout_and_fingerprint(tmp_path):
+    from open_guji_cv.steps import row_segment as RS
+    p = tmp_path / "layout.jsonl"
+    p.write_text(json.dumps({"vol": "vol04", "page": 23, "col": 1, "slots": [3, 4], "notes": [],
+                             "half": [], "raised": 0}) + "\n"
+                 + json.dumps({"vol": "vol05", "page": 1, "col": 2, "slots": [1], "notes": [],
+                               "half": [], "raised": 0}) + "\n", encoding="utf-8")
+    assert set(RS.load_layout(str(p), "vol04")) == {(23, 1)}
+    on = RS.RowSegmentParams(layout_prior=str(p))
+    assert len(on.layout_fingerprint) == 16
+    # 表不在：开着的开关不能悄悄当空表（同 colgold_prior）
+    import pytest
+    with pytest.raises(FileNotFoundError):
+        RS.load_layout(str(tmp_path / "nope.jsonl"), "vol04")
+    with pytest.raises(ValueError):
+        RS.RowSegmentParams(layout_prior=str(tmp_path / "nope.jsonl"))
+    off = RS.RowSegmentParams()
+    assert off.layout_prior == "" and off.layout_fingerprint == ""     # 关着时参数逐字段不变

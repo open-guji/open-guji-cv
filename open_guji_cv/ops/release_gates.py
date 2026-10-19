@@ -22,6 +22,11 @@ import re
 from pathlib import Path
 
 LACUNA = ("□", "〓")
+HOT_PAGE_COLS = 3
+"""2d 里一页没交代的列 ≥ 这么多，就点名「整页处理」：重切清单写一个页号即覆盖全页。
+殿本 10 册离线量（2026-10-19，`doc/research/切分现状梳理与新方向-2026-10-19.md` §六·5）：Step3 结构与
+逐列本对不上的列扎堆在少数页——卷端页、Step1 整页列错位、拆过的页、印章页——这类页逐列交代是白费，
+该整页送审或重切；只错一两列的页多是单格的事，照旧逐列交代。只提示，不改判定。"""
 ACTIONS = ("重切", "改字", "说明", "一致")
 _POS = re.compile(r"(\d+)(?::(\d+)(?::(-?\d+[ab]?))?)?")
 
@@ -178,6 +183,11 @@ def check_fallback(book: str, pages, store, lists_root: Path | None = None) -> d
             by_act["重切"] = by_act.get("重切", 0) + 1
         else:
             loose.append(f"{c['page']}:{c['col']}")
+    per_page: dict[int, int] = {}
+    for x in loose:
+        pg = int(x.split(":")[0])
+        per_page[pg] = per_page.get(pg, 0) + 1
+    hot = [{"page": pg, "cols": n} for pg, n in sorted(per_page.items()) if n >= HOT_PAGE_COLS]
     return {"columns": len(cols), "by_action": by_act, "loose": loose, "ledger_bad": bad,
-            "recut_bad": recut.bad}
+            "recut_bad": recut.bad, "hot_pages": hot}
 
