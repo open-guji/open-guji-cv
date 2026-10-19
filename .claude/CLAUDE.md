@@ -5,7 +5,7 @@
 
 ## 项目概述
 古籍刻本图像 → 逐字转写的引擎：切分（Step1–4）、识别与定字（Step5–7）、人裁回流（Step8）、导出（Step9）。
-数据集与评测在隔壁仓 `open-guji-dataset`；各书的数据（原图、产物、人裁、字形库）在 `guji-workspace`。
+数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/datastore.md` 第六节）；产物在各机本地。
 
 ## 先看哪份
 文档都在仓根 `doc/`（2026-10-06 起；原 `.claude/doc/` 已并入，旧路径对照见 `.claude/doc/README.md`）。
@@ -44,8 +44,9 @@
 - 产物在 `<工作区>/products/<book>/<step>/p0024.json`，列图和字块在 `cache/`，任务记录在 `runs/`。
 
 ## 字形库
-- 一本书的字形真源在**工作区** `output/glyph_store/`（加 `feedback/events/`），SQLite 索引 `output/glyph.db` 可重建：
-  `guji-cv glyph-db rebuild -w <工作区>`。
+- 一本书的字形真源在**中心库**，本机副本在数据目录 `$GUJI_DATA_HOME/<分支>/<工作区 id>/output/glyph_store/`（加 `feedback/events/`）；
+  工作区里只留 `workspace.yaml` 和标记 `.central.json`。开工 `guji db sync -w <工作区>`（没迁的先 `guji db migrate`），
+  审完再 `guji db sync`。SQLite 索引 `output/glyph.db` 在工作区，拉到新字形库时自动重建。
 - 本仓 `output/glyph_store/` 是测试用的样本库；根目录早期遗留的跨书 `glyph_store/` 已于 2026-10-06 删除（可从分支 archive/pre-cleanup-2026-10-06 找回）；字体字形不进 git，由 `fonts/` 确定性重建（见 `fonts/README.md`）。
 
 ## 云服务器（2026-09-30 起搁置）

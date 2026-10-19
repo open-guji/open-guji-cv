@@ -22,7 +22,7 @@
 走 `clustering.audit.evict_instance`（写 `evictions` 撤例审计，`glyph_store_sync` 的删除护栏
 只放行有审计的删除），在 `feedback_write_lock` 里做，与控制台裁决互斥。**不改事件**：
 人裁的「确认」事件留着（文本层照出字）；同格以后再有事件也会被 `glyphdb_admit` 的遮挡闸挡住。
-撤完 store 由 `guji-glyph-store-sync.timer` 下一轮导出（或手跑 `scripts/glyph_store_sync.py`）。
+撤完跑 `guji db sync -w <工作区>` 导出并推进中心库（旧的 glyph_store_sync 定时器 2026-10-19 退役）。
 幂等：撤完再跑，找到 0 例。
 """
 from __future__ import annotations

@@ -11,9 +11,7 @@
 - `zhengli/zl.py`：整理一册书**执行脚本**（幂等、可断点续跑，只在需看图／人裁处停；见 runbook〇·五）；`zhengli/snap_import.py`：容忍 CRLF 的 `guji snap import` 包装。
 - `relanding/`：重落后核对（`manifest_cmp.py` 比 params_hash／指纹，`relanding_diff.py` 比放行差异与红线格，`products_snapshot.py` 留快照；用法见其 README）。
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
-- `snapshot_glyph_store.py`：字形库快照：output/glyph.db → output/glyph_store/（真源，进 Git）。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
-- `glyph_store_sync.py`：字形库 store ＋ 人裁事件/裁决定时导出：db → output/glyph_store/，
 
 ## 评测（`guji eval run` 调用或手动跑；对真书数据的质量量法，不是测试）（51）
 
@@ -118,7 +116,6 @@
 - `glyph_crosscheck.py`：字形库 × 工作区记录 对账：库里的刻例，与这一格现在的裁决、排除名单、管线决定、字块图是否还对得上。
 - `glyph_near_forms_sync.py`：体检里人判「形近 / 异体」的字对 → 形近字人裁表 `config/confusable_human.json`（任务书 H §四·5）。
 - `glyph_rekey_drift.py`：重切之后，把库里「id 已指到别的字」的刻例挪回它现在所在的格（字形库 08，2026-09-26）。
-- `glyph_store_sync.py`：字形库 store ＋ 人裁事件/裁决定时导出：db → output/glyph_store/，
 - `glyph_triage.py`：字形库机器分诊（2026-09-25）：OCR + CNN 两路独立识别 + 整理本对齐字，对照库里定的字。
 - `glyph_triage_sheet.py`：分诊结果出联系表：每卡一格 = 本例 | 本书对手 | 字体(定的字) | 字体(OCR1) | 字体(CNN1)，下注文字。
 - `glyph_v1_map.py`：四庫 v1 旧管线刻例 → 现在的格：按形状找，不再按「格号 = idx+1」猜（字形库 08，2026-09-26）。
@@ -220,7 +217,6 @@
 - `shadow_gate_eval.py`：影子放行闸的离线评估：对一份已落盘的 seed_admit 产物，统计「若开 shadow_veto 会降级哪些格」。
 - `shadow_gate_train.py`：训练影子放行闸的模型文件（带元数据 + 指纹）。
 - `siku_volume_extract.py`：四庫總目整册标点层（A4）＋实体层（A5）流水线。逻辑在 `open_guji_cv/render/siku_extract.py`。
-- `snapshot_glyph_store.py`：字形库快照：output/glyph.db → output/glyph_store/（真源，进 Git）。
 - `snapshot_recognize_profile.py`：recognize-profile 全量样本巡检（**脚本，不是 pytest 测试**）。
 - `stat_verdict_evidence.py`：只读统计：各书现有人裁事件里带 anchor / bbox / 图像指纹 / 产物版本的比例。
 - `struct_gold_residual.py`：结构金标：把 300 张卡按「模型预测 vs IDS 表全部拆法」分三类，只把真有分歧的留给人裁。
