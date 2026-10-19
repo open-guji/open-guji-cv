@@ -43,7 +43,14 @@ def _git_head() -> str:
         return ""
 
 
-def _cv_version() -> str:
+def _cv_version(repo: Path = REPO_ROOT) -> str:
+    """引擎仓 ``pyproject.toml`` 里的版本号。装包元数据（``importlib.metadata``）只在重装时更新，
+    可编辑安装后升了版本号它还是旧的（底库 b1 就因此记成 0.4.4，实为 v0.4.6），只在读不到仓时兜底。"""
+    try:
+        import tomllib
+        return str(tomllib.loads((Path(repo) / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"])
+    except Exception:
+        pass
     try:
         from importlib.metadata import version
         return version("open-guji-cv")
@@ -165,7 +172,7 @@ def build_base(base_ws: Path, note: str = "", *, repo: Path = REPO_ROOT) -> Path
         "base_version": b,
         "created": datetime.date.today().isoformat(),
         "repo_commit": _repo_commit(repo),
-        "built_with": {"cv_version": _cv_version()},
+        "built_with": {"cv_version": _cv_version(repo)},
         "note": note,
         "code_tables": {"NEVER_MATCH_FAMILIES": _never_match_hash()},
         "items": items,
