@@ -8,6 +8,7 @@
 待发分支 `rc/v0.4.6`。
 
 ### Changed
+- 新机器第一次 `guji db pull` 先从 R2 下工作区快照（殿本约 6–7 MB，R2 下载不收费），库里只要快照之后变了的文件；`pull` 向库要过文件后、`sync` 拉下库里新改动后，把本机与库一致的文本打包存成新快照（只有能写该分支的令牌存得上，存不上不影响拉取）。快照只当缓存，逐文件对库里的 sha，坏了、旧了都退回从库里取。`GUJI_DATA_SNAPSHOT=0` 关掉。要 Worker 的 `/v1/snapshots`（guji-workspace-data#14）。不碰任何 Step，17 步 `code_hash` 不变。
 - `guji db pull`／`sync`／借库拉取省 Neon 公网流量：本机已有、整文件 sha 与库里一致的文件直接用本机字节，只向库要变了的文件（按 `src_path` 查）；向库要行只取 `src_path`、`src_line`、`raw`，刻例图清单只取 `instance_id`、`patch_sha`。起因：Neon 免费档每月 5 GiB 公网流量，10-18 建库后 1.6 天用掉 4.75 GB，因为每次 sync 只要库里有新写入就把整个工作区按 `SELECT *` 重读一遍（殿本约 120 MB）。改后小改动的一次 sync 只传变了的那几个文件。要 Worker 认 `cols` 与同列多值（guji-workspace-data#13）；旧 Worker 自动退回整行取、逐值查。新机器第一次拉仍是全量。不碰任何 Step，17 步 `code_hash` 不变。
 
 ### Added

@@ -692,3 +692,55 @@ def test_worker_rows_multi_value_and_old_worker(monkeypatch):
     rows = list(w2.rows("events", "tws", cols=("raw",), src_path=["b", "a"]))
     assert [r["q"]["src_path"] for r in rows] == ["a", "b"]               # 旧 Worker：逐值查、整行取
     assert all("cols" not in r["q"] for r in rows)
+
+
+class _WithSnapshots(_Counting):
+    """带快照接口的数据源（快照存内存，同 Worker 的 /v1/snapshots：只留 rev 最大的）。"""
+
+    def __init__(self, src, store):
+        super().__init__(src)
+        self.store = store
+
+    def get_snapshot(self, ws):
+        return self.store.get(ws)
+
+    def put_snapshot(self, ws, rev, data):
+        if ws not in self.store or self.store[ws][0] < rev:
+            self.store[ws] = (rev, data)
+        return {}
+
+
+def test_fresh_pull_seeds_from_snapshot(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.materialize import LINE_COLS
+    from open_guji_cv.datastore.workcopy import data_dir
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    store: dict = {}
+    sa = _WithSnapshots(src, store)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", sa, cache)
+    assert "tws" in store                                                  # 第一台整拉后存了快照
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    sb = _WithSnapshots(src, store)
+    b = _fresh(files, tmp_path / "b", sb, cache)
+    assert not [c for c in sb.calls if c[1] == LINE_COLS]                  # 文本全从快照来
+    assert _data_files(data_dir(b)) == _data_files(data_dir(a))
+
+    # 快照之后库里又改了一个文件：新机器只向库要这一个
+    rel = "feedback/events/b.jsonl"
+    files2 = dict(files)
+    files2["W/" + rel] = files["W/" + rel] + (_line(id="evt_b_9", batch="b", seq=9) + "\n").encode()
+    import_commit(conn, repo, _commit(repo, files2, "c2"))
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-c"))
+    sc = _WithSnapshots(src, store)
+    c = _fresh(files, tmp_path / "c", sc, cache)
+    got = [c_ for c_ in sc.calls if c_[1] == LINE_COLS]
+    assert got and all(c_[2].get("src_path") == [rel] for c_ in got)
+    assert (data_dir(c) / rel).read_bytes() == files2["W/" + rel]
+
+    # 坏快照：整拉照样对
+    store["tws"] = (store["tws"][0], b"not a tarball")
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-d"))
+    d = _fresh(files, tmp_path / "d", _WithSnapshots(src, {"tws": store["tws"]}), cache)
+    assert (data_dir(d) / rel).read_bytes() == files2["W/" + rel]

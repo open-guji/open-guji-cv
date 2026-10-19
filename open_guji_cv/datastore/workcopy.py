@@ -166,6 +166,76 @@ def _local(ws_dir: Path, data: Path):
     return f
 
 
+# ---- 工作区快照（Neon 免费档按公网流量计；新机器整拉殿本走 Neon 约 50 MB，快照包约 6–7 MB 走 R2 不收费）----
+
+SNAPSHOT_ENV = "GUJI_DATA_SNAPSHOT"      # 设 0 关掉快照（不下也不传）
+SNAPSHOT_SKIP_EXT = (".png",)            # 图另有 R2 缓存，不进快照
+
+
+def _snapshots_on(src) -> bool:
+    return os.environ.get(SNAPSHOT_ENV, "1") != "0" and hasattr(src, "get_snapshot")
+
+
+def _seed_from_snapshot(src, ws: str, seed: Path) -> int | None:
+    """把最新快照解到 ``seed``（只收普通文件、相对路径、不许 ..）。返回快照 rev；没有返回 None。出错只当没有。"""
+    import io
+    import sys
+    import tarfile
+    try:
+        got = src.get_snapshot(ws)
+        if not got:
+            return None
+        rev, blob = got
+        if seed.exists():
+            shutil.rmtree(seed)
+        with tarfile.open(fileobj=io.BytesIO(blob), mode="r:gz") as tf:
+            for m in tf.getmembers():
+                name = m.name
+                if not m.isfile() or name.startswith("/") or ".." in Path(name).parts:
+                    continue
+                f = tf.extractfile(m)
+                if f is None:
+                    continue
+                out = seed / name
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(f.read())
+        return int(rev)
+    except Exception as e:                       # 快照只是缓存：坏了、断了都退回整拉
+        print(f"[db] 快照不可用，改从库里整拉：{e}", file=sys.stderr)
+        shutil.rmtree(seed, ignore_errors=True)
+        return None
+
+
+def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: dict[str, str]) -> int | None:
+    """把本机已与库一致的文本文件打成 tar.gz 存上去。只放 sha 与 ``base`` 一致的；令牌不能写就算了。返回字节数。"""
+    import io
+    import sys
+    import tarfile
+    if not hasattr(src, "put_snapshot"):
+        return None
+    local = _local(ws_dir, data)
+    buf = io.BytesIO()
+    try:
+        with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=9) as tf:
+            for rel in sorted(base):
+                if rel.endswith(SNAPSHOT_SKIP_EXT):
+                    continue
+                p = local(rel)
+                if p is None:
+                    continue
+                b = p.read_bytes()
+                if sha256(b) != base[rel]:
+                    continue
+                ti = tarfile.TarInfo(rel)
+                ti.size = len(b)
+                tf.addfile(ti, io.BytesIO(b))
+        src.put_snapshot(ws, rev, buf.getvalue())
+        return len(buf.getvalue())
+    except Exception as e:                       # 读令牌、旧 Worker、网络问题：不影响拉取
+        print(f"[db] 快照没存上（不影响本次拉取）：{e}", file=sys.stderr)
+        return None
+
+
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
                  prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
     from .materialize import materialize
@@ -303,7 +373,16 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     tmp = data.parent / f".{data.name}.pull.tmp"
     if tmp.exists():
         shutil.rmtree(tmp)
-    rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=_local(ws_dir, data))
+    reuse = _local(ws_dir, data)
+    seed = data.parent / f".{data.name}.seed"
+    seed_rev = _seed_from_snapshot(src, ws, seed) if st is None and _snapshots_on(src) else None
+    if seed_rev is not None:                     # 新机器：先用快照里的文件，库里只要之后变了的
+        here = reuse
+        reuse = lambda rel: here(rel) or ((seed / rel) if (seed / rel).is_file() else None)  # noqa: E731
+    try:
+        rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=reuse)
+    finally:
+        shutil.rmtree(seed, ignore_errors=True)
     written, removed = _install(tmp, ws_dir, data)
     base = _db_manifest(src, ws)
     store_changed = any(old_base.get(k) != base.get(k) for k in set(old_base) | set(base) if k.startswith(GS))
@@ -323,6 +402,10 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
             fp = glyph.fingerprint(glyph.db_path)
     write_state(data, ws=ws, branch=str(m.get("branch") or "main"), rev=rev, base=base, glyph_db_fp=fp,
                 borrow=bsig)
+    if seed_rev is not None:
+        out["snapshot_rev"] = seed_rev
+    if stats.get("fetched") and _snapshots_on(src):   # 这次向库要过文件：存一份新快照给下一台新机器
+        out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, base)
     return out
 
 
@@ -648,5 +731,7 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     write_state(data, ws=ws, branch=st.get("branch", "main"), rev=rev, base=remote, glyph_db_fp=fp,
                 borrow=st.get("borrow", []))
     if not _diff(remote, manifest(ws_dir, data)):
+        if _snapshots_on(src):
+            out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, remote)
         return {**out, "action": "pulled"}
     return {**out, "action": "merged+push", "push": push(conn, ws_dir, actor=actor, uploader=uploader, glyph=glyph)}
