@@ -291,3 +291,118 @@ def test_push_uploads_only_images_new_to_db(repo, conn, tmp_path):  # noqa: F811
     calls = []
     push(conn, ws, actor="t", uploader=lambda imgs: calls.append(dict(imgs)) or {})
     assert calls == [{hashlib.sha256(b"\\x89PNG new anchor").hexdigest(): new}]
+
+
+# ---- 整理本进中心库（共享方案 2.2 节，S1）----
+
+def _migrated(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.client import PgSource
+    from open_guji_cv.datastore.importer import import_commit
+    from open_guji_cv.datastore.workcopy import migrate
+    files = _workspace(tmp_path)
+    import_commit(conn, repo, _commit(repo, files, "c1"))
+    src = PgSource(conn)
+    cache = _Cache(tmp_path / "cache", {k[2:]: v for k, v in files.items()})
+    ws = _checkout(files, tmp_path / "ws")
+    migrate(src, ws, cache=cache)
+    return src, cache, files, ws
+
+
+def test_corpus_adopt_push_and_pull(repo, conn, tmp_path):  # noqa: F811
+    """已迁过的工作区根上的 corpus/、corpus-pack/：migrate 补迁进数据目录 → push 进库（文本按 txt 进 R2）
+    → 新机器 pull 还原；库里有的整理本本地删了，push 拒绝。"""
+    from open_guji_cv.datastore.workcopy import (FileDeleteRefused, data_dir, local_changes, migrate,
+                                                 push)
+    src, cache, files, ws = _migrated(repo, conn, tmp_path)
+    text = "欽定四庫全書總目\n卷一\n".encode("utf-8")
+    man = b'{"corpus_version": 1}\n'
+    (ws / "corpus" / "sub").mkdir(parents=True)
+    (ws / "corpus" / "zongmu.txt").write_bytes(text)
+    (ws / "corpus" / "sub" / "0001.jsonl").write_bytes(b'{"a": 1}\n')
+    (ws / "corpus-pack" / "v1").mkdir(parents=True)
+    (ws / "corpus-pack" / "v1" / "manifest.json").write_bytes(man)
+    (ws / "corpus" / "README.md.bak-1").write_bytes(b"x")         # 备份不进库，也不挪
+
+    dry = migrate(src, ws, dry_run=True)
+    assert dry["adopt"] == 3 and (ws / "corpus" / "zongmu.txt").exists()
+    rep = migrate(src, ws)
+    data = data_dir(ws)
+    assert rep["adopt"] == 3
+    assert (data / "corpus/zongmu.txt").read_bytes() == text
+    assert (data / "config/corpus-pack/v1/manifest.json").read_bytes() == man
+    assert not (ws / "corpus-pack").exists() and not (ws / "corpus" / "zongmu.txt").exists()
+    assert (ws / "corpus" / "README.md.bak-1").exists()
+    assert local_changes(ws) == ["config/corpus-pack/v1/manifest.json", "corpus/sub/0001.jsonl",
+                                 "corpus/zongmu.txt"]
+
+    calls = []
+    push(conn, ws, actor="t", uploader=lambda imgs, ext="png": calls.append((ext, dict(imgs))) or {})
+    sha = hashlib.sha256(text).hexdigest()
+    assert [(e, sorted(g)) for e, g in calls] == [
+        ("txt", sorted([sha, hashlib.sha256(b'{"a": 1}\n').hexdigest()]))]
+    rows = {r["src_path"]: r["sha256"] for r in src.rows("corpus_files", "tws")}
+    assert rows["corpus/zongmu.txt"] == sha and len(rows) == 2
+    assert "config/corpus-pack/v1/manifest.json" in {r["src_path"] for r in src.rows("files", "tws")}
+    assert local_changes(ws) == []
+
+    for b in (text, b'{"a": 1}\n'):
+        cache.put(hashlib.sha256(b).hexdigest(), b)
+    fresh = _fresh(files, tmp_path / "m2", src, cache)
+    assert (data_dir(fresh) / "corpus/zongmu.txt").read_bytes() == text
+    assert (data_dir(fresh) / "config/corpus-pack/v1/manifest.json").read_bytes() == man
+    assert local_changes(fresh) == []
+
+    (data / "corpus/zongmu.txt").unlink()
+    with pytest.raises(FileDeleteRefused, match="zongmu.txt"):
+        push(conn, ws, actor="t")
+
+
+def test_corpus_adopt_refuses_clash(repo, conn, tmp_path):  # noqa: F811
+    from open_guji_cv.datastore.workcopy import data_dir, migrate
+    src, _, _, ws = _migrated(repo, conn, tmp_path)
+    (ws / "corpus").mkdir()
+    (ws / "corpus" / "a.txt").write_bytes(b"old")
+    (data_dir(ws) / "corpus").mkdir()
+    (data_dir(ws) / "corpus" / "a.txt").write_bytes(b"new")
+    with pytest.raises(SystemExit, match="内容不同"):
+        migrate(src, ws)
+    assert (ws / "corpus" / "a.txt").read_bytes() == b"old"
+
+
+def test_corpus_paths_follow_data_dir(tmp_path, monkeypatch):
+    """corpus_path／清单目录：迁过的工作区在数据目录；还没补迁时退回工作区根；没迁的照旧。"""
+    from open_guji_cv.core.corpus_pin import _base, pack_root
+    from open_guji_cv.core.workspace import central_data_dir, corpus_dir, corpus_path
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    assert corpus_dir(plain) == plain / "corpus" and pack_root(plain) == plain / "corpus-pack"
+
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    (ws / ".central.json").write_text('{"ws": "tws", "branch": "main"}')
+    data = central_data_dir("tws")
+    (ws / "corpus").mkdir()
+    (ws / "corpus-pack").mkdir()
+    assert corpus_dir(ws) == ws / "corpus" and pack_root(ws) == ws / "corpus-pack"   # 还没补迁
+    (data / "corpus").mkdir(parents=True)
+    (data / "config" / "corpus-pack").mkdir(parents=True)
+    assert corpus_dir(ws) == data / "corpus"
+    assert pack_root(ws) == data / "config" / "corpus-pack"
+    assert _base("ws", "corpus/**/*.txt", ws) == data
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    assert corpus_path("x.txt") == data / "corpus" / "x.txt"
+
+
+def test_blob_rows_tolerates_old_worker():
+    """Worker 还没开放 corpus_files（旧版回 404 no_table）时当空表，pull 照常。"""
+    from open_guji_cv.datastore.client import CentralError
+    from open_guji_cv.datastore.materialize import blob_rows
+
+    class Old:
+        def rows(self, tbl, ws):
+            if tbl == "corpus_files":
+                raise CentralError(404, "no_table", "不开放的表：corpus_files")
+            yield {"src_path": "x", "sha256": "y"}
+
+    assert blob_rows(Old(), "corpus_files", "tws") == []
+    assert blob_rows(Old(), "anchor_patches_meta", "tws") == [{"src_path": "x", "sha256": "y"}]

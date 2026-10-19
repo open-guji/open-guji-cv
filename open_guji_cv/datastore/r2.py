@@ -24,6 +24,9 @@ from dataclasses import dataclass, field
 from . import gitsource
 from .scope import GS, classify, r2_key, sha256
 
+#: R2 键后缀 → PUT 的 content-type（须与 Worker `assets.ts` 的 EXT_TYPES 一致）
+CONTENT_TYPES = {"png": "image/png", "txt": "text/plain; charset=utf-8"}
+
 
 @dataclass
 class Obj:
@@ -117,7 +120,7 @@ PUT_BATCH = 40   # 每张都要在 Worker 里查一次桶（R2 调用），一�
 
 
 def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: int = 8,
-                      limit: int | None = None, read=None) -> dict:
+                      limit: int | None = None, read=None, ext: str = "png") -> dict:
     """经 guji-data Worker 传：POST /v1/assets/sign → 已有就跳过，否则 PUT 到返回的 url。
 
     要 ``GUJI_DATA_TOKEN``（exp 令牌只能传 exp 桶，main 桶要正式令牌）；地址默认
@@ -125,6 +128,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     先用 ``/v1/assets/sign-batch`` 每 ``PUT_BATCH`` 张签一次（已有的跳过），再逐张 PUT；
     旧版 Worker 没有批量接口就退回逐张签。``limit`` 用来分批。
     ``read(obj) -> bytes`` 给了就不从 git 读（``db push`` 传本地文件用）。
+    ``ext`` 是 R2 键后缀（图 png，整理本 txt，见 ``scope.BLOB_TABLES``），Worker 按它定 content-type。
     """
     import ssl
     import time
@@ -161,7 +165,7 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     def put(o: Obj, sig: dict) -> str:
         if sig.get("exists"):
             return "exists"
-        if sig.get("key") != r2_key(o.sha):
+        if sig.get("key") != r2_key(o.sha, ext):
             return "key_mismatch"
         if read is not None:
             data = read(o)
@@ -172,19 +176,19 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
             data = local.reader.read(o.oid)
         if sha256(data) != o.sha:
             return "sha_mismatch"
-        st, _ = call(sig["url"], data, "PUT", {"content-type": "image/png"})
+        st, _ = call(sig["url"], data, "PUT", {"content-type": CONTENT_TYPES[ext]})
         return "uploaded" if st in (200, 201) else f"put_{st}"
 
     def one(o: Obj) -> str:
         st, body = call(f"{base}/v1/assets/sign", json.dumps(
-            {"bucket": bucket, "op": "put", "sha256": o.sha, "ext": "png"}).encode(), "POST",
+            {"bucket": bucket, "op": "put", "sha256": o.sha, "ext": ext}).encode(), "POST",
             {"authorization": f"Bearer {token}", "content-type": "application/json"})
         return put(o, json.loads(body)) if st == 200 else f"sign_{st}"
 
     def batch(chunk: list[Obj]) -> list[str] | None:
         """一次签 ``PUT_BATCH`` 张（/v1/assets/sign-batch，已有的直接判 exists）；旧版 Worker 回 None。"""
         st, body = call(f"{base}/v1/assets/sign-batch", json.dumps(
-            {"bucket": bucket, "op": "put", "ext": "png", "sha256s": [o.sha for o in chunk]}).encode(),
+            {"bucket": bucket, "op": "put", "ext": ext, "sha256s": [o.sha for o in chunk]}).encode(),
             "POST", {"authorization": f"Bearer {token}", "content-type": "application/json"})
         if st == 404:
             return None
@@ -216,12 +220,12 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     return dict(stats)
 
 
-def upload_files(images: dict, bucket: str = "main", workers: int = 8) -> dict:
-    """``{sha: 本地路径}`` 经 Worker 传进 R2（已有跳过）。``db push`` 用。"""
+def upload_files(images: dict, bucket: str = "main", workers: int = 8, ext: str = "png") -> dict:
+    """``{sha: 本地路径}`` 经 Worker 传进 R2（已有跳过）。``db push`` 用；``ext`` 见 ``upload_via_worker``。"""
     from pathlib import Path
     objs = {sha: Obj(sha, Path(p).stat().st_size, str(p)) for sha, p in images.items()}
     return upload_via_worker(None, objs, bucket=bucket, workers=workers,
-                             read=lambda o: Path(o.oid).read_bytes())
+                             read=lambda o: Path(o.oid).read_bytes(), ext=ext)
 
 
 def upload(repo, objs: dict[str, Obj], workers: int = 8) -> dict:

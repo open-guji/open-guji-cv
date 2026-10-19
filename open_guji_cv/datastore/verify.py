@@ -9,10 +9,10 @@ from __future__ import annotations
 from collections import Counter, defaultdict
 
 from . import gitsource
-from .scope import GS, TABLES, classify, sha256, split_lines
+from .scope import BLOB_TABLES, GS, TABLES, classify, sha256, split_lines
 
 LINE_TABLES = {t for t in TABLES if t not in (
-    "workspaces", "books", "files", "source_files", "anchor_patches_meta")}
+    "workspaces", "books", "files", "source_files", *BLOB_TABLES)}
 
 
 def _db_files(cur, ws: str) -> dict[str, dict]:
@@ -60,8 +60,10 @@ def _verify_ws(cur, reader, d, files) -> dict:
     for tbl in ("workspaces", "books", "files"):
         cur.execute(f"SELECT src_path, raw FROM {tbl} WHERE ws = %s", (ws,))
         whole.update(dict(cur.fetchall()))
-    cur.execute("SELECT src_path, sha256 FROM anchor_patches_meta WHERE ws = %s", (ws,))
-    anchor_sha = dict(cur.fetchall())
+    blob_sha: dict[str, str] = {}
+    for t in BLOB_TABLES:
+        cur.execute(f"SELECT src_path, sha256 FROM {t} WHERE ws = %s", (ws,))
+        blob_sha.update(cur.fetchall())
     cur.execute("SELECT instance_id, patch_sha FROM glyph_instances WHERE ws = %s", (ws,))
     patch_sha = dict(cur.fetchall())
 
@@ -75,11 +77,11 @@ def _verify_ws(cur, reader, d, files) -> dict:
             continue
         data = reader.read(oid)
         bsha = sha256(data)
-        if tbl == "anchor_patches_meta":
-            counts["anchor_patches"] += 1
+        if tbl in BLOB_TABLES:
+            counts["anchor_patches" if tbl == "anchor_patches_meta" else tbl] += 1
             seen_paths.add(rel)
-            if anchor_sha.get(rel) != bsha:
-                mism.append(f"{rel}: 锚图 sha 不符")
+            if blob_sha.get(rel) != bsha:
+                mism.append(f"{rel}: {tbl} 记的 sha 不符")
             continue
         seen_paths.add(rel)
         counts["files"] += 1

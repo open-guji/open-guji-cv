@@ -181,6 +181,25 @@ glyph.db（逐字节不变）和产物，数据目录与提交逐字节相同，
 书 yaml 两边都改则 `SyncConflict` 且本地不动。
 守卫 `tests/test_central_paths.py`：包内不许从工作区根直接拼这些目录。
 
+### 整理本与语料库清单（2026-10-19 起，共享方案 S1）
+
+- **收录**：`corpus/**`（整理本）进新表 `corpus_files`，做法同锚图：库里只记 `src_path`、`sha256`、`bytes`，
+  文件本身进 R2（`sha256/<2>/<sha>.txt`，Worker 的 `/v1/assets/sign*` 带 `"ext": "txt"`）。
+  语料库清单从 `<工作区>/corpus-pack/vN/` 挪到数据目录 `config/corpus-pack/vN/`，随 `config/` 进 `files` 表。
+  工作区根的旧 `corpus-pack/` 不再收录。
+- **补迁**：已经迁过的工作区，`guji db migrate -w <工作区>` 再跑一次，把工作区根留下的 `corpus/`、`corpus-pack/`
+  挪进数据目录，成为待推改动（同 sha 的直接删工作区里的那份；数据目录里有同名不同内容的就停下）。然后 `guji db push`。
+  第一次推会在库里建 `corpus_files` 表（`import_scans` 里 `apply_schema`）。
+- **路径**：`core/workspace.corpus_dir()` 迁过的工作区指数据目录 `corpus/`；数据目录里还没有、工作区根还有旧的时退回工作区根。
+  `corpus_pin.pack_root()` 同理。钉了版本的册指纹是 `corpus-vN`，没钉的册指纹按文件名＋内容算，都与文件放哪无关：
+  殿本 10 册×17 步搬家前后 `self_hash` 逐位相同，`guji corpus verify` v1 无 changed／missing。
+- **新旧版本混用**：旧版 cv 不认 `corpus_files`，pull 不还原整理本，读的仍是工作区根的 `corpus/`；新版 cv 碰到没部署新表的
+  旧 Worker（`no_table`）当作空表。所以 **guji-workspace 删掉 `corpus/`、`corpus-pack/` 要等带 S1 的版本（v0.4.5）发了、
+  各机升级之后**，否则旧版会静默退回本仓的样本语料。
+
+验收（`tests/datastore/test_datastore_workcopy.py`）：补迁后推、另一台 pull 逐字节相同；同名不同内容拒绝补迁；
+路径函数跟着数据目录走；旧 Worker 没有 `corpus_files` 时 pull 照常。
+
 **在线实测（2026-10-19，云会话，main rev 1356）**：qtw-draft 从空目录还原 33 个文件、6,506 张刻例图
 （6,538 次 Worker 请求，约 7 分钟，重建 glyph.db 6,506 个实例）；随即试推（自动经 443 桥连 Neon main）全部表 0 变更。
 
