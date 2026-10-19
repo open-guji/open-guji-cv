@@ -229,7 +229,7 @@ vol01 全书解出率 75.7% 看着低，是 p90–p132 那 41 页职名/目录�
 ### 反馈通道：这是它的第一次真实使用
 
 查 `feedback/events/` 时发现目录根本不存在——通道搭好后一条事件也没进过。
-`doc/design/segmentation_border_feedback.md` 记的是 **v1 phase3 格线整体
+`doc/archive/design/segmentation_border_feedback.md` 记的是 **v1 phase3 格线整体
 上飘 35~55px**，与 v2 的下界偏上不是同一件事，而且只是散文，没走 Event 通道。
 
 现存批次：

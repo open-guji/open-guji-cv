@@ -1,6 +1,6 @@
 # M7 分块 D＋E：上下文路（日曰／己已巳／入人八）
 
-> 2026-10-17，Emerson（上下文线程）。总设计 [M7-形近字优化算法-总设计.md](M7-形近字优化算法-总设计.md) §四、§6.3、§6.4；交接 [M7-上下文线程交接.md](M7-上下文线程交接.md)。
+> 2026-10-17，Emerson（上下文线程）。总设计 [M7-形近字优化算法-总设计.md](M7-形近字优化算法-总设计.md) §四、§6.3、§6.4；交接 [M7-上下文线程交接.md](../archive/design/M7-上下文线程交接.md)。
 > **状态：L1、L2 的代码、规则、提示词和强真值上的首轮评测已完成；验收（§七 第 2、3 条）还差新抽随机样本的人裁。**
 > 不改任何 Step／`code_deps`／产物指纹（19 步 `code_hash` 与 main 相同，`git diff main -- open_guji_cv/steps` 为空）；所有新行为缺省关，只在 `open_guji_cv/groups/ctx_*.py`、`config/groups/{jys,ry,rr}/`、`research/m7/ctx/` 里。
 

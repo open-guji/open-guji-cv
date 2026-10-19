@@ -1539,7 +1539,7 @@ y 向下），沿用 Step 2 的约定——列图矫正之后已经不是页面�
 奇数字段尾 `tail_a` 仍是只有 a 半的 `jiazhu_a`，那是段的一部分；雙行段下一格
 的右半小字一律是段尾——用户定：不会有两段"独立"的注紧挨着，7a+6b 必然一体）。
 标定与三条负结果见 `jiazhu_split.py` 的 `SOLO_*` 常量注释与
-`doc/design/jiazhu_defects_for_segmentation.md` 型 3。
+`doc/archive/design/jiazhu_defects_for_segmentation.md` 型 3。
 
 ⚠️ 量跨度**不能取绝对最外侧墨点**：一个孤立像素就能毁掉判据
 （bxgb p8c2s5「袤」在 x=0 有 1px 纸缘残渣，跨度从 ~0.5 被撑到 1.009）。
