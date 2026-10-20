@@ -178,7 +178,7 @@
 - `find_border_lines.py`：投影峰匹配找版框线：批量跑竖直界行/边框 + 上下边框，画到图上，出报告页。
 - `freeze_bottom_offset_gold.py`：把 `border-detection/bottom-offset` 的 68 条人工金标转成**绝对页面坐标**并冻结。
 - `harvest_shadow_review.py`：把「影子≠现字」审查页（Artifact）上的人裁收回来，写成人裁事件。幂等。
-- `ia_download_zongmu.py`：下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。
+- `ia_download_zongmu.py`：下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。全书 99 册两段编号，`--vols 11-20` 按册号选，缺省取 `_tif.zip`（与现有原图逐像素一致）。
 - `ingest_cutline_flip_verdicts.py`：切分裁决台（A/B 盲裁）的裁决 → `char-segmentation/touching-cuts` 金标。
 - `kage_render_glyphwiki.py`：把 GlyphWiki 的 KAGE 字形离线渲染成位图——给「Unicode 未收字」造模板的原型。
 - `kangxi_crossval.py`：康熙字典字頭切圖的交叉驗證：把「可能標錯的字」全部挑出來人審。
