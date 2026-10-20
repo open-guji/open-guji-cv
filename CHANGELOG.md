@@ -17,6 +17,7 @@
 - `guji products exclusions <册> --a <重切前> [--b <重切后>] [--apply]`（`ops/exclusion_rebind.py`，用户 10-20 同意方向）：排除清单按格号记、不带框，重切后可能落到别的格。按重切前的框到重切后找 IoU ≥ 0.85 的格：没动不改、顺移改号（`rekey_from`）、找不到或改号撞上撤到 `crop_exclusions_retired.jsonl`。缺省只报计划。不碰任何 Step，`code_hash` 不变。
 
 ### Fixed
+- `guji db pull`／`sync` 遇到库里引用、R2 上却没有（404）的图不再停下：跳过、stderr 打一行并在 `materialize` 结果的 `missing_images`（相对路径→sha）里列出，其余照常还原。要像以前一样遇到就停：`GUJI_DATA_MISSING_BLOBS=error`。不碰任何 Step，`code_hash` 不变。
 - `guji products diff --images` 看图页：`bbox_page` 是右上原点，原来直接当左上原点裁、画框，除正中那列外都画到镜像位置的另一列（vol04 R1 验收时发现）。现在先 `bbox_tr_to_tl` 再裁。报告数字不受影响。不碰任何 Step，`code_hash` 不变。
 - `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
 

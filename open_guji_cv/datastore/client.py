@@ -180,12 +180,15 @@ class WorkerSource:
         return len(page["rows"])
 
     def fetch_blobs(self, shas: Iterable[str], bucket: str = "main",
-                    workers: int | None = None, ext: str = "png") -> Iterator[tuple[str, bytes]]:
+                    workers: int | None = None, ext: str = "png",
+                    skip_missing: bool = False) -> Iterator[tuple[str, bytes | None]]:
         """每 1000 张批量签一次，再并发直取 R2。
 
         每个线程留着自己的 HTTPS 长连接（keep-alive），不再一张图一次握手；并发缺省 32
         （``GUJI_DATA_FETCH_WORKERS`` 可改）。正式桶的签名直链是公开域名 blob.open-guji.com（10-19 起），下载不算 Worker 请求；实验桶仍指向 Worker 的 /v1/blob，每张图算一次。
-        10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。"""
+        10-19 实测（云端，2KB 小图）：旧法 8 线程无长连接约 30 张/秒，长连接 32 线程约 150 张/秒。
+
+        ``skip_missing``：R2 里确实没有（404）的图不报错，回 ``(sha, None)`` 由调用方记下。"""
         shas = sorted(set(shas))
         workers = workers or int(os.environ.get("GUJI_DATA_FETCH_WORKERS") or 32)
         getter = _KeepAliveGetter(self._ctx)
@@ -196,9 +199,18 @@ class WorkerSource:
             try:
                 return sha, getter.get(urls[sha])
             except CentralError as e:
-                if fallback is None or e.status not in (403, 404):
+                if e.status not in (403, 404):
                     raise
-                return sha, getter.get(self._sign_get(fallback, [sha], ext)[sha])
+                if fallback is None:
+                    if skip_missing and e.status == 404:
+                        return sha, None
+                    raise
+                try:
+                    return sha, getter.get(self._sign_get(fallback, [sha], ext)[sha])
+                except CentralError as e2:
+                    if skip_missing and e2.status == 404:
+                        return sha, None
+                    raise
 
         with ThreadPoolExecutor(workers) as ex:
             for i in range(0, len(shas), SIGN_BATCH):
@@ -381,7 +393,8 @@ class PgSource:
                     (ws, int(rev), limit))
         return int(cur.fetchone()[0])
 
-    def fetch_blobs(self, shas, bucket: str = "main", workers: int = 8, ext: str = "png"):
+    def fetch_blobs(self, shas, bucket: str = "main", workers: int = 8, ext: str = "png",
+                    skip_missing: bool = False):
         raise CentralError(0, "no_blobs", "直连 Postgres 拿不到图：图在 R2，请经 Worker（GUJI_DATA_TOKEN）或预先填好本地缓存")
 
 
@@ -411,14 +424,26 @@ class BlobCache:
         return p
 
     def ensure(self, src, shas: Iterable[str], bucket: str = "main", ext: str = "png") -> dict:
-        """把缺的图（``ext`` 是 R2 键后缀：图 png，整理本 txt）拉进缓存。返回 {have, fetched}。
+        """把缺的图（``ext`` 是 R2 键后缀：图 png，整理本 txt）拉进缓存。返回 {have, fetched, missing}。
+
+        R2 里没有的图（库引用了、桶里 404）缺省跳过并报告：``missing`` 是它们的 sha 列表，并在 stderr 打一行。
+        ``GUJI_DATA_MISSING_BLOBS=error`` 恢复成遇到就停。
         缓存只按 sha 存，文件名一律 ``.png``（内容相同 sha 就相同，与后缀无关）。"""
         want = sorted(set(shas))
         missing = [s for s in want if not self.has(s)]
         t0 = time.time()
-        for n, (sha, data) in enumerate(src.fetch_blobs(missing, bucket=bucket, ext=ext) if missing else (), 1):
+        strict = os.environ.get("GUJI_DATA_MISSING_BLOBS", "").lower() == "error"
+        absent: list[str] = []
+        for n, (sha, data) in enumerate(
+                src.fetch_blobs(missing, bucket=bucket, ext=ext, skip_missing=not strict) if missing else (), 1):
+            if data is None:
+                absent.append(sha)
+                continue
             self.put(sha, data)
             if n % 2000 == 0 or (n == len(missing) and n >= 2000):   # 大批量时报进度，免得像卡住
                 print(f"  取图 {n}/{len(missing)}（{n / max(time.time() - t0, 1e-6):.0f} 张/秒）",
                       file=sys.stderr, flush=True)
-        return {"have": len(want) - len(missing), "fetched": len(missing)}
+        if absent:
+            print(f"  ！R2 上找不到 {len(absent)} 张图（已跳过，本地缺这些文件）：{', '.join(absent[:5])}…",
+                  file=sys.stderr, flush=True)
+        return {"have": len(want) - len(missing), "fetched": len(missing) - len(absent), "missing": absent}

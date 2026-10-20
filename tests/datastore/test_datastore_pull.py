@@ -148,7 +148,10 @@ def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool):
             q = dict(urllib.parse.parse_qsl(u.query))
             calls.append(("GET", u.path))
             if u.path.startswith("/blob/"):
-                return self._send(200, raw=blobs[u.path.rsplit("/", 1)[1]])
+                key = u.path.rsplit("/", 1)[1]
+                if key not in blobs:
+                    return self._send(404, {"error": "not_found", "message": "no such blob"})
+                return self._send(200, raw=blobs[key])
             assert self.headers["authorization"] == "Bearer tok"
             if u.path == "/v1/status":
                 return self._send(200, {"rev": 7})
@@ -175,6 +178,26 @@ def _fake_worker(rows: list[dict], blobs: dict[str, bytes], batch: bool):
     return srv, calls
 
 
+def test_ensure_skips_blobs_missing_from_r2(monkeypatch, tmp_path):
+    from open_guji_cv.datastore.client import BlobCache, CentralError, WorkerSource
+
+    good = b"a"
+    gsha = hashlib.sha256(good).hexdigest()
+    gone = hashlib.sha256(b"gone").hexdigest()
+    srv, _ = _fake_worker([], {gsha: good}, True)
+    try:
+        src = WorkerSource(url=f"http://127.0.0.1:{srv.server_port}", token="tok", branch="ci")
+        cache = BlobCache(tmp_path / "c")
+        out = cache.ensure(src, [gsha, gone])
+        assert out == {"have": 0, "fetched": 1, "missing": [gone]}
+        assert cache.has(gsha) and not cache.has(gone)
+        monkeypatch.setenv("GUJI_DATA_MISSING_BLOBS", "error")
+        with pytest.raises(CentralError):
+            BlobCache(tmp_path / "c2").ensure(src, [gone])
+    finally:
+        srv.shutdown()
+
+
 @pytest.mark.parametrize("batch", [True, False])
 def test_worker_source_paging_and_blobs(monkeypatch, tmp_path, batch):
     from open_guji_cv.datastore import client
@@ -189,8 +212,8 @@ def test_worker_source_paging_and_blobs(monkeypatch, tmp_path, batch):
         assert src.status() == 7
         assert [r["i"] for r in src.rows("source_files", "tws")] == list(range(5))
         cache = BlobCache(tmp_path / "c")
-        assert cache.ensure(src, list(blobs) * 2) == {"have": 0, "fetched": 3}
-        assert cache.ensure(src, list(blobs)) == {"have": 3, "fetched": 0}   # 再拉不发请求
+        assert cache.ensure(src, list(blobs) * 2) == {"have": 0, "fetched": 3, "missing": []}
+        assert cache.ensure(src, list(blobs)) == {"have": 3, "fetched": 0, "missing": []}   # 再拉不发请求
         assert all(cache.path(s).read_bytes() == b for s, b in blobs.items())
     finally:
         srv.shutdown()
