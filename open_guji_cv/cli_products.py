@@ -5,6 +5,7 @@
     guji products pack  fetch <册> [--label 名] [--to 产物根] -w <工作区>    # 取回，缺省落在本机产物根
     guji products pack  list [<册>] -w <工作区>                            # ★ = 该册 main
     guji products pack  promote <册> --label 名 -w <工作区>                # 把已存的包标成该册 main
+    guji products exclusions <册> --a <重切前产物根> [--b <重切后>] [--apply] -w <工作区>  # 排除清单按框跟着重切走
     guji products pack  push-index | fetch-index                           # 生僻字 embedding 索引（models/*/emb_*.npz）
 
 产物根就是含 `<册>/<步>/p0001.json` 的那一层（`products/`、`guji snapshot make` 出的目录、实验变体目录）。
@@ -173,21 +174,47 @@ def _note_main(book: str, label: str, note: str) -> None:
         print(f"实验记录已记「标为 main」：{p}")
 
 
+def cmd_exclusions(args) -> None:
+    """排除清单按框跟着重切走（`ops/exclusion_rebind.py`）。缺省只报计划，`--apply` 才改本机名单。"""
+    from .core.book import load_book
+    from .core.workspace import exclusions_path
+    from .ops import exclusion_rebind as XR
+    book = load_book(args.book)
+    a, b = _root(args.a), _root(args.b)
+    ex = exclusions_path()
+    rows = XR.plan(book.id, a, b, ex)
+    c = XR.counts(rows)
+    print(f"{book.id} 排除清单 {len(rows)} 条：" + "、".join(
+        f"{k} {c.get(k, 0)}" for k in ("same", "moved", "gone", "dup", "no_old")) + f"（名单 {ex}）")
+    for p in rows:
+        if p["status"] in ("moved", "gone", "dup"):
+            print(f"  {p['status']:5s} {p['iid']}" + (f" → {p['new']}" if p["new"] and p["status"] != "gone" else "")
+                  + f"  IoU {p['iou']}")
+    if args.apply:
+        XR.apply(rows, ex)
+        print("已改本机名单；改完 guji db sync 推回中心库（名单一变各册 seed_admit 都会过期）")
+    elif c.get("moved") or c.get("gone") or c.get("dup"):
+        print("（只是计划；加 --apply 才改）")
+
+
 def cmd_products(args) -> None:
     _ws(args)
     if args.action == "diff":
         cmd_diff(args)
+    elif args.action == "exclusions":
+        cmd_exclusions(args)
     else:
         cmd_pack(args)
 
 
 def add_parser(sub) -> None:
     p = sub.add_parser("products", help="[v2] 产物前后对比（diff）、产物包存取 R2（pack）")
-    p.add_argument("action", choices=["diff", "pack"])
+    p.add_argument("action", choices=["diff", "pack", "exclusions"])
     p.add_argument("pos", nargs="*", help="diff：<册>；pack：push|fetch|list|promote [<册>]、push-index、fetch-index")
     p.add_argument("-w", "--workspace", default=None, help="工作区（册配置、原图）")
     p.add_argument("--a", default=None, help="diff：前（基线）产物根")
-    p.add_argument("--b", default=None, help="diff：后产物根，缺省本机产物根")
+    p.add_argument("--b", default=None, help="diff／exclusions：后产物根，缺省本机产物根")
+    p.add_argument("--apply", action="store_true", help="exclusions：按计划改本机排除清单（缺省只报）")
     p.add_argument("--pages", default="all")
     p.add_argument("--out", default=None, help="diff：报告目录，缺省 ./diff-<册>")
     p.add_argument("--images", type=int, default=0, help="diff：前 N 个变了的列出看图页（要原图）")
@@ -206,15 +233,15 @@ def add_parser(sub) -> None:
 
 
 def cmd_products_entry(args) -> None:
-    """位置参数整理：diff <册>；pack <push|fetch|list> [<册>]。"""
+    """位置参数整理：diff <册>；exclusions <册>；pack <push|fetch|list> [<册>]。"""
     pos = list(args.pos or [])
-    if args.action == "diff":
+    if args.action in ("diff", "exclusions"):
         if len(pos) != 1:
-            print("✗ 用法：guji products diff <册> --a <产物根> [--b …]", file=sys.stderr)
+            print(f"✗ 用法：guji products {args.action} <册> --a <产物根> [--b …]", file=sys.stderr)
             sys.exit(2)
         args.book = pos[0]
         if not args.a:
-            print("✗ diff 要 --a（前一份产物根，如 guji snapshot make 出的目录、产物包取回的目录）", file=sys.stderr)
+            print(f"✗ {args.action} 要 --a（前一份产物根，如 guji snapshot make 出的目录、产物包取回的目录）", file=sys.stderr)
             sys.exit(2)
     else:
         if not pos or pos[0] not in ("push", "fetch", "list", "promote", "push-index", "fetch-index"):

@@ -205,3 +205,34 @@ def test_central_rev(tmp_path, monkeypatch):
     assert W.central_rev() is None
     (tmp_path / ".central-state.json").write_text(json.dumps({"ws": "siku", "branch": "main", "rev": 9916}))
     assert W.central_rev() == "siku@main:9916"
+
+
+def test_exclusion_rebind(tmp_path):
+    """名单按框跟着重切走：框没动不改，顺移改号，切没了撤下，改号撞上已有的撤掉。"""
+    from open_guji_cv.ops import exclusion_rebind as XR
+
+    def cells(root, boxes):
+        d = root / "b" / "cell_shrink"
+        d.mkdir(parents=True, exist_ok=True)
+        chars = [{"id": k, "bbox_page": v, "cell_type": "char"} for k, v in boxes.items()]
+        (d / "p0001.json").write_text(json.dumps({"char_index": {"page": 1, "columns": [{"col": 1, "chars": chars}]}}))
+    old, new = tmp_path / "old", tmp_path / "new"
+    box = lambda y: [0, y, 90, y + 90]                                  # noqa: E731
+    cells(old, {"b:1:1:1": box(0), "b:1:1:2": box(100), "b:1:1:3": box(200), "b:1:1:4": box(300)})
+    # 重切：格 1 没动；格 2 那块现在编 3（前面多切了一格）；格 3 的框切成两半；格 4 的框编成 5、而 5 已在名单里
+    cells(new, {"b:1:1:1": box(0), "b:1:1:2": [0, 90, 90, 100], "b:1:1:3": box(100),
+                "b:1:1:4": [0, 200, 90, 245], "b:1:1:5": box(300), "b:1:1:6": [0, 245, 90, 290]})
+    ex = tmp_path / "crop_exclusions.jsonl"
+    lines = [{"instance_id": i, "reason": "not_a_char", "origin": "human"}
+             for i in ("b:1:1:1", "b:1:1:2", "b:1:1:3", "b:1:1:4", "b:1:1:5", "b:9:1:1", "c:1:1:1")]
+    ex.write_text("".join(json.dumps(r) + "\n" for r in lines))
+    rows = XR.plan("b", old, new, ex)
+    st = {p["iid"]: (p["status"], p["new"]) for p in rows}
+    assert st == {"b:1:1:1": ("same", "b:1:1:1"), "b:1:1:2": ("moved", "b:1:1:3"), "b:1:1:3": ("gone", None),
+                  "b:1:1:4": ("dup", "b:1:1:5"), "b:1:1:5": ("no_old", None), "b:9:1:1": ("no_old", None)}
+    XR.apply(rows, ex, today="2026-10-20")
+    kept = [json.loads(x) for x in ex.read_text().splitlines()]
+    assert [r["instance_id"] for r in kept] == ["b:1:1:1", "b:1:1:3", "b:1:1:5", "b:9:1:1", "c:1:1:1"]
+    assert kept[1]["rekey_from"] == "b:1:1:2"
+    ret = [json.loads(x) for x in (tmp_path / "crop_exclusions_retired.jsonl").read_text().splitlines()]
+    assert {(r["instance_id"], r["retired_by"]) for r in ret} == {("b:1:1:3", "rebind:gone"), ("b:1:1:4", "rebind:dup")}

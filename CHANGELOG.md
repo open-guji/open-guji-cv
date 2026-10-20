@@ -13,6 +13,8 @@
   - `guji pipeline`／`step`／`status`／`close-check` 末尾：本机这册产物在最后一次存／取包之后又跑过（各步 `_manifest.jsonl` 摘要对不上，记在 `<产物根>/<册>/.pack.json`），印一行提醒存包。只提醒不挡。
   - `pack push` 在工作区仓写 `experiments/<册>/<标签>.md`（基线、三样版本、中心库 rev、册 yaml、`--report` 给的 diff 报告）；`promote`／`--main` 往页尾追「标为 main」。`--no-record` 不写。
 
+- `guji products exclusions <册> --a <重切前> [--b <重切后>] [--apply]`（`ops/exclusion_rebind.py`，用户 10-20 同意方向）：排除清单按格号记、不带框，重切后可能落到别的格。按重切前的框到重切后找 IoU ≥ 0.85 的格：没动不改、顺移改号（`rekey_from`）、找不到或改号撞上撤到 `crop_exclusions_retired.jsonl`。缺省只报计划。不碰任何 Step，`code_hash` 不变。
+
 ### Fixed
 - `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
 
