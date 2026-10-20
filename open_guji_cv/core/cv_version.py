@@ -101,3 +101,33 @@ def mismatch(book_cv_version: str | None, installed: str | None = None) -> str |
         why = "（open_guji_cv/ 下有没提交的改动）"
     return (f"册配置固定 cv_version={want}，装的是 {have or '未知版本'}{why}。"
             f"请检出 v{want} 再跑；确要用当前代码（如做实验）加 --allow-cv-mismatch")
+
+
+def frozen_mismatch(freeze: dict | None, installed_commit: str | None = None,
+                    installed_version: str | None = None) -> str | None:
+    """冻结册（yaml 有 `freeze:`）护栏（M10·D7，GUJI-694）：装的代码不是冻结时那份 → 一句说明；否则 None。
+
+    冻结代码常在专门的分支上（vol01 是 v0.4.5＋人工指定格补丁，`describe` 得 `0.4.5+N`），
+    所以写了 `freeze.cv_commit` 就按**提交**比，没写才按 `freeze.cv_version` 比版本。
+    顶层 `cv_version` 的护栏（`mismatch`）照旧另查；冻结册顶层常常没写它，以前在 main 上照样能跑。"""
+    fz = freeze or {}
+    if not (fz.get("snapshot") or fz.get("manifest")):
+        return None
+    want_commit = str(fz.get("cv_commit") or "").strip()
+    if installed_commit is None and installed_version is None:
+        installed_version, installed_commit = describe()
+    if want_commit:
+        if installed_commit and installed_commit.startswith(want_commit[:12]) and (
+                len(want_commit) < 40 or installed_commit == want_commit):
+            if installed_version and installed_version.endswith("+dirty"):
+                return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}），装的提交对，但 open_guji_cv/ 下有没提交的改动。"
+                        f"1.0 后修订见 runbook「四·五」；确要用当前代码加 --allow-cv-mismatch")
+            return None
+        return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}，cv_commit={want_commit[:12]}），"
+                f"装的是 {(installed_commit or '未知提交')[:12]}。请在冻结 tag 的检出上跑（如 `git worktree add … freeze/<…>`）；"
+                f"1.0 后修订见 runbook「四·五」；确要用当前代码（如做实验）加 --allow-cv-mismatch")
+    want = normalize(fz.get("cv_version"))
+    if want and normalize(installed_version) != want:
+        return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}，cv_version={want}），装的是 {installed_version or '未知版本'}。"
+                f"请检出 v{want} 再跑；确要用当前代码加 --allow-cv-mismatch")
+    return None

@@ -133,8 +133,9 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
 def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
     """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
     只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
-    from .core.cv_version import mismatch
-    msg = mismatch(getattr(book, "cv_version", None))
+    from .core.cv_version import frozen_mismatch, mismatch
+    # 冻结册另按冻结时的提交比（M10·D7，GUJI-694）：冻结册顶层常没写 cv_version，以前在 main 上照样能跑
+    msg = mismatch(getattr(book, "cv_version", None)) or frozen_mismatch(getattr(book, "freeze", None))
     if not msg:
         return
     if allow or warn_only:
