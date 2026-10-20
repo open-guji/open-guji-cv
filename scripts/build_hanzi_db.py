@@ -126,6 +126,25 @@ def upload(src: Path) -> dict:
     return upload_files({k: str(v) for k, v in files.items()}, bucket="main", ext="txt")
 
 
+def upload_emb() -> dict:
+    """`config/hanzi/emb/` 里各版向量包的文件（本机 blob 缓存里有的）→ R2 正式桶（按 sha，已有跳过）。
+
+    向量文件是二进制（`.npy`），Worker 目前只签 png／txt 两种后缀，按用户 10-19 定先一律走 txt 后缀；
+    内容按 sha 核，后缀只决定 content-type，下载方（`hanzi.pack.get_blob`）按字节读、核 sha。"""
+    from open_guji_cv.clustering.emb_pack import manifests
+    from open_guji_cv.datastore.r2 import upload_files
+    from open_guji_cv.hanzi.pack import blob_cache_path
+    files = {}
+    for m in manifests():
+        for name, f in m["files"].items():
+            p = blob_cache_path(f["sha256"])
+            if p.exists():
+                files[f["sha256"]] = str(p)
+            else:
+                print(f"  {m['version']}/{name} 本机没有，跳过")
+    return upload_files(files, bucket="main", ext="txt")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", type=Path, default=None, help="原始资料目录（缺省 <库根>/src）")
@@ -133,6 +152,7 @@ def main() -> None:
     ap.add_argument("--zi-dir", type=Path, default=None, help="字统网缓存目录，汇总进原始资料（可选）")
     ap.add_argument("--no-build", action="store_true", help="不构建，用 config/hanzi 里的当前清单")
     ap.add_argument("--upload", action="store_true", help="把当前版的文件与原始资料传进 R2 正式桶")
+    ap.add_argument("--upload-emb", action="store_true", help="把 config/hanzi/emb/ 各版向量包的文件传进 R2")
     ap.add_argument("--check", action="store_true", help="跑 A1 重放、A2 覆盖、A4 速度")
     ap.add_argument("--report", type=Path, default=None, help="检查结果写到这个 json")
     args = ap.parse_args()
@@ -155,6 +175,8 @@ def main() -> None:
             print(f"  缺原始资料：{m['stats']['missing']}")
     if args.upload:
         print("上传 R2：", upload(src))
+    if args.upload_emb:
+        print("上传向量包：", upload_emb())
     if not args.check:
         return
     m = read_manifest()

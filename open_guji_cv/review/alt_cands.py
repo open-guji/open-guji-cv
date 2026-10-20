@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable
+from pathlib import Path
 
 import numpy as np
 
@@ -55,14 +56,25 @@ class TemplateBank:
     """字 → 字体模板 embedding（单位向量），按字记忆化。
 
     与 5-b 的 `_emb_index` 同一个函数（`cnn_candidates.build_emb_matrix`）算，所以同一个字两边的
-    向量逐位相同；但只算池子里出现的字（一册几千字），不建 7 万字大索引。"""
+    向量逐位相同；但只算池子里出现的字（一册几千字），不建 7 万字大索引。
+    本机已有与现役模型同规格的全字表向量包（`clustering.emb_pack`，`guji cache pull-rare-index` 拉）
+    就直接取行，不现场渲染；包是同一个函数建的，逐位相同。"""
 
-    def __init__(self, cnn=None):
+    def __init__(self, cnn=None, use_pack: bool = True):
         if cnn is None:
             from ..clustering.cnn_candidates import shared
             cnn = shared()
         self.cnn = cnn
         self._vec: dict[str, np.ndarray | None] = {}
+        self._pack = None
+        if use_pack:
+            try:
+                from ..clustering.cnn_candidates import DEFAULT_CKPT
+                from ..clustering.emb_pack import load_current
+                if Path(cnn.ckpt).resolve() == Path(DEFAULT_CKPT).resolve():
+                    self._pack = load_current(download=False)
+            except (OSError, ValueError, KeyError, ImportError, AttributeError):
+                self._pack = None
 
     @property
     def available(self) -> bool:
@@ -70,6 +82,11 @@ class TemplateBank:
 
     def vectors(self, chars: list[str]) -> dict[str, np.ndarray]:
         todo = [c for c in chars if c not in self._vec]
+        if todo and self._pack is not None:
+            got = self._pack.vectors(todo)
+            self._vec.update(got)
+            todo = [c for c in todo if c not in got and c not in self._pack.failed]
+            self._vec.update({c: None for c in chars if c in self._pack.failed})
         if todo:
             from ..clustering.cnn_candidates import build_emb_matrix
             from ..clustering.synth import render_char
