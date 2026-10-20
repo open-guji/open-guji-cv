@@ -167,6 +167,14 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"),
                          # 第二批（2026-10-20 sheldon 异体对第二批审定）：按册留一 0 错
                          ("qik", "啓啟"), ("lih", "厯歴"), ("jue", "絕絶"))},
+    # —— 差别不在缝两侧的两形混用异体对（2026-10-20，道 1 续）：字频弃权后走在线 IDS 的「整字岭回归」判法（`ids_whole`，
+    #    `ids_online.SPECS[组].whole`）；判不出送人审，不退到库形最近。模板库在 config/groups/<组>/ids_bank.json。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("freq", "ids"), combine="first"),
+        note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
+       for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
 }
 
 
