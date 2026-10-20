@@ -790,7 +790,7 @@ def _longest_first(pages: list[int], manifest) -> list[int]:
 
 
 def _pin_threads(n: int) -> None:
-    """worker 里给 torch／OpenCV／BLAS 定线程数（见 `core/parallel.worker_threads`）。
+    """worker 里给 torch／BLAS 定线程数（见 `core/parallel.worker_threads`）。
     已经 import 了的库调运行期接口；还没 import 的设环境变量，等它第一次建线程池时读。"""
     import os
     import sys
@@ -805,11 +805,9 @@ def _pin_threads(n: int) -> None:
             pass
     for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
         os.environ[var] = str(n)
-    try:
-        import cv2
-        cv2.setNumThreads(n)
-    except Exception:  # noqa: BLE001
-        pass
+    # OpenCV 的线程数**不能**在这里改：主进程用过 cv2 的线程池后，fork 出的子进程里
+    # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测，四个 worker
+    # 全挂）。不动它，OpenCV 自己的 fork 处理够用（border_detect 并行一直这么跑）。
 
 
 def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,

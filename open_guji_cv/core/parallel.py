@@ -102,6 +102,6 @@ def effective_jobs(step, jobs: int) -> tuple[int, str | None]:
 
 
 def worker_threads(jobs: int) -> int:
-    """每个 worker 给 torch／OpenCV／BLAS 几个线程：核数平分，至少 1。
+    """每个 worker 给 torch／BLAS 几个线程：核数平分，至少 1。
     不压的话 4 个 worker 各开 4 个线程，16 个线程抢 4 个核，比串行还慢。"""
     return max(1, (os.cpu_count() or 1) // max(1, jobs))
