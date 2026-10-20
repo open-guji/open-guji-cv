@@ -402,9 +402,16 @@ def verify_pair_elastic(a: np.ndarray, b: np.ndarray,
                         tau: float = ELASTIC_TAU,
                         block: int = ELASTIC_BLOCK,
                         local: int = ELASTIC_LOCAL,
-                        early_exit_raw: float | None = ELASTIC_EARLY_EXIT_RAW) -> PairVerdict:
+                        early_exit_raw: float | None = ELASTIC_EARLY_EXIT_RAW,
+                        wmax_floor: float | None = None) -> PairVerdict:
     """elastic 判据：软覆盖 + 分块弹性对齐。字段语义与 verify_pair_cov 一致
     （f1 放覆盖率、diff_blob_ratio 放窗口残差），数值已校准回 coverage 刻度。
+
+    ``wmax_floor``（2026-10-20，提速）：cov 不到 ``cov_high`` 且 ≤ 它时不算 wmax，
+    ``diff_blob_ratio`` 返回 nan。wmax 只在两处有用：cov 够 same 时判 same／unsure，
+    以及调用方拿它当「本格最优那一对」的 wmax。库匹配逐个候选复核时把「目前最高 cov」
+    传进来，73% 的对就不用算（第四册 10 页 16880 对实测），判决与产物逐字节不变。
+    缺省 None = 照旧每对都算。
     """
     if a.shape != b.shape:
         raise ValueError("a/b 尺寸不一致")
@@ -422,13 +429,17 @@ def verify_pair_elastic(a: np.ndarray, b: np.ndarray,
     b_aligned = _shifted_view(padded, dx, dy, size, max_shift)
     rigid_f1 = _f1(a, b_aligned, na, int(np.count_nonzero(b_aligned)))
 
+    cov = _calibrate(raw, _CAL_RAW, _CAL_COV)
+    if wmax_floor is not None and cov < cov_high and cov <= wmax_floor:
+        return PairVerdict("unsure" if cov >= cov_low else "diff", float(cov), float(rigid_f1),
+                           (dx, dy), scale, float("nan"))
+
     miss_a, miss_b = _elastic_miss(a, b_aligned, tau, block, local)
     k = (MISS_WIN, MISS_WIN)
     w_raw = max(
         float(cv2.boxFilter(miss_a, -1, k, normalize=False).max()),
         float(cv2.boxFilter(miss_b, -1, k, normalize=False).max()))
 
-    cov = _calibrate(raw, _CAL_RAW, _CAL_COV)
     wmax = _calibrate(w_raw, _CAL_WRAW, _CAL_WMAX)
 
     if cov >= cov_high and wmax <= miss_wmax:

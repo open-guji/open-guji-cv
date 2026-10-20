@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import multiprocessing
 import re
 import subprocess
 import time
@@ -21,6 +22,7 @@ from pydantic import BaseModel
 
 from .book import BookSpec
 from .pipeline import Pipeline, _produces
+from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
@@ -41,6 +43,7 @@ def _module_source_hash(mod_name: str) -> str:
     内容一字未改，Step2 闸以下 11 步 54 页全线过期。2026-10-06 再进一步：改注释、补 docstring
     也会让各书产物整体过期，逼得大家不敢整理代码，所以注释和 docstring 也不进指纹。
     改代码本身（哪怕只改一个常量）照样判过期。见 `code_only_text`。
+    2026-10-20 起例外一条：在 `core/code_equiv.py` 登记过「产物逐字节不变」的改动，返回改前的哈希。
     """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
@@ -48,6 +51,9 @@ def _module_source_hash(mod_name: str) -> str:
     src = inspect.getsourcefile(mod)
     h = hashlib.sha256(code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() \
         if src else "nosrc"
+    # 产物逐字节不变的提速改动登记过等价的，换回旧哈希（core/code_equiv.py）
+    from .code_equiv import canonical
+    h = canonical(mod_name, h)
     _code_hash_cache[mod_name] = h
     return h
 
@@ -127,6 +133,11 @@ def _page_list(pages: list[int], limit: int = 8) -> str:
     """日志里点名的页：`p3,p4,…` 最多 `limit` 个，多了写「等」。"""
     head = ",".join(f"p{p}" for p in pages[:limit])
     return head + (" 等" if len(pages) > limit else "")
+
+
+def code_hash_of_module(mod_name: str) -> str:
+    """单个模块的代码指纹（只认代码、经等价登记换算），给派生缓存的键用。"""
+    return _module_source_hash(mod_name)[:16]
 
 
 def code_hash(step: Step, legacy: bool = False) -> str:
@@ -538,9 +549,9 @@ class Engine:
                        jobs: int = 1) -> tuple[int, bool]:
         """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。
 
-        `jobs > 1` 且 `step.spec.parallel_safe` 时走页级并行（见 `_run_one_step_parallel`）；
-        否则串行——`parallel_safe=False` 是默认值，没标过的 Step 一律串行，标记本身
-        就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
+        `jobs > 1` 且这一步审过可并行（`StepSpec.parallel_safe` 或 `core/parallel.py` 的登记）
+        时走页级并行（见 `_run_one_step_parallel`）；否则串行——没登记过的 Step 一律串行，
+        登记本身就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
         from .corpus_pin import require_pin_clean, step_pin_token
         if step_pin_token(step.spec.id, self.book):     # 册钉了语料库、这步读语料：起跑前硬校验
             from .workspace import workspace_root
@@ -550,7 +561,7 @@ class Engine:
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
                      f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
                      f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
-        if jobs > 1 and step.spec.parallel_safe:
+        if jobs > 1 and is_parallel_safe(step):
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)
         sid = step.spec.id
@@ -634,7 +645,9 @@ class Engine:
         张页是同时提交的，无法半路收回已经在跑的任务。"""
         sid = step.spec.id
         manifest = self.store.manifest(self.book.id, sid)
-        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页（{jobs} 进程并行）")
+        jobs, why = effective_jobs(step, jobs)
+        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页（{jobs} 进程并行"
+                 + (f"；{why}，进程数压到 {jobs}" if why else "") + "）")
 
         todo: list[int] = []
         fps: dict[int, tuple[str, dict, str]] = {}
@@ -668,7 +681,7 @@ class Engine:
         if not todo:
             return done, False
 
-        from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures import ProcessPoolExecutor, as_completed
         any_failed = False
         # `initializer`：重资源 Step（`glyph_match` 的字形库、`row_segment` 的
         # U-Net 权重等）在 worker **进程启动时**建一次 `RunContext`，之后这个
@@ -679,44 +692,77 @@ class Engine:
         # id、在子进程里 `load_book`/`load_pipeline` 再建一个空参数的 ctx，CLI
         # `--params` 与管线 yaml 的 `params:` 全丢，指纹却按覆盖后的参数记（GUJI-580）。
         initargs = (self.book, self.pipeline, sid, dict(self.ctx.params),
-                    self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes)
-        with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
-                                 initargs=initargs) as ex:
-            for pg, products, err, elapsed in ex.map(_parallel_worker, todo, chunksize=1):
-                fp, ups, ph = fps[pg]
-                key = page_key(pg)
-                if err is not None:
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
-                                               elapsed=round(elapsed, 3), status="failed", error=err))
-                    self.log(f"{sid} p{pg}: 失败 {err}")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
-                    any_failed = True
-                    continue
-                try:
-                    for k in products:
-                        if k not in step.spec.produces:
-                            raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
-                        if kind_of(k).storage != "numeric":
-                            raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
-                    _, sha = self.store.write(self.book.id, sid, key, products)
-                    self._stamp_cache(step, key, sha)
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
-                                               params_hash=ph, upstream=ups or {},
-                                               code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                               self_hash=self.self_hash(step),
-                                               soft=soft_values(step, self.ctx.params_for(step)),
-                                               book=book_dep_values(step, self.book)))
-                    self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
-                    report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
-                except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
-                    err2 = f"{type(e).__name__}: {e}"
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
-                                               elapsed=round(elapsed, 3), status="failed", error=err2))
-                    self.log(f"{sid} p{pg}: 失败 {err2}")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))
-                    any_failed = True
+                    self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes,
+                    worker_threads(jobs), multiprocessing.get_start_method() == "fork")
+        # 页的次序：上一轮记过耗时的页按耗时从大到小先发，难页不压在最后一个 worker 上拖尾
+        # （row_segment 超过 20 s 的难页占这一步 42% 的时间）。产物与次序无关：每页独立算、
+        # 主进程按完成先后落盘，manifest 按页键存。
+        todo = _longest_first(todo, manifest)
+
+        def land(pg: int, products, err, elapsed: float) -> bool:
+            """一页结果落盘（主进程串行），返回是否失败。与 `_run_one_step` 落盘逐行同形。"""
+            fp, ups, ph = fps[pg]
+            key = page_key(pg)
+            if err is not None:
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                           upstream=ups or {}, code_rev=self._rev, **self._cv,
+                                           elapsed=round(elapsed, 3), status="failed", error=err))
+                self.log(f"{sid} p{pg}: 失败 {err}")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
+                return True
+            try:
+                for k in products:
+                    if k not in step.spec.produces:
+                        raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
+                    if kind_of(k).storage != "numeric":
+                        raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
+                _, sha = self.store.write(self.book.id, sid, key, products)
+                self._stamp_cache(step, key, sha)
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
+                                           params_hash=ph, upstream=ups or {},
+                                           code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
+                                           self_hash=self.self_hash(step),
+                                           soft=soft_values(step, self.ctx.params_for(step)),
+                                           book=book_dep_values(step, self.book)))
+                self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
+                report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
+                return False
+            except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
+                err2 = f"{type(e).__name__}: {e}"
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                           upstream=ups or {}, code_rev=self._rev, **self._cv,
+                                           elapsed=round(elapsed, 3), status="failed", error=err2))
+                self.log(f"{sid} p{pg}: 失败 {err2}")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))
+                return True
+
+        # 先在主进程跑一页「暖机」（登记了 `warm_first` 的步，如 seed_admit）：第一页会把证人索引、
+        # 人裁匹配器、绑定表这些进程级缓存建好，之后 fork 出的 worker 写时复制直接共享，不再各建
+        # 一份（每份几十秒、上 GB）。`gc.freeze()` 把这些对象挪出 GC 的视野，免得子进程一次全量 GC
+        # 写遍几百万个对象头、把共享页全复制一遍。Windows 是 spawn，共享不到，只是第一页先跑。
+        if warm_first(step) and len(todo) > 1:
+            first, todo = todo[0], todo[1:]
+            t0 = time.time()
+            try:
+                prods, err = step.run_page(self.ctx, first), None
+            except Exception as e:  # noqa: BLE001
+                prods, err = None, f"{type(e).__name__}: {e}"
+            any_failed |= land(first, prods, err, time.time() - t0)
+            from .parallel import warm
+            warm(step, self.ctx)
+            import gc
+            gc.collect()
+            gc.freeze()
+        try:
+            with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
+                                     initargs=initargs) as ex:
+                futs = [ex.submit(_parallel_worker, pg) for pg in todo]
+                for fut in as_completed(futs):
+                    any_failed |= land(*fut.result())
+        finally:
+            if warm_first(step):
+                import gc
+                gc.unfreeze()
         return done, any_failed and stop_on_error
 
     def run(self, steps: list[str] | None = None, pages: list[int] | None = None,
@@ -772,9 +818,51 @@ _worker_ctx: "RunContext | None" = None
 _worker_step: "Step | None" = None
 
 
+def _longest_first(pages: list[int], manifest) -> list[int]:
+    """按上一轮 manifest 记的单页耗时降序；没记过的页排在最前（未知当难页）。"""
+    def cost(pg: int) -> float:
+        ent = manifest.get(page_key(pg))
+        el = getattr(ent, "elapsed", None) if ent is not None else None
+        return float("inf") if el is None else float(el)
+    return sorted(pages, key=cost, reverse=True)
+
+
+def _pin_threads(n: int, forked: bool = False) -> None:
+    """worker 里给 torch／BLAS 定线程数（见 `core/parallel.worker_threads`）。
+    已经 import 了的库调运行期接口；还没 import 的设环境变量，等它第一次建线程池时读。"""
+    import os
+    import sys
+    if "torch" in sys.modules:
+        # torch 是从主进程 fork 带过来的：主进程若已用过它的 OpenMP 线程池，子进程再开
+        # 多线程会**卡死**（libgomp 不认 fork；2026-10-20 实测 1 线程正常、2/4 线程挂住）。
+        # 只能 1 线程——同一卷积 1 线程与 4 线程结果逐位相同，只是慢。
+        n = 1
+        try:
+            sys.modules["torch"].set_num_threads(1)
+        except Exception:  # noqa: BLE001
+            pass
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        os.environ[var] = str(n)          # 给子进程里之后才加载的库
+    from .parallel import set_blas_threads
+    set_blas_threads(n)                   # 已从主进程带来的 numpy：变量不生效，调运行期接口
+    # OpenCV 的线程数**不能**在 fork 出的子进程里改：主进程用过 cv2 的线程池后，子进程里
+    # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测两回：一回是
+    # 这里自己调的，四个 worker 全挂；一回是 seed_admit 在 worker 里第一次 import
+    # `clustering.cnn_candidates`，它模块顶层调 `setNumThreads(1)`，三个 worker 挂住）。
+    # 所以 fork 出的 worker 里把它换成空函数——只管线程数、不影响结果；不管哪个模块什么时候
+    # import 都不会再踩。spawn（Windows）出的子进程是全新的，不受影响，不动。
+    if forked:
+        try:
+            import cv2
+            cv2.setNumThreads = lambda _n: None
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
                           params: "dict[str, BaseModel]", store_root: Path,
-                          cache_root: Path, cache_limit: int) -> None:
+                          cache_root: Path, cache_limit: int, threads: int = 0,
+                          forked: bool = False) -> None:
     """`ProcessPoolExecutor(initializer=...)`：每个 worker 进程启动时跑一次。
     像 `glyph_match`（字形库）、`row_segment`（U-Net 权重）这类 Step 把重资源
     缓存在 `Step` 实例的 `self.<attr>` 上（进程内单例，见各 Step 源码），这里
@@ -785,6 +873,8 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     都由主进程原样传进来，worker 不再自己按 id 重新加载（GUJI-580：重新加载会丢
     `--params` 与管线参数，产物按缺省参数算、指纹却记覆盖后的参数）。"""
     global _worker_ctx, _worker_step
+    if threads > 0:
+        _pin_threads(threads, forked)
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
     _worker_step = STEPS[step_id]

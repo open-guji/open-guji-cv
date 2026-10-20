@@ -1124,6 +1124,41 @@ bash scripts/run_pipeline.sh          # 两册并行，逐阶段计时，≈11 �
 量耗时**别用产物 mtime 推**——多轮重跑会把时间戳搅在一起（实测把 5 分钟
 的聚类推成了 34 分钟）。
 
+### 6.1 v2 管线耗时画像与提速（2026-10-20，四庫 vol04，4 核云端）
+
+**先量对再动手**：manifest 里的 `elapsed` 是**墙钟**，不是 CPU。串行 glyph_match 墙钟 45 s／8 页时 CPU 是
+147 s——OpenBLAS 自己开满核，单线程只慢 13%（产物逐字节相同）。所以「并行度 1.0」不等于三核闲着。
+页级并行与 worker 线程的坑见 `doc/segmentation_v2_pipeline.md`「登记并行」。
+
+**Step5-a glyph_match（10 页 1688 格，cProfile）**：弹性复核 `verify_pair_elastic` 每格 10 次占约 70%；
+开头建库算 HOG 18 s（每个进程一次）；整库特征点乘 + 全排序约 17%；同格查找 6%。已做、产物逐字节相同的：
+
+| 改动 | 依据 |
+|---|---|
+| wmax 按需算（`verify_pair_elastic(wmax_floor=)`） | 73% 的对 cov 既不够 same 也刷新不了本格最高 cov，wmax 算了不用 |
+| 同格查找按 (册,页,列) 分桶 | 原来每格扫整库 1.8 万条 id |
+| HOG 一次 `np.add.at` + 块批量除 | 每个 bin 的累加次序不变；范数仍逐块 `sqrt(x·x)`（= `np.linalg.norm` 的做法） |
+
+合计逐页耗时 −24%（46 页 331 s → 251 s），vol04 46 页、vol06 15 页与改前逐字节相同，经**代码等价登记**
+（`core/code_equiv.py`）不让各册过期。**没做、会改产物的**（要评测再定）：一页合批做矩阵乘选近邻
+（这部分快 10 倍，但浮点末位变，前 10 名偶尔换位）；少做复核（1688 格里 1424 格是 unsure，要看完全部
+候选，提前收手省得不多）。
+
+**Step3 row_segment**：91% 是切点 U-Net 前向。合批送逐样本逐位相同，但单线程下合批反而慢；
+torch 多线程碰上 CPU 争抢慢 10 倍（4 线程 9.1 s vs 1 线程 0.95 s／8 窗口），「难页 20 s+」多半是这个。
+
+**Step5-d／6／7 是一次性加载为主**（10 页）：align_ref 31 s（每页 0.02 s，加载：证人逐行解析 13 s、
+兼容字归一 9 s、n-gram 4 s）；context_decide 98 s（每页 0.04 s；通用语言模型现训 78 s + 存盘 16 s，
+缓存在 `cache_root()/general_lm`，新容器必付）；——**注意 cProfile 把纯 Python 循环放大约 3 倍**，
+不带剖析器实测通用 LM 现训 28 s、本书 LM 5.3 s。2026-10-20 起两个 LM 都按**语料内容 + lm.py 代码指纹**
+缓存（`seeding._cached_lm`；原来通用 LM 按 mtime，换检出就白训，本书 LM 每次现训），热缓存时
+context_decide 首页 6–7 s → 2 s，产物逐字节不变；seed_admit 76 s（每页约 3 s；三份证人 n-gram 22 s、
+铁证人裁匹配器 15 s，**每页把全部事件重读一遍** 1.1 s）。
+
+**代码等价登记的流程**：改热点 → `scripts/code_equiv.py check --base <改前> --step … --book … --pages …`
+（同一批页新旧代码各跑一遍、逐页比 sha）→ 全同才出登记行 → 贴进 `core/code_equiv.py` 同 PR 提交。
+只差浮点末位也不许登记。
+
 **Pass 1 采样化评估后搁置**：采样会改变字距共识的取样总体，
 `consensus_h` 中位数微移 → 全书网格相位/尺度都变 → 产物不再逐字节
 等价，按金标漂移协议 91 个实例样本全得重核对。页级并行后它只值

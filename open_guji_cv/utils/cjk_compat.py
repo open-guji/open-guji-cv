@@ -17,9 +17,12 @@ U+F900–FAFF、U+2F800–2FA1F 里的字符，Unicode 为它们定了**规范�
 """
 from __future__ import annotations
 
+import re
 import unicodedata
 
 _RANGES = ((0xF900, 0xFAFF), (0x2F800, 0x2FA1F))
+#: 同 `_RANGES`，给整串快速判断用（C 里扫，不逐字进 Python）。
+_COMPAT_RE = re.compile("[\uF900-\uFAFF\U0002F800-\U0002FA1F]")
 
 #: 人定不折的兼容码位（目前为空）。
 KEEP: frozenset[str] = frozenset()
@@ -43,7 +46,9 @@ def fold_compat(s: str | None) -> str | None:
     """字符串里的兼容汉字换成统一汉字；其余字符（含 IDS、IVS 序列）原样。None 原样返回。"""
     if not s:
         return s
-    if not any(in_compat_block(c) for c in s):
+    # 绝大多数串一个兼容字都没有：正则在 C 里扫一遍就返回（2026-10-20，提速；原来逐字
+    # `in_compat_block`，align_ref 起跑时折整部语料要 1 s，现在 16 ms，结果相同）
+    if not _COMPAT_RE.search(s):
         return s
     return "".join(unicodedata.normalize("NFC", c) if is_compat(c) else c for c in s)
 

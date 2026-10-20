@@ -138,7 +138,12 @@ def seeded(tmp_path_factory):
     sq = _square_norm()
     png = cv2.imencode(".png", (255 - sq * 255).astype(np.uint8))[1].tobytes()
     assert db.admit_instance("pre:9:1:1", "弔", png, provenance="human")
-    summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+    # 模块级 fixture 先于逐用例的环境隔离跑：本书 LM 按内容落缓存（seeding._cached_lm），
+    # 不显式指到临时目录就会写进仓内 cache/（conftest 的仓内防污染守卫会报）
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("GUJI_CACHE_DIR", str(root / "cache"))
+        mp.setenv("GUJI_DERIVED_FETCH", "0")          # 不连网取现成 LM（同 conftest._isolated_env）
+        summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
     yield {"root": root, "book_dir": book_dir, "db": db, "summary": summary,
            "corpus": corpus_path, "variants": variants_path}
     db.close()
@@ -591,11 +596,21 @@ def test_build_seed_lm_mixture_and_cache(tmp_path, monkeypatch):
     gen.write_text("欽定四庫全書\n" * 50, encoding="utf-8")
     lm = build_seed_lm(book_text, [gen])
     assert lm.name.startswith("mix(")
-    assert (cache_dir / "general_lm" / ".general_lm_cache.json").exists()
-    assert not (tmp_path / ".general_lm_cache.json").exists(), "缓存不该写进语料目录"
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 1
+    assert len(list((cache_dir / "general_lm").glob("book-*.json"))) == 1     # 本书 LM 也缓存（2026-10-20）
+    assert not list(tmp_path.glob("*.json")), "缓存不该写进语料目录"
     # 二次构造走缓存（源未变）；源变了重训不炸
     lm2 = build_seed_lm(book_text, [gen])
     assert lm2.logp("庫", ("四",)) == lm.logp("庫", ("四",))
+    assert len(list((cache_dir / "general_lm").glob("*.json"))) == 2         # 命中，没多出新文件
+    # 内容变了换键重训；只是 mtime 变不重训
+    import os
+    os.utime(gen, (1, 1))
+    build_seed_lm(book_text, [gen])
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 1
+    gen.write_text("欽定四庫全書總目\n" * 50, encoding="utf-8")
+    build_seed_lm(book_text, [gen])
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 2
     # 本书没见过、通用语料见过的搭配：混合后概率高于纯本书
     pure = build_seed_lm(book_text, None)
     assert lm.logp("定", ("欽",)) > pure.logp("定", ("欽",))
