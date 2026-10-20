@@ -293,3 +293,17 @@ def test_font_set_fingerprint_no_fonts_is_nofonts(tmp_path):
 # 结论数字与「别再走的三条路」留在 `doc/glyph_db_expansion_research.md` §6，
 # 不靠测试的 docstring 当档案。这里只留**代码行为**的用例：候选去重排序、
 # batch 与逐个调用排名一致、字表构造只收汉字。
+
+
+def test_row_norms_not_fooled_by_reused_id():
+    """`_index` 的 lru 挤掉的矩阵释放后，新矩阵可能拿到同一个 id、行数也相同（2026-10-20 修）：
+    行模长缓存不能只认 id，否则用的是别的矩阵的模长，余弦相似度全错。"""
+    import numpy as np
+    from open_guji_cv.clustering import font_candidates as fc
+    rng = np.random.default_rng(0)
+    m1 = rng.random((3, 5)).astype(np.float32)
+    v1 = fc._row_norms(m1)
+    m2 = (rng.random((3, 5)) * 10).astype(np.float32)
+    fc._NORM_CACHE[id(m2)] = (m1, v1)          # 模拟 m1 释放后 id 被 m2 复用
+    assert np.allclose(fc._row_norms(m2), np.linalg.norm(m2, axis=1))
+    assert fc._row_norms(m2) is fc._row_norms(m2)   # 同一个对象照常命中缓存

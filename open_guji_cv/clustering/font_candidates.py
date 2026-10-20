@@ -39,6 +39,7 @@
 from __future__ import annotations
 
 import glob
+import os
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -258,9 +259,13 @@ def _index(charset: tuple[str, ...], root: str = "fonts",
         return np.zeros((0, 1), dtype=np.float32), []
     mat = feat.extract(np.stack(mats)).astype(np.float32)
     index_dir.mkdir(parents=True, exist_ok=True)
-    np.savez(f, mat=mat,
+    # 先写带进程号的临时文件再换上去（2026-10-20）：直接 np.savez 时两个进程同时建同一张表，
+    # 或别的进程读到写了一半的文件，坏文件会留在盘上、以后每次读都抛错被调用方吞成「没有候选」。
+    tmp = f.with_name(f"{f.stem}.tmp{os.getpid()}.npz")
+    np.savez(tmp, mat=mat,
              chars=np.array([c for c, _ in keys]),
              fonts=np.array([fn for _, fn in keys]))
+    os.replace(tmp, f)
     return mat, keys
 
 
@@ -291,19 +296,26 @@ def warm(charsets: list[tuple[str, ...]], root: str = "fonts",
         kept.append(cs_set)
 
 
-_NORM_CACHE: dict[int, np.ndarray] = {}
+_NORM_CACHE: dict[int, tuple[np.ndarray, np.ndarray]] = {}
 
 
 def _row_norms(mat: np.ndarray) -> np.ndarray:
-    """模板矩阵的行模长，按矩阵身份缓存（`_index` 的 lru_cache 保证同一批查询同一个对象）。"""
+    """模板矩阵的行模长，按矩阵身份缓存（`_index` 的 lru_cache 保证同一批查询同一个对象）。
+
+    缓存里连矩阵本身一起存、命中要求 `is` 同一个对象（2026-10-20 修）。原来只按 `id(mat)`
+    存、只比行数：`_index` 的 lru 只有 2 格，挤出去的矩阵一释放，新建的矩阵常常拿到同一个
+    id，而 2~4 字的临时小表行数又常相同——于是用了**别的矩阵的行模长**，余弦相似度算错，
+    结果随这一进程之前查过哪些字表变（串行也一样，页序一换结果就不同；variant_form 的字形
+    证据经 `image_ranks_for` 走这里）。矩阵留在缓存里，id 也就不会被复用。"""
     key = id(mat)
-    v = _NORM_CACHE.get(key)
-    if v is None or v.shape[0] != mat.shape[0]:
-        v = np.linalg.norm(mat, axis=1)
-        v[v == 0] = 1.0
-        if len(_NORM_CACHE) > 8:
-            _NORM_CACHE.clear()
-        _NORM_CACHE[key] = v
+    hit = _NORM_CACHE.get(key)
+    if hit is not None and hit[0] is mat:
+        return hit[1]
+    v = np.linalg.norm(mat, axis=1)
+    v[v == 0] = 1.0
+    if len(_NORM_CACHE) > 8:
+        _NORM_CACHE.clear()
+    _NORM_CACHE[key] = (mat, v)
     return v
 
 

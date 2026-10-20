@@ -16,6 +16,10 @@ builder 现算、写入、返回。`prune()` 按 mtime 做 LRU，压到上限以
 所以每种图像类产物按页记一个**戳**（产出它的那一步这一页产物的 sha，`cache/<册>/<种类>/_stamps.json`）：
 写缓存时记下、读缓存时与「现在这一页产物的 sha」比对，对不上就把这一页该种类的缓存整体清掉重算。
 没有戳的老缓存照旧放行（无从验证）——要查这类用 `guji cache verify <册>`（拿渲染结果比对邻格）。
+
+戳文件是整种类一份的「读→改→写」，页级并行（`guji pipeline --jobs N`）时几个 worker 同时惰性再生
+不同页的图块，都要改它：不加锁会互相覆盖（丢掉别页的戳），共用一个 `.tmp` 名还会让后一个
+`os.replace` 找不到文件、整页记失败。所以改戳一律在 `_stamps_lock` 里做，临时文件带进程号。
 """
 
 from __future__ import annotations
@@ -23,6 +27,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Callable
 
@@ -31,6 +36,11 @@ import numpy as np
 from ..utils.image_io import imwrite
 
 DEFAULT_LIMIT_BYTES = 20 * (1 << 30)   # 20 GB
+
+
+def _is_meta(p: Path) -> bool:
+    """戳文件、它的临时文件、改戳的锁文件：不是缓存图，清缓存与 LRU 都不碰。"""
+    return p.name == "_stamps.json" or p.name.startswith(("_stamps.tmp", "."))
 
 
 def default_cache_root() -> Path:
@@ -69,22 +79,40 @@ class ImageCache:
         m = self._PAGE_RE.match(key)
         if not stamp or not m:
             return
-        d = self._read_stamps(book, kind_id)
-        if d.get(m.group(0)) == stamp:
-            return
-        d[m.group(0)] = stamp
+        if self._read_stamps(book, kind_id).get(m.group(0)) == stamp:
+            return                               # 常见路径：已记过，不拿锁
+        with self._stamps_lock(book, kind_id):
+            d = self._read_stamps(book, kind_id)
+            if d.get(m.group(0)) == stamp:
+                return
+            d[m.group(0)] = stamp
+            self._write_stamps(book, kind_id, d)
+
+    @contextmanager
+    def _stamps_lock(self, book: str, kind_id: str):
+        """改 `_stamps.json` 的跨进程锁（见模块头）：每种类一把，锁文件与戳文件同目录，阻塞等
+        （临界区是毫秒级的读改写）。关文件即放锁，进程死了锁也就放了。"""
+        from ..core.runlock import _try_lock
+        d = self.root / book / kind_id
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / ".stamps.lock", "a+") as fh:
+            _try_lock(fh, blocking=True)
+            yield
+
+    def _write_stamps(self, book: str, kind_id: str, d: dict[str, str]) -> None:
         p = self._stamps_path(book, kind_id)
         p.parent.mkdir(parents=True, exist_ok=True)
-        tmp = p.with_suffix(".tmp")
+        tmp = p.with_suffix(f".tmp{os.getpid()}")
         tmp.write_text(json.dumps(d, sort_keys=True), encoding="utf-8")
         os.replace(tmp, p)
 
     def _drop_stale_page(self, book: str, kind_id: str, key: str) -> None:
         m = self._PAGE_RE.match(key)
         self.invalidate(book, kind_id, key_prefix=m.group(0))
-        d = self._read_stamps(book, kind_id)
-        if d.pop(m.group(0), None) is not None:
-            self._stamps_path(book, kind_id).write_text(json.dumps(d, sort_keys=True), encoding="utf-8")
+        with self._stamps_lock(book, kind_id):
+            d = self._read_stamps(book, kind_id)
+            if d.pop(m.group(0), None) is not None:
+                self._write_stamps(book, kind_id, d)
 
     def get(self, book: str, kind_id: str, key: str, stamp: str | None = None) -> Path | None:
         """`stamp` = 这一页产物现在的 sha。缓存里记着另一个戳 → 这一页该种类缓存整体过期，清掉返回 None。
@@ -107,8 +135,14 @@ class ImageCache:
             stamp: str | None = None) -> Path:
         p = self.path(book, kind_id, key)
         p.parent.mkdir(parents=True, exist_ok=True)
-        if not imwrite(str(p), img):
+        # 先写临时文件再换上去（2026-10-20）：并行时别的 worker 可能正在读这张图（Step7 铁证
+        # 会读别页的人裁刻例），直接写会让它读到半张图、整页记失败。临时名以 `.` 开头，
+        # 清缓存与 LRU 都不当它是缓存图（`_is_meta`）。
+        tmp = p.with_name(f".{p.stem}.tmp{os.getpid()}{p.suffix}")
+        if not imwrite(str(tmp), img):
+            tmp.unlink(missing_ok=True)
             raise IOError(f"写缓存失败: {p}")
+        os.replace(tmp, p)
         self.set_page_stamp(book, kind_id, key, stamp)
         return p
 
@@ -133,7 +167,7 @@ class ImageCache:
             if not d.exists():
                 continue
             for p in d.iterdir():
-                if p.is_file() and p.stem.startswith(key_prefix) and p.name != "_stamps.json":
+                if p.is_file() and p.stem.startswith(key_prefix) and not _is_meta(p):
                     p.unlink()
                     n += 1
             if not key_prefix:
@@ -145,7 +179,7 @@ class ImageCache:
         total = n = 0
         if self.root.exists():
             for p in self.root.rglob("*"):
-                if p.is_file() and p.name != "_stamps.json":     # 戳文件是元数据，不算缓存体积
+                if p.is_file() and not _is_meta(p):     # 戳文件与锁是元数据，不算缓存体积
                     total += p.stat().st_size
                     n += 1
         return total, n
@@ -155,7 +189,7 @@ class ImageCache:
         limit = self.limit_bytes if limit_bytes is None else limit_bytes
         files = [(p.stat().st_mtime, p.stat().st_size, p)
                  for p in self.root.rglob("*")
-                 if p.is_file() and p.name != "_stamps.json"] if self.root.exists() else []
+                 if p.is_file() and not _is_meta(p)] if self.root.exists() else []
         total = sum(s for _, s, _ in files)
         freed = 0
         for _, size, p in sorted(files):

@@ -185,6 +185,10 @@ def _same_content(a: Event, b: Event) -> bool:
             and a.payload == b.payload and a.reviewer == b.reviewer)
 
 
+#: `EventLog.read_cached` 的解析结果：批次文件路径 → ((大小, mtime_ns), 事件列表)。
+_READ_CACHE: dict[str, tuple[tuple[int, int], list]] = {}
+
+
 class EventLog:
     """只追加的事件日志。一批一个文件，便于按批收割与回看。"""
 
@@ -339,6 +343,33 @@ class EventLog:
         for b in self.batches():
             yield from self.read(b)
 
+    def read_cached(self, batch: str) -> list[Event]:
+        """同 `read()`，但按批次文件的 (大小, mtime_ns) 记住解析结果，文件一动就重读。
+
+        为什么（2026-10-20）：Step7 每页要把全书人裁事件读三遍（`lookup.human_chars` 一遍、
+        `bindings.book_bindings` 算缓存键两遍），vol04 约 3.8 万条，pydantic 逐行解析每页约 1.7 s，
+        占 seed_admit 每页耗时一半以上——而一次跑批里事件文件基本不变。
+
+        ⚠️ 返回的是**共享对象**，调用方只许读、不许改（改了会串到别的调用方）。所以只给审过的
+        只读热点用，别的地方照旧 `read()`／`iter_all()`。"""
+        path = self.batch_path(batch)
+        try:
+            st = path.stat()
+        except FileNotFoundError:
+            return []
+        key, sig = str(path), (st.st_size, st.st_mtime_ns)
+        hit = _READ_CACHE.get(key)
+        if hit is not None and hit[0] == sig:
+            return hit[1]
+        evs = self.read(batch)
+        _READ_CACHE[key] = (sig, evs)
+        return evs
+
+    def iter_all_cached(self) -> Iterator[Event]:
+        """`iter_all()` 的缓存版，规矩同 `read_cached()`：只读。"""
+        for b in self.batches():
+            yield from self.read_cached(b)
+
     def latest_seq(self, batch: str) -> int:
         evs = self.read(batch)
         return max((e.seq for e in evs), default=0)
@@ -407,3 +438,9 @@ class EventLog:
         done = self.consumed_ids(consumer)
         evs = self.read(batch) if batch else sorted(self.iter_all(), key=lambda e: e.order)
         return [e for e in evs if e.id not in done]
+
+
+def iter_events_readonly(log) -> "Iterator[Event]":
+    """只读遍历全部事件：`log` 有缓存版就用缓存版（见 `EventLog.read_cached`），测试替身没有就退回 `iter_all()`。"""
+    f = getattr(log, "iter_all_cached", None)
+    return f() if f is not None else log.iter_all()

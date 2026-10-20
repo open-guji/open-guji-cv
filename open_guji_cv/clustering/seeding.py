@@ -513,34 +513,72 @@ def admission_decision(ocr: dict | None, align_char: str | None,
 
 # ── 语言模型 ─────────────────────────────────────────────────────────
 
-def _load_general_lm(paths: list[Path]) -> CharNgramLM:
-    """通用语料 LM：训练一次（~30s/10M 字）后缓存。
+#: 语言模型盘上缓存的口径版本：缓存文件格式或键的组成改了就加 1。
+LM_CACHE_VERSION = 2
 
-    缓存键 = 各源文件 (name, size, mtime) + 剪枝阈；源变了自动重训。
+
+def _cached_lm(kind: str, sources: list[tuple[str, bytes]], params: list,
+               build) -> CharNgramLM:
+    """按**内容**缓存训好的 LM（2026-10-20）：`cache_root()/general_lm/<kind>-<键>.json`。
+
+    键 = 各语料 (名字, sha256) + 训练参数 + `clustering/lm.py` 的代码指纹 + 本缓存口径版本。
+    语料、训练参数、训练代码任何一样变了都换键重训；只是文件 mtime 变了（换机器、重新 clone、
+    `guji db pull` 重写）不重训。读到坏文件就重建覆盖。写入先落带进程号的临时文件再换上去，
+    几个进程同时建同一份也不会读到半个文件。
+
+    为什么：Step6 每个进程都要先建 LM——本书 3-gram 原来**每次现训**（vol04 约 5 s），
+    通用 3-gram 有缓存但键是 mtime，新容器或重新 clone 后约 28 s 重训。命中时本书约 1.7 s、
+    通用约 0.6 s。缓存里的计数与现训逐项相同（JSON 往返不改键值），打分逐位不变。
+    """
+    import hashlib
+    import os
+
+    from ..core.engine import code_hash_of_module
+    from ..core.workspace import cache_root
+    key = json.dumps([LM_CACHE_VERSION, kind, params, code_hash_of_module("open_guji_cv.clustering.lm"),
+                      [[name, hashlib.sha256(data).hexdigest()] for name, data in sources]],
+                     ensure_ascii=False)
+    h = hashlib.sha256(key.encode("utf-8")).hexdigest()[:24]
+    lm_dir = cache_root() / "general_lm"
+    f = lm_dir / f"{kind}-{h}.json"
+    if f.exists():
+        try:
+            return CharNgramLM.load(f)
+        except (OSError, ValueError, KeyError):
+            pass                                  # 坏文件：下面重建覆盖
+    # 本机没有：先去 R2 取别的机器训好、手动推上去的同一份（键相同即内容相同；要 GUJI_DATA_TOKEN，
+    # 读令牌就够；取不到、没令牌就现训）。见 datastore/packs.py「派生缓存」。
+    from ..datastore.packs import fetch_derived
+    if fetch_derived("lm", f.name, f):
+        try:
+            return CharNgramLM.load(f)
+        except (OSError, ValueError, KeyError):
+            pass
+    lm = build()
+    lm_dir.mkdir(parents=True, exist_ok=True)
+    tmp = f.with_name(f"{f.stem}.tmp{os.getpid()}.json")
+    lm.save(tmp)
+    os.replace(tmp, f)
+    return lm
+
+
+def _load_general_lm(paths: list[Path]) -> CharNgramLM:
+    """通用语料 LM：训练一次（vol04 三份共约 35M 字节，约 28 s）后按内容缓存（见 `_cached_lm`）。
 
     ⚠️ **缓存文件落 `cache_root()`，不落 `paths[0].parent`**（任务卡 #54 第3条，
     2026-09-27 改）：`general_corpus_dir` 的语料本身是引擎自带资源，可以摆在
     仓里或工作区，但**派生缓存**不该跟着摆在语料旁边——那条路径不受
     `GUJI_CACHE_DIR`/`GUJI_WORKSPACE` 管，语料一旦解析到仓内 `corpus/external/`，
-    全量单测就会在仓里写下一份 22 MB 的 `.general_lm_cache.json`，触发
-    conftest 的仓内易变目录防污染断言。
+    全量单测就会在仓里写下一份 22 MB 的缓存，触发 conftest 的仓内易变目录防污染断言。
     """
-    from ..core.workspace import cache_root
-    key = json.dumps([[p.name, p.stat().st_size, int(p.stat().st_mtime)]
-                      for p in paths] + [GENERAL_LM_PRUNE])
-    lm_dir = cache_root() / "general_lm"
-    lm_dir.mkdir(parents=True, exist_ok=True)
-    cache = lm_dir / ".general_lm_cache.json"
-    meta = lm_dir / ".general_lm_cache.meta"
-    if cache.exists() and meta.exists() \
-            and meta.read_text(encoding="utf-8") == key:
-        return CharNgramLM.load(cache)
-    lm = CharNgramLM(order=3)
-    lm.train(p.read_text(encoding="utf-8") for p in paths)
-    lm.prune(min_count=GENERAL_LM_PRUNE)
-    lm.save(cache)
-    meta.write_text(key, encoding="utf-8")
-    return lm
+    datas = [(p.name, p.read_bytes()) for p in paths]
+
+    def build() -> CharNgramLM:
+        lm = CharNgramLM(order=3)
+        lm.train(d.decode("utf-8") for _, d in datas)
+        lm.prune(min_count=GENERAL_LM_PRUNE)
+        return lm
+    return _cached_lm("general", datas, [3, GENERAL_LM_PRUNE], build)
 
 
 def build_seed_lm(corpus_text: str,
@@ -551,7 +589,8 @@ def build_seed_lm(corpus_text: str,
     是本书语料没见过的搭配（LM 判「通不通顺」的底气），权重压低使
     本书专名（人名/书名）不被通用分布淹没。
     """
-    book = train_ngram([corpus_text], order=3)
+    book = _cached_lm("book", [("book", corpus_text.encode("utf-8"))], [3, 1],
+                      lambda: train_ngram([corpus_text], order=3))
     paths = [Path(p) for p in (general_corpus or []) if Path(p).exists()]
     if not paths:
         return book
