@@ -21,6 +21,7 @@ from pydantic import BaseModel
 
 from .book import BookSpec
 from .pipeline import Pipeline, _produces
+from .parallel import effective_jobs, is_parallel_safe, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
@@ -536,9 +537,9 @@ class Engine:
                        jobs: int = 1) -> tuple[int, bool]:
         """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。
 
-        `jobs > 1` 且 `step.spec.parallel_safe` 时走页级并行（见 `_run_one_step_parallel`）；
-        否则串行——`parallel_safe=False` 是默认值，没标过的 Step 一律串行，标记本身
-        就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
+        `jobs > 1` 且这一步审过可并行（`StepSpec.parallel_safe` 或 `core/parallel.py` 的登记）
+        时走页级并行（见 `_run_one_step_parallel`）；否则串行——没登记过的 Step 一律串行，
+        登记本身就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
         from .corpus_pin import require_pin_clean, step_pin_token
         if step_pin_token(step.spec.id, self.book):     # 册钉了语料库、这步读语料：起跑前硬校验
             from .workspace import workspace_root
@@ -548,7 +549,7 @@ class Engine:
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
                      f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
                      f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
-        if jobs > 1 and step.spec.parallel_safe:
+        if jobs > 1 and is_parallel_safe(step):
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)
         sid = step.spec.id
@@ -632,7 +633,9 @@ class Engine:
         张页是同时提交的，无法半路收回已经在跑的任务。"""
         sid = step.spec.id
         manifest = self.store.manifest(self.book.id, sid)
-        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页（{jobs} 进程并行）")
+        jobs, why = effective_jobs(step, jobs)
+        self.log(f"== {sid} {step.spec.title}：{len(pages)} 页（{jobs} 进程并行"
+                 + (f"；{why}，进程数压到 {jobs}" if why else "") + "）")
 
         todo: list[int] = []
         fps: dict[int, tuple[str, dict, str]] = {}
@@ -666,7 +669,7 @@ class Engine:
         if not todo:
             return done, False
 
-        from concurrent.futures import ProcessPoolExecutor
+        from concurrent.futures import ProcessPoolExecutor, as_completed
         any_failed = False
         # `initializer`：重资源 Step（`glyph_match` 的字形库、`row_segment` 的
         # U-Net 权重等）在 worker **进程启动时**建一次 `RunContext`，之后这个
@@ -677,10 +680,17 @@ class Engine:
         # id、在子进程里 `load_book`/`load_pipeline` 再建一个空参数的 ctx，CLI
         # `--params` 与管线 yaml 的 `params:` 全丢，指纹却按覆盖后的参数记（GUJI-580）。
         initargs = (self.book, self.pipeline, sid, dict(self.ctx.params),
-                    self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes)
+                    self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes,
+                    worker_threads(jobs))
+        # 页的次序：上一轮记过耗时的页按耗时从大到小先发，难页不压在最后一个 worker 上拖尾
+        # （row_segment 超过 20 s 的难页占这一步 42% 的时间）。产物与次序无关：每页独立算、
+        # 主进程按完成先后落盘，manifest 按页键存。
+        todo = _longest_first(todo, manifest)
         with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
                                  initargs=initargs) as ex:
-            for pg, products, err, elapsed in ex.map(_parallel_worker, todo, chunksize=1):
+            futs = [ex.submit(_parallel_worker, pg) for pg in todo]
+            for fut in as_completed(futs):
+                pg, products, err, elapsed = fut.result()
                 fp, ups, ph = fps[pg]
                 key = page_key(pg)
                 if err is not None:
@@ -770,9 +780,41 @@ _worker_ctx: "RunContext | None" = None
 _worker_step: "Step | None" = None
 
 
+def _longest_first(pages: list[int], manifest) -> list[int]:
+    """按上一轮 manifest 记的单页耗时降序；没记过的页排在最前（未知当难页）。"""
+    def cost(pg: int) -> float:
+        ent = manifest.get(page_key(pg))
+        el = getattr(ent, "elapsed", None) if ent is not None else None
+        return float("inf") if el is None else float(el)
+    return sorted(pages, key=cost, reverse=True)
+
+
+def _pin_threads(n: int) -> None:
+    """worker 里给 torch／OpenCV／BLAS 定线程数（见 `core/parallel.worker_threads`）。
+    已经 import 了的库调运行期接口；还没 import 的设环境变量，等它第一次建线程池时读。"""
+    import os
+    import sys
+    if "torch" in sys.modules:
+        # torch 是从主进程 fork 带过来的：主进程若已用过它的 OpenMP 线程池，子进程再开
+        # 多线程会**卡死**（libgomp 不认 fork；2026-10-20 实测 1 线程正常、2/4 线程挂住）。
+        # 只能 1 线程——同一卷积 1 线程与 4 线程结果逐位相同，只是慢。
+        n = 1
+        try:
+            sys.modules["torch"].set_num_threads(1)
+        except Exception:  # noqa: BLE001
+            pass
+    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
+        os.environ[var] = str(n)
+    try:
+        import cv2
+        cv2.setNumThreads(n)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
                           params: "dict[str, BaseModel]", store_root: Path,
-                          cache_root: Path, cache_limit: int) -> None:
+                          cache_root: Path, cache_limit: int, threads: int = 0) -> None:
     """`ProcessPoolExecutor(initializer=...)`：每个 worker 进程启动时跑一次。
     像 `glyph_match`（字形库）、`row_segment`（U-Net 权重）这类 Step 把重资源
     缓存在 `Step` 实例的 `self.<attr>` 上（进程内单例，见各 Step 源码），这里
@@ -783,6 +825,8 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     都由主进程原样传进来，worker 不再自己按 id 重新加载（GUJI-580：重新加载会丢
     `--params` 与管线参数，产物按缺省参数算、指纹却记覆盖后的参数）。"""
     global _worker_ctx, _worker_step
+    if threads > 0:
+        _pin_threads(threads)
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
     _worker_step = STEPS[step_id]

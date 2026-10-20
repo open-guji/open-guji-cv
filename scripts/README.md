@@ -143,12 +143,13 @@
 - `calibrate_margin.py`：context-margin 准入阈标定（glyph_db_first_design.md §3：context provenance）。
 - `calibrate_variant_form.py`：「义定形未定」定形阈值标定（`clustering/variant_form.py` 的五个常数）。
 
-## 测量（4）
+## 测量（5）
 
 - `measure_context_ink_gate.py`：D 铁证复核（2026-09-27）第 3 步：context 通道空白弃权闸的阈值要从全书墨量分布
 - `measure_frame_geometry.py`：版框几何常数实测：内框线宽 / 外框条宽 / 内外框间距，按边分开统计。
 - `measure_gutter_straightness.py`：界行「直不直」的指标：把整条界行往 x 轴投影，看峰有多高、多窄。
 - `measure_llm_online_accuracy.py`：CLI 封装：`open_guji_cv.eval.llm_online_accuracy.compute_report` 的
+- `parallel_equivalence.py`：串行与并行（`--jobs N`）跑出的两个产物目录逐步逐页比 sha256；`core/parallel.py` 登记新步前的验收。
 
 ## 其他（85）
 

@@ -463,6 +463,20 @@ above」而非数组边界）上一度写出了 off-by-one，语义对齐的代�
 暂缓。16 核机器实测 `border_detect` 4 进程 12 页：11.4s → 6.6s（多页读图/
 调度有开销，非线性 4x）。
 
+**`row_segment`／`glyph_match` 登记并行（2026-10-20）**：审查结论登记在
+`core/parallel.py::AUDITED`，**不在 Step 上标 `parallel_safe`**——Step 模块源码进
+`code_hash`，在 Step 上加一个关键字参数就让各册 Step3 以下全线过期，而并行与否不改产物。
+`core/parallel.py` 不在任何 Step 的 `code_deps` 里（`tests/test_parallel_registry.py` 守着）。
+同一次改动：
+- **缓存戳加锁**：worker 惰性再生图块时都要改同一个 `_stamps.json`，原来共用一个
+  `_stamps.tmp`，后到的 `os.replace` 找不到文件、整页记失败（测试复现过），还会互相丢戳。
+  现在改戳在 `ImageCache._stamps_lock` 里做，临时文件带进程号。
+- **worker 线程数**：核数 ÷ 进程数；torch 若是从主进程 fork 带过来的一律 1 线程——
+  主进程用过 torch 的 OpenMP 线程池后，fork 出的子进程再开多线程会**卡死**（实测）。
+- **进程数按内存压**：登记里写单 worker 峰值内存，可用内存不够就少开几个（日志写原因）。
+- **难页先发**：按上一轮 manifest 记的单页耗时从大到小派页，难页不压在最后拖尾。
+- 验收：`scripts/parallel_equivalence.py` 比串行／并行两个产物目录逐页 sha256。
+
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 
 把一条界行整条投到 x 轴上——线越直，墨全落在同一个 x 上，峰就越高越窄；线越弯，
