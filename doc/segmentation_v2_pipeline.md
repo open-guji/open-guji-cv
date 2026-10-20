@@ -475,7 +475,22 @@ above」而非数组边界）上一度写出了 off-by-one，语义对齐的代�
   主进程用过 torch 的 OpenMP 线程池后，fork 出的子进程再开多线程会**卡死**（实测）。
 - **进程数按内存压**：登记里写单 worker 峰值内存，可用内存不够就少开几个（日志写原因）。
 - **难页先发**：按上一轮 manifest 记的单页耗时从大到小派页，难页不压在最后拖尾。
+- **worker 里 OpenBLAS 压到 1 线程**（运行期调轮子自带 so 的接口；fork 来的 numpy 设环境变量不生效）。
+  不压时 4 个 worker 各开满核，glyph_match 每页从 4.6 s 慢到 20 s，并行墙钟与串行持平。串行时 OpenBLAS
+  开满核也只快 13%（8 页：45 s／CPU 147 s vs 1 线程 51 s／CPU 53 s），产物逐字节相同。
+- **worker 里不改 OpenCV 线程数**：fork 子进程里 `cv2.setNumThreads` 卡死（四个 worker 全挂）。
 - 验收：`scripts/parallel_equivalence.py` 比串行／并行两个产物目录逐页 sha256。
+
+第四册 46 页（每 5 页取 1，加 p17/p100/p186），4 核云端，Step0–5a，串行 vs `--jobs 4`，**9 步 46 页产物全部逐字节相同**：
+
+| 步 | 串行墙钟 | 4 进程墙钟 | 倍数 |
+|---|---|---|---|
+| border_detect | 54 s | 15 s | 3.6 |
+| row_segment | 65 s | 26 s | 2.5 |
+| glyph_match | 231 s | 80 s | 2.9（含每 worker 约 17 s 建库）|
+| Step0–5a 合计 | 约 412 s | 181 s | 2.3 |
+
+单进程峰值 0.53 GB。下一个串行大头是 cell_shrink（0.7 s/页）与 Step6–7。
 
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 

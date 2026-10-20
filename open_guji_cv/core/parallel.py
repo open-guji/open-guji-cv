@@ -37,17 +37,17 @@ class ParallelAudit:
 
 AUDITED: dict[str, ParallelAudit] = {
     "row_segment": ParallelAudit(
-        mem_gb=1.5,
+        mem_gb=1.0,
         note="run_page 只读本页 gate_manifest／column_windows／列图与册级人裁表（lookup，只读），"
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
-             "改戳走 ImageCache 的锁。第四册串行／4 进程产物逐页比对：待验（scripts/parallel_equivalence.py）。"),
+             "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=2.0,
+        mem_gb=1.0,
         note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存，worker 各建一份（约 17 s）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
-             "第四册串行／4 进程产物逐页比对：待验（scripts/parallel_equivalence.py）。"),
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
 }
 
 
