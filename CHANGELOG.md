@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- 语料库清单不再收字组 `config/groups/*/prompt.md`（只给离线 L2 拼消息，Step 不读）；老清单里登记了的也跳过核对。此前改提示词（cc6f455f）会让钉了 corpus 的册在 glyph_match 起跑前报 CorpusDrift 拒跑（M9 基线跑 vol06 撞上，GUJI-636；PATCH，各步 code_hash 不变）。
+
 ## [0.4.9] - 测试中
 
 ### Added
