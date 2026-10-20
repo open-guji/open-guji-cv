@@ -7,6 +7,15 @@
 
 ### Added
 - `scripts/check_release_tags.py`：发版后核对每个发进 main 的版本都有 `vX.Y.Z` tag、且 tag 在 main 主线的发版合并提交上（用户 10-20 定「打了 tag 才算发完」，写进 `doc/版本号规矩.md` 第三节第 5、9、10 条）。PATCH；不碰任何 Step，`code_hash` 不变。
+- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
+
+## [0.4.9] - 2026-10-20
+
+PATCH（sheldon 10-20 定）。相对 v0.4.8 只有 `rare_candidates`（8d081ec338766152 → b92a99fa13957185）、`seed_admit`（19fbae2631200652 → 3337e7b0b2dc43ec）的 `code_hash` 变，其余 15 步不变。配套语料库：殿本 v9（日曰、入人八文意表按提示词 v2 重建，覆盖 vol01、vol04–10；`group_flow` 点名彝组 `yi_560`）——v9 清单登记了新提示词，旧版 CV 配 v9 会被语料钉拒跑，换版要同时改钉。
+验收（rc 上，殿本 vol05–07 共 141 页 seed_admit，对 v0.4.8＋语料库 v7）：送审 223→205；新放行 19 格（日曰 15、彝 4）逐格核对全对；新送审 1 格（vol07:102:9:21「五事一曰貌至五曰」，v0.4.8 误放「日」，现被文意表拦下）；随机抽的 60 页无变化。
+
+### Added
+- 字组：第四批只看字频的异体组 爲為 說説（wei shuo；殿本人裁只见一形，≥10 且来自 ≥2 册）。PATCH；只有 seed_admit 的 `code_hash` 变。要在册配置 `group_flow` 点名才生效。
 - `guji opinions publish-status`（M11 B2，GUJI-714；PATCH）：意见池里网站来源（改字、一段有问题）的处理结论按网站 target 聚合，写中心库 `feedback/lists/web/<书>/status.jsonl`（已进文本→adopted＋版本、已采纳→adopted、未采纳→rejected＋公开理由、交用户／讨论→discussing；精校票不发），幂等；网站 proofing-sync 读它回写 `/api/fixes`。顺手修回复草稿把模板句与公开理由叠在一起的毛病（GUJI-713）。不碰任何 Step，`code_hash` 不变。
 - 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
 - M11 第一阶段：意见池、AI 初判的确定性部分、修订工具（GUJI-712／713／715，设计 `doc/design/M11-分块-第一阶段最小闭环.md`）。新包 `open_guji_cv/opinions/`（L4）与 `guji opinions …`：`ingest`（中心库 `feedback/lists/web/<书>/` 的改字／精校票、网站公开读 `/api/fixes`、`/api/feedback` 文字类 → 中心库 `feedback/lists/opinions/<书>/`，幂等，去测试票、记重复与转出）、`list`／`show`、`versions`（book-text CHANGES → `text_versions.json`）、`locate`、`normalize`、`pack`（IIIF 原图档裁格与列条带、上下文、marks，`sheet.png`／`sheet.md`）、`triage`（会话判、`config/opinions/rules.json` 定去向）、`to-user`／`decide`、`revise`（A／B／B′ 类改 book-text 冻结册 char／cord，伴生层跟随，调 `bump_original.py` 升 patch，CHANGES 引意见 id）、`reply-drafts`。PATCH；不碰任何 Step，17 步与闸 `code_hash` 不变。
