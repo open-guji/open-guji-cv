@@ -430,6 +430,11 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     if sc.ws != st.get("ws"):
         raise SystemExit(f"数据目录记的工作区是 {st.get('ws')}，workspace.yaml 写的是 {sc.ws}")
     local_paths = {r.src_path for r in sc.rows}
+    if not creating and not shared_writer:
+        from ..core.corpus_pin import push_problems
+        problems = push_problems(ws_dir)
+        if problems:
+            raise SystemExit(problems[0])
     if is_shared_ws(sc.ws) and not shared_writer:
         raise SystemExit(f"{sc.ws} 是共享层的只读工作区（共享方案 3.2 节），普通 push／sync 不能写；"
                          f"由升级脚本出新版本")
@@ -446,6 +451,14 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
+        if not creating and not shared_writer:                 # 已发布的语料库版本不可改（用户 10-20）
+            cur.execute("SELECT src_path, sha256 FROM files WHERE ws = %s "
+                        "AND src_path LIKE 'config/corpus-pack/v%%/manifest.json'", (sc.ws,))
+            db_sha = dict(cur.fetchall())
+            changed = sorted(r.src_path for r in sc.rows if r.tbl == "files" and r.src_path in db_sha
+                             and r.cols.get("sha256", db_sha[r.src_path]) != db_sha[r.src_path])
+            if changed:
+                raise SystemExit(f"语料库清单 {changed[:3]} 已发布，版本不可改；出新版本（guji corpus build）")
         cur.execute("SELECT src_path FROM source_files WHERE ws = %s"
                     + "".join(f" UNION ALL SELECT src_path FROM {t} WHERE ws = %s" for t in BLOB_TABLES),
                     (sc.ws,) * (1 + len(BLOB_TABLES)))

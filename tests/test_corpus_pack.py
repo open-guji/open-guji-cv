@@ -249,3 +249,17 @@ def test_cv_version_reads_repo_pyproject(tmp_path):
     from open_guji_cv.ops.corpus_pack import _cv_version
     (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\nversion = "9.8.7"\n', encoding="utf-8")
     assert _cv_version(tmp_path) == "9.8.7"
+
+
+def test_push_refuses_changed_corpus_without_new_version(ws):
+    """语料库任何内容变了都要改版本号（用户 10-20）：最新一版登记的文件改了／缺了／多了 → 推送前拒绝；出新版本就放行。"""
+    from open_guji_cv.core import corpus_pin
+    assert corpus_pin.push_problems(ws) == []             # 没出过清单：不管
+    cp.build(ws)
+    assert corpus_pin.push_problems(ws) == []
+    (ws / "config" / "groups" / "freq.json").write_text('{"a": 2}', encoding="utf-8")
+    (ws / "corpus" / "new.txt").write_text("丁", encoding="utf-8")
+    msg = corpus_pin.push_problems(ws)[0]
+    assert "freq.json" in msg and "new.txt" in msg and "v2" in msg
+    cp.build(ws)                                          # 出 v2 把现状收进去 → 放行
+    assert corpus_pin.push_problems(ws) == []
