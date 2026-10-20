@@ -5,6 +5,9 @@
 
 ## [0.4.8] - 待发
 
+### Added
+- 产物包按「三样版本」打标签、每册有 main（用户 10-20 定：不同版本的结果分开存、不覆盖，main 是最新正式结果；cv、字形库、语料库三个版本号共同决定结果）：`guji products pack push` 不给 `--label` 时标签拼成 `cv<版本>-c<语料库号>-g<字形库号>-<改动名>`（`--change`；字形库没钉写 `g-`＋人裁指纹前 6 位），三样完整值记进 manifest 的 `versions`；新 `pack promote <册> --label …`／`pack push --main` 追加 main 指针（`main-ptr/`，只增不改，Worker 不用改）；`fetch` 缺省取 main，没标过才取最新；`list` 标 ★ 并列三样版本。不碰任何 Step，`code_hash` 不变。
+
 ### Fixed
 - `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
 
