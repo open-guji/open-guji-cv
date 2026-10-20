@@ -54,3 +54,11 @@ def test_choose_hog_two_classes():
     best, m, _ = choose_hog(gray, bank, min_margin=0.1)
     assert best == "捺" and m >= 0.1
     assert choose_hog(gray, {"捺": bank["捺"]})[0] is None      # 不是两类
+
+
+def test_window_part_takes_fraction_of_ink_box():
+    from open_guji_cv.groups.ids_parts import window_part
+    g = np.full((40, 40), 255, np.uint8)
+    g[10:30, 10:30] = 0          # 外框 20×20
+    w = window_part(g, 0.0, 0.5, 0.0, 1.0)
+    assert (w < 128).sum() == 10 * 20 and window_part(np.full((9, 9), 255, np.uint8), 0, 1) is None

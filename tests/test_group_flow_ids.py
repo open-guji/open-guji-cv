@@ -190,6 +190,6 @@ def test_yi_560_three_slot_bank_loads_and_abstains_on_blank():
     """彝组三段版（2026-10-20）：仓里的模板库键是 `位置|部件名`，空白格弃权，指纹带上这一组。"""
     assert O.SPECS["yi_560"].three and O.has_bank("yi_560")
     b = O._slot_bank(O.load_bank(O.bank_path("yi_560")))
-    assert set(b) == {0, 1, 2, 3} and set(b[0]) == {"彐", "彑"} and set(b[2]) == {"廾", "大"}
+    assert set(b) == {0, 1, 2, 3, 4, 5} and set(b[0]) == {"彐", "彑"} and set(b[2]) == {"廾", "大"}
     assert O.judge("yi_560", np.full((100, 100), 255, np.uint8)).why == "abstain:blank"
     assert "yi_560=" in O.fingerprint(["yi_560"])
