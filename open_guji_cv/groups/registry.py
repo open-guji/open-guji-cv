@@ -149,7 +149,9 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=(), config_dir=None,
         flow=FlowSpec(("freq",), combine="first"),
         note="异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。")
-       for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"))},
+       for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"),
+                         # 第三批（2026-10-20 sheldon 合审定）：殿本全书只见一形，人裁 ≥10 且来自 ≥2 册
+                         ("kan", "刊刋"), ("jiw", "既旣"), ("qx", "清淸"), ("dx", "顚顛"), ("zx", "淄湽"), ("qy", "青靑"))},
 }
 
 
