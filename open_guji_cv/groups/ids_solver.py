@@ -22,6 +22,8 @@ from .ids_segment import ink_of, polylines_to_mask, right_part, split_parts, str
 TOP_WIN = (0.0, 0.25, 0.0, 0.7)
 #: 下段窗口：外框下 45%、中间 60%（廾／大 的差别在撇捺是否外撇）
 BOT_WIN = (0.55, 1.0, 0.2, 0.8)
+#: 中段窗口：外框中间 45%、右 45%（米｜糸/分 的右半），不依赖任何缝；82 格留一 0 错（竖缝版 1–3 错）
+MID_WIN = (0.25, 0.7, 0.55, 1.0)
 
 
 @dataclass
@@ -50,7 +52,7 @@ def solve(gray: np.ndarray, bank: dict, resolver: IdsResolver, polylines=None, m
     """`bank = ids_parts.build_bank(...)`（位置 → 部件名 → 模板）；`polylines=(上/中, 中/下)` 缺省用直线基线。
     库里有 `bank[3]`（中段右半 糸／分）时，中段改认「竖切后的右半」：`vcut` 缺省用 `vertical_seam` 自动切。
     `mid_hog` 给了数：中段改用 HOG＋岭回归判别（`choose_hog`），判别值绝对值不到它就弃权；上下段仍用软 IoU 近邻。
-    `bot_hog` 同理（`bank[5]`、`BOT_WIN`）。
+    `mid_hog` 且库里有 `bank[6]`（中段窗口模板）：中段改认 `MID_WIN` 窗口，不再依赖竖缝。`bot_hog` 同理（`bank[5]`、`BOT_WIN`）。
     `top_hog` 给了数且库里有 `bank[4]`（上段窗口模板）：上段改认「外框上 25%×左 70% 的窗口」（`TOP_WIN`），同样 HOG＋岭回归，不依赖上／中缝。"""
     ink = ink_of(gray)
     if not ink.any():
@@ -62,6 +64,10 @@ def solve(gray: np.ndarray, bank: dict, resolver: IdsResolver, polylines=None, m
     parts = split_parts(gray, mask)
     picks, margins = [], []
     for k in range(3):
+        if k == 1 and mid_hog is not None and bank.get(6):
+            best, m, _ = choose_hog(window_part(gray, *MID_WIN), bank[6], min_margin=mid_hog)
+            picks.append(_mid_name(best) if best else None); margins.append(round(m, 4))
+            continue
         if k == 1 and bank.get(3):
             vc = vcut if vcut is not None else vertical_seam(ink, mask)
             if vc is None:
@@ -108,6 +114,9 @@ def add_real(bank: dict, gray: np.ndarray, names: tuple, polylines=None, vcut=No
     w = window_part(gray, *TOP_WIN)
     if w is not None:
         bank.setdefault(4, {}).setdefault(names[0], []).append(norm_part(w))
+    w = window_part(gray, *MID_WIN)
+    if w is not None:
+        bank.setdefault(6, {}).setdefault(names[1][1:] if names[1].startswith("米") else names[1], []).append(norm_part(w))
     w = window_part(gray, *BOT_WIN)
     if w is not None:
         bank.setdefault(5, {}).setdefault(names[2], []).append(norm_part(w))
