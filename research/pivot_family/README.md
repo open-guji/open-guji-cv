@@ -60,3 +60,15 @@
   - 读数：字统网覆盖 358、rt 覆盖 379。三家合并后池大小中位 24，top-1/3/5 = 378/413/413，与本仓表单独（池 7）几乎相同。
 - `quant_check.py`：模板向量 fp16 族内名次与 fp32 相同 413/414，int8 是 398/414。检索包用 fp16。
 - 结论与架构见文档 §8–§11。
+
+## 向量包精度对比（10-20）
+
+`emb_precision_eval.py`：模板矩阵直接取 hanzi 库的全字表向量包（`clustering/emb_pack.py`，不用现建 40 分钟），
+fp32／fp16／int8 三种精度在同一批真刻本靶子上比全表检索（第 1／前 5／前 10，与 fp32 的一致率）和以字找字（族内前 1／3／5）。
+
+```
+.venv/bin/python research/pivot_family/emb_precision_eval.py --out /tmp/emb_prec.json
+```
+
+判据与切换办法见 `doc/design/汉字字形与关系库-总设计.md` §10「B2 续：精度」。
+

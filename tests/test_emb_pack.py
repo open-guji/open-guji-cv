@@ -15,15 +15,23 @@ SPEC = {"ckpt": "glyph_cnn_r5", "ckpt_fp": "aaaaaaaaaaaa", "font_fp": "bbbbbbbbb
         "code_fp": "cccccccccccc", "extra": []}
 
 
-def _publish(tmp_path, spec=SPEC, chars="一丁七", failed="丂", dim=4):
-    """造一版包：三个文件放进假 blob 缓存，清单写进假 emb 目录。"""
+def _npy(a) -> bytes:
+    buf = io.BytesIO()
+    np.save(buf, a, allow_pickle=False)
+    return buf.getvalue()
+
+
+def _publish(tmp_path, spec=SPEC, chars="一丁七", failed="丂", dim=4, precisions=E.PRECISIONS):
+    """造一版包：三种精度的分片（每种分两片）放进假 blob 缓存，清单写进假 emb 目录。"""
     rng = np.random.default_rng(0)
     mat = rng.standard_normal((len(chars), dim)).astype(np.float32)
     files = {}
-    for k, part in enumerate((mat[:2], mat[2:])):                       # 分两片，载入时按名拼回
-        buf = io.BytesIO()
-        np.save(buf, part, allow_pickle=False)
-        files[f"vectors-{k:02d}.npy"] = buf.getvalue()
+    for prec in precisions:
+        arrays = E.encode(mat, prec)
+        for k, sl in enumerate((slice(0, 2), slice(2, None))):          # 分两片，载入时按名拼回
+            files[f"{prec}/vectors-{k:02d}.npy"] = _npy(arrays["vectors"][sl])
+        if "scale" in arrays:
+            files[f"{prec}/scale.npy"] = _npy(arrays["scale"])
     files.update({"chars.txt": "".join(c + "\n" for c in chars).encode(),
                   "failed.txt": "".join(c + "\n" for c in failed).encode()})
     blobs = tmp_path / "blobs"
@@ -34,7 +42,7 @@ def _publish(tmp_path, spec=SPEC, chars="一丁七", failed="丂", dim=4):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_bytes(data)
         meta[name] = {"sha256": sha, "bytes": len(data)}
-    m = {"version": E.version_of(spec), **spec, "dim": dim, "dtype": "float32", "files": meta}
+    m = {"version": E.version_of(spec), **spec, "dim": dim, "precisions": list(precisions), "files": meta}
     emb_dir = tmp_path / "emb"
     emb_dir.mkdir(exist_ok=True)
     (emb_dir / f"{m['version']}.json").write_text(json.dumps(m), encoding="utf-8")
@@ -59,9 +67,30 @@ def test_find_only_returns_same_spec(tmp_path):
     assert E.find(SPEC, emb_dir)["version"] == m["version"]                  # 旧版照留
 
 
+def test_encode_decode_precisions():
+    rng = np.random.default_rng(3)
+    mat = rng.standard_normal((5, 16)).astype(np.float32)
+    assert np.array_equal(E.roundtrip(mat, "fp32"), mat)
+    assert np.abs(E.roundtrip(mat, "fp16") - mat).max() < 1e-2
+    enc = E.encode(mat, "int8")
+    assert enc["vectors"].dtype == np.int8 and enc["scale"].shape == (5,)
+    assert np.abs(E.decode(enc) - mat).max() <= enc["scale"].max() / 2 + 1e-7    # 误差不超过半个刻度
+    assert E.DEFAULT_PRECISION == "int8"                                     # 用户 10-20 定缺省 8 位
+
+
+def test_load_picks_precision(tmp_path):
+    m, mat, blobs, _ = _publish(tmp_path, precisions=("fp32", "int8"))
+    i8 = E.EmbPack.load(m, blob_dir=blobs)                                    # 缺省 int8
+    assert i8.precision == "int8" and np.array_equal(i8.mat, E.roundtrip(mat, "int8"))
+    assert E.EmbPack.load(m, blob_dir=blobs, precision="fp16") is None         # 没发布这个精度
+    got, _ = i8.materialize("一万", lambda cs: (np.ones((len(cs), 4), np.float32), list(cs)))
+    assert np.array_equal(got[1], E.roundtrip(np.ones((1, 4), np.float32), "int8")[0])   # 现算的行也同精度
+
+
 def test_load_and_materialize_reproduces_build_order(tmp_path):
     m, mat, blobs, _ = _publish(tmp_path)
-    pk = E.EmbPack.load(m, blob_dir=blobs, fetch=lambda url: pytest.fail("本机有缓存不该下载"))
+    pk = E.EmbPack.load(m, blob_dir=blobs, precision="fp32",
+                        fetch=lambda url: pytest.fail("本机有缓存不该下载"))
     assert pk.chars == list("一丁七") and pk.failed == {"丂"} and np.array_equal(pk.mat, mat)
     calls = []
 
@@ -77,17 +106,18 @@ def test_load_and_materialize_reproduces_build_order(tmp_path):
 
 
 def test_load_checks_sha_and_download_flag(tmp_path):
-    m, *_ = _publish(tmp_path)
+    m, _, blobs, _ = _publish(tmp_path)
     assert E.EmbPack.load(m, blob_dir=tmp_path / "empty", download=False) is None
     with pytest.raises(ValueError, match="sha256"):
         E.EmbPack.load(m, blob_dir=tmp_path / "empty", fetch=lambda url: b"tampered")
+    assert E.EmbPack.load(m, blob_dir=blobs, download=False).precision == "int8"
 
 
 def test_template_bank_takes_rows_from_pack(tmp_path, monkeypatch):
     from open_guji_cv.clustering import cnn_candidates as cc
     from open_guji_cv.review.alt_cands import TemplateBank
     m, mat, blobs, _ = _publish(tmp_path)
-    pk = E.EmbPack.load(m, blob_dir=blobs)
+    pk = E.EmbPack.load(m, blob_dir=blobs, precision="fp32")
 
     class FakeCnn:
         ckpt = tmp_path / "other.pt"                                        # 不是现役模型：不挂包
@@ -103,3 +133,37 @@ def test_template_bank_takes_rows_from_pack(tmp_path, monkeypatch):
     got = bank.vectors(["一", "丂", "万"])
     assert np.array_equal(got["一"], mat[0]) and "丂" not in got           # 失败的字不现算
     assert built == [("万",)]                                              # 只有包外的字现场渲染
+
+
+def test_pull_rare_index_writes_source_and_replaces_foreign_table(tmp_path, monkeypatch):
+    """`guji cache pull-rare-index --book`：落表旁写来源；来源不同（本地现建、无记录）的旧表被替换，同来源跳过。"""
+    import argparse
+
+    from open_guji_cv import cli_v2
+    from open_guji_cv.clustering import cnn_candidates as cc
+    from open_guji_cv.clustering import rare_panel
+    from open_guji_cv.steps import align_ref
+    m, mat, blobs, emb_dir = _publish(tmp_path)
+    monkeypatch.setattr(E, "current_spec", lambda ckpt=None: dict(SPEC))
+    monkeypatch.setattr(E, "EMB_DIR", emb_dir)
+    monkeypatch.setattr(E, "find", lambda spec, d=emb_dir: m)
+    real_load = E.EmbPack.load.__func__
+    monkeypatch.setattr(E.EmbPack, "load", classmethod(
+        lambda cls, man, blob_dir=None, fetch=None, download=True, precision="int8":
+        real_load(cls, man, blobs, fetch, download, precision)))
+    monkeypatch.setattr(rare_panel, "book_charsets", lambda book, corpus: (tuple("七一"), (), {}))
+    monkeypatch.setattr(align_ref, "book_corpus", lambda book: None)
+    f = tmp_path / "emb_k.npz"
+    monkeypatch.setattr(cc.CnnCandidates, "emb_index_key", lambda self, cs: ("k", f, {}))
+    args = argparse.Namespace(book="b", precision=None)
+
+    cc._save_emb_index(f, np.zeros((2, 4), np.float32), ["七", "一"])        # 本地现建的旧表，没有来源记录
+    cli_v2._cmd_cache_pull_rare_index(args)
+    side = json.loads(f.with_name(f.name + ".source.json").read_text(encoding="utf-8"))
+    assert side == {"emb": m["version"], "precision": "int8"}
+    with np.load(f) as z:
+        assert list(z["chars"]) == ["七", "一"]
+        assert np.array_equal(z["mat"], E.roundtrip(mat[[2, 0]], "int8"))      # 换成了包里的 8 位行
+    stamp = f.stat().st_mtime_ns
+    cli_v2._cmd_cache_pull_rare_index(args)                                     # 同来源：跳过
+    assert f.stat().st_mtime_ns == stamp

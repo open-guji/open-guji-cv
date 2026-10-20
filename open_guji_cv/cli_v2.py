@@ -78,8 +78,9 @@ def _warn_rare_index_missing(book: str) -> None:
         n = sum(m[1] for m in miss)
         print(f"⚠️ Step5-b 模板索引未预建：{', '.join(f'{a} {b} 字（{c}）' for a, b, c in miss)}。"
               f"若有页要算，第一页会现建 {n} 字（单核约 {n // 25 // 60} 分钟）。建议先 "
-              f"`guji cache build-rare-index --book {book} --jobs 4 -w <工作区>`，"
-              f"或导入带这几个 key 的索引包（runbook S5）", flush=True)
+              f"`guji cache pull-rare-index --book {book} -w <工作区>`（从向量包落成，几秒），"
+              f"没有同规格的向量包时再 `guji cache build-rare-index --book {book} --jobs 4`（runbook S5）",
+              flush=True)
 
 
 def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
@@ -816,7 +817,11 @@ def _cmd_cache_pull_rare_index(args) -> None:
     只认**与本机现役同规格**的包（模型、字体、渲染代码、额外图源四样指纹全对上，见
     `clustering/emb_pack.py`）；对不上就明说，照旧用 `build-rare-index` 现建，不拿旧向量冒充。
     落盘的 key、路径与 `build-rare-index` 是同一个函数算的，`_emb_index` 照旧命中。
-    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。"""
+    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。
+
+    精度（`--precision`）缺省 int8（用户 10-20 定；真刻本评测过了判据，读数见总设计 §10「B2 续：精度」）。
+    表旁边写 `emb_<key>.npz.source.json`（向量包版本＋精度）；已有的表来源不同（含本地现建、没有来源记录的）
+    就替换，全队统一到同一版本同一精度——同一册在不同机器上 5-b 候选逐位一致。"""
     from .clustering import cnn_candidates as cc
     from .clustering import emb_pack
 
@@ -827,8 +832,12 @@ def _cmd_cache_pull_rare_index(args) -> None:
         print(f"没有与本机同规格的向量包：本机 {emb_pack.version_of(spec)} {spec}；已发布：{have}。"
               f"用 `guji cache build-rare-index` 现建，或先 `guji cache build-emb-pack` 出一版。")
         sys.exit(1)
-    pk = emb_pack.EmbPack.load(m)
-    print(f"向量包 {pk.version}：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
+    prec = args.precision or emb_pack.DEFAULT_PRECISION
+    pk = emb_pack.EmbPack.load(m, precision=prec)
+    if pk is None:
+        print(f"向量包 {m['version']} 没有 {prec} 精度（有 {m.get('precisions', ['fp32'])}）")
+        sys.exit(1)
+    print(f"向量包 {pk.version}（{prec}）：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
     if not args.book:
         return
     from .clustering.rare_panel import book_charsets
@@ -846,12 +855,21 @@ def _cmd_cache_pull_rare_index(args) -> None:
         if not cs:
             continue
         key, f, _extra = inst.emb_index_key(cs)
+        side = f.with_name(f.name + ".source.json")
+        want = {"emb": pk.version, "precision": prec}
         if f.exists():
-            print(f"{name}：已有 {f}，跳过")
-            continue
+            try:
+                have = json.loads(side.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                have = None
+            if have == want:
+                print(f"{name}：已有 {f}（{pk.version}／{prec}），跳过")
+                continue
+            print(f"{name}：替换 {f.name}（原表来源：{have or '本地现建或旧快照，无来源记录'}）")
         mat, names = pk.materialize(cs, compute)
         cc._save_emb_index(f, mat, names)
-        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}")
+        side.write_text(json.dumps(want, ensure_ascii=False) + "\n", encoding="utf-8")
+        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}（{prec}）")
 
 
 def _cmd_cache_build_rare_index(args) -> None:
@@ -2937,6 +2955,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--jobs", type=int, default=1,
                    help="build-rare-index：分片多进程建（逐位相同；云端 4 核给 4，约快 4 倍）；"
                         "warm：预渲字块的进程数")
+    p.add_argument("--precision", choices=["int8", "fp16", "fp32"], default=None,
+                   help="pull-rare-index：向量包精度，缺省 int8（真刻本评测与 fp32 持平，见总设计 B2 续）")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
     p.add_argument("--key", default="", help="get：缓存键，如 p0024c01s10")
     p.add_argument("--page", type=int, default=0, help="column：页号")

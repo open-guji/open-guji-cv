@@ -6,6 +6,8 @@
 ## [0.4.9] - 待发
 
 ### Added
+- hanzi 库字形向量包同一版本存 int8／fp16／fp32 三种精度，缺省 int8（26 MB，新机器约 10 秒拉完）；真刻本精度评测脚本 `research/pivot_family/emb_precision_eval.py`（#281，用户 10-20）。
+- `guji cache pull-rare-index --book` 缺省改用 int8 向量包落 Step5-b 模板表，表旁写 `.source.json`（版本＋精度），来源不同的旧表被替换；runbook S5-b 列为备表首选（#284）。真刻本 4,254 条：int8 排第 1 95.5%（fp32 95.3%）、前 5 99.1%（同）。不碰任何 Step，`code_hash` 不变；已有 5-b 产物不用重跑。这两条在 main 上是 v0.4.8 切点前后直接合的（713cbb4a、74b83143），这里 cherry-pick 进待发分支。
 - 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
 
 待发分支 `rc/v0.4.9`（2026-10-20 开；v0.4.8 自此冻结，新 PR 一律投这里）。

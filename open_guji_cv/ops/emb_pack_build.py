@@ -13,7 +13,15 @@ from pathlib import Path
 
 import numpy as np
 
-from ..clustering.emb_pack import EMB_DIR, FILES, REPO, current_spec, version_of
+from ..clustering.emb_pack import (
+    EMB_DIR,
+    FILES,
+    PRECISIONS,
+    REPO,
+    current_spec,
+    encode,
+    version_of,
+)
 
 
 def full_charset() -> tuple[str, ...]:
@@ -38,26 +46,36 @@ SHARD_ROWS = 32768
 
 def write_pack(out: Path, mat: np.ndarray, names: list[str], failed: list[str], spec: dict, meta: dict,
                emb_dir: Path = EMB_DIR) -> dict:
-    """`(mat, names)` → `out/` 下的分片 `vectors-NN.npy`、`chars.txt`、`failed.txt`，清单写进
-    `emb_dir/<版本>.json`，文件同时放进本机 blob 缓存（本机取用不用再下）。"""
+    """`(mat, names)` → `out/<精度>/vectors-NN.npy`（int8 另有 `scale.npy`）、`chars.txt`、`failed.txt`，
+    三种精度一起写；清单写进 `emb_dir/<版本>.json`，文件同时放进本机 blob 缓存（本机取用不用再下）。"""
+    import shutil
+
     from ..hanzi.pack import blob_cache_path
     out = Path(out)
     out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("vectors*.npy"):
-        old.unlink()
-    mat = mat.astype(np.float32)
-    names_ = []
-    for k, i in enumerate(range(0, max(len(mat), 1), SHARD_ROWS)):
-        buf = io.BytesIO()
-        np.save(buf, mat[i:i + SHARD_ROWS], allow_pickle=False)
-        (out / f"vectors-{k:02d}.npy").write_bytes(buf.getvalue())
-        names_.append(f"vectors-{k:02d}.npy")
+    rel: list[str] = []
+    for prec in PRECISIONS:
+        d = out / prec
+        if d.exists():
+            shutil.rmtree(d)
+        d.mkdir()
+        arrays = encode(mat, prec)
+        for k, i in enumerate(range(0, max(len(mat), 1), SHARD_ROWS)):
+            buf = io.BytesIO()
+            np.save(buf, arrays["vectors"][i:i + SHARD_ROWS], allow_pickle=False)
+            (d / f"vectors-{k:02d}.npy").write_bytes(buf.getvalue())
+            rel.append(f"{prec}/vectors-{k:02d}.npy")
+        if "scale" in arrays:
+            buf = io.BytesIO()
+            np.save(buf, arrays["scale"], allow_pickle=False)
+            (d / "scale.npy").write_bytes(buf.getvalue())
+            rel.append(f"{prec}/scale.npy")
     (out / "chars.txt").write_text("".join(c + "\n" for c in names), encoding="utf-8")
     (out / "failed.txt").write_text("".join(c + "\n" for c in failed), encoding="utf-8")
-    m = {"version": version_of(spec), **spec, "dim": int(mat.shape[1]), "dtype": "float32",
+    m = {"version": version_of(spec), **spec, "dim": int(mat.shape[1]), "precisions": list(PRECISIONS),
          "n_chars": len(names), "n_failed": len(failed), "charset": "hanzi chars ∪ ids_lv1", **meta,
          "files": {n: {"sha256": hashlib.sha256((out / n).read_bytes()).hexdigest(),
-                       "bytes": (out / n).stat().st_size} for n in [*names_, *FILES]}}
+                       "bytes": (out / n).stat().st_size} for n in [*rel, *FILES]}}
     for n, f in m["files"].items():
         bp = blob_cache_path(f["sha256"])
         if not bp.exists():
