@@ -22,10 +22,23 @@ Step5-b 稀见字候选与「以字找字」都要「每个字的字体模板向
 **取用只认当前规格**：`find(current_spec())` 找不到同规格的版本就返回 None，调用方照旧本地现建——
 换了模型、字体或代码而包还没出，绝不会拿旧向量冒充。
 
+## 精度（用户 10-20 定：三种都留，默认 8 位）
+
+同一版本（同一模型、字体、代码）里存三种精度，取用时选，版本号不变：
+
+| 精度 | 存法 | 全字表体积 | 用在哪 |
+|---|---|---|---|
+| `int8`（**缺省**） | 每个字一行 int8 ＋ 该行一个 float32 刻度（`max|v|/127`），用时 `q × 刻度` | 约 26 MB | 以字找字排序、直接取向量 |
+| `fp16` | 半精度 | 约 52 MB | 留着对照 |
+| `fp32` | 全精度，与现建逐位相同 | 约 104 MB | **Step5-b 暂用**：真刻本评测（`research/pivot_family/emb_precision_eval.py`）过了再切，免得用包的机器和现建的机器候选对不上 |
+
+10-20 代理实测（单套字体渲染当查询、7 万字检索 3,000 条）：int8 正确字排第 1 60.0%、前 5 71.3%，与 fp32 相同；
+第 1 名与 fp32 相同 99.0%，前 10 集合相同只有 36%（第 5–10 名分数挨得近，顺序会换）。4 位不够（排第 1 降到 43%）。
+
 ## 文件
 
-- `vectors-NN.npy`：float32 `[n, 256]` 按行切成每片 32,768 行（约 32 MB，Worker 单次上传有上限），
-  拼起来逐行与 `chars.txt` 对应（不用 float16：R 道 09-27 实测 top-1 会变 1%）；
+- `<精度>/vectors-NN.npy`：按行切片，每片 32,768 行（Worker 单次上传有上限，整份 104 MB 会 413），拼起来逐行与 `chars.txt` 对应；
+  `int8/scale.npy` 是每行的刻度；
 - `chars.txt`：建成的字，一行一字，码位序；
 - `failed.txt`：全部字体都渲染不出的字（产线建索引时同样会跳过，materialize 据此逐位复现）。
 
@@ -44,7 +57,37 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 EMB_DIR = REPO / "config" / "hanzi" / "emb"
-FILES = ("chars.txt", "failed.txt")       # 另有向量分片 vectors-NN.npy，见清单 files
+FILES = ("chars.txt", "failed.txt")       # 另有 <精度>/vectors-NN.npy 等，见清单 files
+PRECISIONS = ("int8", "fp16", "fp32")
+DEFAULT_PRECISION = "int8"
+
+
+def encode(mat: np.ndarray, precision: str) -> dict[str, np.ndarray]:
+    """float32 `[n, d]` → 要存的数组：`{"vectors": …}`，int8 另有 `{"scale": …}`。"""
+    mat = np.asarray(mat, np.float32)
+    if precision == "fp32":
+        return {"vectors": mat}
+    if precision == "fp16":
+        return {"vectors": mat.astype(np.float16)}
+    if precision == "int8":
+        scale = np.abs(mat).max(axis=1) / 127 if len(mat) else np.zeros(0, np.float32)
+        scale = np.where(scale > 0, scale, 1).astype(np.float32)
+        q = np.clip(np.round(mat / scale[:, None]), -127, 127).astype(np.int8)
+        return {"vectors": q, "scale": scale}
+    raise ValueError(f"不认识的精度 {precision}")
+
+
+def decode(arrays: dict[str, np.ndarray]) -> np.ndarray:
+    """`encode` 的反面 → float32 `[n, d]`（int8 是 `q × 刻度`，不再单位化，与 10-20 实测口径一致）。"""
+    v = arrays["vectors"]
+    if v.dtype == np.int8:
+        return v.astype(np.float32) * arrays["scale"][:, None]
+    return v.astype(np.float32)
+
+
+def roundtrip(mat: np.ndarray, precision: str) -> np.ndarray:
+    """现算的行也过一遍同样的存取，跟包里的行同一个精度。"""
+    return decode(encode(mat, precision))
 
 
 def code_fingerprint() -> str:
@@ -88,9 +131,11 @@ def find(spec: dict, emb_dir: Path = EMB_DIR) -> dict | None:
 class EmbPack:
     """一版向量包：`row(字)`、`vectors(字…)`、`materialize(字表)`。"""
 
-    def __init__(self, manifest: dict, mat: np.ndarray, chars: list[str], failed: set[str]):
+    def __init__(self, manifest: dict, mat: np.ndarray, chars: list[str], failed: set[str],
+                 precision: str = "fp32"):
         self.manifest = manifest
         self.version = manifest["version"]
+        self.precision = precision
         self.mat = mat
         self.chars = chars
         self.index = {c: i for i, c in enumerate(chars)}
@@ -98,29 +143,37 @@ class EmbPack:
 
     @classmethod
     def load(cls, manifest: dict, blob_dir: Path | None = None, fetch=None,
-             download: bool = True) -> EmbPack | None:
-        """按清单取全部文件（本机 blob 缓存 → R2）；`download=False` 时本机缺任何一个就返回 None。"""
+             download: bool = True, precision: str = DEFAULT_PRECISION) -> EmbPack | None:
+        """按清单取某一精度的文件（本机 blob 缓存 → R2）；`download=False` 时本机缺任何一个、
+        或清单里没有这个精度，都返回 None。"""
         from ..hanzi.pack import blob_cache_path, get_blob
+        want = [n for n in manifest["files"] if n.startswith(f"{precision}/")]
+        if not want:
+            return None
         paths = {}
-        for name in sorted(manifest["files"]):
+        for name in sorted(want + list(FILES)):
             sha = manifest["files"][name]["sha256"]
             if not download and not blob_cache_path(sha, blob_dir).exists():
                 return None
             paths[name] = get_blob(sha, blob_dir, fetch, label=f"{manifest['version']}/{name}")
-        shards = [np.load(io.BytesIO(paths[n].read_bytes()), allow_pickle=False)
-                  for n in sorted(paths) if n.startswith("vectors")]
-        mat = np.concatenate(shards) if shards else np.zeros((0, manifest["dim"]), np.float32)
+        def npy(n):
+            return np.load(io.BytesIO(paths[n].read_bytes()), allow_pickle=False)
+        shards = [npy(n) for n in sorted(paths) if n.startswith(f"{precision}/vectors-")]
+        arrays = {"vectors": np.concatenate(shards) if shards else np.zeros((0, manifest["dim"]), np.float32)}
+        if f"{precision}/scale.npy" in paths:
+            arrays["scale"] = npy(f"{precision}/scale.npy")
+        mat = decode(arrays)
         chars = paths["chars.txt"].read_text(encoding="utf-8").splitlines()
         failed = set(paths["failed.txt"].read_text(encoding="utf-8").splitlines())
         if mat.shape != (len(chars), manifest["dim"]):
             raise ValueError(f"{manifest['version']}：向量 {mat.shape} 与字数 {len(chars)} 对不上")
-        return cls(manifest, mat, chars, failed)
+        return cls(manifest, mat, chars, failed, precision)
 
     def vectors(self, chars) -> dict[str, np.ndarray]:
         return {c: self.mat[self.index[c]] for c in chars if c in self.index}
 
     def materialize(self, cs, compute=None) -> tuple[np.ndarray, list[str]]:
-        """字表 → `(mat, names)`，与产线 `build_emb_matrix(cs)` 逐位相同：按 `cs` 原顺序取行，
+        """字表 → `(mat, names)`：按 `cs` 原顺序取行（fp32 包与产线 `build_emb_matrix(cs)` 逐位相同），
         包里记为渲染失败的字跳过（产线也跳过）；包外的字（建包时没在全字表里）交 `compute(字…)` 现算，
         没给 `compute` 就报错——宁可不出，不出一份缺行的索引。"""
         cs = tuple(cs)
@@ -130,7 +183,7 @@ class EmbPack:
             if compute is None:
                 raise KeyError(f"{len(todo)} 字不在向量包 {self.version} 里（如 {''.join(todo[:10])}），要现算")
             m, ns = compute(tuple(todo))
-            got = dict(zip(ns, m))
+            got = dict(zip(ns, roundtrip(m, self.precision) if len(ns) else m))
         rows, names = [], []
         for c in cs:
             if c in self.index:
@@ -145,7 +198,8 @@ class EmbPack:
 
 
 def load_current(download: bool = True, blob_dir: Path | None = None, fetch=None,
-                 emb_dir: Path = EMB_DIR) -> EmbPack | None:
-    """本机现役规格对应的包；没有同规格的版本、或 `download=False` 而本机没缓存 → None。"""
+                 emb_dir: Path = EMB_DIR, precision: str = DEFAULT_PRECISION) -> EmbPack | None:
+    """本机现役规格对应的包（缺省 8 位）；没有同规格的版本、没有这个精度、或 `download=False`
+    而本机没缓存 → None。"""
     m = find(current_spec(), emb_dir)
-    return EmbPack.load(m, blob_dir, fetch, download) if m else None
+    return EmbPack.load(m, blob_dir, fetch, download, precision) if m else None

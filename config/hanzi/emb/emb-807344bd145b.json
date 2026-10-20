@@ -5,7 +5,6 @@
  "ckpt_fp": "d2ce8bab0fd0",
  "code_fp": "d09c1b915e1b",
  "dim": 256,
- "dtype": "float32",
  "extra": [],
  "files": {
   "chars.txt": {
@@ -16,26 +15,67 @@
    "bytes": 0,
    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
-  "vectors-00.npy": {
+  "fp16/vectors-00.npy": {
+   "bytes": 16777344,
+   "sha256": "d111ddb4c72a57ae9a197e707592f8319bfad25d5ced5cdb450e7980bf0a9619"
+  },
+  "fp16/vectors-01.npy": {
+   "bytes": 16777344,
+   "sha256": "324e369183d782d5da5fdf0ef4b91f58c209cb9e295ff72b5531d13f157d4cb5"
+  },
+  "fp16/vectors-02.npy": {
+   "bytes": 16777344,
+   "sha256": "a80e7e7979b47478132a79a837f2c2db61a93ece1a54eb5c1e27ea79a113206a"
+  },
+  "fp16/vectors-03.npy": {
+   "bytes": 1909376,
+   "sha256": "463202ce2c28332b92349a1f7773768d5b03db3eae58cc66f5faf97a1ac699f4"
+  },
+  "fp32/vectors-00.npy": {
    "bytes": 33554560,
    "sha256": "d369ee1a4f7d5f5277552e88c540d979a22bbfb5cfd40095a99f26d8e961cdfb"
   },
-  "vectors-01.npy": {
+  "fp32/vectors-01.npy": {
    "bytes": 33554560,
    "sha256": "affbba76970edaacac24616e4f81570f80636ea542056b88fc0cd7f77b6e8750"
   },
-  "vectors-02.npy": {
+  "fp32/vectors-02.npy": {
    "bytes": 33554560,
    "sha256": "913eb4b07c0b58adf079a7c6f646867f8096c33add2460f6ab0497279345b55f"
   },
-  "vectors-03.npy": {
+  "fp32/vectors-03.npy": {
    "bytes": 3818624,
    "sha256": "4fe28289bf6fd0a3244299dd4e612f931154c8452cab86a77212c66912bae395"
+  },
+  "int8/scale.npy": {
+   "bytes": 408260,
+   "sha256": "dfdab607a6743cbff390d5e91d2feff86f7abdbc64c3fce7a83d431acc4513a8"
+  },
+  "int8/vectors-00.npy": {
+   "bytes": 8388736,
+   "sha256": "e1050731dfd44e60c8734efe012e3506d87af5f193794b18e6d2c1636f8c7ae2"
+  },
+  "int8/vectors-01.npy": {
+   "bytes": 8388736,
+   "sha256": "fe7fe18ef0492591f65f1b1fe39885d6660892ce0faadd7a776e2e804bc44bc4"
+  },
+  "int8/vectors-02.npy": {
+   "bytes": 8388736,
+   "sha256": "dff4f5b97533483f21c351359d8d6dfbb0f6102630cac34ebd3733b1c1a79231"
+  },
+  "int8/vectors-03.npy": {
+   "bytes": 954752,
+   "sha256": "e47ce3f327328744737aa009e6fae817aba1e65cd80d425416fb9097df531702"
   }
  },
  "font_fp": "b31acfa1c250",
  "jobs": 4,
  "n_chars": 102033,
  "n_failed": 0,
+ "precisions": [
+  "int8",
+  "fp16",
+  "fp32"
+ ],
  "version": "emb-807344bd145b"
 }

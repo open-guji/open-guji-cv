@@ -816,7 +816,10 @@ def _cmd_cache_pull_rare_index(args) -> None:
     只认**与本机现役同规格**的包（模型、字体、渲染代码、额外图源四样指纹全对上，见
     `clustering/emb_pack.py`）；对不上就明说，照旧用 `build-rare-index` 现建，不拿旧向量冒充。
     落盘的 key、路径与 `build-rare-index` 是同一个函数算的，`_emb_index` 照旧命中。
-    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。"""
+    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。
+
+    精度（`--precision`）：给 `--book` 时缺省 fp32——Step5-b 产物要与本地现建逐位一致，等真刻本评测
+    （`research/pivot_family/emb_precision_eval.py`）过了再全队切 8 位；不给 `--book` 时缺省 8 位（用户 10-20 定）。"""
     from .clustering import cnn_candidates as cc
     from .clustering import emb_pack
 
@@ -827,8 +830,12 @@ def _cmd_cache_pull_rare_index(args) -> None:
         print(f"没有与本机同规格的向量包：本机 {emb_pack.version_of(spec)} {spec}；已发布：{have}。"
               f"用 `guji cache build-rare-index` 现建，或先 `guji cache build-emb-pack` 出一版。")
         sys.exit(1)
-    pk = emb_pack.EmbPack.load(m)
-    print(f"向量包 {pk.version}：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
+    prec = args.precision or ("fp32" if args.book else emb_pack.DEFAULT_PRECISION)
+    pk = emb_pack.EmbPack.load(m, precision=prec)
+    if pk is None:
+        print(f"向量包 {m['version']} 没有 {prec} 精度（有 {m.get('precisions', ['fp32'])}）")
+        sys.exit(1)
+    print(f"向量包 {pk.version}（{prec}）：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
     if not args.book:
         return
     from .clustering.rare_panel import book_charsets
@@ -851,7 +858,7 @@ def _cmd_cache_pull_rare_index(args) -> None:
             continue
         mat, names = pk.materialize(cs, compute)
         cc._save_emb_index(f, mat, names)
-        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}")
+        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}（{prec}）")
 
 
 def _cmd_cache_build_rare_index(args) -> None:
@@ -2937,6 +2944,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--jobs", type=int, default=1,
                    help="build-rare-index：分片多进程建（逐位相同；云端 4 核给 4，约快 4 倍）；"
                         "warm：预渲字块的进程数")
+    p.add_argument("--precision", choices=["int8", "fp16", "fp32"], default=None,
+                   help="pull-rare-index：向量包精度；给 --book 缺省 fp32（Step5-b 要与现建逐位一致），不给缺省 int8")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
     p.add_argument("--key", default="", help="get：缓存键，如 p0024c01s10")
     p.add_argument("--page", type=int, default=0, help="column：页号")
