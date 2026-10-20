@@ -61,6 +61,9 @@ SPECS: dict[str, IdsSpec] = {
     "xu": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
     "ce": IdsSpec(frame="", orient="h", prior=0.5, which=1, min_margin=0.02, by_form=True),
     "jiao": IdsSpec(frame="", orient="h", prior=0.5, which=0, min_margin=0.02, by_form=True),
+    "qik": IdsSpec(frame="", orient="h", prior=0.5, which=1, min_margin=0.02, by_form=True),
+    "lih": IdsSpec(frame="", orient="v", prior=0.4, which=1, min_margin=0.02, by_form=True),
+    "jue": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
 }
 
 
