@@ -555,7 +555,7 @@ class Engine:
         from .corpus_pin import require_pin_clean, step_pin_token
         if step_pin_token(step.spec.id, self.book):     # 册钉了语料库、这步读语料：起跑前硬校验
             from .workspace import workspace_root
-            require_pin_clean(workspace_root(), self.book.corpus)
+            require_pin_clean(workspace_root(), self.book.corpus, vol=self.book.id)
         for g in self.optional_gaps(step, pages):
             self.log(f"⚠️ {step.spec.id}：{'/'.join(g['switches'])} 开着，但 {g['producer']} 缺 "
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"

@@ -8,6 +8,9 @@
 钉住的版本必须有清单，否则报错；清单之后文件被改过只警告一次（该出新版本，或把文件改回去）。
 算指纹时（``guji status`` 等）只警告；真开跑读语料的步之前 ``require_pin_clean`` 硬校验，改了或缺了就拒绝。
 两级清单（共享方案 S2）：书库 ``v<N>`` 写 ``base: M`` 时并上底库 ``b<M>``（中心库 ``corpus-base``）的条目。
+三层（doc/design/语料库分层版本.md）：全局（底库 ``b<M>``）＋整套书（书库 ``v<N>``）＋册（``vol/<册>/v<K>``）；
+册 yaml 的 ``corpus: N`` 是总号，在该册的钉子账 ``pins/<册>.json`` 里对应三层各自的版本，任一层变总号就升；
+指纹仍只取 ``corpus-vN``。没有钉子账的册，``N`` 按旧做法解释为书库 ``v<N>``（它清单里写的 ``base``）。
 """
 from __future__ import annotations
 
@@ -37,12 +40,6 @@ ITEMS: tuple[tuple[str, str, str], ...] = (
 )
 
 _SKIP_NAMES = {"README.md", ".gitkeep"}
-
-
-def _sha256(p: Path) -> str:
-    from ..products.store import sha256_file
-    return sha256_file(p)
-
 
 
 def _sha256(p: Path) -> str:
@@ -131,28 +128,156 @@ def base_manifest_path(ws: Path, version: int) -> Path:
     return d / f"b{version}" / "manifest.json"
 
 
-def load_manifest(ws: Path, version: int) -> dict:
-    """书库 v<N> 的清单；写了 ``base: M`` 的，底库 b<M> 的条目并进来（书库只登记工作区里的文件）。"""
+_KEEP = object()
+
+
+def _load_book_manifest(ws: Path, version: int, base=_KEEP) -> dict:
+    """书库 v<N> 的清单；写了 ``base: M`` 的，底库 b<M> 的条目并进来（书库只登记工作区里的文件）。
+    ``base`` 给了就用它覆盖清单里写的（钉子账里的全局层版本，``None`` = 不并底库）。"""
     import json
     mp = manifest_path(ws, version)
     if not mp.exists():
         raise FileNotFoundError(f"没有语料库 v{version} 的清单：{mp}")
     man = json.loads(mp.read_text(encoding="utf-8"))
-    b = man.get("base")
+    b = man.get("base") if base is _KEEP else base
     if b is None:
         return man
     bp = base_manifest_path(ws, int(b))
     if not bp.exists():
         raise FileNotFoundError(f"语料库 v{version} 写着底库 b{b}，本机没有它的清单 {bp}"
                                 f"（先 guji db pull -w {ws}）")
-    base = json.loads(bp.read_text(encoding="utf-8"))
-    bad = [i["path"] for i in base["items"] if i["root"] != "repo"] + \
+    base_man = json.loads(bp.read_text(encoding="utf-8"))
+    bad = [i["path"] for i in base_man["items"] if i["root"] != "repo"] + \
           [i["path"] for i in man["items"] if i["root"] != "ws"]
     if bad:
         raise ValueError(f"两级清单的条目根不对（底库只放引擎仓文件，书库只放工作区文件）：{bad[:5]}")
-    return {**man, "items": sorted(base["items"] + man["items"], key=lambda i: (i["root"], i["path"])),
-            "code_tables": base.get("code_tables", {}),
-            "base_manifest": {k: base.get(k) for k in ("base_version", "repo_commit", "created")}}
+    return {**man, "base": int(b),
+            "items": sorted(base_man["items"] + man["items"], key=lambda i: (i["root"], i["path"])),
+            "code_tables": base_man.get("code_tables", {}),
+            "base_manifest": {k: base_man.get(k) for k in ("base_version", "repo_commit", "created")}}
+
+
+def load_manifest(ws: Path, version: int, vol: str | None = None) -> dict:
+    """册 yaml 的 ``corpus: N`` 对应的完整清单。
+
+    不给 ``vol``：``N`` 就是书库版本（旧做法）。给了 ``vol``（册 id）：按该册的钉子账把 ``N`` 解成
+    三层（全局、整套书、册）版本再并起来；册没有钉子账时退回旧做法。"""
+    if vol is None:
+        return _load_book_manifest(ws, version)
+    pin = resolve_pin(ws, vol, version)
+    man = _load_book_manifest(ws, pin["book"], base=pin["global"])
+    if pin.get("vol") is None:
+        return man
+    vm = _load_vol_manifest(ws, vol, pin["vol"])
+    return {**man, "vol_manifest": {"vol": vol, "vol_version": pin["vol"]},
+            "items": sorted(man["items"] + vm["items"], key=lambda i: (i["root"], i["path"]))}
+
+
+# ── 册层与钉子账（分层版本）──────────────────────────────────────────────────────
+
+#: 册层语料所在目录（工作区数据根下，每册一个子目录）
+VOL_DIR = "config/corpus-vol"
+
+
+def vol_prefix(vol: str) -> str:
+    return f"{VOL_DIR}/{vol}/"
+
+
+def vol_versions(ws: Path, vol: str) -> list[int]:
+    d = pack_root(ws) / "vol" / vol
+    if not d.is_dir():
+        return []
+    return sorted(int(p.name[1:]) for p in d.iterdir()
+                  if p.is_dir() and p.name.startswith("v") and p.name[1:].isdigit()
+                  and (p / "manifest.json").exists())
+
+
+def vol_manifest_path(ws: Path, vol: str, version: int) -> Path:
+    return pack_root(ws) / "vol" / vol / f"v{version}" / "manifest.json"
+
+
+def collect_vol(ws: Path, vol: str) -> list[dict]:
+    """扫出这册的册层语料文件（``config/corpus-vol/<册>/**``），都在工作区数据根下，root=ws。"""
+    base = _base("ws", VOL_DIR + "/", ws)
+    out = []
+    for p in sorted((base / VOL_DIR / vol).glob("**/*")) if (base / VOL_DIR / vol).is_dir() else []:
+        if p.is_file() and p.name not in _SKIP_NAMES:
+            out.append({"group": "vol", "root": "ws", "path": p.relative_to(base).as_posix(),
+                        "size": p.stat().st_size, "sha256": _sha256(p)})
+    return out
+
+
+def _load_vol_manifest(ws: Path, vol: str, version: int) -> dict:
+    import json
+    mp = vol_manifest_path(ws, vol, version)
+    if not mp.exists():
+        raise FileNotFoundError(f"没有册层语料库 {vol} v{version} 的清单：{mp}")
+    man = json.loads(mp.read_text(encoding="utf-8"))
+    bad = [i["path"] for i in man["items"] if i["root"] != "ws" or not i["path"].startswith(vol_prefix(vol))]
+    if bad:
+        raise ValueError(f"册层清单的条目只能是 {vol_prefix(vol)} 下的工作区文件：{bad[:5]}")
+    return man
+
+
+def pins_path(ws: Path, vol: str) -> Path:
+    return pack_root(ws) / "pins" / f"{vol}.json"
+
+
+def load_pins(ws: Path, vol: str) -> list[dict]:
+    """这册的钉子账（只追加）：每行 ``{n, global, book, vol, date, note}``，``n`` 是总号。"""
+    import json
+    p = pins_path(ws, vol)
+    return json.loads(p.read_text(encoding="utf-8"))["rows"] if p.exists() else []
+
+
+def resolve_pin(ws: Path, vol: str, n: int) -> dict:
+    """总号 N → 三层版本。账里有就按账；这册没有钉子账时退回旧做法：N 是书库版本，全局层取它清单里写的 ``base``。"""
+    import json
+    rows = load_pins(ws, vol)
+    for r in rows:
+        if r["n"] == n:
+            return {"n": n, "global": r.get("global"), "book": r["book"], "vol": r.get("vol")}
+    if rows:
+        raise FileNotFoundError(f"册 {vol} 的钉子账里没有总号 {n}（有 {[r['n'] for r in rows]}）：{pins_path(ws, vol)}")
+    mp = manifest_path(ws, n)
+    if not mp.exists():
+        raise FileNotFoundError(f"没有语料库 v{n} 的清单：{mp}")
+    return {"n": n, "global": json.loads(mp.read_text(encoding="utf-8")).get("base"), "book": n, "vol": None}
+
+
+def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEEP, book_ver=_KEEP,
+               vol_ver=_KEEP, note: str = "") -> dict:
+    """给这册追加一行钉子账。没写的层沿用最新一行；组合与最新一行相同就拒绝（不空升）。
+
+    没有钉子账时 ``from_n`` 必给（册 yaml 现在的 ``corpus:``），先把它按旧做法登成首行再追加。
+    只写账，不改册 yaml、不推中心库——新总号由调用方写进册 yaml。"""
+    import datetime
+    import json
+    rows = load_pins(ws, vol)
+    if not rows:
+        if from_n is None:
+            raise ValueError(f"册 {vol} 还没有钉子账：要给册 yaml 现在的 corpus: 号（from_n）来登首行")
+        first = resolve_pin(ws, vol, from_n)
+        rows = [{**first, "date": datetime.date.today().isoformat(), "note": "迁移：原 corpus: %d" % from_n}]
+    cur = rows[-1]
+    new = {"global": cur.get("global") if global_ver is _KEEP else global_ver,
+           "book": cur["book"] if book_ver is _KEEP else book_ver,
+           "vol": cur.get("vol") if vol_ver is _KEEP else vol_ver}
+    if new == {"global": cur.get("global"), "book": cur["book"], "vol": cur.get("vol")}:
+        raise ValueError(f"册 {vol} 的三层版本与最新总号 {cur['n']} 相同（{new}），不空升")
+    if new["book"] not in versions(ws):
+        raise FileNotFoundError(f"整套书层没有 v{new['book']}（有 {versions(ws)}）")
+    if new["global"] is not None and new["global"] not in base_versions(ws):
+        raise FileNotFoundError(f"全局层没有 b{new['global']}（本机有 {base_versions(ws)}；先 guji db pull）")
+    if new["vol"] is not None and new["vol"] not in vol_versions(ws, vol):
+        raise FileNotFoundError(f"册 {vol} 没有册层 v{new['vol']}（有 {vol_versions(ws, vol)}）")
+    row = {"n": max(r["n"] for r in rows) + 1, **new,
+           "date": datetime.date.today().isoformat(), "note": note}
+    rows.append(row)
+    p = pins_path(ws, vol)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"rows": rows}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return row
 
 
 def versions(ws: Path) -> list[int]:
@@ -244,21 +369,21 @@ def pin_token(version: int) -> str:
     return f"corpus-v{version}"
 
 
-_CHECKED: dict[tuple[str, int], None] = {}
+_CHECKED: dict[tuple[str, int, str | None], None] = {}
 
 
-def _check_pin_once(ws: Path | None, version: int) -> None:
+def _check_pin_once(ws: Path | None, version: int, vol: str | None = None) -> None:
     """钉住的版本必须有清单；清单之后文件被改只警告一次。"""
     if ws is None:
         raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但不知道工作区（设 GUJI_WORKSPACE 或给 -w）")
-    key = (str(ws), version)
+    key = (str(ws), version, vol)
     if key in _CHECKED:
         return
-    mp = manifest_path(ws, version)
-    if not mp.exists():
-        raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但没有清单 {mp}"
-                                f"（先跑 guji corpus build -w {ws}）")
-    r = check_files(ws, load_manifest(ws, version))
+    try:
+        man = load_manifest(ws, version, vol)
+    except FileNotFoundError as e:
+        raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但{e}（先跑 guji corpus build -w {ws}）") from e
+    r = check_files(ws, man)
     _CHECKED[key] = None
     if r["changed"] or r["missing"]:
         print(f"  ⚠️  语料库 v{version} 的清单与当前文件不符（改了 {len(r['changed'])}，缺 {len(r['missing'])}）："
@@ -272,7 +397,7 @@ class CorpusDrift(RuntimeError):
 
 #: 起跑前硬校验：设成 ``warn`` 只警告不拒绝（临时绕过，比如正在出新版本）
 DRIFT_ENV = "GUJI_CORPUS_DRIFT"
-_CLEAN: dict[tuple[str, int], tuple] = {}
+_CLEAN: dict[tuple[str, int, str | None], tuple] = {}
 
 
 def _stat_sig(ws: Path, man: dict) -> tuple:
@@ -288,7 +413,7 @@ def _stat_sig(ws: Path, man: dict) -> tuple:
     return tuple(out)
 
 
-def require_pin_clean(ws: Path | None, version: int) -> None:
+def require_pin_clean(ws: Path | None, version: int, vol: str | None = None) -> None:
     """钉住的版本：清单里的文件有改动或缺失就拒绝跑（``CorpusDrift``）。
 
     只看清单里登记过的文件；清单之外新出现的文件（``extra``）只警告——它们不在承诺里，
@@ -297,10 +422,10 @@ def require_pin_clean(ws: Path | None, version: int) -> None:
         raise CorpusDrift(f"册 yaml 钉了 corpus: {version}，但不知道工作区（设 GUJI_WORKSPACE 或给 -w）")
     import os
     try:
-        man = load_manifest(ws, version)
+        man = load_manifest(ws, version, vol)
     except FileNotFoundError as e:
         raise CorpusDrift(str(e)) from e
-    key, sig = (str(ws), version), _stat_sig(ws, man)
+    key, sig = (str(ws), version, vol), _stat_sig(ws, man)
     if _CLEAN.get(key) == sig:
         return
     r = check_files(ws, man)
@@ -332,6 +457,6 @@ def with_corpus_pin(p, book):
     if not fields:
         return p
     from .workspace import workspace_root
-    _check_pin_once(workspace_root(), v)
+    _check_pin_once(workspace_root(), v, getattr(book, "id", None))
     tok = pin_token(v)
     return type(p)(**{**p.model_dump(), **{f: tok for f in fields}})

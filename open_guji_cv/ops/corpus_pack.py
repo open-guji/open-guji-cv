@@ -105,10 +105,36 @@ def build(ws: Path, version: int | None = None, note: str = "", base=None) -> Pa
     return out
 
 
-def verify(ws: Path, version: int) -> dict:
-    """拿清单对当前文件：返回 changed／missing／extra（清单之外新出现的）。两级清单连底库一起对。"""
-    man = load_manifest(ws, version)
+def build_vol(ws: Path, vol: str, note: str = "") -> Path:
+    """出册层新版清单（``config/corpus-vol/<册>/**`` 下的文件）。缺省取最大号 + 1；
+    没有文件、或内容与最新一版完全相同都拒绝（不空升）。"""
+    from ..core.corpus_pin import collect_vol, vol_manifest_path, vol_versions
+    items = collect_vol(ws, vol)
+    if not items:
+        raise FileNotFoundError(f"册 {vol} 的册层目录 config/corpus-vol/{vol}/ 下没有文件")
+    have = vol_versions(ws, vol)
+    if have:
+        last = json.loads(vol_manifest_path(ws, vol, have[-1]).read_text(encoding="utf-8"))
+        if [(i["path"], i["sha256"]) for i in last["items"]] == [(i["path"], i["sha256"]) for i in items]:
+            raise ValueError(f"册 {vol} 的册层内容与 v{have[-1]} 相同，不空升")
+    v = (have[-1] + 1) if have else 1
+    out = vol_manifest_path(ws, vol, v)
+    man = {"vol": vol, "vol_version": v, "created": datetime.date.today().isoformat(),
+           "built_with": {"cv_version": _cv_version(), "cv_commit": _git_head()}, "note": note, "items": items}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps(man, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return out
+
+
+def verify(ws: Path, version: int, vol: str | None = None) -> dict:
+    """拿清单对当前文件：返回 changed／missing／extra（清单之外新出现的）。两级清单连底库一起对；
+    给了 ``vol`` 按该册的钉子账把总号 ``version`` 解成三层一起对。"""
+    man = load_manifest(ws, version, vol)
     r = check_files(ws, man)
+    if vol is not None:                           # 册层目录不在 ITEMS 里，新增的册层文件单独扫
+        from ..core.corpus_pin import collect_vol
+        listed = {i["path"] for i in man["items"]}
+        r = {**r, "extra": r["extra"] + [f'ws:{i["path"]}' for i in collect_vol(ws, vol) if i["path"] not in listed]}
     code_ok = man.get("code_tables", {}).get("NEVER_MATCH_FAMILIES") == _never_match_hash()
     out = {"version": version, **r, "never_match_families_same": code_ok,
            "clean": not (r["changed"] or r["missing"] or r["extra"]) and code_ok}

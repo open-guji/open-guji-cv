@@ -1981,6 +1981,29 @@ def cmd_corpus(args) -> None:
     if not ws.is_dir():
         print(f"✗ 工作区 {ws} 不存在", file=sys.stderr)
         sys.exit(2)
+    if args.action == "pin":                          # 册的钉子账：追加一行总号（分层版本）
+        from .core.corpus_pin import append_pin
+        if not args.vol:
+            print("✗ pin 要给 --vol <册 id>", file=sys.stderr)
+            sys.exit(2)
+        kw = {k: v for k, v in (("global_ver", args.global_ver), ("book_ver", args.book_ver),
+                                ("vol_ver", args.vol_ver)) if v is not None}
+        try:
+            row = append_pin(ws, args.vol, from_n=args.from_n, note=args.note, **kw)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}（本命令不改册 yaml、不推中心库）")
+        return
+    if args.action == "build" and args.vol:           # 册层清单
+        try:
+            out = cp.build_vol(ws, args.vol, args.note)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✓ 已写 {out}（接着 guji corpus pin --vol {args.vol} --vol-ver N 记进钉子账）")
+        return
     if args.action in ("build", "init"):
         base = args.base
         if args.action == "init":                     # 新书：钉最新底库出 v1（两级清单）
@@ -2001,9 +2024,14 @@ def cmd_corpus(args) -> None:
         print(f"✓ 已写 {out}（迁过的工作区接着 guji db push -w {ws}）")
     elif args.action == "verify":
         vs = cp.versions(ws)
-        v = args.version or (vs[-1] if vs else 0)
+        v = args.version
+        if not v and args.vol:                        # 册：总号缺省取钉子账最新一行
+            from .core.corpus_pin import load_pins
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (vs[-1] if vs else 0)
         try:
-            r = cp.verify(ws, v)
+            r = cp.verify(ws, v, args.vol)
         except FileNotFoundError as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
@@ -3094,13 +3122,18 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
-                                      "build-base 出底库／init 新书钉最新底库")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init"])
+                                      "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,
                    help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
+    p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
+    p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
+    p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
+    p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
+    p.add_argument("--vol-ver", type=int, default=None, help="pin：册层版本")
     p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
 
     p = sub.add_parser("glyphlib", help="[v2] 共享刻例库：build 从一本书精选刻例出新版本（--push 推进中心库）")

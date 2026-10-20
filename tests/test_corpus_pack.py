@@ -225,7 +225,7 @@ def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypat
     from open_guji_cv.core import corpus_pin
     from open_guji_cv.core.engine import Engine
     seen = []
-    monkeypatch.setattr(corpus_pin, "require_pin_clean", lambda ws, v: seen.append(v) or (_ for _ in ()).throw(
+    monkeypatch.setattr(corpus_pin, "require_pin_clean", lambda ws, v, **kw: seen.append(v) or (_ for _ in ()).throw(
         corpus_pin.CorpusDrift("drift")))
 
     class _E:
@@ -263,3 +263,94 @@ def test_push_refuses_changed_corpus_without_new_version(ws):
     assert "freq.json" in msg and "new.txt" in msg and "v2" in msg
     cp.build(ws)                                          # 出 v2 把现状收进去 → 放行
     assert corpus_pin.push_problems(ws) == []
+
+
+# ── 分层版本：全局／整套书／册三层，总号记在册的钉子账里（doc/design/语料库分层版本.md）──────
+
+def _copy_base(b, tmp_path_unused=None):
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root
+    n = json.loads(b.read_text(encoding="utf-8"))["base_version"]
+    dst = borrowed_root(BASE_WS) / BASE_DIR / f"b{n}" / "manifest.json"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(b.read_bytes())
+
+
+def test_no_pin_ledger_means_legacy_meaning(two_level):
+    """册没有钉子账：总号就是书库版本，带不带册 id 解出来的清单一样（殿本现有 corpus: 9 不受影响）。"""
+    from open_guji_cv.core import corpus_pin
+    book, _, _ = two_level
+    cp.build(book, base=1)
+    assert corpus_pin.resolve_pin(book, "vol01", 1) == {"n": 1, "global": 1, "book": 1, "vol": None}
+    assert corpus_pin.load_manifest(book, 1, "vol01") == corpus_pin.load_manifest(book, 1)
+    with pytest.raises(FileNotFoundError, match="没有语料库 v3"):
+        corpus_pin.load_manifest(book, 3, "vol01")
+
+
+def test_any_layer_change_bumps_total_and_same_combo_is_refused(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "fixed.json").write_text('{"a": 1}', encoding="utf-8")
+    v1 = cp.build_vol(book, "vol01")
+    assert v1.parent.name == "v1"
+    with pytest.raises(ValueError, match="相同"):
+        cp.build_vol(book, "vol01")                       # 内容没变不空升
+    with pytest.raises(ValueError, match="钉子账"):
+        corpus_pin.append_pin(book, "vol01", vol_ver=1)   # 没账又没给 from_n
+    r2 = corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)          # 册层变了 → 总号 2
+    assert (r2["n"], r2["global"], r2["book"], r2["vol"]) == (2, 1, 1, 1)
+    assert [r["n"] for r in corpus_pin.load_pins(book, "vol01")] == [1, 2]   # 首行是迁移行
+    with pytest.raises(ValueError, match="不空升"):
+        corpus_pin.append_pin(book, "vol01", vol_ver=1)
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(book, base=1)                                                   # 整套书层 v2
+    assert corpus_pin.append_pin(book, "vol01", book_ver=2)["n"] == 3
+    _copy_base(cp.build_base(cp.base_workdir("main"), "second"))              # 全局层 b2
+    assert corpus_pin.append_pin(book, "vol01", global_ver=2)["n"] == 4
+    assert corpus_pin.append_pin(book, "vol01", book_ver=1, global_ver=1)["n"] == 5   # 回退也是新总号
+    with pytest.raises(FileNotFoundError, match="没有 v9"):
+        corpus_pin.append_pin(book, "vol01", book_ver=9)
+
+
+def test_pinned_manifest_merges_three_layers_and_verify_sees_vol_files(two_level, monkeypatch):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "fixed.json").write_text('{"a": 1}', encoding="utf-8")
+    cp.build_vol(book, "vol01")
+    corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)
+    man = corpus_pin.load_manifest(book, 2, "vol01")
+    roots = {(i["root"], i["path"]) for i in man["items"]}
+    assert ("ws", "config/corpus-vol/vol01/fixed.json") in roots and ("ws", "corpus/ref.txt") in roots
+    assert any(r == "repo" for r, _ in roots)                               # 全局层的引擎仓文件
+    assert cp.verify(book, 2, "vol01")["clean"]
+    (vol_dir / "new.json").write_text("{}", encoding="utf-8")
+    assert cp.verify(book, 2, "vol01")["extra"] == ["ws:config/corpus-vol/vol01/new.json"]
+    (vol_dir / "fixed.json").write_text('{"a": 2}', encoding="utf-8")
+    corpus_pin._CLEAN.clear()
+    with pytest.raises(corpus_pin.CorpusDrift, match="fixed.json"):
+        corpus_pin.require_pin_clean(book, 2, "vol01")
+    corpus_pin._CLEAN.clear()
+    monkeypatch.setenv(corpus_pin.DRIFT_ENV, "warn")
+    corpus_pin.require_pin_clean(book, 2, "vol01")
+
+
+def test_vol_manifest_rejects_foreign_paths(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "a.json").write_text("{}", encoding="utf-8")
+    p = cp.build_vol(book, "vol01")
+    m = json.loads(p.read_text(encoding="utf-8"))
+    m["items"][0]["path"] = "config/groups/freq.json"
+    p.write_text(json.dumps(m), encoding="utf-8")
+    with pytest.raises(ValueError, match="册层清单"):
+        corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)
+        corpus_pin.load_manifest(book, 2, "vol01")
