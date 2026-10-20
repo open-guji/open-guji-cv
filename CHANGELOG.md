@@ -7,6 +7,9 @@
 
 待发分支 `rc/v0.4.7`。
 
+### Fixed
+- 导出（`formats/guji_page_cv.py`）：排除名单格（seg_defect／crop_defect）人已给字（`evidence.human_char`）的，字位 `method=human`、`review=human`，不再记 `pending`、不再标 `lacuna: defect`（文本本来就出这个字）。此前这类格在 pages.json 里仍是 pending（vol02 重跑后 124 格），顺带让待审单、2c 把它们当没裁。只动导出出口，不动任何 Step，`code_hash` 不变。非字、原刻残（damaged）、无人给字的名单格不变。
+
 ### Changed
 - `guji close-check` 1a（非冻结册）改口径（用户 10-19 定「在跑它的那个版本下新鲜就行，不要求最新版本」）：只因「代码或版本变了」过期、且 manifest 条目记着正式版 `cv_version`（不带 `+N`／`+dirty`）的页算新鲜，过期也不再往下游传；detail 里另报这类页数与本册产物用到的 cv 版本。册配置变、参数变、上游产物变、缺失、失败、显式失效、老条目（没记版本）照旧算 FAIL。新参数 `--strict-cv` 回到旧口径。`Engine.status(code_ok=True)` 是同一件事（缺省 False，`guji status` 不变）。冻结册的 1a 不受影响。PATCH；只动 `core/engine.py`（不在任何 Step 的 `code_deps`）、`ops/close_check.py`、`cli_v2.py`，`code_hash` 不变。
 
