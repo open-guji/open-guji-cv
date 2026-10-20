@@ -7,6 +7,7 @@
 
 ### Added
 - 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
+- M10 小件（#286，v0.4.8 发版后直接合进了 main，dev 已含）：`resolved_manual_cells` 遇坏行改为逐行读、跳过并在 stderr 报出（原来一行坏整片静默退回自动切分），新增 `scripts/zhengli/check_manual_cells.py`（GUJI-692）；公众意见台账 `scripts/zhengli/opinion_ledger.py`（GUJI-690）；runbook S25「1.0 之后的修订」（GUJI-696）。`lookup.py` 不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
 
 ## [0.4.8] - 2026-10-20
 
