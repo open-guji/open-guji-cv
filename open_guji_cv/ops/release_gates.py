@@ -1,7 +1,9 @@
 """放行硬项（用户 2026-10-19 定，GUJI-624）：0.1.0 与 1.0.0 都查，`guji close-check` 第 2c、2d 项。
 
-1. **□ 有去向**（2c）：导出文本里每个阙文占位（`□`／`〓`）对应的格，要么在公众人审页的待审单上
-   （book-text 的 `NNN.pending.json`，`--pending` 给），要么在本册的**重切清单**上。都不在的不放行。
+1. **□ 有去向**（2c）：导出文本里每个阙文占位（`□`／`〓`）对应的格，要么在公众人审页的待审单上，
+   要么在本册的**重切清单**上。都不在的不放行。待审单 10-20 起只在中心库
+   `feedback/lists/proofing/<书>/<章>.pending.json`（本地在数据目录同一相对路径，`guji db sync` 拉下来），
+   不再在 book-text；`resolve_pending` 缺省就去那里找（GUJI-711），见下「待审单在哪」。
 2. 人审页加「切坏格」一类：网站侧的事。2c 报出的没去向的格（close-check `--json` 的 `loose`）要上人审页时，
    在 pending.json 里写 `{"cell": 格, "review": "pending", "why": ["seg_defect"], "cls": "seg_defect"}`；人裁定保持 □ 的格留在单上、写 `review: "human"`，也算有去向。
 3. **整理本对不上的列有交代**（2d）：align_ref 记进 `coord_fallback` 的列（格与整理本对不上），每一列都要在
@@ -107,8 +109,97 @@ def load_ledger(book: str, root: Path | None = None) -> tuple[dict[tuple[int, in
     return out, bad
 
 
+# ── 待审单在哪（GUJI-711）────────────────────────────────
+#
+# 10-20 起公众待审单只在中心库 `feedback/lists/proofing/<书>/<章>.pending.json`（网站 proofing-sync 从这里发布），
+# 本地在数据目录 `$GUJI_DATA_HOME/<分支>/<工作区>/feedback/lists/proofing/…`（`lists_dir()` 已指过去）。
+# `<书>` 是 book-text 的书 id（四庫總目 `96mid1ogzk`），`<章>` 是章号 NNN（`volNN` 册即 `0NN`）。
+
+PROOFING = "proofing"
+META_DIR = Path(__file__).resolve().parents[2] / "doc" / "formats" / "samples" / "guji_format_v0.1"
+_VOL = re.compile(r"vol(\d+)")
+_CHAP = re.compile(r"\d{3}")
+
+
+def proofing_path(book_text_id: str, chapter: str, root: Path | None = None) -> Path:
+    return (root or lists_dir()) / PROOFING / book_text_id / f"{chapter}.pending.json"
+
+
+def chapter_of(book: str, chapter: str | None = None) -> str | None:
+    """章号：给了就用；`volNN` 册推成 `0NN`（与 `guji export format` 同一口径）；推不出 → None。"""
+    if chapter:
+        return chapter
+    m = _VOL.fullmatch(book or "")
+    return f"{int(m.group(1)):03d}" if m else None
+
+
+def book_text_id(book: str) -> str | None:
+    """cv 册 → book-text 书 id：`guji export format` 用的那份 meta（`meta_<册>.json` 的 `defaults.book.id`）。"""
+    p = META_DIR / f"meta_{book}.json"
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))["defaults"]["book"]["id"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def default_pending(book: str, chapter: str | None = None, root: Path | None = None) -> Path | None:
+    """本册本章的中心库待审单（本地数据目录里的路径）；推不出章号 → None。
+
+    书 id 先按 meta 取；取不到就在 `proofing/*/` 下找这一章，恰好一份才用。文件不一定在。"""
+    chap = chapter_of(book, chapter)
+    if not chap:
+        return None
+    bid = book_text_id(book)
+    if bid:
+        return proofing_path(bid, chap, root)
+    hits = sorted(((root or lists_dir()) / PROOFING).glob(f"*/{chap}.pending.json"))
+    return hits[0] if len(hits) == 1 else None
+
+
+def resolve_pending(arg: str | Path | None, book: str, chapter: str | None = None,
+                    root: Path | None = None) -> tuple[Path | None, str]:
+    """`--pending` 的值 → (待审单路径或 None, 给人看的一句说明)。
+
+    - 不给（`None`）或只写 `--pending`（空串）：本册本章的中心库待审单；
+    - 给册（`vol04`）、章号（`004`）或 `<书>/<章>`：那一册／章的中心库待审单；
+    - 给文件路径：在就用它；不在、又像 book-text 的旧路径（`NNN.pending.json`）→ 说明已迁移、指出新路径，
+      新路径在就改读新路径。
+    中心库待审单不在 → (None, 提示先 `guji db sync`)，2c 只认重切清单。"""
+    a = "" if arg is None else str(arg).strip()
+    target: Path | None
+    if not a:
+        target, how = default_pending(book, chapter, root), f"本册（{book}）"
+    elif _VOL.fullmatch(a):
+        target, how = default_pending(a, None, root), f"册 {a}"
+    elif _CHAP.fullmatch(a):
+        target, how = default_pending(book, a, root), f"章 {a}"
+    elif re.fullmatch(r"[^/\\]+/\d{3}", a):
+        bid, chap = a.split("/")
+        target, how = proofing_path(bid, chap, root), a
+    else:
+        p = Path(a).expanduser()
+        if p.is_file():
+            return p, ""
+        m = re.fullmatch(r"(\d{3})\.pending\.json", p.name)
+        if not m:
+            return None, f"--pending 给的 {a} 不在"
+        # book-text 的目录是 `Book/g/z/k/<书 id>/NNN.pending.json`：书 id 先按 meta，取不到用上一级目录名
+        bid = book_text_id(book) or (p.parent.name if p.parent.name not in ("", ".", "..") else None)
+        new = proofing_path(bid, m.group(1), root) if bid else default_pending(book, m.group(1), root)
+        moved = (f"--pending 给的 {a} 不在：待审单 10-20 起已从 book-text 迁到中心库，"
+                 f"本地在 {new}（`guji db sync` 拉下来）")
+        if new is not None and new.is_file():
+            return new, moved + "，改读这份"
+        return None, moved + "；那里也没有，只认重切清单"
+    if target is None:
+        return None, f"{how}推不出章号／书 id，没找中心库待审单（给 --chapter，或 --pending <书>/<章>）；只认重切清单"
+    if not target.is_file():
+        return None, f"中心库待审单 {target} 不在（先 guji db sync？）；只认重切清单"
+    return target, f"待审单：{target}"
+
+
 def load_pending_cells(path: Path) -> set[str]:
-    """book-text 的 `NNN.pending.json` → 待审单上的格（`cell` 字段，形如 `9:7:17`、`90:1:3a`）。
+    """待审单 `NNN.pending.json`（中心库 `feedback/lists/proofing/<书>/`）→ 待审单上的格（`cell` 字段，形如 `9:7:17`、`90:1:3a`）。
 
     `review: "human"` 的也算：人在审页上裁过、定了保持 □ 的格留在单上（网站不再显示），就算有去向。"""
     d = json.loads(Path(path).read_text(encoding="utf-8"))

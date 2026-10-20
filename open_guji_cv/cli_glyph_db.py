@@ -106,7 +106,7 @@ def cmd_glyph_db(args):
             font_db = G.pick_font_db(db_path, *[p for _, p in others])
             res = G.run_selfcheck(db_path, others, font_db, progress=True)
             out = G.save(res)
-            summary = {k: v for k, v in res.items() if k not in ("findings", "all")}
+            summary = {k: v for k, v in res.items() if k not in ("findings", "all", "inst_sha")}
             summary["out"] = str(out)
         elif args.action == "repair":
             # 字头脏数据 + 同一格的机器副本；默认只报，--apply 才写

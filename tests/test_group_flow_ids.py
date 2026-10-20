@@ -74,6 +74,30 @@ def test_judge_abstains_low_margin_few_templates_blank():
     assert O.judge_with("can", blank, bank, SPEC).why == "abstain:blank"
 
 
+BY_FORM = O.IdsSpec(frame="", orient="h", prior=0.45, which=1, min_margin=0.02, min_class=8, by_form=True)
+
+
+def test_judge_by_form_classifies_by_member_char():
+    """按字分类（叙敘 等）：模板按成员字建，切下的一段直接比，不经 IDS 拼字。"""
+    cells = [("敘", _glyph("bar", k % 3 - 1)) for k in range(9)] + [("叙", _glyph("col", k % 3 - 1)) for k in range(9)]
+    bank = O.form_templates(cells, BY_FORM)
+    assert sorted(bank) == ["叙", "敘"] and len(bank["敘"]) == 9
+    v = O.judge_with("xu", _glyph("bar"), bank, BY_FORM)
+    assert v.char == "敘" and v.why == "agree" and v.extra["form"] == "敘" and v.extra["margin"] >= 0.02
+    assert O.judge_with("xu", _glyph("col"), bank, BY_FORM).char == "叙"
+    few = O.form_templates(cells[:9] + cells[9:11], BY_FORM)                    # 叙 只有 2 例，不许给
+    v = O.judge_with("xu", _glyph("col"), few, BY_FORM)
+    assert v.char is None and v.why == "abstain:few_templates"
+    assert O.judge_with("xu", np.full((100, 100), 255, np.uint8), bank, BY_FORM).why == "abstain:blank"
+
+
+def test_repo_by_form_banks_load():
+    for g in ("xu", "ce", "jiao", "qik", "lih", "jue"):
+        assert O.SPECS[g].by_form and O.has_bank(g), g
+        from open_guji_cv.groups.registry import GROUPS
+        assert set(O.load_bank(O.bank_path(g))) <= GROUPS[g].members, g
+
+
 def test_bank_file_roundtrip_deterministic(tmp_path):
     bank = _bank()
     d = O.dump_bank("can", bank, {"cells": 18})

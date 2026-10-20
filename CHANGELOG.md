@@ -3,6 +3,54 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
+## [0.4.8] - 待发
+
+### Added
+- 产物包按「三样版本」打标签、每册有 main（用户 10-20 定：不同版本的结果分开存、不覆盖，main 是最新正式结果；cv、字形库、语料库三个版本号共同决定结果）：`guji products pack push` 不给 `--label` 时标签拼成 `cv<版本>-c<语料库号>-g<字形库号>-<改动名>`（`--change`；字形库没钉写 `g-`＋人裁指纹前 6 位），三样完整值记进 manifest 的 `versions`；新 `pack promote <册> --label …`／`pack push --main` 追加 main 指针（`main-ptr/`，只增不改，Worker 不用改）；`fetch` 缺省取 main，没标过才取最新；`list` 标 ★ 并列三样版本。不碰任何 Step，`code_hash` 不变。
+
+- 产物包记字形库的内容版本、没存包提醒、实验记录（用户 10-20 定）。不碰任何 Step，`code_hash` 不变：
+  - 每条产物 manifest 新字段 `db_rev`（跑时本机数据对应的中心库版本 `<工作区>@<分支>:<rev>`，不进指纹）；包的 `versions` 加 `db_rev`、`db_revs`（seed_admit 各页的 rev 与页数）、`corpus_base`。`glyph_pin` 只钉指纹不钉内容，要复现某份包读的库就从这个 rev 开 Neon 分支。
+  - `guji pipeline`／`step`／`status`／`close-check` 末尾：本机这册产物在最后一次存／取包之后又跑过（各步 `_manifest.jsonl` 摘要对不上，记在 `<产物根>/<册>/.pack.json`），印一行提醒存包。只提醒不挡。
+  - `pack push` 在工作区仓写 `experiments/<册>/<标签>.md`（基线、三样版本、中心库 rev、册 yaml、`--report` 给的 diff 报告）；`promote`／`--main` 往页尾追「标为 main」。`--no-record` 不写。
+  - 实验记录开头加「摘要」（用户 10-20：每跑完一次都在记录里简单总结配置和结果）：`pack push --summary "…"`（或 `@文件`）写目的、改了什么、结论；给了 `--report` 时自动加一行结果（送审前后、人审率、变了的列、逐格翻转）；从产物 manifest 自动列各步最后一轮的起止时刻（洛杉矶）与耗时，看得出这一轮从哪步起重跑、哪步最慢。
+
+- `guji products exclusions <册> --a <重切前> [--b <重切后>] [--apply]`（`ops/exclusion_rebind.py`，用户 10-20 同意方向）：排除清单按格号记、不带框，重切后可能落到别的格。按重切前的框到重切后找 IoU ≥ 0.85 的格：没动不改、顺移改号（`rekey_from`）、找不到或改号撞上撤到 `crop_exclusions_retired.jsonl`。缺省只报计划。不碰任何 Step，`code_hash` 不变。
+
+- 控制台记下选的字是从哪儿点来的（`doc/research/人审找字-以字找字与异体族按图排序.md` §5.3，用户 10-20 要量相似字的真实命中）：
+  - **定字卡**：confirm 行多带 `pick_src`、`pick_rank`、`pivot`、`pick_from`（`reviewClass.pickFields`）。`pick_src` 取值：
+    - `cand`：主候选，`rank` 为键位表第几个，`from` 为哪几路；
+    - `alt`：相似字，带 `pivot`；
+    - `alt_q`：键入近似字后的相似字；
+    - `rare`：「查候选」；
+    - `custom`：手输；
+    - `jys`：己已巳卡；
+    - `cnn`／`ctx`／`llm`／`ocr`／`ai`／`form`：证据行上的「采信」。
+  - **Step8「都不对」**：`collate_verdict` 与 `confirm` 带 `pick_src`／`pick_rank`／`pivot`，取值为 `alt`／`alt_q`／`custom`。
+  - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
+- `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
+
+### Changed
+- 管线提速（#255，PATCH；产物逐字节不变，**只有 rare_candidates、seed_admit 的 `code_hash` 变了**，其余 15 步不变）：
+  - 页级并行：`row_segment`、`cell_shrink`、`glyph_match`、`rare_candidates`、`seed_admit` 登记进 `core/parallel.py`（不进指纹）。四庫 vol04 46 页串行对 `--jobs 4` 逐字节相同：row_segment 65→26 s、cell_shrink 28→9 s、glyph_match 231→80 s、rare_candidates 65→24 s、seed_admit 82→50 s。worker 里 OpenBLAS／torch 压 1 线程、`cv2.setNumThreads` 置空（fork 子进程里调它会卡死）；seed_admit、rare_candidates 先在主进程暖机、`parallel_warm` 预建大缓存再 fork；进程数按可用内存压。seed_admit 并行前要先把字块缓存建好。
+  - 代码等价登记（`core/code_equiv.py` + `scripts/code_equiv.py check`，用户 10-20 定）：新旧代码同一批页产物逐字节相同才登记，指纹换回旧哈希，各册不过期。
+  - 热点：glyph_match 逐页 −24%（wmax 按需算、同格查找分桶、HOG 向量化）；seed_admit 每页 2.3→0.85 s（事件读缓存；铁证匹配器归一图按内容缓存）；context_decide 热缓存首页 6–7→2 s（本书与通用 LM 按语料内容 + 代码指纹缓存）；align_ref 起跑 16→7 s；印章遮挡每页 0.21→0.02 s。
+  - 训好的语言模型跨机分发：本机没命中先用读令牌去 R2 取 `derived/lm/…`，`guji products pack push-index` 手动推（用户 10-20 定）。runbook S1 设 `GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_READ`。
+
+### Fixed
+- `font_candidates._row_norms` 按 `id(mat)` 缓存行模长：lru 挤掉的矩阵释放后 id 被复用、行数相同时用错模长，余弦全错、结果随页序变（#255）；seed_admit 补登记 `code_deps` 里的 `font_candidates`。**rare_candidates、seed_admit 判过期，各册要重跑这两步**（vol04 46 页上未触发，产物相同）。
+- 并发写（#255）：`_stamps.json` 加跨进程锁、临时文件带进程号（原来并行再生图块会整页记失败、丢戳）；`ImageCache.put`、绑定逐页缓存、字体索引改原子写。
+- 中心库客户端超时分两档、超时快速重试（GUJI-707；国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手，GUJI-703）：小 JSON 请求（查表、签名、状态、whoami、分支、追加事件）缺省超时 120 → 25 秒（`GUJI_DATA_TIMEOUT` 可改），超时走原有退避重试，且网络错至少试 4 次（原先查表、签名只试 2 次）；收发大块字节的（快照、备份、产物包、R2 直取图、`r2` 上传的 PUT）维持原值。`r2.upload_via_worker` 的签名请求同样用短超时。PATCH；不碰任何 Step，`code_hash` 不变。
+- `guji close-check` 第 2c 项的待审单改读中心库（GUJI-711）：10-20 起公众待审单只在中心库 `feedback/lists/proofing/<书>/<章>.pending.json`，`--pending` 不给（或只写 `--pending`）就读数据目录里本册本章那份（书 id 按 `meta_<册>.json`，取不到在 `proofing/*/` 下找唯一一份；章号取 `--chapter`、导出目录唯一的 `NNN.lines.md` 或 `volNN`）；也认册（`vol04`）、章号、`<书>/<章>`；给了 book-text 的旧路径且文件不在，提示已迁移并指出新路径（新路径在就改读）。数据目录里没有就照旧只认重切清单，2c 说明里写清。runbook 同步。PATCH；不碰任何 Step，`code_hash` 不变。
+- 字形库体检结果带库指纹，过期不出卡（GUJI-710）：`guji glyph-db selfcheck` 把开跑时的库指纹（本书套刻例 `(实例 id, 字, 图块 sha)` 排序后哈希）记进 `summary.json` 的 `db_fp`，每张卡记本例与本书对手的图块 sha；控制台体检 tab 出卡前核对，结果没带指纹或卡上刻例的图对不上（刻例重排编号）→ 409「体检结果已过期（库已变），请重跑 guji glyph-db selfcheck」，一张卡也不出；只是撤了、改了字的，那几张卡不出、其余照出。起因 GUJI-623：09-26 的结果在 09-27 重排编号后照样出卡，9 张错位。`glyphdb-audit` skill 与 `glyph_audit.py` 的说明改成中心库口径（数据目录、`guji db sync`，不再进 git）。PATCH；不碰任何 Step，`code_hash` 不变。
+- 语料库任何内容变了都要改版本号（用户 10-20）：`guji db push`／`sync` 推送前，最新一版清单登记的工作区文件被改、缺，或清单之外多了新语料文件 → 拒绝，提示先 `guji corpus build` 出新版本一起推；已发布的某一版 `manifest.json` 库里已有且本地不同 → 拒绝（旧版本不可改）。只看工作区文件；引擎仓里的表仍由起跑前硬校验管。10-20 的起因：v1 登记的 `freq.json`、`l2/jys.json` 钉选后被重新生成，`glyph_match` 因此拒跑。改 `core/corpus_pin.py`、`datastore/workcopy.py`，`code_hash` 不变。
+- `guji db pull`／`sync` 遇到库里引用、R2 上却没有（404）的图不再停下：跳过、stderr 打一行并在 `materialize` 结果的 `missing_images`（相对路径→sha）里列出，其余照常还原。要像以前一样遇到就停：`GUJI_DATA_MISSING_BLOBS=error`。不碰任何 Step，`code_hash` 不变。
+- Step3 逐列格位先验 `layout_prior`：列端框线残渣记空。表说该空、又是整列物理上第一格或最后一格的「字格」，里面像字的墨行合计不到 0.15 个 period、满宽横线（±3 行）以外的墨占格面积不到 0.03 时改成 blank（产物 flags 记 `layout_frame_junk`）。起因：掩码故意不罚满宽密行，版框横线落进列首／列尾那格时被切成「字」，按 daizhige 算多切一格（vol05 p147 c1、vol06 p18 c6／p69 c2／p63 c1）。列中段的碎墨不碰：卷端页、整页破损页上印断的字（vol09 p164「經部十七」）不能批量判非字。殿本 vol04–09 实测改空 647 格，全部看图是框线、竖线、碎点；比 1.20 逐格多修好 19 列（4／5／6／7／8／9 册各 1／4／6／3／1／4）、改坏 0；穿字格线不变（只改格的类型，不动格线）。开关不开的书不受影响。PATCH；`row_segment` 版本 1.21，`code_hash` d4f420cf47082535 → e82f08017e79c63a。
+- Step3 逐列格位先验 `layout_prior`：表的抬头级数与闸（`n_raised_hint`）不一致时，两种格网都切，取格线横穿字少的（打平照旧用表的）。起因：殿本 vol04 产物包对照组／版面先验组（`cv0.4.7-c1-g-82293e-*`）看图——①p84 c5、p65 c8「御」「欽」抬头在版框上方、列图没截到，按表硬设抬头格把首个看得见的字编成 -1，整列格网错一位劈字（84:5 放行错字「一」）；②p127 c1–2 低起列（从第 5 格起），按表压掉闸给的抬头余量后格网上挤半格。一律听闸也不行：书名列首字会被吸进 -1（vol04 实测新坏 10 列）。vol04 全册只有 7 列改走闸的格网（8:8、9:8、65:8、84:5、127:1、127:2、220:1），其余列与 v0.4.7 逐字节相同；穿字格线（对照组 1,810 条）旧版 1,808 → 新版 1,783。Step3 产物 flags 记 `layout_raise_gate`。开关不开的书不受影响。PATCH；`row_segment` 版本 1.20，`code_hash` b72e737b7a45a1df → d4f420cf47082535。
+- `guji products diff --images` 看图页：`bbox_page` 是右上原点，原来直接当左上原点裁、画框，除正中那列外都画到镜像位置的另一列（vol04 R1 验收时发现）。现在先 `bbox_tr_to_tl` 再裁。报告数字不受影响。不碰任何 Step，`code_hash` 不变。
+- `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
+
+待发分支 `rc/v0.4.8`。
+
 ## [0.4.7] - 2026-10-20
 
 ### Fixed
@@ -123,6 +171,10 @@ MINOR（用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次�
 PATCH。中心库客户端与写入切换（数据迁出工作区、`guji db sync` 自动合并、每日备份；GUJI-606/608/611），group_flow 第三批形近字组。相对 v0.3.4 只有 `seed_admit` 的 `code_hash` 变（6a4e2bd27c35fa8a → f0f2713200ae880e），其余 16 步不变；没迁进中心库的工作区行为不变。
 
 ### Added
+- 字组：按字分类的异体组再加 啓啟 厯歴 絕絶（qik lih jue），模板来自 sheldon 10-20「异体对第二批」人裁（vol01、vol04–10），按册留一 0 错。册配置 `group_flow` 点名才生效。
+- 字组：两形混用的异体组 叙敘 冊册 教敎（xu ce jiao）走在线 IDS 新判法「按字分类」（`IdsSpec.by_form`）：自动缝切开，取有差别的那段与各字的同段真实刻例比最近邻。模板来自 sheldon 10-20 合审的殿本人裁（vol04–10），按册留一 0 错。册配置 `group_flow` 点名才生效。
+- 字组：第三批只看字频的异体组 刊刋 既旣 清淸 顚顛 淄湽 青靑（kan jiw qx dx zx qy；殿本全书人裁只见一形，sheldon 10-20 合审定）。要在册配置 `group_flow` 点名才生效。
+- 字频解法阈值 20→10，且主形人裁须来自至少两册（2026-10-20，sheldon 定）：`seed_admit.group_flow_freq_major` 缺省 10、新参数 `group_flow_freq_min_vols` 缺省 2（0＝不查）；字频表新增 `vols`（每个刻形有人裁的册数，旧表没有就不查册数）。现有数据里新放行的只有 變𠮓（17，来自 vol01–03）；彙彚 12 只来自 vol01，仍弃权。`seed_admit` 的 `code_hash` 变，参数哈希变（用 group_flow 的册）。
 - `guji db status|pull|branch|import`：中心库客户端（GUJI-606，工作包 8.5）。`pull -w <工作区>` 经 guji-data Worker 把字形库账本按当前版本还原到 `<工作区>/output/central/<分支>/output/glyph_store/`（每个文件核 sha256，刻例图按 sha 从 R2 拉进本地缓存 `GUJI_DATA_CACHE`、去重），再重建 `glyph.db`，等价于 `glyph-db rebuild --no-replay --no-borrow`；git 管着的 `output/glyph_store/` 不动，库旁写 `glyph.db.central.json` 记分支与 rev。`--rev N` 只在该工作区 N 之后没变时放行（中心库不存旧内容），`--with-feedback` 连 feedback/ 一起还原。`branch create|delete` 开删实验分支，`import --from exp/<名>` 把实验分支的事件显式导入正式库（经 Worker `/v1/events`，按事件 id 幂等；写入切换 GUJI-608 前 Worker 不接受写 main）。连接只认 `GUJI_DATA_URL`／`GUJI_DATA_TOKEN`／`GUJI_DATA_BRANCH`。新模块 `datastore/client.py`、`materialize.py`、`pull.py`、`cli_db.py`，不进任何 Step 的 `code_deps`，**17 步 `code_hash` 全部不变**（逐步对照验过）；不用就没有任何影响。`python -m open_guji_cv.datastore r2-plan --via worker` 改为每 200 张调一次 `/v1/assets/sign-batch`（旧版 Worker 退回逐张签）。
 
 - **数据迁出工作区**（GUJI-608，2026-10-19，用户定）：中心库是册 yaml、人裁事件、台账、批次、人工配置、字形库唯一的家，工作区里只留 `workspace.yaml` 和标记 `.central.json`，数据在工作区外的数据目录 `$GUJI_DATA_HOME/<分支>/<工作区 id>/`（缺省 `~/.guji-data`）。`core/workspace` 加 `data_root`／`books_dir`／`ws_config_dir`，见到标记就把数据路径指向数据目录，没有标记照旧；各处从工作区根直拼的路径改走这些函数（`core/book`、`corpus_pin`、`seed_admit`、`groups/freq`、`groups/ids_online`、`collate_consumers`、`snap/*`、`deploy_check`、控制台工作区列表），守卫 `tests/test_central_paths.py`。新命令 `guji db migrate`（核对后挪数据、写标记，glyph.db 不动）、`guji db pull`（中心库 → 数据目录，拉到新字形库才重建 glyph.db）、`guji db push`（拿库锁后先比版本号，别人先写过整次拒绝；只追加台账少行、整个文件丢了也拒绝；glyph.db 改过先导出；新图先经 Worker 传正式桶；连库用 `GUJI_DATA_PG_DSN`，没有就从 `NEON_DATABASE_URL` 自动起 443 桥）。迁过的工作区上 `guji store commit|check` 改为推中心库，close-check 第 8 项改查没推的改动。新模块 `datastore/workcopy.py`、`ops/central_glyph.py`；`importer.import_scans` 从 `import_commit` 拆出（加 `guard` 钩子）；旧的 `db pull` 只读快照（`output/central/`）删掉。**`seed_admit` 的 `code_hash` 变**（50b4c7c96150b33d → f0f2713200ae880e，字组表改从数据目录找；本版字组第三批已经让它变过一次），其余 16 步不变。没迁的工作区行为一字不变。
@@ -138,6 +190,9 @@ PATCH。中心库客户端与写入切换（数据迁出工作区、`guji db syn
 - 中心库 push／sync 判「glyph.db 改过要先导出」改用导出签名（`ops/central_glyph.export_signature`，即原 `glyph_store_sync.db_signature`），不再用匹配器库指纹：只标了／撤了近似字、改了实例 label／ids 时匹配器指纹不变，此前这类改动会漏推。
 - 中心库客户端与 `r2-plan --via worker` 遇到断流（`http.client.IncompleteRead`）也退避重试，不再整次中断（2026-10-18 正式桶上传时碰到）。
 - group_flow 第三批形近不同义字组（2026-10-19，sheldon 定）：論諭 `ly`、大太 `dt`、問間 `wj`、曾會 `zh`、遺還 `yh`，按文意（L1 规则＋haiku 答案表，只收 conf=high，只补放不复核）。注册表加 5 个 `GroupSpec`，配置 `config/groups/{ly,dt,wj,zh,yh}/{rules.yaml,prompt.md}`，扩展脚本 `ext_enum_cells.py`／`ext_make_batches.py` 加 `--groups`。缺省关（书 yaml 的 `group_flow` 点名才生效）。vol04 A/B：组外格逐格不变，放行 +10（曾會，均无强真值可对），报告 `doc/exp/group_flow-3-vol04-报告.md`。PATCH；**`seed_admit` 的 `code_hash` 变**（6a4e2bd27c35fa8a → 50b4c7c96150b33d），其余 16 步不变。
+- group_flow 第四批形近字组（2026-10-19，sheldon 定）：象彖 `xz`、王玉 `wyu`、圓圖 `yt`，做法同第三批（L1 规则＋逐册 L2 haiku 表，只补放不复核；彖傳／象傳、玉篇／帝王篇、方圓等两可词弃权）。vol04 A/B 组外格 0 变化，放行 +1（该册这三组几乎都已被放行，收益在没放行的册），L1 对整理本零冲突。`seed_admit` 的 `code_hash` f0f2713200ae880e → c3dbd4dac0582b47，其余 16 步不变。报告 [group_flow-4-vol04-报告](doc/exp/group_flow-4-vol04-报告.md)。
+- group_flow 第五批八组（2026-10-19）：目自 `mz`（与日目 `rm` 共用「目」，互相声明 `overlaps`）、一二 `yr`、千干 `qg`、十卜 `sb`、甲申 `js`、而面 `em`、傅傳 `fc`、木本 `mb`，均形近不同义、按文意（L1 规则先行，弃权查 L2 haiku 表，只收 conf=high），补放也复核（只降审不改字）。L1 规则由整理本奇偶册交叉验证生成（两半都不矛盾才收），再手工剔掉「蔡傳」「王宗傳」「草本」类两可词，对 vol02–10 整理本零冲突；一二的 haiku 表对整理本有 5% 分歧，不稳，**一二只用 L1、不挂 L2 表**。vol04 A/B：组内格 0 降审、0 改字，补放 +4（千 1、十 1、傅 1、一 1；其中三格整理本为空，未逐格看图），其余 4000 多个组内格都是「文意与现放行字一致」；原因是这八组在 vol04 几乎都已被基线放对。`seed_admit` `code_hash` f0c37eac6214999c → e05fed6d5f32f4b7，其余 16 步不变。报告 [group_flow-6-vol04-报告](doc/exp/group_flow-6-vol04-报告.md)。
+- group_flow：允许组成员重叠＋形近组复核＋日目组 `rm`（2026-10-19，sheldon 定）：①`GroupSpec.overlaps`（须互相声明），`flow.entry` 一个字可属多个组——补放选第一个装得下「分差内全部候选＋整理本字」的组，复核选第一个声明了 `review` 且装得下整理本字的组；日曰 `ry` 与新组日目 `rm`（L1＋L2 haiku 表）共用「日」，日曰候选归 ry、日目候选归 rm、三者混杂留人审。②已放行格复核（只降审、不改字）：`ry wxs ly dt wj zh yh xz wyu yt rm` 打开 `review`（原来只有 jys／rr）。③`seed_admit` 的待审补放通道（witness3／coord_fallback）不再把复核判了 `group_flow_disagree`／`_conflict` 的格放回去（原来降审被 coord_fallback 按整理本字又放行，白降；含 jys／rr 原有的降审）。vol04 A/B：复核降审 8 格（象彖 4、大太 2、問間 1、入人八 1，原来被放回去的那 1 格），无改字；日目 L2 表 57 格答 37；组外格仅 iron 通道 +3（本机重拉字形库后库内容变化所致，与本改动无关）。`seed_admit` `code_hash` c3dbd4dac0582b47 → f0c37eac6214999c，其余 16 步不变。报告 [group_flow-5-vol04-报告](doc/exp/group_flow-5-vol04-报告.md)。
 
 ## [0.3.4] - 2026-10-18
 

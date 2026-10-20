@@ -166,11 +166,22 @@ def api_glyphlib_patch(instance_id: str, crop: bool = True) -> Response:
 @maps_http
 def api_glyphlib_audit(all: bool = False) -> dict:
     """体检结果（`glyph-db selfcheck` 落的 findings.jsonl）＋ 裁决账。
-    默认只回未裁的卡；`all=1` 连已裁的一起回（带 `decision`）。"""
-    from ...clustering.glyph_selfcheck import FLAG_LABELS, decisions, load_findings, out_dir
+    默认只回未裁的卡；`all=1` 连已裁的一起回（带 `decision`）。
+
+    出卡前核对库指纹（GUJI-710，`glyph_selfcheck.freshness`）：结果没带指纹、或卡上刻例的
+    图与体检时对不上（刻例重排编号）→ 409「体检结果已过期（库已变），请重跑 …」，一张卡也不出；
+    只是撤了、改了字的刻例，那几张卡不出（计入 `n_gone`）。"""
+    from ...clustering.glyph_selfcheck import (FLAG_LABELS, STALE_MSG, decisions, freshness,
+                                               load_findings, out_dir)
+    from ...errors import Conflict
     import sqlite3
     db, _ = _paths()
     meta, rows = load_findings()
+    fr = freshness(meta, rows, db)
+    if not fr["fresh"]:
+        raise Conflict(f"{STALE_MSG}。{fr['reason']}")
+    rows_all = rows
+    rows = [r for r in rows if r["key"] not in fr["drop"]]
     dec = decisions()
     # 体检之后撤掉的实例（别处撤库、同格副本清理）不再出卡
     c = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -178,12 +189,13 @@ def api_glyphlib_audit(all: bool = False) -> dict:
         alive = {r[0] for r in c.execute("SELECT instance_id FROM exemplars")}
     finally:
         c.close()
-    n_gone = sum(1 for r in rows if r["instance_id"] not in alive)
     rows = [r for r in rows if r["instance_id"] in alive]
+    n_gone = len(rows_all) - len(rows)
     for r in rows:
         r["decision"] = dec.get(r["key"])
     todo = [r for r in rows if r["decision"] is None]
     return {"meta": meta, "flag_labels": FLAG_LABELS, "out": str(out_dir()), "n_gone": n_gone,
+            "db_fp": fr["db_fp"] or meta.get("db_fp"),
             "n_total": len(rows), "n_decided": len(rows) - len(todo),
             "findings": rows if all else todo}
 
