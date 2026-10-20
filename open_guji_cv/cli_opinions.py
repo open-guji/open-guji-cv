@@ -557,8 +557,8 @@ def add_parser(sub) -> None:
     p.add_argument("--book-text", default=None, help="book-text 本地检出（要写）")
     p.add_argument("--dry-run", action="store_true", help="只算不写")
     p.add_argument("--pr", default=None, help="book-text 的 PR 号（写进 CHANGES；不 dry-run 时必填）")
-    p.add_argument("--guess-style", default="lacuna", choices=("lacuna", "guess-char", "guess-str"),
-                   help="阙文带推测字的写法：lacuna（现行，推测字只进 CHANGES）／guess-char（现行残字写法）／guess-str（D4 扩展）")
+    p.add_argument("--guess-style", default="guess-c", choices=("guess-c", "lacuna", "guess-char"),
+                   help="阙文带推测字的写法：guess-c（缺省，char v0.2 guess_c，悬停出推测字）／lacuna（推测字只进 CHANGES）／guess-char（残字写法）")
     p.add_argument("--bump-script", default=None, help="缺省 <book-text>/scripts/book-text/bump_original.py")
     p.add_argument("--only", default="", help="只套这些意见（逗号分隔 id）")
     p.add_argument("--log-applied", action="store_true", help="改完在意见池 log 记 applied（PR 合了再用）")

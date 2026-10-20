@@ -14,9 +14,10 @@
 再对改过的标点、实体线各升 patch（它会把 text_version 跟到新文本）。CHANGES 的说明里列意见 id。
 
 阙文带推测字的写法（``guess_style``）：
-- ``lacuna``（缺省，现行 guji-char v0.1）：``{"c": "□", "lacuna": true}``，推测字只记在 CHANGES 与意见池；
-- ``guess-char``（现行 v0.1 的残字写法）：``{"c": "一", "guess": true}``，阅读器显示灰字加点线；
-- ``guess-str``（D4 扩展，GUJI-717 合了才能用）：``{"c": "□", "lacuna": true, "guess": "一"}``。
+- ``guess-c``（缺省，guji-char v0.2，GUJI-717 用户 10-20 定）：``{"c": "□", "lacuna": true, "guess_c": "一"}``，
+  阅读器照阙文显示 □、悬停给推测字；用到它的章 ``$schema`` 写 char v0.2（guji-format#21）；
+- ``lacuna``（guji-char v0.1）：``{"c": "□", "lacuna": true}``，推测字只记在 CHANGES 与意见池；
+- ``guess-char``（v0.1 的残字写法）：``{"c": "一", "guess": true}``，阅读器显示灰字加点线。
 """
 from __future__ import annotations
 
@@ -31,7 +32,9 @@ from .schema import norm_class
 from .textsrc import BookText, vol_key
 
 LACUNA = "□"
-GUESS_STYLES = ("lacuna", "guess-char", "guess-str")
+GUESS_STYLES = ("guess-c", "lacuna", "guess-char")
+CHAR_SCHEMA_V02 = "https://open-guji.org/schema/char/v0.2.json"
+CELL_KEYS = ("a", "c", "lane", "lacuna", "guess", "guess_c", "zi")
 APPLY_CLASSES = ("A", "B", "B′")
 
 
@@ -129,7 +132,7 @@ class Applied:
     notes: list = field(default_factory=list)
 
 
-def apply_one(char: dict, cord: dict, op_id: str, rev: dict, guess_style: str = "lacuna") -> Applied:
+def apply_one(char: dict, cord: dict, op_id: str, rev: dict, guess_style: str = "guess-c") -> Applied:
     """在内存里把一条修订套到 char／cord 上。校验字对不上就报错，不改。"""
     k = norm_class(rev.get("class"))
     if k not in APPLY_CLASSES:
@@ -152,20 +155,22 @@ def apply_one(char: dict, cord: dict, op_id: str, rev: dict, guess_style: str = 
                 cell["lacuna"] = True
                 cell.pop("zi", None)
                 cell.pop("guess", None)
+                cell.pop("guess_c", None)
                 g = c.get("guess")
                 if g and guess_style == "guess-char":
                     cell.update(c=g, guess=True)
                     cell.pop("lacuna", None)
-                elif g and guess_style == "guess-str":
-                    cell["guess"] = g
+                elif g and guess_style == "guess-c":
+                    cell["guess_c"] = g
             else:
                 cell["c"] = to
                 cell.pop("lacuna", None)
                 cell.pop("guess", None)
+                cell.pop("guess_c", None)
                 if "zi" in cell:
                     out.notes.append(f"{a} 原有组字 zi={cell['zi']!r}，改字后去掉")
                     cell.pop("zi")
-            col["cells"][i] = {key: cell[key] for key in ("a", "c", "lane", "lacuna", "guess", "zi") if key in cell}
+            col["cells"][i] = {key: cell[key] for key in CELL_KEYS if key in cell}
             out.cells.append({"a": a, "before": before, "after": col["cells"][i]})
         else:   # B′
             after, mark_id = c.get("after"), c.get("mark")
@@ -193,8 +198,8 @@ def apply_one(char: dict, cord: dict, op_id: str, rev: dict, guess_style: str = 
                 g = c.get("guess")
                 if g and guess_style == "guess-char":
                     new = {"a": a, "c": g, "guess": True}
-                elif g and guess_style == "guess-str":
-                    new["guess"] = g
+                elif g and guess_style == "guess-c":
+                    new["guess_c"] = g
             col["cells"].insert(i + 1, new)
             pg["marks"] = [m for m in pg["marks"] if m.get("id") != mark_id]
             cells = pg.setdefault("cells", [])
@@ -347,7 +352,7 @@ class Result:
 
 
 def revise(bt_root: str | Path, book: str, vol: str, todo: list, *, dry_run: bool = True, pr: str | None = None,
-           guess_style: str = "lacuna", bump_script: str | Path | None = None, skipped: list | None = None) -> Result:
+           guess_style: str = "guess-c", bump_script: str | Path | None = None, skipped: list | None = None) -> Result:
     """对一章套 ``todo``（[(op, revision)]）。dry_run 只算不写。"""
     bt = BookText(book, bt_root)
     v3 = vol_key(vol)
@@ -359,6 +364,8 @@ def revise(bt_root: str | Path, book: str, vol: str, todo: list, *, dry_run: boo
     old_char = json.loads(texts["char"])
     char, cord = copy.deepcopy(old_char), json.loads(texts["cord"]) if texts["cord"] else {"pages": []}
     applied = [apply_one(char, cord, op.id, rev, guess_style) for op, rev in todo]
+    if any("guess_c" in c for p in char.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []):
+        char["$schema"] = CHAR_SCHEMA_V02          # guess_c 只有 char v0.2 认（guji-format#21）
     moves = {c["after_cell"]: c["a"] for ap in applied if ap.cls == "B′" for c in ap.cells}
     punct = json.loads(texts["punct"]) if texts["punct"] else None
     entity = json.loads(texts["entity"]) if texts["entity"] else None

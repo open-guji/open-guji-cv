@@ -132,6 +132,10 @@ def test_class_b_prime_mark_to_lacuna_cell(bt):
     assert [(e["span"]["start_offset"], e["span"]["end_offset"]) for e in ent["entities"]] == [(6, 8), (10, 11)]
     assert punct["version"] == "1.1.1" and ent["version"] == "1.1.1"    # 偏移变了，两条伴生线各升 patch
     assert "推测「一」" in (_vd(bt) / "CHANGES.md").read_text(encoding="utf-8")
+    # 缺省写法 guess-c（GUJI-717）：新格带 guess_c，char 的 $schema 改写成 v0.2
+    new_cell = next(c for p in char["pages"] for col in p["columns"] for c in col["cells"] if c["a"] == "3:1:4")
+    assert new_cell == {"a": "3:1:4", "c": "□", "lacuna": True, "guess_c": "一"}
+    assert char["$schema"] == V.CHAR_SCHEMA_V02
     # 自造数据和真书一样：mark 的 slot（3）与 char 格号（新格 4）口径不同，记一条说明
     assert len(res.applied[0].notes) == 1 and "slot 3" in res.applied[0].notes[0]
 
@@ -155,7 +159,7 @@ def test_guess_styles_and_guards(bt):
                                       "guess": "一"}]}
     for style, want in (("lacuna", {"a": "3:1:4", "c": "□", "lacuna": True}),
                         ("guess-char", {"a": "3:1:4", "c": "一", "guess": True}),
-                        ("guess-str", {"a": "3:1:4", "c": "□", "lacuna": True, "guess": "一"})):
+                        ("guess-c", {"a": "3:1:4", "c": "□", "lacuna": True, "guess_c": "一"})):
         char = json.loads((_vd(bt) / "002.char.json").read_text(encoding="utf-8"))
         cord = json.loads((_vd(bt) / "002.cord.json").read_text(encoding="utf-8"))
         ap = V.apply_one(char, cord, "op", base, style)
