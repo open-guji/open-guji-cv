@@ -27,6 +27,7 @@
     - `cnn`／`ctx`／`llm`／`ocr`／`ai`／`form`：证据行上的「采信」。
   - **Step8「都不对」**：`collate_verdict` 与 `confirm` 带 `pick_src`／`pick_rank`／`pivot`，取值为 `alt`／`alt_q`／`custom`。
   - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
+- char 导出：阙文带推测字（GUJI-717，用户 10-20 定「录文以图为准」，guji-format#21 char v0.2 `guess_c`）。人裁 `confirm v=damaged` 带 `guess=X` 的格（9.1 写 `□{guess=X}`），`scripts/export_guji_format.py --format char-cord` 与 `scripts/convert_pages_to_char_cord.py` 改写成 `{"c": "□", "lacuna": true, "guess_c": "X"}`，不再写成残字 `guess: true`、`c: X`（阅读器显示灰字 X，与「图上无字录 □」相反）。`guji export format` 出的旧形态（lines.md、pages.json）不变。只有带这种格的册 `$schema` 写 char v0.2，其余册导出逐字节不变（book-text 现存 char 里 `guess: true` 为 0 处）。往返核对按 9.1 写法比；`formats/` 加 `guji_char_v0.2.schema.json`。PATCH；改 `formats/guji_char_cord.py`、两个导出脚本，不在任何 Step 的 `code_deps` 里，17 个 Step 和闸的 `code_hash` 全不变。
 - `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
 
 ### Fixed

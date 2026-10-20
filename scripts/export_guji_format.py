@@ -104,7 +104,7 @@ def main(argv=None) -> int:
         cc.write_files(new, a.out)
         st = cc.stats(new[f"{a.chapter}.char.json"], new[f"{a.chapter}.cord.json"])
         print(f"{a.book} 章 {a.chapter}（char-cord，keys={a.keys}）：{st['pages']} 页、{st['cells']} 格（有框 {st['boxed']}）、"
-              f"阙文 {st['lacuna']}；没写进 cord 的 {rep['dropped']} → {a.out}")
+              f"阙文 {st['lacuna']}（其中带推测字 {st['guess_c']}）；没写进 cord 的 {rep['dropped']} → {a.out}")
         bad += char_cord_report(new, md)
         return 1 if bad else 0
     if a.only == "pages":

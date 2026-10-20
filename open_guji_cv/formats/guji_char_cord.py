@@ -2,12 +2,14 @@
 """book-text 新形态：`NNN.char.json`（字）＋ `NNN.cord.json`（框）＋ `NNN.norm.json`（按格位的例外）。F4 道，overview#419。
 
 规范：guji-format `spec/01-guji-cord.md`、`spec/02-guji-char.md`，schema 在仓根 `formats/guji_{char,cord}_v0.1.schema.json`
-（从 guji-format 7ad86dc 照抄，测试只读本仓）。book-text 一侧见 `docs/ORIGINAL.md`。
+（从 guji-format 7ad86dc 照抄，测试只读本仓）；char v0.2（`guess_c`）的 `formats/guji_char_v0.2.schema.json` 从 guji-format
+0370a39（GUJI-717，guji-format#21）照抄。book-text 一侧见 `docs/ORIGINAL.md`。
 
 入口只吃 F3 的 `guji-pages/0.1`（`NNN.pages.json`，格里带字）——**不读产物**：
 
 - `from_pages_json(pj, zi=…, norm=…)` → `{NNN.char.json, NNN.cord.json, NNN.norm.json}`；
-- `char_to_lines_md(char)` → 分行稿，记法与 `guji_page.to_guji_markdown`（Step9 9.1）逐字相同；
+- `char_to_lines_md(char)` → 分行稿（spec 03 §三）；`guess_c_as_qz=True` 时与 `guji_page.to_guji_markdown`（Step9 9.1）
+  逐字相同（只差阙文带推测字一处写法，见下）；
 - `check(char, cord)` 核两边格位、页号、列号；`validate(obj, "char"|"cord")` 过 schema。
 
 导出器（`scripts/export_guji_format.py --format char-cord`）先照旧出 pages.json，再走这里；纯转换入口是
@@ -24,7 +26,11 @@
 - `c` = 格里的字；未收字取 zi.json 的近似字（没有近似字是「〓」），`zi` = IDS 或描述；
 - `lacuna` = 字框 `lacuna: "unreadable"` 或页上 `lacuna_extra`；`c` 照规范写「□」。`lacuna: "defect"`（字在、
   图块切坏）不算阙文，char 里不标；
-- `guess` = 字框 `guess` 且字是「□」（分行稿 `□{guess=X}`），`c` 写推测的字 X；
+- 阙文带推测字（char v0.2 `guess_c`，GUJI-717，用户 10-20 定「录文以图为准」）= 字框 `guess` 且字是「□」——这只有
+  人裁 `confirm v=damaged` 带 `guess=X` 一条来路（排除名单 evidence `guess=X` → Step7 `□` 占位 → 9.1 `□{guess=X}`）：
+  `{"c": "□", "lacuna": true, "guess_c": X}`。原先写成残字 `guess: true`、`c` 写 X（阅读器出灰字 X），与「图上无字录 □」
+  相反，改掉；char 里因此不再出 `guess: true`。有 `guess_c` 的册 `$schema` 写 char v0.2，没有的照旧 v0.1，逐字节不变。
+  分行稿（spec 03 §三）里这格照阙文写 `[[]]`；9.1 的 lines.md 写的是 `□{guess=X}`，核往返时用 `guess_c_as_qz=True`；
 - `lane` 只在推不出来时写：`solo` 总写；夹注只在格位后缀与左右不符时写（lines 口径下单边夹注一律记 `a`）；
 - 列：`raised`、`lead_blank` 非 0 才写；`kind` 版心记 `banxin`、没有字的列记 `blank`，正文不写。
 
@@ -40,6 +46,7 @@ from pathlib import Path
 from typing import Any
 
 CHAR_SCHEMA_URL = "https://open-guji.org/schema/char/v0.1.json"
+CHAR_SCHEMA_URL_V02 = "https://open-guji.org/schema/char/v0.2.json"     # 有 guess_c（阙文带推测字）才写这一版
 CORD_SCHEMA_URL = "https://open-guji.org/schema/cord/v0.1.json"
 NORM_SCHEMA = "guji-norm/0.2"          # guji-format 还没有 norm 的 schema；0.1 是 F3 带字偏移 `o` 的那版
 LACUNA_CHAR = "□"
@@ -47,6 +54,7 @@ ZI_NO_NEAR = "〓"
 _FORMATS = Path(__file__).resolve().parents[2] / "formats"
 SCHEMA_PATHS = {"char": _FORMATS / "guji_char_v0.1.schema.json",
                 "cord": _FORMATS / "guji_cord_v0.1.schema.json"}
+CHAR_SCHEMA_FILES = {CHAR_SCHEMA_URL: SCHEMA_PATHS["char"], CHAR_SCHEMA_URL_V02: _FORMATS / "guji_char_v0.2.schema.json"}
 KEYS = ("cv", "lines")
 
 _REGION_KINDS = ("body", "banxin", "margin")
@@ -81,8 +89,10 @@ def _lane_of(cell: dict) -> str:
 
 # ───────────────────────── 分行稿 ─────────────────────────
 
-def _tok(cell: dict, *, in_solo: bool = False) -> str:
+def _tok(cell: dict, *, in_solo: bool = False, guess_c_as_qz: bool = False) -> str:
     if cell.get("lacuna"):
+        if guess_c_as_qz and cell.get("guess_c"):
+            return f"□{{guess={cell['guess_c']}}}"   # 9.1 的写法（原刻残＋人给的最像字），只用于核往返
         return LACUNA_CHAR if in_solo else "[[]]"   # Step9 在 :jz[…] 里把阙文写成「□」（guji_page_v0.2 §10.1 已知例外）
     if cell.get("zi") is not None:
         return f":zi[{cell['zi']}]"
@@ -102,39 +112,46 @@ def _runs(cells: list[dict]) -> list[tuple[str, list[dict]]]:
     return out
 
 
-def column_line(col: dict) -> str | None:
-    """一列 → 分行稿的一行；没有字的列返回 None（分行稿不出空行）。"""
+def column_line(col: dict, *, guess_c_as_qz: bool = False) -> str | None:
+    """一列 → 分行稿的一行；没有字的列返回 None（分行稿不出空行）。`guess_c_as_qz` 见 `char_to_lines_md`。"""
     if not col.get("cells"):
         return None
+
+    def tok(cell: dict, *, in_solo: bool = False) -> str:
+        return _tok(cell, in_solo=in_solo, guess_c_as_qz=guess_c_as_qz)
+
     out = ["^" * int(col.get("raised") or 0) + "." * int(col.get("lead_blank") or 0)]
     runs = _runs(col["cells"])
     k = 0
     while k < len(runs):
         ln, cs = runs[k]
         if ln in ("jz_r", "jz_l"):
-            right = "".join(map(_tok, cs)) if ln == "jz_r" else ""
-            left = "".join(map(_tok, cs)) if ln == "jz_l" else ""
+            right = "".join(map(tok, cs)) if ln == "jz_r" else ""
+            left = "".join(map(tok, cs)) if ln == "jz_l" else ""
             if ln == "jz_r" and k + 1 < len(runs) and runs[k + 1][0] == "jz_l":
-                left = "".join(map(_tok, runs[k + 1][1]))
+                left = "".join(map(tok, runs[k + 1][1]))
                 k += 1
             out.append(f"<{right}|{left}>" if right and left else f"<{right}{left}>")
         elif ln == "solo":
-            out.append(":jz[" + "".join(_tok(c, in_solo=True) for c in cs) + "]{type=单行}")
+            out.append(":jz[" + "".join(tok(c, in_solo=True) for c in cs) + "]{type=单行}")
         else:
-            out.append("".join(map(_tok, cs)))
+            out.append("".join(map(tok, cs)))
         k += 1
     return "".join(out)
 
 
-def page_lines(page: dict) -> list[str]:
+def page_lines(page: dict, *, guess_c_as_qz: bool = False) -> list[str]:
     lines = [f"<!-- p{page['page']} -->"]
-    lines += [ln for ln in (column_line(c) for c in page["columns"]) if ln is not None]
+    lines += [ln for ln in (column_line(c, guess_c_as_qz=guess_c_as_qz) for c in page["columns"]) if ln is not None]
     return lines
 
 
-def char_to_lines_md(char: dict) -> str:
-    """char → 一列一行的分行稿（与 F3 导出的 `NNN.lines.md` 同记法：每页先 `<!-- pN -->`，末尾一个换行）。"""
-    return "\n".join("\n".join(page_lines(p)) for p in char["pages"]) + "\n"
+def char_to_lines_md(char: dict, *, guess_c_as_qz: bool = False) -> str:
+    """char → 一列一行的分行稿（每页先 `<!-- pN -->`，末尾一个换行），记法照 guji-format spec 03 §三。
+
+    `guess_c_as_qz=True`：阙文带推测字写成 9.1 的 `□{guess=X}`，此时与 F3 导出的 `NNN.lines.md` 逐字节相同，
+    导出器核往返用它；缺省照 spec 03 写 `[[]]`（`□{guess=X}` 在分行稿里是残字 `guess: true` 的写法）。"""
+    return "\n".join("\n".join(page_lines(p, guess_c_as_qz=guess_c_as_qz)) for p in char["pages"]) + "\n"
 
 
 # ── 分行稿 → 格位（book-text `original_version.lines_slots` 的口径；`:zi[…]` 算一格）──
@@ -233,7 +250,8 @@ def _char_cell(c: dict, lane: str, *, lac_extra: set[int], zi_by_o: dict[int, di
     if c.get("lacuna") == "unreadable" or o in lac_extra:
         out["c"], out["lacuna"] = LACUNA_CHAR, True
     elif c.get("guess") and c["c"] == "□" and z is None:
-        out["c"], out["guess"] = c["guess"], True
+        # 原刻残、人给了最像的字（confirm v=damaged guess=X）：录 □，推测字记 guess_c（char v0.2，GUJI-717）
+        out["c"], out["lacuna"], out["guess_c"] = LACUNA_CHAR, True, c["guess"]
     return out
 
 
@@ -394,7 +412,9 @@ def from_pages_json(pj: dict, *, zi: dict | None = None, norm: dict | None = Non
         rep["pages"] += 1
 
     head = {"book_id": book_id, "volume": volume}
-    char = {"$schema": CHAR_SCHEMA_URL, "version": version, **head, "pages": char_pages}
+    has_guess_c = any("guess_c" in c for p in char_pages for col in p["columns"] for c in col["cells"])
+    char = {"$schema": CHAR_SCHEMA_URL_V02 if has_guess_c else CHAR_SCHEMA_URL, "version": version, **head,
+            "pages": char_pages}
     cord = {"$schema": CORD_SCHEMA_URL, **head, "pages": cord_pages}
     norm_out = {"schema": NORM_SCHEMA, **head, "table": (norm or {}).get("table"),
                 "items": [_norm_item(n, allmap) for n in (norm or {}).get("items", [])]}
@@ -506,9 +526,10 @@ def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> lis
 
 
 def validate(obj: dict, kind: str) -> list[str]:
-    """按 guji-format 的 JSON Schema 校验（`kind` = char / cord）。"""
+    """按 guji-format 的 JSON Schema 校验（`kind` = char / cord）。char 按它自己的 `$schema` 取 v0.1／v0.2，认不出的按 v0.1。"""
     import jsonschema
-    schema = json.loads(SCHEMA_PATHS[kind].read_text(encoding="utf-8"))
+    path = CHAR_SCHEMA_FILES.get(obj.get("$schema"), SCHEMA_PATHS[kind]) if kind == "char" else SCHEMA_PATHS[kind]
+    schema = json.loads(path.read_text(encoding="utf-8"))
     v = jsonschema.Draft202012Validator(schema)
     return [f"{'/'.join(map(str, e.path))}: {e.message}" for e in v.iter_errors(obj)]
 
@@ -517,5 +538,6 @@ def stats(char: dict, cord: dict) -> dict:
     cells = [c for p in char["pages"] for col in p["columns"] for c in col["cells"]]
     return {"pages": len(char["pages"]), "columns": sum(len(p["columns"]) for p in char["pages"]),
             "cells": len(cells), "lacuna": sum(1 for c in cells if c.get("lacuna")),
-            "guess": sum(1 for c in cells if c.get("guess")), "zi": sum(1 for c in cells if "zi" in c),
+            "guess": sum(1 for c in cells if c.get("guess")), "guess_c": sum(1 for c in cells if c.get("guess_c")),
+            "zi": sum(1 for c in cells if "zi" in c),
             "boxed": sum(len(p["cells"]) for p in cord["pages"])}
