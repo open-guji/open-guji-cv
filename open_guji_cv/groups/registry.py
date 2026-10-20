@@ -160,7 +160,9 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
         flow=FlowSpec(("freq", "ids"), combine="first"),
         note="异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。")
-       for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"))},
+       for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"),
+                         # 第二批（2026-10-20 sheldon 异体对第二批审定）：按册留一 0 错
+                         ("qik", "啓啟"), ("lih", "厯歴"), ("jue", "絕絶"))},
 }
 
 
