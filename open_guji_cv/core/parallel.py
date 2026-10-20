@@ -56,6 +56,12 @@ AUDITED: dict[str, ParallelAudit] = {
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
+    "rare_candidates": ParallelAudit(
+        mem_gb=1.5, warm_first=True,
+        note="审查（2026-10-20）：缓存都只按输入记忆（_emb_cache／_fwd_cache／_gw_cs 用 is 比对，_real_slots 按值），"
+             "落盘都是带 pid 的临时文件 + os.replace；每页单独组批、eval 模式无随机。前置：emb 索引在 fork 前已在盘上"
+             "（`RareCandidatesStep.parallel_warm` 在主进程建，缺盘时只建一次）；跑批期间不改字形库、checkpoint、fonts、册 yaml。"
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 23.5 s，单进程 1.06 GB（2026-10-20）。"),
     "seed_admit": ParallelAudit(
         mem_gb=3.0, warm_first=True,
         note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"

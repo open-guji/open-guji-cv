@@ -143,6 +143,28 @@ class RareCandidatesStep(Step):
         book_deps=("font",),
     )
 
+    def parallel_warm(self, ctx: RunContext) -> None:
+        """页级并行 fork 前在主进程把进程级缓存建好（`core/parallel.warm`）：拿一张合成的十字形
+        走一遍 `rare_for_batch`——它分数低，必然触发升级档，于是基集与升级档的 emb 索引（缺盘时
+        只在这里建一次，不让 N 个 worker 各冷建一份、各占 2.4 GB）、真刻例原型、GlyphWiki 变体、
+        释义与异体表这些懒加载的都建好，worker 写时复制共享。这些缓存都只按输入记忆，
+        多跑这一张不影响任何一页的结果。"""
+        import numpy as np
+
+        from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
+        from ..clustering.rare_panel import rare_for_batch
+        from .align_ref import book_corpus
+        p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
+        corpus = book_corpus(ctx.book.id)
+        if not Path(corpus).exists():
+            return
+        img = np.full((64, 64), 255, np.uint8)
+        img[8:56, 30:34] = 0
+        img[30:34, 8:56] = 0
+        rare_for_batch([img], p.k, corpus, ctx.book.id, struct_rerank=p.struct_rerank,
+                       struct_probe=p.struct_probe or None, real_proto=book_real_proto(ctx.book.font),
+                       gw_enabled=book_gw_variant(ctx.book.font))
+
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch

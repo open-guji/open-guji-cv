@@ -1009,6 +1009,8 @@ class CnnCandidates:
         乘法（GEMM）——两处都是"同一份模板/同一张网络，换一批输入"，批处理
         没有精度代价，只是把 IO/调度开销摊到一批里。
         """
+        # 早退路径也要清掉上一次的来源记录，调用方紧跟着读（rare_panel），不能读到上一页的（2026-10-20）
+        self.last_gw_prov, self.last_real_prov = [], []
         if not self._ensure():
             _warn_emb_down("checkpoint 不可用")
             return [[] for _ in norm_patches]
@@ -1041,6 +1043,7 @@ class CnnCandidates:
         调用方没有先调 `topk_batch`/`emb_topk_batch`）时退回对子集单独前向——
         正确性不受影响，只是拿不到这次的省时；这是防御性兜底，不是常态路径。
         """
+        self.last_gw_prov, self.last_real_prov = [], []      # 早退也清（见 emb_topk_batch）
         if not self._ensure():
             _warn_emb_down("checkpoint 不可用")
             return [[] for _ in idx]
