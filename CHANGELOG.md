@@ -1,19 +1,18 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
-## [0.4.9] - 待发
+## [未发版]
+
+## [0.4.9] - 测试中
 
 ### Added
-- hanzi 库字形向量包同一版本存 int8／fp16／fp32 三种精度，缺省 int8（26 MB，新机器约 10 秒拉完）；真刻本精度评测脚本 `research/pivot_family/emb_precision_eval.py`（#281，用户 10-20）。
-- `guji cache pull-rare-index --book` 缺省改用 int8 向量包落 Step5-b 模板表，表旁写 `.source.json`（版本＋精度），来源不同的旧表被替换；runbook S5-b 列为备表首选（#284）。真刻本 4,254 条：int8 排第 1 95.5%（fp32 95.3%）、前 5 99.1%（同）。不碰任何 Step，`code_hash` 不变；已有 5-b 产物不用重跑。这两条在 main 上是 v0.4.8 切点前后直接合的（713cbb4a、74b83143），这里 cherry-pick 进待发分支。
+- 字组：第四批只看字频的异体组 爲為 說説（wei shuo；殿本人裁只见一形，≥10 且来自 ≥2 册）。PATCH；只有 seed_admit 的 `code_hash` 变。要在册配置 `group_flow` 点名才生效。
+- `guji opinions publish-status`（M11 B2，GUJI-714；PATCH）：意见池里网站来源（改字、一段有问题）的处理结论按网站 target 聚合，写中心库 `feedback/lists/web/<书>/status.jsonl`（已进文本→adopted＋版本、已采纳→adopted、未采纳→rejected＋公开理由、交用户／讨论→discussing；精校票不发），幂等；网站 proofing-sync 读它回写 `/api/fixes`。顺手修回复草稿把模板句与公开理由叠在一起的毛病（GUJI-713）。不碰任何 Step，`code_hash` 不变。
 - 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
-
-待发分支 `rc/v0.4.9`（2026-10-20 开；v0.4.8 自此冻结，新 PR 一律投这里）。
-
-### Added
 - M11 第一阶段：意见池、AI 初判的确定性部分、修订工具（GUJI-712／713／715，设计 `doc/design/M11-分块-第一阶段最小闭环.md`）。新包 `open_guji_cv/opinions/`（L4）与 `guji opinions …`：`ingest`（中心库 `feedback/lists/web/<书>/` 的改字／精校票、网站公开读 `/api/fixes`、`/api/feedback` 文字类 → 中心库 `feedback/lists/opinions/<书>/`，幂等，去测试票、记重复与转出）、`list`／`show`、`versions`（book-text CHANGES → `text_versions.json`）、`locate`、`normalize`、`pack`（IIIF 原图档裁格与列条带、上下文、marks，`sheet.png`／`sheet.md`）、`triage`（会话判、`config/opinions/rules.json` 定去向）、`to-user`／`decide`、`revise`（A／B／B′ 类改 book-text 冻结册 char／cord，伴生层跟随，调 `bump_original.py` 升 patch，CHANGES 引意见 id）、`reply-drafts`。PATCH；不碰任何 Step，17 步与闸 `code_hash` 不变。
+- M10 小件（#286，v0.4.8 发版后直接合进了 main，dev 已含）：`resolved_manual_cells` 遇坏行改为逐行读、跳过并在 stderr 报出（原来一行坏整片静默退回自动切分），新增 `scripts/zhengli/check_manual_cells.py`（GUJI-692）；公众意见台账 `scripts/zhengli/opinion_ledger.py`（GUJI-690）；runbook S25「1.0 之后的修订」（GUJI-696）。`lookup.py` 不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
 
 ### Changed
 - 管线提速（#255，PATCH；产物逐字节不变，**只有 rare_candidates、seed_admit 的 `code_hash` 变了**，其余 15 步不变）：
@@ -28,9 +27,14 @@
 
 ## [0.4.8] - 2026-10-20
 
+### 流程
+- 分支与发版流程改为 **dev 集成＋发版时切 rc**（用户 10-20 定，`doc/版本号规矩.md` 第三节）：日常 PR 投 `dev`；准备发版时从 dev 切 `rc/vX.Y.Z` 测试，rc 只收本版修复并合回 dev；测完 rc 用 merge commit 合进 main、打 tag；main 不直接收 PR。`scripts/check_rc_target.py` 跟着改：目标 `dev` 返回 0，`main` 返回 4。
+
 ### 并入 main 上 v0.4.7 之后直接合入的改动
 - 汉字关系库 hanzi：总设计、B0/B1/B7（#256）、B2 全字表字形向量包（#276）、B3 以字找字候选池改由 hanzi 库给（#266）、B4 字统网按字典存派生事实（#267）、真书实测文档（#278）。
 - Step3 `row_segment` 人工指定整列格 `manual_cells`（#251，main 上记作 1.20；没有指定的列逐字节不变）。
+- hanzi 库 B2 续：向量包存 int8／fp16／fp32（#281）；真刻本评测过判据，Step5-b 也切 8 位向量包（#284）。
+- M10：待审分流脚本 `pending_route.py`（GUJI-688）、冻结册运行护栏（GUJI-694）（#279）。
 - 文档：人审率分析补列级对位救援的离线评估（#247）；M10 精校调研与总设计、已知错单脚本、`guji exit-check`（#273）。
 - **`row_segment` 版本合为 1.22**（本线 1.20／1.21 的 layout_prior 改动＋main 的 manual_cells），`code_hash` e82f08017e79c63a（rc）／bb4f3830915bcdf0（main）→ d5f4ceedcfbd2d06：各册 Step3 起判过期，冻结册按冻结规则不受影响；开关（layout_prior、manual_cells）不开的列产物逐字节不变。其余各步 `code_hash` 与 rc/v0.4.8 相同（相对 v0.4.7 变了的步见下面各条）。
 

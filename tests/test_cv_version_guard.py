@@ -155,3 +155,36 @@ def test_isolated_argv_passes_allow_flag():
     args = SimpleNamespace(book="b", pipeline="p", pages="all", force=False, stop_on_error=False,
                            params=None, jobs=None, allow_sample_db=False, allow_cv_mismatch=True)
     assert "--allow-cv-mismatch" in cli_v2.isolated_step_argv(args, "s", "/ws")
+
+
+# ── 冻结册护栏（M10·D7，GUJI-694）────────────────────────────────────
+FZ = {"at": "1.0.0", "snapshot": "snap/x/vol01/T1", "cv_commit": "a" * 40, "cv_version": "0.4.5"}
+
+
+def test_frozen_mismatch_by_commit():
+    assert cvv.frozen_mismatch(FZ, installed_commit="a" * 40, installed_version="0.4.5+3") is None   # 冻结提交在分支上
+    msg = cvv.frozen_mismatch(FZ, installed_commit="b" * 40, installed_version="0.4.7")
+    assert msg and "已冻结" in msg and "aaaaaaaaaaaa" in msg
+    assert "没提交的改动" in cvv.frozen_mismatch(FZ, installed_commit="a" * 40, installed_version="0.4.5+3+dirty")
+
+
+def test_frozen_mismatch_by_version_and_not_frozen():
+    fz = {"snapshot": "snap/x", "cv_version": "v0.4.5"}
+    assert cvv.frozen_mismatch(fz, installed_commit="c" * 40, installed_version="0.4.5") is None
+    assert cvv.frozen_mismatch(fz, installed_commit="c" * 40, installed_version="0.4.7")
+    assert cvv.frozen_mismatch({}, installed_commit="c" * 40, installed_version="0.4.7") is None
+    assert cvv.frozen_mismatch({"cv_commit": "a" * 40}) is None          # 没有快照不算冻结
+
+
+def test_guard_refuses_frozen_book_without_top_level_version(monkeypatch, capsys):
+    """vol01 现状：顶层没写 cv_version、只有 freeze 段——以前在 main 上照样能跑。"""
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.4.7", "b" * 40))
+    book = SimpleNamespace(cv_version=None, freeze=FZ)
+    with pytest.raises(SystemExit) as e:
+        cli_v2._guard_cv_version(book)
+    assert e.value.code == 2 and "已冻结" in capsys.readouterr().err
+    cli_v2._guard_cv_version(book, allow=True)
+    assert "⚠️" in capsys.readouterr().err
+    monkeypatch.setattr(cvv, "describe", lambda repo=None: ("0.4.5+3", "a" * 40))
+    cli_v2._guard_cv_version(book)
+    assert capsys.readouterr().err == ""

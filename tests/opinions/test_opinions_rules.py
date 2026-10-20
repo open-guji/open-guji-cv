@@ -137,7 +137,7 @@ def test_triage_to_user_decide_end_to_end(tmp_path, capsys):
     assert st.status(q7.id) == "to_user" and st.status(a.id) == "auto_accepted"
     tri = st.last(q7.id, "triaged").data
     assert tri["revision"]["class"] == "B′" and tri["revision"]["cells"][0]["guess"] == "一"
-    assert "推测字「一」" in tri["reply_draft"]
+    assert tri["reply_draft"] == "感谢指正。图上无字，按文意当有「一」。"  # 不再把模板句与公开理由叠在一起（GUJI-713）
     out = tmp_path / "tu"
     main(["opinions", "to-user", "--book", BOOK, "--root", str(tmp_path / "pool"), "--out", str(out)])
     items = json.loads((out / "items.json").read_text(encoding="utf-8"))

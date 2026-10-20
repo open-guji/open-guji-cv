@@ -25,7 +25,7 @@ def test_group_ids_match_dataset_registry():
                            "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "qg", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
-                           "qik", "lih", "jue"}
+                           "qik", "lih", "jue", "wei", "shuo"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 
@@ -35,10 +35,10 @@ def test_backend_names_valid_and_members_nonempty():
         assert set(g.backends) <= BACKEND_NAMES, g.id
 
 
-def test_yi_560_is_inert():
-    """#560 异体组只登记成员：没有判别器，不进字组统一流程，走人裁数据路。"""
+def test_yi_560_flow():
+    """#560 彝组：字频→IDS 三段（2026-10-20 上线）。"""
     g = get_group("yi_560")
-    assert g.backends == () and g.flow is None
+    assert g.backends == () and g.flow is not None and g.flow.solvers == ("freq", "ids")
     assert g.members == frozenset("彝彛彜彞𢑱𢑴")
 
 
