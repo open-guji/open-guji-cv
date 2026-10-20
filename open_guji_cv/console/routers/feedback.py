@@ -17,7 +17,7 @@ from ..auth import Identity, require_admin, require_reviewer
 from ..errors import maps_http
 from ...feedback.anchor import enrich_events as _anchor_events
 from ...feedback.consumers import route_and_consume
-from ...feedback.events import EventTarget, make_event
+from ...feedback.events import EventTarget, make_event, replay_key
 from ...feedback.harvest import harvest_text
 from ...feedback.routes import RouteTable
 from ...review.batches import Batch, render_registry_markdown
@@ -190,6 +190,11 @@ def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
         payload = {k: v for k, v in row.items() if k not in ("id", "t")}
         if req.request_id:
             payload["request_id"] = req.request_id
+        ct = payload.get("client_ts")
+        if isinstance(ct, (int, float)) and not isinstance(ct, bool) and 0 < ct < 1e11:
+            # 一律毫秒（2026-10-20）：09 月的夹注台发的是秒（float），vol02/03-jiazhu 327 条
+            # 与别的台混在一起，按毫秒读会算出 1970 年。1e11 毫秒 = 1973 年，秒数到 5138 年才越界。
+            payload["client_ts"] = int(round(ct * 1000))
         # `client_ts` / `dwell_ms` 留在 payload 里：事件的 `ts` 是**收割时间**
         # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
         # 指标就是这个耗时，没有它 D 刀无法证伪。
@@ -254,7 +259,7 @@ def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
 
 @router.get("/api/events")
 def api_events_list(batch: str | None = None, limit: int = 200) -> list[dict]:
-    evs = deps.event_log().read(batch) if batch else sorted(deps.event_log().iter_all(), key=lambda e: e.order)
+    evs = deps.event_log().read(batch) if batch else sorted(deps.event_log().iter_all(), key=replay_key)
     return [e.model_dump(mode="json") for e in evs[-limit:]]
 
 

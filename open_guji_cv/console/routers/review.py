@@ -1239,7 +1239,8 @@ def api_review_conflicts(batch: str | None = None, book: str | None = None) -> l
     out = []
     for (step, unit, kind, key), group in groups.items():
         last_by_reviewer = {}
-        for e in sorted(group, key=lambda x: x.order):
+        from ...feedback.events import replay_key
+        for e in sorted(group, key=replay_key):
             last_by_reviewer[e.reviewer] = e
         if len(last_by_reviewer) < 2:
             continue

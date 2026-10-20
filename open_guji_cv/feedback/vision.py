@@ -163,7 +163,8 @@ def rebuild_vision_gold(log: VisionLog | None = None, store=None) -> dict:
     log = log or VisionLog()
     if not log.events_dir.exists():
         return {"events": 0}
-    evs = sorted(log.iter_all(), key=lambda e: e.order)
+    from .events import replay_key
+    evs = sorted(log.iter_all(), key=replay_key)
     return {"events": len(evs), **vision_gold(evs, store)}
 
 

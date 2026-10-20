@@ -13,7 +13,7 @@ from pathlib import Path
 
 from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
-from .events import Event, EventLog, counts_as_human
+from .events import Event, EventLog, counts_as_human, replay_key
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
 
@@ -717,7 +717,8 @@ def route_and_consume(log: EventLog, batch: str | None = None,
     with feedback_write_lock(log.root):
         table = table or RouteTable.load(log.root / "routes.yaml")
         results: list[ConsumeResult] = []
-        evs_all = log.read(batch) if batch else sorted(log.iter_all(), key=lambda e: e.order)
+        # 按 replay_key（时间序）喂给消费者：gold_add 等同 id 后写覆盖，跨批次按批次名排会让旧裁决盖掉新裁决
+        evs_all = sorted(log.read(batch) if batch else log.iter_all(), key=replay_key)
         if event_ids is not None:
             evs_all = [e for e in evs_all if e.id in event_ids]
         dests = {e.id: table.destinations(e) for e in evs_all}
