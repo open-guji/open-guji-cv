@@ -42,6 +42,7 @@ def _module_source_hash(mod_name: str) -> str:
     内容一字未改，Step2 闸以下 11 步 54 页全线过期。2026-10-06 再进一步：改注释、补 docstring
     也会让各书产物整体过期，逼得大家不敢整理代码，所以注释和 docstring 也不进指纹。
     改代码本身（哪怕只改一个常量）照样判过期。见 `code_only_text`。
+    2026-10-20 起例外一条：在 `core/code_equiv.py` 登记过「产物逐字节不变」的改动，返回改前的哈希。
     """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
@@ -49,6 +50,9 @@ def _module_source_hash(mod_name: str) -> str:
     src = inspect.getsourcefile(mod)
     h = hashlib.sha256(code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() \
         if src else "nosrc"
+    # 产物逐字节不变的提速改动登记过等价的，换回旧哈希（core/code_equiv.py）
+    from .code_equiv import canonical
+    h = canonical(mod_name, h)
     _code_hash_cache[mod_name] = h
     return h
 

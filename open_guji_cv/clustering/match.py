@@ -257,15 +257,20 @@ class GlyphMatcher:
         q = _cell_parts(cell_id)
         if q is None:
             return {j for j, iid in enumerate(self._ids) if iid == cell_id}
-        keys = getattr(self, "_cell_keys", None)
-        if keys is None or len(keys) != len(self._ids):
-            keys = [_cell_parts(i) for i in self._ids]
-            self._cell_keys = keys
+        # 按 (册, 页, 列) 分桶（2026-10-20，提速）：原来每格把整库 1.8 万条 id 扫一遍，
+        # 占 Step5-a 约 6%；结果是同一个集合。
+        index = getattr(self, "_cell_index", None)
+        if index is None or getattr(self, "_cell_index_n", -1) != len(self._ids):
+            index = {}
+            for j, iid in enumerate(self._ids):
+                k = _cell_parts(iid)
+                if k is not None:
+                    index.setdefault(k[:3], []).append((j, k))
+            self._cell_index = index
+            self._cell_index_n = len(self._ids)
         b, pg, col, sl, q_exact = q
         rows = set()
-        for j, k in enumerate(keys):
-            if k is None or k[:3] != (b, pg, col):
-                continue
+        for j, k in index.get((b, pg, col), ()):
             diff = abs(k[3] - sl)
             if q_exact and k[4]:
                 if diff == 0:
@@ -432,13 +437,17 @@ class GlyphMatcher:
         best_cov, best_wmax = 0.0, 0.0
         best_char: str | None = None       # 最好那次验证对应的库字，diff 档拿它当唯一候选
         n_verified = 0
+        # wmax 按需算（见 verify_pair_elastic 的 wmax_floor）：这一对 cov 不够 same、
+        # 也刷新不了目前最高 cov 时，它的 wmax 下面用不上。只对真的 elastic 判据传。
+        lazy_wmax = self._verify is verify_pair_elastic
         for j in top:
             j = int(j)
             if deadline is not None and time.monotonic() > deadline:
                 raise MatchTimeout(f"已验证 {n_verified}/{len(top)} 个刻例")
             v = self._verify(norm, self._patches[j],
                              cov_high=self.cov_high,
-                             miss_wmax=self.miss_wmax)
+                             miss_wmax=self.miss_wmax,
+                             **({"wmax_floor": best_cov} if lazy_wmax else {}))
             n_verified += 1
             if v.f1 > best_cov:
                 best_cov, best_wmax = v.f1, v.diff_blob_ratio

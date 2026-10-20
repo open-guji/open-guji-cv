@@ -71,23 +71,46 @@ class HogFeature(BaseFeature):
         bins = np.minimum((ang / np.pi * self.nbins).astype(int), self.nbins - 1)
 
         n = self.size // self.cell
+        # 整张图一次 np.add.at（2026-10-20，提速）：原来 64 个格各调一次。每个 bin 只属于一个格，
+        # 而一个格的像素在整图按行展开里的相对次序与按格切片展开相同，所以每个 bin 的
+        # float32 累加次序不变，直方图逐位相同。
         hist = np.zeros((n, n, self.nbins), dtype=np.float32)
-        for cy in range(n):
-            for cx in range(n):
-                sl = (slice(cy * self.cell, (cy + 1) * self.cell),
-                      slice(cx * self.cell, (cx + 1) * self.cell))
-                b = bins[sl].ravel()
-                m = mag[sl].ravel()
-                np.add.at(hist[cy, cx], b, m)
+        e = n * self.cell                       # 格外的边角像素原来就不计
+        bins, mag = bins[:e, :e], mag[:e, :e]
+        cell_idx = self._cell_index(bins.shape)
+        np.add.at(hist.reshape(-1), (cell_idx + bins).ravel(), mag.ravel())
 
-        # 2×2-cell 块 L2 归一（滑动步长 1 cell）
-        blocks = []
-        for by in range(n - 1):
-            for bx in range(n - 1):
-                block = hist[by:by + 2, bx:bx + 2].ravel()
-                norm = np.linalg.norm(block)
-                blocks.append(block / norm if norm > 0 else block)
-        return np.concatenate(blocks)
+        # 2×2-cell 块 L2 归一（滑动步长 1 cell）。范数直接写 sqrt(x·x)——就是 np.linalg.norm
+        # 对一维 float32 的做法，结果逐位相同，省掉它每次的 Python 开销（每张图 49 次）。
+        # 各块一次取齐（每行就是原来 hist[by:by+2, bx:bx+2].ravel() 的拷贝），逐块 dot 不变，
+        # 除法整批做；范数为 0 的块本来全是 0，除以 1 仍是 0。
+        B = hist.reshape(-1)[self._block_index(n)]
+        norms = np.array([np.sqrt(b.dot(b)) for b in B], dtype=np.float32)
+        return (B / np.where(norms > 0, norms, np.float32(1))[:, None]).ravel()
+
+    def _block_index(self, n: int) -> np.ndarray:
+        """(块数, 4×nbins) 的下标：第 k 行是第 k 个 2×2 块按 hist[by:by+2, bx:bx+2].ravel() 的次序。"""
+        cache = self.__dict__.setdefault("_blk_idx", {})
+        hit = cache.get(n)
+        if hit is None:
+            ids = np.arange(n * n * self.nbins).reshape(n, n, self.nbins)
+            hit = np.stack([ids[by:by + 2, bx:bx + 2].ravel()
+                            for by in range(n - 1) for bx in range(n - 1)])
+            cache[n] = hit
+        return hit
+
+    def _cell_index(self, shape: tuple[int, int]) -> np.ndarray:
+        """每个像素所属格在 hist 展平后的起点（格号 × nbins），按图尺寸缓存。"""
+        cache = self.__dict__.setdefault("_cell_idx", {})
+        hit = cache.get(shape)
+        if hit is None:
+            h, w = shape
+            n = self.size // self.cell
+            cy = np.arange(h) // self.cell
+            cx = np.arange(w) // self.cell
+            hit = ((cy[:, None] * n + cx[None, :]) * self.nbins).astype(np.intp)
+            cache[shape] = hit
+        return hit
 
     def extract(self, patches: np.ndarray) -> np.ndarray:
         feats = [self._hog_single(soft_patch(p) * 255.0) for p in patches]
