@@ -82,10 +82,11 @@ def cmd_check(args) -> int:
         old, new = code_hash_at(m, args.base), code_hash_at(m, None)
         if old != new:
             changed.append((m, new, canonical(m, old)))
-    if not changed:
-        print(f"{args.step} 的模块（{len(mods)} 个）在 {args.base} 与工作区之间代码没变，不用登记")
+    if not changed and not args.always:
+        print(f"{args.step} 的模块（{len(mods)} 个）在 {args.base} 与工作区之间代码没变，不用登记"
+              "（改的是指纹外的代码、也要比产物时加 --always）")
         return 0
-    print("代码变了的模块：" + "、".join(m for m, _, _ in changed))
+    print("代码变了的模块：" + ("、".join(m for m, _, _ in changed) or "（无，--always 照样比产物）"))
 
     work = Path(args.workdir or tempfile.mkdtemp(prefix="code_equiv_"))
     work.mkdir(parents=True, exist_ok=True)
@@ -115,7 +116,7 @@ def cmd_check(args) -> int:
         if rep["diff"] or rep["only_a"] or rep["only_b"] or rep["same"] == 0:
             print(f"✗ 不等价：相同 {rep['same']} 页，不同 {rep['diff']}，只在旧 {rep['only_a']}，只在新 {rep['only_b']}")
             return 1
-        print(f"✓ {args.step} {args.book} {rep['same']} 页产物逐字节相同。登记行：\n")
+        print(f"✓ {args.step} {args.book} {rep['same']} 页产物逐字节相同。" + ("登记行：\n" if changed else "（指纹没变，不用登记）"))
         ev = (f"{args.step} 在 {args.book} {rep['same']} 页（--pages {args.pages}）上与 "
               f"{args.base} 产物逐字节相同；{args.note}".rstrip("；"))
         for m, new, old in changed:
@@ -146,6 +147,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--workdir", default=None)
     c.add_argument("--note", default="", help="附进 evidence 的说明（比如页的来历）")
     c.add_argument("--keep", action="store_true", help="留着基线检出")
+    c.add_argument("--always", action="store_true",
+                   help="这一步的指纹模块没变也照样跑两遍比产物（改的是 feedback/ 之类指纹外的代码时用）")
     args = ap.parse_args(argv)
     return {"hash": cmd_hash, "check": cmd_check}[args.cmd](args)
 

@@ -684,6 +684,9 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
                    "open_guji_cv.groups.ids_parts", "open_guji_cv.groups.ids_segment", "open_guji_cv.groups.ids_solver",
                    "open_guji_cv.clustering.iron_evidence",
+                   # 字形证据（variant_form.image_ranks_for）查字体模板走它；2026-10-20 修了它按 id
+                   # 缓存行模长、拿错矩阵模长的 bug，结果可能变，此前漏登记，补上
+                   "open_guji_cv.clustering.font_candidates",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
                    # 间接进了指纹，原图不变，所以不必加进 consumes。

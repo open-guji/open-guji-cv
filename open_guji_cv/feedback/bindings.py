@@ -261,8 +261,9 @@ def _fp_diff(evidence: dict | None, cur_patch: Path | None) -> float | None:
 
 def _verdict_events(book: str, log) -> dict[int, list]:
     """本书逐格裁决事件（confirm 类），按页分组、按时间排序。"""
+    from .events import iter_events_readonly
     out: dict[int, list] = {}
-    for e in sorted(log.iter_all(), key=lambda e: (e.ts, e.batch, e.seq)):
+    for e in sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq)):
         if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
             continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格
         pk = parse_cell_key(e.target.key)
@@ -276,8 +277,9 @@ def _return_trigger_events(book: str, log) -> dict[int, list]:
     """本书 `cutline`／`n_body_slots`／`return_resolve` 事件，按页分组、按时间排序——
     `_verdict_events` 只收 `confirm`+`unit=cell`，收不到这几种列级/结案事件（见
     `feedback/returns.py`、`compute_page` 的 `return_events` 参数）。"""
+    from .events import iter_events_readonly
     out: dict[int, list] = {}
-    for e in sorted(log.iter_all(), key=lambda e: (e.ts, e.batch, e.seq)):
+    for e in sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq)):
         if e.kind not in ("cutline", "n_body_slots", "return_resolve"):
             continue
         if e.target.book != book or e.target.page is None:
