@@ -42,6 +42,8 @@ class FlowConfig:
     top1_cov: float = 0.97
     freq_table: dict = field(default_factory=dict)     # 组 id → {成员: 人裁刻形数}（`freq.load`）
     freq_major: int = _freq.MAJOR
+    freq_vols: dict = field(default_factory=dict)      # 组 id → {成员: 人裁册数}（`freq.load_vols`）
+    freq_min_vols: int = _freq.MIN_VOLS
     l2_tables: dict = field(default_factory=dict)      # 组 id → 上下文 L2 答案表路径
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -94,7 +96,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         gs = [g for g in groups_in(r.char, cfg.groups) if GROUPS[g].flow.review]
         for g in gs:
             mem = GROUPS[g].members
-            if not ref or ref in mem or canon(ref) in mem:
+            if GROUPS[g].ref_free or not ref or ref in mem or canon(ref) in mem:
                 return g, "review"
         return None
     if not cands:
@@ -106,7 +108,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         mem = GROUPS[g].members
         if not all(c in mem for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
-        if ref and ref not in mem and canon(ref) not in mem:
+        if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
             continue
         return g, "lift"
     return None
@@ -116,7 +118,8 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
            patch_fn) -> GroupVerdict:
     spec = GROUPS[g]
     if name == "freq":
-        return _freq.decide(cfg.freq_table.get(g), spec.members, cfg.freq_major)
+        return _freq.decide(cfg.freq_table.get(g), spec.members, cfg.freq_major,
+                            cfg.freq_vols.get(g), cfg.freq_min_vols)
     if name == "ids":
         # 方案 S7：有在线判法与模板库的组（`ids_online.SPECS`）才取图判；其余弃权，且不去取图
         from . import ids_online
@@ -191,7 +194,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         g, mode = e
         need_ctx = "ctx" in GROUPS[g].flow.solvers and ctx_fn is not None
         left, right = (ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)) if need_ctx else (None, None)
-        ch, why, trail = decide(g, r, cands, ref, cfg, left, right, patch_fn)
+        ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
         plans.append((r, g, mode, ch, why, trail))
     res = FlowResult(entered=len(plans))
     for r, g, mode, ch, why, trail in plans:
