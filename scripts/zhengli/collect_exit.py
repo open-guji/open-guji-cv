@@ -167,6 +167,21 @@ def _r1(book, ws, cc, guji) -> dict:
                       f"收尾闸已定字没出字 {gaps}、人裁字≠放行字 {mism}（报告项）"}
 
 
+# ---------------------------------------------------------------- 钉版（提示，不判 FAIL）
+def _pins(book) -> dict:
+    """册 yaml 的钉版三项：cv_version、corpus、glyph_pin（GUJI-656，`doc/版本号规矩.md` 第七节）。
+
+    只报不判：没钉的项进 warn，exit_report 在总判前单列一行。读不到册配置也只记 warn。"""
+    try:
+        from open_guji_cv.core.book import load_book
+        b = load_book(book)
+    except Exception as e:  # noqa: BLE001
+        return {"warn": [f"读不到册配置：{type(e).__name__}: {e}"]}
+    pins = {"cv_version": b.cv_version, "corpus": b.corpus, "glyph_pin": b.glyph_pin}
+    pins["warn"] = [f"没钉 {k}" for k, v in pins.items() if v is None]
+    return pins
+
+
 # ---------------------------------------------------------------- R4 异常表 ＋ R2
 def parse_anomaly(path: Path) -> list[dict]:
     """读异常表 md：每个数据行 → {n, text, concl}。结论列＝第 4 个单元格（# | 现象 | 原因 | 结论 | …）。"""
@@ -286,7 +301,7 @@ def collect(book: str, ws, export_dir=None, anomaly=None, reason: str | None = N
         "R5": _r5(cc, cc_cmd, cc_err, export_err),
     }
     gen = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m-%d %H:%M PDT")
-    return {"book": book, "cv_version": _cv_version(), "generated": gen, "items": items}
+    return {"book": book, "cv_version": _cv_version(), "generated": gen, "items": items, "pins": _pins(book)}
 
 
 def main(argv=None) -> int:
@@ -296,7 +311,8 @@ def main(argv=None) -> int:
     ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji export format")
     ap.add_argument("--anomaly", help="R4 异常表 md（模板 异常表模板.md）")
     ap.add_argument("--reason", help="R3 原因归并一句话（人写）")
-    ap.add_argument("--pending", help="book-text 本章 NNN.pending.json；close-check 第 2c 项□去向用（GUJI-624）")
+    ap.add_argument("--pending", help="原样转给 close-check 第 2c 项（□去向，GUJI-624）；不给时 close-check 缺省读中心库"
+                                      "本册本章的待审单（数据目录 feedback/lists/proofing/<书>/<章>.pending.json，GUJI-711）")
     ap.add_argument("--guji", default="guji")
     ap.add_argument("-o", "--out", help="input.json 输出路径（缺省打印到 stdout）")
     ap.add_argument("--report", help="同时用 exit_report.py 拼出 Markdown 报告到此路径")

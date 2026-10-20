@@ -170,6 +170,7 @@ def cmd_pipeline(args) -> None:
         except RunLockHeld as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
+        _print_unpacked(eng.book.id, eng.store)
         sys.exit(1 if rc and args.stop_on_error else 0)
     try:
         with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
@@ -180,8 +181,21 @@ def cmd_pipeline(args) -> None:
         sys.exit(3)
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
+    else:
+        _print_unpacked(eng.book.id, eng.store)
     n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
     sys.exit(1 if n_failed and args.stop_on_error else 0)
+
+
+def _print_unpacked(book: str, store) -> None:
+    """本机这册产物有没存包的新结果就提醒一句（`datastore.packs.unpacked_note`；不挡什么）。"""
+    try:
+        from .datastore.packs import unpacked_note
+        msg = unpacked_note(store.root, book)
+    except Exception:          # noqa: BLE001 —— 提醒算不出来不碍事
+        msg = None
+    if msg:
+        print(f"  ⓘ {msg}")
 
 
 def cmd_rerun(args) -> None:
@@ -259,6 +273,7 @@ def cmd_status(args) -> None:
     _print_closure_gaps(gaps)
     _print_closure_mismatches(mism)
     _print_vision_pending(st["vision_pending"])
+    _print_unpacked(eng.book.id, eng.store)
 
 
 def _vision_pending(book: str, pages: list[int], store) -> list[dict] | None:
@@ -291,12 +306,13 @@ def cmd_close_check(args) -> None:
                  export_dir=Path(args.export_dir) if args.export_dir else None,
                  chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
                  reports=reports_root(), tier=getattr(args, "tier", "final"),
-                 pending=Path(args.pending) if getattr(args, "pending", None) else None,
+                 pending=getattr(args, "pending", None),
                  strict_cv=getattr(args, "strict_cv", False))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
         CC.print_report(res)
+        _print_unpacked(eng.book.id, eng.store)
     sys.exit(0 if res["machine_ok"] else 1)
 
 
@@ -408,6 +424,11 @@ def cmd_audit(args) -> None:
             cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
                        skip_decided=False, cls="*")["cards"]
         todo = [c for c in cs if not c.get("admit")]
+        if args.reviewed:
+            # 人裁过的格也算（它们多已放行、不在待审里）：给 alt-eval 拿历史人裁量真实命中，不进待审单
+            from .feedback.lookup import human_chars
+            done = human_chars(book)
+            todo += [c for c in cs if c.get("admit") and c.get("id") in done]
         zi = ZiCache(Path(args.zi_cache) if args.zi_cache else None, fetch=args.fetch_zi)
         alt = alt_for_cards(book, todo, k=args.k or ALT_K, zi=zi, log=lambda m: print(m, file=sys.stderr))
         n = attach(cs, alt)
@@ -2816,8 +2837,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "（出 0.1.0 用；整理设计 R5）")
     p.add_argument("--strict-cv", action="store_true", dest="strict_cv",
                    help="1a 用旧口径：代码／版本变了也算过期（缺省只因代码变、产物记着正式版 cv_version 的页算新鲜）")
-    p.add_argument("--pending", default=None,
-                   help="book-text 本章的 NNN.pending.json（公众人审页的待审单）；第 2c 项认它上面的格为「□ 有去向」")
+    p.add_argument("--pending", nargs="?", const="", default=None,
+                   help="公众人审页的待审单，第 2c 项认它上面的格为「□ 有去向」。不给或只写 --pending：读中心库"
+                        "本册本章的 feedback/lists/proofing/<书>/<章>.pending.json（数据目录里，先 guji db sync）；"
+                        "也可给册（vol04）、章号（004）、<书>/<章> 或文件路径。book-text 的旧路径已不用（10-20 迁中心库）")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("exit-check",
@@ -2856,6 +2879,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--k", type=int, default=0, help="alt：每格最多几个相似字（缺省 30）")
     p.add_argument("--fetch-zi", action="store_true",
                    help="alt：字统网缓存里没有的近似字去取一次（≥3 秒一次，取到写缓存）；缺省只读缓存")
+    p.add_argument("--reviewed", action="store_true",
+                   help="alt：人裁过、已放行的格也算相似字（给 alt-eval 用历史人裁量命中；pending_list 只取待审格，不受影响）")
     p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")

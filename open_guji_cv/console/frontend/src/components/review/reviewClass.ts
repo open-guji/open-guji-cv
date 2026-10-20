@@ -80,6 +80,32 @@ export interface VerdictLike {
   approxIds?: string
   /** 近似字备注（可空）。 */
   approxNote?: string
+  /** 选的字是从哪儿点来的（见 `PickInfo`）。改字时跟着最后一次点选走，切分缺陷等档不带。 */
+  pick?: PickInfo
+}
+
+/**
+ * 选字来源（cv doc/research/人审找字-以字找字与异体族按图排序.md §5.3）：量「以字找字」有没有用，
+ * 不影响落裁决。`src`：cand 主候选（`from`＝哪几路，`rank`＝键位表第几个）、alt 相似字、
+ * alt_q 键入近似字后的相似字（`pivot`＝从哪个近似字查来）、rare「查候选」、custom 手输、
+ * jys 己已巳卡、cnn／ctx／llm／ocr／ai／form 证据行上的「采信」。与网站精校页 `pick_src` 同名。
+ */
+export interface PickInfo {
+  src: string
+  rank?: number
+  pivot?: string
+  from?: string
+}
+
+/** PickInfo → 事件 payload 片段（`pick_src`／`pick_rank`／`pivot`／`pick_from`）；没有就空对象，老事件逐字段不变。 */
+export function pickFields(p: PickInfo | undefined): Record<string, unknown> {
+  if (!p || !p.src) return {}
+  return {
+    pick_src: p.src,
+    ...(p.rank !== undefined && Number.isInteger(p.rank) && p.rank > 0 ? { pick_rank: p.rank } : {}),
+    ...(p.pivot && [...p.pivot].length === 1 ? { pivot: p.pivot } : {}),
+    ...(p.from ? { pick_from: p.from } : {}),
+  }
 }
 
 /**
@@ -133,6 +159,7 @@ export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = n
     client_ts: v.ts, dwell_ms: v.dwell,
     ...(aiAcc !== null ? { ai_accepted: aiAcc } : {}),
     ...approxFields(v),
+    ...pickFields(v.pick),
   }
 }
 
@@ -142,11 +169,11 @@ export function verdictRow(id: string, v: VerdictLike, aiAcc: boolean | null = n
  * 「字形不入库」勾选沿用。
  */
 export function pickVerdict(ch: string, prev: VerdictLike | undefined, seenAt: number | undefined,
-                            now: number): VerdictLike {
+                            now: number, pick?: PickInfo): VerdictLike {
   const keepDefect = !!prev && DEFECT_DONES.includes(prev.done)
   const dwell = prev?.dwell !== undefined ? prev.dwell : (seenAt ? now - seenAt : undefined)
   return { shape: ch, done: keepDefect ? prev!.done : (ch ? '1' : ''), ts: now, dwell, noGlyphLib: prev?.noGlyphLib,
-           ...keepApprox(prev) }
+           ...keepApprox(prev), ...(pick && ch ? { pick } : {}) }
 }
 
 /** 上下文一格显示什么字：缺省整理本优先（`text`），开了「刻本读法」才用 `char`。 */

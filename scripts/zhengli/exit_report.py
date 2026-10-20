@@ -50,6 +50,10 @@ def main(path: str) -> int:
                 problems.append(f"{k} {res}")
             num = it.get("number", "")
         out.append(f"| {k} | {TITLE[k]} | {res} | {num} | {it.get('cmd','')} | {it.get('attach') or '—'} |")
+    pins = d.get("pins") or {}
+    if pins:                                   # 钉版只提示，不进 problems（GUJI-656）
+        got = "、".join(f"{k}={pins[k]}" for k in ("cv_version", "corpus", "glyph_pin") if pins.get(k) is not None)
+        out += ["", "钉版：" + (got or "无") + ("；⚠ " + "、".join(pins["warn"]) + "（提示，不挡出口）" if pins.get("warn") else "")]
     out += ["", "总判：" + ("可出 0.1.0" if not problems else "不可出 0.1.0（" + "；".join(problems) + "）")]
     print("\n".join(out))
     return 1 if problems else 0

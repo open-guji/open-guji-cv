@@ -50,6 +50,9 @@ class ManifestEntry:
     （`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
     cv_commit: str | None = None
     """生成这条产物时 cv 的完整 commit sha（`code_rev` 只是短 sha）。不进指纹。"""
+    db_rev: str | None = None
+    """跑这一页时本机数据目录对应的中心库版本 `<工作区>@<分支>:<rev>`（`core.workspace.central_rev`）。
+    不进指纹；字形库、人裁的内容版本靠它追（`glyph_pin` 只钉指纹）。老条目是 None。"""
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)

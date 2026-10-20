@@ -9,6 +9,7 @@
 
 - `check_pages_json_boxes.py`：pages.json 抽字核对（A2 验收，F3 overview#398）：抽 N 个格，把框画回原图，出一张对照图 + 对位量。
 - `zhengli/zl.py`：整理一册书**执行脚本**（幂等、可断点续跑，只在需看图／人裁处停；见 runbook〇·五）；`zhengli/snap_import.py`：容忍 CRLF 的 `guji snap import` 包装。
+- 粗校出口与待审单（`zhengli/`）：`collect_exit.py`＋`exit_report.py`（R1–R5 出口报告）；`ledger.py`（粗校台账、统一人审率口径，GUJI-667）；`pending_list.py`（册级待审单 pending.json）、`sprite_build.py`／`ex_build.py`／`alt_build.py`（精校页字块雪碧图、同字例子、相似字图）、`decision_build.py`（decision.json），后五个 10-20 从 ai-team 迁入（GUJI-652）。
 - `relanding/`：重落后核对（`manifest_cmp.py` 比 params_hash／指纹，`relanding_diff.py` 比放行差异与红线格，`products_snapshot.py` 留快照；用法见其 README）。
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
@@ -178,7 +179,7 @@
 - `find_border_lines.py`：投影峰匹配找版框线：批量跑竖直界行/边框 + 上下边框，画到图上，出报告页。
 - `freeze_bottom_offset_gold.py`：把 `border-detection/bottom-offset` 的 68 条人工金标转成**绝对页面坐标**并冻结。
 - `harvest_shadow_review.py`：把「影子≠现字」审查页（Artifact）上的人裁收回来，写成人裁事件。幂等。
-- `ia_download_zongmu.py`：下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。
+- `ia_download_zongmu.py`：下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。全书 99 册两段编号，`--vols 11-20` 按册号选，缺省取 `_tif.zip`（与现有原图逐像素一致）。
 - `ingest_cutline_flip_verdicts.py`：切分裁决台（A/B 盲裁）的裁决 → `char-segmentation/touching-cuts` 金标。
 - `kage_render_glyphwiki.py`：把 GlyphWiki 的 KAGE 字形离线渲染成位图——给「Unicode 未收字」造模板的原型。
 - `kangxi_crossval.py`：康熙字典字頭切圖的交叉驗證：把「可能標錯的字」全部挑出來人審。

@@ -1,9 +1,11 @@
 """`guji products`：产物前后对比、产物包（存取 R2）。不跑 Step，不进任何 Step 的 `code_deps`。
 
     guji products diff <册> --a <产物根> [--b <产物根>] [--pages …] [--out 目录] [--images N] -w <工作区>
-    guji products pack  push <册> [--label 名] [--steps a,b] -w <工作区>     # 本机产物打包存 R2
+    guji products pack  push <册> [--change 名] [--main] [--report diff目录] -w <工作区>  # 本机产物打包存 R2，并在工作区仓写实验记录
     guji products pack  fetch <册> [--label 名] [--to 产物根] -w <工作区>    # 取回，缺省落在本机产物根
-    guji products pack  list [<册>] -w <工作区>
+    guji products pack  list [<册>] -w <工作区>                            # ★ = 该册 main
+    guji products pack  promote <册> --label 名 -w <工作区>                # 把已存的包标成该册 main
+    guji products exclusions <册> --a <重切前产物根> [--b <重切后>] [--apply] -w <工作区>  # 排除清单按框跟着重切走
     guji products pack  push-index | fetch-index                           # 生僻字 embedding 索引（models/*/emb_*.npz）
 
 产物根就是含 `<册>/<步>/p0001.json` 的那一层（`products/`、`guji snapshot make` 出的目录、实验变体目录）。
@@ -53,6 +55,73 @@ def cmd_diff(args) -> None:
     print(f"报告：{rep}")
 
 
+def book_versions(book: str, root: Path | None = None) -> dict:
+    """一份结果由三样版本共同决定：cv、语料库（册 yaml `corpus: N`，两级清单另记底库号）、字形库
+    （`glyph_pin: N`；没钉就记人裁内容指纹）。全记进产物包的 manifest，标签前三段由它拼。
+
+    `glyph_pin` 只钉指纹、不钉字形库内容，所以另记中心库 rev：`db_rev` 是存包时本机数据对应的版本，
+    `db_revs` 是 seed_admit 各页跑时记下的版本及页数（产物 manifest 的 `db_rev`，老产物没有）。
+    要精确复现某份包读的库，从那个 rev 开 Neon 实验分支。"""
+    from .core import cv_version as CV
+    from .core.workspace import central_rev
+    ver, commit = CV.describe()
+    out = {"cv": ver, "cv_commit": commit, "corpus": None, "corpus_base": None, "glyph_pin": None,
+           "human_fp": None, "db_rev": central_rev(), "db_revs": None}
+    try:
+        from .core.book import load_book
+        b = load_book(book)
+        out["corpus"] = getattr(b, "corpus", None)
+        out["glyph_pin"] = getattr(b, "glyph_pin", None)
+    except Exception:          # noqa: BLE001 —— 读不到册配置：只记 cv
+        pass
+    if out["corpus"] is not None:
+        try:
+            from .core.corpus_pin import load_manifest
+            from .core.workspace import workspace_root
+            out["corpus_base"] = load_manifest(workspace_root(), int(out["corpus"])).get("base")
+        except Exception:      # noqa: BLE001
+            pass
+    if out["glyph_pin"] is None:
+        try:
+            from .clustering.glyph_fp import human_shapes_fingerprint
+            from .core.workspace import glyph_db_path
+            out["human_fp"] = human_shapes_fingerprint(glyph_db_path())
+        except Exception:      # noqa: BLE001
+            pass
+    if root is not None:
+        from .products.manifest import Manifest
+        m = Path(root) / book / "seed_admit" / "_manifest.jsonl"
+        if m.exists():
+            revs: dict[str, int] = {}
+            for e in Manifest(m).all().values():
+                if e.status == "ok":
+                    k = e.db_rev or "未记"
+                    revs[k] = revs.get(k, 0) + 1
+            out["db_revs"] = revs or None
+    return out
+
+
+def _book_yaml_text(book: str) -> str | None:
+    from .core.workspace import books_dir
+    d = books_dir()
+    p = d / f"{book}.yaml" if d is not None else None
+    return p.read_text(encoding="utf-8") if p is not None and p.is_file() else None
+
+
+def _record(book: str, info: dict, base_label: str | None, report: str | None,
+            summary: str | None = None, root: Path | None = None) -> None:
+    """存包后在工作区仓 `experiments/<册>/<标签>.md` 留实验记录（只写文件，提交由人做）。"""
+    from .core.workspace import workspace_root
+    from .ops import exp_record as ER
+    ws = workspace_root()
+    if ws is None:
+        return
+    p = ER.write_record(ws, book, info, base_label=base_label, book_yaml=_book_yaml_text(book),
+                        report_dir=Path(report).expanduser() if report else None,
+                        summary=summary, products_root=root)
+    print(f"实验记录：{p}（在工作区仓里，记得提交）")
+
+
 def cmd_pack(args) -> None:
     from .datastore import packs as PK
     if args.pack_action in ("push-index", "fetch-index"):
@@ -62,61 +131,132 @@ def cmd_pack(args) -> None:
         return
     if args.pack_action == "list":
         for row in PK.list_packs(args.book):
-            print(f"{row['name']}\t{row.get('bytes', '')}\t{row.get('created', '')}\t{row.get('note', '')}")
+            star = "★" if row.get("main") else " "
+            v = row.get("versions") or {}
+            vs = (f"cv {v.get('cv')} 语料 {v.get('corpus') if v.get('corpus') is not None else '-'} "
+                  f"字形 {v.get('glyph_pin') if v.get('glyph_pin') is not None else (v.get('human_fp') or '-')}") if v else ""
+            print(f"{star} {row['name']}\t{row.get('bytes', '')}\t{row.get('created', '')}\t{vs}\t{row.get('note', '')}")
+        return
+    if args.pack_action == "promote":
+        if not (args.book and args.label):
+            print("✗ 用法：guji products pack promote <册> --label <标签>", file=sys.stderr)
+            sys.exit(2)
+        print(f"已标 main：{PK.promote(args.book, args.label, note=args.note or '')}")
+        _note_main(args.book, args.label, args.note or "")
         return
     if not args.book:
         print("✗ push/fetch 要给册", file=sys.stderr)
         sys.exit(2)
     if args.pack_action == "push":
-        info = PK.push_products(args.book, _root(args.root), label=args.label,
+        root = _root(args.root)
+        try:
+            base_label = PK.main_label(args.book)
+        except Exception:      # noqa: BLE001 —— 列不到指针不挡存包
+            base_label = None
+        info = PK.push_products(args.book, root, label=args.label, change=args.change,
+                                vers=book_versions(args.book, root),
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
+        if not args.no_record:
+            _record(args.book, info, base_label, args.report, _summary_text(args.summary), root)
+        if args.main:
+            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '')}")
+            _note_main(args.book, info["label"], args.note or "")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
+
+
+def _summary_text(s: str | None) -> str | None:
+    """`--summary` 可直接给文字，也可给 `@文件`（多行摘要写文件里）。"""
+    if s and s.startswith("@"):
+        return Path(s[1:]).expanduser().read_text(encoding="utf-8")
+    return s
+
+
+def _note_main(book: str, label: str, note: str) -> None:
+    from .core.workspace import workspace_root
+    from .ops import exp_record as ER
+    ws = workspace_root()
+    p = ER.note_main(ws, book, label, note) if ws is not None else None
+    if p:
+        print(f"实验记录已记「标为 main」：{p}")
+
+
+def cmd_exclusions(args) -> None:
+    """排除清单按框跟着重切走（`ops/exclusion_rebind.py`）。缺省只报计划，`--apply` 才改本机名单。"""
+    from .core.book import load_book
+    from .core.workspace import exclusions_path
+    from .ops import exclusion_rebind as XR
+    book = load_book(args.book)
+    a, b = _root(args.a), _root(args.b)
+    ex = exclusions_path()
+    rows = XR.plan(book.id, a, b, ex)
+    c = XR.counts(rows)
+    print(f"{book.id} 排除清单 {len(rows)} 条：" + "、".join(
+        f"{k} {c.get(k, 0)}" for k in ("same", "moved", "gone", "dup", "no_old")) + f"（名单 {ex}）")
+    for p in rows:
+        if p["status"] in ("moved", "gone", "dup"):
+            print(f"  {p['status']:5s} {p['iid']}" + (f" → {p['new']}" if p["new"] and p["status"] != "gone" else "")
+                  + f"  IoU {p['iou']}")
+    if args.apply:
+        XR.apply(rows, ex)
+        print("已改本机名单；改完 guji db sync 推回中心库（名单一变各册 seed_admit 都会过期）")
+    elif c.get("moved") or c.get("gone") or c.get("dup"):
+        print("（只是计划；加 --apply 才改）")
 
 
 def cmd_products(args) -> None:
     _ws(args)
     if args.action == "diff":
         cmd_diff(args)
+    elif args.action == "exclusions":
+        cmd_exclusions(args)
     else:
         cmd_pack(args)
 
 
 def add_parser(sub) -> None:
     p = sub.add_parser("products", help="[v2] 产物前后对比（diff）、产物包存取 R2（pack）")
-    p.add_argument("action", choices=["diff", "pack"])
-    p.add_argument("pos", nargs="*", help="diff：<册>；pack：push|fetch|list [<册>]、push-index、fetch-index")
+    p.add_argument("action", choices=["diff", "pack", "exclusions"])
+    p.add_argument("pos", nargs="*", help="diff：<册>；pack：push|fetch|list|promote [<册>]、push-index、fetch-index")
     p.add_argument("-w", "--workspace", default=None, help="工作区（册配置、原图）")
     p.add_argument("--a", default=None, help="diff：前（基线）产物根")
-    p.add_argument("--b", default=None, help="diff：后产物根，缺省本机产物根")
+    p.add_argument("--b", default=None, help="diff／exclusions：后产物根，缺省本机产物根")
+    p.add_argument("--apply", action="store_true", help="exclusions：按计划改本机排除清单（缺省只报）")
     p.add_argument("--pages", default="all")
     p.add_argument("--out", default=None, help="diff：报告目录，缺省 ./diff-<册>")
     p.add_argument("--images", type=int, default=0, help="diff：前 N 个变了的列出看图页（要原图）")
     p.add_argument("--pipeline", default="keben_body_v2")
-    p.add_argument("--label", default=None, help="pack：包名后缀，缺省 cv 版本号")
+    p.add_argument("--label", default=None, help="pack：整个标签（ASCII）；push 缺省按版本三段拼（见 --change）；fetch 缺省取 main")
     p.add_argument("--steps", default=None, help="pack push：只打这几步，逗号分隔；缺省全部")
     p.add_argument("--root", default=None, help="pack：产物根，缺省本机产物根")
     p.add_argument("--to", default=None, help="pack fetch：解到哪个产物根")
     p.add_argument("--force", action="store_true", help="pack fetch：目标已有该册产物也覆盖")
-    p.add_argument("--note", default=None, help="pack push：说明（谁、为什么）")
+    p.add_argument("--note", default=None, help="pack push／promote：说明（谁、为什么）")
+    p.add_argument("--change", default=None, help="pack push：改动名（ASCII），接在自动版本标签后，如 layout → cv0.4.7-c1-g2-layout")
+    p.add_argument("--main", action="store_true", help="pack push：存完顺手标成该册 main（正式结果）")
+    p.add_argument("--report", default=None, help="pack push：这次 diff 的报告目录（含 report.md），抄进实验记录")
+    p.add_argument("--summary", default=None,
+                   help="pack push：实验记录开头的摘要（目的、改了什么、怎么跑、结论）；@文件 读文件")
+    p.add_argument("--no-record", action="store_true",
+                   help="pack push：不在工作区仓 experiments/<册>/<标签>.md 写实验记录（试存、测试用）")
 
 
 def cmd_products_entry(args) -> None:
-    """位置参数整理：diff <册>；pack <push|fetch|list> [<册>]。"""
+    """位置参数整理：diff <册>；exclusions <册>；pack <push|fetch|list> [<册>]。"""
     pos = list(args.pos or [])
-    if args.action == "diff":
+    if args.action in ("diff", "exclusions"):
         if len(pos) != 1:
-            print("✗ 用法：guji products diff <册> --a <产物根> [--b …]", file=sys.stderr)
+            print(f"✗ 用法：guji products {args.action} <册> --a <产物根> [--b …]", file=sys.stderr)
             sys.exit(2)
         args.book = pos[0]
         if not args.a:
-            print("✗ diff 要 --a（前一份产物根，如 guji snapshot make 出的目录、产物包取回的目录）", file=sys.stderr)
+            print(f"✗ {args.action} 要 --a（前一份产物根，如 guji snapshot make 出的目录、产物包取回的目录）", file=sys.stderr)
             sys.exit(2)
     else:
-        if not pos or pos[0] not in ("push", "fetch", "list", "push-index", "fetch-index"):
-            print("✗ 用法：guji products pack push|fetch|list [<册>]｜push-index｜fetch-index", file=sys.stderr)
+        if not pos or pos[0] not in ("push", "fetch", "list", "promote", "push-index", "fetch-index"):
+            print("✗ 用法：guji products pack push|fetch|list|promote [<册>]｜push-index｜fetch-index", file=sys.stderr)
             sys.exit(2)
         args.pack_action, args.book = pos[0], (pos[1] if len(pos) > 1 else None)
     cmd_products(args)

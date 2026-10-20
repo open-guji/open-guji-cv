@@ -4,8 +4,8 @@
 全部自造数据：
 - CV 来路：沿用 `test_guji_format` 那两页（抬头、行首留白、双行夹注、单行小注里的阙文、未收字、规范层、
   列中排除格、印章），走 `to_guji_format` 出 pages.json 再转；
-- 手造一份 pages.json，把 CV 页里不常有的几样凑齐：版心列、空列、单边夹注、残字、切坏格（`defect`）、
-  一格两字、版框为空、印章压字、`lacuna_extra`。
+- 手造一份 pages.json，把 CV 页里不常有的几样凑齐：版心列、空列、单边夹注、原刻残带人给的最像字（`□{guess=X}`，
+  导出成阙文带推测字 `guess_c`，char v0.2，GUJI-717）、切坏格（`defect`）、一格两字、版框为空、印章压字、`lacuna_extra`。
 
 钉住：两份都过 guji-format schema；cord 不带字、格位都在 char 里、页列号一致；**char 生成的分行稿与同一份导出的
 lines.md 逐字相同**（cv、lines 两种格位口径都是）；lines 口径的 key 与 book-text `lines_slots` 同法数出来。
@@ -48,6 +48,7 @@ def test_cv_pages_json_roundtrip(legacy, keys):
     assert cc.validate(char, "char") == [] and cc.validate(cord, "cord") == []
     assert cc.check(char, cord, norm) == []
     assert cc.char_to_lines_md(char) == legacy["002.lines.md"]            # 往返不丢字
+    assert char["$schema"] == cc.CHAR_SCHEMA_URL                          # 没有 guess_c：照旧 v0.1，逐字节不变
     assert char["book_id"] == "testbook01" and char["volume"] == 2 and char["version"] == "0.1.0"
     assert [p["page"] for p in char["pages"]] == [p["page"] for p in cord["pages"]] == [PAGE, PAGE + 1]
     # cord 不带字；每格一个框
@@ -146,13 +147,20 @@ def test_handmade_pages_json(keys):
     char, cord = files["003.char.json"], files["003.cord.json"]
     assert cc.validate(char, "char") == [] and cc.validate(cord, "cord") == []
     assert cc.check(char, cord) == []
-    assert cc.char_to_lines_md(char) == (LINES_MD if multi else LINES_MD.replace("卅一", "卅"))
+    md = LINES_MD if multi else LINES_MD.replace("卅一", "卅")
+    assert cc.char_to_lines_md(char, guess_c_as_qz=True) == md                          # 与 9.1 的 lines.md 逐字相同
+    assert cc.char_to_lines_md(char) == md.replace("□{guess=春}", "[[]]")              # spec 03：照阙文写
     p7 = char["pages"][0]
     assert p7["label"] == "五" and char["pages"][1] == {"page": 8, "columns": []}
     by = {c["c"]: c for c in _cells(char)}
-    assert by["春"]["guess"] is True and "lacuna" not in by["殘"]           # defect 不是阙文
+    assert "lacuna" not in by["殘"]                                       # defect 不是阙文
+    # 原刻残＋人给的最像字（confirm v=damaged guess=春）→ 阙文带推测字：c 仍是 □，推测字在 guess_c；不再出残字 guess
+    g = [c for c in _cells(char) if "guess_c" in c]
+    assert [(c["c"], c.get("lacuna"), c["guess_c"]) for c in g] == [("□", True, "春")]
+    assert "春" not in by and not any("guess" in c for c in _cells(char))
+    assert char["$schema"] == cc.CHAR_SCHEMA_URL_V02
     assert ("卅一" if multi else "卅") in by
-    assert [c.get("lacuna") for c in _cells(char)].count(True) == 2       # unreadable + lacuna_extra
+    assert [c.get("lacuna") for c in _cells(char)].count(True) == 3       # unreadable + lacuna_extra + 带推测字
     assert by["小"]["lane"] == "solo"
     assert rep["dropped"] == {"regions": 1, "columns": 0, "cells": 1, "marks": 1}
     assert len(cord["pages"][0]["cells"]) == 11 and "regions" not in cord["pages"][1]
@@ -175,6 +183,27 @@ def test_handmade_pages_json(keys):
         assert blank["col"] == 2 and "slot" not in blank
         seal = next(m for m in cord["pages"][0]["marks"] if m["kind"] == "seal")
         assert seal["occludes"] == ["7:1:1"]
+
+
+def test_guess_c_needs_char_v02():
+    """有 guess_c 的 char 只过 v0.2：按 `$schema` 取 schema，硬写成 v0.1 就被拦（格对象不许多键）。"""
+    files, _ = cc.from_pages_json(_pj(), version="1.0.0")
+    char = files["003.char.json"]
+    assert cc.validate(char, "char") == []
+    errs = cc.validate({**char, "$schema": cc.CHAR_SCHEMA_URL}, "char")
+    assert errs and all("guess_c" in e for e in errs)
+    bad = copy.deepcopy(char)                                             # guess_c 只许在阙文格上
+    cell = next(c for c in _cells(bad) if "guess_c" in c)
+    del cell["lacuna"]
+    assert cc.validate(bad, "char")
+
+
+def test_report_roundtrip_with_guess_c():
+    """导出器的往返核对：9.1 的 lines.md 写 □{guess=X}，char 里是 guess_c——要认作一致。"""
+    from convert_pages_to_char_cord import report
+    files, _ = cc.from_pages_json(_pj(), version="1.0.0")
+    assert report(files, LINES_MD) == 0
+    assert report(files, LINES_MD.replace("□{guess=春}", "□{guess=夏}")) == 1
 
 
 def test_lines_keys_refuse_multi_char():
@@ -250,9 +279,12 @@ def test_exporter_char_cord(tmp_path):
     base = ["--products", str(tmp_path / "products"), "--book", BOOK, "--chapter", "002", "--meta", str(meta),
             "--pages", str(PAGE)]
     assert main(base + ["--out", str(tmp_path / "old")]) == 0
-    assert main(base + ["--out", str(tmp_path / "new"), "--format", "char-cord"]) == 0
+    with pytest.raises(SystemExit):                                          # char-cord 不给版本号就拒（GUJI-679）
+        main(base + ["--out", str(tmp_path / "nover"), "--format", "char-cord"])
+    assert main(base + ["--out", str(tmp_path / "new"), "--format", "char-cord", "--text-version", "0.1.3"]) == 0
     assert sorted(p.name for p in (tmp_path / "new").iterdir()) == ["002.char.json", "002.cord.json", "002.norm.json"]
     char = json.loads((tmp_path / "new" / "002.char.json").read_text(encoding="utf-8"))
+    assert char["version"] == "0.1.3"
     old = sorted(p.name for p in (tmp_path / "old").iterdir())               # 旧形态照出、不受影响
     assert old == [f"002.{k}" for k in ("lines.md", "norm.json", "pages.json", "proof.json", "zi.json")]
     assert cc.char_to_lines_md(char) == (tmp_path / "old" / "002.lines.md").read_text(encoding="utf-8")

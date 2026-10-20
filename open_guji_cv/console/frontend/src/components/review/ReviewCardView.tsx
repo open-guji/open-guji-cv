@@ -6,6 +6,7 @@ import { disagreeingRuns, dropReason, groupById } from './ai'
 import type { KeyItem } from './candidates'
 import type { Verdict } from './ReviewPanel'
 import { ctxChar, isJysCard, JYS_OPTIONS } from './reviewClass'
+import type { PickInfo } from './reviewClass'
 
 interface Props {
   idx: number
@@ -18,7 +19,7 @@ interface Props {
   aroundCtx?: AroundContext
   rareOut?: RareCandidate[] | 'loading' | 'error'
   onFocus: () => void
-  onSet: (shape: string, done?: string) => void
+  onSet: (shape: string, done?: string, pick?: PickInfo) => void
   onSetNoGlyphLib: (checked: boolean) => void
   onSetGuess: (guess: string) => void
   /** 无匹配（近似字）勾选与 IDS／备注（overview#276）。老调用方不传就不显示这一栏。 */
@@ -52,14 +53,14 @@ export function ReviewCardView({
   const doubts = (c.doubts || []).map((d, i) => <div key={i} className="rvdoubt">⚠ {d}</div>)
   const fm = c.form && c.form.state === 'open' ? c.form : null
 
-  function pick(ch: string) {
+  function pick(ch: string, from?: PickInfo) {
     setShapeInput(ch)
-    onSet(ch)
+    onSet(ch, undefined, from)
   }
 
   function onShapeInput(val: string) {
     setShapeInput(val)
-    onSet(val, undefined)
+    onSet(val, undefined, { src: 'custom' })
   }
 
   // 上下文：整理本对位原文优先，刻本读法在开关后面（#247）。己已巳卡把本位遮成「？」——
@@ -103,7 +104,7 @@ export function ReviewCardView({
         <div className="rvjys-opts">
           {JYS_OPTIONS.map((o) => (
             <button key={o.ch} className={`rvjys-pick${v.shape === o.ch && v.done ? ' pick' : ''}`}
-                    onClick={(e) => { e.stopPropagation(); onFocus(); pick(o.ch) }} title={`${o.ch}：${o.hint}（${o.key}）`}>
+                    onClick={(e) => { e.stopPropagation(); onFocus(); pick(o.ch, { src: 'jys', rank: +o.key }) }} title={`${o.ch}：${o.hint}（${o.key}）`}>
               <kbd>{o.key}</kbd>{o.ch}
             </button>
           ))}
@@ -178,7 +179,7 @@ export function ReviewCardView({
               <span className="k" title="借来的字形库上按字取 r5 embedding 均值原型检索（书 yaml params.review.first_pick）">CNN</span>{' '}
               {c.first.cnn_candidates.slice(0, 3).map(([ch, s], i) => (
                 <span key={i}>
-                  <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(ch) }}
+                  <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(ch, { src: 'cnn', rank: i + 1 }) }}
                           title={`采信这个字（CNN 原型余弦 ${s}）`}>{ch}</button>
                   <span className="rvp">{Number(s).toFixed(2)}</span>
                 </span>
@@ -198,26 +199,26 @@ export function ReviewCardView({
             </div>
           )}
           <div><span className="k">上下文</span> {c.ctx?.char
-            ? <><button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.char!) }}
+            ? <><button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.char!, { src: 'ctx' }) }}
                         title={`采信上下文定的字（margin ${c.ctx.margin}）`}>{c.ctx.char}</button>
                 <span className="rvp">m={c.ctx.margin}</span></>
             : '—'}
             {c.ctx?.llm_suggestion && (
-              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.llm_suggestion!) }}
+              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.ctx!.llm_suggestion!, { src: 'llm' }) }}
                       title="Step6 上下文裁决 margin 不够时问了线上大模型，这是它的建议（只调过候选顺序，未自动放行，见 Step6 大模型调用记录页）">
                 🤖{c.ctx.llm_suggestion}
               </button>
             )}</div>
           {c.jys?.char && (
             <div><span className="k" title="己/已/巳 三字刻法不分，按上下文定：干支、时辰、「自己」一类搭配，其余为「已」">上下文定字</span>{' '}
-              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.jys!.char!) }}
+              <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(c.jys!.char!, { src: 'jys_ctx' }) }}
                       title={`依据：${c.jys.why}`}>{c.jys.char}</button>
               <span className="rvp">{c.jys.why}</span></div>
           )}
           <div><span className="k" title="Paddle OCR，准确率一般，只作参考">OCR</span> {ocr.length
             ? ocr.map(([ch, p], i) => (
                 <span key={i}>
-                  <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(ch) }}
+                  <button className="rvtake" onClick={(e) => { e.stopPropagation(); onFocus(); pick(ch, { src: 'ocr', rank: i + 1 }) }}
                           title={`采信这个字（OCR 概率 ${Number(p).toFixed(3)}）`}>{ch}</button>
                   <span className="rvp">{Number(p).toFixed(2)}</span>
                 </span>
@@ -255,7 +256,7 @@ export function ReviewCardView({
                     <span className="rvp">p={r.p.toFixed(2)}</span>
                     {g.members.map((m) => (
                       <button key={m} className={`rvpick${v.shape === m ? ' pick' : ''}`}
-                              onClick={(e) => { e.stopPropagation(); onFocus(); pick(m) }}
+                              onClick={(e) => { e.stopPropagation(); onFocus(); pick(m, { src: 'ai', rank: i + 1 }) }}
                               title={g.why || undefined}>{m}</button>
                     ))}
                     {g.members.length > 1 && <span className="muted">同字异形</span>}
@@ -292,7 +293,7 @@ export function ReviewCardView({
             const lib = (fm.lib || []).find((x) => x[0] === f)
             return (
               <button key={f} className={`rvformpick${v.shape === f ? ' pick' : ''}`}
-                      onClick={(e) => { e.stopPropagation(); onFocus(); pick(f) }}
+                      onClick={(e) => { e.stopPropagation(); onFocus(); pick(f, { src: 'form' }) }}
                       title={`${hn ? `本书人裁确认过 ${hn} 次` : '本书还没人确认过这个形（首例）'}${lib ? ` · 库 cov ${lib[1]}` : ''}`}>
                 {f}<sub>{hn ? `人${hn}` : '新'}</sub>
               </button>
@@ -304,7 +305,7 @@ export function ReviewCardView({
         <span className="rvbtns">
           {keys.map((e, i) => e.ch ? (
             <button key={i} className={`rvpick${v.shape === e.ch ? ' pick' : ''}${e.nokey ? ' nokey' : ''}`}
-                    onClick={(ev) => { ev.stopPropagation(); onFocus(); pick(e.ch) }} title={e.note}>
+                    onClick={(ev) => { ev.stopPropagation(); onFocus(); pick(e.ch, { src: 'cand', rank: i + 1, from: e.srcs.join('+') }) }} title={e.note}>
               {e.keys.length ? `${e.keys.join('/')}·` : ''}{e.ch}<sub className="rvsrc">{e.srcs.join('·')}</sub>
             </button>
           ) : (
@@ -364,7 +365,7 @@ export function ReviewCardView({
         {rareOut === 'error' && '加载失败'}
         {Array.isArray(rareOut) && (rareOut.length ? rareOut.map((x, i) => (
           <div className="rvrrow" key={i}>
-            <button className="rvpick rvrarepick" onClick={(ev) => { ev.stopPropagation(); onFocus(); pick(x.char) }}
+            <button className="rvpick rvrarepick" onClick={(ev) => { ev.stopPropagation(); onFocus(); pick(x.char, { src: 'rare', rank: i + 1 }) }}
                     title={`${x.py ? x.py + ' · ' : ''}相似度 ${x.score} · ${x.font} · ${x.ids || '—'} · ${x.cp}`}>{x.char}</button>
             {x.std
               ? <b className="rvstd" title={`整理本里用的是这个字（${x.std_freq} 次）`}>→ {x.std}</b>
@@ -374,7 +375,7 @@ export function ReviewCardView({
           </div>
         )) : '没有候选')}
       </div>
-      <AltPanel book={book} c={c} active={isCurrent} onPick={(ch) => { onFocus(); pick(ch) }} />
+      <AltPanel book={book} c={c} active={isCurrent} onPick={(ch, from) => { onFocus(); pick(ch, from) }} />
     </div>
   )
 }
