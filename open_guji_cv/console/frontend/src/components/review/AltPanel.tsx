@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchRareAlt } from '../../api/review'
 import { libFontUrl } from '../../api/glyphlib'
 import type { AltCand, ReviewCard } from '../../types/review'
+import type { PickInfo } from './reviewClass'
 import { ALT_SHOW, cardPivots } from './altPivots'
 
 type Out = { pivots: string[]; candidates: AltCand[] } | 'loading' | 'error'
@@ -21,7 +22,7 @@ function Glyph({ ch }: { ch: string }) {
  * 点一个＝选这个字（同候选按钮）。只出候选，不进放行。
  */
 export function AltPanel({ book, c, active, onPick }: {
-  book: string; c: ReviewCard; active: boolean; onPick: (ch: string) => void
+  book: string; c: ReviewCard; active: boolean; onPick: (ch: string, from: PickInfo) => void
 }) {
   const pivots = cardPivots(c)
   const [q, setQ] = useState('')
@@ -63,8 +64,9 @@ export function AltPanel({ book, c, active, onPick }: {
       {out === 'error' && <span className="muted">查找失败</span>}
       {out && typeof out === 'object' && !list.length && <span className="muted">没有找到</span>}
       <div className="rvaltgrid">
-        {shown.map(a => (
-          <button key={a.c} className="rvaltbtn" onClick={() => onPick(a.c)}
+        {shown.map((a, i) => (
+          <button key={a.c} className="rvaltbtn"
+                  onClick={() => onPick(a.c, { src: asked ? 'alt_q' : 'alt', rank: i + 1, ...(a.p ? { pivot: a.p } : {}) })}
                   title={`${a.p && a.p !== a.c ? `从「${a.p}」查到 · ` : ''}像 ${Math.floor(a.s * 100)}% · ${a.src}`}>
             <Glyph ch={a.c} />
             <span>{a.c}</span>

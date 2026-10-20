@@ -96,6 +96,8 @@ export interface Step8Decide {
   cat?: Step8Cat      // who=ours 时的小类
   fix?: string        // who=neither 时人输入的正确字
   note?: string
+  // who=neither 时这个字从哪儿来（reviewClass.PickInfo 的 payload 片段）：alt／alt_q 相似字、custom 手输
+  pick_src?: string; pick_rank?: number; pivot?: string
 }
 
 export function postStep8Decide(d: Step8Decide) {
