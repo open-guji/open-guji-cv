@@ -37,7 +37,11 @@ def _make_src(root):
     (src / "unihan-Unihan_IRGSources.txt").write_text(irg, encoding="utf-8")
     (src / "unihan-Unihan_Readings.txt").write_text(f"{_u('歷')}\tkDefinition\tpass through\n",
                                                     encoding="utf-8")
-    (src / "zi-families.jsonl").write_text('{"q": "狼", "fam": ["郎"]}\n', encoding="utf-8")
+    (src / "zi-families.jsonl").write_text(
+        '{"q": "狼", "fam": ["郎"]}\n'                                         # 旧格式：只有一跳族
+        '{"q": "互", "v": 2, "fam": ["牙"], "claims": [["GHZR", "GHZR-1497.10-12", "牙", "互"],'
+        ' ["TVAR", "TVAR-A00053_002-0", "⿻𡕒一", "互"]], "links": [["A", "互", "D", "㸦"]]}\n',
+        encoding="utf-8")
     (src / "cjkvi-twedu-variants.txt").write_text(
         "twedu/variant,<rev>,twedu/regular\n互,twedu/variant,㸴\n互,twedu/variant,⿱一彑\n", encoding="utf-8")
     (src / "cjkvi-hydzd-borrowed.txt").write_text("仍,hydcd/borrowed,乃,5287\n", encoding="utf-8")
@@ -209,7 +213,7 @@ def test_family_excludes_never_rels_and_distinct(built):
 def test_forms_and_charcomp(built):
     _, db, _ = built
     info = db.info("互")
-    assert [f["key"] for f in info["forms"]] == ["⿱一彑"]
+    assert [f["key"] for f in info["forms"]] == ["⿱一彑", "⿻𡕒一"]      # cjkvi 的、字统网的
     rt = sorted((e.a, e.b, e.rel) for e in db.edges_of("歷") if e.src == "charcomp:rt")
     assert rt == [("历", "歷", "related"), ("歴", "歷", "variant")]   # 私用区那个丢掉
     assert [(e.rel) for e in db.edges("注", "註") if e.src == "charcomp:rt"] == ["related"]
@@ -225,6 +229,10 @@ def test_pool_matches_family_pool_shape(built):
     assert pool["註"] == {"p": "注", "src": "v,rt"}        # 池子不剔 distinct（只是候选）
     assert db.pool(["注"], srcs=["rt"]).keys() == {"注", "註"}
     assert db.pool(["狼"])["郎"] == {"p": "狼", "src": "zi"}   # 字统网派生族（原始资料 zi-families.jsonl）
+    claim = [e for e in db.edges("互", "牙") if e.src.startswith("zi")]
+    assert [(e.a, e.b, e.directed, e.src, e.sense) for e in claim] == [("互", "牙", 1, "zi:GHZR", "GHZR-1497.10-12")]
+    assert db.edges("互", "㸦")[0].src == "zi:link" and db.pool(["互"])["㸦"]["src"] == "zi"
+    assert {"key": "⿻𡕒一", "regular": "互", "src": "zi:TVAR", "ref": "TVAR-A00053_002-0"} in db.info("互")["forms"]
 
 
 def test_components(built):

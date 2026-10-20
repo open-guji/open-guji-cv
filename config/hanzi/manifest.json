@@ -1,6 +1,6 @@
 {
  "builder": 2,
- "content_sha": "f40f1f5dcdf5",
+ "content_sha": "6793f7864c8f",
  "edges_by_src_rel": {
   "charcomp:rt|related": 46211,
   "charcomp:rt|variant": 12179,
@@ -19,21 +19,63 @@
   "unihan:kTraditionalVariant|simp": 6924,
   "unihan:kZVariant|z": 90,
   "yitizi|variant": 8688,
-  "zi|variant": 213
+  "zi:BABELSTONE|variant": 1,
+  "zi:FZK|variant": 121,
+  "zi:G3|variant": 1,
+  "zi:G4K|variant": 11,
+  "zi:GBK|variant": 2,
+  "zi:GHC|variant": 3,
+  "zi:GHZH|variant": 415,
+  "zi:GHZR|variant": 336,
+  "zi:GHZ|variant": 1,
+  "zi:GKJ|variant": 2,
+  "zi:GZA|variant": 1,
+  "zi:GZFY|variant": 3,
+  "zi:GZH|variant": 14,
+  "zi:GZJW|variant": 32,
+  "zi:GZ|variant": 87,
+  "zi:G_2J|variant": 39,
+  "zi:G_ROC1J|variant": 3,
+  "zi:H|variant": 2,
+  "zi:IVD|variant": 13,
+  "zi:JH|variant": 34,
+  "zi:JK|variant": 19,
+  "zi:JMJ|variant": 488,
+  "zi:K2|variant": 1,
+  "zi:K3|variant": 3,
+  "zi:K4|variant": 1,
+  "zi:KC|variant": 172,
+  "zi:SAT|variant": 637,
+  "zi:T13|variant": 2,
+  "zi:T4|variant": 1,
+  "zi:T5|variant": 1,
+  "zi:TC|variant": 3,
+  "zi:TF|variant": 1,
+  "zi:TVAR|variant": 1329,
+  "zi:UCV|variant": 25,
+  "zi:UK|variant": 38,
+  "zi:UTC|variant": 6,
+  "zi:V2|variant": 1,
+  "zi:V4|variant": 2,
+  "zi:VN|variant": 20,
+  "zi:VTDCNDG|variant": 26,
+  "zi:WASEIKANJI|variant": 16,
+  "zi:ZITOOLS|variant": 1594,
+  "zi:link|variant": 33694
  },
  "files": {
   "core/edges.tsv": {
-   "bytes": 4869962,
+   "bytes": 8240799,
    "pack": "core",
-   "rows": 147990,
-   "sha256": "5f25368739210b660aa4b0aee4cca2fcf10674c44943c02a959f02742d5b1daf",
+   "rows": 186978,
+   "sha256": "03c4aeeee9cac2c3fb02f185b172c381b435c1679f558476316cd978afb94e04",
    "table": "edges"
   },
   "core/forms.tsv": {
-   "bytes": 130693,
+   "bytes": 1808275,
    "pack": "core",
-   "rows": 2697,
-   "sha256": "6c7b6675253f1a3469162594100d4504e6cc7c4485209a320ca9963f203bb4ec",
+   "rows": 37826,
+   "sha256": "698c969acacea9c97bcce9f1f4a5e9c7962948111a46017a8341970133625233",
    "table": "forms"
   },
   "core/sources.tsv": {
@@ -143,8 +185,8 @@
    "sha256": "b1a3de60dac377c2f8ae3acd5cd9828b60e8ca1500f08834d730fd7cfe69709a"
   },
   "zi-families.jsonl": {
-   "bytes": 2977,
-   "sha256": "060ee04aebd34f6e968c5995e0b1531beb7ffa0b680645d5d66c2638367886af"
+   "bytes": 11012520,
+   "sha256": "1b57843cd331f4473ed31585244605c97d99d8db60387dfa82cfb38c63ef17af"
   }
  },
  "stats": {
@@ -232,10 +274,13 @@
    "edges": 17376
   },
   "zi": {
-   "edges": 214,
-   "queried": 61
+   "claims": 11808,
+   "edges": 118836,
+   "forms": 77728,
+   "links": 107028,
+   "queried": 1870
   }
  },
  "unihan_version": "18.0.0",
- "version": "hanzi-f40f1f5dcdf5"
+ "version": "hanzi-6793f7864c8f"
 }

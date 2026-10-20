@@ -74,22 +74,24 @@ def fetch_sources(src_dir: Path, force: bool = False) -> list[str]:
 
 
 def zi_jsonl(zi_dir: Path, dest: Path) -> int:
-    """字统网缓存目录（`U+XXXX.json`，`{q, fam, ts}`）→ 一个排好序的 jsonl，只留 q 与 fam（不留取的时间）。
+    """字统网缓存目录（`U+XXXX.json`）→ 一个排好序的 jsonl：q、一跳族、逐节点判断与连线（不留取的时间）。
 
     放进原始资料，跟版本一起进 R2：查一次全队共享，不用每台机器重查。已有的 dest 会并进来。"""
-    fams: dict[str, list[str]] = {}
+    fams: dict[str, dict] = {}
     if dest.exists():
         for line in dest.read_text(encoding="utf-8").splitlines():
             d = json.loads(line)
-            fams[d["q"]] = d["fam"]
+            fams[d["q"]] = d
     for f in sorted(Path(zi_dir).glob("U+*.json")):
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
         if d.get("q") and d.get("fam") is not None:
-            fams[d["q"]] = sorted(d["fam"])
-    dest.write_text("".join(json.dumps({"q": q, "fam": fams[q]}, ensure_ascii=False) + "\n"
+            d.pop("ts", None)
+            d["fam"] = sorted(d["fam"])
+            fams[d["q"]] = d
+    dest.write_text("".join(json.dumps(fams[q], ensure_ascii=False, sort_keys=True) + "\n"
                             for q in sorted(fams)), encoding="utf-8")
     return len(fams)
 
@@ -200,9 +202,10 @@ def collect(src: Path, cfg: Path) -> tuple[dict[str, list[tuple]], dict]:
 
     if (src / ZI_FILE).exists():
         docs = [json.loads(x) for x in (src / ZI_FILE).read_text(encoding="utf-8").splitlines() if x]
-        rows, stats["zi"] = I.zi_cache(docs)
+        rows, forms, stats["zi"] = I.zi_cache(docs)
         edges += rows
-        used_src.add("zi")
+        tables["forms"] += forms
+        used_src.update({"zi"} | {r[4] for r in rows})
 
     if (p := cfg / "variants" / "local_edges.json").exists():
         rows, stats["local:keben"] = I.local_edges(json.loads(p.read_text(encoding="utf-8")))

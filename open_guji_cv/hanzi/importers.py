@@ -254,17 +254,38 @@ def near_pairs(text: str, src: str) -> tuple[list[tuple], dict]:
     return rows, {"pairs": len(rows)}
 
 
-def zi_cache(docs: list[dict]) -> tuple[list[Edge], dict]:
-    """字统网缓存 `{q, fam}` → 无向 variant 边，来源 `zi`。只收派生的族关系事实。"""
+def zi_cache(docs: list[dict]) -> tuple[list[Edge], list[tuple], dict]:
+    """字统网缓存 → (边, 未编码形, stats)。只收派生的关系事实（`variant_sources.zi_facts`），不收释义原文。
+
+    - 新格式（`v`≥2）：每条判断 `[前缀, 节点, 字形, 正字]` → 有向边 (正字, 字形)，来源 `zi:<前缀>`、
+      义项＝节点 id；字形是 IDS 串的进 `forms`。连线 `[节点A, 字A, 节点B, 字B]` → 无向边，来源 `zi:link`。
+    - 旧格式只有一跳族 `fam` → 无向边 (q, 成员)，来源 `zi`。"""
     rows: list[Edge] = []
+    forms: list[tuple] = []
+    st = Counter()
     for d in docs:
         q = d.get("q", "")
         if not is_han(q):
             continue
-        for c in d.get("fam") or ():
-            if is_han(c) and c != q:
-                rows.append((q, c, S.VARIANT, 0, "zi", "", "", ""))
-    return rows, {"queried": len(docs), "edges": len(rows)}
+        if d.get("claims") is None and d.get("links") is None:
+            st["old_format"] += 1
+            for c in d.get("fam") or ():
+                if is_han(c) and c != q:
+                    rows.append((q, c, S.VARIANT, 0, "zi", "", "", ""))
+            continue
+        for prefix, node, g, r in d.get("claims") or ():
+            if is_han(g):
+                rows.append((r, g, S.VARIANT, 1, f"zi:{prefix}", node, "", ""))
+                st["claims"] += 1
+            elif len(g) > 1:
+                forms.append((g, r, f"zi:{prefix}", node))
+                st["forms"] += 1
+        for na, ga, nb, gb in d.get("links") or ():
+            rows.append((ga, gb, S.VARIANT, 0, "zi:link", "", f"{na}>{nb}", ""))
+            st["links"] += 1
+    st["queried"] = len(docs)
+    st["edges"] = len(rows)
+    return rows, forms, dict(st)
 
 
 # ── IDS ──────────────────────────────────────────────────
