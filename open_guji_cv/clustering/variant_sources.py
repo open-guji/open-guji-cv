@@ -73,6 +73,33 @@ def zi_parse(doc: dict, q: str) -> list[str]:
     return sorted(c for c in out if c != q and is_han(c))
 
 
+#: 缓存格式版本：2 起除一跳族外还存逐节点的字典判断与连线（`zi_facts`）。
+ZI_CACHE_V = 2
+
+
+def zi_facts(doc: dict) -> dict[str, list]:
+    """`/api/zi/<q>` 的 yi 图 → 派生事实（只留关系，不留释义原文、读音、图）：
+
+    - `claims`：`[字典前缀, 节点 id, 字形, 正字]`——这部字典（GHZR 汉语大字典、TVAR 台湾异体字典、
+      GHZH 汉字海、ZITOOLS 站方……）的这个条目说「字形」是「正字」的异体。字形可以是 IDS 串（未编码形）；
+      正字只收单个已编码字。
+    - `links`：`[节点 A, 字形 A, 节点 B, 字形 B]`——图上两个节点相连，两头都是已编码单字且不同的才收。"""
+    yi = doc.get("yi") or {}
+    nodes = {k: n for k, n in (yi.get("nodes") or {}).items() if isinstance(n, list) and len(n) > 10}
+    claims = []
+    for k, n in sorted(nodes.items()):
+        g, r = n[4], n[10]
+        if isinstance(g, str) and g and isinstance(r, str) and is_han(r) and g != r:
+            claims.append([n[1], k, g, r])
+    links = []
+    for e in yi.get("edges") or []:
+        if len(e) >= 2 and e[0] in nodes and e[1] in nodes:
+            ga, gb = nodes[e[0]][4], nodes[e[1]][4]
+            if isinstance(ga, str) and isinstance(gb, str) and ga != gb and is_han(ga) and is_han(gb):
+                links.append([e[0], ga, e[1], gb])
+    return {"claims": claims, "links": sorted(links)}
+
+
 def zi_cache_dir() -> Path:
     if os.environ.get("GUJI_ZITOOLS_CACHE"):
         return Path(os.environ["GUJI_ZITOOLS_CACHE"])
@@ -141,19 +168,31 @@ class ZiCache:
             return None
         fam = zi_parse(doc, c)
         self.root.mkdir(parents=True, exist_ok=True)
-        self._path(c).write_text(json.dumps({"q": c, "fam": fam, "ts": int(time.time())},
-                                            ensure_ascii=False), encoding="utf-8")
+        self._path(c).write_text(json.dumps({"q": c, "v": ZI_CACHE_V, "fam": fam, **zi_facts(doc),
+                                             "ts": int(time.time())}, ensure_ascii=False), encoding="utf-8")
         self.n_fetched += 1
         if self._rev is not None:
             for v in fam:
                 self._rev.setdefault(v, set()).add(c)
         return fam
 
-    def ensure(self, c: str) -> None:
-        """不论 `fetch` 开关，缓存里没有 c 就去取一次（控制台里人键入的近似字用）。"""
-        if self._mem.get(c) is None and not self._path(c).exists():
+    def ensure(self, c: str, upgrade: bool = False) -> bool:
+        """不论 `fetch` 开关，缓存里没有 c 就去取一次（控制台里人键入的近似字用）；返回这次联网了没有。
+        `upgrade=True` 时旧格式（没有逐节点事实）的也重取一次（`scripts/zi_fetch.py` 批量补查用）。"""
+        f = self._path(c)
+        stale = upgrade and f.exists() and self._version(f) < ZI_CACHE_V
+        if stale or (self._mem.get(c) is None and not f.exists()):
             self._mem.pop(c, None)
             self._mem[c] = self._download(c)
+            return True
+        return False
+
+    @staticmethod
+    def _version(f: Path) -> int:
+        try:
+            return int(json.loads(f.read_text(encoding="utf-8")).get("v") or 1)
+        except (OSError, ValueError):
+            return 0
 
     def family(self, c: str) -> set[str]:
         """c 的字统网一跳族 ∪ 缓存里以 c 为族成员的字（反向边）。"""

@@ -36,6 +36,38 @@ def test_zi_parse_one_hop_encoded_only():
     assert vs.zi_parse(doc, "弊") == sorted(["𡚁", "斃"])   # IDS 串、私用区不收，两跳外不收
 
 
+def test_zi_facts_keeps_claims_and_links_not_glosses():
+    def node(k, prefix, form, zheng, gloss="同「X」，释义原文"):
+        return [k, prefix, k, "0", form, form, form, gloss, None, None, zheng] + [None] * 6
+    doc = {"yi": {"nodes": {
+        "A": node("A", "GHZR", "互", ""),
+        "B": node("B", "TVAR", "⿱一㐄", "互"),                 # 未编码形，正字 互
+        "C": node("C", "GHZR", "牙", "互"),                    # 汉语大字典：牙 同 互
+        "D": node("D", "GHZR", "㸦", ""),
+        "E": node("E", "TVAR", "互", "手氏")},                  # 正字不是单字，不收
+        "edges": [["A", "D"], ["A", "B"], ["A", "C"]]}}
+    f = vs.zi_facts(doc)
+    assert f["claims"] == [["TVAR", "B", "⿱一㐄", "互"], ["GHZR", "C", "牙", "互"]]
+    assert f["links"] == [["A", "互", "C", "牙"], ["A", "互", "D", "㸦"]]   # 未编码那头不进连线
+    assert "释义" not in json.dumps(f, ensure_ascii=False)
+
+
+def test_zi_cache_upgrades_old_format(tmp_path):
+    (tmp_path / f"U+{ord('蒙'):04X}.json").write_text(json.dumps({"q": "蒙", "fam": ["𫎇"]}), encoding="utf-8")
+    calls = []
+
+    def opener(req, timeout=0):
+        calls.append(req.full_url)
+        return _Resp(json.dumps(_zi_doc("蒙", ["𫎇"]), ensure_ascii=False).encode("utf-8"))
+
+    z = vs.ZiCache(tmp_path, fetch=False, interval=0, opener=opener)
+    assert z.ensure("蒙") is False and not calls             # 缺省不重取
+    assert z.ensure("蒙", upgrade=True) is True and len(calls) == 1
+    d = json.loads((tmp_path / f"U+{ord('蒙'):04X}.json").read_text(encoding="utf-8"))
+    assert d["v"] == vs.ZI_CACHE_V and "claims" in d and "links" in d
+    assert z.ensure("蒙", upgrade=True) is False and len(calls) == 1
+
+
 class _Resp(io.BytesIO):
     def __enter__(self):
         return self
