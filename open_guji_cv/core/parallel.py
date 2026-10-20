@@ -38,6 +38,12 @@ class ParallelAudit:
 
 
 AUDITED: dict[str, ParallelAudit] = {
+    "cell_shrink": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页 cells／column_windows／列图与原图（印章遮挡），写的只有本页键的字块图"
+             "（`cache.put`，原子写；清缓存与记戳在主进程）；extractor／crop_quality／frame_bar_strategy／"
+             "seam 无模块级可变状态。第四册 46 页串行／4 进程产物与 8436 张字块图逐个相同，"
+             "墙钟 27.8 s → 9.1 s，单进程 0.19 GB（2026-10-20）。"),
     "row_segment": ParallelAudit(
         mem_gb=1.0,
         note="run_page 只读本页 gate_manifest／column_windows／列图与册级人裁表（lookup，只读），"
