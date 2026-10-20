@@ -142,6 +142,7 @@ def seeded(tmp_path_factory):
     # 不显式指到临时目录就会写进仓内 cache/（conftest 的仓内防污染守卫会报）
     with pytest.MonkeyPatch.context() as mp:
         mp.setenv("GUJI_CACHE_DIR", str(root / "cache"))
+        mp.setenv("GUJI_DERIVED_FETCH", "0")          # 不连网取现成 LM（同 conftest._isolated_env）
         summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
     yield {"root": root, "book_dir": book_dir, "db": db, "summary": summary,
            "corpus": corpus_path, "variants": variants_path}

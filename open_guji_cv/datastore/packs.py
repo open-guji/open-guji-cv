@@ -228,3 +228,44 @@ def fetch_rare_indexes(src=None) -> list[str]:
             fetch_file(key, dest, src=src)
             got.append(str(dest))
     return got
+
+
+# ---- 派生缓存：训好的语言模型（2026-10-20）----
+# 本机缓存 `cache_root()/general_lm/<kind>-<键>.json` 的键已经按「语料内容 sha256 + 训练参数 + lm.py
+# 代码指纹」算（`clustering.seeding._cached_lm`），各机器同一份输入得到同一个文件名，所以按文件名存取：
+# `derived/lm/<文件名>/{part-000, manifest.json}`。取：本机没命中时自动取（要 `GUJI_DATA_TOKEN`，读令牌就够）；
+# 存：手动 `guji products pack push-index`（要正式令牌），用户 10-20 定不自动推。
+
+def _lm_dir() -> Path:
+    from ..core.workspace import cache_root
+    return cache_root() / "general_lm"
+
+
+def fetch_derived(kind_dir: str, name: str, dest: Path) -> bool:
+    """R2 里有 `derived/<kind_dir>/<name>` 就取下来（核 sha256、原子落盘）返回 True；没设令牌、
+    没有这份、网络出错都返回 False（调用方接着现算，不因取不到而失败）。`GUJI_DERIVED_FETCH=0` 关掉。"""
+    import os
+    if not os.environ.get("GUJI_DATA_TOKEN") or os.environ.get("GUJI_DERIVED_FETCH") == "0":
+        return False
+    try:
+        fetch_file(f"derived/{kind_dir}/{name}", Path(dest))
+        return True
+    except Exception:  # noqa: BLE001 —— 取不到就现算
+        return False
+
+
+def push_derived(src=None) -> list[str]:
+    """本机训好的语言模型（`cache_root()/general_lm/*.json`）里 R2 还没有的，存上去。"""
+    src = src or _client()
+    have = {r["key"].rsplit("/", 1)[0] for r in
+            src._call("GET", "/v1/packs", query={"bucket": _bucket(src), "prefix": "derived/lm/"})["packs"]
+            if r["key"].endswith("/manifest.json")}
+    done = []
+    for f in sorted(_lm_dir().glob("*.json")):
+        if ".tmp" in f.name or not (f.name.startswith("book-") or f.name.startswith("general-")):
+            continue
+        key = f"derived/lm/{f.name}"
+        if key not in have:
+            push_file(key, f, src=src)
+            done.append(key)
+    return done
