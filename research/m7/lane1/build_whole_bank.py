@@ -24,6 +24,8 @@ sys.path.insert(0, str(ROOT))
 from open_guji_cv.groups import ids_online, ids_whole  # noqa: E402
 
 GROUPS = {"lv": "呂吕", "zheng": "徵徴"}
+#: 人裁更正（事件里的字不对，sheldon 复看原图后改）：格 id → 正确的字
+CORRECTIONS = {"vol07:4:4:21": "呂"}   # 2026-10-20：墨浓、两个口被粗笔连上，原裁吕，复看是呂
 
 
 def clean(gray: np.ndarray) -> np.ndarray:
@@ -89,7 +91,7 @@ def collect(fb: Path, raw: Path):
             if crop.size == 0:
                 continue
             gray = clean(crop)
-        cells.append((s, gray, book, key))
+        cells.append((CORRECTIONS.get(key, s), gray, book, key))
     return cells
 
 
