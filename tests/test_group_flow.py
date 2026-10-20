@@ -87,7 +87,11 @@ def test_freq_decide():
     m = frozenset("旨㫖")
     assert F.decide({"㫖": 41, "旨": 0}, m).char == "㫖"
     assert F.decide({"㫖": 41, "旨": 1}, m).char is None            # 次形不为 0
-    assert F.decide({"㫖": 19, "旨": 0}, m).char is None            # 主形不够 20
+    assert F.decide({"㫖": 9, "旨": 0}, m).char is None             # 主形不够 10（10-20 前是 20）
+    assert F.decide({"㫖": 12, "旨": 0}, m).char == "㫖"
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols={"㫖": 1}, min_vols=2).why == "abstain:one_vol"   # 只来自一册
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols={"㫖": 2}, min_vols=2).char == "㫖"
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols=None, min_vols=2).char == "㫖"   # 旧表没有册数：不卡
     assert F.decide(None, m).why == "abstain:no_table"
 
 
