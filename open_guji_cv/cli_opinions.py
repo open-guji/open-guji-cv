@@ -1,0 +1,176 @@
+"""`guji opinions`：意见池（M11 第一阶段，设计 `doc/design/M11-分块-第一阶段最小闭环.md`）。不跑 Step，不进任何 Step 的 `code_deps`。
+
+    guji opinions ingest  --book B --ws W [--remote] [--dry-run] [--live-vols 001,002] [--from-dir D]   # 三源入池，幂等
+    guji opinions list    --book B --ws W [--status S] [--vol V]
+    guji opinions show    <id> --book B --ws W
+    guji opinions versions --book B --ws W --book-text <检出>      # 从 book-text CHANGES 生成 text_versions.json
+    guji opinions locate  <id> --book B --ws W [--book-text <检出>]
+    guji opinions normalize <fb_id> --into <json> --book B --ws W  # 会话把自由文字规整成一条或多条
+    guji opinions pack    <id…> --out <目录> --book B --ws W [--book-text <检出>]   # 证据包＋sheet.png／sheet.md
+    guji opinions triage  <id> --verdict … --confidence … --public … [--revision JSON] --judge 名 --book B --ws W
+    guji opinions to-user --out <目录>／decide --from <裁决 JSON>
+    guji opinions revise  --book B --vol 002 --book-text <检出> [--dry-run] --pr N
+    guji opinions reply-drafts --book B --ws W
+
+意见池在哪：缺省是本机数据目录 `$GUJI_DATA_HOME/<分支>/<工作区>/feedback/lists/opinions/<书>/`（`guji db sync` 推进中心库）；
+`--root D` 用 `D/<书>/`（试跑、不进中心库的判定）；`--remote` 直接经 Worker 读写中心库（令牌取 `--token-env` 指的环境变量，不打印）。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import sys
+from pathlib import Path
+
+DEFAULT_BOOK_TEXT = os.environ.get("GUJI_BOOK_TEXT")
+
+
+def _store(args, by: str | None = None):
+    from .opinions.store import open_store
+    return open_store(args.book, ws=args.ws, root=args.root, remote=args.remote, token_env=args.token_env,
+                      branch=args.branch, by=by or getattr(args, "by", None) or "tool")
+
+
+def _print(s: str = "") -> None:
+    sys.stdout.write(s + "\n")
+
+
+# ---------------- ingest ----------------
+
+def cmd_ingest(args) -> None:
+    from .opinions import ingest as I
+    src = I.Sources()
+    notes = []
+    if args.from_dir:
+        d = I.read_dir(Path(args.from_dir))
+        src.fixes += d.fixes
+        src.cellreview.update(d.cellreview)
+        src.public_fixes += d.public_fixes
+        src.feedback += d.feedback
+        src.hidden |= d.hidden
+        notes.append(f"离线目录 {args.from_dir}")
+    if not args.no_central:
+        from .datastore.client import WorkerSource
+        tok = os.environ.get(args.web_token_env or args.token_env)
+        if not tok:
+            raise SystemExit(f"读中心库网站意见要环境变量 {args.web_token_env or args.token_env}（或 --no-central）")
+        c = I.read_central_web(WorkerSource(token=tok, branch=args.branch), args.ws, args.book, args.branch)
+        src.fixes += c.fixes
+        src.cellreview.update(c.cellreview)
+        src.hidden |= c.hidden
+        notes += c.notes
+    if args.live_vols:
+        vols = [v.strip() for v in args.live_vols.split(",") if v.strip()]
+        src.public_fixes += I.fetch_public_fixes(args.book, vols, args.site)
+        notes.append(f"网站公开实时读 /api/fixes 章 {','.join(vols)}")
+    if not args.no_feedback:
+        src.feedback += I.fetch_public_feedback(args.site)
+        notes.append(f"网站公开读 /api/feedback {len(src.feedback)} 条")
+    st = _store(args, by=args.by)
+    items = I.incoming(src, args.book)
+    rep = I.ingest(st, items, by=args.by)
+    for n in notes:
+        _print("· " + n)
+    _print(("[dry-run] 将入池：" if args.dry_run else "入池：") + st.backend.describe())
+    for i in rep.added:
+        tags = []
+        if i in rep.forwarded:
+            tags.append("转出")
+        if any(i == d for d, _ in rep.dup):
+            tags.append("重复→" + next(o for d, o in rep.dup if d == i))
+        _print("  + " + I.describe(st.opinions[i]) + (f"  [{'；'.join(tags)}]" if tags else ""))
+    for old, new in rep.superseded:
+        _print(f"  ~ {old} 由 {new} 取代")
+    _print(rep.summary())
+    if args.dry_run:
+        return
+    st.touch("raw")
+    res = st.save()
+    _print(f"写入 {', '.join(res) or '（无改动）'}")
+
+
+# ---------------- list / show ----------------
+
+def cmd_list(args) -> None:
+    from .opinions.ingest import describe, sort_key
+    st = _store(args)
+    stat = st.statuses()
+    ops = sorted(st.opinions.values(), key=sort_key)
+    n = 0
+    for op in ops:
+        if args.status and stat[op.id] not in args.status.split(","):
+            continue
+        if args.vol and op.vol != args.vol:
+            continue
+        if args.channel and op.channel != args.channel:
+            continue
+        n += 1
+        _print(f"{stat[op.id]:<13} {describe(op)}")
+    _print(f"共 {n} 条（池里 {len(ops)} 条；{st.backend.describe()}）")
+
+
+def cmd_show(args) -> None:
+    st = _store(args)
+    op = st.get(args.id)
+    _print(json.dumps(op.to_dict(), ensure_ascii=False, indent=1))
+    _print(f"状态：{st.status(op.id)}")
+    for e in st.events_of(op.id):
+        _print(f"  {e.ts} {e.kind:<10} {e.by:<14} {json.dumps(e.data, ensure_ascii=False)[:300]}")
+
+
+def cmd_schema(args) -> None:
+    from .opinions.schema import json_schema
+    _print(json.dumps(json_schema(), ensure_ascii=False, indent=1))
+
+
+# ---------------- 注册 ----------------
+
+def _common(p, store: bool = True) -> None:
+    p.add_argument("--book", required=True, help="book-text 书 id，如 96mid1ogzk")
+    if store:
+        p.add_argument("--ws", default=os.environ.get("GUJI_OPINIONS_WS"),
+                       help="中心库工作区 id（数据目录、--remote 用；环境变量 GUJI_OPINIONS_WS 可给缺省）")
+        p.add_argument("--root", default=None, help="本地意见池根目录，文件在 <root>/<书>/（不给用数据目录）")
+        p.add_argument("--remote", action="store_true", help="直接经 Worker 读写中心库（不经数据目录）")
+        p.add_argument("--token-env", default="GUJI_DATA_TOKEN", help="--remote 的令牌在哪个环境变量（缺省 GUJI_DATA_TOKEN）")
+        p.add_argument("--branch", default="main")
+
+
+def add_parser(sub) -> None:
+    op = sub.add_parser("opinions", help="[M11] 意见池：入池、证据包、初判、修订 book-text 冻结册")
+    s = op.add_subparsers(dest="op_cmd", metavar="<子命令>")
+
+    p = s.add_parser("ingest", help="三源入池（fixes.jsonl／<rev>.jsonl／公开读），幂等")
+    _common(p)
+    p.add_argument("--dry-run", action="store_true", help="只打印将入池的条目，不写")
+    p.add_argument("--from-dir", default=None, help="离线来源目录（fixes.jsonl、<rev>.jsonl、api-fixes*.json、api-feedback*.json）")
+    p.add_argument("--no-central", action="store_true", help="不读中心库 feedback/lists/web/<书>/")
+    p.add_argument("--web-token-env", default=None, help="读中心库网站意见用的令牌环境变量（缺省同 --token-env）")
+    p.add_argument("--live-vols", default="", help="另从网站公开实时读 /api/fixes 取这些章（逗号分隔，如 001,002,003）")
+    p.add_argument("--no-feedback", action="store_true", help="不读网站公开 /api/feedback")
+    p.add_argument("--site", default="https://www.openguji.com")
+    p.add_argument("--by", default="ingest", help="log 里记谁入的池")
+    p.set_defaults(func=cmd_ingest)
+
+    p = s.add_parser("list", help="列意见与状态")
+    _common(p)
+    p.add_argument("--status", default="", help="只列这些状态（逗号分隔）")
+    p.add_argument("--vol", default="")
+    p.add_argument("--channel", default="")
+    p.set_defaults(func=cmd_list)
+
+    p = s.add_parser("show", help="看一条意见和它的 log")
+    p.add_argument("id")
+    _common(p)
+    p.set_defaults(func=cmd_show)
+
+    p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
+    p.set_defaults(func=cmd_schema)
+
+
+def cmd_opinions(args) -> None:
+    f = getattr(args, "func", None)
+    if f is None:
+        raise SystemExit("guji opinions <子命令>；见 guji opinions -h")
+    f(args)

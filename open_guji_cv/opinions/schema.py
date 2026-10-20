@@ -116,8 +116,8 @@ class Opinion:
                     e.append(f"target.{k} 不是格位：{v!r}")
             if (t.get("start") is None) != (t.get("end") is None):
                 e.append("target 的 start、end 要么都有要么都没有")
-            if t.get("start") and not (t.get("text_version") or t.get("rev")):
-                e.append("有格号的 target 要带 text_version 或 rev")
+            if t.get("start") and not (t.get("text_version") or t.get("rev") or t.get("entity_version")):
+                e.append("有格号的 target 要带 text_version 或 rev（专名意见带 entity_version）")
         if self.proposal is not None and not isinstance(self.proposal, dict):
             e.append("proposal 应为对象")
         if not self.ts:
@@ -298,6 +298,7 @@ def json_schema() -> dict:
             "ts": {"type": "string"},
             "target": {"type": "object", "properties": {
                 "start": cell, "end": cell, "text_version": {"type": "string"}, "rev": {"type": "string"},
+                "entity_version": {"type": "string"},
                 "check": {"type": "string"}}},
             "category": {"enum": list(CATEGORIES)},
             "proposal": {"type": "object", "properties": {"text": {"type": "string"}, "choice": {"type": "string"}}},
