@@ -61,8 +61,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec(("ctx",), review=True), overlaps=("rm",),
-        note="按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
+        flow=FlowSpec(("ctx", "ry_shape"), review=True, lift_needs=("ctx",)), overlaps=("rm",),
+        note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
