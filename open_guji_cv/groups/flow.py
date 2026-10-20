@@ -42,6 +42,8 @@ class FlowConfig:
     top1_cov: float = 0.97
     freq_table: dict = field(default_factory=dict)     # 组 id → {成员: 人裁刻形数}（`freq.load`）
     freq_major: int = _freq.MAJOR
+    freq_vols: dict = field(default_factory=dict)      # 组 id → {成员: 人裁册数}（`freq.load_vols`）
+    freq_min_vols: int = _freq.MIN_VOLS
     l2_tables: dict = field(default_factory=dict)      # 组 id → 上下文 L2 答案表路径
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -107,7 +109,8 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
            patch_fn) -> GroupVerdict:
     spec = GROUPS[g]
     if name == "freq":
-        return _freq.decide(cfg.freq_table.get(g), spec.members, cfg.freq_major)
+        return _freq.decide(cfg.freq_table.get(g), spec.members, cfg.freq_major,
+                            cfg.freq_vols.get(g), cfg.freq_min_vols)
     if name == "ids":
         # 方案 S7：有在线判法与模板库的组（`ids_online.SPECS`）才取图判；其余弃权，且不去取图
         from . import ids_online

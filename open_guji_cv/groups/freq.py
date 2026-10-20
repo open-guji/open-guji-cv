@@ -25,7 +25,8 @@ from pathlib import Path
 from .protocol import GroupVerdict
 
 VERSION = 1
-MAJOR = 20
+MAJOR = 10          # 2026-10-20 sheldon 定 20→10，配 MIN_VOLS（主形须来自至少两册，防单册偏用）
+MIN_VOLS = 2
 #: 这些 confirm 结论说明这一格没有可数的刻形
 _NO_SHAPE = frozenset({"not_a_char", "seg_defect", "skip", "damaged"})
 
@@ -78,14 +79,18 @@ def build(workspace: Path, groups: dict[str, frozenset]) -> dict:
     """→ 表：`{"version", "source", "groups": {组 id: {成员: 人裁刻形数}}}`。"""
     shapes = human_shapes(Path(workspace))
     counts: dict[str, dict[str, int]] = {}
+    vols: dict[str, dict[str, int]] = {}
     for gid, members in sorted(groups.items()):
         c = {ch: 0 for ch in sorted(members)}
-        for s in shapes.values():
+        v: dict[str, set] = {ch: set() for ch in c}
+        for k, s in shapes.items():
             if s in c:
                 c[s] += 1
+                v[s].add(k.split(":")[0])
         counts[gid] = c
+        vols[gid] = {ch: len(x) for ch, x in v.items()}
     return {"version": VERSION, "source": {"workspace": Path(workspace).name, "cells": len(shapes)},
-            "groups": counts}
+            "groups": counts, "vols": vols}
 
 
 def write(table: dict, path: Path) -> None:
@@ -100,20 +105,30 @@ def load(path: str | Path) -> dict[str, dict[str, int]]:
     return {g: {k: int(v) for k, v in c.items()} for g, c in (d.get("groups") or {}).items()}
 
 
+def load_vols(path: str | Path) -> dict[str, dict[str, int]]:
+    """{组: {成员: 有该刻形人裁的册数}}；旧表没有这一项 → 空（不卡册数）。"""
+    d = json.loads(Path(path).read_text(encoding="utf-8"))
+    return {g: {k: int(v) for k, v in c.items()} for g, c in (d.get("vols") or {}).items()}
+
+
 def fingerprint(path: str | Path | None) -> str:
     if not path or not Path(path).exists():
         return "missing"
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
 
 
-def decide(counts: dict[str, int] | None, members, major: int = MAJOR) -> GroupVerdict:
-    """主形人裁数 ≥ major 且其余成员都是 0 → 主形；否则弃权。`extra.counts` 原样留痕。"""
+def decide(counts: dict[str, int] | None, members, major: int = MAJOR,
+           vols: dict[str, int] | None = None, min_vols: int = 0) -> GroupVerdict:
+    """主形人裁数 ≥ major 且其余成员都是 0（且给了册数时，主形来自 ≥ min_vols 册）→ 主形；否则弃权。
+    `extra.counts` 原样留痕。"""
     if not counts:
         return GroupVerdict(None, why="abstain:no_table", via="freq")
     c = {ch: int(counts.get(ch, 0)) for ch in sorted(members)}
     top = max(c, key=lambda ch: (c[ch], ch))
     rest = sum(n for ch, n in c.items() if ch != top)
     if c[top] >= major and rest == 0:
+        if vols is not None and min_vols and int(vols.get(top, 0)) < min_vols:
+            return GroupVerdict(None, why="abstain:one_vol", via="freq", extra={"counts": c, "vols": dict(vols)})
         return GroupVerdict(top, why="agree", via="freq", extra={"counts": c})
     return GroupVerdict(None, why="abstain:mixed" if rest else "abstain:few", via="freq", extra={"counts": c})
 

@@ -188,7 +188,8 @@ class SeedAdmitParams(BaseModel):
     证据写 `evidence.group`（组、入口、每个解法的给字与理由、结论）。见 `groups/flow.py`、
     doc/design/M7-字组统一流程-variant-tie改造方案.md。关着不进参数 dump（`params_hash` 不变）。"""
     group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
-    group_flow_freq_major: int = 20         # 主形人裁数下限；其余成员须为 0
+    group_flow_freq_major: int = 10         # 主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
+    group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 上下文 L2 答案表（ctx_ver 3）
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
@@ -1811,7 +1812,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     """字组统一流程（`SeedAdmitParams.group_flow`）：见 `groups/flow.py`。→ 放行数净增（补放减降级）。"""
     from ..groups.context import WIDTH
     from ..groups.flow import FlowConfig, group_flow_pass
-    from ..groups.freq import load as _load_freq
+    from ..groups.freq import load as _load_freq, load_vols as _load_vols
     from ..groups.registry import GROUPS
     from ..utils.jiazhu_order import sort_by_reading
     # 读序展平，剔除排除名单格（与建 L2 表的 `research/m7/ctx/l2_make_book.py` 同一取法，表键才对得上）
@@ -1819,6 +1820,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
            if not (r.doubts and "excluded" in r.doubts)]
     cfg = FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov,
                      top1_cov=p.group_flow_top1_cov, freq_major=p.group_flow_freq_major,
+                     freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
+                     freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
                      l2_tables=dict(p.group_flow_tables))
 
