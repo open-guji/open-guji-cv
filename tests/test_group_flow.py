@@ -64,6 +64,15 @@ def test_entry_ref_via_codepoints():
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")
 
 
+def test_entry_ref_free_group_ignores_ref():
+    """己已巳整理本没参考价值（ref_free）：整理本字在组外也照进入；有整理本字的普通组仍被挡。"""
+    cfg = _cfg()
+    assert GROUPS["jys"].ref_free and not GROUPS["zhi"].ref_free
+    assert entry(Rec("a"), [("已", 0.99)], "其", cfg) == ("jys", "lift")
+    assert entry(Rec("a", "已", True, "split_ref"), [], "其", cfg) == ("jys", "review")
+    assert entry(Rec("a"), [("㫖", 0.98)], "指", cfg) is None
+
+
 def test_entry_review_only_for_review_groups_and_never_human():
     cfg = _cfg()
     assert entry(Rec("a", "己", True, "context"), [], None, cfg) == ("jys", "review")
