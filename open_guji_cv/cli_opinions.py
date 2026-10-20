@@ -124,6 +124,56 @@ def cmd_schema(args) -> None:
     _print(json.dumps(json_schema(), ensure_ascii=False, indent=1))
 
 
+# ---------------- versions / locate ----------------
+
+def _bt(args):
+    from .opinions.textsrc import BookText, default_book_text
+    return BookText(args.book, default_book_text(getattr(args, "book_text", None)))
+
+
+def cmd_versions(args) -> None:
+    from .opinions.textsrc import parse_changes
+    bt = _bt(args)
+    tv = parse_changes(bt.changes(), args.book)
+    for vol in sorted(tv):
+        for r in tv[vol]:
+            miss = [k for k in ("rev", "snapshot", "cv_version") if not r.get(k)]
+            _print(f"{vol} {r['text_version']:<7} {r['date']} {r['pr'] or '—':<6} {r['kind']:<9} "
+                   f"rev={r['rev'] or '—'} cv={r['cv_version'] or r['cv_commit'] or '—'} 快照={r['snapshot'] or '—'}"
+                   + (f"  缺 {','.join(miss)}" if miss else ""))
+    _print(f"{sum(len(v) for v in tv.values())} 个文本版本，{len(tv)} 章（{bt.describe()}）")
+    if args.dry_run:
+        return
+    st = _store(args, by="versions")
+    if st.set_text_versions(tv):
+        st.save(only=["versions"])
+        _print(f"写入 text_versions.json（{st.backend.describe()}）")
+    else:
+        _print("text_versions.json 没变")
+
+
+def cmd_locate(args) -> None:
+    from .opinions.textsrc import locate
+    st = _store(args)
+    op = st.get(args.id)
+    bt = _bt(args) if (args.book_text or os.environ.get("GUJI_BOOK_TEXT") or args.github) else None
+    r = locate(op, st.text_versions, bt)
+    if args.json:
+        _print(json.dumps(r, ensure_ascii=False, indent=1))
+        return
+    _print(f"{op.id}：第 {r['vol']} 章 {r['cell']}{('–' + r['end']) if r['end'] and r['end'] != r['cell'] else ''}"
+           f"（提时 {r['asked_at'] or '—'}）")
+    _print(f"  当前格号 {r['cell']}，当前 text_version {r['text_version'] or '—'}"
+           + (f"，其间升过 {', '.join(r['since'])}" if r["since"] else "，其间没升过版本"))
+    _print(f"  校验字 {r['check'] or '—'}，现文 {r['current_text'] if r['current_text'] is not None else '—'}"
+           + (f"；⚠ {r['drift']}" if r["drift"] else ""))
+    _print(f"  rev {r['rev'] or '缺'}；cv {r['cv_version'] or r['cv_commit'] or '缺'}；快照 {r['snapshot'] or '缺'}")
+    if r.get("cord_producer"):
+        _print(f"  cord 该页 producers.cv：{json.dumps(r['cord_producer'], ensure_ascii=False)}")
+    if r["missing"]:
+        _print(f"  缺：{'、'.join(r['missing'])}")
+
+
 # ---------------- 注册 ----------------
 
 def _common(p, store: bool = True) -> None:
@@ -164,6 +214,20 @@ def add_parser(sub) -> None:
     p.add_argument("id")
     _common(p)
     p.set_defaults(func=cmd_show)
+
+    p = s.add_parser("versions", help="从 book-text CHANGES.md 生成 text_versions.json")
+    _common(p)
+    p.add_argument("--book-text", default=None, help="book-text 本地检出（缺省环境变量 GUJI_BOOK_TEXT，再缺走 GitHub raw）")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_versions)
+
+    p = s.add_parser("locate", help="格号＋版本 → 当前格号、text_version、rev、快照")
+    p.add_argument("id")
+    _common(p)
+    p.add_argument("--book-text", default=None, help="book-text 本地检出（核当前文本与校验字）")
+    p.add_argument("--github", action="store_true", help="没有本地检出时从 GitHub raw 取当前文本")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_locate)
 
     p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
     p.set_defaults(func=cmd_schema)
