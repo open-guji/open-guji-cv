@@ -182,6 +182,27 @@ def check_files(ws: Path, man: dict) -> dict:
     return {"changed": changed, "missing": missing, "extra": extra}
 
 
+def push_problems(ws: Path) -> list[str]:
+    """推进中心库前的保护（用户 10-20：语料库里任何内容变了，都要改版本号）。
+
+    ① 最新一版清单登记的工作区文件被改了、缺了，或清单之外多了新语料文件：先 ``guji corpus build`` 出新版本一起推；
+    ② 本机已有的某一版清单和库里不一样：旧版本不可改。
+    只看工作区里的文件（root=ws）；引擎仓里的表随 cv 版本走，由起跑前硬校验管。"""
+    vs = versions(ws)
+    if not vs:
+        return []
+    out: list[str] = []
+    last = vs[-1]
+    r = check_files(ws, load_manifest(ws, last))
+    live = lambda xs: [x for x in xs if x.startswith("ws:")]          # noqa: E731
+    changed, missing, extra = live(r["changed"]), live(r["missing"]), live(r["extra"])
+    if changed or missing or extra:
+        out.append(f"语料库 v{last} 登记的文件内容变了（改了 {len(changed)}，缺 {len(missing)}，新增 {len(extra)}："
+                   f"{(changed + missing + extra)[:4]}）；语料库任何内容变了都要改版本号——先 "
+                   f"guji corpus build -w <工作区> 出 v{last + 1} 再推，或把文件改回去")
+    return out
+
+
 # ── 册钉子 ─────────────────────────────────────────────────────────────────────
 
 #: 属于语料库的内容指纹字段（各 Step 参数类里自动填的那些）。钉了版本就整体换成 `corpus-vN`。
