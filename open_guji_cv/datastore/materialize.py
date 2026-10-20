@@ -142,13 +142,19 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
         images.update(got)
         by_ext[BLOB_TABLES[tbl]].update(got.values())
     img_stats = {}
+    absent_shas: set[str] = set()
     if images:
         if cache is None:
             from .client import BlobCache
             cache = BlobCache()
         for ext in sorted(by_ext):
             st = cache.ensure(src, by_ext[ext], bucket=bucket, ext=ext)
-            img_stats = {k: img_stats.get(k, 0) + v for k, v in st.items()}
+            absent_shas |= set(st.get("missing", ()))
+            img_stats = {k: img_stats.get(k, 0) + v for k, v in st.items() if k != "missing"}
+    skipped = {p: sha for p, sha in images.items() if sha in absent_shas}
+    images = {p: sha for p, sha in images.items() if sha not in absent_shas}
+    if skipped:
+        img_stats["missing"] = len(skipped)
 
     # 落盘：先写进临时目录，全部成功再换上去
     tmp = dest.with_name(dest.name + f".tmp{os.getpid()}")
@@ -178,4 +184,4 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
                     new.replace(old)
     shutil.rmtree(tmp, ignore_errors=True)
     return {"ws": ws, "files": len(texts), "reused": reused, "fetched": fetched, "images": len(images),
-            "image_cache": img_stats, "bytes": sum(len(b) for b in texts.values())}
+            "image_cache": img_stats, "missing_images": skipped, "bytes": sum(len(b) for b in texts.values())}
