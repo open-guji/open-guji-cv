@@ -1,5 +1,7 @@
 # HANDOFF：殿本 Step3 结构先验——先在 vol04 上开 `layout_prior`，量过再推开
 
+> **10-20 更新（用户定）**：vol04 受控重跑验过（送审 238→209，实验记录 guji-workspace `experiments/vol04/cv0.4.7p24-c6-g-82293e-layout-prior-v121.md`），**vol04–10 册 yaml 已全部开** `row_segment.layout_prior: corpus/daizhige/layout_slots.jsonl`，格位表已进中心库。下面「先只做 vol04」的步骤不用再做；各册照常重跑即可（Step3 起判过期一次），重跑后看 close-check 2d 点名的整页问题页。
+
 - 交给：做殿本整理（重跑 vol04–10）的会话。
 - 交出：切分负责会话。用户 10-19 晚定，**切分的事全部归它**，`colgold_prior`、`yolo_merge`、colgold 金标、`column_counts` 评测都包括在内；原来做 C／D 的会话已停。
 - 本文取代 [HANDOFF_colgold_CD_vol04-10.md](HANDOFF_colgold_CD_vol04-10.md)。
