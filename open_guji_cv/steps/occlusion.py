@@ -84,12 +84,10 @@ def cell_densities(gray: np.ndarray, cells) -> dict[tuple[int, int, str], float]
     keep[0] = False
     pts = cen[keep]
     H, W = b.shape
-    cnt = np.zeros((H + 1, W + 1), np.int32)
-    if len(pts):
-        xi = np.clip(pts[:, 0].astype(int), 0, W - 1)
-        yi = np.clip(pts[:, 1].astype(int), 0, H - 1)
-        np.add.at(cnt, (yi + 1, xi + 1), 1)
-    integ = cnt.cumsum(0).cumsum(1)
+    # 每格数「落在扩半格框里的中等墨点」。原来先在整页上建积分图（两次 cumsum，约 0.3 s/页）再取框和；
+    # 框和恰是 Y0 ≤ y < Y1、X0 ≤ x < X1 的点数，点只有几千、格一两百，直接数，整数逐个相同（2026-10-20）。
+    xi = np.clip(pts[:, 0].astype(int), 0, W - 1) if len(pts) else np.zeros(0, int)
+    yi = np.clip(pts[:, 1].astype(int), 0, H - 1) if len(pts) else np.zeros(0, int)
     out: dict[tuple[int, int, str], float] = {}
     for c in cells.columns:
         for x in c.cells:
@@ -103,7 +101,7 @@ def cell_densities(gray: np.ndarray, cells) -> dict[tuple[int, int, str], float]
             Y0, Y1 = int(max(0, y0 - OCC_GROW * h)), int(min(H, y1 + OCC_GROW * h))
             if X1 <= X0 or Y1 <= Y0:
                 continue
-            k = integ[Y1, X1] - integ[Y0, X1] - integ[Y1, X0] + integ[Y0, X0]
+            k = int(np.count_nonzero((yi >= Y0) & (yi < Y1) & (xi >= X0) & (xi < X1)))
             out[(c.col, x.slot, x.sub or "")] = float(k) / ((X1 - X0) * (Y1 - Y0)) * 1e4
     return out
 
