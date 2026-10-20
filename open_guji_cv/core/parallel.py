@@ -50,8 +50,10 @@ AUDITED: dict[str, ParallelAudit] = {
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=1.0,
-        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存，worker 各建一份（约 17 s）；"
+        mem_gb=1.0, warm_first=True,
+        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存；warm_first（2026-10-20 晚）：主进程先跑一页"
+             "把它建好，fork 后各 worker 共享，不再各建一份。库含字体域（约 17.4 万条，特征矩阵 1.2 GB）时这件事要紧："
+             "各建一份是每进程约 2 分钟、2 GB；匹配器特征另有盘上缓存（`seeding._matcher_arrays`，mmap 共享页缓存）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
@@ -63,7 +65,7 @@ AUDITED: dict[str, ParallelAudit] = {
              "（`RareCandidatesStep.parallel_warm` 在主进程建，缺盘时只建一次）；跑批期间不改字形库、checkpoint、fonts、册 yaml。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 23.5 s，单进程 1.06 GB（2026-10-20）。"),
     "seed_admit": ParallelAudit(
-        mem_gb=3.0, warm_first=True,
+        mem_gb=2.0, warm_first=True,
         note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"
              "修掉的：font_candidates._row_norms 按 id 缓存拿错矩阵（串行也随页序变）；图块缓存、"
              "绑定缓存、字体索引改原子写（并发读到半个文件会整页失败或静默为空）。"
@@ -72,7 +74,9 @@ AUDITED: dict[str, ParallelAudit] = {
              "人裁匹配器、绑定表，fork 后共享；Windows（spawn）各进程自建，单进程峰值约 2.1 GB。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 82 s → 50 s，单进程峰值 2.1 GB；"
              "worker 里 cv2.setNumThreads 置空（cnn_candidates 模块顶层调它，fork 子进程里卡死过），"
-             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"),
+             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"
+             "内存登记 3.0 → 2.0 GB（2026-10-20 晚）：每步一个子进程后 vol06 主进程峰值 1.95 GB，主进程加 3 个 worker "
+             "合计 PSS 3.3 GB（fork 共享页）；按 3.0 算，15 GB 的机器只开得出 3 个进程，CPU 利用率 51%。"),
 }
 
 
@@ -98,8 +102,60 @@ def is_parallel_safe(step) -> bool:
     return bool(step.spec.parallel_safe) or step.spec.id in AUDITED
 
 
+def _cgroup_available_bytes(proc_cgroup: str = "/proc/self/cgroup",
+                            root: str = "/sys/fs/cgroup") -> int | None:
+    """本进程所在 cgroup 还能用多少内存：上限 − 已用 + 文件页（页缓存，活跃的也算：内存紧时能回收，
+    挤不掉的是匿名内存）。没有上限返回 None。只加不活跃那部分会少算——跑过一步之后 mmap 的特征缓存和读过的图
+    都是活跃文件页（云端实测 5.7 GB），seed_admit 被压到 2 个进程。
+
+    容器里 `/proc/meminfo` 看到的是整台宿主（2026-10-20 云端：MemAvailable 15 GiB，cgroup 上限 13.4 GiB），
+    按它压进程数会高估；超了 cgroup 上限是直接 OOM 杀进程（字体域进库后 dev 上的 glyph_match 4 进程就这样被杀）。"""
+    try:
+        lines = open(proc_cgroup, encoding="ascii").read().splitlines()
+    except OSError:
+        return None
+    for ln in lines:
+        hid, ctrls, path = ln.split(":", 2)
+        if hid == "0" and ctrls == "":                          # cgroup v2
+            base = root + path
+            files = ("memory.max", "memory.current", "memory.stat", ("active_file", "inactive_file"))
+        elif "memory" in ctrls.split(","):                      # cgroup v1
+            base = root + "/memory" + path
+            files = ("memory.limit_in_bytes", "memory.usage_in_bytes", "memory.stat",
+                     ("total_active_file", "total_inactive_file"))
+        else:
+            continue
+        try:
+            lim = open(os.path.join(base, files[0]), encoding="ascii").read().strip()
+            if lim == "max" or int(lim) >= 1 << 60:
+                continue                                        # 这一层没设上限
+            used = int(open(os.path.join(base, files[1]), encoding="ascii").read())
+            file_pages = 0
+            for st in open(os.path.join(base, files[2]), encoding="ascii"):
+                k, _, v = st.partition(" ")
+                if k in files[3]:
+                    file_pages += int(v)
+            return max(0, int(lim) - used + file_pages)
+        except (OSError, ValueError):
+            continue
+    return None
+
+
 def available_memory_gb() -> float | None:
-    """本机此刻可用内存（GB）；取不到返回 None（不按内存压进程数）。"""
+    """本机此刻可用内存（GB）：`MemAvailable` 与本进程 cgroup 余量取小；都取不到返回 None（不按内存压进程数）。"""
+    try:
+        cg = _cgroup_available_bytes()
+    except Exception:  # noqa: BLE001 —— 只是限流参考
+        cg = None
+    sysgb = _system_available_gb()
+    if cg is None:
+        return sysgb
+    cg_gb = cg / (1 << 30)
+    return cg_gb if sysgb is None else min(sysgb, cg_gb)
+
+
+def _system_available_gb() -> float | None:
+    """`/proc/meminfo` 的 MemAvailable（Windows 走 GlobalMemoryStatusEx）。"""
     try:
         if os.name == "nt":
             import ctypes

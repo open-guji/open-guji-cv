@@ -90,7 +90,10 @@ def cmd_glyph_db(args):
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
-                jobs=args.jobs, vertical=args.vertical)
+                jobs=args.jobs, vertical=args.vertical,
+                use_pack=not getattr(args, "no_pack", False))
+        elif args.action == "font-pack-push":
+            summary = _font_pack_push(db, args)
         elif args.action == "set-edition":
             # 一本书一个 edition：把库里全部刻本字形并到 --edition（字形库 06）
             if not args.edition:
@@ -134,13 +137,44 @@ def cmd_glyph_db(args):
             db.close()
 
 
+def _font_pack_push(db, args) -> dict:
+    """`glyph-db font-pack-push`：把库里已导好的字体域导成预建件、存进 R2（`clustering/font_pack.py`）。
+
+    手动跑，要正式令牌（同 `products pack push-index`）。只推与清单、字表、竖排开关对得上的那几套：
+    库里记的字体文件与字表 sha（`font_manifests`）和现在算的不一样就不推——包的键按现在的输入算，
+    拿旧库的行配新键会让别的机器拷到不对的字形。"""
+    from .clustering import font_pack as FP
+    from .clustering.font_glyphs import load_charset, load_manifest
+    from .clustering.glyph_fp import font_domain_manifest
+    import hashlib
+    specs, data = load_manifest(args.manifest)
+    if args.edition:
+        specs = [x for x in specs if x.edition_tag == args.edition]
+    chars = load_charset(args.charset or data["charset"])
+    have = font_domain_manifest(db.db_path)
+    saved, skipped = [], []
+    for spec in specs:
+        man = have.get(spec.edition_tag) or {}
+        want_fonts = {p.name: FP._sha_file(p) for p in spec.font_paths if p.exists()}
+        if (man.get("fonts") != want_fonts or bool(man.get("vertical")) != bool(args.vertical)
+                or man.get("chars_sha256") != hashlib.sha256("".join(chars).encode("utf-8")).hexdigest()):
+            skipped.append({"edition": spec.edition_tag, "why": "库里这套字体域与清单／字表／--vertical 对不上，先重导"})
+            continue
+        saved.append(FP.save_pack(db, spec, chars, args.vertical))
+    pushed = FP.push_packs()
+    if not getattr(args, "keep_pack", False):
+        for f in saved:
+            f.unlink(missing_ok=True)
+    return {"saved": [f.name for f in saved], "pushed": pushed, "skipped": skipped}
+
+
 def add_parser(sub) -> None:
     """在 `sub`（argparse 子命令表）上注册 `glyph-db`。"""
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
-                            "set-edition"])
+                            "set-edition", "font-pack-push"])
     p.add_argument("-w", "--workspace", default=None,
                    help="工作区仓根（含 books/、output/glyph.db）。同 v2 命令那个 -w：给了就覆盖"
                         "本次调用的 GUJI_WORKSPACE，不给就退回读环境变量。任务卡 #54 第13条：这个"
@@ -181,5 +215,9 @@ def add_parser(sub) -> None:
     p.add_argument("--jobs", type=int, default=1,
                    help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
                         "写库仍单线程）")
+    p.add_argument("--no-pack", action="store_true",
+                   help="import-font 用：不找字体域预建件（本机或 R2），一律逐字渲染")
+    p.add_argument("--keep-pack", action="store_true",
+                   help="font-pack-push 用：推完把本机导出的包留在 cache/fontdb/（缺省删掉，省盘）")
     p.add_argument("--title", default=None, help="书名")
 

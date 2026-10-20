@@ -98,3 +98,32 @@ def test_set_blas_threads_reaches_bundled_openblas():
         assert n >= 1
     finally:
         parallel.set_blas_threads(parallel.os.cpu_count() or 1)
+
+
+def test_cgroup_memory_limit_caps_available_memory(tmp_path):
+    """容器里 /proc/meminfo 看到整台宿主；按 cgroup 余量（上限 − 已用 + 文件页）算才不会高估。"""
+    from open_guji_cv.core.parallel import _cgroup_available_bytes
+    G = 1 << 30
+    # v1
+    pc = tmp_path / "cg1"
+    pc.write_text("4:memory:/a/b\n3:cpuset:/\n", encoding="ascii")
+    d = tmp_path / "root" / "memory" / "a" / "b"
+    d.mkdir(parents=True)
+    (d / "memory.limit_in_bytes").write_text(str(12 * G))
+    (d / "memory.usage_in_bytes").write_text(str(5 * G))
+    (d / "memory.stat").write_text(f"cache 1\ninactive_file 5\ntotal_active_file {G}\ntotal_inactive_file {G}\n")
+    assert _cgroup_available_bytes(str(pc), str(tmp_path / "root")) == 9 * G
+    (d / "memory.limit_in_bytes").write_text(str(9223372036854771712))        # 没设上限
+    assert _cgroup_available_bytes(str(pc), str(tmp_path / "root")) is None
+    # v2
+    pc2 = tmp_path / "cg2"
+    pc2.write_text("0::/s\n", encoding="ascii")
+    d2 = tmp_path / "root2" / "s"
+    d2.mkdir(parents=True)
+    (d2 / "memory.max").write_text(str(8 * G))
+    (d2 / "memory.current").write_text(str(7 * G))
+    (d2 / "memory.stat").write_text(f"anon 1\nactive_file {G // 2}\ninactive_file {G // 2}\n")
+    assert _cgroup_available_bytes(str(pc2), str(tmp_path / "root2")) == 2 * G
+    (d2 / "memory.max").write_text("max\n")
+    assert _cgroup_available_bytes(str(pc2), str(tmp_path / "root2")) is None
+    assert _cgroup_available_bytes(str(tmp_path / "nope"), str(tmp_path)) is None

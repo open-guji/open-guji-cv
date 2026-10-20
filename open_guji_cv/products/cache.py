@@ -20,6 +20,11 @@ builder 现算、写入、返回。`prune()` 按 mtime 做 LRU，压到上限以
 戳文件是整种类一份的「读→改→写」，页级并行（`guji pipeline --jobs N`）时几个 worker 同时惰性再生
 不同页的图块，都要改它：不加锁会互相覆盖（丢掉别页的戳），共用一个 `.tmp` 名还会让后一个
 `os.replace` 找不到文件、整页记失败。所以改戳一律在 `_stamps_lock` 里做，临时文件带进程号。
+
+戳还是「这一页缓存可信」的凭据：`guji cache verify`／`close-check` 1b 对戳与现行产物对得上的页
+不再逐列渲染比对（2026-10-20，出口检查 5–12 分钟 → 秒级）。所以**只能给干净的页记戳**：引擎重跑一页
+前先清掉这一页再写，干净；惰性补图时这一页若还没戳、目录里却已有别的图（记戳机制之前的老缓存，
+是哪一代产物切的说不清），就不记——否则补一张新图会把整页老图一起「洗白」，校验从此跳过它。
 """
 
 from __future__ import annotations
@@ -53,6 +58,8 @@ class ImageCache:
     def __init__(self, root: Path | None = None, limit_bytes: int = DEFAULT_LIMIT_BYTES):
         self.root = Path(root) if root else default_cache_root()
         self.limit_bytes = limit_bytes
+        #: (册, 种类, 页) → 这一页没戳时目录里是否已有老图（见模块头末段）；清页缓存时作废
+        self._legacy: dict[tuple[str, str, str], bool] = {}
 
     def path(self, book: str, kind_id: str, key: str, ext: str = "png") -> Path:
         return self.root / book / kind_id / f"{key}.{ext}"
@@ -135,6 +142,10 @@ class ImageCache:
             stamp: str | None = None) -> Path:
         p = self.path(book, kind_id, key)
         p.parent.mkdir(parents=True, exist_ok=True)
+        m = self._PAGE_RE.match(key)
+        if stamp and m and self.page_stamp(book, kind_id, key) is None \
+                and self.has_unstamped_files(book, kind_id, m.group(0)):
+            stamp = None                 # 这一页有说不清来历的老图：不记戳（模块头末段）
         # 先写临时文件再换上去（2026-10-20）：并行时别的 worker 可能正在读这张图（Step7 铁证
         # 会读别页的人裁刻例），直接写会让它读到半张图、整页记失败。临时名以 `.` 开头，
         # 清缓存与 LRU 都不当它是缓存图（`_is_meta`）。
@@ -145,6 +156,17 @@ class ImageCache:
         os.replace(tmp, p)
         self.set_page_stamp(book, kind_id, key, stamp)
         return p
+
+    def has_unstamped_files(self, book: str, kind_id: str, page: str) -> bool:
+        """这一页（`page` 形如 `p0024`）在记戳之前目录里就已有缓存图：首次查时看一眼目录并记住，
+        之后同一页只查内存（字块目录一册几万个文件，不能每张图都扫一遍）。"""
+        k = (book, kind_id, page)
+        hit = self._legacy.get(k)
+        if hit is None:
+            d = self.root / book / kind_id
+            hit = d.exists() and any(not _is_meta(q) for q in d.glob(f"{page}*"))
+            self._legacy[k] = hit
+        return hit
 
     def materialize(self, book: str, kind_id: str, key: str,
                     builder: Callable[[], np.ndarray], stamp: str | None = None) -> Path:
@@ -170,6 +192,8 @@ class ImageCache:
                 if p.is_file() and p.stem.startswith(key_prefix) and not _is_meta(p):
                     p.unlink()
                     n += 1
+            for k in [k for k in self._legacy if k[0] == book and k[1] == d.name and k[2].startswith(key_prefix)]:
+                del self._legacy[k]
             if not key_prefix:
                 (d / "_stamps.json").unlink(missing_ok=True)       # 整种类清空时戳也一并作废
         return n

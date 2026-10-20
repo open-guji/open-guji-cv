@@ -327,8 +327,11 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
                                charset: str | Path | None = None,
                                limit: int | None = None,
                                progress_every: int = 5000,
-                               jobs: int = 1) -> dict:
-    """按清單批量導入字體字形。缺失字體檔的條目跳過並記在結果裡。"""
+                               jobs: int = 1, use_pack: bool = True) -> dict:
+    """按清單批量導入字體字形。缺失字體檔的條目跳過並記在結果裡。
+
+    `use_pack`：先找同一套字体、字表、代码渲出来的预建件（本机或 R2，`clustering/font_pack.py`），
+    有就整表拷进来，不再逐字渲染（云端 4 核两套 12–15 分钟 → 拷表）；没有才渲染。"""
     specs, data = load_manifest(manifest_path)
     if only:
         specs = [s for s in specs if s.edition_tag == only]
@@ -346,6 +349,18 @@ def import_fonts_from_manifest(db, manifest_path: str | Path,
                             "hint": "该字体未随仓库提交，需自行下载到 "
                                     "$GUJI_FONT_DIR（见 fonts/README.md）"})
             continue
+        if use_pack and not limit:
+            from .font_pack import find_pack, import_pack
+            f, fetched = find_pack(spec, chars, vertical)
+            if f is not None:
+                try:
+                    r = import_pack(db, f, spec.edition_tag)
+                finally:
+                    if fetched:
+                        f.unlink(missing_ok=True)
+                results.append({**r, "missing": len(chars) - r["glyphs"], "requested": len(chars),
+                                "from_pack": f.name})
+                continue
         results.append(import_font(db, spec, chars, vertical=vertical,
                                    progress_every=progress_every, jobs=jobs))
     return {"charset_size": len(chars), "imported": results,

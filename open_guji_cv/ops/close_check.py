@@ -100,8 +100,10 @@ def _cache(eng, pages) -> dict:
     from .cache_verify import verify_book
     res = verify_book(eng, pages, fix=False, log=lambda *_: None)
     n = res.get("bad_columns", 0)
+    tr = res.get("pages_trusted_by_stamp") or {}
+    note = f"；戳对得上免查：字块 {tr.get('char_patch', 0)} 页、列图 {tr.get('column_image', 0)} 页" if tr else ""
     return _item("1b", "缓存不错位", PASS if not n else FAIL,
-                 f"错位 {n} 列" + ("（`guji cache verify --fix`）" if n else ""), res.get("bad_pages") or None)
+                 f"错位 {n} 列" + ("（`guji cache verify --fix`）" if n else "") + note, res.get("bad_pages") or None)
 
 
 def _glyph_store_missing(ws: Path) -> str | None:

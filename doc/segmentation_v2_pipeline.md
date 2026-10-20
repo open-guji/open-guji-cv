@@ -507,6 +507,11 @@ seed_admit 的两处特别：
   import 时卡死在 pthread_cond_destroy（三个 worker 挂住，py-spy 实锤）。只管线程数、不影响结果。
 - 前置：字块缓存已建（铁证读别页人裁刻例图）；跑批期间不交人裁、不 `guji db sync`（串行同理）。
 
+**字体域进库之后（同日晚，GUJI-647）**：上面的 glyph_match 数字是在没导字体域的库（1.8 万条）上量的。正式库导了两套字体后
+匹配器有 17.4 万条，每个进程建库 2 分钟、约 3.5 GB，dev 上 `--jobs 4` 被 OOM 杀。现在 glyph_match 也登记 `warm_first`
+（主进程建一次、fork 共享），匹配器特征按内容缓存（命中 2.4 s）。seed_admit 单 worker 内存登记 3.0 → 2.0 GB，
+进程数按「`MemAvailable` 与 cgroup 余量取小」压。详见 `doc/pipeline_handbook.md` §6.2。
+
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 
 把一条界行整条投到 x 轴上——线越直，墨全落在同一个 x 上，峰就越高越窄；线越弯，

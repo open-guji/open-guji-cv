@@ -86,6 +86,7 @@ import logging
 import time
 from pathlib import Path
 
+import numpy as np
 from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec
@@ -255,6 +256,14 @@ class GlyphMatchParams(BaseModel):
     落进人审，不再让一个病态格拖死整页。书级 yaml `params: {glyph_match: {cell_budget_s: 20}}` 可开。
     只在逐个刻例验证之间检查，所以单次验证本身的耗时不在预算内。"""
 
+    batch_knn: bool = False
+    """整页合批算近邻（2026-10-20，GUJI-647 第 7 项）。False = 关（缺省，产物与参数指纹逐字节不变）。
+    开了以后先把本页要匹配的图（格与候选试切）全部归一、提特征，每 64 个做一次矩阵乘得到与整库的
+    相似度，再逐格照常判。字体域进库后库有约 17 万条（特征矩阵 1.2 GB），逐格做矩阵乘向量每格都要
+    把整张表读一遍（内存带宽，约 0.14 s／格）；合批后每 64 格才读一遍，单线程约快 10 倍。
+    **会改产物**：矩阵乘与逐格乘的浮点累加次序不同，相似度末位不同（实测最大差 6e-7），前 10 名约
+    1.5% 的查询换位，个别格的候选与判决随之变。开不开按波次窗口定，开前出差异单（`guji products diff`）。"""
+
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
         # 没开时不进 model_dump：params_hash 靠它算，否则加这个字段就会把全部现役产物判过期
@@ -266,6 +275,8 @@ class GlyphMatchParams(BaseModel):
                 d.pop("cell_budget_s", None)
             if not d.get("borrow_fingerprint"):
                 d.pop("borrow_fingerprint", None)
+            if not d.get("batch_knn"):
+                d.pop("batch_knn", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -389,6 +400,8 @@ class GlyphMatchStep(Step):
         # 格级复用（core/reuse.py）：本步没变、只是上游重写了时，几何没动的格搬旧记录。
         from ..core.reuse import cell_reuse, log_reuse
         reuse = cell_reuse(ctx, self, page, "glyph_match")
+        if p.batch_knn:
+            matcher = _PageBatch(matcher, _page_queries(ctx, page, chars, reuse, normalize_patch))
         n_reused = n_total = n_timeout = 0
         out: list[ColumnMatch] = []
         for cc in chars.columns:
@@ -474,6 +487,74 @@ class GlyphMatchStep(Step):
                         page, n_timeout, n_total, p.cell_budget_s)
         return {"glyph_match": PageMatch(
             page=page, db_fingerprint=p.db_fingerprint, columns=out)}
+
+
+def _page_queries(ctx: RunContext, page: int, chars: "PageChars", reuse: dict,
+                  normalize_patch) -> list[np.ndarray]:
+    """`batch_knn` 的第一遍：本页要匹配的图（格与它的候选试切）的归一结果，顺序与 `run_page`
+    逐格判时调匹配器的顺序相同。读图出错的照逐格判时的规矩：格的图读不出来整页失败，
+    候选试切的键再生不了就跳过。"""
+    out: list[np.ndarray] = []
+    for cc in chars.columns:
+        if not cc.ok:
+            continue
+        for r in cc.chars:
+            if r.cell_type != "char" or not r.patch_key or r.id in reuse:
+                continue
+            is_punct = (getattr(r, "step3_kind", None) == "punct")
+            out.append(normalize_patch(_patch(ctx, r.patch_key, page), is_punct))
+            for cv in (r.cand_variants or []):
+                try:
+                    cimg = ctx.image("char_patch", cv.patch_key)
+                except (KeyError, ValueError):
+                    continue
+                out.append(normalize_patch(cimg, is_punct))
+    return out
+
+
+class _PageBatch:
+    """`batch_knn`：包住匹配器，按本页查询顺序每 `CHUNK` 个做一次「查询特征 × 整库特征」矩阵乘，
+    逐格判时把现成的那一行相似度递给 `GlyphMatcher.match(sims=…)`。查询按归一图内容（sha1）认，
+    认不出的（不该有）照旧逐格算。其余属性原样转给被包的匹配器。"""
+    CHUNK = 64
+
+    def __init__(self, matcher, norms: list[np.ndarray]):
+        self._m = matcher
+        self._norms = norms
+        self._idx: dict[bytes, int] = {}
+        for i, n in enumerate(norms):
+            self._idx.setdefault(self._key(n), i)
+        self._feats: dict[int, np.ndarray] = {}
+        self._c0 = -1
+        self._S: np.ndarray | None = None
+
+    @staticmethod
+    def _key(norm: np.ndarray) -> bytes:
+        return hashlib.sha1(repr((norm.shape, norm.dtype.str)).encode() + norm.tobytes()).digest()
+
+    def __getattr__(self, name):
+        return getattr(self._m, name)
+
+    def _feat(self, i: int) -> np.ndarray:
+        f = self._feats.get(i)
+        if f is None:
+            f = np.asarray(self._m._feature.extract(self._norms[i][None, ...])[0], dtype=np.float32)
+            self._feats[i] = f
+        return f
+
+    def match(self, norm: np.ndarray, **kw):
+        i = self._idx.get(self._key(norm))
+        if i is None:
+            return self._m.match(norm, **kw)
+        c0 = i - i % self.CHUNK
+        if c0 != self._c0:
+            t0 = time.monotonic()
+            Q = np.stack([self._feat(j) for j in range(c0, min(c0 + self.CHUNK, len(self._norms)))])
+            self._S = Q @ self._m.library_matrix().T
+            self._c0 = c0
+            if kw.get("deadline") is not None:      # 这一块的矩阵乘是 64 格共用的，不算进这一格的预算
+                kw["deadline"] += time.monotonic() - t0
+        return self._m.match(norm, feat=self._feat(i), sims=self._S[i - c0], **kw)
 
 
 def _timeout_rec(r, budget_s: float) -> MatchRec:

@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- glyph_match 开关 `batch_knn`（GUJI-647 第 7 项，PATCH；**缺省关**，关着时产物与参数指纹逐字节不变）：一页的格每 64 个做一次「查询 × 整库」矩阵乘，库矩阵每 64 格才读一遍。库含字体域（17.4 万条、1.2 GB）时逐格算卡在内存带宽，vol06 全册 glyph_match 1282 s → 367 s。**会改产物**：浮点末位不同，vol06 23,517 格判决、字、cov 全同，8 格候选排序变；`guji products diff` 送审 222 → 222、变了的列 0。开不开按 M9 波次窗口定：书级 `params: {glyph_match: {batch_knn: true}}`。
 - `guji opinions publish-status`（M11 B2，GUJI-714；PATCH）：意见池里网站来源（改字、一段有问题）的处理结论按网站 target 聚合，写中心库 `feedback/lists/web/<书>/status.jsonl`（已进文本→adopted＋版本、已采纳→adopted、未采纳→rejected＋公开理由、交用户／讨论→discussing；精校票不发），幂等；网站 proofing-sync 读它回写 `/api/fixes`。顺手修回复草稿把模板句与公开理由叠在一起的毛病（GUJI-713）。不碰任何 Step，`code_hash` 不变。
 - 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
 - M11 第一阶段：意见池、AI 初判的确定性部分、修订工具（GUJI-712／713／715，设计 `doc/design/M11-分块-第一阶段最小闭环.md`）。新包 `open_guji_cv/opinions/`（L4）与 `guji opinions …`：`ingest`（中心库 `feedback/lists/web/<书>/` 的改字／精校票、网站公开读 `/api/fixes`、`/api/feedback` 文字类 → 中心库 `feedback/lists/opinions/<书>/`，幂等，去测试票、记重复与转出）、`list`／`show`、`versions`（book-text CHANGES → `text_versions.json`）、`locate`、`normalize`、`pack`（IIIF 原图档裁格与列条带、上下文、marks，`sheet.png`／`sheet.md`）、`triage`（会话判、`config/opinions/rules.json` 定去向）、`to-user`／`decide`、`revise`（A／B／B′ 类改 book-text 冻结册 char／cord，伴生层跟随，调 `bump_original.py` 升 patch，CHANGES 引意见 id）、`reply-drafts`。PATCH；不碰任何 Step，17 步与闸 `code_hash` 不变。
@@ -18,7 +19,18 @@
   - 热点：glyph_match 逐页 −24%（wmax 按需算、同格查找分桶、HOG 向量化）；seed_admit 每页 2.3→0.85 s（事件读缓存；铁证匹配器归一图按内容缓存）；context_decide 热缓存首页 6–7→2 s（本书与通用 LM 按语料内容 + 代码指纹缓存）；align_ref 起跑 16→7 s；印章遮挡每页 0.21→0.02 s。
   - 训好的语言模型跨机分发：本机没命中先用读令牌去 R2 取 `derived/lm/…`，`guji products pack push-index` 手动推（用户 10-20 定）。runbook S1 设 `GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_READ`。
 
+- 冷启动、内存、出口检查提速（GUJI-647，PATCH；**17 步 `code_hash` 全部不变**：`glyph_match`、`match`、`seeding` 的改动在 vol06 30 页、库含字体域时与改前逐字节相同，已登记代码等价）：
+  - 字体域预建件（`clustering/font_pack.py`）：`glyph-db import-font` 先找同一套字体文件、字表、渲染代码出过的字体域（本机 `cache/fontdb/` 或 R2 `derived/fontdb/`，读令牌就够），整表拷进 glyph.db，与逐字渲染逐列相同、字体域指纹相同。两套 15.5 万字：渲染 12.6 分钟 → 拷表 43 秒（加下载约 1.8 GB）。从 R2 取来的包导完即删。推送手动：`glyph-db font-pack-push`（正式令牌）。`--no-pack` 强制渲染。
+  - R2 通道（`datastore.packs.push_file`／`fetch_file`）改流式、可选 gzip，取时 8 段并发（实测单路 11 MB/s、8 路 44 MB/s）；旧 manifest 照认。
+  - glyph_match 匹配器特征按内容缓存（`seeding._matcher_arrays`，`cache/glyph_feats/`）：字体域进库后库有 17.4 万条，每个进程建匹配器原要约 2 分钟（逐条解 PNG、算 HOG），命中缓存 2.4 秒；整库特征矩阵只存一份（原来列表一份、堆起来又一份），建库峰值 4.5 GB → 2.1 GB，命中时走 mmap、多进程共享页缓存。`GUJI_MATCHER_FEAT_CACHE=0` 关。
+  - glyph_match 登记 `warm_first`：主进程建一次匹配器，fork 后共享。改前 dev 上库含字体域时 `--jobs 4` 四个 worker 各建一份（各约 3.5 GB），被 OOM 杀。
+  - `guji pipeline` 跑多步时缺省每步一个子进程（`--isolate-steps`；`--no-isolate-steps` 退回单进程，`--json` 时不隔离）：vol06 单进程连跑到 seed_admit 主进程 3.5 GB，隔离后 seed_admit 1.95 GB、context_decide 1.48 GB。
+  - 页级并行的可用内存改认 cgroup 上限（容器里 `/proc/meminfo` 看到的是整台宿主：云端 MemAvailable 15 GiB、cgroup 余量 11 GiB）；seed_admit 单 worker 内存登记 3.0 → 2.0 GB（实测主进程 1.95 GB、4 进程合计 PSS 3.3 GB），15 GB 的机器开得满 4 进程。
+  - `guji cache verify`／`close-check` 1b：戳与现行产物对得上的页免查（引擎重跑一页先清再写、读时戳不对整页作废，这类缓存一定是这一代切的）。vol06 150 页 1.4 秒（原约 5 分钟）；`--full` 照旧全查。
+
 ### Fixed
+- 缓存页戳会把老缓存「洗白」（GUJI-647）：一页没戳、目录里却有记戳机制之前的老图时，惰性补一张新图（或 `cache warm` 收尾补戳）会给整页记上戳，`cache verify` 从此跳过它。现在这类页不记戳，留给内容校验。
+- `--isolate-steps` 下某一步崩了（异常、护栏拒跑）父进程照样接着跑下游、最后返回 0；现在停在那一步、返回它的返回码。控制台取消工单（只 terminate 父进程）时把 SIGTERM 转给正在跑的那一步，不留孤儿接着写产物。
 - `font_candidates._row_norms` 按 `id(mat)` 缓存行模长：lru 挤掉的矩阵释放后 id 被复用、行数相同时用错模长，余弦全错、结果随页序变（#255）；seed_admit 补登记 `code_deps` 里的 `font_candidates`。**rare_candidates、seed_admit 判过期，各册要重跑这两步**（vol04 46 页上未触发，产物相同）。
 - 并发写（#255）：`_stamps.json` 加跨进程锁、临时文件带进程号（原来并行再生图块会整页记失败、丢戳）；`ImageCache.put`、绑定逐页缓存、字体索引改原子写。
 
