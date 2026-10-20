@@ -30,7 +30,7 @@ from . import freq as _freq
 from .protocol import GroupVerdict
 from .registry import GROUPS
 
-SOLVERS = frozenset({"freq", "ids", "top1", "ctx", "bars", "rr_img"})
+SOLVERS = frozenset({"freq", "ids", "top1", "ctx", "bars", "rr_img", "ry_shape"})
 CHANNEL = "group_flow"
 
 
@@ -153,6 +153,12 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
         return GroupVerdict(pick if pick in spec.members else None, conf=c.get("p"),
                             why="agree" if pick in spec.members else "abstain:rr_clf", via="rr_img",
                             extra={"probs": c.get("probs")})
+    if name == "ry_shape":
+        from . import aspect
+        ch, ratio = aspect.judge(img)
+        return GroupVerdict(ch if ch in spec.members else None, conf=ratio,
+                            why="agree" if ch in spec.members else "abstain:aspect", via="ry_shape",
+                            extra={"ratio": None if ratio is None else round(float(ratio), 3)})
     raise ValueError(f"group_flow：解法 {name!r} 不认得")
 
 
