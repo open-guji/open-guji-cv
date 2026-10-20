@@ -77,7 +77,7 @@ def _tar_book(root: Path, book: str, steps: list[str] | None) -> tuple[bytes, in
     n, per = 0, {}
     with tarfile.open(fileobj=buf, mode="w:gz", compresslevel=6) as tf:
         for f in sorted(base.glob("*")):                         # 册级文件（_raw_index.json 等）
-            if f.is_file() and not f.name.endswith(".tmp"):
+            if f.is_file() and not f.name.endswith(".tmp") and not f.name.startswith("."):
                 tf.add(f, arcname=f"{book}/{f.name}")
                 n += 1
         for s in use:
@@ -119,6 +119,46 @@ def check_label(label: str) -> None:
         raise ValueError(f"标签不能叫 {MAIN_DIR}（main 指针占用）")
 
 
+MARK = ".pack.json"     # <产物根>/<册>/.pack.json：本机这份产物最后一次存包／取包是哪个标签、当时的摘要
+
+
+def products_digest(root: Path, book: str) -> str:
+    """一册产物的摘要：各步 `_manifest.jsonl` 内容的 sha256。manifest 只追加，跑过任何一页就变；
+    取回的包解出来与存包时一字不差，所以存、取之后各记一次，之后对得上就说明没再跑过。"""
+    base = Path(root) / book
+    h = hashlib.sha256()
+    for m in sorted(base.glob("*/_manifest.jsonl")):
+        h.update(m.parent.name.encode("utf-8") + b"\0")
+        h.update(m.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def write_mark(root: Path, book: str, label: str, how: str) -> None:
+    base = Path(root) / book
+    if base.is_dir():
+        (base / MARK).write_text(json.dumps({"label": label, "how": how, "digest": products_digest(root, book),
+                                             "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+                                            ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def unpacked_note(root: Path, book: str) -> str | None:
+    """本机这册产物有没存进产物包的新结果 → 一句提醒；没产物、或与最后存／取的包一致 → None。
+    提醒只是提醒（不挡什么）：试跑、半截的结果本来就不该存。"""
+    base = Path(root) / book
+    if not any(base.glob("*/_manifest.jsonl")):
+        return None
+    try:
+        mk = json.loads((base / MARK).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        mk = None
+    if mk and mk.get("digest") == products_digest(root, book):
+        return None
+    tail = f"（上次{'存' if mk.get('how') == 'push' else '取'}的是 {mk.get('label')}，之后又跑过）" if mk else "（从没存过包）"
+    return (f"本册产物还没存进产物包{tail}：正式结果跑完记得 "
+            f"guji products pack push {book} --change <改动名> [--main]")
+
+
 def push_products(book: str, root: Path, label: str | None = None, steps: list[str] | None = None,
                   note: str = "", src=None, change: str | None = None, vers: dict | None = None) -> dict:
     """`label` 给了就整个用它；不给就拼 `<版本三段>-<change>`（change 缺省 UTC 时刻），如 `cv0.4.7-c1-g2-layout`。
@@ -147,6 +187,8 @@ def push_products(book: str, root: Path, label: str | None = None, steps: list[s
            "pack_sha256": hashlib.sha256(data).hexdigest()}
     _call(src, "PUT", f"{pre}/manifest.json", data=json.dumps(man, ensure_ascii=False, indent=1).encode("utf-8"),
           content_type="application/json", tries=3)
+    if not steps:                       # 只打了几步的包不算整册存过
+        write_mark(root, book, label, "push")
     return man
 
 
@@ -233,6 +275,7 @@ def fetch_products(book: str, dest_root: Path, label: str | None = None, force: 
             if not m.isfile() or m.name.startswith("/") or ".." in Path(m.name).parts or not m.name.startswith(f"{book}/"):
                 raise ValueError(f"包里有不合规的路径：{m.name}")
         tf.extractall(dest_root, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(dest_root)
+    write_mark(dest_root, book, name.rsplit("/", 1)[-1], "fetch")
     return {"name": name, "dest": str(dest), "files": man["files"], "cv_version": man.get("cv_version")}
 
 

@@ -119,7 +119,7 @@ def test_manifest_records_cv_version(tmp_path, monkeypatch):
     pl = Pipeline(id="tcvp", title="t", steps=[sid])
     eng = Engine(book, pl, store=ProductStore(tmp_path / "p"), cache=ImageCache(tmp_path / "c"),
                  log=lambda s: None)
-    assert eng._cv == {"cv_version": "0.3.0+1", "cv_commit": "c" * 40}
+    assert eng._cv == {"cv_version": "0.3.0+1", "cv_commit": "c" * 40, "db_rev": None}   # 没工作区：无中心库 rev
     eng.run(steps=[sid], pages=[1])
     line = (tmp_path / "p" / "tcv" / sid / "_manifest.jsonl")
     rows = [json.loads(x) for x in line.read_text(encoding="utf-8").splitlines() if x.strip()]

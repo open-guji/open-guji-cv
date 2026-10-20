@@ -152,3 +152,56 @@ def test_version_label():
     lab = PK.version_label({"cv": "0.4.7+dirty", "corpus": 1, "glyph_pin": None, "human_fp": "nodb"})
     assert lab == "cv0.4.7pdirty-c1-g-"
     PK.check_label(lab + "-x")
+
+
+def test_unpacked_note(tmp_path, monkeypatch):
+    """存包、取包之后不提醒；之后又跑过（manifest 追加了）就提醒；只打几步的包不算存过。"""
+    from open_guji_cv.datastore import packs as PK
+    monkeypatch.setattr(PK, "_ws_name", lambda: "ws-x")
+    root = tmp_path / "products"
+    d = root / "vol04" / "seed_admit"
+    d.mkdir(parents=True)
+    assert PK.unpacked_note(root, "vol04") is None                     # 没产物不提醒
+    (d / "p0001.json").write_text("A")
+    (d / "_manifest.jsonl").write_text('{"key": "p0001"}\n')
+    assert "从没存过包" in PK.unpacked_note(root, "vol04")
+    src = FakeSrc()
+    PK.push_products("vol04", root, label="a1", src=src, steps=["seed_admit"])
+    assert PK.unpacked_note(root, "vol04") is not None                 # 只打几步不算
+    man = PK.push_products("vol04", root, label="a2", src=src)
+    assert man["files"] == 2                                           # .pack.json 不进包
+    assert PK.unpacked_note(root, "vol04") is None
+    with open(d / "_manifest.jsonl", "a") as f:
+        f.write('{"key": "p0001", "x": 1}\n')
+    assert "a2" in PK.unpacked_note(root, "vol04")
+    PK.fetch_products("vol04", tmp_path / "got", label="a2", src=src)
+    assert PK.unpacked_note(tmp_path / "got", "vol04") is None
+
+
+def test_exp_record(tmp_path):
+    from open_guji_cv.ops import exp_record as ER
+    rep = tmp_path / "diff"
+    rep.mkdir()
+    (rep / "report.md").write_text("# 前后对比 vol04\n\n| | 格 |\n\n## 小节\n")
+    man = {"label": "cv0.4.7-c1-g2-x", "name": "products/ws/vol04/cv0.4.7-c1-g2-x", "created": "2026-10-20T01:00:00Z",
+           "note": "测", "files": 3, "bytes": 2e6,
+           "versions": {"cv": "0.4.7", "cv_commit": "23df9921abcdef", "corpus": 1, "glyph_pin": 2,
+                        "db_revs": {"siku@main:9916": 200, "未记": 21}}}
+    p = ER.write_record(tmp_path / "ws", "vol04", man, base_label="v0.4.6-cujiao", book_yaml="id: vol04\n",
+                        report_dir=rep)
+    assert p == tmp_path / "ws" / "experiments" / "vol04" / "cv0.4.7-c1-g2-x.md"
+    t = p.read_text()
+    assert "`v0.4.6-cujiao`" in t and "siku@main:9916（200 页）" in t and "id: vol04" in t
+    assert "### 小节" in t and "前后对比 vol04" not in t
+    assert (tmp_path / "ws" / "experiments" / "README.md").exists()
+    assert ER.note_main(tmp_path / "ws", "vol04", "cv0.4.7-c1-g2-x", "验收过") == p
+    assert "★ 标为 main：验收过" in p.read_text()
+    assert ER.note_main(tmp_path / "ws", "vol04", "nope") is None
+
+
+def test_central_rev(tmp_path, monkeypatch):
+    from open_guji_cv.core import workspace as W
+    monkeypatch.setattr(W, "data_root", lambda ws=None: tmp_path)
+    assert W.central_rev() is None
+    (tmp_path / ".central-state.json").write_text(json.dumps({"ws": "siku", "branch": "main", "rev": 9916}))
+    assert W.central_rev() == "siku@main:9916"

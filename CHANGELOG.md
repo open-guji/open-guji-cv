@@ -8,6 +8,11 @@
 ### Added
 - 产物包按「三样版本」打标签、每册有 main（用户 10-20 定：不同版本的结果分开存、不覆盖，main 是最新正式结果；cv、字形库、语料库三个版本号共同决定结果）：`guji products pack push` 不给 `--label` 时标签拼成 `cv<版本>-c<语料库号>-g<字形库号>-<改动名>`（`--change`；字形库没钉写 `g-`＋人裁指纹前 6 位），三样完整值记进 manifest 的 `versions`；新 `pack promote <册> --label …`／`pack push --main` 追加 main 指针（`main-ptr/`，只增不改，Worker 不用改）；`fetch` 缺省取 main，没标过才取最新；`list` 标 ★ 并列三样版本。不碰任何 Step，`code_hash` 不变。
 
+- 产物包记字形库的内容版本、没存包提醒、实验记录（用户 10-20 定）。不碰任何 Step，`code_hash` 不变：
+  - 每条产物 manifest 新字段 `db_rev`（跑时本机数据对应的中心库版本 `<工作区>@<分支>:<rev>`，不进指纹）；包的 `versions` 加 `db_rev`、`db_revs`（seed_admit 各页的 rev 与页数）、`corpus_base`。`glyph_pin` 只钉指纹不钉内容，要复现某份包读的库就从这个 rev 开 Neon 分支。
+  - `guji pipeline`／`step`／`status`／`close-check` 末尾：本机这册产物在最后一次存／取包之后又跑过（各步 `_manifest.jsonl` 摘要对不上，记在 `<产物根>/<册>/.pack.json`），印一行提醒存包。只提醒不挡。
+  - `pack push` 在工作区仓写 `experiments/<册>/<标签>.md`（基线、三样版本、中心库 rev、册 yaml、`--report` 给的 diff 报告）；`promote`／`--main` 往页尾追「标为 main」。`--no-record` 不写。
+
 ### Fixed
 - `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
 
