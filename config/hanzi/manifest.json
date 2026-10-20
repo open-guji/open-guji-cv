@@ -1,6 +1,6 @@
 {
  "builder": 2,
- "content_sha": "f62f3205deba",
+ "content_sha": "f40f1f5dcdf5",
  "edges_by_src_rel": {
   "charcomp:rt|related": 46211,
   "charcomp:rt|variant": 12179,
@@ -60,10 +60,10 @@
    "table": "near"
   },
   "parts/chars.tsv": {
-   "bytes": 3306989,
+   "bytes": 3869746,
    "pack": "parts",
    "rows": 101997,
-   "sha256": "78ec2ba3ebf23136a2feabdd286996414436750e650e47a995dfe23114b864ba",
+   "sha256": "99e85e62d81d4c4cd04ec7e6670e707847506bc37017164fe5473d516a973174",
    "table": "chars"
   },
   "parts/comps.tsv": {
@@ -113,6 +113,10 @@
   "cjkvi-twedu-variants.txt": {
    "bytes": 563773,
    "sha256": "acdda9d67772a95a94cec964fea5ac2e478e364a962429b4cf563e7cd24d4cdb"
+  },
+  "unihan-Unihan_DictionaryIndices.txt": {
+   "bytes": 8921637,
+   "sha256": "b41c7c5ca3a01d833ed4fe0c7b9cdf41c4ec08cb11a0fd1df6e92ed666ce00e1"
   },
   "unihan-Unihan_DictionaryLikeData.txt": {
    "bytes": 4129290,
@@ -233,5 +237,5 @@
   }
  },
  "unihan_version": "18.0.0",
- "version": "hanzi-f62f3205deba"
+ "version": "hanzi-f40f1f5dcdf5"
 }

@@ -147,7 +147,7 @@ SOURCES: dict[str, dict[str, str]] = {
 #: 原始下载文件 → URL（构建只读本地 src/，`--fetch` 时才按这张表下载缺的）。
 #: Unihan.zip 下载后只留这几个文本文件（`unihan-<名>`），原始资料进 R2 时都是文本。
 UNIHAN_PARTS = ("Unihan_Variants.txt", "Unihan_IRGSources.txt", "Unihan_Readings.txt",
-                "Unihan_DictionaryLikeData.txt")
+                "Unihan_DictionaryLikeData.txt", "Unihan_DictionaryIndices.txt")
 
 SRC_FILES: dict[str, str] = {
     **{f"unihan-{n}": UNIHAN_URL for n in UNIHAN_PARTS},

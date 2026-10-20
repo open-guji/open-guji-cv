@@ -105,7 +105,7 @@ def api_rare_batch(req: RareBatchIn) -> dict:
 @maps_http
 def api_rare_alt(book: str, page: int, col: int, slot: int, sub: str = "",
                  p: list[str] = Query(default=[]), q: str = "", k: int = 30) -> dict:
-    """**相似字（以字找字）**：近似字的异体族（本仓表＋部件檢索＋字统网）按这格字块图排序。
+    """**相似字（以字找字）**：近似字的异体族（hanzi 库＋本机字统网缓存）按这格字块图排序。
 
     用户 10-19：人审最花时间的是先认出一个近似字、再去字统网翻它的异体、挑和图最像的。
     `p`＝卡上已有的近似字（整理本字、上下文字、库前几名，前端从卡上取），字统网只读缓存；

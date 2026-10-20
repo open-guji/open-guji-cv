@@ -82,7 +82,8 @@ def unihan_variants(text: str) -> tuple[list[Edge], dict]:
     return rows, dict(st)
 
 
-_UNIHAN_CHAR_FIELDS = {"kRSUnicode": "rs", "kTotalStrokes": "strokes",
+#: Unicode 16 起 kIRGKangXi 并进 kKangXi（在 Unihan_DictionaryIndices.txt）；两个名字都认。
+_UNIHAN_CHAR_FIELDS = {"kRSUnicode": "rs", "kTotalStrokes": "strokes", "kKangXi": "kangxi",
                        "kIRGKangXi": "kangxi", "kDefinition": "def"}
 
 

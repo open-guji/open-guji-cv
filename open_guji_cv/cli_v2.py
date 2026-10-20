@@ -374,7 +374,7 @@ def cmd_audit(args) -> None:
         print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
     elif args.action == "alt":
         # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
-        # 近似字的异体族（本仓表＋部件檢索＋字统网缓存）按字块图排序，挂成卡上 `alt`，
+        # 近似字的异体族（hanzi 库；本机字统网缓存照并）按字块图排序，挂成卡上 `alt`，
         # 再交 ai-team pending_list.py --cards 并进 pending.json（proof_fields 原样带出）。
         from .clustering.variant_sources import ZiCache
         from .review.alt_cands import ALT_K, alt_for_cards, attach
