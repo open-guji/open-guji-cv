@@ -497,9 +497,14 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db,
                        return_events=return_events, backfill=backfill, patch_stamp=patch_stamp or None)
     f.parent.mkdir(parents=True, exist_ok=True)
-    f.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
-                             "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                             "rows": rows}, ensure_ascii=False), encoding="utf-8")
+    # 先写带进程号的临时文件再换上去（2026-10-20）：Step7 并行时几个 worker 可能同时重算同一页的
+    # 绑定，直接 write_text 会让别的进程读到半个文件（读坏会被上面吞掉重算，但写本身会互相截断）。
+    import os
+    tmp = f.with_name(f"{f.stem}.tmp{os.getpid()}.json")
+    tmp.write_text(json.dumps({"v": _VERSION, "cells_sha": cells_sha, "sig": sig,
+                               "computed_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                               "rows": rows}, ensure_ascii=False), encoding="utf-8")
+    os.replace(tmp, f)
     return rows
 
 

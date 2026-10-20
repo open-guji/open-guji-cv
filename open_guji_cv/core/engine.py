@@ -21,7 +21,7 @@ from pydantic import BaseModel
 
 from .book import BookSpec
 from .pipeline import Pipeline, _produces
-from .parallel import effective_jobs, is_parallel_safe, worker_threads
+from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
 from ..products.cache import ImageCache
@@ -695,45 +695,69 @@ class Engine:
         # （row_segment 超过 20 s 的难页占这一步 42% 的时间）。产物与次序无关：每页独立算、
         # 主进程按完成先后落盘，manifest 按页键存。
         todo = _longest_first(todo, manifest)
-        with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
-                                 initargs=initargs) as ex:
-            futs = [ex.submit(_parallel_worker, pg) for pg in todo]
-            for fut in as_completed(futs):
-                pg, products, err, elapsed = fut.result()
-                fp, ups, ph = fps[pg]
-                key = page_key(pg)
-                if err is not None:
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
-                                               elapsed=round(elapsed, 3), status="failed", error=err))
-                    self.log(f"{sid} p{pg}: 失败 {err}")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
-                    any_failed = True
-                    continue
-                try:
-                    for k in products:
-                        if k not in step.spec.produces:
-                            raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
-                        if kind_of(k).storage != "numeric":
-                            raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
-                    _, sha = self.store.write(self.book.id, sid, key, products)
-                    self._stamp_cache(step, key, sha)
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
-                                               params_hash=ph, upstream=ups or {},
-                                               code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
-                                               self_hash=self.self_hash(step),
-                                               soft=soft_values(step, self.ctx.params_for(step)),
-                                               book=book_dep_values(step, self.book)))
-                    self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
-                    report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
-                except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
-                    err2 = f"{type(e).__name__}: {e}"
-                    manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
-                                               upstream=ups or {}, code_rev=self._rev, **self._cv,
-                                               elapsed=round(elapsed, 3), status="failed", error=err2))
-                    self.log(f"{sid} p{pg}: 失败 {err2}")
-                    report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))
-                    any_failed = True
+
+        def land(pg: int, products, err, elapsed: float) -> bool:
+            """一页结果落盘（主进程串行），返回是否失败。与 `_run_one_step` 落盘逐行同形。"""
+            fp, ups, ph = fps[pg]
+            key = page_key(pg)
+            if err is not None:
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                           upstream=ups or {}, code_rev=self._rev, **self._cv,
+                                           elapsed=round(elapsed, 3), status="failed", error=err))
+                self.log(f"{sid} p{pg}: 失败 {err}")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err))
+                return True
+            try:
+                for k in products:
+                    if k not in step.spec.produces:
+                        raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
+                    if kind_of(k).storage != "numeric":
+                        raise ValueError(f"{sid} 把图像类 {k!r} 当 numeric 返回了")
+                _, sha = self.store.write(self.book.id, sid, key, products)
+                self._stamp_cache(step, key, sha)
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, sha256=sha,
+                                           params_hash=ph, upstream=ups or {},
+                                           code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
+                                           self_hash=self.self_hash(step),
+                                           soft=soft_values(step, self.ctx.params_for(step)),
+                                           book=book_dep_values(step, self.book)))
+                self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
+                report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
+                return False
+            except Exception as e:  # noqa: BLE001 —— 落盘校验失败也不拖垮整批
+                err2 = f"{type(e).__name__}: {e}"
+                manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
+                                           upstream=ups or {}, code_rev=self._rev, **self._cv,
+                                           elapsed=round(elapsed, 3), status="failed", error=err2))
+                self.log(f"{sid} p{pg}: 失败 {err2}")
+                report.outcomes.append(PageOutcome(sid, pg, "failed", elapsed, err2))
+                return True
+
+        # 先在主进程跑一页「暖机」（登记了 `warm_first` 的步，如 seed_admit）：第一页会把证人索引、
+        # 人裁匹配器、绑定表这些进程级缓存建好，之后 fork 出的 worker 写时复制直接共享，不再各建
+        # 一份（每份几十秒、上 GB）。`gc.freeze()` 把这些对象挪出 GC 的视野，免得子进程一次全量 GC
+        # 写遍几百万个对象头、把共享页全复制一遍。Windows 是 spawn，共享不到，只是第一页先跑。
+        if warm_first(step) and len(todo) > 1:
+            first, todo = todo[0], todo[1:]
+            t0 = time.time()
+            try:
+                prods, err = step.run_page(self.ctx, first), None
+            except Exception as e:  # noqa: BLE001
+                prods, err = None, f"{type(e).__name__}: {e}"
+            any_failed |= land(first, prods, err, time.time() - t0)
+            import gc
+            gc.collect()
+            gc.freeze()
+        try:
+            with ProcessPoolExecutor(max_workers=jobs, initializer=_parallel_worker_init,
+                                     initargs=initargs) as ex:
+                futs = [ex.submit(_parallel_worker, pg) for pg in todo]
+                for fut in as_completed(futs):
+                    any_failed |= land(*fut.result())
+        finally:
+            if warm_first(step):
+                import gc
+                gc.unfreeze()
         return done, any_failed and stop_on_error
 
     def run(self, steps: list[str] | None = None, pages: list[int] | None = None,

@@ -135,8 +135,14 @@ class ImageCache:
             stamp: str | None = None) -> Path:
         p = self.path(book, kind_id, key)
         p.parent.mkdir(parents=True, exist_ok=True)
-        if not imwrite(str(p), img):
+        # 先写临时文件再换上去（2026-10-20）：并行时别的 worker 可能正在读这张图（Step7 铁证
+        # 会读别页的人裁刻例），直接写会让它读到半张图、整页记失败。临时名以 `.` 开头，
+        # 清缓存与 LRU 都不当它是缓存图（`_is_meta`）。
+        tmp = p.with_name(f".{p.stem}.tmp{os.getpid()}{p.suffix}")
+        if not imwrite(str(tmp), img):
+            tmp.unlink(missing_ok=True)
             raise IOError(f"写缓存失败: {p}")
+        os.replace(tmp, p)
         self.set_page_stamp(book, kind_id, key, stamp)
         return p
 

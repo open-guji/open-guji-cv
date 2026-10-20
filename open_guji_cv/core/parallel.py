@@ -33,6 +33,8 @@ class ParallelAudit:
     """单个 worker 的峰值常驻内存（GB，实测，留了余量）。"""
     note: str
     """审了什么、怎么验的。"""
+    warm_first: bool = False
+    """先在主进程跑一页把进程级缓存建好，再 fork（子进程写时复制共享），见 `Engine._run_one_step_parallel`。"""
 
 
 AUDITED: dict[str, ParallelAudit] = {
@@ -48,7 +50,21 @@ AUDITED: dict[str, ParallelAudit] = {
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
+    "seed_admit": ParallelAudit(
+        mem_gb=3.0, warm_first=True,
+        note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"
+             "修掉的：font_candidates._row_norms 按 id 缓存拿错矩阵（串行也随页序变）；图块缓存、"
+             "绑定缓存、字体索引改原子写（并发读到半个文件会整页失败或静默为空）。"
+             "前置：本批页的字块缓存已建好（`guji cache warm`），铁证会读别页的人裁刻例图；"
+             "跑批期间不交人裁、不 `guji db sync`（串行同理）。warm_first：主进程先跑一页建好证人索引、"
+             "人裁匹配器、绑定表，fork 后共享；Windows（spawn）各进程自建，单进程峰值约 2.1 GB。"
+             "第四册串行／4 进程产物比对：待验。"),
 }
+
+
+def warm_first(step) -> bool:
+    a = AUDITED.get(step.spec.id)
+    return bool(a and a.warm_first)
 
 
 def is_parallel_safe(step) -> bool:
