@@ -490,7 +490,22 @@ above」而非数组边界）上一度写出了 off-by-one，语义对齐的代�
 | glyph_match | 231 s | 80 s | 2.9（含每 worker 约 17 s 建库）|
 | Step0–5a 合计 | 约 412 s | 181 s | 2.3 |
 
-单进程峰值 0.53 GB。下一个串行大头是 cell_shrink（0.7 s/页）与 Step6–7。
+单进程峰值 0.53 GB。
+
+**之后又登记了两步（同日）**：
+
+| 步 | 串行墙钟 | 4 进程墙钟 | 说明 |
+|---|---|---|---|
+| cell_shrink | 27.8 s | 9.1 s | 46 页产物与 8436 张字块图逐个相同；单进程 0.19 GB |
+| seed_admit | 82 s | 50 s | 46 页逐字节相同；单进程 2.1 GB；含主进程暖机约 20 s，整册估 270 s → 90 s |
+
+seed_admit 的两处特别：
+- **主进程暖机**（`ParallelAudit.warm_first` + `SeedAdmitStep.parallel_warm`）：先在主进程跑一页、再显式预建证人
+  8-gram 索引与铁证人裁匹配器，`gc.freeze()` 后 fork，worker 写时复制共享。只靠「先跑一页」建不全——证人索引只在
+  复核通道真用到时才懒建，第一页常碰不到，worker 原来各自重建 17–20 s。
+- **fork 出的 worker 里 `cv2.setNumThreads` 置空**：`clustering/cnn_candidates` 模块顶层调它，worker 里第一次
+  import 时卡死在 pthread_cond_destroy（三个 worker 挂住，py-spy 实锤）。只管线程数、不影响结果。
+- 前置：字块缓存已建（铁证读别页人裁刻例图）；跑批期间不交人裁、不 `guji db sync`（串行同理）。
 
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 
