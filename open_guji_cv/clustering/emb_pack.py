@@ -24,7 +24,8 @@ Step5-b 稀见字候选与「以字找字」都要「每个字的字体模板向
 
 ## 文件
 
-- `vectors.npy`：float32 `[n, 256]`，逐行与 `chars.txt` 对应（不用 float16：R 道 09-27 实测 top-1 会变 1%）；
+- `vectors-NN.npy`：float32 `[n, 256]` 按行切成每片 32,768 行（约 32 MB，Worker 单次上传有上限），
+  拼起来逐行与 `chars.txt` 对应（不用 float16：R 道 09-27 实测 top-1 会变 1%）；
 - `chars.txt`：建成的字，一行一字，码位序；
 - `failed.txt`：全部字体都渲染不出的字（产线建索引时同样会跳过，materialize 据此逐位复现）。
 
@@ -43,7 +44,7 @@ import numpy as np
 
 REPO = Path(__file__).resolve().parents[2]
 EMB_DIR = REPO / "config" / "hanzi" / "emb"
-FILES = ("vectors.npy", "chars.txt", "failed.txt")
+FILES = ("chars.txt", "failed.txt")       # 另有向量分片 vectors-NN.npy，见清单 files
 
 
 def code_fingerprint() -> str:
@@ -98,15 +99,17 @@ class EmbPack:
     @classmethod
     def load(cls, manifest: dict, blob_dir: Path | None = None, fetch=None,
              download: bool = True) -> EmbPack | None:
-        """按清单取三个文件（本机 blob 缓存 → R2）；`download=False` 时本机没有就返回 None。"""
+        """按清单取全部文件（本机 blob 缓存 → R2）；`download=False` 时本机缺任何一个就返回 None。"""
         from ..hanzi.pack import blob_cache_path, get_blob
         paths = {}
-        for name in FILES:
+        for name in sorted(manifest["files"]):
             sha = manifest["files"][name]["sha256"]
             if not download and not blob_cache_path(sha, blob_dir).exists():
                 return None
             paths[name] = get_blob(sha, blob_dir, fetch, label=f"{manifest['version']}/{name}")
-        mat = np.load(io.BytesIO(paths["vectors.npy"].read_bytes()), allow_pickle=False)
+        shards = [np.load(io.BytesIO(paths[n].read_bytes()), allow_pickle=False)
+                  for n in sorted(paths) if n.startswith("vectors")]
+        mat = np.concatenate(shards) if shards else np.zeros((0, manifest["dim"]), np.float32)
         chars = paths["chars.txt"].read_text(encoding="utf-8").splitlines()
         failed = set(paths["failed.txt"].read_text(encoding="utf-8").splitlines())
         if mat.shape != (len(chars), manifest["dim"]):

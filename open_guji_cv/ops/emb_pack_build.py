@@ -31,15 +31,52 @@ def full_charset() -> tuple[str, ...]:
     return tuple(sorted((c for c in cs if len(c) == 1), key=ord))
 
 
+#: 每片向量的行数：32,768 行 × 256 维 × 4 字节 ＝ 32 MB。整份 104 MB 经 Worker 上传被拒（10-20 实测 413，
+#: 单次请求上限约 100 MB），所以切片，每片单独按 sha 存取。
+SHARD_ROWS = 32768
+
+
+def write_pack(out: Path, mat: np.ndarray, names: list[str], failed: list[str], spec: dict, meta: dict,
+               emb_dir: Path = EMB_DIR) -> dict:
+    """`(mat, names)` → `out/` 下的分片 `vectors-NN.npy`、`chars.txt`、`failed.txt`，清单写进
+    `emb_dir/<版本>.json`，文件同时放进本机 blob 缓存（本机取用不用再下）。"""
+    from ..hanzi.pack import blob_cache_path
+    out = Path(out)
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("vectors*.npy"):
+        old.unlink()
+    mat = mat.astype(np.float32)
+    names_ = []
+    for k, i in enumerate(range(0, max(len(mat), 1), SHARD_ROWS)):
+        buf = io.BytesIO()
+        np.save(buf, mat[i:i + SHARD_ROWS], allow_pickle=False)
+        (out / f"vectors-{k:02d}.npy").write_bytes(buf.getvalue())
+        names_.append(f"vectors-{k:02d}.npy")
+    (out / "chars.txt").write_text("".join(c + "\n" for c in names), encoding="utf-8")
+    (out / "failed.txt").write_text("".join(c + "\n" for c in failed), encoding="utf-8")
+    m = {"version": version_of(spec), **spec, "dim": int(mat.shape[1]), "dtype": "float32",
+         "n_chars": len(names), "n_failed": len(failed), "charset": "hanzi chars ∪ ids_lv1", **meta,
+         "files": {n: {"sha256": hashlib.sha256((out / n).read_bytes()).hexdigest(),
+                       "bytes": (out / n).stat().st_size} for n in [*names_, *FILES]}}
+    for n, f in m["files"].items():
+        bp = blob_cache_path(f["sha256"])
+        if not bp.exists():
+            bp.parent.mkdir(parents=True, exist_ok=True)
+            bp.write_bytes((out / n).read_bytes())
+    Path(emb_dir).mkdir(parents=True, exist_ok=True)
+    (Path(emb_dir) / f"{m['version']}.json").write_text(
+        json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    return m
+
+
 def build(out: Path, chars: tuple[str, ...] | None = None, jobs: int = 4, emb_dir: Path = EMB_DIR,
           log=print) -> dict:
-    """在本机建一版（要 torch 与 checkpoint）：写三个文件到 `out/`，清单写进 `emb_dir/<版本>.json`。"""
+    """在本机建一版（要 torch 与 checkpoint），写进 `out/` 与 `emb_dir/<版本>.json`（`write_pack`）。"""
     import time
 
-    from ..hanzi.pack import blob_cache_path
-    from ..ops.rare_index_build import build_parallel
-    from . import cnn_candidates as cc
-    from .synth import render_char
+    from ..clustering import cnn_candidates as cc
+    from ..clustering.synth import render_char
+    from .rare_index_build import build_parallel
     spec = current_spec()
     inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
     if not inst._ensure():
@@ -50,25 +87,8 @@ def build(out: Path, chars: tuple[str, ...] | None = None, jobs: int = 4, emb_di
     mat, names = build_parallel(inst, cs, jobs) if jobs > 1 else cc.build_emb_matrix(
         inst._net, inst._dev, cs, {}, render_char)
     secs = time.time() - t0
-    out = Path(out)
-    out.mkdir(parents=True, exist_ok=True)
     ok = set(names)
-    buf = io.BytesIO()
-    np.save(buf, mat.astype(np.float32), allow_pickle=False)
-    (out / "vectors.npy").write_bytes(buf.getvalue())
-    (out / "chars.txt").write_text("".join(c + "\n" for c in names), encoding="utf-8")
-    (out / "failed.txt").write_text("".join(c + "\n" for c in cs if c not in ok), encoding="utf-8")
-    m = {"version": version_of(spec), **spec, "dim": int(mat.shape[1]), "dtype": "float32",
-         "n_chars": len(names), "n_failed": len(cs) - len(names), "charset": "hanzi chars ∪ ids_lv1",
-         "build_seconds": round(secs), "jobs": jobs,
-         "files": {n: {"sha256": hashlib.sha256((out / n).read_bytes()).hexdigest(),
-                       "bytes": (out / n).stat().st_size} for n in FILES}}
-    for n, f in m["files"].items():                      # 本机 blob 缓存也放一份，本机取用不用再下
-        bp = blob_cache_path(f["sha256"])
-        bp.parent.mkdir(parents=True, exist_ok=True)
-        bp.write_bytes((out / n).read_bytes())
-    Path(emb_dir).mkdir(parents=True, exist_ok=True)
-    (Path(emb_dir) / f"{m['version']}.json").write_text(
-        json.dumps(m, ensure_ascii=False, indent=1, sort_keys=True) + "\n", encoding="utf-8")
+    m = write_pack(out, mat, names, [c for c in cs if c not in ok], spec,
+                   {"build_seconds": round(secs), "jobs": jobs}, emb_dir)
     log(f"建好 {m['version']}：{len(names)} 字，失败 {m['n_failed']}，{secs:.0f} 秒")
     return m

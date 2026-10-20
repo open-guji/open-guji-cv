@@ -19,10 +19,13 @@ def _publish(tmp_path, spec=SPEC, chars="一丁七", failed="丂", dim=4):
     """造一版包：三个文件放进假 blob 缓存，清单写进假 emb 目录。"""
     rng = np.random.default_rng(0)
     mat = rng.standard_normal((len(chars), dim)).astype(np.float32)
-    buf = io.BytesIO()
-    np.save(buf, mat, allow_pickle=False)
-    files = {"vectors.npy": buf.getvalue(), "chars.txt": "".join(c + "\n" for c in chars).encode(),
-             "failed.txt": "".join(c + "\n" for c in failed).encode()}
+    files = {}
+    for k, part in enumerate((mat[:2], mat[2:])):                       # 分两片，载入时按名拼回
+        buf = io.BytesIO()
+        np.save(buf, part, allow_pickle=False)
+        files[f"vectors-{k:02d}.npy"] = buf.getvalue()
+    files.update({"chars.txt": "".join(c + "\n" for c in chars).encode(),
+                  "failed.txt": "".join(c + "\n" for c in failed).encode()})
     blobs = tmp_path / "blobs"
     meta = {}
     for name, data in files.items():
@@ -59,7 +62,7 @@ def test_find_only_returns_same_spec(tmp_path):
 def test_load_and_materialize_reproduces_build_order(tmp_path):
     m, mat, blobs, _ = _publish(tmp_path)
     pk = E.EmbPack.load(m, blob_dir=blobs, fetch=lambda url: pytest.fail("本机有缓存不该下载"))
-    assert pk.chars == list("一丁七") and pk.failed == {"丂"}
+    assert pk.chars == list("一丁七") and pk.failed == {"丂"} and np.array_equal(pk.mat, mat)
     calls = []
 
     def compute(cs):
