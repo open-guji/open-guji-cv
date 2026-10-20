@@ -5,11 +5,17 @@
 
 ## [未发版]
 
+### Added
+- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
+
 ### Fixed
 - 语料库清单不再收字组 `config/groups/*/prompt.md`（只给离线 L2 拼消息，Step 不读）；老清单里登记了的也跳过核对。此前改提示词（cc6f455f）会让钉了 corpus 的册在 glyph_match 起跑前报 CorpusDrift 拒跑（M9 基线跑 vol06 撞上，GUJI-636；PATCH，各步 code_hash 不变）。
 - 并行限流按容器内存算：可用内存取 /proc/meminfo 与 cgroup 上限（减去已用、不算页缓存）中小的；glyph_match 单进程登记从 1 GB 改为 3.6 GB（导了字体域后 vol06 实测 3.4–3.7 GB，原登记让 4 进程在 14.3 GB 容器里被 OOM 杀）。只改进程数，产物与 code_hash 不变（M9 基线，GUJI-636）。
 
-## [0.4.9] - 测试中
+## [0.4.9] - 2026-10-20
+
+PATCH（sheldon 10-20 定）。相对 v0.4.8 只有 `rare_candidates`（8d081ec338766152 → b92a99fa13957185）、`seed_admit`（19fbae2631200652 → 3337e7b0b2dc43ec）的 `code_hash` 变，其余 15 步不变。配套语料库：殿本 v9（日曰、入人八文意表按提示词 v2 重建，覆盖 vol01、vol04–10；`group_flow` 点名彝组 `yi_560`）——v9 清单登记了新提示词，旧版 CV 配 v9 会被语料钉拒跑，换版要同时改钉。
+验收（rc 上，殿本 vol05–07 共 141 页 seed_admit，对 v0.4.8＋语料库 v7）：送审 223→205；新放行 19 格（日曰 15、彝 4）逐格核对全对；新送审 1 格（vol07:102:9:21「五事一曰貌至五曰」，v0.4.8 误放「日」，现被文意表拦下）；随机抽的 60 页无变化。
 
 ### Added
 - 字组：第四批只看字频的异体组 爲為 說説（wei shuo；殿本人裁只见一形，≥10 且来自 ≥2 册）。PATCH；只有 seed_admit 的 `code_hash` 变。要在册配置 `group_flow` 点名才生效。
