@@ -25,7 +25,7 @@ PKG = "open_guji_cv"
 #: 层号越小越底层。同层互相 import 不限制。
 LAYER: dict[str, int] = {
     # L0 基础：无内部依赖的小模块
-    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0,
+    "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0,
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
     "core": 1, "products": 1, "utils": 1, "formats": 1, "datastore": 1,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
