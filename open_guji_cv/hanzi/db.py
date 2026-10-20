@@ -2,17 +2,18 @@
 """hanzi 库的查询（总设计 §6.3）。只读打开 sqlite，进程内常驻。
 
     from open_guji_cv.hanzi import HanziDB
-    db = HanziDB.open()            # $GUJI_HANZI_DB，否则 $GUJI_DATA_HOME/_shared/hanzi/current
+    db = HanziDB.open()            # 按 git 里的清单 config/hanzi/manifest.json 灌本机库（同版本只灌一次）
     db.family("互")                # {字: [Edge…]}，星形一跳，剔掉人审定的 distinct
     db.pool(["歷", "注"])          # 与 variant_sources.family_pool 同形
+
+部件检索要用的部件包第一次用到时才从 R2 按 sha 拉（约 2.6 MB），查族、形近只要核心包（已在 git）。
 
 **异体关系不传递**：这里只给以查询字为中心的星形；`depth=2` 也只是「一跳成员再走一跳」，
 从不做连通分量（需求 §7 坑 1）。
 """
 from __future__ import annotations
 
-import json
-import os
+import heapq
 import sqlite3
 from collections.abc import Iterable
 from functools import lru_cache
@@ -36,19 +37,6 @@ class Edge(NamedTuple):
         return self.b if self.a == c else self.a
 
 
-def default_path() -> Path:
-    env = os.environ.get("GUJI_HANZI_DB")
-    if env:
-        p = Path(env)
-        return p / "hanzi.sqlite" if p.is_dir() else p
-    from .build import data_root
-    root = data_root()
-    cur = root / "current"
-    if not cur.exists():
-        raise FileNotFoundError(f"没有 hanzi 库：{cur} 不存在。先跑 python scripts/build_hanzi_db.py --fetch")
-    return root / cur.read_text(encoding="utf-8").strip() / "hanzi.sqlite"
-
-
 #: `pool()` 的来源简写，与 `variant_sources.family_pool` 的 `src` 对齐。
 def _pool_tag(src: str) -> str | None:
     if src in S.LEGACY_TAGS or src.startswith("local:keben"):
@@ -62,23 +50,50 @@ def _pool_tag(src: str) -> str | None:
     return None
 
 
+def _ro_uri(p: Path) -> str:
+    return p.resolve().as_uri() + "?mode=ro"          # Windows 下是 file:///C:/…
+
+
 class HanziDB:
-    def __init__(self, path: str | Path):
-        self.path = Path(path)
+    """核心库常开；部件库 ATTACH 成 `parts`，没有就在第一次部件查询时经 `pack` 拉。"""
+
+    def __init__(self, core: str | Path, parts: str | Path | None = None, pack=None):
+        self.path = Path(core)
         if not self.path.exists():
             raise FileNotFoundError(f"没有 hanzi 库：{self.path}")
-        uri = self.path.resolve().as_uri() + "?mode=ro"     # Windows 下是 file:///C:/…
-        self.con = sqlite3.connect(uri, uri=True, check_same_thread=False)
+        self.con = sqlite3.connect(_ro_uri(self.path), uri=True, check_same_thread=False)
         self.meta = dict(self.con.execute("SELECT k, v FROM meta"))
         self.version = self.meta.get("version", "")
+        self._pack = pack
+        self._has_parts = False
+        self._up_cache: dict[tuple[str, int], dict[str, int]] = {}
+        if parts is not None:
+            self._attach(Path(parts))
 
     @classmethod
-    def open(cls, path: str | Path | None = None) -> HanziDB:
-        return cls(path or default_path())
+    def open(cls, version: str | None = None, parts: bool | None = None, **pack_kw) -> HanziDB:
+        """按清单打开某版（缺省当前版）。`parts=True` 立刻备好部件库，`False` 不要，
+        `None`（缺省）本机有就挂上、没有就等第一次部件查询再拉。`pack_kw` 传给 `pack.Pack`。"""
+        from .pack import Pack
+        pk = Pack(version, **pack_kw)
+        core = pk.ensure("core")
+        p = pk.ensure("parts") if parts else (pk.db_path("parts") if parts is None and pk.has("parts")
+                                              else None)
+        return cls(core, p, pack=pk if parts is not False else None)
+
+    def _attach(self, p: Path) -> None:
+        self.con.execute("ATTACH DATABASE ? AS parts", (_ro_uri(p),))
+        self._has_parts = True
+
+    def _parts(self) -> None:
+        if self._has_parts:
+            return
+        if self._pack is None:
+            raise RuntimeError("没有部件库：用 HanziDB.open(parts=True) 打开")
+        self._attach(self._pack.ensure("parts"))
 
     def manifest(self) -> dict:
-        p = self.path.parent / "manifest.json"
-        return json.loads(p.read_text(encoding="utf-8")) if p.exists() else {}
+        return self._pack.manifest if self._pack is not None else {}
 
     # ── 边 ───────────────────────────────────────────
 
@@ -155,43 +170,105 @@ class HanziDB:
         rows = sorted(cur, key=lambda r: (-r[2], r[4]))
         return [r[:4] for r in rows[:k]] if k else [r[:4] for r in rows]
 
-    # ── 部件与 IDS ───────────────────────────────────
+    # ── 部件与 IDS（部件库）─────────────────────────
 
-    def ids(self, c: str, src: str | None = None) -> list[tuple[str, str, str]]:
-        q = "SELECT src, seq, regions FROM ids WHERE ch=?" + (" AND src=?" if src else "")
-        return list(self.con.execute(q, (c, src) if src else (c,)))
+    def ids(self, c: str) -> list[tuple[str, str, str]]:
+        self._parts()
+        return list(self.con.execute("SELECT src, seq, regions FROM parts.ids WHERE ch=?", (c,)))
 
     def by_ids(self, seq: str) -> list[str]:
-        return sorted({r[0] for r in self.con.execute("SELECT ch FROM ids WHERE seq=?", (seq,))})
+        self._parts()
+        return sorted({r[0] for r in self.con.execute("SELECT ch FROM parts.ids WHERE seq=?", (seq,))})
 
     def components(self, c: str, max_depth: int = 1) -> list[str]:
-        return [r[0] for r in self.con.execute(
-            "SELECT part FROM comps WHERE ch=? AND depth<=? AND folded=0 ORDER BY depth, part",
-            (c, max_depth))]
+        """c 的部件，逐层往下拆到 `max_depth` 层，按（层、码位）排。库里只存直接部件，多层现算。"""
+        self._parts()
+        depth: dict[str, int] = {}
+        frontier = [c]
+        for d in range(1, max_depth + 1):
+            if not frontier:
+                break
+            q = f"SELECT part FROM parts.comps WHERE folded=0 AND ch IN ({','.join('?' * len(frontier))})"
+            nxt = []
+            for (p,) in self.con.execute(q, frontier):
+                if p != c and p not in depth:
+                    depth[p] = d
+                    nxt.append(p)
+            frontier = nxt
+        return sorted(depth, key=lambda p: (depth[p], p))
+
+    def _up(self, part: str, max_depth: int) -> dict[str, int]:
+        """含 part 的字 → part 在其中第几层（逐层往上找、去重；认折叠形）。最常见的「口」约 3 万字、0.1 秒；
+        结果上千字的常见部件留在进程内（控制台常驻时第二次就快了），最多 32 个。"""
+        key = (part, max_depth)
+        if key in self._up_cache:
+            return self._up_cache[key]
+        depth: dict[str, int] = {}
+        frontier = [part]
+        for d in range(1, max_depth + 1):
+            nxt = []
+            for i in range(0, len(frontier), 900):
+                chunk = frontier[i:i + 900]
+                q = f"SELECT ch FROM parts.comps WHERE part IN ({','.join('?' * len(chunk))})"
+                for (ch,) in self.con.execute(q, chunk):
+                    if ch != part and ch not in depth:
+                        depth[ch] = d
+                        nxt.append(ch)
+            if not nxt:
+                break
+            frontier = nxt
+        if len(depth) > 1000:
+            if len(self._up_cache) >= 32:
+                self._up_cache.pop(next(iter(self._up_cache)))
+            self._up_cache[key] = depth
+        return depth
 
     def by_components(self, parts: Iterable[str], max_depth: int = 6,
                       limit: int = 200) -> list[str]:
-        """含全部给定部件（任意深度、认折叠形）的字，按「最深那个部件的深度、码位」排。"""
+        """含全部给定部件（`max_depth` 层以内、认折叠形）的字，按「最深那个部件的层数、码位」排。
+        从最少见的部件往上找；候选少时其余部件逐字往下核，多时也往上找再取交集。"""
+        self._parts()
         parts = [p for p in dict.fromkeys(parts) if p]
         if not parts:
             return []
-        joins = " ".join(f"JOIN comps c{i} ON c{i}.ch = c0.ch AND c{i}.part = ? AND c{i}.depth <= ?"
-                         for i in range(1, len(parts)))
-        deepest = "MAX(" + ", ".join(f"c{i}.depth" for i in range(len(parts))) + ")" \
-            if len(parts) > 1 else "c0.depth"
-        sql = (f"SELECT c0.ch, MIN({deepest}) AS d FROM comps c0 {joins} "
-               f"WHERE c0.part = ? AND c0.depth <= ? GROUP BY c0.ch")
-        args: list = []
+        n = {p: self.con.execute("SELECT COUNT(*) FROM parts.comps WHERE part=?", (p,)).fetchone()[0]
+             for p in parts}
+        parts.sort(key=lambda p: n[p])
+        best = self._up(parts[0], max_depth)
         for p in parts[1:]:
-            args += [p, max_depth]
-        args += [parts[0], max_depth]
-        items = sorted(self.con.execute(sql, args), key=lambda t: (t[1], ord(t[0][0]), t[0]))
-        return [ch for ch, _ in items[:limit]]
+            if not best:
+                break
+            if len(best) <= 300:
+                found = {ch: self._depth_of(ch, p, max_depth) for ch in best}
+            else:
+                found = self._up(p, max_depth)
+            best = {ch: max(d, found[ch]) for ch, d in best.items() if found.get(ch)}
+        items = heapq.nsmallest(limit, best.items(), key=lambda t: (t[1], t[0]))
+        return [ch for ch, _ in items]
+
+    def _depth_of(self, ch: str, part: str, max_depth: int) -> int:
+        """part 在 ch 里第几层（认折叠形）；不在 → 0。"""
+        frontier, seen = [ch], {ch}
+        for d in range(1, max_depth + 1):
+            if not frontier:
+                return 0
+            q = f"SELECT part, folded FROM parts.comps WHERE ch IN ({','.join('?' * len(frontier))})"
+            nxt = []
+            for p, folded in self.con.execute(q, frontier):
+                if p == part:
+                    return d
+                if not folded and p not in seen:
+                    seen.add(p)
+                    nxt.append(p)
+            frontier = nxt
+        return 0
 
     # ── 属性 ─────────────────────────────────────────
 
     def info(self, c: str) -> dict:
-        row = self.con.execute("SELECT * FROM chars WHERE ch=?", (c,)).fetchone()
+        """码位属性、主套 IDS（要部件库）＋归到 c 名下的未编码形。"""
+        self._parts()
+        row = self.con.execute("SELECT * FROM parts.chars WHERE ch=?", (c,)).fetchone()
         d = dict(zip(S.TABLES["chars"], row)) if row else {"ch": c}
         d["ids"] = self.ids(c)
         d["forms"] = [dict(zip(S.TABLES["forms"], r))
@@ -259,5 +336,5 @@ class HanziDB:
 
 @lru_cache(maxsize=1)
 def shared() -> HanziDB:
-    """进程内共用的只读库（控制台常驻用）。"""
+    """进程内共用的只读库（控制台常驻用；check_same_thread=False，只读可跨线程）。"""
     return HanziDB.open()

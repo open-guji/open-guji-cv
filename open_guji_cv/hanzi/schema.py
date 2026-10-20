@@ -1,8 +1,12 @@
 # -*- coding: utf-8 -*-
 """hanzi 库的表结构、关系类型与来源登记（总设计 §6）。
 
-规范形是 `tsv/*.tsv`（排好序、逐字节可复现）；`hanzi.sqlite` 由它们灌出，只为查得快。
-每张表的列序就是 tsv 的列序。
+规范形是排好序、逐字节可复现的 tsv；sqlite 由它们在各机本地灌出，只为查得快，不分发。
+每张表的列序就是 tsv 的列序。分两个包（总设计 §6.1，10-19 晚用户定）：
+
+- **核心包**（关系边、未编码形、来源登记；形近对直接读 `config/ids/` 的两张表）：tsv 进 git
+  `config/hanzi/core/`，云会话克隆完就能用；
+- **部件包**（字属性、主套 IDS、直接部件）：按 sha 进 R2，第一次用到部件检索时才拉。
 """
 from __future__ import annotations
 
@@ -22,17 +26,26 @@ INT_COLS = {"cp", "directed", "depth", "folded", "ln", "strokes"}
 #: 实数列。
 REAL_COLS = {"score"}
 
-INDEXES = (
-    "CREATE INDEX edges_a ON edges(a)",
-    "CREATE INDEX edges_b ON edges(b)",
-    "CREATE INDEX ids_ch ON ids(ch)",
-    "CREATE INDEX ids_seq ON ids(seq)",
-    "CREATE INDEX comps_part ON comps(part, ch, depth)",
-    "CREATE INDEX comps_ch ON comps(ch)",
-    "CREATE INDEX near_a ON near(a)",
-    "CREATE INDEX near_b ON near(b)",
-    "CREATE INDEX forms_regular ON forms(regular)",
-)
+#: 包 → 表。两个包各灌一个 sqlite（`core.sqlite`、`parts.sqlite`），查询时把部件库 ATTACH 上。
+PACKS: dict[str, tuple[str, ...]] = {
+    "core": ("sources", "edges", "forms", "near"),
+    "parts": ("chars", "ids", "comps"),
+}
+
+INDEXES: dict[str, tuple[str, ...]] = {
+    "edges": ("CREATE INDEX edges_a ON edges(a)", "CREATE INDEX edges_b ON edges(b)"),
+    "near": ("CREATE INDEX near_a ON near(a)", "CREATE INDEX near_b ON near(b)"),
+    "forms": ("CREATE INDEX forms_regular ON forms(regular)",),
+    "chars": ("CREATE UNIQUE INDEX chars_ch ON chars(ch)",),
+    "ids": ("CREATE INDEX ids_ch ON ids(ch)", "CREATE INDEX ids_seq ON ids(seq)"),
+    "comps": ("CREATE INDEX comps_part ON comps(part, ch)", "CREATE INDEX comps_ch ON comps(ch)"),
+}
+
+#: 形近对不进包：本机灌库时直接读这两张已在 git 里的表（清单里记 sha，对不上就去 R2 取那一版）。
+NEAR_FILES: dict[str, str] = {
+    "near:v1": "config/ids/confusable_pairs_v1.tsv",
+    "near:ids-v1": "config/ids/ids_confusable_pairs_v1.tsv",
+}
 
 # ── 关系类型（edges.rel）────────────────────────────────
 #: 来源说是异体。
@@ -77,9 +90,7 @@ LEGACY_NEVER_TAGS = frozenset({"unihan:kSpoofingVariant", "hydzd-borrowed"})
 # 用户 2026-10-19 定：关系是事实，tier 只作出处标注与日后对外打包的过滤键，不挡导入（总设计 §3）。
 UNIHAN_URL = "https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip"
 CJKVI_BASE = "https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/"
-CJKVI_IDS_URL = "https://raw.githubusercontent.com/cjkvi/cjkvi-ids/master/ids.txt"
 YIBAI_BASE = "https://raw.githubusercontent.com/yi-bai/ids/master/"
-BABELSTONE_URL = "https://www.babelstone.co.uk/CJK/IDS.TXT"
 YITIZI_URL = "https://cdn.jsdelivr.net/npm/yitizi@0.1.3/index.js"
 CHARCOMP_BASE = "https://raw.githubusercontent.com/frankslin/char-components/main/web/data/"
 
@@ -119,16 +130,8 @@ SOURCES: dict[str, dict[str, str]] = {
                     "license": "部件檢索公開授權（非商业，须标注来源）", "tier": "nc"},
     "charcomp:vt": {"name": "部件檢索 vt 部件变体折叠", "url": CHARCOMP_BASE + "vt.json",
                     "license": "部件檢索公開授權（非商业，须标注来源）", "tier": "nc"},
-    "yibai:lv0": {"name": "yi-bai/ids lv0", "url": YIBAI_BASE + "ids_lv0.txt", "license": "MIT",
-                  "tier": "open"},
     "yibai:lv1": {"name": "yi-bai/ids lv1", "url": YIBAI_BASE + "ids_lv1.txt", "license": "MIT",
                   "tier": "open"},
-    "yibai:lv2": {"name": "yi-bai/ids lv2（按 UCV 合并部件变体）", "url": YIBAI_BASE + "ids_lv2.txt",
-                  "license": "MIT", "tier": "open"},
-    "babelstone": {"name": "BabelStone IDS", "url": BABELSTONE_URL,
-                   "license": "作者声明为事实数据、无著作权", "tier": "open"},
-    "chise": {"name": "cjkvi-ids（基于 CHISE IDS）", "url": CJKVI_IDS_URL,
-              "license": "GPLv2（CHISE）", "tier": "unclear"},
     "local:keben": {"name": "本项目刻本实证手工边", "url": "config/variants/local_edges.json",
                     "license": "自有", "tier": "own"},
     "local:never": {"name": "本项目人审定永不并组", "url": "config/variants/never_group.json",
@@ -142,19 +145,19 @@ SOURCES: dict[str, dict[str, str]] = {
 }
 
 #: 原始下载文件 → URL（构建只读本地 src/，`--fetch` 时才按这张表下载缺的）。
+#: Unihan.zip 下载后只留这几个文本文件（`unihan-<名>`），原始资料进 R2 时都是文本。
+UNIHAN_PARTS = ("Unihan_Variants.txt", "Unihan_IRGSources.txt", "Unihan_Readings.txt",
+                "Unihan_DictionaryLikeData.txt")
+
 SRC_FILES: dict[str, str] = {
-    "Unihan.zip": UNIHAN_URL,
+    **{f"unihan-{n}": UNIHAN_URL for n in UNIHAN_PARTS},
     "cjkvi-twedu-variants.txt": CJKVI_BASE + "twedu-variants.txt",
     "cjkvi-hydzd-variants.txt": CJKVI_BASE + "hydzd-variants.txt",
     "cjkvi-hydzd-borrowed.txt": CJKVI_BASE + "hydzd-borrowed.txt",
     "cjkvi-dypytz-variants.txt": CJKVI_BASE + "dypytz-variants.txt",
     "cjkvi-cjkvi-simplified.txt": CJKVI_BASE + "cjkvi-simplified.txt",
-    "cjkvi-ids.txt": CJKVI_IDS_URL,
     "yitizi-index.js": YITIZI_URL,
-    "yibai-ids_lv0.txt": YIBAI_BASE + "ids_lv0.txt",
     "yibai-ids_lv1.txt": YIBAI_BASE + "ids_lv1.txt",
-    "yibai-ids_lv2.txt": YIBAI_BASE + "ids_lv2.txt",
-    "babelstone-IDS.TXT": BABELSTONE_URL,
     "charcomp-rt.jsonl": CHARCOMP_BASE + "rt.jsonl",
     "charcomp-dt.jsonl": CHARCOMP_BASE + "dt.jsonl",
     "charcomp-vt.json": CHARCOMP_BASE + "vt.json",

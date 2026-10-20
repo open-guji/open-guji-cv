@@ -1,12 +1,14 @@
-"""构建 hanzi 库并跑验收（总设计 §7 的 A1–A4）。
+"""构建 hanzi 库、发布、上传 R2、跑验收（总设计 §7、B7）。
 
-    python scripts/build_hanzi_db.py --fetch                 # 下载缺的原始文件，再构建
-    python scripts/build_hanzi_db.py                          # 只用本地 src/ 构建
-    python scripts/build_hanzi_db.py --check --report out.json   # 构建后跑 A1 重放、A2 覆盖、A4 速度
+    python scripts/build_hanzi_db.py --fetch [--zi-dir DIR]   # 下载缺的原始资料，构建并发布到 config/hanzi/
+    python scripts/build_hanzi_db.py --check --report out.json  # 对当前清单跑 A1 重放、A2 覆盖、A4 速度
+    GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_PROD python scripts/build_hanzi_db.py --no-build --upload
 
-- 原始文件缓存 `$GUJI_DATA_HOME/_shared/hanzi/src/`（`--src` 可改），不进 git；
-- 库落在 `$GUJI_DATA_HOME/_shared/hanzi/hanzi-<内容指纹>/`，`current` 指向最新一版；
-- `--zi-dir` 给字统网缓存目录（`U+XXXX.json`），就把其中的族作为 `zi` 来源收进来。
+- 原始资料 `$GUJI_DATA_HOME/_shared/hanzi/src/`（`--src` 可改），不进 git，`--upload` 时按 sha 进 R2；
+- 构建产出先落 `$GUJI_DATA_HOME/_shared/hanzi/build/`，再发布：核心包 tsv 与清单写进本仓
+  `config/hanzi/`（进 git），部件包 tsv 放本机 blob 缓存；`--upload` 把清单里的全部文件和原始资料
+  经 guji-data Worker 传进 R2 正式桶（按 sha、txt 后缀，已有跳过；要正式令牌）；
+- `--zi-dir` 给字统网缓存目录（`U+XXXX.json`）：先把其中的族汇总进原始资料 `zi-families.jsonl`。
 """
 from __future__ import annotations
 
@@ -23,7 +25,16 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
 from open_guji_cv.hanzi import HanziDB
-from open_guji_cv.hanzi.build import build, data_root, fetch_sources
+from open_guji_cv.hanzi import schema as S
+from open_guji_cv.hanzi.build import (
+    ZI_FILE,
+    build,
+    data_root,
+    fetch_sources,
+    publish,
+    zi_jsonl,
+)
+from open_guji_cv.hanzi.pack import read_manifest
 
 
 def _by_tag(s: set) -> dict[str, int]:
@@ -99,38 +110,63 @@ def bench(db: HanziDB, chars: list[str]) -> dict:
     return out
 
 
+def upload(src: Path) -> dict:
+    """清单里的全部文件（核心包、部件包、形近对表）与原始资料 → R2 正式桶（txt 后缀，按 sha，已有跳过）。"""
+    from open_guji_cv.datastore.r2 import upload_files
+    from open_guji_cv.hanzi.build import sha256_file
+    from open_guji_cv.hanzi.pack import Pack
+    pk = Pack()
+    files = {f["sha256"]: pk._file(k, f) for k, f in pk.manifest["files"].items()}
+    for name, f in pk.manifest["raw"].items():
+        p = src / name
+        if p.exists() and sha256_file(p) == f["sha256"]:
+            files[f["sha256"]] = p
+        else:
+            print(f"  原始资料 {name} 本机没有或 sha 对不上，跳过")
+    return upload_files({k: str(v) for k, v in files.items()}, bucket="main", ext="txt")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", type=Path, default=None, help="原始文件目录（缺省 <库根>/src）")
-    ap.add_argument("--out", type=Path, default=None, help="库根（缺省 $GUJI_DATA_HOME/_shared/hanzi）")
-    ap.add_argument("--fetch", action="store_true", help="先下载缺的原始文件")
-    ap.add_argument("--zi-dir", type=Path, default=None, help="字统网缓存目录（可选）")
-    ap.add_argument("--no-build", action="store_true", help="不构建，只对 current 跑检查")
+    ap.add_argument("--src", type=Path, default=None, help="原始资料目录（缺省 <库根>/src）")
+    ap.add_argument("--fetch", action="store_true", help="先下载缺的原始资料")
+    ap.add_argument("--zi-dir", type=Path, default=None, help="字统网缓存目录，汇总进原始资料（可选）")
+    ap.add_argument("--no-build", action="store_true", help="不构建，用 config/hanzi 里的当前清单")
+    ap.add_argument("--upload", action="store_true", help="把当前版的文件与原始资料传进 R2 正式桶")
     ap.add_argument("--check", action="store_true", help="跑 A1 重放、A2 覆盖、A4 速度")
     ap.add_argument("--report", type=Path, default=None, help="检查结果写到这个 json")
     args = ap.parse_args()
 
-    root = args.out or data_root()
+    root = data_root()
     src = args.src or root / "src"
     if args.fetch:
         got = fetch_sources(src)
         print(f"下载 {len(got)} 个：{got}")
+    if args.zi_dir:
+        print(f"字统网派生族 {zi_jsonl(args.zi_dir, src / ZI_FILE)} 字 → {src / ZI_FILE}")
     if not args.no_build:
-        m = build(src, REPO / "config", root, zi_dir=args.zi_dir)
-        print(f"{m['version']}  构建 {m['build_seconds']} 秒")
-        for t, info in m["tables"].items():
-            print(f"  {t:8s} {info['rows']:>9,d}")
+        t0 = time.time()
+        m = build(src, REPO / "config", root / "build")
+        publish(root / "build", REPO, root / "blobs")
+        print(f"{m['version']}  构建 {time.time() - t0:.1f} 秒，发布到 config/hanzi/")
+        for k, f in m["files"].items():
+            print(f"  {f['pack']:5s} {k:22s} {f['rows']:>9,d} 行 {f['bytes'] / 1e6:6.1f} MB")
         if m["stats"]["missing"]:
-            print(f"  缺原始文件：{m['stats']['missing']}")
+            print(f"  缺原始资料：{m['stats']['missing']}")
+    if args.upload:
+        print("上传 R2：", upload(src))
     if not args.check:
         return
+    m = read_manifest()
     t0 = time.perf_counter()
-    db = HanziDB.open(root / (root / "current").read_text(encoding="utf-8").strip() / "hanzi.sqlite")
-    open_ms = round((time.perf_counter() - t0) * 1000, 1)
-    rep = {"version": db.version, "open_ms": open_ms,
+    db = HanziDB.open(parts=True)
+    open_s = round(time.perf_counter() - t0, 2)
+    rep = {"version": db.version, "open_s（含首次灌库）": open_s,
            "A1_variants": check_variants(db, REPO / "config" / "variants" / "variants.json"),
-           "A2_pivot": check_pivot(db, REPO / "research" / "pivot_family" / "rows.jsonl.gz")}
-    sample = [r[0] for r in db.con.execute("SELECT ch FROM chars ORDER BY cp")][::50][:2000]
+           "A2_pivot": check_pivot(db, REPO / "research" / "pivot_family" / "rows.jsonl.gz"),
+           "sizes_mb": {p: round(db._pack.db_path(p).stat().st_size / 1e6, 1) for p in S.PACKS},
+           "rows": {k: f["rows"] for k, f in m["files"].items()}}
+    sample = [r[0] for r in db.con.execute("SELECT ch FROM parts.chars ORDER BY cp")][::50][:2000]
     rep["A4_bench"] = bench(db, sample)
     text = json.dumps(rep, ensure_ascii=False, indent=1)
     if args.report:

@@ -94,3 +94,35 @@ python -m pytest tests/test_hanzi_db.py -s -p no:cacheprovider
 - 用现役 `ZiCache(fetch=True)` 查 N 档的 61 个金标字，3 秒间隔，约 3 分钟，全部取到。
 - 缓存只存派生的族（`{q, fam, ts}`），不存页面、图、释义。
 - 族的噪声如需求所说偏大，例如 芳 的族只有 房，衍 的族里有 演 延。所以库里标 `zi` 来源，`pool()` 里单列 `zi`，排序照旧靠字块图。
+
+## B7：瘦身与发布（10-19 晚）
+
+版本 `hanzi-f62f3205deba`。边、未编码形、形近对与上一版相同；部件改为只存直接部件，IDS 只留 yi-bai lv1。
+
+```bash
+python scripts/build_hanzi_db.py --zi-dir $GUJI_DATA_HOME/_shared/zitools      # 构建 9.8 秒，发布到 config/hanzi/
+GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_PROD python scripts/build_hanzi_db.py --no-build --upload   # {'uploaded': 23}
+python scripts/build_hanzi_db.py --no-build --check
+```
+
+| 文件 | 包 | 行数 | 大小 | 放哪 |
+|---|---|---|---|---|
+| core/edges.tsv | 核心 | 147,990 | 4.9 MB | git＋R2 |
+| core/forms.tsv | 核心 | 2,697 | 0.1 MB | git＋R2 |
+| core/sources.tsv | 核心 | 21 | — | git＋R2 |
+| config/ids/confusable_pairs_v1.tsv | 核心（形近） | 19,729 | 0.6 MB | git（原有）＋R2 |
+| config/ids/ids_confusable_pairs_v1.tsv | 核心（形近） | 61,376 | 2.4 MB | git（原有）＋R2 |
+| parts/chars.tsv | 部件 | 101,997 | 3.3 MB | R2 |
+| parts/ids.tsv | 部件 | 117,041 | 3.3 MB | R2 |
+| parts/comps.tsv | 部件 | 287,446 | 3.7 MB | R2 |
+
+- 本机灌出的库：core.sqlite 16.6 MB、parts.sqlite 26.5 MB，合计 43 MB，原先 164 MB。
+- 全新目录、不带令牌：
+  - 打开核心库 1.0 秒，零下载；
+  - 第一次 `by_components` 拉 3 个部件包文件，连灌库 4.2 秒；第二次打开不再下载。
+- A1 读数同上一版（±16／+751，`local_missing` 空）；A2 同上一版（414/414；N 档 70/76）。
+- 速度：
+  - `family()` p50 0.027 ms、p99 0.14 ms；`pool()` p99 0.16 ms。
+  - `by_components` 抽样 2,000 字的前两个部件：p50 6 ms、p99 260 ms、最慢 0.6 秒。
+  - 慢的都是笔画级组合（一＋丨、丨＋丶），命中近 9 万字。真实组合：口＋木 74 ms、言＋射 3 ms、禾＋止 1 ms。
+

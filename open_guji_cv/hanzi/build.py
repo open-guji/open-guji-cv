@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
-"""构建：本地原始文件（`src/`）＋本仓 `config/` → 规范 tsv → sqlite → manifest（总设计 §6.1）。
+"""构建：原始资料（`src/`）＋本仓 `config/` → 两个包的规范 tsv ＋ 清单（总设计 §6.1、B7）。
 
-    from open_guji_cv.hanzi.build import build
-    manifest = build(src_dir, cfg_dir, out_root)
+    from open_guji_cv.hanzi.build import build, publish
+    m = build(src_dir, cfg_dir, out_dir)     # out_dir/{core,parts}/*.tsv ＋ manifest.json
+    publish(out_dir, repo_root)              # 核心包与清单写进 config/hanzi/，部件包放进本机 blob 缓存
 
-- 不联网；缺的原始文件先 `fetch_sources(src_dir)`。
-- 同一份输入 ⇒ tsv 逐字节相同 ⇒ `content_sha` 相同（验收 A3）。版本目录名 `hanzi-<content_sha>`。
-- 原始文件缺了哪个就跳过哪个来源，manifest 的 `missing` 里记下，不报错（测试与轻量构建用）。
+- 不联网；缺的原始资料先 `fetch_sources(src_dir)`。缺了哪个就跳过哪个来源，`stats.missing` 里记下。
+- 清单里没有时间戳：同一份输入 ⇒ tsv 与清单逐字节相同（验收 A3），进 git 也不会无谓地变。
+- sqlite 不在这里出，各机由 `pack.ensure()` 从 tsv 灌（几秒）。
 """
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import shutil
-import sqlite3
-import time
 import urllib.request
 import zipfile
 from collections import Counter
@@ -25,9 +25,11 @@ from . import importers as I
 from . import schema as S
 from .ids import leaves
 
-BUILDER_VERSION = 1
-#: 部件闭包的最大深度（字 → 部件 → 部件的部件…）。
-MAX_COMP_DEPTH = 6
+BUILDER_VERSION = 2
+#: 核心包与清单在仓里的位置。
+HANZI_CFG = Path("config") / "hanzi"
+#: 字统网派生族的原始资料文件（由 `zi_jsonl()` 从缓存目录汇总，不是上游下载的）。
+ZI_FILE = "zi-families.jsonl"
 
 
 def data_root() -> Path:
@@ -35,19 +37,35 @@ def data_root() -> Path:
     return home / "_shared" / "hanzi"
 
 
-def fetch_sources(src_dir: Path, names: list[str] | None = None, force: bool = False) -> list[str]:
-    """按 `schema.SRC_FILES` 下载缺的原始文件；返回下载了哪些。"""
+def sha256_file(p: Path) -> str:
+    h = hashlib.sha256()
+    with open(p, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _get(url: str) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": "open-guji-cv hanzi-db"})
+    with urllib.request.urlopen(req, timeout=300) as r:
+        return r.read()
+
+
+def fetch_sources(src_dir: Path, force: bool = False) -> list[str]:
+    """按 `schema.SRC_FILES` 下载缺的原始资料；Unihan.zip 只解出 `UNIHAN_PARTS` 几个文本文件。"""
     src_dir.mkdir(parents=True, exist_ok=True)
-    got = []
+    got: list[str] = []
+    unihan: zipfile.ZipFile | None = None
     for name, url in S.SRC_FILES.items():
-        if names and name not in names:
-            continue
         dest = src_dir / name
         if dest.exists() and not force:
             continue
-        req = urllib.request.Request(url, headers={"User-Agent": "open-guji-cv hanzi-db"})
-        with urllib.request.urlopen(req, timeout=300) as r:
-            data = r.read()
+        if name.startswith("unihan-"):
+            if unihan is None:
+                unihan = zipfile.ZipFile(io.BytesIO(_get(url)))
+            data = unihan.read(name[len("unihan-"):])
+        else:
+            data = _get(url)
         tmp = dest.with_suffix(dest.suffix + ".part")
         tmp.write_bytes(data)
         tmp.replace(dest)
@@ -55,12 +73,25 @@ def fetch_sources(src_dir: Path, names: list[str] | None = None, force: bool = F
     return got
 
 
-def _sha(p: Path) -> str:
-    h = hashlib.sha256()
-    with open(p, "rb") as f:
-        for chunk in iter(lambda: f.read(1 << 20), b""):
-            h.update(chunk)
-    return h.hexdigest()
+def zi_jsonl(zi_dir: Path, dest: Path) -> int:
+    """字统网缓存目录（`U+XXXX.json`，`{q, fam, ts}`）→ 一个排好序的 jsonl，只留 q 与 fam（不留取的时间）。
+
+    放进原始资料，跟版本一起进 R2：查一次全队共享，不用每台机器重查。已有的 dest 会并进来。"""
+    fams: dict[str, list[str]] = {}
+    if dest.exists():
+        for line in dest.read_text(encoding="utf-8").splitlines():
+            d = json.loads(line)
+            fams[d["q"]] = d["fam"]
+    for f in sorted(Path(zi_dir).glob("U+*.json")):
+        try:
+            d = json.loads(f.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        if d.get("q") and d.get("fam") is not None:
+            fams[d["q"]] = sorted(d["fam"])
+    dest.write_text("".join(json.dumps({"q": q, "fam": fams[q]}, ensure_ascii=False) + "\n"
+                            for q in sorted(fams)), encoding="utf-8")
+    return len(fams)
 
 
 def _cell(v) -> str:
@@ -70,7 +101,7 @@ def _cell(v) -> str:
 
 
 def _norm_edge(r: tuple) -> tuple:
-    """无向边按码位排成 a<b（单字比码位，未编码形比字符串）。"""
+    """无向边按码位排成 a<b。"""
     a, b, rel, directed, *rest = r
     if not directed and (a > b):
         a, b = b, a
@@ -81,139 +112,12 @@ def _dedupe_edges(rows: list[tuple]) -> list[tuple]:
     """同 (a, b, rel, directed, src, sense) 只留一行，ref／note 合并去重。"""
     acc: dict[tuple, list[set[str]]] = {}
     for r in map(_norm_edge, rows):
-        key = r[:6]
-        refs = acc.setdefault(key, [set(), set()])
+        refs = acc.setdefault(r[:6], [set(), set()])
         if r[6]:
             refs[0].add(r[6])
         if r[7]:
             refs[1].add(r[7])
     return [(*k, ";".join(sorted(v[0])), " | ".join(sorted(v[1]))) for k, v in acc.items()]
-
-
-def collect(src: Path, cfg: Path, zi_dir: Path | None = None) -> tuple[dict[str, list[tuple]], dict]:
-    """读全部来源 → `{表: 行}`, 统计。"""
-    tables: dict[str, list[tuple]] = {t: [] for t in S.TABLES}
-    stats: dict[str, dict] = {}
-    missing: list[str] = []
-    used_src: set[str] = set()
-
-    def have(name: str) -> Path | None:
-        p = src / name
-        if p.exists():
-            return p
-        missing.append(name)
-        return None
-
-    def txt(p: Path) -> str:
-        return p.read_text(encoding="utf-8")
-
-    edges = tables["edges"]
-
-    # Unihan
-    if (z := have("Unihan.zip")):
-        with zipfile.ZipFile(z) as zf:
-            names = set(zf.namelist())
-
-            def rd(n: str) -> str:
-                return zf.read(n).decode("utf-8") if n in names else ""
-
-            rows, st = I.unihan_variants(rd("Unihan_Variants.txt"))
-            edges += rows
-            stats["unihan_variants"] = st
-            rows, st = I.unihan_chars([rd("Unihan_IRGSources.txt"), rd("Unihan_Readings.txt"),
-                                       rd("Unihan_DictionaryLikeData.txt")])
-            tables["chars"] += rows
-            stats["unihan_chars"] = st
-            head = rd("Unihan_Variants.txt").splitlines()[:3]
-            stats["unihan_version"] = next((h.split("Version")[-1].strip() for h in head
-                                            if "Unicode Version" in h), "")
-        used_src.update(t for t in S.SOURCES if t.startswith("unihan"))
-
-    # cjkvi-variants
-    for fname, tag in (("cjkvi-twedu-variants.txt", "twedu"), ("cjkvi-hydzd-variants.txt", "hydzd"),
-                       ("cjkvi-hydzd-borrowed.txt", "hydzd-borrowed"),
-                       ("cjkvi-dypytz-variants.txt", "dypytz"),
-                       ("cjkvi-cjkvi-simplified.txt", "cjkvi-simplified")):
-        if (p := have(fname)):
-            rows, forms, st = I.cjkvi_variants(txt(p), tag)
-            edges += rows
-            tables["forms"] += forms
-            stats[tag] = st
-            used_src.add(tag)
-
-    if (p := have("yitizi-index.js")):
-        rows, st = I.yitizi(txt(p))
-        edges += rows
-        stats["yitizi"] = st
-        used_src.add("yitizi")
-
-    # 部件檢索
-    dt, rt = src / "charcomp-dt.jsonl", src / "charcomp-rt.jsonl"
-    if have("charcomp-dt.jsonl") and have("charcomp-rt.jsonl"):
-        rows, st = I.charcomp_rt(txt(dt).splitlines(), txt(rt).splitlines())
-        edges += rows
-        stats["charcomp:rt"] = st
-        used_src.add("charcomp:rt")
-    vt: dict[str, str] = {}
-    if (p := have("charcomp-vt.json")):
-        vt = {k: v for k, v in json.loads(txt(p)).items() if v and v != k}
-        stats["charcomp:vt"] = {"folds": len(vt)}
-        used_src.add("charcomp:vt")
-
-    # 本项目
-    if (p := cfg / "variants" / "local_edges.json").exists():
-        rows, st = I.local_edges(json.loads(txt(p)))
-        edges += rows
-        stats["local:keben"] = st
-        used_src.update(r[4] for r in rows)
-    if (p := cfg / "variants" / "never_group.json").exists():
-        rows, st = I.never_group(json.loads(txt(p)))
-        edges += rows
-        stats["local:never"] = st
-        used_src.add("local:never")
-    for fname, tag in (("confusable_pairs_v1.tsv", "near:v1"),
-                       ("ids_confusable_pairs_v1.tsv", "near:ids-v1")):
-        if (p := cfg / "ids" / fname).exists():
-            rows, st = I.near_pairs(txt(p), tag)
-            tables["near"] += rows
-            stats[tag] = st
-            used_src.add(tag)
-
-    # 字统网缓存（可选；只收派生的族）
-    if zi_dir and Path(zi_dir).exists():
-        docs = []
-        for f in sorted(Path(zi_dir).glob("U+*.json")):
-            try:
-                docs.append(json.loads(f.read_text(encoding="utf-8")))
-            except Exception:
-                continue
-        rows, st = I.zi_cache(docs)
-        edges += rows
-        stats["zi"] = st
-        used_src.add("zi")
-
-    # IDS
-    for fname, tag in (("yibai-ids_lv0.txt", "yibai:lv0"), ("yibai-ids_lv1.txt", "yibai:lv1"),
-                       ("yibai-ids_lv2.txt", "yibai:lv2")):
-        if (p := have(fname)):
-            tables["ids"] += I.ids_yibai(txt(p), tag)
-            used_src.add(tag)
-    if (p := have("babelstone-IDS.TXT")):
-        tables["ids"] += I.ids_babelstone(p.read_text(encoding="utf-8-sig"))
-        used_src.add("babelstone")
-    if (p := have("cjkvi-ids.txt")):
-        tables["ids"] += I.ids_chise(txt(p))
-        used_src.add("chise")
-    tables["ids"] = sorted(set(tables["ids"]))
-    stats["ids"] = dict(Counter(r[1] for r in tables["ids"]))
-
-    tables["comps"] = _comps(tables["ids"], vt)
-    tables["edges"] = _dedupe_edges(edges)
-    tables["forms"] = _dedupe_forms(tables["forms"])
-    tables["sources"] = [(k, v["name"], v["url"], v["license"], v["tier"], v.get("note", ""))
-                         for k, v in S.SOURCES.items() if k in used_src]
-    stats["missing"] = missing
-    return tables, stats
 
 
 def _dedupe_forms(rows: list[tuple]) -> list[tuple]:
@@ -224,8 +128,8 @@ def _dedupe_forms(rows: list[tuple]) -> list[tuple]:
 
 
 def _comps(ids_rows: list[tuple], vt: dict[str, str]) -> list[tuple]:
-    """部件闭包：以 yibai:lv1 的全部写法为准，字 → 叶子部件 → 叶子的叶子…，记最小深度。
-    部件在 vt 里有折叠形的，另记一行折叠后的部件（folded=1）。"""
+    """直接部件：主套 IDS（yibai:lv1，全部写法）的叶子，depth=1。多层部件查询时现算（`db.components`）。
+    部件在 vt 里有折叠形的另记一行（folded=1），按折叠形也能查到。"""
     direct: dict[str, set[str]] = {}
     for ch, src, seq, _ in ids_rows:
         if src != "yibai:lv1":
@@ -234,127 +138,180 @@ def _comps(ids_rows: list[tuple], vt: dict[str, str]) -> list[tuple]:
             if p != ch:
                 direct.setdefault(ch, set()).add(p)
     out: list[tuple] = []
-    for ch in direct:
-        depth: dict[str, int] = {}
-        frontier = sorted(direct[ch])
-        d = 1
-        while frontier and d <= MAX_COMP_DEPTH:
-            nxt = []
-            for p in frontier:
-                if p in depth or p == ch:
-                    continue
-                depth[p] = d
-                nxt.extend(sorted(direct.get(p, ())))
-            frontier = nxt
-            d += 1
-        folded: dict[str, int] = {}
-        for p, dp in depth.items():
-            f = vt.get(p)
-            if f and f not in depth:
-                folded[f] = min(folded.get(f, 99), dp)
-        out += [(ch, p, dp, 0) for p, dp in depth.items()]
-        out += [(ch, p, dp, 1) for p, dp in folded.items()]
+    for ch, parts in direct.items():
+        out += [(ch, p, 1, 0) for p in parts]
+        out += [(ch, f, 1, 1) for f in {vt[p] for p in parts if p in vt} - parts]
     return out
+
+
+def collect(src: Path, cfg: Path) -> tuple[dict[str, list[tuple]], dict]:
+    """读原始资料与本仓表 → `{表: 行}`（形近对不在内，见 `schema.NEAR_FILES`）、统计。"""
+    tables: dict[str, list[tuple]] = {t: [] for t in S.TABLES if t != "near"}
+    stats: dict = {}
+    missing: list[str] = []
+    used_src: set[str] = set()
+
+    def text(name: str) -> str | None:
+        p = src / name
+        if p.exists():
+            return p.read_text(encoding="utf-8-sig")
+        missing.append(name)
+        return None
+
+    edges = tables["edges"]
+
+    if (t := text("unihan-Unihan_Variants.txt")) is not None:
+        rows, stats["unihan_variants"] = I.unihan_variants(t)
+        edges += rows
+        stats["unihan_version"] = next((h.split("Version")[-1].strip() for h in t.splitlines()[:5]
+                                        if "Unicode Version" in h), "")
+        used_src.update(k for k in S.SOURCES if k.startswith("unihan:"))
+    texts = [t for n in S.UNIHAN_PARTS[1:] if (t := text(f"unihan-{n}")) is not None]
+    if texts:
+        rows, stats["unihan_chars"] = I.unihan_chars(texts)
+        tables["chars"] += rows
+        used_src.add("unihan")
+
+    for fname, tag in (("cjkvi-twedu-variants.txt", "twedu"), ("cjkvi-hydzd-variants.txt", "hydzd"),
+                       ("cjkvi-hydzd-borrowed.txt", "hydzd-borrowed"),
+                       ("cjkvi-dypytz-variants.txt", "dypytz"),
+                       ("cjkvi-cjkvi-simplified.txt", "cjkvi-simplified")):
+        if (t := text(fname)) is not None:
+            rows, forms, stats[tag] = I.cjkvi_variants(t, tag)
+            edges += rows
+            tables["forms"] += forms
+            used_src.add(tag)
+
+    if (t := text("yitizi-index.js")) is not None:
+        rows, stats["yitizi"] = I.yitizi(t)
+        edges += rows
+        used_src.add("yitizi")
+
+    dt, rt = text("charcomp-dt.jsonl"), text("charcomp-rt.jsonl")
+    if dt is not None and rt is not None:
+        rows, stats["charcomp:rt"] = I.charcomp_rt(dt.splitlines(), rt.splitlines())
+        edges += rows
+        used_src.add("charcomp:rt")
+    vt: dict[str, str] = {}
+    if (t := text("charcomp-vt.json")) is not None:
+        vt = {k: v for k, v in json.loads(t).items() if v and v != k}
+        stats["charcomp:vt"] = {"folds": len(vt)}
+        used_src.add("charcomp:vt")
+
+    if (src / ZI_FILE).exists():
+        docs = [json.loads(x) for x in (src / ZI_FILE).read_text(encoding="utf-8").splitlines() if x]
+        rows, stats["zi"] = I.zi_cache(docs)
+        edges += rows
+        used_src.add("zi")
+
+    if (p := cfg / "variants" / "local_edges.json").exists():
+        rows, stats["local:keben"] = I.local_edges(json.loads(p.read_text(encoding="utf-8")))
+        edges += rows
+        used_src.update(r[4] for r in rows)
+    if (p := cfg / "variants" / "never_group.json").exists():
+        rows, stats["local:never"] = I.never_group(json.loads(p.read_text(encoding="utf-8")))
+        edges += rows
+        used_src.add("local:never")
+    used_src.update(S.NEAR_FILES)
+
+    if (t := text("yibai-ids_lv1.txt")) is not None:
+        tables["ids"] = sorted(set(I.ids_yibai(t, "yibai:lv1")))
+        used_src.add("yibai:lv1")
+
+    tables["comps"] = _comps(tables["ids"], vt)
+    tables["edges"] = _dedupe_edges(edges)
+    tables["forms"] = _dedupe_forms(tables["forms"])
+    tables["sources"] = [(k, v["name"], v["url"], v["license"], v["tier"], v.get("note", ""))
+                         for k, v in S.SOURCES.items() if k in used_src]
+    stats["missing"] = missing
+    return tables, stats
 
 
 def _sort_key(row: tuple) -> tuple:
     return tuple((0, v, "") if isinstance(v, (int, float)) else (1, 0, v) for v in row)
 
 
-def write_tsv(tables: dict[str, list[tuple]], out: Path) -> dict[str, dict]:
-    out.mkdir(parents=True, exist_ok=True)
-    info = {}
-    for name, cols in S.TABLES.items():
-        rows = sorted(tables.get(name, []), key=_sort_key)
-        p = out / f"{name}.tsv"
-        with open(p, "w", encoding="utf-8", newline="\n") as f:
-            for r in rows:
-                assert len(r) == len(cols), (name, r)
-                f.write("\t".join(_cell(v) for v in r) + "\n")
-        info[name] = {"rows": len(rows), "sha256": _sha(p)}
-    return info
+def write_tsv(rows: list[tuple], cols: tuple[str, ...], p: Path) -> dict:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    rows = sorted(rows, key=_sort_key)
+    with open(p, "w", encoding="utf-8", newline="\n") as f:
+        for r in rows:
+            assert len(r) == len(cols), (p.name, r)
+            f.write("\t".join(_cell(v) for v in r) + "\n")
+    return {"rows": len(rows), "sha256": sha256_file(p), "bytes": p.stat().st_size}
 
 
-def content_sha(tsv_info: dict[str, dict]) -> str:
+def content_sha(files: dict[str, dict]) -> str:
     h = hashlib.sha256()
-    for name in sorted(tsv_info):
-        h.update(f"{name}\t{tsv_info[name]['sha256']}\n".encode())
+    for key in sorted(files):
+        h.update(f"{key}\t{files[key]['sha256']}\n".encode())
     return h.hexdigest()[:12]
 
 
-def _parse(col: str, v: str):
-    if col in S.INT_COLS:
-        return int(v) if v else 0
-    if col in S.REAL_COLS:
-        return float(v) if v else 0.0
-    return v
+def build(src: Path, cfg: Path, out: Path) -> dict:
+    """构建一个版本到 `out/`（先清空）；返回清单（也写在 `out/manifest.json`）。
 
-
-def load_sqlite(tsv_dir: Path, db_path: Path) -> None:
-    tmp = db_path.with_suffix(".tmp")
-    if tmp.exists():
-        tmp.unlink()
-    con = sqlite3.connect(tmp)
-    con.execute("PRAGMA journal_mode=OFF")
-    con.execute("PRAGMA synchronous=OFF")
-    for name, cols in S.TABLES.items():
-        decl = ", ".join(f"{c} {'INTEGER' if c in S.INT_COLS else 'REAL' if c in S.REAL_COLS else 'TEXT'}"
-                         for c in cols)
-        con.execute(f"CREATE TABLE {name} ({decl})")
-        p = tsv_dir / f"{name}.tsv"
-        with open(p, encoding="utf-8") as f:
-            rows = (tuple(_parse(c, v) for c, v in zip(cols, line.rstrip("\n").split("\t")))
-                    for line in f)
-            con.executemany(f"INSERT INTO {name} VALUES ({','.join('?' * len(cols))})", rows)
-    for sql in S.INDEXES:
-        con.execute(sql)
-    con.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
-    con.commit()
-    con.close()
-    tmp.replace(db_path)
-
-
-def build(src: Path, cfg: Path, out_root: Path | None = None, zi_dir: Path | None = None,
-          set_current: bool = True) -> dict:
-    """构建一个版本；返回 manifest（也写在 `<版本目录>/manifest.json`）。"""
-    src, cfg = Path(src), Path(cfg)
-    out_root = Path(out_root) if out_root else data_root()
-    t0 = time.time()
-    tables, stats = collect(src, cfg, zi_dir)
-    stage = out_root / f".building-{os.getpid()}"
-    if stage.exists():
-        shutil.rmtree(stage)
-    tsv_info = write_tsv(tables, stage / "tsv")
-    sha = content_sha(tsv_info)
-    load_sqlite(stage / "tsv", stage / "hanzi.sqlite")
-    version = f"hanzi-{sha}"
+    清单 `files` 的键：包内文件是 `core/edges.tsv` 这种相对路径；形近对表的键是来源名（`near:v1`），
+    `path` 指向仓里的那张表。每个文件都有 sha256——本机灌库、对外发布都按它认。"""
+    src, cfg, out = Path(src), Path(cfg), Path(out)
+    tables, stats = collect(src, cfg)
+    if out.exists():
+        shutil.rmtree(out)
+    files: dict[str, dict] = {}
+    for pack, names in S.PACKS.items():
+        for t in names:
+            if t == "near":
+                continue
+            rel = f"{pack}/{t}.tsv"
+            files[rel] = {"pack": pack, "table": t, **write_tsv(tables[t], S.TABLES[t], out / rel)}
+    for tag, path in S.NEAR_FILES.items():
+        p = cfg.parent / path            # NEAR_FILES 的路径相对仓根，cfg 是仓根下的 config/
+        if p.exists():
+            n = sum(1 for x in p.read_text(encoding="utf-8").splitlines()
+                    if x and not x.startswith(("#", "a\t")))
+            files[tag] = {"pack": "core", "table": "near", "path": path, "rows": n,
+                          "sha256": sha256_file(p), "bytes": p.stat().st_size}
+            stats[tag] = {"pairs": n}
+    sha = content_sha(files)
+    raw = {p.name: {"sha256": sha256_file(p), "bytes": p.stat().st_size}
+           for p in sorted(src.iterdir()) if p.name in S.SRC_FILES or p.name == ZI_FILE} \
+        if src.exists() else {}
     manifest = {
-        "version": version,
+        "version": f"hanzi-{sha}",
         "content_sha": sha,
         "builder": BUILDER_VERSION,
-        "built_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        "build_seconds": round(time.time() - t0, 1),
-        "inputs": {p.name: {"sha256": _sha(p), "bytes": p.stat().st_size}
-                   for p in sorted(src.iterdir()) if p.name in S.SRC_FILES} if src.exists() else {},
-        "config": {str(p.relative_to(cfg)): _sha(p) for p in (
-            cfg / "variants" / "local_edges.json", cfg / "variants" / "never_group.json",
-            cfg / "ids" / "confusable_pairs_v1.tsv", cfg / "ids" / "ids_confusable_pairs_v1.tsv")
-            if p.exists()},
-        "tables": tsv_info,
+        "unihan_version": stats.get("unihan_version", ""),
+        "files": files,
+        "raw": raw,
         "stats": stats,
         "edges_by_src_rel": dict(sorted(Counter(f"{r[4]}|{r[2]}" for r in tables["edges"]).items())),
     }
-    con = sqlite3.connect(stage / "hanzi.sqlite")
-    con.executemany("INSERT INTO meta VALUES (?, ?)",
-                    [("version", version), ("content_sha", sha), ("builder", str(BUILDER_VERSION))])
-    con.commit()
-    con.close()
-    (stage / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1,
-                                                    sort_keys=True) + "\n", encoding="utf-8")
-    final = out_root / version
-    if final.exists():
-        shutil.rmtree(final)
-    stage.replace(final)
-    if set_current:
-        (out_root / "current").write_text(version + "\n", encoding="utf-8")
+    (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1, sort_keys=True)
+                                       + "\n", encoding="utf-8")
     return manifest
+
+
+def publish(out: Path, repo: Path, blob_dir: Path | None = None) -> dict:
+    """把 `build()` 的产出放到位：核心包 tsv → `config/hanzi/core/`，清单 → `config/hanzi/manifest.json`
+    与 `config/hanzi/versions/<版本>.json`；部件包 tsv 按 sha 放进本机 blob 缓存（上传 R2 另做）。"""
+    from .pack import blob_cache_path
+    out, repo = Path(out), Path(repo)
+    m = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+    dest = repo / HANZI_CFG
+    core = dest / "core"
+    if core.exists():
+        shutil.rmtree(core)
+    core.mkdir(parents=True)
+    for rel, f in m["files"].items():
+        if "path" in f:
+            continue
+        if f["pack"] == "core":
+            shutil.copyfile(out / rel, dest / rel)
+        bp = blob_cache_path(f["sha256"], blob_dir)
+        if not bp.exists():
+            bp.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(out / rel, bp)
+    (dest / "versions").mkdir(exist_ok=True)
+    shutil.copyfile(out / "manifest.json", dest / "manifest.json")
+    shutil.copyfile(out / "manifest.json", dest / "versions" / f"{m['version']}.json")
+    return m

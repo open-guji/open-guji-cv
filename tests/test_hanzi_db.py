@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
-"""hanzi 库：自造的小原始文件 → 构建 → 查询。不联网、不读真表。"""
+"""hanzi 库：自造的小原始资料 → 构建 → 发布到假仓 → 按清单灌本机库 → 查询。
+
+不联网：R2 用一个本地目录代替（`fetch` 换成按 sha 读这个目录），不读真表。"""
 from __future__ import annotations
 
+import hashlib
 import json
-import zipfile
 
 import pytest
 
 from open_guji_cv.hanzi import HanziDB
 from open_guji_cv.hanzi import schema as S
-from open_guji_cv.hanzi.build import build
+from open_guji_cv.hanzi.build import build, publish
 from open_guji_cv.hanzi.ids import leaves, split_alternatives
 
 
@@ -31,10 +33,11 @@ def _make_src(root):
     ]) + "\n"
     irg = "\n".join([f"{_u(c)}\tkRSUnicode\t77.12" for c in "歷歴历曆互㸴己已"]
                     + [f"{_u('歷')}\tkTotalStrokes\t16", f"{_u('歷')}\tkIRGKangXi\t0581.010"]) + "\n"
-    with zipfile.ZipFile(src / "Unihan.zip", "w") as z:
-        z.writestr("Unihan_Variants.txt", variants)
-        z.writestr("Unihan_IRGSources.txt", irg)
-        z.writestr("Unihan_Readings.txt", f"{_u('歷')}\tkDefinition\tpass through\n")
+    (src / "unihan-Unihan_Variants.txt").write_text(variants, encoding="utf-8")
+    (src / "unihan-Unihan_IRGSources.txt").write_text(irg, encoding="utf-8")
+    (src / "unihan-Unihan_Readings.txt").write_text(f"{_u('歷')}\tkDefinition\tpass through\n",
+                                                    encoding="utf-8")
+    (src / "zi-families.jsonl").write_text('{"q": "狼", "fam": ["郎"]}\n', encoding="utf-8")
     (src / "cjkvi-twedu-variants.txt").write_text(
         "twedu/variant,<rev>,twedu/regular\n互,twedu/variant,㸴\n互,twedu/variant,⿱一彑\n", encoding="utf-8")
     (src / "cjkvi-hydzd-borrowed.txt").write_text("仍,hydcd/borrowed,乃,5287\n", encoding="utf-8")
@@ -48,13 +51,11 @@ def _make_src(root):
     (src / "yibai-ids_lv1.txt").write_text(
         "歷\t⿸厤止\n厤\t⿸厂秝\n秝\t⿰禾禾\n迴\t⿺⻌回\n"
         "一\t#(H)(.);{一}#(T)(t)\n說\t⿰言兌(G,T);⿰言兑(J)\n", encoding="utf-8")
-    (src / "babelstone-IDS.TXT").write_text(
-        "﻿# BabelStone\r\nU+6B77\t歷\t^⿸厤止$(GHT)\t*note\r\n", encoding="utf-8")
     return src
 
 
 def _make_cfg(root):
-    cfg = root / "config"
+    cfg = root / "repo" / "config"
     (cfg / "variants").mkdir(parents=True)
     (cfg / "ids").mkdir()
     (cfg / "variants" / "local_edges.json").write_text(json.dumps({"edges": [
@@ -70,11 +71,43 @@ def _make_cfg(root):
     return cfg
 
 
+class FakeR2:
+    """R2 的替身：一个按 sha 存文件的目录，`fetch(url)` 从 URL 末尾认出 sha。"""
+
+    def __init__(self, root):
+        self.root = root
+        self.calls = 0
+        self.tamper = False
+
+    def __call__(self, url: str) -> bytes:
+        self.calls += 1
+        sha = url.rsplit("/", 1)[1].removesuffix(".txt")
+        data = (self.root / sha[:2] / f"{sha}.txt").read_bytes()
+        return data + b"x" if self.tamper else data
+
+
+def _release(tmp_path):
+    """构建 → 发布到假仓 `repo/`，部件包等文件进假 R2；返回 (清单, 假仓, 假 R2, 打开库的函数)。"""
+    src, cfg = _make_src(tmp_path), _make_cfg(tmp_path)
+    repo = cfg.parent
+    m = build(src, cfg, tmp_path / "out")
+    r2 = FakeR2(tmp_path / "r2")
+    publish(tmp_path / "out", repo, blob_dir=r2.root)
+    for f in m["files"].values():                       # 形近对表在仓里，也照样进 R2（旧版要用）
+        if "path" in f:
+            data = (repo / f["path"]).read_bytes()
+            (r2.root / f["sha256"][:2]).mkdir(parents=True, exist_ok=True)
+            (r2.root / f["sha256"][:2] / f"{f['sha256']}.txt").write_bytes(data)
+
+    def opener(**kw):
+        return HanziDB.open(repo=repo, root=tmp_path / "data", fetch=r2, **kw)
+    return m, repo, r2, opener
+
+
 @pytest.fixture()
 def built(tmp_path):
-    src, cfg = _make_src(tmp_path), _make_cfg(tmp_path)
-    m = build(src, cfg, tmp_path / "out")
-    return m, HanziDB.open(tmp_path / "out" / m["version"] / "hanzi.sqlite"), (src, cfg, tmp_path)
+    m, repo, r2, opener = _release(tmp_path)
+    return m, opener(parts=True), (repo, r2, opener, tmp_path)
 
 
 def test_ids_helpers():
@@ -85,12 +118,54 @@ def test_ids_helpers():
     assert leaves("⿱艹\ue123") == ["艹"]            # 私用区不当部件
 
 
-def test_build_is_reproducible(built):
-    m, _, (src, cfg, tmp) = built
-    m2 = build(src, cfg, tmp / "out2")
-    assert m2["content_sha"] == m["content_sha"]
-    assert m["stats"]["unihan_version"] == "99.0.0"
-    assert (tmp / "out" / "current").read_text().strip() == m["version"]
+def test_build_is_reproducible_and_published(built):
+    m, db, (repo, _, _, tmp) = built
+    build(tmp / "src", repo / "config", tmp / "out2")
+    assert (tmp / "out2" / "manifest.json").read_bytes() == (tmp / "out" / "manifest.json").read_bytes()
+    assert m["unihan_version"] == "99.0.0"
+    assert db.version == m["version"] == f"hanzi-{m['content_sha']}"
+    hz = repo / "config" / "hanzi"
+    assert json.loads((hz / "manifest.json").read_text(encoding="utf-8")) == m
+    assert (hz / "versions" / f"{m['version']}.json").exists()
+    assert sorted(p.name for p in (hz / "core").iterdir()) == ["edges.tsv", "forms.tsv", "sources.tsv"]
+    assert not (hz / "parts").exists()                   # 部件包不进 git
+    f = m["files"]["core/edges.tsv"]
+    assert hashlib.sha256((hz / "core" / "edges.tsv").read_bytes()).hexdigest() == f["sha256"]
+
+
+def test_core_needs_no_download_parts_fetched_once(tmp_path):
+    m, _, r2, opener = _release(tmp_path)
+    db = opener()
+    assert set(db.family("歷", srcs=["unihan"])) == {"歴"}
+    assert r2.calls == 0                                  # 核心包与形近表都在仓里
+    assert db.components("歷") == ["厤", "止"]          # 第一次部件查询才拉
+    n_parts = sum(1 for f in m["files"].values() if f["pack"] == "parts")
+    assert r2.calls == n_parts
+    opener().components("歷")                            # 本机已灌好，不再拉
+    assert r2.calls == n_parts
+    with pytest.raises(RuntimeError):
+        opener(parts=False).ids("歷")
+
+
+def test_download_checks_sha(tmp_path):
+    _, _, r2, opener = _release(tmp_path)
+    r2.tamper = True
+    with pytest.raises(ValueError, match="sha256"):
+        opener(parts=True)
+
+
+def test_old_version_still_opens(tmp_path):
+    m, repo, r2, opener = _release(tmp_path)
+    v1 = m["version"]
+    edges = repo / "config" / "variants" / "local_edges.json"
+    edges.write_text(json.dumps({"edges": []}), encoding="utf-8")          # 出新版：手工边删掉
+    m2 = build(tmp_path / "src", repo / "config", tmp_path / "out")
+    publish(tmp_path / "out", repo, blob_dir=r2.root)
+    assert m2["version"] != v1
+    assert not opener().edges("㫖", "旨")
+    old = opener(version=v1)                              # 仓里的核心包已是新版，旧版的从 R2 按 sha 取
+    assert old.version == v1 and old.edges("㫖", "旨")
+
 
 
 def test_edges_keep_source_rel_direction(built):
@@ -139,6 +214,7 @@ def test_pool_matches_family_pool_shape(built):
     assert "巳" not in pool
     assert pool["註"] == {"p": "注", "src": "v,rt"}        # 池子不剔 distinct（只是候选）
     assert db.pool(["注"], srcs=["rt"]).keys() == {"注", "註"}
+    assert db.pool(["狼"])["郎"] == {"p": "狼", "src": "zi"}   # 字统网派生族（原始资料 zi-families.jsonl）
 
 
 def test_components(built):
@@ -147,8 +223,10 @@ def test_components(built):
     assert db.components("歷", max_depth=3) == ["厤", "止", "厂", "秝", "禾"]
     assert db.by_components(["禾", "止"]) == ["歷"]
     assert db.by_components(["辵"]) == ["迴"]              # 部件变体折叠
+    assert db.by_components(["禾"], max_depth=2) == ["秝", "厤"]
+    assert db.by_components(["禾", "厂"]) == ["厤", "歷"]
     assert db.by_ids("⿸厤止") == ["歷"]
-    assert {s for s, *_ in db.ids("歷")} == {"yibai:lv1", "babelstone"}
+    assert {s for s, *_ in db.ids("歷")} == {"yibai:lv1"}
     assert db.info("歷")["strokes"] == 16
 
 
@@ -168,7 +246,8 @@ def test_missing_sources_are_skipped(tmp_path):
     cfg = _make_cfg(tmp_path)
     (tmp_path / "src").mkdir()
     m = build(tmp_path / "src", cfg, tmp_path / "out")
-    assert "Unihan.zip" in m["stats"]["missing"]
-    db = HanziDB.open(tmp_path / "out" / m["version"] / "hanzi.sqlite")
+    assert "unihan-Unihan_Variants.txt" in m["stats"]["missing"]
+    publish(tmp_path / "out", cfg.parent, blob_dir=tmp_path / "r2")
+    db = HanziDB.open(repo=cfg.parent, root=tmp_path / "data", fetch=FakeR2(tmp_path / "r2"))
     assert db.distinct("注", "註")
     assert db.near("己", 1)[0][0] == "乙"
