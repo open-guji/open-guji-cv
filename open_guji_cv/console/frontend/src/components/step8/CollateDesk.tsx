@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { withWorkspace } from '../../api/client'
 import { fetchStep8Overview, fetchStep8Queue, postStep8Decide, postStep8Seg } from '../../api/step8'
 import type { Step8Bucket, Step8Cat, Step8Group, Step8Overview, Step8Queue, Step8Sample, Step8Seg } from '../../api/step8'
+import type { ReviewCard } from '../../types/review'
+import { AltPanel } from '../review/AltPanel'
+import '../review/review.css'
 
 // Step8 · 复核裁决台。设计见 overview 仓 Step8-落库反馈/05。
 //
@@ -391,6 +394,13 @@ export function CollateDesk({ book }: { book: string }) {
               <button disabled={!sel.fix.trim()} onClick={() => void move({ who: 'neither', fix: sel.fix })}>确认</button>
             </div>
           )}
+          {sel.who === 'neither' && c.samples[at] && c.samples[at].page != null && (() => {
+            // 相似字（以字找字）：以校对本的字、我方的字为近似字，查它们的异体族、按这处字图排；点一个填进「正确的字」
+            const s0 = c.samples[at]
+            const pseudo: ReviewCard = { id: s0.id, page: s0.page, col: s0.col, slot: s0.slot, sub: s0.sub || undefined,
+                                         patch: '', ref: { char: c.pair[1] }, ctx: { char: c.pair[0] } }
+            return <AltPanel key={s0.id} book={book} c={pseudo} active onPick={(ch) => setSel((x) => ({ ...x, fix: ch }))} />
+          })()}
           <div className="s8-nav">
             <button onClick={() => go(-1)} disabled={cur === 0} title="上一对（不提交）">←</button>
             <button onClick={() => go(1)} disabled={cur >= groups.length - 1} title="下一对（不提交）">→</button>

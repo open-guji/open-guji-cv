@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { BinaryToggleImage } from '../common/BinaryToggleImage'
 import type { AroundContext, RareCandidate, ReviewCard } from '../../types/review'
+import { AltPanel } from './AltPanel'
 import { disagreeingRuns, dropReason, groupById } from './ai'
 import type { KeyItem } from './candidates'
 import type { Verdict } from './ReviewPanel'
@@ -35,7 +36,7 @@ interface Props {
 }
 
 export function ReviewCardView({
-  idx, c, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
+  idx, c, book, isCurrent, verdict, keys, ctxImgOpen, aroundCtx, rareOut,
   onFocus, onSet, onSetNoGlyphLib, onSetGuess, onSetApprox, onToggleCtxImg, onFetchRare, contextImgSrc,
   cls, jysOpen = false, onJysNone, ctxKeben = false,
 }: Props) {
@@ -373,6 +374,7 @@ export function ReviewCardView({
           </div>
         )) : '没有候选')}
       </div>
+      <AltPanel book={book} c={c} active={isCurrent} onPick={(ch) => { onFocus(); pick(ch) }} />
     </div>
   )
 }

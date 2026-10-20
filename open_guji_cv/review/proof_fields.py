@@ -6,6 +6,8 @@
 `NNN.pending.json` 的 `cells[]` 或章 `proof.json` 的 `cells[]`。
 
 - `pending_fields(card)`：册级 pending 用的全部字段（`img`／`ex` 由雪碧图脚本另加，这里不出）。
+  卡上带了 `alt`（`review.alt_cands` 出待审单时算好的相似字，`guji audit alt`）就原样带出：
+  `[{c, s, p, src}]`，按字块图相似度排好，`p`＝从哪个近似字查来，`src`＝哪几家（v/rt/zi/near/piv）。
 - `slim_fields(card)`：章 `proof.json` 瘦身形态，只带 `cls`／`why`／`conf`。
 """
 from __future__ import annotations
@@ -72,6 +74,10 @@ def pending_fields(card: dict) -> dict:
     occ = card.get("occluded")
     if occ:
         out["occ"] = {"c": occ.get("char") or "", "ref_blank": bool(occ.get("ref_blank"))}
+    alt = card.get("alt")
+    if alt:
+        out["alt"] = [{"c": a["c"], "s": _num(a.get("s"), 4), "p": a.get("p") or "", "src": a.get("src") or ""}
+                      for a in alt]
     return out
 
 
