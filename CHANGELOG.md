@@ -29,7 +29,14 @@
   - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
 - `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
 
+- `scripts/check_rc_target.py <rc 分支>`（GUJI-657）：合 PR 前核对目标待发分支是否已发版（远端有 `vX.Y.Z` 返回 1 并提示改投哪条；不是最新待发分支返回 2）。只读，用 `git ls-remote`。不碰任何 Step，`code_hash` 不变。
+- 粗校出口报告单列「钉版」一行（GUJI-656）：`collect_exit.py` 读册配置的 `cv_version`、`corpus`、`glyph_pin`，没钉的标 ⚠，只提示、不挡出口；规矩见 `doc/版本号规矩.md` 第七节（每波开工发一个正式 tag，各册钉 tag＋语料号＋字形库号）。不碰任何 Step，`code_hash` 不变。
+
+### Changed
+- `scripts/export_guji_format.py --format char-cord` 的 `--text-version` 改为必填、不再缺省 0.1.0（GUJI-679）：已在 book-text 上的册要写线上现行版本，以前缺省写 0.1.0，出补丁前得先手工改回。`zl.py` 导出步显式传版本。不碰任何 Step，`code_hash` 不变。
+
 ### Fixed
+- 产物包键的工作区名不再瞎猜（GUJI-671）：`datastore/packs._ws_name()` 先读 `.central.json` 的 ws，再读 `workspace.yaml` 的 id，都没有就报错；以前回退成目录名首段或 `ws`，vol01–03 的包因此落在 `products/ws/` 下、用 `-w` 取不到。不碰任何 Step，`code_hash` 不变。
 - 语料库任何内容变了都要改版本号（用户 10-20）：`guji db push`／`sync` 推送前，最新一版清单登记的工作区文件被改、缺，或清单之外多了新语料文件 → 拒绝，提示先 `guji corpus build` 出新版本一起推；已发布的某一版 `manifest.json` 库里已有且本地不同 → 拒绝（旧版本不可改）。只看工作区文件；引擎仓里的表仍由起跑前硬校验管。10-20 的起因：v1 登记的 `freq.json`、`l2/jys.json` 钉选后被重新生成，`glyph_match` 因此拒跑。改 `core/corpus_pin.py`、`datastore/workcopy.py`，`code_hash` 不变。
 - `guji db pull`／`sync` 遇到库里引用、R2 上却没有（404）的图不再停下：跳过、stderr 打一行并在 `materialize` 结果的 `missing_images`（相对路径→sha）里列出，其余照常还原。要像以前一样遇到就停：`GUJI_DATA_MISSING_BLOBS=error`。不碰任何 Step，`code_hash` 不变。
 - Step3 逐列格位先验 `layout_prior`：列端框线残渣记空。表说该空、又是整列物理上第一格或最后一格的「字格」，里面像字的墨行合计不到 0.15 个 period、满宽横线（±3 行）以外的墨占格面积不到 0.03 时改成 blank（产物 flags 记 `layout_frame_junk`）。起因：掩码故意不罚满宽密行，版框横线落进列首／列尾那格时被切成「字」，按 daizhige 算多切一格（vol05 p147 c1、vol06 p18 c6／p69 c2／p63 c1）。列中段的碎墨不碰：卷端页、整页破损页上印断的字（vol09 p164「經部十七」）不能批量判非字。殿本 vol04–09 实测改空 647 格，全部看图是框线、竖线、碎点；比 1.20 逐格多修好 19 列（4／5／6／7／8／9 册各 1／4／6／3／1／4）、改坏 0；穿字格线不变（只改格的类型，不动格线）。开关不开的书不受影响。PATCH；`row_segment` 版本 1.21，`code_hash` d4f420cf47082535 → e82f08017e79c63a。

@@ -277,3 +277,19 @@ def test_render_images_uses_top_right_frame(tmp_path):
     assert n == 1
     out = cv2.imread(str(tmp_path / "cols" / "p0001c01.png"), cv2.IMREAD_GRAYSCALE)
     assert (out < 128).mean() > 0.3                                  # 裁到的是那块墨，不是空白
+def test_ws_name_marker_then_yaml_then_error(tmp_path, monkeypatch):
+    """包键的工作区名：标记优先，其次 workspace.yaml 的 id；都没有就报错，不回退成目录名或 ws（GUJI-671）。"""
+    from open_guji_cv.datastore import packs as PK
+    ws = tmp_path / "96mid1ogzk-某書"
+    ws.mkdir()
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    monkeypatch.delenv("GUJI_DATA_BRANCH", raising=False)
+    with pytest.raises(SystemExit):
+        PK._ws_name()
+    (ws / "workspace.yaml").write_text("id: siku-zongmu\n", encoding="utf-8")
+    assert PK._ws_name() == "siku-zongmu"
+    (ws / ".central.json").write_text(json.dumps({"ws": "from-marker", "branch": "main"}), encoding="utf-8")
+    assert PK._ws_name() == "from-marker"
+    monkeypatch.delenv("GUJI_WORKSPACE")
+    with pytest.raises(SystemExit):
+        PK._ws_name()

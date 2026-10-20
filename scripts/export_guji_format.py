@@ -17,7 +17,10 @@ channel/cand）、`NNN.norm.json`、`NNN.zi.json`；给了 `--punct`/`--entity` 
 lines.md 逐字相同。`--keys cv|lines` 选格位口径（缺省 cv，照 spec 02）。缺省 `--format legacy` = 原来那组文件。
 
     python scripts/export_guji_format.py --products <products 根> --book vol02 --chapter 002 \\
-        --meta meta.json --out out/ --format char-cord [--keys cv] [--text-version 0.1.0]
+        --meta meta.json --out out/ --format char-cord --text-version 0.1.0 [--keys cv]
+
+`--text-version` 在 char-cord 下必填、没有缺省（GUJI-679）：首次出写 0.1.0，已是 0.1.x 的册写 book-text 上的现行版本
+（以前缺省写 0.1.0，出补丁前得先手工改回线上版本，踩过）。
 """
 from __future__ import annotations
 
@@ -67,8 +70,12 @@ def main(argv=None) -> int:
     ap.add_argument("--format", choices=("legacy", "char-cord"), default="legacy",
                     help="legacy = lines.md＋pages/proof/norm/zi.json；char-cord = char.json＋cord.json＋norm.json")
     ap.add_argument("--keys", choices=cc.KEYS, default="cv", help="char-cord 的格位口径")
-    ap.add_argument("--text-version", default="0.1.0", help="char-cord：char 的 version")
+    ap.add_argument("--text-version", default=None,
+                    help="char-cord 必填：char 的 version（首次 0.1.0；已有的册写 book-text 现行版本）")
     a = ap.parse_args(argv)
+    if a.format == "char-cord" and not a.text_version:
+        ap.error("--format char-cord 要给 --text-version：首次出写 0.1.0，已有的册写 book-text 上的现行版本"
+                 "（<册目录>/index.json 的 chapters[].text_version）")
 
     meta = json.loads(Path(a.meta).read_text(encoding="utf-8"))
     if a.split_table:

@@ -250,9 +250,12 @@ def test_exporter_char_cord(tmp_path):
     base = ["--products", str(tmp_path / "products"), "--book", BOOK, "--chapter", "002", "--meta", str(meta),
             "--pages", str(PAGE)]
     assert main(base + ["--out", str(tmp_path / "old")]) == 0
-    assert main(base + ["--out", str(tmp_path / "new"), "--format", "char-cord"]) == 0
+    with pytest.raises(SystemExit):                                          # char-cord 不给版本号就拒（GUJI-679）
+        main(base + ["--out", str(tmp_path / "nover"), "--format", "char-cord"])
+    assert main(base + ["--out", str(tmp_path / "new"), "--format", "char-cord", "--text-version", "0.1.3"]) == 0
     assert sorted(p.name for p in (tmp_path / "new").iterdir()) == ["002.char.json", "002.cord.json", "002.norm.json"]
     char = json.loads((tmp_path / "new" / "002.char.json").read_text(encoding="utf-8"))
+    assert char["version"] == "0.1.3"
     old = sorted(p.name for p in (tmp_path / "old").iterdir())               # 旧形态照出、不受影响
     assert old == [f"002.{k}" for k in ("lines.md", "norm.json", "pages.json", "proof.json", "zi.json")]
     assert cc.char_to_lines_md(char) == (tmp_path / "old" / "002.lines.md").read_text(encoding="utf-8")
