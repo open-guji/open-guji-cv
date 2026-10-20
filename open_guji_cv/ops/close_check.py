@@ -9,7 +9,8 @@
      且 Step5-b 产物里有字的页都出过 embedding 候选（没 torch 跑出来的产物指纹照样新鲜，只能看产物）
   2 待审清零（待审卡片按类计数；`--tier rough` 粗校档只报数、不计，终校档 `final`（缺省）才计）
   2b 收尾闸 closure_gaps = 0（有定字裁决却没出字）
-  2c □ 有去向：导出文本里每个阙文格在公众待审单（`--pending`）或重切清单上（给了 --export-dir 才查）
+  2c □ 有去向：导出文本里每个阙文格在公众待审单或重切清单上（给了 --export-dir 才查）；待审单缺省读中心库
+     `feedback/lists/proofing/<书>/<章>.pending.json`（数据目录里，`--pending` 可改，见 `release_gates.resolve_pending`）
   2d 整理本对不上的列（align_ref `coord_fallback`）逐列有交代（列交代单或重切清单）
      ——2c、2d 是用户 10-19 定的放行硬项（GUJI-624），粗校档、终校档都计，见 `ops/release_gates.py`
   8 字形库真源已提交（工作区 git 里 feedback/、output/glyph_store/ 没有未提交改动）
@@ -171,12 +172,21 @@ def _closure(book: str, pages, store, ws: Path | None = None) -> dict:
                  {"gaps": [g["id"] for g in gaps], "mismatches": [m["id"] for m in mism]})
 
 
-def _lacuna(book: str, export_dir: Path, chapter: str | None, pending: Path | None) -> dict:
-    from .release_gates import check_lacuna
-    r = check_lacuna(book, export_dir, chapter, pending)
+def _export_chapter(export_dir: Path) -> str | None:
+    """导出目录里只有一章时取它的章号（`NNN.lines.md`）。"""
+    ld = sorted(Path(export_dir).glob("*.lines.md"))
+    stem = ld[0].name.split(".")[0] if len(ld) == 1 else ""
+    return stem if len(stem) == 3 and stem.isdigit() else None
+
+
+def _lacuna(book: str, export_dir: Path, chapter: str | None, pending: Path | str | None) -> dict:
+    """`pending`：`--pending` 的原值（不给是 None）。缺省读中心库待审单（GUJI-711，`resolve_pending`）。"""
+    from .release_gates import check_lacuna, resolve_pending
+    path, note = resolve_pending(pending, book, chapter or _export_chapter(export_dir))
+    r = check_lacuna(book, export_dir, chapter, path)
     bad = r["loose"] or r["recut_bad"]
     detail = (f"□ {r['lacuna']} 个：上人审页 {len(r['pending'])}，在重切清单 {len(r['recut'])}，"
-              f"没去向 {len(r['loose'])}" + ("" if pending else "（没给 --pending，只认重切清单）")
+              f"没去向 {len(r['loose'])}" + (f"（{note}）" if note else "")
               + (f"；重切清单有 {len(r['recut_bad'])} 行位置写坏" if r["recut_bad"] else ""))
     return _item("2c", "□ 有去向", FAIL if bad else PASS, detail,
                  {"loose": r["loose"][:200], "recut_bad": r["recut_bad"][:50]} if bad else None)
@@ -274,7 +284,7 @@ MANUAL_ITEMS = [
 
 def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | None = None,
         notes: Path | None = None, reports: Path | None = None, tier: str = "final",
-        pending: Path | None = None, strict_cv: bool = False) -> dict:
+        pending: Path | str | None = None, strict_cv: bool = False) -> dict:
     book = eng.book.id
     items: list[dict] = []
     checks = [
