@@ -11,6 +11,12 @@
 云会话只通 443，用 ``WorkerSource``（环境变量 ``GUJI_DATA_URL``、``GUJI_DATA_TOKEN``、
 ``GUJI_DATA_BRANCH``）。服务器能直连 5432，也可以用 ``PgSource``（``GUJI_DATA_PG_DSN``）。
 令牌只从环境变量读，不打印、不落盘。
+
+**超时分两档**（GUJI-707）：国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手（GUJI-703），原先一律 120 秒，
+一次卡住就白等两分钟。现在小 JSON 请求（查表、签名、状态、whoami、分支、追加事件等：回 JSON、请求体不是大块字节）
+缺省 ``SMALL_TIMEOUT`` = 25 秒（``GUJI_DATA_TIMEOUT`` 可改），超时照常走退避重试，且网络错至少重试到
+``NET_TRIES`` 次；收发大块字节的（快照、备份、产物包、R2 直取图）维持 120 秒。超时是每次 socket 操作的上限，
+不是整次传输的上限，大页慢慢流也不会被掐断。
 """
 
 from __future__ import annotations
@@ -37,6 +43,19 @@ DEFAULT_URL = "https://data.open-guji.com"
 PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页 events 约 7.6 MB，免费档偶尔超资源回 503/1102）
 MAX_IN = 200            # 同列多值过滤一次最多几个值（Worker tables.ts 的 MAX_IN）
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
+BIG_TIMEOUT = 120.0      # 大块字节（快照、备份、产物包、R2 图）每次 socket 操作的超时（秒）
+SMALL_TIMEOUT = 25.0     # 小 JSON 请求的缺省超时（秒），环境变量 GUJI_DATA_TIMEOUT 可改（GUJI-707）
+NET_TRIES = 4            # 小请求遇到网络错（含超时）至少试这么多次，不受调用方 tries=2 限（那是给 503 拆批留的）
+
+
+def default_small_timeout() -> float:
+    """小 JSON 请求的超时：``GUJI_DATA_TIMEOUT``（秒，正数）或 ``SMALL_TIMEOUT``。"""
+    v = os.environ.get("GUJI_DATA_TIMEOUT")
+    try:
+        t = float(v) if v else SMALL_TIMEOUT
+    except ValueError:
+        t = SMALL_TIMEOUT
+    return t if t > 0 else SMALL_TIMEOUT
 
 
 class CentralError(RuntimeError):
@@ -61,13 +80,15 @@ class WorkerSource:
     """经 guji-data Worker 读写。分支用 ``?branch=``；写接口按令牌角色由 Worker 把关。"""
 
     def __init__(self, url: str | None = None, token: str | None = None,
-                 branch: str | None = None, timeout: float = 120):
+                 branch: str | None = None, timeout: float = BIG_TIMEOUT,
+                 small_timeout: float | None = None):
         self.url = (url or os.environ.get("GUJI_DATA_URL") or DEFAULT_URL).rstrip("/")
         self.token = token if token is not None else os.environ.get("GUJI_DATA_TOKEN")
         if not self.token:
             raise SystemExit("缺环境变量 GUJI_DATA_TOKEN（中心库令牌；会话里一般用读令牌）")
         self.branch = branch or os.environ.get("GUJI_DATA_BRANCH") or "main"
-        self.timeout = timeout
+        self.timeout = timeout                 # 大块字节
+        self.small_timeout = small_timeout or default_small_timeout()   # 小 JSON（GUJI-707）
         ca = os.environ.get("SSL_CERT_FILE") or os.environ.get("REQUESTS_CA_BUNDLE")
         self._ctx = ssl.create_default_context(cafile=ca) if ca else ssl.create_default_context()
         self.requests = 0                      # 本进程发了几次 Worker 请求（免费档每天 10 万次）
@@ -78,7 +99,14 @@ class WorkerSource:
     # ---- HTTP ----
     def _call(self, method: str, path: str, *, query: dict | None = None, body=None,
               auth: bool = True, raw: bool = False, data: bytes | None = None,
-              content_type: str = "application/octet-stream", tries: int = 5):
+              content_type: str = "application/octet-stream", tries: int = 5,
+              timeout: float | None = None):
+        """``timeout`` 不给按请求分档（见模块头）：回原始字节（``raw``）或发大块字节（``data``）的用
+        ``self.timeout``，其余小 JSON 请求用 ``self.small_timeout``，网络错（含超时）至少试 ``NET_TRIES`` 次。"""
+        big = raw or data is not None
+        if timeout is None:
+            timeout = self.timeout if big else self.small_timeout
+        net_tries = tries if big else max(tries, NET_TRIES)
         url = path if path.startswith("http") else self.url + path
         if query:
             url += ("&" if "?" in url else "?") + urllib.parse.urlencode(query, doseq=True)
@@ -92,10 +120,13 @@ class WorkerSource:
             headers["authorization"] = f"Bearer {self.token}"
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
         last = None
-        for attempt in range(tries):           # 网络抖动、429、5xx 退避重试；本模块的请求都幂等
+        n_http = n_net = 0
+        for attempt in range(max(tries, net_tries)):   # 网络抖动、429、5xx 退避重试；本模块的请求都幂等
+            if n_http >= tries or n_net >= net_tries:
+                break
             self.requests += 1
             try:
-                with urllib.request.urlopen(req, context=self._ctx, timeout=self.timeout) as r:
+                with urllib.request.urlopen(req, context=self._ctx, timeout=timeout) as r:
                     payload = r.read()
                     return payload if raw else json.loads(payload or b"null")
             except urllib.error.HTTPError as e:
@@ -108,8 +139,12 @@ class WorkerSource:
                     raise CentralError(e.code, j.get("error", "http"), j.get("message", payload[:200].decode("utf-8", "replace")),
                                        j.get("detail")) from None
                 last = CentralError(e.code, "http", payload[:200].decode("utf-8", "replace"))
-            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:  # 含 IncompleteRead（断流）
+                n_http += 1
+            except (urllib.error.URLError, OSError, http.client.HTTPException) as e:  # 含 IncompleteRead（断流）、超时
                 last = e
+                n_net += 1
+            if n_http >= tries or n_net >= net_tries:
+                break
             time.sleep(min(2 ** attempt, 20))
         raise last  # type: ignore[misc]
 

@@ -99,7 +99,7 @@ def test_close_check_items_2c_2d(monkeypatch, tmp_path):
     _align(st, 9, {"3": "x"})
     c = CC._lacuna("vol01", exp, None, None)
     assert c["no"] == "2c" and c["status"] == CC.FAIL and c["data"]["loose"] == ["9:1:2"]
-    assert "没给 --pending" in c["detail"]
+    assert "只认重切清单" in c["detail"]                # 中心库待审单不在：只认重切清单
     f = CC._fallback("vol01", [9], st)
     assert f["no"] == "2d" and f["status"] == CC.FAIL and f["data"]["loose"] == ["9:3"]
     _tsv(RG.recut_path("vol01", tmp_path / "lists"), "位置\t原因", ["9\t整页重切"])
@@ -114,6 +114,77 @@ def test_cli_has_pending_option():
     cli_v2.register_subcommands(root.add_subparsers(dest="command"))
     assert root.parse_args(["close-check", "b", "-w", "/x", "--pending", "x.json"]).pending == "x.json"
     assert root.parse_args(["close-check", "b", "-w", "/x"]).pending is None
+    assert root.parse_args(["close-check", "b", "-w", "/x", "--pending"]).pending == ""   # 只写 --pending：读中心库
+    assert root.parse_args(["close-check", "b", "-w", "/x", "--pending", "vol04"]).pending == "vol04"
+
+
+# ── 待审单改读中心库（GUJI-711）──
+
+def _pend(p, cells):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"cells": [{"cell": c, "review": "pending"} for c in cells]}), encoding="utf-8")
+    return p
+
+
+def test_resolve_pending_defaults_to_central(tmp_path, monkeypatch):
+    lists = tmp_path / "lists"
+    monkeypatch.setattr(RG, "lists_dir", lambda: lists)
+    monkeypatch.setattr(RG, "book_text_id", lambda b: "bk01" if b.startswith("vol") else None)
+    want = lists / "proofing" / "bk01" / "004.pending.json"
+    assert RG.default_pending("vol04") == want
+    assert RG.default_pending("vol04", "007") == lists / "proofing" / "bk01" / "007.pending.json"
+    assert RG.default_pending("zhiming") is None                       # 推不出章号
+
+    got, note = RG.resolve_pending(None, "vol04")                       # 不在：只认重切清单，说清去哪找
+    assert got is None and str(want) in note and "guji db sync" in note
+    _pend(want, ["9:1:2"])
+    for arg in (None, "", "vol04", "004", "bk01/004", str(want)):
+        got, _ = RG.resolve_pending(arg, "vol04")
+        assert got == want, arg
+    other = _pend(lists / "proofing" / "bk01" / "005.pending.json", [])
+    assert RG.resolve_pending("vol05", "vol04")[0] == other              # 给册：那一册的
+    assert RG.resolve_pending(None, "vol04", "005")[0] == other          # --chapter 优先
+
+
+def test_resolve_pending_book_id_by_glob(tmp_path, monkeypatch):
+    """meta 里查不到书 id：在 proofing/*/ 下找这一章，恰好一份才用。"""
+    lists = tmp_path / "lists"
+    monkeypatch.setattr(RG, "lists_dir", lambda: lists)
+    monkeypatch.setattr(RG, "book_text_id", lambda b: None)
+    a = _pend(lists / "proofing" / "x" / "002.pending.json", [])
+    assert RG.resolve_pending(None, "vol02")[0] == a
+    _pend(lists / "proofing" / "y" / "002.pending.json", [])
+    got, note = RG.resolve_pending(None, "vol02")
+    assert got is None and "推不出" in note
+
+
+def test_resolve_pending_old_book_text_path(tmp_path, monkeypatch):
+    """给了 book-text 的旧路径、文件不在：提示已迁中心库并指出新路径；新路径在就改读它。"""
+    lists = tmp_path / "lists"
+    monkeypatch.setattr(RG, "lists_dir", lambda: lists)
+    monkeypatch.setattr(RG, "book_text_id", lambda b: None)
+    old = tmp_path / "book-text" / "Book" / "g" / "z" / "k" / "bk01" / "004.pending.json"
+    new = lists / "proofing" / "bk01" / "004.pending.json"
+    got, note = RG.resolve_pending(str(old), "vol04")
+    assert got is None and "已从 book-text 迁到中心库" in note and str(new) in note
+    _pend(new, ["9:1:2"])
+    got, note = RG.resolve_pending(str(old), "vol04")
+    assert got == new and "改读这份" in note
+    _pend(old, [])                                                      # 旧文件真在：照给的用
+    assert RG.resolve_pending(str(old), "vol04") == (old, "")
+
+
+def test_close_check_2c_reads_central_pending(tmp_path, monkeypatch):
+    exp = tmp_path / "exp"
+    exp.mkdir()
+    _export(exp, "甲□", ["9:1:1", "9:1:2"])                              # 章号 001 从 001.lines.md 取
+    lists = tmp_path / "lists"
+    monkeypatch.setattr(RG, "lists_dir", lambda: lists)
+    monkeypatch.setattr(RG, "book_text_id", lambda b: "bk01")
+    assert CC._lacuna("zhiming", exp, None, None)["status"] == CC.FAIL
+    p = _pend(lists / "proofing" / "bk01" / "001.pending.json", ["9:1:2"])
+    c = CC._lacuna("zhiming", exp, None, None)
+    assert c["status"] == CC.PASS and str(p) in c["detail"]
 
 
 def test_close_check_1c_models(monkeypatch, tmp_path):

@@ -20,6 +20,21 @@
 
 全部只是**怀疑**，裁决归人（控制台字形库页「体检」tab），走 `glyph_audit` 事件。
 
+## 库指纹：结果过期就不出卡（GUJI-710）
+
+体检一跑一小时，结果落盘后库还会变。09-27 刻例重排编号后没重跑，控制台照旧拿 09-26 的
+findings 出卡，实例 id 已指向别的图，9 张卡错位。现在 `run_selfcheck` 开跑时记下
+**库指纹**（`library_fingerprint`：本书套刻例的 `(实例 id, 字, 图块 sha)` 排序后哈希）写进
+summary.json 的 `db_fp`，每张卡另记本例与本书对手的图块 sha。控制台出卡前 `freshness`：
+
+- 没有 `db_fp`（旧版算的）→ 过期，不出卡；
+- 指纹相同 → 新鲜；
+- 指纹不同（裁决撤库、改字、新进库都会变）→ 逐卡核对：卡上任何一个还在库里的刻例，
+  图块 sha 与体检时不同（id 被挪给了别的图）→ 整份过期，不出卡；只是撤了、改了字的，
+  那几张卡不出，其余照出。不这样分，体检页上撤一例，剩下的卡就全成「过期」了。
+
+过期时提示「体检结果已过期（库已变），请重跑 guji glyph-db selfcheck」。
+
 ## 语义分组
 
 「同字」按 `VariantMap.semantic` 判（异体算同字），与 `audit.py` 一致：卽/即 的刻例
@@ -28,6 +43,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 from dataclasses import asdict, dataclass, field
@@ -286,6 +302,7 @@ def run_selfcheck(db_path: str | Path,
     from .verify import verify_pair_elastic
 
     t0 = time.time()
+    lib = library_rows(db_path)             # 开跑时的库：指纹与各卡图块 sha 都按这一刻记
     vmap = VariantMap.load()
     uv = (_unihan_same(UNIHAN_SAME if unihan_variants is True else unihan_variants)
           if unihan_variants else (lambda a, b: False))
@@ -404,8 +421,11 @@ def run_selfcheck(db_path: str | Path,
     for f in flagged:
         for fl in f.flags:
             counts[fl] = counts.get(fl, 0) + 1
+    ref_ids = {i for f in flagged for i in _card_refs(asdict(f))}
     return {
         "db": str(db_path),
+        "db_fp": _fingerprint(lib),
+        "inst_sha": {i: lib[i][1] for i in sorted(ref_ids) if i in lib},
         "others": [ws for ws, _ in others],
         "font_db": str(font_db) if font_db else None,
         "n_checked": len(findings),
@@ -447,8 +467,11 @@ def save(result: dict, out: Path | None = None) -> Path:
             d = asdict(f)
             d["score"] = f.score
             d["key"] = f.key()
+            shas = result.get("inst_sha") or {}
+            d["sha"] = shas.get(f.instance_id)
+            d["peer_sha"] = {i: shas[i] for i in _card_refs(d)[1:] if i in shas}
             fh.write(json.dumps(d, ensure_ascii=False) + "\n")
-    meta = {k: v for k, v in result.items() if k not in ("findings", "all")}
+    meta = {k: v for k, v in result.items() if k not in ("findings", "all", "inst_sha")}
     meta["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
     (out / "summary.json").write_text(json.dumps(meta, ensure_ascii=False, indent=1),
                                       encoding="utf-8")
@@ -464,6 +487,89 @@ def load_findings(out: Path | None = None) -> tuple[dict, list[dict]]:
     with open(f_p, encoding="utf-8") as fh:
         rows = [json.loads(l) for l in fh if l.strip()]
     return meta, rows
+
+
+# ── 库指纹（GUJI-710）────────────────────────────────────
+
+STALE_MSG = "体检结果已过期（库已变），请重跑 guji glyph-db selfcheck"
+
+
+def library_rows(db_path: str | Path) -> dict[str, tuple[str, str]]:
+    """本书套刻例（与 `load_entries` 同口径：去掉字体域）→ {实例 id: (字, 图块 sha256 前 16 位)}。"""
+    c = connect_ro(db_path)
+    try:
+        fe = {r[0] for r in c.execute("SELECT edition_tag FROM sources WHERE kind='font'")}
+        rows = c.execute(
+            "SELECT e.instance_id, g.char, g.edition_tag, i.patch_png "
+            "FROM exemplars e JOIN glyphs g ON g.glyph_id=e.glyph_id "
+            "JOIN instances i ON i.instance_id=e.instance_id").fetchall()
+    finally:
+        c.close()
+    return {iid: (ch, hashlib.sha256(bytes(png)).hexdigest()[:16])
+            for iid, ch, ed, png in rows
+            if not (ed in fe or str(ed).startswith("font:"))}
+
+
+def _fingerprint(lib: dict[str, tuple[str, str]]) -> str:
+    """`k1:<刻例数>:<哈希>`：(实例 id, 字, 图块 sha) 排序后取 sha256 前 16 位。
+    复制、VACUUM、从中心库重建都不变；进库、撤库、改字、id 换了图都变。"""
+    h = hashlib.sha256()
+    for iid in sorted(lib):
+        h.update(json.dumps([iid, *lib[iid]], ensure_ascii=False).encode("utf-8"))
+        h.update(b"\n")
+    return f"k1:{len(lib)}:{h.hexdigest()[:16]}"
+
+
+def library_fingerprint(db_path: str | Path) -> str:
+    return _fingerprint(library_rows(db_path))
+
+
+def _card_refs(d: dict) -> list[str]:
+    """一张卡涉及的本书刻例：本例在前，再是本书对手、本书同字参照（他书、字体的不算）。"""
+    out = [d["instance_id"]]
+    for k in ("rival_peer",):
+        if d.get(k):
+            out.append(d[k])
+    if d.get("same_peer") and not d.get("same_peer_ws"):
+        out.append(d["same_peer"])
+    return list(dict.fromkeys(out))
+
+
+def freshness(meta: dict, rows: list[dict], db_path: str | Path) -> dict:
+    """体检结果对当前库还作不作数（见模块头「库指纹」）。
+
+    返回 `{"fresh": bool, "reason": str, "db_fp": 当前指纹, "drop": {不出的卡 key}}`。
+    `fresh=False` 时整份不出卡；`drop` 是撤了、改了字的刻例所在的卡。"""
+    out = {"fresh": True, "reason": "", "db_fp": None, "drop": set()}
+    if not rows:
+        return out
+    rec = meta.get("db_fp")
+    if not rec:
+        out.update(fresh=False, reason="这份结果没有库指纹（旧版 selfcheck 算的）")
+        return out
+    lib = library_rows(db_path)
+    cur = out["db_fp"] = _fingerprint(lib)
+    if cur == rec:
+        return out
+    moved: list[str] = []
+    for r in rows:
+        shas = {r["instance_id"]: r.get("sha"), **(r.get("peer_sha") or {})}
+        chars = {r["instance_id"]: r.get("char"), r.get("rival_peer"): r.get("rival_char")}
+        for iid in _card_refs(r):
+            now = lib.get(iid)
+            if now is None:                          # 撤了
+                out["drop"].add(r["key"])
+                continue
+            sha = shas.get(iid)
+            if sha is None or now[1] != sha:         # 没记 sha，或 id 换了图
+                moved.append(iid)
+            elif iid in chars and chars[iid] and now[0] != chars[iid]:
+                out["drop"].add(r["key"])            # 改了字：这张卡的前提变了
+    if moved:
+        out.update(fresh=False, reason=f"{len(set(moved))} 个刻例 id 对应的图与体检时不同"
+                                       f"（例 {sorted(set(moved))[0]}；刻例重排编号？）"
+                                       f"；体检时库 {rec}，现在 {cur}")
+    return out
 
 
 def decisions(out: Path | None = None) -> dict[str, dict]:

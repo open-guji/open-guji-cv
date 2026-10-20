@@ -145,13 +145,16 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     local = threading.local()
     readers: list = []
 
-    def call(url, data, method, headers):
+    from .client import default_small_timeout
+    sign_timeout = default_small_timeout()     # 签名是小 JSON：超时短、快速重试（GUJI-707）；PUT 图维持 60 秒
+
+    def call(url, data, method, headers, timeout: float = 60):
         # Cloudflare 拦默认的 Python-urllib UA（error 1010），带自己的 UA
         headers = {"user-agent": "open-guji-cv-datastore", **headers}
         req = urllib.request.Request(url, data=data, method=method, headers=headers)
-        for attempt in range(5):           # 网络抖动、429、5xx 退避重试；签名和 PUT 都幂等
+        for attempt in range(5):           # 网络抖动（含超时）、429、5xx 退避重试；签名和 PUT 都幂等
             try:
-                with urllib.request.urlopen(req, context=ctx, timeout=60) as r:
+                with urllib.request.urlopen(req, context=ctx, timeout=timeout) as r:
                     return r.status, r.read()
             except urllib.error.HTTPError as e:
                 if e.code != 429 and e.code < 500:
@@ -182,14 +185,14 @@ def upload_via_worker(repo, objs: dict[str, Obj], bucket: str = "exp", workers: 
     def one(o: Obj) -> str:
         st, body = call(f"{base}/v1/assets/sign", json.dumps(
             {"bucket": bucket, "op": "put", "sha256": o.sha, "ext": ext}).encode(), "POST",
-            {"authorization": f"Bearer {token}", "content-type": "application/json"})
+            {"authorization": f"Bearer {token}", "content-type": "application/json"}, sign_timeout)
         return put(o, json.loads(body)) if st == 200 else f"sign_{st}"
 
     def batch(chunk: list[Obj]) -> list[str] | None:
         """一次签 ``PUT_BATCH`` 张（/v1/assets/sign-batch，已有的直接判 exists）；旧版 Worker 回 None。"""
         st, body = call(f"{base}/v1/assets/sign-batch", json.dumps(
             {"bucket": bucket, "op": "put", "ext": ext, "sha256s": [o.sha for o in chunk]}).encode(),
-            "POST", {"authorization": f"Bearer {token}", "content-type": "application/json"})
+            "POST", {"authorization": f"Bearer {token}", "content-type": "application/json"}, sign_timeout)
         if st == 404:
             return None
         if st != 200:

@@ -296,7 +296,8 @@ def main(argv=None) -> int:
     ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji export format")
     ap.add_argument("--anomaly", help="R4 异常表 md（模板 异常表模板.md）")
     ap.add_argument("--reason", help="R3 原因归并一句话（人写）")
-    ap.add_argument("--pending", help="book-text 本章 NNN.pending.json；close-check 第 2c 项□去向用（GUJI-624）")
+    ap.add_argument("--pending", help="原样转给 close-check 第 2c 项（□去向，GUJI-624）；不给时 close-check 缺省读中心库"
+                                      "本册本章的待审单（数据目录 feedback/lists/proofing/<书>/<章>.pending.json，GUJI-711）")
     ap.add_argument("--guji", default="guji")
     ap.add_argument("-o", "--out", help="input.json 输出路径（缺省打印到 stdout）")
     ap.add_argument("--report", help="同时用 exit_report.py 拼出 Markdown 报告到此路径")
