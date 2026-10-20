@@ -298,6 +298,24 @@ def cmd_close_check(args) -> None:
     sys.exit(0 if res["machine_ok"] else 1)
 
 
+def cmd_exit_check(args) -> None:
+    """一册文本出 1.0 时的出口动作逐项核（只读；M10 G8，GUJI-685）。见 `ops/exit_check.py` 模块头。"""
+    import re
+    from .ops import exit_check as EC
+    chapter = args.chapter or (f"{int(args.book[3:]):03d}" if re.fullmatch(r"vol\d+", args.book) else None)
+    if not chapter:
+        sys.exit("册名不是 volNN 时要给 --chapter NNN")
+    from .core.book import load_book
+    b = load_book(args.book)
+    res = EC.run(Path(args.text_dir), chapter, b.freeze, b.cv_version,
+                 repo=Path(args.repo) if args.repo else None)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        EC.print_report(res)
+    sys.exit(0 if res["ok"] else 1)
+
+
 def cmd_export(args) -> None:
     """`guji export md|format <册>`：把 runbook 里两条易错的散脚本收成固定口径（overview#413 C2）。
 
@@ -2386,6 +2404,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "close-check": cmd_close_check,
+    "exit-check": cmd_exit_check,
     "export": cmd_export,
     "audit": cmd_audit,
     "store": cmd_store,
@@ -2780,6 +2799,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="1a 用旧口径：代码／版本变了也算过期（缺省只因代码变、产物记着正式版 cv_version 的页算新鲜）")
     p.add_argument("--pending", default=None,
                    help="book-text 本章的 NNN.pending.json（公众人审页的待审单）；第 2c 项认它上面的格为「□ 有去向」")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("exit-check",
+                       help="[v2] 一册文本出 1.0 的出口动作逐项核（只读）：proofing、review、decision、阙文、冻结登记（M10 G8）")
+    p.add_argument("book")
+    p.add_argument("--text-dir", required=True, help="book-text 本书 default 目录（含 index.json、NNN.char.json）")
+    p.add_argument("--chapter", default=None, help="章号 NNN；缺省按 volNN 推")
+    p.add_argument("--repo", default=None, help="查 tag 用的 cv 仓目录；缺省本包所在仓")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
