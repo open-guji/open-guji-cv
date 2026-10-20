@@ -140,20 +140,50 @@ def draft_event(rev: dict | None) -> dict | None:
     return {"v": "seg_defect", "cell": c.get("a"), "note": "C 类，切分变了"}
 
 
-def reply_template(verdict: str, rev: dict | None, op: Opinion, public: str) -> str:
+def template_core(verdict: str, rev: dict | None, op: Opinion) -> str:
+    """没有公开理由时的模板回复（只说结论，不带理由）。"""
     t = (op.target or {})
-    tail = f"{public}" if public else ""
     if verdict == "text_ok":
-        return f"感谢指正。经核对原书图，此处原文作「{t.get('check') or ''}」，暂不改。{tail}".strip()
+        return f"感谢指正。经核对原书图，此处原文作「{t.get('check') or ''}」，暂不改。"
     if verdict == "accept":
-        return f"感谢指正，已采纳，下一版文本改正。{tail}".strip()
+        return "感谢指正，已采纳，下一版文本改正。"
     if verdict == "lacuna_guess":
         g = ((rev or {}).get("cells") or [{}])[0].get("guess") or (op.proposal or {}).get("text") or ""
-        return (f"感谢指正。原书此处图上无字，按文意当有「{g}」：将录为阙文 □，并注推测字「{g}」（按磨损缺字处理）。"
-                f"{tail}").strip()
+        return f"感谢指正。原书此处图上无字，按文意当有「{g}」：将录为阙文 □，并注推测字「{g}」（按磨损缺字处理）。"
     if verdict == "out_of_scope":
-        return f"感谢指正，已转给标点／专名整理。{tail}".strip()
-    return f"感谢指正，这一处还要再看，结果会在这里更新。{tail}".strip()
+        return "感谢指正，已转给标点／专名整理。"
+    return "感谢指正，这一处还要再看，结果会在这里更新。"
+
+
+def _sentence(s: str) -> str:
+    s = (s or "").strip()
+    return s if not s or s[-1] in "。！？.!?" else s + "。"
+
+
+def reply_template(verdict: str, rev: dict | None, op: Opinion, public: str) -> str:
+    """公开回复草稿。有公开理由时只用「感谢指正。」＋公开理由：结论（采纳／未采纳、版本）由网站状态显示，
+    模板句再说一遍就与理由重复（GUJI-713：原来是模板句＋公开理由叠在一起）。没有公开理由才用模板句。"""
+    public = (public or "").strip()
+    if public:
+        return "感谢指正。" + _sentence(public)
+    return template_core(verdict, rev, op)
+
+
+THANKS = re.compile(r"^感谢指正[。，,.！!]?\s*")
+
+
+def reply_body(tri: dict, op: Opinion) -> str:
+    """判定记录里的回复草稿 → 去掉致谢与模板句后的正文（给网站回写用）。
+
+    - 草稿是模板生成的（新写法「感谢指正。＋理由」、旧写法「模板句＋理由」、或只有模板句）→ 正文就是公开理由；
+    - 会话手写的草稿 → 原样，只去掉开头的「感谢指正」。"""
+    draft = (tri.get("reply_draft") or "").strip()
+    public = (tri.get("rationale_public") or "").strip()
+    core = template_core(tri.get("verdict") or "", tri.get("revision"), op)
+    generated = {core, (core + public).strip(), reply_template(tri.get("verdict") or "", tri.get("revision"), op, public)}
+    if not draft or draft in generated:
+        return _sentence(public)
+    return THANKS.sub("", draft).strip()
 
 
 # ---- 刷票 ----

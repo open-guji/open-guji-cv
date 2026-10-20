@@ -9,5 +9,5 @@
 
 模块：``schema``（数据形）、``store``（五个文件的读写，本地或经 Worker ``/v1/files``）、
 ``ingest``（三源入池）、``textsrc``（book-text 的 char/cord/CHANGES）、``evidence``（证据包）、
-``rules``（确定性分流）、``revise``（A／B／B′ 类修订）。命令行在 ``cli_opinions``（``guji opinions …``）。
+``rules``（确定性分流）、``revise``（A／B／B′ 类修订）、``webstatus``（处理结论 → 网站状态清单）。命令行在 ``cli_opinions``（``guji opinions …``）。
 """
