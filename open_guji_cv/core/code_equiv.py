@@ -53,6 +53,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1e6c03d679834e9e74effdb44df0da2fef9608c1905f38f5b0214718a31732be",
           old="28cd1749594a804c94f92e7dd3e9b298af30cc834357cd3c0a323d7d2af5fc4c",
           evidence=_GM_1020),
+    Equiv(module="open_guji_cv.steps.align_ref_coord",
+          new="2eab06857f480e3bea599a57c7207291e0b080d2eb4e0af6c76c3dda40b7b8b2",
+          old="b7f1dca521754254e92f782c0fa42767ab838e8a1b4cf09c629bc4d14b39c235",
+          evidence=("align_ref 起跑提速（parse_lines 复用 Unit、is_text_char 记忆）：vol04 46 页（每 5 页取 1，"
+                    "加 p17/p100/p186）与改前 ea23fa2 产物逐字节相同；scripts/code_equiv.py check，2026-10-20")),
 )
 
 
