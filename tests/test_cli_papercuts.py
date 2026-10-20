@@ -175,8 +175,8 @@ def test_general_lm_cache_follows_cache_root_not_corpus_dir(tmp_path, monkeypatc
     cache_dir = tmp_path / "mycache"
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache_dir))
     _load_general_lm([p])
-    assert not (corpus_dir / ".general_lm_cache.json").exists(), "缓存不该写进语料目录"
-    assert (cache_dir / "general_lm" / ".general_lm_cache.json").exists()
+    assert not list(corpus_dir.glob("*.json")), "缓存不该写进语料目录"
+    assert list((cache_dir / "general_lm").glob("general-*.json"))
 
 
 # ── K21：`context_decide`(step_id) 与 `context_decision`(kind_id) 不同名，

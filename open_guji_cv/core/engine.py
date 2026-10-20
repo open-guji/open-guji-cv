@@ -134,6 +134,11 @@ def _page_list(pages: list[int], limit: int = 8) -> str:
     return head + (" 等" if len(pages) > limit else "")
 
 
+def code_hash_of_module(mod_name: str) -> str:
+    """单个模块的代码指纹（只认代码、经等价登记换算），给派生缓存的键用。"""
+    return _module_source_hash(mod_name)[:16]
+
+
 def code_hash(step: Step, legacy: bool = False) -> str:
     """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。"""
     mods = [type(step).__module__, *step.spec.code_deps]

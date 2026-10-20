@@ -591,11 +591,21 @@ def test_build_seed_lm_mixture_and_cache(tmp_path, monkeypatch):
     gen.write_text("欽定四庫全書\n" * 50, encoding="utf-8")
     lm = build_seed_lm(book_text, [gen])
     assert lm.name.startswith("mix(")
-    assert (cache_dir / "general_lm" / ".general_lm_cache.json").exists()
-    assert not (tmp_path / ".general_lm_cache.json").exists(), "缓存不该写进语料目录"
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 1
+    assert len(list((cache_dir / "general_lm").glob("book-*.json"))) == 1     # 本书 LM 也缓存（2026-10-20）
+    assert not list(tmp_path.glob("*.json")), "缓存不该写进语料目录"
     # 二次构造走缓存（源未变）；源变了重训不炸
     lm2 = build_seed_lm(book_text, [gen])
     assert lm2.logp("庫", ("四",)) == lm.logp("庫", ("四",))
+    assert len(list((cache_dir / "general_lm").glob("*.json"))) == 2         # 命中，没多出新文件
+    # 内容变了换键重训；只是 mtime 变不重训
+    import os
+    os.utime(gen, (1, 1))
+    build_seed_lm(book_text, [gen])
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 1
+    gen.write_text("欽定四庫全書總目\n" * 50, encoding="utf-8")
+    build_seed_lm(book_text, [gen])
+    assert len(list((cache_dir / "general_lm").glob("general-*.json"))) == 2
     # 本书没见过、通用语料见过的搭配：混合后概率高于纯本书
     pure = build_seed_lm(book_text, None)
     assert lm.logp("定", ("欽",)) > pure.logp("定", ("欽",))

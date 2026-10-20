@@ -1149,7 +1149,10 @@ torch 多线程碰上 CPU 争抢慢 10 倍（4 线程 9.1 s vs 1 线程 0.95 s�
 
 **Step5-d／6／7 是一次性加载为主**（10 页）：align_ref 31 s（每页 0.02 s，加载：证人逐行解析 13 s、
 兼容字归一 9 s、n-gram 4 s）；context_decide 98 s（每页 0.04 s；通用语言模型现训 78 s + 存盘 16 s，
-缓存在 `cache_root()/general_lm`，新容器必付）；seed_admit 76 s（每页约 3 s；三份证人 n-gram 22 s、
+缓存在 `cache_root()/general_lm`，新容器必付）；——**注意 cProfile 把纯 Python 循环放大约 3 倍**，
+不带剖析器实测通用 LM 现训 28 s、本书 LM 5.3 s。2026-10-20 起两个 LM 都按**语料内容 + lm.py 代码指纹**
+缓存（`seeding._cached_lm`；原来通用 LM 按 mtime，换检出就白训，本书 LM 每次现训），热缓存时
+context_decide 首页 6–7 s → 2 s，产物逐字节不变；seed_admit 76 s（每页约 3 s；三份证人 n-gram 22 s、
 铁证人裁匹配器 15 s，**每页把全部事件重读一遍** 1.1 s）。
 
 **代码等价登记的流程**：改热点 → `scripts/code_equiv.py check --base <改前> --step … --book … --pages …`
