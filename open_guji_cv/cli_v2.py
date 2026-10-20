@@ -8,6 +8,8 @@
     guji cache build-rare-index --book <book> [--jobs 4]   # 云端预建 Step5-b embedding 索引，供服务器分发命中
     guji cache warm --book <book> [--pages all] [--jobs 4]  # 多进程预渲字块缓存（快照导入后用）
     guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
+    guji cache pull-rare-index [--book <book>]             # 从全字表向量包（R2，按版本）落成 Step5-b 索引，不用现建
+    guji cache build-emb-pack [--jobs 4]                   # 建一版全字表向量包（清单进 config/hanzi/emb/）
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
 本模块顶层不 import 任何重依赖，保证 CLI 冷启动快。
@@ -757,6 +759,60 @@ def cmd_cache(args) -> None:
         _cmd_cache_build_rare_index(args)
     elif args.action == "build-font-index":
         _cmd_cache_build_font_index(args)
+    elif args.action == "pull-rare-index":
+        _cmd_cache_pull_rare_index(args)
+    elif args.action == "build-emb-pack":
+        from .clustering import emb_pack
+        from .hanzi.build import data_root
+        from .ops.emb_pack_build import build
+        m = build(data_root() / "emb-build", jobs=max(1, args.jobs or 1))
+        print(f"清单 {emb_pack.EMB_DIR / (m['version'] + '.json')}；三个文件在 {data_root() / 'emb-build'}，"
+              "传 R2：python scripts/build_hanzi_db.py --no-build --upload-emb")
+
+
+def _cmd_cache_pull_rare_index(args) -> None:
+    """`guji cache pull-rare-index [--book <book>]`：用全字表向量包（hanzi 库 B2）落成 Step5-b 的
+    `emb_<key>.npz`，代替 `build-rare-index` 的现建（4 核约 45 分钟）。
+
+    只认**与本机现役同规格**的包（模型、字体、渲染代码、额外图源四样指纹全对上，见
+    `clustering/emb_pack.py`）；对不上就明说，照旧用 `build-rare-index` 现建，不拿旧向量冒充。
+    落盘的 key、路径与 `build-rare-index` 是同一个函数算的，`_emb_index` 照旧命中。
+    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。"""
+    from .clustering import cnn_candidates as cc
+    from .clustering import emb_pack
+
+    spec = emb_pack.current_spec()
+    m = emb_pack.find(spec)
+    if m is None:
+        have = ", ".join(x["version"] + f"（模型 {x['ckpt_fp']}）" for x in emb_pack.manifests()) or "无"
+        print(f"没有与本机同规格的向量包：本机 {emb_pack.version_of(spec)} {spec}；已发布：{have}。"
+              f"用 `guji cache build-rare-index` 现建，或先 `guji cache build-emb-pack` 出一版。")
+        sys.exit(1)
+    pk = emb_pack.EmbPack.load(m)
+    print(f"向量包 {pk.version}：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
+    if not args.book:
+        return
+    from .clustering.rare_panel import book_charsets
+    from .steps.align_ref import book_corpus
+    cs_base, cs_esc, _spec = book_charsets(args.book, book_corpus(args.book))
+    inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
+
+    def compute(chars):
+        if not inst._ensure():
+            raise SystemExit(f"{len(chars)} 字不在包里、本机又没有 torch/checkpoint，落不成完整索引")
+        from .clustering.synth import render_char
+        return cc.build_emb_matrix(inst._net, inst._dev, tuple(chars), {}, render_char)
+
+    for name, cs in (("base", cs_base), ("escalate", cs_esc)):
+        if not cs:
+            continue
+        key, f, _extra = inst.emb_index_key(cs)
+        if f.exists():
+            print(f"{name}：已有 {f}，跳过")
+            continue
+        mat, names = pk.materialize(cs, compute)
+        cc._save_emb_index(f, mat, names)
+        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}")
 
 
 def _cmd_cache_build_rare_index(args) -> None:
@@ -2817,9 +2873,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | warm | "
-                                     "build-rare-index | build-font-index")
+                                     "build-rare-index | build-font-index | pull-rare-index | build-emb-pack")
     p.add_argument("action", choices=["usage", "prune", "get", "column", "verify", "warm",
-                                      "build-rare-index", "build-font-index"])
+                                      "build-rare-index", "build-font-index", "pull-rare-index",
+                                      "build-emb-pack"])
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
     p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")

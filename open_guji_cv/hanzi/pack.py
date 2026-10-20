@@ -45,6 +45,22 @@ def _lf_sha(p: Path) -> str:
     return hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
+def get_blob(sha: str, blob_dir: Path | None = None, fetch: Callable[[str], bytes] | None = None,
+             label: str = "") -> Path:
+    """按 sha 取一个文件：本机 blob 缓存有且 sha 对就用，否则从 R2 公开域名下载、核 sha、落缓存。"""
+    bp = blob_cache_path(sha, blob_dir)
+    if bp.exists() and sha256_file(bp) == sha:
+        return bp
+    data = (fetch or _download)(blob_url(sha))
+    if hashlib.sha256(data).hexdigest() != sha:
+        raise ValueError(f"{label or sha} 下载内容的 sha256 对不上清单（{blob_url(sha)}）")
+    bp.parent.mkdir(parents=True, exist_ok=True)
+    tmp = bp.with_suffix(f".part{os.getpid()}")
+    tmp.write_bytes(data)
+    tmp.replace(bp)
+    return bp
+
+
 def read_manifest(version: str | None = None, repo: Path = REPO) -> dict:
     base = Path(repo) / HANZI_CFG
     p = base / "manifest.json" if not version else base / "versions" / f"{version}.json"
@@ -75,17 +91,7 @@ class Pack:
         local = self.repo / (f.get("path") or (HANZI_CFG / key))
         if local.exists() and _lf_sha(local) == f["sha256"]:
             return local
-        bp = blob_cache_path(f["sha256"], self.root / "blobs")
-        if bp.exists() and sha256_file(bp) == f["sha256"]:
-            return bp
-        data = self.fetch(blob_url(f["sha256"]))
-        if hashlib.sha256(data).hexdigest() != f["sha256"]:
-            raise ValueError(f"{key} 下载内容的 sha256 对不上清单（{blob_url(f['sha256'])}）")
-        bp.parent.mkdir(parents=True, exist_ok=True)
-        tmp = bp.with_suffix(".part")
-        tmp.write_bytes(data)
-        tmp.replace(bp)
-        return bp
+        return get_blob(f["sha256"], self.root / "blobs", self.fetch, label=key)
 
     def ensure(self, pack: str) -> Path:
         """把 `pack`（core／parts）灌成本机 sqlite，返回路径；已有就直接返回。"""

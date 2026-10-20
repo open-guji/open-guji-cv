@@ -1,0 +1,41 @@
+{
+ "build_seconds": 1734,
+ "charset": "hanzi chars ∪ ids_lv1",
+ "ckpt": "glyph_cnn_r5",
+ "ckpt_fp": "d2ce8bab0fd0",
+ "code_fp": "d09c1b915e1b",
+ "dim": 256,
+ "dtype": "float32",
+ "extra": [],
+ "files": {
+  "chars.txt": {
+   "bytes": 482533,
+   "sha256": "665531bd42b4db0e2cdebb683958b655bcff9a168b0785c1174819181650b10c"
+  },
+  "failed.txt": {
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "vectors-00.npy": {
+   "bytes": 33554560,
+   "sha256": "d369ee1a4f7d5f5277552e88c540d979a22bbfb5cfd40095a99f26d8e961cdfb"
+  },
+  "vectors-01.npy": {
+   "bytes": 33554560,
+   "sha256": "affbba76970edaacac24616e4f81570f80636ea542056b88fc0cd7f77b6e8750"
+  },
+  "vectors-02.npy": {
+   "bytes": 33554560,
+   "sha256": "913eb4b07c0b58adf079a7c6f646867f8096c33add2460f6ab0497279345b55f"
+  },
+  "vectors-03.npy": {
+   "bytes": 3818624,
+   "sha256": "4fe28289bf6fd0a3244299dd4e612f931154c8452cab86a77212c66912bae395"
+  }
+ },
+ "font_fp": "b31acfa1c250",
+ "jobs": 4,
+ "n_chars": 102033,
+ "n_failed": 0,
+ "version": "emb-807344bd145b"
+}
