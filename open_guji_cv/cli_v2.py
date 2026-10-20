@@ -166,6 +166,7 @@ def cmd_pipeline(args) -> None:
         except RunLockHeld as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
+        _print_unpacked(eng.book.id, eng.store)
         sys.exit(1 if rc and args.stop_on_error else 0)
     try:
         with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
@@ -176,8 +177,21 @@ def cmd_pipeline(args) -> None:
         sys.exit(3)
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
+    else:
+        _print_unpacked(eng.book.id, eng.store)
     n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
     sys.exit(1 if n_failed and args.stop_on_error else 0)
+
+
+def _print_unpacked(book: str, store) -> None:
+    """本机这册产物有没存包的新结果就提醒一句（`datastore.packs.unpacked_note`；不挡什么）。"""
+    try:
+        from .datastore.packs import unpacked_note
+        msg = unpacked_note(store.root, book)
+    except Exception:          # noqa: BLE001 —— 提醒算不出来不碍事
+        msg = None
+    if msg:
+        print(f"  ⓘ {msg}")
 
 
 def cmd_rerun(args) -> None:
@@ -255,6 +269,7 @@ def cmd_status(args) -> None:
     _print_closure_gaps(gaps)
     _print_closure_mismatches(mism)
     _print_vision_pending(st["vision_pending"])
+    _print_unpacked(eng.book.id, eng.store)
 
 
 def _vision_pending(book: str, pages: list[int], store) -> list[dict] | None:
@@ -293,6 +308,7 @@ def cmd_close_check(args) -> None:
         print(json.dumps(res, ensure_ascii=False))
     else:
         CC.print_report(res)
+        _print_unpacked(eng.book.id, eng.store)
     sys.exit(0 if res["machine_ok"] else 1)
 
 

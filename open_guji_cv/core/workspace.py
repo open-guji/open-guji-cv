@@ -192,6 +192,24 @@ def data_root(ws: Path | None = None) -> Path | None:
     return Path(ws)
 
 
+def central_rev(ws: Path | None = None) -> str | None:
+    """本机数据目录对应中心库的哪一版：``<工作区>@<分支>:<rev>``（读 ``.central-state.json``，
+    ``db pull``／``push`` 时写）。没迁、没拉过返回 None。
+
+    记进每条产物 manifest（``ManifestEntry.db_rev``）和产物包的 ``versions``：``glyph_pin`` 只钉指纹、
+    不钉字形库内容，要知道一页当时读的是哪版库、要从那版开 Neon 分支复现，就看这个。
+    拉过之后本机又裁了、还没推的改动不在这个 rev 里。"""
+    import json
+    d = data_root(ws)
+    if d is None:
+        return None
+    try:
+        st = json.loads((d / ".central-state.json").read_text(encoding="utf-8"))
+        return f"{st['ws']}@{st.get('branch') or 'main'}:{int(st['rev'])}"
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def books_dir(ws: Path | None = None) -> Path | None:
     """册配置 ``books/``（见 ``data_root``）。"""
     d = data_root(ws)
