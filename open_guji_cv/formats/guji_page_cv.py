@@ -224,7 +224,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
             rec = admit_by_id.get(s.id)
             ev = (rec.evidence if rec else {}) or {}
             occ = bool(ev.get("occluded"))
-            if s.admit and s.human:
+            if (s.admit or (s.defect and s.char)) and s.human:   # 排除名单格人给了字（evidence.human_char）：已裁
                 method, review = "human", "human"
             elif s.admit and s.id in pending_ids:      # 看图判错、人还没裁：仍在待审队列里，不是已校对
                 method, review = f"cv:{s.channel}", "pending"
@@ -245,7 +245,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                 g["box_from"] = "cell_quad"
             if s.unreadable:
                 g["lacuna"] = "unreadable"
-            elif s.defect:
+            elif s.defect and not s.char:      # 人给了字的不记阙文
                 g["lacuna"] = "defect"
             if s.guess:
                 g["guess"] = s.guess

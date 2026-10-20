@@ -1,6 +1,6 @@
 import { api, withWorkspace } from './client'
 import type {
-  AroundContext, RareCandidate, ReviewCardsGroupedResponse, ReviewCardsResponse,
+  AltCand, AroundContext, RareCandidate, ReviewCardsGroupedResponse, ReviewCardsResponse,
   ReviewCardsShapeResponse, ReviewVerdictsResponse,
 } from '../types/review'
 
@@ -64,6 +64,18 @@ export function fetchRareBatch(book: string, k: number, slots: string[]) {
 export function fetchRareOne(book: string, page: number, col: number, slot: number, sub?: string) {
   const suffix = sub ? `?sub=${encodeURIComponent(sub)}&k=10` : '?k=10'
   return api<{ candidates: RareCandidate[] }>(`/api/rare/${encodeURIComponent(book)}/${page}/${col}/${slot}${suffix}`)
+}
+
+/** 相似字（/api/rare/alt）：`pivots`＝卡上的近似字（只读字统网缓存）；`q`＝人键入的近似字（缓存没有就联网取一次）。 */
+export function fetchRareAlt(book: string, page: number, col: number, slot: number,
+                             o: { sub?: string; pivots?: string[]; q?: string; k?: number } = {}) {
+  const sp = new URLSearchParams()
+  if (o.sub) sp.set('sub', o.sub)
+  for (const p of o.pivots || []) sp.append('p', p)
+  if (o.q) sp.set('q', o.q)
+  sp.set('k', String(o.k ?? 30))
+  return api<{ pivots: string[]; candidates: AltCand[] }>(
+    `/api/rare/alt/${encodeURIComponent(book)}/${page}/${col}/${slot}?${sp.toString()}`)
 }
 
 /** IDS 兜底：按结构 + 认出的部件查字（/api/rare/search）。给了字位坐标就用那格的 emb 在池内排。 */

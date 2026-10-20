@@ -81,3 +81,20 @@ def test_layout_path_follows_corpus_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
     assert _layout_path("corpus/daizhige/layout_slots.jsonl") == tmp_path / "corpus" / "daizhige" / "layout_slots.jsonl"
     assert _layout_path(str(tmp_path / "x.jsonl")) == tmp_path / "x.jsonl"
+
+
+def test_row_segment_off_switches_not_in_params_dump(tmp_path):
+    """缺省关的开关不进 dump：params_hash 与加这些字段之前（v0.4.5）逐位相同（冻结册升版不报「参数变了」，D 10-19）；开着照常进。"""
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.steps import row_segment as RS
+    off = RS.RowSegmentParams().model_dump()
+    for k in ("colgold_prior", "colgold_fingerprint", "yolo_merge", "yolo_model_dir", "yolo_fingerprint",
+              "yolo_conf", "yolo_cover", "yolo_max_h", "layout_prior", "layout_fingerprint"):
+        assert k not in off, k
+    p = tmp_path / "layout.jsonl"
+    p.write_text(json.dumps({"vol": "vol04", "page": 23, "col": 1, "slots": [3], "notes": [],
+                             "half": [], "raised": 0}) + "\n", encoding="utf-8")
+    on = RS.RowSegmentParams(layout_prior=str(p))
+    d = on.model_dump()
+    assert d["layout_prior"] == str(p) and len(d["layout_fingerprint"]) == 16
+    assert params_hash(on) != params_hash(RS.RowSegmentParams())

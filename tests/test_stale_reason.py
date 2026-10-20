@@ -125,3 +125,53 @@ def test_calibrate_hint_names_column_gate():
     assert "column_gate" in txt and "须重跑" in txt
     txt = format_table([Row("period_prior", 180.0, 181.0)], diag, "b")
     assert "须重跑" not in txt
+
+
+def _code_only_stale(store, cv_version, steps=("t_sr_gate",)):
+    """把指定步的条目改成「只是代码变了」：指纹作废，其余（参数、册配置、上游）原样；记上 cv_version。"""
+    for sid in steps:
+        m = store.manifest("tsr", sid)
+        for k, e in m.all().items():
+            m.put(dataclasses.replace(e, fingerprint="0" * 24, cv_version=cv_version))
+
+
+def test_status_code_ok_counts_code_only_stale_as_fresh(world):
+    """用户 10-19：在跑它的那个版本下新鲜就行。只因代码变了过期、产物记着正式版的页当新鲜往下传。"""
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _code_only_stale(store, "0.4.4")
+    eng = _eng(book, pl, store, cache)
+    old = eng.status()
+    assert old["steps"]["t_sr_gate"]["stale_reasons"] == {"代码或版本变了": 2}
+    assert old["steps"]["t_sr_down"]["stale_reasons"] == {"上游过期": 2}
+    new = eng.status(code_ok=True)
+    assert new["steps"]["t_sr_gate"]["counts"][FRESH] == 2
+    assert new["steps"]["t_sr_gate"]["code_only"] == 2 and new["steps"]["t_sr_gate"]["cv_versions"] == {"0.4.4": 2}
+    assert new["steps"]["t_sr_down"]["counts"][FRESH] == 2          # 过期不再往下传
+    assert "code_only" not in new["steps"]["t_sr_down"]
+
+
+def test_status_code_ok_still_flags_everything_else(world):
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    for cv in (None, "0.4.4+3", "0.4.4+dirty"):                       # 老条目、非 tag 版本不放过
+        _code_only_stale(store, cv)
+        assert _eng(book, pl, store, cache).status(code_ok=True)["steps"]["t_sr_gate"]["counts"][STALE] == 2
+    _code_only_stale(store, "0.4.4")
+    # 参数变了 / 册配置变了：照旧报警
+    st = _eng(book, pl, store, cache, params={"t_sr_gate": {"gain": 2.0}}).status(code_ok=True)
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了": 2}
+    st = _eng(dataclasses.replace(book, period_prior=204.0), pl, store, cache).status(code_ok=True)
+    assert st["steps"]["t_sr_gate"]["counts"][STALE] == 2
+    assert "code_only" not in st["steps"]["t_sr_gate"]
+
+
+def test_close_check_1a_code_only_and_strict_cv(world):
+    from open_guji_cv.ops import close_check as CC
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    _code_only_stale(store, "0.4.4")
+    eng = _eng(book, pl, store, cache)
+    it = CC._fresh(eng, [1, 2])
+    assert it["status"] == CC.PASS and "2 页只是代码" in it["detail"] and "0.4.4×2" in it["detail"]
+    assert CC._fresh(eng, [1, 2], strict_cv=True)["status"] == CC.FAIL

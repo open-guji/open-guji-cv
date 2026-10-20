@@ -16,7 +16,7 @@
 | L3 管线 | `steps` `gates` `shadow` `feedback` | 各 Step 的适配（`import open_guji_cv.steps` 即注册全部 Step）；挂在 Step 上的闸；影子放行闸；人裁事件与路由（`EventLog`） |
 | L4 应用 | `eval` `review` `snap` `ops` `exp` | 评测；审阅批次与卡片；快照导入；发布/部署运维；A/B 实验框架 |
 | L5 控制台 | `console` | FastAPI 后端（`console/routers/*`）＋无构建前端，`guji console` 启动 |
-| L6 命令行 | `cli_v2` `cli_exp` `cli_glyph_db` `cli_db` | `guji` 命令（pipeline / step / status / close-check / recheck / cache / collate / gold / eval …） |
+| L6 命令行 | `cli_v2` `cli_exp` `cli_glyph_db` `cli_db` `cli_products` | `guji` 命令（pipeline / step / status / close-check / recheck / cache / collate / gold / eval …） |
 | L7 入口 | `__main__` | `python -m open_guji_cv` |
 
 ## 二、各层之间的「接口」是什么

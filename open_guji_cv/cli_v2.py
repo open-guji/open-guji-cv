@@ -231,6 +231,8 @@ def cmd_status(args) -> None:
         print(json.dumps(st, ensure_ascii=False))
         return
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
+    if getattr(eng.book, "glyph_pin", None):
+        print(f"  字形库钉在 g{eng.book.glyph_pin}：别处人裁进库不让 seed_admit 过期；要落地新人裁把册 yaml 的 glyph_pin 加一")
     for sid, d in st["steps"].items():
         c = d["counts"]
         drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""
@@ -285,7 +287,8 @@ def cmd_close_check(args) -> None:
                  export_dir=Path(args.export_dir) if args.export_dir else None,
                  chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
                  reports=reports_root(), tier=getattr(args, "tier", "final"),
-                 pending=Path(args.pending) if getattr(args, "pending", None) else None)
+                 pending=Path(args.pending) if getattr(args, "pending", None) else None,
+                 strict_cv=getattr(args, "strict_cv", False))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
@@ -369,6 +372,41 @@ def cmd_audit(args) -> None:
         md.write_text(A.review_sheet(book, q, closure_gaps(book, pages, eng.store),
                                      closure_mismatches(book, pages, eng.store)), encoding="utf-8")
         print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
+    elif args.action == "alt":
+        # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
+        # 近似字的异体族（本仓表＋部件檢索＋字统网缓存）按字块图排序，挂成卡上 `alt`，
+        # 再交 ai-team pending_list.py --cards 并进 pending.json（proof_fields 原样带出）。
+        from .clustering.variant_sources import ZiCache
+        from .review.alt_cands import ALT_K, alt_for_cards, attach
+        if args.cards:
+            doc = json.loads(Path(args.cards).read_text(encoding="utf-8"))
+            cs = doc["cards"] if isinstance(doc, dict) else doc
+        else:
+            from .review.cards import cards
+            cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
+                       skip_decided=False, cls="*")["cards"]
+        todo = [c for c in cs if not c.get("admit")]
+        zi = ZiCache(Path(args.zi_cache) if args.zi_cache else None, fetch=args.fetch_zi)
+        alt = alt_for_cards(book, todo, k=args.k or ALT_K, zi=zi, log=lambda m: print(m, file=sys.stderr))
+        n = attach(cs, alt)
+        dst = Path(args.cards_out) if args.cards_out else out_dir / f"{book}.cards.alt.json"
+        dst.write_text(json.dumps(cs, ensure_ascii=False), encoding="utf-8")
+        print(f"{book} 相似字：待审 {len(todo)} 格，出 alt {n} 格（字统网新取 {zi.n_fetched} 字）→ {dst}")
+    elif args.action == "alt-eval":
+        # 相似字效果：人裁过之后，拿人定的字回头看 alt 里排第几（doc/research/人审找字-…md §6）
+        from .feedback.lookup import human_chars
+        from .review.alt_cands import alt_eval
+        src = Path(args.cards) if args.cards else out_dir / f"{book}.cards.alt.json"
+        if not src.exists():
+            print(f"✗ 没有 {src}：先跑 `guji audit alt {book} -w <工作区>`", file=sys.stderr); sys.exit(2)
+        doc = json.loads(src.read_text(encoding="utf-8"))
+        res = alt_eval(doc["cards"] if isinstance(doc, dict) else doc, human_chars(book))
+        print(json.dumps(res, ensure_ascii=False, indent=1))
+        for name, label in (("all", "全部"), ("hard", "难格（人定的字不在卡上原有候选里）")):
+            t = res[name]
+            if t["n"]:
+                print(f"{label} {t['n']} 格：第 1 名 {t['top1']}，前 5 {t['top5']}，前 10 {t['top10']}"
+                      f"（{t['top10'] / t['n']:.0%}），在相似字里的平均名次 {t['mean_rank_when_hit']}", file=sys.stderr)
     elif args.action == "count":
         from .core.workspace import feedback_root
         if not args.since:
@@ -2682,6 +2720,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--tier", choices=["final", "rough"], default="final",
                    help="final（缺省，终校档）：待审必须清零；rough（粗校档）：第 2 项待审只报数、不计"
                         "（出 0.1.0 用；整理设计 R5）")
+    p.add_argument("--strict-cv", action="store_true", dest="strict_cv",
+                   help="1a 用旧口径：代码／版本变了也算过期（缺省只因代码变、产物记着正式版 cv_version 的页算新鲜）")
     p.add_argument("--pending", default=None,
                    help="book-text 本章的 NNN.pending.json（公众人审页的待审单）；第 2c 项认它上面的格为「□ 有去向」")
     p.add_argument("--json", action="store_true")
@@ -2697,8 +2737,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--split-table", default=None, help="format：合扫拆页裁剪表，缺省四庫的 split_table_siku.json")
 
     p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
-                                     "count = 用户审完当场核数；sheet = 生成请审单（只读）")
-    p.add_argument("action", choices=["admitted", "jys", "count", "sheet"])
+                                     "count = 用户审完当场核数；sheet = 生成请审单（只读）；"
+                                     "alt = 给待审卡算好相似字（并进待审单）；alt-eval = 人裁后量相似字命中")
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "alt", "alt-eval"])
     p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
     p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
     p.add_argument("book")
@@ -2707,6 +2748,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--export-dir", default=None, help="jys：guji export format 的输出目录")
     p.add_argument("--chapter", default=None)
     p.add_argument("--out", default=None, help="输出目录；缺省 reports/<册>/")
+    p.add_argument("--cards", default=None, help="alt：卡片列表 JSON（cards(cls='*') 的输出），缺省现算全册；"
+                                                 "alt-eval：带 alt 的卡片 JSON，缺省 reports/<册>/<册>.cards.alt.json")
+    p.add_argument("--cards-out", default=None, help="alt：带 alt 的卡片 JSON 写到这里；缺省 reports/<册>/<册>.cards.alt.json")
+    p.add_argument("--k", type=int, default=0, help="alt：每格最多几个相似字（缺省 30）")
+    p.add_argument("--fetch-zi", action="store_true",
+                   help="alt：字统网缓存里没有的近似字去取一次（≥3 秒一次，取到写缓存）；缺省只读缓存")
+    p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
     p.add_argument("action", choices=["check", "commit"])
@@ -2982,6 +3030,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_db import add_parser as _add_db, cmd_db
     _add_db(sub)
     COMMANDS_V2["db"] = cmd_db
+    # products：前后对比、产物包（受控重跑，doc/受控重跑.md），自带 -w
+    from .cli_products import add_parser as _add_products, cmd_products_entry
+    _add_products(sub)
+    COMMANDS_V2["products"] = cmd_products_entry
     install_workspace_option(sub)
 
 

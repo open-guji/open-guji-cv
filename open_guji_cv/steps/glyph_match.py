@@ -66,6 +66,17 @@ vol02 一轮一个半小时，而新进的几个字形绝大多数格的判决�
   `--verdicts unsure,diff`（非 same 的格统统再查一遍，≈半价）、`--dead`（命中的库条目
   已撤或已改字头——这类格的 same 已经没有依据，建议每次撤库后跑）、`--all`（整页）。
   它只写 manifest 的格级失效，下一次 `guji pipeline --from glyph_match` 只重算这些格。
+
+## 借来的刻例：降一档、进指纹（2026-10-19，共享方案 S6）
+
+工作区 `glyph_lib.borrow` 借来的字形库（共享刻例库 `glyphlib-<族>-v<N>`、别的书）在重建 glyph.db 时装进来，
+记在 `borrowed` 表。它们照旧参与匹配，但**排第二顺位、降一档信任**（sheldon 10-18 定）：
+- 判 same 的库条目里有本书的，就用本书那条当 `matched_id`（同字才会到这里，护栏 2 管异字）；
+- 只有借来的条目判 same：**降成 unsure**，字进候选（带 cov 当先验），交上下文裁决；`via="borrowed:<条目 id>"`
+  记来源，`matched_id` 不填。降下来的格不再走共识升档、近形决胜——那两道看的 cov 正是借来的条目给的。
+- 候选试切（`cand_variants`）同样处理。
+- `borrow_fingerprint` 是硬参数，自动填被借库的名字（排序、去重），借的库换了版本产物判过期；
+  没借库时是空串、不进参数 dump，参数哈希与以前逐位相同。没借库的书判决不变。
 """
 
 from __future__ import annotations
@@ -148,6 +159,55 @@ def human_verdicts_fingerprint(path: str | Path | None = None) -> str:
     return _db_stamp(path, _HUMAN_SQL)
 
 
+def _borrow_name(store: str) -> str:
+    """`borrowed.store`（被借字形库在本机的路径）→ 被借库的名字，不带本机路径。
+
+    中心库借库拉到 `.borrowed/<工作区>/output/glyph_store`、旧布局写的是 `<工作区仓>/output/glyph_store`，
+    都取工作区那一级的目录名；别的路径取最后一级。"""
+    parts = Path(str(store).replace("\\", "/")).parts
+    if len(parts) >= 3 and parts[-2:] == ("output", "glyph_store"):
+        return parts[-3]
+    return parts[-1] if parts else ""
+
+
+def borrowed_ids(db_path: str | Path | None) -> frozenset[str]:
+    """库里借来的实例 id（`borrowed` 表）。没这张表、读不了都当没借。"""
+    import sqlite3
+    p = Path(db_path or _default_db())
+    if not p.exists():
+        return frozenset()
+    try:
+        with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as c:
+            return frozenset(r[0] for r in c.execute("SELECT instance_id FROM borrowed"))
+    except sqlite3.Error:
+        return frozenset()
+
+
+def borrow_fingerprint(db_path: str | Path | None = None) -> str:
+    """被借库的名字（排序、去重、逗号连）；没借是空串。见模块头「借来的刻例」。"""
+    import sqlite3
+    p = Path(db_path or _default_db())
+    if not p.exists():
+        return ""
+    try:
+        with sqlite3.connect(f"file:{p}?mode=ro", uri=True) as c:
+            names = {_borrow_name(r[0]) for r in c.execute("SELECT DISTINCT store FROM borrowed")}
+    except sqlite3.Error:
+        return ""
+    return ",".join(sorted(n for n in names if n))
+
+
+def demote_borrowed(m, borrowed: frozenset[str]):
+    """借来的条目判的 same 降一档（见模块头）。返回 (verdict, char, matched_id, cov, wmax, borrowed_id)：
+    `borrowed_id` 非空＝降了档。不是 same、没借库、命中的是本书条目时原样返回。"""
+    if m.verdict != "same" or not borrowed or m.matched_id not in borrowed:
+        return m.verdict, m.char, m.matched_id, m.cov, m.wmax, None
+    for iid, cov, wmax in getattr(m, "same_hits", ()) or ():
+        if iid not in borrowed:                     # 本书也有条目判 same：本书优先
+            return "same", m.char, iid, cov, wmax, None
+    return "unsure", None, None, m.cov, m.wmax, m.matched_id
+
+
 class GlyphMatchParams(BaseModel):
     db_path: str = ""
     """字形库路径。**留空 = 运行时按 workspace 解析**（`GUJI_GLYPH_DB` →
@@ -185,6 +245,10 @@ class GlyphMatchParams(BaseModel):
     首位，证据落 `MatchRec.near_shape`；匹配器没判护栏的 unsure 格再升 same（`via="near_shape:<s>"`）。
     书级 yaml `params: {glyph_match: {near_shape: true}}` 可开。"""
 
+    borrow_fingerprint: str = ""
+    """被借字形库的名字（`borrow_fingerprint()`，留空自动填）。硬参数：借的库换了，这一步判过期。
+    没借库时是空串，不进参数 dump（参数哈希与 S6 之前逐位相同）。见模块头「借来的刻例」。"""
+
     cell_budget_s: float = 0.0
     """每格时间预算（秒，2026-10-09，overview#493）。0 = 不设限（缺省，产物与参数指纹不变）。
     >0 时一格（含它的候选试切）匹配超时就放弃：记 `verdict="diff"`、`guard="timeout"`、无候选，
@@ -200,6 +264,8 @@ class GlyphMatchParams(BaseModel):
                 d.pop("near_shape", None)
             if not d.get("cell_budget_s"):
                 d.pop("cell_budget_s", None)
+            if not d.get("borrow_fingerprint"):
+                d.pop("borrow_fingerprint", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -209,6 +275,8 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_path", _default_db())
         if not self.db_fingerprint:
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
+        if not self.borrow_fingerprint:
+            object.__setattr__(self, "borrow_fingerprint", borrow_fingerprint(self.db_path))
 
 
 def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
@@ -308,8 +376,10 @@ class GlyphMatchStep(Step):
         key = (p.db_path, p.db_fingerprint)
         if getattr(self, "_confirmed_key", None) != key:
             self._confirmed = human_confirmed_counts(p.db_path) if p.consensus_min_confirmed > 0 else {}
+            self._borrowed = borrowed_ids(p.db_path) if p.borrow_fingerprint else frozenset()
             self._confirmed_key = key
         confirmed = self._confirmed
+        borrowed = getattr(self, "_borrowed", frozenset())
 
         def normalize_patch(img, punct: bool = False):
             # 标点走等比归一（见 seed_witness 与 normalize.normalize_patch 的 isotropic 说明）：
@@ -365,8 +435,9 @@ class GlyphMatchStep(Step):
                     except MatchTimeout:
                         timed_out = True
                         break
+                    cv_verdict, cv_char, _, _, _, _ = demote_borrowed(cm, borrowed)
                     cand_variants.append(CandidateMatch(
-                        side=cv.side, cand_idx=cv.cand_idx, verdict=cm.verdict, char=cm.char,
+                        side=cv.side, cand_idx=cv.cand_idx, verdict=cv_verdict, char=cv_char,
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
                         candidates=[(cc, round(float(vv), 4))
                                     for cc, vv in cm.candidates[:p.max_candidates]]))
@@ -374,8 +445,9 @@ class GlyphMatchStep(Step):
                     recs.append(_timeout_rec(r, p.cell_budget_s))
                     n_timeout += 1
                     continue
-                verdict, char, via = m.verdict, m.char, None
-                if verdict == "unsure" and m.guard is None:
+                verdict, char, matched_id, cov, wmax, lent = demote_borrowed(m, borrowed)
+                via = f"borrowed:{lent}" if lent else None
+                if verdict == "unsure" and m.guard is None and not lent:
                     # 共识升档（见模块头）。匹配器判了护栏（never_match / conflict）的不动。
                     hit = consensus_same(list(m.candidates), confirmed.get,
                                          p.consensus_cov, p.consensus_margin,
@@ -383,14 +455,14 @@ class GlyphMatchStep(Step):
                     if hit:
                         verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
                 ns = m.near_shape
-                if (ns_cfg is not None and verdict == "unsure" and ns and ns.get("winner")
+                if (ns_cfg is not None and verdict == "unsure" and ns and ns.get("winner") and not lent
                         and (m.guard is None or ns_cfg.allow_guarded)):
                     # 近形决胜升档（与共识升档同层、互不重叠：触发要求差距 < 0.03，共识要求 ≥ 0.03）
                     verdict, char, via = "same", ns["winner"], f"near_shape:{ns['score']:+.2f}"
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
-                    verdict=verdict, char=char, matched_id=m.matched_id,
-                    cov=round(float(m.cov), 4), wmax=round(float(m.wmax), 2),
+                    verdict=verdict, char=char, matched_id=matched_id,
+                    cov=round(float(cov), 4), wmax=round(float(wmax), 2),
                     candidates=[(c, round(float(v), 4))
                                 for c, v in m.candidates[:p.max_candidates]],
                     guard=m.guard, n_verified=int(m.n_verified), via=via,

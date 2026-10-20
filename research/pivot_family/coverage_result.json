@@ -1,0 +1,666 @@
+{
+ "V": {
+  "ours": {
+   "n": 414,
+   "covered": 414,
+   "top1": 379,
+   "top3": 413,
+   "top5": 413,
+   "top10": 414,
+   "pool_median": 7.0
+  },
+  "rt": {
+   "n": 414,
+   "covered": 379,
+   "top1": 346,
+   "top3": 378,
+   "top5": 378,
+   "top10": 379,
+   "pool_median": 18.0
+  },
+  "zi": {
+   "n": 414,
+   "covered": 358,
+   "top1": 325,
+   "top3": 357,
+   "top5": 357,
+   "top10": 358,
+   "pool_median": 14.0
+  },
+  "ours+rt": {
+   "n": 414,
+   "covered": 414,
+   "top1": 378,
+   "top3": 413,
+   "top5": 413,
+   "top10": 414,
+   "pool_median": 18.0
+  },
+  "all3": {
+   "n": 414,
+   "covered": 414,
+   "top1": 378,
+   "top3": 413,
+   "top5": 413,
+   "top10": 413,
+   "pool_median": 24.0
+  }
+ },
+ "N": {
+  "n": 76,
+  "zi_fetched": 74,
+  "zi_has_family": 63,
+  "rt_has_family": 67,
+  "detail": [
+   {
+    "g": "㒊",
+    "p": "㒊",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 18
+   },
+   {
+    "g": "惋",
+    "p": "惋",
+    "family": 8,
+    "pool": 9,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "狼",
+    "p": "狼",
+    "family": 11,
+    "pool": 12,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "鋈",
+    "p": "鋈",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "鋈",
+    "p": "鋈",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "𡽪",
+    "p": "𡽪",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "𡽪",
+    "p": "𡽪",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "𫊫",
+    "p": "𫊫",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫊫",
+    "p": "𫊫",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫎇",
+    "p": "蒙",
+    "family": 1,
+    "pool": 31,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫎇",
+    "p": "蒙",
+    "family": 1,
+    "pool": 31,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫎇",
+    "p": "蒙",
+    "family": 1,
+    "pool": 31,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫎇",
+    "p": "蒙",
+    "family": 1,
+    "pool": 31,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𫝑",
+    "p": "𫝑",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𬋕",
+    "p": "𬋕",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𮮄",
+    "p": "𮮄",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𮮄",
+    "p": "𮮄",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𲄳",
+    "p": "𲄳",
+    "family": 2,
+    "pool": 3,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "𲄳",
+    "p": "𲄳",
+    "family": 2,
+    "pool": 3,
+    "rank": null,
+    "base_rank": null
+   },
+   {
+    "g": "㴶",
+    "p": "㴶",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "偓",
+    "family": 0
+   },
+   {
+    "g": "僖",
+    "p": "僖",
+    "family": 2,
+    "pool": 3,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "吐",
+    "p": "吐",
+    "family": 12,
+    "pool": 13,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "堉",
+    "p": "堉",
+    "family": 2,
+    "pool": 3,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "墓",
+    "p": "墓",
+    "family": 20,
+    "pool": 21,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "婺",
+    "p": "婺",
+    "family": 7,
+    "pool": 8,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "嫄",
+    "p": "嫄",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "嫓",
+    "p": "嫓",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "寄",
+    "p": "計",
+    "family": 11,
+    "pool": 4,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "帖",
+    "p": "帖",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "幛",
+    "p": "幛",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "彭",
+    "p": "彭",
+    "family": 13,
+    "pool": 14,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "怠",
+    "p": "怠",
+    "family": 11,
+    "pool": 12,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "惑",
+    "p": "國",
+    "family": 12,
+    "pool": 69,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "惑",
+    "p": "國",
+    "family": 12,
+    "pool": 69,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "想",
+    "p": "想",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "挹",
+    "p": "抑",
+    "family": 8,
+    "pool": 28,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "挹",
+    "p": "抑",
+    "family": 8,
+    "pool": 28,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "描",
+    "p": "描",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "描",
+    "p": "描",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "攻",
+    "p": "共",
+    "family": 15,
+    "pool": 16,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "攻",
+    "p": "共",
+    "family": 15,
+    "pool": 16,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "曩",
+    "p": "曩",
+    "family": 26,
+    "pool": 27,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "棼",
+    "p": "棼",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "楛",
+    "p": "楛",
+    "family": 3,
+    "pool": 4,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "楣",
+    "p": "楣",
+    "family": 7,
+    "pool": 8,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "毛",
+    "p": "無",
+    "family": 15,
+    "pool": 91,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "汲",
+    "p": "汲",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "湖",
+    "p": "湖",
+    "family": 3,
+    "pool": 4,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "澥",
+    "p": "澥",
+    "family": 2,
+    "pool": 3,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "煤",
+    "p": "煤",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "瑞",
+    "p": "瑞",
+    "family": 4,
+    "pool": 5,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "璋",
+    "p": "章",
+    "family": 7,
+    "pool": 12,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "璐",
+    "family": 0
+   },
+   {
+    "g": "禁",
+    "p": "禁",
+    "family": 8,
+    "pool": 9,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "禁",
+    "p": "禁",
+    "family": 8,
+    "pool": 9,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "稍",
+    "p": "稍",
+    "family": 9,
+    "pool": 10,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "稍",
+    "p": "稍",
+    "family": 9,
+    "pool": 10,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "笈",
+    "p": "籍",
+    "family": 6,
+    "pool": 6,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "笵",
+    "p": "笵",
+    "family": 2,
+    "pool": 3,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "筵",
+    "p": "筵",
+    "family": 27,
+    "pool": 28,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "簇",
+    "p": "簇",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "粉",
+    "p": "粉",
+    "family": 5,
+    "pool": 6,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "紊",
+    "p": "文",
+    "family": 5,
+    "pool": 11,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "芳",
+    "p": "芳",
+    "family": 11,
+    "pool": 12,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "衍",
+    "p": "延",
+    "family": 14,
+    "pool": 21,
+    "rank": null,
+    "base_rank": 2
+   },
+   {
+    "g": "蹖",
+    "p": "蹖",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "郊",
+    "p": "高",
+    "family": 11,
+    "pool": 14,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "配",
+    "p": "配",
+    "family": 13,
+    "pool": 14,
+    "rank": 1,
+    "base_rank": 2
+   },
+   {
+    "g": "配",
+    "p": "配",
+    "family": 13,
+    "pool": 14,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "酷",
+    "p": "酷",
+    "family": 8,
+    "pool": 9,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "雯",
+    "p": "雯",
+    "family": 1,
+    "pool": 2,
+    "rank": 1,
+    "base_rank": 1
+   },
+   {
+    "g": "露",
+    "p": "路",
+    "family": 23,
+    "pool": 22,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "靖",
+    "p": "請",
+    "family": 9,
+    "pool": 9,
+    "rank": null,
+    "base_rank": 1
+   },
+   {
+    "g": "音",
+    "p": "意",
+    "family": 10,
+    "pool": 13,
+    "rank": null,
+    "base_rank": 2
+   },
+   {
+    "g": "𮞉",
+    "p": "𮞉",
+    "family": 1,
+    "pool": 2,
+    "rank": null,
+    "base_rank": null
+   }
+  ],
+  "p_ne_g": 20,
+  "p_ne_g_top1": 5,
+  "p_ne_g_base_top1": 14,
+  "p_ne_g_top3": 5,
+  "p_ne_g_base_top3": 16,
+  "p_ne_g_top5": 5,
+  "p_ne_g_base_top5": 16,
+  "p_ne_g_top10": 5,
+  "p_ne_g_base_top10": 16
+ }
+}

@@ -29,7 +29,7 @@ class FakeEng:
         self.book = book
         self._reasons = reasons or {}
 
-    def status(self, pages=None):
+    def status(self, pages=None, code_ok=False):
         return {"steps": {sid: {"counts": {"stale": sum(r.values()), "missing": 0, "failed": 0,
                                            "blocked": 0},
                                 "stale_reasons": r}

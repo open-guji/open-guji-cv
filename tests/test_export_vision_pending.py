@@ -61,3 +61,23 @@ def test_human_decided_cell_is_never_demoted_to_pending(store):
 def test_vision_pending_ids_is_empty_without_vision_records(ws):
     from open_guji_cv.feedback.vision import vision_pending_ids
     assert vision_pending_ids("keben", [1, 2, 3]) == frozenset()
+
+
+def test_excluded_cell_with_human_char_is_exported_as_human_decided(store):
+    """排除名单格（seg_defect）人已给字（evidence.human_char）：文本出这个字，review=human，不记阙文。"""
+    from open_guji_cv.core.spec import page_key
+    a = store.read(BOOK, "seed_admit", page_key(PAGE), "seed_admit")
+    r = next(r for cc in a.columns for r in cc.chars if r.slot == 3 and cc.col == 2)
+    r.evidence = {"excluded": "human:seg_defect", "human_char": "如"}
+    store.write(BOOK, "seed_admit", f"p{PAGE:04d}", {"seed_admit": a})
+    out = _export(store)
+    g = next(x for x in out["glyphs"] if x["cv_id"] == r.id)
+    assert out["text"][g["text"][0]] == "如"
+    assert g["review"] == "human" and g["method"] == "human"
+    assert g["text"][0] not in out.get("lacuna", [])
+    assert gp.check(out) == []
+    # 没有人给的字：照旧 □ + pending
+    r.evidence = {"excluded": "human:seg_defect"}
+    store.write(BOOK, "seed_admit", f"p{PAGE:04d}", {"seed_admit": a})
+    g = next(x for x in _export(store)["glyphs"] if x["cv_id"] == r.id)
+    assert g["review"] == "pending"
