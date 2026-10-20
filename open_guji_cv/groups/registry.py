@@ -153,6 +153,14 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"),
                          # 第三批（2026-10-20 sheldon 合审定）：殿本全书只见一形，人裁 ≥10 且来自 ≥2 册
                          ("kan", "刊刋"), ("jiw", "既旣"), ("qx", "清淸"), ("dx", "顚顛"), ("zx", "淄湽"), ("qy", "青靑"))},
+    # —— 两形混用的异体组（2026-10-20）：字频弃权后走在线 IDS 的「按字分类」判法（`ids_online.SPECS`，by_form）；
+    #    判不出就送人审，不退到库形最近。模板库在 config/groups/<组>/ids_bank.json。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("freq", "ids"), combine="first"),
+        note="异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。")
+       for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"))},
 }
 
 
