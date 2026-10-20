@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 from typing import NamedTuple
 
 from ..utils.ji_yi_si import FAMILY as _JYS
@@ -115,19 +116,105 @@ def resolved_manual_cells(book: str) -> dict[tuple[int, int], list[dict]]:
     """
     from .consumers import verdict_store
     out: dict[tuple[int, int], list[dict]] = {}
+    store = verdict_store()
     try:
-        items = verdict_store().list(MANUAL_CELLS_SHARD, legacy=False)
-    except Exception:
-        return out
+        items = store.list(MANUAL_CELLS_SHARD, legacy=False)
+    except Exception:  # noqa: BLE001
+        # 以前这里静默返回空表：一行格式不对（如 history 少了 ts/change），整个分片作废、所有人工指定的列
+        # 悄悄退回自动切分（册2、3 收尾清单 §三，M10·D5）。现在逐行读、跳过坏行并报出来。
+        items = _manual_items_lenient(store.items_path(MANUAL_CELLS_SHARD))
     for it in items:
         if it.status != "active" or str(it.anchor.book) != book:
             continue
         page, col = it.anchor.page, it.anchor.col
         cells = it.expected.get("cells")
         if page is None or col is None or not isinstance(cells, list) or not cells:
+            print(f"⚠️ manual-cells {it.id}：没有页／列或 cells 为空，这一列不生效", file=sys.stderr)
             continue
         out[(page, col)] = cells
     return out
+
+
+MANUAL_CELL_KINDS = frozenset({"char", "jiazhu_a", "jiazhu_b"})
+MANUAL_CELL_KEYS = ("slot", "kind", "y0", "y1", "x0", "x1")
+
+
+def _manual_items_lenient(path):
+    """逐行读 manual-cells 分片，坏行跳过并在 stderr 报出（不再让一行坏掉整个分片）。"""
+    from ..gold.item import GoldItem
+    out = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return out
+    for n, line in enumerate(lines, 1):
+        if not line.strip():
+            continue
+        try:
+            out.append(GoldItem.model_validate_json(line))
+        except Exception as e:  # noqa: BLE001
+            print(f"⚠️ manual-cells {path} 第 {n} 行格式不对，这一列不生效：{str(e).splitlines()[0]}", file=sys.stderr)
+    return out
+
+
+def check_manual_cells(path) -> list[str]:
+    """逐行检查 manual-cells 分片（`feedback/verdicts/char-segmentation/manual-cells/items.jsonl`），返回问题清单；空＝没问题。
+
+    查：能否解析成金标条目；anchor 有 book／page／col；`expected.cells` 非空，每格有 slot、kind、y0、y1、x0、x1，
+    kind 在 char／jiazhu_a／jiazhu_b 里，y0<y1、x0<x1；同一列 slot＋sub 不重复；history 每条有 ts、change、why。"""
+    import json as _json
+    from ..gold.item import GoldItem
+    problems: list[str] = []
+    seen: dict[tuple, int] = {}
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        where = f"第 {n} 行"
+        try:
+            raw = _json.loads(line)
+        except ValueError as e:
+            problems.append(f"{where}：不是 JSON（{e}）")
+            continue
+        for i, h in enumerate(raw.get("history") or []):
+            miss = [k for k in ("ts", "change", "why") if not (isinstance(h, dict) and h.get(k))]
+            if miss:
+                problems.append(f"{where}：history[{i}] 缺 {'、'.join(miss)}")
+        try:
+            it = GoldItem.model_validate(raw)
+        except Exception as e:  # noqa: BLE001
+            problems.append(f"{where}：金标信封不合法（{str(e).splitlines()[0]}）")
+            continue
+        where = f"第 {n} 行（{it.id}）"
+        a = it.anchor
+        if not a.book or a.page is None or a.col is None:
+            problems.append(f"{where}：anchor 缺 book／page／col")
+        else:
+            key = (a.book, a.page, a.col)
+            if key in seen and it.status == "active":
+                problems.append(f"{where}：与第 {seen[key]} 行是同一列（后到的覆盖先到的）")
+            seen[key] = n
+        cells = it.expected.get("cells")
+        if not isinstance(cells, list) or not cells:
+            problems.append(f"{where}：expected.cells 为空")
+            continue
+        slots = set()
+        for j, c in enumerate(cells):
+            if not isinstance(c, dict):
+                problems.append(f"{where}：cells[{j}] 不是对象")
+                continue
+            miss = [k for k in MANUAL_CELL_KEYS if c.get(k) is None]
+            if miss:
+                problems.append(f"{where}：cells[{j}] 缺 {'、'.join(miss)}")
+                continue
+            if c["kind"] not in MANUAL_CELL_KINDS:
+                problems.append(f"{where}：cells[{j}] kind={c['kind']!r} 不认识")
+            if not (c["y0"] < c["y1"] and c["x0"] < c["x1"]):
+                problems.append(f"{where}：cells[{j}] 框不对（y0<y1、x0<x1）")
+            sk = (c["slot"], c.get("sub") or "")
+            if sk in slots:
+                problems.append(f"{where}：cells[{j}] 格号 {c['slot']}{c.get('sub') or ''} 重复")
+            slots.add(sk)
+    return problems
 
 
 SOLO_NOTE_SHARD = "char-segmentation/solo-notes"

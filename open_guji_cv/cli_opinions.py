@@ -11,6 +11,7 @@
     guji opinions to-user --out <目录>／decide --from <裁决 JSON>
     guji opinions revise  --book B --vol 002 --book-text <检出> [--dry-run] --pr N
     guji opinions reply-drafts --book B --ws W
+    guji opinions publish-status --book B --ws W [--remote] [--dry-run]  # 处理结论 → 中心库 feedback/lists/web/<书>/status.jsonl（网站回显）
 
 意见池在哪：缺省是本机数据目录 `$GUJI_DATA_HOME/<分支>/<工作区>/feedback/lists/opinions/<书>/`（`guji db sync` 推进中心库）；
 `--root D` 用 `D/<书>/`（试跑、不进中心库的判定）；`--remote` 直接经 Worker 读写中心库（令牌取 `--token-env` 指的环境变量，不打印）。
@@ -401,6 +402,27 @@ def cmd_reply_drafts(args) -> None:
     _print(f"待回复 {n} 条（回写网站归 B2，第一阶段只出草稿）")
 
 
+# ---------------- publish-status ----------------
+
+def cmd_publish_status(args) -> None:
+    from .opinions import webstatus as W
+    st = _store(args)
+    backend = W.status_backend(args.book, ws=args.ws, root=args.root, remote=args.remote, token_env=args.token_env,
+                               branch=args.branch)
+    res = W.publish(st, backend, dry_run=args.dry_run)
+    for r in res["rows"]:
+        _print(json.dumps(r, ensure_ascii=False))
+    for n in res["notes"]:
+        _print(f"  注：{n}")
+    c = res["counts"]
+    tag = "[dry-run] " if args.dry_run else ""
+    if not res["changed"]:
+        _print(f"{tag}{res['where']}：{len(res['rows'])} 行，内容没变，不写")
+    else:
+        _print(f"{tag}{res['where']}：{len(res['rows'])} 行（新增 {c['added']}、改 {c['changed']}、不变 {c['same']}、"
+               f"去掉 {c['removed']}）" + ("，已写" if res["written"] else "，未写"))
+
+
 # ---------------- revise ----------------
 
 def cmd_revise(args) -> None:
@@ -567,6 +589,11 @@ def add_parser(sub) -> None:
     p = s.add_parser("reply-drafts", help="列出已结案、待回复读者的意见和回复文字")
     _common(p)
     p.set_defaults(func=cmd_reply_drafts)
+
+    p = s.add_parser("publish-status", help="网站来源意见的处理结论 → 中心库 feedback/lists/web/<书>/status.jsonl（网站 Action 回写 /api/fixes）")
+    _common(p)
+    p.add_argument("--dry-run", action="store_true", help="只打印，不写")
+    p.set_defaults(func=cmd_publish_status)
 
     p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
     p.set_defaults(func=cmd_schema)
