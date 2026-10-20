@@ -402,6 +402,11 @@ def cmd_audit(args) -> None:
             cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
                        skip_decided=False, cls="*")["cards"]
         todo = [c for c in cs if not c.get("admit")]
+        if args.reviewed:
+            # 人裁过的格也算（它们多已放行、不在待审里）：给 alt-eval 拿历史人裁量真实命中，不进待审单
+            from .feedback.lookup import human_chars
+            done = human_chars(book)
+            todo += [c for c in cs if c.get("admit") and c.get("id") in done]
         zi = ZiCache(Path(args.zi_cache) if args.zi_cache else None, fetch=args.fetch_zi)
         alt = alt_for_cards(book, todo, k=args.k or ALT_K, zi=zi, log=lambda m: print(m, file=sys.stderr))
         n = attach(cs, alt)
@@ -2770,6 +2775,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--k", type=int, default=0, help="alt：每格最多几个相似字（缺省 30）")
     p.add_argument("--fetch-zi", action="store_true",
                    help="alt：字统网缓存里没有的近似字去取一次（≥3 秒一次，取到写缓存）；缺省只读缓存")
+    p.add_argument("--reviewed", action="store_true",
+                   help="alt：人裁过、已放行的格也算相似字（给 alt-eval 用历史人裁量命中；pending_list 只取待审格，不受影响）")
     p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
