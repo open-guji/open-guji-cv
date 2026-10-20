@@ -7,6 +7,7 @@
 
 ### Fixed
 - 语料库清单不再收字组 `config/groups/*/prompt.md`（只给离线 L2 拼消息，Step 不读）；老清单里登记了的也跳过核对。此前改提示词（cc6f455f）会让钉了 corpus 的册在 glyph_match 起跑前报 CorpusDrift 拒跑（M9 基线跑 vol06 撞上，GUJI-636；PATCH，各步 code_hash 不变）。
+- 并行限流按容器内存算：可用内存取 /proc/meminfo 与 cgroup 上限（减去已用、不算页缓存）中小的；glyph_match 单进程登记从 1 GB 改为 3.6 GB（导了字体域后 vol06 实测 3.4–3.7 GB，原登记让 4 进程在 14.3 GB 容器里被 OOM 杀）。只改进程数，产物与 code_hash 不变（M9 基线，GUJI-636）。
 
 ## [0.4.9] - 测试中
 
