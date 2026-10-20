@@ -33,6 +33,7 @@
 - 粗校出口报告单列「钉版」一行（GUJI-656）：`collect_exit.py` 读册配置的 `cv_version`、`corpus`、`glyph_pin`，没钉的标 ⚠，只提示、不挡出口；规矩见 `doc/版本号规矩.md` 第七节（每波开工发一个正式 tag，各册钉 tag＋语料号＋字形库号）。不碰任何 Step，`code_hash` 不变。
 - `scripts/zhengli/ledger.py`（GUJI-667）：粗校台账与统一人审率口径（用户 10-20 定：正文页送精校的待审格 ÷ 正文页字格，不含标题槽、非字格；重切清单、非正文另报），`review_rate()` 纯函数＋CLI 追加一行到数据目录 `feedback/lists/ledger/<册>.jsonl`。不碰任何 Step，`code_hash` 不变。
 - `scripts/ia_download_zongmu.py` 改按全书 99 册两段编号（`06061300`–`06061320`、`06066140`–`06066217`，GUJI-648 逐号核过；原来按「199 册连号」，照默认跑会从 vol22 起下别的书）：新 `--vols 11-20` 按册号选，缺省取 `_tif.zip`（与工作区现有原图逐像素一致）。书单 `doc/runbook/书单-四庫總目.md`。不碰任何 Step，`code_hash` 不变。
+- 粗校待审单脚本迁进本仓 `scripts/zhengli/`（GUJI-652）：`pending_list.py`、`sprite_build.py`、`ex_build.py`、`alt_build.py`、`decision_build.py`，原在 ai-team 工单目录、runbook 直接引用、没有测试；行为不变，`--cv-root` 缺省本仓根，各配单元测试。`ex_build`／`decision_build` 的用法示例仍写中心库切换前的路径，文件头注明。不碰任何 Step，`code_hash` 不变。
 
 ### Changed
 - `scripts/export_guji_format.py --format char-cord` 的 `--text-version` 改为必填、不再缺省 0.1.0（GUJI-679）：已在 book-text 上的册要写线上现行版本，以前缺省写 0.1.0，出补丁前得先手工改回。`zl.py` 导出步显式传版本。不碰任何 Step，`code_hash` 不变。

@@ -9,6 +9,7 @@
 
 - `check_pages_json_boxes.py`：pages.json 抽字核对（A2 验收，F3 overview#398）：抽 N 个格，把框画回原图，出一张对照图 + 对位量。
 - `zhengli/zl.py`：整理一册书**执行脚本**（幂等、可断点续跑，只在需看图／人裁处停；见 runbook〇·五）；`zhengli/snap_import.py`：容忍 CRLF 的 `guji snap import` 包装。
+- 粗校出口与待审单（`zhengli/`）：`collect_exit.py`＋`exit_report.py`（R1–R5 出口报告）；`ledger.py`（粗校台账、统一人审率口径，GUJI-667）；`pending_list.py`（册级待审单 pending.json）、`sprite_build.py`／`ex_build.py`／`alt_build.py`（精校页字块雪碧图、同字例子、相似字图）、`decision_build.py`（decision.json），后五个 10-20 从 ai-team 迁入（GUJI-652）。
 - `relanding/`：重落后核对（`manifest_cmp.py` 比 params_hash／指纹，`relanding_diff.py` 比放行差异与红线格，`products_snapshot.py` 留快照；用法见其 README）。
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
