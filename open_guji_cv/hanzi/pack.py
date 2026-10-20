@@ -92,41 +92,45 @@ class Pack:
         dest = self.db_path(pack)
         if dest.exists():
             return dest
-        files = [(k, f) for k, f in sorted(self.manifest["files"].items()) if f["pack"] == pack]
-        paths = [(k, f, self._file(k, f)) for k, f in files]
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        tmp = dest.with_suffix(f".tmp{os.getpid()}")
-        if tmp.exists():
-            tmp.unlink()
-        con = sqlite3.connect(tmp)
-        con.execute("PRAGMA journal_mode=OFF")
-        con.execute("PRAGMA synchronous=OFF")
-        made: set[str] = set()
-        for key, f, p in paths:
+        tables: dict[str, list] = {}
+        for key, f in sorted(self.manifest["files"].items()):
+            if f["pack"] != pack:
+                continue
             t = f["table"]
-            cols = S.TABLES[t]
-            if t not in made:
-                decl = ", ".join(f"{c} {_coltype(c)}" for c in cols)
-                con.execute(f"CREATE TABLE {t} ({decl})")
-                made.add(t)
-            text = p.read_text(encoding="utf-8")
+            text = self._file(key, f).read_text(encoding="utf-8")
             if "path" in f:                                  # 形近对表：原样的仓里表，现解析
                 rows = I.near_pairs(text, key)[0]
             else:
-                rows = (tuple(_parse(c, v) for c, v in zip(cols, line.split("\t")))
-                        for line in text.splitlines())
-            con.executemany(f"INSERT INTO {t} VALUES ({','.join('?' * len(cols))})", rows)
-        for t in made:
-            for sql in S.INDEXES.get(t, ()):
-                con.execute(sql)
-        con.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
-        con.executemany("INSERT INTO meta VALUES (?, ?)",
-                        [("version", self.version), ("pack", pack),
-                         ("unihan_version", self.manifest.get("unihan_version", ""))])
-        con.commit()
-        con.close()
-        tmp.replace(dest)
+                rows = [tuple(_parse(c, v) for c, v in zip(S.TABLES[t], line.split("\t")))
+                        for line in text.splitlines()]
+            tables.setdefault(t, []).extend(rows)
+        write_db(dest, tables, {"version": self.version, "pack": pack,
+                                "unihan_version": self.manifest.get("unihan_version", "")})
         return dest
+
+
+def write_db(dest: Path, tables: dict[str, list[tuple]], meta: dict[str, str]) -> Path:
+    """`{表: 行}` → sqlite（建表、灌行、建索引、写 meta），先写临时文件再换上，半截的库不会留下。"""
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(f".tmp{os.getpid()}")
+    if tmp.exists():
+        tmp.unlink()
+    con = sqlite3.connect(tmp)
+    con.execute("PRAGMA journal_mode=OFF")
+    con.execute("PRAGMA synchronous=OFF")
+    for t, rows in tables.items():
+        cols = S.TABLES[t]
+        con.execute(f"CREATE TABLE {t} ({', '.join(f'{c} {_coltype(c)}' for c in cols)})")
+        con.executemany(f"INSERT INTO {t} VALUES ({','.join('?' * len(cols))})", rows)
+        for sql in S.INDEXES.get(t, ()):
+            con.execute(sql)
+    con.execute("CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT)")
+    con.executemany("INSERT INTO meta VALUES (?, ?)", sorted(meta.items()))
+    con.commit()
+    con.close()
+    tmp.replace(dest)
+    return dest
 
 
 def _coltype(c: str) -> str:

@@ -15,7 +15,8 @@ from __future__ import annotations
 
 import heapq
 import sqlite3
-from collections.abc import Iterable
+import threading
+from collections.abc import Callable, Iterable
 from functools import lru_cache
 from pathlib import Path
 from typing import NamedTuple
@@ -67,6 +68,7 @@ class HanziDB:
         self._pack = pack
         self._has_parts = False
         self._up_cache: dict[tuple[str, int], dict[str, int]] = {}
+        self._lock = threading.Lock()                   # 控制台多线程：部件库只 ATTACH 一次
         if parts is not None:
             self._attach(Path(parts))
 
@@ -81,6 +83,16 @@ class HanziDB:
                                               else None)
         return cls(core, p, pack=pk if parts is not False else None)
 
+    @classmethod
+    def from_tables(cls, root: str | Path, core: dict[str, list[tuple]],
+                    parts: dict[str, list[tuple]] | None = None) -> HanziDB:
+        """直接拿行建一个小库（测试与临时实验用，不走清单）：`{表: 行}`，列序同 `schema.TABLES`。"""
+        from .pack import write_db
+        root = Path(root)
+        c = write_db(root / "core.sqlite", core, {"version": "adhoc", "pack": "core"})
+        p = write_db(root / "parts.sqlite", parts, {"version": "adhoc", "pack": "parts"}) if parts else None
+        return cls(c, p)
+
     def _attach(self, p: Path) -> None:
         self.con.execute("ATTACH DATABASE ? AS parts", (_ro_uri(p),))
         self._has_parts = True
@@ -90,7 +102,9 @@ class HanziDB:
             return
         if self._pack is None:
             raise RuntimeError("没有部件库：用 HanziDB.open(parts=True) 打开")
-        self._attach(self._pack.ensure("parts"))
+        with self._lock:
+            if not self._has_parts:
+                self._attach(self._pack.ensure("parts"))
 
     def manifest(self) -> dict:
         return self._pack.manifest if self._pack is not None else {}
@@ -277,12 +291,14 @@ class HanziDB:
 
     # ── 合成候选池 ───────────────────────────────────
 
-    def pool(self, pivots: list[str], near_k: int = 5, srcs: Iterable[str] | None = None
-             ) -> dict[str, dict]:
+    def pool(self, pivots: list[str], near_k: int = 5, srcs: Iterable[str] | None = None,
+             extra: Callable[[str], dict[str, Iterable[str]]] | None = None) -> dict[str, dict]:
         """近似字 → `{字: {"p": 从哪个近似字来, "src": "piv,v,rt,zi,near"}}`。
 
         与 `variant_sources.family_pool` 同口径：v＝现役异体表（去通假、钓鱼形近）、rt＝部件檢索、
-        zi＝字统网派生边、near＝形近表前 k；人审 distinct 不剔（池子只是候选，宁多勿少）。"""
+        zi＝字统网派生边、near＝形近表前 k；人审 distinct 不剔（池子只是候选，宁多勿少）。
+        `extra(近似字) -> {简写: 字…}` 并进库外的来源（如本机字统网缓存里库还没收的族），
+        与库里同一简写的合在一起排。"""
         from .importers import is_han
         want = set(srcs) if srcs is not None else None
         pool: dict[str, dict] = {}
@@ -306,6 +322,8 @@ class HanziDB:
                 tag = _pool_tag(e.src)
                 if tag:
                     by_tag.setdefault(tag, set()).add(e.other(p))
+            for tag, cs in (extra(p) if extra else {}).items():
+                by_tag.setdefault(tag, set()).update(cs)
             for tag in order:
                 for c in sorted(by_tag.get(tag, ())):
                     add(c, p, tag)

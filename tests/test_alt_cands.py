@@ -69,25 +69,31 @@ def test_zi_cache_offline_failure_is_silent(tmp_path):
     assert not list(tmp_path.glob("*.json"))          # 失败不写缓存，下次再试
 
 
-def test_charcomp_and_compat_filter(tmp_path):
-    f = tmp_path / "rt.tsv"
-    f.write_text("# 头注\n歷\t厯歴歷\n", encoding="utf-8")
-    assert vs.charcomp("歷", f) == {"厯", "歴"}         # 兼容区重复字、私用区都去掉
+def test_is_han_drops_compat_and_pua():
+    assert vs.is_han("歷") and vs.is_han("𡚁")
+    assert not vs.is_han("\uf98c")                       # 兼容区重复字 歷
+    assert not vs.is_han("\ue000") and not vs.is_han("⺄") and not vs.is_han("ab")
 
 
-def test_family_pool_merges_sources_and_tags(tmp_path, monkeypatch):
-    f = tmp_path / "rt.tsv"
-    f.write_text("弊\t獘\n", encoding="utf-8")
-    monkeypatch.setattr(vs, "CHARCOMP_TSV", f)
+def test_family_pool_merges_sources_and_tags(tmp_path):
+    from open_guji_cv.hanzi import HanziDB
+    edge = lambda a, b, src, d=0: (a, b, "variant", d, src, "", "", "")
+    db = HanziDB.from_tables(tmp_path / "hz", {
+        "sources": [], "forms": [],
+        "edges": [edge("弊", "𡚁", "twedu", 1), edge("弊", "獘", "charcomp:rt"),
+                  edge("弊", "敝", "hydzd-borrowed")],                     # 通假不进池
+        "near": [("弊", "蔽", "near:v1", "slot", 0.95, "", 1)]})
     z = vs.ZiCache(tmp_path / "zi", fetch=False)
     (tmp_path / "zi").mkdir()
     (tmp_path / "zi" / f"U+{ord('弊'):04X}.json").write_text(
         json.dumps({"q": "弊", "fam": ["𡚁", "幣"]}, ensure_ascii=False), encoding="utf-8")
-    pool = vs.family_pool(["弊"], zi=z, near_k=0)
+    pool = vs.family_pool(["弊"], zi=z, near_k=0, db=db)
     assert pool["弊"]["src"] == "piv"
-    assert "v" in pool["𡚁"]["src"] and "zi" in pool["𡚁"]["src"]   # 本仓表与字统网都有
-    assert pool["獘"]["src"].endswith("rt") and pool["幣"]["src"] == "zi"
+    assert pool["𡚁"]["src"] == "v,zi"                  # 库里的异体表与本机字统网缓存都有
+    assert pool["獘"]["src"] == "rt" and pool["幣"]["src"] == "zi"
+    assert "敝" not in pool and "蔽" not in pool
     assert all(e["p"] == "弊" for e in pool.values())
+    assert vs.family_pool(["弊"], near_k=1, db=db)["蔽"]["src"] == "near"
 
 
 def test_pivots_of_priority_and_dedup():
