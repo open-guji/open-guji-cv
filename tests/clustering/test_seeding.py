@@ -138,7 +138,11 @@ def seeded(tmp_path_factory):
     sq = _square_norm()
     png = cv2.imencode(".png", (255 - sq * 255).astype(np.uint8))[1].tobytes()
     assert db.admit_instance("pre:9:1:1", "弔", png, provenance="human")
-    summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
+    # 模块级 fixture 先于逐用例的环境隔离跑：本书 LM 按内容落缓存（seeding._cached_lm），
+    # 不显式指到临时目录就会写进仓内 cache/（conftest 的仓内防污染守卫会报）
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("GUJI_CACHE_DIR", str(root / "cache"))
+        summary = seed_book(book_dir, db, corpus_path, variants=variants_path)
     yield {"root": root, "book_dir": book_dir, "db": db, "summary": summary,
            "corpus": corpus_path, "variants": variants_path}
     db.close()

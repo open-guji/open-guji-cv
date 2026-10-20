@@ -704,6 +704,15 @@ class SeedAdmitStep(Step):
                      "group_flow_freq", "group_flow_tables"),
     )
 
+    def parallel_warm(self, ctx: RunContext) -> None:
+        """页级并行 fork 前在主进程预建两份大缓存（`core/parallel.warm`）：三份证人的 8-gram 索引
+        （复核通道才用，懒加载，第一页常碰不到）与铁证人裁匹配器。键与 run_page 里一致。只管提速。"""
+        p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
+        if p.lane_witness3 or p.lane_coord or p.lane_seal:
+            _lane_witnesses(ctx.book, p)
+        if ctx.book.iron_gate:
+            _iron_context(p.db_path, getattr(ctx.book, "norm_stroke", None))
+
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids
         from ..clustering.note_lexicon import load_lexicon, match_segment

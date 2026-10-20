@@ -10,6 +10,7 @@ import hashlib
 import importlib
 import inspect
 import json
+import multiprocessing
 import re
 import subprocess
 import time
@@ -690,7 +691,7 @@ class Engine:
         # `--params` 与管线 yaml 的 `params:` 全丢，指纹却按覆盖后的参数记（GUJI-580）。
         initargs = (self.book, self.pipeline, sid, dict(self.ctx.params),
                     self.store.root, self.ctx.cache.root, self.ctx.cache.limit_bytes,
-                    worker_threads(jobs))
+                    worker_threads(jobs), multiprocessing.get_start_method() == "fork")
         # 页的次序：上一轮记过耗时的页按耗时从大到小先发，难页不压在最后一个 worker 上拖尾
         # （row_segment 超过 20 s 的难页占这一步 42% 的时间）。产物与次序无关：每页独立算、
         # 主进程按完成先后落盘，manifest 按页键存。
@@ -745,6 +746,8 @@ class Engine:
             except Exception as e:  # noqa: BLE001
                 prods, err = None, f"{type(e).__name__}: {e}"
             any_failed |= land(first, prods, err, time.time() - t0)
+            from .parallel import warm
+            warm(step, self.ctx)
             import gc
             gc.collect()
             gc.freeze()
@@ -822,7 +825,7 @@ def _longest_first(pages: list[int], manifest) -> list[int]:
     return sorted(pages, key=cost, reverse=True)
 
 
-def _pin_threads(n: int) -> None:
+def _pin_threads(n: int, forked: bool = False) -> None:
     """worker 里给 torch／BLAS 定线程数（见 `core/parallel.worker_threads`）。
     已经 import 了的库调运行期接口；还没 import 的设环境变量，等它第一次建线程池时读。"""
     import os
@@ -840,14 +843,24 @@ def _pin_threads(n: int) -> None:
         os.environ[var] = str(n)          # 给子进程里之后才加载的库
     from .parallel import set_blas_threads
     set_blas_threads(n)                   # 已从主进程带来的 numpy：变量不生效，调运行期接口
-    # OpenCV 的线程数**不能**在这里改：主进程用过 cv2 的线程池后，fork 出的子进程里
-    # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测，四个 worker
-    # 全挂）。不动它，OpenCV 自己的 fork 处理够用（border_detect 并行一直这么跑）。
+    # OpenCV 的线程数**不能**在 fork 出的子进程里改：主进程用过 cv2 的线程池后，子进程里
+    # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测两回：一回是
+    # 这里自己调的，四个 worker 全挂；一回是 seed_admit 在 worker 里第一次 import
+    # `clustering.cnn_candidates`，它模块顶层调 `setNumThreads(1)`，三个 worker 挂住）。
+    # 所以 fork 出的 worker 里把它换成空函数——只管线程数、不影响结果；不管哪个模块什么时候
+    # import 都不会再踩。spawn（Windows）出的子进程是全新的，不受影响，不动。
+    if forked:
+        try:
+            import cv2
+            cv2.setNumThreads = lambda _n: None
+        except Exception:  # noqa: BLE001
+            pass
 
 
 def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
                           params: "dict[str, BaseModel]", store_root: Path,
-                          cache_root: Path, cache_limit: int, threads: int = 0) -> None:
+                          cache_root: Path, cache_limit: int, threads: int = 0,
+                          forked: bool = False) -> None:
     """`ProcessPoolExecutor(initializer=...)`：每个 worker 进程启动时跑一次。
     像 `glyph_match`（字形库）、`row_segment`（U-Net 权重）这类 Step 把重资源
     缓存在 `Step` 实例的 `self.<attr>` 上（进程内单例，见各 Step 源码），这里
@@ -859,7 +872,7 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     `--params` 与管线参数，产物按缺省参数算、指纹却记覆盖后的参数）。"""
     global _worker_ctx, _worker_step
     if threads > 0:
-        _pin_threads(threads)
+        _pin_threads(threads, forked)
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
     _worker_step = STEPS[step_id]

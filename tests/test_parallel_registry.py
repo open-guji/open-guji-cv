@@ -25,7 +25,7 @@ def test_audited_steps_exist_and_count_as_safe():
         assert sid in STEPS, sid
         assert parallel.is_parallel_safe(STEPS[sid])
     assert parallel.is_parallel_safe(STEPS["border_detect"])     # 标在 Step 上的照旧认
-    assert not parallel.is_parallel_safe(STEPS["seed_admit"])    # 没登记的一律串行
+    assert not parallel.is_parallel_safe(STEPS["context_decide"])    # 没登记的一律串行
 
 
 def test_registry_is_not_a_code_dep():

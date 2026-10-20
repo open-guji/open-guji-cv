@@ -58,8 +58,23 @@ AUDITED: dict[str, ParallelAudit] = {
              "前置：本批页的字块缓存已建好（`guji cache warm`），铁证会读别页的人裁刻例图；"
              "跑批期间不交人裁、不 `guji db sync`（串行同理）。warm_first：主进程先跑一页建好证人索引、"
              "人裁匹配器、绑定表，fork 后共享；Windows（spawn）各进程自建，单进程峰值约 2.1 GB。"
-             "第四册串行／4 进程产物比对：待验。"),
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 82 s → 50 s，单进程峰值 2.1 GB；"
+             "worker 里 cv2.setNumThreads 置空（cnn_candidates 模块顶层调它，fork 子进程里卡死过），"
+             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"),
 }
+
+
+def warm(step, ctx) -> None:
+    """fork 前在主进程预建这一步的进程级缓存：Step 有 `parallel_warm(ctx)` 就调（写在 Step 上，
+    因为 core 不许 import steps）。「先跑一页」建不全——懒加载的缓存第一页可能碰不到，worker 又各自
+    重建（seed_admit 的证人索引就是）。只管提速，出错就跳过、不影响结果。"""
+    f = getattr(step, "parallel_warm", None)
+    if f is None:
+        return
+    try:
+        f(ctx)
+    except Exception:  # noqa: BLE001 —— 预热只管提速
+        pass
 
 
 def warm_first(step) -> bool:
