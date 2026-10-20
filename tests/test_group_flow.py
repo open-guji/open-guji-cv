@@ -40,7 +40,7 @@ def test_flow_groups_declared_and_valid():
     assert {"mn", "dian", "can", "chen", "li", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
     check_groups(tuple(flows))
     with pytest.raises(ValueError):
-        check_groups(("yi_560",))       # 没声明 flow
+        check_groups(("nope2",))        # 没注册
     with pytest.raises(ValueError):
         check_groups(("nope",))
 
