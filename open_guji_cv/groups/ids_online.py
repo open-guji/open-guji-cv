@@ -49,6 +49,7 @@ class IdsSpec:
                                 # 用于两字差别不落在同一 IDS 部件上的异体对（叙敘、冊册、教敎，2026-10-20）
     three: bool = False         # True：彝组三段版（`ids_solver.solve`）：自动缝切上／中／下三段、中段再竖切取右半，
                                 # 每段二选一后拼 `⿳上⿰米X下` 交 IdsResolver；任一段 margin 不够整格弃权
+    mid_hog: float | None = None  # 三段版：给了数，中段（糸／分）改用 HOG＋岭回归判别，|判别值| 不到它弃权（上下段仍用 min_margin）
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -67,8 +68,10 @@ SPECS: dict[str, IdsSpec] = {
     "lih": IdsSpec(frame="", orient="v", prior=0.4, which=1, min_margin=0.02, by_form=True),
     "jue": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
     # 彝彛彜彞𢑱𢑴（2026-10-20，sheldon 定上线）：42 格人标三段读法（dataset yi_560/user_parts_labels），自动缝（band 0.08、pull 2.0）。
-    # 留一：margin 0.04 → 26 对／16 弃权／0 错（覆盖 62%）；0.02 有 5 错、0.0 有 8 错，所以取 0.04。
-    "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True),
+    # 留一：margin 0.04 → 23 对／19 弃权／0 错（覆盖 55%）；0.02 有 5 错、0.0 有 8 错，所以取 0.04。
+    # 瓶颈是中段 糸／分（软 IoU 近邻 5/42 错，上下段各 2、1 错）。中段改 HOG＋岭回归（ids_parts.choose_hog，模板即训练集）：
+    # 中段 1/42 错；整格留一 mid_hog 0.08–0.20 都是 33 对／0 错（平台），取中间偏保守 0.15。
+    "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True, mid_hog=0.15),
 }
 
 
@@ -222,7 +225,7 @@ def _judge_three(g: str, gray, bank: dict, spec: IdsSpec) -> GroupVerdict:
         return GroupVerdict(None, why="abstain:blank", via="ids")
     pl, vc = cut
     b = _slot_bank(bank)
-    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc)
+    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc, mid_hog=spec.mid_hog)
     ms = [float(x) for x in v.margins]
     extra = {"ids": v.ids, "slots": list(v.slots), "margins": [round(x, 4) for x in ms], "kind": v.kind, "flag": v.flag}
     if v.char is None or v.char not in _members(g):
