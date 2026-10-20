@@ -64,6 +64,15 @@ def test_entry_ref_via_codepoints():
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")
 
 
+def test_entry_ref_free_group_ignores_ref():
+    """己已巳整理本没参考价值（ref_free）：整理本字在组外也照进入；有整理本字的普通组仍被挡。"""
+    cfg = _cfg()
+    assert GROUPS["jys"].ref_free and not GROUPS["zhi"].ref_free
+    assert entry(Rec("a"), [("已", 0.99)], "其", cfg) == ("jys", "lift")
+    assert entry(Rec("a", "已", True, "split_ref"), [], "其", cfg) == ("jys", "review")
+    assert entry(Rec("a"), [("㫖", 0.98)], "指", cfg) is None
+
+
 def test_entry_review_only_for_review_groups_and_never_human():
     cfg = _cfg()
     assert entry(Rec("a", "己", True, "context"), [], None, cfg) == ("jys", "review")
@@ -78,7 +87,11 @@ def test_freq_decide():
     m = frozenset("旨㫖")
     assert F.decide({"㫖": 41, "旨": 0}, m).char == "㫖"
     assert F.decide({"㫖": 41, "旨": 1}, m).char is None            # 次形不为 0
-    assert F.decide({"㫖": 19, "旨": 0}, m).char is None            # 主形不够 20
+    assert F.decide({"㫖": 9, "旨": 0}, m).char is None             # 主形不够 10（10-20 前是 20）
+    assert F.decide({"㫖": 12, "旨": 0}, m).char == "㫖"
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols={"㫖": 1}, min_vols=2).why == "abstain:one_vol"   # 只来自一册
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols={"㫖": 2}, min_vols=2).char == "㫖"
+    assert F.decide({"㫖": 12, "旨": 0}, m, vols=None, min_vols=2).char == "㫖"   # 旧表没有册数：不卡
     assert F.decide(None, m).why == "abstain:no_table"
 
 

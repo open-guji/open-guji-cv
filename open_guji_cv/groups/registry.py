@@ -47,6 +47,7 @@ class GroupSpec:
     config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
     flow: FlowSpec | None = None  # 字组统一流程里的判法；None＝不进 `group_flow`
     overlaps: tuple = ()          # 允许与哪些组共用成员（须互相声明）；入口按分差内候选＋整理本字选第一个装得下的组
+    ref_free: bool = False        # 整理本在本组的字上没有参考价值（如己已巳，sheldon 2026-10-19 定）：入口不看整理本字，判法也拿不到它
 
 
 GROUPS: dict[str, GroupSpec] = {
@@ -54,7 +55,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="jys", name="己已巳", members=frozenset("己已巳"),
         backends=("rule", "ctx_table", "table"),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
-        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True),
+        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True), ref_free=True,
         note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
@@ -109,8 +110,24 @@ GROUPS: dict[str, GroupSpec] = {
     "rm": GroupSpec(
         id="rm", name="日目", members=frozenset("日目"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/rm",
-        flow=FlowSpec(("ctx",), review=True), overlaps=("ry",),
+        flow=FlowSpec(("ctx",), review=True), overlaps=("ry", "mz"),
         note="按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"),
+    # —— 第五批（2026-10-19）：目自、一二、千干、十卜、甲申、而面、傅傳、木本。同前：L1 规则（整理本奇偶册交叉验证零冲突）＋逐册 L2 表。
+    #    目自与 rm 共用「目」（互相声明 overlaps）。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("ctx",), review=True), overlaps=ov,
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
+       for gid, name, ov, note in (
+           ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
+           ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
+           ("qg", "千干", (), "千＝千百、千餘、千里；干＝干支、干戈、干預。"),
+           ("sb", "十卜", (), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
+           ("js", "甲申", (), "干支：甲子、甲乙；申＝申明、申屠、庚申。"),
+           ("em", "而面", (), "而＝虚词；面＝東面、南面、四面。"),
+           ("fc", "傅傳", (), "傳＝傳注、經傳、傳記；傅＝傅會、傅寅、傅以漸、太傅。"),
+           ("mb", "木本", (), "本＝版本、原本、本草；木＝草木、木瓜、木部。"))},
     "yi_560": GroupSpec(
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
@@ -133,7 +150,9 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=(), config_dir=None,
         flow=FlowSpec(("freq",), combine="first"),
         note="异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。")
-       for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"))},
+       for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"),
+                         # 第三批（2026-10-20 sheldon 合审定）：殿本全书只见一形，人裁 ≥10 且来自 ≥2 册
+                         ("kan", "刊刋"), ("jiw", "既旣"), ("qx", "清淸"), ("dx", "顚顛"), ("zx", "淄湽"), ("qy", "青靑"))},
 }
 
 
