@@ -804,7 +804,9 @@ def _pin_threads(n: int) -> None:
         except Exception:  # noqa: BLE001
             pass
     for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS"):
-        os.environ[var] = str(n)
+        os.environ[var] = str(n)          # 给子进程里之后才加载的库
+    from .parallel import set_blas_threads
+    set_blas_threads(n)                   # 已从主进程带来的 numpy：变量不生效，调运行期接口
     # OpenCV 的线程数**不能**在这里改：主进程用过 cv2 的线程池后，fork 出的子进程里
     # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测，四个 worker
     # 全挂）。不动它，OpenCV 自己的 fork 处理够用（border_detect 并行一直这么跑）。

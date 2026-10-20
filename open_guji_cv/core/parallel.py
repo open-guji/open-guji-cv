@@ -105,3 +105,40 @@ def worker_threads(jobs: int) -> int:
     """每个 worker 给 torch／BLAS 几个线程：核数平分，至少 1。
     不压的话 4 个 worker 各开 4 个线程，16 个线程抢 4 个核，比串行还慢。"""
     return max(1, (os.cpu_count() or 1) // max(1, jobs))
+
+
+#: numpy／scipy 轮子自带的 OpenBLAS 的运行期线程数接口（符号名随打包方式变）。
+_BLAS_SETTERS = ("scipy_openblas_set_num_threads64_", "scipy_openblas_set_num_threads",
+                 "openblas_set_num_threads64_", "openblas_set_num_threads")
+
+
+def set_blas_threads(n: int) -> int:
+    """运行期把已加载的 OpenBLAS 线程池改成 `n`，返回改了几个库。
+
+    环境变量 `OPENBLAS_NUM_THREADS` 只在库加载时读一次；fork 出的 worker 早已带着主进程
+    加载好的 numpy，设变量不生效，只能调库自己的接口。不改的代价实测（第四册 8 页
+    glyph_match 串行）：OpenBLAS 默认开满核，墙钟 45 s、CPU 147 s；1 线程墙钟 51 s、CPU 53 s，
+    产物逐字节相同——多出来的两核多基本是线程空转。4 个 worker 各开满核时每页慢到 4 倍，
+    页级并行整个白做。没装 threadpoolctl，自己找轮子里的 so，找不到就算了（只影响快慢）。"""
+    import ctypes
+    import glob
+    import importlib.util
+    done = 0
+    for pkg in ("numpy", "scipy"):
+        spec = importlib.util.find_spec(pkg)
+        if spec is None or not spec.origin:
+            continue
+        pkg_dir = os.path.dirname(spec.origin)
+        for lib in glob.glob(os.path.join(pkg_dir + ".libs", "*openblas*")) \
+                + glob.glob(os.path.join(pkg_dir, ".libs", "*openblas*")):
+            try:
+                h = ctypes.CDLL(lib)
+            except OSError:
+                continue
+            for name in _BLAS_SETTERS:
+                fn = getattr(h, name, None)
+                if fn is not None:
+                    fn(ctypes.c_int(n))
+                    done += 1
+                    break
+    return done

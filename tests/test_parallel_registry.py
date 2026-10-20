@@ -87,3 +87,14 @@ def test_concurrent_stamps_not_lost(tmp_path):
     assert c.usage()[1] == 200
     c.invalidate("b", "char_patch")
     assert (tmp_path / "b" / "char_patch" / ".stamps.lock").exists()
+
+
+def test_set_blas_threads_reaches_bundled_openblas():
+    """fork 出的 worker 里设环境变量不生效，必须能调到轮子自带 OpenBLAS 的运行期接口。"""
+    n = parallel.set_blas_threads(1)
+    try:
+        if n == 0:
+            pytest.skip("这台机器的 numpy 不带 OpenBLAS（如 MKL 版）")
+        assert n >= 1
+    finally:
+        parallel.set_blas_threads(parallel.os.cpu_count() or 1)
