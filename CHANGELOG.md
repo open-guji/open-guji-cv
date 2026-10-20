@@ -5,6 +5,9 @@
 
 ## [0.4.8] - 待发
 
+### Fixed
+- `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
+
 待发分支 `rc/v0.4.8`。
 
 ## [0.4.7] - 2026-10-20

@@ -112,3 +112,11 @@ def test_rare_index_roundtrip(tmp_path, monkeypatch):
     monkeypatch.setattr(PK, "_models_root", lambda: b)
     assert len(PK.fetch_rare_indexes(src=src)) == 1
     assert (b / "glyph_cnn_r5" / "emb_0123.npz").read_bytes() == b"\x00" * 1000
+
+
+def test_pack_label_must_be_ascii():
+    from open_guji_cv.datastore import packs as PK
+    PK.check_label("v0.4.7-layout-prior")
+    for bad in ("v0.4.6-粗校", "", "-x", "a/b", "x" * 97):
+        with pytest.raises(ValueError):
+            PK.check_label(bad)

@@ -20,6 +20,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 import io
 import json
 import shutil
@@ -87,12 +88,23 @@ def _tar_book(root: Path, book: str, steps: list[str] | None) -> tuple[bytes, in
     return buf.getvalue(), n, per
 
 
+LABEL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,95}$")   # 与 Worker /v1/packs 的路径段规则一致
+
+
+def check_label(label: str) -> None:
+    """包标签只许 ASCII 字母、数字、`_.-`（Worker 拒收中文等，报 bad_path）。先在本地挡下，说清楚。"""
+    if not LABEL_RE.match(label or ""):
+        raise ValueError(f"包标签 {label!r} 不合法：只能用 ASCII 字母、数字和 _.-，以字母或数字开头，"
+                         f"不超过 96 字符（如 v0.4.7-layout-prior）")
+
+
 def push_products(book: str, root: Path, label: str | None = None, steps: list[str] | None = None,
                   note: str = "", src=None) -> dict:
     from ..core import cv_version as CV
     src = src or _client()
     ver, commit = CV.describe()
     label = label or f"v{ver or 'unknown'}-{time.strftime('%Y%m%dT%H%M', time.gmtime())}"
+    check_label(label)
     ws = _ws_name()
     pre = f"{_prefix(ws, book)}/{label}"
     data, nfiles, per = _tar_book(root, book, steps)
