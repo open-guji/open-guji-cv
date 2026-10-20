@@ -276,6 +276,27 @@ console.log(JSON.stringify([
     ]
 
 
+@needs_node
+def test_ts_pick_source_rides_on_confirm_only(tmp_path):
+    """选字来源（人审找字 §5.3）：pickVerdict 记下、verdictRow 只在 confirm 行写 pick_*；没点过的行逐字段不变。"""
+    out = _run_ts(tmp_path, """
+const alt = R.pickVerdict('𡚁', undefined, 400, 1000, { src: 'alt', rank: 3, pivot: '弊' })
+const key = R.pickVerdict('弊', undefined, 400, 1000, { src: 'cand', rank: 1, from: '整理本+库' })
+const defect = R.pickVerdict('巳', { shape: '', done: 'truncated', dwell: 7 }, 400, 1000, { src: 'alt', rank: 1 })
+const cleared = R.pickVerdict('', undefined, 400, 1000, { src: 'custom' })
+console.log(JSON.stringify({
+  alt: R.verdictRow('x', alt), key: R.verdictRow('x', key), defect: R.verdictRow('x', defect),
+  cleared: cleared.pick ?? null, bad: R.pickFields({ src: 'alt', rank: 0, pivot: '弊病' }), none: R.pickFields(undefined),
+}))
+""")
+    base = {"id": "x", "v": "confirm", "no_glyph_lib": False, "client_ts": 1000, "dwell_ms": 600}
+    assert out["alt"] == {**base, "shape": "𡚁", "pick_src": "alt", "pick_rank": 3, "pivot": "弊"}
+    assert out["key"] == {**base, "shape": "弊", "pick_src": "cand", "pick_rank": 1, "pick_from": "整理本+库"}
+    assert "pick_src" not in out["defect"], "切分缺陷档不带选字来源"
+    assert out["cleared"] is None, "清空了字就不留来源"
+    assert out["bad"] == {"pick_src": "alt"} and out["none"] == {}
+
+
 def test_jys_rows_read_downstream_unchanged(tmp_path):
     """己已巳卡发的行（上面 node 用例钉住的形状）经 `/api/events` 同一套信封写进日志后，
     `human_chars` 读出的就是选的那个字——与普通卡点同一个字的结果完全一样；`seg_defect` 带字同理。"""

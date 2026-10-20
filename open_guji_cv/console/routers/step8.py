@@ -286,6 +286,10 @@ class DecideIn(BaseModel):
     cat: str = ""                # who=ours 时：variant | jiajie | taboo | other
     fix: str = ""                # who=neither 时人输入的正确字
     note: str = ""
+    # who=neither 时这个字从哪儿来（人审找字 §5.3，只为量「相似字」有没有用）：alt／alt_q 相似字、custom 手输
+    pick_src: str = ""
+    pick_rank: int | None = None
+    pivot: str = ""
 
 
 _VS = re.compile("[\ufe00-\ufe0f\U000e0100-\U000e01ef]")
@@ -340,15 +344,17 @@ def _events_for(d: DecideIn, base_seq: int, batch: str, current: dict[str, dict]
     cat = (d.cat or "other") if who == "ours" else ""
     fix = d.fix.strip() if who == "neither" else ""
     new_final = final_char(pair, who, fix)
+    pick = {k: v for k, v in (("pick_src", d.pick_src), ("pick_rank", d.pick_rank), ("pivot", d.pivot))
+            if v not in ("", None)} if who == "neither" else {}
     for key in d.ids:
         cur = current.get(key) or {}
         ctx = {k: cur.get(k) for k in ("page", "col", "slot", "sub", "hyp_ctx", "ref_ctx")}
         add("collate_verdict", key, {"pair": pair, "who": who, "cat": cat, "fix": fix,
-                                     "final": new_final, "ctx": ctx, "note": d.note})
+                                     "final": new_final, "ctx": ctx, "note": d.note, **pick})
         if new_final != cur.get("final", pair[0]):
             add("confirm", key, {"v": "confirm", "shape": new_final,
                                  "conversion": 0, "no_glyph_lib": False, "via": VIA,
-                                 "pair": pair, "note": d.note or f"Step8 复核：{who or '退回待审'}"})
+                                 "pair": pair, "note": d.note or f"Step8 复核：{who or '退回待审'}", **pick})
 
     # 通假是贴给字对的跨书标签：看挪完之后本书还有没有一处归通假。自动归进来的也算——
     # 它们正是靠这张表归进来的（旧 ② 层点「通假」只记字对、不落字位），撤了表它们就散了

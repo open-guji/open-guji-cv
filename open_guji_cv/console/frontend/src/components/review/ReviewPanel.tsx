@@ -9,7 +9,7 @@ import { ReviewCardView } from './ReviewCardView'
 import { occludedDefault, occludedGroupRows, staleDefault } from './doubt'
 import { CLASS_HELP, classHelpKey, DEFAULT_HELP, countShadowPre, dropOffScreen, gridFlagRows, gridRows, isJysCard, JYS_NONE_KEYS, jysPickByKey,
          keepApprox, nextGridState, pickVerdict, screenRows } from './reviewClass'
-import type { GridState } from './reviewClass'
+import type { GridState, PickInfo } from './reviewClass'
 import { ReplaceAlignGrid } from './ReplaceAlignGrid'
 import './review.css'
 
@@ -39,6 +39,8 @@ export interface Verdict {
   // 勾上才展开 IDS／备注；事件 payload 多带 approx/ids/note（`reviewClass.approxFields`）。
   approx?: boolean
   approxIds?: string
+  // 选的字从哪儿点来（reviewClass.PickInfo）：随 confirm 行写 pick_src／pick_rank／pivot／pick_from
+  pick?: PickInfo
   approxNote?: string
 }
 
@@ -294,7 +296,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     }
   }
 
-  function setVerdict(i: number, shape: string, doneIn?: string) {
+  function setVerdict(i: number, shape: string, doneIn?: string, pick?: PickInfo) {
     const c = cards[i]
     if (!c) return
     // 从候选/输入框改字时（doneIn 省略）：切分缺陷两档要**保住**，别被改字顶掉——
@@ -303,7 +305,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
     const prev = verdicts.current[c.id]
     const now = Date.now()
     if (doneIn === undefined) {
-      verdicts.current[c.id] = pickVerdict(shape, prev, seen.current[c.id], now)
+      verdicts.current[c.id] = pickVerdict(shape, prev, seen.current[c.id], now, pick)
     } else {
       const dwell = prev?.dwell !== undefined ? prev.dwell : (seen.current[c.id] ? now - seen.current[c.id] : undefined)
       verdicts.current[c.id] = { shape, done: doneIn, ts: now, dwell, noGlyphLib: prev?.noGlyphLib, ...keepApprox(prev) }
@@ -538,15 +540,20 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
       // 己已巳专用卡：1/2/3 = 己/已/巳，4/0 = 都不是（展开成普通卡）；T/C/D 这张卡上没有，不响应
       if (isJysCard(c.cls, !!jysOpen.current[c.id])) {
         const ch = jysPickByKey(ev.key)
-        if (ch) { setVerdict(cur, ch); focus(cur + 1); ev.preventDefault(); return }
+        if (ch) { setVerdict(cur, ch, undefined, { src: 'jys', rank: +ev.key }); focus(cur + 1); ev.preventDefault(); return }
         if (JYS_NONE_KEYS.includes(ev.key)) { jysOpen.current[c.id] = true; bump(); ev.preventDefault(); return }
         if (/^[5tTcCdD]$/.test(ev.key)) return
       }
       if (ev.key === 'ArrowRight' || ev.key === 'j') { focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 'ArrowLeft' || ev.key === 'k') { focus(cur - 1); ev.preventDefault() }
       else if (['1', '2', '3', '4', '5'].includes(ev.key)) {
-        const pick = keyList(c, rare.current[c.id]).find((e) => e.keys.includes(+ev.key))
-        if (pick && pick.ch) { setVerdict(cur, pick.ch); focus(cur + 1); ev.preventDefault() }
+        const kl = keyList(c, rare.current[c.id])
+        const at = kl.findIndex((e) => e.keys.includes(+ev.key))
+        const pick = at >= 0 ? kl[at] : undefined
+        if (pick && pick.ch) {
+          setVerdict(cur, pick.ch, undefined, { src: 'cand', rank: at + 1, from: pick.srcs.join('+') })
+          focus(cur + 1); ev.preventDefault()
+        }
       } else if (ev.key === 'n' || ev.key === 'N') { setVerdict(cur, '', 'non'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 's' || ev.key === 'S') { setVerdict(cur, '', 'skip'); focus(cur + 1); ev.preventDefault() }
       else if (ev.key === 't' || ev.key === 'T') { setVerdict(cur, '', 'truncated'); focus(cur + 1); ev.preventDefault() }
@@ -680,7 +687,7 @@ export function ReviewPanel({ book, pages, onSubmitted, reloadSignal }: {
               aroundCtx={around.current[aroundKey(c)]}
               rareOut={rareOut.current[i]}
               onFocus={() => focus(i)}
-              onSet={(shape: string, done?: string) => setVerdict(i, shape, done)}
+              onSet={(shape: string, done?: string, pick?: PickInfo) => setVerdict(i, shape, done, pick)}
               onSetNoGlyphLib={(checked: boolean) => setNoGlyphLib(i, checked)}
               onSetGuess={(g: string) => setGuess(i, g)}
               onSetApprox={(patch) => setApprox(i, patch)}

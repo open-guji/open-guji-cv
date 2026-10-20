@@ -16,6 +16,19 @@
 
 - `guji products exclusions <册> --a <重切前> [--b <重切后>] [--apply]`（`ops/exclusion_rebind.py`，用户 10-20 同意方向）：排除清单按格号记、不带框，重切后可能落到别的格。按重切前的框到重切后找 IoU ≥ 0.85 的格：没动不改、顺移改号（`rekey_from`）、找不到或改号撞上撤到 `crop_exclusions_retired.jsonl`。缺省只报计划。不碰任何 Step，`code_hash` 不变。
 
+- 控制台记下选的字是从哪儿点来的（`doc/research/人审找字-以字找字与异体族按图排序.md` §5.3，用户 10-20 要量相似字的真实命中）：
+  - **定字卡**：confirm 行多带 `pick_src`、`pick_rank`、`pivot`、`pick_from`（`reviewClass.pickFields`）。`pick_src` 取值：
+    - `cand`：主候选，`rank` 为键位表第几个，`from` 为哪几路；
+    - `alt`：相似字，带 `pivot`；
+    - `alt_q`：键入近似字后的相似字；
+    - `rare`：「查候选」；
+    - `custom`：手输；
+    - `jys`：己已巳卡；
+    - `cnn`／`ctx`／`llm`／`ocr`／`ai`／`form`：证据行上的「采信」。
+  - **Step8「都不对」**：`collate_verdict` 与 `confirm` 带 `pick_src`／`pick_rank`／`pivot`，取值为 `alt`／`alt_q`／`custom`。
+  - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
+- `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
+
 ### Fixed
 - 语料库任何内容变了都要改版本号（用户 10-20）：`guji db push`／`sync` 推送前，最新一版清单登记的工作区文件被改、缺，或清单之外多了新语料文件 → 拒绝，提示先 `guji corpus build` 出新版本一起推；已发布的某一版 `manifest.json` 库里已有且本地不同 → 拒绝（旧版本不可改）。只看工作区文件；引擎仓里的表仍由起跑前硬校验管。10-20 的起因：v1 登记的 `freq.json`、`l2/jys.json` 钉选后被重新生成，`glyph_match` 因此拒跑。改 `core/corpus_pin.py`、`datastore/workcopy.py`，`code_hash` 不变。
 - `guji db pull`／`sync` 遇到库里引用、R2 上却没有（404）的图不再停下：跳过、stderr 打一行并在 `materialize` 结果的 `missing_images`（相对路径→sha）里列出，其余照常还原。要像以前一样遇到就停：`GUJI_DATA_MISSING_BLOBS=error`。不碰任何 Step，`code_hash` 不变。

@@ -59,6 +59,17 @@ def test_neither_uses_the_typed_char():
     assert evs[0].payload["fix"] == "丙"
 
 
+def test_neither_carries_pick_source_into_both_events():
+    """「都不对」里点的相似字：pick_src／pick_rank／pivot 随 collate_verdict 和 confirm 一起写（人审找字 §5.3）。"""
+    evs = _mk(["bxgb:3:1:1"], _cur(_row(1)), who="neither", fix="丙", pick_src="alt", pick_rank=2, pivot="乙")
+    for e in evs:
+        assert (e.payload["pick_src"], e.payload["pick_rank"], e.payload["pivot"]) == ("alt", 2, "乙")
+    # 别的档带了也不写；不带就没有这几个键（老事件逐字段不变）
+    theirs = _mk(["bxgb:3:1:1"], _cur(_row(1)), who="theirs", pick_src="alt", pick_rank=2)
+    plain = _mk(["bxgb:3:1:1"], _cur(_row(1)), who="neither", fix="丙")
+    assert not any("pick_src" in e.payload for e in theirs + plain)
+
+
 def test_moving_back_to_ours_reverts_the_char():
     """校对本对 → 挪回我方对：那一格要改回我方的字。"""
     cur = _cur(_row(1, who="theirs", basis="human", final="乙"))

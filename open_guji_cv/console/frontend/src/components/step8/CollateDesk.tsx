@@ -4,6 +4,7 @@ import { fetchStep8Overview, fetchStep8Queue, postStep8Decide, postStep8Seg } fr
 import type { Step8Bucket, Step8Cat, Step8Group, Step8Overview, Step8Queue, Step8Sample, Step8Seg } from '../../api/step8'
 import type { ReviewCard } from '../../types/review'
 import { AltPanel } from '../review/AltPanel'
+import { pickFields, type PickInfo } from '../review/reviewClass'
 import '../review/review.css'
 
 // Step8 · 复核裁决台。设计见 overview 仓 Step8-落库反馈/05。
@@ -132,6 +133,8 @@ export function CollateDesk({ book }: { book: string }) {
   const [sel, setSel] = useState<Sel>({ who: 'ours', cat: 'other', fix: '' })
   // 提交后重载队列时要停在哪张卡：记一个字位 id，重载后找含它的那组
   const focusId = useRef<string | null>(null)
+  // 「都不对」里点的相似字（记下来源，提交时随事件写 pick_src／pick_rank／pivot）；手改输入框就作废
+  const altPick = useRef<(PickInfo & { ch: string }) | null>(null)
 
   const groups = useMemo(() => q?.groups || [], [q])
   const c: Step8Group | undefined = groups[cur]
@@ -182,11 +185,15 @@ export function CollateDesk({ book }: { book: string }) {
     const rest = c.ids.filter((x) => !ids.includes(x))
     focusId.current = rest[0] ?? groups[cur + 1]?.ids[0] ?? null
     setBusy(true)
+    const fix = (to.fix || '').trim()
+    const ap = altPick.current
+    const pick = to.who === 'neither' ? pickFields(ap && ap.ch === fix ? ap : { src: 'custom' }) : {}
     try {
       const r = await postStep8Decide({
         book, pair: c.pair, ids, who: to.who,
         cat: to.who === 'ours' ? to.cat : undefined,
-        fix: to.who === 'neither' ? (to.fix || '').trim() : undefined,
+        fix: to.who === 'neither' ? fix : undefined,
+        ...pick,
       })
       if (!r.ok) { setMsg(r.error || '提交失败'); focusId.current = null; return }
       const toLabel = describe({ who: to.who, cat: to.cat, fix: (to.fix || '').trim() })
@@ -386,7 +393,7 @@ export function CollateDesk({ book }: { book: string }) {
             <div className="s8-acts">
               <span className="k">正确的字</span>
               <input className="s8-fix" value={sel.fix} maxLength={2} placeholder="输入" autoFocus
-                onChange={(e) => setSel((s) => ({ ...s, fix: e.target.value }))}
+                onChange={(e) => { altPick.current = null; setSel((s) => ({ ...s, fix: e.target.value })) }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') { e.preventDefault(); void move({ who: 'neither', fix: sel.fix }) }
                   else if (e.key === 'Escape') { (e.target as HTMLInputElement).blur() }
@@ -399,7 +406,8 @@ export function CollateDesk({ book }: { book: string }) {
             const s0 = c.samples[at]
             const pseudo: ReviewCard = { id: s0.id, page: s0.page, col: s0.col, slot: s0.slot, sub: s0.sub || undefined,
                                          patch: '', ref: { char: c.pair[1] }, ctx: { char: c.pair[0] } }
-            return <AltPanel key={s0.id} book={book} c={pseudo} active onPick={(ch) => setSel((x) => ({ ...x, fix: ch }))} />
+            return <AltPanel key={s0.id} book={book} c={pseudo} active
+                             onPick={(ch, from) => { altPick.current = { ...from, ch }; setSel((x) => ({ ...x, fix: ch })) }} />
           })()}
           <div className="s8-nav">
             <button onClick={() => go(-1)} disabled={cur === 0} title="上一对（不提交）">←</button>
