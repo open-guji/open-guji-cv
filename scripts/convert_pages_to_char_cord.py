@@ -5,7 +5,8 @@
     python scripts/convert_pages_to_char_cord.py --pages-json 002.pages.json --out out/ \\
         [--zi 002.zi.json] [--norm 002.norm.json] [--lines-md 002.lines.md] [--keys cv|lines] [--text-version 0.1.0]
 
-给了 `--lines-md` 就核往返：char 生成的分行稿必须与它逐字节相同。另外总要过 schema、过 `check`（cord 的格位
+给了 `--lines-md` 就核往返：char 生成的分行稿必须与它逐字节相同（阙文带推测字按 9.1 的 `□{guess=X}` 写，
+见 `guji_char_cord.char_to_lines_md`）。另外总要过 schema、过 `check`（cord 的格位
 都在 char 里，页号、列号两边一致）。任何一项不过返回 1，文件照写，方便对照。
 """
 from __future__ import annotations
@@ -34,7 +35,7 @@ def report(files: dict, lines_md: str | None = None) -> int:
     print(f"   格位/页号/列号一致：{'过' if not errs else f'不过 {len(errs)} 处，如 {errs[:3]}'}")
     bad += bool(errs)
     if lines_md is not None:
-        gen = cc.char_to_lines_md(char)
+        gen = cc.char_to_lines_md(char, guess_c_as_qz=True)      # 9.1 把阙文带推测字写成 □{guess=X}
         if gen == lines_md:
             print(f"   往返：char 生成的分行稿与 lines.md 逐字节相同（{len(gen.splitlines())} 行）")
         else:
@@ -65,7 +66,7 @@ def main(argv=None) -> int:
     cord = next(v for k, v in files.items() if k.endswith(".cord.json"))
     st = cc.stats(char, cord)
     print(f"{pj.get('chapter')}（keys={a.keys}）：{st['pages']} 页、{st['columns']} 列、{st['cells']} 格（有框 {st['boxed']}），"
-          f"阙文 {st['lacuna']}、残字 {st['guess']}、组字 {st['zi']}；与 CV 锚点不同的 key {rep['rekeyed']}；"
+          f"阙文 {st['lacuna']}（其中带推测字 {st['guess_c']}）、残字 {st['guess']}、组字 {st['zi']}；与 CV 锚点不同的 key {rep['rekeyed']}；"
           f"没写进 cord 的（框为空/类别不认）{rep['dropped']} → {a.out}")
     lines_md = Path(a.lines_md).read_text(encoding="utf-8") if a.lines_md else None
     return 1 if report(files, lines_md) else 0

@@ -1,16 +1,22 @@
 # -*- coding: utf-8 -*-
-"""异体族的三家来源，合成「以字找字」的候选池（只出候选，不进放行）。
+"""「以字找字」的候选池（只出候选，不进放行）：近似字的异体族＋形近，交给字块图排序。
 
-研究与读数见 `doc/research/人审找字-以字找字与异体族按图排序.md` §8.3：三家各自都有漏
+研究与读数见 `doc/research/人审找字-以字找字与异体族按图排序.md` §8.3：各家来源都有漏
 （同一批 414 对里字统网覆盖 358、部件檢索 379），合并后池子从 7 扩到 24、按图排序后
 top-1/3/5 几乎不变，所以**并表、再按字块图排序**。
 
-| 来源 | 文件 | 说明 |
+2026-10-19 起族由自建汉字关系库 `open_guji_cv.hanzi` 给（`HanziDB.pool`，见
+`doc/design/汉字字形与关系库-总设计.md` B3），本机不联网也有完整的族：
+
+| 简写 | 来源 | 说明 |
 |---|---|---|
-| `v` 本仓异体表 | `config/variants/variants.json`（`variants.variants_of`） | 去掉 `NEVER_SOURCES`（形近钓鱼、通假） |
-| `rt` 部件檢索 | `config/variants/charcomp_rt.tsv` | WFG「部件檢索」rt 表派生，非商业授权、须标来源（文件头） |
-| `zi` 字统网 | 缓存目录 `$GUJI_ZITOOLS_CACHE`（缺省 `$GUJI_DATA_HOME/_shared/zitools/`），**不进 git** | `/api/zi/<字>` 的 yi 图解析成一跳族；站点无数据许可，只按需低频取、缓存（§9.4） |
-| `near` 形近表 | `config/ids/confusable_pairs_v1.tsv`（`confusables.load_pairs`） | IDS 派生形近对，取前几名 |
+| `v` | 库里的现役异体来源（Unihan、twedu、hydzd、dypytz、简繁、yitizi、`local:keben`） | 去掉形近钓鱼、通假 |
+| `rt` | 库里的部件檢索 rt | 非商业授权、须标来源（库的 `sources` 表） |
+| `zi` | 库里的字统网派生族 ∪ 本机缓存 `$GUJI_ZITOOLS_CACHE`（缺省 `$GUJI_DATA_HOME/_shared/zitools/`） | 库是出版本时汇总的；缓存里后来取的字照样并进来（`ZiCache`） |
+| `near` | 形近表 `config/ids/confusable_pairs_v1.tsv` | 取前几名 |
+
+字统网只按需、针对性地取（一次一字、≥3 秒间隔），只存派生的族，不存页面；
+攒下的缓存出新版库时用 `scripts/build_hanzi_db.py --zi-dir` 汇总进库，全队共享。
 
 字统网的族按「字典义项」连，混有通假、同音、构件关系（歷 的族里有 勒栗壢），
 所以只当池子、必须按图排；而且**不对称**（查 𫎇 得 蒙，查 蒙 的一跳里没有 𫎇），
@@ -29,8 +35,6 @@ import urllib.request
 from functools import lru_cache
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
-CHARCOMP_TSV = REPO / "config" / "variants" / "charcomp_rt.tsv"
 ZI_API = "https://zi.tools/api/zi/"
 ZI_MIN_INTERVAL = 3.0          # 秒；对字统网的礼貌间隔
 ZI_UA = "open-guji (low-rate, cached; https://github.com/open-guji)"
@@ -46,36 +50,6 @@ def is_han(c: str) -> bool:
     if unicodedata.normalize("NFC", c) != c:          # 兼容区重复字（歷 U+F98C → 歷）
         return False
     return unicodedata.category(c) == "Lo" and o >= 0x3400
-
-
-# ── 本仓异体表 ────────────────────────────────────────
-
-def ours(c: str) -> set[str]:
-    from ..variants import NEVER_SOURCES, variants_of
-    try:
-        return {v for v, tags in variants_of(c) if set(tags) - NEVER_SOURCES and is_han(v)}
-    except FileNotFoundError:
-        return set()
-
-
-# ── 部件檢索 rt ───────────────────────────────────────
-
-@lru_cache(maxsize=4)
-def _charcomp(path: str) -> dict[str, frozenset[str]]:
-    p = Path(path)
-    if not p.exists():
-        return {}
-    out: dict[str, frozenset[str]] = {}
-    for line in p.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith("#"):
-            continue
-        head, _, rest = line.partition("\t")
-        out[head] = frozenset(c for c in rest if is_han(c) and c != head)
-    return out
-
-
-def charcomp(c: str, path: str | Path | None = None) -> set[str]:
-    return set(_charcomp(str(path or CHARCOMP_TSV)).get(c, ()))
 
 
 # ── 字统网 ────────────────────────────────────────────
@@ -97,6 +71,33 @@ def zi_parse(doc: dict, q: str) -> list[str]:
     keys = start | {m for k in start for m in adj.get(k, ())}
     out = {nodes[k][4] for k in keys if k in nodes and isinstance(nodes[k][4], str)}
     return sorted(c for c in out if c != q and is_han(c))
+
+
+#: 缓存格式版本：2 起除一跳族外还存逐节点的字典判断与连线（`zi_facts`）。
+ZI_CACHE_V = 2
+
+
+def zi_facts(doc: dict) -> dict[str, list]:
+    """`/api/zi/<q>` 的 yi 图 → 派生事实（只留关系，不留释义原文、读音、图）：
+
+    - `claims`：`[字典前缀, 节点 id, 字形, 正字]`——这部字典（GHZR 汉语大字典、TVAR 台湾异体字典、
+      GHZH 汉字海、ZITOOLS 站方……）的这个条目说「字形」是「正字」的异体。字形可以是 IDS 串（未编码形）；
+      正字只收单个已编码字。
+    - `links`：`[节点 A, 字形 A, 节点 B, 字形 B]`——图上两个节点相连，两头都是已编码单字且不同的才收。"""
+    yi = doc.get("yi") or {}
+    nodes = {k: n for k, n in (yi.get("nodes") or {}).items() if isinstance(n, list) and len(n) > 10}
+    claims = []
+    for k, n in sorted(nodes.items()):
+        g, r = n[4], n[10]
+        if isinstance(g, str) and g and isinstance(r, str) and is_han(r) and g != r:
+            claims.append([n[1], k, g, r])
+    links = []
+    for e in yi.get("edges") or []:
+        if len(e) >= 2 and e[0] in nodes and e[1] in nodes:
+            ga, gb = nodes[e[0]][4], nodes[e[1]][4]
+            if isinstance(ga, str) and isinstance(gb, str) and ga != gb and is_han(ga) and is_han(gb):
+                links.append([e[0], ga, e[1], gb])
+    return {"claims": claims, "links": sorted(links)}
 
 
 def zi_cache_dir() -> Path:
@@ -167,19 +168,31 @@ class ZiCache:
             return None
         fam = zi_parse(doc, c)
         self.root.mkdir(parents=True, exist_ok=True)
-        self._path(c).write_text(json.dumps({"q": c, "fam": fam, "ts": int(time.time())},
-                                            ensure_ascii=False), encoding="utf-8")
+        self._path(c).write_text(json.dumps({"q": c, "v": ZI_CACHE_V, "fam": fam, **zi_facts(doc),
+                                             "ts": int(time.time())}, ensure_ascii=False), encoding="utf-8")
         self.n_fetched += 1
         if self._rev is not None:
             for v in fam:
                 self._rev.setdefault(v, set()).add(c)
         return fam
 
-    def ensure(self, c: str) -> None:
-        """不论 `fetch` 开关，缓存里没有 c 就去取一次（控制台里人键入的近似字用）。"""
-        if self._mem.get(c) is None and not self._path(c).exists():
+    def ensure(self, c: str, upgrade: bool = False) -> bool:
+        """不论 `fetch` 开关，缓存里没有 c 就去取一次（控制台里人键入的近似字用）；返回这次联网了没有。
+        `upgrade=True` 时旧格式（没有逐节点事实）的也重取一次（`scripts/zi_fetch.py` 批量补查用）。"""
+        f = self._path(c)
+        stale = upgrade and f.exists() and self._version(f) < ZI_CACHE_V
+        if stale or (self._mem.get(c) is None and not f.exists()):
             self._mem.pop(c, None)
             self._mem[c] = self._download(c)
+            return True
+        return False
+
+    @staticmethod
+    def _version(f: Path) -> int:
+        try:
+            return int(json.loads(f.read_text(encoding="utf-8")).get("v") or 1)
+        except (OSError, ValueError):
+            return 0
 
     def family(self, c: str) -> set[str]:
         """c 的字统网一跳族 ∪ 缓存里以 c 为族成员的字（反向边）。"""
@@ -199,37 +212,18 @@ def shared_zi() -> ZiCache:
 
 # ── 合并 ─────────────────────────────────────────────
 
-def near(c: str, k: int = 5) -> set[str]:
-    from .confusables import load_pairs
-    return {b for b, *_ in load_pairs().get(c, [])[:k] if is_han(b)}
+@lru_cache(maxsize=1)
+def _hanzi():
+    from ..hanzi import HanziDB
+    return HanziDB.open()
 
 
-def family_pool(pivots: list[str], zi: ZiCache | None = None,
-                near_k: int = 5) -> dict[str, dict]:
-    """近似字 → 合并池 `{字: {"p": 从哪个近似字来, "src": "v,rt,zi,near,piv"}}`。
+def family_pool(pivots: list[str], zi: ZiCache | None = None, near_k: int = 5,
+                db=None) -> dict[str, dict]:
+    """近似字 → 合并池 `{字: {"p": 从哪个近似字来, "src": "piv,v,rt,zi,near"}}`。
 
-    同一个字从几路来时 `src` 合并、`p` 取第一个（pivots 按优先级排好传进来）。近似字自己也进池（`piv`）。"""
-    pool: dict[str, dict] = {}
-
-    def add(c: str, p: str, src: str) -> None:
-        if not is_han(c):
-            return
-        e = pool.setdefault(c, {"p": p, "src": []})
-        if src not in e["src"]:
-            e["src"].append(src)
-
-    for p in pivots:
-        if not is_han(p):
-            continue
-        add(p, p, "piv")
-        for c in ours(p):
-            add(c, p, "v")
-        for c in charcomp(p):
-            add(c, p, "rt")
-        if zi is not None:
-            for c in zi.family(p):
-                add(c, p, "zi")
-        if near_k:
-            for c in near(p, near_k):
-                add(c, p, "near")
-    return {c: {"p": e["p"], "src": ",".join(e["src"])} for c, e in pool.items()}
+    同一个字从几路来时 `src` 合并、`p` 取第一个（pivots 按优先级排好传进来）。近似字自己也进池（`piv`）。
+    `db` 缺省用当前版 hanzi 库（核心包在 git，不联网）；`zi` 给了就把本机缓存的族并进 `zi`。"""
+    db = db if db is not None else _hanzi()
+    extra = (lambda p: {"zi": zi.family(p)}) if zi is not None else None
+    return db.pool(pivots, near_k=near_k, extra=extra)

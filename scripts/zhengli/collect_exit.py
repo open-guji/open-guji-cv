@@ -167,6 +167,21 @@ def _r1(book, ws, cc, guji) -> dict:
                       f"收尾闸已定字没出字 {gaps}、人裁字≠放行字 {mism}（报告项）"}
 
 
+# ---------------------------------------------------------------- 钉版（提示，不判 FAIL）
+def _pins(book) -> dict:
+    """册 yaml 的钉版三项：cv_version、corpus、glyph_pin（GUJI-656，`doc/版本号规矩.md` 第七节）。
+
+    只报不判：没钉的项进 warn，exit_report 在总判前单列一行。读不到册配置也只记 warn。"""
+    try:
+        from open_guji_cv.core.book import load_book
+        b = load_book(book)
+    except Exception as e:  # noqa: BLE001
+        return {"warn": [f"读不到册配置：{type(e).__name__}: {e}"]}
+    pins = {"cv_version": b.cv_version, "corpus": b.corpus, "glyph_pin": b.glyph_pin}
+    pins["warn"] = [f"没钉 {k}" for k, v in pins.items() if v is None]
+    return pins
+
+
 # ---------------------------------------------------------------- R4 异常表 ＋ R2
 def parse_anomaly(path: Path) -> list[dict]:
     """读异常表 md：每个数据行 → {n, text, concl}。结论列＝第 4 个单元格（# | 现象 | 原因 | 结论 | …）。"""
@@ -286,7 +301,7 @@ def collect(book: str, ws, export_dir=None, anomaly=None, reason: str | None = N
         "R5": _r5(cc, cc_cmd, cc_err, export_err),
     }
     gen = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m-%d %H:%M PDT")
-    return {"book": book, "cv_version": _cv_version(), "generated": gen, "items": items}
+    return {"book": book, "cv_version": _cv_version(), "generated": gen, "items": items, "pins": _pins(book)}
 
 
 def main(argv=None) -> int:

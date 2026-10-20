@@ -767,7 +767,8 @@ def st_export(ctx):
     num = re.sub(r"\D", "", ctx.book).zfill(3)
     out = ctx.reports / "_export"
     cmd = [ctx.venv_py, "scripts/export_guji_format.py", "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
-           "--out", out, "--format", "char-cord", "--keys", "cv"]
+           "--out", out, "--format", "char-cord", "--keys", "cv",
+           "--text-version", ctx.st.get("text_version") or "0.1.0"]    # 首次出 0.1.0；补丁版在状态里记 text_version
     meta = CV / f"doc/formats/samples/guji_format_v0.1/meta_{ctx.book}.json"
     if meta.exists():
         cmd += ["--meta", meta]

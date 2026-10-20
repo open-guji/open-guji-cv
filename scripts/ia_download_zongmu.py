@@ -1,26 +1,27 @@
 #!/usr/bin/env python3
 """下载武英殿刻本《钦定四库全书总目》全套扫描（Internet Archive）。
 
-来源：浙大 CADAL 600dpi 扫描，IA 上以连续编号上传：
-    06061300.cn ~ 06061498.cn   （199 册 = 卷首四 + 总目 200 卷）
-    首册: https://archive.org/details/06061300.cn
-    见 book-index: Book/9/6/m/96mid1ogzk-欽定四庫全書總目武英殿刻本.json
+来源：浙大 CADAL 600dpi 扫描，IA 上**分两段编号、共 99 册**（2026-10-20 GUJI-648 逐号核过，书单见
+`doc/runbook/书单-四庫總目.md`）：
+    06061300.cn ~ 06061320.cn   21 册：卷首一～四、卷一～四十四（vol01–vol21）
+    06066140.cn ~ 06066217.cn   78 册：卷四十五～二百（vol22–vol99）
+以前写的「199 册 = 06061300～06061498 连号」是错的：06061321 起是别的书。
+    见 book-index: Book/g/z/k/96mid1ogzk-欽定四庫全書總目武英殿刻本.json
 
 用法（可随时中断、重跑续传）：
-    python scripts/ia_download_zongmu.py --out data_full/zongmu            # 全套
-    python scripts/ia_download_zongmu.py --out data_full/zongmu --start 06061300 --count 5
+    python scripts/ia_download_zongmu.py --out data_full/zongmu                 # 全套 99 册
+    python scripts/ia_download_zongmu.py --out data_full/zongmu --vols 11-20    # 按册号（第 1 波）
     python scripts/ia_download_zongmu.py --out data_full/zongmu --prefer pdf
 
 行为：
-- 每册先取 metadata，优先选 *_jp2.zip（无损页图），--prefer pdf 时选 PDF；
+- 每册先取 metadata，缺省选 *_tif.zip：1-bit 600dpi 页图，与工作区现有 vol01–10 的 PNG 逐像素一致
+  （GUJI-648 抽 vol03 第 10 页核过）；没有再退 _cnbook.zip（原始包，体积约 1.6 倍）；--prefer pdf 时选 PDF；
 - 断点续传（HTTP Range），完成后按 IA metadata 的 md5 校验，校验通过写
   <item>.ok 标记，重跑自动跳过；
 - 下载前检查磁盘余量（须 > 预估体积 + 5GB 缓冲），不足即停；
 - 全程限一个连接（对 IA 友好），失败退避重试 3 次；
 - 清单进度写 <out>/manifest.jsonl（一册一行：item、文件、大小、md5、状态）。
-
-注意：Claude Code 远程容器的出口代理封锁 archive.org（组织策略 403），
-此脚本须在网络可达 archive.org 的环境运行（本机，或放开策略后的容器）。
+- 每册第 1 张是书脊标签；部分册有合扫页（vol03/04/07/09 各拆出 3 页），下完逐册查。
 """
 
 from __future__ import annotations
@@ -34,7 +35,22 @@ import time
 import urllib.request
 from pathlib import Path
 
-FIRST, LAST = 6061300, 6061498          # 06061300.cn ~ 06061498.cn
+#: 全书 99 册的 IA 编号，下标＋1＝册号（vol01＝06061300.cn）。两段编号见模块头。
+ITEMS = [f"0{n}.cn" for n in range(6061300, 6061321)] + [f"0{n}.cn" for n in range(6066140, 6066218)]
+
+
+def select(vols: str | None) -> list[str]:
+    """`11-20`／`3,5,7`／空（全套）→ IA 编号列表。"""
+    if not vols:
+        return list(ITEMS)
+    want: list[int] = []
+    for part in vols.split(","):
+        a, _, b = part.partition("-")
+        want += range(int(a), int(b or a) + 1)
+    bad = [v for v in want if not 1 <= v <= len(ITEMS)]
+    if bad:
+        raise SystemExit(f"册号超出 1–{len(ITEMS)}：{bad}")
+    return [ITEMS[v - 1] for v in want]
 
 
 def http_json(url: str, retries: int = 3) -> dict:
@@ -58,10 +74,10 @@ def pick_file(meta: dict, prefer: str) -> dict | None:
         order = [lambda f: f["name"].endswith(".pdf"),
                  lambda f: f["name"].endswith("_cnbook.zip")]
     else:
-        # CADAL 中文书 item 无 jp2：原始扫描在 _cnbook.zip（信息量最大，
-        # book9 管线即用其中 tif），其次处理版 _tif.zip
-        order = [lambda f: f["name"].endswith("_cnbook.zip"),
-                 lambda f: f["name"].endswith("_tif.zip"),
+        # CADAL 中文书 item 无 jp2：_tif.zip 与工作区现有原图逐像素一致，体积小；
+        # 没有再退原始包 _cnbook.zip（GUJI-648）
+        order = [lambda f: f["name"].endswith("_tif.zip"),
+                 lambda f: f["name"].endswith("_cnbook.zip"),
                  lambda f: f["name"].endswith("_jp2.zip"),
                  lambda f: f["name"].endswith("_jp2.tar"),
                  lambda f: f["name"].endswith(".pdf")]
@@ -102,17 +118,14 @@ def md5sum(path: Path) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--out", required=True, help="输出目录")
-    ap.add_argument("--start", default=f"0{FIRST}", help="起始编号（如 06061300）")
-    ap.add_argument("--count", type=int, default=LAST - FIRST + 1,
-                    help="册数（默认全套 199）")
-    ap.add_argument("--prefer", default="jp2", choices=["jp2", "pdf"])
+    ap.add_argument("--vols", default=None, help="册号，如 11-20 或 3,5,7；缺省全套 99 册")
+    ap.add_argument("--prefer", default="tif", choices=["tif", "pdf"])
     args = ap.parse_args()
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     manifest = out / "manifest.jsonl"
-    start_n = int(args.start.lstrip("0") or "0")
-    items = [f"0{n}.cn" for n in range(start_n, min(start_n + args.count, LAST + 1))]
+    items = select(args.vols)
     print(f"计划 {len(items)} 册: {items[0]} ~ {items[-1]}  → {out}")
 
     done = failed = 0
@@ -126,7 +139,7 @@ def main() -> None:
             meta = http_json(f"https://archive.org/metadata/{item}")
             f = pick_file(meta, args.prefer)
             if f is None:
-                raise RuntimeError("未找到可下载文件（jp2.zip/pdf）")
+                raise RuntimeError("未找到可下载文件（tif.zip/cnbook.zip/pdf）")
             size = int(f.get("size", 0))
             free = shutil.disk_usage(out).free
             if free < size + 5 * (1 << 30):

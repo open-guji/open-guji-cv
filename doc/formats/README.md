@@ -5,6 +5,7 @@
 | [guji_page_v0.2.md](guji_page_v0.2.md) | 每字带坐标的页面文本格式 guji-page（现行 v0.2；v0、v0.1 留档） |
 | [norm_layer_proposal.md](norm_layer_proposal.md) | 规范层（异体 → 通行字）方案调研 |
 | `F*_handoff.md` | F1／F2 道交接记录 |
+| [M9-M10交接契约.md](M9-M10交接契约.md) | 粗校（M9）交精校（M10）的四样东西：book-text 0.x 文本、中心库待审单、R2 正式产物包、粗校台账，以同一 rev 为准（GUJI-678，待 M10 确认） |
 | `samples/` | 各版样例数据 |
 
 标点层 `NNN.punct.json`、实体层 `NNN.entity.json` 的字段规范在 `guji-format` 仓（04 标点、05 实体）；

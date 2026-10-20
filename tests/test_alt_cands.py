@@ -36,6 +36,38 @@ def test_zi_parse_one_hop_encoded_only():
     assert vs.zi_parse(doc, "弊") == sorted(["𡚁", "斃"])   # IDS 串、私用区不收，两跳外不收
 
 
+def test_zi_facts_keeps_claims_and_links_not_glosses():
+    def node(k, prefix, form, zheng, gloss="同「X」，释义原文"):
+        return [k, prefix, k, "0", form, form, form, gloss, None, None, zheng] + [None] * 6
+    doc = {"yi": {"nodes": {
+        "A": node("A", "GHZR", "互", ""),
+        "B": node("B", "TVAR", "⿱一㐄", "互"),                 # 未编码形，正字 互
+        "C": node("C", "GHZR", "牙", "互"),                    # 汉语大字典：牙 同 互
+        "D": node("D", "GHZR", "㸦", ""),
+        "E": node("E", "TVAR", "互", "手氏")},                  # 正字不是单字，不收
+        "edges": [["A", "D"], ["A", "B"], ["A", "C"]]}}
+    f = vs.zi_facts(doc)
+    assert f["claims"] == [["TVAR", "B", "⿱一㐄", "互"], ["GHZR", "C", "牙", "互"]]
+    assert f["links"] == [["A", "互", "C", "牙"], ["A", "互", "D", "㸦"]]   # 未编码那头不进连线
+    assert "释义" not in json.dumps(f, ensure_ascii=False)
+
+
+def test_zi_cache_upgrades_old_format(tmp_path):
+    (tmp_path / f"U+{ord('蒙'):04X}.json").write_text(json.dumps({"q": "蒙", "fam": ["𫎇"]}), encoding="utf-8")
+    calls = []
+
+    def opener(req, timeout=0):
+        calls.append(req.full_url)
+        return _Resp(json.dumps(_zi_doc("蒙", ["𫎇"]), ensure_ascii=False).encode("utf-8"))
+
+    z = vs.ZiCache(tmp_path, fetch=False, interval=0, opener=opener)
+    assert z.ensure("蒙") is False and not calls             # 缺省不重取
+    assert z.ensure("蒙", upgrade=True) is True and len(calls) == 1
+    d = json.loads((tmp_path / f"U+{ord('蒙'):04X}.json").read_text(encoding="utf-8"))
+    assert d["v"] == vs.ZI_CACHE_V and "claims" in d and "links" in d
+    assert z.ensure("蒙", upgrade=True) is False and len(calls) == 1
+
+
 class _Resp(io.BytesIO):
     def __enter__(self):
         return self
@@ -69,25 +101,31 @@ def test_zi_cache_offline_failure_is_silent(tmp_path):
     assert not list(tmp_path.glob("*.json"))          # 失败不写缓存，下次再试
 
 
-def test_charcomp_and_compat_filter(tmp_path):
-    f = tmp_path / "rt.tsv"
-    f.write_text("# 头注\n歷\t厯歴歷\n", encoding="utf-8")
-    assert vs.charcomp("歷", f) == {"厯", "歴"}         # 兼容区重复字、私用区都去掉
+def test_is_han_drops_compat_and_pua():
+    assert vs.is_han("歷") and vs.is_han("𡚁")
+    assert not vs.is_han("\uf98c")                       # 兼容区重复字 歷
+    assert not vs.is_han("\ue000") and not vs.is_han("⺄") and not vs.is_han("ab")
 
 
-def test_family_pool_merges_sources_and_tags(tmp_path, monkeypatch):
-    f = tmp_path / "rt.tsv"
-    f.write_text("弊\t獘\n", encoding="utf-8")
-    monkeypatch.setattr(vs, "CHARCOMP_TSV", f)
+def test_family_pool_merges_sources_and_tags(tmp_path):
+    from open_guji_cv.hanzi import HanziDB
+    edge = lambda a, b, src, d=0: (a, b, "variant", d, src, "", "", "")
+    db = HanziDB.from_tables(tmp_path / "hz", {
+        "sources": [], "forms": [],
+        "edges": [edge("弊", "𡚁", "twedu", 1), edge("弊", "獘", "charcomp:rt"),
+                  edge("弊", "敝", "hydzd-borrowed")],                     # 通假不进池
+        "near": [("弊", "蔽", "near:v1", "slot", 0.95, "", 1)]})
     z = vs.ZiCache(tmp_path / "zi", fetch=False)
     (tmp_path / "zi").mkdir()
     (tmp_path / "zi" / f"U+{ord('弊'):04X}.json").write_text(
         json.dumps({"q": "弊", "fam": ["𡚁", "幣"]}, ensure_ascii=False), encoding="utf-8")
-    pool = vs.family_pool(["弊"], zi=z, near_k=0)
+    pool = vs.family_pool(["弊"], zi=z, near_k=0, db=db)
     assert pool["弊"]["src"] == "piv"
-    assert "v" in pool["𡚁"]["src"] and "zi" in pool["𡚁"]["src"]   # 本仓表与字统网都有
-    assert pool["獘"]["src"].endswith("rt") and pool["幣"]["src"] == "zi"
+    assert pool["𡚁"]["src"] == "v,zi"                  # 库里的异体表与本机字统网缓存都有
+    assert pool["獘"]["src"] == "rt" and pool["幣"]["src"] == "zi"
+    assert "敝" not in pool and "蔽" not in pool
     assert all(e["p"] == "弊" for e in pool.values())
+    assert vs.family_pool(["弊"], near_k=1, db=db)["蔽"]["src"] == "near"
 
 
 def test_pivots_of_priority_and_dedup():

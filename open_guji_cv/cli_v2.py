@@ -8,6 +8,8 @@
     guji cache build-rare-index --book <book> [--jobs 4]   # 云端预建 Step5-b embedding 索引，供服务器分发命中
     guji cache warm --book <book> [--pages all] [--jobs 4]  # 多进程预渲字块缓存（快照导入后用）
     guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
+    guji cache pull-rare-index [--book <book>]             # 从全字表向量包（R2，按版本）落成 Step5-b 索引，不用现建
+    guji cache build-emb-pack [--jobs 4]                   # 建一版全字表向量包（清单进 config/hanzi/emb/）
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
 本模块顶层不 import 任何重依赖，保证 CLI 冷启动快。
@@ -312,6 +314,24 @@ def cmd_close_check(args) -> None:
     sys.exit(0 if res["machine_ok"] else 1)
 
 
+def cmd_exit_check(args) -> None:
+    """一册文本出 1.0 时的出口动作逐项核（只读；M10 G8，GUJI-685）。见 `ops/exit_check.py` 模块头。"""
+    import re
+    from .ops import exit_check as EC
+    chapter = args.chapter or (f"{int(args.book[3:]):03d}" if re.fullmatch(r"vol\d+", args.book) else None)
+    if not chapter:
+        sys.exit("册名不是 volNN 时要给 --chapter NNN")
+    from .core.book import load_book
+    b = load_book(args.book)
+    res = EC.run(Path(args.text_dir), chapter, b.freeze, b.cv_version,
+                 repo=Path(args.repo) if args.repo else None)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        EC.print_report(res)
+    sys.exit(0 if res["ok"] else 1)
+
+
 def cmd_export(args) -> None:
     """`guji export md|format <册>`：把 runbook 里两条易错的散脚本收成固定口径（overview#413 C2）。
 
@@ -390,7 +410,7 @@ def cmd_audit(args) -> None:
         print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
     elif args.action == "alt":
         # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
-        # 近似字的异体族（本仓表＋部件檢索＋字统网缓存）按字块图排序，挂成卡上 `alt`，
+        # 近似字的异体族（hanzi 库；本机字统网缓存照并）按字块图排序，挂成卡上 `alt`，
         # 再交 ai-team pending_list.py --cards 并进 pending.json（proof_fields 原样带出）。
         from .clustering.variant_sources import ZiCache
         from .review.alt_cands import ALT_K, alt_for_cards, attach
@@ -778,6 +798,60 @@ def cmd_cache(args) -> None:
         _cmd_cache_build_rare_index(args)
     elif args.action == "build-font-index":
         _cmd_cache_build_font_index(args)
+    elif args.action == "pull-rare-index":
+        _cmd_cache_pull_rare_index(args)
+    elif args.action == "build-emb-pack":
+        from .clustering import emb_pack
+        from .hanzi.build import data_root
+        from .ops.emb_pack_build import build
+        m = build(data_root() / "emb-build", jobs=max(1, args.jobs or 1))
+        print(f"清单 {emb_pack.EMB_DIR / (m['version'] + '.json')}；三个文件在 {data_root() / 'emb-build'}，"
+              "传 R2：python scripts/build_hanzi_db.py --no-build --upload-emb")
+
+
+def _cmd_cache_pull_rare_index(args) -> None:
+    """`guji cache pull-rare-index [--book <book>]`：用全字表向量包（hanzi 库 B2）落成 Step5-b 的
+    `emb_<key>.npz`，代替 `build-rare-index` 的现建（4 核约 45 分钟）。
+
+    只认**与本机现役同规格**的包（模型、字体、渲染代码、额外图源四样指纹全对上，见
+    `clustering/emb_pack.py`）；对不上就明说，照旧用 `build-rare-index` 现建，不拿旧向量冒充。
+    落盘的 key、路径与 `build-rare-index` 是同一个函数算的，`_emb_index` 照旧命中。
+    不给 `--book` 时只把向量包拉到本机（控制台「以字找字」排序用）。"""
+    from .clustering import cnn_candidates as cc
+    from .clustering import emb_pack
+
+    spec = emb_pack.current_spec()
+    m = emb_pack.find(spec)
+    if m is None:
+        have = ", ".join(x["version"] + f"（模型 {x['ckpt_fp']}）" for x in emb_pack.manifests()) or "无"
+        print(f"没有与本机同规格的向量包：本机 {emb_pack.version_of(spec)} {spec}；已发布：{have}。"
+              f"用 `guji cache build-rare-index` 现建，或先 `guji cache build-emb-pack` 出一版。")
+        sys.exit(1)
+    pk = emb_pack.EmbPack.load(m)
+    print(f"向量包 {pk.version}：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
+    if not args.book:
+        return
+    from .clustering.rare_panel import book_charsets
+    from .steps.align_ref import book_corpus
+    cs_base, cs_esc, _spec = book_charsets(args.book, book_corpus(args.book))
+    inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
+
+    def compute(chars):
+        if not inst._ensure():
+            raise SystemExit(f"{len(chars)} 字不在包里、本机又没有 torch/checkpoint，落不成完整索引")
+        from .clustering.synth import render_char
+        return cc.build_emb_matrix(inst._net, inst._dev, tuple(chars), {}, render_char)
+
+    for name, cs in (("base", cs_base), ("escalate", cs_esc)):
+        if not cs:
+            continue
+        key, f, _extra = inst.emb_index_key(cs)
+        if f.exists():
+            print(f"{name}：已有 {f}，跳过")
+            continue
+        mat, names = pk.materialize(cs, compute)
+        cc._save_emb_index(f, mat, names)
+        print(f"{name}：{f}（key={key}），{len(names)}/{len(cs)} 字，来自 {pk.version}")
 
 
 def _cmd_cache_build_rare_index(args) -> None:
@@ -2351,6 +2425,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "close-check": cmd_close_check,
+    "exit-check": cmd_exit_check,
     "export": cmd_export,
     "audit": cmd_audit,
     "store": cmd_store,
@@ -2749,6 +2824,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "也可给册（vol04）、章号（004）、<书>/<章> 或文件路径。book-text 的旧路径已不用（10-20 迁中心库）")
     p.add_argument("--json", action="store_true")
 
+    p = sub.add_parser("exit-check",
+                       help="[v2] 一册文本出 1.0 的出口动作逐项核（只读）：proofing、review、decision、阙文、冻结登记（M10 G8）")
+    p.add_argument("book")
+    p.add_argument("--text-dir", required=True, help="book-text 本书 default 目录（含 index.json、NNN.char.json）")
+    p.add_argument("--chapter", default=None, help="章号 NNN；缺省按 volNN 推")
+    p.add_argument("--repo", default=None, help="查 tag 用的 cv 仓目录；缺省本包所在仓")
+    p.add_argument("--json", action="store_true")
+
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
     p.add_argument("action", choices=["md", "format"])
     p.add_argument("book")
@@ -2842,9 +2925,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "这个仍然走一遍完整的 OAuth 回调，只是身份接口是假的")
 
     p = sub.add_parser("cache", help="[v2] 图像缓存：usage | prune | get | column | verify | warm | "
-                                     "build-rare-index | build-font-index")
+                                     "build-rare-index | build-font-index | pull-rare-index | build-emb-pack")
     p.add_argument("action", choices=["usage", "prune", "get", "column", "verify", "warm",
-                                      "build-rare-index", "build-font-index"])
+                                      "build-rare-index", "build-font-index", "pull-rare-index",
+                                      "build-emb-pack"])
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
     p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
