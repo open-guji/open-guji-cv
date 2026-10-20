@@ -3,7 +3,8 @@
     guji products diff <册> --a <产物根> [--b <产物根>] [--pages …] [--out 目录] [--images N] -w <工作区>
     guji products pack  push <册> [--label 名] [--steps a,b] -w <工作区>     # 本机产物打包存 R2
     guji products pack  fetch <册> [--label 名] [--to 产物根] -w <工作区>    # 取回，缺省落在本机产物根
-    guji products pack  list [<册>] -w <工作区>
+    guji products pack  list [<册>] -w <工作区>                            # ★ = 该册 main
+    guji products pack  promote <册> --label 名 -w <工作区>                # 把已存的包标成该册 main
     guji products pack  push-index | fetch-index                           # 生僻字 embedding 索引（models/*/emb_*.npz）
 
 产物根就是含 `<册>/<步>/p0001.json` 的那一层（`products/`、`guji snapshot make` 出的目录、实验变体目录）。
@@ -53,6 +54,29 @@ def cmd_diff(args) -> None:
     print(f"报告：{rep}")
 
 
+def book_versions(book: str) -> dict:
+    """一份结果由三样版本共同决定：cv、语料库（册 yaml `corpus: N`）、字形库（`glyph_pin: N`；
+    没钉就记人裁内容指纹）。全记进产物包的 manifest，标签前三段由它拼。"""
+    from .core import cv_version as CV
+    ver, commit = CV.describe()
+    out = {"cv": ver, "cv_commit": commit, "corpus": None, "glyph_pin": None, "human_fp": None}
+    try:
+        from .core.book import load_book
+        b = load_book(book)
+        out["corpus"] = getattr(b, "corpus", None)
+        out["glyph_pin"] = getattr(b, "glyph_pin", None)
+    except Exception:          # noqa: BLE001 —— 读不到册配置：只记 cv
+        pass
+    if out["glyph_pin"] is None:
+        try:
+            from .clustering.glyph_fp import human_shapes_fingerprint
+            from .core.workspace import glyph_db_path
+            out["human_fp"] = human_shapes_fingerprint(glyph_db_path())
+        except Exception:      # noqa: BLE001
+            pass
+    return out
+
+
 def cmd_pack(args) -> None:
     from .datastore import packs as PK
     if args.pack_action in ("push-index", "fetch-index"):
@@ -62,15 +86,28 @@ def cmd_pack(args) -> None:
         return
     if args.pack_action == "list":
         for row in PK.list_packs(args.book):
-            print(f"{row['name']}\t{row.get('bytes', '')}\t{row.get('created', '')}\t{row.get('note', '')}")
+            star = "★" if row.get("main") else " "
+            v = row.get("versions") or {}
+            vs = (f"cv {v.get('cv')} 语料 {v.get('corpus') if v.get('corpus') is not None else '-'} "
+                  f"字形 {v.get('glyph_pin') if v.get('glyph_pin') is not None else (v.get('human_fp') or '-')}") if v else ""
+            print(f"{star} {row['name']}\t{row.get('bytes', '')}\t{row.get('created', '')}\t{vs}\t{row.get('note', '')}")
+        return
+    if args.pack_action == "promote":
+        if not (args.book and args.label):
+            print("✗ 用法：guji products pack promote <册> --label <标签>", file=sys.stderr)
+            sys.exit(2)
+        print(f"已标 main：{PK.promote(args.book, args.label, note=args.note or '')}")
         return
     if not args.book:
         print("✗ push/fetch 要给册", file=sys.stderr)
         sys.exit(2)
     if args.pack_action == "push":
-        info = PK.push_products(args.book, _root(args.root), label=args.label,
+        info = PK.push_products(args.book, _root(args.root), label=args.label, change=args.change,
+                                vers=book_versions(args.book),
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
+        if args.main:
+            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '')}")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
@@ -87,7 +124,7 @@ def cmd_products(args) -> None:
 def add_parser(sub) -> None:
     p = sub.add_parser("products", help="[v2] 产物前后对比（diff）、产物包存取 R2（pack）")
     p.add_argument("action", choices=["diff", "pack"])
-    p.add_argument("pos", nargs="*", help="diff：<册>；pack：push|fetch|list [<册>]、push-index、fetch-index")
+    p.add_argument("pos", nargs="*", help="diff：<册>；pack：push|fetch|list|promote [<册>]、push-index、fetch-index")
     p.add_argument("-w", "--workspace", default=None, help="工作区（册配置、原图）")
     p.add_argument("--a", default=None, help="diff：前（基线）产物根")
     p.add_argument("--b", default=None, help="diff：后产物根，缺省本机产物根")
@@ -95,12 +132,14 @@ def add_parser(sub) -> None:
     p.add_argument("--out", default=None, help="diff：报告目录，缺省 ./diff-<册>")
     p.add_argument("--images", type=int, default=0, help="diff：前 N 个变了的列出看图页（要原图）")
     p.add_argument("--pipeline", default="keben_body_v2")
-    p.add_argument("--label", default=None, help="pack：包名后缀，缺省 cv 版本号")
+    p.add_argument("--label", default=None, help="pack：整个标签（ASCII）；push 缺省按版本三段拼（见 --change）；fetch 缺省取 main")
     p.add_argument("--steps", default=None, help="pack push：只打这几步，逗号分隔；缺省全部")
     p.add_argument("--root", default=None, help="pack：产物根，缺省本机产物根")
     p.add_argument("--to", default=None, help="pack fetch：解到哪个产物根")
     p.add_argument("--force", action="store_true", help="pack fetch：目标已有该册产物也覆盖")
-    p.add_argument("--note", default=None, help="pack push：说明（谁、为什么）")
+    p.add_argument("--note", default=None, help="pack push／promote：说明（谁、为什么）")
+    p.add_argument("--change", default=None, help="pack push：改动名（ASCII），接在自动版本标签后，如 layout → cv0.4.7-c1-g2-layout")
+    p.add_argument("--main", action="store_true", help="pack push：存完顺手标成该册 main（正式结果）")
 
 
 def cmd_products_entry(args) -> None:
@@ -115,8 +154,8 @@ def cmd_products_entry(args) -> None:
             print("✗ diff 要 --a（前一份产物根，如 guji snapshot make 出的目录、产物包取回的目录）", file=sys.stderr)
             sys.exit(2)
     else:
-        if not pos or pos[0] not in ("push", "fetch", "list", "push-index", "fetch-index"):
-            print("✗ 用法：guji products pack push|fetch|list [<册>]｜push-index｜fetch-index", file=sys.stderr)
+        if not pos or pos[0] not in ("push", "fetch", "list", "promote", "push-index", "fetch-index"):
+            print("✗ 用法：guji products pack push|fetch|list|promote [<册>]｜push-index｜fetch-index", file=sys.stderr)
             sys.exit(2)
         args.pack_action, args.book = pos[0], (pos[1] if len(pos) > 1 else None)
     cmd_products(args)

@@ -120,3 +120,35 @@ def test_pack_label_must_be_ascii():
     for bad in ("v0.4.6-粗校", "", "-x", "a/b", "x" * 97):
         with pytest.raises(ValueError):
             PK.check_label(bad)
+def test_pack_main_pointer(tmp_path, monkeypatch):
+    from open_guji_cv.datastore import packs as PK
+    monkeypatch.setattr(PK, "_ws_name", lambda: "ws-x")
+    root = tmp_path / "products"
+    (root / "vol04" / "seed_admit").mkdir(parents=True)
+    src = FakeSrc()
+    for lab, body in (("a1", "A"), ("b2", "B")):
+        (root / "vol04" / "seed_admit" / "p0001.json").write_text(body)
+        PK.push_products("vol04", root, label=lab, src=src)
+    assert PK.main_label("vol04", src=src) is None
+    got = PK.fetch_products("vol04", tmp_path / "x", src=src)          # 没标 main：取最新存的
+    assert got["name"].endswith("/b2")
+    PK.promote("vol04", "a1", src=src)
+    assert PK.main_label("vol04", src=src) == "a1"
+    assert [m["main"] for m in PK.list_packs("vol04", src=src)] == [True, False]
+    got = PK.fetch_products("vol04", tmp_path / "y", src=src)          # 标了 main：缺省取 main
+    assert got["name"].endswith("/a1")
+    assert (tmp_path / "y" / "vol04" / "seed_admit" / "p0001.json").read_text() == "A"
+    with pytest.raises(Exception):
+        PK.promote("vol04", "nope", src=src)                          # 包不存在不许标
+    with pytest.raises(ValueError):
+        PK.check_label("main-ptr")
+
+
+def test_version_label():
+    from open_guji_cv.datastore import packs as PK
+    assert PK.version_label({"cv": "0.4.7", "corpus": 1, "glyph_pin": 2}) == "cv0.4.7-c1-g2"
+    assert PK.version_label({"cv": "0.4.7+3", "corpus": None, "glyph_pin": None,
+                             "human_fp": "h1:812:3fa9c1d2e"}) == "cv0.4.7p3-c--g-3fa9c1"
+    lab = PK.version_label({"cv": "0.4.7+dirty", "corpus": 1, "glyph_pin": None, "human_fp": "nodb"})
+    assert lab == "cv0.4.7pdirty-c1-g-"
+    PK.check_label(lab + "-x")
