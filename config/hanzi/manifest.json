@@ -1,0 +1,286 @@
+{
+ "builder": 2,
+ "content_sha": "6793f7864c8f",
+ "edges_by_src_rel": {
+  "charcomp:rt|related": 46211,
+  "charcomp:rt|variant": 12179,
+  "cjkvi-simplified|simp": 5905,
+  "dypytz|variant": 1051,
+  "hydzd-borrowed|borrow": 3198,
+  "hydzd|simp": 2260,
+  "hydzd|variant": 26883,
+  "local:keben|variant": 1,
+  "local:never|distinct": 54,
+  "twedu|variant": 24741,
+  "unihan:kSemanticVariant|variant": 2181,
+  "unihan:kSimplifiedVariant|simp": 6924,
+  "unihan:kSpecializedSemanticVariant|variant_partial": 304,
+  "unihan:kSpoofingVariant|spoof": 183,
+  "unihan:kTraditionalVariant|simp": 6924,
+  "unihan:kZVariant|z": 90,
+  "yitizi|variant": 8688,
+  "zi:BABELSTONE|variant": 1,
+  "zi:FZK|variant": 121,
+  "zi:G3|variant": 1,
+  "zi:G4K|variant": 11,
+  "zi:GBK|variant": 2,
+  "zi:GHC|variant": 3,
+  "zi:GHZH|variant": 415,
+  "zi:GHZR|variant": 336,
+  "zi:GHZ|variant": 1,
+  "zi:GKJ|variant": 2,
+  "zi:GZA|variant": 1,
+  "zi:GZFY|variant": 3,
+  "zi:GZH|variant": 14,
+  "zi:GZJW|variant": 32,
+  "zi:GZ|variant": 87,
+  "zi:G_2J|variant": 39,
+  "zi:G_ROC1J|variant": 3,
+  "zi:H|variant": 2,
+  "zi:IVD|variant": 13,
+  "zi:JH|variant": 34,
+  "zi:JK|variant": 19,
+  "zi:JMJ|variant": 488,
+  "zi:K2|variant": 1,
+  "zi:K3|variant": 3,
+  "zi:K4|variant": 1,
+  "zi:KC|variant": 172,
+  "zi:SAT|variant": 637,
+  "zi:T13|variant": 2,
+  "zi:T4|variant": 1,
+  "zi:T5|variant": 1,
+  "zi:TC|variant": 3,
+  "zi:TF|variant": 1,
+  "zi:TVAR|variant": 1329,
+  "zi:UCV|variant": 25,
+  "zi:UK|variant": 38,
+  "zi:UTC|variant": 6,
+  "zi:V2|variant": 1,
+  "zi:V4|variant": 2,
+  "zi:VN|variant": 20,
+  "zi:VTDCNDG|variant": 26,
+  "zi:WASEIKANJI|variant": 16,
+  "zi:ZITOOLS|variant": 1594,
+  "zi:link|variant": 33694
+ },
+ "files": {
+  "core/edges.tsv": {
+   "bytes": 8240799,
+   "pack": "core",
+   "rows": 186978,
+   "sha256": "03c4aeeee9cac2c3fb02f185b172c381b435c1679f558476316cd978afb94e04",
+   "table": "edges"
+  },
+  "core/forms.tsv": {
+   "bytes": 1808275,
+   "pack": "core",
+   "rows": 37826,
+   "sha256": "698c969acacea9c97bcce9f1f4a5e9c7962948111a46017a8341970133625233",
+   "table": "forms"
+  },
+  "core/sources.tsv": {
+   "bytes": 2998,
+   "pack": "core",
+   "rows": 21,
+   "sha256": "5114a12da28d27aa67011412ba27419664ab49e42cdff85e337eaccc874af52b",
+   "table": "sources"
+  },
+  "near:ids-v1": {
+   "bytes": 2423070,
+   "pack": "core",
+   "path": "config/ids/ids_confusable_pairs_v1.tsv",
+   "rows": 61376,
+   "sha256": "68aa564ca9d42f96cf0fac69529c5b7fc6b55c578b12229cc7ce1fdf5c295283",
+   "table": "near"
+  },
+  "near:v1": {
+   "bytes": 635295,
+   "pack": "core",
+   "path": "config/ids/confusable_pairs_v1.tsv",
+   "rows": 19729,
+   "sha256": "224e559943f8b2531174f5ff144b1a5f0b11f788c7ccc894aa91d319be55b501",
+   "table": "near"
+  },
+  "parts/chars.tsv": {
+   "bytes": 3869746,
+   "pack": "parts",
+   "rows": 101997,
+   "sha256": "99e85e62d81d4c4cd04ec7e6670e707847506bc37017164fe5473d516a973174",
+   "table": "chars"
+  },
+  "parts/comps.tsv": {
+   "bytes": 3686035,
+   "pack": "parts",
+   "rows": 287446,
+   "sha256": "fa41c7852ada6adfdb372f84b10f9026b221be28d6ba1652d92f87ad5b45af51",
+   "table": "comps"
+  },
+  "parts/ids.tsv": {
+   "bytes": 3322593,
+   "pack": "parts",
+   "rows": 117041,
+   "sha256": "10448d33ca5756c4889fbd31c132ab8b9f6ce2e22b1644e9dfbee9f1bb4bcce1",
+   "table": "ids"
+  }
+ },
+ "raw": {
+  "charcomp-dt.jsonl": {
+   "bytes": 3223919,
+   "sha256": "6cfbac4cc08078214e613144744df2ae2ac0b0e78ad71bdda4a7af41ac70cc3b"
+  },
+  "charcomp-rt.jsonl": {
+   "bytes": 1106442,
+   "sha256": "7fbf6290b9b77455a343e124118a180ec6b432490bdc0485f37817af72b4ee4d"
+  },
+  "charcomp-vt.json": {
+   "bytes": 14413,
+   "sha256": "f97af4b22d10d62f6d940cece80d4762375e7d4268d50d9f6e51234c2150a3cb"
+  },
+  "cjkvi-cjkvi-simplified.txt": {
+   "bytes": 373627,
+   "sha256": "607bd46ad674031f5bcd3b1ec891391e85d9cb61a187280e8f3531f70bd3a2fb"
+  },
+  "cjkvi-dypytz-variants.txt": {
+   "bytes": 25282,
+   "sha256": "8224bf5060532e113d9b8ac172316432eb02778ee992cbcb87c9e2b3c21f0f8f"
+  },
+  "cjkvi-hydzd-borrowed.txt": {
+   "bytes": 101108,
+   "sha256": "d0f96bb6c16e5f4d95ecf1131a89bc05fd507fb042421106277e0953dd9d2629"
+  },
+  "cjkvi-hydzd-variants.txt": {
+   "bytes": 673965,
+   "sha256": "3bd15737609cdacc5afbefdb1de26e40d27f725879dbb4b3a258cf6b326fcbf0"
+  },
+  "cjkvi-twedu-variants.txt": {
+   "bytes": 563773,
+   "sha256": "acdda9d67772a95a94cec964fea5ac2e478e364a962429b4cf563e7cd24d4cdb"
+  },
+  "unihan-Unihan_DictionaryIndices.txt": {
+   "bytes": 8921637,
+   "sha256": "b41c7c5ca3a01d833ed4fe0c7b9cdf41c4ec08cb11a0fd1df6e92ed666ce00e1"
+  },
+  "unihan-Unihan_DictionaryLikeData.txt": {
+   "bytes": 4129290,
+   "sha256": "cce221e3d4719c9fa7f0068d2a86bd0d8f3bf5725a21a77d00fc4f784d5520ed"
+  },
+  "unihan-Unihan_IRGSources.txt": {
+   "bytes": 13379351,
+   "sha256": "e2c484cd22b54f7e0ce896ebb02f33e092b92325accf0fd55e0e14e3863869eb"
+  },
+  "unihan-Unihan_Readings.txt": {
+   "bytes": 8844571,
+   "sha256": "9d39995b5de714e8ce93716ed5d15eaa0792d68e407cdf8a0add2893b8f4150b"
+  },
+  "unihan-Unihan_Variants.txt": {
+   "bytes": 726700,
+   "sha256": "4ccfd34b08ac7b9c14353f6668ba43e3796d85c4cdce7952b635be16015aafa2"
+  },
+  "yibai-ids_lv1.txt": {
+   "bytes": 2059601,
+   "sha256": "51f78d7d84f52fd73e5bc155c2239b737c58ce627d446894a809f1a36547ae18"
+  },
+  "yitizi-index.js": {
+   "bytes": 170914,
+   "sha256": "b1a3de60dac377c2f8ae3acd5cd9828b60e8ca1500f08834d730fd7cfe69709a"
+  },
+  "zi-families.jsonl": {
+   "bytes": 11012520,
+   "sha256": "1b57843cd331f4473ed31585244605c97d99d8db60387dfa82cfb38c63ef17af"
+  }
+ },
+ "stats": {
+  "charcomp:rt": {
+   "edges": 58887,
+   "related": 46218,
+   "variant": 12669
+  },
+  "charcomp:vt": {
+   "folds": 853
+  },
+  "cjkvi-simplified": {
+   "col3_bad": 2653,
+   "edges": 10797,
+   "forms": 2653,
+   "line_meta": 4,
+   "self_loop": 231
+  },
+  "dypytz": {
+   "col1_bad": 2,
+   "col3_bad": 2,
+   "edges": 1051,
+   "line_meta": 13
+  },
+  "hydzd": {
+   "col1_bad": 1,
+   "col3_bad": 50,
+   "edges": 29159,
+   "forms": 44,
+   "line_meta": 6,
+   "self_loop": 9
+  },
+  "hydzd-borrowed": {
+   "edges": 3380,
+   "line_meta": 2,
+   "self_loop": 1
+  },
+  "local:keben": {
+   "edges": 1
+  },
+  "local:never": {
+   "edges": 54
+  },
+  "missing": [],
+  "near:ids-v1": {
+   "pairs": 61376
+  },
+  "near:v1": {
+   "pairs": 19729
+  },
+  "twedu": {
+   "edges": 24741,
+   "line_meta": 4,
+   "self_loop": 4
+  },
+  "unihan_chars": {
+   "by_block": {
+    "A": 6592,
+    "B": 42720,
+    "C": 4160,
+    "D": 223,
+    "E": 5774,
+    "F": 7473,
+    "G": 4939,
+    "H": 4192,
+    "I": 622,
+    "J": 4298,
+    "URO": 20992,
+    "compat": 12
+   },
+   "chars": 101997
+  },
+  "unihan_variants": {
+   "edges": 19364,
+   "kSemanticVariant": 4362,
+   "kSimplifiedVariant": 6924,
+   "kSpecializedSemanticVariant": 608,
+   "kSpoofingVariant": 366,
+   "kTraditionalVariant": 6924,
+   "kZVariant": 180,
+   "self_loop": 860
+  },
+  "unihan_version": "18.0.0",
+  "yitizi": {
+   "edges": 17376
+  },
+  "zi": {
+   "claims": 11808,
+   "edges": 118836,
+   "forms": 77728,
+   "links": 107028,
+   "queried": 1870
+  }
+ },
+ "unihan_version": "18.0.0",
+ "version": "hanzi-6793f7864c8f"
+}

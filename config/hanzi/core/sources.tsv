@@ -1,0 +1,21 @@
+charcomp:rt	部件檢索 rt（中研院漢字構形資料庫等整理）	https://raw.githubusercontent.com/frankslin/char-components/main/web/data/rt.jsonl	部件檢索公開授權（非商业，须标注来源）	nc	
+charcomp:vt	部件檢索 vt 部件变体折叠	https://raw.githubusercontent.com/frankslin/char-components/main/web/data/vt.json	部件檢索公開授權（非商业，须标注来源）	nc	
+cjkvi-simplified	cjkvi-variants 简繁	https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/cjkvi-simplified.txt	无 LICENSE（版权声明）	unclear	
+dypytz	cjkvi-variants dypytz（第一批异体字整理表）	https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/dypytz-variants.txt	无 LICENSE（版权声明）	unclear	
+hydzd	cjkvi-variants hydzd（漢語大字典）	https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/hydzd-variants.txt	无 LICENSE（版权声明）	unclear	
+hydzd-borrowed	cjkvi-variants hydzd-borrowed（漢語大字典 通假）	https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/hydzd-borrowed.txt	无 LICENSE（版权声明）	unclear	
+local:keben	本项目刻本实证手工边	config/variants/local_edges.json	自有	own	
+local:never	本项目人审定永不并组	config/variants/never_group.json	自有	own	
+near:ids-v1	本项目 IDS 形近对表 v1	config/ids/ids_confusable_pairs_v1.tsv	自有	own	
+near:v1	本项目形近对表 v1（IDS＋字体模板余弦）	config/ids/confusable_pairs_v1.tsv	自有	own	
+twedu	cjkvi-variants twedu（台湾教育部異體字字典）	https://raw.githubusercontent.com/cjkvi/cjkvi-variants/master/twedu-variants.txt	无 LICENSE（版权声明）	unclear	
+unihan	Unihan 码位属性	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kSemanticVariant	Unihan kSemanticVariant	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kSimplifiedVariant	Unihan kSimplifiedVariant	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kSpecializedSemanticVariant	Unihan kSpecializedSemanticVariant	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kSpoofingVariant	Unihan kSpoofingVariant（形近，非异体）	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kTraditionalVariant	Unihan kTraditionalVariant	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+unihan:kZVariant	Unihan kZVariant	https://www.unicode.org/Public/UCD/latest/ucd/Unihan.zip	Unicode License v3	open	
+yibai:lv1	yi-bai/ids lv1	https://raw.githubusercontent.com/yi-bai/ids/master/ids_lv1.txt	MIT	open	
+yitizi	nk2028/yitizi 0.1.3	https://cdn.jsdelivr.net/npm/yitizi@0.1.3/index.js	两份文档记 CC0／MIT 不一致	unclear	
+zi	字统网 zi.tools 针对性查询所得的一跳族（派生事实）	https://zi.tools/	无数据许可；只收派生的关系事实，不收原文与图	fact-ref	

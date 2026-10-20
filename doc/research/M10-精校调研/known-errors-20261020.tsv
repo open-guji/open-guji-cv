@@ -1,0 +1,179 @@
+# 已知错单（GUJI-684）：cell 放的字 应为 类别 来源 备注。kind=char/nonchar/review。生成：scripts/zhengli/known_errors.py build
+cell	shown	expect	kind	source	note
+vol01:9:7:17	曰	臼	char	基线错放格总表-Ezra.md	臼（窠臼）
+vol01:72:9:9	宮	官	char	基线错放格总表-Ezra.md	官（稗官）
+vol01:134:2:9	删	刪	char	cv doc/pipeline_handbook.md §15.2	已确认错放（iron 放「删」，页上是「刪」）
+vol02:15:9:20	元		review	基线错放格总表-Ezra.md	待审（半字，非整字）；证据未坐实
+vol02:188:4:20	足		review	基线错放格总表-Ezra.md	待审（半字）；证据未坐实
+vol04:3:1:13	辠		review	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（印泥/噪点）；被 #360 护栏正确退回待审
+vol04:3:2:-1	經		review	vision:claude-sonnet-5-5:vol04/看图结论-通道量效果.jsonl	[lane_seal量效果] seal 新放行（字），对照引擎列图判；上下文 【經】部六□□
+vol04:6:6:-1	𧀍		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（抬头空格框线）
+vol04:10:1:-1	之	乙	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	乙（恭呈乙覽）
+vol04:12:7:2	一		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：一个「三」被切成 一+䒑
+vol04:12:7:3	䒑		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上
+vol04:16:1:6	巳	己	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	己（己說）
+vol04:20:9:2	中		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（碎块）
+vol04:23:1:3	一	三	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	三（前三卷）
+vol04:23:5:2	圖		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（碎块）
+vol04:23:7:20	戮	爻	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	爻（動爻）
+vol04:34:4:1	一		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（抬头小块）
+vol04:34:9:20	考	「	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：格框跨「於古」两字，放行「考」；应为「於」
+vol04:34:9:21	中	「	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：应为「古」，放行「中」；与上格同一处切分错
+vol04:40:2:2	曰	日	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[iron_gate量效果] 書名《讀易日鈔》；证人作日
+vol04:40:4:6	已	己	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[ctx_rule量效果] 戌進士授内閣中書己未召試博學鴻詞：干支「己未」（康熙十八年博學鴻詞科），规则放行成了已（ji_yi_si_ctx_rule 新放行，按文意）
+vol04:41:8:8	千	干	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	干（干國家易名之典）
+vol04:46:7:21	一		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（横线）
+vol04:48:5:8a	祖	直	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	直（直隸）
+vol04:48:6:8	翁	羽	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	羽（字羽修）
+vol04:51:2:-1	一		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（列顶横线）
+vol04:51:8:2	廦		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（碎点）
+vol04:52:9:21	墏	樽	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	樽（图是樽）
+vol04:56:3:19	㢗	盾	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	盾（矛盾）
+vol04:59:8:10	巳	已	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S10] 實已畧備於斯（按文意）
+vol04:60:9:6	曰	日	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	日（卦直日）
+vol04:63:1:17	𢈂	自	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	自（自唐以來）
+vol04:63:1:19	片	唐	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	唐（同上）
+vol04:64:9:5	然		review	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是宻/密类，放了然）；被 #360 护栏正确退回待审
+vol04:68:6:10	𠮓	變	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是變，放码位𠮓）；被 #360 护栏正确退回待审
+vol04:71:2:7	𠃜	尸	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	尸（图是尸）
+vol04:71:7:5	至		review	vision:claude-sonnet-5-5:vol04/看图结论-通道量效果.jsonl	[rare_ref量效果] rare_ref 新放行（字），对照引擎列图判；上下文 自割【至】編端論乾
+vol04:73:5:9	巳	已	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S10] 先已刋板（按文意）
+vol04:79:7:14	𩰣	○	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	○（圈号）
+vol04:80:5:3	𬑹		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:4	小		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:5	𢍺		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:6	箵		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:7	㫖		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:8	是		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:9	𠳋		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:10	訁		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:11	𪊵		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:12	僅		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:13	𭦋		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:14	孓		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:15	輯		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:16	𩞤		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:17	𠭍		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:18	世		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:19	讠		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:20	𱞄		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:5:21	𠤞		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:3	熟		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:4	驣		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:5	𪜊		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:6	理		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:8	𪜊		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:9	𰹉		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:10	𢎧		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:11	𪜊		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:12	文		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:13	蟾		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:14	丿		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:15	貔		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:16	渢		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:17	三		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:80:6:19	安		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:85:5:13	集	榘	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	榘（图是榘）
+vol04:93:1:18	占	古	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	古（去古寖遠）
+vol04:94:1:8	郖	鄭	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	鄭（鄭康成，字残损）
+vol04:94:6:1	一		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（列顶横线）
+vol04:102:3:15	千	上	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：格框偏，「上」被切开，放行千；应为上
+vol04:102:3:16	士	元	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上偏移，应为元，放行士
+vol04:102:6:2	聿	論	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：格框偏在「論」上半，放行聿；应为論
+vol04:103:3:20	凡	比	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	比（承乘比應）
+vol04:117:4:21	凑		review	vision:claude-sonnet-5-5:vol04/看图结论-通道量效果.jsonl	[lane_witness3量效果] witness3 新放行（字），对照引擎列图判；上下文 從類書中【凑】
+vol04:118:6:18	𣼣	漏	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是漏，放了𣼣）；被 #360 护栏正确退回待审
+vol04:127:3:7	𡔏	等	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上，应为等
+vol04:127:3:8	奇		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：p127c3 偏格
+vol04:127:3:13	藴	淆	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：p127c3 格框整体偏半格；应为淆
+vol04:127:3:14	哴		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上
+vol04:127:3:18	𬞊	正	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上，应为正
+vol04:127:4:-2	𩲊		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:127:4:-1	𠜴		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:127:4:1	繹		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:127:4:2	喡		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:130:2:13	雖		review	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（噪点）；被 #360 护栏正确退回待审
+vol04:130:2:14	𪧲		review	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（噪点）；被 #360 护栏正确退回待审
+vol04:130:3:14	繞		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（墨点污渍）
+vol04:130:3:15	𧄡		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（同上）
+vol04:130:4:15	疒		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（污点）
+vol04:133:3:7	日	曰	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	曰（象統曰）
+vol04:136:9:21	本	主	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	主（图是主）
+vol04:137:8:2	一		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：「永」上点被切出读成一
+vol04:141:8:8	暌	睽	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	睽（睽卦）
+vol04:144:5:19	巳	已	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S10] 年已𦒷矣（按文意）
+vol04:153:4:20	子	亨	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：格框偏在「亨」下半，放行子；应为亨
+vol04:163:1:17a	典	其	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是其，放了典）；被 #360 护栏正确退回待审
+vol04:186:2:9	𨒦	迎	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	迎（將迎意必）
+vol04:188:2:20	人	八	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	八（太陽八卦）
+vol04:193:3:7	賢	贄	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	贄（撰贄）
+vol04:196:2:21	一		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：「三」底横被切出读成一
+vol04:196:8:21	且		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（碎块）
+vol04:198:1:21	宸	宗	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	宗（其宗旨）
+vol04:199:4:2	𠧐	黔	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：「黔」顶部被切出，读成𠧐；应为黔
+vol04:205:9:21	𠰅	主	char	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	主（图是主）
+vol04:206:1:2	𧟩		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（小点）
+vol04:208:4:10	戝	賊	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是賊，放戝）；被 #360 护栏正确退回待审
+vol04:216:6:-1	丨		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（界行竖线）
+vol04:216:6:2	丨		nonchar	基线错放格总表-Ezra.md；vision:claude-opus-5-5:vol04/看图结论.jsonl	非字（同上）
+vol04:216:6:14a	𫡆	三	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是三，放了𫡆）；被 #360 护栏正确退回待审
+vol04:216:6:15a	𭙒	子	char	vision:claude-sonnet-5-5:vol04/看图结论.jsonl	[360开关量效果] 放行字不对（图是子，放了𭙒）；被 #360 护栏正确退回待审
+vol04:217:2:3	甘		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:4	言		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:5	𨇭		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:6	夣		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:8	臣		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:9	𥏬		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:10	霻		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:11	題		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:12	𩯐		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:15	亅		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:16	𦌮		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:17	匱		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:18	畧		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:19	𲆌		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:20	彑		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:2:21	且		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:3	博		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:4	曾		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:5	昘		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:6	冊		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:7	馤		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:8	翁		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:9	阝		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:10	穹		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:12	事		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:13	卜		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:14	永		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:15	㐶		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:16	夏		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:17	曼		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:19	氵		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:217:3:20	氵		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:218:2:14	如		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：格框跨界行两列（若+經），放行如；p218c2 夹注切分错
+vol04:218:2:15	中		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 切分错：同上，格框跨两列，放行中
+vol04:218:8:21	巳	己	char	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S10] 言及己所論註（按文意）
+vol04:220:4:-2	𩧞		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:4:-1	勲		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:4:1	𠓺		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:4:2	蘀		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:4:4	一		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:5:-2	觀		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:5:1	丶		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:5:4	魗		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:6:-1	䟞		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:6:1	藝		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:6:2	圖		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:6:3	圖		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:6:4	㠚		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:7:-2	俪		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol04:220:7:4	𢴡		review	vision:claude-opus-5-5:vol04/看图结论.jsonl	[S8] 乱码列（列切窄/卷末印章），见 overview#427
+vol05:98:1:8a	折		review	基线错放格总表-Ezra.md；vision:claude-sonnet-5-5:vol05/看图结论.jsonl	待证据（看图判错，应为未记）
+vol05:104:5:5a	雨		review	基线错放格总表-Ezra.md；vision:claude-sonnet-5-5:vol05/看图结论.jsonl	待证据（同上）
+vol05:139:5:21	十		review	基线错放格总表-Ezra.md；vision:claude-sonnet-5-5:vol05/看图结论.jsonl	待证据（同上）
+vol05:175:1:5a	岀		review	基线错放格总表-Ezra.md；vision:claude-sonnet-5-5:vol05/看图结论.jsonl	待证据（同上）
+vol06:40:1:1	一		nonchar	基线错放格总表-Ezra.md	非字（原文无此字，疑列首框线）；证据未坐实
+vol06:149:1:21	一		review	基线错放格总表-Ezra.md	待审（半字）；证据未坐实
+vol07:128:9:19	曰	日	char	基线错放格总表-Ezra.md	日
+vol07:130:2:1	卜	書	char	基线错放格总表-Ezra.md	書（实为書右半）；证据未坐实
+vol07:130:2:10	無	撫	char	基线错放格总表-Ezra.md	撫（图上是撫）；证据未坐实

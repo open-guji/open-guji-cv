@@ -102,6 +102,34 @@ def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
     return out
 
 
+MANUAL_CELLS_SHARD = "char-segmentation/manual-cells"
+
+
+def resolved_manual_cells(book: str) -> dict[tuple[int, int], list[dict]]:
+    """人工指定整列的格：`(page, col) → [{slot, sub, kind, y0, y1, x0, x1}, …]`（列图坐标）。
+
+    切分算法在这一列上怎么也切不对（职名页雙行相位不齐、压扁密排、正文页挤成半高的卷题）时，
+    人对着原图把每个字框定下来，格号（`slot` + `sub`）按定本。`row_segment` 在该页重跑时直接
+    采用，不再跑切分；裁决不进指纹，靠该页显式重跑生效（同 `resolved_slots`）。
+    卡片 id `book:page:col`，`expected.cells` 是上面那张表，`kind` 取 char / jiazhu_a / jiazhu_b。
+    """
+    from .consumers import verdict_store
+    out: dict[tuple[int, int], list[dict]] = {}
+    try:
+        items = verdict_store().list(MANUAL_CELLS_SHARD, legacy=False)
+    except Exception:
+        return out
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book:
+            continue
+        page, col = it.anchor.page, it.anchor.col
+        cells = it.expected.get("cells")
+        if page is None or col is None or not isinstance(cells, list) or not cells:
+            continue
+        out[(page, col)] = cells
+    return out
+
+
 SOLO_NOTE_SHARD = "char-segmentation/solo-notes"
 
 

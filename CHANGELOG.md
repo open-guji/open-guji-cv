@@ -3,7 +3,28 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.8] - 待发
+## [0.4.9] - 待发
+
+待发分支 `rc/v0.4.9`（2026-10-20 开；v0.4.8 自此冻结，新 PR 一律投这里）。
+
+### Changed
+- 管线提速（#255，PATCH；产物逐字节不变，**只有 rare_candidates、seed_admit 的 `code_hash` 变了**，其余 15 步不变）：
+  - 页级并行：`row_segment`、`cell_shrink`、`glyph_match`、`rare_candidates`、`seed_admit` 登记进 `core/parallel.py`（不进指纹）。四庫 vol04 46 页串行对 `--jobs 4` 逐字节相同：row_segment 65→26 s、cell_shrink 28→9 s、glyph_match 231→80 s、rare_candidates 65→24 s、seed_admit 82→50 s。worker 里 OpenBLAS／torch 压 1 线程、`cv2.setNumThreads` 置空（fork 子进程里调它会卡死）；seed_admit、rare_candidates 先在主进程暖机、`parallel_warm` 预建大缓存再 fork；进程数按可用内存压。seed_admit 并行前要先把字块缓存建好。
+  - 代码等价登记（`core/code_equiv.py` + `scripts/code_equiv.py check`，用户 10-20 定）：新旧代码同一批页产物逐字节相同才登记，指纹换回旧哈希，各册不过期。
+  - 热点：glyph_match 逐页 −24%（wmax 按需算、同格查找分桶、HOG 向量化）；seed_admit 每页 2.3→0.85 s（事件读缓存；铁证匹配器归一图按内容缓存）；context_decide 热缓存首页 6–7→2 s（本书与通用 LM 按语料内容 + 代码指纹缓存）；align_ref 起跑 16→7 s；印章遮挡每页 0.21→0.02 s。
+  - 训好的语言模型跨机分发：本机没命中先用读令牌去 R2 取 `derived/lm/…`，`guji products pack push-index` 手动推（用户 10-20 定）。runbook S1 设 `GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_READ`。
+
+### Fixed
+- `font_candidates._row_norms` 按 `id(mat)` 缓存行模长：lru 挤掉的矩阵释放后 id 被复用、行数相同时用错模长，余弦全错、结果随页序变（#255）；seed_admit 补登记 `code_deps` 里的 `font_candidates`。**rare_candidates、seed_admit 判过期，各册要重跑这两步**（vol04 46 页上未触发，产物相同）。
+- 并发写（#255）：`_stamps.json` 加跨进程锁、临时文件带进程号（原来并行再生图块会整页记失败、丢戳）；`ImageCache.put`、绑定逐页缓存、字体索引改原子写。
+
+## [0.4.8] - 2026-10-20
+
+### 并入 main 上 v0.4.7 之后直接合入的改动
+- 汉字关系库 hanzi：总设计、B0/B1/B7（#256）、B2 全字表字形向量包（#276）、B3 以字找字候选池改由 hanzi 库给（#266）、B4 字统网按字典存派生事实（#267）、真书实测文档（#278）。
+- Step3 `row_segment` 人工指定整列格 `manual_cells`（#251，main 上记作 1.20；没有指定的列逐字节不变）。
+- 文档：人审率分析补列级对位救援的离线评估（#247）；M10 精校调研与总设计、已知错单脚本、`guji exit-check`（#273）。
+- **`row_segment` 版本合为 1.22**（本线 1.20／1.21 的 layout_prior 改动＋main 的 manual_cells），`code_hash` e82f08017e79c63a（rc）／bb4f3830915bcdf0（main）→ d5f4ceedcfbd2d06：各册 Step3 起判过期，冻结册按冻结规则不受影响；开关（layout_prior、manual_cells）不开的列产物逐字节不变。其余各步 `code_hash` 与 rc/v0.4.8 相同（相对 v0.4.7 变了的步见下面各条）。
 
 ### Added
 - 产物包按「三样版本」打标签、每册有 main（用户 10-20 定：不同版本的结果分开存、不覆盖，main 是最新正式结果；cv、字形库、语料库三个版本号共同决定结果）：`guji products pack push` 不给 `--label` 时标签拼成 `cv<版本>-c<语料库号>-g<字形库号>-<改动名>`（`--change`；字形库没钉写 `g-`＋人裁指纹前 6 位），三样完整值记进 manifest 的 `versions`；新 `pack promote <册> --label …`／`pack push --main` 追加 main 指针（`main-ptr/`，只增不改，Worker 不用改）；`fetch` 缺省取 main，没标过才取最新；`list` 标 ★ 并列三样版本。不碰任何 Step，`code_hash` 不变。
@@ -27,18 +48,20 @@
     - `cnn`／`ctx`／`llm`／`ocr`／`ai`／`form`：证据行上的「采信」。
   - **Step8「都不对」**：`collate_verdict` 与 `confirm` 带 `pick_src`／`pick_rank`／`pivot`，取值为 `alt`／`alt_q`／`custom`。
   - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
+- char 导出：阙文带推测字（GUJI-717，用户 10-20 定「录文以图为准」，guji-format#21 char v0.2 `guess_c`）。人裁 `confirm v=damaged` 带 `guess=X` 的格（9.1 写 `□{guess=X}`），`scripts/export_guji_format.py --format char-cord` 与 `scripts/convert_pages_to_char_cord.py` 改写成 `{"c": "□", "lacuna": true, "guess_c": "X"}`，不再写成残字 `guess: true`、`c: X`（阅读器显示灰字 X，与「图上无字录 □」相反）。`guji export format` 出的旧形态（lines.md、pages.json）不变。只有带这种格的册 `$schema` 写 char v0.2，其余册导出逐字节不变（book-text 现存 char 里 `guess: true` 为 0 处）。往返核对按 9.1 写法比；`formats/` 加 `guji_char_v0.2.schema.json`。PATCH；改 `formats/guji_char_cord.py`、两个导出脚本，不在任何 Step 的 `code_deps` 里，17 个 Step 和闸的 `code_hash` 全不变。
 - `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
 
+- `scripts/check_rc_target.py <rc 分支>`（GUJI-657）：合 PR 前核对目标待发分支是否已发版（远端有 `vX.Y.Z` 返回 1 并提示改投哪条；不是最新待发分支返回 2）。只读，用 `git ls-remote`。不碰任何 Step，`code_hash` 不变。
+- 粗校出口报告单列「钉版」一行（GUJI-656）：`collect_exit.py` 读册配置的 `cv_version`、`corpus`、`glyph_pin`，没钉的标 ⚠，只提示、不挡出口；规矩见 `doc/版本号规矩.md` 第七节（每波开工发一个正式 tag，各册钉 tag＋语料号＋字形库号）。不碰任何 Step，`code_hash` 不变。
+- `scripts/zhengli/ledger.py`（GUJI-667）：粗校台账与统一人审率口径（用户 10-20 定：正文页送精校的待审格 ÷ 正文页字格，不含标题槽、非字格；重切清单、非正文另报），`review_rate()` 纯函数＋CLI 追加一行到数据目录 `feedback/lists/ledger/<册>.jsonl`。不碰任何 Step，`code_hash` 不变。
+- `scripts/ia_download_zongmu.py` 改按全书 99 册两段编号（`06061300`–`06061320`、`06066140`–`06066217`，GUJI-648 逐号核过；原来按「199 册连号」，照默认跑会从 vol22 起下别的书）：新 `--vols 11-20` 按册号选，缺省取 `_tif.zip`（与工作区现有原图逐像素一致）。书单 `doc/runbook/书单-四庫總目.md`。不碰任何 Step，`code_hash` 不变。
+- 粗校待审单脚本迁进本仓 `scripts/zhengli/`（GUJI-652）：`pending_list.py`、`sprite_build.py`、`ex_build.py`、`alt_build.py`、`decision_build.py`，原在 ai-team 工单目录、runbook 直接引用、没有测试；行为不变，`--cv-root` 缺省本仓根，各配单元测试。`ex_build`／`decision_build` 的用法示例仍写中心库切换前的路径，文件头注明。不碰任何 Step，`code_hash` 不变。
+
 ### Changed
-- 管线提速（#255，PATCH；产物逐字节不变，**只有 rare_candidates、seed_admit 的 `code_hash` 变了**，其余 15 步不变）：
-  - 页级并行：`row_segment`、`cell_shrink`、`glyph_match`、`rare_candidates`、`seed_admit` 登记进 `core/parallel.py`（不进指纹）。四庫 vol04 46 页串行对 `--jobs 4` 逐字节相同：row_segment 65→26 s、cell_shrink 28→9 s、glyph_match 231→80 s、rare_candidates 65→24 s、seed_admit 82→50 s。worker 里 OpenBLAS／torch 压 1 线程、`cv2.setNumThreads` 置空（fork 子进程里调它会卡死）；seed_admit、rare_candidates 先在主进程暖机、`parallel_warm` 预建大缓存再 fork；进程数按可用内存压。seed_admit 并行前要先把字块缓存建好。
-  - 代码等价登记（`core/code_equiv.py` + `scripts/code_equiv.py check`，用户 10-20 定）：新旧代码同一批页产物逐字节相同才登记，指纹换回旧哈希，各册不过期。
-  - 热点：glyph_match 逐页 −24%（wmax 按需算、同格查找分桶、HOG 向量化）；seed_admit 每页 2.3→0.85 s（事件读缓存；铁证匹配器归一图按内容缓存）；context_decide 热缓存首页 6–7→2 s（本书与通用 LM 按语料内容 + 代码指纹缓存）；align_ref 起跑 16→7 s；印章遮挡每页 0.21→0.02 s。
-  - 训好的语言模型跨机分发：本机没命中先用读令牌去 R2 取 `derived/lm/…`，`guji products pack push-index` 手动推（用户 10-20 定）。runbook S1 设 `GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_READ`。
+- `scripts/export_guji_format.py --format char-cord` 的 `--text-version` 改为必填、不再缺省 0.1.0（GUJI-679）：已在 book-text 上的册要写线上现行版本，以前缺省写 0.1.0，出补丁前得先手工改回。`zl.py` 导出步显式传版本。不碰任何 Step，`code_hash` 不变。
 
 ### Fixed
-- `font_candidates._row_norms` 按 `id(mat)` 缓存行模长：lru 挤掉的矩阵释放后 id 被复用、行数相同时用错模长，余弦全错、结果随页序变（#255）；seed_admit 补登记 `code_deps` 里的 `font_candidates`。**rare_candidates、seed_admit 判过期，各册要重跑这两步**（vol04 46 页上未触发，产物相同）。
-- 并发写（#255）：`_stamps.json` 加跨进程锁、临时文件带进程号（原来并行再生图块会整页记失败、丢戳）；`ImageCache.put`、绑定逐页缓存、字体索引改原子写。
+- 产物包键的工作区名不再瞎猜（GUJI-671）：`datastore/packs._ws_name()` 先读 `.central.json` 的 ws，再读 `workspace.yaml` 的 id，都没有就报错；以前回退成目录名首段或 `ws`，vol01–03 的包因此落在 `products/ws/` 下、用 `-w` 取不到。不碰任何 Step，`code_hash` 不变。
 - 中心库客户端超时分两档、超时快速重试（GUJI-707；国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手，GUJI-703）：小 JSON 请求（查表、签名、状态、whoami、分支、追加事件）缺省超时 120 → 25 秒（`GUJI_DATA_TIMEOUT` 可改），超时走原有退避重试，且网络错至少试 4 次（原先查表、签名只试 2 次）；收发大块字节的（快照、备份、产物包、R2 直取图、`r2` 上传的 PUT）维持原值。`r2.upload_via_worker` 的签名请求同样用短超时。PATCH；不碰任何 Step，`code_hash` 不变。
 - `guji close-check` 第 2c 项的待审单改读中心库（GUJI-711）：10-20 起公众待审单只在中心库 `feedback/lists/proofing/<书>/<章>.pending.json`，`--pending` 不给（或只写 `--pending`）就读数据目录里本册本章那份（书 id 按 `meta_<册>.json`，取不到在 `proofing/*/` 下找唯一一份；章号取 `--chapter`、导出目录唯一的 `NNN.lines.md` 或 `volNN`）；也认册（`vol04`）、章号、`<书>/<章>`；给了 book-text 的旧路径且文件不在，提示已迁移并指出新路径（新路径在就改读）。数据目录里没有就照旧只认重切清单，2c 说明里写清。runbook 同步。PATCH；不碰任何 Step，`code_hash` 不变。
 - 字形库体检结果带库指纹，过期不出卡（GUJI-710）：`guji glyph-db selfcheck` 把开跑时的库指纹（本书套刻例 `(实例 id, 字, 图块 sha)` 排序后哈希）记进 `summary.json` 的 `db_fp`，每张卡记本例与本书对手的图块 sha；控制台体检 tab 出卡前核对，结果没带指纹或卡上刻例的图对不上（刻例重排编号）→ 409「体检结果已过期（库已变），请重跑 guji glyph-db selfcheck」，一张卡也不出；只是撤了、改了字的，那几张卡不出、其余照出。起因 GUJI-623：09-26 的结果在 09-27 重排编号后照样出卡，9 张错位。`glyphdb-audit` skill 与 `glyph_audit.py` 的说明改成中心库口径（数据目录、`guji db sync`，不再进 git）。PATCH；不碰任何 Step，`code_hash` 不变。

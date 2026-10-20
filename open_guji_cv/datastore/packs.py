@@ -47,12 +47,22 @@ def _bucket(src) -> str:
 
 
 def _ws_name() -> str:
+    """产物包键里的工作区名：标记 ``.central.json`` 的 ws，其次 ``workspace.yaml`` 的 id。
+
+    两样都没有就报错，不猜：以前回退成目录名首段或 ``ws``，包落在别的前缀下，
+    用 ``-w <工作区>`` 再也取不到（GUJI-671，vol01–03 的包曾落进 ``products/ws/``）。"""
     from ..core.workspace import central_marker, workspace_root
     m = central_marker() or {}
     if m.get("ws"):
         return str(m["ws"])
     root = workspace_root()
-    return (root.name if root else "ws").split("-")[0].lower()
+    if root is not None and (root / "workspace.yaml").is_file():
+        import yaml
+        wid = (yaml.safe_load((root / "workspace.yaml").read_text(encoding="utf-8")) or {}).get("id")
+        if wid:
+            return str(wid)
+    raise SystemExit(f"产物包要知道工作区名：{root or '没设工作区（-w／GUJI_WORKSPACE）'} 下既没有 .central.json 的 ws，"
+                     "也没有 workspace.yaml 的 id")
 
 
 def _prefix(ws: str, book: str) -> str:
