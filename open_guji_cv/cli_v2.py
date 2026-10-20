@@ -302,7 +302,7 @@ def cmd_close_check(args) -> None:
                  export_dir=Path(args.export_dir) if args.export_dir else None,
                  chapter=args.chapter, notes=Path(args.notes) if args.notes else None,
                  reports=reports_root(), tier=getattr(args, "tier", "final"),
-                 pending=Path(args.pending) if getattr(args, "pending", None) else None,
+                 pending=getattr(args, "pending", None),
                  strict_cv=getattr(args, "strict_cv", False))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
@@ -2743,8 +2743,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                         "（出 0.1.0 用；整理设计 R5）")
     p.add_argument("--strict-cv", action="store_true", dest="strict_cv",
                    help="1a 用旧口径：代码／版本变了也算过期（缺省只因代码变、产物记着正式版 cv_version 的页算新鲜）")
-    p.add_argument("--pending", default=None,
-                   help="book-text 本章的 NNN.pending.json（公众人审页的待审单）；第 2c 项认它上面的格为「□ 有去向」")
+    p.add_argument("--pending", nargs="?", const="", default=None,
+                   help="公众人审页的待审单，第 2c 项认它上面的格为「□ 有去向」。不给或只写 --pending：读中心库"
+                        "本册本章的 feedback/lists/proofing/<书>/<章>.pending.json（数据目录里，先 guji db sync）；"
+                        "也可给册（vol04）、章号（004）、<书>/<章> 或文件路径。book-text 的旧路径已不用（10-20 迁中心库）")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")

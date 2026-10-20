@@ -1,80 +1,84 @@
 ---
 name: glyphdb-audit
-description: 刻本字形库体检——找出同字不相像的刻例（可能选错字）与形似他字/OCR 异议的刻例，出交互审查页供人裁决，回收裁决撤库或入白名单。用户说「检查/体检字形库」「查一下有没有选错的字」时用。
+description: 刻本字形库体检——找出同字不相像的刻例（可能选错字）与形似他字/字体异议的刻例，在控制台字形库页「体检」tab 供人裁决，裁决撤库、改字或入白名单。用户说「检查/体检字形库」「查一下有没有选错的字」时用。
 ---
 
 # 字形库体检（glyphdb-audit）
 
-进库的每个字形都是后续匹配的证据，错一个毒一片。本 skill 定期体检
-`output/glyph.db`，判据与实现在 `open_guji_cv/clustering/audit.py`
-（模块注释是单一事实源），脚本是 `scripts/audit_glyph_db.py`。
+进库的每个字形都是后续匹配的证据，错一个毒一片。本 skill 定期体检一本书的字形库。
+判据与实现在 `open_guji_cv/clustering/glyph_selfcheck.py`（模块注释是单一事实源），
+裁决的消费者在 `open_guji_cv/feedback/glyph_audit.py`。
+
+**数据在哪（2026-10-19 写入切换后）**：字形真源在**中心库**，本机副本在数据目录
+`$GUJI_DATA_HOME/<分支>/<工作区 id>/output/glyph_store/`（缺省 `~/.guji-data`）；
+工作区里的 `output/glyph.db` 是从它重建的 SQLite 索引。字形库**不再进 git**，
+不要 `glyph-db export` 后提交，也不要往 open-guji-cv 仓里提交库或结果。见 `doc/datastore.md` 第六节。
 
 ## 流程（照单执行）
 
-1. **扫库出报告**：
+1. **先拉最新库**：
 
    ```bash
-   PYTHONIOENCODING=utf-8 venv/bin/python scripts/audit_glyph_db.py run \
-       --db output/glyph.db --out output/glyphdb_audit
+   guji db sync -w <工作区>
    ```
 
-   三路怀疑信号（互相独立，都只是怀疑）：
-   - `outlier` 同字离群：留一法同字最优 cov < 0.90；
-   - `rival` 形似他字：异字 cov ≥ 0.90 且反超同字——标错字的典型形态；
-   - `ocr` OCR 异议：RapidOCR top1（s2t+语义归一）≠ 库内字且 prob ≥ 0.80。
-     OCR 单独只算弱信号（校准不可靠），与前两路叠加才要紧。
-   耗时约 2~3 分钟（形状 ~2500 例留一验证 + 全量 OCR）；`--no-ocr`
-   可省一半时间做快扫。
-
-2. **发布审查页**：把 `output/glyphdb_audit/review.html` 发布为
-   Artifact（**固定复用体检页的既有 URL**，别新开；本页与种子审查页
-   是两个不同 Artifact）。排序已按怀疑等级：rival+ocr > rival >
-   outlier+ocr > outlier > ocr。页尾单例字（全库唯一刻例，无同字参照）
-   只有 OCR 信号，单独列出仅供扫一眼。
-
-3. **回收裁决**：用户在页上按 X（撤库重审）/ O（没问题）后，从
-   artifact 最新存档提取 `GUJI-SEED-EVENT` 行（op 是 evict/ok，
-   与种子事件同前缀不同 op 空间，seed-ingest 会自动忽略它们）：
+2. **体检**（落 `<工作区>/output/glyph_selfcheck/findings.jsonl`、`summary.json`）：
 
    ```bash
-   PYTHONIOENCODING=utf-8 venv/bin/python scripts/audit_glyph_db.py apply \
-       --db output/glyph.db --events <events.txt>
+   PYTHONIOENCODING=utf-8 .venv/bin/guji glyph-db selfcheck -w <工作区>
+   #   --no-others：只在本书内比，不拿兄弟工作区的库当参照
    ```
 
-   - `evict`：删库（admissions/exemplars/derived/instances + 空壳
-     glyph），队列行退回 `pending_review`（note=audit_evict）——
-     下次导出该页时字位重新出卡，走正常审查流重新定字；
-   - `ok`：进 `output/glyphdb_audit/audit_ok.json` 白名单，下轮体检
-     不再骚扰。白名单按 instance_id 记，随仓库提交。
+   四路怀疑信号（都只是怀疑，裁决归人）：
+   - `outlier` 同字离群：本书同字留一最优 cov < 0.90；
+   - `rival` 形似本书他字：异字 cov ≥ 0.90 且反超同字——标错字的典型形态；
+   - `rival_xbook` 形似他书他字：兄弟工作区的库作第二意见；
+   - `font_rival` 更像另一个字的字体：弱信号，要拉开 `FONT_MARGIN` 才标。
 
-4. **收尾**：撤库过的页要重新导出审查（进库审查页 artifact），用户
-   重新裁决后照常 seed-ingest；`output/glyph.db`、`audit_ok.json`、
-   `report.json` 随 open-guji-cv 提交推送（分支 + 主干同步）。
-5. **回流匹配基准**：本轮 rival × 白名单的新案例是匹配算法的
-   排序金标——`scripts/build_match_triplets_shard.py --dataset
-   ../open-guji-dataset` 重建 `glyph-match/triplets`（hard 会增长，
-   control 抽样有固定 seed），`scripts/eval_match_triplets.py` 重报
-   基线并更新分片 README/results。
+   另有人裁 × 人裁冲突、`context` 放行两项只加权排序。北行约 15 分钟、四庫约 1 小时（两核）。
+
+3. **在控制台裁**：字形库页「体检」tab，一张卡一个可疑刻例；裁决（没问题 / 形近·异体 /
+   撤库 / 改字 / 一致程度）走 `glyph_audit` 事件，立即消费，账记在
+   `output/glyph_selfcheck/decisions.jsonl`（同一张卡下轮体检不再出）。
+
+   **结果带库指纹**（GUJI-710）：selfcheck 把开跑时的库指纹记进 `summary.json` 的 `db_fp`，
+   每张卡记本例与本书对手的图块 sha。控制台出卡前核对——结果没带指纹（旧版算的），或卡上刻例
+   的图与体检时对不上（刻例重排编号之类），整页提示「体检结果已过期（库已变），请重跑
+   guji glyph-db selfcheck」，一张卡也不出，照提示重跑第 2 步。只是撤了、改了字的刻例，
+   那几张卡不出，其余照常（在体检页上撤库不会让剩下的卡失效）。
+
+4. **收尾**：撤库、改字改的是 glyph.db，裁完
+
+   ```bash
+   guji db sync -w <工作区>
+   ```
+
+   push 前见 glyph.db 指纹变了会自动先导出成字形库账本再推上中心库。撤库的格下次跑到那一页会重新出卡，
+   走正常审查流重新定字。
+
+5. **回流匹配基准**（可选）：本轮 rival × 白名单的新案例是匹配算法的排序金标——
+   `scripts/build_match_triplets_shard.py --dataset ../open-guji-dataset` 重建 `glyph-match/triplets`，
+   `scripts/eval_match_triplets.py` 重报基线并更新分片 README/results。
 
 ## 什么时候跑
 
-- 每累计新进库几百条之后（逐页审进行中大约每 3~5 页一次）；
-- 改过归一化/verify/匹配参数之后（形状判据变了，旧准入要复检）；
+- 每累计新进库几百条之后；
+- 改过归一化 / verify / 匹配参数之后（形状判据变了，旧准入要复检）；
+- 刻例重排编号、从中心库拉到大批新字形之后（控制台会提示旧结果过期）；
 - 用户说「我可能选错了」的任何时候。
 
 ## 判读要点（给跑体检的会话）
 
-- **rival 双向对**（惟↔淮 这类互为竞争）多半是真形近而非错标——
-  两边 OCR 都认同库内字时基本可 `ok`；
-- 真错标的形态：rival + OCR 也倒向竞争字（首轮实锤 15:8:15
-  「紛」形似「給」且 OCR 读「粉」）；
-- 单例 OCR 异议里 恒/恆、兹/茲 这类**异体对**是 vmap 语义没覆盖的
-  噪声，`ok` 掉即可（顺手把缺的异体关系报给 variants 维护方更好）；
-- **参照图也可能才是坏的**（划痕/残余混进库当了范例）：每张参照图
-  下有「撤此参照」，撤的是参照实例自己、不影响本例的裁决；撤完本例
-  照常 X/O。
-- 用户要**作废一轮已做的操作重来**：`run --tag <新盐>` 重新生成
-  （批次号变，页面上的旧事件与本地计数全部作废），`force` 重发布同一
-  Artifact URL；只要还没跑 `apply`，库没有被动过。
-- 阈值（TH_OUTLIER/TH_RIVAL/TH_OCR）在 audit.py 顶部，动之前先看
-  报告分布，别拍脑袋。
+- **rival 双向对**（惟↔淮 这类互为竞争）多半是真形近而非错标，可裁「形近·异体」；
+- 真错标的形态：rival 且对手是人裁、本例是机器放行（尤其 `context`），或字体也倒向竞争字；
+- 恒/恆、兹/茲 这类**异体对**是 vmap 语义没覆盖的噪声，「没问题」即可（顺手把缺的异体关系报给 variants 维护方更好）；
+- **参照图也可能才是坏的**（划痕 / 残余混进库当了范例）：撤库可以撤对手那一例，不影响本例的裁决；
+- 阈值（`TH_OUTLIER`/`TH_RIVAL`/`FONT_TH`/`FONT_MARGIN`）在 `glyph_selfcheck.py` 顶部，动之前先看
+  `summary.json` 的分布，别拍脑袋。
+
+## 旧工具（只读参考）
+
+`scripts/audit_glyph_db.py`（`clustering/audit.py`，形离群＋竞争字＋OCR 异议，出 Artifact 审查页、
+`apply` 回收）是 09 月控制台体检 tab 之前的做法，结果不带库指纹、白名单 `audit_ok.json` 不进中心库。
+新体检一律走上面的流程；确要用旧脚本，跑 `PYTHONIOENCODING=utf-8 .venv/bin/python scripts/audit_glyph_db.py run --db <工作区>/output/glyph.db --out <工作区>/output/glyphdb_audit`，
+撤库后同样 `guji db sync`，不提交进 git。
