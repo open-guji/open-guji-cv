@@ -35,7 +35,8 @@
 | [glyph_set_roadmap.md](glyph_set_roadmap.md) | 字形套：共享度量网络＋可插拔原型库 |
 | [charset_and_lm.md](charset_and_lm.md) | 字表标准与语言模型混合 |
 | [variant_strategy.md](variant_strategy.md) | 异体字策略：忠于刻本字形下的识别与资料积累 |
-| [汉字字形与关系库-需求起点.md](汉字字形与关系库-需求起点.md) | 自建全字表字形＋异体／形近／部件关系库、替代字统网的需求起点（10-20，待总设计） |
+| [汉字字形与关系库-需求起点.md](汉字字形与关系库-需求起点.md) | 自建全字表字形＋异体／形近／部件关系库、替代字统网的需求起点（10-20；10-19 晚用户补充许可定调） |
+| [汉字字形与关系库-总设计.md](汉字字形与关系库-总设计.md) | 上一行的总设计：`open_guji_cv/hanzi` 离线关系库（schema、分块 B0–B7、验收），B0／B1 已执行；验收读数在 [hanzi库-B1验收.md](hanzi库-B1验收.md) |
 | [14-准确率优先-Step6与Step7重设计.md](14-准确率优先-Step6与Step7重设计.md) | 准确率优先：铁证＝同形人裁实例、Step6 去 n-gram |
 | [15-人裁锚定与重切后重绑定.md](15-人裁锚定与重切后重绑定.md) | 人裁带锚、重切后自动改绑（P1–P3 已做） |
 | [review_feedback_loops.md](review_feedback_loops.md) | 人裁三条回流环：切分层、匹配栈、准入 |
