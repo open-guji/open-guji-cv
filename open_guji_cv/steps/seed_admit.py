@@ -106,6 +106,18 @@ class SeedAdmitParams(BaseModel):
     note_min_sim: float = 0.70          # 段相似度下限（见 note_lexicon.MIN_SIM）
     note_fingerprint: str = ""          # 自动填：词表变了产物过期
     use_human_verdicts: bool = True     # 人裁过的位直接采信人裁字形（最高优先级）
+    human_unbound_review: bool = True
+    """人裁绑丢闸（2026-10-20，GUJI-697，Sheldon 定：**人裁永远是最高优先级，新放行不许顶掉旧人裁**）。
+
+    重切之后，人裁要经绑定表（`feedback/bindings.py`）找回现在对应的格；切开／合并／格没了／锚补不出来的，
+    绑定表判「不采信」，人裁就从 `_human_shapes`／`human_chars` 里消失了——原来的设计说「回待审」，
+    但本步并没有把那一格拦下，后面的自动通道照常放行，**人裁被机器悄悄顶掉、没有任何报错**
+    （册2 在 cv dev 上重跑实测：22:6:7 人裁「戕」→ 放行「成」，64:9:21「止」→「什」）。
+
+    开着（缺省）时：原编号上有绑丢的人裁、而这一格最后放行的字与人裁的字**不一样** → 退回待审
+    （`doubts` 记 `human_unbound`，`evidence.human_unbound = {char, status, event}`，日志 warning）；
+    放行的字与人裁一致的照常放行，只在 evidence 上挂标记。只降级、不改字、不放行。放在所有遍之后。
+    格是不是还是当年那一格不知道（正因为绑不上），所以交给人看图，不拿旧字直接顶上。"""
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
     iron_config_fingerprint: str = ""
@@ -663,7 +675,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.17", unit="cell",   # 1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.18", unit="cell",   # 1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates",),
         optional_consumes_when=(("rare_candidates", "rare_ref"),),
@@ -742,14 +754,24 @@ class SeedAdmitStep(Step):
         # 會，判据 A 的「对你的裁决」因此掉到 210/211。库匹配、上下文、整理本对齐
         # 全都是间接证据，人看着图下的判断不是——它该一票定案。
         human_shapes = _human_shapes(p.db_path) if p.use_human_verdicts else {}
+        _lost_lib: dict = {}
         if human_shapes:
             # 按入库时的编号记的人裁，先过绑定表找回现在对应的格（总览/15；重切后挂错格的根治）
             from ..feedback.bindings import rebind_library_shapes
-            human_shapes = rebind_library_shapes(ctx.book.id, human_shapes)
+            human_shapes = rebind_library_shapes(
+                ctx.book.id, human_shapes, lost=_lost_lib if p.human_unbound_review else None)
         # 事件侧的人裁定字（2026-09-20）：勾了「字形不入库」的裁决不进字形库，上面那份就
         # 没有它——但字是定了的，文本采信不能丢。见 `feedback/lookup.human_chars`。
         from ..feedback.lookup import human_chars
-        human_texts = human_chars(ctx.book.id) if p.use_human_verdicts else {}
+        _lost_ev: dict = {}
+        human_texts = (human_chars(ctx.book.id, lost=_lost_ev if p.human_unbound_review else None)
+                       if p.use_human_verdicts else {})
+        # 人裁绑丢闸（见 `SeedAdmitParams.human_unbound_review`）：绑定后不采信的人裁，按原编号
+        human_lost: dict = {}
+        if p.use_human_verdicts and p.human_unbound_review:
+            human_lost = {**_lost_lib, **_lost_ev}
+            for k in [k for k in human_lost if k in human_shapes or k in human_texts]:
+                del human_lost[k]
 
         _ex_cache: dict = {}
 
@@ -1274,7 +1296,7 @@ class SeedAdmitStep(Step):
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
         #   0 group_flow（字组统一流程，升／降，缺省关）→ 1 rare_ref（升）→ 3 shadow_veto（降）→
         #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ （6 rare_cp_ctx_review 已于 2026-10-18 删除）→
-        #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
+        #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）→ 10 human_unbound（降，人裁绑丢闸，放最后）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
         #   ry_group、rr_clf、m7 各遍已于 2026-10-18 并进 group_flow 删除，编号留空不改）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
         #   主循环内就地置空（放行记录生成之前）的不记。
@@ -1310,6 +1332,10 @@ class SeedAdmitStep(Step):
             d_runt = _runt_cell_pass(ctx, page, p, out)
             n_auto -= d_runt
             n_review += d_runt
+        if human_lost:
+            d_hu = _human_unbound_pass(ctx, page, out, human_lost)
+            n_auto -= d_hu
+            n_review += d_hu
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1463,6 +1489,34 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
             n += 1
+    return n
+
+
+def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict) -> int:
+    """人裁绑丢闸（只降级，放在所有通道与各遍之后）。→ 降级格数。见 `SeedAdmitParams.human_unbound_review`。
+
+    `lost`：`{原编号: {"char", "status", "event", ...}}`，绑定后不采信的人裁。本格放行的字与人裁不同 →
+    退回待审；相同 → 照常放行。两种都在 evidence 上挂 `human_unbound`，没放行的格也挂（给审的人看旧裁决）。"""
+    n = 0
+    hits: list[str] = []
+    for col in out:
+        for rec in col.chars or []:
+            h = lost.get(rec.id)
+            if h is None or rec.provenance == "human" or rec.channel == "human":
+                continue
+            rec.evidence = {**(rec.evidence or {}),
+                            "human_unbound": {k: h.get(k) for k in ("char", "status", "event")}}
+            if rec.admit and rec.char != h.get("char"):
+                _demote(rec, "human_unbound")
+                hits.append(f"{rec.id} 人裁「{h.get('char')}」/放行「{rec.char}」({h.get('status')})")
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["human_unbound"]))
+                n += 1
+    if hits:
+        _log.warning("seed_admit p%s: %d 格人裁绑丢、机器放行了别的字，已退回待审：%s",
+                     page, len(hits), "；".join(hits))
+        ctx.log(f"⚠ seed_admit p{page}: 人裁绑丢 {len(hits)} 格，机器放行的字与人裁不同，已退回待审"
+                f"（doubt human_unbound）：{'；'.join(hits)}")
     return n
 
 
