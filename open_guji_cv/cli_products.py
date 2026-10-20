@@ -108,7 +108,8 @@ def _book_yaml_text(book: str) -> str | None:
     return p.read_text(encoding="utf-8") if p is not None and p.is_file() else None
 
 
-def _record(book: str, info: dict, base_label: str | None, report: str | None) -> None:
+def _record(book: str, info: dict, base_label: str | None, report: str | None,
+            summary: str | None = None, root: Path | None = None) -> None:
     """存包后在工作区仓 `experiments/<册>/<标签>.md` 留实验记录（只写文件，提交由人做）。"""
     from .core.workspace import workspace_root
     from .ops import exp_record as ER
@@ -116,7 +117,8 @@ def _record(book: str, info: dict, base_label: str | None, report: str | None) -
     if ws is None:
         return
     p = ER.write_record(ws, book, info, base_label=base_label, book_yaml=_book_yaml_text(book),
-                        report_dir=Path(report).expanduser() if report else None)
+                        report_dir=Path(report).expanduser() if report else None,
+                        summary=summary, products_root=root)
     print(f"实验记录：{p}（在工作区仓里，记得提交）")
 
 
@@ -156,13 +158,20 @@ def cmd_pack(args) -> None:
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
         if not args.no_record:
-            _record(args.book, info, base_label, args.report)
+            _record(args.book, info, base_label, args.report, _summary_text(args.summary), root)
         if args.main:
             print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '')}")
             _note_main(args.book, info["label"], args.note or "")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
+
+
+def _summary_text(s: str | None) -> str | None:
+    """`--summary` 可直接给文字，也可给 `@文件`（多行摘要写文件里）。"""
+    if s and s.startswith("@"):
+        return Path(s[1:]).expanduser().read_text(encoding="utf-8")
+    return s
 
 
 def _note_main(book: str, label: str, note: str) -> None:
@@ -228,6 +237,8 @@ def add_parser(sub) -> None:
     p.add_argument("--change", default=None, help="pack push：改动名（ASCII），接在自动版本标签后，如 layout → cv0.4.7-c1-g2-layout")
     p.add_argument("--main", action="store_true", help="pack push：存完顺手标成该册 main（正式结果）")
     p.add_argument("--report", default=None, help="pack push：这次 diff 的报告目录（含 report.md），抄进实验记录")
+    p.add_argument("--summary", default=None,
+                   help="pack push：实验记录开头的摘要（目的、改了什么、怎么跑、结论）；@文件 读文件")
     p.add_argument("--no-record", action="store_true",
                    help="pack push：不在工作区仓 experiments/<册>/<标签>.md 写实验记录（试存、测试用）")
 

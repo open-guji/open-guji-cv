@@ -199,6 +199,32 @@ def test_exp_record(tmp_path):
     assert ER.note_main(tmp_path / "ws", "vol04", "nope") is None
 
 
+def test_exp_record_summary_and_runs(tmp_path):
+    """摘要（人写）＋结果一行（diff summary.json）＋各步运行表（产物 manifest）进实验记录开头。"""
+    from open_guji_cv.ops import exp_record as ER
+    rep = tmp_path / "diff"
+    rep.mkdir()
+    (rep / "summary.json").write_text(json.dumps({
+        "a": {"review": 273, "review_rate": 0.00789}, "b": {"review": 256, "review_rate": 0.00741},
+        "columns": {"cells": 51, "same": 1886, "text": 4}, "flips": {"放行字变": 2, "admit→review": 44}}))
+    root = tmp_path / "prod"
+    for step, ts, el in (("row_segment", 1792461600.0, 4.0), ("seed_admit", 1792465200.0, 3.5)):
+        d = root / "vol04" / step
+        d.mkdir(parents=True)
+        d.joinpath("_manifest.jsonl").write_text("".join(
+            json.dumps({"key": f"p{i:04d}", "status": "ok", "ts": ts + i, "elapsed": el, "cv_version": "0.4.7"}) + "\n"
+            for i in range(1, 3)) + json.dumps({"key": "p0003", "status": "error", "ts": ts}) + "\n")
+    man = {"label": "x", "versions": {}}
+    t = ER.write_record(tmp_path / "ws", "vol04", man, report_dir=rep, summary="目的：试先验。", products_root=root).read_text()
+    assert t.index("## 摘要") < t.index("目的：试先验。") < t.index("## 基本信息")
+    assert "送审 273 → 256（人审率 0.79% → 0.74%）" in t and "cells 51、text 4" in t and "same" not in t.split("## 基本信息")[0]
+    assert "| row_segment | 2 | 0.4.7 |" in t and t.index("| row_segment") < t.index("| seed_admit")
+    assert "0.1 分" in t                                   # 2 页 × 3.5 秒
+    assert "10-19 18:59 → 10-19 19:00" in t               # 1792461600 = 10-20 02:00Z = 洛杉矶 10-19 19:00（夏令时）
+    t2 = ER.write_record(tmp_path / "ws", "vol04", man).read_text()
+    assert "没给 `--summary`" in t2 and "各步运行" not in t2
+
+
 def test_central_rev(tmp_path, monkeypatch):
     from open_guji_cv.core import workspace as W
     monkeypatch.setattr(W, "data_root", lambda ws=None: tmp_path)

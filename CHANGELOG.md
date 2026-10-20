@@ -12,6 +12,7 @@
   - 每条产物 manifest 新字段 `db_rev`（跑时本机数据对应的中心库版本 `<工作区>@<分支>:<rev>`，不进指纹）；包的 `versions` 加 `db_rev`、`db_revs`（seed_admit 各页的 rev 与页数）、`corpus_base`。`glyph_pin` 只钉指纹不钉内容，要复现某份包读的库就从这个 rev 开 Neon 分支。
   - `guji pipeline`／`step`／`status`／`close-check` 末尾：本机这册产物在最后一次存／取包之后又跑过（各步 `_manifest.jsonl` 摘要对不上，记在 `<产物根>/<册>/.pack.json`），印一行提醒存包。只提醒不挡。
   - `pack push` 在工作区仓写 `experiments/<册>/<标签>.md`（基线、三样版本、中心库 rev、册 yaml、`--report` 给的 diff 报告）；`promote`／`--main` 往页尾追「标为 main」。`--no-record` 不写。
+  - 实验记录开头加「摘要」（用户 10-20：每跑完一次都在记录里简单总结配置和结果）：`pack push --summary "…"`（或 `@文件`）写目的、改了什么、结论；给了 `--report` 时自动加一行结果（送审前后、人审率、变了的列、逐格翻转）；从产物 manifest 自动列各步最后一轮的起止时刻（洛杉矶）与耗时，看得出这一轮从哪步起重跑、哪步最慢。
 
 - `guji products exclusions <册> --a <重切前> [--b <重切后>] [--apply]`（`ops/exclusion_rebind.py`，用户 10-20 同意方向）：排除清单按格号记、不带框，重切后可能落到别的格。按重切前的框到重切后找 IoU ≥ 0.85 的格：没动不改、顺移改号（`rekey_from`）、找不到或改号撞上撤到 `crop_exclusions_retired.jsonl`。缺省只报计划。不碰任何 Step，`code_hash` 不变。
 
