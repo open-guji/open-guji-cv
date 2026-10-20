@@ -145,6 +145,7 @@ MINOR（用户 2026-10-19 同意：609 改指纹、没冻结的册重算一次�
 PATCH。中心库客户端与写入切换（数据迁出工作区、`guji db sync` 自动合并、每日备份；GUJI-606/608/611），group_flow 第三批形近字组。相对 v0.3.4 只有 `seed_admit` 的 `code_hash` 变（6a4e2bd27c35fa8a → f0f2713200ae880e），其余 16 步不变；没迁进中心库的工作区行为不变。
 
 ### Added
+- 字组：按字分类的异体组再加 啓啟 厯歴 絕絶（qik lih jue），模板来自 sheldon 10-20「异体对第二批」人裁（vol01、vol04–10），按册留一 0 错。册配置 `group_flow` 点名才生效。
 - 字组：两形混用的异体组 叙敘 冊册 教敎（xu ce jiao）走在线 IDS 新判法「按字分类」（`IdsSpec.by_form`）：自动缝切开，取有差别的那段与各字的同段真实刻例比最近邻。模板来自 sheldon 10-20 合审的殿本人裁（vol04–10），按册留一 0 错。册配置 `group_flow` 点名才生效。
 - 字组：第三批只看字频的异体组 刊刋 既旣 清淸 顚顛 淄湽 青靑（kan jiw qx dx zx qy；殿本全书人裁只见一形，sheldon 10-20 合审定）。要在册配置 `group_flow` 点名才生效。
 - 字频解法阈值 20→10，且主形人裁须来自至少两册（2026-10-20，sheldon 定）：`seed_admit.group_flow_freq_major` 缺省 10、新参数 `group_flow_freq_min_vols` 缺省 2（0＝不查）；字频表新增 `vols`（每个刻形有人裁的册数，旧表没有就不查册数）。现有数据里新放行的只有 變𠮓（17，来自 vol01–03）；彙彚 12 只来自 vol01，仍弃权。`seed_admit` 的 `code_hash` 变，参数哈希变（用 group_flow 的册）。
