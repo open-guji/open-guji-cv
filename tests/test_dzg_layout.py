@@ -116,3 +116,24 @@ def test_cut_rows_counts_only_lines_through_ink():
     assert _cut_rows(img, bad) == 2
     jz = [C(y0=0, y1=100, kind="jiazhu_a", sub="a", slot=1), C(y0=50, y1=100, kind="jiazhu_b", sub="b", slot=1)]
     assert _cut_rows(img, jz) == 0
+
+
+def test_blank_frame_junk_only_touches_column_ends_with_frame_ink():
+    """列端框线残渣：表说该空的首／末格里只有满宽横线就记空；像字的墨、列中段的格、碎墨多的格都不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((500, 100), 255, np.uint8)
+    img[20:26, 0:100] = 0                      # 列首格：一条满宽版框线
+    img[120:180, 30:70] = 0                    # 第 2 格：字
+    img[220:280, 30:70] = 0                    # 第 3 格：字
+    img[420:480, 30:70] = 0                    # 列尾格：表说该空，图上却是字 → 不动
+    mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
+    cells = [mk(1, 0), mk(2, 100), mk(3, 200), C(slot=4, y0=300, y1=400, kind="blank", sub=None), mk(5, 400)]
+    n = _blank_frame_junk(img, cells, {2, 3}, (0, 100), 128, 100.0)
+    assert n == 1 and cells[0].kind == "blank" and cells[4].kind == "char"
+    # 列中段：表说该空的第 3 格里只有横线，但它不是列端 → 不动
+    img2 = img.copy(); img2[220:280] = 255; img2[240:246, :] = 0
+    cells2 = [mk(1, 0), mk(2, 100), mk(3, 200), mk(5, 400)]
+    _blank_frame_junk(img2, cells2, {2, 5}, (0, 100), 128, 100.0)
+    assert cells2[2].kind == "char"

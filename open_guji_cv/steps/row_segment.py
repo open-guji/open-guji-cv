@@ -273,6 +273,47 @@ def _cut_rows(img, cells, ink_threshold: int = 128) -> int:
     return n
 
 
+#: 列端框线残渣判据：像字的墨行（行墨 ≥ 0.08 列宽且 < 0.5 列宽，同 row_boundaries 的空白格口径）
+#: 合起来不到这么多个 period，且满宽横线（±3 行）以外的墨占格面积不到 FRAME_JUNK_RESID，就当这一格没有字
+FRAME_JUNK_CHARLIKE = 0.15
+FRAME_JUNK_RESID = 0.03
+
+
+def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float) -> int:
+    """表说该空、又是整列物理上第一格或最后一格的字格，里面只有框线／零星碎点时改成 blank，返回改了几格。"""
+    import numpy as np
+    body = sorted(occ)
+    if not body:
+        return 0
+    lo, hi = body[0], body[-1]
+    h, w = img.shape[:2]
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    x0, x1 = (int(content_x[0]), int(content_x[1])) if content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    cw = x1 - x0
+    ink = g[:, x0:x1] < ink_threshold
+    row = ink.sum(axis=1)
+    charlike = (row >= 0.08 * cw) & (row < 0.5 * cw)
+    frame = row >= 0.5 * cw
+    near = frame.copy()
+    for d in (1, 2, 3):
+        near[d:] |= frame[:-d]
+        near[:-d] |= frame[d:]
+    order = sorted(cells, key=lambda c: c.y0)
+    n = 0
+    for c in (order[0], order[-1]) if order else ():
+        if c.kind != "char" or lo <= c.slot <= hi or c.slot in occ:
+            continue
+        a, b = max(0, int(c.y0)), min(h, int(c.y1))
+        if b <= a:
+            continue
+        resid = float(ink[a:b][~near[a:b]].sum()) / ((b - a) * cw)
+        if charlike[a:b].sum() < FRAME_JUNK_CHARLIKE * period and resid < FRAME_JUNK_RESID:
+            c.kind = "blank"
+            n += 1
+    return n
+
+
 def _n_chars(cells) -> int:
     return sum(1 for c in cells if c.kind != "blank")
 
@@ -419,7 +460,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.20", unit="column",   # 1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.21", unit="column",   # 1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -566,6 +607,17 @@ class RowSegmentStep(Step):
                         base = dict(base, n_raised=n_raised_col, top_slack=top_slack)
                         prior_flags.append(f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格），"
                                            f"穿字格线 {k1}→{k2}")
+                        occ = occ2
+            # 列端框线残渣：表说该空、格里又只有框线那种满宽横墨或碎点（没有像字的墨行）的列端字格记空。
+            # 掩码故意不罚满宽密行（不然 DP 为躲框线去并上面的字，见 row_boundaries.SLOT_MASK_ROWS），所以
+            # 版框横线落进列首/列尾那一格时会被切成「字」（殿本 vol04 p6 c2、p8 c2，vol05 p147 c1）。
+            # 只动整列物理上的第一格、最后一格，且格里横线以外几乎没墨：列中段的碎墨（卷端页、整页破损页上
+            # 印断的字，vol09 p164「經部十七」）不碰——人审率分析的教训：破损页的空位不能批量判非字。
+            # 殿本 vol04–09 实测改空 647 格（逐格看图都是框线、竖线、碎点），比 1.20 逐格多修好 19 列、改坏 0。
+            if lay is not None and r is not None:
+                n_junk = _blank_frame_junk(img, r.cells, occ, gc.content_x, p.ink_threshold, gate.period)
+                if n_junk:
+                    prior_flags.append(f"layout_frame_junk：列端 {n_junk} 格只有框线／碎墨，记空")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
             # 逐列字数先验与 YOLO 并格（同列互斥，两套先验叠在一列上会打架）
             skip_cd = human_col or lay is not None
