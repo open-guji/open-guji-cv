@@ -1,0 +1,20 @@
+{
+  "_doc": "guji opinions triage 的规则表（M11 第一阶段 C2，设计 doc/design/M11-分块-第一阶段最小闭环.md）。门槛是初值，第二阶段用 vol01 人裁造的评测集标定（GUJI-713）。published＝冻结册（文本 ≥1.0，举证责任在意见一方），proofing＝0.x 精校册。",
+  "version": 1,
+  "profiles": {
+    "published": {
+      "auto_accept": {"min_confidence": 0.95, "min_evidence_agree": 2, "classes": ["A", "B"]},
+      "auto_reject": {"min_confidence": 0.9},
+      "to_user_verdicts": ["lacuna_guess", "seg_issue", "unclear"],
+      "reply_required": true
+    },
+    "proofing": {
+      "auto_accept": {"min_confidence": 0.8, "min_evidence_agree": 1, "classes": ["A", "B"]},
+      "auto_reject": {"min_confidence": 0.9},
+      "to_user_verdicts": ["lacuna_guess", "seg_issue", "unclear"],
+      "reply_required": false
+    }
+  },
+  "forward": {"punct": "punct", "entity": "entity"},
+  "flood": {"per_source_per_day": 60, "disagree_ratio": 0.8, "burst_sources": 5, "burst_seconds": 3600}
+}
