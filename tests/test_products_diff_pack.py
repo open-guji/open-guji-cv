@@ -236,3 +236,18 @@ def test_exclusion_rebind(tmp_path):
     assert kept[1]["rekey_from"] == "b:1:1:2"
     ret = [json.loads(x) for x in (tmp_path / "crop_exclusions_retired.jsonl").read_text().splitlines()]
     assert {(r["instance_id"], r["retired_by"]) for r in ret} == {("b:1:1:3", "rebind:gone"), ("b:1:1:4", "rebind:dup")}
+
+
+def test_render_images_uses_top_right_frame(tmp_path):
+    """bbox_page 是右上原点：看图页要先翻成左上原点再裁，否则裁到镜像位置的另一列。"""
+    import cv2
+    import numpy as np
+    from open_guji_cv.ops import products_diff as PD
+    img = np.full((200, 400), 255, np.uint8)
+    img[20:80, 300:360] = 0                                          # 墨在右边（左上原点 x 300–360）
+    c = PD.Cell("b:1:1:1", (40.0, 20.0, 99.0, 80.0), 0, "admit", "字")   # 右上原点：x = 399-360 … 399-300
+    cd = PD.ColDiff(1, 1, "text", [c], [PD.Cell("b:1:1:1", c.bbox, 0, "admit", "子")], [(0, 0)])
+    n = PD.render_images({"columns": [cd]}, tmp_path, lambda pg: img, 5, "a", "b")
+    assert n == 1
+    out = cv2.imread(str(tmp_path / "cols" / "p0001c01.png"), cv2.IMREAD_GRAYSCALE)
+    assert (out < 128).mean() > 0.3                                  # 裁到的是那块墨，不是空白

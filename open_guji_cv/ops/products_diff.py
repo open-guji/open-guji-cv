@@ -239,6 +239,7 @@ def render_images(res: dict, out: Path, raw_page, n: int, a_label: str, b_label:
     import numpy as np
 
     from ..utils.image_io import imwrite
+    from ..core.anchor import bbox_tr_to_tl
     cols = sorted(res["columns"], key=_impact)[:n]
     img_dir = out / "cols"
     img_dir.mkdir(parents=True, exist_ok=True)
@@ -249,8 +250,14 @@ def render_images(res: dict, out: Path, raw_page, n: int, a_label: str, b_label:
             cache.clear()
             cache[cd.page] = raw_page(cd.page)
         im = cache[cd.page]
-        boxes = [c.bbox for c in cd.a + cd.b if c.bbox]
-        if im is None or not boxes:
+        if im is None:
+            continue
+        # bbox_page 是右上原点（`raw_page_px@top-right`，x 从右往左量），先换成左上原点再裁、画框；
+        # 直接当左上原点用会画到镜像位置的另一列（中间那列恰好对得上，所以不容易发现）
+        w = im.shape[1]
+        tl = {id(c): bbox_tr_to_tl(c.bbox, w) for c in cd.a + cd.b if c.bbox}
+        boxes = list(tl.values())
+        if not boxes:
             continue
         x0 = max(0, int(min(bb[0] for bb in boxes)) - 12)
         x1 = min(im.shape[1], int(max(bb[2] for bb in boxes)) + 12)
@@ -264,8 +271,9 @@ def render_images(res: dict, out: Path, raw_page, n: int, a_label: str, b_label:
             for c in cells:
                 if not c.bbox:
                     continue
-                p0 = (int(c.bbox[0]) - x0, int(c.bbox[1]) - y0)
-                p1 = (int(c.bbox[2]) - x0, int(c.bbox[3]) - y0)
+                bb = tl[id(c)]
+                p0 = (int(bb[0]) - x0, int(bb[1]) - y0)
+                p1 = (int(bb[2]) - x0, int(bb[3]) - y0)
                 cv2.rectangle(t, p0, p1, colr, 4 if c.state == "review" else 2)
             tiles.append(t)
         gap = np.full((crop.shape[0], 10, 3), 255, np.uint8)
