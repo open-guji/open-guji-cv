@@ -354,3 +354,20 @@ def test_vol_manifest_rejects_foreign_paths(two_level):
     with pytest.raises(ValueError, match="册层清单"):
         corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)
         corpus_pin.load_manifest(book, 2, "vol01")
+
+
+def test_pin_dev_means_unpinned():
+    from open_guji_cv.core.corpus_pin import parse_pin
+    assert parse_pin("dev") is None and parse_pin(" Dev ") is None
+    assert parse_pin("v3") == 3
+
+
+def test_push_refuses_dev_pinned_book(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    (data / "books").mkdir()
+    (data / "books" / "vol01.yaml").write_text("id: vol01\ncorpus: 3\n", encoding="utf-8")
+    assert corpus_pin.push_problems(book) == []
+    (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: dev\n", encoding="utf-8")
+    msg = corpus_pin.push_problems(book)
+    assert len(msg) == 1 and "vol02" in msg[0] and "dev" in msg[0]

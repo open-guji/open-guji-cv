@@ -8,7 +8,7 @@
 钉住的版本必须有清单，否则报错；清单之后文件被改过只警告一次（该出新版本，或把文件改回去）。
 算指纹时（``guji status`` 等）只警告；真开跑读语料的步之前 ``require_pin_clean`` 硬校验，改了或缺了就拒绝。
 两级清单（共享方案 S2）：书库 ``v<N>`` 写 ``base: M`` 时并上底库 ``b<M>``（中心库 ``corpus-base``）的条目。
-三层（doc/design/语料库分层版本.md）：全局（底库 ``b<M>``）＋整套书（书库 ``v<N>``）＋册（``vol/<册>/v<K>``）；
+册 yaml 写 ``corpus: dev`` = 语料在改，等同没钉。三层（doc/design/语料库分层版本.md）：全局（底库 ``b<M>``）＋整套书（书库 ``v<N>``）＋册（``vol/<册>/v<K>``）；
 册 yaml 的 ``corpus: N`` 是总号，在该册的钉子账 ``pins/<册>.json`` 里对应三层各自的版本，任一层变总号就升；
 指纹仍只取 ``corpus-vN``。没有钉子账的册，``N`` 按旧做法解释为书库 ``v<N>``（它清单里写的 ``base``）。
 """
@@ -307,16 +307,37 @@ def check_files(ws: Path, man: dict) -> dict:
     return {"changed": changed, "missing": missing, "extra": extra}
 
 
+def dev_pins(ws: Path) -> list[str]:
+    """册 yaml 里写着 ``corpus: dev``（语料在改）的册：只在本机用，不许推中心库（中心库只收正式版本号）。"""
+    import yaml
+    d = data_root_books(ws)
+    out = []
+    for f in sorted(d.glob("*.yaml")) if d is not None and d.is_dir() else []:
+        try:
+            v = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("corpus")
+        except Exception:                          # noqa: BLE001 —— 读不了的册配置不归这里管
+            continue
+        if isinstance(v, str) and v.strip().lower() == "dev":
+            out.append(f"册 {f.stem} 的 corpus 是 dev（语料还在改），中心库只收正式版本号：先出新版本、"
+                       f"guji corpus pin 后把册 yaml 改成新总号，或把它改回上一个正式号再推")
+    return out
+
+
+def data_root_books(ws: Path) -> Path | None:
+    from .workspace import books_dir
+    return books_dir(ws)
+
+
 def push_problems(ws: Path) -> list[str]:
     """推进中心库前的保护（用户 10-20：语料库里任何内容变了，都要改版本号）。
 
     ① 最新一版清单登记的工作区文件被改了、缺了，或清单之外多了新语料文件：先 ``guji corpus build`` 出新版本一起推；
     ② 本机已有的某一版清单和库里不一样：旧版本不可改。
     只看工作区里的文件（root=ws）；引擎仓里的表随 cv 版本走，由起跑前硬校验管。"""
+    out: list[str] = dev_pins(ws)
     vs = versions(ws)
     if not vs:
-        return []
-    out: list[str] = []
+        return out
     last = vs[-1]
     r = check_files(ws, load_manifest(ws, last))
     live = lambda xs: [x for x in xs if x.startswith("ws:")]          # noqa: E731
@@ -355,10 +376,15 @@ def step_pin_token(step_id: str, book) -> str | None:
 
 
 def parse_pin(v) -> int | None:
-    """册 yaml 的 `corpus:`：`1`／`"1"`／`"v1"` → 1；空 → None。"""
+    """册 yaml 的 `corpus:`：`1`／`"1"`／`"v1"` → 1；空 → None。
+
+    `dev` 表示「语料正在改」：等同没钉（不校验清单，语料类指纹照旧按内容哈希，改了产物就判过期），
+    读出来也是 None；发版时出新版本、`guji corpus pin` 后把 yaml 改成新总号。"""
     if v is None or v == "":
         return None
     s = str(v).strip().lower()
+    if s == "dev":
+        return None
     s = s[1:] if s.startswith("v") else s
     if not s.isdigit() or int(s) < 1:
         raise ValueError(f"册 yaml 的 corpus: 应是正整数版本号（如 1 或 v1），收到 {v!r}")
