@@ -3,7 +3,13 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.8] - 待发
+## [0.4.8] - 2026-10-20
+
+### 并入 main 上 v0.4.7 之后直接合入的改动
+- 汉字关系库 hanzi：总设计、B0/B1/B7（#256）、B2 全字表字形向量包（#276）、B3 以字找字候选池改由 hanzi 库给（#266）、B4 字统网按字典存派生事实（#267）、真书实测文档（#278）。
+- Step3 `row_segment` 人工指定整列格 `manual_cells`（#251，main 上记作 1.20；没有指定的列逐字节不变）。
+- 文档：人审率分析补列级对位救援的离线评估（#247）；M10 精校调研与总设计、已知错单脚本、`guji exit-check`（#273）。
+- **`row_segment` 版本合为 1.22**（本线 1.20／1.21 的 layout_prior 改动＋main 的 manual_cells），`code_hash` e82f08017e79c63a（rc）／bb4f3830915bcdf0（main）→ d5f4ceedcfbd2d06：各册 Step3 起判过期，冻结册按冻结规则不受影响；开关（layout_prior、manual_cells）不开的列产物逐字节不变。其余各步 `code_hash` 与 rc/v0.4.8 相同（相对 v0.4.7 变了的步见下面各条）。
 
 ### Added
 - 产物包按「三样版本」打标签、每册有 main（用户 10-20 定：不同版本的结果分开存、不覆盖，main 是最新正式结果；cv、字形库、语料库三个版本号共同决定结果）：`guji products pack push` 不给 `--label` 时标签拼成 `cv<版本>-c<语料库号>-g<字形库号>-<改动名>`（`--change`；字形库没钉写 `g-`＋人裁指纹前 6 位），三样完整值记进 manifest 的 `versions`；新 `pack promote <册> --label …`／`pack push --main` 追加 main 指针（`main-ptr/`，只增不改，Worker 不用改）；`fetch` 缺省取 main，没标过才取最新；`list` 标 ★ 并列三样版本。不碰任何 Step，`code_hash` 不变。
