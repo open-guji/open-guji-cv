@@ -297,6 +297,15 @@ console.log(JSON.stringify({
     assert out["bad"] == {"pick_src": "alt"} and out["none"] == {}
 
 
+@needs_node
+def test_ts_zh_label_shows_codepoint_beyond_bmp_han(tmp_path):
+    """控制台小标签：基本区、扩 A、兼容区照常显示；扩 B 以后、私用区显示码位（用户 10-20）。"""
+    out = _run_ts(tmp_path, r"""
+console.log(JSON.stringify(['之', '㐀', '豈', '□', 'a', '\u{20000}', '\u{2D44A}', '\u{301CF}', '\uE000', '之乎'].map(R.zhLabel)))
+""")
+    assert out == ["之", "㐀", "豈", "□", "a", "U+20000", "U+2D44A", "U+301CF", "U+E000", "之乎"]
+
+
 def test_jys_rows_read_downstream_unchanged(tmp_path):
     """己已巳卡发的行（上面 node 用例钉住的形状）经 `/api/events` 同一套信封写进日志后，
     `human_chars` 读出的就是选的那个字——与普通卡点同一个字的结果完全一样；`seg_defect` 带字同理。"""

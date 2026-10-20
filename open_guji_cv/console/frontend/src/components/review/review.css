@@ -162,4 +162,7 @@
 .rvaltbtn { display: inline-flex; flex-direction: column; align-items: center; padding: .15rem; min-width: 3rem; }
 .rvaltimg { width: 2.6rem; height: 2.6rem; object-fit: contain; background: #fff; }
 .rvaltch { font-size: 1.8rem; line-height: 2.6rem; font-family: "Noto Serif TC", "Source Han Serif TC", serif; }
+/* 显示不出来的字改显示码位（reviewClass.zhLabel）：等宽小字，悬停看原字 */
+.rvaltcp { font-size: .7rem; line-height: 2.6rem; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.rvaltcplab { font-size: .65rem; font-family: ui-monospace, Menlo, Consolas, monospace; }
 .rvaltmore { font-size: .72rem; align-self: center; }

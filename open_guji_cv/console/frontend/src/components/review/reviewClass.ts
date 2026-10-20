@@ -176,6 +176,19 @@ export function pickVerdict(ch: string, prev: VerdictLike | undefined, seenAt: n
            ...keepApprox(prev), ...(pick && ch ? { pick } : {}) }
 }
 
+/**
+ * 控制台页面上直接写成文字的汉字，能不能指望阅审人电脑的字体显示出来：控制台不带网页字体，
+ * 只认基本区、扩 A、兼容区（各系统都有字体）；扩 B 以后、私用区一律当显示不出来，改显示码位（用户 10-20）。
+ * 字形图由后端用 I.Ming／Jigmo 渲染，不受这个影响。
+ */
+export function zhLabel(c: string): string {
+  const o = c.codePointAt(0)
+  if (o === undefined || [...c].length !== 1) return c
+  const hanOrPua = (o >= 0x3400 && o <= 0x9fff) || (o >= 0xe000 && o <= 0xfaff) || o >= 0x20000
+  const bmpHan = (o >= 0x3400 && o <= 0x4dbf) || (o >= 0x4e00 && o <= 0x9fff) || (o >= 0xf900 && o <= 0xfaff)
+  return !hanOrPua || bmpHan ? c : `U+${o.toString(16).toUpperCase().padStart(4, '0')}`
+}
+
 /** 上下文一格显示什么字：缺省整理本优先（`text`），开了「刻本读法」才用 `char`。 */
 export function ctxChar(s: { char?: string | null; text?: string | null }, keben: boolean): string {
   return (keben ? s.char : (s.text ?? s.char)) || '□'
