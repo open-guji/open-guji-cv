@@ -29,7 +29,17 @@
   - 切分缺陷等档不带；没点过的行逐字段不变。网站精校页同名字段见 kaiyuanguji-web#531。不碰任何 Step，`code_hash` 不变。
 - `guji audit alt <册> --reviewed`：已人裁、已放行的格也算相似字（只写进 `cards.alt.json` 给 `alt-eval`，不进待审单），拿历史人裁量相似字的真实命中——这些格裁的时候人还看不到相似字，没有「看了候选才选它」的偏倚。10-20 殿本 vol01–03 实测：人定的字不在卡上原有候选里的难格 75 格，相似字前 5 命中 55 格、前 10 命中 59 格（79%），第 1 名 36 格。不碰任何 Step，`code_hash` 不变。
 
+- `scripts/check_rc_target.py <rc 分支>`（GUJI-657）：合 PR 前核对目标待发分支是否已发版（远端有 `vX.Y.Z` 返回 1 并提示改投哪条；不是最新待发分支返回 2）。只读，用 `git ls-remote`。不碰任何 Step，`code_hash` 不变。
+- 粗校出口报告单列「钉版」一行（GUJI-656）：`collect_exit.py` 读册配置的 `cv_version`、`corpus`、`glyph_pin`，没钉的标 ⚠，只提示、不挡出口；规矩见 `doc/版本号规矩.md` 第七节（每波开工发一个正式 tag，各册钉 tag＋语料号＋字形库号）。不碰任何 Step，`code_hash` 不变。
+- `scripts/zhengli/ledger.py`（GUJI-667）：粗校台账与统一人审率口径（用户 10-20 定：正文页送精校的待审格 ÷ 正文页字格，不含标题槽、非字格；重切清单、非正文另报），`review_rate()` 纯函数＋CLI 追加一行到数据目录 `feedback/lists/ledger/<册>.jsonl`。不碰任何 Step，`code_hash` 不变。
+- `scripts/ia_download_zongmu.py` 改按全书 99 册两段编号（`06061300`–`06061320`、`06066140`–`06066217`，GUJI-648 逐号核过；原来按「199 册连号」，照默认跑会从 vol22 起下别的书）：新 `--vols 11-20` 按册号选，缺省取 `_tif.zip`（与工作区现有原图逐像素一致）。书单 `doc/runbook/书单-四庫總目.md`。不碰任何 Step，`code_hash` 不变。
+- 粗校待审单脚本迁进本仓 `scripts/zhengli/`（GUJI-652）：`pending_list.py`、`sprite_build.py`、`ex_build.py`、`alt_build.py`、`decision_build.py`，原在 ai-team 工单目录、runbook 直接引用、没有测试；行为不变，`--cv-root` 缺省本仓根，各配单元测试。`ex_build`／`decision_build` 的用法示例仍写中心库切换前的路径，文件头注明。不碰任何 Step，`code_hash` 不变。
+
+### Changed
+- `scripts/export_guji_format.py --format char-cord` 的 `--text-version` 改为必填、不再缺省 0.1.0（GUJI-679）：已在 book-text 上的册要写线上现行版本，以前缺省写 0.1.0，出补丁前得先手工改回。`zl.py` 导出步显式传版本。不碰任何 Step，`code_hash` 不变。
+
 ### Fixed
+- 产物包键的工作区名不再瞎猜（GUJI-671）：`datastore/packs._ws_name()` 先读 `.central.json` 的 ws，再读 `workspace.yaml` 的 id，都没有就报错；以前回退成目录名首段或 `ws`，vol01–03 的包因此落在 `products/ws/` 下、用 `-w` 取不到。不碰任何 Step，`code_hash` 不变。
 - 中心库客户端超时分两档、超时快速重试（GUJI-707；国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手，GUJI-703）：小 JSON 请求（查表、签名、状态、whoami、分支、追加事件）缺省超时 120 → 25 秒（`GUJI_DATA_TIMEOUT` 可改），超时走原有退避重试，且网络错至少试 4 次（原先查表、签名只试 2 次）；收发大块字节的（快照、备份、产物包、R2 直取图、`r2` 上传的 PUT）维持原值。`r2.upload_via_worker` 的签名请求同样用短超时。PATCH；不碰任何 Step，`code_hash` 不变。
 - `guji close-check` 第 2c 项的待审单改读中心库（GUJI-711）：10-20 起公众待审单只在中心库 `feedback/lists/proofing/<书>/<章>.pending.json`，`--pending` 不给（或只写 `--pending`）就读数据目录里本册本章那份（书 id 按 `meta_<册>.json`，取不到在 `proofing/*/` 下找唯一一份；章号取 `--chapter`、导出目录唯一的 `NNN.lines.md` 或 `volNN`）；也认册（`vol04`）、章号、`<书>/<章>`；给了 book-text 的旧路径且文件不在，提示已迁移并指出新路径（新路径在就改读）。数据目录里没有就照旧只认重切清单，2c 说明里写清。runbook 同步。PATCH；不碰任何 Step，`code_hash` 不变。
 - 字形库体检结果带库指纹，过期不出卡（GUJI-710）：`guji glyph-db selfcheck` 把开跑时的库指纹（本书套刻例 `(实例 id, 字, 图块 sha)` 排序后哈希）记进 `summary.json` 的 `db_fp`，每张卡记本例与本书对手的图块 sha；控制台体检 tab 出卡前核对，结果没带指纹或卡上刻例的图对不上（刻例重排编号）→ 409「体检结果已过期（库已变），请重跑 guji glyph-db selfcheck」，一张卡也不出；只是撤了、改了字的，那几张卡不出、其余照出。起因 GUJI-623：09-26 的结果在 09-27 重排编号后照样出卡，9 张错位。`glyphdb-audit` skill 与 `glyph_audit.py` 的说明改成中心库口径（数据目录、`guji db sync`，不再进 git）。PATCH；不碰任何 Step，`code_hash` 不变。
