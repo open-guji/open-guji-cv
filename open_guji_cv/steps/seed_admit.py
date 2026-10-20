@@ -680,11 +680,14 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
-                   "open_guji_cv.groups.bars", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
+                   "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
                    "open_guji_cv.groups.ids_parts", "open_guji_cv.groups.ids_segment", "open_guji_cv.groups.ids_solver",
                    "open_guji_cv.clustering.iron_evidence",
+                   # 字形证据（variant_form.image_ranks_for）查字体模板走它；2026-10-20 修了它按 id
+                   # 缓存行模长、拿错矩阵模长的 bug，结果可能变，此前漏登记，补上
+                   "open_guji_cv.clustering.font_candidates",
                    "open_guji_cv.variants",
                    # 印章遮挡检测（overview#195）；它读的 Step3 `cells` 已经经 `char_index`
                    # 间接进了指纹，原图不变，所以不必加进 consumes。
@@ -701,6 +704,15 @@ class SeedAdmitStep(Step):
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
                      "group_flow_freq", "group_flow_tables"),
     )
+
+    def parallel_warm(self, ctx: RunContext) -> None:
+        """页级并行 fork 前在主进程预建两份大缓存（`core/parallel.warm`）：三份证人的 8-gram 索引
+        （复核通道才用，懒加载，第一页常碰不到）与铁证人裁匹配器。键与 run_page 里一致。只管提速。"""
+        p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
+        if p.lane_witness3 or p.lane_coord or p.lane_seal:
+            _lane_witnesses(ctx.book, p)
+        if ctx.book.iron_gate:
+            _iron_context(p.db_path, getattr(ctx.book, "norm_stroke", None))
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids

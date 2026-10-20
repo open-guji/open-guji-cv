@@ -96,6 +96,7 @@ COORD_MERGE_MIN_AGREE = 3      # 少一格（并格）救援：最高配法的�
 COORD_MERGE_MIN_CELLS = 4      # 少一格救援：共识后至少要给出这么多格的字，否则整列不认
 
 
+@lru_cache(maxsize=1 << 16)
 def is_text_char(ch: str) -> bool:
     """整理本里算「一个字位」的字符：CJK/字母类、数字类（〇）、私用区、`□`（阙字）。"""
     if ch in "□〓":            # 〓：daizhige 逐列本里没有码表的 PUA 生僻字占位
@@ -134,6 +135,19 @@ class RefLine:
 GRID_HEADER = "#@"
 _BLANK = "\u3000"
 
+#: `Unit` 不可变，同样内容的单元共用一个对象（2026-10-20，提速）：整部整理本两百多万个字位，
+#: 逐个新建 frozen dataclass 是 `parse_lines` 的大头；加上 `is_text_char` 按字记忆，
+#: 总目 8.6 s → 3.1 s、逐列本 11.4 s → 1.5 s，行表逐项相等。
+_UNITS: dict[tuple[str, str, str], Unit] = {}
+
+
+def _unit(kind: str, a: str, b: str = "") -> Unit:
+    k = (kind, a, b)
+    u = _UNITS.get(k)
+    if u is None:
+        u = _UNITS[k] = Unit(kind, a, b)
+    return u
+
 
 def parse_lines(raw: str) -> list[RefLine]:
     """整理本原文 → 行表。
@@ -165,7 +179,7 @@ def parse_lines(raw: str) -> list[RefLine]:
                 k = math.ceil(len(note) / 2)
                 a, b = note[:k], note[k:]
             for i in range(max(len(a), len(b))):
-                units.append(Unit("n", a[i] if i < len(a) else "", b[i] if i < len(b) else ""))
+                units.append(_unit("n", a[i] if i < len(a) else "", b[i] if i < len(b) else ""))
             text.extend(ch for ch in note if ch != "|")
             note.clear()
 
@@ -181,14 +195,14 @@ def parse_lines(raw: str) -> list[RefLine]:
                 note.append(ch)
                 continue
             if grid and ch == _BLANK and not in_note:
-                units.append(Unit("b", ""))
+                units.append(_unit("b", ""))
                 continue
             if not is_text_char(ch):
                 continue
             if in_note:
                 note.append(ch)
             else:
-                units.append(Unit("c", ch))
+                units.append(_unit("c", ch))
                 text.append(ch)
         if note:
             flush_note()

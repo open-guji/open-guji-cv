@@ -6,7 +6,7 @@
     guji products pack  list [<册>] -w <工作区>                            # ★ = 该册 main
     guji products pack  promote <册> --label 名 -w <工作区>                # 把已存的包标成该册 main
     guji products exclusions <册> --a <重切前产物根> [--b <重切后>] [--apply] -w <工作区>  # 排除清单按框跟着重切走
-    guji products pack  push-index | fetch-index                           # 生僻字 embedding 索引（models/*/emb_*.npz）
+    guji products pack  push-index | fetch-index                           # 生僻字 embedding 索引（models/*/emb_*.npz）；push-index 另推训好的语言模型
 
 产物根就是含 `<册>/<步>/p0001.json` 的那一层（`products/`、`guji snapshot make` 出的目录、实验变体目录）。
 细则见 doc/受控重跑.md。
@@ -125,8 +125,11 @@ def _record(book: str, info: dict, base_label: str | None, report: str | None,
 def cmd_pack(args) -> None:
     from .datastore import packs as PK
     if args.pack_action in ("push-index", "fetch-index"):
-        fn = PK.push_rare_indexes if args.pack_action == "push-index" else PK.fetch_rare_indexes
-        done = fn()
+        if args.pack_action == "push-index":
+            # 生僻字 embedding 索引 + 训好的语言模型（2026-10-20；LM 取是自动的，见 packs.fetch_derived）
+            done = PK.push_rare_indexes() + PK.push_derived()
+        else:
+            done = PK.fetch_rare_indexes()
         print(("已存：" if args.pack_action == "push-index" else "已取：") + ("、".join(done) or "无（都已有）"))
         return
     if args.pack_action == "list":

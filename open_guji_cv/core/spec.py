@@ -184,7 +184,10 @@ class StepSpec:
     集合、没有依赖执行顺序的一次性初始化（会被每个子进程重复触发）、写的都是
     `store.write(..., page_key(pg), ...)` 这种按页隔离的产物，数据库/字形库连接
     （若有）能在子进程里各自新建而非跨进程共享。标错的代价是静默数据错误，
-    不是报错——宁可漏标（退化成串行）也不要错标。"""
+    不是报错——宁可漏标（退化成串行）也不要错标。
+
+    已有产物的 Step 别在这里标：Step 模块源码进 `code_hash`，标一下各册这一步以下全线过期。
+    登记到 `core/parallel.py::AUDITED`（不进指纹，审查纪律相同），引擎两处任一为真即并行。"""
 
 
 def live_optional_consumes(spec: StepSpec, params, book=None) -> tuple[str, ...]:

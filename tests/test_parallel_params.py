@@ -94,3 +94,44 @@ def test_parallel_writes_to_engine_store(world):
     _, _, tmp = world
     _run(world, "par2", 2, None)
     assert (tmp / "par2" / "products" / "tpar" / "t_step_par").is_dir()
+
+
+class NumW(BaseModel):
+    page: int
+    pid: int
+
+
+if "t_parw" not in KINDS:
+    register_kind(ProductKindSpec(id="t_parw", title="暖机并行", storage="numeric", unit="page",
+                                  schema=NumW))
+
+if "t_step_parw" not in STEPS:
+    @register_step
+    class StepParW(Step):
+        spec = StepSpec(id="t_step_parw", title="合成暖机并行步", version="1", unit="page",
+                        consumes=("raw_page",), produces=("t_parw",), params=ParamsP)
+
+        def run_page(self, ctx, page):
+            import os
+            return {"t_parw": NumW(page=page, pid=os.getpid())}
+
+
+def test_warm_first_runs_one_page_in_parent_then_forks(world, monkeypatch):
+    """登记了 warm_first 的步：第一页在主进程跑（进程级缓存建好、fork 后共享），其余进 worker；
+    各页都落盘、gc 冻结在跑完后解开。"""
+    import gc
+    import os
+
+    from open_guji_cv.core import parallel
+    monkeypatch.setitem(parallel.AUDITED, "t_step_parw",
+                        parallel.ParallelAudit(mem_gb=0.01, note="测试", warm_first=True))
+    book, _, tmp = world
+    pl = Pipeline(id="t_parw_pl", title="t", steps=["t_step_parw"])
+    pl.validate()
+    eng = Engine(book, pl, store=ProductStore(tmp / "w" / "products"), cache=ImageCache(tmp / "w" / "cache"),
+                 log=lambda s: None)
+    rep = eng.run(pages=[1, 2, 3, 4], jobs=2)
+    assert all(o.status == "ok" for o in rep.outcomes), rep.outcomes
+    pids = [eng.ctx.product("t_parw", pg).pid for pg in (1, 2, 3, 4)]
+    assert pids.count(os.getpid()) == 1          # 恰好一页在主进程
+    assert gc.get_freeze_count() == 0            # 冻结解开了

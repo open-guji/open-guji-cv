@@ -47,6 +47,8 @@ class IdsSpec:
     min_class: int = 8          # 某类模板（真实刻例）少于这个数，判成它也弃权
     by_form: bool = False       # True：模板按成员字分类（不经 IDS 拼字），切下的那一段直接和各字的同段比；
                                 # 用于两字差别不落在同一 IDS 部件上的异体对（叙敘、冊册、教敎，2026-10-20）
+    three: bool = False         # True：彝组三段版（`ids_solver.solve`）：自动缝切上／中／下三段、中段再竖切取右半，
+                                # 每段二选一后拼 `⿳上⿰米X下` 交 IdsResolver；任一段 margin 不够整格弃权
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -64,6 +66,9 @@ SPECS: dict[str, IdsSpec] = {
     "qik": IdsSpec(frame="", orient="h", prior=0.5, which=1, min_margin=0.02, by_form=True),
     "lih": IdsSpec(frame="", orient="v", prior=0.4, which=1, min_margin=0.02, by_form=True),
     "jue": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
+    # 彝彛彜彞𢑱𢑴（2026-10-20，sheldon 定上线）：42 格人标三段读法（dataset yi_560/user_parts_labels），自动缝（band 0.08、pull 2.0）。
+    # 留一：margin 0.04 → 26 对／16 弃权／0 错（覆盖 62%）；0.02 有 5 错、0.0 有 8 错，所以取 0.04。
+    "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True),
 }
 
 
@@ -167,6 +172,8 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     from .registry import GROUPS
     spec = spec or SPECS[g]
     members = GROUPS[g].members
+    if spec.three:
+        return _judge_three(g, gray, bank, spec)
     if spec.by_form:
         return _judge_by_form(gray, bank, spec, members)
     v = solve_two(np.asarray(gray), bank, _resolver(g), spec.frame, spec.orient, spec.prior,
@@ -185,6 +192,54 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(v.char, conf=m, why="agree", via="ids", extra=extra)
+
+
+def _auto_three(gray):
+    """彝组自动切：上／中、中／下两条缝（先取直线基线作先验）＋中段竖缝。无墨迹 → None。"""
+    from .ids_segment import ink_of, polylines_to_mask, seam_polyline, straight_baseline, vertical_seam
+    ink = ink_of(gray)
+    if not ink.any():
+        return None
+    y1, y2 = straight_baseline(ink, 3)
+    pl = (seam_polyline(ink, y1, band=0.08, pull=2.0), seam_polyline(ink, y2, band=0.08, pull=2.0))
+    return pl, vertical_seam(ink, polylines_to_mask(ink.shape, *pl))
+
+
+def _slot_bank(bank: dict) -> dict:
+    """彝组模板库的键是 `位置|部件名`（如 `1|米糸`、`3|糸`＝中段竖切右半）→ `{位置: {部件名: [图,…]}}`。"""
+    out: dict = {}
+    for k, v in bank.items():
+        slot, name = k.split("|", 1)
+        out.setdefault(int(slot), {})[name] = v
+    return out
+
+
+def _judge_three(g: str, gray, bank: dict, spec: IdsSpec) -> GroupVerdict:
+    from .ids_solver import solve
+    arr = np.asarray(gray)
+    cut = _auto_three(arr)
+    if cut is None:
+        return GroupVerdict(None, why="abstain:blank", via="ids")
+    pl, vc = cut
+    b = _slot_bank(bank)
+    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc)
+    ms = [float(x) for x in v.margins]
+    extra = {"ids": v.ids, "slots": list(v.slots), "margins": [round(x, 4) for x in ms], "kind": v.kind, "flag": v.flag}
+    if v.char is None or v.char not in _members(g):
+        return GroupVerdict(None, conf=min(ms) if ms else 0.0, why="abstain:" + v.kind.removeprefix("abstain_"), via="ids", extra=extra)
+    if v.flag:      # nearest_variant：Unicode 没有这个组合，只能近似 → 不放，送人审
+        return GroupVerdict(None, conf=min(ms), why="abstain:nearest", via="ids", extra=extra)
+    for k, name in enumerate(v.slots):
+        key = 3 if (k == 1 and b.get(3)) else k
+        tname = name[1:] if key == 3 and name.startswith("米") else name
+        if len(b.get(key, {}).get(tname) or ()) < spec.min_class:
+            return GroupVerdict(None, conf=min(ms), why="abstain:few_templates", via="ids", extra=extra)
+    return GroupVerdict(v.char, conf=min(ms), why="agree", via="ids", extra=extra)
+
+
+def _members(g: str):
+    from .registry import GROUPS
+    return GROUPS[g].members
 
 
 def _judge_by_form(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
@@ -208,6 +263,62 @@ def _judge_by_form(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+_YI_NM = {"⺕": "彐", "彑": "彑", "糸": "米糸", "米+分": "米分", "廾": "廾", "大": "大"}
+
+
+def _three_cells(g: str, dataset: Path):
+    from PIL import Image
+    d = Path(dataset) / "char-groups" / "variant" / g
+    src = d / "user_parts_labels.jsonl"
+    cells = []
+    for line in src.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        gray = np.asarray(Image.open(d / "crops" / (r["id"].replace(":", "_") + ".png")).convert("L"))
+        cut = _auto_three(gray)
+        if cut is not None:
+            cells.append((r["id"], tuple(_YI_NM[r[k]] for k in ("top", "mid", "bot")), gray, cut))
+    return cells, src
+
+
+def _three_bank(cells, skip: str | None = None) -> dict:
+    from .ids_solver import add_real
+    bank = {0: {}, 1: {}, 2: {}}
+    for i, names, gray, (pl, vc) in cells:
+        if i != skip:
+            add_real(bank, gray, names, pl, vc)
+    # 与线上同一量化
+    return {f"{slot}|{name}": [quantize(t).astype(np.float32) / 255.0 for t in ts]
+            for slot, names_ in bank.items() for name, ts in names_.items()}
+
+
+def evaluate_three(g: str, dataset: Path, margins=(0.0, 0.02, 0.04, 0.06)) -> dict:
+    """彝组留一：模板库只用其余格，切线用自动缝（同线上）。→ {margin: {right, abstain, wrong}}。"""
+    cells, _ = _three_cells(g, dataset)
+    out = {m: Counter() for m in margins}
+    wrong = []
+    for i, names, gray, _cut in cells:
+        bank = _three_bank(cells, skip=i)
+        for m in margins:
+            v = _judge_three(g, gray, bank, IdsSpec(**{**asdict(SPECS[g]), "min_margin": m}))
+            k = "abstain" if v.char is None else "right" if tuple(v.extra["slots"]) == names else "wrong"
+            out[m][k] += 1
+            if k == "wrong":
+                wrong.append((m, i, names, v.char))
+    return {"by_margin": {m: dict(c) for m, c in out.items()}, "wrong": wrong, "cells": len(cells)}
+
+
+def build_three(g: str, dataset: Path) -> dict:
+    """彝组：dataset `char-groups/variant/<g>/user_parts_labels.jsonl`（三段读法）＋ `crops/` → 模板库（自动缝，同线上）。"""
+    cells, src = _three_cells(g, dataset)
+    flat = _three_bank(cells)
+    n = len(cells)
+    out = dump_bank(g, flat, {"labels": f"char-groups/variant/{g}/user_parts_labels.jsonl",
+                              "labels_sha256": hashlib.sha256(src.read_bytes()).hexdigest()[:16], "cells": n})
+    return out
 
 
 def form_templates(cells, spec: IdsSpec) -> dict:
@@ -299,11 +410,11 @@ def main(argv=None) -> int:
     if a.cmd == "build":
         from .registry import GROUPS
         out = a.out or _ROOT / (GROUPS[a.group].config_dir or f"config/groups/{a.group}") / "ids_bank.json"
-        d = build(a.group, a.dataset)
+        d = build_three(a.group, a.dataset) if SPECS[a.group].three else build(a.group, a.dataset)
         write_bank(d, out)
         print(f"写入 {out}：{d['source']}，各类模板 { {k: len(v) for k, v in d['templates'].items()} }")
     else:
-        r = evaluate(a.group, a.dataset)
+        r = (evaluate_three if SPECS[a.group].three else evaluate)(a.group, a.dataset)
         print(f"{a.group} 留一（自动缝）{r['cells']} 格")
         for m, c in r["by_margin"].items():
             print(f"  margin {m:.2f}: {c}")

@@ -495,14 +495,14 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
             bound = book_bindings(book, log)
         except Exception:
             bound = {}            # 绑定表算不出来就退回按编号（与 09-25 之前一致），不因此丢掉全部人裁
-    from .events import EventLog, counts_as_human
+    from .events import EventLog, counts_as_human, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
     try:
         # 按**时间**后到覆盖，不按批次名：Step8 复核（`<book>-collate`）改的字要压过更早的
         # Step7 定字，而批次名排序下 `bxgb-list-…-decide` 排在 `bxgb-collate` 后面，
         # 会把复核改好的字盖回去（2026-09-24）。同一秒内再按批次/seq 定序。
-        evs = sorted((log or EventLog()).iter_all(), key=lambda e: (e.ts, e.batch, e.seq))
+        evs = sorted(iter_events_readonly(log or EventLog()), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
         return out
     superseded: set[str] = set()

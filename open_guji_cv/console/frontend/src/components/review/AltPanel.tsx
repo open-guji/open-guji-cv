@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchRareAlt } from '../../api/review'
 import { libFontUrl } from '../../api/glyphlib'
 import type { AltCand, ReviewCard } from '../../types/review'
-import type { PickInfo } from './reviewClass'
+import { zhLabel, type PickInfo } from './reviewClass'
 import { ALT_SHOW, cardPivots } from './altPivots'
 
 type Out = { pivots: string[]; candidates: AltCand[] } | 'loading' | 'error'
@@ -11,7 +11,7 @@ const memo = new Map<string, Out>()          // 翻回来不重查；键＝字�
 /** 字形图：先 I.Ming（明体，近刻本），没有就 Jigmo（到扩展 G），都没有只显示字。 */
 function Glyph({ ch }: { ch: string }) {
   const [font, setFont] = useState<'iming' | 'jigmo' | ''>('iming')
-  if (!font) return <span className="rvaltch">{ch}</span>
+  if (!font) return <span className={zhLabel(ch) === ch ? 'rvaltch' : 'rvaltcp'} title={ch}>{zhLabel(ch)}</span>
   return <img className="rvaltimg" src={libFontUrl(ch, font)} alt={ch} loading="lazy"
               onError={() => setFont(font === 'iming' ? 'jigmo' : '')} />
 }
@@ -69,7 +69,7 @@ export function AltPanel({ book, c, active, onPick }: {
                   onClick={() => onPick(a.c, { src: asked ? 'alt_q' : 'alt', rank: i + 1, ...(a.p ? { pivot: a.p } : {}) })}
                   title={`${a.p && a.p !== a.c ? `从「${a.p}」查到 · ` : ''}像 ${Math.floor(a.s * 100)}% · ${a.src}`}>
             <Glyph ch={a.c} />
-            <span>{a.c}</span>
+            <span className={zhLabel(a.c) === a.c ? undefined : 'rvaltcplab'} title={a.c}>{zhLabel(a.c)}</span>
           </button>
         ))}
         {list.length > ALT_SHOW && (

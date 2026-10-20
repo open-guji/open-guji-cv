@@ -1,7 +1,32 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+
+## [未发版]
+
+## [0.4.9] - 2026-10-20
+
+PATCH（sheldon 10-20 定）。相对 v0.4.8 只有 `rare_candidates`（8d081ec338766152 → b92a99fa13957185）、`seed_admit`（19fbae2631200652 → 3337e7b0b2dc43ec）的 `code_hash` 变，其余 15 步不变。配套语料库：殿本 v9（日曰、入人八文意表按提示词 v2 重建，覆盖 vol01、vol04–10；`group_flow` 点名彝组 `yi_560`）——v9 清单登记了新提示词，旧版 CV 配 v9 会被语料钉拒跑，换版要同时改钉。
+验收（rc 上，殿本 vol05–07 共 141 页 seed_admit，对 v0.4.8＋语料库 v7）：送审 223→205；新放行 19 格（日曰 15、彝 4）逐格核对全对；新送审 1 格（vol07:102:9:21「五事一曰貌至五曰」，v0.4.8 误放「日」，现被文意表拦下）；随机抽的 60 页无变化。
+
+### Added
+- 字组：第四批只看字频的异体组 爲為 說説（wei shuo；殿本人裁只见一形，≥10 且来自 ≥2 册）。PATCH；只有 seed_admit 的 `code_hash` 变。要在册配置 `group_flow` 点名才生效。
+- `guji opinions publish-status`（M11 B2，GUJI-714；PATCH）：意见池里网站来源（改字、一段有问题）的处理结论按网站 target 聚合，写中心库 `feedback/lists/web/<书>/status.jsonl`（已进文本→adopted＋版本、已采纳→adopted、未采纳→rejected＋公开理由、交用户／讨论→discussing；精校票不发），幂等；网站 proofing-sync 读它回写 `/api/fixes`。顺手修回复草稿把模板句与公开理由叠在一起的毛病（GUJI-713）。不碰任何 Step，`code_hash` 不变。
+- 控制台「相似字」字形图下的小标签：扩 B 以后、私用区的字改显示码位 `U+XXXXX`（悬停看原字），两套字体都渲染不出字形图时同样显示码位（`reviewClass.zhLabel`，用户 10-20）。控制台不带网页字体，原来这些字在阅审人电脑上多半是方框；字形图本身照旧由后端用 I.Ming／Jigmo 渲染。不碰任何 Step，`code_hash` 不变。
+- M11 第一阶段：意见池、AI 初判的确定性部分、修订工具（GUJI-712／713／715，设计 `doc/design/M11-分块-第一阶段最小闭环.md`）。新包 `open_guji_cv/opinions/`（L4）与 `guji opinions …`：`ingest`（中心库 `feedback/lists/web/<书>/` 的改字／精校票、网站公开读 `/api/fixes`、`/api/feedback` 文字类 → 中心库 `feedback/lists/opinions/<书>/`，幂等，去测试票、记重复与转出）、`list`／`show`、`versions`（book-text CHANGES → `text_versions.json`）、`locate`、`normalize`、`pack`（IIIF 原图档裁格与列条带、上下文、marks，`sheet.png`／`sheet.md`）、`triage`（会话判、`config/opinions/rules.json` 定去向）、`to-user`／`decide`、`revise`（A／B／B′ 类改 book-text 冻结册 char／cord，伴生层跟随，调 `bump_original.py` 升 patch，CHANGES 引意见 id）、`reply-drafts`。PATCH；不碰任何 Step，17 步与闸 `code_hash` 不变。
+- M10 小件（#286，v0.4.8 发版后直接合进了 main，dev 已含）：`resolved_manual_cells` 遇坏行改为逐行读、跳过并在 stderr 报出（原来一行坏整片静默退回自动切分），新增 `scripts/zhengli/check_manual_cells.py`（GUJI-692）；公众意见台账 `scripts/zhengli/opinion_ledger.py`（GUJI-690）；runbook S25「1.0 之后的修订」（GUJI-696）。`lookup.py` 不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
+
+### Changed
+- 管线提速（#255，PATCH；产物逐字节不变，**只有 rare_candidates、seed_admit 的 `code_hash` 变了**，其余 15 步不变）：
+  - 页级并行：`row_segment`、`cell_shrink`、`glyph_match`、`rare_candidates`、`seed_admit` 登记进 `core/parallel.py`（不进指纹）。四庫 vol04 46 页串行对 `--jobs 4` 逐字节相同：row_segment 65→26 s、cell_shrink 28→9 s、glyph_match 231→80 s、rare_candidates 65→24 s、seed_admit 82→50 s。worker 里 OpenBLAS／torch 压 1 线程、`cv2.setNumThreads` 置空（fork 子进程里调它会卡死）；seed_admit、rare_candidates 先在主进程暖机、`parallel_warm` 预建大缓存再 fork；进程数按可用内存压。seed_admit 并行前要先把字块缓存建好。
+  - 代码等价登记（`core/code_equiv.py` + `scripts/code_equiv.py check`，用户 10-20 定）：新旧代码同一批页产物逐字节相同才登记，指纹换回旧哈希，各册不过期。
+  - 热点：glyph_match 逐页 −24%（wmax 按需算、同格查找分桶、HOG 向量化）；seed_admit 每页 2.3→0.85 s（事件读缓存；铁证匹配器归一图按内容缓存）；context_decide 热缓存首页 6–7→2 s（本书与通用 LM 按语料内容 + 代码指纹缓存）；align_ref 起跑 16→7 s；印章遮挡每页 0.21→0.02 s。
+  - 训好的语言模型跨机分发：本机没命中先用读令牌去 R2 取 `derived/lm/…`，`guji products pack push-index` 手动推（用户 10-20 定）。runbook S1 设 `GUJI_DATA_TOKEN=$GUJI_DATA_TOKEN_READ`。
+
+### Fixed
+- `font_candidates._row_norms` 按 `id(mat)` 缓存行模长：lru 挤掉的矩阵释放后 id 被复用、行数相同时用错模长，余弦全错、结果随页序变（#255）；seed_admit 补登记 `code_deps` 里的 `font_candidates`。**rare_candidates、seed_admit 判过期，各册要重跑这两步**（vol04 46 页上未触发，产物相同）。
+- 并发写（#255）：`_stamps.json` 加跨进程锁、临时文件带进程号（原来并行再生图块会整页记失败、丢戳）；`ImageCache.put`、绑定逐页缓存、字体索引改原子写。
 
 ## [0.4.8] - 2026-10-20
 

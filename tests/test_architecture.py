@@ -33,11 +33,11 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4,
+    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4,
     # L5 控制台（Web）
     "console": 5,
     # L6 命令行入口
-    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6,
+    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_opinions": 6,
     # L7 `python -m`
     "__main__": 7,
 }

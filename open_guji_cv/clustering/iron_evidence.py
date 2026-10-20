@@ -77,7 +77,11 @@ def form_inseparable(path: str | None = None) -> frozenset[frozenset[str]]:
 
 
 def human_matcher(db_path: str, norm_stroke: int | None):
-    """只吃人裁实例的内存匹配器。返回 (matcher, 人裁实例数)。"""
+    """只吃人裁实例的内存匹配器。返回 (matcher, 人裁实例数)。
+
+    归一图按内容缓存（2026-10-20，提速）：每个进程起来都要把四千多张人裁刻例解 PNG、
+    `normalize_patch` 一遍（vol04 4414 张约 13 s，占 Step7 起跑大头）。缓存键 = 刻例图 sha256，
+    缓存文件名带 `normalize.py` 的代码指纹与笔宽——归一化代码一改整份作废。命中时与现算逐位相同。"""
     from .glyph_db import GlyphDB
     from .match import GlyphMatcher
     from .normalize import normalize_patch
@@ -88,11 +92,66 @@ def human_matcher(db_path: str, norm_stroke: int | None):
            JOIN glyphs g ON g.glyph_id = e.glyph_id
            JOIN instances i ON i.instance_id = e.instance_id
            WHERE i.label_status = 'human'""").fetchall()
+    cache = _NormCache(norm_stroke)
     for char, iid, png in rows:
-        img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
-        if img is not None:
-            m.add(iid, char, normalize_patch(img, stroke_width=norm_stroke))
+        norm = cache.get(png)
+        if norm is None:
+            img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                continue
+            norm = normalize_patch(img, stroke_width=norm_stroke)
+            cache.put(png, norm)
+        m.add(iid, char, norm)
+    cache.save()
     return m, len(rows)
+
+
+class _NormCache:
+    """刻例图 sha256 → 归一图，落 `cache_root()/iron/norm-<normalize 代码指纹>-<笔宽>.npz`。
+    读坏了当没有；写先落带进程号的临时文件再换上去。没有新条目就不写。"""
+
+    def __init__(self, norm_stroke: int | None):
+        import hashlib
+        self._sha = hashlib.sha256
+        try:
+            from ..core.engine import code_hash_of_module
+            from ..core.workspace import cache_root
+            tag = code_hash_of_module("open_guji_cv.clustering.normalize")
+            self.path = cache_root() / "iron" / f"norm-{tag}-{norm_stroke or 0}.npz"
+        except Exception:                       # noqa: BLE001 —— 缓存只是提速，取不到路径就不缓存
+            self.path = None
+        self.data: dict[str, np.ndarray] = {}
+        self.dirty = False
+        if self.path is not None and self.path.exists():
+            try:
+                with np.load(self.path, allow_pickle=False) as z:
+                    self.data = dict(zip(z["keys"].tolist(), z["norms"]))
+            except Exception:                   # noqa: BLE001
+                self.data = {}
+
+    def get(self, png: bytes) -> np.ndarray | None:
+        return self.data.get(self._sha(png).hexdigest())
+
+    def put(self, png: bytes, norm: np.ndarray) -> None:
+        if self.path is not None and norm is not None:
+            self.data[self._sha(png).hexdigest()] = norm
+            self.dirty = True
+
+    def save(self) -> None:
+        if not (self.dirty and self.path is not None and self.data):
+            return
+        import os
+        shapes = {v.shape for v in self.data.values()}
+        if len(shapes) != 1:                    # 尺寸不一（不该发生）就不缓存，免得存坏
+            return
+        keys = sorted(self.data)
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = self.path.with_name(f"{self.path.stem}.tmp{os.getpid()}.npz")
+            np.savez(tmp, keys=np.array(keys), norms=np.stack([self.data[k] for k in keys]))
+            os.replace(tmp, self.path)
+        except OSError:
+            pass
 
 
 def iron(cands: list[tuple[str, float]], human_chars: set[str],
