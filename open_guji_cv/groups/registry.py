@@ -47,6 +47,7 @@ class GroupSpec:
     config_dir: str | None = None # 相对仓根，如 "config/groups/yi_560"
     flow: FlowSpec | None = None  # 字组统一流程里的判法；None＝不进 `group_flow`
     overlaps: tuple = ()          # 允许与哪些组共用成员（须互相声明）；入口按分差内候选＋整理本字选第一个装得下的组
+    ref_free: bool = False        # 整理本在本组的字上没有参考价值（如己已巳，sheldon 2026-10-19 定）：入口不看整理本字，判法也拿不到它
 
 
 GROUPS: dict[str, GroupSpec] = {
@@ -54,7 +55,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="jys", name="己已巳", members=frozenset("己已巳"),
         backends=("rule", "ctx_table", "table"),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
-        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True),
+        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True), ref_free=True,
         note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
