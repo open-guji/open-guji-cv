@@ -401,6 +401,46 @@ def cmd_reply_drafts(args) -> None:
     _print(f"待回复 {n} 条（回写网站归 B2，第一阶段只出草稿）")
 
 
+# ---------------- revise ----------------
+
+def cmd_revise(args) -> None:
+    from .opinions import revise as V
+    from .opinions.textsrc import default_book_text
+    root = default_book_text(args.book_text)
+    if not root:
+        raise SystemExit("revise 要本地 book-text 检出（--book-text 或 GUJI_BOOK_TEXT）")
+    st = _store(args, by="revise")
+    todo, skipped = V.plan(st, args.vol)
+    if args.only:
+        want = set(args.only.split(","))
+        todo = [(o, r) for o, r in todo if o.id in want]
+    _print(f"第 {args.vol} 章：要套 {len(todo)} 条，跳过 {len(skipped)} 条")
+    for op, rev in todo:
+        _print(f"  {op.id} {rev.get('class')} {json.dumps(rev.get('cells'), ensure_ascii=False)}")
+    for i, why in skipped:
+        _print(f"  跳过 {i}：{why}")
+    if not todo:
+        return
+    try:
+        res = V.revise(root, args.book, args.vol, todo, dry_run=args.dry_run, pr=args.pr,
+                       guess_style=args.guess_style, bump_script=args.bump_script, skipped=skipped)
+    except V.ReviseError as e:
+        raise SystemExit(f"✗ {e}")
+    for line in res.bump_log:
+        _print("  bump: " + line.replace("\n", "；"))
+    _print(("[dry-run] " if args.dry_run else "") + f"文本线 {res.old_version} → {res.new_version or '（待升 patch）'}；"
+           f"伴生层 标点 {res.companions['punct']} 处、实体 {res.companions['entity']} 处")
+    _print("出口检查：" + ("通过" if not res.problems else "；".join(res.problems)))
+    _print("\n---- PR 正文 ----\n" + V.pr_body(res, args.book))
+    if res.problems and not args.dry_run:
+        raise SystemExit(2)
+    if args.log_applied and not args.dry_run:
+        for op, _rev in todo:
+            st.log(op.id, "applied", {"text_version": res.new_version, "pr": args.pr})
+        st.save()
+        _print(f"log 记 applied {len(todo)} 条（{st.backend.describe()}）")
+
+
 # ---------------- 注册 ----------------
 
 def _common(p, store: bool = True) -> None:
@@ -510,6 +550,19 @@ def add_parser(sub) -> None:
     p.add_argument("--by", default="user")
     p.add_argument("--dry-run", action="store_true")
     p.set_defaults(func=cmd_decide)
+
+    p = s.add_parser("revise", help="对已采纳意见改 book-text 冻结册 char／cord，升 patch，写 CHANGES，打印 PR 正文")
+    _common(p)
+    p.add_argument("--vol", required=True, help="章号 NNN")
+    p.add_argument("--book-text", default=None, help="book-text 本地检出（要写）")
+    p.add_argument("--dry-run", action="store_true", help="只算不写")
+    p.add_argument("--pr", default=None, help="book-text 的 PR 号（写进 CHANGES；不 dry-run 时必填）")
+    p.add_argument("--guess-style", default="lacuna", choices=("lacuna", "guess-char", "guess-str"),
+                   help="阙文带推测字的写法：lacuna（现行，推测字只进 CHANGES）／guess-char（现行残字写法）／guess-str（D4 扩展）")
+    p.add_argument("--bump-script", default=None, help="缺省 <book-text>/scripts/book-text/bump_original.py")
+    p.add_argument("--only", default="", help="只套这些意见（逗号分隔 id）")
+    p.add_argument("--log-applied", action="store_true", help="改完在意见池 log 记 applied（PR 合了再用）")
+    p.set_defaults(func=cmd_revise)
 
     p = s.add_parser("reply-drafts", help="列出已结案、待回复读者的意见和回复文字")
     _common(p)
