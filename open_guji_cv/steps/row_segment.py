@@ -245,6 +245,34 @@ def colgold_count(g: dict, img=None, thr: int = 128):
     return count
 
 
+def _layout_kw(lay: dict, occ: set, n_body: int, n_raised: int):
+    """逐列格位表的一行 → (DP 掩码参数, forced_jiazhu, forced_main)。两半都有字的夹注格强制拆、正文格强制整。"""
+    notes = set(lay.get("notes", ())) & occ
+    return ({"slot_mask": slot_mask_from_occupied(occ, n_body, n_raised)},
+            notes or None, (occ - notes - set(lay.get("half", ()))) or None)
+
+
+#: 格线穿字判据：格线上下 ±2 行、列宽中间 80% 的墨占比都 ≥ 这个值，算这条线横穿了字
+CUT_ROW_INK = 0.06
+
+
+def _cut_rows(img, cells, ink_threshold: int = 128) -> int:
+    """一列里横穿字的格线条数（字格与相邻格的分界；空格之间、夹注 a/b 之间不算）。只用来比两种格网谁劈字少。"""
+    import numpy as np
+    h, w = img.shape[:2]
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink = (g[:, int(w * 0.1):int(w * 0.9)] < ink_threshold).mean(axis=1)
+    cs = sorted(cells, key=lambda c: c.y0)
+    n = 0
+    for a, b in zip(cs, cs[1:]):
+        if (a.kind == "blank" and b.kind == "blank") or (a.sub and b.sub and a.slot == b.slot):
+            continue
+        y = int(round(b.y0))
+        if 2 <= y < h - 2 and float(np.min(ink[y - 2:y + 3])) >= CUT_ROW_INK:
+            n += 1
+    return n
+
+
 def _n_chars(cells) -> int:
     return sum(1 for c in cells if c.kind != "blank")
 
@@ -391,7 +419,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.19", unit="column",   # 1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.20", unit="column",   # 1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -479,14 +507,15 @@ class RowSegmentStep(Step):
             lay_kw: dict = {}
             forced_jz = book_forced_jz.get((page, gc.col))
             forced_main = book_forced_main.get((page, gc.col))
+            lay_alt = None     # 闸版格网（抬头级数听闸、表只管格的有无），见下
             if lay is not None:
-                n_raised_col = int(lay.get("raised", 0))
-                top_slack = gc.border_top if n_raised_col else gc.top_slack
                 occ = set(lay["slots"])
-                lay_kw["slot_mask"] = slot_mask_from_occupied(occ, n_body_col, n_raised_col)
-                notes = set(lay.get("notes", ()))
-                forced_jz = notes or None
-                forced_main = (occ - notes - set(lay.get("half", ()))) or None
+                want = int(lay.get("raised", 0))
+                if want != n_raised_col:
+                    lay_alt = (n_raised_col, gc.top_slack, {s for s in occ if s > 0 or s >= -n_raised_col})
+                n_raised_col = want
+                top_slack = gc.border_top if want else gc.top_slack
+                lay_kw, forced_jz, forced_main = _layout_kw(lay, occ, n_body_col, n_raised_col)
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
                         period=gate.period, ref_w=gate.ref_w, content_x=gc.content_x,
                         border_top=gc.border_top, border_bottom=gc.border_bottom,
@@ -498,25 +527,45 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
-            def _seg(n_body: int):
+            def _seg(n_body: int, alt: tuple | None = None):
+                n_r, t_s, l_kw, f_jz, f_main = (alt if alt is not None else
+                                                (n_raised_col, top_slack, lay_kw, forced_jz, forced_main))
                 return segment_column(
-                    img, period=gate.period, n_body_slots=n_body, n_raised=n_raised_col,
+                    img, period=gate.period, n_body_slots=n_body, n_raised=n_r,
                     border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
-                    top_slack=top_slack, content_x=gc.content_x,
+                    top_slack=t_s, content_x=gc.content_x,
                     ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
                     raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
                     resolved_cuts=col_resolved or None, cut_judge=judge,
                     pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                                  if pg_ == page and c_ == gc.col} or None,
                     forced_solo=book_solo.get((page, gc.col)),
-                    forced_jiazhu=forced_jz,
-                    forced_main=forced_main,
-                    detect_bottom_bar=p.detect_bottom_bar, **lay_kw,
+                    forced_jiazhu=f_jz,
+                    forced_main=f_main,
+                    detect_bottom_bar=p.detect_bottom_bar, **l_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
             r = _seg(n_body_col)
             prior_flags: list[str] = []
+            # 逐列格位先验的抬头级数与闸不一致时，两种格网都切，取格线穿字少的（打平用表的）。
+            # 表管「有没有抬头字」，图上有几个物理格位要看列图：殿本 vol04 产物包实测，按表硬改会坏两类列——
+            # ①表说抬头、列图却从版框顶起截（p84 c5、p65 c8「御」「欽」在版框上方没截到）：首个看得见的字被编成 -1，
+            #   整列格网错一位劈字；②表说不抬头、闸给了余量的低起列（p127 c1–2 从第 5 格起，字距比 period 大）：
+            #   压掉余量后空格压不短，格网整体上挤半格。但闸多给的那格在书名列上会把首字吸进 -1（研究文档 §六），
+            #   一律听闸也不行（vol04 新坏 10 列），所以按图二选一。只有约 7% 的列要多切一次。
+            if lay_alt is not None and r is not None:
+                n_r2, t_s2, occ2 = lay_alt
+                alt = (n_r2, t_s2) + _layout_kw(lay, occ2, n_body_col, n_r2)
+                r2 = _seg(n_body_col, alt)
+                if r2 is not None:
+                    k1, k2 = _cut_rows(img, r.cells, p.ink_threshold), _cut_rows(img, r2.cells, p.ink_threshold)
+                    if k2 < k1:
+                        r = r2
+                        n_raised_col, top_slack = n_r2, t_s2
+                        base = dict(base, n_raised=n_raised_col, top_slack=top_slack)
+                        prior_flags.append(f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格），"
+                                           f"穿字格线 {k1}→{k2}")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
             # 逐列字数先验与 YOLO 并格（同列互斥，两套先验叠在一列上会打架）
             skip_cd = human_col or lay is not None

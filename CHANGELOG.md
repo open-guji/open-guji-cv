@@ -19,6 +19,7 @@
 ### Fixed
 - 语料库任何内容变了都要改版本号（用户 10-20）：`guji db push`／`sync` 推送前，最新一版清单登记的工作区文件被改、缺，或清单之外多了新语料文件 → 拒绝，提示先 `guji corpus build` 出新版本一起推；已发布的某一版 `manifest.json` 库里已有且本地不同 → 拒绝（旧版本不可改）。只看工作区文件；引擎仓里的表仍由起跑前硬校验管。10-20 的起因：v1 登记的 `freq.json`、`l2/jys.json` 钉选后被重新生成，`glyph_match` 因此拒跑。改 `core/corpus_pin.py`、`datastore/workcopy.py`，`code_hash` 不变。
 - `guji db pull`／`sync` 遇到库里引用、R2 上却没有（404）的图不再停下：跳过、stderr 打一行并在 `materialize` 结果的 `missing_images`（相对路径→sha）里列出，其余照常还原。要像以前一样遇到就停：`GUJI_DATA_MISSING_BLOBS=error`。不碰任何 Step，`code_hash` 不变。
+- Step3 逐列格位先验 `layout_prior`：表的抬头级数与闸（`n_raised_hint`）不一致时，两种格网都切，取格线横穿字少的（打平照旧用表的）。起因：殿本 vol04 产物包对照组／版面先验组（`cv0.4.7-c1-g-82293e-*`）看图——①p84 c5、p65 c8「御」「欽」抬头在版框上方、列图没截到，按表硬设抬头格把首个看得见的字编成 -1，整列格网错一位劈字（84:5 放行错字「一」）；②p127 c1–2 低起列（从第 5 格起），按表压掉闸给的抬头余量后格网上挤半格。一律听闸也不行：书名列首字会被吸进 -1（vol04 实测新坏 10 列）。vol04 全册只有 7 列改走闸的格网（8:8、9:8、65:8、84:5、127:1、127:2、220:1），其余列与 v0.4.7 逐字节相同；穿字格线（对照组 1,810 条）旧版 1,808 → 新版 1,783。Step3 产物 flags 记 `layout_raise_gate`。开关不开的书不受影响。PATCH；`row_segment` 版本 1.20，`code_hash` b72e737b7a45a1df → d4f420cf47082535。
 - `guji products diff --images` 看图页：`bbox_page` 是右上原点，原来直接当左上原点裁、画框，除正中那列外都画到镜像位置的另一列（vol04 R1 验收时发现）。现在先 `bbox_tr_to_tl` 再裁。报告数字不受影响。不碰任何 Step，`code_hash` 不变。
 - `guji products pack push --label`：标签先在本地按 Worker 的规则校验（ASCII 字母、数字、`_.-`，≤96 字符），中文等不合法标签直接报清楚，不再到 Worker 才报 `bad_path`（重跑 vol04-10 线程 10-20 用「v0.4.6-粗校」撞上）。不碰任何 Step，`code_hash` 不变。
 
