@@ -45,6 +45,8 @@ class IdsSpec:
     which: int = 1              # 决定字的是第几段（1＝下／右）
     min_margin: float = 0.02    # 第一名减第二名不到这个数就弃权
     min_class: int = 8          # 某类模板（真实刻例）少于这个数，判成它也弃权
+    by_form: bool = False       # True：模板按成员字分类（不经 IDS 拼字），切下的那一段直接和各字的同段比；
+                                # 用于两字差别不落在同一 IDS 部件上的异体对（叙敘、冊册、教敎，2026-10-20）
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -53,6 +55,12 @@ SPECS: dict[str, IdsSpec] = {
     # 留一册（模板不含本册）：0.02 → 64／10／0，0.04 → 57／17／0；不设门槛时两格错（vol04 參→㕘），池图 margin 0.019、0.004，
     # 换成线上 char_patch 是 0.026、0.022（同格两种图 margin 差可到 ±0.018）。所以取 0.04（宁可弃权）。叅不足 8 例，永不给。
     "can": IdsSpec(frame="⿱厽{}", orient="h", prior=0.52, min_margin=0.04),
+    # 以下三组（2026-10-20）：模板＝sheldon 合审裁过的殿本 vol04–10 格（中心库 confirm 事件），按字分类（by_form）。
+    # 按册留一（判某册时模板不含该册，含 min_class 门槛）：叙敘 23 格 → 17 对／6 弃权／0 错；冊册 16 格 → 13／3／0（册 只 3 例，永不给）；
+    # 教敎 28 格 → 24／4／0（margin 0.0 时 4 错，所以门槛 0.02）。厯歴 按册留一有错、啓啟 只一册有图，都未登记。
+    "xu": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
+    "ce": IdsSpec(frame="", orient="h", prior=0.5, which=1, min_margin=0.02, by_form=True),
+    "jiao": IdsSpec(frame="", orient="h", prior=0.5, which=0, min_margin=0.02, by_form=True),
 }
 
 
@@ -156,6 +164,8 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     from .registry import GROUPS
     spec = spec or SPECS[g]
     members = GROUPS[g].members
+    if spec.by_form:
+        return _judge_by_form(gray, bank, spec, members)
     v = solve_two(np.asarray(gray), bank, _resolver(g), spec.frame, spec.orient, spec.prior,
                   which=spec.which, min_margin=0.0)
     m = float(v.margins[0]) if v.margins else 0.0
@@ -172,6 +182,42 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(v.char, conf=m, why="agree", via="ids", extra=extra)
+
+
+def _judge_by_form(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
+    """按字分类：自动缝切开，取第 `which` 段，与各成员字的同段模板比最近邻（`ids_two._choose_norm`）。"""
+    from .ids_segment import ink_of
+    from .ids_two import _choose_norm, auto_cut, part_of
+    g = np.asarray(gray)
+    if not ink_of(g).any():
+        return GroupVerdict(None, why="abstain:blank", via="ids")
+    pl = auto_cut(g, spec.orient, spec.prior)
+    x = part_of(g, pl, spec.orient, spec.which) if pl is not None else None
+    if x is None:
+        return GroupVerdict(None, why="abstain:slot", via="ids")
+    best, m, scores = _choose_norm(x, bank, 0.0)
+    extra = {"form": best, "margin": round(float(m), 4), "scores": {k: round(float(v), 4) for k, v in scores.items()}}
+    if best is None or best not in members:
+        return GroupVerdict(None, why="abstain:slot", via="ids", extra=extra)
+    if m < spec.min_margin:
+        return GroupVerdict(None, conf=m, why="abstain:low_margin", via="ids", extra=extra)
+    n = len(bank.get(best) or ())
+    if n < spec.min_class:
+        return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
+    return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+def form_templates(cells, spec: IdsSpec) -> dict:
+    """`cells = [(成员字, 灰度图), …]`（人裁过的真实刻例）→ by_form 模板 `{字: [归一段图,…]}`，与线上同一量化。"""
+    from .ids_two import auto_cut, part_of
+    bank: dict = {}
+    for form, gray in cells:
+        g = np.asarray(gray)
+        pl = auto_cut(g, spec.orient, spec.prior)
+        x = part_of(g, pl, spec.orient, spec.which) if pl is not None else None
+        if x is not None:
+            bank.setdefault(form, []).append(quantize(x).astype(np.float32) / 255.0)
+    return bank
 
 
 def judge(g: str, gray) -> GroupVerdict:
