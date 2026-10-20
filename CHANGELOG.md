@@ -32,6 +32,7 @@
 - `scripts/check_rc_target.py <rc 分支>`（GUJI-657）：合 PR 前核对目标待发分支是否已发版（远端有 `vX.Y.Z` 返回 1 并提示改投哪条；不是最新待发分支返回 2）。只读，用 `git ls-remote`。不碰任何 Step，`code_hash` 不变。
 - 粗校出口报告单列「钉版」一行（GUJI-656）：`collect_exit.py` 读册配置的 `cv_version`、`corpus`、`glyph_pin`，没钉的标 ⚠，只提示、不挡出口；规矩见 `doc/版本号规矩.md` 第七节（每波开工发一个正式 tag，各册钉 tag＋语料号＋字形库号）。不碰任何 Step，`code_hash` 不变。
 
+- `scripts/zhengli/ledger.py`（GUJI-667）：粗校台账与统一人审率口径（用户 10-20 定：正文页送精校的待审格 ÷ 正文页字格，不含标题槽、非字格；重切清单、非正文另报），`review_rate()` 纯函数＋CLI 追加一行到数据目录 `feedback/lists/ledger/<册>.jsonl`。不碰任何 Step，`code_hash` 不变。
 ### Changed
 - `scripts/export_guji_format.py --format char-cord` 的 `--text-version` 改为必填、不再缺省 0.1.0（GUJI-679）：已在 book-text 上的册要写线上现行版本，以前缺省写 0.1.0，出补丁前得先手工改回。`zl.py` 导出步显式传版本。不碰任何 Step，`code_hash` 不变。
 

@@ -286,8 +286,8 @@ def test_ws_name_marker_then_yaml_then_error(tmp_path, monkeypatch):
     monkeypatch.delenv("GUJI_DATA_BRANCH", raising=False)
     with pytest.raises(SystemExit):
         PK._ws_name()
-    (ws / "workspace.yaml").write_text("id: siku-zongmu\n", encoding="utf-8")
-    assert PK._ws_name() == "siku-zongmu"
+    (ws / "workspace.yaml").write_text("id: demo-ws\n", encoding="utf-8")
+    assert PK._ws_name() == "demo-ws"
     (ws / ".central.json").write_text(json.dumps({"ws": "from-marker", "branch": "main"}), encoding="utf-8")
     assert PK._ws_name() == "from-marker"
     monkeypatch.delenv("GUJI_WORKSPACE")
