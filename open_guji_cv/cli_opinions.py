@@ -174,6 +174,35 @@ def cmd_locate(args) -> None:
         _print(f"  缺：{'、'.join(r['missing'])}")
 
 
+# ---------------- pack ----------------
+
+def cmd_pack(args) -> None:
+    from .opinions import evidence as E
+    from .opinions.textsrc import locate
+    st = _store(args)
+    bt = _bt(args)
+    fetch = E.ImageFetcher(Path(args.cache) if args.cache else None)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    evs = []
+    texts: dict = {}
+    for i in args.ids:
+        op = st.get(i)
+        if op.vol not in texts:
+            texts[op.vol] = (bt.char(op.vol), bt.cord(op.vol))
+        char, cord = texts[op.vol]
+        if char is None or cord is None:
+            raise SystemExit(f"book-text（{bt.describe()}）里没有第 {op.vol} 章的 char／cord")
+        ev = E.build(op, char, cord, fetch, out, window=args.window, others=E.same_cell_others(st, op),
+                     located=locate(op, st.text_versions, bt))
+        evs.append(ev)
+        nx = ev.get("next_after_target")
+        _print(f"{op.id}：{ev['vol']} {'、'.join(ev['target'])}  上下文 {ev['context']}  "
+               f"下一格 {nx['label'] + ('（' + nx['note'] + '）' if nx.get('note') else '') if nx else '—'}")
+    png, md = E.sheet(evs, out)
+    _print(f"证据包 {len(evs)} 条 → {out}（{png.name}、{md.name}）")
+
+
 # ---------------- 注册 ----------------
 
 def _common(p, store: bool = True) -> None:
@@ -228,6 +257,15 @@ def add_parser(sub) -> None:
     p.add_argument("--github", action="store_true", help="没有本地检出时从 GitHub raw 取当前文本")
     p.add_argument("--json", action="store_true")
     p.set_defaults(func=cmd_locate)
+
+    p = s.add_parser("pack", help="出证据包（裁图、条带、上下文、marks）＋ sheet.png／sheet.md")
+    p.add_argument("ids", nargs="+")
+    _common(p)
+    p.add_argument("--out", required=True)
+    p.add_argument("--book-text", default=None, help="book-text 本地检出（缺省 GUJI_BOOK_TEXT，再缺走 GitHub raw）")
+    p.add_argument("--cache", default=None, help="IIIF 整页原图缓存目录（缺省 $GUJI_DATA_HOME/_shared/iiif）")
+    p.add_argument("--window", type=int, default=3, help="意见格前后各取几个单元（字格与 marks）")
+    p.set_defaults(func=cmd_pack)
 
     p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
     p.set_defaults(func=cmd_schema)
