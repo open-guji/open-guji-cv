@@ -89,8 +89,11 @@ class RowSegmentStep(Step):
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
+        from ..feedback.lookup import resolved_manual_cells as _resolved_manual
+        manual = {k[1]: v for k, v in _resolved_manual(ctx.book.id).items() if k[0] == page}
         if p.roster_pages and page in set(_expand_pages(p.roster_pages)):
-            return {"cells": self._run_roster(ctx, p, page, gate, wins)}
+            pc = self._run_roster(ctx, p, page, gate, wins)
+            return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
         # 人裁回流：workspace 裁决表里这本书已裁决的切点（feedback/lookup.py，
         # **不读 open-guji-dataset**），按 (页,列) 筛出 slot_above → kind 传给
         # segment_column 收敛候选。裁决不进指纹，该页下次重跑才生效（见 lookup 注）。
@@ -211,7 +214,8 @@ class RowSegmentStep(Step):
                                                for c in cp.candidates],
                                        ) for cp in r.cut_candidates],
                                    **base))
-        return {"cells": PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)}
+        pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
+        return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
 
 
     # ── 职名页分支 ────────────────────────────────────────────────────
@@ -291,6 +295,50 @@ class RowSegmentStep(Step):
             out.append(ColumnCells(ok=True, n_body_slots=pos, cells=cells, boundaries=[],
                                    em=float(rc.em), flags=["roster", *rc.flags], **base))
         return PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
+
+
+def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: GateManifest,
+                        wins: PageWindows) -> PageCells:
+    """人工指定的整列格（`lookup.resolved_manual_cells`）替换算法切出的那一列。
+
+    与职名页同一套下游约定：列级 flags 带 `roster`（闸3 不按版式格数拦、Step4 不按格线裁）加 `manual_cells`，
+    `boundaries` 为空；雙行 a/b 同 slot 共 pos，`gap_center` = 两行之间的缝。未过交接闸的列不动。"""
+    if not manual:
+        return pc
+    page_w = wins.page_size[0]
+    cols = []
+    for cc in pc.columns:
+        spec = manual.get(cc.col)
+        gc = next((g for g in gate.columns if g.col == cc.col), None)
+        if spec is None or gc is None:
+            cols.append(cc)
+            continue
+        wrec = wins.column(cc.col)
+        mapper = None
+        if wrec is not None:
+            mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                  wrec.top_y, wrec.bottom_y)
+        a_x = [c["x0"] for c in spec if c.get("sub") == "a"]
+        b_x = [c["x1"] for c in spec if c.get("sub") == "b"]
+        gap = (min(a_x) + max(b_x)) / 2.0 if a_x and b_x else None
+        cells: list[CellRec] = []
+        for order, c in enumerate(spec):
+            kind = c.get("kind") or "char"
+            cells.append(CellRec(
+                slot=int(c["slot"]), pos=int(c["slot"]), y0=float(c["y0"]), y1=float(c["y1"]),
+                x0=float(c["x0"]), x1=float(c["x1"]), kind=kind, sub=c.get("sub"), order=order,
+                gap_center=gap if kind.startswith("jiazhu") else None, raised=False,
+                flags=["manual"],
+                quad_page=(None if mapper is None else
+                           [(round(x, 2), round(y, 2))
+                            for x, y in mapper.quad_tr(c["x0"], c["y0"], c["x1"], c["y1"])])))
+        n_pos = len({c.pos for c in cells})
+        cols.append(ColumnCells(
+            ok=True, n_body_slots=n_pos, cells=cells, boundaries=[], em=None,
+            flags=["roster", "manual_cells"], col=cc.col, n_raised=0, period=gate.period,
+            ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
+            border_bottom=gc.border_bottom, top_slack=0.0))
+    return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
 
 
 def _slot_to_pos(slot: int, n_raised: int) -> int:
