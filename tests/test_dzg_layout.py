@@ -98,3 +98,21 @@ def test_row_segment_off_switches_not_in_params_dump(tmp_path):
     d = on.model_dump()
     assert d["layout_prior"] == str(p) and len(d["layout_fingerprint"]) == 16
     assert params_hash(on) != params_hash(RS.RowSegmentParams())
+
+
+def test_cut_rows_counts_only_lines_through_ink():
+    """格线穿字判据：线落在字缝里不算，横穿字身才算；空格之间、夹注 a/b 之间不算。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _cut_rows
+    img = np.full((300, 100), 255, np.uint8)
+    img[10:90, 20:80] = 0                      # 字一：10–90
+    img[110:190, 20:80] = 0                    # 字二：110–190
+    ok = [C(y0=0, y1=100, kind="char", sub=None, slot=1), C(y0=100, y1=200, kind="char", sub=None, slot=2),
+          C(y0=200, y1=300, kind="blank", sub=None, slot=3)]
+    assert _cut_rows(img, ok) == 0
+    bad = [C(y0=0, y1=50, kind="char", sub=None, slot=1), C(y0=50, y1=150, kind="char", sub=None, slot=2),
+           C(y0=150, y1=300, kind="char", sub=None, slot=3)]
+    assert _cut_rows(img, bad) == 2
+    jz = [C(y0=0, y1=100, kind="jiazhu_a", sub="a", slot=1), C(y0=50, y1=100, kind="jiazhu_b", sub="b", slot=1)]
+    assert _cut_rows(img, jz) == 0
