@@ -92,7 +92,7 @@ def test_judge_by_form_classifies_by_member_char():
 
 
 def test_repo_by_form_banks_load():
-    for g in ("xu", "ce", "jiao"):
+    for g in ("xu", "ce", "jiao", "qik", "lih", "jue"):
         assert O.SPECS[g].by_form and O.has_bank(g), g
         from open_guji_cv.groups.registry import GROUPS
         assert set(O.load_bank(O.bank_path(g))) <= GROUPS[g].members, g
