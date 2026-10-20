@@ -3,11 +3,10 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 在待发分支的 `## [X.Y.Z] - 待发` 下加一行；发版时把「待发」改成日期（见版本号规矩第三节）。
 
-## [0.4.7] - 待发
-
-待发分支 `rc/v0.4.7`。
+## [0.4.7] - 2026-10-20
 
 ### Fixed
+- 标点分段（`render/siku_extract.py`、`render/reflow_text.py`，#239）：抬头／平抬／差一格改为软分段，连起来交模型断句后再定。只动渲染出口，不碰任何 Step，`code_hash` 不变。
 - 导出（`formats/guji_page_cv.py`）：排除名单格（seg_defect／crop_defect）人已给字（`evidence.human_char`）的，字位 `method=human`、`review=human`，不再记 `pending`、不再标 `lacuna: defect`（文本本来就出这个字）。此前这类格在 pages.json 里仍是 pending（vol02 重跑后 124 格），顺带让待审单、2c 把它们当没裁。只动导出出口，不动任何 Step，`code_hash` 不变。非字、原刻残（damaged）、无人给字的名单格不变。
 
 ### Changed
