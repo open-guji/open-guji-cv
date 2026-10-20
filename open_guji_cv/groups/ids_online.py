@@ -83,9 +83,11 @@ SPECS: dict[str, IdsSpec] = {
     # （ids_solver.TOP_WIN／BOT_WIN，bank 的 4|、5| 槽）。留一：34 对／8 弃权／0 错（覆盖 81%）；
     # 8 个弃权中 6 个是读对了但 Unicode 无此组合（彑米糸大，nearest 旗）；sheldon 10-20 定「彑米糸大 ≡ 𢑴，不用人审」→ nearest_ok：
     # 加上后 40 对／2 弃权／0 错（覆盖 95%）。
-    # 阈值平台：top_hog 0.0–0.08、mid_hog 0.08–0.20、bot_hog 0.05–0.2 结果都一样。
+    # 第三轮（10-20 sheldon 补点 40 格部件读法，共 82 格）：中段也改比例窗口（MID_WIN，bank 的 6| 槽），不再依赖任何缝；
+    # 三段都是「窗口＋HOG＋岭回归」，82 格留一**三个槽全部读对**（竖缝版中段 1–3 错）。门槛取 0.05（全对，只是给新数据留保护）：
+    # 82 对里 79 格给字、3 格 margin<0.05 弃权，0 错；0.1 → 77 格，0.2 → 71 格。
     "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
-                         top_hog=0.05, mid_hog=0.15, bot_hog=0.1, nearest_ok=True),
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True),
     # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
     # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
     # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
