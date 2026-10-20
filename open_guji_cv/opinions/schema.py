@@ -124,7 +124,7 @@ class Opinion:
             e.append("缺 ts")
         return e
 
-    def validate(self) -> "Opinion":
+    def validate(self) -> Opinion:
         e = self.errors()
         if e:
             raise SchemaError(f"{self.id}: " + "；".join(e))
@@ -135,7 +135,7 @@ class Opinion:
         return {k: v for k, v in d.items() if v is not None and v != {} or k in ("target",)}
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Opinion":
+    def from_dict(cls, d: dict) -> Opinion:
         names = {f.name for f in fields(cls)}
         unknown = set(d) - names
         if unknown:
@@ -174,7 +174,7 @@ class LogEvent:
             e.append("applied 要带 data.text_version")
         return e
 
-    def validate(self) -> "LogEvent":
+    def validate(self) -> LogEvent:
         e = self.errors()
         if e:
             raise SchemaError(f"log {self.kind} {self.opinion}: " + "；".join(e))
@@ -184,7 +184,7 @@ class LogEvent:
         return {"ts": self.ts, "opinion": self.opinion, "kind": self.kind, "by": self.by, "data": self.data or {}}
 
     @classmethod
-    def from_dict(cls, d: dict) -> "LogEvent":
+    def from_dict(cls, d: dict) -> LogEvent:
         return cls(ts=d.get("ts", ""), opinion=d.get("opinion", ""), kind=d.get("kind", ""),
                    by=d.get("by", ""), data=d.get("data") or {})
 
@@ -205,6 +205,10 @@ class Triage:
     engine: str = ""
     #: 规则表给出的理由（为什么是这个 route），工具写
     rule: list | None = None
+    #: 起草的 CV 人裁事件（采纳后进 cv_events_todo，第二阶段补写）
+    draft_event: dict | None = None
+    #: 证据里一致的路数（字形库前一名、整理本、上下文…），自动采纳门槛用
+    evidence_agree: int | None = None
 
     def errors(self) -> list[str]:
         e = []
@@ -239,7 +243,7 @@ class Triage:
         return {k: v for k, v in d.items() if v not in (None, "", [])}
 
     @classmethod
-    def from_dict(cls, d: dict) -> "Triage":
+    def from_dict(cls, d: dict) -> Triage:
         names = {f.name for f in fields(cls)}
         return cls(**{k: v for k, v in (d or {}).items() if k in names},
                    **{k: "" for k in ("verdict", "route", "judge", "rationale_public")

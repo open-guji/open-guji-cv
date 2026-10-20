@@ -8,7 +8,13 @@ import jsonschema
 import pytest
 
 from open_guji_cv.opinions import schema as S
-from open_guji_cv.opinions.store import DuplicateId, LocalBackend, OpinionStore, StoreConflict, open_store
+from open_guji_cv.opinions.store import (
+    DuplicateId,
+    LocalBackend,
+    OpinionStore,
+    StoreConflict,
+    open_store,
+)
 
 
 def _op(n: int = 1, **kw) -> S.Opinion:

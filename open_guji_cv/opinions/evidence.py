@@ -154,7 +154,7 @@ def context(cells: list[dict], start: str, end: str, n: int = 12) -> str:
     if start not in seq or end not in seq:
         return ""
     i, j = seq.index(start), seq.index(end)
-    t = lambda xs: "".join(c["c"] for c in xs)   # noqa: E731
+    t = lambda xs: "".join(c["c"] for c in xs)
     return t(cells[max(0, i - n):i]) + "【" + t(cells[i:j + 1]) + "】" + t(cells[j + 1:j + 1 + n])
 
 

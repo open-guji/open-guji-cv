@@ -43,8 +43,8 @@ CHOICE_CATEGORY = {"char": "wrong", "none": "extra", "unsure": "unclear", "cut":
 _RE_ID_CARD = re.compile(r"(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)")
 _RE_PHONE = re.compile(r"(?<![\w])(?:\+?86[-\s]?|0086[-\s]?)?1[3-9]\d{9}(?!\d)")
 _RE_EMAIL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._%+-]*@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
-_RE_QQ_WX_ZH = re.compile(r"(QQ|微信)([\s:：号是为]{0,4})([0-9A-Za-z_-]{5,20})", re.I)
-_RE_VX_WX_EN = re.compile(r"\b(vx|wx)([\s:：号是为-]{1,4})([0-9A-Za-z_-]{5,20})", re.I)
+_RE_QQ_WX_ZH = re.compile(r"(QQ|微信)([\s:：号是为]{0,4})([0-9A-Za-z_-]{5,20})", re.IGNORECASE)
+_RE_VX_WX_EN = re.compile(r"\b(vx|wx)([\s:：号是为-]{1,4})([0-9A-Za-z_-]{5,20})", re.IGNORECASE)
 
 
 def desensitize(text):
@@ -445,6 +445,21 @@ def sort_key(op: Opinion):
     return (op.vol or "", cell_key(t["start"]) if t.get("start") else (0, 0, 0, ""), op.ts, op.id)
 
 
-__all__ = ["Incoming", "Sources", "Report", "ingest", "incoming", "read_central_web", "read_dir",
-           "fetch_public_feedback", "fetch_public_fixes", "from_fix_record", "from_public_fixes",
-           "from_cellreview", "from_feedback", "desensitize", "is_test", "now_iso"]
+__all__ = [
+    "Incoming",
+    "Report",
+    "Sources",
+    "desensitize",
+    "fetch_public_feedback",
+    "fetch_public_fixes",
+    "from_cellreview",
+    "from_feedback",
+    "from_fix_record",
+    "from_public_fixes",
+    "incoming",
+    "ingest",
+    "is_test",
+    "now_iso",
+    "read_central_web",
+    "read_dir",
+]

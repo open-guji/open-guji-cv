@@ -17,7 +17,6 @@
 """
 from __future__ import annotations
 
-import argparse
 import json
 import os
 import sys
@@ -203,6 +202,205 @@ def cmd_pack(args) -> None:
     _print(f"证据包 {len(evs)} 条 → {out}（{png.name}、{md.name}）")
 
 
+# ---------------- normalize ----------------
+
+def cmd_normalize(args) -> None:
+    """会话把一条自由文字（fb_ 或别的待规整意见）规整成一条或多条：原条 superseded，新条带 normalized_by。"""
+    from .opinions.ingest import describe
+    from .opinions.schema import Opinion, make_id
+    st = _store(args, by=args.by)
+    src = st.get(args.id)
+    if st.status(src.id) not in ("to_normalize", "new"):
+        raise SystemExit(f"{src.id} 状态是 {st.status(src.id)}，不规整")
+    raw = args.into.strip()
+    parts = json.loads(raw if raw[:1] in "[{" else Path(raw).read_text(encoding="utf-8"))
+    if isinstance(parts, dict):
+        parts = [parts]
+    new = []
+    for k, p in enumerate(parts, 1):
+        op = Opinion(id=make_id(src.channel, f"norm:{src.id}", k), book=src.book, vol=p.get("vol") or src.vol,
+                     channel=src.channel, raw_id=src.raw_id, voter=src.voter, ts=src.ts, target=p.get("target") or {},
+                     category=p["category"], proposal=p.get("proposal"), note=p.get("note") or src.note,
+                     normalized_by=args.by, extra={"from": src.id})
+        new.append(op)
+    for op in new:
+        st.add(op, log_data={"source": f"normalize {src.id}"})
+    st.log(src.id, "superseded", {"by": new[0].id, "all": [o.id for o in new], "reason": "规整"})
+    for op in new:
+        _print("  + " + describe(op))
+    if args.dry_run:
+        _print("[dry-run] 不写")
+        return
+    st.save()
+    _print(f"规整 {src.id} → {len(new)} 条（{st.backend.describe()}）")
+
+
+# ---------------- triage ----------------
+
+def _triage_one(st, bt, rules, op_id: str, a: dict) -> tuple:
+    from .opinions import rules as R
+    from .opinions.schema import Triage
+    from .opinions.textsrc import char_cells, cord_page, locate
+    op = st.get(op_id)
+    status = st.status(op.id)
+    located = locate(op, st.text_versions, bt) if bt is not None else None
+    rev = R.parse_revision(a.get("revision"))
+    if rev is None and bt is not None and (op.target or {}).get("start"):
+        char, cord = bt.char(op.vol), bt.cord(op.vol)
+        if char:
+            page = int(op.target["start"].split(":")[0])
+            rev = R.derive_revision(op, a["verdict"], char_cells(char), cord_page(cord, page) if cord else None,
+                                    guess=a.get("guess"))
+    if a["verdict"] in ("text_ok", "out_of_scope", "unclear"):
+        rev = None
+    route, why = R.route(op, verdict=a["verdict"], confidence=float(a["confidence"]), public=a.get("public") or "",
+                         profile=a.get("profile") or "published", revision=rev, status=status, located=located,
+                         evidence_agree=int(a.get("evidence_agree") or 0), human_cells=a.get("human_cells"),
+                         store=st, rules=rules, requested=a.get("route"))
+    if located and located.get("already"):
+        rev = None
+    reply = a.get("reply") or R.reply_template(a["verdict"], rev, op, a.get("public") or "")
+    tri = Triage(verdict=a["verdict"], confidence=float(a["confidence"]), rationale_public=a.get("public") or "",
+                 rationale_internal=a.get("internal") or "", evidence=a.get("evidence") or None, route=route,
+                 revision=rev, reply_draft=reply, judge=a["judge"], profile=a.get("profile") or "published",
+                 engine=a.get("engine") or "", rule=why, draft_event=R.draft_event(rev),
+                 evidence_agree=int(a["evidence_agree"]) if a.get("evidence_agree") not in (None, "") else None)
+    e = tri.errors()
+    if e:
+        raise SystemExit(f"{op.id}：" + "；".join(e))
+    return op, tri
+
+
+def cmd_triage(args) -> None:
+    from .opinions import rules as R
+    st = _store(args, by=args.judge)
+    bt = _bt(args) if (args.book_text or os.environ.get("GUJI_BOOK_TEXT") or args.github) else None
+    rules = R.load_rules(args.rules)
+    human = set(Path(args.human_cells).read_text(encoding="utf-8").split()) if args.human_cells else None
+    jobs = []
+    if args.from_tsv:
+        lines = [ln.rstrip("\n").split("\t") for ln in Path(args.from_tsv).read_text(encoding="utf-8").splitlines() if ln.strip()]
+        head = lines[0]
+        for row in lines[1:]:
+            d = dict(zip(head, row))
+            jobs.append((d.pop("id"), d))
+    else:
+        if not args.id or not args.verdict or args.confidence is None:
+            raise SystemExit("要 <id> --verdict --confidence（或 --from TSV）")
+        jobs.append((args.id, {"verdict": args.verdict, "confidence": args.confidence, "public": args.public,
+                               "internal": args.internal, "revision": args.revision, "route": args.route,
+                               "guess": args.guess, "evidence": args.evidence, "evidence_agree": args.evidence_agree,
+                               "reply": args.reply, "profile": args.profile, "engine": args.engine}))
+    for op_id, a in jobs:
+        a.setdefault("judge", args.judge)
+        a["judge"] = a.get("judge") or args.judge
+        a["human_cells"] = human
+        try:
+            op, tri = _triage_one(st, bt, rules, op_id, a)
+        except R.RuleError as e:
+            raise SystemExit(f"{op_id}：{e}")
+        st.log(op.id, "triaged", tri.to_dict(), by=args.judge)
+        rv = tri.revision or {}
+        _print(f"{op.id}：{tri.verdict}（{tri.confidence}）→ {tri.route}；{'；'.join(tri.rule or [])}")
+        if rv:
+            _print(f"  修订 {rv.get('class')}：{json.dumps(rv.get('cells'), ensure_ascii=False)}")
+        if tri.draft_event:
+            _print(f"  草稿事件 {json.dumps(tri.draft_event, ensure_ascii=False)}")
+        _print(f"  回复草稿：{tri.reply_draft}")
+    if args.dry_run:
+        _print("[dry-run] 不写")
+        return
+    st.save()
+    _print(f"写入判定 {len(jobs)} 条（{st.backend.describe()}）")
+
+
+# ---------------- to-user / decide / reply-drafts ----------------
+
+def cmd_to_user(args) -> None:
+    """交用户的意见出成审阅页数据（review-artifact skill 发页）：items.json＋README.md；有证据包目录就带上裁图路径。"""
+    import shutil
+    st = _store(args)
+    stat = st.statuses()
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    items = []
+    for op in st.opinions.values():
+        if stat[op.id] != "to_user":
+            continue
+        tri = st.last(op.id, "triaged")
+        d = tri.data if tri else {}
+        imgs = []
+        if args.pack:
+            pd = Path(args.pack) / op.id
+            for name in ("strip_marked.png",) + tuple(sorted(p.name for p in pd.glob("target-*.png"))):
+                if (pd / name).is_file():
+                    dst = out / "img" / f"{op.id}-{name}"
+                    dst.parent.mkdir(exist_ok=True)
+                    shutil.copyfile(pd / name, dst)
+                    imgs.append(str(dst.relative_to(out)))
+        items.append({"id": op.id, "vol": op.vol, "target": op.target, "category": op.category,
+                      "proposal": op.proposal, "note": op.note, "verdict": d.get("verdict"),
+                      "confidence": d.get("confidence"), "rationale_public": d.get("rationale_public"),
+                      "rationale_internal": d.get("rationale_internal"), "rule": d.get("rule"),
+                      "revision": d.get("revision"), "reply_draft": d.get("reply_draft"), "images": imgs,
+                      "options": ["accept", "reject", "discuss"]})
+    (out / "items.json").write_text(json.dumps(items, ensure_ascii=False, indent=1), encoding="utf-8")
+    md = ["# 交用户裁决的意见", "", "每条选 accept（采纳）／reject（不采纳）／discuss（公开讨论）。收回后 `guji opinions decide --from <裁决.json>`。", ""]
+    for it in items:
+        t = it["target"] or {}
+        md += [f"## {it['id']}", f"- 第 {it['vol']} 章 {t.get('start')}–{t.get('end')}：{t.get('check')} → {(it['proposal'] or {}).get('text')}",
+               f"- 判定 {it['verdict']}（{it['confidence']}）：{it['rationale_public']}", f"- 为什么交你：{'；'.join(it['rule'] or [])}",
+               f"- 修订：{json.dumps(it['revision'], ensure_ascii=False)}", f"- 回复草稿：{it['reply_draft']}", ""]
+    (out / "README.md").write_text("\n".join(md), encoding="utf-8")
+    _print(f"交用户 {len(items)} 条 → {out / 'items.json'}")
+
+
+def cmd_decide(args) -> None:
+    """收回的裁决 → log ``decided``；采纳的把草稿事件追加进 cv_events_todo（第二阶段补写成 CV 人裁事件）。"""
+    from .opinions.schema import DECISIONS, now_iso
+    st = _store(args, by=args.by)
+    rows = json.loads(Path(args.from_file).read_text(encoding="utf-8"))
+    if isinstance(rows, dict):
+        rows = rows.get("items") or rows.get("decisions") or [rows]
+    n = 0
+    for r in rows:
+        oid = r.get("opinion") or r.get("id")
+        dec = r.get("decision") or r.get("verdict") or r.get("choice")
+        if not oid or dec not in DECISIONS:
+            _print(f"  跳过 {r}")
+            continue
+        op = st.get(oid)
+        st.log(op.id, "decided", {"decision": dec, "by": r.get("by") or args.by,
+                                  **({"note": r["note"]} if r.get("note") else {})}, by=args.by)
+        if dec == "accept":
+            tri = st.last(op.id, "triaged")
+            d = tri.data if tri else {}
+            st.add_cv_todo({"opinion": op.id, "vol": op.vol, "draft_event": d.get("draft_event"),
+                            "revision": d.get("revision"), "ts": now_iso()})
+        n += 1
+        _print(f"  {op.id} → {dec}")
+    if args.dry_run:
+        _print("[dry-run] 不写")
+        return
+    st.save()
+    _print(f"记裁决 {n} 条（{st.backend.describe()}）")
+
+
+def cmd_reply_drafts(args) -> None:
+    st = _store(args)
+    stat = st.statuses()
+    n = 0
+    for op in st.opinions.values():
+        if stat[op.id] not in ("auto_accepted", "auto_rejected", "accepted", "rejected", "applied"):
+            continue
+        if st.last(op.id, "replied") is not None:
+            continue
+        tri = st.last(op.id, "triaged")
+        n += 1
+        _print(f"{op.id}\t{stat[op.id]}\t{(tri.data.get('reply_draft') if tri else '') or ''}")
+    _print(f"待回复 {n} 条（回写网站归 B2，第一阶段只出草稿）")
+
+
 # ---------------- 注册 ----------------
 
 def _common(p, store: bool = True) -> None:
@@ -266,6 +464,56 @@ def add_parser(sub) -> None:
     p.add_argument("--cache", default=None, help="IIIF 整页原图缓存目录（缺省 $GUJI_DATA_HOME/_shared/iiif）")
     p.add_argument("--window", type=int, default=3, help="意见格前后各取几个单元（字格与 marks）")
     p.set_defaults(func=cmd_pack)
+
+    p = s.add_parser("normalize", help="会话把自由文字规整成一条或多条（原条 superseded）")
+    p.add_argument("id")
+    _common(p)
+    p.add_argument("--into", required=True, help="JSON（或文件）：[{vol, target:{start,end,text_version}, category, proposal, note}]")
+    p.add_argument("--by", required=True, help="规整者（会话名）")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_normalize)
+
+    p = s.add_parser("triage", help="写判定（会话判、规则表定去向）")
+    p.add_argument("id", nargs="?")
+    _common(p)
+    p.add_argument("--verdict", choices=("text_ok", "accept", "lacuna_guess", "seg_issue", "out_of_scope", "unclear"))
+    p.add_argument("--confidence", type=float)
+    p.add_argument("--public", default="", help="公开理由，一句话")
+    p.add_argument("--internal", default="", help="内部理由")
+    p.add_argument("--revision", default=None, help="修订 JSON（或 @文件）；不给就按意见和 book-text 推")
+    p.add_argument("--guess", default=None, help="lacuna_guess 的推测字（不给取建议多出的那个字）")
+    p.add_argument("--route", default=None, choices=("auto_accept", "auto_reject", "to_user", "discuss", "forward"),
+                   help="只能要求比规则更保守的去向")
+    p.add_argument("--evidence", default=None, help="证据包路径或摘要")
+    p.add_argument("--evidence-agree", type=int, default=0, help="一致的证据路数（自动采纳门槛）")
+    p.add_argument("--reply", default=None, help="公开回复草稿（不给按模板起）")
+    p.add_argument("--profile", default="published", choices=("published", "proofing"))
+    p.add_argument("--judge", required=True, help="判定者：会话名或模型名")
+    p.add_argument("--engine", default="", help="引擎版本")
+    p.add_argument("--rules", default=None, help="规则表（缺省 config/opinions/rules.json）")
+    p.add_argument("--human-cells", default=None, help="用户亲裁过的格号清单文件（空白分隔）")
+    p.add_argument("--book-text", default=None)
+    p.add_argument("--github", action="store_true")
+    p.add_argument("--from", dest="from_tsv", default=None, help="批量：TSV，表头含 id verdict confidence public …")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_triage)
+
+    p = s.add_parser("to-user", help="交用户的意见出成审阅页数据")
+    _common(p)
+    p.add_argument("--out", required=True)
+    p.add_argument("--pack", default=None, help="证据包目录（guji opinions pack 的 --out），带上裁图")
+    p.set_defaults(func=cmd_to_user)
+
+    p = s.add_parser("decide", help="收回的裁决记 decided；采纳的草稿事件进 cv_events_todo")
+    _common(p)
+    p.add_argument("--from", dest="from_file", required=True)
+    p.add_argument("--by", default="user")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_decide)
+
+    p = s.add_parser("reply-drafts", help="列出已结案、待回复读者的意见和回复文字")
+    _common(p)
+    p.set_defaults(func=cmd_reply_drafts)
 
     p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
     p.set_defaults(func=cmd_schema)

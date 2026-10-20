@@ -77,7 +77,7 @@ class LocalBackend:
         return t, sha256_text(t)
 
     def write(self, name: str, text: str, base_sha: str | None) -> dict:
-        cur, sha = self.read(name)
+        _cur, sha = self.read(name)
         if sha != base_sha:
             raise StoreConflict(f"{self.root / name} 读后被改过（{base_sha} → {sha}），重读再写")
         self.root.mkdir(parents=True, exist_ok=True)
@@ -142,7 +142,7 @@ class OpinionStore:
         self._versions_dirty = False
 
     # ---- 读 ----
-    def load(self) -> "OpinionStore":
+    def load(self) -> OpinionStore:
         for key, name in FILES.items():
             self._text[key], self._sha[key] = self.backend.read(name)
         for d in _jsonl(self._text["opinions"] or ""):
