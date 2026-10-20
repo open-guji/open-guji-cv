@@ -16,14 +16,14 @@ def test_unreleased_newest_ok():
     assert code == 0                                   # rc tag 不算发版
 
 
-def test_released_points_to_next():
+def test_released_points_to_dev():
     code, msg = verdict("rc/v0.4.7", {"v0.4.6", "v0.4.7"}, HEADS)
-    assert code == 1 and "rc/v0.4.8" in msg
+    assert code == 1 and "改投 dev" in msg
 
 
-def test_released_without_next_branch():
-    code, msg = verdict("rc/v0.4.8", {"v0.4.8"}, HEADS)
-    assert code == 1 and "下一条" in msg
+def test_dev_ok_main_refused():
+    assert verdict("dev", set(), HEADS)[0] == 0
+    assert verdict("main", set(), HEADS)[0] == 4
 
 
 def test_not_newest_rc():
@@ -31,5 +31,5 @@ def test_not_newest_rc():
     assert code == 2 and "rc/v0.4.8" in msg
 
 
-def test_not_rc_branch():
-    assert verdict("main", set(), HEADS)[0] == 3
+def test_not_dev_or_rc():
+    assert verdict("feat/x", set(), HEADS)[0] == 3

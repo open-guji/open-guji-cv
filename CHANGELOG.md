@@ -5,9 +5,14 @@
 
 ## [0.4.8] - 2026-10-20
 
+### 流程
+- 分支与发版流程改为 **dev 集成＋发版时切 rc**（用户 10-20 定，`doc/版本号规矩.md` 第三节）：日常 PR 投 `dev`；准备发版时从 dev 切 `rc/vX.Y.Z` 测试，rc 只收本版修复并合回 dev；测完 rc 用 merge commit 合进 main、打 tag；main 不直接收 PR。`scripts/check_rc_target.py` 跟着改：目标 `dev` 返回 0，`main` 返回 4。
+
 ### 并入 main 上 v0.4.7 之后直接合入的改动
 - 汉字关系库 hanzi：总设计、B0/B1/B7（#256）、B2 全字表字形向量包（#276）、B3 以字找字候选池改由 hanzi 库给（#266）、B4 字统网按字典存派生事实（#267）、真书实测文档（#278）。
 - Step3 `row_segment` 人工指定整列格 `manual_cells`（#251，main 上记作 1.20；没有指定的列逐字节不变）。
+- hanzi 库 B2 续：向量包存 int8／fp16／fp32（#281）。
+- M10：待审分流脚本 `pending_route.py`（GUJI-688）、冻结册运行护栏（GUJI-694）（#279）。
 - 文档：人审率分析补列级对位救援的离线评估（#247）；M10 精校调研与总设计、已知错单脚本、`guji exit-check`（#273）。
 - **`row_segment` 版本合为 1.22**（本线 1.20／1.21 的 layout_prior 改动＋main 的 manual_cells），`code_hash` e82f08017e79c63a（rc）／bb4f3830915bcdf0（main）→ d5f4ceedcfbd2d06：各册 Step3 起判过期，冻结册按冻结规则不受影响；开关（layout_prior、manual_cells）不开的列产物逐字节不变。其余各步 `code_hash` 与 rc/v0.4.8 相同（相对 v0.4.7 变了的步见下面各条）。
 
