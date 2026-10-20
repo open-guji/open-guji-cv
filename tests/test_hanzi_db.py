@@ -147,6 +147,16 @@ def test_core_needs_no_download_parts_fetched_once(tmp_path):
         opener(parts=False).ids("歷")
 
 
+def test_crlf_checkout_still_counts_as_local(tmp_path):
+    """Windows 的 git 把 tsv 检出成 CRLF：仍认仓里那份，不去 R2 下载。"""
+    _, repo, r2, opener = _release(tmp_path)
+    for p in [*(repo / "config" / "hanzi" / "core").iterdir(), *(repo / "config" / "ids").iterdir()]:
+        p.write_bytes(p.read_bytes().replace(b"\n", b"\r\n"))
+    db = opener(parts=False)
+    assert r2.calls == 0
+    assert db.near("己", 1)[0][0] == "乙" and db.edges("㫖", "旨")
+
+
 def test_download_checks_sha(tmp_path):
     _, _, r2, opener = _release(tmp_path)
     r2.tamper = True

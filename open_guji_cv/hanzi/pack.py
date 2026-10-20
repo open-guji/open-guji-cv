@@ -39,6 +39,12 @@ def _download(url: str) -> bytes:
         return r.read()
 
 
+def _lf_sha(p: Path) -> str:
+    """仓里文件的 sha：先把 CRLF 统一成 LF。Windows 的 git（`* text=auto`）检出时会把 tsv 换成 CRLF，
+    清单记的是 LF 版的 sha；灌库读文本时换行本来就统一，内容一样。"""
+    return hashlib.sha256(p.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+
+
 def read_manifest(version: str | None = None, repo: Path = REPO) -> dict:
     base = Path(repo) / HANZI_CFG
     p = base / "manifest.json" if not version else base / "versions" / f"{version}.json"
@@ -67,7 +73,7 @@ class Pack:
     def _file(self, key: str, f: dict) -> Path:
         """清单里的一个文件 → 本机路径（仓里 → blob 缓存 → 下载），sha 必须对上。"""
         local = self.repo / (f.get("path") or (HANZI_CFG / key))
-        if local.exists() and sha256_file(local) == f["sha256"]:
+        if local.exists() and _lf_sha(local) == f["sha256"]:
             return local
         bp = blob_cache_path(f["sha256"], self.root / "blobs")
         if bp.exists() and sha256_file(bp) == f["sha256"]:

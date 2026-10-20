@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# hanzi 库：清单按 LF 字节记 sha，这里不做换行转换（见 open_guji_cv/hanzi/pack.py:_lf_sha）
+config/hanzi/** -text
