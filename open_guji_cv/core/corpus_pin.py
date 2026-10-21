@@ -321,7 +321,8 @@ def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEE
         if from_n is None:
             raise ValueError(f"册 {vol} 还没有钉子账：要给册 yaml 现在的 corpus: 号（from_n）来登首行")
         first = resolve_pin(ws, vol, from_n)
-        rows = [{**first, "date": datetime.date.today().isoformat(), "note": "迁移：原 corpus: %d" % from_n}]
+        rows = [{**first, "date": datetime.date.today().isoformat(), "note": "迁移：原 corpus: %d" % from_n,
+                 "legacy_token": True}]
     cur = rows[-1]
     new = {"global": cur.get("global") if global_ver is _KEEP else global_ver,
            "book": cur["book"] if book_ver is _KEEP else book_ver,
@@ -465,8 +466,8 @@ _TOKEN_CACHE: dict[tuple[str, int, str | None], str] = {}
 def corpus_token(ws: Path | None, version: int, vol: str | None = None, dev: bool = False) -> str:
     """这册语料库的指纹串：只取内容（清单条目哈希），不含版本号（sheldon 10-21）。
 
-    **兼容**：这册还没有钉子账（殿本现在的 ``corpus: 9``）时仍返回旧写法 ``corpus-vN``，已有产物不过期；
-    有了钉子账（分层版本迁移后）才切到内容哈希。开发中的总号（``dev``）一律用内容哈希。
+    **兼容**：这册还没有钉子账（殿本现在的 ``corpus: 9``），或这个总号是迁移行（账里 ``legacy_token: true``，
+    ``append_pin`` 登首行时写）时仍返回旧写法 ``corpus-vN``，已有产物不过期；之后新升的总号才用内容哈希。开发中的总号（``dev``）一律用内容哈希。
     钉死的总号：取清单里登记的条目，清单不可变，算一次就缓存；这样钉着的册不受工作副本改动影响。
     开发中的总号（``dev``）：取工作副本当前的文件，所以开发期间改了表产物自动判过期；
     发版时清单就是那一刻的文件，内容哈希不变，指纹不变，不用 ``fp-migrate``。"""
@@ -475,8 +476,9 @@ def corpus_token(ws: Path | None, version: int, vol: str | None = None, dev: boo
     if dev:
         items = collect(ws, cached=True) + (collect_vol(ws, vol, cached=True) if vol else [])
         return items_digest(items)
-    if not load_pins(ws, vol or ""):                   # 还没有钉子账的册：旧写法 corpus-vN，指纹逐位不变
-        return f"corpus-v{version}"                    # （P3 迁移时和 fp-migrate 一起切到内容哈希）
+    rows = load_pins(ws, vol or "")
+    if not rows or any(r["n"] == version and r.get("legacy_token") for r in rows):
+        return f"corpus-v{version}"                    # 没有钉子账，或迁移行（legacy_token）：旧写法，指纹逐位不变
     key = (str(ws), version, vol)
     tok = _TOKEN_CACHE.get(key)
     if tok is None:
