@@ -231,6 +231,24 @@ artifact 模式裁完之后，用 `Artifact action:"read"` 读回 HTML，粘进�
 
 ⚠️ **发布前必须先收割**。不先读回就重发，会盖掉线上还没收割的裁决。批次登记里有这道闸。
 
+### 4.2b 网站精校页的投票（2026-10-21）
+
+读者在 openguji.com 精校页点的六档票，用 `guji cellvotes` 转成人裁事件（逻辑见 `feedback/web_votes.py` 模块头）：
+
+```bash
+guji db pull -w <工作区>                                   # 票快照、人裁都从数据目录读
+guji pipeline keben_body_v2 vol04 --pages <有票的页> --to seed_admit -w <工作区>   # 锚要用现行产物
+guji cellvotes draft vol04 --site-book 96mid1ogzk --rev 004-r3 \
+    --cord <book-text>/Book/g/z/k/96mid1ogzk/default/004.cord.json --out <目录> -w <工作区>
+#   票刚投、每日同步还没跑：加 --from-kv（令牌环境变量 CELLREVIEW_TOKEN）
+#   看 <目录>/report.md、held.tsv；可写的在 drafts.jsonl
+guji cellvotes write vol04 <目录> --batch H-web-vol04-<日期> --reviewer <投票人> -w <工作区>
+guji db sync -w <工作区>                                   # 推库（先报告、等点头）
+```
+
+`--cord` 要用**出单那一版**的文本（rev 对应的 book-text 版本）：现行 cv 重切过的列，旧格号已经不是读者看到的字，
+这类格挂起不写。「无字」缺省挂起（排除名单只增不删），要落加 `--include-none`。
+
 ### 4.3 路由：裁决自动变成金标
 
 按「试算（不落库）」先看会写什么，确认后按「按路由表消费」。
