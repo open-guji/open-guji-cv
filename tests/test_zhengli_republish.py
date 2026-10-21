@@ -95,7 +95,7 @@ def test_from_pack_helpers(tmp_path, monkeypatch):
     b = {"events": 3, "status": {"valid": 2, "review": 1}, "newer": [], "id_mismatch": ["vol05:3:1:2"],
          "unbound": ["vol05:3:1:2"], "decided_not_admitted": []}
     md = "\n".join(rp.bind_md(b))
-    assert "定字人裁 3 条" in md and "扣错的 1 格" in md and "`vol05:3:1:2`" in md
+    assert "定字人裁 3 条" in md and "绑不上的 1 格不扣" in md and "`vol05:3:1:2`" in md
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)        # 不给沙箱产物根就不取包，免得覆盖正式 products/
     with pytest.raises(SystemExit, match="GUJI_PRODUCTS_DIR"):
         rp.main(["from-pack", "--book", "vol05", "-w", str(tmp_path), "--label", "x"])
