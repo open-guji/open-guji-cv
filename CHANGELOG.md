@@ -9,6 +9,9 @@
 
 PATCH（sheldon 10-21 定发）。配套语料库：殿本书库 v10＋全局层 b2（分层版本 P3），十册改钉 `corpus: 10`，`group_flow` 点名 `lv`、`zheng`。
 
+### Changed
+- 彝组 `yi_560` 改走 U-Net 切三段（#332，`groups/ids_unet.py`，纯 numpy 推理，权重 `config/groups/yi_560/unet.npz` 1.0 MB；窗口法退为后备），模板库按 U-Net 切分重建。按册留出（超参也只在训练册选）82 格：79 对／2 弃权／1 错，窗口法同口径错 5。`seed_admit` 的 `code_hash` 变（38f5371fe3279014）。
+
 ### Fixed
 - 中心库不再收人裁写锁 `*.write.lock`（空文件，曾被推进殿本、北行的 `files` 表，10-21 已从库里删掉）。
 
