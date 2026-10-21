@@ -6,7 +6,10 @@
 **幂等**：消费者把已应用的事件 id 记在 `feedback/consumed/<consumer>.jsonl`，
 再次收割同一批只应用新增的（手册「按 batch+seq 去重，不要整文件重灌」的机制化）。
 
-**同一字位的多条事件按 (batch, seq) 升序应用、后到覆盖**——沿用 seed_queue 的纪律。
+**同一字位的多条事件按 `replay_key` = (ts, batch, seq) 升序应用、后到覆盖**。早先写的是
+「按 (batch, seq)」——批次名的字典序不是时间序（`H-mojibake-fix-…` 排在 `vol01-…` 前面，
+更正事件反被旧裁决盖回去），2026-09-24 起 `lookup.human_chars` 已改按时间；2026-10-20 全部
+「后到覆盖」的地方统一到 `replay_key`（规范见 `doc/formats/人裁事件规范.md` §6）。
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ import time
 from pathlib import Path
 from typing import Iterable, Iterator, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # 人裁动作。前四种是 P1 就要用的；其余对齐既有 labels.jsonl / seed 事件的动词，
 # 收割旧格式时映射到这里，不新造词。
@@ -73,7 +76,7 @@ Kind = Literal[
                       #   后到覆盖，who 空 = 退回待审。改字那部分另写一条带 via 的 confirm。
     "unmark_jiajie",  # 撤一条通假字对（payload: pair, book）→ 从 jiajie.tsv 删掉本书标的那行。
     # ── 字形库体检（2026-09-25，字形库 03）。见 feedback/glyph_audit.py。
-    "glyph_audit",    # 库里一个刻例定的字对不对（payload: v∈ok/near_form/evict/relabel,
+    "glyph_audit",    # 库里一个刻例定的字对不对（payload: v∈ok/near_form/evict/relabel/fidelity,
                       #   instance_id, key, target, char, peer, peer_char, flags）
     # ── 打回结案（2026-09-27，总览/13 并入总览/15，见 feedback/returns.py）。
     "return_resolve", # 本步待办卡上人点了「已修」/「不是问题」（payload: resolution∈
@@ -132,6 +135,21 @@ class EventTarget(BaseModel):
     slot: int | None = None
     anchor: dict | None = None      # §3.4 的锚点：space / bbox / quad / content_sha / product_key
 
+    @model_validator(mode="after")
+    def _fill_from_key(self) -> "EventTarget":
+        """book/page/col/slot 全空、key 解析得出 → 从 key 补上（2026-10-20）。
+
+        这四个字段本来就是 key 的拆分（写入口 `parse_card_id(key)` 填）。09-17 之前 `parse_card_id`
+        不认 `vol\\d+` 以外的册名，bxgb 822 条定字、100 条切线落盘时四项全空；按 `target.book` 过滤的
+        读者（`bindings._return_trigger_events`、控制台按册列事件）就漏了它们。只补全空的，
+        有值的一律不动（不替人改账）。"""
+        if self.book is None and self.page is None and self.col is None and self.slot is None:
+            from .keys import parse_card_id
+            for k, v in parse_card_id(self.key).items():
+                if v is not None:
+                    setattr(self, k, v)
+        return self
+
 
 class Event(BaseModel):
     id: str
@@ -153,6 +171,16 @@ class Event(BaseModel):
     @property
     def order(self) -> tuple[str, int]:
         return (self.batch, self.seq)
+
+
+def replay_key(e: Event) -> tuple[str, str, int]:
+    """「后到覆盖」的唯一排序键：写入时间 `ts`，同一秒内再按 (batch, seq)。
+
+    凡是「同一单位多条事件取最新」「按序重放」都用它，别用 `Event.order`——那是批内序号，
+    跨批次比的是批次名字典序。2026-10-20 实测殿本（10-18 快照，1.5 万条）里有 351 个单位（confirm 291、
+    cutline 60）两种排序取到的最终裁决不同：`gold rebuild` 按批次名重放，金标裁决表与
+    文本层（`human_chars` 按时间）对不上。"""
+    return (e.ts, e.batch, e.seq)
 
 
 def _now() -> str:
@@ -374,12 +402,18 @@ class EventLog:
         evs = self.read(batch)
         return max((e.seq for e in evs), default=0)
 
-    def resolve(self, batch: str | None = None) -> dict[str, Event]:
-        """按 (batch, seq) 升序重放，返回每个 target.key 的**最终**事件（后到覆盖）。"""
-        evs = self.read(batch) if batch else sorted(self.iter_all(), key=lambda e: e.order)
+    def resolve(self, batch: str | None = None, kinds: Iterable[str] | None = None,
+                unit: str | None = None) -> dict[str, Event]:
+        """按 `replay_key` 升序重放，返回每个 target.key 的**最终**事件（后到覆盖）。
+
+        `kinds`／`unit` 给了就只看这些事件：切线（`unit=boundary`）与定字（`unit=cell`）的 key
+        长得一样（`vol02:87:2:10`），不过滤的话一条切线会顶掉同 key 的定字裁决。"""
+        evs = self.read(batch) if batch else self.iter_all()
+        want = set(kinds) if kinds is not None else None
         out: dict[str, Event] = {}
-        for e in evs:
-            out[e.target.key] = e
+        for e in sorted(evs, key=replay_key):
+            if (want is None or e.kind in want) and (unit is None or e.target.unit == unit):
+                out[e.target.key] = e
         return out
 
     # ── 幂等消费 ─────────────────────────────────────────────────────
@@ -436,7 +470,7 @@ class EventLog:
 
     def pending(self, consumer: str, batch: str | None = None) -> list[Event]:
         done = self.consumed_ids(consumer)
-        evs = self.read(batch) if batch else sorted(self.iter_all(), key=lambda e: e.order)
+        evs = sorted(self.read(batch) if batch else self.iter_all(), key=replay_key)
         return [e for e in evs if e.id not in done]
 
 
