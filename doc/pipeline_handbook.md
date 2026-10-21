@@ -1184,6 +1184,19 @@ context_decide 首页 6–7 s → 2 s，产物逐字节不变；seed_admit 76 s�
 - **容器内存看 cgroup**：`/proc/meminfo` 是整台宿主（15 GiB），cgroup 余量才 11 GiB；超了 cgroup 上限是直接 OOM 杀，不是换页变慢。
   页级并行压进程数已改认两者取小（`core/parallel.available_memory_gb`）。
 
+**冷启动端到端（vol06 150 页，空数据目录、空缓存、空产物，4 核云端，缺省配置）**：
+
+| 段 | 本轮前（卡上 10-19 记录）| 本轮 |
+|---|---|---|
+| `db pull` | 4.5–8 分 | 211 s |
+| `glyph-db rebuild` | （未单列）| 265 s → 133 s（派生表示多进程）|
+| 字体域两套 | 12–15 分 | 20 s 拷表（R2 下载另约 45 s）|
+| Step0–7 整册 | Step1–4 26 分 + Step5–7 55 分 | 2028 s（33.8 分，其中 glyph_match 1320 s）；开 `batch_knn` 估约 18 分 |
+| 缓存校验 | 约 5 分 | 1.3 s |
+| `close-check --tier rough` | 5–12 分 | 123 s → 31.5 s（`status()` 里参数每步只算一次）|
+
+合计约 41 分钟（开 `batch_knn` 约 25 分钟）；单进程内存峰值 2.2 GB，全树 PSS 峰值 3.8 GB。
+
 **冷启动的另一半是字体域本身**：逐字渲染两套 12.6 分钟（jigmo 485 s、iming 272 s，`--jobs 4`）。字体域只取决于字体文件、字表和渲染代码，
 做成预建件（`clustering/font_pack.py`）后拷表 43 s；R2 上压缩约 1.8 GB，8 路并发 44 MB/s 约 45 s。单路只有 11 MB/s，瓶颈在单连接。
 

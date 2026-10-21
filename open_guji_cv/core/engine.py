@@ -343,7 +343,7 @@ class Engine:
                 return None
             out[kind] = sha
         # 带开关的可选上游（`StepSpec.optional_consumes_when`）开关关着时不进指纹
-        for kind in live_optional_consumes(step.spec, self.ctx.params_for(step), self.book):
+        for kind in live_optional_consumes(step.spec, self._params(step), self.book):
             sha = self._upstream_sha(kind, page)
             if sha is not None:
                 out[kind] = sha
@@ -355,7 +355,7 @@ class Engine:
         把 `align_ref` 等标成 `upstream_stale`——它们这次根本不读 5-b。"""
         ups = self.pipeline.upstream(step.spec.id)
         off = set(step.spec.optional_consumes) - set(
-            live_optional_consumes(step.spec, self.ctx.params_for(step), self.book))
+            live_optional_consumes(step.spec, self._params(step), self.book))
         if not off:
             return ups
         wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
@@ -385,7 +385,7 @@ class Engine:
         不改放行逻辑、不改指纹；5-b 补跑后它的 sha 进指纹，下游自然判过期重算。
 
         → `[{kind, producer, switches, missing: [页...]}]`，没有缺口返回 `[]`。"""
-        on = gated_optional_on(step.spec, self.ctx.params_for(step), self.book)
+        on = gated_optional_on(step.spec, self._params(step), self.book)
         out: list[dict] = []
         for kind, switches in on.items():
             try:
@@ -402,9 +402,24 @@ class Engine:
         """真正缺的那些硬依赖——报错要点名它们，不是把 `consumes` 整串印出来。"""
         return [k for k in step.spec.consumes if self._upstream_sha(k, page) is None]
 
+    def _params(self, step: Step) -> BaseModel:
+        """`ctx.params_for(step)`；在 `status()` 里每步只算一次（`_pcache`）。
+
+        参数模型构造时会现算库指纹（`glyph_match.db_fingerprint`、`seed_admit` 的人裁形状指纹……），
+        库含字体域时一次要对 3 GB 的 glyph.db 做几回统计；`status()` 逐页逐步调，vol06 150 页
+        `close-check` 1a 光这个就 98 s（GUJI-647）。一次 `status()` 之内库不变，缓存只活在这一次调用里，
+        下一次查状态照样看得见人裁进库。跑批路径不走缓存，行为不变。"""
+        c = getattr(self, "_pcache", None)
+        if c is None:
+            return self.ctx.params_for(step)
+        p = c.get(step.spec.id)
+        if p is None:
+            p = c[step.spec.id] = self.ctx.params_for(step)
+        return p
+
     def fingerprint(self, step: Step, page: int) -> tuple[str | None, dict[str, str] | None, str]:
         ups = self.upstream_shas(step, page)
-        p = self.ctx.params_for(step)
+        p = self._params(step)
         ph = params_hash(p, step.spec.soft_params, step.spec.path_params)
         if ups is None:
             return None, None, ph
@@ -413,7 +428,7 @@ class Engine:
         return fp, ups, ph
 
     def self_hash(self, step: Step) -> str:
-        return self_hash(step, self.book, self.ctx.params_for(step))
+        return self_hash(step, self.book, self._params(step))
 
     # ── 状态 ─────────────────────────────────────────────────────────
     def page_status(self, step: Step, page: int) -> tuple[str, ManifestEntry | None]:
@@ -466,7 +481,7 @@ class Engine:
         page_state: dict[int, str] = {}
         # 软参数漂移（`StepSpec.soft_params`）：只报数、不改状态。老条目没记 `soft`
         # （软化之前跑的）也算漂移——不知道当时对的是哪个库。
-        soft_now = soft_values(step, self.ctx.params_for(step))
+        soft_now = soft_values(step, self._params(step))
         n_drift = 0
         reasons: dict[str, int] = {}
         code_only = 0
@@ -519,6 +534,13 @@ class Engine:
         列表时，这个 stale 会被记进 `seen`，沿 DAG 一路拖垮 `align_ref` 等
         以它为上游的下游 step——不管补跑多少次都好不了（2026-09-16 排查
         `test_route_snapshot` 不稳定时查出）。"""
+        self._pcache = {}
+        try:
+            return self._status(pages, steps, code_ok)
+        finally:
+            self._pcache = None
+
+    def _status(self, pages, steps, code_ok: bool) -> dict:
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         steps, _ = self._default_steps(steps)
         out: dict[str, dict] = {}

@@ -17,6 +17,8 @@
   - glyph_match 登记 `warm_first`：主进程建一次匹配器，fork 后共享。改前 dev 上库含字体域时 `--jobs 4` 四个 worker 各建一份（各约 3.5 GB），被 OOM 杀。
   - `guji pipeline` 跑多步时缺省每步一个子进程（`--isolate-steps`；`--no-isolate-steps` 退回单进程，`--json` 时不隔离）：vol06 单进程连跑到 seed_admit 主进程 3.5 GB，隔离后 seed_admit 1.95 GB、context_decide 1.48 GB。
   - 页级并行的可用内存改认 cgroup 上限（容器里 `/proc/meminfo` 看到的是整台宿主：云端 MemAvailable 15 GiB、cgroup 余量 11 GiB）；seed_admit 单 worker 内存登记 3.0 → 2.0 GB（实测主进程 1.95 GB、4 进程合计 PSS 3.3 GB），15 GB 的机器开得满 4 进程。
+  - `glyph-db rebuild` 派生表示（归一、骨架、HOG）多进程算（`--jobs`，缺省 CPU 数），主进程按原顺序写库，14 张表与单进程逐行相同：殿本 1.85 万例 163 s → 38 s，整条命令连补放人裁 265 s → 133 s。`import-font` 的 `--jobs` 缺省仍是 1。
+  - `close-check` 1a／`guji status`：一次 `status()` 里每步的参数只构造一次（构造时要对 glyph.db 算库指纹，库含字体域时 3 GB；原来逐页逐步现算）。vol06 close-check 粗校档 126 s → 31.5 s，各项结论逐行相同。
   - `guji cache verify`／`close-check` 1b：戳与现行产物对得上的页免查（引擎重跑一页先清再写、读时戳不对整页作废，这类缓存一定是这一代切的）。vol06 150 页 1.4 秒（原约 5 分钟）；`--full` 照旧全查。
 
 ### Fixed

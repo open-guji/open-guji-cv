@@ -69,11 +69,13 @@ def cmd_glyph_db(args):
             missing = [str(p) for p in extras if ".borrowed" in p.parts and not p.is_dir()]
             if missing:
                 print(f"借库不存在：{missing}（写中心库工作区名的，先 guji db pull 拉一次）"); sys.exit(1)
+            import os
+            jobs = getattr(args, "jobs", None) or (os.cpu_count() or 1)
             if extras:
                 print(f"借库（冷启动）：{', '.join(map(str, extras))}")
-                summary = rebuild_from_store(store_dir, db_path, extra_stores=extras)
+                summary = rebuild_from_store(store_dir, db_path, extra_stores=extras, jobs=jobs)
             else:
-                summary = rebuild_from_store(store_dir, db_path)
+                summary = rebuild_from_store(store_dir, db_path, jobs=jobs)
             db = None
             assert_db_not_silently_empty(db_path, store_dir)
             # 补放两次导出之间审进库、真源还没跟上的人裁（值守 #115，2026-09-27）；--no-replay 跳过
@@ -90,7 +92,7 @@ def cmd_glyph_db(args):
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
-                jobs=args.jobs, vertical=args.vertical,
+                jobs=getattr(args, "jobs", None) or 1, vertical=args.vertical,
                 use_pack=not getattr(args, "no_pack", False))
         elif args.action == "font-pack-push":
             summary = _font_pack_push(db, args)
@@ -212,9 +214,9 @@ def add_parser(sub) -> None:
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,
                    help="只导前 N 个字（import-font 冒烟测试用）")
-    p.add_argument("--jobs", type=int, default=1,
-                   help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
-                        "写库仍单线程）")
+    p.add_argument("--jobs", type=int, default=None,
+                   help="并行进程数：import-font 渲染（缺省 1）；rebuild 算派生表示（缺省 CPU 数）。"
+                        "渲染、归一、骨架、HOG 是纯 CPU，写库仍单线程，结果与单进程逐位相同")
     p.add_argument("--no-pack", action="store_true",
                    help="import-font 用：不找字体域预建件（本机或 R2），一律逐字渲染")
     p.add_argument("--keep-pack", action="store_true",
