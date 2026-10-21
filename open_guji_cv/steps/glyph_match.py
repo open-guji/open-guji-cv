@@ -264,6 +264,17 @@ class GlyphMatchParams(BaseModel):
     **会改产物**：矩阵乘与逐格乘的浮点累加次序不同，相似度末位不同（实测最大差 6e-7），前 10 名约
     1.5% 的查询换位，个别格的候选与判决随之变。开不开按波次窗口定，开前出差异单（`guji products diff`）。"""
 
+    font_tier: dict | bool | None = None
+    """分级查库（2026-10-21，GUJI-726）。None/false = 关（缺省，产物与参数指纹逐字节不变）。
+    开了以后每格先只查刻本库（库里 id 不以 `font:` 起头的条目，殿本约 1.8 万条）；刻本库「命中弱」时
+    再按现行做法查整库（含字体域，约 17.4 万条），那一格的结果与关着时相同。命中强（下面两条之一）
+    就用刻本库的结果，字体域不比：
+    - 判 same、没触发护栏；
+    - `cov` 不为 None 时：判 unsure、没触发护栏、首选 cov ≥ `cov`、比次优**异字**高 ≥ `margin`。
+    另外 `min_n` > 0 时，首选字在刻本库里不到 `min_n` 例的一律算弱。
+    `true` 或 `{}` 按缺省值开（`cov: null, margin: 0.03, min_n: 0`，即只认 same）。**会改产物**：
+    命中强的格不再看字体字形，前 10 名、候选、个别格的判决会变；调研与数字见 GUJI-726。"""
+
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
         # 没开时不进 model_dump：params_hash 靠它算，否则加这个字段就会把全部现役产物判过期
@@ -277,6 +288,8 @@ class GlyphMatchParams(BaseModel):
                 d.pop("borrow_fingerprint", None)
             if not d.get("batch_knn"):
                 d.pop("batch_knn", None)
+            if d.get("font_tier") in (None, False):
+                d.pop("font_tier", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -400,7 +413,14 @@ class GlyphMatchStep(Step):
         # 格级复用（core/reuse.py）：本步没变、只是上游重写了时，几何没动的格搬旧记录。
         from ..core.reuse import cell_reuse, log_reuse
         reuse = cell_reuse(ctx, self, page, "glyph_match")
-        if p.batch_knn:
+        tier = _FontTier.rule(p.font_tier)
+        if tier is not None:
+            # 合批只给刻本库那一档：查整库的格事先不知道，逐格算
+            sub = _keben_subset(matcher)
+            if p.batch_knn:
+                sub = _PageBatch(sub, _page_queries(ctx, page, chars, reuse, normalize_patch))
+            matcher = _FontTier(matcher, sub, tier)
+        elif p.batch_knn:
             matcher = _PageBatch(matcher, _page_queries(ctx, page, chars, reuse, normalize_patch))
         n_reused = n_total = n_timeout = 0
         out: list[ColumnMatch] = []
@@ -482,6 +502,8 @@ class GlyphMatchStep(Step):
                     cand_variants=cand_variants, near_shape=m.near_shape))
             out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
         log_reuse(ctx, self, page, n_reused, n_total)
+        if tier is not None:
+            log.info("glyph_match p%s: 分级查库 %d 次查询里 %d 次查了整库", page, matcher.n_query, matcher.n_full)
         if n_timeout:
             log.warning("glyph_match p%s: %d/%d 格超过 %gs 预算，记 timeout 转人审",
                         page, n_timeout, n_total, p.cell_budget_s)
@@ -555,6 +577,90 @@ class _PageBatch:
             if kw.get("deadline") is not None:      # 这一块的矩阵乘是 64 格共用的，不算进这一格的预算
                 kw["deadline"] += time.monotonic() - t0
         return self._m.match(norm, feat=self._feat(i), sims=self._S[i - c0], **kw)
+
+
+FONT_PREFIX = "font:"
+_SUBSETS: dict[int, tuple] = {}
+
+
+def _keben_subset(matcher):
+    """整库匹配器里刻本那部分（id 不以 `font:` 起头）组成的匹配器，`font_tier` 用。
+
+    浅拷贝原匹配器（配置、护栏、近形决胜原样），只换装库的几张表；特征矩阵抽成一份连续的（殿本 1.8 万条约
+    130 MB），归一图与特征行是原匹配器那几行本身，不复制。按原匹配器对象缓存，fork 出的 worker 共用主进程建的那份。"""
+    import copy
+    hit = _SUBSETS.get(id(matcher))
+    if hit is not None and hit[0] is matcher:
+        return hit[1]
+    rows = [j for j, iid in enumerate(matcher._ids) if not str(iid).startswith(FONT_PREFIX)]
+    sub = copy.copy(matcher)
+    sub._ids = [matcher._ids[j] for j in rows]
+    sub._chars = [matcher._chars[j] for j in rows]
+    sub._patches = [matcher._patches[j] for j in rows]
+    sub._feats = [matcher._feats[j] for j in rows]
+    sub._F = np.ascontiguousarray(matcher.library_matrix()[rows]) if rows else None
+    sub._char_set = set(sub._chars)
+    sub._rows_of = None
+    sub._cell_index = None
+    sub._cell_index_n = -1
+    n_of: dict[str, int] = {}
+    for c in sub._chars:
+        n_of[c] = n_of.get(c, 0) + 1
+    sub.n_keben = n_of
+    _SUBSETS.clear()                       # 只留最近一个库状态（同 seeding._MATCHER_CACHE）
+    _SUBSETS[id(matcher)] = (matcher, sub)
+    return sub
+
+
+class _FontTier:
+    """`font_tier`：先查刻本库，命中弱再查整库（见 `GlyphMatchParams.font_tier`）。其余属性转给整库匹配器。"""
+
+    def __init__(self, full, sub, rule: dict):
+        self._full = full
+        self._sub = sub
+        self._rule = rule
+        self._n_of = getattr(sub, "n_keben", {})          # 包了 _PageBatch 也取得到（它把属性转给被包的）
+        self.n_query = 0
+        self.n_full = 0
+
+    @staticmethod
+    def rule(cfg) -> dict | None:
+        if cfg is None or cfg is False:
+            return None
+        d = {"cov": None, "margin": 0.03, "min_n": 0}
+        if isinstance(cfg, dict):
+            unknown = set(cfg) - set(d)
+            if unknown:
+                raise ValueError(f"font_tier 不认识的键：{sorted(unknown)}")
+            d.update(cfg)
+        return d
+
+    def __getattr__(self, name):
+        return getattr(self._full, name)
+
+    def strong(self, m) -> bool:
+        """刻本库这一结果够不够用（够用就不查字体域）。"""
+        if m.guard is not None or not m.candidates:
+            return False
+        top, cov = m.candidates[0]
+        if self._rule["min_n"] > 0 and self._n_of.get(top, 0) < self._rule["min_n"]:
+            return False
+        if m.verdict == "same":
+            return True
+        if m.verdict != "unsure" or self._rule["cov"] is None or cov < self._rule["cov"]:
+            return False
+        nxt = next((v for c, v in m.candidates[1:] if c != top), None)
+        return cov - (nxt if nxt is not None else 0.85) >= self._rule["margin"]
+
+    def match(self, norm, **kw):
+        self.n_query += 1
+        m = self._sub.match(norm, **kw)
+        if self.strong(m):
+            return m
+        self.n_full += 1
+        kw.pop("feat", None)
+        kw.pop("sims", None)
+        return self._full.match(norm, **kw)
 
 
 def _timeout_rec(r, budget_s: float) -> MatchRec:
