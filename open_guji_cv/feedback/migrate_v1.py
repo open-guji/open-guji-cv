@@ -528,10 +528,15 @@ def main(argv=None) -> None:
                 if cur.fetchone():
                     raise SystemExit(f"{ws} 在 rev {rev} 之后有新写入；重跑本脚本")
 
+            # 上面的读已经让连接隐式开了事务；不先结束它，import_scans 的 transaction() 只是个保存点，
+            # 关连接时整次写入跟着回滚（10-21 第一次 --apply 就是这样白跑的，库没动）
+            conn.commit()
             ir = import_scans(conn, [sc], label=f"migrate_v1:{ws}@{rev}", actor="migrate_v1",
                               dry_run=not args.apply, source="migrate", guard=guard,
                               allow_delete=True, only_paths=set(changed))
             rep["import"] = ir.as_dict()
+            if args.apply and not src.changes_since(ws, rev, limit=1):
+                raise SystemExit(f"{ws}：写完库里没有新变更，写入没生效")
         json.dump(rep, sys.stdout, ensure_ascii=False, indent=1)
         print()
 
