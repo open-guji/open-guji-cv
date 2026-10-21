@@ -474,3 +474,67 @@ def test_next_text_says_jiyisi_never_high(tmp_path, monkeypatch):
         zl.st_vision_gate(ctx)
     t = (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
     assert "己已巳族" in t and "不记「高」" in t
+
+
+# ⑨ M9 基线（vol06 整册）撞到的几处（GUJI-653）
+def test_halve_jobs():
+    assert zl.halve_jobs(["guji", "pipeline", "--jobs", "4", "--from", "x"]) == ["guji", "pipeline", "--jobs", "2", "--from", "x"]
+    assert zl.halve_jobs(["guji", "--jobs", "1"]) is None and zl.halve_jobs(["guji"]) is None
+
+
+def test_broken_process_pool_is_lowjobs():
+    out = "concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly"
+    assert [act for rx, act, _ in zl.CLASSIFY if rx.search(out)] == ["retry-lowjobs"]
+
+
+def test_bg_wait_retries_with_half_jobs(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    seen = []
+
+    class P:
+        def __init__(self, cmd, stdout=None, **kw):
+            seen.append(cmd[cmd.index("--jobs") + 1])
+            stdout.write(b"BrokenProcessPool\n" if len(seen) == 1 else b"ok\n")
+            self.returncode = 1 if len(seen) == 1 else 0
+
+        def poll(self):
+            return self.returncode
+    monkeypatch.setattr(zl.subprocess, "Popen", P)
+    zl.bg_wait(ctx, ["guji", "pipeline", "--jobs", "4"], "t", poll=0)
+    assert seen == ["4", "2"]
+
+
+def test_ws_sparse_patterns_nested_layout():
+    """guji-workspace 是 仓根/<书目录>/data_full/<丛编>/<册>/，只取本册原图。"""
+    assert zl.ws_sparse_patterns("96mid1ogzk-書", "vol06") == ["/*", "!/*/data_full/*/*/", "/96mid1ogzk-書/data_full/*/vol06/"]
+
+
+def test_st_db_skips_without_central_marker(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    with pytest.raises(zl.Skip):
+        zl.st_db(ctx)
+
+
+def test_export_requires_text_version(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    monkeypatch.delenv("ZL_TEXT_VERSION", raising=False)
+    with pytest.raises(zl.Stop):
+        zl.st_export(ctx)
+    assert "ZL_TEXT_VERSION" in (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+
+
+def test_chapter_and_text_id(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.ws = tmp_path / "96mid1ogzk-欽定四庫全書總目"
+    monkeypatch.delenv("ZL_TEXT_ID", raising=False)
+    assert (zl.chapter_no(ctx), zl.text_id(ctx)) == ("006", "96mid1ogzk")
+
+
+def test_fallback_draft_lists_loose_columns(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.reports.mkdir(parents=True)
+    cc = {"items": [{"no": "2d", "data": {"loose": ["12:3", "40:7"]}}]}
+    f = zl.fallback_draft(ctx, cc)
+    rows = [r for r in f.read_text(encoding="utf-8").splitlines() if r and not r.startswith("#")]
+    assert rows == ["页\t列\t处理\t说明", "12\t3\t\t", "40\t7\t\t"]
+    assert zl.fallback_draft(ctx, {"items": [{"no": "2d", "data": None}]}) is None
