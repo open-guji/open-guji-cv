@@ -48,11 +48,12 @@ def _mid_name(rname: str) -> str:
 
 
 def solve(gray: np.ndarray, bank: dict, resolver: IdsResolver, polylines=None, min_margin: float = 0.05, vcut=None,
-          mid_hog: float | None = None, top_hog: float | None = None, bot_hog: float | None = None) -> IdsVerdict:
+          mid_hog: float | None = None, top_hog: float | None = None, bot_hog: float | None = None, windows: bool = True) -> IdsVerdict:
     """`bank = ids_parts.build_bank(...)`（位置 → 部件名 → 模板）；`polylines=(上/中, 中/下)` 缺省用直线基线。
     库里有 `bank[3]`（中段右半 糸／分）时，中段改认「竖切后的右半」：`vcut` 缺省用 `vertical_seam` 自动切。
     `mid_hog` 给了数：中段改用 HOG＋岭回归判别（`choose_hog`），判别值绝对值不到它就弃权；上下段仍用软 IoU 近邻。
     `mid_hog` 且库里有 `bank[6]`（中段窗口模板）：中段改认 `MID_WIN` 窗口，不再依赖竖缝。`bot_hog` 同理（`bank[5]`、`BOT_WIN`）。
+    `windows=False`（U-Net 切分版）：不用窗口，三段都用 HOG＋岭回归认 `polylines` 切出的部件（中段为竖切右半 `bank[3]`），门槛仍是 `top_hog`／`mid_hog`／`bot_hog`。
     `top_hog` 给了数且库里有 `bank[4]`（上段窗口模板）：上段改认「外框上 25%×左 70% 的窗口」（`TOP_WIN`），同样 HOG＋岭回归，不依赖上／中缝。"""
     ink = ink_of(gray)
     if not ink.any():
@@ -64,7 +65,7 @@ def solve(gray: np.ndarray, bank: dict, resolver: IdsResolver, polylines=None, m
     parts = split_parts(gray, mask)
     picks, margins = [], []
     for k in range(3):
-        if k == 1 and mid_hog is not None and bank.get(6):
+        if k == 1 and windows and mid_hog is not None and bank.get(6):
             best, m, _ = choose_hog(window_part(gray, *MID_WIN), bank[6], min_margin=mid_hog)
             picks.append(_mid_name(best) if best else None); margins.append(round(m, 4))
             continue
@@ -77,9 +78,11 @@ def solve(gray: np.ndarray, bank: dict, resolver: IdsResolver, polylines=None, m
                           else choose(rp, bank[3], min_margin=min_margin))
             picks.append(_mid_name(best) if best else None); margins.append(round(m, 4))
             continue
-        if k == 0 and top_hog is not None and bank.get(4):
+        if not windows and (top_hog, mid_hog, bot_hog)[k] is not None and k != 1:
+            best, m, _ = choose_hog(parts[k], bank[k], min_margin=(top_hog, mid_hog, bot_hog)[k])
+        elif k == 0 and windows and top_hog is not None and bank.get(4):
             best, m, _ = choose_hog(window_part(gray, *TOP_WIN), bank[4], min_margin=top_hog, cells=8)
-        elif k == 2 and bot_hog is not None and bank.get(5):
+        elif k == 2 and windows and bot_hog is not None and bank.get(5):
             best, m, _ = choose_hog(window_part(gray, *BOT_WIN), bank[5], min_margin=bot_hog, lam=1.0, cells=8)
         else:
             best, m, _ = choose(parts[k], bank[k], min_margin=min_margin)

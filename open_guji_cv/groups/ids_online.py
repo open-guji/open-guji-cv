@@ -53,6 +53,8 @@ class IdsSpec:
     nearest_ok: bool = False      # 三段版：IDS 无对应码位只能归近似字（nearest_variant 旗）时照样给字（彝：彑米糸大 ≡ 𢑴，sheldon 10-20 定）
     bot_hog: float | None = None  # 三段版：同上，下段（廾／大）用下部窗口 HOG＋岭回归
     mid_hog: float | None = None  # 三段版：给了数，中段（糸／分）改用 HOG＋岭回归判别，|判别值| 不到它弃权（上下段仍用 min_margin）
+    unet: str = ""              # 三段版：给了文件名（如 `unet.npz`，在组的 config_dir），三条缝改用 U-Net 切（纯 numpy 推理，不要 torch），
+                                # 三段都用 HOG＋岭回归认切出的部件，不用窗口；权重缺失 → 整格弃权 abstain:no_model（2026-10-21：按册留出 U-Net 错 1／窗口法错 5）
     whole: str = ""             # "pix"|"hog"：整字二类岭回归（`ids_whole`，不切缝；差别不在缝两侧的两字异体：呂吕、徵徴），
                                 # `min_margin` 当作判别值绝对值的门槛；非空时 frame/orient/prior/which 不用
     region: tuple = (0.0, 1.0, 0.0, 1.0)  # 整字版：取归一字块的哪一块（占宽高的 x0,x1,y0,y1）
@@ -86,8 +88,11 @@ SPECS: dict[str, IdsSpec] = {
     # 第三轮（10-20 sheldon 补点 40 格部件读法，共 82 格）：中段也改比例窗口（MID_WIN，bank 的 6| 槽），不再依赖任何缝；
     # 三段都是「窗口＋HOG＋岭回归」，82 格留一**三个槽全部读对**（竖缝版中段 1–3 错）。门槛取 0.05（全对，只是给新数据留保护）：
     # 82 对里 79 格给字、3 格 margin<0.05 弃权，0 错；0.1 → 77 格，0.2 → 71 格。
+    # 第四轮（10-21，sheldon 指出窗口法的参数和模板都在同一批 82 格上选，留一偏乐观）：改**按册留出**——留出一册，窗口参数／U-Net／模板
+    # 都只用其余九册：窗口法错 5 格（上段 4、中段 1，多数把握不低），**U-Net 切分 + HOG 岭回归只错 1 格**（vol05:74:7:10 极黑，把握 0.018 < 0.05 会弃权）。
+    # 所以线上改 U-Net 切三段（unet.npz，约 1.1MB，纯 numpy 推理）；窗口槽不再进库。
     "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
-                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True),
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True, unet="unet.npz"),
     # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
     # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
     # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
@@ -186,7 +191,7 @@ def fingerprint(groups) -> str:
         sp = GROUPS[g]
         ov = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_override.tsv"
         spec = hashlib.sha256(json.dumps(asdict(SPECS[g]), sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
-        parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}")
+        parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else ""))
     if not parts:
         return ""
     return "ids:" + ",".join(parts) + f",lv1={_sha(IDS_TABLE)}"
@@ -235,6 +240,44 @@ def _auto_three(gray):
     return pl, vertical_seam(ink, polylines_to_mask(ink.shape, *pl))
 
 
+@lru_cache(maxsize=8)
+def _load_unet_cached(path: str, sha: str):
+    from .ids_unet import NpNet
+    return NpNet(path)
+
+
+def unet_path(g: str) -> Path | None:
+    """组 `g` 的 U-Net 权重：工作区 `config/groups/ids/<g>.unet.npz` 优先，其次仓里 `<config_dir>/<spec.unet>`。"""
+    from ..core.workspace import ws_config_dir
+    from .registry import GROUPS
+    spec = SPECS.get(g)
+    if spec is None or not spec.unet:
+        return None
+    cfg = ws_config_dir()
+    if cfg is not None and (cfg / "groups" / "ids" / f"{g}.unet.npz").exists():
+        return cfg / "groups" / "ids" / f"{g}.unet.npz"
+    gs = GROUPS.get(g)
+    if gs is not None and gs.config_dir and (_ROOT / gs.config_dir / spec.unet).exists():
+        return _ROOT / gs.config_dir / spec.unet
+    return None
+
+
+def _load_unet(g: str):
+    p = unet_path(g)
+    return None if p is None else _load_unet_cached(str(p), hashlib.sha256(p.read_bytes()).hexdigest())
+
+
+def _unet_three(net, gray):
+    """U-Net 切：→ ((上/中折线, 中/下折线), 中段竖缝)。无墨迹 → None。"""
+    from .ids_segment import ink_of, polylines_to_mask, vertical_seam
+    from .ids_unet import predict_prob_np, prob_to_polylines
+    ink = ink_of(gray)
+    if not ink.any():
+        return None
+    pl = tuple(prob_to_polylines(predict_prob_np(net, gray)))
+    return pl, vertical_seam(ink, polylines_to_mask(ink.shape, *pl))
+
+
 def _slot_bank(bank: dict) -> dict:
     """彝组模板库的键是 `位置|部件名`（如 `1|米糸`、`3|糸`＝中段竖切右半）→ `{位置: {部件名: [图,…]}}`。"""
     out: dict = {}
@@ -244,15 +287,21 @@ def _slot_bank(bank: dict) -> dict:
     return out
 
 
-def _judge_three(g: str, gray, bank: dict, spec: IdsSpec) -> GroupVerdict:
+def _judge_three(g: str, gray, bank: dict, spec: IdsSpec, net=None) -> GroupVerdict:
     from .ids_solver import solve
     arr = np.asarray(gray)
-    cut = _auto_three(arr)
+    if spec.unet:
+        net = net or _load_unet(g)
+        if net is None:
+            return GroupVerdict(None, why="abstain:no_model", via="ids")
+        cut = _unet_three(net, arr)
+    else:
+        cut = _auto_three(arr)
     if cut is None:
         return GroupVerdict(None, why="abstain:blank", via="ids")
     pl, vc = cut
     b = _slot_bank(bank)
-    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc, mid_hog=spec.mid_hog, top_hog=spec.top_hog, bot_hog=spec.bot_hog)
+    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc, mid_hog=spec.mid_hog, top_hog=spec.top_hog, bot_hog=spec.bot_hog, windows=not spec.unet)
     ms = [float(x) for x in v.margins]
     extra = {"ids": v.ids, "slots": list(v.slots), "margins": [round(x, 4) for x in ms], "kind": v.kind, "flag": v.flag}
     if v.char is None or v.char not in _members(g):
@@ -315,7 +364,27 @@ def _judge_whole(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
 _YI_NM = {"⺕": "彐", "彑": "彑", "糸": "米糸", "米+分": "米分", "廾": "廾", "大": "大"}
 
 
-def _three_cells(g: str, dataset: Path):
+def _human_cuts(g: str, dataset: Path) -> dict:
+    """dataset `cut_labels.jsonl` 里人标的上／中、中／下折线（去掉 `cut_recheck_lowmargin.jsonl` 判 bad 的格）→ {id: (折线1, 折线2)}。"""
+    d = Path(dataset) / "char-groups" / "variant" / g
+    f = d / "cut_labels.jsonl"
+    if not f.exists():
+        return {}
+    bad = set()
+    rc = d / "cut_recheck_lowmargin.jsonl"
+    if rc.exists():
+        bad = {r["id"] for r in map(json.loads, filter(str.strip, rc.read_text(encoding="utf-8").splitlines())) if r.get("verdict") == "bad"}
+    out = {}
+    for line in f.read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r["id"] not in bad and len(r.get("hcuts") or ()) == 2:
+                out[r["id"]] = tuple(tuple(tuple(pt) for pt in l) for l in r["hcuts"])
+    return out
+
+
+def _three_cells(g: str, dataset: Path, cutter=None):
+    """→ [(id, 三段名, 灰度图, (折线, 竖缝))]。`cutter(id, gray)` 给了就用它切（U-Net 版），否则自动缝。"""
     from PIL import Image
     d = Path(dataset) / "char-groups" / "variant" / g
     src = d / "user_parts_labels.jsonl"
@@ -325,18 +394,20 @@ def _three_cells(g: str, dataset: Path):
             continue
         r = json.loads(line)
         gray = np.asarray(Image.open(d / "crops" / (r["id"].replace(":", "_") + ".png")).convert("L"))
-        cut = _auto_three(gray)
+        cut = cutter(r["id"], gray) if cutter else _auto_three(gray)
         if cut is not None:
             cells.append((r["id"], tuple(_YI_NM[r[k]] for k in ("top", "mid", "bot")), gray, cut))
     return cells, src
 
 
-def _three_bank(cells, skip: str | None = None) -> dict:
+def _three_bank(cells, skip: str | None = None, windows: bool = True) -> dict:
     from .ids_solver import add_real
     bank = {0: {}, 1: {}, 2: {}}
     for i, names, gray, (pl, vc) in cells:
         if i != skip:
             add_real(bank, gray, names, pl, vc)
+    if not windows:
+        bank = {k: v for k, v in bank.items() if k in (0, 1, 2, 3)}
     # 与线上同一量化
     return {f"{slot}|{name}": [quantize(t).astype(np.float32) / 255.0 for t in ts]
             for slot, names_ in bank.items() for name, ts in names_.items()}
@@ -358,8 +429,77 @@ def evaluate_three(g: str, dataset: Path, margins=(0.0, 0.02, 0.04, 0.06)) -> di
     return {"by_margin": {m: dict(c) for m, c in out.items()}, "wrong": wrong, "cells": len(cells)}
 
 
-def build_three(g: str, dataset: Path) -> dict:
-    """彝组：dataset `char-groups/variant/<g>/user_parts_labels.jsonl`（三段读法）＋ `crops/` → 模板库（自动缝，同线上）。"""
+def _train_unet(g: str, dataset: Path, exclude_volume: str | None = None, epochs: int = 120, seed: int = 1):
+    """用 dataset 里人标折线训 U-Net（需要 torch）；`exclude_volume` 给了就不用那一册的格（按册留出评测）。"""
+    from PIL import Image
+    from . import ids_unet as U
+    from .ids_segment import polylines_to_mask
+    d = Path(dataset) / "char-groups" / "variant" / g
+    train = []
+    for i, pl in _human_cuts(g, dataset).items():
+        if exclude_volume and i.split(":")[0] == exclude_volume:
+            continue
+        gray = np.asarray(Image.open(d / "crops" / (i.replace(":", "_") + ".png")).convert("L"))
+        train.append((gray, polylines_to_mask(gray.shape, *pl)))
+    return U.train(train, epochs=epochs, seed=seed)
+
+
+def _unet_cutter(net, human: dict, skip_volume: str | None = None):
+    """建库用的切法：人标折线优先（该册被留出时不用），否则 U-Net 预测。"""
+    from .ids_segment import ink_of, polylines_to_mask, vertical_seam
+    from .ids_unet import predict_prob, prob_to_polylines
+
+    def cut(i, gray):
+        ink = ink_of(gray)
+        if not ink.any():
+            return None
+        if i in human and i.split(":")[0] != skip_volume:
+            pl = human[i]
+        else:
+            pl = tuple(prob_to_polylines(predict_prob(net, gray)))
+        return pl, vertical_seam(ink, polylines_to_mask(ink.shape, *pl))
+    return cut
+
+
+def evaluate_three_unet(g: str, dataset: Path, margins=(0.0, 0.02, 0.05), epochs: int = 120) -> dict:
+    """彝组 U-Net 版按册留出：留出一册，U-Net 与模板只用其余册，测这一册（设计者调参不在评测格上）。需要 torch。"""
+    spec = SPECS[g]
+    human = _human_cuts(g, dataset)
+    probe, _ = _three_cells(g, dataset, cutter=lambda i, gr: ((((0, .3), (1, .3)), ((0, .65), (1, .65))), None))
+    vols = sorted({c[0].split(":")[0] for c in probe})
+    out = {m: Counter() for m in margins}
+    wrong = []
+    for v in vols:
+        net = _train_unet(g, dataset, exclude_volume=v, epochs=epochs)
+        cells, _ = _three_cells(g, dataset, cutter=_unet_cutter(net, human, skip_volume=v))
+        from .ids_unet import NpNet
+        npnet = NpNet.from_torch(net)
+        for i, names, gray, _cut in cells:
+            if i.split(":")[0] != v:
+                continue
+            bank = _three_bank([c for c in cells if c[0].split(":")[0] != v], windows=False)
+            for m in margins:
+                sp = IdsSpec(**{**asdict(spec), "top_hog": m, "mid_hog": m, "bot_hog": m})
+                vd = _judge_three(g, gray, bank, sp, net=npnet)
+                k = "abstain" if vd.char is None else "right" if tuple(vd.extra["slots"]) == names else "wrong"
+                out[m][k] += 1
+                if k == "wrong":
+                    wrong.append((m, i, names, vd.char))
+    return {"by_margin": {m: dict(c) for m, c in out.items()}, "wrong": wrong, "cells": sum(out[margins[0]].values())}
+
+
+def build_three(g: str, dataset: Path, out_weights: Path | None = None) -> dict:
+    """彝组：dataset `char-groups/variant/<g>/user_parts_labels.jsonl`（三段读法）＋ `crops/` → 模板库（自动缝，同线上）。
+    `SPECS[g].unet` 非空：先用全部人标折线训 U-Net 存到 `out_weights`，模板按人标折线（没有的用 U-Net 预测）切，库里只留 0–3 槽。"""
+    if SPECS[g].unet:
+        from . import ids_unet as U
+        net = _train_unet(g, dataset)
+        U.save_weights(net, out_weights)
+        cells, src = _three_cells(g, dataset, cutter=_unet_cutter(net, _human_cuts(g, dataset)))
+        flat = _three_bank(cells, windows=False)
+        return dump_bank(g, flat, {"labels": f"char-groups/variant/{g}/user_parts_labels.jsonl",
+                                   "labels_sha256": hashlib.sha256(src.read_bytes()).hexdigest()[:16], "cells": len(cells),
+                                   "cuts_sha256": hashlib.sha256((Path(dataset) / "char-groups" / "variant" / g / "cut_labels.jsonl").read_bytes()).hexdigest()[:16]})
     cells, src = _three_cells(g, dataset)
     flat = _three_bank(cells)
     n = len(cells)
@@ -457,12 +597,13 @@ def main(argv=None) -> int:
     if a.cmd == "build":
         from .registry import GROUPS
         out = a.out or _ROOT / (GROUPS[a.group].config_dir or f"config/groups/{a.group}") / "ids_bank.json"
-        d = build_three(a.group, a.dataset) if SPECS[a.group].three else build(a.group, a.dataset)
+        d = (build_three(a.group, a.dataset, out.with_name(SPECS[a.group].unet) if SPECS[a.group].unet else None)
+             if SPECS[a.group].three else build(a.group, a.dataset))
         write_bank(d, out)
         print(f"写入 {out}：{d['source']}，各类模板 { {k: len(v) for k, v in d['templates'].items()} }")
     else:
-        r = (evaluate_three if SPECS[a.group].three else evaluate)(a.group, a.dataset)
-        print(f"{a.group} 留一（自动缝）{r['cells']} 格")
+        r = (evaluate_three_unet if SPECS[a.group].unet else evaluate_three if SPECS[a.group].three else evaluate)(a.group, a.dataset)
+        print(f"{a.group} {'按册留出（U-Net）' if SPECS[a.group].unet else '留一（自动缝）'}{r['cells']} 格")
         for m, c in r["by_margin"].items():
             print(f"  margin {m:.2f}: {c}")
         for w in r["wrong"]:
