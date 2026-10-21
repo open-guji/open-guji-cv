@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- 中心库不再收人裁写锁 `*.write.lock`（空文件，曾被推进殿本、北行的 `files` 表，10-21 已从库里删掉）。
+
 ### Added
 - 粗校基准（M9 D6-5，GUJI-669）：`open_guji_cv/exp/rough_bench.py`、`scripts/rough_bench.py build`（冻结页＋标签进测试集仓 `rough-bench/`）、`scripts/eval_rough_bench.py`（登记为 `guji eval run rough_bench`）。在各册 main 快照上用 `guji exp` 重跑 seed_admit（或从 `--from` 起），报正文送审率和有标签格的错放；有变体时**新增错放必须为 0**。人裁按绑定表对到快照切分，看图结论只收现行字＝当时显示字的格。不碰任何 Step，`code_hash` 不变。
 - `scripts/zhengli/wave_report.py`（M9 D6-6，GUJI-670）：一波各册待审格按主成因码汇总，出成因分布、派单（按交给谁，列最常见的字对／字组码）、与上一波比的增减、粗校基准结果、下一波目标（`wave.json` + `wave.md`，贴 Jira）。只读产物。
