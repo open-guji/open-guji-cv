@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-#: 码 → (中文名, 交给谁)。顺序即判定优先级（`cause_of` 里自上而下第一条命中）。
+#: 码 → (中文名, 交给谁)。判定优先级见 `cause_of`（D → C → A2 → 整理本这位没字的 A6/A1/A5/A3/A4/F/A9 → B → F → E → G → H → I）。
 CAUSES: dict[str, tuple[str, str]] = {
     "D": ("印章／污损遮挡", "不修，交 M10"),
     "C": ("形近字组（己已巳、日曰等）", "M7"),
