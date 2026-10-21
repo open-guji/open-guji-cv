@@ -1391,6 +1391,13 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float,
     return True
 
 
+def has_stroke(patch: np.ndarray) -> bool:
+    """格里有没有成笔的墨：至少一个连通体过 is_end_cell_junk 的两道噪点闸（面积、高度）。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    return any(int(st[k, 4]) >= TAIL_JUNK_MIN_INK and int(st[k, 3]) >= 4 for k in range(1, n))
+
+
 HEAD_CELL_MIN_H = 0.5      # 抬头位的字必须有这么高的连通体（× 格高）
 
 
@@ -2494,6 +2501,10 @@ class CharExtractor:
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
             order = [i for i, _t, _b in local]
             end_cand = set(order[:2 + n_head_rows] + order[-2:])
+            # 逐列格位表认下的字格（Step3 记 layout_char）：格里有成笔的墨时听表，下面两道渣格闸不判它空。
+            # 列端的「一」「二」与版框横线形状上分不清（殿本 vol05–10 列尾「一」被判渣 16 列）。
+            # 空纸照样判空：表与图差一格时（vol04 p11 c1 首字「御」在表外），表认的末格可能是白纸。
+            table_char = {int(c["index"]) for c in cells if c.get("layout_char")}
             # 曲线切边只碰**最外一格**：只有它挨着版框。列端渣格闸取
             # 首末各 2 格（渣有时占两格），但短列里那两个集合会重叠，
             # 拿它切边会把列首格**下方的邻字残余**也当框线切掉。
@@ -2638,7 +2649,7 @@ class CharExtractor:
                         break
                     if "tail_junk" in inst.flags:
                         continue
-                    if not is_end_cell_junk(*info, frame_guard=self.frame_guard):
+                    if (i in table_char and has_stroke(info[0])) or not is_end_cell_junk(*info, frame_guard=self.frame_guard):
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")
@@ -2647,7 +2658,7 @@ class CharExtractor:
             # 太松（两条框线相连就冒充「字粘条」），另用严判据。
             for i in order[:n_head_rows]:
                 info, inst = end_patches.get(i), by_idx.get(i)
-                if info is None or inst is None or inst.cell_type != "char":
+                if info is None or inst is None or inst.cell_type != "char" or (i in table_char and has_stroke(info[0])):
                     continue
                 if is_head_cell_junk(*info):
                     inst.cell_type = "empty"
