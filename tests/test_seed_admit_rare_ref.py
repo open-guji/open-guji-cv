@@ -13,7 +13,7 @@ from helpers import make_book, make_ctx, page_align_ref, page_decision, page_mat
 from open_guji_cv.core.engine import params_hash
 from open_guji_cv.core.spec import live_optional_consumes
 from open_guji_cv.core.step import STEPS
-from open_guji_cv.products.kinds.recog import ColumnRare, PageRare, RareCand, RareRec
+from open_guji_cv.products.kinds.recog import ColumnRare, CoordRec, PageRare, RareCand, RareRec
 from open_guji_cv.shadow import signals as S
 from open_guji_cv.shadow.gate import ShadowGate, decide_promote, promote_judge
 from open_guji_cv.steps import seed_admit as sa
@@ -31,16 +31,24 @@ def _rare(cands: dict[int, list[str]]) -> PageRare:
 
 
 def _run(tmp_path, monkeypatch, *, rare, cands=((LIB, 0.95),), verdict="unsure", guard=None, char=None,
-         align=(REF, "replace"), params=None):
+         align=(REF, "replace"), params=None, coord=None):
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    # CNN 那一路（match_solo_cnn）与这里测的无关：本机装了 torch、有 checkpoint 时它会去读字块图，
+    # 测试没造图就整页失败；没 checkpoint 的机器上它自动弃权。统一让它弃权，测试不随机器变。
+    monkeypatch.setattr(sa, "_cnn_top", lambda *a, **k: None)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=char, cov=cands[0][1], wmax=16.0,
                                          guard=guard, candidates=list(cands))]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.1, source="prior")]))
-    if align:
-        write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
-            PAGE, BOOK, col=COL, recs=[dict(slot=1, align_char=align[0], align_op=align[1])]))
+    if align or coord is not None:
+        # coord：只给坐标对位、现役对位里缺这一格（另摆一个对得上的格，页才算锚上）
+        recs = ([dict(slot=1, align_char=align[0], align_op=align[1])] if align
+                else [dict(slot=2, align_char="之", align_op="equal")])
+        ar = page_align_ref(PAGE, BOOK, col=COL, recs=recs)
+        if coord is not None:
+            ar.coord = [CoordRec(id=f"{BOOK}:{PAGE}:{COL}:1", col=COL, slot=1, ref_char=coord)]
+        write_product(ctx, "align_ref", PAGE, align_ref=ar)
     if rare is not None:
         write_product(ctx, "rare_candidates", PAGE, rare_candidates=_rare({1: rare}))
     ctx.params["seed_admit"] = SeedAdmitParams(**(params or {}))
@@ -119,6 +127,48 @@ def test_already_admitted_cell_not_touched(tmp_path, monkeypatch):
     base = _run(tmp_path, monkeypatch, **kw)
     on = _run(tmp_path, monkeypatch, params=ON, **kw)
     assert base.admit and on.model_dump() == base.model_dump()
+
+
+# ── 坐标对位那支（rare_ref_coord）────────────────────────────────────────────
+def test_coord_admits_when_align_missing(tmp_path, monkeypatch):
+    """现役对位缺这一格、坐标对位字 = 5-b 首位 → 放行坐标对位字，evidence 记 via=coord。"""
+    r = _run(tmp_path, monkeypatch, rare=[REF, LIB], align=None, coord=REF, params=ON)
+    assert r.admit and r.channel == "rare_ref" and r.char == REF and r.doubts == []
+    assert r.evidence["rare_ref"] == {"rare": REF, "ref": REF, "lib": LIB, "cov": 0.95, "via": "coord"}
+
+
+def test_coord_switch_off_and_params(tmp_path, monkeypatch):
+    r = _run(tmp_path, monkeypatch, rare=[REF, LIB], align=None, coord=REF,
+             params={**ON, "rare_ref_coord": False})
+    assert not r.admit and "rare_ref" not in r.evidence
+    db = str(tmp_path / "g.db")
+    sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
+    h = lambda p: params_hash(p, sp, pt)  # noqa: E731
+    on = SeedAdmitParams(db_path=db, rare_ref=True)
+    assert on.model_dump()["rare_ref_coord"] is True
+    assert h(on) != h(SeedAdmitParams(db_path=db, rare_ref=True, rare_ref_coord=False))
+    # rare_ref 关着时这个字段不进 dump
+    assert "rare_ref_coord" not in SeedAdmitParams(db_path=db).model_dump()
+
+
+@pytest.mark.parametrize("kw", [
+    dict(rare=["〓"], coord="〓"),                            # 逐列本生僻字占位
+    dict(rare=[REF], coord=""),                               # 坐标对位说是空格位
+    dict(rare=[LIB, REF], coord=REF),                         # 5-b 首位不是坐标对位字
+    dict(rare=["曰"], coord="曰", cands=(("日", 0.95),)),     # 字组里的字归 group_flow
+    dict(rare=[REF], coord=REF, cands=(("日", 0.95),)),       # 库首位在字组里
+    dict(rare=["裏"], coord="裏", cands=((LIB, 0.95), ("裡", 0.94))),   # 库候选里有坐标对位字的异体
+    dict(rare=[REF], coord=REF, cands=((LIB, 0.85),)),        # 库首位覆盖度太低（页末、版心外的怪格）
+])
+def test_coord_blocked(tmp_path, monkeypatch, kw):
+    r = _run(tmp_path, monkeypatch, align=None, params=ON, **kw)
+    assert not r.admit and "rare_ref" not in r.evidence
+
+
+def test_coord_not_used_when_align_present(tmp_path, monkeypatch):
+    """现役对位有这一格（equal）时照旧只认现役对位，坐标对位不顶替。"""
+    r = _run(tmp_path, monkeypatch, rare=[REF], align=(LIB, "equal"), coord=REF, params=ON)
+    assert r.channel != "rare_ref"
 
 
 def test_hard_doubts_pure():

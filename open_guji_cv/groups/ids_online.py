@@ -69,9 +69,10 @@ SPECS: dict[str, IdsSpec] = {
     # 换成线上 char_patch 是 0.026、0.022（同格两种图 margin 差可到 ±0.018）。所以取 0.04（宁可弃权）。叅不足 8 例，永不给。
     "can": IdsSpec(frame="⿱厽{}", orient="h", prior=0.52, min_margin=0.04),
     # 以下几组（2026-10-20）：模板＝sheldon 合审裁过的殿本 vol04–10 格（中心库 confirm 事件），按字分类（by_form）。
-    # 教敎：按册留一 28 格 → 24 对／4 弃权／0 错（margin 0.0 时 4 错，所以门槛 0.02）。2026-10-21 用 dataset 里 37 格重做**按册 5 折留出**：
-    #   自动缝 0%、U-Net 8%、整字 8%（给字格 0 错时的覆盖率）——样本少、差别细，三法都不行，所以**仍是旧自动缝规格，没有升级**，等补采样。
-    "jiao": IdsSpec(frame="", orient="h", prior=0.5, which=0, min_margin=0.02, by_form=True),
+    # 教敎（2026-10-21，sheldon 提示「差别在左上角」）：**整字里只取左上角一块做 HOG**（region 左 0–55%、上 0–46%，sheldon 在取框页调的）＋岭回归，
+    #   整字／U-Net 切部件／自动缝三法此前都不行（给字格 0 错覆盖 ≤8%）。dataset `jiao/labels.jsonl` 93 格（教 68／敎 25，含 vol01 四格教→敎更正）按册 5 折留出：
+    #   margin 0.4 → 87 对／6 弃／0 错（0.3 → 89／4／0，唯一错例 margin 0.23）。字块归一到 48×48 再取框（32 太小，框内取不到 HOG 块）。
+    "jiao": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", region=(0.0, 0.55, 0.0, 0.46), lam=1.0, size=48),
     # 叙敘（2026-10-21，sheldon 指出旧窗口法不对）：真正的差别在右部（又／攵），旧规格取的是「上 40%」。改成 **U-Net 切左右、取右部**（by_form）：
     #   dataset `xu/labels.jsonl` 30 格人标切线（叙 11／敘 19）；U-Net 用叙敘＋教敎＋絕絶 共 106 格左右切线一起训（同是「两部件之间一刀」，
     #   `unet.npz`，纯 numpy 推理）。按册 5 折留出（U-Net 与模板都不含留出册）：墨迹像素归段准确率 0.992（旧自动缝 0.965）；
@@ -112,6 +113,12 @@ SPECS: dict[str, IdsSpec] = {
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="pix", lam=1.0, size=32),
     "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog",
                      region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
+    # 子于、山由出（2026-10-21，未覆盖形近字长尾线）：整字 HOG＋岭回归，模板＝殿本 vol04–10 seed_admit 放行格（match_ref、无疑问，
+    # 建库与评测见 research/m7/long_tail/build_bank.py）；组外的 干／曲 也进库（判成它们＝abstain:slot），免得真干、真曲被硬判进组。
+    # 子于：按册留一 0 错（|d|≥0.3 起；子 250／于 91／干 若干；唯一的错是 3 个予，予不进组、也不进 tolerate）；门槛取 0.4。
+    # 山由出：一对多岭回归（判别值＝与第二名得分差），|d|≥0.8 → 0 错，覆盖约 97%（≥0.5 起出现 1 错）；门槛取 0.8。
+    "zy": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=32),
+    "sy": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", lam=1.0, size=40),
 }
 
 

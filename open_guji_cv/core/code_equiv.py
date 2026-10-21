@@ -80,6 +80,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="fce6b16b7513e40ba0edda3f66df99a6f1089d5acce9869272229c3ed3363389",
           old="7fa5464da6ca4c45382394b0ecc847e8b8495c806609e2505da4ef9b0c762ab5",
           evidence=_GM_1020_PM),
+    Equiv(module="open_guji_cv.steps.glyph_match",
+          new="7f2f4fb431f137add3bea3cfa979e637ba7eb0dff52844f381c2b201240c69a4",
+          old="f67439e5c78f68150e1509bf7e8aa7db437d66ef5e7a145340c505fd00bf4b5d",
+          evidence=("glyph_match 加 font_tier 开关（缺省关，GUJI-726）：开关关着时 vol06 30 页（每 5 页取 1）与 origin/dev "
+                    "（glyph_match 与 code_deps 同 fb6ff83）产物逐字节相同，库含字体域（17.4 万条）；scripts/code_equiv.py check，2026-10-21")),
 )
 
 

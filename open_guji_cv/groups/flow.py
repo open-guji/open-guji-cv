@@ -4,7 +4,7 @@
 
 **进入**（一个字只属一组，`registry` 有不重叠测试）：
 - 补放：格没放行、不是人裁、没撞硬护栏；库 top1 cov ≥ `min_cov`，top1 所在组 G 在点名里；与 top1 分差 < `delta` 的
-  候选全在 G 里；有整理本对位字时它（或按书级 `codepoints` 归一后）也在 G 里。
+  候选全在 G 里（或在 G 的 `FlowSpec.tolerate` 里）；有整理本对位字时它（或按书级 `codepoints` 归一后）也在 G 里。
 - 复核：组声明了 `review`，格已被别的通道放行、放行字在 G 里（人裁位不碰）。
 
 **判**：按组的 `FlowSpec.solvers` 顺序跑解法，`combine=first` 取第一个给字的，`agree` 要求给字的全一致。
@@ -106,7 +106,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return None
     for g in groups_in(top, cfg.groups):
         mem = GROUPS[g].members
-        if not all(c in mem for c, v in cands[1:] if c1 - v < cfg.delta):
+        if not all(c in mem or c in GROUPS[g].flow.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
         if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
             continue

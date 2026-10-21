@@ -205,7 +205,12 @@ def cmd_pipeline(args) -> None:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
         if rc == 0:
-            _auto_pack(args, eng, steps)
+            failed = _failed_pages(eng, steps, pages)
+            if failed:
+                print(f"  ⚠ {len(failed)} 页失败（如 {'、'.join(failed[:5])}），没自动存包；"
+                      f"见上面各步的「失败」行", file=sys.stderr)
+            else:
+                _auto_pack(args, eng, steps)
         _print_unpacked(eng.book.id, eng.store)
         sys.exit(rc)
     try:
@@ -223,6 +228,26 @@ def cmd_pipeline(args) -> None:
             _auto_pack(args, eng, steps)
         _print_unpacked(eng.book.id, eng.store)
     sys.exit(1 if n_failed and args.stop_on_error else 0)
+
+
+def _failed_pages(eng, steps: list[str], pages: list[int]) -> list[str]:
+    """隔离跑完后，这几步（连同挂着的闸）这批页里 manifest 记失败的页：`["seed_admit p3", …]`。
+
+    子进程里某页失败（不加 `--stop-on-error`）照样返回 0，父进程只看返回码就会当成全过——vol08 开了
+    shadow_veto 却没装 joblib，seed_admit 69 页全失败，整册照样自动存了包（10-21 基线重跑）。单进程连跑时
+    是数 `RunReport` 里的失败页，这里读子进程写下的 manifest（新开 ProductStore，不用父进程缓存的旧表）。"""
+    from .core.spec import page_key
+    from .core.step import STEPS
+    from .products.store import ProductStore
+    store = ProductStore(eng.store.root)
+    out = []
+    for sid in steps:
+        gate = STEPS[sid].spec.gate if sid in STEPS else None
+        for s in (sid, gate.id) if gate else (sid,):
+            m = store.manifest(eng.book.id, s)
+            out += [f"{s} p{pg}" for pg in pages
+                    if (e := m.get(page_key(pg))) is not None and e.status == "failed"]
+    return out
 
 
 def _auto_pack(args, eng, steps: list[str]) -> None:
@@ -3338,6 +3363,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)
     COMMANDS_V2["opinions"] = cmd_opinions
+    # cellvotes（M10）：网站精校页投票 → 人裁事件草稿／写入；带 book，-w 由下面统一加
+    from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
+    _add_cellvotes(sub)
+    COMMANDS_V2["cellvotes"] = cmd_cellvotes
     install_workspace_option(sub)
 
 

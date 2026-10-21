@@ -58,6 +58,23 @@ def expected(col):
     return E
 
 
+def load_overrides():
+    """人核过的格位覆盖（`scripts/dzg_layout.py` 模块头）：{(册, 页, 列): slots}，只收正文列。"""
+    f = DZ / 'layout_overrides.jsonl'
+    if not f.exists():
+        return {}
+    ov = (json.loads(l) for l in open(f, encoding='utf-8') if l.strip())
+    return {(o['vol'], o['page'], o['col']): o['slots'] for o in ov if 'slots' in o and not o.get('notes')}
+
+
+def override(E, slots):
+    """格位以覆盖为准。字数相同（整列平移）字按原顺序落上去；字数不同（daizhige 漏了字）原格位留原字，补的格记 □。"""
+    chs = [E[k] for k in sorted(E, key=lambda x: (x[0], x[1] or ''))]
+    if len(chs) == len(slots):
+        return {(sl, None): ch for sl, ch in zip(sorted(slots), chs)}
+    return {(sl, None): E.get((sl, None), '□') for sl in slots}
+
+
 def predicted(c):
     return {(r['slot'], r.get('sub')) for r in c['chars'] if r['cell_type'] == 'char'}
 
@@ -104,7 +121,7 @@ def classify(E, P, ok):
 def main():
     prod = Path(sys.argv[1]); vols = sys.argv[2].split(',')
     out = sys.argv[sys.argv.index('--out') + 1] if '--out' in sys.argv else None
-    recs = load_dzg()
+    recs = load_dzg(); ovr = load_overrides()
     pm = [json.loads(l) for l in open(DZ / 'page_map.jsonl', encoding='utf-8')]
     T = collections.Counter(); byvol = collections.defaultdict(collections.Counter)
     bykind = collections.defaultdict(collections.Counter)
@@ -122,6 +139,8 @@ def main():
         nbad = 0
         for col in range(1, 10):
             E = expected(dcols.get(col, {'runs': []}))
+            if (m['vol'], m['page'], col) in ovr:
+                E = override(E, ovr[(m['vol'], m['page'], col)])
             c = ours.get(col)
             P = predicted(c) if c else set()
             k = classify(E, P, bool(c and c.get('ok')))

@@ -126,7 +126,7 @@ def test_glyph_match_page_fails_when_patch_unreadable(tmp_path, monkeypatch, ws,
     ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
     step = STEPS["glyph_match"]
     monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
-    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp")
+    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp", font_tier=False, batch_knn=False)
 
     # 对照：图读得到时这一页正常出产物
     ok = step.run_page(ctx, 1)["glyph_match"]

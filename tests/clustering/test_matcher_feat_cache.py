@@ -72,13 +72,15 @@ def test_matcher_matrix_is_reused_not_restacked(tmp_path, monkeypatch):
     assert m2.match(q).to_dict() == r.to_dict()
 
 
-def test_batch_knn_switch_is_off_by_default_and_out_of_the_params_hash():
+def test_batch_knn_is_on_by_default_and_off_keeps_old_params_hash():
+    """v0.5.5 起缺省开（用户 10-21 定）；显式关掉时不进参数 dump，参数哈希与以前的缺省相同。"""
     from open_guji_cv.core.engine import params_hash
     from open_guji_cv.steps.glyph_match import GlyphMatchParams
-    off = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="")
-    assert off.batch_knn is False and "batch_knn" not in off.model_dump(mode="json")
-    on = off.model_copy(update={"batch_knn": True})
-    assert on.model_dump(mode="json")["batch_knn"] is True
+    base = dict(db_path="x.db", db_fingerprint="f", borrow_fingerprint="", font_tier=False)
+    on = GlyphMatchParams(**base)
+    assert on.batch_knn is True and on.model_dump(mode="json")["batch_knn"] is True
+    off = GlyphMatchParams(**base, batch_knn=False)
+    assert "batch_knn" not in off.model_dump(mode="json")
     assert params_hash(on) != params_hash(off)
 
 
