@@ -1839,6 +1839,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
                     and pos not in runs and pos not in solo:
                 solo[pos] = jiazhu_split.right_half_left_edge(patches[pos], ink_threshold)
+        # 表说只有一半有字、判据又认成單行小注的格（列里没有雙行段时，如小写靠右的「臣」）：表说它是夹注的一半，
+        # 按半格发（缝取小注左缘，只发墨多的那半），不发 jiazhu_solo
+        if half_notes:
+            for pos in sorted(solo):
+                if _pos_to_slot(pos, n_raised) in half_notes:
+                    runs[pos] = solo.pop(pos)
+                    one_half.add(pos)
 
     cells: list[Cell] = []
     for k in range(n_slots):
