@@ -10,6 +10,7 @@
 | T-5 | `anchor.product_key` 混着两种形状 | 只留控制台那种 `{step, key, fingerprint}`；`{<cells 步>: sha256}` 挪到 `anchor.cells_sha`；补锚档里的字符串 `product_key` 同样挪 |
 | F-2 | `target.book/page/col/slot` 全空 | 从 key 补（`keys.parse_card_id`） |
 | F-3 | `payload.client_ts` 是秒 | ×1000 取整成毫秒 |
+| F-8 | 刻例库升格记账 `feedback/events/promote.jsonl`（整文件 `kind=promote`） | 整文件挪到 `feedback/promote.jsonl`，内容不动 |
 
 id 一改，引用它的地方跟着改：
 - `consumed/<消费者>.jsonl`：旧 id 已不存在 → 原地换成新 id；旧 id 还在（T-1 撞号，一个 id 当时代表两条事件、
@@ -42,6 +43,10 @@ ANCHORS_DIR = "feedback/anchors/"
 PRODUCT_KEY_FIELDS = ("step", "key", "fingerprint")
 _ID = re.compile(r"^evt_(?P<batch>.+)_(?P<seq>\d{6,})$")
 _BAD_IN_NAME = ':*?"<>|/\\\x00'          # = EventLog._BAD_IN_NAME（不为它 import EventLog）
+
+
+#: 刻例库升格记账（``ops/glyphlib.py`` 写）：不是人裁事件，不放 ``feedback/events/``（规范 §9 F-8）
+PROMOTE_PATH = "feedback/promote.jsonl"
 
 
 def safe_batch_name(batch: str) -> str:
@@ -165,6 +170,17 @@ def normalize_event(e: dict, cells_step: str | None, m: Migration, where: str) -
 def migrate(files: dict[str, bytes], cells_step: str | None = None) -> Migration:
     """``files``：一个工作区 ``feedback/`` 下的文本文件。``cells_step``：补锚档字符串 product_key 指的那一步。"""
     m = Migration(files=dict(files))
+    # 0. F-8：刻例库的升格记账（整文件都是 kind=promote）不是人裁事件，挪出 feedback/events/
+    for path in sorted(files):
+        if path.startswith("feedback/events/") and path.endswith(".jsonl"):
+            ls = _lines(files[path])
+            if ls and all(json.loads(x).get("kind") == "promote" for x in ls):
+                dst = PROMOTE_PATH
+                if dst in m.files and m.files[dst] != files[path]:
+                    raise SystemExit(f"{dst} 已存在且内容不同，{path} 挪不过去")
+                m.files[dst] = m.files.pop(path)
+                m.note("F-8 升格记账挪出事件目录", f"{path} → {dst}（{len(ls)} 行）")
+    files = m.files
     # 1. 读事件，逐条规整
     by_file: dict[str, list] = {}           # 路径 → [事件 dict 或 原样保留的行]
     dirty: set[str] = set()

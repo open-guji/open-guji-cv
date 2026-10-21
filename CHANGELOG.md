@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 人裁事件规范 §9 F-6／F-7／F-8（原 O-1／O-6／O-7）：`guji db sync` 合并同批次撞号时本地新行顺延重编、本地记账等引用跟着改；`guji db import` 导完自动对导入的事件 route（`--no-route` 关）；`guji events lint` 新增 `W-unconsumed`；刻例库升格记账改写到 `feedback/promote.jsonl`，`migrate_v1` 能把旧的挪过去。不动任何 Step 的 code_hash。
+
 ## [0.5.1] - 测试中
 
 ### Added

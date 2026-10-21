@@ -248,6 +248,60 @@ def test_merge_append_keeps_both_tails():
     assert _merge_append(b"", b"") == b""
 
 
+def test_merge_events_renumbers_local_seq_clash():
+    """规范 §9 F-6：两台机器往同一批次各追加一条、都编成 seq 2 → 库里的不动，本地的顺延成 seq 3。"""
+    import json
+
+    from open_guji_cv.datastore.workcopy import _merge_events
+    base = _line(id="evt_b_000001", batch="b", seq=1, ts="t1")
+    r = _line(id="evt_b_000002", batch="b", seq=2, ts="t2", payload={"v": "r"})
+    lo = _line(id="evt_b_000002", batch="b", seq=2, ts="t3", payload={"v": "l"})
+    same = _line(id="evt_b_000002", batch="b", seq=2, ts="t2", payload={"v": "r"})
+    m, ren = _merge_events(f"{base}\n{lo}\n".encode(), f"{base}\n{r}\n".encode())
+    rows = [json.loads(x) for x in m.decode().splitlines()]
+    assert ren == {"evt_b_000002": "evt_b_000003"}
+    assert [(x["id"], x["seq"], x["payload"]["v"]) for x in rows[1:]] == [
+        ("evt_b_000002", 2, "r"), ("evt_b_000003", 3, "l")]
+    assert _merge_events(f"{base}\n{same}\n".encode(), f"{base}\n{r}\n".encode()) == (
+        f"{base}\n{r}\n".encode(), {})                                   # 同一条两边都有：不重编
+
+
+def test_sync_renumbers_clashing_events_and_their_ledger(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """撞号重编后，本地记账里引用旧 id 的行跟着改；库里两条都在、各自的记账不互相遮挡。"""
+    import json
+
+    from open_guji_cv.datastore.workcopy import data_dir, local_changes, sync
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", src, cache)
+    da = data_dir(a)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    b = _fresh(files, tmp_path / "b", src, cache)
+    db_ = data_dir(b)
+    rel, led = "feedback/events/b.jsonl", "feedback/consumed/gold_add.jsonl"
+
+    def write(d, v):
+        (d / rel).write_bytes((d / rel).read_bytes() + (_line(id="evt_b_000009", batch="b", seq=9, payload={"v": v})
+                                                        + "\n").encode())
+        p = d / led
+        old = p.read_bytes() if p.exists() else b""
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_bytes(old + (_line(event="evt_b_000009", note=v) + "\n").encode())
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    write(da, "a")
+    assert sync(src, conn, a, actor="a", cache=cache)["action"] == "push"
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    write(db_, "b")
+    out = sync(src, conn, b, actor="b", cache=cache)
+    assert out["renumbered"] == {"evt_b_000009": "evt_b_000010"}
+    assert local_changes(b) == []
+    ev = {r["id"]: json.loads(r["raw"]).get("payload", {}).get("v") for r in src.rows("events", "tws")}
+    assert ev["evt_b_000009"] == "a" and ev["evt_b_000010"] == "b"
+    notes = {json.loads(x)["note"]: json.loads(x)["event"] for x in (db_ / led).read_text().splitlines()}
+    assert notes == {"a": "evt_b_000009", "b": "evt_b_000010"}
+
+
 def test_anchor_patches_round_trip(repo, conn, tmp_path):  # noqa: F811
     """锚图只记在 anchor_patches_meta（不进 source_files）：迁移不该把它们当差异，新机器 pull 要还原出来。"""
     from open_guji_cv.datastore.client import PgSource

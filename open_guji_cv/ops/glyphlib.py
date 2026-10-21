@@ -1,7 +1,7 @@
 """`guji glyphlib build`：从一本书的字形库精选刻例，出共享刻例库的新版本（共享方案 3.2 节，S5）。
 
 共享刻例库每版一个中心库只读工作区 ``glyphlib-<族>-v<N>``，里面只有 ``workspace.yaml``、
-``output/glyph_store/`` 和记升格来源的 ``feedback/events/promote.jsonl``。刻例图逐字节照搬来源书的
+``output/glyph_store/`` 和记升格来源的 ``feedback/promote.jsonl``。刻例图逐字节照搬来源书的
 （R2 里按 sha 存，同一张图不另存一份）；实例 id、来源 id 加上来源工作区前缀，免得和借它的书撞号。
 
 选哪些刻例（门槛由 sheldon 定，见方案第六节）：
@@ -165,7 +165,7 @@ def write_store(src_store: Path, picked: list[dict], out_store: Path, *, src_ws:
 
 def promote_events(picked: list[dict], *, src_ws: str, lib: str, actor: str | None, note: str,
                    thresholds: dict) -> list[dict]:
-    """升格记账（方案 4.1 节）：一条刻例一行，进目标工作区的 ``feedback/events/promote.jsonl``。"""
+    """升格记账（方案 4.1 节）：一条刻例一行，进目标工作区的 ``feedback/promote.jsonl``。"""
     ts = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
     batch = f"promote-{lib}"
     return [{"id": f"evt_{batch}_{i:06d}", "batch": batch, "seq": i, "kind": "promote", "actor": actor,
@@ -224,7 +224,7 @@ def build(src_ws_dir: Path, name: str, *, min_batches: int = 2, per_char: int = 
         db.close()
     thresholds = {"min_confirm_batches": min_batches, "per_char": per_char, "audit_clean": True,
                   "no_approx": True}
-    ev = data / "feedback" / "events" / "promote.jsonl"
+    ev = data / "feedback" / "promote.jsonl"            # 不是人裁事件，不进 feedback/events/（规范 §9 F-8）
     ev.parent.mkdir(parents=True, exist_ok=True)
     ev.write_text("".join(json.dumps(e, ensure_ascii=False, sort_keys=True) + "\n"
                           for e in promote_events(picked, src_ws=src_ws, lib=name, actor=actor, note=note,

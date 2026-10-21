@@ -18,6 +18,7 @@
 | `E-client-ts-sec` | 错 | `payload.client_ts` 是秒不是毫秒 |
 | `E-product-key` | 错 | `anchor.product_key` 不是 `{step, key, fingerprint}`（切分产物 sha 归 `anchor.cells_sha`） |
 | `W-confirm-no-shape` | 警 | `v=confirm` 却没有 `shape`（定字裁决没给字，文本层不认） |
+| `W-unconsumed` | 警 | 路由表给了去向、对应消费者却没记账的事件（条数按「事件×消费者」计；例子按批次汇总）。多半是脚本或 Worker 直写、没走 route（规范 §9 F-7），补跑 `guji events route`。`product_invalidate` 按设计不追溯，不报 |
 | `I-order` | 提示 | 同一单位的「最终裁决」按批次名序与按时间序不同的条数（读者一律按 `replay_key`） |
 """
 from __future__ import annotations
@@ -170,4 +171,31 @@ def lint(feedback_root: Path) -> Report:
     k = order_disagreements(events)
     if k:
         rep.counts["I-order"] = k
+    unconsumed(Path(feedback_root), events, rep)
     return rep
+
+
+#: 新接上路由时历史事件不追溯的消费者（见 `consumers.product_invalidate` 文档）：没记账不算漏
+NOT_RETROACTIVE = frozenset({"product_invalidate"})
+
+
+def unconsumed(feedback_root: Path, events: list[Event], rep: Report) -> None:
+    """`W-unconsumed`：有去向却没消费的（规范 §9 F-7）。"""
+    from .consumers import CONSUMERS
+    from .routes import RouteTable
+    if not events:
+        return
+    table = RouteTable.load(feedback_root / "routes.yaml")
+    log = EventLog(feedback_root)
+    dests = {e.id: {d.consumer for d in table.destinations(e)} for e in events}
+    by: Counter[tuple[str, str]] = Counter()
+    for consumer in CONSUMERS:
+        if consumer in NOT_RETROACTIVE:
+            continue
+        done = log.consumed_ids(consumer)
+        for e in events:
+            if consumer in dests[e.id] and e.id not in done:
+                by[(consumer, e.batch)] += 1
+    if by:
+        rep.counts["W-unconsumed"] = sum(by.values())
+        rep.examples["W-unconsumed"] = [f"{c} ← {b}：{n} 条" for (c, b), n in by.most_common(_EXAMPLES)]
