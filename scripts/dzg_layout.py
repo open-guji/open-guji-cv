@@ -11,6 +11,9 @@
      "half": [14],             # 只有一半有字的 slot（段尾奇数字只有右半；行内空格也会只剩一半）
      "raised": 0}              # 出格抬头级数（daizhige start=-1 → 1）
 
+daizhige 自己排错格的列（看原图核过），写进同目录 `layout_overrides.jsonl` 覆盖，重生成也不丢：
+一行 = 册/页/列 + 要改的字段（slots/notes/half/raised）+ `why`（看图看到什么），没写的字段沿用 daizhige。
+
 格位口径：daizhige 的格位 pos（`start` 起算，-1/-2 出格）→ 我们的 slot：pos≥0 → pos+1，pos<0 → pos
 （字形库 instances 已核：idx = daizhige 格位 + 1，vol01 910 列 900 符合）。我们一页 = daizhige 一个半叶，
 列号 = `no % 9 + 1`。用法与实测见 `doc/research/切分现状梳理与新方向-2026-10-19.md` §六。
@@ -72,7 +75,32 @@ def build(ws: Path, vols: set[str] | None = None) -> list[dict]:
                             "dzg": f"{m['dzg_id']}h{m['side']}", **lay})
     # 同一 (册,页,列) 出现多行（vol01 p102 c1 职名页）不知道信哪行，全部剔除（同 dzg_import colgold 的 dup）
     n = Counter((r["vol"], r["page"], r["col"]) for r in out)
-    return [r for r in out if n[(r["vol"], r["page"], r["col"])] == 1]
+    out = [r for r in out if n[(r["vol"], r["page"], r["col"])] == 1]
+    return apply_overrides(out, dz / "layout_overrides.jsonl", vols)
+
+
+FIELDS = ("slots", "notes", "half", "raised")
+
+
+def apply_overrides(rows: list[dict], path: Path, vols: set[str] | None = None) -> list[dict]:
+    """人核过的覆盖行（见模块头）盖到 daizhige 推出的行上；表里没有的列整行补进来。"""
+    if not path.exists():
+        return rows
+    at = {(r["vol"], r["page"], r["col"]): r for r in rows}
+    for ln in path.read_text(encoding="utf-8").splitlines():
+        if not ln.strip():
+            continue
+        o = json.loads(ln)
+        if vols and o["vol"] not in vols:
+            continue
+        k = (o["vol"], o["page"], o["col"])
+        r = at.get(k)
+        if r is None:
+            r = at[k] = {"vol": k[0], "page": k[1], "col": k[2], "dzg": "override",
+                         "slots": [], "notes": [], "half": [], "raised": 0}
+            rows.append(r)
+        r.update({f: o[f] for f in FIELDS if f in o})
+    return rows
 
 
 def main(argv=None) -> int:

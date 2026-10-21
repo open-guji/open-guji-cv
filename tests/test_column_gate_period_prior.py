@@ -132,7 +132,7 @@ def test_switches_off_keep_params_hash():
 def test_edge_estimate_unchanged_when_off(tmp_path, monkeypatch):
     """开关关着：贴下界的估值照旧用（行为与加开关前一致）。"""
     _pin_estimate(monkeypatch)
-    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0))
+    gm = _run(_ctx_params(tmp_path, _body_page(), 115.0, period_prior_tol=0))
     assert gm.period == 80.0
     assert gm.period_from_prior is False
 
@@ -164,3 +164,14 @@ def test_edge_fallback_leaves_good_estimate(tmp_path):
     on = _run(_ctx_params(tmp_path / "b", _body_page(), 60.0, period_edge_fallback=True))
     assert on.model_dump() == base.model_dump()
     assert on.period_from_prior is False
+
+
+def test_prior_tol_fallback(tmp_path, monkeypatch):
+    """估值偏离先验超过 period_prior_tol（缺省 10%）：用先验；偏得少的照用估值。"""
+    _pin_estimate(monkeypatch, 89.0)
+    gm = _run(_ctx_params(tmp_path / "a", _body_page(), 115.0))
+    assert gm.period == 115.0 and gm.period_from_prior is True
+    assert any("偏离书级先验" in f for f in gm.flags)
+    _pin_estimate(monkeypatch, 110.0)
+    gm = _run(_ctx_params(tmp_path / "b", _body_page(), 115.0))
+    assert gm.period == 110.0 and gm.period_from_prior is False

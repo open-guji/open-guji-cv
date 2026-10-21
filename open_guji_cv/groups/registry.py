@@ -25,13 +25,16 @@ class FlowSpec:
     - `review_abstain`：复核时解法全弃权也降为人审（「没有文意证据就不信别的通道」，己已巳用；旧 `ji_yi_si_clf`
       对规则不命中的整理本放行格就是这么做的）；
     - `lift_needs`：补放时给字的解法里必须有这几个之一（空＝不限）。入人八字形分类器只验证过「降级」，不许单独补放
-      （vol04 A/B：过切的半个「爻」被它单独放成「人」）。"""
+      （vol04 A/B：过切的半个「爻」被它单独放成「人」）；
+    - `tolerate`：补放进入时，分差内允许出现的**组外候选字**（库形上的陪衬，不是真竞争者）。只放宽进入，给字仍全凭解法，
+      解法给不出组内字照样送审。彝：库形常把 尋、舞 排在第二、三位（vol04–10 有 4 格因此没进流程）。"""
     solvers: tuple
     combine: str = "agree"
     review: bool = False
     review_fix: bool = False
     lift_needs: tuple = ()
     review_abstain: bool = False
+    tolerate: frozenset = frozenset()
 
 
 @dataclass(frozen=True)
@@ -55,8 +58,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="jys", name="己已巳", members=frozenset("己已巳"),
         backends=("rule", "ctx_table", "table"),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
-        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True), ref_free=True,
-        note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。"),
+        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True, tolerate=frozenset("巴")), ref_free=True,
+        note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。巴是库形陪衬（vol04–10 有 17 格因分差内的巴没进流程；L2 有「其他」出口，真是巴会弃权）。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
@@ -132,7 +135,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
-        flow=FlowSpec(("freq", "ids"), combine="first"),
+        flow=FlowSpec(("freq", "ids"), combine="first", tolerate=frozenset("尋舞")),
         note="异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。"
              "只在 seed_admit.group_flow 点名时生效。"),
     # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。
@@ -175,6 +178,18 @@ GROUPS: dict[str, GroupSpec] = {
         flow=FlowSpec(("freq", "ids"), combine="first"),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
+    # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
+    #    判不出送人审。模板库在 config/groups/<组>/ids_bank.json（组外的 干／曲 也进库，判成它们就弃权）。
+    "zy": GroupSpec(
+        id="zy", name="子于", members=frozenset("子于"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/zy",
+        flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("干")),
+        note="形近不同义，按整字字形判（整字岭回归，按册留一 0 错）；干 当陪衬字；只补放。"),
+    "sy": GroupSpec(
+        id="sy", name="山由出", members=frozenset("山由出"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/sy",
+        flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("曲")),
+        note="形近不同义，按整字字形判（一对多岭回归，按册留一 0 错）；曲 当陪衬字；只补放。"),
 }
 
 

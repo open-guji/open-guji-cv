@@ -59,6 +59,20 @@ def test_entry_lift_needs_near_candidates_and_ref_in_group():
     assert entry(r, [("點", 0.99)], None, cfg) is None                                  # 组没点名
 
 
+def test_entry_tolerates_declared_outsiders_only():
+    cfg = FlowConfig(groups=("yi_560",))
+    r = Rec("a")
+    assert entry(r, [("彝", 0.9535), ("𢑱", 0.9535), ("舞", 0.9359)], None, cfg) == ("yi_560", "lift")   # 舞 是陪衬
+    assert entry(r, [("彝", 0.9535), ("尋", 0.94)], None, cfg) == ("yi_560", "lift")
+    assert entry(r, [("彝", 0.9535), ("指", 0.94)], None, cfg) is None                                  # 别的组外字照挡
+
+
+def test_entry_jys_tolerates_ba():
+    cfg = _cfg()
+    assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")
+    assert entry(Rec("a"), [("己", 0.99), ("目", 0.985)], None, cfg) is None
+
+
 def test_entry_ref_via_codepoints():
     canon = {"旨x": "旨"}.get
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")
