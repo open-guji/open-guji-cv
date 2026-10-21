@@ -232,3 +232,20 @@ def test_layout_row_fills_trailing_empty_columns():
     assert _layout_row(layout, 5, 2) is None
     assert _layout_row(layout, 5, 4)["slots"] == []
     assert _layout_row(layout, 6, 1) is None
+
+
+def test_blank_seal_cells_only_touches_table_empty_cells_in_the_seal_box(monkeypatch):
+    """印框记空：模板命中的印框里、表说该空的列端格记空；印框里表说有字的格、印框外的格都不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps import occlusion
+    from open_guji_cv.steps.row_segment import _blank_seal_cells
+    mk = lambda slot, kind="char": C(slot=slot, sub=None, kind=kind)
+    col = C(ok=True, col=3, flags=[], cells=[mk(1), mk(2), mk(3), mk(4, "jiazhu_solo"), mk(5)])
+    monkeypatch.setattr(occlusion, "load_seal_templates", lambda: (np.zeros((2, 2), np.uint8),))
+    monkeypatch.setattr(occlusion, "seal_blank_cells",
+                        lambda gray, cells, **kw: {(3, 1, ""): {}, (3, 3, ""): {}, (3, 4, ""): {}})
+    ctx = C(raw_page=lambda page: np.zeros((10, 10), np.uint8))
+    _blank_seal_cells(ctx, 7, [col], {3: {1, 2, 4, 5}})       # 表：第 3 格有字
+    assert [c.kind for c in col.cells] == ["blank", "char", "char", "blank", "char"]
+    assert col.flags == ["layout_seal：列端 2 格在印框里、表说空，记空"]

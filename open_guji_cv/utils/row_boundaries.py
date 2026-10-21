@@ -1567,6 +1567,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     forced_solo: "set[int] | None" = None,
                     forced_jiazhu: "set[int] | None" = None,
                     forced_main: "set[int] | None" = None,
+                    half_notes: "set[int] | None" = None,
                     dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
                     grid_bounds: "Sequence[float] | None" = None,
@@ -1644,6 +1645,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       `jiazhu_split` 的「段尾疑似闸」：自动裁段 18 处命中 16 处假阳性），只能人指出来。这些格在
       连段、强制拆、段端收编**之后**从段里摘掉，按整格出（char）；也不再参与單行小注判定。
       同一格两条强制都在时它赢（人后来又说「这是正文」）。
+    - `half_notes`：只有一半有字的夹注格（对外 `slot` 编号，来自逐列格位表的 `half`）。列里有雙行段时，
+      这一格按段的缝（各段格缝的中位数）拆，**只发墨多的那一半**——行内空格、段尾奇数字，另一半
+      只有邻字残墨。列里没有雙行段就不管（交给單行小注判据）。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
@@ -1785,6 +1789,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     tail_a: set[int] = set()
     solo: dict[int, float] = {}
     suspect: set[int] = set()
+    one_half: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
@@ -1812,6 +1817,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for pos in main_pos:
             runs.pop(pos, None)
             tail_a.discard(pos)
+        # 表说只有一半有字的夹注格：并进段（缝取段的中位数），发格时只发墨多的一半
+        if half_notes and runs:
+            cx_mid = float(np.median(list(runs.values())))
+            for pos in sorted(nonblank):
+                if _pos_to_slot(pos, n_raised) in half_notes and pos not in main_pos:
+                    runs.setdefault(pos, cx_mid)
+                    one_half.add(pos)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
@@ -1854,9 +1866,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             cxi = int(round(cx_local))
             # 半边无墨（段末单半）不发格子——生产同口径（`ty.size < 30`）。
             # a=右子列先读、b=左子列；单字尾（tail_a）的 b 侧只有邻字残渣。
-            for kind, xs, xe in (("jiazhu_a", cxi, x_hi - x_lo),
-                                  ("jiazhu_b", 0, cxi)):
-                if kind == "jiazhu_b" and pos in tail_a:
+            sides = (("jiazhu_a", cxi, x_hi - x_lo), ("jiazhu_b", 0, cxi))
+            if pos in one_half:
+                sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
+            for kind, xs, xe in sides:
+                if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue
                 half = patches[pos][:, xs:xe]
                 if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:

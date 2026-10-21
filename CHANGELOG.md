@@ -6,6 +6,8 @@
 ## [未发版]
 
 ### Changed
+- 切分 `row_segment` 1.26：`layout_prior` 加两处。格位表说只有一半有字的夹注格（`half`，如「無巡卷撫數採進」里的行内空格、段尾奇数字），列里有雙行段时按段缝（各段格缝的中位数）拆、只发墨多的那一半（`row_boundaries.segment_column` 新参数 `half_notes`，缺省 None 不变）。PATCH；`row_segment` 与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，闸不传这个参数、输出不变）的 `code_hash` 变。殿本对 1.25：vol06 第 9/32/37/63 页、vol08 p46 修好 5 列，vol05 全册修好 3 列、改坏 0，vol09 全册不变。
+  - 印框记空：模板（`config/seal_templates/`，「乾隆御覽之寶」）命中的印框里、表说该空的列端格记空（`steps.occlusion.seal_blank_cells`，NCC ≥ 0.35、重叠 ≥ 一半；进 `code_deps`）。管篆文刻得清楚、墨连成笔画的大印，碎墨判据认不出这种。vol05 p188、vol06 p149、vol09 p162、vol10 p87 修好 9 列；vol05、vol10 全册改坏 0。
 - 跑批、冷启动再提速（GUJI-647 后续，PATCH；**17 步 `code_hash` 全部不变、产物逐字节不变**，改的都是引擎、登记表与不在任何 `code_deps` 里的模块）：
   - 页级并行新登记 6 步（`core/parallel.py`）：`column_warp`、`border_detect_gate`、`column_gate`、`row_segment_gate`、`align_ref`、`context_decide`（后两步 `warm_first`）。vol06 150 页串行／4 进程：8 步产物逐页 sha 相同，`column_raw`／`column_image` 各 1332 张列图逐张相同。`context_decide` 开了 `enable_online_llm` 时退回串行（新字段 `ParallelAudit.serial_when`）。
   - 跑一步期间每步参数只构造一次（`Engine._run_one_step` 与 `RunContext._params_memo`，并行 worker 每进程一次）：参数构造时要对 glyph.db 算人裁、库指纹，原来逐页在指纹、落盘、run_page 里各算一遍，vol06 seed_admit 主进程 600 多次。seed_admit 整册 185 s → 79 s，150 页产物与 manifest（指纹、参数哈希、上游）逐项相同。
