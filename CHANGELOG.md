@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 切分 `row_segment` 1.32：印框的第二个来源——相邻列的表空段（表首字之上、末字之下，整列空的列就是整列）在同一高度都有像字的墨，就把这一团墨的外接框当印框（`_empty_zone_seal`），列端表空格落在里面的记空。补上模板认不出的空心印和模板框没盖住的印边。`_in_seal` 改收印框列表。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol09 p68 c5/c6、p265 c4/c5/c6，vol05 p188 c7（另 p3 三列），vol09／05／06 全册改坏 0。
 - 格位表 `scripts/dzg_layout.py`：读同目录 `layout_overrides.jsonl`（看原图核过的列，写要改的 slots/notes/half/raised 加 `why`），盖在 daizhige 推出的行上，重生成不丢；评测 `research/dzg_struct_prior/structcmp.py` 的参照同样按它改。首批 4 列（殿本 vol04 p11 c1/c4/c5、p79 c7：daizhige 起始格错一格、漏抬头、把「○」当空格）。代码不动，表变 → 用到这几页的 `row_segment` 产物过期。vol04 第 4 页起错列 3 → 1（另 2 列原来就切对了，错在参照）。
 - 闸2 `column_gate` 1.12：页级周期估值偏离书级 `period_prior` 超过 `period_prior_tol`（缺省 10%，0 = 关）时回落先验，记 flag `period_fallback`。殿本正文页估值都在先验 ±5% 内；卷末大印、整页空白的页会被带偏（vol04 p127/128/220 估 89–95，vol05 p188 102，vol09 p69/162/163/224/225 79–127，先验 114–115），Step3 拿错的格高切，抬头格数、格网整列错位。修好 vol04 p127 c3（整列格线错半格）、vol09 p162 c3，表上改坏 0；其余页估值没偏，产物不变。没配 `period_prior` 的书不受影响。PATCH；`column_gate` 的 `code_hash` 与参数指纹变，各书 Step2 闸起判过期。
 - 切分 `row_segment` 1.31：列端表空格记空（`_blank_frame_junk`）不再只看字格和單行小注格，被切成雙行小注半格（jiazhu_a/b）的印章墨也记空。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol10 p175 c5、vol09 p265 c7，vol09、vol10 全册改坏 0（vol10 第 4 页起已无错列）。
