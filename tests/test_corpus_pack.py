@@ -415,3 +415,21 @@ def test_dev_pin_skips_checks_then_release_needs_layers_built(two_level):
     assert "dev" not in corpus_pin.load_pins(book, "vol01")[-1]
     with pytest.raises(ValueError, match="不是开发中"):
         corpus_pin.release_pin(book, "vol01", 2)
+
+
+def test_big_txt_items_are_marked_r2_and_do_not_change_fingerprint(tmp_path, monkeypatch):
+    from open_guji_cv.core import corpus_pin
+    (tmp_path / "corpus").mkdir()
+    (tmp_path / "corpus" / "big.txt").write_text("甲" * 400_000, encoding="utf-8")      # 1.2MB
+    (tmp_path / "corpus" / "small.txt").write_text("乙", encoding="utf-8")
+    items = {i["path"]: i for i in corpus_pin.collect(tmp_path)}
+    assert items["corpus/big.txt"]["store"] == "r2" and "store" not in items["corpus/small.txt"]
+    d1 = corpus_pin.items_digest(list(items.values()))
+    d2 = corpus_pin.items_digest([{k: v for k, v in i.items() if k != "store"} for i in items.values()])
+    assert d1 == d2                                                   # store 只是存放位置的标注，不进指纹
+    cp.build(tmp_path)
+    plan = cp.upload_blobs(tmp_path, 1)                              # 缺省只演练，不碰网络
+    assert plan["blobs"] >= 1 and plan["local"] == plan["blobs"] and plan["executed"] is False   # 含仓里的殆知阁两部
+    (tmp_path / "corpus" / "big.txt").write_text("丙" * 400_000, encoding="utf-8")
+    with pytest.raises(ValueError, match="不符"):
+        cp.upload_blobs(tmp_path, 1)

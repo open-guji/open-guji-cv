@@ -41,6 +41,18 @@ ITEMS: tuple[tuple[str, str, str], ...] = (
 
 _SKIP_NAMES = {"README.md", ".gitkeep"}
 
+#: 大静态文件（≥1MB 的 .txt）在清单条目里加 ``"store": "r2"``：内容在 R2 按 sha256 存（``guji corpus upload`` 传，
+#: ``fetch`` 取回），清单只记哈希做索引。目前 R2 只收 png／txt（`datastore.r2.CONTENT_TYPES`）。不进指纹（`items_digest` 只看 root、path、sha256）。
+BLOB_MIN = 1_000_000
+
+
+def _item(group: str, root: str, rel: str, p: Path, sha) -> dict:
+    size = p.stat().st_size
+    it = {"group": group, "root": root, "path": rel, "size": size, "sha256": sha(p)}
+    if size >= BLOB_MIN and p.suffix == ".txt":
+        it["store"] = "r2"
+    return it
+
 
 def _sha256(p: Path) -> str:
     from ..products.store import sha256_file
@@ -85,8 +97,7 @@ def collect(ws: Path, cached: bool = False) -> list[dict]:
             key = (root, rel)
             if key in seen:
                 continue
-            seen[key] = {"group": group, "root": root, "path": rel,
-                         "size": p.stat().st_size, "sha256": (_sha256_stat_cached if cached else _sha256)(p)}
+            seen[key] = _item(group, root, rel, p, _sha256_stat_cached if cached else _sha256)
     return [seen[k] for k in sorted(seen)]
 
 
@@ -215,8 +226,8 @@ def collect_vol(ws: Path, vol: str, cached: bool = False) -> list[dict]:
     out = []
     for p in sorted((base / VOL_DIR / vol).glob("**/*")) if (base / VOL_DIR / vol).is_dir() else []:
         if p.is_file() and p.name not in _SKIP_NAMES:
-            out.append({"group": "vol", "root": "ws", "path": p.relative_to(base).as_posix(),
-                        "size": p.stat().st_size, "sha256": (_sha256_stat_cached if cached else _sha256)(p)})
+            out.append(_item("vol", "ws", p.relative_to(base).as_posix(), p,
+                             _sha256_stat_cached if cached else _sha256))
     return out
 
 

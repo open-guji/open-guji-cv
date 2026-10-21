@@ -237,3 +237,73 @@ def publish_base(src, conn, *, note: str = "", actor: str | None = None, repo: P
         out.unlink()
     return {"base_version": man.get("base_version"), "repo_commit": man.get("repo_commit"),
             "files": len(man.get("items", [])), "manifest": str(out), "push": rep}
+
+
+# ── 大文件进 R2（分层版本 P2）────────────────────────────────────────────────────
+
+def _blob_files(ws: Path, man: dict) -> dict[str, Path]:
+    """清单里标了 ``store: r2`` 的条目 → {sha256: 本机文件路径}（文件不在本机就缺席）。"""
+    from ..core.corpus_pin import _base
+    out = {}
+    for it in man["items"]:
+        if it.get("store") == "r2":
+            p = _base(it["root"], it["path"], ws) / it["path"]
+            if p.is_file():
+                out[it["sha256"]] = p
+    return out
+
+
+def upload_blobs(ws: Path, version: int, vol: str | None = None, execute: bool = False) -> dict:
+    """``guji corpus upload``：把这版清单里的大文件传进 R2（按 sha256 内容寻址，已有跳过）。
+    缺省只演练（列要传的文件和字节数）；``--execute`` 才真传，要 ``GUJI_DATA_TOKEN``。
+    本机文件的 sha 和清单不符的拒绝上传（先 verify）。"""
+    man = load_manifest(ws, version, vol)
+    want = {it["sha256"]: it for it in man["items"] if it.get("store") == "r2"}
+    have = _blob_files(ws, man)
+    stale = [sha for sha, p in have.items() if _sha256_file(p) != sha]
+    if stale:
+        raise ValueError(f"本机文件内容与清单不符，不上传：{[str(have[s]) for s in stale][:3]}（先 guji corpus verify）")
+    plan = {"version": version, "blobs": len(want), "bytes": sum(it["size"] for it in want.values()),
+            "local": len(have), "missing_local": sorted(want[s]["path"] for s in want if s not in have),
+            "executed": False}
+    if execute:
+        from ..datastore.r2 import upload_files
+        plan["upload"] = upload_files(have, bucket="main", ext="txt")
+        plan["executed"] = True
+    return plan
+
+
+def fetch_blobs(ws: Path, version: int, vol: str | None = None) -> dict:
+    """``guji corpus fetch``：把这版清单里本机缺的大文件从 R2 取回、放到清单登记的位置。
+    本机已有且内容一致的跳过；已有但内容不同的**不覆盖**，报出来。"""
+    import shutil
+
+    from ..core.corpus_pin import _base
+    from ..datastore.client import BlobCache, WorkerSource
+    man = load_manifest(ws, version, vol)
+    todo, differ, ok = [], [], 0
+    for it in man["items"]:
+        if it.get("store") != "r2":
+            continue
+        p = _base(it["root"], it["path"], ws) / it["path"]
+        if not p.exists():
+            todo.append((it, p))
+        elif _sha256_file(p) == it["sha256"]:
+            ok += 1
+        else:
+            differ.append(it["path"])
+    cache = BlobCache()
+    got = cache.ensure(WorkerSource(), [it["sha256"] for it, _ in todo], ext="txt") if todo else {"missing": []}
+    placed = 0
+    for it, p in todo:
+        if cache.has(it["sha256"]):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(cache.path(it["sha256"]), p)
+            placed += 1
+    return {"version": version, "already_ok": ok, "placed": placed, "differ_not_overwritten": differ,
+            "not_in_r2": got["missing"]}
+
+
+def _sha256_file(p: Path) -> str:
+    from ..core.corpus_pin import _sha256
+    return _sha256(p)

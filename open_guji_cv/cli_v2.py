@@ -1997,6 +1997,21 @@ def cmd_corpus(args) -> None:
         tail = "，再加 corpus_dev: true（开发中，发版用 guji corpus release）" if args.dev else ""
         print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}{tail}（本命令不改册 yaml、不推中心库）")
         return
+    if args.action in ("upload", "fetch"):            # 大文件（≥1MB）进／出 R2，清单只记哈希
+        from .core.corpus_pin import load_pins
+        v = args.version
+        if not v and args.vol:
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (cp.versions(ws) or [0])[-1]
+        try:
+            res = (cp.upload_blobs(ws, v, args.vol, execute=args.execute) if args.action == "upload"
+                   else cp.fetch_blobs(ws, v, args.vol))
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(res)
+        return
     if args.action == "release":                      # 开发中的总号发版：三层清单齐了才放行
         from .core.corpus_pin import release_pin
         if not args.vol or not args.version:
@@ -3137,7 +3152,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
                                       "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release"])
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release", "upload", "fetch"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,
@@ -3145,6 +3160,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
     p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
     p.add_argument("--dev", action="store_true", help="pin：开发中的总号（各层版本可以指向还没出的清单；发版用 release）")
+    p.add_argument("--execute", action="store_true", help="upload：真传 R2（缺省只演练；要 GUJI_DATA_TOKEN）")
     p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
     p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
     p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
