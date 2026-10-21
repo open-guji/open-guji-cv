@@ -298,6 +298,12 @@ FRAME_JUNK_RESID = 0.03
 EDGE_BAND = 0.06
 EDGE_ROWS = 0.35
 
+#: 碎墨判据：格里的墨落在大连通块（面积 > STROKE_AREA 像素，同 occlusion.OCC_AREA_MAX，字的笔画主体）里的比例
+#: 不到 STROKE_FRAC，算不像字。字的墨几乎都连成笔画（殿本 vol04/vol09 七万三千个表认下的字格：0.1% 分位 0.75，
+#: 中位 1.0）；印章的印泥斑点、篆文残笔是成片的小墨点（vol04 p3 印章压着的表空格 0~0.69）
+STROKE_AREA = 150
+STROKE_FRAC = 0.75
+
 
 def _edge_rows(ink) -> float:
     """格内（二值）墨伸到左右侧边的行数 ÷ 有墨的行数。"""
@@ -309,9 +315,19 @@ def _edge_rows(ink) -> float:
     return float((ink[:, :e].any(axis=1) | ink[:, -e:].any(axis=1)).sum()) / rows
 
 
+def _stroke_mask(ink):
+    """（二值）墨里属于大连通块（笔画）的像素。"""
+    import cv2
+    _n, lab, st, _c = cv2.connectedComponentsWithStats(ink.astype("uint8"), connectivity=8)
+    big = st[:, cv2.CC_STAT_AREA] > STROKE_AREA
+    big[0] = False
+    return big[lab]
+
+
 def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float) -> int:
     """表说该空、又在表的首字之前或末字之后（列端那一段表空格；表说整列空就是整列）的字格，里面的墨不像字就
-    改成 blank，返回改了几格。不像字 = 只有框线／零星碎点，或者墨越过了界行（印章、墨污，见 EDGE_ROWS）。"""
+    改成 blank，返回改了几格。不像字 = 只有框线／零星碎点，或者墨越过了界行（印章、墨污，见 EDGE_ROWS），
+    或者墨大多是碎点、连不成笔画（印章，见 STROKE_FRAC）。"""
     import numpy as np
     body = sorted(occ)
     lo, hi = (body[0], body[-1]) if body else (1, 0)
@@ -321,6 +337,7 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
     cw = x1 - x0
     ink = g[:, x0:x1] < ink_threshold
+    stroke = _stroke_mask(ink)
     row = ink.sum(axis=1)
     charlike = (row >= 0.08 * cw) & (row < 0.5 * cw)
     frame = row >= 0.5 * cw
@@ -338,7 +355,9 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
             continue
         resid = float(ink[a:b][~near[a:b]].sum()) / ((b - a) * cw)
         frame_only = charlike[a:b].sum() < FRAME_JUNK_CHARLIKE * period and resid < FRAME_JUNK_RESID
-        if frame_only or _edge_rows(ink[a:b]) >= EDGE_ROWS:
+        n_ink = int(ink[a:b].sum())
+        speckle = n_ink > 0 and stroke[a:b].sum() < STROKE_FRAC * n_ink
+        if frame_only or speckle or _edge_rows(ink[a:b]) >= EDGE_ROWS:
             c.kind = "blank"
             n += 1
     return n
@@ -522,7 +541,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.24", unit="column",   # 1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.25", unit="column",   # 1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.row_grid", "open_guji_cv.utils.jiazhu_split",

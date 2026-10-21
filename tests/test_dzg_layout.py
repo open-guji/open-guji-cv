@@ -194,6 +194,23 @@ def test_blank_frame_junk_blanks_ink_crossing_column_edges():
     assert [c.kind for c in cells] == ["blank", "blank", "char", "char", "char"]
 
 
+def test_blank_frame_junk_blanks_speckle_that_forms_no_strokes():
+    """印章压着的表空格：墨是成片的小墨点、连不成笔画，没伸到列边也记空；连成笔画的字不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((400, 100), 255, np.uint8)
+    img[20:80, 30:70] = 0                      # 第 1 格：表的首字
+    for y in range(115, 190, 8):               # 第 2 格：印泥斑点，3×3 的小点，守在列内
+        for x in range(20, 80, 8):
+            img[y:y + 3, x:x + 3] = 0
+    img[320:380, 30:70] = 0                    # 第 4 格：表说空、却是连成笔画的字 → 不动
+    mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
+    cells = [mk(1, 0), mk(2, 100), C(slot=3, y0=200, y1=300, kind="blank", sub=None), mk(4, 300)]
+    assert _blank_frame_junk(img, cells, {1}, (0, 100), 128, 100.0) == 1
+    assert [c.kind for c in cells] == ["char", "blank", "blank", "char"]
+
+
 def test_blank_frame_junk_whole_column_when_table_says_empty():
     """表说整列空（卷末空列）：整列都是表空格段，印章记空。"""
     from types import SimpleNamespace as C
