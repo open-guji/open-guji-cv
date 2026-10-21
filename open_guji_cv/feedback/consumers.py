@@ -8,6 +8,7 @@ P1 只实现 `gold_add`（事件 → 金标条目），另外两个（glyphdb_ad
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -16,6 +17,9 @@ from ..gold.store import GoldStore
 from .events import Event, EventLog, counts_as_human, replay_key
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
+
+#: 一次 `glyphdb_admit` 调用里按册记住 (ctx, seed_admit 参数)，见 `_occluded_lookup`。
+_OCC_BOOKS: ContextVar[dict | None] = ContextVar("_OCC_BOOKS", default=None)
 
 
 @dataclass
@@ -275,18 +279,28 @@ def _occluded_lookup(book: str, page: int):
     """(book, page) → 该页遮挡格集合 {(col, slot, sub)}；读不到产物/原图 → 空集（不拦）。
 
     判据与 `seed_admit` 的 `occluded_gate` 同源（`steps.occlusion.page_occluded`，参数也取
-    该书 `seed_admit` 的解析结果）；书级关了 `occluded_gate` 的就不拦。"""
+    该书 `seed_admit` 的解析结果）；书级关了 `occluded_gate` 的就不拦。
+
+    `glyphdb_admit` 调用期间同一册的 ctx 与参数只建一次（`_OCC_BOOKS`，2026-10-21）：解析 seed_admit
+    参数要给整个 glyph.db 算人裁指纹，原来逐页重算，rebuild 后补放 1180 条人裁（711 页）这一项占
+    95%（约 130 s）。遮挡判据只用册配置与 `occluded_*` 几个字段，补放进库改不了它们。"""
     try:
-        import open_guji_cv.steps  # noqa: F401  注册 Step
-        from ..core.book import load_book
-        from ..core.step import STEPS, RunContext
-        from ..products.cache import ImageCache
-        from ..products.store import ProductStore
-        from ..steps.occlusion import page_occluded
-        ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda *_: None)
-        p = ctx.params_for(STEPS["seed_admit"])
+        books = _OCC_BOOKS.get()
+        got = books.get(book) if books is not None else None
+        if got is None:
+            import open_guji_cv.steps  # noqa: F401  注册 Step
+            from ..core.book import load_book
+            from ..core.step import STEPS, RunContext
+            from ..products.cache import ImageCache
+            from ..products.store import ProductStore
+            ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda *_: None)
+            got = (ctx, ctx.params_for(STEPS["seed_admit"]))
+            if books is not None:
+                books[book] = got
+        ctx, p = got
         if not p.occluded_gate:
             return set()
+        from ..steps.occlusion import page_occluded
         return set(page_occluded(ctx, page, p))
     except Exception:
         return set()
@@ -349,13 +363,22 @@ def glyphdb_admit(events, db_path: str | None = None,
     from ..clustering.glyph_db import GlyphDB
     from ..core.workspace import glyph_db_path
     from ..products.cache import ImageCache
-    from ..utils.binarized import binarize_page
-    import cv2
 
     db = GlyphDB(str(glyph_db_path(db_path)))
     cache = ImageCache()
     occ_of = occluded_of or _occluded_lookup
     occ_memo: dict = {}
+    occ_tok = _OCC_BOOKS.set({})
+    try:
+        return _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize)
+    finally:
+        _OCC_BOOKS.reset(occ_tok)
+
+
+def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize) -> ConsumeResult:
+    """`glyphdb_admit` 的逐条进库（拆出来只为外面能包一层 `_OCC_BOOKS`）。"""
+    import cv2
+    from ..utils.binarized import binarize_page
     for e, _dest in admits:
         from ..utils.cjk_compat import fold_compat
         shape = fold_compat(_unmojibake(e.payload.get("shape") or e.payload.get("char")))

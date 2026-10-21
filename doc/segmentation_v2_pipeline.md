@@ -516,6 +516,15 @@ seed_admit 的两处特别：
 （主进程建一次、fork 共享），匹配器特征按内容缓存（命中 2.4 s）。seed_admit 单 worker 内存登记 3.0 → 2.0 GB，
 进程数按「`MemAvailable` 与 cgroup 余量取小」压。详见 `doc/pipeline_handbook.md` §6.2。
 
+**又登记六步（2026-10-21，GUJI-647 后续）**：`column_warp`、三道闸（`border_detect_gate`、`column_gate`、
+`row_segment_gate`）、`align_ref`、`context_decide`。闸也是逐页的：闸跟着它挂的那一步另走一次 `_run_one_step`，
+登记认的是闸自己的 id。审查结论写在 `core/parallel.py` 各条的 note 里。
+- `align_ref`、`context_decide` 登记 `warm_first`：主进程先跑一页，整理本 8-gram 索引、LM 建好后再 fork。
+- `context_decide` 开了 `enable_online_llm` 时退回串行（`ParallelAudit.serial_when`）：在线大模型要写盘上缓存与调用日志、
+  按次限流，审查只覆盖缺省关的路径。
+- 验收：vol06 150 页，同一份上游，`guji step <步> --jobs 1` 与 `--jobs 4` 各跑一遍，8 步（含 border_detect、row_segment）
+  150 页产物逐页 sha 相同，`column_raw`／`column_image` 各 1332 张列图逐张相同。
+
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 
 把一条界行整条投到 x 轴上——线越直，墨全落在同一个 x 上，峰就越高越窄；线越弯，

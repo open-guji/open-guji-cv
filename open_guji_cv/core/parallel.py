@@ -35,6 +35,8 @@ class ParallelAudit:
     """审了什么、怎么验的。"""
     warm_first: bool = False
     """先在主进程跑一页把进程级缓存建好，再 fork（子进程写时复制共享），见 `Engine._run_one_step_parallel`。"""
+    serial_when: tuple[str, ...] = ()
+    """这些布尔参数开着时退回串行：审查只覆盖缺省路径，开关打开后另有跨页状态（如在线大模型的盘上缓存）。"""
 
 
 AUDITED: dict[str, ParallelAudit] = {
@@ -44,6 +46,33 @@ AUDITED: dict[str, ParallelAudit] = {
              "（`cache.put`，原子写；清缓存与记戳在主进程）；extractor／crop_quality／frame_bar_strategy／"
              "seam 无模块级可变状态。第四册 46 页串行／4 进程产物与 8436 张字块图逐个相同，"
              "墙钟 27.8 s → 9.1 s，单进程 0.19 GB（2026-10-20）。"),
+    "border_detect_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸1：run_page 只读本页原图（判页型）、borders／line_index／page_survey 产物，不写缓存；"
+             "页型模型（pagetype_model，缺省关）按参数缓存在 step 上，只读。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "column_warp": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"
+             "写的只有本页键的列图（column_raw／column_image，`cache.put` 原子写；清缓存与记戳在主进程）；"
+             "column_projection／column_triage 无模块级可变状态。vol06 150 页串行／4 进程产物 sha 逐页相同，1332 列的两种列图逐张相同（2026-10-21）。"),
+    "column_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸2：run_page 只读本页 column_windows、闸1 manifest、line_index 与本页列图"
+             "（`ctx.image` 缺图时惰性重生写的是本页的键），页级先验只用本页各列。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "row_segment_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸3：run_page 只读本页 cells、闸1 manifest 与本页列图（`eval.rulers._col_profile`，只读缓存）。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "align_ref": ParallelAudit(
+        mem_gb=1.2, warm_first=True,
+        note="run_page 只读本页 glyph_match／rare_candidates／cells 产物与整理本；整理本字流、8-gram 索引、"
+             "证人、坐标行表都是按输入记忆的 lru_cache（`_corpus_text`／`_corpus_index`／"
+             "`_witnesses_for_book_cached`／`align_ref_coord.ref_lines`），`_UNITS` 是按值共用的不可变单元。"
+             "warm_first：主进程先跑一页把整理本索引建好（约 10 s），fork 后共享。不写缓存、不写别的产物。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "context_decide": ParallelAudit(
+        mem_gb=1.0, warm_first=True, serial_when=("enable_online_llm",),
+        note="run_page 只读本页 glyph_match／rare_candidates 产物；LM 与选字策略按 (策略, 语料指纹, 门槛, 异体表) "
+             "缓存在 step 上（`_decider`），打分只读；ai_evidence 按指纹读文件。warm_first：主进程先跑一页建 LM。"
+             "在线大模型（enable_online_llm，缺省关）要写盘上缓存与调用日志、按次限流，开着时退回串行。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
     "row_segment": ParallelAudit(
         mem_gb=1.0,
         note="run_page 只读本页 gate_manifest／column_windows／列图与册级人裁表（lookup，只读），"
@@ -104,8 +133,14 @@ def warm_first(step) -> bool:
     return bool(a and a.warm_first)
 
 
-def is_parallel_safe(step) -> bool:
-    return bool(step.spec.parallel_safe) or step.spec.id in AUDITED
+def is_parallel_safe(step, params=None) -> bool:
+    """`params` 是这一步本次的参数；给了就按登记的 `serial_when` 检查开关。"""
+    if step.spec.parallel_safe:
+        return True
+    a = AUDITED.get(step.spec.id)
+    if a is None:
+        return False
+    return not (params is not None and any(getattr(params, k, False) for k in a.serial_when))
 
 
 def available_memory_gb() -> float | None:

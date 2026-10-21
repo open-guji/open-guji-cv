@@ -39,5 +39,5 @@ def test_consumer_uses_no_edge_margin():
     """进库那一行必须显式 edge_margin=0——按源码钉，避免下次有人改回去。"""
     import inspect
     from open_guji_cv.feedback import consumers
-    src = inspect.getsource(consumers.glyphdb_admit)
+    src = inspect.getsource(consumers._admit_events)       # glyphdb_admit 的逐条进库
     assert "binarize_page(img, edge_margin=0)" in src
