@@ -284,14 +284,19 @@ def _r3(cc, export_dir: Path | None, reason: str | None) -> dict:
 
 # ---------------------------------------------------------------- 主函数
 def collect(book: str, ws, export_dir=None, anomaly=None, reason: str | None = None,
-            guji: str = "guji", pending=None) -> dict:
+            guji: str = "guji", pending=None, cc_json=None) -> dict:
     ws = Path(ws)
     os.environ["GUJI_WORKSPACE"] = str(ws)      # 进程内调 cv（R2）要它；guji 子命令走 -w
     export_dir = Path(export_dir) if export_dir else None
     anomaly = Path(anomaly) if anomaly else None
     export_err = _export(book, ws, export_dir, guji) if export_dir else "没给 --export-dir"
-    cc, cc_cmd, cc_err = _close_check(book, ws, export_dir if not export_err else None, guji,
-                                    pending=pending)
+    if cc_json:     # 复用已跑好的 `close-check --tier rough --json`（一遍约 5 分钟，zl.py close 步已跑过）
+        cc, cc_err = _json_after_header(Path(cc_json).read_text(encoding="utf-8")), None
+        cc["_tier_native"] = cc.get("tier") == "rough"
+        cc_cmd = f"guji close-check {book} -w $WS --json --tier {cc.get('tier', 'final')}（复用 {Path(cc_json).name}）"
+    else:
+        cc, cc_cmd, cc_err = _close_check(book, ws, export_dir if not export_err else None, guji,
+                                        pending=pending)
     r4, rows = _r4(anomaly)
     items = {
         "R1": _r1(book, ws, cc, guji),
@@ -314,10 +319,11 @@ def main(argv=None) -> int:
     ap.add_argument("--pending", help="原样转给 close-check 第 2c 项（□去向，GUJI-624）；不给时 close-check 缺省读中心库"
                                       "本册本章的待审单（数据目录 feedback/lists/proofing/<书>/<章>.pending.json，GUJI-711）")
     ap.add_argument("--guji", default="guji")
+    ap.add_argument("--close-check-json", help="已跑好的 close-check --json 输出文件：复用它，不再跑一遍（约 5 分钟）")
     ap.add_argument("-o", "--out", help="input.json 输出路径（缺省打印到 stdout）")
     ap.add_argument("--report", help="同时用 exit_report.py 拼出 Markdown 报告到此路径")
     a = ap.parse_args(argv)
-    data = collect(a.book, a.workspace, a.export_dir, a.anomaly, a.reason, a.guji, a.pending)
+    data = collect(a.book, a.workspace, a.export_dir, a.anomaly, a.reason, a.guji, a.pending, a.close_check_json)
     text = json.dumps(data, ensure_ascii=False, indent=1)
     if a.out:
         Path(a.out).write_text(text + "\n", encoding="utf-8")

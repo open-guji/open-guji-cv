@@ -50,12 +50,14 @@ AUDITED: dict[str, ParallelAudit] = {
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=1.0,
+        mem_gb=3.6,
         note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存，worker 各建一份（约 17 s）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
-             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条，未导字体域）（2026-10-20）。"
+             "按 runbook S6 导了 jigmo、iming 字体域（glyph.db 3.1 GB）后，vol06 实测单 worker 3.4–3.7 GB，"
+             "原登记 1 GB 让 4 进程在 14.3 GB 的容器里被 OOM 杀（M9 基线，GUJI-636），改登记 3.6 GB。"),
     "rare_candidates": ParallelAudit(
         mem_gb=1.5, warm_first=True,
         note="审查（2026-10-20）：缓存都只按输入记忆（_emb_cache／_fwd_cache／_gw_cs 用 is 比对，_real_slots 按值），"
@@ -115,12 +117,56 @@ def available_memory_gb() -> float | None:
             if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
                 return None
             return ms.ullAvailPhys / (1 << 30)
+        host = None
         with open("/proc/meminfo", encoding="ascii") as f:
             for ln in f:
                 if ln.startswith("MemAvailable:"):
-                    return int(ln.split()[1]) / (1 << 20)
+                    host = int(ln.split()[1]) / (1 << 20)
+                    break
+        cg = _cgroup_headroom_gb()
+        if host is None:
+            return cg
+        return host if cg is None else min(host, cg)
     except Exception:  # noqa: BLE001 —— 只是限流参考，取不到就不限
         return None
+
+
+def _cgroup_headroom_gb(root: str = "") -> float | None:
+    """容器（cgroup v2／v1）内存上限减已用（不算可回收的页缓存），GB；没设上限或读不到返回 None。
+    云容器里 /proc/meminfo 报的是整机，进程却按 cgroup 上限被 OOM 杀。"""
+    def _read(p):
+        try:
+            with open(p, encoding="ascii") as f:
+                return f.read().strip()
+        except OSError:
+            return None
+    pairs = [(root + "/sys/fs/cgroup/memory.max", root + "/sys/fs/cgroup/memory.current")]
+    try:
+        with open(root + "/proc/self/cgroup", encoding="utf-8") as f:
+            for ln in f:
+                parts = ln.strip().split(":", 2)
+                if len(parts) == 3 and "memory" in parts[1].split(","):
+                    d = root + "/sys/fs/cgroup/memory" + parts[2]
+                    pairs.append((d + "/memory.limit_in_bytes", d + "/memory.usage_in_bytes"))
+                elif len(parts) == 3 and parts[0] == "0" and parts[2] not in ("", "/"):
+                    d = root + "/sys/fs/cgroup" + parts[2]
+                    pairs.insert(0, (d + "/memory.max", d + "/memory.current"))
+    except OSError:
+        pass
+    for lim_p, use_p in pairs:
+        lim, use = _read(lim_p), _read(use_p)
+        if not lim or not use or lim == "max" or not lim.isdigit() or not use.isdigit():
+            continue
+        lim_i = int(lim)
+        if lim_i >= 1 << 60:                       # v1 没设上限时是个极大值
+            continue
+        cache = 0
+        for ln in (_read(lim_p.rsplit("/", 1)[0] + "/memory.stat") or "").splitlines():
+            k, _, v = ln.partition(" ")
+            if k in ("file", "total_cache") and v.isdigit():   # v2：file；v1：total_cache
+                cache = int(v)
+                break
+        return max(0, lim_i - max(0, int(use) - cache)) / (1 << 30)
     return None
 
 

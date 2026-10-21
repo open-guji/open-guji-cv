@@ -406,10 +406,17 @@ def cmd_audit(args) -> None:
         pages = eng.book.resolve_pages("all")
         q = cards(book, "all", limit=1, only="review", store=eng.store, gate_cut=False,
                   skip_decided=True, cls="*").get("class_counts") or {}
+        import re
+        from .feedback.vision import vision_checks, vision_pending
+        chk = vision_checks(book)
+        vis = [{**v, "note": (chk.get(v["id"]) or {}).get("note")} for v in vision_pending(book, pages, eng.store)]
+        uns = [{"id": k, "shown": c.get("shown"), "note": c.get("note")} for k, c in sorted(chk.items(), key=lambda kv: [int(x) for x in re.findall(r"\d+", kv[0])])
+               if c.get("v") == "unsure"]
         md = out_dir / f"{book}.请审单.md"
         md.write_text(A.review_sheet(book, q, closure_gaps(book, pages, eng.store),
-                                     closure_mismatches(book, pages, eng.store)), encoding="utf-8")
-        print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
+                                     closure_mismatches(book, pages, eng.store), vision=vis, unsure=uns),
+                      encoding="utf-8")
+        print(f"{book} 请审单 → {md}（第 4 节看图判错 {len(vis)} 格、第 5 节看不清 {len(uns)} 格，已按看图结论填好）")
     elif args.action == "alt":
         # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
         # 近似字的异体族（hanzi 库；本机字统网缓存照并）按字块图排序，挂成卡上 `alt`，
