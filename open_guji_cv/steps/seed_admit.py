@@ -328,6 +328,22 @@ class SeedAdmitParams(BaseModel):
     注意这条**只拦不放**——「异体就取库形」实测 75 格只对 11，别用）。
     只会把待审挪到放行，不改任何已放行格；人裁位不经这里。evidence 记 `rare_ref={rare, ref, lib, cov}`。
     关着时不读 5-b、不进参数哈希，产物逐字节不变。书 yaml `params: {seed_admit: {rare_ref: true}}` 打开。"""
+    rare_ref_coord: bool = True
+    """规则 A 补坐标对位（2026-10-21，M7「无把握与无对位格」，缺省开；只在 `rare_ref` 开着时起作用）。
+
+    现役对位（`align_ref.chars`）里**没有**这一格时（difflib 没配上，或被库证据闸 `lib_gate` 拿掉），
+    用坐标对位字（`align_ref.coord`）当整理本字再走一遍规则 A：5-b 首位逐字等于坐标对位字 → 放行，
+    字 = 坐标对位字，evidence `rare_ref.via = "coord"`。殿本 vol04–10（cv0.5.4、语料 12）送审 1,255 格里
+    约 600 格没有现役对位，其中约 30 格（过完下面的护栏）坐标对位字与 5-b 首位一致却没有任何通道接（多是库里没有的字：
+    䕶、謫、褣、闕…，库首位只是长得像的常用字）。离线对照：同一规则落在已由别的通道放行的格上，
+    与放行字一致 311/319，不一致的 8 格全是 `context` 通道放的。排在审路（`_review_lanes_pass`）
+    之后跑，`coord_fallback` 已接走的格（回放里 179 格，字全同）不改通道。
+
+    比现役对位那支多四道护栏（坐标对位比 difflib 对位粗）：坐标对位字是 〓（逐列本的生僻字占位）或空格不放；
+    库首位覆盖度 < 0.90 不放（`_RARE_REF_COORD_MIN_COV`）；
+    坐标对位字或库首位落在任一字组（`groups.registry`）里不放（归字组流程判）；库前
+    `lane_variant_topk` 名候选里有坐标对位字的异体不放（同 `lane_variant_guard`，免得把刻本异体改成通用字）。
+    整页没锚上（现役对位整页为空）时不用坐标对位。关着（或 `rare_ref` 关着）时不进参数哈希。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -558,6 +574,8 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.rare_ref:
             d.pop("rare_ref", None)
+        if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
+            d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not self.shadow_veto:
             for k in ("shadow_model", "shadow_model_fingerprint"):
                 d.pop(k, None)
@@ -1297,7 +1315,7 @@ class SeedAdmitStep(Step):
             out.append(ColumnAdmit(col=cc.col, ok=True, chars=recs))
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
         #   0 group_flow（字组统一流程，升／降，缺省关）→ 1 rare_ref（升）→ 3 shadow_veto（降）→
-        #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ （6 rare_cp_ctx_review 已于 2026-10-18 删除）→
+        #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ 5b rare_ref_coord（升）→ （6 rare_cp_ctx_review 已于 2026-10-18 删除）→
         #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）→ 10 human_unbound（降，人裁绑丢闸，放最后）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
         #   ry_group、rr_clf、m7 各遍已于 2026-10-18 并进 group_flow 删除，编号留空不改）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
@@ -1328,6 +1346,11 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.rare_ref and p.rare_ref_coord and amap:
+            # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
+            d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk)
+            n_auto += d_rc
+            n_review -= d_rc
         if p.oversplit_gate == "hint":
             _oversplit_hint_pass(p, out, chars)      # 只加提示，不动放行集，不计数
         if p.runt_cell_review:
@@ -1400,9 +1423,37 @@ def rare_ref_decide(*, doubts, guard, verdict, lib_char, lib_top, ref, op, rare_
     return ref
 
 
-def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict) -> int:
-    """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。"""
+_RARE_REF_COORD_MIN_COV = 0.90
+"""坐标对位那支的库首位覆盖度下限：殿本 vol04–10 回放里库首位 cov < 0.90 的格多落在页末（9:21）、版心外（-1），
+库判 diff、字块本身可疑，坐标对位在这些位置也最容易错位，一律留人审。"""
+
+
+def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk: int,
+                       are_variants, group_chars: frozenset[str], cov: float = 1.0) -> bool:
+    """规则 A 坐标对位那支（`SeedAdmitParams.rare_ref_coord`）比现役对位多的护栏。纯函数。"""
+    if not ref or ref == "〓":                  # 空格位／逐列本生僻字占位：不知道是哪个字
+        return False
+    if cov < _RARE_REF_COORD_MIN_COV:
+        return False
+    if ref in group_chars or (lib_top and lib_top in group_chars):
+        return False                            # 字组里的字归 group_flow 判
+    if any(isinstance(d, str) and d.startswith(("group_flow", "shadow_veto")) for d in doubts or ()):
+        return False
+    forms = [c for c, _v in cands[:max(topk, 0)]]
+    return not any(f != ref and are_variants(f, ref) for f in forms)
+
+
+def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
+                   coord: dict[str, str] | None = None, variant_topk: int = 3) -> int:
+    """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。
+
+    `coord` 不给：只看现役对位（`amap`）里的格。`coord` 给了（`rare_ref_coord`，排在审路之后另跑一遍）：
+    只看现役对位里**没有**的格，拿坐标对位字当整理本字（护栏见 `_rare_ref_coord_ok`）。"""
     from ..variants import are_variants
+    group_chars: frozenset[str] = frozenset()
+    if coord:
+        from ..groups.registry import GROUPS
+        group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -1411,10 +1462,21 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict) -> int:
             m = mmap.get(rec.id)
             al = amap.get(rec.id)
             top5 = rtop.get(rec.id)
-            if m is None or al is None or not top5:
+            if m is None or not top5:
                 continue
             lib_top = (m.char if m.verdict == "same" and m.char
                        else (m.candidates[0][0] if m.candidates else None))
+            via = None
+            if coord is not None:
+                if al is not None:
+                    continue
+                co = coord.get(rec.id)
+                if not co or not _rare_ref_coord_ok(co, lib_top, list(m.candidates or []), rec.doubts,
+                                                    variant_topk, are_variants, group_chars, m.cov):
+                    continue
+                al, via = (co, "replace"), "coord"      # 坐标对位字与库首位不同才有意义，按 replace 段判
+            elif al is None:
+                continue
             ch = rare_ref_decide(doubts=rec.doubts, guard=m.guard, verdict=m.verdict,
                                  lib_char=m.char if m.verdict == "same" else None, lib_top=lib_top,
                                  ref=al[0], op=al[1], rare_top=top5[0], are_variants=are_variants)
@@ -1423,7 +1485,7 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict) -> int:
             rec.admit, rec.channel, rec.provenance, rec.char = True, "rare_ref", "rare_ref", ch
             rec.doubts = []
             rec.evidence = {**rec.evidence, "rare_ref": {
-                "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov}}
+                "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov, **({"via": via} if via else {})}}
             n += 1
     return n
 
