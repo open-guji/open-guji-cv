@@ -41,15 +41,17 @@ ITEMS: tuple[tuple[str, str, str], ...] = (
 
 _SKIP_NAMES = {"README.md", ".gitkeep"}
 
-#: 大静态文件（≥1MB 的 .txt）在清单条目里加 ``"store": "r2"``：内容在 R2 按 sha256 存（``guji corpus upload`` 传，
+#: 大静态文件（≥1MB 的 .txt／.tsv／.json）在清单条目里加 ``"store": "r2"``：内容在 R2 按 sha256 存（``guji corpus upload`` 传，
 #: ``fetch`` 取回），清单只记哈希做索引。目前 R2 只收 png／txt（`datastore.r2.CONTENT_TYPES`）。不进指纹（`items_digest` 只看 root、path、sha256）。
 BLOB_MIN = 1_000_000
+#: 文本类才走 R2（桶里统一按 .txt 键存，content-type 为 text/plain；取回按 sha 还原到登记的路径，后缀不影响）
+BLOB_SUFFIXES = (".txt", ".tsv", ".json")
 
 
 def _item(group: str, root: str, rel: str, p: Path, sha) -> dict:
     size = p.stat().st_size
     it = {"group": group, "root": root, "path": rel, "size": size, "sha256": sha(p)}
-    if size >= BLOB_MIN and p.suffix == ".txt":
+    if size >= BLOB_MIN and p.suffix in BLOB_SUFFIXES:
         it["store"] = "r2"
     return it
 
