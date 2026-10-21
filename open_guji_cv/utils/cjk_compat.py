@@ -50,7 +50,14 @@ def fold_compat(s: str | None) -> str | None:
     # `in_compat_block`，align_ref 起跑时折整部语料要 1 s，现在 16 ms，结果相同）
     if not _COMPAT_RE.search(s):
         return s
-    return "".join(unicodedata.normalize("NFC", c) if is_compat(c) else c for c in s)
+    # 只换正则扫出来的兼容区段字符，其余原样（2026-10-21，提速：整部语料里有一个兼容字就要逐字
+    # 进 Python，align_ref 起跑折语料 12 s；改后同一份语料逐字相同）
+    return _COMPAT_RE.sub(_fold_one, s)
+
+
+def _fold_one(m: re.Match) -> str:
+    c = m.group(0)
+    return unicodedata.normalize("NFC", c) if is_compat(c) else c
 
 
 def fold_unique(chars) -> list[str]:

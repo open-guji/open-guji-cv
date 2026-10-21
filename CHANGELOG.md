@@ -5,6 +5,34 @@
 
 ## [未发版]
 
+## [0.5.4] - 2026-10-20
+
+PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`（1.3）、`row_segment`（1.26、1.27）、`column_gate` 与形近字组 `group_flow` 的 `code_hash` 变，**各书 Step1 起全部判过期**。#345 改了 `config/groups/{jue,lih,qik,xu}/ids_bank.json`、新增 `xu/unet.npz`，配套语料库出全局层 b4，殿本 vol04–10 钉子账升 n=12、册 yaml 改钉 `corpus: 12`（v0.5.4 配 `corpus: 11` 会 CorpusDrift 拒跑）。
+验收（rc 上）：全量测试 3709 过、14 跳过；修了 1 条随 #345 过时的测试（`test_repo_by_form_banks_load`：整字组不再要求 `by_form`）。
+
+### Changed
+- 形近字 IDS 路按组换法（`groups/ids_online`、`ids_unet`）：叙敘 用左右向 U-Net 一条折线切线（`config/groups/xu/unet.npz`，留出册覆盖 33%→87%）；絕絶、厯歴、啓啟 改整字岭回归；冊册 踢出 IDS 路（SPECS 删 `ce`）；教敎 不变。实验记录见 `doc/research/形近字组实验记录.md`。xu/jue/lih/qik 的 group_flow 指纹变。
+
+### Fixed
+- `glyphdb_admit` 取图前查绑定（规范 §9 F-10）：补消费积压时重切后格号顺移的按现格取字块，绑定判不该采信的不进库（计 `unbound`）。实时消费不受影响；不在任何 Step 的 `code_deps` 里，各书产物不过期。
+
+### Added
+- `feedback/migrate_dedupe.py`：删整轮重发的人裁事件副本（规范 §9 M-3，原 O-8），记账、补锚档、金标 `source_events` 跟着改，带核对与 `gold rebuild` 比对；10-21 已写中心库（殿本 3,638 条、北行 76 条）。不动 Step 模块，各书产物不过期。
+
+### Changed
+- `guji pipeline` 整册（`--pages all`）从头跑到尾、没有失败页时，**缺省自动把产物打包存进 R2**（`products pack push`，标签 `<版本三段>-full`，不标 main；sheldon 10-21：免得忘）。`--no-pack` 或 `GUJI_AUTO_PACK=0` 关；没设 `GUJI_DATA_TOKEN`、存失败只提醒，不改返回码。不碰任何 Step，`code_hash` 不变。
+- 边框探测 `border_detect` 1.3：抬头框向邻列延伸（`utils.border_geometry._extend_head_raise`，`detect_head_raise(extend=True)` 缺省开）。已认下的抬头列，邻列在同一高度（±18px）有淡一些的细锐线（墨占比 ≥ 0.12，够不上原来的 0.35）、线下有抬头字的墨（≥ 一半行）就并进同一个抬头块，再照旧过墙线判据。管内边框印得淡、被抬头字压着的列：原来这一列按普通列取窗，抬头字整个落在列图外。PATCH；`border_detect` 的 `code_hash` 变，**各书 Step1 起全部判过期**（Sheldon 10-21：过期不是顾虑），只有抬头框变了的页输出变。殿本 vol04／07／09 全部 621 页里 4 页的抬头框变了，Step1–4 重跑修好 4 列（vol04 p9 c8、vol07 p44 c8、vol09 p109 c5/c6），改坏 0（vol09 p106 c7 并进抬头块，切分不变）。
+- 切分 `row_segment` 1.27：印框记空门槛 NCC 0.35 → 0.30（非印页实测最高 0.282；这里只动表说该空的列端格）。vol10 p175 修好 2 列；vol10、vol07 全册改坏 0。
+- 切分 `row_segment` 1.26：`layout_prior` 加两处。格位表说只有一半有字的夹注格（`half`，如「無巡卷撫數採進」里的行内空格、段尾奇数字），列里有雙行段时按段缝（各段格缝的中位数）拆、只发墨多的那一半（`row_boundaries.segment_column` 新参数 `half_notes`，缺省 None 不变）。PATCH；`row_segment` 与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，闸不传这个参数、输出不变）的 `code_hash` 变。殿本对 1.25：vol06 第 9/32/37/63 页、vol08 p46 修好 5 列，vol05 全册修好 3 列、改坏 0，vol09 全册不变。
+  - 印框记空：模板（`config/seal_templates/`，「乾隆御覽之寶」）命中的印框里、表说该空的列端格记空（`steps.occlusion.seal_blank_cells`，NCC ≥ 0.35、重叠 ≥ 一半；进 `code_deps`）。管篆文刻得清楚、墨连成笔画的大印，碎墨判据认不出这种。vol05 p188、vol06 p149、vol09 p162、vol10 p87 修好 9 列；vol05、vol10 全册改坏 0。
+- 跑批、冷启动再提速（GUJI-647 后续，PATCH；**17 步 `code_hash` 全部不变、产物逐字节不变**，改的都是引擎、登记表与不在任何 `code_deps` 里的模块）：
+  - 页级并行新登记 6 步（`core/parallel.py`）：`column_warp`、`border_detect_gate`、`column_gate`、`row_segment_gate`、`align_ref`、`context_decide`（后两步 `warm_first`）。vol06 150 页串行／4 进程：8 步产物逐页 sha 相同，`column_raw`／`column_image` 各 1332 张列图逐张相同。`context_decide` 开了 `enable_online_llm` 时退回串行（新字段 `ParallelAudit.serial_when`）。
+  - 跑一步期间每步参数只构造一次（`Engine._run_one_step` 与 `RunContext._params_memo`，并行 worker 每进程一次）：参数构造时要对 glyph.db 算人裁、库指纹，原来逐页在指纹、落盘、run_page 里各算一遍，vol06 seed_admit 主进程 600 多次。seed_admit 整册 185 s → 79 s，150 页产物与 manifest（指纹、参数哈希、上游）逐项相同。
+  - `glyph-db rebuild` 补放人裁：遮挡查询（`feedback.consumers._occluded_lookup`）在一次 `glyphdb_admit` 里按册只解析一次 seed_admit 参数（原来逐页解析，补放 1180 条人裁、711 页占 95%）：补放 139 s → 25 s（剖析下），14 张表、补放报告、消费记账逐项相同。
+  - `fold_compat`（`utils/cjk_compat`）只换正则扫到的兼容区段字符：整部语料有一个兼容字时原来逐字进 Python，align_ref 起跑折语料 4.5 s → 0.05 s，2 万条随机串与两部整理本逐字相同。
+  - `guji db pull`：重建 glyph.db 的派生表示按 CPU 数多进程（同 `glyph-db rebuild`，原来单进程）；取图（R2）与向库要文本行同时跑；读令牌先问 `whoami`，不再白打一个注定存不上的快照包（约 9 s）。
+  - 冷启动端到端第二轮（vol06 150 页，空数据目录、空图缓存、空缓存、空产物，4 核云端）：`db pull` 211 s（上轮图缓存是热的）→ 166 s（图全冷），`glyph-db rebuild` 133 s → 55 s，Step0–7 2028 s → 1878 s（seed_admit 185 → 99、column_warp 62 → 21、三道闸合计 62 → 35），close-check 35 s；合计约 41 分 → 36 分。
+
 ## [0.5.3] - 2026-10-20
 
 PATCH（Sheldon 10-21 定发）。`row_segment`（1.23 → 1.25，新增 `code_deps` `utils.row_grid`）与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，只加了缺省不走的格网入口，闸的输出不变）的 `code_hash` 变，各册 column_gate 与 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。

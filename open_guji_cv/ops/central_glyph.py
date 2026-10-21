@@ -25,9 +25,13 @@ def rebuild_db(ws_dir: Path, store: Path, db_path: Path, extras: list[Path] | No
     wcfg = yaml.safe_load((Path(ws_dir) / "workspace.yaml").read_text(encoding="utf-8")) or {}
     if extras is None and ((wcfg.get("glyph_lib") or {}).get("borrow")):
         raise SystemExit("workspace.yaml 配了 glyph_lib.borrow（借库），这条路径没解析借库；请用 guji db pull")
+    import os
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    summary = (rebuild_from_store(store, db_path, extra_stores=list(extras)) if extras
-               else rebuild_from_store(store, db_path))
+    # 派生表示按 CPU 数多进程算，同 `glyph-db rebuild` 缺省（库内容与单进程逐行相同；新机器 `db pull`
+    # 里这一步原是单进程，殿本约 160 s）
+    jobs = os.cpu_count() or 1
+    summary = (rebuild_from_store(store, db_path, extra_stores=list(extras), jobs=jobs) if extras
+               else rebuild_from_store(store, db_path, jobs=jobs))
     assert_db_not_silently_empty(db_path, store)
     return summary
 
