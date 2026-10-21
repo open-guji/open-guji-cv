@@ -190,9 +190,10 @@ def test_yi_560_three_slot_bank_loads_and_abstains_on_blank():
     """彝组三段版（2026-10-20）：仓里的模板库键是 `位置|部件名`，空白格弃权，指纹带上这一组。"""
     assert O.SPECS["yi_560"].three and O.has_bank("yi_560")
     b = O._slot_bank(O.load_bank(O.bank_path("yi_560")))
-    assert set(b) == {0, 1, 2, 3, 4, 5, 6} and set(b[0]) == {"彐", "彑"} and set(b[2]) == {"廾", "大"}
+    assert set(b) == {0, 1, 2, 3} and set(b[0]) == {"彐", "彑"} and set(b[2]) == {"廾", "大"}
     assert O.judge("yi_560", np.full((100, 100), 255, np.uint8)).why == "abstain:blank"
     assert "yi_560=" in O.fingerprint(["yi_560"])
+    assert O.SPECS["yi_560"].unet and O.unet_path("yi_560") is not None and ".u" in O.fingerprint(["yi_560"])
 
 
 def test_yi_560_nearest_variant_is_released_when_spec_allows(monkeypatch):
@@ -202,11 +203,11 @@ def test_yi_560_nearest_variant_is_released_when_spec_allows(monkeypatch):
     from open_guji_cv.groups.ids_solver import IdsVerdict
     fake = IdsVerdict("𢑴", "⿳彑⿰米糸大", "nearest", "nearest_variant", ("彑", "米糸", "大"), (0.5, 0.5, 0.5))
     monkeypatch.setattr(ids_solver, "solve", lambda *a, **k: fake)
-    monkeypatch.setattr(O, "_auto_three", lambda g: (None, None))
+    monkeypatch.setattr(O, "_unet_three", lambda net, g: (None, None))
     bank = {f"{k}|{n}": [np.zeros((32, 32), np.float32)] * 3
             for k, ns in ((0, "彐彑"), (1, ("米糸", "米分")), (2, "廾大")) for n in ns}
     bank["3|糸"] = bank["3|分"] = [np.zeros((32, 32), np.float32)] * 3
     gray = np.zeros((10, 10), np.uint8)
     spec = O.SPECS["yi_560"]
-    assert spec.nearest_ok and O._judge_three("yi_560", gray, bank, spec).char == "𢑴"
-    assert O._judge_three("yi_560", gray, bank, replace(spec, nearest_ok=False)).why == "abstain:nearest"
+    assert spec.nearest_ok and O._judge_three("yi_560", gray, bank, spec, net=object()).char == "𢑴"
+    assert O._judge_three("yi_560", gray, bank, replace(spec, nearest_ok=False), net=object()).why == "abstain:nearest"
