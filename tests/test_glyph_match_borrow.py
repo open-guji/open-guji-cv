@@ -99,7 +99,7 @@ def test_step_demotes_borrowed_same(tmp_path, monkeypatch, ws, fixture_page, hit
     monkeypatch.setattr(type(step), "_matcher", lambda self, p: _Stub())
     monkeypatch.setattr(gm, "borrowed_ids", lambda _p: frozenset({"lib:1"}))
     monkeypatch.setattr(gm, "human_confirmed_counts", lambda _p: {"甲": 50})   # 共识升档的条件都满足
-    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="fp", borrow_fingerprint="glyphlib-tst-v1")
+    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="fp", borrow_fingerprint="glyphlib-tst-v1", font_tier=False, batch_knn=False)
     recs = [r for cc in step.run_page(ctx, 1)["glyph_match"].columns for r in cc.chars]
     assert recs
     assert {(r.verdict, r.char, r.matched_id, r.via) for r in recs} == {want}

@@ -256,16 +256,18 @@ class GlyphMatchParams(BaseModel):
     落进人审，不再让一个病态格拖死整页。书级 yaml `params: {glyph_match: {cell_budget_s: 20}}` 可开。
     只在逐个刻例验证之间检查，所以单次验证本身的耗时不在预算内。"""
 
-    batch_knn: bool = False
-    """整页合批算近邻（2026-10-20，GUJI-647 第 7 项）。False = 关（缺省，产物与参数指纹逐字节不变）。
+    batch_knn: bool = True
+    """整页合批算近邻（2026-10-20，GUJI-647 第 7 项）。**缺省开**（用户 10-21 定，v0.5.5 起）；
+    `false` 关回逐格算，关时不进参数 dump，参数指纹与 v0.5.4 及以前的缺省相同。
     开了以后先把本页要匹配的图（格与候选试切）全部归一、提特征，每 64 个做一次矩阵乘得到与整库的
     相似度，再逐格照常判。字体域进库后库有约 17 万条（特征矩阵 1.2 GB），逐格做矩阵乘向量每格都要
     把整张表读一遍（内存带宽，约 0.14 s／格）；合批后每 64 格才读一遍，单线程约快 10 倍。
     **会改产物**：矩阵乘与逐格乘的浮点累加次序不同，相似度末位不同（实测最大差 6e-7），前 10 名约
-    1.5% 的查询换位，个别格的候选与判决随之变。开不开按波次窗口定，开前出差异单（`guji products diff`）。"""
+    1.5% 的查询换位，个别格的候选与判决随之变（vol06 全册：判决、字、cov 全同，8 格候选排序变，送审数不变）。"""
 
-    font_tier: dict | bool | None = None
-    """分级查库（2026-10-21，GUJI-726）。None/false = 关（缺省，产物与参数指纹逐字节不变）。
+    font_tier: dict | bool | None = True
+    """分级查库（2026-10-21，GUJI-726）。**缺省开**（`true`，用户 10-21 定，v0.5.5 起）；`false`／`null` 关，
+    关时不进参数 dump，参数指纹与 v0.5.4 及以前的缺省相同。
     开了以后每格先只查刻本库（库里 id 不以 `font:` 起头的条目，殿本约 1.8 万条）；刻本库「命中弱」时
     再按现行做法查整库（含字体域，约 17.4 万条），那一格的结果与关着时相同。命中强（下面两条之一）
     就用刻本库的结果，字体域不比：
@@ -424,11 +426,15 @@ class GlyphMatchStep(Step):
         reuse = cell_reuse(ctx, self, page, "glyph_match")
         tier = _FontTier.rule(p.font_tier)
         if tier is not None:
-            # 合批只给刻本库那一档：查整库的格事先不知道，逐格算
+            # 两档都合批：刻本库那一档每格都查；整库那一档只在命中弱时查，按块惰性算（某块里有一格要查整库才算这一块）
             sub = _keben_subset(matcher)
+            full = matcher
             if p.batch_knn:
-                sub = _PageBatch(sub, _page_queries(ctx, page, chars, reuse, normalize_patch))
-            matcher = _FontTier(matcher, sub, tier)
+                queries = _page_queries(ctx, page, chars, reuse, normalize_patch)
+                sub = _PageBatch(sub, queries)
+                full = _PageBatch(matcher, queries)
+                full._feats = sub._feats            # 同一批图、同一套特征：只提一次
+            matcher = _FontTier(full, sub, tier)
         elif p.batch_knn:
             matcher = _PageBatch(matcher, _page_queries(ctx, page, chars, reuse, normalize_patch))
         n_reused = n_total = n_timeout = 0
@@ -577,11 +583,14 @@ class _PageBatch:
         i = self._idx.get(self._key(norm))
         if i is None:
             return self._m.match(norm, **kw)
+        F = self._m.library_matrix()
+        if F.ndim != 2 or not F.shape[0]:      # 库是空的（新书刻本库还没有字）：没有可合批的，逐格判
+            return self._m.match(norm, **kw)
         c0 = i - i % self.CHUNK
         if c0 != self._c0:
             t0 = time.monotonic()
             Q = np.stack([self._feat(j) for j in range(c0, min(c0 + self.CHUNK, len(self._norms)))])
-            self._S = Q @ self._m.library_matrix().T
+            self._S = Q @ F.T
             self._c0 = c0
             if kw.get("deadline") is not None:      # 这一块的矩阵乘是 64 格共用的，不算进这一格的预算
                 kw["deadline"] += time.monotonic() - t0
