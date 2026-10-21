@@ -1089,6 +1089,12 @@ def cmd_events(args) -> None:
     if args.action == "import-vision":
         _import_vision(args)
         return
+    if args.action == "lint":
+        # 按 doc/formats/人裁事件规范.md 体检事件日志（只读）；有 E- 级问题以 1 退出
+        from .feedback.lint import lint
+        rep = lint(EventLog().root)
+        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1) if args.json else rep.render())
+        sys.exit(1 if rep.n_errors else 0)
     log = EventLog()
     if args.action == "harvest":
         b = BatchStore().get(args.batch)
@@ -1121,13 +1127,14 @@ def _select_events(log, batch: str | None, book: str | None = None) -> list:
     """`events list` 的取数：批次名可带通配（`vol03-*`，按文件名匹配后合并）；`book` 只留
     target.key 以 `<册>:` 开头的事件——通配批次里混进别册的 key 时（GUJI-77）不串册。只读。"""
     import fnmatch
+    from .feedback.events import replay_key
     if batch and any(c in batch for c in "*?["):
         evs = sorted((e for b in log.batches() if fnmatch.fnmatch(b, batch)
-                      for e in log.read(b)), key=lambda e: e.order)
+                      for e in log.read(b)), key=replay_key)
     elif batch:
         evs = log.read(batch)
     else:
-        evs = sorted(log.iter_all(), key=lambda e: e.order)
+        evs = sorted(log.iter_all(), key=replay_key)
     if book:
         evs = [e for e in evs if e.target.key.startswith(f"{book}:")]
     return evs
@@ -3019,8 +3026,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dataset", default=None, help="测试集仓路径（缺省 GUJI_DATASET_DIR 或 ../open-guji-dataset）")
 
-    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision")
-    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision"])
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision | lint")
+    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision", "lint"])
     p.add_argument("batch", nargs="?", default=None, help="批次名；import-vision 时是 jsonl 路径")
     p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
     p.add_argument("--step", default=None)
@@ -3033,6 +3040,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
     p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
     p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
+    p.add_argument("--json", action="store_true", help="lint：出机读结果")
 
     p = sub.add_parser("eval", help="[v2] 评测：list | run")
     p.add_argument("action", choices=["list", "run"])

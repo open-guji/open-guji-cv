@@ -280,7 +280,8 @@ FRAME_JUNK_RESID = 0.03
 
 
 def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float) -> int:
-    """表说该空、又是整列物理上第一格或最后一格的字格，里面只有框线／零星碎点时改成 blank，返回改了几格。"""
+    """表说该空、又在表的首字之前或末字之后（列端那一段表空格）的字格，里面只有框线／零星碎点时改成 blank，
+    返回改了几格。"""
     import numpy as np
     body = sorted(occ)
     if not body:
@@ -301,7 +302,7 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
         near[:-d] |= frame[d:]
     order = sorted(cells, key=lambda c: c.y0)
     n = 0
-    for c in (order[0], order[-1]) if order else ():
+    for c in order:
         if c.kind != "char" or lo <= c.slot <= hi or c.slot in occ:
             continue
         a, b = max(0, int(c.y0)), min(h, int(c.y1))
@@ -312,6 +313,38 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
             c.kind = "blank"
             n += 1
     return n
+
+
+#: 劈字判据：一个连通体高在 [SPLIT_CC_MIN, SPLIT_CC_MAX] 个 period 之间（像一个字，不是碎点、不是界行），
+#: 格线从中间穿过、上下两段都占它高的 SPLIT_SIDE 以上，算这条格线把字劈了
+SPLIT_CC_MIN, SPLIT_CC_MAX, SPLIT_SIDE = 0.3, 1.5, 0.3
+
+
+def _split_chars(img, cells, period: float, ink_threshold: int = 128) -> int:
+    """一列里把单个连通体（一个字）从中间劈开的格线条数。比 _cut_rows 稳：只看行墨的判据会被
+    稀疏笔画骗过（「疏」「僅」被劈也只穿过一两笔），看连通体则一个字被劈就是被劈。"""
+    import cv2
+    import numpy as np
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    h, w = g.shape[:2]
+    binary = (g[:, int(w * 0.1):int(w * 0.9)] < ink_threshold).astype(np.uint8)
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    ccs = [(int(st[k, 1]), int(st[k, 1] + st[k, 3])) for k in range(1, n)
+           if SPLIT_CC_MIN * period <= st[k, 3] <= SPLIT_CC_MAX * period]
+    cs = sorted(cells, key=lambda c: c.y0)
+    k = 0
+    for a, b in zip(cs, cs[1:]):
+        if (a.kind == "blank" and b.kind == "blank") or (a.sub and b.sub and a.slot == b.slot):
+            continue
+        y = b.y0
+        k += any(y - t >= SPLIT_SIDE * (e - t) and e - y >= SPLIT_SIDE * (e - t) for t, e in ccs)
+    return k
+
+
+def _mask_misses(cells, occ: set) -> int:
+    """一种格网违表的格数：表说有字却切成空、表说该空却切出字。掩码是软约束，DP 为躲穿字会违表。"""
+    got = {c.slot for c in cells if c.kind != "blank"}
+    return len(got ^ set(occ))
 
 
 def _n_chars(cells) -> int:
@@ -460,7 +493,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.22", unit="column",   # 1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.23", unit="column",   # 1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.jiazhu_split",
@@ -552,6 +585,7 @@ class RowSegmentStep(Step):
             forced_jz = book_forced_jz.get((page, gc.col))
             forced_main = book_forced_main.get((page, gc.col))
             lay_alt = None     # 闸版格网（抬头级数听闸、表只管格的有无），见下
+            gate_raised = n_raised_col
             if lay is not None:
                 occ = set(lay["slots"])
                 want = int(lay.get("raised", 0))
@@ -592,38 +626,61 @@ class RowSegmentStep(Step):
                        else {"lam": NONUNIFORM_LAM}))
             r = _seg(n_body_col)
             prior_flags: list[str] = []
-            # 逐列格位先验的抬头级数与闸不一致时，两种格网都切，取格线穿字少的（打平用表的）。
-            # 表管「有没有抬头字」，图上有几个物理格位要看列图：殿本 vol04 产物包实测，按表硬改会坏两类列——
-            # ①表说抬头、列图却从版框顶起截（p84 c5、p65 c8「御」「欽」在版框上方没截到）：首个看得见的字被编成 -1，
-            #   整列格网错一位劈字；②表说不抬头、闸给了余量的低起列（p127 c1–2 从第 5 格起，字距比 period 大）：
-            #   压掉余量后空格压不短，格网整体上挤半格。但闸多给的那格在书名列上会把首字吸进 -1（研究文档 §六），
-            #   一律听闸也不行（vol04 新坏 10 列），所以按图二选一。只有约 7% 的列要多切一次。
-            if lay_alt is not None and r is not None:
-                n_r2, t_s2, occ2 = lay_alt
-                alt = (n_r2, t_s2) + _layout_kw(lay, occ2, n_body_col, n_r2)
-                r2 = _seg(n_body_col, alt)
-                if r2 is not None:
-                    k1, k2 = _cut_rows(img, r.cells, p.ink_threshold), _cut_rows(img, r2.cells, p.ink_threshold)
-                    if k2 < k1:
-                        r = r2
-                        n_raised_col, top_slack = n_r2, t_s2
-                        base = dict(base, n_raised=n_raised_col, top_slack=top_slack)
-                        prior_flags.append(f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格），"
-                                           f"穿字格线 {k1}→{k2}")
-                        occ = occ2
+            # 逐列格位先验命中的列，候选格网按图挑：
+            #   表格网（抬头级数、格的有无都按表）；
+            #   闸抬头格网（表与闸的抬头级数不一致时：抬头听闸，表只管格的有无）；
+            #   无先验格网（前两者都劈了字、且不看表切出的字比表少时才用：表的字图上装不下，比如整理本分行和刻本不同）。
+            # 打分：坏格数 = 劈开的字 + 违表的格，取最少；一样多时宁可违表也不劈字，再比穿字格线，再打平按上面的顺序。
+            # - 闸抬头：表管「有没有抬头字」，图上有几个物理格位要看列图。殿本 vol04 产物包：①表说抬头、列图却从
+            #   版框顶起截（p84 c5、p65 c8「御」「欽」没截到）；②表说不抬头、闸给了余量的低起列（p127 c1–2）。
+            #   但闸多给的那格在书名列上会把首字吸进 -1，一律听闸也不行（vol04 新坏 10 列），所以按图二选一。
+            # - 违表格数算进坏格数、排在穿字格线前：掩码是软约束，「二」这类上下两横中间有空的字，格线落在两横之间不穿墨，
+            #   只比穿字会选中违表劈「二」的那种（vol06 p94 c6，「二」上横被单切一格后丢掉）。
+            # - 无先验：表说 6 字、图上只有 5 字的短列（vol07 p44 c8「臨御六十一年」，「臨」不在这一列），
+            #   硬按表切只能劈字（坏格 1／1），无先验少一字（坏格 1／0）→ 取无先验。这时这一列当作没有表（不记空框线、
+            #   不标 layout_char）。不看表切出的字不比表少时不换：那是图上多了东西（版框线、斑驳底纸），不是表多了字
+            #   （vol04 p6 c9 版框线进了列图、vol09 p164 c1 卷端页，换了反而整列格号错位或多切碎格）。
+            if lay is not None and r is not None:
+                cands = [(r, n_raised_col, top_slack, occ, "")]
+                if lay_alt is not None:
+                    n_r2, t_s2, occ2 = lay_alt
+                    r2 = _seg(n_body_col, (n_r2, t_s2) + _layout_kw(lay, occ2, n_body_col, n_r2))
+                    if r2 is not None:
+                        cands.append((r2, n_r2, t_s2, occ2, f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格）"))
+
+                def _score(c):
+                    k_split = _split_chars(img, c[0].cells, gate.period, p.ink_threshold)
+                    k_miss = _mask_misses(c[0].cells, c[3])
+                    return (k_split + k_miss, k_split, _cut_rows(img, c[0].cells, p.ink_threshold))
+                scores = [_score(c) for c in cands]
+                if min(s_[1] for s_ in scores) > 0:
+                    r3 = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
+                    if r3 is not None and _n_chars(r3.cells) < len(occ):
+                        cands.append((r3, gate_raised, gc.top_slack, occ, "layout_off"))
+                        scores.append(_score(cands[-1]))
+                best = min(range(len(cands)), key=lambda i: (scores[i], i))
+                if best:
+                    r, n_raised_col, top_slack, occ, why = cands[best]
+                    base = dict(base, n_raised=n_raised_col, top_slack=top_slack)
+                    prior_flags.append(f"{why}：坏格／劈字／穿字 "
+                                       + "→".join("/".join(map(str, scores[i])) for i in (0, best)))
+                    if why == "layout_off":
+                        lay = None
             # 列端框线残渣：表说该空、格里又只有框线那种满宽横墨或碎点（没有像字的墨行）的列端字格记空。
             # 掩码故意不罚满宽密行（不然 DP 为躲框线去并上面的字，见 row_boundaries.SLOT_MASK_ROWS），所以
             # 版框横线落进列首/列尾那一格时会被切成「字」（殿本 vol04 p6 c2、p8 c2，vol05 p147 c1）。
-            # 只动整列物理上的第一格、最后一格，且格里横线以外几乎没墨：列中段的碎墨（卷端页、整页破损页上
+            # 只动表的首字之前、末字之后那一段表空格，且格里横线以外几乎没墨：列中段的碎墨（卷端页、整页破损页上
             # 印断的字，vol09 p164「經部十七」）不碰——人审率分析的教训：破损页的空位不能批量判非字。
             # 殿本 vol04–09 实测改空 647 格（逐格看图都是框线、竖线、碎点），比 1.20 逐格多修好 19 列、改坏 0。
+            # 1.23 起从「物理首／末格」放宽到这一段：首字上方隔一个空格的碎墨、斜笔残迹（vol06 p11 c2、p126 c1，
+            # vol07 p36 c3、p65 c2）也在这一段里，判据不变。
             if lay is not None and r is not None:
                 n_junk = _blank_frame_junk(img, r.cells, occ, gc.content_x, p.ink_threshold, gate.period)
                 if n_junk:
                     prior_flags.append(f"layout_frame_junk：列端 {n_junk} 格只有框线／碎墨，记空")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
             # 逐列字数先验与 YOLO 并格（同列互斥，两套先验叠在一列上会打架）
-            skip_cd = human_col or lay is not None
+            skip_cd = human_col or (page, gc.col) in layout
             g = colgold.get((page, gc.col))
             k_pairs = 0
             if r is not None and yolo_boxes and not skip_cd and not _has_jiazhu(r.cells):
@@ -666,6 +723,8 @@ class RowSegmentStep(Step):
                     seam_top=c.seam_top, seam_bottom=c.seam_bottom,
                     quad_page=(None if mapper is None else
                                [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
+                    # 表认下的字格：Step4 的列端渣格闸不再拿图像判据把它判空（「一」「二」在列端形同框线）
+                    flags=["layout_char"] if lay is not None and c.kind != "blank" and c.slot in occ else [],
                 ))
             flags: list[str] = list(prior_flags)
             if r.bottom_bar_y is not None:
