@@ -18,9 +18,15 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
 **文本和待审单要一起换**：新单的格号按新切分排，网站显示的还是 book-text 的旧文本就会对不上。
 所以 prep 要 --export-dir（同一次导出的 char／cord／pages），push 前先把同一次导出推到 book-text。
 
+别人已经跑好、存成产物包的结果，不用重跑：`from-pack` 一条命令拉库、取包、核人裁绑定、导出、prep，
+纯机器约 3 分钟（vol05 实测）。人裁怎么和新切分合并：产物里的 seed_admit 跑时已按锚框重绑了所有人裁
+（`feedback/bindings.py`），出单前再核一遍——包跑完之后才来的人裁、按格号扣会扣错的格都列进差异单。
+
 用法：
+  python scripts/zhengli/republish.py from-pack --book vol05 -w $WS --label <包标签> --book-text <book-text 仓>
   python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export
-  python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync]
+  python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync] [--book-text <book-text 仓>]
+推库要 `.[datastore]`（psycopg、websockets）和能写 main 的令牌。
 产物根取 GUJI_PRODUCTS_DIR，没设就是 <工作区>/products（与引擎同口径）。
 """
 from __future__ import annotations
@@ -181,7 +187,7 @@ def raw_dir(ws: Path, book: str) -> Path | None:
     return next((p for p in sorted((ws / "data_full").glob(f"*/{book}")) if p.is_dir()), None)
 
 
-def cmd_prep(a) -> int:
+def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
     products, export = products_root(ws), Path(a.export_dir)
@@ -248,7 +254,14 @@ def cmd_prep(a) -> int:
     reflow = max(0, len((routed / f"{chapter}.reflow.tsv").read_text(encoding="utf-8").splitlines()) - 1)
     d = diff(old, new, dropped, cell_states(products, book), web_votes(ws, text_id, (old or {}).get("rev")))
     (out / "diff.json").write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-    (out / "差异单.md").write_text(diff_md(book, d, len(team), reflow), encoding="utf-8")
+    md = diff_md(book, d, len(team), reflow)
+    if pack:
+        md = md.replace("\n\n## 去掉的格", f"\n- 产物包 `{pack}`\n\n## 去掉的格", 1)
+    if bind:
+        md += "\n".join(bind_md(bind)) + "\n"
+        d["bind"] = bind
+        (out / "diff.json").write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
+    (out / "差异单.md").write_text(md, encoding="utf-8")
     plan = {"book": book, "rev": rev, "chapter": chapter, "text_id": text_id, "pending": str(out / f"{chapter}.pending.json"),
             "team": str(routed / f"{chapter}.team.pending.json"), "sprites": str(out / "sprites") if (out / "sprites").exists() else None,
             "export_dir": str(export), "online": str(online)}
@@ -264,6 +277,9 @@ def cmd_push(a) -> int:
     plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     if not a.yes:
         sys.exit(f"✗ 推上线前先看 {out / '差异单.md'}，确认后加 --yes")
+    if a.book_text:
+        d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
+        bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
     online = Path(plan["online"])
     if online.exists():
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
@@ -281,7 +297,10 @@ def cmd_push(a) -> int:
         run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
             env={**os.environ, "GUJI_WORKSPACE": str(ws)})
     todo = [] if a.sync else [f"guji db sync -w {ws}   # 推进中心库，网站每日 proofing-sync 才拿得到"]
-    todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）",
+    if not a.book_text:
+        todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）"]
+    todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：book-text PR 合了、单子推了，"
+             "请网站总管按顺序手动跑 kaiyuanguji-web 的 data.yml（flow=text）和 proofing-sync.yml（target=production、parts=publish、dry_run=false）",
              f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}"]
     if plan.get("sprites"):
         todo.append(f"雪碧图 {plan['sprites']} 上 COS／R2（GUJI-675 落地前手工传）")
@@ -289,18 +308,182 @@ def cmd_push(a) -> int:
     return 0
 
 
+def bind_check(products: Path, book: str) -> dict:
+    """定字人裁按锚框绑到现行切分（同 seed_admit 回放），看合并有没有冲突。
+
+    - `newer`：包跑完之后才来的人裁（产物里还没有），出单时 pending_route 按格号扣；
+    - `id_mismatch`：原格号还在待审里、但这条人裁绑到了别的格或绑不上——按格号扣会扣错，要人看；
+    - `unbound`：绑不上（review／void），这些格会以失效老裁决再出卡。"""
+    sys.path.insert(0, str(CV))
+    import datetime as dt
+    from collections import defaultdict
+    from open_guji_cv.exp.rough_bench import _NoCache, _split_key
+    from open_guji_cv.feedback.bindings import compute_page
+    from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
+    from open_guji_cv.products.store import ProductStore
+    sys.path.insert(0, str(HERE))
+    from pending_route import deciding
+
+    ran: dict[int, float] = {}
+    mf = products / book / "seed_admit" / "_manifest.jsonl"
+    for line in (mf.read_text(encoding="utf-8").splitlines() if mf.exists() else []):
+        r = json.loads(line)
+        pg = int(re.sub(r"\D", "", r["key"]))
+        ran[pg] = max(ran.get(pg, 0), r.get("ts") or 0)
+    states = {f"{book}:{k}": v[0] for k, v in cell_states(products, book).items()}
+    by_page: dict[int, list] = defaultdict(list)
+    for e in sorted(iter_events_readonly(EventLog()), key=lambda e: (e.ts, e.batch, e.seq)):
+        if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
+            continue
+        if not deciding({"kind": e.kind, "payload": e.payload or {}}):
+            continue
+        try:
+            b, pg, *_ = _split_key(e.target.key)
+        except ValueError:
+            continue
+        if b == book:
+            by_page[pg].append(e)
+    st = ProductStore(products)
+    out = {"events": 0, "status": Counter(), "newer": [], "id_mismatch": [], "unbound": [], "decided_not_admitted": []}
+    for pg, evs in sorted(by_page.items()):
+        ev = {e.id: e for e in evs}
+        for row in compute_page(book, pg, evs, store=st, cache=_NoCache(), backfill={}):
+            e = ev[row["event"]]
+            out["events"] += 1
+            out["status"][row["status"]] += 1
+            bound = row.get("bound") if row["status"] in ("valid", "rebound") else None
+            key = e.target.key
+            ts = dt.datetime.fromisoformat(e.ts.replace("Z", "+00:00")).timestamp()
+            if ts > ran.get(pg, 0):
+                out["newer"].append(key)
+            if not bound:
+                out["unbound"].append(key)
+            if states.get(key) == "review" and bound != key:
+                out["id_mismatch"].append(key)
+            elif bound and states.get(bound) == "review" and ts <= ran.get(pg, 0):
+                out["decided_not_admitted"].append(bound)
+    out["status"] = dict(out["status"])
+    return out
+
+
+def bind_md(b: dict) -> list[str]:
+    s = b["status"]
+    lines = ["", "## 人裁合并", "",
+             f"- 定字人裁 {b['events']} 条，按锚框绑到新切分：" + "、".join(f"{k} {v}" for k, v in sorted(s.items())),
+             f"- 包跑完之后才来的 {len(b['newer'])} 条（按格号扣）；按格号扣会扣错的 {len(b['id_mismatch'])} 格"
+             + ("（要人看：" + "、".join(f"`{k}`" for k in b["id_mismatch"][:20]) + "）" if b["id_mismatch"] else "")]
+    if b["unbound"]:
+        lines.append(f"- 绑不上的 {len(b['unbound'])} 条（以失效老裁决再出卡）：" + "、".join(f"`{k}`" for k in b["unbound"][:20]))
+    if b["decided_not_admitted"]:
+        lines.append(f"- 人裁过、产物里机器还没放行的 {len(b['decided_not_admitted'])} 格（不上单，文本里是机器读法）："
+                     + "、".join(f"`{k}`" for k in b["decided_not_admitted"][:20]))
+    return lines
+
+
+def book_text_dir(repo: Path, text_id: str) -> Path:
+    hit = sorted(Path(repo).glob(f"Book/*/*/*/{text_id}/default"))
+    if not hit:
+        sys.exit(f"✗ {repo} 里没有 Book/…/{text_id}/default")
+    return hit[0]
+
+
+def online_text_version(repo: Path, text_id: str, chapter: str) -> str:
+    idx = json.loads((book_text_dir(repo, text_id) / "index.json").read_text(encoding="utf-8"))
+    for c in idx.get("chapters", []):
+        if str(c.get("file")) == chapter or f"{c.get('n', 0):03d}" == chapter:
+            if c.get("text_version"):
+                return c["text_version"]
+    sys.exit(f"✗ book-text index.json 里 {chapter} 没有 text_version（首次入库用 --text-version 0.1.0）")
+
+
+def pack_manifest(products: Path, book: str) -> dict:
+    """seed_admit 末行清单（cv_commit／cv_version／db_rev）。"""
+    mf = products / book / "seed_admit" / "_manifest.jsonl"
+    lines = mf.read_text(encoding="utf-8").splitlines() if mf.exists() else []
+    return json.loads(lines[-1]) if lines else {}
+
+
+def cmd_from_pack(a) -> int:
+    """取别人跑好的产物包直接出单：拉库 → 取包 → 核人裁绑定 → 导出 → prep。不重跑任何 Step。"""
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    if not os.environ.get("GUJI_PRODUCTS_DIR"):
+        sys.exit("✗ 先设沙箱 GUJI_PRODUCTS_DIR：取包会整册覆盖 <产物根>/<册>，不碰正式 products/")
+    products = products_root(ws)
+    env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
+    py = sys.executable
+    guji = [py, "-m", "open_guji_cv.cli_v2"]
+    if not a.no_pull and run([*guji, "db", "pull", "-w", ws], cwd=CV, env=env).returncode:
+        return 1
+    if (products / book).exists():
+        shutil.rmtree(products / book)
+    if run([*guji, "products", "pack", "fetch", book, "--label", a.label, "--to", products, "-w", ws],
+           cwd=CV, env=env).returncode:
+        return 1
+    tv = a.text_version or (online_text_version(Path(a.book_text), text_id, chapter) if a.book_text else None)
+    if not tv:
+        sys.exit("✗ 要 --book-text <book-text 仓>（读线上文本版本）或 --text-version")
+    export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
+    cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
+           "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
+    for flag, f in (("--meta", CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"),
+                    ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
+        if f.exists():
+            cmd += [flag, f]
+    if run(cmd, cwd=CV, env=env).returncode:
+        return 1
+    b = bind_check(products, book)
+    print(f"人裁绑定：{b['events']} 条 {b['status']}；包后新到 {len(b['newer'])}、按格号会扣错 {len(b['id_mismatch'])}")
+    a.export_dir = str(export)
+    man = pack_manifest(products, book)            # 单子头记包的 cv 版本，不是本机的
+    a.cv_commit = a.cv_commit or man.get("cv_commit")
+    a.cv_version = a.cv_version or man.get("cv_version")
+    rc = cmd_prep(a, bind=b, pack=a.label)
+    if rc == 0 and b["id_mismatch"]:
+        print(f"⚠ {len(b['id_mismatch'])} 格按格号扣会扣错，push 前看差异单「人裁合并」一节")
+    return rc
+
+
+def bump_book_text(repo: Path, plan: dict, note: str) -> None:
+    """同一次导出的 char／cord／norm 拷进 book-text、文本线升 minor、重建索引、本地校验；提交到新分支（PR 另开）。"""
+    d = book_text_dir(repo, plan["text_id"])
+    ch = plan["chapter"]
+    for t in ("char", "cord", "norm"):
+        src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
+        if src.exists():
+            shutil.copyfile(src, d / f"{ch}.{t}.json")
+    br = f"republish-{plan['rev']}"
+    for cmd in (["git", "checkout", "-B", br],
+                [sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
+                 "--chapter", ch, "--note", note, "--pr", "TBD"],
+                [sys.executable, "scripts/book-text/build_texts_index.py", "--root", "."],
+                [sys.executable, "scripts/local_check.py"],
+                ["git", "add", "-A", str(d), "index/texts"],
+                ["git", "commit", "-qm", f"{note}"]):
+        if run(cmd, cwd=repo).returncode:
+            sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
+    print(f"book-text 分支 {br} 已提交：推上去开 PR（CHANGES 里 #TBD 换成 PR 号），合了再 push 待审单")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("prep", "push"):
+    for name in ("prep", "push", "from-pack"):
         p = sp.add_parser(name)
         p.add_argument("--book", required=True)
         p.add_argument("-w", "--workspace", required=True)
         p.add_argument("--rev", help="新单 rev；prep 缺省按线上单加一（006-r2 → 006-r3）" if name == "prep" else "prep 打出的 rev",
                        required=name == "push")
         p.add_argument("--out", help="出单目录，缺省 <工作区>/reports/<册>/_publish/<rev>")
-        if name == "prep":
-            p.add_argument("--export-dir", required=True, help="同一份产物导出的 char／cord／pages 所在目录")
+        if name == "from-pack":
+            p.add_argument("--label", required=True, help="产物包标签（guji products pack list <册>）")
+            p.add_argument("--book-text", help="book-text 仓：读线上文本版本")
+            p.add_argument("--text-version", help="不给 --book-text 时手给线上文本版本")
+            p.add_argument("--no-pull", action="store_true", help="不先 guji db pull")
+            p.add_argument("--out-root", help="缺省 <工作区>/reports/<册>/_publish")
+        if name in ("prep", "from-pack"):
+            if name == "prep":
+                p.add_argument("--export-dir", required=True, help="同一份产物导出的 char／cord／pages 所在目录")
             p.add_argument("--chapter")
             p.add_argument("--text-id")
             p.add_argument("--cv-commit")
@@ -310,11 +493,13 @@ def main(argv=None) -> int:
             p.add_argument("--no-alt", action="store_true", help="不跑 guji audit alt（单子上没有相似字）")
             p.add_argument("--fetch-zi", action="store_true", help="audit alt 去字统网补缓存（首次慢）")
             p.add_argument("--no-sprite", action="store_true")
-        else:
+        if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
+            p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
+            p.add_argument("--note", help="book-text CHANGES 一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     a = ap.parse_args(argv)
-    return cmd_prep(a) if a.cmd == "prep" else cmd_push(a)
+    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack}[a.cmd](a)
 
 
 if __name__ == "__main__":
