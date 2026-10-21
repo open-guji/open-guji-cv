@@ -262,6 +262,32 @@ def test_detect_head_raise_extends_block_to_neighbor_with_faint_inner_line():
     assert sorted(r.col for r in got) == [5, 6]
     assert abs({r.col: r for r in got}[6].inner_y - 280) <= 4
 
+
+def test_detect_head_raise_text_rule_finds_box_with_walls_but_no_top_line():
+    """殿本 vol04 p84 c5 型：抬头框只印了两侧粗墙、没有顶线，横线判据找不到；版框上方有字＋有墙 → 抬头。
+    同样的字凸出、旁边没有墙（「上諭」紧贴笔直版框那种）→ 不算。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    n = len(xs) - 1
+
+    def strokes(c):
+        x0, x1 = int(xs[n - c]), int(xs[n - c + 1])
+        cx = (x0 + x1) // 2
+        for y in range(262, 352, 12):                       # 一个字：横笔加一道撇，每行都有墨、都不满
+            mask[y:y + 5, cx - 10:cx + 10] = 1.0
+        for y in range(262, 352):
+            xd = cx - 15 + (y - 262) // 3
+            mask[y, xd:xd + 6] = 1.0
+        return x0, x1
+    x0, x1 = strokes(5)
+    for xw in (x0 - 40, x1 + 35):                            # 两侧粗墙在界行外，落到主边框
+        mask[250:border_top, xw:xw + 8] = 1.0
+    strokes(8)                                               # 第 8 列：字凸出、没有墙
+    assert detect_head_raise(mask, top, verts, width=1000, text_rule=False) == []
+    got = detect_head_raise(mask, top, verts, width=1000)
+    assert [r.col for r in got] == [5]
+    assert got[0].estimated and abs(got[0].inner_y - (262 - 8)) <= 3
+
 # ---------------------------------------------------------------- 外框探测
 
 def _outer_page(w=1000, h=1200, gap=40, top_y=300, bot_y=900,
