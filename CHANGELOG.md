@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- 教敎（`groups/ids_online`，`jiao`）改用整字左上角一块（左 0–55%、上 0–46%）做 HOG＋岭回归：按册 5 折留出 93 格，门槛 0.4 → 87 对／6 弃／0 错（此前整字／U-Net／自动缝给字格 0 错覆盖 ≤8%）。`config/groups/jiao/ids_bank.json` 用 dataset 93 格重建（教 68／敎 25，含 vol01 四格教→敎更正）。jiao 的 group_flow 指纹变，seed_admit code_hash 变。记录见 `doc/research/形近字组实验记录.md`。
+
 ### Added
 - `guji cellvotes draft|write`（`feedback/web_votes.py`、`cli_cellvotes.py`）：网站精校页投票直接转人裁事件草稿。取票（数据目录快照／`--from-kv` 管理读／文件）→ 去测试票、同格同来源留最新 → 六档映射（与 ai-team `web_opinions.py` 同口径）→ 对正式库最新人裁（一致的跳过、要推翻的挂起）→ 对格位（现行 `cell_shrink` 对出单版 book-text `cord.json`，列被重切过的挂起）→ 「无字」缺省挂起；`write` 走控制台同一条写入路径（带锚、消费、按草稿内容判重）。殿本 vol04 004-r3 的 31 票回放：可写 19、格位对不上 6、无字 6，与 10-21 手工核对一致。不动 Step 模块，各书产物不过期。
 
