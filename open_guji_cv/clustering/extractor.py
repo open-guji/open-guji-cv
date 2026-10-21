@@ -1252,6 +1252,78 @@ def _char_body(binary: np.ndarray) -> np.ndarray | None:
     return out
 
 
+# ── 列端版框细线（2026-10-21）───────────────────────────────────
+# 双边版框的内细线常落在列尾格、列首格里：Step2 按版框剥的是外粗框，内框在它里面十几到三十行，印得细、
+# 断成虚线，`strip_frame_debris`（要与字身有缝）、`carve_end_edge`（贴着字身的墨算字身）都剥不掉，进了
+# 字块。殿本 vol05 列尾字约 12% 带着它（「同」「見」「二」底下一道虚线）。
+# 判据按行看、不看连通体：内容窗口中间 88% 宽里，墨从左到右跨过 FRAME_LINE_SPAN、覆盖 FRAME_LINE_COV 以上
+# 的行是「线行」，连成不超过 FRAME_LINE_THICK 格高的一段是一条线。只在离格外沿 FRAME_LINE_ZONE 格高以内
+# 找（框线实测在 0.36 以内；列首「詩」「周」的上横在 0.45 以外），从字往外一条条看：线外（到下一条线或
+# 图块边）还有成片的墨（超过 FRAME_LINE_TAIL 行满宽的量），这条就是字自己的底横——vol09「其」「兵」「與」
+# 的底横下面还有两点／两脚——跳过看下一条；第一条线外干净的就是框，连同线外抹白。
+# 调用方只拿贴着版框的格来剥（格外沿离版框内缘不到一格）：列在半页收住时，末格外面是白纸，没有框。
+FRAME_LINE_SPAN = 0.85
+FRAME_LINE_COV = 0.4
+FRAME_LINE_THICK = 0.12
+FRAME_LINE_ZONE = 0.4
+FRAME_LINE_TAIL = 3.0
+FRAME_LINE_SPECK = 0.1     # 墨不到这么多窗宽的行算白
+FRAME_LINE_INNER = 0.06     # 内容窗口左右各让出这么多（避开界行竖线）
+
+
+def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
+                     win_x0: float, win_x1: float, bottom: bool = True,
+                     gap: bool = False) -> np.ndarray:
+    """列尾格（bottom=True）／列首格的版框细线连同线外一并抹白。
+
+    cell_top/cell_bot 为格界、win_x0/win_x1 为列内容窗口，都在图块坐标系里。线内侧（字那边）
+    没墨的不动：那是只有一横的字（列端的「一」），不是框。gap=True 时线和字之间还要隔着白行：
+    列首格用（字头碰不到框，紧贴着字的满宽横是字的上横——卷首「欽定」页满纸噪点，「周」的上横
+    连着噪点落进 FRAME_LINE_ZONE）；列尾不要求，字脚常压在框线上（「見」）。"""
+    if not bottom:      # 列首格上下翻转同解
+        h = patch.shape[0]
+        flip = patch[::-1]
+        out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True)
+        return patch if out is flip else np.ascontiguousarray(out[::-1])
+    h, w = patch.shape[:2]
+    a = int(round(win_x0 + FRAME_LINE_INNER * (win_x1 - win_x0)))
+    b = int(round(win_x1 - FRAME_LINE_INNER * (win_x1 - win_x0)))
+    a, b = max(0, a), min(w, b)
+    if b - a < 10:
+        return patch
+    ink = patch[:, a:b] < BINARY_THRESHOLD_PATCH
+    line = np.zeros(h, dtype=bool)
+    for y in range(max(0, int(round(cell_bot - FRAME_LINE_ZONE * (cell_bot - cell_top)))), h):
+        xs = np.flatnonzero(ink[y])
+        line[y] = (xs.size >= FRAME_LINE_COV * (b - a)
+                   and xs[-1] - xs[0] + 1 >= FRAME_LINE_SPAN * (b - a))
+    runs: list[tuple[int, int]] = []
+    y = 0
+    while y < h:
+        if line[y]:
+            y1 = y
+            while y1 < h and line[y1]:
+                y1 += 1
+            runs.append((y, y1))
+            y = y1
+        else:
+            y += 1
+    for k, (y0, y1) in enumerate(runs):
+        if y1 - y0 > FRAME_LINE_THICK * (cell_bot - cell_top):
+            continue
+        nxt = runs[k + 1][0] if k + 1 < len(runs) else h
+        if ink[y1:nxt].sum() > FRAME_LINE_TAIL * (b - a):
+            continue
+        if gap and (ink[max(0, y0 - 2):y0].sum(axis=1) >= FRAME_LINE_SPECK * (b - a)).all():
+            continue
+        if not (patch[:y0] < BINARY_THRESHOLD_PATCH).any():
+            return patch
+        out = patch.copy()
+        out[y0:] = 255
+        return out
+    return patch
+
+
 def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     """列端图块的曲线边：沿紧贴字身外沿、绕开版框的路径切，路径外抹白。
 
@@ -2539,6 +2611,12 @@ class CharExtractor:
                 # 列端格：剥掉与字身分离的版框碎渣（2026-08-25 用户定
                 # 口径——框渣算可后处理的污染，不算错误截取）。自检
                 # flags 与紧裁都在剥后的图块上算，口径统一为「去框后」。
+                # 贴着版框的列端格剥框线。夹注格不剥：两行小字的横画并排连成满宽，会被当成线。
+                near_frame = ((idx == tail_cell and frame_in_bot - (sy0 + lbot) < cell_h_ref)
+                              or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
+                if near_frame and _jiazhu_gap_center(patch, jz_ref_w) is None:
+                    patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
+                                             bottom=idx == tail_cell)
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)

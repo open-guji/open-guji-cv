@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- 字框收缩 `cell_shrink` 1.10：贴着版框的列尾格、列首格，把格里横贯内容窗口的版框细线（双边框的内框，印得细、常断成虚线）连同线外抹白（`extractor.strip_frame_line`）。原来 `strip_frame_debris`、`carve_end_edge` 剥不掉，殿本列尾字约一成带着一道横线进字块。线只在离格外沿 0.4 格高内找；线外还有成片墨的（「其」「兵」底横下的两点）是字自己的横，跳过；列首格要求线和字之间隔着白行；夹注格不剥。vol05／vol09 改 145／229 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
+
 ## [0.5.5] - 2026-10-21
 
 PATCH（Sheldon 10-21 定发）。glyph_match 的 `batch_knn`、`font_tier` 改为缺省开（vol06：glyph_match 959 s → 349 s，送审 142 → 143，两边都放行而字不同的 0 格）。相对 v0.5.4，8 步 `code_hash` 变：`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`glyph_match`、`seed_admit`，**各书 Step1 起全部判过期**；其余 9 步不变。rc 上全量测试：3755 过、9 跳过；修了 8 条随 #366 进来、在有 CNN checkpoint 的机器上失败的测试（#370，只改测试）。
