@@ -3,7 +3,7 @@
 
 | `source` | 读哪里 | 缺省 `selection` |
 |---|---|---|
-| `human_events` | `<feedback>/events/<book>-*.jsonl`，`step=seed_admit ∧ unit=cell ∧ kind∈{confirm,verdict} ∧ actor=user`，每格取最新 | 批名带抽检标记（`audit` 等，同 `eval_step7_replay.py`）→ `random`；其余是审查队列 → `picked` |
+| `human_events` | `<feedback>/events/*.jsonl` 里 `target.book` 是本册的，`step=seed_admit ∧ unit=cell ∧ kind∈{confirm,verdict} ∧ actor=user`，每格取最新 | 批名带抽检标记（`audit` 等，同 `eval_step7_replay.py`）→ `random`；其余是审查队列 → `picked` |
 | `vision` | `看图结论.jsonl`（`feedback/vision.py` 的格式：cell / v / char / shown / ts）| `picked` |
 | `gold` | 金标分片 `items.jsonl`（`GoldItem`：anchor 定格，`expected.char`）| 带 `stratum` → `picked`，否则 `random` |
 
@@ -83,7 +83,7 @@ def load_human_events(spec: dict, books: list[str]) -> list[Label]:
     out: list[Label] = []
     for book in books:
         best: dict[str, tuple] = {}
-        for f in sorted(glob.glob(str(d / f"{book}-*.jsonl"))):
+        for f in sorted(glob.glob(str(d / "*.jsonl"))):   # H 道批名不带册前缀（H-M7-…），按 target.book 筛
             batch = Path(f).stem
             for ln in Path(f).read_text(encoding="utf-8").splitlines():
                 if not ln.strip():
@@ -176,11 +176,12 @@ def load_gold(spec: dict, books: list[str]) -> list[Label]:
         exp = r.get("expected") or {}
         truth = next((exp[k] for k in _GOLD_CHAR_KEYS if exp.get(k)), None)
         defect = bool(exp.get("defect") or exp.get("v") in DEFECT_V)
-        if not truth and not defect:
+        wrong = set(exp.get("wrong") or ())           # 只知道不是这些字（看图判错没认出）
+        if not truth and not defect and not wrong:
             continue
         cell = f"{a['book']}:{a['page']}:{a['col']}:{a['slot']}{exp.get('sub') or ''}"
         out.append(Label(cell=cell, source="gold", selection=_sel(spec, PICKED if r.get("stratum") else RANDOM),
-                         truth=truth, defect=defect, ref=p.parent.name))
+                         truth=truth, defect=defect, wrong=wrong, ref=p.parent.name))
     return out
 
 
