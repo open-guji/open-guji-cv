@@ -245,20 +245,11 @@ def load_seal_templates() -> tuple[np.ndarray, ...]:
 SEAL_COVER_DILATE = 5   # 印章笔画覆盖区：命中模板二值化（<128）膨胀的像素数（道 A 量法，overview#493）
 
 
-def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
-                     overlap: float, ink_out: float | None = None
-                     ) -> dict[tuple[int, int, str], dict]:
-    """找印框，返回框内候选格 {(col, slot, sub): {"seal_score", "overlap", "ink_out"}}。
-
-    印框 = 窗口先验内 NCC 最高（≥ `thr`）的那个模板位置。格与印框重叠面积 ÷ 格面积 ≥ `overlap`
-    才入选。找不到印框、没有模板、窗口超出页图都返回空表。只给候选，不判空。
-
-    `ink_out`（第四条保险，道 A 量法）：格内「模板外墨」＝格框内 <128 且落在覆盖区外的像素 ÷ 格面积；
-    ≥ `ink_out` 的格退出候选（仍走原路径，即待审）。覆盖区 ＝ 命中的那个模板在命中位置的二值化（<128）
-    膨胀 `SEAL_COVER_DILATE` 像素，与 NCC 命中同一坐标系、不另起对位。`ink_out=None` 不做这道过滤。"""
+def find_seal_box(gray: np.ndarray, *, templates, thr: float):
+    """窗口先验内 NCC 最高的模板位置：(印框 (x, y, w, h)、分数、模板)；没有模板、窗口超出页图、分数 < `thr` 返回 None。"""
     import cv2
     if not templates or gray is None:
-        return {}
+        return None
     H, W = gray.shape[:2]
     best, box, best_tpl = -1.0, None, None
     x0, y0 = SEAL_WIN_XY[0] - SEAL_WIN_HALF, SEAL_WIN_XY[1] - SEAL_WIN_HALF
@@ -275,7 +266,27 @@ def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
         if mx > best:
             best, box, best_tpl = float(mx), (rx0 + px, ry0 + py, tw, th), tpl
     if box is None or best < thr:
+        return None
+    return box, best, best_tpl
+
+
+def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
+                     overlap: float, ink_out: float | None = None
+                     ) -> dict[tuple[int, int, str], dict]:
+    """找印框，返回框内候选格 {(col, slot, sub): {"seal_score", "overlap", "ink_out"}}。
+
+    印框 = 窗口先验内 NCC 最高（≥ `thr`）的那个模板位置。格与印框重叠面积 ÷ 格面积 ≥ `overlap`
+    才入选。找不到印框、没有模板、窗口超出页图都返回空表。只给候选，不判空。
+
+    `ink_out`（第四条保险，道 A 量法）：格内「模板外墨」＝格框内 <128 且落在覆盖区外的像素 ÷ 格面积；
+    ≥ `ink_out` 的格退出候选（仍走原路径，即待审）。覆盖区 ＝ 命中的那个模板在命中位置的二值化（<128）
+    膨胀 `SEAL_COVER_DILATE` 像素，与 NCC 命中同一坐标系、不另起对位。`ink_out=None` 不做这道过滤。"""
+    hit = find_seal_box(gray, templates=templates, thr=thr)
+    if hit is None:
         return {}
+    import cv2
+    box, best, best_tpl = hit
+    H, W = gray.shape[:2]
     bx, by, bw, bh = box
     # 覆盖区：命中模板在命中位置的笔画（<128）膨胀；只在页图尺寸内
     cov = np.zeros((H, W), np.uint8)

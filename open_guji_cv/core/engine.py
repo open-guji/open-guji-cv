@@ -408,7 +408,7 @@ class Engine:
         参数模型构造时会现算库指纹（`glyph_match.db_fingerprint`、`seed_admit` 的人裁形状指纹……），
         库含字体域时一次要对 3 GB 的 glyph.db 做几回统计；`status()` 逐页逐步调，vol06 150 页
         `close-check` 1a 光这个就 98 s（GUJI-647）。一次 `status()` 之内库不变，缓存只活在这一次调用里，
-        下一次查状态照样看得见人裁进库。跑批路径不走缓存，行为不变。"""
+        下一次查状态照样看得见人裁进库。跑批时同理，缓存只活在跑一步的期间（`_run_one_step`）。"""
         c = getattr(self, "_pcache", None)
         if c is None:
             return self.ctx.params_for(step)
@@ -569,6 +569,21 @@ class Engine:
     def _run_one_step(self, step: Step, pages: list[int], report: RunReport,
                        force: bool, stop_on_error: bool, total: int, done: int,
                        jobs: int = 1) -> tuple[int, bool]:
+        """`_run_one_step_pages` 外包一层：这一步跑批期间参数只构造一次（`_pcache` 与 `ctx._params_memo`
+        同一个表）。参数构造时要对 glyph.db 算人裁、库指纹（seed_admit 每次约 0.1–0.3 s），原来逐页在
+        指纹、落盘、run_page 里各现算一遍，vol06 seed_admit 一步主进程 600 多次（GUJI-647）。一步之内库不变，
+        跑完就清，下一步照样现算。"""
+        if getattr(self, "_pcache", None) is not None:   # 已在 status() 之类的缓存范围里
+            return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
+        self._pcache = self.ctx._params_memo = {}
+        try:
+            return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
+        finally:
+            self._pcache = self.ctx._params_memo = None
+
+    def _run_one_step_pages(self, step: Step, pages: list[int], report: RunReport,
+                            force: bool, stop_on_error: bool, total: int, done: int,
+                            jobs: int = 1) -> tuple[int, bool]:
         """跑一个 Step（普通 Step 或闸）逐页，返回 (新的 done 计数, 是否已 stop_on_error 中止)。
 
         `jobs > 1` 且这一步审过可并行（`StepSpec.parallel_safe` 或 `core/parallel.py` 的登记）
@@ -585,7 +600,7 @@ class Engine:
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
                      f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
                      f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
-        if jobs > 1 and is_parallel_safe(step):
+        if jobs > 1 and is_parallel_safe(step, self.ctx.params_for(step)):
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)
         sid = step.spec.id
@@ -913,6 +928,7 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_step = STEPS[step_id]
     _worker_ctx = RunContext(book, ProductStore(store_root), ImageCache(cache_root, cache_limit),
                              params, log=lambda s: None, pipeline=pipeline)
+    _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
 def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float]:

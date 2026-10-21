@@ -264,12 +264,12 @@ def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypat
             return []
 
     with pytest.raises(corpus_pin.CorpusDrift):
-        Engine._run_one_step(_E(), _step("glyph_match"), [], None, False, False, 0, 0)
+        Engine._run_one_step_pages(_E(), _step("glyph_match"), [], None, False, False, 0, 0)
     assert seen == [2]
     e = _E()
     e.book = make_book()                                # 没钉：不查
     with pytest.raises(AttributeError):                 # 走到后面真跑的地方（假引擎没有 store）
-        Engine._run_one_step(e, _step("glyph_match"), [], None, False, False, 0, 0)
+        Engine._run_one_step_pages(e, _step("glyph_match"), [], None, False, False, 0, 0)
     assert seen == [2]
 
 

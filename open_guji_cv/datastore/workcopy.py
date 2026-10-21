@@ -213,6 +213,10 @@ def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: di
     import tarfile
     if not hasattr(src, "put_snapshot"):
         return None
+    if _read_only(src):
+        # 读令牌存不上（403），先问一句，省得白打一个包（殿本约 9 s；云端新机器拉库都是读令牌）
+        print("[db] 读令牌不存快照（不影响本次拉取）", file=sys.stderr)
+        return None
     local = _local(ws_dir, data)
     buf = io.BytesIO()
     try:
@@ -234,6 +238,14 @@ def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: di
     except Exception as e:                       # 读令牌、旧 Worker、网络问题：不影响拉取
         print(f"[db] 快照没存上（不影响本次拉取）：{e}", file=sys.stderr)
         return None
+
+
+def _read_only(src) -> bool:
+    """令牌是不是只读（``whoami`` 的 ``role == "read"``）；问不到当可写，照旧去试。"""
+    try:
+        return hasattr(src, "whoami") and (src.whoami() or {}).get("role") == "read"
+    except Exception:                            # noqa: BLE001 —— 旧 Worker、网络问题：照旧试着存
+        return False
 
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,

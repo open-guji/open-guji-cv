@@ -91,6 +91,25 @@ def test_forced_on_blank_or_unforced_columns_changes_nothing():
     assert [(c.slot, c.sub, c.kind) for c in base.cells] == [(c.slot, c.sub, c.kind) for c in same.cells]
 
 
+def test_half_note_cell_emits_only_the_inked_half():
+    """格位表说只有一半有字的夹注格（行内空格：右行空、左行有字）：按段的缝拆，只发墨多的那半；不给就整格当正文。"""
+    img = _column(thin_seam_slots=(7, 9))
+    y0 = GRID_Y0 + 7 * SLOT_H + 10
+    img[y0:y0 + 90, 37:148] = 255
+    img[y0:y0 + 90, 15:96] = 0                        # 第 8 格：只有左半（b）一个小字
+    img[y0 + 40:y0 + 44, 96:104] = 0                  # 一笔伸过中缝
+    base = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, forced_jiazhu={7, 9})
+    assert set(_cells(base)[8]) == {""}
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, forced_jiazhu={7, 9},
+                               half_notes={8})
+    assert {sub: c.kind for sub, c in _cells(r)[8].items()} == {"b": "jiazhu_b"}
+    # 列里没有雙行段：不管
+    plain = _column()
+    assert [(c.slot, c.sub, c.kind) for c in fit_mod.segment_column(
+        plain, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, half_notes={8}).cells] == \
+        [(c.slot, c.sub, c.kind) for c in fit_mod.segment_column(plain, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W).cells]
+
+
 # ── 数据源：事件日志里最新一条定字裁决是 seg_defect+reason=jiazhu_as_main ──
 
 def _ev(batch, seq, key, payload, ts):
@@ -129,3 +148,13 @@ def test_route_invalidates_row_segment_for_jiazhu_marks():
                              for d in table.destinations(_ev("b", 1, "vol01:12:7:9", p, "2026-10-01T00:00:01Z")))
     assert "row_segment" in steps(jzp)
     assert "row_segment" not in steps({"v": "seg_defect", "quality": "truncated"})
+
+
+def test_half_note_solo_cell_without_runs_is_emitted_as_a_half():
+    """列里没有雙行段、表说只有一半有字的格，判据认成單行小注（小字靠右）→ 按半格发 jiazhu_a；表不说就仍是單行小注。"""
+    img = _column(tail_slots=(15,))
+    base = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
+    assert {sub: c.kind for sub, c in _cells(base)[15].items()} == {"": "jiazhu_solo"}
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, half_notes={15})
+    assert {sub: c.kind for sub, c in _cells(r)[15].items()} == {"a": "jiazhu_a"}
+

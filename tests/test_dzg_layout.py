@@ -175,3 +175,102 @@ def test_mask_misses_counts_both_directions():
     cells = [C(slot=1, kind="blank"), C(slot=2, kind="char"), C(slot=3, kind="char"), C(slot=4, kind="blank")]
     assert _mask_misses(cells, {2, 3}) == 0
     assert _mask_misses(cells, {3, 4}) == 2     # 第 2 格表说空却有字，第 4 格表说有字却空
+
+
+def test_blank_frame_junk_blanks_ink_crossing_column_edges():
+    """印章、墨污越过界行（墨伸到列的左右边上）：在表空格段里记空；守在列内的字不动；表认下的格不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((500, 100), 255, np.uint8)
+    img[10:90, 0:100:7] = 0                    # 第 1 格：印章笔画，满宽散开、伸到两边
+    img[110:190, 0:30] = 0                     # 第 2 格：印泥从左边伸进来
+    img[220:280, 30:70] = 0                    # 第 3 格：表的首字
+    img[310:390, 0:100:9] = 0                  # 第 4 格：越界墨，但表说有字 → 不动
+    mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
+    cells = [mk(1, 0), mk(2, 100), mk(3, 200), mk(4, 300), mk(5, 400)]
+    img[420:480, 30:70] = 0                    # 第 5 格：表说空、却是守在列内的字 → 不动（表可能漏字）
+    assert _blank_frame_junk(img, cells, {3, 4}, (0, 100), 128, 100.0) == 2
+    assert [c.kind for c in cells] == ["blank", "blank", "char", "char", "char"]
+
+
+def test_blank_frame_junk_blanks_speckle_that_forms_no_strokes():
+    """印章压着的表空格：墨是成片的小墨点、连不成笔画，没伸到列边也记空；连成笔画的字不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((400, 100), 255, np.uint8)
+    img[20:80, 30:70] = 0                      # 第 1 格：表的首字
+    for y in range(115, 190, 8):               # 第 2 格：印泥斑点，3×3 的小点，守在列内
+        for x in range(20, 80, 8):
+            img[y:y + 3, x:x + 3] = 0
+    img[320:380, 30:70] = 0                    # 第 4 格：表说空、却是连成笔画的字 → 不动
+    mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
+    cells = [mk(1, 0), mk(2, 100), C(slot=3, y0=200, y1=300, kind="blank", sub=None), mk(4, 300)]
+    assert _blank_frame_junk(img, cells, {1}, (0, 100), 128, 100.0) == 1
+    assert [c.kind for c in cells] == ["char", "blank", "blank", "char"]
+
+
+def test_blank_frame_junk_blanks_cells_holding_only_thin_vertical_lines():
+    """列端表空格里墨只是一两道竖线（印框的边）→ 记空；表空格里真有一个字 → 不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((300, 100), 255, np.uint8)
+    img[0:100, 30:70] = 0                      # 第 1 格：表的首字
+    img[100:200, 40:46] = 0                    # 第 2 格：一道竖线
+    img[110:190, 88:94] = 0                    #          又一道
+    img[220:280, 30:70] = 0                    # 第 3 格：一个字
+    mk = lambda slot, y0, kind="char": C(slot=slot, y0=y0, y1=y0 + 100, kind=kind, sub=None)
+    cells = [mk(1, 0), mk(2, 100, "jiazhu_solo"), mk(3, 200)]
+    assert _blank_frame_junk(img, cells, {1}, (0, 100), 128, 100.0) == 1
+    assert [c.kind for c in cells] == ["char", "blank", "char"]
+
+
+def test_blank_frame_junk_whole_column_when_table_says_empty():
+    """表说整列空（卷末空列）：整列都是表空格段，印章记空。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((300, 100), 255, np.uint8)
+    img[110:190, 0:100:6] = 0                  # 中间那格：印章
+    mk = lambda slot, y0: C(slot=slot, y0=y0, y1=y0 + 100, kind="char", sub=None)
+    cells = [C(slot=1, y0=0, y1=100, kind="blank", sub=None), mk(2, 100), C(slot=3, y0=200, y1=300, kind="blank", sub=None)]
+    assert _blank_frame_junk(img, cells, set(), (0, 100), 128, 100.0) == 1
+    assert cells[1].kind == "blank"
+
+
+def test_layout_row_fills_trailing_empty_columns():
+    """表只记有字的列：这一页最后一列表行之后的列是整列空；表里没有这一页、或列号在中间缺的，不猜。"""
+    from open_guji_cv.steps.row_segment import _layout_row
+    layout = {(5, 1): {"slots": [1, 2]}, (5, 3): {"slots": [1]}}
+    assert _layout_row(layout, 5, 1) == {"slots": [1, 2]}
+    assert _layout_row(layout, 5, 2) is None
+    assert _layout_row(layout, 5, 4)["slots"] == []
+    assert _layout_row(layout, 6, 1) is None
+
+
+def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
+    """印框记空：印框里、表说该空的列端格（字格、單行小注格）记空，哪怕墨连成笔画像字；
+    印框里表说有字的格、印框外的格都不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((500, 100), 255, np.uint8)
+    for k in range(5):
+        img[k * 100 + 20:k * 100 + 80, 30:70] = 0              # 每格一块成笔画的墨
+    kinds = ["char", "char", "char", "jiazhu_solo", "char"]
+    cells = [C(slot=k + 1, y0=k * 100, y1=k * 100 + 100, kind=kd, sub=None) for k, kd in enumerate(kinds)]
+    in_seal = lambda c: c.slot in (1, 3, 4)
+    assert _blank_frame_junk(img, cells, {3}, (0, 100), 128, 100.0, in_seal) == 2
+    assert [c.kind for c in cells] == ["blank", "char", "char", "blank", "char"]
+
+
+def test_in_seal_measures_cell_overlap_with_the_seal_box_in_page_coords():
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _in_seal
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [(x0 + 1000, y0), (x1 + 1000, y0), (x1 + 1000, y1), (x0 + 1000, y1)])
+    f = _in_seal((1000, 0, 100, 150), mapper)                # 印框盖住列图 y 0..150
+    cell = lambda y0: C(x0=0, x1=100, y0=y0, y1=y0 + 100)
+    assert f(cell(0)) and f(cell(50)) and not f(cell(110))     # 重叠 1、0.5、0.4
+    assert _in_seal(None, mapper) is None and _in_seal((0, 0, 1, 1), None) is None

@@ -18,7 +18,7 @@ def _torch():
     return torch, nn, F
 
 
-def make_net(base: int = 12):
+def make_net(base: int = 12, n_out: int = 3):
     torch, nn, F = _torch()
 
     def blk(i, o):
@@ -34,7 +34,7 @@ def make_net(base: int = 12):
             self.u3, self.d3 = nn.ConvTranspose2d(base * 8, base * 4, 2, 2), blk(base * 8, base * 4)
             self.u2, self.d2 = nn.ConvTranspose2d(base * 4, base * 2, 2, 2), blk(base * 4, base * 2)
             self.u1, self.d1 = nn.ConvTranspose2d(base * 2, base, 2, 2), blk(base * 2, base)
-            self.out = nn.Conv2d(base, 3, 1)
+            self.out = nn.Conv2d(base, n_out, 1)
 
         def forward(self, x):
             e1 = self.e1(x); e2 = self.e2(F.max_pool2d(e1, 2)); e3 = self.e3(F.max_pool2d(e2, 2))
@@ -75,11 +75,11 @@ def augment(gray: np.ndarray, mask: np.ndarray, rng: np.random.Generator):
     return x, y
 
 
-def train(cells, epochs: int = 150, seed: int = 0, base: int = 12, lr: float = 3e-3):
-    """cells = [(gray, mask)]。返回训练好的网络（CPU）。"""
+def train(cells, epochs: int = 150, seed: int = 0, base: int = 12, lr: float = 3e-3, n_out: int = 3):
+    """cells = [(gray, mask)]。返回训练好的网络（CPU）。`n_out` 类数：三段版 3，两段版（一条切线）2。"""
     torch, nn, F = _torch()
     torch.manual_seed(seed); rng = np.random.default_rng(seed)
-    net = make_net(base); opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-3)
+    net = make_net(base, n_out); opt = torch.optim.AdamW(net.parameters(), lr=lr, weight_decay=1e-3)
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=epochs * ((len(cells) * 4 + 15) // 16))
     for ep in range(epochs):
         net.train()
@@ -115,6 +115,21 @@ def prob_to_polylines(prob: np.ndarray, step: int = 4, smooth: int = 5):
     y2 = np.maximum(y2, y1)
     xs = list(range(0, w, step)) + [w - 1]
     return ([[(x + 0.5) / w, float(y1[x])] for x in xs], [[(x + 0.5) / w, float(y2[x])] for x in xs])
+
+
+def prob_to_polyline2(prob: np.ndarray, orient: str = "h", step: int = 4, smooth: int = 5):
+    """两类概率 → 一条折线（归一化，点为 (x,y)，格式同 `ids_two.auto_cut`）。
+    `h`（0 上 1 下）：第 x 列界线＝上段概率之和÷h；`v`（0 左 1 右）：第 y 行界线＝左段概率之和÷w。"""
+    if orient == "v":
+        t = prob_to_polyline2(prob[:, :, :].transpose(0, 2, 1), "h", step, smooth)
+        return [[y, x] for x, y in t]
+    _, h, w = prob.shape
+    y1 = prob[0].sum(axis=0) / h
+    k = np.ones(smooth) / smooth
+    pad = smooth // 2
+    y1 = np.convolve(np.r_[[y1[0]] * pad, y1, [y1[-1]] * pad], k, mode="valid")
+    xs = list(range(0, w, step)) + [w - 1]
+    return [[(x + 0.5) / w, float(y1[x])] for x in xs]
 
 
 # —— 线上推理：纯 numpy，不需要 torch ——

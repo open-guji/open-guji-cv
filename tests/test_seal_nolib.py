@@ -87,6 +87,31 @@ def test_occluded_gate_covers_v2_prefixed_key_and_memoizes(lib):
     assert calls == [(BOOK, pg)]
 
 
+def test_default_lookup_builds_seed_admit_params_once_per_book(lib, monkeypatch):
+    """缺省遮挡查询在一次 `glyphdb_admit` 里同一册只解析一次 seed_admit 参数（要给整库算人裁指纹，
+    原来逐页重算，rebuild 补放 711 页约 130 s）；调用结束不留缓存。"""
+    from open_guji_cv.core.step import RunContext
+    from open_guji_cv.feedback import consumers
+    from test_glyphdb_admit import _ev
+    db, cells = lib
+    seen = []
+    real = RunContext.params_for
+
+    def counting(self, step):
+        if step.spec.id == "seed_admit":
+            seen.append(self.book.id)
+        return real(self, step)
+    monkeypatch.setattr(RunContext, "params_for", counting)
+    evs = [_ev(f"{BOOK}:{pg}:{col}:{slot}", {"v": "confirm", "shape": "巳"}, pg, col, slot)
+           for pg, col, slot in [cells[0], (PAGE + 1, 1, 1), (PAGE + 2, 1, 1)]]
+    glyphdb_admit(evs, db_path=str(db))
+    assert seen == [BOOK]
+    assert consumers._OCC_BOOKS.get() is None
+    consumers._occluded_lookup(BOOK, PAGE)                # 调用之外照旧每次现建
+    consumers._occluded_lookup(BOOK, PAGE)
+    assert seen == [BOOK] * 3
+
+
 # ── 3. 找出并撤库 ───────────────────────────────────────────────────────
 def _tiny():
     import cv2

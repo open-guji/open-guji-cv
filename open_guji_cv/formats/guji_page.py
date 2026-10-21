@@ -43,8 +43,8 @@ SCHEMA_PATH = SCHEMA_PATHS[SCHEMA_ID]
 INDEX_SCHEMA_ID = "guji-layout-index/0.1"
 INDEX_SCHEMA_PATH = _FORMATS / "guji_layout_index_v0.1.schema.json"
 
-# IIIF 约定（网站总管 overview#357，2026-10-02）
-IIIF_BASE = "https://data.kaiyuanguji.com/iiif"
+# IIIF 约定（网站总管 overview#357，2026-10-02）；2026-10-21 数据域名迁到 data.openguji.com（kaiyuanguji-web#553、book-text#208）
+IIIF_BASE = "https://data.openguji.com/iiif"
 NORM_WHY = ("异体",)                 # 文本总管 #361·4：norm 只管异体→通行字，校勘改字不进这一层
 ZI_FORMS = ("ids", "desc")          # 文本总管 #361·7：方位确定写 IDS，拿不准写描述文字
 # v0.2（用户 10-02 裁定，#361·3/7/10）

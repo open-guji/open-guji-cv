@@ -25,7 +25,17 @@ def test_audited_steps_exist_and_count_as_safe():
         assert sid in STEPS, sid
         assert parallel.is_parallel_safe(STEPS[sid])
     assert parallel.is_parallel_safe(STEPS["border_detect"])     # 标在 Step 上的照旧认
-    assert not parallel.is_parallel_safe(STEPS["context_decide"])    # 没登记的一律串行
+    assert not parallel.is_parallel_safe(STEPS["page_survey"])       # 没登记的一律串行
+
+
+def test_serial_when_switch_falls_back_to_serial():
+    """context_decide 开了在线大模型（写盘上缓存、按次限流）就退回串行；缺省关时可并行。"""
+    from open_guji_cv.steps.context_decide import ContextDecideParams
+    step = STEPS["context_decide"]
+    off = ContextDecideParams()
+    assert parallel.is_parallel_safe(step, off)
+    assert not parallel.is_parallel_safe(step, off.model_copy(update={"enable_online_llm": True}))
+    assert parallel.is_parallel_safe(step)                            # 不给参数：只看登记
 
 
 def test_registry_is_not_a_code_dep():

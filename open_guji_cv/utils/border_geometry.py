@@ -242,6 +242,83 @@ HR_WALL_MIN_FRAC = 0.40
 # 装饰墨迹当台阶"的唯一防线（`detect_head_raise` 文档串记过：不看墙线时
 # 9/14/142 三页的"上諭"全是假阳性）。0.40 是"两份金标都零误报"的下沿。
 HR_DEFAULT_PAIR_GAP = 38  # 外边框整条没印上时，按实测中位间距推
+#: 抬头块向邻列延伸（`detect_head_raise(extend=True)`，2026-10-21）：邻列在块的内边框高度 ±HR_CLUSTER_DY 里
+#: 有一条细锐线、墨占比 ≥ 此值（够不上 HR_THIN_INK_MIN，内边框印得淡、或被抬头字压着），就算同一个抬头框，
+#: 并进块里，再一起过墙线判据。殿本 vol04 p9 c8 0.18、vol09 p109 c5/c6 0.21/0.15；块外的普通列在这一高度是空白。
+HR_EXTEND_INK_MIN = 0.12
+#: 延伸还要这一列真有抬头字：框线下 HR_EXTEND_SKIP 行起到窗口下沿，墨占比 > 0.1 的行占到 HR_EXTEND_TEXT_ROWS 以上。
+#: 七册全部页：真抬头列 0.77~0.99；抬头框旁边的普通列（线只是邻框的延长）0.00~0.08
+HR_EXTEND_SKIP = 8
+HR_EXTEND_TEXT_ROWS = 0.5
+#: 字凸出判据（`detect_head_raise(text_rule=True)`，2026-10-21）：有的抬头框只印了粗外框、没有内细线（殿本 vol04 p84
+#: 那种连顶线都没有），横线判据找不到。改看主上边框上方 [btop−130, btop−45] 这一段：列中间一半（先去掉整段
+#: 都有墨的竖条，即墙线）按行算墨占比，像字的行（HR_TEXT_ROW_LO~HR_TEXT_ROW_HI）占到 HR_TEXT_ROWS 以上，
+#: 而且至少一侧（界行往外 HR_TEXT_WALL_OUT 内）有墙线覆盖 HR_TEXT_WALL 以上，就算抬头。
+#: 殿本 vol04／06／07／09 全部页：抬头框没认出的 5 列（vol04 p65 c8、p84 c5，vol06 p58 c6，vol07 p46 c7、p77 c2）
+#: 全中，另中 vol04 p11 c5（图上确实抬头，格位表记成不抬），别无误报。
+#: 墙线这一道挡的是「上諭」那种字紧贴笔直版框、没有台阶的页（见 `detect_head_raise` 文档串）。
+HR_TEXT_BAND = (130, 45)
+HR_TEXT_ROW_LO, HR_TEXT_ROW_HI = 0.1, 0.6
+HR_TEXT_ROWS = 0.4
+HR_TEXT_WALL = 0.5
+HR_TEXT_WALL_OUT = 70
+HR_TEXT_PAD = 8
+
+
+def _raised_text_top(binm: np.ndarray, btop: float, xl: int, xr: int) -> float | None:
+    """字凸出判据（见 HR_TEXT_BAND）：这一列算抬头就返回抬头字的上沿 − HR_TEXT_PAD，否则 None。"""
+    h, w = binm.shape
+    y0, y1 = int(btop - HR_TEXT_BAND[0]), int(btop - HR_TEXT_BAND[1])
+    m = (xr - xl) // 4
+    if y0 < 0 or xr - xl < 20:
+        return None
+    band = binm[y0:y1, xl + m:xr - m]
+    keep = band.mean(axis=0) < HR_TEXT_ROW_HI          # 去掉墙线那种整段有墨的竖条
+    if not keep.any():
+        return None
+
+    def charlike(a: np.ndarray) -> np.ndarray:
+        r = a[:, keep].mean(axis=1)
+        return (r > HR_TEXT_ROW_LO) & (r < HR_TEXT_ROW_HI)
+    if charlike(band).mean() < HR_TEXT_ROWS:
+        return None
+    wall = 0.0
+    for x0, sgn in ((xl, -1), (xr, 1)):
+        for dx in range(-10, HR_TEXT_WALL_OUT + 1, 3):
+            xs = int(max(0, min(w - HR_WALL_STRIP_W, x0 + sgn * dx)))
+            wall = max(wall, float(binm[y0:y1, xs:xs + HR_WALL_STRIP_W].any(axis=1).mean()))
+    if wall < HR_TEXT_WALL:
+        return None
+    lo = max(0, int(btop - HR_BAND_ABOVE))
+    rows = np.flatnonzero(charlike(binm[lo:y1, xl + m:xr - m]))
+    return float(lo + rows[0] - HR_TEXT_PAD) if len(rows) else None
+
+
+def _extend_head_raise(per_col: list, curves: list) -> None:
+    """已认下的抬头列向两侧邻列延伸（见 `detect_head_raise` 第 6 步），原地改 `per_col`。"""
+    changed = True
+    while changed:
+        changed = False
+        for i, c in enumerate(per_col):
+            if c is not None or curves[i] is None:
+                continue
+            refs = [per_col[j]["inner_y"] for j in (i - 1, i + 1) if 0 <= j < len(per_col) and per_col[j]]
+            if not refs:
+                continue
+            curve, lo, btop, xl, xr = curves[i]
+            best = None
+            for ci in local_maxima(curve, radius=3):
+                y, ink = float(lo + ci), float(curve[ci])
+                wd, _ = half_height_score_at(curve, ci)
+                if wd <= HR_THIN_WD_MAX and ink >= HR_EXTEND_INK_MIN \
+                        and min(abs(y - r) for r in refs) <= HR_CLUSTER_DY \
+                        and HR_DIST_MIN <= btop - y <= HR_DIST_MAX and (best is None or ink > best[1]):
+                    best = (y, ink)
+            below = curve[int(best[0] - lo) + HR_EXTEND_SKIP:] if best is not None else curve[:0]
+            if len(below) and float((below > 0.1).mean()) >= HR_EXTEND_TEXT_ROWS:
+                per_col[i] = dict(col=i + 1, inner_y=best[0], outer_y=best[0] - HR_DEFAULT_PAIR_GAP,
+                                  estimated=True, btop=btop, xl=xl, xr=xr)
+                changed = True
 
 
 def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float) -> float:
@@ -291,7 +368,7 @@ def _dedup_peaks(peaks: list[tuple[float, float, float]],
 
 
 def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
-                       width: int) -> list[HeadRaiseBorder]:
+                       width: int, extend: bool = True, text_rule: bool = True) -> list[HeadRaiseBorder]:
     """探测抬头框（某几列的版框整体向上抬起一截）。
 
     判据不是"边框上方有字凸出"——那条路走过，9/14/142 三页的"上諭"紧贴
@@ -311,10 +388,18 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     5. 相邻列 inner_y 差 ≤18px 的聚成一个**抬头块**，墙线只查块的最外
        两侧——连续抬头列共用一个抬头框，块内部的界行在抬头区继续延伸，
        不是墙（vol01/33 c7 在块中间，实测墙覆盖率只有 0.00~0.04）。
+    6. 聚块之前，已认下的列向两侧邻列延伸（`extend`，2026-10-21）——邻列在同一高度有淡一些的细锐线
+       （`HR_EXTEND_INK_MIN`）、线下有抬头字的墨（`HR_EXTEND_TEXT_ROWS`）就并进来，可以一列接一列延伸；
+       延伸出来的块照样过第 5 步的墙线判据。
+       管内边框印得淡、或被抬头字压着的列（殿本 vol04 p9 c8、vol09 p109 c5/c6：抬头字整个落在列图外）。
+    7. 前面都没认下的列，再看字凸出（`text_rule`，2026-10-21，见 `HR_TEXT_BAND`）：主上边框上方有像字的墨、
+       旁边有墙线。管只印了粗外框、没有内细线（或连顶线都没有）的抬头框。不是第一句说的那条老路：
+       这里去掉了墙线竖条、只数像字的行，而且要有墙。inner_y 取抬头字上沿往上 HR_TEXT_PAD，`estimated=True`。
     """
     h, w = mask.shape
     binm = (mask > 0).astype(np.uint8)
     per_col: list[dict | None] = []
+    curves: list[tuple | None] = []
     for i in range(len(verticals) - 1):
         right_v, left_v = verticals[i], verticals[i + 1]
         x_old = lambda v, y: (width - 1) - v.x_at(y)  # noqa: E731
@@ -326,8 +411,10 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
         xr = int(min(w, max(x_old(right_v, ym), x_old(left_v, ym))))
         if xr - xl < 20 or hi <= lo:
             per_col.append(None)
+            curves.append(None)
             continue
         curve = binm[lo:hi, xl:xr].sum(axis=1).astype(np.float64) / (xr - xl)
+        curves.append((curve, lo, btop, xl, xr))
         thin: list[tuple[float, float, float]] = []
         fat: list[tuple[float, float, float]] = []
         for ci in local_maxima(curve, radius=3):
@@ -357,6 +444,8 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
                      else inner[0] - HR_DEFAULT_PAIR_GAP),
             estimated=estimated, btop=btop, xl=xl, xr=xr))
 
+    if extend:
+        _extend_head_raise(per_col, curves)
     blocks: list[list[dict]] = []
     cur: list[dict] = []
     for c in per_col + [None]:
@@ -378,6 +467,15 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
         out.extend(HeadRaiseBorder(col=c["col"], inner_y=c["inner_y"],
                                    outer_y=c["outer_y"], estimated=c["estimated"])
                    for c in blk)
+    if text_rule:
+        got = {b.col for b in out}
+        for i, cv in enumerate(curves):
+            if cv is None or i + 1 in got:
+                continue
+            y = _raised_text_top(binm, cv[2], cv[3], cv[4])
+            if y is not None:
+                out.append(HeadRaiseBorder(col=i + 1, inner_y=y, outer_y=y - HR_DEFAULT_PAIR_GAP, estimated=True))
+        out.sort(key=lambda b: b.col)
     return out
 
 
@@ -1472,7 +1570,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     vline_polyline: bool = True,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
-                    frame_layers: dict | None = None) -> BorderDetectionResult:
+                    frame_layers: dict | None = None,
+                    head_raise_extend: bool = True) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1569,7 +1668,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             conv.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
                               yt_ + (yb_ - yt_) / 3.0, yt_ + 2.0 * (yb_ - yt_) / 3.0))
         verticals, vseg = conv, 3
-    head_raise = detect_head_raise(mask, top, verticals, w)
+    head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
                                  frame_layers=frame_layers)

@@ -204,6 +204,8 @@ def cmd_pipeline(args) -> None:
         except RunLockHeld as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
+        if rc == 0:
+            _auto_pack(args, eng, steps)
         _print_unpacked(eng.book.id, eng.store)
         sys.exit(rc)
     try:
@@ -213,12 +215,40 @@ def cmd_pipeline(args) -> None:
     except RunLockHeld as e:
         print(f"✗ {e}", file=sys.stderr)
         sys.exit(3)
+    n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
     if getattr(args, "json", False):
         print(json.dumps(rep.to_dict(), ensure_ascii=False))
     else:
+        if not n_failed:
+            _auto_pack(args, eng, steps)
         _print_unpacked(eng.book.id, eng.store)
-    n_failed = sum(1 for o in rep.outcomes if o.status == "failed")
     sys.exit(1 if n_failed and args.stop_on_error else 0)
+
+
+def _auto_pack(args, eng, steps: list[str]) -> None:
+    """整册从头跑到尾、没有失败页 → 顺手把产物打包存进 R2（sheldon 10-21：免得忘）。
+
+    只在「--pages all 且跑的是整条 pipeline（没给 --from/--to 或给的就是首尾两步）」时存；
+    `--no-pack` 或 `GUJI_AUTO_PACK=0` 关。没有令牌、存失败只提醒，不改跑批的返回码。
+    标签按版本三段拼，后缀 `full`；不标 main（要标用 `guji products pack promote`）。"""
+    import os
+    if getattr(args, "no_pack", False) or os.environ.get("GUJI_AUTO_PACK", "1") == "0":
+        return
+    if str(getattr(args, "pages", "")) != "all" or steps != cli_steps(eng, None, None):
+        return
+    book = eng.book.id
+    if not os.environ.get("GUJI_DATA_TOKEN"):
+        print(f"  ⓘ 整册跑完，没设 GUJI_DATA_TOKEN，没自动存包：guji products pack push {book} --change full")
+        return
+    try:
+        from .cli_products import book_versions
+        from .datastore import packs as PK
+        root = eng.store.root
+        info = PK.push_products(book, root, change="full", vers=book_versions(book, root),
+                                note="guji pipeline 整册跑完自动存")
+        print(f"  ✓ 整册跑完，产物已自动存包：{info['name']}（{info['bytes'] / 1e6:.1f} MB）")
+    except Exception as e:     # noqa: BLE001 —— 存包失败不算跑批失败
+        print(f"  ⚠ 整册跑完，自动存包失败（{e}）：手动 guji products pack push {book} --change full")
 
 
 def _print_unpacked(book: str, store) -> None:
@@ -2723,6 +2753,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("book", help="books/<id>.yaml 里的书 id")
     p.add_argument("--from", dest="from_step", default=None, help="起始步骤 id")
     p.add_argument("--to", dest="to_step", default=None, help="终止步骤 id（含）")
+    p.add_argument("--no-pack", action="store_true",
+                   help="整册（--pages all）从头跑到尾时缺省自动把产物打包存 R2；加这个不存（也可 GUJI_AUTO_PACK=0）")
     _add_pages(p)
 
     p = sub.add_parser("step", help="[v2] 只跑一步")
@@ -3306,6 +3338,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)
     COMMANDS_V2["opinions"] = cmd_opinions
+    # cellvotes（M10）：网站精校页投票 → 人裁事件草稿／写入；带 book，-w 由下面统一加
+    from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
+    _add_cellvotes(sub)
+    COMMANDS_V2["cellvotes"] = cmd_cellvotes
     install_workspace_option(sub)
 
 

@@ -1171,6 +1171,26 @@ def find_content_window(col_gray: np.ndarray, ink_threshold: int = 128,
     return x_lo, x_hi
 
 
+#: 等距格线就近落进字缝：每条格线只在 ±SNAP_FRAC 格高内挪，挪到行墨最少的那一行（平手取离原位近的）
+SNAP_FRAC = 0.2
+
+
+def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -> list[float]:
+    """等距格网（`utils/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
+    直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。"""
+    h = len(row_proj)
+    sm = np.convolve(row_proj, np.ones(5) / 5.0, mode="same")
+    r = max(1, int(round(SNAP_FRAC * period)))
+    out = []
+    for y in bounds:
+        yi = int(round(min(max(y, 0.0), h - 1)))
+        a, b = max(0, yi - r), min(h, yi + r + 1)
+        win = sm[a:b]
+        best = min(range(len(win)), key=lambda i: (round(float(win[i]), 3), abs(a + i - yi)))
+        out.append(float(a + best))
+    return out
+
+
 def row_ink_projection(col_gray: np.ndarray, x_lo: int = 0, x_hi: int | None = None,
                         ink_threshold: int = 128) -> np.ndarray:
     """列图的行投影：每一行在内容窗口内的墨像素个数（喂给弹性 DP 的曲线）。"""
@@ -1547,8 +1567,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     forced_solo: "set[int] | None" = None,
                     forced_jiazhu: "set[int] | None" = None,
                     forced_main: "set[int] | None" = None,
+                    half_notes: "set[int] | None" = None,
                     dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
+                    grid_bounds: "Sequence[float] | None" = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1623,10 +1645,15 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       `jiazhu_split` 的「段尾疑似闸」：自动裁段 18 处命中 16 处假阳性），只能人指出来。这些格在
       连段、强制拆、段端收编**之后**从段里摘掉，按整格出（char）；也不再参与單行小注判定。
       同一格两条强制都在时它赢（人后来又说「这是正文」）。
+    - `half_notes`：只有一半有字的夹注格（对外 `slot` 编号，来自逐列格位表的 `half`）。列里有雙行段时，
+      这一格按段的缝（各段格缝的中位数）拆，**只发墨多的那一半**——行内空格、段尾奇数字，另一半
+      只有邻字残墨。列里没有雙行段就不管（交给單行小注判据）。
     - `pinned_cuts`：人拖过的切线，`slot_above → 列图 y`（`feedback/lookup.resolved_pins`），
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
+    - `grid_bounds`：等距格网（`utils/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
+      就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1650,12 +1677,18 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
 
     bar_y = (find_bottom_frame_bar(col_gray, x_lo, x_hi, border_bottom, period, ink_threshold)
-             if detect_bottom_bar else None)
+             if detect_bottom_bar and grid_bounds is None else None)
     # 框线已在 border_bottom 上（或贴着它）就不必挪：只有真高出一截才换下界
     if bar_y is not None and bar_y > border_bottom - BOTTOM_BAR_MIN_SHIFT:
         bar_y = None
-    result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
-                                n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
+    if grid_bounds is not None:
+        if len(grid_bounds) != n_slots + 1:
+            raise ValueError(f"grid_bounds 要 {n_slots + 1} 条格线，给了 {len(grid_bounds)}")
+        result = RowBoundaryResult(boundaries=snap_to_gaps(row_proj, grid_bounds, period),
+                                   blank_intervals=[], valleys=[], period=period)
+    else:
+        result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
+                                    n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
     if bar_y is not None:
         barred = fit_row_boundaries(row_proj, dst_w, border_top, bar_y, period,
                                     n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
@@ -1756,6 +1789,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     tail_a: set[int] = set()
     solo: dict[int, float] = {}
     suspect: set[int] = set()
+    one_half: set[int] = set()
     if detect_jiazhu:
         ruler = float(ref_w) if ref_w else float(dst_w)
         entries = [
@@ -1783,6 +1817,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         for pos in main_pos:
             runs.pop(pos, None)
             tail_a.discard(pos)
+        # 表说只有一半有字的夹注格：并进段（缝取段的中位数），发格时只发墨多的一半
+        if half_notes and runs:
+            cx_mid = float(np.median(list(runs.values())))
+            for pos in sorted(nonblank):
+                if _pos_to_slot(pos, n_raised) in half_notes and pos not in main_pos:
+                    runs.setdefault(pos, cx_mid)
+                    one_half.add(pos)
         suspect = jiazhu_split.suspect_full_width_cells(runs, patches, ink_threshold)
         # 單行小注（小字只占右半、左半空着）：zongmu 两册没有这种版式，原判据
         # 测不到（跨度比正文还窄，方向相反），bxgb 大量用它给人名作注。
@@ -1798,6 +1839,13 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if forced_solo and _pos_to_slot(pos, n_raised) in forced_solo \
                     and pos not in runs and pos not in solo:
                 solo[pos] = jiazhu_split.right_half_left_edge(patches[pos], ink_threshold)
+        # 表说只有一半有字、判据又认成單行小注的格（列里没有雙行段时，如小写靠右的「臣」）：表说它是夹注的一半，
+        # 按半格发（缝取小注左缘，只发墨多的那半），不发 jiazhu_solo
+        if half_notes:
+            for pos in sorted(solo):
+                if _pos_to_slot(pos, n_raised) in half_notes:
+                    runs[pos] = solo.pop(pos)
+                    one_half.add(pos)
 
     cells: list[Cell] = []
     for k in range(n_slots):
@@ -1825,9 +1873,11 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             cxi = int(round(cx_local))
             # 半边无墨（段末单半）不发格子——生产同口径（`ty.size < 30`）。
             # a=右子列先读、b=左子列；单字尾（tail_a）的 b 侧只有邻字残渣。
-            for kind, xs, xe in (("jiazhu_a", cxi, x_hi - x_lo),
-                                  ("jiazhu_b", 0, cxi)):
-                if kind == "jiazhu_b" and pos in tail_a:
+            sides = (("jiazhu_a", cxi, x_hi - x_lo), ("jiazhu_b", 0, cxi))
+            if pos in one_half:
+                sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
+            for kind, xs, xe in sides:
+                if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue
                 half = patches[pos][:, xs:xe]
                 if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
