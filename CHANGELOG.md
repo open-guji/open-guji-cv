@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.3] - 测试中
+
+PATCH（Sheldon 10-21 定发）。只有 `row_segment` 的 `code_hash` 变（1.23 → 1.25，新增 `code_deps` `utils.row_grid`），各册 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。
+
 ### Changed
 - 切分 `row_segment` 1.25：`layout_prior` 列端表空格里的墨大多连不成笔画（落在面积 > 150 像素连通块里的不到 75%：印章的印泥斑点、篆文残笔）也记空。PATCH；`row_segment` 的 `code_hash` 变，各册 Step3 起判过期。殿本 vol04–10 全部页 10,620 列对 1.24 逐格 99.03% → 99.51%，修好 51 列、改坏 0（第 4 页起 99.33% → 99.55%，修好 23）；修的是各册首叶（p2/p3 藏书印）和卷端大印（vol04 p130、vol09 p70/p164、vol10 p88）。
 - 切分 `row_segment` 1.24：逐列格位约束 `layout_prior` 加三处（只作用于命中格位表的页；开关关着、或没有表的书逐字节不变）。PATCH；`row_segment` 的 `code_hash` 变（新增 `code_deps` `utils.row_grid`，`utils.row_boundaries` 加了不跑 DP 的格网入口），各册 Step3 起判过期。殿本 vol04–10（第 4 页起 10,521 列）对 1.23 逐格 99.03% → 99.33%，修好 32 列、改坏 0；穿字格线七册合计 6061 → 5941。
