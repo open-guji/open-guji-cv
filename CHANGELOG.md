@@ -5,33 +5,31 @@
 
 ## [未发版]
 
+### Added
+- `guji audit changes <册> --base <上一基线产物根>`（M9 D5，GUJI-664）：列出新放行、放行字变了的格（`放行变化.md／json`）；zl.py 设 `ZL_BASE_PRODUCTS` 后这些格进联系页，看图闸要每格都有结论才过。联系页另存单格图与 `tiles.json`。
+- `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
+- `guji audit reasons <册>`（M9 D6，GUJI-668）：每个待审格打一个主成因码（`review/causes.py`：A1–A9 切分／对位、B 码位异体、C 形近字组、D 遮挡、E 与整理本冲突、F 库缺字、G 对齐改字、H 库＝整理本仍被拦、I 证据不足），出 `reasons.json`／`reasons.md`（按码写交给谁）。`republish.py` 把码并进待审单的 `cause`、台账记 `reasons.cause`；`cls` 不动。vol06 175 格里「证据不足」8%。只读产物，不碰任何 Step。
+
 ## [0.5.0] - 测试中
 
 ### Added
 - 人裁事件规范 v1（#300，GUJI 人裁事件格式调研）：`doc/formats/人裁事件规范.md` 与 `formats/guji_feedback_event_v1.schema.json`；`guji events lint -w <工作区>` 按规范只读体检。全部「后到覆盖」统一按 `replay_key=(ts, batch, seq)`（`gold rebuild`、`route_and_consume`、`EventLog.resolve/pending`、`label_batches`、`vision` 重建、复核冲突、事件列表此前按批次名序，殿本 351 个单位、北行 11 个两种顺序取到的最终裁决不同，下次 `gold rebuild` 会按时间序改正）；`EventTarget` 从 key 补全空的 `book/page/col/slot`；`resolve(kinds=, unit=)`；控制台写入把秒级 `client_ts` 归一毫秒。PATCH；不在任何 Step 的 `code_deps` 里，17 步 `code_hash` 不变。
 - 人裁事件历史遗留迁成现行格式（#321）：`python -m open_guji_cv.feedback.migrate_v1 --ws <工作区> [--apply]`（撞号／错文件、旧 id、空 target 字段、秒级 client_ts、`product_key` 两种形状；连带改 consumed、金标 `source_events`、补锚档；核对重放顺序与 `gold rebuild` 不变）；`datastore.importer.import_scans(only_paths=)` 只差分点名的文件。锚里切分产物的 sha 改写进 `anchor.cells_sha`，`product_key` 只留 `{step, key, fingerprint}`；lint 新增 `E-key-empty`、`E-product-key`，`E-id-shape`／`E-batch-file`／`E-client-ts-sec` 升为错误。中心库 10-21 已迁（殿本 import 118、北行 import 119）。PATCH；17 步 `code_hash` 不变。
+- `scripts/check_release_tags.py`：发版后核对每个发进 main 的版本都有 `vX.Y.Z` tag、且 tag 在 main 主线的发版合并提交上（用户 10-20 定「打了 tag 才算发完」，写进 `doc/版本号规矩.md` 第三节第 5、9、10 条）。PATCH；不碰任何 Step，`code_hash` 不变。
+- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
 
 ### Changed
 - 切分 `row_segment` 1.23、`cell_shrink` 1.9：逐列格位约束 `layout_prior` 三处结构化改动（只作用于命中格位表的列；开关关着、或没有表的书逐字节不变）。PATCH；只有 row_segment（d5f4ceedcfbd2d06 → 89ea9a967e3dd407）、cell_shrink（17162d9e3ed6047f → f9206af1e771f0e5）的 `code_hash` 变，各册 Step3 起判过期。殿本 vol04–10（第 4 页起 10,521 列，对 v0.4.9 现行 main）逐格 98.79% → 99.03%，修好 27 列、改坏 1 列（vol09 p162 c3 卷末小计列，看图新切法更好，金标口径多一格）。
   - 候选格网统一打分：表格网、闸抬头格网（抬头级数表与闸不一致时）、无先验格网（前两者都劈了字、且不看表切出的字比表少时）按「坏格数＝劈开的字＋违表的格 → 劈字数 → 穿字格线」取最小。新增劈字判据 `_split_chars`（一个连通体被格线劈成两段、两段各占三成以上）。修 vol06 p94 c6 列首「二」被单切一格后丢失、vol07 p44 c8「年」被劈。
   - 列端框线残渣记空的范围从「物理首／末格」放宽到「表的首字之前、末字之后那一段表空格」，判据不变（首字上方隔一格的碎墨、斜笔残迹）。
   - Step3 给表认下的字格记 `layout_char`；Step4 列端渣格闸遇到这种格、且格里有成笔的墨时不判渣（列尾「一」被判 tail_junk，vol05–10 共 16 列）。白纸照样判空。
-
-### Added
-- `guji audit changes <册> --base <上一基线产物根>`（M9 D5，GUJI-664）：列出新放行、放行字变了的格（`放行变化.md／json`）；zl.py 设 `ZL_BASE_PRODUCTS` 后这些格进联系页，看图闸要每格都有结论才过。联系页另存单格图与 `tiles.json`。
-- `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
-- `guji audit reasons <册>`（M9 D6，GUJI-668）：每个待审格打一个主成因码（`review/causes.py`：A1–A9 切分／对位、B 码位异体、C 形近字组、D 遮挡、E 与整理本冲突、F 库缺字、G 对齐改字、H 库＝整理本仍被拦、I 证据不足），出 `reasons.json`／`reasons.md`（按码写交给谁）。`republish.py` 把码并进待审单的 `cause`、台账记 `reasons.cause`；`cls` 不动。vol06 175 格里「证据不足」8%。只读产物，不碰任何 Step。
-- `scripts/check_release_tags.py`：发版后核对每个发进 main 的版本都有 `vX.Y.Z` tag、且 tag 在 main 主线的发版合并提交上（用户 10-20 定「打了 tag 才算发完」，写进 `doc/版本号规矩.md` 第三节第 5、9、10 条）。PATCH；不碰任何 Step，`code_hash` 不变。
-- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
+- 请审单（`guji audit sheet`）第 4 节按已导入的看图结论自动填「看图判错、人还没裁」的格，新增第 5 节「看不清」；原来要会话手工追加。不碰任何 Step，`code_hash` 不变（M9，GUJI-653）。
+- `scripts/zhengli/zl.py`（M9 基线跑 vol06 整册后，GUJI-653／654）：新增 `db`（拉中心库）、`pending`（待审单草稿，只给 2c 核数、不上线）两步；书 yaml 改从数据目录 `books/` 找；稀疏克隆按 `<书目录>/data_full/<丛编>/<册>/` 取本册原图；BrokenProcessPool 归「疑似内存不足」，前台、后台都减半并行续跑；缓存只在校验报错时 `--fix`；导出不再缺省 `--text-version 0.1.0`，要 `ZL_TEXT_VERSION`；`close` 改跑粗校档 `--tier rough`，出 R1–R5 报告、2d 列交代草稿，剩下的活写 NEXT.md。`collect_exit.py` 加 `--close-check-json` 复用已跑的体检（省一遍约 5 分钟）。
+- 新增 `scripts/zhengli/republish.py`（GUJI-680 第一步）：一册重跑后重发待审单。`prep` 按现行产物出新单（audit alt → pending_list → pending_route 扣已人裁 → 雪碧图），rev 按线上单自动加一，出差异单（去掉的格按「人裁过／机器放行了／格号没了」分，列出旧 rev 上的网站精校票）；`push --yes` 才写进数据目录并记台账，`--sync` 再推中心库。不碰任何 Step。
 
 ### Fixed
 - 语料库清单不再收字组 `config/groups/*/prompt.md`（只给离线 L2 拼消息，Step 不读）；老清单里登记了的也跳过核对。此前改提示词（cc6f455f）会让钉了 corpus 的册在 glyph_match 起跑前报 CorpusDrift 拒跑（M9 基线跑 vol06 撞上，GUJI-636；PATCH，各步 code_hash 不变）。
 - 并行限流按容器内存算：可用内存取 /proc/meminfo 与 cgroup 上限（减去已用、不算页缓存）中小的；glyph_match 单进程登记从 1 GB 改为 3.6 GB（导了字体域后 vol06 实测 3.4–3.7 GB，原登记让 4 进程在 14.3 GB 容器里被 OOM 杀）。只改进程数，产物与 code_hash 不变（M9 基线，GUJI-636）。
-
-### Changed
-- 请审单（`guji audit sheet`）第 4 节按已导入的看图结论自动填「看图判错、人还没裁」的格，新增第 5 节「看不清」；原来要会话手工追加。不碰任何 Step，`code_hash` 不变（M9，GUJI-653）。
-- `scripts/zhengli/zl.py`（M9 基线跑 vol06 整册后，GUJI-653／654）：新增 `db`（拉中心库）、`pending`（待审单草稿，只给 2c 核数、不上线）两步；书 yaml 改从数据目录 `books/` 找；稀疏克隆按 `<书目录>/data_full/<丛编>/<册>/` 取本册原图；BrokenProcessPool 归「疑似内存不足」，前台、后台都减半并行续跑；缓存只在校验报错时 `--fix`；导出不再缺省 `--text-version 0.1.0`，要 `ZL_TEXT_VERSION`；`close` 改跑粗校档 `--tier rough`，出 R1–R5 报告、2d 列交代草稿，剩下的活写 NEXT.md。`collect_exit.py` 加 `--close-check-json` 复用已跑的体检（省一遍约 5 分钟）。
-- 新增 `scripts/zhengli/republish.py`（GUJI-680 第一步）：一册重跑后重发待审单。`prep` 按现行产物出新单（audit alt → pending_list → pending_route 扣已人裁 → 雪碧图），rev 按线上单自动加一，出差异单（去掉的格按「人裁过／机器放行了／格号没了」分，列出旧 rev 上的网站精校票）；`push --yes` 才写进数据目录并记台账，`--sync` 再推中心库。不碰任何 Step。
 
 ## [0.4.9] - 2026-10-20
 
