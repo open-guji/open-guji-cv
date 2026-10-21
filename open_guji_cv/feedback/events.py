@@ -139,10 +139,10 @@ class EventTarget(BaseModel):
     def _fill_from_key(self) -> "EventTarget":
         """book/page/col/slot 全空、key 解析得出 → 从 key 补上（2026-10-20）。
 
-        这四个字段本来就是 key 的拆分（写入口 `parse_card_id(key)` 填）。09-17 之前 `parse_card_id`
-        不认 `vol\\d+` 以外的册名，bxgb 822 条定字、100 条切线落盘时四项全空；按 `target.book` 过滤的
-        读者（`bindings._return_trigger_events`、控制台按册列事件）就漏了它们。只补全空的，
-        有值的一律不动（不替人改账）。"""
+        这四个字段本来就是 key 的拆分。放在构造时补，所有写入口（控制台、H 道脚本直写 `EventLog.append`）
+        都不会再落全空的行。09-17 之前 `parse_card_id` 不认 `vol\\d+` 以外的册名，bxgb 822 条定字、100 条
+        切线落盘时四项全空，按 `target.book` 过滤的读者（`bindings._return_trigger_events`、控制台按册列事件）
+        漏了它们；那批原行 10-21 已迁（`migrate_v1`）。只补全空的，有值的一律不动（不替人改账）。"""
         if self.book is None and self.page is None and self.col is None and self.slot is None:
             from .keys import parse_card_id
             for k, v in parse_card_id(self.key).items():

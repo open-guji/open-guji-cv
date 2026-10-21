@@ -99,12 +99,17 @@ def _pk_cols(tbl: str) -> list[str]:
     return ["ws", *TABLES[tbl].key]
 
 
-def load_existing(cur, tbl: str, ws: str) -> dict[tuple, tuple[str, int]]:
+def load_existing(cur, tbl: str, ws: str, paths: set[str] | None = None) -> dict[tuple, tuple[str, int]]:
+    """``paths`` 给了就只取这些文件的行（``import_scans(only_paths=)``）。"""
     keys = TABLES[tbl].key
     sel = ", ".join(keys) + ", " if keys else ""
     text = "raw || E'\\n' || COALESCE(patch_sha, '')" if tbl == "glyph_instances" else "raw"
+    where, args = "ws = %s", [ws]
+    if paths is not None:
+        where += " AND src_path = ANY(%s)"
+        args.append(sorted(paths))
     cur.execute(f"SELECT {sel}encode(sha256(convert_to({text}, 'UTF8')), 'hex'), src_line "
-                f"FROM {tbl} WHERE ws = %s", (ws,))
+                f"FROM {tbl} WHERE {where}", args)
     n = len(keys)
     return {tuple(r[:n]): (r[n], r[n + 1]) for r in cur.fetchall()}
 
@@ -204,9 +209,12 @@ def import_commit(conn, repo, commit: str = "HEAD", *, only_ws: set[str] | None 
 
 def import_scans(conn, scans: list[ScanResult], *, label: str, allow_delete: bool = False,
                  actor: str | None = None, dry_run: bool = False, source: str = "",
-                 guard=None) -> ImportReport:
+                 guard=None, only_paths: set[str] | None = None) -> ImportReport:
     """把扫描结果写进库（幂等差分）。``guard(cur)`` 在拿到锁之后、写库之前调用，抛错即整次回滚
-    （``db push`` 用它比版本号）。``label`` 记进 ``imports.git_commit``。"""
+    （``db push`` 用它比版本号）。``label`` 记进 ``imports.git_commit``。
+
+    ``only_paths``：只差分这些文件（扫描里别的行不看，库里别的文件不动）。给一次性改几个文件的脚本用
+    （如 ``feedback.migrate_v1``），省得为了改几行台账把整个工作区连图带库拉下来再整推。"""
     commit = label
     rep = ImportReport(commit=commit, dry_run=dry_run)
     with conn.transaction():
@@ -225,11 +233,12 @@ def import_scans(conn, scans: list[ScanResult], *, label: str, allow_delete: boo
         for sc in scans:
             by_tbl: dict[str, list[Row]] = {t: [] for t in TABLES}
             for r in sc.rows:
-                by_tbl[r.tbl].append(r)
+                if only_paths is None or r.src_path in only_paths:
+                    by_tbl[r.tbl].append(r)
             rep.problems[sc.ws] = sc.problems
             rep.skipped[sc.ws] = dict(Counter(_top(p) for p in sc.skipped))
             for tbl in TABLES:
-                plan = diff(by_tbl[tbl], load_existing(cur, tbl, sc.ws))
+                plan = diff(by_tbl[tbl], load_existing(cur, tbl, sc.ws, only_paths))
                 if plan.deletes and TABLES[tbl].append_only and not allow_delete:
                     refused.append(f"{sc.ws}/{tbl}: 要删 {len(plan.deletes)} 行"
                                    f"（如 {plan.deletes[0]}）")

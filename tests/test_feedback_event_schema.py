@@ -1,7 +1,7 @@
 """人裁事件规范（doc/formats/人裁事件规范.md）落到代码的几条：
 
 - 「后到覆盖」一律按 `replay_key` = (ts, batch, seq)，不按批次名；
-- 老事件 `target.book/page/col/slot` 全空时读回从 key 补；
+- `target.book/page/col/slot` 全空时构造事件就从 key 补（写入口统一；老数据 10-21 已迁）；
 - `resolve` 能按 kind/unit 过滤（切线与定字 key 同形）；
 - 控制台写入 `client_ts` 一律毫秒；
 - `guji events lint` 的几类问题。
@@ -116,13 +116,25 @@ def test_lint_reports_known_problems(tmp_path):
                             {"y": 1})
     (ev / "vol01-cutline-split_char.jsonl").write_text(line(a), encoding="utf-8")
     (ev / "vol01-cutline.jsonl").write_text(line(b), encoding="utf-8")
-    (ev / "x.jsonl").write_text(line(bad_v) + line(sec) + line(wrong_unit) + "{坏行\n", encoding="utf-8")
+    mixed_pk = make_event("x", 4, "confirm", EventTarget(step="seed_admit", unit="cell", key="vol01:1:1:4", anchor={
+        "product_key": {"step": "seed_admit", "key": "p0001", "fingerprint": "F", "row_segment": "abc"}}),
+        {"v": "confirm", "shape": "之"})
+    empty = json.loads(line(make_event("x", 5, "confirm", EventTarget(step="seed_admit", unit="cell", key="bxgb:1:1:5"),
+                                       {"v": "confirm", "shape": "之"})))
+    empty["target"].update(book=None, page=None, col=None, slot=None)
+    odd_id = json.loads(line(make_event("x", 6, "band", EventTarget(step="column_warp", unit="column", key="bxgb:1:1"),
+                                        {"band": "clean"})))
+    odd_id["id"] = "evt_x-all_000006"
+    (ev / "x.jsonl").write_text(line(bad_v) + line(sec) + line(wrong_unit) + line(mixed_pk)
+                                + json.dumps(empty, ensure_ascii=False) + "\n"
+                                + json.dumps(odd_id, ensure_ascii=False) + "\n" + "{坏行\n", encoding="utf-8")
     rep = lint(tmp_path)
     c = rep.counts
-    assert c["E-dup-id"] == 1 and c["W-batch-file"] == 1
-    assert c["E-payload-v"] == 1 and c["W-client-ts-sec"] == 1 and c["E-unit"] == 1
+    assert c["E-dup-id"] == 1 and c["E-batch-file"] == 1
+    assert c["E-payload-v"] == 1 and c["E-client-ts-sec"] == 1 and c["E-unit"] == 1
+    assert c["E-product-key"] == 1 and c["E-key-empty"] == 1 and c["E-id-shape"] == 1
     assert c["E-parse"] == 1
-    assert rep.n_errors == 4
+    assert rep.n_errors == 9
     assert "E-dup-id" in rep.render()
 
 

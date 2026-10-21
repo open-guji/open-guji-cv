@@ -177,7 +177,7 @@ def _ctx_word(shape: str | None, align: str | None) -> str:
     return "variant" if same_char(shape, align) else "differ"
 
 
-def build_page(book: str, page: int, events: list, cells, cells_sha: str | None,
+def build_page(book: str, page: int, events: list, cells, cells_sha: dict[str, str] | None,
                raw_loader, patch_for, align: dict, store_patch_fn=None) -> list[dict]:
     """一页老事件 → 补锚行（锚不上的 `anchor` 为 None、`evidence.reason` 写原因）。
 
@@ -271,7 +271,7 @@ def build_page(book: str, page: int, events: list, cells, cells_sha: str | None,
             cell = r["cell"]
             al = align.get(cell) if cell is not None else None
             a = {"v": BACKFILL_VERSION, "space": SPACE, "ink_bbox": r["ink_bbox"],
-                 "source": "backfill:ink", "product_key": cells_sha}
+                 "source": "backfill:ink", "cells_sha": cells_sha}
             if store_patch_fn is not None:
                 try:
                     a["content_sha"] = store_patch_fn(r["path"])
@@ -298,7 +298,7 @@ def build_page(book: str, page: int, events: list, cells, cells_sha: str | None,
             ok = (off == 0 and (c, s, sb) == (col, slot, sub)) or by_ink or by_col
             if (c, s, sb) in idx and ok:
                 row["anchor"] = {"v": BACKFILL_VERSION, "space": SPACE, "bbox": idx[(c, s, sb)][0],
-                                 "source": "backfill:ctx", "product_key": cells_sha}
+                                 "source": "backfill:ctx", "cells_sha": cells_sha}
                 row["evidence"] = {"method": "ctx", "at": f"{c}:{s}{sb}", "align": ch,
                                    "ctx": _ctx_word(shape, ch), "offset": off,
                                    "by": "same" if (off == 0 and (c, s, sb) == (col, slot, sub))
