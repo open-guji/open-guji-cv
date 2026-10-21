@@ -67,6 +67,12 @@ def test_entry_tolerates_declared_outsiders_only():
     assert entry(r, [("彝", 0.9535), ("指", 0.94)], None, cfg) is None                                  # 别的组外字照挡
 
 
+def test_entry_jys_tolerates_ba():
+    cfg = _cfg()
+    assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")
+    assert entry(Rec("a"), [("己", 0.99), ("目", 0.985)], None, cfg) is None
+
+
 def test_entry_ref_via_codepoints():
     canon = {"旨x": "旨"}.get
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")

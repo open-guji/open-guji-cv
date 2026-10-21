@@ -25,16 +25,20 @@ def _matcher(tmp_path, monkeypatch):
     return m
 
 
-def test_font_tier_is_off_by_default_and_out_of_the_params_hash():
+def test_font_tier_is_on_by_default_and_off_keeps_old_params_hash():
+    """v0.5.5 起缺省开（用户 10-21 定）；显式关掉时不进参数 dump，参数哈希与以前的缺省相同。"""
     from open_guji_cv.core.engine import params_hash
     from open_guji_cv.steps.glyph_match import GlyphMatchParams
-    off = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="")
-    assert off.font_tier is None and "font_tier" not in off.model_dump(mode="json")
-    assert "font_tier" not in off.model_copy(update={"font_tier": False}).model_dump(mode="json")
-    on = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="", font_tier={"cov": 0.99})
-    d = on.model_dump(mode="json")["font_tier"]
-    assert d["cov"] == 0.99 and len(d["family_fp"]) == 12          # 字组／形近字表的指纹自动填进来
-    assert params_hash(on) != params_hash(off)
+    base = dict(db_path="x.db", db_fingerprint="f", borrow_fingerprint="", batch_knn=False)
+    dflt = GlyphMatchParams(**base)
+    d = dflt.model_dump(mode="json")["font_tier"]
+    assert len(d["family_fp"]) == 12                                  # 字组／形近字表的指纹自动填进来
+    off = GlyphMatchParams(**base, font_tier=False)
+    assert "font_tier" not in off.model_dump(mode="json")
+    assert "font_tier" not in GlyphMatchParams(**base, font_tier=None).model_dump(mode="json")
+    on = GlyphMatchParams(**base, font_tier={"cov": 0.99})
+    assert on.model_dump(mode="json")["font_tier"]["cov"] == 0.99
+    assert len({params_hash(dflt), params_hash(off), params_hash(on)}) == 3
 
 
 def test_rule_defaults_and_unknown_keys():
@@ -80,6 +84,24 @@ def test_strong_keben_hit_skips_the_font_domain_and_weak_falls_back_to_full(tmp_
     assert tier2.n_full == 1
 
 
+def test_both_tiers_batched_full_tier_only_computed_for_weak_chunks(tmp_path, monkeypatch):
+    """两个开关都开（v0.5.5 缺省）：刻本库、整库两档都走 `_PageBatch`；整库那档按块惰性算，
+    一块里没有命中弱的格就不算；两档共用一份查询特征。结果与不合批时相同。"""
+    from open_guji_cv.steps.glyph_match import _FontTier, _PageBatch, _keben_subset
+    m = _matcher(tmp_path, monkeypatch)
+    sub = _keben_subset(m)
+    kou = m._patches[m._ids.index("kb:053E3")].copy()
+    yong = m._patches[m._ids.index("font:t:06C38")].copy()
+    queries = [kou, kou.copy(), yong]
+    bsub, bfull = _PageBatch(sub, queries), _PageBatch(m, queries)
+    bfull._feats = bsub._feats
+    bsub.CHUNK = bfull.CHUNK = 2                                   # 块 0＝两个「口」（强），块 1＝「永」（弱）
+    tier = _FontTier(bfull, bsub, _FontTier.rule({"cov": None}))
+    plain = _FontTier(m, sub, _FontTier.rule({"cov": None}))
+    for q in queries:
+        assert tier.match(q, exclude_id=None).to_dict() == plain.match(q, exclude_id=None).to_dict()
+    assert (tier.n_query, tier.n_full) == (3, 1)
+    assert bfull._c0 == 2                                          # 整库只算了「永」所在的块
 
 def test_strong_rule_on_unsure_needs_cov_and_margin_to_another_char():
     from open_guji_cv.clustering.match import MatchResult
