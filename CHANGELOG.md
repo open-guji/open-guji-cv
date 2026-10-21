@@ -5,6 +5,17 @@
 
 ## [未发版]
 
+## [0.5.3] - 2026-10-20
+
+PATCH（Sheldon 10-21 定发）。`row_segment`（1.23 → 1.25，新增 `code_deps` `utils.row_grid`）与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，只加了缺省不走的格网入口，闸的输出不变）的 `code_hash` 变，各册 column_gate 与 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。
+
+### Changed
+- 切分 `row_segment` 1.25：`layout_prior` 列端表空格里的墨大多连不成笔画（落在面积 > 150 像素连通块里的不到 75%：印章的印泥斑点、篆文残笔）也记空。PATCH；`row_segment` 的 `code_hash` 变，各册 Step3 起判过期。殿本 vol04–10 全部页 10,620 列对 1.24 逐格 99.03% → 99.51%，修好 51 列、改坏 0（第 4 页起 99.33% → 99.55%，修好 23）；修的是各册首叶（p2/p3 藏书印）和卷端大印（vol04 p130、vol09 p70/p164、vol10 p88）。
+- 切分 `row_segment` 1.24：逐列格位约束 `layout_prior` 加三处（只作用于命中格位表的页；开关关着、或没有表的书逐字节不变）。PATCH；`row_segment` 的 `code_hash` 变（新增 `code_deps` `utils.row_grid`，`utils.row_boundaries` 加了不跑 DP 的格网入口），各册 Step3 起判过期。殿本 vol04–10（第 4 页起 10,521 列）对 1.23 逐格 99.03% → 99.33%，修好 32 列、改坏 0；穿字格线七册合计 6061 → 5941。
+  - 等距格网（`utils/row_grid`，用户 10-21：殿本正文每列严格 21 格、格高相近）作候选格网：格号按行墨投影的周期相位排，格线在 ±0.2 格内就近落缝。修列首印章、墨损处 DP 多切一格、整列格号错位（vol04 p6 c2、p8 c2/c4/c8，vol06 p33 c4）。
+  - 各候选格网先把列端表空格里不像字的墨记空，再打分。
+  - 不像字加「越过界行」（印章、墨污：墨伸到列的左右边上）；一页最后一列表行之后的列按整列空处理（卷末印章空列）。
+
 ## [0.5.2] - 2026-10-21
 
 PATCH（sheldon 10-21 定发）。相对 v0.5.1 只有 `seed_admit` 的 `code_hash` 变（c1cc30263b355ed5 → e3566f98f5046f0d），其余 16 步不变。配套语料库（分层版本 P3 起）：全局层 b3（含 #332 的彝组模板库与 U-Net 权重）＋殿本书库 v10，十册钉子账 n=11、册 yaml 改钉 `corpus: 11`，`group_flow` 点名 `lv`、`zheng`（中心库 corpus-base rev 34273、siku-zongmu rev 34313）。**v0.5.1 配 `corpus: 9` 会因 `yi_560/ids_bank.json` 与 v9 清单不符被起跑校验拒跑**，各册重跑请用 v0.5.2。
