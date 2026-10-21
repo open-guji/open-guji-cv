@@ -289,6 +289,15 @@ build-base 第一次新开 `corpus-base`、再出新版旧版还在、普通 pus
 - **10-19 本地试算（殿本，不推）**：人裁 4,374 例 → 确认两批以上且体检干净 1,149 例 → 每字 3 张 **1,076 例、827 字**；
   图与来源逐字节相同；借进全唐文重建，1,076 例都是 `borrowed_human`。
 
+### 字形库快照 g<N>（2026-10-21 起，GUJI-727）
+
+- **出号**：`guji glyph-db snapshot -w <工作区> [--note …]`，数据目录要先推干净（快照对得上中心库的 rev）。出 `config/glyph-pack/g<N>/manifest.json`：
+  `output/glyph_store/` 与借来的字形库每个文件的路径、sha256、类型，`digest` 是条目内容哈希（不带版本号）。内容与最新一版相同拒绝。
+- **存**：清单随 `config/` 进 `files` 表；**已发布的清单不可改**（push 守卫同语料库清单）。清单登记的文本随第一次推它的 `guji db push` 按 sha 传 R2
+  （`sha256/xx/<sha>.txt`），本机文件已与清单不同就拒推；刻例图早已按 sha 在桶里。同 sha 不另存，没变的 `instances/<册>.jsonl` 不占新空间。
+- **取**：`glyph-g<N>.db` 在工作区本地，`guji db pull/sync` 与 `guji pipeline/step` 起跑前按各册 `glyph_pin` 自动建：本机同 sha 的文件、本机图缓存优先，
+  缺的从 R2 取；`guji glyph-db pin-verify --pin N` 只从 R2 拼一遍核对。字体域从当前 `glyph.db` 拷。用法与指纹口径见 `core/glyph_pin.py` 模块头。
+
 ### 升格候选（2026-10-19 起，共享方案 S7，先做语料部分）
 
 - `guji promote mine -w <工作区> [--min-confusable 3] [--out 清单.json]`：只读，从本书对勘裁决（`collate_verdict`）挖两类候选，
