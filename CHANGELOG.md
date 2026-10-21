@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- 切分 `row_segment` 1.26：`layout_prior` 格位表说只有一半有字的夹注格（`half`，如「無巡卷撫數採進」里的行内空格、段尾奇数字），列里有雙行段时按段缝（各段格缝的中位数）拆、只发墨多的那一半（`row_boundaries.segment_column` 新参数 `half_notes`，缺省 None 不变）。PATCH；`row_segment` 与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，闸不传这个参数、输出不变）的 `code_hash` 变。殿本对 1.25：vol06 第 9/32/37/63 页、vol08 p46 修好 5 列，vol05 全册修好 3 列、改坏 0，vol09 全册不变。
+
 ## [0.5.3] - 2026-10-20
 
 PATCH（Sheldon 10-21 定发）。`row_segment`（1.23 → 1.25，新增 `code_deps` `utils.row_grid`）与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，只加了缺省不走的格网入口，闸的输出不变）的 `code_hash` 变，各册 column_gate 与 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。
