@@ -454,3 +454,18 @@ def test_group_prompt_md_is_not_corpus(tmp_path, monkeypatch):
     assert corpus_pin.check_files(ws, old) == {"changed": [], "missing": [], "extra": []}
     (g / "rules.yaml").write_text("a: 2\n", encoding="utf-8")
     assert corpus_pin.check_files(ws, old)["changed"] == ["repo:config/groups/rr/rules.yaml"]
+
+
+def test_migration_row_keeps_legacy_token_new_rows_use_content_hash(two_level):
+    """首行（迁移行）指纹仍是 corpus-v<n>，已有产物不过期；之后升的总号才用内容哈希。"""
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(book, base=1)                                                    # v2
+    corpus_pin.append_pin(book, "vol01", from_n=1, book_ver=2)                 # 迁移行 n=1 + 新行 n=2
+    rows = corpus_pin.load_pins(book, "vol01")
+    assert rows[0].get("legacy_token") and "legacy_token" not in rows[1]
+    assert corpus_pin.corpus_token(book, 1, "vol01") == "corpus-v1"
+    t2 = corpus_pin.corpus_token(book, 2, "vol01")
+    assert t2.startswith("corpus-") and t2 != "corpus-v2"
