@@ -417,6 +417,26 @@ def cmd_audit(args) -> None:
                                      closure_mismatches(book, pages, eng.store), vision=vis, unsure=uns),
                       encoding="utf-8")
         print(f"{book} 请审单 → {md}（第 4 节看图判错 {len(vis)} 格、第 5 节看不清 {len(uns)} 格，已按看图结论填好）")
+    elif args.action == "changes":
+        # 放行变化必看图（M9 D5，GUJI-664）：对上一基线的产物根，列出新放行／放行字变了的格
+        from .core.workspace import products_root
+        if not args.base:
+            print("✗ changes 要给 --base <上一基线的产物根>", file=sys.stderr); sys.exit(2)
+        res = A.admit_changes(Path(args.base), products_root(), book)
+        (out_dir / f"{book}.放行变化.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out_dir / f"{book}.放行变化.md").write_text(A.admit_changes_md(res), encoding="utf-8")
+        print(f"{book} 放行变化：{res['n']} 格（字变了 {res['n_changed']}，新放行 {res['n_new']}）→ {out_dir / (book + '.放行变化.md')}")
+    elif args.action == "reasons":
+        # 待审格主成因码（M9 D6，GUJI-668）：按码派给切分、M7、字形库、语料（review/causes.py）
+        from collections import Counter
+        from .core.workspace import products_root
+        from .review.causes import book_causes, causes_md
+        res = book_causes(products_root(), book)
+        (out_dir / f"{book}.reasons.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out_dir / f"{book}.reasons.md").write_text(causes_md(book, res), encoding="utf-8")
+        cnt = Counter(v["cause"] for v in res.values())
+        print(f"{book} 待审 {len(res)} 格成因：" + "、".join(f"{k} {v}" for k, v in cnt.most_common())
+              + f" → {out_dir / (book + '.reasons.md')}")
     elif args.action == "alt":
         # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
         # 近似字的异体族（hanzi 库；本机字统网缓存照并）按字块图排序，挂成卡上 `alt`，
@@ -2878,7 +2898,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
                                      "count = 用户审完当场核数；sheet = 生成请审单（只读）；"
                                      "alt = 给待审卡算好相似字（并进待审单）；alt-eval = 人裁后量相似字命中")
-    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "alt", "alt-eval"])
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "reasons", "changes", "alt", "alt-eval"])
+    p.add_argument("--base", default=None, help="changes：上一基线的产物根（与它比放行变化）")
     p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
     p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
     p.add_argument("book")
