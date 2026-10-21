@@ -297,33 +297,98 @@ def _models_root() -> Path:
     return Path(__file__).resolve().parents[2] / "models"
 
 
-def push_file(key: str, path: Path, src=None) -> dict:
+def push_file(key: str, path: Path, src=None, gzip_level: int | None = None) -> dict:
+    """把一个文件按 64 MB 分段存到 `key/part-NNN`，再写 `key/manifest.json`。
+
+    边读边传（2026-10-20）：字体域预建件一套约 1.5 GB，整份读进内存会把小机器挤爆。
+    `gzip_level` 给了就边读边压（manifest 记 `encoding: gzip`，`sha256`／`bytes` 是**解压后**原文件的）。"""
+    import zlib
     src = src or _client()
-    data = Path(path).read_bytes()
-    parts = []
-    for i in range(0, max(1, len(data)), PART_BYTES):
-        chunk = data[i:i + PART_BYTES]
+    whole = hashlib.sha256()
+    total = 0
+    parts: list[dict] = []
+    z = zlib.compressobj(gzip_level, zlib.DEFLATED, 31) if gzip_level is not None else None
+    buf = bytearray()
+
+    def send(chunk: bytes) -> None:
         name = f"part-{len(parts):03d}"
-        _call(src, "PUT", f"{key}/{name}", data=chunk, tries=3)
+        _call(src, "PUT", f"{key}/{name}", data=bytes(chunk), tries=3)
         parts.append({"name": name, "bytes": len(chunk), "sha256": hashlib.sha256(chunk).hexdigest()})
-    man = {"name": key, "bytes": len(data), "sha256": hashlib.sha256(data).hexdigest(), "parts": parts,
+
+    with open(path, "rb") as f:
+        for blk in iter(lambda: f.read(PART_BYTES), b""):
+            whole.update(blk)
+            total += len(blk)
+            buf += z.compress(blk) if z is not None else blk
+            while len(buf) >= PART_BYTES:
+                send(buf[:PART_BYTES])
+                del buf[:PART_BYTES]
+    if z is not None:
+        buf += z.flush()
+    while len(buf) > PART_BYTES:
+        send(buf[:PART_BYTES])
+        del buf[:PART_BYTES]
+    if buf or not parts:
+        send(buf)
+    man = {"name": key, "bytes": total, "sha256": whole.hexdigest(), "parts": parts,
            "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
+    if z is not None:
+        man["encoding"] = "gzip"
     _call(src, "PUT", f"{key}/manifest.json", data=json.dumps(man).encode("utf-8"),
           content_type="application/json", tries=3)
     return man
 
 
+#: 取大文件时同时在路上的段数（每段 ≤ 64 MB，内存里最多这么多段）。云端实测（2026-10-20，读令牌）：
+#: 单路约 11 MB/s，4 路合计 21 MB/s，8 路 44 MB/s——瓶颈在单连接，不在出口带宽
+FETCH_THREADS = 8
+
+
+def _parts_in_order(src, key: str, parts: list[dict]):
+    """按顺序逐段产出内容，后面几段并发预取（一段 64 MB 串行取，字体域 1.8 GB 要好几分钟）。"""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=FETCH_THREADS) as ex:
+        futs = []
+        for i, p in enumerate(parts):
+            futs.append(ex.submit(_call, src, "GET", f"{key}/{p['name']}", raw=True))
+            if i + 1 >= FETCH_THREADS:
+                yield futs.pop(0).result()
+        for f in futs:
+            yield f.result()
+
+
 def fetch_file(key: str, dest: Path, src=None) -> int:
+    """取回 `push_file` 存的文件：逐段核 sha256、边取边写（manifest 记了 gzip 就边取边解），
+    整份 sha256 对上才换到 `dest`。返回原文件字节数。"""
+    import zlib
     src = src or _client()
     man = json.loads(_call(src, "GET", f"{key}/manifest.json", raw=True))
-    data = b"".join(_call(src, "GET", f"{key}/{p['name']}", raw=True) for p in man["parts"])
-    if hashlib.sha256(data).hexdigest() != man["sha256"]:
-        raise ValueError(f"{key} sha256 对不上，不落盘")
+    z = zlib.decompressobj(31) if man.get("encoding") == "gzip" else None
+    dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    tmp.write_bytes(data)
-    tmp.replace(dest)
-    return len(data)
+    whole = hashlib.sha256()
+    n = 0
+    try:
+        with open(tmp, "wb") as out:
+            for p, chunk in zip(man["parts"], _parts_in_order(src, key, man["parts"])):
+                if "sha256" in p and hashlib.sha256(chunk).hexdigest() != p["sha256"]:
+                    raise ValueError(f"{key}/{p['name']} sha256 对不上，不落盘")
+                blk = z.decompress(chunk) if z is not None else chunk
+                whole.update(blk)
+                n += len(blk)
+                out.write(blk)
+            if z is not None:
+                tail = z.flush()
+                whole.update(tail)
+                n += len(tail)
+                out.write(tail)
+        if whole.hexdigest() != man["sha256"]:
+            raise ValueError(f"{key} sha256 对不上，不落盘")
+        tmp.replace(dest)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return n
 
 
 def push_rare_indexes(src=None) -> list[str]:
@@ -363,6 +428,8 @@ def fetch_rare_indexes(src=None) -> list[str]:
 # 代码指纹」算（`clustering.seeding._cached_lm`），各机器同一份输入得到同一个文件名，所以按文件名存取：
 # `derived/lm/<文件名>/{part-000, manifest.json}`。取：本机没命中时自动取（要 `GUJI_DATA_TOKEN`，读令牌就够）；
 # 存：手动 `guji products pack push-index`（要正式令牌），用户 10-20 定不自动推。
+# 同一套按文件名存取的还有字体域预建件 `derived/fontdb/<edition>-<键>.sqlite`（gzip，一套 0.7–1.2 GB 压后），
+# 取在 `glyph-db import-font`，存是 `glyph-db font-pack-push`（`clustering/font_pack.py`）。
 
 def _lm_dir() -> Path:
     from ..core.workspace import cache_root

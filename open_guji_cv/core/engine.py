@@ -343,7 +343,7 @@ class Engine:
                 return None
             out[kind] = sha
         # 带开关的可选上游（`StepSpec.optional_consumes_when`）开关关着时不进指纹
-        for kind in live_optional_consumes(step.spec, self.ctx.params_for(step), self.book):
+        for kind in live_optional_consumes(step.spec, self._params(step), self.book):
             sha = self._upstream_sha(kind, page)
             if sha is not None:
                 out[kind] = sha
@@ -355,7 +355,7 @@ class Engine:
         把 `align_ref` 等标成 `upstream_stale`——它们这次根本不读 5-b。"""
         ups = self.pipeline.upstream(step.spec.id)
         off = set(step.spec.optional_consumes) - set(
-            live_optional_consumes(step.spec, self.ctx.params_for(step), self.book))
+            live_optional_consumes(step.spec, self._params(step), self.book))
         if not off:
             return ups
         wants = set(step.spec.consumes) | (set(step.spec.optional_consumes) - off)
@@ -385,7 +385,7 @@ class Engine:
         不改放行逻辑、不改指纹；5-b 补跑后它的 sha 进指纹，下游自然判过期重算。
 
         → `[{kind, producer, switches, missing: [页...]}]`，没有缺口返回 `[]`。"""
-        on = gated_optional_on(step.spec, self.ctx.params_for(step), self.book)
+        on = gated_optional_on(step.spec, self._params(step), self.book)
         out: list[dict] = []
         for kind, switches in on.items():
             try:
@@ -402,9 +402,24 @@ class Engine:
         """真正缺的那些硬依赖——报错要点名它们，不是把 `consumes` 整串印出来。"""
         return [k for k in step.spec.consumes if self._upstream_sha(k, page) is None]
 
+    def _params(self, step: Step) -> BaseModel:
+        """`ctx.params_for(step)`；在 `status()` 里每步只算一次（`_pcache`）。
+
+        参数模型构造时会现算库指纹（`glyph_match.db_fingerprint`、`seed_admit` 的人裁形状指纹……），
+        库含字体域时一次要对 3 GB 的 glyph.db 做几回统计；`status()` 逐页逐步调，vol06 150 页
+        `close-check` 1a 光这个就 98 s（GUJI-647）。一次 `status()` 之内库不变，缓存只活在这一次调用里，
+        下一次查状态照样看得见人裁进库。跑批路径不走缓存，行为不变。"""
+        c = getattr(self, "_pcache", None)
+        if c is None:
+            return self.ctx.params_for(step)
+        p = c.get(step.spec.id)
+        if p is None:
+            p = c[step.spec.id] = self.ctx.params_for(step)
+        return p
+
     def fingerprint(self, step: Step, page: int) -> tuple[str | None, dict[str, str] | None, str]:
         ups = self.upstream_shas(step, page)
-        p = self.ctx.params_for(step)
+        p = self._params(step)
         ph = params_hash(p, step.spec.soft_params, step.spec.path_params)
         if ups is None:
             return None, None, ph
@@ -413,7 +428,7 @@ class Engine:
         return fp, ups, ph
 
     def self_hash(self, step: Step) -> str:
-        return self_hash(step, self.book, self.ctx.params_for(step))
+        return self_hash(step, self.book, self._params(step))
 
     # ── 状态 ─────────────────────────────────────────────────────────
     def page_status(self, step: Step, page: int) -> tuple[str, ManifestEntry | None]:
@@ -466,7 +481,7 @@ class Engine:
         page_state: dict[int, str] = {}
         # 软参数漂移（`StepSpec.soft_params`）：只报数、不改状态。老条目没记 `soft`
         # （软化之前跑的）也算漂移——不知道当时对的是哪个库。
-        soft_now = soft_values(step, self.ctx.params_for(step))
+        soft_now = soft_values(step, self._params(step))
         n_drift = 0
         reasons: dict[str, int] = {}
         code_only = 0
@@ -519,6 +534,13 @@ class Engine:
         列表时，这个 stale 会被记进 `seen`，沿 DAG 一路拖垮 `align_ref` 等
         以它为上游的下游 step——不管补跑多少次都好不了（2026-09-16 排查
         `test_route_snapshot` 不稳定时查出）。"""
+        self._pcache = {}
+        try:
+            return self._status(pages, steps, code_ok)
+        finally:
+            self._pcache = None
+
+    def _status(self, pages, steps, code_ok: bool) -> dict:
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
         steps, _ = self._default_steps(steps)
         out: dict[str, dict] = {}
@@ -845,6 +867,15 @@ def _pin_threads(n: int, forked: bool = False) -> None:
         os.environ[var] = str(n)          # 给子进程里之后才加载的库
     from .parallel import set_blas_threads
     set_blas_threads(n)                   # 已从主进程带来的 numpy：变量不生效，调运行期接口
+    # 已加载的 OpenMP 运行库也要压（2026-10-21）：seed_admit 的影子模型（`shadow_veto`，scikit-learn
+    # HistGradientBoosting）predict 走 sklearn 自带的 libgomp，主进程暖机时按核数初始化，fork 出的 4 个
+    # worker 各开 4 线程、16 线程抢 4 核，OpenMP 忙等把每页从几秒拖到约 700 s（vol09 实测）。变量对已
+    # 初始化的运行库不生效，用 threadpoolctl（sklearn 的依赖）调 omp_set_num_threads。按样本并行，结果与线程数无关。
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=n, user_api="openmp")
+    except Exception:  # noqa: BLE001 —— 没装 sklearn 就没有 threadpoolctl，也就没有这个运行库
+        pass
     # OpenCV 的线程数**不能**在 fork 出的子进程里改：主进程用过 cv2 的线程池后，子进程里
     # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测两回：一回是
     # 这里自己调的，四个 worker 全挂；一回是 seed_admit 在 worker 里第一次 import

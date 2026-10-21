@@ -6,9 +6,27 @@
 ## [未发版]
 
 ### Added
+- glyph_match 开关 `batch_knn`（GUJI-647 第 7 项，PATCH；**缺省关**，关着时产物与参数指纹逐字节不变）：一页的格每 64 个做一次「查询 × 整库」矩阵乘，库矩阵每 64 格才读一遍。库含字体域（17.4 万条、1.2 GB）时逐格算卡在内存带宽，vol06 全册 glyph_match 1282 s → 367 s。**会改产物**：浮点末位不同，vol06 23,517 格判决、字、cov 全同，8 格候选排序变；`guji products diff` 送审 222 → 222、变了的列 0。开不开按 M9 波次窗口定：书级 `params: {glyph_match: {batch_knn: true}}`。
 - `guji audit changes <册> --base <上一基线产物根>`（M9 D5，GUJI-664）：列出新放行、放行字变了的格（`放行变化.md／json`）；zl.py 设 `ZL_BASE_PRODUCTS` 后这些格进联系页，看图闸要每格都有结论才过。联系页另存单格图与 `tiles.json`。
 - `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
 - `guji audit reasons <册>`（M9 D6，GUJI-668）：每个待审格打一个主成因码（`review/causes.py`：A1–A9 切分／对位、B 码位异体、C 形近字组、D 遮挡、E 与整理本冲突、F 库缺字、G 对齐改字、H 库＝整理本仍被拦、I 证据不足），出 `reasons.json`／`reasons.md`（按码写交给谁）。`republish.py` 把码并进待审单的 `cause`、台账记 `reasons.cause`；`cls` 不动。vol06 175 格里「证据不足」8%。只读产物，不碰任何 Step。
+
+### Changed
+- 冷启动、内存、出口检查提速（GUJI-647，PATCH；**17 步 `code_hash` 全部不变**：`glyph_match`、`match`、`seeding` 的改动在 vol06 30 页、库含字体域时与改前逐字节相同，已登记代码等价）：
+  - 字体域预建件（`clustering/font_pack.py`）：`glyph-db import-font` 先找同一套字体文件、字表、渲染代码出过的字体域（本机 `cache/fontdb/` 或 R2 `derived/fontdb/`，读令牌就够），整表拷进 glyph.db，与逐字渲染逐列相同、字体域指纹相同。两套 15.5 万字：渲染 12.6 分钟 → 拷表 43 秒（加下载约 1.8 GB）。从 R2 取来的包导完即删。推送手动：`glyph-db font-pack-push`（正式令牌）。`--no-pack` 强制渲染。
+  - R2 通道（`datastore.packs.push_file`／`fetch_file`）改流式、可选 gzip，取时 8 段并发（实测单路 11 MB/s、8 路 44 MB/s）；旧 manifest 照认。
+  - glyph_match 匹配器特征按内容缓存（`seeding._matcher_arrays`，`cache/glyph_feats/`）：字体域进库后库有 17.4 万条，每个进程建匹配器原要约 2 分钟（逐条解 PNG、算 HOG），命中缓存 2.4 秒；整库特征矩阵只存一份（原来列表一份、堆起来又一份），建库峰值 4.5 GB → 2.1 GB，命中时走 mmap、多进程共享页缓存。`GUJI_MATCHER_FEAT_CACHE=0` 关。
+  - glyph_match 登记 `warm_first`：主进程建一次匹配器，fork 后共享。改前 dev 上库含字体域时 `--jobs 4` 四个 worker 各建一份（各约 3.5 GB），被 OOM 杀。
+  - `guji pipeline` 跑多步时缺省每步一个子进程（`--isolate-steps`；`--no-isolate-steps` 退回单进程，`--json` 时不隔离）：vol06 单进程连跑到 seed_admit 主进程 3.5 GB，隔离后 seed_admit 1.95 GB、context_decide 1.48 GB。
+  - 页级并行的内存登记：glyph_match 3.6 → 1.5 GB（warm_first 与特征缓存之后 worker 不再自建匹配器；vol06 冷启动主进程峰值 2.2 GB、主进程加 4 个 worker 合计 PSS 2.6 GB；按 3.6 算 13 GB 的容器只开得出 2 个进程），seed_admit 3.0 → 2.0 GB（实测主进程 1.95 GB、4 进程合计 PSS 3.3 GB）。
+  - `glyph-db rebuild` 派生表示（归一、骨架、HOG）多进程算（`--jobs`，缺省 CPU 数），主进程按原顺序写库，14 张表与单进程逐行相同：殿本 1.85 万例 163 s → 38 s，整条命令连补放人裁 265 s → 133 s。`import-font` 的 `--jobs` 缺省仍是 1。
+  - `close-check` 1a／`guji status`：一次 `status()` 里每步的参数只构造一次（构造时要对 glyph.db 算库指纹，库含字体域时 3 GB；原来逐页逐步现算）。vol06 close-check 粗校档 126 s → 31.5 s，各项结论逐行相同。
+  - `guji cache verify`／`close-check` 1b：戳与现行产物对得上的页免查（引擎重跑一页先清再写、读时戳不对整页作废，这类缓存一定是这一代切的）。vol06 150 页 1.4 秒（原约 5 分钟）；`--full` 照旧全查。
+
+### Fixed
+- **seed_admit 并行时影子模型极慢（#255 引入，0.4.9、0.5.0 受影响）**：开了 `shadow_veto` 的册（vol05、vol09 等），影子模型（scikit-learn HistGradientBoosting）predict 用 sklearn 自带的 OpenMP，主进程暖机时按核数建好线程池，fork 出的 4 个 worker 各开 4 线程、16 线程抢 4 核，每页从几秒拖到约 700 s（vol09 实测）。worker 里用 threadpoolctl 把已加载的 OpenMP 运行库压到每 worker 线程数；vol09 20 页 4 进程 63 s、串行 102 s，产物逐页相同。产物从来不受影响，只是慢。
+- 缓存页戳会把老缓存「洗白」（GUJI-647）：一页没戳、目录里却有记戳机制之前的老图时，惰性补一张新图（或 `cache warm` 收尾补戳）会给整页记上戳，`cache verify` 从此跳过它。现在这类页不记戳，留给内容校验。
+- `--isolate-steps` 下某一步崩了（异常、护栏拒跑）父进程照样接着跑下游、最后返回 0；现在停在那一步、返回它的返回码。控制台取消工单（只 terminate 父进程）时把 SIGTERM 转给正在跑的那一步，不留孤儿接着写产物。
 
 ## [0.5.0] - 2026-10-20
 

@@ -135,3 +135,20 @@ def test_warm_first_runs_one_page_in_parent_then_forks(world, monkeypatch):
     pids = [eng.ctx.product("t_parw", pg).pid for pg in (1, 2, 3, 4)]
     assert pids.count(os.getpid()) == 1          # 恰好一页在主进程
     assert gc.get_freeze_count() == 0            # 冻结解开了
+
+
+def test_worker_pin_also_limits_loaded_openmp_runtimes():
+    """影子模型（sklearn）的 OpenMP 运行库在主进程里已按核数初始化，fork 出的 worker 不压就 16 线程抢 4 核，
+    每页从几秒拖到约 700 s（2026-10-21，vol09）。`_pin_threads` 要把已加载的 OpenMP 也压到 n。"""
+    import subprocess
+    import sys
+    pytest.importorskip("sklearn")
+    pytest.importorskip("threadpoolctl")
+    code = ("import sklearn.ensemble, threadpoolctl\n"
+            "from open_guji_cv.core.engine import _pin_threads\n"
+            "_pin_threads(1, forked=False)\n"
+            "omp = [i['num_threads'] for i in threadpoolctl.threadpool_info() if i['user_api'] == 'openmp']\n"
+            "print(omp)\n"
+            "assert omp and all(n == 1 for n in omp), omp\n")
+    r = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert r.returncode == 0, r.stdout + r.stderr
