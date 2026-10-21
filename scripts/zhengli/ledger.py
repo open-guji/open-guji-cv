@@ -212,6 +212,7 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
     review = nonbody_review = nonchar_review = on_recut = 0
     unmatched: list[str] = []
     cls_c: Counter = Counter()
+    cause_c: Counter = Counter()                 # 主成因码（republish 并进单子的 cause，GUJI-668）
     why_c: Counter = Counter()
     status_c: Counter = Counter()
     for a, c in pending.items():
@@ -229,6 +230,8 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
         review += 1
         on_recut += bool(recut is not None and recut.covers_cell(a))
         cls_c[c.get("cls") or NONE_KEY] += 1
+        if c.get("cause"):
+            cause_c[c["cause"]] += 1
         for w in (c.get("why") or [NONE_KEY]):
             why_c[w] += 1
         status_c[str(c.get("review") or NONE_KEY)] += 1
@@ -253,7 +256,7 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
         "unmatched_sample": unmatched[:10],
         "recut_cells": recut_n,
         "review_on_recut": on_recut,
-        "reasons": {"cls": _sorted(cls_c), "why": _sorted(why_c)},
+        "reasons": {"cls": _sorted(cls_c), "why": _sorted(why_c), **({"cause": _sorted(cause_c)} if cause_c else {})},
         "review_status": _sorted(status_c),
         "pending_cells": len(pending),
         "body_only": body_only,

@@ -50,6 +50,7 @@ class IdsSpec:
     three: bool = False         # True：彝组三段版（`ids_solver.solve`）：自动缝切上／中／下三段、中段再竖切取右半，
                                 # 每段二选一后拼 `⿳上⿰米X下` 交 IdsResolver；任一段 margin 不够整格弃权
     top_hog: float | None = None  # 三段版：给了数，上段（彑／彐）改用窗口 HOG＋岭回归（不依赖上／中缝），|判别值| 不到它弃权
+    nearest_ok: bool = False      # 三段版：IDS 无对应码位只能归近似字（nearest_variant 旗）时照样给字（彝：彑米糸大 ≡ 𢑴，sheldon 10-20 定）
     bot_hog: float | None = None  # 三段版：同上，下段（廾／大）用下部窗口 HOG＋岭回归
     mid_hog: float | None = None  # 三段版：给了数，中段（糸／分）改用 HOG＋岭回归判别，|判别值| 不到它弃权（上下段仍用 min_margin）
     whole: str = ""             # "pix"|"hog"：整字二类岭回归（`ids_whole`，不切缝；差别不在缝两侧的两字异体：呂吕、徵徴），
@@ -80,10 +81,13 @@ SPECS: dict[str, IdsSpec] = {
     # 上段 彑／彐 只差左上一个小钩，自动缝常把上段笔画从中间切开（近邻 margin 0.00–0.04）；中段 糸／分 近邻留一 5/42 错。
     # 改法：三段都用 HOG＋岭回归（ids_parts.choose_hog，模板即训练集）；上段、下段不用缝，取墨迹外框的比例窗口
     # （ids_solver.TOP_WIN／BOT_WIN，bank 的 4|、5| 槽）。留一：34 对／8 弃权／0 错（覆盖 81%）；
-    # 8 个弃权中 5 个是读对了但 Unicode 无此组合（彑米糸大，nearest 旗，设计上送人审）。
-    # 阈值平台：top_hog 0.0–0.08、mid_hog 0.08–0.20、bot_hog 0.05–0.2 结果都一样。
+    # 8 个弃权中 6 个是读对了但 Unicode 无此组合（彑米糸大，nearest 旗）；sheldon 10-20 定「彑米糸大 ≡ 𢑴，不用人审」→ nearest_ok：
+    # 加上后 40 对／2 弃权／0 错（覆盖 95%）。
+    # 第三轮（10-20 sheldon 补点 40 格部件读法，共 82 格）：中段也改比例窗口（MID_WIN，bank 的 6| 槽），不再依赖任何缝；
+    # 三段都是「窗口＋HOG＋岭回归」，82 格留一**三个槽全部读对**（竖缝版中段 1–3 错）。门槛取 0.05（全对，只是给新数据留保护）：
+    # 82 对里 79 格给字、3 格 margin<0.05 弃权，0 错；0.1 → 77 格，0.2 → 71 格。
     "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
-                         top_hog=0.05, mid_hog=0.15, bot_hog=0.1),
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True),
     # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
     # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
     # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
@@ -253,7 +257,7 @@ def _judge_three(g: str, gray, bank: dict, spec: IdsSpec) -> GroupVerdict:
     extra = {"ids": v.ids, "slots": list(v.slots), "margins": [round(x, 4) for x in ms], "kind": v.kind, "flag": v.flag}
     if v.char is None or v.char not in _members(g):
         return GroupVerdict(None, conf=min(ms) if ms else 0.0, why="abstain:" + v.kind.removeprefix("abstain_"), via="ids", extra=extra)
-    if v.flag:      # nearest_variant：Unicode 没有这个组合，只能近似 → 不放，送人审
+    if v.flag and not spec.nearest_ok:      # nearest_variant：Unicode 没有这个组合，只能近似 → 缺省不放，送人审
         return GroupVerdict(None, conf=min(ms), why="abstain:nearest", via="ids", extra=extra)
     for k, name in enumerate(v.slots):
         key = 3 if (k == 1 and b.get(3)) else k

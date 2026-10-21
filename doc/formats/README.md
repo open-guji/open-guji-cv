@@ -3,6 +3,7 @@
 | 档 | 是什么 |
 |---|---|
 | [guji_page_v0.2.md](guji_page_v0.2.md) | 每字带坐标的页面文本格式 guji-page（现行 v0.2；v0、v0.1 留档） |
+| [人裁事件规范.md](人裁事件规范.md) | 人裁事件（`feedback/events/`、`feedback/vision/`、中心库 `events` 表）的信封、单位键、各 kind 的 payload、排序覆盖、锚与重切漂移、已知问题；机读 schema `formats/guji_feedback_event_v1.schema.json`，体检 `guji events lint` |
 | [norm_layer_proposal.md](norm_layer_proposal.md) | 规范层（异体 → 通行字）方案调研 |
 | `F*_handoff.md` | F1／F2 道交接记录 |
 | [M9-M10交接契约.md](M9-M10交接契约.md) | 粗校（M9）交精校（M10）的四样东西：book-text 0.x 文本、中心库待审单、R2 正式产物包、粗校台账，以同一 rev 为准（GUJI-678，待 M10 确认） |

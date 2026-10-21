@@ -50,14 +50,18 @@ AUDITED: dict[str, ParallelAudit] = {
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=1.0, warm_first=True,
+        mem_gb=1.5, warm_first=True,
         note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存；warm_first（2026-10-20 晚）：主进程先跑一页"
              "把它建好，fork 后各 worker 共享，不再各建一份。库含字体域（约 17.4 万条，特征矩阵 1.2 GB）时这件事要紧："
-             "各建一份是每进程约 2 分钟、2 GB；匹配器特征另有盘上缓存（`seeding._matcher_arrays`，mmap 共享页缓存）；"
+             "各建一份是每进程约 2 分钟、3.4–3.7 GB；匹配器特征另有盘上缓存（`seeding._matcher_arrays`，mmap 共享页缓存）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
-             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条，未导字体域）（2026-10-20）。"
+             "按 runbook S6 导了 jigmo、iming 字体域（glyph.db 3.1 GB）后，vol06 实测单 worker 3.4–3.7 GB，"
+             "原登记 1 GB 让 4 进程在 14.3 GB 的容器里被 OOM 杀（M9 基线，GUJI-636），曾改登记 3.6 GB。"
+             "warm_first 与特征缓存之后（GUJI-647）每个 worker 不再自建匹配器：vol06 冷启动主进程峰值 2.2 GB、"
+             "主进程加 4 个 worker 合计 PSS 2.6 GB，按 3.6 算 13 GB 的容器只开得出 2 个进程，改登记 1.5 GB 留余量。"),
     "rare_candidates": ParallelAudit(
         mem_gb=1.5, warm_first=True,
         note="审查（2026-10-20）：缓存都只按输入记忆（_emb_cache／_fwd_cache／_gw_cs 用 is 比对，_real_slots 按值），"
@@ -104,60 +108,8 @@ def is_parallel_safe(step) -> bool:
     return bool(step.spec.parallel_safe) or step.spec.id in AUDITED
 
 
-def _cgroup_available_bytes(proc_cgroup: str = "/proc/self/cgroup",
-                            root: str = "/sys/fs/cgroup") -> int | None:
-    """本进程所在 cgroup 还能用多少内存：上限 − 已用 + 文件页（页缓存，活跃的也算：内存紧时能回收，
-    挤不掉的是匿名内存）。没有上限返回 None。只加不活跃那部分会少算——跑过一步之后 mmap 的特征缓存和读过的图
-    都是活跃文件页（云端实测 5.7 GB），seed_admit 被压到 2 个进程。
-
-    容器里 `/proc/meminfo` 看到的是整台宿主（2026-10-20 云端：MemAvailable 15 GiB，cgroup 上限 13.4 GiB），
-    按它压进程数会高估；超了 cgroup 上限是直接 OOM 杀进程（字体域进库后 dev 上的 glyph_match 4 进程就这样被杀）。"""
-    try:
-        lines = open(proc_cgroup, encoding="ascii").read().splitlines()
-    except OSError:
-        return None
-    for ln in lines:
-        hid, ctrls, path = ln.split(":", 2)
-        if hid == "0" and ctrls == "":                          # cgroup v2
-            base = root + path
-            files = ("memory.max", "memory.current", "memory.stat", ("active_file", "inactive_file"))
-        elif "memory" in ctrls.split(","):                      # cgroup v1
-            base = root + "/memory" + path
-            files = ("memory.limit_in_bytes", "memory.usage_in_bytes", "memory.stat",
-                     ("total_active_file", "total_inactive_file"))
-        else:
-            continue
-        try:
-            lim = open(os.path.join(base, files[0]), encoding="ascii").read().strip()
-            if lim == "max" or int(lim) >= 1 << 60:
-                continue                                        # 这一层没设上限
-            used = int(open(os.path.join(base, files[1]), encoding="ascii").read())
-            file_pages = 0
-            for st in open(os.path.join(base, files[2]), encoding="ascii"):
-                k, _, v = st.partition(" ")
-                if k in files[3]:
-                    file_pages += int(v)
-            return max(0, int(lim) - used + file_pages)
-        except (OSError, ValueError):
-            continue
-    return None
-
-
 def available_memory_gb() -> float | None:
-    """本机此刻可用内存（GB）：`MemAvailable` 与本进程 cgroup 余量取小；都取不到返回 None（不按内存压进程数）。"""
-    try:
-        cg = _cgroup_available_bytes()
-    except Exception:  # noqa: BLE001 —— 只是限流参考
-        cg = None
-    sysgb = _system_available_gb()
-    if cg is None:
-        return sysgb
-    cg_gb = cg / (1 << 30)
-    return cg_gb if sysgb is None else min(sysgb, cg_gb)
-
-
-def _system_available_gb() -> float | None:
-    """`/proc/meminfo` 的 MemAvailable（Windows 走 GlobalMemoryStatusEx）。"""
+    """本机此刻可用内存（GB）；取不到返回 None（不按内存压进程数）。"""
     try:
         if os.name == "nt":
             import ctypes
@@ -173,12 +125,56 @@ def _system_available_gb() -> float | None:
             if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
                 return None
             return ms.ullAvailPhys / (1 << 30)
+        host = None
         with open("/proc/meminfo", encoding="ascii") as f:
             for ln in f:
                 if ln.startswith("MemAvailable:"):
-                    return int(ln.split()[1]) / (1 << 20)
+                    host = int(ln.split()[1]) / (1 << 20)
+                    break
+        cg = _cgroup_headroom_gb()
+        if host is None:
+            return cg
+        return host if cg is None else min(host, cg)
     except Exception:  # noqa: BLE001 —— 只是限流参考，取不到就不限
         return None
+
+
+def _cgroup_headroom_gb(root: str = "") -> float | None:
+    """容器（cgroup v2／v1）内存上限减已用（不算可回收的页缓存），GB；没设上限或读不到返回 None。
+    云容器里 /proc/meminfo 报的是整机，进程却按 cgroup 上限被 OOM 杀。"""
+    def _read(p):
+        try:
+            with open(p, encoding="ascii") as f:
+                return f.read().strip()
+        except OSError:
+            return None
+    pairs = [(root + "/sys/fs/cgroup/memory.max", root + "/sys/fs/cgroup/memory.current")]
+    try:
+        with open(root + "/proc/self/cgroup", encoding="utf-8") as f:
+            for ln in f:
+                parts = ln.strip().split(":", 2)
+                if len(parts) == 3 and "memory" in parts[1].split(","):
+                    d = root + "/sys/fs/cgroup/memory" + parts[2]
+                    pairs.append((d + "/memory.limit_in_bytes", d + "/memory.usage_in_bytes"))
+                elif len(parts) == 3 and parts[0] == "0" and parts[2] not in ("", "/"):
+                    d = root + "/sys/fs/cgroup" + parts[2]
+                    pairs.insert(0, (d + "/memory.max", d + "/memory.current"))
+    except OSError:
+        pass
+    for lim_p, use_p in pairs:
+        lim, use = _read(lim_p), _read(use_p)
+        if not lim or not use or lim == "max" or not lim.isdigit() or not use.isdigit():
+            continue
+        lim_i = int(lim)
+        if lim_i >= 1 << 60:                       # v1 没设上限时是个极大值
+            continue
+        cache = 0
+        for ln in (_read(lim_p.rsplit("/", 1)[0] + "/memory.stat") or "").splitlines():
+            k, _, v = ln.partition(" ")
+            if k in ("file", "total_cache") and v.isdigit():   # v2：file；v1：total_cache
+                cache = int(v)
+                break
+        return max(0, lim_i - max(0, int(use) - cache)) / (1 << 30)
     return None
 
 

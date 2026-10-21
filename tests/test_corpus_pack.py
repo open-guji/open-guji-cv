@@ -263,3 +263,24 @@ def test_push_refuses_changed_corpus_without_new_version(ws):
     assert "freq.json" in msg and "new.txt" in msg and "v2" in msg
     cp.build(ws)                                          # 出 v2 把现状收进去 → 放行
     assert corpus_pin.push_problems(ws) == []
+
+
+def test_group_prompt_md_is_not_corpus(tmp_path, monkeypatch):
+    """字组 prompt.md 只给离线 L2 拼消息，Step 不读：不进清单；老清单里登记了的，改它也不算漂移。"""
+    from open_guji_cv.core import corpus_pin
+    repo = tmp_path / "repo"
+    g = repo / "config" / "groups" / "rr"
+    g.mkdir(parents=True)
+    (g / "rules.yaml").write_text("a: 1\n", encoding="utf-8")
+    (g / "prompt.md").write_text("v1\n", encoding="utf-8")
+    monkeypatch.setattr(corpus_pin, "REPO_ROOT", repo)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    items = corpus_pin.collect(ws)
+    assert [i["path"] for i in items] == ["config/groups/rr/rules.yaml"]
+    old = {"items": items + [{"group": "rules", "root": "repo", "path": "config/groups/rr/prompt.md",
+                              "size": 3, "sha256": "0" * 64}]}
+    (g / "prompt.md").write_text("v2\n", encoding="utf-8")
+    assert corpus_pin.check_files(ws, old) == {"changed": [], "missing": [], "extra": []}
+    (g / "rules.yaml").write_text("a: 2\n", encoding="utf-8")
+    assert corpus_pin.check_files(ws, old)["changed"] == ["repo:config/groups/rr/rules.yaml"]
