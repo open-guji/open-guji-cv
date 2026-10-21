@@ -45,6 +45,7 @@ class FlowConfig:
     freq_vols: dict = field(default_factory=dict)      # 组 id → {成员: 人裁册数}（`freq.load_vols`）
     freq_min_vols: int = _freq.MIN_VOLS
     l2_tables: dict = field(default_factory=dict)      # 组 id → 上下文 L2 答案表路径
+    canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
     rr_model: str | None = None
     rr_p: float = 0.5
 
@@ -134,7 +135,7 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
             return GroupVerdict(top, conf=c1, why="agree", via="top1", extra={"cov": c1})
         return GroupVerdict(None, conf=c1, why="abstain:low_cov", via="top1", extra={"cov": c1})
     if name == "ctx":
-        v = ctx_judge(g, r.id, ref, left or "", right or "", cfg.l2_tables.get(g))
+        v = ctx_judge(g, r.id, ref, left or "", right or "", cfg.l2_tables.get(g), cfg.canon)
         return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx",
                             extra={"rules": v.extra.get("rules")} if v.extra.get("rules") else {})
     img = patch_fn(r.id) if patch_fn is not None else None
@@ -262,7 +263,8 @@ def ctx_fingerprint(groups, tables: dict) -> str:
     return h.hexdigest()[:16]
 
 
-def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None) -> GroupVerdict:
+def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None,
+              canon: Callable[[str], str] | None = None) -> GroupVerdict:
     from .ctx_l1 import CtxL1Backend
     from .ctx_l2 import CtxL2Backend
     from .protocol import JudgeInput, window_from_text
@@ -275,6 +277,6 @@ def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None) -
         return v
     if table not in _L2:
         _L2[table] = CtxL2Backend(table)
-    v2 = _L2[table].judge(spec, cell)
+    v2 = _L2[table].judge(spec, cell, canon)
     v2.extra = {**v2.extra, "l1_why": v.why}
     return v2

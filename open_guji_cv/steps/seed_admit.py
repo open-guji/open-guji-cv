@@ -489,6 +489,13 @@ class SeedAdmitParams(BaseModel):
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
 
+    codepoint_semantic: bool = True
+    """书级 `codepoints:` 并进语义判等（缺省开）：册配置声明过的码位对（巻→卷、别→別、岀→出、晩→晚、內→内 …）
+    在本步所有「语义同字」比较里按同一个字算（`context_vs_ref`、`replace_align`、`relax_ref_agree`、
+    `match_ref` 各通道都读 `vmap.semantic`），放行的字也落到册指定的码位。此前 `codepoints` 只进
+    可信边判据，`vmap` 不认 巻/卷、别/別 等，于是整理本排异体、刻本与文意都对的格全被 `context_vs_ref`
+    拦下（殿本 vol04–10 送审里这一类 217 格）。没配 `codepoints` 的册行为不变；关掉回到旧行为。"""
+
     juan_rule: bool = False
     """「数字＋卷」放行（Y1，overview#454，缺省关）：库 top1 是「卷」、cov ≥ `juan_cov`、这一格
     前一个正文字是数字（一…十百千）或「幾」，且别无护栏／疑问（只允许 `replace_align`、
@@ -570,6 +577,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.seal_blank_page:
             for k in ("seal_blank_page", "seal_blank_thr", "seal_blank_overlap", "seal_blank_ink_out"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.codepoint_semantic:
+            d.pop("codepoint_semantic", None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
@@ -741,6 +750,8 @@ class SeedAdmitStep(Step):
         from ..variant_ledger import BookLedger
         p: SeedAdmitParams = ctx.params_for(self)  # type: ignore[assignment]
         vmap = VariantMap.load(p.variants or None)
+        if p.codepoint_semantic and ctx.book.codepoints:
+            vmap = _CodepointMap(vmap, ctx.book)
         ledger = BookLedger.load_or_empty(p.edition)
         # 排除名单：人裁标过「切坏 / 带残留 / 非字」的图块**不进库也不出审查卡**
         # （用户 2026-08-25 定的口径，exclusions.py 模块头）。v1 的 seeding 一直
@@ -1338,6 +1349,13 @@ class SeedAdmitStep(Step):
             d_hu = _human_unbound_pass(ctx, page, out, human_lost)
             n_auto -= d_hu
             n_review += d_hu
+        if p.codepoint_semantic and ctx.book.codepoints:
+            # 放行字落到册指定码位。放在所有后处理遍之后：`group_flow` 的文意 L2 表键是按整理本原字
+            # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。
+            for col in out:
+                for rec in col.chars or []:
+                    if rec.admit and rec.char:
+                        rec.char = ctx.book.canonical_char(rec.char)
         if patch_missing:
             lanes: dict[str, int] = {}
             for v in patch_missing.values():
@@ -1898,7 +1916,10 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
                      freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
-                     l2_tables=dict(p.group_flow_tables))
+                     l2_tables=dict(p.group_flow_tables),
+                     # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
+                     canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
+                                                        and ctx.book.codepoints) else None))
 
     def blocked(r) -> bool:
         m = mmap.get(r.id)
@@ -2391,6 +2412,20 @@ def _opt(ctx: RunContext, kind: str, page: int):
         return ctx.product(kind, page)
     except Exception:
         return None
+
+
+class _CodepointMap:
+    """VariantMap 的包装：书级 `codepoints:` 声明过的码位先归到册指定的码位再查语义
+    （巻→卷 后 semantic(巻)==semantic(卷)）。没声明的字原样查。"""
+
+    def __init__(self, base, book):
+        self._base, self._book = base, book
+
+    def semantic(self, char: str) -> str:
+        return self._base.semantic(self._book.canonical_char(char))
+
+    def __getattr__(self, name):
+        return getattr(self._base, name)
 
 
 class _PairAwareMap:

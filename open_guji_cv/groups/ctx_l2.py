@@ -89,6 +89,10 @@ def merge_runs(group: str, members: str, ver: str, runs: dict[str, dict], ctxs: 
     return {"schema": "group_clf/1", "group": group, "ctx_ver": CTX_VER, "ver": ver, "models": sorted(runs), "cells": cells}
 
 
+def _canon_str(s, canon) -> str:
+    return "".join(canon(c) for c in s) if isinstance(s, str) else ""
+
+
 class CtxL2Backend:
     name = "ctx_l2"
 
@@ -99,7 +103,7 @@ class CtxL2Backend:
             raw = Path(table).read_bytes()
             self._t, self.fingerprint = json.loads(raw.decode("utf-8")), hashlib.sha256(raw).hexdigest()[:16]
 
-    def judge(self, spec, cell: JudgeInput) -> GroupVerdict:
+    def judge(self, spec, cell: JudgeInput, canon=None) -> GroupVerdict:
         t = self._t
         if t.get("schema") != "group_clf/1" or t.get("group") != spec.id or t.get("ctx_ver") != CTX_VER:
             return GroupVerdict(None, why="ver_mismatch", via="ctx_l2")
@@ -107,7 +111,12 @@ class CtxL2Backend:
         if not e:
             return GroupVerdict(None, why="cache_miss", via="ctx_l2")
         left, right = cell.window(WIDTH)
-        if e.get("ctx") != ctx_key(left, right):
+        if canon is not None:
+            # 书级码位归一：表键与本格窗口各自归一再比（别/別、巻/卷 不算上下文变了）
+            same = _canon_str(e.get("ctx"), canon) == _canon_str(ctx_key(left, right), canon)
+        else:
+            same = e.get("ctx") == ctx_key(left, right)
+        if not same:
             return GroupVerdict(None, why="ctx_mismatch", via="ctx_l2")
         ch = e.get("char")
         if ch is not None and ch not in spec.members:

@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 书级 `codepoints:` 并进 seed_admit 的语义判等（`codepoint_semantic`，缺省开；关掉回旧行为）：巻→卷、别→別、岀→出、晩→晚、內→内 在 `context_vs_ref`、`replace_align`、`match_replace` 等一切「语义同字」比较里按同一个字算，放行字最后落册指定码位；`group_flow` 文意 L2 表的键按码位归一再比（否则邻格新放行会让组内格误降）。起因：此前 `vmap` 不认这些码位对，整理本排异体、刻本与文意都对的格全被 `context_vs_ref` 拦下（殿本 vol04–10 送审里这类 217 格：卷巻 178、別别 33、出岀 4、晚晩 2）。没配 `codepoints` 的册产物不变；参数指纹不变（缺省值不进 dump）。PATCH；`seed_admit` 的 `code_hash` 变（9edc140c6b12→ba6f32e10e83），别的 Step 不变。抽样重跑这类格所在 140 页：新放行 216，降级 0，仍送审 1（被遮挡）。
 - 格位表 `scripts/dzg_layout.py`：读同目录 `layout_overrides.jsonl`（看原图核过的列，写要改的 slots/notes/half/raised 加 `why`），盖在 daizhige 推出的行上，重生成不丢；评测 `research/dzg_struct_prior/structcmp.py` 的参照同样按它改。首批 4 列（殿本 vol04 p11 c1/c4/c5、p79 c7：daizhige 起始格错一格、漏抬头、把「○」当空格）。代码不动，表变 → 用到这几页的 `row_segment` 产物过期。vol04 第 4 页起错列 3 → 1（另 2 列原来就切对了，错在参照）。
 - 闸2 `column_gate` 1.12：页级周期估值偏离书级 `period_prior` 超过 `period_prior_tol`（缺省 10%，0 = 关）时回落先验，记 flag `period_fallback`。殿本正文页估值都在先验 ±5% 内；卷末大印、整页空白的页会被带偏（vol04 p127/128/220 估 89–95，vol05 p188 102，vol09 p69/162/163/224/225 79–127，先验 114–115），Step3 拿错的格高切，抬头格数、格网整列错位。修好 vol04 p127 c3（整列格线错半格）、vol09 p162 c3，表上改坏 0；其余页估值没偏，产物不变。没配 `period_prior` 的书不受影响。PATCH；`column_gate` 的 `code_hash` 与参数指纹变，各书 Step2 闸起判过期。
 - 切分 `row_segment` 1.31：列端表空格记空（`_blank_frame_junk`）不再只看字格和單行小注格，被切成雙行小注半格（jiazhu_a/b）的印章墨也记空。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol10 p175 c5、vol09 p265 c7，vol09、vol10 全册改坏 0（vol10 第 4 页起已无错列）。
