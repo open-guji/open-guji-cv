@@ -538,3 +538,21 @@ def test_fallback_draft_lists_loose_columns(tmp_path, monkeypatch):
     rows = [r for r in f.read_text(encoding="utf-8").splitlines() if r and not r.startswith("#")]
     assert rows == ["页\t列\t处理\t说明", "12\t3\t\t", "40\t7\t\t"]
     assert zl.fallback_draft(ctx, {"items": [{"no": "2d", "data": None}]}) is None
+
+
+def test_st_ws_adds_book_to_existing_sparse_clone(tmp_path, monkeypatch):
+    """已有的稀疏克隆（仓根/<书目录>）：不克隆，只把本册原图加进稀疏规则。"""
+    subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True)
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.ws = tmp_path / "repo" / "abc-書"
+    ctx.ws.mkdir()
+    ctx.reports = ctx.ws / "reports" / ctx.book
+    calls = []
+
+    def spy(c, cmd, **kw):
+        calls.append(list(map(str, cmd)))
+        return 0, ("true\n" if cmd[:3] == ["git", "config", "--get"] else "deadbeef\n")
+    monkeypatch.setattr(zl, "sh", spy)
+    zl.st_ws(ctx)
+    assert not any("clone" in c for c in calls)
+    assert ["git", "sparse-checkout", "add", "/abc-書/data_full/*/vol06/"] in calls

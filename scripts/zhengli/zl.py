@@ -287,7 +287,11 @@ def ws_sparse_patterns(ws_name: str, book: str) -> list[str]:
 
 def st_ws(ctx):
     root = ctx.ws.parent                            # 工作区是 guji-workspace 仓里的一个书目录
-    pats = ws_sparse_patterns(ctx.ws.name, ctx.book)
+    if in_git_repo(ctx.ws):                         # 已有仓（工作区就是仓根或仓内子目录）：以仓根为准
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=ctx.ws, capture_output=True, text=True).stdout.strip()
+        root = Path(top) if top else ctx.ws
+    rel = ctx.ws.resolve().relative_to(root.resolve()).as_posix() if ctx.ws.resolve().is_relative_to(root.resolve()) else ctx.ws.name
+    pats = ws_sparse_patterns(rel, ctx.book) if rel != "." else ["/*", "!/data_full/*/", f"/data_full/{ctx.book}/"]   # 老布局：仓根就是书目录
     if not in_git_repo(root):
         if root.exists() and any(root.iterdir()):
             write_next(ctx, "工作区父目录不是 guji-workspace 仓", [f"`{root}` 非空又不是 git 仓；把 --ws 指到 `<仓根>/<书目录>`，仓根要空或不存在。"])
