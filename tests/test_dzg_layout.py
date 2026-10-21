@@ -137,3 +137,41 @@ def test_blank_frame_junk_only_touches_column_ends_with_frame_ink():
     cells2 = [mk(1, 0), mk(2, 100), mk(3, 200), mk(5, 400)]
     _blank_frame_junk(img2, cells2, {2, 5}, (0, 100), 128, 100.0)
     assert cells2[2].kind == "char"
+
+
+def test_blank_frame_junk_covers_table_empty_run_at_column_end():
+    """首字上方隔着一个空格的碎墨（表空格段里、不是物理首格）也记空；表的首字本身不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((400, 100), 255, np.uint8)
+    img[140:150, 45:52] = 0                    # 第 2 格：一点碎墨
+    img[220:280, 30:70] = 0                    # 第 3 格：表的首字
+    mk = lambda slot, y0, kind="char": C(slot=slot, y0=y0, y1=y0 + 100, kind=kind, sub=None)
+    cells = [mk(1, 0, "blank"), mk(2, 100), mk(3, 200), mk(4, 300, "blank")]
+    assert _blank_frame_junk(img, cells, {3}, (0, 100), 128, 100.0) == 1
+    assert cells[1].kind == "blank" and cells[2].kind == "char"
+
+
+def test_split_chars_counts_lines_through_one_glyph_only():
+    """劈字：格线把一个连通体劈成两段、两段都占它高的三成以上才算；擦过字头、落在字缝里都不算。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _split_chars
+    img = np.full((300, 100), 255, np.uint8)
+    img[10:90, 45:55] = 0                      # 字一：一竖，10–90
+    img[120:130, 20:80] = 0                    # 字二：「二」上横
+    img[170:180, 20:80] = 0                    #       「二」下横
+    mk = lambda slot, y0, y1: C(slot=slot, y0=y0, y1=y1, kind="char", sub=None)
+    assert _split_chars(img, [mk(1, 0, 100), mk(2, 100, 200)], 100.0) == 0
+    assert _split_chars(img, [mk(1, 0, 50), mk(2, 50, 200)], 100.0) == 1        # 竖从中间劈开
+    assert _split_chars(img, [mk(1, 0, 20), mk(2, 20, 200)], 100.0) == 0        # 只擦掉字头一成
+    assert _split_chars(img, [mk(1, 0, 150), mk(2, 150, 200)], 100.0) == 0      # 落在「二」两横之间（这一型靠违表格数）
+
+
+def test_mask_misses_counts_both_directions():
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _mask_misses
+    cells = [C(slot=1, kind="blank"), C(slot=2, kind="char"), C(slot=3, kind="char"), C(slot=4, kind="blank")]
+    assert _mask_misses(cells, {2, 3}) == 0
+    assert _mask_misses(cells, {3, 4}) == 2     # 第 2 格表说空却有字，第 4 格表说有字却空

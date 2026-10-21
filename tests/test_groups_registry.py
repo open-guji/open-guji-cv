@@ -20,12 +20,13 @@ def test_group_ids_match_dataset_registry():
     """id 与 dataset `char-groups/groups.json` 的 id 一致（jys／ry／rr／yi_560／wxs／wm／ts）；
     另有字组统一流程首批七个异体组（mn／dian／can／chen／li／shen／zhi，2026-10-18）、第二批四个只看字频的（ji／qing／bian／hui）、
     第三批五个形近不同义的（ly／dt／wj／zh／yh，2026-10-19）、第四批三个（xz／wyu／yt）、日目 rm、第五批八个（mz／yr／qg／sb／js／em／fc／mb）、
-    第三批只看字频的异体组六个（kan／jiw／qx／dx／zx／qy，2026-10-20）、按字分类 IDS 三组（xu／ce／jiao）。"""
+    第三批只看字频的异体组六个（kan／jiw／qx／dx／zx／qy，2026-10-20）、按字分类 IDS 三组（xu／ce／jiao）、
+    整字岭回归两组（lv 呂吕／zheng 徵徴，2026-10-20）。"""
     assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
                            "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "qg", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
-                           "qik", "lih", "jue"}
+                           "qik", "lih", "jue", "wei", "shuo", "lv", "zheng"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 
@@ -35,10 +36,10 @@ def test_backend_names_valid_and_members_nonempty():
         assert set(g.backends) <= BACKEND_NAMES, g.id
 
 
-def test_yi_560_is_inert():
-    """#560 异体组只登记成员：没有判别器，不进字组统一流程，走人裁数据路。"""
+def test_yi_560_flow():
+    """#560 彝组：字频→IDS 三段（2026-10-20 上线）。"""
     g = get_group("yi_560")
-    assert g.backends == () and g.flow is None
+    assert g.backends == () and g.flow is not None and g.flow.solvers == ("freq", "ids")
     assert g.members == frozenset("彝彛彜彞𢑱𢑴")
 
 

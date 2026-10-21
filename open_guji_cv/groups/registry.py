@@ -61,8 +61,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec(("ctx",), review=True), overlaps=("rm",),
-        note="按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
+        flow=FlowSpec(("ctx", "ry_shape"), review=True, lift_needs=("ctx",)), overlaps=("rm",),
+        note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
@@ -132,7 +132,9 @@ GROUPS: dict[str, GroupSpec] = {
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
-        note="异体字组（#560）：只登记成员。没有判别器（42 格训不出「大 vs 廾」读字器），走人裁数据路，不抬不降。"),
+        flow=FlowSpec(("freq", "ids"), combine="first"),
+        note="异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。"
+             "只在 seed_admit.group_flow 点名时生效。"),
     # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。
     #    判法：字频成立就定；否则 IDS（尚未在线，弃权）；再否则沿用旧 variant_tie「库形最近的码位」（top1 cov ≥ 0.97）。
     **{gid: GroupSpec(
@@ -152,7 +154,9 @@ GROUPS: dict[str, GroupSpec] = {
         note="异体组：只看字频；数据不够送人审，重算字频表后自动放行。只在 seed_admit.group_flow 点名时生效。")
        for gid, name in (("ji", "即卽"), ("qing", "卿𨜊"), ("bian", "變𠮓"), ("hui", "彙彚"),
                          # 第三批（2026-10-20 sheldon 合审定）：殿本全书只见一形，人裁 ≥10 且来自 ≥2 册
-                         ("kan", "刊刋"), ("jiw", "既旣"), ("qx", "清淸"), ("dx", "顚顛"), ("zx", "淄湽"), ("qy", "青靑"))},
+                         ("kan", "刊刋"), ("jiw", "既旣"), ("qx", "清淸"), ("dx", "顚顛"), ("zx", "淄湽"), ("qy", "青靑"),
+                         # 第四批（2026-10-20 少样例异体道盘点）：殿本人裁只见一形，≥10 且来自 ≥2 册
+                         ("wei", "爲為"), ("shuo", "說説"))},
     # —— 两形混用的异体组（2026-10-20）：字频弃权后走在线 IDS 的「按字分类」判法（`ids_online.SPECS`，by_form）；
     #    判不出就送人审，不退到库形最近。模板库在 config/groups/<组>/ids_bank.json。
     **{gid: GroupSpec(
@@ -163,6 +167,14 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"),
                          # 第二批（2026-10-20 sheldon 异体对第二批审定）：按册留一 0 错
                          ("qik", "啓啟"), ("lih", "厯歴"), ("jue", "絕絶"))},
+    # —— 差别不在缝两侧的两形混用异体对（2026-10-20，道 1 续）：字频弃权后走在线 IDS 的「整字岭回归」判法（`ids_whole`，
+    #    `ids_online.SPECS[组].whole`）；判不出送人审，不退到库形最近。模板库在 config/groups/<组>/ids_bank.json。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec(("freq", "ids"), combine="first"),
+        note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
+       for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
 }
 
 

@@ -47,6 +47,17 @@ class IdsSpec:
     min_class: int = 8          # 某类模板（真实刻例）少于这个数，判成它也弃权
     by_form: bool = False       # True：模板按成员字分类（不经 IDS 拼字），切下的那一段直接和各字的同段比；
                                 # 用于两字差别不落在同一 IDS 部件上的异体对（叙敘、冊册、教敎，2026-10-20）
+    three: bool = False         # True：彝组三段版（`ids_solver.solve`）：自动缝切上／中／下三段、中段再竖切取右半，
+                                # 每段二选一后拼 `⿳上⿰米X下` 交 IdsResolver；任一段 margin 不够整格弃权
+    top_hog: float | None = None  # 三段版：给了数，上段（彑／彐）改用窗口 HOG＋岭回归（不依赖上／中缝），|判别值| 不到它弃权
+    nearest_ok: bool = False      # 三段版：IDS 无对应码位只能归近似字（nearest_variant 旗）时照样给字（彝：彑米糸大 ≡ 𢑴，sheldon 10-20 定）
+    bot_hog: float | None = None  # 三段版：同上，下段（廾／大）用下部窗口 HOG＋岭回归
+    mid_hog: float | None = None  # 三段版：给了数，中段（糸／分）改用 HOG＋岭回归判别，|判别值| 不到它弃权（上下段仍用 min_margin）
+    whole: str = ""             # "pix"|"hog"：整字二类岭回归（`ids_whole`，不切缝；差别不在缝两侧的两字异体：呂吕、徵徴），
+                                # `min_margin` 当作判别值绝对值的门槛；非空时 frame/orient/prior/which 不用
+    region: tuple = (0.0, 1.0, 0.0, 1.0)  # 整字版：取归一字块的哪一块（占宽高的 x0,x1,y0,y1）
+    lam: float = 1.0            # 整字版：岭回归的 L2 系数
+    size: int = 32              # 整字版：模板与在线字块归一后的边长（模板库里也写一份）
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -64,6 +75,28 @@ SPECS: dict[str, IdsSpec] = {
     "qik": IdsSpec(frame="", orient="h", prior=0.5, which=1, min_margin=0.02, by_form=True),
     "lih": IdsSpec(frame="", orient="v", prior=0.4, which=1, min_margin=0.02, by_form=True),
     "jue": IdsSpec(frame="", orient="h", prior=0.4, which=0, min_margin=0.02, by_form=True),
+    # 彝彛彜彞𢑱𢑴（2026-10-20，sheldon 定上线）：42 格人标三段读法（dataset yi_560/user_parts_labels），自动缝（band 0.08、pull 2.0）。
+    # 留一：margin 0.04 → 23 对／19 弃权／0 错（覆盖 55%）；0.02 有 5 错、0.0 有 8 错，所以取 0.04。
+    # 第二轮（sheldon 10-20 追问「剩下的为什么分不开」）：13 个弃权里 11 个三段其实读对了，只是 margin 不够——
+    # 上段 彑／彐 只差左上一个小钩，自动缝常把上段笔画从中间切开（近邻 margin 0.00–0.04）；中段 糸／分 近邻留一 5/42 错。
+    # 改法：三段都用 HOG＋岭回归（ids_parts.choose_hog，模板即训练集）；上段、下段不用缝，取墨迹外框的比例窗口
+    # （ids_solver.TOP_WIN／BOT_WIN，bank 的 4|、5| 槽）。留一：34 对／8 弃权／0 错（覆盖 81%）；
+    # 8 个弃权中 6 个是读对了但 Unicode 无此组合（彑米糸大，nearest 旗）；sheldon 10-20 定「彑米糸大 ≡ 𢑴，不用人审」→ nearest_ok：
+    # 加上后 40 对／2 弃权／0 错（覆盖 95%）。
+    # 第三轮（10-20 sheldon 补点 40 格部件读法，共 82 格）：中段也改比例窗口（MID_WIN，bank 的 6| 槽），不再依赖任何缝；
+    # 三段都是「窗口＋HOG＋岭回归」，82 格留一**三个槽全部读对**（竖缝版中段 1–3 错）。门槛取 0.05（全对，只是给新数据留保护）：
+    # 82 对里 79 格给字、3 格 margin<0.05 弃权，0 错；0.1 → 77 格，0.2 → 71 格。
+    "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True),
+    # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
+    # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
+    # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
+    #   模板里 vol07:4:4:21 按 sheldon 复看改为呂（原人裁吕，墨浓两口被粗笔连上；更正写在建库脚本 CORRECTIONS）。
+    # 徵徴 hog（取字块 x 0.28–0.78、y 0.15–0.65）80×80、λ=3：|d|≥0.6 → 38 对／37 弃权／0 错（≥0.5 46 对 0 错，≥0.4 55 对 0 错，≥0.3 1 错；
+    #   换尺寸、λ、区域，0.6 处都是 0 错，所以取 0.6）。徵徴 不设门槛只有 87–92% 对，别放宽。
+    "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="pix", lam=1.0, size=32),
+    "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog",
+                     region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
 }
 
 
@@ -167,6 +200,10 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     from .registry import GROUPS
     spec = spec or SPECS[g]
     members = GROUPS[g].members
+    if spec.three:
+        return _judge_three(g, gray, bank, spec)
+    if spec.whole:
+        return _judge_whole(gray, bank, spec, members)
     if spec.by_form:
         return _judge_by_form(gray, bank, spec, members)
     v = solve_two(np.asarray(gray), bank, _resolver(g), spec.frame, spec.orient, spec.prior,
@@ -185,6 +222,54 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(v.char, conf=m, why="agree", via="ids", extra=extra)
+
+
+def _auto_three(gray):
+    """彝组自动切：上／中、中／下两条缝（先取直线基线作先验）＋中段竖缝。无墨迹 → None。"""
+    from .ids_segment import ink_of, polylines_to_mask, seam_polyline, straight_baseline, vertical_seam
+    ink = ink_of(gray)
+    if not ink.any():
+        return None
+    y1, y2 = straight_baseline(ink, 3)
+    pl = (seam_polyline(ink, y1, band=0.08, pull=2.0), seam_polyline(ink, y2, band=0.08, pull=2.0))
+    return pl, vertical_seam(ink, polylines_to_mask(ink.shape, *pl))
+
+
+def _slot_bank(bank: dict) -> dict:
+    """彝组模板库的键是 `位置|部件名`（如 `1|米糸`、`3|糸`＝中段竖切右半）→ `{位置: {部件名: [图,…]}}`。"""
+    out: dict = {}
+    for k, v in bank.items():
+        slot, name = k.split("|", 1)
+        out.setdefault(int(slot), {})[name] = v
+    return out
+
+
+def _judge_three(g: str, gray, bank: dict, spec: IdsSpec) -> GroupVerdict:
+    from .ids_solver import solve
+    arr = np.asarray(gray)
+    cut = _auto_three(arr)
+    if cut is None:
+        return GroupVerdict(None, why="abstain:blank", via="ids")
+    pl, vc = cut
+    b = _slot_bank(bank)
+    v = solve(arr, b, _resolver(g), pl, min_margin=spec.min_margin, vcut=vc, mid_hog=spec.mid_hog, top_hog=spec.top_hog, bot_hog=spec.bot_hog)
+    ms = [float(x) for x in v.margins]
+    extra = {"ids": v.ids, "slots": list(v.slots), "margins": [round(x, 4) for x in ms], "kind": v.kind, "flag": v.flag}
+    if v.char is None or v.char not in _members(g):
+        return GroupVerdict(None, conf=min(ms) if ms else 0.0, why="abstain:" + v.kind.removeprefix("abstain_"), via="ids", extra=extra)
+    if v.flag and not spec.nearest_ok:      # nearest_variant：Unicode 没有这个组合，只能近似 → 缺省不放，送人审
+        return GroupVerdict(None, conf=min(ms), why="abstain:nearest", via="ids", extra=extra)
+    for k, name in enumerate(v.slots):
+        key = 3 if (k == 1 and b.get(3)) else k
+        tname = name[1:] if key == 3 and name.startswith("米") else name
+        if len(b.get(key, {}).get(tname) or ()) < spec.min_class:
+            return GroupVerdict(None, conf=min(ms), why="abstain:few_templates", via="ids", extra=extra)
+    return GroupVerdict(v.char, conf=min(ms), why="agree", via="ids", extra=extra)
+
+
+def _members(g: str):
+    from .registry import GROUPS
+    return GROUPS[g].members
 
 
 def _judge_by_form(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
@@ -208,6 +293,79 @@ def _judge_by_form(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+def _judge_whole(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
+    """整字二类岭回归（`ids_whole`）：判别值绝对值 ≥ `min_margin`、判成的字模板 ≥ `min_class` 才给字。"""
+    from . import ids_whole
+    best, m, sc = ids_whole.score(np.asarray(gray), bank, spec.whole, tuple(spec.region), spec.lam, spec.size)
+    extra = {"form": best, "margin": round(float(m), 4), "scores": {k: round(float(v), 4) for k, v in sc.items()}}
+    if best is None:
+        return GroupVerdict(None, why="abstain:blank", via="ids", extra=extra)
+    if best not in members:
+        return GroupVerdict(None, why="abstain:slot", via="ids", extra=extra)
+    if m < spec.min_margin:
+        return GroupVerdict(None, conf=m, why="abstain:low_margin", via="ids", extra=extra)
+    n = len(bank.get(best) or ())
+    if n < spec.min_class:
+        return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
+    return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+_YI_NM = {"⺕": "彐", "彑": "彑", "糸": "米糸", "米+分": "米分", "廾": "廾", "大": "大"}
+
+
+def _three_cells(g: str, dataset: Path):
+    from PIL import Image
+    d = Path(dataset) / "char-groups" / "variant" / g
+    src = d / "user_parts_labels.jsonl"
+    cells = []
+    for line in src.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        gray = np.asarray(Image.open(d / "crops" / (r["id"].replace(":", "_") + ".png")).convert("L"))
+        cut = _auto_three(gray)
+        if cut is not None:
+            cells.append((r["id"], tuple(_YI_NM[r[k]] for k in ("top", "mid", "bot")), gray, cut))
+    return cells, src
+
+
+def _three_bank(cells, skip: str | None = None) -> dict:
+    from .ids_solver import add_real
+    bank = {0: {}, 1: {}, 2: {}}
+    for i, names, gray, (pl, vc) in cells:
+        if i != skip:
+            add_real(bank, gray, names, pl, vc)
+    # 与线上同一量化
+    return {f"{slot}|{name}": [quantize(t).astype(np.float32) / 255.0 for t in ts]
+            for slot, names_ in bank.items() for name, ts in names_.items()}
+
+
+def evaluate_three(g: str, dataset: Path, margins=(0.0, 0.02, 0.04, 0.06)) -> dict:
+    """彝组留一：模板库只用其余格，切线用自动缝（同线上）。→ {margin: {right, abstain, wrong}}。"""
+    cells, _ = _three_cells(g, dataset)
+    out = {m: Counter() for m in margins}
+    wrong = []
+    for i, names, gray, _cut in cells:
+        bank = _three_bank(cells, skip=i)
+        for m in margins:
+            v = _judge_three(g, gray, bank, IdsSpec(**{**asdict(SPECS[g]), "min_margin": m}))
+            k = "abstain" if v.char is None else "right" if tuple(v.extra["slots"]) == names else "wrong"
+            out[m][k] += 1
+            if k == "wrong":
+                wrong.append((m, i, names, v.char))
+    return {"by_margin": {m: dict(c) for m, c in out.items()}, "wrong": wrong, "cells": len(cells)}
+
+
+def build_three(g: str, dataset: Path) -> dict:
+    """彝组：dataset `char-groups/variant/<g>/user_parts_labels.jsonl`（三段读法）＋ `crops/` → 模板库（自动缝，同线上）。"""
+    cells, src = _three_cells(g, dataset)
+    flat = _three_bank(cells)
+    n = len(cells)
+    out = dump_bank(g, flat, {"labels": f"char-groups/variant/{g}/user_parts_labels.jsonl",
+                              "labels_sha256": hashlib.sha256(src.read_bytes()).hexdigest()[:16], "cells": n})
+    return out
 
 
 def form_templates(cells, spec: IdsSpec) -> dict:
@@ -299,11 +457,11 @@ def main(argv=None) -> int:
     if a.cmd == "build":
         from .registry import GROUPS
         out = a.out or _ROOT / (GROUPS[a.group].config_dir or f"config/groups/{a.group}") / "ids_bank.json"
-        d = build(a.group, a.dataset)
+        d = build_three(a.group, a.dataset) if SPECS[a.group].three else build(a.group, a.dataset)
         write_bank(d, out)
         print(f"写入 {out}：{d['source']}，各类模板 { {k: len(v) for k, v in d['templates'].items()} }")
     else:
-        r = evaluate(a.group, a.dataset)
+        r = (evaluate_three if SPECS[a.group].three else evaluate)(a.group, a.dataset)
         print(f"{a.group} 留一（自动缝）{r['cells']} 格")
         for m, c in r["by_margin"].items():
             print(f"  margin {m:.2f}: {c}")

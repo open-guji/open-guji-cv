@@ -39,6 +39,15 @@ ITEMS: tuple[tuple[str, str, str], ...] = (
 _SKIP_NAMES = {"README.md", ".gitkeep"}
 
 
+def _not_corpus(root: str, rel: str) -> bool:
+    """不算语料的文件：说明文件；字组的 ``prompt.md``（只给离线 L2 批量拼消息用，Step 不读，
+    改它不该让钉了版本的册拒跑）。老清单里登记过的这类条目，核对时也跳过。"""
+    name = rel.rsplit("/", 1)[-1]
+    if name in _SKIP_NAMES:
+        return True
+    return root == "repo" and name == "prompt.md" and rel.startswith("config/groups/")
+
+
 def _sha256(p: Path) -> str:
     from ..products.store import sha256_file
     return sha256_file(p)
@@ -69,9 +78,11 @@ def collect(ws: Path) -> list[dict]:
     for group, root, pat in ITEMS:
         base = _base(root, pat, ws)
         for p in sorted(base.glob(pat)):
-            if not p.is_file() or p.name in _SKIP_NAMES:
+            if not p.is_file():
                 continue
             rel = p.relative_to(base).as_posix()
+            if _not_corpus(root, rel):
+                continue
             key = (root, rel)
             if key in seen:
                 continue
@@ -173,6 +184,8 @@ def check_files(ws: Path, man: dict) -> dict:
     changed, missing, listed = [], [], set()
     for it in man["items"]:
         listed.add((it["root"], it["path"]))
+        if _not_corpus(it["root"], it["path"]):
+            continue
         p = _base(it["root"], it["path"], ws) / it["path"]
         if not p.is_file():
             missing.append(f'{it["root"]}:{it["path"]}')
