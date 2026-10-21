@@ -196,3 +196,18 @@ def test_alt_for_cards_cuts_patch_when_cache_missing(monkeypatch):
     ctx = Ctx()
     got = ac.alt_for_cards("b", [card], bank=Bank(), ctx=ctx)
     assert [a["c"] for a in got["b:3:1:6"]] == ["已", "巳"] and ctx.keys == [("char_patch", "p0003c01s6")]
+
+
+def test_family_pool_takes_symbols_only_when_a_pivot_is_one():
+    """近似字里有特殊符号 → 整张符号表进池；纯汉字近似字不混进符号（设计 4.3）。"""
+    from open_guji_cv.hanzi.symbols import is_symbol, symbols
+
+    class Db:
+        def pool(self, pivots, near_k=5, extra=None):
+            return {p: {"p": p, "src": "piv"} for p in pivots if not is_symbol(p)}
+
+    assert "○" in symbols() and not is_symbol("〇")
+    got = vs.family_pool(["口", "○"], db=Db())
+    assert got["○"] == {"p": "○", "src": "piv"} and got["◎"] == {"p": "○", "src": "sym"}
+    assert set(symbols()) <= set(got) and got["口"]["src"] == "piv"
+    assert not any(is_symbol(c) for c in vs.family_pool(["口", "日"], db=Db()))
