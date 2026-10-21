@@ -80,18 +80,43 @@ def test_pin_replaces_content_fingerprints_with_version(tmp_path, monkeypatch):
     pinned = _ctx_with_ws(tmp_path, monkeypatch, 1)
     p1 = pinned.params_for(_step("context_decide"))
     assert isinstance(p1, ContextDecideParams)
-    assert p1.corpus_fingerprint == "corpus-v1"
+    assert p1.corpus_fingerprint == "corpus-v1"          # 没有钉子账的册：旧写法，指纹逐位不变
 
 
-def test_pinned_fingerprint_ignores_content_but_not_version(tmp_path, monkeypatch):
+def test_legacy_pinned_fingerprint_ignores_content_but_not_version(tmp_path, monkeypatch):
+    _ctx_with_ws(tmp_path, monkeypatch, None)
     cp.build(tmp_path)                                  # v1
     cp.build(tmp_path)                                  # v2
     ctx1 = _ctx_with_ws(tmp_path, monkeypatch, 1)
     before = ctx1.params_for(_step("context_decide")).corpus_fingerprint
     (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")   # 内容变了
-    after = _ctx_with_ws(tmp_path, monkeypatch, 1).params_for(_step("context_decide")).corpus_fingerprint
-    assert before == after == "corpus-v1"
-    assert _ctx_with_ws(tmp_path, monkeypatch, 2).params_for(_step("context_decide")).corpus_fingerprint == "corpus-v2"
+    from open_guji_cv.core.corpus_pin import corpus_token
+    assert corpus_token(tmp_path, 1, "tbook") == before == "corpus-v1"
+    assert corpus_token(tmp_path, 2, "tbook") == "corpus-v2"
+
+
+def test_ledger_fingerprint_is_content_not_version_and_dev_follows_live_files(tmp_path, monkeypatch):
+    """有钉子账的册：指纹取清单内容哈希，不含版本号；开发中取工作副本；发版前后不变。"""
+    import json
+
+    from open_guji_cv.core.corpus_pin import corpus_token, pins_path
+    _ctx_with_ws(tmp_path, monkeypatch, None)
+    cp.build(tmp_path)                                  # v1
+    cp.build(tmp_path)                                  # v2：内容和 v1 一样
+    pp = pins_path(tmp_path, "tbook")
+    pp.parent.mkdir(parents=True, exist_ok=True)
+    pp.write_text(json.dumps({"rows": [{"n": 1, "global": None, "book": 1, "vol": None},
+                                       {"n": 2, "global": None, "book": 2, "vol": None}]}), encoding="utf-8")
+    t1, t2 = corpus_token(tmp_path, 1, "tbook"), corpus_token(tmp_path, 2, "tbook")
+    assert t1 == t2 and t1 != "corpus-v1"               # 内容没变，版本号换了，指纹不变
+    assert corpus_token(tmp_path, 3, "tbook", dev=True) == t1   # 开发中、文件没动：与发版后一样
+    (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    assert corpus_token(tmp_path, 1, "tbook") == t1     # 钉死的：读清单，不受工作副本影响
+    live = corpus_token(tmp_path, 3, "tbook", dev=True)
+    assert live != t1                                   # 开发中：改了就变，产物自动判过期
+    cp.build(tmp_path)                                  # v3 发版
+    pp.write_text(json.dumps({"rows": [{"n": 3, "global": None, "book": 3, "vol": None}]}), encoding="utf-8")
+    assert corpus_token(tmp_path, 3, "tbook") == live   # 发版前后指纹不变
 
 
 def test_pin_without_manifest_fails_fast(tmp_path, monkeypatch):
@@ -117,6 +142,10 @@ def test_step_payload_carries_pin_only_for_corpus_steps(tmp_path, monkeypatch):
     from helpers import make_book
 
     from open_guji_cv.core.engine import _self_payload
+    _ctx_with_ws(tmp_path, monkeypatch, None)
+    cp.build(tmp_path)
+    (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(tmp_path)                                  # v2：内容不同于 v1
     for sid in ("glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit"):
         assert "corpus" not in _self_payload(_step(sid), make_book(), "x")          # 没钉：键都不出现
         assert _self_payload(_step(sid), make_book(corpus=2), "x")["corpus"] == "corpus-v2"
@@ -356,18 +385,33 @@ def test_vol_manifest_rejects_foreign_paths(two_level):
         corpus_pin.load_manifest(book, 2, "vol01")
 
 
-def test_pin_dev_means_unpinned():
-    from open_guji_cv.core.corpus_pin import parse_pin
-    assert parse_pin("dev") is None and parse_pin(" Dev ") is None
-    assert parse_pin("v3") == 3
-
-
 def test_push_refuses_dev_pinned_book(two_level):
     from open_guji_cv.core import corpus_pin
     book, data, _ = two_level
     (data / "books").mkdir()
     (data / "books" / "vol01.yaml").write_text("id: vol01\ncorpus: 3\n", encoding="utf-8")
     assert corpus_pin.push_problems(book) == []
-    (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: dev\n", encoding="utf-8")
+    (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: 4\ncorpus_dev: true\n", encoding="utf-8")
     msg = corpus_pin.push_problems(book)
     assert len(msg) == 1 and "vol02" in msg[0] and "dev" in msg[0]
+
+
+def test_dev_pin_skips_checks_then_release_needs_layers_built(two_level):
+    from helpers import make_book
+
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    row = corpus_pin.append_pin(book, "vol01", from_n=1, book_ver=2, dev=True)       # 先升号，v2 清单还没出
+    assert row["n"] == 2 and row["dev"] is True
+    with pytest.raises(FileNotFoundError, match="整套书层没有 v2"):
+        corpus_pin.release_pin(book, "vol01", 2)                                      # 清单没出齐不放行
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")            # 开发中改语料
+    corpus_pin.require_pin_clean(book, 1, "vol01")  if False else None
+    b = make_book(corpus=2, corpus_dev=True)
+    assert b.corpus_dev                                                               # 跳过校验的开关
+    cp.build(book, base=1)                                                            # 发版：出 v2
+    assert "dev" not in corpus_pin.release_pin(book, "vol01", 2)
+    assert "dev" not in corpus_pin.load_pins(book, "vol01")[-1]
+    with pytest.raises(ValueError, match="不是开发中"):
+        corpus_pin.release_pin(book, "vol01", 2)

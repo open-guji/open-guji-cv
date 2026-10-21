@@ -552,8 +552,10 @@ class Engine:
         `jobs > 1` 且这一步审过可并行（`StepSpec.parallel_safe` 或 `core/parallel.py` 的登记）
         时走页级并行（见 `_run_one_step_parallel`）；否则串行——没登记过的 Step 一律串行，
         登记本身就是「审查过、安全」的唯一凭证，`jobs` 参数不能替审查背书。"""
-        from .corpus_pin import require_pin_clean, step_pin_token
-        if step_pin_token(step.spec.id, self.book):     # 册钉了语料库、这步读语料：起跑前硬校验
+        from .corpus_pin import CORPUS_STEPS, require_pin_clean
+        if (getattr(self.book, "corpus", None) and step.spec.id in CORPUS_STEPS
+                and not getattr(self.book, "corpus_dev", False)):
+            # 册钉了语料库、这步读语料：起跑前硬校验（corpus_dev 开发中的总号跳过）
             from .workspace import workspace_root
             require_pin_clean(workspace_root(), self.book.corpus, vol=self.book.id)
         for g in self.optional_gaps(step, pages):

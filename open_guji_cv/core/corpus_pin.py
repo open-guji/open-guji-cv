@@ -4,11 +4,11 @@
 在它上面加「出新版」和代码常量校验。
 
 **册钉子**：册 yaml 写 `corpus: 1`（或 `v1`）。钉了之后，`params_for` 把参数里**属于语料库的内容指纹**
-（`PIN_FIELDS`）统一换成 `corpus-v1`：指纹只认版本号，不看内容；没钉的册一字不变。
+（`PIN_FIELDS`）统一换成 `corpus-<清单内容哈希>`（`corpus_token`）：不含版本号；没钉的册一字不变。
 钉住的版本必须有清单，否则报错；清单之后文件被改过只警告一次（该出新版本，或把文件改回去）。
 算指纹时（``guji status`` 等）只警告；真开跑读语料的步之前 ``require_pin_clean`` 硬校验，改了或缺了就拒绝。
 两级清单（共享方案 S2）：书库 ``v<N>`` 写 ``base: M`` 时并上底库 ``b<M>``（中心库 ``corpus-base``）的条目。
-册 yaml 写 ``corpus: dev`` = 语料在改，等同没钉。三层（doc/design/语料库分层版本.md）：全局（底库 ``b<M>``）＋整套书（书库 ``v<N>``）＋册（``vol/<册>/v<K>``）；
+册 yaml 再写 ``corpus_dev: true`` = 这个总号的语料还在开发，跳过校验。三层（doc/design/语料库分层版本.md）：全局（底库 ``b<M>``）＋整套书（书库 ``v<N>``）＋册（``vol/<册>/v<K>``）；
 册 yaml 的 ``corpus: N`` 是总号，在该册的钉子账 ``pins/<册>.json`` 里对应三层各自的版本，任一层变总号就升；
 指纹仍只取 ``corpus-vN``。没有钉子账的册，``N`` 按旧做法解释为书库 ``v<N>``（它清单里写的 ``base``）。
 """
@@ -47,6 +47,19 @@ def _sha256(p: Path) -> str:
     return sha256_file(p)
 
 
+_SHA_CACHE: dict[tuple[str, int, int], str] = {}
+
+
+def _sha256_stat_cached(p: Path) -> str:
+    """同一进程里按 (路径, 大小, 修改时间) 缓存的哈希：指纹每次算都要扫一遍语料，别每次都读 60MB。"""
+    st = p.stat()
+    key = (str(p), st.st_size, st.st_mtime_ns)
+    h = _SHA_CACHE.get(key)
+    if h is None:
+        h = _SHA_CACHE[key] = _sha256(p)
+    return h
+
+
 def _base(root: str, pat: str, ws: Path) -> Path:
     """根目录。工作区里 ``config/`` 下的表迁到中心库数据目录后在 ``data_root``（GUJI-608）。"""
     if root == "repo":
@@ -60,7 +73,7 @@ def _base(root: str, pat: str, ws: Path) -> Path:
     return ws
 
 
-def collect(ws: Path) -> list[dict]:
+def collect(ws: Path, cached: bool = False) -> list[dict]:
     """按 ITEMS 扫出当前所有语料文件，返回 manifest 的 items（按 (root, path) 排序，输出稳定）。"""
     seen: dict[tuple[str, str], dict] = {}
     for group, root, pat in ITEMS:
@@ -73,7 +86,7 @@ def collect(ws: Path) -> list[dict]:
             if key in seen:
                 continue
             seen[key] = {"group": group, "root": root, "path": rel,
-                         "size": p.stat().st_size, "sha256": _sha256(p)}
+                         "size": p.stat().st_size, "sha256": (_sha256_stat_cached if cached else _sha256)(p)}
     return [seen[k] for k in sorted(seen)]
 
 
@@ -196,14 +209,14 @@ def vol_manifest_path(ws: Path, vol: str, version: int) -> Path:
     return pack_root(ws) / "vol" / vol / f"v{version}" / "manifest.json"
 
 
-def collect_vol(ws: Path, vol: str) -> list[dict]:
+def collect_vol(ws: Path, vol: str, cached: bool = False) -> list[dict]:
     """扫出这册的册层语料文件（``config/corpus-vol/<册>/**``），都在工作区数据根下，root=ws。"""
     base = _base("ws", VOL_DIR + "/", ws)
     out = []
     for p in sorted((base / VOL_DIR / vol).glob("**/*")) if (base / VOL_DIR / vol).is_dir() else []:
         if p.is_file() and p.name not in _SKIP_NAMES:
             out.append({"group": "vol", "root": "ws", "path": p.relative_to(base).as_posix(),
-                        "size": p.stat().st_size, "sha256": _sha256(p)})
+                        "size": p.stat().st_size, "sha256": (_sha256_stat_cached if cached else _sha256)(p)})
     return out
 
 
@@ -230,6 +243,31 @@ def load_pins(ws: Path, vol: str) -> list[dict]:
     return json.loads(p.read_text(encoding="utf-8"))["rows"] if p.exists() else []
 
 
+def _check_layers_exist(ws: Path, vol: str, new: dict) -> None:
+    if new["book"] not in versions(ws):
+        raise FileNotFoundError(f"整套书层没有 v{new['book']}（有 {versions(ws)}）")
+    if new["global"] is not None and new["global"] not in base_versions(ws):
+        raise FileNotFoundError(f"全局层没有 b{new['global']}（本机有 {base_versions(ws)}；先 guji db pull）")
+    if new["vol"] is not None and new["vol"] not in vol_versions(ws, vol):
+        raise FileNotFoundError(f"册 {vol} 没有册层 v{new['vol']}（有 {vol_versions(ws, vol)}）")
+
+
+def release_pin(ws: Path, vol: str, n: int) -> dict:
+    """开发中的总号发版：三层清单都已出齐（版本号对得上）才放行，账里去掉 ``dev``。
+    册 yaml 的 ``corpus_dev: true`` 由调用方去掉。"""
+    import json
+    rows = load_pins(ws, vol)
+    row = next((r for r in rows if r["n"] == n), None)
+    if row is None:
+        raise FileNotFoundError(f"册 {vol} 的钉子账里没有总号 {n}")
+    if not row.get("dev"):
+        raise ValueError(f"册 {vol} 的总号 {n} 不是开发中的，不用发版")
+    _check_layers_exist(ws, vol, row)
+    row.pop("dev")
+    pins_path(ws, vol).write_text(json.dumps({"rows": rows}, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return row
+
+
 def resolve_pin(ws: Path, vol: str, n: int) -> dict:
     """总号 N → 三层版本。账里有就按账；这册没有钉子账时退回旧做法：N 是书库版本，全局层取它清单里写的 ``base``。"""
     import json
@@ -246,11 +284,12 @@ def resolve_pin(ws: Path, vol: str, n: int) -> dict:
 
 
 def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEEP, book_ver=_KEEP,
-               vol_ver=_KEEP, note: str = "") -> dict:
+               vol_ver=_KEEP, note: str = "", dev: bool = False) -> dict:
     """给这册追加一行钉子账。没写的层沿用最新一行；组合与最新一行相同就拒绝（不空升）。
 
     没有钉子账时 ``from_n`` 必给（册 yaml 现在的 ``corpus:``），先把它按旧做法登成首行再追加。
-    只写账，不改册 yaml、不推中心库——新总号由调用方写进册 yaml。"""
+    ``dev=True``：开发中的总号，各层版本号可以指向还没出的清单（先升号，再改语料，发版时 ``release_pin``）。
+    只写账，不改册 yaml、不推中心库——新总号由调用方写进册 yaml（开发中再加 ``corpus_dev: true``）。"""
     import datetime
     import json
     rows = load_pins(ws, vol)
@@ -265,14 +304,12 @@ def append_pin(ws: Path, vol: str, *, from_n: int | None = None, global_ver=_KEE
            "vol": cur.get("vol") if vol_ver is _KEEP else vol_ver}
     if new == {"global": cur.get("global"), "book": cur["book"], "vol": cur.get("vol")}:
         raise ValueError(f"册 {vol} 的三层版本与最新总号 {cur['n']} 相同（{new}），不空升")
-    if new["book"] not in versions(ws):
-        raise FileNotFoundError(f"整套书层没有 v{new['book']}（有 {versions(ws)}）")
-    if new["global"] is not None and new["global"] not in base_versions(ws):
-        raise FileNotFoundError(f"全局层没有 b{new['global']}（本机有 {base_versions(ws)}；先 guji db pull）")
-    if new["vol"] is not None and new["vol"] not in vol_versions(ws, vol):
-        raise FileNotFoundError(f"册 {vol} 没有册层 v{new['vol']}（有 {vol_versions(ws, vol)}）")
+    if not dev:
+        _check_layers_exist(ws, vol, new)
     row = {"n": max(r["n"] for r in rows) + 1, **new,
            "date": datetime.date.today().isoformat(), "note": note}
+    if dev:
+        row["dev"] = True
     rows.append(row)
     p = pins_path(ws, vol)
     p.parent.mkdir(parents=True, exist_ok=True)
@@ -308,18 +345,18 @@ def check_files(ws: Path, man: dict) -> dict:
 
 
 def dev_pins(ws: Path) -> list[str]:
-    """册 yaml 里写着 ``corpus: dev``（语料在改）的册：只在本机用，不许推中心库（中心库只收正式版本号）。"""
+    """册 yaml 里写着 ``corpus_dev: true``（语料在开发）的册：只在本机用，不许推中心库（中心库只收正式版本号）。"""
     import yaml
     d = data_root_books(ws)
     out = []
     for f in sorted(d.glob("*.yaml")) if d is not None and d.is_dir() else []:
         try:
-            v = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("corpus")
+            dev = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("corpus_dev")
         except Exception:                          # noqa: BLE001 —— 读不了的册配置不归这里管
             continue
-        if isinstance(v, str) and v.strip().lower() == "dev":
-            out.append(f"册 {f.stem} 的 corpus 是 dev（语料还在改），中心库只收正式版本号：先出新版本、"
-                       f"guji corpus pin 后把册 yaml 改成新总号，或把它改回上一个正式号再推")
+        if dev:
+            out.append(f"册 {f.stem} 写着 corpus_dev: true（语料还在开发），中心库只收正式版本号：先 "
+                       f"guji corpus release 发版并去掉 corpus_dev，或改回上一个正式总号再推")
     return out
 
 
@@ -370,29 +407,59 @@ CORPUS_STEPS: frozenset[str] = frozenset({
 
 
 def step_pin_token(step_id: str, book) -> str | None:
-    """这一步这册书该带的语料库版本串；没钉或这步不读语料 → None（指纹不变）。"""
+    """这一步这册书该带的语料库内容串；没钉或这步不读语料 → None（指纹不变）。"""
     v = getattr(book, "corpus", None)
-    return pin_token(v) if v and step_id in CORPUS_STEPS else None
+    if not v or step_id not in CORPUS_STEPS:
+        return None
+    from .workspace import workspace_root
+    return corpus_token(workspace_root(), v, getattr(book, "id", None), getattr(book, "corpus_dev", False))
 
 
 def parse_pin(v) -> int | None:
-    """册 yaml 的 `corpus:`：`1`／`"1"`／`"v1"` → 1；空 → None。
-
-    `dev` 表示「语料正在改」：等同没钉（不校验清单，语料类指纹照旧按内容哈希，改了产物就判过期），
-    读出来也是 None；发版时出新版本、`guji corpus pin` 后把 yaml 改成新总号。"""
+    """册 yaml 的 `corpus:`：`1`／`"1"`／`"v1"` → 1；空 → None。"""
     if v is None or v == "":
         return None
     s = str(v).strip().lower()
-    if s == "dev":
-        return None
     s = s[1:] if s.startswith("v") else s
     if not s.isdigit() or int(s) < 1:
         raise ValueError(f"册 yaml 的 corpus: 应是正整数版本号（如 1 或 v1），收到 {v!r}")
     return int(s)
 
 
-def pin_token(version: int) -> str:
-    return f"corpus-v{version}"
+def items_digest(items: list[dict]) -> str:
+    """清单条目（root、path、sha256）排序后的哈希：指纹里的「语料内容」，**不含版本号**。"""
+    import hashlib
+    body = "\n".join(sorted(f'{i["root"]}\t{i["path"]}\t{i["sha256"]}' for i in items))
+    return "corpus-" + hashlib.sha256(body.encode("utf-8")).hexdigest()[:16]
+
+
+_TOKEN_CACHE: dict[tuple[str, int, str | None], str] = {}
+
+
+def corpus_token(ws: Path | None, version: int, vol: str | None = None, dev: bool = False) -> str:
+    """这册语料库的指纹串：只取内容（清单条目哈希），不含版本号（sheldon 10-21）。
+
+    **兼容**：这册还没有钉子账（殿本现在的 ``corpus: 9``）时仍返回旧写法 ``corpus-vN``，已有产物不过期；
+    有了钉子账（分层版本迁移后）才切到内容哈希。开发中的总号（``dev``）一律用内容哈希。
+    钉死的总号：取清单里登记的条目，清单不可变，算一次就缓存；这样钉着的册不受工作副本改动影响。
+    开发中的总号（``dev``）：取工作副本当前的文件，所以开发期间改了表产物自动判过期；
+    发版时清单就是那一刻的文件，内容哈希不变，指纹不变，不用 ``fp-migrate``。"""
+    if ws is None:
+        raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但不知道工作区（设 GUJI_WORKSPACE 或给 -w）")
+    if dev:
+        items = collect(ws, cached=True) + (collect_vol(ws, vol, cached=True) if vol else [])
+        return items_digest(items)
+    if not load_pins(ws, vol or ""):                   # 还没有钉子账的册：旧写法 corpus-vN，指纹逐位不变
+        return f"corpus-v{version}"                    # （P3 迁移时和 fp-migrate 一起切到内容哈希）
+    key = (str(ws), version, vol)
+    tok = _TOKEN_CACHE.get(key)
+    if tok is None:
+        try:
+            man = load_manifest(ws, version, vol)
+        except FileNotFoundError as e:
+            raise FileNotFoundError(f"册 yaml 钉了 corpus: {version}，但{e}（先跑 guji corpus build -w {ws}）") from e
+        tok = _TOKEN_CACHE[key] = items_digest(man["items"])
+    return tok
 
 
 _CHECKED: dict[tuple[str, int, str | None], None] = {}
@@ -483,6 +550,8 @@ def with_corpus_pin(p, book):
     if not fields:
         return p
     from .workspace import workspace_root
-    _check_pin_once(workspace_root(), v, getattr(book, "id", None))
-    tok = pin_token(v)
+    dev = getattr(book, "corpus_dev", False)
+    if not dev:
+        _check_pin_once(workspace_root(), v, getattr(book, "id", None))
+    tok = corpus_token(workspace_root(), v, getattr(book, "id", None), dev)
     return type(p)(**{**p.model_dump(), **{f: tok for f in fields}})

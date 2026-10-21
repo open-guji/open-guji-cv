@@ -1989,12 +1989,26 @@ def cmd_corpus(args) -> None:
         kw = {k: v for k, v in (("global_ver", args.global_ver), ("book_ver", args.book_ver),
                                 ("vol_ver", args.vol_ver)) if v is not None}
         try:
-            row = append_pin(ws, args.vol, from_n=args.from_n, note=args.note, **kw)
+            row = append_pin(ws, args.vol, from_n=args.from_n, note=args.note, dev=args.dev, **kw)
         except (ValueError, FileNotFoundError) as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
         _out(row)
-        print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}（本命令不改册 yaml、不推中心库）")
+        tail = "，再加 corpus_dev: true（开发中，发版用 guji corpus release）" if args.dev else ""
+        print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}{tail}（本命令不改册 yaml、不推中心库）")
+        return
+    if args.action == "release":                      # 开发中的总号发版：三层清单齐了才放行
+        from .core.corpus_pin import release_pin
+        if not args.vol or not args.version:
+            print("✗ release 要给 --vol <册 id> 和 --version <总号>", file=sys.stderr)
+            sys.exit(2)
+        try:
+            row = release_pin(ws, args.vol, args.version)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        print("✓ 已发版；册 yaml 去掉 corpus_dev: true，再 guji corpus verify --vol 确认干净")
         return
     if args.action == "build" and args.vol:           # 册层清单
         try:
@@ -3123,13 +3137,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
 
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
                                       "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin"])
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,
                    help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
     p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
+    p.add_argument("--dev", action="store_true", help="pin：开发中的总号（各层版本可以指向还没出的清单；发版用 release）")
     p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
     p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
     p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
