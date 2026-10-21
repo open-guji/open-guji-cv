@@ -474,3 +474,101 @@ def test_next_text_says_jiyisi_never_high(tmp_path, monkeypatch):
         zl.st_vision_gate(ctx)
     t = (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
     assert "己已巳族" in t and "不记「高」" in t
+
+
+# ⑨ M9 基线（vol06 整册）撞到的几处（GUJI-653）
+def test_halve_jobs():
+    assert zl.halve_jobs(["guji", "pipeline", "--jobs", "4", "--from", "x"]) == ["guji", "pipeline", "--jobs", "2", "--from", "x"]
+    assert zl.halve_jobs(["guji", "--jobs", "1"]) is None and zl.halve_jobs(["guji"]) is None
+
+
+def test_broken_process_pool_is_lowjobs():
+    out = "concurrent.futures.process.BrokenProcessPool: A process in the process pool was terminated abruptly"
+    assert [act for rx, act, _ in zl.CLASSIFY if rx.search(out)] == ["retry-lowjobs"]
+
+
+def test_bg_wait_retries_with_half_jobs(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    seen = []
+
+    class P:
+        def __init__(self, cmd, stdout=None, **kw):
+            seen.append(cmd[cmd.index("--jobs") + 1])
+            stdout.write(b"BrokenProcessPool\n" if len(seen) == 1 else b"ok\n")
+            self.returncode = 1 if len(seen) == 1 else 0
+
+        def poll(self):
+            return self.returncode
+    monkeypatch.setattr(zl.subprocess, "Popen", P)
+    zl.bg_wait(ctx, ["guji", "pipeline", "--jobs", "4"], "t", poll=0)
+    assert seen == ["4", "2"]
+
+
+def test_ws_sparse_patterns_nested_layout():
+    """guji-workspace 是 仓根/<书目录>/data_full/<丛编>/<册>/，只取本册原图。"""
+    assert zl.ws_sparse_patterns("96mid1ogzk-書", "vol06") == ["/*", "!/*/data_full/*/*/", "/96mid1ogzk-書/data_full/*/vol06/"]
+
+
+def test_st_db_skips_without_central_marker(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    with pytest.raises(zl.Skip):
+        zl.st_db(ctx)
+
+
+def test_export_requires_text_version(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch)
+    monkeypatch.delenv("ZL_TEXT_VERSION", raising=False)
+    with pytest.raises(zl.Stop):
+        zl.st_export(ctx)
+    assert "ZL_TEXT_VERSION" in (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+
+
+def test_chapter_and_text_id(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.ws = tmp_path / "96mid1ogzk-欽定四庫全書總目"
+    monkeypatch.delenv("ZL_TEXT_ID", raising=False)
+    assert (zl.chapter_no(ctx), zl.text_id(ctx)) == ("006", "96mid1ogzk")
+
+
+def test_fallback_draft_lists_loose_columns(tmp_path, monkeypatch):
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.reports.mkdir(parents=True)
+    cc = {"items": [{"no": "2d", "data": {"loose": ["12:3", "40:7"]}}]}
+    f = zl.fallback_draft(ctx, cc)
+    rows = [r for r in f.read_text(encoding="utf-8").splitlines() if r and not r.startswith("#")]
+    assert rows == ["页\t列\t处理\t说明", "12\t3\t\t", "40\t7\t\t"]
+    assert zl.fallback_draft(ctx, {"items": [{"no": "2d", "data": None}]}) is None
+
+
+def test_st_ws_adds_book_to_existing_sparse_clone(tmp_path, monkeypatch):
+    """已有的稀疏克隆（仓根/<书目录>）：不克隆，只把本册原图加进稀疏规则。"""
+    subprocess.run(["git", "init", "-q", str(tmp_path / "repo")], check=True)
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.ws = tmp_path / "repo" / "abc-書"
+    ctx.ws.mkdir()
+    ctx.reports = ctx.ws / "reports" / ctx.book
+    calls = []
+
+    def spy(c, cmd, **kw):
+        calls.append(list(map(str, cmd)))
+        return 0, ("true\n" if cmd[:3] == ["git", "config", "--get"] else "deadbeef\n")
+    monkeypatch.setattr(zl, "sh", spy)
+    zl.st_ws(ctx)
+    assert not any("clone" in c for c in calls)
+    assert ["git", "sparse-checkout", "add", "/abc-書/data_full/*/vol06/"] in calls
+
+
+def test_vision_gate_requires_every_admit_change(tmp_path, monkeypatch):
+    """换基线后放行变化的格一格不落要看图（GUJI-664）：缺一格就停在闸。"""
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.reports.mkdir(parents=True)
+    (ctx.reports / "vol06.放行变化.json").write_text(json.dumps({"rows": [
+        {"id": "vol06:1:1:1", "char": "曰", "old": None}, {"id": "vol06:1:1:2", "char": "日", "old": "曰"}]}), encoding="utf-8")
+    (ctx.reports / "看图结论.jsonl").write_text(json.dumps({"cell": "vol06:1:1:1", "v": "ok"}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(zl, "sh", lambda *a, **k: (0, ""))
+    with pytest.raises(zl.Gate):
+        zl.st_vision_gate(ctx)
+    assert "vol06:1:1:2" in (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+    with (ctx.reports / "看图结论.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"cell": "vol06:1:1:2", "v": "ok"}) + "\n")
+    zl.st_vision_gate(ctx)                       # 都看过了：照常导入

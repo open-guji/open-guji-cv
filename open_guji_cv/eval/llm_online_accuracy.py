@@ -69,7 +69,7 @@ def compute_report(log_dir: Path, book: str | None = None,
 
     rows = load_online_calls(log_dir, book)
     elog = EventLog(feedback_root) if feedback_root else EventLog()
-    resolved = elog.resolve()
+    resolved = elog.resolve(kinds=("confirm", "relabel"))   # 同 key 的切线不能顶掉定字
 
     n_total = len(rows)
     n_answered = sum(1 for r in rows if r.get("llm_answer_in_candidates"))

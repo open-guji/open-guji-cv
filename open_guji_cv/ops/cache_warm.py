@@ -18,6 +18,8 @@ Step5-b `rare_candidates`，它不是 `parallel_safe`）要逐格现切字块：
 2. worker 里把 `set_page_stamp` 换成空操作——只写图、不写戳；
 3. 全部渲完，主进程**串行**给这些页、各种类补戳，戳值与 worker 自己写会写的一样
    （`RunContext.cache_stamp` = 产出它那一步这一页产物的 sha，预渲期间产物不变）。
+   预渲前就有图、却没戳的页（记戳机制之前的老缓存）**不补**：戳是「这页缓存可信」的凭据，
+   `guji cache verify`／`close-check` 1b 对有戳的页免查（`products/cache.py` 模块头末段）。
 
 不改任何 Step：切图走的是 `RunContext.materialize` → 产出步的 `render`，与跑批同一条路。
 """
@@ -70,9 +72,12 @@ def _kinds_dirs(ctx):
     return [d.name for d in base.iterdir() if d.is_dir()] if base.exists() else []
 
 
-def _stamp_pass(ctx, pages: list[int], drop: bool) -> None:
-    """`drop=True`：清掉戳对不上的页（预渲前）；`False`：给有图的页补戳（预渲后）。"""
+def _stamp_pass(ctx, pages: list[int], drop: bool,
+                skip: set[tuple[str, str]] | None = None) -> set[tuple[str, str]]:
+    """`drop=True`：清掉戳对不上的页（预渲前），返回没戳却已有图的 `(种类, 页)`；
+    `False`：给有图的页补戳（预渲后），`skip` 里的不补。"""
     from ..core.spec import page_key
+    legacy: set[tuple[str, str]] = set()
     for kind in _kinds_dirs(ctx):
         try:
             ctx.producer(kind)
@@ -88,14 +93,17 @@ def _stamp_pass(ctx, pages: list[int], drop: bool) -> None:
                 rec = ctx.cache.page_stamp(ctx.book.id, kind, pk)
                 if rec is not None and rec != cur:
                     ctx.cache._drop_stale_page(ctx.book.id, kind, pk)
-            elif any(d.glob(f"{pk}*")):
+                elif rec is None and any(d.glob(f"{pk}*")):
+                    legacy.add((kind, pk))
+            elif (kind, pk) not in (skip or ()) and any(d.glob(f"{pk}*")):
                 ctx.cache.set_page_stamp(ctx.book.id, kind, pk, cur)
+    return legacy
 
 
 def warm(ctx, pipeline_id: str, pages: list[int], jobs: int, log=print) -> dict:
     """→ `{pages, patches, failed: {页: 错误}, seconds}`。`ctx` 是主进程的 `RunContext`。"""
     t0 = time.time()
-    _stamp_pass(ctx, pages, drop=True)
+    legacy = _stamp_pass(ctx, pages, drop=True)
     failed: dict[int, str] = {}
     n_total = 0
     with ProcessPoolExecutor(max_workers=max(1, jobs), initializer=_init,
@@ -106,6 +114,6 @@ def warm(ctx, pipeline_id: str, pages: list[int], jobs: int, log=print) -> dict:
                 failed[pg] = err
             if i % 10 == 0 or i == len(pages):
                 log(f"guji cache warm：{i}/{len(pages)} 页，{n_total} 个字块，{time.time() - t0:.0f}s")
-    _stamp_pass(ctx, pages, drop=False)
+    _stamp_pass(ctx, pages, drop=False, skip=legacy)
     return {"pages": len(pages), "patches": n_total, "failed": failed,
             "seconds": round(time.time() - t0, 1)}

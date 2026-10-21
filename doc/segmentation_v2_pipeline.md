@@ -505,7 +505,16 @@ seed_admit 的两处特别：
   复核通道真用到时才懒建，第一页常碰不到，worker 原来各自重建 17–20 s。
 - **fork 出的 worker 里 `cv2.setNumThreads` 置空**：`clustering/cnn_candidates` 模块顶层调它，worker 里第一次
   import 时卡死在 pthread_cond_destroy（三个 worker 挂住，py-spy 实锤）。只管线程数、不影响结果。
+- **worker 里 OpenMP 也压线程**（2026-10-21）：开了 `shadow_veto` 的册，影子模型（sklearn HistGradientBoosting）predict
+  用 sklearn 自带的 libgomp，主进程暖机时按核数建好线程池，fork 出的 4 个 worker 各开 4 线程、16 线程抢 4 核，
+  vol09 每页约 700 s（正常几秒）。`_pin_threads` 用 threadpoolctl 把已加载的 OpenMP 压到每 worker 线程数，
+  vol09 20 页 4 进程 63 s、串行 102 s，产物逐页相同。#255 起到 0.5.0 都带着这个问题（只慢、不改产物）。
 - 前置：字块缓存已建（铁证读别页人裁刻例图）；跑批期间不交人裁、不 `guji db sync`（串行同理）。
+
+**字体域进库之后（同日晚，GUJI-647）**：上面的 glyph_match 数字是在没导字体域的库（1.8 万条）上量的。正式库导了两套字体后
+匹配器有 17.4 万条，每个进程建库 2 分钟、约 3.5 GB，dev 上 `--jobs 4` 被 OOM 杀。现在 glyph_match 也登记 `warm_first`
+（主进程建一次、fork 共享），匹配器特征按内容缓存（命中 2.4 s）。seed_admit 单 worker 内存登记 3.0 → 2.0 GB，
+进程数按「`MemAvailable` 与 cgroup 余量取小」压。详见 `doc/pipeline_handbook.md` §6.2。
 
 #### 界行「直不直」的指标：投影峰高 + x 跨度（用户 2026-09-02 给的判据）
 

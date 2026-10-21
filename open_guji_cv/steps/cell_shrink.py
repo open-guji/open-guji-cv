@@ -91,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.8", unit="cell",   # 1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.9", unit="cell",   # 1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
@@ -118,13 +118,15 @@ class CellShrinkStep(Step):
         for c in cc.cells:
             d = by_pos.setdefault(c.pos, {"index": c.pos - 1, "y_top": c.y0, "y_bottom": c.y1,
                                           "type": "empty", "kinds": set(), "is_punct": False,
-                                          "seam_top": None, "seam_bottom": None})
+                                          "seam_top": None, "seam_bottom": None, "layout_char": False})
             d["kinds"].add(c.kind)
             if c.kind == "punct":
                 d["is_punct"] = True
             d["y_top"], d["y_bottom"] = min(d["y_top"], c.y0), max(d["y_bottom"], c.y1)
             if c.kind != "blank":
                 d["type"] = "char"
+            if "layout_char" in c.flags:
+                d["layout_char"] = True
             # 夹注 a/b 合成一格时不传折线——折线是给单一整格算的，半宽格各自
             # 的 seam 语义对不上合成后的满宽格，宁可退回矩形边界也不要凑错。
             if pos_count[c.pos] == 1:
@@ -140,6 +142,7 @@ class CellShrinkStep(Step):
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
                   "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
+                  **({"layout_char": True} if d["layout_char"] else {}),
                   **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"],
                       "jiazhu_subs": sorted(d["jiazhu_subs"])}
                      if "jiazhu_cx" in d else {})}

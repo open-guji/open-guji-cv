@@ -89,7 +89,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
     只透传会影响这一步怎么跑的参数（页范围、force、stop-on-error、params、jobs、sample-db），
     不透传 `--json`／`--wait`（锁由父进程持有，见 `_run_steps_isolated`）。"""
     argv = [sys.executable, "-m", "open_guji_cv", "step", sid, args.book,
-            "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace]
+            "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace,
+            "--no-isolate-steps"]
     if args.force:
         argv.append("--force")
     if args.stop_on_error:
@@ -114,20 +115,50 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     闸跟着它挂的 Step 在子进程里自动跑（与 `Engine.run` 同一规矩）。
     步序、产物落点、指纹都与单进程一致——这里只改「进程怎么切」，不碰任何 Step。
     父进程持有书级跑批锁，子进程设 `GUJI_NO_RUN_LOCK=1` 免得自己抢自己；子进程不再进批处理切片
-    （父进程已经在里面，cgroup 随子进程继承）。返回码：第一个失败子进程的返回码，全过 0。"""
+    （父进程已经在里面，cgroup 随子进程继承）。
+
+    返回码：第一个非零的子进程返回码，全过 0；**遇到非零就停**（2026-10-20 起隔离是缺省）。子进程
+    只在两种情况下非零：`--stop-on-error` 且有页失败，或者整步崩了（异常、护栏拒跑）——后者以前不加
+    `--stop-on-error` 时会被吞掉、接着用缺了的上游跑下游，最后返回 0；单进程连跑时同样的崩溃是直接抛出。"""
     import os
+    import signal
     import subprocess
     ws = os.environ["GUJI_WORKSPACE"]
     env = {**os.environ, "GUJI_NO_RUN_LOCK": "1", "GUJI_NO_BATCH_SLICE": "1"}
+    cur: dict = {"p": None}
+
+    def _forward(signum, _frame):
+        # 控制台取消工单只 terminate 父进程（console/jobs.py）：转给正在跑的那一步，别留孤儿接着写产物。
+        # 这里不能 wait：主线程正卡在同一个 Popen.wait 里，它的锁不可重入，会死锁；等子进程收尾放在 finally
+        p = cur["p"]
+        if p is not None and p.poll() is None:
+            p.send_signal(signum)
+        raise SystemExit(128 + signum)
+    try:
+        old = signal.signal(signal.SIGTERM, _forward)
+    except ValueError:                    # 不在主线程（嵌在别的程序里调）：不接管信号
+        old = None
     rc = 0
-    for i, sid in enumerate(steps, 1):
-        print(f"── [{i}/{len(steps)}] {sid}（独立子进程）", flush=True)
-        r = subprocess.run(isolated_step_argv(args, sid, ws), env=env)
-        if r.returncode != 0:
-            rc = rc or r.returncode
-            if args.stop_on_error:
-                print(f"✗ {sid} 返回码 {r.returncode}，--stop-on-error 停", file=sys.stderr)
+    try:
+        for i, sid in enumerate(steps, 1):
+            print(f"── [{i}/{len(steps)}] {sid}（独立子进程）", flush=True)
+            cur["p"] = subprocess.Popen(isolated_step_argv(args, sid, ws), env=env)
+            code = cur["p"].wait()
+            cur["p"] = None
+            if code != 0:
+                rc = code
+                print(f"✗ {sid} 返回码 {code}，后面的步不跑了", file=sys.stderr)
                 break
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+        p = cur["p"]
+        if p is not None:                 # 被信号打断：等转过去的信号让这一步停下，停不下来就杀
+            try:
+                p.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
     return rc
 
 
@@ -160,10 +191,13 @@ def cmd_pipeline(args) -> None:
         _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
-    if getattr(args, "isolate_steps", False):
-        if getattr(args, "json", False):
-            print("✗ --isolate-steps 不支持 --json（每步一个子进程，没有合并报告）", file=sys.stderr)
-            sys.exit(2)
+    isolate = getattr(args, "isolate_steps", None)
+    if isolate and getattr(args, "json", False):
+        print("✗ --isolate-steps 不支持 --json（每步一个子进程，没有合并报告）", file=sys.stderr)
+        sys.exit(2)
+    if isolate is None:          # 缺省：多于一步、不要 JSON 报告时每步一个子进程（GUJI-647）
+        isolate = len(steps) > 1 and not getattr(args, "json", False)
+    if isolate:
         try:
             with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
                 rc = _run_steps_isolated(args, steps)
@@ -171,7 +205,7 @@ def cmd_pipeline(args) -> None:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
         _print_unpacked(eng.book.id, eng.store)
-        sys.exit(1 if rc and args.stop_on_error else 0)
+        sys.exit(rc)
     try:
         with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
             rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
@@ -406,10 +440,37 @@ def cmd_audit(args) -> None:
         pages = eng.book.resolve_pages("all")
         q = cards(book, "all", limit=1, only="review", store=eng.store, gate_cut=False,
                   skip_decided=True, cls="*").get("class_counts") or {}
+        import re
+        from .feedback.vision import vision_checks, vision_pending
+        chk = vision_checks(book)
+        vis = [{**v, "note": (chk.get(v["id"]) or {}).get("note")} for v in vision_pending(book, pages, eng.store)]
+        uns = [{"id": k, "shown": c.get("shown"), "note": c.get("note")} for k, c in sorted(chk.items(), key=lambda kv: [int(x) for x in re.findall(r"\d+", kv[0])])
+               if c.get("v") == "unsure"]
         md = out_dir / f"{book}.请审单.md"
         md.write_text(A.review_sheet(book, q, closure_gaps(book, pages, eng.store),
-                                     closure_mismatches(book, pages, eng.store)), encoding="utf-8")
-        print(f"{book} 请审单 → {md}（第 4 节按字位改判由会话看图后追加）")
+                                     closure_mismatches(book, pages, eng.store), vision=vis, unsure=uns),
+                      encoding="utf-8")
+        print(f"{book} 请审单 → {md}（第 4 节看图判错 {len(vis)} 格、第 5 节看不清 {len(uns)} 格，已按看图结论填好）")
+    elif args.action == "changes":
+        # 放行变化必看图（M9 D5，GUJI-664）：对上一基线的产物根，列出新放行／放行字变了的格
+        from .core.workspace import products_root
+        if not args.base:
+            print("✗ changes 要给 --base <上一基线的产物根>", file=sys.stderr); sys.exit(2)
+        res = A.admit_changes(Path(args.base), products_root(), book)
+        (out_dir / f"{book}.放行变化.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out_dir / f"{book}.放行变化.md").write_text(A.admit_changes_md(res), encoding="utf-8")
+        print(f"{book} 放行变化：{res['n']} 格（字变了 {res['n_changed']}，新放行 {res['n_new']}）→ {out_dir / (book + '.放行变化.md')}")
+    elif args.action == "reasons":
+        # 待审格主成因码（M9 D6，GUJI-668）：按码派给切分、M7、字形库、语料（review/causes.py）
+        from collections import Counter
+        from .core.workspace import products_root
+        from .review.causes import book_causes, causes_md
+        res = book_causes(products_root(), book)
+        (out_dir / f"{book}.reasons.json").write_text(json.dumps(res, ensure_ascii=False, indent=1), encoding="utf-8")
+        (out_dir / f"{book}.reasons.md").write_text(causes_md(book, res), encoding="utf-8")
+        cnt = Counter(v["cause"] for v in res.values())
+        print(f"{book} 待审 {len(res)} 格成因：" + "、".join(f"{k} {v}" for k, v in cnt.most_common())
+              + f" → {out_dir / (book + '.reasons.md')}")
     elif args.action == "alt":
         # 出待审单前给每张卡算好「相似字」（review/alt_cands.py；doc/research/人审找字-…md）：
         # 近似字的异体族（hanzi 库；本机字统网缓存照并）按字块图排序，挂成卡上 `alt`，
@@ -793,7 +854,8 @@ def cmd_cache(args) -> None:
         from .core.pipeline import default_pipeline_id
         pid = args.pipeline or default_pipeline_id(load_book(args.book))
         eng = _engine(args.book, pid, quiet=True)
-        res = verify_book(eng, eng.book.resolve_pages(args.pages), fix=args.fix)
+        res = verify_book(eng, eng.book.resolve_pages(args.pages), fix=args.fix,
+                          full=getattr(args, "full", False))
         main_print(res)
         sys.exit(1 if res["bad_columns"] and not args.fix else 0)
     elif args.action == "build-rare-index":
@@ -1062,6 +1124,12 @@ def cmd_events(args) -> None:
     if args.action == "import-vision":
         _import_vision(args)
         return
+    if args.action == "lint":
+        # 按 doc/formats/人裁事件规范.md 体检事件日志（只读）；有 E- 级问题以 1 退出
+        from .feedback.lint import lint
+        rep = lint(EventLog().root)
+        print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1) if args.json else rep.render())
+        sys.exit(1 if rep.n_errors else 0)
     log = EventLog()
     if args.action == "harvest":
         b = BatchStore().get(args.batch)
@@ -1094,13 +1162,14 @@ def _select_events(log, batch: str | None, book: str | None = None) -> list:
     """`events list` 的取数：批次名可带通配（`vol03-*`，按文件名匹配后合并）；`book` 只留
     target.key 以 `<册>:` 开头的事件——通配批次里混进别册的 key 时（GUJI-77）不串册。只读。"""
     import fnmatch
+    from .feedback.events import replay_key
     if batch and any(c in batch for c in "*?["):
         evs = sorted((e for b in log.batches() if fnmatch.fnmatch(b, batch)
-                      for e in log.read(b)), key=lambda e: e.order)
+                      for e in log.read(b)), key=replay_key)
     elif batch:
         evs = log.read(batch)
     else:
-        evs = sorted(log.iter_all(), key=lambda e: e.order)
+        evs = sorted(log.iter_all(), key=replay_key)
     if book:
         evs = [e for e in evs if e.target.key.startswith(f"{book}:")]
     return evs
@@ -2634,10 +2703,11 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "混跑一条 pipeline 时不用分开调。别超过 CPU 数——超订只会更慢，"
                         "有一次性初始化（模型/字形库）的 Step 并行时这部分开销按进程数摊，"
                         "不是按页摊，进程数越多单个 worker 越快建好摊得越薄，但仍不该超核数")
-    p.add_argument("--isolate-steps", action="store_true",
-                   help="每个 Step 一个独立子进程跑（默认关，行为不变）：跑完进程退出、内存整体回收。"
-                        "整册跑、服务器有内存上限（MemoryHigh）时用它，免得 torch／字形库／索引逐步叠加把"
-                        "进程拖进换页（GUJI-555）。代价是每步多付一次 import 与模型加载；不支持 --json")
+    p.add_argument("--isolate-steps", action=argparse.BooleanOptionalAction, default=None,
+                   help="每个 Step 一个独立子进程跑：跑完进程退出、内存整体回收，免得 torch／字形库／索引／"
+                        "语言模型逐步叠在一个进程里（GUJI-555；殿本 vol06 单进程连跑到 seed_admit 主进程 3.5 GB）。"
+                        "2026-10-20 起 `guji pipeline` 跑多于一步、不要 --json 时缺省就隔离（GUJI-647），"
+                        "代价是每步多付一次 import 与模型加载；--no-isolate-steps 退回单进程连跑。不支持 --json")
     p.add_argument("--allow-cv-mismatch", action="store_true",
                    help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
                         "做实验、临时核对时用，产物 manifest 照实记装的版本")
@@ -2921,7 +2991,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("audit", help="[v2] 定版检查清单：admitted = 放行错穷举；jys = 己/已/巳 全族；"
                                      "count = 用户审完当场核数；sheet = 生成请审单（只读）；"
                                      "alt = 给待审卡算好相似字（并进待审单）；alt-eval = 人裁后量相似字命中")
-    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "alt", "alt-eval"])
+    p.add_argument("action", choices=["admitted", "jys", "count", "sheet", "reasons", "changes", "alt", "alt-eval"])
+    p.add_argument("--base", default=None, help="changes：上一基线的产物根（与它比放行变化）")
     p.add_argument("--since", default=None, help="count：只数这个时间之后的事件（ISO，如 2026-10-06T08:00）")
     p.add_argument("--expect", default=None, help="count：请审单字位清单文件，一行一个，报漏审与单外多审")
     p.add_argument("book")
@@ -3008,6 +3079,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
     p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
+    p.add_argument("--full", action="store_true",
+                   help="verify：连戳与现行产物对得上的页也逐列渲染比对（缺省免查这些页，见 ops/cache_verify.py）")
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
     p.add_argument("--jobs", type=int, default=1,
@@ -3048,8 +3121,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--dataset", default=None, help="测试集仓路径（缺省 GUJI_DATASET_DIR 或 ../open-guji-dataset）")
 
-    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision")
-    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision"])
+    p = sub.add_parser("events", help="[v2] 反馈事件：harvest | route | list | verdicts | import-vision | lint")
+    p.add_argument("action", choices=["harvest", "route", "list", "verdicts", "import-vision", "lint"])
     p.add_argument("batch", nargs="?", default=None, help="批次名；import-vision 时是 jsonl 路径")
     p.add_argument("--file", default=None, help="收割源：审查页 HTML / JSONL / 日志")
     p.add_argument("--step", default=None)
@@ -3062,6 +3135,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
     p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
     p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
+    p.add_argument("--json", action="store_true", help="lint：出机读结果")
 
     p = sub.add_parser("eval", help="[v2] 评测：list | run")
     p.add_argument("action", choices=["list", "run"])
