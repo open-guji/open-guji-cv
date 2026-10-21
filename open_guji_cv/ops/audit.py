@@ -223,3 +223,41 @@ def review_sheet(book: str, queue: dict, gaps: list[dict], mismatches: list[dict
         out += [f"| `{u['id']}` | {u.get('shown') or '□'} | {u.get('note') or ''} |" for u in unsure]
         out += ["", "不审的默认：照现放行字出文本。", ""]
     return "\n".join(out)
+
+
+def _admitted_map(products_dir: Path, book: str) -> dict[str, dict]:
+    """`<产物根>/<册>/seed_admit/p*.json` 里放行了的格 → {char, channel, page}。"""
+    out: dict[str, dict] = {}
+    for f in sorted((Path(products_dir) / book / "seed_admit").glob("p*.json")):
+        s = json.loads(f.read_text(encoding="utf-8"))["seed_admit"]
+        for col in s.get("columns", []):
+            for ch in col.get("chars", []):
+                if ch.get("admit"):
+                    out[ch["id"]] = {"char": ch.get("char"), "channel": ch.get("channel"), "page": int(ch["id"].split(":")[1])}
+    return out
+
+
+def admit_changes(base_dir: Path, new_dir: Path, book: str) -> dict:
+    """放行变化（M9 D5，GUJI-664）：和上一基线比，**新放行**或**放行字变了**的格。这些格机器说了算、
+    没人看过，换基线后必须看图；人审过的格不在 seed_admit 的放行里变（人裁字照旧），会落在这里的
+    只有机器自己改了主意的。格号在两版都有才比；重切后格号变了的不算（另由切分差异单管）。"""
+    old, new = _admitted_map(base_dir, book), _admitted_map(new_dir, book)
+    rows = []
+    for cid, n in new.items():
+        o = old.get(cid)
+        if o is None or o["char"] != n["char"]:
+            rows.append({"id": cid, "page": n["page"], "char": n["char"], "old": (o or {}).get("char"),
+                         "channel": n["channel"], "kind": "newly_admitted" if o is None else "changed"})
+    rows.sort(key=lambda r: (r["page"], [int(x) for x in re.findall(r"\d+", r["id"].split(":", 1)[1])]))
+    return {"book": book, "base": str(base_dir), "n": len(rows),
+            "n_changed": sum(1 for r in rows if r["kind"] == "changed"),
+            "n_new": sum(1 for r in rows if r["kind"] == "newly_admitted"),
+            "by_channel": dict(Counter(r["channel"] for r in rows).most_common()), "rows": rows}
+
+
+def admit_changes_md(res: dict) -> str:
+    lines = [f"# {res['book']} 放行变化（对 `{res['base']}`）", "",
+             f"共 {res['n']} 格：放行字变了 {res['n_changed']}，新放行 {res['n_new']}。每格都要看图（runbook S8），结论写进 看图结论.jsonl。",
+             "", "| 字位 | 原放行 | 现放行 | 通道 |", "|---|---|---|---|"]
+    lines += [f"| `{r['id']}` | {r['old'] or '（没放）'} | {r['char'] or '□'} | {r['channel'] or ''} |" for r in res["rows"]]
+    return "\n".join(lines) + "\n"

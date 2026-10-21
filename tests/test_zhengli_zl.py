@@ -556,3 +556,19 @@ def test_st_ws_adds_book_to_existing_sparse_clone(tmp_path, monkeypatch):
     zl.st_ws(ctx)
     assert not any("clone" in c for c in calls)
     assert ["git", "sparse-checkout", "add", "/abc-書/data_full/*/vol06/"] in calls
+
+
+def test_vision_gate_requires_every_admit_change(tmp_path, monkeypatch):
+    """换基线后放行变化的格一格不落要看图（GUJI-664）：缺一格就停在闸。"""
+    ctx = make_ctx(tmp_path, monkeypatch, book="vol06")
+    ctx.reports.mkdir(parents=True)
+    (ctx.reports / "vol06.放行变化.json").write_text(json.dumps({"rows": [
+        {"id": "vol06:1:1:1", "char": "曰", "old": None}, {"id": "vol06:1:1:2", "char": "日", "old": "曰"}]}), encoding="utf-8")
+    (ctx.reports / "看图结论.jsonl").write_text(json.dumps({"cell": "vol06:1:1:1", "v": "ok"}) + "\n", encoding="utf-8")
+    monkeypatch.setattr(zl, "sh", lambda *a, **k: (0, ""))
+    with pytest.raises(zl.Gate):
+        zl.st_vision_gate(ctx)
+    assert "vol06:1:1:2" in (ctx.reports / "NEXT.md").read_text(encoding="utf-8")
+    with (ctx.reports / "看图结论.jsonl").open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"cell": "vol06:1:1:2", "v": "ok"}) + "\n")
+    zl.st_vision_gate(ctx)                       # 都看过了：照常导入

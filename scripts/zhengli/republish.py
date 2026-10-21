@@ -110,7 +110,7 @@ def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: 
                   else "排除名单（非字）" if st == "excluded" else "格号没了（多半重切）")
     return {"old_rev": (old or {}).get("rev"), "new_rev": new.get("rev"), "old": len(o), "new": len(n),
             "kept": len(set(o) & set(n)), "removed": [{"cell": c, "why": why[c]} for c in removed],
-            "added": [{"cell": c, "cls": n[c].get("cls")} for c in sorted(set(n) - set(o), key=_key)],
+            "added": [{"cell": c, "cls": n[c].get("cause") or n[c].get("cls")} for c in sorted(set(n) - set(o), key=_key)],
             "removed_by": dict(Counter(v.split("「")[0] for v in why.values())),
             "votes_on_old": sum(votes.values()), "voted_cells_kept": sorted(set(votes) & set(n), key=_key)}
 
@@ -136,6 +136,22 @@ def diff_md(book: str, d: dict, team: int, reflow: int) -> str:
     if len(d["added"]) > 300:
         lines.append(f"| … | 另 {len(d['added']) - 300} 格见 diff.json |")
     return "\n".join(lines) + "\n"
+
+
+def add_causes(pending: Path, products: Path, book: str) -> None:
+    """每格并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
+    sys.path.insert(0, str(CV))
+    from open_guji_cv.review.causes import book_causes
+    if not pending.exists():
+        return
+    res = book_causes(products, book)
+    doc = json.loads(pending.read_text(encoding="utf-8"))
+    for c in doc.get("cells", []):
+        if c["cell"] in res:
+            c["cause"] = res[c["cell"]]["cause"]
+            if res[c["cell"]]["detail"]:
+                c["cause_detail"] = res[c["cell"]]["detail"]
+    pending.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
 def run(cmd, **kw) -> subprocess.CompletedProcess:
@@ -208,6 +224,8 @@ def cmd_prep(a) -> int:
     if run(cmd, env=env).returncode:
         return 1
     public = routed / f"{chapter}.pending.json"
+    add_causes(public, products, book)
+    add_causes(routed / f"{chapter}.team.pending.json", products, book)
     final = public
     rd = raw_dir(ws, book)
     if rd and not a.no_sprite:

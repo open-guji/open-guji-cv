@@ -104,3 +104,21 @@ def test_admitted_missing_kind_fills_char_from_ctx(tmp_path):
     res = A.admitted(col)
     assert res["rows"][0]["char"] == "㫖"
     assert "| `v:2:1:1` | 㫖 |" in A.admitted_md(res)
+
+
+def test_admit_changes_new_and_changed(tmp_path):
+    """放行变化必看图（GUJI-664）：新放行、放行字变了的格列出；没变的、新版不放了的不列。"""
+    def page(root, chars):
+        d = root / "v" / "seed_admit"
+        d.mkdir(parents=True)
+        (d / "p0001.json").write_text(json.dumps({"seed_admit": {"columns": [{"chars": chars}]}}, ensure_ascii=False),
+                                      encoding="utf-8")
+    page(tmp_path / "old", [{"id": "v:1:1:1", "admit": True, "char": "甲"}, {"id": "v:1:1:2", "admit": True, "char": "乙"},
+                            {"id": "v:1:1:3", "admit": False}, {"id": "v:1:1:4", "admit": True, "char": "丁"}])
+    page(tmp_path / "new", [{"id": "v:1:1:1", "admit": True, "char": "甲"}, {"id": "v:1:1:2", "admit": True, "char": "己", "channel": "x"},
+                            {"id": "v:1:1:3", "admit": True, "char": "丙"}, {"id": "v:1:1:4", "admit": False}])
+    res = A.admit_changes(tmp_path / "old", tmp_path / "new", "v")
+    assert [(r["id"], r["old"], r["char"], r["kind"]) for r in res["rows"]] == [
+        ("v:1:1:2", "乙", "己", "changed"), ("v:1:1:3", None, "丙", "newly_admitted")]
+    assert (res["n_changed"], res["n_new"]) == (1, 1)
+    assert "| `v:1:1:3` | （没放） | 丙 |" in A.admit_changes_md(res)
