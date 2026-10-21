@@ -58,8 +58,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="jys", name="己已巳", members=frozenset("己已巳"),
         backends=("rule", "ctx_table", "table"),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
-        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True), ref_free=True,
-        note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。"),
+        flow=FlowSpec(("ctx",), review=True, review_fix=True, review_abstain=True, tolerate=frozenset("巴")), ref_free=True,
+        note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。巴是库形陪衬（vol04–10 有 17 格因分差内的巴没进流程；L2 有「其他」出口，真是巴会弃权）。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
