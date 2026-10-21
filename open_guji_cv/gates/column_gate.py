@@ -192,6 +192,12 @@ class ColumnGateParams(BaseModel):
     #: 的页改用 `period_prior`。四庫基线上命中 vol01 23 页（22 页职名页几何不变）、vol03 p57/58、
     #: vol06 p150、vol07 p91；草稿册重跑时用，冻结册不要开（会改 period 值让下游过期）。
     period_edge_fallback: bool = False
+    #: **页级周期偏离书级先验太多时回落先验**（2026-10-21，殿本 vol04 p127 c3 整列格线错半格）。
+    #: 正文页的格高是版式常量：殿本 vol04/05/09 正文页的估值都在先验 ±5% 以内。偏出 ±这么多的页，
+    #: 估值是被卷末大印、整页空白带偏的（vol04 p127/128/220 估 89–95、vol05 p188 102、vol09 p162 99.5，
+    #: 先验 115），Step3 拿它当格高，抬头格数、格网全乱。0 = 关（只剩上面贴下界那一条）。没配
+    #: `period_prior` 的书不受影响。
+    period_prior_tol: float = 0.10
 
     @model_serializer(mode="wrap")
     def _drop_off_period_override(self, handler):
@@ -208,7 +214,7 @@ class ColumnGateParams(BaseModel):
 @register_step
 class ColumnGateStep(Step):
     spec = StepSpec(
-        id="column_gate", title="Step2→3 交接闸", version="1.11", unit="column",
+        id="column_gate", title="Step2→3 交接闸", version="1.12", unit="column",   # 1.12：页级周期偏离书级先验超过 period_prior_tol 回落先验
         consumes=("column_windows", "column_image", "border_detect_gate_manifest"),
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
@@ -324,13 +330,20 @@ class ColumnGateStep(Step):
                         projs, borders, dst_ws, period_prior=ctx.book.period_prior)), 2)
                     # 窗口边缘卡死（GUJI-364）：自相关最大值落在窗口下界，说明真峰在窗外或
                     # 本页字稀，估值不可信。开关开着时回落书级先验。
-                    if (p.period_edge_fallback and ctx.book.period_prior
-                            and period <= int(ctx.book.period_prior * PERIOD_WINDOW_LO) + 1):
-                        period = float(ctx.book.period_prior)
+                    prior = ctx.book.period_prior
+                    if (p.period_edge_fallback and prior
+                            and period <= int(prior * PERIOD_WINDOW_LO) + 1):
+                        period = float(prior)
                         period_from_prior = True
                         page_flags.append(
                             f"period_fallback：页级周期估值贴窗口下界（{period_est:g}px），"
                             f"已用书级先验 {period:g}px 兜底")
+                    elif p.period_prior_tol and prior and abs(period / prior - 1) > p.period_prior_tol:
+                        period = float(prior)
+                        period_from_prior = True
+                        page_flags.append(
+                            f"period_fallback：页级周期估值 {period_est:g}px 偏离书级先验超过 "
+                            f"{p.period_prior_tol:.0%}，已用先验 {period:g}px")
                 except ValueError as e:
                     # 空栏页兜底（2026-09-13）：栏内没有字就推不出纵向节律，
                     # 这不是故障——界行齐全、九列切得出来，该正常产出一个
