@@ -227,6 +227,10 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
         cmd += ["--team-pages", a.team_pages]
     if a.page_types:
         cmd += ["--page-types", a.page_types]
+    if bind and bind["id_mismatch"]:              # 人裁绑到了别的格／绑不上：原格号上的人裁不算这一格定了字
+        keep = out / "keep.txt"
+        keep.write_text("\n".join(bind["id_mismatch"]) + "\n", encoding="utf-8")
+        cmd += ["--keep", keep]
     if run(cmd, env=env).returncode:
         return 1
     public = routed / f"{chapter}.pending.json"
@@ -370,8 +374,8 @@ def bind_md(b: dict) -> list[str]:
     s = b["status"]
     lines = ["", "## 人裁合并", "",
              f"- 定字人裁 {b['events']} 条，按锚框绑到新切分：" + "、".join(f"{k} {v}" for k, v in sorted(s.items())),
-             f"- 包跑完之后才来的 {len(b['newer'])} 条（按格号扣）；按格号扣会扣错的 {len(b['id_mismatch'])} 格"
-             + ("（要人看：" + "、".join(f"`{k}`" for k in b["id_mismatch"][:20]) + "）" if b["id_mismatch"] else "")]
+             f"- 包跑完之后才来的 {len(b['newer'])} 条（按格号扣）；原格号上有人裁、但人裁绑到别处或绑不上的 {len(b['id_mismatch'])} 格不扣，照旧留在单上"
+             + ("：" + "、".join(f"`{k}`" for k in b["id_mismatch"][:20]) if b["id_mismatch"] else "")]
     if b["unbound"]:
         lines.append(f"- 绑不上的 {len(b['unbound'])} 条（以失效老裁决再出卡）：" + "、".join(f"`{k}`" for k in b["unbound"][:20]))
     if b["decided_not_admitted"]:
@@ -410,7 +414,8 @@ def cmd_from_pack(a) -> int:
     if not os.environ.get("GUJI_PRODUCTS_DIR"):
         sys.exit("✗ 先设沙箱 GUJI_PRODUCTS_DIR：取包会整册覆盖 <产物根>/<册>，不碰正式 products/")
     products = products_root(ws)
-    env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
+    os.environ["GUJI_WORKSPACE"] = str(ws)        # bind_check 在本进程读人裁（EventLog 只认环境变量）
+    env = {**os.environ, "PYTHONIOENCODING": "utf-8"}
     py = sys.executable
     guji = [py, "-m", "open_guji_cv.cli_v2"]
     if not a.no_pull and run([*guji, "db", "pull", "-w", ws], cwd=CV, env=env).returncode:
@@ -440,7 +445,7 @@ def cmd_from_pack(a) -> int:
     a.cv_version = a.cv_version or man.get("cv_version")
     rc = cmd_prep(a, bind=b, pack=a.label)
     if rc == 0 and b["id_mismatch"]:
-        print(f"⚠ {len(b['id_mismatch'])} 格按格号扣会扣错，push 前看差异单「人裁合并」一节")
+        print(f"ⓘ {len(b['id_mismatch'])} 格人裁绑到了别的格或绑不上，照旧留在单上（差异单「人裁合并」一节）")
     return rc
 
 
