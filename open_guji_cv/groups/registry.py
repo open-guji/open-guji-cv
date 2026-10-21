@@ -178,6 +178,18 @@ GROUPS: dict[str, GroupSpec] = {
         flow=FlowSpec(("freq", "ids"), combine="first"),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
+    # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
+    #    判不出送人审。模板库在 config/groups/<组>/ids_bank.json（组外的 干／曲 也进库，判成它们就弃权）。
+    "zy": GroupSpec(
+        id="zy", name="子于", members=frozenset("子于"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/zy",
+        flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("干")),
+        note="形近不同义，按整字字形判（整字岭回归，按册留一 0 错）；干 当陪衬字；只补放。"),
+    "sy": GroupSpec(
+        id="sy", name="山由出", members=frozenset("山由出"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/sy",
+        flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("曲")),
+        note="形近不同义，按整字字形判（一对多岭回归，按册留一 0 错）；曲 当陪衬字；只补放。"),
 }
 
 
