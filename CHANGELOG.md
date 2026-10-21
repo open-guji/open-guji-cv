@@ -10,7 +10,9 @@
 - `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
 - `guji audit reasons <册>`（M9 D6，GUJI-668）：每个待审格打一个主成因码（`review/causes.py`：A1–A9 切分／对位、B 码位异体、C 形近字组、D 遮挡、E 与整理本冲突、F 库缺字、G 对齐改字、H 库＝整理本仍被拦、I 证据不足），出 `reasons.json`／`reasons.md`（按码写交给谁）。`republish.py` 把码并进待审单的 `cause`、台账记 `reasons.cause`；`cls` 不动。vol06 175 格里「证据不足」8%。只读产物，不碰任何 Step。
 
-## [0.5.0] - 测试中
+## [0.5.0] - 2026-10-20
+
+MINOR（sheldon 10-20 定发 v0.5.0）。相对 v0.4.9 只有 `row_segment`（d5f4ceedcfbd2d06 → 89ea9a967e3dd407）、`cell_shrink`（17162d9e3ed6047f → f9206af1e771f0e5）、`seed_admit`（3337e7b0b2dc43ec → c1cc30263b355ed5）的 `code_hash` 变，其余 14 步不变；各册 Step3 起判过期。rc 上全量测试 3632 过、32 跳过，2 条失败在 v0.4.9 上同样失败（`test_cut_select::test_ckpt_fingerprint_empty_for_missing_file` 缺检查点，`test_datastore_workcopy::test_corpus_adopt_push_and_pull`）。
 
 ### Added
 - 人裁事件规范 v1（#300，GUJI 人裁事件格式调研）：`doc/formats/人裁事件规范.md` 与 `formats/guji_feedback_event_v1.schema.json`；`guji events lint -w <工作区>` 按规范只读体检。全部「后到覆盖」统一按 `replay_key=(ts, batch, seq)`（`gold rebuild`、`route_and_consume`、`EventLog.resolve/pending`、`label_batches`、`vision` 重建、复核冲突、事件列表此前按批次名序，殿本 351 个单位、北行 11 个两种顺序取到的最终裁决不同，下次 `gold rebuild` 会按时间序改正）；`EventTarget` 从 key 补全空的 `book/page/col/slot`；`resolve(kinds=, unit=)`；控制台写入把秒级 `client_ts` 归一毫秒。PATCH；不在任何 Step 的 `code_deps` 里，17 步 `code_hash` 不变。
