@@ -167,7 +167,7 @@ def test_build_page_ink_and_column_shift():
            _ev("v:1:1:6", 5, "戊"),                                       # 第 1 列单条 −1：无旁证
            _ev("v:1:1:7", 6, "庚"),                                       # 上下文同编号
            _ev("v:1:1:3", 7, None)]                                       # 无字、无图块
-    rows = A.build_page("v", 1, evs, cells, "sha", lambda: raw,
+    rows = A.build_page("v", 1, evs, cells, {"row_segment": "sha"}, lambda: raw,
                         lambda k: (None, patch, "乙") if k == "v:1:1:2" else None, align)
     by = {r["key"]: r for r in rows}
     assert by["v:1:1:2"]["evidence"]["method"] == "ink" and by["v:1:1:2"]["evidence"]["at"] == "1:2"

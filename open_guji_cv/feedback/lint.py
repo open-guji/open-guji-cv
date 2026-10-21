@@ -1,7 +1,7 @@
 """人裁事件体检：按 `doc/formats/人裁事件规范.md` 逐行查 `feedback/events/`、`feedback/vision/`。
 
-只读、不改账。人裁日志只追加，查出来的问题靠追加更正事件或在规范里登记为「历史遗留、读者容忍」解决，
-不回头改行（`consumed/` 认的是事件 id，改行会让记账对不上）。
+只读、不改账。人裁日志只追加，查出来的问题靠追加更正事件解决；改行要连 `consumed/`、金标 `source_events`
+一起改（`consumed/` 认的是事件 id），只在一次性规整里做（`migrate_v1`，2026-10-21 把下表的历史遗留清完了）。
 
 `guji events lint -w <工作区>` 打印报告；`--json` 出机读结果。每类问题给条数和前几个例子。
 
@@ -10,11 +10,13 @@
 | `E-parse` | 错 | 行不是 JSON，或过不了 `Event` 信封（kind 不认识、缺字段） |
 | `E-dup-id` | 错 | 同一事件 id 出现在不止一个文件、内容不同——`consumed/` 按 id 记账，两条只会消费一条 |
 | `E-key-fields` | 错 | `target.book/page/col/slot` 有值但与 `target.key` 解析结果不一致 |
+| `E-key-empty` | 错 | `target.key` 解析得出、`target.book/page/col/slot` 却全空（落盘的原行；读回时会补，但库里 `events.book` 列是空的） |
 | `E-payload-v` | 错 | `confirm` 没有 `payload.v` 或取值不在规范里 |
 | `E-unit` | 错 | kind 与 `target.unit` 不配（如 `cutline` 不是 `boundary`） |
-| `W-id-shape` | 警 | id 不是 `evt_<batch>_<seq:06d>` |
-| `W-batch-file` | 警 | 事件的 `batch` 与所在文件名不符（`read(batch)` 读不到它，`batch_path` 指向别的文件） |
-| `W-client-ts-sec` | 警 | `payload.client_ts` 是秒不是毫秒 |
+| `E-id-shape` | 错 | id 不是 `evt_<batch>_<seq:06d>` |
+| `E-batch-file` | 错 | 事件的 `batch` 与所在文件名不符（`read(batch)` 读不到它，`batch_path` 指向别的文件） |
+| `E-client-ts-sec` | 错 | `payload.client_ts` 是秒不是毫秒 |
+| `E-product-key` | 错 | `anchor.product_key` 不是 `{step, key, fingerprint}`（切分产物 sha 归 `anchor.cells_sha`） |
 | `W-confirm-no-shape` | 警 | `v=confirm` 却没有 `shape`（定字裁决没给字，文本层不认） |
 | `I-order` | 提示 | 同一单位的「最终裁决」按批次名序与按时间序不同的条数（读者一律按 `replay_key`） |
 """
@@ -32,6 +34,9 @@ from .keys import parse_card_id
 
 #: `confirm` 的 `payload.v` 取值（规范 §5.1）
 CONFIRM_V = frozenset({"confirm", "seg_defect", "not_a_char", "skip", "damaged"})
+
+#: `anchor.product_key` 只许这几个键（规范 §7.2）
+PRODUCT_KEY_FIELDS = frozenset({"step", "key", "fingerprint"})
 
 #: kind → 允许的 `target.unit`（规范 §5 各节；没列的不查）
 KIND_UNITS = {
@@ -86,7 +91,7 @@ class Report:
 def _check_event(e: Event, where: str, rep: Report) -> None:
     m = _ID.match(e.id)
     if not m or m["batch"] != e.batch or int(m["seq"]) != e.seq:
-        rep.add("W-id-shape", f"{where} {e.id}（batch={e.batch} seq={e.seq}）")
+        rep.add("E-id-shape", f"{where} {e.id}（batch={e.batch} seq={e.seq}）")
     t = e.target
     want = parse_card_id(t.key)
     if want:
@@ -106,7 +111,10 @@ def _check_event(e: Event, where: str, rep: Report) -> None:
             rep.add("W-confirm-no-shape", f"{where} {e.id} key={t.key}")
     ct = p.get("client_ts")
     if isinstance(ct, (int, float)) and not isinstance(ct, bool) and 0 < ct < 1e11:
-        rep.add("W-client-ts-sec", f"{where} {e.id} client_ts={ct}")
+        rep.add("E-client-ts-sec", f"{where} {e.id} client_ts={ct}")
+    pk = (t.anchor or {}).get("product_key")
+    if pk is not None and not (isinstance(pk, dict) and set(pk) <= PRODUCT_KEY_FIELDS):
+        rep.add("E-product-key", f"{where} {e.id} product_key 键={sorted(pk) if isinstance(pk, dict) else type(pk).__name__}")
 
 
 def lint_dir(d: Path, rep: Report, seen: dict[str, tuple[str, str]], events: list[Event]) -> None:
@@ -124,7 +132,10 @@ def lint_dir(d: Path, rep: Report, seen: dict[str, tuple[str, str]], events: lis
                 rep.add("E-parse", f"{where} {str(exc).splitlines()[0][:120]}")
                 continue
             if EventLog.safe_batch_name(e.batch) != stem:
-                rep.add("W-batch-file", f"{where} batch={e.batch!r}")
+                rep.add("E-batch-file", f"{where} batch={e.batch!r}")
+            raw_t = json.loads(line).get("target") or {}
+            if all(raw_t.get(k) is None for k in ("book", "page", "col", "slot")) and parse_card_id(e.target.key):
+                rep.add("E-key-empty", f"{where} {e.id} key={e.target.key}")
             body = json.dumps(e.model_dump(mode="json", exclude={"id"}), sort_keys=True, ensure_ascii=False)
             prev = seen.get(e.id)
             if prev is not None and prev[1] != body:
