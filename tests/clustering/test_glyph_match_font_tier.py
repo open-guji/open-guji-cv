@@ -39,10 +39,13 @@ def test_font_tier_is_off_by_default_and_out_of_the_params_hash():
 def test_rule_defaults_and_unknown_keys():
     from open_guji_cv.steps.glyph_match import _FontTier
     assert _FontTier.rule(None) is None and _FontTier.rule(False) is None
-    assert _FontTier.rule(True) == {"cov": None, "margin": 0.03, "min_n": 0}
+    assert _FontTier.rule(True) == {"cov": None, "margin": 0.03, "min_n": 0, "same": True,
+                                    "seed": None, "seed_k": 20, "emb": None}
     assert _FontTier.rule({"cov": 0.99})["cov"] == 0.99
     with pytest.raises(ValueError):
         _FontTier.rule({"covv": 0.99})
+    with pytest.raises(ValueError):
+        _FontTier.rule({"seed": "near"})
 
 
 def test_keben_subset_keeps_only_non_font_rows(tmp_path, monkeypatch):
@@ -76,3 +79,39 @@ def test_strong_keben_hit_skips_the_font_domain_and_weak_falls_back_to_full(tmp_
     tier2 = _FontTier(m, sub, _FontTier.rule({"min_n": 2}))
     tier2.match(kou, exclude_id=None)
     assert tier2.n_full == 1
+
+
+def test_seed_mode_compares_only_the_seeded_font_rows(tmp_path, monkeypatch):
+    """`seed: cnn`：命中弱的格只比种子字的字体行。CNN 与向量包换成假的：种子里有「永」就认得出，没有就认不出。"""
+    import numpy as np
+    from open_guji_cv.steps import glyph_match as GM
+    m = _matcher(tmp_path, monkeypatch)
+    m.k = 2
+    sub = GM._keben_subset(m)
+    yong = m._patches[m._ids.index("font:t:06C38")].copy()
+    full = m.match(yong)
+    assert full.verdict == "same" and full.char == "永"
+
+    class FakeCnn:
+        def embed(self, norms):
+            return np.array([[1.0, 0.0]], np.float32)
+
+    for seeds, expect_yong in ((["永", "山"], True), (["日", "山"], False)):
+        chars = seeds + ["一", "二", "口"]
+        M = np.array([[1.0, 0.0]] * len(seeds) + [[0.0, 1.0]] * 3, np.float32)
+        monkeypatch.setattr(GM, "_SEED", {"cnn": FakeCnn(), "M": M, "chars": chars})
+        tier = GM._FontTier(m, sub, GM._FontTier.rule({"seed": "cnn", "seed_k": len(seeds), "same": False}))
+        r = tier.match(yong, exclude_id=None)
+        assert tier.n_full == 1
+        assert (r.char == "永") is expect_yong
+        if expect_yong:
+            assert r.to_dict() == full.to_dict()
+
+
+def test_seed_mode_records_the_emb_version_in_the_params(monkeypatch):
+    from open_guji_cv.clustering import emb_pack
+    from open_guji_cv.steps.glyph_match import GlyphMatchParams
+    monkeypatch.setattr(emb_pack, "current_spec", lambda: {"ckpt_fp": "a", "font_fp": "b", "code_fp": "c", "extra": []})
+    p = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="", font_tier={"seed": "cnn"})
+    assert p.font_tier["emb"].startswith("emb-")
+    assert p.model_dump(mode="json")["font_tier"]["emb"] == p.font_tier["emb"]

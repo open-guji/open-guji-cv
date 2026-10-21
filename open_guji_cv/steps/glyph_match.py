@@ -271,9 +271,14 @@ class GlyphMatchParams(BaseModel):
     就用刻本库的结果，字体域不比：
     - 判 same、没触发护栏；
     - `cov` 不为 None 时：判 unsure、没触发护栏、首选 cov ≥ `cov`、比次优**异字**高 ≥ `margin`。
-    另外 `min_n` > 0 时，首选字在刻本库里不到 `min_n` 例的一律算弱。
-    `true` 或 `{}` 按缺省值开（`cov: null, margin: 0.03, min_n: 0`，即只认 same）。**会改产物**：
-    命中强的格不再看字体字形，前 10 名、候选、个别格的判决会变；调研与数字见 GUJI-726。"""
+    另外 `min_n` > 0 时，首选字在刻本库里不到 `min_n` 例的一律算弱；`same: false` 时 same 也算弱。
+    `seed: cnn` 时命中弱的格不查整个字体域，只查「图像 CNN 在全字表向量包里最近的 `seed_k` 个字
+    ＋刻本库前 5 个候选字」的字体字形（几十个字、约百来行），其余字体行不比（`seed_k` 缺省 20）；
+    要本机有与现役模型同规格的向量包（`guji cache pull-rare-index` 拉），没有就报错。向量包版本自动
+    填进 `emb`，换了模型或字体产物判过期。
+    `true` 或 `{}` 按缺省值开（`cov: null, margin: 0.03, min_n: 0, same: true, seed: null`，
+    即只认 same、弱了查整库）。**会改产物**：不比的字体行进不了前 10 名，候选、个别格的判决会变；
+    调研与数字见 GUJI-726。"""
 
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
@@ -301,6 +306,9 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
         if not self.borrow_fingerprint:
             object.__setattr__(self, "borrow_fingerprint", borrow_fingerprint(self.db_path))
+        if isinstance(self.font_tier, dict) and self.font_tier.get("seed") and "emb" not in self.font_tier:
+            from ..clustering.emb_pack import current_spec, version_of
+            object.__setattr__(self, "font_tier", {**self.font_tier, "emb": version_of(current_spec())})
 
 
 def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
@@ -417,7 +425,7 @@ class GlyphMatchStep(Step):
         if tier is not None:
             # 合批只给刻本库那一档：查整库的格事先不知道，逐格算
             sub = _keben_subset(matcher)
-            if p.batch_knn:
+            if p.batch_knn and not tier["seed"]:
                 sub = _PageBatch(sub, _page_queries(ctx, page, chars, reuse, normalize_patch))
             matcher = _FontTier(matcher, sub, tier)
         elif p.batch_knn:
@@ -607,9 +615,45 @@ def _keben_subset(matcher):
     for c in sub._chars:
         n_of[c] = n_of.get(c, 0) + 1
     sub.n_keben = n_of
+    sub.parent_rows = np.asarray(rows, dtype=np.int64)
     _SUBSETS.clear()                       # 只留最近一个库状态（同 seeding._MATCHER_CACHE）
     _SUBSETS[id(matcher)] = (matcher, sub)
     return sub
+
+
+def _keben_rows(matcher) -> np.ndarray:
+    return _keben_subset(matcher).parent_rows
+
+
+_SEED: dict = {}
+
+
+def _seed_index():
+    """图像 CNN 与全字表向量包（单位化的 float32 矩阵）。进程内建一次，fork 出的 worker 共用。"""
+    if not _SEED:
+        from ..clustering.cnn_candidates import shared
+        from ..clustering.emb_pack import load_current
+        cnn = shared()
+        pack = load_current(download=False)
+        if pack is None or not cnn._ensure():
+            raise RuntimeError("font_tier.seed=cnn 要本机有与现役模型同规格的向量包和 CNN checkpoint："
+                               "先 `guji cache pull-rare-index`")
+        M = np.asarray(pack.mat, dtype=np.float32)
+        M = M / (np.linalg.norm(M, axis=1, keepdims=True) + 1e-9)
+        _SEED.update(cnn=cnn, M=M, chars=pack.chars)
+    return _SEED
+
+
+def _seed_font_rows(matcher, norm: np.ndarray, cand_chars: list[str], k: int) -> list[int]:
+    """种子字（查询图在向量包里最近的 k 个字 ∪ `cand_chars`）在整库匹配器里的字体行号，升序。"""
+    s = _seed_index()
+    e = s["cnn"].embed([norm])[0]
+    sims = s["M"] @ e
+    k = min(k, len(sims))
+    top = np.argpartition(-sims, k - 1)[:k] if k > 0 else []
+    chars = {s["chars"][int(j)] for j in top} | set(cand_chars)
+    return sorted(j for c in chars for j in matcher._rows_for(c)
+                  if str(matcher._ids[j]).startswith(FONT_PREFIX))
 
 
 class _FontTier:
@@ -627,12 +671,14 @@ class _FontTier:
     def rule(cfg) -> dict | None:
         if cfg is None or cfg is False:
             return None
-        d = {"cov": None, "margin": 0.03, "min_n": 0}
+        d = {"cov": None, "margin": 0.03, "min_n": 0, "same": True, "seed": None, "seed_k": 20, "emb": None}
         if isinstance(cfg, dict):
             unknown = set(cfg) - set(d)
             if unknown:
                 raise ValueError(f"font_tier 不认识的键：{sorted(unknown)}")
             d.update(cfg)
+        if d["seed"] not in (None, "cnn"):
+            raise ValueError(f"font_tier.seed 只认 cnn：{d['seed']!r}")
         return d
 
     def __getattr__(self, name):
@@ -646,7 +692,7 @@ class _FontTier:
         if self._rule["min_n"] > 0 and self._n_of.get(top, 0) < self._rule["min_n"]:
             return False
         if m.verdict == "same":
-            return True
+            return bool(self._rule["same"])
         if m.verdict != "unsure" or self._rule["cov"] is None or cov < self._rule["cov"]:
             return False
         nxt = next((v for c, v in m.candidates[1:] if c != top), None)
@@ -654,13 +700,31 @@ class _FontTier:
 
     def match(self, norm, **kw):
         self.n_query += 1
-        m = self._sub.match(norm, **kw)
+        kw.pop("feat", None)
+        kw.pop("sims", None)
+        if not self._rule["seed"]:
+            m = self._sub.match(norm, **kw)
+            if self.strong(m):
+                return m
+            self.n_full += 1
+            return self._full.match(norm, **kw)
+        full = self._full
+        feat = np.asarray(full._feature.extract(norm[None, ...])[0], dtype=np.float32)
+        sub_sims = self._sub.library_matrix() @ feat
+        m = self._sub.match(norm, feat=feat, sims=sub_sims, **kw)
         if self.strong(m):
             return m
         self.n_full += 1
-        kw.pop("feat", None)
-        kw.pop("sims", None)
-        return self._full.match(norm, **kw)
+        # 只比种子字的字体行：其余字体行的相似度记 -inf，排不进前 10 名（刻本行用刻本库那一份相似度）
+        rows = _seed_font_rows(full, norm, [c for c, _ in m.candidates[:5]], int(self._rule["seed_k"]))
+        kb = _keben_rows(full)
+        if len(kb) + len(rows) < 2 * full.k:         # 库太小，-inf 的行会排进前 k：照整库算
+            return full.match(norm, feat=feat, **kw)
+        sims = np.full(len(full), -np.inf, dtype=np.float32)
+        sims[kb] = sub_sims
+        if rows:
+            sims[rows] = full.library_matrix()[rows] @ feat
+        return full.match(norm, feat=feat, sims=sims, **kw)
 
 
 def _timeout_rec(r, budget_s: float) -> MatchRec:
