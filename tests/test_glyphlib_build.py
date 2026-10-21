@@ -95,7 +95,7 @@ def test_build_copies_patches_and_borrows_as_borrowed_human(src_ws, tmp_path):
     assert sorted(r["instance_id"] for r in inst) == ["srcbook:vol01:1:1:1", "srcbook:vol01:1:2:1",
                                                       "srcbook:vol01:1:3:1"]
     assert {r["source_id"] for r in inst} == {"srcbook.vol01"}
-    ev = [json.loads(x) for x in (lib / "feedback/events/promote.jsonl").read_text("utf-8").splitlines()]
+    ev = [json.loads(x) for x in (lib / "feedback/promote.jsonl").read_text("utf-8").splitlines()]
     assert len(ev) == 3 and ev[0]["kind"] == "promote" and ev[0]["payload"]["from_ws"] == "srcbook"
 
     db = tmp_path / "borrower.sqlite"                                   # 别的书借它：记成借来的人裁，不当本书铁证

@@ -134,10 +134,13 @@ def test_verify_rejects_content_change():
         M.verify(before, m)
 
 
-def test_promote_lines_are_left_alone():
-    """刻例库的升格记账（kind=promote）也放在 feedback/events/，不是人裁事件：不碰。"""
+def test_promote_file_moves_out_of_events():
+    """刻例库的升格记账（kind=promote）不是人裁事件：整文件挪到 feedback/promote.jsonl，内容不动（规范 §9 F-8）。"""
     line = b'{"batch": "promote-x", "id": "evt_promote-x_000001", "kind": "promote", "seq": 1, ' \
            b'"target": {"book": null, "key": "ws:v2:vol02:1:1:1", "unit": "glyph"}, "ts": "2026-10-19T00:00:00Z"}\n'
     files = {"workspace.yaml": b"id: g\n", "feedback/events/promote.jsonl": line}
     m = M.migrate(files)
-    assert not m.changed(files) and m.skipped == {"feedback/events/promote.jsonl": 1}
+    assert m.changed(files) == ["feedback/events/promote.jsonl", "feedback/promote.jsonl"]
+    assert m.files["feedback/promote.jsonl"] == line and "feedback/events/promote.jsonl" not in m.files
+    assert M.verify(files, m)["events"] == 0
+    assert not M.migrate(m.files).changed(m.files)

@@ -55,6 +55,7 @@ def test_classify_skips_backups_and_products():
     assert classify("feedback/consumed_bak_20260904/a.jsonl") is None
     assert classify("feedback/_backup_20260916/a.jsonl") is None
     assert classify("feedback/events/.gitkeep") is None
+    assert classify("feedback/.write.lock") is None and classify("feedback/verdicts/.write.lock") is None
     assert classify("data_full/zongmu/vol01/1.png") is None
     assert classify("output/vol01/x.json") is None
 

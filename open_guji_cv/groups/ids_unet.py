@@ -115,3 +115,72 @@ def prob_to_polylines(prob: np.ndarray, step: int = 4, smooth: int = 5):
     y2 = np.maximum(y2, y1)
     xs = list(range(0, w, step)) + [w - 1]
     return ([[(x + 0.5) / w, float(y1[x])] for x in xs], [[(x + 0.5) / w, float(y2[x])] for x in xs])
+
+
+# —— 线上推理：纯 numpy，不需要 torch ——
+# 训练（`train`）仍要 torch；训完 `save_weights` 存成 .npz（约 1.1MB），线上用 `NpNet` 前向，
+# 结果与 torch eval 模式一致（`tests/test_groups_ids_unet_np.py`）。无随机、无 GPU，云端重跑逐字节相同。
+
+def save_weights(net, path) -> None:
+    """torch 网络 → .npz（state_dict 的 float32 数组，键名不变）。"""
+    np.savez_compressed(path, **{k: v.detach().cpu().numpy().astype(np.float32) for k, v in net.state_dict().items()
+                                 if v.dtype.is_floating_point})
+
+
+def _conv3(x, w, b):
+    """x (C,H,W)，w (O,C,3,3)，padding=1。"""
+    from numpy.lib.stride_tricks import sliding_window_view
+    xp = np.pad(x, ((0, 0), (1, 1), (1, 1)))
+    win = sliding_window_view(xp, (3, 3), axis=(1, 2))          # (C,H,W,3,3)
+    return np.einsum("chwij,ocij->ohw", win, w, optimize=True) + b[:, None, None]
+
+
+def _bn(x, p, pre):
+    s = p[pre + ".weight"] / np.sqrt(p[pre + ".running_var"] + 1e-5)
+    return (x - p[pre + ".running_mean"][:, None, None]) * s[:, None, None] + p[pre + ".bias"][:, None, None]
+
+
+def _blk(x, p, pre):
+    x = np.maximum(_bn(_conv3(x, p[pre + ".0.weight"], p[pre + ".0.bias"]), p, pre + ".1"), 0)
+    return np.maximum(_bn(_conv3(x, p[pre + ".3.weight"], p[pre + ".3.bias"]), p, pre + ".4"), 0)
+
+
+def _pool(x):
+    c, h, w = x.shape
+    return x.reshape(c, h // 2, 2, w // 2, 2).max(axis=(2, 4))
+
+
+def _up(x, w, b):
+    """ConvTranspose2d(k=2,s=2)：w (C,O,2,2)。"""
+    c, h, ww = x.shape
+    y = np.einsum("chw,coab->ohawb", x, w, optimize=True).reshape(w.shape[1], h * 2, ww * 2)
+    return y + b[:, None, None]
+
+
+class NpNet:
+    def __init__(self, path):
+        z = np.load(path)
+        self.p = {k: z[k] for k in z.files}
+
+    @classmethod
+    def from_torch(cls, net):
+        o = cls.__new__(cls)
+        o.p = {k: v.detach().cpu().numpy().astype(np.float32) for k, v in net.state_dict().items() if v.dtype.is_floating_point}
+        return o
+
+    def forward(self, x):
+        p = self.p
+        e1 = _blk(x, p, "e1"); e2 = _blk(_pool(e1), p, "e2"); e3 = _blk(_pool(e2), p, "e3")
+        b = _blk(_pool(e3), p, "b")
+        d3 = _blk(np.concatenate([_up(b, p["u3.weight"], p["u3.bias"]), e3]), p, "d3")
+        d2 = _blk(np.concatenate([_up(d3, p["u2.weight"], p["u2.bias"]), e2]), p, "d2")
+        d1 = _blk(np.concatenate([_up(d2, p["u1.weight"], p["u1.bias"]), e1]), p, "d1")
+        return np.einsum("chw,oc->ohw", d1, p["out.weight"][:, :, 0, 0], optimize=True) + p["out.bias"][:, None, None]
+
+
+def predict_prob_np(net: NpNet, gray: np.ndarray) -> np.ndarray:
+    import cv2
+    z = net.forward(to_input(gray))
+    z = np.exp(z - z.max(axis=0)); p = z / z.sum(axis=0)
+    h, w = gray.shape
+    return np.stack([cv2.resize(c, (w, h), interpolation=cv2.INTER_LINEAR) for c in p])

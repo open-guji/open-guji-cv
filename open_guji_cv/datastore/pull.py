@@ -62,7 +62,8 @@ def import_events(src_from, dst, ws: str, ids: set[str] | None, dst_branch: str,
         raise SystemExit(f"实验分支上找不到这些事件：{missing[:10]}{'…' if len(missing) > 10 else ''}")
     plan = {p: len(v) for p, v in sorted(want.items())}
     out: dict = {"ws": ws, "from": src_from.branch, "to": dst_branch, "plan": plan,
-                 "n": sum(plan.values()), "dry_run": dry_run}
+                 "n": sum(plan.values()), "dry_run": dry_run,
+                 "ids": sorted(i for rows in want.values() for _, i, _ in rows)}
     if dry_run:
         return out
     results = []

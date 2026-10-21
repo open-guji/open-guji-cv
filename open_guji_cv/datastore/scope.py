@@ -92,6 +92,7 @@ TABLES: dict[str, TableSpec] = {t.name: t for t in (
 EXCLUDE_GLOBS = (
     "*.bak*", "*/*.bak*/*", "*.bak-*/*", "*_backup_*/*", "*/_backup_*/*",
     "*consumed_bak_*/*", "*.gitkeep", "*/.gitkeep",
+    "*.write.lock",                    # 人裁写锁（feedback/lock.py）：进程间互斥用的空文件，不是数据
     "corpus/*/columns.jsonl",          # 殿本 daizhige 的逐列结构，40 MB，`convert` 可重生成（git 里也不收）
 )
 
