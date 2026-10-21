@@ -14,7 +14,7 @@
   - `guji db pull`：重建 glyph.db 的派生表示按 CPU 数多进程（同 `glyph-db rebuild`，原来单进程）；取图（R2）与向库要文本行同时跑；读令牌先问 `whoami`，不再白打一个注定存不上的快照包（约 9 s）。
   - 冷启动端到端第二轮（vol06 150 页，空数据目录、空图缓存、空缓存、空产物，4 核云端）：`db pull` 211 s（上轮图缓存是热的）→ 166 s（图全冷），`glyph-db rebuild` 133 s → 55 s，Step0–7 2028 s → 1878 s（seed_admit 185 → 99、column_warp 62 → 21、三道闸合计 62 → 35），close-check 35 s；合计约 41 分 → 36 分。
 
-## [0.5.3] - 测试中
+## [0.5.3] - 2026-10-20
 
 PATCH（Sheldon 10-21 定发）。`row_segment`（1.23 → 1.25，新增 `code_deps` `utils.row_grid`）与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，只加了缺省不走的格网入口，闸的输出不变）的 `code_hash` 变，各册 column_gate 与 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。
 
