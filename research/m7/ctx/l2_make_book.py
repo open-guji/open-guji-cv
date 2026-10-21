@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from open_guji_cv.groups.context import WIDTH
-from open_guji_cv.groups.ctx_l2 import build_batch
+from open_guji_cv.groups.prompt_template import book_prompt_vars, build_batch_rendered as build_batch
 from open_guji_cv.groups.flow import ctx_judge as judge
 from open_guji_cv.groups.registry import GROUPS
 from open_guji_cv.steps.seed_admit import _clf_ctx
@@ -47,7 +47,7 @@ for g in groups:
     ids = sorted(cells[g]); man = {}
     for i in range(0, len(ids), a.size):
         chunk = ids[i:i + a.size]; name = f"{g}_{i // a.size:02d}"
-        (out / f"{name}.txt").write_text(build_batch(prompt, [dict(id=c, left=cells[g][c][0], right=cells[g][c][1]) for c in chunk]), encoding="utf-8")
+        (out / f"{name}.txt").write_text(build_batch(prompt, [dict(id=c, left=cells[g][c][0], right=cells[g][c][1]) for c in chunk], book_prompt_vars()), encoding="utf-8")
         man[name] = chunk
     (out / f"{g}_manifest.json").write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
     (out / f"{g}_cells.json").write_text(json.dumps(cells[g], ensure_ascii=False), encoding="utf-8")

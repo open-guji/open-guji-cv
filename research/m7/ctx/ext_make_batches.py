@@ -5,7 +5,7 @@ import argparse, json, sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv")
 from open_guji_cv.groups.ctx_l1 import CtxL1Backend
-from open_guji_cv.groups.ctx_l2 import build_batch
+from open_guji_cv.groups.prompt_template import book_prompt_vars, build_batch_rendered as build_batch
 ap = argparse.ArgumentParser(); ap.add_argument("--groups", default="wxs,wm,ts"); ap.add_argument("cells"); ap.add_argument("out"); ap.add_argument("--extra", default=""); ap.add_argument("--size", type=int, default=40)
 a = ap.parse_args(); out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
 extra = set(json.load(open(a.extra)) if a.extra else [])
@@ -20,7 +20,7 @@ for g in a.groups.split(","):
     man = {}; cm = {c["id"]: [c["left"], c["right"]] for c in sel}
     for i in range(0, len(sel), a.size):
         ch_ = sel[i:i + a.size]; name = f"{g}_{i // a.size:02d}"
-        (out / f"{name}.txt").write_text(build_batch(f"/home/user/open-guji-cv/config/groups/{g}/prompt.md", ch_), encoding="utf-8")
+        (out / f"{name}.txt").write_text(build_batch(f"/home/user/open-guji-cv/config/groups/{g}/prompt.md", ch_, book_prompt_vars()), encoding="utf-8")
         man[name] = [c["id"] for c in ch_]
     (out / f"{g}_manifest.json").write_text(json.dumps(man, ensure_ascii=False)); (out / f"{g}_cells.json").write_text(json.dumps(cm, ensure_ascii=False)); (out / f"{g}_l1.json").write_text(json.dumps(l1, ensure_ascii=False))
     print(g, "共", sum(1 for c in cells if c["group"] == g), "L1给字", sum(1 for v in l1.values() if v), "送模型", len(sel), "批", len(man))
