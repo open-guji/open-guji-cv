@@ -22,6 +22,7 @@
   - `guji cache verify`／`close-check` 1b：戳与现行产物对得上的页免查（引擎重跑一页先清再写、读时戳不对整页作废，这类缓存一定是这一代切的）。vol06 150 页 1.4 秒（原约 5 分钟）；`--full` 照旧全查。
 
 ### Fixed
+- **seed_admit 并行时影子模型极慢（#255 引入，0.4.9 受影响）**：开了 `shadow_veto` 的册（vol05、vol09 等），影子模型（scikit-learn HistGradientBoosting）predict 用 sklearn 自带的 OpenMP，主进程暖机时按核数建好线程池，fork 出的 4 个 worker 各开 4 线程、16 线程抢 4 核，每页从几秒拖到约 700 s（vol09 实测）。worker 里用 threadpoolctl 把已加载的 OpenMP 运行库压到每 worker 线程数；vol09 20 页 4 进程 63 s、串行 102 s，产物逐页相同。产物从来不受影响，只是慢。
 - 缓存页戳会把老缓存「洗白」（GUJI-647）：一页没戳、目录里却有记戳机制之前的老图时，惰性补一张新图（或 `cache warm` 收尾补戳）会给整页记上戳，`cache verify` 从此跳过它。现在这类页不记戳，留给内容校验。
 - `--isolate-steps` 下某一步崩了（异常、护栏拒跑）父进程照样接着跑下游、最后返回 0；现在停在那一步、返回它的返回码。控制台取消工单（只 terminate 父进程）时把 SIGTERM 转给正在跑的那一步，不留孤儿接着写产物。
 

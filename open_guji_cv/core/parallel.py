@@ -76,7 +76,9 @@ AUDITED: dict[str, ParallelAudit] = {
              "worker 里 cv2.setNumThreads 置空（cnn_candidates 模块顶层调它，fork 子进程里卡死过），"
              "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"
              "内存登记 3.0 → 2.0 GB（2026-10-20 晚）：每步一个子进程后 vol06 主进程峰值 1.95 GB，主进程加 3 个 worker "
-             "合计 PSS 3.3 GB（fork 共享页）；按 3.0 算，15 GB 的机器只开得出 3 个进程，CPU 利用率 51%。"),
+             "合计 PSS 3.3 GB（fork 共享页）；按 3.0 算，15 GB 的机器只开得出 3 个进程，CPU 利用率 51%。"
+             "开了 shadow_veto 的册：影子模型的 OpenMP 要在 worker 里压线程（`engine._pin_threads`），不压时 vol09 每页约 700 s"
+             "（2026-10-21；vol09 20 页串行／4 进程产物逐页相同）。"),
 }
 
 

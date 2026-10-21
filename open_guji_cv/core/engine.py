@@ -867,6 +867,15 @@ def _pin_threads(n: int, forked: bool = False) -> None:
         os.environ[var] = str(n)          # 给子进程里之后才加载的库
     from .parallel import set_blas_threads
     set_blas_threads(n)                   # 已从主进程带来的 numpy：变量不生效，调运行期接口
+    # 已加载的 OpenMP 运行库也要压（2026-10-21）：seed_admit 的影子模型（`shadow_veto`，scikit-learn
+    # HistGradientBoosting）predict 走 sklearn 自带的 libgomp，主进程暖机时按核数初始化，fork 出的 4 个
+    # worker 各开 4 线程、16 线程抢 4 核，OpenMP 忙等把每页从几秒拖到约 700 s（vol09 实测）。变量对已
+    # 初始化的运行库不生效，用 threadpoolctl（sklearn 的依赖）调 omp_set_num_threads。按样本并行，结果与线程数无关。
+    try:
+        from threadpoolctl import threadpool_limits
+        threadpool_limits(limits=n, user_api="openmp")
+    except Exception:  # noqa: BLE001 —— 没装 sklearn 就没有 threadpoolctl，也就没有这个运行库
+        pass
     # OpenCV 的线程数**不能**在 fork 出的子进程里改：主进程用过 cv2 的线程池后，子进程里
     # `cv2.setNumThreads` 要拆那个池，卡死在 pthread_cond_destroy（2026-10-20 实测两回：一回是
     # 这里自己调的，四个 worker 全挂；一回是 seed_admit 在 worker 里第一次 import
