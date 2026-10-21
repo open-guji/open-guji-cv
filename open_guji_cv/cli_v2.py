@@ -546,11 +546,14 @@ def cmd_audit(args) -> None:
             done = human_chars(book)
             todo += [c for c in cs if c.get("admit") and c.get("id") in done]
         zi = ZiCache(Path(args.zi_cache) if args.zi_cache else None, fetch=args.fetch_zi)
-        alt = alt_for_cards(book, todo, k=args.k or ALT_K, zi=zi, log=lambda m: print(m, file=sys.stderr))
+        alt = alt_for_cards(book, todo, k=args.k or ALT_K, zi=zi, ctx=eng.ctx, log=lambda m: print(m, file=sys.stderr))
         n = attach(cs, alt)
         dst = Path(args.cards_out) if args.cards_out else out_dir / f"{book}.cards.alt.json"
         dst.write_text(json.dumps(cs, ensure_ascii=False), encoding="utf-8")
         print(f"{book} 相似字：待审 {len(todo)} 格，出 alt {n} 格（字统网新取 {zi.n_fetched} 字）→ {dst}")
+        if todo and not n:
+            # 一格都没出多半是环境问题（缺 torch／checkpoint、取不到字块图），不能让下游照出一张没有相似字的单子
+            print(f"✗ {book} 待审 {len(todo)} 格一格相似字都没出，见上面的原因", file=sys.stderr); sys.exit(1)
     elif args.action == "alt-eval":
         # 相似字效果：人裁过之后，拿人定的字回头看 alt 里排第几（doc/research/人审找字-…md §6）
         from .feedback.lookup import human_chars

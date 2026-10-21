@@ -99,3 +99,31 @@ def test_from_pack_helpers(tmp_path, monkeypatch):
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)        # 不给沙箱产物根就不取包，免得覆盖正式 products/
     with pytest.raises(SystemExit, match="GUJI_PRODUCTS_DIR"):
         rp.main(["from-pack", "--book", "vol05", "-w", str(tmp_path), "--label", "x"])
+
+
+def test_prep_stops_when_alt_fails(tmp_path, monkeypatch):
+    """audit alt 出不来相似字（10-21 殿本：包里没有字块图缓存）就停，不照发一张没有相似字的单子。"""
+    ws, export, _ = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: type("P", (), {"returncode": 1})())
+    with pytest.raises(SystemExit, match="--no-alt"):
+        rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-sprite"])
+
+
+def test_add_alt_patches_online_in_place(tmp_path, monkeypatch):
+    ws, _, online = _setup(tmp_path)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps([{"id": "vol06:1:1:1", "alt": [{"c": "已", "s": 0.91234, "p": "己", "src": "v"}]},
+                                 {"id": "vol06:1:1:2", "alt": [{"c": "巳", "s": 0.8, "p": "己", "src": "rt"}]}]),
+                     encoding="utf-8")
+    before = json.loads(online.read_text(encoding="utf-8"))
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards)]) == 0
+    assert json.loads(online.read_text(encoding="utf-8")) == before                            # 不给 --yes 不写回
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes"]) == 0
+    after = json.loads(online.read_text(encoding="utf-8"))
+    assert after["rev"] == "006-r2"                                                             # 不换 rev，已投的票照旧有效
+    assert [c["cell"] for c in after["cells"]] == ["1:1:1", "1:1:2", "1:1:9"]
+    assert after["cells"][0]["alt"] == [{"c": "已", "s": 0.9123, "p": "己", "src": "v"}]
+    assert "alt" not in after["cells"][2]                                                       # 卡片里没有的格不补

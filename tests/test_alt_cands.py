@@ -165,3 +165,34 @@ def test_alt_eval_ranks_and_hard_tier():
     assert res["all"]["n"] == 3 and res["all"]["top1"] == 1 and res["all"]["top3"] == 2
     assert res["hard"] == {"n": 2, "top1": 0, "top3": 1, "top5": 1, "top10": 1, "in_alt": 1, "mean_rank_when_hit": 3.0}
     assert res["hard_examples"][0] == {"g": "𡚁", "rank": 3, "old": "弊敝"}
+
+
+def test_alt_for_cards_cuts_patch_when_cache_missing(monkeypatch):
+    """缓存里没有字块图（从产物包出单）时走 ctx 现切；没有 ctx 就跳过并记数。"""
+    from open_guji_cv.clustering import rare_panel
+    from open_guji_cv.review import alt_cands as ac
+
+    class Bank:
+        available = True
+        def embed(self, img):
+            return np.array([1.0, 0.0])
+        def vectors(self, chars):
+            return {c: np.array([1.0, 0.0]) if c == "已" else np.array([0.0, 1.0]) for c in chars}
+
+    class Ctx:
+        keys = []
+        def image(self, kind, key):
+            self.keys.append((kind, key))
+            return np.zeros((8, 8), np.uint8)
+
+    monkeypatch.setattr(rare_panel, "rare_patch", lambda *a, **k: None)
+    monkeypatch.setattr(rare_panel, "_book_norm_stroke", lambda b: None)
+    monkeypatch.setattr("open_guji_cv.clustering.normalize.normalize_patch", lambda img, stroke_width=None: img)
+    monkeypatch.setattr(vs, "family_pool", lambda piv, zi=None: {"已": {"p": "己", "src": "v"}, "巳": {"p": "己", "src": "v"}})
+    card = {"id": "b:3:1:6", "page": 3, "col": 1, "slot": 6, "char": "己"}
+    logs = []
+    assert ac.alt_for_cards("b", [card], bank=Bank(), log=logs.append) == {}
+    assert any("取不到字块图" in m for m in logs)
+    ctx = Ctx()
+    got = ac.alt_for_cards("b", [card], bank=Bank(), ctx=ctx)
+    assert [a["c"] for a in got["b:3:1:6"]] == ["已", "巳"] and ctx.keys == [("char_patch", "p0003c01s6")]

@@ -136,9 +136,13 @@ def shared_bank() -> TemplateBank:
 
 
 def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank: TemplateBank | None = None,
-                  extra_pivots: dict[str, list[str]] | None = None, image_cache=None,
+                  extra_pivots: dict[str, list[str]] | None = None, image_cache=None, ctx=None,
                   log: Callable[[str], None] | None = None) -> dict[str, list[dict]]:
-    """一批卡 → `{卡 id: alt 列表}`。取不到字块图、或 CNN 不可用的卡不出（键缺席）。"""
+    """一批卡 → `{卡 id: alt 列表}`。取不到字块图、或 CNN 不可用的卡不出（键缺席）。
+
+    给了 ``ctx``（`RunContext`）时，缓存里没有的字块图从原图＋cell_shrink 现切（`ctx.image`）：
+    从产物包出单（`republish.py from-pack`）只有 products、没有 cache/，不现切就一格都取不到图，
+    10-21 殿本 vol04–10 重发的待审单因此整批没有相似字。"""
     from ..clustering.normalize import normalize_patch
     from ..clustering.rare_panel import _book_norm_stroke, rare_patch
     from ..clustering.variant_sources import family_pool
@@ -150,9 +154,17 @@ def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank
         return {}
     ns = _book_norm_stroke(book)
     out: dict[str, list[dict]] = {}
+    no_img = 0
     for i, c in enumerate(cards):
         img = rare_patch(book, int(c["page"]), int(c["col"]), int(c["slot"]), c.get("sub") or "", image_cache)
+        if img is None and ctx is not None:
+            key = f"p{int(c['page']):04d}c{int(c['col']):02d}s{int(c['slot'])}{c.get('sub') or ''}"
+            try:
+                img = ctx.image("char_patch", key)
+            except Exception:  # noqa: BLE001 — 切不出就当没图，与缓存缺图同口径
+                img = None
         if img is None:
+            no_img += 1
             continue
         q = bank.embed(normalize_patch(img, stroke_width=ns))
         if q is None:
@@ -163,6 +175,8 @@ def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank
             out[c["id"]] = rank_pool(q, pool, bank.vectors, k)
         if log and (i + 1) % 100 == 0:
             log(f"alt：{i + 1}/{len(cards)} 格")
+    if log and no_img:
+        log(f"alt：{no_img}/{len(cards)} 格取不到字块图，没出相似字")
     return out
 
 
