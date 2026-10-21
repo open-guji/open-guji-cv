@@ -1171,6 +1171,26 @@ def find_content_window(col_gray: np.ndarray, ink_threshold: int = 128,
     return x_lo, x_hi
 
 
+#: 等距格线就近落进字缝：每条格线只在 ±SNAP_FRAC 格高内挪，挪到行墨最少的那一行（平手取离原位近的）
+SNAP_FRAC = 0.2
+
+
+def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -> list[float]:
+    """等距格网（`utils/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
+    直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。"""
+    h = len(row_proj)
+    sm = np.convolve(row_proj, np.ones(5) / 5.0, mode="same")
+    r = max(1, int(round(SNAP_FRAC * period)))
+    out = []
+    for y in bounds:
+        yi = int(round(min(max(y, 0.0), h - 1)))
+        a, b = max(0, yi - r), min(h, yi + r + 1)
+        win = sm[a:b]
+        best = min(range(len(win)), key=lambda i: (round(float(win[i]), 3), abs(a + i - yi)))
+        out.append(float(a + best))
+    return out
+
+
 def row_ink_projection(col_gray: np.ndarray, x_lo: int = 0, x_hi: int | None = None,
                         ink_threshold: int = 128) -> np.ndarray:
     """列图的行投影：每一行在内容窗口内的墨像素个数（喂给弹性 DP 的曲线）。"""
@@ -1549,6 +1569,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     forced_main: "set[int] | None" = None,
                     dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
+                    grid_bounds: "Sequence[float] | None" = None,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1627,6 +1648,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
+    - `grid_bounds`：等距格网（`utils/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
+      就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1650,12 +1673,18 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     row_proj = row_ink_projection(col_gray, x_lo, x_hi, ink_threshold)
 
     bar_y = (find_bottom_frame_bar(col_gray, x_lo, x_hi, border_bottom, period, ink_threshold)
-             if detect_bottom_bar else None)
+             if detect_bottom_bar and grid_bounds is None else None)
     # 框线已在 border_bottom 上（或贴着它）就不必挪：只有真高出一截才换下界
     if bar_y is not None and bar_y > border_bottom - BOTTOM_BAR_MIN_SHIFT:
         bar_y = None
-    result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
-                                n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
+    if grid_bounds is not None:
+        if len(grid_bounds) != n_slots + 1:
+            raise ValueError(f"grid_bounds 要 {n_slots + 1} 条格线，给了 {len(grid_bounds)}")
+        result = RowBoundaryResult(boundaries=snap_to_gaps(row_proj, grid_bounds, period),
+                                   blank_intervals=[], valleys=[], period=period)
+    else:
+        result = fit_row_boundaries(row_proj, dst_w, border_top, border_bottom, period,
+                                    n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
     if bar_y is not None:
         barred = fit_row_boundaries(row_proj, dst_w, border_top, bar_y, period,
                                     n_slots=n_slots, top_slack=top_slack, **dp_kwargs)
