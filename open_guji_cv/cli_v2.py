@@ -2050,6 +2050,58 @@ def cmd_corpus(args) -> None:
     if not ws.is_dir():
         print(f"✗ 工作区 {ws} 不存在", file=sys.stderr)
         sys.exit(2)
+    if args.action == "pin":                          # 册的钉子账：追加一行总号（分层版本）
+        from .core.corpus_pin import append_pin
+        if not args.vol:
+            print("✗ pin 要给 --vol <册 id>", file=sys.stderr)
+            sys.exit(2)
+        kw = {k: v for k, v in (("global_ver", args.global_ver), ("book_ver", args.book_ver),
+                                ("vol_ver", args.vol_ver)) if v is not None}
+        try:
+            row = append_pin(ws, args.vol, from_n=args.from_n, note=args.note, dev=args.dev, **kw)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        tail = "，再加 corpus_dev: true（开发中，发版用 guji corpus release）" if args.dev else ""
+        print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}{tail}（本命令不改册 yaml、不推中心库）")
+        return
+    if args.action in ("upload", "fetch"):            # 大文件（≥1MB）进／出 R2，清单只记哈希
+        from .core.corpus_pin import load_pins
+        v = args.version
+        if not v and args.vol:
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (cp.versions(ws) or [0])[-1]
+        try:
+            res = (cp.upload_blobs(ws, v, args.vol, execute=args.execute) if args.action == "upload"
+                   else cp.fetch_blobs(ws, v, args.vol))
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(res)
+        return
+    if args.action == "release":                      # 开发中的总号发版：三层清单齐了才放行
+        from .core.corpus_pin import release_pin
+        if not args.vol or not args.version:
+            print("✗ release 要给 --vol <册 id> 和 --version <总号>", file=sys.stderr)
+            sys.exit(2)
+        try:
+            row = release_pin(ws, args.vol, args.version)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        print("✓ 已发版；册 yaml 去掉 corpus_dev: true，再 guji corpus verify --vol 确认干净")
+        return
+    if args.action == "build" and args.vol:           # 册层清单
+        try:
+            out = cp.build_vol(ws, args.vol, args.note)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✓ 已写 {out}（接着 guji corpus pin --vol {args.vol} --vol-ver N 记进钉子账）")
+        return
     if args.action in ("build", "init"):
         base = args.base
         if args.action == "init":                     # 新书：钉最新底库出 v1（两级清单）
@@ -2070,9 +2122,14 @@ def cmd_corpus(args) -> None:
         print(f"✓ 已写 {out}（迁过的工作区接着 guji db push -w {ws}）")
     elif args.action == "verify":
         vs = cp.versions(ws)
-        v = args.version or (vs[-1] if vs else 0)
+        v = args.version
+        if not v and args.vol:                        # 册：总号缺省取钉子账最新一行
+            from .core.corpus_pin import load_pins
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (vs[-1] if vs else 0)
         try:
-            r = cp.verify(ws, v)
+            r = cp.verify(ws, v, args.vol)
         except FileNotFoundError as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
@@ -3168,13 +3225,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
-                                      "build-base 出底库／init 新书钉最新底库")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init"])
+                                      "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release", "upload", "fetch"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,
                    help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
+    p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
+    p.add_argument("--dev", action="store_true", help="pin：开发中的总号（各层版本可以指向还没出的清单；发版用 release）")
+    p.add_argument("--execute", action="store_true", help="upload：真传 R2（缺省只演练；要 GUJI_DATA_TOKEN）")
+    p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
+    p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
+    p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
+    p.add_argument("--vol-ver", type=int, default=None, help="pin：册层版本")
     p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
 
     p = sub.add_parser("glyphlib", help="[v2] 共享刻例库：build 从一本书精选刻例出新版本（--push 推进中心库）")

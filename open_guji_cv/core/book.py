@@ -313,6 +313,9 @@ class BookSpec:
     #: 钉了之后，语料类内容指纹（`core/corpus_pin.PIN_FIELDS`）在 `params_for` 里换成 `corpus-vN`，
     #: 指纹只认版本号；不写 = 照旧按内容哈希，行为与加这个字段之前逐位相同。
     corpus: int | None = None
+    #: yaml 的 `corpus_dev: true`：这个总号的语料还在开发，跳过清单校验（指纹照样带 `corpus-vN`）。
+    #: 发版时 `guji corpus release` 校验后去掉；带着它的册配置不许推中心库。不进 `book_deps`。
+    corpus_dev: bool = False
     #: 本册钉住的字形库号（yaml 的 `glyph_pin: 1` 或 `g1`；见 `core/glyph_pin.py`）。钉了之后
     #: seed_admit 的人裁、近似字指纹在 `params_for` 里换成 `glyph-gN`，别处人裁进库不让本册过期；
     #: 不写 = 照旧按库内容哈希，行为与加这个字段之前逐位相同。
@@ -646,6 +649,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         params=_load_book_params(d.get("params")),
         cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
         corpus=_parse_corpus_pin(d.get("corpus")),
+        corpus_dev=bool(d.get("corpus_dev", False)),
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
