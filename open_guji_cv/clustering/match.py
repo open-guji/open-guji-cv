@@ -242,6 +242,17 @@ class GlyphMatcher:
         self._char_set.add(char)
         self._rows_of = None
 
+    def library_matrix(self) -> np.ndarray:
+        """整库特征矩阵（N×D float32）。
+
+        性能（2026-09-14）：库有几万条时 `np.asarray(self._feats)` 每次要把整张特征表重新堆一遍
+        （一页 179 字位 6.3s，占 Step5-a 43%）。堆一次缓存起来，`add()` 时失效；矩阵内容逐位相同。"""
+        F = getattr(self, "_F", None)          # getattr：测试里有绕过 __init__ 构造的 matcher
+        if F is None or F.shape[0] != len(self._feats):
+            F = np.asarray(self._feats)
+            self._F = F
+        return F
+
     def _same_cell_rows(self, cell_id: str) -> set[int]:
         """库里与 ``cell_id`` 是**同一个物理格**的所有行（2026-09-26，字形库 08；
         2026-09-27 v1 重键后收紧，字形库 12 §六）。
@@ -378,23 +389,26 @@ class GlyphMatcher:
     def match(self, norm: np.ndarray,
               feat: np.ndarray | None = None,
               exclude_id: str | None = None,
-              deadline: float | None = None) -> MatchResult:
+              deadline: float | None = None,
+              sims: np.ndarray | None = None) -> MatchResult:
         """见 `_match`；开了近形决胜（`near_shape`）时在其结果上再走一道 `_apply_near_shape`。
 
         ``deadline``：`time.monotonic()` 的绝对时刻，None = 不设限。逐个库刻例验证之间检查，
-        到点抛 `MatchTimeout`（由 Step5-a 的每格预算接住，记 timeout 转人审）。"""
+        到点抛 `MatchTimeout`（由 Step5-a 的每格预算接住，记 timeout 转人审）。
+        ``sims``：调用方已算好的「整库特征 · 本格特征」（Step5-a 整页合批，`batch_knn`）；None 照旧逐格算。"""
         if getattr(self, "near_shape", None) is None or not self._ids:
-            return self._match(norm, feat, exclude_id, deadline)
+            return self._match(norm, feat, exclude_id, deadline, sims)
         if feat is None:
             feat = self._feature.extract(norm[None, ...])[0]
-        r = self._match(norm, feat, exclude_id, deadline)
+        r = self._match(norm, feat, exclude_id, deadline, sims)
         excl = self._same_cell_rows(exclude_id) if exclude_id is not None else set()
         return self._apply_near_shape(r, norm, feat, excl)
 
     def _match(self, norm: np.ndarray,
                feat: np.ndarray | None = None,
                exclude_id: str | None = None,
-               deadline: float | None = None) -> MatchResult:
+               deadline: float | None = None,
+               sims: np.ndarray | None = None) -> MatchResult:
         """``exclude_id`` 把该实例自己从库里摘掉再比（2026-08-25 加）。
 
         字位一旦进过库，重跑 seed / 复裁时它自己就在 matcher 里，于是
@@ -410,15 +424,10 @@ class GlyphMatcher:
         """
         if not self._ids:
             return MatchResult("diff", None, None, 0.0, 0.0)
-        if feat is None:
-            feat = self._feature.extract(norm[None, ...])[0]
-        # 性能（2026-09-14）：库有几万条时 `np.asarray(self._feats)` 每次要把整张特征表重新堆一遍
-        # （一页 179 字位 6.3s，占 Step5-a 43%）。堆一次缓存起来，`add()` 时失效；矩阵内容逐位相同。
-        F = getattr(self, "_F", None)          # getattr：测试里有绕过 __init__ 构造的 matcher
-        if F is None or F.shape[0] != len(self._feats):
-            F = np.asarray(self._feats)
-            self._F = F
-        sims = F @ np.asarray(feat, dtype=np.float32)
+        if sims is None:
+            if feat is None:
+                feat = self._feature.extract(norm[None, ...])[0]
+            sims = self.library_matrix() @ np.asarray(feat, dtype=np.float32)
         excl: set[int] = set()
         if exclude_id is not None:
             # 摘自身：把相似度压到最低，排序自然把它甩到末尾。

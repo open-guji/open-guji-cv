@@ -114,3 +114,24 @@ def test_borrowed_human_not_counted_as_own(two, tmp_path):
     assert set(st.values()) == {"borrowed_human"}
     db.close()
     assert human_confirmed_counts(str(tmp_path / "m.db")) == {"以": 1, "令": 1}
+
+
+def test_rebuild_with_worker_pool_equals_single_process(tmp_path, monkeypatch):
+    """派生表示多进程先算、主进程按原顺序写（GUJI-647）：库里每张表与单进程重建逐行相同。"""
+    import sqlite3
+
+    from open_guji_cv.clustering import glyph_db as G
+    rows = [(f"b:1:{c}:{i}", "一二三口日"[i % 5]) for c in range(1, 4) for i in range(1, 9)]
+    st = _store(tmp_path, "st", "book-a", rows)
+
+    def dump(p):
+        c = sqlite3.connect(p)
+        names = [r[0] for r in c.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")]
+        return {t: c.execute(f"SELECT * FROM {t} ORDER BY rowid").fetchall() for t in names
+                if t != "sqlite_sequence"}
+    rebuild_from_store(st, tmp_path / "one.db", jobs=1)
+    monkeypatch.setattr(G, "_PARALLEL_MIN", 1)
+    rebuild_from_store(st, tmp_path / "pool.db", jobs=2)
+    a, b = dump(tmp_path / "one.db"), dump(tmp_path / "pool.db")
+    assert a["derived"] and len(a["derived"]) == 3 * len(rows)
+    assert a == b

@@ -232,6 +232,12 @@ EVALS: dict[str, EvalSpec] = {s.id: s for s in [
        needs=("products",),
        note="金标路径写死在脚本里（page-type/expected.json）；--book/--products 可选，"
            "不走注册表的位置参数机制；只读现成 cells 产物，不重跑管线"),
+    # 粗校基准（M9 D6-5，GUJI-669）：冻结的页＋标签，在快照上重跑 seed_admit（或从 --from 起），
+    # 报正文送审率与有标签格的错放；只跑现行代码时和分片 report.json 记的建库基线比。
+    _e("rough_bench", "rough-bench", pythonpath=True,
+       title="粗校基准（人审率／错放）", needs=("products", "heavy", "corpus"),
+       note="要工作区（GUJI_WORKSPACE：册配置、原图、glyph.db）和读令牌（快照包从 R2 取）；"
+            "专家改动用 --var B.yaml 跑，新增错放必须为 0。口径见 exp/rough_bench.py"),
     # 结构感知识别（2026-09-21 合并进来的那条线；补进注册表，`test_registry_covers_every_eval_script`
     # 钉的就是「scripts/eval_*.py 一个都不许漏登记」）
     _e("struct_rerank", "rare-char", arg_kind="none", out_flag="--json", pythonpath=True,

@@ -7,7 +7,8 @@ import argparse, json, random, sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv")
 from common import *
-from open_guji_cv.groups.ctx_l2 import build_batch, parse_output, merge_runs
+from open_guji_cv.groups.ctx_l2 import parse_output, merge_runs
+from open_guji_cv.groups.prompt_template import book_prompt_vars, build_batch_rendered as build_batch
 from open_guji_cv.groups.registry import GROUPS
 
 ap = argparse.ArgumentParser(); ap.add_argument("cmd"); ap.add_argument("group"); ap.add_argument("dir")
@@ -23,7 +24,7 @@ if a.cmd == "make":
     for i in range(0, len(rows), a.size):
         chunk = rows[i:i + a.size]; name = f"{g}_{i // a.size:02d}"
         cells = [dict(id=r["id"], left=window(r)[0], right=window(r)[1]) for r in chunk]
-        (D / f"{name}.txt").write_text(build_batch(prompt, cells), encoding="utf-8")
+        (D / f"{name}.txt").write_text(build_batch(prompt, cells, book_prompt_vars()), encoding="utf-8")
         man[name] = [c["id"] for c in cells]
     (D / f"{g}_manifest.json").write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
     print(g, len(rows), "格", len(man), "批")

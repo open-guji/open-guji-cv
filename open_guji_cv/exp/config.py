@@ -7,7 +7,7 @@ books: [vol05]
 snapshot: /path/to/products        # 含 <book>/<step>/ 的产物根（只读，快照或 `guji snapshot` 出来的目录）
 from: seed_admit                   # 第一个受影响的步；之前的步从快照复用
 to: seed_admit
-pages: all                         # 跑哪些页：all（快照里有上游的页）/ body / 页号表达式
+pages: all                         # 跑哪些页：all（快照里有上游的页）/ body / 页号表达式；也可按册 {vol05: "3-9", …}
 base:                              # 变体 A；省略 = 当前代码的默认参数
   params: {}
 variants:
@@ -60,7 +60,7 @@ class ExpConfig:
     from_step: str = "seed_admit"
     to_step: str = "seed_admit"
     pipeline: str = "keben_body_v2"
-    pages: str | list[int] = "all"
+    pages: str | list[int] | dict[str, str | list[int]] = "all"   # dict：按册给
     book_params: str = "keep"                  # keep / ignore：书 yaml 的 params: 算不算进基线
     match: str = "exact"                       # exact / semantic：放行字与标签字怎样算「对」
     snapshot: str | None = None

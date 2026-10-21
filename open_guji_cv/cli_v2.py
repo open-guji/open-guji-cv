@@ -89,7 +89,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
     只透传会影响这一步怎么跑的参数（页范围、force、stop-on-error、params、jobs、sample-db），
     不透传 `--json`／`--wait`（锁由父进程持有，见 `_run_steps_isolated`）。"""
     argv = [sys.executable, "-m", "open_guji_cv", "step", sid, args.book,
-            "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace]
+            "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace,
+            "--no-isolate-steps"]
     if args.force:
         argv.append("--force")
     if args.stop_on_error:
@@ -114,20 +115,50 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     闸跟着它挂的 Step 在子进程里自动跑（与 `Engine.run` 同一规矩）。
     步序、产物落点、指纹都与单进程一致——这里只改「进程怎么切」，不碰任何 Step。
     父进程持有书级跑批锁，子进程设 `GUJI_NO_RUN_LOCK=1` 免得自己抢自己；子进程不再进批处理切片
-    （父进程已经在里面，cgroup 随子进程继承）。返回码：第一个失败子进程的返回码，全过 0。"""
+    （父进程已经在里面，cgroup 随子进程继承）。
+
+    返回码：第一个非零的子进程返回码，全过 0；**遇到非零就停**（2026-10-20 起隔离是缺省）。子进程
+    只在两种情况下非零：`--stop-on-error` 且有页失败，或者整步崩了（异常、护栏拒跑）——后者以前不加
+    `--stop-on-error` 时会被吞掉、接着用缺了的上游跑下游，最后返回 0；单进程连跑时同样的崩溃是直接抛出。"""
     import os
+    import signal
     import subprocess
     ws = os.environ["GUJI_WORKSPACE"]
     env = {**os.environ, "GUJI_NO_RUN_LOCK": "1", "GUJI_NO_BATCH_SLICE": "1"}
+    cur: dict = {"p": None}
+
+    def _forward(signum, _frame):
+        # 控制台取消工单只 terminate 父进程（console/jobs.py）：转给正在跑的那一步，别留孤儿接着写产物。
+        # 这里不能 wait：主线程正卡在同一个 Popen.wait 里，它的锁不可重入，会死锁；等子进程收尾放在 finally
+        p = cur["p"]
+        if p is not None and p.poll() is None:
+            p.send_signal(signum)
+        raise SystemExit(128 + signum)
+    try:
+        old = signal.signal(signal.SIGTERM, _forward)
+    except ValueError:                    # 不在主线程（嵌在别的程序里调）：不接管信号
+        old = None
     rc = 0
-    for i, sid in enumerate(steps, 1):
-        print(f"── [{i}/{len(steps)}] {sid}（独立子进程）", flush=True)
-        r = subprocess.run(isolated_step_argv(args, sid, ws), env=env)
-        if r.returncode != 0:
-            rc = rc or r.returncode
-            if args.stop_on_error:
-                print(f"✗ {sid} 返回码 {r.returncode}，--stop-on-error 停", file=sys.stderr)
+    try:
+        for i, sid in enumerate(steps, 1):
+            print(f"── [{i}/{len(steps)}] {sid}（独立子进程）", flush=True)
+            cur["p"] = subprocess.Popen(isolated_step_argv(args, sid, ws), env=env)
+            code = cur["p"].wait()
+            cur["p"] = None
+            if code != 0:
+                rc = code
+                print(f"✗ {sid} 返回码 {code}，后面的步不跑了", file=sys.stderr)
                 break
+    finally:
+        if old is not None:
+            signal.signal(signal.SIGTERM, old)
+        p = cur["p"]
+        if p is not None:                 # 被信号打断：等转过去的信号让这一步停下，停不下来就杀
+            try:
+                p.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                p.kill()
+                p.wait()
     return rc
 
 
@@ -160,10 +191,13 @@ def cmd_pipeline(args) -> None:
         _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
-    if getattr(args, "isolate_steps", False):
-        if getattr(args, "json", False):
-            print("✗ --isolate-steps 不支持 --json（每步一个子进程，没有合并报告）", file=sys.stderr)
-            sys.exit(2)
+    isolate = getattr(args, "isolate_steps", None)
+    if isolate and getattr(args, "json", False):
+        print("✗ --isolate-steps 不支持 --json（每步一个子进程，没有合并报告）", file=sys.stderr)
+        sys.exit(2)
+    if isolate is None:          # 缺省：多于一步、不要 JSON 报告时每步一个子进程（GUJI-647）
+        isolate = len(steps) > 1 and not getattr(args, "json", False)
+    if isolate:
         try:
             with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
                 rc = _run_steps_isolated(args, steps)
@@ -171,7 +205,7 @@ def cmd_pipeline(args) -> None:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(3)
         _print_unpacked(eng.book.id, eng.store)
-        sys.exit(1 if rc and args.stop_on_error else 0)
+        sys.exit(rc)
     try:
         with book_run_lock(eng.book.id, wait=getattr(args, "wait", False)):
             rep = eng.run(steps=steps, pages=pages, force=args.force, stop_on_error=args.stop_on_error,
@@ -820,7 +854,8 @@ def cmd_cache(args) -> None:
         from .core.pipeline import default_pipeline_id
         pid = args.pipeline or default_pipeline_id(load_book(args.book))
         eng = _engine(args.book, pid, quiet=True)
-        res = verify_book(eng, eng.book.resolve_pages(args.pages), fix=args.fix)
+        res = verify_book(eng, eng.book.resolve_pages(args.pages), fix=args.fix,
+                          full=getattr(args, "full", False))
         main_print(res)
         sys.exit(1 if res["bad_columns"] and not args.fix else 0)
     elif args.action == "build-rare-index":
@@ -2015,6 +2050,58 @@ def cmd_corpus(args) -> None:
     if not ws.is_dir():
         print(f"✗ 工作区 {ws} 不存在", file=sys.stderr)
         sys.exit(2)
+    if args.action == "pin":                          # 册的钉子账：追加一行总号（分层版本）
+        from .core.corpus_pin import append_pin
+        if not args.vol:
+            print("✗ pin 要给 --vol <册 id>", file=sys.stderr)
+            sys.exit(2)
+        kw = {k: v for k, v in (("global_ver", args.global_ver), ("book_ver", args.book_ver),
+                                ("vol_ver", args.vol_ver)) if v is not None}
+        try:
+            row = append_pin(ws, args.vol, from_n=args.from_n, note=args.note, dev=args.dev, **kw)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        tail = "，再加 corpus_dev: true（开发中，发版用 guji corpus release）" if args.dev else ""
+        print(f"✓ 已追加钉子账；册 yaml 改成 corpus: {row['n']}{tail}（本命令不改册 yaml、不推中心库）")
+        return
+    if args.action in ("upload", "fetch"):            # 大文件（≥1MB）进／出 R2，清单只记哈希
+        from .core.corpus_pin import load_pins
+        v = args.version
+        if not v and args.vol:
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (cp.versions(ws) or [0])[-1]
+        try:
+            res = (cp.upload_blobs(ws, v, args.vol, execute=args.execute) if args.action == "upload"
+                   else cp.fetch_blobs(ws, v, args.vol))
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(res)
+        return
+    if args.action == "release":                      # 开发中的总号发版：三层清单齐了才放行
+        from .core.corpus_pin import release_pin
+        if not args.vol or not args.version:
+            print("✗ release 要给 --vol <册 id> 和 --version <总号>", file=sys.stderr)
+            sys.exit(2)
+        try:
+            row = release_pin(ws, args.vol, args.version)
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(row)
+        print("✓ 已发版；册 yaml 去掉 corpus_dev: true，再 guji corpus verify --vol 确认干净")
+        return
+    if args.action == "build" and args.vol:           # 册层清单
+        try:
+            out = cp.build_vol(ws, args.vol, args.note)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        print(f"✓ 已写 {out}（接着 guji corpus pin --vol {args.vol} --vol-ver N 记进钉子账）")
+        return
     if args.action in ("build", "init"):
         base = args.base
         if args.action == "init":                     # 新书：钉最新底库出 v1（两级清单）
@@ -2035,9 +2122,14 @@ def cmd_corpus(args) -> None:
         print(f"✓ 已写 {out}（迁过的工作区接着 guji db push -w {ws}）")
     elif args.action == "verify":
         vs = cp.versions(ws)
-        v = args.version or (vs[-1] if vs else 0)
+        v = args.version
+        if not v and args.vol:                        # 册：总号缺省取钉子账最新一行
+            from .core.corpus_pin import load_pins
+            rows = load_pins(ws, args.vol)
+            v = rows[-1]["n"] if rows else None
+        v = v or (vs[-1] if vs else 0)
         try:
-            r = cp.verify(ws, v)
+            r = cp.verify(ws, v, args.vol)
         except FileNotFoundError as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(1)
@@ -2611,10 +2703,11 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "混跑一条 pipeline 时不用分开调。别超过 CPU 数——超订只会更慢，"
                         "有一次性初始化（模型/字形库）的 Step 并行时这部分开销按进程数摊，"
                         "不是按页摊，进程数越多单个 worker 越快建好摊得越薄，但仍不该超核数")
-    p.add_argument("--isolate-steps", action="store_true",
-                   help="每个 Step 一个独立子进程跑（默认关，行为不变）：跑完进程退出、内存整体回收。"
-                        "整册跑、服务器有内存上限（MemoryHigh）时用它，免得 torch／字形库／索引逐步叠加把"
-                        "进程拖进换页（GUJI-555）。代价是每步多付一次 import 与模型加载；不支持 --json")
+    p.add_argument("--isolate-steps", action=argparse.BooleanOptionalAction, default=None,
+                   help="每个 Step 一个独立子进程跑：跑完进程退出、内存整体回收，免得 torch／字形库／索引／"
+                        "语言模型逐步叠在一个进程里（GUJI-555；殿本 vol06 单进程连跑到 seed_admit 主进程 3.5 GB）。"
+                        "2026-10-20 起 `guji pipeline` 跑多于一步、不要 --json 时缺省就隔离（GUJI-647），"
+                        "代价是每步多付一次 import 与模型加载；--no-isolate-steps 退回单进程连跑。不支持 --json")
     p.add_argument("--allow-cv-mismatch", action="store_true",
                    help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
                         "做实验、临时核对时用，产物 manifest 照实记装的版本")
@@ -2986,6 +3079,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pipeline", default=None, help="verify：管线 id，缺省按册")
     p.add_argument("--pages", default="all", help="verify / warm：页表达式，缺省 all")
     p.add_argument("--fix", action="store_true", help="verify：把错位页的字块/列图缓存清掉，惰性重建")
+    p.add_argument("--full", action="store_true",
+                   help="verify：连戳与现行产物对得上的页也逐列渲染比对（缺省免查这些页，见 ops/cache_verify.py）")
     p.add_argument("--limit-gb", type=float, default=None)
     p.add_argument("--book", default="")
     p.add_argument("--jobs", type=int, default=1,
@@ -3130,13 +3225,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--comp", action="append", default=[], help="IDS 兜底：任意位置含此部件（可重复）")
 
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
-                                      "build-base 出底库／init 新书钉最新底库")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init"])
+                                      "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release", "upload", "fetch"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,
                    help="build／init：两级清单，引擎仓文件归底库（latest 或底库号）；不给 build 出单级清单")
     p.add_argument("--dry-run", action="store_true", help="build-base：只算不推")
+    p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
+    p.add_argument("--dev", action="store_true", help="pin：开发中的总号（各层版本可以指向还没出的清单；发版用 release）")
+    p.add_argument("--execute", action="store_true", help="upload：真传 R2（缺省只演练；要 GUJI_DATA_TOKEN）")
+    p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
+    p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
+    p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
+    p.add_argument("--vol-ver", type=int, default=None, help="pin：册层版本")
     p.add_argument("-w", "--workspace", default=None, help="工作区目录（清单落在 <工作区>/corpus-pack/vN/）")
 
     p = sub.add_parser("glyphlib", help="[v2] 共享刻例库：build 从一本书精选刻例出新版本（--push 推进中心库）")

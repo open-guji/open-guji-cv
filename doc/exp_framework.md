@@ -73,7 +73,7 @@ seed: 0
 
 | `source` | 读哪里 | 缺省 `selection` |
 |---|---|---|
-| `human_events` | `<feedback>/events/<book>-*.jsonl`，`actor=user` 的 seed_admit 格级 confirm/verdict，每格取最新 | 批名带抽检标记（`audit` 等，同 `eval_step7_replay.py`）→ `random`，其余 `picked` |
+| `human_events` | `<feedback>/events/*.jsonl` 里 `target.book` 是本册的（H 道批名不带册前缀），`actor=user` 的 seed_admit 格级 confirm/verdict，每格取最新 | 批名带抽检标记（`audit` 等，同 `eval_step7_replay.py`）→ `random`，其余 `picked` |
 | `vision` | `看图结论.jsonl`（`feedback/vision.py` 的格式）| `picked` |
 | `gold` | 金标分片 `items.jsonl`（`anchor` 定格，`expected.char`）| 带 `stratum` → `picked`，否则 `random` |
 
@@ -157,6 +157,26 @@ guji exp sample <实验名> estimate -w $WS  # → sample/estimate.md
 - **同意层简单随机抽**，标签记 `selection=random`、`stratum=agree`、`weight` = 层格数 ÷ 抽中格数。
 - 估计表**不套线上的「异体弃权」**：按口径 A，异体码位放行算错，正是要量的东西。
 - 随机层只抽几十格时区间很宽（0 错时 95% 上界约 3/n），报告里照实写。要把全册错误率估准，需要几百上千格随机标签。
+
+## 六·二、粗校基准（M9 D6-5，GUJI-669）
+
+专家的改动进 rc 之前，先在一份**冻结的**页与标签上量两个数：正文送审率变了多少；有标签的格里**新增错放**（基线对、变体错）有几格，必须为 0。设计见 `doc/design/M9-平台粗校-调研与总设计.md` D6 第 5 条，代码在 `open_guji_cv/exp/rough_bench.py`。
+
+```bash
+# 跑（现行代码对建库基线；要工作区与读令牌，快照包缺了自动从 R2 取到 <实验根>/_snapshot/）
+python scripts/eval_rough_bench.py ../open-guji-dataset/rough-bench -w $WS --jobs 2
+guji eval run rough_bench                          # 同上，走评测注册表
+# 专家改动：变体 yaml 同 guji exp（params: {seed_admit: {…}}）；改切分的从更早的步起
+python scripts/eval_rough_bench.py ../open-guji-dataset/rough-bench -w $WS --var B.yaml [--from row_segment]
+# 重建一版（新的人裁要进基准时）
+python scripts/rough_bench.py build --snapshot <各册 main 包取回的产物根>
+```
+
+- **基准**是测试集仓的 `rough-bench/`：`bench.yaml`（册、每册冻结的页、快照包标签、判准）、`items.jsonl`（冻结的标签，金标信封）、`report.json`（建库时现行代码的基线数）。
+- **页**：每册正文页里，标签分最高的 16 页（人裁一格 3 分、看图一格 1 分）加其余正文页里按种子随机的 12 页。
+- **标签**：人裁按绑定表对到快照的切分，`valid`／`rebound` 才收（只按锚框几何）；看图结论只收「快照这一格的现行字＝当时显示的字」的。批注 `[S8]` 开头的是出口随机抽样，记 `random`，其余都是 `picked`，只报计数。
+- 跑法就是 `guji exp`：快照里 `from` 之前的步硬链接当上游，评测口径照旧关掉 `use_human_verdicts`（不拿人裁考它自己）。有变体时另出完整的 `guji exp` 报告。`pages` 可以按册给（`{vol05: [3, 9], …}`），基准就是这样传页的。
+- 基准冻结后不跟着中心库变。新人裁要进基准就重建一版；旧版的数照旧可比。
 
 ## 七、已知限制
 
