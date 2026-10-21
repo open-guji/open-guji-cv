@@ -637,20 +637,96 @@ class SyncConflict(RuntimeError):
 APPEND_ONLY = {t for t, spec in TABLES.items() if spec.append_only}
 
 
-def _merge_append(local: bytes, remote: bytes) -> bytes | None:
-    """两边都只在共同前缀后面追加了行 → 前缀＋库里的新行＋本地的新行（本地与库里相同的行不重复）。
-
-    不知道基准内容，共同前缀就当基准：若有一边其实改了前缀里的行，合出来的文件会少那一边的旧行，
-    推的时候只追加台账少行会被导入器拒掉（``DeleteRefused``），不会悄悄丢数据。"""
+def _split_append(local: bytes, remote: bytes) -> tuple[list[str], list[str], list[str]]:
+    """共同前缀、库里在前缀后的新行、本地在前缀后的新行（与库里相同的行不重复）。"""
     lo, re_ = local.decode("utf-8").splitlines(), remote.decode("utf-8").splitlines()
     n = 0
     while n < min(len(lo), len(re_)) and lo[n] == re_[n]:
         n += 1
     tail_r = re_[n:]
     seen = set(tail_r)
-    tail_l = [x for x in lo[n:] if x not in seen]
-    merged = lo[:n] + tail_r + tail_l
-    return ("\n".join(merged) + "\n").encode("utf-8") if merged else b""
+    return lo[:n], tail_r, [x for x in lo[n:] if x not in seen]
+
+
+def _join(lines: list[str]) -> bytes:
+    return ("\n".join(lines) + "\n").encode("utf-8") if lines else b""
+
+
+def _merge_append(local: bytes, remote: bytes) -> bytes | None:
+    """两边都只在共同前缀后面追加了行 → 前缀＋库里的新行＋本地的新行（本地与库里相同的行不重复）。
+
+    不知道基准内容，共同前缀就当基准：若有一边其实改了前缀里的行，合出来的文件会少那一边的旧行，
+    推的时候只追加台账少行会被导入器拒掉（``DeleteRefused``），不会悄悄丢数据。"""
+    head, tail_r, tail_l = _split_append(local, remote)
+    return _join(head + tail_r + tail_l)
+
+
+def _merge_events(local: bytes, remote: bytes) -> tuple[bytes, dict[str, str]]:
+    """人裁事件文件的合并（规范 §9 F-6）：同 ``_merge_append``，再给本地新行里与库里撞号的重新编号。
+
+    两台机器往同一批次追加时各自从同一个 ``seq`` 往后编，合出来同一 ``id`` 两行内容不同：记账互相遮挡、
+    库主键 ``(ws, src_path, id)`` 冲突。库里的行已经推出去了、别的机器可能已消费，所以只动本地的：
+    顺延到该批次合并后的下一个空 ``seq``，与 ``EventLog.append`` 撞号顺延同一语义。
+    返回（合并后的字节，旧 id → 新 id）。"""
+    head, tail_r, tail_l = _split_append(local, remote)
+    rows = [json.loads(x) for x in head + tail_r if x.strip()]
+    taken = {r.get("id") for r in rows}
+    top: dict[str, int] = {}
+    for r in rows:
+        if isinstance(r.get("seq"), int):
+            top[r.get("batch")] = max(top.get(r.get("batch"), 0), r["seq"])
+    renamed: dict[str, str] = {}
+    out_l = []
+    for x in tail_l:
+        if not x.strip():
+            continue
+        d = json.loads(x)
+        b = d.get("batch")
+        if d.get("id") in taken and isinstance(d.get("seq"), int):
+            s = top.get(b, 0) + 1
+            new = f"evt_{b}_{s:06d}"
+            renamed[d["id"]] = new
+            d["id"], d["seq"] = new, s
+            x = json.dumps(d, ensure_ascii=False, sort_keys=True)
+        if isinstance(d.get("seq"), int):
+            top[b] = max(top.get(b, 0), d["seq"])
+        taken.add(d.get("id"))
+        out_l.append(x)
+    return _join(head + tail_r + out_l), renamed
+
+
+def _rename_ids(text: str, renamed: dict[str, str]) -> str:
+    for old, new in renamed.items():
+        text = text.replace(f'"{old}"', f'"{new}"')
+    return text
+
+
+def _apply_renames(renamed: dict[str, str], *, merged: dict[str, bytes], local_only: dict[str, Path],
+                   remote: dict[str, bytes]) -> list[str]:
+    """本地事件改了 id → 本地写的记账、补锚、金标里引用它的地方跟着改（只改本地新写的行）。
+
+    ``merged``：两边都改了的只追加台账，按库里的字节切出本地新行再改；``local_only``：只有本地改了的文件，
+    基准之后的新 id 只可能是本地写的，整文件改。"""
+    if not renamed:
+        return []
+    touched = []
+    for rel, b in list(merged.items()):
+        if classify(rel) == "events" or rel not in remote:
+            continue
+        head, tail_r, tail_l = _split_append(b, remote[rel])
+        nl = [_rename_ids(x, renamed) for x in tail_l]
+        if nl != tail_l:
+            merged[rel] = _join(head + tail_r + nl)
+            touched.append(rel)
+    for rel, path in local_only.items():
+        if classify(rel) == "events" or not path.exists() or path.suffix not in (".jsonl", ".json"):
+            continue
+        t = path.read_text(encoding="utf-8")
+        nt = _rename_ids(t, renamed)
+        if nt != t:
+            path.write_text(nt, encoding="utf-8")
+            touched.append(rel)
+    return sorted(touched)
 
 
 def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str = "main",
@@ -696,12 +772,17 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     theirs = set(_diff(base, remote))
     both = sorted(mine & theirs)
     merged: dict[str, bytes] = {}
+    renamed: dict[str, str] = {}
     conflicts = []
     for rel in both:
         lp = (ws_dir if rel == WS_YAML else data) / rel
         rp = tmp / rel
         if local.get(rel) == remote.get(rel):
             continue                                       # 两边改成一样
+        if classify(rel) == "events" and lp.exists() and rp.exists():
+            merged[rel], ren = _merge_events(lp.read_bytes(), rp.read_bytes())
+            renamed.update(ren)
+            continue
         if classify(rel) in APPEND_ONLY and lp.exists() and rp.exists():
             m = _merge_append(lp.read_bytes(), rp.read_bytes())
             if m is not None:
@@ -713,6 +794,8 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
         raise SyncConflict(f"这些文件本地和库里都改了，合不了（如 {conflicts[:5]}）；"
                            f"要库里的：guji db pull --force；要本地的：手工合进去再推")
     out.update(remote_changes=sorted(theirs), merged=sorted(merged), rev_remote=rev)
+    if renamed:
+        out["renumbered"] = renamed
     if dry_run:
         shutil.rmtree(tmp, ignore_errors=True)
         return {**out, "action": "merge (dry-run)"}
@@ -733,6 +816,10 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
             if not q.exists():
                 q.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(p, q)
+    if renamed:                                            # 撞号重编：本地引用跟着改（规范 §9 F-6）
+        out["renamed_refs"] = _apply_renames(
+            renamed, merged=merged, remote={r: (tmp / r).read_bytes() for r in merged if (tmp / r).exists()},
+            local_only={r: data / r for r in sorted(mine - theirs) if r != WS_YAML})
     for rel, b in merged.items():
         (data / rel).write_bytes(b)
     shutil.rmtree(tmp, ignore_errors=True)

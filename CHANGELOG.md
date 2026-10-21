@@ -10,6 +10,7 @@
 - `scripts/zhengli/wave_report.py`（M9 D6-6，GUJI-670）：一波各册待审格按主成因码汇总，出成因分布、派单（按交给谁，列最常见的字对／字组码）、与上一波比的增减、粗校基准结果、下一波目标（`wave.json` + `wave.md`，贴 Jira）。只读产物。
 
 ### Changed
+- 人裁事件规范 §9 F-6／F-7／F-8（原 O-1／O-6／O-7）：`guji db sync` 合并同批次撞号时本地新行顺延重编、本地记账等引用跟着改；`guji db import` 导完自动对导入的事件 route（`--no-route` 关）；`guji events lint` 新增 `W-unconsumed`；刻例库升格记账改写到 `feedback/promote.jsonl`，`migrate_v1` 能把旧的挪过去。不动任何 Step 的 code_hash。
 - `guji exp`：`pages` 可以按册给（`{vol05: [3, 9], …}`）；`human_events` 标签读 `feedback/events/` 下全部文件、按 `target.book` 筛（原来只读 `<册>-*.jsonl`，H 道 `H-M7-…` 这类批名的人裁全漏了，vol04–10 只认出 1 条）；金标标签认 `expected.wrong`（只知道不是哪些字）。
 
 ## [0.5.1] - 2026-10-21
