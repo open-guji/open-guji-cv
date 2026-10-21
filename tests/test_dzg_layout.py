@@ -274,3 +274,22 @@ def test_in_seal_measures_cell_overlap_with_the_seal_box_in_page_coords():
     cell = lambda y0: C(x0=0, x1=100, y0=y0, y1=y0 + 100)
     assert f(cell(0)) and f(cell(50)) and not f(cell(110))     # 重叠 1、0.5、0.4
     assert _in_seal(None, mapper) is None and _in_seal((0, 0, 1, 1), None) is None
+
+
+def test_build_applies_layout_overrides(tmp_path):
+    """`layout_overrides.jsonl`：只盖写到的字段，其余沿用 daizhige；表里没有的列整行补进来。"""
+    dz = tmp_path / "corpus" / "daizhige"
+    dz.mkdir(parents=True)
+    rec = {"id": "0001-0010", "cols": [{"no": 0, "runs": [{"t": "text", "start": 2, "s": "甲乙"}]}]}
+    (dz / "0001.jsonl").write_text(json.dumps(rec, ensure_ascii=False) + "\n", encoding="utf-8")
+    pm = {"vol": "vol01", "page": 7, "kind": "text", "dzg_kind": "full", "dzg_id": "0001-0010", "side": 0}
+    (dz / "page_map.jsonl").write_text(json.dumps(pm) + "\n", encoding="utf-8")
+    ov = [{"vol": "vol01", "page": 7, "col": 1, "slots": [2, 3], "why": "图上从第 2 格起"},
+          {"vol": "vol01", "page": 7, "col": 2, "slots": [-1, 1], "raised": 1, "why": "抬一格"},
+          {"vol": "vol02", "page": 1, "col": 1, "slots": [1]}]
+    (dz / "layout_overrides.jsonl").write_text(
+        "".join(json.dumps(o, ensure_ascii=False) + "\n" for o in ov), encoding="utf-8")
+    rows = dl.build(tmp_path, {"vol01"})
+    assert [(r["col"], r["slots"], r["raised"], r["dzg"]) for r in rows] == [
+        (1, [2, 3], 0, "0001-0010h0"), (2, [-1, 1], 1, "override")]
+    assert "why" not in rows[0]
