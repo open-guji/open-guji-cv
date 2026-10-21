@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- `guji cellvotes draft|write`（`feedback/web_votes.py`、`cli_cellvotes.py`）：网站精校页投票直接转人裁事件草稿。取票（数据目录快照／`--from-kv` 管理读／文件）→ 去测试票、同格同来源留最新 → 六档映射（与 ai-team `web_opinions.py` 同口径）→ 对正式库最新人裁（一致的跳过、要推翻的挂起）→ 对格位（现行 `cell_shrink` 对出单版 book-text `cord.json`，列被重切过的挂起）→ 「无字」缺省挂起；`write` 走控制台同一条写入路径（带锚、消费、按草稿内容判重）。殿本 vol04 004-r3 的 31 票回放：可写 19、格位对不上 6、无字 6，与 10-21 手工核对一致。不动 Step 模块，各书产物不过期。
+
 ## [0.5.4] - 测试中
 
 PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`（1.3）、`row_segment`（1.26、1.27）、`column_gate` 与形近字组 `group_flow` 的 `code_hash` 变，**各书 Step1 起全部判过期**。
@@ -16,7 +19,6 @@ PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`�
 - `glyphdb_admit` 取图前查绑定（规范 §9 F-10）：补消费积压时重切后格号顺移的按现格取字块，绑定判不该采信的不进库（计 `unbound`）。实时消费不受影响；不在任何 Step 的 `code_deps` 里，各书产物不过期。
 
 ### Added
-- `guji cellvotes draft|write`（`feedback/web_votes.py`、`cli_cellvotes.py`）：网站精校页投票直接转人裁事件草稿。取票（数据目录快照／`--from-kv` 管理读／文件）→ 去测试票、同格同来源留最新 → 六档映射（与 ai-team `web_opinions.py` 同口径）→ 对正式库最新人裁（一致的跳过、要推翻的挂起）→ 对格位（现行 `cell_shrink` 对出单版 book-text `cord.json`，列被重切过的挂起）→ 「无字」缺省挂起；`write` 走控制台同一条写入路径（带锚、消费、按草稿内容判重）。殿本 vol04 004-r3 的 31 票回放：可写 19、格位对不上 6、无字 6，与 10-21 手工核对一致。不动 Step 模块，各书产物不过期。
 - `feedback/migrate_dedupe.py`：删整轮重发的人裁事件副本（规范 §9 M-3，原 O-8），记账、补锚档、金标 `source_events` 跟着改，带核对与 `gold rebuild` 比对；10-21 已写中心库（殿本 3,638 条、北行 76 条）。不动 Step 模块，各书产物不过期。
 
 ### Changed
