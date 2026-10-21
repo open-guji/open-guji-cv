@@ -12,10 +12,13 @@
 
     char   → confirm v=confirm shape=<字>
     cut    → confirm v=seg_defect quality=truncated（给了字就带 shape）
-    jiazhu → confirm v=seg_defect reason=jiazhu_as_main
-    main   → confirm v=seg_defect reason=main_as_jiazhu
+    jiazhu → confirm v=seg_defect reason=jiazhu_as_main（给了字就带 shape）
+    main   → confirm v=seg_defect reason=main_as_jiazhu（给了字就带 shape）
     none   → confirm v=not_a_char —— **缺省挂起**：排除名单只增不删、不带锚（M10 调研 B 的 P6），要落加 include_none
     unsure → 不写
+
+网站 10-21 起四档都能同时带一个字（用户：切分错了也先把字给上，格子先过、切分另修）。cut／jiazhu／main 带字照上
+带 shape；**none、unsure 带字自相矛盾（说没字／看不清又给了字），挂起交人看**。
 
 挂起（不写，交人看）的情形：同格意见不一致；要推翻已有人裁；格位对不上（现行 cv 重切过这一列，旧格号已不是那个字）；
 无字（缺省）。和已有人裁一致的直接跳过，不重写。
@@ -95,9 +98,9 @@ def payload_of(choice: str, char: str = "") -> dict | None:
     if choice == "cut":
         return {"v": "seg_defect", "quality": "truncated", **({"shape": char} if char else {})}
     if choice == "jiazhu":
-        return {"v": "seg_defect", "reason": "jiazhu_as_main"}
+        return {"v": "seg_defect", "reason": "jiazhu_as_main", **({"shape": char} if char else {})}
     if choice == "main":
-        return {"v": "seg_defect", "reason": "main_as_jiazhu"}
+        return {"v": "seg_defect", "reason": "main_as_jiazhu", **({"shape": char} if char else {})}
     if choice == "none":
         return {"v": "not_a_char"}
     return None
@@ -206,6 +209,11 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
         groups[v["a"]].append(v)
     for a in sorted(groups, key=cell_order):
         vs = groups[a]
+        guess = [v for v in vs if v["choice"] in ("none", "unsure") and v.get("char")]
+        if guess:
+            out.drafts.append(Draft(f"{cv_book}:{a}", a, {}, vs, held="说无字／看不清又给了字：" + "、".join(
+                sorted({f"{v['choice']}={v['char']}" for v in guess}))))
+            continue
         real = [v for v in vs if v["choice"] != "unsure"]
         if not real:
             out.skipped.append((a, f"只有「看不出」×{len(vs)}"))
