@@ -156,3 +156,34 @@ def test_first_import_logs_one_change_per_table(repo, conn, monkeypatch):
     c2 = _commit(repo, files, "c2")
     importer.import_commit(conn, repo, c2)
     assert conn.execute("SELECT count(*) FROM changes WHERE tbl = 'events'").fetchone()[0] == 2
+
+
+def test_import_only_paths_touches_just_those_files(repo, conn):
+    """``only_paths``：只差分点名的文件；扫描里没带的文件（如字形库、别的批次）库里原样不动。"""
+    from open_guji_cv.datastore.importer import import_commit, import_scans
+    from open_guji_cv.datastore.scope import scan_files
+    from open_guji_cv.datastore.verify import verify_commit
+
+    files = _base()
+    files["W/feedback/events/c.jsonl"] = (_line(id="evt_c_1", batch="c", seq=1, kind="confirm", actor="user",
+                                                payload={"v": "x"}, target={"book": "vol03"}, ts="t") + "\n").encode()
+    c1 = _commit(repo, files, "c1")
+    import_commit(conn, repo, c1)
+    # 只带 workspace.yaml 和改过的 b.jsonl、consumed：别的文件都不在扫描里
+    new_b = files["W/feedback/events/b.jsonl"].replace(b"evt_b_2", b"evt_b_000002")
+    sc = scan_files([("workspace.yaml", lambda: b"id: tws\n"),
+                     ("feedback/events/b.jsonl", lambda: new_b),
+                     ("feedback/consumed/glyphdb_admit.jsonl",
+                      lambda: (_line(event="evt_b_000001", ts="t", note="b") + "\n").encode())], "W")
+    rep = import_scans(conn, [sc], label="t", allow_delete=True,
+                       only_paths={"feedback/events/b.jsonl", "feedback/consumed/glyphdb_admit.jsonl"})
+    assert rep.per_table["events"] == {"rows": 2, "insert": 1, "update": 0, "delete": 1, "moved": 0}
+    assert rep.per_table["consumed"]["delete"] == 1 and rep.per_table["consumed"]["update"] == 1
+    assert sum(v.get("delete", 0) for t, v in rep.per_table.items() if t not in ("events", "consumed")) == 0
+    ids = {r[0] for r in conn.execute("SELECT id FROM events")}
+    assert ids == {"evt_b_1", "evt_b_000002", "evt_c_1"}
+    assert conn.execute("SELECT count(*) FROM glyph_instances").fetchone()[0] == 1
+    files["W/feedback/events/b.jsonl"] = new_b
+    files["W/feedback/consumed/glyphdb_admit.jsonl"] = (_line(event="evt_b_000001", ts="t", note="b") + "\n").encode()
+    c2 = _commit(repo, files, "c2")
+    assert verify_commit(conn, repo, c2)["ok"]               # 库里拼回来就是改后的提交

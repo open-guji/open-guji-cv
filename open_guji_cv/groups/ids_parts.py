@@ -107,3 +107,65 @@ def choose(part_gray: np.ndarray, templates: dict, min_margin: float = 0.0):
     ranked = sorted(scores.items(), key=lambda kv: -kv[1])
     margin = ranked[0][1] - ranked[1][1] if len(ranked) > 1 else ranked[0][1]
     return (ranked[0][0] if margin >= min_margin else None), margin, scores
+
+
+def hog(p: np.ndarray, cells: int = 4, bins: int = 8) -> np.ndarray:
+    """归一部件图 → 梯度方向直方图特征（cells×cells 格、无符号方向 bins 个，整体 L2 归一）。"""
+    p = np.asarray(p, np.float32)
+    gy, gx = np.gradient(p)
+    mag = np.hypot(gx, gy)
+    b = np.minimum(((np.arctan2(gy, gx) % np.pi) / np.pi * bins).astype(int), bins - 1)
+    n = p.shape[0] // cells
+    out = np.zeros((cells, cells, bins), np.float32)
+    for i in range(cells):
+        for j in range(cells):
+            sl = (slice(i * n, (i + 1) * n), slice(j * n, (j + 1) * n))
+            np.add.at(out[i, j], b[sl].ravel(), mag[sl].ravel())
+    f = out.ravel()
+    return f / (np.linalg.norm(f) + 1e-6)
+
+
+_HOG_CACHE: dict = {}
+
+
+def _ridge(templates: dict, names: tuple, lam: float, cells: int = 4):
+    """模板库 → 二类岭回归（目标 ±1）权重；按模板库对象缓存（库对象常驻内存，持引用保证 id 不复用）。"""
+    key = (id(templates), names, lam, cells)
+    hit = _HOG_CACHE.get(key)
+    if hit is not None and hit[0] is templates:
+        return hit[1]
+    xs, ts = [], []
+    for sign, n in zip((-1.0, 1.0), names):
+        for t in templates.get(n, ()):
+            xs.append(np.r_[hog(t, cells), 1.0]); ts.append(sign)
+    X = np.array(xs); reg = lam * np.eye(X.shape[1]); reg[-1, -1] = 0
+    w = np.linalg.solve(X.T @ X + reg, X.T @ np.array(ts))
+    _HOG_CACHE[key] = (templates, w)
+    return w
+
+
+def choose_hog(part_gray: np.ndarray, templates: dict, min_margin: float = 0.0, lam: float = 0.3, cells: int = 4):
+    """两类部件的线性判别：HOG 特征＋岭回归（模板就是训练集）。返回 `(best|None, |判别值|, {名: 判别值})`。
+    比 `choose` 的软 IoU 近邻更能区分笔画结构相近的部件（彝组中段 糸／分，留一错 5→1）。只支持恰好两类。"""
+    x = norm_part(part_gray)
+    names = tuple(sorted(n for n, ts in templates.items() if ts))
+    if x is None or len(names) != 2:
+        return None, 0.0, {}
+    d = float(np.r_[hog(x, cells), 1.0] @ _ridge(templates, names, lam, cells))
+    m = abs(d)
+    return (names[1] if d > 0 else names[0]) if m >= min_margin else None, m, {names[0]: -d, names[1]: d}
+
+
+def window_part(gray: np.ndarray, y0: float, y1: float, x0: float = 0.0, x1: float = 1.0) -> np.ndarray | None:
+    """整格墨迹外框内按比例取一块窗口（高 y0–y1、宽 x0–x1，均占外框的比例）→ 灰度图（同其他部件图，交 `norm_part`／`choose_hog`）。
+    不依赖自动缝：缝切歪时（如把上段笔画从中间切开）窗口仍稳定。无墨迹返回 None。"""
+    ink = ink_of(gray)
+    if not ink.any():
+        return None
+    ys, xs = np.where(ink)
+    t, l = ys.min(), xs.min()
+    h, w = ys.max() + 1 - t, xs.max() + 1 - l
+    sub = np.full(ink.shape, 255, np.uint8)
+    sl = (slice(t + int(y0 * h), t + int(y1 * h)), slice(l + int(x0 * w), l + int(x1 * w)))
+    sub[sl] = np.where(ink[sl], 0, 255)
+    return sub

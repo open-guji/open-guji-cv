@@ -38,3 +38,27 @@ def test_blank_part_abstains_and_min_margin_abstains():
 def test_norm_part_size():
     g = np.full((50, 30), 255, np.uint8); g[10:20, 5:25] = 0
     assert norm_part(g).shape == (32, 32)
+
+
+def test_choose_hog_two_classes():
+    from open_guji_cv.groups.ids_parts import choose_hog
+    rng = np.random.default_rng(0)
+
+    def blob(diag):
+        a = np.eye(32, dtype=np.float32) if diag else np.eye(32, dtype=np.float32)[::-1]
+        a = np.clip(a + np.roll(a, 1, 1), 0, 1)
+        return np.clip(a + rng.normal(0, 0.05, a.shape), 0, 1).astype(np.float32)
+
+    bank = {"撇": [blob(False) for _ in range(6)], "捺": [blob(True) for _ in range(6)]}
+    gray = (255 * (1 - blob(True))).astype(np.uint8)
+    best, m, _ = choose_hog(gray, bank, min_margin=0.1)
+    assert best == "捺" and m >= 0.1
+    assert choose_hog(gray, {"捺": bank["捺"]})[0] is None      # 不是两类
+
+
+def test_window_part_takes_fraction_of_ink_box():
+    from open_guji_cv.groups.ids_parts import window_part
+    g = np.full((40, 40), 255, np.uint8)
+    g[10:30, 10:30] = 0          # 外框 20×20
+    w = window_part(g, 0.0, 0.5, 0.0, 1.0)
+    assert (w < 128).sum() == 10 * 20 and window_part(np.full((9, 9), 255, np.uint8), 0, 1) is None

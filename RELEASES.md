@@ -56,6 +56,29 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.5.0
+
+对比 `v0.4.9`。用户 2026-10-20 定升 MINOR：切分 `layout_prior` 改了命中格位表各册的缺省输出，值得重跑。tag 经 ai-team 中转站打在 main 的发版合并提交上（annotated）。
+
+### Added
+- 字组呂吕、徵徴走在线 IDS 整字岭回归（`groups/ids_whole.py`）；要在册配置 `group_flow` 点名才生效。
+- 人裁事件规范 v1 与 `guji events lint`；人裁历史遗留一次规整工具 `feedback.migrate_v1`（中心库殿本、北行已迁）。
+- `scripts/check_release_tags.py`：核对每个发进 main 的版本都有 tag。
+
+### Changed
+- 切分 `row_segment` 1.23、`cell_shrink` 1.9：`layout_prior` 候选格网统一打分、列端表空格段记空、表认字格不判渣。殿本 vol04–10（第 4 页起 10,521 列）逐格 98.79% → 99.03%，修好 27 列、改坏 1 列。没有格位表的书逐字节不变。
+- 人裁「后到覆盖」一律按 `(ts, batch, seq)`：`gold rebuild` 等此前按批次名序的地方改为时间序。锚里切分产物 sha 改记 `anchor.cells_sha`。
+- 请审单自动填看图判错格；`zl.py` 新增 `db`、`pending`；`republish.py` 重发待审单。
+
+### Fixed
+- 语料库清单不再收字组提示词，改提示词不再让钉 corpus 的册 CorpusDrift 拒跑。
+- 并行限流按容器内存算，glyph_match 单进程登记 3.6 GB（修 4 进程 OOM）。
+
+### Removed
+- 无。
+
+影响：`row_segment`（d5f4ceedcfbd2d06 → 89ea9a967e3dd407）、`cell_shrink`（17162d9e3ed6047f → f9206af1e771f0e5）、`seed_admit`（3337e7b0b2dc43ec → c1cc30263b355ed5）三步 `code_hash` 变，其余 14 步不变；没冻结的册 Step3 起重算。组合验收：本版改缺省输出的只有 `layout_prior` 一项（单项 A/B 见 #322，即上面的 vol04–10 数字）；呂吕／徵徴要点名才开，人裁事件的改动不在任何 Step 的 `code_deps` 里，所以没有另做全关对全开的组合 A/B。全量测试 3632 过（2 条失败在 v0.4.9 上同样失败）。
+
 ## v0.4.0
 
 对比 `v0.3.5`（`34035c10`）。用户 2026-10-19 同意升 MINOR：609 改指纹，没冻结的册重算一次。只此一项，不涉及判决逻辑，组合 A/B 不适用（见下「影响」）。tag 由 Deploy 在 main 上打（annotated）。
