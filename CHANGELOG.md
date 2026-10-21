@@ -5,9 +5,10 @@
 
 ## [未发版]
 
-## [0.5.2] - 测试中
+## [0.5.2] - 2026-10-21
 
-PATCH（sheldon 10-21 定发）。配套语料库：殿本书库 v10＋全局层 b2（分层版本 P3），十册改钉 `corpus: 10`，`group_flow` 点名 `lv`、`zheng`。
+PATCH（sheldon 10-21 定发）。相对 v0.5.1 只有 `seed_admit` 的 `code_hash` 变（c1cc30263b355ed5 → e3566f98f5046f0d），其余 16 步不变。配套语料库（分层版本 P3 起）：全局层 b3（含 #332 的彝组模板库与 U-Net 权重）＋殿本书库 v10，十册钉子账 n=11、册 yaml 改钉 `corpus: 11`，`group_flow` 点名 `lv`、`zheng`（中心库 corpus-base rev 34273、siku-zongmu rev 34313）。**v0.5.1 配 `corpus: 9` 会因 `yi_560/ids_bank.json` 与 v9 清单不符被起跑校验拒跑**，各册重跑请用 v0.5.2。
+验收（rc 上）：殿本 vol05–07 共 141 页 seed_admit，对 v0.5.1＋语料库 v9，送审 205 → 205、逐格无变化；全量测试 3695 过、38 跳过，1 失败 1 错误在 dev 上同样存在（`test_pagetype_model::test_model_roundtrip_and_gate_abstain`、`test_datastore_expbranch` 缺 PG）。
 
 ### Changed
 - 彝组 `yi_560` 改走 U-Net 切三段（#332，`groups/ids_unet.py`，纯 numpy 推理，权重 `config/groups/yi_560/unet.npz` 1.0 MB；窗口法退为后备），模板库按 U-Net 切分重建。按册留出（超参也只在训练册选）82 格：79 对／2 弃权／1 错，窗口法同口径错 5。`seed_admit` 的 `code_hash` 变（38f5371fe3279014）。
