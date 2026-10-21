@@ -604,6 +604,10 @@ def st_audit(ctx):
     out = ctx.reports / "_export"
     sh(ctx, ctx.guji("export", "format", ctx.book, "-w", ctx.ws, "--out", out), check=False)  # 只为出 lines.md 给 jys 用
     sh(ctx, ctx.guji("audit", "jys", ctx.book, "-w", ctx.ws, "--export-dir", out), check=False)
+    sh(ctx, ctx.guji("audit", "reasons", ctx.book, "-w", ctx.ws), check=False)   # 待审格主成因码，派单用（GUJI-668）
+    base = os.environ.get("ZL_BASE_PRODUCTS")
+    if base:        # 换基线：放行变化的格必看图（GUJI-664），进联系页、看图闸
+        sh(ctx, ctx.guji("audit", "changes", ctx.book, "-w", ctx.ws, "--base", base))
 
 
 # ───────── S8 看图联系页 ─────────
@@ -720,6 +724,9 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     if not jf.exists():
         raise Stop(f"没有 {jf.name}：先跑 audit 步")
     rows = contact_rows(json.loads(jf.read_text(encoding="utf-8")))
+    have = {r["id"] for r in rows}
+    rows += [{"id": r["id"], "char": r["char"], "witness": {"上一基线": r["old"]} if r.get("old") else None, "ctx": None}
+             for r in admit_change_rows(ctx) if r["id"] not in have]
     outd = ctx.reports / "联系页"
     outd.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -754,7 +761,9 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
                 continue
             y0, y1 = contact_window([x.bbox_col for x in recs], pos, 1, height=img.shape[0])
             tiles.append(render_contact_tile(img, y0, y1, recs[pos].bbox_col, n, tag=jiazhu_side(sub) or ""))
-            e["ok"] = True
+            (outd / "tiles").mkdir(exist_ok=True)
+            cv2.imwrite(str(outd / "tiles" / f"{n:04d}.png"), tiles[-1])     # 单格图：交外部模型看（vision_ask.py）
+            e["ok"], e["tile"] = True, f"tiles/{n:04d}.png"
         except Exception as ex:  # noqa: BLE001  单格失败只标注，不拖垮整册
             e["why"] = f"{type(ex).__name__}: {ex}"
     sheets = []
@@ -767,11 +776,18 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     for k, e in enumerate(ok_entries):
         e["sheet_idx"] = k // per
     md = contact_md(ctx.book, entries, sheets)
+    (outd / "tiles.json").write_text(json.dumps(entries, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     mdp = outd / f"{ctx.book}.看图联系页.md"
     mdp.write_text(md, encoding="utf-8")
     ctx.log(f"联系页：{len(ok_entries)}/{len(rows)} 格成图，{len(sheets)} 页 → {outd}")
     check_contact(ctx, entries, mdp)
     return mdp
+
+
+def admit_change_rows(ctx) -> list[dict]:
+    """`audit changes` 出的放行变化格（没设 ZL_BASE_PRODUCTS 就没有）。"""
+    f = ctx.reports / f"{ctx.book}.放行变化.json"
+    return json.loads(f.read_text(encoding="utf-8")).get("rows", []) if f.exists() else []
 
 
 def st_contact(ctx):
@@ -790,6 +806,18 @@ def st_vision_gate(ctx):
             f"3. 结论写 `reports/{ctx.book}/看图结论.jsonl`（`ts` 要填；格式见 `open_guji_cv/feedback/vision.py`），再 `zl.py run --only vision-gate`。",
         ])
         raise Gate("等看图结论")
+    seen = set()
+    for line in jl.read_text(encoding="utf-8").splitlines():
+        try:
+            seen.add(json.loads(line).get("cell"))
+        except ValueError:
+            pass
+    left = [r["id"] for r in admit_change_rows(ctx) if r["id"] not in seen]
+    if left:        # 放行变化必看图：一格不落（GUJI-664）
+        write_next(ctx, f"放行变化还有 {len(left)} 格没看图", [
+            f"看 `reports/{ctx.book}/{ctx.book}.放行变化.md` 与联系页，把这些格的结论补进 `看图结论.jsonl`，再 `zl.py run --only vision-gate`：",
+            "", *[f"- `{x}`" for x in left[:200]]])
+        raise Gate(f"放行变化 {len(left)} 格没看图")
     sh(ctx, ctx.guji("events", "import-vision", jl, "--book", ctx.book, "--dry-run", "-w", ctx.ws))
     sh(ctx, ctx.guji("events", "import-vision", jl, "--book", ctx.book, "-w", ctx.ws))
 

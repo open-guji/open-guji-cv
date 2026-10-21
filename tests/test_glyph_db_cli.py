@@ -28,7 +28,7 @@ def capture_store(monkeypatch, tmp_path):
     """打桩 rebuild_from_store，只抓它实际收到的 store 路径，不真跑。"""
     seen = {}
 
-    def _fake_rebuild(store_dir, db_path):
+    def _fake_rebuild(store_dir, db_path, jobs=1):
         seen["store_dir"] = Path(store_dir)
         return {"instances": 0}
 
@@ -92,7 +92,7 @@ def test_absolute_store_overrides_workspace(monkeypatch, tmp_path, capture_store
 def capture_extras(monkeypatch, tmp_path):
     seen = {}
 
-    def _fake_rebuild(store_dir, db_path, extra_stores=()):
+    def _fake_rebuild(store_dir, db_path, extra_stores=(), jobs=1):
         seen["extras"] = [Path(x) for x in extra_stores]
         return {"instances": 0}
 

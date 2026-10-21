@@ -70,3 +70,78 @@ def test_stale_column_images_flags_shape_mismatch_only(tmp_path, monkeypatch):
     monkeypatch.setitem(STEPS, "column_warp", SimpleNamespace(render=lambda ctx, kind, key: renders[key]))
     eng = SimpleNamespace(cache=cache, book=SimpleNamespace(id="b"), ctx=None)
     assert cv.stale_column_images(eng, [1]) == {1: [2]}
+
+
+def test_lazy_put_does_not_stamp_a_page_that_already_holds_unstamped_legacy_files(tmp_path):
+    """戳是「这一页缓存可信」的凭据（verify 免查）：老缓存页补一张新图不能把整页老图一起洗白。"""
+    c = ImageCache(tmp_path)
+    c.put("b", "char_patch", "p0003c01s1", _img(10))                              # 老缓存：没戳
+    c.put("b", "char_patch", "p0003c01s2", _img(20), stamp="X")                   # 惰性补一张
+    assert c.page_stamp("b", "char_patch", "p0003c01s1") is None
+    c.put("b", "char_patch", "p0004c01s1", _img(20), stamp="X")                   # 空页照常记戳
+    c.put("b", "char_patch", "p0004c01s2", _img(20), stamp="X")
+    assert c.page_stamp("b", "char_patch", "p0004c01s1") == "X"
+    c.invalidate("b", "char_patch", key_prefix="p0003")                           # 清掉后重写：干净了，记戳
+    c.put("b", "char_patch", "p0003c01s1", _img(10), stamp="X")
+    assert c.page_stamp("b", "char_patch", "p0003c01s1") == "X"
+
+
+def _verify_eng(tmp_path, stamps, manifest_sha):
+    """verify_book 用的假引擎：p1 两列各 6 个字格；`stamps` 是缓存里记的戳，`manifest_sha` 是现行产物 sha。"""
+    from types import SimpleNamespace as NS
+    cache = ImageCache(tmp_path)
+    chars = [NS(cell_type="char", patch_key=f"p0001c01s{s}") for s in range(1, 7)]
+    for r in chars:
+        cache.put("b", "char_patch", r.patch_key, _img(10))
+    cache.put("b", "column_image", "p0001c01", _img(10))
+    for kind, st in stamps.items():
+        cache.set_page_stamp("b", kind, "p0001", st)
+    reads = []
+    store = NS(read=lambda *a: reads.append(a) or NS(columns=[NS(ok=True, col=1, chars=chars)]))
+    ctx = NS(cache_stamp=lambda kind, key: manifest_sha)
+    return NS(cache=cache, book=NS(id="b"), ctx=ctx, store=store), reads
+
+
+def test_verify_book_trusts_pages_whose_stamps_match_and_full_checks_them_anyway(tmp_path, monkeypatch):
+    from types import SimpleNamespace as NS
+    from open_guji_cv.core.step import STEPS
+    from open_guji_cv.ops import cache_verify as cv
+    rendered = []
+    fake = NS(render=lambda ctx, kind, key: rendered.append(key) or _img(10))
+    monkeypatch.setitem(STEPS, "cell_shrink", fake)
+    monkeypatch.setitem(STEPS, "column_warp", fake)
+    eng, reads = _verify_eng(tmp_path, {"char_patch": "S", "column_image": "S"}, "S")
+    res = cv.verify_book(eng, [1], log=lambda *_: None)
+    assert res["pages_trusted_by_stamp"] == {"char_patch": 1, "column_image": 1}
+    assert reads == [] and rendered == [] and res["bad_columns"] == 0
+    res = cv.verify_book(eng, [1], log=lambda *_: None, full=True)
+    assert res["pages_trusted_by_stamp"] == {"char_patch": 0, "column_image": 0}
+    assert reads and rendered and res["columns_checked"] == 1
+
+
+def test_verify_book_still_checks_pages_with_a_stale_or_missing_stamp(tmp_path, monkeypatch):
+    from types import SimpleNamespace as NS
+    from open_guji_cv.core.step import STEPS
+    from open_guji_cv.ops import cache_verify as cv
+    fake = NS(render=lambda ctx, kind, key: _img(10))
+    monkeypatch.setitem(STEPS, "cell_shrink", fake)
+    monkeypatch.setitem(STEPS, "column_warp", fake)
+    eng, reads = _verify_eng(tmp_path, {"char_patch": "OLD"}, "NEW")            # 字块戳过期、列图没戳
+    res = cv.verify_book(eng, [1], log=lambda *_: None)
+    assert res["pages_trusted_by_stamp"] == {"char_patch": 0, "column_image": 0}
+    assert reads and res["columns_checked"] == 1
+
+
+def test_cache_warm_does_not_stamp_pages_that_held_unstamped_legacy_files(tmp_path):
+    from types import SimpleNamespace as NS
+    from open_guji_cv.ops.cache_warm import _stamp_pass
+    cache = ImageCache(tmp_path)
+    cache.put("b", "char_patch", "p0001c01s1", _img(10))                          # 老缓存页
+    ctx = NS(cache=cache, book=NS(id="b"), producer=lambda kind: None,
+             cache_stamp=lambda kind, key: "CUR")
+    legacy = _stamp_pass(ctx, [1, 2], drop=True)
+    assert legacy == {("char_patch", "p0001")}
+    cache.put("b", "char_patch", "p0002c01s1", _img(10))                          # 预渲出来的（worker 不写戳）
+    _stamp_pass(ctx, [1, 2], drop=False, skip=legacy)
+    assert cache.page_stamp("b", "char_patch", "p0001c01s1") is None
+    assert cache.page_stamp("b", "char_patch", "p0002c01s1") == "CUR"

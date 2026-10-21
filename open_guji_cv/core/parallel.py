@@ -50,14 +50,18 @@ AUDITED: dict[str, ParallelAudit] = {
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=3.6,
-        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存，worker 各建一份（约 17 s）；"
+        mem_gb=1.5, warm_first=True,
+        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存；warm_first（2026-10-20 晚）：主进程先跑一页"
+             "把它建好，fork 后各 worker 共享，不再各建一份。库含字体域（约 17.4 万条，特征矩阵 1.2 GB）时这件事要紧："
+             "各建一份是每进程约 2 分钟、3.4–3.7 GB；匹配器特征另有盘上缓存（`seeding._matcher_arrays`，mmap 共享页缓存）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条，未导字体域）（2026-10-20）。"
              "按 runbook S6 导了 jigmo、iming 字体域（glyph.db 3.1 GB）后，vol06 实测单 worker 3.4–3.7 GB，"
-             "原登记 1 GB 让 4 进程在 14.3 GB 的容器里被 OOM 杀（M9 基线，GUJI-636），改登记 3.6 GB。"),
+             "原登记 1 GB 让 4 进程在 14.3 GB 的容器里被 OOM 杀（M9 基线，GUJI-636），曾改登记 3.6 GB。"
+             "warm_first 与特征缓存之后（GUJI-647）每个 worker 不再自建匹配器：vol06 冷启动主进程峰值 2.2 GB、"
+             "主进程加 4 个 worker 合计 PSS 2.6 GB，按 3.6 算 13 GB 的容器只开得出 2 个进程，改登记 1.5 GB 留余量。"),
     "rare_candidates": ParallelAudit(
         mem_gb=1.5, warm_first=True,
         note="审查（2026-10-20）：缓存都只按输入记忆（_emb_cache／_fwd_cache／_gw_cs 用 is 比对，_real_slots 按值），"
@@ -65,7 +69,7 @@ AUDITED: dict[str, ParallelAudit] = {
              "（`RareCandidatesStep.parallel_warm` 在主进程建，缺盘时只建一次）；跑批期间不改字形库、checkpoint、fonts、册 yaml。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 23.5 s，单进程 1.06 GB（2026-10-20）。"),
     "seed_admit": ParallelAudit(
-        mem_gb=3.0, warm_first=True,
+        mem_gb=2.0, warm_first=True,
         note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"
              "修掉的：font_candidates._row_norms 按 id 缓存拿错矩阵（串行也随页序变）；图块缓存、"
              "绑定缓存、字体索引改原子写（并发读到半个文件会整页失败或静默为空）。"
@@ -74,7 +78,11 @@ AUDITED: dict[str, ParallelAudit] = {
              "人裁匹配器、绑定表，fork 后共享；Windows（spawn）各进程自建，单进程峰值约 2.1 GB。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 82 s → 50 s，单进程峰值 2.1 GB；"
              "worker 里 cv2.setNumThreads 置空（cnn_candidates 模块顶层调它，fork 子进程里卡死过），"
-             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"),
+             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"
+             "内存登记 3.0 → 2.0 GB（2026-10-20 晚）：每步一个子进程后 vol06 主进程峰值 1.95 GB，主进程加 3 个 worker "
+             "合计 PSS 3.3 GB（fork 共享页）；按 3.0 算，15 GB 的机器只开得出 3 个进程，CPU 利用率 51%。"
+             "开了 shadow_veto 的册：影子模型的 OpenMP 要在 worker 里压线程（`engine._pin_threads`），不压时 vol09 每页约 700 s"
+             "（2026-10-21；vol09 20 页串行／4 进程产物逐页相同）。"),
 }
 
 
