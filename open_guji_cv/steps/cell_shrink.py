@@ -91,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.9", unit="cell",   # 1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.10", unit="cell",   # 1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
