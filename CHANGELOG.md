@@ -5,7 +5,9 @@
 
 ## [未发版]
 
-## [0.5.1] - 测试中
+## [0.5.1] - 2026-10-21
+
+PATCH（sheldon 10-21 定发）。相对 v0.5.0，17 步 `code_hash` 全部不变（rc 上与 v0.5.0 逐步比对）。
 
 ### Added
 - 语料库分层版本（#317，PATCH；**缺省不影响现有册**：没有钉子账的册，`corpus: N` 与指纹 `corpus-vN` 逐位不变，17 步 `code_hash` 不变）：语料库分全局（底库 b）／整套书（书库 v）／册 三层各一个整数版本；`guji corpus pin [--dev]`、`release`、`build/verify --vol`、`upload/fetch`；册有钉子账后指纹取清单内容哈希、不含版本号；册 yaml `corpus_dev: true` 开发中跳过清单校验（带它的册配置不许 `db push`）；≥1MB 的文本文件清单标 `store: r2`，内容按哈希存 R2。提示词模板占位符渲染 `groups/prompt_template.py`（不动 `ctx_l2`）。设计与 P3 迁移步骤见 `doc/design/语料库分层版本.md`。
