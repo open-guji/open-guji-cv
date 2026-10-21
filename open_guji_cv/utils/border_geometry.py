@@ -242,6 +242,41 @@ HR_WALL_MIN_FRAC = 0.40
 # 装饰墨迹当台阶"的唯一防线（`detect_head_raise` 文档串记过：不看墙线时
 # 9/14/142 三页的"上諭"全是假阳性）。0.40 是"两份金标都零误报"的下沿。
 HR_DEFAULT_PAIR_GAP = 38  # 外边框整条没印上时，按实测中位间距推
+#: 抬头块向邻列延伸（`detect_head_raise(extend=True)`，2026-10-21）：邻列在块的内边框高度 ±HR_CLUSTER_DY 里
+#: 有一条细锐线、墨占比 ≥ 此值（够不上 HR_THIN_INK_MIN，内边框印得淡、或被抬头字压着），就算同一个抬头框，
+#: 并进块里，再一起过墙线判据。殿本 vol04 p9 c8 0.18、vol09 p109 c5/c6 0.21/0.15；块外的普通列在这一高度是空白。
+HR_EXTEND_INK_MIN = 0.12
+#: 延伸还要这一列真有抬头字：框线下 HR_EXTEND_SKIP 行起到窗口下沿，墨占比 > 0.1 的行占到 HR_EXTEND_TEXT_ROWS 以上。
+#: 七册全部页：真抬头列 0.77~0.99；抬头框旁边的普通列（线只是邻框的延长）0.00~0.08
+HR_EXTEND_SKIP = 8
+HR_EXTEND_TEXT_ROWS = 0.5
+
+
+def _extend_head_raise(per_col: list, curves: list) -> None:
+    """已认下的抬头列向两侧邻列延伸（见 `detect_head_raise` 第 6 步），原地改 `per_col`。"""
+    changed = True
+    while changed:
+        changed = False
+        for i, c in enumerate(per_col):
+            if c is not None or curves[i] is None:
+                continue
+            refs = [per_col[j]["inner_y"] for j in (i - 1, i + 1) if 0 <= j < len(per_col) and per_col[j]]
+            if not refs:
+                continue
+            curve, lo, btop, xl, xr = curves[i]
+            best = None
+            for ci in local_maxima(curve, radius=3):
+                y, ink = float(lo + ci), float(curve[ci])
+                wd, _ = half_height_score_at(curve, ci)
+                if wd <= HR_THIN_WD_MAX and ink >= HR_EXTEND_INK_MIN \
+                        and min(abs(y - r) for r in refs) <= HR_CLUSTER_DY \
+                        and HR_DIST_MIN <= btop - y <= HR_DIST_MAX and (best is None or ink > best[1]):
+                    best = (y, ink)
+            below = curve[int(best[0] - lo) + HR_EXTEND_SKIP:] if best is not None else curve[:0]
+            if len(below) and float((below > 0.1).mean()) >= HR_EXTEND_TEXT_ROWS:
+                per_col[i] = dict(col=i + 1, inner_y=best[0], outer_y=best[0] - HR_DEFAULT_PAIR_GAP,
+                                  estimated=True, btop=btop, xl=xl, xr=xr)
+                changed = True
 
 
 def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float) -> float:
@@ -291,7 +326,7 @@ def _dedup_peaks(peaks: list[tuple[float, float, float]],
 
 
 def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
-                       width: int) -> list[HeadRaiseBorder]:
+                       width: int, extend: bool = True) -> list[HeadRaiseBorder]:
     """探测抬头框（某几列的版框整体向上抬起一截）。
 
     判据不是"边框上方有字凸出"——那条路走过，9/14/142 三页的"上諭"紧贴
@@ -311,10 +346,15 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     5. 相邻列 inner_y 差 ≤18px 的聚成一个**抬头块**，墙线只查块的最外
        两侧——连续抬头列共用一个抬头框，块内部的界行在抬头区继续延伸，
        不是墙（vol01/33 c7 在块中间，实测墙覆盖率只有 0.00~0.04）。
+    6. 聚块之前，已认下的列向两侧邻列延伸（`extend`，2026-10-21）——邻列在同一高度有淡一些的细锐线
+       （`HR_EXTEND_INK_MIN`）、线下有抬头字的墨（`HR_EXTEND_TEXT_ROWS`）就并进来，可以一列接一列延伸；
+       延伸出来的块照样过第 5 步的墙线判据。
+       管内边框印得淡、或被抬头字压着的列（殿本 vol04 p9 c8、vol09 p109 c5/c6：抬头字整个落在列图外）。
     """
     h, w = mask.shape
     binm = (mask > 0).astype(np.uint8)
     per_col: list[dict | None] = []
+    curves: list[tuple | None] = []
     for i in range(len(verticals) - 1):
         right_v, left_v = verticals[i], verticals[i + 1]
         x_old = lambda v, y: (width - 1) - v.x_at(y)  # noqa: E731
@@ -326,8 +366,10 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
         xr = int(min(w, max(x_old(right_v, ym), x_old(left_v, ym))))
         if xr - xl < 20 or hi <= lo:
             per_col.append(None)
+            curves.append(None)
             continue
         curve = binm[lo:hi, xl:xr].sum(axis=1).astype(np.float64) / (xr - xl)
+        curves.append((curve, lo, btop, xl, xr))
         thin: list[tuple[float, float, float]] = []
         fat: list[tuple[float, float, float]] = []
         for ci in local_maxima(curve, radius=3):
@@ -357,6 +399,8 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
                      else inner[0] - HR_DEFAULT_PAIR_GAP),
             estimated=estimated, btop=btop, xl=xl, xr=xr))
 
+    if extend:
+        _extend_head_raise(per_col, curves)
     blocks: list[list[dict]] = []
     cur: list[dict] = []
     for c in per_col + [None]:
@@ -1472,7 +1516,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     vline_polyline: bool = True,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
-                    frame_layers: dict | None = None) -> BorderDetectionResult:
+                    frame_layers: dict | None = None,
+                    head_raise_extend: bool = True) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1569,7 +1614,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             conv.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
                               yt_ + (yb_ - yt_) / 3.0, yt_ + 2.0 * (yb_ - yt_) / 3.0))
         verticals, vseg = conv, 3
-    head_raise = detect_head_raise(mask, top, verticals, w)
+    head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
                                  frame_layers=frame_layers)
