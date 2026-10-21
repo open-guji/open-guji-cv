@@ -271,10 +271,13 @@ class GlyphMatchParams(BaseModel):
     就用刻本库的结果，字体域不比：
     - 判 same、没触发护栏；
     - 判 unsure、没触发护栏、首选 cov ≥ `cov`、比次优**异字**高 ≥ `margin`（`cov: null` 关掉这一条）。
-    另外 `min_n` > 0 时，首选字在刻本库里不到 `min_n` 例的一律算弱。
-    `true` 或 `{}` 按缺省值开：`cov: 0.98, margin: 0.03, min_n: 0`（GUJI-726 的 T98，用户 10-21 定这个方向）。
-    vol06 实测 glyph_match 770 s → 454 s，约 4 成的查询仍查整库；**会改产物**：命中强的格不再看字体字形，
-    候选与个别格的判决会变（vol06 送审 173 → 175，放行字变 0）。数字见 GUJI-726。"""
+    另外 `min_n` > 0 时，首选字在刻本库里不到 `min_n` 例的一律算弱；`family: true`（缺省）时，首选字是
+    字组成员（`groups.registry.GROUPS`）或在形近护栏表里有对手（`clustering.match._PARTNER`）的也一律算弱——
+    这些字下游（字组流程、上下文）靠候选里的另一个码位来判，那个码位常常只在字体域里有：粗校基准上 T98
+    把 vol07:96:5:17「旣」放成了「既」（字体域的兼容码位「既」U+FA42 没进候选），vol05:7:4:21「二」放成了「一」。
+    这张字表的指纹开着时自动填进 `family_fp`，字表变了产物判过期。
+    `true` 或 `{}` 按缺省值开：`cov: 0.98, margin: 0.03, min_n: 0, family: true`（GUJI-726，用户 10-21 定 T98 方向）。
+    **会改产物**：命中强的格不再看字体字形，候选与个别格的判决会变。数字见 GUJI-726。"""
 
     @model_serializer(mode="wrap")
     def _drop_unset_near_shape(self, handler):
@@ -302,6 +305,11 @@ class GlyphMatchParams(BaseModel):
             object.__setattr__(self, "db_fingerprint", db_fingerprint(self.db_path))
         if not self.borrow_fingerprint:
             object.__setattr__(self, "borrow_fingerprint", borrow_fingerprint(self.db_path))
+        tier = _FontTier.rule(self.font_tier)
+        if tier is not None and tier["family"] and not tier["family_fp"]:
+            fp = hashlib.sha256("".join(sorted(_family_chars())).encode()).hexdigest()[:12]
+            object.__setattr__(self, "font_tier", {**(self.font_tier if isinstance(self.font_tier, dict) else {}),
+                                                   "family_fp": fp})
 
 
 def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
@@ -613,6 +621,19 @@ def _keben_subset(matcher):
     return sub
 
 
+_FAMILY: list = []
+
+
+def _family_chars() -> frozenset[str]:
+    """`font_tier.family` 拦的字：字组成员 ∪ 形近护栏表里有对手的字。"""
+    if not _FAMILY:
+        from ..clustering.match import _PARTNER
+        from ..groups.registry import GROUPS
+        _FAMILY.append(frozenset().union(*(g.members for g in GROUPS.values()))
+                       | frozenset(c for c, v in _PARTNER.items() if v))
+    return _FAMILY[0]
+
+
 class _FontTier:
     """`font_tier`：先查刻本库，命中弱再查整库（见 `GlyphMatchParams.font_tier`）。其余属性转给整库匹配器。"""
 
@@ -628,7 +649,7 @@ class _FontTier:
     def rule(cfg) -> dict | None:
         if cfg is None or cfg is False:
             return None
-        d = {"cov": 0.98, "margin": 0.03, "min_n": 0}
+        d = {"cov": 0.98, "margin": 0.03, "min_n": 0, "family": True, "family_fp": None}
         if isinstance(cfg, dict):
             unknown = set(cfg) - set(d)
             if unknown:
@@ -644,6 +665,8 @@ class _FontTier:
         if m.guard is not None or not m.candidates:
             return False
         top, cov = m.candidates[0]
+        if self._rule["family"] and top in _family_chars():
+            return False
         if self._rule["min_n"] > 0 and self._n_of.get(top, 0) < self._rule["min_n"]:
             return False
         if m.verdict == "same":

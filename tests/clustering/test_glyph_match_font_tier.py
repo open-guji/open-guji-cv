@@ -31,15 +31,17 @@ def test_font_tier_is_off_by_default_and_out_of_the_params_hash():
     off = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="")
     assert off.font_tier is None and "font_tier" not in off.model_dump(mode="json")
     assert "font_tier" not in off.model_copy(update={"font_tier": False}).model_dump(mode="json")
-    on = off.model_copy(update={"font_tier": {"cov": 0.99}})
-    assert on.model_dump(mode="json")["font_tier"] == {"cov": 0.99}
+    on = GlyphMatchParams(db_path="x.db", db_fingerprint="f", borrow_fingerprint="", font_tier={"cov": 0.99})
+    d = on.model_dump(mode="json")["font_tier"]
+    assert d["cov"] == 0.99 and len(d["family_fp"]) == 12          # 字组／形近字表的指纹自动填进来
     assert params_hash(on) != params_hash(off)
 
 
 def test_rule_defaults_and_unknown_keys():
     from open_guji_cv.steps.glyph_match import _FontTier
     assert _FontTier.rule(None) is None and _FontTier.rule(False) is None
-    assert _FontTier.rule(True) == {"cov": 0.98, "margin": 0.03, "min_n": 0}       # GUJI-726 的 T98
+    assert _FontTier.rule(True) == {"cov": 0.98, "margin": 0.03, "min_n": 0,       # GUJI-726 的 T98
+                                    "family": True, "family_fp": None}
     assert _FontTier.rule({"cov": 0.99})["cov"] == 0.99
     with pytest.raises(ValueError):
         _FontTier.rule({"covv": 0.99})
@@ -82,7 +84,7 @@ def test_strong_keben_hit_skips_the_font_domain_and_weak_falls_back_to_full(tmp_
 def test_strong_rule_on_unsure_needs_cov_and_margin_to_another_char():
     from open_guji_cv.clustering.match import MatchResult
     from open_guji_cv.steps.glyph_match import _FontTier
-    t = _FontTier(object(), object(), _FontTier.rule(True))
+    t = _FontTier(object(), object(), _FontTier.rule({"family": False}))
 
     def u(cands, guard=None):
         return MatchResult("unsure", None, None, cands[0][1], 5.0, cands, guard=guard)
@@ -93,3 +95,15 @@ def test_strong_rule_on_unsure_needs_cov_and_margin_to_another_char():
     assert t.strong(u([("口", 0.99)]))                                     # 没有异字：按 0.85 算
     assert not t.strong(u([("口", 0.99)], guard="never_match"))             # 护栏一律算弱
     assert not t.strong(MatchResult("diff", None, None, 0.7, 30.0, [("口", 0.7)]))
+
+
+def test_family_chars_are_always_weak():
+    """字组成员、形近护栏有对手的字：刻本库判 same 也查整库（下游靠字体域给的另一个码位判字）。"""
+    from open_guji_cv.clustering.match import MatchResult
+    from open_guji_cv.steps.glyph_match import _FontTier, _family_chars
+    fam = _family_chars()
+    assert {"既", "旣", "一", "二"} <= fam and "口" not in fam
+    t = _FontTier(object(), object(), _FontTier.rule(True))
+    assert not t.strong(MatchResult("same", "二", "kb:1", 0.999, 3.0, [("二", 0.999)]))
+    assert not t.strong(MatchResult("unsure", None, None, 0.985, 5.0, [("既", 0.985)]))
+    assert t.strong(MatchResult("same", "口", "kb:1", 0.999, 3.0, [("口", 0.999)]))
