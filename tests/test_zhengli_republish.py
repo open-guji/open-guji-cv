@@ -83,3 +83,19 @@ def test_prep_then_push(tmp_path, monkeypatch, capsys):
     assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
     assert (out / "online.006-r2.pending.json").exists()
     assert "book-text" in capsys.readouterr().out
+
+
+def test_from_pack_helpers(tmp_path, monkeypatch):
+    d = tmp_path / "bt" / "Book" / "g" / "z" / "k" / "96mid1ogzk" / "default"
+    d.mkdir(parents=True)
+    (d / "index.json").write_text(json.dumps({"chapters": [{"n": 5, "file": "005", "text_version": "0.2.0"}]}), encoding="utf-8")
+    assert rp.online_text_version(tmp_path / "bt", "96mid1ogzk", "005") == "0.2.0"
+    with pytest.raises(SystemExit):
+        rp.online_text_version(tmp_path / "bt", "96mid1ogzk", "006")
+    b = {"events": 3, "status": {"valid": 2, "review": 1}, "newer": [], "id_mismatch": ["vol05:3:1:2"],
+         "unbound": ["vol05:3:1:2"], "decided_not_admitted": []}
+    md = "\n".join(rp.bind_md(b))
+    assert "定字人裁 3 条" in md and "扣错的 1 格" in md and "`vol05:3:1:2`" in md
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)        # 不给沙箱产物根就不取包，免得覆盖正式 products/
+    with pytest.raises(SystemExit, match="GUJI_PRODUCTS_DIR"):
+        rp.main(["from-pack", "--book", "vol05", "-w", str(tmp_path), "--label", "x"])
