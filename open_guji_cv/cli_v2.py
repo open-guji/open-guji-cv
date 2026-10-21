@@ -3306,6 +3306,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)
     COMMANDS_V2["opinions"] = cmd_opinions
+    # cellvotes（M10）：网站精校页投票 → 人裁事件草稿／写入；带 book，-w 由下面统一加
+    from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
+    _add_cellvotes(sub)
+    COMMANDS_V2["cellvotes"] = cmd_cellvotes
     install_workspace_option(sub)
 
 
