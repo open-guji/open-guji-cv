@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import threading
 from collections import defaultdict
 from collections.abc import Callable
 from pathlib import Path
@@ -76,6 +77,86 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     if not files and not any(blobs.values()):
         raise MaterializeError(f"库里工作区 {ws} 没有 {'、'.join(prefixes)} 下的文件")
 
+    # R2 里的文件：刻例图（只在还原字形库时）＋锚图、整理本（不进 source_files，单在 BLOB_TABLES）
+    images: dict[str, str] = {}                      # 相对路径 → sha
+    by_ext: dict[str, set[str]] = defaultdict(set)   # R2 键后缀 → sha
+    if with_images and sel(GS + "patches/"):
+        for r in _rows(src, "glyph_instances", ws, ("instance_id", "patch_sha")):
+            if r.get("patch_sha"):
+                images[f"{GS}patches/{_safe(r['instance_id'])}.png"] = r["patch_sha"]
+                by_ext["png"].add(r["patch_sha"])
+    for tbl, got in blobs.items():
+        images.update(got)
+        by_ext[BLOB_TABLES[tbl]].update(got.values())
+    img_stats = {}
+    absent_shas: set[str] = set()
+    img_err: list[BaseException] = []
+
+    def fetch_images() -> None:
+        nonlocal img_stats
+        try:
+            for ext in sorted(by_ext):
+                st = cache.ensure(src, by_ext[ext], bucket=bucket, ext=ext)
+                absent_shas.update(st.get("missing", ()))
+                img_stats = {k: img_stats.get(k, 0) + v for k, v in st.items() if k != "missing"}
+        except BaseException as e:               # noqa: BLE001 —— 回主线程再抛
+            img_err.append(e)
+
+    # 取图（R2，新机器殿本 2 万张约 60 s）与下面向库要文本行（Worker）各等各的网络，放后台线程同时跑
+    # （2026-10-21）；写盘只在两边都完了之后，结果与先后跑相同。
+    img_thread = None
+    if images:
+        if cache is None:
+            from .client import BlobCache
+            cache = BlobCache()
+        img_thread = threading.Thread(target=fetch_images, name="materialize-images", daemon=True)
+        img_thread.start()
+    try:
+        texts, reused, fetched = _texts(src, ws, files, reuse)
+    finally:
+        if img_thread is not None:
+            img_thread.join()
+    if img_err:
+        raise img_err[0]
+
+    skipped = {p: sha for p, sha in images.items() if sha in absent_shas}
+    images = {p: sha for p, sha in images.items() if sha not in absent_shas}
+    if skipped:
+        img_stats["missing"] = len(skipped)
+
+    # 落盘：先写进临时目录，全部成功再换上去
+    tmp = dest.with_name(dest.name + f".tmp{os.getpid()}")
+    if tmp.exists():
+        shutil.rmtree(tmp)
+    for p, b in texts.items():
+        out = tmp / p
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b)
+    for p, sha in images.items():
+        out = tmp / p
+        out.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(cache.path(sha), out)
+    dest.mkdir(parents=True, exist_ok=True)
+    tops = {x.rstrip("/").split("/")[0] for x in prefixes}
+    for top in tops:
+        if (tmp / top).exists():
+            for prefix in prefixes:
+                if prefix.split("/")[0] != top:
+                    continue
+                old = dest / prefix.rstrip("/")
+                if old.exists():
+                    shutil.rmtree(old) if old.is_dir() else old.unlink()
+                new = tmp / prefix.rstrip("/")
+                if new.exists():
+                    old.parent.mkdir(parents=True, exist_ok=True)
+                    new.replace(old)
+    shutil.rmtree(tmp, ignore_errors=True)
+    return {"ws": ws, "files": len(texts), "reused": reused, "fetched": fetched, "images": len(images),
+            "image_cache": img_stats, "missing_images": skipped, "bytes": sum(len(b) for b in texts.values())}
+
+
+def _texts(src, ws: str, files: dict, reuse) -> tuple[dict[str, bytes], int, int]:
+    """``source_files`` 登记的文本文件逐个还原（本机同 sha 的直接用），整文件核 sha。返回 (文本, 复用数, 向库要的数)。"""
     by_tbl: dict[str, list[str]] = defaultdict(list)
     for p, f in files.items():
         by_tbl[f["tbl"]].append(p)
@@ -129,59 +210,4 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
     missing = [p for p, f in files.items() if f["tbl"] not in BLOB_TABLES and p not in texts]
     if bad or missing:
         raise MaterializeError(f"还原后 sha 不符 {len(bad)} 个（如 {bad[:3]}），缺 {len(missing)} 个（如 {missing[:3]}）")
-
-    # R2 里的文件：刻例图（只在还原字形库时）＋锚图、整理本（不进 source_files，单在 BLOB_TABLES）
-    images: dict[str, str] = {}                      # 相对路径 → sha
-    by_ext: dict[str, set[str]] = defaultdict(set)   # R2 键后缀 → sha
-    if with_images and sel(GS + "patches/"):
-        for r in _rows(src, "glyph_instances", ws, ("instance_id", "patch_sha")):
-            if r.get("patch_sha"):
-                images[f"{GS}patches/{_safe(r['instance_id'])}.png"] = r["patch_sha"]
-                by_ext["png"].add(r["patch_sha"])
-    for tbl, got in blobs.items():
-        images.update(got)
-        by_ext[BLOB_TABLES[tbl]].update(got.values())
-    img_stats = {}
-    absent_shas: set[str] = set()
-    if images:
-        if cache is None:
-            from .client import BlobCache
-            cache = BlobCache()
-        for ext in sorted(by_ext):
-            st = cache.ensure(src, by_ext[ext], bucket=bucket, ext=ext)
-            absent_shas |= set(st.get("missing", ()))
-            img_stats = {k: img_stats.get(k, 0) + v for k, v in st.items() if k != "missing"}
-    skipped = {p: sha for p, sha in images.items() if sha in absent_shas}
-    images = {p: sha for p, sha in images.items() if sha not in absent_shas}
-    if skipped:
-        img_stats["missing"] = len(skipped)
-
-    # 落盘：先写进临时目录，全部成功再换上去
-    tmp = dest.with_name(dest.name + f".tmp{os.getpid()}")
-    if tmp.exists():
-        shutil.rmtree(tmp)
-    for p, b in texts.items():
-        out = tmp / p
-        out.parent.mkdir(parents=True, exist_ok=True)
-        out.write_bytes(b)
-    for p, sha in images.items():
-        out = tmp / p
-        out.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(cache.path(sha), out)
-    dest.mkdir(parents=True, exist_ok=True)
-    tops = {x.rstrip("/").split("/")[0] for x in prefixes}
-    for top in tops:
-        if (tmp / top).exists():
-            for prefix in prefixes:
-                if prefix.split("/")[0] != top:
-                    continue
-                old = dest / prefix.rstrip("/")
-                if old.exists():
-                    shutil.rmtree(old) if old.is_dir() else old.unlink()
-                new = tmp / prefix.rstrip("/")
-                if new.exists():
-                    old.parent.mkdir(parents=True, exist_ok=True)
-                    new.replace(old)
-    shutil.rmtree(tmp, ignore_errors=True)
-    return {"ws": ws, "files": len(texts), "reused": reused, "fetched": fetched, "images": len(images),
-            "image_cache": img_stats, "missing_images": skipped, "bytes": sum(len(b) for b in texts.values())}
+    return texts, reused, fetched
