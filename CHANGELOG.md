@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.5.4] - 2026-10-21
+## [0.5.4] - 2026-10-20
 
 PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`（1.3）、`row_segment`（1.26、1.27）、`column_gate` 与形近字组 `group_flow` 的 `code_hash` 变，**各书 Step1 起全部判过期**。#345 改了 `config/groups/{jue,lih,qik,xu}/ids_bank.json`、新增 `xu/unet.npz`，配套语料库出全局层 b4，殿本 vol04–10 钉子账升 n=12、册 yaml 改钉 `corpus: 12`（v0.5.4 配 `corpus: 11` 会 CorpusDrift 拒跑）。
 验收（rc 上）：全量测试 3709 过、14 跳过；修了 1 条随 #345 过时的测试（`test_repo_by_form_banks_load`：整字组不再要求 `by_form`）。
