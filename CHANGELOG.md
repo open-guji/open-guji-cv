@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- **glyph_match 两个提速开关改为缺省开**（用户 10-21 定，PATCH）：`batch_knn`（整页合批算近邻）与 `font_tier`（分级查库：先查刻本库，命中弱再查整库）。两个都开时两档都合批：刻本库那档每格都查，整库那档按 64 格一块惰性算，块里有命中弱的格才算，两档共用一份查询特征。显式写 `false` 关回去，关时不进参数 dump，参数指纹与 v0.5.4 的缺省相同。**会改产物**：glyph_match 参数指纹与 `code_hash`（4b3ff0e181cdc99d → a0b27c7c2fdaae05，其余 16 步不变）都变，各书 Step5-a 起判过期，下一次重跑整册重算。单开时的证据见 `doc/开关登记表.md`（batch_knn：vol06 1282 s → 367 s、送审 222 → 222；font_tier：粗校基准新增错放 0、送审 413 → 414）；两个同开（vol06 150 页，同一份上游，4 核云端，特征缓存热）：glyph_match 959 s → 349 s，从 glyph_match 到 seed_admit 1048 s → 431 s；`guji products diff` 送审 142 → 143（人审率 0.60% → 0.61%），放行转送审 2 格、送审转放行 1 格，**两边都放行而字不同的 0 格**。另修：库是空的（新书刻本库还没有字）时合批的矩阵乘出错、整页失败，改为逐格判。
 - 切分 `row_segment` 1.31：列端表空格记空（`_blank_frame_junk`）不再只看字格和單行小注格，被切成雙行小注半格（jiazhu_a/b）的印章墨也记空。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol10 p175 c5、vol09 p265 c7，vol09、vol10 全册改坏 0（vol10 第 4 页起已无错列）。
 - 切分 `row_segment` 1.30：格位表说只有一半有字（`half`）、判据又认成單行小注的格，按夹注半格发 `jiazhu_a`／`jiazhu_b`（缝取小注左缘，只发墨多的一半），不再发 `jiazhu_solo`。管列里没有雙行段时小写靠右的「臣」之类（1.26 只管列里有雙行段的）。`row_boundaries.segment_column` 的 `half_notes` 参数行为扩大，不传仍不变。PATCH；`row_segment` 与 `column_gate` 的 `code_hash` 变。殿本修好 vol04 p110 c1、vol07 p29 c9，两册全册改坏 0。
 - 切分 `row_segment` 1.29：列端表空格里墨只是一两道竖线的格记空（有墨的像素列不到内容宽的 20%，`VLINE_COLS`；印框的边、界行残段）。PATCH；`row_segment` 的 `code_hash` 变。殿本 vol04／05 修好 vol04 p127 c7，改坏 0。
