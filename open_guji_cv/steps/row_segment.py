@@ -326,10 +326,11 @@ def _stroke_mask(ink):
     return big[lab]
 
 
-def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float) -> int:
-    """表说该空、又在表的首字之前或末字之后（列端那一段表空格；表说整列空就是整列）的字格，里面的墨不像字就
-    改成 blank，返回改了几格。不像字 = 只有框线／零星碎点，或者墨越过了界行（印章、墨污，见 EDGE_ROWS），
-    或者墨大多是碎点、连不成笔画（印章，见 STROKE_FRAC）。"""
+def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float, in_seal=None) -> int:
+    """表说该空、又在表的首字之前或末字之后（列端那一段表空格；表说整列空就是整列）的字格（含單行小注格），
+    里面的墨不像字就改成 blank，返回改了几格。不像字 = 只有框线／零星碎点，或者墨越过了界行（印章、墨污，见
+    EDGE_ROWS），或者墨大多是碎点、连不成笔画（印章，见 STROKE_FRAC），或者格一半以上落在印框里（`in_seal(cell)`，
+    篆文刻得清楚、墨连成笔画的大印，见 SEAL_THR）。"""
     import numpy as np
     body = sorted(occ)
     lo, hi = (body[0], body[-1]) if body else (1, 0)
@@ -350,10 +351,14 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     order = sorted(cells, key=lambda c: c.y0)
     n = 0
     for c in order:
-        if c.kind != "char" or lo <= c.slot <= hi or c.slot in occ:
+        if c.kind not in ("char", "jiazhu_solo") or lo <= c.slot <= hi or c.slot in occ:
             continue
         a, b = max(0, int(c.y0)), min(h, int(c.y1))
         if b <= a:
+            continue
+        if in_seal is not None and in_seal(c):
+            c.kind = "blank"
+            n += 1
             continue
         resid = float(ink[a:b][~near[a:b]].sum()) / ((b - a) * cw)
         frame_only = charlike[a:b].sum() < FRAME_JUNK_CHARLIKE * period and resid < FRAME_JUNK_RESID
@@ -365,38 +370,41 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     return n
 
 
-#: 印框记空（`steps.occlusion.seal_blank_cells`，固定印「乾隆御覽之寶」模板）的门槛：NCC ≥ 0.30（seed_admit 用 0.35；
+#: 印框记空（`steps.occlusion.find_seal_box`，固定印「乾隆御覽之寶」模板）的门槛：NCC ≥ 0.30（seed_admit 用 0.35；
 #: 非印页实测最高 0.282，vol10 p175 的印 0.34——这里只动表说该空的格，门槛可以松一点），格与印框重叠 ≥ 一半。不用 seed_admit 的「印外墨」保险：各页的印
 #: 是不同的一次钤盖，跟模板对不严（vol06 p149、vol10 p175 空格的印外墨 0.003–0.06），保险会把空格全挡掉；
 #: 这里另有表说该空这一道
 SEAL_THR, SEAL_OVERLAP = 0.30, 0.5
 
 
-def _blank_seal_cells(ctx, page: int, columns, table_empty: dict) -> None:
-    """印压着的列端表空格记空：印的篆文笔画清楚、连成大块时，_blank_frame_junk 的墨判据认不出（不碎、
-    不一定伸到列边）。这里认印框：模板命中、格一半以上在印框里，而且表说这一格该空（列端那段表空格），才记空。"""
-    from types import SimpleNamespace
-
-    from .occlusion import load_seal_templates, seal_blank_cells
+def _seal_box(ctx, page: int):
+    """这一页的印框（页图坐标 x, y, w, h），模板没命中（< SEAL_THR）为 None。"""
+    from .occlusion import find_seal_box, load_seal_templates
     tpls = load_seal_templates()
     if not tpls:
-        return
+        return None
     try:
         gray = ctx.raw_page(page)
     except Exception:
-        return
-    cols = [c for c in columns if c.ok and c.col in table_empty]
-    hit = seal_blank_cells(gray, SimpleNamespace(columns=cols), templates=tpls, thr=SEAL_THR,
-                           overlap=SEAL_OVERLAP)
-    for c in cols:
-        n = 0
-        for x in c.cells:
-            if x.kind in ("char", "jiazhu_solo") and x.slot in table_empty[c.col] \
-                    and (c.col, x.slot, x.sub or "") in hit:
-                x.kind = "blank"
-                n += 1
-        if n:
-            c.flags.append(f"layout_seal：列端 {n} 格在印框里、表说空，记空")
+        return None
+    hit = find_seal_box(gray, templates=tpls, thr=SEAL_THR)
+    return None if hit is None else hit[0]
+
+
+def _in_seal(box, mapper):
+    """格（列图坐标）一半以上（SEAL_OVERLAP）落在印框里的判定函数；没有印框或列图映射时为 None。"""
+    if box is None or mapper is None:
+        return None
+    bx, by, bw, bh = box
+
+    def f(c) -> bool:
+        q = mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)
+        xs, ys = [x for x, _ in q], [y for _, y in q]
+        area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+        ix = max(0.0, min(max(xs), bx + bw) - max(min(xs), bx))
+        iy = max(0.0, min(max(ys), by + bh) - max(min(ys), by))
+        return area > 0 and ix * iy / area >= SEAL_OVERLAP
+    return f
 
 
 #: 劈字判据：一个连通体高在 [SPLIT_CC_MIN, SPLIT_CC_MAX] 个 period 之间（像一个字，不是碎点、不是界行），
@@ -577,7 +585,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.27", unit="column",   # 1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.28", unit="column",   # 1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.row_grid", "open_guji_cv.utils.jiazhu_split",
@@ -641,6 +649,8 @@ class RowSegmentStep(Step):
         layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
         # 等距格网（utils/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
         grids = {}
+        # 印框（列端表空格记空的判据之一）：同样只给格位先验命中的页找
+        seal_box = _seal_box(ctx, page) if any(pg_ == page for (pg_, _c) in layout) else None
         if gate.period is not None and any(pg_ == page for (pg_, _c) in layout):
             grid_cols = []
             for gc in gate.columns:
@@ -652,7 +662,6 @@ class RowSegmentStep(Step):
                                       n_raised=max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)))
             grids = fit_page_grids(grid_cols, gate.period, p.ink_threshold)
         out: list[ColumnCells] = []
-        table_empty: dict[int, set] = {}     # 表里有的列 → 列端那段表空格的 slot（印框记空只动这些）
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
             # 装得下几个字」（见 GateColumn.n_raised_hint）——同一页上有的抬头列
@@ -769,7 +778,10 @@ class RowSegmentStep(Step):
                     k_split = _split_chars(img, c[0].cells, gate.period, p.ink_threshold)
                     k_miss = _mask_misses(c[0].cells, c[3])
                     return (k_split + k_miss, k_split, _cut_rows(img, c[0].cells, p.ink_threshold))
-                junk = [_blank_frame_junk(img, c[0].cells, c[3], gc.content_x, p.ink_threshold, gate.period)
+                wrec = wins.column(gc.col)
+                in_seal = None if wrec is None else _in_seal(seal_box, ColumnMapper(
+                    page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y))
+                junk = [_blank_frame_junk(img, c[0].cells, c[3], gc.content_x, p.ink_threshold, gate.period, in_seal)
                         for c in cands]
                 scores = [_score(c) for c in cands]
                 if min(s_[1] for s_ in scores) > 0:
@@ -787,7 +799,7 @@ class RowSegmentStep(Step):
                     if why == "layout_off":
                         lay = None
                 if junk[best]:
-                    prior_flags.append(f"layout_frame_junk：列端 {junk[best]} 格的墨不像字（框线／碎墨／越界墨），记空")
+                    prior_flags.append(f"layout_frame_junk：列端 {junk[best]} 格的墨不像字（框线／碎墨／越界墨／印框），记空")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
             # 逐列字数先验与 YOLO 并格（同列互斥，两套先验叠在一列上会打架）
             skip_cd = human_col or in_table
@@ -813,10 +825,6 @@ class RowSegmentStep(Step):
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
-            if in_table:
-                body = sorted(occ)
-                table_empty[gc.col] = {c.slot for c in r.cells if c.slot not in occ
-                                       and not (body and body[0] <= c.slot <= body[-1])}
             wrec = wins.column(gc.col)
             mapper = None
             if wrec is not None:
@@ -862,8 +870,6 @@ class RowSegmentStep(Step):
                                                for c in cp.candidates],
                                        ) for cp in r.cut_candidates],
                                    **base))
-        if table_empty:
-            _blank_seal_cells(ctx, page, out, table_empty)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
 

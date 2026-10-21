@@ -234,18 +234,27 @@ def test_layout_row_fills_trailing_empty_columns():
     assert _layout_row(layout, 6, 1) is None
 
 
-def test_blank_seal_cells_only_touches_table_empty_cells_in_the_seal_box(monkeypatch):
-    """印框记空：模板命中的印框里、表说该空的列端格记空；印框里表说有字的格、印框外的格都不动。"""
+def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
+    """印框记空：印框里、表说该空的列端格（字格、單行小注格）记空，哪怕墨连成笔画像字；
+    印框里表说有字的格、印框外的格都不动。"""
     from types import SimpleNamespace as C
     import numpy as np
-    from open_guji_cv.steps import occlusion
-    from open_guji_cv.steps.row_segment import _blank_seal_cells
-    mk = lambda slot, kind="char": C(slot=slot, sub=None, kind=kind)
-    col = C(ok=True, col=3, flags=[], cells=[mk(1), mk(2), mk(3), mk(4, "jiazhu_solo"), mk(5)])
-    monkeypatch.setattr(occlusion, "load_seal_templates", lambda: (np.zeros((2, 2), np.uint8),))
-    monkeypatch.setattr(occlusion, "seal_blank_cells",
-                        lambda gray, cells, **kw: {(3, 1, ""): {}, (3, 3, ""): {}, (3, 4, ""): {}})
-    ctx = C(raw_page=lambda page: np.zeros((10, 10), np.uint8))
-    _blank_seal_cells(ctx, 7, [col], {3: {1, 2, 4, 5}})       # 表：第 3 格有字
-    assert [c.kind for c in col.cells] == ["blank", "char", "char", "blank", "char"]
-    assert col.flags == ["layout_seal：列端 2 格在印框里、表说空，记空"]
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((500, 100), 255, np.uint8)
+    for k in range(5):
+        img[k * 100 + 20:k * 100 + 80, 30:70] = 0              # 每格一块成笔画的墨
+    kinds = ["char", "char", "char", "jiazhu_solo", "char"]
+    cells = [C(slot=k + 1, y0=k * 100, y1=k * 100 + 100, kind=kd, sub=None) for k, kd in enumerate(kinds)]
+    in_seal = lambda c: c.slot in (1, 3, 4)
+    assert _blank_frame_junk(img, cells, {3}, (0, 100), 128, 100.0, in_seal) == 2
+    assert [c.kind for c in cells] == ["blank", "char", "char", "blank", "char"]
+
+
+def test_in_seal_measures_cell_overlap_with_the_seal_box_in_page_coords():
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _in_seal
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [(x0 + 1000, y0), (x1 + 1000, y0), (x1 + 1000, y1), (x0 + 1000, y1)])
+    f = _in_seal((1000, 0, 100, 150), mapper)                # 印框盖住列图 y 0..150
+    cell = lambda y0: C(x0=0, x1=100, y0=y0, y1=y0 + 100)
+    assert f(cell(0)) and f(cell(50)) and not f(cell(110))     # 重叠 1、0.5、0.4
+    assert _in_seal(None, mapper) is None and _in_seal((0, 0, 1, 1), None) is None
