@@ -5,7 +5,10 @@
 
 ## [未发版]
 
+## [0.5.1] - 测试中
+
 ### Added
+- 语料库分层版本（#317，PATCH；**缺省不影响现有册**：没有钉子账的册，`corpus: N` 与指纹 `corpus-vN` 逐位不变，17 步 `code_hash` 不变）：语料库分全局（底库 b）／整套书（书库 v）／册 三层各一个整数版本；`guji corpus pin [--dev]`、`release`、`build/verify --vol`、`upload/fetch`；册有钉子账后指纹取清单内容哈希、不含版本号；册 yaml `corpus_dev: true` 开发中跳过清单校验（带它的册配置不许 `db push`）；≥1MB 的文本文件清单标 `store: r2`，内容按哈希存 R2。提示词模板占位符渲染 `groups/prompt_template.py`（不动 `ctx_l2`）。设计与 P3 迁移步骤见 `doc/design/语料库分层版本.md`。
 - glyph_match 开关 `batch_knn`（GUJI-647 第 7 项，PATCH；**缺省关**，关着时产物与参数指纹逐字节不变）：一页的格每 64 个做一次「查询 × 整库」矩阵乘，库矩阵每 64 格才读一遍。库含字体域（17.4 万条、1.2 GB）时逐格算卡在内存带宽，vol06 全册 glyph_match 1282 s → 367 s。**会改产物**：浮点末位不同，vol06 23,517 格判决、字、cov 全同，8 格候选排序变；`guji products diff` 送审 222 → 222、变了的列 0。开不开按 M9 波次窗口定：书级 `params: {glyph_match: {batch_knn: true}}`。
 - `guji audit changes <册> --base <上一基线产物根>`（M9 D5，GUJI-664）：列出新放行、放行字变了的格（`放行变化.md／json`）；zl.py 设 `ZL_BASE_PRODUCTS` 后这些格进联系页，看图闸要每格都有结论才过。联系页另存单格图与 `tiles.json`。
 - `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
