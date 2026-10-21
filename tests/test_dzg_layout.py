@@ -211,6 +211,22 @@ def test_blank_frame_junk_blanks_speckle_that_forms_no_strokes():
     assert [c.kind for c in cells] == ["char", "blank", "blank", "char"]
 
 
+def test_blank_frame_junk_blanks_cells_holding_only_thin_vertical_lines():
+    """列端表空格里墨只是一两道竖线（印框的边）→ 记空；表空格里真有一个字 → 不动。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _blank_frame_junk
+    img = np.full((300, 100), 255, np.uint8)
+    img[0:100, 30:70] = 0                      # 第 1 格：表的首字
+    img[100:200, 40:46] = 0                    # 第 2 格：一道竖线
+    img[110:190, 88:94] = 0                    #          又一道
+    img[220:280, 30:70] = 0                    # 第 3 格：一个字
+    mk = lambda slot, y0, kind="char": C(slot=slot, y0=y0, y1=y0 + 100, kind=kind, sub=None)
+    cells = [mk(1, 0), mk(2, 100, "jiazhu_solo"), mk(3, 200)]
+    assert _blank_frame_junk(img, cells, {1}, (0, 100), 128, 100.0) == 1
+    assert [c.kind for c in cells] == ["char", "blank", "char"]
+
+
 def test_blank_frame_junk_whole_column_when_table_says_empty():
     """表说整列空（卷末空列）：整列都是表空格段，印章记空。"""
     from types import SimpleNamespace as C
