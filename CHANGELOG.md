@@ -9,6 +9,9 @@
 - 旨㫖（`zhi`）上线整字判法（`groups/ids_online` SPECS、`registry` 配 `config/groups/zhi`）：整字 HOG＋岭回归，模板来自 R2 整册产物对位文字（353 格，sheldon 更正 18 个旨→㫖），按册 5 折留出 margin 0.5 → 348 对／5 弃／0 错。`zhi` 需在册配置 group_flow 点名才生效，重跑归 M8。
 
 ### Changed
+- 字组判法重构成**方法数组**（sheldon 10-22 定，`groups/methods.py`）：每组在 `FlowSpec.methods` 里登记一串方法，依次试，`combine=first` 遇放行即停、`agree` 全跑须一致；每个方法输出放行字或待定，带 0–1 置信度与留痕。八类：码位归一 `codepoint`（新，暂无组用）、字频 `freq`、上下文固定匹配 `ctx_rule`、LLM 答案表 `llm`（两者合成子数组 `ctx`）、整字 HOG＋岭回归 `hog`、IDS 部件 `ids`、复合 `composite`（取框→方法，教敎、徵徴）、自定义函数 `custom`（量横、日曰宽高比、入人八分类器、库形最近）。算法与留痕名不变：殿本 vol04 共 65 页、56 组全开，seed_admit 产物与改前逐字节相同。`seed_admit` 的 `code_hash` 变（`code_deps` 加 `groups.methods`，`flow`／`registry` 改写），其余步不变。
+
+### Changed
 - 遮挡格与盖章空栏改读印章定位 `seals`（印章系统化第 2 期之二）：`occlusion.page_occluded`（seed_admit `occluded_gate`、字形库入库闸、Step4 `seal_region` 旗共用的唯一入口）改为「与大印框重叠 ≥ 一半的格」，不再按格算墨点密度；`page_seal_blank` 改用小印框和它的笔画覆盖区（`seal_detect.stroke_mask`），不再在 (830,330) 窗口里找模板。修了两处旧坐标错：旧判据把右上原点的格框直接套在左上原点的原图上，量到的是左右镜像的位置，印正好在页中间才没出事。殿本十页大印页：遮挡格 1,226 → 1,290，新增的非空格 62 个（vol08 p2 印淡，旧判据只认出半方，占 57 格），减少 24 格（印框外的边角）。十页小印页：盖章空栏候选里的非空格减少 9 个（vol09 p162 c4、vol10 p87 c3/c4，都是压在印下的真字「文淵閣著錄」等，旧路径因坐标镜像误入候选），vol07 p134 多 2 个、少 1 个。没有 `seals` 产物的旧产物照旧走原判据。PATCH；`cell_shrink` 1.12、`seed_admit` 1.19，新读 `seals`，`code_hash` 变；`row_segment` 补登记 `seal_detect` 为代码依赖。
 - 切分 `row_segment` 1.33（印章系统化第 2 期之一）：列端表空格「落在印里就记空」改读印章定位 `seals` 产物，删掉 `_seal_box`（窗口模板找印）和 `_empty_zone_seal`（表空段墨团）。大印按框量（格与印框重叠 ≥ 一半）；小印按笔画量：格里 ≥ 70% 的墨属于压着印笔画覆盖区的连通块（`_in_seal`），印边只压住一列一小半也认得出。顺带修好旧坐标错：原印框是左上原点、格是右上原点，卷末印正好在页中线附近才一直没出事。殿本七册 20 页印章页 Step3–4 重跑，与 dev 逐列对比：修好 0、改坏 0。PATCH；`row_segment` 的 `code_hash` 变，并新读 `seals`。
 - 印章定位 `seal_detect` 1.1：大印外框改按版框定——紧贴版框上边与右边、边长＝版框宽（九列）的正方形（Sheldon 10-22 给的规律），不再用墨点密度区的外接框（偏大）；密度只判有没有大印。这一步因此挪到 `border_detect` 之后（读 `borders`），读不到版框才退回密度框。殿本 13 页大印逐页看图都贴合。小印不变。

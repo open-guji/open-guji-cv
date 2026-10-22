@@ -1,0 +1,115 @@
+# -*- coding: utf-8 -*-
+"""字组方法数组（`groups/methods.py`，sheldon 2026-10-22 定）：八类方法的接口、置信度 0–1、子数组、复合、注册表里的数组。自造数据。"""
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+from open_guji_cv.groups import GROUPS
+from open_guji_cv.groups import methods as M
+from open_guji_cv.groups.flow import FlowConfig, check_groups
+from open_guji_cv.groups.protocol import GroupVerdict
+
+
+def _inp(g="zhi", members=None, cands=(), cfg=None, patch=None, left=None, right=None):
+    return M.MethodInput(group=g, members=frozenset(members or GROUPS[g].members), cell_id="v:1:1:1",
+                         cands=list(cands), ref=None, cfg=cfg or FlowConfig(groups=(g,)), left=left, right=right,
+                         patch_fn=(lambda cid: patch) if patch is not None else None)
+
+
+def test_every_group_has_method_array_of_known_kinds():
+    check_groups(tuple(GROUPS))
+    for g, s in GROUPS.items():
+        assert s.flow is not None and s.flow.methods, g
+        for m in (*s.flow.methods, *s.flow.form_methods):
+            assert isinstance(m, M.Method) and m.kind in (*M.KINDS, "chain"), (g, m)
+            for sub in getattr(m, "steps", ()):
+                assert sub.kind in M.KINDS
+
+
+def test_registry_kinds_match_ids_specs():
+    """整字判法的组是 hog，登记了取框的是「取框→hog」复合，其余看图组是 ids；留痕名都沿用 `ids`。"""
+    from open_guji_cv.groups.ids_online import SPECS
+    img = {g: next(m for m in s.flow.methods if m.name == "ids") for g, s in GROUPS.items() if "ids" in s.flow.solvers}
+    kinds = {g: m.kind for g, m in img.items()}
+    for g in ("lv", "jue", "lih", "qik", "zy", "sy", "sz", "gm", "xb"):
+        assert kinds[g] == "hog", g
+    for g in ("jiao", "zheng"):
+        assert kinds[g] == "composite", g
+        m = img[g]
+        assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
+    for g in ("can", "xu", "yi_560", "mn", "ce"):
+        assert kinds[g] == "ids", g
+    assert GROUPS["zhi"].flow.methods[1].kind == "hog"
+
+
+def test_ctx_is_rule_then_llm_chain():
+    m = GROUPS["jys"].flow.methods[0]
+    assert m.name == "ctx" and [s.kind for s in m.steps] == ["ctx_rule", "llm"]
+    assert GROUPS["ry"].flow.describe() == "[ctx_rule → llm] ＋ custom:ry_shape"
+
+
+def test_chain_first_release_wins_and_skips_inapplicable():
+    calls = []
+
+    def mk(name, ch):
+        def fn(inp):
+            calls.append(name)
+            return GroupVerdict(ch, conf=0.5 if ch else None, why="agree" if ch else "abstain:x", via=name)
+        return M.Custom(name, fn=fn)
+
+    c = M.Chain("c", steps=(mk("a", None), mk("b", "㫖"), mk("c", "旨")))
+    v = c.run(_inp())
+    assert v.char == "㫖" and calls == ["a", "b"] and 0.0 <= v.conf <= 1.0
+    calls.clear()
+    v = M.Chain("c", steps=(mk("a", None), mk("b", None))).run(_inp())
+    assert v.char is None and v.why == "abstain:x" and calls == ["a", "b"]
+    # LLM 方法这册没给表 → 跳过，结论是固定匹配的
+    assert not M.Llm().applies(_inp("jys"))
+
+
+def test_confidence_is_clipped_to_unit_interval():
+    m = M.Custom("big", fn=lambda inp: GroupVerdict("旨", conf=3.7, why="agree", via="big"))
+    assert m.run(_inp()).conf == 1.0
+    m = M.Custom("none", fn=lambda inp: GroupVerdict(None, conf=None, why="abstain:x", via="none"))
+    assert m.run(_inp()).conf == 0.0
+    assert M.unit(-0.2) == 0.0 and M.unit(0.3) == 0.3
+
+
+def test_codepoint_gives_book_choice():
+    cfg = FlowConfig(groups=("zhi",), canon=lambda c: {"巻": "卷"}.get(c, c))
+    v = M.CODEPOINT.run(_inp(members="巻卷", cfg=cfg))
+    assert v.char == "卷" and v.conf == 1.0
+    assert M.CODEPOINT.run(_inp(members="旨㫖", cfg=cfg)).char is None          # 这套书没定这一对
+    assert M.CODEPOINT.run(_inp(members="巻卷")).why == "abstain:no_codepoints"
+
+
+def test_freq_and_top1():
+    cfg = FlowConfig(groups=("zhi",), freq_table={"zhi": {"㫖": 30, "旨": 0}}, freq_vols={"zhi": {"㫖": 3}})
+    v = M.FREQ.run(_inp(cfg=cfg))
+    assert v.char == "㫖" and v.conf == 1.0
+    assert M.TOP1.run(_inp(cands=[("旨", 0.99)])).char == "旨"
+    assert M.TOP1.run(_inp(cands=[("旨", 0.90)])).char is None
+    assert M.FORM_TOP1.run(_inp(members="會㑹", cands=[("㑹", 0.95), ("會", 0.90)])).char == "㑹"
+
+
+def test_image_methods_without_patch_are_pending():
+    assert M.BARS.run(_inp("ts")).why == "abstain:no_patch"
+    assert M.RY_SHAPE.needs_patch and not M.CTX.needs_patch and not M.FREQ.needs_patch
+    assert GROUPS["jiao"].flow.needs_patch and not GROUPS["jys"].flow.needs_patch
+    assert GROUPS["zh"].flow.needs_patch            # 两段判第二段有 IDS
+
+
+def test_composite_crop_equals_registered_region(monkeypatch):
+    """取框→HOG 与直接按 SPECS 的取框调整字判法结果一致（教敎）。"""
+    from open_guji_cv.groups import ids_online
+    if not ids_online.has_bank("jiao"):
+        pytest.skip("没有教敎模板库")
+    rng = np.random.default_rng(0)
+    img = np.full((60, 60), 255, np.uint8)
+    img[10:50, 10:50] = (rng.random((40, 40)) > 0.6) * 255
+    v1 = GROUPS["jiao"].flow.methods[-1].run(_inp("jiao", patch=img))
+    v2 = ids_online.judge("jiao", img)
+    assert (v1.char, v1.why, v1.extra) == (v2.char, v2.why, v2.extra)
+    with pytest.raises(ValueError):
+        M.Composite("x", op=M.Crop((0, 1, 0, 1)), inner=M.FREQ).run(_inp("jiao", patch=img))
