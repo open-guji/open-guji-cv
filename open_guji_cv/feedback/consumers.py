@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
+from ..hanzi.symbols import is_symbol
 from .events import Event, EventLog, counts_as_human, replay_key
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
@@ -146,6 +147,8 @@ def _expected_of(e: Event) -> dict:
         # 与 crop_top 仍一并存下，只为排查历史问题，**不要拿它当基准**。
         keys = ("y_left", "y_right", "y_left_abs", "y_right_abs", "crop_top", "verdict")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "inverted_band":
+        return {k: p[k] for k in ("verdict", "rules") if p.get(k) not in (None, "")}
     if e.kind == "head_raise":
         # 列级抬头精标（overview `Step3-逐字切分/03-抬头综合优化.md`）。三件事
         # 一张卡：`raised` 这一列是不是抬头 / `n_raised` 抬高几格 / `head_cut`
@@ -398,8 +401,9 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
             continue
-        if len(shape) != 1 or ord(shape) < 0x2E80:
-            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引
+        if len(shape) != 1 or (ord(shape) < 0x2E80 and not is_symbol(shape)):
+            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引。
+            # 登记过的特殊符号（○□△…，`hanzi.symbols`）放行：人定成符号的格进库，同书同形 5-a 才匹配得上
             res.errors.append(f"{e.target.key}: 字形 {shape!r} 不是单个汉字，跳过")
             res.skipped += 1
             continue

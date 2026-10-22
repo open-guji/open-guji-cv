@@ -5,7 +5,8 @@
 抽特征（`pix`：模糊后缩 16×16 的像素；`hog`：8 像素格、12 向、2×2 块归一的梯度方向直方图），
 在冻结模板库（每字的真实刻例）上训**二类岭回归**（目标 ±1，模板就是训练集），判别值绝对值不到 `min_margin` 弃权。
 
-- 只支持恰好两个成员字；每类模板少于 `min_class` 个，判成它也弃权。
+- 两类：单个二类岭回归（呂吕、徵徴）；三类及以上（2026-10-21，山由出）：一对多岭回归，判别值＝第一名与第二名得分之差。
+  每类模板少于 `min_class` 个，判成它也弃权。
 - 模板库格式同 `ids_online`（`templates={字: [size×size 的 uint8 墨迹图,…]}`），另在 `source.books` 里按模板顺序记所属册，
   供按册留一评测（判某册时模板不含该册）。
 - 在线字块与建库的字块都经 `norm`（<128 为墨，裁外框，缩放），所以两边一致。
@@ -79,8 +80,20 @@ def fit(bank: dict, kind: str, region: tuple, lam: float):
     if hit is not None and hit[0] is bank:
         return hit[1]
     names = tuple(sorted(n for n, ts in bank.items() if ts))
-    if len(names) != 2:
+    if len(names) < 2:
         res = (names, None)
+    elif len(names) > 2:
+        # 一对多：每类一列权重（目标 ±1），共用同一个 x'x
+        xs, lab = [], []
+        for n in names:
+            for t in bank[n]:
+                xs.append(np.r_[feature(t, kind, region), 1.0])
+                lab.append(n)
+        x = np.array(xs, np.float64)
+        reg = lam * np.eye(x.shape[1])
+        reg[-1, -1] = 0.0
+        tgt = np.array([[1.0 if l == n else -1.0 for n in names] for l in lab])
+        res = (names, np.linalg.solve(x.T @ x + reg, x.T @ tgt))
     else:
         xs, ts = [], []
         for sign, n in zip((-1.0, 1.0), names):
@@ -96,7 +109,8 @@ def fit(bank: dict, kind: str, region: tuple, lam: float):
 
 
 def score(gray: np.ndarray, bank: dict, kind: str, region: tuple, lam: float, size: int):
-    """→ `(字, 判别值绝对值, {字: 判别值})`；空白、库不是恰好两类 → `(None, 0.0, {})`。判别值为正偏向名字排序靠后的字。"""
+    """→ `(字, 判别值绝对值, {字: 判别值})`；空白、库不足两类 → `(None, 0.0, {})`。两类：判别值为正偏向名字排序靠后的字；
+    三类以上：字＝得分最高的类，判别值＝与第二名的得分差，`{字: 得分}`。"""
     return score_norm(norm(np.asarray(gray), size), bank, kind, region, lam)
 
 
@@ -105,7 +119,12 @@ def score_norm(x: np.ndarray | None, bank: dict, kind: str, region: tuple, lam: 
     names, w = fit(bank, kind, region, lam)
     if x is None or w is None:
         return None, 0.0, {}
-    d = float(np.r_[feature(x, kind, region), 1.0] @ w)
+    f = np.r_[feature(x, kind, region), 1.0]
+    if w.ndim == 2:
+        sc = f @ w
+        o = np.argsort(-sc)
+        return names[o[0]], float(sc[o[0]] - sc[o[1]]), {n: float(v) for n, v in zip(names, sc)}
+    d = float(f @ w)
     return (names[1] if d > 0 else names[0]), abs(d), {names[0]: -d, names[1]: d}
 
 

@@ -186,7 +186,8 @@ def test_flipped_cell_is_judged_non_char_by_lane_seal():
 
 
 def test_seal_blank_params_off_not_in_dump():
-    d = SeedAdmitParams().model_dump()
+    d = SeedAdmitParams(seal_blank_page=False).model_dump()
+    assert SeedAdmitParams().seal_blank_page is True                    # 2026-10-22 起缺省开
     assert not {"seal_blank_page", "seal_blank_thr", "seal_blank_overlap"} & set(d)
     on = SeedAdmitParams(seal_blank_page=True).model_dump()
     assert on["seal_blank_page"] is True and on["seal_blank_thr"] == 0.35
@@ -237,6 +238,6 @@ def test_ink_out_threshold_boundary():
 def test_ink_out_param_dump_rule():
     # ④ 开关关：dump 不含 seal_blank_ink_out；开关开：含，缺省 0.005
     from open_guji_cv.steps.seed_admit import SeedAdmitParams as SP
-    assert "seal_blank_ink_out" not in SP().model_dump()
+    assert "seal_blank_ink_out" not in SP(seal_blank_page=False).model_dump()
     on = SP(seal_blank_page=True).model_dump()
     assert on["seal_blank_ink_out"] == 0.005

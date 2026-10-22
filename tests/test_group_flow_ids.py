@@ -92,10 +92,13 @@ def test_judge_by_form_classifies_by_member_char():
 
 
 def test_repo_by_form_banks_load():
-    for g in ("xu", "ce", "jiao", "qik", "lih", "jue"):
-        assert O.SPECS[g].by_form and O.has_bank(g), g
+    for g in ("xu", "jiao", "qik", "lih", "jue", "zhi"):
+        sp = O.SPECS[g]
+        assert (sp.by_form or sp.whole or sp.generic) and O.has_bank(g), g   # 絕絶/厯歴/啓啟 改整字（#345）；叙敘/教敎/絕絶 改通用判法（10-22）
         from open_guji_cv.groups.registry import GROUPS
         assert set(O.load_bank(O.bank_path(g))) <= GROUPS[g].members, g
+        if sp.generic:
+            assert len(O.generic_meta(g)["shape"]) == 64, g
 
 
 def test_bank_file_roundtrip_deterministic(tmp_path):
@@ -118,18 +121,18 @@ def test_bank_path_prefers_workspace_and_fingerprint(tmp_path, monkeypatch):
     O.write_bank(O.dump_bank("can", _bank(), {}), p)
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert O.bank_path("can") == p and O.has_bank("can")
-    assert O.bank_path("zhi") is None and not O.has_bank("zhi")          # 没登记判法、也没库
+    assert O.bank_path("dian") is None and not O.has_bank("dian")          # 没登记判法、也没库（點㸃）
     f1 = O.fingerprint(("can", "mn"))
     assert f1.startswith("ids:can=") and "mn" not in f1 and "lv1=" in f1
     O.write_bank(O.dump_bank("can", _bank(n_bar=10), {}), p)
     assert O.fingerprint(("can",)) != f1                                 # 模板库变 → 指纹变
-    assert O.fingerprint(("mn", "zhi", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
+    assert O.fingerprint(("mn", "dian", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
 
 
 def test_judge_entry_without_bank_or_patch(monkeypatch):
     monkeypatch.setattr(O, "bank_path", lambda g: None)
     assert O.judge("can", _glyph("bar")).why == "abstain:no_bank"
-    assert O.judge("zhi", _glyph("bar")).why == "abstain:no_spec"
+    assert O.judge("dian", _glyph("bar")).why == "abstain:no_spec"
 
 
 @pytest.fixture

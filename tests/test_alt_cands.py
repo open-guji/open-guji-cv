@@ -165,3 +165,70 @@ def test_alt_eval_ranks_and_hard_tier():
     assert res["all"]["n"] == 3 and res["all"]["top1"] == 1 and res["all"]["top3"] == 2
     assert res["hard"] == {"n": 2, "top1": 0, "top3": 1, "top5": 1, "top10": 1, "in_alt": 1, "mean_rank_when_hit": 3.0}
     assert res["hard_examples"][0] == {"g": "𡚁", "rank": 3, "old": "弊敝"}
+
+
+def test_alt_for_cards_cuts_patch_when_cache_missing(monkeypatch):
+    """缓存里没有字块图（从产物包出单）时走 ctx 现切；没有 ctx 就跳过并记数。"""
+    from open_guji_cv.clustering import rare_panel
+    from open_guji_cv.review import alt_cands as ac
+
+    class Bank:
+        available = True
+        def embed(self, img):
+            return np.array([1.0, 0.0])
+        def vectors(self, chars):
+            return {c: np.array([1.0, 0.0]) if c == "已" else np.array([0.0, 1.0]) for c in chars}
+
+    class Ctx:
+        keys = []
+        def image(self, kind, key):
+            self.keys.append((kind, key))
+            return np.zeros((8, 8), np.uint8)
+
+    monkeypatch.setattr(rare_panel, "rare_patch", lambda *a, **k: None)
+    monkeypatch.setattr(rare_panel, "_book_norm_stroke", lambda b: None)
+    monkeypatch.setattr("open_guji_cv.clustering.normalize.normalize_patch", lambda img, stroke_width=None: img)
+    monkeypatch.setattr(vs, "family_pool", lambda piv, zi=None: {"已": {"p": "己", "src": "v"}, "巳": {"p": "己", "src": "v"}})
+    card = {"id": "b:3:1:6", "page": 3, "col": 1, "slot": 6, "char": "己"}
+    logs = []
+    assert ac.alt_for_cards("b", [card], bank=Bank(), log=logs.append) == {}
+    assert any("取不到字块图" in m for m in logs)
+    ctx = Ctx()
+    got = ac.alt_for_cards("b", [card], bank=Bank(), ctx=ctx)
+    assert [a["c"] for a in got["b:3:1:6"]] == ["已", "巳"] and ctx.keys == [("char_patch", "p0003c01s6")]
+
+
+def test_family_pool_takes_symbols_only_when_a_pivot_is_one():
+    """近似字里有特殊符号 → 整张符号表进池；纯汉字近似字不混进符号（设计 4.3）。"""
+    from open_guji_cv.hanzi.symbols import is_symbol, symbols
+
+    class Db:
+        def pool(self, pivots, near_k=5, extra=None):
+            return {p: {"p": p, "src": "piv"} for p in pivots if not is_symbol(p)}
+
+    assert "○" in symbols() and not is_symbol("〇")
+    got = vs.family_pool(["口", "○"], db=Db())
+    assert got["○"] == {"p": "○", "src": "piv"} and got["◎"] == {"p": "○", "src": "sym"}
+    assert set(symbols()) <= set(got) and got["口"]["src"] == "piv"
+    assert not any(is_symbol(c) for c in vs.family_pool(["口", "日"], db=Db()))
+
+
+def test_symbol_hint_threshold():
+    """图像与某个符号模板够像（≥ SYM_MIN）才提示符号，否则不提示（设计 4.3 兜底）。"""
+    from open_guji_cv.review.alt_cands import SYM_MIN, symbol_hint
+    q = np.array([1.0, 0.0])
+    near = np.array([SYM_MIN + 0.01, (1 - (SYM_MIN + 0.01) ** 2) ** 0.5])
+    far = np.array([SYM_MIN - 0.1, (1 - (SYM_MIN - 0.1) ** 2) ** 0.5])
+    assert symbol_hint(q, lambda cs: {c: (near if c == "○" else far) for c in cs}) == "○"
+    assert symbol_hint(q, lambda cs: {c: far for c in cs}) is None
+
+
+def test_rare_panel_symbol_gate():
+    """5-b 符号门槛（特殊符号设计 S3）：符号余弦 ≥ SYM_MIN 且高过本格最像的汉字才留，留下的排最前。"""
+    from open_guji_cv.clustering.rare_panel import _sym_first, _symbol_gate
+    assert _symbol_gate([("人", 0.988), ("亼", 0.978), ("△", 0.964)]) == frozenset()      # vol06 噪声
+    assert _symbol_gate([("○", 0.964), ("◎", 0.942), ("口", 0.927), ("⊙", 0.914)]) == {"○", "◎"}
+    assert _symbol_gate([("○", 0.92), ("口", 0.90)]) == frozenset()                        # 不到 SYM_MIN
+    hits = [{"char": "口"}, {"char": "○"}, {"char": "乙"}, {"char": "◎"}]
+    assert [h["char"] for h in _sym_first(hits, frozenset({"○", "◎"}))] == ["○", "◎", "口", "乙"]
+    assert _sym_first(hits, frozenset()) is hits

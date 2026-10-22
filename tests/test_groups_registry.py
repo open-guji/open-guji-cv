@@ -26,7 +26,7 @@ def test_group_ids_match_dataset_registry():
                            "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "qg", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
-                           "qik", "lih", "jue", "wei", "shuo", "lv", "zheng"}
+                           "qik", "lih", "jue", "wei", "shuo", "lv", "zheng", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 
@@ -50,17 +50,18 @@ def test_groups_of_handles_unregistered_and_multi():
 
 
 def test_members_of_different_groups_do_not_overlap():
-    """成员不许重叠，除非两个组在 `overlaps` 里互相声明（日曰 ry／日目 rm 共用「日」）。"""
+    """成员不许重叠，除非两个组在 `overlaps` 里互相声明（日曰 ry／日目 rm 共用「日」）。查字组流程可点名的全部组（含码位归一组）。"""
+    from open_guji_cv.groups.registry import FLOW_GROUPS
     seen: dict[str, str] = {}
-    for g in GROUPS.values():
+    for g in FLOW_GROUPS.values():
         for ch in g.members:
             if ch in seen:
-                other = GROUPS[seen[ch]]
+                other = FLOW_GROUPS[seen[ch]]
                 assert g.id in other.overlaps and other.id in g.overlaps, f"{ch} 同属 {seen[ch]} 和 {g.id}"
             seen[ch] = g.id
-    for g in GROUPS.values():
+    for g in FLOW_GROUPS.values():
         for o in g.overlaps:
-            assert g.id in GROUPS[o].overlaps, f"{g.id} 声明与 {o} 重叠但对方没声明"
+            assert g.id in FLOW_GROUPS[o].overlaps, f"{g.id} 声明与 {o} 重叠但对方没声明"
 
 
 def test_old_m7_groups_all_covered_by_group_flow():

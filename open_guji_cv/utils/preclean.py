@@ -254,7 +254,7 @@ def _check_gate(kind: str, before: float, after: float,
     return note
 
 
-def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, list[str]]:
+def apply_preclean(gray: np.ndarray, rules: list[dict], *, gate: bool = True) -> tuple[np.ndarray, list[str]]:
     """按 book.yaml 里登记的规则依次处理一页。返回 (新图, 每条规则的说明)。
 
     `inverted_band` 会核对闸0：带内墨占比修完要回落到 `BODY_INK_GATE` 以内，
@@ -262,6 +262,8 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
 
     个别页可以用 `gate_override` 单页放宽闸（见 `_check_gate`）——**只能单页放宽，
     不许改全局常量**：闸是给所有页的，为一页调松了，别的页修坏了就拦不住。
+
+    `gate=False`：人在控制台看过修前修后预览、点了头的候选（`steps/invert_detect.py`），只记墨占比不拦。
     """
     notes: list[str] = []
     out = gray
@@ -285,8 +287,11 @@ def apply_preclean(gray: np.ndarray, rules: list[dict]) -> tuple[np.ndarray, lis
             before = band_ink_ratio(out, mask, th)
             out = fn(out, **kw)
             after = band_ink_ratio(out, mask, th)
-            notes.append(_check_gate(kind, before, after,
-                                     r.get("gate_override"), r.get("gate_reason")))
+            if gate:
+                notes.append(_check_gate(kind, before, after,
+                                         r.get("gate_override"), r.get("gate_reason")))
+            else:
+                notes.append(f"{kind}: 带内墨占比 {before:.3f} -> {after:.3f}（人审放行，不过闸）")
         else:
             before = float((out < th).mean())
             out = fn(out, **kw)
@@ -349,7 +354,87 @@ def effective_raw_path(book, page: int, *, log: Callable[[str], None] | None = N
         if log:
             log(f"[Step0] {book.id} p{page} 登记了预清理但产物不存在，"
                 f"先用原图；跑 `python -m open_guji_cv.cli_v2 preclean {book.id}` 生成")
+        return book.raw_path(page)
+    rules = approved_inverted_rules(book.id, page)
+    if rules:
+        p = approved_precleaned(book, page, rules, log=log)
+        if p is not None:
+            return p
     return book.raw_path(page)
+
+
+#: 反色带人审落的裁决表分片（`feedback/questions.py` 的 `invert_detect.page.is_inverted` 落这里）
+INVERTED_BAND_SHARD = "preprocess/inverted-band"
+_INVERTED_CACHE: dict[tuple, dict[int, dict]] = {}
+
+
+def resolved_inverted(book_id: str) -> dict[int, dict]:
+    """反色带人审：`page → {"verdict": "yes"|"no", "rules": [{…}, …]}`（`steps/invert_detect.py` 的候选，人点头与否）。
+
+    直接读裁决表 `<verdicts>/preprocess/inverted-band/items.jsonl`（金标条目格式，见 `gold/item.py`），
+    不经 `feedback`／`gold`：本模块在 L1，Step 引擎每页都要问（`tests/test_architecture.py` 不许往上 import）。
+    每页每步都问一次，按表文件签名缓存；表不在就是空表。同一页多条以文件里靠后的为准。
+    """
+    import json
+
+    from ..core.workspace import verdicts_root
+    try:
+        path = verdicts_root() / INVERTED_BAND_SHARD / "items.jsonl"
+        st = path.stat()
+    except Exception:  # noqa: BLE001  —— 没有工作区或还没裁过
+        return {}
+    key = (str(path), st.st_mtime_ns, st.st_size, book_id)
+    if key not in _INVERTED_CACHE:
+        out: dict[int, dict] = {}
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            it = json.loads(line)
+            anchor = it.get("anchor") or {}
+            if it.get("status", "active") != "active" or str(anchor.get("book")) != book_id or anchor.get("page") is None:
+                continue
+            exp = it.get("expected") or {}
+            if exp.get("verdict") in ("yes", "no"):
+                out[int(anchor["page"])] = {"verdict": exp["verdict"], "rules": list(exp.get("rules") or [])}
+        _INVERTED_CACHE[key] = out
+    return _INVERTED_CACHE[key]
+
+
+def approved_inverted_rules(book_id: str, page: int) -> list[dict]:
+    """反色带候选里人点了头（yes）的规则表；没有返回空表。书 yaml `preclean:` 登记的页不走这里（以登记为准）。"""
+    v = resolved_inverted(book_id).get(page)
+    return list(v["rules"]) if v and v["verdict"] == "yes" else []
+
+
+def approved_precleaned(book, page: int, rules: list[dict], *, log: Callable[[str], None] | None = None) -> Path | None:
+    """人点头的反色带按 `rules` 修好的图（派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，没有就现做）。
+    规则改了文件名跟着变；修不了（量不到带）返回 None，调用方读原图。"""
+    import hashlib
+    import json
+
+    from cv2 import imread, imwrite
+
+    from ..core.workspace import cache_root
+    h = hashlib.sha256(json.dumps(rules, sort_keys=True).encode()).hexdigest()[:12]
+    dst = cache_root() / PRECLEANED_DIRNAME / book.id / f"{page}_{h}.png"
+    if dst.exists():
+        return dst
+    img = imread(str(book.raw_path(page)), 0)
+    if img is None:
+        return None
+    try:
+        out, notes = apply_preclean(img, rules, gate=False)
+    except ValueError as e:
+        if log:
+            log(f"[Step0] {book.id} p{page} 人审放行的反色带修不了，先用原图：{e}")
+        return None
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    if not imwrite(str(dst), out):
+        return None
+    if log:
+        for n in notes:
+            log(f"[Step0] {book.id} p{page} {n}")
+    return dst
 
 
 def build_precleaned(book, pages=None, *, force: bool = False,

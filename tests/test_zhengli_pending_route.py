@@ -81,3 +81,19 @@ def test_reflow_groups_and_hold(tmp_path):
 def test_parse_pages():
     assert pr.parse_pages("89-91,196，200") == {89, 90, 91, 196, 200}
     assert pr.parse_pages("") == set()
+
+
+def test_keep_list_not_deducted(tmp_path):
+    """人裁绑到了别的格（重切后格号顺移）：--keep 名单上的格不按格号扣。"""
+    pending = {"rev": "004-r4", "cells": [{"cell": "216:4:9a", "review": "pending", "cls": "x", "why": ["human_unbound"]},
+                                          {"cell": "216:4:10", "review": "pending", "cls": "x", "why": ["x"]}]}
+    p = tmp_path / "004.pending.json"
+    p.write_text(json.dumps(pending), encoding="utf-8")
+    e = tmp_path / "e.jsonl"
+    e.write_text("\n".join(json.dumps(ev(c, "confirm", "2026-10-01T00:00:00Z", shape="啟", book="vol04"))
+                           for c in ("216:4:9a", "216:4:10")), encoding="utf-8")
+    keep = tmp_path / "keep.txt"
+    keep.write_text("vol04:216:4:9a\n", encoding="utf-8")
+    out = tmp_path / "out"
+    assert pr.main(["--pending", str(p), "--book", "vol04", "--events", str(e), "--keep", str(keep), "--out", str(out)]) == 0
+    assert [c["cell"] for c in json.loads((out / "004.pending.json").read_text(encoding="utf-8"))["cells"]] == ["216:4:9a"]

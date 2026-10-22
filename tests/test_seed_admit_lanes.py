@@ -296,7 +296,7 @@ def test_human_and_excluded_untouched():
 # ── 开关与指纹 ────────────────────────────────────────────────────────
 
 def test_params_off_not_in_dump():
-    d = SeedAdmitParams(db_path="x").model_dump()
+    d = SeedAdmitParams(db_path="x", lane_seal=False).model_dump()
     assert not any(k.startswith("lane_") for k in d)
     d = SeedAdmitParams(db_path="x", lane_seal=True).model_dump()
     assert d["lane_seal"] is True and "lane_witness_fingerprint" in d

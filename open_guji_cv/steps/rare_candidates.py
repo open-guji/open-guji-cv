@@ -4,8 +4,7 @@
 RRF，批处理版），**融合算法一行没改**——它是 `/api/rare` 审字卡片背后那
 套引擎，此前只在界面上按需调用；库匹配 / OCR / 整理本三路都已经是正式
 Step，生僻字这路补齐后四路才在同一层，Step6 融合与 Step7 通道才能直接
-读它，不必再各自单独接 `clustering.cnn_candidates`（`match_solo_cnn`
-通道就是这么单独接的一次）。
+读它，不必再各自单独接 `clustering.cnn_candidates`。
 
 ## 指纹要带 checkpoint 与模板集
 

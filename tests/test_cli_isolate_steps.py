@@ -112,6 +112,33 @@ def test_crashed_step_makes_pipeline_exit_nonzero(monkeypatch, ws):
     assert e.value.code == 1
 
 
+def test_isolated_run_with_failed_pages_does_not_auto_pack(monkeypatch, ws, capsys):
+    """子进程里有页失败照样返回 0：父进程要读 manifest 数失败页，有失败就不自动存包（10-21 vol08）。"""
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.core.pipeline import default_pipeline_id
+    from open_guji_cv.products.manifest import ManifestEntry
+    from open_guji_cv.products.store import ProductStore
+    pid = default_pipeline_id(load_book("keben"))
+    packed: list = []
+    monkeypatch.setattr(cli_v2, "_auto_pack", lambda args, eng, steps: packed.append(1))
+    argv = ["pipeline", pid, "keben", "-w", str(ws), "--pages", "1", "--to", "column_warp"]
+    monkeypatch.setattr(cli_v2, "_run_steps_isolated", lambda args, steps: 0)
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main(argv)
+    assert e.value.code == 0 and packed == [1]
+
+    def fail_one(args, steps):                       # 子进程写下的：闸 1 第 1 页失败
+        ProductStore().manifest("keben", "border_detect_gate").put(
+            ManifestEntry(key="p0001", fingerprint="", status="failed", error="boom"))
+        return 0
+    monkeypatch.setattr(cli_v2, "_run_steps_isolated", fail_one)
+    packed.clear()
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main(argv)
+    assert e.value.code == 0 and packed == []
+    assert "border_detect_gate p1" in capsys.readouterr().err
+
+
 def test_json_is_rejected_with_isolate_steps(ws, capsys):
     from open_guji_cv.core.pipeline import default_pipeline_id
     from open_guji_cv.core.book import load_book

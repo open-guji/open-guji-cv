@@ -10,6 +10,8 @@
          待审单里带 stale（旧裁已失效）的格，只认 stale.ts 之后的事件。
   团队单 页在 --team-pages 里，或 --page-types 里不是 body 的页（非正文只给团队，用户 10-20 定）。
   公众单 其余。
+  不扣   --keep 名单上的格照旧留在单上（republish.py from-pack 传：人裁按锚框绑到了别的格或绑不上，
+         原格号上的人裁不能算这一格定了字）。
   回流单 同一 (cls, why) 的格 ≥ --reflow-min（缺省 20）：成片的问题先交 M7／M9／CV 修，不逐格审（设计 GUJI-543 §4.2）。
          cls=other、why=none（机器没把握的兜底）不算同一个原因，不进回流单。
          只列出来；加 --reflow-hold 才把它们从两张单里拿掉。
@@ -134,6 +136,7 @@ def main(argv=None) -> int:
     ap.add_argument("--reflow-min", type=int, default=20)
     ap.add_argument("--reflow-hold", action="store_true", help="回流单上的格不进公众单、团队单")
     ap.add_argument("--db-rev", default=None, help="分流时中心库的 rev，写进两张单的 based_on_db_rev")
+    ap.add_argument("--keep", type=Path, default=None, help="不扣的格号，一行一个（可带「册:」前缀）")
     ap.add_argument("--out", required=True, type=Path)
     a = ap.parse_args(argv)
 
@@ -143,7 +146,11 @@ def main(argv=None) -> int:
     if a.page_types:
         types = json.loads(a.page_types.read_text(encoding="utf-8"))
         team_pages |= {int(p) for p, t in types.items() if t != "body"}
-    res = route(pending, decided_cells(iter_events(a.events), a.book, as_of), team_pages, a.reflow_min, a.reflow_hold)
+    decided = decided_cells(iter_events(a.events), a.book, as_of)
+    if a.keep:
+        for line in a.keep.read_text(encoding="utf-8").split():
+            decided.pop(line.removeprefix(f"{a.book}:"), None)
+    res = route(pending, decided, team_pages, a.reflow_min, a.reflow_hold)
 
     stem = re.sub(r"(\.pending)?\.json$", "", a.pending.name)
     a.out.mkdir(parents=True, exist_ok=True)

@@ -91,6 +91,7 @@ from __future__ import annotations
 from functools import lru_cache
 from pathlib import Path
 
+from ..hanzi.symbols import is_symbol, symbols
 from ..utils.cjk_compat import fold_compat, fold_unique
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -261,6 +262,7 @@ def spec_for_book(book: str | None, edition: str = "keben") -> dict:
             variants: true          # 叠加异体展开
             allow: no-simplified    # 简体否决（繁体刻本推荐）；none = 不过滤
             extra: [甫, 鳥]          # 手工补字
+            symbols: false          # 特殊符号表（○□△…，`config/charset/symbols.tsv`）并进基集，缺省关
 
     **`corpus` 从「唯一来源」降级成「叠加项」**——这是本次改造的要点。
     整理本仍有独立价值（给 `freq` 排序与 `std` 正字提示），
@@ -285,7 +287,9 @@ def spec_for_book(book: str | None, edition: str = "keben") -> dict:
         "corpus": bool(cfg.get("corpus", True)),
         "variants": bool(cfg.get("variants", True)),
         "allow": cfg.get("allow") or DEFAULT_ALLOW_BY_EDITION.get(edition, "none"),
-        "extra": list(cfg.get("extra") or []),
+        # 特殊符号（设计 `doc/design/特殊符号进字符候选集-设计.md` S3）：开了就把符号表追加进 extra，
+        # `build_charsets` 让 extra 里登记过的符号绕过 `_cjk` 过滤。没开的书 extra 原样，字表逐字相同。
+        "extra": list(cfg.get("extra") or []) + (list(symbols()) if cfg.get("symbols") else []),
     }
 
 
@@ -337,7 +341,9 @@ def build_charsets(base: str, escalate: str | None, corpus: str | None,
         except Exception:
             pass
 
-    cs = {fold_compat(c) for c in cs if _cjk(c)}
+    # extra 里登记过的特殊符号（册配置 `font.charset.symbols`）不受 `_cjk` 过滤；只进基集
+    sym = {c for c in extra if is_symbol(c)}
+    cs = {fold_compat(c) for c in cs if _cjk(c)} | sym
     esc = {fold_compat(c) for c in esc_set if _cjk(c)} - cs
     return tuple(sorted(cs)), tuple(sorted(esc))
 

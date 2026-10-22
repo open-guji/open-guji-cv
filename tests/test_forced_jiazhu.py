@@ -148,3 +148,13 @@ def test_route_invalidates_row_segment_for_jiazhu_marks():
                              for d in table.destinations(_ev("b", 1, "vol01:12:7:9", p, "2026-10-01T00:00:01Z")))
     assert "row_segment" in steps(jzp)
     assert "row_segment" not in steps({"v": "seg_defect", "quality": "truncated"})
+
+
+def test_half_note_solo_cell_without_runs_is_emitted_as_a_half():
+    """列里没有雙行段、表说只有一半有字的格，判据认成單行小注（小字靠右）→ 按半格发 jiazhu_a；表不说就仍是單行小注。"""
+    img = _column(tail_slots=(15,))
+    base = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W)
+    assert {sub: c.kind for sub, c in _cells(base)[15].items()} == {"": "jiazhu_solo"}
+    r = fit_mod.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, half_notes={15})
+    assert {sub: c.kind for sub, c in _cells(r)[15].items()} == {"a": "jiazhu_a"}
+
