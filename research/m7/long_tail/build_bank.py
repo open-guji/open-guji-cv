@@ -43,7 +43,8 @@ def gather(prod: Path, imgs: Path, chars: str, size: int, channels=("match_ref",
 
 
 #: 组 → (进模板库的字, 归一边长, 每类上限)。组外的 干、曲 也进库：判成它们就 abstain:slot，免得真的干／曲被硬判成组内字。与 `ids_online.SPECS` 里的 size 一致。
-PLAN = {"zy": ("子于干", 32, 250), "sy": ("山由出曲", 40, 150)}
+PLAN = {"zy": ("子于干", 32, 250), "sy": ("山由出曲", 40, 150),
+        "sz": ("宋朱未末", 40, 100), "gm": ("各名", 40, 200), "xb": ("心必", 32, 250)}
 
 
 def pick(cells, cap: int, seed: int = 0):

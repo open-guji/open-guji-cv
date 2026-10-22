@@ -119,6 +119,9 @@ SPECS: dict[str, IdsSpec] = {
     # 山由出：一对多岭回归（判别值＝与第二名得分差），|d|≥0.8 → 0 错，覆盖约 97%（≥0.5 起出现 1 错）；门槛取 0.8。
     "zy": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=32),
     "sy": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", lam=1.0, size=40),
+    "sz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=40),
+    "gm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", lam=1.0, size=40),
+    "xb": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=32),
 }
 
 
