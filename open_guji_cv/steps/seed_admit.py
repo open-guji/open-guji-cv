@@ -1553,10 +1553,19 @@ def _shadow_gate(p: "SeedAdmitParams"):
     return g
 
 
+def _group_members(gid) -> frozenset:
+    from ..groups.registry import FLOW_GROUPS
+    spec = FLOW_GROUPS.get(gid) if gid else None
+    return spec.members if spec is not None else frozenset()
+
+
 def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
     """影子放行闸（只降级）：把现行规则已放行、影子有把握说不对的格降回待审。→ 降级格数。
 
     放在所有通道与 `group_flow` 之后：只会把 admit 从 True 改 False，不改字、不升级。
+    字组按文意定的字（通道 `group_flow`、provenance `context`）影子要改成同组另一个字时不降：形近字的库形本就分不开，
+    影子挑的只是同一个难点的另一边（sheldon 10-22「文意置信度特别高可以改掉整理本」，vol09:251 改成曰后被影子降、
+    又被 coord_fallback 按坐标放回日）。
     `provenance=="human"`（人裁）一票定案，不经这里。模型文件缺／口径不符 → 抛错（开了开关却没有模型
     是配置错误，不静默当没开）；单格信号异常 → 该格弃权。"""
     from ..shadow.signals import CellEvidence
@@ -1583,6 +1592,10 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             v = gate.judge(ev)
             if not v.veto:
                 continue
+            g = (rec.evidence or {}).get("group") or {}
+            if (rec.channel == "group_flow" and rec.provenance == "context" and v.pick
+                    and v.pick in _group_members(g.get("id"))):
+                continue                      # 字组按文意定的字，影子只是挑了同组另一个字：形近本就分不开（vol09:251 曰）
             if (vmap is not None and v.pick and rec.char and v.pick != rec.char
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
