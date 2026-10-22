@@ -1268,22 +1268,88 @@ FRAME_LINE_THICK = 0.12
 FRAME_LINE_ZONE = 0.4
 FRAME_LINE_TAIL = 3.0
 FRAME_LINE_SPECK = 0.1     # 墨不到这么多窗宽的行算白
+# 全页线位（page_frame_line_offset）：同一页各列的框线离版框的距离一样。认出线位后，线位上下
+# FRAME_LINE_TOL 格高内的行，覆盖到 FRAME_LINE_FAINT_COV、跨度到 FRAME_LINE_FAINT_SPAN 就算线行——
+# 印得淡、断成虚点的框线单看一格认不出（vol05 实测覆盖 0.1–0.6、跨度 0.7–0.8，两头的点常缺），
+# 放到全页的线位上就认得出。线外有字（FRAME_LINE_TAIL）照样跳过。淡线还得断成至少 FRAME_LINE_DASHES 段：
+# 压在线位上的字底横（列尾「土」「士」）是一整笔，不能当淡线剥。
+FRAME_LINE_DASHES = 3
+FRAME_LINE_TOL = 0.04
+FRAME_LINE_FAINT_COV = 0.1
+FRAME_LINE_FAINT_SPAN = 0.6
+FRAME_LINE_PAGE_MIN = 3     # 至少这么多列的实线落在同一线位上才认
 FRAME_LINE_INNER = 0.06     # 内容窗口左右各让出这么多（避开界行竖线）
+
+
+def _line_rows(ink: np.ndarray, y_from: int, cov: float = FRAME_LINE_COV,
+               span: float = FRAME_LINE_SPAN, dashes: int = 1) -> np.ndarray:
+    """y_from 起逐行判线行：墨覆盖 ≥ cov、跨度 ≥ span（都按窗宽），墨至少断成 dashes 段。"""
+    h, W = ink.shape
+    line = np.zeros(h, dtype=bool)
+    for y in range(max(0, y_from), h):
+        xs = np.flatnonzero(ink[y])
+        line[y] = (xs.size >= cov * W and xs[-1] - xs[0] + 1 >= span * W
+                   and int((np.diff(xs) > 2).sum()) + 1 >= dashes)
+    return line
+
+
+def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]], cell_h: float,
+                            bottom: bool = True) -> list[float]:
+    """全页的框线线位：离版框的距离（列图坐标，向内为正），双边框内外两道各一个。
+
+    columns：每列 (列图, 内容窗左, 内容窗右, 版框 y)。每列在版框往内 FRAME_LINE_ZONE 格高里找实线
+    （覆盖 FRAME_LINE_COV）各段的中线，量离版框多远；至少 FRAME_LINE_PAGE_MIN 列落在 ±FRAME_LINE_TOL
+    格高内的算一道线位，取中位数。"""
+    tol = FRAME_LINE_TOL * cell_h
+    span = int(round(FRAME_LINE_ZONE * cell_h))
+    ds: list[tuple[float, int]] = []
+    for k, (img, x0, x1, edge) in enumerate(columns):
+        a, b = int(round(x0 + FRAME_LINE_INNER * (x1 - x0))), int(round(x1 - FRAME_LINE_INNER * (x1 - x0)))
+        a, b = max(0, a), min(img.shape[1], b)
+        lo = max(0, int(round(edge)) - span) if bottom else max(0, int(round(edge)))
+        hi = min(img.shape[0], int(round(edge)) + 1) if bottom else min(img.shape[0], int(round(edge)) + span)
+        if b - a < 10 or hi - lo < 2:
+            continue
+        rows = _line_rows(img[lo:hi, a:b] < BINARY_THRESHOLD_PATCH, 0, FRAME_LINE_COV)
+        y = 0
+        while y < rows.size:
+            if rows[y]:
+                y1 = y
+                while y1 < rows.size and rows[y1]:
+                    y1 += 1
+                mid = lo + (y + y1 - 1) / 2
+                ds.append(((edge - mid) if bottom else (mid - edge), k))
+                y = y1
+            else:
+                y += 1
+    ds.sort()
+    out: list[float] = []
+    i = 0
+    while i < len(ds):
+        win = [d for d in ds[i:] if d[0] - ds[i][0] <= 2 * tol]
+        if len({k for _, k in win}) >= FRAME_LINE_PAGE_MIN:
+            out.append(float(np.median([d for d, _ in win])))
+            i += len(win)
+        else:
+            i += 1
+    return out
 
 
 def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
                      win_x0: float, win_x1: float, bottom: bool = True,
-                     gap: bool = False) -> np.ndarray:
+                     gap: bool = False, line_ys: tuple[float, ...] = ()) -> np.ndarray:
     """列尾格（bottom=True）／列首格的版框细线连同线外一并抹白。
 
     cell_top/cell_bot 为格界、win_x0/win_x1 为列内容窗口，都在图块坐标系里。线内侧（字那边）
     没墨的不动：那是只有一横的字（列端的「一」），不是框。gap=True 时线和字之间还要隔着白行：
     列首格用（字头碰不到框，紧贴着字的满宽横是字的上横——卷首「欽定」页满纸噪点，「周」的上横
-    连着噪点落进 FRAME_LINE_ZONE）；列尾不要求，字脚常压在框线上（「見」）。"""
+    连着噪点落进 FRAME_LINE_ZONE）；列尾不要求，字脚常压在框线上（「見」）。line_ys 是全页线位
+    （图块坐标，见 page_frame_line_offsets），线位上下放宽覆盖认淡线。"""
     if not bottom:      # 列首格上下翻转同解
         h = patch.shape[0]
         flip = patch[::-1]
-        out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True)
+        out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True,
+                               line_ys=tuple(h - ly for ly in line_ys))
         return patch if out is flip else np.ascontiguousarray(out[::-1])
     h, w = patch.shape[:2]
     a = int(round(win_x0 + FRAME_LINE_INNER * (win_x1 - win_x0)))
@@ -1292,11 +1358,14 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
     if b - a < 10:
         return patch
     ink = patch[:, a:b] < BINARY_THRESHOLD_PATCH
-    line = np.zeros(h, dtype=bool)
-    for y in range(max(0, int(round(cell_bot - FRAME_LINE_ZONE * (cell_bot - cell_top)))), h):
-        xs = np.flatnonzero(ink[y])
-        line[y] = (xs.size >= FRAME_LINE_COV * (b - a)
-                   and xs[-1] - xs[0] + 1 >= FRAME_LINE_SPAN * (b - a))
+    zone = int(round(cell_bot - FRAME_LINE_ZONE * (cell_bot - cell_top)))
+    line = _line_rows(ink, zone, FRAME_LINE_COV)
+    if line_ys:
+        tol = FRAME_LINE_TOL * (cell_bot - cell_top)
+        near = np.zeros(h, dtype=bool)
+        for ly in line_ys:
+            near[max(0, zone, int(np.floor(ly - tol))):max(0, int(np.ceil(ly + tol)) + 1)] = True
+        line |= near & _line_rows(ink, zone, FRAME_LINE_FAINT_COV, FRAME_LINE_FAINT_SPAN, FRAME_LINE_DASHES)
     runs: list[tuple[int, int]] = []
     y = 0
     while y < h:
@@ -2615,8 +2684,10 @@ class CharExtractor:
                 near_frame = ((idx == tail_cell and frame_in_bot - (sy0 + lbot) < cell_h_ref)
                               or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
                 if near_frame and _jiazhu_gap_center(patch, jz_ref_w) is None:
+                    lys = gmeta.get("frame_lines_bottom" if idx == tail_cell else "frame_lines_top") or ()
                     patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
-                                             bottom=idx == tail_cell)
+                                             bottom=idx == tail_cell,
+                                             line_ys=tuple(float(v) - (sy0 + y0) for v in lys))
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)
