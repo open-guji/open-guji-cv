@@ -1327,6 +1327,9 @@ FRAME_LINE_THICK = 0.12
 FRAME_LINE_ZONE = 0.4
 FRAME_LINE_TAIL = 3.0
 FRAME_LINE_SPECK = 0.1     # 墨不到这么多窗宽的行算白
+FRAME_LINE_BLANK = 0.03    # 「线跟字之间隔着白行」的白：墨不到这么多窗宽（字的竖笔压到线上就不算白）
+FRAME_BAR_COV = 0.8        # 厚过 FRAME_LINE_THICK 的线行段，平均墨覆盖到这么多才算粗版框
+FRAME_LINE_EDGE = 4        # 线行上下这么多行算线的毛边（数线外有没有字时不计）
 # 全页线位（page_frame_line_offset）：同一页各列的框线离版框的距离一样。认出线位后，线位上下
 # FRAME_LINE_TOL 格高内的行，覆盖到 FRAME_LINE_FAINT_COV、跨度到 FRAME_LINE_FAINT_SPAN 就算线行——
 # 印得淡、断成虚点的框线单看一格认不出（vol05 实测覆盖 0.1–0.6、跨度 0.7–0.8，两头的点常缺），
@@ -1436,13 +1439,24 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
             y = y1
         else:
             y += 1
+    edge = line.copy()        # 线行连同上下毛边（粗框的边沿墨不满一行，不算线行）
+    for y0, y1 in runs:
+        edge[max(0, y0 - FRAME_LINE_EDGE):y1 + FRAME_LINE_EDGE] = True
     for k, (y0, y1) in enumerate(runs):
-        if y1 - y0 > FRAME_LINE_THICK * (cell_bot - cell_top):
+        # 太厚的不是线——除非墨几乎铺满，那是粗版框（vol06 p149「者」底下、vol08 p59「尚」顶上），
+        # 字的笔画不会又厚又满宽，贴着字也照剥
+        bar = y1 - y0 > FRAME_LINE_THICK * (cell_bot - cell_top)
+        if bar and float(ink[y0:y1].mean()) < FRAME_BAR_COV:
             continue
         nxt = runs[k + 1][0] if k + 1 < len(runs) else h
         if ink[y1:nxt].sum() > FRAME_LINE_TAIL * (b - a):
-            continue
-        if gap and (ink[max(0, y0 - 2):y0].sum(axis=1) >= FRAME_LINE_SPECK * (b - a)).all():
+            # 线外有墨。双边框两道之间的连墨（粗框的毛边、内外框间的竖向连墨）不算：线跟字之间隔着白行
+            # （线是框、不是压在框上的字脚），线的毛边以外到下一道线的墨又不多，照样是框（vol05 p92「乾」）。
+            above = ink[max(0, y0 - FRAME_LINE_EDGE - 2):max(0, y0 - FRAME_LINE_EDGE)].sum(axis=1)
+            if not (above.size and (above <= FRAME_LINE_BLANK * (b - a)).all()
+                    and ink[y1:nxt][~edge[y1:nxt]].sum() <= FRAME_LINE_TAIL * (b - a)):
+                continue
+        if gap and not bar and (ink[max(0, y0 - 2):y0].sum(axis=1) >= FRAME_LINE_SPECK * (b - a)).all():
             continue
         if not (patch[:y0] < BINARY_THRESHOLD_PATCH).any():
             return patch

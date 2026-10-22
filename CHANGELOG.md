@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- Step4 cell_shrink 1.19：列端粗版框不再带进字块（重跑 v0.5.7 时害了认字）。`strip_frame_line` 两处放宽：线跟字之间隔着白行、线外到下一道线只有框的毛边和连墨的，双边框内外两道一起剥（vol05 p92「乾」）；厚过 0.12 格但墨铺满 ≥80% 的线行段算粗版框，贴着字也剥（vol06 p149「者」、vol08 p59「尚」）。vol05 全册只改「乾」和一格框渣、vol09 全册 0 格变化。框线只剩贴着字的碎段的（vol06「將」「而」、vol09「講」）还没修。
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added

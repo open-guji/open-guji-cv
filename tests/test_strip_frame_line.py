@@ -98,3 +98,38 @@ def test_page_frame_line_offsets_consensus():
         cols.append((img, 0.0, 180.0, 400.0))
     offs = page_frame_line_offsets(cols, cell_h=120.0, bottom=True)
     assert len(offs) == 1 and 27 <= offs[0] <= 30
+
+
+def test_double_frame_with_joining_ink_removed():
+    """「乾」：字下隔着白行是一道粗内框，内外两道框之间有竖向连墨，两道一起剥。"""
+    p = np.full((H + 20, W), 255, np.uint8)
+    p[20:100, 80:90] = 0
+    p[108:120, 6:174] = 0          # 内框（离字 8 行白）
+    for x in (10, 60, 110, 160):   # 两道框之间的连墨
+        p[120:128, x:x + 6] = 0
+    p[128:132, 6:174] = 0          # 外框
+    out = strip_frame_line(p, 10, 130, 0, W)
+    assert (out[106:] == 255).all()
+    assert (out[20:100, 80:90] == 0).all()
+
+
+def test_char_foot_on_inner_frame_with_outer_frame_kept():
+    """字脚压在内框上、下面还有外框：内框连着字，不当框剥（只剥外框），字的底横不动。"""
+    p = _patch()
+    p[96:104, 12:168] = 0          # 满宽底横，紧贴内框
+    p[104:107, 6:174] = 0          # 内框
+    for x in range(10, 170, 20):   # 两道框之间连墨多（原判据就不剥内框）
+        p[107:118, x:x + 8] = 0
+    p[118:122, 6:174] = 0
+    out = strip_frame_line(p, 10, 130, 0, W)
+    assert (out[:104] == p[:104]).all()
+
+
+def test_thick_solid_bar_removed_even_touching_head_char():
+    """「尚」：列首又厚又满的粗版框，贴着字也剥。"""
+    p = _patch()
+    p[10:34, 4:176] = 0            # 24 行粗框（> FRAME_LINE_THICK 格高），满宽
+    p[34:40, 84:88] = 0            # 字头的点贴着框
+    out = strip_frame_line(p, 10, 130, 0, W, bottom=False)
+    assert (out[:34] == 255).all()
+    assert (out[20:100, 80:90][14:] == 0).all()
