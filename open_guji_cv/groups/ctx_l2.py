@@ -90,23 +90,46 @@ def merge_runs(group: str, members: str, ver: str, runs: dict[str, dict], ctxs: 
 
 
 def add_review(table: dict, model: str, run: dict, members: str, need: tuple = ("high",)) -> int:
-    """第二个模型复核（sheldon 10-22 定）：主表里「主模型给了组内字、只是置信不够」（`abstain:low_conf`）的格，
-    复核模型给同一个字且置信 ∈ `need` → 用这个字（why=`agree:review`）；其余格不动，只记票。就地改 `table`，返回改了几格。
-    己已巳 179 格人工标注上：haiku 非 high 的 18 格里 Sonnet high 且同字 5 格，0 错（haiku「其他」不收，两边字不同不收）。"""
+    """第二个模型复核（sheldon 10-22 定，同日放宽）：主表里主模型没给出把握的格（`abstain:low_conf`、`abstain:other`），
+    复核模型给组内字且置信 ∈ `need`、主模型又没有哪一遍以 high 给过别的字 → 用复核模型的字（why=`agree:review`）；
+    其余格不动，只记票。就地改 `table`，返回改了几格。
+    己已巳 179 格人工标注上：haiku 非 high、Sonnet high 的 9 格全对（8 格同字、1 格异字）。"""
     n = 0
     for cid, e in (table.get("cells") or {}).items():
         v = run.get(cid)
         if not v:
             continue
         e.setdefault("votes", {})[model] = [v.get("char"), v.get("conf")]
-        if e.get("why") != "abstain:low_conf":
+        if e.get("why") not in ("abstain:low_conf", "abstain:other"):
             continue
         main = [x for m, x in e["votes"].items() if m != model and x]
-        if main and all(x[0] == v.get("char") for x in main) and v.get("char") in members and v.get("conf") in need:
+        if any(x[1] == "high" and x[0] != v.get("char") for x in main):
+            continue
+        if v.get("char") in members and v.get("conf") in need:
             e["char"], e["why"] = v["char"], "agree:review"
             n += 1
     if model not in table.get("models", []):
         table["models"] = sorted([*table.get("models", []), model])
+    return n
+
+
+def add_confirm(table: dict, runs: dict, need: tuple = ("high",)) -> int:
+    """再跑几遍确认（日曰，sheldon 10-22「文意置信度特别高可以改掉整理本」）：`runs`＝{模型名: {格: 答案}}。主表已给字的格，
+    每一遍都给同一个字且置信 ∈ `need` → 记 `strong: true`。只有 strong 的答案能在复核时改掉别的通道放行的字
+    （`FlowSpec.review_fix_strong`）；不 strong 的答案照旧（照常补放、照常降审）。就地改 `table`，返回 strong 格数。
+    日曰 98 格人工标注上：haiku 与 Sonnet 都 high 且同字 66 格，错 1 格（vol02:183:8:7，sheldon 两轮复审为日）。"""
+    n = 0
+    for cid, e in (table.get("cells") or {}).items():
+        vs = [r.get(cid) for r in runs.values()]
+        for m, v in zip(runs, vs):
+            if v:
+                e.setdefault("votes", {})[m] = [v.get("char"), v.get("conf")]
+        if e.get("char") is not None and all(v and v.get("char") == e["char"] and v.get("conf") in need for v in vs):
+            e["strong"] = True
+            n += 1
+        else:
+            e.pop("strong", None)
+    table["models"] = sorted({*table.get("models", []), *runs})
     return n
 
 
@@ -187,4 +210,6 @@ class CtxL2Backend:
             # 「组内字都不通」有多把握（共字组联合判 `flow.decide_joint` 只认 high）
             vs = [v for v in (e.get("votes") or {}).values() if v]
             extra["other_conf"] = "high" if vs and all(v[1] == "high" for v in vs) else "low"
+        if ch is not None and e.get("strong"):
+            extra["strong"] = True
         return GroupVerdict(ch, why=why, via="ctx_l2", extra=extra)

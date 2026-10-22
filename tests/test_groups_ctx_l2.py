@@ -112,16 +112,32 @@ def test_jys_llm_skips_second_of_family_pair():
     assert (v.char, v.why) == (None, "abstain:pair")
 
 
-def test_add_review_only_upgrades_same_char_high():
-    """复核模型只把「主模型同字但置信不够」的格补成答案；字不同、复核也不 high、主模型说其他的都不动。"""
+def test_add_review_takes_reviewer_high_unless_main_was_high():
+    """复核模型 high 的组内字就收（主模型 low/mid/「其他」都行）；主模型有一遍以 high 给了别的字、或复核不 high 都不收。"""
     from open_guji_cv.groups.ctx_l2 import add_review
-    ctx = {k: ("左", "右") for k in "abcd"}
+    ctx = {k: ("左", "右") for k in "abcde"}
     t = merge_runs("jys", "己已巳", "jys-l2-1", {"haiku": {
         "a": {"char": "已", "conf": "mid"}, "b": {"char": "已", "conf": "mid"},
-        "c": {"char": "其他", "conf": "mid"}, "d": {"char": "己", "conf": "low"}}}, ctx, min_conf=("high",))
+        "c": {"char": "其他", "conf": "mid"}, "d": {"char": "己", "conf": "low"}, "e": {"char": "已", "conf": "high"}}},
+        ctx, min_conf=("high",))
+    t["cells"]["e"].update(char=None, why="abstain:low_conf")       # 假装另一遍不 high，看 high 那一遍挡不挡
     n = add_review(t, "sonnet", {"a": {"char": "已", "conf": "high"}, "b": {"char": "己", "conf": "high"},
-                                 "c": {"char": "已", "conf": "high"}, "d": {"char": "己", "conf": "mid"}}, "己已巳")
-    assert n == 1
-    assert (t["cells"]["a"]["char"], t["cells"]["a"]["why"]) == ("已", "agree:review")
-    assert [t["cells"][k]["char"] for k in "bcd"] == [None, None, None]
-    assert t["cells"]["b"]["votes"]["sonnet"] == ["己", "high"] and t["models"] == ["haiku", "sonnet"]
+                                 "c": {"char": "已", "conf": "high"}, "d": {"char": "己", "conf": "mid"},
+                                 "e": {"char": "己", "conf": "high"}}, "己已巳")
+    assert n == 3
+    assert [t["cells"][k]["char"] for k in "abcde"] == ["已", "己", "已", None, None]
+    assert t["cells"]["a"]["why"] == "agree:review" and t["cells"]["b"]["votes"]["sonnet"] == ["己", "high"]
+    assert t["models"] == ["haiku", "sonnet"]
+
+
+def test_add_confirm_marks_strong_and_backend_reports_it():
+    from open_guji_cv.groups.ctx_l2 import add_confirm
+    ctx = {"a": ("二月十一", "奉"), "b": ("二月十一", "奉")}
+    t = merge_runs("ry", "日曰", "ry-l2-1", {"haiku": {"a": {"char": "日", "conf": "high"},
+                                                       "b": {"char": "日", "conf": "high"}}}, ctx)
+    n = add_confirm(t, {"haiku#2": {"a": {"char": "日", "conf": "high"}, "b": {"char": "日", "conf": "high"}},
+                        "sonnet": {"a": {"char": "日", "conf": "high"}, "b": {"char": "日", "conf": "mid"}}})
+    assert n == 1 and t["cells"]["a"]["strong"] and "strong" not in t["cells"]["b"]
+    be = CtxL2Backend(t)
+    assert be.judge(RY, JudgeInput("a", None, window_from_text("二月十一", "奉"))).extra["strong"] is True
+    assert "strong" not in be.judge(RY, JudgeInput("b", None, window_from_text("二月十一", "奉"))).extra
