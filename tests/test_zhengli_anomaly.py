@@ -53,7 +53,7 @@ def test_json_errors_are_specific(tmp_path):
     assert "JSON 第 3 行" in ce.load_anomaly(f)[1][0]
     f.write_text(json.dumps({"rows": [{"n": 1, "text": "a", "concl": "b"}, {"n": 1, "text": "", "concl": "x"},
                                       {"n": "x"}, "oops", {"n": 5, "text": "t", "pages": ["7"]}]}), encoding="utf-8")
-    rows, problems = ce.load_anomaly(f)
+    _, problems = ce.load_anomaly(f)
     joined = "\n".join(problems)
     assert "第 1 行（rows[2]） 序号重复" in joined and "没有 text" in joined and "rows[3] 的 n 要是数字" in joined
     assert "rows[4] 不是对象" in joined and "的 pages 要是整数数组" in joined
