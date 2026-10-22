@@ -762,6 +762,7 @@ def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float
 
 
 NEIGHBOR_PART_OUT = 0.62     # 跨格界部件的墨至少这么多在界外，才算邻字的（drop_neighbor_parts）
+NEIGHBOR_PART_DEPTH = 0.10   # 且伸进本格不超过这么深（× 列格高）
 
 
 def _nearer_outside(binary: np.ndarray, comp: np.ndarray, t0: int, t1: int) -> bool:
@@ -789,6 +790,8 @@ def drop_neighbor_parts(patch: np.ndarray, ctx: np.ndarray, off: int,
     「聖/經」「歟/自」）。部件常比 pad 长，在图块里看不全，所以在上下各多一格的列条 `ctx`
     里找连通体（`patch` 的第 0 行 = `ctx` 的第 `off` 行，两者同宽；格界也按 `ctx` 行号给）。
     跨格界、不高于一个字（`SPLIT_H_RATIO` × 本列格高 `cell_h` 以内，更高的是粘连块）、不碰 `ctx` 上下沿、
+    伸进本格不超过 `NEIGHBOR_PART_DEPTH`（伸得深的多半是两字粘成一块：「爲/兵」「標/其」「蒙/荃」，
+    整块挪走会挖掉本字的笔画，2026-10-22 Sheldon 看图指出）、
     墨至少 `NEIGHBOR_PART_OUT` 在格界外、且离格外的墨不比离格内的远的，从本格抹掉——邻格那边
     留着。四六开到五五开的照旧两格都留：格界偏低时下字顶上的点、宀（音、序、宮、字）常是
     这样，归错了比多一笔伤得重。
@@ -802,8 +805,11 @@ def drop_neighbor_parts(patch: np.ndarray, ctx: np.ndarray, off: int,
     out = patch
     for k in range(1, n):
         y, h = int(st[k, 1]), int(st[k, 3])
-        if (h > SPLIT_H_RATIO * cell_h or y <= 0 or y + h >= H
-                or not ((top and y < t0 < y + h) or (bottom and y < t1 < y + h))):
+        cross_top, cross_bot = top and y < t0 < y + h, bottom and y < t1 < y + h
+        if h > SPLIT_H_RATIO * cell_h or y <= 0 or y + h >= H or not (cross_top or cross_bot):
+            continue
+        # 只挪伸进本格浅浅一截的；伸进字里深的多半是两字粘成一块，整块挪走会挖掉本字的笔画
+        if max(y + h - t0 if cross_top else 0, t1 - y if cross_bot else 0) > NEIGHBOR_PART_DEPTH * cell_h:
             continue
         rows = np.nonzero(lab[y:y + h] == k)[0] + y
         inside = int(((rows >= t0) & (rows < t1)).sum())
