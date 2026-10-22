@@ -91,7 +91,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.19", unit="cell",   # 1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.20", unit="cell",   # 1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals",),
         produces=("char_index", "char_patch"),
         params=CellShrinkParams,
@@ -105,7 +105,7 @@ class CellShrinkStep(Step):
 
     # ── 一列 ──────────────────────────────────────────────────────────
     def _page_frame_lines(self, ctx: RunContext, page: int, cells: PageCells) -> dict:
-        """全页的框线线位（列图坐标）：各列框线离版框一样远，拿全页的实线定线位，淡线按线位认
+        """全页的框线线位（列图坐标）和线厚：各列框线离版框一样远，拿全页的实线定线位，淡线按线位认
         （extractor.page_frame_line_offsets）。"""
         from ..clustering.extractor import page_frame_line_offsets
         cols = [cc for cc in cells.columns if cc.ok and "roster" not in cc.flags and cc.content_x]
@@ -119,7 +119,7 @@ class CellShrinkStep(Step):
             offs = page_frame_line_offsets(
                 [(imgs[cc.col], *cc.content_x, edge[cc.col]) for cc in cols if edge[cc.col] is not None],
                 cell_h, bottom=bottom)
-            out[key] = {cc.col: [edge[cc.col] - d if bottom else edge[cc.col] + d for d in offs]
+            out[key] = {cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in offs]
                         for cc in cols if edge[cc.col] is not None}
         return out
 
