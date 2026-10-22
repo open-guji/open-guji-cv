@@ -49,14 +49,14 @@ def glyph_store_human(gs: Path, members: set) -> dict:
     return out
 
 
-def load(root: Path, crops: Path, members: set, extra: list[Path] = (), gs: Path | None = None):
+def load(root: Path, crops: Path, members: set, extra: list[Path] = (), gs: Path | None = None, only: bool = False):
     """→ [(字, 灰度, 册, 格 id)]。数据集人裁为主；给了字形库 `gs` 再并入其中 human 实例（数据集没有的格）。
-    同一格多条且字不一致的整格丢弃。"""
+    同一格多条且字不一致的整格丢弃。`only`：只用 `crops`／`extra` 里的图（如线上同款 char_patch），不并入数据集自带的字块图。"""
     paths = {}
     for d in (crops, *extra):
         for f in Path(d).glob("*.png"):
             paths.setdefault(f.stem, f)
-    for f in list(root.glob("variant/*/crops/*.png")) + list(root.glob("*/crops/*.png")):
+    for f in ([] if only else list(root.glob("variant/*/crops/*.png")) + list(root.glob("*/crops/*.png"))):
         paths.setdefault(f.stem, f)
     forms = defaultdict(set)
     for line in open(root / "labels" / "unified.jsonl", encoding="utf-8"):
@@ -208,13 +208,14 @@ def main():
     ap.add_argument("group")
     ap.add_argument("--min-form", type=int, default=8)
     ap.add_argument("--json", type=Path)
+    ap.add_argument("--only-crops", action="store_true", help="只用给定目录里的字块图（线上同款 char_patch），不并入数据集自带图")
     ap.add_argument("--glyph-store", type=Path, help="并入中心库字形库 human 实例（guji db pull 后的 output/glyph_store）")
     a = ap.parse_args()
     gids = list(FLOW_GROUPS) if a.group == "all" else a.group.split(",")
     out = {}
     for g in gids:
         mem = set(FLOW_GROUPS[g].members)
-        cells = load(a.root, a.crops, mem, gs=a.glyph_store)
+        cells = load(a.root, a.crops, mem, gs=a.glyph_store, only=a.only_crops)
         cnt = Counter(c[0] for c in cells)
         forms = [f for f, n in cnt.items() if n >= a.min_form]
         if len(forms) < 2:
