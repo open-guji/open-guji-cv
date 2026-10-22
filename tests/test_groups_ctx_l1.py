@@ -114,3 +114,10 @@ def test_batch3_groups_rules(g, left, right, want):
     spec = GROUPS[g]
     be = CtxL1Backend(ROOT / spec.config_dir / "rules.yaml", spec.members)
     assert be.decide(left, right)[0] == want
+
+
+def test_real_symbol_in_window_is_not_target(tmp_path):
+    """特殊符号设计 4.4：规则里的 ◎ 是目标位；邻格放行的字真是符号 ◎ 时不许被当成目标位。"""
+    be = _backend(tmp_path, "rules:\n  - {id: a, char: 日, re: '月十◎'}\n")
+    assert be.decide("月十", "")[0] == "日"
+    assert be.decide("月十◎之", "")[0] is None        # 左窗里的真 ◎ 不是目标位

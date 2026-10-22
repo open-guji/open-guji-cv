@@ -221,3 +221,14 @@ def test_symbol_hint_threshold():
     far = np.array([SYM_MIN - 0.1, (1 - (SYM_MIN - 0.1) ** 2) ** 0.5])
     assert symbol_hint(q, lambda cs: {c: (near if c == "○" else far) for c in cs}) == "○"
     assert symbol_hint(q, lambda cs: {c: far for c in cs}) is None
+
+
+def test_rare_panel_symbol_gate():
+    """5-b 符号门槛（特殊符号设计 S3）：符号余弦 ≥ SYM_MIN 且高过本格最像的汉字才留，留下的排最前。"""
+    from open_guji_cv.clustering.rare_panel import _sym_first, _symbol_gate
+    assert _symbol_gate([("人", 0.988), ("亼", 0.978), ("△", 0.964)]) == frozenset()      # vol06 噪声
+    assert _symbol_gate([("○", 0.964), ("◎", 0.942), ("口", 0.927), ("⊙", 0.914)]) == {"○", "◎"}
+    assert _symbol_gate([("○", 0.92), ("口", 0.90)]) == frozenset()                        # 不到 SYM_MIN
+    hits = [{"char": "口"}, {"char": "○"}, {"char": "乙"}, {"char": "◎"}]
+    assert [h["char"] for h in _sym_first(hits, frozenset({"○", "◎"}))] == ["○", "◎", "口", "乙"]
+    assert _sym_first(hits, frozenset()) is hits
