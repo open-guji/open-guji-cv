@@ -472,13 +472,19 @@ def cmd_add_alt(a) -> int:
         if c.get("alt") and ":" in str(c.get("id")):
             alt[c["id"].split(":", 1)[1]] = pending_fields({"alt": c["alt"]})["alt"]
     cells = doc.get("cells") or []
-    todo = [c for c in cells if c.get("review") != "human" and not c.get("alt")]
+    todo = [c for c in cells if c.get("review") != "human" and (a.replace or not c.get("alt"))]
     miss = [c["cell"] for c in todo if c["cell"] not in alt]
+    changed = []
     for c in todo:
         if c["cell"] in alt:
+            old = [x.get("c") for x in c.get("alt") or []]
+            if old != [x["c"] for x in alt[c["cell"]]]:
+                changed.append(c["cell"])
             c["alt"] = alt[c["cell"]]
     n = len(todo) - len(miss)
-    print(f"{book} {doc.get('rev')}：缺相似字 {len(todo)} 格，补上 {n} 格" + (f"；卡片里没有的 {len(miss)} 格：{' '.join(miss[:20])}" if miss else ""))
+    print(f"{book} {doc.get('rev')}：{'重算' if a.replace else '缺相似字'} {len(todo)} 格，补上 {n} 格，相似字有变的 {len(changed)} 格"
+          + (f"（{' '.join(changed[:20])}）" if a.replace and changed else "")
+          + (f"；卡片里没有的 {len(miss)} 格：{' '.join(miss[:20])}" if miss else ""))
     out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / f"{doc.get('rev')}-alt"
     out.mkdir(parents=True, exist_ok=True)
     (out / f"{chapter}.pending.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
@@ -527,6 +533,7 @@ def main(argv=None) -> int:
     p.add_argument("--chapter")
     p.add_argument("--text-id")
     p.add_argument("--out")
+    p.add_argument("--replace", action="store_true", help="已有相似字的格也换成这次算的（相似字规则改了之后用）")
     p.add_argument("--yes", action="store_true", help="写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     for name in ("prep", "push", "from-pack"):

@@ -23,6 +23,9 @@ import numpy as np
 
 ALT_K = 30                    # 每格最多给几个
 ALT_SHOW = 10                 # 前端缺省展开几个（用户 10-19 定）
+#: 字块图与某个特殊符号模板的余弦 ≥ 这个值，就把符号表并进池子（设计 4.3 兜底）。
+#: 10-21 在殿本 vol04–10 待审 1255 格上扫：真符号格（○×4、⊙×1）0.94–0.97，其余最高 0.84
+SYM_MIN = 0.93
 
 
 def pivots_of(card: dict, extra: Iterable[str] = ()) -> list[str]:
@@ -109,6 +112,28 @@ def rank_pool(q: np.ndarray, pool: dict[str, dict], vectors: Callable[[list[str]
     return [{"c": c, "s": round(s, 4), "p": pool[c]["p"], "src": pool[c]["src"]} for s, c in scored[:k]]
 
 
+def symbol_hint(q: np.ndarray, vectors: Callable[[list[str]], dict[str, np.ndarray]],
+                beat: float = -1.0) -> str | None:
+    """字块图像不像某个特殊符号：最像的那个符号余弦 ≥ `SYM_MIN`、且高过 `beat`（这格自己池子里
+    最像的字）才返回它，否则 None。只看绝对值不够：曰、日 的字块和 □ 的余弦也能过 0.93，
+    但比不过 曰、日 本身（10-21 殿本扫描）。"""
+    from ..hanzi.symbols import symbols
+    vec = vectors(list(symbols()))
+    best = max(((float(v @ q), c) for c, v in vec.items()), default=(0.0, None))
+    return best[1] if best[0] >= SYM_MIN and best[0] > beat else None
+
+
+def _with_symbols(q, pivots: list[str], bank, zi, k: int) -> list[dict]:
+    """池子按图排序；图像比池子里最像的字更像某个符号时，符号表并进池子再排（设计 4.3）。"""
+    from ..clustering.variant_sources import family_pool
+    pool = family_pool(pivots, zi=zi)
+    ranked = rank_pool(q, pool, bank.vectors, k) if pool else []
+    sym = symbol_hint(q, bank.vectors, beat=ranked[0]["s"] if ranked else -1.0)
+    if sym:
+        ranked = rank_pool(q, family_pool(pivots + [sym], zi=zi), bank.vectors, k)
+    return ranked
+
+
 def alt_for_image(book: str | None, img, pivots: list[str], *, k: int = ALT_K, zi=None,
                   bank: TemplateBank | None = None) -> list[dict]:
     """一张字块图 ＋ 近似字 → alt 列表（控制台现场查一格用；出待审单批量走 `alt_for_cards`）。"""
@@ -120,8 +145,9 @@ def alt_for_image(book: str | None, img, pivots: list[str], *, k: int = ALT_K, z
     if img is None or not bank.available:
         return []
     q = bank.embed(normalize_patch(img, stroke_width=_book_norm_stroke(book)))
-    pool = family_pool(pivots, zi=zi)
-    return rank_pool(q, pool, bank.vectors, k) if (q is not None and pool) else []
+    if q is None:
+        return []
+    return _with_symbols(q, pivots, bank, zi, k)
 
 
 _BANK: TemplateBank | None = None
@@ -170,9 +196,9 @@ def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank
         if q is None:
             continue
         piv = pivots_of(c, (extra_pivots or {}).get(c["id"], ()))
-        pool = family_pool(piv, zi=zi)
-        if pool:
-            out[c["id"]] = rank_pool(q, pool, bank.vectors, k)
+        ranked = _with_symbols(q, piv, bank, zi, k)
+        if ranked:
+            out[c["id"]] = ranked
         if log and (i + 1) % 100 == 0:
             log(f"alt：{i + 1}/{len(cards)} 格")
     if log and no_img:
