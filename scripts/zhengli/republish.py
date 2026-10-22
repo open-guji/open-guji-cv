@@ -13,7 +13,8 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
             旧 rev 上已有的网站精校票也列出（它们不是人裁事件，扣不掉）
   push   人看过差异单、点了头才跑（要 --yes）：新单写进数据目录 proofing/<书>/<章>.pending.json，
          写一行台账（ledger.py），加 --sync 再 `guji db sync` 推进中心库。
-         雪碧图上 COS／R2、产物包标 main、book-text 换文本这三样还要另做，push 末尾逐条打出来。
+         雪碧图（改名带内容哈希、`sprites[]` 写进单子）在这里按 sha256 传进 R2；网站每日 proofing-sync 再把图
+         和单子一起发到 COS（GUJI-675）。产物包标 main、book-text 换文本这两样还要另做，push 末尾逐条打出来。
 
 **文本和待审单要一起换**：新单的格号按新切分排，网站显示的还是 book-text 的旧文本就会对不上。
 所以 prep 要 --export-dir（同一次导出的 char／cord／pages），push 前先把同一次导出推到 book-text。
@@ -27,6 +28,8 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
   python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export
   python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync] [--book-text <book-text 仓>]
   python scripts/zhengli/republish.py add-alt --book vol05 -w $WS [--yes --sync]   # 线上单漏了相似字：原地补，不换 rev
+  python scripts/zhengli/republish.py add-sprites --book vol05 -w $WS --export-dir <cord 所在目录> [--yes --sync]
+                                                                      # 线上单的雪碧图没上 R2：重建、核坐标不变、传 R2、原地补 sprites[]
 推库要 `.[datastore]`（psycopg、websockets）和能写 main 的令牌。
 产物根取 GUJI_PRODUCTS_DIR，没设就是 <工作区>/products（与引擎同口径）。
 """
@@ -44,6 +47,8 @@ from pathlib import Path
 
 CV = Path(__file__).resolve().parents[2]
 HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+import sprite_pub
 
 
 def chapter_of(book: str) -> str:
@@ -253,7 +258,11 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     elif not rd:
         print(f"ⓘ 没找到 {book} 的原图目录（{ws}/data_full/*/{book}），不出雪碧图，单子上没有 img")
     new = json.loads(final.read_text(encoding="utf-8"))
-    shutil.copyfile(final, out / f"{chapter}.pending.json")
+    if final.parent == out / "sprites" and (out / "sprites" / "assets.json").exists():
+        new, _ = sprite_pub.attach(new, out / "sprites")     # 图改名带哈希、sprites[] 写进单子（GUJI-675）
+        (out / f"{chapter}.pending.json").write_text(json.dumps(new, ensure_ascii=False, indent=1), encoding="utf-8")
+    else:
+        shutil.copyfile(final, out / f"{chapter}.pending.json")
     raw_doc = json.loads((raw / f"{chapter}.pending.json").read_text(encoding="utf-8"))
     pub_cells = {c["cell"] for c in json.loads(public.read_text(encoding="utf-8"))["cells"]}
     dropped = [c for c in raw_doc["cells"] if c["cell"] not in pub_cells]
@@ -288,6 +297,10 @@ def cmd_push(a) -> int:
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
         bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
+    doc_new = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
+    if doc_new.get("sprites"):                                   # 图先进 R2，单子再写：单上线时图一定取得到
+        stats = sprite_pub.upload(doc_new["sprites"], Path(plan["sprites"]) / "pub")
+        print(f"雪碧图 {len(doc_new['sprites'])} 张 → R2：{stats}")
     online = Path(plan["online"])
     if online.exists():
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
@@ -310,8 +323,10 @@ def cmd_push(a) -> int:
     todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：book-text PR 合了、单子推了，"
              "请网站总管按顺序手动跑 kaiyuanguji-web 的 data.yml（flow=text）和 proofing-sync.yml（target=production、parts=publish、dry_run=false）",
              f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}"]
-    if plan.get("sprites"):
-        todo.append(f"雪碧图 {plan['sprites']} 上 COS／R2（GUJI-675 落地前手工传）")
+    if doc_new.get("sprites"):
+        todo.append("雪碧图已进 R2，单子里的 sprites[] 会随 guji db sync 进中心库；网站 proofing-sync（publish）发布时一并传到 COS")
+    elif plan.get("sprites"):
+        todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
     return 0
 
@@ -523,6 +538,55 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     print(f"book-text 分支 {br} 已提交：推上去开 PR（CHANGES 里 #TBD 换成 PR 号），合了再 push 待审单")
 
 
+def cmd_add_sprites(a) -> int:
+    """线上单的雪碧图没上 R2（GUJI-675 之前出的单）：重建、核坐标不变、传 R2、原地补 `sprites[]` 并把 `img.s` 换成哈希名。
+
+    重建用 `sprite_build.py` 在线上单上跑一遍（同一份 cord、同一批原图、同一个格序，坐标应当逐格相同）；
+    只要有一格 `img` 的坐标对不上就整个不动，打出对不上的格——说明手上的 cord／原图不是出这张单时的那份。
+    相似字字形图（`alt[].g`）线上单本来就没有，不补。"""
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    online = proofing_path(ws, text_id, chapter)
+    doc = json.loads(online.read_text(encoding="utf-8"))
+    if doc.get("sprites"):
+        print(f"{book} {doc.get('rev')}：单子已有 sprites[] {len(doc['sprites'])} 张，不用补")
+        return 0
+    cord = Path(a.export_dir) / f"{chapter}.cord.json"
+    rd = raw_dir(ws, book)
+    if not cord.exists() or not rd:
+        sys.exit(f"✗ 要有 {cord} 和原图目录（{ws}/data_full/*/{book}）")
+    out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / f"{doc.get('rev')}-sprites"
+    out.mkdir(parents=True, exist_ok=True)
+    src = out / "online.pending.json"
+    src.write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    sp = out / "sprites"
+    if run([sys.executable, HERE / "sprite_build.py", "--cord", cord, "--pending", src, "--raw-dir", rd,
+            "--book", text_id, "--vol", chapter[-2:], "--out", sp]).returncode:
+        return 1
+    rebuilt = {c["cell"]: c.get("img") for c in json.loads((sp / "pending.with-img.json").read_text(encoding="utf-8"))["cells"]}
+    bad = [c["cell"] for c in doc["cells"] if (c.get("img") or None) != (rebuilt.get(c["cell"]) or None)]
+    if bad:
+        sys.exit(f"✗ {len(bad)} 格重建出的 img 坐标和线上单不一样（{' '.join(bad[:20])}）：手上的 cord／原图不是出这张单时的那份，不动")
+    new, entries = sprite_pub.attach(doc, sp)
+    (out / f"{chapter}.pending.json").write_text(json.dumps(new, ensure_ascii=False), encoding="utf-8")
+    print(f"{book} {doc.get('rev')}：{len(doc['cells'])} 格的坐标全部一致，雪碧图 {len(entries)} 张，"
+          f"{sum(e['bytes'] for e in entries) / 1e6:.1f} MB；补好的单 → {out / f'{chapter}.pending.json'}")
+    if not a.yes:
+        print("确认后加 --yes：传 R2、写回数据目录")
+        return 0
+    stats = sprite_pub.upload(entries, sp / "pub")
+    print(f"雪碧图 → R2：{stats}")
+    shutil.copyfile(online, out / f"online.{doc.get('rev')}.pending.json.bak")
+    shutil.copyfile(out / f"{chapter}.pending.json", online)
+    print(f"已写回 {online}")
+    if a.sync:
+        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
+            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    else:
+        print(f"还要：guji db sync -w {ws}；再请网站总管手动跑 proofing-sync（publish），网站才取得到图")
+    return 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -535,6 +599,15 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p.add_argument("--replace", action="store_true", help="已有相似字的格也换成这次算的（相似字规则改了之后用）")
     p.add_argument("--yes", action="store_true", help="写回数据目录")
+    p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p = sp.add_parser("add-sprites", help="线上单补雪碧图（传 R2、写 sprites[]，不换 rev）")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--export-dir", required=True, help="出这张单时那次导出的 cord 所在目录")
+    p.add_argument("--chapter")
+    p.add_argument("--text-id")
+    p.add_argument("--out")
+    p.add_argument("--yes", action="store_true", help="传 R2、写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     for name in ("prep", "push", "from-pack"):
         p = sp.add_parser(name)
@@ -567,7 +640,7 @@ def main(argv=None) -> int:
             p.add_argument("--note", help="book-text CHANGES 一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     a = ap.parse_args(argv)
-    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt}[a.cmd](a)
+    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 
 
 if __name__ == "__main__":
