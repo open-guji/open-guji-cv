@@ -135,6 +135,12 @@ def resolved_manual_cells(book: str) -> dict[tuple[int, int], list[dict]]:
     return out
 
 
+def resolved_inverted(book: str) -> dict[int, dict]:
+    """反色带人审：`page → {"verdict", "rules"}`。实现在 `utils.preclean`（Step 引擎在 L1 要读，不能往上 import）。"""
+    from ..utils.preclean import resolved_inverted as _r
+    return _r(book)
+
+
 MANUAL_CELL_KINDS = frozenset({"char", "jiazhu_a", "jiazhu_b"})
 MANUAL_CELL_KEYS = ("slot", "kind", "y0", "y1", "x0", "x1")
 
