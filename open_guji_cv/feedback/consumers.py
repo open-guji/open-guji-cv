@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
+from ..hanzi.symbols import is_symbol
 from .events import Event, EventLog, counts_as_human, replay_key
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
@@ -398,8 +399,9 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
             continue
-        if len(shape) != 1 or ord(shape) < 0x2E80:
-            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引
+        if len(shape) != 1 or (ord(shape) < 0x2E80 and not is_symbol(shape)):
+            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引。
+            # 登记过的特殊符号（○□△…，`hanzi.symbols`）放行：人定成符号的格进库，同书同形 5-a 才匹配得上
             res.errors.append(f"{e.target.key}: 字形 {shape!r} 不是单个汉字，跳过")
             res.skipped += 1
             continue

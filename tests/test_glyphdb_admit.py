@@ -241,6 +241,20 @@ def test_mojibake_shape_is_repaired_or_rejected(lib):
     assert r.added == 0 and "不是单个汉字" in r.errors[0]
 
 
+def test_symbol_shape_enters_library(lib):
+    """人定成特殊符号（○，非汉字区）的格照样进库（特殊符号设计 4.2）；未登记的非汉字单字仍拒。"""
+    db, cells = lib
+    r = _confirm(db, cells[6], {"v": "confirm", "shape": "○"})
+    assert r.added == 1, r.errors
+    pg, col, slot = cells[6]
+    c = sqlite3.connect(db)
+    assert c.execute("select label from instances where instance_id=?",
+                     (f"v2:{BOOK}:{pg}:{col}:{slot}",)).fetchone()[0] == "○"
+    c.close()
+    r = _confirm(db, cells[7], {"v": "confirm", "shape": "☆"})
+    assert r.added == 0 and "不是单个汉字" in r.errors[0]
+
+
 def test_relabel_without_cache_uses_library_patch(lib, monkeypatch):
     """字块缓存被清之后改判：图块用库里那张，改判照样落库。"""
     db, cells = lib
