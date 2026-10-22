@@ -24,6 +24,7 @@ PATCH（Sheldon 10-21 定发）。glyph_match 的 `batch_knn`、`font_tier` 改�
 - 教敎（`groups/ids_online`，`jiao`）改用整字左上角一块（左 0–55%、上 0–46%）做 HOG＋岭回归：按册 5 折留出 93 格，门槛 0.4 → 87 对／6 弃／0 错（此前整字／U-Net／自动缝给字格 0 错覆盖 ≤8%）。`config/groups/jiao/ids_bank.json` 用 dataset 93 格重建（教 68／敎 25，含 vol01 四格教→敎更正）。jiao 的 group_flow 指纹变，seed_admit code_hash 变。记录见 `doc/research/形近字组实验记录.md`。
 
 ### Added
+- Step0 印章定位 `seal_detect`（印章系统化第 1 期，用户 10-22 定）：排在 Step1 之前，只读原图，产物 `seals` 列出每页每方印的类别（`stain` 大印＝卷首叶、卷端页的斑驳藏书印；`crisp` 小印＝卷末「乾隆御覽之寶」）、规范空间外框、分数、来源。大印按 150 px 网格的中等墨点密度认（峰值 ≥ 20、近方形，排掉 p2 书签条）；小印用印章模板整页找，分数取「模板笔画处有墨比例 − 空白处有墨比例」，印压正文时也认得出（vol09 p265 原来认不出）。书级 `params.seal_detect.overrides` 可人核整页覆盖。殿本十册 1,707 页认出 26 页（大印 13、小印 13），我逐页看图没发现误报（待 Sheldon 核图定为标准）。这一期只新增产物，别的步还不读它，各书已有产物不过期（新步自己要算一遍）。设计见 Claude Doc「印章系统化设计」。
 - `glyph_match.font_tier`（缺省关，GUJI-726）：分级查库，每格先只查刻本库；命中弱才查含字体域的整库，那一格与关着时相同。命中强＝判 same 或「unsure、首选 cov ≥ 0.98、比次优异字高 ≥ 0.03」，且首选字不是字组成员、没有形近对手。vol06 glyph_match 770 s → 606 s、vol05 1022 s → 770 s；粗校基准新增错放 0、送审 413 → 414。会改产物，开不开由 M9 定；关时产物与参数指纹不变（代码等价登记）。
 - `guji cellvotes draft|write`（`feedback/web_votes.py`、`cli_cellvotes.py`）：网站精校页投票直接转人裁事件草稿。取票（数据目录快照／`--from-kv` 管理读／文件）→ 去测试票、同格同来源留最新 → 六档映射（与 ai-team `web_opinions.py` 同口径）→ 对正式库最新人裁（一致的跳过、要推翻的挂起）→ 对格位（现行 `cell_shrink` 对出单版 book-text `cord.json`，列被重切过的挂起）→ 「无字」缺省挂起；`write` 走控制台同一条写入路径（带锚、消费、按草稿内容判重）。殿本 vol04 004-r3 的 31 票回放：可写 19、格位对不上 6、无字 6，与 10-21 手工核对一致。不动 Step 模块，各书产物不过期。
 
