@@ -6,7 +6,7 @@
   asp       保留宽高比（补白成方）再 48×48 HOG 6×6＋岭回归
   pix       像素 32×32＋岭回归
 `--leaf`：判别叶子在更深一层时再切一刀取叶子（见 cmp_cutter.make_extract）。
-用法：python research/m7/ids_plan/cmp_recog.py xu --dataset <dataset> [--leaf]"""
+用法：python research/m7/ids_plan/cmp_recog.py xu --dataset <dataset> [--leaf] [--cutter human|prior|unet_own|unet_comp]"""
 import argparse
 import json
 import sys
@@ -59,6 +59,23 @@ def ridge_fit(X, y, classes, lam):
     return np.linalg.solve(X.T @ X + lam * np.eye(X.shape[1]), X.T @ Y)
 
 
+def fold_cutter(name, k, rows, fo, orient, plan, ds, epochs):
+    """第 k 折的切法：只用其他折（其他册）的人标切线建。返回 `img -> 折线`。"""
+    from cmp_cutter import comp_pool, mean_shape, prior_seam
+    train = [(img, cut) for i, _f, img, cut in rows if fo.get(i.split(":")[0]) != k]
+    if name == "human":
+        return None
+    if name == "prior":
+        shp = mean_shape([c for _img, c in train], orient)
+        return lambda img: prior_seam(img, shp, orient)
+    from open_guji_cv.groups.ids_unet import NpNet, predict_prob_np, prob_to_polyline2
+    if name == "unet_comp":
+        held = {v for v, kk in fo.items() if kk == k}
+        train, _ = comp_pool(ds, plan, 1 - plan.diff[0], held)
+    net = NpNet.from_torch(O._train_unet2(train, orient, epochs=epochs))
+    return lambda img: prob_to_polyline2(predict_prob_np(net, img), orient)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("group")
@@ -66,42 +83,35 @@ def main():
     ap.add_argument("--leaf", action="store_true")
     ap.add_argument("--folds", type=int, default=5)
     ap.add_argument("--lam", type=float, default=1.0)
-    ap.add_argument("--all", action="store_true",
-                    help="用组内全部人裁格（含没标切线的），切线一律用形状先验折线（先验只取有人标切线的格）")
+    ap.add_argument("--epochs", type=int, default=60)
+    ap.add_argument("--cutter", default="human", choices=["human", "prior", "unet_own", "unet_comp"],
+                    help="human：只用有人标切线的格；其余：组内全部人裁格，模板格与测试格都用这一折的同一切法切（切法只用其他册建）")
     a = ap.parse_args()
-    g = a.group
+    g, ds = a.group, Path(a.dataset)
     plan = derive_plan("".join(sorted(GROUPS[g].members)), ROOT / "config" / "groups" / g)
     orient, which = plan.orient, plan.diff[0]
-    rows, _ = O._pool(g, Path(a.dataset))
-    if a.all:
-        from cmp_cutter import mean_shape, prior_seam
-        cells, _ = O._whole_cells(g, Path(a.dataset))
-        vv = sorted({c[2] for c in cells})
-        fo = {v: k % a.folds for k, v in enumerate(vv)}
-        # 先验形状按折取：判某格时只用其他折（其他册）的人标切线求平均形状，不漏留出册的信息
-        shp = {k: mean_shape([cut for i, _f, _img, cut in rows if fo.get(i.split(":")[0]) != k], orient)
-               for k in range(a.folds)}
-        rows = [(i, f, img, prior_seam(img, shp[fo[v]], orient)) for f, img, v, i in cells]
-        rows = [r for r in rows if r[3] is not None]
-    if a.leaf:
-        ext = make_extract(plan, orient, which, True)
-        def part(img, cut):
-            p = ext(img, cut)          # 已归一 32×32（norm_part）
-            return None if p is None else p
+    rows, _ = O._pool(g, ds)
+    ext = make_extract(plan, orient, which, True) if a.leaf else (lambda img, cut: raw_part(img, cut, orient, which))
+    if a.cutter == "human":
+        cells = [(f, img, i.split(":")[0], i, cut) for i, f, img, cut in rows]
     else:
-        def part(img, cut):
-            return raw_part(img, cut, orient, which)
-    data = [(i, f, part(img, cut)) for i, f, img, cut in rows]
-    data = [d for d in data if d[2] is not None]
-    vols = sorted({d[0].split(":")[0] for d in data})
-    fold_of = {v: k % a.folds for k, v in enumerate(vols)}
-    classes = sorted({d[1] for d in data})
+        cells = [(f, img, v, i, None) for f, img, v, i in O._whole_cells(g, ds)[0]]
+    vols = sorted({c[2] for c in cells})
+    fo = {v: k % a.folds for k, v in enumerate(vols)}
+    classes = sorted({c[0] for c in cells})
     rec = {m: [] for m in ["nn", *FEATS]}
     for k in range(a.folds):
-        te = [d for d in data if fold_of[d[0].split(":")[0]] == k]
-        tr = [d for d in data if fold_of[d[0].split(":")[0]] != k]
-        if not te:
+        if not any(fo[c[2]] == k for c in cells):
             continue
+        cut_of = fold_cutter(a.cutter, k, rows, fo, orient, plan, ds, a.epochs)
+        data = []
+        for f, img, v, i, cut in cells:
+            pl = cut if cut_of is None else cut_of(img)
+            p = ext(img, pl) if pl is not None else None
+            if p is not None:
+                data.append((i, f, p, fo[v] == k))
+        tr = [d[:3] for d in data if not d[3]]
+        te = [d[:3] for d in data if d[3]]
         nn_bank = {}
         for _i, f, p in tr:
             nn_bank.setdefault(f, []).append(resize(p, 32))
@@ -115,6 +125,7 @@ def main():
                 s = np.r_[fe(p), 1.0] @ W
                 o = np.argsort(-s)
                 rec[name].append((i, f, classes[o[0]], float(s[o[0]] - s[o[1]])))
+        print("fold", k, "done", file=sys.stderr, flush=True)
     out = {}
     for name, rs in rec.items():
         wrong = [r for r in rs if r[2] != r[1]]
@@ -122,7 +133,7 @@ def main():
         out[name] = {"right": len(rs) - len(wrong), "wrong": len(wrong),
                      "zero_err_cover": round(sum(1 for r in rs if r[2] == r[1] and r[3] > th) / len(rs), 3),
                      "wrong_cells": [(r[0], r[1], r[2], round(r[3], 3)) for r in wrong]}
-    print(json.dumps({"group": g, "cells": len(data), "leaf": a.leaf, "result": out}, ensure_ascii=False))
+    print(json.dumps({"group": g, "cells": len(rec["nn"]), "leaf": a.leaf, "cutter": a.cutter, "result": out}, ensure_ascii=False))
 
 
 if __name__ == "__main__":
