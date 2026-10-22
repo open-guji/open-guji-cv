@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- Step3 row_segment 1.36：字内空隙里的格线不再把字头、点留在上一格（人审截断「良」的点、「晉」的头、「其」的脚、「二」的上横）。干净格线两侧有一格格高偏离 period 超过 15% 也过一次 U-Net 探针（vol02 1,800 条，原来只有一高一矮的 6 条）；探针分歧 ≥100、扩池补来的候选（U-Net 引导缝 / 按格高找的缝）与 U-Net 分歧 ≤30px 且穿墨 ≤20px 时直接改选，不再只记候选交人。粘连切点同样适用。vol02 改 55 处切点，看图约 50 处修好、其余持平；Step3 时长略增。
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added

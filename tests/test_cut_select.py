@@ -310,9 +310,16 @@ def test_clean_line_between_short_and_tall_cells_with_full_ink_becomes_probe_cut
     r = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W, cut_judge=j)
     cp = next(c for c in r.cut_candidates if c.slot_above == 5)
     assert cp.origin == "split_suspect" and cp.candidates[0].kind == "straight"
-    assert cp.escalate is True and cp.escalate_reason.startswith("split_suspect")
-    assert cp.chosen == 0 and cp.chosen_by == "rule"           # 升级后 L3 会补候选（period_up 等），但选法不动
     assert all(c.kind in ("straight", "unet_seam", "period_up", "period_dn") for c in cp.candidates)
+    # 扩池补来的候选与 U-Net 一致（分歧 0）、穿墨少 → 直接改选，不再交人
+    assert cp.chosen_by == "unet" and cp.candidates[cp.chosen].kind != "straight" and cp.escalate is False
+    # 扩池候选也与 U-Net 分歧大 → 选法不动，照旧升级
+    r1 = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
+                            cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5},
+                                                 dis={"straight": ESCALATE_BLOB + 20, "seam": ESCALATE_BLOB}))
+    cp1 = next(c for c in r1.cut_candidates if c.slot_above == 5)
+    assert cp1.escalate is True and cp1.escalate_reason.startswith("split_suspect")
+    assert cp1.chosen == 0 and cp1.chosen_by == "rule"
     # 同样几何、U-Net 不觉得有问题 → 建了切点但不升级
     r2 = RBm.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, ref_w=COL_W,
                             cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}, dis={"straight": 5}))
@@ -321,11 +328,18 @@ def test_clean_line_between_short_and_tall_cells_with_full_ink_becomes_probe_cut
 
 
 def test_clean_line_between_normal_cells_builds_no_cut_point():
-    """干净且格高正常的格线照旧不建切点（L0 直接放行），行为与改动前一致。"""
+    """干净且两侧格高都正常（偏 ≤ CLEAN_PROBE_DEV）的格线照旧不建切点（L0 直接放行）。"""
+    from open_guji_cv.utils.cut_select import CLEAN_PROBE_DEV
     img = _touching_column()
     r = RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=_FakeJudge({"straight": 0.5, "seam": 0.5}))
-    assert {cp.slot_above for cp in r.cut_candidates} == {5}      # 只有 5/6 那条粘连
-    assert all(cp.origin == "touching" for cp in r.cut_candidates)
+    assert {cp.slot_above for cp in r.cut_candidates if cp.origin == "touching"} == {5}   # 只有 5/6 那条粘连
+    cells = {c.slot: c for c in r.cells}
+    for cp in r.cut_candidates:
+        if cp.origin == "touching":
+            continue
+        u, d = cells[cp.slot_above], cells[cp.slot_below]
+        assert max(abs((u.y1 - u.y0) / SLOT_H - 1), abs((d.y1 - d.y0) / SLOT_H - 1)) > CLEAN_PROBE_DEV
+        assert cp.chosen_by == "rule" and cp.candidates[cp.chosen].kind == "straight"   # U-Net 无异议就不改
 
 
 def test_guided_seam_from_owner_follows_the_partition():

@@ -1934,6 +1934,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             mass = float(ink_bin[a:b].sum()) / (med_h * content_w)
             return mass >= SPLIT_MASS_MIN
 
+        def _height_off(u: Cell, d: Cell) -> bool:
+            """干净格线两侧有一格高偏离 period 超过 `CLEAN_PROBE_DEV`：格线可能落在字内空隙里，过一次 U-Net。"""
+            from .cut_select import CLEAN_PROBE_DEV
+            return period > 0 and max(abs((u.y1 - u.y0) / period - 1),
+                                      abs((d.y1 - d.y0) / period - 1)) > CLEAN_PROBE_DEV
+
         def _resolve_and_probe(cands, chosen, up_c, dn_c, k_):
             """第 4 步人裁回流 + 第 5 步 U-Net 探针/裁判；两类切点（粘连 / L0′ 嫌疑）共用。"""
             chosen_by = "rule"
@@ -1970,8 +1976,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                         # 时扩池，于是 60–100 这一档（顺序闸要挡、人要裁的那 82 条）卡片上根本没有 U-Net 缝
                         # 可选——用户实裁时发现「这些 U-Net 都能找到更好结果」。凡是要交给人或下游的切点，
                         # 都该先把候选补齐（原则 ①：给人最好的选项）。
+                        n_old = len(cands)
                         cands = _expand_pool(cands, up_c, dn_c, k_)
-                        if dis[chosen] >= ESCALATE_BLOB:
+                        adopt = _adopt_expanded(cands, n_old, dis[chosen])
+                        if adopt is not None:
+                            chosen, chosen_by = adopt, "unet"
+                        elif dis[chosen] >= ESCALATE_BLOB:
                             escalate = True
                             escalate_reason = f"dis_unet={dis[chosen]}>={ESCALATE_BLOB} n_cand={len(cands)}"
                         # 人裁**指向 L3 才生成的候选**（unet_seam / period_*）时，第 4 步收敛必然落空
@@ -1985,6 +1995,21 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                                 chosen_by = "human"
                                 escalate, escalate_reason = False, None
             return cands, chosen, chosen_by, escalate, escalate_reason
+
+        def _adopt_expanded(cands, n_old, dis_chosen):
+            """L3 扩池后**自动改选**（2026-10-22）：现选与 U-Net 分歧 ≥ `ESCALATE_BLOB`、扩池来的候选里有一条
+            几乎与 U-Net 一致（分歧 ≤ `ADOPT_DIS`）且穿墨少（≤ `ADOPT_INK`）的，就用它，不再交人。
+            人审截断（vol02 seg_defect）里「良」的点、「晉」的头被格线留在上一格这类，U-Net 引导缝都把它们
+            划回本字、穿墨 2–10px；原来只记候选、打 escalate，产物里照旧是截断的字。"""
+            from .cut_select import ADOPT_DIS, ADOPT_INK, ESCALATE_BLOB
+            if dis_chosen < ESCALATE_BLOB:
+                return None
+            ok = [i for i in range(n_old, len(cands))
+                  if cands[i].dis_unet is not None and cands[i].dis_unet <= ADOPT_DIS
+                  and cands[i].seam_ink <= ADOPT_INK]
+            if not ok:
+                return None
+            return max(ok, key=lambda i: (cands[i].agree or 0.0, -cands[i].seam_ink))
 
         def _expand_pool(cands, up_c, dn_c, k_):
             """L3 扩池（2026-09-15，10 卡）：只对升级的切点，**只加候选不改选法**。
@@ -2037,17 +2062,19 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if not ink_bin[y].any():
                 # L0′（2026-09-15）：干净格线里的「切进字里」嫌疑也建切点（只有直线一条）并过探针，
                 # 其余干净格线仍旧不建切点。见 SPLIT_* 常量的说明。
-                if not _split_suspect(up[0], dn[0]):
+                suspect = _split_suspect(up[0], dn[0])
+                if not suspect and not _height_off(up[0], dn[0]):
                     continue
                 cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
                 cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k)
+                origin = "split_suspect" if suspect else "clean_probe"
                 if escalate_reason:
-                    escalate_reason = "split_suspect " + escalate_reason
+                    escalate_reason = origin + " " + escalate_reason
                 cut_cands.append(CutPointCandidates(k=k, y=float(bounds[k]),
                                                     slot_above=up[0].slot, slot_below=dn[0].slot,
                                                     candidates=cands, chosen=chosen, chosen_by=chosen_by,
                                                     escalate=escalate, escalate_reason=escalate_reason,
-                                                    origin="split_suspect"))
+                                                    origin=origin))
                 if cands[chosen].kind != "straight":   # 人裁收敛到折线时照写 seam_*
                     up[0].seam_bottom = cands[chosen].y
                     dn[0].seam_top = cands[chosen].y
