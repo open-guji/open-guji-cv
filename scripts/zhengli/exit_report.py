@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""粗校出口报告拼装（GUJI-556 / 设计 GUJI-543 §3.3 R1–R5）。
+"""粗校出口报告拼装（GUJI-556 / 设计 GUJI-543 §3.3 R1–R6）。
 
 输入是一份 JSON（由 collect_exit.py 自动取数生成，也可手填），
 输出固定格式 Markdown。不读 products，不写 cv。
@@ -25,6 +25,7 @@ TITLE = {
     "R3": "人审率（目标<1%，不卡出口，须写原因）",
     "R4": "异常清单都有结论",
     "R5": "导出过格式检查（close-check）",
+    "R6": "整页、整列不丢字（col_gate 报出的列都有去向）",
 }
 
 
@@ -34,7 +35,7 @@ def main(path: str) -> int:
     out = [f"# {d['book']} 粗校出口报告 · cv_version={d['cv_version']} · 生成于 {d['generated']}", "",
            "| 项 | 内容 | 结果 | 数字 | 命令 | 附件 |", "|---|---|---|---|---|---|"]
     problems = []
-    for k in ORDER:
+    for k in ORDER + (["R6"] if "R6" in items else []):    # R6（GUJI-661）有数才判，老 input.json 没有不算缺
         it = items.get(k)
         if not it:
             problems.append(f"{k} 缺")

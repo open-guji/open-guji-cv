@@ -8,14 +8,19 @@ P1 只实现 `gold_add`（事件 → 金标条目），另外两个（glyphdb_ad
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..gold.item import Anchor, GoldItem
 from ..gold.store import GoldStore
-from .events import Event, EventLog, counts_as_human
+from ..hanzi.symbols import is_symbol
+from .events import Event, EventLog, counts_as_human, replay_key
 from .routes import Destination, RouteTable
 from ..utils.image_io import imread as cv_imread
+
+#: 一次 `glyphdb_admit` 调用里按册记住 (ctx, seed_admit 参数)，见 `_occluded_lookup`。
+_OCC_BOOKS: ContextVar[dict | None] = ContextVar("_OCC_BOOKS", default=None)
 
 
 @dataclass
@@ -27,6 +32,7 @@ class ConsumeResult:
     skipped: int = 0
     no_lib: int = 0            # 正常裁决但按 no_glyph_lib 标志不建库的条数（非错误）
     occluded: int = 0          # 其中：印章遮挡格（不论事件 no_glyph_lib 是什么，一律不建库）
+    unbound: int = 0           # glyphdb_admit：绑定判不该采信（重切后待审／作废），不取图、不进库（非错误）
     errors: list[str] = None   # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -36,7 +42,7 @@ class ConsumeResult:
     def to_dict(self) -> dict:
         return {"consumer": self.consumer, "events": self.n_events, "added": self.added,
                 "updated": self.updated, "skipped": self.skipped, "no_lib": self.no_lib,
-                "occluded": self.occluded,
+                "occluded": self.occluded, "unbound": self.unbound,
                 "errors": self.errors}
 
 
@@ -141,6 +147,8 @@ def _expected_of(e: Event) -> dict:
         # 与 crop_top 仍一并存下，只为排查历史问题，**不要拿它当基准**。
         keys = ("y_left", "y_right", "y_left_abs", "y_right_abs", "crop_top", "verdict")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "inverted_band":
+        return {k: p[k] for k in ("verdict", "rules") if p.get(k) not in (None, "")}
     if e.kind == "head_raise":
         # 列级抬头精标（overview `Step3-逐字切分/03-抬头综合优化.md`）。三件事
         # 一张卡：`raised` 这一列是不是抬头 / `n_raised` 抬高几格 / `head_cut`
@@ -275,18 +283,28 @@ def _occluded_lookup(book: str, page: int):
     """(book, page) → 该页遮挡格集合 {(col, slot, sub)}；读不到产物/原图 → 空集（不拦）。
 
     判据与 `seed_admit` 的 `occluded_gate` 同源（`steps.occlusion.page_occluded`，参数也取
-    该书 `seed_admit` 的解析结果）；书级关了 `occluded_gate` 的就不拦。"""
+    该书 `seed_admit` 的解析结果）；书级关了 `occluded_gate` 的就不拦。
+
+    `glyphdb_admit` 调用期间同一册的 ctx 与参数只建一次（`_OCC_BOOKS`，2026-10-21）：解析 seed_admit
+    参数要给整个 glyph.db 算人裁指纹，原来逐页重算，rebuild 后补放 1180 条人裁（711 页）这一项占
+    95%（约 130 s）。遮挡判据只用册配置与 `occluded_*` 几个字段，补放进库改不了它们。"""
     try:
-        import open_guji_cv.steps  # noqa: F401  注册 Step
-        from ..core.book import load_book
-        from ..core.step import STEPS, RunContext
-        from ..products.cache import ImageCache
-        from ..products.store import ProductStore
-        from ..steps.occlusion import page_occluded
-        ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda *_: None)
-        p = ctx.params_for(STEPS["seed_admit"])
+        books = _OCC_BOOKS.get()
+        got = books.get(book) if books is not None else None
+        if got is None:
+            import open_guji_cv.steps  # noqa: F401  注册 Step
+            from ..core.book import load_book
+            from ..core.step import STEPS, RunContext
+            from ..products.cache import ImageCache
+            from ..products.store import ProductStore
+            ctx = RunContext(load_book(book), ProductStore(), ImageCache(), log=lambda *_: None)
+            got = (ctx, ctx.params_for(STEPS["seed_admit"]))
+            if books is not None:
+                books[book] = got
+        ctx, p = got
         if not p.occluded_gate:
             return set()
+        from ..steps.occlusion import page_occluded
         return set(page_occluded(ctx, page, p))
     except Exception:
         return set()
@@ -294,7 +312,7 @@ def _occluded_lookup(book: str, page: int):
 
 def glyphdb_admit(events, db_path: str | None = None,
                   dry_run: bool = False, binarize: bool = True,
-                  occluded_of=None, **kw) -> ConsumeResult:
+                  occluded_of=None, bindings_of=None, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
 
     这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
@@ -316,6 +334,16 @@ def glyphdb_admit(events, db_path: str | None = None,
     实测 vol03 p3 有 8 格遮挡格的「确认」事件带的是 false，于是进了库。所以这里不信事件：
     格落在遮挡块里（`occluded_of(book, page)`，缺省 `_occluded_lookup`，与 seed_admit 同一判据）
     就当 `no_glyph_lib` 处理，计入 `res.no_lib` 与 `res.occluded`。
+
+    ## 图块按绑定取现格（2026-10-21，规范 §9 F-10）
+
+    事件的格键是裁决当时的编号。裁完即消费时它就是现格；补消费积压时页可能已经重切过，
+    格号顺移（`bindings` 判 `rebound`）的按原键取图会拿到邻格。所以取图前查绑定
+    （`bindings_of(book, page)` → `{event_id: 绑定行}`，缺省 `_bindings_lookup`）：
+    `usable` 给出现格号就按它取字块；判不该采信（待审、作废、裁于现行切分之前且无锚）的
+    不取图、不进库，计入 `res.unbound`（不是错误，照常记账——与读者经绑定丢掉它同口径）；
+    这页没有现行切分产物、或查不到这条事件的绑定，照旧按原键。库里的 id 仍用原格键，读者经
+    `rebind_library_shapes` 换到现格（同一口径）。
 
     ## `no_glyph_lib`：选字正常裁决，但这张图不建库（2026-09-09）
 
@@ -349,13 +377,23 @@ def glyphdb_admit(events, db_path: str | None = None,
     from ..clustering.glyph_db import GlyphDB
     from ..core.workspace import glyph_db_path
     from ..products.cache import ImageCache
-    from ..utils.binarized import binarize_page
-    import cv2
 
     db = GlyphDB(str(glyph_db_path(db_path)))
     cache = ImageCache()
     occ_of = occluded_of or _occluded_lookup
     occ_memo: dict = {}
+    occ_tok = _OCC_BOOKS.set({})
+    try:
+        return _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bindings_of or _bindings_lookup)
+    finally:
+        _OCC_BOOKS.reset(occ_tok)
+
+
+def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -> ConsumeResult:
+    """`glyphdb_admit` 的逐条进库（拆出来只为外面能包一层 `_OCC_BOOKS`）。"""
+    bind_memo: dict = {}
+    import cv2
+    from ..utils.binarized import binarize_page
     for e, _dest in admits:
         from ..utils.cjk_compat import fold_compat
         shape = fold_compat(_unmojibake(e.payload.get("shape") or e.payload.get("char")))
@@ -363,8 +401,9 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.errors.append(f"{e.target.key}: 事件没有字形，跳过")
             res.skipped += 1
             continue
-        if len(shape) != 1 or ord(shape) < 0x2E80:
-            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引
+        if len(shape) != 1 or (ord(shape) < 0x2E80 and not is_symbol(shape)):
+            # 字形不是单个汉字（乱码、拼音、多字）：进库会把垃圾字头钉进匹配索引。
+            # 登记过的特殊符号（○□△…，`hanzi.symbols`）放行：人定成符号的格进库，同书同形 5-a 才匹配得上
             res.errors.append(f"{e.target.key}: 字形 {shape!r} 不是单个汉字，跳过")
             res.skipped += 1
             continue
@@ -376,9 +415,13 @@ def glyphdb_admit(events, db_path: str | None = None,
             res.no_lib += 1
             res.occluded += 1
             continue
+        patch_from = _bound_key(e, book, bind_of, bind_memo)
+        if patch_from is None:
+            res.unbound += 1
+            continue
         # 图块键：p{page}c{col}s{slot}[a|b]，与 Step4 落缓存时一致
         try:
-            _b, pg, col, slot = e.target.key.split(":")
+            _b, pg, col, slot = patch_from.split(":")
             sub = ""
             if slot and slot[-1] in "ab":
                 slot, sub = slot[:-1], slot[-1]
@@ -507,6 +550,37 @@ def _apply_approx(db, db_id: str, shape: str, e: Event) -> None:
                       reviewer=e.reviewer, at=e.ts)
     elif e.actor == "user":
         db.clear_approx(db_id, at=e.ts)
+
+
+def _bindings_lookup(book: str, page: int) -> dict[str, dict]:
+    """(book, page) → 该页裁决事件的绑定行 `{event_id: row}`；这页没有现行切分产物、或算不出 → 空
+    （照旧按原键）。没有切分时绑定一律判 void／unanchored，那不是「裁决不该采信」，是本机没产物
+    （`glyph-db rebuild` 补放人裁、只有字块缓存的机器）。"""
+    try:
+        from ..products.store import ProductStore
+        from .bindings import _cells_versions, book_bindings
+        store = ProductStore()
+        v = _cells_versions(book, page, store)
+        if not v or v[-1][0] != "current":
+            return {}
+        return book_bindings(book, store=store, pages=[page])
+    except Exception:
+        return {}
+
+
+def _bound_key(e: Event, book: str, bindings_of, memo: dict) -> str | None:
+    """取图用的格键：绑定给出的现格号；绑定判不该采信 → None；没有这条的绑定 → 原键。"""
+    from .bindings import usable
+    parts = (e.target.key or "").split(":")
+    if len(parts) != 4 or parts[0] == "v2" or not parts[1].isdigit():
+        return e.target.key
+    bk, page = book or parts[0], int(parts[1])
+    if (bk, page) not in memo:
+        memo[(bk, page)] = bindings_of(bk, page)
+    row = memo[(bk, page)].get(e.id)
+    if row is None:
+        return e.target.key
+    return usable(row)
 
 
 def _is_occluded(e: Event, book: str, occluded_of, memo: dict) -> bool:
@@ -717,7 +791,8 @@ def route_and_consume(log: EventLog, batch: str | None = None,
     with feedback_write_lock(log.root):
         table = table or RouteTable.load(log.root / "routes.yaml")
         results: list[ConsumeResult] = []
-        evs_all = log.read(batch) if batch else sorted(log.iter_all(), key=lambda e: e.order)
+        # 按 replay_key（时间序）喂给消费者：gold_add 等同 id 后写覆盖，跨批次按批次名排会让旧裁决盖掉新裁决
+        evs_all = sorted(log.read(batch) if batch else log.iter_all(), key=replay_key)
         if event_ids is not None:
             evs_all = [e for e in evs_all if e.id in event_ids]
         dests = {e.id: table.destinations(e) for e in evs_all}

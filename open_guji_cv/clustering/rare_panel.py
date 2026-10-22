@@ -28,6 +28,7 @@ import cv2
 from .font_candidates import book_charset, candidates, candidates_batch
 from .ids_guard import ids_of
 from .normalize import normalize_patch
+from ..hanzi.symbols import SYM_MIN, is_symbol
 from ..products.cache import ImageCache
 from ..steps.align_ref import DEFAULT_CORPUS
 from ..utils.image_io import imread as cv_imread
@@ -449,6 +450,13 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         cnn_list = emb_list = [[] for _ in norms]
         gw_prov = [{} for _ in norms]
 
+    # 特殊符号（册配置 `font.charset.symbols`，设计 S3）：符号形状简单，墨团、残字、口 囗 也会配上 △ □ ○，
+    # vol06 实测不设门槛时 5% 的格前 10 里混进符号。只留「余弦 ≥ SYM_MIN 且高过本格最像的汉字」的符号，
+    # 留下的排到融合结果最前（`_sym_first`）。字表里没有符号的书 emb_list 原样，产物不变。
+    sym_ok = [_symbol_gate(row) for row in emb_list]
+    if any(is_symbol(t[0]) for row in emb_list for t in row):
+        emb_list = [[t for t in row if t[0] in ok or not is_symbol(t[0])] for row, ok in zip(emb_list, sym_ok)]
+
     eds = book_font_editions(book) if book else []
     ns = _book_norm_stroke(book) if book else None
     # matcher 建一次、批量查（`db_font_topk` 每次调用都要 `cached_matcher_from_db`，
@@ -482,9 +490,9 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         return hits
 
     if not (struct_rerank and cnn.available):
-        return [_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk), pv)
-                for a, b, cnn_topk, emb_topk, dbk, pv
-                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov)]
+        return [_sym_first(_gw(_fuse(a, b, cnn_topk, emb_topk, k, dbk), pv), ok)
+                for a, b, cnn_topk, emb_topk, dbk, pv, ok
+                in zip(a_list, b_list, cnn_list, emb_list, db_list, gw_prov, sym_ok)]
 
     # 重排要看前 30 名，先按 30 融合再截 k；部件概率整页一次前向
     from .ids_guard import components as first_level_components
@@ -500,11 +508,24 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
     else:
         probs, comps_of = cnn.comp_probs_batch(norms), first_level_components
     out = []
-    for hits, pr, pv in zip(fused, probs, gw_prov):
+    for hits, pr, pv, ok in zip(fused, probs, gw_prov, sym_ok):
         by_char = {h["char"]: h for h in hits}
         order = _rerank([h["char"] for h in hits], pr, comps_of, k=k)
-        out.append(_gw([by_char[ch] for ch in order], pv))
+        out.append(_sym_first(_gw([by_char[ch] for ch in order], pv), ok))
     return out
+
+
+def _symbol_gate(row: list) -> frozenset:
+    """一格 embedding 候选 `[(字, 余弦), ...]` 里过门槛的特殊符号：余弦 ≥ `SYM_MIN` 且高过本格最像的非符号字。"""
+    best = max((sc for ch, sc in row if not is_symbol(ch)), default=-1.0)
+    return frozenset(ch for ch, sc in row if is_symbol(ch) and sc >= SYM_MIN and sc > best)
+
+
+def _sym_first(hits: list[dict], ok: frozenset) -> list[dict]:
+    """过了门槛的符号挪到最前（按原先先后），其余照旧。没有就原样返回。"""
+    if not ok:
+        return hits
+    return [h for h in hits if h["char"] in ok] + [h for h in hits if h["char"] not in ok]
 
 
 def char_hint(ch: str) -> dict:

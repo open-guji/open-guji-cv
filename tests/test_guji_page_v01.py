@@ -89,7 +89,7 @@ def test_seq_mapping_follows_split_table():
 def test_plain_page_canvas_is_whole_leaf(page):
     _ok(page)
     c = page["canvas"]
-    assert c["id"] == "https://data.kaiyuanguji.com/iiif/testbook01/canvas/02/0005"
+    assert c["id"] == "https://data.openguji.com/iiif/testbook01/canvas/02/0005"
     assert (c["width"], c["height"]) == (W, H) and "source" not in c
     ann = gp.to_iiif_annotations(page)
     assert ann["items"][0]["target"] == f"{c['id']}#xywh=109,210,180,80"

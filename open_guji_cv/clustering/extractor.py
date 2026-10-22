@@ -19,7 +19,6 @@ import cv2
 import numpy as np
 
 from ..utils.image_io import imread, imwrite
-from ..utils.seam import mask_outside
 from .ids import make_id
 from .normalize import NORM_SIZE, normalize_patch
 
@@ -712,11 +711,11 @@ def _cell_top(cell: dict) -> float:
     `seam_top`/`seam_bottom`，而矩形 `y_top`/`y_bottom` 仍是 DP 那条直线——两者
     可以差几十像素（1434 vs 1462）。取块窗口此前只读矩形边界，于是从直线起裁，
     「十」的横笔整条落在窗口**之外**，图块只剩一竖（人裁标成「字形不完整」）。
-    `mask_outside` 救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
+    按折线抹墨救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
     没裁进来的墨**。
 
     窗口取两者并集（折线最高点与矩形上界取小）。折线外的墨随后照旧由
-    `mask_outside` 抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
+    归属图（`partition_strip`）抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
     与「格界严格信任 Step3」那条纪律不冲突。
     """
     top = float(cell["y_top"])
@@ -731,34 +730,94 @@ def _cell_bottom(cell: dict) -> float:
     return max(bot, span[1]) if span else bot
 
 
-def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float) -> np.ndarray:
-    """抹掉图块上下 pad 带里**不伸进格内**的连通体——那是邻字伸过来的笔尖（2026-09-19）。
+NEIGHBOR_PART_DEPTH = 0.10   # 跨格界的连通体伸进一格超过这么深（× 列格高）才算这格的身子（partition_strip）
 
-    图块按格界外扩 8% 裁（pad 是给略微越界的本字笔画留的），可紧裁又是「图块内所有墨的
-    外接框」，于是邻字压在格界外几像素的笔尖也被框进来：bxgb 4 页 1422 格里 161 格
-    （11.3%）的紧框因此多出中位 6px 的邻字墨（水/高/山/五/里/王/張/柏/漢/不/道/云/二/十/間
-    …逐格看过，抹掉的全是邻字的笔尖）。用户审阅标的「contaminated」大半是它。
 
-    判据只用格界（严格信任 Step3，与折线 `mask_outside` 同一纪律）：连通体整体落在
-    `[0, cell_top)` 或 `[cell_bot, H)` 里的抹掉；跨过格界、哪怕只沾进一像素的都留——
-    本字越界的笔画正是 pad 要保住的。列端格的框残渣同样在 pad 带里，顺带抹掉，
-    后面的端格剥离少一道活。
+PART_SMALL = 0.25   # 跨格界的连通体不高于这么多 × 列格高，算小部件（点、钩），整块归离得近的那格
+
+
+def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray, bool, bool]],
+                    cell_h: float) -> np.ndarray:
+    """整列一次分好每个墨像素归哪一格（2026-10-22，Step4 归属图）。
+
+    `bounds` 每格一项 `(top, bot, seam_top, seam_bot)`：`top`/`bot` 是长 W 的逐列行号（条带坐标，
+    直格界就是常数，Step3 选了折线就是折线），`seam_*` 记那条格界是不是 Step3 的折线。
+    格界 `[top, bot)` 是这一格的地盘。连通体只落在一格地盘里（越出去的只是格外的空白/版框带）
+    归那格；不沾任何格地盘的不归谁。跨了几格地盘的按三条规则：
+
+    1. 跨的是 Step3 的折线，或者有两格都伸进去超过 `NEIGHBOR_PART_DEPTH` 格高：按格界切开，
+       各归各的地盘（折线严格信任 Step3；两边都深的是两字粘成一块，「家/之」「左/字」）；
+    2. 小部件（高不过 `PART_SMALL` 格高）：整块归离它近的那格的墨（上字底横的小钩、
+       格界偏低时下字顶上的点，「上/下」「音」）；
+    3. 其余整块归墨多的那格（本字越界的笔画伸进邻格浅浅一截；断开的横画大半在本格、
+       只有一角压过格界，「上」的底横左段带个钩伸到「下」的头上）。
+
+    返回 H×W int16：墨像素的格下标（`bounds` 的下标），不归任何格和非墨像素是 -1。
+    每个墨像素至多归一格：不会两格各带走同一笔。
     """
-    t0, t1 = int(round(cell_top)), int(round(cell_bot))
-    if t0 <= 0 and t1 >= patch.shape[0]:
-        return patch
-    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
-    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
-    if n <= 1:
-        return patch
-    out = patch
+    H, W = strip.shape[:2]
+    binary = strip < BINARY_THRESHOLD_PATCH
+    rows = np.arange(H)[:, None]
+    terr = np.full((H, W), -1, np.int16)
+    for i, (top, bot, _st, _sb) in enumerate(bounds):
+        terr[(rows >= top[None, :]) & (rows < bot[None, :]) & (terr < 0)] = i
+    owner = np.full((H, W), -1, np.int16)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary.astype(np.uint8), 8)
+    deep = NEIGHBOR_PART_DEPTH * cell_h
     for k in range(1, n):
-        y, h = int(st[k, 1]), int(st[k, 3])
-        if y + h <= t0 or y >= t1:
-            if out is patch:
-                out = patch.copy()
-            out[lab == k] = 255
-    return out
+        x, y, w, h = (int(v) for v in st[k, :4])
+        comp = lab[y:y + h, x:x + w] == k
+        t = terr[y:y + h, x:x + w]
+        cs = [int(c) for c in np.unique(t[comp]) if c >= 0]
+        if not cs:
+            continue
+        if len(cs) == 1:
+            win = cs[0]
+        else:
+            ext = {c: np.ptp(np.nonzero((t == c) & comp)[0]) + 1 for c in cs}
+            seam = any(bounds[a][3] or bounds[a + 1][2] for a in range(min(cs), max(cs)))
+            if seam or sum(e > deep for e in ext.values()) >= 2:
+                win = None
+            elif h <= PART_SMALL * cell_h:
+                win = _nearest_cell(binary, terr, lab == k, (x, y, w, h), cs, cell_h)
+            else:
+                win = max(cs, key=lambda c: int((comp & (t == c)).sum()))
+        view = owner[y:y + h, x:x + w]
+        if win is not None:
+            view[comp] = win
+            continue
+        # 按地盘切开；落在格与格空隙里的像素归同一列上最近的那格
+        cut = np.where(comp, t, -1)
+        gap = comp & (t < 0)
+        if gap.any():
+            gy, gx = np.nonzero(gap)
+            dist = np.stack([np.maximum(np.maximum(bounds[c][0][gx + x] - (gy + y), (gy + y) - bounds[c][1][gx + x] + 1), 0)
+                             for c in cs])
+            cut[gy, gx] = np.asarray(cs)[dist.argmin(0)]
+        view[comp] = cut[comp]
+    return owner
+
+
+def _nearest_cell(binary: np.ndarray, terr: np.ndarray, comp: np.ndarray, box: tuple[int, int, int, int],
+                  cs: list[int], cell_h: float) -> int:
+    """小部件离哪格的（别的）墨近就归哪格；一样近归墨多的那格。"""
+    x, y, w, h = box
+    r = int(cell_h)
+    y0, y1 = max(0, y - r), min(binary.shape[0], y + h + r)
+    x0, x1 = max(0, x - r), min(binary.shape[1], x + w + r)
+    c_win = comp[y0:y1, x0:x1]
+    other = binary[y0:y1, x0:x1] & ~c_win
+    t = terr[y0:y1, x0:x1]
+    best, key = cs[0], None
+    for c in cs:
+        ink = other & (t == c)
+        gap = np.inf
+        if ink.any():
+            gap = float(cv2.distanceTransform((~ink).astype(np.uint8), cv2.DIST_L2, 3)[c_win].min())
+        cand = (gap, -int((c_win & (t == c)).sum()))
+        if key is None or cand < key:
+            best, key = c, cand
+    return best
 
 
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
@@ -1252,6 +1311,181 @@ def _char_body(binary: np.ndarray) -> np.ndarray | None:
     return out
 
 
+# ── 列端版框细线（2026-10-21）───────────────────────────────────
+# 双边版框的内细线常落在列尾格、列首格里：Step2 按版框剥的是外粗框，内框在它里面十几到三十行，印得细、
+# 断成虚线，`strip_frame_debris`（要与字身有缝）、`carve_end_edge`（贴着字身的墨算字身）都剥不掉，进了
+# 字块。殿本 vol05 列尾字约 12% 带着它（「同」「見」「二」底下一道虚线）。
+# 判据按行看、不看连通体：内容窗口中间 88% 宽里，墨从左到右跨过 FRAME_LINE_SPAN、覆盖 FRAME_LINE_COV 以上
+# 的行是「线行」，连成不超过 FRAME_LINE_THICK 格高的一段是一条线。只在离格外沿 FRAME_LINE_ZONE 格高以内
+# 找（框线实测在 0.36 以内；列首「詩」「周」的上横在 0.45 以外），从字往外一条条看：线外（到下一条线或
+# 图块边）还有成片的墨（超过 FRAME_LINE_TAIL 行满宽的量），这条就是字自己的底横——vol09「其」「兵」「與」
+# 的底横下面还有两点／两脚——跳过看下一条；第一条线外干净的就是框，连同线外抹白。
+# 调用方只拿贴着版框的格来剥（格外沿离版框内缘不到一格）：列在半页收住时，末格外面是白纸，没有框。
+FRAME_LINE_SPAN = 0.85
+FRAME_LINE_COV = 0.4
+FRAME_LINE_THICK = 0.12
+FRAME_LINE_ZONE = 0.4
+FRAME_LINE_TAIL = 3.0
+FRAME_LINE_SPECK = 0.1     # 墨不到这么多窗宽的行算白
+FRAME_LINE_BLANK = 0.03    # 「线跟字之间隔着白行」的白：墨不到这么多窗宽（字的竖笔压到线上就不算白）
+FRAME_BAR_COV = 0.8        # 厚过 FRAME_LINE_THICK 的线行段，平均墨覆盖到这么多才算粗版框
+FRAME_LINE_EDGE = 4        # 线行上下这么多行算线的毛边（数线外有没有字时不计）
+# 全页线位（page_frame_line_offset）：同一页各列的框线离版框的距离一样。认出线位后，线位上下
+# FRAME_LINE_TOL 格高内的行，覆盖到 FRAME_LINE_FAINT_COV、跨度到 FRAME_LINE_FAINT_SPAN 就算线行——
+# 印得淡、断成虚点的框线单看一格认不出（vol05 实测覆盖 0.1–0.6、跨度 0.7–0.8，两头的点常缺），
+# 放到全页的线位上就认得出。线外有字（FRAME_LINE_TAIL）照样跳过。淡线还得断成至少 FRAME_LINE_DASHES 段：
+# 压在线位上的字底横（列尾「土」「士」）是一整笔，不能当淡线剥。
+FRAME_LINE_DASHES = 3
+FRAME_LINE_TOL = 0.04
+FRAME_LINE_FAINT_COV = 0.1
+FRAME_LINE_FAINT_SPAN = 0.6
+FRAME_LINE_PAGE_ZONE = 0.8   # 全页线位在版框往内这么多格高里找（双边框内框离版框可到半格，vol06 p112）
+FRAME_LINE_SHORT_SPAN = 0.8  # 对上全页线位的实线，跨度到这么多窗宽才认（「士」的底横 0.7 压在线位上）
+FRAME_LINE_TH_TOL = 2        # 短实线跟全页线位的线厚差不过这么多行
+FRAME_LINE_PAGE_MIN = 3     # 至少这么多列的实线落在同一线位上才认
+FRAME_LINE_INNER = 0.06     # 内容窗口左右各让出这么多（避开界行竖线）
+
+
+def _line_rows(ink: np.ndarray, y_from: int, cov: float = FRAME_LINE_COV,
+               span: float = FRAME_LINE_SPAN, dashes: int = 1) -> np.ndarray:
+    """y_from 起逐行判线行：墨覆盖 ≥ cov、跨度 ≥ span（都按窗宽），墨至少断成 dashes 段。"""
+    h, W = ink.shape
+    line = np.zeros(h, dtype=bool)
+    for y in range(max(0, y_from), h):
+        xs = np.flatnonzero(ink[y])
+        line[y] = (xs.size >= cov * W and xs[-1] - xs[0] + 1 >= span * W
+                   and int((np.diff(xs) > 2).sum()) + 1 >= dashes)
+    return line
+
+
+def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]], cell_h: float,
+                            bottom: bool = True) -> list[tuple[float, float]]:
+    """全页的框线线位：(离版框的距离, 线厚)（列图坐标，距离向内为正），双边框内外两道各一个。
+
+    columns：每列 (列图, 内容窗左, 内容窗右, 版框 y)。每列在版框往内 FRAME_LINE_PAGE_ZONE 格高里找实线
+    （覆盖 FRAME_LINE_COV）各段的中线和厚，量离版框多远；至少 FRAME_LINE_PAGE_MIN 列落在 ±FRAME_LINE_TOL
+    格高内的算一道线位，距离、线厚都取中位数。"""
+    tol = FRAME_LINE_TOL * cell_h
+    span = int(round(FRAME_LINE_PAGE_ZONE * cell_h))
+    ds: list[tuple[float, int, int]] = []
+    for k, (img, x0, x1, edge) in enumerate(columns):
+        a, b = int(round(x0 + FRAME_LINE_INNER * (x1 - x0))), int(round(x1 - FRAME_LINE_INNER * (x1 - x0)))
+        a, b = max(0, a), min(img.shape[1], b)
+        lo = max(0, int(round(edge)) - span) if bottom else max(0, int(round(edge)))
+        hi = min(img.shape[0], int(round(edge)) + 1) if bottom else min(img.shape[0], int(round(edge)) + span)
+        if b - a < 10 or hi - lo < 2:
+            continue
+        rows = _line_rows(img[lo:hi, a:b] < BINARY_THRESHOLD_PATCH, 0, FRAME_LINE_COV)
+        y = 0
+        while y < rows.size:
+            if rows[y]:
+                y1 = y
+                while y1 < rows.size and rows[y1]:
+                    y1 += 1
+                mid = lo + (y + y1 - 1) / 2
+                ds.append(((edge - mid) if bottom else (mid - edge), k, y1 - y))
+                y = y1
+            else:
+                y += 1
+    ds.sort()
+    out: list[tuple[float, float]] = []
+    i = 0
+    while i < len(ds):
+        win = [d for d in ds[i:] if d[0] - ds[i][0] <= 2 * tol]
+        if len({k for _, k, _ in win}) >= FRAME_LINE_PAGE_MIN:
+            out.append((float(np.median([d for d, _, _ in win])), float(np.median([t for _, _, t in win]))))
+            i += len(win)
+        else:
+            i += 1
+    return out
+
+
+def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
+                     win_x0: float, win_x1: float, bottom: bool = True,
+                     gap: bool = False, line_ys: tuple[tuple[float, float], ...] = ()) -> np.ndarray:
+    """列尾格（bottom=True）／列首格的版框细线连同线外一并抹白。
+
+    cell_top/cell_bot 为格界、win_x0/win_x1 为列内容窗口，都在图块坐标系里。线内侧（字那边）
+    没墨的不动：那是只有一横的字（列端的「一」），不是框。gap=True 时线和字之间还要隔着白行：
+    列首格用（字头碰不到框，紧贴着字的满宽横是字的上横——卷首「欽定」页满纸噪点，「周」的上横
+    连着噪点落进 FRAME_LINE_ZONE）；列尾不要求，字脚常压在框线上（「見」）。line_ys 是全页线位
+    （图块坐标）和线厚（见 page_frame_line_offsets）：线位上放宽覆盖认淡线；不满 FRAME_LINE_SPAN 的实线，
+    位置、厚度都跟全页那道线对上也认（字脚压着的双边框内框）。"""
+    if not bottom:      # 列首格上下翻转同解
+        h = patch.shape[0]
+        flip = patch[::-1]
+        out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True,
+                               line_ys=tuple((h - ly, th) for ly, th in line_ys))
+        return patch if out is flip else np.ascontiguousarray(out[::-1])
+    h, w = patch.shape[:2]
+    a = int(round(win_x0 + FRAME_LINE_INNER * (win_x1 - win_x0)))
+    b = int(round(win_x1 - FRAME_LINE_INNER * (win_x1 - win_x0)))
+    a, b = max(0, a), min(w, b)
+    if b - a < 10:
+        return patch
+    ink = patch[:, a:b] < BINARY_THRESHOLD_PATCH
+    zone = int(round(cell_bot - FRAME_LINE_ZONE * (cell_bot - cell_top)))
+    line = _line_rows(ink, zone, FRAME_LINE_COV)
+    if line_ys:
+        tol = FRAME_LINE_TOL * (cell_bot - cell_top)
+        near = np.zeros(h, dtype=bool)
+        for ly, _ in line_ys:
+            near[max(0, zone, int(np.floor(ly - tol))):max(0, int(np.ceil(ly + tol)) + 1)] = True
+        line |= near & _line_rows(ink, zone, FRAME_LINE_FAINT_COV, FRAME_LINE_FAINT_SPAN, FRAME_LINE_DASHES)
+        # 短实线：一段实线行的中线落在线位上、厚度跟全页那道线差不过 FRAME_LINE_TH_TOL 行才算——
+        # 字的底笔碰巧压在线位上，厚度对不上（vol09 p256「是」捺脚只有 1 行够宽）
+        solid = _line_rows(ink, zone, FRAME_LINE_COV, FRAME_LINE_SHORT_SPAN)
+        y = 0
+        while y < h:
+            if not solid[y]:
+                y += 1
+                continue
+            y1 = y
+            while y1 < h and solid[y1]:
+                y1 += 1
+            mid = (y + y1 - 1) / 2
+            if any(abs(mid - ly) <= tol and abs((y1 - y) - th) <= FRAME_LINE_TH_TOL and y1 - y >= 2
+                   for ly, th in line_ys):
+                line[y:y1] = True
+            y = y1
+    runs: list[tuple[int, int]] = []
+    y = 0
+    while y < h:
+        if line[y]:
+            y1 = y
+            while y1 < h and line[y1]:
+                y1 += 1
+            runs.append((y, y1))
+            y = y1
+        else:
+            y += 1
+    edge = line.copy()        # 线行连同上下毛边（粗框的边沿墨不满一行，不算线行）
+    for y0, y1 in runs:
+        edge[max(0, y0 - FRAME_LINE_EDGE):y1 + FRAME_LINE_EDGE] = True
+    for k, (y0, y1) in enumerate(runs):
+        # 太厚的不是线——除非墨几乎铺满，那是粗版框（vol06 p149「者」底下、vol08 p59「尚」顶上），
+        # 字的笔画不会又厚又满宽，贴着字也照剥
+        bar = y1 - y0 > FRAME_LINE_THICK * (cell_bot - cell_top)
+        if bar and float(ink[y0:y1].mean()) < FRAME_BAR_COV:
+            continue
+        nxt = runs[k + 1][0] if k + 1 < len(runs) else h
+        if ink[y1:nxt].sum() > FRAME_LINE_TAIL * (b - a):
+            # 线外有墨。双边框两道之间的连墨（粗框的毛边、内外框间的竖向连墨）不算：线跟字之间隔着白行
+            # （线是框、不是压在框上的字脚），线的毛边以外到下一道线的墨又不多，照样是框（vol05 p92「乾」）。
+            above = ink[max(0, y0 - FRAME_LINE_EDGE - 2):max(0, y0 - FRAME_LINE_EDGE)].sum(axis=1)
+            if not (above.size and (above <= FRAME_LINE_BLANK * (b - a)).all()
+                    and ink[y1:nxt][~edge[y1:nxt]].sum() <= FRAME_LINE_TAIL * (b - a)):
+                continue
+        if gap and not bar and (ink[max(0, y0 - 2):y0].sum(axis=1) >= FRAME_LINE_SPECK * (b - a)).all():
+            continue
+        if not (patch[:y0] < BINARY_THRESHOLD_PATCH).any():
+            return patch
+        out = patch.copy()
+        out[y0:] = 255
+        return out
+    return patch
+
+
 def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     """列端图块的曲线边：沿紧贴字身外沿、绕开版框的路径切，路径外抹白。
 
@@ -1389,6 +1623,13 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float,
     if top is not None and (bot - top) >= TAIL_JUNK_SPAN * cell_h:
         return False                      # 「二/三」类：多笔跨度撑起整格
     return True
+
+
+def has_stroke(patch: np.ndarray) -> bool:
+    """格里有没有成笔的墨：至少一个连通体过 is_end_cell_junk 的两道噪点闸（面积、高度）。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, _lab, st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    return any(int(st[k, 4]) >= TAIL_JUNK_MIN_INK and int(st[k, 3]) >= 4 for k in range(1, n))
 
 
 HEAD_CELL_MIN_H = 0.5      # 抬头位的字必须有这么高的连通体（× 格高）
@@ -2478,22 +2719,17 @@ class CharExtractor:
                     int(round(right_x)) - sx0, cell_h_ref,
                     right_ext=right_delta, left_ext=left_delta,
                     strategy=bar_strategy, top_line=tl, bottom_line=bl)
-            # 格与格之间的上下边界**严格信任 Step3**（矩形 y_top/y_bottom，
-            # 或 Step3 选中了折线时的 seam_top/seam_bottom），不再自己按
-            # 连通体猜"这块墨该归哪格"（2026-09-12 用户定：`_assign_column`
-            # 的贪心匹配+四级键在归属判断本身没错时也会被上游一条切错的
-            # 折线带偏——vol02:135:3:5"其"字八字底一撇被 Step3 折线错误
-            # 划给了下一格，_assign_column 只是忠实执行了这条错误的折线；
-            # 反过来说，格界内的墨迹不需要再猜是不是"自己的"，Step3 已经
-            # 决定了这一格该有什么）。列内左右方向（版框钉桩/左右缘救援/
-            # 界行剔除/曲线切边）不受影响，仍按原逻辑走。
-            seam_of = {int(c["index"]): (c.get("seam_top"), c.get("seam_bottom"))
-                      for c in cells}
+            # 格与格之间的上下边界跟 Step3 走（2026-09-12 用户定，不再用 `_assign_column` 的贪心匹配猜归属）：
+            # Step3 选了折线的格界严格按折线分；直格界只多管跨线连通体整块归谁（partition_strip 的三条规则）。
 
             # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
             order = [i for i, _t, _b in local]
             end_cand = set(order[:2 + n_head_rows] + order[-2:])
+            # 逐列格位表认下的字格（Step3 记 layout_char）：格里有成笔的墨时听表，下面两道渣格闸不判它空。
+            # 列端的「一」「二」与版框横线形状上分不清（殿本 vol05–10 列尾「一」被判渣 16 列）。
+            # 空纸照样判空：表与图差一格时（vol04 p11 c1 首字「御」在表外），表认的末格可能是白纸。
+            table_char = {int(c["index"]) for c in cells if c.get("layout_char")}
             # 曲线切边只碰**最外一格**：只有它挨着版框。列端渣格闸取
             # 首末各 2 格（渣有时占两格），但短列里那两个集合会重叠，
             # 拿它切边会把列首格**下方的邻字残余**也当框线切掉。
@@ -2501,26 +2737,39 @@ class CharExtractor:
             tail_cell = order[-1] if order else None
             end_patches: dict[int, tuple[np.ndarray, float]] = {}
             jz_pre: dict[int, tuple[np.ndarray, float, float]] = {}
-            for cell, (idx, ltop, lbot) in zip(cells, local):
+            # 整列一次分好每个墨像素归哪格（partition_strip），各格图块只留自己的墨：
+            # 不会两格各带走同一笔，也不用再在 pad 带里逐块猜哪笔是邻字的
+            xs = np.arange(strip.shape[1]) + sx0 - int(round(left_x))
+
+            def _edge(rect: float, seam) -> np.ndarray:
+                e = np.full(strip.shape[1], rect - sy0)
+                if seam is not None:
+                    sv = np.asarray([np.nan if v is None else float(v) for v in seam])
+                    ok = (xs >= 0) & (xs < len(sv))
+                    v = np.full(strip.shape[1], np.nan)
+                    v[ok] = sv[xs[ok]] - sy0
+                    e = np.where(np.isnan(v), e, v)
+                return e
+
+            owner = partition_strip(strip, [
+                (_edge(float(c["y_top"]), c.get("seam_top")), _edge(float(c["y_bottom"]), c.get("seam_bottom")),
+                 bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells], cell_h_ref)
+            ink_px = strip < BINARY_THRESHOLD_PATCH
+            for ci, (cell, (idx, ltop, lbot)) in enumerate(zip(cells, local)):
                 cell_h = lbot - ltop
                 pad = cell_h * self.padding_ratio
                 y0 = max(0, int(round(ltop - pad)))
                 y1 = min(strip.shape[0], int(round(lbot + pad)))
+                # 窗口还要包住归本格、越出 pad 的墨（伸进邻格浅浅一截的本字笔画）
+                mine = owner == ci
+                ys = np.nonzero(mine.any(axis=1))[0]
+                if ys.size:
+                    y0, y1 = min(y0, int(ys[0])), max(y1, int(ys[-1]) + 1)
                 if y1 <= y0:
                     continue
                 patch = strip[y0:y1].copy()
-                seam_top, seam_bottom = seam_of.get(idx, (None, None))
-                if seam_top is not None or seam_bottom is not None:
-                    # Step3 选中了折线：折线之外严格不属于本格，抹白。
-                    # 折线数组是**列图坐标的绝对值**（原点在内容窗口 x_lo，
-                    # y 是列图绝对行号）；patch 顶边在列图坐标系的绝对 y 是
-                    # sy0+y0（strip 已经先减过 sy0，y0 只是相对 strip 的局部
-                    # 偏移，两层要叠加，只传 y0 会把折线错位一个 sy0，
-                    # 曾经把整格抹白——2026-09-12 实测复现）。
-                    patch = mask_outside(patch, seam_top, seam_bottom,
-                                        y0=sy0 + y0, x0=sx0 - int(round(left_x)))
-                # pad 带里邻字伸过来的笔尖：不跨格界的连通体一律抹掉（见函数注释）
-                patch = drop_pad_only_components(patch, ltop - y0, lbot - y0)
+                patch[ink_px[y0:y1] & ~mine[y0:y1]] = 255
+
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
@@ -2528,6 +2777,14 @@ class CharExtractor:
                 # 列端格：剥掉与字身分离的版框碎渣（2026-08-25 用户定
                 # 口径——框渣算可后处理的污染，不算错误截取）。自检
                 # flags 与紧裁都在剥后的图块上算，口径统一为「去框后」。
+                # 贴着版框的列端格剥框线。夹注格不剥：两行小字的横画并排连成满宽，会被当成线。
+                near_frame = ((idx == tail_cell and frame_in_bot - (sy0 + lbot) < cell_h_ref)
+                              or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
+                if near_frame and _jiazhu_gap_center(patch, jz_ref_w) is None:
+                    lys = gmeta.get("frame_lines_bottom" if idx == tail_cell else "frame_lines_top") or ()
+                    patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
+                                             bottom=idx == tail_cell,
+                                             line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys))
                 if idx in end_cand:
                     patch = strip_frame_debris(patch, ltop - y0,
                                                lbot - y0, cell_h)
@@ -2638,7 +2895,7 @@ class CharExtractor:
                         break
                     if "tail_junk" in inst.flags:
                         continue
-                    if not is_end_cell_junk(*info, frame_guard=self.frame_guard):
+                    if (i in table_char and has_stroke(info[0])) or not is_end_cell_junk(*info, frame_guard=self.frame_guard):
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")
@@ -2647,7 +2904,7 @@ class CharExtractor:
             # 太松（两条框线相连就冒充「字粘条」），另用严判据。
             for i in order[:n_head_rows]:
                 info, inst = end_patches.get(i), by_idx.get(i)
-                if info is None or inst is None or inst.cell_type != "char":
+                if info is None or inst is None or inst.cell_type != "char" or (i in table_char and has_stroke(info[0])):
                     continue
                 if is_head_cell_junk(*info):
                     inst.cell_type = "empty"

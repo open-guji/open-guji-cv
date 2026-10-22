@@ -42,7 +42,9 @@ _CJK_MIN = 0x2E80
 
 
 def _valid_char(s: str | None) -> bool:
-    return bool(s) and len(s) == 1 and ord(s) >= _CJK_MIN
+    """单个汉字，或登记过的特殊符号（○□△…，`hanzi.symbols`；人定成符号的格照样进库）。"""
+    from ..hanzi.symbols import is_symbol
+    return bool(s) and len(s) == 1 and (ord(s) >= _CJK_MIN or is_symbol(s))
 
 
 def connect_ro(db_path: str | Path) -> sqlite3.Connection:

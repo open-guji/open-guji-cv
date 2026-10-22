@@ -157,7 +157,9 @@ def rebuild_verdicts(log, store: GoldStore, table=None, batches: Iterable[str] |
     table = table or RouteTable.load(log.root / "routes.yaml")
     wanted = set(batches) if batches else None
     events = [e for e in log.iter_all() if wanted is None or e.batch in wanted]
-    events.sort(key=lambda e: e.order)
+    # = feedback.events.replay_key（写在这里是不新开 gold→feedback.events 的依赖）：时间序重放，
+    # 与 human_chars 同口径；按批次名序会让旧裁决盖掉新的
+    events.sort(key=lambda e: (e.ts, e.batch, e.seq))
     plan = table.plan(events)
     pairs = plan.get("gold_add", [])
     res = gold_add(pairs, store=store, why=why)

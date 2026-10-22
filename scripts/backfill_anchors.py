@@ -95,7 +95,7 @@ def main() -> None:
         idx = _cell_index(cells) if cells is not None else {}
         raw_path = bk.raw_path(page) if hasattr(bk, "raw_path") else None
         loader = (lambda rp=raw_path: cv2.imread(str(rp), cv2.IMREAD_GRAYSCALE))
-        rows += build_page(book, page, evs, cells, store.sha(book, step, page_key(page)), loader,
+        rows += build_page(book, page, evs, cells, {step: store.sha(book, step, page_key(page))}, loader,
                            patch_for, align_for(page, idx),
                            store_patch_fn=(lambda p: store_patch(book, p)) if a.write else None)
 

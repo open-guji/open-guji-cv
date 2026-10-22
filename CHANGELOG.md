@@ -5,11 +5,215 @@
 
 ## [未发版]
 
-### Added
-- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
-
 ### Fixed
 - `guji opinions publish-status`（GUJI-714 后续，PATCH）：① 上次发过、这次算不出状态的 target（意见重开、改判成不写的状态）写一行 `state:"open"`，网站 proofing-sync 据此撤回 KV 里的旧状态（原来旧状态一直留着，实时页与 COS 清单不一致）；② 人裁驳回又没写公开理由、判定为原文不误的，回复用模板句「此处原文作「甲」，暂不改」（原来读者只看到「未采纳」）；③ 撤销过 dup 的意见照常带回复（原来只要有过 dup 记录就不回）。不碰任何 Step，`code_hash` 不变。
+
+## [0.5.8] - 2026-10-22
+
+PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_detect`、切分 `row_segment` 1.36、字框收缩 `cell_shrink` 1.19–1.20、外框线回直线 `border_detect` 1.5、文意组加字形第二路（cv#429，新增 12 个组模板库 rr ts ly wj zh yh yt js em fc yr xz）、厯歴／呂吕／徵徴 判法调整、己已巳／日曰 收口、影子复核按册码位归一（v0.5.7 漏带）。相对 v0.5.7，`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`seed_admit` 七步 `code_hash` 变，另新增 `invert_detect`，**各书 Step1 起全部判过期**；其余 11 步不变。新组 weiw shan di qin 要在册配置 `group_flow` 点名；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3851 过、66 跳过、1 条报错；报错的是一条测试守卫，已修（装了 psycopg 而没给测试库时，`test_datastore_expbranch` 一条用例报错而不是跳过，只改测试）。
+
+### Fixed
+- seed_admit 影子复核 `shadow_veto` 比字按册 `codepoints` 归一（d54fe0fc）：別别、晚晩、出岀 不再被误降。v0.5.7 切 rc 时没带上，本版补发。`seed_admit` 的 `code_hash` 变。
+- Step3 row_segment 1.36：字内空隙里的格线不再把字头、点留在上一格（人审截断「良」的点、「晉」的头、「其」的脚、「二」的上横）。干净格线两侧有一格格高偏离 period 超过 15% 也过一次 U-Net 探针（vol02 1,800 条，原来只有一高一矮的 6 条）；探针分歧 ≥100、扩池补来的候选（U-Net 引导缝 / 按格高找的缝）与 U-Net 分歧 ≤30px 时直接改选，不再只记候选交人：粘连切点要穿墨 ≤20px，原本干净的格线只换成同样不穿墨的缝（换成穿笔画的缝会把上字底横的一截切给下格，「一」就成了「二」）。vol02 改 40 处、vol05 改 76 处，看图都是修好或持平；Step3 时长略增。
+- Step4 cell_shrink 1.19：列端粗版框不再带进字块（重跑 v0.5.7 时害了认字）。`strip_frame_line` 两处放宽：线跟字之间隔着白行、线外到下一道线只有框的毛边和连墨的，双边框内外两道一起剥（vol05 p92「乾」）；厚过 0.12 格但墨铺满 ≥80% 的线行段算粗版框，贴着字也剥（vol06 p149「者」、vol08 p59「尚」）。vol05 全册只改「乾」和一格框渣、vol09 全册 0 格变化。框线只剩贴着字的碎段的（vol06「將」「而」、vol09「講」）还没修。
+- Step4 cell_shrink 1.20：双边框内框贴着字脚、两头没到窗边的，不再带进字块（vol06 p112「而」）。全页框线线位原来只在版框往内 0.4 格里找，内框离版框可到半格，找不着；改为找到 0.8 格，并记下每道线的线厚。列端格里跨度 ≥0.8 窗宽的实线，中线落在线位上、厚度跟那道线差不过 2 行，就当框线剥。字的底笔碰巧压在线位上的厚度、跨度对不上（「士」的底横 0.7 窗宽、「是」的捺脚只有 1 行）。vol05 改 17 格、vol09 改 41 格，看图都是剥掉框线或框渣，「燧」辶的捺尾跟框线连成一片，随框剥掉一截。「將」那列框线跟邻列对不上、「講」是虚线贴字，还没修。
+- Step1 外框线也按横带证据回直线（`border_detect` 1.5，`border_geometry.snap_verticals_to_evidence`）：原来「折点只许在有界行支撑的横带偏离直线」只管内部界行，首尾两条外框线没人管。vol08 p2（卷首大印页）左外框下半段印得淡，三段折线被第 9 列字的竖笔吸进 42px，s15–21 七个字只罩住右半。外框线现在只认两种证据：线就压着的框线（偏 <8px）原位，否则回直线位（直线已挑过细内框）；不用文字缝、不往远处的粗外条挪；内部界行先定、外框线最后按定下来的邻线过间距护栏，内部界行与改前逐位相同。vol04/08/09 三册 555 页里 34 页的外框线动了，Step3–4 新旧对比：对格位表逐格全对 279/279 列不变，字框横向变了的 13 列看图都是变好或持平（vol08 p2 c9 罩全，vol04 p178 c1、p63 c1、p91 c1、vol08 p12 c1 甩掉框线渣）。各书 Step1 起判过期。
+- 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
+
+### Added
+- R6 整页／整列丢字检查 `ops/col_gate`（GUJI-661）：读 Step3 与原图，报「整列没切出」与「单字墨段没被字格接住」，抹掉版框折角与污渍后再判。`scripts/zhengli/col_gate.py` 单跑，`collect_exit.py` 加 R6 项（`exit_report.py` 有数才判）。只报告，不改产物，不动任何 Step。殿本 v0.5.7 包 vol04–10 误报每册 0–12 处；自造缺陷召回：整列格记空 100%、整列没切出约 85%、整列错位 0.6 格约 65–73%；真书历史案例（vol03 57:1 等）云端没有当时的旧产物，未能复现。
+- `feedback/exclusion_check.stale_by_binding` + `scripts/zhengli/stale_exclusions.py`：列出人裁排除名单里裁决锚点与当前切图对不上的格（只报告；GUJI-659／623）。
+- 粗校出口 R4 异常表可写成 JSON（GUJI-666，`scripts/zhengli/collect_exit.py` 的 `load_anomaly`）：`{"rows": [{n, text, cause, concl, pages?, cols?}]}`，`pages`／`cols` 给了就不再从「现象」里抠 pN colM；格式错报具体位置（JSON 报行列和 `rows[i]`，md 报第几行），不再是整表悄悄 FAIL 或悄悄少读几行。老 md 表照读。体检结果带字形库指纹那一半早由 GUJI-710 做掉。
+- `guji pipeline`／`guji step` 起跑前自检依赖（GUJI-654，`ops/preflight.py`）：这次要跑的步骤用得上的东西本机缺了就拒跑（退出码 2）并点名——Step3 切点裁判（`cut_judge=unet`）和 Step5-b 要 torch 与权重，册配置开了 `shadow_veto` 的 Step7 要 joblib／scikit-learn。以前这些都是悄悄退回旧办法或整页失败（10-21 vol08 缺 joblib，seed_admit 69 页全失败，pipeline 仍返回 0）。`--allow-missing-deps` 或 `GUJI_ALLOW_MISSING_DEPS=1` 放行。不动任何 Step 与 code_deps。
+- 待审单雪碧图改成「文件名带内容哈希、真源进 R2」（GUJI-675，方案 B）：`scripts/zhengli/sprite_pub.py`——`republish.py prep` 把图改名 `<原名>.<sha8>.webp`、单子顶层写 `sprites[]`，`push` 先把图按 sha256 传进 R2 main 桶（`datastore/r2.py` 认 `webp` 后缀）再写单子；新增 `republish.py add-sprites` 给线上旧单补图（重建后逐格核坐标，一格对不上就不动）。网站 proofing-sync 读 `sprites[]` 发到 COS（kaiyuanguji-web 同步改）。不动任何 Step 与 code_deps。
+- Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
+- 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
+- 反色带候选 `invert_detect` 1.1：先排掉不在正文里的黑条（Sheldon 10-22 嫌 1.0 误报多）。黑条不足 12 行（上框粗线）、上方是空白天头（页顶外框）、上下是满纸花纹（封面、书衣）都不报。殿本十册 1,707 页：已登记 15 处全中，误报 13 页降到 2 页（vol06 p40、vol08 p67，抬头格下的粗横线，与已登记的 vol02 p136 几何上分不开）。阈值在同一批十册上定，没有留出验证。
+- 复查已登记反色带：vol05 p22、vol07 p78、vol09 p174/p175 四页修完还留着黑块（登记的横向范围漏了一截，vol07 p78 左两格的带上沿是台阶形），中心库 yaml 补全规则（vol07 p78 左两格改用矩形），`precleaned/` 四张图重生成。修后再跑 `invert_detect` 不报，逐页看图核对干净。四页 Step1 起判过期。
+- 特殊符号进字符候选集（Sheldon 10-21 定，设计 `doc/design/特殊符号进字符候选集-设计.md`）：人定的符号（○□△⊙ 等，`hanzi.symbols` 登记过的）能进字形库，`glyphdb_admit` 与 `glyph_ledger` 不再把非汉字码位一律拒收；相似字按图认符号（模板余弦 ≥ 0.93 且高过本格最像的字才并入）；5-b 字表开关 `font.charset.symbols`、seed_admit `symbol_review`（放行成符号的格退回人审，除非本书同一符号已有 3 条以上人裁）；送审原因显示「可能是符号」。没开开关的册产物逐字节不变。（#362、#377、#384）
+- 从产物包出待审单时，相似字现切字块图、一格没出就报错、`republish.py add-alt [--replace]` 原地补。（#362）
+- 日曰分歧复核（sheldon 10-22，重跑后 4–10 册 39 格组流与库分歧，长上下文读原典逐格定字）：日曰 18 格里 10 格是文意表（L2）错杀或错放，根因是表只取 haiku、Sonnet high 异议不起作用（5 格 Sonnet 5/5 对）。新 `scripts/l2_apply_dissent.py` 离线改表（Sonnet high 异字→以 Sonnet 为准），不动 Step 代码、`code_hash` 不变；抽样 8 页：6 格由降审回到放行且字对，其余不变。新表（另加长上下文判定 3 格 vol07:73、vol09:40、vol10:109）sheldon 10-22 说「推」，已推中心库＝书库语料 v15（base b4，册钉还没改到 v15）；项目文件 `jys-ry-rm-1022/round4/ry.json`。
+
+### Changed
+- 厯歴 `lih` 改取下半框 HOG（`ids_online.SPECS`：size 48、`region=(0,1,0.5,1)`、门槛 0.25；模板库同一 122 格重建）：按册留出 119 对/3 弃/0 错（原 92/122）。区域在同批数据上选，偏乐观。经验总结与逐组评估见 `doc/design/M7-切分识别经验推广.md`。PATCH；只影响点名了 lih 的册，重跑归 M8。
+- 呂吕 `lv` 门槛 0.5→0.3、徵徴 `zheng` 0.6→0.45（sheldon 10-22 同意）：判别台复核（`research/m7/bench/check_prod.py`）发现两组各有 1 格在线上门槛之上判「错」，sheldon 看图确认是原人裁错（vol02:125:8:4 实为吕、vol01:70:7:10 实为徴；数据集与中心库已更正）。更正后按册留一：呂吕 68 对/2 弃/0 错（原 62），徵徴 49 对/26 弃/0 错（原 38，错例最大 0.336）。与上一条合计 PATCH；只有 `seed_admit` 的 `code_hash` 变（相对 dev：8a8925fc0ffbd21a→72120ef3f1a81eec）。
+- 文意组加字形第二路（sheldon 10-22「能不能再进一步优化算法」）：入人八 土士 論諭 問間 曾會 遺還 圓圖 甲申 而面 傅傳 一二 共 11 组，方法数组在文意之后加整字／取框 HOG（`registry.GLYPH2`、`ids_online.SPECS` 同名行，模板库 `config/groups/<组>/ids_bank.json`）。文意弃权时字形可单独补放，两路都给字须一致，复核时字形给了别的字就降审。新的 `IdsSpec.clean`（`ids_whole.clean_patch` 去邻格碎墨）与 `aspect`（宽高比不合弃权）；模板＝人裁格＋vol04–10 已放行格（每册每字 ≤20），字块都是线上同款 char_patch；门槛＝按册留一人裁 0 错且已放行格异议 ≤0.2%，最低 0.4。象彖𧰼 的「象族」形判（象／𧰼）用左半中段 HOG，只在很像象时给象，𧰼 不足 20 例永不自动给。vol04–10 抽样 106 页对 dev：补放 10 格（逐格读上下文，1 格组外字判错，甲申门槛 0.4→0.5 后挡住）、降审 1 格（文意对、字形误报）。大太 未末 王玉 目自 千干 十卜 戊戌戍 木本 不上。`seed_admit` 的 `code_hash` 05f5830d581fee12→f035a1fe19ee8836；新模板库进下一版语料（`repo:` 文件），重跑归 M8。
+- 己已巳／日曰 第三轮收口（sheldon 10-22；`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`「第三轮」节）：① 己已巳 `pair`：读序紧挨的两格都进了组 → 前「己」后「巳」（干支，總目参考文本两两相邻 37 处全是己巳），不跑方法；② `ctx_l2.add_review` 放宽：主模型 low/mid/「其他」都可，复核模型 high 的组内字就收，主模型有一遍 high 给了别的字则不收（己已巳 179 格标注上 9 格全对）；③ 日曰 `review_fix_strong`：L2 表答案 strong（`ctx_l2.add_confirm`：另跑一遍 haiku 和 Sonnet 都 high 同字）且字形没明显反对时，复核改掉别的通道按整理本放的字，否则照旧降审（日曰 98 格标注上 haiku＋Sonnet 都 high 同字 66 格错 1）；④ 影子闸不降字组按文意定的字——影子只是挑了同组另一个字时（原来改成曰后被影子降、又被坐标兜底按整理本放回日）。抽样 261 页对 dev：新放行／改字 13 格，逐格核 0 错、0 降审；三组送审（不含遮挡）69→56，其中 strong 标记与放宽复核要新 L2 表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（cb2434a4a4c41d6e→8a8925fc0ffbd21a）。
+
+## [0.5.7] - 2026-10-21
+
+PATCH（Sheldon 10-22 定发，vol04–10 重跑用）。相对 v0.5.6，`cell_shrink`（1.17）、`row_segment`（1.35）、`seed_admit`（1.21，`code_hash` 85052303fa79a800→bff8f652ceae4de9）三步 `code_hash` 变，**各书 Step3 起判过期**；其余 15 步不变。新增 `qin`／`shan`／`weiw` 三个字组模板库，要在册配置 `group_flow` 点名才生效。
+
+### Added
+- 字形判法扩面（sheldon 10-22，#393 方法数组之后）：衛衞 `weiw`、刪删 `shan`、扺抵 `di` 三个异体对上线取框 HOG＋岭回归（`ids_online.SPECS`，`registry` 配 `config/groups/<组>/ids_bank.json`）。模板＝数据集 `labels/unified.jsonl` 里 sheldon 人裁刻形与 `variant/*/crops` 字块（衛41／衞14、刪111／删5、抵90／扺10）；按册留出 0 错：衛衞 37／55 对、刪删 97／116、扺抵 78／100，次形（衞／删／扺）几乎都弃权送人审，不会被放成主形。只补放，需在册配置 group_flow 点名，重跑归 M8。`ids_online` 与 `registry` 变，`seed_admit` 的 `code_hash` 变。建库与评测脚本 `research/m7/glyph_expand/`。
+- 禽會俞命舍（`qin`）整字字形组：曾會㑹 里被点「其他」的 14 格多为禽。整字 HOG 一对多，模板＝殿本 vol04–10 放行格（每类 ≤60，曾合愈进库但非组员）＋禽 11 格（sheldon 10-22 已确认），按册留出成员格 150 对／19 弃／0 错（门槛 0.5）。单独成表 `registry.SHAPE_GROUPS`（只进 `FLOW_GROUPS`，不进 `GROUPS`：成员有命舍會 等常用字，进了会改 glyph_match／rare_ref_coord 的全局行为）；`ids_online` 改查 `FLOW_GROUPS`；与 zh 共用「會」（互相声明 overlaps）。需在册配置 group_flow 点名。
+
+### Changed
+- 字框收缩 `cell_shrink` 1.18：归属图（`partition_strip`）里跨格界、又不算小部件的连通体，整块归**墨多**的那格（1.17 归伸得深的那格）。vol05 p163 c9「上」断开的底横左段带个钩伸过格界，墨大半在「上」，1.17 却整块分给了「下」（Sheldon 看图指出）。vol05/09 对 1.17 只改这一对格。
+- 字框收缩 `cell_shrink` 1.17：整列先算一张归属图，每个墨像素至多归一格（`extractor.partition_strip`）。规则有三条：跨 Step3 折线、或两边都伸过 0.1 格的连通体按格界切开；高不过 0.25 格的小部件整块归离它近的字；其余整块归伸得深的那格。图块只留本格的墨，替掉原先按格界外扩 8% 裁块后的三道逐块清理（`drop_pad_only_components`、`drop_neighbor_parts`、`clip_unions_at_line`，已删）。vol05/09 对 1.16 改 75 格：多为去掉压在格边的邻字碎笔，另有本字越界的笔画补回来（「學」的子钩、「丹」的底横、列末「隱」原先只裁到上半）。
+- 字框收缩 `cell_shrink` 1.16：两字粘成一块、跨格界两边都伸过 0.1 格的连通体，按格界切开，各格只留界内的半边（`extractor.clip_unions_at_line`）。原先图块按格界外扩 8% 裁、跨界部件整块保留，两格各带走邻字一截（「家」的竖钩连「之」的点、「左」的底横连「字」的宀）。vol05/09 改 1199/1570 格，多为去掉邻字连过来的笔画，本字越界的笔尖会被切掉几像素。
+- 己已巳／日曰／日目 送审收口（`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`）：① 文意 L2 表键容许远处漂移——目标字两侧各 3 字内逐字相同、远处至多差 2 个字位仍用表里的答案（`group_flow_l2_drift`，缺省 2；建表后重跑邻格放行字会变，约 40 格因此整条对不上）；② 共字组联合判——分差内候选单组装不下、装得下「组＋共字组」（日曰目三字紧咬）时也进流程，主组定字后共字组须同意或明说「其他」且 high（`group_flow_joint`，缺省开；目仍是真竞争者，不当陪衬）；③ 己已巳前一字也是族字（干支「己巳」第二字）时不查 L2 表。殿本 vol04–10 抽样 141 页对 dev：新放行 39、复核降审 1，逐格核 0 错；三组送审（不含遮挡）139→101，其中约 20 格靠补跑的 haiku 表，表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（85052303fa79a800→57ce247a18aaf27c）。
+- 己已巳／日曰 第二轮收口（同一文档「第二轮」节）：① L2 表键比对时，本格窗口是「□」而表键有字的位不算差（坐标兜底等组流之后的补放遍会把邻格放进来，按成品建表时有字、组流时是 □；vol09:251「祭統曰春祭曰礿」6 格因此对不上，还漏掉 2 格放错的日）；② L1 规则 `jys-年號己巳`：年號末字＋己（或已／巳）＋◎ → 巳（参考文本 23 处 22 处是巳，另一处是语料讹字）；③ `ctx_l2.add_review`：建表时第二个模型复核，主模型同字只是置信不够、复核模型同字且 high 才收（sheldon 10-22 定；己已巳 104 格人工标注上 0 错），跑批仍只查表。抽样 250 页对 dev：新放行 32、降审 2（都是放错的日），逐格核 0 错；三组送审（不含遮挡）99→69，其中 23 格靠 Sonnet 复核后的 jys 表，表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（相对合并时的 dev：eeee3347742102a0→bff8f652ceae4de9）。
+- 切分与印章三个开关改缺省开，不再逐册设（Sheldon 10-22 定）：`row_segment.layout_prior` 缺省读 `corpus/daizhige/layout_slots.jsonl`，本工作区没有这张表（没有逐列本的书）就当关、不报错；书 yaml 写了别的路径而表不存在照旧报错，写空串＝关。`seed_admit.seal_blank_page`、`lane_seal` 缺省开（殿本十册原本就逐册开着）。殿本 vol01–03 从此也走逐列格位约束：vol02／vol03 p4–40 从原图重跑 Step1–4，逐格全对 329→330、319→330（各 333 列），没有回退列。各册 yaml 里这几行变成多余，留着无害。vol01–03 的 Step3 起参数哈希变，判过期。
+- vol07 p44（御製序首叶）抬头框整格被翻成实心黑条，登记 `inverted_rect` 预清理，`precleaned/vol07/44.png` 进仓；原来 Step1 抬头闸量不到第 7 列，「玉」整字丢出列图。配合中心库格位表覆盖（第 1、5、8、9 列出格抬一格，第 6 列从第 1 格起，daizhige 记错），这一页 36/36 列逐格全对。
+
+## [0.5.6] - 2026-10-21
+
+PATCH（sheldon 10-22 定发）。主要内容：印章系统化 1–4 期（新增 Step0 `seal_detect`，切分与遮挡格改读印章定位）、字框收缩 `cell_shrink` 1.10–1.15、字组判法重构成方法数组并新增五个码位归一组、旨㫖整字判法上线、啓啟与教敎模板库重建。相对 v0.5.5，`row_segment`、`cell_shrink`、`seed_admit` 三步 `code_hash` 变，另新增 `seal_detect`，**各书 Step0／Step3 起判过期**；其余 14 步不变。新组（zy sy sz gm xb zhi 及码位归一组 nei bie chu juan wan）要在册配置 `group_flow` 点名才生效；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3786 过、39 跳过。
+
+### Added
+- Step0 印章定位 `seal_detect`（印章系统化第 1 期，用户 10-22 定）：排在 Step1 之前，只读原图，产物 `seals` 列出每页每方印的类别（`stain` 大印＝卷首叶、卷端页的斑驳藏书印；`crisp` 小印＝卷末「乾隆御覽之寶」）、规范空间外框、分数、来源。大印按 150 px 网格的中等墨点密度认（峰值 ≥ 20、近方形，排掉 p2 书签条）；小印用印章模板整页找，分数取「模板笔画处有墨比例 − 空白处有墨比例」，印压正文时也认得出（vol09 p265 原来认不出）。书级 `params.seal_detect.overrides` 可人核整页覆盖。殿本十册 1,707 页认出 26 页（大印 13、小印 13），我逐页看图没发现误报（待 Sheldon 核图定为标准）。这一期只新增产物，别的步还不读它，各书已有产物不过期（新步自己要算一遍）。设计见 Claude Doc「印章系统化设计」。
+- 旨㫖（`zhi`）上线整字判法（`groups/ids_online` SPECS、`registry` 配 `config/groups/zhi`）：整字 HOG＋岭回归，模板来自 R2 整册产物对位文字（353 格，sheldon 更正 18 个旨→㫖），按册 5 折留出 margin 0.5 → 348 对／5 弃／0 错。`zhi` 需在册配置 group_flow 点名才生效，重跑归 M8。
+
+### Changed
+- 字组判法重构成**方法数组**（sheldon 10-22 定，`groups/methods.py`）：每组在 `FlowSpec.methods` 里登记一串方法，依次试，`combine=first` 遇放行即停、`agree` 全跑须一致；每个方法输出放行字或待定，带 0–1 置信度与留痕。八类：码位归一 `codepoint`（新；配新组 內内 nei、別别 bie、出岀 chu、卷巻 juan、晚晩 wan，单独成表 `CODEPOINT_GROUPS`、不进 `GROUPS`，glyph_match／rare_ref_coord 的全局字组集合不变，要在册配置 `group_flow` 点名才生效）、字频 `freq`、上下文固定匹配 `ctx_rule`、LLM 答案表 `llm`（两者合成子数组 `ctx`）、整字 HOG＋岭回归 `hog`、IDS 部件 `ids`、复合 `composite`（取框→方法，教敎、徵徴）、自定义函数 `custom`（量横、日曰宽高比、入人八分类器、库形最近）。算法与留痕名不变：殿本 vol04 共 65 页、56 组全开，seed_admit 产物与改前逐字节相同；再加五个码位归一组，65 页 9,688 格逐格不变（这批格已被 #372 的码位判等放行）。`seed_admit` 的 `code_hash` 变（`code_deps` 加 `groups.methods`，`flow`／`registry` 改写），其余步不变。
+- 字框收缩 `cell_shrink` 1.15：1.13 挪走的跨格界部件，伸进本格超过 0.1 格的不再挪（`NEIGHBOR_PART_DEPTH`）。伸得深的多半是两字粘成一块，整块挪走挖掉了本字的笔画（vol09「兵」「標」「諸」、vol05「荃」「字」「後」，Sheldon 看图指出）。
+- 小印压着的字也算遮挡格（印章系统化第 4 期，用户 10-22 定）：`occlusion.page_occluded` 在大印之外，加与小印框重叠 ≥ 0.3 的格，除去盖章空栏候选（格里的墨全在印笔画上）。这些格同大印：Step4 打 `seal_region` 旗，seed_admit 默认整理本字、审核卡归「印章遮挡」组，定字入库闸不建字形库。殿本 10 页小印页：新增 59 格，全在印压字的 vol09 p68／p162／p265、vol10 p87／p175（各 16／5／17／10／10）和 vol07 p134（1 格）；印落在空白处的 4 页不变。PATCH；`cell_shrink` 1.14、`seed_admit` 1.20。
+- 字框收缩 `cell_shrink` 1.13：跨格界的连通体若不高于一字、墨至少六成二在格界外、离格外的墨不比格内的远，算邻字越界的笔画，从本格抹掉（`extractor.drop_neighbor_parts`；在上下各多一格的列条里找部件，Step3 选了折线的那条格界不查）。原先跨界的部件两格都留，一格多笔、一格缺笔（「上/下」「宜/賓」「聖/經」）。vol05/09 改 30/34 格，逐张看过，改坏 1 格（vol05 p122 c3「字」丢宀）。
+- 切分 `row_segment` 1.34（印章系统化第 3 期）：大印压着列首的列（列首格一半以上在 `seals` 的大印框里）直接取逐列格位表的等距格网（抬头听表、格线就近落缝），不再在几张候选格网里按坏格挑。印泥斑点连着字，劈字、穿字都量不准：闸把列首斑点当抬头字（vol04 p3 c2/c3、vol05 p3 c3、vol10 p88 c1），DP 为躲斑点把格挤歪（vol07 p2 c1、vol09 p70 c1），字整列错一格而格号集合照样对得上。评测 `structcmp` 加「对位」口径（同页同格号的字格高度应一致，偏半格以上记错位），`flipcmp` 一并报，卷端页缺省在内。殿本七册 20 页印章页重跑：大印页错位列 12 → 0，逐格、字数两口径修好 0、改坏 0。PATCH；`row_segment` 的 `code_hash` 变。
+- 遮挡格与盖章空栏改读印章定位 `seals`（印章系统化第 2 期之二）：`occlusion.page_occluded`（seed_admit `occluded_gate`、字形库入库闸、Step4 `seal_region` 旗共用的唯一入口）改为「与大印框重叠 ≥ 一半的格」，不再按格算墨点密度；`page_seal_blank` 改用小印框和它的笔画覆盖区（`seal_detect.stroke_mask`），不再在 (830,330) 窗口里找模板。修了两处旧坐标错：旧判据把右上原点的格框直接套在左上原点的原图上，量到的是左右镜像的位置，印正好在页中间才没出事。殿本十页大印页：遮挡格 1,226 → 1,290，新增的非空格 62 个（vol08 p2 印淡，旧判据只认出半方，占 57 格），减少 24 格（印框外的边角）。十页小印页：盖章空栏候选里的非空格减少 9 个（vol09 p162 c4、vol10 p87 c3/c4，都是压在印下的真字「文淵閣著錄」等，旧路径因坐标镜像误入候选），vol07 p134 多 2 个、少 1 个。没有 `seals` 产物的旧产物照旧走原判据。PATCH；`cell_shrink` 1.12、`seed_admit` 1.19，新读 `seals`，`code_hash` 变；`row_segment` 补登记 `seal_detect` 为代码依赖。
+- 切分 `row_segment` 1.33（印章系统化第 2 期之一）：列端表空格「落在印里就记空」改读印章定位 `seals` 产物，删掉 `_seal_box`（窗口模板找印）和 `_empty_zone_seal`（表空段墨团）。大印按框量（格与印框重叠 ≥ 一半）；小印按笔画量：格里 ≥ 70% 的墨属于压着印笔画覆盖区的连通块（`_in_seal`），印边只压住一列一小半也认得出。顺带修好旧坐标错：原印框是左上原点、格是右上原点，卷末印正好在页中线附近才一直没出事。殿本七册 20 页印章页 Step3–4 重跑，与 dev 逐列对比：修好 0、改坏 0。PATCH；`row_segment` 的 `code_hash` 变，并新读 `seals`。
+- 印章定位 `seal_detect` 1.1：大印外框改按版框定——紧贴版框上边与右边、边长＝版框宽（九列）的正方形（Sheldon 10-22 给的规律），不再用墨点密度区的外接框（偏大）；密度只判有没有大印。这一步因此挪到 `border_detect` 之后（读 `borders`），读不到版框才退回密度框。殿本 13 页大印逐页看图都贴合。小印不变。
+- 啓啟（`qik`）整字模板库用 dataset 98 格重建（原 24 格＋R2 整册产物里对位文字与整字判法一致的 74 格）：按册留出门槛 0.5 → 97 对／1 弃／0 错（原 17／7／0）。qik 的 group_flow 指纹变。
+- 中心库令牌缺省用读令牌：没设 `GUJI_DATA_TOKEN` 而有 `GUJI_DATA_TOKEN_READ` 时，`import open_guji_cv` 就把前者设成后者（云端 Default 环境只放 `_READ`／`_PROD`／`_EXP`，sheldon 10-21）。拉库、取 R2 字体包／产物包／语言模型不用再手动 export；推送照旧要显式设正式或实验令牌。不碰任何 Step，`code_hash` 不变。
+- 字框收缩 `cell_shrink` 1.11：列端框线按全页线位认淡线。同一页各列的框线离版框一样远，先拿全页的实线定线位（`extractor.page_frame_line_offsets`，至少 3 列落在同一处），线位上下 0.04 格高内覆盖 0.1、跨度 0.6、断成至少 3 段的行也算线行——印得淡、断成虚点的框线单看一格认不出（覆盖 0.1–0.6、两头缺点）。压在线位上的字底横是一整笔（列尾「土」「士」），不剥。vol05／vol09 比 1.10 多改 161／248 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
+- 字框收缩 `cell_shrink` 1.10：贴着版框的列尾格、列首格，把格里横贯内容窗口的版框细线（双边框的内框，印得细、常断成虚线）连同线外抹白（`extractor.strip_frame_line`）。原来 `strip_frame_debris`、`carve_end_edge` 剥不掉，殿本列尾字约一成带着一道横线进字块。线只在离格外沿 0.4 格高内找；线外还有成片墨的（「其」「兵」底横下的两点）是字自己的横，跳过；列首格要求线和字之间隔着白行；夹注格不剥。vol05／vol09 改 145／229 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
+- 书级 `codepoints:` 并进 seed_admit 的语义判等（`codepoint_semantic`，缺省开；关掉回旧行为）：巻→卷、别→別、岀→出、晩→晚、內→内 在 `context_vs_ref`、`replace_align`、`match_replace` 等一切「语义同字」比较里按同一个字算，放行字最后落册指定码位；`group_flow` 文意 L2 表的键按码位归一再比（否则邻格新放行会让组内格误降）。起因：此前 `vmap` 不认这些码位对，整理本排异体、刻本与文意都对的格全被 `context_vs_ref` 拦下（殿本 vol04–10 送审里这类 217 格：卷巻 178、別别 33、出岀 4、晚晩 2）。没配 `codepoints` 的册产物不变；参数指纹不变（缺省值不进 dump）。PATCH；`seed_admit` 的 `code_hash` 变（合入 dev 时 5335145caae3→a4f8dc68effc），别的 Step 不变。抽样重跑这类格所在 140 页：新放行 216，降级 0，仍送审 1（被遮挡）。
+
+## [0.5.5] - 2026-10-21
+
+PATCH（Sheldon 10-21 定发）。glyph_match 的 `batch_knn`、`font_tier` 改为缺省开（vol06：glyph_match 959 s → 349 s，送审 142 → 143，两边都放行而字不同的 0 格）。相对 v0.5.4，8 步 `code_hash` 变：`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`glyph_match`、`seed_admit`，**各书 Step1 起全部判过期**；其余 9 步不变。rc 上全量测试：3755 过、9 跳过；修了 8 条随 #366 进来、在有 CNN checkpoint 的机器上失败的测试（#370，只改测试）。
+
+### Changed
+- **glyph_match 两个提速开关改为缺省开**（用户 10-21 定，PATCH）：`batch_knn`（整页合批算近邻）与 `font_tier`（分级查库：先查刻本库，命中弱再查整库）。两个都开时两档都合批：刻本库那档每格都查，整库那档按 64 格一块惰性算，块里有命中弱的格才算，两档共用一份查询特征。显式写 `false` 关回去，关时不进参数 dump，参数指纹与 v0.5.4 的缺省相同。**会改产物**：glyph_match 参数指纹与 `code_hash`（4b3ff0e181cdc99d → a0b27c7c2fdaae05，其余 16 步不变）都变，各书 Step5-a 起判过期，下一次重跑整册重算。单开时的证据见 `doc/开关登记表.md`（batch_knn：vol06 1282 s → 367 s、送审 222 → 222；font_tier：粗校基准新增错放 0、送审 413 → 414）；两个同开（vol06 150 页，同一份上游，4 核云端，特征缓存热）：glyph_match 959 s → 349 s，从 glyph_match 到 seed_admit 1048 s → 431 s；`guji products diff` 送审 142 → 143（人审率 0.60% → 0.61%），放行转送审 2 格、送审转放行 1 格，**两边都放行而字不同的 0 格**。另修：库是空的（新书刻本库还没有字）时合批的矩阵乘出错、整页失败，改为逐格判。
+- 切分 `row_segment` 1.32：印框的第二个来源——相邻列的表空段（表首字之上、末字之下，整列空的列就是整列）在同一高度都有像字的墨，就把这一团墨的外接框当印框（`_empty_zone_seal`），列端表空格落在里面的记空。补上模板认不出的空心印和模板框没盖住的印边。`_in_seal` 改收印框列表。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol09 p68 c5/c6、p265 c4/c5/c6，vol05 p188 c7（另 p3 三列），vol09／05／06 全册改坏 0。
+- 格位表 `scripts/dzg_layout.py`：读同目录 `layout_overrides.jsonl`（看原图核过的列，写要改的 slots/notes/half/raised 加 `why`），盖在 daizhige 推出的行上，重生成不丢；评测 `research/dzg_struct_prior/structcmp.py` 的参照同样按它改。首批 4 列（殿本 vol04 p11 c1/c4/c5、p79 c7：daizhige 起始格错一格、漏抬头、把「○」当空格）。代码不动，表变 → 用到这几页的 `row_segment` 产物过期。vol04 第 4 页起错列 3 → 1（另 2 列原来就切对了，错在参照）。
+- 闸2 `column_gate` 1.12：页级周期估值偏离书级 `period_prior` 超过 `period_prior_tol`（缺省 10%，0 = 关）时回落先验，记 flag `period_fallback`。殿本正文页估值都在先验 ±5% 内；卷末大印、整页空白的页会被带偏（vol04 p127/128/220 估 89–95，vol05 p188 102，vol09 p69/162/163/224/225 79–127，先验 114–115），Step3 拿错的格高切，抬头格数、格网整列错位。修好 vol04 p127 c3（整列格线错半格）、vol09 p162 c3，表上改坏 0；其余页估值没偏，产物不变。没配 `period_prior` 的书不受影响。PATCH；`column_gate` 的 `code_hash` 与参数指纹变，各书 Step2 闸起判过期。
+- 切分 `row_segment` 1.31：列端表空格记空（`_blank_frame_junk`）不再只看字格和單行小注格，被切成雙行小注半格（jiazhu_a/b）的印章墨也记空。PATCH；`row_segment` 的 `code_hash` 变。殿本修好 vol10 p175 c5、vol09 p265 c7，vol09、vol10 全册改坏 0（vol10 第 4 页起已无错列）。
+- 切分 `row_segment` 1.30：格位表说只有一半有字（`half`）、判据又认成單行小注的格，按夹注半格发 `jiazhu_a`／`jiazhu_b`（缝取小注左缘，只发墨多的一半），不再发 `jiazhu_solo`。管列里没有雙行段时小写靠右的「臣」之类（1.26 只管列里有雙行段的）。`row_boundaries.segment_column` 的 `half_notes` 参数行为扩大，不传仍不变。PATCH；`row_segment` 与 `column_gate` 的 `code_hash` 变。殿本修好 vol04 p110 c1、vol07 p29 c9，两册全册改坏 0。
+- 切分 `row_segment` 1.29：列端表空格里墨只是一两道竖线的格记空（有墨的像素列不到内容宽的 20%，`VLINE_COLS`；印框的边、界行残段）。PATCH；`row_segment` 的 `code_hash` 变。殿本 vol04／05 修好 vol04 p127 c7，改坏 0。
+- 教敎（`groups/ids_online`，`jiao`）改用整字左上角一块（左 0–55%、上 0–46%）做 HOG＋岭回归：按册 5 折留出 93 格，门槛 0.4 → 87 对／6 弃／0 错（此前整字／U-Net／自动缝给字格 0 错覆盖 ≤8%）。`config/groups/jiao/ids_bank.json` 用 dataset 93 格重建（教 68／敎 25，含 vol01 四格教→敎更正）。jiao 的 group_flow 指纹变，seed_admit code_hash 变。记录见 `doc/research/形近字组实验记录.md`。
+
+### Added
+- `glyph_match.font_tier`（缺省关，GUJI-726）：分级查库，每格先只查刻本库；命中弱才查含字体域的整库，那一格与关着时相同。命中强＝判 same 或「unsure、首选 cov ≥ 0.98、比次优异字高 ≥ 0.03」，且首选字不是字组成员、没有形近对手。vol06 glyph_match 770 s → 606 s、vol05 1022 s → 770 s；粗校基准新增错放 0、送审 413 → 414。会改产物，开不开由 M9 定；关时产物与参数指纹不变（代码等价登记）。
+- `guji cellvotes draft|write`（`feedback/web_votes.py`、`cli_cellvotes.py`）：网站精校页投票直接转人裁事件草稿。取票（数据目录快照／`--from-kv` 管理读／文件）→ 去测试票、同格同来源留最新 → 六档映射（与 ai-team `web_opinions.py` 同口径）→ 对正式库最新人裁（一致的跳过、要推翻的挂起）→ 对格位（现行 `cell_shrink` 对出单版 book-text `cord.json`，列被重切过的挂起）→ 「无字」缺省挂起；`write` 走控制台同一条写入路径（带锚、消费、按草稿内容判重）。殿本 vol04 004-r3 的 31 票回放：可写 19、格位对不上 6、无字 6，与 10-21 手工核对一致。不动 Step 模块，各书产物不过期。
+
+### Fixed
+- `guji pipeline` 每步一个子进程（`--isolate-steps`，多步时缺省）跑完后，父进程读 manifest 数失败页，有失败页就不自动存包、在 stderr 列出来（原来子进程里有页失败照样返回 0，父进程当全过：10-21 基线重跑 vol08 seed_admit 69 页全失败仍自动存了包）。返回码与单进程连跑一致（不加 `--stop-on-error` 仍是 0）。不动 Step 模块。
+
+## [0.5.4] - 2026-10-20
+
+PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`（1.3）、`row_segment`（1.26、1.27）、`column_gate` 与形近字组 `group_flow` 的 `code_hash` 变，**各书 Step1 起全部判过期**。#345 改了 `config/groups/{jue,lih,qik,xu}/ids_bank.json`、新增 `xu/unet.npz`，配套语料库出全局层 b4，殿本 vol04–10 钉子账升 n=12、册 yaml 改钉 `corpus: 12`（v0.5.4 配 `corpus: 11` 会 CorpusDrift 拒跑）。
+验收（rc 上）：全量测试 3709 过、14 跳过；修了 1 条随 #345 过时的测试（`test_repo_by_form_banks_load`：整字组不再要求 `by_form`）。
+
+### Changed
+- 边框探测 `border_detect` 1.4：抬头框加字凸出判据（`border_geometry._raised_text_top`，`detect_head_raise(text_rule=True)` 缺省开）。有的抬头框只印了粗外框、没有内细线，有的连顶线都没有，横线判据找不到，抬头字落在列图外。现在前面都没认下的列，主上边框上方 [btop−130, btop−45] 一段先去掉整段有墨的竖条（墙线），再按行看：像字的行（墨占比 0.1~0.6）占四成以上，并且至少一侧界行外 70px 内有墙线（覆盖 ≥ 0.5），就算抬头，inner_y 取抬头字上沿往上 8px。墙线这一道挡「上諭」那种字紧贴笔直版框的页。殿本 vol04／06／07 全部 506 页，只有预期的 6 列变（vol04 p65 c8、p84 c5、p11 c5，vol06 p58 c6，vol07 p46 c7、p77 c2）。Step1–4 重跑修好 4 列（vol04 p65 c8、p84 c5，vol06 p58 c6，vol07 p77 c2），改坏 0。PATCH；`border_detect` 的 `code_hash` 变，各书 Step1 起判过期。
+- 切分 `row_segment` 1.28：印框记空挪进候选格网打分之前，跟框线碎墨一起「先记空再打分」（`_blank_frame_junk` 加 `in_seal` 判据；原来选完格网才记空的 `_blank_seal_cells` 删掉）。印框里列端表空格是單行小注格的也记空。印框查找抽成 `occlusion.find_seal_box`（`seal_blank_cells` 照用，输出不变）。PATCH；`row_segment` 与 `seed_admit`（`code_deps` 含 `occlusion`）的 `code_hash` 变。殿本 vol04／05／09 对旧产物修好 13 列、改坏 0（vol04 p130 页首噪点 5 列、p35、p191、p3 五列，vol09 p68 c7；对比基线里有些页不是最新代码出的，修好数偏高）。
+- 形近字 IDS 路按组换法（`groups/ids_online`、`ids_unet`）：叙敘 用左右向 U-Net 一条折线切线（`config/groups/xu/unet.npz`，留出册覆盖 33%→87%）；絕絶、厯歴、啓啟 改整字岭回归；冊册 踢出 IDS 路（SPECS 删 `ce`）；教敎 不变。实验记录见 `doc/research/形近字组实验记录.md`。xu/jue/lih/qik 的 group_flow 指纹变。
+
+### Fixed
+- `glyphdb_admit` 取图前查绑定（规范 §9 F-10）：补消费积压时重切后格号顺移的按现格取字块，绑定判不该采信的不进库（计 `unbound`）。实时消费不受影响；不在任何 Step 的 `code_deps` 里，各书产物不过期。
+
+### Added
+- 字形库按版本钉（GUJI-727，设计 `doc/design/字形库按版本钉-细设计.md`）：`guji glyph-db snapshot` 出只读快照 g<N>（清单随 `config/` 进中心库、一个号只写一次，文本随 push 按 sha 进 R2），册 yaml `glyph_pin: N` 有快照时本册读字形库的步改用 `output/glyph-g<N>.db`、字形库指纹换成快照内容哈希；`pin-build`／`pin-list`／`pin-verify`／`snapshot-upload`，`db pull/sync` 与 `pipeline` 起跑前自动建库。没钉的册、钉了号没快照的册行为与指纹逐位不变；**17 步 `code_hash` 全部不变**。
+- `scripts/zhengli/republish.py from-pack`：取别人跑好的产物包直接重发待审单，不重跑任何 Step——拉库、取包、按锚框核人裁绑定（包后新到的、按格号扣会扣错的、绑不上的都列进差异单「人裁合并」）、导出（文本版本读 book-text 线上值，单子头记包的 cv 版本）、prep，vol05 实测一条命令 4 分钟。`push --book-text` 顺带把同一次导出拷进 book-text、文本线升 minor、本地校验后提交到新分支；收尾提示请网站总管按顺序手动跑文本与待审单两段发布（每日定时里待审单比文本早 20 分钟）。不在任何 `code_deps` 里，各书产物不过期。
+  - 后续修两处（vol04–10 实跑发现）：from-pack 自己设 `GUJI_WORKSPACE`（之前没设时人裁绑定读到 0 条）；原格号上有人裁、但人裁绑到别处或绑不上的格不再被 `pending_route` 按格号扣掉（新参数 `--keep`），照旧留在单上。
+- `feedback/migrate_dedupe.py`：删整轮重发的人裁事件副本（规范 §9 M-3，原 O-8），记账、补锚档、金标 `source_events` 跟着改，带核对与 `gold rebuild` 比对；10-21 已写中心库（殿本 3,638 条、北行 76 条）。不动 Step 模块，各书产物不过期。
+
+### Changed
+- `guji pipeline` 整册（`--pages all`）从头跑到尾、没有失败页时，**缺省自动把产物打包存进 R2**（`products pack push`，标签 `<版本三段>-full`，不标 main；sheldon 10-21：免得忘）。`--no-pack` 或 `GUJI_AUTO_PACK=0` 关；没设 `GUJI_DATA_TOKEN`、存失败只提醒，不改返回码。不碰任何 Step，`code_hash` 不变。
+- 边框探测 `border_detect` 1.3：抬头框向邻列延伸（`utils.border_geometry._extend_head_raise`，`detect_head_raise(extend=True)` 缺省开）。已认下的抬头列，邻列在同一高度（±18px）有淡一些的细锐线（墨占比 ≥ 0.12，够不上原来的 0.35）、线下有抬头字的墨（≥ 一半行）就并进同一个抬头块，再照旧过墙线判据。管内边框印得淡、被抬头字压着的列：原来这一列按普通列取窗，抬头字整个落在列图外。PATCH；`border_detect` 的 `code_hash` 变，**各书 Step1 起全部判过期**（Sheldon 10-21：过期不是顾虑），只有抬头框变了的页输出变。殿本 vol04／07／09 全部 621 页里 4 页的抬头框变了，Step1–4 重跑修好 4 列（vol04 p9 c8、vol07 p44 c8、vol09 p109 c5/c6），改坏 0（vol09 p106 c7 并进抬头块，切分不变）。
+- 切分 `row_segment` 1.27：印框记空门槛 NCC 0.35 → 0.30（非印页实测最高 0.282；这里只动表说该空的列端格）。vol10 p175 修好 2 列；vol10、vol07 全册改坏 0。
+- 切分 `row_segment` 1.26：`layout_prior` 加两处。格位表说只有一半有字的夹注格（`half`，如「無巡卷撫數採進」里的行内空格、段尾奇数字），列里有雙行段时按段缝（各段格缝的中位数）拆、只发墨多的那一半（`row_boundaries.segment_column` 新参数 `half_notes`，缺省 None 不变）。PATCH；`row_segment` 与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，闸不传这个参数、输出不变）的 `code_hash` 变。殿本对 1.25：vol06 第 9/32/37/63 页、vol08 p46 修好 5 列，vol05 全册修好 3 列、改坏 0，vol09 全册不变。
+  - 印框记空：模板（`config/seal_templates/`，「乾隆御覽之寶」）命中的印框里、表说该空的列端格记空（`steps.occlusion.seal_blank_cells`，NCC ≥ 0.35、重叠 ≥ 一半；进 `code_deps`）。管篆文刻得清楚、墨连成笔画的大印，碎墨判据认不出这种。vol05 p188、vol06 p149、vol09 p162、vol10 p87 修好 9 列；vol05、vol10 全册改坏 0。
+- 跑批、冷启动再提速（GUJI-647 后续，PATCH；**17 步 `code_hash` 全部不变、产物逐字节不变**，改的都是引擎、登记表与不在任何 `code_deps` 里的模块）：
+  - 页级并行新登记 6 步（`core/parallel.py`）：`column_warp`、`border_detect_gate`、`column_gate`、`row_segment_gate`、`align_ref`、`context_decide`（后两步 `warm_first`）。vol06 150 页串行／4 进程：8 步产物逐页 sha 相同，`column_raw`／`column_image` 各 1332 张列图逐张相同。`context_decide` 开了 `enable_online_llm` 时退回串行（新字段 `ParallelAudit.serial_when`）。
+  - 跑一步期间每步参数只构造一次（`Engine._run_one_step` 与 `RunContext._params_memo`，并行 worker 每进程一次）：参数构造时要对 glyph.db 算人裁、库指纹，原来逐页在指纹、落盘、run_page 里各算一遍，vol06 seed_admit 主进程 600 多次。seed_admit 整册 185 s → 79 s，150 页产物与 manifest（指纹、参数哈希、上游）逐项相同。
+  - `glyph-db rebuild` 补放人裁：遮挡查询（`feedback.consumers._occluded_lookup`）在一次 `glyphdb_admit` 里按册只解析一次 seed_admit 参数（原来逐页解析，补放 1180 条人裁、711 页占 95%）：补放 139 s → 25 s（剖析下），14 张表、补放报告、消费记账逐项相同。
+  - `fold_compat`（`utils/cjk_compat`）只换正则扫到的兼容区段字符：整部语料有一个兼容字时原来逐字进 Python，align_ref 起跑折语料 4.5 s → 0.05 s，2 万条随机串与两部整理本逐字相同。
+  - `guji db pull`：重建 glyph.db 的派生表示按 CPU 数多进程（同 `glyph-db rebuild`，原来单进程）；取图（R2）与向库要文本行同时跑；读令牌先问 `whoami`，不再白打一个注定存不上的快照包（约 9 s）。
+  - 冷启动端到端第二轮（vol06 150 页，空数据目录、空图缓存、空缓存、空产物，4 核云端）：`db pull` 211 s（上轮图缓存是热的）→ 166 s（图全冷），`glyph-db rebuild` 133 s → 55 s，Step0–7 2028 s → 1878 s（seed_admit 185 → 99、column_warp 62 → 21、三道闸合计 62 → 35），close-check 35 s；合计约 41 分 → 36 分。
+
+## [0.5.3] - 2026-10-20
+
+PATCH（Sheldon 10-21 定发）。`row_segment`（1.23 → 1.25，新增 `code_deps` `utils.row_grid`）与 `column_gate`（`code_deps` 含 `utils.row_boundaries`，只加了缺省不走的格网入口，闸的输出不变）的 `code_hash` 变，各册 column_gate 与 Step3 起判过期；只有开了 `layout_prior`、命中格位表的页（殿本 vol04–10）输出变，别的书逐字节不变。
+
+### Changed
+- 切分 `row_segment` 1.25：`layout_prior` 列端表空格里的墨大多连不成笔画（落在面积 > 150 像素连通块里的不到 75%：印章的印泥斑点、篆文残笔）也记空。PATCH；`row_segment` 的 `code_hash` 变，各册 Step3 起判过期。殿本 vol04–10 全部页 10,620 列对 1.24 逐格 99.03% → 99.51%，修好 51 列、改坏 0（第 4 页起 99.33% → 99.55%，修好 23）；修的是各册首叶（p2/p3 藏书印）和卷端大印（vol04 p130、vol09 p70/p164、vol10 p88）。
+- 切分 `row_segment` 1.24：逐列格位约束 `layout_prior` 加三处（只作用于命中格位表的页；开关关着、或没有表的书逐字节不变）。PATCH；`row_segment` 的 `code_hash` 变（新增 `code_deps` `utils.row_grid`，`utils.row_boundaries` 加了不跑 DP 的格网入口），各册 Step3 起判过期。殿本 vol04–10（第 4 页起 10,521 列）对 1.23 逐格 99.03% → 99.33%，修好 32 列、改坏 0；穿字格线七册合计 6061 → 5941。
+  - 等距格网（`utils/row_grid`，用户 10-21：殿本正文每列严格 21 格、格高相近）作候选格网：格号按行墨投影的周期相位排，格线在 ±0.2 格内就近落缝。修列首印章、墨损处 DP 多切一格、整列格号错位（vol04 p6 c2、p8 c2/c4/c8，vol06 p33 c4）。
+  - 各候选格网先把列端表空格里不像字的墨记空，再打分。
+  - 不像字加「越过界行」（印章、墨污：墨伸到列的左右边上）；一页最后一列表行之后的列按整列空处理（卷末印章空列）。
+
+## [0.5.2] - 2026-10-21
+
+PATCH（sheldon 10-21 定发）。相对 v0.5.1 只有 `seed_admit` 的 `code_hash` 变（c1cc30263b355ed5 → e3566f98f5046f0d），其余 16 步不变。配套语料库（分层版本 P3 起）：全局层 b3（含 #332 的彝组模板库与 U-Net 权重）＋殿本书库 v10，十册钉子账 n=11、册 yaml 改钉 `corpus: 11`，`group_flow` 点名 `lv`、`zheng`（中心库 corpus-base rev 34273、siku-zongmu rev 34313）。**v0.5.1 配 `corpus: 9` 会因 `yi_560/ids_bank.json` 与 v9 清单不符被起跑校验拒跑**，各册重跑请用 v0.5.2。
+验收（rc 上）：殿本 vol05–07 共 141 页 seed_admit，对 v0.5.1＋语料库 v9，送审 205 → 205、逐格无变化；全量测试 3695 过、38 跳过，1 失败 1 错误在 dev 上同样存在（`test_pagetype_model::test_model_roundtrip_and_gate_abstain`、`test_datastore_expbranch` 缺 PG）。
+
+### Changed
+- 彝组 `yi_560` 改走 U-Net 切三段（#332，`groups/ids_unet.py`，纯 numpy 推理，权重 `config/groups/yi_560/unet.npz` 1.0 MB；窗口法退为后备），模板库按 U-Net 切分重建。按册留出（超参也只在训练册选）82 格：79 对／2 弃权／1 错，窗口法同口径错 5。`seed_admit` 的 `code_hash` 变（38f5371fe3279014）。
+
+### Fixed
+- 中心库不再收人裁写锁 `*.write.lock`（空文件，曾被推进殿本、北行的 `files` 表，10-21 已从库里删掉）。
+
+### Added
+- 粗校基准（M9 D6-5，GUJI-669）：`open_guji_cv/exp/rough_bench.py`、`scripts/rough_bench.py build`（冻结页＋标签进测试集仓 `rough-bench/`）、`scripts/eval_rough_bench.py`（登记为 `guji eval run rough_bench`）。在各册 main 快照上用 `guji exp` 重跑 seed_admit（或从 `--from` 起），报正文送审率和有标签格的错放；有变体时**新增错放必须为 0**。人裁按绑定表对到快照切分，看图结论只收现行字＝当时显示字的格。不碰任何 Step，`code_hash` 不变。
+- `scripts/zhengli/wave_report.py`（M9 D6-6，GUJI-670）：一波各册待审格按主成因码汇总，出成因分布、派单（按交给谁，列最常见的字对／字组码）、与上一波比的增减、粗校基准结果、下一波目标（`wave.json` + `wave.md`，贴 Jira）。只读产物。
+
+### Changed
+- 人裁事件规范 §9 F-6／F-7／F-8（原 O-1／O-6／O-7）：`guji db sync` 合并同批次撞号时本地新行顺延重编、本地记账等引用跟着改；`guji db import` 导完自动对导入的事件 route（`--no-route` 关）；`guji events lint` 新增 `W-unconsumed`；刻例库升格记账改写到 `feedback/promote.jsonl`，`migrate_v1` 能把旧的挪过去。不动任何 Step 的 code_hash。
+- `guji exp`：`pages` 可以按册给（`{vol05: [3, 9], …}`）；`human_events` 标签读 `feedback/events/` 下全部文件、按 `target.book` 筛（原来只读 `<册>-*.jsonl`，H 道 `H-M7-…` 这类批名的人裁全漏了，vol04–10 只认出 1 条）；金标标签认 `expected.wrong`（只知道不是哪些字）。
+
+## [0.5.1] - 2026-10-21
+
+PATCH（sheldon 10-21 定发）。相对 v0.5.0，17 步 `code_hash` 全部不变（rc 上与 v0.5.0 逐步比对）。
+
+### Added
+- 语料库分层版本（#317，PATCH；**缺省不影响现有册**：没有钉子账的册，`corpus: N` 与指纹 `corpus-vN` 逐位不变，17 步 `code_hash` 不变）：语料库分全局（底库 b）／整套书（书库 v）／册 三层各一个整数版本；`guji corpus pin [--dev]`、`release`、`build/verify --vol`、`upload/fetch`；册有钉子账后指纹取清单内容哈希、不含版本号；册 yaml `corpus_dev: true` 开发中跳过清单校验（带它的册配置不许 `db push`）；≥1MB 的文本文件清单标 `store: r2`，内容按哈希存 R2。提示词模板占位符渲染 `groups/prompt_template.py`（不动 `ctx_l2`）。设计与 P3 迁移步骤见 `doc/design/语料库分层版本.md`。
+- glyph_match 开关 `batch_knn`（GUJI-647 第 7 项，PATCH；**缺省关**，关着时产物与参数指纹逐字节不变）：一页的格每 64 个做一次「查询 × 整库」矩阵乘，库矩阵每 64 格才读一遍。库含字体域（17.4 万条、1.2 GB）时逐格算卡在内存带宽，vol06 全册 glyph_match 1282 s → 367 s。**会改产物**：浮点末位不同，vol06 23,517 格判决、字、cov 全同，8 格候选排序变；`guji products diff` 送审 222 → 222、变了的列 0。开不开按 M9 波次窗口定：书级 `params: {glyph_match: {batch_knn: true}}`。
+- `guji audit changes <册> --base <上一基线产物根>`（M9 D5，GUJI-664）：列出新放行、放行字变了的格（`放行变化.md／json`）；zl.py 设 `ZL_BASE_PRODUCTS` 后这些格进联系页，看图闸要每格都有结论才过。联系页另存单格图与 `tiles.json`。
+- `scripts/zhengli/vision_ask.py`（GUJI-665）：联系页每格交外部视觉模型看，`merge` 两家一致才算、不一致记看不清，`score` 对参照计分。智谱免费模型在 vol06 上误判太多（负结果，见 `doc/research/M9-粗校调研/E-…`），不默认接入。
+- `guji audit reasons <册>`（M9 D6，GUJI-668）：每个待审格打一个主成因码（`review/causes.py`：A1–A9 切分／对位、B 码位异体、C 形近字组、D 遮挡、E 与整理本冲突、F 库缺字、G 对齐改字、H 库＝整理本仍被拦、I 证据不足），出 `reasons.json`／`reasons.md`（按码写交给谁）。`republish.py` 把码并进待审单的 `cause`、台账记 `reasons.cause`；`cls` 不动。vol06 175 格里「证据不足」8%。只读产物，不碰任何 Step。
+
+### Changed
+- 冷启动、内存、出口检查提速（GUJI-647，PATCH；**17 步 `code_hash` 全部不变**：`glyph_match`、`match`、`seeding` 的改动在 vol06 30 页、库含字体域时与改前逐字节相同，已登记代码等价）：
+  - 字体域预建件（`clustering/font_pack.py`）：`glyph-db import-font` 先找同一套字体文件、字表、渲染代码出过的字体域（本机 `cache/fontdb/` 或 R2 `derived/fontdb/`，读令牌就够），整表拷进 glyph.db，与逐字渲染逐列相同、字体域指纹相同。两套 15.5 万字：渲染 12.6 分钟 → 拷表 43 秒（加下载约 1.8 GB）。从 R2 取来的包导完即删。推送手动：`glyph-db font-pack-push`（正式令牌）。`--no-pack` 强制渲染。
+  - R2 通道（`datastore.packs.push_file`／`fetch_file`）改流式、可选 gzip，取时 8 段并发（实测单路 11 MB/s、8 路 44 MB/s）；旧 manifest 照认。
+  - glyph_match 匹配器特征按内容缓存（`seeding._matcher_arrays`，`cache/glyph_feats/`）：字体域进库后库有 17.4 万条，每个进程建匹配器原要约 2 分钟（逐条解 PNG、算 HOG），命中缓存 2.4 秒；整库特征矩阵只存一份（原来列表一份、堆起来又一份），建库峰值 4.5 GB → 2.1 GB，命中时走 mmap、多进程共享页缓存。`GUJI_MATCHER_FEAT_CACHE=0` 关。
+  - glyph_match 登记 `warm_first`：主进程建一次匹配器，fork 后共享。改前 dev 上库含字体域时 `--jobs 4` 四个 worker 各建一份（各约 3.5 GB），被 OOM 杀。
+  - `guji pipeline` 跑多步时缺省每步一个子进程（`--isolate-steps`；`--no-isolate-steps` 退回单进程，`--json` 时不隔离）：vol06 单进程连跑到 seed_admit 主进程 3.5 GB，隔离后 seed_admit 1.95 GB、context_decide 1.48 GB。
+  - 页级并行的内存登记：glyph_match 3.6 → 1.5 GB（warm_first 与特征缓存之后 worker 不再自建匹配器；vol06 冷启动主进程峰值 2.2 GB、主进程加 4 个 worker 合计 PSS 2.6 GB；按 3.6 算 13 GB 的容器只开得出 2 个进程），seed_admit 3.0 → 2.0 GB（实测主进程 1.95 GB、4 进程合计 PSS 3.3 GB）。
+  - `glyph-db rebuild` 派生表示（归一、骨架、HOG）多进程算（`--jobs`，缺省 CPU 数），主进程按原顺序写库，14 张表与单进程逐行相同：殿本 1.85 万例 163 s → 38 s，整条命令连补放人裁 265 s → 133 s。`import-font` 的 `--jobs` 缺省仍是 1。
+  - `close-check` 1a／`guji status`：一次 `status()` 里每步的参数只构造一次（构造时要对 glyph.db 算库指纹，库含字体域时 3 GB；原来逐页逐步现算）。vol06 close-check 粗校档 126 s → 31.5 s，各项结论逐行相同。
+  - `guji cache verify`／`close-check` 1b：戳与现行产物对得上的页免查（引擎重跑一页先清再写、读时戳不对整页作废，这类缓存一定是这一代切的）。vol06 150 页 1.4 秒（原约 5 分钟）；`--full` 照旧全查。
+
+### Fixed
+- **seed_admit 并行时影子模型极慢（#255 引入，0.4.9、0.5.0 受影响）**：开了 `shadow_veto` 的册（vol05、vol09 等），影子模型（scikit-learn HistGradientBoosting）predict 用 sklearn 自带的 OpenMP，主进程暖机时按核数建好线程池，fork 出的 4 个 worker 各开 4 线程、16 线程抢 4 核，每页从几秒拖到约 700 s（vol09 实测）。worker 里用 threadpoolctl 把已加载的 OpenMP 运行库压到每 worker 线程数；vol09 20 页 4 进程 63 s、串行 102 s，产物逐页相同。产物从来不受影响，只是慢。
+- 缓存页戳会把老缓存「洗白」（GUJI-647）：一页没戳、目录里却有记戳机制之前的老图时，惰性补一张新图（或 `cache warm` 收尾补戳）会给整页记上戳，`cache verify` 从此跳过它。现在这类页不记戳，留给内容校验。
+- `--isolate-steps` 下某一步崩了（异常、护栏拒跑）父进程照样接着跑下游、最后返回 0；现在停在那一步、返回它的返回码。控制台取消工单（只 terminate 父进程）时把 SIGTERM 转给正在跑的那一步，不留孤儿接着写产物。
+
+## [0.5.0] - 2026-10-20
+
+MINOR（sheldon 10-20 定发 v0.5.0）。相对 v0.4.9 只有 `row_segment`（d5f4ceedcfbd2d06 → 89ea9a967e3dd407）、`cell_shrink`（17162d9e3ed6047f → f9206af1e771f0e5）、`seed_admit`（3337e7b0b2dc43ec → c1cc30263b355ed5）的 `code_hash` 变，其余 14 步不变；各册 Step3 起判过期。rc 上全量测试 3632 过、32 跳过，2 条失败在 v0.4.9 上同样失败（`test_cut_select::test_ckpt_fingerprint_empty_for_missing_file` 缺检查点，`test_datastore_workcopy::test_corpus_adopt_push_and_pull`）。
+
+### Added
+- 人裁事件规范 v1（#300，GUJI 人裁事件格式调研）：`doc/formats/人裁事件规范.md` 与 `formats/guji_feedback_event_v1.schema.json`；`guji events lint -w <工作区>` 按规范只读体检。全部「后到覆盖」统一按 `replay_key=(ts, batch, seq)`（`gold rebuild`、`route_and_consume`、`EventLog.resolve/pending`、`label_batches`、`vision` 重建、复核冲突、事件列表此前按批次名序，殿本 351 个单位、北行 11 个两种顺序取到的最终裁决不同，下次 `gold rebuild` 会按时间序改正）；`EventTarget` 从 key 补全空的 `book/page/col/slot`；`resolve(kinds=, unit=)`；控制台写入把秒级 `client_ts` 归一毫秒。PATCH；不在任何 Step 的 `code_deps` 里，17 步 `code_hash` 不变。
+- 人裁事件历史遗留迁成现行格式（#321）：`python -m open_guji_cv.feedback.migrate_v1 --ws <工作区> [--apply]`（撞号／错文件、旧 id、空 target 字段、秒级 client_ts、`product_key` 两种形状；连带改 consumed、金标 `source_events`、补锚档；核对重放顺序与 `gold rebuild` 不变）；`datastore.importer.import_scans(only_paths=)` 只差分点名的文件。锚里切分产物的 sha 改写进 `anchor.cells_sha`，`product_key` 只留 `{step, key, fingerprint}`；lint 新增 `E-key-empty`、`E-product-key`，`E-id-shape`／`E-batch-file`／`E-client-ts-sec` 升为错误。中心库 10-21 已迁（殿本 import 118、北行 import 119）。PATCH；17 步 `code_hash` 不变。
+- `scripts/check_release_tags.py`：发版后核对每个发进 main 的版本都有 `vX.Y.Z` tag、且 tag 在 main 主线的发版合并提交上（用户 10-20 定「打了 tag 才算发完」，写进 `doc/版本号规矩.md` 第三节第 5、9、10 条）。PATCH；不碰任何 Step，`code_hash` 不变。
+- 字组：呂吕、徵徴 走在线 IDS 的「整字岭回归」判法（`groups/ids_whole.py`，`ids_online.IdsSpec.whole`；组 id lv、zheng）。按字分类（`by_form`）切缝比不了这两对（呂吕 差在中间连笔，徵徴 差在字中上部细节），改整字裁外框归一后二类岭回归（呂吕 取像素，徵徴 取字块中上部 HOG），判别值不够弃权。模板＝殿本 vol01–10 人裁事件格，建库与按册留一评测 `research/m7/lane1/build_whole_bank.py`。按册留一：徵徴 |d|≥0.6 → 38 对／37 弃权／0 错；呂吕 |d|≥0.5 → 62 对／8 弃权／0 错（vol07:4:4:21 按 sheldon 复看更正为呂）。PATCH；只有 seed_admit 的 `code_hash` 变（d277e5d75f708d82 → d8e0c8279a4419c2）。要在册配置 `group_flow` 点名才生效，字频表／册配置由收口线程改。
+
+### Changed
+- 切分 `row_segment` 1.23、`cell_shrink` 1.9：逐列格位约束 `layout_prior` 三处结构化改动（只作用于命中格位表的列；开关关着、或没有表的书逐字节不变）。PATCH；只有 row_segment（d5f4ceedcfbd2d06 → 89ea9a967e3dd407）、cell_shrink（17162d9e3ed6047f → f9206af1e771f0e5）的 `code_hash` 变，各册 Step3 起判过期。殿本 vol04–10（第 4 页起 10,521 列，对 v0.4.9 现行 main）逐格 98.79% → 99.03%，修好 27 列、改坏 1 列（vol09 p162 c3 卷末小计列，看图新切法更好，金标口径多一格）。
+  - 候选格网统一打分：表格网、闸抬头格网（抬头级数表与闸不一致时）、无先验格网（前两者都劈了字、且不看表切出的字比表少时）按「坏格数＝劈开的字＋违表的格 → 劈字数 → 穿字格线」取最小。新增劈字判据 `_split_chars`（一个连通体被格线劈成两段、两段各占三成以上）。修 vol06 p94 c6 列首「二」被单切一格后丢失、vol07 p44 c8「年」被劈。
+  - 列端框线残渣记空的范围从「物理首／末格」放宽到「表的首字之前、末字之后那一段表空格」，判据不变（首字上方隔一格的碎墨、斜笔残迹）。
+  - Step3 给表认下的字格记 `layout_char`；Step4 列端渣格闸遇到这种格、且格里有成笔的墨时不判渣（列尾「一」被判 tail_junk，vol05–10 共 16 列）。白纸照样判空。
+- 请审单（`guji audit sheet`）第 4 节按已导入的看图结论自动填「看图判错、人还没裁」的格，新增第 5 节「看不清」；原来要会话手工追加。不碰任何 Step，`code_hash` 不变（M9，GUJI-653）。
+- `scripts/zhengli/zl.py`（M9 基线跑 vol06 整册后，GUJI-653／654）：新增 `db`（拉中心库）、`pending`（待审单草稿，只给 2c 核数、不上线）两步；书 yaml 改从数据目录 `books/` 找；稀疏克隆按 `<书目录>/data_full/<丛编>/<册>/` 取本册原图；BrokenProcessPool 归「疑似内存不足」，前台、后台都减半并行续跑；缓存只在校验报错时 `--fix`；导出不再缺省 `--text-version 0.1.0`，要 `ZL_TEXT_VERSION`；`close` 改跑粗校档 `--tier rough`，出 R1–R5 报告、2d 列交代草稿，剩下的活写 NEXT.md。`collect_exit.py` 加 `--close-check-json` 复用已跑的体检（省一遍约 5 分钟）。
+- 新增 `scripts/zhengli/republish.py`（GUJI-680 第一步）：一册重跑后重发待审单。`prep` 按现行产物出新单（audit alt → pending_list → pending_route 扣已人裁 → 雪碧图），rev 按线上单自动加一，出差异单（去掉的格按「人裁过／机器放行了／格号没了」分，列出旧 rev 上的网站精校票）；`push --yes` 才写进数据目录并记台账，`--sync` 再推中心库。不碰任何 Step。
+
+### Fixed
+- 语料库清单不再收字组 `config/groups/*/prompt.md`（只给离线 L2 拼消息，Step 不读）；老清单里登记了的也跳过核对。此前改提示词（cc6f455f）会让钉了 corpus 的册在 glyph_match 起跑前报 CorpusDrift 拒跑（M9 基线跑 vol06 撞上，GUJI-636；PATCH，各步 code_hash 不变）。
+- 并行限流按容器内存算：可用内存取 /proc/meminfo 与 cgroup 上限（减去已用、不算页缓存）中小的；glyph_match 单进程登记从 1 GB 改为 3.6 GB（导了字体域后 vol06 实测 3.4–3.7 GB，原登记让 4 进程在 14.3 GB 容器里被 OOM 杀）。只改进程数，产物与 code_hash 不变（M9 基线，GUJI-636）。
 
 ## [0.4.9] - 2026-10-20
 

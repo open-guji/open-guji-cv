@@ -181,6 +181,27 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def derived_payload(norm_patch: np.ndarray, feature) -> tuple[bytes, bytes, bytes]:
+    """一例的派生表示 `(归一图 PNG, 骨架 PNG, 特征 float32 字节)`。纯函数：逐条入库与重建时的多进程共用这一份。"""
+    feat = feature.extract(norm_patch[None, ...])[0]
+    return (_png(norm_patch), _png(skeletonize(norm_patch)),
+            feat.astype(np.float32).tobytes())
+
+
+#: `rebuild_from_store` 多进程算派生表示时 worker 里的特征提取器
+_REBUILD_FEATURE = None
+
+
+def _rebuild_init(feature_backend: str) -> None:
+    global _REBUILD_FEATURE
+    _REBUILD_FEATURE = get_feature(feature_backend)
+
+
+def _rebuild_derived(raw: bytes) -> tuple[bytes, bytes, bytes]:
+    gray = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    return derived_payload(normalize_patch(gray), _REBUILD_FEATURE)
+
+
 def _png(arr01: np.ndarray) -> bytes:
     """{0,1} 二值圖 → 白底黑字 PNG bytes。"""
     ok, buf = cv2.imencode(".png", (255 - arr01 * 255).astype(np.uint8))
@@ -248,17 +269,14 @@ class GlyphDB:
         return f"feat_{self.feature_name}"
 
     def _write_derived(self, cur, iid, norm_patch) -> None:
-        feat = self._feature.extract(norm_patch[None, ...])[0]
-        rows = [
-            (iid, "norm", ALGO_VERSIONS["norm"], _png(norm_patch)),
-            (iid, "skeleton", ALGO_VERSIONS["skeleton"],
-             _png(skeletonize(norm_patch))),
-            (self._feat_kind(), ALGO_VERSIONS["feat"], feat),
-        ]
-        rows[2] = (iid, self._feat_kind(), ALGO_VERSIONS["feat"],
-                   feat.astype(np.float32).tobytes())
-        cur.executemany("INSERT OR REPLACE INTO derived VALUES (?,?,?,?)",
-                        rows)
+        self._insert_derived(cur, iid, derived_payload(norm_patch, self._feature))
+
+    def _insert_derived(self, cur, iid, payload: tuple[bytes, bytes, bytes]) -> None:
+        norm_png, skel_png, feat = payload
+        cur.executemany("INSERT OR REPLACE INTO derived VALUES (?,?,?,?)", [
+            (iid, "norm", ALGO_VERSIONS["norm"], norm_png),
+            (iid, "skeleton", ALGO_VERSIONS["skeleton"], skel_png),
+            (iid, self._feat_kind(), ALGO_VERSIONS["feat"], feat)])
 
     # ── 近似字侧表（overview#276）──────────────────────────
 
@@ -909,9 +927,23 @@ def _borrowed(db: "GlyphDB") -> tuple[set[str], set[str], set[str]]:
     return ids, eds, srcs
 
 
+#: 例数少于这个就不开进程池（起进程的开销比省下的多）
+_PARALLEL_MIN = 2000
+
+
+def _derived_many(raws: list[bytes], feature_backend: str, jobs: int) -> list[tuple[bytes, bytes, bytes]]:
+    """每例原图 PNG → `derived_payload`，顺序与输入相同。`jobs > 1` 用进程池（同 `font_glyphs` 的渲染池）。"""
+    if jobs <= 1 or len(raws) < _PARALLEL_MIN:
+        _rebuild_init(feature_backend)
+        return [_rebuild_derived(b) for b in raws]
+    import multiprocessing as mp
+    with mp.Pool(jobs, initializer=_rebuild_init, initargs=(feature_backend,)) as pool:
+        return pool.map(_rebuild_derived, raws, chunksize=64)
+
+
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                        feature_backend: str = DEFAULT_FEATURE,
-                       extra_stores: "tuple | list" = ()) -> dict:
+                       extra_stores: "tuple | list" = (), jobs: int = 1) -> dict:
     """Git 導出目錄 → SQLite 索引（派生表示按當前算法重算）。
 
     ``extra_stores``（2026-09-27，全唐文书级库）：再把别的工作区的真源**借**进来，
@@ -924,6 +956,9 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
       人裁通道、共识升档、近形决胜都读它）不装；借来实例的 `label_status='human'` 改记
       ``borrowed_human``（铁证匹配器、影子信号、`_iron_context` 只认 ``'human'``）。不改的话，
       全唐文借殿本时殿本 3,331 条人裁会进本书人裁查询、共识升档的字从 126 个涨到 491 个。
+
+    ``jobs``（2026-10-20，GUJI-647）：派生表示（解码 → 归一 → 骨架 → HOG）是每例图的纯函数，多进程先算好、
+    主进程按原顺序写库，库内容与单进程逐位相同。殿本 1.85 万例单进程约 4 分钟，是新容器冷启动的一大块。
     """
     store = Path(store_dir)
     db_file = Path(db_path)
@@ -948,30 +983,29 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
             if borrowed and cur.rowcount:
                 new_src.append(r["source_id"])
         n_inst = n_der = 0
+        recs = []
         for meta_file in sorted((st / "instances").glob("*.jsonl")):
             for r in read(meta_file):
                 png = st / "patches" / f"{_safe(r['instance_id'])}.png"
-                if not png.exists():
-                    continue
-                raw = png.read_bytes()
-                r = {**r, "patch_png": raw}
-                if borrowed and r.get("label_status") == "human":
-                    r["label_status"] = "borrowed_human"     # 借来的人裁不当本书人裁
-                cols = ",".join(r)
-                cur.execute(f"{verb} INTO instances ({cols}) "
-                            f"VALUES ({','.join('?' * len(r))})",
-                            tuple(r.values()))
-                if borrowed:
-                    if not cur.rowcount:
-                        continue          # 本书已有同 id 实例：本书优先
-                    cur.execute("INSERT OR IGNORE INTO borrowed VALUES (?,?)",
-                                (r["instance_id"], str(st)))
-                n_inst += 1
-                # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）
-                gray = cv2.imdecode(np.frombuffer(raw, np.uint8),
-                                    cv2.IMREAD_GRAYSCALE)
-                db._write_derived(cur, r["instance_id"], normalize_patch(gray))
-                n_der += 3
+                if png.exists():
+                    recs.append({**r, "patch_png": png.read_bytes()})
+        payloads = _derived_many([r["patch_png"] for r in recs], feature_backend, jobs)
+        for r, payload in zip(recs, payloads):
+            if borrowed and r.get("label_status") == "human":
+                r["label_status"] = "borrowed_human"     # 借来的人裁不当本书人裁
+            cols = ",".join(r)
+            cur.execute(f"{verb} INTO instances ({cols}) "
+                        f"VALUES ({','.join('?' * len(r))})",
+                        tuple(r.values()))
+            if borrowed:
+                if not cur.rowcount:
+                    continue          # 本书已有同 id 实例：本书优先
+                cur.execute("INSERT OR IGNORE INTO borrowed VALUES (?,?)",
+                            (r["instance_id"], str(st)))
+            n_inst += 1
+            # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）：上面已（多进程）算好，按原顺序写
+            db._insert_derived(cur, r["instance_id"], payload)
+            n_der += 3
         if not borrowed:
             for f in sorted((st / "events").glob("*.jsonl")):
                 for r in read(f):

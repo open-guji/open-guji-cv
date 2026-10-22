@@ -1,0 +1,135 @@
+# -*- coding: utf-8 -*-
+"""scripts/zhengli/republish.py（重跑后重发待审单，GUJI-680）：自造产物、线上单与人裁事件，不碰真书。"""
+from __future__ import annotations
+
+import importlib.util
+import json
+from collections import Counter
+from pathlib import Path
+
+import pytest
+
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "zhengli" / "republish.py"
+spec = importlib.util.spec_from_file_location("zhengli_republish", SCRIPT)
+rp = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(rp)
+
+
+def test_next_rev_and_ids(tmp_path):
+    assert rp.next_rev("006-r2", "006") == "006-r3"
+    assert rp.next_rev(None, "006") == "006-r0"
+    assert rp.chapter_of("vol06") == "006"
+    assert rp.text_id_of(tmp_path / "96mid1ogzk-欽定四庫全書總目") == "96mid1ogzk"
+    assert sorted(["10:1:1", "2:3:4b", "2:3:4a", "2:10:1"], key=rp._key) == ["2:3:4a", "2:3:4b", "2:10:1", "10:1:1"]
+
+
+def test_diff_explains_each_removed_cell():
+    old = {"rev": "006-r2", "cells": [{"cell": c} for c in ("1:1:1", "1:1:2", "1:1:3", "1:1:4", "1:1:5")]}
+    new = {"rev": "006-r3", "cells": [{"cell": "1:1:4"}, {"cell": "2:1:1", "cls": "near_form"}]}
+    d = rp.diff(old, new, dropped=[{"cell": "1:1:1"}], states={"1:1:2": ("admit", "己"), "1:1:5": ("excluded", None)}, votes=Counter({"1:1:4": 2}))
+    assert (d["old"], d["new"], d["kept"]) == (5, 2, 1)
+    assert [(x["cell"], x["why"]) for x in d["removed"]] == [
+        ("1:1:1", "人裁过"), ("1:1:2", "机器放行「己」"), ("1:1:3", "格号没了（多半重切）"), ("1:1:5", "排除名单（非字）")]
+    assert d["added"] == [{"cell": "2:1:1", "cls": "near_form"}]
+    assert d["votes_on_old"] == 2 and d["voted_cells_kept"] == ["1:1:4"]
+    md = rp.diff_md("vol06", d, team=0, reflow=0)
+    assert "006-r2 → 006-r3" in md and "精校票 2 张" in md
+
+
+def _setup(tmp_path):
+    """没迁中心库的工作区（数据根就是工作区）：一页产物、一张线上单、一条人裁事件、一份 cord。"""
+    ws = tmp_path / "abc123-书"
+    seed = ws / "products" / "vol06" / "seed_admit"
+    seed.mkdir(parents=True)
+    seed.joinpath("p0001.json").write_text(json.dumps({"seed_admit": {"n_review": 3, "columns": [{"chars": [
+        {"id": "vol06:1:1:1", "admit": True, "char": "己"},
+        {"id": "vol06:1:1:2", "admit": False, "doubts": ["lib_miss"]},
+        {"id": "vol06:1:1:3", "admit": False},
+        {"id": "vol06:1:1:4", "admit": False},
+    ]}]}}), encoding="utf-8")
+    online = ws / "feedback" / "lists" / "proofing" / "abc123" / "006.pending.json"
+    online.parent.mkdir(parents=True)
+    online.write_text(json.dumps({"rev": "006-r2", "cells": [{"cell": c, "review": "pending"} for c in
+                                                             ("1:1:1", "1:1:2", "1:1:9")]}), encoding="utf-8")
+    ev = ws / "feedback" / "events"
+    ev.mkdir(parents=True)
+    ev.joinpath("a.jsonl").write_text(json.dumps({"kind": "confirm", "ts": "2026-10-20T00:00:00Z",
+                                                  "target": {"unit": "cell", "key": "vol06:1:1:3"},
+                                                  "payload": {"v": "confirm", "shape": "甲"}}) + "\n", encoding="utf-8")
+    export = ws / "reports" / "vol06" / "_export"
+    export.mkdir(parents=True)
+    export.joinpath("006.cord.json").write_text("{}", encoding="utf-8")
+    return ws, export, online
+
+
+def test_prep_then_push(tmp_path, monkeypatch, capsys):
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
+                    "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
+    out = ws / "reports" / "vol06" / "_publish" / "006-r3"
+    new = json.loads((out / "006.pending.json").read_text(encoding="utf-8"))
+    assert new["rev"] == "006-r3" and [c["cell"] for c in new["cells"]] == ["1:1:2", "1:1:4"]   # 1:1:3 人裁过，扣掉
+    d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
+    assert {x["cell"]: x["why"] for x in d["removed"]} == {"1:1:1": "机器放行「己」", "1:1:9": "格号没了（多半重切）"}
+    assert [x["cell"] for x in d["added"]] == ["1:1:4"]
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r2"                  # prep 不碰线上单
+
+    with pytest.raises(SystemExit):                                                             # 不给 --yes 不推
+        rp.main(["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3"])
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: None)                                      # 台账脚本另有测试
+    assert rp.main(["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes"]) == 0
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
+    assert (out / "online.006-r2.pending.json").exists()
+    assert "book-text" in capsys.readouterr().out
+
+
+def test_from_pack_helpers(tmp_path, monkeypatch):
+    d = tmp_path / "bt" / "Book" / "g" / "z" / "k" / "96mid1ogzk" / "default"
+    d.mkdir(parents=True)
+    (d / "index.json").write_text(json.dumps({"chapters": [{"n": 5, "file": "005", "text_version": "0.2.0"}]}), encoding="utf-8")
+    assert rp.online_text_version(tmp_path / "bt", "96mid1ogzk", "005") == "0.2.0"
+    with pytest.raises(SystemExit):
+        rp.online_text_version(tmp_path / "bt", "96mid1ogzk", "006")
+    b = {"events": 3, "status": {"valid": 2, "review": 1}, "newer": [], "id_mismatch": ["vol05:3:1:2"],
+         "unbound": ["vol05:3:1:2"], "decided_not_admitted": []}
+    md = "\n".join(rp.bind_md(b))
+    assert "定字人裁 3 条" in md and "绑不上的 1 格不扣" in md and "`vol05:3:1:2`" in md
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)        # 不给沙箱产物根就不取包，免得覆盖正式 products/
+    with pytest.raises(SystemExit, match="GUJI_PRODUCTS_DIR"):
+        rp.main(["from-pack", "--book", "vol05", "-w", str(tmp_path), "--label", "x"])
+
+
+def test_prep_stops_when_alt_fails(tmp_path, monkeypatch):
+    """audit alt 出不来相似字（10-21 殿本：包里没有字块图缓存）就停，不照发一张没有相似字的单子。"""
+    ws, export, _ = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: type("P", (), {"returncode": 1})())
+    with pytest.raises(SystemExit, match="--no-alt"):
+        rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-sprite"])
+
+
+def test_add_alt_patches_online_in_place(tmp_path, monkeypatch):
+    ws, _, online = _setup(tmp_path)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    cards = tmp_path / "cards.json"
+    cards.write_text(json.dumps([{"id": "vol06:1:1:1", "alt": [{"c": "已", "s": 0.91234, "p": "己", "src": "v"}]},
+                                 {"id": "vol06:1:1:2", "alt": [{"c": "巳", "s": 0.8, "p": "己", "src": "rt"}]}]),
+                     encoding="utf-8")
+    before = json.loads(online.read_text(encoding="utf-8"))
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards)]) == 0
+    assert json.loads(online.read_text(encoding="utf-8")) == before                            # 不给 --yes 不写回
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes"]) == 0
+    after = json.loads(online.read_text(encoding="utf-8"))
+    assert after["rev"] == "006-r2"                                                             # 不换 rev，已投的票照旧有效
+    assert [c["cell"] for c in after["cells"]] == ["1:1:1", "1:1:2", "1:1:9"]
+    assert after["cells"][0]["alt"] == [{"c": "已", "s": 0.9123, "p": "己", "src": "v"}]
+    assert "alt" not in after["cells"][2]                                                       # 卡片里没有的格不补
+    cards.write_text(json.dumps([{"id": "vol06:1:1:1", "alt": [{"c": "○", "s": 0.97, "p": "○", "src": "piv"}]}]), encoding="utf-8")
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes"]) == 0
+    assert json.loads(online.read_text(encoding="utf-8"))["cells"][0]["alt"][0]["c"] == "已"      # 不加 --replace 不动已有的
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes", "--replace"]) == 0
+    after = json.loads(online.read_text(encoding="utf-8"))
+    assert after["cells"][0]["alt"][0]["c"] == "○" and after["cells"][1]["alt"][0]["c"] == "巳"

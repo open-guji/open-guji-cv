@@ -331,6 +331,9 @@ class RunContext:
         #: 也不走 Engine 的形参，并行 worker 自己建 ctx、拿不到 Engine。
         import os as _os
         self.reuse_enabled = _os.environ.get("GUJI_NO_REUSE") != "1"
+        #: 一步跑批期间的参数缓存 {step_id: 参数}，引擎跑一步时设、跑完清（`Engine._run_one_step`），
+        #: 并行 worker 一个进程只跑一步，建 ctx 时就设。None＝不缓存，每次现算（控制台等直接建的 ctx）。
+        self._params_memo: dict | None = None
 
     @property
     def pipeline(self):
@@ -376,6 +379,9 @@ class RunContext:
         ——它是用户在书 yaml 里的明确配置，不该被下面几个"按本书 convenience
         默认值"的函数抢先占了"仍是默认值"这个判据的位置（见该函数文档）。
         """
+        memo = self._params_memo
+        if memo is not None and step.spec.id in memo:
+            return memo[step.spec.id]
         p = self.params.get(step.spec.id)
         if p is None:
             p = step.spec.params()
@@ -387,6 +393,8 @@ class RunContext:
         p = _with_book_step6_ai(p, self)
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
+        if memo is not None:
+            memo[step.spec.id] = p
         return p
 
     #: `_raw` 最多留几页（见 `raw_page`）。引擎按 step-major 顺序跑——

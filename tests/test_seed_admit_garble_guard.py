@@ -78,10 +78,10 @@ def test_rare_codepoint_needs_low_cov(tmp_path, monkeypatch):
 def test_rare_run_blocks_common_chars_in_garbled_column(tmp_path, monkeypatch):
     """整列切坏：库 top 罕用码位连成串，中间夹着的常用字（cov 不低）也拦。"""
     cells = [("𬑹", 0.96, "𬑹"), ("小", 0.93, "𢍺"), ("是", 0.93, "𠳋"), ("世", 0.93, "𭦋"), ("讠", 0.96, "讠")]
-    rs = _run(_ctx(tmp_path, monkeypatch), cells)
+    rs = _run(_ctx(tmp_path, monkeypatch, context_garble_run=3), cells)
     assert [r.admit for r in rs] == [False] * 5
     assert "ctx_garble_run" in rs[3].doubts
-    rs = _run(_ctx(tmp_path / "off", monkeypatch, context_garble_run=0), cells)
+    rs = _run(_ctx(tmp_path / "off", monkeypatch), cells)      # 缺省关（10-21）
     assert rs[3].admit and rs[3].channel == "context"
 
 

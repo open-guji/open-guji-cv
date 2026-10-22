@@ -209,21 +209,137 @@ def load_matcher_from_db(db: GlyphDB, edition: str | None = None,
     if edition:
         sql += " WHERE g.edition_tag = ?"
         args = (edition,)
-    for char, iid, data, ed in cur.execute(sql, args).fetchall():
-        if norm_stroke:
-            canon = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
-            if canon is None:
-                continue
-            # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）；
-            # 标点条目走等比归一（宽高比是判据，见 normalize.normalize_patch 的 isotropic）。
-            norm = normalize_patch(canon, stroke_width=norm_stroke,
-                                   strip_lines=not str(ed).startswith("font:"),
-                                   isotropic=(char in _PUNCT_CHARS))
-        else:
+    rows = cur.execute(sql, args).fetchall()
+    if not norm_stroke:
+        # 刻本链：特征与解码后的归一图按内容缓存在盘上（`_matcher_arrays`），逐条与现算的相同
+        try:
+            F, P = _matcher_arrays(rows, matcher._feature)
+        except _NotUniform:
+            F = P = None
+        if F is not None:
+            for i, (char, iid, _data, _ed) in enumerate(rows):
+                matcher.add(iid, char, P[i], feat=F[i])
+                chars.add(char)
+            matcher._F = F               # 同一份矩阵，匹配时不必再把 `_feats` 堆一遍（省一份 1.2 GB）
+            return matcher, chars
+    for char, iid, data, ed in rows:
+        if not norm_stroke:
             norm = _unpng(data)
+            matcher.add(iid, char, norm)
+            chars.add(char)
+            continue
+        canon = cv2.imdecode(np.frombuffer(data, np.uint8), cv2.IMREAD_GRAYSCALE)
+        if canon is None:
+            continue
+        # 字体模板没有版框，「贴边细线」规则会把 旦/宣/二 的细横当界行删掉（normalize.py）；
+        # 标点条目走等比归一（宽高比是判据，见 normalize.normalize_patch 的 isotropic）。
+        norm = normalize_patch(canon, stroke_width=norm_stroke,
+                               strip_lines=not str(ed).startswith("font:"),
+                               isotropic=(char in _PUNCT_CHARS))
         matcher.add(iid, char, norm)
         chars.add(char)
     return matcher, chars
+
+
+class _NotUniform(Exception):
+    """库里的归一图／特征不是同一形状：堆不成矩阵，退回逐条装库。"""
+
+
+#: 匹配器特征缓存的格式版本（改了存法就加一，旧目录自然不再命中）
+_FEAT_CACHE_V = 1
+
+
+def _feat_cache_dir(feature) -> Path | None:
+    """`cache_root()/glyph_feats/<特征类>-v<格式>-<features.py 代码指纹>/`；`GUJI_MATCHER_FEAT_CACHE=0` 关。"""
+    import os
+    if os.environ.get("GUJI_MATCHER_FEAT_CACHE") == "0":
+        return None
+    try:
+        from ..core.engine import code_hash_of_module
+        from ..core.workspace import cache_root
+        h = code_hash_of_module("open_guji_cv.clustering.features")[:16]
+    except Exception:  # noqa: BLE001 —— 缓存只管提速，定不了位置就现算
+        return None
+    return cache_root() / "glyph_feats" / f"{type(feature).__name__}-v{_FEAT_CACHE_V}-{h}"
+
+
+def _matcher_arrays(rows, feature) -> tuple[np.ndarray, np.ndarray]:
+    """库里每条样例的 `(特征矩阵 N×D float32, 归一图 N×64×64 uint8)`，与逐条 `_unpng` +
+    `feature.extract(norm[None])[0]` 逐位相同（2026-10-20，GUJI-647）。
+
+    为什么缓存：字体域进库后匹配器有约 17 万条，逐条解 PNG、算 HOG 每个进程要约 2 分钟（单进程 117 s，
+    以前 1.8 万条约 17 s），每次 `guji step glyph_match` 都付一遍。HOG 只取决于归一图本身和
+    `features.py` 的代码，所以按「`derived.norm` 的 PNG 字节 sha1」认行、按 features.py 代码指纹分目录：
+    代码一改目录就换，旧缓存碰不到。
+
+    存法：目录下每一「代」是一个子目录（名字 = 这批行键的哈希，内容由键唯一决定），三份 `.npy`
+    写齐后再原子地改 `current` 指针——读的一方只认指针指向的那一代，不会读到「新特征 + 旧键」的拼凑
+    （长度相同时会静默配错行）。库里行的顺序与当前代一致时直接映射文件（mmap，不复制、多进程共享页缓存）；
+    顺序变了或有新样例：命中的照抄、缺的现算，写成新的一代。Windows 上映射中的文件删不掉，所以那边
+    整读、不映射；写失败（盘满、被占用）就不写，只影响下次快慢。"""
+    import hashlib
+    import os
+    import shutil
+    keys = np.array([hashlib.sha1(r[2]).digest() for r in rows], dtype="S20")
+    d = _feat_cache_dir(feature)
+    mm = "r" if os.name != "nt" else None
+    index: dict[bytes, int] = {}
+    cf = cp = None
+    cur_gen = None
+    if d is not None and (d / "current").exists():
+        try:
+            cur_gen = (d / "current").read_text(encoding="ascii").strip()
+            g = d / cur_gen
+            ck = np.load(g / "keys.npy")
+            cf = np.load(g / "feats.npy", mmap_mode=mm)
+            cp = np.load(g / "patches.npy", mmap_mode=mm)
+            if not (cf.shape[0] == cp.shape[0] == len(ck)):
+                raise ValueError("缓存三份长度不一")
+            if len(ck) == len(keys) and np.array_equal(ck, keys):
+                return np.asarray(cf), np.asarray(cp)
+            index = {k: i for i, k in enumerate(ck.tolist())}
+        except (OSError, ValueError):
+            index, cf, cp = {}, None, None
+    # 预分配、原地填（先攒列表再 stack 要两份，17 万条时峰值 4.5 GB）
+    F = P = None
+    for i, (k, r) in enumerate(zip(keys.tolist(), rows)):
+        j = index.get(k)
+        if j is not None:
+            f, norm = cf[j], cp[j]
+        else:
+            norm = _unpng(r[2])
+            f = np.asarray(feature.extract(norm[None, ...])[0], dtype=np.float32)
+        if F is None:
+            F = np.empty((len(rows), f.shape[0]), np.float32)
+            P = np.empty((len(rows), *norm.shape), np.uint8)
+        if norm.shape != P.shape[1:] or f.shape != F.shape[1:] or norm.dtype != np.uint8:
+            raise _NotUniform(f"{norm.shape}/{f.shape}")
+        F[i] = f
+        P[i] = norm
+    if F is None:
+        return np.zeros((0, 0), np.float32), np.zeros((0, 64, 64), np.uint8)
+    if d is not None and len(rows):
+        try:
+            gen = hashlib.sha1(keys.tobytes()).hexdigest()[:16]
+            g = d / gen
+            g.mkdir(parents=True, exist_ok=True)
+            tag = f".tmp{os.getpid()}"
+            for name, arr in (("feats", F), ("patches", P), ("keys", keys)):
+                tmp = g / f"{name}{tag}.npy"
+                np.save(tmp, arr)
+                os.replace(tmp, g / f"{name}.npy")
+            ptr = d / f"current{tag}"
+            ptr.write_text(gen, encoding="ascii")
+            os.replace(ptr, d / "current")
+            for old in d.iterdir():                     # 旧的代：别的进程若正映射着，Linux 上删了也照常读完
+                if old.is_dir() and old.name != gen:
+                    shutil.rmtree(old, ignore_errors=True)
+            for old in d.parent.glob(f"{type(feature).__name__}-v*"):   # features.py 改过之前的目录
+                if old != d:
+                    shutil.rmtree(old, ignore_errors=True)
+        except OSError:
+            pass
+    return F, P
 
 
 _MATCHER_CACHE: dict[tuple, tuple[GlyphMatcher, set[str]]] = {}
@@ -339,7 +455,6 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                        match_guard: str | None = None,
                        match_wmax: float = 0.0,
                        solo_cov: float = MATCH_SOLO_COV,
-                       cnn_char: str | None = None,
                        ) -> tuple[bool, str | None]:
     """进库裁决：返回 (可自动进库, 通道名 None|"match_ref"|"match_solo")。
 
@@ -473,25 +588,9 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                 and c1 not in NEAR_FORM_CHARS
                 and ocr_char not in NEAR_FORM_CHARS):
             return True, "match_solo_ocr"
-        # CNN 字形背书档（2026-09-07 加，`external_glyph_sources_experiment.md` §5.9）：
-        # 同一个灰区（形状 0.95~0.99），OCR 读不出或读错时，换 CNN embedding 检索
-        # （模板 = 字体 + 康熙字头 + 字统网真刻本）的 top1 做背书。
-        #
-        # **为什么这不违反「两路误差独立」**：CNN 与库匹配确实同输入同归一，但实测
-        # P(CNN 错 | 形状路错) 只有 8.8%（CNN 无条件错误率 3.4%），**两路错到同一个
-        # 字**只占形状路错误的 3.2% —— 相关但远非同源。更关键的是这一档**本来就没有
-        # 第二路**（OCR 缺席时只能落人审），补一路弱独立证据是净收益，不是拿它替换
-        # 已有的独立证据（dual 的 OCR 那一路一动不动）。
-        #
-        # bench seen_test 实测（2,480 位，排除 己已巳/人入/日目 等护栏字）：
-        # 灰区 1,432 位里 CNN 背书 1,408（98.3%）、**错 0**；不背书的 31 位里库本来
-        # 就错 16（51.6%）——它既放行也挡。整体放行 39.4% → 96.2%，精度 99.83%。
-        # 护栏与 OCR 档完全一致（rival95 / NEAR_FORM_CHARS 两侧都拦）。
-        if (cnn_char is not None and cov1 >= MATCH_SOLO_OCR_COV and not rival95
-                and vmap.semantic(cnn_char) == vmap.semantic(c1)
-                and c1 not in NEAR_FORM_CHARS
-                and cnn_char not in NEAR_FORM_CHARS):
-            return True, "match_solo_cnn"
+        # CNN 字形背书档（match_solo_cnn）2026-10-21 删除：调用方 `_cnn_top` 漏传语料路径，
+        # 通道自上线起从未触发；按殿本 vol04–10 产物回放，补好后灰区里库缺字、CNN 与库一起错
+        # （刻本异体被改成通用字），不值得留。见 doc/design/流程与模块.md。
     # match_margin（用户 2026-08-27 定，见 MATCH_MARGIN_THRESH 注释）：
     # 兜底通道——上面全部通道都没吃到的，最后看一眼「有没有 competitor」。
     # 不管疑问是什么组合（db_inconsistent 除外——它说的是库本身对不上，

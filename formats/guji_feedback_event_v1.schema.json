@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-guji.org/schema/feedback-event/v1.json",
+  "title": "guji 人裁事件（feedback event）v1",
+  "description": "feedback/events/<batch>.jsonl 与 feedback/vision/<batch>.jsonl 的一行。规范正文：doc/formats/人裁事件规范.md。代码真源：open_guji_cv/feedback/events.py（Event）。本 schema 描述**线上格式**：老数据（2026-09 起）全部能过；带 'normative' 字样的约束只对新写入要求，lint（guji events lint）报。",
+  "type": "object",
+  "required": ["id", "ts", "batch", "seq", "kind", "target"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "evt_<batch>_<seq:06d>。消费记账（consumed/<consumer>.jsonl）按它认事件，全工作区唯一（normative；历史上有 14 条例外，见规范 §9）。",
+      "pattern": "^evt_.+_[0-9]{6,}$"
+    },
+    "ts": {
+      "type": "string",
+      "description": "服务端写入时间，UTC，到秒。「后到覆盖」的第一排序键（replay_key = ts, batch, seq）。不是人做判断的时刻（那是 payload.client_ts）。",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "batch": {
+      "type": "string",
+      "minLength": 1,
+      "description": "批次名。文件名 = safe_batch_name(batch) + '.jsonl'（: * ? \" < > | / \\ 换成 -）。批次名不承载语义：别从批次名推册号（vol02-61-70-decide 里有 191 条 vol01 的格）。"
+    },
+    "seq": {"type": "integer", "minimum": 1, "description": "批内序号，同批递增；撞号且内容不同时 append 顺延。"},
+    "actor": {"enum": ["user", "model", "align"], "default": "user",
+              "description": "谁的动作触发：user=人在台上点的；model=脚本/模型（含人裁的机械更正、看图结论、机器高可信刻例）；align=对齐算法。是不是「人裁」看 counts_as_human，不看 actor。"},
+    "kind": {
+      "enum": ["verdict", "band", "border_class", "recrop", "not_a_char", "confirm", "relabel", "skip", "damaged",
+               "mark", "flag", "split", "merge", "note", "cutline", "border_offset", "head_raise", "n_body_slots",
+               "collate_ok", "char_convention", "mark_jiajie", "variant_deny", "collate_verdict", "unmark_jiajie",
+               "glyph_audit", "return_resolve", "needs_review", "admit_candidate", "cell_review", "vision_check"],
+      "description": "传输层粗分类。recrop/not_a_char/relabel/skip/damaged/mark/flag/split/merge/note 没有写入口（not_a_char/skip/damaged 实走 confirm + payload.v），新代码不许写。"
+    },
+    "target": {"$ref": "#/$defs/target"},
+    "payload": {"type": "object", "default": {}},
+    "source_format": {"type": ["string", "null"],
+                      "description": "server=控制台直连写入；verdicts/seed/seg/marks=从旧格式收割；null=脚本直写（H 道更正、看图导入等）。"},
+    "reviewer": {"type": ["string", "null"],
+                 "description": "具体是谁：网站账号 email；本机控制台为 local-dev@127.0.0.1；Claude 道写 claude-<道>-<任务>。"}
+  },
+  "allOf": [
+    {"if": {"properties": {"kind": {"const": "confirm"}}},
+     "then": {"properties": {"target": {"properties": {"unit": {"const": "cell"}}},
+                             "payload": {"$ref": "#/$defs/confirm_payload"}}}},
+    {"if": {"properties": {"kind": {"const": "cutline"}}},
+     "then": {"properties": {"target": {"properties": {"unit": {"const": "boundary"}}},
+                             "payload": {"$ref": "#/$defs/cutline_payload"}}}},
+    {"if": {"properties": {"kind": {"const": "vision_check"}}},
+     "then": {"properties": {"actor": {"const": "model"},
+                             "payload": {"required": ["source", "v"],
+                                         "properties": {"source": {"const": "vision"},
+                                                        "v": {"enum": ["ok", "wrong", "unsure"]}}}}}},
+    {"if": {"properties": {"kind": {"const": "collate_verdict"}}},
+     "then": {"properties": {"payload": {"required": ["pair"],
+                                         "properties": {"who": {"enum": ["ours", "theirs", "neither", "", null]},
+                                                        "cat": {"enum": ["variant", "jiajie", "taboo", "other", "", null]}}}}}},
+    {"if": {"properties": {"kind": {"const": "border_offset"}}},
+     "then": {"properties": {"target": {"properties": {"unit": {"const": "page"}}}}}},
+    {"if": {"properties": {"kind": {"enum": ["n_body_slots", "head_raise", "band"]}}},
+     "then": {"properties": {"target": {"properties": {"unit": {"const": "column"}}}}}},
+    {"if": {"properties": {"kind": {"const": "cell_review"}}},
+     "then": {"properties": {"payload": {"properties": {"verdict": {"enum": ["pick", "none", "unsure", "other"]}}}}}},
+    {"if": {"properties": {"kind": {"const": "glyph_audit"}}},
+     "then": {"properties": {"payload": {"properties": {"v": {"enum": ["ok", "near_form", "evict", "relabel", "fidelity"]}}}}}},
+    {"if": {"properties": {"kind": {"const": "admit_candidate"}}},
+     "then": {"properties": {"payload": {"properties": {"v": {"enum": ["admit", "reject", "unclear"]}}}}}},
+    {"if": {"properties": {"kind": {"const": "return_resolve"}}},
+     "then": {"properties": {"payload": {"properties": {"resolution": {"enum": ["fixed", "wontfix"]}}}}}}
+  ],
+  "$defs": {
+    "target": {
+      "type": "object",
+      "required": ["step", "key"],
+      "additionalProperties": false,
+      "properties": {
+        "step": {"type": "string", "description": "出这张卡的 Step id（seed_admit、row_segment、border_detect、column_warp、cell_shrink、step8_collate、glyph_audit、cell_review…）；H 道更正脚本写 H_<事由>。"},
+        "unit": {"enum": ["book", "page", "column", "cell", "boundary"], "default": "page"},
+        "key": {"type": "string", "minLength": 1, "description": "单位键，语法见规范 §3（格键 册:页:列:格[a|b]）。"},
+        "book": {"type": ["string", "null"], "description": "册 id（books/<id>.yaml 的 id，如 vol01、bxgb），不是 book-index id。由 key 解析（写入口填；2026-10-21 起库里不再有全空的）。"},
+        "page": {"type": ["integer", "null"]},
+        "col": {"type": ["integer", "null"]},
+        "slot": {"type": ["integer", "null"], "description": "格号：正文从 1 起；负数 = 超框抬头（-1 最靠框）；没有 0。"},
+        "anchor": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/anchor"}]}
+      }
+    },
+    "anchor": {
+      "type": "object",
+      "description": "写入时按当时产物算的定位锚，重切后 bindings.py 靠它找回格。全部可选、互相独立。",
+      "properties": {
+        "v": {"type": "integer"},
+        "space": {"const": "raw_page_px@top-right"},
+        "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4,
+                 "description": "原图像素外接框 [x0,y0,x1,y1]，右上原点。原图不变，跨重切可比——这是锚的主体。"},
+        "quad": {"type": "array"},
+        "content_sha": {"type": "string", "description": "当时字块图 sha1；图在 feedback/anchor_patches/<册>/<前两位>/<sha>.png（中心库→R2）。"},
+        "ctx": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2, "description": "当时读序前后各 2 字 [前, 后]。"},
+        "product_key": {"type": "object", "additionalProperties": false,
+                        "properties": {"step": {"type": "string"}, "key": {"type": "string"}, "fingerprint": {"type": "string"}},
+                        "description": "出卡那一步的页产物指纹（控制台 _product_anchor 写）。只说明「当时是哪一版」，不能用来找格。"},
+        "cells_sha": {"type": "object", "additionalProperties": {"type": "string"},
+                      "description": "{<cells 那一步>: <产物 sha256>}：算 bbox 用的那一版切分（cell_anchor、补锚档写）。2026-10-21 前混在 product_key 里。"},
+        "source": {"type": "string", "description": "live | backfill[:<版本>]"},
+        "evidence": {"type": "object",
+                     "description": "人当时看到的图的指纹：fp、fp_size、fp_of(char_patch|column_image)、step、key、sha256、params_hash、manifest_fp、y0、v。bindings 优先比它。"}
+      }
+    },
+    "confirm_payload": {
+      "type": "object",
+      "required": ["v"],
+      "properties": {
+        "v": {"enum": ["confirm", "seg_defect", "not_a_char", "skip", "damaged"],
+              "description": "confirm=定字（带 shape）；seg_defect=这块图切坏了（可同时带 shape，带了也算定字）；not_a_char=不是字；skip=存疑跳过（待办）；damaged=原刻残、认不出（文本出 □，可带 guess）。"},
+        "shape": {"type": "string", "description": "字形：单字或合法多码位（IDS、PUA+选择符）。写入口拒乱码、折兼容汉字。"},
+        "reading": {"type": "string", "description": "2026-09-26 起取消；老事件里只有 己/已/巳 族时才取它。"},
+        "conversion": {"type": "integer"},
+        "no_glyph_lib": {"type": "boolean", "description": "这块图不当范本（不进字形库），字照样算定了。"},
+        "quality": {"type": "string", "description": "seg_defect：clean/truncated/contaminated/not_text。"},
+        "defect": {"type": "string"},
+        "reason": {"type": "string", "description": "seg_defect：jiazhu_as_main（小注当正文，拆）/ main_as_jiazhu（正文当小注，别拆）→ Step3 重跑强制。"},
+        "guess": {"type": ["string", "null"], "description": "damaged：最像的字（只进金标与括注，不进字形库）；没有写 null。"},
+        "via": {"type": "string", "description": "从哪个台/动作来的：grid、collate_verdict…"},
+        "source": {"type": "string", "description": "来源：vision（不算人裁）、auto（机器高可信刻例）、或文字说明（网站意见、更正脚本）。"},
+        "group": {"type": "string"},
+        "note": {"type": "string"},
+        "client_ts": {"type": "number", "minimum": 100000000000, "description": "前端点下去的时刻，**毫秒**（2026-09 夹注台写过秒，10-21 已迁成毫秒；控制台写入口照旧把秒归一）。"},
+        "dwell_ms": {"type": "number"},
+        "request_id": {"type": "string", "description": "POST 幂等键。"}
+      }
+    },
+    "cutline_payload": {
+      "type": "object",
+      "properties": {
+        "verdict": {"type": "string", "description": "ok | moved | seam_ok | overlap | idk | cand"},
+        "y": {"type": "number", "description": "列图坐标（Step2 column_warp 列图，行号）。列窗一变就漂；以 page_x/page_y 为准。"},
+        "y_old": {"type": ["number", "null"]},
+        "col_h": {"type": "number"},
+        "bi": {"type": "integer"},
+        "slot_above": {"type": "integer"},
+        "slot_below": {"type": "integer"},
+        "char_above": {"type": "string"},
+        "char_below": {"type": "string"},
+        "cand": {"type": "string", "description": "straight | seam_narrow | seam_wide | unet_seam | period_up | period_dn"},
+        "polyline": {"type": "array"},
+        "page_x": {"type": "number", "description": "原图坐标（2026-09-26 起写入时记），跨重切可用。"},
+        "page_y": {"type": "number"},
+        "geom_sig": {"type": "string"},
+        "tags": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

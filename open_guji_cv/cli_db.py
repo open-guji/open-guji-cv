@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 
@@ -85,6 +86,18 @@ def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = 
                     glyph=glyph_hooks(ws_dir))
 
 
+def _ensure_glyph_pins(ws_dir: Path, res: dict) -> None:
+    """拉完以后，各册钉的字形库版本（有快照的）本机没建库就建（GUJI-727）。建不成只记一行，不让拉取失败。"""
+    from .ops.glyph_snapshot import ensure_pins
+    try:
+        built = [r for r in ensure_pins(ws_dir, log=lambda s: print(s, file=sys.stderr)) if not r.get("reused")]
+    except SystemExit as e:
+        res["glyph_pins_error"] = str(e)
+        return
+    if built:
+        res["glyph_pins_built"] = [r["pin"] for r in built]
+
+
 def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
     """``guji db sync`` 一轮：库里有新改动先合进来（只追加台账两边的新行都留），再推本地的。"""
     from .datastore.client import BlobCache, WorkerSource
@@ -98,6 +111,28 @@ def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
         return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
                     uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
                     glyph=glyph_hooks(ws_dir))
+
+
+def route_imported(ws_dir: Path, ids: set[str], *, branch: str) -> dict:
+    """导回的事件经 Worker 直写进库，没走控制台「写完就 route」（规范 §9 F-7）：拉下来、只对这几条跑消费者、再推。
+
+    本机副本不是 ``branch`` 那个分支的就不跑（消费者要写的是那个分支的工作区），返回里说明，留给那边补跑。"""
+    from .core.workspace import feedback_root, verdicts_root
+    from .feedback.consumers import route_and_consume
+    from .feedback.events import EventLog
+    from .feedback.routes import RouteTable
+    from .gold.store import GoldStore
+    if _branch() != branch:
+        return {"skipped": f"本机副本在分支 {_branch()}，事件导进了 {branch}；到 {branch} 的副本上 guji db sync 后 "
+                           f"guji events route"}
+    pulled = sync_workspace(ws_dir)
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)          # 消费者（glyph.db、排除名单）都按工作区找路径
+    log = EventLog(feedback_root())
+    out = route_and_consume(log, table=RouteTable.load(log.root / "routes.yaml"), store=GoldStore(verdicts_root()),
+                            event_ids=ids)
+    pushed = sync_workspace(ws_dir)
+    return {"pulled": pulled.get("action"), "results": out["results"], "unrouted": len(out["unrouted"]),
+            "pushed": pushed.get("action")}
 
 
 def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
@@ -139,7 +174,10 @@ def cmd_db(args) -> None:
     if args.action == "sync":
         if args.watch:
             _watch(ws_dir, args.watch, args.dry_run)
-        _print(sync_workspace(ws_dir, dry_run=args.dry_run))
+        res = sync_workspace(ws_dir, dry_run=args.dry_run)
+        if not args.dry_run:
+            _ensure_glyph_pins(ws_dir, res)
+        _print(res)
         return
 
     src = WorkerSource(branch=args.branch)
@@ -162,6 +200,8 @@ def cmd_db(args) -> None:
         res = pull(src, ws_dir, cache=BlobCache(), bucket=args.bucket, force=args.force,
                    glyph=None if args.no_rebuild else glyph_hooks(ws_dir))
         res["worker_requests"] = src.requests
+        if not args.no_rebuild:
+            _ensure_glyph_pins(ws_dir, res)
         _print(res)
         return
 
@@ -194,7 +234,11 @@ def cmd_db(args) -> None:
             ids = {x.strip() for x in Path(args.events).read_text(encoding="utf-8").splitlines()
                    if x.strip() and not x.startswith("#")}
         src_from = WorkerSource(token=src.token, branch=args.from_branch)
-        _print(import_events(src_from, src, workspace_id(ws_dir), ids, dst_branch=args.to, dry_run=args.dry_run))
+        res = import_events(src_from, src, workspace_id(ws_dir), ids, dst_branch=args.to, dry_run=args.dry_run)
+        if not args.dry_run and res["ids"] and not args.no_route:
+            res["route"] = route_imported(ws_dir, set(res["ids"]), branch=args.to)
+        res.pop("ids")
+        _print(res)
         return
 
 
@@ -218,5 +262,7 @@ def add_parser(sub) -> None:
     p.add_argument("--from", dest="from_branch", default=None, help="import：实验分支名")
     p.add_argument("--to", default="main", help="import：导入到哪个分支（缺省 main）")
     p.add_argument("--events", default=None, help="import：事件 id 清单文件（一行一个）；不给就导入目标没有的全部")
+    p.add_argument("--no-route", action="store_true",
+                   help="import：导完不在本机副本上跑消费者（缺省会拉下来、只对导入的事件 route、再推）")
     p.add_argument("--dry-run", action="store_true", help="migrate/push/sync/import：只列计划不写")
     p.add_argument("--watch", type=int, default=None, metavar="秒", help="sync：每隔这么多秒做一轮，不退出")

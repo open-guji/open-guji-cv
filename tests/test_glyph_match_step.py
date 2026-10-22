@@ -78,7 +78,7 @@ def test_library_change_does_not_stale_but_is_reported_as_drift(tmp_path, monkey
     step = STEPS["glyph_match"]
     monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
 
-    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="aaaa")
+    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="aaaa", font_tier=False, batch_knn=False)
     fp_a, _, _ = eng.fingerprint(step, 1)
     eng.run(steps=["glyph_match"], pages=[1])
     assert eng.store.manifest(bk.id, "glyph_match").get("p0001").soft == {"db_fingerprint": "aaaa"}
@@ -86,7 +86,7 @@ def test_library_change_does_not_stale_but_is_reported_as_drift(tmp_path, monkey
     assert row["drift"] == 0
     before = row["pages"][1]["status"]     # 样页的上游闸不一定全新鲜，只比前后
 
-    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="bbbb")
+    eng.ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="bbbb", font_tier=False, batch_knn=False)
     fp_b, _, _ = eng.fingerprint(step, 1)
     assert fp_a and fp_a == fp_b, "库指纹变了，Step 指纹不该跟着变（软参数）"
     row = eng.status(pages=[1], steps=["glyph_match"])["steps"]["glyph_match"]
@@ -120,7 +120,7 @@ def test_products_carry_per_instance_evidence(tmp_path, monkeypatch, ws, fixture
     ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
     step = STEPS["glyph_match"]
     monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
-    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp")
+    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp", font_tier=False, batch_knn=False)
 
     d = step.run_page(ctx, 1)["glyph_match"]
     same = [r for cc in d.columns for r in cc.chars if r.verdict == "same"]

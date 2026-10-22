@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -213,6 +214,10 @@ def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: di
     import tarfile
     if not hasattr(src, "put_snapshot"):
         return None
+    if _read_only(src):
+        # 读令牌存不上（403），先问一句，省得白打一个包（殿本约 9 s；云端新机器拉库都是读令牌）
+        print("[db] 读令牌不存快照（不影响本次拉取）", file=sys.stderr)
+        return None
     local = _local(ws_dir, data)
     buf = io.BytesIO()
     try:
@@ -234,6 +239,14 @@ def _publish_snapshot(src, ws: str, rev: int, ws_dir: Path, data: Path, base: di
     except Exception as e:                       # 读令牌、旧 Worker、网络问题：不影响拉取
         print(f"[db] 快照没存上（不影响本次拉取）：{e}", file=sys.stderr)
         return None
+
+
+def _read_only(src) -> bool:
+    """令牌是不是只读（``whoami`` 的 ``role == "read"``）；问不到当可写，照旧去试。"""
+    try:
+        return hasattr(src, "whoami") and (src.whoami() or {}).get("role") == "read"
+    except Exception:                            # noqa: BLE001 —— 旧 Worker、网络问题：照旧试着存
+        return False
 
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
@@ -409,6 +422,43 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     return out
 
 
+#: 字形库快照清单（GUJI-727，``core/glyph_pin.py``）：``config/glyph-pack/g<N>/manifest.json``
+GLYPH_PACK_DIR = "config/glyph-pack/"
+_GLYPH_PACK_MAN = re.compile(r"^config/glyph-pack/g\d+/manifest\.json$")
+
+
+def glyph_pack_blobs(ws_dir: Path, data: Path, base: dict[str, str], rows) -> dict[str, Path]:
+    """这次 push 新带上的字形库快照清单（基准里没有的）→ 它登记的文本条目 ``{sha: 本机文件}``，随 push 传 R2。
+
+    刻例图不用管：出快照要求数据目录已推干净，图早已按 sha 进桶；借来的库是从中心库拉的，图也在桶里。
+    本机文件已与清单不同的拒推：那一版的文本谁都拼不出来了，删掉这个号重出快照。"""
+    out: dict[str, Path] = {}
+    for r in rows:
+        if r.tbl != "files" or not _GLYPH_PACK_MAN.match(r.src_path) or r.src_path in base:
+            continue
+        man = json.loads((data / r.src_path).read_text(encoding="utf-8"))
+        bad = []
+        for it in man.get("items", []):
+            if it.get("type") != "txt":
+                continue
+            root = str(it["root"])
+            if root == "gs":
+                p = data / GS / it["path"]
+            elif root.startswith("borrow:"):
+                p = resolve_borrow(root[len("borrow:"):], ws_dir) / it["path"]
+            else:
+                bad.append(f"{root}:{it['path']}")
+                continue
+            if p.is_file() and sha256(p.read_bytes()) == it["sha256"]:
+                out[it["sha256"]] = p
+            else:
+                bad.append(f"{root}:{it['path']}")
+        if bad:
+            raise SystemExit(f"字形库快照 {r.src_path} 登记的 {len(bad)} 个文本本机已经变了（如 {bad[:3]}），"
+                             f"推上去也没人拼得出这一版；删掉这个号、guji glyph-db snapshot 重出")
+    return out
+
+
 def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_delete: bool = False,
          uploader=None, glyph: GlyphHooks | None = None, shared_writer: bool = False) -> dict:
     """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images[, ext=])`` 传新图与整理本。
@@ -451,14 +501,17 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
-        if not creating and not shared_writer:                 # 已发布的语料库版本不可改（用户 10-20）
+        if not creating and not shared_writer:                 # 已发布的语料库、字形库版本不可改（用户 10-20；GUJI-727）
             cur.execute("SELECT src_path, sha256 FROM files WHERE ws = %s "
-                        "AND src_path LIKE 'config/corpus-pack/v%%/manifest.json'", (sc.ws,))
+                        "AND (src_path LIKE 'config/corpus-pack/v%%/manifest.json' "
+                        "OR src_path LIKE 'config/glyph-pack/g%%/manifest.json')", (sc.ws,))
             db_sha = dict(cur.fetchall())
             changed = sorted(r.src_path for r in sc.rows if r.tbl == "files" and r.src_path in db_sha
                              and r.cols.get("sha256", db_sha[r.src_path]) != db_sha[r.src_path])
             if changed:
-                raise SystemExit(f"语料库清单 {changed[:3]} 已发布，版本不可改；出新版本（guji corpus build）")
+                what = "字形库" if changed[0].startswith(GLYPH_PACK_DIR) else "语料库"
+                raise SystemExit(f"{what}清单 {changed[:3]} 已发布，版本不可改；出新版本"
+                                 f"（{'guji glyph-db snapshot' if what == '字形库' else 'guji corpus build'}）")
         cur.execute("SELECT src_path FROM source_files WHERE ws = %s"
                     + "".join(f" UNION ALL SELECT src_path FROM {t} WHERE ws = %s" for t in BLOB_TABLES),
                     (sc.ws,) * (1 + len(BLOB_TABLES)))
@@ -478,6 +531,9 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     lost = sorted(str(p) for g in images.values() for p in g.values() if not p.exists())
     if lost:
         raise SystemExit(f"实例引用的 {len(lost)} 张图本地没有（如 {lost[:3]}）")
+    pack_txt = glyph_pack_blobs(ws_dir, data, st.get("base", {}), sc.rows)
+    if pack_txt:                                       # 新出的字形库快照：登记的文本随这次 push 进 R2
+        images.setdefault("txt", {}).update(pack_txt)
     if images and uploader is not None and not dry_run:
         # 库里已有的图（导入或之前推过时已进桶）不再逐张签名核对：每次推都核两万张要十几分钟，
         # 连接闲置被断，事务一开就死（10-19 D 推 vol01 裁决两次失败）
@@ -637,20 +693,96 @@ class SyncConflict(RuntimeError):
 APPEND_ONLY = {t for t, spec in TABLES.items() if spec.append_only}
 
 
-def _merge_append(local: bytes, remote: bytes) -> bytes | None:
-    """两边都只在共同前缀后面追加了行 → 前缀＋库里的新行＋本地的新行（本地与库里相同的行不重复）。
-
-    不知道基准内容，共同前缀就当基准：若有一边其实改了前缀里的行，合出来的文件会少那一边的旧行，
-    推的时候只追加台账少行会被导入器拒掉（``DeleteRefused``），不会悄悄丢数据。"""
+def _split_append(local: bytes, remote: bytes) -> tuple[list[str], list[str], list[str]]:
+    """共同前缀、库里在前缀后的新行、本地在前缀后的新行（与库里相同的行不重复）。"""
     lo, re_ = local.decode("utf-8").splitlines(), remote.decode("utf-8").splitlines()
     n = 0
     while n < min(len(lo), len(re_)) and lo[n] == re_[n]:
         n += 1
     tail_r = re_[n:]
     seen = set(tail_r)
-    tail_l = [x for x in lo[n:] if x not in seen]
-    merged = lo[:n] + tail_r + tail_l
-    return ("\n".join(merged) + "\n").encode("utf-8") if merged else b""
+    return lo[:n], tail_r, [x for x in lo[n:] if x not in seen]
+
+
+def _join(lines: list[str]) -> bytes:
+    return ("\n".join(lines) + "\n").encode("utf-8") if lines else b""
+
+
+def _merge_append(local: bytes, remote: bytes) -> bytes | None:
+    """两边都只在共同前缀后面追加了行 → 前缀＋库里的新行＋本地的新行（本地与库里相同的行不重复）。
+
+    不知道基准内容，共同前缀就当基准：若有一边其实改了前缀里的行，合出来的文件会少那一边的旧行，
+    推的时候只追加台账少行会被导入器拒掉（``DeleteRefused``），不会悄悄丢数据。"""
+    head, tail_r, tail_l = _split_append(local, remote)
+    return _join(head + tail_r + tail_l)
+
+
+def _merge_events(local: bytes, remote: bytes) -> tuple[bytes, dict[str, str]]:
+    """人裁事件文件的合并（规范 §9 F-6）：同 ``_merge_append``，再给本地新行里与库里撞号的重新编号。
+
+    两台机器往同一批次追加时各自从同一个 ``seq`` 往后编，合出来同一 ``id`` 两行内容不同：记账互相遮挡、
+    库主键 ``(ws, src_path, id)`` 冲突。库里的行已经推出去了、别的机器可能已消费，所以只动本地的：
+    顺延到该批次合并后的下一个空 ``seq``，与 ``EventLog.append`` 撞号顺延同一语义。
+    返回（合并后的字节，旧 id → 新 id）。"""
+    head, tail_r, tail_l = _split_append(local, remote)
+    rows = [json.loads(x) for x in head + tail_r if x.strip()]
+    taken = {r.get("id") for r in rows}
+    top: dict[str, int] = {}
+    for r in rows:
+        if isinstance(r.get("seq"), int):
+            top[r.get("batch")] = max(top.get(r.get("batch"), 0), r["seq"])
+    renamed: dict[str, str] = {}
+    out_l = []
+    for x in tail_l:
+        if not x.strip():
+            continue
+        d = json.loads(x)
+        b = d.get("batch")
+        if d.get("id") in taken and isinstance(d.get("seq"), int):
+            s = top.get(b, 0) + 1
+            new = f"evt_{b}_{s:06d}"
+            renamed[d["id"]] = new
+            d["id"], d["seq"] = new, s
+            x = json.dumps(d, ensure_ascii=False, sort_keys=True)
+        if isinstance(d.get("seq"), int):
+            top[b] = max(top.get(b, 0), d["seq"])
+        taken.add(d.get("id"))
+        out_l.append(x)
+    return _join(head + tail_r + out_l), renamed
+
+
+def _rename_ids(text: str, renamed: dict[str, str]) -> str:
+    for old, new in renamed.items():
+        text = text.replace(f'"{old}"', f'"{new}"')
+    return text
+
+
+def _apply_renames(renamed: dict[str, str], *, merged: dict[str, bytes], local_only: dict[str, Path],
+                   remote: dict[str, bytes]) -> list[str]:
+    """本地事件改了 id → 本地写的记账、补锚、金标里引用它的地方跟着改（只改本地新写的行）。
+
+    ``merged``：两边都改了的只追加台账，按库里的字节切出本地新行再改；``local_only``：只有本地改了的文件，
+    基准之后的新 id 只可能是本地写的，整文件改。"""
+    if not renamed:
+        return []
+    touched = []
+    for rel, b in list(merged.items()):
+        if classify(rel) == "events" or rel not in remote:
+            continue
+        head, tail_r, tail_l = _split_append(b, remote[rel])
+        nl = [_rename_ids(x, renamed) for x in tail_l]
+        if nl != tail_l:
+            merged[rel] = _join(head + tail_r + nl)
+            touched.append(rel)
+    for rel, path in local_only.items():
+        if classify(rel) == "events" or not path.exists() or path.suffix not in (".jsonl", ".json"):
+            continue
+        t = path.read_text(encoding="utf-8")
+        nt = _rename_ids(t, renamed)
+        if nt != t:
+            path.write_text(nt, encoding="utf-8")
+            touched.append(rel)
+    return sorted(touched)
 
 
 def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str = "main",
@@ -696,12 +828,17 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     theirs = set(_diff(base, remote))
     both = sorted(mine & theirs)
     merged: dict[str, bytes] = {}
+    renamed: dict[str, str] = {}
     conflicts = []
     for rel in both:
         lp = (ws_dir if rel == WS_YAML else data) / rel
         rp = tmp / rel
         if local.get(rel) == remote.get(rel):
             continue                                       # 两边改成一样
+        if classify(rel) == "events" and lp.exists() and rp.exists():
+            merged[rel], ren = _merge_events(lp.read_bytes(), rp.read_bytes())
+            renamed.update(ren)
+            continue
         if classify(rel) in APPEND_ONLY and lp.exists() and rp.exists():
             m = _merge_append(lp.read_bytes(), rp.read_bytes())
             if m is not None:
@@ -713,6 +850,8 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
         raise SyncConflict(f"这些文件本地和库里都改了，合不了（如 {conflicts[:5]}）；"
                            f"要库里的：guji db pull --force；要本地的：手工合进去再推")
     out.update(remote_changes=sorted(theirs), merged=sorted(merged), rev_remote=rev)
+    if renamed:
+        out["renumbered"] = renamed
     if dry_run:
         shutil.rmtree(tmp, ignore_errors=True)
         return {**out, "action": "merge (dry-run)"}
@@ -733,6 +872,10 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
             if not q.exists():
                 q.parent.mkdir(parents=True, exist_ok=True)
                 os.replace(p, q)
+    if renamed:                                            # 撞号重编：本地引用跟着改（规范 §9 F-6）
+        out["renamed_refs"] = _apply_renames(
+            renamed, merged=merged, remote={r: (tmp / r).read_bytes() for r in merged if (tmp / r).exists()},
+            local_only={r: data / r for r in sorted(mine - theirs) if r != WS_YAML})
     for rel, b in merged.items():
         (data / rel).write_bytes(b)
     shutil.rmtree(tmp, ignore_errors=True)

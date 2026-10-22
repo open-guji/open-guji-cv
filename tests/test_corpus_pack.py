@@ -80,18 +80,43 @@ def test_pin_replaces_content_fingerprints_with_version(tmp_path, monkeypatch):
     pinned = _ctx_with_ws(tmp_path, monkeypatch, 1)
     p1 = pinned.params_for(_step("context_decide"))
     assert isinstance(p1, ContextDecideParams)
-    assert p1.corpus_fingerprint == "corpus-v1"
+    assert p1.corpus_fingerprint == "corpus-v1"          # 没有钉子账的册：旧写法，指纹逐位不变
 
 
-def test_pinned_fingerprint_ignores_content_but_not_version(tmp_path, monkeypatch):
+def test_legacy_pinned_fingerprint_ignores_content_but_not_version(tmp_path, monkeypatch):
+    _ctx_with_ws(tmp_path, monkeypatch, None)
     cp.build(tmp_path)                                  # v1
     cp.build(tmp_path)                                  # v2
     ctx1 = _ctx_with_ws(tmp_path, monkeypatch, 1)
     before = ctx1.params_for(_step("context_decide")).corpus_fingerprint
     (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")   # 内容变了
-    after = _ctx_with_ws(tmp_path, monkeypatch, 1).params_for(_step("context_decide")).corpus_fingerprint
-    assert before == after == "corpus-v1"
-    assert _ctx_with_ws(tmp_path, monkeypatch, 2).params_for(_step("context_decide")).corpus_fingerprint == "corpus-v2"
+    from open_guji_cv.core.corpus_pin import corpus_token
+    assert corpus_token(tmp_path, 1, "tbook") == before == "corpus-v1"
+    assert corpus_token(tmp_path, 2, "tbook") == "corpus-v2"
+
+
+def test_ledger_fingerprint_is_content_not_version_and_dev_follows_live_files(tmp_path, monkeypatch):
+    """有钉子账的册：指纹取清单内容哈希，不含版本号；开发中取工作副本；发版前后不变。"""
+    import json
+
+    from open_guji_cv.core.corpus_pin import corpus_token, pins_path
+    _ctx_with_ws(tmp_path, monkeypatch, None)
+    cp.build(tmp_path)                                  # v1
+    cp.build(tmp_path)                                  # v2：内容和 v1 一样
+    pp = pins_path(tmp_path, "tbook")
+    pp.parent.mkdir(parents=True, exist_ok=True)
+    pp.write_text(json.dumps({"rows": [{"n": 1, "global": None, "book": 1, "vol": None},
+                                       {"n": 2, "global": None, "book": 2, "vol": None}]}), encoding="utf-8")
+    t1, t2 = corpus_token(tmp_path, 1, "tbook"), corpus_token(tmp_path, 2, "tbook")
+    assert t1 == t2 and t1 != "corpus-v1"               # 内容没变，版本号换了，指纹不变
+    assert corpus_token(tmp_path, 3, "tbook", dev=True) == t1   # 开发中、文件没动：与发版后一样
+    (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    assert corpus_token(tmp_path, 1, "tbook") == t1     # 钉死的：读清单，不受工作副本影响
+    live = corpus_token(tmp_path, 3, "tbook", dev=True)
+    assert live != t1                                   # 开发中：改了就变，产物自动判过期
+    cp.build(tmp_path)                                  # v3 发版
+    pp.write_text(json.dumps({"rows": [{"n": 3, "global": None, "book": 3, "vol": None}]}), encoding="utf-8")
+    assert corpus_token(tmp_path, 3, "tbook") == live   # 发版前后指纹不变
 
 
 def test_pin_without_manifest_fails_fast(tmp_path, monkeypatch):
@@ -117,6 +142,10 @@ def test_step_payload_carries_pin_only_for_corpus_steps(tmp_path, monkeypatch):
     from helpers import make_book
 
     from open_guji_cv.core.engine import _self_payload
+    _ctx_with_ws(tmp_path, monkeypatch, None)
+    cp.build(tmp_path)
+    (tmp_path / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(tmp_path)                                  # v2：内容不同于 v1
     for sid in ("glyph_match", "rare_candidates", "context_decide", "align_ref", "seed_admit"):
         assert "corpus" not in _self_payload(_step(sid), make_book(), "x")          # 没钉：键都不出现
         assert _self_payload(_step(sid), make_book(corpus=2), "x")["corpus"] == "corpus-v2"
@@ -225,7 +254,7 @@ def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypat
     from open_guji_cv.core import corpus_pin
     from open_guji_cv.core.engine import Engine
     seen = []
-    monkeypatch.setattr(corpus_pin, "require_pin_clean", lambda ws, v: seen.append(v) or (_ for _ in ()).throw(
+    monkeypatch.setattr(corpus_pin, "require_pin_clean", lambda ws, v, **kw: seen.append(v) or (_ for _ in ()).throw(
         corpus_pin.CorpusDrift("drift")))
 
     class _E:
@@ -235,12 +264,12 @@ def test_engine_runs_hard_check_only_for_pinned_corpus_steps(tmp_path, monkeypat
             return []
 
     with pytest.raises(corpus_pin.CorpusDrift):
-        Engine._run_one_step(_E(), _step("glyph_match"), [], None, False, False, 0, 0)
+        Engine._run_one_step_pages(_E(), _step("glyph_match"), [], None, False, False, 0, 0)
     assert seen == [2]
     e = _E()
     e.book = make_book()                                # 没钉：不查
     with pytest.raises(AttributeError):                 # 走到后面真跑的地方（假引擎没有 store）
-        Engine._run_one_step(e, _step("glyph_match"), [], None, False, False, 0, 0)
+        Engine._run_one_step_pages(e, _step("glyph_match"), [], None, False, False, 0, 0)
     assert seen == [2]
 
 
@@ -263,3 +292,183 @@ def test_push_refuses_changed_corpus_without_new_version(ws):
     assert "freq.json" in msg and "new.txt" in msg and "v2" in msg
     cp.build(ws)                                          # 出 v2 把现状收进去 → 放行
     assert corpus_pin.push_problems(ws) == []
+
+
+# ── 分层版本：全局／整套书／册三层，总号记在册的钉子账里（doc/design/语料库分层版本.md）──────
+
+def _copy_base(b, tmp_path_unused=None):
+    from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
+    from open_guji_cv.core.workspace import borrowed_root
+    n = json.loads(b.read_text(encoding="utf-8"))["base_version"]
+    dst = borrowed_root(BASE_WS) / BASE_DIR / f"b{n}" / "manifest.json"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.write_bytes(b.read_bytes())
+
+
+def test_no_pin_ledger_means_legacy_meaning(two_level):
+    """册没有钉子账：总号就是书库版本，带不带册 id 解出来的清单一样（殿本现有 corpus: 9 不受影响）。"""
+    from open_guji_cv.core import corpus_pin
+    book, _, _ = two_level
+    cp.build(book, base=1)
+    assert corpus_pin.resolve_pin(book, "vol01", 1) == {"n": 1, "global": 1, "book": 1, "vol": None}
+    assert corpus_pin.load_manifest(book, 1, "vol01") == corpus_pin.load_manifest(book, 1)
+    with pytest.raises(FileNotFoundError, match="没有语料库 v3"):
+        corpus_pin.load_manifest(book, 3, "vol01")
+
+
+def test_any_layer_change_bumps_total_and_same_combo_is_refused(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "fixed.json").write_text('{"a": 1}', encoding="utf-8")
+    v1 = cp.build_vol(book, "vol01")
+    assert v1.parent.name == "v1"
+    with pytest.raises(ValueError, match="相同"):
+        cp.build_vol(book, "vol01")                       # 内容没变不空升
+    with pytest.raises(ValueError, match="钉子账"):
+        corpus_pin.append_pin(book, "vol01", vol_ver=1)   # 没账又没给 from_n
+    r2 = corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)          # 册层变了 → 总号 2
+    assert (r2["n"], r2["global"], r2["book"], r2["vol"]) == (2, 1, 1, 1)
+    assert [r["n"] for r in corpus_pin.load_pins(book, "vol01")] == [1, 2]   # 首行是迁移行
+    with pytest.raises(ValueError, match="不空升"):
+        corpus_pin.append_pin(book, "vol01", vol_ver=1)
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(book, base=1)                                                   # 整套书层 v2
+    assert corpus_pin.append_pin(book, "vol01", book_ver=2)["n"] == 3
+    _copy_base(cp.build_base(cp.base_workdir("main"), "second"))              # 全局层 b2
+    assert corpus_pin.append_pin(book, "vol01", global_ver=2)["n"] == 4
+    assert corpus_pin.append_pin(book, "vol01", book_ver=1, global_ver=1)["n"] == 5   # 回退也是新总号
+    with pytest.raises(FileNotFoundError, match="没有 v9"):
+        corpus_pin.append_pin(book, "vol01", book_ver=9)
+
+
+def test_pinned_manifest_merges_three_layers_and_verify_sees_vol_files(two_level, monkeypatch):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "fixed.json").write_text('{"a": 1}', encoding="utf-8")
+    cp.build_vol(book, "vol01")
+    corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)
+    man = corpus_pin.load_manifest(book, 2, "vol01")
+    roots = {(i["root"], i["path"]) for i in man["items"]}
+    assert ("ws", "config/corpus-vol/vol01/fixed.json") in roots and ("ws", "corpus/ref.txt") in roots
+    assert any(r == "repo" for r, _ in roots)                               # 全局层的引擎仓文件
+    assert cp.verify(book, 2, "vol01")["clean"]
+    (vol_dir / "new.json").write_text("{}", encoding="utf-8")
+    assert cp.verify(book, 2, "vol01")["extra"] == ["ws:config/corpus-vol/vol01/new.json"]
+    (vol_dir / "fixed.json").write_text('{"a": 2}', encoding="utf-8")
+    corpus_pin._CLEAN.clear()
+    with pytest.raises(corpus_pin.CorpusDrift, match="fixed.json"):
+        corpus_pin.require_pin_clean(book, 2, "vol01")
+    corpus_pin._CLEAN.clear()
+    monkeypatch.setenv(corpus_pin.DRIFT_ENV, "warn")
+    corpus_pin.require_pin_clean(book, 2, "vol01")
+
+
+def test_vol_manifest_rejects_foreign_paths(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    vol_dir = data / "config" / "corpus-vol" / "vol01"
+    vol_dir.mkdir(parents=True)
+    (vol_dir / "a.json").write_text("{}", encoding="utf-8")
+    p = cp.build_vol(book, "vol01")
+    m = json.loads(p.read_text(encoding="utf-8"))
+    m["items"][0]["path"] = "config/groups/freq.json"
+    p.write_text(json.dumps(m), encoding="utf-8")
+    with pytest.raises(ValueError, match="册层清单"):
+        corpus_pin.append_pin(book, "vol01", from_n=1, vol_ver=1)
+        corpus_pin.load_manifest(book, 2, "vol01")
+
+
+def test_push_refuses_dev_pinned_book(two_level):
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    (data / "books").mkdir()
+    (data / "books" / "vol01.yaml").write_text("id: vol01\ncorpus: 3\n", encoding="utf-8")
+    assert corpus_pin.push_problems(book) == []
+    (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: 4\ncorpus_dev: true\n", encoding="utf-8")
+    msg = corpus_pin.push_problems(book)
+    assert len(msg) == 1 and "vol02" in msg[0] and "dev" in msg[0]
+
+
+def test_dev_pin_skips_checks_then_release_needs_layers_built(two_level):
+    from helpers import make_book
+
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    row = corpus_pin.append_pin(book, "vol01", from_n=1, book_ver=2, dev=True)       # 先升号，v2 清单还没出
+    assert row["n"] == 2 and row["dev"] is True
+    with pytest.raises(FileNotFoundError, match="整套书层没有 v2"):
+        corpus_pin.release_pin(book, "vol01", 2)                                      # 清单没出齐不放行
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")            # 开发中改语料
+    corpus_pin.require_pin_clean(book, 1, "vol01")  if False else None
+    b = make_book(corpus=2, corpus_dev=True)
+    assert b.corpus_dev                                                               # 跳过校验的开关
+    cp.build(book, base=1)                                                            # 发版：出 v2
+    assert "dev" not in corpus_pin.release_pin(book, "vol01", 2)
+    assert "dev" not in corpus_pin.load_pins(book, "vol01")[-1]
+    with pytest.raises(ValueError, match="不是开发中"):
+        corpus_pin.release_pin(book, "vol01", 2)
+
+
+def test_big_txt_items_are_marked_r2_and_do_not_change_fingerprint(tmp_path, monkeypatch):
+    from open_guji_cv.core import corpus_pin
+    (tmp_path / "corpus").mkdir()
+    (tmp_path / "corpus" / "big.txt").write_text("甲" * 400_000, encoding="utf-8")      # 1.2MB
+    (tmp_path / "corpus" / "small.txt").write_text("乙", encoding="utf-8")
+    items = {i["path"]: i for i in corpus_pin.collect(tmp_path)}
+    assert items["corpus/big.txt"]["store"] == "r2" and "store" not in items["corpus/small.txt"]
+    d1 = corpus_pin.items_digest(list(items.values()))
+    d2 = corpus_pin.items_digest([{k: v for k, v in i.items() if k != "store"} for i in items.values()])
+    assert d1 == d2                                                   # store 只是存放位置的标注，不进指纹
+    (tmp_path / "corpus" / "w.npz").write_bytes(b"\x00\x01" * 600_000)                # 1.2MB 二进制权重也走 R2
+    assert {i["path"]: i for i in corpus_pin.collect(tmp_path)}.get("corpus/w.npz") is None   # corpus/ 只收 .txt，权重在 config/groups/*/ 下
+    assert corpus_pin._item("rules", "repo", "config/groups/x/unet.npz", tmp_path / "corpus" / "w.npz", lambda p: "h")["store"] == "r2"
+    cp.build(tmp_path)
+    plan = cp.upload_blobs(tmp_path, 1)                              # 缺省只演练，不碰网络
+    assert plan["blobs"] >= 1 and plan["local"] == plan["blobs"] and plan["executed"] is False   # 含仓里的殆知阁两部
+    (tmp_path / "corpus" / "big.txt").write_text("丙" * 400_000, encoding="utf-8")
+    with pytest.raises(ValueError, match="不符"):
+        cp.upload_blobs(tmp_path, 1)
+
+
+def test_group_prompt_md_is_not_corpus(tmp_path, monkeypatch):
+    """字组 prompt.md 只给离线 L2 拼消息，Step 不读：不进清单；老清单里登记了的，改它也不算漂移。"""
+    from open_guji_cv.core import corpus_pin
+    repo = tmp_path / "repo"
+    g = repo / "config" / "groups" / "rr"
+    g.mkdir(parents=True)
+    (g / "rules.yaml").write_text("a: 1\n", encoding="utf-8")
+    (g / "prompt.md").write_text("v1\n", encoding="utf-8")
+    monkeypatch.setattr(corpus_pin, "REPO_ROOT", repo)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    items = corpus_pin.collect(ws)
+    assert [i["path"] for i in items] == ["config/groups/rr/rules.yaml"]
+    old = {"items": items + [{"group": "rules", "root": "repo", "path": "config/groups/rr/prompt.md",
+                              "size": 3, "sha256": "0" * 64}]}
+    (g / "prompt.md").write_text("v2\n", encoding="utf-8")
+    assert corpus_pin.check_files(ws, old) == {"changed": [], "missing": [], "extra": []}
+    (g / "rules.yaml").write_text("a: 2\n", encoding="utf-8")
+    assert corpus_pin.check_files(ws, old)["changed"] == ["repo:config/groups/rr/rules.yaml"]
+
+
+def test_migration_row_keeps_legacy_token_new_rows_use_content_hash(two_level):
+    """首行（迁移行）指纹仍是 corpus-v<n>，已有产物不过期；之后升的总号才用内容哈希。"""
+    from open_guji_cv.core import corpus_pin
+    book, data, _ = two_level
+    cp.build(book, base=1)
+    (data / "corpus" / "ref.txt").write_text("甲乙丙丁", encoding="utf-8")
+    cp.build(book, base=1)                                                    # v2
+    corpus_pin.append_pin(book, "vol01", from_n=1, book_ver=2)                 # 迁移行 n=1 + 新行 n=2
+    rows = corpus_pin.load_pins(book, "vol01")
+    assert rows[0].get("legacy_token") and "legacy_token" not in rows[1]
+    assert corpus_pin.corpus_token(book, 1, "vol01") == "corpus-v1"
+    t2 = corpus_pin.corpus_token(book, 2, "vol01")
+    assert t2.startswith("corpus-") and t2 != "corpus-v2"

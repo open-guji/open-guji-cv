@@ -492,9 +492,10 @@ def _end_bbox(g, end: str, page_w: int) -> list[float] | None:
 # ═══ 收割 ════════════════════════════════════════════════════════════
 
 def _latest(events, kinds: tuple[str, ...]) -> dict[str, object]:
-    """每个 target.key 取最后一条（同键后到覆盖，沿用事件日志纪律）。"""
+    """每个 target.key 取最后一条（同键后到覆盖，沿用事件日志纪律：`replay_key`）。"""
+    from ..feedback.events import replay_key
     out = {}
-    for e in sorted(events, key=lambda x: x.order):
+    for e in sorted(events, key=replay_key):
         if e.kind in kinds:
             out[e.target.key] = e
     return out

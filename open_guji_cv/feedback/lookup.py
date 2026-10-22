@@ -135,6 +135,12 @@ def resolved_manual_cells(book: str) -> dict[tuple[int, int], list[dict]]:
     return out
 
 
+def resolved_inverted(book: str) -> dict[int, dict]:
+    """反色带人审：`page → {"verdict", "rules"}`。实现在 `utils.preclean`（Step 引擎在 L1 要读，不能往上 import）。"""
+    from ..utils.preclean import resolved_inverted as _r
+    return _r(book)
+
+
 MANUAL_CELL_KINDS = frozenset({"char", "jiazhu_a", "jiazhu_b"})
 MANUAL_CELL_KEYS = ("slot", "kind", "y0", "y1", "x0", "x1")
 
@@ -460,7 +466,7 @@ def _superseded_events(evs: list, bound: dict[str, dict], pre: str) -> set[str]:
 
 
 def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
-                bind: bool | None = None) -> dict[str, str]:
+                bind: bool | None = None, lost: dict[str, dict] | None = None) -> dict[str, str]:
     """人在定字台上定过的字 → `{裸 id: 字}`，同一位**后到覆盖**。
 
     只有字形（2026-09-26 取消读法）。唯一的例外是**老事件**里的 己/已/巳：当时允许「看着像 X、
@@ -483,6 +489,12 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     **重绑定**（2026-09-25，总览/15）：`bind` 为真时每条裁决先过绑定表（`feedback/bindings.py`）——
     按锚在现行切分里找回它现在对应的格：原格仍是那个字照用，整列顺移了改绑到新编号，
     切开/合并/找不到的不采信（回待审）。缺省 `bind=None` = 读工作区事件日志时开、传入测试日志时关。
+
+    **绑丢了的人裁不能悄悄消失**（2026-10-20，GUJI-697）：传 `lost`（一个空 dict）时，绑定后
+    不采信的裁决按**原编号**记进去：`{原编号: {"char", "status", "event", "ts"}}`；同一编号之后
+    又有可采信的裁决（出现在返回值里）的不记。`seed_admit` 拿它做「人裁绑丢」闸：机器在这一格
+    放行的字与人当年裁的不一样，就退回待审并报 warning——人裁永远是最高优先级，绑丢了也不许
+    让机器的新放行顶掉（册2 重跑实测 22:6:7 戕→成、64:9:21 止→什）。
     """
     if stale is None:
         stale = stale_human_marks(book)
@@ -548,14 +560,22 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
                                 book, e.target.key, p["shape"])
             continue
         key = e.target.key
-        if bind:
-            from .bindings import usable
-            key = usable(bound.get(e.id)) if e.id in bound else key
-            if key is None:
-                continue                  # 挂错格 / 切开合并 / 格没了：不采信，回待审
         ch = str(p["shape"])
         rd = p.get("reading")
         if ch in _JYS and rd in _JYS:
             ch = rd
+        if bind:
+            from .bindings import usable
+            key = usable(bound.get(e.id)) if e.id in bound else key
+            if key is None:
+                # 挂错格 / 切开合并 / 格没了：不采信，回待审（`lost` 记下，见 docstring）
+                if lost is not None:
+                    row = bound.get(e.id) or {}
+                    lost[e.target.key] = {"char": ch, "status": row.get("status"),
+                                          "event": e.id, "ts": e.ts}
+                continue
         out[key] = ch
+    if lost is not None:
+        for k in [k for k in lost if k in out]:
+            del lost[k]
     return out

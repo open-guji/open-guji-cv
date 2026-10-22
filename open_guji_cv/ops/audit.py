@@ -166,12 +166,14 @@ SECS_PER_CELL = 5          # 控制台一格约 5 秒（vol03 实测，#164）
 
 
 def review_sheet(book: str, queue: dict, gaps: list[dict], mismatches: list[dict],
-                 console: str = "http://127.0.0.1:8640/") -> str:
+                 console: str = "http://127.0.0.1:8640/", vision: list[dict] | None = None,
+                 unsure: list[dict] | None = None) -> str:
     """请审单（runbook S11 的格式）：一类活一节，每节写在哪、几格、几分钟、不审的默认。
 
     `queue` = 待审卡按类计数（`cards(...)["class_counts"]`）；`gaps` = 收尾闸格（有定字裁决却没出字，
     卡上已预勾旧裁的字）；`mismatches` = 人裁字≠放行字的报告项，只列正文一类（己已巳族由会话自己按文意过）。
-    放行错穷举里判为错的格不在这里：会话看完图后把那几格按字位追加到第 4 节。
+    `vision` = 看图判错、人还没裁的格（`feedback.vision.vision_pending` 的行，可带 `note`），填进第 4 节；
+    `unsure` = 看图看不清的格（`{id, shown, note}`），列成第 5 节「看原图」。都不给时第 4 节留空表由会话追加（M9 前的旧行为）。
     """
     from ..review.cards import REVIEW_CLASSES
     names = {k: label for k, label, _h in REVIEW_CLASSES}
@@ -207,6 +209,55 @@ def review_sheet(book: str, queue: dict, gaps: list[dict], mismatches: list[dict
         out += ["", "不审的默认：照现放行字出文本。"]
     else:
         out += ["无。"]
-    out += ["", "## 4. 按字位改判（放行错穷举、己/已/巳 看图判为错的格，由会话追加）", "",
-            "| 字位 | 现在 | 建议 | 理由 |", "|---|---|---|---|", "", "不审的默认：照现放行字出文本。", ""]
+    out += ["", "## 4. 按字位改判（放行错穷举、己/已/巳 看图判为错的格" + ("）" if vision else "，由会话追加）"), ""]
+    if vision:
+        out += [f"控制台 Step7 →「定字裁决」，筛 `doubt=vision_flag`。共 {len(vision)} 格，约 {mins(len(vision))} 分钟。", ""]
+    out += ["| 字位 | 现在 | 建议 | 理由 |", "|---|---|---|---|"]
+    out += [f"| `{v['id']}` | {v.get('char') or '□'} | {v.get('vision') or '？'} | {v.get('note') or ''} |"
+            for v in vision or []]
+    out += ["", "不审的默认：照现放行字出文本。", ""]
+    if unsure:
+        out += ["## 5. 看不清（要看原图）", "",
+                f"看图看不清、不进待审队列的格，共 {len(unsure)} 格。请对着原图看一眼，认得出就在控制台按字位改判。", "",
+                "| 字位 | 现在 | 说明 |", "|---|---|---|"]
+        out += [f"| `{u['id']}` | {u.get('shown') or '□'} | {u.get('note') or ''} |" for u in unsure]
+        out += ["", "不审的默认：照现放行字出文本。", ""]
     return "\n".join(out)
+
+
+def _admitted_map(products_dir: Path, book: str) -> dict[str, dict]:
+    """`<产物根>/<册>/seed_admit/p*.json` 里放行了的格 → {char, channel, page}。"""
+    out: dict[str, dict] = {}
+    for f in sorted((Path(products_dir) / book / "seed_admit").glob("p*.json")):
+        s = json.loads(f.read_text(encoding="utf-8"))["seed_admit"]
+        for col in s.get("columns", []):
+            for ch in col.get("chars", []):
+                if ch.get("admit"):
+                    out[ch["id"]] = {"char": ch.get("char"), "channel": ch.get("channel"), "page": int(ch["id"].split(":")[1])}
+    return out
+
+
+def admit_changes(base_dir: Path, new_dir: Path, book: str) -> dict:
+    """放行变化（M9 D5，GUJI-664）：和上一基线比，**新放行**或**放行字变了**的格。这些格机器说了算、
+    没人看过，换基线后必须看图；人审过的格不在 seed_admit 的放行里变（人裁字照旧），会落在这里的
+    只有机器自己改了主意的。格号在两版都有才比；重切后格号变了的不算（另由切分差异单管）。"""
+    old, new = _admitted_map(base_dir, book), _admitted_map(new_dir, book)
+    rows = []
+    for cid, n in new.items():
+        o = old.get(cid)
+        if o is None or o["char"] != n["char"]:
+            rows.append({"id": cid, "page": n["page"], "char": n["char"], "old": (o or {}).get("char"),
+                         "channel": n["channel"], "kind": "newly_admitted" if o is None else "changed"})
+    rows.sort(key=lambda r: (r["page"], [int(x) for x in re.findall(r"\d+", r["id"].split(":", 1)[1])]))
+    return {"book": book, "base": str(base_dir), "n": len(rows),
+            "n_changed": sum(1 for r in rows if r["kind"] == "changed"),
+            "n_new": sum(1 for r in rows if r["kind"] == "newly_admitted"),
+            "by_channel": dict(Counter(r["channel"] for r in rows).most_common()), "rows": rows}
+
+
+def admit_changes_md(res: dict) -> str:
+    lines = [f"# {res['book']} 放行变化（对 `{res['base']}`）", "",
+             f"共 {res['n']} 格：放行字变了 {res['n_changed']}，新放行 {res['n_new']}。每格都要看图（runbook S8），结论写进 看图结论.jsonl。",
+             "", "| 字位 | 原放行 | 现放行 | 通道 |", "|---|---|---|---|"]
+    lines += [f"| `{r['id']}` | {r['old'] or '（没放）'} | {r['char'] or '□'} | {r['channel'] or ''} |" for r in res["rows"]]
+    return "\n".join(lines) + "\n"

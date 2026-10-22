@@ -79,3 +79,37 @@ def test_default_routes_send_cutline_to_product_invalidate_row_segment():
     inv = [d for d in dests if d.consumer == "product_invalidate"]
     assert inv and inv[0].extra == {"step": "row_segment"}
     assert any(d.consumer == "gold_add" and d.shard == "char-segmentation/touching-cuts" for d in dests)
+
+
+def test_status_builds_each_steps_params_once_not_per_page(world, monkeypatch):  # noqa: F811
+    """参数模型构造时会现算库指纹（库含字体域时很贵），`status()` 之内每步只算一次（GUJI-647）；
+    出了 `status()` 不缓存，下一次照样现算。"""
+    eng = make_engine(world)
+    eng.run(pages=[1, 2, 3])
+    calls: list[str] = []
+    real = type(eng.ctx).params_for
+    monkeypatch.setattr(type(eng.ctx), "params_for", lambda self, step: calls.append(step.spec.id) or real(self, step))
+    st = eng.status(pages=[1, 2, 3])
+    assert all(st["steps"][s]["pages"][p]["status"] == FRESH for s in ("t_step_a", "t_step_b") for p in (1, 2, 3))
+    assert calls and len(calls) == len(set(calls))
+    calls.clear()
+    eng.page_status(STEPS["t_step_a"], 1)
+    n1 = len(calls)
+    eng.page_status(STEPS["t_step_a"], 2)
+    assert n1 and len(calls) == 2 * n1                  # status() 之外不缓存
+
+
+def test_run_builds_each_steps_params_once_per_step(world, monkeypatch):  # noqa: F811
+    """跑批时一步之内参数只构造一次（指纹、落盘、run_page 共用；GUJI-647 第 5 项），跑完不留缓存。"""
+    eng = make_engine(world)
+    calls: list[str] = []
+    real = type(eng.ctx).params_for
+
+    def counting(self, step):
+        if self._params_memo is None or step.spec.id not in self._params_memo:
+            calls.append(step.spec.id)
+        return real(self, step)
+    monkeypatch.setattr(type(eng.ctx), "params_for", counting)
+    eng.run(pages=[1, 2, 3], force=True)
+    assert sorted(calls) == sorted(set(calls)) and {"t_step_a", "t_step_b"} <= set(calls)
+    assert eng.ctx._params_memo is None and eng._pcache is None

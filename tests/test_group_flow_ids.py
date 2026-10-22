@@ -92,10 +92,13 @@ def test_judge_by_form_classifies_by_member_char():
 
 
 def test_repo_by_form_banks_load():
-    for g in ("xu", "ce", "jiao", "qik", "lih", "jue"):
-        assert O.SPECS[g].by_form and O.has_bank(g), g
+    for g in ("xu", "jiao", "qik", "lih", "jue", "zhi"):
+        sp = O.SPECS[g]
+        assert (sp.by_form or sp.whole or sp.generic) and O.has_bank(g), g   # 絕絶/厯歴/啓啟 改整字（#345）；叙敘/教敎/絕絶 改通用判法（10-22）
         from open_guji_cv.groups.registry import GROUPS
         assert set(O.load_bank(O.bank_path(g))) <= GROUPS[g].members, g
+        if sp.generic:
+            assert len(O.generic_meta(g)["shape"]) == 64, g
 
 
 def test_bank_file_roundtrip_deterministic(tmp_path):
@@ -118,18 +121,18 @@ def test_bank_path_prefers_workspace_and_fingerprint(tmp_path, monkeypatch):
     O.write_bank(O.dump_bank("can", _bank(), {}), p)
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert O.bank_path("can") == p and O.has_bank("can")
-    assert O.bank_path("zhi") is None and not O.has_bank("zhi")          # 没登记判法、也没库
+    assert O.bank_path("dian") is None and not O.has_bank("dian")          # 没登记判法、也没库（點㸃）
     f1 = O.fingerprint(("can", "mn"))
     assert f1.startswith("ids:can=") and "mn" not in f1 and "lv1=" in f1
     O.write_bank(O.dump_bank("can", _bank(n_bar=10), {}), p)
     assert O.fingerprint(("can",)) != f1                                 # 模板库变 → 指纹变
-    assert O.fingerprint(("mn", "zhi", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
+    assert O.fingerprint(("mn", "dian", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
 
 
 def test_judge_entry_without_bank_or_patch(monkeypatch):
     monkeypatch.setattr(O, "bank_path", lambda g: None)
     assert O.judge("can", _glyph("bar")).why == "abstain:no_bank"
-    assert O.judge("zhi", _glyph("bar")).why == "abstain:no_spec"
+    assert O.judge("dian", _glyph("bar")).why == "abstain:no_spec"
 
 
 @pytest.fixture
@@ -193,3 +196,21 @@ def test_yi_560_three_slot_bank_loads_and_abstains_on_blank():
     assert set(b) == {0, 1, 2, 3} and set(b[0]) == {"彐", "彑"} and set(b[2]) == {"廾", "大"}
     assert O.judge("yi_560", np.full((100, 100), 255, np.uint8)).why == "abstain:blank"
     assert "yi_560=" in O.fingerprint(["yi_560"])
+    assert O.SPECS["yi_560"].unet and O.unet_path("yi_560") is not None and ".u" in O.fingerprint(["yi_560"])
+
+
+def test_yi_560_nearest_variant_is_released_when_spec_allows(monkeypatch):
+    """彑米糸大 无 Unicode 码位，解析器归 𢑴 并打 nearest 旗；sheldon 10-20 定它就是 𢑴，yi_560 放行（其他组仍弃权）。"""
+    from dataclasses import replace
+    from open_guji_cv.groups import ids_solver
+    from open_guji_cv.groups.ids_solver import IdsVerdict
+    fake = IdsVerdict("𢑴", "⿳彑⿰米糸大", "nearest", "nearest_variant", ("彑", "米糸", "大"), (0.5, 0.5, 0.5))
+    monkeypatch.setattr(ids_solver, "solve", lambda *a, **k: fake)
+    monkeypatch.setattr(O, "_unet_three", lambda net, g: (None, None))
+    bank = {f"{k}|{n}": [np.zeros((32, 32), np.float32)] * 3
+            for k, ns in ((0, "彐彑"), (1, ("米糸", "米分")), (2, "廾大")) for n in ns}
+    bank["3|糸"] = bank["3|分"] = [np.zeros((32, 32), np.float32)] * 3
+    gray = np.zeros((10, 10), np.uint8)
+    spec = O.SPECS["yi_560"]
+    assert spec.nearest_ok and O._judge_three("yi_560", gray, bank, spec, net=object()).char == "𢑴"
+    assert O._judge_three("yi_560", gray, bank, replace(spec, nearest_ok=False), net=object()).why == "abstain:nearest"

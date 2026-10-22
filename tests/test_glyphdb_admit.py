@@ -241,6 +241,20 @@ def test_mojibake_shape_is_repaired_or_rejected(lib):
     assert r.added == 0 and "不是单个汉字" in r.errors[0]
 
 
+def test_symbol_shape_enters_library(lib):
+    """人定成特殊符号（○，非汉字区）的格照样进库（特殊符号设计 4.2）；未登记的非汉字单字仍拒。"""
+    db, cells = lib
+    r = _confirm(db, cells[6], {"v": "confirm", "shape": "○"})
+    assert r.added == 1, r.errors
+    pg, col, slot = cells[6]
+    c = sqlite3.connect(db)
+    assert c.execute("select label from instances where instance_id=?",
+                     (f"v2:{BOOK}:{pg}:{col}:{slot}",)).fetchone()[0] == "○"
+    c.close()
+    r = _confirm(db, cells[7], {"v": "confirm", "shape": "☆"})
+    assert r.added == 0 and "不是单个汉字" in r.errors[0]
+
+
 def test_relabel_without_cache_uses_library_patch(lib, monkeypatch):
     """字块缓存被清之后改判：图块用库里那张，改判照样落库。"""
     db, cells = lib
@@ -254,3 +268,41 @@ def test_relabel_without_cache_uses_library_patch(lib, monkeypatch):
     assert c.execute("select label from instances where instance_id=?",
                      (f"v2:{BOOK}:{pg}:{col}:{slot}",)).fetchone()[0] == "乙"
     c.close()
+
+
+def _patch_png(db, iid):
+    con = sqlite3.connect(str(db))
+    try:
+        row = con.execute("SELECT patch_png FROM instances WHERE instance_id=?", (iid,)).fetchone()
+        return bytes(row[0]) if row else None
+    finally:
+        con.close()
+
+
+def test_rebound_event_takes_the_patch_of_its_current_cell(lib, tmp_path):
+    """补消费积压（规范 §9 F-10）：重切后格号顺移的，按绑定给的现格取图，库里 id 仍用原键。"""
+    db, cells = lib
+    a, b = cells[0], cells[1]
+    ev = _ev(f"{BOOK}:{a[0]}:{a[1]}:{a[2]}", {"v": "confirm", "shape": "之"}, *a)
+    bound = f"{BOOK}:{b[0]}:{b[1]}:{b[2]}"
+    res = glyphdb_admit([ev], db_path=str(db), bindings_of=lambda bk, pg: {
+        ev[0].id: {"status": "rebound", "bound": bound}})
+    assert res.added == 1 and not res.errors
+    got = _patch_png(db, f"v2:{BOOK}:{a[0]}:{a[1]}:{a[2]}")
+    # 对照：直接按现格 b 收一次，图应相同
+    db2 = tmp_path / "g2.db"
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    GlyphDB(db2).close()
+    glyphdb_admit([_ev(bound, {"v": "confirm", "shape": "之"}, *b)], db_path=str(db2),
+                  bindings_of=lambda bk, pg: {})
+    assert got is not None and got == _patch_png(db2, f"v2:{bound}")
+
+
+def test_unusable_binding_is_not_admitted_and_not_an_error(lib):
+    db, cells = lib
+    a = cells[0]
+    ev = _ev(f"{BOOK}:{a[0]}:{a[1]}:{a[2]}", {"v": "confirm", "shape": "之"}, *a)
+    res = glyphdb_admit([ev], db_path=str(db), bindings_of=lambda bk, pg: {
+        ev[0].id: {"status": "review", "bound": None}})
+    assert (res.added, res.unbound, res.errors) == (0, 1, [])
+    assert _patch_png(db, f"v2:{BOOK}:{a[0]}:{a[1]}:{a[2]}") is None

@@ -35,6 +35,8 @@ class ParallelAudit:
     """审了什么、怎么验的。"""
     warm_first: bool = False
     """先在主进程跑一页把进程级缓存建好，再 fork（子进程写时复制共享），见 `Engine._run_one_step_parallel`。"""
+    serial_when: tuple[str, ...] = ()
+    """这些布尔参数开着时退回串行：审查只覆盖缺省路径，开关打开后另有跨页状态（如在线大模型的盘上缓存）。"""
 
 
 AUDITED: dict[str, ParallelAudit] = {
@@ -44,18 +46,51 @@ AUDITED: dict[str, ParallelAudit] = {
              "（`cache.put`，原子写；清缓存与记戳在主进程）；extractor／crop_quality／frame_bar_strategy／"
              "seam 无模块级可变状态。第四册 46 页串行／4 进程产物与 8436 张字块图逐个相同，"
              "墙钟 27.8 s → 9.1 s，单进程 0.19 GB（2026-10-20）。"),
+    "border_detect_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸1：run_page 只读本页原图（判页型）、borders／line_index／page_survey 产物，不写缓存；"
+             "页型模型（pagetype_model，缺省关）按参数缓存在 step 上，只读。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "column_warp": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"
+             "写的只有本页键的列图（column_raw／column_image，`cache.put` 原子写；清缓存与记戳在主进程）；"
+             "column_projection／column_triage 无模块级可变状态。vol06 150 页串行／4 进程产物 sha 逐页相同，1332 列的两种列图逐张相同（2026-10-21）。"),
+    "column_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸2：run_page 只读本页 column_windows、闸1 manifest、line_index 与本页列图"
+             "（`ctx.image` 缺图时惰性重生写的是本页的键），页级先验只用本页各列。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "row_segment_gate": ParallelAudit(
+        mem_gb=0.5,
+        note="闸3：run_page 只读本页 cells、闸1 manifest 与本页列图（`eval.rulers._col_profile`，只读缓存）。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "align_ref": ParallelAudit(
+        mem_gb=1.2, warm_first=True,
+        note="run_page 只读本页 glyph_match／rare_candidates／cells 产物与整理本；整理本字流、8-gram 索引、"
+             "证人、坐标行表都是按输入记忆的 lru_cache（`_corpus_text`／`_corpus_index`／"
+             "`_witnesses_for_book_cached`／`align_ref_coord.ref_lines`），`_UNITS` 是按值共用的不可变单元。"
+             "warm_first：主进程先跑一页把整理本索引建好（约 10 s），fork 后共享。不写缓存、不写别的产物。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "context_decide": ParallelAudit(
+        mem_gb=1.0, warm_first=True, serial_when=("enable_online_llm",),
+        note="run_page 只读本页 glyph_match／rare_candidates 产物；LM 与选字策略按 (策略, 语料指纹, 门槛, 异体表) "
+             "缓存在 step 上（`_decider`），打分只读；ai_evidence 按指纹读文件。warm_first：主进程先跑一页建 LM。"
+             "在线大模型（enable_online_llm，缺省关）要写盘上缓存与调用日志、按次限流，开着时退回串行。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
     "row_segment": ParallelAudit(
         mem_gb=1.0,
         note="run_page 只读本页 gate_manifest／column_windows／列图与册级人裁表（lookup，只读），"
              "U-Net 裁判是进程内单例（get_judge），每个 worker 各载一份；列图惰性再生写的是本页的键，"
              "改戳走 ImageCache 的锁。第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 26 s；worker 里 torch 1 线程（2026-10-20）。"),
     "glyph_match": ParallelAudit(
-        mem_gb=1.0,
-        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存，worker 各建一份（约 17 s）；"
+        mem_gb=1.5, warm_first=True,
+        note="字形库匹配器走 seeding.cached_matcher_from_db 的进程级缓存；warm_first（2026-10-20 晚）：主进程先跑一页"
+             "把它建好，fork 后各 worker 共享，不再各建一份。库含字体域（约 17.4 万条，特征矩阵 1.2 GB）时这件事要紧："
+             "各建一份是每进程约 2 分钟、3.4–3.7 GB；匹配器特征另有盘上缓存（`seeding._matcher_arrays`，mmap 共享页缓存）；"
              "人裁例数、借用名单按库指纹缓存在 step 实例上，只读。格级复用读的是本步旧产物，"
              "本步产物只由主进程写。cell_budget_s 是按墙钟的每格预算（缺省关）：开着时并行"
              "让单格变慢就可能多出 timeout 格——与换台机器跑同一性质，不是并行特有。"
-             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条；登记 1 GB 留余量）（2026-10-20）。"),
+             "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 231 s → 80 s，单 worker 峰值 0.53 GB（库 18,474 条，未导字体域）（2026-10-20）。"
+             "按 runbook S6 导了 jigmo、iming 字体域（glyph.db 3.1 GB）后，vol06 实测单 worker 3.4–3.7 GB，"
+             "原登记 1 GB 让 4 进程在 14.3 GB 的容器里被 OOM 杀（M9 基线，GUJI-636），曾改登记 3.6 GB。"
+             "warm_first 与特征缓存之后（GUJI-647）每个 worker 不再自建匹配器：vol06 冷启动主进程峰值 2.2 GB、"
+             "主进程加 4 个 worker 合计 PSS 2.6 GB，按 3.6 算 13 GB 的容器只开得出 2 个进程，改登记 1.5 GB 留余量。"),
     "rare_candidates": ParallelAudit(
         mem_gb=1.5, warm_first=True,
         note="审查（2026-10-20）：缓存都只按输入记忆（_emb_cache／_fwd_cache／_gw_cs 用 is 比对，_real_slots 按值），"
@@ -63,7 +98,7 @@ AUDITED: dict[str, ParallelAudit] = {
              "（`RareCandidatesStep.parallel_warm` 在主进程建，缺盘时只建一次）；跑批期间不改字形库、checkpoint、fonts、册 yaml。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 65 s → 23.5 s，单进程 1.06 GB（2026-10-20）。"),
     "seed_admit": ParallelAudit(
-        mem_gb=3.0, warm_first=True,
+        mem_gb=2.0, warm_first=True,
         note="审查（2026-10-20）：run_page 不写事件／台账／人裁，只读；模块级缓存都按输入键记忆。"
              "修掉的：font_candidates._row_norms 按 id 缓存拿错矩阵（串行也随页序变）；图块缓存、"
              "绑定缓存、字体索引改原子写（并发读到半个文件会整页失败或静默为空）。"
@@ -72,7 +107,11 @@ AUDITED: dict[str, ParallelAudit] = {
              "人裁匹配器、绑定表，fork 后共享；Windows（spawn）各进程自建，单进程峰值约 2.1 GB。"
              "第四册 46 页串行／4 进程产物 sha 逐页相同，墙钟 82 s → 50 s，单进程峰值 2.1 GB；"
              "worker 里 cv2.setNumThreads 置空（cnn_candidates 模块顶层调它，fork 子进程里卡死过），"
-             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"),
+             "fork 前 `SeedAdmitStep.parallel_warm` 预建证人索引与铁证匹配器（先跑一页建不全）（2026-10-20）。"
+             "内存登记 3.0 → 2.0 GB（2026-10-20 晚）：每步一个子进程后 vol06 主进程峰值 1.95 GB，主进程加 3 个 worker "
+             "合计 PSS 3.3 GB（fork 共享页）；按 3.0 算，15 GB 的机器只开得出 3 个进程，CPU 利用率 51%。"
+             "开了 shadow_veto 的册：影子模型的 OpenMP 要在 worker 里压线程（`engine._pin_threads`），不压时 vol09 每页约 700 s"
+             "（2026-10-21；vol09 20 页串行／4 进程产物逐页相同）。"),
 }
 
 
@@ -94,8 +133,14 @@ def warm_first(step) -> bool:
     return bool(a and a.warm_first)
 
 
-def is_parallel_safe(step) -> bool:
-    return bool(step.spec.parallel_safe) or step.spec.id in AUDITED
+def is_parallel_safe(step, params=None) -> bool:
+    """`params` 是这一步本次的参数；给了就按登记的 `serial_when` 检查开关。"""
+    if step.spec.parallel_safe:
+        return True
+    a = AUDITED.get(step.spec.id)
+    if a is None:
+        return False
+    return not (params is not None and any(getattr(params, k, False) for k in a.serial_when))
 
 
 def available_memory_gb() -> float | None:
@@ -115,12 +160,56 @@ def available_memory_gb() -> float | None:
             if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(ms)):
                 return None
             return ms.ullAvailPhys / (1 << 30)
+        host = None
         with open("/proc/meminfo", encoding="ascii") as f:
             for ln in f:
                 if ln.startswith("MemAvailable:"):
-                    return int(ln.split()[1]) / (1 << 20)
+                    host = int(ln.split()[1]) / (1 << 20)
+                    break
+        cg = _cgroup_headroom_gb()
+        if host is None:
+            return cg
+        return host if cg is None else min(host, cg)
     except Exception:  # noqa: BLE001 —— 只是限流参考，取不到就不限
         return None
+
+
+def _cgroup_headroom_gb(root: str = "") -> float | None:
+    """容器（cgroup v2／v1）内存上限减已用（不算可回收的页缓存），GB；没设上限或读不到返回 None。
+    云容器里 /proc/meminfo 报的是整机，进程却按 cgroup 上限被 OOM 杀。"""
+    def _read(p):
+        try:
+            with open(p, encoding="ascii") as f:
+                return f.read().strip()
+        except OSError:
+            return None
+    pairs = [(root + "/sys/fs/cgroup/memory.max", root + "/sys/fs/cgroup/memory.current")]
+    try:
+        with open(root + "/proc/self/cgroup", encoding="utf-8") as f:
+            for ln in f:
+                parts = ln.strip().split(":", 2)
+                if len(parts) == 3 and "memory" in parts[1].split(","):
+                    d = root + "/sys/fs/cgroup/memory" + parts[2]
+                    pairs.append((d + "/memory.limit_in_bytes", d + "/memory.usage_in_bytes"))
+                elif len(parts) == 3 and parts[0] == "0" and parts[2] not in ("", "/"):
+                    d = root + "/sys/fs/cgroup" + parts[2]
+                    pairs.insert(0, (d + "/memory.max", d + "/memory.current"))
+    except OSError:
+        pass
+    for lim_p, use_p in pairs:
+        lim, use = _read(lim_p), _read(use_p)
+        if not lim or not use or lim == "max" or not lim.isdigit() or not use.isdigit():
+            continue
+        lim_i = int(lim)
+        if lim_i >= 1 << 60:                       # v1 没设上限时是个极大值
+            continue
+        cache = 0
+        for ln in (_read(lim_p.rsplit("/", 1)[0] + "/memory.stat") or "").splitlines():
+            k, _, v = ln.partition(" ")
+            if k in ("file", "total_cache") and v.isdigit():   # v2：file；v1：total_cache
+                cache = int(v)
+                break
+        return max(0, lim_i - max(0, int(use) - cache)) / (1 << 30)
     return None
 
 

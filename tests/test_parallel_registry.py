@@ -25,7 +25,17 @@ def test_audited_steps_exist_and_count_as_safe():
         assert sid in STEPS, sid
         assert parallel.is_parallel_safe(STEPS[sid])
     assert parallel.is_parallel_safe(STEPS["border_detect"])     # 标在 Step 上的照旧认
-    assert not parallel.is_parallel_safe(STEPS["context_decide"])    # 没登记的一律串行
+    assert not parallel.is_parallel_safe(STEPS["page_survey"])       # 没登记的一律串行
+
+
+def test_serial_when_switch_falls_back_to_serial():
+    """context_decide 开了在线大模型（写盘上缓存、按次限流）就退回串行；缺省关时可并行。"""
+    from open_guji_cv.steps.context_decide import ContextDecideParams
+    step = STEPS["context_decide"]
+    off = ContextDecideParams()
+    assert parallel.is_parallel_safe(step, off)
+    assert not parallel.is_parallel_safe(step, off.model_copy(update={"enable_online_llm": True}))
+    assert parallel.is_parallel_safe(step)                            # 不给参数：只看登记
 
 
 def test_registry_is_not_a_code_dep():
@@ -98,3 +108,31 @@ def test_set_blas_threads_reaches_bundled_openblas():
         assert n >= 1
     finally:
         parallel.set_blas_threads(parallel.os.cpu_count() or 1)
+
+
+def test_available_memory_respects_cgroup_limit(tmp_path, monkeypatch):
+    """云容器：/proc/meminfo 报整机，进程按 cgroup 上限被杀；可用内存取两者小的，页缓存不算占用。"""
+    G = 1 << 30
+    cg = tmp_path / "sys/fs/cgroup/memory/box"
+    cg.mkdir(parents=True)
+    (tmp_path / "proc/self").mkdir(parents=True)
+    (tmp_path / "proc/self/cgroup").write_text("4:memory:/box\n0::/\n", encoding="ascii")
+    (cg / "memory.limit_in_bytes").write_text(str(14 * G), encoding="ascii")
+    (cg / "memory.usage_in_bytes").write_text(str(6 * G), encoding="ascii")
+    (cg / "memory.stat").write_text(f"cache {4 * G}\ntotal_cache {4 * G}\n", encoding="ascii")
+    assert parallel._cgroup_headroom_gb(str(tmp_path)) == 12.0
+    (cg / "memory.limit_in_bytes").write_text(str(1 << 62), encoding="ascii")        # v1 不限
+    assert parallel._cgroup_headroom_gb(str(tmp_path)) is None
+    v2 = tmp_path / "v2"
+    (v2 / "sys/fs/cgroup").mkdir(parents=True)
+    (v2 / "proc/self").mkdir(parents=True)
+    (v2 / "proc/self/cgroup").write_text("0::/\n", encoding="ascii")
+    (v2 / "sys/fs/cgroup/memory.max").write_text(str(8 * G), encoding="ascii")
+    (v2 / "sys/fs/cgroup/memory.current").write_text(str(3 * G), encoding="ascii")
+    (v2 / "sys/fs/cgroup/memory.stat").write_text(f"anon {2 * G}\nfile {1 * G}\n", encoding="ascii")
+    assert parallel._cgroup_headroom_gb(str(v2)) == 6.0
+    (v2 / "sys/fs/cgroup/memory.max").write_text("max", encoding="ascii")
+    assert parallel._cgroup_headroom_gb(str(v2)) is None
+    if parallel.os.name != "nt":                                                   # Windows 走 GlobalMemoryStatusEx
+        monkeypatch.setattr(parallel, "_cgroup_headroom_gb", lambda: 2.0)
+        assert parallel.available_memory_gb() <= 2.0

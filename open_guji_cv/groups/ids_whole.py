@@ -5,7 +5,8 @@
 抽特征（`pix`：模糊后缩 16×16 的像素；`hog`：8 像素格、12 向、2×2 块归一的梯度方向直方图），
 在冻结模板库（每字的真实刻例）上训**二类岭回归**（目标 ±1，模板就是训练集），判别值绝对值不到 `min_margin` 弃权。
 
-- 只支持恰好两个成员字；每类模板少于 `min_class` 个，判成它也弃权。
+- 两类：单个二类岭回归（呂吕、徵徴）；三类及以上（2026-10-21，山由出）：一对多岭回归，判别值＝第一名与第二名得分之差。
+  每类模板少于 `min_class` 个，判成它也弃权。
 - 模板库格式同 `ids_online`（`templates={字: [size×size 的 uint8 墨迹图,…]}`），另在 `source.books` 里按模板顺序记所属册，
   供按册留一评测（判某册时模板不含该册）。
 - 在线字块与建库的字块都经 `norm`（<128 为墨，裁外框，缩放），所以两边一致。
@@ -32,6 +33,47 @@ def norm(gray: np.ndarray, size: int) -> np.ndarray | None:
     ys, xs = np.where(ink)
     crop = ink[ys.min():ys.max() + 1, xs.min():xs.max() + 1].astype(np.uint8) * 255
     return np.asarray(Image.fromarray(crop).resize((size, size), Image.BILINEAR), dtype=np.float32) / 255.0
+
+
+def clean_patch(gray: np.ndarray) -> np.ndarray:
+    """去邻格碎墨（2026-10-22，文意组字形第二路）：墨迹 8 连通域里，面积 ≥ 最大块 15% 的算主体；
+    其余小块贴边、落在主体外框（外扩 8%）之外、或面积不到最大块 1% 的抹白；主体级的块若贴边、不到最大块 35% 且细长（宽或高 < 12%）
+    也抹白（邻列笔画）。线上字块常带邻格碎墨，按墨迹外框归一后整字变形，論→諭、自→目 会高把握判错。cv2 惰性导入。"""
+    import cv2
+    g = np.asarray(gray)
+    ink = ink_of(g).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    if n <= 2:
+        return g
+    H, W = g.shape[:2]
+    areas = st[1:, cv2.CC_STAT_AREA]
+    big = areas.max()
+    main = {i + 1 for i, a in enumerate(areas) if a >= 0.15 * big}
+    xs0 = min(st[i, 0] for i in main)
+    ys0 = min(st[i, 1] for i in main)
+    xs1 = max(st[i, 0] + st[i, 2] for i in main)
+    ys1 = max(st[i, 1] + st[i, 3] for i in main)
+    mx, my = 0.08 * W, 0.08 * H
+    out = g.copy()
+    for i in range(1, n):
+        x, y, w, h, a = (int(v) for v in st[i])
+        touch = x <= 0 or x + w >= W or y <= 0 or y + h >= H
+        if i in main:
+            drop = touch and a < 0.35 * big and (w < 0.12 * W or h < 0.12 * H)
+        else:
+            inside = x >= xs0 - mx and x + w <= xs1 + mx and y >= ys0 - my and y + h <= ys1 + my
+            drop = touch or not inside or a < 0.01 * big
+        if drop:
+            out[lab == i] = 255
+    return out
+
+
+def aspect_ok(gray: np.ndarray, rng: tuple) -> bool:
+    """字块宽高比在 `rng=(lo, hi)` 内；超出多半是连进了邻字（如夹注两小字并成一块）。空 `rng` 不查。"""
+    if not rng:
+        return True
+    h, w = np.asarray(gray).shape[:2]
+    return rng[0] <= w / max(h, 1) <= rng[1]
 
 
 def _crop(img: np.ndarray, region: tuple) -> np.ndarray:
@@ -79,8 +121,20 @@ def fit(bank: dict, kind: str, region: tuple, lam: float):
     if hit is not None and hit[0] is bank:
         return hit[1]
     names = tuple(sorted(n for n, ts in bank.items() if ts))
-    if len(names) != 2:
+    if len(names) < 2:
         res = (names, None)
+    elif len(names) > 2:
+        # 一对多：每类一列权重（目标 ±1），共用同一个 x'x
+        xs, lab = [], []
+        for n in names:
+            for t in bank[n]:
+                xs.append(np.r_[feature(t, kind, region), 1.0])
+                lab.append(n)
+        x = np.array(xs, np.float64)
+        reg = lam * np.eye(x.shape[1])
+        reg[-1, -1] = 0.0
+        tgt = np.array([[1.0 if l == n else -1.0 for n in names] for l in lab])
+        res = (names, np.linalg.solve(x.T @ x + reg, x.T @ tgt))
     else:
         xs, ts = [], []
         for sign, n in zip((-1.0, 1.0), names):
@@ -96,7 +150,8 @@ def fit(bank: dict, kind: str, region: tuple, lam: float):
 
 
 def score(gray: np.ndarray, bank: dict, kind: str, region: tuple, lam: float, size: int):
-    """→ `(字, 判别值绝对值, {字: 判别值})`；空白、库不是恰好两类 → `(None, 0.0, {})`。判别值为正偏向名字排序靠后的字。"""
+    """→ `(字, 判别值绝对值, {字: 判别值})`；空白、库不足两类 → `(None, 0.0, {})`。两类：判别值为正偏向名字排序靠后的字；
+    三类以上：字＝得分最高的类，判别值＝与第二名的得分差，`{字: 得分}`。"""
     return score_norm(norm(np.asarray(gray), size), bank, kind, region, lam)
 
 
@@ -105,7 +160,12 @@ def score_norm(x: np.ndarray | None, bank: dict, kind: str, region: tuple, lam: 
     names, w = fit(bank, kind, region, lam)
     if x is None or w is None:
         return None, 0.0, {}
-    d = float(np.r_[feature(x, kind, region), 1.0] @ w)
+    f = np.r_[feature(x, kind, region), 1.0]
+    if w.ndim == 2:
+        sc = f @ w
+        o = np.argsort(-sc)
+        return names[o[0]], float(sc[o[0]] - sc[o[1]]), {n: float(v) for n, v in zip(names, sc)}
+    d = float(f @ w)
     return (names[1] if d > 0 else names[0]), abs(d), {names[0]: -d, names[1]: d}
 
 

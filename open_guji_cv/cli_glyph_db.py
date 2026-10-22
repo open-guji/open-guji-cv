@@ -39,6 +39,9 @@ def cmd_glyph_db(args):
         os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
     assert_workspace_declared()
 
+    if args.action in PIN_ACTIONS:
+        _pin_action(args)
+        return
     db_path = glyph_db_path()
     store_dir = glyph_store_path(args.store)
     db = GlyphDB(db_path)
@@ -69,11 +72,13 @@ def cmd_glyph_db(args):
             missing = [str(p) for p in extras if ".borrowed" in p.parts and not p.is_dir()]
             if missing:
                 print(f"借库不存在：{missing}（写中心库工作区名的，先 guji db pull 拉一次）"); sys.exit(1)
+            import os
+            jobs = getattr(args, "jobs", None) or (os.cpu_count() or 1)
             if extras:
                 print(f"借库（冷启动）：{', '.join(map(str, extras))}")
-                summary = rebuild_from_store(store_dir, db_path, extra_stores=extras)
+                summary = rebuild_from_store(store_dir, db_path, extra_stores=extras, jobs=jobs)
             else:
-                summary = rebuild_from_store(store_dir, db_path)
+                summary = rebuild_from_store(store_dir, db_path, jobs=jobs)
             db = None
             assert_db_not_silently_empty(db_path, store_dir)
             # 补放两次导出之间审进库、真源还没跟上的人裁（值守 #115，2026-09-27）；--no-replay 跳过
@@ -90,7 +95,10 @@ def cmd_glyph_db(args):
             summary = import_fonts_from_manifest(
                 db, args.manifest, only=args.edition,
                 charset=args.charset, limit=args.limit,
-                jobs=args.jobs, vertical=args.vertical)
+                jobs=getattr(args, "jobs", None) or 1, vertical=args.vertical,
+                use_pack=not getattr(args, "no_pack", False))
+        elif args.action == "font-pack-push":
+            summary = _font_pack_push(db, args)
         elif args.action == "set-edition":
             # 一本书一个 edition：把库里全部刻本字形并到 --edition（字形库 06）
             if not args.edition:
@@ -134,13 +142,74 @@ def cmd_glyph_db(args):
             db.close()
 
 
+def _font_pack_push(db, args) -> dict:
+    """`glyph-db font-pack-push`：把库里已导好的字体域导成预建件、存进 R2（`clustering/font_pack.py`）。
+
+    手动跑，要正式令牌（同 `products pack push-index`）。只推与清单、字表、竖排开关对得上的那几套：
+    库里记的字体文件与字表 sha（`font_manifests`）和现在算的不一样就不推——包的键按现在的输入算，
+    拿旧库的行配新键会让别的机器拷到不对的字形。"""
+    from .clustering import font_pack as FP
+    from .clustering.font_glyphs import load_charset, load_manifest
+    from .clustering.glyph_fp import font_domain_manifest
+    import hashlib
+    specs, data = load_manifest(args.manifest)
+    if args.edition:
+        specs = [x for x in specs if x.edition_tag == args.edition]
+    chars = load_charset(args.charset or data["charset"])
+    have = font_domain_manifest(db.db_path)
+    saved, skipped = [], []
+    for spec in specs:
+        man = have.get(spec.edition_tag) or {}
+        want_fonts = {p.name: FP._sha_file(p) for p in spec.font_paths if p.exists()}
+        if (man.get("fonts") != want_fonts or bool(man.get("vertical")) != bool(args.vertical)
+                or man.get("chars_sha256") != hashlib.sha256("".join(chars).encode("utf-8")).hexdigest()):
+            skipped.append({"edition": spec.edition_tag, "why": "库里这套字体域与清单／字表／--vertical 对不上，先重导"})
+            continue
+        saved.append(FP.save_pack(db, spec, chars, args.vertical))
+    pushed = FP.push_packs()
+    if not getattr(args, "keep_pack", False):
+        for f in saved:
+            f.unlink(missing_ok=True)
+    return {"saved": [f.name for f in saved], "pushed": pushed, "skipped": skipped}
+
+
+#: 字形库按版本钉（GUJI-727，`ops/glyph_snapshot.py`）
+PIN_ACTIONS = ("snapshot", "pin-build", "pin-list", "pin-verify", "snapshot-upload")
+
+
+def _pin_action(args) -> None:
+    """`glyph-db snapshot | pin-build | pin-list | pin-verify | snapshot-upload`。只写本机；
+    清单推中心库走 `guji db push`（新清单登记的文本随 push 传 R2），`snapshot-upload --execute` 单独补传。"""
+    from .core.workspace import workspace_root
+    from .ops import glyph_snapshot as G
+    ws = workspace_root()
+    if ws is None:
+        print("要 -w <工作区>"); sys.exit(1)
+    need_pin = args.action in ("pin-verify", "snapshot-upload")
+    if need_pin and not args.pin:
+        print(f"{args.action} 要 --pin N"); sys.exit(1)
+    if args.action == "snapshot":
+        out = G.snapshot(ws, note=args.note or "", require_clean=not args.allow_dirty)
+    elif args.action == "pin-build":
+        out = ([G.build_pinned_db(ws, args.pin, force=args.force)] if args.pin
+               else G.ensure_pins(ws) if not args.force
+               else [G.build_pinned_db(ws, n, force=True) for n in sorted(G.pins_in_use(ws))])
+    elif args.action == "pin-list":
+        out = G.list_pins(ws)
+    elif args.action == "pin-verify":
+        out = G.verify_remote(ws, args.pin)
+    else:
+        out = G.upload_blobs(ws, args.pin, execute=args.execute)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
 def add_parser(sub) -> None:
     """在 `sub`（argparse 子命令表）上注册 `glyph-db`。"""
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
-                            "set-edition"])
+                            "set-edition", "font-pack-push", *PIN_ACTIONS])
     p.add_argument("-w", "--workspace", default=None,
                    help="工作区仓根（含 books/、output/glyph.db）。同 v2 命令那个 -w：给了就覆盖"
                         "本次调用的 GUJI_WORKSPACE，不给就退回读环境变量。任务卡 #54 第13条：这个"
@@ -178,8 +247,20 @@ def add_parser(sub) -> None:
                    help="字表文件（import-font 用，默认取 manifest 里的）")
     p.add_argument("--limit", type=int, default=None,
                    help="只导前 N 个字（import-font 冒烟测试用）")
-    p.add_argument("--jobs", type=int, default=1,
-                   help="import-font 并行渲染进程数（渲染+归一是纯 CPU；"
-                        "写库仍单线程）")
+    p.add_argument("--jobs", type=int, default=None,
+                   help="并行进程数：import-font 渲染（缺省 1）；rebuild 算派生表示（缺省 CPU 数）。"
+                        "渲染、归一、骨架、HOG 是纯 CPU，写库仍单线程，结果与单进程逐位相同")
+    p.add_argument("--no-pack", action="store_true",
+                   help="import-font 用：不找字体域预建件（本机或 R2），一律逐字渲染")
+    p.add_argument("--keep-pack", action="store_true",
+                   help="font-pack-push 用：推完把本机导出的包留在 cache/fontdb/（缺省删掉，省盘）")
     p.add_argument("--title", default=None, help="书名")
+    p.add_argument("--pin", type=int, default=None,
+                   help="pin-build / pin-verify / snapshot-upload 用：字形库版本号 N（g<N>）")
+    p.add_argument("--note", default=None, help="snapshot 用：这一版的说明（记进清单）")
+    p.add_argument("--force", action="store_true", help="pin-build 用：库在且对得上也重建")
+    p.add_argument("--execute", action="store_true",
+                   help="snapshot-upload 用：真传 R2（要正式令牌 GUJI_DATA_TOKEN；不加只演练）")
+    p.add_argument("--allow-dirty", action="store_true",
+                   help="snapshot 用：数据目录有没推的改动也出（快照就对不上中心库的 rev，只供试验）")
 

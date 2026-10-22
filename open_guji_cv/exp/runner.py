@@ -199,7 +199,7 @@ def select_pages(cfg: ExpConfig, upstream_root: Path, book: str, pipeline, steps
         have = _pages_with(upstream_root, book, s)
         if have:
             break
-    sel = cfg.pages
+    sel = cfg.pages.get(book, "all") if isinstance(cfg.pages, dict) else cfg.pages   # 按册给页（粗校基准）
     if sel in (None, "all"):
         return have
     if sel == "body":

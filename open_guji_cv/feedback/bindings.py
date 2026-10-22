@@ -569,13 +569,16 @@ def usable(row: dict | None, event_ts: str | None = None) -> str | None:
     return None
 
 
-def rebind_library_shapes(book: str, shapes: dict[str, str], log=None) -> dict[str, str]:
+def rebind_library_shapes(book: str, shapes: dict[str, str], log=None,
+                          lost: dict[str, dict] | None = None) -> dict[str, str]:
     """字形库人裁（`seed_admit._human_shapes`，按入库时的编号）→ 现在该落的编号。
 
     以该编号**最后一条**裁决事件的绑定状态为准：仍有效照旧、顺移了改绑、其余丢掉。
     最后一条裁决的字与库里不同（人后来改判了，库因「同一实例只准入一次」没跟上）→ 库里这份丢掉，
     由事件那条路给新字（vol02 `151:9:20` 库里「一」、09-25 改判「二」）。
     库里有而事件日志里没有的（很老的数据）原样保留——没有依据就不动，与 09-25 之前一致。
+    传 `lost`（空 dict）时，因绑定不可用而丢掉的那些按原编号记进去（同 `lookup.human_chars` 的 `lost`）；
+    「人后来改判」那种不算丢。
     """
     try:
         b = book_bindings(book, log)
@@ -595,4 +598,10 @@ def rebind_library_shapes(book: str, shapes: dict[str, str], log=None) -> dict[s
         nk = usable(r)
         if nk:
             out[nk] = ch
+        elif lost is not None:
+            lost[k] = {"char": ch, "status": r.get("status"), "event": r.get("event"),
+                       "ts": r.get("ts"), "src": "glyph_db"}
+    if lost is not None:
+        for k in [k for k in lost if k in out]:
+            del lost[k]
     return out

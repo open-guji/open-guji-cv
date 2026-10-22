@@ -126,7 +126,7 @@ def test_glyph_match_page_fails_when_patch_unreadable(tmp_path, monkeypatch, ws,
     ctx, _ = run_keben_from_raw(tmp_path, monkeypatch, book=bk, gray=fixture_page)
     step = STEPS["glyph_match"]
     monkeypatch.setattr(type(step), "_matcher", lambda self, p: _StubMatcher())
-    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp")
+    ctx.params["glyph_match"] = GlyphMatchParams(db_fingerprint="testfp", font_tier=False, batch_knn=False)
 
     # 对照：图读得到时这一页正常出产物
     ok = step.run_page(ctx, 1)["glyph_match"]
@@ -184,7 +184,7 @@ class _CtxPatch:
 
 def test_seed_admit_page_patch_raises_instead_of_none(monkeypatch):
     from open_guji_cv.clustering import cnn_candidates
-    from open_guji_cv.steps.seed_admit import PatchUnavailable, _cnn_top, _image_ranks, _page_patch
+    from open_guji_cv.steps.seed_admit import PatchUnavailable, _image_ranks, _page_patch
 
     class _Cnn:                     # CNN 通道开着（有 checkpoint）——这时才会去读图
         available = True
@@ -192,22 +192,9 @@ def test_seed_admit_page_patch_raises_instead_of_none(monkeypatch):
 
     with pytest.raises(PatchUnavailable, match="p0020c03s5a"):
         _page_patch(_CtxNoPatch(), 20, 3, 5, "a")
-    # CNN 背书 / 组内检索：以前没图 → None（这一路悄悄关掉），现在没图 → 抛错
-    with pytest.raises(PatchUnavailable):
-        _cnn_top(_CtxNoPatch(), 20, 3, 5, None)
+    # 组内检索：以前没图 → None（这一路悄悄关掉），现在没图 → 抛错
     with pytest.raises(PatchUnavailable):
         _image_ranks(_CtxNoPatch(), 20, 3, 5, None, ["甲", "乙"])
-
-
-def test_seed_admit_cnn_top_skips_image_when_channel_off(monkeypatch):
-    """没 checkpoint / 没 torch：CNN 通道本来就不触发，不去读图、不报错。"""
-    from open_guji_cv.clustering import cnn_candidates
-    from open_guji_cv.steps.seed_admit import _cnn_top
-
-    class _Cnn:
-        available = False
-    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Cnn())
-    assert _cnn_top(_CtxNoPatch(), 20, 3, 5, None) is None
 
 
 def test_seed_admit_page_patch_uses_ctx_image_with_patch_key():
@@ -255,24 +242,16 @@ def test_seed_admit_page_patch_book_id_mode(tmp_path, monkeypatch):
 _SA_BOOK, _SA_PAGE, _SA_COL = "tbook", 1, 1
 
 
-def _seed_admit_page(tmp_path, monkeypatch, *, patch_missing, cnn_on=True, logs=None):
+def _seed_admit_page(tmp_path, monkeypatch, *, patch_missing, logs=None):
     """一页两格、缓存里一张字块都没有（= 快照沙箱）：
     slot 18 match_replace 放行（整理本「𠮓」，库首位「變」，D #178 那组）后走组内定形 → 要读图；
-    slot 19 没整理本、库在灰区 → CNN 背书要读图。"""
+    slot 19 没整理本、库在灰区 → 不读图（CNN 背书通道已删）。"""
     from helpers import make_book, make_ctx, page_match, write_product
 
     import open_guji_cv.steps  # noqa: F401
-    from open_guji_cv.clustering import cnn_candidates
     from open_guji_cv.core.step import STEPS
     from open_guji_cv.products.kinds.recog import AlignRec, PageAlignRef
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
-
-    class _Cnn:
-        available = cnn_on
-
-        def emb_topk(self, *a, **k):
-            return [("甲", 0.9)]
-    monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Cnn())
 
     ctx = make_ctx(tmp_path, make_book(_SA_BOOK), monkeypatch=monkeypatch)
     if logs is not None:
@@ -306,18 +285,12 @@ def test_seed_admit_patch_missing_skip_finishes_and_counts(tmp_path, monkeypatch
     recs = {r.slot: r for cc in d.columns for r in cc.chars}
     assert set(recs) == {18, 19}
     assert recs[18].evidence["patch_missing"] == ["form"]
-    assert recs[19].evidence["patch_missing"] == ["cnn"]
+    assert "patch_missing" not in recs[19].evidence
     n_missing = sum(1 for r in recs.values() if "patch_missing" in r.evidence)
+    assert n_missing == 1
     summary = [s for s in logs if "patch_missing=skip" in s]
     assert len(summary) == 1 and f"{n_missing} 格读不到字块" in summary[0], logs
-    assert "'form': 1" in summary[0] and "'cnn': 1" in summary[0]
-
-
-def test_seed_admit_patch_missing_skip_quiet_when_lane_off(tmp_path, monkeypatch):
-    """CNN 通道没开（没 checkpoint）时根本不读图，不算「读不到」。"""
-    d = _seed_admit_page(tmp_path, monkeypatch, patch_missing="skip", cnn_on=False)
-    recs = {r.slot: r for cc in d.columns for r in cc.chars}
-    assert "patch_missing" not in recs[19].evidence
+    assert "'form': 1" in summary[0]
 
 
 def test_seed_admit_patch_missing_param_validation_and_hash():

@@ -66,11 +66,25 @@ SELF_CHECK = "import torch, scipy, cv2, joblib, sklearn, yaml; print('torch', to
 CLASSIFY = [
     (re.compile(r"ModuleNotFoundError: No module named '([\w\.]+)'"), "pip", "缺 Python 模块"),
     (re.compile(r"No space left on device|磁盘空间不足"), "stop", "磁盘满：删缓存/旧产物后重跑"),
-    (re.compile(r"Killed|MemoryError|returned non-zero exit status -9|exit code -9"), "retry-lowjobs", "疑似内存不足"),
+    (re.compile(r"Killed|MemoryError|BrokenProcessPool|returned non-zero exit status -9|exit code -9"), "retry-lowjobs",
+     "疑似内存不足（子进程被杀）"),
     (re.compile(r"sha256 对不上.*_manifest\.jsonl"), "stop", "快照行尾不一致：改用 zl.py import-snap（容忍 CRLF）"),
     (re.compile(r"rate limit|Connection (reset|aborted)|Temporary failure|timed out"), "retry", "网络抖动"),
 ]
 PIP_NAME = {"joblib": "joblib", "sklearn": "scikit-learn==1.9.1", "cv2": "opencv-python-headless", "yaml": "pyyaml"}
+
+
+def halve_jobs(cmd: list[str]) -> list[str] | None:
+    """`--jobs N` → `--jobs N//2`（至少 1）；已是 1 或没有 --jobs 返回 None（不能再降）。"""
+    cmd = list(cmd)
+    if "--jobs" not in cmd:
+        return None
+    i = cmd.index("--jobs") + 1
+    n = int(cmd[i])
+    if n <= 1:
+        return None
+    cmd[i] = str(max(1, n // 2))
+    return cmd
 
 
 def now() -> str:
@@ -116,7 +130,7 @@ class Ctx:
             f.write(line + "\n")
 
 
-def sh(ctx: Ctx, cmd, cwd=None, env_extra=None, retries=2, lowjobs_fix=None, check=True, tail=4000):
+def sh(ctx: Ctx, cmd, cwd=None, env_extra=None, retries=2, lowjobs_fix=halve_jobs, check=True, tail=4000):
     """跑一条命令：失败分类、自动重试。返回 (rc, 输出末 tail 字)；tail=None 返回全文（要解析 JSON 时用，别截断）。"""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8", **(env_extra or {})}
     if ctx.ws:
@@ -145,8 +159,9 @@ def sh(ctx: Ctx, cmd, cwd=None, env_extra=None, retries=2, lowjobs_fix=None, che
             if act == "retry" and attempt < retries:
                 time.sleep(2 ** (attempt + 1))
                 break
-            if act == "retry-lowjobs" and attempt < retries and lowjobs_fix:
+            if act == "retry-lowjobs" and attempt < retries and lowjobs_fix and lowjobs_fix(cmd):
                 cmd = lowjobs_fix(cmd)
+                ctx.log("降并行重试：" + " ".join(cmd[cmd.index("--jobs"):cmd.index("--jobs") + 2]))
                 break
             return fail(ctx, cmd, p.returncode, out, why, check, tail)
         else:
@@ -202,6 +217,10 @@ def bg_wait(ctx, cmd, tag, poll=20, **kw):
             if r.returncode == 0 and not kw.get("_retried"):
                 ctx.log("补装依赖后重试一次")
                 return bg_wait(ctx, cmd, tag, poll, _retried=True)
+        if m and act == "retry-lowjobs" and halve_jobs(cmd):
+            # 已完成的页 guji 自己跳过，降并行续跑不重算（M9 基线 vol06：4 进程被 OOM 杀，2 进程 22 分跑完）
+            ctx.log(f"失败分类：{why}；降并行续跑")
+            return bg_wait(ctx, halve_jobs(cmd), tag, poll, **kw)
     write_next(ctx, f"后台步 {tag} 失败 rc={p.returncode}", ["日志：" + str(lf), "```", out[-1500:], "```"])
     raise Stop(f"{tag} 失败")
 
@@ -261,12 +280,28 @@ def ws_remote_url(cv_repo) -> str | None:
     return url.replace("open-guji-cv", "guji-workspace")
 
 
+def ws_sparse_patterns(ws_name: str, book: str) -> list[str]:
+    """guji-workspace 是「仓根/<书目录>/data_full/<丛编>/<册>/」：只取本书本册原图，其余文件照常。"""
+    return ["/*", "!/*/data_full/*/*/", f"/{ws_name}/data_full/*/{book}/"]
+
+
 def st_ws(ctx):
-    if not in_git_repo(ctx.ws):
+    root = ctx.ws.parent                            # 工作区是 guji-workspace 仓里的一个书目录
+    if in_git_repo(ctx.ws):                         # 已有仓（工作区就是仓根或仓内子目录）：以仓根为准
+        top = subprocess.run(["git", "rev-parse", "--show-toplevel"], cwd=ctx.ws, capture_output=True, text=True).stdout.strip()
+        root = Path(top) if top else ctx.ws
+    rel = ctx.ws.resolve().relative_to(root.resolve()).as_posix() if ctx.ws.resolve().is_relative_to(root.resolve()) else ctx.ws.name
+    pats = ws_sparse_patterns(rel, ctx.book) if rel != "." else ["/*", "!/data_full/*/", f"/data_full/{ctx.book}/"]   # 老布局：仓根就是书目录
+    if not in_git_repo(root):
+        if root.exists() and any(root.iterdir()):
+            write_next(ctx, "工作区父目录不是 guji-workspace 仓", [f"`{root}` 非空又不是 git 仓；把 --ws 指到 `<仓根>/<书目录>`，仓根要空或不存在。"])
+            raise Stop("工作区父目录不是仓")
         url = os.environ.get("ZL_WS_URL") or ws_remote_url(ctx.cv) or WS_URL
-        sh(ctx, ["git", "clone", "--filter=blob:none", "--sparse", url, str(ctx.ws)], cwd=ctx.ws.parent)
-        # 只要本书原图：data_full/<册>，其余顶层目录照常
-        sh(ctx, ["git", "sparse-checkout", "set", "--no-cone", "/*", "!/data_full/*/", f"/data_full/{ctx.book}/"], cwd=ctx.ws)
+        root.parent.mkdir(parents=True, exist_ok=True)
+        sh(ctx, ["git", "clone", "--filter=blob:none", "--sparse", url, str(root)], cwd=root.parent)
+        sh(ctx, ["git", "sparse-checkout", "set", "--no-cone", *pats], cwd=root)
+    elif sh(ctx, ["git", "config", "--get", "core.sparseCheckout"], cwd=root, check=False, retries=0)[1].strip() == "true":
+        sh(ctx, ["git", "sparse-checkout", "add", pats[-1]], cwd=root)   # 已是稀疏克隆：补上本册
     pin = os.environ.get("ZL_WS_PIN")
     if pin:
         sh(ctx, ["git", "checkout", pin], cwd=ctx.ws)
@@ -275,6 +310,13 @@ def st_ws(ctx):
         "cv": sh(ctx, ["git", "rev-parse", "HEAD"])[1].strip(),
         "ws": sh(ctx, ["git", "rev-parse", "HEAD"], cwd=ctx.ws)[1].strip(),
     }
+
+
+def st_db(ctx):
+    """S2 拉中心库（册配置、人裁、台账、字形库都在库里，工作区只有标记 .central.json）。"""
+    if not (ctx.ws / ".central.json").exists():
+        raise Skip("工作区没迁中心库（无 .central.json）")
+    sh(ctx, ctx.guji("db", "pull", "-w", ctx.ws))
 
 
 def _indent(line: str) -> int:
@@ -440,9 +482,17 @@ def preset_label(ctx) -> str:
     return (f"预设 {ctx.preset}" if ctx.preset else "标准配置（无预设）") + ("，关 shadow_veto" if ctx.no_shadow_veto else "")
 
 
+def book_yaml(ctx) -> Path:
+    """书 yaml 的真位置：迁了中心库的在数据目录 books/（`core.workspace.books_dir`），没迁的在工作区 books/。"""
+    rc, out = sh(ctx, [ctx.venv_py, "-c", "import sys; from pathlib import Path; from open_guji_cv.core.workspace import books_dir; "
+                       "print(books_dir(Path(sys.argv[1])))", ctx.ws], check=False, retries=0)
+    d = out.strip().splitlines()[-1] if rc == 0 and out.strip() else ""
+    return (Path(d) if d and d != "None" else ctx.ws / "books") / f"{ctx.book}.yaml"
+
+
 def st_yaml(ctx):
     """把标准 Step7 开关补进书 yaml：只补缺的键；已有键不改，与标准值不同的只报告（--set 除外），其余文字、注释、排版一字不动。"""
-    f = ctx.ws / "books" / f"{ctx.book}.yaml"
+    f = book_yaml(ctx)
     if not f.exists():
         write_next(ctx, "缺书 yaml", [f"`{f}` 不存在。拷一份同类册的 yaml 改册号、page_split、版面先验；缺 `period_prior` 会被闸 2/3 拦。"])
         raise Stop("缺书 yaml")
@@ -463,9 +513,14 @@ def st_yaml(ctx):
             f"  {sec}:\n" + "".join(f"    {k}: {_fmt(v)}\n" for k, v in kv.items()) for sec, kv in blocks), encoding="utf-8")
         write_next(ctx, "书 yaml 需手贴标准开关", [f"yaml 写法超出自动补丁范围（{changed}）。把 `{snip}` 里的键合并进 `{f}`，然后原样重跑。"])
         raise Stop("书 yaml 需手贴开关")
+    central = not f.resolve().is_relative_to(ctx.ws.resolve())
+    if changed and central and not ctx.extra:
+        # 册配置在中心库、各机共用：脚本的「标准开关」不替团队改真源（M9 基线：补了 6 个键，seed_admit 与别人跑的不一样）
+        ctx.log(f"ⓘ 中心库册配置与脚本标准开关不同，不改（要改用 --set 并 guji db sync）：{changed}")
+        changed = {}
     if changed:
         f.write_bytes(new_t.encode("utf-8"))
-        ctx.log(f"yaml 已补标准开关（只动这些行），改动项：{changed}")
+        ctx.log(f"yaml 已补标准开关（只动这些行），改动项：{changed}" + ("；在中心库，记得 guji db sync" if central else ""))
     else:
         ctx.log("yaml 已是标准开关")
     txt = new_t
@@ -508,8 +563,9 @@ def st_glyphdb(ctx):
 
 
 def st_cache_verify(ctx):
-    sh(ctx, ctx.guji("cache", "verify", "--book", ctx.book, "-w", ctx.ws), retries=0, check=False)
-    rc, out = sh(ctx, ctx.guji("cache", "verify", "--book", ctx.book, "--fix", "-w", ctx.ws), retries=0, check=False)
+    rc, _ = sh(ctx, ctx.guji("cache", "verify", "--book", ctx.book, "-w", ctx.ws), retries=0, check=False)
+    if rc != 0:     # 有错位才修；无错位时 --fix 是同样的一遍全量校验（vol06 约 3.5 分）
+        sh(ctx, ctx.guji("cache", "verify", "--book", ctx.book, "--fix", "-w", ctx.ws), retries=0, check=False)
 
 
 def st_rare(ctx):
@@ -518,7 +574,10 @@ def st_rare(ctx):
     if not need:
         ctx.log("无 rare_candidates 步，跳过")
         return
-    sh(ctx, ctx.guji("cache", "build-rare-index", "--book", ctx.book, "--jobs", ctx.jobs, "-w", ctx.ws))  # 已有表自动跳过
+    # 先拉全字表向量包（与本机同规格才认），拉不到再现建（vol06 现建 12 分）
+    rc, _ = sh(ctx, ctx.guji("cache", "pull-rare-index", "--book", ctx.book, "-w", ctx.ws), check=False, retries=1)
+    if rc != 0:
+        sh(ctx, ctx.guji("cache", "build-rare-index", "--book", ctx.book, "--jobs", ctx.jobs, "-w", ctx.ws))  # 已有表自动跳过
     sh(ctx, ctx.guji("cache", "warm", "--book", ctx.book, "--pages", "all", "--jobs", ctx.jobs, "-w", ctx.ws))
     bg_wait(ctx, ctx.guji("pipeline", "keben_body_v2", ctx.book, *_pages_all(ctx), "--from", "rare_candidates", "--to", "rare_candidates"), "rare")
 
@@ -545,6 +604,10 @@ def st_audit(ctx):
     out = ctx.reports / "_export"
     sh(ctx, ctx.guji("export", "format", ctx.book, "-w", ctx.ws, "--out", out), check=False)  # 只为出 lines.md 给 jys 用
     sh(ctx, ctx.guji("audit", "jys", ctx.book, "-w", ctx.ws, "--export-dir", out), check=False)
+    sh(ctx, ctx.guji("audit", "reasons", ctx.book, "-w", ctx.ws), check=False)   # 待审格主成因码，派单用（GUJI-668）
+    base = os.environ.get("ZL_BASE_PRODUCTS")
+    if base:        # 换基线：放行变化的格必看图（GUJI-664），进联系页、看图闸
+        sh(ctx, ctx.guji("audit", "changes", ctx.book, "-w", ctx.ws, "--base", base))
 
 
 # ───────── S8 看图联系页 ─────────
@@ -661,6 +724,9 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     if not jf.exists():
         raise Stop(f"没有 {jf.name}：先跑 audit 步")
     rows = contact_rows(json.loads(jf.read_text(encoding="utf-8")))
+    have = {r["id"] for r in rows}
+    rows += [{"id": r["id"], "char": r["char"], "witness": {"上一基线": r["old"]} if r.get("old") else None, "ctx": None}
+             for r in admit_change_rows(ctx) if r["id"] not in have]
     outd = ctx.reports / "联系页"
     outd.mkdir(parents=True, exist_ok=True)
     if not rows:
@@ -695,7 +761,9 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
                 continue
             y0, y1 = contact_window([x.bbox_col for x in recs], pos, 1, height=img.shape[0])
             tiles.append(render_contact_tile(img, y0, y1, recs[pos].bbox_col, n, tag=jiazhu_side(sub) or ""))
-            e["ok"] = True
+            (outd / "tiles").mkdir(exist_ok=True)
+            cv2.imwrite(str(outd / "tiles" / f"{n:04d}.png"), tiles[-1])     # 单格图：交外部模型看（vision_ask.py）
+            e["ok"], e["tile"] = True, f"tiles/{n:04d}.png"
         except Exception as ex:  # noqa: BLE001  单格失败只标注，不拖垮整册
             e["why"] = f"{type(ex).__name__}: {ex}"
     sheets = []
@@ -708,11 +776,18 @@ def build_contact_sheets(ctx, per: int = 24) -> Path | None:
     for k, e in enumerate(ok_entries):
         e["sheet_idx"] = k // per
     md = contact_md(ctx.book, entries, sheets)
+    (outd / "tiles.json").write_text(json.dumps(entries, ensure_ascii=False, indent=1, default=str), encoding="utf-8")
     mdp = outd / f"{ctx.book}.看图联系页.md"
     mdp.write_text(md, encoding="utf-8")
     ctx.log(f"联系页：{len(ok_entries)}/{len(rows)} 格成图，{len(sheets)} 页 → {outd}")
     check_contact(ctx, entries, mdp)
     return mdp
+
+
+def admit_change_rows(ctx) -> list[dict]:
+    """`audit changes` 出的放行变化格（没设 ZL_BASE_PRODUCTS 就没有）。"""
+    f = ctx.reports / f"{ctx.book}.放行变化.json"
+    return json.loads(f.read_text(encoding="utf-8")).get("rows", []) if f.exists() else []
 
 
 def st_contact(ctx):
@@ -731,6 +806,18 @@ def st_vision_gate(ctx):
             f"3. 结论写 `reports/{ctx.book}/看图结论.jsonl`（`ts` 要填；格式见 `open_guji_cv/feedback/vision.py`），再 `zl.py run --only vision-gate`。",
         ])
         raise Gate("等看图结论")
+    seen = set()
+    for line in jl.read_text(encoding="utf-8").splitlines():
+        try:
+            seen.add(json.loads(line).get("cell"))
+        except ValueError:
+            pass
+    left = [r["id"] for r in admit_change_rows(ctx) if r["id"] not in seen]
+    if left:        # 放行变化必看图：一格不落（GUJI-664）
+        write_next(ctx, f"放行变化还有 {len(left)} 格没看图", [
+            f"看 `reports/{ctx.book}/{ctx.book}.放行变化.md` 与联系页，把这些格的结论补进 `看图结论.jsonl`，再 `zl.py run --only vision-gate`：",
+            "", *[f"- `{x}`" for x in left[:200]]])
+        raise Gate(f"放行变化 {len(left)} 格没看图")
     sh(ctx, ctx.guji("events", "import-vision", jl, "--book", ctx.book, "--dry-run", "-w", ctx.ws))
     sh(ctx, ctx.guji("events", "import-vision", jl, "--book", ctx.book, "-w", ctx.ws))
 
@@ -742,7 +829,7 @@ class Gate(Exception):
 def st_sheet(ctx):
     sh(ctx, ctx.guji("audit", "sheet", ctx.book, "-w", ctx.ws))
     write_next(ctx, "请审单已生成，等用户审", [
-        f"`reports/{ctx.book}/{ctx.book}.请审单.md`；第 4 节（看图改判/看不清）要手工追加。",
+        f"`reports/{ctx.book}/{ctx.book}.请审单.md`（第 4、5 节已按看图结论填好，发出前扫一眼）。",
         f"审完：`zl.py run --only human-count --since <请审单时刻>`，再 `zl.py run --from export`。",
     ])
     raise Gate("等人审（请审单）")
@@ -761,14 +848,30 @@ def products_dir(ctx) -> Path:
     return Path(env).expanduser() if env else ctx.ws / "products"
 
 
+def chapter_no(ctx) -> str:
+    """章号 = 册号补足三位（vol04 → 004）。"""
+    return re.sub(r"\D", "", ctx.book).zfill(3)
+
+
+def text_id(ctx) -> str:
+    """book-text 条目 id = 书目录名 `<id>-<书名>` 的 id 段（四庫總目 96mid1ogzk）；ZL_TEXT_ID 可覆盖。"""
+    return os.environ.get("ZL_TEXT_ID") or ctx.ws.name.split("-", 1)[0]
+
+
 def st_export(ctx):
     if ctx.st.get("human_verdicts"):
         sh(ctx, ctx.guji("pipeline", "keben_body_v2", ctx.book, *_pages_all(ctx), "--from", "seed_admit"))
-    num = re.sub(r"\D", "", ctx.book).zfill(3)
+    tv = os.environ.get("ZL_TEXT_VERSION") or ctx.st.get("text_version")
+    if not tv:      # 不替人猜：已在 book-text 上的册写线上现行版本，回落 0.1.0 会让版本号倒退（GUJI-679）
+        write_next(ctx, "导出要给文本版本号", [
+            "首次出写 `ZL_TEXT_VERSION=0.1.0`；已在 book-text 上的册写线上现行版本（册目录 `index.json` 的 `chapters[].text_version`）。",
+            "设好后原样重跑；版本号记进状态文件，之后不用再给。"])
+        raise Stop("缺 ZL_TEXT_VERSION")
+    ctx.st["text_version"] = tv
+    num = chapter_no(ctx)
     out = ctx.reports / "_export"
     cmd = [ctx.venv_py, "scripts/export_guji_format.py", "--products", products_dir(ctx), "--book", ctx.book, "--chapter", num,
-           "--out", out, "--format", "char-cord", "--keys", "cv",
-           "--text-version", ctx.st.get("text_version") or "0.1.0"]    # 首次出 0.1.0；补丁版在状态里记 text_version
+           "--out", out, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
     meta = CV / f"doc/formats/samples/guji_format_v0.1/meta_{ctx.book}.json"
     if meta.exists():
         cmd += ["--meta", meta]
@@ -797,19 +900,65 @@ def st_taboo(ctx):
     ctx.log(f"避諱表 → {nd}")
 
 
+def pending_draft(ctx) -> Path:
+    return ctx.reports / "_pending" / f"{chapter_no(ctx)}.pending.json"
+
+
+def st_pending(ctx):
+    """S11-b 机器部分：按现行产物出本章待审单**草稿**（reports/<册>/_pending/），给 close-check 2c 核 □ 去向。
+    不写中心库的公众待审单：上线是发布步，要人点头（M9 D6）。"""
+    pins = ctx.st.get("pins") or {}
+    cv_commit = pins.get("cv") or sh(ctx, ["git", "rev-parse", "HEAD"])[1].strip()
+    rev = os.environ.get("ZL_PENDING_REV") or f"{chapter_no(ctx)}-r0"
+    out = pending_draft(ctx).parent
+    out.mkdir(parents=True, exist_ok=True)
+    sh(ctx, [ctx.venv_py, str(CV / "scripts/zhengli/pending_list.py"), "--products", products_dir(ctx), "--book", ctx.book,
+             "--chapter", chapter_no(ctx), "--rev", rev, "--cv-commit", cv_commit, "--out", out])
+    ctx.log(f"待审单草稿 → {pending_draft(ctx)}（只给 2c 核数；上线另走发布）")
+
+
+def fallback_draft(ctx, cc: dict) -> Path | None:
+    """2d 没交代的列 → 列交代草稿 TSV（处理、说明空着由会话/人看图填，填好并进数据目录 feedback/lists/）。"""
+    it = next((x for x in cc.get("items", []) if x.get("no") == "2d"), None)
+    loose = ((it or {}).get("data") or {}).get("loose") or []
+    if not loose:
+        return None
+    f = ctx.reports / f"{ctx.book}-对不上列交代.草稿.tsv"
+    f.write_text("页\t列\t处理\t说明\n# 处理：重切／改字／说明／一致；说明、一致要写说明。填好后并进数据目录 feedback/lists/"
+                 f"{ctx.book}-对不上列交代.tsv\n" + "".join(f"{x.split(':')[0]}\t{x.split(':')[1]}\t\t\n" for x in loose),
+                 encoding="utf-8")
+    return f
+
+
 def st_close(ctx):
-    cmd = ctx.guji("close-check", ctx.book, "-w", ctx.ws, "--export-dir", ctx.reports / "_export")
+    """S20 粗校出口：close-check 粗校档（第 2 项只报数）＋ collect_exit 的 R1–R5，剩下的活写进 NEXT.md。"""
+    base = ctx.guji("close-check", ctx.book, "-w", ctx.ws, "--export-dir", ctx.reports / "_export", "--tier", "rough")
     if os.environ.get("ZL_NOTES"):
-        cmd += ["--notes", os.environ["ZL_NOTES"]]
-    rc, out = sh(ctx, cmd, check=False, retries=0)
-    (ctx.reports / "close-check.out.txt").write_text(out, encoding="utf-8")
-    ctx.log("close-check rc=%s；输出在 reports/%s/close-check.out.txt" % (rc, ctx.book))
+        base += ["--notes", os.environ["ZL_NOTES"]]
+    if pending_draft(ctx).exists():
+        base += ["--pending", pending_draft(ctx)]
+    rc, out = sh(ctx, [*base, "--json"], check=False, retries=0, tail=None)
+    cc = parse_json_tail(out) or {}
+    (ctx.reports / "close-check.json").write_text(json.dumps(cc, ensure_ascii=False, indent=1), encoding="utf-8")
+    bad = [x for x in cc.get("items", []) if x.get("status") in ("fail", "error")]
+    lines = [f"- ✗ {x['no']} {x['name']}：{x['detail']}" for x in bad]
+    fd = fallback_draft(ctx, cc)
+    if fd:
+        lines.append(f"- 2d 没交代的列已列成草稿 `{fd}`：逐列看图填「处理、说明」，并进数据目录 `feedback/lists/` 后重跑 close。")
+    rc2, _ = sh(ctx, [ctx.venv_py, str(CV / "scripts/zhengli/collect_exit.py"), ctx.book, "-w", ctx.ws,
+                      "--export-dir", ctx.reports / "_export", "--guji", str(Path(ctx.venv_py).with_name("guji")),
+                      "--close-check-json", ctx.reports / "close-check.json",
+                      "-o", ctx.reports / "粗校出口.json", "--report", ctx.reports / "粗校报告.md"], check=False, retries=0)
+    lines.append(f"- 粗校报告（R1–R5）：`reports/{ctx.book}/粗校报告.md`" + ("" if rc2 == 0 else f"（collect_exit rc={rc2}，看日志）"))
+    write_next(ctx, "粗校出口" + ("机器项全过" if not bad else f"还差 {len(bad)} 项"), lines)
+    ctx.log(f"close-check（粗校档）未过 {len(bad)} 项；剩下的活见 reports/{ctx.book}/NEXT.md")
 
 
 # (名, 函数, 说明, 云端/本地)  ——按顺序
 STAGES = [
     ("env", st_env, "S1 装环境（含 shadow extra、自检 joblib/sklearn）"),
-    ("ws", st_ws, "S2 稀疏克隆 ws、钉提交、设 noreply 邮箱"),
+    ("ws", st_ws, "S2 稀疏克隆 ws（只取本册原图）、钉提交、设 noreply 邮箱"),
+    ("db", st_db, "S2 拉中心库（册配置、人裁、字形库）"),
     ("yaml", st_yaml, "S3 合并标准 Step7 开关"),
     ("import-snap", st_import_snap, "（可选）从快照分支起步，容忍 CRLF"),
     ("survey", st_survey, "S4 预检"),
@@ -827,7 +976,8 @@ STAGES = [
     ("human-count", st_human_count, "S12 人裁核数（用户审完后）"),
     ("export", st_export, "S16/S17 导出 char/cord/norm、md"),
     ("taboo", st_taboo, "第 7 项：避諱改字表 v0"),
-    ("close", st_close, "S20 close-check"),
+    ("pending", st_pending, "S11-b 待审单草稿（只给 2c 核 □ 去向，不上线）"),
+    ("close", st_close, "S20 粗校出口：close-check 粗校档＋R1–R5 报告，剩下的活写 NEXT.md"),
 ]
 # 默认 run 跳过这些（要显式 --only 或 --from 才跑）
 MANUAL = {"human-count"}

@@ -91,20 +91,41 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.8", unit="cell",   # 1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
-        consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
+        id="cell_shrink", title="Step4 字框收缩", version="1.20", unit="cell",   # 1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals",),
+        produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
-                   "open_guji_cv.steps.occlusion"),
+                   "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
+    def _page_frame_lines(self, ctx: RunContext, page: int, cells: PageCells) -> dict:
+        """全页的框线线位（列图坐标）和线厚：各列框线离版框一样远，拿全页的实线定线位，淡线按线位认
+        （extractor.page_frame_line_offsets）。"""
+        from ..clustering.extractor import page_frame_line_offsets
+        cols = [cc for cc in cells.columns if cc.ok and "roster" not in cc.flags and cc.content_x]
+        if not cols:
+            return {}
+        cell_h = float(np.median([cc.period for cc in cols]))
+        imgs = {cc.col: ctx.image("column_image", column_key(page, cc.col)) for cc in cols}
+        out = {}
+        for key, bottom in (("frame_lines_bottom", True), ("frame_lines_top", False)):
+            edge = {cc.col: cc.border_bottom if bottom else cc.border_top for cc in cols}
+            offs = page_frame_line_offsets(
+                [(imgs[cc.col], *cc.content_x, edge[cc.col]) for cc in cols if edge[cc.col] is not None],
+                cell_h, bottom=bottom)
+            out[key] = {cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in offs]
+                        for cc in cols if edge[cc.col] is not None}
+        return out
+
     def _extract_column(self, ctx: RunContext, page: int, cc: ColumnCells,
-                        img: np.ndarray) -> list[tuple[object, np.ndarray | None]]:
+                        img: np.ndarray, frame_lines: dict | None = None
+                        ) -> list[tuple[object, np.ndarray | None]]:
         from ..clustering.extractor import CharExtractor
         p: CellShrinkParams = ctx.params_for(self)  # type: ignore[assignment]
         if "roster" in cc.flags:
@@ -118,13 +139,15 @@ class CellShrinkStep(Step):
         for c in cc.cells:
             d = by_pos.setdefault(c.pos, {"index": c.pos - 1, "y_top": c.y0, "y_bottom": c.y1,
                                           "type": "empty", "kinds": set(), "is_punct": False,
-                                          "seam_top": None, "seam_bottom": None})
+                                          "seam_top": None, "seam_bottom": None, "layout_char": False})
             d["kinds"].add(c.kind)
             if c.kind == "punct":
                 d["is_punct"] = True
             d["y_top"], d["y_bottom"] = min(d["y_top"], c.y0), max(d["y_bottom"], c.y1)
             if c.kind != "blank":
                 d["type"] = "char"
+            if "layout_char" in c.flags:
+                d["layout_char"] = True
             # 夹注 a/b 合成一格时不传折线——折线是给单一整格算的，半宽格各自
             # 的 seam 语义对不上合成后的满宽格，宁可退回矩形边界也不要凑错。
             if pos_count[c.pos] == 1:
@@ -140,6 +163,7 @@ class CellShrinkStep(Step):
         cells = [{"type": d["type"], "index": d["index"], "y_top": float(d["y_top"]),
                   "y_bottom": float(d["y_bottom"]), "is_punct": d["is_punct"],
                   "seam_top": d["seam_top"], "seam_bottom": d["seam_bottom"],
+                  **({"layout_char": True} if d["layout_char"] else {}),
                   **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"],
                       "jiazhu_subs": sorted(d["jiazhu_subs"])}
                      if "jiazhu_cx" in d else {})}
@@ -158,6 +182,7 @@ class CellShrinkStep(Step):
                      # 「列图顶端就是版框内缘」（列裁切已把框排除），所以真正的框残留
                      # 落在 y≈0 与 y≈border_bottom 附近。
                      "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap"),
+                     **{k: v.get(cc.col, []) for k, v in (frame_lines or {}).items()},
                      **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
@@ -229,6 +254,7 @@ class CellShrinkStep(Step):
             from .occlusion import page_occluded
             from .seed_admit import SeedAdmitParams
             seal = page_occluded(ctx, page, SeedAdmitParams())
+        frame_lines = self._page_frame_lines(ctx, page, cells)
         out: list[ColumnChars] = []
         for cc in cells.columns:
             if not cc.ok:
@@ -263,7 +289,7 @@ class CellShrinkStep(Step):
                 if pb is not None:
                     multi_above[pb] = cp    # pb 是切点的下格 → 切点在 pb 上方
             recs: list[CharRec] = []
-            for inst, patch in self._extract_column(ctx, page, cc, img):
+            for inst, patch in self._extract_column(ctx, page, cc, img, frame_lines):
                 pos = int(inst.idx) + 1
                 slot = pos_to_slot.get(pos, pos)
                 key = cell_key(page, cc.col, slot) + (inst.sub or "")
@@ -333,7 +359,7 @@ class CellShrinkStep(Step):
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
-        for inst, patch in self._extract_column(ctx, page, cc, img):
+        for inst, patch in self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells)):
             pos = int(inst.idx) + 1
             if pos_to_slot.get(pos) == slot and (inst.sub or "") == sub and patch is not None:
                 if pos in seams and not sub:
