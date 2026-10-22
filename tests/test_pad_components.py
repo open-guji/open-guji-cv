@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.clustering.extractor import drop_pad_only_components
+from open_guji_cv.clustering.extractor import drop_neighbor_parts, drop_pad_only_components
 
 
 def _patch(h: int = 90, w: int = 100) -> np.ndarray:
@@ -48,3 +48,56 @@ def test_detached_component_inside_cell_is_kept():
     p[66:72, 30:36] = 0          # 格内的一点
     out = drop_pad_only_components(p, 6, 84)
     assert (out[66:72, 30:36] == 0).all()
+
+
+def _ctx(h: int = 270, w: int = 100) -> np.ndarray:
+    return np.full((h, w), 255, np.uint8)
+
+
+def test_neighbor_part_crossing_mostly_outside_is_dropped():
+    """上字断开的底横带个小钩伸过格界（90）：墨大半在格界外，从本格抹掉（vol05「上/下」）。"""
+    c = _ctx()
+    c[20:78, 20:80] = 0          # 上字
+    c[80:86, 10:50] = 0          # 上字底横的左段（与字身断开）
+    c[86:94, 30:33] = 0          # 小钩伸过格界
+    c[100:170, 20:80] = 0        # 本字
+    patch = c[81:189].copy()     # 图块 = 格（90..180）上下各 9px pad
+    out = drop_neighbor_parts(patch, c, 81, 90, 180, 90)
+    assert (out[:94 - 81] == 255).all()
+    assert (out[100 - 81:170 - 81, 20:80] == 0).all()
+
+
+def test_own_top_dot_crossing_mostly_outside_is_kept():
+    """格界偏低，下字顶上的点大半在界外，可它紧挨着本字（音、言、序）：留着。"""
+    c = _ctx()
+    c[20:70, 20:80] = 0          # 上字
+    c[84:93, 45:52] = 0          # 本字的点，大半在格界（90）之上
+    c[95:170, 20:80] = 0         # 本字
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
+    assert (out[84 - 81:93 - 81, 45:52] == 0).all()
+
+
+def test_own_part_crossing_mostly_inside_is_kept():
+    c = _ctx()
+    c[100:170, 20:80] = 0
+    c[174:186, 30:60] = 0        # 本字底横，大半在格界（180）以内
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
+    assert (out[174 - 81:186 - 81, 30:60] == 0).all()
+
+
+def test_touching_block_reaching_ctx_edge_is_kept():
+    """碰到上下各一格的列条边的是粘连长块，照旧按格界切。"""
+    c = _ctx()
+    c[0:100, 45:50] = 0          # 从列条顶一直下来
+    c[100:170, 20:80] = 0
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
+    assert (out[0:19, 45:50] == 0).all()
+
+
+def test_side_with_seam_is_not_checked():
+    c = _ctx()
+    c[80:86, 10:50] = 0
+    c[86:94, 30:33] = 0
+    c[100:170, 20:80] = 0
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90, top=False)
+    assert (out[86 - 81:94 - 81, 30:33] == 0).all()
