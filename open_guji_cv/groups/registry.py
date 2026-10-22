@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CTX, FORM_TOP1, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, Method, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, Method, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -225,7 +225,7 @@ GROUPS: dict[str, GroupSpec] = {
     "sy": GroupSpec(
         id="sy", name="山由出", members=frozenset("山由出"), backends=(),
         kind="near_form", solvers=("ids",), config_dir="config/groups/sy",
-        flow=FlowSpec((_img("sy"),), combine="first", tolerate=frozenset("曲")),
+        flow=FlowSpec((_img("sy"),), combine="first", tolerate=frozenset("曲")), overlaps=("chu",),
         note="形近不同义，按整字字形判（一对多岭回归，按册留一 0 错）；曲 当陪衬字；只补放。"),
     # 长尾线第二批（2026-10-22）：宋朱未、各名、心必也走整字字形判。先试过文意路（L1 规则＋haiku L2 表），
     # 在已放行格里与现判不一致的 21 格，看图 21 格全是文意判错，所以弃用，见 doc/design/M7-未覆盖形近字长尾.md 第五节。
@@ -245,6 +245,22 @@ GROUPS: dict[str, GroupSpec] = {
         flow=FlowSpec((_img("xb"),), combine="first"),
         note="按整字字形判（按册留一 0 错）；只补放。"),
 }
+
+
+#: 码位归一组（sheldon 2026-10-22 定）：两个码位刻形分不清、书里已定用哪一个（册配置 `codepoints:`，各套书可不同），
+#: 方法数组只有 `codepoint`——直接给册配置定的那个字；这套书没定就待定。只补放，不复核（放行字最后本来就落册指定码位）。
+#: **单独一张表、不进 `GROUPS`**：`GROUPS` 的成员在 `glyph_match`（弱命中）与 `seed_admit.rare_ref_coord` 里当全局字组集合用，
+#: 这几对进去会改那两处的行为；字组流程（`flow`）与 `seed_admit.group_flow` 点名用的是 `FLOW_GROUPS`（两张表合起来）。
+CODEPOINT_GROUPS: dict[str, GroupSpec] = {
+    gid: GroupSpec(id=gid, name=name, members=frozenset(name), backends=(), kind="variant", solvers=(),
+                   flow=FlowSpec((CODEPOINT,), combine="first"), overlaps=ov,
+                   note="码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。")
+    for gid, name, ov in (("nei", "內内", ()), ("bie", "別别", ()), ("chu", "出岀", ("sy",)),
+                          ("juan", "卷巻", ()), ("wan", "晚晩", ()))
+}
+
+#: 字组流程可点名的全部组。
+FLOW_GROUPS: dict[str, GroupSpec] = {**GROUPS, **CODEPOINT_GROUPS}
 
 
 def get_group(group_id: str) -> GroupSpec:

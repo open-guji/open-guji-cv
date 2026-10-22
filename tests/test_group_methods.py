@@ -113,3 +113,45 @@ def test_composite_crop_equals_registered_region(monkeypatch):
     assert (v1.char, v1.why, v1.extra) == (v2.char, v2.why, v2.extra)
     with pytest.raises(ValueError):
         M.Composite("x", op=M.Crop((0, 1, 0, 1)), inner=M.FREQ).run(_inp("jiao", patch=img))
+
+
+def test_codepoint_groups_flow_only():
+    """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
+    from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS
+    assert set(CODEPOINT_GROUPS) == {"nei", "bie", "chu", "juan", "wan"}
+    assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS)
+    check_groups(tuple(CODEPOINT_GROUPS))
+    for g, s in CODEPOINT_GROUPS.items():
+        assert s.flow.methods == (M.CODEPOINT,) and not s.flow.review and len(s.members) == 2, g
+    assert "chu" in FLOW_GROUPS["sy"].overlaps and "sy" in FLOW_GROUPS["chu"].overlaps
+
+
+def test_codepoint_group_lifts_book_choice():
+    from dataclasses import dataclass, field
+    from open_guji_cv.groups.flow import group_flow_pass
+
+    @dataclass
+    class Rec:
+        id: str
+        char: str | None = None
+        admit: bool = False
+        channel: str | None = None
+        provenance: str = ""
+        doubts: list = field(default_factory=list)
+        evidence: dict = field(default_factory=dict)
+
+    book = {"巻": "卷", "别": "別"}
+    canon = lambda c: book.get(c, c)                     # noqa: E731
+    cfg = FlowConfig(groups=("juan", "bie"), canon=canon)
+    a, b, c = Rec("a"), Rec("b"), Rec("c")
+    cands = {"a": [("巻", 0.97), ("卷", 0.96)], "b": [("别", 0.95)], "c": [("巻", 0.97), ("券", 0.96)]}
+    res = group_flow_pass([a, b, c], {"a": ("巻", "eq")}, lambda cid: cands[cid], lambda r: False, cfg, canon=canon)
+    assert a.admit and a.char == "卷" and a.channel == "group_flow"
+    assert a.evidence["group"]["solvers"][0]["solver"] == "codepoint"
+    assert b.admit and b.char == "別"
+    assert not c.admit and "group" not in c.evidence             # 组外字紧咬，不进
+    assert res.lifted == 2
+    # 这套书没定码位 → 待定送审
+    d = Rec("d")
+    group_flow_pass([d], {}, lambda cid: [("巻", 0.97)], lambda r: False, FlowConfig(groups=("juan",)))
+    assert not d.admit and "group_flow_abstain" in d.doubts

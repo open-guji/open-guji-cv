@@ -9,7 +9,7 @@
 
 | kind | 是什么 | 实现 |
 |---|---|---|
-| `codepoint` | 码位归一：这套书在册配置 `codepoints:` 里定了用哪个码位，组内字一律给那个字 | `Codepoint` |
+| `codepoint` | 码位归一：这套书在册配置 `codepoints:` 里定了用哪个码位，组内字一律给那个字（內内 別别 出岀 卷巻 晚晩，`registry.CODEPOINT_GROUPS`） | `Codepoint` |
 | `freq` | 字频：殿本人裁只见一形（主形 ≥10 且 ≥2 册、其余 0）就给主形 | `Freq`（`freq.decide`） |
 | `ctx_rule` | 上下文固定匹配：前后各 20 字的词组／正则（`rules.yaml`），零模型 | `CtxRule`（`ctx_l1`） |
 | `llm` | LLM 分析：离线跑好的 haiku 答案表，只收 conf=high | `Llm`（`ctx_l2`） |
@@ -130,8 +130,8 @@ def _cell(inp: MethodInput):
 
 
 def _spec(g: str):
-    from .registry import GROUPS
-    return GROUPS[g]
+    from .registry import FLOW_GROUPS
+    return FLOW_GROUPS[g]
 
 
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:

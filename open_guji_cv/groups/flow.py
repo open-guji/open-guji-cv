@@ -30,7 +30,7 @@ from typing import Callable
 from . import freq as _freq
 from .methods import KINDS, Method, MethodInput
 from .protocol import GroupVerdict
-from .registry import GROUPS
+from .registry import FLOW_GROUPS as GROUPS   # 含码位归一组（`registry.CODEPOINT_GROUPS`）
 
 CHANNEL = "group_flow"
 
