@@ -25,6 +25,9 @@ from pathlib import Path
 from .protocol import GroupVerdict, JudgeInput
 
 MARK = "◎"
+#: 匹配串里目标位实际用的码位（私用区）。规则文件照旧写 `◎`，加载时换成它——邻格放行的字真是符号 ◎ 时
+#: 不会被当成目标位（特殊符号进候选集设计 4.4）。
+TARGET = "\ue000"
 WIDTH = 20
 SCHEMA = "ctx_l1/1"
 
@@ -65,7 +68,7 @@ class CtxL1Backend:
             ch = r.get("char")
             if members is not None and ch is not None and ch not in members:
                 raise ValueError(f"{p}: 规则 {rid} 的 char {ch!r} 不在组内")
-            self.rules.append(Rule(rid, ch, re.compile(pat), r.get("note", ""), r.get("src", "")))
+            self.rules.append(Rule(rid, ch, re.compile(pat.replace(MARK, TARGET)), r.get("note", ""), r.get("src", "")))
         self._legacy = None
         if raw.get("legacy"):
             mod, fn = raw["legacy"].split(":")
@@ -73,7 +76,7 @@ class CtxL1Backend:
 
     def decide(self, left: str, right: str) -> tuple[str | None, str, list[str]]:
         """→ (字|None, why, 命中规则 id 们)。"""
-        text = left + MARK + right
+        text = left + TARGET + right
         hits: dict[str, list[str]] = {}
         for r in self.rules:
             if r.pattern.search(text):

@@ -44,6 +44,10 @@ _GM_1020_PM = ("glyph_match 加 batch_knn 开关（缺省关）、匹配器可�
                "开关关着时 vol06 30 页（每 5 页取 1）与 origin/dev fbfd1f9 产物逐字节相同，库含字体域（17.4 万条），"
                "匹配器走新的特征缓存；scripts/code_equiv.py check，2026-10-20")
 
+_SYM_1022 = ("特殊符号进候选集 S3（seed_admit 加 symbol_review 开关，缺省关；ctx_l1 目标位换私用区码位）："
+             "开关关着时 vol06 30 页（每 5 页取 1，group_flow 的 ctx_l1 规则有命中）与 origin/dev 5826853 产物逐字节相同；"
+             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（dev 上 ids_bank 与钉子不符，新旧两边同样），2026-10-22")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -85,6 +89,14 @@ ENTRIES: tuple[Equiv, ...] = (
           old="f67439e5c78f68150e1509bf7e8aa7db437d66ef5e7a145340c505fd00bf4b5d",
           evidence=("glyph_match 加 font_tier 开关（缺省关，GUJI-726）：开关关着时 vol06 30 页（每 5 页取 1）与 origin/dev "
                     "（glyph_match 与 code_deps 同 fb6ff83）产物逐字节相同，库含字体域（17.4 万条）；scripts/code_equiv.py check，2026-10-21")),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="2a4219983670c95907006ebdd3aeac23130c19d0aac7df7011b637749248bc83",
+          old="3d8e409fbeeb20d41cba5d4e8eef694dd5e9285490e4f8ba6c21e234b442a867",
+          evidence=_SYM_1022),
+    Equiv(module="open_guji_cv.groups.ctx_l1",
+          new="720a9e15855681456378e88ec5504d5643372c07f8b456e11e1ba61b01a1c573",
+          old="1d5e011d22e7cd25514cdcb6dea8d8b877126f2d227326add1a789525a6f6449",
+          evidence=_SYM_1022),
 )
 
 
