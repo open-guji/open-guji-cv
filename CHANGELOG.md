@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- 字形判法扩面（sheldon 10-22，#393 方法数组之后）：衛衞 `weiw`、刪删 `shan`、扺抵 `di` 三个异体对上线取框 HOG＋岭回归（`ids_online.SPECS`，`registry` 配 `config/groups/<组>/ids_bank.json`）。模板＝数据集 `labels/unified.jsonl` 里 sheldon 人裁刻形与 `variant/*/crops` 字块（衛41／衞14、刪111／删5、抵90／扺10）；按册留出 0 错：衛衞 37／55 对、刪删 97／116、扺抵 78／100，次形（衞／删／扺）几乎都弃权送人审，不会被放成主形。只补放，需在册配置 group_flow 点名，重跑归 M8。`ids_online` 与 `registry` 变，`seed_admit` 的 `code_hash` 变。建库与评测脚本 `research/m7/glyph_expand/`。
 - 旨㫖（`zhi`）上线整字判法（`groups/ids_online` SPECS、`registry` 配 `config/groups/zhi`）：整字 HOG＋岭回归，模板来自 R2 整册产物对位文字（353 格，sheldon 更正 18 个旨→㫖），按册 5 折留出 margin 0.5 → 348 对／5 弃／0 错。`zhi` 需在册配置 group_flow 点名才生效，重跑归 M8。
 
 ### Changed

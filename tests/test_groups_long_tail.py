@@ -101,3 +101,19 @@ def test_second_batch_registered_and_banks_load():
         d = json.loads(p.read_text(encoding="utf-8"))
         assert set(members + extra) <= set(d["templates"])
     assert "wm" in GROUPS["sz"].overlaps and "sz" in GROUPS["wm"].overlaps
+
+
+def test_wide_shape_pairs_registered_and_banks_load():
+    """衛衞 weiw、刪删 shan、扺抵 di（2026-10-22，字形判法扩面）：取框 HOG；模板库格式对、两形都在、小于 1MB。"""
+    from pathlib import Path
+    import json
+    root = Path(__file__).resolve().parent.parent
+    for gid, members in (("weiw", "衛衞"), ("shan", "刪删"), ("di", "扺抵")):
+        g = GROUPS[gid]
+        assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
+        sp = O.SPECS[gid]
+        assert sp.whole == "hog" and sp.region[3] == 1.0 and sp.region != (0.0, 1.0, 0.0, 1.0)
+        p = root / g.config_dir / "ids_bank.json"
+        assert p.stat().st_size < 1_000_000
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert set(members) <= set(d["templates"]) and d["size"] == sp.size

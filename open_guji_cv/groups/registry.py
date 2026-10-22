@@ -244,6 +244,14 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ids",), config_dir="config/groups/xb",
         flow=FlowSpec((_img("xb"),), combine="first"),
         note="按整字字形判（按册留一 0 错）；只补放。"),
+    # 字形判法扩面（2026-10-22）：两形混用的异体对，字频不成立（次形不为 0），走取框 HOG＋岭回归；模板＝dataset 人裁（按册留出 0 错）。
+    # 次形（衞／删／扺）样本太少，几乎总是弃权送人审；只补放、不复核。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec((_img(gid),), combine="first"),
+        note=f"异体组：取框 HOG＋岭回归（{note}）；只在 seed_admit.group_flow 点名时生效。")
+       for gid, name, note in (("weiw", "衛衞", "看字中下部"), ("shan", "刪删", "看左下的冊／册"), ("di", "扺抵", "看左下到右下"))},
 }
 
 

@@ -125,6 +125,14 @@ SPECS: dict[str, IdsSpec] = {
     "sz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=40),
     "gm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", lam=1.0, size=40),
     "xb": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=32),
+    # 衛衞、刪删、扺抵（2026-10-22，字形判法扩面）：模板＝dataset `labels/unified.jsonl` 里 sheldon 人裁刻形（衛41／衞14、刪111／删5、抵90／扺10，
+    # 字块图来自 `variant/{wei,shan,di}/crops`），取框 HOG＋岭回归，按册留出（判某册时模板不含该册）。次形太少，只当「放主形」用：
+    # 次形（衞／删／扺）在留出里几乎都落在门槛下弃权，不会被放成主形（0 错），要靠人审。框与参数在 0.25 网格上扫、取 0 错覆盖最高处的邻近稳健值：
+    # 衛衞 取框 x0.25–0.75、y0.5–1（0 错门槛 0.55，取 0.7 → 衛 37／55 给对）；刪删 取左下 x0–0.5、y0.5–1（册／冊 的下半，0 错门槛 0.74，取 0.85 → 97／116）；
+    # 扺抵 取 x0–0.75、y0.5–1（0 错门槛 0.41，取 0.55 → 78／100，其中扺 0）。
+    "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
+    "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),
+    "di": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.55, min_class=8, whole="hog", region=(0.0, 0.75, 0.5, 1.0), lam=3.0, size=64),
 }
 
 
