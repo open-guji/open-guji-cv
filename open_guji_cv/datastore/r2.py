@@ -25,7 +25,7 @@ from . import gitsource
 from .scope import GS, classify, r2_key, sha256
 
 #: R2 键后缀 → PUT 的 content-type（须与 Worker `assets.ts` 的 EXT_TYPES 一致）
-CONTENT_TYPES = {"png": "image/png", "txt": "text/plain; charset=utf-8"}
+CONTENT_TYPES = {"png": "image/png", "txt": "text/plain; charset=utf-8", "webp": "image/webp"}
 
 
 @dataclass
