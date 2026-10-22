@@ -1,11 +1,12 @@
-"""Step0 印章定位：原图 → 本页每方印的类别与外框。印章系统化第 1 期（2026-10-22）。
+"""印章定位：原图＋版框 → 本页每方印的类别与外框。印章系统化第 1 期（2026-10-22）。
 
 ## 起因
 
 用户 10-22：「在整个页面一开始、整个识别开始的时候就确定出来印章在什么位置，后边就不用再识别了。」
 此前印章由四段代码各认一遍（`occlusion.page_occluded` 的格级密度、`occlusion.find_seal_box` 的
 窗口模板、`row_segment._empty_zone_seal` 的表空段墨团、碎墨判空），都在切完格之后，判得也不一致。
-这一步只读原图、排在 Step1 之前，产物 `seals` 是后面各步认印的唯一来源（第 2、3 期改各步去读它）。
+这一步紧跟 Step1 版框（只用版框定大印的位置，Step1 本身不识别字），在切分、识别之前；
+产物 `seals` 是后面各步认印的唯一来源（第 2 期起改各步去读它）。
 
 ## 两类印、两条判据（殿本四库总目十册 1,707 页普查）
 
@@ -13,7 +14,10 @@
    （面积 `DOT_AREA` 内的连通块，太小是噪声、太大是字的笔画）。按 `GRID` 像素网格数墨点、
    3×3 平滑，≥ `HOT` 的格连成区，区内峰值 ≥ `min_peak` 才算印。印近于方形，区的宽高比
    不在 `ASPECT` 内的不算——各册 p2 的书签条（细长，满是碎墨）就是这样排掉的。
-   十册：印页峰值 23.9–42.4，无印页 ≤ 19。
+   十册：印页峰值 23.9–42.4，无印页 ≤ 19。密度只用来判**有没有**大印；位置有更强的规律
+   （Sheldon 10-22）：印紧贴版框上边与右边，宽正好是整个版框（九列），高与宽相等。所以外框
+   取版框右上角起、边长＝版框宽的正方形（`stain_square`，`source="frame"`）；页面弯曲带来的
+   几十像素误差不管。读不到版框才退回密度区的外接框（`source="density"`）。
 2. **小印 `crisp`**（卷末「乾隆御覽之寶」）：模板（`config/seal_templates/`）在 1/4 降采样图上
    整页搜。分数不用 NCC——印压在正文上时印里有字，NCC 掉到 0.3（vol09 p265 原来认不出）——
    而用「模板笔画处有墨的比例 − 模板空白处有墨的比例」：印下压字只会抬高第二项一点，
@@ -130,10 +134,24 @@ def crisp_seals(gray: np.ndarray, *, min_cover: float, min_score: float, templat
     return [((x0, y0, x0 + int(round(w / SCALE)), y0 + int(round(h / SCALE))), round(score, 4), name)]
 
 
-def detect_seals(gray: np.ndarray, p: SealDetectParams) -> list[Seal]:
+def stain_square(borders) -> tuple[float, float, float, float] | None:
+    """大印外框（右上原点）：版框右上角起、边长＝版框宽的正方形。量在上框处；读不到上框或竖线返回 None。"""
+    if borders is None or borders.top is None or len(borders.verticals) < 2:
+        return None
+    ty = float(borders.top.y_at_right)
+    xs = [float(v.x_at_top) + float(v.slope) * ty for v in borders.verticals]
+    xr, xl = min(xs), max(xs)
+    return (xr, ty, xl, ty + (xl - xr))
+
+
+def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Seal]:
     W = gray.shape[1]
-    out = [Seal(kind="stain", bbox=bbox_tl_to_tr(b, W), score=s, source="density")
-           for b, s in stain_seals(gray, min_peak=p.min_peak)]
+    stains = stain_seals(gray, min_peak=p.min_peak)
+    square = stain_square(borders) if stains else None
+    if square is not None:          # 一页只有一方大印，位置按版框定
+        out = [Seal(kind="stain", bbox=square, score=max(s for _b, s in stains), source="frame")]
+    else:
+        out = [Seal(kind="stain", bbox=bbox_tl_to_tr(b, W), score=s, source="density") for b, s in stains]
     out += [Seal(kind="crisp", bbox=bbox_tl_to_tr(b, W), score=s, source="template", template=t)
             for b, s, t in crisp_seals(gray, min_cover=p.min_cover, min_score=p.min_score)]
     return out
@@ -142,8 +160,8 @@ def detect_seals(gray: np.ndarray, p: SealDetectParams) -> list[Seal]:
 @register_step
 class SealDetectStep(Step):
     spec = StepSpec(
-        id="seal_detect", title="Step0 印章定位", version="1.0", unit="page",
-        consumes=("raw_page",), produces=("seals",), params=SealDetectParams,
+        id="seal_detect", title="印章定位", version="1.1", unit="page",   # 1.1：大印外框按版框定（正方形）
+        consumes=("raw_page", "borders"), produces=("seals",), params=SealDetectParams,
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -154,5 +172,5 @@ class SealDetectStep(Step):
             seals = [Seal(kind=s["kind"], bbox=tuple(s["bbox"]), score=1.0, source="manual")
                      for s in p.overrides[page]]
         else:
-            seals = detect_seals(gray, p)
+            seals = detect_seals(gray, p, ctx.product("borders", page))
         return {"seals": PageSeals(page=page, width=W, height=H, seals=seals)}
