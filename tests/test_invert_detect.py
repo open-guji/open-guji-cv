@@ -44,3 +44,20 @@ def test_thin_frame_line_is_not():
 
 def test_clean_page_has_none():
     assert detect_inverted(_page()) == []
+
+
+def test_top_frame_under_blank_margin_is_not():
+    g = _page()
+    _invert(g, 100, 130, 250, 1100)              # 页顶：黑条上方是空白天头（外框），不报
+    assert detect_inverted(g) == []
+
+
+def test_bar_on_patterned_cover_is_not():
+    g = _page()
+    rng = np.random.default_rng(0)
+    g[200:700] = np.where(rng.random((500, g.shape[1])) < 0.5, 0, 255).astype(np.uint8)
+    g[400:431] = 255
+    for x in RULES:
+        g[400:431, x:x + 5] = 0
+    _invert(g, 400, 430, 250, 1100)              # 满纸花纹（封面、书衣）里的黑条，不报
+    assert detect_inverted(g) == []
