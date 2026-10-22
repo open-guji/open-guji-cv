@@ -83,6 +83,20 @@ def test_layout_path_follows_corpus_dir(tmp_path, monkeypatch):
     assert _layout_path(str(tmp_path / "x.jsonl")) == tmp_path / "x.jsonl"
 
 
+def test_layout_prior_defaults_on_when_the_workspace_has_the_table(tmp_path, monkeypatch):
+    """2026-10-22 起缺省开：工作区有 corpus/daizhige/layout_slots.jsonl 就用，没有（无逐列本的书）就当关、不报错。"""
+    from open_guji_cv.steps import row_segment as RS
+    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
+    assert RS.RowSegmentParams().layout_prior == ""
+    t = tmp_path / "corpus" / "daizhige" / "layout_slots.jsonl"
+    t.parent.mkdir(parents=True)
+    t.write_text(json.dumps({"vol": "vol04", "page": 23, "col": 1, "slots": [3], "notes": [],
+                             "half": [], "raised": 0}) + "\n", encoding="utf-8")
+    on = RS.RowSegmentParams()
+    assert on.layout_prior == RS.DEFAULT_LAYOUT and len(on.layout_fingerprint) == 16
+    assert RS.RowSegmentParams(layout_prior="").layout_prior == ""        # 书 yaml 写空串＝关
+
+
 def test_row_segment_off_switches_not_in_params_dump(tmp_path):
     """缺省关的开关不进 dump：params_hash 与加这些字段之前（v0.4.5）逐位相同（冻结册升版不报「参数变了」，D 10-19）；开着照常进。"""
     from open_guji_cv.core.engine import params_hash
