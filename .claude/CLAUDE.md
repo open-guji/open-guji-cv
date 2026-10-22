@@ -40,7 +40,7 @@
 
 ## 环境
 - Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[console,torch,dev]"`。仓里旧的 `venv/` 是死的。
-- **装完自检** `python -c "import torch, scipy, cv2"`：缺件不报错，只会悄悄降级。
+- **装完自检** `python -c "import torch, scipy, cv2"`：缺件不报错，只会悄悄降级。`guji pipeline`／`step` 起跑前会查这次要跑的步骤缺不缺 torch／权重／joblib，缺了拒跑（`--allow-missing-deps` 放行）。
 - 环境变量：`PYTHONIOENCODING=utf-8`（Windows 必设）、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`、`GUJI_WORKSPACE=<书的工作区>`。
 - 带 book 的命令都要 `-w <工作区>`。
 - 产物在 `<工作区>/products/<book>/<step>/p0024.json`，列图和字块在 `cache/`，任务记录在 `runs/`。
