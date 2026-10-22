@@ -427,6 +427,9 @@ def test_big_txt_items_are_marked_r2_and_do_not_change_fingerprint(tmp_path, mon
     d1 = corpus_pin.items_digest(list(items.values()))
     d2 = corpus_pin.items_digest([{k: v for k, v in i.items() if k != "store"} for i in items.values()])
     assert d1 == d2                                                   # store 只是存放位置的标注，不进指纹
+    (tmp_path / "corpus" / "w.npz").write_bytes(b"\x00\x01" * 600_000)                # 1.2MB 二进制权重也走 R2
+    assert {i["path"]: i for i in corpus_pin.collect(tmp_path)}.get("corpus/w.npz") is None   # corpus/ 只收 .txt，权重在 config/groups/*/ 下
+    assert corpus_pin._item("rules", "repo", "config/groups/x/unet.npz", tmp_path / "corpus" / "w.npz", lambda p: "h")["store"] == "r2"
     cp.build(tmp_path)
     plan = cp.upload_blobs(tmp_path, 1)                              # 缺省只演练，不碰网络
     assert plan["blobs"] >= 1 and plan["local"] == plan["blobs"] and plan["executed"] is False   # 含仓里的殆知阁两部
