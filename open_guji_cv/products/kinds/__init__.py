@@ -8,3 +8,4 @@ from . import page, borders, columns, gate, cells, chars, recog, row_segment_gat
 from . import line_index  # noqa: F401  —— 现代印刷链 Step1 的列明细
 from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条）
 from . import seals  # noqa: F401  —— 印章定位（2026-10-22）
+from . import inverted  # noqa: F401  —— 反色带候选（2026-10-22）
