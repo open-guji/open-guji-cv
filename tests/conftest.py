@@ -79,6 +79,7 @@ def _isolated_env(monkeypatch, tmp_path):
     # 测试只依赖仓内数据、不连网，统一关掉
     monkeypatch.setenv("GUJI_DERIVED_FETCH", "0")
     monkeypatch.setenv("GUJI_AUTO_PACK", "0")       # 整册跑完自动存包（cli_v2._auto_pack）同理关掉
+    monkeypatch.setenv("GUJI_ALLOW_MISSING_DEPS", "1")  # 起跑前依赖自检（ops/preflight.py）：云端没装 torch 也要能跑 pipeline 测试
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)
