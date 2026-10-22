@@ -277,6 +277,19 @@ def test_in_seal_measures_cell_overlap_with_the_seal_box_in_page_coords():
     assert _in_seal([], mapper) is None and _in_seal([(0, 0, 1, 1, None)], None) is None
 
 
+def test_under_stain_is_the_column_head_under_a_big_seal_only():
+    """列首格（版框顶下一个 period）一半以上在大印框里才算；小印（有笔画掩码）、列首格下面才进印框的都不算。"""
+    import numpy as np
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _under_stain
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [(x0 + 1000, y0), (x1 + 1000, y0), (x1 + 1000, y1), (x0 + 1000, y1)])
+    big = (1000, 300, 1900, 1200, None)
+    assert _under_stain([big], mapper, (0, 100), 300, 100)          # 列首 300..400 整格在印里
+    assert not _under_stain([big], mapper, (0, 100), 200, 100)      # 200..300：只贴着印框上沿
+    assert not _under_stain([big], mapper, (950, 1050), 300, 100)   # 列在印框左外侧
+    assert not _under_stain([(1000, 300, 1900, 1200, np.ones((2, 2), np.uint8))], mapper, (0, 100), 300, 100)
+
+
 def test_in_seal_counts_ink_on_the_small_seal_strokes_even_at_the_box_edge():
     """小印：格只有一角挨着印框，但格里的墨（列图）映回原图都落在印的笔画上 → 算印；格里另有墨（字）→ 不算。"""
     import numpy as np
