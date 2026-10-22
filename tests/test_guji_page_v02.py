@@ -260,3 +260,18 @@ def test_yolo_empty_token_becomes_lacuna_and_roundtrips():
     assert gp.to_guji_markdown(pg, page_comment=False) == "一[[]]□"
     back = gy.pages_to_project(json.loads(json.dumps([pg])))
     assert json.dumps(back, ensure_ascii=False) == json.dumps(proj, ensure_ascii=False)
+
+
+# ───────────── 夹注两半都记空 ─────────────
+def test_duplicate_blank_cells_emit_one_mark(store):
+    """Step3 把夹注 a／b 两半都记空后同一格号有两个 blank（blank 没有 sub）：导出只发一个 mark，id 不撞。"""
+    from copy import deepcopy
+    cells = store.read(BOOK, "row_segment", KEY, "cells")
+    col1 = next(c for c in cells.columns if c.col == 1)
+    col1.cells.append(deepcopy(col1.cells[0]))               # 列首那个 blank 再来一份
+    store.write(BOOK, "row_segment", KEY, {"cells": cells})
+    p = from_cv_products(store, BOOK, PAGE, copy.deepcopy(META))
+    blanks = [m for m in p["marks"] if m["kind"] == "blank" and m["col"] == "c1"]
+    assert len({m["id"] for m in blanks}) == len(blanks)
+    assert sum(1 for m in blanks if m["slot"] == 1) == 1
+    _ok(p)
