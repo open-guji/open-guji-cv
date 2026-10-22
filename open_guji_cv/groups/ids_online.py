@@ -60,6 +60,8 @@ class IdsSpec:
     region: tuple = (0.0, 1.0, 0.0, 1.0)  # 整字版：取归一字块的哪一块（占宽高的 x0,x1,y0,y1）
     lam: float = 1.0            # 整字版：岭回归的 L2 系数
     size: int = 32              # 整字版：模板与在线字块归一后的边长（模板库里也写一份）
+    generic: bool = False       # True：通用判法（`ids_generic`）：切法与判别叶子由成员 IDS 导出（`ids_plan`），缺省形状先验折线切、
+                                # 给了 `unet` 改用 U-Net；模板与在线格同一切法切，最近邻；frame/orient/prior/which/by_form 不用（2026-10-22）
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -72,7 +74,9 @@ SPECS: dict[str, IdsSpec] = {
     # 教敎（2026-10-21，sheldon 提示「差别在左上角」）：**整字里只取左上角一块做 HOG**（region 左 0–55%、上 0–46%，sheldon 在取框页调的）＋岭回归，
     #   整字／U-Net 切部件／自动缝三法此前都不行（给字格 0 错覆盖 ≤8%）。dataset `jiao/labels.jsonl` 93 格（教 68／敎 25，含 vol01 四格教→敎更正）按册 5 折留出：
     #   margin 0.4 → 87 对／6 弃／0 错（0.3 → 89／4／0，唯一错例 margin 0.23）。字块归一到 48×48 再取框（32 太小，框内取不到 HOG 块）。
-    "jiao": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", region=(0.0, 0.55, 0.0, 0.46), lam=1.0, size=48),
+    #   **2026-10-22 改通用判法**（`ids_generic`，叙敘、絕絶 同）：计划导出 ⿰{}攵、判别叶子在左部里，先验折线切左右、再切到叶子，模板＝全部 93 格同法切出，最近邻。
+    #   按册 5 折留出（先验形状与模板都不含留出册）：margin 0.02 → 92 对／1 弃／0 错，0.03 → 91／2／0（唯一错例 margin 0.0199），取 0.03。
+    "jiao": IdsSpec(frame="", orient="v", prior=0.5, min_margin=0.03, min_class=8, generic=True),
     # 旨㫖（2026-10-22）：整字 HOG＋岭回归。模板取自 R2 整册产物（殿本 vol01、04–10）的对位文字，其中 18 个标成旨的被 sheldon 更正为㫖（对位文字旨/㫖有错），
     #   裁坏的 3 格已去掉。dataset `zhi/labels.jsonl` 353 格（㫖 283／旨 70）按册 5 折留出 353 对／0 错。
     "zhi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=32),
@@ -80,10 +84,15 @@ SPECS: dict[str, IdsSpec] = {
     #   dataset `xu/labels.jsonl` 30 格人标切线（叙 11／敘 19）；U-Net 用叙敘＋教敎＋絕絶 共 106 格左右切线一起训（同是「两部件之间一刀」，
     #   `unet.npz`，纯 numpy 推理）。按册 5 折留出（U-Net 与模板都不含留出册）：墨迹像素归段准确率 0.992（旧自动缝 0.965）；
     #   识别给字格 0 错时覆盖率 87%（旧自动缝 33%，整字 hog 87%）；门槛 0.075 刚好 0 错，取 0.1 留余量。
-    "xu": IdsSpec(frame="", orient="v", prior=0.5, which=1, min_margin=0.1, by_form=True, unet="unet.npz"),
+    #   **2026-10-22 改通用判法**：计划导出 ⿰余{}，先验折线切（不用 U-Net）、取右部，模板与在线格同一切法。按册 5 折留出 30 格：
+    #   不设门槛 0 错（21 对，9 格因留出后 叙 模板不足 8 例弃权；全库 叙 11 例，线上不受此限）；旧 U-Net 在同口径下 0 错覆盖 57%。取 0.02 留余量。
+    "xu": IdsSpec(frame="", orient="v", prior=0.5, min_margin=0.02, generic=True),
     # 絕絶（2026-10-21）：差别在右部笔画细节，旧窗口 23%、U-Net 部件 31%、**整字 hog 44%**（按册 5 折留出，0 错覆盖率）→ 整字 hog；
     #   门槛：0 错门槛 0.50，取 0.6。39 格（絕 15／絶 24）。
-    "jue": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog", lam=1.0, size=32),
+    #   **2026-10-22 改通用判法＋细 IDS**（sheldon 定：絕 ⿰糸⿱刀巴、絶 ⿰糸⿱⺈巴，`ids_fine.tsv`）：判别叶子＝右部「色」的上半（刀／⺈），
+    #   U-Net（只用本组 39 格人标切线训，`unet.npz`）切左右、自动缝再切到叶子，最近邻。按册 5 折留出：margin 0.04 → 24 对／15 弃／0 错
+    #   （最大错例 margin 0.033；先验折线版 0.06 才 0 错、19 对），取 0.05 → 23／16／0（0 错覆盖 59%，旧整字 hog 44%）。
+    "jue": IdsSpec(frame="", orient="v", prior=0.5, min_margin=0.05, min_class=8, generic=True, unet="unet.npz"),
     # 厯歴（2026-10-21）：差别在下部（心 vs 止），旧左右窗口按册留一有错一直没登记；整字 hog 按册留出 122 格错 3，0 错覆盖率 81%（pix 71%）。
     #   0 错门槛 0.50，取 0.6。
     "lih": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog", lam=1.0, size=32),
@@ -225,8 +234,13 @@ def fingerprint(groups) -> str:
             continue
         sp = GROUPS[g]
         ov = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_override.tsv"
-        spec = hashlib.sha256(json.dumps(asdict(SPECS[g]), sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
-        parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else ""))
+        d = asdict(SPECS[g])
+        if not d["generic"]:
+            d.pop("generic")            # 新字段缺省值不进哈希：不用通用判法的组指纹不变
+        spec = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
+        fine = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_fine.tsv"
+        parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else "")
+                     + (f".f{_sha(fine)}" if SPECS[g].generic else ""))
     if not parts:
         return ""
     return "ids:" + ",".join(parts) + f",lv1={_sha(IDS_TABLE)}"
@@ -240,6 +254,8 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     from .registry import FLOW_GROUPS as GROUPS
     spec = spec or SPECS[g]
     members = GROUPS[g].members
+    if spec.generic:
+        return _judge_generic(g, gray, bank, spec, members, net=net)
     if spec.three:
         return _judge_three(g, gray, bank, spec)
     if spec.whole:
@@ -400,6 +416,133 @@ def _judge_by_form(gray, bank: dict, spec: IdsSpec, members, g: str = "", net=No
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
     return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+@lru_cache(maxsize=16)
+def _meta_cached(path: str, digest: str) -> dict:
+    return json.loads(Path(path).read_text(encoding="utf-8")).get("generic") or {}
+
+
+def generic_meta(g: str) -> dict:
+    """通用判法模板库里的 `generic` 段（先验形状等）；没有 → {}。"""
+    p = bank_path(g)
+    return _meta_cached(str(p), hashlib.sha256(p.read_bytes()).hexdigest()) if p is not None else {}
+
+
+def _gdir(g: str) -> str:
+    from .registry import GROUPS
+    return str(_ROOT / (GROUPS[g].config_dir or f"config/groups/{g}"))
+
+
+def _judge_generic(g: str, gray, bank: dict, spec: IdsSpec, members, net=None, meta: dict | None = None) -> GroupVerdict:
+    """通用判法（`ids_generic`）：计划 → 切（先验折线／U-Net）→ 判别叶子 → 最近邻。"""
+    from . import ids_generic as G
+    plan = G.plan_of("".join(sorted(members)), _gdir(g))
+    if not G.usable(plan):
+        return GroupVerdict(None, why="abstain:no_plan", via="ids")
+    arr = np.asarray(gray)
+    if not ink_of_any(arr):
+        return GroupVerdict(None, why="abstain:blank", via="ids")
+    meta = meta if meta is not None else generic_meta(g)
+    if spec.unet and net is None:
+        net = _load_unet(g)
+        if net is None:
+            return GroupVerdict(None, why="abstain:no_model", via="ids")
+    if not spec.unet and not meta.get("shape"):
+        return GroupVerdict(None, why="abstain:no_bank", via="ids")
+    pl = G.cut(plan, arr, meta.get("shape"), net=net if spec.unet else None)
+    x = G.leaf_of(plan, arr, pl) if pl is not None else None
+    if x is None:
+        return GroupVerdict(None, why="abstain:slot", via="ids")
+    best, m, scores = G.choose(x, bank)
+    extra = {"form": best, "margin": round(m, 4), "plan": plan.frame,
+             "scores": {k: round(float(v), 4) for k, v in scores.items()}}
+    if best is None or best not in members:
+        return GroupVerdict(None, why="abstain:slot", via="ids", extra=extra)
+    if m < spec.min_margin:
+        return GroupVerdict(None, conf=m, why="abstain:low_margin", via="ids", extra=extra)
+    n = len(bank.get(best) or ())
+    if n < spec.min_class:
+        return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
+    return GroupVerdict(best, conf=m, why="agree", via="ids", extra=extra)
+
+
+def ink_of_any(arr) -> bool:
+    from .ids_segment import ink_of
+    return bool(ink_of(arr).any())
+
+
+def _generic_cutter(g: str, spec: IdsSpec, cut_rows, epochs: int = 60):
+    """用人标切线建一折的切法：→ (shape, net)。`cut_rows=[(id, 字, 图, 切线)]`。U-Net 需要 torch。"""
+    from . import ids_generic as G
+    from .registry import GROUPS
+    plan = G.plan_of("".join(sorted(GROUPS[g].members)), _gdir(g))
+    shape = G.mean_shape([c for *_x, c in cut_rows], plan.orient)
+    net = None
+    if spec.unet:
+        from .ids_unet import NpNet
+        tnet = _train_unet2([(img, c) for _i, _f, img, c in cut_rows], plan.orient, epochs=epochs)
+        net = NpNet.from_torch(tnet)
+        net._torch = tnet               # 建库时存权重用
+    return plan, shape, net
+
+
+def _generic_templates(plan, cells, shape, net) -> dict:
+    from . import ids_generic as G
+    bank: dict = {}
+    for form, img, _v, _i in cells:
+        pl = G.cut(plan, img, shape, net=net)
+        x = G.leaf_of(plan, img, pl) if pl is not None else None
+        if x is not None:
+            bank.setdefault(form, []).append(quantize(x).astype(np.float32) / 255.0)
+    return bank
+
+
+def build_generic(g: str, dataset: Path, out_weights: Path | None = None) -> dict:
+    """通用判法建库：先验形状取全部人标切线；模板＝组内全部人裁格（`labels.jsonl`）按同一切法切出的判别叶子。
+    登记了 `unet` 的组同时训 U-Net（只用本组人标切线）存到 `out_weights`（需要 torch）。"""
+    from . import ids_unet as U
+    spec = SPECS[g]
+    rows, src = _pool(g, dataset)
+    plan, shape, net = _generic_cutter(g, spec, rows)
+    if net is not None and out_weights is not None:
+        U.save_weights(net._torch, out_weights)
+    cells, _ = _whole_cells(g, dataset)
+    d = dump_bank(g, _generic_templates(plan, cells, shape, net),
+                  {"labels": f"char-groups/variant/{g}/labels.jsonl",
+                   "labels_sha256": hashlib.sha256(src.read_bytes()).hexdigest()[:16],
+                   "cells": len(cells), "cut_cells": len(rows),
+                   "forms": dict(sorted(Counter(c[0] for c in cells).items()))})
+    d["generic"] = {"frame": plan.frame, "orient": plan.orient, "shape": shape, "cutter": "unet" if spec.unet else "prior"}
+    return d
+
+
+def evaluate_generic(g: str, dataset: Path, margins=(0.0, 0.02, 0.05, 0.1), folds: int = 5, epochs: int = 60) -> dict:
+    """通用判法按册留出（`folds` 折，按册号轮流分）：留出册既不进先验形状／U-Net，也不进模板。"""
+    from .registry import GROUPS
+    spec = SPECS[g]
+    members = GROUPS[g].members
+    rows, _ = _pool(g, dataset)
+    cells, _ = _whole_cells(g, dataset)
+    vols = sorted({c[2] for c in cells})
+    fold_of = {v: k % folds for k, v in enumerate(vols)}
+    out = {m: Counter() for m in margins}
+    wrong = []
+    for k in range(folds):
+        test = [c for c in cells if fold_of[c[2]] == k]
+        if not test:
+            continue
+        plan, shape, net = _generic_cutter(g, spec, [r for r in rows if fold_of.get(r[0].split(":")[0]) != k], epochs)
+        bank = _generic_templates(plan, [c for c in cells if fold_of[c[2]] != k], shape, net)
+        for form, img, _v, i in test:
+            for m in margins:
+                vd = _judge_generic(g, img, bank, IdsSpec(**{**asdict(spec), "min_margin": m}), members, net=net,
+                                    meta={"shape": shape})
+                kk = "abstain" if vd.char is None else "right" if vd.char == form else "wrong"
+                out[m][kk] += 1
+                if kk == "wrong":
+                    wrong.append((m, i, form, vd.char, vd.extra.get("margin")))
+    return {"by_margin": {m: dict(c) for m, c in out.items()}, "wrong": wrong, "cells": len(cells)}
 
 
 def _judge_whole(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
@@ -755,7 +898,8 @@ def main(argv=None) -> int:
         from .registry import FLOW_GROUPS as GROUPS
         out = a.out or _ROOT / (GROUPS[a.group].config_dir or f"config/groups/{a.group}") / "ids_bank.json"
         sp = SPECS[a.group]
-        d = (build_three(a.group, a.dataset, out.with_name(sp.unet) if sp.unet else None) if sp.three
+        d = (build_generic(a.group, a.dataset, out.with_name(sp.unet) if sp.unet else None) if sp.generic
+             else build_three(a.group, a.dataset, out.with_name(sp.unet) if sp.unet else None) if sp.three
              else build_whole(a.group, a.dataset) if sp.whole
              else build_by_form_unet(a.group, a.dataset, out.with_name(sp.unet)) if sp.by_form and sp.unet
              else build(a.group, a.dataset))
@@ -763,7 +907,9 @@ def main(argv=None) -> int:
         print(f"写入 {out}：{d['source']}，各类模板 { {k: len(v) for k, v in d['templates'].items()} }")
     else:
         sp = SPECS[a.group]
-        if sp.whole:
+        if sp.generic:
+            r = evaluate_generic(a.group, a.dataset)
+        elif sp.whole:
             from . import ids_whole
             from .registry import FLOW_GROUPS as GROUPS
             bank = json.loads(bank_path(a.group).read_text(encoding="utf-8"))

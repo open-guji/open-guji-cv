@@ -93,9 +93,12 @@ def test_judge_by_form_classifies_by_member_char():
 
 def test_repo_by_form_banks_load():
     for g in ("xu", "jiao", "qik", "lih", "jue", "zhi"):
-        assert (O.SPECS[g].by_form or O.SPECS[g].whole) and O.has_bank(g), g   # 絕絶/厯歴/啓啟 改整字（#345）
+        sp = O.SPECS[g]
+        assert (sp.by_form or sp.whole or sp.generic) and O.has_bank(g), g   # 絕絶/厯歴/啓啟 改整字（#345）；叙敘/教敎/絕絶 改通用判法（10-22）
         from open_guji_cv.groups.registry import GROUPS
         assert set(O.load_bank(O.bank_path(g))) <= GROUPS[g].members, g
+        if sp.generic:
+            assert len(O.generic_meta(g)["shape"]) == 64, g
 
 
 def test_bank_file_roundtrip_deterministic(tmp_path):
