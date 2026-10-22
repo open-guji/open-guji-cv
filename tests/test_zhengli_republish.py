@@ -127,3 +127,9 @@ def test_add_alt_patches_online_in_place(tmp_path, monkeypatch):
     assert [c["cell"] for c in after["cells"]] == ["1:1:1", "1:1:2", "1:1:9"]
     assert after["cells"][0]["alt"] == [{"c": "已", "s": 0.9123, "p": "己", "src": "v"}]
     assert "alt" not in after["cells"][2]                                                       # 卡片里没有的格不补
+    cards.write_text(json.dumps([{"id": "vol06:1:1:1", "alt": [{"c": "○", "s": 0.97, "p": "○", "src": "piv"}]}]), encoding="utf-8")
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes"]) == 0
+    assert json.loads(online.read_text(encoding="utf-8"))["cells"][0]["alt"][0]["c"] == "已"      # 不加 --replace 不动已有的
+    assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes", "--replace"]) == 0
+    after = json.loads(online.read_text(encoding="utf-8"))
+    assert after["cells"][0]["alt"][0]["c"] == "○" and after["cells"][1]["alt"][0]["c"] == "巳"
