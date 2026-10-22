@@ -150,8 +150,19 @@ def shrink_boxes(char_index: dict, page_width: int) -> dict[str, list]:
     return out
 
 
-def check_cell(a: str, old: dict[str, list], new: dict[str, list], tol: float = BOX_TOL) -> str | None:
-    """同一格在出单版（old）与现行（new）里是不是同一个框。对得上返回 None，否则返回理由。"""
+def box_iou(a: list, b: list) -> float:
+    x1, y1 = max(a[0], b[0]), max(a[1], b[1])
+    x2, y2 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    i = max(0, x2 - x1) * max(0, y2 - y1)
+    u = a[2] * a[3] + b[2] * b[3] - i
+    return i / u if u > 0 else 0.0
+
+
+def check_cell(a: str, old: dict[str, list], new: dict[str, list], tol: float = BOX_TOL,
+               min_iou: float | None = None) -> str | None:
+    """同一格在出单版（old）与现行（new）里是不是同一个框。对得上返回 None，否则返回理由。
+
+    ``min_iou`` 给了就放宽：本列格位集合相同、且目标格新旧框重叠 ≥ min_iou 也放行（同列别的格挪了不管）。"""
     pg, col = a.split(":")[:2]
     pre = f"{pg}:{col}:"
     so = {k for k in old if k.startswith(pre)}
@@ -164,6 +175,8 @@ def check_cell(a: str, old: dict[str, list], new: dict[str, list], tol: float = 
         return f"本列格位变了（出单版 {len(so)} 格，现行 {len(sn)} 格）"
     worst = max(max(abs(u - w) for u, w in zip(old[k], new[k])) for k in so)
     if worst > tol:
+        if min_iou is not None and box_iou(old[a], new[a]) >= min_iou:
+            return None
         return f"本列格框变了（最大差 {worst:.0f}px）"
     return None
 
