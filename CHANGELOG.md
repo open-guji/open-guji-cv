@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+### Added
+- 字形判法扩面（sheldon 10-22，#393 方法数组之后）：衛衞 `weiw`、刪删 `shan`、扺抵 `di` 三个异体对上线取框 HOG＋岭回归（`ids_online.SPECS`，`registry` 配 `config/groups/<组>/ids_bank.json`）。模板＝数据集 `labels/unified.jsonl` 里 sheldon 人裁刻形与 `variant/*/crops` 字块（衛41／衞14、刪111／删5、抵90／扺10）；按册留出 0 错：衛衞 37／55 对、刪删 97／116、扺抵 78／100，次形（衞／删／扺）几乎都弃权送人审，不会被放成主形。只补放，需在册配置 group_flow 点名，重跑归 M8。`ids_online` 与 `registry` 变，`seed_admit` 的 `code_hash` 变。建库与评测脚本 `research/m7/glyph_expand/`。
+- 禽會俞命舍（`qin`）整字字形组：曾會㑹 里被点「其他」的 14 格多为禽。整字 HOG 一对多，模板＝殿本 vol04–10 放行格（每类 ≤60，曾合愈进库但非组员）＋禽 11 格（sheldon 10-22 已确认），按册留出成员格 150 对／19 弃／0 错（门槛 0.5）。单独成表 `registry.SHAPE_GROUPS`（只进 `FLOW_GROUPS`，不进 `GROUPS`：成员有命舍會 等常用字，进了会改 glyph_match／rare_ref_coord 的全局行为）；`ids_online` 改查 `FLOW_GROUPS`；与 zh 共用「會」（互相声明 overlaps）。需在册配置 group_flow 点名。
+
 ### Changed
 - 字框收缩 `cell_shrink` 1.16：两字粘成一块、跨格界两边都伸过 0.1 格的连通体，按格界切开，各格只留界内的半边（`extractor.clip_unions_at_line`）。原先图块按格界外扩 8% 裁、跨界部件整块保留，两格各带走邻字一截（「家」的竖钩连「之」的点、「左」的底横连「字」的宀）。vol05/09 改 1199/1570 格，多为去掉邻字连过来的笔画，本字越界的笔尖会被切掉几像素。
 - 己已巳／日曰／日目 送审收口（`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`）：① 文意 L2 表键容许远处漂移——目标字两侧各 3 字内逐字相同、远处至多差 2 个字位仍用表里的答案（`group_flow_l2_drift`，缺省 2；建表后重跑邻格放行字会变，约 40 格因此整条对不上）；② 共字组联合判——分差内候选单组装不下、装得下「组＋共字组」（日曰目三字紧咬）时也进流程，主组定字后共字组须同意或明说「其他」且 high（`group_flow_joint`，缺省开；目仍是真竞争者，不当陪衬）；③ 己已巳前一字也是族字（干支「己巳」第二字）时不查 L2 表。殿本 vol04–10 抽样 141 页对 dev：新放行 39、复核降审 1，逐格核 0 错；三组送审（不含遮挡）139→101，其中约 20 格靠补跑的 haiku 表，表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（85052303fa79a800→57ce247a18aaf27c）。

@@ -125,13 +125,25 @@ SPECS: dict[str, IdsSpec] = {
     "sz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=40),
     "gm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", lam=1.0, size=40),
     "xb": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=32),
+    # 衛衞、刪删、扺抵（2026-10-22，字形判法扩面）：模板＝dataset `labels/unified.jsonl` 里 sheldon 人裁刻形（衛41／衞14、刪111／删5、抵90／扺10，
+    # 字块图来自 `variant/{wei,shan,di}/crops`），取框 HOG＋岭回归，按册留出（判某册时模板不含该册）。次形太少，只当「放主形」用：
+    # 次形（衞／删／扺）在留出里几乎都落在门槛下弃权，不会被放成主形（0 错），要靠人审。框与参数在 0.25 网格上扫、取 0 错覆盖最高处的邻近稳健值：
+    # 衛衞 取框 x0.25–0.75、y0.5–1（0 错门槛 0.55，取 0.7 → 衛 37／55 给对）；刪删 取左下 x0–0.5、y0.5–1（册／冊 的下半，0 错门槛 0.74，取 0.85 → 97／116）；
+    # 扺抵 取 x0–0.75、y0.5–1（0 错门槛 0.41，取 0.55 → 78／100，其中扺 0）。
+    # 禽會俞命舍（2026-10-22）：曾會㑹 里 sheldon 点「其他」的 14 格多半是禽（库形把它当會）。一对多整字 HOG（不取框，48×48，λ=0.3），
+    #   模板＝殿本 vol04–10 seed_admit 放行格（命／會／合 各取 60，曾 37、愈 28、舍 25、俞 13）＋禽 11（放行里 witness3 的 10 格＋看图预填 1，sheldon 10-22 已确认，
+    #   dataset variant/glyph_expand_1022）；曾 合 愈 进库但不是组员，判成它们＝弃权。含 与 舍 在放行里混用，不进库。按册留出：成员格 150 对／19 弃／0 错（0 错门槛 0.18，取 0.5）。
+    "qin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=48),
+    "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
+    "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),
+    "di": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.55, min_class=8, whole="hog", region=(0.0, 0.75, 0.5, 1.0), lam=3.0, size=64),
 }
 
 
 def bank_path(g: str) -> Path | None:
     """组 `g` 的模板库文件：工作区 `config/groups/ids/<g>.json` 优先，其次仓里 `<config_dir>/ids_bank.json`；都没有 → None。"""
     from ..core.workspace import ws_config_dir
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     cfg = ws_config_dir()
     if cfg is not None and (cfg / "groups" / "ids" / f"{g}.json").exists():
         return cfg / "groups" / "ids" / f"{g}.json"
@@ -190,7 +202,7 @@ def load_bank(path: str | Path) -> dict:
 @lru_cache(maxsize=16)
 def _resolver(g: str):
     from .ids import IdsResolver
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     spec = GROUPS[g]
     return IdsResolver(sorted(spec.members), _ROOT / (spec.config_dir or f"config/groups/{g}"))
 
@@ -206,7 +218,7 @@ def _sha(p: Path | None) -> str:
 def fingerprint(groups) -> str:
     """点名组里登记了在线判法的，各取「判法参数＋模板库＋覆盖表＋IDS 总表」哈希；没有就空串（不改旧指纹）。"""
     from .ids import IDS_TABLE
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     parts = []
     for g in sorted(set(groups)):
         if g not in SPECS or g not in GROUPS:
@@ -225,7 +237,7 @@ def fingerprint(groups) -> str:
 def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None, net=None) -> GroupVerdict:
     """用给定模板库判一格（评测与线上共用）。给字条件：IDS 对上组内成员、margin ≥ `min_margin`、该类模板 ≥ `min_class`。"""
     from .ids_two import solve_two
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     spec = spec or SPECS[g]
     members = GROUPS[g].members
     if spec.three:
@@ -278,7 +290,7 @@ def _load_unet_cached(path: str, sha: str):
 def unet_path(g: str) -> Path | None:
     """组 `g` 的 U-Net 权重：工作区 `config/groups/ids/<g>.unet.npz` 优先，其次仓里 `<config_dir>/<spec.unet>`。"""
     from ..core.workspace import ws_config_dir
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     spec = SPECS.get(g)
     if spec is None or not spec.unet:
         return None
@@ -358,7 +370,7 @@ def _judge_three(g: str, gray, bank: dict, spec: IdsSpec, net=None) -> GroupVerd
 
 
 def _members(g: str):
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     return GROUPS[g].members
 
 
@@ -584,7 +596,7 @@ def judge(g: str, gray) -> GroupVerdict:
 def _pool(g: str, dataset: Path):
     """dataset 人标池 → [(id, 字形, 灰度图, 切线)]。只收 `form` 在组内、切线 ≥2 点的行。"""
     from PIL import Image
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     d = Path(dataset) / "char-groups" / "variant" / g
     mem = GROUPS[g].members
     rows = []
@@ -686,7 +698,7 @@ def build_by_form_unet(g: str, dataset: Path, out_weights: Path) -> dict:
 def _whole_cells(g: str, dataset: Path):
     """整字版：dataset `variant/<g>/labels.jsonl`（`form` 在组内）＋ `crops/` → [(字, 灰度图, 册, 格 id)]。切线不用。"""
     from PIL import Image
-    from .registry import GROUPS
+    from .registry import FLOW_GROUPS as GROUPS
     d = Path(dataset) / "char-groups" / "variant" / g
     mem = GROUPS[g].members
     cells = []
@@ -740,7 +752,7 @@ def main(argv=None) -> int:
     if a.group not in SPECS:
         raise SystemExit(f"组 {a.group!r} 没有登记在线判法（ids_online.SPECS）")
     if a.cmd == "build":
-        from .registry import GROUPS
+        from .registry import FLOW_GROUPS as GROUPS
         out = a.out or _ROOT / (GROUPS[a.group].config_dir or f"config/groups/{a.group}") / "ids_bank.json"
         sp = SPECS[a.group]
         d = (build_three(a.group, a.dataset, out.with_name(sp.unet) if sp.unet else None) if sp.three
@@ -753,7 +765,7 @@ def main(argv=None) -> int:
         sp = SPECS[a.group]
         if sp.whole:
             from . import ids_whole
-            from .registry import GROUPS
+            from .registry import FLOW_GROUPS as GROUPS
             bank = json.loads(bank_path(a.group).read_text(encoding="utf-8"))
             r = ids_whole.evaluate(a.group, bank)
         elif sp.by_form and sp.unet:
