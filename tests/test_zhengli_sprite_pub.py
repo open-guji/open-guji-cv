@@ -58,18 +58,17 @@ def test_upload_fails_loudly_when_a_sheet_is_missing(tmp_path, monkeypatch):
     assert sp.upload([{"name": "a.webp", "sha256": "0" * 64}], tmp_path)["exists"] == 1
 
 
-def _ws(tmp_path, move_cord=False):
+def _ws(tmp_path, monkeypatch):
     ws = tmp_path / "abc123-书"
-    raw = ws / "data_full" / "zongmu" / "vol06"
+    raw = tmp_path / "raw-vol06"
     raw.mkdir(parents=True)
+    monkeypatch.setattr(rp, "raw_dir", lambda ws_, book: raw)       # 原图目录在工作区里，测试不去拼那个路径
     im = Image.new("L", (200, 300), 255)
     im.paste(0, (20, 20, 40, 40))
     im.save(raw / "1.png")
     export = ws / "reports" / "vol06" / "_export"
     export.mkdir(parents=True)
     boxes = ([10, 10, 40, 40], [10, 60, 40, 40])
-    if move_cord:
-        boxes = ([11, 10, 40, 40], [10, 60, 40, 40])
     cord = {"pages": [{"page": 1, "image": {"width": 200, "height": 300},
                        "cells": [{"a": "1:1:1", "box": boxes[0]}, {"a": "1:1:2", "box": boxes[1]}]}]}
     (export / "006.cord.json").write_text(json.dumps(cord), encoding="utf-8")
@@ -82,7 +81,7 @@ def _ws(tmp_path, move_cord=False):
 
 
 def test_add_sprites_rebuilds_uploads_and_patches_in_place(tmp_path, monkeypatch):
-    ws, export, online = _ws(tmp_path)
+    ws, export, online = _ws(tmp_path, monkeypatch)
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     sent = []
     monkeypatch.setattr(rp.sprite_pub, "upload", lambda entries, pub_dir, bucket="main": sent.append((entries, pub_dir)) or {"uploaded": len(entries)})
@@ -100,7 +99,7 @@ def test_add_sprites_rebuilds_uploads_and_patches_in_place(tmp_path, monkeypatch
 
 
 def test_add_sprites_refuses_when_coordinates_differ(tmp_path, monkeypatch):
-    ws, export, online = _ws(tmp_path)
+    ws, export, online = _ws(tmp_path, monkeypatch)
     cord = json.loads((export / "006.cord.json").read_text(encoding="utf-8"))
     cord["pages"][0]["cells"].reverse()                                                         # 格序变了，坐标就对不上
     (export / "006.cord.json").write_text(json.dumps(cord), encoding="utf-8")
