@@ -40,6 +40,7 @@ class FlowConfig:
     delta: float = 0.03
     min_cov: float = 0.85
     top1_cov: float = 0.97
+    form_margin: float = 0.02                          # 两段判的形选择：族内库形第一名领先族内第二名的最小分差
     freq_table: dict = field(default_factory=dict)     # 组 id → {成员: 人裁刻形数}（`freq.load`）
     freq_major: int = _freq.MAJOR
     freq_vols: dict = field(default_factory=dict)      # 组 id → {成员: 人裁册数}（`freq.load_vols`）
@@ -70,6 +71,10 @@ def check_groups(groups) -> None:
             raise ValueError(f"group_flow：字组 {g!r} 的解法 {sorted(bad)} 不认得")
         if set(f.lift_needs) - set(f.solvers):
             raise ValueError(f"group_flow：字组 {g!r} 的 lift_needs {f.lift_needs} 不在它的解法里")
+        if f.families and set("".join(f.families)) - GROUPS[g].members:
+            raise ValueError(f"group_flow：字组 {g!r} 的 families {f.families} 含非成员字")
+        if set(f.form_solvers) - {"freq", "ids", "top1"}:
+            raise ValueError(f"group_flow：字组 {g!r} 的 form_solvers {f.form_solvers} 不认得")
         if f.combine not in ("first", "agree"):
             raise ValueError(f"group_flow：字组 {g!r} 的 combine={f.combine!r} 只能是 first/agree")
 
@@ -180,7 +185,50 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
         return None, "abstain", trail
     if len(set(picks)) > 1:
         return None, "conflict", trail
+    if f.families:
+        return _pick_form(g, picks[0], r, cands, cfg, patch_fn, trail)
     return picks[0], "agree", trail
+
+
+def _pick_form(g: str, ch: str, r, cands, cfg: FlowConfig, patch_fn, trail: list) -> tuple[str | None, str, list]:
+    """两段判的第二段：`ch` 是第一段（文意）定的字；它所在的族不止一形时，按刻形在族内选，选不出弃权。"""
+    f = GROUPS[g].flow
+    fam = next((x for x in f.families if ch in x), None)
+    if fam is None or len(fam) < 2:
+        return ch, "agree", trail
+    fam_set = frozenset(fam)
+    for name in f.form_solvers:
+        if name == "freq":
+            v = _freq.decide(cfg.freq_table.get(g), fam_set, cfg.freq_major, cfg.freq_vols.get(g), cfg.freq_min_vols)
+        elif name == "ids":
+            from . import ids_online
+            if not ids_online.has_bank(g):
+                v = GroupVerdict(None, why="abstain:no_bank", via="ids")
+            else:
+                v = ids_online.judge(g, patch_fn(r.id) if patch_fn is not None else None)
+                if v.char is not None and v.char not in fam_set:
+                    v = GroupVerdict(None, why="abstain:out_of_family", via="ids")
+        elif name == "top1":
+            v = _form_top1(cands, fam_set, cfg)
+        else:
+            raise ValueError(f"group_flow：形选择解法 {name!r} 不认得")
+        trail.append({"solver": f"form:{name}", "char": v.char, "why": v.why, **v.extra})
+        if v.char is not None:
+            return v.char, "agree", trail
+    return None, "abstain", trail
+
+
+def _form_top1(cands, fam: frozenset, cfg: FlowConfig) -> GroupVerdict:
+    """库形最近：族内最高分的形，cov ≥ `min_cov`，且领先族内其他形 ≥ `form_margin`。"""
+    inf = [(c, s) for c, s in (cands or []) if c in fam]
+    if not inf:
+        return GroupVerdict(None, why="abstain:no_cands", via="top1")
+    best, s1 = inf[0]
+    if s1 < cfg.min_cov:
+        return GroupVerdict(None, conf=s1, why="abstain:low_cov", via="top1", extra={"cov": s1})
+    if len(inf) > 1 and s1 - inf[1][1] < cfg.form_margin:
+        return GroupVerdict(None, conf=s1, why="abstain:form_close", via="top1", extra={"cov": s1, "gap": round(s1 - inf[1][1], 4)})
+    return GroupVerdict(best, conf=s1, why="agree", via="top1", extra={"cov": s1})
 
 
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],

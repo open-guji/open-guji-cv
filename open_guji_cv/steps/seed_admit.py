@@ -1990,7 +1990,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         m = mmap.get(cid)
         return list(m.candidates or []) if m is not None else []
     patch_fn = None
-    if any(s in ("bars", "rr_img", "ids") for g in p.group_flow for s in GROUPS[g].flow.solvers):
+    if any(s in ("bars", "rr_img", "ids") for g in p.group_flow
+           for s in (*GROUPS[g].flow.solvers, *(GROUPS[g].flow.form_solvers if GROUPS[g].flow.families else ()))):
         slots = {r.id: (c.col, r.slot, r.sub) for c in out for r in c.chars or []}
         recs = {r.id: r for c in out for r in c.chars or []}
         miss = patch_missing if patch_missing is not None else {}
