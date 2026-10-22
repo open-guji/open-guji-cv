@@ -279,6 +279,22 @@ def test_snap_reverts_unruled_polyline_bends_to_the_straight_fit():
             assert abs(out[vi].x_at(y) - verts[vi].x_at(y)) <= 4, (vi, y, out[vi].x_at(y), verts[vi].x_at(y))
 
 
+def test_snap_reverts_outer_frame_line_pulled_into_text():
+    """外框线下半段没印、折线被首末列字的竖笔吸进 30px → 同样锚回直线；内部界行不受影响
+    （2026-10-22 vol08 p2 左外框吸进第 9 列 42px）。"""
+    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence, _from_knots
+    binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.15)
+    yt, yb = 100.0, 1400.0
+    ky = [yt, yt + (yb - yt) / 3, yt + 2 * (yb - yt) / 3, yb]
+    x = verts[-1].x_at_top
+    bent = verts[:-1] + [_from_knots([x, x, x - 30.0, x - 30.0], ky)]   # 往页心（字里）偏 30px
+    out, n = snap_verticals_to_evidence(binm, top, bot, bent, Wd, Hd, straight=verts)
+    assert n == 1, n
+    assert all(out[i] is verts[i] for i in range(4))
+    for y in (300.0, 900.0, 1350.0):
+        assert abs(out[-1].x_at(y) - verts[-1].x_at(y)) <= 4, (y, out[-1].x_at(y))
+
+
 def test_thick_inner_bar_with_an_outer_rule_is_double_not_single():
     """粗条（12 行）之外还有一条外框 → 判 double 并报 outer，不许当成 single
     （2026-09-20 vol02 p12/16/110/185）。"""
