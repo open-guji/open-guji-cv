@@ -38,5 +38,8 @@ def test_structure_mismatch_falls_back_to_whole():
     assert _plan("冊册", "ce").mode == "whole"       # ⿻ 叠合没有直线切法
 
 
-def test_identical_ids_is_same():
-    assert _plan("絕絶", "jue").mode == "same"
+def test_coarse_table_is_same_until_fine_ids_given():
+    assert derive_plan("絕絶").mode == "same"        # ids_lv1 都写 ⿰糸色，分不出
+    p = _plan("絕絶", "jue")                         # 组内更细的 ids 行：色 上部 刀／⺈
+    assert (p.mode, p.orient) == ("split", "v")
+    assert diff_leaves(p) == [((1, 0), {"絕": "刀", "絶": "⺈"})]

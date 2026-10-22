@@ -127,6 +127,18 @@ def _cost(s: Slot) -> tuple:
     return (sum(a for a, _ in c), sum(b for _, b in c))
 
 
+def _own_ids(group_dir: Path | str | None) -> dict:
+    """组目录 `ids_override.tsv` 里的 `ids<TAB>字<TAB>IDS<TAB>理由` 行：ids_lv1 太粗分不出的字，给更细的组内 IDS（覆盖字表）。"""
+    out: dict[str, list[str]] = {}
+    f = Path(group_dir) / "ids_fine.tsv" if group_dir else None
+    if f is not None and f.exists():
+        for line in f.read_text(encoding="utf-8").splitlines():
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[0] == "ids":
+                out.setdefault(parts[1], []).append(parts[2])
+    return out
+
+
 def _tree_of(ch: str, table: dict, alias: dict) -> list[Node]:
     out = []
     for seq in table.get(ch, []):
@@ -142,7 +154,8 @@ def derive_plan(members: str, group_dir: Path | str | None = None, table: dict |
     table = table if table is not None else load_table()
     alias = load_override(Path(group_dir))["alias"] if group_dir else {}
     members = [m for m in members]
-    cands = [_tree_of(m, table, alias) for m in members]
+    own = _own_ids(group_dir)
+    cands = [_tree_of(m, {**table, **own}, alias) for m in members]
     best: tuple | None = None
     for combo in product(*cands):
         slot = _align(list(combo), table, alias, budget)
