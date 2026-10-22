@@ -32,13 +32,13 @@ def test_registry_kinds_match_ids_specs():
     from open_guji_cv.groups.ids_online import SPECS
     img = {g: next(m for m in s.flow.methods if m.name == "ids") for g, s in GROUPS.items() if "ids" in s.flow.solvers}
     kinds = {g: m.kind for g, m in img.items()}
-    for g in ("lv", "jue", "lih", "qik", "zy", "sy", "sz", "gm", "xb"):
+    for g in ("lv", "lih", "qik", "zy", "sy", "sz", "gm", "xb"):
         assert kinds[g] == "hog", g
-    for g in ("jiao", "zheng"):
+    for g in ("zheng",):
         assert kinds[g] == "composite", g
         m = img[g]
         assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
-    for g in ("can", "xu", "yi_560", "mn", "ce"):
+    for g in ("can", "xu", "jiao", "jue", "yi_560", "mn", "ce"):          # 叙敘／教敎／絕絶 10-22 改通用 IDS 判法
         assert kinds[g] == "ids", g
     assert GROUPS["zhi"].flow.methods[1].kind == "hog"
 
