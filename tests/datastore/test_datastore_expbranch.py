@@ -9,7 +9,10 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from test_datastore_pg import conn, repo  # noqa: F401  (fixtures)
+from test_datastore_pg import DSN, conn, repo  # noqa: F401  (fixtures)
+
+# 用到 Postgres 的用例跟 test_datastore_pg 同口径：没给测试库就跳过（装了 psycopg 也一样）
+_needs_pg = pytest.mark.skipif(not DSN, reason="没有 GUJI_TEST_PG_DSN（测试用 Postgres）")
 
 EXP = "exp/GUJI-612-try"
 
@@ -163,6 +166,7 @@ def test_cli_branch_flag_sets_env(tmp_path, monkeypatch):
     assert seen["branch"] == EXP
 
 
+@_needs_pg
 def test_pull_push_on_exp_branch_keeps_main_copy_apart(repo, conn, tmp_path, monkeypatch):  # noqa: F811
     """同一工作区：main 的数据目录与实验分支的各管各的；在实验分支上改了推上去，main 的副本不动。"""
     from test_datastore_pg import DSN
