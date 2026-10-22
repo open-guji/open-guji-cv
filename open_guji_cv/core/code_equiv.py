@@ -97,6 +97,12 @@ ENTRIES: tuple[Equiv, ...] = (
           new="720a9e15855681456378e88ec5504d5643372c07f8b456e11e1ba61b01a1c573",
           old="1d5e011d22e7cd25514cdcb6dea8d8b877126f2d227326add1a789525a6f6449",
           evidence=_SYM_1022),
+    Equiv(module="open_guji_cv.clustering.rare_panel",
+          new="36638fb605c036d8ac3744855dfd39e0b02ff8fa09e6413532603356c35ca555",
+          old="bec943126936e2e9d49db88c56d8d7faff8ca851af96ae805baa63b57bed8f21",
+          evidence=("特殊符号进候选集 S3（5-b 符号门槛：字表里有符号的册才过滤／前移符号）：字表无符号的 vol07 30 页（每 5 页取 1，"
+                    "3 页新旧同样失败）、vol04 30 页与 origin/dev 5826853 产物逐字节相同；新旧同一 emb 索引，"
+                    "删掉本步旧产物免得格级复用，手工跑 guji step 比 sha，2026-10-22")),
 )
 
 
