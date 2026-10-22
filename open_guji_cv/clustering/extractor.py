@@ -761,6 +761,62 @@ def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float
     return out
 
 
+NEIGHBOR_PART_OUT = 0.62     # 跨格界部件的墨至少这么多在界外，才算邻字的（drop_neighbor_parts）
+
+
+def _nearer_outside(binary: np.ndarray, comp: np.ndarray, t0: int, t1: int) -> bool:
+    """部件离格外的别的墨不比离格内的远（像素距离）——它挨着的是邻字。"""
+    other = binary.astype(bool) & ~comp
+    band = np.zeros(binary.shape[0], bool)
+    band[t0:t1] = True
+    gaps = []
+    for ink in (other & band[:, None], other & ~band[:, None]):
+        if not ink.any():
+            gaps.append(np.inf)
+            continue
+        dist = cv2.distanceTransform((~ink).astype(np.uint8), cv2.DIST_L2, 3)
+        gaps.append(float(dist[comp].min()))
+    return gaps[1] <= gaps[0]
+
+
+def drop_neighbor_parts(patch: np.ndarray, ctx: np.ndarray, off: int,
+                        cell_top: float, cell_bot: float, cell_h: float,
+                        top: bool = True, bottom: bool = True) -> np.ndarray:
+    """抹掉跨格界、墨大半在格界外的邻字部件（2026-10-22）。
+
+    `drop_pad_only_components` 只抹整块在格界外的，跨格界的两格都留：上字断开的底横带个
+    小钩伸过界、下字的点顶过界，结果一格多笔、一格缺笔（vol05「上/下」「宜/賓」、vol09
+    「聖/經」「歟/自」）。部件常比 pad 长，在图块里看不全，所以在上下各多一格的列条 `ctx`
+    里找连通体（`patch` 的第 0 行 = `ctx` 的第 `off` 行，两者同宽；格界也按 `ctx` 行号给）。
+    跨格界、不高于一个字（`SPLIT_H_RATIO` × 本列格高 `cell_h` 以内，更高的是粘连块）、不碰 `ctx` 上下沿、
+    墨至少 `NEIGHBOR_PART_OUT` 在格界外、且离格外的墨不比离格内的远的，从本格抹掉——邻格那边
+    留着。四六开到五五开的照旧两格都留：格界偏低时下字顶上的点、宀（音、序、宮、字）常是
+    这样，归错了比多一笔伤得重。
+    粘连块照旧按格界切。`top`/`bottom` 关掉某条格界：Step3 在那边选了
+    折线时，折线已分过部件，直格界不作数。
+    """
+    t0, t1 = int(round(cell_top)), int(round(cell_bot))
+    binary = (ctx < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    H = ctx.shape[0]
+    out = patch
+    for k in range(1, n):
+        y, h = int(st[k, 1]), int(st[k, 3])
+        if (h > SPLIT_H_RATIO * cell_h or y <= 0 or y + h >= H
+                or not ((top and y < t0 < y + h) or (bottom and y < t1 < y + h))):
+            continue
+        rows = np.nonzero(lab[y:y + h] == k)[0] + y
+        inside = int(((rows >= t0) & (rows < t1)).sum())
+        if len(rows) - inside < NEIGHBOR_PART_OUT * len(rows) or not _nearer_outside(binary, lab == k, t0, t1):
+            continue
+        m = lab[off:off + patch.shape[0]] == k
+        if m.any():
+            if out is patch:
+                out = patch.copy()
+            out[m] = 255
+    return out
+
+
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     """抹掉最外侧的界行残条（磨损界行断成的短竖段/虚线链）。
 
@@ -2673,6 +2729,10 @@ class CharExtractor:
                                         y0=sy0 + y0, x0=sx0 - int(round(left_x)))
                 # pad 带里邻字伸过来的笔尖：不跨格界的连通体一律抹掉（见函数注释）
                 patch = drop_pad_only_components(patch, ltop - y0, lbot - y0)
+                c0 = max(0, int(round(ltop - cell_h)))
+                c1 = min(strip.shape[0], int(round(lbot + cell_h)))
+                patch = drop_neighbor_parts(patch, strip[c0:c1], y0 - c0, ltop - c0, lbot - c0, cell_h_ref,
+                                            top=seam_top is None, bottom=seam_bottom is None)
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
