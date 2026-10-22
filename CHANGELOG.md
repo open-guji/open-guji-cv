@@ -6,6 +6,9 @@
 ## [未发版]
 
 ### Changed
+- 啓啟（`qik`）整字模板库用 dataset 98 格重建（原 24 格＋R2 整册产物里对位文字与整字判法一致的 74 格）：按册留出门槛 0.5 → 97 对／1 弃／0 错（原 17／7／0）。qik 的 group_flow 指纹变。
+
+### Changed
 - 中心库令牌缺省用读令牌：没设 `GUJI_DATA_TOKEN` 而有 `GUJI_DATA_TOKEN_READ` 时，`import open_guji_cv` 就把前者设成后者（云端 Default 环境只放 `_READ`／`_PROD`／`_EXP`，sheldon 10-21）。拉库、取 R2 字体包／产物包／语言模型不用再手动 export；推送照旧要显式设正式或实验令牌。不碰任何 Step，`code_hash` 不变。
 - 字框收缩 `cell_shrink` 1.11：列端框线按全页线位认淡线。同一页各列的框线离版框一样远，先拿全页的实线定线位（`extractor.page_frame_line_offsets`，至少 3 列落在同一处），线位上下 0.04 格高内覆盖 0.1、跨度 0.6、断成至少 3 段的行也算线行——印得淡、断成虚点的框线单看一格认不出（覆盖 0.1–0.6、两头缺点）。压在线位上的字底横是一整笔（列尾「土」「士」），不剥。vol05／vol09 比 1.10 多改 161／248 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
 - 字框收缩 `cell_shrink` 1.10：贴着版框的列尾格、列首格，把格里横贯内容窗口的版框细线（双边框的内框，印得细、常断成虚线）连同线外抹白（`extractor.strip_frame_line`）。原来 `strip_frame_debris`、`carve_end_edge` 剥不掉，殿本列尾字约一成带着一道横线进字块。线只在离格外沿 0.4 格高内找；线外还有成片墨的（「其」「兵」底横下的两点）是字自己的横，跳过；列首格要求线和字之间隔着白行；夹注格不剥。vol05／vol09 改 145／229 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
