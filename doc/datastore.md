@@ -155,7 +155,7 @@ guji-workspace `6bef1ada`（main 分支 rev 1356，`verify` 0 差异）。原图
 `glyph_store_path`、`books_dir`、`ws_config_dir` 指向数据目录；没有标记照旧（测试、没迁的工作区）。
 
 ```bash
-export GUJI_DATA_TOKEN=<正式令牌>             # GUJI_DATA_TOKEN_PROD；只读的话读令牌就够
+export GUJI_DATA_TOKEN=<正式令牌>             # GUJI_DATA_TOKEN_PROD；只读的话不用设：没设时自动用 GUJI_DATA_TOKEN_READ
 guji db migrate -w <工作区> --dry-run         # 一次性：先看工作区里的数据与库是否一致
 guji db migrate -w <工作区>                   # 数据挪进数据目录、工作区里删掉、写标记；glyph.db 不动
 guji db pull    -w <工作区>                   # 中心库 → 数据目录；拉到新字形库才重建 glyph.db
