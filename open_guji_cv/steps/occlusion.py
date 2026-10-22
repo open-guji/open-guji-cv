@@ -184,30 +184,75 @@ def text_ink_fraction(gray: np.ndarray, cells) -> dict[tuple[int, int, str], flo
     return out
 
 
+def seal_overlap_cells(cells, seals, kind: str, overlap: float) -> dict[tuple[int, int, str], tuple[float, object]]:
+    """格（`quad_page`，规范空间）与 `kind` 类印（`seals` 产物的 `Seal`）的外框重叠 ÷ 格面积 ≥ `overlap` 的格
+    → {(col, slot, sub): (重叠比, 那方印)}；一格压着几方印取重叠最大的。"""
+    out: dict[tuple[int, int, str], tuple[float, object]] = {}
+    boxes = [s for s in seals if s.kind == kind]
+    if not boxes:
+        return out
+    for c in cells.columns:
+        for x in c.cells:
+            if not x.quad_page:
+                continue
+            q = np.asarray(x.quad_page, dtype=float)
+            gx0, gy0 = q.min(0)
+            gx1, gy1 = q.max(0)
+            area = (gx1 - gx0) * (gy1 - gy0)
+            if area <= 0:
+                continue
+            for s in boxes:
+                bx0, by0, bx1, by1 = s.bbox
+                ov = max(0.0, min(gx1, bx1) - max(gx0, bx0)) * max(0.0, min(gy1, by1) - max(gy0, by0)) / area
+                key = (c.col, x.slot, x.sub or "")
+                if ov >= overlap and ov > out.get(key, (0.0, None))[0]:
+                    out[key] = (ov, s)
+    return out
+
+
+#: 遮挡格：格与大印外框重叠 ≥ 这个比例（印章系统化，2026-10-22）
+OCC_SEAL_OVERLAP = 0.5
+
+
 def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
-    """本页的遮挡格 {(col, slot, sub): 密度}——**判据的唯一入口**。
+    """本页的遮挡格 {(col, slot, sub): 分数}——**判据的唯一入口**。
 
     `seed_admit` 的 `occluded_gate` 与 `feedback.consumers.glyphdb_admit` 的入库闸都走这里
     （2026-09-30，H-seal：人裁「确认」事件的 `no_glyph_lib` 可能是 false，闸不能只信事件）。
-    `p` 是带 `occluded_min_*` 五个字段的参数对象（`SeedAdmitParams`）。读不到 Step3 字格
-    或原图就当没有遮挡（返回空表）。"""
+
+    2026-10-22 起（印章系统化第 2 期）：遮挡格＝与印章定位 `seals` 产物里**大印**外框重叠 ≥
+    `OCC_SEAL_OVERLAP` 的格，分数取那方印的峰值密度。大印区整块不识别（用户 10-22：「大的印章就是
+    完全不用识别」）。殿本十页大印页对比旧的格级密度判据：旧 1,226 格、新 1,290 格，新增的非空格
+    62 个（vol08 p2 印淡、旧判据只认出半方 57 格；vol04 p130 5 格），旧有新无 24 格（印框外的边角）。
+    旧判据量墨点时把规范空间（右上原点）的格框直接套在原图（左上原点）上，量的是左右镜像处，
+    印在页中间才没出事。没有 `seals` 产物的旧产物才退回旧的密度判据（模块头，`p` 带
+    `occluded_min_*` 五个字段，`SeedAdmitParams`）。读不到 Step3 字格就当没有遮挡（返回空表）。"""
     try:
         cells = ctx.product("cells", page)
     except Exception:
         return {}
     if cells is None:
         return {}
-    try:
-        gray = ctx.raw_page(page)
-    except Exception:
-        return {}
-    occ = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
-                         min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
-                         min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
+    has_seals = getattr(ctx, "has_product", None)
+    if has_seals is not None and has_seals("seals", page):
+        hit = seal_overlap_cells(cells, ctx.product("seals", page).seals, "stain", OCC_SEAL_OVERLAP)
+        occ = {k: float(s.score) for k, (_ov, s) in hit.items()}
+    else:
+        try:
+            gray = ctx.raw_page(page)
+        except Exception:
+            return {}
+        occ = occluded_cells(cell_densities(gray, cells), min_density=p.occluded_min_density,
+                             min_cells=p.occluded_min_cells, min_cols=p.occluded_min_cols,
+                             min_peak=p.occluded_min_peak, min_contrast=p.occluded_min_contrast)
     # 清楚的字救回：块里夹着的、格内大块墨 ≥ `occluded_rescue_ink` 的格不算遮挡（0＝关，缺省，行为不变）。
     # getattr：别的调用方（`feedback.consumers`、`cell_shrink` 的缺省参数）传的参数对象可能没有这个字段。
     rescue = float(getattr(p, "occluded_rescue_ink", 0.0) or 0.0)
     if occ and rescue > 0:
+        try:
+            gray = ctx.raw_page(page)
+        except Exception:
+            return occ
         frac = text_ink_fraction(gray, cells)
         occ = {k: v for k, v in occ.items() if frac.get(k, 0.0) < rescue}
     return occ
@@ -324,7 +369,11 @@ def seal_blank_cells(gray: np.ndarray, cells, *, templates, thr: float,
 
 
 def page_seal_blank(ctx, page: int, p) -> dict[tuple[int, int, str], dict]:
-    """本页盖章空栏候选格（读不到 Step3 字格或原图就当没有）。`p` 带 `seal_blank_thr`／`seal_blank_overlap`／`seal_blank_ink_out`。"""
+    """本页盖章空栏候选格（读不到 Step3 字格或原图就当没有）。`p` 带 `seal_blank_thr`／`seal_blank_overlap`／`seal_blank_ink_out`。
+
+    2026-10-22 起（印章系统化第 2 期）：印框取印章定位 `seals` 产物里的**小印**（`seal_blank_thr` 不再用），
+    格与印框重叠 ≥ `seal_blank_overlap` 入选；「印外墨」的覆盖区取 `seal_detect.stroke_mask`。格框从规范空间
+    换回原图坐标再量（旧路径直接拿右上原点的格框比左上原点的印框）。没有 `seals` 产物的旧产物才走旧路径。"""
     try:
         cells = ctx.product("cells", page)
         gray = ctx.raw_page(page)
@@ -332,6 +381,33 @@ def page_seal_blank(ctx, page: int, p) -> dict[tuple[int, int, str], dict]:
         return {}
     if cells is None:
         return {}
-    return seal_blank_cells(gray, cells, templates=load_seal_templates(),
-                            thr=p.seal_blank_thr, overlap=p.seal_blank_overlap,
-                            ink_out=p.seal_blank_ink_out)
+    has_seals = getattr(ctx, "has_product", None)
+    if has_seals is None or not has_seals("seals", page):
+        return seal_blank_cells(gray, cells, templates=load_seal_templates(),
+                                thr=p.seal_blank_thr, overlap=p.seal_blank_overlap,
+                                ink_out=p.seal_blank_ink_out)
+    from .seal_detect import stroke_mask
+    H, W = gray.shape[:2]
+    out: dict[tuple[int, int, str], dict] = {}
+    masks: dict[int, np.ndarray | None] = {}
+    for key, (ov, s) in seal_overlap_cells(cells, ctx.product("seals", page).seals, "crisp",
+                                           p.seal_blank_overlap).items():
+        if id(s) not in masks:
+            masks[id(s)] = stroke_mask(s, H, W)
+        cov = masks[id(s)]
+        col, slot, sub = key
+        x = next(x for c in cells.columns if c.col == col for x in c.cells if x.slot == slot and (x.sub or "") == sub)
+        q = np.asarray(x.quad_page, dtype=float)
+        gx0, gy0 = q.min(0)
+        gx1, gy1 = q.max(0)
+        area = (gx1 - gx0) * (gy1 - gy0)
+        y0, y1 = max(0, int(np.floor(gy0))), min(H, int(np.ceil(gy1)))
+        x0, x1 = max(0, int(np.floor(W - 1 - gx1))), min(W, int(np.ceil(W - 1 - gx0)))
+        ink = gray[y0:y1, x0:x1] < 128
+        if cov is not None:
+            ink = ink & (cov[y0:y1, x0:x1] == 0)
+        frac = float(np.count_nonzero(ink)) / area
+        if p.seal_blank_ink_out is not None and frac >= p.seal_blank_ink_out:
+            continue
+        out[key] = {"seal_score": round(float(s.score), 4), "overlap": round(ov, 3), "ink_out": round(frac, 4)}
+    return out

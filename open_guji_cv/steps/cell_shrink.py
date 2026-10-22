@@ -91,15 +91,16 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.11", unit="cell",   # 1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
-        consumes=("cells", "column_windows", "column_image"), produces=("char_index", "char_patch"),
+        id="cell_shrink", title="Step4 字框收缩", version="1.12", unit="cell",   # 1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals",),
+        produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
                    "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
-                   "open_guji_cv.steps.occlusion"),
+                   "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────

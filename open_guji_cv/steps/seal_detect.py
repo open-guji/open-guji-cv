@@ -150,7 +150,10 @@ def _template_stroke(name: str):
     import cv2
 
     from ..utils.image_io import imread
-    im = imread(str(SEAL_TPL_DIR / name), cv2.IMREAD_GRAYSCALE)
+    try:
+        im = imread(str(SEAL_TPL_DIR / name), cv2.IMREAD_GRAYSCALE)
+    except OSError:
+        im = None
     if im is None:
         return None
     return cv2.dilate((im < 128).astype(np.uint8), np.ones((STROKE_DILATE, STROKE_DILATE), np.uint8))
