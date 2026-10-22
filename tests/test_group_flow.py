@@ -193,7 +193,7 @@ def test_review_conflict_demotes(monkeypatch):
     """复核时两路解法给了不同的字（必有一路≠放行字）→ 降审。"""
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    picks = {"ctx": "人", "rr_img": "入"}
+    picks = {"ctx": "人", "rr_img": "入", "ids": None}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
     r = Rec("b", "人", True, "match_ref", "match")
     group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
@@ -253,10 +253,11 @@ def test_ry_review_fix_only_when_strong(monkeypatch):
 
 
 def test_lift_needs_blocks_image_only_lift(monkeypatch):
-    """入人八 `lift_needs=("ctx",)`：只有字形分类器给字时不补放（留人审 `group_flow_weak`）。"""
+    """入人八 `lift_needs=("ctx", "ids")`：只有随机森林分类器给字时不补放（留人审 `group_flow_weak`）；
+    文意或整字 HOG 给字（且不冲突）才补放。"""
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    picks = {"ctx": None, "rr_img": "人"}
+    picks = {"ctx": None, "rr_img": "人", "ids": None}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
     r = Rec("x")
     group_flow_pass([r], {}, lambda cid: [("入", 0.96), ("人", 0.94)], lambda r: False, _cfg())
@@ -265,12 +266,16 @@ def test_lift_needs_blocks_image_only_lift(monkeypatch):
     r = Rec("y")
     group_flow_pass([r], {}, lambda cid: [("入", 0.96), ("人", 0.94)], lambda r: False, _cfg())
     assert r.admit and r.char == "人"
+    picks["ctx"], picks["ids"] = None, "人"          # 文意弃权、整字 HOG 给字 → 补放（2026-10-22 字形第二路）
+    r = Rec("z")
+    group_flow_pass([r], {}, lambda cid: [("入", 0.96), ("人", 0.94)], lambda r: False, _cfg())
+    assert r.admit and r.char == "人"
 
 
 def test_agree_combine_conflict(monkeypatch):
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    picks = {"ctx": "人", "rr_img": "入"}
+    picks = {"ctx": "人", "rr_img": "入", "ids": None}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
     r = Rec("x")
     group_flow_pass([r], {}, lambda cid: [("人", 0.99), ("入", 0.98)], lambda r: False, _cfg())

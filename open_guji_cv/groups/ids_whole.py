@@ -35,6 +35,47 @@ def norm(gray: np.ndarray, size: int) -> np.ndarray | None:
     return np.asarray(Image.fromarray(crop).resize((size, size), Image.BILINEAR), dtype=np.float32) / 255.0
 
 
+def clean_patch(gray: np.ndarray) -> np.ndarray:
+    """去邻格碎墨（2026-10-22，文意组字形第二路）：墨迹 8 连通域里，面积 ≥ 最大块 15% 的算主体；
+    其余小块贴边、落在主体外框（外扩 8%）之外、或面积不到最大块 1% 的抹白；主体级的块若贴边、不到最大块 35% 且细长（宽或高 < 12%）
+    也抹白（邻列笔画）。线上字块常带邻格碎墨，按墨迹外框归一后整字变形，論→諭、自→目 会高把握判错。cv2 惰性导入。"""
+    import cv2
+    g = np.asarray(gray)
+    ink = ink_of(g).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    if n <= 2:
+        return g
+    H, W = g.shape[:2]
+    areas = st[1:, cv2.CC_STAT_AREA]
+    big = areas.max()
+    main = {i + 1 for i, a in enumerate(areas) if a >= 0.15 * big}
+    xs0 = min(st[i, 0] for i in main)
+    ys0 = min(st[i, 1] for i in main)
+    xs1 = max(st[i, 0] + st[i, 2] for i in main)
+    ys1 = max(st[i, 1] + st[i, 3] for i in main)
+    mx, my = 0.08 * W, 0.08 * H
+    out = g.copy()
+    for i in range(1, n):
+        x, y, w, h, a = (int(v) for v in st[i])
+        touch = x <= 0 or x + w >= W or y <= 0 or y + h >= H
+        if i in main:
+            drop = touch and a < 0.35 * big and (w < 0.12 * W or h < 0.12 * H)
+        else:
+            inside = x >= xs0 - mx and x + w <= xs1 + mx and y >= ys0 - my and y + h <= ys1 + my
+            drop = touch or not inside or a < 0.01 * big
+        if drop:
+            out[lab == i] = 255
+    return out
+
+
+def aspect_ok(gray: np.ndarray, rng: tuple) -> bool:
+    """字块宽高比在 `rng=(lo, hi)` 内；超出多半是连进了邻字（如夹注两小字并成一块）。空 `rng` 不查。"""
+    if not rng:
+        return True
+    h, w = np.asarray(gray).shape[:2]
+    return rng[0] <= w / max(h, 1) <= rng[1]
+
+
 def _crop(img: np.ndarray, region: tuple) -> np.ndarray:
     n = img.shape[0]
     x0, x1, y0, y1 = region

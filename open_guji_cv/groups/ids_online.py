@@ -60,6 +60,8 @@ class IdsSpec:
     region: tuple = (0.0, 1.0, 0.0, 1.0)  # 整字版：取归一字块的哪一块（占宽高的 x0,x1,y0,y1）
     lam: float = 1.0            # 整字版：岭回归的 L2 系数
     size: int = 32              # 整字版：模板与在线字块归一后的边长（模板库里也写一份）
+    clean: bool = False         # 整字版：判之前先去邻格碎墨（`ids_whole.clean_patch`）；模板建库时须同样清理（2026-10-22）
+    aspect: tuple = ()          # 整字版：字块宽高比须在 (lo, hi) 内，否则弃权 abstain:aspect（连进邻字的块）
     generic: bool = False       # True：通用判法（`ids_generic`）：切法与判别叶子由成员 IDS 导出（`ids_plan`），缺省形状先验折线切、
                                 # 给了 `unet` 改用 U-Net；模板与在线格同一切法切，最近邻；frame/orient/prior/which/by_form 不用（2026-10-22）
 
@@ -125,6 +127,39 @@ SPECS: dict[str, IdsSpec] = {
     # 2026-10-22 放低（sheldon 同意）：判别台复核（research/m7/bench/check_prod.py）发现的两格线上门槛之上的「错」是原人裁错
     #   （vol02:125:8:4 实为吕、vol01:70:7:10 实为徴，sheldon 看图定，数据集与中心库已更正）。更正后按册留一：
     #   呂吕 0.3 → 68 对／2 弃／0 错（无错例）；徵徴 0.45 → 49 对／26 弃／0 错（错例最大 0.336，留 0.11 余量）。
+    # —— 文意组的字形第二路（2026-10-22，sheldon「能不能再进一步优化算法」）：整字／取框 HOG＋岭回归，`clean`＋`aspect`。
+    #   模板＝数据集人裁格＋殿本 vol04–10 已放行格（每册每字 ≤20，放行字当标签），字块全是线上同款 char_patch、去碎墨后建库
+    #   （research/m7/bench/build_ctx_bank.py）；尺寸与取框由判别台按册嵌套留出选（bench.py --only-crops）。
+    #   门槛（research/m7/bench/ctx_glyph2.py，按册留一）：人裁格 0 错、且已放行格上与放行字不同的 ≤0.2%，取两者较高者 ×1.1，最低 0.4。
+    #   注释里「人裁 a/b、放行 同 c/d 异 e」是该门槛下按册留一的数（放行异议逐格读过上下文，多为字形错判）。
+    #   不上的组：大太 未末 王玉 目自 千干 十卜（差一小笔，留出覆盖太低）、戊戌戍（戍 不足 8 例，会把戍判成戊／戌）、木本（人裁不足）。
+    "rr": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.66, min_class=8, whole="hog", region=(0.0, 1.0, 0.0, 0.5),
+                  size=48, clean=True, aspect=(0.45, 2.2)),          # 人裁 42/48，放行 同 1817/1846 异 2
+    "ts": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.44, min_class=8, whole="hog", region=(0.0, 0.5, 0.0, 1.0),
+                  size=32, clean=True, aspect=(0.45, 2.2)),          # 人裁 17/29，放行 同 409/414 异 0
+    "ly": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.66, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0),
+                  size=32, clean=True, aspect=(0.45, 2.2)),          # 人裁 21/40，放行 同 518/614 异 0
+    "wj": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.59, min_class=8, whole="hog", region=(0.25, 1.0, 0.25, 1.0),
+                  size=48, clean=True, aspect=(0.45, 2.2)),          # 人裁 29/37，放行 同 225/268 异 0
+    "zh": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.5),
+                  size=32, clean=True, aspect=(0.45, 2.2)),          # 人裁 104/104，放行 同 77/77 异 0（只判 曾／會 族；會㑹 形判不用它）
+    "yh": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", size=32, clean=True,
+                  aspect=(0.45, 2.2)),                               # 人裁 21/24，放行 同 61/61 异 0
+    "yt": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.51, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 1.0),
+                  size=32, clean=True, aspect=(0.45, 2.2)),          # 人裁 19/32，放行 同 608/693 异 1
+    "js": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", size=32, clean=True,
+                  aspect=(0.45, 2.2)),                               # 人裁 40/40，放行 同 120/120 异 0；抽样页 vol06:15:6:13（组外字，sheldon 判其他）判申 0.454，故 0.4→0.5
+    "em": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", region=(0.0, 1.0, 0.5, 1.0),
+                  size=32, clean=True, aspect=(0.45, 2.2)),          # 人裁 21/21，放行 同 1718/1719 异 1
+    "fc": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.8, min_class=8, whole="hog", region=(0.0, 1.0, 0.25, 0.75),
+                  size=48, clean=True, aspect=(0.45, 2.2)),          # 人裁 9/30，放行 同 1034/1473 异 0
+    "yr": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.87, min_class=8, whole="hog", size=32, clean=True),
+                                                                     # 人裁 17/21，放行 同 2633/2794 异 5；不查宽高比（「一」本来就扁）
+    # 象／𧰼（2026-10-22，sheldon 指「中间这一块有明显区别」）：只用于 象彖𧰼 组「象族」的形判（族内 象／𧰼），不进组级方法。
+    #   判别区＝左半中段 (x 0–0.5, y 0.125–0.625)，64×64；模板只用人裁（象 153／𧰼 13，不收已放行格：里面混着约 1.5% 𧰼）。
+    #   按册留一：𧰼 判成象的最大 margin 0.92 → 取 1.0，象 约四成给字、0 错；𧰼 不足 20 例（min_class=20）永不自动给，一律人审。
+    "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
+                  size=64, clean=True, aspect=(0.45, 2.2)),
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
     "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
                      region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
@@ -551,6 +586,10 @@ def evaluate_generic(g: str, dataset: Path, margins=(0.0, 0.02, 0.05, 0.1), fold
 def _judge_whole(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
     """整字二类岭回归（`ids_whole`）：判别值绝对值 ≥ `min_margin`、判成的字模板 ≥ `min_class` 才给字。"""
     from . import ids_whole
+    if not ids_whole.aspect_ok(gray, tuple(spec.aspect)):
+        return GroupVerdict(None, why="abstain:aspect", via="ids")
+    if spec.clean:
+        gray = ids_whole.clean_patch(gray)
     best, m, sc = ids_whole.score(np.asarray(gray), bank, spec.whole, tuple(spec.region), spec.lam, spec.size)
     extra = {"form": best, "margin": round(float(m), 4), "scores": {k: round(float(v), 4) for k, v in sc.items()}}
     if best is None:
