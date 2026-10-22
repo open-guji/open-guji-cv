@@ -18,6 +18,7 @@ PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_d
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added
+- 粗校出口 R4 异常表可写成 JSON（GUJI-666，`scripts/zhengli/collect_exit.py` 的 `load_anomaly`）：`{"rows": [{n, text, cause, concl, pages?, cols?}]}`，`pages`／`cols` 给了就不再从「现象」里抠 pN colM；格式错报具体位置（JSON 报行列和 `rows[i]`，md 报第几行），不再是整表悄悄 FAIL 或悄悄少读几行。老 md 表照读。体检结果带字形库指纹那一半早由 GUJI-710 做掉。
 - `guji pipeline`／`guji step` 起跑前自检依赖（GUJI-654，`ops/preflight.py`）：这次要跑的步骤用得上的东西本机缺了就拒跑（退出码 2）并点名——Step3 切点裁判（`cut_judge=unet`）和 Step5-b 要 torch 与权重，册配置开了 `shadow_veto` 的 Step7 要 joblib／scikit-learn。以前这些都是悄悄退回旧办法或整页失败（10-21 vol08 缺 joblib，seed_admit 69 页全失败，pipeline 仍返回 0）。`--allow-missing-deps` 或 `GUJI_ALLOW_MISSING_DEPS=1` 放行。不动任何 Step 与 code_deps。
 - 待审单雪碧图改成「文件名带内容哈希、真源进 R2」（GUJI-675，方案 B）：`scripts/zhengli/sprite_pub.py`——`republish.py prep` 把图改名 `<原名>.<sha8>.webp`、单子顶层写 `sprites[]`，`push` 先把图按 sha256 传进 R2 main 桶（`datastore/r2.py` 认 `webp` 后缀）再写单子；新增 `republish.py add-sprites` 给线上旧单补图（重建后逐格核坐标，一格对不上就不动）。网站 proofing-sync 读 `sprites[]` 发到 COS（kaiyuanguji-web 同步改）。不动任何 Step 与 code_deps。
 - Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
