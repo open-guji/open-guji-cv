@@ -267,32 +267,56 @@ def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
 
 
 def test_in_seal_measures_cell_overlap_with_the_seal_box_in_page_coords():
+    """大印（无笔画掩码）：格与印框（规范空间 x0, y0, x1, y1）重叠 ≥ 一半。"""
     from types import SimpleNamespace as C
     from open_guji_cv.steps.row_segment import _in_seal
     mapper = C(quad_tr=lambda x0, y0, x1, y1: [(x0 + 1000, y0), (x1 + 1000, y0), (x1 + 1000, y1), (x0 + 1000, y1)])
-    f = _in_seal([(1000, 0, 100, 150)], mapper)              # 印框盖住列图 y 0..150
+    f = _in_seal([(1000, 0, 1100, 150, None)], mapper)       # 印框盖住列图 y 0..150
     cell = lambda y0: C(x0=0, x1=100, y0=y0, y1=y0 + 100)
     assert f(cell(0)) and f(cell(50)) and not f(cell(110))     # 重叠 1、0.5、0.4
-    assert _in_seal([], mapper) is None and _in_seal([(0, 0, 1, 1)], None) is None
+    assert _in_seal([], mapper) is None and _in_seal([(0, 0, 1, 1, None)], None) is None
 
 
-def test_empty_zone_seal_needs_ink_in_neighbouring_columns_table_empty_zones():
-    """表空段（首字之上）里有像字的墨：相邻两列同高都有才当印框，单独一列的不算。"""
+def test_under_stain_is_the_column_head_under_a_big_seal_only():
+    """列首格（版框顶下一个 period）一半以上在大印框里才算；小印（有笔画掩码）、列首格下面才进印框的都不算。"""
     import numpy as np
     from types import SimpleNamespace as C
-    from open_guji_cv.steps.row_segment import _empty_zone_seal
+    from open_guji_cv.steps.row_segment import _under_stain
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [(x0 + 1000, y0), (x1 + 1000, y0), (x1 + 1000, y1), (x0 + 1000, y1)])
+    big = (1000, 300, 1900, 1200, None)
+    assert _under_stain([big], mapper, (0, 100), 300, 100)          # 列首 300..400 整格在印里
+    assert not _under_stain([big], mapper, (0, 100), 200, 100)      # 200..300：只贴着印框上沿
+    assert not _under_stain([big], mapper, (950, 1050), 300, 100)   # 列在印框左外侧
+    assert not _under_stain([(1000, 300, 1900, 1200, np.ones((2, 2), np.uint8))], mapper, (0, 100), 300, 100)
 
-    def col(n, ink_rows, slots):
-        img = np.full((420, 100), 255, np.uint8)
-        for a, b in ink_rows:
-            img[a:b, 40:60] = 0                          # 墨宽 20%：像字，不是框线
-        mp = C(quad_tr=lambda x0, y0, x1, y1, o=n * 100: [(x0 + o, y0), (x1 + o, y0), (x1 + o, y1), (x0 + o, y1)])
-        return dict(col=n, img=img, content_x=(0, 100), border_top=0, border_bottom=420, slots=slots, mapper=mp)
-    body = list(range(3, 22))                            # 表：第 3 格起有字，period 20 → 表空段 y 0..40
-    cols = [col(1, [(5, 35)], body), col(2, [(8, 38)], body), col(4, [(5, 35)], body)]
-    boxes = _empty_zone_seal(cols, 20.0, 128)
-    assert len(boxes) == 1 and boxes[0][0] == 100 and boxes[0][0] + boxes[0][2] == 300   # 1、2 列连成一团，4 列落单
-    assert _empty_zone_seal([cols[0], cols[2]], 20.0, 128) == []
+
+def test_in_seal_counts_ink_on_the_small_seal_strokes_even_at_the_box_edge():
+    """小印：格只有一角挨着印框，但格里的墨（列图）映回原图都落在印的笔画上 → 算印；格里另有墨（字）→ 不算。"""
+    import numpy as np
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _in_seal
+    H, W = 400, 400
+    mask = np.zeros((H, W), np.uint8)
+    mask[40:100, 240:300] = 1                                   # 原图左上原点
+    img = np.full((100, 100), 255, np.uint8)                    # 列图：列图 (x, y) ↔ 原图左上 (x + 199, y)
+    img[50:90, 51:91] = 0
+    mapper = C(quad_tr=lambda x0, y0, x1, y1: [(200 - x0, y0), (200 - x1, y0), (200 - x1, y1), (200 - x0, y1)],
+               to_page_tl=lambda x, y: (x + 199, y))
+    f = _in_seal([(150, 0, 300, 300, mask)], mapper, img)
+    cell = C(x0=0, x1=100, y0=0, y1=100)
+    assert f(cell)
+    img[50:90, 5:40] = 0                                        # 印外再加一块字的墨
+    assert not f(cell)
+
+
+def test_page_seals_reads_every_seal_from_the_seals_product():
+    """印只来自印章定位 `seals` 产物（大印、小印都算）；大印没有笔画掩码；没有产物就是空表。"""
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _page_seals
+    ps = C(height=3000, width=2300, seals=[C(kind="stain", template="", bbox=(300.0, 330.0, 1960.0, 1990.0))])
+    ctx = C(has_product=lambda kind, page: page == 3, product=lambda kind, page: ps)
+    assert _page_seals(ctx, 3) == [(300.0, 330.0, 1960.0, 1990.0, None)]
+    assert _page_seals(ctx, 4) == []
 
 
 def test_build_applies_layout_overrides(tmp_path):

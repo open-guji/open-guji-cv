@@ -1,10 +1,11 @@
-"""seals：Step0 印章定位（numeric，页级）。印章系统化第 1 期（2026-10-22）。
+"""seals：印章定位（numeric，页级，紧跟 Step1 版框）。印章系统化第 1 期（2026-10-22）。
 
 用户 10-22：印章要在整页识别一开始就定位好，后面各步只读这份结果、不再各自去认。
 每页一份，列出本页每一方印：类别、外框、分数、来源。没有印的页 `seals` 为空表。
 
 两类印（殿本四库总目十册普查，设计见 `steps/seal_detect.py` 模块头）：
-- `stain` 大印：卷首叶、卷端页的藏书印，斑驳，满是中等墨点，不用识别，只要知道范围；
+- `stain` 大印：卷首叶、卷端页的藏书印，斑驳，满是中等墨点，不用识别，只要知道范围——
+  它紧贴版框上边与右边，宽正好九列（整个版框宽），是正方形（Sheldon 10-22），外框按版框定；
 - `crisp` 小印：卷末「乾隆御覽之寶」，笔画清楚，容易被当成字，覆盖区＝模板笔画。
 """
 
@@ -24,7 +25,8 @@ class Seal(BaseModel):
     """外框 [x0, y0, x1, y1]，规范空间（右上原点，x 向左）。"""
     score: float
     """`stain` 是峰值密度（每格中等墨点数）；`crisp` 是模板笔画覆盖率减底色墨率。"""
-    source: Literal["density", "template", "manual"]
+    source: Literal["density", "frame", "template", "manual"]
+    """`frame`：大印位置按版框定（紧贴上框、右框的正方形，边长＝版框宽）；`density`：没有版框时退回墨点密度区。"""
     template: str = ""
     """`crisp` 命中的模板文件名（`config/seal_templates/`），下游据此复原笔画覆盖区。"""
 
@@ -37,5 +39,5 @@ class PageSeals(BaseModel):
 
 
 SEALS = register_kind(ProductKindSpec(
-    id="seals", title="Step0 印章定位", storage="numeric", unit="page",
+    id="seals", title="印章定位", storage="numeric", unit="page",
     schema=PageSeals, coord_space=RAW_TR))

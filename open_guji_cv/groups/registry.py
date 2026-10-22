@@ -154,7 +154,7 @@ GROUPS: dict[str, GroupSpec] = {
         note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, cfg in (("mn", "蒙𫎇", None), ("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
                               ("chen", "讖識䜟", None), ("li", "隸𨽾", None), ("shen", "慎愼", "config/groups/shen"),
-                              ("zhi", "旨㫖", None))},
+                              ("zhi", "旨㫖", "config/groups/zhi"))},
     # —— 第二批异体组（2026-10-18 sheldon 定）：只靠字频。人裁数不够（主形 <20 或次形不为 0）时弃权、送人审，
     #    不退到 IDS／库形最近；字频表重算后数据攒够就自动放行。
     **{gid: GroupSpec(
