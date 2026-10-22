@@ -109,6 +109,8 @@ def test_box_conversion_and_check():
     assert check_cell("5:1:2", old, new) is None                               # 差 1px：对得上
     moved = shrink_boxes(_shrink(2300, [cells[0], ("5:1:2", [1801, 680, 108, 118])]), 2300)
     assert "格框变了" in check_cell("5:1:1", old, moved)                        # 同列别的格动了也不放行
+    assert check_cell("5:1:1", old, moved, min_iou=0.8) is None                # 放宽档：目标格框没动就放行
+    assert "格框变了" in check_cell("5:1:2", old, moved, min_iou=0.8)           # 目标格自己挪了仍不放行
     fewer = shrink_boxes(_shrink(2300, cells[:1]), 2300)
     assert "现行产物里没有" in check_cell("5:1:2", old, fewer)
     assert "格位变了" in check_cell("5:1:1", old, fewer)

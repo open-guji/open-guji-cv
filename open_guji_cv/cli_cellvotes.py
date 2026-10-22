@@ -38,7 +38,7 @@ def _fetch_kv(site_book: str, rev: str, token: str, site: str = SITE) -> list[di
     while True:
         q = {"rev": rev, "book": site_book, "limit": "256", **({"cursor": cursor} if cursor else {})}
         req = urllib.request.Request(f"{site}/api/cellreview?{urllib.parse.urlencode(q)}",
-                                     headers={"Authorization": f"Bearer {token}"})
+                                     headers={"Authorization": f"Bearer {token}", "User-Agent": "guji-cellvotes/1"})
         with urllib.request.urlopen(req, timeout=60) as r:
             d = json.load(r)
         if not d.get("success"):
@@ -66,7 +66,7 @@ def _votes(args) -> tuple[list[dict], str]:
     return load_votes(p), f"数据目录 {p.relative_to(feedback_root().parent)}"
 
 
-def _box_checker(book: str, cord_path: Path, tol: float):
+def _box_checker(book: str, cord_path: Path, tol: float, args=None):
     """返回 check(a)：按页懒读现行 cell_shrink，和出单版 cord 比。缺这一页的产物就挂起（不猜）。"""
     from .core.spec import page_key
     from .feedback.web_votes import check_cell, cord_boxes, shrink_boxes
@@ -83,7 +83,7 @@ def _box_checker(book: str, cord_path: Path, tol: float):
             cache[pg] = None if raw is None else shrink_boxes(raw.get("char_index") or {}, width)
         if cache[pg] is None:
             return f"现行产物缺第 {pg} 页（先 guji pipeline keben_body_v2 {book} --pages {pg} --to seed_admit）"
-        return check_cell(a, old, cache[pg], tol)
+        return check_cell(a, old, cache[pg], tol, getattr(args, 'iou', None))
     return check
 
 
@@ -96,7 +96,7 @@ def cmd_draft(args) -> None:
     raw, where = _votes(args)
     votes, dropped = latest_votes(raw, args.site_book, args.rev)
     human = latest_human(EventLog(feedback_root()).iter_all())
-    check = _box_checker(args.book, Path(args.cord), args.tol) if args.cord else None
+    check = _box_checker(args.book, Path(args.cord), args.tol, args) if args.cord else None
     t = triage(votes, args.book, human, include_none=args.include_none, check=check)
 
     out = Path(args.out)
@@ -161,6 +161,8 @@ def add_parser(sub) -> None:
     p.add_argument("--cord", default=None, help="draft：出单那一版 book-text 的 <册>.cord.json")
     p.add_argument("--no-box-check", action="store_true", help="draft：不核格位（自己担保产物没重切过）")
     p.add_argument("--tol", type=float, default=8.0, help="draft：格框容差（像素，缺省 8）")
+    p.add_argument("--iou", type=float, default=None,
+                   help="draft：放宽档——框差超容差时，目标格新旧框重叠 ≥ 此值（如 0.8）且本列格位集合相同也放行")
     p.add_argument("--include-none", action="store_true", help="draft：「无字」也写（缺省挂起）")
     p.add_argument("--from", dest="from_file", default=None, help="draft：票从文件读")
     p.add_argument("--from-kv", action="store_true", help="draft：票直接管理读网站")
