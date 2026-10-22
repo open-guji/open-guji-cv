@@ -123,6 +123,10 @@ DEFAULT_ROUTES: list[dict] = [
     # ——那个分片是旧坐标系、**已退役**。新开分片跟页级
     # `border-detection/head-raise-presence` 也分开存：两级的锚点粒度不同
     # （页 vs 列），塞一个分片里 eval 口径会打架。
+    # 反色带候选人审（2026-10-22，`steps/invert_detect.py`）：只落裁决表。不必失效产物——点 yes 的页
+    # `effective_raw_path` 换成修好的图，原图 sha 一变，Step0 起各步自然判过期。
+    {"match": {"kind": "inverted_band"},
+     "to": [{"consumer": "gold_add", "shard": "preprocess/inverted-band"}]},
     {"match": {"kind": "head_raise"},
      "to": [{"consumer": "gold_add", "shard": "char-segmentation/head-raise-columns"}]},
     # 逐列字数人裁（2026-09-18，`review/slot_count_cards.py`）：`chars_per_line`

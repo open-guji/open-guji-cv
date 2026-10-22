@@ -47,6 +47,7 @@ KIND_UNITS = {
     "band": {"column"},
     "border_class": {"column", "page"},
     "head_raise": {"column"},
+    "inverted_band": {"page"},
     "n_body_slots": {"column"},
     "vision_check": {"cell"},
     "collate_verdict": {"cell"},

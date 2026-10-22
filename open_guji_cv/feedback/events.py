@@ -58,6 +58,7 @@ Kind = Literal[
     "cutline",        # 拖切线：粘连格线的理想切点（payload: y / y_old / verdict / slot_above / slot_below）
     "border_offset",  # 整页拖版框：下版框整页坐标金标（payload: y_left / y_right / verdict）
     "head_raise",     # 列级抬头精标（payload: raised / n_raised / head_cut / note）
+    "inverted_band",  # 反色带候选人审（payload: verdict∈yes/no, rules = preclean 规则表）；yes 的页 Step0 照 rules 修
     "n_body_slots",   # 逐列字数人裁：chars_per_line 常量在个别列不成立时的覆盖（payload: n_slots）
     # ── Step8 复核裁决（2026-09-22）。问的不是「这是什么字」而是「我们和证人谁对」。
     "collate_ok",     # 维持我方转写：看过图了，我们和证人就是不一样。只记账，

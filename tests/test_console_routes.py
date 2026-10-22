@@ -721,9 +721,11 @@ def test_route_inventory():
     与 `PUT /api/books/{book}/ocr_candidates`。114 → 112。
     2026-10-19 相似字（以字找字，doc/research/人审找字-以字找字与异体族按图排序.md）：新增
     `GET /api/rare/alt/{book}/{page}/{col}/{slot}`（近似字的异体族按字块图排序，只出候选）。112 → 113。
+    2026-10-22 反色带送审：新增 `GET /api/invert-review/cards`、`GET /api/invert-review/preview`
+    （修前修后预览）；裁决走既有 `POST /api/events`（kind=inverted_band）。113 → 115。
     """
     got = sorted(_endpoints())
-    assert len(got) == 113,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 115,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -840,6 +842,8 @@ EXPECTED_ROUTES = [
     "GET /api/batches", "GET /api/batches.md", "GET /api/batches/{batch_id}",
     "GET /api/books", "GET /api/border-review/cards", "GET /api/border-review/img/{book}/{page}.jpg",
     "GET /api/border-review/verdicts",
+    # Step0 反色带送审（2026-10-22）
+    "GET /api/invert-review/cards", "GET /api/invert-review/preview",
     # Step2 列清理人裁（2026-09-17）
     "GET /api/column-review/case",
     "GET /api/column-review/cases", "GET /api/column-review/verdicts",
