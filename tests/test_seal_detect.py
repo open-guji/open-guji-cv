@@ -94,12 +94,16 @@ def test_page_occluded_is_the_cells_under_the_big_seal():
     from open_guji_cv.products.kinds.seals import PageSeals, Seal
     from open_guji_cv.steps.occlusion import page_occluded
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
-    cells = _cells((1, [(1, 300, 300, 480, 400), (2, 300, 400, 480, 500), (9, 300, 1500, 480, 1600)]))
+    cells = _cells((1, [(1, 300, 300, 480, 400), (2, 300, 400, 480, 500), (9, 300, 1500, 480, 1600),
+                        (10, 300, 1600, 480, 1700)]))
     seals = PageSeals(page=3, width=W, height=H, seals=[
         Seal(kind="stain", bbox=(300, 330, 2000, 1490), score=33.0, source="frame"),
         Seal(kind="crisp", bbox=(300, 1500, 960, 2180), score=0.6, source="template", template="x.png")])
-    occ = page_occluded(_seal_ctx(cells, seals), 3, SeedAdmitParams())
-    assert occ == {(1, 1, ""): 33.0, (1, 2, ""): 33.0}       # 1 格重叠 0.7、2 格 1.0；小印不算遮挡
+    gray = _page()
+    gray[1520:1580, W - 1 - 460:W - 1 - 320] = 0               # 9 格（规范空间 x 300..480）里有字；10 格只有印（这里没墨）
+    occ = page_occluded(_seal_ctx(cells, seals, gray), 3, SeedAdmitParams())
+    # 1 格与大印重叠 0.7、2 格 1.0；9 格是小印压着的字；10 格没有印外的墨，是盖章空栏，不算遮挡
+    assert occ == {(1, 1, ""): 33.0, (1, 2, ""): 33.0, (1, 9, ""): 0.6}
 
 
 def test_page_seal_blank_uses_the_small_seal_and_page_coordinates():
