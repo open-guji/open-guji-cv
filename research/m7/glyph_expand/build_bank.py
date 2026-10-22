@@ -14,7 +14,7 @@ from eval_pair import load, loo, summarize  # noqa: E402
 from open_guji_cv.groups import ids_online as O, ids_whole  # noqa: E402
 
 #: 组 → (字, size)
-PLAN = {"weiw": ("衛衞", 48), "shan": ("刪删", 48), "di": ("扺抵", 64)}
+PLAN = {"lih": ("厯歴", 48), "weiw": ("衛衞", 48), "shan": ("刪删", 48), "di": ("扺抵", 64)}
 
 if __name__ == "__main__":
     root, g = Path(sys.argv[1]), sys.argv[2]

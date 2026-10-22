@@ -95,7 +95,7 @@ SPECS: dict[str, IdsSpec] = {
     "jue": IdsSpec(frame="", orient="v", prior=0.5, min_margin=0.05, min_class=8, generic=True, unet="unet.npz"),
     # 厯歴（2026-10-21）：差别在下部（心 vs 止），旧左右窗口按册留一有错一直没登记；整字 hog 按册留出 122 格错 3，0 错覆盖率 81%（pix 71%）。
     #   0 错门槛 0.50，取 0.6。
-    "lih": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog", lam=1.0, size=32),
+    "lih": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.25, min_class=8, whole="hog", region=(0.0, 1.0, 0.5, 1.0), lam=1.0, size=48),
     # 啓啟（2026-10-21）：啓是「户攵」在上口在下，啟是「启」在左攵在右，结构不同、整字分布差得大，不切。整字 pix：24 格（啓 8／啟 16，只 vol01、vol04 两册）
     #   留一格 24/24、按册留出也全对；样本少，取 0.5，啓 刚好 8 例，待补采。
     "qik": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="pix", lam=1.0, size=32),
@@ -122,8 +122,11 @@ SPECS: dict[str, IdsSpec] = {
     #   模板里 vol07:4:4:21 按 sheldon 复看改为呂（原人裁吕，墨浓两口被粗笔连上；更正写在建库脚本 CORRECTIONS）。
     # 徵徴 hog（取字块 x 0.28–0.78、y 0.15–0.65）80×80、λ=3：|d|≥0.6 → 38 对／37 弃权／0 错（≥0.5 46 对 0 错，≥0.4 55 对 0 错，≥0.3 1 错；
     #   换尺寸、λ、区域，0.6 处都是 0 错，所以取 0.6）。徵徴 不设门槛只有 87–92% 对，别放宽。
-    "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="pix", lam=1.0, size=32),
-    "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog",
+    # 2026-10-22 放低（sheldon 同意）：判别台复核（research/m7/bench/check_prod.py）发现的两格线上门槛之上的「错」是原人裁错
+    #   （vol02:125:8:4 实为吕、vol01:70:7:10 实为徴，sheldon 看图定，数据集与中心库已更正）。更正后按册留一：
+    #   呂吕 0.3 → 68 对／2 弃／0 错（无错例）；徵徴 0.45 → 49 对／26 弃／0 错（错例最大 0.336，留 0.11 余量）。
+    "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
+    "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
                      region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
     # 子于、山由出（2026-10-21，未覆盖形近字长尾线）：整字 HOG＋岭回归，模板＝殿本 vol04–10 seed_admit 放行格（match_ref、无疑问，
     # 建库与评测见 research/m7/long_tail/build_bank.py）；组外的 干／曲 也进库（判成它们＝abstain:slot），免得真干、真曲被硬判进组。
