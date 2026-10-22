@@ -5,6 +5,8 @@
 每一条都是先写错了、被实测推翻才改对的。
 """
 
+from types import SimpleNamespace
+
 from open_guji_cv.clustering.charset_spec import (
     DEFAULT_ALLOW_BY_EDITION, DEFAULT_ESCALATE_THRESHOLD,
     base_charset, build_charsets, filter_candidates, is_simplified,
@@ -98,3 +100,24 @@ def test_escalate_threshold_is_calibrated_value():
     换 `base` 要重标，改这个常量必须同时改 `charset_spec` 模块头那张表。
     """
     assert DEFAULT_ESCALATE_THRESHOLD == 0.85
+
+
+def test_symbols_join_base_only_when_switched_on(monkeypatch):
+    """特殊符号设计 S3：`font.charset.symbols: true` 才把符号表并进基集；extra 里的符号绕过 `_cjk` 过滤，
+    不开的书字表逐字不变。"""
+    import open_guji_cv.core.book as book_mod
+    from open_guji_cv.clustering.charset_spec import spec_for_book
+    from open_guji_cv.hanzi.symbols import symbols
+
+    def fake(cfg):
+        return lambda _b: SimpleNamespace(font={"charset": cfg}, edition="keben")
+    monkeypatch.setattr(book_mod, "load_book", fake({"symbols": True, "extra": ["甫"]}))
+    spec = spec_for_book("x")
+    assert spec["extra"][0] == "甫" and set(symbols()) <= set(spec["extra"])
+    monkeypatch.setattr(book_mod, "load_book", fake({"extra": ["甫"]}))
+    assert spec_for_book("x")["extra"] == ["甫"]
+
+    on, esc_on = build_charsets("unicode-cjk-a", "unicode-ext-b", None, False, True, tuple(symbols()))
+    off, esc_off = build_charsets("unicode-cjk-a", "unicode-ext-b", None, False, True, ())
+    assert set(on) - set(off) == set(symbols())
+    assert not any(c in symbols() for c in off) and esc_on == esc_off

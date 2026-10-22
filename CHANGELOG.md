@@ -5,6 +5,29 @@
 
 ## [未发版]
 
+## [0.5.6] - 2026-10-21
+
+PATCH（sheldon 10-22 定发）。主要内容：印章系统化 1–4 期（新增 Step0 `seal_detect`，切分与遮挡格改读印章定位）、字框收缩 `cell_shrink` 1.10–1.15、字组判法重构成方法数组并新增五个码位归一组、旨㫖整字判法上线、啓啟与教敎模板库重建。相对 v0.5.5，`row_segment`、`cell_shrink`、`seed_admit` 三步 `code_hash` 变，另新增 `seal_detect`，**各书 Step0／Step3 起判过期**；其余 14 步不变。新组（zy sy sz gm xb zhi 及码位归一组 nei bie chu juan wan）要在册配置 `group_flow` 点名才生效；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3786 过、39 跳过。
+
+### Added
+- Step0 印章定位 `seal_detect`（印章系统化第 1 期，用户 10-22 定）：排在 Step1 之前，只读原图，产物 `seals` 列出每页每方印的类别（`stain` 大印＝卷首叶、卷端页的斑驳藏书印；`crisp` 小印＝卷末「乾隆御覽之寶」）、规范空间外框、分数、来源。大印按 150 px 网格的中等墨点密度认（峰值 ≥ 20、近方形，排掉 p2 书签条）；小印用印章模板整页找，分数取「模板笔画处有墨比例 − 空白处有墨比例」，印压正文时也认得出（vol09 p265 原来认不出）。书级 `params.seal_detect.overrides` 可人核整页覆盖。殿本十册 1,707 页认出 26 页（大印 13、小印 13），我逐页看图没发现误报（待 Sheldon 核图定为标准）。这一期只新增产物，别的步还不读它，各书已有产物不过期（新步自己要算一遍）。设计见 Claude Doc「印章系统化设计」。
+- 旨㫖（`zhi`）上线整字判法（`groups/ids_online` SPECS、`registry` 配 `config/groups/zhi`）：整字 HOG＋岭回归，模板来自 R2 整册产物对位文字（353 格，sheldon 更正 18 个旨→㫖），按册 5 折留出 margin 0.5 → 348 对／5 弃／0 错。`zhi` 需在册配置 group_flow 点名才生效，重跑归 M8。
+
+### Changed
+- 字组判法重构成**方法数组**（sheldon 10-22 定，`groups/methods.py`）：每组在 `FlowSpec.methods` 里登记一串方法，依次试，`combine=first` 遇放行即停、`agree` 全跑须一致；每个方法输出放行字或待定，带 0–1 置信度与留痕。八类：码位归一 `codepoint`（新；配新组 內内 nei、別别 bie、出岀 chu、卷巻 juan、晚晩 wan，单独成表 `CODEPOINT_GROUPS`、不进 `GROUPS`，glyph_match／rare_ref_coord 的全局字组集合不变，要在册配置 `group_flow` 点名才生效）、字频 `freq`、上下文固定匹配 `ctx_rule`、LLM 答案表 `llm`（两者合成子数组 `ctx`）、整字 HOG＋岭回归 `hog`、IDS 部件 `ids`、复合 `composite`（取框→方法，教敎、徵徴）、自定义函数 `custom`（量横、日曰宽高比、入人八分类器、库形最近）。算法与留痕名不变：殿本 vol04 共 65 页、56 组全开，seed_admit 产物与改前逐字节相同；再加五个码位归一组，65 页 9,688 格逐格不变（这批格已被 #372 的码位判等放行）。`seed_admit` 的 `code_hash` 变（`code_deps` 加 `groups.methods`，`flow`／`registry` 改写），其余步不变。
+- 字框收缩 `cell_shrink` 1.15：1.13 挪走的跨格界部件，伸进本格超过 0.1 格的不再挪（`NEIGHBOR_PART_DEPTH`）。伸得深的多半是两字粘成一块，整块挪走挖掉了本字的笔画（vol09「兵」「標」「諸」、vol05「荃」「字」「後」，Sheldon 看图指出）。
+- 小印压着的字也算遮挡格（印章系统化第 4 期，用户 10-22 定）：`occlusion.page_occluded` 在大印之外，加与小印框重叠 ≥ 0.3 的格，除去盖章空栏候选（格里的墨全在印笔画上）。这些格同大印：Step4 打 `seal_region` 旗，seed_admit 默认整理本字、审核卡归「印章遮挡」组，定字入库闸不建字形库。殿本 10 页小印页：新增 59 格，全在印压字的 vol09 p68／p162／p265、vol10 p87／p175（各 16／5／17／10／10）和 vol07 p134（1 格）；印落在空白处的 4 页不变。PATCH；`cell_shrink` 1.14、`seed_admit` 1.20。
+- 字框收缩 `cell_shrink` 1.13：跨格界的连通体若不高于一字、墨至少六成二在格界外、离格外的墨不比格内的远，算邻字越界的笔画，从本格抹掉（`extractor.drop_neighbor_parts`；在上下各多一格的列条里找部件，Step3 选了折线的那条格界不查）。原先跨界的部件两格都留，一格多笔、一格缺笔（「上/下」「宜/賓」「聖/經」）。vol05/09 改 30/34 格，逐张看过，改坏 1 格（vol05 p122 c3「字」丢宀）。
+- 切分 `row_segment` 1.34（印章系统化第 3 期）：大印压着列首的列（列首格一半以上在 `seals` 的大印框里）直接取逐列格位表的等距格网（抬头听表、格线就近落缝），不再在几张候选格网里按坏格挑。印泥斑点连着字，劈字、穿字都量不准：闸把列首斑点当抬头字（vol04 p3 c2/c3、vol05 p3 c3、vol10 p88 c1），DP 为躲斑点把格挤歪（vol07 p2 c1、vol09 p70 c1），字整列错一格而格号集合照样对得上。评测 `structcmp` 加「对位」口径（同页同格号的字格高度应一致，偏半格以上记错位），`flipcmp` 一并报，卷端页缺省在内。殿本七册 20 页印章页重跑：大印页错位列 12 → 0，逐格、字数两口径修好 0、改坏 0。PATCH；`row_segment` 的 `code_hash` 变。
+- 遮挡格与盖章空栏改读印章定位 `seals`（印章系统化第 2 期之二）：`occlusion.page_occluded`（seed_admit `occluded_gate`、字形库入库闸、Step4 `seal_region` 旗共用的唯一入口）改为「与大印框重叠 ≥ 一半的格」，不再按格算墨点密度；`page_seal_blank` 改用小印框和它的笔画覆盖区（`seal_detect.stroke_mask`），不再在 (830,330) 窗口里找模板。修了两处旧坐标错：旧判据把右上原点的格框直接套在左上原点的原图上，量到的是左右镜像的位置，印正好在页中间才没出事。殿本十页大印页：遮挡格 1,226 → 1,290，新增的非空格 62 个（vol08 p2 印淡，旧判据只认出半方，占 57 格），减少 24 格（印框外的边角）。十页小印页：盖章空栏候选里的非空格减少 9 个（vol09 p162 c4、vol10 p87 c3/c4，都是压在印下的真字「文淵閣著錄」等，旧路径因坐标镜像误入候选），vol07 p134 多 2 个、少 1 个。没有 `seals` 产物的旧产物照旧走原判据。PATCH；`cell_shrink` 1.12、`seed_admit` 1.19，新读 `seals`，`code_hash` 变；`row_segment` 补登记 `seal_detect` 为代码依赖。
+- 切分 `row_segment` 1.33（印章系统化第 2 期之一）：列端表空格「落在印里就记空」改读印章定位 `seals` 产物，删掉 `_seal_box`（窗口模板找印）和 `_empty_zone_seal`（表空段墨团）。大印按框量（格与印框重叠 ≥ 一半）；小印按笔画量：格里 ≥ 70% 的墨属于压着印笔画覆盖区的连通块（`_in_seal`），印边只压住一列一小半也认得出。顺带修好旧坐标错：原印框是左上原点、格是右上原点，卷末印正好在页中线附近才一直没出事。殿本七册 20 页印章页 Step3–4 重跑，与 dev 逐列对比：修好 0、改坏 0。PATCH；`row_segment` 的 `code_hash` 变，并新读 `seals`。
+- 印章定位 `seal_detect` 1.1：大印外框改按版框定——紧贴版框上边与右边、边长＝版框宽（九列）的正方形（Sheldon 10-22 给的规律），不再用墨点密度区的外接框（偏大）；密度只判有没有大印。这一步因此挪到 `border_detect` 之后（读 `borders`），读不到版框才退回密度框。殿本 13 页大印逐页看图都贴合。小印不变。
+- 啓啟（`qik`）整字模板库用 dataset 98 格重建（原 24 格＋R2 整册产物里对位文字与整字判法一致的 74 格）：按册留出门槛 0.5 → 97 对／1 弃／0 错（原 17／7／0）。qik 的 group_flow 指纹变。
+- 中心库令牌缺省用读令牌：没设 `GUJI_DATA_TOKEN` 而有 `GUJI_DATA_TOKEN_READ` 时，`import open_guji_cv` 就把前者设成后者（云端 Default 环境只放 `_READ`／`_PROD`／`_EXP`，sheldon 10-21）。拉库、取 R2 字体包／产物包／语言模型不用再手动 export；推送照旧要显式设正式或实验令牌。不碰任何 Step，`code_hash` 不变。
+- 字框收缩 `cell_shrink` 1.11：列端框线按全页线位认淡线。同一页各列的框线离版框一样远，先拿全页的实线定线位（`extractor.page_frame_line_offsets`，至少 3 列落在同一处），线位上下 0.04 格高内覆盖 0.1、跨度 0.6、断成至少 3 段的行也算线行——印得淡、断成虚点的框线单看一格认不出（覆盖 0.1–0.6、两头缺点）。压在线位上的字底横是一整笔（列尾「土」「士」），不剥。vol05／vol09 比 1.10 多改 161／248 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
+- 字框收缩 `cell_shrink` 1.10：贴着版框的列尾格、列首格，把格里横贯内容窗口的版框细线（双边框的内框，印得细、常断成虚线）连同线外抹白（`extractor.strip_frame_line`）。原来 `strip_frame_debris`、`carve_end_edge` 剥不掉，殿本列尾字约一成带着一道横线进字块。线只在离格外沿 0.4 格高内找；线外还有成片墨的（「其」「兵」底横下的两点）是字自己的横，跳过；列首格要求线和字之间隔着白行；夹注格不剥。vol05／vol09 改 145／229 格，逐格看图改坏 0，格的类型不变。PATCH；`cell_shrink` 版本与 `code_hash` 变，各书 Step4 起判过期。
+- 书级 `codepoints:` 并进 seed_admit 的语义判等（`codepoint_semantic`，缺省开；关掉回旧行为）：巻→卷、别→別、岀→出、晩→晚、內→内 在 `context_vs_ref`、`replace_align`、`match_replace` 等一切「语义同字」比较里按同一个字算，放行字最后落册指定码位；`group_flow` 文意 L2 表的键按码位归一再比（否则邻格新放行会让组内格误降）。起因：此前 `vmap` 不认这些码位对，整理本排异体、刻本与文意都对的格全被 `context_vs_ref` 拦下（殿本 vol04–10 送审里这类 217 格：卷巻 178、別别 33、出岀 4、晚晩 2）。没配 `codepoints` 的册产物不变；参数指纹不变（缺省值不进 dump）。PATCH；`seed_admit` 的 `code_hash` 变（合入 dev 时 5335145caae3→a4f8dc68effc），别的 Step 不变。抽样重跑这类格所在 140 页：新放行 216，降级 0，仍送审 1（被遮挡）。
+
 ## [0.5.5] - 2026-10-21
 
 PATCH（Sheldon 10-21 定发）。glyph_match 的 `batch_knn`、`font_tier` 改为缺省开（vol06：glyph_match 959 s → 349 s，送审 142 → 143，两边都放行而字不同的 0 格）。相对 v0.5.4，8 步 `code_hash` 变：`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`glyph_match`、`seed_admit`，**各书 Step1 起全部判过期**；其余 9 步不变。rc 上全量测试：3755 过、9 跳过；修了 8 条随 #366 进来、在有 CNN checkpoint 的机器上失败的测试（#370，只改测试）。

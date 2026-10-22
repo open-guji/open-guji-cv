@@ -15,6 +15,7 @@ selector:
 steps:
   - page_survey          # Step0 页面预检：原图尺寸 → 按册中位数标异常页；闸在 border_detect_gate（任务卡 #54 第22条）
   - border_detect        # Step1 边框探测：原图 → 版框 + 界行（含折线）+ 外框 + 抬头框
+  - seal_detect          # 印章定位：原图＋版框 → 每方印的类别（大印/小印）与外框，大印按版框定成正方形；后面各步认印只读它（2026-10-22）
   - column_warp          # Step2 单列射影 + 去噪 + 界行/版框清除：→ warp 参数 / 文字带 / border_class；列图走缓存；出口闸见上
   - row_segment          # Step3 单列文字切分：→ 带类型字格 + 读序
   - cell_shrink          # Step4 字框收缩：沿用 CharExtractor；→ 紧框 + flags；字块走缓存

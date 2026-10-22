@@ -60,7 +60,7 @@ def per_page(book: str, pages: list[int] | None, st: ProductStore) -> dict:
 
 
 def channel_breakdown(book: str, pages: list[int] | None, st: ProductStore) -> dict:
-    """自动放行的通道占比：dual / match_ref / match_solo_cnn / context / … 各占多少。
+    """自动放行的通道占比：dual / match_ref / match_solo / context / … 各占多少。
 
     只统计 `admit=True` 的记录——人审位没有 channel（走的是人裁不是通道）。
     口径与 `模块测试与现状.md` §2.7 "通道占比 dual 84.7%" 那类数字一致，

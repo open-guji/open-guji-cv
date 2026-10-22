@@ -33,9 +33,6 @@ def _rare(cands: dict[int, list[str]]) -> PageRare:
 def _run(tmp_path, monkeypatch, *, rare, cands=((LIB, 0.95),), verdict="unsure", guard=None, char=None,
          align=(REF, "replace"), params=None, coord=None):
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
-    # CNN 那一路（match_solo_cnn）与这里测的无关：本机装了 torch、有 checkpoint 时它会去读字块图，
-    # 测试没造图就整页失败；没 checkpoint 的机器上它自动弃权。统一让它弃权，测试不随机器变。
-    monkeypatch.setattr(sa, "_cnn_top", lambda *a, **k: None)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=char, cov=cands[0][1], wmax=16.0,
                                          guard=guard, candidates=list(cands))]))

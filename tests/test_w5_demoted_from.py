@@ -107,3 +107,46 @@ def test_diff_script(tmp_path):
     j["columns"][0]["chars"][0]["evidence"]["keep"] = 2
     q.write_text(json.dumps(j), encoding="utf-8")
     assert m.compare(tmp_path / "a", tmp_path / "b", "bk")["diff_pages"] == ["p0001.json"]
+
+
+def _sym_setup(monkeypatch, rare_top=None):
+    import open_guji_cv.steps.align_ref as ar
+    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: None)
+    monkeypatch.setattr(ar, "rare_topk_map", lambda r, k: {"r1": [rare_top]} if rare_top else {})
+    return NS(symbol_min_human=3)
+
+
+def test_symbol_review(monkeypatch):
+    """特殊符号设计 S3：放行成符号的格退回待审，doubts 记 symbol；库里同符号人裁够数、走库匹配才放。"""
+    p = _sym_setup(monkeypatch)
+    r = _rec(char="○", channel="match_solo")
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p, [_col(r)], {}, {}) == 1
+    _assert_demoted(r, "symbol_review", "match_solo")
+    assert "symbol" in r.doubts and r.evidence["symbol"] == "○"
+    human = {f"b:1:1:{i}": "○" for i in range(3)}
+    r2 = _rec(char="○", channel="match_solo")
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p, [_col(r2)], {}, human) == 0
+    assert r2.admit
+    r3 = _rec(char="○", channel="context")             # 人裁够数也不让上下文放行符号
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p, [_col(r3)], {}, human) == 1
+
+
+def test_symbol_review_context_no_vote(monkeypatch):
+    """库／5-b 首选是符号、上下文却放行成别的字 → 退回待审；纯汉字格不动。"""
+    p = _sym_setup(monkeypatch, rare_top="●")
+    r = _rec(char="口", channel="context")
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p, [_col(r)], {}, {}) == 1
+    assert r.evidence["symbol"] == "●"
+    r2 = _rec(char="口", channel="match_ref")             # 库匹配放行的不动（库 top1 不是符号）
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p, [_col(r2)], {"r1": NS(char="口")}, {}) == 0
+    assert r2.admit and "symbol" not in r2.doubts
+    p2 = _sym_setup(monkeypatch)
+    r3 = _rec(char="山", channel="context")
+    assert sa._symbol_review_pass(NS(log=lambda s: None), 1, p2, [_col(r3)], {"r1": NS(char="山")}, {}) == 0
+    assert r3.evidence == {"keep": 1}
+
+
+def test_symbol_review_params_hash_unchanged_when_off():
+    d = sa.SeedAdmitParams().model_dump()
+    assert "symbol_review" not in d and "symbol_min_human" not in d
+    assert "symbol_review" in sa.SeedAdmitParams(symbol_review=True).model_dump()

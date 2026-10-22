@@ -73,6 +73,24 @@ def test_entry_jys_tolerates_ba():
     assert entry(Rec("a"), [("己", 0.99), ("目", 0.985)], None, cfg) is None
 
 
+def test_zh_xz_include_variant_forms():
+    """sheldon 10-22：㑹 并入曾會、𧰼 并入象彖（异体写法，文意定字）。"""
+    assert {"曾", "會", "㑹"} <= GROUPS["zh"].members and {"象", "彖", "𧰼"} <= GROUPS["xz"].members
+    assert entry(Rec("a"), [("會", 0.98), ("㑹", 0.97)], None, FlowConfig(groups=("zh",))) == ("zh", "lift")
+
+
+def test_two_stage_form_pick():
+    """象彖𧰼：文意先定彖／象族，象𧰼同族再按库形最近选形；选不出弃权。"""
+    from open_guji_cv.groups.flow import _pick_form
+    cfg = FlowConfig(groups=("xz",))
+    r = Rec("a")
+    assert _pick_form("xz", "彖", r, [("彖", 0.9)], cfg, None, [])[:2] == ("彖", "agree")        # 单字族不再选形
+    assert _pick_form("xz", "象", r, [("象", 0.963), ("𧰼", 0.938)], cfg, None, [])[:2] == ("象", "agree")
+    assert _pick_form("xz", "象", r, [("𧰼", 0.97), ("象", 0.96)], cfg, None, [])[0] is None      # 太近，弃权
+    assert _pick_form("xz", "象", r, [("𧰼", 0.97), ("象", 0.90)], cfg, None, [])[0] == "𧰼"      # 文意定族，刻形定形
+    assert _pick_form("xz", "象", r, [("象", 0.80)], cfg, None, [])[0] is None                    # cov 太低
+
+
 def test_entry_ref_via_codepoints():
     canon = {"旨x": "旨"}.get
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")

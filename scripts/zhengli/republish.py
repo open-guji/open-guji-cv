@@ -26,6 +26,7 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
   python scripts/zhengli/republish.py from-pack --book vol05 -w $WS --label <包标签> --book-text <book-text 仓>
   python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export
   python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync] [--book-text <book-text 仓>]
+  python scripts/zhengli/republish.py add-alt --book vol05 -w $WS [--yes --sync]   # 线上单漏了相似字：原地补，不换 rev
 推库要 `.[datastore]`（psycopg、websockets）和能写 main 的令牌。
 产物根取 GUJI_PRODUCTS_DIR，没设就是 <工作区>/products（与引擎同口径）。
 """
@@ -204,8 +205,11 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
 
     cards = ws / "reports" / book / f"{book}.cards.alt.json"
     if not a.no_alt:
-        run([py, "-m", "open_guji_cv.cli_v2", "audit", "alt", book, "-w", ws] + (["--fetch-zi"] if a.fetch_zi else []),
-            cwd=CV, env=env)
+        cards.unlink(missing_ok=True)             # 上一次的卡不能顶替这一次（格号可能已变）
+        if run([py, "-m", "open_guji_cv.cli_v2", "audit", "alt", book, "-w", ws] + (["--fetch-zi"] if a.fetch_zi else []),
+               cwd=CV, env=env).returncode:
+            # 10-21 殿本重发时这步静默出了 0 格相似字，单子照发，网站卡片上相似字全没了；现在出不来就停
+            sys.exit("✗ guji audit alt 没出相似字（见上面的原因）；确实要出没有相似字的单子加 --no-alt")
     raw = out / "raw"
     cmd = [py, HERE / "pending_list.py", "--products", products, "--book", book, "--chapter", chapter, "--rev", rev,
            "--cv-commit", a.cv_commit or git_head(), "--out", raw]
@@ -449,6 +453,55 @@ def cmd_from_pack(a) -> int:
     return rc
 
 
+def cmd_add_alt(a) -> int:
+    """线上单原地补相似字：不换 rev、不动格子，只给缺 `alt` 的格挂上（网站已投的票照旧有效）。
+
+    给出单时漏了相似字的单子补救用（10-21 殿本 vol04–10）。卡片取 `guji audit alt` 的输出，
+    必须是出这张单的那个产物包算的（格号要对得上）；对不上的格不补，打出来。
+    相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。"""
+    sys.path.insert(0, str(CV))
+    from open_guji_cv.review.proof_fields import pending_fields
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    online = proofing_path(ws, text_id, chapter)
+    doc = json.loads(online.read_text(encoding="utf-8"))
+    src = Path(a.cards) if a.cards else ws / "reports" / book / f"{book}.cards.alt.json"
+    raw = json.loads(src.read_text(encoding="utf-8"))
+    alt = {}
+    for c in (raw["cards"] if isinstance(raw, dict) else raw):
+        if c.get("alt") and ":" in str(c.get("id")):
+            alt[c["id"].split(":", 1)[1]] = pending_fields({"alt": c["alt"]})["alt"]
+    cells = doc.get("cells") or []
+    todo = [c for c in cells if c.get("review") != "human" and (a.replace or not c.get("alt"))]
+    miss = [c["cell"] for c in todo if c["cell"] not in alt]
+    changed = []
+    for c in todo:
+        if c["cell"] in alt:
+            old = [x.get("c") for x in c.get("alt") or []]
+            if old != [x["c"] for x in alt[c["cell"]]]:
+                changed.append(c["cell"])
+            c["alt"] = alt[c["cell"]]
+    n = len(todo) - len(miss)
+    print(f"{book} {doc.get('rev')}：{'重算' if a.replace else '缺相似字'} {len(todo)} 格，补上 {n} 格，相似字有变的 {len(changed)} 格"
+          + (f"（{' '.join(changed[:20])}）" if a.replace and changed else "")
+          + (f"；卡片里没有的 {len(miss)} 格：{' '.join(miss[:20])}" if miss else ""))
+    out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / f"{doc.get('rev')}-alt"
+    out.mkdir(parents=True, exist_ok=True)
+    (out / f"{chapter}.pending.json").write_text(json.dumps(doc, ensure_ascii=False), encoding="utf-8")
+    if not a.yes:
+        print(f"补好的单 → {out / f'{chapter}.pending.json'}；确认后加 --yes 写回数据目录")
+        return 0
+    shutil.copyfile(online, out / f"online.{doc.get('rev')}.pending.json")
+    shutil.copyfile(out / f"{chapter}.pending.json", online)
+    print(f"已写回 {online}")
+    if a.sync:
+        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
+            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    else:
+        print(f"还要：guji db sync -w {ws}；网站 proofing-sync（parts=publish）后再清 CDN 缓存")
+    return 0
+
+
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     """同一次导出的 char／cord／norm 拷进 book-text、文本线升 minor、重建索引、本地校验；提交到新分支（PR 另开）。"""
     d = book_text_dir(repo, plan["text_id"])
@@ -473,6 +526,16 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
+    p = sp.add_parser("add-alt", help="线上单原地补相似字（不换 rev）")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--cards", help="guji audit alt 的输出，缺省 <工作区>/reports/<册>/<册>.cards.alt.json")
+    p.add_argument("--chapter")
+    p.add_argument("--text-id")
+    p.add_argument("--out")
+    p.add_argument("--replace", action="store_true", help="已有相似字的格也换成这次算的（相似字规则改了之后用）")
+    p.add_argument("--yes", action="store_true", help="写回数据目录")
+    p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     for name in ("prep", "push", "from-pack"):
         p = sp.add_parser(name)
         p.add_argument("--book", required=True)
@@ -504,7 +567,7 @@ def main(argv=None) -> int:
             p.add_argument("--note", help="book-text CHANGES 一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     a = ap.parse_args(argv)
-    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack}[a.cmd](a)
+    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt}[a.cmd](a)
 
 
 if __name__ == "__main__":

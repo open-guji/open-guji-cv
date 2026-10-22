@@ -21,6 +21,8 @@ from pathlib import Path
 
 import numpy as np
 
+from ..hanzi.symbols import SYM_MIN  # 字块图与符号模板余弦门槛（设计 4.3 兜底），与 5-b 共用
+
 ALT_K = 30                    # 每格最多给几个
 ALT_SHOW = 10                 # 前端缺省展开几个（用户 10-19 定）
 
@@ -109,6 +111,28 @@ def rank_pool(q: np.ndarray, pool: dict[str, dict], vectors: Callable[[list[str]
     return [{"c": c, "s": round(s, 4), "p": pool[c]["p"], "src": pool[c]["src"]} for s, c in scored[:k]]
 
 
+def symbol_hint(q: np.ndarray, vectors: Callable[[list[str]], dict[str, np.ndarray]],
+                beat: float = -1.0) -> str | None:
+    """字块图像不像某个特殊符号：最像的那个符号余弦 ≥ `SYM_MIN`、且高过 `beat`（这格自己池子里
+    最像的字）才返回它，否则 None。只看绝对值不够：曰、日 的字块和 □ 的余弦也能过 0.93，
+    但比不过 曰、日 本身（10-21 殿本扫描）。"""
+    from ..hanzi.symbols import symbols
+    vec = vectors(list(symbols()))
+    best = max(((float(v @ q), c) for c, v in vec.items()), default=(0.0, None))
+    return best[1] if best[0] >= SYM_MIN and best[0] > beat else None
+
+
+def _with_symbols(q, pivots: list[str], bank, zi, k: int) -> list[dict]:
+    """池子按图排序；图像比池子里最像的字更像某个符号时，符号表并进池子再排（设计 4.3）。"""
+    from ..clustering.variant_sources import family_pool
+    pool = family_pool(pivots, zi=zi)
+    ranked = rank_pool(q, pool, bank.vectors, k) if pool else []
+    sym = symbol_hint(q, bank.vectors, beat=ranked[0]["s"] if ranked else -1.0)
+    if sym:
+        ranked = rank_pool(q, family_pool(pivots + [sym], zi=zi), bank.vectors, k)
+    return ranked
+
+
 def alt_for_image(book: str | None, img, pivots: list[str], *, k: int = ALT_K, zi=None,
                   bank: TemplateBank | None = None) -> list[dict]:
     """一张字块图 ＋ 近似字 → alt 列表（控制台现场查一格用；出待审单批量走 `alt_for_cards`）。"""
@@ -120,8 +144,9 @@ def alt_for_image(book: str | None, img, pivots: list[str], *, k: int = ALT_K, z
     if img is None or not bank.available:
         return []
     q = bank.embed(normalize_patch(img, stroke_width=_book_norm_stroke(book)))
-    pool = family_pool(pivots, zi=zi)
-    return rank_pool(q, pool, bank.vectors, k) if (q is not None and pool) else []
+    if q is None:
+        return []
+    return _with_symbols(q, pivots, bank, zi, k)
 
 
 _BANK: TemplateBank | None = None
@@ -136,9 +161,13 @@ def shared_bank() -> TemplateBank:
 
 
 def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank: TemplateBank | None = None,
-                  extra_pivots: dict[str, list[str]] | None = None, image_cache=None,
+                  extra_pivots: dict[str, list[str]] | None = None, image_cache=None, ctx=None,
                   log: Callable[[str], None] | None = None) -> dict[str, list[dict]]:
-    """一批卡 → `{卡 id: alt 列表}`。取不到字块图、或 CNN 不可用的卡不出（键缺席）。"""
+    """一批卡 → `{卡 id: alt 列表}`。取不到字块图、或 CNN 不可用的卡不出（键缺席）。
+
+    给了 ``ctx``（`RunContext`）时，缓存里没有的字块图从原图＋cell_shrink 现切（`ctx.image`）：
+    从产物包出单（`republish.py from-pack`）只有 products、没有 cache/，不现切就一格都取不到图，
+    10-21 殿本 vol04–10 重发的待审单因此整批没有相似字。"""
     from ..clustering.normalize import normalize_patch
     from ..clustering.rare_panel import _book_norm_stroke, rare_patch
     from ..clustering.variant_sources import family_pool
@@ -150,19 +179,29 @@ def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank
         return {}
     ns = _book_norm_stroke(book)
     out: dict[str, list[dict]] = {}
+    no_img = 0
     for i, c in enumerate(cards):
         img = rare_patch(book, int(c["page"]), int(c["col"]), int(c["slot"]), c.get("sub") or "", image_cache)
+        if img is None and ctx is not None:
+            key = f"p{int(c['page']):04d}c{int(c['col']):02d}s{int(c['slot'])}{c.get('sub') or ''}"
+            try:
+                img = ctx.image("char_patch", key)
+            except Exception:  # noqa: BLE001 — 切不出就当没图，与缓存缺图同口径
+                img = None
         if img is None:
+            no_img += 1
             continue
         q = bank.embed(normalize_patch(img, stroke_width=ns))
         if q is None:
             continue
         piv = pivots_of(c, (extra_pivots or {}).get(c["id"], ()))
-        pool = family_pool(piv, zi=zi)
-        if pool:
-            out[c["id"]] = rank_pool(q, pool, bank.vectors, k)
+        ranked = _with_symbols(q, piv, bank, zi, k)
+        if ranked:
+            out[c["id"]] = ranked
         if log and (i + 1) % 100 == 0:
             log(f"alt：{i + 1}/{len(cards)} 格")
+    if log and no_img:
+        log(f"alt：{no_img}/{len(cards)} 格取不到字块图，没出相似字")
     return out
 
 

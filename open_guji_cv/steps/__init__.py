@@ -18,6 +18,7 @@
 
 from ..products import kinds  # noqa: F401  —— 先注册产物种类
 from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条），排最前
+from . import seal_detect  # noqa: F401  —— 印章定位（印章系统化，2026-10-22；拓扑上紧跟 border_detect）
 from . import (border_detect, column_warp, row_segment,  # noqa: F401
                cell_shrink, glyph_match, rare_candidates,
                context_decide, align_ref, seed_admit)

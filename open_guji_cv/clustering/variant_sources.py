@@ -223,7 +223,15 @@ def family_pool(pivots: list[str], zi: ZiCache | None = None, near_k: int = 5,
     """近似字 → 合并池 `{字: {"p": 从哪个近似字来, "src": "piv,v,rt,zi,near"}}`。
 
     同一个字从几路来时 `src` 合并、`p` 取第一个（pivots 按优先级排好传进来）。近似字自己也进池（`piv`）。
+    近似字里有特殊符号（`hanzi.symbols`）时整张符号表并进来（`sym`）。
     `db` 缺省用当前版 hanzi 库（核心包在 git，不联网）；`zi` 给了就把本机缓存的族并进 `zi`。"""
     db = db if db is not None else _hanzi()
     extra = (lambda p: {"zi": zi.family(p)}) if zi is not None else None
-    return db.pool(pivots, near_k=near_k, extra=extra)
+    pool = db.pool(pivots, near_k=near_k, extra=extra)
+    # 特殊符号（○□△…）不是汉字，库里没有它们的边；近似字里有符号时整张符号表进池（符号之间互为形近），按图排
+    from ..hanzi.symbols import is_symbol, symbols
+    sym = next((p for p in pivots if is_symbol(p)), None)
+    if sym:
+        for c in symbols():
+            pool.setdefault(c, {"p": sym, "src": "piv" if c == sym else "sym"})
+    return pool
