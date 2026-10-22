@@ -73,6 +73,12 @@ def test_entry_jys_tolerates_ba():
     assert entry(Rec("a"), [("己", 0.99), ("目", 0.985)], None, cfg) is None
 
 
+def test_zh_xz_include_variant_forms():
+    """sheldon 10-22：㑹 并入曾會、𧰼 并入象彖（异体写法，文意定字）。"""
+    assert {"曾", "會", "㑹"} <= GROUPS["zh"].members and {"象", "彖", "𧰼"} <= GROUPS["xz"].members
+    assert entry(Rec("a"), [("會", 0.98), ("㑹", 0.97)], None, FlowConfig(groups=("zh",))) == ("zh", "lift")
+
+
 def test_entry_ref_via_codepoints():
     canon = {"旨x": "旨"}.get
     assert entry(Rec("a"), [("㫖", 0.98)], "旨x", _cfg(), canon=lambda c: canon(c, c)) == ("zhi", "lift")
