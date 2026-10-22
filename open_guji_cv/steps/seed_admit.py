@@ -206,6 +206,14 @@ class SeedAdmitParams(BaseModel):
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
     group_flow_top1_cov: float = 0.97
+    group_flow_joint: bool = True
+    """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
+    先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
+    见 `groups.flow.decide_joint`。False＝这类格不进流程（2026-10-22 前的行为）。"""
+    group_flow_l2_drift: int = 2
+    """文意 L2 答案表的键（建表时的前后各 20 字）与本次窗口对不上时，若目标字两侧各 3 字内逐字相同、只远处差至多这么多个字位，
+    仍用表里的答案（证据 `ctx_drift`）；0＝逐字相同才用（2026-10-22 前的行为）。建表后重跑，邻格放行字会变（□→曰、徵→徴），
+    vol04–10 己已巳／日曰约 40 格因此整条对不上而送审。"""
     group_flow_fingerprint: str = ""        # 自动填（开关开时）：字频表、规则文件、答案表内容哈希
     witness3_no_diff: bool = False
     """T11 A 档（缺省关；关时 `witness3_no_diff` 不进 dump，`params_hash` 不变）：`lane_witness3` 本要放行的格，
@@ -2030,7 +2038,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
                      freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
-                     l2_tables=dict(p.group_flow_tables),
+                     l2_tables=dict(p.group_flow_tables), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
                                                         and ctx.book.codepoints) else None))

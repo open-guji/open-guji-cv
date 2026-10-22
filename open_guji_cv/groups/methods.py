@@ -136,8 +136,8 @@ def _spec(g: str):
 
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:
     """文意类方法的留痕口径（沿用旧 `ctx` 解法）：via 记 `ctx:<后端>`，extra 只留命中的规则。"""
-    return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx",
-                        extra={"rules": v.extra.get("rules")} if v.extra.get("rules") else {})
+    keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf") if v.extra.get(k) not in (None, [], "")}
+    return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx", extra=keep)
 
 
 @dataclass(frozen=True)
@@ -163,16 +163,19 @@ class Llm(Method):
     """离线 haiku 答案表（`group_clf/1`，管线只查表）；这册没给表 → 不适用（`applies` 为假，子数组跳过它）。"""
     name: str = "llm"
     kind = "llm"
+    after_pair: frozenset = frozenset()   # 前一字是这些字时不信表（己已巳：「嘉定己巳」的第二字，haiku 常读成「已」）
 
     def applies(self, inp) -> bool:
         return bool(inp.cfg.l2_tables.get(inp.group))
 
     def _run(self, inp):
         from .ctx_l2 import CtxL2Backend
+        if self.after_pair and inp.left and inp.left[-1] in self.after_pair:
+            return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_l2"))
         table = inp.cfg.l2_tables.get(inp.group)
         if table not in _L2:
             _L2[table] = CtxL2Backend(table)
-        v = _L2[table].judge(_spec(inp.group), _cell(inp), inp.cfg.canon)
+        v = _L2[table].judge(_spec(inp.group), _cell(inp), inp.cfg.canon, getattr(inp.cfg, "l2_drift", 0))
         if v.char is not None:
             v.conf = 1.0          # 表里只收 conf=high
         return _ctx_out(v)
@@ -353,6 +356,8 @@ def ry_shape(inp: MethodInput, img) -> GroupVerdict:
 
 FREQ = Freq()
 CTX = Chain("ctx", steps=(CtxRule(), Llm()))
+#: 己已巳的文意：两个族字相连（干支「己巳」）时第二字不查表，规则判不了就待定（vol06:125:6:8「嘉定己巳書成」表里是「已」）
+JYS_CTX = Chain("ctx", steps=(CtxRule(), Llm(after_pair=frozenset("己已巳"))))
 TOP1 = Custom("top1", fn=top1)
 FORM_TOP1 = Custom("top1", fn=form_top1)
 BARS = Custom("bars", fn=bars, patch=True)
