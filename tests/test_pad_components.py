@@ -101,3 +101,14 @@ def test_side_with_seam_is_not_checked():
     c[100:170, 20:80] = 0
     out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90, top=False)
     assert (out[86 - 81:94 - 81, 30:33] == 0).all()
+
+
+def test_deep_part_is_kept_even_if_mostly_outside():
+    """伸进本格深（两字粘成一块，「爲/兵」）：墨大半在界外也不挪，挪了会挖掉本字的笔画。"""
+    c = _ctx()
+    c[20:70, 20:80] = 0
+    c[70:92, 40:70] = 0          # 上字的下半，大半在格界（90）之上
+    c[92:110, 60:63] = 0         # 粘着的本字一笔，伸进格内 20px（> 0.1 格）
+    c[115:170, 20:80] = 0
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
+    assert (out[92 - 81:110 - 81, 60:63] == 0).all()
