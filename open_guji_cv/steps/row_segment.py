@@ -624,7 +624,8 @@ class RowSegmentStep(Step):
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.row_grid", "open_guji_cv.utils.jiazhu_split",
                    "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
                    "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment",
-                   "open_guji_cv.utils.roster_glyph", "open_guji_cv.utils.yolo_tool_infer", "open_guji_cv.steps.occlusion"),
+                   "open_guji_cv.utils.roster_glyph", "open_guji_cv.utils.yolo_tool_infer", "open_guji_cv.steps.occlusion",
+                   "open_guji_cv.steps.seal_detect"),
         soft_params=("roster_glyph_fingerprint",),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior"),
     )
