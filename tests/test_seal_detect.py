@@ -1,4 +1,4 @@
-"""Step0 印章定位（`steps/seal_detect.py`）：大印密度、小印模板覆盖、规范空间坐标。数据全在这里现造。"""
+"""印章定位（`steps/seal_detect.py`）：大印密度与版框正方形、小印模板覆盖、规范空间坐标。数据全在这里现造。"""
 
 from __future__ import annotations
 
@@ -61,3 +61,15 @@ def test_detect_reports_bbox_in_top_right_space():
     x0, _y0, x1, _y1 = seal.bbox
     # 左上原点 x∈[≤300, ≥1650] → 右上原点 x∈[W-1-x1, W-1-x0]
     assert seal.kind == "stain" and x1 >= W - 1 - 300 and x0 <= W - 1 - 1650
+
+
+def test_stain_seal_is_the_square_at_the_frame_top_right():
+    from types import SimpleNamespace as NS
+    borders = NS(top=NS(y_at_right=330.0),
+                 verticals=[NS(x_at_top=x, slope=0.0) for x in (340.0, 525.0, 2000.0)])
+    img = _page()
+    _dots(img, 300, 300, 1800, 1800, 6000)
+    (seal,) = detect_seals(img, SealDetectParams(min_cover=2.0), borders)
+    assert seal.source == "frame" and seal.bbox == (340.0, 330.0, 2000.0, 1990.0)
+    # 没有大印的页，有版框也不出框
+    assert detect_seals(_page(), SealDetectParams(), borders) == []
