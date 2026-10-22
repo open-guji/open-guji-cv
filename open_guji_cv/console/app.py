@@ -19,14 +19,14 @@ from fastapi.staticfiles import StaticFiles
 from ..clustering.rare_panel import warm_font_index
 from .static_path import STATIC
 from .routers import (auth, border_review, cell_review, column_review, cutline, evals, feedback, glyph_candidates,
-                      glyph_match, glyph_spotcheck, glyphlib, gold, jiazhu, products, rare, registry, review, runs,
+                      glyph_match, glyph_spotcheck, glyphlib, gold, invert_review, jiazhu, products, rare, registry, review, runs,
                       slot_count_review, spa_fallback, step8, step9, variants, workspace)
 
 #: include 的顺序 = OpenAPI 文档里的顺序，与 `routers/__init__.py` 那张表一致。
 #: `spa_fallback` 必须排最后——它注册 `/{full_path:path}`，放前面会抢走
 #: 后面所有 router 的 /api/* 路由（见该文件顶部说明）。
 ROUTERS = (auth, registry, workspace, runs, products, feedback, gold, evals,
-           review, cutline, border_review, column_review, slot_count_review, jiazhu,
+           review, cutline, border_review, invert_review, column_review, slot_count_review, jiazhu,
            rare, glyph_match, glyphlib, glyph_spotcheck, glyph_candidates, cell_review, variants, step8, step9,
            spa_fallback)
 

@@ -94,7 +94,7 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.4", unit="page",   # 1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.5", unit="page",   # 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge"),

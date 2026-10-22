@@ -38,6 +38,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from ..utils.preclean import INVERTED_BAND_SHARD  # 反色带人审落的分片（`utils.preclean.resolved_inverted` 读它）
+
 
 @dataclass(frozen=True)
 class Question:
@@ -142,6 +144,17 @@ QUESTIONS: tuple[Question, ...] = (
         expected_keys=("n_slots",),
         note="版式常量在个别列不成立时的覆盖。没有可靠的纯信号判据——"
              "格高/period 比值两个方向都有假阳性/假阴性，只能人裁。",
+    ),
+    # ── Step0 反色带 ─────────────────────────────────────────────
+    Question(
+        id="invert_detect.page.is_inverted", unit="page",
+        shard=INVERTED_BAND_SHARD,
+        title="这条黑条是不是反色带（纸翻黑、界行翻白），要不要照建议修",
+        answers=("yes", "no"),
+        kind="inverted_band",
+        expected_keys=("verdict", "rules"),
+        note="Sheldon 10-22 定「自动认＋送审，人点头才修」：粗外框与窄反色带分不干净，误修把版框翻白会整页切坏。"
+             "yes 的页 Step0 照 `rules` 修（`lookup.resolved_inverted`），no 的页不再出卡。",
     ),
     Question(
         id="row_segment.column.head_raise", unit="column",

@@ -26,17 +26,18 @@ class _VMap:
         return self._sem.get(c, c)
 
 
-def _run(monkeypatch, cur, pick, abstain=True):
+def _run(monkeypatch, cur, pick, abstain=True, channel="match_ref", provenance="match_ref", evidence=None, book_cp=None):
     monkeypatch.setattr(sa, "_shadow_gate", lambda p: _Gate(pick))
     monkeypatch.setattr(sa, "_opt", lambda ctx, kind, page: None)
     import open_guji_cv.clustering.variants as variants
     monkeypatch.setattr(variants.VariantMap, "load", classmethod(lambda cls, *a, **k: _VMap()))
-    rec = AdmitRec(id="v:1:1:1", slot=1, sub=None, admit=True, channel="match_ref", char=cur,
-                   provenance="match_ref", doubts=[], evidence={})
+    rec = AdmitRec(id="v:1:1:1", slot=1, sub=None, admit=True, channel=channel, char=cur,
+                   provenance=provenance, doubts=[], evidence=evidence or {})
     out = [SimpleNamespace(chars=[rec])]
     m = SimpleNamespace(candidates=[(cur, 0.97)], guard=None, verdict="same", cov=0.97, wmax=0.0)
     p = sa.SeedAdmitParams(shadow_veto=True, shadow_veto_variant_abstain=abstain)
-    n = sa._shadow_veto_pass(None, 1, p, out, {rec.id: m}, {})
+    book = SimpleNamespace(codepoints=book_cp or {}, canonical_char=lambda c: (book_cp or {}).get(c, c))
+    n = sa._shadow_veto_pass(SimpleNamespace(book=book), 1, p, out, {rec.id: m}, {})
     return n, rec
 
 
@@ -59,4 +60,23 @@ def test_rare_codepoint_cur_does_not_abstain(monkeypatch):
     """#431：放行字是罕用码位（𠮓，扩展区）时不弃权，照常降级。"""
     _VMap._sem.update({"𠮓": "變", "變": "變"})
     n, rec = _run(monkeypatch, cur="𠮓", pick="變")
+    assert n == 1 and not rec.admit
+
+
+def test_group_context_pick_in_same_group_is_kept(monkeypatch):
+    """字组按文意定的字（group_flow＋context），影子挑同组另一个字 → 不降；挑组外字、或不是按文意定的照常降。"""
+    ev = {"group": {"id": "ry", "decision": "fix"}}
+    n, rec = _run(monkeypatch, cur="曰", pick="日", channel="group_flow", provenance="context", evidence=ev)
+    assert n == 0 and rec.admit
+    n, rec = _run(monkeypatch, cur="曰", pick="田", channel="group_flow", provenance="context", evidence=ev)
+    assert n == 1 and not rec.admit
+    n, rec = _run(monkeypatch, cur="曰", pick="日", channel="group_flow", provenance="match", evidence=ev)
+    assert n == 1 and not rec.admit
+
+
+def test_book_codepoints_pick_abstains(monkeypatch):
+    """册 `codepoints:` 归一后同字（晩→晚）：影子挑了另一个码位不算认错；没配该对则照常降。"""
+    n, rec = _run(monkeypatch, cur="晚", pick="晩", abstain=False, book_cp={"晩": "晚"})
+    assert n == 0 and rec.admit
+    n, rec = _run(monkeypatch, cur="晚", pick="晩", abstain=False, book_cp={})
     assert n == 1 and not rec.admit

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 
 
@@ -83,6 +84,18 @@ def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = 
         return push(conn, ws_dir, actor=actor, dry_run=dry_run, allow_delete=allow_delete,
                     uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
                     glyph=glyph_hooks(ws_dir))
+
+
+def _ensure_glyph_pins(ws_dir: Path, res: dict) -> None:
+    """拉完以后，各册钉的字形库版本（有快照的）本机没建库就建（GUJI-727）。建不成只记一行，不让拉取失败。"""
+    from .ops.glyph_snapshot import ensure_pins
+    try:
+        built = [r for r in ensure_pins(ws_dir, log=lambda s: print(s, file=sys.stderr)) if not r.get("reused")]
+    except SystemExit as e:
+        res["glyph_pins_error"] = str(e)
+        return
+    if built:
+        res["glyph_pins_built"] = [r["pin"] for r in built]
 
 
 def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
@@ -161,7 +174,10 @@ def cmd_db(args) -> None:
     if args.action == "sync":
         if args.watch:
             _watch(ws_dir, args.watch, args.dry_run)
-        _print(sync_workspace(ws_dir, dry_run=args.dry_run))
+        res = sync_workspace(ws_dir, dry_run=args.dry_run)
+        if not args.dry_run:
+            _ensure_glyph_pins(ws_dir, res)
+        _print(res)
         return
 
     src = WorkerSource(branch=args.branch)
@@ -184,6 +200,8 @@ def cmd_db(args) -> None:
         res = pull(src, ws_dir, cache=BlobCache(), bucket=args.bucket, force=args.force,
                    glyph=None if args.no_rebuild else glyph_hooks(ws_dir))
         res["worker_requests"] = src.requests
+        if not args.no_rebuild:
+            _ensure_glyph_pins(ws_dir, res)
         _print(res)
         return
 

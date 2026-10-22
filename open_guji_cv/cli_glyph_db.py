@@ -39,6 +39,9 @@ def cmd_glyph_db(args):
         os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
     assert_workspace_declared()
 
+    if args.action in PIN_ACTIONS:
+        _pin_action(args)
+        return
     db_path = glyph_db_path()
     store_dir = glyph_store_path(args.store)
     db = GlyphDB(db_path)
@@ -170,13 +173,43 @@ def _font_pack_push(db, args) -> dict:
     return {"saved": [f.name for f in saved], "pushed": pushed, "skipped": skipped}
 
 
+#: 字形库按版本钉（GUJI-727，`ops/glyph_snapshot.py`）
+PIN_ACTIONS = ("snapshot", "pin-build", "pin-list", "pin-verify", "snapshot-upload")
+
+
+def _pin_action(args) -> None:
+    """`glyph-db snapshot | pin-build | pin-list | pin-verify | snapshot-upload`。只写本机；
+    清单推中心库走 `guji db push`（新清单登记的文本随 push 传 R2），`snapshot-upload --execute` 单独补传。"""
+    from .core.workspace import workspace_root
+    from .ops import glyph_snapshot as G
+    ws = workspace_root()
+    if ws is None:
+        print("要 -w <工作区>"); sys.exit(1)
+    need_pin = args.action in ("pin-verify", "snapshot-upload")
+    if need_pin and not args.pin:
+        print(f"{args.action} 要 --pin N"); sys.exit(1)
+    if args.action == "snapshot":
+        out = G.snapshot(ws, note=args.note or "", require_clean=not args.allow_dirty)
+    elif args.action == "pin-build":
+        out = ([G.build_pinned_db(ws, args.pin, force=args.force)] if args.pin
+               else G.ensure_pins(ws) if not args.force
+               else [G.build_pinned_db(ws, n, force=True) for n in sorted(G.pins_in_use(ws))])
+    elif args.action == "pin-list":
+        out = G.list_pins(ws)
+    elif args.action == "pin-verify":
+        out = G.verify_remote(ws, args.pin)
+    else:
+        out = G.upload_blobs(ws, args.pin, execute=args.execute)
+    print(json.dumps(out, ensure_ascii=False, indent=2))
+
+
 def add_parser(sub) -> None:
     """在 `sub`（argparse 子命令表）上注册 `glyph-db`。"""
     p = sub.add_parser("glyph-db", help="跨书字形数据库（SQLite）")
     p.add_argument("action",
                    choices=["stats", "export", "rebuild",
                             "import-font", "drop-edition", "repair", "selfcheck",
-                            "set-edition", "font-pack-push"])
+                            "set-edition", "font-pack-push", *PIN_ACTIONS])
     p.add_argument("-w", "--workspace", default=None,
                    help="工作区仓根（含 books/、output/glyph.db）。同 v2 命令那个 -w：给了就覆盖"
                         "本次调用的 GUJI_WORKSPACE，不给就退回读环境变量。任务卡 #54 第13条：这个"
@@ -222,4 +255,12 @@ def add_parser(sub) -> None:
     p.add_argument("--keep-pack", action="store_true",
                    help="font-pack-push 用：推完把本机导出的包留在 cache/fontdb/（缺省删掉，省盘）")
     p.add_argument("--title", default=None, help="书名")
+    p.add_argument("--pin", type=int, default=None,
+                   help="pin-build / pin-verify / snapshot-upload 用：字形库版本号 N（g<N>）")
+    p.add_argument("--note", default=None, help="snapshot 用：这一版的说明（记进清单）")
+    p.add_argument("--force", action="store_true", help="pin-build 用：库在且对得上也重建")
+    p.add_argument("--execute", action="store_true",
+                   help="snapshot-upload 用：真传 R2（要正式令牌 GUJI_DATA_TOKEN；不加只演练）")
+    p.add_argument("--allow-dirty", action="store_true",
+                   help="snapshot 用：数据目录有没推的改动也出（快照就对不上中心库的 rev，只供试验）")
 

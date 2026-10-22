@@ -25,6 +25,10 @@ class FlowSpec:
       （只降不改字）；
     - `review_fix`：复核时方法给了别的字，**改成方法的字**（仍放行，通道 `group_flow`）而不是降审——只给「字形只定
       是这一族、哪个字全凭文意」的组用（己已巳：别的通道放的字本来就是整理本或库形的猜测）；
+    - `review_fix_strong`：同 `review_fix`，但只在文意答案 strong（L2 表第二个模型也以 high 给了同一个字，`ctx_l2.add_confirm`）、
+      且其余方法没有反对时才改字，否则照常降审（日曰：sheldon 10-22「文意置信度特别高可以改掉整理本」）；
+    - `pair`：相邻两格（读序紧挨）都进了本组时，前一格给 `pair[0]`、后一格给 `pair[1]`，不再跑方法（己已巳：干支「己巳」；
+      總目参考文本里己已巳两两相邻 37 处全是干支己巳）。三格以上连着不适用，照常跑方法；
     - `review_abstain`：复核时方法全待定也降为人审（「没有文意证据就不信别的通道」，己已巳用）；
     - `lift_needs`：补放时给字的方法里必须有这几个之一（按名字；空＝不限）。入人八字形分类器只验证过「降级」，不许单独补放
       （vol04 A/B：过切的半个「爻」被它单独放成「人」）；
@@ -36,6 +40,8 @@ class FlowSpec:
     combine: str = "agree"
     review: bool = False
     review_fix: bool = False
+    review_fix_strong: bool = False
+    pair: tuple = ()
     lift_needs: tuple = ()
     review_abstain: bool = False
     tolerate: frozenset = frozenset()
@@ -90,25 +96,35 @@ def _img(gid: str) -> Method:
     return IDS
 
 
+#: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
+#: 文意弃权时字形可单独补放，两路都给字须一致，否则送审；复核时字形给了别的字就降审。
+GLYPH2 = frozenset({"rr", "ts", "ly", "wj", "zh", "yh", "yt", "js", "em", "fc", "yr"})
+
+
+def _g2(gid: str) -> tuple:
+    return (_img(gid),) if gid in GLYPH2 else ()
+
+
 GROUPS: dict[str, GroupSpec] = {
     "jys": GroupSpec(
         id="jys", name="己已巳", members=frozenset("己已巳"),
         backends=("rule", "ctx_table", "table"),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/jys",
-        flow=FlowSpec((JYS_CTX,), review=True, review_fix=True, review_abstain=True, tolerate=frozenset("巴")), ref_free=True,
+        flow=FlowSpec((JYS_CTX,), review=True, review_fix=True, review_abstain=True, tolerate=frozenset("巴"),
+                     pair=("己", "巳")), ref_free=True,
         note="按文意定（L1 规则含旧 ji_yi_si_clf 规则路，弃权查 L2 表）；已放行的本族格无文意证据也降审。巴是库形陪衬（vol04–10 有 17 格因分差内的巴没进流程；L2 有「其他」出口，真是巴会弃权）。前一字也是族字（干支「己巳」的第二字）时不查 L2 表。"),
     "ry": GroupSpec(
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec((CTX, RY_SHAPE), review=True, lift_needs=("ctx",)), overlaps=("rm",),
+        flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, lift_needs=("ctx",)), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
-        flow=FlowSpec((CTX, RR_IMG), review=True, lift_needs=("ctx",)),
-        note="文意＋字形分类器；补放要文意给字且两路不冲突，复核时任一路给了别的字就降审。"),
+        flow=FlowSpec((CTX, RR_IMG, *_g2("rr")), review=True, lift_needs=("ctx", "ids")),
+        note="文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审。"),
     # —— 上下文线（cv#118）：按文意定；土士、未末另加量横（文意弃权才用量横，两路不一致送审） ——
     "wxs": GroupSpec(
         id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
@@ -126,14 +142,15 @@ GROUPS: dict[str, GroupSpec] = {
         id="ts", name="土士", members=frozenset("土士"),
         backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/ts",
-        flow=FlowSpec((CTX, BARS)),
-        note="按文意定；文意弃权时按量横长短（groups/bars.py）。"),
+        flow=FlowSpec((CTX, BARS, *_g2("ts"))),
+        note="按文意定；文意弃权时按量横长短（groups/bars.py）与整字 HOG（左半），给字须一致。"),
     # —— 第三批形近不同义组（2026-10-19 sheldon 定）：按文意定（L1 规则＋haiku 查表）。只补放，不复核；
     #    L1 零冲突于整理本，其余格由逐册 L2 表（haiku，只收 conf=high）决定，弃权送人审。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX,), review=True, families=FAMILIES.get(gid, ())), overlaps=("qin",) if gid == "zh" else (),
+        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ()),
+                      **({"form_methods": (FREQ, FORM_TOP1)} if gid == "zh" else {})), overlaps=("qin",) if gid == "zh" else (),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
                                ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會㑹", "會＝會典、附會；曾＝曾經、姓氏。㑹是會的异体：先按文意定曾／會族，會㑹再按刻形（字频→IDS→库形最近）定哪一形。"),
@@ -142,7 +159,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX,), review=True, families=FAMILIES.get(gid, ())),
+        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ())),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
                                ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},
@@ -157,7 +174,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX,), review=True), overlaps=ov,
+        flow=FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),

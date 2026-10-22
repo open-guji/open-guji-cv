@@ -59,7 +59,8 @@ def book_versions(book: str, root: Path | None = None) -> dict:
     """一份结果由三样版本共同决定：cv、语料库（册 yaml `corpus: N`，两级清单另记底库号）、字形库
     （`glyph_pin: N`；没钉就记人裁内容指纹）。全记进产物包的 manifest，标签前三段由它拼。
 
-    `glyph_pin` 只钉指纹、不钉字形库内容，所以另记中心库 rev：`db_rev` 是存包时本机数据对应的版本，
+    钉了有快照的字形库版本时另记 `glyph_digest`（快照内容）与 `glyph_rev`（出快照时的中心库 rev）。
+    旧做法的 `glyph_pin` 只钉指纹、不钉字形库内容，所以另记中心库 rev：`db_rev` 是存包时本机数据对应的版本，
     `db_revs` 是 seed_admit 各页跑时记下的版本及页数（产物 manifest 的 `db_rev`，老产物没有）。
     要精确复现某份包读的库，从那个 rev 开 Neon 实验分支。"""
     from .core import cv_version as CV
@@ -79,6 +80,15 @@ def book_versions(book: str, root: Path | None = None) -> dict:
             from .core.corpus_pin import load_manifest
             from .core.workspace import workspace_root
             out["corpus_base"] = load_manifest(workspace_root(), int(out["corpus"])).get("base")
+        except Exception:      # noqa: BLE001
+            pass
+    if out["glyph_pin"] is not None:          # 有快照的钉号（GUJI-727）：另记快照内容与它对应的中心库 rev
+        try:
+            from .core.glyph_pin import load_manifest as glyph_manifest
+            from .core.workspace import workspace_root
+            gm = glyph_manifest(workspace_root(), int(out["glyph_pin"]))
+            if gm:
+                out["glyph_digest"], out["glyph_rev"] = gm["digest"], gm.get("rev")
         except Exception:      # noqa: BLE001
             pass
     if out["glyph_pin"] is None:

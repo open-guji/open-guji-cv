@@ -748,7 +748,8 @@ class SeedAdmitStep(Step):
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
                    "open_guji_cv.groups.ids_parts", "open_guji_cv.groups.ids_segment", "open_guji_cv.groups.ids_solver",
-                   "open_guji_cv.groups.ids_whole",
+                   "open_guji_cv.groups.ids_whole", "open_guji_cv.groups.ids_generic", "open_guji_cv.groups.ids_plan",
+                   "open_guji_cv.groups.ids_unet",
                    "open_guji_cv.clustering.iron_evidence",
                    # 字形证据（variant_form.image_ranks_for）查字体模板走它；2026-10-20 修了它按 id
                    # 缓存行模长、拿错矩阵模长的 bug，结果可能变，此前漏登记，补上
@@ -1552,10 +1553,19 @@ def _shadow_gate(p: "SeedAdmitParams"):
     return g
 
 
+def _group_members(gid) -> frozenset:
+    from ..groups.registry import FLOW_GROUPS
+    spec = FLOW_GROUPS.get(gid) if gid else None
+    return spec.members if spec is not None else frozenset()
+
+
 def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
     """影子放行闸（只降级）：把现行规则已放行、影子有把握说不对的格降回待审。→ 降级格数。
 
     放在所有通道与 `group_flow` 之后：只会把 admit 从 True 改 False，不改字、不升级。
+    字组按文意定的字（通道 `group_flow`、provenance `context`）影子要改成同组另一个字时不降：形近字的库形本就分不开，
+    影子挑的只是同一个难点的另一边（sheldon 10-22「文意置信度特别高可以改掉整理本」，vol09:251 改成曰后被影子降、
+    又被 coord_fallback 按坐标放回日）。
     `provenance=="human"`（人裁）一票定案，不经这里。模型文件缺／口径不符 → 抛错（开了开关却没有模型
     是配置错误，不静默当没开）；单格信号异常 → 该格弃权。"""
     from ..shadow.signals import CellEvidence
@@ -1566,6 +1576,8 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
         vmap = VariantMap.load(p.variants or None)
     rare = _opt(ctx, "rare_candidates", page)
     rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
+    book = getattr(ctx, "book", None)
+    cbook = book if getattr(p, "codepoint_semantic", False) and getattr(book, "codepoints", None) else None
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -1582,6 +1594,13 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             v = gate.judge(ev)
             if not v.veto:
                 continue
+            g = (rec.evidence or {}).get("group") or {}
+            if (rec.channel == "group_flow" and rec.provenance == "context" and v.pick
+                    and v.pick in _group_members(g.get("id"))):
+                continue                      # 字组按文意定的字，影子只是挑了同组另一个字：形近本就分不开（vol09:251 曰）
+            if (cbook is not None and v.pick and rec.char and v.pick != rec.char
+                    and cbook.canonical_char(v.pick) == cbook.canonical_char(rec.char)):
+                continue                      # 册 `codepoints:` 归一后同字（別别、晚晩、出岀）：影子比字没按册归一，不是认错
             if (vmap is not None and v.pick and rec.char and v.pick != rec.char
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):

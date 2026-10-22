@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -421,6 +422,43 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
     return out
 
 
+#: 字形库快照清单（GUJI-727，``core/glyph_pin.py``）：``config/glyph-pack/g<N>/manifest.json``
+GLYPH_PACK_DIR = "config/glyph-pack/"
+_GLYPH_PACK_MAN = re.compile(r"^config/glyph-pack/g\d+/manifest\.json$")
+
+
+def glyph_pack_blobs(ws_dir: Path, data: Path, base: dict[str, str], rows) -> dict[str, Path]:
+    """这次 push 新带上的字形库快照清单（基准里没有的）→ 它登记的文本条目 ``{sha: 本机文件}``，随 push 传 R2。
+
+    刻例图不用管：出快照要求数据目录已推干净，图早已按 sha 进桶；借来的库是从中心库拉的，图也在桶里。
+    本机文件已与清单不同的拒推：那一版的文本谁都拼不出来了，删掉这个号重出快照。"""
+    out: dict[str, Path] = {}
+    for r in rows:
+        if r.tbl != "files" or not _GLYPH_PACK_MAN.match(r.src_path) or r.src_path in base:
+            continue
+        man = json.loads((data / r.src_path).read_text(encoding="utf-8"))
+        bad = []
+        for it in man.get("items", []):
+            if it.get("type") != "txt":
+                continue
+            root = str(it["root"])
+            if root == "gs":
+                p = data / GS / it["path"]
+            elif root.startswith("borrow:"):
+                p = resolve_borrow(root[len("borrow:"):], ws_dir) / it["path"]
+            else:
+                bad.append(f"{root}:{it['path']}")
+                continue
+            if p.is_file() and sha256(p.read_bytes()) == it["sha256"]:
+                out[it["sha256"]] = p
+            else:
+                bad.append(f"{root}:{it['path']}")
+        if bad:
+            raise SystemExit(f"字形库快照 {r.src_path} 登记的 {len(bad)} 个文本本机已经变了（如 {bad[:3]}），"
+                             f"推上去也没人拼得出这一版；删掉这个号、guji glyph-db snapshot 重出")
+    return out
+
+
 def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_delete: bool = False,
          uploader=None, glyph: GlyphHooks | None = None, shared_writer: bool = False) -> dict:
     """数据目录 → 中心库（直连 Postgres；云会话经 wsbridge）。``uploader(images[, ext=])`` 传新图与整理本。
@@ -463,14 +501,17 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
-        if not creating and not shared_writer:                 # 已发布的语料库版本不可改（用户 10-20）
+        if not creating and not shared_writer:                 # 已发布的语料库、字形库版本不可改（用户 10-20；GUJI-727）
             cur.execute("SELECT src_path, sha256 FROM files WHERE ws = %s "
-                        "AND src_path LIKE 'config/corpus-pack/v%%/manifest.json'", (sc.ws,))
+                        "AND (src_path LIKE 'config/corpus-pack/v%%/manifest.json' "
+                        "OR src_path LIKE 'config/glyph-pack/g%%/manifest.json')", (sc.ws,))
             db_sha = dict(cur.fetchall())
             changed = sorted(r.src_path for r in sc.rows if r.tbl == "files" and r.src_path in db_sha
                              and r.cols.get("sha256", db_sha[r.src_path]) != db_sha[r.src_path])
             if changed:
-                raise SystemExit(f"语料库清单 {changed[:3]} 已发布，版本不可改；出新版本（guji corpus build）")
+                what = "字形库" if changed[0].startswith(GLYPH_PACK_DIR) else "语料库"
+                raise SystemExit(f"{what}清单 {changed[:3]} 已发布，版本不可改；出新版本"
+                                 f"（{'guji glyph-db snapshot' if what == '字形库' else 'guji corpus build'}）")
         cur.execute("SELECT src_path FROM source_files WHERE ws = %s"
                     + "".join(f" UNION ALL SELECT src_path FROM {t} WHERE ws = %s" for t in BLOB_TABLES),
                     (sc.ws,) * (1 + len(BLOB_TABLES)))
@@ -490,6 +531,9 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     lost = sorted(str(p) for g in images.values() for p in g.values() if not p.exists())
     if lost:
         raise SystemExit(f"实例引用的 {len(lost)} 张图本地没有（如 {lost[:3]}）")
+    pack_txt = glyph_pack_blobs(ws_dir, data, st.get("base", {}), sc.rows)
+    if pack_txt:                                       # 新出的字形库快照：登记的文本随这次 push 进 R2
+        images.setdefault("txt", {}).update(pack_txt)
     if images and uploader is not None and not dry_run:
         # 库里已有的图（导入或之前推过时已进桶）不再逐张签名核对：每次推都核两万张要十几分钟，
         # 连接闲置被断，事务一开就死（10-19 D 推 vol01 裁决两次失败）

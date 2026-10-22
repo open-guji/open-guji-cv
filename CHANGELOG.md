@@ -5,6 +5,33 @@
 
 ## [未发版]
 
+## [0.5.8] - 2026-10-22
+
+PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_detect`、切分 `row_segment` 1.36、字框收缩 `cell_shrink` 1.19–1.20、外框线回直线 `border_detect` 1.5、文意组加字形第二路（cv#429，新增 12 个组模板库 rr ts ly wj zh yh yt js em fc yr xz）、厯歴／呂吕／徵徴 判法调整、己已巳／日曰 收口、影子复核按册码位归一（v0.5.7 漏带）。相对 v0.5.7，`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`seed_admit` 七步 `code_hash` 变，另新增 `invert_detect`，**各书 Step1 起全部判过期**；其余 11 步不变。新组 weiw shan di qin 要在册配置 `group_flow` 点名；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3851 过、66 跳过、1 条报错；报错的是一条测试守卫，已修（装了 psycopg 而没给测试库时，`test_datastore_expbranch` 一条用例报错而不是跳过，只改测试）。
+
+### Fixed
+- seed_admit 影子复核 `shadow_veto` 比字按册 `codepoints` 归一（d54fe0fc）：別别、晚晩、出岀 不再被误降。v0.5.7 切 rc 时没带上，本版补发。`seed_admit` 的 `code_hash` 变。
+- Step3 row_segment 1.36：字内空隙里的格线不再把字头、点留在上一格（人审截断「良」的点、「晉」的头、「其」的脚、「二」的上横）。干净格线两侧有一格格高偏离 period 超过 15% 也过一次 U-Net 探针（vol02 1,800 条，原来只有一高一矮的 6 条）；探针分歧 ≥100、扩池补来的候选（U-Net 引导缝 / 按格高找的缝）与 U-Net 分歧 ≤30px 时直接改选，不再只记候选交人：粘连切点要穿墨 ≤20px，原本干净的格线只换成同样不穿墨的缝（换成穿笔画的缝会把上字底横的一截切给下格，「一」就成了「二」）。vol02 改 40 处、vol05 改 76 处，看图都是修好或持平；Step3 时长略增。
+- Step4 cell_shrink 1.19：列端粗版框不再带进字块（重跑 v0.5.7 时害了认字）。`strip_frame_line` 两处放宽：线跟字之间隔着白行、线外到下一道线只有框的毛边和连墨的，双边框内外两道一起剥（vol05 p92「乾」）；厚过 0.12 格但墨铺满 ≥80% 的线行段算粗版框，贴着字也剥（vol06 p149「者」、vol08 p59「尚」）。vol05 全册只改「乾」和一格框渣、vol09 全册 0 格变化。框线只剩贴着字的碎段的（vol06「將」「而」、vol09「講」）还没修。
+- Step4 cell_shrink 1.20：双边框内框贴着字脚、两头没到窗边的，不再带进字块（vol06 p112「而」）。全页框线线位原来只在版框往内 0.4 格里找，内框离版框可到半格，找不着；改为找到 0.8 格，并记下每道线的线厚。列端格里跨度 ≥0.8 窗宽的实线，中线落在线位上、厚度跟那道线差不过 2 行，就当框线剥。字的底笔碰巧压在线位上的厚度、跨度对不上（「士」的底横 0.7 窗宽、「是」的捺脚只有 1 行）。vol05 改 17 格、vol09 改 41 格，看图都是剥掉框线或框渣，「燧」辶的捺尾跟框线连成一片，随框剥掉一截。「將」那列框线跟邻列对不上、「講」是虚线贴字，还没修。
+- Step1 外框线也按横带证据回直线（`border_detect` 1.5，`border_geometry.snap_verticals_to_evidence`）：原来「折点只许在有界行支撑的横带偏离直线」只管内部界行，首尾两条外框线没人管。vol08 p2（卷首大印页）左外框下半段印得淡，三段折线被第 9 列字的竖笔吸进 42px，s15–21 七个字只罩住右半。外框线现在只认两种证据：线就压着的框线（偏 <8px）原位，否则回直线位（直线已挑过细内框）；不用文字缝、不往远处的粗外条挪；内部界行先定、外框线最后按定下来的邻线过间距护栏，内部界行与改前逐位相同。vol04/08/09 三册 555 页里 34 页的外框线动了，Step3–4 新旧对比：对格位表逐格全对 279/279 列不变，字框横向变了的 13 列看图都是变好或持平（vol08 p2 c9 罩全，vol04 p178 c1、p63 c1、p91 c1、vol08 p12 c1 甩掉框线渣）。各书 Step1 起判过期。
+- 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
+
+### Added
+- Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
+- 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
+- 反色带候选 `invert_detect` 1.1：先排掉不在正文里的黑条（Sheldon 10-22 嫌 1.0 误报多）。黑条不足 12 行（上框粗线）、上方是空白天头（页顶外框）、上下是满纸花纹（封面、书衣）都不报。殿本十册 1,707 页：已登记 15 处全中，误报 13 页降到 2 页（vol06 p40、vol08 p67，抬头格下的粗横线，与已登记的 vol02 p136 几何上分不开）。阈值在同一批十册上定，没有留出验证。
+- 复查已登记反色带：vol05 p22、vol07 p78、vol09 p174/p175 四页修完还留着黑块（登记的横向范围漏了一截，vol07 p78 左两格的带上沿是台阶形），中心库 yaml 补全规则（vol07 p78 左两格改用矩形），`precleaned/` 四张图重生成。修后再跑 `invert_detect` 不报，逐页看图核对干净。四页 Step1 起判过期。
+- 特殊符号进字符候选集（Sheldon 10-21 定，设计 `doc/design/特殊符号进字符候选集-设计.md`）：人定的符号（○□△⊙ 等，`hanzi.symbols` 登记过的）能进字形库，`glyphdb_admit` 与 `glyph_ledger` 不再把非汉字码位一律拒收；相似字按图认符号（模板余弦 ≥ 0.93 且高过本格最像的字才并入）；5-b 字表开关 `font.charset.symbols`、seed_admit `symbol_review`（放行成符号的格退回人审，除非本书同一符号已有 3 条以上人裁）；送审原因显示「可能是符号」。没开开关的册产物逐字节不变。（#362、#377、#384）
+- 从产物包出待审单时，相似字现切字块图、一格没出就报错、`republish.py add-alt [--replace]` 原地补。（#362）
+- 日曰分歧复核（sheldon 10-22，重跑后 4–10 册 39 格组流与库分歧，长上下文读原典逐格定字）：日曰 18 格里 10 格是文意表（L2）错杀或错放，根因是表只取 haiku、Sonnet high 异议不起作用（5 格 Sonnet 5/5 对）。新 `scripts/l2_apply_dissent.py` 离线改表（Sonnet high 异字→以 Sonnet 为准），不动 Step 代码、`code_hash` 不变；抽样 8 页：6 格由降审回到放行且字对，其余不变。新表（另加长上下文判定 3 格 vol07:73、vol09:40、vol10:109）sheldon 10-22 说「推」，已推中心库＝书库语料 v15（base b4，册钉还没改到 v15）；项目文件 `jys-ry-rm-1022/round4/ry.json`。
+
+### Changed
+- 厯歴 `lih` 改取下半框 HOG（`ids_online.SPECS`：size 48、`region=(0,1,0.5,1)`、门槛 0.25；模板库同一 122 格重建）：按册留出 119 对/3 弃/0 错（原 92/122）。区域在同批数据上选，偏乐观。经验总结与逐组评估见 `doc/design/M7-切分识别经验推广.md`。PATCH；只影响点名了 lih 的册，重跑归 M8。
+- 呂吕 `lv` 门槛 0.5→0.3、徵徴 `zheng` 0.6→0.45（sheldon 10-22 同意）：判别台复核（`research/m7/bench/check_prod.py`）发现两组各有 1 格在线上门槛之上判「错」，sheldon 看图确认是原人裁错（vol02:125:8:4 实为吕、vol01:70:7:10 实为徴；数据集与中心库已更正）。更正后按册留一：呂吕 68 对/2 弃/0 错（原 62），徵徴 49 对/26 弃/0 错（原 38，错例最大 0.336）。与上一条合计 PATCH；只有 `seed_admit` 的 `code_hash` 变（相对 dev：8a8925fc0ffbd21a→72120ef3f1a81eec）。
+- 文意组加字形第二路（sheldon 10-22「能不能再进一步优化算法」）：入人八 土士 論諭 問間 曾會 遺還 圓圖 甲申 而面 傅傳 一二 共 11 组，方法数组在文意之后加整字／取框 HOG（`registry.GLYPH2`、`ids_online.SPECS` 同名行，模板库 `config/groups/<组>/ids_bank.json`）。文意弃权时字形可单独补放，两路都给字须一致，复核时字形给了别的字就降审。新的 `IdsSpec.clean`（`ids_whole.clean_patch` 去邻格碎墨）与 `aspect`（宽高比不合弃权）；模板＝人裁格＋vol04–10 已放行格（每册每字 ≤20），字块都是线上同款 char_patch；门槛＝按册留一人裁 0 错且已放行格异议 ≤0.2%，最低 0.4。象彖𧰼 的「象族」形判（象／𧰼）用左半中段 HOG，只在很像象时给象，𧰼 不足 20 例永不自动给。vol04–10 抽样 106 页对 dev：补放 10 格（逐格读上下文，1 格组外字判错，甲申门槛 0.4→0.5 后挡住）、降审 1 格（文意对、字形误报）。大太 未末 王玉 目自 千干 十卜 戊戌戍 木本 不上。`seed_admit` 的 `code_hash` 05f5830d581fee12→f035a1fe19ee8836；新模板库进下一版语料（`repo:` 文件），重跑归 M8。
+- 己已巳／日曰 第三轮收口（sheldon 10-22；`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`「第三轮」节）：① 己已巳 `pair`：读序紧挨的两格都进了组 → 前「己」后「巳」（干支，總目参考文本两两相邻 37 处全是己巳），不跑方法；② `ctx_l2.add_review` 放宽：主模型 low/mid/「其他」都可，复核模型 high 的组内字就收，主模型有一遍 high 给了别的字则不收（己已巳 179 格标注上 9 格全对）；③ 日曰 `review_fix_strong`：L2 表答案 strong（`ctx_l2.add_confirm`：另跑一遍 haiku 和 Sonnet 都 high 同字）且字形没明显反对时，复核改掉别的通道按整理本放的字，否则照旧降审（日曰 98 格标注上 haiku＋Sonnet 都 high 同字 66 格错 1）；④ 影子闸不降字组按文意定的字——影子只是挑了同组另一个字时（原来改成曰后被影子降、又被坐标兜底按整理本放回日）。抽样 261 页对 dev：新放行／改字 13 格，逐格核 0 错、0 降审；三组送审（不含遮挡）69→56，其中 strong 标记与放宽复核要新 L2 表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（cb2434a4a4c41d6e→8a8925fc0ffbd21a）。
+
 ## [0.5.7] - 2026-10-21
 
 PATCH（Sheldon 10-22 定发，vol04–10 重跑用）。相对 v0.5.6，`cell_shrink`（1.17）、`row_segment`（1.35）、`seed_admit`（1.21，`code_hash` 85052303fa79a800→bff8f652ceae4de9）三步 `code_hash` 变，**各书 Step3 起判过期**；其余 15 步不变。新增 `qin`／`shan`／`weiw` 三个字组模板库，要在册配置 `group_flow` 点名才生效。
@@ -80,6 +107,7 @@ PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`�
 - `glyphdb_admit` 取图前查绑定（规范 §9 F-10）：补消费积压时重切后格号顺移的按现格取字块，绑定判不该采信的不进库（计 `unbound`）。实时消费不受影响；不在任何 Step 的 `code_deps` 里，各书产物不过期。
 
 ### Added
+- 字形库按版本钉（GUJI-727，设计 `doc/design/字形库按版本钉-细设计.md`）：`guji glyph-db snapshot` 出只读快照 g<N>（清单随 `config/` 进中心库、一个号只写一次，文本随 push 按 sha 进 R2），册 yaml `glyph_pin: N` 有快照时本册读字形库的步改用 `output/glyph-g<N>.db`、字形库指纹换成快照内容哈希；`pin-build`／`pin-list`／`pin-verify`／`snapshot-upload`，`db pull/sync` 与 `pipeline` 起跑前自动建库。没钉的册、钉了号没快照的册行为与指纹逐位不变；**17 步 `code_hash` 全部不变**。
 - `scripts/zhengli/republish.py from-pack`：取别人跑好的产物包直接重发待审单，不重跑任何 Step——拉库、取包、按锚框核人裁绑定（包后新到的、按格号扣会扣错的、绑不上的都列进差异单「人裁合并」）、导出（文本版本读 book-text 线上值，单子头记包的 cv 版本）、prep，vol05 实测一条命令 4 分钟。`push --book-text` 顺带把同一次导出拷进 book-text、文本线升 minor、本地校验后提交到新分支；收尾提示请网站总管按顺序手动跑文本与待审单两段发布（每日定时里待审单比文本早 20 分钟）。不在任何 `code_deps` 里，各书产物不过期。
   - 后续修两处（vol04–10 实跑发现）：from-pack 自己设 `GUJI_WORKSPACE`（之前没设时人裁绑定读到 0 条）；原格号上有人裁、但人裁绑到别处或绑不上的格不再被 `pending_route` 按格号扣掉（新参数 `--keep`），照旧留在单上。
 - `feedback/migrate_dedupe.py`：删整轮重发的人裁事件副本（规范 §9 M-3，原 O-8），记账、补锚档、金标 `source_events` 跟着改，带核对与 `gold rebuild` 比对；10-21 已写中心库（殿本 3,638 条、北行 76 条）。不动 Step 模块，各书产物不过期。

@@ -68,7 +68,8 @@ def test_old_m7_groups_all_covered_by_group_flow():
     """S6（2026-10-18）：旧 m7 上下文路覆盖的六组都在字组统一流程里有判法；土士、未末加量横。"""
     for gid in ("jys", "ry", "rr", "wxs", "wm", "ts"):
         assert GROUPS[gid].flow is not None and "ctx" in GROUPS[gid].flow.solvers, gid
-    assert GROUPS["ts"].flow.solvers == GROUPS["wm"].flow.solvers == ("ctx", "bars")
+    assert GROUPS["wm"].flow.solvers == ("ctx", "bars")
+    assert GROUPS["ts"].flow.solvers == ("ctx", "bars", "ids")      # 2026-10-22 加字形第二路
     assert GROUPS["jys"].flow.review and GROUPS["jys"].flow.review_fix and GROUPS["jys"].flow.review_abstain
 
 
