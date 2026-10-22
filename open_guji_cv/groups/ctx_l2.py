@@ -89,6 +89,27 @@ def merge_runs(group: str, members: str, ver: str, runs: dict[str, dict], ctxs: 
     return {"schema": "group_clf/1", "group": group, "ctx_ver": CTX_VER, "ver": ver, "models": sorted(runs), "cells": cells}
 
 
+def add_review(table: dict, model: str, run: dict, members: str, need: tuple = ("high",)) -> int:
+    """第二个模型复核（sheldon 10-22 定）：主表里「主模型给了组内字、只是置信不够」（`abstain:low_conf`）的格，
+    复核模型给同一个字且置信 ∈ `need` → 用这个字（why=`agree:review`）；其余格不动，只记票。就地改 `table`，返回改了几格。
+    己已巳 179 格人工标注上：haiku 非 high 的 18 格里 Sonnet high 且同字 5 格，0 错（haiku「其他」不收，两边字不同不收）。"""
+    n = 0
+    for cid, e in (table.get("cells") or {}).items():
+        v = run.get(cid)
+        if not v:
+            continue
+        e.setdefault("votes", {})[model] = [v.get("char"), v.get("conf")]
+        if e.get("why") != "abstain:low_conf":
+            continue
+        main = [x for m, x in e["votes"].items() if m != model and x]
+        if main and all(x[0] == v.get("char") for x in main) and v.get("char") in members and v.get("conf") in need:
+            e["char"], e["why"] = v["char"], "agree:review"
+            n += 1
+    if model not in table.get("models", []):
+        table["models"] = sorted([*table.get("models", []), model])
+    return n
+
+
 def _canon_str(s, canon) -> str:
     return "".join(canon(c) for c in s) if isinstance(s, str) else ""
 
@@ -108,7 +129,9 @@ def _split_key(k) -> tuple[str, str] | None:
 def ctx_drift(stored, now, canon=None, core: int = DRIFT_CORE) -> int | None:
     """表键 `stored` 与本格窗口键 `now` 差几个字位（按离目标字的距离逐位比，左文从右往左、右文从左往右；
     长度不同时多出的位也算差）；目标字两侧各 `core` 字内有差 → None（不算同一上下文）。
-    建表后重跑，邻格的放行字会变（□→曰、徵→徴、远处一字改放），表就整条对不上（vol04–10 重跑后 己已巳／日曰 约 40 格）。"""
+    建表后重跑，邻格的放行字会变（□→曰、徵→徴、远处一字改放），表就整条对不上（vol04–10 重跑后 己已巳／日曰 约 40 格）。
+    本格窗口是「□」（组流时还没放行）而表键有字的位不算差：坐标兜底等组流之后的补放遍会把邻格放进来，
+    按成品建表时这些位有字、组流时却是 □（vol09:251「祭統曰春祭曰礿」6 格因此整条对不上）。"""
     a, b = _split_key(stored), _split_key(now)
     if a is None or b is None:
         return None
@@ -118,7 +141,7 @@ def ctx_drift(stored, now, canon=None, core: int = DRIFT_CORE) -> int | None:
         for i in range(max(len(sa), len(sb))):
             x = c(sa[i]) if i < len(sa) else None
             y = c(sb[i]) if i < len(sb) else None
-            if x != y:
+            if x != y and not (y == "□" and x is not None):
                 if i < core:
                     return None
                 n += 1
