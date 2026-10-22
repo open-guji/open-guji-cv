@@ -187,6 +187,7 @@ def cmd_pipeline(args) -> None:
     _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
+    _ensure_glyph_pin(eng.book)
     if "rare_candidates" in steps:
         _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
@@ -228,6 +229,19 @@ def cmd_pipeline(args) -> None:
             _auto_pack(args, eng, steps)
         _print_unpacked(eng.book.id, eng.store)
     sys.exit(1 if n_failed and args.stop_on_error else 0)
+
+
+def _ensure_glyph_pin(book) -> None:
+    """册钉了有快照的字形库版本：本机没建那一版的库（或库过时）就先建（`ops/glyph_snapshot.py`，GUJI-727）。"""
+    if not getattr(book, "glyph_pin", None):
+        return
+    from .core.glyph_pin import load_manifest
+    from .core.workspace import workspace_root
+    ws = workspace_root()
+    if ws is None or load_manifest(ws, book.glyph_pin) is None:
+        return
+    from .ops.glyph_snapshot import ensure_pins
+    ensure_pins(ws, [book.glyph_pin])
 
 
 def _failed_pages(eng, steps: list[str], pages: list[int]) -> list[str]:
@@ -339,7 +353,16 @@ def cmd_status(args) -> None:
         return
     print(f"{st['book']} · {st['pipeline']} · {len(pages)} 页")
     if getattr(eng.book, "glyph_pin", None):
-        print(f"  字形库钉在 g{eng.book.glyph_pin}：别处人裁进库不让 seed_admit 过期；要落地新人裁把册 yaml 的 glyph_pin 加一")
+        from .core.glyph_pin import pin_state
+        ps = pin_state(eng.book) or {}
+        if ps.get("snapshot"):
+            rev = f"，中心库 rev {ps['rev']}" if ps.get("rev") is not None else ""
+            print(f"  字形库钉在 g{ps['n']}（{ps['digest']}{rev}；库文件"
+                  f"{'在' if ps['db_ok'] else '缺，下次 pipeline 起跑前自动建'}）：本册用这一版的内容跑，"
+                  f"要吃新人裁先 guji glyph-db snapshot 出新号，再把册 yaml 的 glyph_pin 改过去")
+        else:
+            print(f"  字形库钉在 g{eng.book.glyph_pin}，但没有这一版的快照：只钉指纹、跑时读当前库（旧做法）；"
+                  f"guji glyph-db snapshot 出快照后改钉，本册才按版本用库")
     for sid, d in st["steps"].items():
         c = d["counts"]
         drift = f"  漂移 {d['drift']:3d}" if d.get("drift") else ""

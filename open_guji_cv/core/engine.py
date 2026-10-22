@@ -595,6 +595,12 @@ class Engine:
             # 册钉了语料库、这步读语料：起跑前硬校验（corpus_dev 开发中的总号跳过）
             from .workspace import workspace_root
             require_pin_clean(workspace_root(), self.book.corpus, vol=self.book.id)
+        if getattr(self.book, "glyph_pin", None):
+            # 册钉了有快照的字形库、这步读它：库文件必须是那一版建的（guji pipeline 起跑前会自动建）
+            from .glyph_pin import reads_pinned_db, require_pinned_db
+            if reads_pinned_db(self.ctx.params_for(step), self.book.glyph_pin):
+                from .workspace import workspace_root
+                require_pinned_db(workspace_root(), self.book.glyph_pin)
         for g in self.optional_gaps(step, pages):
             self.log(f"⚠️ {step.spec.id}：{'/'.join(g['switches'])} 开着，但 {g['producer']} 缺 "
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
