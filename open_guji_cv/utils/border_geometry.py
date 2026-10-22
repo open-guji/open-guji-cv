@@ -1050,7 +1050,12 @@ def push_bottom_to_bar(binm: np.ndarray, bottom: HLine, verticals: list[VLine],
 #: 界行，下面整段外推，偏到 80px。**能看见界行的地方线从不偏**（两册普查：有界行的
 #: 横带里偏移全部 ≤2px），所以这一步只在没有界行证据的横带用**文字缝中心**当证据，
 #: 与有界行横带的界行位置一起重新拟合三段折线；证据不足或改动 <SNAP_MIN_CHANGE 的线
-#: 原样保留，外框线（首尾两条）不动。
+#: 原样保留。
+#: 外框线（首尾两条）同样按「折点只许在有界行支撑的横带偏离直线」管，但只认两种证据：线就压在
+#: 可见框线上（偏 <SNAP_MIN_DEVIATION）→ 原位；否则 → 直线位（直线已由 `_snap_to_inner_rule`
+#: 挑过细内框）。不用文字缝（外侧没有文字列），也不往远处的框线挪（外框外侧 17~40px 是粗外条，
+#: 挪过去列就宽进一条黑边）。vol08 p2（卷首大印页）左外框下半段印得淡、折线被第 9 列字的竖笔
+#: 吸进 42px，七个字只罩住右半——护栏退的是邻线，外框线自己没人管。
 SNAP_K = 8                  # 横带数
 SNAP_RULE_SEARCH = 30       # 界行在线位 ±这么多 px 里找
 SNAP_RULE_MIN_FRAC = 0.5    # 沿线 3px 宽、桥接 ≤SNAP_RULE_GAP 行后最长竖段 ≥ 带高的这个比例才算界行
@@ -1159,7 +1164,7 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
                                verticals: list[VLine], width: int, height: int,
                                straight: list[VLine] | None = None
                                ) -> tuple[list[VLine], int]:
-    """内部界行逐条按横带证据重拟合三段折线。返回 (新线表, 换了几条)。见 SNAP_* 常量注释。
+    """界行逐条按横带证据重拟合三段折线。返回 (新线表, 换了几条)。见 SNAP_* 常量注释。
     输入输出都是新坐标系的 VLine；证据在原图坐标里量。
 
     每个横带的证据，按优先级：
@@ -1168,7 +1173,8 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
       3. 否则 → **直线拟合的位置**（`straight`，折线拟合之前那条）。折线拟合在界行淡到
          看不见的横带里会把折点贴到字的竖笔上（vol02 p160 页底 c4~c7 偏 21~37px，而直线
          外推离文字列中心算出的界行 ≤5px）——折点只许在有界行支撑的横带偏离直线。
-         没给 `straight` 就退回当前线位。"""
+         没给 `straight` 就退回当前线位。
+    首尾两条外框线只用 1（且只认线就压着的框线）和 3，见 SNAP_* 注释。"""
     n = len(verticals)
     if n < 4:
         return verticals, 0
@@ -1186,21 +1192,24 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
         bands.append((y0, y1, (y0 + y1) // 2, binm[y0:y1, :].mean(axis=0)))
     out = list(verticals)
     cands: dict[int, VLine] = {}
-    for vi in range(1, n - 1):
+    for vi in range(n):
         v = verticals[vi]
+        outer = vi in (0, n - 1)
         ys, xs, ws = [], [], []
         sick = False
         for (y0, y1, yc, colp) in bands:
             xl_new = float(v.x_at(float(yc)))
             xl_raw = int(round((width - 1) - xl_new))
             d = _rule_offset(binm, v, width, y0, y1)
+            if outer and d is not None and abs(d) >= SNAP_MIN_DEVIATION:
+                d = None                          # 外框线不往远处的框线挪（见 SNAP_* 注释）
             if d is not None:
                 ys.append(yc); xs.append(xl_new - d); ws.append(1.0)     # 原图 +d ⇒ 新坐标 −d
                 if abs(d) >= SNAP_MIN_DEVIATION:
                     sick = True
                 continue
             on_text = colp[max(0, xl_raw - 12):xl_raw + 13].mean() >= SNAP_TEXT_DENSE
-            if on_text:
+            if on_text and not outer:
                 sick = True                       # 压在字上（见 SNAP_TEXT_DENSE）
                 xp_raw = (width - 1) - (verticals[vi - 1].x_at(float(yc)) + verticals[vi + 1].x_at(float(yc))) / 2.0
                 gt = _gap_target(colp, xl_raw, pitch, width, xp_raw)
@@ -1234,20 +1243,27 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
         cands[vi] = cand
     # 邻线间距护栏：按邻线的候选量（邻线没候选就按旧线）。整页一起偏的页（p177）
     # 旧邻线本身是错的，按旧邻线量会把正确的纠正当成「间距 1.45×列距」拒掉。
+    # 分两轮：先定内部界行（只看内部候选，外框线按旧线），再按定下来的邻线判外框线——
+    # 外框线的候选不许反过来放行内部界行的候选（vol04 p178 实测：外框回直线后 v1 的坏候选
+    # 跟着过了护栏，页底偏 64px）。
+    inner = {vi: c for vi, c in cands.items() if 0 < vi < n - 1}
     changed = 0
-    for vi, cand in cands.items():
-        ok = True
-        # 在横带中心量（有证据的地方）。折点 y 在版框顶/底，最后一带之外是外推，
-        # 边框相邻列的合理纠正会在那里被读成 1.4×列距。
-        for y in (float(yc) for (_, _, yc, _) in bands):
-            for ni in (vi - 1, vi + 1):
-                nb = cands.get(ni, verticals[ni])
-                gap = abs(cand.x_at(y) - nb.x_at(y))
-                if not (SNAP_PITCH_LO * pitch <= gap <= SNAP_PITCH_HI * pitch):
-                    ok = False
-        if ok:
-            out[vi] = cand
-            changed += 1
+    for group, nb_of in ((inner, lambda ni: inner.get(ni, verticals[ni])),
+                         ({vi: c for vi, c in cands.items() if vi not in inner}, lambda ni: out[ni])):
+        for vi, cand in group.items():
+            ok = True
+            # 在横带中心量（有证据的地方）。折点 y 在版框顶/底，最后一带之外是外推，
+            # 边框相邻列的合理纠正会在那里被读成 1.4×列距。
+            for y in (float(yc) for (_, _, yc, _) in bands):
+                for ni in (vi - 1, vi + 1):
+                    if not 0 <= ni < n:
+                        continue
+                    gap = abs(cand.x_at(y) - nb_of(ni).x_at(y))
+                    if not (SNAP_PITCH_LO * pitch <= gap <= SNAP_PITCH_HI * pitch):
+                        ok = False
+            if ok:
+                out[vi] = cand
+                changed += 1
     return out, changed
 
 
