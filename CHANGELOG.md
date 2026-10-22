@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+### Changed
+- 切分与印章三个开关改缺省开，不再逐册设（Sheldon 10-22 定）：`row_segment.layout_prior` 缺省读 `corpus/daizhige/layout_slots.jsonl`，本工作区没有这张表（没有逐列本的书）就当关、不报错；书 yaml 写了别的路径而表不存在照旧报错，写空串＝关。`seed_admit.seal_blank_page`、`lane_seal` 缺省开（殿本十册原本就逐册开着）。殿本 vol01–03 从此也走逐列格位约束：vol02／vol03 p4–40 从原图重跑 Step1–4，逐格全对 329→330、319→330（各 333 列），没有回退列。各册 yaml 里这几行变成多余，留着无害。vol01–03 的 Step3 起参数哈希变，判过期。
+- vol07 p44（御製序首叶）抬头框整格被翻成实心黑条，登记 `inverted_rect` 预清理，`precleaned/vol07/44.png` 进仓；原来 Step1 抬头闸量不到第 7 列，「玉」整字丢出列图。配合中心库格位表覆盖（第 1、5、8、9 列出格抬一格，第 6 列从第 1 格起，daizhige 记错），这一页 36/36 列逐格全对。
+
 ## [0.5.6] - 2026-10-21
 
 PATCH（sheldon 10-22 定发）。主要内容：印章系统化 1–4 期（新增 Step0 `seal_detect`，切分与遮挡格改读印章定位）、字框收缩 `cell_shrink` 1.10–1.15、字组判法重构成方法数组并新增五个码位归一组、旨㫖整字判法上线、啓啟与教敎模板库重建。相对 v0.5.5，`row_segment`、`cell_shrink`、`seed_admit` 三步 `code_hash` 变，另新增 `seal_detect`，**各书 Step0／Step3 起判过期**；其余 14 步不变。新组（zy sy sz gm xb zhi 及码位归一组 nei bie chu juan wan）要在册配置 `group_flow` 点名才生效；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3786 过、39 跳过。
