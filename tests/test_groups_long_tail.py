@@ -101,3 +101,36 @@ def test_second_batch_registered_and_banks_load():
         d = json.loads(p.read_text(encoding="utf-8"))
         assert set(members + extra) <= set(d["templates"])
     assert "wm" in GROUPS["sz"].overlaps and "sz" in GROUPS["wm"].overlaps
+
+
+def test_wide_shape_pairs_registered_and_banks_load():
+    """衛衞 weiw、刪删 shan、扺抵 di（2026-10-22，字形判法扩面）：取框 HOG；模板库格式对、两形都在、小于 1MB。"""
+    from pathlib import Path
+    import json
+    root = Path(__file__).resolve().parent.parent
+    for gid, members in (("weiw", "衛衞"), ("shan", "刪删"), ("di", "扺抵")):
+        g = GROUPS[gid]
+        assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
+        sp = O.SPECS[gid]
+        assert sp.whole == "hog" and sp.region[3] == 1.0 and sp.region != (0.0, 1.0, 0.0, 1.0)
+        p = root / g.config_dir / "ids_bank.json"
+        assert p.stat().st_size < 1_000_000
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert set(members) <= set(d["templates"]) and d["size"] == sp.size
+
+
+def test_qin_is_flow_only_and_bank_loads():
+    """禽會俞命舍 qin（2026-10-22）：只进字组流程表，不进 `GROUPS`（常用字，进了会改 glyph_match／rare_ref_coord 的全局行为）；与 zh 共用「會」。"""
+    from pathlib import Path
+    import json
+    from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
+    assert "qin" in SHAPE_GROUPS and "qin" in FLOW_GROUPS and "qin" not in GROUPS
+    assert set(FLOW_GROUPS["qin"].members) == set("禽會俞命舍")
+    assert "zh" in FLOW_GROUPS["qin"].overlaps and "qin" in GROUPS["zh"].overlaps
+    sp = O.SPECS["qin"]
+    root = Path(__file__).resolve().parent.parent
+    p = root / FLOW_GROUPS["qin"].config_dir / "ids_bank.json"
+    assert p.stat().st_size < 1_000_000
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert set("禽會俞命舍曾合愈") <= set(d["templates"]) and d["size"] == sp.size
+    assert O.has_bank("qin")

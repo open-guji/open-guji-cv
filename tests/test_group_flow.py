@@ -305,3 +305,50 @@ def test_entry_overlapping_groups_pick_the_one_that_holds_all_close_candidates()
     assert entry(adm, [], "目", cfg) == ("rm", "review")
     assert entry(adm, [], "曰", cfg) == ("ry", "review")
     assert entry(adm, [], None, cfg) == ("ry", "review")
+
+
+def test_entry_joint_when_close_candidates_span_overlapping_groups():
+    """日曰目三字紧咬：单组装不下；`joint` 开着时归第一个装得下「组＋共字组」的组，入口记 "joint"。"""
+    r = Rec("x")
+    three = [("日", 0.98), ("曰", 0.975), ("目", 0.972)]
+    assert entry(r, three, None, FlowConfig(groups=("ry", "rm"))) is None
+    cfg = FlowConfig(groups=("ry", "rm"), joint=True)
+    assert entry(r, three, None, cfg) == ("ry", "joint")
+    assert entry(r, [("曰", 0.98), ("目", 0.975), ("日", 0.97)], "曰", cfg) == ("ry", "joint")
+    assert entry(r, three, "白", cfg) is None                                   # 整理本字不在并集里
+    assert entry(r, three + [("師", 0.971)], None, cfg) is None                  # 组外字紧咬
+    assert entry(r, three, None, FlowConfig(groups=("ry",), joint=True)) is None  # 共字组没点名
+    assert entry(r, [("日", 0.98), ("曰", 0.975)], None, cfg) == ("ry", "lift")  # 单组装得下照旧
+
+
+def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
+    """ry 定字后问 rm：曰 须 rm 明说「其他」，日 须 rm 也给日；rm 弃权或给目 → 留人审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+
+    def solve(name, g, r, *a, **k):
+        ch, why, *extra = out[(g, name)]
+        return GroupVerdict(ch, why=why, via=name, extra=extra[0] if extra else {})
+    monkeypatch.setattr(flow, "_solve", solve)
+    cfg = FlowConfig(groups=("ry", "rm"), joint=True)
+    three = [("日", 0.98), ("曰", 0.975), ("目", 0.972)]
+
+    def run(ry, rm):
+        out.update({("ry", "ctx"): ry, ("ry", "ry_shape"): (None, "abstain:aspect"), ("rm", "ctx"): rm})
+        r = Rec("x")
+        group_flow_pass([r], {}, lambda cid: three, lambda r: False, cfg)
+        return r
+    r = run(("曰", "agree"), (None, "abstain:other", {"other_conf": "high"}))
+    assert r.admit and r.char == "曰" and r.evidence["group"]["mode"] == "joint"
+    assert [t["solver"] for t in r.evidence["group"]["solvers"]] == ["ctx", "ry_shape", "rm:ctx"]
+    assert run(("日", "agree"), ("日", "agree")).char == "日"
+    for rm in ((None, "abstain:low_conf"), ("目", "agree"), ("日", "agree")):
+        r = run(("曰", "agree"), rm)
+        assert not r.admit and "group_flow_joint" in r.doubts
+    r = run(("日", "agree"), (None, "abstain:other", {"other_conf": "high"}))
+    assert not r.admit and "group_flow_joint" in r.doubts
+    r = run(("曰", "agree"), (None, "abstain:other", {"other_conf": "low"}))          # 「其他」不是 high 不算
+    assert not r.admit and "group_flow_joint" in r.doubts
+    r = run((None, "abstain:low_conf"), ("日", "agree"))
+    assert not r.admit and "group_flow_abstain" in r.doubts
