@@ -72,6 +72,18 @@ def test_own_overshoot_is_kept_whole():
     assert (o[100:186, 45:50] == 1).all()
 
 
+def test_broken_bar_mostly_in_this_cell_stays():
+    """「上」的底横断开，左段带个钩伸过格界、离「下」的头更近：墨大半在本格，整块留给「上」。"""
+    s = _strip()
+    s[20:84, 60:65] = 0          # 上字的竖
+    s[82:86, 10:50] = 0          # 底横左段（与竖断开）
+    s[86:106, 30:33] = 0         # 带的钩伸进下一格 16px（> 0.1 格，可墨不多）
+    s[108:114, 10:80] = 0        # 下字的顶横，紧挨着钩尖
+    s[114:170, 45:50] = 0
+    o = _owner(s)
+    assert (o[82:106, 10:50][s[82:106, 10:50] == 0] == 0).all()
+
+
 def test_union_deep_on_both_sides_is_split_at_the_line():
     """两字粘成一块、两边都伸得深（「家」的竖钩连「之」的点）：按格界切开，各留各的。"""
     s = _strip()

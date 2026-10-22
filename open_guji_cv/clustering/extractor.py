@@ -749,7 +749,8 @@ def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray
        各归各的地盘（折线严格信任 Step3；两边都深的是两字粘成一块，「家/之」「左/字」）；
     2. 小部件（高不过 `PART_SMALL` 格高）：整块归离它近的那格的墨（上字底横的小钩、
        格界偏低时下字顶上的点，「上/下」「音」）；
-    3. 其余只在一格伸得深：整块归那格（本字越界的笔画，伸进邻格浅浅一截）。
+    3. 其余整块归墨多的那格（本字越界的笔画伸进邻格浅浅一截；断开的横画大半在本格、
+       只有一角压过格界，「上」的底横左段带个钩伸到「下」的头上）。
 
     返回 H×W int16：墨像素的格下标（`bounds` 的下标），不归任何格和非墨像素是 -1。
     每个墨像素至多归一格：不会两格各带走同一笔。
@@ -780,7 +781,7 @@ def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray
             elif h <= PART_SMALL * cell_h:
                 win = _nearest_cell(binary, terr, lab == k, (x, y, w, h), cs, cell_h)
             else:
-                win = max(cs, key=ext.get)
+                win = max(cs, key=lambda c: int((comp & (t == c)).sum()))
         view = owner[y:y + h, x:x + w]
         if win is not None:
             view[comp] = win
