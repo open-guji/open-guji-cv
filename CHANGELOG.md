@@ -7,7 +7,7 @@
 
 - 厯歴 `lih` 改取下半框 HOG（`ids_online.SPECS`：size 48、`region=(0,1,0.5,1)`、门槛 0.25；模板库同一 122 格重建）：按册留出 119 对/3 弃/0 错（原 92/122）。区域在同批数据上选，偏乐观。经验总结与逐组评估见 `doc/design/M7-切分识别经验推广.md`。PATCH；只有 `seed_admit` 的 `code_hash` 变（相对 dev：cb2434a4a4c41d6e→ee06350910ce30c6）。只影响点名了 lih 的册，重跑归 M8。
 
-## [0.5.7] - 测试中
+## [0.5.7] - 2026-10-21
 
 PATCH（Sheldon 10-22 定发，vol04–10 重跑用）。相对 v0.5.6，`cell_shrink`（1.17）、`row_segment`（1.35）、`seed_admit`（1.21，`code_hash` 85052303fa79a800→bff8f652ceae4de9）三步 `code_hash` 变，**各书 Step3 起判过期**；其余 15 步不变。新增 `qin`／`shan`／`weiw` 三个字组模板库，要在册配置 `group_flow` 点名才生效。
 
