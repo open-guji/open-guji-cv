@@ -144,6 +144,35 @@ def stain_square(borders) -> tuple[float, float, float, float] | None:
     return (xr, ty, xl, ty + (xl - xr))
 
 
+@lru_cache(maxsize=8)
+def _template_stroke(name: str):
+    """模板 `name` 原分辨率的笔画掩码（膨胀 `STROKE_DILATE`，uint8 0/1）；读不到为 None。"""
+    import cv2
+
+    from ..utils.image_io import imread
+    im = imread(str(SEAL_TPL_DIR / name), cv2.IMREAD_GRAYSCALE)
+    if im is None:
+        return None
+    return cv2.dilate((im < 128).astype(np.uint8), np.ones((STROKE_DILATE, STROKE_DILATE), np.uint8))
+
+
+def stroke_mask(seal: Seal, height: int, width: int) -> np.ndarray | None:
+    """小印笔画在整页上的覆盖区（左上原点、页图大小的 0/1 掩码）：命中模板的笔画放到外框处。大印或读不到模板为 None。"""
+    if seal.kind != "crisp" or not seal.template:
+        return None
+    st = _template_stroke(seal.template)
+    if st is None:
+        return None
+    x0, y0, _x1, _y1 = (int(round(v)) for v in bbox_tl_to_tr(seal.bbox, width))
+    out = np.zeros((height, width), np.uint8)
+    h, w = st.shape
+    a, b = max(0, y0), min(height, y0 + h)
+    c, d = max(0, x0), min(width, x0 + w)
+    if a < b and c < d:
+        out[a:b, c:d] = st[a - y0:b - y0, c - x0:d - x0]
+    return out
+
+
 def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Seal]:
     W = gray.shape[1]
     stains = stain_seals(gray, min_peak=p.min_peak)
