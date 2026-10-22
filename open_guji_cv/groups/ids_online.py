@@ -131,8 +131,8 @@ SPECS: dict[str, IdsSpec] = {
     # 衛衞 取框 x0.25–0.75、y0.5–1（0 错门槛 0.55，取 0.7 → 衛 37／55 给对）；刪删 取左下 x0–0.5、y0.5–1（册／冊 的下半，0 错门槛 0.74，取 0.85 → 97／116）；
     # 扺抵 取 x0–0.75、y0.5–1（0 错门槛 0.41，取 0.55 → 78／100，其中扺 0）。
     # 禽會俞命舍（2026-10-22）：曾會㑹 里 sheldon 点「其他」的 14 格多半是禽（库形把它当會）。一对多整字 HOG（不取框，48×48，λ=0.3），
-    #   模板＝殿本 vol04–10 seed_admit 放行格（命／會／合 各取 60，曾 37、愈 28、舍 25、俞 13）＋禽 11（放行里 witness3 的 10 格＋看图预填 1，
-    #   待 sheldon 确认）；曾 合 愈 进库但不是组员，判成它们＝弃权。含 与 舍 在放行里混用，不进库。按册留出：成员格 150 对／19 弃／0 错（0 错门槛 0.18，取 0.5）。
+    #   模板＝殿本 vol04–10 seed_admit 放行格（命／會／合 各取 60，曾 37、愈 28、舍 25、俞 13）＋禽 11（放行里 witness3 的 10 格＋看图预填 1，sheldon 10-22 已确认，
+    #   dataset variant/glyph_expand_1022）；曾 合 愈 进库但不是组员，判成它们＝弃权。含 与 舍 在放行里混用，不进库。按册留出：成员格 150 对／19 弃／0 错（0 错门槛 0.18，取 0.5）。
     "qin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=48),
     "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
     "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),

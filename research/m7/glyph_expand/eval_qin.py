@@ -9,7 +9,7 @@ import numpy as np
 
 from open_guji_cv.groups import ids_online as O, ids_whole
 
-OVERRIDE = {"vol08:54:8:4": "禽", "vol09:265:6:12": "禽", "vol10:19:5:4": "俞"}   # 看图预填（14 格「其他」里能认的）
+OVERRIDE = {"vol09:265:6:12": "禽", "vol10:19:5:4": "俞"}   # 看图预填，sheldon 10-22 在确认页确认（dataset variant/glyph_expand_1022；54:8:4 他改成「其他」，不进库）
 CAP = 60
 
 
