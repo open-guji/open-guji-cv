@@ -19,7 +19,6 @@ import cv2
 import numpy as np
 
 from ..utils.image_io import imread, imwrite
-from ..utils.seam import mask_outside
 from .ids import make_id
 from .normalize import NORM_SIZE, normalize_patch
 
@@ -712,11 +711,11 @@ def _cell_top(cell: dict) -> float:
     `seam_top`/`seam_bottom`，而矩形 `y_top`/`y_bottom` 仍是 DP 那条直线——两者
     可以差几十像素（1434 vs 1462）。取块窗口此前只读矩形边界，于是从直线起裁，
     「十」的横笔整条落在窗口**之外**，图块只剩一竖（人裁标成「字形不完整」）。
-    `mask_outside` 救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
+    按折线抹墨救不回来：它只能抹掉窗口内不属于本格的墨，**抹不出窗口外
     没裁进来的墨**。
 
     窗口取两者并集（折线最高点与矩形上界取小）。折线外的墨随后照旧由
-    `mask_outside` 抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
+    归属图（`partition_strip`）抹掉——窗口只负责「把该有的裁进来」，归属判断仍归折线，
     与「格界严格信任 Step3」那条纪律不冲突。
     """
     top = float(cell["y_top"])
@@ -731,130 +730,94 @@ def _cell_bottom(cell: dict) -> float:
     return max(bot, span[1]) if span else bot
 
 
-def drop_pad_only_components(patch: np.ndarray, cell_top: float, cell_bot: float) -> np.ndarray:
-    """抹掉图块上下 pad 带里**不伸进格内**的连通体——那是邻字伸过来的笔尖（2026-09-19）。
+NEIGHBOR_PART_DEPTH = 0.10   # 跨格界的连通体伸进一格超过这么深（× 列格高）才算这格的身子（partition_strip）
 
-    图块按格界外扩 8% 裁（pad 是给略微越界的本字笔画留的），可紧裁又是「图块内所有墨的
-    外接框」，于是邻字压在格界外几像素的笔尖也被框进来：bxgb 4 页 1422 格里 161 格
-    （11.3%）的紧框因此多出中位 6px 的邻字墨（水/高/山/五/里/王/張/柏/漢/不/道/云/二/十/間
-    …逐格看过，抹掉的全是邻字的笔尖）。用户审阅标的「contaminated」大半是它。
 
-    判据只用格界（严格信任 Step3，与折线 `mask_outside` 同一纪律）：连通体整体落在
-    `[0, cell_top)` 或 `[cell_bot, H)` 里的抹掉；跨过格界、哪怕只沾进一像素的都留——
-    本字越界的笔画正是 pad 要保住的。列端格的框残渣同样在 pad 带里，顺带抹掉，
-    后面的端格剥离少一道活。
+PART_SMALL = 0.25   # 跨格界的连通体不高于这么多 × 列格高，算小部件（点、钩），整块归离得近的那格
+
+
+def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray, bool, bool]],
+                    cell_h: float) -> np.ndarray:
+    """整列一次分好每个墨像素归哪一格（2026-10-22，Step4 归属图）。
+
+    `bounds` 每格一项 `(top, bot, seam_top, seam_bot)`：`top`/`bot` 是长 W 的逐列行号（条带坐标，
+    直格界就是常数，Step3 选了折线就是折线），`seam_*` 记那条格界是不是 Step3 的折线。
+    格界 `[top, bot)` 是这一格的地盘。连通体只落在一格地盘里（越出去的只是格外的空白/版框带）
+    归那格；不沾任何格地盘的不归谁。跨了几格地盘的按三条规则：
+
+    1. 跨的是 Step3 的折线，或者有两格都伸进去超过 `NEIGHBOR_PART_DEPTH` 格高：按格界切开，
+       各归各的地盘（折线严格信任 Step3；两边都深的是两字粘成一块，「家/之」「左/字」）；
+    2. 小部件（高不过 `PART_SMALL` 格高）：整块归离它近的那格的墨（上字底横的小钩、
+       格界偏低时下字顶上的点，「上/下」「音」）；
+    3. 其余整块归墨多的那格（本字越界的笔画伸进邻格浅浅一截；断开的横画大半在本格、
+       只有一角压过格界，「上」的底横左段带个钩伸到「下」的头上）。
+
+    返回 H×W int16：墨像素的格下标（`bounds` 的下标），不归任何格和非墨像素是 -1。
+    每个墨像素至多归一格：不会两格各带走同一笔。
     """
-    t0, t1 = int(round(cell_top)), int(round(cell_bot))
-    if t0 <= 0 and t1 >= patch.shape[0]:
-        return patch
-    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
-    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
-    if n <= 1:
-        return patch
-    out = patch
-    for k in range(1, n):
-        y, h = int(st[k, 1]), int(st[k, 3])
-        if y + h <= t0 or y >= t1:
-            if out is patch:
-                out = patch.copy()
-            out[lab == k] = 255
-    return out
-
-
-NEIGHBOR_PART_OUT = 0.62     # 跨格界部件的墨至少这么多在界外，才算邻字的（drop_neighbor_parts）
-NEIGHBOR_PART_DEPTH = 0.10   # 且伸进本格不超过这么深（× 列格高）
-
-
-def _nearer_outside(binary: np.ndarray, comp: np.ndarray, t0: int, t1: int) -> bool:
-    """部件离格外的别的墨不比离格内的远（像素距离）——它挨着的是邻字。"""
-    other = binary.astype(bool) & ~comp
-    band = np.zeros(binary.shape[0], bool)
-    band[t0:t1] = True
-    gaps = []
-    for ink in (other & band[:, None], other & ~band[:, None]):
-        if not ink.any():
-            gaps.append(np.inf)
-            continue
-        dist = cv2.distanceTransform((~ink).astype(np.uint8), cv2.DIST_L2, 3)
-        gaps.append(float(dist[comp].min()))
-    return gaps[1] <= gaps[0]
-
-
-def drop_neighbor_parts(patch: np.ndarray, ctx: np.ndarray, off: int,
-                        cell_top: float, cell_bot: float, cell_h: float,
-                        top: bool = True, bottom: bool = True) -> np.ndarray:
-    """抹掉跨格界、墨大半在格界外的邻字部件（2026-10-22）。
-
-    `drop_pad_only_components` 只抹整块在格界外的，跨格界的两格都留：上字断开的底横带个
-    小钩伸过界、下字的点顶过界，结果一格多笔、一格缺笔（vol05「上/下」「宜/賓」、vol09
-    「聖/經」「歟/自」）。部件常比 pad 长，在图块里看不全，所以在上下各多一格的列条 `ctx`
-    里找连通体（`patch` 的第 0 行 = `ctx` 的第 `off` 行，两者同宽；格界也按 `ctx` 行号给）。
-    跨格界、不高于一个字（`SPLIT_H_RATIO` × 本列格高 `cell_h` 以内，更高的是粘连块）、不碰 `ctx` 上下沿、
-    伸进本格不超过 `NEIGHBOR_PART_DEPTH`（伸得深的多半是两字粘成一块：「爲/兵」「標/其」「蒙/荃」，
-    整块挪走会挖掉本字的笔画，2026-10-22 Sheldon 看图指出）、
-    墨至少 `NEIGHBOR_PART_OUT` 在格界外、且离格外的墨不比离格内的远的，从本格抹掉——邻格那边
-    留着。四六开到五五开的照旧两格都留：格界偏低时下字顶上的点、宀（音、序、宮、字）常是
-    这样，归错了比多一笔伤得重。
-    粘连块照旧按格界切。`top`/`bottom` 关掉某条格界：Step3 在那边选了
-    折线时，折线已分过部件，直格界不作数。
-    """
-    t0, t1 = int(round(cell_top)), int(round(cell_bot))
-    binary = (ctx < BINARY_THRESHOLD_PATCH).astype(np.uint8)
-    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
-    H = ctx.shape[0]
-    out = patch
-    for k in range(1, n):
-        y, h = int(st[k, 1]), int(st[k, 3])
-        cross_top, cross_bot = top and y < t0 < y + h, bottom and y < t1 < y + h
-        if h > SPLIT_H_RATIO * cell_h or y <= 0 or y + h >= H or not (cross_top or cross_bot):
-            continue
-        # 只挪伸进本格浅浅一截的；伸进字里深的多半是两字粘成一块，整块挪走会挖掉本字的笔画
-        if max(y + h - t0 if cross_top else 0, t1 - y if cross_bot else 0) > NEIGHBOR_PART_DEPTH * cell_h:
-            continue
-        rows = np.nonzero(lab[y:y + h] == k)[0] + y
-        inside = int(((rows >= t0) & (rows < t1)).sum())
-        if len(rows) - inside < NEIGHBOR_PART_OUT * len(rows) or not _nearer_outside(binary, lab == k, t0, t1):
-            continue
-        m = lab[off:off + patch.shape[0]] == k
-        if m.any():
-            if out is patch:
-                out = patch.copy()
-            out[m] = 255
-    return out
-
-
-def clip_unions_at_line(patch: np.ndarray, ctx: np.ndarray, off: int,
-                        cell_top: float, cell_bot: float, cell_h: float,
-                        top: bool = True, bottom: bool = True) -> np.ndarray:
-    """两字粘成一块、跨格界两边都伸得深的连通体，本格只留格界以内的那半（2026-10-22）。
-
-    格界多半就落在粘连的细处（「家」的竖钩连着「之」的点，「左」的底横连着「字」的宀），
-    可图块按格界外扩 8% pad 裁、跨界部件又整块保留，于是两格各带走邻字一截（pad 那么高）。
-    两边都伸过 `NEIGHBOR_PART_DEPTH` 的，按格界切开，各留各的半边；只在一边伸出浅浅一截的
-    是本字越界的笔画（pad 要保住的）或邻字的笔尖（`drop_neighbor_parts` 管），这里不动。
-    `patch`/`ctx`/`off`/`top`/`bottom` 同 `drop_neighbor_parts`。
-    """
-    t0, t1 = int(round(cell_top)), int(round(cell_bot))
-    binary = (ctx < BINARY_THRESHOLD_PATCH).astype(np.uint8)
-    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    H, W = strip.shape[:2]
+    binary = strip < BINARY_THRESHOLD_PATCH
+    rows = np.arange(H)[:, None]
+    terr = np.full((H, W), -1, np.int16)
+    for i, (top, bot, _st, _sb) in enumerate(bounds):
+        terr[(rows >= top[None, :]) & (rows < bot[None, :]) & (terr < 0)] = i
+    owner = np.full((H, W), -1, np.int16)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary.astype(np.uint8), 8)
     deep = NEIGHBOR_PART_DEPTH * cell_h
-    rows = np.arange(off, off + patch.shape[0])[:, None]
-    out = patch
     for k in range(1, n):
-        y, h = int(st[k, 1]), int(st[k, 3])
-        cut = None
-        if top and t0 - y > deep and y + h - t0 > deep:
-            cut = rows < t0
-        if bottom and y + h - t1 > deep and t1 - y > deep:
-            cut = rows >= t1 if cut is None else cut | (rows >= t1)
-        if cut is None:
+        x, y, w, h = (int(v) for v in st[k, :4])
+        comp = lab[y:y + h, x:x + w] == k
+        t = terr[y:y + h, x:x + w]
+        cs = [int(c) for c in np.unique(t[comp]) if c >= 0]
+        if not cs:
             continue
-        m = (lab[off:off + patch.shape[0]] == k) & cut
-        if m.any():
-            if out is patch:
-                out = patch.copy()
-            out[m] = 255
-    return out
+        if len(cs) == 1:
+            win = cs[0]
+        else:
+            ext = {c: np.ptp(np.nonzero((t == c) & comp)[0]) + 1 for c in cs}
+            seam = any(bounds[a][3] or bounds[a + 1][2] for a in range(min(cs), max(cs)))
+            if seam or sum(e > deep for e in ext.values()) >= 2:
+                win = None
+            elif h <= PART_SMALL * cell_h:
+                win = _nearest_cell(binary, terr, lab == k, (x, y, w, h), cs, cell_h)
+            else:
+                win = max(cs, key=lambda c: int((comp & (t == c)).sum()))
+        view = owner[y:y + h, x:x + w]
+        if win is not None:
+            view[comp] = win
+            continue
+        # 按地盘切开；落在格与格空隙里的像素归同一列上最近的那格
+        cut = np.where(comp, t, -1)
+        gap = comp & (t < 0)
+        if gap.any():
+            gy, gx = np.nonzero(gap)
+            dist = np.stack([np.maximum(np.maximum(bounds[c][0][gx + x] - (gy + y), (gy + y) - bounds[c][1][gx + x] + 1), 0)
+                             for c in cs])
+            cut[gy, gx] = np.asarray(cs)[dist.argmin(0)]
+        view[comp] = cut[comp]
+    return owner
+
+
+def _nearest_cell(binary: np.ndarray, terr: np.ndarray, comp: np.ndarray, box: tuple[int, int, int, int],
+                  cs: list[int], cell_h: float) -> int:
+    """小部件离哪格的（别的）墨近就归哪格；一样近归墨多的那格。"""
+    x, y, w, h = box
+    r = int(cell_h)
+    y0, y1 = max(0, y - r), min(binary.shape[0], y + h + r)
+    x0, x1 = max(0, x - r), min(binary.shape[1], x + w + r)
+    c_win = comp[y0:y1, x0:x1]
+    other = binary[y0:y1, x0:x1] & ~c_win
+    t = terr[y0:y1, x0:x1]
+    best, key = cs[0], None
+    for c in cs:
+        ink = other & (t == c)
+        gap = np.inf
+        if ink.any():
+            gap = float(cv2.distanceTransform((~ink).astype(np.uint8), cv2.DIST_L2, 3)[c_win].min())
+        cand = (gap, -int((c_win & (t == c)).sum()))
+        if key is None or cand < key:
+            best, key = c, cand
+    return best
 
 
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
@@ -2722,17 +2685,8 @@ class CharExtractor:
                     int(round(right_x)) - sx0, cell_h_ref,
                     right_ext=right_delta, left_ext=left_delta,
                     strategy=bar_strategy, top_line=tl, bottom_line=bl)
-            # 格与格之间的上下边界**严格信任 Step3**（矩形 y_top/y_bottom，
-            # 或 Step3 选中了折线时的 seam_top/seam_bottom），不再自己按
-            # 连通体猜"这块墨该归哪格"（2026-09-12 用户定：`_assign_column`
-            # 的贪心匹配+四级键在归属判断本身没错时也会被上游一条切错的
-            # 折线带偏——vol02:135:3:5"其"字八字底一撇被 Step3 折线错误
-            # 划给了下一格，_assign_column 只是忠实执行了这条错误的折线；
-            # 反过来说，格界内的墨迹不需要再猜是不是"自己的"，Step3 已经
-            # 决定了这一格该有什么）。列内左右方向（版框钉桩/左右缘救援/
-            # 界行剔除/曲线切边）不受影响，仍按原逻辑走。
-            seam_of = {int(c["index"]): (c.get("seam_top"), c.get("seam_bottom"))
-                      for c in cells}
+            # 格与格之间的上下边界跟 Step3 走（2026-09-12 用户定，不再用 `_assign_column` 的贪心匹配猜归属）：
+            # Step3 选了折线的格界严格按折线分；直格界只多管跨线连通体整块归谁（partition_strip 的三条规则）。
 
             # 列端渣格闸的候选：首末各 2 格（渣有时占两格，闸从端头向内
             # 走，遇到第一格真字就停——见 is_end_cell_junk 上方注释）。
@@ -2749,32 +2703,39 @@ class CharExtractor:
             tail_cell = order[-1] if order else None
             end_patches: dict[int, tuple[np.ndarray, float]] = {}
             jz_pre: dict[int, tuple[np.ndarray, float, float]] = {}
-            for cell, (idx, ltop, lbot) in zip(cells, local):
+            # 整列一次分好每个墨像素归哪格（partition_strip），各格图块只留自己的墨：
+            # 不会两格各带走同一笔，也不用再在 pad 带里逐块猜哪笔是邻字的
+            xs = np.arange(strip.shape[1]) + sx0 - int(round(left_x))
+
+            def _edge(rect: float, seam) -> np.ndarray:
+                e = np.full(strip.shape[1], rect - sy0)
+                if seam is not None:
+                    sv = np.asarray([np.nan if v is None else float(v) for v in seam])
+                    ok = (xs >= 0) & (xs < len(sv))
+                    v = np.full(strip.shape[1], np.nan)
+                    v[ok] = sv[xs[ok]] - sy0
+                    e = np.where(np.isnan(v), e, v)
+                return e
+
+            owner = partition_strip(strip, [
+                (_edge(float(c["y_top"]), c.get("seam_top")), _edge(float(c["y_bottom"]), c.get("seam_bottom")),
+                 bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells], cell_h_ref)
+            ink_px = strip < BINARY_THRESHOLD_PATCH
+            for ci, (cell, (idx, ltop, lbot)) in enumerate(zip(cells, local)):
                 cell_h = lbot - ltop
                 pad = cell_h * self.padding_ratio
                 y0 = max(0, int(round(ltop - pad)))
                 y1 = min(strip.shape[0], int(round(lbot + pad)))
+                # 窗口还要包住归本格、越出 pad 的墨（伸进邻格浅浅一截的本字笔画）
+                mine = owner == ci
+                ys = np.nonzero(mine.any(axis=1))[0]
+                if ys.size:
+                    y0, y1 = min(y0, int(ys[0])), max(y1, int(ys[-1]) + 1)
                 if y1 <= y0:
                     continue
                 patch = strip[y0:y1].copy()
-                seam_top, seam_bottom = seam_of.get(idx, (None, None))
-                if seam_top is not None or seam_bottom is not None:
-                    # Step3 选中了折线：折线之外严格不属于本格，抹白。
-                    # 折线数组是**列图坐标的绝对值**（原点在内容窗口 x_lo，
-                    # y 是列图绝对行号）；patch 顶边在列图坐标系的绝对 y 是
-                    # sy0+y0（strip 已经先减过 sy0，y0 只是相对 strip 的局部
-                    # 偏移，两层要叠加，只传 y0 会把折线错位一个 sy0，
-                    # 曾经把整格抹白——2026-09-12 实测复现）。
-                    patch = mask_outside(patch, seam_top, seam_bottom,
-                                        y0=sy0 + y0, x0=sx0 - int(round(left_x)))
-                # pad 带里邻字伸过来的笔尖：不跨格界的连通体一律抹掉（见函数注释）
-                patch = drop_pad_only_components(patch, ltop - y0, lbot - y0)
-                c0 = max(0, int(round(ltop - cell_h)))
-                c1 = min(strip.shape[0], int(round(lbot + cell_h)))
-                patch = drop_neighbor_parts(patch, strip[c0:c1], y0 - c0, ltop - c0, lbot - c0, cell_h_ref,
-                                            top=seam_top is None, bottom=seam_bottom is None)
-                patch = clip_unions_at_line(patch, strip[c0:c1], y0 - c0, ltop - c0, lbot - c0, cell_h_ref,
-                                            top=seam_top is None, bottom=seam_bottom is None)
+                patch[ink_px[y0:y1] & ~mine[y0:y1]] = 255
+
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
