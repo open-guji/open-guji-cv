@@ -18,6 +18,7 @@ PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_d
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added
+- R6 整页／整列丢字检查 `ops/col_gate`（GUJI-661）：读 Step3 与原图，报「整列没切出」与「单字墨段没被字格接住」，抹掉版框折角与污渍后再判。`scripts/zhengli/col_gate.py` 单跑，`collect_exit.py` 加 R6 项（`exit_report.py` 有数才判）。只报告，不改产物，不动任何 Step。殿本 v0.5.7 包 vol04–10 误报每册 0–12 处；自造缺陷召回：整列格记空 100%、整列没切出约 85%、整列错位 0.6 格约 65–73%；真书历史案例（vol03 57:1 等）云端没有当时的旧产物，未能复现。
 - Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
 - 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
 - 反色带候选 `invert_detect` 1.1：先排掉不在正文里的黑条（Sheldon 10-22 嫌 1.0 误报多）。黑条不足 12 行（上框粗线）、上方是空白天头（页顶外框）、上下是满纸花纹（封面、书衣）都不报。殿本十册 1,707 页：已登记 15 处全中，误报 13 页降到 2 页（vol06 p40、vol08 p67，抬头格下的粗横线，与已登记的 vol02 p136 几何上分不开）。阈值在同一批十册上定，没有留出验证。
