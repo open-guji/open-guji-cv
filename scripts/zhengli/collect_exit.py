@@ -3,7 +3,7 @@
 生成 exit_report.py 要吃的 input.json（可再直接拼出报告）。
 
 用法：
-  python scripts/zhengli/collect_exit.py vol04 -w $WS --export-dir DIR --anomaly vol04-异常表.md \
+  python scripts/zhengli/collect_exit.py vol04 -w $WS --export-dir DIR --anomaly vol04-异常表.json \
         [--reason "R3 原因归并一句话"] [-o vol04-input.json] [--report vol04-粗校报告.md]
 可移植：核心是 collect(book, ws, export_dir, anomaly)->dict；CLI 只是薄壳。
 前提：`guji` 在 PATH（或 --guji 指定）、`python` 能 import open_guji_cv（R2 在进程内调 gates.query），
@@ -184,16 +184,84 @@ def _pins(book) -> dict:
 
 # ---------------------------------------------------------------- R4 异常表 ＋ R2
 def parse_anomaly(path: Path) -> list[dict]:
-    """读异常表 md：每个数据行 → {n, text, concl}。结论列＝第 4 个单元格（# | 现象 | 原因 | 结论 | …）。"""
-    rows = []
-    for ln in path.read_text(encoding="utf-8").splitlines():
+    """读异常表：每个数据行 → {n, text, concl}。只要行，不管格式问题（要问题清单用 `load_anomaly`）。"""
+    return load_anomaly(path)[0]
+
+
+def load_anomaly(path: Path) -> tuple[list[dict], list[str]]:
+    """读异常表，返回（数据行, 格式问题）。问题都带行号，一条一句人话，不再是「格式一错整表 FAIL」（GUJI-666）。
+
+    两种格式，按后缀认：
+    - `.json`（推荐）：`{"book": "vol04", "rows": [{"n": 1, "text": "p79 col3 …", "cause": "…", "concl": "…",
+      "pages": [79], "cols": [[79, 3]]}]}`；`pages`／`cols` 可选，给了就按它算「有去向」，不再从「现象」里抠 pN colM；
+    - 其他（`.md`）：`| # | 现象 | 原因 | 结论 | … |`，结论列＝第 4 个单元格。以 `|` 开头却读不出来的行会报行号。"""
+    path = Path(path)
+    text = path.read_text(encoding="utf-8")
+    return (_load_anomaly_json(text) if path.suffix.lower() == ".json" else _load_anomaly_md(text))
+
+
+def _load_anomaly_json(text: str) -> tuple[list[dict], list[str]]:
+    import json
+    try:
+        doc = json.loads(text)
+    except json.JSONDecodeError as e:
+        return [], [f"JSON 第 {e.lineno} 行第 {e.colno} 列：{e.msg}"]
+    items = doc.get("rows") if isinstance(doc, dict) else doc
+    if not isinstance(items, list):
+        return [], ["顶层要是 {\"rows\": [...]} 或直接是数组"]
+    rows, problems, seen = [], [], set()
+    for i, it in enumerate(items, 1):
+        where = f"rows[{i}]"
+        if not isinstance(it, dict):
+            problems.append(f"{where} 不是对象")
+            continue
+        n = str(it.get("n", "")).strip()
+        if not re.fullmatch(r"\d+", n):
+            problems.append(f"{where} 的 n 要是数字，现在是 {it.get('n')!r}")
+            continue
+        where = f"第 {n} 行（rows[{i}]）"
+        if n in seen:
+            problems.append(f"{where} 序号重复")
+        seen.add(n)
+        for k in ("text", "concl"):
+            if k in it and not isinstance(it[k], str):
+                problems.append(f"{where} 的 {k} 要是字符串")
+        row = {"n": n, "text": str(it.get("text") or "").strip(), "concl": str(it.get("concl") or "").strip()}
+        if not row["text"]:
+            problems.append(f"{where} 没有 text（现象）")
+        pages = it.get("pages")
+        if pages is not None:
+            if not (isinstance(pages, list) and all(isinstance(x, int) for x in pages)):
+                problems.append(f"{where} 的 pages 要是整数数组")
+            else:
+                row["pages"] = pages
+        cols = it.get("cols")
+        if cols is not None:
+            if not (isinstance(cols, list) and all(isinstance(x, list) and len(x) == 2 and all(isinstance(y, int) for y in x) for x in cols)):
+                problems.append(f"{where} 的 cols 要是 [页, 列] 的数组")
+            else:
+                row["cols"] = [tuple(x) for x in cols]
+        rows.append(row)
+    return rows, problems
+
+
+def _load_anomaly_md(text: str) -> tuple[list[dict], list[str]]:
+    rows, problems = [], []
+    for no, ln in enumerate(text.splitlines(), 1):
         if not ln.startswith("|"):
             continue
         cells = [c.strip() for c in ln.strip().strip("|").split("|")]
-        if len(cells) < 4 or not re.fullmatch(r"\d+", cells[0]):
+        if all(re.fullmatch(r":?-{2,}:?", c) or not c for c in cells):
+            continue                                              # 分隔行 |---|---|
+        if not re.fullmatch(r"\d+", cells[0]):
+            if re.match(r"#?\s*\d", cells[0]):                  # 像序号又不是纯数字（"1." "#2" "3）"）：多半是手误，报出来
+                problems.append(f"第 {no} 行：序号格要写纯数字，现在是「{cells[0][:12]}」（该行不计入）")
+            continue                                              # 其余（表头、别的表）不管
+        if len(cells) < 4:
+            problems.append(f"第 {no} 行：只有 {len(cells)} 格，要 `| # | 现象 | 原因 | 结论 |` 至少 4 格（该行不计入）")
             continue
         rows.append({"n": cells[0], "text": cells[1], "concl": cells[3]})
-    return rows
+    return rows, problems
 
 
 def _coverage(rows: list[dict]) -> tuple[set[int], set[tuple[int, int]]]:
@@ -202,6 +270,11 @@ def _coverage(rows: list[dict]) -> tuple[set[int], set[tuple[int, int]]]:
     for r in rows:
         if not r["concl"] or r["concl"] in ("—", "-"):
             continue            # 没结论的行不算「有去向」
+        if "pages" in r or "cols" in r:                 # 结构化异常表给了页／列，不再从现象里抠
+            pages.update(r.get("pages", []))
+            cols.update(tuple(c) for c in r.get("cols", []))
+            pages.update(p for p, _ in r.get("cols", []))
+            continue
         for seg in re.split(r"[;；]", r["text"]):
             ps = [int(x) for x in re.findall(r"(?<![A-Za-z])p\s*(\d+)", seg)]
             cs = [int(x) for x in re.findall(r"(?:col|c)\s*(\d+)", seg)]
@@ -214,9 +287,12 @@ def _r4(anomaly: Path | None) -> tuple[dict, list[dict]]:
     cmd = "人工看图（异常表见附件）"
     if anomaly is None or not anomaly.is_file():
         return _fail(cmd, f"没有异常表：{anomaly}"), []
-    rows = parse_anomaly(anomaly)
+    rows, problems = load_anomaly(anomaly)
     empty = [r["n"] for r in rows if not r["concl"] or r["concl"] in ("—", "-")]
     att = anomaly.name
+    if problems:
+        shown = "；".join(problems[:5]) + (f"；…共 {len(problems)} 处" if len(problems) > 5 else "")
+        return {"result": "FAIL", "number": f"异常表格式有问题：{shown}", "cmd": cmd, "attach": att}, rows
     if not rows:
         return {"result": "FAIL", "number": "异常表里没有数据行", "cmd": cmd, "attach": att}, rows
     if empty:
@@ -339,7 +415,7 @@ def main(argv=None) -> int:
     ap.add_argument("book")
     ap.add_argument("-w", "--workspace", required=True)
     ap.add_argument("--export-dir", help="导出目录；没有 lines.md 就现跑 guji export format")
-    ap.add_argument("--anomaly", help="R4 异常表 md（模板 异常表模板.md）")
+    ap.add_argument("--anomaly", help="R4 异常表：.json（推荐，格式错报行号）或 .md（| # | 现象 | 原因 | 结论 |）")
     ap.add_argument("--reason", help="R3 原因归并一句话（人写）")
     ap.add_argument("--pending", help="原样转给 close-check 第 2c 项（□去向，GUJI-624）；不给时 close-check 缺省读中心库"
                                       "本册本章的待审单（数据目录 feedback/lists/proofing/<书>/<章>.pending.json，GUJI-711）")
