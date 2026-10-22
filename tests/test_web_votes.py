@@ -29,6 +29,7 @@ def test_payload_mapping():
     assert payload_of("cut", "日") == {"v": "seg_defect", "quality": "truncated", "shape": "日"}
     assert payload_of("jiazhu") == {"v": "seg_defect", "reason": "jiazhu_as_main"}
     assert payload_of("main") == {"v": "seg_defect", "reason": "main_as_jiazhu"}
+    assert payload_of("jiazhu", "之") == {"v": "seg_defect", "reason": "jiazhu_as_main", "shape": "之"}
     assert payload_of("none") == {"v": "not_a_char"}
     assert payload_of("unsure") is None
 
@@ -73,6 +74,16 @@ def test_triage_routes():
     row = t.ready[0].row("网站精校意见（004-r3）")
     assert row["id"] == "vol04:2:1:1" and row["v"] == "confirm" and row["shape"] == "象"
     assert "v1" in row["source"]
+
+
+def test_triage_flag_with_char():
+    """网站 10-21 起四档能同时带字：切分错了带字照写，无字／看不清带字挂起。"""
+    votes, _ = latest_votes([vote("3:1:1", "jiazhu", "之"), vote("3:1:2", "none", "口"), vote("3:1:3", "unsure", "日")],
+                            BOOK, REV)
+    t = triage(votes, "vol04", {})
+    assert [(d.a, d.payload.get("shape")) for d in t.ready] == [("3:1:1", "之")]
+    held = {d.a: d.held for d in t.held}
+    assert set(held) == {"3:1:2", "3:1:3"} and all(h.startswith("说无字／看不清又给了字") for h in held.values())
 
 
 def test_latest_human_takes_newest():
