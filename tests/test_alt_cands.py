@@ -211,3 +211,13 @@ def test_family_pool_takes_symbols_only_when_a_pivot_is_one():
     assert got["○"] == {"p": "○", "src": "piv"} and got["◎"] == {"p": "○", "src": "sym"}
     assert set(symbols()) <= set(got) and got["口"]["src"] == "piv"
     assert not any(is_symbol(c) for c in vs.family_pool(["口", "日"], db=Db()))
+
+
+def test_symbol_hint_threshold():
+    """图像与某个符号模板够像（≥ SYM_MIN）才提示符号，否则不提示（设计 4.3 兜底）。"""
+    from open_guji_cv.review.alt_cands import SYM_MIN, symbol_hint
+    q = np.array([1.0, 0.0])
+    near = np.array([SYM_MIN + 0.01, (1 - (SYM_MIN + 0.01) ** 2) ** 0.5])
+    far = np.array([SYM_MIN - 0.1, (1 - (SYM_MIN - 0.1) ** 2) ** 0.5])
+    assert symbol_hint(q, lambda cs: {c: (near if c == "○" else far) for c in cs}) == "○"
+    assert symbol_hint(q, lambda cs: {c: far for c in cs}) is None
