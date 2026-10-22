@@ -1013,20 +1013,13 @@ class SeedAdmitStep(Step):
                         and vmap.semantic(lib_top) != vmap.semantic(align_char)
                         and ledger.pair_confirmed(lib_top, align_char)):
                     vm_here = _PairAwareMap(vmap, {lib_top: vmap.semantic(align_char)})
-                # CNN 字形背书（match_solo_cnn 用）：只在**灰区且无整理本**时才算，
-                # 别的档一律不看它——避免把一路弱独立证据混进已经成立的两路里。
-                # 取图有代价（要读 char_patch 并过网络），所以先判档位再算。
-                cnn_char = None
-                if (align_char is None and r.verdict != "same" and r.candidates
-                        and max(c for _, c in r.candidates) >= MATCH_SOLO_OCR_COV):
-                    cnn_char = soft_patch(r.id, "cnn", _cnn_top, ctx, page, cc.col, r.slot, r.sub)
                 ok, channel = admission_decision(
                     ocr=ocr_in, align_char=align_char, ref_char=None,
                     doubts=doubts, vmap=vm_here,
                     match_char=r.char if r.verdict == "same" else None,
                     match_candidates=list(r.candidates),
                     match_guard=r.guard, match_wmax=r.wmax,
-                    solo_cov=p.solo_cov, cnn_char=cnn_char)
+                    solo_cov=p.solo_cov)
                 # 书级收紧（overview#155）：关通道 / match_solo 形近闸。放在所有兜底通道之前，
                 # 作废的格后面仍可能被别的独立证据接住。
                 if ok and channel in off_channels:
@@ -2253,7 +2246,7 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
-_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_cnn"})
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
@@ -2502,30 +2495,6 @@ class _PairAwareMap:
 
     def __getattr__(self, name):
         return getattr(self._base, name)
-
-
-def _cnn_top(book, page: int, col: int, slot: int, sub: str | None) -> str | None:
-    """CNN embedding 检索的 top1 字（模板 = 字体 + 康熙字头 + 字统网真刻本）。
-
-    只给 `match_solo_cnn` 用：无整理本 + 库形状落在 0.95~0.99 灰区时的第二路背书。
-    没 checkpoint / 没装 torch → None（通道自动不触发）；**没图 → 抛 `PatchUnavailable`**
-    （2026-10-05 前是 None，图读不到这一路就悄悄关了，overview#407）。
-    """
-    try:
-        from ..clustering.cnn_candidates import shared
-        cc = shared()
-        if not cc.available:
-            return None
-    except Exception:
-        return None
-    img = _page_patch(book, page, col, slot, sub)     # 通道开着才读图；读不到抛错
-    try:
-        from ..clustering.font_candidates import book_charset
-        from ..clustering.normalize import normalize_patch
-        top = cc.emb_topk(normalize_patch(img), tuple(book_charset()), k=1)
-        return top[0][0] if top else None
-    except Exception:
-        return None
 
 
 def _image_ranks(book, page: int, col: int, slot: int, sub: str | None,
