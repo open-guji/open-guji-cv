@@ -18,7 +18,7 @@ from ..core.spec import page_key
 from ..feedback.lookup import resolved_inverted
 from ..products.kinds import inverted as _inverted  # noqa: F401  —— 登记 inverted 产物种类
 from ..products.store import ProductStore
-from ..utils.preclean import apply_preclean, band_ink_ratio, band_mask, rect_mask
+from ..utils.preclean import apply_preclean, band_mask, rect_mask
 
 QUESTION = "invert_detect.page.is_inverted"
 CROP_PAD = 400      # 预览图在候选黑条上下各多露多少行（要看得出是版框还是正文里的一条带）
@@ -60,29 +60,20 @@ def cards(store: ProductStore, book: str, pages: list[int] | None = None, *, inc
     return out
 
 
-def preview(book: str, page: int, rules: list[dict], which: str) -> tuple[np.ndarray, dict]:
-    """修前（`which="before"`）或修后的预览图（候选附近一条通栏，缩到一半），和每条规则修前修后的带内墨占比。"""
+def preview(book: str, page: int, rules: list[dict], which: str) -> np.ndarray:
+    """修前（`which="before"`）或照 `rules` 修后的预览图：候选附近一条通栏，缩到一半。"""
     import cv2
 
     from ..utils.image_io import imread
     bk = load_book(book)
     gray = imread(str(bk.raw_path(page)), cv2.IMREAD_GRAYSCALE)   # 卡上比的是原图与照规则修的图，不经 effective_raw_path
     ys = []
-    inks = []
     for r in rules:
         m = _rule_mask(gray, r)
-        if m is None or not m.any():
-            inks.append(None)
-            continue
-        rows = np.flatnonzero(m.any(1))
-        ys += [int(rows[0]), int(rows[-1])]
-        before = band_ink_ratio(gray, m)
-        inks.append({"before": round(before, 3), "after": round(1.0 - before, 3)})
-    img = gray
-    if which == "after":
-        img, _notes = apply_preclean(gray, rules, gate=False)
+        if m is not None and m.any():
+            rows = np.flatnonzero(m.any(1))
+            ys += [int(rows[0]), int(rows[-1])]
+    img = apply_preclean(gray, rules, gate=False)[0] if which == "after" else gray
     if ys:
-        a, b = max(0, min(ys) - CROP_PAD), min(gray.shape[0], max(ys) + CROP_PAD)
-        img = img[a:b]
-    img = cv2.resize(img, None, fx=PREVIEW_SCALE, fy=PREVIEW_SCALE, interpolation=cv2.INTER_AREA)
-    return img, {"ink": inks}
+        img = img[max(0, min(ys) - CROP_PAD):min(gray.shape[0], max(ys) + CROP_PAD)]
+    return cv2.resize(img, None, fx=PREVIEW_SCALE, fy=PREVIEW_SCALE, interpolation=cv2.INTER_AREA)

@@ -38,7 +38,7 @@ def api_invert_review_preview(book: str, page: int, which: str = "before", rules
                                           for c in card["rules"]]
     if not rs:
         raise HTTPException(404, f"{book} p{page} 没有反色带候选")
-    img, _info = ic.preview(book, page, rs, which)
+    img = ic.preview(book, page, rs, which)
     ok, buf = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])
     if not ok:
         raise HTTPException(500, "编码失败")
