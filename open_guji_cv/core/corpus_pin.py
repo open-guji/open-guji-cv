@@ -44,8 +44,9 @@ _SKIP_NAMES = {"README.md", ".gitkeep"}
 #: 大静态文件（≥1MB 的 .txt／.tsv／.json）在清单条目里加 ``"store": "r2"``：内容在 R2 按 sha256 存（``guji corpus upload`` 传，
 #: ``fetch`` 取回），清单只记哈希做索引。目前 R2 只收 png／txt（`datastore.r2.CONTENT_TYPES`）。不进指纹（`items_digest` 只看 root、path、sha256）。
 BLOB_MIN = 1_000_000
-#: 文本类才走 R2（桶里统一按 .txt 键存，content-type 为 text/plain；取回按 sha 还原到登记的路径，后缀不影响）
-BLOB_SUFFIXES = (".txt", ".tsv", ".json")
+#: 文本类才走 R2（桶里统一按 .txt 键存，content-type 为 text/plain；取回按 sha 还原到登记的路径，后缀不影响）。
+#: `.npz` 是 U-Net 权重（`config/groups/<组>/unet.npz`，约 1MB，sheldon 2026-10-22 要求训完都存 R2 免得重训）：同样按哈希存，字节原样。
+BLOB_SUFFIXES = (".txt", ".tsv", ".json", ".npz")
 
 
 def _item(group: str, root: str, rel: str, p: Path, sha) -> dict:
