@@ -83,8 +83,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="wm", name="未末", members=frozenset("未末"),
         backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/wm",
-        flow=FlowSpec(("ctx", "bars")),
-        note="按文意定；文意弃权时按量横长短（groups/bars.py）。"),
+        flow=FlowSpec(("ctx", "bars")), overlaps=("sz",),
+        note="按文意定；文意弃权时按量横长短（groups/bars.py）。与 sz 共用「未」。"),
     "ts": GroupSpec(
         id="ts", name="土士", members=frozenset("土士"),
         backends=(),
@@ -190,6 +190,23 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ids",), config_dir="config/groups/sy",
         flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("曲")),
         note="形近不同义，按整字字形判（一对多岭回归，按册留一 0 错）；曲 当陪衬字；只补放。"),
+    # 长尾线第二批（2026-10-22）：宋朱未、各名、心必也走整字字形判。先试过文意路（L1 规则＋haiku L2 表），
+    # 在已放行格里与现判不一致的 21 格，看图 21 格全是文意判错，所以弃用，见 doc/design/M7-未覆盖形近字长尾.md 第五节。
+    "sz": GroupSpec(
+        id="sz", name="宋朱未", members=frozenset("宋朱未"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/sz", overlaps=("wm",),
+        flow=FlowSpec(("ids",), combine="first", tolerate=frozenset("末")),
+        note="按整字字形判（一对多岭回归）；末 当陪衬字，模板库里也有末；与 wm 共用「未」；只补放。"),
+    "gm": GroupSpec(
+        id="gm", name="各名", members=frozenset("各名"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/gm",
+        flow=FlowSpec(("ids",), combine="first"),
+        note="按整字字形判（上部夂／夕）；只补放。"),
+    "xb": GroupSpec(
+        id="xb", name="心必", members=frozenset("心必"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/xb",
+        flow=FlowSpec(("ids",), combine="first"),
+        note="按整字字形判（按册留一 0 错）；只补放。"),
 }
 
 

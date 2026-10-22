@@ -85,3 +85,19 @@ def test_non_member_template_class_abstains_with_slot():
     bank2 = {"山": bank["山"], "由": bank["由"], "曲": bank["出"]}    # 「出」的图在库里叫曲（组外字）
     v = O.judge_with("sy", _glyph("d"), bank2, SPEC3)
     assert v.char is None and v.why == "abstain:slot"
+
+
+def test_second_batch_registered_and_banks_load():
+    """宋朱未 sz、各名 gm、心必 xb（2026-10-22）：整字字形判；模板库格式对、类别齐、小于 1MB。"""
+    from pathlib import Path
+    import json
+    root = Path(__file__).resolve().parent.parent
+    for gid, members, extra in (("sz", "宋朱未", "末"), ("gm", "各名", ""), ("xb", "心必", "")):
+        g = GROUPS[gid]
+        assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
+        assert O.SPECS[gid].whole == "hog"
+        p = root / g.config_dir / "ids_bank.json"
+        assert p.stat().st_size < 1_000_000
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert set(members + extra) <= set(d["templates"])
+    assert "wm" in GROUPS["sz"].overlaps and "sz" in GROUPS["wm"].overlaps
