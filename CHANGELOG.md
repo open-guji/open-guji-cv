@@ -10,8 +10,12 @@
 - 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
 - 反色带候选 `invert_detect` 1.1：先排掉不在正文里的黑条（Sheldon 10-22 嫌 1.0 误报多）。黑条不足 12 行（上框粗线）、上方是空白天头（页顶外框）、上下是满纸花纹（封面、书衣）都不报。殿本十册 1,707 页：已登记 15 处全中，误报 13 页降到 2 页（vol06 p40、vol08 p67，抬头格下的粗横线，与已登记的 vol02 p136 几何上分不开）。阈值在同一批十册上定，没有留出验证。
 - 复查已登记反色带：vol05 p22、vol07 p78、vol09 p174/p175 四页修完还留着黑块（登记的横向范围漏了一截，vol07 p78 左两格的带上沿是台阶形），中心库 yaml 补全规则（vol07 p78 左两格改用矩形），`precleaned/` 四张图重生成。修后再跑 `invert_detect` 不报，逐页看图核对干净。四页 Step1 起判过期。
+- 特殊符号进字符候选集（Sheldon 10-21 定，设计 `doc/design/特殊符号进字符候选集-设计.md`）：人定的符号（○□△⊙ 等，`hanzi.symbols` 登记过的）能进字形库，`glyphdb_admit` 与 `glyph_ledger` 不再把非汉字码位一律拒收；相似字按图认符号（模板余弦 ≥ 0.93 且高过本格最像的字才并入）；5-b 字表开关 `font.charset.symbols`、seed_admit `symbol_review`（放行成符号的格退回人审，除非本书同一符号已有 3 条以上人裁）；送审原因显示「可能是符号」。没开开关的册产物逐字节不变。（#362、#377、#384）
+- 从产物包出待审单时，相似字现切字块图、一格没出就报错、`republish.py add-alt [--replace]` 原地补。（#362）
 
 ### Changed
+- 厯歴 `lih` 改取下半框 HOG（`ids_online.SPECS`：size 48、`region=(0,1,0.5,1)`、门槛 0.25；模板库同一 122 格重建）：按册留出 119 对/3 弃/0 错（原 92/122）。区域在同批数据上选，偏乐观。经验总结与逐组评估见 `doc/design/M7-切分识别经验推广.md`。PATCH；只影响点名了 lih 的册，重跑归 M8。
+- 呂吕 `lv` 门槛 0.5→0.3、徵徴 `zheng` 0.6→0.45（sheldon 10-22 同意）：判别台复核（`research/m7/bench/check_prod.py`）发现两组各有 1 格在线上门槛之上判「错」，sheldon 看图确认是原人裁错（vol02:125:8:4 实为吕、vol01:70:7:10 实为徴；数据集与中心库已更正）。更正后按册留一：呂吕 68 对/2 弃/0 错（原 62），徵徴 49 对/26 弃/0 错（原 38，错例最大 0.336）。与上一条合计 PATCH；只有 `seed_admit` 的 `code_hash` 变（相对 dev：8a8925fc0ffbd21a→72120ef3f1a81eec）。
 - 己已巳／日曰 第三轮收口（sheldon 10-22；`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`「第三轮」节）：① 己已巳 `pair`：读序紧挨的两格都进了组 → 前「己」后「巳」（干支，總目参考文本两两相邻 37 处全是己巳），不跑方法；② `ctx_l2.add_review` 放宽：主模型 low/mid/「其他」都可，复核模型 high 的组内字就收，主模型有一遍 high 给了别的字则不收（己已巳 179 格标注上 9 格全对）；③ 日曰 `review_fix_strong`：L2 表答案 strong（`ctx_l2.add_confirm`：另跑一遍 haiku 和 Sonnet 都 high 同字）且字形没明显反对时，复核改掉别的通道按整理本放的字，否则照旧降审（日曰 98 格标注上 haiku＋Sonnet 都 high 同字 66 格错 1）；④ 影子闸不降字组按文意定的字——影子只是挑了同组另一个字时（原来改成曰后被影子降、又被坐标兜底按整理本放回日）。抽样 261 页对 dev：新放行／改字 13 格，逐格核 0 错、0 降审；三组送审（不含遮挡）69→56，其中 strong 标记与放宽复核要新 L2 表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（cb2434a4a4c41d6e→8a8925fc0ffbd21a）。
 
 ## [0.5.7] - 2026-10-21
@@ -89,6 +93,7 @@ PATCH（Sheldon 10-21 定发，vol04–10 基线重跑用）。`border_detect`�
 - `glyphdb_admit` 取图前查绑定（规范 §9 F-10）：补消费积压时重切后格号顺移的按现格取字块，绑定判不该采信的不进库（计 `unbound`）。实时消费不受影响；不在任何 Step 的 `code_deps` 里，各书产物不过期。
 
 ### Added
+- 字形库按版本钉（GUJI-727，设计 `doc/design/字形库按版本钉-细设计.md`）：`guji glyph-db snapshot` 出只读快照 g<N>（清单随 `config/` 进中心库、一个号只写一次，文本随 push 按 sha 进 R2），册 yaml `glyph_pin: N` 有快照时本册读字形库的步改用 `output/glyph-g<N>.db`、字形库指纹换成快照内容哈希；`pin-build`／`pin-list`／`pin-verify`／`snapshot-upload`，`db pull/sync` 与 `pipeline` 起跑前自动建库。没钉的册、钉了号没快照的册行为与指纹逐位不变；**17 步 `code_hash` 全部不变**。
 - `scripts/zhengli/republish.py from-pack`：取别人跑好的产物包直接重发待审单，不重跑任何 Step——拉库、取包、按锚框核人裁绑定（包后新到的、按格号扣会扣错的、绑不上的都列进差异单「人裁合并」）、导出（文本版本读 book-text 线上值，单子头记包的 cv 版本）、prep，vol05 实测一条命令 4 分钟。`push --book-text` 顺带把同一次导出拷进 book-text、文本线升 minor、本地校验后提交到新分支；收尾提示请网站总管按顺序手动跑文本与待审单两段发布（每日定时里待审单比文本早 20 分钟）。不在任何 `code_deps` 里，各书产物不过期。
   - 后续修两处（vol04–10 实跑发现）：from-pack 自己设 `GUJI_WORKSPACE`（之前没设时人裁绑定读到 0 条）；原格号上有人裁、但人裁绑到别处或绑不上的格不再被 `pending_route` 按格号扣掉（新参数 `--keep`），照旧留在单上。
 - `feedback/migrate_dedupe.py`：删整轮重发的人裁事件副本（规范 §9 M-3，原 O-8），记账、补锚档、金标 `source_events` 跟着改，带核对与 `gold rebuild` 比对；10-21 已写中心库（殿本 3,638 条、北行 76 条）。不动 Step 模块，各书产物不过期。
