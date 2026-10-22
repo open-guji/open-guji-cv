@@ -27,7 +27,9 @@ class FlowSpec:
     - `lift_needs`：补放时给字的解法里必须有这几个之一（空＝不限）。入人八字形分类器只验证过「降级」，不许单独补放
       （vol04 A/B：过切的半个「爻」被它单独放成「人」）；
     - `tolerate`：补放进入时，分差内允许出现的**组外候选字**（库形上的陪衬，不是真竞争者）。只放宽进入，给字仍全凭解法，
-      解法给不出组内字照样送审。彝：库形常把 尋、舞 排在第二、三位（vol04–10 有 4 格因此没进流程）。"""
+      解法给不出组内字照样送审。彝：库形常把 尋、舞 排在第二、三位（vol04–10 有 4 格因此没进流程）；
+    - `families`：两段判。组里有同字异体时（象彖𧰼：象𧰼同字，彖另一字），先由 `solvers`（文意）定「哪一族」，
+      族里不止一形的，再由 `form_solvers`（字频→IDS→库形最近，按刻形）定哪一形，定不下来弃权。族是字符串，如 ("彖", "象𧰼")。"""
     solvers: tuple
     combine: str = "agree"
     review: bool = False
@@ -35,6 +37,8 @@ class FlowSpec:
     lift_needs: tuple = ()
     review_abstain: bool = False
     tolerate: frozenset = frozenset()
+    families: tuple = ()
+    form_solvers: tuple = ("freq", "ids", "top1")
 
 
 @dataclass(frozen=True)
@@ -52,6 +56,9 @@ class GroupSpec:
     overlaps: tuple = ()          # 允许与哪些组共用成员（须互相声明）；入口按分差内候选＋整理本字选第一个装得下的组
     ref_free: bool = False        # 整理本在本组的字上没有参考价值（如己已巳，sheldon 2026-10-19 定）：入口不看整理本字，判法也拿不到它
 
+
+#: 两段判的族（见 `FlowSpec.families`）：先按文意定哪一族，族内不止一形再按刻形定（sheldon 2026-10-22）。
+FAMILIES: dict[str, tuple] = {"zh": ("曾", "會㑹"), "xz": ("彖", "象𧰼")}
 
 GROUPS: dict[str, GroupSpec] = {
     "jys": GroupSpec(
@@ -96,18 +103,18 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec(("ctx",), review=True),
+        flow=FlowSpec(("ctx",), review=True, families=FAMILIES.get(gid, ())),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
-                               ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會㑹", "會＝會典、附會；曾＝曾經、姓氏。㑹是會的异体写法（sheldon 10-22 并入），文意定字后取通行字。"),
+                               ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會㑹", "會＝會典、附會；曾＝曾經、姓氏。㑹是會的异体：先按文意定曾／會族，會㑹再按刻形（字频→IDS→库形最近）定哪一形。"),
                                ("yh", "遺還", "遺＝遺文、補遺；還＝還朝、返還。"))},
     # —— 第四批（2026-10-19）：象彖、王玉、圓圖。同前，L1 零冲突＋逐册 L2 表。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec(("ctx",), review=True),
+        flow=FlowSpec(("ctx",), review=True, families=FAMILIES.get(gid, ())),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
-       for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体写法（sheldon 10-22 并入），文意定字后取通行字。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
+       for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
                                ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},
     # —— 日目（2026-10-19）：与 ry 共用「日」（互相声明 overlaps），入口按分差内候选选组：日曰候选归 ry，日目候选归 rm，三者混杂留人审。
     "rm": GroupSpec(
