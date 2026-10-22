@@ -5,9 +5,9 @@
 
 ## [未发版]
 
-## [0.5.6] - 测试中
+## [0.5.6] - 2026-10-21
 
-PATCH（sheldon 10-22 定发）。主要内容：印章系统化 1–4 期（新增 Step0 `seal_detect`，切分与遮挡格改读印章定位）、字框收缩 `cell_shrink` 1.10–1.15、字组判法重构成方法数组并新增五个码位归一组、旨㫖整字判法上线、啓啟与教敎模板库重建。相对 v0.5.5，`row_segment`、`cell_shrink`、`seed_admit` 三步 `code_hash` 变，另新增 `seal_detect`，**各书 Step0／Step3 起判过期**；其余 14 步不变。新组（zy sy sz gm xb zhi 及码位归一组 nei bie chu juan wan）要在册配置 `group_flow` 点名才生效；组模板库变了，配套出全局层新底库、各册改钉。
+PATCH（sheldon 10-22 定发）。主要内容：印章系统化 1–4 期（新增 Step0 `seal_detect`，切分与遮挡格改读印章定位）、字框收缩 `cell_shrink` 1.10–1.15、字组判法重构成方法数组并新增五个码位归一组、旨㫖整字判法上线、啓啟与教敎模板库重建。相对 v0.5.5，`row_segment`、`cell_shrink`、`seed_admit` 三步 `code_hash` 变，另新增 `seal_detect`，**各书 Step0／Step3 起判过期**；其余 14 步不变。新组（zy sy sz gm xb zhi 及码位归一组 nei bie chu juan wan）要在册配置 `group_flow` 点名才生效；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3786 过、39 跳过。
 
 ### Added
 - Step0 印章定位 `seal_detect`（印章系统化第 1 期，用户 10-22 定）：排在 Step1 之前，只读原图，产物 `seals` 列出每页每方印的类别（`stain` 大印＝卷首叶、卷端页的斑驳藏书印；`crisp` 小印＝卷末「乾隆御覽之寶」）、规范空间外框、分数、来源。大印按 150 px 网格的中等墨点密度认（峰值 ≥ 20、近方形，排掉 p2 书签条）；小印用印章模板整页找，分数取「模板笔画处有墨比例 − 空白处有墨比例」，印压正文时也认得出（vol09 p265 原来认不出）。书级 `params.seal_detect.overrides` 可人核整页覆盖。殿本十册 1,707 页认出 26 页（大印 13、小印 13），我逐页看图没发现误报（待 Sheldon 核图定为标准）。这一期只新增产物，别的步还不读它，各书已有产物不过期（新步自己要算一遍）。设计见 Claude Doc「印章系统化设计」。
