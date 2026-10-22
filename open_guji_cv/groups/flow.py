@@ -15,6 +15,10 @@
   `review_fix` 时前者改成解法的字（通道 `group_flow`，`evidence.fixed_from` 记原通道与原字）；声明了
   `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
 
+- 复核时组声明了 `review_fix_strong`：文意答案 strong（L2 表多遍都 high 同字）且方法之间一致 → 照 `review_fix` 改字，否则照常降审。
+- 组声明了 `pair`（己已巳：干支「己巳」）：读序紧挨的两格都进了本组 → 前一格给 `pair[0]`、后一格给 `pair[1]`，不跑方法
+  （留痕 `ctx:pair`）；三格以上连着照常跑方法。
+
 每个进了流程的格都写 `evidence.group`：组、入口、每个解法的给字与理由、最终结论。
 
 判格在前、改格在后：先用遍前状态给所有格算好结论，再逐格执行，前一格改字不污染后一格的窗口。
@@ -216,22 +220,44 @@ def _pick_form(g: str, ch: str, r, cands, cfg: FlowConfig, patch_fn, trail: list
     return None, "abstain", trail
 
 
+def _pair_pos(entries: dict, i: int, g: str) -> int | None:
+    """组声明了 `pair` 时，第 i 格与读序紧挨的一格都进了本组、且不是三格以上连着 → 0（前一格）或 1（后一格）；否则 None。"""
+    if not GROUPS[g].flow.pair:
+        return None
+    same = lambda j: j in entries and entries[j][2][0] == g
+    run = [j for j in (i - 1, i + 1) if same(j)]
+    if len(run) != 1:
+        return None
+    j = run[0]
+    lo = min(i, j)
+    if same(lo - 1) or same(lo + 2):
+        return None
+    return 0 if i == lo else 1
+
+
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
                     canon: Callable[[str], str] = lambda c: c) -> FlowResult:
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
     `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。"""
-    plans = []
+    entries = {}
     for i, r in enumerate(seq):
         if blocked(r):
             continue
         cands = cands_of(r.id) or []
         ref = (amap.get(r.id) or (None, None))[0]
         e = entry(r, cands, ref, cfg, canon)
-        if e is None:
+        if e is not None:
+            entries[i] = (cands, ref, e)
+    plans = []
+    for i, (cands, ref, (g, mode)) in entries.items():
+        r = seq[i]
+        pos = _pair_pos(entries, i, g)
+        if pos is not None:
+            ch = GROUPS[g].flow.pair[pos]
+            plans.append((r, g, mode, ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree:pair", "via": "ctx:pair"}]))
             continue
-        g, mode = e
         need_ctx = ctx_fn is not None and any("ctx" in GROUPS[x].flow.solvers
                                               for x in (g, *(partners(g, cfg.groups) if mode == "joint" else ())))
         left, right = (ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)) if need_ctx else (None, None)
@@ -256,9 +282,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 r.doubts = list(dict.fromkeys(list(r.doubts or []) + [f"group_flow_{why}"]))
         else:
             f = GROUPS[g].flow
-            code = ("group_flow_disagree" if (ch is not None and ch != r.char and not f.review_fix) or why == "conflict"
+            fix = f.review_fix or (f.review_fix_strong and why == "agree" and any(
+                t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail))
+            code = ("group_flow_disagree" if (ch is not None and ch != r.char and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
-            if ch is not None and ch != r.char and f.review_fix:
+            if ch is not None and ch != r.char and fix:
                 decision = "fix"
                 r.evidence = {**(r.evidence or {}), "fixed_from": {"channel": r.channel, "char": r.char}}
                 r.char, r.channel, r.provenance = ch, CHANNEL, "context"

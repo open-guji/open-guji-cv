@@ -147,6 +147,8 @@ def _expected_of(e: Event) -> dict:
         # 与 crop_top 仍一并存下，只为排查历史问题，**不要拿它当基准**。
         keys = ("y_left", "y_right", "y_left_abs", "y_right_abs", "crop_top", "verdict")
         return {k: p[k] for k in keys if k in p and p[k] not in (None, "")}
+    if e.kind == "inverted_band":
+        return {k: p[k] for k in ("verdict", "rules") if p.get(k) not in (None, "")}
     if e.kind == "head_raise":
         # 列级抬头精标（overview `Step3-逐字切分/03-抬头综合优化.md`）。三件事
         # 一张卡：`raised` 这一列是不是抬头 / `n_raised` 抬高几格 / `head_cut`
