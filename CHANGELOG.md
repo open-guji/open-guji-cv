@@ -9,6 +9,9 @@
 - Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
 - 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
 
+### Changed
+- 己已巳／日曰 第三轮收口（sheldon 10-22；`doc/research/己已巳日曰日目-送审收口-2026-10-22.md`「第三轮」节）：① 己已巳 `pair`：读序紧挨的两格都进了组 → 前「己」后「巳」（干支，總目参考文本两两相邻 37 处全是己巳），不跑方法；② `ctx_l2.add_review` 放宽：主模型 low/mid/「其他」都可，复核模型 high 的组内字就收，主模型有一遍 high 给了别的字则不收（己已巳 179 格标注上 9 格全对）；③ 日曰 `review_fix_strong`：L2 表答案 strong（`ctx_l2.add_confirm`：另跑一遍 haiku 和 Sonnet 都 high 同字）且字形没明显反对时，复核改掉别的通道按整理本放的字，否则照旧降审（日曰 98 格标注上 haiku＋Sonnet 都 high 同字 66 格错 1）；④ 影子闸不降字组按文意定的字——影子只是挑了同组另一个字时（原来改成曰后被影子降、又被坐标兜底按整理本放回日）。抽样 261 页对 dev：新放行／改字 13 格，逐格核 0 错、0 降审；三组送审（不含遮挡）69→56，其中 strong 标记与放宽复核要新 L2 表推中心库后才生效。PATCH；只有 `seed_admit` 的 `code_hash` 变（cb2434a4a4c41d6e→8a8925fc0ffbd21a）。
+
 ## [0.5.7] - 2026-10-21
 
 PATCH（Sheldon 10-22 定发，vol04–10 重跑用）。相对 v0.5.6，`cell_shrink`（1.17）、`row_segment`（1.35）、`seed_admit`（1.21，`code_hash` 85052303fa79a800→bff8f652ceae4de9）三步 `code_hash` 变，**各书 Step3 起判过期**；其余 15 步不变。新增 `qin`／`shan`／`weiw` 三个字组模板库，要在册配置 `group_flow` 点名才生效。

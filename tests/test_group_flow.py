@@ -207,11 +207,49 @@ def test_review_fix_and_abstain_for_jys(monkeypatch):
     out = {"b": "已", "c": None}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(out[r.id], via=name))
     b, c = Rec("b", "巳", True, "split_ref", "match"), Rec("c", "巳", True, "split_ref", "match")
-    res = group_flow_pass([b, c], {}, lambda cid: [], lambda r: False, _cfg())
+    mid = Rec("m", "中", True, "split_ref", "match")       # 隔开，免得两格相邻按干支 pair 判
+    res = group_flow_pass([b, mid, c], {}, lambda cid: [], lambda r: False, _cfg())
     assert b.admit and b.char == "已" and b.channel == "group_flow" and b.provenance == "context"
     assert b.evidence["fixed_from"] == {"channel": "split_ref", "char": "巳"} and b.evidence["group"]["decision"] == "fix"
     assert not c.admit and "group_flow_abstain" in c.doubts and c.evidence["demoted_from"]["channel"] == "split_ref"
     assert (res.lifted, res.demoted) == (0, 1)
+
+
+def test_jys_pair_is_ganzhi(monkeypatch):
+    """己已巳 `pair`：读序紧挨的两格都进了组 → 前「己」后「巳」，不跑方法；三格连着照常跑方法。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(None, via=name))
+    a, b = Rec("a", "巳", True, "split_ref", "match"), Rec("b", "已")
+    cands = {"b": [("已", 0.97), ("巳", 0.96)]}
+    group_flow_pass([Rec("x", "熙", True), a, b, Rec("y", "大", True)], {}, lambda cid: cands.get(cid, []),
+                    lambda r: False, _cfg())
+    assert (a.char, a.admit, a.evidence["group"]["decision"]) == ("己", True, "fix")
+    assert (b.char, b.admit, b.channel) == ("巳", True, "group_flow")
+    assert b.evidence["group"]["solvers"][0]["why"] == "agree:pair"
+    run = [Rec(k, "已", True, "split_ref", "match") for k in "pqr"]
+    group_flow_pass(run, {}, lambda cid: [], lambda r: False, _cfg())
+    assert all(not r.admit and "group_flow_abstain" in r.doubts for r in run)
+
+
+def test_ry_review_fix_only_when_strong(monkeypatch):
+    """日曰 `review_fix_strong`：文意答案 strong 且字形没反对才改掉别的通道放的字；不 strong 照旧降审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    strong = {"s": True, "w": False}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "曰" if name == "ctx" else None, via=name, extra={"strong": True} if name == "ctx" and strong[r.id] else {}))
+    s, w = Rec("s", "日", True, "match_ref", "match"), Rec("w", "日", True, "match_ref", "match")
+    cfg = FlowConfig(groups=("ry",))
+    group_flow_pass([s, Rec("m", "中", True), w], {}, lambda cid: [], lambda r: False, cfg)
+    assert (s.char, s.admit, s.evidence["group"]["decision"]) == ("曰", True, "fix")
+    assert s.evidence["fixed_from"] == {"channel": "match_ref", "char": "日"}
+    assert not w.admit and "group_flow_disagree" in w.doubts
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "曰" if name == "ctx" else "日", via=name, extra={"strong": True} if name == "ctx" else {}))
+    c = Rec("c", "日", True, "match_ref", "match")
+    group_flow_pass([c], {}, lambda cid: [], lambda r: False, cfg)
+    assert not c.admit and "group_flow_disagree" in c.doubts              # 字形明显反对 → 冲突，仍降审
 
 
 def test_lift_needs_blocks_image_only_lift(monkeypatch):
