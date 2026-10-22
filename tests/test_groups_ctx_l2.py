@@ -80,6 +80,13 @@ def test_ctx_drift_counts_and_canon():
     assert ctx_drift("bad", "v3:a|b") is None
 
 
+def test_ctx_drift_unknown_now_is_not_a_difference():
+    """本格窗口是 □（组流时邻格还没放行）、表键有字：不算差，核心内也一样；反过来表键 □、窗口有字仍算差。"""
+    assert ctx_drift("v3:甲乙丙丁戊|祭日礿夏", "v3:甲乙丙丁戊|□□□夏") == 0
+    assert ctx_drift("v3:甲乙丙丁戊|□□□夏", "v3:甲乙丙丁戊|祭日礿夏") is None
+    assert ctx_drift("v3:甲乙丙丁戊|祭日礿夏", "v3:甲乙丙丁戊|□□□冬") == 1
+
+
 def test_other_carries_confidence():
     """「其他」的把握记在 `other_conf`：各遍都 high 才是 high（共字组联合判只认它）。"""
     ctx = {"a": ("一", "二"), "b": ("一", "二")}
@@ -96,10 +103,25 @@ def test_jys_llm_skips_second_of_family_pair():
     from types import SimpleNamespace
     from open_guji_cv.groups.methods import JYS_CTX, MethodInput
     jys = GROUPS["jys"]
-    ctx = {"c": ("至嘉定巳", "書成")}
+    ctx = {"c": ("冊末云巳", "手補")}      # 年號在前（嘉定己巳）由 L1 规则 jys-年號己巳 先接，这里用没有年號的「云己巳」
     t = merge_runs("jys", "己已巳", "jys-l2-1", _runs(("已", "high"), ("已", "high")), ctx)
     cfg = SimpleNamespace(l2_tables={"jys": t}, canon=None, l2_drift=0)
     inp = MethodInput(group="jys", members=jys.members, cell_id="c", cands=[], ref=None, cfg=cfg,
-                      left="至嘉定巳", right="書成")
+                      left="冊末云巳", right="手補")
     v = JYS_CTX.run(inp)
     assert (v.char, v.why) == (None, "abstain:pair")
+
+
+def test_add_review_only_upgrades_same_char_high():
+    """复核模型只把「主模型同字但置信不够」的格补成答案；字不同、复核也不 high、主模型说其他的都不动。"""
+    from open_guji_cv.groups.ctx_l2 import add_review
+    ctx = {k: ("左", "右") for k in "abcd"}
+    t = merge_runs("jys", "己已巳", "jys-l2-1", {"haiku": {
+        "a": {"char": "已", "conf": "mid"}, "b": {"char": "已", "conf": "mid"},
+        "c": {"char": "其他", "conf": "mid"}, "d": {"char": "己", "conf": "low"}}}, ctx, min_conf=("high",))
+    n = add_review(t, "sonnet", {"a": {"char": "已", "conf": "high"}, "b": {"char": "己", "conf": "high"},
+                                 "c": {"char": "已", "conf": "high"}, "d": {"char": "己", "conf": "mid"}}, "己已巳")
+    assert n == 1
+    assert (t["cells"]["a"]["char"], t["cells"]["a"]["why"]) == ("已", "agree:review")
+    assert [t["cells"][k]["char"] for k in "bcd"] == [None, None, None]
+    assert t["cells"]["b"]["votes"]["sonnet"] == ["己", "high"] and t["models"] == ["haiku", "sonnet"]
