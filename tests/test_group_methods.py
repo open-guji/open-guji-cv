@@ -32,9 +32,9 @@ def test_registry_kinds_match_ids_specs():
     from open_guji_cv.groups.ids_online import SPECS
     img = {g: next(m for m in s.flow.methods if m.name == "ids") for g, s in GROUPS.items() if "ids" in s.flow.solvers}
     kinds = {g: m.kind for g, m in img.items()}
-    for g in ("lv", "lih", "qik", "zy", "sy", "sz", "gm", "xb"):
+    for g in ("lv", "qik", "zy", "sy", "sz", "gm", "xb", "yh", "js", "yr"):
         assert kinds[g] == "hog", g
-    for g in ("zheng",):
+    for g in ("zheng", "lih", "rr", "ts", "ly", "wj", "zh", "yt", "em", "fc"):   # lih 10-22 改下半框；文意组字形第二路 10-22
         assert kinds[g] == "composite", g
         m = img[g]
         assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
@@ -155,3 +155,28 @@ def test_codepoint_group_lifts_book_choice():
     d = Rec("d")
     group_flow_pass([d], {}, lambda cid: [("巻", 0.97)], lambda r: False, FlowConfig(groups=("juan",)))
     assert not d.admit and "group_flow_abstain" in d.doubts
+
+
+def test_ctx_glyph2_groups():
+    """文意组字形第二路（2026-10-22）：排在文意之后、清碎墨；象𧰼 形判只在族内、𧰼 不足 20 例永不自动给；曾會 族的會㑹 形判不用整字库。"""
+    from open_guji_cv.groups.ids_online import SPECS
+    from open_guji_cv.groups.registry import GLYPH2
+    for g in GLYPH2:
+        assert GROUPS[g].flow.solvers[0] == "ctx" and "ids" in GROUPS[g].flow.solvers, g
+        assert SPECS[g].whole == "hog" and SPECS[g].clean and SPECS[g].min_margin >= 0.4, g
+    assert "ids" not in GROUPS["xz"].flow.solvers and "ids" in GROUPS["xz"].flow.form_solvers
+    assert SPECS["xz"].min_class == 20
+    assert "ids" not in GROUPS["zh"].flow.form_solvers
+    assert "wxs" not in GLYPH2 and "dt" not in GLYPH2
+
+
+def test_clean_patch_drops_border_specks():
+    import numpy as np
+    from open_guji_cv.groups import ids_whole
+    g = np.full((60, 50), 255, np.uint8)
+    g[10:50, 20:30] = 0          # 主体竖笔
+    g[0:3, 0:3] = 0              # 贴边碎墨
+    g[30:32, 46:50] = 0          # 贴右边的小块
+    c = ids_whole.clean_patch(g)
+    assert (c[10:50, 20:30] == 0).all() and c[0:3, 0:3].min() == 255 and c[30:32, 46:50].min() == 255
+    assert ids_whole.aspect_ok(g, (0.45, 2.2)) and not ids_whole.aspect_ok(np.zeros((10, 40)), (0.45, 2.2))
