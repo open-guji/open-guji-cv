@@ -68,7 +68,7 @@ U-Net 只剩 L2′ 探针一个用处：分歧 ≥ `ESCALATE_BLOB` 就升级出�
 升级 18 → 13，丢的 5 条都不是真错。多候选切点（真要裁判改选）照旧全过 U-Net。"""
 ADOPT_DIS, ADOPT_INK = 30, 20
 """扩池候选自动改选（`row_boundaries._adopt_expanded`，2026-10-22）：现选分歧 ≥ `ESCALATE_BLOB` 时，扩池候选
-分歧 ≤ ADOPT_DIS px、穿墨 ≤ ADOPT_INK px 就直接用。"""
+分歧 ≤ ADOPT_DIS px、穿墨 ≤ ADOPT_INK px 就直接用；原本干净的格线只换成不穿墨的缝。"""
 
 CLEAN_PROBE_DEV = 0.15
 """干净格线（直线不穿墨）也过 U-Net 探针的门槛：两侧格高有一格偏离 period 超过这个比例（2026-10-22）。

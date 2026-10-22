@@ -1940,7 +1940,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             return period > 0 and max(abs((u.y1 - u.y0) / period - 1),
                                       abs((d.y1 - d.y0) / period - 1)) > CLEAN_PROBE_DEV
 
-        def _resolve_and_probe(cands, chosen, up_c, dn_c, k_):
+        def _resolve_and_probe(cands, chosen, up_c, dn_c, k_, clean=False):
             """第 4 步人裁回流 + 第 5 步 U-Net 探针/裁判；两类切点（粘连 / L0′ 嫌疑）共用。"""
             chosen_by = "rule"
             resolved = (resolved_cuts or {}).get(up_c.slot)
@@ -1961,7 +1961,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)
                 if res is not None and len(res[0]) == len(cands):
-                    from .cut_select import ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
+                    from .cut_select import ADOPT_INK, ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
                     sc, dis = res
                     for c, s_, d_ in zip(cands, sc, dis):
                         c.agree = s_
@@ -1978,7 +1978,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                         # 都该先把候选补齐（原则 ①：给人最好的选项）。
                         n_old = len(cands)
                         cands = _expand_pool(cands, up_c, dn_c, k_)
-                        adopt = _adopt_expanded(cands, n_old, dis[chosen])
+                        adopt = _adopt_expanded(cands, n_old, dis[chosen], 0 if clean else ADOPT_INK)
                         if adopt is not None:
                             chosen, chosen_by = adopt, "unet"
                         elif dis[chosen] >= ESCALATE_BLOB:
@@ -1996,17 +1996,20 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                                 escalate, escalate_reason = False, None
             return cands, chosen, chosen_by, escalate, escalate_reason
 
-        def _adopt_expanded(cands, n_old, dis_chosen):
+        def _adopt_expanded(cands, n_old, dis_chosen, ink_cap):
             """L3 扩池后**自动改选**（2026-10-22）：现选与 U-Net 分歧 ≥ `ESCALATE_BLOB`、扩池来的候选里有一条
             几乎与 U-Net 一致（分歧 ≤ `ADOPT_DIS`）且穿墨少（≤ `ADOPT_INK`）的，就用它，不再交人。
             人审截断（vol02 seg_defect）里「良」的点、「晉」的头被格线留在上一格这类，U-Net 引导缝都把它们
-            划回本字、穿墨 2–10px；原来只记候选、打 escalate，产物里照旧是截断的字。"""
-            from .cut_select import ADOPT_DIS, ADOPT_INK, ESCALATE_BLOB
+            划回本字、穿墨 2–10px；原来只记候选、打 escalate，产物里照旧是截断的字。
+
+            `ink_cap`：干净格线（直线一点墨不穿）只许换成同样不穿墨的缝（0）——换成穿笔画的缝，等于把上字
+            底横的一截切给下格；下格是「一」时就成了「二」（Sheldon 10-22 看图，vol05「聖/一」「其/一」等 7 处）。"""
+            from .cut_select import ADOPT_DIS, ESCALATE_BLOB
             if dis_chosen < ESCALATE_BLOB:
                 return None
             ok = [i for i in range(n_old, len(cands))
                   if cands[i].dis_unet is not None and cands[i].dis_unet <= ADOPT_DIS
-                  and cands[i].seam_ink <= ADOPT_INK]
+                  and cands[i].seam_ink <= ink_cap]
             if not ok:
                 return None
             return max(ok, key=lambda i: (cands[i].agree or 0.0, -cands[i].seam_ink))
@@ -2066,7 +2069,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 if not suspect and not _height_off(up[0], dn[0]):
                     continue
                 cands = [SeamCandidate(kind="straight", y=None, seam_ink=0, dev_max=0)]
-                cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k)
+                cands, chosen, chosen_by, escalate, escalate_reason = _resolve_and_probe(cands, 0, up[0], dn[0], k, clean=True)
                 origin = "split_suspect" if suspect else "clean_probe"
                 if escalate_reason:
                     escalate_reason = origin + " " + escalate_reason
