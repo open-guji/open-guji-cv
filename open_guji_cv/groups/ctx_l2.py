@@ -93,6 +93,38 @@ def _canon_str(s, canon) -> str:
     return "".join(canon(c) for c in s) if isinstance(s, str) else ""
 
 
+#: 窗口漂移（`drift`）时目标字两侧各这么多字内必须逐字相同（干支、搭配都在这里）
+DRIFT_CORE = 3
+
+
+def _split_key(k) -> tuple[str, str] | None:
+    if not isinstance(k, str) or ":" not in k or "|" not in k:
+        return None
+    body = k.split(":", 1)[1]
+    left, _, right = body.partition("|")
+    return left, right
+
+
+def ctx_drift(stored, now, canon=None, core: int = DRIFT_CORE) -> int | None:
+    """表键 `stored` 与本格窗口键 `now` 差几个字位（按离目标字的距离逐位比，左文从右往左、右文从左往右；
+    长度不同时多出的位也算差）；目标字两侧各 `core` 字内有差 → None（不算同一上下文）。
+    建表后重跑，邻格的放行字会变（□→曰、徵→徴、远处一字改放），表就整条对不上（vol04–10 重跑后 己已巳／日曰 约 40 格）。"""
+    a, b = _split_key(stored), _split_key(now)
+    if a is None or b is None:
+        return None
+    c = canon or (lambda x: x)
+    n = 0
+    for sa, sb in ((a[0][::-1], b[0][::-1]), (a[1], b[1])):
+        for i in range(max(len(sa), len(sb))):
+            x = c(sa[i]) if i < len(sa) else None
+            y = c(sb[i]) if i < len(sb) else None
+            if x != y:
+                if i < core:
+                    return None
+                n += 1
+    return n
+
+
 class CtxL2Backend:
     name = "ctx_l2"
 
@@ -103,7 +135,9 @@ class CtxL2Backend:
             raw = Path(table).read_bytes()
             self._t, self.fingerprint = json.loads(raw.decode("utf-8")), hashlib.sha256(raw).hexdigest()[:16]
 
-    def judge(self, spec, cell: JudgeInput, canon=None) -> GroupVerdict:
+    def judge(self, spec, cell: JudgeInput, canon=None, drift: int = 0) -> GroupVerdict:
+        """`drift`＞0：窗口对不上时，若只差远处（目标字两侧 `DRIFT_CORE` 字外）至多 `drift` 个字位，仍用表里的答案
+        （证据 `ctx_drift` 记差几位）；0＝逐字相同才用。"""
         t = self._t
         if t.get("schema") != "group_clf/1" or t.get("group") != spec.id or t.get("ctx_ver") != CTX_VER:
             return GroupVerdict(None, why="ver_mismatch", via="ctx_l2")
@@ -116,9 +150,18 @@ class CtxL2Backend:
             same = _canon_str(e.get("ctx"), canon) == _canon_str(ctx_key(left, right), canon)
         else:
             same = e.get("ctx") == ctx_key(left, right)
+        extra = {"votes": e.get("votes")}
         if not same:
-            return GroupVerdict(None, why="ctx_mismatch", via="ctx_l2")
+            n = ctx_drift(e.get("ctx"), ctx_key(left, right), canon) if drift > 0 else None
+            if n is None or n > drift:
+                return GroupVerdict(None, why="ctx_mismatch", via="ctx_l2")
+            extra["ctx_drift"] = n
         ch = e.get("char")
         if ch is not None and ch not in spec.members:
             ch = None
-        return GroupVerdict(ch, why=str(e.get("why") or ""), via="ctx_l2", extra={"votes": e.get("votes")})
+        why = str(e.get("why") or "")
+        if why == "abstain:other":
+            # 「组内字都不通」有多把握（共字组联合判 `flow.decide_joint` 只认 high）
+            vs = [v for v in (e.get("votes") or {}).values() if v]
+            extra["other_conf"] = "high" if vs and all(v[1] == "high" for v in vs) else "low"
+        return GroupVerdict(ch, why=why, via="ctx_l2", extra=extra)
