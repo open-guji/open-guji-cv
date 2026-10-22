@@ -86,7 +86,7 @@ SPECS: dict[str, IdsSpec] = {
     "jue": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog", lam=1.0, size=32),
     # 厯歴（2026-10-21）：差别在下部（心 vs 止），旧左右窗口按册留一有错一直没登记；整字 hog 按册留出 122 格错 3，0 错覆盖率 81%（pix 71%）。
     #   0 错门槛 0.50，取 0.6。
-    "lih": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.6, min_class=8, whole="hog", lam=1.0, size=32),
+    "lih": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.25, min_class=8, whole="hog", region=(0.0, 1.0, 0.5, 1.0), lam=1.0, size=48),
     # 啓啟（2026-10-21）：啓是「户攵」在上口在下，啟是「启」在左攵在右，结构不同、整字分布差得大，不切。整字 pix：24 格（啓 8／啟 16，只 vol01、vol04 两册）
     #   留一格 24/24、按册留出也全对；样本少，取 0.5，啓 刚好 8 例，待补采。
     "qik": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="pix", lam=1.0, size=32),
