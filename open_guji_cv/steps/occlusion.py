@@ -212,6 +212,9 @@ def seal_overlap_cells(cells, seals, kind: str, overlap: float) -> dict[tuple[in
 
 #: 遮挡格：格与大印外框重叠 ≥ 这个比例（印章系统化，2026-10-22）
 OCC_SEAL_OVERLAP = 0.5
+#: 小印压字：格与小印外框重叠 ≥ 这个比例（印章系统化第 4 期）。比大印低：小印的边框正好横穿印边那一列的字
+#: （vol09 p68 c7、p265 c7，重叠 0.35–0.44，字上压着一道印边）；印边外一列只蹭到 ≤ 0.18。
+OCC_CRISP_OVERLAP = 0.3
 
 
 def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
@@ -226,7 +229,11 @@ def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
     62 个（vol08 p2 印淡、旧判据只认出半方 57 格；vol04 p130 5 格），旧有新无 24 格（印框外的边角）。
     旧判据量墨点时把规范空间（右上原点）的格框直接套在原图（左上原点）上，量的是左右镜像处，
     印在页中间才没出事。没有 `seals` 产物的旧产物才退回旧的密度判据（模块头，`p` 带
-    `occluded_min_*` 五个字段，`SeedAdmitParams`）。读不到 Step3 字格就当没有遮挡（返回空表）。"""
+    `occluded_min_*` 五个字段，`SeedAdmitParams`）。读不到 Step3 字格就当没有遮挡（返回空表）。
+
+    第 4 期（用户 10-22 定）：**小印压着的真字**也算遮挡——与小印外框重叠 ≥ `OCC_CRISP_OVERLAP` 的格，
+    除去盖章空栏候选（`page_seal_blank`：格里的墨全在印笔画上，是印不是字），分数取小印的分数。
+    印的笔画压在字上，字块带着印进字形库会污染刻例，识别也不可信（vol09 p68／p162／p265 卷末）。"""
     try:
         cells = ctx.product("cells", page)
     except Exception:
@@ -235,8 +242,14 @@ def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
         return {}
     has_seals = getattr(ctx, "has_product", None)
     if has_seals is not None and has_seals("seals", page):
-        hit = seal_overlap_cells(cells, ctx.product("seals", page).seals, "stain", OCC_SEAL_OVERLAP)
+        seals = ctx.product("seals", page).seals
+        hit = seal_overlap_cells(cells, seals, "stain", OCC_SEAL_OVERLAP)
         occ = {k: float(s.score) for k, (_ov, s) in hit.items()}
+        # 小印压着的字（用户 10-22 定：同大印，默认整理本字、不进字形库）；只有印没有字的格是盖章空栏，归 page_seal_blank
+        small = seal_overlap_cells(cells, seals, "crisp", OCC_CRISP_OVERLAP)
+        if small:
+            blank = page_seal_blank(ctx, page, p)
+            occ.update({k: float(s.score) for k, (_ov, s) in small.items() if k not in blank and k not in occ})
     else:
         try:
             gray = ctx.raw_page(page)
