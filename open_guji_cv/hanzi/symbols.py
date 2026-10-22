@@ -11,6 +11,11 @@ from pathlib import Path
 
 TSV = Path(__file__).resolve().parents[2] / "config" / "charset" / "symbols.tsv"
 
+#: 字块图与符号模板的 CNN 余弦门槛：最像的符号 ≥ 它、且高过同格最像的汉字，才当这格可能是符号。
+#: 10-21 殿本 vol04–10 待审 1255 格实测：真符号 0.94–0.97，其余最高 0.84；曰、日 对 □ 也能过 0.93，
+#: 但比不过 曰、日 本身，所以第二条不能省。相似字（`review.alt_cands`）与 5-b（`clustering.rare_panel`）共用。
+SYM_MIN = 0.93
+
 
 @lru_cache(maxsize=1)
 def symbols() -> dict[str, str]:

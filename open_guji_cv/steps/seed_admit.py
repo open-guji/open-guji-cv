@@ -206,6 +206,14 @@ class SeedAdmitParams(BaseModel):
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
     group_flow_top1_cov: float = 0.97
+    group_flow_joint: bool = True
+    """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
+    先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
+    见 `groups.flow.decide_joint`。False＝这类格不进流程（2026-10-22 前的行为）。"""
+    group_flow_l2_drift: int = 2
+    """文意 L2 答案表的键（建表时的前后各 20 字）与本次窗口对不上时，若目标字两侧各 3 字内逐字相同、只远处差至多这么多个字位，
+    仍用表里的答案（证据 `ctx_drift`）；0＝逐字相同才用（2026-10-22 前的行为）。建表后重跑，邻格放行字会变（□→曰、徵→徴），
+    vol04–10 己已巳／日曰约 40 格因此整条对不上而送审。"""
     group_flow_fingerprint: str = ""        # 自动填（开关开时）：字频表、规则文件、答案表内容哈希
     witness3_no_diff: bool = False
     """T11 A 档（缺省关；关时 `witness3_no_diff` 不进 dump，`params_hash` 不变）：`lane_witness3` 本要放行的格，
@@ -243,6 +251,17 @@ class SeedAdmitParams(BaseModel):
     起因：独立看图 7/7 矮放行格全是半个字（vol02 15:9:20、188:4:20 是 slot 20 而非末格，所以不限末格）。"""
     runt_ratio: float = 0.6
     runt_min_ink: float = 0.02
+    symbol_review: bool = False
+    """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，缺省关；关时 `symbol_review`／`symbol_min_human`
+    不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。
+
+    符号形状简单，墨团、残字容易被配成 ●／○，所以第一版：
+    - 放行字是符号（`hanzi.symbols`）→ 退回待审，除非走的是库匹配通道（`match_*`／`dual`／`iron`）且本书库里
+      同一符号的人裁 ≥ `symbol_min_human` 条；
+    - 库 top1 或 5-b top1 是符号、却由上下文通道（`context*`）放行成别的字 → 退回待审（上下文对符号不投票）；
+    - 没放行的格，只要放行字／库 top1／5-b top1 有符号，`doubts` 记 `symbol`（网站原因「可能是符号」）。
+    人裁位不动。"""
+    symbol_min_human: int = 3
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -371,8 +390,8 @@ class SeedAdmitParams(BaseModel):
     密度分不开，墨点密度挡不住），而真字格的大块墨占比 0.13~0.35、只有斑点的空格 ≤0.14。建议值 0.15。
     只收紧遮挡、放更多格走正常通道；书 yaml `params: {seed_admit: {occluded_rescue_ink: 0.15}}`。
     关着时不进参数哈希。**注意**：vol03 p3 那种真印章压字的页，印下面的字格也会被救回——要不要开按册定。"""
-    seal_blank_page: bool = False
-    """盖章空栏判空（2026-10-09，道 B 规格 overview#493，缺省关；需同开 `lane_seal`）。
+    seal_blank_page: bool = True
+    """盖章空栏判空（2026-10-09，道 B 规格 overview#493；需同开 `lane_seal`；2026-10-22 起缺省开，殿本十册原先逐册开）。
 
     固定印「乾隆御覽之寶」（`config/seal_templates/`）NCC 命中、印框与格重叠 ≥ `seal_blank_overlap`
     的格，若同时满足：坐标对位无字、且未被强通道（match_ref／match_solo／witness3／match_margin／iron）
@@ -477,8 +496,8 @@ class SeedAdmitParams(BaseModel):
     对位字 == 主证人（`lane_witnesses` 质量最高的那家，四庫即 daizhige 逐列本）→ 字取库首位；
     或每家证人 + 坐标对位字全同、库无护栏 → 字取坐标对位字。库首位与坐标对位字是已知异体对时
     两支都不放（同 R1 的护栏）。"""
-    lane_seal: bool = False
-    """R5 印章区（通道 `seal`）：`occluded_gate` 拦下的格，默认字来源在 `lane_seal_via` 里且有字 →
+    lane_seal: bool = True
+    """（2026-10-22 起缺省开，殿本十册原先逐册开。）R5 印章区（通道 `seal`）：`occluded_gate` 拦下的格，默认字来源在 `lane_seal_via` 里且有字 →
     放行默认字；坐标对位说这一位是空格（`via=coord_blank`）→ 判非字（`admit=True`、`char=None`、
     `evidence.occluded.ref_blank`，文本层跳过不占位）。护栏：本列坐标对位字连起来含
     `lane_seal_title_marks` 里任一串（卷端／版心题，坐标对位常错位）→ 整列不放。"""
@@ -557,6 +576,9 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        if isinstance(d, dict) and not self.symbol_review:
+            d.pop("symbol_review", None)
+            d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.runt_cell_review:
             d.pop("runt_cell_review", None)
             d.pop("runt_ratio", None)
@@ -704,10 +726,10 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.20", unit="cell",   # 1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.21", unit="cell",   # 1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
-        optional_consumes_when=(("rare_candidates", "rare_ref"),),
+        optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -1322,7 +1344,7 @@ class SeedAdmitStep(Step):
         # —— 后处理遍的次序（W5，GUJI-49；改次序＝改产物，别动）——
         #   0 group_flow（字组统一流程，升／降，缺省关）→ 1 rare_ref（升）→ 3 shadow_veto（降）→
         #   4 seal_blank_flip（降）→ 5 _review_lanes_pass（升）→ 5b rare_ref_coord（升）→ （6 rare_cp_ctx_review 已于 2026-10-18 删除）→
-        #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）→ 10 human_unbound（降，人裁绑丢闸，放最后）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
+        #   8 oversplit hint（只加提示）→ 9 runt_cell_review（降）→ 9b symbol_review（降）→ 10 human_unbound（降，人裁绑丢闸，放最后）。（shadow_promote 已于 W2 删除；_resolve_ji_yi_si、
         #   ry_group、rr_clf、m7 各遍已于 2026-10-18 并进 group_flow 删除，编号留空不改）
         #   「降」的遍在置空 channel 前调 `_demote()`，把放行时的 channel 与遍名写进 `evidence.demoted_from`；
         #   主循环内就地置空（放行记录生成之前）的不记。
@@ -1363,6 +1385,10 @@ class SeedAdmitStep(Step):
             d_runt = _runt_cell_pass(ctx, page, p, out)
             n_auto -= d_runt
             n_review += d_runt
+        if p.symbol_review:
+            d_sym = _symbol_review_pass(ctx, page, p, out, mmap, human_shapes)
+            n_auto -= d_sym
+            n_review += d_sym
         if human_lost:
             d_hu = _human_unbound_pass(ctx, page, out, human_lost)
             n_auto -= d_hu
@@ -1594,6 +1620,46 @@ def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict) -> in
                      page, len(hits), "；".join(hits))
         ctx.log(f"⚠ seed_admit p{page}: 人裁绑丢 {len(hits)} 格，机器放行的字与人裁不同，已退回待审"
                 f"（doubt human_unbound）：{'；'.join(hits)}")
+    return n
+
+
+_LIB_CHANNELS = ("match_", "dual", "iron")
+
+
+def _symbol_review_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict,
+                        human_shapes: dict) -> int:
+    """特殊符号送审（只降级，放在 runt_cell_review 之后、human_unbound 之前）。→ 降级格数。见 `SeedAdmitParams.symbol_review`。"""
+    from collections import Counter
+
+    from .align_ref import rare_topk_map
+    from ..hanzi.symbols import is_symbol
+    rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
+    n_human = Counter(c for c in human_shapes.values() if is_symbol(c))
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.provenance == "human" or rec.channel == "human":
+                continue
+            m = mmap.get(rec.id)
+            lib_top = getattr(m, "char", None) if m is not None else None
+            rare_top = (rtop.get(rec.id) or [None])[0]
+            hint = [c for c in (rec.char, lib_top, rare_top) if c and is_symbol(c)]
+            if not hint:
+                continue
+            ch_ = rec.channel or ""
+            if rec.admit and rec.char and is_symbol(rec.char):
+                down = not (ch_.startswith(_LIB_CHANNELS) and n_human[rec.char] >= p.symbol_min_human)
+            else:
+                down = rec.admit and ch_.startswith("context")
+            if down:
+                _demote(rec, "symbol_review")
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                n += 1
+            if not rec.admit:
+                rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["symbol"]))
+                rec.evidence = {**(rec.evidence or {}), "symbol": hint[0]}
+    if n:
+        ctx.log(f"seed_admit p{page}: 特殊符号送审 {n} 格（doubt symbol）")
     return n
 
 
@@ -1973,7 +2039,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
                      freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
-                     l2_tables=dict(p.group_flow_tables),
+                     l2_tables=dict(p.group_flow_tables), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
                                                         and ctx.book.codepoints) else None))

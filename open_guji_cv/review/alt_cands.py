@@ -21,11 +21,10 @@ from pathlib import Path
 
 import numpy as np
 
+from ..hanzi.symbols import SYM_MIN  # 字块图与符号模板余弦门槛（设计 4.3 兜底），与 5-b 共用
+
 ALT_K = 30                    # 每格最多给几个
 ALT_SHOW = 10                 # 前端缺省展开几个（用户 10-19 定）
-#: 字块图与某个特殊符号模板的余弦 ≥ 这个值，就把符号表并进池子（设计 4.3 兜底）。
-#: 10-21 在殿本 vol04–10 待审 1255 格上扫：真符号格（○×4、⊙×1）0.94–0.97，其余最高 0.84
-SYM_MIN = 0.93
 
 
 def pivots_of(card: dict, extra: Iterable[str] = ()) -> list[str]:
