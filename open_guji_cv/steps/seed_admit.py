@@ -686,7 +686,7 @@ class SeedAdmitParams(BaseModel):
                 from ..groups.freq import fingerprint as _fq_fp
                 from ..groups.flow import ctx_fingerprint as _ctx_fp
                 from ..utils.rr_clf import model_fingerprint as _rr_fp
-                from ..groups.registry import GROUPS as _G
+                from ..groups.registry import FLOW_GROUPS as _G
                 _ctx_groups = tuple(g for g in self.group_flow if "ctx" in _G[g].flow.solvers)
                 parts = [_fq_fp(self.group_flow_freq), _ctx_fp(_ctx_groups, self.group_flow_tables)]
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
@@ -720,6 +720,7 @@ class SeedAdmitStep(Step):
                    # 字组统一流程（group_flow，缺省关）及其解法：文意 L1 规则（jys 的 legacy 规则在 utils.ji_yi_si_clf）、
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry",
+                   "open_guji_cv.groups.methods",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
@@ -1928,7 +1929,7 @@ def _resolve_group_flow_paths(p) -> None:
     路径不进参数哈希，表内容哈希进 `group_flow_fingerprint`。"""
     from pathlib import Path
     from ..core.workspace import REPO_ROOT, data_root, workspace_root
-    from ..groups.registry import GROUPS
+    from ..groups.registry import FLOW_GROUPS as GROUPS
     base = workspace_root() or REPO_ROOT
     cfg = (data_root() or REPO_ROOT) / "config" / "groups"     # 迁到中心库后在数据目录（GUJI-608）
 
@@ -1961,7 +1962,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     from ..groups.context import WIDTH
     from ..groups.flow import FlowConfig, group_flow_pass
     from ..groups.freq import load as _load_freq, load_vols as _load_vols
-    from ..groups.registry import GROUPS
+    from ..groups.registry import FLOW_GROUPS as GROUPS
     from ..utils.jiazhu_order import sort_by_reading
     # 读序展平，剔除排除名单格（与建 L2 表的 `research/m7/ctx/l2_make_book.py` 同一取法，表键才对得上）
     seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
@@ -1990,8 +1991,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         m = mmap.get(cid)
         return list(m.candidates or []) if m is not None else []
     patch_fn = None
-    if any(s in ("bars", "rr_img", "ids") for g in p.group_flow
-           for s in (*GROUPS[g].flow.solvers, *(GROUPS[g].flow.form_solvers if GROUPS[g].flow.families else ()))):
+    if any(GROUPS[g].flow.needs_patch for g in p.group_flow):
         slots = {r.id: (c.col, r.slot, r.sub) for c in out for r in c.chars or []}
         recs = {r.id: r for c in out for r in c.chars or []}
         miss = patch_missing if patch_missing is not None else {}
