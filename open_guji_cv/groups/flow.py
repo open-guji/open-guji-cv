@@ -48,6 +48,8 @@ class FlowConfig:
     freq_min_vols: int = _freq.MIN_VOLS
     l2_tables: dict = field(default_factory=dict)      # 组 id → 上下文 L2 答案表路径
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
+    l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l2.ctx_drift`；0＝逐字比）
+    joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     rr_model: str | None = None
     rr_p: float = 0.5
 
@@ -98,7 +100,8 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。
 
     一个字属于多个组（`overlaps`）时：补放选第一个能把「分差内全部候选＋整理本字」都装下的组，复核选第一个
-    声明了 `review` 且装得下整理本字的组。"""
+    声明了 `review` 且装得下整理本字的组。哪一组都装不下、但装得下「组＋它的共字组」（日曰目紧咬：ry＋rm）时，
+    `cfg.joint` 开着 → (组, "joint")，由 `decide_joint` 判。"""
     if r.provenance == "human" or r.channel in ("human", CHANNEL):
         return None
     if r.admit:
@@ -120,7 +123,24 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
             continue
         return g, "lift"
+    if cfg.joint:
+        for g in groups_in(top, cfg.groups):
+            parts = partners(g, cfg.groups)
+            if not parts:
+                continue
+            mem = GROUPS[g].members.union(*(GROUPS[h].members for h in parts))
+            tol = GROUPS[g].flow.tolerate
+            if not all(c in mem or c in tol for c, v in cands[1:] if c1 - v < cfg.delta):
+                continue
+            if ref and ref not in mem and canon(ref) not in mem:
+                continue
+            return g, "joint"
     return None
+
+
+def partners(g: str, groups) -> tuple:
+    """组 `g` 在点名里的共字组（登记表 `overlaps`）。"""
+    return tuple(h for h in GROUPS[g].overlaps if h in groups)
 
 
 def _method(g: str, name: str, form: bool = False):
@@ -161,6 +181,24 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     return picks[0], "agree", trail
 
 
+def decide_joint(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None) -> tuple[str | None, str, list]:
+    """共字组联合判（日曰目三字紧咬，哪一组都装不下；sheldon 10-22「目是真竞争者，不能当陪衬」）：
+    先由组 `g` 定字 X，再问每个共字组 h——X 是 h 的成员：h 也须给 X；X 不是 h 的成员：h 须明确说「其他」
+    （文意 L2 表 `abstain:other` 且各遍都是 high，即「h 的字放进去都不通」）。任一共字组弃权、给了别的字 → 待定（"joint"）。
+    例：ry 说曰、rm 说其他 → 曰；ry 说日、rm 说日 → 日；rm 没表态 → 留人审。共字组的留痕名前加「组 id:」。"""
+    ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
+    if ch is None:
+        return None, why, trail
+    for h in partners(g, cfg.groups):
+        hc, _, ht = decide(h, r, cands, None if GROUPS[h].ref_free else ref, cfg, left, right, patch_fn)
+        trail = trail + [{**t, "solver": f"{h}:{t['solver']}"} for t in ht]
+        ok = hc == ch if ch in GROUPS[h].members else (
+            hc is None and any(t.get("why") == "abstain:other" and t.get("other_conf") == "high" for t in ht))
+        if not ok:
+            return None, "joint", trail
+    return ch, "agree", trail
+
+
 def _pick_form(g: str, ch: str, r, cands, cfg: FlowConfig, patch_fn, trail: list) -> tuple[str | None, str, list]:
     """两段判的第二段：`ch` 是第一段（文意）定的字；它所在的族不止一形时，按刻形在族内依次试 `form_methods`，都待定就待定。"""
     f = GROUPS[g].flow
@@ -194,13 +232,17 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         if e is None:
             continue
         g, mode = e
-        need_ctx = "ctx" in GROUPS[g].flow.solvers and ctx_fn is not None
+        need_ctx = ctx_fn is not None and any("ctx" in GROUPS[x].flow.solvers
+                                              for x in (g, *(partners(g, cfg.groups) if mode == "joint" else ())))
         left, right = (ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)) if need_ctx else (None, None)
-        ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
+        if mode == "joint":
+            ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
+        else:
+            ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
         plans.append((r, g, mode, ch, why, trail))
     res = FlowResult(entered=len(plans))
     for r, g, mode, ch, why, trail in plans:
-        if mode == "lift":
+        if mode in ("lift", "joint"):
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）

@@ -1,0 +1,76 @@
+<title>形近字待确认</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+:root{--bg:#f6f5f2;--fg:#1d1d1b;--mut:#6b6a66;--card:#fff;--line:#dcdad3;--acc:#1f5f5b;--accfg:#fff;--warn:#f3d46b;--warnfg:#4a3b00;--ok:#2f7a4f}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#161716;--fg:#ecebe6;--mut:#9a998f;--card:#202120;--line:#34352f;--acc:#6fc1bb;--accfg:#0c1b1a;--warn:#7a6414;--warnfg:#fff0b8;--ok:#74c995;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#161716;--fg:#ecebe6;--mut:#9a998f;--card:#202120;--line:#34352f;--acc:#6fc1bb;--accfg:#0c1b1a;--warn:#7a6414;--warnfg:#fff0b8;--ok:#74c995;color-scheme:dark}
+body{background:var(--bg);color:var(--fg);padding-block:12px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));font-family:"Noto Sans CJK SC","Noto Sans SC","PingFang SC",system-ui,sans-serif;line-height:1.5}
+main{max-width:760px;margin:0 auto}
+h1{font-size:1.25rem;margin:.4rem 0 .2rem}
+h2{font-size:1rem;margin:1.4rem 0 .2rem;font-family:"Noto Serif CJK SC","Source Han Serif SC","Songti SC",serif}
+p.note{color:var(--mut);font-size:.85rem;margin:.2rem 0 .6rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.card.unsure{border-color:#c9a227;box-shadow:inset 0 0 0 1px #c9a227}
+.card.done{opacity:.9}
+.img{background:#fff;border-radius:3px;height:100px;display:flex;align-items:center;justify-content:center}
+.img img{max-height:96px;max-width:100%}
+.id{font-size:.68rem;color:var(--mut);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chips{display:flex;flex-wrap:wrap;gap:4px}
+button{font:inherit;font-size:1.05rem;min-width:38px;height:36px;border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:4px;font-family:"Noto Serif CJK SC","Source Han Serif SC","Songti SC","Jigmo","HanaMin",serif}
+button[aria-pressed="true"]{background:var(--acc);color:var(--accfg);border-color:var(--acc)}
+button:focus-visible{outline:2px solid var(--acc);outline-offset:1px}
+.tag{font-size:.7rem;background:var(--warn);color:var(--warnfg);padding:0 5px;border-radius:3px;align-self:flex-start}
+#st{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);padding:6px 0;font-size:.8rem;color:var(--mut);z-index:5}
+</style>
+<main>
+<h1>形近字待确认</h1>
+<p class="note">字块上面已按算法／我看图预填（高亮的字），没错就不用点；预填错了点对的字，「其他」点最后一个。黄框是我没把握的。点一下就保存，不用提交。</p>
+<div id="st">保存状态：连接中…</div>
+<div id="root"></div>
+</main>
+<script>
+const ITEMS = __ITEMS__;
+const GROUPS = {"禽會俞命舍":"A · 禽會俞命舍（曾會㑹里点过「其他」的格，多半是禽；下面前 10 格是产物里 witness3 放行成禽的）",
+  "蒙𫎇":"B · 蒙𫎇 少数形候选","隸𨽾":"B · 隸𨽾 少数形候选","讖識䜟":"B · 讖識䜟 少数形候选"};
+let db=null, me="", ans={};
+const st=document.getElementById("st");
+function sel(id){return ans[id]||null}
+function render(){
+  const root=document.getElementById("root"); root.textContent="";
+  const order=Object.keys(GROUPS);
+  for(const g of order){
+    const its=ITEMS.filter(i=>i.group===g); if(!its.length) continue;
+    const h=document.createElement("h2"); h.textContent=GROUPS[g]; root.appendChild(h);
+    const grid=document.createElement("div"); grid.className="grid"; root.appendChild(grid);
+    for(const it of its){
+      const cur=sel(it.id)||it.pre;
+      const c=document.createElement("div"); c.className="card"+(it.sure?"":" unsure")+(sel(it.id)?" done":"");
+      const im=document.createElement("div"); im.className="img"; const i=document.createElement("img"); i.src=it.img; i.alt=it.id; im.appendChild(i); c.appendChild(im);
+      const d=document.createElement("div"); d.className="id"; d.textContent=it.id; c.appendChild(d);
+      if(!it.sure){const t=document.createElement("span"); t.className="tag"; t.textContent="没把握"; c.appendChild(t);}
+      const ch=document.createElement("div"); ch.className="chips";
+      for(const o of [...it.opts,"其他"]){
+        const b=document.createElement("button"); b.textContent=o; b.setAttribute("aria-pressed",String(cur===o));
+        b.onclick=()=>save(it,o); ch.appendChild(b);
+      }
+      c.appendChild(ch); grid.appendChild(c);
+    }
+  }
+}
+async function save(it,o){
+  ans[it.id]=o; render();
+  if(!db){st.textContent="未连上存储，这次点选不会保存";return}
+  try{await db.doc("answers/"+it.id.replace(/:/g,"_")).set({id:it.id,form:o,pre:it.pre,by:me,at:Date.now()}); st.textContent="已保存 "+Object.keys(ans).length+" 格改动（未点的按预填算）";}
+  catch(e){st.textContent="保存失败："+(e.message||e.code)}
+}
+render();
+(async()=>{
+  try{
+    const u=await claude.use("user"); me=u? String(await u.id()):"";
+    db=await claude.use("db");
+    if(!db){st.textContent="未连上存储（需登录），点选不会保存";return}
+    db.collection("answers").onSnapshot(s=>{ s.docs.forEach(d=>{const v=d.data(); if(v&&v.id) ans[v.id]=v.form}); render(); st.textContent="已连接，改动 "+Object.keys(ans).length+" 格"; });
+  }catch(e){st.textContent="存储不可用"}
+})();
+</script>

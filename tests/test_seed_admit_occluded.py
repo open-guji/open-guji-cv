@@ -92,7 +92,7 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None):
 
 
 def test_occluded_cells_are_never_admitted_and_default_to_reference(tmp_path, monkeypatch):
-    got, sa = _run_seed(tmp_path, monkeypatch)
+    got, sa = _run_seed(tmp_path, monkeypatch, params=SeedAdmitParams(lane_seal=False))   # 印章区补放另测（test_seed_admit_lanes）
     r3 = got[3]
     assert not r3.admit and r3.doubts == ["occluded"], (r3.channel, r3.doubts)
     assert r3.char == "衡" and r3.evidence["occluded"]["via"] == "coord"
