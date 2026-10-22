@@ -330,6 +330,30 @@ def _r2(book, rows) -> dict:
             "number": f"{desc}，全部在异常表有结论的行里出现"}
 
 
+def _r6(book, rows) -> dict:
+    """R6 整页整列不丢字不错位（GUJI-661）：`ops/col_gate` 扫 Step3，报出的每一列要么异常表有结论，要么别报。"""
+    cmd = "python scripts/zhengli/col_gate.py --book <册>（open_guji_cv/ops/col_gate.py）"
+    try:
+        from open_guji_cv.ops.col_gate import scan_book
+        found, n = scan_book(book)
+    except Exception as e:  # noqa: BLE001
+        return _fail(cmd, f"扫描出错：{type(e).__name__}: {e}")
+    if not n:
+        return _fail(cmd, "没有 Step3 产物可扫")
+    cov_pages, cov_cols = _coverage(rows)
+    miss = []
+    for f in found:
+        p, c = f["page"], f.get("col")
+        if (c is not None and (p, c) in cov_cols) or (c is None and p in cov_pages):
+            continue
+        miss.append(f"p{p}" + (f" col{c}" if c is not None else f" 缺列@x{f.get('x0')}") + f"（{'丢字 ' + str(f['n']) if f['kind'] == 'dropped' else '整列没切出'}）")
+    if not miss:
+        return {"result": "PASS", "cmd": cmd, "attach": "",
+                "number": f"扫 {n} 页，报 {len(found)} 处，全部在异常表有结论" if found else f"扫 {n} 页，无整列丢字"}
+    return {"result": "FAIL", "cmd": cmd, "attach": "",
+            "number": f"扫 {n} 页，报 {len(found)} 处；异常表里找不到去向的 {len(miss)} 处：{'、'.join(miss[:20])}{'…' if len(miss) > 20 else ''}"}
+
+
 # ---------------------------------------------------------------- R3
 def _r3(cc, export_dir: Path | None, reason: str | None) -> dict:
     cmd = "guji close-check（第 2 项 class_counts）；总格数取导出 pages.json"
@@ -380,6 +404,7 @@ def collect(book: str, ws, export_dir=None, anomaly=None, reason: str | None = N
         "R3": _r3(cc, export_dir, reason),
         "R4": r4,
         "R5": _r5(cc, cc_cmd, cc_err, export_err),
+        "R6": _r6(book, rows),
     }
     gen = datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%m-%d %H:%M PDT")
     return {"book": book, "cv_version": _cv_version(), "generated": gen, "items": items, "pins": _pins(book)}

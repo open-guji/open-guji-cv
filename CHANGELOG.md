@@ -18,6 +18,7 @@ PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_d
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added
+- R6 整页／整列丢字检查 `ops/col_gate`（GUJI-661）：读 Step3 与原图，报「整列没切出」与「单字墨段没被字格接住」，抹掉版框折角与污渍后再判。`scripts/zhengli/col_gate.py` 单跑，`collect_exit.py` 加 R6 项（`exit_report.py` 有数才判）。只报告，不改产物，不动任何 Step。殿本 v0.5.7 包 vol04–10 误报每册 0–12 处；自造缺陷召回：整列格记空 100%、整列没切出约 85%、整列错位 0.6 格约 65–73%；真书历史案例（vol03 57:1 等）云端没有当时的旧产物，未能复现。
 - `feedback/exclusion_check.stale_by_binding` + `scripts/zhengli/stale_exclusions.py`：列出人裁排除名单里裁决锚点与当前切图对不上的格（只报告；GUJI-659／623）。
 - 粗校出口 R4 异常表可写成 JSON（GUJI-666，`scripts/zhengli/collect_exit.py` 的 `load_anomaly`）：`{"rows": [{n, text, cause, concl, pages?, cols?}]}`，`pages`／`cols` 给了就不再从「现象」里抠 pN colM；格式错报具体位置（JSON 报行列和 `rows[i]`，md 报第几行），不再是整表悄悄 FAIL 或悄悄少读几行。老 md 表照读。体检结果带字形库指纹那一半早由 GUJI-710 做掉。
 - `guji pipeline`／`guji step` 起跑前自检依赖（GUJI-654，`ops/preflight.py`）：这次要跑的步骤用得上的东西本机缺了就拒跑（退出码 2）并点名——Step3 切点裁判（`cut_judge=unet`）和 Step5-b 要 torch 与权重，册配置开了 `shadow_veto` 的 Step7 要 joblib／scikit-learn。以前这些都是悄悄退回旧办法或整页失败（10-21 vol08 缺 joblib，seed_admit 69 页全失败，pipeline 仍返回 0）。`--allow-missing-deps` 或 `GUJI_ALLOW_MISSING_DEPS=1` 放行。不动任何 Step 与 code_deps。
