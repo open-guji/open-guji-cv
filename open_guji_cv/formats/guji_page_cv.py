@@ -197,8 +197,13 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                "raised": col_cells.n_raised, "lead_blank": lead, "runs": []}
         if not col_cells.ok:
             col["note"] = f"Step3 无解：{col_cells.error}"
+        blank_slots: set[int] = set()
         for c in col_cells.cells:
             if c.kind == "blank":
+                # 夹注 a／b 两半都被 Step3 记空时同一格号有两个 blank（blank 没有 sub），只发一个 mark（vol05 p3 c4）
+                if c.slot in blank_slots:
+                    continue
+                blank_slots.add(c.slot)
                 marks.append({"id": mint_id("m", page_id, f"{book}:{page}:{cn}:{c.slot}{c.sub or ''}", "blank"),
                               "kind": "blank", "col": cid, "slot": c.slot,
                               "box": cell_box(cn, c.slot, c.sub), "by": "cv"})
