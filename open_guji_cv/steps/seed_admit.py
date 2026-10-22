@@ -1576,6 +1576,8 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
         vmap = VariantMap.load(p.variants or None)
     rare = _opt(ctx, "rare_candidates", page)
     rmap = {r.id: r for cc in (rare.columns if rare else []) for r in cc.chars}
+    book = getattr(ctx, "book", None)
+    cbook = book if getattr(p, "codepoint_semantic", False) and getattr(book, "codepoints", None) else None
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -1596,6 +1598,9 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             if (rec.channel == "group_flow" and rec.provenance == "context" and v.pick
                     and v.pick in _group_members(g.get("id"))):
                 continue                      # 字组按文意定的字，影子只是挑了同组另一个字：形近本就分不开（vol09:251 曰）
+            if (cbook is not None and v.pick and rec.char and v.pick != rec.char
+                    and cbook.canonical_char(v.pick) == cbook.canonical_char(rec.char)):
+                continue                      # 册 `codepoints:` 归一后同字（別别、晚晩、出岀）：影子比字没按册归一，不是认错
             if (vmap is not None and v.pick and rec.char and v.pick != rec.char
                     and not _rare_cp(rec.char)    # 放行字是罕用码位不弃权（#431：𠮓→變、𣼣→漏）
                     and vmap.semantic(v.pick) == vmap.semantic(rec.char)):
