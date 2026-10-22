@@ -3,7 +3,11 @@
 用法：python structcmp.py <products_dir> <vol,...> [--out out.json]
 口径：daizhige 格位 pos（start 起算，-1/-2 是出格抬头）→ 我们的 slot：pos>=0 → pos+1，pos<0 → pos。
 夹注 r（右行）→ sub a，l（左行）→ sub b，与 Step3 的 a=右子列 一致。
-只比 page_map 里 kind=text、dzg_kind=full 的页。
+只比 page_map 里 kind=text、dzg_kind=full 的页，卷端页（p2/p3 卷首叶、卷中换卷那一页）也在内。
+
+格号集合对上不等于字落对了格：卷端页大印下的列，整列格网错一格、字数却照样对得上（vol10 p88 c1「欽」进了抬头格、
+末两格是印泥）。所以另报**对位**：同一页各列同一格号的字格，在页面上的高度应该一样（殿本格网各列对齐）；
+字格中心离这一页该格号的中位高度超过半格的，记为错位（`misplaced`，按列列出格号）。只看图上的位置，不看整理本。
 """
 import json, os, sys, collections
 from pathlib import Path
@@ -79,6 +83,22 @@ def predicted(c):
     return {(r['slot'], r.get('sub')) for r in c['chars'] if r['cell_type'] == 'char'}
 
 
+def misplaced(cols, period):
+    """一页各列里错位的字格：{列: [格号]}。同格号的字格中心高（页面坐标）取各列中位数，至少三列有字才比。"""
+    at = collections.defaultdict(list); cells = []
+    for c in cols:
+        for r in c['chars']:
+            if r['cell_type'] == 'char' and r['slot'] >= 1 and not r.get('sub'):
+                y = (r['bbox_page'][1] + r['bbox_page'][3]) / 2
+                at[r['slot']].append(y); cells.append((c['col'], r['slot'], y))
+    ref = {k: sorted(v)[len(v) // 2] for k, v in at.items() if len(v) >= 3}
+    out = collections.defaultdict(list)
+    for col, sl, y in cells:
+        if sl in ref and abs(y - ref[sl]) > 0.5 * period:
+            out[col].append(sl)
+    return out
+
+
 def phys(sl):
     return sl - 1 if sl > 0 else sl
 
@@ -125,7 +145,7 @@ def main():
     pm = [json.loads(l) for l in open(DZ / 'page_map.jsonl', encoding='utf-8')]
     T = collections.Counter(); byvol = collections.defaultdict(collections.Counter)
     bykind = collections.defaultdict(collections.Counter)
-    rows = []; pages_bad = collections.Counter(); missing = []; ncols = collections.Counter()
+    rows = []; pages_bad = collections.Counter(); missing = []; ncols = collections.Counter(); mis = {}
     for m in pm:
         if m['vol'] not in vols or m['kind'] != 'text' or m.get('dzg_kind') != 'full':
             continue
@@ -136,6 +156,11 @@ def main():
         rec = recs[m['dzg_id']]
         dcols = {c['no'] % 9 + 1: c for c in rec.get('cols', []) if (c['no'] >= 9) == bool(m['side'])}
         ours = {c['col']: c for c in ci['columns']}
+        rs = prod / m['vol'] / 'row_segment' / f"p{m['page']:04d}.json"
+        per = json.loads(rs.read_text())['cells'].get('period') if rs.exists() else None
+        if per:
+            for col, sls in misplaced([c for c in ci['columns'] if c.get('ok')], per).items():
+                mis[f"{m['vol']}:{m['page']}:{col}"] = sls
         nbad = 0
         for col in range(1, 10):
             E = expected(dcols.get(col, {'runs': []}))
@@ -157,6 +182,7 @@ def main():
                                  only_P=sorted([list(x) for x in P - set(E)], key=str),
                                  text=''.join(E[x] for x in sorted(E, key=lambda x: (x[0], x[1] or '')))))
         pages_bad[nbad] += 1
+    bad_keys = {f"{r['vol']}:{r['page']}:{r['col']}" for r in rows}
     n = sum(T.values())
     print(f'列 {n}，逐格全对 {T["exact"]} = {T["exact"]/max(n,1):.4f}')
     for k, v in T.most_common():
@@ -170,12 +196,13 @@ def main():
     for k, c in bykind.items():
         nn = sum(c.values()); print(f'  {k} {c["exact"]}/{nn} = {c["exact"]/nn:.4f}  ', dict(c.most_common()))
     print('每页错列数分布：', sorted(pages_bad.items()))
+    print(f'对位：错位列 {len(mis)}，其中格号集合全对的 {sum(1 for k in mis if k not in bad_keys)}')
     if missing:
         print('缺产物页：', len(missing), missing[:10])
     if out:
         json.dump(dict(total=dict(T), byvol={k: dict(v) for k, v in byvol.items()},
                        bykind={k: dict(v) for k, v in bykind.items()}, rows=rows,
-                       pages_bad=dict(pages_bad), ncols=dict(ncols)), open(out, 'w'), ensure_ascii=False, indent=0)
+                       pages_bad=dict(pages_bad), ncols=dict(ncols), misplaced=mis), open(out, 'w'), ensure_ascii=False, indent=0)
 
 
 if __name__ == '__main__':
