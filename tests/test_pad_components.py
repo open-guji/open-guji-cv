@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.clustering.extractor import drop_neighbor_parts, drop_pad_only_components
+from open_guji_cv.clustering.extractor import clip_unions_at_line, drop_neighbor_parts, drop_pad_only_components
 
 
 def _patch(h: int = 90, w: int = 100) -> np.ndarray:
@@ -112,3 +112,23 @@ def test_deep_part_is_kept_even_if_mostly_outside():
     c[115:170, 20:80] = 0
     out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
     assert (out[92 - 81:110 - 81, 60:63] == 0).all()
+
+
+def test_union_deep_on_both_sides_is_clipped_at_the_line():
+    """两字粘成一块、跨格界两边都伸得深（「家」的竖钩连「之」的点）：本格只留格界以内的半边。"""
+    c = _ctx()
+    c[20:90, 45:50] = 0          # 上字的竖钩，一直伸到格界（90）
+    c[90:120, 40:70] = 0         # 连着下字的点与横
+    c[130:170, 20:80] = 0
+    out = drop_neighbor_parts(c[81:189].copy(), c, 81, 90, 180, 90)
+    out = clip_unions_at_line(out, c, 81, 90, 180, 90)
+    assert (out[:90 - 81] == 255).all()
+    assert (out[90 - 81:120 - 81, 40:70] == 0).all()
+
+
+def test_own_overshoot_is_not_clipped():
+    """本字的笔画越过格界一小截（不到 0.1 格）：pad 留着它，不切。"""
+    c = _ctx()
+    c[100:186, 45:50] = 0        # 本字的竖越过格界（180）6px
+    out = clip_unions_at_line(c[81:189].copy(), c, 81, 90, 180, 90)
+    assert (out[180 - 81:186 - 81, 45:50] == 0).all()

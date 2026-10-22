@@ -823,6 +823,40 @@ def drop_neighbor_parts(patch: np.ndarray, ctx: np.ndarray, off: int,
     return out
 
 
+def clip_unions_at_line(patch: np.ndarray, ctx: np.ndarray, off: int,
+                        cell_top: float, cell_bot: float, cell_h: float,
+                        top: bool = True, bottom: bool = True) -> np.ndarray:
+    """两字粘成一块、跨格界两边都伸得深的连通体，本格只留格界以内的那半（2026-10-22）。
+
+    格界多半就落在粘连的细处（「家」的竖钩连着「之」的点，「左」的底横连着「字」的宀），
+    可图块按格界外扩 8% pad 裁、跨界部件又整块保留，于是两格各带走邻字一截（pad 那么高）。
+    两边都伸过 `NEIGHBOR_PART_DEPTH` 的，按格界切开，各留各的半边；只在一边伸出浅浅一截的
+    是本字越界的笔画（pad 要保住的）或邻字的笔尖（`drop_neighbor_parts` 管），这里不动。
+    `patch`/`ctx`/`off`/`top`/`bottom` 同 `drop_neighbor_parts`。
+    """
+    t0, t1 = int(round(cell_top)), int(round(cell_bot))
+    binary = (ctx < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
+    deep = NEIGHBOR_PART_DEPTH * cell_h
+    rows = np.arange(off, off + patch.shape[0])[:, None]
+    out = patch
+    for k in range(1, n):
+        y, h = int(st[k, 1]), int(st[k, 3])
+        cut = None
+        if top and t0 - y > deep and y + h - t0 > deep:
+            cut = rows < t0
+        if bottom and y + h - t1 > deep and t1 - y > deep:
+            cut = rows >= t1 if cut is None else cut | (rows >= t1)
+        if cut is None:
+            continue
+        m = (lab[off:off + patch.shape[0]] == k) & cut
+        if m.any():
+            if out is patch:
+                out = patch.copy()
+            out[m] = 255
+    return out
+
+
 def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     """抹掉最外侧的界行残条（磨损界行断成的短竖段/虚线链）。
 
@@ -2738,6 +2772,8 @@ class CharExtractor:
                 c0 = max(0, int(round(ltop - cell_h)))
                 c1 = min(strip.shape[0], int(round(lbot + cell_h)))
                 patch = drop_neighbor_parts(patch, strip[c0:c1], y0 - c0, ltop - c0, lbot - c0, cell_h_ref,
+                                            top=seam_top is None, bottom=seam_bottom is None)
+                patch = clip_unions_at_line(patch, strip[c0:c1], y0 - c0, ltop - c0, lbot - c0, cell_h_ref,
                                             top=seam_top is None, bottom=seam_bottom is None)
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
