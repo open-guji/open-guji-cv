@@ -117,3 +117,20 @@ def test_wide_shape_pairs_registered_and_banks_load():
         assert p.stat().st_size < 1_000_000
         d = json.loads(p.read_text(encoding="utf-8"))
         assert set(members) <= set(d["templates"]) and d["size"] == sp.size
+
+
+def test_qin_is_flow_only_and_bank_loads():
+    """禽會俞命舍 qin（2026-10-22）：只进字组流程表，不进 `GROUPS`（常用字，进了会改 glyph_match／rare_ref_coord 的全局行为）；与 zh 共用「會」。"""
+    from pathlib import Path
+    import json
+    from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
+    assert "qin" in SHAPE_GROUPS and "qin" in FLOW_GROUPS and "qin" not in GROUPS
+    assert set(FLOW_GROUPS["qin"].members) == set("禽會俞命舍")
+    assert "zh" in FLOW_GROUPS["qin"].overlaps and "qin" in GROUPS["zh"].overlaps
+    sp = O.SPECS["qin"]
+    root = Path(__file__).resolve().parent.parent
+    p = root / FLOW_GROUPS["qin"].config_dir / "ids_bank.json"
+    assert p.stat().st_size < 1_000_000
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert set("禽會俞命舍曾合愈") <= set(d["templates"]) and d["size"] == sp.size
+    assert O.has_bank("qin")
