@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.7] - 测试中
+
+PATCH（Sheldon 10-22 定发，vol04–10 重跑用）。相对 v0.5.6，`cell_shrink`（1.17）、`row_segment`（1.35）、`seed_admit`（1.21，`code_hash` 85052303fa79a800→bff8f652ceae4de9）三步 `code_hash` 变，**各书 Step3 起判过期**；其余 15 步不变。新增 `qin`／`shan`／`weiw` 三个字组模板库，要在册配置 `group_flow` 点名才生效。
+
 ### Added
 - 字形判法扩面（sheldon 10-22，#393 方法数组之后）：衛衞 `weiw`、刪删 `shan`、扺抵 `di` 三个异体对上线取框 HOG＋岭回归（`ids_online.SPECS`，`registry` 配 `config/groups/<组>/ids_bank.json`）。模板＝数据集 `labels/unified.jsonl` 里 sheldon 人裁刻形与 `variant/*/crops` 字块（衛41／衞14、刪111／删5、抵90／扺10）；按册留出 0 错：衛衞 37／55 对、刪删 97／116、扺抵 78／100，次形（衞／删／扺）几乎都弃权送人审，不会被放成主形。只补放，需在册配置 group_flow 点名，重跑归 M8。`ids_online` 与 `registry` 变，`seed_admit` 的 `code_hash` 变。建库与评测脚本 `research/m7/glyph_expand/`。
 - 禽會俞命舍（`qin`）整字字形组：曾會㑹 里被点「其他」的 14 格多为禽。整字 HOG 一对多，模板＝殿本 vol04–10 放行格（每类 ≤60，曾合愈进库但非组员）＋禽 11 格（sheldon 10-22 已确认），按册留出成员格 150 对／19 弃／0 错（门槛 0.5）。单独成表 `registry.SHAPE_GROUPS`（只进 `FLOW_GROUPS`，不进 `GROUPS`：成员有命舍會 等常用字，进了会改 glyph_match／rare_ref_coord 的全局行为）；`ids_online` 改查 `FLOW_GROUPS`；与 zh 共用「會」（互相声明 overlaps）。需在册配置 group_flow 点名。
