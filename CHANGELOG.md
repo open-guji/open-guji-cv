@@ -15,7 +15,7 @@
 - 复查已登记反色带：vol05 p22、vol07 p78、vol09 p174/p175 四页修完还留着黑块（登记的横向范围漏了一截，vol07 p78 左两格的带上沿是台阶形），中心库 yaml 补全规则（vol07 p78 左两格改用矩形），`precleaned/` 四张图重生成。修后再跑 `invert_detect` 不报，逐页看图核对干净。四页 Step1 起判过期。
 - 特殊符号进字符候选集（Sheldon 10-21 定，设计 `doc/design/特殊符号进字符候选集-设计.md`）：人定的符号（○□△⊙ 等，`hanzi.symbols` 登记过的）能进字形库，`glyphdb_admit` 与 `glyph_ledger` 不再把非汉字码位一律拒收；相似字按图认符号（模板余弦 ≥ 0.93 且高过本格最像的字才并入）；5-b 字表开关 `font.charset.symbols`、seed_admit `symbol_review`（放行成符号的格退回人审，除非本书同一符号已有 3 条以上人裁）；送审原因显示「可能是符号」。没开开关的册产物逐字节不变。（#362、#377、#384）
 - 从产物包出待审单时，相似字现切字块图、一格没出就报错、`republish.py add-alt [--replace]` 原地补。（#362）
-- 日曰分歧复核（sheldon 10-22，重跑后 4–10 册 39 格组流与库分歧，长上下文读原典逐格定字）：日曰 18 格里 10 格是文意表（L2）错杀或错放，根因是表只取 haiku、Sonnet high 异议不起作用（5 格 Sonnet 5/5 对）。新 `scripts/l2_apply_dissent.py` 离线改表（Sonnet high 异字→以 Sonnet 为准），不动 Step 代码、`code_hash` 不变；抽样 8 页：6 格由降审回到放行且字对，其余不变。新表 `jys-ry-rm-1022/round4/ry.json` 待 sheldon 说「推」进中心库。
+- 日曰分歧复核（sheldon 10-22，重跑后 4–10 册 39 格组流与库分歧，长上下文读原典逐格定字）：日曰 18 格里 10 格是文意表（L2）错杀或错放，根因是表只取 haiku、Sonnet high 异议不起作用（5 格 Sonnet 5/5 对）。新 `scripts/l2_apply_dissent.py` 离线改表（Sonnet high 异字→以 Sonnet 为准），不动 Step 代码、`code_hash` 不变；抽样 8 页：6 格由降审回到放行且字对，其余不变。新表（另加长上下文判定 3 格 vol07:73、vol09:40、vol10:109）sheldon 10-22 说「推」，已推中心库＝书库语料 v15（base b4，册钉还没改到 v15）；项目文件 `jys-ry-rm-1022/round4/ry.json`。
 
 ### Changed
 - 厯歴 `lih` 改取下半框 HOG（`ids_online.SPECS`：size 48、`region=(0,1,0.5,1)`、门槛 0.25；模板库同一 122 格重建）：按册留出 119 对/3 弃/0 错（原 92/122）。区域在同批数据上选，偏乐观。经验总结与逐组评估见 `doc/design/M7-切分识别经验推广.md`。PATCH；只影响点名了 lih 的册，重跑归 M8。
