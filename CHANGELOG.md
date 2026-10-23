@@ -9,6 +9,7 @@
 ## [未发版]
 
 ### Added
+- `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
 - `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
 
 ### Changed
