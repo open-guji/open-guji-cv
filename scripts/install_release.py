@@ -6,7 +6,7 @@
     python install_release.py --dir ./assets   # 附件已在本地目录
 
 装好后 `guji --help` 可用；corpus 走中心库（`guji db pull`）；fonts/ 目前不在包里（`db pull` 不取字体），见 README。
-资源（models/、config/、formats/）解到 open_guji_cv 的上一级目录。
+资源（models/、config/、formats/、precleaned/）解到 open_guji_cv 的上一级目录。
 """
 from __future__ import annotations
 
@@ -79,7 +79,7 @@ def main() -> int:
                          check=True, capture_output=True, text=True).stdout.strip()
     with tarfile.open(data) as tf:
         for m in tf.getmembers():
-            if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config", "formats"):
+            if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config", "formats", "precleaned"):
                 raise ValueError(f"资源包里有不合规的路径：{m.name}")
         tf.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(out)
     print(f"已装 {wheel.name}；资源解到 {out}")

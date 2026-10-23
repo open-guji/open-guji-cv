@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""打发版附件：wheel（代码）＋资源包（models/、config/、formats/）＋ install_release.py ＋ SHA256SUMS。
+"""打发版附件：wheel（代码）＋资源包（models/、config/、formats/、precleaned/）＋ install_release.py ＋ SHA256SUMS。
 
 用法：python scripts/build_release_assets.py [--out dist/release]
 
@@ -21,7 +21,7 @@ import tarfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA_DIRS = ("models", "config", "formats")
+DATA_DIRS = ("models", "config", "formats", "precleaned")
 SKIP_PREFIXES = ("models/glyph_cnn_r4/",)
 
 
