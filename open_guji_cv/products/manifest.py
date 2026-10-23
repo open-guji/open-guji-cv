@@ -62,17 +62,24 @@ class Manifest:
     def __init__(self, path: Path):
         self.path = path
         self._entries: dict[str, ManifestEntry] | None = None
+        self._torn_tail = False       # 文件末尾没有换行（上次写到一半被杀），下一次追加先补一个
 
     def _load(self) -> dict[str, ManifestEntry]:
         if self._entries is None:
             self._entries = {}
             if self.path.exists():
                 with open(self.path, encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
+                    for raw in f:
+                        self._torn_tail = not raw.endswith("\n")
+                        line = raw.strip()
                         if not line:
                             continue
-                        d = json.loads(line)
+                        try:
+                            d = json.loads(line)
+                        except ValueError:
+                            # 追加写时进程被杀（SIGKILL、VM 回收）可能留下半行：丢掉这一条，
+                            # 该页当作没记过，重跑时补；不让一行坏数据拦住整册续跑。
+                            continue
                         d.setdefault("upstream", {})
                         self._entries[d["key"]] = ManifestEntry(**{
                             k: v for k, v in d.items() if k in ManifestEntry.__dataclass_fields__})
@@ -88,7 +95,8 @@ class Manifest:
         self._load()[entry.key] = entry
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(entry.to_json() + "\n")
+            f.write(("\n" if self._torn_tail else "") + entry.to_json() + "\n")
+        self._torn_tail = False
 
     def invalidate(self, key: str, reason: str, cells: list[str] | None = None) -> bool:
         """把 `key` 的最新条目标成显式失效（追加一条带 `invalidated` 的副本）。
@@ -121,3 +129,4 @@ class Manifest:
             for e in entries.values():
                 f.write(e.to_json() + "\n")
         tmp.replace(self.path)
+        self._torn_tail = False
