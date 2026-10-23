@@ -12,6 +12,9 @@
 
 PATCH（A30 要钉正式 tag 跑殿本 vol11–19）。
 
+### Fixed（rc 上修）
+- `guji db sync`／`pull` 读的过程中有人往同一工作区推新行（如 `admissions.jsonl` 追加）时，不再报「库里有超出 n_lines 的行」退出，而是重读（原来只在读完后核 rev，读到一半的不一致直接抛）；没有新写入的不一致照旧报错。10-23 A30 sync 殿本撞上（与 dev／v0.5.9 无关，同一段代码，换时间重试就过）。只动 `datastore/workcopy.py`，各步 `code_hash` 不变。
+
 ### Added
 - 指纹覆盖守卫 `tests/test_code_deps_coverage.py`（A20）：`code_hash` 只认 Step 模块与手列的 `code_deps`，不顺 import 走；普查出 11 个 Step 共 39 处「import 了算法模块却没进指纹」（seed_admit 15 处，含 `shadow.*`、`feedback.mojibake`、`clustering.confusable`、`steps.align_ref`/`context_decide`）。现登记为存量、约定搭车补（该步下次本来就改算法时顺手补进 `code_deps`），新增 import 不登记就测试失败。只加测试，不碰任何 Step，`code_hash` 不变（L0）。
 - `guji opinions auto`（M11，GUJI-735 起步；MINOR 级新命令，不碰任何 Step，`code_hash` 不变）：修订流程自动化调和器。`decide`（`to_user` 的意见按 `rules.json` 的 `auto.decide` 自动结案，`decided.by=policy:auto-v1`；刷票、用户亲裁、版本漂移、C 类、看不清、置信不足的留着）、`prepare`（每章聚一批，book-text 里建 `auto/<书>-<章>-<日期>` 分支，套 `revise`、升版本、跑 `local_check`、提交一次，失败不留半成品）、`finish-pr`（CHANGES 的 `#TBD` 换 PR 号）、`finish-merged`（记 `applied`、格谱系、度量、`publish-status`）、`digest`（汇总）。意见池新增 `releases.jsonl`、`lineage.jsonl`、`metrics.jsonl`（只追加）；日志新增 kind `batched`／`pr_opened`／`published`／`reverted`／`policy_applied`，只有 `reverted` 改状态。`rules.json` 升 version 2，加 `auto` 段；合并进 book-text main 缺省不自动（`auto.merge.enabled=false`）。设计见 book-text `docs/design/2026-10-修订流程自动化设计.md`。
