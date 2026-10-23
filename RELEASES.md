@@ -1,3 +1,5 @@
+> **2026-10-23 说明**：本文开头的发布流程（`main` 是开发线、`production` 快进、`guji release check`）是 2026-09-26 的旧版。现行分支与发版流程以 [`doc/版本号规矩.md`](doc/版本号规矩.md) 第三节为准：日常 PR 投 `dev`，发版切 `rc/vX.Y.Z`，merge commit 进 `main`，在合并提交上打 `vX.Y.Z`。版本记录以 `CHANGELOG.md` 与 main 上的 tag 为准；本文只在 MINOR 发版时补一节（见版本号规矩第四节）。下面的 `cv-2026.*` 小节是历史。
+
 # RELEASES
 
 服务器（对外校对平台）只跟 `production` 分支，`main` 是开发线。发布节奏现阶段
