@@ -8,13 +8,13 @@
 
 ## [未发版]
 
-## [0.5.10] - 测试中
-
-PATCH（Sheldon 10-23 定：放行开关缺省开、Step1 列距救援，殿本全体重跑用；A30 跑 vol11–19 也钉这个 tag）。
-
 ### Changed
 - 放行开关缺省开（2026-10-23 sheldon 定「没问题的 feature 一律缺省开，开关只为方便 A/B」）：`seed_admit.context_guard_diff`、`context_guard_ref_blank`、`lane_witness3`、`lane_coord` 改缺省开，`group_flow` 缺省＝注册表里全部声明了 flow 的字组（书 yaml 写 `[]` 才关），书级 `iron_gate` 缺省开。殿本 20 册 yaml 本来都开着，行为不变；`seed_admit` 参数 dump 变，各册放行判过期。
 - Step1 border_detect 1.6：列距救援 `pitch_rescue`（缺省开，`utils/pitch_rescue`）。自由模式列网里有列 < 0.7×中位列宽时（多挑一条假竖线把一列劈成两窄列、外侧一整列落在网外、字悄悄丢掉），先网格模式重探，选不出版框对再去掉劈线、在有字的一侧补外框；新网干净才接受，没触发的页逐字节不变。殿本 vol11–20 九页里修好 8 页（vol13 p75、vol14 p103/186、vol16 p120、vol19 p29/86、vol20 p68/113），vol16 p8 密排夹注页留人工。`border_detect` 的 `code_hash` 变，全书 Step1 起判过期。
+
+## [0.5.10] - 测试中
+
+PATCH（A30 要钉正式 tag 跑殿本 vol11–19）。
 
 ### Fixed（rc 上修）
 - `guji db sync`／`pull` 读的过程中有人往同一工作区推新行（如 `admissions.jsonl` 追加）时，不再报「库里有超出 n_lines 的行」退出，而是重读（原来只在读完后核 rev，读到一半的不一致直接抛）；没有新写入的不一致照旧报错。10-23 A30 sync 殿本撞上（与 dev／v0.5.9 无关，同一段代码，换时间重试就过）。只动 `datastore/workcopy.py`，各步 `code_hash` 不变。
