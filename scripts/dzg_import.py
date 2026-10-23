@@ -7,6 +7,7 @@
     python scripts/dzg_import.py map        [--ws DIR] [--vols 01,03]
     python scripts/dzg_import.py compare    [--ws DIR] [--samples 10]
     python scripts/dzg_import.py colgold    [--ws DIR] --release DIR [--vols 01,03]
+    python scripts/dzg_import.py fix-glyph-codes [--ws DIR]
 
 `--ws` 缺省读 `GUJI_WORKSPACE`（四庫總目书目录那一层）。
 
@@ -21,6 +22,10 @@
 - 列 `runs[]`：`text` 带 `start`（列首空几格；`-1` 是出格抬头）；`note` 是双行小注，
   `r`/`l` 两行各是 `[[偏移, 文字], ...]`，偏移是**小注内部**的格位。
 - `pua_map` 给出本条里 PUA 码位 → 真字；映不上的 PUA 本工具记作 `〓`。
+- `glyphs` 是本条的**缺字图**：`{"U+1001": [图路径, x, y, w, h, …]}`。源文件拿缅甸文字母
+  （U+1001 起，每条从头编号）当缺字的占位码，`text` 字段里同一位写的是 `□`。这些码位
+  不是 PUA，`fix_pua` 原先认不出，缅甸字母原样进了整理本（2026-10-23 A24 在 align_ref
+  坐标对位里发现，殿本 0001–0005 共 233 处）；现在与映不上的 PUA 一样记 `〓`。
 - **0001–0005 是總目**（0005 尾部附《四庫抽燬書提要》），0006 起是別的书。
   所以 `download` 收到**第一个不含總目的文件就停**，不一路试到 404（那是 1500 冊）。
 
@@ -117,21 +122,26 @@ def load_records(path: Path) -> list[dict]:
             if not line.strip():
                 continue
             r = json.loads(line)
-            for k in ("cols", "geom", "roll", "book", "pua_map", "images"):
+            for k in ("cols", "geom", "roll", "book", "pua_map", "images", "glyphs"):
                 if k in r:
                     r[k] = _norm_field(r[k])
             out.append(r)
     return out
 
 
-def fix_pua(s: str, pua_map: dict | None) -> tuple[str, int]:
-    """PUA → 真字（按本条 `pua_map`），映不上的记 `〓`。返回（新串，映不上的个数）。"""
+def fix_pua(s: str, pua_map: dict | None, glyphs: dict | None = None) -> tuple[str, int]:
+    """PUA → 真字（按本条 `pua_map`），映不上的记 `〓`；本条 `glyphs` 登记的缺字图占位码也记 `〓`。
+    返回（新串，记成 `〓` 的个数）。"""
     if not s:
         return s, 0
     pm = pua_map or {}
+    gl = glyphs if isinstance(glyphs, dict) else {}
     out, miss = [], 0
     for ch in s:
-        if _is_pua(ch):
+        if f"U+{ord(ch):04X}" in gl:
+            out.append(UNMAPPED)
+            miss += 1
+        elif _is_pua(ch):
             real = pm.get(f"U+{ord(ch):04X}")
             if real:
                 out.append(real)
@@ -162,19 +172,19 @@ class Half:
         return sum(len(han_only(column_plain(c))) for c in self.cols)
 
 
-def _fix_col(col: dict, pua_map) -> tuple[dict, int]:
+def _fix_col(col: dict, pua_map, glyphs=None) -> tuple[dict, int]:
     miss = 0
     runs = []
     for run in col.get("runs", []):
         run = dict(run)
         if run.get("t") == "text":
-            run["s"], m = fix_pua(run.get("s", ""), pua_map)
+            run["s"], m = fix_pua(run.get("s", ""), pua_map, glyphs)
             miss += m
         elif run.get("t") == "note":
             for side in ("r", "l"):
                 segs = []
                 for off, s in run.get(side, []):
-                    s, m = fix_pua(s, pua_map)
+                    s, m = fix_pua(s, pua_map, glyphs)
                     miss += m
                     segs.append([off, s])
                 run[side] = segs
@@ -193,7 +203,7 @@ def build_halves(files: list[Path]) -> list[Half]:
                 mine, miss = [], 0
                 for c in sorted(cols, key=lambda c: c["no"]):
                     if (c["no"] >= NCOL) == bool(side):
-                        fc, m = _fix_col(c, r.get("pua_map"))
+                        fc, m = _fix_col(c, r.get("pua_map"), r.get("glyphs"))
                         mine.append(fc)
                         miss += m
                 halves.append(Half(len(halves), f.name, r["id"], str(r["page"]), side,
@@ -313,7 +323,7 @@ TXT_NAME = "siku_daizhige.txt"
 TXT_HEADER = (
     "# daizhige 逐列整理本（文淵閣四庫全書總目，sikuquanshu.daizhige.net/data/0001–0005.jsonl，"
     "即維基文庫 ProofreadPage 逐列校對本）。一行＝一列（line_is_column），列首全角空格＝start 格數，"
-    "雙行小注寫作<右行|左行>，映不上的PUA缺字記〓。每個半葉前一行「#@ 記錄id 頁 h0/h1」。"
+    "雙行小注寫作<右行|左行>，映不上的PUA缺字與缺字圖占位碼記〓。每個半葉前一行「#@ 記錄id 頁 h0/h1」。"
     "由 open-guji-cv scripts/dzg_import.py convert 生成，勿手改。"
 )
 
@@ -351,6 +361,27 @@ def cmd_convert(ws: Path) -> None:
         for c in cols:
             f.write(json.dumps(c, ensure_ascii=False) + "\n")
     print(json.dumps(stats, ensure_ascii=False))
+
+
+GLYPH_CODE_RE = re.compile(r"[\u1000-\u109f]")
+"""源文件的缺字图占位码（缅甸文字母，见模块头 `glyphs`）。总目正文里不会有真的缅甸文。"""
+
+
+def fix_glyph_codes(text: str) -> tuple[str, int]:
+    """已生成的整理本里漏掉的缺字图占位码 → `〓`。一字换一字，行数、列内格位都不变。"""
+    return GLYPH_CODE_RE.subn(UNMAPPED, text)
+
+
+def cmd_fix_glyph_codes(ws: Path) -> None:
+    """就地修已有的 `siku_daizhige.txt`，不重新 convert。
+
+    2026-10-23 实测：重新下载 0001–0005 再 convert，与库里那份差 90 多行列首缩进、少一行
+    （daizhige 源文件之后改过），重生成会连带动格位表和坐标对位；只修占位码则只动 233 个字。"""
+    p = _corpus(ws) / TXT_NAME
+    text, n = fix_glyph_codes(p.read_text(encoding="utf-8"))
+    if n:
+        p.write_text(text, encoding="utf-8")
+    print(json.dumps({"file": str(p), "fixed": n}, ensure_ascii=False))
 
 
 # ── map：我们的页 → 半叶 ───────────────────────────────────
@@ -960,7 +991,8 @@ def cmd_colgold(ws: Path, release_dir: Path, vols: list[str], export: Path | Non
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("cmd", choices=["download", "manifest", "convert", "map", "compare", "colgold"])
+    ap.add_argument("cmd", choices=["download", "manifest", "convert", "map", "compare", "colgold",
+                                       "fix-glyph-codes"])
     ap.add_argument("--ws", default=os.environ.get("GUJI_WORKSPACE"))
     ap.add_argument("--max", type=int, default=60)
     ap.add_argument("--vols", default=",".join(VOLS))
@@ -981,6 +1013,8 @@ def main(argv=None) -> int:
         cmd_manifest(ws)
     elif a.cmd == "convert":
         cmd_convert(ws)
+    elif a.cmd == "fix-glyph-codes":
+        cmd_fix_glyph_codes(ws)
     elif a.cmd == "map":
         cmd_map(ws, [v.zfill(2) for v in a.vols.split(",")])
     elif a.cmd == "colgold":
