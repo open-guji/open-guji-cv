@@ -540,6 +540,24 @@ def _build_net(n_cls: int, n_comp: int, d: int = 256, n_struct: int = 0, n_slot:
     return Net()
 
 
+class CnnCheckpointMissing(RuntimeError):
+    """识别权重文件不存在。与"没装 torch"不同：权重在 `models/` 里随引擎仓走，找不到几乎总是安装路径不对
+    （wheel 装后引擎仓根落在 site-packages 旁，北行日錄 2026-09-15 同款），退回 HOG 只会悄悄少一路候选。"""
+
+
+def require_checkpoint(cnn: "CnnCandidates") -> None:
+    """生僻字面板入口调用：权重文件不在就报错，不返回空候选（A23，2026-10-23）。
+
+    只管"文件不在"，不管"没装 torch"（那条由 `ops/preflight` 在起跑前报，单测环境也常无 torch）。
+    `GUJI_ALLOW_MISSING_DEPS=1` 放行，等同 `--allow-missing-deps`。"""
+    import os
+    if cnn.ckpt.exists() or os.environ.get("GUJI_ALLOW_MISSING_DEPS") == "1":
+        return
+    raise CnnCheckpointMissing(
+        f"缺识别权重 {cnn.ckpt}：生僻字候选会少 CNN／embedding 两路。检查 models/glyph_cnn_r5/best.pt 是否随引擎仓安装"
+        f"（按引擎仓根找，不是 cwd）；确要退回字体候选，设 GUJI_ALLOW_MISSING_DEPS=1")
+
+
 class CnnCandidates:
     """懒加载；没有 checkpoint 或没装 torch 时 `available` 为 False，调用方跳过。"""
 
