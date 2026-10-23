@@ -261,6 +261,10 @@ guji cellvotes draft vol05 --site-book 96mid1ogzk --rev 005-r6 --pack rev-005-r6
 `--cord` 要用**出单那一版**的文本（rev 对应的 book-text 版本）：现行 cv 重切过的列，旧格号已经不是读者看到的字，
 这类格挂起不写。「无字」缺省挂起（排除名单只增不删），要落加 `--include-none`。
 
+机器放行格的质检（GUJI-693）：`scripts/zhengli/qa_pick.py pick` 按通道挑置信最低的格（默认配额照册 005，
+总数 < 200，不随机，复跑样本 id 一样），出 `样本.json`、`清单.md` 和拼图；判完抄成 `判.tsv`，
+`qa_pick.py tally` 出 `汇总.md`（按通道、按错误类型）和 `qa.jsonl`。只读，不写中心库；判错要改字的照常走人裁事件。
+
 ### 4.3 路由：裁决自动变成金标
 
 按「试算（不落库）」先看会写什么，确认后按「按路由表消费」。
