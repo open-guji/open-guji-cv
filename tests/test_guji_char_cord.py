@@ -238,6 +238,11 @@ def test_check_catches_mismatch():
     dup["pages"][0]["columns"][1]["cells"].append(dict(dup["pages"][0]["columns"][1]["cells"][0]))
     assert any("重复" in e for e in cc.check(dup))
     assert any("在 char 里没有" in e for e in cc.check(char, None, {"items": [{"a": "7:9:1", "t": "x"}]}))
+    # marks 的 id 重复（册 005 p3 重跑出过）
+    dupm = copy.deepcopy(cord)
+    dupm["pages"][0]["marks"] = [{"kind": "blank", "id": "mx", "box": [0, 0, 1, 1]},
+                                 {"kind": "blank", "id": "mx", "box": [0, 0, 1, 1]}]
+    assert any("mark id mx 重复" in e for e in cc.check(char, dupm))
     # cord 里带字被 schema 拒
     withc = copy.deepcopy(cord)
     withc["pages"][0]["cells"][0]["c"] = "皇"
