@@ -103,6 +103,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv.append("--allow-sample-db")
     if getattr(args, "allow_cv_mismatch", False):
         argv.append("--allow-cv-mismatch")
+    if getattr(args, "why", None):
+        argv += ["--why", args.why]
     if getattr(args, "allow_missing_deps", False):
         argv.append("--allow-missing-deps")
     return argv
@@ -164,18 +166,38 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     return rc
 
 
-def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
+def _guard_cv_version(book, allow: bool = False, warn_only: bool = False, why: str | None = None,
+                      eng=None) -> None:
     """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
-    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
-    from .core.cv_version import frozen_mismatch, mismatch
+    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。
+
+    放行只有两条路（2026-10-23 起），都照样提醒，理由记进环境变量 `GUJI_CV_OVERRIDE`、随每条 manifest 落盘：
+    - 在中心库实验分支上跑（`GUJI_DATA_BRANCH=exp/*`，产物、glyph.db 落该分支自己的目录）：自动放行；
+    - `--allow-cv-mismatch --why "<理由>"`：不写理由不放行。
+    给了 `eng` 就把理由补进它已算好的 manifest 字段（引擎先于护栏建）。"""
+    import os
+    from .core.cv_version import OVERRIDE_ENV, frozen_mismatch, isolated_branch, mismatch
     # 冻结册另按冻结时的提交比（M10·D7，GUJI-694）：冻结册顶层常没写 cv_version，以前在 main 上照样能跑
     msg = mismatch(getattr(book, "cv_version", None)) or frozen_mismatch(getattr(book, "freeze", None))
     if not msg:
         return
-    if allow or warn_only:
+    if warn_only:
         print(f"⚠️ {msg}", file=sys.stderr, flush=True)
         return
-    print(f"✗ {msg}", file=sys.stderr, flush=True)
+    why = (why or "").strip() or os.environ.get(OVERRIDE_ENV, "").strip()
+    branch = isolated_branch()
+    if branch and not allow:
+        why = f"exp-branch:{branch}"
+    if branch or (allow and why):
+        os.environ[OVERRIDE_ENV] = why
+        if eng is not None:
+            eng._cv["cv_override"] = why
+        print(f"⚠️ {msg}\n   放行（{why}）：产物 manifest 记装的版本与这条理由", file=sys.stderr, flush=True)
+        return
+    if allow:
+        print(f"✗ {msg}\n   --allow-cv-mismatch 要同时写 --why \"<理由>\"（记进产物 manifest）", file=sys.stderr, flush=True)
+    else:
+        print(f"✗ {msg}", file=sys.stderr, flush=True)
     sys.exit(2)
 
 
@@ -203,7 +225,8 @@ def cmd_pipeline(args) -> None:
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
-    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False), why=getattr(args, "why", None),
+                      eng=eng)
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     _ensure_glyph_pin(eng.book)
@@ -332,7 +355,7 @@ def cmd_rerun(args) -> None:
     eng = _engine(args.book, args.pipeline, None)
     # 写产物，和 pipeline／step 一样过 cv 版本护栏（GUJI-577）；--dry-run 只提醒
     _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False),
-                      warn_only=args.dry_run)
+                      warn_only=args.dry_run, why=getattr(args, "why", None), eng=eng)
     pages = eng.book.resolve_pages(args.pages)
 
     def steps_after(first, to):
@@ -2833,8 +2856,11 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "2026-10-20 起 `guji pipeline` 跑多于一步、不要 --json 时缺省就隔离（GUJI-647），"
                         "代价是每步多付一次 import 与模型加载；--no-isolate-steps 退回单进程连跑。不支持 --json")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
-                        "做实验、临时核对时用，产物 manifest 照实记装的版本")
+                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577），"
+                        "须同时给 --why。做实验优先在中心库实验分支上跑（GUJI_DATA_BRANCH=exp/*，自动放行、产物隔离）；"
+                        "产物 manifest 照实记装的版本和理由（cv_override）")
+    p.add_argument("--why", default=None,
+                   help="配 --allow-cv-mismatch：为什么要用非钉定版本在这里跑，记进每条产物 manifest 的 cv_override")
     p.add_argument("--allow-missing-deps", action="store_true",
                    help="这次要跑的步骤本机缺依赖（torch／权重／shadow_veto 要的 joblib）时仍然跑（默认拒跑，退出码 2；GUJI-654）。"
                         "缺的东西会让 Step 悄悄退回旧办法或整页失败，只在明知后果时加")
@@ -2871,7 +2897,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--wait", action="store_true", help="这本书正有别的跑批时排队等")
     p.add_argument("--json", action="store_true")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定了 cv_version 而装的不是它时照跑（只提醒）")
+                   help="册配置固定了 cv_version 而装的不是它时照跑，须同时给 --why（实验分支上自动放行）")
+    p.add_argument("--why", default=None, help="配 --allow-cv-mismatch：理由，记进产物 manifest 的 cv_override")
 
     p = sub.add_parser("binarize",
                        help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
