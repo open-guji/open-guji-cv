@@ -560,6 +560,12 @@ class SeedAdmitParams(BaseModel):
     不走通道、送审，免得把刻本异体改成通用字（vol04 coord_fallback 把 6 格刻本「㫖」放成「旨」：
     库首位是「旨」，㫖 只在候选里）。只在三通道任一开着时进 dump。"""
     lane_variant_topk: int = 3
+    lane_keep_ref_review: bool = True
+    """护栏拿整理本字拦下的格不再走待审补放（A24 2026-10-23，vol20 实跑）：`ctx_guard_ref`（ref_prefer）、
+    `group_flow_ref_dissent`／`group_flow_coord_dissent` 降审的格，R1/R4 会拿同一个整理本字、再加文渊阁系证人又放回去。
+    证人与整理本同源，跟殿本刻字不一致时（其/萁、諸/諧）它们照样一致；vol20 这样放回 23 格里改错 5 格
+    （45:5:18 諸→諧、144:5:20 其→萁、109:5:10 本→木、178:3:16、178:3:19）。开着 = 这些格留人审，默认字仍是整理本字。
+    只在三通道任一开着时进 dump；False＝放回（2026-10-23 前的行为）。"""
     lane_witness_fingerprint: str = ""
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
@@ -672,7 +678,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
                       "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
-                      "lane_variant_topk"):
+                      "lane_variant_topk", "lane_keep_ref_review"):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
@@ -1858,6 +1864,8 @@ _LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar", "g
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
 #: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
 _LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
+#: `lane_keep_ref_review` 开着时 R1/R4/R5 不碰的：护栏已拿整理本字比过、判定该人看的格。
+_LANE_REF_REVIEW = frozenset({"ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"})
 
 
 def _lane_class(doubts, evidence: dict | None, char, ref_char, lib_top) -> str:
@@ -1986,7 +1994,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
     for col in out:
         for rec in col.chars or []:
             if (rec.admit or rec.channel == "human" or rec.provenance == "human"
-                    or "excluded" in (rec.doubts or []) or set(rec.doubts or []) & _LANE_HARD):
+                    or "excluded" in (rec.doubts or []) or set(rec.doubts or []) & _LANE_HARD
+                    or (p.lane_keep_ref_review and set(rec.doubts or []) & _LANE_REF_REVIEW)):
                 continue
             al = amap.get(rec.id)
             ref, op = (al[0], al[1]) if al else (None, None)
