@@ -189,3 +189,24 @@ def test_add_alt_patches_online_in_place(tmp_path, monkeypatch):
     assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes", "--replace"]) == 0
     after = json.loads(online.read_text(encoding="utf-8"))
     assert after["cells"][0]["alt"][0]["c"] == "○" and after["cells"][1]["alt"][0]["c"] == "巳"
+
+
+def test_pack_rev_stores_issue_products(tmp_path, monkeypatch):
+    """--sync 时存出单版产物包 rev-<rev>；--no-pack 不存；存不成只告警。"""
+    import argparse
+    import subprocess
+    calls = []
+    rc = {"v": 0}
+
+    def fake_run(cmd, **kw):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, rc["v"], "", "")
+
+    monkeypatch.setattr(rp, "run", fake_run)
+    assert rp.pack_rev(argparse.Namespace(no_pack=False), tmp_path, "vol06", "006-r3") == "rev-006-r3"
+    c = calls[-1]
+    assert c[c.index("pack") + 1:c.index("pack") + 3] == ["push", "vol06"] and c[c.index("--label") + 1] == "rev-006-r3"
+    assert rp.pack_rev(argparse.Namespace(no_pack=True), tmp_path, "vol06", "006-r3") is None and len(calls) == 1
+    rc["v"] = 1
+    assert rp.pack_rev(argparse.Namespace(no_pack=False), tmp_path, "vol06", "006-r3") is None
