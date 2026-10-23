@@ -3440,6 +3440,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_products import add_parser as _add_products, cmd_products_entry
     _add_products(sub)
     COMMANDS_V2["products"] = cmd_products_entry
+    # source：原图源件、页图、页表（R2），云会话取原图；自带 -w
+    from .cli_source import add_parser as _add_source, cmd_source
+    _add_source(sub)
+    COMMANDS_V2["source"] = cmd_source
     # opinions（M11）：意见池、证据包、初判、修订 book-text 冻结册；不带 book 位置参数，不要 -w
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)

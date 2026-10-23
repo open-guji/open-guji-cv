@@ -37,7 +37,7 @@ LAYER: dict[str, int] = {
     # L5 控制台（Web）
     "console": 5,
     # L6 命令行入口
-    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_opinions": 6, "cli_cellvotes": 6,
+    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6,
     # L7 `python -m`
     "__main__": 7,
 }
