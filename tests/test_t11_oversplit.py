@@ -227,3 +227,6 @@ def test_step_off_arm_byte_identical_and_hint_keeps_release_set(tmp_path, monkey
     assert adm(base) == adm(on)
     hit = [r.id for cc in on.columns for r in cc.chars if "oversplit_pair" in r.doubts]
     assert hit and all(not r.admit for cc in on.columns for r in cc.chars if r.id in hit)
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -97,3 +97,6 @@ def test_rare_run_window():
     assert _rare_run_ids(recs, 0) == frozenset()
     sparse = [NS(id=str(i), char=None, candidates=[(ch, 0.9)]) for i, ch in enumerate("㫖之而不以爲方之而㫖")]
     assert _rare_run_ids(sparse, 3) == frozenset()
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -134,3 +134,6 @@ def test_near_form_families_never_auto_admit_on_shape_alone(tmp_path, monkeypatc
     assert not by_slot[1].admit or by_slot[1].channel not in ("match_solo",
                                                               "match_solo_ocr"), \
         f"形近家族字「{family}」只凭形状就走了 {by_slot[1].channel}"
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -82,3 +82,7 @@ def test_jiazhu_rule_bar_ignored_when_on(tmp_path, monkeypatch):
 def test_body_cell_rule_bar_unaffected_by_jiazhu_switch(tmp_path, monkeypatch):
     p = {**ON, "nonchar_jiazhu_ignore_rule_bar": True}
     assert not _run(tmp_path, monkeypatch, flags=["rule_bar"], params=p).admit
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

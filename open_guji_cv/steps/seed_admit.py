@@ -59,6 +59,11 @@ _N_KEYS = ("context_single_stroke_review", "context_narrow_review", "context_nar
            "context_narrow_ref", "context_narrow_col_review", "context_narrow_col_ratio")
 
 
+def _flow_groups():
+    from ..groups.registry import FLOW_GROUPS
+    return FLOW_GROUPS
+
+
 class SeedAdmitParams(BaseModel):
     variants: str = ""                  # 异体表；空 = VariantMap 默认
     solo_cov: float = 0.99              # match_solo 的 cov 闸，实测拐点
@@ -185,8 +190,8 @@ class SeedAdmitParams(BaseModel):
     实测 41 条人裁：文意对 39、字形对 40。关掉不等于「永远人审」——下面的 context
     通道（2026-09-11 起对己已巳不再排除）仍可能在没有整理本时单独放行。放进来的字由 `group_flow`（jys 组）复核，
     见 `always_review`。"""
-    group_flow: tuple[str, ...] = ()
-    """字组统一流程（新 variant-tie，2026-10-18 sheldon 定，缺省空＝关）：点名注册表里声明了 `flow` 的字组 id
+    group_flow: tuple[str, ...] = Field(default_factory=lambda: tuple(_flow_groups()))   # 2026-10-23 sheldon 定缺省开全部字组
+    """字组统一流程（新 variant-tie，2026-10-18 sheldon 定；2026-10-23 起缺省＝注册表里全部声明了 flow 的字组，书 yaml 写 `[]` 才关）：点名注册表里声明了 `flow` 的字组 id
     （七个异体组 `mn dian can chen li shen zhi`，六个形近组 `jys ry rr ts wm wxs`）。紧接主循环、在其余后处理遍之前。
     2026-10-18 起它是字组的唯一一条路：旧开关 `ji_yi_si_*`、`ry_group`、`rr_clf`、`m7_*`、`variant_tie*` 已并进来删掉。
 
@@ -481,7 +486,7 @@ class SeedAdmitParams(BaseModel):
     approx_fingerprint: str = ""
     """自动填：近似字侧表的内容戳（`approx_labels` 条数 + 内容哈希）。表空 = ""。"""
 
-    context_guard_diff: bool = False
+    context_guard_diff: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """context 通道放行前，库判 `diff` 且 `cov < context_guard_cov` 就不放行（doubt
     `ctx_guard_diff`，overview#333 建议 1 前半）。库已经明确说「不像」，上下文单凭文意不该
     把它抬成字。缺省关；五个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
@@ -491,7 +496,7 @@ class SeedAdmitParams(BaseModel):
     """context 通道放行前，这一格在 Step4 `char_index` 上带 `context_guard_flag_set` 里任一
     标记就不放行（doubt `ctx_guard_flag`，建议 1 后半）。没有 `char_index` 产物 = 弃权。"""
     context_guard_flag_set: str = "rule_bar,suspect_empty,bad_seg"
-    context_guard_ref_blank: bool = False
+    context_guard_ref_blank: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
     时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
     context_guard_ref_prefer: bool = False
@@ -525,13 +530,13 @@ class SeedAdmitParams(BaseModel):
     # 只升不降、只出文本（`evidence.no_glyph_lib`），人裁位与排除名单不经这里，己/已/巳 一族
     # 一律不走（仍归 `ji_yi_si`）。放行格 `channel`/`provenance` 是通道名，`doubts` 记
     # `lane_<通道名>`，原疑问挪进 `evidence.lane.prev_doubts`。三个开关全关时这一段不进 dump。
-    lane_witness3: bool = False
+    lane_witness3: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """R1 三证人一致（通道 `witness3`）：整理本对位来自 `replace` 段、待审类别是 对齐改字层／
     与整理本冲突／形近字（`review.cards.card_class` 同口径），而 `lane_witnesses` 里每家证人
     （逐格读法见 `clustering.witness_cells`）、整理本字、坐标对位字语义全同 → 放行，字 = 整理本字。
     护栏：库首位（刻本原字）与整理本字是已知异体对（语义同、字面不同）→ 不放，照旧送审
     （免得把刻本上的 獘 改成整理本的 弊）。"""
-    lane_coord: bool = False
+    lane_coord: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """R4 坐标对位兜底（通道 `coord_fallback`）：只碰「其余」类待审格。二选一：库首位 == 坐标
     对位字 == 主证人（`lane_witnesses` 质量最高的那家，四庫即 daizhige 逐列本）→ 字取库首位；
     或每家证人 + 坐标对位字全同、库无护栏 → 字取坐标对位字。库首位与坐标对位字是已知异体对时

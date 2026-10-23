@@ -90,3 +90,7 @@ def test_default_min_ink_leaves_room_for_real_low_ink_chars():
     vol03 全书 `channel=context` 逐格看图定的界，压在「确认空白」（0.0493）与
     「确认真字，一横的「一」」（0.0677）之间。"""
     assert 0.0493 < SeedAdmitParams().context_min_ink < 0.0677
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
