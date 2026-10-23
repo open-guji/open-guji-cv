@@ -126,7 +126,7 @@ include = ["open_guji_cv*"]
 exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
-open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/*",
+open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/**/*", "ops/*.json",
                 "clustering/review/static/*", "datastore/*.sql"]
 
 # ── 测试 ────────────────────────────────────────────────────────────────

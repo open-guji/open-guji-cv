@@ -22,6 +22,17 @@
 - Python 3.10+
 - （可选）CUDA 12.x + NVIDIA GPU（RTX 3080 实测约 1.5 秒/页）
 
+### 0.（只跑不改代码时）用发版附件安装，不必克隆整仓
+
+每个 `vX.Y.Z` 的 [GitHub Release](https://github.com/open-guji/open-guji-cv/releases) 都挂了 wheel、资源包（`models/`、`config/`、`formats/`）、`install_release.py` 和 `SHA256SUMS`。把它们下到同一个目录后：
+
+```bash
+python install_release.py --dir <附件目录> [--extras cpu,datastore]
+# 或在线：python install_release.py 0.5.9
+```
+
+语料走中心库（`guji db pull`）。**字体（`fonts/`）目前不在包里，`db pull` 也不取字体**：IDS 模板渲染（`groups/ids_parts.py`）和 `clustering/match.py` 缺字体时会静默变差，需自行把 `fonts/jigmo`、`iming`、`genmin` 放到 `open_guji_cv` 的上一级目录（或设 `GUJI_FONT_DIR`，对 match.py 无效）。要改代码才需要下面的克隆方式。
+
 ### 1. 克隆仓库并创建虚拟环境
 
 ```bash

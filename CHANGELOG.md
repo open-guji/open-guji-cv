@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- PATCH：发版自动附带 Python 执行包（新增 `.github/workflows/release.yml`、`scripts/build_release_assets.py`、`scripts/install_release.py`）：wheel ＋ 资源包（`models/`、`config/`、`formats/`、`precleaned/`）；wheel 补上控制台前端 dist 和 `ops/baseline_tests.json`＋ 校验和挂到 GitHub Release，执行方不必克隆整仓。不改 `open_guji_cv/`，各步 `code_hash` 不变。
+
 ## [0.5.9] - 2026-10-22
 
 PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。
