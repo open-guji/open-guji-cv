@@ -337,6 +337,11 @@ class SeedAdmitParams(BaseModel):
     `context_guard_diff` 只拦库判 diff 且 cov<0.8；vol14 的错放库判都是 unsure、cov 0.93–0.98（𣏌→相：库 𣏌 0.984／相 0.948；
     㳫→書：杳 0.975／書 0.933；牽→事：奉 0.937、事 不在候选）。0 = 关。"""
     context_lib_dissent_cov: float = 0.93
+    context_page_end_review: bool = True
+    """每页读序最后一格不走 context 通道（A24 2026-10-23）：Step5-d 对位只收两头被 equal 夹住的 replace 段，页末那一格
+    没有后一段，库字与整理本不一致时就拿不到对位字，只剩 context 猜。殿本 v0.5.9 vol12／vol14：页末格放行字变率
+    1.9%／1.7%，其余格 0.07%／0.05%（vol12 布→補、葬→非、戴→裁，vol14 牽→事、睦→時 都在 9:21）。命中 → doubt
+    `context_page_end`，落人审（每册约 2–5 格）。根治在对位侧，另查。"""
     iron_ctx_guard: bool = True
     """铁证放行前与 Step6 上下文互证（A24 2026-10-23，vol11 12:2:14 官→宫：库 宫 0.9972／官 0.9961 近平手，上下文
     官 0.69／宫 0.31，铁证仍放 宫）：上下文 ranked 第一名与铁证字语义不同、概率 ≥ `iron_ctx_prob`，且它在库候选里与
@@ -671,7 +676,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.context_lib_dissent_gap:
             d.pop("context_lib_dissent_gap", None)
             d.pop("context_lib_dissent_cov", None)
-        for flag, keys in (("context_variant_form_guard", ("context_variant_ratio", "context_variant_lib_gap")),
+        for flag, keys in (("context_page_end_review", ()),
+                           ("context_variant_form_guard", ("context_variant_ratio", "context_variant_lib_gap")),
                            ("iron_ctx_guard", ("iron_ctx_prob", "iron_ctx_gap")),
                            ("match_tie_guard", ("match_tie_gap",))):
             if isinstance(d, dict) and not getattr(self, flag):
@@ -933,6 +939,10 @@ class SeedAdmitStep(Step):
         # 近似字闸（overview#276）：{近似例 id}、{刻例全是近似例的 (字)}；表空时两个都是空集
         apx_ids, apx_only = (_approx_index(p.db_path) if p.approx_fingerprint
                              else ({}, frozenset()))
+        # 本页读序最后一格（`context_page_end_review`）：末列（col 最大）按读序的最后一个字位
+        _ok_cols = [c for c in match.columns if c.ok and c.chars]
+        page_last_id = (sort_by_reading(max(_ok_cols, key=lambda c: c.col).chars)[-1].id
+                        if (_ok_cols and p.context_page_end_review) else None)
         for cc in match.columns:
             if not cc.ok:
                 out.append(ColumnAdmit(col=cc.col, ok=False, error=cc.error))
@@ -1268,6 +1278,8 @@ class SeedAdmitStep(Step):
                             d, r.candidates, vm_here, p.context_variant_ratio, p.context_variant_lib_gap,
                             ctx.book.canonical_char if (ctx is not None and ctx.book.codepoints) else None):
                         doubts.append("context_variant_form")
+                    elif r.id == page_last_id:
+                        doubts.append("context_page_end")
                     elif p.context_lib_dissent_gap > 0 and _context_lib_dissent(
                             d.char, r.candidates, vm_here, p.context_lib_dissent_gap, p.context_lib_dissent_cov):
                         doubts.append("context_lib_dissent")

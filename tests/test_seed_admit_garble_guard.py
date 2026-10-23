@@ -23,7 +23,8 @@ def _ctx(tmp_path, monkeypatch, **params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
-    kwargs = {"seed_admit": SeedAdmitParams(**params)} if params else {}
+    params.setdefault("context_page_end_review", False)  # 单列自造格即页末格
+    kwargs = {"seed_admit": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 

@@ -126,7 +126,7 @@ def _run_ctx(tmp_path, monkeypatch, cands, dec, params=None):
         dict(slot=1, verdict="unsure", cov=cands[0][1], wmax=10.0, candidates=list(cands))]))
     write_product(ctx, "context_decide", 1, context_decision=page_decision(
         1, "tbook", col=1, recs=[dict(slot=1, source="context", **dec)]))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", "context_page_end_review": False, **(params or {})})
     return STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"].columns[0].chars[0]
 
 
@@ -141,3 +141,13 @@ def test_seed_admit_context_variant_form(tmp_path, monkeypatch):
     assert not r.admit and "context_variant_form" in r.doubts
     r = _run_ctx(tmp_path, monkeypatch, cands, dec, {"context_variant_form_guard": False})
     assert r.admit and r.channel == "context" and r.char == "叅"
+
+
+def test_seed_admit_context_page_end(tmp_path, monkeypatch):
+    # 页末格整理本对位常丢（只收两头 equal 夹住的 replace），context 字改送审
+    cands = [("事", 0.95), ("牽", 0.90)]
+    dec = dict(char="事", margin=0.9, ranked=[("事", 0.9), ("牽", 0.05)])
+    r = _run_ctx(tmp_path, monkeypatch, cands, dec, {"context_page_end_review": True})
+    assert not r.admit and "context_page_end" in r.doubts
+    r = _run_ctx(tmp_path, monkeypatch, cands, dec)
+    assert r.admit and r.channel == "context"
