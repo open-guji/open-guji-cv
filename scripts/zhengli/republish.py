@@ -278,6 +278,24 @@ def sprites_gate(doc: dict, a) -> None:
         return
     sys.exit(f"✗ {msg}。先用 add-sprites 补齐（会连相似字图一起重建），或加 --ack-missing-sprites")
 
+def pack_label(rev: str) -> str:
+    return f"rev-{rev}"
+
+
+def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
+    """出单版产物存成包 `rev-<rev>`（GUJI-730 P1-1）：落这张单上的票时 `guji cellvotes draft --pack rev-<rev>`
+    直接取回当锚，不用重跑，格号也不会漂。存不成只告警（落票退回老办法：重跑有票的页）。"""
+    if getattr(a, "no_pack", False):
+        return None
+    label = pack_label(rev)
+    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "products", "pack", "push", book, "--label", label,
+             "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"],
+            cwd=CV, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    if p.returncode:
+        print(f"⚠ 出单版产物包 {label} 没存成（见上）：落票时只能重跑有票的页算锚")
+        return None
+    return label
+
 def sync_and_publish(a, ws: Path) -> bool:
     """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
     p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
@@ -429,15 +447,21 @@ def cmd_push(a) -> int:
     if pages.exists():
         cmd += ["--pages-json", pages]
     run(cmd, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    label = pack_rev(a, ws, book, a.rev) if a.sync else None
     published = sync_and_publish(a, ws) if a.sync else False
     todo = [] if a.sync else [f"guji db sync -w {ws}   # 推进中心库，网站每日 proofing-sync 才拿得到"]
+    if label:
+        print(f"出单版产物包：{label}；落这张单的票用 guji cellvotes draft … --rev {a.rev} --pack {label}")
+    elif a.sync:
+        todo.append(f"guji products pack push {book} --label {pack_label(a.rev)}   # 出单版产物包，落票免重跑")
     if not a.book_text:
         todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）"]
     if not published:
         todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：单子推了就手动跑 kaiyuanguji-web 的 "
                  "proofing-sync.yml（target=production、parts=publish、dry_run=false）；加 --sync 时本脚本自动触发"]
     todo += ["book-text PR 合了之后跑 kaiyuanguji-web 的 data.yml（flow=text），网站文本才换新",
-             f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}"]
+             (f"guji products pack promote {book} --label {label}   # 这一版是正式结果就标 main" if label else
+              f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}")]
     if doc_new.get("sprites"):
         todo.append("雪碧图已进 R2，单子里的 sprites[] 会随 guji db sync 进中心库；网站 proofing-sync（publish）发布时一并传到 COS")
     elif plan.get("sprites"):
@@ -767,6 +791,7 @@ def main(argv=None) -> int:
             p.add_argument("--note", help="book-text CHANGES 一行的说明")
             p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
             p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
+            p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
     a = ap.parse_args(argv)

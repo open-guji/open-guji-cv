@@ -246,6 +246,13 @@ guji cellvotes write vol04 <目录> --batch H-web-vol04-<日期> --reviewer <投
 guji db sync -w <工作区>                                   # 推库（先报告、等点头）
 ```
 
+**出单时存了产物包的单子（2026-10-23 起，`republish.py push --sync` 自动存 `rev-<rev>`）不用重跑**：draft 加
+`--pack rev-<rev>`、不给 `--cord`，锚和格位都按出单版产物算，write 自动用同一份（GUJI-730 P1-1）：
+
+```bash
+guji cellvotes draft vol05 --site-book 96mid1ogzk --rev 005-r6 --pack rev-005-r6 --from-kv --out <目录> -w <工作区>
+```
+
 `--cord` 要用**出单那一版**的文本（rev 对应的 book-text 版本）：现行 cv 重切过的列，旧格号已经不是读者看到的字，
 这类格挂起不写。「无字」缺省挂起（排除名单只增不删），要落加 `--include-none`。
 
