@@ -17,6 +17,7 @@
       cv_version: "0.2.0"            # 生成快照的 cv 版本（登记用）
       snapshot: snap/96mid1ogzk/vol01/20261017T1243   # 工作区 git 里的快照分支
       # 或 manifest: snapshots/vol01-r1/manifest.json （相对工作区）
+      # 或 pack: freeze-1.0.0-20261023T1800   （`guji freeze register` 写；R2 冻结包旁的 baseline.json）
 
 只读，不改产物。本模块在 `ops/`，不在任何 Step 的 `code_deps`。"""
 from __future__ import annotations
@@ -34,12 +35,18 @@ class FreezeError(RuntimeError):
 
 def is_frozen(book) -> bool:
     fz = getattr(book, "freeze", None) or {}
-    return bool(fz.get("snapshot") or fz.get("manifest"))
+    return bool(fz.get("snapshot") or fz.get("manifest") or fz.get("pack"))
 
 
 def load_baseline(book, ws: Path) -> dict:
     """读冻结基线的快照 manifest（guji-snap/1）。"""
     fz = getattr(book, "freeze", None) or {}
+    if fz.get("pack"):                      # `guji freeze register` 写的：R2 冻结包旁的 baseline.json（GUJI-694）
+        from .freeze_register import load_pack_baseline
+        try:
+            return load_pack_baseline(fz["pack"], book.id, ws)
+        except Exception as e:  # noqa: BLE001 —— 取不到就说清楚，不让 close-check 崩
+            raise FreezeError(f"取不到冻结包 {fz['pack']} 的 baseline.json：{e}") from e
     if fz.get("manifest"):
         p = Path(fz["manifest"])
         p = p if p.is_absolute() else Path(ws) / p
@@ -49,7 +56,7 @@ def load_baseline(book, ws: Path) -> dict:
             raise FreezeError(f"读不到冻结基线 manifest {p}：{e}") from e
     ref = fz.get("snapshot")
     if not ref:
-        raise FreezeError("册配置 freeze: 既没写 snapshot 也没写 manifest")
+        raise FreezeError("册配置 freeze: 没写 pack、snapshot 或 manifest")
     for r in (ref, f"origin/{ref}"):
         out = subprocess.run(["git", "-C", str(ws), "show", f"{r}:manifest.json"],
                              capture_output=True, text=True, encoding="utf-8")
@@ -130,7 +137,7 @@ def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dic
             else:
                 not_counted += n
     n_new = human_events_since(book.id, str(base.get("created") or ""), feedback_root)
-    label = (f"冻结基线 {fz.get('snapshot') or fz.get('manifest')}"
+    label = (f"冻结基线 {fz.get('pack') or fz.get('snapshot') or fz.get('manifest')}"
              f"（文本 {fz.get('at', '?')}，cv {fz.get('cv_version') or (base.get('cv') or {}).get('version') or '?'}）")
     bad = bool(cmp["changed"] or cmp["missing"] or cfg_changed)
     parts = [label,
