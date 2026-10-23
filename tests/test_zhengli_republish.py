@@ -85,6 +85,31 @@ def test_prep_then_push(tmp_path, monkeypatch, capsys):
     assert "book-text" in capsys.readouterr().out
 
 
+def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
+    """旧单 006-r2 上有票没落成人裁就不换单（G0）；看不出的票、已有人裁的格不算；--ack-unlanded-votes 照换。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
+                    "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
+    web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r2.jsonl"
+    web.parent.mkdir(parents=True)
+    vote = lambda a, choice, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": 1}
+    web.write_text("\n".join(json.dumps(v) for v in (
+        vote("1:1:3", "char", "甲"),          # 已有人裁：落了
+        vote("1:1:9", "unsure"),              # 看不出：不用落
+        vote("1:1:2", "char", "乙"),          # 没落
+    )) + "\n", encoding="utf-8")
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: None)
+    push = ["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes"]
+    with pytest.raises(SystemExit, match="1:1:2"):
+        rp.main(push)
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r2"                  # 门在动任何东西之前
+    assert rp.main(push + ["--ack-unlanded-votes", "测试"]) == 0
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
+
+
 def test_sync_then_publish_web(tmp_path, monkeypatch):
     """推库成功才触发网站 proofing-sync；sync 失败、--no-publish-web、没有 gh 都不触发。"""
     import argparse

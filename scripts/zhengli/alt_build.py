@@ -112,7 +112,9 @@ def main(argv: list[str] | None = None) -> int:
     for c in pend["cells"]:
         if c.get("alt"):
             n_cells += 1
-            c = dict(c, alt=[dict(x, g=pos[x["c"]]) if x["c"] in pos else x for x in c["alt"]])
+            # 两套字体都没有的字不出图，也去掉旧单上残留的 g（指向的格子在新图里已是别的字）
+            c = dict(c, alt=[dict(x, g=pos[x["c"]]) if x["c"] in pos else {k: v for k, v in x.items() if k != "g"}
+                             for x in c["alt"]])
         cells.append(c)
     (a.out / "pending.with-alt.json").write_text(json.dumps(dict(pend, cells=cells), ensure_ascii=False, indent=1),
                                                  encoding="utf-8")
