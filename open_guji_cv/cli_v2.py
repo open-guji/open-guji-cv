@@ -103,6 +103,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv.append("--allow-sample-db")
     if getattr(args, "allow_cv_mismatch", False):
         argv.append("--allow-cv-mismatch")
+    if getattr(args, "allow_missing_deps", False):
+        argv.append("--allow-missing-deps")
     return argv
 
 
@@ -177,6 +179,23 @@ def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> Non
     sys.exit(2)
 
 
+def _preflight_deps(eng, steps: list[str], allow: bool = False) -> None:
+    """起跑前查这次要跑的步骤本机缺不缺依赖（`ops/preflight.py`，GUJI-654）；缺了拒跑，`--allow-missing-deps` 放行。"""
+    import os
+    from .ops import preflight
+    allow = allow or os.environ.get("GUJI_ALLOW_MISSING_DEPS") == "1"
+    missing = preflight.check(eng, steps)
+    if not missing:
+        return
+    head = "⚠ 本机缺依赖（--allow-missing-deps 放行，照跑）：" if allow else "✗ 本机缺依赖，拒跑（退出码 2）："
+    print(head, file=sys.stderr)
+    for m in missing:
+        print(f"  - {m}", file=sys.stderr)
+    print(f"  装齐：{preflight.INSTALL_HINT}；确实要在缺东西的机器上跑加 --allow-missing-deps", file=sys.stderr)
+    if not allow:
+        sys.exit(2)
+
+
 def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
@@ -188,6 +207,7 @@ def cmd_pipeline(args) -> None:
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     _ensure_glyph_pin(eng.book)
+    _preflight_deps(eng, steps, allow=getattr(args, "allow_missing_deps", False))
     if "rare_candidates" in steps:
         _warn_rare_index_missing(eng.book.id)
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
@@ -2792,6 +2812,9 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
     p.add_argument("--allow-cv-mismatch", action="store_true",
                    help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
                         "做实验、临时核对时用，产物 manifest 照实记装的版本")
+    p.add_argument("--allow-missing-deps", action="store_true",
+                   help="这次要跑的步骤本机缺依赖（torch／权重／shadow_veto 要的 joblib）时仍然跑（默认拒跑，退出码 2；GUJI-654）。"
+                        "缺的东西会让 Step 悄悄退回旧办法或整页失败，只在明知后果时加")
     p.add_argument("--allow-sample-db", action="store_true",
                    help="没设 GUJI_WORKSPACE 时，显式声明「就是要用仓内那份几百条的示例库」再跑"
                         "（不加这个、又没设 GUJI_WORKSPACE，直接报错——2026-09-09 吃过亏：漏设变量"

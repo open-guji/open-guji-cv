@@ -420,7 +420,7 @@ def cmd_publish_status(args) -> None:
         _print(f"{tag}{res['where']}：{len(res['rows'])} 行，内容没变，不写")
     else:
         _print(f"{tag}{res['where']}：{len(res['rows'])} 行（新增 {c['added']}、改 {c['changed']}、不变 {c['same']}、"
-               f"去掉 {c['removed']}）" + ("，已写" if res["written"] else "，未写"))
+               f"撤回 {c['reopened']}）" + ("，已写" if res["written"] else "，未写"))
 
 
 # ---------------- revise ----------------

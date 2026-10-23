@@ -5,6 +5,14 @@
 
 ## [未发版]
 
+## [0.5.9] - 2026-10-22
+
+PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。
+
+### Fixed
+- Step3 row_segment 1.37（PATCH）：`layout_prior` 开着、表在、表里却没有本册时直接报错，不再悄悄当关。殿本 vol11–20 首跑就是册配置写了关、表里也没这 10 册，对表逐格全对只有 94.7%（vol04–10 带表 100%）。同时中心库补了 vol11–20 的页映射与格位表（rev 93491，15,825 列），册配置改回开。`row_segment` 的 `code_hash` 变了，缺省输出不变（有表的册逐字节相同）。
+- `guji opinions publish-status`（GUJI-714 后续，PATCH）：① 上次发过、这次算不出状态的 target（意见重开、改判成不写的状态）写一行 `state:"open"`，网站 proofing-sync 据此撤回 KV 里的旧状态（原来旧状态一直留着，实时页与 COS 清单不一致）；② 人裁驳回又没写公开理由、判定为原文不误的，回复用模板句「此处原文作「甲」，暂不改」（原来读者只看到「未采纳」）；③ 撤销过 dup 的意见照常带回复（原来只要有过 dup 记录就不回）。不碰任何 Step，`code_hash` 不变。
+
 ## [0.5.8] - 2026-10-22
 
 PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_detect`、切分 `row_segment` 1.36、字框收缩 `cell_shrink` 1.19–1.20、外框线回直线 `border_detect` 1.5、文意组加字形第二路（cv#429，新增 12 个组模板库 rr ts ly wj zh yh yt js em fc yr xz）、厯歴／呂吕／徵徴 判法调整、己已巳／日曰 收口、影子复核按册码位归一（v0.5.7 漏带）。相对 v0.5.7，`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`seed_admit` 七步 `code_hash` 变，另新增 `invert_detect`，**各书 Step1 起全部判过期**；其余 11 步不变。新组 weiw shan di qin 要在册配置 `group_flow` 点名；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3851 过、66 跳过、1 条报错；报错的是一条测试守卫，已修（装了 psycopg 而没给测试库时，`test_datastore_expbranch` 一条用例报错而不是跳过，只改测试）。
@@ -18,6 +26,11 @@ PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_d
 - 导出 cord 时同一格号的两个 blank 格只发一个 mark：夹注 a／b 两半都被 Step3 记空（`layout_frame_junk`）后同一格号有两个 blank、blank 没有 sub，mark id 撞，`guji export`／`republish.py from-pack` 在页检查报「id 重复」（v0.5.7 重跑 vol05 p3 第 4 列 slot 11、12）。只改导出，不动任何 Step，`code_hash` 不变；Step3 产物里的重复 blank 留着无害。
 
 ### Added
+- R6 整页／整列丢字检查 `ops/col_gate`（GUJI-661）：读 Step3 与原图，报「整列没切出」与「单字墨段没被字格接住」，抹掉版框折角与污渍后再判。`scripts/zhengli/col_gate.py` 单跑，`collect_exit.py` 加 R6 项（`exit_report.py` 有数才判）。只报告，不改产物，不动任何 Step。殿本 v0.5.7 包 vol04–10 误报每册 0–12 处；自造缺陷召回：整列格记空 100%、整列没切出约 85%、整列错位 0.6 格约 65–73%；真书历史案例（vol03 57:1 等）云端没有当时的旧产物，未能复现。
+- `feedback/exclusion_check.stale_by_binding` + `scripts/zhengli/stale_exclusions.py`：列出人裁排除名单里裁决锚点与当前切图对不上的格（只报告；GUJI-659／623）。
+- 粗校出口 R4 异常表可写成 JSON（GUJI-666，`scripts/zhengli/collect_exit.py` 的 `load_anomaly`）：`{"rows": [{n, text, cause, concl, pages?, cols?}]}`，`pages`／`cols` 给了就不再从「现象」里抠 pN colM；格式错报具体位置（JSON 报行列和 `rows[i]`，md 报第几行），不再是整表悄悄 FAIL 或悄悄少读几行。老 md 表照读。体检结果带字形库指纹那一半早由 GUJI-710 做掉。
+- `guji pipeline`／`guji step` 起跑前自检依赖（GUJI-654，`ops/preflight.py`）：这次要跑的步骤用得上的东西本机缺了就拒跑（退出码 2）并点名——Step3 切点裁判（`cut_judge=unet`）和 Step5-b 要 torch 与权重，册配置开了 `shadow_veto` 的 Step7 要 joblib／scikit-learn。以前这些都是悄悄退回旧办法或整页失败（10-21 vol08 缺 joblib，seed_admit 69 页全失败，pipeline 仍返回 0）。`--allow-missing-deps` 或 `GUJI_ALLOW_MISSING_DEPS=1` 放行。不动任何 Step 与 code_deps。
+- 待审单雪碧图改成「文件名带内容哈希、真源进 R2」（GUJI-675，方案 B）：`scripts/zhengli/sprite_pub.py`——`republish.py prep` 把图改名 `<原名>.<sha8>.webp`、单子顶层写 `sprites[]`，`push` 先把图按 sha256 传进 R2 main 桶（`datastore/r2.py` 认 `webp` 后缀）再写单子；新增 `republish.py add-sprites` 给线上旧单补图（重建后逐格核坐标，一格对不上就不动）。网站 proofing-sync 读 `sprites[]` 发到 COS（kaiyuanguji-web 同步改）。不动任何 Step 与 code_deps。
 - Step0 反色带候选 `invert_detect`（Sheldon 10-22 定「自动认＋送审，人点头才修」）：排在 Step1 之前，判据是「长横黑条里界行翻成白缝、带外接着是黑界行」，产物 `inverted` 列出每页候选黑条、翻白界行道数和建议修法（一条 `preclean:` 规则，量不到上下沿就退成矩形）。只送审、不自动修：殿本十册原图上已登记的 15 处全中，另报 13 页，Sheldon 看过都是粗外框或封面。已登记 `preclean:` 的页读修好的图，不再报。控制台卡片和点头后自动修在下一个 PR。
 - 反色带送审与点头才修：控制台 Step0 页加「反色带候选」卡，一页一张，原图与照建议修法修后的预览并排，点「是／否」落 `inverted_band` 事件（问题 `invert_detect.page.is_inverted`，裁决表 `preprocess/inverted-band`）。点「是」的页 Step0 照规则修，修好的图放派生缓存 `<cache>/precleaned/<book>/<页>_<规则哈希>.png`，`effective_raw_path` 读它，原图 sha 变、各步自然判过期；人审放行不再过墨量闸。点「否」的页不再出卡（勾「含已否」可改判）。书 yaml `preclean:` 登记的页照旧以登记为准。接口 `/api/invert-review/cards`、`/api/invert-review/preview`。
 - 反色带候选 `invert_detect` 1.1：先排掉不在正文里的黑条（Sheldon 10-22 嫌 1.0 误报多）。黑条不足 12 行（上框粗线）、上方是空白天头（页顶外框）、上下是满纸花纹（封面、书衣）都不报。殿本十册 1,707 页：已登记 15 处全中，误报 13 页降到 2 页（vol06 p40、vol08 p67，抬头格下的粗横线，与已登记的 vol02 p136 几何上分不开）。阈值在同一批十册上定，没有留出验证。

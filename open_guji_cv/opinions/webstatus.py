@@ -21,13 +21,14 @@ log 里有 ``replied``（已回复读者的定稿文字）的，回复用它，�
 
 ``status.jsonl`` 一行：``{v:1, book, volume, target, state, version?, reason?, reply?, opinions:[id…], ts}``，
 按章、格位、target 排序；内容（除 ``ts``）没变的行保留旧 ``ts``，整份没变就不重写（幂等）。
+上次发过、这次没有状态的 target 留一行 ``state: "open"``（撤回网站上的旧状态）。
 """
 from __future__ import annotations
 
 import json
 import re
 
-from .rules import reply_body
+from .rules import reply_body, template_core
 from .schema import Opinion, cell_key, now_iso
 from .store import LocalBackend, RemoteBackend
 
@@ -113,6 +114,12 @@ def _reply_for(store, op: Opinion, state: str, version: str | None, reason: str)
     if state == "adopted":
         return (REPLY_APPLIED.format(v=version) if version else REPLY_PENDING) + body
     if state == "rejected":
+        if not body and not (reason or "").strip():
+            # 人裁驳回又没写公开理由：判定是「原文不误」且知道原字的，回复用模板句（「此处原文作「甲」，暂不改」），
+            # 不然读者只看到「未采纳」
+            if tri is not None and tri.data.get("verdict") == "text_ok" and (op.target or {}).get("check"):
+                return template_core("text_ok", tri.data.get("revision"), op)
+            return ""
         # 理由已在状态里显示；回复只在比理由多出内容时才带
         if not body or body.strip("。 ") == (reason or "").strip("。 "):
             return ""
@@ -175,8 +182,8 @@ def compute(store) -> tuple[list[dict], list[str]]:
             reason = _clip("；".join(rs), REASON_MAX)
         replies = []
         for o in lead:
-            if store.last(o.id, "dup") is not None:
-                continue  # 重复票的回复归本条
+            if stat.get(o.id) == "dup":
+                continue  # 重复票的回复归本条（看当前状态：撤销过 dup 的意见照常回复）
             r = _reply_for(store, o, state, version, reason)
             if r and r not in replies:
                 replies.append(r)
@@ -202,7 +209,10 @@ def _strip_ts(r: dict) -> dict:
 
 
 def render(rows: list[dict], old_text: str | None, ts: str | None = None) -> tuple[str, dict]:
-    """新行 → 文件全文。与旧文件同 (章, target) 且内容相同的行保留旧 ts。返回 (全文, 计数)。"""
+    """新行 → 文件全文。与旧文件同 (章, target) 且内容相同的行保留旧 ts。返回 (全文, 计数)。
+
+    旧文件有、这次算不出状态的 target（意见重开、改判成不写的状态……）写一行 ``state: "open"``，
+    网站据此把 KV 里的旧状态撤回；已经是 open 的旧行原样保留（幂等，日后有了新状态再被顶掉）。"""
     old = {}
     for ln in (old_text or "").splitlines():
         if ln.strip():
@@ -212,7 +222,7 @@ def render(rows: list[dict], old_text: str | None, ts: str | None = None) -> tup
                 continue
             old[(d.get("volume"), d.get("target"))] = d
     ts = ts or now_iso()
-    out, n = [], {"same": 0, "changed": 0, "added": 0, "removed": 0}
+    out, n = [], {"same": 0, "changed": 0, "added": 0}
     for r in rows:
         prev = old.pop((r["volume"], r["target"]), None)
         if prev is not None and _strip_ts(prev) == r and prev.get("ts"):
@@ -221,7 +231,17 @@ def render(rows: list[dict], old_text: str | None, ts: str | None = None) -> tup
         else:
             out.append({**r, "ts": ts})
             n["changed" if prev is not None else "added"] += 1
-    n["removed"] = len(old)
+    n["reopened"] = 0
+    for prev in old.values():
+        if not prev.get("volume") or not prev.get("target"):
+            continue
+        if prev.get("state") == "open" and prev.get("ts"):
+            out.append(prev)
+            continue
+        out.append({"v": 1, "book": prev.get("book"), "volume": prev["volume"], "target": prev["target"],
+                    "state": "open", "opinions": prev.get("opinions") or [], "ts": ts})
+        n["reopened"] += 1
+    out.sort(key=_target_key)
     return "".join(_line(r) + "\n" for r in out), n
 
 
