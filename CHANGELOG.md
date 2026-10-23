@@ -1,12 +1,13 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]`
-### Fixed
-- seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
- 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
+
+### Fixed
+- seed_admit `rare_ref`（两遍）也认 `lane_keep_ref_review`（A24）：被 `ctx_guard_ref`／`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格不再由 rare_ref 按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」，旧版放成「木」）。开了 rare_ref 的册参数 dump 多出该键，`code_hash` 变，各册只需重落 seed_admit。
+- seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
 ### Added
 - `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
