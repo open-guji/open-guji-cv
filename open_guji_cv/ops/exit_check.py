@@ -145,8 +145,8 @@ def run(text_dir: Path, chapter: str, freeze: dict | None, cv_version: str | Non
 
     fz = freeze or {}
     miss = [k for k in ("cv_commit", "cv_version") if not fz.get(k)]
-    if not (fz.get("snapshot") or fz.get("manifest")):
-        miss.insert(0, "snapshot")
+    if not (fz.get("snapshot") or fz.get("manifest") or fz.get("pack")):
+        miss.insert(0, "snapshot／pack")
     items.append(_item("E5", "冻结段完整", bool(fz) and not miss,
                        "册 yaml 没有 freeze:" if not fz else ("" if not miss else f"freeze 缺 {'、'.join(miss)}")))
 

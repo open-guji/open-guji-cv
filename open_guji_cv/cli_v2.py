@@ -3479,6 +3479,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
     _add_cellvotes(sub)
     COMMANDS_V2["cellvotes"] = cmd_cellvotes
+    # freeze（GUJI-694）：冻结登记；带 book，-w 由下面统一加
+    from .cli_freeze import add_parser as _add_freeze, cmd_freeze
+    _add_freeze(sub)
+    COMMANDS_V2["freeze"] = cmd_freeze
     install_workspace_option(sub)
 
 

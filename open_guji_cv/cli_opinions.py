@@ -11,7 +11,7 @@
     guji opinions to-user --out <目录>／decide --from <裁决 JSON>
     guji opinions revise  --book B --vol 002 --book-text <检出> [--dry-run] --pr N
     guji opinions reply-drafts --book B --ws W
-    guji opinions auto decide|prepare|finish-pr|finish-merged|digest --book B --ws W --remote ...   # 自动化调和器（rules.json 的 auto 段）
+    guji opinions auto decide|prepare|finish-pr|finish-merged|revert|finish-revert|digest --book B --ws W --remote ...   # 自动化调和器（rules.json 的 auto 段）
     guji opinions publish-status --book B --ws W [--remote] [--dry-run]  # 处理结论 → 中心库 feedback/lists/web/<书>/status.jsonl（网站回显）
 
 意见池在哪：缺省是本机数据目录 `$GUJI_DATA_HOME/<分支>/<工作区>/feedback/lists/opinions/<书>/`（`guji db sync` 推进中心库）；
@@ -508,6 +508,24 @@ def cmd_auto(args) -> None:
                 return {"rows": len(r["rows"]), "written": r["written"], "where": r["where"]}
             res = A.finish_merged(st, args.release, args.commit, publish_status=pub)
             _print(json.dumps(res, ensure_ascii=False))
+        elif sub == "revert":
+            from .opinions import revert as RV
+            from .opinions.textsrc import default_book_text
+            root = default_book_text(args.book_text)
+            if not root:
+                raise SystemExit("revert 要本地 book-text 检出（--book-text 或 GUJI_BOOK_TEXT）")
+            res = RV.prepare_revert(st, root, args.release, args.reason or "", run_checks=not args.no_checks, trailers=args.trailer)
+            _print(json.dumps(res, ensure_ascii=False, indent=1))
+        elif sub == "finish-revert":
+            from .opinions import revert as RV
+            backend = W.status_backend(args.book, ws=args.ws, root=args.root, remote=args.remote,
+                                       token_env=args.token_env, branch=args.branch)
+
+            def pub2():
+                r = W.publish(st, backend, dry_run=args.dry_run)
+                return {"rows": len(r["rows"]), "written": r["written"], "where": r["where"]}
+            res = RV.finish_revert_merged(st, args.release, args.commit, publish_status=pub2)
+            _print(json.dumps(res, ensure_ascii=False))
         elif sub == "digest":
             _print(A.digest(st, rules, since=args.since))
             return
@@ -653,7 +671,7 @@ def add_parser(sub) -> None:
     p.set_defaults(func=cmd_publish_status)
 
     p = s.add_parser("auto", help="自动化调和器：decide 自动结案、prepare 聚批改文本、finish-pr／finish-merged 收尾、digest 汇总")
-    p.add_argument("auto_cmd", choices=("decide", "prepare", "finish-pr", "finish-merged", "digest"))
+    p.add_argument("auto_cmd", choices=("decide", "prepare", "finish-pr", "finish-merged", "revert", "finish-revert", "digest"))
     _common(p)
     p.add_argument("--by", default="auto", help="log 里记谁做的")
     p.add_argument("--rules", default=None, help="规则表路径（缺省 config/opinions/rules.json）")
@@ -663,9 +681,10 @@ def add_parser(sub) -> None:
     p.add_argument("--human-cells", default=None, help="prepare：保护格清单（每行一个格号，人裁或手改过的），碰到的意见不自动改")
     p.add_argument("--no-checks", action="store_true", help="prepare：不跑 local_check（只给测试用）")
     p.add_argument("--trailer", action="append", default=[], help="prepare：提交信息末尾加的行，可重复")
-    p.add_argument("--release", default=None, help="finish-pr／finish-merged：发布批 id")
+    p.add_argument("--release", default=None, help="finish-pr／finish-merged／revert／finish-revert：发布批 id（revert 给要撤销的批，finish-revert 给撤销批）")
     p.add_argument("--pr", default=None, help="finish-pr：PR 号")
     p.add_argument("--commit", default=None, help="finish-merged：合并后 main 上的提交")
+    p.add_argument("--reason", default=None, help="revert：撤销理由（必填，写进 CHANGES 和 reverted 事件）")
     p.add_argument("--since", default=None, help="digest：只列这个时间（ISO）之后的自动结案")
     p.set_defaults(func=cmd_auto)
 

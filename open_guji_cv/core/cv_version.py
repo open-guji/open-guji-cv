@@ -151,8 +151,9 @@ def frozen_mismatch(freeze: dict | None, installed_commit: str | None = None,
     所以写了 `freeze.cv_commit` 就按**提交**比，没写才按 `freeze.cv_version` 比版本。
     顶层 `cv_version` 的护栏（`mismatch`）照旧另查；冻结册顶层常常没写它，以前在 main 上照样能跑。"""
     fz = freeze or {}
-    if not (fz.get("snapshot") or fz.get("manifest")):
+    if not (fz.get("snapshot") or fz.get("manifest") or fz.get("pack")):
         return None
+    where = fz.get("pack") or fz.get("snapshot") or fz.get("manifest")
     want_commit = str(fz.get("cv_commit") or "").strip()
     if installed_commit is None and installed_version is None:
         installed_version, installed_commit = describe()
@@ -160,14 +161,14 @@ def frozen_mismatch(freeze: dict | None, installed_commit: str | None = None,
         if installed_commit and installed_commit.startswith(want_commit[:12]) and (
                 len(want_commit) < 40 or installed_commit == want_commit):
             if installed_version and installed_version.endswith("dirty"):
-                return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}），装的提交对，但 open_guji_cv/ 下有没提交的改动。"
+                return (f"本册已冻结（{where}），装的提交对，但 open_guji_cv/ 下有没提交的改动。"
                         f"1.0 后修订见 runbook「四·五」；{OVERRIDE_HINT}")
             return None
-        return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}，cv_commit={want_commit[:12]}），"
+        return (f"本册已冻结（{where}，cv_commit={want_commit[:12]}），"
                 f"装的是 {(installed_commit or '未知提交')[:12]}。请在冻结 tag 的检出上跑（如 `git worktree add … freeze/<…>`）；"
                 f"1.0 后修订见 runbook「四·五」；{OVERRIDE_HINT}")
     want = normalize(fz.get("cv_version"))
     if want and normalize(installed_version) != want:
-        return (f"本册已冻结（{fz.get('snapshot') or fz.get('manifest')}，cv_version={want}），装的是 {installed_version or '未知版本'}。"
+        return (f"本册已冻结（{where}，cv_version={want}），装的是 {installed_version or '未知版本'}。"
                 f"请检出 v{want} 再跑；{OVERRIDE_HINT}")
     return None

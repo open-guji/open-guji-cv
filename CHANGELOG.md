@@ -1,14 +1,16 @@
 # Changelog
 
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
-本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]`
-### Fixed
-- seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
- 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
+本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ## [未发版]
 
+### Fixed
+- seed_admit `rare_ref`（两遍）也认 `lane_keep_ref_review`（A24）：被 `ctx_guard_ref`／`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格不再由 rare_ref 按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」，旧版放成「木」）。开了 rare_ref 的册参数 dump 多出该键，`code_hash` 变，各册只需重落 seed_admit。
+- seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
+
 ### Added
+- `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
 - `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
 
 ### Changed
@@ -18,6 +20,7 @@
 - Step1 列距救援收紧到实测列宽带（Sheldon 10-23：殿本列宽极一致，按分布严格限）：殿本 vol04–20 共 2,969 页，内列宽／页中位 99.9% 在 0.907–1.088，最外两列 0.84–1.26。触发改为「有列出带」（内列 ±10%、外列 0.85–1.3），新列网也须全在带内；另加「列宽合格的列两边的界行不许动」，防网格把印好的真界行挪进空白（vol13 p46）。vol11–20 触发 31 页、改 8 页（原 7 页列网错位＋vol11 p55 右框线更贴界行），vol04–10 不变。
 
 ### Fixed
+- `ops/col_gate.py`（A20，A24 报）：读原图改走 `utils.image_io.imread`，不再直接调 `cv2.imread`（Windows 非 ASCII 路径会静默读空；`test_image_io_guard` 在 dev 上因此失败）。缺原图照旧跳过。不进任何 Step，`code_hash` 不变（L0）。
 - `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
 - `scripts/zhengli/republish.py add-sprites`（A20，A31 报）：核坐标时把 `img.s` 文件名也一起比了。线上单已是哈希名（`p0001.<sha8>.webp`，册 006–010 先前补过主雪碧图、只缺相似字图），重建出来是 `p0001.webp`，于是 105 格坐标全对也整单被拒。现在比之前去掉内容哈希，页名不同照样拒。发布脚本，不进任何 Step，`code_hash` 不变（L0）。
 
