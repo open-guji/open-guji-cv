@@ -68,136 +68,24 @@ export PYTHONIOENCODING=utf-8                         # Windows 控制台中文�
 
 ## 快速开始
 
+管线是 v2 切分链（`keben_body_v2`），由 `guji` 命令驱动。v1 的 `analyze / preprocess / extract / run` 已于 2026-10-06 退役删除。
+
 ```bash
-# 第一步：分析版式特征
-python -m open_guji_cv analyze data/book1/
+export PYTHONIOENCODING=utf-8
+export GUJI_WORKSPACE=<册所在的工作区>   # 册定义（books/*.yaml）从这里读
 
-# 第二步：图像预处理（裁剪 → 增强 → 二值化）
-python -m open_guji_cv preprocess data/book1/
-
-# 第三步：版面 + 字符检测，输出结构化 JSON
-python -m open_guji_cv extract data/book1/
-
-# 一键运行全部流程
-python -m open_guji_cv run data/book1/
+guji pipeline keben_body_v2 <册> --pages all -w <工作区>   # 跑一册
+guji status <册> -w <工作区>                                # 看各步进度
 ```
 
----
+链上前两步与页型相关：
 
-## CLI 命令参考
-
-### 全局选项
-
-| 选项 | 默认值 | 说明 |
-|------|--------|------|
-| `-o, --output` | `output` | 输出根目录 |
-
-### 通用选项（preprocess / extract / run）
-
-| 选项 | 说明 |
+| 步骤 | 作用 |
 |------|------|
-| `--profile PATH` | 指定 profile.json 路径（默认自动查找） |
-| `--range RANGE` | 处理范围，如 `3-6` 或 `1,3,5` |
+| Step0 `page_survey` / `invert_detect` | 页面尺寸预检；反色带候选（只送审，不自动修） |
+| Step1 `border_detect` | 版框、界行、抬头框与列类型；出口闸判页型（`page_type` / 网格策略） |
 
----
-
-### `analyze` — 第一步：版式分析
-
-```bash
-python -m open_guji_cv analyze data/book1/
-```
-
-对文件夹内样本图片（最多 10 张）自动分析，生成 `data/book1/profile.json`。
-
-检测内容：边框类型（双层/单层）、页面类型（半页/筒子页）、行列数、书脊阴影等。
-
----
-
-### `preprocess` — 第二步：图像预处理
-
-```bash
-python -m open_guji_cv preprocess data/book1/
-python -m open_guji_cv preprocess data/book1/ --range 3-6   # 只处理第 3~6 张
-```
-
-按顺序执行 s1~s6，输出到 `output/book1/`：
-
-| 步骤 | 名称 | 条件 |
-|------|------|------|
-| s1 | 裁书脊阴影 | `spine_shadow` 在干扰项中 |
-| s2 | 裁边框 | 始终执行 |
-| s3 | 直线增强 | 始终执行 |
-| s4 | 倾斜校正 | 始终执行 |
-| s5 | 拆分筒子页 | `page_type == "uncut_full"` |
-| s6 | 二值化 | 始终执行 |
-
----
-
-### `extract` — 第三步：版面与字符检测
-
-```bash
-python -m open_guji_cv extract data/book1/                    # 两步全做（默认）
-python -m open_guji_cv extract data/book1/ --steps layout     # 只做版面检测
-python -m open_guji_cv extract data/book1/ --steps grid       # 只做字符网格
-python -m open_guji_cv extract data/book1/ --range 1-5
-```
-
-| `--steps` | 说明 |
-|-----------|------|
-| `all`（默认） | Phase 2 版面检测 + Phase 3 字符网格，全部执行 |
-| `layout` | 只做版面检测（边框 + 列结构） |
-| `grid` | 只做字符网格定位（需先有 layout 结果） |
-
-输出到 `output/book1/phase2_layout/` 和 `output/book1/phase3_char_grid/`：
-- `{stem}_layout.json` / `{stem}_char_grid.json` — 结构化数据
-- `{stem}_annotated.png` — 可视化标注图
-
----
-
-### `run` — 一键完整管线
-
-```bash
-python -m open_guji_cv run data/book1/                        # 全部图片
-python -m open_guji_cv run data/book1/ --range 3-6            # 指定范围
-python -m open_guji_cv run data/book1/ --format combined       # 合并为单个 JSON
-python -m open_guji_cv run data/book1/ --clean                 # 完成后删除中间文件
-```
-
-依次执行 analyze → preprocess → extract 三步，最终输出到 `output/book1/results/`：
-
-| 文件 | 说明 |
-|------|------|
-| `{stem}.json` | 检测结果（边框、列、字符位置与文字） |
-| `{stem}_preprocessed.png` | 预处理后的二值化图片 |
-| `{stem}_annotated.png` | 合并标注图 |
-
----
-
-### `show-profile` — 查看版式配置
-
-```bash
-python -m open_guji_cv show-profile data/book1/
-```
-
----
-
-## 输出目录结构
-
-```
-output/<book_name>/
-├── profile.json              # BookProfile（版式配置）
-├── manifest.json             # 执行记录
-├── s2_crop_border/
-├── s3_enhance_lines/
-├── s4_deskew/
-├── s6_binarize/              # 最终二值化图像
-├── phase2_layout/            # 版面检测结果
-├── phase3_char_grid/         # 字符网格结果
-└── results/                  # 最终输出
-    ├── {stem}.json
-    ├── {stem}_preprocessed.png
-    └── {stem}_annotated.png
-```
+页型判别的口径、评测与局限见 `doc/pipeline_handbook.md`（§「怎么筛正文页」与 P0/P2 段）；整册操作流程见 `doc/runbook/整理一册书.md`。
 
 ---
 
