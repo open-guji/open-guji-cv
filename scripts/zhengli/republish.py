@@ -138,15 +138,17 @@ def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
     return rows, "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
 
 
-def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]) -> list[dict]:
+def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> list[dict]:
     """旧单上还没落成人裁的票（G0；第五册 168 票就是新单先上、票后落才漂了格位）。
 
     每格最后一票：「看不出」不用落；该格已有定了字的人裁（这批票写进去的，或与票一致而跳过的）算落了；其余都算没落，
-    包括缺省挂起的「无字」——要么落（`cellvotes write --include-none`），要么明说照换（--ack-unlanded-votes）。"""
+    包括缺省挂起的「无字」——要么落（`cellvotes write --include-none`），要么明说照换（--ack-unlanded-votes）。
+    `held`：cellvotes draft 的挂起清单（held.tsv 第一列）里的格算「已记为挂起」（G0 允许），不拦。"""
     sys.path.insert(0, str(CV))
     from open_guji_cv.feedback.web_votes import latest_votes
     from pending_route import cell_of, deciding
     latest, _ = latest_votes(votes, text_id, rev)
+    held = set(held or ())
     decided: set[str] = set()
     for f in sorted((data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
         for line in f.read_text(encoding="utf-8").splitlines():
@@ -158,7 +160,7 @@ def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict
                 c = cell_of(e, book)
                 if c:
                     decided.add(c)
-    return [v for v in latest if v["choice"] != "unsure" and v["a"] not in decided]
+    return [v for v in latest if v["choice"] != "unsure" and v["a"] not in decided and v["a"] not in held]
 
 
 def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a) -> None:
@@ -166,7 +168,11 @@ def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: 
     if not old_rev or old_rev == new_rev:
         return
     votes, src = old_rev_votes(ws, text_id, old_rev)
-    left = unlanded_votes(ws, book, text_id, old_rev, votes)
+    hf = getattr(a, "held_file", None)
+    held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
+    left = unlanded_votes(ws, book, text_id, old_rev, votes, held)
+    if held:
+        print(f"挂起清单 {hf}：{len(held)} 格记为挂起，不拦")
     print(f"旧单 {old_rev} 的票（{src}）：{len(votes)} 张，未落 {len(left)} 格")
     if not left:
         return
@@ -794,6 +800,7 @@ def main(argv=None) -> int:
             p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
     a = ap.parse_args(argv)
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 
