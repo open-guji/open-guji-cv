@@ -85,6 +85,37 @@ def test_prep_then_push(tmp_path, monkeypatch, capsys):
     assert "book-text" in capsys.readouterr().out
 
 
+def test_sync_then_publish_web(tmp_path, monkeypatch):
+    """推库成功才触发网站 proofing-sync；sync 失败、--no-publish-web、没有 gh 都不触发。"""
+    import argparse
+    import subprocess
+    calls = []
+
+    def fake_run(rc_sync):
+        def _run(cmd, **kw):
+            cmd = [str(c) for c in cmd]
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, rc_sync if "sync" in cmd else 0, "", "")
+        return _run
+
+    monkeypatch.setattr(rp.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(rp, "run", fake_run(0))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is True
+    assert calls[-1][:3] == ["gh", "workflow", "run"] and "parts=publish" in calls[-1] and "dry_run=false" in calls[-1]
+
+    calls.clear()
+    monkeypatch.setattr(rp, "run", fake_run(1))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is False
+    assert not any(c[0] == "gh" for c in calls)
+
+    calls.clear()
+    monkeypatch.setattr(rp, "run", fake_run(0))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=True), tmp_path) is False
+    monkeypatch.setattr(rp.shutil, "which", lambda name: None)
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is False
+    assert not any(c[0] == "gh" for c in calls)
+
+
 def test_from_pack_helpers(tmp_path, monkeypatch):
     d = tmp_path / "bt" / "Book" / "g" / "z" / "k" / "96mid1ogzk" / "default"
     d.mkdir(parents=True)

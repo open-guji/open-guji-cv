@@ -176,6 +176,38 @@ def run(cmd, **kw) -> subprocess.CompletedProcess:
     return p
 
 
+WEB_REPO = "open-guji/kaiyuanguji-web"
+
+
+def publish_web(a) -> bool:
+    """推库成功后马上触发网站 proofing-sync（publish），不等每天一次的定时（GUJI-730 P0-1）。
+
+    用本机 `gh`（会话的 GitHub 授权，或环境变量 GH_TOKEN，要对 kaiyuanguji-web 有 actions 写权限）。
+    触发不了只打印手动做法，不算失败：单子已在中心库，每日定时兜底。"""
+    if getattr(a, "no_publish_web", False):
+        return False
+    if not shutil.which("gh"):
+        print("⚠ 没有 gh，网站 proofing-sync 没触发：等每日定时，或手动跑 proofing-sync.yml（production、publish、dry_run=false）")
+        return False
+    p = run(["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO,
+             "-f", "target=production", "-f", "parts=publish", "-f", "dry_run=false"])
+    if p.returncode:
+        print("⚠ 网站 proofing-sync 触发失败（见上），等每日定时或手动跑")
+        return False
+    print(f"已触发网站 proofing-sync（publish）：gh run list -R {WEB_REPO} -w proofing-sync.yml 看进度，约 3 分钟上线")
+    return True
+
+
+def sync_and_publish(a, ws: Path) -> bool:
+    """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
+            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    if p.returncode:
+        print("✗ guji db sync 失败，没触发网站发布")
+        return False
+    return publish_web(a)
+
+
 def git_head() -> str:
     return subprocess.run(["git", "rev-parse", "HEAD"], cwd=CV, capture_output=True, text=True).stdout.strip()
 
@@ -314,14 +346,14 @@ def cmd_push(a) -> int:
     if pages.exists():
         cmd += ["--pages-json", pages]
     run(cmd, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
-    if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    published = sync_and_publish(a, ws) if a.sync else False
     todo = [] if a.sync else [f"guji db sync -w {ws}   # 推进中心库，网站每日 proofing-sync 才拿得到"]
     if not a.book_text:
         todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）"]
-    todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：book-text PR 合了、单子推了，"
-             "请网站总管按顺序手动跑 kaiyuanguji-web 的 data.yml（flow=text）和 proofing-sync.yml（target=production、parts=publish、dry_run=false）",
+    if not published:
+        todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：单子推了就手动跑 kaiyuanguji-web 的 "
+                 "proofing-sync.yml（target=production、parts=publish、dry_run=false）；加 --sync 时本脚本自动触发"]
+    todo += ["book-text PR 合了之后跑 kaiyuanguji-web 的 data.yml（flow=text），网站文本才换新",
              f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}"]
     if doc_new.get("sprites"):
         todo.append("雪碧图已进 R2，单子里的 sprites[] 会随 guji db sync 进中心库；网站 proofing-sync（publish）发布时一并传到 COS")
@@ -510,10 +542,9 @@ def cmd_add_alt(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+        sync_and_publish(a, ws)
     else:
-        print(f"还要：guji db sync -w {ws}；网站 proofing-sync（parts=publish）后再清 CDN 缓存")
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
     return 0
 
 
@@ -580,10 +611,9 @@ def cmd_add_sprites(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+        sync_and_publish(a, ws)
     else:
-        print(f"还要：guji db sync -w {ws}；再请网站总管手动跑 proofing-sync（publish），网站才取得到图")
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
     return 0
 
 
@@ -600,6 +630,7 @@ def main(argv=None) -> int:
     p.add_argument("--replace", action="store_true", help="已有相似字的格也换成这次算的（相似字规则改了之后用）")
     p.add_argument("--yes", action="store_true", help="写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     p = sp.add_parser("add-sprites", help="线上单补雪碧图（传 R2、写 sprites[]，不换 rev）")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)
@@ -609,6 +640,7 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p.add_argument("--yes", action="store_true", help="传 R2、写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     for name in ("prep", "push", "from-pack"):
         p = sp.add_parser(name)
         p.add_argument("--book", required=True)
@@ -638,7 +670,8 @@ def main(argv=None) -> int:
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
             p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
             p.add_argument("--note", help="book-text CHANGES 一行的说明")
-            p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+            p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
+            p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     a = ap.parse_args(argv)
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 
