@@ -1158,8 +1158,9 @@ def test_ref_admit_char_prefers_library_orthodox_form():
     """参考字是异体键且库 top 是其正字 → 取库字；库 top 就是参考字则不动。"""
     from open_guji_cv.clustering.seeding import ref_admit_char
     from open_guji_cv.clustering.variants import VariantMap
-    vmap = VariantMap({"贯": "貫", "云": "雲"})
+    vmap = VariantMap({"贯": "貫", "云": "雲", "尙": "尚"})
     assert ref_admit_char("贯", [("貫", 0.99)], vmap) == "貫"
+    assert ref_admit_char("尙", [("尚", 0.99)], vmap) == "尙"   # 不在简体清单：刻本通行形不动
     assert ref_admit_char("云", [("云", 0.99), ("雲", 0.9)], vmap) == "云"
     assert ref_admit_char("貫", [("貫", 0.99)], vmap) == "貫"
     assert ref_admit_char("贯", None, vmap) == "贯"

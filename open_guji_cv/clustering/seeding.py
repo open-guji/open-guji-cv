@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -447,23 +448,34 @@ def detect_nonchar(gray: "np.ndarray", ocr: dict | None,
     return None
 
 
+@functools.lru_cache(maxsize=1)
+def _simplified_refs() -> frozenset[str]:
+    """人工审定的「纯简体字」清单（参考文本里混入的简体，库与干净繁体本都不用）。"""
+    p = Path(__file__).resolve().parents[2] / "config" / "dicts" / "simplified_refs.txt"
+    if not p.exists():
+        return frozenset()
+    return frozenset(
+        ln.split("\t")[0].strip() for ln in p.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.startswith("#"))
+
+
 def ref_admit_char(ref_char: str | None,
                    match_candidates: list[tuple[str, float]] | None,
                    vmap: VariantMap) -> str | None:
     """match_replace/match_ref_weak/match_margin 进库字：取整理本/参考字，
-    但参考字是异体表的异体键、而库 top 候选恰是它的语义正字时取库候选。
+    但参考字在人工审定的纯简体清单里、且库 top 候选恰是它的语义正字时取库字。
 
-    起因（2026-10-23，GUJI-727 后体检）：殿本 vol16:73:4:11、vol20:195:7:18
-    的参考文本（文渊阁录入）混有简体「贯」「牵」，通道照参考字进库，又靠
+    起因（2026-10-23）：殿本 vol16:73:4:11、vol20:195:7:18 的参考文本
+    （文渊阁录入）混有简体「贯」「牵」，通道照参考字进库，又靠
     variants.auto 的 贯→貫 过了语义闸，出简体码位。库里只有 貫、牽。
-    库 top 就是正字时，形状证据与正字一致，取库字；库 top 本身就是参考字
-    （如 云，库里也是云）则 semantic(云)≠云 但 top==云≠正字，不触发。
+    **只认清单**：不清单化时（凡异体键且库 top 为正字）在 vol16/vol20 真产物上
+    回放会把 尙→尚、旣→既、郷→鄉 这类刻本通行形也改掉（146 格），那是
+    忠实转写，不能动。清单外一律保持原行为。
     """
-    if not ref_char or not match_candidates:
+    if not ref_char or not match_candidates or ref_char not in _simplified_refs():
         return ref_char
     top = max(match_candidates, key=lambda t: t[1])[0]
-    sem = vmap.semantic(ref_char)
-    if sem != ref_char and top == sem:
+    if top == vmap.semantic(ref_char) != ref_char:
         return top
     return ref_char
 
