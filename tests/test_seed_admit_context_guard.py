@@ -70,15 +70,6 @@ def test_diff_low_cov_blocked(tmp_path, monkeypatch):
     assert r.admit and r.channel == "context"
 
 
-def test_flags_blocked_only_for_listed_flags(tmp_path, monkeypatch):
-    for fl in ("rule_bar", "suspect_empty", "bad_seg"):
-        r = _run(_ctx(tmp_path / fl, monkeypatch, context_guard_flags=True), flags=["boundary_ink", fl])
-        assert not r.admit and "ctx_guard_flag" in r.doubts, fl
-    # boundary_ink 在 vol03 到处都有（p110 字格大半带它），不在名单里不能拦
-    r = _run(_ctx(tmp_path / "ok", monkeypatch, context_guard_flags=True), flags=["boundary_ink", "edge_blob"])
-    assert r.admit and r.channel == "context"
-
-
 def test_ref_blank_blocked_unless_glyph_same(tmp_path, monkeypatch):
     r = _run(_ctx(tmp_path, monkeypatch, context_guard_ref_blank=True), ref="")
     assert not r.admit and r.char is None and "ctx_guard_ref_blank" in r.doubts
@@ -101,9 +92,9 @@ def test_ref_prefer_defaults_to_ref_char_and_reviews(tmp_path, monkeypatch):
 
 
 def test_guard_off_params_dump_unchanged():
-    """全关时五个字段都不进 dump（`params_hash` 与加字段前逐位相同）；开任一个才进。"""
+    """全关时四个字段都不进 dump（`params_hash` 与加字段前逐位相同）；开任一个才进。"""
     off = SeedAdmitParams(db_path="x").model_dump()
     assert not [k for k in off if k.startswith("context_guard")]
-    on = SeedAdmitParams(db_path="x", context_guard_flags=True).model_dump()
-    assert on["context_guard_flags"] is True and on["context_guard_cov"] == 0.8
+    on = SeedAdmitParams(db_path="x", context_guard_diff=True).model_dump()
+    assert on["context_guard_diff"] is True and on["context_guard_cov"] == 0.8
     json.dumps(off)
