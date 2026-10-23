@@ -1,6 +1,6 @@
 {
-  "_doc": "guji opinions triage 的规则表（M11 第一阶段 C2，设计 doc/design/M11-分块-第一阶段最小闭环.md）。门槛是初值，第二阶段用 vol01 人裁造的评测集标定（GUJI-713）。published＝冻结册（文本 ≥1.0，举证责任在意见一方），proofing＝0.x 精校册。",
-  "version": 1,
+  "_doc": "guji opinions triage 的规则表（M11 第一阶段 C2，设计 doc/design/M11-分块-第一阶段最小闭环.md）。门槛是初值，第二阶段用 vol01 人裁造的评测集标定（GUJI-713）。published＝冻结册（文本 ≥1.0，举证责任在意见一方），proofing＝0.x 精校册。version 2（2026-10-23，sheldon 定前期不再让他裁意见）：加 auto 段，由 `guji opinions auto` 读：to_user 的意见按 auto.decide 自动结案，只有 auto.park_reasons 命中的和 C 类、看不清留着，在汇总里报告而不要求人裁；auto.enabled=false 是总开关；合并进 book-text main 默认不自动（auto.merge.enabled=false），覆盖线上文本要用户点头，要放开由用户明说。",
+  "version": 2,
   "profiles": {
     "published": {
       "auto_accept": {"min_confidence": 0.95, "min_evidence_agree": 2, "classes": ["A", "B"]},
@@ -16,5 +16,12 @@
     }
   },
   "forward": {"punct": "punct", "entity": "entity"},
+  "auto": {
+    "enabled": true,
+    "decide": {"min_confidence": 0.85, "reject_min_confidence": 0.85, "classes": ["A", "B", "B′"], "by": "policy:auto-v1"},
+    "park_reasons": ["疑似刷票", "用户亲裁", "用户已裁", "版本漂移"],
+    "batch": {"max_cells": 50},
+    "merge": {"enabled": false, "max_cells": 50, "require_checks": true, "max_protected_conflicts": 0}
+  },
   "flood": {"per_source_per_day": 60, "disagree_ratio": 0.8, "burst_sources": 5, "burst_seconds": 3600}
 }

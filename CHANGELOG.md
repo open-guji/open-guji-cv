@@ -5,6 +5,19 @@
 
 ## [未发版]
 
+### Added
+- `guji opinions auto`（M11，GUJI-735 起步；MINOR 级新命令，不碰任何 Step，`code_hash` 不变）：修订流程自动化调和器。`decide`（`to_user` 的意见按 `rules.json` 的 `auto.decide` 自动结案，`decided.by=policy:auto-v1`；刷票、用户亲裁、版本漂移、C 类、看不清、置信不足的留着）、`prepare`（每章聚一批，book-text 里建 `auto/<书>-<章>-<日期>` 分支，套 `revise`、升版本、跑 `local_check`、提交一次，失败不留半成品）、`finish-pr`（CHANGES 的 `#TBD` 换 PR 号）、`finish-merged`（记 `applied`、格谱系、度量、`publish-status`）、`digest`（汇总）。意见池新增 `releases.jsonl`、`lineage.jsonl`、`metrics.jsonl`（只追加）；日志新增 kind `batched`／`pr_opened`／`published`／`reverted`／`policy_applied`，只有 `reverted` 改状态。`rules.json` 升 version 2，加 `auto` 段；合并进 book-text main 缺省不自动（`auto.merge.enabled=false`）。设计见 book-text `docs/design/2026-10-修订流程自动化设计.md`。
+
+### Fixed
+- seed_admit 放行护栏七条（A24，殿本 vol11/14/15 用 v0.5.9 重跑后逐格核出的错放；新开关缺省开，`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变）：
+  ① `context_variant_form_guard`：Step6 margin 按语义合并算，參㕘叅、簒/篡 等异体各占一半也报 margin 1.0，context 在异体里抓阄（vol14 235:7:4 两版一次 㕘 一次 叅）；放行字在 ranked 里有语义同字的对手、库形又分不开 → 落审（doubt `context_variant_form`）。
+  ② `iron_ctx_guard`：铁证字与上下文第一名（概率 ≥0.5）语义不同、两字在库里近平手（差 <0.005）→ 落审（`iron_vs_ctx`；vol11 12:2:14 官→宫）。
+  ③ `match_tie_guard`：库判非 same、库前两名语义不同且 cov 差 <0.003 时 match_ref／match_replace／match_margin 不放行（`match_tie`）：对位载体取库 top1，近平手时「库与整理本一致」是自证（vol14 60:1:5 拱→撰）。**缺省关**：vol16–20 离线回放每册多送审 160–400 格（日曰、人八等库近平手而整理本给对），只多拦 2 格。
+  ⑤ `context_lib_dissent_gap`（0.03，`context_lib_dissent_cov` 0.93）：库 top1 与 context 字语义不同，context 字在库里落后 ≥0.03 或不在库候选（top1 cov ≥0.93）→ 落审（`context_lib_dissent`；vol14 𣏌→相、㳫→書、牽→事）。原 `context_guard_diff` 只拦库判 diff，这几格库判都是 unsure。
+  ④ `group_flow_lift_ref_guard`：字组补放时只有文意给字、整理本字是组内另一字 → 不补放（`group_flow_ref_dissent`；vol15 118:4:15 面→而）；共字组联合判（日曰目）不受此限。
+  ⑦ 同一开关下加坐标对位拦补放：现役对位缺格、坐标对位（`align_ref.coord`）是组外另一字 → 不补放（`group_flow_coord_dissent`；vol18 107:6:7 叔→叙、vol16 109:6:21 樊→彝）。坐标对位字只用来拦，不参与判字。
+  ⑥ `context_page_end_review`：本页读序最后一格不走 context 放行（`context_page_end`）。对位只收两头被 equal 夹住的 replace，页末格常拿不到整理本字，没人拦 context：v0.5.7→v0.5.9 放行字变率页末格 1.94%／1.67%（vol12／vol14），其余格 0.07%／0.05%。每册约多送审 2–5 格；根治在对位侧，另查。
+
 ## [0.5.9] - 2026-10-22
 
 PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。
