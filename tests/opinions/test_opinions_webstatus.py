@@ -155,6 +155,56 @@ def test_publish_idempotent(tmp_path):
     assert row["version"] == "1.0.2" and row["ts"] == "2026-10-22T01:00:00Z"
 
 
+
+def test_publish_reopen_writes_open(tmp_path):
+    """发过状态的 target 这次算不出状态：留一行 open（网站据此撤回），再跑不变；有了新状态再顶掉。"""
+    st = _store(tmp_path)
+    o = st.add(_cf(1, "3:1:2"))
+    st.log(o.id, "triaged", _tri("图上是乙", route="auto_accept"))
+    be = LocalBackend(tmp_path / "web" / BOOK)
+    W.publish(st, be, ts="2026-10-20T01:00:00Z")
+    st.log(o.id, "superseded", {"by": "x"})
+    r = W.publish(st, be, ts="2026-10-21T01:00:00Z")
+    assert r["written"] and r["counts"]["reopened"] == 1
+    assert r["rows"] == [{"v": 1, "book": BOOK, "volume": "002", "target": "char~3:1:2~~", "state": "open",
+                          "opinions": [o.id], "ts": "2026-10-21T01:00:00Z"}]
+    r = W.publish(st, be, ts="2026-10-22T01:00:00Z")
+    assert not r["changed"] and r["rows"][0]["ts"] == "2026-10-21T01:00:00Z"
+    p = st.add(_cf(2, "3:1:2"))
+    st.log(p.id, "triaged", _tri("图上是丙", route="auto_accept"))
+    r = W.publish(st, be, ts="2026-10-23T01:00:00Z")
+    assert [x["state"] for x in r["rows"]] == ["adopted"] and r["counts"]["changed"] == 1
+
+
+def test_rejected_without_public_reason(tmp_path):
+    """人裁驳回、没写公开理由：判定是原文不误的，回复用模板句；别的判定不回。"""
+    st = _store(tmp_path)
+    a = st.add(_cf(1, "3:1:2"))
+    st.log(a.id, "triaged", _tri("", verdict="text_ok", route="to_user",
+                                 reply=R.reply_template("text_ok", None, a, "")))
+    st.log(a.id, "decided", {"decision": "reject"})
+    b = st.add(_cf(2, "3:1:3"))
+    st.log(b.id, "triaged", _tri("", verdict="accept", route="to_user"))
+    st.log(b.id, "decided", {"decision": "reject"})
+    rows, _ = W.compute(st)
+    ra, rb = rows
+    assert ra["state"] == "rejected" and "reason" not in ra
+    assert ra["reply"] == "感谢指正。经核对原书图，此处原文作「甲」，暂不改。"
+    assert rb["state"] == "rejected" and "reply" not in rb and "reason" not in rb
+
+
+def test_undone_dup_gets_reply(tmp_path):
+    """标过 dup、后来又重判的意见：回复照常带（看当前状态，不看有没有过 dup 记录）。"""
+    st = _store(tmp_path)
+    a = st.add(_cf(1, "3:1:2"))
+    st.log(a.id, "triaged", _tri("图上是乙", route="auto_accept"))
+    b = st.add(_cf(2, "3:1:3"))
+    st.log(b.id, "dup", {"of": a.id})
+    st.log(b.id, "triaged", _tri("要再看", verdict="unclear"))
+    rows, _ = W.compute(st)
+    rb = [r for r in rows if r["target"] == "char~3:1:3~~"][0]
+    assert rb["state"] == "discussing" and rb["reply"] == W.REPLY_DISCUSS
+
 def test_cli_publish_status(tmp_path, capsys):
     from open_guji_cv.cli_v2 import main
     st = _store(tmp_path)

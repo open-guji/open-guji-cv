@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- `guji opinions publish-status`（GUJI-714 后续，PATCH）：① 上次发过、这次算不出状态的 target（意见重开、改判成不写的状态）写一行 `state:"open"`，网站 proofing-sync 据此撤回 KV 里的旧状态（原来旧状态一直留着，实时页与 COS 清单不一致）；② 人裁驳回又没写公开理由、判定为原文不误的，回复用模板句「此处原文作「甲」，暂不改」（原来读者只看到「未采纳」）；③ 撤销过 dup 的意见照常带回复（原来只要有过 dup 记录就不回）。不碰任何 Step，`code_hash` 不变。
+
 ## [0.5.8] - 2026-10-22
 
 PATCH（sheldon 10-22 定发）。主要内容：Step0 反色带候选 `invert_detect`、切分 `row_segment` 1.36、字框收缩 `cell_shrink` 1.19–1.20、外框线回直线 `border_detect` 1.5、文意组加字形第二路（cv#429，新增 12 个组模板库 rr ts ly wj zh yh yt js em fc yr xz）、厯歴／呂吕／徵徴 判法调整、己已巳／日曰 收口、影子复核按册码位归一（v0.5.7 漏带）。相对 v0.5.7，`border_detect`、`border_detect_gate`、`column_warp`、`column_gate`、`row_segment`、`cell_shrink`、`seed_admit` 七步 `code_hash` 变，另新增 `invert_detect`，**各书 Step1 起全部判过期**；其余 11 步不变。新组 weiw shan di qin 要在册配置 `group_flow` 点名；组模板库变了，配套出全局层新底库、各册改钉。rc 上全量测试：3851 过、66 跳过、1 条报错；报错的是一条测试守卫，已修（装了 psycopg 而没给测试库时，`test_datastore_expbranch` 一条用例报错而不是跳过，只改测试）。
