@@ -12,6 +12,9 @@
 - 放行开关缺省开（2026-10-23 sheldon 定「没问题的 feature 一律缺省开，开关只为方便 A/B」）：`seed_admit.context_guard_diff`、`context_guard_ref_blank`、`lane_witness3`、`lane_coord` 改缺省开，`group_flow` 缺省＝注册表里全部声明了 flow 的字组（书 yaml 写 `[]` 才关），书级 `iron_gate` 缺省开。殿本 20 册 yaml 本来都开着，行为不变；`seed_admit` 参数 dump 变，各册放行判过期。
 - Step1 border_detect 1.6：列距救援 `pitch_rescue`（缺省开，`utils/pitch_rescue`）。自由模式列网里有列 < 0.7×中位列宽时（多挑一条假竖线把一列劈成两窄列、外侧一整列落在网外、字悄悄丢掉），先网格模式重探，选不出版框对再去掉劈线、在有字的一侧补外框；新网干净才接受，没触发的页逐字节不变。殿本 vol11–20 九页里修好 8 页（vol13 p75、vol14 p103/186、vol16 p120、vol19 p29/86、vol20 p68/113），vol16 p8 密排夹注页留人工。`border_detect` 的 `code_hash` 变，全书 Step1 起判过期。
 
+### Fixed
+- `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
+
 ## [0.5.10] - 测试中
 
 PATCH（A30 要钉正式 tag 跑殿本 vol11–19）。
