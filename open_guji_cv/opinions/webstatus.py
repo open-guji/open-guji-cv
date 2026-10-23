@@ -42,7 +42,8 @@ RE_VERSION = re.compile(r"^[A-Za-z0-9._-]{1,16}$")
 
 STATE_OF = {"applied": "adopted", "accepted": "adopted", "auto_accepted": "adopted",
             "rejected": "rejected", "auto_rejected": "rejected",
-            "to_user": "discussing", "discussing": "discussing"}
+            "to_user": "discussing", "discussing": "discussing",
+            "reverted": "discussing"}      # 撤销后回到「还要再看」，网站不再显示已改
 #: 同一 target 多条意见时谁说了算（大的优先）
 RANK = {("adopted", True): 4, ("adopted", False): 3, ("discussing", False): 2, ("rejected", False): 1}
 
