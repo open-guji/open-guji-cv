@@ -17,6 +17,7 @@
 
 ### Fixed
 - `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
+- `scripts/zhengli/republish.py add-sprites`（A20，A31 报）：核坐标时把 `img.s` 文件名也一起比了。线上单已是哈希名（`p0001.<sha8>.webp`，册 006–010 先前补过主雪碧图、只缺相似字图），重建出来是 `p0001.webp`，于是 105 格坐标全对也整单被拒。现在比之前去掉内容哈希，页名不同照样拒。发布脚本，不进任何 Step，`code_hash` 不变（L0）。
 
 ## [0.5.10] - 测试中
 
