@@ -21,6 +21,7 @@
   python scripts/zhengli/proof_cycle.py plan  --book vol04 -w $WS [--reviewer sheldon] [--cord <出单版 cord>]
   python scripts/zhengli/proof_cycle.py apply --book vol04 -w $WS --plan <plan.json> --hash <计划哈希> \
       --book-text <book-text 仓> [--allow-cv-drift] [--dry-run]
+  python scripts/zhengli/proof_cycle.py audit --book vol04 -w $WS [--rev 004-r6] [--held held.tsv]   # 只读：G0 票账
 
 票缺省直接读网站 KV（要 CELLREVIEW_TOKEN）；没有令牌就读中心库快照（每日同步之后才有）。
 仍要用户点头的（不在本脚本里）：打 1.0 标签与冻结、解冻、放宽放行规则、越过检查门的 --ack-*。
@@ -189,6 +190,11 @@ def cmd_apply(a) -> int:
     else:
         log.note("没有可写的票，跳过落票")
 
+    if not a.dry_run:                       # G0 票账：写完之后每一票都该有去向
+        votes, src = rp.old_rev_votes(ws, plan["text_id"], plan["rev"])
+        held = [ln.split("\t")[0] for ln in (Path(plan["draft_dir"]) / "held.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip()]
+        log.note(rp.ledger_md(rp.ticket_ledger(ws, book, plan["text_id"], plan["rev"], votes, held)) + f"（票源：{src}）")
+
     # 3. 重跑有票的页：只能用出单那一版 cv，否则混进别版切分
     if plan["pack"]:
         head = rp.git_head()
@@ -273,6 +279,18 @@ def open_book_text_pr(repo: Path, br: str, title: str, plan: dict, new_rev: str)
     return n
 
 
+def cmd_audit(a) -> int:
+    """只读：某张单（缺省线上那张）的 G0 票账。"""
+    ws, book = Path(a.workspace).resolve(), a.book
+    text_id, chapter = rp.text_id_of(ws), rp.chapter_of(book)
+    rev = a.rev or json.loads(rp.proofing_path(ws, text_id, chapter).read_text(encoding="utf-8")).get("rev")
+    votes, src = rp.old_rev_votes(ws, text_id, rev)
+    held = [ln.split("\t")[0] for ln in Path(a.held).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if a.held else []
+    led = rp.ticket_ledger(ws, book, text_id, rev, votes, held)
+    print(rp.ledger_md(led) + f"（票源：{src}）")
+    return 1 if led["counts"]["未落"] else 0
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
@@ -290,8 +308,13 @@ def main(argv=None) -> int:
     p.add_argument("--book-text", required=True, help="book-text 仓（main 上、干净）")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
+    p = sp.add_parser("audit", help="只读：一张单的 G0 票账（写入／一致／看不出／挂起／未落），有未落退出码 1")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--rev", help="缺省线上单")
+    p.add_argument("--held", help="cellvotes draft 的 held.tsv")
     a = ap.parse_args(argv)
-    return {"plan": cmd_plan, "apply": cmd_apply}[a.cmd](a)
+    return {"plan": cmd_plan, "apply": cmd_apply, "audit": cmd_audit}[a.cmd](a)
 
 
 if __name__ == "__main__":

@@ -210,3 +210,18 @@ def test_pack_rev_stores_issue_products(tmp_path, monkeypatch):
     assert rp.pack_rev(argparse.Namespace(no_pack=True), tmp_path, "vol06", "006-r3") is None and len(calls) == 1
     rc["v"] = 1
     assert rp.pack_rev(argparse.Namespace(no_pack=False), tmp_path, "vol06", "006-r3") is None
+
+
+def test_ticket_ledger_balances(tmp_path, monkeypatch):
+    """G0 票账：写入（人裁晚于票）、一致（人裁早于票）、看不出、挂起、未落，五项之和 = 有效票格数。"""
+    ws, export, online = _setup(tmp_path)                      # 1:1:3 有一条 2026-10-20 的定字人裁
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    vote = lambda a, choice, ts, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": ts}
+    t_before, t_after = 1790000000000, 1793000000000           # 毫秒：2026-09-21 与 2026-10-26
+    votes = [vote("1:1:3", "char", t_before, "甲"), vote("1:1:9", "unsure", t_after), vote("1:1:2", "char", t_after, "乙"),
+             vote("1:1:4", "none", t_after), vote("2:1:1", "char", t_after, "丙"), {"book": "x"}]
+    led = rp.ticket_ledger(ws, "vol06", "abc123", "006-r2", votes, held=["1:1:4"])
+    assert led["counts"] == {"写入": 1, "与已有人裁一致": 0, "看不出": 1, "挂起": 1, "未落": 2}
+    assert sum(led["counts"].values()) == led["votes"] == 5 and "账平" in rp.ledger_md(led)
+    led2 = rp.ticket_ledger(ws, "vol06", "abc123", "006-r2", [vote("1:1:3", "char", t_after, "甲")])
+    assert led2["counts"]["与已有人裁一致"] == 1                    # 人裁早于票：判一致跳过
