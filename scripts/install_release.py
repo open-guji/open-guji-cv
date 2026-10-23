@@ -5,7 +5,7 @@
     python install_release.py 0.5.9            # 从 GitHub Release 下载
     python install_release.py --dir ./assets   # 附件已在本地目录
 
-装好后 `guji --help` 可用；fonts/、corpus 不在包里，用 `guji db pull` 从中心库取。
+装好后 `guji --help` 可用；corpus 走中心库（`guji db pull`）；fonts/ 目前不在包里（`db pull` 不取字体），见 README。
 资源（models/、config/、formats/）解到 open_guji_cv 的上一级目录。
 """
 from __future__ import annotations

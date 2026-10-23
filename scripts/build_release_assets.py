@@ -7,7 +7,7 @@
 wheel 只含 `open_guji_cv/`，装进 site-packages 后这些目录不在。资源包按**同一相对布局**
 （`models/…`、`config/…`）解到 `open_guji_cv` 的上一级目录，源码零改动，各 Step 的 code_hash 不变。
 清单取 `git ls-files`（不带 gitignore 的缓存），不带 `models/glyph_cnn_r4`（上一代，可切回时自取）。
-fonts/（194 MB）、corpus/ 不在包里，走中心库（`guji db pull`）。
+corpus/ 走中心库（`guji db pull`）；fonts/（194 MB）暂不在包里，`db pull` 也不取字体，是否另出字体包待用户定。
 设计见 doc/design/发版附带Python执行包.md。
 """
 from __future__ import annotations

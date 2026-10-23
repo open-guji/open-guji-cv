@@ -31,7 +31,7 @@ python install_release.py --dir <附件目录> [--extras cpu,datastore]
 # 或在线：python install_release.py 0.5.9
 ```
 
-字体（`fonts/`）和语料不在包里，用 `guji db pull` 从中心库取。要改代码才需要下面的克隆方式。
+语料走中心库（`guji db pull`）。**字体（`fonts/`）目前不在包里，`db pull` 也不取字体**：IDS 模板渲染（`groups/ids_parts.py`）和 `clustering/match.py` 缺字体时会静默变差，需自行把 `fonts/jigmo`、`iming`、`genmin` 放到 `open_guji_cv` 的上一级目录（或设 `GUJI_FONT_DIR`，对 match.py 无效）。要改代码才需要下面的克隆方式。
 
 ### 1. 克隆仓库并创建虚拟环境
 

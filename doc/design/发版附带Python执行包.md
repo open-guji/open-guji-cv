@@ -30,7 +30,7 @@
 |---|---|---|
 | `models/`（r5 现役 19 MB、partition_unet 11 MB、pagetype/rr_clf/shadow_admit 共 <1 MB） | Step5-b、切分、页型、放行闸 | 随资源包；r4（上一代）可不带，省 19 MB |
 | `config/`（字表、变体、IDS、gloss） | 多步 | 随资源包；其中 `config/corpus-pack` 已有中心库管道（`datastore/workcopy.py`） |
-| `fonts/`（194 MB） | 生僻字候选、字形库 | **不进 Release**；已有「按指纹从中心库取」的思路，执行方 `guji db pull` 取。只有确认某些步不连中心库也要字体时才补小包 |
+| `fonts/`（194 MB） | 生僻字候选、字形库 | **更正（A24 核查，10-23）**：原写「`guji db pull` 取」不成立，datastore 里没有取字体的逻辑；缺字体时 `groups/ids_parts.py` 静默少模板、`clustering/match.py` 读 `fonts/jigmo`。可再分发的 jigmo（CC0）、iming（IPA）、genmin（OFL）约 139 MB，`kangxi`（商业字体，55 MB）**不得**进公开 Release。建议另出一个 `open-guji-cv-fonts-X.Y.Z.tar.gz`（只含前三者；字体极少变，可只在变时更新），**待用户定** |
 | `corpus/` | 对勘、语料钉版 | 同上，走中心库（`corpus: N` 钉版已是这个口径） |
 
 资源包不能再靠 `parents[2]` 猜位置。**需要一处小改动**：加一个环境变量（暂名 `GUJI_CV_HOME`，缺省仍为仓库根），所有 `parents[N] / "models|config|fonts"` 收口到一个 `core/paths.py` 的函数里。这是触碰 87 处引用中约十几处的重构，**不改任何 Step 的输入输出，但 `code_deps` 若包含这些文件则 `code_hash` 会变**——按冻结基线分级，初判 L1（改路径解析、产物逐字节不变），实施 PR 里要合前实算 `code_hash` 并写明。
