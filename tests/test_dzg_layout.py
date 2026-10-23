@@ -350,3 +350,15 @@ def test_build_applies_layout_overrides(tmp_path):
     assert [(r["col"], r["slots"], r["raised"], r["dzg"]) for r in rows] == [
         (1, [2, 3], 0, "0001-0010h0"), (2, [-1, 1], 1, "override")]
     assert "why" not in rows[0]
+
+
+def test_row_segment_refuses_book_missing_from_layout(tmp_path):
+    """表在、开关开着、表里没有本册 → 报错，不悄悄当关（殿本 vol11–20 首跑，2026-10-23）。"""
+    import json
+    from open_guji_cv.steps import row_segment as RS
+    p = tmp_path / "layout.jsonl"
+    p.write_text(json.dumps({"vol": "vol04", "page": 23, "col": 1, "slots": [3], "notes": [], "half": [],
+                             "raised": 0}) + "\n", encoding="utf-8")
+    assert RS.load_layout(str(p), "vol11") == {}
+    src = Path(RS.__file__).read_text(encoding="utf-8")
+    assert "if p.layout_prior and not layout:" in src and "raise ValueError" in src
