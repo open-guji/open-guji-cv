@@ -129,3 +129,4 @@ class Manifest:
             for e in entries.values():
                 f.write(e.to_json() + "\n")
         tmp.replace(self.path)
+        self._torn_tail = False
