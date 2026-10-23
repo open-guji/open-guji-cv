@@ -23,6 +23,11 @@ from pathlib import Path
 HASHED = re.compile(r"\.[0-9a-f]{8}\.webp$")
 
 
+def unhashed(name: str) -> str:
+    """去掉 attach 加的内容哈希：`p0003.0123abcd.webp` → `p0003.webp`（没带哈希的原样）。"""
+    return HASHED.sub(".webp", name)
+
+
 def _rewrite(node, names: dict[str, str]):
     """递归改写：任何 `{"s": <旧名>, ...}` 的 s 换成新名。"""
     if isinstance(node, dict):

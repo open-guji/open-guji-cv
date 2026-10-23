@@ -8,12 +8,17 @@
 
 ## [未发版]
 
+### Added
+- `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
+
 ### Changed
 - 放行开关缺省开（2026-10-23 sheldon 定「没问题的 feature 一律缺省开，开关只为方便 A/B」）：`seed_admit.context_guard_diff`、`context_guard_ref_blank`、`lane_witness3`、`lane_coord` 改缺省开，`group_flow` 缺省＝注册表里全部声明了 flow 的字组（书 yaml 写 `[]` 才关），书级 `iron_gate` 缺省开。殿本 20 册 yaml 本来都开着，行为不变；`seed_admit` 参数 dump 变，各册放行判过期。
 - Step1 border_detect 1.6：列距救援 `pitch_rescue`（缺省开，`utils/pitch_rescue`）。自由模式列网里有列 < 0.7×中位列宽时（多挑一条假竖线把一列劈成两窄列、外侧一整列落在网外、字悄悄丢掉），先网格模式重探，选不出版框对再去掉劈线、在有字的一侧补外框；新网干净才接受，没触发的页逐字节不变。殿本 vol11–20 九页里修好 8 页（vol13 p75、vol14 p103/186、vol16 p120、vol19 p29/86、vol20 p68/113），vol16 p8 密排夹注页留人工。`border_detect` 的 `code_hash` 变，全书 Step1 起判过期。
+- Step1 列距救援收紧到实测列宽带（Sheldon 10-23：殿本列宽极一致，按分布严格限）：殿本 vol04–20 共 2,969 页，内列宽／页中位 99.9% 在 0.907–1.088，最外两列 0.84–1.26。触发改为「有列出带」（内列 ±10%、外列 0.85–1.3），新列网也须全在带内；另加「列宽合格的列两边的界行不许动」，防网格把印好的真界行挪进空白（vol13 p46）。vol11–20 触发 31 页、改 8 页（原 7 页列网错位＋vol11 p55 右框线更贴界行），vol04–10 不变。
 
 ### Fixed
 - `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
+- `scripts/zhengli/republish.py add-sprites`（A20，A31 报）：核坐标时把 `img.s` 文件名也一起比了。线上单已是哈希名（`p0001.<sha8>.webp`，册 006–010 先前补过主雪碧图、只缺相似字图），重建出来是 `p0001.webp`，于是 105 格坐标全对也整单被拒。现在比之前去掉内容哈希，页名不同照样拒。发布脚本，不进任何 Step，`code_hash` 不变（L0）。
 
 ## [0.5.10] - 测试中
 

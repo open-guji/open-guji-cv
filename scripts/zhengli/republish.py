@@ -714,6 +714,13 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     print(f"book-text 分支 {br} 已提交：推上去开 PR（CHANGES 里 #TBD 换成 PR 号），合了再 push 待审单")
 
 
+def _img_key(img):
+    """核坐标用：线上单的 `s` 可能已是哈希名（`p0001.<sha8>.webp`），重建出来是 `p0001.webp`，比之前去掉哈希。"""
+    if not img:
+        return None
+    return {**img, "s": sprite_pub.unhashed(img["s"])} if isinstance(img.get("s"), str) else img
+
+
 def cmd_add_sprites(a) -> int:
     """线上单的雪碧图没上 R2（GUJI-675 之前出的单）：重建、核坐标不变、传 R2、原地补 `sprites[]` 并把 `img.s` 换成哈希名。
 
@@ -741,7 +748,7 @@ def cmd_add_sprites(a) -> int:
             "--book", text_id, "--vol", chapter[-2:], "--out", sp]).returncode:
         return 1
     rebuilt = {c["cell"]: c.get("img") for c in json.loads((sp / "pending.with-img.json").read_text(encoding="utf-8"))["cells"]}
-    bad = [c["cell"] for c in doc["cells"] if (c.get("img") or None) != (rebuilt.get(c["cell"]) or None)]
+    bad = [c["cell"] for c in doc["cells"] if _img_key(c.get("img")) != _img_key(rebuilt.get(c["cell"]))]
     if bad:
         sys.exit(f"✗ {len(bad)} 格重建出的 img 坐标和线上单不一样（{' '.join(bad[:20])}）：手上的 cord／原图不是出这张单时的那份，不动")
     base = json.loads((sp / "pending.with-img.json").read_text(encoding="utf-8"))

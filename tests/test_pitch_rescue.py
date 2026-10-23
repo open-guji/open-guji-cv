@@ -62,3 +62,20 @@ def test_grid_accepted_only_if_clean_and_overlapping():
     far = [1871 + 170 * k for k in range(10)]
     out, how = pr.rescue(_res(p68), _gray([]), lambda pitch: _res(far))
     assert how is None
+
+
+def test_band_from_distribution():
+    """内列 ±10%、外列 0.85–1.3（殿本 2,969 页实测 99.9% 分位）；轻微不匀不算病。"""
+    assert pr.in_band([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1680])        # 外列 1.23 照收
+    assert pr.out_of_band([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1700]) == {9}
+
+
+def test_grid_may_not_move_good_rules():
+    """vol13 p46：只有最外一列偏宽（1.3+），网格却把内部三条真界行各挪 9px → 不接受。"""
+    old = [343, 523, 700, 876, 1066, 1249, 1440, 1624, 1802, 2040]
+    grid = [343, 523, 700, 876, 1066, 1258, 1447, 1635, 1832, 2040]
+    bad = pr.out_of_band(old)
+    assert bad == {9}
+    assert not pr.keeps_good_lines(old, grid, bad)
+    out, how = pr.rescue(_res(old), _gray([]), lambda pitch: _res(grid))
+    assert how is None
