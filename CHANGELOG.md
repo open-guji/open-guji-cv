@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- `guji opinions auto`（M11，GUJI-735 起步；MINOR 级新命令，不碰任何 Step，`code_hash` 不变）：修订流程自动化调和器。`decide`（`to_user` 的意见按 `rules.json` 的 `auto.decide` 自动结案，`decided.by=policy:auto-v1`；刷票、用户亲裁、版本漂移、C 类、看不清、置信不足的留着）、`prepare`（每章聚一批，book-text 里建 `auto/<书>-<章>-<日期>` 分支，套 `revise`、升版本、跑 `local_check`、提交一次，失败不留半成品）、`finish-pr`（CHANGES 的 `#TBD` 换 PR 号）、`finish-merged`（记 `applied`、格谱系、度量、`publish-status`）、`digest`（汇总）。意见池新增 `releases.jsonl`、`lineage.jsonl`、`metrics.jsonl`（只追加）；日志新增 kind `batched`／`pr_opened`／`published`／`reverted`／`policy_applied`，只有 `reverted` 改状态。`rules.json` 升 version 2，加 `auto` 段；合并进 book-text main 缺省不自动（`auto.merge.enabled=false`）。设计见 book-text `docs/design/2026-10-修订流程自动化设计.md`。
+
 ## [0.5.9] - 2026-10-22
 
 PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。
