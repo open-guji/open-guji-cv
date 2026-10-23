@@ -16,7 +16,8 @@ SCHEMA = "guji-opinion/0.1"
 #: 渠道；机器意见写 ``machine:<检查名>``
 CHANNELS = ("charfix", "span", "cellreview", "feedback")
 CATEGORIES = ("wrong", "missing", "extra", "order", "seg", "lacuna", "unclear", "punct", "entity", "other")
-LOG_KINDS = ("ingested", "superseded", "dup", "forwarded", "triaged", "decided", "applied", "replied", "cv_written")
+LOG_KINDS = ("ingested", "superseded", "dup", "forwarded", "triaged", "decided", "applied", "replied", "cv_written",
+             "batched", "pr_opened", "published", "reverted", "policy_applied")
 VERDICTS = ("text_ok", "accept", "lacuna_guess", "seg_issue", "out_of_scope", "unclear")
 ROUTES = ("auto_accept", "auto_reject", "to_user", "discuss", "forward")
 DECISIONS = ("accept", "reject", "discuss")
@@ -25,7 +26,7 @@ REV_CLASSES = ("A", "B", "B′", "C")
 PROFILES = ("published", "proofing")
 #: 意见状态（``derive_status`` 的值）
 STATUSES = ("new", "to_normalize", "superseded", "dup", "forwarded", "auto_accepted", "auto_rejected",
-            "to_user", "discussing", "accepted", "rejected", "applied")
+            "to_user", "discussing", "accepted", "rejected", "applied", "reverted")
 
 CELL_RE = re.compile(r"^\d+:\d+:-?[1-9]\d*[ab]?$")
 VOL_RE = re.compile(r"^\d{3}$")
@@ -172,6 +173,12 @@ class LogEvent:
             e.append(f"decided 的 decision 应为 {DECISIONS}")
         if self.kind == "applied" and not d.get("text_version"):
             e.append("applied 要带 data.text_version")
+        if self.kind in ("batched", "pr_opened", "published", "reverted") and not d.get("release"):
+            e.append(f"{self.kind} 要带 data.release")
+        if self.kind == "pr_opened" and not d.get("pr"):
+            e.append("pr_opened 要带 data.pr")
+        if self.kind == "reverted" and not d.get("reason"):
+            e.append("reverted 要带 data.reason")
         return e
 
     def validate(self) -> LogEvent:
@@ -259,7 +266,8 @@ def derive_status(events: list[LogEvent]) -> str:
     """一条意见的 log（按写入顺序）→ 状态。
 
     ``new → triaged →（auto_accepted｜auto_rejected｜to_user｜discussing｜forwarded｜dup）→ accepted／rejected → applied``；
-    ``fb_`` 入池时待规整（``to_normalize``），规整后原条 ``superseded``。``replied``、``cv_written`` 不改状态。"""
+    ``fb_`` 入池时待规整（``to_normalize``），规整后原条 ``superseded``。``replied``、``cv_written``、``batched``、``pr_opened``、``published``、``policy_applied`` 不改状态
+    （发布批的进度看 ``releases.jsonl``）；``reverted`` 把 applied 退回。"""
     st = "new"
     for e in events:
         k, d = e.kind, e.data or {}
@@ -278,6 +286,8 @@ def derive_status(events: list[LogEvent]) -> str:
             st = _DECISION_STATUS.get(d.get("decision"), st)
         elif k == "applied":
             st = "applied"
+        elif k == "reverted":
+            st = "reverted"
     return st
 
 
