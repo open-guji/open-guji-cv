@@ -135,6 +135,8 @@ def _gaps() -> dict[str, set[str]]:
     out: dict[str, set[str]] = {}
     for st in STEPS.values():
         m = type(st).__module__
+        if not m.startswith("open_guji_cv."):    # 别的测试往 STEPS 里注册的假 Step（全量跑时才在）
+            continue
         miss = {i for i in _imports(m) - set(st.spec.code_deps) if (m, i) not in NOT_IN_FP}
         if miss:
             out.setdefault(m, set()).update(miss)
