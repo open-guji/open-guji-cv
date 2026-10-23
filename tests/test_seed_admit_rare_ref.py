@@ -235,3 +235,6 @@ def test_v2_features_and_v1_candidate_set():
 
 def _VCtx():
     return S.SignalContext(vm=_VM(), partners={}, human_ids={}, lib_ids=frozenset())
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

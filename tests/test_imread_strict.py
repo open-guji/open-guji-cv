@@ -313,3 +313,6 @@ def test_seed_admit_iron_page_scale_skip_records_missing():
     seen: list[str] = []
     scale = _iron_page_scale(_CtxNoPatch(), 20, pm, on_missing=seen.append)
     assert seen == ["b:20:1:1", "b:20:1:2"] and scale > 0
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

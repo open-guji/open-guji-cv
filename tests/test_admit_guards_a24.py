@@ -172,3 +172,7 @@ def test_seed_admit_context_page_end(tmp_path, monkeypatch):
     assert not r.admit and "context_page_end" in r.doubts
     r = _run_ctx(tmp_path, monkeypatch, cands, dec)
     assert r.admit and r.channel == "context"
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

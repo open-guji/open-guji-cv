@@ -28,6 +28,7 @@ from ..products.kinds.line_index import LineIndex, LineRec
 from ..utils.border_geometry import detect_borders
 from ..utils.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..utils.column_types import classify_columns
+from ..utils.pitch_rescue import rescue as pitch_rescue
 
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
@@ -78,6 +79,10 @@ class BorderDetectParams(BaseModel):
     缺省空，空时本字段与 `grid_col_pitch` 都不进参数 dump，产物与加字段前逐字节相同。"""
     grid_col_pitch: float | None = None
     """`column_grid_pages` 那些页用的列距先验（px）；None = 用书级 `col_pitch`。"""
+    pitch_rescue: bool = True
+    """列距救援（`utils/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
+    < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
+    「去掉劈开窄对的线、在有字的一侧补外框线」；新列网干净才接受。没触发的页逐字节不变。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
@@ -94,10 +99,11 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.5", unit="page",   # 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.6", unit="page",   # 1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
-                   "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge"),
+                   "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge",
+                   "open_guji_cv.utils.pitch_rescue"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
         # `column_grid` / `col_pitch` / `frame_height` / `vline_polyline` 决定竖线
         # 走哪条路、用哪组阈值，同理。
@@ -128,7 +134,7 @@ class BorderDetectStep(Step):
             col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
-        def _detect(n_cols: int):
+        def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
             return detect_borders(gray, expected_cols=n_cols, ink_threshold=p.ink_threshold,
                                   book_bottom_gap=ctx.book.bottom_gap,
                                   top_band_frac=ctx.book.top_band_frac,
@@ -144,6 +150,11 @@ class BorderDetectStep(Step):
         res = _detect(cols)
         if grid_page:
             pad_outer_columns(res)
+        rescued = None
+        if p.pitch_rescue and not grid:
+            # 网格模式必须带列距先验（见 border_geometry.detect_borders）；书上没写就取本页自由模式的中位列距
+            res, rescued = pitch_rescue(res, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
+                                        leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold)
         # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
         # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
         merged_col = None
@@ -172,6 +183,8 @@ class BorderDetectStep(Step):
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")
+            if rescued:
+                flags.append(f"pitch_rescued：页上有窄列（多挑假竖线、外侧整列落在网外），已按列距重定（{rescued}）")
             lines.append(LineRec(col=c.col, kind=c.kind, x0=c.x0, x1=c.x1, y0=top_y, y1=bot_y,
                                  width=c.width, flags=flags))
         n_body = sum(1 for ln in lines if ln.kind == "body")

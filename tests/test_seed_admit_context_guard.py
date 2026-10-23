@@ -108,3 +108,7 @@ def test_guard_off_params_dump_unchanged():
     on = SeedAdmitParams(db_path="x", context_guard_flags=True).model_dump()
     assert on["context_guard_flags"] is True and on["context_guard_cov"] == 0.8
     json.dumps(off)
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

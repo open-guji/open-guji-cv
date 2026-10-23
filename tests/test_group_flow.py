@@ -395,3 +395,6 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_joint" in r.doubts
     r = run((None, "abstain:low_conf"), ("日", "agree"))
     assert not r.admit and "group_flow_abstain" in r.doubts
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

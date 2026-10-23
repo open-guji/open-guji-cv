@@ -114,3 +114,7 @@ def test_short_jiazhu_sub_match_ref_and_normal_height_kept(monkeypatch):
     assert n == 0 and recs[2].admit
     n, recs = _runt_direct(monkeypatch, "context", h=100)
     assert n == 0 and recs[2].admit
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

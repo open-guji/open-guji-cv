@@ -161,3 +161,6 @@ def test_never_group_pairs_no_longer_admitted_as_variants(tmp_path, monkeypatch)
         r = _run(tmp_path / f"m{i}", monkeypatch, candidates=[(lib, 0.9443), ("泊", 0.939)],
                  align_char=ref, margin=0.80)
         assert not (r.admit and r.channel == "ref_lib"), (lib, ref, r.char)
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

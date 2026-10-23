@@ -96,7 +96,7 @@ class BookSpec:
     #: 任务书-D-铁证放行影子验收.md。**只放行文本，不进字形库**（不写 admissions）——
     #: 这是用户批复时特意加的口子，避免「自己放行的字变成下次放行的证据」自我强化；
     #: 回退只需把这个开关改回 false 重跑 `seed_admit`，不用撤库。
-    iron_gate: bool = False
+    iron_gate: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     #: Step9-9.3 对勘的**证人**（整理本）清单（yaml 的 `references:`）。
     #: 每项 `{file, quality: best|mid|low, label, line_is_column}`。
     #: 空 = 退回单证人（与 `align_ref` 同一份默认语料）。

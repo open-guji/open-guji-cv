@@ -102,3 +102,6 @@ def test_replace_form_same_literal_untouched(tmp_path, monkeypatch):
 def test_replace_form_rejects_unknown_value(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         _run(tmp_path, monkeypatch, **REPL, params={"replace_form": "nope"})
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
