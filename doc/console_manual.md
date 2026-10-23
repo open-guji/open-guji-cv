@@ -253,6 +253,11 @@ guji db sync -w <工作区>                                   # 推库（先报�
 guji cellvotes draft vol05 --site-book 96mid1ogzk --rev 005-r6 --pack rev-005-r6 --from-kv --out <目录> -w <工作区>
 ```
 
+**一轮串起来（GUJI-730 P1-2）**：`scripts/zhengli/proof_cycle.py plan` 出计划（只读：取包、出草稿、算要重跑的页、
+计划哈希），`apply --hash <哈希>` 按计划原样执行：落票推库 → 用出单版 cv 在沙箱重跑有票的页 → 导出 →
+`republish.py prep/push`（过出单门、换单门，存新单的包，升 book-text、推库、发网站）→ book-text 草稿 PR。
+任何一处和计划对不上就停；用户 10-22 定这类流程化操作不再逐次批准。
+
 `--cord` 要用**出单那一版**的文本（rev 对应的 book-text 版本）：现行 cv 重切过的列，旧格号已经不是读者看到的字，
 这类格挂起不写。「无字」缺省挂起（排除名单只增不删），要落加 `--include-none`。
 

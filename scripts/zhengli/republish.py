@@ -138,27 +138,61 @@ def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
     return rows, "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
 
 
-def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]) -> list[dict]:
-    """旧单上还没落成人裁的票（G0；第五册 168 票就是新单先上、票后落才漂了格位）。
+def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> dict:
+    """一张单的票账（1.0 发布标准 G0）：每格最后一票归到 写入／与已有人裁一致／看不出／挂起／未落 之一。
 
-    每格最后一票：「看不出」不用落；该格已有定了字的人裁（这批票写进去的，或与票一致而跳过的）算落了；其余都算没落，
-    包括缺省挂起的「无字」——要么落（`cellvotes write --include-none`），要么明说照换（--ack-unlanded-votes）。"""
+    写入 = 该格有晚于这一票的定字人裁；一致 = 该格的定字人裁早于这一票（cellvotes 判一致跳过）；
+    看不出 = 只投了「看不出」；挂起 = 在 cellvotes draft 的挂起清单（held.tsv 第一列）里；其余未落——
+    包括缺省挂起却没记进清单的「无字」。账要平：有效票格数 = 五项之和。"""
+    import datetime as dt
     sys.path.insert(0, str(CV))
     from open_guji_cv.feedback.web_votes import latest_votes
     from pending_route import cell_of, deciding
-    latest, _ = latest_votes(votes, text_id, rev)
-    decided: set[str] = set()
+    latest, dropped = latest_votes(votes, text_id, rev)
+    held = set(held or ())
+    last: dict[str, float] = {}                 # 格 → 最晚一条定字人裁的时刻（秒）
     for f in sorted((data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
         for line in f.read_text(encoding="utf-8").splitlines():
             try:
                 e = json.loads(line)
             except ValueError:
                 continue
-            if deciding(e):
-                c = cell_of(e, book)
-                if c:
-                    decided.add(c)
-    return [v for v in latest if v["choice"] != "unsure" and v["a"] not in decided]
+            c = cell_of(e, book) if deciding(e) else None
+            if c:
+                try:
+                    t = dt.datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    t = 0.0
+                last[c] = max(last.get(c, 0.0), t)
+    rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
+    for v in latest:
+        a, ts = v["a"], float(v.get("ts") or 0)
+        ts = ts / 1000 if ts > 1e11 else ts       # KV 里是毫秒
+        if v["choice"] == "unsure":
+            rows["看不出"].append(v)
+        elif a in last:
+            rows["写入" if last[a] >= ts else "与已有人裁一致"].append(v)
+        elif a in held:
+            rows["挂起"].append(v)
+        else:
+            rows["未落"].append(v)
+    return {"rev": rev, "votes": len(latest), "dropped": dropped, "rows": rows,
+            "counts": {k: len(x) for k, x in rows.items()}}
+
+
+def ledger_md(led: dict) -> str:
+    c = led["counts"]
+    ok = "账平" if sum(c.values()) == led["votes"] else "账不平"
+    s = (f"票账 {led['rev']}：有效 {led['votes']} 格 = 写入 {c['写入']} ＋ 一致 {c['与已有人裁一致']} ＋ 看不出 {c['看不出']}"
+         f" ＋ 挂起 {c['挂起']} ＋ 未落 {c['未落']}（{ok}）")
+    if c["未落"]:
+        s += "；未落：" + " ".join(f"{v['a']}({v['choice']})" for v in led["rows"]["未落"][:20])
+    return s
+
+
+def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> list[dict]:
+    """旧单上还没落成人裁的票（G0；第五册 168 票就是新单先上、票后落才漂了格位）。见 `ticket_ledger` 的「未落」。"""
+    return ticket_ledger(ws, book, text_id, rev, votes, held)["rows"]["未落"]
 
 
 def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a) -> None:
@@ -166,8 +200,11 @@ def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: 
     if not old_rev or old_rev == new_rev:
         return
     votes, src = old_rev_votes(ws, text_id, old_rev)
-    left = unlanded_votes(ws, book, text_id, old_rev, votes)
-    print(f"旧单 {old_rev} 的票（{src}）：{len(votes)} 张，未落 {len(left)} 格")
+    hf = getattr(a, "held_file", None)
+    held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
+    led = ticket_ledger(ws, book, text_id, old_rev, votes, held)
+    left = led["rows"]["未落"]
+    print(f"旧单 {old_rev} 的票（{src}）：{ledger_md(led)}")
     if not left:
         return
     cells = " ".join(f"{v['a']}({v['choice']})" for v in left[:20])
@@ -794,6 +831,7 @@ def main(argv=None) -> int:
             p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
     a = ap.parse_args(argv)
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 
