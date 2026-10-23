@@ -447,6 +447,27 @@ def detect_nonchar(gray: "np.ndarray", ocr: dict | None,
     return None
 
 
+def ref_admit_char(ref_char: str | None,
+                   match_candidates: list[tuple[str, float]] | None,
+                   vmap: VariantMap) -> str | None:
+    """match_replace/match_ref_weak/match_margin 进库字：取整理本/参考字，
+    但参考字是异体表的异体键、而库 top 候选恰是它的语义正字时取库候选。
+
+    起因（2026-10-23，GUJI-727 后体检）：殿本 vol16:73:4:11、vol20:195:7:18
+    的参考文本（文渊阁录入）混有简体「贯」「牵」，通道照参考字进库，又靠
+    variants.auto 的 贯→貫 过了语义闸，出简体码位。库里只有 貫、牽。
+    库 top 就是正字时，形状证据与正字一致，取库字；库 top 本身就是参考字
+    （如 云，库里也是云）则 semantic(云)≠云 但 top==云≠正字，不触发。
+    """
+    if not ref_char or not match_candidates:
+        return ref_char
+    top = max(match_candidates, key=lambda t: t[1])[0]
+    sem = vmap.semantic(ref_char)
+    if sem != ref_char and top == sem:
+        return top
+    return ref_char
+
+
 def admission_decision(ocr: dict | None, align_char: str | None,
                        ref_char: str | None, doubts: list[str],
                        vmap: VariantMap,
@@ -1054,8 +1075,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                              "match_margin"):
                     # 这三条通道站着的都是整理本/参考字，库只是形状旁证
                     # （match_margin 同一机理，见 MATCH_MARGIN_THRESH 注释）
-                    proposed = (al.char if al else None) or \
-                        (ctx or {}).get("ref_char")
+                    proposed = ref_admit_char(
+                        (al.char if al else None) or
+                        (ctx or {}).get("ref_char"),
+                        mr.candidates, vmap)
                 elif admit_ok and channel == "match_ref":
                     # 库 × 整理本通道的进库字取库匹配形——站着的是形状
                     # 证据（verify same）+ 整理本，OCR 只是旁证；否则
@@ -1566,8 +1589,9 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
             n["kept"] += 1
             continue
         if channel in ("match_replace", "match_ref_weak", "match_margin"):
-            proposed = (it.align or {}).get("char") or \
-                (it.context or {}).get("ref_char")
+            proposed = ref_admit_char(
+                (it.align or {}).get("char") or
+                (it.context or {}).get("ref_char"), cands or None, vmap)
         elif channel in ("match_ref", "match_solo", "match_solo_ocr"):
             proposed = m.get("char") or (
                 max(cands, key=lambda t: t[1])[0] if cands else None)
