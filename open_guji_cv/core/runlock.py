@@ -31,6 +31,21 @@ LOCK_NAME = ".run.lock"
 SNAP_REL = "products_snap"
 
 
+def _alive_hint(h: dict) -> str:
+    """同机时标出持有者 pid 是否还活着。flock 抢不到说明有进程握着锁（常是并行工作进程在父进程被杀后
+    还没退）；pid 已不在时提示去找它的子进程，而不是当成残留标记等着过期。"""
+    pid = h.get("pid")
+    if not isinstance(pid, int) or h.get("host") != socket.gethostname():
+        return ""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return "（已不在，锁可能被它的子进程握着，`ps` 查）"
+    except OSError:
+        return ""
+    return "（在运行）"
+
+
 class RunLockHeld(RuntimeError):
     """别的进程正持有这本书的跑批锁。"""
 
@@ -38,7 +53,7 @@ class RunLockHeld(RuntimeError):
         self.path = path
         self.holder = holder or {}
         h = self.holder
-        who = (f"pid {h.get('pid')}@{h.get('host')}，{h.get('started')} 起，命令：{h.get('cmd')}"
+        who = (f"pid {h.get('pid')}@{h.get('host')}{_alive_hint(h)}，{h.get('started')} 起，命令：{h.get('cmd')}"
                if h else "持有者信息读不到")
         super().__init__(f"这本书正有别的跑批在写 {path.parent}（{who}）。"
                          f"等它跑完再来，或加 --wait 排队；试验请用 GUJI_PRODUCTS_DIR 指到沙箱。")
