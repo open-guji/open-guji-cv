@@ -210,6 +210,11 @@ class SeedAdmitParams(BaseModel):
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
     见 `groups.flow.decide_joint`。False＝这类格不进流程（2026-10-22 前的行为）。"""
+    group_flow_lift_ref_guard: bool = True
+    """字组补放（lift）与整理本互证（A24 2026-10-23，vol15 118:4:15 面→而：文意 L1 规则 em-而-l1 给 而，整理本对位 面，
+    字形第二路倾向 面 但分差 0.33 不到 0.4 弃权，lift 仍放 而；图是 面）：整理本字是本组成员、与组给的字不同，且组里
+    没有任何非文意解法（字频、字形、IDS…）给出同一个字 → 不补放，留人审（`group_flow_ref_dissent`）。
+    共字组联合判（joint，日曰目）不受此限：sheldon 10-22 定日曰文意高置信可改整理本。"""
     group_flow_l2_drift: int = 2
     """文意 L2 答案表的键（建表时的前后各 20 字）与本次窗口对不上时，若目标字两侧各 3 字内逐字相同、只远处差至多这么多个字位，
     仍用表里的答案（证据 `ctx_drift`）；0＝逐字相同才用（2026-10-22 前的行为）。建表后重跑，邻格放行字会变（□→曰、徵→徴），
@@ -318,6 +323,32 @@ class SeedAdmitParams(BaseModel):
     `solo_ctx_veto`、落人审。起因：vol05 `147:9:9` 金标士，库候选 土 0.9955／士 0.9813（纯形状），
     而 context_decide 的 ranked 是 士 0.6327／土 0.2218——系统里已有对的答案，match_solo 这条路
     不看。vol05 377 格 match_solo 里 ranked[0] 与放行字不同仅 27 格。0 = 关（旧行为，不进 dump）。"""
+    context_variant_form_guard: bool = True
+    """context 通道不在异体里选形（A24 2026-10-23，殿本 vol11/14/15 用 v0.5.9 重跑后逐格核）：Step6 的 margin 按语义合并算
+    （`semantic_margin`，为的是 珎/珍 不摊薄），于是 參㕘叅 三形各约 0.33、簒/篡 各 0.46 也报 margin 1.0，context 在异体里抓阄
+    （vol14 235:7:4 两版一次 㕘 一次 叅）。放行字的 `ranked` 里有另一个**语义同字、字面不同**的候选，概率 ≥
+    `context_variant_ratio` × 放行字的概率，而库形分不开它俩（放行字的库 cov 领先不到 `context_variant_lib_gap`；
+    那个候选不在库候选里 = 分得开）→ 不放行，doubt `context_variant_form`，落人审（异体看刻形）。书级码位归一后同字的不算。"""
+    context_variant_ratio: float = 0.25
+    context_variant_lib_gap: float = 0.02
+    context_lib_dissent_gap: float = 0.03
+    """context 通道与库形互证（A24 2026-10-23）：库 top1 与 context 字语义不同，而 context 字在库候选里落后 top1 至少这么多
+    （或根本不在库候选里、且 top1 cov ≥ `context_lib_dissent_cov`）→ 不放行，doubt `context_lib_dissent`。
+    `context_guard_diff` 只拦库判 diff 且 cov<0.8；vol14 的错放库判都是 unsure、cov 0.93–0.98（𣏌→相：库 𣏌 0.984／相 0.948；
+    㳫→書：杳 0.975／書 0.933；牽→事：奉 0.937、事 不在候选）。0 = 关。"""
+    context_lib_dissent_cov: float = 0.93
+    iron_ctx_guard: bool = True
+    """铁证放行前与 Step6 上下文互证（A24 2026-10-23，vol11 12:2:14 官→宫：库 宫 0.9972／官 0.9961 近平手，上下文
+    官 0.69／宫 0.31，铁证仍放 宫）：上下文 ranked 第一名与铁证字语义不同、概率 ≥ `iron_ctx_prob`，且它在库候选里与
+    铁证字近平手（cov 落后不到 `iron_ctx_gap`）→ 不放行，doubt `iron_vs_ctx`。"""
+    iron_ctx_prob: float = 0.5
+    iron_ctx_gap: float = 0.005
+    match_tie_guard: bool = True
+    """库 × 整理本 通道的近平手护栏（A24 2026-10-23，vol14 60:1:5 拱→撰）：Step5-d 对位的载体字取库 top1，库 撰 0.9393／
+    撤 0.9391 只差 0.0002，载体就是 撰，整理本里唯一的「撰」被 difflib 对到这一格（真 撰 在下一格）——「库与整理本一致」
+    是自证，不是两路独立证据。库判不是 same、库前两名语义不同且 cov 差 < `match_tie_gap` 时，match_ref／match_replace／
+    match_margin 不放行，doubt `match_tie`。"""
+    match_tie_gap: float = 0.003
     replace_form: str = "align"
     """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
     - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
@@ -637,6 +668,15 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
             d.pop("seal_lib_cov", None)
+        if isinstance(d, dict) and not self.context_lib_dissent_gap:
+            d.pop("context_lib_dissent_gap", None)
+            d.pop("context_lib_dissent_cov", None)
+        for flag, keys in (("context_variant_form_guard", ("context_variant_ratio", "context_variant_lib_gap")),
+                           ("iron_ctx_guard", ("iron_ctx_prob", "iron_ctx_gap")),
+                           ("match_tie_guard", ("match_tie_gap",))):
+            if isinstance(d, dict) and not getattr(self, flag):
+                for k in (flag, *keys):
+                    d.pop(k, None)
         if isinstance(d, dict) and not self._context_guard_on():
             for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
                       "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
@@ -1062,6 +1102,11 @@ class SeedAdmitStep(Step):
                     if _variant_indirect(_shape, align_char, ledger, ctx.book):
                         ok, channel = False, None
                         doubts.append("variant_indirect")
+                if (ok and p.match_tie_guard and r.verdict != "same"
+                        and channel in ("match_ref", "match_replace", "match_margin")
+                        and _lib_near_tie(r.candidates, vm_here, p.match_tie_gap)):
+                    ok, channel = False, None
+                    doubts.append("match_tie")
                 # ── 版本注闭集通道 note_lexicon（2026-09-06）──────────
                 # 走到这里还没放行、而段级匹配给出了读法时补一刀。判据与
                 # match_ref 同构（文本证据 × 形状证据、来源独立），但证据来自
@@ -1219,6 +1264,13 @@ class SeedAdmitStep(Step):
                             p, r, d.char, _ir, _coord_refs(ctx, page, coord_cache), vm_here)):
                         doubts.append(_g[0])
                         char = _g[1] or char
+                    elif p.context_variant_form_guard and _context_variant_tie(
+                            d, r.candidates, vm_here, p.context_variant_ratio, p.context_variant_lib_gap,
+                            ctx.book.canonical_char if (ctx is not None and ctx.book.codepoints) else None):
+                        doubts.append("context_variant_form")
+                    elif p.context_lib_dissent_gap > 0 and _context_lib_dissent(
+                            d.char, r.candidates, vm_here, p.context_lib_dissent_gap, p.context_lib_dissent_cov):
+                        doubts.append("context_lib_dissent")
                     else:
                         ok, channel, char, prov = True, "context", d.char, "context"
 
@@ -1295,6 +1347,9 @@ class SeedAdmitStep(Step):
                                 iron_char, (align_char, _coord_refs(ctx, page, coord_cache).get(r.id)),
                                 vm_here):
                         doubts.append("iron_confusable_ref")
+                    elif iron_char is not None and p.iron_ctx_guard and _iron_ctx_dissent(
+                            iron_char, dmap.get(r.id), r.candidates, vm_here, p.iron_ctx_prob, p.iron_ctx_gap):
+                        doubts.append("iron_vs_ctx")
                     elif iron_char is not None:
                         ok, channel, char, prov = True, "iron", iron_char, "iron"
                         doubts = []
@@ -2058,6 +2113,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
                      l2_tables=dict(p.group_flow_tables), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
+                     lift_ref_guard=p.group_flow_lift_ref_guard,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
                                                         and ctx.book.codepoints) else None))
@@ -2329,6 +2385,64 @@ def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
     top, prob = ranked[0]
     lib = max(cands, key=lambda t: t[1])[0]
     return prob >= thresh and vmap.semantic(top) != vmap.semantic(lib)
+
+
+def _lib_cov(cands, ch: str) -> float | None:
+    return max((v for c, v in cands if c == ch), default=None)
+
+
+def _lib_near_tie(cands, vmap, gap: float) -> bool:
+    """`match_tie_guard`：库候选前两名语义不同、cov 差 < gap。"""
+    top = sorted(cands or [], key=lambda t: -t[1])[:2]
+    return (len(top) == 2 and top[0][1] - top[1][1] < gap
+            and vmap.semantic(top[0][0]) != vmap.semantic(top[1][0]))
+
+
+def _context_variant_tie(dec, cands, vmap, ratio: float, lib_gap: float, canon=None) -> bool:
+    """`context_variant_form_guard`：context 放行字在 ranked 里有语义同字、字面不同的对手（概率 ≥ ratio × 放行字概率），
+    库形又分不开它俩 → True（context 不该在异体里选形）。"""
+    ranked = getattr(dec, "ranked", None) or []
+    ch = dec.char
+    p1 = next((v for c, v in ranked if c == ch), None)
+    if not p1:
+        return False
+    norm = canon or (lambda c: c)
+    sem = vmap.semantic(ch)
+    c1 = _lib_cov(cands or [], ch)
+    for c, v in ranked:
+        if c == ch or norm(c) == norm(ch) or vmap.semantic(c) != sem or v < ratio * p1:
+            continue
+        c2 = _lib_cov(cands or [], c)
+        if c2 is None:
+            continue                      # 对手不在库候选里：库形分得开
+        if c1 is None or c1 - c2 < lib_gap:
+            return True
+    return False
+
+
+def _context_lib_dissent(ch: str, cands, vmap, gap: float, absent_cov: float) -> bool:
+    """`context_lib_dissent_gap`：库 top1 与 context 字语义不同，context 字（含同义异体）在库里落后 ≥ gap，
+    或不在库候选里而 top1 cov ≥ absent_cov。没有库候选 = 不拦。"""
+    if not cands:
+        return False
+    c1, v1 = max(cands, key=lambda t: t[1])
+    sem = vmap.semantic(ch)
+    if vmap.semantic(c1) == sem:
+        return False
+    vc = max((v for c, v in cands if vmap.semantic(c) == sem), default=None)
+    return v1 >= absent_cov if vc is None else v1 - vc >= gap
+
+
+def _iron_ctx_dissent(iron_char: str, dec, cands, vmap, prob: float, gap: float) -> bool:
+    """`iron_ctx_guard`：上下文第一名与铁证字语义不同、概率 ≥ prob，且在库里与铁证字近平手。"""
+    ranked = getattr(dec, "ranked", None) or []
+    if not ranked:
+        return False
+    top, p = ranked[0]
+    if p < prob or vmap.semantic(top) == vmap.semantic(iron_char):
+        return False
+    ci, ct = _lib_cov(cands or [], iron_char), _lib_cov(cands or [], top)
+    return ci is not None and ct is not None and ci - ct < gap
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
