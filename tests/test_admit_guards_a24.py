@@ -79,7 +79,8 @@ def test_params_dump_hides_guards_when_off():
     d = SeedAdmitParams(context_variant_form_guard=False, iron_ctx_guard=False, match_tie_guard=False).model_dump()
     assert not any(k in d for k in ("context_variant_form_guard", "context_variant_ratio", "iron_ctx_guard",
                                     "iron_ctx_prob", "match_tie_guard", "match_tie_gap"))
-    assert SeedAdmitParams().model_dump()["match_tie_guard"] is True
+    assert "match_tie_guard" not in SeedAdmitParams().model_dump()          # 缺省关
+    assert SeedAdmitParams(match_tie_guard=True).model_dump()["match_tie_gap"] == 0.003
 
 
 @dataclass
@@ -114,6 +115,26 @@ def test_lift_ref_dissent(monkeypatch):
     r = Rec("x")
     group_flow_pass([r], amap, cands, lambda r: False, FlowConfig(groups=("em",)))
     assert r.admit and r.char == "而"                     # 非文意解法也给 而：补放
+
+
+def test_lift_coord_dissent(monkeypatch):
+    """vol18 107:6:7：现役对位缺格，坐标对位是组外的 叔，组给 叙 → 不补放；坐标对位是组内字或没有时照旧。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    g = "em"
+    mem = sorted(flow.GROUPS[g].members)
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(mem[0], via=name))
+    cands = lambda cid: [(mem[0], 0.994), (mem[1], 0.9785)]
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, FlowConfig(groups=(g,)), veto_refs={"x": "叔"})
+    assert not r.admit and "group_flow_coord_dissent" in r.doubts
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, FlowConfig(groups=(g,)), veto_refs={"x": mem[1]})
+    assert r.admit and r.char == mem[0]                  # 组内另一字：坐标对位不拦
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, FlowConfig(groups=(g,), lift_ref_guard=False),
+                    veto_refs={"x": "叔"})
+    assert r.admit and r.char == mem[0]
 
 
 # —— 接进 seed_admit ——

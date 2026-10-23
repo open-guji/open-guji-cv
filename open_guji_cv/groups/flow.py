@@ -239,9 +239,11 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
-                    canon: Callable[[str], str] = lambda c: c) -> FlowResult:
+                    canon: Callable[[str], str] = lambda c: c,
+                    veto_refs: dict[str, str] | None = None) -> FlowResult:
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
-    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。"""
+    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
+    `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
     entries = {}
     for i, r in enumerate(seq):
         if blocked(r):
@@ -278,6 +280,10 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
                   and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)):
                 ch, why = None, "ref_dissent"   # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
+                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
+                ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
             if ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"
