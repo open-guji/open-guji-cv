@@ -66,5 +66,5 @@ def test_guard_actually_detects_a_new_param():
     """守卫自检：给一个注册表里的组名加前缀的假字段，应被判为字组参数且不在白名单。"""
     for fake in ("jys_foo", "ry_new_switch", "rr_extra", "yi_560_review", "near_form_x", "ji_yi_si_other"):
         assert _is_group_param(fake) and fake not in ALLOWED_LEGACY
-    for ok in ("shadow_veto", "runt_cell_review", "rare_ref", "lane_seal", "variant_tie"):
+    for ok in ("shadow_veto", "symbol_review", "rare_ref", "lane_seal", "variant_tie"):
         assert not _is_group_param(ok)
