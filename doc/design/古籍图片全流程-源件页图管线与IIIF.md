@@ -1,6 +1,6 @@
 # 古籍图片全流程：源件 → 页图 → 管线与 IIIF（设计稿，A20，2026-10-23）
 
-> 状态：**设计稿，待用户定方案**。纯文档，不改代码、不写 R2、不搬数据。
+> 状态：**已定案并实施（2026-10-23）**。用户 10-23 05:34 定：直接写正式桶，其余六条按推荐。实施记录与和设计稿的出入见文末「十一」。
 > 起因：A30 要「原图存 R2、子会话一条命令取」（ai-team `domain/CV/规范/子会话启动提速与待命池策略.md` 6.2）；用户 10-23 要求把**网站书影（COS 上的 IIIF）**一并纳入，统一设计下载、存储、拆页、修正和取用。
 > 读过的现状：cv `scripts/ia_download_zongmu.py`、`utils/page_split.py`、`utils/preclean.py`、`core/step.py::raw_page`、`core/engine.py::_upstream_sha`；
 > kaiyuanguji-web `ops/iiif/siku_zongmu_iiif.py`、`siku-zongmu-splits.json`、`check_cord_vs_splits.py`、`nextjs/src/lib/facsimile.ts`；guji-workspace-data Worker `packs.ts`、`policy.ts`；cv PR #443。
@@ -128,13 +128,41 @@ seq 已经是 cord 的 canvas id（`…/iiif/<书>/canvas/<册>/<seq>`）和网�
 | 4 | web 仓 IIIF 改读页表（A41） | 新册书影上线；`check_cord_vs_splits` 改核页表 |
 | 5 | 收掉旧裁剪框表、`ia_download_zongmu.py`；guji-workspace 原图去留（要用户点头） | — |
 
-## 十、需要用户定的
+## 十、用户的决定（2026-10-23）
 
-1. 页图逐页按 sha 存 R2 正式桶、按哈希公开（推荐）；源件不公开。
-2. 页 id 用 IIIF 现有的 seq，管线继续用连续页号、由页表对照（推荐）；还是让管线也改用 seq（全部册要重跑）。
-3. 正式桶写入走服务器（A，推荐）还是给 Worker 加专用写令牌（B）。
-4. 网站书影改读页表，由 A41 来改。
-5. 修图界线：给读者看的修正进页表，只为识别的留在 preclean（推荐）。
-6. vol11–20 若 A30 本地字节与 build 不一致：保留 A30 那份不重跑（推荐，若已跑过），还是统一用 build。
+1. 页图按 sha 存正式桶、公开读：**同意**。
+2. 页 id 用 IIIF 的页序，管线页号不改：**同意**。
+3. 正式桶写入：**直接写正式桶**（出错覆盖即可），不先在实验桶演练；由 A20 用正式令牌执行。
+4. 网站书影改读页表：**同意**（A20 出 web PR，A41 接手合并与重出）。
+5. 修图界线：**同意**。
+6. 已跑过的册字节不一致时保留已跑的：**同意**（实测没有不一致，见下）。
 
-通知（定案后经协调者）：A21–A24、A30（存储位置变化）、A41（书影生成改读页表）、Ops（服务器跑正式写入）。
+## 十一、实施记录（2026-10-23，A20）
+
+**代码**：`open_guji_cv/datastore/sources.py`、`open_guji_cv/cli_source.py`（`guji source pull|show|list|check|ia|register|replace`），测试 `tests/datastore/test_sources.py`。不进任何 Step 的 `code_deps`，17 步 `code_hash` 不变。
+
+**与设计稿的出入**（实现时改的，理由都是少改别处）：
+- **页表放 R2，不放中心库 `files` 表**：`pack/source/pages/<书id>/<册>/r<NNN>.json`，每版一份、只增不改（同名再存 Worker 回 409，即两人同时改时后到的被拒）。原因：Worker 的 `/v1/files` 只开 `feedback/lists/`，写 `config/` 要直连 Postgres；网站的 web 令牌也读不了中心库的 `config/`。放 R2 不改 Worker、不改表，任何令牌都能读。
+- **cv 册与书的对应**：`pack/source/by-ws/<工作区>/<册名>.json` 指针（只写一次），`guji source pull vol11 -w <ws>` 靠它找页表。
+- **R2 正式桶整桶按键公开**：实测 `blob.open-guji.com/<任意键>` 都能取（包括 `pack/` 下的产物包、源件），只是不能列目录。所以「源件不公开」实际是「按键公开、键不可列」，与产物包现状相同。网站就是靠这一点不要令牌读页表（从 r001 往上探到 404 取最新版）。
+- **页图编码**：`Image.convert("RGB")` 后 Pillow 缺省参数存 PNG（不是灰度）。殿本 vol11–20 线上产物用的原图就是这么转的，逐字节核过。
+
+**殿本 vol01–20 已上正式桶**（页表都是 r001，`guji source list 96mid1ogzk`）：
+
+| 册 | 怎么登记 | 核对 |
+|---|---|---|
+| vol11–20（1,797 页） | `guji source ia`：从 IA `_tif.zip` 生成 | 与各册最新产物包 `_raw_index.json` **逐页逐字节相同**，产物不过期 |
+| vol01–10（1,707 页） | `guji source register`：guji-workspace `data_full/` 现有原图原样登记 | 与 IA 逐像素相同；第 1 叶书脊页是缩小存档（957×1359，ops 记 manual）；vol03/04/07/09 合扫拆页按 web 仓裁剪框表裁出，与现有图逐像素相同；与产物包 `_raw_index.json` 逐字节相同，只有册配置 `preclean:` 登记的 10 页不比（产物记的是修好那张的 sha） |
+
+20 个源件（IA `_tif.zip` 原样，`pack/source/orig/96mid1ogzk/<册>/…`）都已存档。
+
+**实测**：新目录 `guji source pull` 取 vol11（110 页、22 MB）2.9 秒，vol20（285 页）6 秒，逐字节对上；落到册配置的 `raw_dir` 也试过。
+
+**网站**：kaiyuanguji-web PR #577 给书影脚本加 `--source pages`（缺省仍是 ia）。vol11 抽 5 叶、vol03 含拆页，两种来源的三档 WebP 与 info.json `diff -r` 完全相同；只有 vol01–10 第 1 叶书脊页会变小，这 10 册已上线，不必重出。
+
+**`guji source check` 的已知误报**：每册第 2 叶是横扫的题签页（宽高比约 1.4），会被报疑似合扫，属正常。
+
+**还没做的**：
+- 全唐文（qtw-draft）、北行日錄（bxgb）等别的书还没登记，要用时照 `register`／`ia` 做。
+- guji-workspace 里 vol01–10 原图是否删掉、项目规则「git 里只放原图」的改写，等用户点头。
+- `scripts/ia_download_zongmu.py` 与 web 仓裁剪框表暂留，新册不再用；等 vol21 起全走页表后再删。

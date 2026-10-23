@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20 已登记，与线上产物用的原图逐字节相同。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
+
 ## [0.5.9] - 2026-10-22
 
 PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。
