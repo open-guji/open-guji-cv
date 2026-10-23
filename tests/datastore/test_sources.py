@@ -167,3 +167,14 @@ def test_keys_and_ids():
     assert S.orig_key("96mid1ogzk", "11", "a_tif.zip") == "source/orig/96mid1ogzk/11/a_tif.zip"
     with pytest.raises(ValueError):
         S.table_key("../x", "11", 1)
+
+
+def test_local_source_ascii_key(tmp_path):
+    p = tmp_path / "NLC403-312001066864-15647_北行日錄_卷一.pdf"
+    p.write_bytes(b"%PDF-1.4")
+    rec = S.local_source(p, "https://example.org/x")
+    assert rec["file"] == "NLC403-312001066864-15647.pdf" and rec["name"] == p.name
+    assert rec["sha256"] == S.sha256(b"%PDF-1.4") and rec["kind"] == "file"
+    q = tmp_path / "全唐文.PDF"
+    q.write_bytes(b"x")
+    assert S.local_source(q)["file"] == S.sha256(b"x")[:16] + ".pdf"     # 名字里没有 ASCII 就用 sha 头

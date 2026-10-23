@@ -6,7 +6,7 @@
     guji source check <书id> <册>                                # 疑似合扫页（宽高比异常），跑管线前看
     guji source ia <书id> <册> --ia <IA 标识> --ws <工作区 id> --book <册名> [--splits 表] --why …
                                                                  # 从 IA 下源件、存档、生成页图、发布页表（正式令牌）
-    guji source register <书id> <册> --dir <原图目录> --map <页号→页序表> --ia <IA 标识> --ws … --book … --why …
+    guji source register <书id> <册> --dir <原图目录> --map <页号→页序表> [--ia <IA 标识> | --src-file <路径>=<网址> …] --ws … --book … --why …
                                                                  # 已有原图目录原样登记（老册，不重编码）（正式令牌）
     guji source replace <书id> <册> <页序> <png> --why …          # 换一页（人工处理后的图），页表出新版（正式令牌）
 
@@ -96,7 +96,7 @@ def cmd_show(args) -> None:
     print(f"{t['book_id']}/{t['vol']} r{t['rev']:03d}（{t.get('status')}）{t.get('ws')}/{t.get('book')}："
           f"{len(t['pages'])} 页，有处理 {ops} 页；{t.get('by')} {t.get('created')}：{t.get('why')}")
     for s in t.get("sources", []):
-        print(f"  源件 {s.get('kind')}:{s.get('id')}/{s.get('file')} sha256 {s.get('sha256', '')[:12]}… → {s.get('r2')}")
+        print(f"  源件 {s.get('kind')}:{s['id'] + '/' if s.get('id') else ''}{s.get('name') or s.get('file')} sha256 {s.get('sha256', '')[:12]}… → {s.get('r2')}")
     if t.get("changed"):
         print(f"  本版改动：{', '.join(t['changed'][:20])}{' …' if len(t['changed']) > 20 else ''}")
 
@@ -167,6 +167,13 @@ def cmd_register(args) -> None:
         if not args.dry_run:
             rec["r2"] = S.store_original(src, args.book_id, vol, rec)
         sources.append({"key": "s1", **rec})
+    for spec in args.src_file or []:                                 # 非 IA 源件：<路径>[=<网址>]
+        path, _, url = spec.partition("=")
+        rec = S.local_source(Path(path), url)
+        if not args.dry_run:
+            rec["r2"] = S.store_original(src, args.book_id, vol, rec)
+            print(f"  源件 {rec['file']} 已存 R2 {rec['r2']}")
+        sources.append({"key": f"s{len(sources) + 1}", **rec})
     pages, blobs = S.register_local(Path(args.dir), seq, pattern=args.pattern,
                                     src_of_page={int(k): v.get("src", "") for k, v in m.items()},
                                     ops_of_page={int(k): v.get("ops", []) for k, v in m.items()})
@@ -207,6 +214,8 @@ def add_parser(sub) -> None:
     p.add_argument("--splits", default=None, help="ia：拆页表（同 web 仓 siku-zongmu-splits.json）")
     p.add_argument("--expect", default=None, help="ia/register：产物包里的 _raw_index.json，逐页核 sha，不符不发布")
     p.add_argument("--expect-skip", default=None, help="ia/register：不比的 cv 页号（册配置 preclean 登记的页），逗号分隔")
+    p.add_argument("--src-file", action="append", default=None,
+                   help="register：非 IA 源件 <路径>[=<网址>]，可多次（按次序记作 s1、s2…，--map 的 src 引这些键）")
     p.add_argument("--dir", default=None, help="register：已有原图目录")
     p.add_argument("--map", default=None, help="register：{cv 页号: {seq, src, ops}} 的 json")
     p.add_argument("--pattern", default="{page}.png", help="register：原图文件名")

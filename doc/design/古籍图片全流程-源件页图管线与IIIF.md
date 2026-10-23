@@ -162,7 +162,20 @@ seq 已经是 cord 的 canvas id（`…/iiif/<书>/canvas/<册>/<seq>`）和网�
 
 **`guji source check` 的已知误报**：每册第 2 叶是横扫的题签页（宽高比约 1.4），会被报疑似合扫，属正常。
 
+**别的书（2026-10-23 晚，用户「旧项目同样整理、书影都放上去」）**：
+
+| 书 | 页表 | 怎么登记 | 核对 |
+|---|---|---|---|
+| 北行日錄（`988g7gsqhd`，ws `beixing-guben`，册 `bxgb`） | `988g7gsqhd/01` r001，56 页 | `register --src-file`：guji-workspace `data_full/bxgb_scan` 原样；两份国图 PDF 存 `source/orig/988g7gsqhd/01/` | 取回与原图逐字节相同 |
+| 全唐文 v006–v010（ws `qtw-draft`） | `995ejelvk0/06`–`10` r001，520 页 | 原图在已删分支 `raw-snap/qtw-v006-v010-png`（9b5ff87，GitHub 按 sha 还能取），sha1 与其 MANIFEST 全对后原样登记 | 取回 v006、v010 逐字节相同 |
+
+- `register` 加 `--src-file <路径>=<网址>`（可多次）登记非 IA 源件；R2 键只收 ASCII，中文文件名截成 ASCII 部分（`NLC403-…-15647.pdf`），原名记在 `name`。
+- **全唐文书 id 借 `995ejelvk0`**（book-index「欽定全唐文清嘉慶二十一年揚州刻本內府本」，条目里的扫描是国图本）：CADAL 清華本在 book-index 没有单独条目，按「Book＝版本」同版归这条，册号用 CADAL 件号（第 6 件＝`06`）。日后若要登记同版国图本，得另立 book-index 条目，免得册号撞。
+- **全唐文源件 DjVu 没存 R2**：Commons 对会话出口限流（API 与 upload 都 429），页表 `sources` 只记了文件名与链接；换个出口下到 `CADAL0102280N.djvu` 后 `register` 出 r002 补上。
+- **书影**：kaiyuanguji-web PR #577 加 `ops/iiif/pages_iiif.py`（别的书只有本站图源），书名、卷次登记在 `ops/iiif/pages-books.json`，workflow `iiif-siku-zongmu.yml` 加 `book` 输入。北行日錄、全唐文五件已上 COS（`iiif/988g7gsqhd/01/`、`iiif/995ejelvk0/06–10/`）。
+- **旧原图**：用户同意删。guji-workspace PR #42 删 main 上的 1,763 张（删前逐张核 sha 全在 R2）；`data/zongmu-vol11|16-17|20-raw-scans` 三分支 741 张也核过全在 R2，待删分支。
+
 **还没做的**：
-- 全唐文（qtw-draft）、北行日錄（bxgb）等别的书还没登记，要用时照 `register`／`ia` 做。
-- guji-workspace 里 vol01–10 原图是否删掉、项目规则「git 里只放原图」的改写，等用户点头。
+- 全唐文 DjVu 源件补存（见上）。
+- 项目规则「git 里只放原图」的改写。
 - `scripts/ia_download_zongmu.py` 与 web 仓裁剪框表暂留，新册不再用；等 vol21 起全走页表后再删。

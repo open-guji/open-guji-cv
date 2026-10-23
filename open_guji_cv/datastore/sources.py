@@ -204,6 +204,18 @@ def ia_download(ia_id: str, dest_dir: Path, retries: int = 3) -> dict:
             "fetched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
+def local_source(path: Path, url: str = "", kind: str = "file") -> dict:
+    """手边已有的源件（国图／Commons 的 PDF、DjVu 等）→ 来源记录，与 `ia_download` 同形。"""
+    path = Path(path)
+    data = path.read_bytes()
+    s = sha256(data)
+    # R2 键只收 ASCII（Worker 拒中文前缀）：`NLC403-…-15647_北行日錄_卷一.pdf` → `NLC403-…-15647.pdf`，原名留在 name
+    stem = re.sub(r"_+$", "", re.sub(r"[^A-Za-z0-9.-]+", "_", path.stem)).strip("_.") or s[:16]
+    file = stem + re.sub(r"[^A-Za-z0-9.]", "", path.suffix.lower())
+    return {"kind": kind, "file": file, "name": path.name, "url": url, "sha256": s, "bytes": len(data),
+            "path": str(path), "fetched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
 def store_original(src, book_id: str, vol: str, rec: dict) -> str:
     """源件原样存 R2（已有就跳过，核 sha）。返回 R2 键（不含 `pack/`）。"""
     from . import packs as PK
