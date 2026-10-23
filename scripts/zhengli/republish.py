@@ -257,7 +257,7 @@ def publish_web(a) -> bool:
     if not shutil.which("gh"):
         print("⚠ 没有 gh，网站 proofing-sync 没触发：等每日定时，或手动跑 proofing-sync.yml（production、publish、dry_run=false）")
         return False
-    p = run(["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO,
+    p = run(["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO, "--ref", "main",  # 带 --ref：云端会话没有 GraphQL，查不了默认分支
              "-f", "target=production", "-f", "parts=publish", "-f", "dry_run=false"])
     if p.returncode:
         print("⚠ 网站 proofing-sync 触发失败（见上），等每日定时或手动跑")

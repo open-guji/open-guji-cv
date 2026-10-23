@@ -126,7 +126,7 @@ def test_sync_then_publish_web(tmp_path, monkeypatch):
     monkeypatch.setattr(rp.shutil, "which", lambda name: "/usr/bin/gh")
     monkeypatch.setattr(rp, "run", fake_run(0))
     assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is True
-    assert calls[-1][:3] == ["gh", "workflow", "run"] and "parts=publish" in calls[-1] and "dry_run=false" in calls[-1]
+    assert calls[-1][:3] == ["gh", "workflow", "run"] and "parts=publish" in calls[-1] and "dry_run=false" in calls[-1] and "--ref" in calls[-1]
 
     calls.clear()
     monkeypatch.setattr(rp, "run", fake_run(1))
