@@ -10,6 +10,7 @@
 - `guji opinions auto`（M11，GUJI-735 起步；MINOR 级新命令，不碰任何 Step，`code_hash` 不变）：修订流程自动化调和器。`decide`（`to_user` 的意见按 `rules.json` 的 `auto.decide` 自动结案，`decided.by=policy:auto-v1`；刷票、用户亲裁、版本漂移、C 类、看不清、置信不足的留着）、`prepare`（每章聚一批，book-text 里建 `auto/<书>-<章>-<日期>` 分支，套 `revise`、升版本、跑 `local_check`、提交一次，失败不留半成品）、`finish-pr`（CHANGES 的 `#TBD` 换 PR 号）、`finish-merged`（记 `applied`、格谱系、度量、`publish-status`）、`digest`（汇总）。意见池新增 `releases.jsonl`、`lineage.jsonl`、`metrics.jsonl`（只追加）；日志新增 kind `batched`／`pr_opened`／`published`／`reverted`／`policy_applied`，只有 `reverted` 改状态。`rules.json` 升 version 2，加 `auto` 段；合并进 book-text main 缺省不自动（`auto.merge.enabled=false`）。设计见 book-text `docs/design/2026-10-修订流程自动化设计.md`。
 
 ### Fixed
+- 续跑加固（#454，A20）：manifest 追加写被杀留下半行时，读表跳过坏行（该页按没记过、重跑补），下一次追加先补换行，不再整册起不来；跑批锁冲突报错在同机时标注持有者 pid「在运行／已不在（锁可能被子进程握着）」。不碰任何 Step，`code_hash` 不变（L0）。
 - seed_admit 放行护栏七条（A24，殿本 vol11/14/15 用 v0.5.9 重跑后逐格核出的错放；新开关缺省开，`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变）：
   ① `context_variant_form_guard`：Step6 margin 按语义合并算，參㕘叅、簒/篡 等异体各占一半也报 margin 1.0，context 在异体里抓阄（vol14 235:7:4 两版一次 㕘 一次 叅）；放行字在 ranked 里有语义同字的对手、库形又分不开 → 落审（doubt `context_variant_form`）。
   ② `iron_ctx_guard`：铁证字与上下文第一名（概率 ≥0.5）语义不同、两字在库里近平手（差 <0.005）→ 落审（`iron_vs_ctx`；vol11 12:2:14 官→宫）。
