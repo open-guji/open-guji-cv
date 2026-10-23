@@ -107,6 +107,12 @@ TRI = dict(confidence=0.5, rationale_public="理由", judge="j")
     ([_ev("decided", decision="accept"), _ev("applied", text_version="1.0.2", pr="#1")], "applied"),
     ([_ev("decided", decision="accept"), _ev("applied", text_version="1.0.2"), _ev("replied", text="谢谢"),
       _ev("cv_written", batch="b")], "applied"),
+    # 自动化新增的 kind：只有 reverted 改状态，发布批进度看 releases.jsonl
+    ([_ev("decided", decision="accept"), _ev("batched", release="r1"), _ev("pr_opened", release="r1", pr="3"),
+      _ev("policy_applied", rule="x")], "accepted"),
+    ([_ev("decided", decision="accept"), _ev("applied", text_version="1.0.2"), _ev("published", release="r1")], "applied"),
+    ([_ev("decided", decision="accept"), _ev("applied", text_version="1.0.2"),
+      _ev("reverted", release="r1", reason="改错了")], "reverted"),
 ])
 def test_status_covers_every_kind(events, want):
     assert S.derive_status(events) == want
@@ -114,7 +120,8 @@ def test_status_covers_every_kind(events, want):
 
 def test_every_log_kind_is_covered():
     """上面的表覆盖了 schema 里的每个 log kind。"""
-    seen = {"ingested", "superseded", "dup", "forwarded", "triaged", "decided", "applied", "replied", "cv_written"}
+    seen = {"ingested", "superseded", "dup", "forwarded", "triaged", "decided", "applied", "replied", "cv_written",
+            "batched", "pr_opened", "published", "reverted", "policy_applied"}
     assert seen == set(S.LOG_KINDS)
 
 

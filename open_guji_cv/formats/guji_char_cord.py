@@ -475,7 +475,7 @@ def write_files(files: dict[str, Any], out_dir: Path | str) -> list[Path]:
 # ───────────────────────── 校验 ─────────────────────────
 
 def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> list[str]:
-    """两边一致：char 格位不重、key 的页/列与所在页/列相同；cord 的每个 `a` 在 char 里、页/列也对；
+    """两边一致：char 格位不重、key 的页/列与所在页/列相同；cord 的每个 `a` 在 char 里、页/列也对、marks 的 id 不重复；
     两边页号集合相同、每页列号集合相同（cord 没有某列的框不算错）；norm 的格位在 char 里、`c` 等于该格的字。"""
     errs: list[str] = []
     where: dict[str, dict] = {}
@@ -494,6 +494,14 @@ def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> lis
                     errs.append(f"char 格位 {c['a']} 重复")
                 where[c["a"]] = c
     if cord is not None:
+        mark_ids: set[str] = set()
+        for p in cord["pages"]:
+            for m in p.get("marks", []):
+                if m.get("id") is None:
+                    continue
+                if m["id"] in mark_ids:
+                    errs.append(f"cord p{p['page']} mark id {m['id']} 重复")
+                mark_ids.add(m["id"])
         cpages = {p["page"] for p in cord["pages"]}
         if cpages != set(cols_of):
             errs.append(f"页号两边不同：只在 char {sorted(set(cols_of) - cpages)[:5]}，只在 cord {sorted(cpages - set(cols_of))[:5]}")

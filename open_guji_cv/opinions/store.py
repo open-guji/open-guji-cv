@@ -29,7 +29,12 @@ FILES = {
     "raw": "raw-feedback.jsonl",
     "versions": "text_versions.json",
     "cv_todo": "cv_events_todo.jsonl",
+    # 自动化（doc/design 修订流程自动化设计）：发布批、格谱系、度量，都只追加
+    "releases": "releases.jsonl",
+    "lineage": "lineage.jsonl",
+    "metrics": "metrics.jsonl",
 }
+APPEND_ONLY = ("opinions", "log", "cv_todo", "releases", "lineage", "metrics")
 REMOTE_DIR = "feedback/lists/opinions/{book}"
 
 
@@ -135,6 +140,10 @@ class OpinionStore:
         self.raw: dict[str, dict] = {}
         self.text_versions: dict = {}
         self.cv_todo: list[dict] = []
+        self.releases: list[dict] = []
+        self.lineage: list[dict] = []
+        self.metrics: list[dict] = []
+        self._new_rows: dict[str, list[dict]] = {"releases": [], "lineage": [], "metrics": []}
         self._new_ops: list[Opinion] = []
         self._new_events: list[LogEvent] = []
         self._new_todo: list[dict] = []
@@ -154,7 +163,24 @@ class OpinionStore:
         self.raw = {d["id"]: d for d in _jsonl(self._text["raw"] or "") if d.get("id")}
         self.text_versions = json.loads(self._text["versions"]) if self._text["versions"] else {}
         self.cv_todo = _jsonl(self._text["cv_todo"] or "")
+        self.releases = _jsonl(self._text["releases"] or "")
+        self.lineage = _jsonl(self._text["lineage"] or "")
+        self.metrics = _jsonl(self._text["metrics"] or "")
         return self
+
+    def release_latest(self) -> dict[str, dict]:
+        """发布批按 id 取最后一行（状态变更是追加同 id 新行，最后一行为准）。"""
+        out: dict[str, dict] = {}
+        for r in self.releases:
+            out[r["id"]] = r
+        return out
+
+    def add_row(self, kind: str, row: dict) -> None:
+        """追加一行发布批（releases）、格谱系（lineage）或度量（metrics）。"""
+        if kind not in self._new_rows:
+            raise KeyError(kind)
+        getattr(self, kind).append(row)
+        self._new_rows[kind].append(row)
 
     def events_of(self, op_id: str) -> list[LogEvent]:
         return [e for e in self.events if e.opinion == op_id]
@@ -229,7 +255,8 @@ class OpinionStore:
     # ---- 写 ----
     def pending(self) -> dict[str, int]:
         return {"opinions": len(self._new_ops), "log": len(self._new_events),
-                "raw": int(self._raw_dirty), "versions": int(self._versions_dirty), "cv_todo": len(self._new_todo)}
+                "raw": int(self._raw_dirty), "versions": int(self._versions_dirty), "cv_todo": len(self._new_todo),
+                **{k: len(v) for k, v in self._new_rows.items()}}
 
     def _rendered(self) -> dict[str, str]:
         """要写的文件 → 新全文。只追加的文件 = 读到的原文（补齐末尾换行）+ 新行。"""
@@ -247,6 +274,9 @@ class OpinionStore:
             out["log"] = appended("log", [e.to_dict() for e in self._new_events])
         if self._new_todo:
             out["cv_todo"] = appended("cv_todo", self._new_todo)
+        for k, rows in self._new_rows.items():
+            if rows:
+                out[k] = appended(k, rows)
         if self._raw_dirty:
             out["raw"] = "".join(_line(self.raw[k]) + "\n" for k in sorted(self.raw))
         if self._versions_dirty:
@@ -262,6 +292,7 @@ class OpinionStore:
             res[FILES[key]] = self.backend.write(FILES[key], text, self._sha[key])
             self._text[key], self._sha[key] = text, sha256_text(text)
         self._new_ops, self._new_events, self._new_todo = [], [], []
+        self._new_rows = {k: [] for k in self._new_rows}
         self._raw_dirty = self._versions_dirty = False
         return res
 

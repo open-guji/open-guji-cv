@@ -457,13 +457,35 @@ def cmd_exit_check(args) -> None:
         sys.exit("册名不是 volNN 时要给 --chapter NNN")
     from .core.book import load_book
     b = load_book(args.book)
+    frozen = None
+    if args.frozen_char:
+        from .ops import text_diff as TD
+        frozen = TD.load(args.frozen_char)
     res = EC.run(Path(args.text_dir), chapter, b.freeze, b.cv_version,
-                 repo=Path(args.repo) if args.repo else None)
+                 repo=Path(args.repo) if args.repo else None, frozen_char=frozen)
+    if args.diff_out and res.get("diff") is not None:
+        from .ops import text_diff as TD
+        TD.write_tsv(res["diff"], json.loads((Path(args.text_dir) / f"{chapter}.char.json").read_text(encoding="utf-8")),
+                     frozen, Path(args.diff_out))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
         EC.print_report(res)
     sys.exit(0 if res["ok"] else 1)
+
+
+def cmd_char_diff(args) -> None:
+    """`guji char-diff <文本 char.json> <冻结导出 char.json>`：逐格比（只读；1.0 标准 G2）。见 `ops/text_diff.py`。"""
+    from .ops import text_diff as TD
+    text, frozen = TD.load(args.text), TD.load(args.frozen)
+    res = TD.diff(text, frozen)
+    if args.out:
+        TD.write_tsv(res, text, frozen, Path(args.out))
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"{res['n']} 处差异：{TD.summary(res)}" + (f"（明细 {args.out}）" if args.out and res["n"] else ""))
+    sys.exit(0 if not res["n"] else 1)
 
 
 def cmd_export(args) -> None:
@@ -2674,6 +2696,7 @@ COMMANDS_V2 = {
     "exit-check": cmd_exit_check,
     "export": cmd_export,
     "audit": cmd_audit,
+    "char-diff": cmd_char_diff,
     "store": cmd_store,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
@@ -3082,6 +3105,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--text-dir", required=True, help="book-text 本书 default 目录（含 index.json、NNN.char.json）")
     p.add_argument("--chapter", default=None, help="章号 NNN；缺省按 volNN 推")
     p.add_argument("--repo", default=None, help="查 tag 用的 cv 仓目录；缺省本包所在仓")
+    p.add_argument("--frozen-char", default=None, dest="frozen_char",
+                   help="冻结快照导出的 NNN.char.json；给了就核 E9（发布文本＝冻结导出）")
+    p.add_argument("--diff-out", default=None, dest="diff_out", help="E9 的逐格差异写成 tsv")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("char-diff", help="[v2] 两份 char.json 逐格比：发布文本 vs 冻结导出（只读，1.0 标准 G2）")
+    p.add_argument("text", help="发布（候选）文本的 NNN.char.json")
+    p.add_argument("frozen", help="冻结快照导出的 NNN.char.json")
+    p.add_argument("--out", default=None, help="差异明细 tsv")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")

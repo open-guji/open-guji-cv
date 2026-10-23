@@ -251,10 +251,17 @@ def _read_only(src) -> bool:
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
                  prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
-    from .materialize import materialize
+    from .materialize import MaterializeError, materialize
     for _ in range(retries):
         r0 = src.status()
-        stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
+        try:
+            stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
+        except MaterializeError:
+            # 先读 source_files、后读行：中间有人推了新行（如 admissions.jsonl 追加），行数对不上会报
+            # 「超出 n_lines」或 sha 不符。读的过程中工作区有新写入就重读，否则是真不一致，照抛（10-23 A30 sync 撞上）
+            if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
+                raise
+            continue
         if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
             return r0, stats
     raise SystemExit("读的过程中工作区一直有新写入，稍后再拉")

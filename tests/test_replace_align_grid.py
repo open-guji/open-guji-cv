@@ -368,3 +368,6 @@ def test_tail_sub_label_renamed():
     from open_guji_cv.review.cards import REPLACE_ALIGN_SUBS
     tail = {k: (lb, h) for k, lb, h in REPLACE_ALIGN_SUBS}["tail"]
     assert tail[0] == "列尾（易混框线）" and "框线" in tail[1]
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

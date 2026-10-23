@@ -21,6 +21,7 @@ def _ctx(tmp_path, monkeypatch, *, params: SeedAdmitParams | None = None):
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测墨量闸
     params = params or SeedAdmitParams()
     params.context_garble_guard = False
+    params.context_page_end_review = False  # 单列自造格即页末格
     kwargs = {"seed_admit": params}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
@@ -89,3 +90,7 @@ def test_default_min_ink_leaves_room_for_real_low_ink_chars():
     vol03 全书 `channel=context` 逐格看图定的界，压在「确认空白」（0.0493）与
     「确认真字，一横的「一」」（0.0677）之间。"""
     assert 0.0493 < SeedAdmitParams().context_min_ink < 0.0677
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

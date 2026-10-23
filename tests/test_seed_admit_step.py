@@ -172,3 +172,6 @@ def test_human_shapes_only_takes_v2_ids(tmp_path):
 
     got = _human_shapes(str(db))
     assert got == {"vol01:4:1:10": "曾"}, got
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

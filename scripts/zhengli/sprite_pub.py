@@ -53,6 +53,24 @@ def attach(doc: dict, sprites_dir: Path) -> tuple[dict, list[dict]]:
     return out, entries
 
 
+def refs(doc: dict) -> set[str]:
+    """单子引用的全部图名：格的 `img.s`、相似字的 `alt[].g.s`。"""
+    out: set[str] = set()
+    for c in doc.get("cells") or ():
+        if isinstance(c.get("img"), dict) and c["img"].get("s"):
+            out.add(c["img"]["s"])
+        for x in c.get("alt") or ():
+            if isinstance(x.get("g"), dict) and x["g"].get("s"):
+                out.add(x["g"]["s"])
+    return out
+
+
+def missing(doc: dict) -> list[str]:
+    """引用了、却没登记进 `sprites[]` 的图（网站 proofing-sync 只传 sprites[] 里的，缺了就是 404）。"""
+    have = {e["name"] for e in doc.get("sprites") or ()}
+    return sorted(refs(doc) - have)
+
+
 def upload(entries: list[dict], pub_dir: Path, bucket: str = "main") -> dict:
     """传进 R2。任何一张没传成（也不是已有）就抛 RuntimeError，不让单子在图缺着的情况下上线。"""
     from open_guji_cv.datastore.r2 import upload_files

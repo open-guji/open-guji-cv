@@ -56,6 +56,7 @@ class FlowConfig:
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     rr_model: str | None = None
     rr_p: float = 0.5
+    lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
 
 
 @dataclass
@@ -238,9 +239,11 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
-                    canon: Callable[[str], str] = lambda c: c) -> FlowResult:
+                    canon: Callable[[str], str] = lambda c: c,
+                    veto_refs: dict[str, str] | None = None) -> FlowResult:
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
-    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。"""
+    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
+    `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
     entries = {}
     for i, r in enumerate(seq):
         if blocked(r):
@@ -256,7 +259,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         pos = _pair_pos(entries, i, g)
         if pos is not None:
             ch = GROUPS[g].flow.pair[pos]
-            plans.append((r, g, mode, ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree:pair", "via": "ctx:pair"}]))
+            plans.append((r, g, mode, ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree:pair", "via": "ctx:pair"}], ref))
             continue
         need_ctx = ctx_fn is not None and any("ctx" in GROUPS[x].flow.solvers
                                               for x in (g, *(partners(g, cfg.groups) if mode == "joint" else ())))
@@ -265,13 +268,22 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
             ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
-        plans.append((r, g, mode, ch, why, trail))
+        plans.append((r, g, mode, ch, why, trail, ref))
     res = FlowResult(entered=len(plans))
-    for r, g, mode, ch, why, trail in plans:
+    norm = cfg.canon or canon
+    for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not GROUPS[g].ref_free
+                  and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
+                  and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)):
+                ch, why = None, "ref_dissent"   # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
+                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
+                ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
             if ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"
