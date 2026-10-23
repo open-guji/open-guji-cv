@@ -24,7 +24,7 @@
 
 ### 0.（只跑不改代码时）用发版附件安装，不必克隆整仓
 
-每个 `vX.Y.Z` 的 [GitHub Release](https://github.com/open-guji/open-guji-cv/releases) 都挂了 wheel、资源包（`models/`、`config/`）、`install_release.py` 和 `SHA256SUMS`。把它们下到同一个目录后：
+每个 `vX.Y.Z` 的 [GitHub Release](https://github.com/open-guji/open-guji-cv/releases) 都挂了 wheel、资源包（`models/`、`config/`、`formats/`）、`install_release.py` 和 `SHA256SUMS`。把它们下到同一个目录后：
 
 ```bash
 python install_release.py --dir <附件目录> [--extras cpu,datastore]

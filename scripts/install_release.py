@@ -6,11 +6,13 @@
     python install_release.py --dir ./assets   # 附件已在本地目录
 
 装好后 `guji --help` 可用；fonts/、corpus 不在包里，用 `guji db pull` 从中心库取。
+资源（models/、config/、formats/）解到 open_guji_cv 的上一级目录。
 """
 from __future__ import annotations
 
 import argparse
 import hashlib
+import shutil
 import subprocess
 import sys
 import tarfile
@@ -39,6 +41,8 @@ def main() -> int:
     ap.add_argument("version", nargs="?", help="如 0.5.9（不带 v）")
     ap.add_argument("--dir", help="附件所在本地目录（不下载）")
     ap.add_argument("--extras", default="", help="pip extras，如 cpu,datastore")
+    ap.add_argument("--no-deps", action="store_true",
+                    help="只装 wheel 本身、不解依赖（环境里已预装 torch/paddle 等时用，免得被换成别的轮子）")
     a = ap.parse_args()
     if bool(a.version) == bool(a.dir):
         ap.error("给版本号或 --dir，二选一")
@@ -63,14 +67,19 @@ def main() -> int:
             return 1
 
     spec = str(wheel) + (f"[{a.extras}]" if a.extras else "")
-    subprocess.run([sys.executable, "-m", "pip", "install", spec], check=True)
+    # 优先 uv（uv venv 建的环境没有 pip），没有 uv 再用 pip
+    uv = shutil.which("uv")
+    cmd = [uv, "pip", "install", "--python", sys.executable] if uv else [sys.executable, "-m", "pip", "install"]
+    if a.no_deps:
+        cmd.append("--no-deps")
+    subprocess.run([*cmd, spec], check=True)
     # 解到包所在目录的上一级：代码按 parents[2] 找 models/、config/，与仓库布局一致
     out = subprocess.run([sys.executable, "-c",
                           "import open_guji_cv,pathlib;print(pathlib.Path(open_guji_cv.__file__).resolve().parents[1])"],
                          check=True, capture_output=True, text=True).stdout.strip()
     with tarfile.open(data) as tf:
         for m in tf.getmembers():
-            if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config"):
+            if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config", "formats"):
                 raise ValueError(f"资源包里有不合规的路径：{m.name}")
         tf.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(out)
     print(f"已装 {wheel.name}；资源解到 {out}")
