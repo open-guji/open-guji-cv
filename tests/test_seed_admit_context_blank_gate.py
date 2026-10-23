@@ -21,6 +21,7 @@ def _ctx(tmp_path, monkeypatch, *, params: SeedAdmitParams | None = None):
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测墨量闸
     params = params or SeedAdmitParams()
     params.context_garble_guard = False
+    params.context_page_end_review = False  # 单列自造格即页末格
     kwargs = {"seed_admit": params}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
