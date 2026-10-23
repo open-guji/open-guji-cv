@@ -88,3 +88,6 @@ def test_hint_before_t9_released_then_demoted_cell_gets_no_pair(tmp_path, monkey
     assert not rs[3].admit and "runt_cell" in rs[3].doubts       # T9 降级了第 3 格
     for rec in rs.values():
         assert "oversplit_pair" not in rec.doubts                  # 两格在 hint 时刻都已放行 → 无提示
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

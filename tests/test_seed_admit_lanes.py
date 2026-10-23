@@ -193,6 +193,20 @@ def test_r4_all_witnesses_and_coord_agree_without_lib():
     assert n == 1 and rs[5].char == "天" and rs[5].evidence["lane"]["via"] == "witnesses_coord"
 
 
+@pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
+def test_r4_keeps_ref_review_cells(doubt):
+    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""
+    chars = BODY[:30]
+    def run(**params):
+        out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", doubt], char="夫")})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+        return _run(out, lib={5: "夫"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, **params)
+    n, rs = run()
+    assert n == 0 and not rs[5].admit
+    n, rs = run(lane_keep_ref_review=False)
+    assert n == 1 and rs[5].char == "天"
+
+
 def test_r4_lib_guard_blocks_witness_branch():
     n, _ = _r4("夫", "天", "天天天", guard="conflict", lane_coord=True)
     assert n == 0
@@ -332,3 +346,6 @@ def test_lane_variant_guard_off_restores_old_behaviour():
     mm = {f"{B}:1:5": NS(char=None, candidates=[("旨", 0.95), ("㫖", 0.94)], guard=None)}
     n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits)
     assert n == 1 and out[0].chars[4].char == "旨"
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -23,7 +23,8 @@ def _ctx(tmp_path, monkeypatch, **params):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
-    kwargs = {"seed_admit": SeedAdmitParams(**params)} if params else {}
+    params.setdefault("context_page_end_review", False)  # 单列自造格即页末格
+    kwargs = {"seed_admit": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
 
@@ -81,8 +82,10 @@ def test_rare_run_blocks_common_chars_in_garbled_column(tmp_path, monkeypatch):
     rs = _run(_ctx(tmp_path, monkeypatch, context_garble_run=3), cells)
     assert [r.admit for r in rs] == [False] * 5
     assert "ctx_garble_run" in rs[3].doubts
-    rs = _run(_ctx(tmp_path / "off", monkeypatch), cells)      # 缺省关（10-21）
+    rs = _run(_ctx(tmp_path / "off", monkeypatch, context_lib_dissent_gap=0), cells)      # 缺省关（10-21）
     assert rs[3].admit and rs[3].channel == "context"
+    rs = _run(_ctx(tmp_path / "dissent", monkeypatch), cells)  # 库形互证（A24 10-23，缺省开）：世 不在库候选、top1 0.93 → 也拦
+    assert not rs[3].admit and "context_lib_dissent" in rs[3].doubts
 
 
 def test_rare_run_window():
@@ -94,3 +97,6 @@ def test_rare_run_window():
     assert _rare_run_ids(recs, 0) == frozenset()
     sparse = [NS(id=str(i), char=None, candidates=[(ch, 0.9)]) for i, ch in enumerate("㫖之而不以爲方之而㫖")]
     assert _rare_run_ids(sparse, 3) == frozenset()
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

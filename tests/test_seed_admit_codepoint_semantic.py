@@ -76,3 +76,6 @@ def test_l2_key_compared_after_codepoint_canon():
     assert be.judge(spec, cell).why == "ctx_mismatch"
     v = be.judge(spec, cell, book.canonical_char)
     assert v.char == "曰" and v.why == "x"
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

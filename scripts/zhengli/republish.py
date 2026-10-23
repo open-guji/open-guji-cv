@@ -12,9 +12,10 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
          5. 差异单：对中心库现行单，去掉几格（人裁过／机器现在放行了／格号变了）、新增几格、留下几格；
             旧 rev 上已有的网站精校票也列出（它们不是人裁事件，扣不掉）
   push   人看过差异单、点了头才跑（要 --yes）：新单写进数据目录 proofing/<书>/<章>.pending.json，
-         写一行台账（ledger.py），加 --sync 再 `guji db sync` 推进中心库。
-         雪碧图（改名带内容哈希、`sprites[]` 写进单子）在这里按 sha256 传进 R2；网站每日 proofing-sync 再把图
+         写一行台账（ledger.py），加 --sync 再 `guji db sync` 推进中心库，成功后触发网站 proofing-sync（publish）。
+         雪碧图（改名带内容哈希、`sprites[]` 写进单子）在这里按 sha256 传进 R2；proofing-sync 再把图
          和单子一起发到 COS（GUJI-675）。产物包标 main、book-text 换文本这两样还要另做，push 末尾逐条打出来。
+         动手之前先过两道门（GUJI-730）：单子引用的图都登记在 `sprites[]` 里；旧单上的票都落成了人裁。
 
 **文本和待审单要一起换**：新单的格号按新切分排，网站显示的还是 book-text 的旧文本就会对不上。
 所以 prep 要 --export-dir（同一次导出的 char／cord／pages），push 前先把同一次导出推到 book-text。
@@ -109,6 +110,110 @@ def web_votes(ws: Path, text_id: str, rev: str | None) -> Counter:
     return c
 
 
+SITE = "https://www.openguji.com"
+
+
+def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
+    """旧 rev 上的全部精校票。有 CELLREVIEW_TOKEN 就直接读网站 KV（刚投的票每日同步还没并进中心库），
+    否则读数据目录里每日同步存下的 `feedback/lists/web/<书>/<rev>.jsonl`。返回 (票, 来源)。"""
+    tok = os.environ.get("CELLREVIEW_TOKEN")
+    if tok:
+        import urllib.parse
+        import urllib.request
+        items, cursor = [], ""
+        while True:
+            q = {"rev": rev, "book": text_id, "limit": "256", **({"cursor": cursor} if cursor else {})}
+            req = urllib.request.Request(f"{SITE}/api/cellreview?{urllib.parse.urlencode(q)}",
+                                         headers={"Authorization": f"Bearer {tok}", "User-Agent": "open-guji-cv/republish"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                d = json.load(r)
+            if not d.get("success"):
+                sys.exit(f"✗ 读网站票失败：{d.get('error')}")
+            items += d.get("items") or []
+            cursor = d.get("cursor") or ""
+            if not d.get("hasMore") or not cursor:
+                return items, "网站 KV"
+    f = data_dir(ws) / "feedback" / "lists" / "web" / text_id / f"{rev}.jsonl"
+    rows = [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()] if f.exists() else []
+    return rows, "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
+
+
+def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> dict:
+    """一张单的票账（1.0 发布标准 G0）：每格最后一票归到 写入／与已有人裁一致／看不出／挂起／未落 之一。
+
+    写入 = 该格有晚于这一票的定字人裁；一致 = 该格的定字人裁早于这一票（cellvotes 判一致跳过）；
+    看不出 = 只投了「看不出」；挂起 = 在 cellvotes draft 的挂起清单（held.tsv 第一列）里；其余未落——
+    包括缺省挂起却没记进清单的「无字」。账要平：有效票格数 = 五项之和。"""
+    import datetime as dt
+    sys.path.insert(0, str(CV))
+    from open_guji_cv.feedback.web_votes import latest_votes
+    from pending_route import cell_of, deciding
+    latest, dropped = latest_votes(votes, text_id, rev)
+    held = set(held or ())
+    last: dict[str, float] = {}                 # 格 → 最晚一条定字人裁的时刻（秒）
+    for f in sorted((data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            c = cell_of(e, book) if deciding(e) else None
+            if c:
+                try:
+                    t = dt.datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")).timestamp()
+                except ValueError:
+                    t = 0.0
+                last[c] = max(last.get(c, 0.0), t)
+    rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
+    for v in latest:
+        a, ts = v["a"], float(v.get("ts") or 0)
+        ts = ts / 1000 if ts > 1e11 else ts       # KV 里是毫秒
+        if v["choice"] == "unsure":
+            rows["看不出"].append(v)
+        elif a in last:
+            rows["写入" if last[a] >= ts else "与已有人裁一致"].append(v)
+        elif a in held:
+            rows["挂起"].append(v)
+        else:
+            rows["未落"].append(v)
+    return {"rev": rev, "votes": len(latest), "dropped": dropped, "rows": rows,
+            "counts": {k: len(x) for k, x in rows.items()}}
+
+
+def ledger_md(led: dict) -> str:
+    c = led["counts"]
+    ok = "账平" if sum(c.values()) == led["votes"] else "账不平"
+    s = (f"票账 {led['rev']}：有效 {led['votes']} 格 = 写入 {c['写入']} ＋ 一致 {c['与已有人裁一致']} ＋ 看不出 {c['看不出']}"
+         f" ＋ 挂起 {c['挂起']} ＋ 未落 {c['未落']}（{ok}）")
+    if c["未落"]:
+        s += "；未落：" + " ".join(f"{v['a']}({v['choice']})" for v in led["rows"]["未落"][:20])
+    return s
+
+
+def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> list[dict]:
+    """旧单上还没落成人裁的票（G0；第五册 168 票就是新单先上、票后落才漂了格位）。见 `ticket_ledger` 的「未落」。"""
+    return ticket_ledger(ws, book, text_id, rev, votes, held)["rows"]["未落"]
+
+
+def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a) -> None:
+    """换单门（GUJI-730 P0-3）：旧单上的票没落完不换新单，免得格号漂（换了切分，旧票就对不上格）。"""
+    if not old_rev or old_rev == new_rev:
+        return
+    votes, src = old_rev_votes(ws, text_id, old_rev)
+    hf = getattr(a, "held_file", None)
+    held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
+    led = ticket_ledger(ws, book, text_id, old_rev, votes, held)
+    left = led["rows"]["未落"]
+    print(f"旧单 {old_rev} 的票（{src}）：{ledger_md(led)}")
+    if not left:
+        return
+    cells = " ".join(f"{v['a']}({v['choice']})" for v in left[:20])
+    if getattr(a, "ack_unlanded_votes", None):
+        print(f"⚠ 未落的票照换（--ack-unlanded-votes：{a.ack_unlanded_votes}）：{cells}")
+        return
+    sys.exit(f"✗ 旧单 {old_rev} 还有 {len(left)} 格的票没落成人裁：{cells}\n"
+             f"  先 guji cellvotes draft/write 把票落了再换单；确要照换加 --ack-unlanded-votes \"<原因>\"")
+
 def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: Counter) -> dict:
     """新旧两张单逐格比：去掉的格按原因分（人裁过／机器放行了／排除名单／格号没了，多半是重切）。"""
     o = {c["cell"]: c for c in (old or {}).get("cells", [])}
@@ -174,6 +279,68 @@ def run(cmd, **kw) -> subprocess.CompletedProcess:
     if p.returncode:
         sys.stderr.write((p.stderr or "")[-3000:])
     return p
+
+
+WEB_REPO = "open-guji/kaiyuanguji-web"
+
+
+def publish_web(a) -> bool:
+    """推库成功后马上触发网站 proofing-sync（publish），不等每天一次的定时（GUJI-730 P0-1）。
+
+    用本机 `gh`（会话的 GitHub 授权，或环境变量 GH_TOKEN，要对 kaiyuanguji-web 有 actions 写权限）。
+    触发不了只打印手动做法，不算失败：单子已在中心库，每日定时兜底。"""
+    if getattr(a, "no_publish_web", False):
+        return False
+    if not shutil.which("gh"):
+        print("⚠ 没有 gh，网站 proofing-sync 没触发：等每日定时，或手动跑 proofing-sync.yml（production、publish、dry_run=false）")
+        return False
+    p = run(["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO, "--ref", "main",  # 带 --ref：云端会话没有 GraphQL，查不了默认分支
+             "-f", "target=production", "-f", "parts=publish", "-f", "dry_run=false"])
+    if p.returncode:
+        print("⚠ 网站 proofing-sync 触发失败（见上），等每日定时或手动跑")
+        return False
+    print(f"已触发网站 proofing-sync（publish）：gh run list -R {WEB_REPO} -w proofing-sync.yml 看进度，约 3 分钟上线")
+    return True
+
+
+def sprites_gate(doc: dict, a) -> None:
+    """出单门（GUJI-730 P0-2）：单子引用的每张图都要登记在 `sprites[]` 里，否则网站上就是 404（册 004–007 的 alt 图）。
+    不过就停；确知要带缺图上线才加 --ack-missing-sprites。"""
+    miss = sprite_pub.missing(doc)
+    if not miss:
+        return
+    msg = f"单子引用了 {len(miss)} 张没登记进 sprites[] 的图：{' '.join(miss[:10])}"
+    if getattr(a, "ack_missing_sprites", False):
+        print(f"⚠ {msg}（--ack-missing-sprites，照推）")
+        return
+    sys.exit(f"✗ {msg}。先用 add-sprites 补齐（会连相似字图一起重建），或加 --ack-missing-sprites")
+
+def pack_label(rev: str) -> str:
+    return f"rev-{rev}"
+
+
+def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
+    """出单版产物存成包 `rev-<rev>`（GUJI-730 P1-1）：落这张单上的票时 `guji cellvotes draft --pack rev-<rev>`
+    直接取回当锚，不用重跑，格号也不会漂。存不成只告警（落票退回老办法：重跑有票的页）。"""
+    if getattr(a, "no_pack", False):
+        return None
+    label = pack_label(rev)
+    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "products", "pack", "push", book, "--label", label,
+             "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"],
+            cwd=CV, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    if p.returncode:
+        print(f"⚠ 出单版产物包 {label} 没存成（见上）：落票时只能重跑有票的页算锚")
+        return None
+    return label
+
+def sync_and_publish(a, ws: Path) -> bool:
+    """`guji db sync`，成功了再触发网站发布。返回是否已触发。"""
+    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
+            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    if p.returncode:
+        print("✗ guji db sync 失败，没触发网站发布")
+        return False
+    return publish_web(a)
 
 
 def git_head() -> str:
@@ -294,14 +461,17 @@ def cmd_push(a) -> int:
     plan = json.loads((out / "plan.json").read_text(encoding="utf-8"))
     if not a.yes:
         sys.exit(f"✗ 推上线前先看 {out / '差异单.md'}，确认后加 --yes")
+    doc_new = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
+    online = Path(plan["online"])
+    old_rev = json.loads(online.read_text(encoding="utf-8")).get("rev") if online.exists() else None
+    sprites_gate(doc_new, a)                                     # 两道门都在动任何东西之前
+    votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
         bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
-    doc_new = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
     if doc_new.get("sprites"):                                   # 图先进 R2，单子再写：单上线时图一定取得到
         stats = sprite_pub.upload(doc_new["sprites"], Path(plan["sprites"]) / "pub")
         print(f"雪碧图 {len(doc_new['sprites'])} 张 → R2：{stats}")
-    online = Path(plan["online"])
     if online.exists():
         bak = out / f"online.{json.loads(online.read_text(encoding='utf-8')).get('rev')}.pending.json"
         shutil.copyfile(online, bak)
@@ -314,15 +484,21 @@ def cmd_push(a) -> int:
     if pages.exists():
         cmd += ["--pages-json", pages]
     run(cmd, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
-    if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    label = pack_rev(a, ws, book, a.rev) if a.sync else None
+    published = sync_and_publish(a, ws) if a.sync else False
     todo = [] if a.sync else [f"guji db sync -w {ws}   # 推进中心库，网站每日 proofing-sync 才拿得到"]
+    if label:
+        print(f"出单版产物包：{label}；落这张单的票用 guji cellvotes draft … --rev {a.rev} --pack {label}")
+    elif a.sync:
+        todo.append(f"guji products pack push {book} --label {pack_label(a.rev)}   # 出单版产物包，落票免重跑")
     if not a.book_text:
         todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）"]
-    todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：book-text PR 合了、单子推了，"
-             "请网站总管按顺序手动跑 kaiyuanguji-web 的 data.yml（flow=text）和 proofing-sync.yml（target=production、parts=publish、dry_run=false）",
-             f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}"]
+    if not published:
+        todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：单子推了就手动跑 kaiyuanguji-web 的 "
+                 "proofing-sync.yml（target=production、parts=publish、dry_run=false）；加 --sync 时本脚本自动触发"]
+    todo += ["book-text PR 合了之后跑 kaiyuanguji-web 的 data.yml（flow=text），网站文本才换新",
+             (f"guji products pack promote {book} --label {label}   # 这一版是正式结果就标 main" if label else
+              f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}")]
     if doc_new.get("sprites"):
         todo.append("雪碧图已进 R2，单子里的 sprites[] 会随 guji db sync 进中心库；网站 proofing-sync（publish）发布时一并传到 COS")
     elif plan.get("sprites"):
@@ -506,14 +682,14 @@ def cmd_add_alt(a) -> int:
     if not a.yes:
         print(f"补好的单 → {out / f'{chapter}.pending.json'}；确认后加 --yes 写回数据目录")
         return 0
+    sprites_gate(doc, a)
     shutil.copyfile(online, out / f"online.{doc.get('rev')}.pending.json")
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+        sync_and_publish(a, ws)
     else:
-        print(f"还要：guji db sync -w {ws}；网站 proofing-sync（parts=publish）后再清 CDN 缓存")
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
     return 0
 
 
@@ -543,13 +719,14 @@ def cmd_add_sprites(a) -> int:
 
     重建用 `sprite_build.py` 在线上单上跑一遍（同一份 cord、同一批原图、同一个格序，坐标应当逐格相同）；
     只要有一格 `img` 的坐标对不上就整个不动，打出对不上的格——说明手上的 cord／原图不是出这张单时的那份。
-    相似字字形图（`alt[].g`）线上单本来就没有，不补。"""
+    单子上有相似字（`alt`）的，同一目录再跑 `alt_build.py` 重出相似字字形图，一起登记进 `sprites[]`
+    （册 004–007 的 `alt-<章>.webp` 就是漏了这一步才 404）。已有 `sprites[]` 但还缺图的单子也走这里重建。"""
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
     online = proofing_path(ws, text_id, chapter)
     doc = json.loads(online.read_text(encoding="utf-8"))
-    if doc.get("sprites"):
-        print(f"{book} {doc.get('rev')}：单子已有 sprites[] {len(doc['sprites'])} 张，不用补")
+    if doc.get("sprites") and not sprite_pub.missing(doc):
+        print(f"{book} {doc.get('rev')}：单子已有 sprites[] {len(doc['sprites'])} 张，引用的图都登记了，不用补")
         return 0
     cord = Path(a.export_dir) / f"{chapter}.cord.json"
     rd = raw_dir(ws, book)
@@ -567,7 +744,15 @@ def cmd_add_sprites(a) -> int:
     bad = [c["cell"] for c in doc["cells"] if (c.get("img") or None) != (rebuilt.get(c["cell"]) or None)]
     if bad:
         sys.exit(f"✗ {len(bad)} 格重建出的 img 坐标和线上单不一样（{' '.join(bad[:20])}）：手上的 cord／原图不是出这张单时的那份，不动")
-    new, entries = sprite_pub.attach(doc, sp)
+    base = json.loads((sp / "pending.with-img.json").read_text(encoding="utf-8"))
+    if any(c.get("alt") for c in base.get("cells") or ()):
+        if run([sys.executable, HERE / "alt_build.py", "--pending", sp / "pending.with-img.json", "--chapter", chapter,
+                "--out", sp]).returncode:
+            return 1
+        base = json.loads((sp / "pending.with-alt.json").read_text(encoding="utf-8"))
+    base.pop("sprites", None)
+    new, entries = sprite_pub.attach(base, sp)
+    sprites_gate(new, a)
     (out / f"{chapter}.pending.json").write_text(json.dumps(new, ensure_ascii=False), encoding="utf-8")
     print(f"{book} {doc.get('rev')}：{len(doc['cells'])} 格的坐标全部一致，雪碧图 {len(entries)} 张，"
           f"{sum(e['bytes'] for e in entries) / 1e6:.1f} MB；补好的单 → {out / f'{chapter}.pending.json'}")
@@ -580,10 +765,9 @@ def cmd_add_sprites(a) -> int:
     shutil.copyfile(out / f"{chapter}.pending.json", online)
     print(f"已写回 {online}")
     if a.sync:
-        run([sys.executable, "-m", "open_guji_cv.cli_v2", "db", "sync", "-w", ws], cwd=CV,
-            env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+        sync_and_publish(a, ws)
     else:
-        print(f"还要：guji db sync -w {ws}；再请网站总管手动跑 proofing-sync（publish），网站才取得到图")
+        print(f"还要：guji db sync -w {ws}；加 --sync 会顺带触发网站 proofing-sync（publish）")
     return 0
 
 
@@ -600,6 +784,8 @@ def main(argv=None) -> int:
     p.add_argument("--replace", action="store_true", help="已有相似字的格也换成这次算的（相似字规则改了之后用）")
     p.add_argument("--yes", action="store_true", help="写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
+    p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
     p = sp.add_parser("add-sprites", help="线上单补雪碧图（传 R2、写 sprites[]，不换 rev）")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)
@@ -609,6 +795,8 @@ def main(argv=None) -> int:
     p.add_argument("--out")
     p.add_argument("--yes", action="store_true", help="传 R2、写回数据目录")
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+    p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
+    p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
     for name in ("prep", "push", "from-pack"):
         p = sp.add_parser(name)
         p.add_argument("--book", required=True)
@@ -638,7 +826,12 @@ def main(argv=None) -> int:
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
             p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
             p.add_argument("--note", help="book-text CHANGES 一行的说明")
-            p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
+            p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库，并触发网站 proofing-sync")
+            p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
+            p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
+            p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
+            p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
     a = ap.parse_args(argv)
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 

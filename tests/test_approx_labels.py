@@ -369,3 +369,6 @@ def test_text_sidecar_includes_matched_cells(tmp_path, monkeypatch):
     rows = sidecar_rows(book_marks(ctx.store, BOOK, [3], log))
     assert [(r["pos"], r["source"], r["ids"], r["note"]) for r in rows] == [
         ("3:1:1", "matched", "⿰亻衡", ""), ("3:1:3", "human", "", "人看过")]
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
