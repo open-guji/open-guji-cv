@@ -182,3 +182,7 @@ def test_callers_without_the_field_keep_working():
     p = SimpleNamespace(occluded_min_density=4.0, occluded_min_cells=12, occluded_min_cols=3,
                         occluded_min_peak=8.0, occluded_min_contrast=2.5)
     assert (cell[0], cell[1], "") in page_occluded(_ctx_with(img, cells), PAGE, p)
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

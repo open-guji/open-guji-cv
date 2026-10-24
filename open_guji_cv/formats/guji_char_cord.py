@@ -36,6 +36,18 @@
 
 cord 去掉字和 CV 内部字段（`by`、`cv_id`、`o`、`runs`、`lacuna`…）；`box` 为空的版框、列、格、记号不写（cord
 允许 char 里的格暂时没有框）。norm 每条 `{a, c, t, by?, why?}`，按格位 key、不带字偏移。
+
+**图（GUJI-740，char v0.3／cord v0.2／fig v0.1，guji-format spec 09）**：
+
+- 图片格：pages.json 的格带 `fig: {"alt": …}`（人裁 `confirm v=figure` → 排除名单理由 `figure` → `report/slots`
+  → guji-page 字框 `fig`）→ char `{"a", "c": "□", "fig": <图 id>}`，不带 `lacuna`；cord 照旧在 `cells[]`；
+- 插图块：`from_pages_json(figure_regions=…)`（控制台 `figure_region`，`feedback/figures.resolved_figure_regions`）→ char 在读序位置
+  插一项图列 `{"col", "kind": "figure", "span", "fig", "cells": []}`，被占的列（含其上切出来的格、norm）去掉；cord 去掉
+  这几列的列框、格、记号，`marks[]` 加 `{"kind": "figure", "fig", "col", "span", "box"}`；
+- 两种都在 `NNN.fig.json` 记一条（`kind` inline／block，`box` 与 cord 一致）。文件字段（`sha256`、`width`、`height`）
+  由 `crop_figures` 从页图裁出后填；**已有 fig.json（`prev_fig`，取 book-text 现行那份）里同页、框重叠的图沿用它的 id**
+  （id 不跟格位变，spec 09 §3.2），`source: redraw` 的条目原样保留、不用裁图覆盖（只跟着改 `page`／`box`）；
+- 用到图的册 char `$schema` 写 v0.3、有插图块的 cord 写 v0.2；没用到图的册逐字节不变（照旧 v0.1／v0.2，不出 fig.json）。
 """
 from __future__ import annotations
 
@@ -47,18 +59,25 @@ from typing import Any
 
 CHAR_SCHEMA_URL = "https://open-guji.org/schema/char/v0.1.json"
 CHAR_SCHEMA_URL_V02 = "https://open-guji.org/schema/char/v0.2.json"     # 有 guess_c（阙文带推测字）才写这一版
+CHAR_SCHEMA_URL_V03 = "https://open-guji.org/schema/char/v0.3.json"     # 有图片格或图列才写这一版
 CORD_SCHEMA_URL = "https://open-guji.org/schema/cord/v0.1.json"
+CORD_SCHEMA_URL_V02 = "https://open-guji.org/schema/cord/v0.2.json"     # 有插图块（marks.figure）才写这一版
+FIG_SCHEMA_URL = "https://open-guji.org/schema/fig/v0.1.json"
+FIG_DEFAULT_ALT = "图形符号"           # 人定是图时没写说明（spec 09 §3.2）
 NORM_SCHEMA = "guji-norm/0.2"          # guji-format 还没有 norm 的 schema；0.1 是 F3 带字偏移 `o` 的那版
 LACUNA_CHAR = "□"
 ZI_NO_NEAR = "〓"
 _FORMATS = Path(__file__).resolve().parents[2] / "formats"
 SCHEMA_PATHS = {"char": _FORMATS / "guji_char_v0.1.schema.json",
-                "cord": _FORMATS / "guji_cord_v0.1.schema.json"}
-CHAR_SCHEMA_FILES = {CHAR_SCHEMA_URL: SCHEMA_PATHS["char"], CHAR_SCHEMA_URL_V02: _FORMATS / "guji_char_v0.2.schema.json"}
+                "cord": _FORMATS / "guji_cord_v0.1.schema.json",
+                "fig": _FORMATS / "guji_fig_v0.1.schema.json"}
+CHAR_SCHEMA_FILES = {CHAR_SCHEMA_URL: SCHEMA_PATHS["char"], CHAR_SCHEMA_URL_V02: _FORMATS / "guji_char_v0.2.schema.json",
+                     CHAR_SCHEMA_URL_V03: _FORMATS / "guji_char_v0.3.schema.json"}
+CORD_SCHEMA_FILES = {CORD_SCHEMA_URL: SCHEMA_PATHS["cord"], CORD_SCHEMA_URL_V02: _FORMATS / "guji_cord_v0.2.schema.json"}
 KEYS = ("cv", "lines")
 
 _REGION_KINDS = ("body", "banxin", "margin")
-_MARK_KINDS = ("blank", "seal", "excluded")
+_MARK_KINDS = ("blank", "seal", "excluded")      # pages.json 里认的；`figure` 由 regions 另加
 _JZ_SUFFIX = {"jz_r": "a", "jz_l": "b"}
 _KEY_RE = re.compile(r"^(\d+):(\d+):(-?[1-9]\d*)([ab]?)$")
 
@@ -89,7 +108,13 @@ def _lane_of(cell: dict) -> str:
 
 # ───────────────────────── 分行稿 ─────────────────────────
 
-def _tok(cell: dict, *, in_solo: bool = False, guess_c_as_qz: bool = False) -> str:
+def _tok(cell: dict, *, in_solo: bool = False, guess_c_as_qz: bool = False, alts: dict | None = None) -> str:
+    if cell.get("fig") is not None:
+        # 图片格（spec 03 §三·5）：`:tu[说明]{id=…}`；核 9.1 往返（`guess_c_as_qz`）或不给 fig.json 时写 `c`（□），
+        # 9.1 的 lines.md 里这格就是一个 □（`lines_slots` 也按一格数）
+        if guess_c_as_qz or alts is None:
+            return cell["c"]
+        return f":tu[{alts.get(cell['fig']) or FIG_DEFAULT_ALT}]{{id={cell['fig']}}}"
     if cell.get("lacuna"):
         if guess_c_as_qz and cell.get("guess_c"):
             return f"□{{guess={cell['guess_c']}}}"   # 9.1 的写法（原刻残＋人给的最像字），只用于核往返
@@ -112,13 +137,18 @@ def _runs(cells: list[dict]) -> list[tuple[str, list[dict]]]:
     return out
 
 
-def column_line(col: dict, *, guess_c_as_qz: bool = False) -> str | None:
-    """一列 → 分行稿的一行；没有字的列返回 None（分行稿不出空行）。`guess_c_as_qz` 见 `char_to_lines_md`。"""
+def column_line(col: dict, *, guess_c_as_qz: bool = False, alts: dict | None = None) -> str | None:
+    """一列 → 分行稿的一行；没有字的列返回 None（分行稿不出空行）。`guess_c_as_qz`、`alts` 见 `char_to_lines_md`。"""
+    if col.get("kind") == "figure":
+        # 图列（spec 03 §三·5）：单独一行 `::tu[说明]{id=…}`；核 9.1 往返时不出（9.1 不知道插图块）
+        if guess_c_as_qz or alts is None:
+            return None
+        return f"::tu[{alts.get(col['fig']) or FIG_DEFAULT_ALT}]{{id={col['fig']}}}"
     if not col.get("cells"):
         return None
 
     def tok(cell: dict, *, in_solo: bool = False) -> str:
-        return _tok(cell, in_solo=in_solo, guess_c_as_qz=guess_c_as_qz)
+        return _tok(cell, in_solo=in_solo, guess_c_as_qz=guess_c_as_qz, alts=alts)
 
     out = ["^" * int(col.get("raised") or 0) + "." * int(col.get("lead_blank") or 0)]
     runs = _runs(col["cells"])
@@ -140,18 +170,21 @@ def column_line(col: dict, *, guess_c_as_qz: bool = False) -> str | None:
     return "".join(out)
 
 
-def page_lines(page: dict, *, guess_c_as_qz: bool = False) -> list[str]:
+def page_lines(page: dict, *, guess_c_as_qz: bool = False, alts: dict | None = None) -> list[str]:
     lines = [f"<!-- p{page['page']} -->"]
-    lines += [ln for ln in (column_line(c, guess_c_as_qz=guess_c_as_qz) for c in page["columns"]) if ln is not None]
+    lines += [ln for ln in (column_line(c, guess_c_as_qz=guess_c_as_qz, alts=alts) for c in page["columns"])
+              if ln is not None]
     return lines
 
 
-def char_to_lines_md(char: dict, *, guess_c_as_qz: bool = False) -> str:
+def char_to_lines_md(char: dict, *, guess_c_as_qz: bool = False, fig: dict | None = None) -> str:
     """char → 一列一行的分行稿（每页先 `<!-- pN -->`，末尾一个换行），记法照 guji-format spec 03 §三。
 
-    `guess_c_as_qz=True`：阙文带推测字写成 9.1 的 `□{guess=X}`，此时与 F3 导出的 `NNN.lines.md` 逐字节相同，
-    导出器核往返用它；缺省照 spec 03 写 `[[]]`（`□{guess=X}` 在分行稿里是残字 `guess: true` 的写法）。"""
-    return "\n".join("\n".join(page_lines(p, guess_c_as_qz=guess_c_as_qz)) for p in char["pages"]) + "\n"
+    `guess_c_as_qz=True`：阙文带推测字写成 9.1 的 `□{guess=X}`、图片格写 □、图列不出，此时与 F3 导出的
+    `NNN.lines.md` 逐字节相同，导出器核往返用它；缺省照 spec 03 写 `[[]]`（`□{guess=X}` 在分行稿里是残字
+    `guess: true` 的写法）。`fig`（同章 fig.json）给了，图片格写 `:tu[说明]{id=…}`、图列写一行 `::tu[说明]{id=…}`。"""
+    alts = {f["id"]: f.get("alt") for f in fig["figures"]} if fig else None
+    return "\n".join("\n".join(page_lines(p, guess_c_as_qz=guess_c_as_qz, alts=alts)) for p in char["pages"]) + "\n"
 
 
 # ── 分行稿 → 格位（book-text `original_version.lines_slots` 的口径；`:zi[…]` 算一格）──
@@ -242,6 +275,12 @@ def _char_cell(c: dict, lane: str, *, lac_extra: set[int], zi_by_o: dict[int, di
     if not c.get("a"):
         raise ValueError(f"字偏移 {o}「{c.get('c')}」没有锚点，排不出格位 key")
     out: dict[str, Any] = {"a": c["a"], "c": c["c"]}
+    if c.get("fig") is not None:
+        # 图片格（char v0.3）：`c` 写 □，不带 lacuna／guess／zi；图 id 由 from_pages_json 定好后填进 `fig`
+        out["c"] = LACUNA_CHAR
+        _set_lane(out, lane)
+        out["fig"] = ""
+        return out
     z = zi_by_o.get(o)
     if z is not None:
         out["c"] = z.get("near") or ZI_NO_NEAR
@@ -267,11 +306,15 @@ def _box_ok(b) -> bool:
 
 
 def from_pages_json(pj: dict, *, zi: dict | None = None, norm: dict | None = None, version: str = "0.1.0",
-                    keys: str = "cv", chapter: str | None = None) -> tuple[dict[str, dict], dict]:
-    """`guji-pages/0.1` → (`{NNN.char.json, NNN.cord.json, NNN.norm.json}`, 报告)。
+                    keys: str = "cv", chapter: str | None = None, figure_regions: dict[int, list[dict]] | None = None,
+                    prev_fig: dict | None = None) -> tuple[dict[str, dict], dict]:
+    """`guji-pages/0.1` → (`{NNN.char.json, NNN.cord.json, NNN.norm.json[, NNN.fig.json]}`, 报告)。
 
     `zi`/`norm` 是 F3 同章的 `zi.json`（`guji-zi/0.1`）/`norm.json`（`guji-norm/0.1`），没有就当空。
-    报告 `{pages, cells, boxed, dropped: {regions, columns, cells, marks}, rekeyed}`。
+    `figure_regions`：插图块 `{页: [{box, col, span, alt, fig?}]}`（`feedback/figures.resolved_figure_regions`）；
+    `prev_fig`：book-text 现行的同章 fig.json（沿用图 id、保留重绘图），见模块头「图」。用到图才出 `NNN.fig.json`，
+    其中文件字段待 `crop_figures` 填。
+    报告 `{pages, cells, boxed, dropped: {regions, columns, cells, marks}, rekeyed, figures: {inline, block, kept, dropped_cells}}`。
     pages.json 的格没盖满 `n_chars`（有字没框，字只在 lines.md 里）就报错——纯转换补不出那些字。
     """
     if keys not in KEYS:
@@ -286,6 +329,7 @@ def from_pages_json(pj: dict, *, zi: dict | None = None, norm: dict | None = Non
         raise ValueError(f"pages.json 的格只盖住 {n_cov} 字元，n_chars 是 {pj['n_chars']}——有字没框，要用 lines.md 补，纯转换做不了")
 
     allmap: dict[str, str] = {}                               # CV 锚点 → 输出 key（lines 口径下 norm 用）
+    fig_alt: dict[tuple[int, str], str] = {}                   # (页, 输出 key) → 图片格说明
     rep = {"pages": 0, "cells": 0, "boxed": 0, "rekeyed": 0,
            "dropped": {"regions": 0, "columns": 0, "cells": 0, "marks": 0}}
     char_pages, cord_pages = [], []
@@ -346,6 +390,9 @@ def from_pages_json(pj: dict, *, zi: dict | None = None, norm: dict | None = Non
         keymap = {cv.get("a"): c["a"] for cv, c in zip(cv_cells, out_cells)}
         idmap = {cv["id"]: c["a"] for cv, c in zip(cv_cells, out_cells) if cv.get("id")}
         allmap.update(keymap)
+        for cv, c in zip(cv_cells, out_cells):
+            if c.get("fig") is not None:
+                fig_alt[(pn, c["a"])] = str((cv.get("fig") or {}).get("alt") or "")
 
         # cord
         if not (pjp.get("canvas") or {}).get("id"):
@@ -412,13 +459,176 @@ def from_pages_json(pj: dict, *, zi: dict | None = None, norm: dict | None = Non
         rep["pages"] += 1
 
     head = {"book_id": book_id, "volume": volume}
+    norm_items = [_norm_item(n, allmap) for n in (norm or {}).get("items", [])]
+    figures, frep = _apply_figures(char_pages, cord_pages, fig_alt, figure_regions or {}, prev_fig, chapter)
+    rep["figures"] = frep
+    if frep["dropped_cells"]:
+        gone = set(frep["dropped_cells"])
+        norm_items = [n for n in norm_items if n["a"] not in gone]  # 插图块占掉的格上的规范层一并去掉
+    has_fig = bool(figures)
     has_guess_c = any("guess_c" in c for p in char_pages for col in p["columns"] for c in col["cells"])
-    char = {"$schema": CHAR_SCHEMA_URL_V02 if has_guess_c else CHAR_SCHEMA_URL, "version": version, **head,
-            "pages": char_pages}
-    cord = {"$schema": CORD_SCHEMA_URL, **head, "pages": cord_pages}
-    norm_out = {"schema": NORM_SCHEMA, **head, "table": (norm or {}).get("table"),
-                "items": [_norm_item(n, allmap) for n in (norm or {}).get("items", [])]}
-    return {f"{chapter}.char.json": char, f"{chapter}.cord.json": cord, f"{chapter}.norm.json": norm_out}, rep
+    char = {"$schema": CHAR_SCHEMA_URL_V03 if has_fig else CHAR_SCHEMA_URL_V02 if has_guess_c else CHAR_SCHEMA_URL,
+            "version": version, **head, "pages": char_pages}
+    has_block = any(m["kind"] == "figure" for p in cord_pages for m in p.get("marks", []))
+    cord = {"$schema": CORD_SCHEMA_URL_V02 if has_block else CORD_SCHEMA_URL, **head, "pages": cord_pages}
+    norm_out = {"schema": NORM_SCHEMA, **head, "table": (norm or {}).get("table"), "items": norm_items}
+    out = {f"{chapter}.char.json": char, f"{chapter}.cord.json": cord, f"{chapter}.norm.json": norm_out}
+    if figures:
+        out[f"{chapter}.fig.json"] = {"$schema": FIG_SCHEMA_URL, **head, "figures": figures}
+    return out, rep
+
+
+# ───────────────────────── 图（char v0.3 / cord v0.2 / fig v0.1） ─────────────────────────
+
+_FIG_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+
+def inline_fig_id(a: str) -> str:
+    """图片格的缺省图 id：`148:2:14` → `f148-2-14`，`3:4:-1` → `f3-4-m1`，`9:2:5a` → `f9-2-5a`（spec 09 §3.2 建议写法）。"""
+    pg, col, slot, sub = parse_key(a)
+    return f"f{pg}-{col}-{'m' + str(-slot) if slot < 0 else slot}{sub}"
+
+
+def _iou(a: list, b: list) -> float:
+    x0, y0 = max(a[0], b[0]), max(a[1], b[1])
+    x1, y1 = min(a[0] + a[2], b[0] + b[2]), min(a[1] + a[3], b[1] + b[3])
+    inter = max(0.0, x1 - x0) * max(0.0, y1 - y0)
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _apply_figures(char_pages: list[dict], cord_pages: list[dict], fig_alt: dict[tuple[int, str], str],
+                   regions: dict[int, list[dict]], prev_fig: dict | None, chapter: str) -> tuple[list[dict], dict]:
+    """就地改 char／cord：插图块换掉被占的列、图片格填图 id；返回 (fig.json 的 figures, 报告)。"""
+    rep: dict[str, Any] = {"inline": 0, "block": 0, "kept": 0, "dropped_cells": []}
+    prev = [f for f in (prev_fig or {}).get("figures") or []]
+    taken: set[str] = set()
+    figures: list[dict] = []
+
+    def pick_id(kind: str, page: int, box: list | None, want: str) -> tuple[str, dict | None]:
+        """同类、同页、框重叠（IoU ≥ 0.5）的旧图沿用它的 id；否则用 `want`（撞了加 -2、-3…）。"""
+        if box is not None:
+            best = max((f for f in prev if f.get("kind") == kind and f.get("page") == page and f["id"] not in taken),
+                       key=lambda f: _iou(f["box"], box), default=None)
+            if best is not None and _iou(best["box"], box) >= 0.5:
+                taken.add(best["id"])
+                return best["id"], best
+        if not _FIG_ID_RE.match(want):
+            raise ValueError(f"图 id 不合 [a-z0-9][a-z0-9-]*：{want!r}")
+        fid, k = want, 1
+        used = taken | {f["id"] for f in prev}
+        while fid in used:
+            k += 1
+            fid = f"{want}-{k}"
+        taken.add(fid)
+        return fid, None
+
+    def entry(fid: str, kind: str, page: int, box: list, alt: str, old: dict | None) -> dict:
+        if old is not None and old.get("source") == "redraw":
+            rep["kept"] += 1                   # 重绘图：文件、来源原样保留，只跟着改位置
+            return {**old, "page": page, "box": box}
+        ext = "png" if kind == "inline" else "webp"
+        return {"id": fid, "kind": kind, "page": page, "box": box, "alt": alt or (old or {}).get("alt") or FIG_DEFAULT_ALT,
+                "file": f"fig/{chapter}/{fid}.{ext}", "sha256": None,
+                "mime": "image/png" if ext == "png" else "image/webp", "width": None, "height": None,
+                "source": "crop", "by": "cv:export"}
+
+    cord_by_page = {p["page"]: p for p in cord_pages}
+    for cp in char_pages:
+        pn = cp["page"]
+        kp = cord_by_page.get(pn) or {}
+        # 插图块：被占的列（含格）从 char、cord 去掉，读序位置插图列
+        for k, r in enumerate(regions.get(pn) or [], 1):
+            lo, span = int(r["col"]), int(r.get("span") or 1)
+            covered = set(range(lo, lo + span))
+            gone = [c["a"] for col in cp["columns"] if col["col"] in covered for c in col["cells"]]
+            rep["dropped_cells"] += gone
+            if any(col.get("kind") == "figure" and col["col"] in covered for col in cp["columns"]):
+                raise ValueError(f"p{pn}：插图块 {r} 与本页另一个插图块重叠")
+            fid, old = pick_id("block", pn, r["box"], r.get("fig") or f"p{pn}-fig{k}")
+            fcol = {"col": lo, "kind": "figure", **({"span": span} if span != 1 else {}), "fig": fid, "cells": []}
+            keep = [col for col in cp["columns"] if col["col"] not in covered]
+            at = next((i for i, col in enumerate(keep) if col["col"] > lo), len(keep))
+            cp["columns"] = keep[:at] + [fcol] + keep[at:]
+            gone_set = set(gone)
+            if kp.get("columns"):
+                kp["columns"] = [c for c in kp["columns"] if c["col"] not in covered]
+            kp["cells"] = [c for c in kp.get("cells", []) if c["a"] not in gone_set]
+            marks = []
+            for m in kp.get("marks", []):
+                if m.get("col") in covered:
+                    continue
+                if m.get("occludes"):                  # 印章压着的格被插图块占掉了：引用跟着去掉
+                    m["occludes"] = [x for x in m["occludes"] if x not in gone_set]
+                    if not m["occludes"]:
+                        del m["occludes"]
+                marks.append(m)
+            marks.append({"kind": "figure", "id": f"mfig-{fid}", "fig": fid, "col": lo,
+                          **({"span": span} if span != 1 else {}), "box": list(r["box"])})
+            kp["marks"] = marks
+            figures.append(entry(fid, "block", pn, list(r["box"]), str(r.get("alt") or ""), old))
+            rep["block"] += 1
+        # 图片格
+        box_of = {c["a"]: c["box"] for c in kp.get("cells", [])}
+        for col in cp["columns"]:
+            for c in col["cells"]:
+                if c.get("fig") is None:
+                    continue
+                box = box_of.get(c["a"])
+                if box is None:
+                    raise ValueError(f"图片格 {c['a']} 在 cord 里没有框，裁不出图")
+                fid, old = pick_id("inline", pn, box, inline_fig_id(c["a"]))
+                c["fig"] = fid
+                figures.append(entry(fid, "inline", pn, box, fig_alt.get((pn, c["a"]), ""), old))
+                rep["inline"] += 1
+    return figures, rep
+
+
+def check_fig(char: dict, cord: dict, fig: dict | None) -> list[str]:
+    """图的一致性（book-text F-OV-13 第 2、3、5 条在 cv 一侧先核）：引用的图都在 fig.json、不留孤图、类别对得上；
+    图片格 `c` 是 □、不带阙文等标记；图列 `cells` 为空；fig 的 `page`／`box` 与 cord 一致；文件字段已填。"""
+    errs: list[str] = []
+    figs = {f["id"]: f for f in (fig or {}).get("figures") or []}
+    used: dict[str, str] = {}
+    for p in char["pages"]:
+        for col in p["columns"]:
+            if col.get("kind") == "figure":
+                used[col["fig"]] = "block"
+                if col["cells"]:
+                    errs.append(f"char p{p['page']} 图列 {col['col']} 带了格")
+            for c in col["cells"]:
+                if c.get("fig") is None:
+                    continue
+                used[c["fig"]] = "inline"
+                if c["c"] != LACUNA_CHAR or any(k in c for k in ("lacuna", "guess", "guess_c", "zi")):
+                    errs.append(f"char 图片格 {c['a']} 的 c 不是 □ 或带了阙文／残字／组字标记")
+    for fid, kind in used.items():
+        f = figs.get(fid)
+        if f is None:
+            errs.append(f"char 引用的图 {fid} 在 fig.json 里没有")
+        elif f["kind"] != kind:
+            errs.append(f"图 {fid}：char 里是 {kind}，fig.json 记 {f['kind']}")
+    for fid in figs:
+        if fid not in used:
+            errs.append(f"fig.json 的图 {fid} 没有被 char 引用（孤图）")
+    box_of = {(p["page"], c["a"]): c["box"] for p in cord["pages"] for c in p["cells"]}
+    mark_of = {m["fig"]: (p["page"], m["box"]) for p in cord["pages"] for m in p.get("marks", [])
+               if m["kind"] == "figure"}
+    for p in char["pages"]:
+        for col in p["columns"]:
+            for c in col["cells"]:
+                f = figs.get(c.get("fig") or "")
+                if f and (f["page"] != p["page"] or list(f["box"]) != list(box_of.get((p["page"], c["a"])) or [])):
+                    errs.append(f"图 {f['id']} 的页／框与 cord 格 {c['a']} 不一致")
+            if col.get("kind") == "figure":
+                f = figs.get(col["fig"])
+                m = mark_of.get(col["fig"])
+                if f and (m is None or m[0] != f["page"] or list(m[1]) != list(f["box"])):
+                    errs.append(f"图 {col['fig']} 的页／框与 cord marks.figure 不一致")
+    for f in figs.values():
+        if not f.get("sha256") or not f.get("width") or not f.get("height"):
+            errs.append(f"图 {f['id']} 还没裁（sha256／width／height 空）")
+    return errs
 
 
 def _strip_book(x: str) -> str:
@@ -475,7 +685,7 @@ def write_files(files: dict[str, Any], out_dir: Path | str) -> list[Path]:
 # ───────────────────────── 校验 ─────────────────────────
 
 def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> list[str]:
-    """两边一致：char 格位不重、key 的页/列与所在页/列相同；cord 的每个 `a` 在 char 里、页/列也对；
+    """两边一致：char 格位不重、key 的页/列与所在页/列相同；cord 的每个 `a` 在 char 里、页/列也对、marks 的 id 不重复；
     两边页号集合相同、每页列号集合相同（cord 没有某列的框不算错）；norm 的格位在 char 里、`c` 等于该格的字。"""
     errs: list[str] = []
     where: dict[str, dict] = {}
@@ -494,6 +704,14 @@ def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> lis
                     errs.append(f"char 格位 {c['a']} 重复")
                 where[c["a"]] = c
     if cord is not None:
+        mark_ids: set[str] = set()
+        for p in cord["pages"]:
+            for m in p.get("marks", []):
+                if m.get("id") is None:
+                    continue
+                if m["id"] in mark_ids:
+                    errs.append(f"cord p{p['page']} mark id {m['id']} 重复")
+                mark_ids.add(m["id"])
         cpages = {p["page"] for p in cord["pages"]}
         if cpages != set(cols_of):
             errs.append(f"页号两边不同：只在 char {sorted(set(cols_of) - cpages)[:5]}，只在 cord {sorted(cpages - set(cols_of))[:5]}")
@@ -526,9 +744,11 @@ def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> lis
 
 
 def validate(obj: dict, kind: str) -> list[str]:
-    """按 guji-format 的 JSON Schema 校验（`kind` = char / cord）。char 按它自己的 `$schema` 取 v0.1／v0.2，认不出的按 v0.1。"""
+    """按 guji-format 的 JSON Schema 校验（`kind` = char / cord / fig）。char、cord 按它自己的 `$schema` 取版本
+    （char v0.1／v0.2／v0.3，cord v0.1／v0.2），认不出的按 v0.1。"""
     import jsonschema
-    path = CHAR_SCHEMA_FILES.get(obj.get("$schema"), SCHEMA_PATHS[kind]) if kind == "char" else SCHEMA_PATHS[kind]
+    files = {"char": CHAR_SCHEMA_FILES, "cord": CORD_SCHEMA_FILES}.get(kind, {})
+    path = files.get(obj.get("$schema"), SCHEMA_PATHS[kind])
     schema = json.loads(path.read_text(encoding="utf-8"))
     v = jsonschema.Draft202012Validator(schema)
     return [f"{'/'.join(map(str, e.path))}: {e.message}" for e in v.iter_errors(obj)]
@@ -539,5 +759,76 @@ def stats(char: dict, cord: dict) -> dict:
     return {"pages": len(char["pages"]), "columns": sum(len(p["columns"]) for p in char["pages"]),
             "cells": len(cells), "lacuna": sum(1 for c in cells if c.get("lacuna")),
             "guess": sum(1 for c in cells if c.get("guess")), "guess_c": sum(1 for c in cells if c.get("guess_c")),
-            "zi": sum(1 for c in cells if "zi" in c),
+            "zi": sum(1 for c in cells if "zi" in c), "fig": sum(1 for c in cells if c.get("fig")),
+            "fig_cols": sum(1 for p in char["pages"] for col in p["columns"] if col.get("kind") == "figure"),
             "boxed": sum(len(p["cells"]) for p in cord["pages"])}
+
+
+# ───────────────────────── 裁图 ─────────────────────────
+
+FIG_PAD = 2                     # 按框外扩 2 像素裁（spec 09 §四）
+FIG_MAX_BYTES = 1 << 20         # 单个文件 ≤ 1 MB
+FIG_MAX_SIDE = 2000             # 超了的插图块先降到长边 2000
+
+
+def _encode(im, mime: str) -> bytes:
+    import io
+    buf = io.BytesIO()
+    if mime == "image/png":
+        im.save(buf, format="PNG", optimize=True)
+    else:
+        im.save(buf, format="WEBP", quality=90, method=6)
+    return buf.getvalue()
+
+
+def crop_figures(fig: dict, cord: dict, load_image, out_dir: Path | str) -> list[str]:
+    """按 fig.json 里 `source: crop` 的每张图，从页图裁出、写到 `<out_dir>/<file>`，填 `sha256`／`width`／`height`。
+    就地改 `fig`；返回问题清单（裁不了的图留空，交 `check_fig` 报）。
+
+    `load_image(page, sha256)` → PIL 图（或 None）：取 **cord 该页 `image.sha256` 那张页图**（坐标就是在它上面量的）——
+    导出脚本先找工作区原图（sha 对得上才用），再取 R2 页图（`blob.open-guji.com/sha256/…`）。
+    canvas 与这张图尺寸不同（拆页、换图）时框不在同一坐标里，不裁、报出来。
+    不去底、不二值化，保持书影原貌（读者端按主题调色）。`source: redraw` 不碰。"""
+    import hashlib
+
+    from PIL import Image
+    out = Path(out_dir)
+    pages = {p["page"]: p for p in cord["pages"]}
+    errs: list[str] = []
+    cache: dict[int, Any] = {}
+    for f in fig["figures"]:
+        if f.get("source") != "crop":
+            continue
+        kp = pages.get(f["page"]) or {}
+        img_meta, canvas = kp.get("image") or {}, kp.get("canvas") or {}
+        if canvas.get("width") and img_meta.get("width") and (canvas["width"], canvas.get("height")) != \
+                (img_meta["width"], img_meta.get("height")):
+            errs.append(f"图 {f['id']}：p{f['page']} 的 canvas 与跑批页图尺寸不同，框不在页图坐标里，没裁（需人核）")
+            continue
+        if f["page"] not in cache:
+            cache[f["page"]] = load_image(f["page"], img_meta.get("sha256"))
+        im = cache[f["page"]]
+        if im is None:
+            errs.append(f"图 {f['id']}：取不到 p{f['page']} 的页图（sha256 {str(img_meta.get('sha256'))[:12]}）")
+            continue
+        x, y, w, h = f["box"]
+        box = (max(0, int(x) - FIG_PAD), max(0, int(y) - FIG_PAD),
+               min(im.width, int(round(x + w)) + FIG_PAD), min(im.height, int(round(y + h)) + FIG_PAD))
+        crop = im.crop(box)
+        if crop.mode not in ("L", "RGB", "1"):
+            crop = crop.convert("RGB")
+        if crop.mode == "1":
+            crop = crop.convert("L")
+        data = _encode(crop, f["mime"])
+        if len(data) > FIG_MAX_BYTES and max(crop.size) > FIG_MAX_SIDE:
+            r = FIG_MAX_SIDE / max(crop.size)
+            crop = crop.resize((max(1, round(crop.width * r)), max(1, round(crop.height * r))), Image.LANCZOS)
+            data = _encode(crop, f["mime"])
+        if len(data) > FIG_MAX_BYTES:
+            errs.append(f"图 {f['id']}：裁出来 {len(data)} 字节，超过 1 MB")
+            continue
+        dst = out / f["file"]
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        dst.write_bytes(data)
+        f.update(sha256=hashlib.sha256(data).hexdigest(), width=crop.width, height=crop.height)
+    return errs

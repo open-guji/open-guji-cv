@@ -126,9 +126,10 @@ def test_pack_main_pointer(tmp_path, monkeypatch):
     root = tmp_path / "products"
     (root / "vol04" / "seed_admit").mkdir(parents=True)
     src = FakeSrc()
-    for lab, body in (("a1", "A"), ("b2", "B")):
+    for lab, body, cv in (("a1", "A", "0.4.7"), ("b2", "B", "0.4.8.dev3+gabcdef123456")):
         (root / "vol04" / "seed_admit" / "p0001.json").write_text(body)
-        PK.push_products("vol04", root, label=lab, src=src)
+        PK.push_products("vol04", root, label=lab, src=src,
+                         vers={"cv": cv, "cv_commit": "c" * 40, "corpus": None, "glyph_pin": None, "human_fp": None})
     assert PK.main_label("vol04", src=src) is None
     got = PK.fetch_products("vol04", tmp_path / "x", src=src)          # 没标 main：取最新存的
     assert got["name"].endswith("/b2")
@@ -142,6 +143,13 @@ def test_pack_main_pointer(tmp_path, monkeypatch):
         PK.promote("vol04", "nope", src=src)                          # 包不存在不许标
     with pytest.raises(ValueError):
         PK.check_label("main-ptr")
+    with pytest.raises(ValueError, match="不是正式版"):                 # dev 出的包不能标 main
+        PK.promote("vol04", "b2", src=src)
+    assert PK.main_label("vol04", src=src) == "a1"
+    PK.promote("vol04", "b2", src=src, why="A30 急用，0.4.8 发版后重跑")  # 写了理由可以，记进指针
+    assert PK.main_label("vol04", src=src) == "b2"
+    ptr = [json.loads(v) for k, v in src.objs.items() if "/main-ptr/" in k and k.endswith("-b2.json")]
+    assert ptr[0]["cv_override"].startswith("A30") and ptr[0]["cv_version"].startswith("0.4.8.dev3")
 
 
 def test_version_label():
@@ -152,6 +160,10 @@ def test_version_label():
     lab = PK.version_label({"cv": "0.4.7+dirty", "corpus": 1, "glyph_pin": None, "human_fp": "nodb"})
     assert lab == "cv0.4.7pdirty-c1-g-"
     PK.check_label(lab + "-x")
+    lab = PK.version_label({"cv": "0.5.10.dev12+g1a2b3c4d5e6f", "corpus": 3, "glyph_pin": 2})
+    assert lab == "cv0.5.10.dev12pg1a2b3c4d5e6f-c3-g2"
+    PK.check_label(lab + "-20261023T1730")
+    assert len(lab + "-20261023T1730") <= PK.LABEL_MAX_MAIN
 
 
 def test_unpacked_note(tmp_path, monkeypatch):

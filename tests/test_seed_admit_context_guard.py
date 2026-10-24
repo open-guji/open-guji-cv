@@ -25,6 +25,7 @@ def _ctx(tmp_path, monkeypatch, **params):
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 G1 四条
     params.setdefault("context_garble_guard", False)
+    params.setdefault("context_page_end_review", False)  # 单列自造格即页末格
     kwargs = {"seed_admit": SeedAdmitParams(**params)}
     return RunContext(make_book(BOOK), ProductStore(products), ImageCache(cache),
                       params=kwargs, log=lambda s: None)
@@ -107,3 +108,7 @@ def test_guard_off_params_dump_unchanged():
     on = SeedAdmitParams(db_path="x", context_guard_flags=True).model_dump()
     assert on["context_guard_flags"] is True and on["context_guard_cov"] == 0.8
     json.dumps(off)
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -251,10 +251,17 @@ def _read_only(src) -> bool:
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
                  prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
-    from .materialize import materialize
+    from .materialize import MaterializeError, materialize
     for _ in range(retries):
         r0 = src.status()
-        stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
+        try:
+            stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
+        except MaterializeError:
+            # 先读 source_files、后读行：中间有人推了新行（如 admissions.jsonl 追加），行数对不上会报
+            # 「超出 n_lines」或 sha 不符。读的过程中工作区有新写入就重读，否则是真不一致，照抛（10-23 A30 sync 撞上）
+            if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
+                raise
+            continue
         if src.status() == r0 or not src.changes_since(ws, r0, limit=1):
             return r0, stats
     raise SystemExit("读的过程中工作区一直有新写入，稍后再拉")
@@ -785,13 +792,66 @@ def _apply_renames(renamed: dict[str, str], *, merged: dict[str, bytes], local_o
     return sorted(touched)
 
 
+def _event_ids(b: bytes) -> set[str]:
+    out = set()
+    for x in b.decode("utf-8").splitlines():
+        if x.strip():
+            try:
+                out.add(json.loads(x).get("id"))
+            except ValueError:
+                continue
+    return out - {None}
+
+
+def _local_new_event_ids(data: Path, tmp: Path, merged: dict[str, bytes], mine: set[str]) -> set[str]:
+    """本地有、库里没有的人裁事件 id（合并后的本地文件对库里那份）。"""
+    ids: set[str] = set()
+    for rel in sorted(mine):
+        if classify(rel) != "events":
+            continue
+        b = merged.get(rel)
+        if b is None:
+            p = data / rel
+            if not p.exists():
+                continue
+            b = p.read_bytes()
+        r = tmp / rel
+        ids |= _event_ids(b) - (_event_ids(r.read_bytes()) if r.exists() else set())
+    return ids
+
+
+def _drop_glyph_consumed(data: Path, ids: set[str]) -> int:
+    """字形库消费者（``consumed/glyph*.jsonl``）里这些事件的记账删掉，好让它们在库里的字形库上重新消费。返回删的行数。"""
+    n = 0
+    for f in sorted((data / "feedback" / "consumed").glob("glyph*.jsonl")):
+        lines = f.read_text(encoding="utf-8").splitlines()
+        keep = []
+        for x in lines:
+            try:
+                drop = bool(x.strip()) and json.loads(x).get("event") in ids
+            except ValueError:
+                drop = False
+            n += drop
+            if not drop:
+                keep.append(x)
+        if len(keep) != len(lines):
+            f.write_text("\n".join(keep) + ("\n" if keep else ""), encoding="utf-8")
+    return n
+
+
 def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str = "main",
-         uploader=None, glyph: GlyphHooks | None = None, dry_run: bool = False) -> dict:
+         uploader=None, glyph: GlyphHooks | None = None, dry_run: bool = False,
+         replay: Callable[[set[str]], dict] | None = None) -> dict:
     """拉 → 合并 → 推，一步做完（控制台写完、定时任务都用它）。
 
     库里在基准 rev 之后没人写过：直接推。有人写过：库里改了、本地没改的文件取库里的；本地改了、库里没改的
     留本地的；两边都改了的只追加台账（events、consumed、anchors）按「共同前缀＋库里新行＋本地新行」合，
-    别的文件两边都改了就整次停下（``SyncConflict``），什么都不动。"""
+    别的文件两边都改了就整次停下（``SyncConflict``），什么都不动。
+
+    字形库（``output/glyph_store/``）两边都改了、又给了 ``replay`` 时不停：字形库是消费者从人裁事件算出来的，
+    本地那份改动就是本地新事件过消费者的结果。取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者
+    （``consumed/glyph*.jsonl``）里的记账，再用 ``replay(新事件 id)`` 让它们在库里的字形库上重新消费一遍，
+    然后照常推（册 005 10-23 两次手工 ``pull --force`` 重写重推，就是这一步）。"""
     ws_dir = Path(ws_dir)
     data = data_dir(ws_dir)
     st = read_state(data)
@@ -830,6 +890,7 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     merged: dict[str, bytes] = {}
     renamed: dict[str, str] = {}
     conflicts = []
+    glyph_taken: list[str] = []
     for rel in both:
         lp = (ws_dir if rel == WS_YAML else data) / rel
         rp = tmp / rel
@@ -844,12 +905,29 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
             if m is not None:
                 merged[rel] = m
                 continue
+        if replay is not None and glyph is not None and rel.startswith(GS) and rp.exists():
+            merged[rel] = rp.read_bytes()                  # 字形库取库里的，本地新事件之后重新消费
+            glyph_taken.append(rel)
+            continue
         conflicts.append(rel)
+    replay_ids: set[str] = set()
+    if glyph_taken:
+        replay_ids = _local_new_event_ids(data, tmp, merged, mine)
+        if not replay_ids:                                 # 本地字形库改了却没有新事件：不是消费者算的，不敢丢
+            conflicts += glyph_taken
+            glyph_taken = []
+        else:                                              # 本地只改了的字形库文件也回到库里那份，免得同一事件算两遍
+            for rel in sorted(mine - theirs):
+                if rel.startswith(GS) and not rel.startswith(GS + "patches/"):
+                    merged[rel] = (tmp / rel).read_bytes() if (tmp / rel).exists() else None
+                    glyph_taken.append(rel)
     if conflicts:
         shutil.rmtree(tmp, ignore_errors=True)
         raise SyncConflict(f"这些文件本地和库里都改了，合不了（如 {conflicts[:5]}）；"
                            f"要库里的：guji db pull --force；要本地的：手工合进去再推")
     out.update(remote_changes=sorted(theirs), merged=sorted(merged), rev_remote=rev)
+    if glyph_taken:
+        out["glyph_taken_remote"] = glyph_taken
     if renamed:
         out["renumbered"] = renamed
     if dry_run:
@@ -877,8 +955,14 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
             renamed, merged=merged, remote={r: (tmp / r).read_bytes() for r in merged if (tmp / r).exists()},
             local_only={r: data / r for r in sorted(mine - theirs) if r != WS_YAML})
     for rel, b in merged.items():
-        (data / rel).write_bytes(b)
+        if b is None:
+            (data / rel).unlink(missing_ok=True)
+        else:
+            (data / rel).write_bytes(b)
     shutil.rmtree(tmp, ignore_errors=True)
+    if glyph_taken:
+        store_changed = True
+        out["replay_unconsumed"] = _drop_glyph_consumed(data, replay_ids)
     fp = st.get("glyph_db_fp")
     if glyph is not None and store_changed and Path(glyph.db_path).exists():
         extras, _ = borrow_stores(src, ws_dir, cache=cache, bucket=bucket)
@@ -886,6 +970,9 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
         fp = glyph.fingerprint(glyph.db_path)
     write_state(data, ws=ws, branch=st.get("branch", "main"), rev=rev, base=remote, glyph_db_fp=fp,
                 borrow=st.get("borrow", []))
+    if replay_ids:
+        out["replay"] = replay(replay_ids)
+        _export_if_changed(glyph, data, read_state(data))  # 重新消费写的是 glyph.db，导出成字形库再比对、推
     if not _diff(remote, manifest(ws_dir, data)):
         if _snapshots_on(src):
             out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, remote)

@@ -46,10 +46,17 @@ class ManifestEntry:
     报「过期」、说不出为什么。记下原值，`status` 就能报「册配置 period_prior 180→204」。
     没有 book_deps 的步、以及此前的老条目都是 None。"""
     cv_version: str | None = None
-    """生成这条产物的 cv 版本：最近正式 tag 去掉 `v`，不在 tag 上写 `0.3.0+N`
-    （`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
+    """生成这条产物的 cv 版本：最近正式 tag 去掉 `v`；不在 tag 上写 `0.3.1.dev2+g<sha12>`
+    （2026-10-23 前是 `0.3.0+N`；`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
     cv_commit: str | None = None
     """生成这条产物时 cv 的完整 commit sha（`code_rev` 只是短 sha）。不进指纹。"""
+    cv_override: str | None = None
+    """册钉了版本而装的不是它、护栏放行时的理由（`--allow-cv-mismatch --why …`，或 `exp-branch:<分支>`）。
+    不进指纹；没过护栏或没钉版本的是 None。"""
+    param_parts: dict[str, str] | None = None
+    """跑这一页时参数逐字段的短哈希（`core.engine.param_parts`，2026-10-24）。不进指纹（指纹只认 `params_hash`），
+    只给 `stale_reason` 说清「参数变了」是哪几个字段，close-check 1a 据此把共享输入（语料、证人、格位表、字组……）
+    被别处更新和本册自己的变动分开报。老条目是 None。"""
     db_rev: str | None = None
     """跑这一页时本机数据目录对应的中心库版本 `<工作区>@<分支>:<rev>`（`core.workspace.central_rev`）。
     不进指纹；字形库、人裁的内容版本靠它追（`glyph_pin` 只钉指纹）。老条目是 None。"""
@@ -62,17 +69,24 @@ class Manifest:
     def __init__(self, path: Path):
         self.path = path
         self._entries: dict[str, ManifestEntry] | None = None
+        self._torn_tail = False       # 文件末尾没有换行（上次写到一半被杀），下一次追加先补一个
 
     def _load(self) -> dict[str, ManifestEntry]:
         if self._entries is None:
             self._entries = {}
             if self.path.exists():
                 with open(self.path, encoding="utf-8") as f:
-                    for line in f:
-                        line = line.strip()
+                    for raw in f:
+                        self._torn_tail = not raw.endswith("\n")
+                        line = raw.strip()
                         if not line:
                             continue
-                        d = json.loads(line)
+                        try:
+                            d = json.loads(line)
+                        except ValueError:
+                            # 追加写时进程被杀（SIGKILL、VM 回收）可能留下半行：丢掉这一条，
+                            # 该页当作没记过，重跑时补；不让一行坏数据拦住整册续跑。
+                            continue
                         d.setdefault("upstream", {})
                         self._entries[d["key"]] = ManifestEntry(**{
                             k: v for k, v in d.items() if k in ManifestEntry.__dataclass_fields__})
@@ -88,7 +102,8 @@ class Manifest:
         self._load()[entry.key] = entry
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with open(self.path, "a", encoding="utf-8") as f:
-            f.write(entry.to_json() + "\n")
+            f.write(("\n" if self._torn_tail else "") + entry.to_json() + "\n")
+        self._torn_tail = False
 
     def invalidate(self, key: str, reason: str, cells: list[str] | None = None) -> bool:
         """把 `key` 的最新条目标成显式失效（追加一条带 `invalidated` 的副本）。
@@ -121,3 +136,4 @@ class Manifest:
             for e in entries.values():
                 f.write(e.to_json() + "\n")
         tmp.replace(self.path)
+        self._torn_tail = False

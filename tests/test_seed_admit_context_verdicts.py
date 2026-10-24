@@ -32,7 +32,7 @@ def _run(tmp_path, monkeypatch, *, verdict: str, params: dict | None = None):
             dict(slot=SLOT, char="X", margin=0.90, source="context"),
         ]))
     # 乱码护栏（overview#427，缺省开）会拦这里自造的低 cov 无证人格，本文件只测 verdict 闸
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False, **(params or {})})
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"context_garble_guard": False, "context_page_end_review": False, **(params or {})})
     return STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
 
 
@@ -88,3 +88,7 @@ def test_whitespace_and_trailing_comma_are_tolerated(tmp_path, monkeypatch):
     r = _rec(_run(tmp_path, monkeypatch, verdict="unsure",
                   params={"context_verdicts": " same, unsure ,"}))
     assert r.admit is True and r.channel == "context"
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

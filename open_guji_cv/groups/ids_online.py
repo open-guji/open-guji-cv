@@ -184,6 +184,13 @@ SPECS: dict[str, IdsSpec] = {
     "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
     "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),
     "di": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.55, min_class=8, whole="hog", region=(0.0, 0.75, 0.5, 1.0), lam=3.0, size=64),
+    "shang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
+    "gai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
+    "ba": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.5, 1.0, 0.0, 1.0), lam=1.0, size=48, clean=True),
+    # 凖準、宻密（2026-10-24，长尾异体对）：模板同上（已放行格＋人裁，看图剔出码位错的格），建库 build_shape_pair.py。
+    # 凖準 只看左半（冫 点＋长提斜穿／氵 三笔竖排），48×48：按册留出不设门槛也 0 错；宻密 整字 48×48（中部 㐅 交叉／必 带两点）：同样 0 错。门槛沿用 0.5。
+    "zhun": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.0, 0.5, 0.0, 1.0), lam=1.0, size=48, clean=True),
+    "mi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
 }
 
 

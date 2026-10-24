@@ -99,3 +99,18 @@ def test_snapshot_copies_steps_and_is_readable_as_products_dir(tmp_path, monkeyp
         make_snapshot("tbook", ["row_segment"], "s1", products=src, dest_root=tmp_path / "snap")
     with pytest.raises(FileNotFoundError):
         make_snapshot("tbook", ["nope"], "s2", products=src, dest_root=tmp_path / "snap")
+
+
+def test_held_message_marks_holder_alive(tmp_path, monkeypatch):
+    monkeypatch.delenv("GUJI_NO_RUN_LOCK", raising=False)
+    ready = tmp_path / "ready"
+    proc = _hold_in_child(tmp_path, "volX", ready)
+    try:
+        _wait_ready(ready, proc)
+        with pytest.raises(RunLockHeld) as ei:
+            with book_run_lock("volX", products=tmp_path):
+                pass
+        assert "（在运行）" in str(ei.value)
+    finally:
+        proc.kill()
+        proc.wait()

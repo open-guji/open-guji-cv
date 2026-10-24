@@ -23,6 +23,11 @@ from pathlib import Path
 HASHED = re.compile(r"\.[0-9a-f]{8}\.webp$")
 
 
+def unhashed(name: str) -> str:
+    """去掉 attach 加的内容哈希：`p0003.0123abcd.webp` → `p0003.webp`（没带哈希的原样）。"""
+    return HASHED.sub(".webp", name)
+
+
 def _rewrite(node, names: dict[str, str]):
     """递归改写：任何 `{"s": <旧名>, ...}` 的 s 换成新名。"""
     if isinstance(node, dict):
@@ -51,6 +56,24 @@ def attach(doc: dict, sprites_dir: Path) -> tuple[dict, list[dict]]:
     out = _rewrite(doc, names)
     out["sprites"] = entries
     return out, entries
+
+
+def refs(doc: dict) -> set[str]:
+    """单子引用的全部图名：格的 `img.s`、相似字的 `alt[].g.s`。"""
+    out: set[str] = set()
+    for c in doc.get("cells") or ():
+        if isinstance(c.get("img"), dict) and c["img"].get("s"):
+            out.add(c["img"]["s"])
+        for x in c.get("alt") or ():
+            if isinstance(x.get("g"), dict) and x["g"].get("s"):
+                out.add(x["g"]["s"])
+    return out
+
+
+def missing(doc: dict) -> list[str]:
+    """引用了、却没登记进 `sprites[]` 的图（网站 proofing-sync 只传 sprites[] 里的，缺了就是 404）。"""
+    have = {e["name"] for e in doc.get("sprites") or ()}
+    return sorted(refs(doc) - have)
 
 
 def upload(entries: list[dict], pub_dir: Path, bucket: str = "main") -> dict:

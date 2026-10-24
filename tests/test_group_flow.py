@@ -108,7 +108,8 @@ def test_entry_ref_free_group_ignores_ref():
 def test_entry_review_only_for_review_groups_and_never_human():
     cfg = _cfg()
     assert entry(Rec("a", "己", True, "context"), [], None, cfg) == ("jys", "review")
-    assert entry(Rec("a", "㫖", True, "match_ref"), [], None, cfg) is None              # 异体组不复核
+    assert entry(Rec("a", "𫎇", True, "match_ref"), [], None, cfg) is None              # 没有字形判法的异体组不复核
+    assert entry(Rec("a", "㫖", True, "match_ref"), [], None, cfg) == ("zhi", "review")  # 按刻形复核（SHAPE_REVIEW）
     assert entry(Rec("a", "己", True, "human", "human"), [], None, cfg) is None
     assert entry(Rec("a", "己", False, None, "human"), [("己", 0.99)], None, cfg) is None
 
@@ -187,6 +188,30 @@ def test_review_demotes_on_disagree(monkeypatch):
     res = group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
     assert not r.admit and r.char == "人" and "group_flow_disagree" in r.doubts
     assert r.evidence["demoted_from"] == {"channel": "context", "by": "group_flow"} and res.demoted == 1
+
+
+def test_variant_review_runs_only_shape_method(monkeypatch):
+    """按刻形复核的异体组（旨㫖）：复核只跑字形方法，不跑字频（字频永远说主形）；判出另一形 → 降审不改字；判不出 → 不动。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out, ran = {"a": "㫖", "b": None, "c": "旨"}, []
+
+    def solve(name, g, r, *a, **k):
+        ran.append(name)
+        return GroupVerdict(out[r.id], via=name)
+    monkeypatch.setattr(flow, "_solve", solve)
+    seq = [Rec(k, "旨", True, "match_solo", "match") for k in "abc"]
+    res = group_flow_pass(seq, {}, lambda cid: [], lambda r: False, _cfg(freq_table={"zhi": {"㫖": 30, "旨": 0}}))
+    a, b, c = seq
+    assert set(ran) == {"ids"}
+    assert not a.admit and a.char == "旨" and "group_flow_disagree" in a.doubts and a.evidence["group"]["decision"] == "demote"
+    assert b.admit and b.evidence["group"]["decision"] == "keep"
+    assert c.admit and c.evidence["group"]["decision"] == "keep"
+    assert res.demoted == 1
+    ran.clear()
+    r = Rec("a")
+    decide("zhi", r, [("旨", 0.99)], None, _cfg(freq_table={"zhi": {"㫖": 30, "旨": 0}}))
+    assert ran == ["freq"]                                   # 不是复核：照旧跑 methods，第一个给字的说了算
 
 
 def test_review_conflict_demotes(monkeypatch):
@@ -395,3 +420,6 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_joint" in r.doubts
     r = run((None, "abstain:low_conf"), ("日", "agree"))
     assert not r.admit and "group_flow_abstain" in r.doubts
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

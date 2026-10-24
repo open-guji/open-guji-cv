@@ -40,3 +40,7 @@ def test_timeout_cell_goes_to_review_whatever_the_other_evidence(tmp_path, monke
     r = _run(tmp_path, monkeypatch, verdict="unsure", cov=0.95, wmax=4.0,
              candidates=[("明", 0.95), ("朋", 0.9)], guard="timeout")
     assert not r.admit and "glyph_timeout" in r.doubts
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

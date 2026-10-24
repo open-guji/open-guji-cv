@@ -100,6 +100,12 @@ Kind = Literal[
                       #   unsure, char, shown, note）。**不是人裁**：actor="model"，不进字形库、不算已裁、
                       #   human_chars 不认；只存 `feedback/vision/`（不进 events/），金标来源记 vision，
                       #   判 wrong 的格送回待审队列（doubt `vision_flag`）。
+    # ── 插图块（GUJI-740，2026-10-24）。见 feedback/figures.py。
+    "figure_region",  # 控制台在页上画的插图框：占若干列、半页或整页的图（payload: box=[x,y,w,h] canvas 像素、
+                      #   col（图块右边第一列）、span、alt、fig（图 id，可空）；v="delete" 撤掉）。
+                      #   **路由表不配消费者**：只由 Step9 导出读（`figures.resolved_figure_regions`），
+                      #   写 char 图列、cord `marks.figure`、fig.json；不让任何产物过期。
+                      #   图片格（一格是图）不走这里，走 confirm + payload.v="figure"。
 ]
 
 Actor = Literal["user", "model", "align"]

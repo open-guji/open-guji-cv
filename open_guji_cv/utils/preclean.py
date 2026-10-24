@@ -12,8 +12,8 @@
 3. `RunContext.raw_page` 优先读 precleaned 里那张；没有就读原图。
    所以 Step1 及其下游一行代码都不用改，未登记的页也完全不受影响。
 
-两种坏区：`inverted_band`（梯形带）与 `inverted_rect`（矩形）
-------------------------------------------------------------
+三种坏区：`inverted_band`（梯形带）、`inverted_rect`（矩形）、`inverted_poly`（多边形）
+--------------------------------------------------------------------------------
 挑哪个看**坏区的形状**，不是看大小：
 
 - `inverted_band` —— 边界是多段梯形、要逐列量出来的（扫描时的横向故障）；
@@ -21,6 +21,8 @@
   「勅祇」两格，四边就是框线本身）。这种**不能**用 band：band 靠「列间纸列在
   区内是一整段纯黑」定上下沿，格内的字笔画会把那段黑截断，量出来的沿顺着笔画跑，
   实测把「祇」啃成几块黑斑。规则形状直接给四个数，不要去"量"。
+- `inverted_poly` —— 台阶形、断成几段、一段高一段低的带（2026-10-23 起 `invert_detect` 的建议修法
+  一律给它）：多边形顶点直接写下，修的时候不再量。
 
 下面讲的是 `inverted_band`
 --------------------------
@@ -210,7 +212,44 @@ def rect_mask(shape: tuple[int, int], *, x0: int, x1: int,
     return m
 
 
-_OPS = {"inverted_band": invert_band, "inverted_rect": invert_rect}
+def poly_mask(shape: tuple[int, int], *, polygons: list[list[list[int]]]) -> np.ndarray:
+    """`inverted_poly` 圈住的区域，布尔 mask。多边形各自填实（`cv2.fillPoly`），顶点是原图像素 [x, y]。"""
+    import cv2
+    m = np.zeros(shape, np.uint8)
+    cv2.fillPoly(m, [np.asarray(p, np.int32).reshape(-1, 1, 2) for p in polygons], 1)
+    return m.astype(bool)
+
+
+def invert_poly(gray: np.ndarray, *, polygons: list[list[list[int]]],
+                ink_threshold: int = 128) -> np.ndarray:
+    """把若干多边形围出的区域整体黑白反转，返回新图；入参不改。
+
+    什么时候用：坏区不是矩形、也不是能逐列量的整齐横带——台阶形、一段高一段低、断成几块
+    （2026-10-23 Sheldon 审 vol11–20 候选：vol11 p40、vol14 p87、vol17 p126 等）。多边形由
+    `steps/invert_detect.py` 按黑区实际形状圈出、人在控制台看过修前修后点头，**不再现量**，
+    所以写下来是什么就修什么。
+    """
+    mask = poly_mask(gray.shape, polygons=polygons)
+    out = gray.copy()
+    out[mask] = 255 - gray[mask]
+    return out
+
+
+def rule_mask(gray: np.ndarray, rule: dict) -> np.ndarray:
+    """一条反色规则（`inverted_band`／`inverted_rect`／`inverted_poly`）要反转的区域，布尔 mask。"""
+    kind = rule.get("kind", "inverted_band")
+    if kind == "inverted_rect":
+        return rect_mask(gray.shape, x0=rule["x0"], x1=rule["x1"], y0=rule["y0"], y1=rule["y1"])
+    if kind == "inverted_poly":
+        return poly_mask(gray.shape, polygons=rule["polygons"])
+    if kind == "inverted_band":
+        return band_mask(gray, segments=rule["segments"], y_lo=rule["y_lo"], y_hi=rule["y_hi"],
+                         y_probe=rule["y_probe"], ink_threshold=rule.get("ink_threshold", 128),
+                         ctx=rule.get("ctx", 170), smooth=rule.get("smooth", 31))
+    raise ValueError(f"不是反色规则: {kind}")
+
+
+_OPS = {"inverted_band": invert_band, "inverted_rect": invert_rect, "inverted_poly": invert_poly}
 
 
 def _check_gate(kind: str, before: float, after: float,
@@ -276,14 +315,8 @@ def apply_preclean(gray: np.ndarray, rules: list[dict], *, gate: bool = True) ->
               if k not in ("kind", "page", "note", "gate_override", "gate_reason")}
         th = kw.get("ink_threshold", 128)
 
-        if kind in ("inverted_band", "inverted_rect"):
-            if kind == "inverted_band":
-                mask = band_mask(out, segments=kw["segments"], y_lo=kw["y_lo"],
-                                 y_hi=kw["y_hi"], y_probe=kw["y_probe"], ink_threshold=th,
-                                 ctx=kw.get("ctx", 170), smooth=kw.get("smooth", 31))
-            else:
-                mask = rect_mask(out.shape, x0=kw["x0"], x1=kw["x1"],
-                                 y0=kw["y0"], y1=kw["y1"])
+        if kind in ("inverted_band", "inverted_rect", "inverted_poly"):
+            mask = rule_mask(out, r)
             before = band_ink_ratio(out, mask, th)
             out = fn(out, **kw)
             after = band_ink_ratio(out, mask, th)

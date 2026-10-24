@@ -186,3 +186,6 @@ def test_seed_admit_shadow_veto_only_demotes(tmp_path, monkeypatch):
     assert on[1].char == "衡"                                   # 字不改，只降级
     assert on[2].admit and on[3].admit                           # 单候选 / 影子同意：不动
     assert all("shadow_veto" not in r.evidence for r in (on[2], on[3]))
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
