@@ -14,7 +14,7 @@
 门槛 0.7 → 衛 37／55 给对，0 错。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 55、文意 0、切线 0、部件 0，其中中心库 0。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 58、文意 0、切线 0、部件 0，其中中心库 56；多来源 53 条，其中来源之间结论不同（被更正过）3 条。
 - `variant/wei/labels.jsonl`（衛 41／衞 14）。
 
 ## 现状与待办

@@ -13,7 +13,8 @@
   **不一致**＝放行字与人裁字不同（给了 `--codepoints` 时两边先按它归一，码位差不算）。不一致不等于错：
   人裁可能晚于产物，要逐格看；明细在 json 的 `mismatch`。
 - **人工数据**：`unified.jsonl` 里 `form` 属于本组的行，按 `kind`（shape 刻形／reading 文意／cut 切线／parts 部件）计；
-  另计来源是中心库（`src` 以 `central:` 开头，流水线读得到）的条数。
+  另计有中心库来源（`in_central`，流水线读得到）的条数；**数据准不准**：多来源（`verified.n>1`）条数、其中被更正过
+  （`corrected_from`，来源之间结论不同）的条数。
 """
 from __future__ import annotations
 
@@ -50,8 +51,13 @@ def load_labels(path: Path | None) -> tuple[dict, dict]:
         f = r.get("form")
         for gid in of.get(f or "", []):
             per[gid][r["kind"]] += 1
-            if str(r.get("src", "")).startswith("central:"):
+            if r.get("in_central", str(r.get("src", "")).startswith("central:")):
                 per[gid]["central"] += 1
+            v = r.get("verified") or {}
+            if v.get("n", 1) > 1:
+                per[gid]["multi"] += 1
+            if r.get("corrected_from"):
+                per[gid]["corrected"] += 1
         if f and r["kind"] in ("shape", "reading"):
             by_id[r["id"]][r["kind"]] = f
     return by_id, per
@@ -117,14 +123,15 @@ def render_md(d: dict, tag: str, date: str) -> str:
     out = [f"# 字组状态 {date}（{tag}）", "",
            f"产物：{len(d['books'])} 册（{'、'.join(d['books'])}）。口径见 cv 仓 `open_guji_cv/eval/group_status.py` 模块头；"
            "每组 × 每册明细在同名 json。", "",
-           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致 | 人工数据 刻形/文意/切线/部件（中心库） | 方法数组 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致 | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for gid, g in d["groups"].items():
         t, lb = g["total"], g["labels"]
         out.append(f"| {gid} | {g['name']} | {g['kind']} | {t.get('occ', 0)} | {_pct(t.get('admit', 0), t.get('occ', 0))} | "
                    f"{t.get('review', 0)} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
                    f"{t.get('checked', 0)} | {t.get('mismatch', 0)} | "
                    f"{lb.get('shape', 0)}/{lb.get('reading', 0)}/{lb.get('cut', 0)}/{lb.get('parts', 0)}（{lb.get('central', 0)}） | "
+                   f"{lb.get('multi', 0)}／{lb.get('corrected', 0)} | "
                    f"`{g['methods']}` |")
     return "\n".join(out) + "\n"
 

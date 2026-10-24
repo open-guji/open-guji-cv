@@ -15,7 +15,7 @@
 L1 单独给字 27.8%；L1→L2 82.3% 给字、1 错。改正金标后 L1→haiku 47/61 全对（下界 0.924，样本少）。「讀易日鈔」是书名，有专门规则。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 101、文意 86、切线 0、部件 0，其中中心库 101。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 101、文意 88、切线 0、部件 0，其中中心库 101；多来源 41 条，其中来源之间结论不同（被更正过）8 条。
 - 数据集 `ry/items.jsonl`（A_human 81／B_vision 10／C_weak 1508）；`review/ry_*`、`pop1_verdicts`（10-20 抽样 33 格，含 vol09:251 更正为曰）。
 
 ## 现状与待办

@@ -15,7 +15,7 @@
 按册留一 356 对／0 错／6 弃（门槛 0.4）；唯一错是 3 个予（予不进组）。子于 有强文意，将来可加 L1 做 agree。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 27、文意 0、切线 0、部件 0，其中中心库 26。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 27、文意 0、切线 0、部件 0，其中中心库 26；多来源 8 条，其中来源之间结论不同（被更正过）2 条。
 - 模板＝殿本 vol04–10 放行格（match_ref、无疑问），标签是放行字不是人裁；建库 `research/m7/long_tail/build_bank.py`。
 
 ## 现状与待办

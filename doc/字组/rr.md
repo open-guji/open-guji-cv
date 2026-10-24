@@ -15,7 +15,7 @@
 L1 只给 10.8%；L1→haiku 50/57 全对（下界 0.929）。整字 HOG 上半：人裁 42/48 对、放行格同 1817 异 2（`ids_online.SPECS` 注释）。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 65、文意 77、切线 0、部件 0，其中中心库 29。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 65、文意 78、切线 0、部件 0，其中中心库 65；多来源 58 条，其中来源之间结论不同（被更正过）4 条。
 - 数据集 `rr/items.jsonl`（A_human 81／B_vision 2／C_weak 2264）；`review/rr_*`。
 
 ## 现状与待办

@@ -14,7 +14,7 @@
 自动缝 by_form 15/0；kNN 85.7%；整字像素岭回归 97%，|d|≥0.3 → 68 对／2 弃／0 错。vol07:4:4:21、vol02:125:8:4 原人裁错，sheldon 看图更正。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 75、文意 0、切线 0、部件 0，其中中心库 3。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 75、文意 0、切线 0、部件 0，其中中心库 73；多来源 70 条，其中来源之间结论不同（被更正过）2 条。
 - 中心库人裁 70 格（吕 48／呂 22）；建库 `research/m7/lane1/build_whole_bank.py`。
 
 ## 现状与待办

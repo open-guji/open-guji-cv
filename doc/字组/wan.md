@@ -13,7 +13,7 @@
 —
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 0、文意 0、切线 0、部件 0，其中中心库 0。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 5、文意 0、切线 0、部件 0，其中中心库 5；多来源 0 条，其中来源之间结论不同（被更正过）0 条。
 - —
 
 ## 现状与待办

@@ -39,7 +39,8 @@ def test_status_counts_occurrence_flow_and_label_check(tmp_path):
     ])
     labels = tmp_path / "unified.jsonl"
     labels.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in [
-        {"id": "vol01:1:1:3", "kind": "shape", "form": "日", "src": "central:x"},     # 放行 曰、人裁 日 → 不一致
+        {"id": "vol01:1:1:3", "kind": "shape", "form": "日", "src": "central:x", "in_central": True,
+         "verified": {"n": 2, "agree": False}, "corrected_from": [{"form": "曰", "src": "review:a", "date": "2026-10-01"}]},     # 放行 曰、人裁 日 → 不一致
         {"id": "vol01:1:1:4", "kind": "shape", "form": "㫖", "src": "variant:zhi"},   # 码位不同、未归一 → 不一致
         {"id": "vol01:1:1:5", "kind": "shape", "form": "刋", "src": "variant:kan"},   # 归一后同字 → 一致
         {"id": "vol01:1:1:6", "kind": "shape", "form": "八", "src": "central:y"},     # 人裁通道不核
@@ -56,7 +57,7 @@ def test_status_counts_occurrence_flow_and_label_check(tmp_path):
     assert (t["occ"], t["admit"], t["review"], t["flow"], t["pick"]) == (3, 2, 1, 2, 1)
     assert (t["checked"], t["mismatch"]) == (1, 1)
     assert ry["mismatch"] == [{"id": "vol01:1:1:3", "admit": "曰", "label": "日", "channel": "dual"}]
-    assert ry["labels"] == {"shape": 1, "central": 1, "cut": 1}
+    assert ry["labels"] == {"shape": 1, "central": 1, "multi": 1, "corrected": 1, "cut": 1}
     assert d["groups"]["zhi"]["total"]["mismatch"] == 1
     assert d["groups"]["kan"]["total"]["checked"] == 1 and "mismatch" not in d["groups"]["kan"]["total"]
 

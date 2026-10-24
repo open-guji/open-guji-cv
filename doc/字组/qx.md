@@ -13,7 +13,7 @@
 —
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 32、文意 0、切线 0、部件 0，其中中心库 2。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 32、文意 0、切线 0、部件 0，其中中心库 27；多来源 26 条，其中来源之间结论不同（被更正过）1 条。
 - 人裁主要是中心库里 vol01–10 的刻形 confirm 事件，没有专门的标注批。
 
 ## 现状与待办

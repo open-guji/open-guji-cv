@@ -14,7 +14,7 @@
 首轮强真值 217 格：现行规则路 64% 给字全对；L1→L2（opus∧sonnet）95.9% 给字 1 错。改正金标后 L1→haiku 172/183 全对，Wilson 下界 0.978。Gemini 几乎不弃权、错的也标 high，不用。《總目》校对本里己已巳互讹严重（「巳著」744 次），不能拿它挖规则。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 153、文意 104、切线 0、部件 0，其中中心库 153。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 153、文意 104、切线 0、部件 0，其中中心库 153；多来源 32 条，其中来源之间结论不同（被更正过）8 条。
 - 数据集 `jys/items.jsonl`（A_human 186／B_vision 40／C_weak 31）；复审页 `review/jys_*`、`ctx_r1/r2`；中心库人裁刻形。按文意口径的更正在 cv `research/m7/ctx/l2_results/review_semantic_overrides.jsonl`。
 
 ## 现状与待办

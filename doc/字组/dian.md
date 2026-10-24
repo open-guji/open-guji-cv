@@ -13,7 +13,7 @@
 无专项训练；码位：工作区 codepoints 已定 點→㸃（pua_rules 里 點=㸃）。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 30、文意 0、切线 0、部件 0，其中中心库 7。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 30、文意 0、切线 0、部件 0，其中中心库 30；多来源 23 条，其中来源之间结论不同（被更正过）1 条。
 - 人裁主要是中心库里 vol01–10 的刻形 confirm 事件，没有专门的标注批。
 
 ## 现状与待办

@@ -13,7 +13,7 @@
 IDS 路评估后认为不需要二选一（只有一种刻形）。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 26、文意 0、切线 11、部件 0，其中中心库 1。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 26、文意 0、切线 11、部件 0，其中中心库 23；多来源 22 条，其中来源之间结论不同（被更正过）0 条。
 - `variant/shen/labels.jsonl` 17 格切线；人裁刻形 26 条。
 
 ## 现状与待办

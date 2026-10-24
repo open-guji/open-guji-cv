@@ -14,7 +14,7 @@
 门槛 0.85 → 97／116，0 错。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 116、文意 0、切线 0、部件 0，其中中心库 0。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 123、文意 0、切线 0、部件 0，其中中心库 88；多来源 82 条，其中来源之间结论不同（被更正过）5 条。
 - `variant/shan/labels.jsonl`（刪 111／删 5）。
 
 ## 现状与待办

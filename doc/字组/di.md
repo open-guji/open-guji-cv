@@ -14,7 +14,7 @@
 门槛 0.55 → 78／100（扺 0）。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 100、文意 0、切线 0、部件 0，其中中心库 0。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 102、文意 0、切线 0、部件 0，其中中心库 85；多来源 83 条，其中来源之间结论不同（被更正过）1 条。
 - `variant/di/labels.jsonl`（抵 90／扺 10）。
 
 ## 现状与待办

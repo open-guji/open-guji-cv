@@ -13,7 +13,7 @@
 —
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 29、文意 0、切线 0、部件 0，其中中心库 21。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 29、文意 0、切线 0、部件 0，其中中心库 28；多来源 10 条，其中来源之间结论不同（被更正过）10 条。
 - 人裁 vol04 有 8 格录 變，10-24 按刻形更正为 𠮓（中心库 rev 95788，`H-A24-variant-relabel-1024`）。
 
 ## 现状与待办

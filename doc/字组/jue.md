@@ -14,7 +14,7 @@
 旧窗口 23%、U-Net 部件 31%、整字 HOG 44%；通用判法＋细 IDS 0 错覆盖 59%（门槛 0.05）。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 42、文意 0、切线 39、部件 0，其中中心库 1。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 42、文意 0、切线 39、部件 0，其中中心库 42；多来源 41 条，其中来源之间结论不同（被更正过）0 条。
 - `variant/jue/labels.jsonl` 39 格切线（絕 15／絶 24）；`fine_ids_1022.jsonl`。
 
 ## 现状与待办

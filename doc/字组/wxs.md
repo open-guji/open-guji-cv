@@ -14,7 +14,7 @@
 量横不适用；整字 HOG 因戍样本少放弃。
 
 ## 人工数据
-- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 48、文意 4、切线 0、部件 0，其中中心库 11。
+- 汇总（dataset `char-groups/labels/unified.jsonl`，2026-10-24 重建）：刻形 48、文意 4、切线 0、部件 0，其中中心库 48；多来源 38 条，其中来源之间结论不同（被更正过）1 条。
 - 10-17/18 复审 49 格（与 wm、ts 共一页，`review/ext_wmt_verdicts.jsonl`）。
 
 ## 现状与待办
