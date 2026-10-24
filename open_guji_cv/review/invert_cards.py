@@ -18,7 +18,7 @@ from ..core.spec import page_key
 from ..feedback.lookup import resolved_inverted
 from ..products.kinds import inverted as _inverted  # noqa: F401  —— 登记 inverted 产物种类
 from ..products.store import ProductStore
-from ..utils.preclean import apply_preclean, band_mask, rect_mask
+from ..utils.preclean import apply_preclean, rule_mask
 
 QUESTION = "invert_detect.page.is_inverted"
 CROP_PAD = 400      # 预览图在候选黑条上下各多露多少行（要看得出是版框还是正文里的一条带）
@@ -32,9 +32,7 @@ def _bands(store: ProductStore, book: str, page: int):
 
 def _rule_mask(gray: np.ndarray, r: dict) -> np.ndarray | None:
     try:
-        if r.get("kind") == "inverted_rect":
-            return rect_mask(gray.shape, x0=r["x0"], x1=r["x1"], y0=r["y0"], y1=r["y1"])
-        return band_mask(gray, segments=r["segments"], y_lo=r["y_lo"], y_hi=r["y_hi"], y_probe=r["y_probe"])
+        return rule_mask(gray, r)
     except (KeyError, ValueError):
         return None
 
