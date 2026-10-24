@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.10] - 测试中
+
+PATCH（A30 要钉正式 tag 跑殿本 vol11–19；Sheldon 10-24 定带上 #471 及之后合进 dev 的改动，仍按 PATCH 发）。
+
 ### Fixed
 - `proof_cycle apply` 用钉住的旧引擎重跑时经 `scripts/zhengli/engine_run.py` 起，读中心库事件跳过旧引擎不认的新种类（如 #485 的 `inverted_band`），并禁止 compact；重跑加 `--stop-on-error`，有一页失败就停，不再带着失败的产物接着导出出单（A32，册006 实跑 seed_admit 150 页全败后仍往下走）。发布脚本，不进任何 Step（PATCH）。
 - 5a 简体参考字兜底（#486，A23，PATCH）：`match_replace` 系通道的参考字落在人工审定的纯简体清单（`config/dicts/simplified_refs.txt`，104 字）里、库 top 是其正字时，取库里的正字，不再把整理本混入的简体（贯/牵 等）放进产物。`clustering.seeding` 在 `seed_admit` 的 `code_deps` 里，`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit；输出会变，不能登记 `code_equiv`。清单文件本身不进指纹，以后改清单不会让产物判过期。
@@ -33,10 +37,6 @@
 - `ops/col_gate.py`（A20，A24 报）：读原图改走 `utils.image_io.imread`，不再直接调 `cv2.imread`（Windows 非 ASCII 路径会静默读空；`test_image_io_guard` 在 dev 上因此失败）。缺原图照旧跳过。不进任何 Step，`code_hash` 不变（L0）。
 - `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
 - `scripts/zhengli/republish.py add-sprites`（A20，A31 报）：核坐标时把 `img.s` 文件名也一起比了。线上单已是哈希名（`p0001.<sha8>.webp`，册 006–010 先前补过主雪碧图、只缺相似字图），重建出来是 `p0001.webp`，于是 105 格坐标全对也整单被拒。现在比之前去掉内容哈希，页名不同照样拒。发布脚本，不进任何 Step，`code_hash` 不变（L0）。
-
-## [0.5.10] - 测试中
-
-PATCH（A30 要钉正式 tag 跑殿本 vol11–19）。
 
 ### Fixed（rc 上修）
 - `guji db sync`／`pull` 读的过程中有人往同一工作区推新行（如 `admissions.jsonl` 追加）时，不再报「库里有超出 n_lines 的行」退出，而是重读（原来只在读完后核 rev，读到一半的不一致直接抛）；没有新写入的不一致照旧报错。10-23 A30 sync 殿本撞上（与 dev／v0.5.9 无关，同一段代码，换时间重试就过）。只动 `datastore/workcopy.py`，各步 `code_hash` 不变。
