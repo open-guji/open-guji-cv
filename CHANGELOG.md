@@ -5,6 +5,13 @@
 
 ## [未发版]
 
+## [0.5.11] - 测试中
+
+PATCH（殿本 vol11–20 统一重落要钉：0.5.10 之后只差 #498）。
+
+### Changed
+- 码位归一可放工作区级 `config/codepoints.yaml`（#498，Sheldon 10-24 定「归一放字形库这一层」）：`load_book` 先读与 `books/` 同级的该文件，再叠册 yaml 的 `codepoints:`（册里写的逐条覆盖）；没有这个文件行为不变。合并后的值经 `seed_admit` 的 `book_deps` 进指纹，加文件的工作区 seed_admit 判过期。
+
 ## [0.5.10] - 2026-10-23
 
 PATCH（A30 要钉正式 tag 跑殿本 vol11–19；Sheldon 10-24 定带上 #471 及之后合进 dev 的改动，仍按 PATCH 发）。
