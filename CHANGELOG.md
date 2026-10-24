@@ -14,6 +14,7 @@
 - seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
 ### Added
+- 精校复审出单与网站推翻旧人裁（M10 复盘第 1、3、5 项，A32）：`republish.py prep/from-pack --recheck <清单>` 把指定格（人裁过的、已放行的都行）放回待审单，每格带 `recheck`、`note`（网站卡片头上常显的一句说明）、`prior`（已有人裁的字和 id），pending_route 不扣它们，现行切分里没有的列进差异单；`guji audit alt --extra` 给这些格也算相似字。`guji cellvotes draft` 另出 `recheck.tsv`（推翻旧裁、意见不一致、说无字又给字、格位变了四类挂起，可直接交 `--recheck`）；复审单上写明了旧裁、投票人投了不同的字，按有意推翻照写（payload `overrides`），出单后又来新裁的照旧挂起。新增 `republish.py issue`：出单、两道门、传图、推库、只发这一章（kaiyuanguji-web#584 的 `only`，网站没有就退回全站）、等网站发布、读者侧冒烟一条命令做完。发布脚本与 CLI，不进任何 Step，`code_hash` 不变（PATCH）。
 - `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
 - `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
 

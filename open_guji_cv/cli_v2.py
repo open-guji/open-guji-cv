@@ -605,6 +605,12 @@ def cmd_audit(args) -> None:
             cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
                        skip_decided=False, cls="*")["cards"]
         todo = [c for c in cs if not c.get("admit")]
+        if getattr(args, "extra", None):
+            # 复审格（republish prep --recheck）多已放行或人裁过，也要相似字，网站卡片才和别的格一样能点选
+            want = {ln.split("\t")[0].strip() for ln in Path(args.extra).read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.lstrip().startswith("#")}
+            want = {w if w.startswith(f"{book}:") else f"{book}:{w}" for w in want}
+            todo += [c for c in cs if c.get("admit") and c.get("id") in want]
         if args.reviewed:
             # 人裁过的格也算（它们多已放行、不在待审里）：给 alt-eval 拿历史人裁量真实命中，不进待审单
             from .feedback.lookup import human_chars
@@ -3148,6 +3154,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--reviewed", action="store_true",
                    help="alt：人裁过、已放行的格也算相似字（给 alt-eval 用历史人裁量命中；pending_list 只取待审格，不受影响）")
     p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
+    p.add_argument("--extra", default=None,
+                   help="alt：另外也要算相似字的格（复审清单，一行一格，第一列格号，可带「册:」前缀）：已放行的复审格也挂上 alt")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
     p.add_argument("action", choices=["check", "commit"])
