@@ -10,7 +10,8 @@
          待审单里带 stale（旧裁已失效）的格，只认 stale.ts 之后的事件。
   团队单 页在 --team-pages 里，或 --page-types 里不是 body 的页（非正文只给团队，用户 10-20 定）。
   公众单 其余。
-  不扣   --keep 名单上的格照旧留在单上（republish.py from-pack 传：人裁按锚框绑到了别的格或绑不上，
+  不扣   带 `recheck: true` 的格（pending_list --recheck 放回来的复审格，本来就是要人推翻或重定的）；
+         --keep 名单上的格照旧留在单上（republish.py from-pack 传：人裁按锚框绑到了别的格或绑不上，
          原格号上的人裁不能算这一格定了字）。
   回流单 同一 (cls, why) 的格 ≥ --reflow-min（缺省 20）：成片的问题先交 M7／M9／CV 修，不逐格审（设计 GUJI-543 §4.2）。
          cls=other、why=none（机器没把握的兜底）不算同一个原因，不进回流单。
@@ -109,7 +110,7 @@ def route(pending: dict, decided: dict, team_pages: set[int], reflow_min: int, r
     kept, dropped = [], []
     for c in cells:
         stale_ts = str((c.get("stale") or {}).get("ts") or "")
-        hits = [h for h in decided.get(c["cell"], []) if h[0] > stale_ts]
+        hits = [] if c.get("recheck") else [h for h in decided.get(c["cell"], []) if h[0] > stale_ts]
         (dropped if hits else kept).append(c)
     groups = Counter((c.get("cls") or "", tuple(c.get("why") or ())) for c in kept)
     # 「other／none」是「机器没把握」的兜底，不是同一个原因，不进回流单
