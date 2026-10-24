@@ -28,6 +28,7 @@
 
 from __future__ import annotations
 
+import functools
 import json
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
@@ -445,6 +446,38 @@ def detect_nonchar(gray: "np.ndarray", ocr: dict | None,
                 or (ocr or {}).get("prob", 0.0) < NONCHAR_OCR_PROB:
             return "tail_junk"
     return None
+
+
+@functools.lru_cache(maxsize=1)
+def _simplified_refs() -> frozenset[str]:
+    """人工审定的「纯简体字」清单（参考文本里混入的简体，库与干净繁体本都不用）。"""
+    p = Path(__file__).resolve().parents[2] / "config" / "dicts" / "simplified_refs.txt"
+    if not p.exists():
+        return frozenset()
+    return frozenset(
+        ln.split("\t")[0].strip() for ln in p.read_text(encoding="utf-8").splitlines()
+        if ln.strip() and not ln.startswith("#"))
+
+
+def ref_admit_char(ref_char: str | None,
+                   match_candidates: list[tuple[str, float]] | None,
+                   vmap: VariantMap) -> str | None:
+    """match_replace/match_ref_weak/match_margin 进库字：取整理本/参考字，
+    但参考字在人工审定的纯简体清单里、且库 top 候选恰是它的语义正字时取库字。
+
+    起因（2026-10-23）：殿本 vol16:73:4:11、vol20:195:7:18 的参考文本
+    （文渊阁录入）混有简体「贯」「牵」，通道照参考字进库，又靠
+    variants.auto 的 贯→貫 过了语义闸，出简体码位。库里只有 貫、牽。
+    **只认清单**：不清单化时（凡异体键且库 top 为正字）在 vol16/vol20 真产物上
+    回放会把 尙→尚、旣→既、郷→鄉 这类刻本通行形也改掉（146 格），那是
+    忠实转写，不能动。清单外一律保持原行为。
+    """
+    if not ref_char or not match_candidates or ref_char not in _simplified_refs():
+        return ref_char
+    top = max(match_candidates, key=lambda t: t[1])[0]
+    if top == vmap.semantic(ref_char) != ref_char:
+        return top
+    return ref_char
 
 
 def admission_decision(ocr: dict | None, align_char: str | None,
@@ -1054,8 +1087,10 @@ def seed_book(book_out_dir: str | Path, db: GlyphDB, corpus: str | Path,
                                              "match_margin"):
                     # 这三条通道站着的都是整理本/参考字，库只是形状旁证
                     # （match_margin 同一机理，见 MATCH_MARGIN_THRESH 注释）
-                    proposed = (al.char if al else None) or \
-                        (ctx or {}).get("ref_char")
+                    proposed = ref_admit_char(
+                        (al.char if al else None) or
+                        (ctx or {}).get("ref_char"),
+                        mr.candidates, vmap)
                 elif admit_ok and channel == "match_ref":
                     # 库 × 整理本通道的进库字取库匹配形——站着的是形状
                     # 证据（verify same）+ 整理本，OCR 只是旁证；否则
@@ -1566,8 +1601,9 @@ def readjudicate_pending(book_out_dir: str | Path, db: GlyphDB,
             n["kept"] += 1
             continue
         if channel in ("match_replace", "match_ref_weak", "match_margin"):
-            proposed = (it.align or {}).get("char") or \
-                (it.context or {}).get("ref_char")
+            proposed = ref_admit_char(
+                (it.align or {}).get("char") or
+                (it.context or {}).get("ref_char"), cands or None, vmap)
         elif channel in ("match_ref", "match_solo", "match_solo_ocr"):
             proposed = m.get("char") or (
                 max(cands, key=lambda t: t[1])[0] if cands else None)
