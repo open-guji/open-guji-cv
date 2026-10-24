@@ -169,7 +169,7 @@ def book_dep_values(step: Step, book: BookSpec) -> dict | None:
     return {k: _jsonable(getattr(book, k, None)) for k in sorted(step.spec.book_deps)}
 
 
-_FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 +N／+dirty）
+_FORMAL_CV = re.compile(r"^\d+\.\d+\.\d+$")     # 正式版 cv_version（不带 .devN+g…／+dirty；同 cv_version.FORMAL_RE）
 
 
 def params_hash(params: BaseModel, soft: tuple[str, ...] = (),

@@ -245,16 +245,27 @@ def main_label(book: str, src=None) -> str | None:
     return keys[-1][len(pre):-len(".json")].split("-", 1)[1]
 
 
-def promote(book: str, label: str, note: str = "", src=None) -> str:
-    """把已存的 `<册>/<标签>` 标成 main（追加一条指针，不动包本身）。"""
+def promote(book: str, label: str, note: str = "", src=None, why: str | None = None) -> str:
+    """把已存的 `<册>/<标签>` 标成 main（追加一条指针，不动包本身）。
+
+    main 是正式结果，只收正式版 cv 出的包（2026-10-23 起）：正式库里包的 `cv_version` 不是三段数字
+    （dev／rc／任意提交跑的 `0.5.10.dev3+g…`、`dev+g…`、带 dirty、没记版本）就拒，
+    确要标给 `why`（记进指针）。实验桶里的包不查。"""
+    from ..core.cv_version import is_formal
     src = src or _client()
     check_label(label)
     if len(label) > LABEL_MAX_MAIN:
         raise ValueError(f"标签 {label!r} 太长，标 main 时不能超过 {LABEL_MAX_MAIN} 字符")
     pre = _prefix(_ws_name(), book)
-    _call(src, "GET", f"{pre}/{label}/manifest.json", raw=True)          # 包得先存在
+    man = json.loads(_call(src, "GET", f"{pre}/{label}/manifest.json", raw=True))   # 包得先存在
+    ver = man.get("cv_version")
+    if _bucket(src) == "main" and not is_formal(ver) and not (why or "").strip():
+        raise ValueError(f"包 {label} 是 cv {ver or '未知版本'} 出的，不是正式版，不能标 main："
+                         f"发正式 tag 后在它上面重跑再存；确要标加 --why \"<理由>\"")
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     rec = {"book": book, "label": label, "at": ts, "note": note}
+    if not is_formal(ver):
+        rec.update(cv_version=ver, cv_override=(why or "").strip() or None)
     _call(src, "PUT", f"{pre}/{MAIN_DIR}/{ts}-{label}.json", data=json.dumps(rec, ensure_ascii=False).encode("utf-8"),
           content_type="application/json", tries=3)
     return f"{pre}/{label}"

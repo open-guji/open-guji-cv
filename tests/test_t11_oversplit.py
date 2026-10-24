@@ -106,3 +106,6 @@ def test_step_off_arm_byte_identical(tmp_path, monkeypatch):
     base = _step_run(tmp_path / "a", monkeypatch, SeedAdmitParams(), None)
     off = _step_run(tmp_path / "b", monkeypatch, SeedAdmitParams(witness3_no_diff=False), None)
     assert base.model_dump_json() == off.model_dump_json()
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -194,6 +194,26 @@ QUESTIONS: tuple[Question, ...] = (
              "不混进 contaminated。不进字形库（形都不全，当刻例会把破损形钉死成那个字）；"
              "文本层出 `□`，`guess` 只作括注 `□（？塊）`。",
     ),
+    Question(
+        id="seed_admit.cell.figure", unit="cell",
+        shard=None,
+        title="这格是图形，不是字（图片格）",
+        answers=("figure",),
+        kind="confirm",
+        note="走 `payload.v == 'figure'` 进来（GUJI-740），payload 另带 `alt`（图的说明，可空）。"
+             "进排除名单（理由 `figure`）：不进字形库、不再出卡；字位占住，文本层出 `□`，"
+             "Step9 导出写 char `fig`、`NNN.fig.json` 与裁图。网站精校票 `choice=figure` 经 "
+             "`guji cellvotes` 落成这一条。",
+    ),
+    Question(
+        id="export.page.figure_region", unit="page",
+        shard=None,
+        title="插图块：这一片是图，不是字",
+        answers=("figure_region",),
+        kind="figure_region",
+        note="控制台在页上画框（GUJI-740）：payload `box`（canvas 像素 [x,y,w,h]）、`col`、`span`、`alt`、"
+             "`fig`（可空）；`v=delete` 撤掉。不配消费者，Step9 导出读 `figures.resolved_figure_regions`。",
+    ),
 )
 
 BY_ID: dict[str, Question] = {q.id: q for q in QUESTIONS}

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace as NS
 
+import pytest
+
 import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.clustering.variants import VariantMap
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _review_lanes_pass
@@ -37,3 +39,6 @@ def test_w3_lib_variant_takes_precedence_over_diff():
     r = out[0].chars[4]
     assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "lib_variant"
     assert "witness3_diff" not in r.doubts
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

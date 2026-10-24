@@ -12,11 +12,11 @@
 |---|---|---|
 | L0 基础 | `errors` `variants` `variant_ledger` `gloss` `detectors` `ocr` `hanzi` | 领域错误信号；异体关系图与本书用字账；单字释义；OCR 检测器与 paddle 子进程 worker；**自建汉字关系库 `hanzi`**（字、关系边、IDS 与部件、形近对，离线 sqlite，只用标准库，见 [design/汉字字形与关系库-总设计.md](design/汉字字形与关系库-总设计.md)）。无内部依赖 |
 | L1 设施 | `core` `products` `utils` `formats` `datastore` | **Step 引擎**（`Step`／`StepSpec`／`STEPS` 注册表／`Engine`）；**产物仓**（`ProductStore`、`ImageCache`、产物 schema）；通用工具；对外交换格式（guji-page 等）；**中心库**（`datastore`：Postgres 表结构、从 guji-workspace 幂等导入与核对、R2 图片上传，只依赖标准库＋psycopg，不进任何 Step 的 `code_deps`） |
-| L2 算法与产出 | `clustering` `gold` `report` `render` `pagetype_model` `groups` | 字形匹配/聚类/播种（`clustering`，最大，约 2.4 万行）；金标信封与分片仓；Step9 汇总层；叠图与阅读排版；页型模型；**形近字组统一接口 `groups`**（注册表、后端协议、适配器、升降执行函数；S0，目前**不被任何 Step 引用**，只许 import L0／L1，见 [design/形近字组统一接口设计.md](design/形近字组统一接口设计.md)） |
+| L2 算法与产出 | `clustering` `gold` `report` `render` `pagetype_model` `groups` | 字形匹配/聚类/播种（`clustering`，最大，约 2.4 万行）；金标信封与分片仓；Step9 汇总层；叠图与阅读排版；页型模型；**形近字／异体字组 `groups`**（注册表、方法数组、统一流程 `group_flow`；规范与各组卡见 [字组/](字组/README.md)） |
 | L3 管线 | `steps` `gates` `shadow` `feedback` | 各 Step 的适配（`import open_guji_cv.steps` 即注册全部 Step）；挂在 Step 上的闸；影子放行闸；人裁事件与路由（`EventLog`） |
 | L4 应用 | `eval` `review` `snap` `ops` `exp` `opinions` | 评测；审阅批次与卡片；快照导入；发布/部署运维；A/B 实验框架；**意见池**（`opinions`，M11：网站读者意见入池、证据包、规则分流、book-text 冻结册修订；只依赖 `core`／`datastore`、标准库与 Pillow，不进任何 Step 的 `code_deps`） |
 | L5 控制台 | `console` | FastAPI 后端（`console/routers/*`）＋无构建前端，`guji console` 启动 |
-| L6 命令行 | `cli_v2` `cli_exp` `cli_glyph_db` `cli_db` `cli_products` `cli_opinions` `cli_cellvotes` | `guji` 命令（pipeline / step / status / close-check / recheck / cache / collate / gold / eval …） |
+| L6 命令行 | `cli_v2` `cli_exp` `cli_glyph_db` `cli_db` `cli_products` `cli_source` `cli_opinions` `cli_cellvotes` `cli_freeze` | `guji` 命令（pipeline / step / status / close-check / recheck / cache / collate / gold / eval …） |
 | L7 入口 | `__main__` | `python -m open_guji_cv` |
 
 ## 二、各层之间的「接口」是什么
@@ -68,4 +68,4 @@
 ## 六、后续
 
 - 剩余的包级向上依赖怎么分批清理：[design/模块化后续计划（待Mila定）.md](design/模块化后续计划（待Mila定）.md)（**待 Mila 定，未执行**）。
-- 形近字这一小块的接口与流程如何统一：[design/形近字组统一接口设计.md](design/形近字组统一接口设计.md)（研究草案，未改代码）。
+- 形近字／异体字组：规范、总表与各组卡在 [字组/](字组/README.md)。

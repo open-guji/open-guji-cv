@@ -103,6 +103,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv.append("--allow-sample-db")
     if getattr(args, "allow_cv_mismatch", False):
         argv.append("--allow-cv-mismatch")
+    if getattr(args, "why", None):
+        argv += ["--why", args.why]
     if getattr(args, "allow_missing_deps", False):
         argv.append("--allow-missing-deps")
     return argv
@@ -164,18 +166,38 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     return rc
 
 
-def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
+def _guard_cv_version(book, allow: bool = False, warn_only: bool = False, why: str | None = None,
+                      eng=None) -> None:
     """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
-    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
-    from .core.cv_version import frozen_mismatch, mismatch
+    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。
+
+    放行只有两条路（2026-10-23 起），都照样提醒，理由记进环境变量 `GUJI_CV_OVERRIDE`、随每条 manifest 落盘：
+    - 在中心库实验分支上跑（`GUJI_DATA_BRANCH=exp/*`，产物、glyph.db 落该分支自己的目录）：自动放行；
+    - `--allow-cv-mismatch --why "<理由>"`：不写理由不放行。
+    给了 `eng` 就把理由补进它已算好的 manifest 字段（引擎先于护栏建）。"""
+    import os
+    from .core.cv_version import OVERRIDE_ENV, frozen_mismatch, isolated_branch, mismatch
     # 冻结册另按冻结时的提交比（M10·D7，GUJI-694）：冻结册顶层常没写 cv_version，以前在 main 上照样能跑
     msg = mismatch(getattr(book, "cv_version", None)) or frozen_mismatch(getattr(book, "freeze", None))
     if not msg:
         return
-    if allow or warn_only:
+    if warn_only:
         print(f"⚠️ {msg}", file=sys.stderr, flush=True)
         return
-    print(f"✗ {msg}", file=sys.stderr, flush=True)
+    why = (why or "").strip() or os.environ.get(OVERRIDE_ENV, "").strip()
+    branch = isolated_branch()
+    if branch and not allow:
+        why = f"exp-branch:{branch}"
+    if branch or (allow and why):
+        os.environ[OVERRIDE_ENV] = why
+        if eng is not None:
+            eng._cv["cv_override"] = why
+        print(f"⚠️ {msg}\n   放行（{why}）：产物 manifest 记装的版本与这条理由", file=sys.stderr, flush=True)
+        return
+    if allow:
+        print(f"✗ {msg}\n   --allow-cv-mismatch 要同时写 --why \"<理由>\"（记进产物 manifest）", file=sys.stderr, flush=True)
+    else:
+        print(f"✗ {msg}", file=sys.stderr, flush=True)
     sys.exit(2)
 
 
@@ -203,7 +225,8 @@ def cmd_pipeline(args) -> None:
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
-    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False), why=getattr(args, "why", None),
+                      eng=eng)
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     _ensure_glyph_pin(eng.book)
@@ -332,7 +355,7 @@ def cmd_rerun(args) -> None:
     eng = _engine(args.book, args.pipeline, None)
     # 写产物，和 pipeline／step 一样过 cv 版本护栏（GUJI-577）；--dry-run 只提醒
     _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False),
-                      warn_only=args.dry_run)
+                      warn_only=args.dry_run, why=getattr(args, "why", None), eng=eng)
     pages = eng.book.resolve_pages(args.pages)
 
     def steps_after(first, to):
@@ -457,13 +480,35 @@ def cmd_exit_check(args) -> None:
         sys.exit("册名不是 volNN 时要给 --chapter NNN")
     from .core.book import load_book
     b = load_book(args.book)
+    frozen = None
+    if args.frozen_char:
+        from .ops import text_diff as TD
+        frozen = TD.load(args.frozen_char)
     res = EC.run(Path(args.text_dir), chapter, b.freeze, b.cv_version,
-                 repo=Path(args.repo) if args.repo else None)
+                 repo=Path(args.repo) if args.repo else None, frozen_char=frozen)
+    if args.diff_out and res.get("diff") is not None:
+        from .ops import text_diff as TD
+        TD.write_tsv(res["diff"], json.loads((Path(args.text_dir) / f"{chapter}.char.json").read_text(encoding="utf-8")),
+                     frozen, Path(args.diff_out))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
         EC.print_report(res)
     sys.exit(0 if res["ok"] else 1)
+
+
+def cmd_char_diff(args) -> None:
+    """`guji char-diff <文本 char.json> <冻结导出 char.json>`：逐格比（只读；1.0 标准 G2）。见 `ops/text_diff.py`。"""
+    from .ops import text_diff as TD
+    text, frozen = TD.load(args.text), TD.load(args.frozen)
+    res = TD.diff(text, frozen)
+    if args.out:
+        TD.write_tsv(res, text, frozen, Path(args.out))
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"{res['n']} 处差异：{TD.summary(res)}" + (f"（明细 {args.out}）" if args.out and res["n"] else ""))
+    sys.exit(0 if not res["n"] else 1)
 
 
 def cmd_export(args) -> None:
@@ -583,6 +628,12 @@ def cmd_audit(args) -> None:
             cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
                        skip_decided=False, cls="*")["cards"]
         todo = [c for c in cs if not c.get("admit")]
+        if getattr(args, "extra", None):
+            # 复审格（republish prep --recheck）多已放行或人裁过，也要相似字，网站卡片才和别的格一样能点选
+            want = {ln.split("\t")[0].strip() for ln in Path(args.extra).read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.lstrip().startswith("#")}
+            want = {w if w.startswith(f"{book}:") else f"{book}:{w}" for w in want}
+            todo += [c for c in cs if c.get("admit") and c.get("id") in want]
         if args.reviewed:
             # 人裁过的格也算（它们多已放行、不在待审里）：给 alt-eval 拿历史人裁量真实命中，不进待审单
             from .feedback.lookup import human_chars
@@ -2064,6 +2115,20 @@ def cmd_check(args) -> None:
              "out": args.out or None})
 
 
+def cmd_groups(args) -> None:
+    """字组：table 由注册表重生成 doc/字组/字组总表.md（--check 只比对）；status 一轮产物 × 人工数据 → 每组状态报告。"""
+    if args.action == "table":
+        from .groups import catalog
+        raise SystemExit(catalog.main(["--check"] if args.check else []))
+    from .eval import group_status
+    if not args.prod or not args.out:
+        raise SystemExit("groups status 要 --prod 与 --out")
+    pj, pm = group_status.run([Path(p) for p in args.prod.split(",")], Path(args.out),
+                              labels=Path(args.labels) if args.labels else None,
+                              codepoints=Path(args.codepoints) if args.codepoints else None, tag=args.tag)
+    print("写", pj, "\n写", pm)
+
+
 def cmd_cards(args) -> None:
     """待审卡片的数据：dingzi | cutline | jiazhu | groups，一律出 JSON。
 
@@ -2674,6 +2739,7 @@ COMMANDS_V2 = {
     "exit-check": cmd_exit_check,
     "export": cmd_export,
     "audit": cmd_audit,
+    "char-diff": cmd_char_diff,
     "store": cmd_store,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
@@ -2685,6 +2751,7 @@ COMMANDS_V2 = {
     "product": cmd_product,
     "check": cmd_check,
     "cards": cmd_cards,
+    "groups": cmd_groups,
     "rare": cmd_rare,
     "variants": cmd_variants,
     "corpus": cmd_corpus,
@@ -2810,8 +2877,11 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "2026-10-20 起 `guji pipeline` 跑多于一步、不要 --json 时缺省就隔离（GUJI-647），"
                         "代价是每步多付一次 import 与模型加载；--no-isolate-steps 退回单进程连跑。不支持 --json")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
-                        "做实验、临时核对时用，产物 manifest 照实记装的版本")
+                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577），"
+                        "须同时给 --why。做实验优先在中心库实验分支上跑（GUJI_DATA_BRANCH=exp/*，自动放行、产物隔离）；"
+                        "产物 manifest 照实记装的版本和理由（cv_override）")
+    p.add_argument("--why", default=None,
+                   help="配 --allow-cv-mismatch：为什么要用非钉定版本在这里跑，记进每条产物 manifest 的 cv_override")
     p.add_argument("--allow-missing-deps", action="store_true",
                    help="这次要跑的步骤本机缺依赖（torch／权重／shadow_veto 要的 joblib）时仍然跑（默认拒跑，退出码 2；GUJI-654）。"
                         "缺的东西会让 Step 悄悄退回旧办法或整页失败，只在明知后果时加")
@@ -2848,7 +2918,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--wait", action="store_true", help="这本书正有别的跑批时排队等")
     p.add_argument("--json", action="store_true")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定了 cv_version 而装的不是它时照跑（只提醒）")
+                   help="册配置固定了 cv_version 而装的不是它时照跑，须同时给 --why（实验分支上自动放行）")
+    p.add_argument("--why", default=None, help="配 --allow-cv-mismatch：理由，记进产物 manifest 的 cv_override")
 
     p = sub.add_parser("binarize",
                        help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
@@ -3082,6 +3153,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--text-dir", required=True, help="book-text 本书 default 目录（含 index.json、NNN.char.json）")
     p.add_argument("--chapter", default=None, help="章号 NNN；缺省按 volNN 推")
     p.add_argument("--repo", default=None, help="查 tag 用的 cv 仓目录；缺省本包所在仓")
+    p.add_argument("--frozen-char", default=None, dest="frozen_char",
+                   help="冻结快照导出的 NNN.char.json；给了就核 E9（发布文本＝冻结导出）")
+    p.add_argument("--diff-out", default=None, dest="diff_out", help="E9 的逐格差异写成 tsv")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("char-diff", help="[v2] 两份 char.json 逐格比：发布文本 vs 冻结导出（只读，1.0 标准 G2）")
+    p.add_argument("text", help="发布（候选）文本的 NNN.char.json")
+    p.add_argument("frozen", help="冻结快照导出的 NNN.char.json")
+    p.add_argument("--out", default=None, help="差异明细 tsv")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
@@ -3116,6 +3196,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--reviewed", action="store_true",
                    help="alt：人裁过、已放行的格也算相似字（给 alt-eval 用历史人裁量命中；pending_list 只取待审格，不受影响）")
     p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
+    p.add_argument("--extra", default=None,
+                   help="alt：另外也要算相似字的格（复审清单，一行一格，第一列格号，可带「册:」前缀）：已放行的复审格也挂上 alt")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
     p.add_argument("action", choices=["check", "commit"])
@@ -3302,6 +3384,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--out", default="",
                    help="ledger：发现明细另存 jsonl（不给就只在 --json/文字里出汇总数与 counts）")
 
+    p = sub.add_parser("groups", help="[v2] 字组：table 重生成字组总表 | status 每组状态报告（只读）")
+    p.add_argument("action", choices=["table", "status"])
+    p.add_argument("--check", action="store_true", help="table：只比对总表与注册表，不写")
+    p.add_argument("--prod", default="", help="status：产物根，逗号分隔（下面是 <册>/seed_admit/p*.json）")
+    p.add_argument("--labels", default="", help="status：dataset char-groups/labels/unified.jsonl")
+    p.add_argument("--codepoints", default="", help="status：工作区 config/codepoints.yaml（核对人裁时先归一码位）")
+    p.add_argument("--out", default="", help="status：输出目录（dataset char-groups/status）")
+    p.add_argument("--tag", default="", help="status：这一轮产物的标签，进文件名")
+
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
     p.add_argument("book")
@@ -3408,6 +3499,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_products import add_parser as _add_products, cmd_products_entry
     _add_products(sub)
     COMMANDS_V2["products"] = cmd_products_entry
+    # source：原图源件、页图、页表（R2），云会话取原图；自带 -w
+    from .cli_source import add_parser as _add_source, cmd_source
+    _add_source(sub)
+    COMMANDS_V2["source"] = cmd_source
     # opinions（M11）：意见池、证据包、初判、修订 book-text 冻结册；不带 book 位置参数，不要 -w
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)
@@ -3416,6 +3511,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
     _add_cellvotes(sub)
     COMMANDS_V2["cellvotes"] = cmd_cellvotes
+    # freeze（GUJI-694）：冻结登记；带 book，-w 由下面统一加
+    from .cli_freeze import add_parser as _add_freeze, cmd_freeze
+    _add_freeze(sub)
+    COMMANDS_V2["freeze"] = cmd_freeze
     install_workspace_option(sub)
 
 

@@ -96,3 +96,7 @@ def test_human_chars_reports_lost(tmp_path, monkeypatch):
     out = lookup.human_chars(BOOK, log=log, stale={}, bind=True, lost=lost)
     assert out == {_key(2): "金"}
     assert set(lost) == {_key(1)} and lost[_key(1)]["char"] == "火" and lost[_key(1)]["status"] == "review"
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

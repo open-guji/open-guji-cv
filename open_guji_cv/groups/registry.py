@@ -35,7 +35,9 @@ class FlowSpec:
     - `tolerate`：补放进入时，分差内允许出现的**组外候选字**（库形上的陪衬，不是真竞争者）。只放宽进入，给字仍全凭方法，
       方法给不出组内字照样送审。彝：库形常把 尋、舞 排在第二、三位（vol04–10 有 4 格因此没进流程）；
     - `families`：两段判。组里有同字异体时（象彖𧰼：象𧰼同字，彖另一字），先由 `methods`（文意）定「哪一族」，
-      族里不止一形的，再由 `form_methods`（字频→IDS→库形最近，按刻形，只在族里选）定哪一形，定不下来待定。族是字符串，如 ("彖", "象𧰼")。"""
+      族里不止一形的，再由 `form_methods`（字频→IDS→库形最近，按刻形，只在族里选）定哪一形，定不下来待定。族是字符串，如 ("彖", "象𧰼")；
+    - `review_methods`：复核时改跑这个数组（依次试，第一个给字的说了算），空＝跟补放一样跑 `methods`。异体组复核只看刻形
+      （2026-10-24，A24：字频永远说主形，拿它复核会把真次形也降掉），如 旨㫖：补放 字频→IDS，复核只跑 IDS。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -47,10 +49,15 @@ class FlowSpec:
     tolerate: frozenset = frozenset()
     families: tuple = ()
     form_methods: tuple = (FREQ, IDS, FORM_TOP1)
+    review_methods: tuple = ()
 
     @property
     def solvers(self) -> tuple:
         return tuple(m.name for m in self.methods)
+
+    @property
+    def review_solvers(self) -> tuple:
+        return tuple(m.name for m in (self.review_methods or self.methods))
 
     @property
     def form_solvers(self) -> tuple:
@@ -59,7 +66,8 @@ class FlowSpec:
     @property
     def needs_patch(self) -> bool:
         """有方法要字块图（两段判时连第二段一起算）。"""
-        return any(m.needs_patch for m in (*self.methods, *(self.form_methods if self.families else ())))
+        return any(m.needs_patch for m in (*self.methods, *self.review_methods,
+                                            *(self.form_methods if self.families else ())))
 
     def describe(self) -> str:
         return (" → " if self.combine == "first" else " ＋ ").join(describe(m) for m in self.methods)
@@ -94,6 +102,16 @@ def _img(gid: str) -> Method:
     if sp is not None and sp.whole:
         return hog_or_crop(tuple(sp.region))
     return IDS
+
+
+#: 按刻形复核的异体组（2026-10-24，A24；sheldon「错放的情况也要注意修复」）：别的通道（库形替换、整理本、三证…）已放行、放行字在组里的格，
+#: 复核只跑组的字形方法（`_img`，不跑字频与库形最近）；判出组里另一形就降审，只降不改字，判不出不动。
+#: vol04–20 回放：旨→㫖 24 格、删→刪 约 12 格等是真错放；判法也会错（删 2 格），所以只降审。名单＝在 `ids_online.SPECS` 有判法的异体组。
+SHAPE_REVIEW = frozenset({"zhi", "can", "xu", "jiao", "qik", "lih", "jue", "lv", "zheng", "weiw", "shan", "di", "yi_560"})
+
+
+def _rv(gid: str) -> dict:
+    return {"review": True, "review_methods": (_img(gid),)} if gid in SHAPE_REVIEW else {}
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
@@ -189,7 +207,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
-        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞")),
+        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞"), **_rv("yi_560")),
         note="异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。"
              "只在 seed_admit.group_flow 点名时生效。"),
     # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。
@@ -197,7 +215,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=cfg,
-        flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first"),
+        flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first", **_rv(gid)),
         note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, cfg in (("mn", "蒙𫎇", None), ("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
                               ("chen", "讖識䜟", None), ("li", "隸𨽾", None), ("shen", "慎愼", "config/groups/shen"),
@@ -219,7 +237,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((FREQ, _img(gid)), combine="first"),
+        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid)),
         note="异体组：字频→IDS（按字分类）；只在 seed_admit.group_flow 点名时生效。")
        for gid, name in (("xu", "叙敘"), ("ce", "冊册"), ("jiao", "教敎"),
                          # 第二批（2026-10-20 sheldon 异体对第二批审定）：按册留一 0 错
@@ -229,7 +247,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((FREQ, _img(gid)), combine="first"),
+        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid)),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
     # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
@@ -262,11 +280,11 @@ GROUPS: dict[str, GroupSpec] = {
         flow=FlowSpec((_img("xb"),), combine="first"),
         note="按整字字形判（按册留一 0 错）；只补放。"),
     # 字形判法扩面（2026-10-22）：两形混用的异体对，字频不成立（次形不为 0），走取框 HOG＋岭回归；模板＝dataset 人裁（按册留出 0 错）。
-    # 次形（衞／删／扺）样本太少，几乎总是弃权送人审；只补放、不复核。
+    # 次形（衞／删／扺）样本太少，几乎总是弃权送人审。2026-10-24 起也复核（`SHAPE_REVIEW`）：判出另一形就降审。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((_img(gid),), combine="first"),
+        flow=FlowSpec((_img(gid),), combine="first", **_rv(gid)),
         note=f"异体组：取框 HOG＋岭回归（{note}）；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("weiw", "衛衞", "看字中下部"), ("shan", "刪删", "看左下的冊／册"), ("di", "扺抵", "看左下到右下"))},
 }
@@ -293,6 +311,15 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ids",), config_dir="config/groups/qin", overlaps=("zh",),
         flow=FlowSpec((_img("qin"),), combine="first", tolerate=frozenset("合愈含")),
         note="按整字字形判（一对多岭回归；曾 合 愈 也进库，判成它们＝弃权）；會 与 zh 共用，入口按分差内候选选组；只补放。"),
+    # 按刻形拆判的异体对（2026-10-24，sheldon「异体看刻形，按 IDS 拆判」）：两形殿本都常见、刻形分得开，整理本与台账给的码位常与刻形不符。
+    # 整字 HOG＋岭回归，模板＝殿本 vol04–20 已放行格（去掉看图确认码位错的格），按册留出 0 错（research/m7/glyph_expand/build_shape_pair.py）。
+    # 复核时把握够就按刻形改码位（`review_fix`），不够不动。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=True),
+        note=f"异体对按刻形判（{note}）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。")
+       for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"))},
 }
 
 #: 字组流程可点名的全部组。

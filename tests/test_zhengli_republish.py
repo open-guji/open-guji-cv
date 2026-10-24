@@ -65,6 +65,7 @@ def _setup(tmp_path):
 def test_prep_then_push(tmp_path, monkeypatch, capsys):
     ws, export, online = _setup(tmp_path)
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)                                       # 换单门别去连网站 KV
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
@@ -83,6 +84,62 @@ def test_prep_then_push(tmp_path, monkeypatch, capsys):
     assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
     assert (out / "online.006-r2.pending.json").exists()
     assert "book-text" in capsys.readouterr().out
+
+
+def test_push_refuses_while_old_votes_unlanded(tmp_path, monkeypatch):
+    """旧单 006-r2 上有票没落成人裁就不换单（G0）；看不出的票、已有人裁的格不算；--ack-unlanded-votes 照换。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
+                    "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
+    web = ws / "feedback" / "lists" / "web" / "abc123" / "006-r2.jsonl"
+    web.parent.mkdir(parents=True)
+    vote = lambda a, choice, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": 1}
+    web.write_text("\n".join(json.dumps(v) for v in (
+        vote("1:1:3", "char", "甲"),          # 已有人裁：落了
+        vote("1:1:9", "unsure"),              # 看不出：不用落
+        vote("1:1:2", "char", "乙"),          # 没落
+    )) + "\n", encoding="utf-8")
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: None)
+    push = ["push", "--book", "vol06", "-w", str(ws), "--rev", "006-r3", "--yes"]
+    with pytest.raises(SystemExit, match="1:1:2"):
+        rp.main(push)
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r2"                  # 门在动任何东西之前
+    assert rp.main(push + ["--ack-unlanded-votes", "测试"]) == 0
+    assert json.loads(online.read_text(encoding="utf-8"))["rev"] == "006-r3"
+
+
+def test_sync_then_publish_web(tmp_path, monkeypatch):
+    """推库成功才触发网站 proofing-sync；sync 失败、--no-publish-web、没有 gh 都不触发。"""
+    import argparse
+    import subprocess
+    calls = []
+
+    def fake_run(rc_sync):
+        def _run(cmd, **kw):
+            cmd = [str(c) for c in cmd]
+            calls.append(cmd)
+            return subprocess.CompletedProcess(cmd, rc_sync if "sync" in cmd else 0, "", "")
+        return _run
+
+    monkeypatch.setattr(rp.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(rp, "run", fake_run(0))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is True
+    assert calls[-1][:3] == ["gh", "workflow", "run"] and "parts=publish" in calls[-1] and "dry_run=false" in calls[-1] and "--ref" in calls[-1]
+
+    calls.clear()
+    monkeypatch.setattr(rp, "run", fake_run(1))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is False
+    assert not any(c[0] == "gh" for c in calls)
+
+    calls.clear()
+    monkeypatch.setattr(rp, "run", fake_run(0))
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=True), tmp_path) is False
+    monkeypatch.setattr(rp.shutil, "which", lambda name: None)
+    assert rp.sync_and_publish(argparse.Namespace(no_publish_web=False), tmp_path) is False
+    assert not any(c[0] == "gh" for c in calls)
 
 
 def test_from_pack_helpers(tmp_path, monkeypatch):
@@ -133,3 +190,99 @@ def test_add_alt_patches_online_in_place(tmp_path, monkeypatch):
     assert rp.main(["add-alt", "--book", "vol06", "-w", str(ws), "--cards", str(cards), "--yes", "--replace"]) == 0
     after = json.loads(online.read_text(encoding="utf-8"))
     assert after["cells"][0]["alt"][0]["c"] == "○" and after["cells"][1]["alt"][0]["c"] == "巳"
+
+
+def test_pack_rev_stores_issue_products(tmp_path, monkeypatch):
+    """--sync 时存出单版产物包 rev-<rev>；--no-pack 不存；存不成只告警。"""
+    import argparse
+    import subprocess
+    calls = []
+    rc = {"v": 0}
+
+    def fake_run(cmd, **kw):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, rc["v"], "", "")
+
+    monkeypatch.setattr(rp, "run", fake_run)
+    assert rp.pack_rev(argparse.Namespace(no_pack=False), tmp_path, "vol06", "006-r3") == "rev-006-r3"
+    c = calls[-1]
+    assert c[c.index("pack") + 1:c.index("pack") + 3] == ["push", "vol06"] and c[c.index("--label") + 1] == "rev-006-r3"
+    assert rp.pack_rev(argparse.Namespace(no_pack=True), tmp_path, "vol06", "006-r3") is None and len(calls) == 1
+    rc["v"] = 1
+    assert rp.pack_rev(argparse.Namespace(no_pack=False), tmp_path, "vol06", "006-r3") is None
+
+
+def test_ticket_ledger_balances(tmp_path, monkeypatch):
+    """G0 票账：写入（人裁晚于票）、一致（人裁早于票）、看不出、挂起、未落，五项之和 = 有效票格数。"""
+    ws, export, online = _setup(tmp_path)                      # 1:1:3 有一条 2026-10-20 的定字人裁
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    vote = lambda a, choice, ts, ch="": {"book": "abc123", "rev": "006-r2", "a": a, "choice": choice, "char": ch, "voter": "u1", "ts": ts}
+    t_before, t_after = 1790000000000, 1793000000000           # 毫秒：2026-09-21 与 2026-10-26
+    votes = [vote("1:1:3", "char", t_before, "甲"), vote("1:1:9", "unsure", t_after), vote("1:1:2", "char", t_after, "乙"),
+             vote("1:1:4", "none", t_after), vote("2:1:1", "char", t_after, "丙"), {"book": "x"}]
+    led = rp.ticket_ledger(ws, "vol06", "abc123", "006-r2", votes, held=["1:1:4"])
+    assert led["counts"] == {"写入": 1, "与已有人裁一致": 0, "看不出": 1, "挂起": 1, "未落": 2}
+    assert sum(led["counts"].values()) == led["votes"] == 5 and "账平" in rp.ledger_md(led)
+    led2 = rp.ticket_ledger(ws, "vol06", "abc123", "006-r2", [vote("1:1:3", "char", t_after, "甲")])
+    assert led2["counts"]["与已有人裁一致"] == 1                    # 人裁早于票：判一致跳过
+
+
+def test_prep_recheck_puts_decided_and_admitted_cells_back(tmp_path, monkeypatch):
+    """--recheck：人裁过的 1:1:3、已放行的 1:1:1 都回到单上并带说明；切分里没有的 1:1:9 列进差异单。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    rc = tmp_path / "recheck.tsv"
+    rc.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n1:1:3\t上次投了「乙」，和已有判断不同\tev1\t甲\t2026-10-20T00:00:00Z\n"
+                  "1:1:1\t机改无票，请核\n1:1:9\t切字改过\n", encoding="utf-8")
+    assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-alt", "--no-sprite",
+                    "--cv-commit", "abc1234", "--recheck", str(rc)]) == 0
+    out = ws / "reports" / "vol06" / "_publish" / "006-r3"
+    new = {c["cell"]: c for c in json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]}
+    assert sorted(new) == ["1:1:1", "1:1:2", "1:1:3", "1:1:4"]
+    assert new["1:1:3"]["prior"] == {"c": "甲", "id": "ev1", "ts": "2026-10-20T00:00:00Z"} and new["1:1:1"]["note"] == "机改无票，请核"
+    md = (out / "差异单.md").read_text(encoding="utf-8")
+    assert "复审格（--recheck）：上单 2 格，现行切分里没有 1 格" in md and "`1:1:9`" in md
+
+
+def test_publish_web_only_falls_back_to_full(monkeypatch):
+    """issue 只发这一章（only=<书>/<章>）；网站还没 only 输入（触发失败）就退回全站发布。"""
+    import argparse
+    import subprocess
+    calls = []
+
+    def _run(cmd, **kw):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1 if any(x.startswith("only=") for x in cmd) else 0, "", "")
+
+    monkeypatch.setattr(rp.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(rp, "run", _run)
+    assert rp.publish_web(argparse.Namespace(no_publish_web=False, publish_only="abc123/006")) is True
+    assert "only=abc123/006" in calls[0] and not any(x.startswith("only=") for x in calls[1])
+
+
+def test_issue_runs_prep_push_and_skips_empty(tmp_path, monkeypatch):
+    """issue：prep → push（--yes --sync、只发这一章）→ 等发布 → 冒烟；新单 0 格就不推。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    seen = {}
+    monkeypatch.setattr(rp, "cmd_push", lambda a: seen.update(yes=a.yes, sync=a.sync, only=a.publish_only, rev=a.rev) or 0)
+    monkeypatch.setattr(rp, "wait_publish", lambda since: "success")
+    monkeypatch.setattr(rp, "smoke", lambda t, c, r: [])
+    base = ["issue", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]
+    assert rp.main(base) == 0
+    assert seen == {"yes": True, "sync": True, "only": "abc123/006", "rev": "006-r3"}
+    monkeypatch.setattr(rp, "smoke", lambda t, c, r: ["p0001.webp → 404"])
+    assert rp.main(base) == 2                                     # 已上线、冒烟没过：2，调用方照样开文本 PR
+
+
+def test_wait_publish_skips_null_run(monkeypatch):
+    """刚触发时 REST 还查不到 run，jq 吐 "null null null"：不能当成 run id，继续等。"""
+    outs = iter(["null null null", "123 in_progress null", "123 completed success"])
+    monkeypatch.setattr(rp.subprocess, "run",
+                        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": next(outs)})())
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert rp.wait_publish("2026-10-24T00:00:00Z", timeout_s=60, poll_s=0) == "success"

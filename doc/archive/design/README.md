@@ -17,7 +17,6 @@
 | 17-13并入15-字段对照.md | 13 并入 15 已完成 |
 | 17-待审格构成与5b整理本双证.md | 10-02 一次性调查 |
 | 18-校对平台对外-校对者流程-方案.md | 用户 09-27 搁置 |
-| M7-上下文线程交接.md | 10-17 线程交接，已完成 |
 | char_clustering_design.md | v1 聚类系统设计，命令已删；留设计与负结果 |
 | fingerprint_shared_db_contention.md | 09-06 指纹冲突事故记录 |
 | jiazhu_defects_for_segmentation.md | 09-06 报给切分侧的两条缺陷 |

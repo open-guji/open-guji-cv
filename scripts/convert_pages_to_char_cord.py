@@ -21,21 +21,28 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from open_guji_cv.formats import guji_char_cord as cc  # noqa: E402
 
 
-def report(files: dict, lines_md: str | None = None) -> int:
-    """过 schema、两边一致、（给了旧 lines.md 时）往返逐字节相同；打印并返回不过的项数。"""
+def report(files: dict, lines_md: str | None = None, roundtrip_char: dict | None = None) -> int:
+    """过 schema、两边一致、（给了旧 lines.md 时）往返逐字节相同；打印并返回不过的项数。
+    有 fig.json 时另过 fig schema 与 `check_fig`（图引用、孤图、框与 cord 一致、已裁）。`roundtrip_char`：核往返用的
+    char（有插图块时传不带插图块的那一份——9.1 的 lines.md 不知道插图块，被占的列照常有字）。"""
     char = next(v for k, v in files.items() if k.endswith(".char.json"))
     cord = next(v for k, v in files.items() if k.endswith(".cord.json"))
     norm = next((v for k, v in files.items() if k.endswith(".norm.json")), None)
+    fig = next((v for k, v in files.items() if k.endswith(".fig.json")), None)
     bad = 0
-    for kind, obj in (("char", char), ("cord", cord)):
+    for kind, obj in (("char", char), ("cord", cord)) + ((("fig", fig),) if fig is not None else ()):
         errs = cc.validate(obj, kind)
         print(f"   {kind} schema：{'过' if not errs else f'不过 {len(errs)} 处，如 {errs[:3]}'}")
         bad += bool(errs)
     errs = cc.check(char, cord, norm)
     print(f"   格位/页号/列号一致：{'过' if not errs else f'不过 {len(errs)} 处，如 {errs[:3]}'}")
     bad += bool(errs)
+    if fig is not None:
+        errs = cc.check_fig(char, cord, fig)
+        print(f"   图（{len(fig['figures'])} 张）引用／框／裁图：{'过' if not errs else f'不过 {len(errs)} 处，如 {errs[:3]}'}")
+        bad += bool(errs)
     if lines_md is not None:
-        gen = cc.char_to_lines_md(char, guess_c_as_qz=True)      # 9.1 把阙文带推测字写成 □{guess=X}
+        gen = cc.char_to_lines_md(roundtrip_char or char, guess_c_as_qz=True)   # 9.1 把阙文带推测字写成 □{guess=X}
         if gen == lines_md:
             print(f"   往返：char 生成的分行稿与 lines.md 逐字节相同（{len(gen.splitlines())} 行）")
         else:

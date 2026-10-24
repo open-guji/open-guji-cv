@@ -11,7 +11,7 @@
 `agree` 全跑、给字的须全一致（下文「解法」即方法）。
 - 补放：有字 → 放行（通道 `group_flow`）；无字或冲突 → 留人审，疑问码 `group_flow_abstain`／`group_flow_conflict`；
   组声明了 `lift_needs` 而给字的解法里没有它们 → 留人审（`group_flow_weak`）。
-- 复核：给了与放行字不同的字、或解法之间不一致 → 降为人审（`group_flow_disagree`，不改字）；组声明了
+- 复核（组声明了 `review_methods` 就改跑它，依次试）：给了与放行字不同的字、或解法之间不一致 → 降为人审（`group_flow_disagree`，不改字）；组声明了
   `review_fix` 时前者改成解法的字（通道 `group_flow`，`evidence.fixed_from` 记原通道与原字）；声明了
   `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
 
@@ -56,6 +56,7 @@ class FlowConfig:
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     rr_model: str | None = None
     rr_p: float = 0.5
+    lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
 
 
 @dataclass
@@ -73,7 +74,7 @@ def check_groups(groups) -> None:
         f = GROUPS[g].flow
         if f is None:
             raise ValueError(f"group_flow：字组 {g!r} 没有声明 flow（registry.GroupSpec.flow）")
-        bad = [m for m in (*f.methods, *f.form_methods) if not isinstance(m, Method) or m.kind not in (*KINDS, "chain")]
+        bad = [m for m in (*f.methods, *f.form_methods, *f.review_methods) if not isinstance(m, Method) or m.kind not in (*KINDS, "chain")]
         if bad:
             raise ValueError(f"group_flow：字组 {g!r} 的方法 {bad} 不认得（须是 groups.methods 的方法）")
         if len(set(f.solvers)) != len(f.solvers):
@@ -84,6 +85,10 @@ def check_groups(groups) -> None:
             raise ValueError(f"group_flow：字组 {g!r} 的 families {f.families} 含非成员字")
         if len(set(f.form_solvers)) != len(f.form_solvers):
             raise ValueError(f"group_flow：字组 {g!r} 的 form_methods 名重复 {f.form_solvers}")
+        if len(set(f.review_solvers)) != len(f.review_solvers):
+            raise ValueError(f"group_flow：字组 {g!r} 的 review_methods 名重复 {f.review_solvers}")
+        if f.review_methods and not f.review:
+            raise ValueError(f"group_flow：字组 {g!r} 声明了 review_methods 却没开 review")
         if f.combine not in ("first", "agree"):
             raise ValueError(f"group_flow：字组 {g!r} 的 combine={f.combine!r} 只能是 first/agree")
 
@@ -147,34 +152,37 @@ def partners(g: str, groups) -> tuple:
     return tuple(h for h in GROUPS[g].overlaps if h in groups)
 
 
-def _method(g: str, name: str, form: bool = False):
+def _method(g: str, name: str, form: bool = False, review: bool = False):
     f = GROUPS[g].flow
-    for m in (f.form_methods if form else f.methods):
+    for m in (f.form_methods if form else (f.review_methods or f.methods) if review else f.methods):
         if m.name == name:
             return m
     raise ValueError(f"group_flow：字组 {g!r} 没有方法 {name!r}")
 
 
 def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, right: str | None,
-           patch_fn, members=None, form: bool = False) -> GroupVerdict:
+           patch_fn, members=None, form: bool = False, review: bool = False) -> GroupVerdict:
     """跑组 `g` 方法数组里名叫 `name` 的方法（`groups.methods`）。`members` 给了就只在这些字里选（两段判第二段＝族）。"""
     inp = MethodInput(group=g, members=frozenset(members if members is not None else GROUPS[g].members),
                       cell_id=r.id, cands=cands, ref=ref, cfg=cfg, left=left, right=right, patch_fn=patch_fn)
-    return _method(g, name, form).run(inp)
+    return _method(g, name, form, review).run(inp)
 
 
-def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None) -> tuple[str | None, str, list]:
-    """依次跑组的方法数组 → (字或 None, 原因 "agree"|"abstain"|"conflict", 每个方法的留痕)。"""
+def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None,
+           review: bool = False) -> tuple[str | None, str, list]:
+    """依次跑组的方法数组 → (字或 None, 原因 "agree"|"abstain"|"conflict", 每个方法的留痕)。
+    `review` 且组声明了 `review_methods`：改跑复核数组，第一个给字的说了算。"""
     f = GROUPS[g].flow
+    alt = review and bool(f.review_methods)
     trail: list[dict] = []
     picks: list[str] = []
-    for name in f.solvers:
-        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn)
+    for name in (f.review_solvers if alt else f.solvers):
+        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt)
         trail.append({"solver": name, "char": v.char, "why": v.why, **({"via": v.via} if v.via != name else {}),
                       **v.extra})
         if v.char is not None:
             picks.append(v.char)
-            if f.combine == "first":
+            if f.combine == "first" or alt:
                 break
     if not picks:
         return None, "abstain", trail
@@ -238,9 +246,11 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
-                    canon: Callable[[str], str] = lambda c: c) -> FlowResult:
+                    canon: Callable[[str], str] = lambda c: c,
+                    veto_refs: dict[str, str] | None = None) -> FlowResult:
     """`seq`：本页读序展平的放行记录；`amap`：{id: (整理本字, op)}；`cands_of(id)`：库候选 [(字, cov)]；
-    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。"""
+    `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
+    `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
     entries = {}
     for i, r in enumerate(seq):
         if blocked(r):
@@ -256,7 +266,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         pos = _pair_pos(entries, i, g)
         if pos is not None:
             ch = GROUPS[g].flow.pair[pos]
-            plans.append((r, g, mode, ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree:pair", "via": "ctx:pair"}]))
+            plans.append((r, g, mode, ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree:pair", "via": "ctx:pair"}], ref))
             continue
         need_ctx = ctx_fn is not None and any("ctx" in GROUPS[x].flow.solvers
                                               for x in (g, *(partners(g, cfg.groups) if mode == "joint" else ())))
@@ -264,14 +274,24 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         if mode == "joint":
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
-            ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
-        plans.append((r, g, mode, ch, why, trail))
+            ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
+                                    review=mode == "review")
+        plans.append((r, g, mode, ch, why, trail, ref))
     res = FlowResult(entered=len(plans))
-    for r, g, mode, ch, why, trail in plans:
+    norm = cfg.canon or canon
+    for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not GROUPS[g].ref_free
+                  and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
+                  and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)):
+                ch, why = None, "ref_dissent"   # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
+                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
+                ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
             if ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"

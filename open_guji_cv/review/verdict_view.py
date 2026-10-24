@@ -187,8 +187,8 @@ def shape_decided_cells(book: str, log: EventLog | None = None) -> dict[str, str
         p = e.payload or {}
         if p.get("v") in ("confirm", "seg_defect") and p.get("shape"):
             out[e.target.key] = str(p["shape"])
-        elif p.get("v") in ("not_a_char", "damaged"):
-            out.pop(e.target.key, None)      # 后来改判非字／原刻残：不再是「定了字」
+        elif p.get("v") in ("not_a_char", "damaged", "figure"):
+            out.pop(e.target.key, None)      # 后来改判非字／原刻残／图形：不再是「定了字」
     return out
 
 
@@ -348,6 +348,9 @@ def _verdict_of(e) -> dict | None:
         # 原图破损（2026-09-19）：`guess` 要一并读回，否则刷新后括注里的
         # 「最像哪个字」凭空消失，人以为没填过、又填一遍。
         return {"shape": "", "done": "damaged", "guess": p.get("guess") or ""}
+    elif v == "figure":
+        # 图片格（GUJI-740）：说明文字一并读回，同 damaged 的 guess
+        return {"shape": "", "done": "figure", "alt": p.get("alt") or ""}
     elif v == "seg_defect":
         # 「小注当正文」（overview#265）：事件照旧是 seg_defect，靠 `reason` 读回成前端那一档，
         # 否则刷新后显示成「字形不完整」，人以为标错了又改一遍。
