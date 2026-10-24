@@ -16,7 +16,8 @@ def cmd_freeze(args) -> None:
     from .products.store import default_products_root
     root = Path(args.root).expanduser().resolve() if args.root else default_products_root()
     p = FR.plan(args.book, args.version, text_id=args.text_id, ws_name=PK._ws_name(), products_root=root,
-                text_dir=Path(args.text_dir) if args.text_dir else None, note=args.note or "")
+                text_dir=Path(args.text_dir) if args.text_dir else None, note=args.note or "",
+                **({"repo": Path(args.repo).expanduser().resolve()} if getattr(args, "repo", None) else {}))
     yaml_path = _book_yaml_path(args.book)
     if args.json and not args.execute:
         print(json.dumps(p, ensure_ascii=False, indent=1))
@@ -53,6 +54,8 @@ def add_parser(sub) -> None:
     p.add_argument("--text-id", required=True, dest="text_id", help="book-text 条目 id（tag 名用），如 96mid1ogzk")
     p.add_argument("--text-dir", default=None, dest="text_dir", help="book-text 本书目录（取 HEAD sha 记进登记）")
     p.add_argument("--root", default=None, help="产物根，缺省本机产物根")
+    p.add_argument("--repo", default=None,
+                   help="产物所用 cv 的 git 检出（缺省本仓）；产物是旧版 cv 跑的就指那个版本的 worktree，如 ~/cv-v057")
     p.add_argument("--note", default=None)
     p.add_argument("--tag-via", default=None, dest="tag_via", help="ai-team 仓目录：经中转站 process/tag.py 打 tag")
     p.add_argument("--execute", action="store_true", help="真的做（缺省只出计划）")
