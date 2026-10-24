@@ -21,7 +21,8 @@ _SPLIT = re.compile(r"(?<!\\)\|")
 _VER = r"\d+\.\d+\.\d+"
 _CHANGE = re.compile(rf"^(?:(?P<old>{_VER}))?→(?P<new>{_VER})$")
 _REV = re.compile(r"(?:本册|rev)\s*(\d{3}-r\d+)")
-_CV_VER = re.compile(r"cv\s*(rc/v\d+\.\d+\.\d+|v?\d+\.\d+\.\d+)")
+#: 正式版 `v0.5.9`；dev 跑的整段带上（`0.5.10.dev12+g<hash>`、`dev+g<hash>`），免得截成 `0.5.10` 冒充正式版
+_CV_VER = re.compile(r"cv\s*(rc/v\d+\.\d+\.\d+|v?\d+\.\d+\.\d+(?:\.dev\d+)?(?:\+[0-9a-z.]+)?|dev\+g[0-9a-f]+(?:\.dirty)?)")
 _CV_COMMIT = re.compile(r"(?:cv|commit)\s+([0-9a-f]{7,40})\b")
 _SNAP = re.compile(r"(snap/[\w./-]+?)(?=[（）()，,；;\s]|$)")
 _SNAP_SHA = re.compile(r"快照\s*([0-9a-f]{7,40})\b")

@@ -20,11 +20,11 @@
 ```bash
 export GUJI_WS96=<guji-workspace>/96mid1ogzk-欽定四庫全書總目武英殿刻本 PYTHONIOENCODING=utf-8
 # 沙箱工作区：books/ + data_full 软链；纯算法基线（不带 feedback）
-guji pipeline keben_body_v2 vol05 --to cell_shrink --pages all --allow-cv-mismatch -w $WS_BASE
+guji pipeline keben_body_v2 vol05 --to cell_shrink --pages all --allow-cv-mismatch --why dzg_struct_prior -w $WS_BASE
 # 约束版：复制基线产物后从 Step3 重跑
 CONSTRAINED_MASS=0.3 CONSTRAINED_RAISE_EXACT=1 CONSTRAINED_KIND=narrow \
   python research/dzg_struct_prior/run_constrained.py --pen 0.5 -- \
-  pipeline keben_body_v2 vol05 --from row_segment --to cell_shrink --pages all --force --allow-cv-mismatch -w $WS_CON
+  pipeline keben_body_v2 vol05 --from row_segment --to cell_shrink --pages all --force --allow-cv-mismatch --why dzg_struct_prior -w $WS_CON
 python research/dzg_struct_prior/structcmp.py $WS_BASE/products vol05 --out base_vol05.json
 python research/dzg_struct_prior/structcmp.py $WS_CON/products vol05 --out con_vol05.json
 python research/dzg_struct_prior/analyze.py base_vol05.json con_vol05.json $WS_BASE $WS_CON

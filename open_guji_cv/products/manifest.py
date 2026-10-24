@@ -46,10 +46,13 @@ class ManifestEntry:
     报「过期」、说不出为什么。记下原值，`status` 就能报「册配置 period_prior 180→204」。
     没有 book_deps 的步、以及此前的老条目都是 None。"""
     cv_version: str | None = None
-    """生成这条产物的 cv 版本：最近正式 tag 去掉 `v`，不在 tag 上写 `0.3.0+N`
-    （`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
+    """生成这条产物的 cv 版本：最近正式 tag 去掉 `v`；不在 tag 上写 `0.3.1.dev2+g<sha12>`
+    （2026-10-23 前是 `0.3.0+N`；`doc/版本号规矩.md` 第五节，GUJI-577）。不进指纹；老条目是 None。"""
     cv_commit: str | None = None
     """生成这条产物时 cv 的完整 commit sha（`code_rev` 只是短 sha）。不进指纹。"""
+    cv_override: str | None = None
+    """册钉了版本而装的不是它、护栏放行时的理由（`--allow-cv-mismatch --why …`，或 `exp-branch:<分支>`）。
+    不进指纹；没过护栏或没钉版本的是 None。"""
     db_rev: str | None = None
     """跑这一页时本机数据目录对应的中心库版本 `<工作区>@<分支>:<rev>`（`core.workspace.central_rev`）。
     不进指纹；字形库、人裁的内容版本靠它追（`glyph_pin` 只钉指纹）。老条目是 None。"""
