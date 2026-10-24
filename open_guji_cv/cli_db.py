@@ -110,7 +110,21 @@ def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
     with _pg_conn(branch) as conn:
         return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
                     uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
-                    glyph=glyph_hooks(ws_dir))
+                    glyph=glyph_hooks(ws_dir), replay=lambda ids: _reconsume(ws_dir, ids))
+
+
+def _reconsume(ws_dir: Path, ids: set[str]) -> dict:
+    """sync 取了库里的字形库后，本地新人裁事件在它上面重新过一遍消费者（只有字形库消费者的记账被删了，别的跳过）。"""
+    from .core.workspace import feedback_root, verdicts_root
+    from .feedback.consumers import route_and_consume
+    from .feedback.events import EventLog
+    from .feedback.routes import RouteTable
+    from .gold.store import GoldStore
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)          # 消费者（glyph.db、排除名单）都按工作区找路径
+    log = EventLog(feedback_root())
+    out = route_and_consume(log, table=RouteTable.load(log.root / "routes.yaml"), store=GoldStore(verdicts_root()),
+                            event_ids=ids)
+    return {"events": len(ids), "results": [str(r) for r in out["results"]], "unrouted": len(out["unrouted"])}
 
 
 def route_imported(ws_dir: Path, ids: set[str], *, branch: str) -> dict:

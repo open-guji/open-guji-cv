@@ -119,7 +119,7 @@ def human_events_since(book_id: str, since: str, feedback_root: Path | None) -> 
 
 def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dict:
     """冻结册的 1a。返回 close_check 的一项（dict）。"""
-    from .close_check import FAIL, PASS, _item
+    from .close_check import FAIL, PASS, _item, _shared_only
     book = eng.book
     fz = book.freeze
     base = load_baseline(book, ws)
@@ -127,10 +127,15 @@ def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dic
     st = eng.status(pages=pages)
     # 规矩表：册配置／参数变 → 报警；代码、字形库、人裁变 → 不报警。
     # 旧条目没记册配置原值时 engine 只能说「代码或册配置变了」，分不清，单列请人核，不判失败。
-    cfg_changed, unclear, not_counted = {}, {}, 0
+    # 只因共享输入（语料、证人、格位表、字组……，`close_check.SHARED_PARAMS`）被别处更新：单列一句，不报警（复盘 I）。
+    cfg_changed, unclear, shared, not_counted = {}, {}, {}, 0
     for sid, d in st["steps"].items():
         for reason, n in (d.get("stale_reasons") or {}).items():
-            if reason.startswith("册配置") or reason.startswith("参数变了"):
+            fields = _shared_only(reason)
+            if fields is not None:
+                for f in fields:
+                    shared[f] = shared.get(f, 0) + n
+            elif reason.startswith("册配置") or reason.startswith("参数变了"):
                 cfg_changed[sid] = cfg_changed.get(sid, 0) + n
             elif reason.startswith("代码或册配置变了"):
                 unclear[sid] = unclear.get(sid, 0) + n
@@ -148,10 +153,13 @@ def fresh_frozen(eng, pages, ws: Path, feedback_root: Path | None = None) -> dic
                if cfg_changed else []),
              *([f"分不清是代码还是册配置变（旧条目没记原值，请人核）："
                 f"{', '.join(f'{k} {v} 页' for k, v in unclear.items())}"] if unclear else []),
+             *([f"共享输入被别处更新（不算失败，冻结记录里记一笔）：{'、'.join(f'{k}×{v}' for k, v in sorted(shared.items()))}"]
+               if shared else []),
              f"基线后新人裁 {n_new} 条待落地",
              f"代码／字形库变带来的过期 {not_counted} 页不计"]
     data = {"frozen": True, "changed": cmp["changed"][:50], "missing": cmp["missing"][:50],
             "config_changed": cfg_changed or None, "unclear_code_or_config": unclear or None,
+            "shared_inputs": shared or None,
             "new_human_events": n_new,
             "stale_not_counted": not_counted}
     return _item("1a", "产物新鲜（冻结基线）", FAIL if bad else PASS, "；".join(parts), data)

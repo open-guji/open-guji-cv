@@ -5,6 +5,11 @@
 
 ## [未发版]
 
+### Changed
+- `guji db sync`：字形库（`output/glyph_store/`）本地和库里都改了、本地又有库里没有的新人裁事件时不再整次停下：取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者（`consumed/glyph*.jsonl`）里的记账，在库里的字形库上重新消费一遍再推。本地字形库改了却没有新事件的照旧报冲突。省掉册 005 精校 10-23 三次手工 `pull --force`＋重写票（A32 复盘改进 1；只在 `datastore/`、CLI，不动 Step，PATCH）。
+- `guji freeze register` 加 `--repo <cv 检出>`：产物是旧版 cv 跑的就指那个版本的 worktree，登记的 cv 版本与提交取自那里；检出认不出版本号（没拉 tag，记成 `dev+g…`）时计划报问题、不许执行，提示 `git fetch --tags`（A32 复盘改进 2；只在 `ops/`、CLI，PATCH）。
+- close-check 1a 分开报过期原因：manifest 新记参数逐字段短哈希 `param_parts`（不进指纹，产物与 `code_hash` 都不变），`status` 的「参数变了」点名字段；只因共享输入（语料、证人、格位表、字组与异体表、借来的字形库等，`close_check.SHARED_PARAMS`）被别处更新而过期的页，1a（含冻结册）单列一句、不算失败；本册自己的变动照旧失败，两类都列。改动前跑的老产物分不出字段，照旧判失败（A32 复盘改进 3，标准 I；PATCH）。
+
 ## [0.5.13] - 2026-10-24
 
 PATCH（#452 seed_admit 删准入三闸：`code_hash` 变、缺省参数下产物不变；#509 `guji recheck --glyph-diff`；#507 精校出单走 book-text dev）。

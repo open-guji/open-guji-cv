@@ -67,7 +67,10 @@ def plan(book: str, version: str, *, text_id: str, ws_name: str, products_root: 
     if not _VER.fullmatch(version or ""):
         problems.append(f"文本版本 {version!r} 不是 X.Y.Z")
     if not cv["commit"]:
-        problems.append("取不到 cv 的提交（不是 cv 的 git 检出？）")
+        problems.append(f"取不到 cv 的提交（{repo} 不是 cv 的 git 检出？产物是旧版 cv 跑的就用 --repo 指那个检出）")
+    elif not cv["version"] or str(cv["version"]).startswith("dev+"):
+        problems.append(f"cv 检出 {repo} 认不出版本号（{cv['version']}）：多半是没拉 tag，"
+                        f"先 git -C {repo} fetch --tags 再出计划")
     if cv["dirty"]:
         problems.append("cv 检出有没提交的改动：冻结的代码必须是某个提交")
     if cv["commit"] and not cv["on_remote"]:
