@@ -11,7 +11,8 @@
 - **放行／送审**：出现格里最终放行、送审的格数。
 - **人裁核对**：已放行、非人裁通道、且 `unified.jsonl` 里有刻形（`shape`，没有就用文意 `reading`）的格；
   **不一致**＝放行字与人裁字不同（给了 `--codepoints` 时两边先按它归一，码位差不算）。不一致不等于错：
-  人裁可能晚于产物，要逐格看；明细在 json 的 `mismatch`。
+  人裁可能晚于产物，要逐格看；明细在 json 的 `mismatch`。人裁字不在本组里的记为**疑格号漂移**（`drift`）：
+  人裁记在旧切分的格号上，重切后同号指向别的字（流水线按锚点重绑，汇总表按格号对不上），不算放错。
 - **人工数据**：`unified.jsonl` 里 `form` 属于本组的行，按 `kind`（shape 刻形／reading 文意／cut 切线／parts 部件）计；
   另计有中心库来源（`in_central`，流水线读得到）的条数；**数据准不准**：多来源（`verified.n>1`）条数、其中被更正过
   （`corrected_from`，来源之间结论不同）的条数。
@@ -103,7 +104,10 @@ def collect(prods: list[Path], labels: Path | None = None, codepoints: Path | No
                             c["checked"] += 1
                             if canon(hc) != canon(r["char"]):
                                 c["mismatch"] += 1
-                                mismatch[gid].append({"id": r["id"], "admit": r["char"], "label": hc, "channel": r.get("channel")})
+                                drift = hc not in R.FLOW_GROUPS[gid].members
+                                c["drift"] += drift
+                                mismatch[gid].append({"id": r["id"], "admit": r["char"], "label": hc, "channel": r.get("channel"),
+                                                      "drift": drift})
     groups = {}
     for gid, g in R.FLOW_GROUPS.items():
         tot = Counter()
@@ -123,13 +127,13 @@ def render_md(d: dict, tag: str, date: str) -> str:
     out = [f"# 字组状态 {date}（{tag}）", "",
            f"产物：{len(d['books'])} 册（{'、'.join(d['books'])}）。口径见 cv 仓 `open_guji_cv/eval/group_status.py` 模块头；"
            "每组 × 每册明细在同名 json。", "",
-           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致 | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
+           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致（疑格号漂移） | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
            "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for gid, g in d["groups"].items():
         t, lb = g["total"], g["labels"]
         out.append(f"| {gid} | {g['name']} | {g['kind']} | {t.get('occ', 0)} | {_pct(t.get('admit', 0), t.get('occ', 0))} | "
                    f"{t.get('review', 0)} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
-                   f"{t.get('checked', 0)} | {t.get('mismatch', 0)} | "
+                   f"{t.get('checked', 0)} | {t.get('mismatch', 0)}（{t.get('drift', 0)}） | "
                    f"{lb.get('shape', 0)}/{lb.get('reading', 0)}/{lb.get('cut', 0)}/{lb.get('parts', 0)}（{lb.get('central', 0)}） | "
                    f"{lb.get('multi', 0)}／{lb.get('corrected', 0)} | "
                    f"`{g['methods']}` |")
