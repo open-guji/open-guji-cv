@@ -504,7 +504,7 @@ class GlyphMatchStep(Step):
                         verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
                 ns = m.near_shape
                 if (ns_cfg is not None and verdict == "unsure" and ns and ns.get("winner") and not lent
-                        and (m.guard is None or ns_cfg.allow_guarded)):
+                        and m.guard is None):
                     # 近形决胜升档（与共识升档同层、互不重叠：触发要求差距 < 0.03，共识要求 ≥ 0.03）
                     verdict, char, via = "same", ns["winner"], f"near_shape:{ns['score']:+.2f}"
                 recs.append(MatchRec(
