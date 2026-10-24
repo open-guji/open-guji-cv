@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.5.13] - 测试中
+## [0.5.13] - 2026-10-24
 
 PATCH（#452 seed_admit 删准入三闸：`code_hash` 变、缺省参数下产物不变；#509 `guji recheck --glyph-diff`；#507 精校出单走 book-text dev）。
 
