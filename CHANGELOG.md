@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- PATCH：发版自动附带 Python 执行包（#447；新增 `.github/workflows/release.yml`、`scripts/build_release_assets.py`、`scripts/install_release.py`）：推 tag 时 wheel ＋ 资源包（`models/`、`config/`、`formats/`、`precleaned/`，Sheldon 10-24 定过渡期随 CV 包；字体、语料不进）＋ `install_release.py` ＋ 校验和自动挂到 GitHub Release，执行方不必克隆整仓。wheel 补上控制台前端 dist 与 `ops/baseline_tests.json`。不改 `open_guji_cv/` 的 Python 代码，各步 `code_hash` 不变。
 - `guji db sync` 顺带落库：拉完合完对还没落进字形库的人裁只跑 `glyphdb_admit`、`glyph_audit` 两个消费者，逐条记账（报错的留着下次再试），落了再推；`--no-admit` 或 `GUJI_AUTO_ADMIT=0` 关。起因是批量写进中心库的人裁事件没人落库（10-22 起积压 967 条）；字形库更新的分工（落库、出快照、改钉）见 `doc/受控重跑.md` 第六节。只在 `feedback/`、CLI，不动任何 Step（PATCH）。
 
 ### Changed
