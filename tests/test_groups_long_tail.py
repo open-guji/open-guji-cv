@@ -134,3 +134,28 @@ def test_qin_is_flow_only_and_bank_loads():
     d = json.loads(p.read_text(encoding="utf-8"))
     assert set("禽會俞命舍曾合愈") <= set(d["templates"]) and d["size"] == sp.size
     assert O.has_bank("qin")
+
+
+def test_shape_pairs_flow_only_and_banks_load():
+    """尙尚 shang、蓋葢 gai、䟦跋 ba（2026-10-24，异体按刻形拆判）：只进字组流程表；复核时按刻形改码位；模板库两形都在、小于 1MB；
+    库里的模板拿回去判，判回自己的字（库与判法参数对得上）。"""
+    from pathlib import Path
+    import json
+    import numpy as np
+    from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
+    root = Path(__file__).resolve().parent.parent
+    for gid, members in (("shang", "尙尚"), ("gai", "蓋葢"), ("ba", "䟦跋")):
+        assert gid in SHAPE_GROUPS and gid not in GROUPS
+        g = FLOW_GROUPS[gid]
+        assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
+        assert g.flow.review and g.flow.review_fix
+        sp = O.SPECS[gid]
+        p = root / g.config_dir / "ids_bank.json"
+        assert p.stat().st_size < 1_000_000
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert set(members) == set(d["templates"]) and d["size"] == sp.size
+        bank = O.load_bank(p)
+        for ch in members:
+            t = (np.asarray(bank[ch][0]) * 255).astype(np.uint8)
+            v = O._judge_whole(255 - t, bank, sp, g.members)
+            assert v.char == ch, (gid, ch, v.why)
