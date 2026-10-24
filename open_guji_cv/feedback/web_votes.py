@@ -27,6 +27,14 @@ figure 同格几票只是说明不同，算同一意见：取最新一票的说�
 挂起（不写，交人看）的情形：同格意见不一致；要推翻已有人裁；格位对不上（现行 cv 重切过这一列，旧格号已不是那个字）；
 无字（缺省）。和已有人裁一致的直接跳过，不重写。
 
+**在网站上推翻旧人裁（M10 复盘第 5 项，10-23）**：复审单（`republish.py prep --recheck`）上的格带 `prior`
+（{c, id}），网站卡片写明「已有判断：判为 X。这次提交的选择会替代它」。票投在这样的格上、且 `prior.id` 就是该格
+现在最新的那条人裁，就是投票人看过旧裁、有意推翻：照写，payload 记 `overrides: <旧人裁 id>`（最新的人裁按时间生效）。
+出单之后该格又来了新人裁（`prior.id` 不是最新那条）照旧挂起。`triage(sheet_prior=…)` 传 {格位: prior.id}。
+
+挂起里能回网站让人再看的几类（`Draft.kind`：overturn 推翻旧裁、disagree 意见不一致、guess 说无字又给字、moved 格位变了）
+由 `recheck_rows` 写成复审清单（`cellvotes draft` 的 `recheck.tsv`），直接交 `republish.py prep --recheck`。
+
 **为什么要对格位**：票上的格号是出单那一版产物的格号。云端／别的机器上能拿到的是**现行**产物，现行 cv 可能把那一列
 重切过——格号还在，字已经不是那个字。出单那一版的格框留在 book-text 的 `<册>.cord.json` 里，拿它和现行
 `cell_shrink` 的框逐格比（目标格与同列各格框差都 ≤ tol，且同列格位集合相同）才放行。
@@ -183,6 +191,8 @@ class Draft:
     payload: dict
     votes: list[dict]
     held: str = ""               # 非空＝挂起理由
+    kind: str = ""               # 挂起的类别：overturn／disagree／guess／moved／none（无字缺省挂起）
+    prior: object = None         # 要推翻的旧人裁 Event（overturn 才有）
 
     def row(self, source: str) -> dict:
         """控制台 ``/api/events`` 一行。"""
@@ -206,9 +216,11 @@ class Triage:
 
 
 def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool = False,
-           check: Callable[[str], str | None] | None = None) -> Triage:
+           check: Callable[[str], str | None] | None = None, sheet_prior: dict[str, str] | None = None) -> Triage:
     """``votes`` 已经过 latest_votes；``human`` 是 latest_human 的结果；
-    ``check(a)`` 核格位（对得上返回 None，否则理由；只对要写的格调用），给 None 表示不核（调用方要自己担保）。"""
+    ``check(a)`` 核格位（对得上返回 None，否则理由；只对要写的格调用），给 None 表示不核（调用方要自己担保）；
+    ``sheet_prior`` {格位: 单上 prior.id}：投票人看过的旧人裁，票就是有意推翻它（见模块说明）。"""
+    sheet_prior = sheet_prior or {}
     out = Triage()
     groups: dict[str, list[dict]] = defaultdict(list)
     for v in votes:
@@ -219,7 +231,7 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
         if guess:
             what = "说是图形又给了字：" if any(v["choice"] == "figure" for v in guess) else "说无字／看不清又给了字："
             out.drafts.append(Draft(f"{cv_book}:{a}", a, {}, vs, held=what + "、".join(
-                sorted({f"{v['choice']}={v['char']}" for v in guess}))))
+                sorted({f"{v['choice']}={v['char']}" for v in guess})), kind="guess"))
             continue
         real = [v for v in vs if v["choice"] != "unsure"]
         if not real:
@@ -229,7 +241,7 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
         key = f"{cv_book}:{a}"
         if len(kinds) > 1:
             out.drafts.append(Draft(key, a, {}, real, held="意见不一致：" + "、".join(
-                sorted(f"{c}{'=' + ch if ch else ''}" for c, ch in kinds))))
+                sorted(f"{c}{'=' + ch if ch else ''}" for c, ch in kinds)), kind="disagree"))
             continue
         choice, char = next(iter(kinds))
         alt = next((str(v["alt"]).strip() for v in sorted(real, key=lambda v: v.get("ts") or 0, reverse=True)
@@ -243,15 +255,51 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
             if same_verdict(h.payload, p):
                 out.skipped.append((a, f"与已有人裁 {h.id} 一致"))
                 continue
-            out.drafts.append(Draft(key, a, p, real, held=f"要推翻已有人裁 {h.id}（{h.payload.get('v')} "
-                                                          f"{h.payload.get('shape') or ''}）"))
-            continue
+            if sheet_prior.get(a) != h.id:
+                out.drafts.append(Draft(key, a, p, real, held=f"要推翻已有人裁 {h.id}（{h.payload.get('v')} "
+                                                              f"{h.payload.get('shape') or ''}）", kind="overturn", prior=h))
+                continue
+            p = {**p, "overrides": h.id}         # 单上写明了旧裁、投票人有意推翻
         d = Draft(key, a, p, real)
         if p["v"] == "not_a_char" and not include_none:
-            d.held = "无字：排除名单只增不删、不带锚，缺省不落（要落加 --include-none）"
+            d.held, d.kind = "无字：排除名单只增不删、不带锚，缺省不落（要落加 --include-none）", "none"
         elif check is not None:
             why = check(a)
             if why:
-                d.held = f"格位对不上：{why}"
+                d.held, d.kind = f"格位对不上：{why}", "moved"
         out.drafts.append(d)
     return out
+
+
+# ───────────────────────── 复审清单 ─────────────────────────
+
+RECHECK_KINDS = ("overturn", "disagree", "guess", "moved")
+
+
+def vote_label(v: dict) -> str:
+    """一票的大白话：选字「X」／没有字／看不清／切分错了「X」……"""
+    ch = f"「{v['char']}」" if v.get("char") else ""
+    return {"char": ch, "none": "没有字" + ch, "unsure": "看不清" + ch, "cut": "切分错了" + ch,
+            "jiazhu": "小注当正文" + ch, "main": "正文当小注" + ch}.get(v["choice"], v["choice"] + ch)
+
+
+def recheck_rows(t: Triage) -> list[tuple[str, str, str, str, str]]:
+    """挂起里能回网站再看的格 → (格位, 说明, 旧人裁 id, 旧人裁的字, 旧人裁时间)，交 `republish.py prep --recheck`。"""
+    rows = []
+    for d in t.held:
+        if d.kind not in RECHECK_KINDS:
+            continue
+        got = "、".join(sorted({vote_label(v) for v in d.votes}))
+        pid = pc = pts = ""
+        if d.kind == "overturn":
+            pl = d.prior.payload or {}
+            pid, pc, pts = d.prior.id, pl.get("shape") or {"not_a_char": "无字"}.get(pl.get("v"), pl.get("v") or ""), str(d.prior.ts)
+            note = f"上次投了{got}，和已有判断不同：要改就再选一次，不改就选「{pc}」"
+        elif d.kind == "disagree":
+            note = f"几票不一致（{got}），请定"
+        elif d.kind == "guess":
+            note = f"上次投的是{got}，既说看不出又给了字，请再定"
+        else:
+            note = f"切字改过，上次在旧框上投了{got}，请按现在的框再看"
+        rows.append((d.a, note, pid, pc, pts))
+    return rows

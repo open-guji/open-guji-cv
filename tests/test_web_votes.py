@@ -156,3 +156,29 @@ def test_draft_with_pack_uses_issue_products(tmp_path, monkeypatch):
     assert os.environ["GUJI_PRODUCTS_DIR"] == meta["products_root"] and meta["ready"] == 1
     C.cmd_draft(args)
     assert fetched == ["rev-004-r3"]                                     # 第二次复用，不再取
+
+
+def test_overturn_on_recheck_sheet_and_recheck_rows():
+    """复审单上写明了旧裁（prior.id）的格，投了不同的字＝有意推翻：照写并记 overrides；
+    旧裁不是单上那条（出单后又来了新裁）照旧挂起；挂起里能回网站的写成复审清单。"""
+    from open_guji_cv.feedback.web_votes import recheck_rows
+    old = human_ev("vol04:2:1:6", shape="己")
+    newer = human_ev("vol04:2:1:8", shape="庚", ts="2026-10-03T00:00:00Z")
+    votes, _ = latest_votes([
+        vote("2:1:6", "char", "丁"),                                     # 单上 prior 就是 old → 推翻
+        vote("2:1:8", "char", "辛"),                                     # 单上 prior 是更早那条 → 挂起
+        vote("2:1:4", "char", "甲"), vote("2:1:4", "char", "乙", voter="v2"),
+        vote("3:1:2", "none", "口"),
+        vote("2:1:2", "none"),                                           # 无字：挂起但不回网站
+    ], BOOK, REV)
+    human = latest_human([old, newer])
+    t = triage(votes, "vol04", human, sheet_prior={"2:1:6": old.id, "2:1:8": "older-event"})
+    ready = {d.a: d.payload for d in t.ready}
+    assert ready == {"2:1:6": {"v": "confirm", "shape": "丁", "overrides": old.id}}
+    kinds = {d.a: d.kind for d in t.held}
+    assert kinds == {"2:1:8": "overturn", "2:1:4": "disagree", "3:1:2": "guess", "2:1:2": "none"}
+    rows = {r[0]: r for r in recheck_rows(t)}
+    assert set(rows) == {"2:1:8", "2:1:4", "3:1:2"}
+    assert rows["2:1:8"][2:4] == (newer.id, "庚") and "「辛」" in rows["2:1:8"][1]
+    assert "「甲」" in rows["2:1:4"][1] and "「乙」" in rows["2:1:4"][1]
+    assert "没有字「口」" in rows["3:1:2"][1]

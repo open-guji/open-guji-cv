@@ -22,6 +22,21 @@
   python scripts/zhengli/proof_cycle.py apply --book vol04 -w $WS --plan <plan.json> --hash <计划哈希> \
       --book-text <book-text 仓> [--allow-cv-drift] [--dry-run]
   python scripts/zhengli/proof_cycle.py audit --book vol04 -w $WS [--rev 004-r6] [--held held.tsv]   # 只读：G0 票账
+  python scripts/zhengli/proof_cycle.py status --book vol06 -w $WS     # 只读：线上单投完没有（退出码 0＝可以落票了）
+
+M10 复盘第 4 项（10-23，册006 起）：
+  - 重跑缺省**全册** seed_admit（约 3 分钟）：只重跑有票的页会漏掉早有人裁、产物却比人裁旧的格（册005 41:9:7）。
+    `--voted-pages-only` 退回旧做法。
+  - **引擎与工具分开**：`plan --engine <出单版 cv 的 worktree>`，重跑用那份 cv（PYTHONPATH 指过去），出单、落票、导出
+    用本仓（dev）。核的是 engine 的 HEAD 等于包的 cv_commit，不再要求本仓就是那个提交。
+  - 线上单没有 rev-<rev> 包时 `plan --pack <标签>` 指定出单用的包（如 main 包）。
+  - **人裁改字与机器改字分开**：导出后和 book-text 现文逐格比，变了的格里，最新人裁就是新字的算人裁改字，进文本；
+    其余是机器改判（无票变字），文本里退回旧字，格放进下一张单的复审清单（「机器改判 A→B，无人裁，请核」）。
+    未冻结册的变字一律进待审（用户 10-20 定），不自行放行。
+  - 出单换成 `republish.py issue`：挂起里能回网站的（cellvotes 的 recheck.tsv）和机器改判一起作复审格，
+    只发这一章、等发布、冒烟。
+  - `status`：线上单有几格、投了几格、最后一票多久以前；全投完，或投过八成且一小时没新票，就算投完。
+    定时任务（云端 trigger）每半小时跑一次，投完了就 plan＋apply，用户只管在网站上投票。
 
 票缺省直接读网站 KV（要 CELLREVIEW_TOKEN）；没有令牌就读中心库快照（每日同步之后才有）。
 仍要用户点头的（不在本脚本里）：打 1.0 标签与冻结、解冻、放宽放行规则、越过检查门的 --ack-*。
@@ -91,7 +106,7 @@ def cmd_plan(a) -> int:
     rev = json.loads(online.read_text(encoding="utf-8")).get("rev")
     out = ws / "reports" / book / "_cycle" / rev
     draft = out / "draft"
-    label = rp.pack_label(rev)
+    label = a.pack or rp.pack_label(rev)
     man = pack_info(ws, book, label)
     cmd = [*GUJI, "cellvotes", "draft", book, "--site-book", text_id, "--rev", rev, "--out", draft, "-w", ws]
     cmd += ["--from-kv"] if os.environ.get("CELLREVIEW_TOKEN") else []
@@ -105,6 +120,7 @@ def cmd_plan(a) -> int:
         return 1
     meta = json.loads((draft / "meta.json").read_text(encoding="utf-8"))
     pages = voted_pages(draft / "drafts.jsonl")
+    engine = str(Path(a.engine).resolve()) if a.engine else None
     plan = {
         "book": book, "text_id": text_id, "chapter": chapter, "rev": rev,
         "batch": f"H-web-{book}-{dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%d')}-{rev}",
@@ -113,7 +129,11 @@ def cmd_plan(a) -> int:
         "skipped": len(meta.get("skipped") or []), "votes": meta["n_votes"], "votes_from": meta["votes_from"],
         "pack": label if man else None, "pack_cv_commit": (man or {}).get("cv_commit"),
         "pack_cv_version": (man or {}).get("cv_version"), "cord": None if man else str(a.cord),
-        "pages": pages, "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "pages": pages, "full_book": not a.voted_pages_only, "engine": engine,
+        "engine_commit": engine_head(Path(engine)) if engine else None,
+        "recheck": sum(1 for ln in (draft / "recheck.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip())
+        if (draft / "recheck.tsv").exists() else 0,
+        "created": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     plan["hash"] = plan_hash(plan)
     (out / "plan.json").write_text(json.dumps(plan, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
@@ -122,7 +142,10 @@ def cmd_plan(a) -> int:
           f"- **写人裁 {plan['ready']} 条**（批次 `{plan['batch']}`，裁决人 {a.reviewer}）；挂起 {plan['held']}、跳过 {plan['skipped']}"
           f"（明细 `{draft / 'report.md'}`、`held.tsv`）",
           f"- 锚：{'出单版产物包 ' + label + '（cv ' + str(plan['pack_cv_version']) + '，' + str(plan['pack_cv_commit'])[:9] + '）' if man else '对 --cord ' + str(a.cord)}",
-          f"- 重跑有票的 {len(pages)} 页到 seed_admit，导出，升 book-text minor（草稿 PR），重出单并上网站",
+          f"- 重跑{'全册' if plan['full_book'] else f'有票的 {len(pages)} 页'}到 seed_admit"
+          f"（引擎 {'本仓' if not engine else engine + ' @ ' + str(plan['engine_commit'])[:9]}），导出，"
+          f"人裁改字进文本、机器改判退回旧字进复审，升 book-text minor（草稿 PR），重出单并只发这一章",
+          f"- 挂起里回网站再看 {plan['recheck']} 格（recheck.tsv）",
           f"- 计划哈希 `{plan['hash']}`", "",
           f"执行：`python scripts/zhengli/proof_cycle.py apply --book {book} -w {ws} --plan {out / 'plan.json'} "
           f"--hash {plan['hash']} --book-text <book-text 仓>`"]
@@ -195,12 +218,13 @@ def cmd_apply(a) -> int:
         held = [ln.split("\t")[0] for ln in (Path(plan["draft_dir"]) / "held.tsv").read_text(encoding="utf-8").splitlines()[1:] if ln.strip()]
         log.note(rp.ledger_md(rp.ticket_ledger(ws, book, plan["text_id"], plan["rev"], votes, held)) + f"（票源：{src}）")
 
-    # 3. 重跑有票的页：只能用出单那一版 cv，否则混进别版切分
+    # 3. 重跑：只能用出单那一版 cv（引擎），否则混进别版切分；工具（落票、导出、出单）用本仓
+    engine = Path(plan["engine"]) if plan.get("engine") else CV
     if plan["pack"]:
-        head = rp.git_head()
+        head = engine_head(engine)
         if plan["pack_cv_commit"] and not head.startswith(plan["pack_cv_commit"][:7]) and not a.allow_cv_drift:
-            sys.exit(f"✗ 本机 cv 是 {head[:9]}，出单版产物包是 {plan['pack_cv_commit'][:9]}（{plan['pack_cv_version']}）："
-                     f"从那个 commit 的 worktree 跑 apply，或加 --allow-cv-drift 明说照跑（人裁已推库，重跑 apply 不会重复写）")
+            sys.exit(f"✗ 引擎 cv（{engine}）是 {head[:9]}，出单版产物包是 {plan['pack_cv_commit'][:9]}（{plan['pack_cv_version']}）："
+                     f"plan 加 --engine <那个 commit 的 worktree>，或加 --allow-cv-drift 明说照跑（人裁已推库，重跑 apply 不会重复写）")
         sandbox = Path(plan["draft_dir"]).parent / "products"
         env_sb = {**env, "GUJI_PRODUCTS_DIR": str(sandbox)}
         if not (sandbox / book).is_dir():
@@ -210,9 +234,14 @@ def cmd_apply(a) -> int:
     else:
         sandbox, env_sb = rp.products_root(ws), env
         log.note("ⓘ 没有出单版产物包：在本机产物根上重跑（要自己担保本机产物就是出单那一版）")
-    if plan["pages"] and not log.step(f"重跑 {len(plan['pages'])} 页到 seed_admit",
-                                      [*GUJI, "pipeline", "keben_body_v2", book, "--pages", ",".join(map(str, plan["pages"])),
-                                       "--to", "seed_admit", "-w", ws], cwd=CV, env=env_sb):
+    env_eng = {**env_sb, "PYTHONPATH": str(engine)} if engine != CV else env_sb
+    if plan.get("full_book", False):
+        if not log.step("全册重跑 seed_admit", [*GUJI, "pipeline", "keben_body_v2", book, "--from", "seed_admit",
+                                               "--to", "seed_admit", "-w", ws], cwd=engine, env=env_eng):
+            return 1
+    elif plan["pages"] and not log.step(f"重跑 {len(plan['pages'])} 页到 seed_admit",
+                                        [*GUJI, "pipeline", "keben_body_v2", book, "--pages", ",".join(map(str, plan["pages"])),
+                                         "--to", "seed_admit", "-w", ws], cwd=engine, env=env_eng):
         return 1
 
     # 4. 导出
@@ -227,21 +256,36 @@ def cmd_apply(a) -> int:
     if not log.step("导出 char／cord", cmd, cwd=CV, env=env_sb):
         return 1
 
-    # 5. 重出单（过出单门、换单门）、存包、升 book-text、推库、发网站
+    # 4b. 人裁改字进文本，机器改判退回旧字、进复审
+    recheck = out / "recheck.tsv"
+    rows = []
+    if not a.dry_run:
+        old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
+        new_char = export / f"{plan['chapter']}.char.json"
+        sp = split_changes(old_char, new_char, human_chars_of(ws, book))
+        if sp["machine"]:
+            revert_cells(new_char, {a_: o for a_, o, _ in sp["machine"]})
+        log.note(f"文本改动 {len(sp['human']) + len(sp['machine'])} 格：人裁 {len(sp['human'])} 格进文本；"
+                 f"机器改判 {len(sp['machine'])} 格退回旧字、进复审"
+                 + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['machine'][:10])}）" if sp["machine"] else ""))
+        dr = Path(plan["draft_dir"]) / "recheck.tsv"
+        rows = [ln for ln in dr.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if dr.exists() else []
+        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，无人裁，请核\t\t\t" for x, o, n in sp["machine"]]
+        recheck.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
+
+    # 5. 一条命令出单：过出单门、换单门，传图、存包、升 book-text、推库、只发这一章、等发布、冒烟
     new_rev = rp.next_rev(plan["rev"], plan["chapter"])
-    rp_py = [sys.executable, HERE / "republish.py"]
-    prep = [*rp_py, "prep", "--book", book, "-w", ws, "--export-dir", export, "--rev", new_rev]
-    if plan["pack_cv_commit"]:
-        prep += ["--cv-commit", plan["pack_cv_commit"]]
-    if plan["pack_cv_version"]:
-        prep += ["--cv-version", plan["pack_cv_version"]]
-    if not log.step(f"出新单 {new_rev}", prep, cwd=CV, env=env_sb):
-        return 1
     note = (f"{book} 精校一轮：{plan['rev']} 的 {plan['ready']} 条人裁（{plan['batch']}），待审单 {new_rev}")
-    if not log.step("推单（出单门、换单门、存包、升 book-text、推库、发网站）",
-                    [*rp_py, "push", "--book", book, "-w", ws, "--rev", new_rev, "--yes", "--sync",
-                     "--book-text", a.book_text, "--note", note,
-                     "--held-file", Path(plan["draft_dir"]) / "held.tsv"], cwd=CV, env=env_sb):
+    issue = [sys.executable, HERE / "republish.py", "issue", "--book", book, "-w", ws, "--export-dir", export,
+             "--rev", new_rev, "--book-text", a.book_text, "--note", note,
+             "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
+    if rows:
+        issue += ["--recheck", recheck]
+    if plan["pack_cv_commit"]:
+        issue += ["--cv-commit", plan["pack_cv_commit"]]
+    if plan["pack_cv_version"]:
+        issue += ["--cv-version", plan["pack_cv_version"]]
+    if not log.step(f"出新单 {new_rev}（复审 {len(rows)} 格）并上线", issue, cwd=CV, env=env_sb):
         return 1
 
     # 6. book-text 草稿 PR
@@ -279,6 +323,87 @@ def open_book_text_pr(repo: Path, br: str, title: str, plan: dict, new_rev: str)
     return n
 
 
+def engine_head(engine: Path) -> str:
+    if Path(engine).resolve() == CV.resolve():
+        return rp.git_head()
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=engine, capture_output=True, text=True).stdout.strip()
+
+
+def _cells(char_json: Path) -> dict[str, str]:
+    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
+    return {c["a"]: c.get("c") or "" for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
+
+
+def human_chars_of(ws: Path, book: str) -> dict[str, str]:
+    """每格最新一条定字人裁的字（{格位: 字}；无字＝""）。读数据目录事件，口径同 pending_route.deciding。"""
+    from pending_route import cell_of, deciding
+    last: dict[str, tuple[str, str]] = {}
+    for f in sorted((rp.data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
+        for line in f.read_text(encoding="utf-8").splitlines():
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            k = deciding(e)
+            c = cell_of(e, book) if k else None
+            if c and str(e.get("ts", "")) >= last.get(c, ("", ""))[0]:
+                last[c] = (str(e.get("ts", "")), (e.get("payload") or {}).get("shape") or "")
+    return {c: ch for c, (_, ch) in last.items()}
+
+
+def split_changes(old_char: Path, new_char: Path, human: dict[str, str]) -> dict:
+    """新导出对 book-text 现文逐格比：变了的格里，最新人裁就是新字的＝人裁改字，其余＝机器改判（无票变字）。
+    格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
+    o, n = _cells(old_char), _cells(new_char)
+    human_ch, machine = [], []
+    for a_ in sorted(set(o) & set(n), key=rp._key):
+        if o[a_] == n[a_]:
+            continue
+        (human_ch if human.get(a_) and human[a_] == n[a_] else machine).append((a_, o[a_], n[a_]))
+    return {"human": human_ch, "machine": machine}
+
+
+def revert_cells(char_json: Path, old: dict[str, str]) -> None:
+    """机器改判的格在导出里退回旧字（未冻结册的变字一律进待审，不自行放进文本）。"""
+    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
+    for p in d.get("pages") or []:
+        for col in p.get("columns") or []:
+            for c in col.get("cells") or []:
+                if c["a"] in old:
+                    if old[c["a"]]:
+                        c["c"] = old[c["a"]]
+                    else:
+                        c.pop("c", None)
+    Path(char_json).write_text(json.dumps(d, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+
+
+def sheet_status(ws: Path, book: str, idle_min: int = 60, share: float = 0.8) -> dict:
+    """线上单投完没有：每格（不含 review=human）都有票，或投过 share 且最后一票已过 idle_min 分钟。"""
+    import time
+    text_id, chapter = rp.text_id_of(ws), rp.chapter_of(book)
+    doc = json.loads(rp.proofing_path(ws, text_id, chapter).read_text(encoding="utf-8"))
+    rev = doc.get("rev")
+    cells = {c["cell"] for c in doc.get("cells") or [] if c.get("review") != "human"}
+    votes, src = rp.old_rev_votes(ws, text_id, rev)
+    sys.path.insert(0, str(CV))
+    from open_guji_cv.feedback.web_votes import latest_votes
+    latest, _ = latest_votes(votes, text_id, rev)
+    voted = {v["a"] for v in latest} & cells
+    last = max(((float(v.get("ts") or 0) / (1000 if float(v.get("ts") or 0) > 1e11 else 1)) for v in latest), default=0.0)
+    idle = (time.time() - last) / 60 if last else None
+    full = bool(cells) and voted >= cells
+    done = full or (bool(cells) and len(voted) >= share * len(cells) and idle is not None and idle >= idle_min)
+    return {"rev": rev, "cells": len(cells), "voted": len(voted), "idle_min": round(idle, 1) if idle is not None else None,
+            "done": done, "why": "全投完" if full else (f"投过 {share:.0%} 且 {idle_min} 分钟没新票" if done else "还在投"),
+            "src": src}
+
+
+def cmd_status(a) -> int:
+    st = sheet_status(Path(a.workspace).resolve(), a.book, a.idle_min, a.share)
+    print(json.dumps(st, ensure_ascii=False))
+    return 0 if st["done"] else 3
+
+
 def cmd_audit(a) -> int:
     """只读：某张单（缺省线上那张）的 G0 票账。"""
     ws, book = Path(a.workspace).resolve(), a.book
@@ -299,6 +424,9 @@ def main(argv=None) -> int:
     p.add_argument("-w", "--workspace", required=True)
     p.add_argument("--reviewer", default="sheldon", help="裁决人（网页投票的人）")
     p.add_argument("--cord", help="没有出单版产物包时：出单那一版 book-text 的 <章>.cord.json")
+    p.add_argument("--pack", help="出单用的产物包标签（缺省 rev-<线上单 rev>；老单没存 rev 包时给 main 包的标签）")
+    p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
+    p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
     p.add_argument("--book", required=True)
@@ -313,8 +441,13 @@ def main(argv=None) -> int:
     p.add_argument("-w", "--workspace", required=True)
     p.add_argument("--rev", help="缺省线上单")
     p.add_argument("--held", help="cellvotes draft 的 held.tsv")
+    p = sp.add_parser("status", help="只读：线上单投完没有（退出码 0＝投完了，3＝还在投）")
+    p.add_argument("--book", required=True)
+    p.add_argument("-w", "--workspace", required=True)
+    p.add_argument("--idle-min", type=int, default=60, help="投过 --share 之后多少分钟没新票算投完（缺省 60）")
+    p.add_argument("--share", type=float, default=0.8)
     a = ap.parse_args(argv)
-    return {"plan": cmd_plan, "apply": cmd_apply, "audit": cmd_audit}[a.cmd](a)
+    return {"plan": cmd_plan, "apply": cmd_apply, "audit": cmd_audit, "status": cmd_status}[a.cmd](a)
 
 
 if __name__ == "__main__":

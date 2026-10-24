@@ -97,3 +97,18 @@ def test_keep_list_not_deducted(tmp_path):
     out = tmp_path / "out"
     assert pr.main(["--pending", str(p), "--book", "vol04", "--events", str(e), "--keep", str(keep), "--out", str(out)]) == 0
     assert [c["cell"] for c in json.loads((out / "004.pending.json").read_text(encoding="utf-8"))["cells"]] == ["216:4:9a"]
+
+
+def test_recheck_cells_not_deducted(tmp_path):
+    """复审格（pending_list --recheck 放回来的）本来就是要推翻或重定的：已有人裁也不扣。"""
+    pending = {"rev": "006-r5", "cells": [{"cell": "83:5:9", "review": "pending", "recheck": True, "note": "旧裁 山，新票 由"},
+                                          {"cell": "83:5:10", "review": "pending"}]}
+    p = tmp_path / "006.pending.json"
+    p.write_text(json.dumps(pending), encoding="utf-8")
+    e = tmp_path / "e.jsonl"
+    e.write_text("\n".join(json.dumps(ev(c, "confirm", "2026-10-01T00:00:00Z", shape="山", book="vol06"))
+                           for c in ("83:5:9", "83:5:10")), encoding="utf-8")
+    out = tmp_path / "out"
+    assert pr.main(["--pending", str(p), "--book", "vol06", "--events", str(e), "--out", str(out)]) == 0
+    cells = json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]
+    assert [c["cell"] for c in cells] == ["83:5:9"] and cells[0]["note"] == "旧裁 山，新票 由"
