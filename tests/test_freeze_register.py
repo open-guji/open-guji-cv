@@ -25,7 +25,7 @@ def _products(tmp: Path) -> Path:
     return root
 
 
-def _repo(tmp: Path, *, push: bool = True) -> Path:
+def _repo(tmp: Path, *, push: bool = True, tag: bool = True) -> Path:
     origin, repo = tmp / "origin.git", tmp / "cv"
     subprocess.run(["git", "init", "-q", "--bare", str(origin)], check=True)
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -35,6 +35,8 @@ def _repo(tmp: Path, *, push: bool = True) -> Path:
     subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
     subprocess.run(["git", "-C", str(repo), "commit", "-qm", "c"], check=True)
     subprocess.run(["git", "-C", str(repo), "remote", "add", "origin", str(origin)], check=True)
+    if tag:
+        subprocess.run(["git", "-C", str(repo), "tag", "v0.5.10"], check=True)
     if push:
         subprocess.run(["git", "-C", str(repo), "push", "-q", "origin", "HEAD:refs/heads/main"], check=True)
         subprocess.run(["git", "-C", str(repo), "fetch", "-q", "origin"], check=True)
@@ -65,6 +67,32 @@ def test_plan_refuses_unpushed_commit_and_bad_version(tmp_path):
     p = FR.plan("vol05", "1.0", text_id="96mid1ogzk", ws_name="demo-ws", products_root=root,
                 repo=_repo(tmp_path, push=False), now=1793000000)
     assert any("X.Y.Z" in x for x in p["problems"]) and any("远端" in x for x in p["problems"])
+
+
+def test_plan_refuses_checkout_without_tags(tmp_path):
+    """没拉 tag 的检出认不出版本：拒绝并提示 fetch --tags（册 005 10-23 用旧版 worktree 冻结时踩过）。"""
+    root = _products(tmp_path)
+    repo = _repo(tmp_path, tag=False)
+    p = FR.plan("vol05", "1.0.0", text_id="96mid1ogzk", ws_name="demo-ws", products_root=root, repo=repo, now=1793000000)
+    assert any("fetch --tags" in x for x in p["problems"])
+    subprocess.run(["git", "-C", str(repo), "tag", "v0.5.7"], check=True)
+    from open_guji_cv.core import cv_version as CV
+    CV.describe.cache_clear()                            # describe 按检出缓存
+    p = FR.plan("vol05", "1.0.0", text_id="96mid1ogzk", ws_name="demo-ws", products_root=root, repo=repo, now=1793000000)
+    assert p["problems"] == [] and p["cv"]["version"] == "0.5.7"
+
+
+def test_cli_repo_points_plan_at_other_checkout(tmp_path, monkeypatch, capsys):
+    from open_guji_cv import cli_freeze
+    root = _products(tmp_path)
+    repo = _repo(tmp_path)
+    monkeypatch.setattr(PK, "_ws_name", lambda: "demo-ws")
+    monkeypatch.setattr("open_guji_cv.core.book._book_yaml_path", lambda b: tmp_path / f"{b}.yaml")
+    args = SimpleNamespace(book="vol05", version="1.0.0", text_id="96mid1ogzk", text_dir=None, root=str(root),
+                           note=None, tag_via=None, execute=False, json=True, repo=str(repo))
+    cli_freeze.cmd_freeze(args)
+    p, _ = json.JSONDecoder().raw_decode(capsys.readouterr().out)
+    assert p["cv"]["version"] == "0.5.10" and p["record"]["cv_commit"] == p["cv"]["commit"]
 
 
 def test_plan_and_execute(tmp_path, monkeypatch):

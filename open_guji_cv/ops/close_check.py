@@ -31,13 +31,61 @@ def _item(no: str, name: str, status: str, detail: str = "", data=None) -> dict:
     return {"no": no, "name": name, "status": status, "detail": detail, "data": data}
 
 
+#: 参数里记「共享输入」内容指纹的字段：语料、证人／参照本、格位表、字组与异体表、借来的字形库、字体域等，
+#: 由别的会话、别的册在中心库里更新，不是本册的代码、参数或人裁（A32 册 005 复盘 I，2026-10-24）。
+SHARED_PARAMS = frozenset({
+    "corpus_fingerprint", "witness_fingerprint", "lane_witness_fingerprint", "ai_evidence_fingerprint",
+    "layout_fingerprint", "group_flow_fingerprint", "variants_fingerprint", "variant_graph_fingerprint",
+    "iron_config_fingerprint", "note_fingerprint", "borrow_fingerprint", "db_font_fingerprint",
+})
+_SHARED_PREFIX = "参数变了："
+
+
+def _shared_only(reason: str) -> list[str] | None:
+    """过期原因是「参数变了：字段…」且字段全是共享输入 → 字段表；否则 None。"""
+    if not reason.startswith(_SHARED_PREFIX):
+        return None
+    fields = reason[len(_SHARED_PREFIX):].split("、")
+    return fields if fields and set(fields) <= SHARED_PARAMS else None
+
+
+def _split_shared(steps: dict) -> tuple[dict, dict[str, int]]:
+    """把只因共享输入变了（及其沿 DAG 传下来的「上游过期」）而过期的页从坏账里剔出来。
+
+    一步里过期原因全是共享字段或「上游过期」、且没有缺失／失败／阻塞，才整步剔掉；
+    「上游产物变了」（上游已重跑出不同产物）、册配置、本册参数、显式失效、旧条目分不出的「参数变了」都算本册的。
+    返回（剔完的坏账，{共享字段: 页数}）；有一步不全是共享的，就不剔（字段计数照报）。"""
+    bad: dict = {}
+    fields: dict[str, int] = {}
+    own = False
+    for sid, d in steps.items():
+        c = {k: d["counts"][k] for k in ("stale", "missing", "failed", "blocked") if d["counts"][k]}
+        if not c:
+            continue
+        bad[sid] = c
+        reasons = d.get("stale_reasons") or {}
+        for r, n in reasons.items():
+            f = _shared_only(r)
+            if f is not None:
+                for x in f:
+                    fields[x] = fields.get(x, 0) + n
+            elif r != "上游过期":
+                own = True
+        if set(c) != {"stale"}:
+            own = True
+    if own or not fields:
+        return bad, fields
+    return {}, fields
+
+
 def _fresh(eng, pages, strict_cv: bool = False) -> dict:
     """第 1a 项。缺省（用户 10-19 定「在跑它的那个版本下新鲜就行」）：只因代码／版本变了过期、
-    产物记着正式版 cv_version 的页算新鲜，只计数并列出本册用到的 cv 版本；`strict_cv` 回到旧口径。"""
+    产物记着正式版 cv_version 的页算新鲜，只计数并列出本册用到的 cv 版本；`strict_cv` 回到旧口径。
+
+    只因共享输入被别处更新而过期（`SHARED_PARAMS`，见 `_split_shared`）也不算失败，另起一句点名字段，
+    冻结时记一笔（1.0 发布标准 I）；本册自己的变动照旧判失败，原因里两类都列。"""
     st = eng.status(pages=pages, code_ok=not strict_cv)
-    bad = {sid: {k: d["counts"][k] for k in ("stale", "missing", "failed", "blocked") if d["counts"][k]}
-           for sid, d in st["steps"].items()}
-    bad = {k: v for k, v in bad.items() if v}
+    bad, shared = _split_shared(st["steps"])
     n_code = sum(d.get("code_only", 0) for d in st["steps"].values())
     vers: dict[str, int] = {}
     for d in st["steps"].values():
@@ -45,9 +93,17 @@ def _fresh(eng, pages, strict_cv: bool = False) -> dict:
             vers[v] = vers.get(v, 0) + n
     note = (f"（另有 {n_code} 页只是代码／版本变了，不计；产物用到的 cv 版本："
             + "、".join(f"{v}×{n}" for v, n in sorted(vers.items())) + "）") if n_code else ""
+    if shared:
+        what = "、".join(f"{k}×{n}" for k, n in sorted(shared.items()))
+        note += (f"（共享输入被别处更新：{what}；冻结时记一笔，不算失败）" if not bad
+                 else f"（其中共享输入变了的：{what}；另有本册自己的变动，见各步原因）")
+    data = bad or None
+    if bad:
+        data = {sid: {**c, "reasons": st["steps"][sid].get("stale_reasons") or {}} for sid, c in bad.items()}
+    elif shared:
+        data = {"shared_inputs": shared}
     return _item("1a", "产物新鲜", PASS if not bad else FAIL,
-                 ("全部新鲜" if not bad else f"{len(bad)} 步有过期/缺失/失败") + note,
-                 bad or None)
+                 ("全部新鲜" if not bad else f"{len(bad)} 步有过期/缺失/失败") + note, data)
 
 
 def _fresh_or_frozen(eng, pages, ws: Path, strict_cv: bool = False) -> dict:

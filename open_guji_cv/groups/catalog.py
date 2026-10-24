@@ -42,6 +42,8 @@ def _flags(fl) -> str:
         out.append("相邻成对 " + "".join(fl.pair))
     if fl.lift_needs:
         out.append("补放须 " + "/".join(fl.lift_needs))
+    if fl.lift_ref_agree:
+        out.append("补放须与整理本同字")
     if fl.tolerate:
         out.append("陪衬 " + "".join(sorted(fl.tolerate)))
     if fl.families:
