@@ -212,6 +212,28 @@ def test_nonempty_db_never_raises_regardless_of_store(tmp_path):
     assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
 
 
+def test_instances_without_exemplars_raises(tmp_path, monkeypatch):
+    """有实例、没一条刻例（10-24 殿本 vol09/10 的钉版库 g2）：匹配器无从比，必须报错；可用开关放行。"""
+    from open_guji_cv.clustering.glyph_db import _now, _png, assert_db_not_silently_empty
+    import numpy as np
+
+    db_path = tmp_path / "noex.sqlite"
+    db = GlyphDB(db_path)
+    cur = db.conn.cursor()
+    cur.execute("INSERT INTO sources (source_id, edition_tag, kind, created_at)"
+                " VALUES ('s','ed','woodblock',?)", (_now(),))
+    cur.execute("INSERT INTO instances (instance_id, source_id, page, col, idx, patch_png, updated_at)"
+                " VALUES ('i1','s','p',0,0,?,?)", (_png(np.zeros((8, 8), np.uint8)), _now()))
+    db.conn.commit()
+    db.close()
+
+    monkeypatch.delenv("GUJI_ALLOW_NO_EXEMPLARS", raising=False)
+    with pytest.raises(RuntimeError, match="没有刻例"):
+        assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
+    monkeypatch.setenv("GUJI_ALLOW_NO_EXEMPLARS", "1")
+    assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
+
+
 def _seed_one_glyph(db, char, norm):
     """直接塞一个 glyph+exemplar+derived，直接造库数据。"""
     from open_guji_cv.clustering.glyph_db import _now, _png
@@ -232,3 +254,30 @@ def _seed_one_glyph(db, char, norm):
                 (gid, iid, _now()))
     db._write_derived(cur, iid, norm)
     db.conn.commit()
+
+
+def test_rebuild_derived_cache_hits_and_is_identical(db, tmp_path, monkeypatch):
+    """派生表示按图 sha 进盘上缓存（10-24）：第二次重建命中缓存，派生表与现算逐位相同；关掉缓存结果也一样。"""
+    import sqlite3
+
+    from open_guji_cv.clustering import glyph_db as G
+    from open_guji_cv.clustering.glyph_db import export_store, rebuild_from_store
+
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
+    seed_glyphs(db)
+    store = tmp_path / "store"
+    export_store(db, store)
+
+    def derived(p):
+        with sqlite3.connect(p) as c:
+            return c.execute("SELECT instance_id, kind, algo_version, data FROM derived ORDER BY 1, 2").fetchall()
+
+    calls = []
+    real = G._derived_compute
+    monkeypatch.setattr(G, "_derived_compute", lambda raws, fb, jobs: calls.append(len(raws)) or real(raws, fb, jobs))
+    rebuild_from_store(store, tmp_path / "a.sqlite")
+    rebuild_from_store(store, tmp_path / "b.sqlite")
+    assert calls[0] > 0 and calls[1:] == []            # 第二次全部命中
+    monkeypatch.setenv("GUJI_NO_DERIVED_CACHE", "1")
+    rebuild_from_store(store, tmp_path / "c.sqlite")
+    assert derived(tmp_path / "a.sqlite") == derived(tmp_path / "b.sqlite") == derived(tmp_path / "c.sqlite")

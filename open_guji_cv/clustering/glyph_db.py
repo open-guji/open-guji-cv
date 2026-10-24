@@ -931,14 +931,74 @@ def _borrowed(db: "GlyphDB") -> tuple[set[str], set[str], set[str]]:
 _PARALLEL_MIN = 2000
 
 
-def _derived_many(raws: list[bytes], feature_backend: str, jobs: int) -> list[tuple[bytes, bytes, bytes]]:
-    """每例原图 PNG → `derived_payload`，顺序与输入相同。`jobs > 1` 用进程池（同 `font_glyphs` 的渲染池）。"""
+def _derived_compute(raws: list[bytes], feature_backend: str, jobs: int) -> list[tuple[bytes, bytes, bytes]]:
     if jobs <= 1 or len(raws) < _PARALLEL_MIN:
         _rebuild_init(feature_backend)
         return [_rebuild_derived(b) for b in raws]
     import multiprocessing as mp
     with mp.Pool(jobs, initializer=_rebuild_init, initargs=(feature_backend,)) as pool:
         return pool.map(_rebuild_derived, raws, chunksize=64)
+
+
+#: 派生表示盘上缓存的代码依据：这几个模块任一改了，同一张图算出来的派生表示就可能变，缓存键跟着换
+_DERIVED_CACHE_MODULES = ("open_guji_cv.clustering.glyph_db", "open_guji_cv.clustering.normalize",
+                          "open_guji_cv.clustering.features", "open_guji_cv.clustering.canonical")
+
+
+def _derived_cache_path(feature_backend: str) -> Path | None:
+    """`<缓存根>/glyph-derived/<键>.sqlite`；`GUJI_NO_DERIVED_CACHE=1` 或算不出键 → None（不缓存）。"""
+    import hashlib
+    import os
+    if os.environ.get("GUJI_NO_DERIVED_CACHE") == "1":
+        return None
+    try:
+        from ..core.engine import code_hash_of_module
+        from ..core.workspace import cache_root
+        h = hashlib.sha256(json.dumps([feature_backend, ALGO_VERSIONS,
+                                       [code_hash_of_module(m) for m in _DERIVED_CACHE_MODULES]],
+                                      sort_keys=True).encode()).hexdigest()[:16]
+        return Path(cache_root()) / "glyph-derived" / f"{h}.sqlite"
+    except Exception:  # noqa: BLE001 —— 缓存只管提速
+        return None
+
+
+def _derived_many(raws: list[bytes], feature_backend: str, jobs: int) -> list[tuple[bytes, bytes, bytes]]:
+    """每例原图 PNG → `derived_payload`，顺序与输入相同。`jobs > 1` 用进程池（同 `font_glyphs` 的渲染池）。
+
+    按图 sha256 走盘上缓存（2026-10-24，A30 新会话冷启动实测）：新会话 `guji db pull` 建 `glyph.db` 和
+    yaml 钉着的 g<N>，改钉后 `pin-build` 再建一次，三次都是同一批约 2 万张刻例图，各自从头算归一、骨架、
+    特征，每次约 50 秒。派生表示是图的纯函数，键里带特征后端、`ALGO_VERSIONS` 与建库各模块的代码指纹，
+    命中的与现算逐位相同。缓存坏了、写不了一律退回现算。"""
+    f = _derived_cache_path(feature_backend)
+    if f is None or not raws:
+        return _derived_compute(raws, feature_backend, jobs)
+    import hashlib
+    keys = [hashlib.sha256(b).hexdigest() for b in raws]
+    got: dict[str, tuple[bytes, bytes, bytes]] = {}
+    try:
+        f.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(str(f), timeout=60) as c:
+            c.execute("CREATE TABLE IF NOT EXISTS d (k TEXT PRIMARY KEY, norm BLOB, skel BLOB, feat BLOB)")
+            uniq = list(dict.fromkeys(keys))
+            for i in range(0, len(uniq), 500):
+                part = uniq[i:i + 500]
+                q = f"SELECT k, norm, skel, feat FROM d WHERE k IN ({','.join('?' * len(part))})"
+                for k, a, b, cc in c.execute(q, part):
+                    got[k] = (bytes(a), bytes(b), bytes(cc))
+    except sqlite3.Error:
+        return _derived_compute(raws, feature_backend, jobs)
+    todo = [i for i, k in enumerate(keys) if k not in got]
+    if todo:
+        fresh = _derived_compute([raws[i] for i in todo], feature_backend, jobs)
+        new = {keys[i]: p for i, p in zip(todo, fresh)}
+        got.update(new)
+        try:
+            with sqlite3.connect(str(f), timeout=60) as c:
+                c.executemany("INSERT OR REPLACE INTO d VALUES (?,?,?,?)",
+                              [(k, *p) for k, p in new.items()])
+        except sqlite3.Error:
+            pass
+    return [got[k] for k in keys]
 
 
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
@@ -1110,9 +1170,21 @@ def assert_db_not_silently_empty(db_path: str | Path,
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
             n = c.execute("SELECT COUNT(*) FROM instances").fetchone()[0]
+            n_ex = c.execute("SELECT COUNT(*) FROM exemplars").fetchone()[0] if n > 0 else 0
     except sqlite3.Error:
         return  # 打不开/表还没建，不是本检查的职责——下游自己会报更明确的错
     if n > 0:
+        # 有实例、没一条刻例（2026-10-24，殿本 vol09/10 第四轮）：钉版库 g2 建出来 instances 20,661、
+        # exemplars 0、glyphs 0，上面只数 instances 拦不住，glyph_match 每页 0.06–0.8 秒「跑完」，
+        # 整册 Step5-a 起全部无效。匹配器只看刻例，刻例为 0 时这一步没有意义，只可能是建库出了错。
+        # 真要对着只有实例的库跑（单测、刚导实例还没放行任何字的新书）设 GUJI_ALLOW_NO_EXEMPLARS=1。
+        import os
+        if n_ex == 0 and os.environ.get("GUJI_ALLOW_NO_EXEMPLARS") != "1":
+            raise RuntimeError(
+                f"字形库没有刻例（instances={n}、exemplars=0）：{db_path}\n"
+                "匹配器只看刻例，对着这个库跑 glyph_match/seed_admit 全是 diff。多半是建库时 glyphs.jsonl／"
+                "exemplars.jsonl 没进来（钉版库查 `guji glyph-db pin-build --pin N` 的清单与取件）；"
+                "重建后再跑。确属只有实例的新库，设 GUJI_ALLOW_NO_EXEMPLARS=1。")
         return
     if store_dir is None:
         from ..core.workspace import glyph_store_path
