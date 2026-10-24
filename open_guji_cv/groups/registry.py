@@ -322,6 +322,15 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
        for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
                                # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
                                ("zhun", "凖準", "左旁 冫／氵"), ("mi", "宻密", "中部 㐅／必"))},
+    # 广宀族（2026-10-24，A24）：「蕤賔」的 賔 字形库里没有，库把它排成 實廣（再往后 墳須寅賞…），形近护栏拦下送审（vol19 十几格）。
+    # 整字 HOG 一对多，只给 賔／賓（`ids_online.SPECS["guang"].give`；實廣 判出来也弃权，库本来认得）；賔賓 按刻形各给各的码位。
+    # 陪衬＝模板库里的陪衬类（判成它们＝弃权），入口才容许它们紧咬。复核只降不改：已放行 實廣 而判出 賔賓 的降审
+    # （vol19 回放 2 格，看图都是刻 賔、被文意通道放成 廣／實 的错放）。
+    "guang": GroupSpec(
+        id="guang", name="廣實賔賓宸", members=frozenset("廣實賔賓宸"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/guang",
+        flow=FlowSpec((_img("guang"),), combine="first", review=True, tolerate=frozenset("寶寳寅賞墳須煩裒盧資質贋寫竇賁責貴")),
+        note="按整字字形判（一对多岭回归，只给 賔賓；成员 實廣宸 只当入口，陪衬与「其他」池判中＝弃权）；补放＋复核降审。"),
 }
 
 #: 字组流程可点名的全部组。
