@@ -811,14 +811,16 @@ def cmd_recheck(args) -> None:
     只标不跑——跑还是 `guji pipeline <p> <book> --from glyph_match`，只重算点名格。"""
     from .core.spec import page_key
     from .steps.glyph_match import live_exemplars, recheck_reasons
-    eng = _engine(args.book, args.pipeline, quiet=True)
+    eng = _engine(args.book, args.pipeline, params=getattr(args, "params", None), quiet=True)
     step = eng.pipeline.producer_of("glyph_match")
     sid = step.spec.id
     p = eng.ctx.params_for(step)
     chars = set((args.chars or "").replace(",", "").replace("，", "").replace(" ", ""))
     verdicts = {v for v in (args.verdicts or "").split(",") if v}
-    if not (chars or verdicts or args.dead or args.all):
-        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all")
+    if not (chars or verdicts or args.dead or args.all or args.glyph_diff):
+        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all / --glyph-diff")
+    if args.glyph_diff:
+        return _recheck_glyph_diff(args, eng, step, p)
     live = None
     if args.dead:
         edition = p.edition
@@ -866,6 +868,67 @@ def cmd_recheck(args) -> None:
         pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
         print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
               + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
+    if n_pages and not args.dry_run:
+        print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
+              f"--pages {args.pages} -w <workspace>")
+
+
+def _old_glyph_db(spec: str) -> str:
+    """`--glyph-diff` 的旧库：`g<N>`／`N`（钉版库，缺了就建）或库文件路径。"""
+    from pathlib import Path
+    from .core.glyph_pin import parse_pin, pinned_db_path
+    n = parse_pin(spec) if not Path(spec).suffix else None
+    if n is None:
+        if not Path(spec).exists():
+            raise SystemExit(f"--glyph-diff：库文件不存在：{spec}")
+        return str(Path(spec))
+    from .core.workspace import workspace_root
+    from .ops.glyph_snapshot import build_pinned_db
+    build_pinned_db(workspace_root(), n)
+    return str(pinned_db_path(n))
+
+
+def _recheck_glyph_diff(args, eng, step, p) -> None:
+    """`guji recheck --glyph-diff <旧库>`：kNN 邻域差分（`ops/glyph_diff.py`），只点名换库后判决可能变的格。"""
+    from .core.spec import page_key
+    from .ops.glyph_diff import load_view, page_affected
+    from .steps.glyph_match import _FontTier, db_fingerprint
+    sid = step.spec.id
+    old_db = _old_glyph_db(args.glyph_diff)
+    if old_db == p.db_path:
+        raise SystemExit(f"--glyph-diff 给的旧库就是本册现在读的库（{old_db}）：没有可比的")
+    p_old = p.model_copy(update={"db_path": old_db, "db_fingerprint": db_fingerprint(old_db)})
+    tier = _FontTier.rule(p.font_tier) is not None
+    print(f"旧库 {old_db}\n新库 {p.db_path}", flush=True)
+    old, new = load_view(p_old, font_tier=tier), load_view(p, font_tier=tier)
+    manifest = eng.store.manifest(eng.book.id, sid)
+    reason = f"recheck glyph-diff {args.glyph_diff}"
+    n_pages = n_cells = n_total = 0
+    by_why: dict[str, int] = {}
+    for pg in eng.book.resolve_pages(args.pages):
+        key = page_key(pg)
+        if manifest.get(key) is None:
+            continue
+        pm = eng.store.read(eng.book.id, sid, key, "glyph_match")
+        if pm is None:
+            continue
+        hit = page_affected(eng.ctx, pg, pm, p, old, new)
+        n_total += sum(len(c.chars) for c in pm.columns if c.ok)
+        for why in hit.values():
+            for w in why:
+                by_why[w] = by_why.get(w, 0) + 1
+        if hit:
+            n_pages += 1
+            n_cells += len(hit)
+            if not args.dry_run:
+                manifest.invalidate(key, reason, cells=sorted(hit))
+        if args.list:
+            for cid, why in sorted(hit.items()):
+                print(f"  {cid}\t{','.join(why)}")
+    head = "[dry-run] " if args.dry_run else ""
+    pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
+    print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
+          + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
     if n_pages and not args.dry_run:
         print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
               f"--pages {args.pages} -w <workspace>")
@@ -3216,6 +3279,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dead", action="store_true",
                    help="same 档命中的库条目已撤或字头已改（撤库后建议跑一次）")
     p.add_argument("--all", action="store_true", help="整页失效（不复用任何格）")
+    p.add_argument("--glyph-diff", default=None, metavar="旧库",
+                   help="换了字形库版本后只点名受影响的格：旧库给 g<N> 或库文件路径，新库＝本册现在读的库"
+                        "（kNN 邻域差分，见 ops/glyph_diff.py）；与其它点名条件互斥")
+    p.add_argument("--list", action="store_true", help="--glyph-diff 时逐格列出点名理由")
+    p.add_argument("--params", default=None,
+                   help="参数覆盖 JSON（同 guji pipeline --params）；如新库不是册 yaml 指的那份："
+                        '{"glyph_match": {"db_path": "…/new.db"}}，之后跑 pipeline 也要带同样的 --params')
     p.add_argument("--dry-run", action="store_true", help="只数不写")
 
     p = sub.add_parser("fp-migrate",
