@@ -319,7 +319,9 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
         flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=True),
         note=f"异体对按刻形判（{note}）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。")
-       for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"))},
+       for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
+                               # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
+                               ("zhun", "凖準", "左旁 冫／氵"), ("mi", "宻密", "中部 㐅／必"))},
 }
 
 #: 字组流程可点名的全部组。
