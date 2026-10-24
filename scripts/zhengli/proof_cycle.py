@@ -235,13 +235,16 @@ def cmd_apply(a) -> int:
         sandbox, env_sb = rp.products_root(ws), env
         log.note("ⓘ 没有出单版产物包：在本机产物根上重跑（要自己担保本机产物就是出单那一版）")
     env_eng = {**env_sb, "PYTHONPATH": str(engine)} if engine != CV else env_sb
+    # 旧引擎经 engine_run.py 跑：读中心库时跳过它不认的新事件种类（不然一推新种类，每页都失败）
+    guji_eng = [sys.executable, HERE / "engine_run.py"] if engine != CV else GUJI
+    # --stop-on-error：一页失败就非零退出，免得带着失败的产物接着导出、出单
     if plan.get("full_book", False):
-        if not log.step("全册重跑 seed_admit", [*GUJI, "pipeline", "keben_body_v2", book, "--from", "seed_admit",
-                                               "--to", "seed_admit", "-w", ws], cwd=engine, env=env_eng):
+        if not log.step("全册重跑 seed_admit", [*guji_eng, "pipeline", "keben_body_v2", book, "--from", "seed_admit",
+                                               "--to", "seed_admit", "--stop-on-error", "-w", ws], cwd=engine, env=env_eng):
             return 1
     elif plan["pages"] and not log.step(f"重跑 {len(plan['pages'])} 页到 seed_admit",
-                                        [*GUJI, "pipeline", "keben_body_v2", book, "--pages", ",".join(map(str, plan["pages"])),
-                                         "--to", "seed_admit", "-w", ws], cwd=engine, env=env_eng):
+                                        [*guji_eng, "pipeline", "keben_body_v2", book, "--pages", ",".join(map(str, plan["pages"])),
+                                         "--to", "seed_admit", "--stop-on-error", "-w", ws], cwd=engine, env=env_eng):
         return 1
 
     # 4. 导出
