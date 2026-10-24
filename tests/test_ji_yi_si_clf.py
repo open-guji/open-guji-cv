@@ -42,7 +42,7 @@ def test_ganzhi_chen_si_jian():
 def test_ganzhi_next_zhi():
     assert clf.classify("順治", "丑")[0] == "己"
     assert clf.classify("某", "酉")[0] == "己"
-    assert clf.classify("而", "未嘗")[0] == "已"           # 「而已未嘗」：未 需日期语境，不当干支
+    assert clf.classify("而", "未嘗")[0] is None           # 「而◎未嘗」：未 需日期语境，不当干支；「而◎」接谓语也不判（10-24 收窄）
     assert clf.classify("康熙", "未")[0] == "己"           # 年号末字 → 日期语境
 
 
@@ -102,6 +102,29 @@ def test_ji_prev_narrowed():
 def test_er_yi_exception_title():
     # 书名《己易》被「而已」规则误伤（vol05:36:6:15）→ 弃权
     assert clf.classify("名徒生轇轕而", "易芥八卷")[0] is None
+
+
+def test_out_of_volume_fixes_1024():
+    # vol11–20 册外回测（A24，2026-10-24）查出的错判，改后弃权或改判
+    assert clf.classify("旬之外卜乙丁", "辛癸等柔日")[0] is None      # 天干列举：不是地支巳
+    assert clf.classify("甲辰乙", "丙午")[0] == "巳"                 # 干支连写照旧（乙巳丙午）
+    assert clf.classify("司馬光曰古律", "亡")[0] == "已"             # 律 不再当「律己」；已亡 照判
+    assert clf.classify("非相生之律", "屬乖舛")[0] is None
+    assert clf.classify("復古之學艱苦之由", "得大槩")[0] is None       # 由 不再当「由己」
+    assert clf.classify("謂虞帝恭", "無爲")[0] == "己"               # 恭己
+    assert clf.classify("之說謂自子至", "前六辰")[0] is None          # 至巳前：时辰，不是已前
+    assert clf.classify("某", "前")[0] == "已"                       # 已前 照判
+    assert clf.classify("女爲悅己者容", "下脫者字")[0] is None        # 校勘语「己下脫」
+    assert clf.classify("某", "下")[0] == "已"
+
+
+def test_er_yi_narrowed_1024():
+    assert clf.classify("不過如此而", "")[0] == "已"
+    assert clf.classify("徒好立異而", "矣")[0] == "已"
+    assert clf.classify("同乎人而", "不以富爲累")[0] is None          # 而己不以…：交文意表
+    assert clf.classify("爲十翼而", "又翼孔子")[0] is None
+    assert clf.classify("不杖衰而", "與之無服")[0] is None
+    assert clf.classify("不杖衰而", "經")[0] is None                 # 已經类规则也不接手
 
 
 def test_unknown_blocks():

@@ -113,6 +113,10 @@ uv pip install -e ".[console,torch,dev]"   # 装完自检：python -c "import to
 `status` 每步下面会列**过期原因**（2026-09-28，overview #174）：`册配置 period_prior 180.0→204.0，须重跑`
 ／`参数变了`／`上游产物变了`／`代码或版本变了`／`上游过期`。册配置那条只有这次改动之后跑过的产物才分得出
 （manifest 新记了 `book_deps` 原值）；老产物报「代码或册配置变了（…；旧条目没记册配置原值）」。
+参数那条 2026-10-24 起点名字段，如 `参数变了：layout_fingerprint、witness_fingerprint`（manifest 新记了逐字段短哈希
+`param_parts`，不进指纹；之前跑的老产物仍只报「参数变了」）。close-check 1a 据此把**共享输入被别处更新**
+（语料、证人／参照本、格位表、字组与异体表、借来的字形库等，见 `ops/close_check.py` 的 `SHARED_PARAMS`）单列、
+不算失败，冻结时记一笔；本册自己的参数、册配置、人裁变动照旧判失败。
 `calibrate` 发现先验漂了时也会提示改 yaml 后哪些步要重跑（`period_prior` → `column_gate`）。
 
 `status` 末尾还有一行**收尾闸**（2026-10-05，overview#403 缺口 C）：「事件里定过字的格」∩「seed_admit

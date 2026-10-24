@@ -1,6 +1,7 @@
 """按刻形拆判的异体对（2026-10-24，sheldon「尙尚、盖蓋葢…按 IDS 拆判」）：产物里已放行格（放行字当标签）＋人裁 → 整字 HOG 模板库，按册留出评测。
 
 用法：python build_shape_pair.py <组 id> <原图根（<册>/<页>.png）> <数据目录（含 output/glyph_store，取人裁）> <产物根…> [--write]
+      [--dataset=<dataset>/char-groups/variant --by=claude-<线程> --date=YYYY-MM-DD]（训练集落 dataset）
 产物根下是 `<册>/seed_admit/p*.json` 与 `<册>/cell_shrink/p*.json`（`guji products pack fetch` 的布局）。
 
 标签：已放行格的放行字（人裁格与印章通道不收），每册每字最多 `PER_VOL` 格；人裁刻形；`EXTRA` 是看图补的格（如送审格里的 盖）。
@@ -39,7 +40,42 @@ PLAN = {
         "vol17:110:3:16", "vol17:110:7:4", "vol17:110:8:20", "vol18:66:1:5", "vol19:5:6:19", "vol19:5:8:9", "vol19:5:8:20",
         "vol19:162:8:14", "vol20:98:1:15", "vol20:120:1:6",
     ], "䟦"), {"vol06:106:1:17", "vol09:239:1:18", "vol10:65:4:4", "vol14:48:8:19"}),   # 放行成 跋、刻形是 叐（无点、下作又）
+    # 凖／準（长尾异体对，2026-10-24）：左旁 冫（点＋一长提斜穿）对 氵（三笔竖排）。放行成 準、刻形是 冫 的 2 格剔出（vol20:100:1:6 是送审格本身），
+    # vol17:92:1:8 中间一笔看不清，剔出。
+    "zhun": ("凖準", {}, {"vol05:177:6:17", "vol20:100:1:6", "vol17:92:1:8"}),
+    # 宻／密：中部 㐅 交叉（无点）对 必（两侧带点）。放行成 密、刻形是 㐅 的 2 格（vol17:139:4:15、vol17:70:4:21）剔出，vol20:104:3:6 墨团看不清剔出。
+    "mi": ("宻密", {}, {"vol17:139:4:15", "vol17:70:4:21", "vol20:104:3:6"}),
 }
+
+
+#: 剔出模板的格里看图有结论的（只进数据集当记录，不进模板）：组 → {格: (刻形, 说明)}
+LOOKED = {
+    "zhun": {"vol05:177:6:17": ("凖", "放行成 準，刻形左旁是 冫"), "vol20:100:1:6": ("凖", "放行成 準（文意通道），刻形左旁是 冫；整理本作 凖")},
+    "mi": {"vol17:139:4:15": ("宻", "放行成 密，中部是 㐅 交叉、无点"), "vol17:70:4:21": ("宻", "放行成 密，中部是 㐅 交叉、无点"),
+           "vol20:104:3:6": ("宻", "放行成 密，墨重，中部偏 㐅；不进模板")},
+}
+
+
+def export(g: str, cells, data: Path, out: Path, by: str, date: str):
+    """训练集落 dataset `char-groups/variant/<组>/`：labels.jsonl（一格一行）、crops/（建库用的清洗后字块）、split.json（按册分折）。"""
+    human = {k for k, f in freq.human_shapes(data).items() if f in PLAN[g][0]}
+    d = out / g
+    (d / "crops").mkdir(parents=True, exist_ok=True)
+    rows, split = [], {}
+    for f, gray, b, k in sorted(cells, key=lambda c: c[3]):
+        cv2.imwrite(str(d / "crops" / (k.replace(":", "_") + ".png")), np.asarray(gray))
+        src = "human" if k in human else ("look" if k in PLAN[g][1] else "admit")
+        rows.append({"id": k, "form": f, "by": {"human": "sheldon", "look": by, "admit": "auto-admit"}[src], "date": date,
+                     "src": {"human": "central:人裁刻形", "look": "看图补", "admit": "已放行格（放行字当标签）"}[src], "in_bank": True})
+        split.setdefault(b, []).append(k)
+    for k, (f, note) in sorted(LOOKED.get(g, {}).items()):
+        rows.append({"id": k, "form": f, "by": by, "date": date, "src": "看图（剔出模板的格）", "note": note, "in_bank": False})
+    with open(d / "labels.jsonl", "w", encoding="utf-8") as fh:
+        for r in rows:
+            fh.write(json.dumps(r, ensure_ascii=False) + "\n")
+    (d / "split.json").write_text(json.dumps({b: sorted(v) for b, v in sorted(split.items())}, ensure_ascii=False, indent=1) + "\n",
+                                  encoding="utf-8")
+    print("数据集", d, len(rows), "行")
 
 
 def _page(imgs: Path, book: str, page: int, _c={}):
@@ -108,7 +144,7 @@ def loo(cells, sp):
 
 if __name__ == "__main__":
     g, imgs, data = sys.argv[1], Path(sys.argv[2]), Path(sys.argv[3])
-    prods = [a for a in sys.argv[4:] if a != "--write"]
+    prods = [a for a in sys.argv[4:] if not a.startswith("--")]
     chars, extra, drop = PLAN[g]
     sp = O.SPECS[g]
     cells = gather(prods, imgs, data, chars, extra, drop)
@@ -127,3 +163,7 @@ if __name__ == "__main__":
         p.parent.mkdir(parents=True, exist_ok=True)
         O.write_bank(d, p)
         print("写", p, p.stat().st_size)
+    ds = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--dataset=")), None)
+    if ds:                                            # --dataset=<dataset>/char-groups/variant --by=claude-<线程> --date=YYYY-MM-DD
+        kv = dict(a[2:].split("=", 1) for a in sys.argv if a.startswith("--") and "=" in a)
+        export(g, cells, data, Path(ds), kv.get("by", "claude"), kv.get("date", ""))

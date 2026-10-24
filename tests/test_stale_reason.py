@@ -29,6 +29,7 @@ class _Per(BaseModel):
 
 class _P(BaseModel):
     gain: float = 1.0
+    corpus_fingerprint: str = ""        # 共享输入的指纹字段（close-check 1a 按字段名分类）
 
 
 if "t_sr_per" not in KINDS:
@@ -96,6 +97,12 @@ def test_status_reason_params_and_old_entry(world):
     book, pl, store, cache = world
     _eng(book, pl, store, cache).run()
     st = _eng(book, pl, store, cache, params={"t_sr_gate": {"gain": 2.0}}).status()
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了：gain": 2}
+    # 没记逐字段哈希的老条目：只能说「参数变了」
+    m = store.manifest("tsr", "t_sr_gate")
+    for k, e in m.all().items():
+        m.put(dataclasses.replace(e, param_parts=None))
+    st = _eng(book, pl, store, cache, params={"t_sr_gate": {"gain": 2.0}}).status()
     assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了": 2}
     # 老条目（本改动之前跑的，没记 book）：分不出是代码还是册配置，要照实说
     m = store.manifest("tsr", "t_sr_gate")
@@ -160,7 +167,7 @@ def test_status_code_ok_still_flags_everything_else(world):
     _code_only_stale(store, "0.4.4")
     # 参数变了 / 册配置变了：照旧报警
     st = _eng(book, pl, store, cache, params={"t_sr_gate": {"gain": 2.0}}).status(code_ok=True)
-    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了": 2}
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了：gain": 2}
     st = _eng(dataclasses.replace(book, period_prior=204.0), pl, store, cache).status(code_ok=True)
     assert st["steps"]["t_sr_gate"]["counts"][STALE] == 2
     assert "code_only" not in st["steps"]["t_sr_gate"]
@@ -175,3 +182,34 @@ def test_close_check_1a_code_only_and_strict_cv(world):
     it = CC._fresh(eng, [1, 2])
     assert it["status"] == CC.PASS and "2 页只是代码" in it["detail"] and "0.4.4×2" in it["detail"]
     assert CC._fresh(eng, [1, 2], strict_cv=True)["status"] == CC.FAIL
+
+
+def test_close_check_1a_separates_shared_inputs(world):
+    """复盘 I（册 005，10-23）：只因共享输入（语料、证人、格位表……）被别处更新而过期，1a 单列不算失败；
+    本册参数一起变了就照旧失败，两类都报。旧条目分不出字段的照旧失败。"""
+    from open_guji_cv.ops import close_check as CC
+    book, pl, store, cache = world
+    _eng(book, pl, store, cache).run()
+    shared = _eng(book, pl, store, cache, params={"t_sr_gate": {"corpus_fingerprint": "v2"}})
+    st = shared.status()
+    assert st["steps"]["t_sr_gate"]["stale_reasons"] == {"参数变了：corpus_fingerprint": 2}
+    it = CC._fresh(shared, [1, 2])
+    assert it["status"] == CC.PASS and "共享输入被别处更新：corpus_fingerprint×2" in it["detail"]
+    assert it["data"] == {"shared_inputs": {"corpus_fingerprint": 2}}
+    both = _eng(book, pl, store, cache, params={"t_sr_gate": {"corpus_fingerprint": "v2", "gain": 2.0}})
+    it = CC._fresh(both, [1, 2])
+    assert it["status"] == CC.FAIL and it["data"]["t_sr_gate"]["reasons"] == {"参数变了：corpus_fingerprint、gain": 2}
+    own = _eng(book, pl, store, cache, params={"t_sr_gate": {"gain": 2.0}})
+    it = CC._fresh(own, [1, 2])
+    assert it["status"] == CC.FAIL and "共享" not in it["detail"]
+    m = store.manifest("tsr", "t_sr_gate")
+    for k, e in m.all().items():
+        m.put(dataclasses.replace(e, param_parts=None))
+    assert CC._fresh(shared, [1, 2])["status"] == CC.FAIL
+
+
+def test_shared_only_parses_reason():
+    from open_guji_cv.ops.close_check import _shared_only
+    assert _shared_only("参数变了：layout_fingerprint、witness_fingerprint") == ["layout_fingerprint", "witness_fingerprint"]
+    assert _shared_only("参数变了：layout_fingerprint、human_fingerprint") is None
+    assert _shared_only("参数变了") is None and _shared_only("册配置 groups a→b") is None
