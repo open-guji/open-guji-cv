@@ -62,7 +62,7 @@ def _run_step(code_root: Path, step: str, book: str, pages: str, ws: str, produc
     env = dict(os.environ, PYTHONPATH=str(code_root), GUJI_PRODUCTS_DIR=str(products),
                GUJI_CACHE_DIR=str(cache), GUJI_WORKSPACE=ws, PYTHONIOENCODING="utf-8")
     argv = ["guji", "step", step, book, "-w", ws, "--pages", pages, "--jobs", str(jobs),
-            "--allow-cv-mismatch"]
+            "--allow-cv-mismatch", "--why", "code_equiv：私有产物目录里比两版代码"]
     code = f"import sys; sys.argv = {argv!r}; from open_guji_cv.cli_v2 import main; main()"
     with open(log, "w", encoding="utf-8") as fh:
         return subprocess.run([sys.executable, "-c", code], cwd=str(code_root), env=env,

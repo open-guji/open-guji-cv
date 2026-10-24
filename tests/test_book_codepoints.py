@@ -82,3 +82,19 @@ def test_set_codepoints_can_update_and_clear(ws):
     set_codepoints("keben", {})                         # 清空 = 回到不配置
     assert load_book("keben").codepoints == {}
     assert "codepoints:" not in _book_yaml_path("keben").read_text(encoding="utf-8")
+
+
+def test_workspace_level_codepoints_shared_and_book_overrides(ws):
+    """工作区级 `config/codepoints.yaml`（2026-10-24，与 `books/` 同级、同一字形库各册共用）：
+    册 yaml 没写的取它；册 yaml 写了同一个键的以册为准。"""
+    from open_guji_cv.core.book import _book_yaml_path, load_book, set_codepoints
+
+    cfg = _book_yaml_path("keben").parent.parent / "config" / "codepoints.yaml"
+    cfg.parent.mkdir(parents=True, exist_ok=True)
+    cfg.write_text("codepoints:\n  刊: 刋\n  别: 別\n", encoding="utf-8")
+    assert load_book("keben").codepoints == {"刊": "刋", "别": "別"}
+
+    set_codepoints("keben", {"别": "别"})
+    book = load_book("keben")
+    assert book.codepoints == {"刊": "刋", "别": "别"}
+    assert book.canonical_char("刊") == "刋"

@@ -154,7 +154,11 @@ def cmd_pack(args) -> None:
         if not (args.book and args.label):
             print("✗ 用法：guji products pack promote <册> --label <标签>", file=sys.stderr)
             sys.exit(2)
-        print(f"已标 main：{PK.promote(args.book, args.label, note=args.note or '')}")
+        try:
+            print(f"已标 main：{PK.promote(args.book, args.label, note=args.note or '', why=args.why)}")
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(2)
         _note_main(args.book, args.label, args.note or "")
         return
     if not args.book:
@@ -166,18 +170,33 @@ def cmd_pack(args) -> None:
             base_label = PK.main_label(args.book)
         except Exception:      # noqa: BLE001 —— 列不到指针不挡存包
             base_label = None
+        vers = book_versions(args.book, root)
+        if args.main and not _main_ok(vers.get("cv"), args.why):
+            sys.exit(2)
         info = PK.push_products(args.book, root, label=args.label, change=args.change,
-                                vers=book_versions(args.book, root),
+                                vers=vers,
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
         if not args.no_record:
             _record(args.book, info, base_label, args.report, _summary_text(args.summary), root)
         if args.main:
-            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '')}")
+            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '', why=args.why)}")
             _note_main(args.book, info["label"], args.note or "")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
+
+
+def _main_ok(cv: str | None, why: str | None) -> bool:
+    """`push --main` 先查：装的不是正式版 cv、又没给 --why，就别存了（存完 promote 也会拒）。实验分支不查。"""
+    from .core.cv_version import is_formal
+    from .core.workspace import active_branch
+    from .datastore.client import is_exp_branch
+    if is_formal(cv) or (why or "").strip() or is_exp_branch(active_branch()):
+        return True
+    print(f"✗ 装的 cv 是 {cv or '未知版本'}，不是正式版，产物不能标 main：发正式 tag 后在它上面重跑再存；"
+          f"只存不标去掉 --main；确要标加 --why \"<理由>\"", file=sys.stderr)
+    return False
 
 
 def _summary_text(s: str | None) -> str | None:
@@ -248,7 +267,10 @@ def add_parser(sub) -> None:
     p.add_argument("--force", action="store_true", help="pack fetch：目标已有该册产物也覆盖")
     p.add_argument("--note", default=None, help="pack push／promote：说明（谁、为什么）")
     p.add_argument("--change", default=None, help="pack push：改动名（ASCII），接在自动版本标签后，如 layout → cv0.4.7-c1-g2-layout")
-    p.add_argument("--main", action="store_true", help="pack push：存完顺手标成该册 main（正式结果）")
+    p.add_argument("--main", action="store_true",
+                   help="pack push：存完顺手标成该册 main（正式结果；只收正式版 cv 出的包，见 --why）")
+    p.add_argument("--why", default=None,
+                   help="pack promote／push --main：包不是正式版 cv 出的（dev、rc、任意提交）也要标 main 时的理由，记进指针")
     p.add_argument("--report", default=None, help="pack push：这次 diff 的报告目录（含 report.md），抄进实验记录")
     p.add_argument("--summary", default=None,
                    help="pack push：实验记录开头的摘要（目的、改了什么、怎么跑、结论）；@文件 读文件")

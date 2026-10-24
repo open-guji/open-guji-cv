@@ -273,7 +273,8 @@ class BookSpec:
     vline_polyline: bool = True
     #: 字体判定结果（yaml 的 `font:`，`calibrate font` 写回；**尚未实现**）。
     font: dict = field(default_factory=dict)
-    #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。
+    #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。2026-10-24 起先取工作区级
+    #: `config/codepoints.yaml`（与 `books/` 同级，同一字形库的各册共用），册 yaml 里写的逐条覆盖（`_ws_codepoints`）。
     #: `{另一码位: 本书指定码位}`——如 `{别: 別}` 表示这本书里「别」这个码位一律
     #: 按「別」统一（库、人裁、用字账都算作「別」，评测认它们是同一字、不算错）。
     #:
@@ -644,7 +645,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
                       else float(d["frame_height"])),
         vline_polyline=bool(d.get("vline_polyline", True)),
         font=dict(d.get("font") or {}),
-        codepoints={str(k): str(v) for k, v in (d.get("codepoints") or {}).items()},
+        codepoints={**_ws_codepoints(path), **{str(k): str(v) for k, v in (d.get("codepoints") or {}).items()}},
         step6_ai=str(d.get("step6_ai") or ""),
         params=_load_book_params(d.get("params")),
         cv_version=(None if d.get("cv_version") is None else str(d["cv_version"])),
@@ -653,6 +654,21 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _ws_codepoints(book_yaml: Path) -> dict[str, str]:
+    """工作区级码位归一（2026-10-24 sheldon 定「码位归一放字形库这一层，不放每册」）：与 `books/` 同级的
+    `config/codepoints.yaml` 顶层 `codepoints:`，同一工作区（同一字形库）的各册共用；册 yaml 的 `codepoints:` 逐条覆盖它。
+    没有这个文件 → 空，行为同以前。"""
+    p = book_yaml.parent.parent / "config" / "codepoints.yaml"
+    if not p.exists():
+        return {}
+    from .yaml_cache import load_yaml_cached
+    d = load_yaml_cached(p) or {}
+    m = d.get("codepoints") or {}
+    if not isinstance(m, dict):
+        raise ValueError(f"{p} 的 codepoints: 应是映射（另一码位: 指定码位），现在是 {type(m).__name__}")
+    return {str(k): str(v) for k, v in m.items()}
 
 
 def _parse_corpus_pin(v) -> int | None:
