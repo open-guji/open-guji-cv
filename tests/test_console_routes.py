@@ -725,7 +725,7 @@ def test_route_inventory():
     （修前修后预览）；裁决走既有 `POST /api/events`（kind=inverted_band）。113 → 115。
     """
     got = sorted(_endpoints())
-    assert len(got) == 115,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
+    assert len(got) == 118,f"路由数变了：{len(got)} 条\n" + "\n".join(got)
     assert got == sorted(EXPECTED_ROUTES), (
         "路由清单变了\n少了：" + str(sorted(set(EXPECTED_ROUTES) - set(got)))
         + "\n多了：" + str(sorted(set(got) - set(EXPECTED_ROUTES))))
@@ -828,6 +828,8 @@ def test_route_snapshot():
 
 
 EXPECTED_ROUTES = [
+    # 插图块画框（GUJI-737，2026-10-24）
+    "GET /api/figure-region/{book}", "GET /api/figure-region/{book}/{page}", "POST /api/figure-region/{book}/{page}",
     # 控制台接入网站账号体系（2026-09-26）
     "GET /api/auth/me", "GET /api/review/conflicts", "GET /healthz", "GET /api/version",
     "GET /auth/login", "GET /auth/callback", "GET /auth/logout",
