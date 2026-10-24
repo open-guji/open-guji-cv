@@ -34,6 +34,8 @@ def _flags(fl) -> str:
     out = []
     if fl.review:
         out.append("复核改字" if fl.review_fix else ("复核改字(强)" if fl.review_fix_strong else "复核降审"))
+    if fl.review_methods:
+        out.append("复核只跑 " + " → ".join(R.describe(m) for m in fl.review_methods))
     if fl.review_abstain:
         out.append("弃权也降审")
     if fl.pair:

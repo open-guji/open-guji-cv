@@ -56,11 +56,11 @@ def test_status_counts_occurrence_flow_and_label_check(tmp_path):
     t = ry["total"]
     assert (t["occ"], t["admit"], t["review"], t["flow"], t["pick"]) == (3, 2, 1, 2, 1)
     assert (t["checked"], t["mismatch"]) == (1, 1)
-    assert ry["mismatch"] == [{"id": "vol01:1:1:3", "admit": "曰", "label": "日", "channel": "dual"}]
+    assert ry["mismatch"] == [{"id": "vol01:1:1:3", "admit": "曰", "label": "日", "channel": "dual", "drift": False}]
     assert ry["labels"] == {"shape": 1, "central": 1, "multi": 1, "corrected": 1, "cut": 1}
-    assert d["groups"]["zhi"]["total"]["mismatch"] == 1
+    assert d["groups"]["zhi"]["total"]["mismatch"] == 1 and d["groups"]["zhi"]["total"]["drift"] == 0
     assert d["groups"]["kan"]["total"]["checked"] == 1 and "mismatch" not in d["groups"]["kan"]["total"]
 
     pj, pm = S.run([tmp_path / "prod"], tmp_path / "out", labels, cp, tag="t", date="2026-10-24")
     assert pj.name == "2026-10-24-t.json" and json.loads(pj.read_text(encoding="utf-8"))["tag"] == "t"
-    assert "| ry | 日曰 | 不同义 | 3 | 66.7% | 1 | 2 | 50.0% | 1 | 1 |" in pm.read_text(encoding="utf-8")
+    assert "| ry | 日曰 | 不同义 | 3 | 66.7% | 1 | 2 | 50.0% | 1 | 1（0） |" in pm.read_text(encoding="utf-8")
