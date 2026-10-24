@@ -272,3 +272,18 @@ details.s8-absent summary .muted { margin-left: .3rem; }
   border-radius: var(--r); pointer-events: none; }
 .version-banner button { pointer-events: auto; margin-left: .6rem; }
 .sidebar-version { margin-top: auto; padding-top: .6rem; font-size: .7rem; font-family: var(--mono); }
+
+/* 插图块画框（Step9 页，GUJI-737） */
+.figreg-bar { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .6rem; }
+.figreg-body { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+.figreg-img { position: relative; width: min(560px, 100%); cursor: crosshair; user-select: none; }
+.figreg-img img { display: block; width: 100%; height: auto; }
+.figreg-svg { position: absolute; left: 0; top: 0; pointer-events: none; }
+.figreg-col { fill: var(--indigo); fill-opacity: .06; stroke: var(--indigo); stroke-opacity: .25; }
+.figreg-colno { fill: var(--indigo); font-size: 10px; text-anchor: middle; }
+.figreg-box { fill: #d9534f; fill-opacity: .12; stroke: #d9534f; stroke-width: 2; }
+.figreg-box.live { stroke-dasharray: 4 3; }
+.figreg-boxno { fill: #d9534f; font-size: 13px; font-weight: 600; }
+.figreg-list { flex: 1; min-width: 260px; display: flex; flex-direction: column; gap: .5rem; }
+.figreg-item { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.figreg-item input { font: inherit; }

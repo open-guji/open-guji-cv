@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { fetchStep9Reflow, fetchStep9Render } from '../api/step9'
 import { PageRangeSelector, loadSavedPageRange } from '../components/common/PageRangeSelector'
 import { ProgressBoard } from '../components/step9/ProgressBoard'
+import { FigureRegionEditor } from '../components/step9/FigureRegionEditor'
 import type { Step9ReflowResponse, Step9RenderResponse } from '../api/step9'
 
 const BASELINE_KEY_PREFIX = 'guji-step9-baseline:'
@@ -191,6 +192,8 @@ export function Step9Page() {
           ))}
         </div>
       )}
+
+      <FigureRegionEditor book={book} />
     </div>
   )
 }
