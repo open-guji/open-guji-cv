@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- `proof_cycle apply` 用钉住的旧引擎重跑时经 `scripts/zhengli/engine_run.py` 起，读中心库事件跳过旧引擎不认的新种类（如 #485 的 `inverted_band`），并禁止 compact；重跑加 `--stop-on-error`，有一页失败就停，不再带着失败的产物接着导出出单（A32，册006 实跑 seed_admit 150 页全败后仍往下走）。发布脚本，不进任何 Step（PATCH）。
 - 5a 简体参考字兜底（#486，A23，PATCH）：`match_replace` 系通道的参考字落在人工审定的纯简体清单（`config/dicts/simplified_refs.txt`，104 字）里、库 top 是其正字时，取库里的正字，不再把整理本混入的简体（贯/牵 等）放进产物。`clustering.seeding` 在 `seed_admit` 的 `code_deps` 里，`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit；输出会变，不能登记 `code_equiv`。清单文件本身不进指纹，以后改清单不会让产物判过期。
 - seed_admit／align_ref 坐标冲突守卫（常开，无开关，A23）：`align_ref` 产物新增 `coord_conflict_ids`（坐标字≠现役 equal 字的格，全记）；match_ref 不放这些格、落人审（doubt `coord_conflict`）。起因：殿本 vol14 cv0.5.9 的 60:1:5 拱→撰、103:2:7（双行小注两字被切一格）放成「中」。vol14 两版回放每版约多送审 8 格。`seed_admit`、`align_ref` 的 code_hash 变，各册缺省输出会变；冻结册只登记不重跑。
 - 生僻字面板（`rare_panel` 单格／批量入口）找不到识别权重文件时报 `CnnCheckpointMissing`，不再悄悄返回少 CNN／embedding 两路的候选（A23；wheel 安装后引擎仓根错位的同款坑）。只管文件缺席，没装 torch 仍由起跑前自检报；`GUJI_ALLOW_MISSING_DEPS=1` 放行。不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
