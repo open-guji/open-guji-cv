@@ -518,11 +518,11 @@ def cmd_push(a) -> int:
     elif a.sync:
         todo.append(f"guji products pack push {book} --label {pack_label(a.rev)}   # 出单版产物包，落票免重跑")
     if not a.book_text:
-        todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py 升版、开 PR（文本与单子要一起换）"]
+        todo += [f"book-text：同一次导出（{plan['export_dir']}）的 char／cord／norm 用 bump_original.py --pr TBD 升版，提交到 dev（文本与单子要一起换）"]
     if not published:
         todo += ["网站别等每日定时（待审单 21:23 UTC 先于文本 21:43 UTC，每天差 20 分钟）：单子推了就手动跑 kaiyuanguji-web 的 "
                  "proofing-sync.yml（target=production、parts=publish、dry_run=false）；加 --sync 时本脚本自动触发"]
-    todo += ["book-text PR 合了之后跑 kaiyuanguji-web 的 data.yml（flow=text），网站文本才换新",
+    todo += ["book-text 每日合并进 main 之后跑 kaiyuanguji-web 的 data.yml（flow=text），网站文本才换新",
              (f"guji products pack promote {book} --label {label}   # 这一版是正式结果就标 main" if label else
               f"guji products pack push {book} --change <改动名> --main   # 产物包标 main，标签记 rev={a.rev}")]
     if doc_new.get("sprites"):
@@ -816,25 +816,51 @@ def cmd_add_alt(a) -> int:
     return 0
 
 
+def book_text_to_dev(repo: Path) -> None:
+    """book-text 切到最新的 dev（2026-10-24 起流程化小改直接提交 dev，每天合一次 main）。工作区要干净。
+
+    显式 refspec：单分支克隆里 `git fetch origin dev` 不更新 origin/dev。"""
+    if run(["git", "status", "--porcelain", "--untracked-files=no"], cwd=repo).stdout.strip():
+        sys.exit(f"✗ book-text（{repo}）工作区有未提交的改动，先处理")
+    for cmd in (["git", "fetch", "-q", "origin", "+refs/heads/dev:refs/remotes/origin/dev"],
+                ["git", "checkout", "-q", "-B", "dev", "origin/dev"]):
+        if run(cmd, cwd=repo).returncode:
+            sys.exit(f"✗ book-text 切 dev 失败：{' '.join(cmd)}")
+
+
+def push_book_text_dev(repo: Path, tries: int = 4) -> bool:
+    """推 dev；别的会话先推了就 rebase 再推（改的是各自的册，一般不冲突）。"""
+    for _ in range(tries):
+        if run(["git", "push", "-q", "origin", "HEAD:refs/heads/dev"], cwd=repo).returncode == 0:
+            return True
+        if run(["git", "pull", "-q", "--rebase", "origin", "dev"], cwd=repo).returncode:
+            run(["git", "rebase", "--abort"], cwd=repo)
+            return False
+    return False
+
+
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
-    """同一次导出的 char／cord／norm 拷进 book-text、文本线升 minor、重建索引、本地校验；提交到新分支（PR 另开）。"""
+    """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
+
+    2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，CHANGES 的 PR 列写 #TBD，
+    每日合并（book-text `scripts/daily_merge.py`）时重建索引、换成当天合并 PR 的号。"""
+    book_text_to_dev(repo)
     d = book_text_dir(repo, plan["text_id"])
     ch = plan["chapter"]
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
-    br = f"republish-{plan['rev']}"
-    for cmd in (["git", "checkout", "-B", br],
-                [sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
+    for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
                  "--chapter", ch, "--note", note, "--pr", "TBD"],
-                [sys.executable, "scripts/book-text/build_texts_index.py", "--root", "."],
-                [sys.executable, "scripts/local_check.py"],
-                ["git", "add", "-A", str(d), "index/texts"],
+                [sys.executable, "scripts/local_check.py", "--dev"],
+                ["git", "add", "-A", str(d)],
                 ["git", "commit", "-qm", f"{note}"]):
         if run(cmd, cwd=repo).returncode:
             sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
-    print(f"book-text 分支 {br} 已提交：推上去开 PR（CHANGES 里 #TBD 换成 PR 号），合了再 push 待审单")
+    if not push_book_text_dev(repo):
+        sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
+    print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main，CHANGES 的 #TBD 届时换成 PR 号")
 
 
 def _img_key(img):

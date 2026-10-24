@@ -75,7 +75,7 @@ def test_apply_dry_run_lists_every_step(tmp_path, monkeypatch):
     assert pc.main(["apply", "--book", "vol06", "-w", str(ws), "--plan", str(p), "--hash", plan["hash"],
                     "--book-text", str(tmp_path / "bt"), "--dry-run"]) == 0
     log = (p.parent / "执行记录.md").read_text(encoding="utf-8")
-    for step in ("写人裁并消费", "推库", "取出单版产物包到沙箱", "重跑 2 页到 seed_admit", "导出", "出新单 006-r4", "推 book-text 分支"):
+    for step in ("写人裁并消费", "推库", "取出单版产物包到沙箱", "重跑 2 页到 seed_admit", "导出", "出新单 006-r4", "文本升版已推到 dev"):
         assert step in log, step
     assert "--held-file" in log and "--pages 3,12" in log and "republish.py issue" in log
 

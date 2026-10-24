@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""一轮精校：线上单的票 → 人裁事件 → 受影响页重跑 → book-text 升版 PR → 新单上线（GUJI-730 P1-2）。
+"""一轮精校：线上单的票 → 人裁事件 → 受影响页重跑 → book-text 升版（dev）→ 新单上线（GUJI-730 P1-2）。
 
 第四、五册这一轮要三四个会话、三次「推库」手工串：落票、重跑、升版、重出单、传图、发网站各做各的。
 用户 10-22 定：流程化操作不再逐次批准，靠检查门兜底。本脚本把一轮串成两步，中间只隔一份计划文件：
@@ -14,8 +14,8 @@
              或 --allow-cv-drift 明说照跑）；在沙箱产物根（包解出来的那份）重跑有票的页到 seed_admit
           4. 导出 char／cord（同 republish from-pack）
           5. `republish.py prep` → `push --yes --sync --book-text`：过出单门、换单门，存新单的产物包，
-             升 book-text minor 并提交到分支，推库后触发网站 proofing-sync
-          6. 推 book-text 分支、开草稿 PR（CHANGES 的 #TBD 换成 PR 号）
+             升 book-text minor 并提交、推到 dev，推库后触发网站 proofing-sync
+          6. book-text 升版提交到 dev（不开 PR；每日合并时 CHANGES 的 #TBD 换成当天合并 PR 的号）
           每步结果写进 `执行记录.md`；中途停了可以改正后重跑 apply（write 有幂等键，不会重复写）。
 
   python scripts/zhengli/proof_cycle.py plan  --book vol04 -w $WS [--reviewer sheldon] [--cord <出单版 cord>]
@@ -144,7 +144,7 @@ def cmd_plan(a) -> int:
           f"- 锚：{'出单版产物包 ' + label + '（cv ' + str(plan['pack_cv_version']) + '，' + str(plan['pack_cv_commit'])[:9] + '）' if man else '对 --cord ' + str(a.cord)}",
           f"- 重跑{'全册' if plan['full_book'] else f'有票的 {len(pages)} 页'}到 seed_admit"
           f"（引擎 {'本仓' if not engine else engine + ' @ ' + str(plan['engine_commit'])[:9]}），导出，"
-          f"人裁改字进文本、机器改判退回旧字进复审，升 book-text minor（草稿 PR），重出单并只发这一章",
+          f"人裁改字进文本、机器改判退回旧字进复审，升 book-text minor（提交到 dev），重出单并只发这一章",
           f"- 挂起里回网站再看 {plan['recheck']} 格（recheck.tsv）",
           f"- 计划哈希 `{plan['hash']}`", "",
           f"执行：`python scripts/zhengli/proof_cycle.py apply --book {book} -w {ws} --plan {out / 'plan.json'} "
@@ -248,7 +248,9 @@ def cmd_apply(a) -> int:
                                          "--to", "seed_admit", "--stop-on-error", "-w", ws], cwd=engine, env=env_eng):
         return 1
 
-    # 4. 导出
+    # 4. 导出（book-text 先切到最新 dev：现文、文本版本都以 dev 为准，2026-10-24 起流程化小改直接提交 dev）
+    if not a.dry_run:
+        rp.book_text_to_dev(Path(a.book_text))
     tv = rp.online_text_version(Path(a.book_text), plan["text_id"], plan["chapter"])
     export = out / "export"
     cmd = [sys.executable, CV / "scripts/export_guji_format.py", "--products", sandbox, "--book", book,
@@ -289,43 +291,14 @@ def cmd_apply(a) -> int:
         issue += ["--cv-commit", plan["pack_cv_commit"]]
     if plan["pack_cv_version"]:
         issue += ["--cv-version", plan["pack_cv_version"]]
-    # 退出码 2＝单子已推库、网站已发布，只是读者侧冒烟没过：文本照样开 PR（单子和文本要一起换），冒烟另查
+    # 退出码 2＝单子已推库、网站已发布、文本已推 dev，只是读者侧冒烟没过：记 ⚠ 照常收尾，冒烟另查
     if not log.step(f"出新单 {new_rev}（复审 {len(rows)} 格）并上线", issue, ok_codes=(0, 2), cwd=CV, env=env_sb):
         return 1
 
-    # 6. book-text 草稿 PR
-    br = f"republish-{new_rev}"
-    if not log.step("推 book-text 分支", ["git", "push", "-u", "origin", br], cwd=a.book_text):
-        return 1
-    if a.dry_run:
-        log.note("[演练] 开 book-text 草稿 PR、CHANGES 的 #TBD 换成 PR 号")
-        return 0
-    pr = open_book_text_pr(Path(a.book_text), br, note, plan, new_rev)
-    log.note(f"book-text 草稿 PR #{pr}" if pr else "⚠ book-text PR 没开成，分支已推，手动开")
+    # 6. book-text：republish issue 已把文本升版提交并推到 dev（不开 PR），每日合并进 main
+    log.note(f"book-text：文本升版已推到 dev，每日合并（洛杉矶 03:30）进 main")
     log.note(f"完成：写 {plan['ready']} 条、新单 {new_rev} 已推并触发网站发布")
     return 0
-
-
-def open_book_text_pr(repo: Path, br: str, title: str, plan: dict, new_rev: str) -> int | None:
-    """用 gh api 开草稿 PR（GraphQL 在会话里不可用），再把 CHANGES 的 #TBD 换成 PR 号补一个提交。"""
-    body = (f"{title}\n\n- 人裁批次 `{plan['batch']}`：写 {plan['ready']} 条、挂起 {plan['held']}、跳过 {plan['skipped']}\n"
-            f"- 锚：{plan['pack'] or plan['cord']}\n- 重跑页：{', '.join(map(str, plan['pages']))}\n"
-            f"- 新待审单：{new_rev}\n- `scripts/local_check.py` 已在 republish push 里跑过\n")
-    p = subprocess.run(["gh", "api", "repos/open-guji/book-text/pulls", "-f", "base=main", "-f", f"head={br}",
-                        "-F", "draft=true", "-f", f"title={title}", "-f", f"body={body}", "--jq", ".number"],
-                       capture_output=True, text=True)
-    if p.returncode:
-        print(p.stderr[-2000:])
-        return None
-    n = int(p.stdout.strip())
-    hits = subprocess.run(["git", "grep", "-l", "#TBD", "--", "*CHANGES.md"], cwd=repo, capture_output=True, text=True).stdout.split()
-    if hits:
-        for f in hits:
-            fp = repo / f
-            fp.write_text(fp.read_text(encoding="utf-8").replace("#TBD", f"#{n}"), encoding="utf-8")
-        for cmd in (["git", "add", *hits], ["git", "commit", "-qm", f"CHANGES：PR 号 #{n}"], ["git", "push", "-q"]):
-            subprocess.run(cmd, cwd=repo)
-    return n
 
 
 def engine_head(engine: Path) -> str:
@@ -438,7 +411,7 @@ def main(argv=None) -> int:
     p.add_argument("-w", "--workspace", required=True)
     p.add_argument("--plan", required=True)
     p.add_argument("--hash", required=True, help="计划哈希（计划.md 里有）")
-    p.add_argument("--book-text", required=True, help="book-text 仓（main 上、干净）")
+    p.add_argument("--book-text", required=True, help="book-text 仓（工作区干净；apply 会切到最新 dev）")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p = sp.add_parser("audit", help="只读：一张单的 G0 票账（写入／一致／看不出／挂起／未落），有未落退出码 1")
