@@ -62,6 +62,8 @@ class IdsSpec:
     size: int = 32              # 整字版：模板与在线字块归一后的边长（模板库里也写一份）
     clean: bool = False         # 整字版：判之前先去邻格碎墨（`ids_whole.clean_patch`）；模板建库时须同样清理（2026-10-22）
     aspect: tuple = ()          # 整字版：字块宽高比须在 (lo, hi) 内，否则弃权 abstain:aspect（连进邻字的块）
+    give: str = ""              # 整字版：非空＝只许给这几个字；判成其余成员也弃权 abstain:not_given（成员只当入口，库本来就认得的字不由本组给；
+                                # 广宀族只给 賔賓，2026-10-24）
     generic: bool = False       # True：通用判法（`ids_generic`）：切法与判别叶子由成员 IDS 导出（`ids_plan`），缺省形状先验折线切、
                                 # 给了 `unet` 改用 U-Net；模板与在线格同一切法切，最近邻；frame/orient/prior/which/by_form 不用（2026-10-22）
 
@@ -187,6 +189,23 @@ SPECS: dict[str, IdsSpec] = {
     "shang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
     "gai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
     "ba": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.5, 1.0, 0.0, 1.0), lam=1.0, size=48, clean=True),
+    # 凖準、宻密（2026-10-24，长尾异体对）：模板同上（已放行格＋人裁，看图剔出码位错的格），建库 build_shape_pair.py。
+    # 凖準 只看左半（冫 点＋长提斜穿／氵 三笔竖排），48×48：按册留出不设门槛也 0 错；宻密 整字 48×48（中部 㐅 交叉／必 带两点）：同样 0 错。门槛沿用 0.5。
+    "zhun": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.0, 0.5, 0.0, 1.0), lam=1.0, size=48, clean=True),
+    "mi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 广宀族 廣實賔賓宸（2026-10-24，A24）：送审的「蕤賔」賔 库里没有字形，被排成 實廣墳須。整字 HOG 一对多（32×32，λ=1），
+    #   类＝成员＋陪衬 17 字（寶寳寅賞墳須煩裒盧資質贋寫竇賁責貴）＋「〇」其他池（35 字），每册每字 ≤3（賔賓 全收），
+    #   模板＝殿本 vol04–20 放行格＋人裁＋送审格看图补标（research/m7/glyph_expand/build_guang.py）。只给 賔／賓（`give`）：
+    #   按册留出 賔41／賓50，判成 賔賓 的错例最高 0.16（寳→賔），取 0.3 → 给 79（賔36 賓43）、错 0；陪衬与其他池判成 實廣 的不给字。
+    "guang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="hog", lam=1.0, size=32, clean=True, give="賔賓"),
+    # 部首族（2026-10-24，A24「门族、辶族」）：一对多整字 HOG，模板＝殿本 vol04–20 已放行格（无疑问，每册每字 ≤4、每字 ≤30），
+    #   组外常见陪衬字（刪 圖 固 同 國…）也进库，判成它们＝弃权（research/m7/glyph_expand/build_family.py）。补放还须与整理本同字（`lift_ref_agree`）。
+    #   門族 整字 48×48，λ=1：按册留出组员格 429，不设门槛错例最大 0.56（閑→閔），取 0.62 → 给字 269、0 错。
+    #   辶族 取右上框 x0.25–1、y0–0.8（避开走之底，整字版 邊→選 0.84 高把握错），48×48，λ=1：组员格 870，错例最大 0.59（邊→選），取 0.65 → 给字约 355、0 错。
+    "men": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.62, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
+                   aspect=(0.45, 2.2)),
+    "chuo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.65, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
+                    size=48, clean=True, aspect=(0.45, 2.2)),
 }
 
 
@@ -278,6 +297,8 @@ def fingerprint(groups) -> str:
         d = asdict(SPECS[g])
         if not d["generic"]:
             d.pop("generic")            # 新字段缺省值不进哈希：不用通用判法的组指纹不变
+        if not d["give"]:
+            d.pop("give")
         spec = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
         fine = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_fine.tsv"
         parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else "")
@@ -599,6 +620,8 @@ def _judge_whole(gray, bank: dict, spec: IdsSpec, members) -> GroupVerdict:
         return GroupVerdict(None, why="abstain:blank", via="ids", extra=extra)
     if best not in members:
         return GroupVerdict(None, why="abstain:slot", via="ids", extra=extra)
+    if spec.give and best not in spec.give:
+        return GroupVerdict(None, why="abstain:not_given", via="ids", extra=extra)
     if m < spec.min_margin:
         return GroupVerdict(None, conf=m, why="abstain:low_margin", via="ids", extra=extra)
     n = len(bank.get(best) or ())
