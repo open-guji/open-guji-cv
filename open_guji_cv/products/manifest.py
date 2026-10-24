@@ -53,6 +53,10 @@ class ManifestEntry:
     cv_override: str | None = None
     """册钉了版本而装的不是它、护栏放行时的理由（`--allow-cv-mismatch --why …`，或 `exp-branch:<分支>`）。
     不进指纹；没过护栏或没钉版本的是 None。"""
+    param_parts: dict[str, str] | None = None
+    """跑这一页时参数逐字段的短哈希（`core.engine.param_parts`，2026-10-24）。不进指纹（指纹只认 `params_hash`），
+    只给 `stale_reason` 说清「参数变了」是哪几个字段，close-check 1a 据此把共享输入（语料、证人、格位表、字组……）
+    被别处更新和本册自己的变动分开报。老条目是 None。"""
     db_rev: str | None = None
     """跑这一页时本机数据目录对应的中心库版本 `<工作区>@<分支>:<rev>`（`core.workspace.central_rev`）。
     不进指纹；字形库、人裁的内容版本靠它追（`glyph_pin` 只钉指纹）。老条目是 None。"""

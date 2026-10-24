@@ -183,6 +183,13 @@ def params_hash(params: BaseModel, soft: tuple[str, ...] = (),
                                      ensure_ascii=False).encode()).hexdigest()[:16]
 
 
+def param_parts(params: BaseModel, soft: tuple[str, ...] = (), path: tuple[str, ...] = ()) -> dict[str, str]:
+    """参数逐字段的短哈希（剔除口径同 `params_hash`）。记进 manifest，不进指纹；`stale_reason` 用它点名变了的字段。"""
+    d = params.model_dump(mode="json")
+    return {k: hashlib.sha256(json.dumps(v, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
+            for k, v in sorted(d.items()) if k not in soft and k not in path}
+
+
 def soft_values(step: Step, params: BaseModel) -> dict[str, str] | None:
     """这次跑的软参数取值（记进 manifest，`status` 比漂移用）；无软参数 → None。"""
     if not step.spec.soft_params:
@@ -461,6 +468,12 @@ class Engine:
                     if entry.book.get(k) != now.get(k)]
             return "册配置 " + "，".join(diff)
         if entry.params_hash != ph:
+            if entry.param_parts is not None:
+                now_parts = param_parts(self._params(step), step.spec.soft_params, step.spec.path_params)
+                diff = sorted(k for k in {*now_parts, *entry.param_parts}
+                              if now_parts.get(k) != entry.param_parts.get(k))
+                if diff:
+                    return "参数变了：" + "、".join(diff)
             return "参数变了"
         if (entry.upstream or {}) != (ups or {}):
             return "上游产物变了"
@@ -659,6 +672,8 @@ class Engine:
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
                                            self_hash=self.self_hash(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
+                                           param_parts=param_parts(self._params(step), step.spec.soft_params,
+                                                                   step.spec.path_params),
                                            book=book_dep_values(step, self.book)))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
@@ -768,6 +783,8 @@ class Engine:
                                            code_rev=self._rev, **self._cv, elapsed=round(elapsed, 3),
                                            self_hash=self.self_hash(step),
                                            soft=soft_values(step, self.ctx.params_for(step)),
+                                           param_parts=param_parts(self._params(step), step.spec.soft_params,
+                                                                   step.spec.path_params),
                                            book=book_dep_values(step, self.book)))
                 self.log(f"{sid} p{pg}: 完成 {elapsed:.2f}s")
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
