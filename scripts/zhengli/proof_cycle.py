@@ -173,15 +173,16 @@ class Log:
         self.path, self.dry = path, dry
         self.lines = [f"# 执行记录 {dt.datetime.now(dt.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}" + ("（演练）" if dry else ""), ""]
 
-    def step(self, name: str, cmd, **kw) -> bool:
+    def step(self, name: str, cmd, ok_codes: tuple[int, ...] = (0,), **kw) -> bool:
         cmd = [str(c) for c in cmd]
         if self.dry:
             self.lines.append(f"- [演练] {name}：`{' '.join(cmd)}`")
             print(f"[演练] {name}: {' '.join(cmd)}")
             ok = True
         else:
-            ok = rp.run(cmd, **kw).returncode == 0
-            self.lines.append(f"- {'✓' if ok else '✗'} {name}")
+            rc = rp.run(cmd, **kw).returncode
+            ok = rc in ok_codes
+            self.lines.append(f"- {'✓' if rc == 0 else ('⚠' if ok else '✗')} {name}" + (f"（退出码 {rc}）" if rc else ""))
         self.path.write_text("\n".join(self.lines) + "\n", encoding="utf-8")
         return ok
 
@@ -288,7 +289,8 @@ def cmd_apply(a) -> int:
         issue += ["--cv-commit", plan["pack_cv_commit"]]
     if plan["pack_cv_version"]:
         issue += ["--cv-version", plan["pack_cv_version"]]
-    if not log.step(f"出新单 {new_rev}（复审 {len(rows)} 格）并上线", issue, cwd=CV, env=env_sb):
+    # 退出码 2＝单子已推库、网站已发布，只是读者侧冒烟没过：文本照样开 PR（单子和文本要一起换），冒烟另查
+    if not log.step(f"出新单 {new_rev}（复审 {len(rows)} 格）并上线", issue, ok_codes=(0, 2), cwd=CV, env=env_sb):
         return 1
 
     # 6. book-text 草稿 PR

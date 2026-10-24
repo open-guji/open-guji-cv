@@ -4,7 +4,7 @@
 为什么：每加一个字组就多一串扁平参数、一个 `_xxx_pass`、一套证据键／疑问码，`seed_admit.py` 越来越乱，
 而且每改一次都让十册 `seed_admit` 过期。形近字组的统一接口（`open_guji_cv/groups/`）已经有了：
 **新字组只许在 `groups/registry.py` 的 `GROUPS` 里登记＋配后端**，不许再往 `SeedAdmitParams` 加参数。
-设计与分期见 `doc/design/形近字组统一接口设计.md`；17 个旧参数曾冻结在下面的白名单里，S6（2026-10-18）已全部删除。
+设计与分期见 `doc/字组/README.md`；17 个旧参数曾冻结在下面的白名单里，S6（2026-10-18）已全部删除。
 
 规则（和 `tests/test_architecture.py` 同一种棘轮）：
 1. `SeedAdmitParams` 里名字属于某个字组的字段，必须在 `ALLOWED_LEGACY` 里——新增一个就红；
@@ -47,7 +47,7 @@ def test_no_new_group_params_in_seed_admit():
     assert not new, (
         "往 SeedAdmitParams 加了新的字组参数：" + "、".join(new) + "。\n"
         "新字组请在 open_guji_cv/groups/registry.py 的 GROUPS 里登记（成员＋后端＋策略），不要再加扁平参数、"
-        "不要再写 _xxx_pass。见 doc/design/形近字组统一接口设计.md。")
+        "不要再写 _xxx_pass。见 doc/字组/README.md。")
 
 
 def test_allowlist_has_no_stale_entries():
