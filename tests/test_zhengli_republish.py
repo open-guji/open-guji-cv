@@ -65,6 +65,7 @@ def _setup(tmp_path):
 def test_prep_then_push(tmp_path, monkeypatch, capsys):
     ws, export, online = _setup(tmp_path)
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)                                       # 换单门别去连网站 KV
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
