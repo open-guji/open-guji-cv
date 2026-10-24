@@ -1,12 +1,13 @@
 """按刻形拆判的异体对（2026-10-24，sheldon「尙尚、盖蓋葢…按 IDS 拆判」）：产物里已放行格（放行字当标签）＋人裁 → 整字 HOG 模板库，按册留出评测。
 
-用法：python build_shape_pair.py <组 id> <原图根（<册>/<页>.png）> <数据目录（含 output/glyph_store，取人裁）> <产物根…> [--write]
+用法：python build_shape_pair.py <组 id> <原图根（<册>/<页>.png）> <数据目录（含 output/glyph_store，取人裁）> <产物根…> [--write] [--char-patch]
       [--dataset=<dataset>/char-groups/variant --by=claude-<线程> --date=YYYY-MM-DD]（训练集落 dataset）
 产物根下是 `<册>/seed_admit/p*.json` 与 `<册>/cell_shrink/p*.json`（`guji products pack fetch` 的布局）。
 
 标签：已放行格的放行字（人裁格与印章通道不收），每册每字最多 `PER_VOL` 格；人裁刻形；`EXTRA` 是看图补的格（如送审格里的 盖）。
 放行字是跟整理本或台账走的，混着码位错的格：先做一轮按册留出，与标签不一致的格逐格看过图（`DROP` 里的是看图确认标签错或看不清的），
 不进模板，再按册留出评一遍，0 错门槛 ×1.1 进 `ids_online.SPECS`。
+`--char-patch`：字块改用线上同款 char_patch（工作区 GUJI_WORKSPACE 要有该册产物与原图；kou 起用，早先的组是原图按框裁）。
 """
 from __future__ import annotations
 
@@ -24,6 +25,8 @@ from open_guji_cv.core.anchor import crop_patch
 from open_guji_cv.groups import freq, ids_online as O, ids_whole
 
 PER_VOL = 12      # 每册每字最多收几格（模板库 <1MB）
+#: 组 → 放行格每字总共最多收几格（人裁与看图补的格不限）：口框族 國圖固 放行格多、64×64 模板大，不封顶模板库 4MB
+CAP = {"kou": 30}
 #: 组 → (字, 看图补的格 {id: 字}, 看图剔出的格)
 PLAN = {
     # 尙／尚：上部 小（左撇外撇）对 ⺌（两点内收）。首轮按册留出与放行字不一致的 12 格看图：10 格是放行字码位错（按刻形改标签不如直接剔），
@@ -45,6 +48,10 @@ PLAN = {
     "zhun": ("凖準", {}, {"vol05:177:6:17", "vol20:100:1:6", "vol17:92:1:8"}),
     # 宻／密：中部 㐅 交叉（无点）对 必（两侧带点）。放行成 密、刻形是 㐅 的 2 格（vol17:139:4:15、vol17:70:4:21）剔出，vol20:104:3:6 墨团看不清剔出。
     "mi": ("宻密", {}, {"vol17:139:4:15", "vol17:70:4:21", "vol20:104:3:6"}),
+    # 口框族 國圖圍園固圓圜（形近不同义，框内部件不同）；圃 圈 囿 进库当陪衬。團 殿本没有放行格，不进库。
+    # 首轮按册留出与标签不一致的格看图：vol12:41:9:14 放行 圃、刻形是 園（标签错）；vol19:65:2:12、vol13:223:6:21、vol11:86:2:21、
+    # vol20:224:1:21 字块切坏（连进邻字或缺半边）。其余不一致的是真判错（圜↔園、圓↔圖），留着定门槛。
+    "kou": ("國圖圍園固圓圜圃圈囿", {}, {"vol12:41:9:14", "vol19:65:2:12", "vol13:223:6:21", "vol11:86:2:21", "vol20:224:1:21"}),
 }
 
 
@@ -86,7 +93,29 @@ def _page(imgs: Path, book: str, page: int, _c={}):
     return _c[k]
 
 
-def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set):
+def char_patch_fn():
+    """线上同款字块（`ctx.image("char_patch")`，列图＋折线缝）：要工作区（GUJI_WORKSPACE）里有该册产物与原图。→ fn(册, 格 id)。"""
+    from open_guji_cv import steps as _s  # noqa: F401
+    from open_guji_cv.core.book import load_book
+    from open_guji_cv.core.step import RunContext
+    from open_guji_cv.products.cache import ImageCache
+    from open_guji_cv.products.store import ProductStore
+    cache, ctxs = ImageCache(), {}
+
+    def fn(book: str, cid: str):
+        _, p, c, s = cid.split(":")
+        sub = s[-1] if s[-1] in "ab" else ""
+        if book not in ctxs:
+            ctxs[book] = RunContext(load_book(book), ProductStore(), cache, log=lambda _: None)
+        try:
+            return ctxs[book].image("char_patch", f"p{int(p):04d}c{int(c):02d}s{s.rstrip('ab')}{sub}")
+        except Exception:   # noqa: BLE001 —— 再生不出的格不进库
+            return None
+    return fn
+
+
+def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set, group: str = "", patch_fn=None):
+    """`patch_fn(册, 格 id)` 给了就用它取字块（线上同款 char_patch，见 `char_patch_fn`），否则按 cell_shrink 框从原图裁。"""
     random.seed(0)
     want: dict = {}                                   # id → (字, 来源)
     per: Counter = Counter()
@@ -103,6 +132,15 @@ def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set):
                 if per[(book, r["char"])] < PER_VOL and r["id"] not in drop:
                     per[(book, r["char"])] += 1
                     want[r["id"]] = (r["char"], r["channel"])
+    cap = CAP.get(group)
+    if cap:
+        byc: dict = {}
+        for k, (f, _) in sorted(want.items()):
+            byc.setdefault(f, []).append(k)
+        for f, ks in byc.items():
+            if len(ks) > cap:
+                for k in set(ks) - set(random.sample(ks, cap)):
+                    del want[k]
     for k, f in freq.human_shapes(data).items():
         if f in chars and k not in drop:
             want[k] = (f, "human")
@@ -120,7 +158,9 @@ def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set):
             continue
         box = {c["id"]: c["bbox_page"] for col in json.load(open(sh, encoding="utf-8"))["char_index"]["columns"] for c in col["chars"]}
         for k, (f, src) in ks:
-            g = crop_patch(img, tuple(box[k])) if k in box else None
+            if k not in box:
+                continue
+            g = patch_fn(b, k) if patch_fn is not None else crop_patch(img, tuple(box[k]))
             if g is not None:
                 cells.append((f, ids_whole.clean_patch(g), b, k))
     return cells
@@ -147,7 +187,7 @@ if __name__ == "__main__":
     prods = [a for a in sys.argv[4:] if not a.startswith("--")]
     chars, extra, drop = PLAN[g]
     sp = O.SPECS[g]
-    cells = gather(prods, imgs, data, chars, extra, drop)
+    cells = gather(prods, imgs, data, chars, extra, drop, g, char_patch_fn() if "--char-patch" in sys.argv else None)
     print(g, "cells", Counter(c[0] for c in cells), "册", len({c[2] for c in cells}))
     res = loo(cells, sp)
     wrong = sorted(((m, f, ch, k) for f, ch, m, k in res if ch and ch != f), reverse=True)

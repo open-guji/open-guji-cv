@@ -127,8 +127,8 @@ def _g2(gid: str) -> tuple:
     return (_img(gid),) if gid in GLYPH2 else ()
 
 
-#: 文意组与字形组共字（入口按分差内候选选组，点名靠前的先试）：會（zh／qin）、問間（wj／men）、遺還（yh／chuo）。
-_GLYPH_OVERLAPS = {"zh": ("qin",), "wj": ("men",), "yh": ("chuo",)}
+#: 文意组与字形组共字（入口按分差内候选选组，点名靠前的先试）：會（zh／qin）、問間（wj／men）、遺還（yh／chuo）、圓圖（yt／kou）。
+_GLYPH_OVERLAPS = {"zh": ("qin",), "wj": ("men",), "yh": ("chuo",), "yt": ("kou",)}
 
 GROUPS: dict[str, GroupSpec] = {
     "jys": GroupSpec(
@@ -184,7 +184,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ())),
+        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ())), overlaps=_GLYPH_OVERLAPS.get(gid, ()),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
                                ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},
@@ -318,6 +318,16 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ids",), config_dir="config/groups/qin", overlaps=("zh",),
         flow=FlowSpec((_img("qin"),), combine="first", tolerate=frozenset("合愈含")),
         note="按整字字形判（一对多岭回归；曾 合 愈 也进库，判成它们＝弃权）；會 与 zh 共用，入口按分差内候选选组；只补放。"),
+    # 口框族（2026-10-24，A24 铺开计划 #2）：國圖圍園固圓圜 都是 囗 框，差在框内部件，形近不同义但字形分得开（库形常在几字间判不定，
+    # vol11–20 形近护栏送审约 13 格）。框内取块（x 0.12–0.88、y 0.1–0.9）整字 HOG 一对多；圃 圈 囿 进库当陪衬（判成它们＝弃权）。
+    # 團 殿本 vol04–20 没有一格放行，建不了模板，不进组（整理本作 團 的格进不了流程，照旧人审）。
+    # 字形单独判不稳（按册留出 2,996 格里清楚的 國 偶有高把握判成 圓），所以补放还要整理本（缺时坐标对位字）同字（`lift_ref_agree`）。
+    # 与 yt（圓圖，文意）共用 圓 圖：册 group_flow 里 yt 排在前面，只有 圓圖 两个候选的格仍归 yt 按文意判。只补放。
+    "kou": GroupSpec(
+        id="kou", name="國圖圍園固圓圜", members=frozenset("國圖圍園固圓圜"), backends=(),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/kou", overlaps=("yt",),
+        flow=FlowSpec((_img("kou"),), combine="first", tolerate=frozenset("圃圈囿"), lift_ref_agree=True),
+        note="口框族：按框内字形判（一对多岭回归；圃 圈 囿 也进库，判成它们＝弃权），须与整理本同字才补放；与 yt 共用 圓 圖，册里 yt 排前；只补放。"),
     # 按刻形拆判的异体对（2026-10-24，sheldon「异体看刻形，按 IDS 拆判」）：两形殿本都常见、刻形分得开，整理本与台账给的码位常与刻形不符。
     # 整字 HOG＋岭回归，模板＝殿本 vol04–20 已放行格（去掉看图确认码位错的格），按册留出 0 错（research/m7/glyph_expand/build_shape_pair.py）。
     # 复核时把握够就按刻形改码位（`review_fix`），不够不动。
