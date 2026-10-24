@@ -286,3 +286,31 @@ def test_wait_publish_skips_null_run(monkeypatch):
                         lambda *a, **k: type("P", (), {"returncode": 0, "stdout": next(outs)})())
     monkeypatch.setattr("time.sleep", lambda s: None)
     assert rp.wait_publish("2026-10-24T00:00:00Z", timeout_s=60, poll_s=0) == "success"
+
+
+def test_book_text_dev_sync_and_push(tmp_path):
+    """book-text 切到最新 dev、提交后推 dev；别人先推了就 rebase 再推（2026-10-24 起流程化小改直接提交 dev）。"""
+    import subprocess as sp
+
+    def git(cwd, *a):
+        sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=cwd, check=True, capture_output=True)
+
+    remote = tmp_path / "remote.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(remote))
+    a, b = tmp_path / "a", tmp_path / "b"
+    for d in (a, b):
+        git(tmp_path, "clone", "-q", "--single-branch", str(remote), str(d))
+    (a / "x.txt").write_text("0\n")
+    git(a, "add", "x.txt"); git(a, "commit", "-qm", "init"); git(a, "push", "-q", "origin", "HEAD:main", "HEAD:dev")
+
+    rp.book_text_to_dev(b)                                   # 单分支克隆也能拿到 origin/dev
+    assert (b / "x.txt").read_text() == "0\n"
+    (a / "y.txt").write_text("a\n"); git(a, "add", "y.txt"); git(a, "commit", "-qm", "a"); git(a, "push", "-q", "origin", "HEAD:dev")
+    (b / "z.txt").write_text("b\n"); git(b, "add", "z.txt"); git(b, "commit", "-qm", "b")
+    assert rp.push_book_text_dev(b)                          # 先被拒，rebase 后推上
+    log = sp.run(["git", "log", "--format=%s", "dev"], cwd=remote, capture_output=True, text=True).stdout.split()
+    assert log[:3] == ["b", "a", "init"]
+
+    (b / "x.txt").write_text("dirty\n")
+    with pytest.raises(SystemExit):
+        rp.book_text_to_dev(b)                               # 工作区不干净就停

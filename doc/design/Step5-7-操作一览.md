@@ -50,7 +50,7 @@ Step5 三路（原四路，5-c 已删）互相独立、并行收集证据；Step
 | 稀见 | `rare_ref`、`rare_cp_ctx_review` | 5-b×整理本放行；罕用码位×context 落审 |
 
 ### 闸（拦放行或转人审）
-遮挡/印章（`occluded_gate`，缺省开）、非字（`nonchar_gate`）、矮格（`runt_cell_review`）、过切提示（`oversplit_gate`）、context 乱码/空白/窄格/单笔画等护栏、`ref_lib_variant_guard`、`variant_indirect_guard`、铁证的整理本互证与形近闸、`shadow_veto`、`approx_gate`、`always_review`（己已巳不采信字形/OCR 通道）。
+遮挡/印章（`occluded_gate`，缺省开）、context 乱码/空白/窄格/单笔画等护栏、`ref_lib_variant_guard`、`variant_indirect_guard`、铁证的整理本互证与形近闸、`shadow_veto`、`approx_gate`、`always_review`（己已巳不采信字形/OCR 通道）。
 
 ### 产物与回流
 落成 numeric 产物，供审查页与 `glyphdb_admit` 消费；人裁事件（Step8）回流后会让 Step7 对应格判过期重算。
