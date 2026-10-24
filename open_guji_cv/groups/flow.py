@@ -16,6 +16,8 @@
   `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
 
 - 复核时组声明了 `review_fix_strong`：文意答案 strong（L2 表多遍都 high 同字）且方法之间一致 → 照 `review_fix` 改字，否则照常降审。
+- 组声明了 `lift_ref_agree`（部首族）：补放的字须与整理本字（缺位时用坐标对位字）同字，否则留人审
+  （`group_flow_ref_dissent`／`group_flow_ref_missing`）。
 - 组声明了 `pair`（己已巳：干支「己巳」）：读序紧挨的两格都进了本组 → 前一格给 `pair[0]`、后一格给 `pair[1]`，不跑方法
   （留痕 `ctx:pair`）；三格以上连着照常跑方法。
 
@@ -288,6 +290,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
                   and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)):
                 ch, why = None, "ref_dissent"   # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）
+            elif ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_agree and norm(
+                    rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch):
+                ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族：字形与整理本两路一致才补放
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):

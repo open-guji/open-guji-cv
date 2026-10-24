@@ -198,6 +198,14 @@ SPECS: dict[str, IdsSpec] = {
     #   模板＝殿本 vol04–20 放行格＋人裁＋送审格看图补标（research/m7/glyph_expand/build_guang.py）。只给 賔／賓（`give`）：
     #   按册留出 賔41／賓50，判成 賔賓 的错例最高 0.16（寳→賔），取 0.3 → 给 79（賔36 賓43）、错 0；陪衬与其他池判成 實廣 的不给字。
     "guang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="hog", lam=1.0, size=32, clean=True, give="賔賓"),
+    # 部首族（2026-10-24，A24「门族、辶族」）：一对多整字 HOG，模板＝殿本 vol04–20 已放行格（无疑问，每册每字 ≤4、每字 ≤30），
+    #   组外常见陪衬字（刪 圖 固 同 國…）也进库，判成它们＝弃权（research/m7/glyph_expand/build_family.py）。补放还须与整理本同字（`lift_ref_agree`）。
+    #   門族 整字 48×48，λ=1：按册留出组员格 429，不设门槛错例最大 0.56（閑→閔），取 0.62 → 给字 269、0 错。
+    #   辶族 取右上框 x0.25–1、y0–0.8（避开走之底，整字版 邊→選 0.84 高把握错），48×48，λ=1：组员格 870，错例最大 0.59（邊→選），取 0.65 → 给字约 355、0 错。
+    "men": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.62, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
+                   aspect=(0.45, 2.2)),
+    "chuo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.65, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
+                    size=48, clean=True, aspect=(0.45, 2.2)),
 }
 
 
