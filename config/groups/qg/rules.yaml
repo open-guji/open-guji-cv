@@ -1,7 +1,7 @@
 schema: ctx_l1/1
 group: qg
+# A24 2026-10-24：下线 qg-千-l1——整理本挖出的搭配规则，拿 vol11–20 整理本回测（规则没见过的册）有冲突，不满足「零冲突」；产物里它们造成的都是误降审（看图核过）。明细见 A24 项目文件 a24/yiti/。
 rules:
-  - {id: qg-千-l1, char: 千, src: corpus-pure, re: '[二三稷數一五非]◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: qg-千-l2, char: 千, src: corpus-pure, re: '(?:虞稷)◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: qg-千-r1, char: 千, src: corpus-pure, re: '◎[古年里頃餘百九慮]', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: qg-千-r2, char: 千, src: corpus-pure, re: '◎(?:古之|頃堂|百年)', note: 整理本奇偶册交叉验证零冲突；n≥3}
