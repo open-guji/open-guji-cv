@@ -47,7 +47,6 @@ class NearShapeConfig:
     fit_q: float = 0.9            # 离群闸：拿胜者组留一距离的哪个分位数当尺子
     fit_max: float = 1.0          # 离群闸：查询距离 / 尺子 超过它就弃权
     flip_margin: float = 0.01     # 推翻 cov 排序（判次优胜）只在两者 cov 差 < 它时允许
-    allow_guarded: bool = False   # 匹配器已判护栏（never_match/conflict）的格也许升档
 
     @classmethod
     def from_any(cls, v) -> "NearShapeConfig | None":
@@ -58,7 +57,9 @@ class NearShapeConfig:
             return cls()
         if isinstance(v, cls):
             return v
-        return cls(**dict(v))
+        d = dict(v)
+        d.pop("allow_guarded", None)   # 2026-10-24 已删：旧 yaml 里的键读进来被忽略
+        return cls(**d)
 
 
 @dataclass

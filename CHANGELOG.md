@@ -18,6 +18,7 @@
 - `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
 
 ### Changed
+- 删 `glyph_match.near_shape.allow_guarded`（A20／用户 10-24 定）：匹配器已判护栏（never_match／conflict）的格近形决胜一律不升档；书 yaml 里的旧键读进来被忽略。`glyph_match` 的 `code_hash` 变，vol02（唯一开着它的册）的 glyph_match 需重算一次。
 - 放行开关缺省开（2026-10-23 sheldon 定「没问题的 feature 一律缺省开，开关只为方便 A/B」）：`seed_admit.context_guard_diff`、`context_guard_ref_blank`、`lane_witness3`、`lane_coord` 改缺省开，`group_flow` 缺省＝注册表里全部声明了 flow 的字组（书 yaml 写 `[]` 才关），书级 `iron_gate` 缺省开。殿本 20 册 yaml 本来都开着，行为不变；`seed_admit` 参数 dump 变，各册放行判过期。
 - Step1 border_detect 1.6：列距救援 `pitch_rescue`（缺省开，`utils/pitch_rescue`）。自由模式列网里有列 < 0.7×中位列宽时（多挑一条假竖线把一列劈成两窄列、外侧一整列落在网外、字悄悄丢掉），先网格模式重探，选不出版框对再去掉劈线、在有字的一侧补外框；新网干净才接受，没触发的页逐字节不变。殿本 vol11–20 九页里修好 8 页（vol13 p75、vol14 p103/186、vol16 p120、vol19 p29/86、vol20 p68/113），vol16 p8 密排夹注页留人工。`border_detect` 的 `code_hash` 变，全书 Step1 起判过期。
 - Step1 列距救援收紧到实测列宽带（Sheldon 10-23：殿本列宽极一致，按分布严格限）：殿本 vol04–20 共 2,969 页，内列宽／页中位 99.9% 在 0.907–1.088，最外两列 0.84–1.26。触发改为「有列出带」（内列 ±10%、外列 0.85–1.3），新列网也须全在带内；另加「列宽合格的列两边的界行不许动」，防网格把印好的真界行挪进空白（vol13 p46）。vol11–20 触发 31 页、改 8 页（原 7 页列网错位＋vol11 p55 右框线更贴界行），vol04–10 不变。
