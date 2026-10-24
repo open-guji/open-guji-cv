@@ -162,7 +162,7 @@ guji db pull    -w <工作区>                   # 中心库 → 数据目录；
 #   …照常跑 cv（控制台、step、H 道）…
 guji db push    -w <工作区> [--dry-run]       # 数据目录 → 中心库（guji store commit 在迁过的工作区上也走这里）
 guji db status  -w <工作区>                   # 落后几条、哪些文件没推
-guji db sync    -w <工作区> [--dry-run]       # 拉＋合并＋推一步做完（日常用这个）
+guji db sync    -w <工作区> [--dry-run]       # 拉＋合并＋顺带落库＋推一步做完（日常用这个）
 guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退出（服务器上替代旧的 glyph_store_sync 定时器）
 ```
 
@@ -177,6 +177,10 @@ guji db sync    -w <工作区> --watch 600       # 每 10 分钟一轮，不退�
   （导入、push、Worker `/v1/events` 都算），有就整次拒绝（`StaleBase`），先 pull——同 git 的 non-fast-forward。
   只追加的台账（events、consumed、anchors）少了行拒绝；库里有的整个文件本地没了也拒绝，确认是真删加 `--allow-delete`。
   写库用导入器同一套差分（`import_scans`，`imports.source = 'push'`），`changes` 逐行留痕。新图先经 Worker 传正式桶。
+- **sync 顺带落库**（2026-10-24 起）：拉完合完，对还没落进字形库的人裁只跑 `glyphdb_admit`、`glyph_audit` 两个消费者
+  （`feedback/auto_admit.py`），落了就再推一次，返回里 `glyph_admit` 记各消费者的结果、`left` 是没落成留着的事件。
+  别的消费者（金标、排除名单）不跑。取不到字块的（本机没有那一页的产物和字块缓存）不记账，留给有产物的机器或 A23 扫尾；
+  `--no-admit` 或 `GUJI_AUTO_ADMIT=0` 关。为什么要有这一步、字形库更新谁来做，见 `doc/受控重跑.md` 第六节。
 - **连库**：push 直连 Postgres。有 `GUJI_DATA_PG_DSN` 就用；没有就读 `NEON_DATABASE_URL`，在本进程起 WebSocket 桥（云会话只通 443）。
 - `push`／`sync` 写 `main`，或用 `--branch exp/…` 写实验分支（见下「实验分支」）；不写 `ci`。
 - **sync（自动合并）**：库里在基准 rev 之后没人写过就直接推；有人写过，先把库里的拼到旁边逐文件比：
