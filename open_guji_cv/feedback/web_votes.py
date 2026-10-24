@@ -15,10 +15,14 @@
     jiazhu → confirm v=seg_defect reason=jiazhu_as_main（给了字就带 shape）
     main   → confirm v=seg_defect reason=main_as_jiazhu（给了字就带 shape）
     none   → confirm v=not_a_char —— **缺省挂起**：排除名单只增不删、不带锚（M10 调研 B 的 P6），要落加 include_none
+    figure → confirm v=figure alt=<说明>（「是图形，不是字」，GUJI-740；票上 `alt` 是卡片说明框里填的，可空）
     unsure → 不写
 
 网站 10-21 起四档都能同时带一个字（用户：切分错了也先把字给上，格子先过、切分另修）。cut／jiazhu／main 带字照上
-带 shape；**none、unsure 带字自相矛盾（说没字／看不清又给了字），挂起交人看**。
+带 shape；**none、unsure、figure 带字自相矛盾（说没字／看不清／是图形又给了字），挂起交人看**。
+
+figure 同格几票只是说明不同，算同一意见：取最新一票的说明（同格同来源本就只留最新）。和已有人裁比也只比「是不是图」，
+说明改了不算推翻。
 
 挂起（不写，交人看）的情形：同格意见不一致；要推翻已有人裁；格位对不上（现行 cv 重切过这一列，旧格号已不是那个字）；
 无字（缺省）。和已有人裁一致的直接跳过，不重写。
@@ -38,10 +42,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-CHOICES = ("char", "none", "unsure", "cut", "jiazhu", "main")
+CHOICES = ("char", "none", "unsure", "cut", "jiazhu", "main", "figure")
 A_RE = re.compile(r"^(\d+):(\d+):(-?\d+)([ab]?)$")
 #: 人裁里算「定了这一格」的 payload.v
-HUMAN_VS = ("confirm", "seg_defect", "not_a_char", "damaged")
+HUMAN_VS = ("confirm", "seg_defect", "not_a_char", "damaged", "figure")
 BOX_TOL = 8.0
 
 
@@ -92,7 +96,7 @@ def latest_votes(votes: list[dict], site_book: str, rev: str) -> tuple[list[dict
     return sorted(best.values(), key=lambda v: (cell_order(v["a"]), v.get("ts") or 0)), dict(dropped)
 
 
-def payload_of(choice: str, char: str = "") -> dict | None:
+def payload_of(choice: str, char: str = "", alt: str = "") -> dict | None:
     if choice == "char":
         return {"v": "confirm", "shape": char} if char else None
     if choice == "cut":
@@ -103,6 +107,8 @@ def payload_of(choice: str, char: str = "") -> dict | None:
         return {"v": "seg_defect", "reason": "main_as_jiazhu", **({"shape": char} if char else {})}
     if choice == "none":
         return {"v": "not_a_char"}
+    if choice == "figure":
+        return {"v": "figure", **({"alt": alt} if alt else {})}
     return None
 
 
@@ -209,9 +215,10 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
         groups[v["a"]].append(v)
     for a in sorted(groups, key=cell_order):
         vs = groups[a]
-        guess = [v for v in vs if v["choice"] in ("none", "unsure") and v.get("char")]
+        guess = [v for v in vs if v["choice"] in ("none", "unsure", "figure") and v.get("char")]
         if guess:
-            out.drafts.append(Draft(f"{cv_book}:{a}", a, {}, vs, held="说无字／看不清又给了字：" + "、".join(
+            what = "说是图形又给了字：" if any(v["choice"] == "figure" for v in guess) else "说无字／看不清又给了字："
+            out.drafts.append(Draft(f"{cv_book}:{a}", a, {}, vs, held=what + "、".join(
                 sorted({f"{v['choice']}={v['char']}" for v in guess}))))
             continue
         real = [v for v in vs if v["choice"] != "unsure"]
@@ -225,7 +232,9 @@ def triage(votes: list[dict], cv_book: str, human: dict, *, include_none: bool =
                 sorted(f"{c}{'=' + ch if ch else ''}" for c, ch in kinds))))
             continue
         choice, char = next(iter(kinds))
-        p = payload_of(choice, char)
+        alt = next((str(v["alt"]).strip() for v in sorted(real, key=lambda v: v.get("ts") or 0, reverse=True)
+                    if (v.get("alt") or "").strip()), "") if choice == "figure" else ""
+        p = payload_of(choice, char, alt)
         if p is None:
             out.skipped.append((a, f"{choice} 档不写"))
             continue

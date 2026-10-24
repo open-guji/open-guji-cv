@@ -14,6 +14,7 @@
 - seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
 ### Added
+- 图片格与插图块（GUJI-740，设计 book-text `docs/design/2026-10-图片格与插图设计.md` §五，格式 guji-format spec 09）：人裁 `confirm v=figure`（`alt` 说明）＝「这格是图形，不是字」，进排除名单（理由 `figure`），Step7 照排除格处理（不进库、不出卡），字位流占位出 □；网站精校票 `choice=figure`（带 `alt`）经 `guji cellvotes` 落成这一条。新 kind `figure_region`（控制台页级插图框，key `figure:<册>:<页>`）不配消费者。Step9 char-cord 导出用到图的册写 char v0.3（格 `fig`、图列 `kind: figure`）、cord v0.2（`marks.figure`）、新文件 `NNN.fig.json`（fig v0.1）与 `fig/NNN/<图 id>.png|webp`（按框外扩 2px 从页图裁，工作区原图 sha 对得上用它，否则取 R2 页图）；`--prev-fig` 沿用旧图 id、保留重绘图。没用到图的册导出逐字节不变。只动 `feedback/`、`report/slots`、`formats/`、导出脚本，不在任何 Step 的 `code_deps` 里，`code_hash` 不变；有图片格人裁的册 seed_admit 照常因名单变化过期（L0）。
 - `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
 - `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
 

@@ -97,15 +97,21 @@ def _rules(borders, W: int) -> list[list[list[int]]]:
 
 def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                      glyph_ids: dict[str, str] | None = None,
-                     pending_ids: frozenset[str] | set[str] | None = None) -> dict:
+                     pending_ids: frozenset[str] | set[str] | None = None,
+                     figure_alts: dict[str, str] | None = None) -> dict:
     """`glyph_ids`：字位 id → 刻例 id（查字形库 instances 得来）。CV 总管 §八·2 定了两者
     「格式同构、值不保证相等」，所以不传就一律记 null，**不拿字位 id 冒充**。
 
     `pending_ids`：放行了、但被看图判错送回人审、人还没裁的字位 id（`feedback.vision.vision_pending`，
     与 `guji close-check`／控制台的「待审」同一口径）。这些格导出时 `review` 记 `pending`、`flags` 加
     `vision_flag`，不再当作已校对（GUJI-555 Lucian 核账：导出口径差 24 格里 12 格是它）。
-    `formats` 在分层里比 `feedback` 低，这里只收一个 id 集合，由导出脚本去算（`scripts/` 不在包分层内）。"""
+    `formats` 在分层里比 `feedback` 低，这里只收一个 id 集合，由导出脚本去算（`scripts/` 不在包分层内）。
+
+    `figure_alts`：图片格（字位流 `figure`，排除名单理由 figure，GUJI-740）的说明 `{字位 id: alt}`
+    （`feedback.figures.figure_cells`，同由导出脚本算）。图片格的字框记 `fig: {"alt": …}`、`method`／`review` 记 human，
+    文本照写 □（不是阙文）；没给说明的 `alt` 空串，char-cord 导出写「图形符号」。"""
     glyph_ids = glyph_ids or {}
+    figure_alts = figure_alts or {}
     pending_ids = pending_ids or frozenset()
     key = page_key(page)
     bd = store.read_raw(book, "border_detect", key)
@@ -229,7 +235,7 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
             rec = admit_by_id.get(s.id)
             ev = (rec.evidence if rec else {}) or {}
             occ = bool(ev.get("occluded"))
-            if (s.admit or (s.defect and s.char)) and s.human:   # 排除名单格人给了字（evidence.human_char）：已裁
+            if s.figure or ((s.admit or (s.defect and s.char)) and s.human):   # 排除名单格人给了字／判了图：已裁
                 method, review = "human", "human"
             elif s.admit and s.id in pending_ids:      # 看图判错、人还没裁：仍在待审队列里，不是已校对
                 method, review = f"cv:{s.channel}", "pending"
@@ -254,6 +260,8 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
                 g["lacuna"] = "defect"
             if s.guess:
                 g["guess"] = s.guess
+            if s.figure:
+                g["fig"] = {"alt": figure_alts.get(s.id, "")}
             flags = []
             if occ:
                 flags.append("occluded")
@@ -355,6 +363,7 @@ def _canvas(meta: dict, page: int, image: dict, warnings: list, page_obj: dict) 
 
 def export_page(products_root: Path | str | None, book: str, page: int, meta: dict,
                 glyph_ids: dict[str, str] | None = None,
-                pending_ids: frozenset[str] | set[str] | None = None) -> dict:
+                pending_ids: frozenset[str] | set[str] | None = None,
+                figure_alts: dict[str, str] | None = None) -> dict:
     store = ProductStore(Path(products_root)) if products_root else ProductStore()
-    return from_cv_products(store, book, page, meta, glyph_ids, pending_ids)
+    return from_cv_products(store, book, page, meta, glyph_ids, pending_ids, figure_alts)
