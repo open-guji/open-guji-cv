@@ -11,6 +11,9 @@
 `agree` 全跑、给字的须全一致（下文「解法」即方法）。
 - 补放：有字 → 放行（通道 `group_flow`）；无字或冲突 → 留人审，疑问码 `group_flow_abstain`／`group_flow_conflict`；
   组声明了 `lift_needs` 而给字的解法里没有它们 → 留人审（`group_flow_weak`）。
+  与整理本互证（`lift_ref_guard`）：只有文意给字、整理本对位字是组里另一个字 → `group_flow_ref_dissent`；没有现役对位时
+  坐标对位字是组外的字，或是组里另一个字而给字的只有单遍文意表（不是 strong、L1 规则，别的方法也没同字）→ `group_flow_coord_dissent`。
+  留人审的格若文意（本组或共字组）给了与整理本（缺时坐标对位）不同的字，另记 `group_flow_ctx_contra`，后面的补放遍不碰。
 - 复核（组声明了 `review_methods` 就改跑它，依次试）：给了与放行字不同的字、或解法之间不一致 → 降为人审（`group_flow_disagree`，不改字）；组声明了
   `review_fix` 时前者改成解法的字（通道 `group_flow`，`evidence.fixed_from` 记原通道与原字）；声明了
   `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
@@ -297,6 +300,15 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
+                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and norm(cr) != norm(ch) and norm(cr) in {norm(m) for m in GROUPS[g].members}
+                  and not any(t["char"] == ch and (t["solver"] != "ctx" or t.get("strong") or t.get("via") == "ctx:ctx_l1"
+                                                   or t.get("runs", 1) >= 2)
+                              for t in trail)):
+                # 坐标对位说是组里另一个字、给字的只有单遍文意表：不补放（vol13 63:5:18、vol17 161:8:8、vol19 27:7:9
+                # 单遍 haiku 读反，A24 10-24）；文意 strong、两遍以上同字、L1 规则或别的方法同字时照放
+                ch, why = None, "coord_dissent"
             if ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"
@@ -304,7 +316,14 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 res.lifted += 1
             else:
                 decision = "review"
-                r.doubts = list(dict.fromkeys(list(r.doubts or []) + [f"group_flow_{why}"]))
+                codes = [f"group_flow_{why}"]
+                cr = ref or (veto_refs or {}).get(r.id)
+                if cr and any(t["solver"].split(":")[-1] == "ctx" and t["char"] and norm(t["char"]) != norm(cr)
+                              for t in trail):
+                    # 文意（本组或共字组）给了与整理本不同的字却没放成：后面的补放遍不许按整理本字放回
+                    # （vol11 18:5:11 顧炎武日知錄、vol15 136:4:14 子曰 被 witness3 按整理本放成曰、目，A24 10-24）
+                    codes.append("group_flow_ctx_contra")
+                r.doubts = list(dict.fromkeys(list(r.doubts or []) + codes))
         else:
             f = GROUPS[g].flow
             fix = f.review_fix or (f.review_fix_strong and why == "agree" and any(

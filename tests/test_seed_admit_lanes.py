@@ -384,3 +384,15 @@ def test_keep_rare_off_restores_guard():
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+@pytest.mark.parametrize("doubt", ["group_flow_disagree", "group_flow_ctx_contra"])
+def test_r4_never_lifts_group_flow_contra(doubt):
+    """字组流程里文意给了别的字而留审的格（vol11 18:5:11 顧炎武日知錄被 witness3 按整理本放成曰）：
+    补放通道不按整理本字放回，`lane_keep_ref_review` 关了也不放。"""
+    chars = BODY[:30]
+    for keep in (True, False):
+        out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+        n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_keep_ref_review=keep)
+        assert n == 0 and not rs[5].admit

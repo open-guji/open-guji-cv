@@ -1751,7 +1751,9 @@ _LANE_R1_CLASSES = frozenset({"replace_align", "ref_conflict", "near_form"})
 _LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar", "glyph_timeout",
                         # 字组流程复核时文意明确给了别的字（或解法互相冲突）而降审的格：待审补放通道不许再放回去
                         # （vol04：象彖复核降审的格被 coord_fallback 按整理本字又放行，降审白降）
-                        "group_flow_disagree", "group_flow_conflict"})
+                        "group_flow_disagree", "group_flow_conflict",
+                        # 补放时文意给了与整理本不同的字、没放成的格（`flow.group_flow_pass`）：同理不许按整理本字放回
+                        "group_flow_ctx_contra"})
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
 #: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
 _LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
