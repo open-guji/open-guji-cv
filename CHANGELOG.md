@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Removed
+- seed_admit 1.22：删准入三闸 `runt_cell_review`（矮格转人审，含 `runt_ratio`、`runt_min_ink`）、`oversplit_gate`（过切提示，含 `oversplit_*`）、`nonchar_gate`（非字过滤，含 `nonchar_flags`、`nonchar_strokes`、`nonchar_jiazhu_ignore_rule_bar`）。三闸缺省都关，A/B 在 vol05、vol09 上单开逐格不变，vol04、05、09 触发条件 0 命中（[报告](doc/exp/准入三闸-vol05-vol09-报告.md)，cv#450；Sheldon 10-23 定删）。`seed_admit` 的 `code_hash` 变，各书该步判过期；缺省参数下产物不变。vol04 册 yaml 原开着 `nonchar_gate`，删后该键被忽略（实测 0 格），该步重算一次即可，键要另在中心库删掉。
+
 ### Changed
 - 精校出单的 book-text 改走 dev（book-text 10-24 新规矩，open-guji/book-text#235；#507）：`republish.py` 的 `bump_book_text` 先切到最新 dev，升版后跑 `local_check.py --dev`、不重建 `index/texts`，提交并推 dev（别人先推了就 rebase 再推），不再开分支和 PR；`proof_cycle apply` 导出前先切 dev，原第 6 步「推分支、开草稿 PR」去掉。CHANGES 的 PR 列写 `#TBD`，由 book-text 每日合并换号（A32，PATCH）。
 
