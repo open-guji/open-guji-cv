@@ -176,3 +176,35 @@ def test_seed_admit_context_page_end(tmp_path, monkeypatch):
 
 import pytest  # noqa: E402
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+def test_lift_ref_agree(monkeypatch):
+    """口框族 kou（2026-10-24）：字形给的字须与整理本（缺时坐标对位字）同字才补放；不同 → ref_dissent，两者都没有 → ref_missing。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    from open_guji_cv.steps.seed_admit import _LANE_REF_REVIEW
+    assert flow.GROUPS["kou"].flow.lift_ref_agree
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("國", via=name))
+    cands = lambda cid: [("圓", 0.981), ("國", 0.977), ("圖", 0.971)]
+    cfg = FlowConfig(groups=("yt", "kou"))
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("國", "replace")}, cands, lambda r: False, cfg)
+    assert r.admit and r.char == "國" and r.evidence["group"]["id"] == "kou"
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("圓", "equal")}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts and "group_flow_ref_dissent" in _LANE_REF_REVIEW
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg, veto_refs={"x": "國"})
+    assert r.admit and r.char == "國"                     # 整理本缺格：坐标对位字同字也行
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_ref_missing" in r.doubts
+
+
+def test_kou_yields_to_yt():
+    """只有 圓 圖 两个候选的格归 yt（文意，册里排在前）；带 國 等的格才归 kou。"""
+    from open_guji_cv.groups.flow import entry
+    cfg = FlowConfig(groups=("yt", "kou"))
+    assert entry(Rec("x"), [("圖", 0.97), ("圓", 0.96)], "圓", cfg) == ("yt", "lift")
+    assert entry(Rec("x"), [("圖", 0.97), ("國", 0.96)], "國", cfg) == ("kou", "lift")
+    assert entry(Rec("x"), [("圖", 0.97), ("團", 0.96)], "圖", cfg) is None        # 團 不在组里（殿本无模板）
