@@ -1,13 +1,8 @@
 schema: ctx_l1/1
 group: mz
+# A24 2026-10-24：下线 mz-目-l1、mz-目-r1、mz-目-r2、mz-自-l1、mz-自-l2、mz-自-r1——整理本挖出的搭配规则，拿 vol11–20 整理本回测（规则没见过的册）有冲突，不满足「零冲突」；产物里它们造成的都是误降审（看图核过）。明细见 A24 项目文件 a24/yiti/。
 rules:
-  - {id: mz-目-l1, char: 目, src: corpus-pure, re: '[總標存原綱藏]◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: mz-目-l2, char: 目, src: corpus-pure, re: '(?:書總|閣書|堂書|文總|類存|存其|家書|道藏|其篇|附存)◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
-  - {id: mz-目-r1, char: 目, src: corpus-pure, re: '◎[卷亦錄曰尚並之於皆凡巻載次]', note: 整理本奇偶册交叉验证零冲突；n≥3}
-  - {id: mz-目-r2, char: 目, src: corpus-pure, re: '◎(?:卷十|三十|亦不)', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: mz-目-m, char: 目, src: corpus-pure, re: '(?:總◎卷|存◎一|總◎巻|其◎而|總◎稱|書◎並|藏◎錄|書◎尚|書◎亦|存◎二)', note: 整理本奇偶册交叉验证零冲突；n≥3}
-  - {id: mz-自-l1, char: 自, src: corpus-pure, re: '[所者傳人出皆各然則又言不文]◎', note: 整理本奇偶册交叉验证零冲突；n≥8}
-  - {id: mz-自-l2, char: 自, src: corpus-pure, re: '(?:前有)◎', note: 整理本奇偶册交叉验证零冲突；n≥8}
-  - {id: mz-自-r1, char: 自, src: corpus-pure, re: '◎[號出然謂漢述明古相立來知]', note: 整理本奇偶册交叉验证零冲突；n≥8}
   - {id: mz-自-r2, char: 自, src: corpus-pure, re: '◎(?:序謂|序稱|序云|出新|宋以|序一)', note: 整理本奇偶册交叉验证零冲突；n≥8}
   - {id: mz-自-m, char: 自, src: corpus-pure, re: '(?:有◎序|其◎序)', note: 整理本奇偶册交叉验证零冲突；n≥8}

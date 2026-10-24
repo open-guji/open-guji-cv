@@ -565,6 +565,12 @@ class SeedAdmitParams(BaseModel):
     不走通道、送审，免得把刻本异体改成通用字（vol04 coord_fallback 把 6 格刻本「㫖」放成「旨」：
     库首位是「旨」，㫖 只在候选里）。只在三通道任一开着时进 dump。"""
     lane_variant_topk: int = 3
+    lane_variant_keep_rare: bool = True
+    """`lane_variant_guard` 的一个例外（A24 2026-10-24，殿本 vol11–20）：坐标对位通道（`lib_coord_primary`）
+    要放的字＝坐标对位字＝库首位，**三者字面相同、且是少见异体**（语义归一后不是它自己，如 䟦 䘮 𤨏）时不拦。
+    护栏防的是「把刻本异体改成通用字」；这里放的就是刻本异体本身，整理本照录、库首位同形，两路独立证据对同一字形。
+    vol11–20 有约 50 格因此误送审，看图 䟦 26、䘮 13、𤨏 8 全是整理本对。属任一字组的字（㕘 㸃 䜟 𢑴 㫖 …）不走这条，
+    由字组按刻形判。只在三通道任一开着时进 dump。"""
     lane_keep_ref_review: bool = True
     """护栏拿整理本字拦下的格不再走待审补放（A24 2026-10-23，vol20 实跑）：`ctx_guard_ref`（ref_prefer）、
     `group_flow_ref_dissent`／`group_flow_coord_dissent` 降审的格，R1/R4 会拿同一个整理本字、再加文渊阁系证人又放回去。
@@ -684,7 +690,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
                       "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
-                      "lane_variant_topk"):
+                      "lane_variant_topk", "lane_variant_keep_rare"):
                 d.pop(k, None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
             d.pop("lane_keep_ref_review", None)
@@ -1978,6 +1984,14 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
         """已知异体对：语义同、字面不同（刻本原字 vs 整理本字）。"""
         return bool(a and b and a != b and sem(a) == sem(b))
 
+    from ..groups.registry import GROUPS
+    group_chars = frozenset(c for g in GROUPS.values() for c in g.members) if p.lane_variant_keep_rare else frozenset()
+
+    def keep_rare(name, char, lib, co, lev) -> bool:
+        """`lane_variant_keep_rare`：放的字＝坐标对位字＝库首位，且是少见异体、不属任何字组。"""
+        return bool(p.lane_variant_keep_rare and name == "coord_fallback" and lev.get("via") == "lib_coord_primary"
+                    and char and char == lib == co and sem(char) != char and char not in group_chars)
+
     def lib_top_of(rid):
         m = mmap.get(rid)
         return (m.char or (m.candidates[0][0] if m.candidates else None)) if m else None
@@ -2088,7 +2102,9 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 m = mmap.get(rec.id)
                 forms = [rec.char] + [c for c, _ in ((m.candidates or [])[:max(p.lane_variant_topk, 0)] if m else [])]
                 vf = next((f for f in forms if variant_pair(f, char)), None)
-                if vf is not None:      # 图上可能是刻本异体：别把它改成通用字（#433）
+                if vf is not None and keep_rare(name, char, lib, co, lev):
+                    lev = {**lev, "keep_rare": vf}
+                elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
             rec.admit, rec.channel, rec.provenance, rec.char = True, name, name, char
