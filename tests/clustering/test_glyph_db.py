@@ -212,6 +212,28 @@ def test_nonempty_db_never_raises_regardless_of_store(tmp_path):
     assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
 
 
+def test_instances_without_exemplars_raises(tmp_path, monkeypatch):
+    """有实例、没一条刻例（10-24 殿本 vol09/10 的钉版库 g2）：匹配器无从比，必须报错；可用开关放行。"""
+    from open_guji_cv.clustering.glyph_db import _now, _png, assert_db_not_silently_empty
+    import numpy as np
+
+    db_path = tmp_path / "noex.sqlite"
+    db = GlyphDB(db_path)
+    cur = db.conn.cursor()
+    cur.execute("INSERT INTO sources (source_id, edition_tag, kind, created_at)"
+                " VALUES ('s','ed','woodblock',?)", (_now(),))
+    cur.execute("INSERT INTO instances (instance_id, source_id, page, col, idx, patch_png, updated_at)"
+                " VALUES ('i1','s','p',0,0,?,?)", (_png(np.zeros((8, 8), np.uint8)), _now()))
+    db.conn.commit()
+    db.close()
+
+    monkeypatch.delenv("GUJI_ALLOW_NO_EXEMPLARS", raising=False)
+    with pytest.raises(RuntimeError, match="没有刻例"):
+        assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
+    monkeypatch.setenv("GUJI_ALLOW_NO_EXEMPLARS", "1")
+    assert_db_not_silently_empty(db_path, tmp_path / "no_such_store")
+
+
 def _seed_one_glyph(db, char, norm):
     """直接塞一个 glyph+exemplar+derived，直接造库数据。"""
     from open_guji_cv.clustering.glyph_db import _now, _png

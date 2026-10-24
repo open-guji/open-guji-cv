@@ -1110,9 +1110,21 @@ def assert_db_not_silently_empty(db_path: str | Path,
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
             n = c.execute("SELECT COUNT(*) FROM instances").fetchone()[0]
+            n_ex = c.execute("SELECT COUNT(*) FROM exemplars").fetchone()[0] if n > 0 else 0
     except sqlite3.Error:
         return  # 打不开/表还没建，不是本检查的职责——下游自己会报更明确的错
     if n > 0:
+        # 有实例、没一条刻例（2026-10-24，殿本 vol09/10 第四轮）：钉版库 g2 建出来 instances 20,661、
+        # exemplars 0、glyphs 0，上面只数 instances 拦不住，glyph_match 每页 0.06–0.8 秒「跑完」，
+        # 整册 Step5-a 起全部无效。匹配器只看刻例，刻例为 0 时这一步没有意义，只可能是建库出了错。
+        # 真要对着只有实例的库跑（单测、刚导实例还没放行任何字的新书）设 GUJI_ALLOW_NO_EXEMPLARS=1。
+        import os
+        if n_ex == 0 and os.environ.get("GUJI_ALLOW_NO_EXEMPLARS") != "1":
+            raise RuntimeError(
+                f"字形库没有刻例（instances={n}、exemplars=0）：{db_path}\n"
+                "匹配器只看刻例，对着这个库跑 glyph_match/seed_admit 全是 diff。多半是建库时 glyphs.jsonl／"
+                "exemplars.jsonl 没进来（钉版库查 `guji glyph-db pin-build --pin N` 的清单与取件）；"
+                "重建后再跑。确属只有实例的新库，设 GUJI_ALLOW_NO_EXEMPLARS=1。")
         return
     if store_dir is None:
         from ..core.workspace import glyph_store_path
