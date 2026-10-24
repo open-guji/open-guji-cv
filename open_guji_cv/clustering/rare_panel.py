@@ -329,8 +329,9 @@ def _rare_for_single_legacy(img, k: int, corpus: str | None = None,
     `cnn_candidates.emb_topk_batch` 模块头）。"""
     norm = normalize_patch(img)
 
-    from .cnn_candidates import shared
+    from .cnn_candidates import shared, require_checkpoint
     cnn = shared()
+    require_checkpoint(cnn)
     # unseen 1,327 条实测：HOG 75.5/94.7，CNN 72.4/97.6，**CNN+embedding RRF
     # 86.7/98.3**（top1/top10）。CNN 可用时 HOG_WEIGHT=0.0 早已让 HOG 出局
     # （见 _fuse 模块头「2026-09-10」一节），这里索性不跑它，省下两档字表
@@ -397,8 +398,9 @@ def rare_for_batch(imgs: list, k: int, corpus: str | None = None,
         return []
     norms = [normalize_patch(img) for img in imgs]
 
-    from .cnn_candidates import shared
+    from .cnn_candidates import shared, require_checkpoint
     cnn = shared()
+    require_checkpoint(cnn)
     spec: dict = {}
     if cnn.available:
         cs_base, cs_esc, spec = book_charsets(book, corpus)

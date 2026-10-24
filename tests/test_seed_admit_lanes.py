@@ -348,4 +348,39 @@ def test_lane_variant_guard_off_restores_old_behaviour():
     assert n == 1 and out[0].chars[4].char == "旨"
 
 
+
+# ── lane_variant_keep_rare（A24 10-24，vol11–20：整理本照录刻本异体、库首位同形，却被异体护栏拦）──────
+
+def _keep_rare(char, cands, **params):
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], char=char)})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + char + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True, **params)
+    mm = {f"{B}:1:5": NS(char=None, candidates=cands, guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: char}), _vm(), lambda: wits)
+    return n, out[0].chars[4]
+
+
+def test_keep_rare_admits_rare_variant_agreed_by_lib_and_coord():
+    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)])
+    assert n == 1 and r.admit and r.char == "䘮" and r.channel == "coord_fallback"
+    assert r.evidence["lane"]["keep_rare"] == "喪"
+
+
+def test_keep_rare_does_not_turn_rare_variant_into_common_form():
+    # 放的是通用字（喪）、候选里有刻本异体（䘮）：照旧拦——这正是 #433 护栏要防的
+    n, r = _keep_rare("喪", [("喪", 0.95), ("䘮", 0.94)])
+    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_keep_rare_skips_group_members():
+    # 㫖 属字组 zhi，由字组按刻形判，不走这条
+    n, r = _keep_rare("㫖", [("㫖", 0.99), ("旨", 0.97)])
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_keep_rare_off_restores_guard():
+    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)], lane_variant_keep_rare=False)
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

@@ -128,4 +128,7 @@ def test_products_and_param_hash_unchanged_when_off():
                                             near_shape=True).model_dump(mode="json")
     assert NearShapeConfig.from_any(None) is None and NearShapeConfig.from_any(False) is None
     assert NearShapeConfig.from_any({"tau": 0.9}).tau == 0.9
+    # allow_guarded 已删（2026-10-24）：旧 yaml 的键读进来被忽略，不报错
+    cfg = NearShapeConfig.from_any({"tau": 0.9, "allow_guarded": True})
+    assert cfg.tau == 0.9 and not hasattr(cfg, "allow_guarded")
     assert isinstance(MatchResult("diff", None, None, 0.0, 0.0).to_dict(), dict)

@@ -26,11 +26,14 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
 
 用法：
   python scripts/zhengli/republish.py from-pack --book vol05 -w $WS --label <包标签> --book-text <book-text 仓>
-  python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export
+  python scripts/zhengli/republish.py prep --book vol06 -w $WS --export-dir $WS/reports/vol06/_export [--recheck <复审清单>]
   python scripts/zhengli/republish.py push --book vol06 -w $WS --rev 006-r3 --yes [--sync] [--book-text <book-text 仓>]
   python scripts/zhengli/republish.py add-alt --book vol05 -w $WS [--yes --sync]   # 线上单漏了相似字：原地补，不换 rev
   python scripts/zhengli/republish.py add-sprites --book vol05 -w $WS --export-dir <cord 所在目录> [--yes --sync]
                                                                       # 线上单的雪碧图没上 R2：重建、核坐标不变、传 R2、原地补 sprites[]
+一条命令（M10 复盘第 3 项）：出单、过门、传图、推库、只发这一章、等网站发布、冒烟，一次做完：
+  python scripts/zhengli/republish.py issue --book vol06 -w $WS --label <包标签> --book-text <book-text 仓> [--recheck <复审清单>]
+  python scripts/zhengli/republish.py issue --book vol06 -w $WS --export-dir <导出目录> [--recheck …]
 推库要 `.[datastore]`（psycopg、websockets）和能写 main 的令牌。
 产物根取 GUJI_PRODUCTS_DIR，没设就是 <工作区>/products（与引擎同口径）。
 """
@@ -255,6 +258,19 @@ def diff_md(book: str, d: dict, team: int, reflow: int) -> str:
     return "\n".join(lines) + "\n"
 
 
+def recheck_md(doc: dict, missing_tsv: Path) -> str:
+    """差异单「复审格」一节：哪些格是按复审清单放回来的、说明是什么；现行切分里没有的列出来交人另想办法。"""
+    rc = [c for c in doc.get("cells", []) if c.get("recheck")]
+    miss = [ln.split("\t") for ln in missing_tsv.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] \
+        if missing_tsv.exists() else []
+    lines = ["", f"## 复审格（--recheck）：上单 {len(rc)} 格，现行切分里没有 {len(miss)} 格", "",
+             "| 格 | 说明 | 已有人裁 |", "|---|---|---|"]
+    lines += [f"| `{c['cell']}` | {c.get('note', '')} | {(c.get('prior') or {}).get('c', '')} |" for c in rc]
+    if miss:
+        lines += ["", "现行切分里没有这几格（多半重切过），没放上单：" + "、".join(f"`{m[0]}`" for m in miss)]
+    return "\n".join(lines) + "\n"
+
+
 def add_causes(pending: Path, products: Path, book: str) -> None:
     """每格并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
     sys.path.insert(0, str(CV))
@@ -294,8 +310,13 @@ def publish_web(a) -> bool:
     if not shutil.which("gh"):
         print("⚠ 没有 gh，网站 proofing-sync 没触发：等每日定时，或手动跑 proofing-sync.yml（production、publish、dry_run=false）")
         return False
-    p = run(["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO, "--ref", "main",  # 带 --ref：云端会话没有 GraphQL，查不了默认分支
-             "-f", "target=production", "-f", "parts=publish", "-f", "dry_run=false"])
+    base = ["gh", "workflow", "run", "proofing-sync.yml", "-R", WEB_REPO, "--ref", "main",  # 带 --ref：云端会话没有 GraphQL，查不了默认分支
+            "-f", "target=production", "-f", "parts=publish", "-f", "dry_run=false"]
+    only = getattr(a, "publish_only", None)
+    # 只发这一章（kaiyuanguji-web#584 起有 only 输入）：一两分钟上线，不等全站；网站还没这个输入就退回全站发布
+    p = run(base + ["-f", f"only={only}"]) if only else None
+    if p is None or p.returncode:
+        p = run(base)
     if p.returncode:
         print("⚠ 网站 proofing-sync 触发失败（见上），等每日定时或手动跑")
         return False
@@ -378,7 +399,8 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     cards = ws / "reports" / book / f"{book}.cards.alt.json"
     if not a.no_alt:
         cards.unlink(missing_ok=True)             # 上一次的卡不能顶替这一次（格号可能已变）
-        if run([py, "-m", "open_guji_cv.cli_v2", "audit", "alt", book, "-w", ws] + (["--fetch-zi"] if a.fetch_zi else []),
+        rc_extra = ["--extra", a.recheck] if getattr(a, "recheck", None) else []
+        if run([py, "-m", "open_guji_cv.cli_v2", "audit", "alt", book, "-w", ws] + (["--fetch-zi"] if a.fetch_zi else []) + rc_extra,
                cwd=CV, env=env).returncode:
             # 10-21 殿本重发时这步静默出了 0 格相似字，单子照发，网站卡片上相似字全没了；现在出不来就停
             sys.exit("✗ guji audit alt 没出相似字（见上面的原因）；确实要出没有相似字的单子加 --no-alt")
@@ -389,6 +411,8 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
         cmd += ["--cv-version", a.cv_version or cv_version()]
     if cards.exists() and not a.no_alt:
         cmd += ["--cards", cards]
+    if getattr(a, "recheck", None):
+        cmd += ["--recheck", a.recheck]
     if run(cmd, env=env).returncode:
         return 1
     events = data_dir(ws) / "feedback" / "events"
@@ -439,6 +463,8 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     d = diff(old, new, dropped, cell_states(products, book), web_votes(ws, text_id, (old or {}).get("rev")))
     (out / "diff.json").write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
     md = diff_md(book, d, len(team), reflow)
+    if getattr(a, "recheck", None):
+        md += recheck_md(new, raw / "recheck_missing.tsv")
     if pack:
         md = md.replace("\n\n## 去掉的格", f"\n- 产物包 `{pack}`\n\n## 去掉的格", 1)
     if bind:
@@ -504,6 +530,101 @@ def cmd_push(a) -> int:
     elif plan.get("sprites"):
         todo.append("⚠ 这次出了雪碧图目录，但单子里没有 sprites[]：网站取不到图（见 sprite_pub.py）")
     print("\n还要做：\n" + "\n".join(f"- {t}" for t in todo))
+    return 0
+
+
+DATA = "https://data.openguji.com"
+
+
+def _http(url: str, method: str = "GET", timeout: int = 30):
+    import urllib.request
+    req = urllib.request.Request(url, method=method, headers={"User-Agent": "open-guji-cv/republish"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return r.status, (r.read() if method == "GET" else b"")
+
+
+def wait_publish(since: str, timeout_s: int = 1800, poll_s: int = 20) -> str | None:
+    """等 issue 触发的那次 proofing-sync 跑完（REST 查 run，会话里没有 GraphQL）。返回 conclusion；等不到返回 None。"""
+    import time
+    t_end = time.time() + timeout_s
+    run_id = None
+    while time.time() < t_end:
+        q = ["gh", "api", f"repos/{WEB_REPO}/actions/workflows/proofing-sync.yml/runs?event=workflow_dispatch&per_page=5",
+             "--jq", f'[.workflow_runs[] | select(.created_at >= "{since}")] | sort_by(.created_at) | .[0] | "\\(.id) \\(.status) \\(.conclusion)"']
+        p = subprocess.run(q, capture_output=True, text=True)
+        out = (p.stdout or "").strip()
+        if p.returncode == 0 and out and out != "null":
+            rid, status, concl = (out.split() + ["", "", ""])[:3]
+            if run_id != rid:
+                run_id = rid
+                print(f"网站发布 run {rid}：https://github.com/{WEB_REPO}/actions/runs/{rid}")
+            if status == "completed":
+                return concl
+        time.sleep(poll_s)
+    return None
+
+
+def smoke(text_id: str, chapter: str, rev: str, tries: int = 6, wait_s: int = 30) -> list[str]:
+    """读者侧冒烟：线上单 rev 是新的、单上引用的每张图都取得到（CDN 刚清，旧单可能还要一会儿才换掉）。返回问题列表。"""
+    import time
+    for i in range(tries):
+        bad = []
+        try:
+            _, body = _http(f"{DATA}/proof/{text_id}/{chapter}.pending.json")
+            doc = json.loads(body)
+        except Exception as e:  # noqa: BLE001
+            doc, bad = {}, [f"取不到线上单：{e}"]
+        if doc and doc.get("rev") != rev:
+            bad = [f"线上单还是 {doc.get('rev')}，不是 {rev}"]
+        elif doc:
+            for name in sorted(sprite_pub.refs(doc)):
+                try:
+                    code, _ = _http(f"{DATA}/proof/{text_id}/{chapter}/{name}", method="HEAD")
+                except Exception as e:  # noqa: BLE001
+                    code = str(e)
+                if code != 200:
+                    bad.append(f"{name} → {code}")
+        if not bad:
+            return []
+        if i < tries - 1:
+            time.sleep(wait_s)
+    return bad
+
+
+def cmd_issue(a) -> int:
+    """一条命令出单（M10 复盘第 3 项）：出单（有 --pack 走 from-pack）→ 两道门 → 传图、写单、台账 → 存出单版包 → 推库
+    → 只发这一章 → 等网站发布跑完 → 读者侧冒烟。相似字图（alt-<章>.webp）由 prep 的 alt_build＋sprite_pub.attach
+    自动登记进 sprites[]，出单门再核一遍。复审格用 --recheck（cellvotes draft 的 recheck.tsv 直接给）。"""
+    import datetime as dt
+    ws, book = Path(a.workspace).resolve(), a.book
+    chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
+    rc = cmd_from_pack(a) if a.label else cmd_prep(a)
+    if rc:
+        return rc
+    online = proofing_path(ws, text_id, chapter)
+    old = json.loads(online.read_text(encoding="utf-8")) if online.exists() else None
+    a.rev = a.rev or next_rev((old or {}).get("rev"), chapter)
+    out = Path(a.out) if a.out else ws / "reports" / book / "_publish" / a.rev
+    d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
+    if not d["new"] and not a.allow_empty:
+        print(f"ⓘ 新单 {a.rev} 一格都没有：不推（线上单 {d['old_rev']} 照旧）。确要换成空单加 --allow-empty")
+        return 0
+    a.yes, a.sync = True, True
+    a.publish_only = f"{text_id}/{chapter}"
+    since = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    rc = cmd_push(a)
+    if rc or a.no_publish_web or a.no_wait:
+        return rc
+    concl = wait_publish(since)
+    if concl != "success":
+        print(f"✗ 网站发布没成（{concl or '等超时'}）：单子已在中心库，每日定时兜底；看上面的 run 链接")
+        return 1
+    bad = smoke(text_id, chapter, a.rev)
+    if bad:
+        print(f"✗ 读者侧冒烟不过（{len(bad)} 处）：" + "；".join(bad[:10]))
+        return 1
+    print(f"✓ {a.rev} 已上线：{d['new']} 格，单子和 {len(sprite_pub.refs(json.loads(online.read_text(encoding='utf-8'))))} 张图都取得到"
+          f"（https://www.openguji.com/proofing/{text_id}/{chapter}）")
     return 0
 
 
@@ -804,22 +925,23 @@ def main(argv=None) -> int:
     p.add_argument("--sync", action="store_true", help="写完再 guji db sync 推进中心库")
     p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
     p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
-    for name in ("prep", "push", "from-pack"):
+    for name in ("prep", "push", "from-pack", "issue"):
         p = sp.add_parser(name)
         p.add_argument("--book", required=True)
         p.add_argument("-w", "--workspace", required=True)
         p.add_argument("--rev", help="新单 rev；prep 缺省按线上单加一（006-r2 → 006-r3）" if name == "prep" else "prep 打出的 rev",
                        required=name == "push")
         p.add_argument("--out", help="出单目录，缺省 <工作区>/reports/<册>/_publish/<rev>")
-        if name == "from-pack":
-            p.add_argument("--label", required=True, help="产物包标签（guji products pack list <册>）")
-            p.add_argument("--book-text", help="book-text 仓：读线上文本版本")
+        if name in ("from-pack", "issue"):
+            p.add_argument("--label", required=name == "from-pack",
+                           help="产物包标签（guji products pack list <册>）" + ("；issue 给了就走 from-pack，不给就要 --export-dir" if name == "issue" else ""))
+            p.add_argument("--book-text", help="book-text 仓：读线上文本版本" + ("；issue 还会拷同一次导出、文本线升 minor、提交到新分支" if name == "issue" else ""))
             p.add_argument("--text-version", help="不给 --book-text 时手给线上文本版本")
             p.add_argument("--no-pull", action="store_true", help="不先 guji db pull")
             p.add_argument("--out-root", help="缺省 <工作区>/reports/<册>/_publish")
-        if name in ("prep", "from-pack"):
-            if name == "prep":
-                p.add_argument("--export-dir", required=True, help="同一份产物导出的 char／cord／pages 所在目录")
+        if name in ("prep", "from-pack", "issue"):
+            if name in ("prep", "issue"):
+                p.add_argument("--export-dir", required=name == "prep", help="同一份产物导出的 char／cord／pages 所在目录")
             p.add_argument("--chapter")
             p.add_argument("--text-id")
             p.add_argument("--cv-commit")
@@ -829,6 +951,17 @@ def main(argv=None) -> int:
             p.add_argument("--no-alt", action="store_true", help="不跑 guji audit alt（单子上没有相似字）")
             p.add_argument("--fetch-zi", action="store_true", help="audit alt 去字统网补缓存（首次慢）")
             p.add_argument("--no-sprite", action="store_true")
+            p.add_argument("--recheck", help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行、"
+                                             "人裁过没有都放回单上，网站卡片头上显示说明；cellvotes draft 的 recheck.tsv 可直接给")
+        if name == "issue":
+            p.add_argument("--note", help="book-text CHANGES 一行的说明（给了 --book-text 才升版）")
+            p.add_argument("--no-publish-web", action="store_true", help="不触发网站发布")
+            p.add_argument("--no-wait", action="store_true", help="触发网站发布后不等、不冒烟")
+            p.add_argument("--no-pack", action="store_true", help="不存出单版产物包 rev-<rev>")
+            p.add_argument("--allow-empty", action="store_true", help="新单 0 格也换上去")
+            p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
+            p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
+            p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
             p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
@@ -840,7 +973,10 @@ def main(argv=None) -> int:
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
     a = ap.parse_args(argv)
-    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
+    if a.cmd == "issue" and not a.label and not a.export_dir:
+        ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
+    return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,
+            "add-alt": cmd_add_alt, "add-sprites": cmd_add_sprites}[a.cmd](a)
 
 
 if __name__ == "__main__":

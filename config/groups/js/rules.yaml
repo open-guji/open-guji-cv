@@ -1,5 +1,6 @@
 schema: ctx_l1/1
 group: js
+# A24 2026-10-24：下线 js-甲-r1——整理本挖出的搭配规则，拿 vol11–20 整理本回测（规则没见过的册）有冲突，不满足「零冲突」；产物里它们造成的都是误降审（看图核过）。明细见 A24 项目文件 a24/yiti/。
 rules:
   - {id: js-申-l1, char: 申, src: corpus-pure, re: '[庚甲壬又篇傳引丙]◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: js-申-l2, char: 申, src: corpus-pure, re: '(?:詩傳|隆壬)◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
@@ -8,6 +9,5 @@ rules:
   - {id: js-申-m, char: 申, src: corpus-pure, re: '(?:傳◎培|庚◎以|甲◎自)', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: js-甲-l1, char: 甲, src: corpus-pure, re: '[納熙正遁太隆]◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: js-甲-l2, char: 甲, src: corpus-pure, re: '(?:康熙|雍正|乾隆|伏納)◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
-  - {id: js-甲-r1, char: 甲, src: corpus-pure, re: '◎[戌寅辰午乙二]', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: js-甲-r2, char: 甲, src: corpus-pure, re: '◎(?:戌進|辰進|午舉)', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: js-甲-m, char: 甲, src: corpus-pure, re: '(?:納◎之|正◎辰|熙◎戌|納◎五)', note: 整理本奇偶册交叉验证零冲突；n≥3}

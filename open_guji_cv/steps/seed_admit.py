@@ -565,6 +565,12 @@ class SeedAdmitParams(BaseModel):
     不走通道、送审，免得把刻本异体改成通用字（vol04 coord_fallback 把 6 格刻本「㫖」放成「旨」：
     库首位是「旨」，㫖 只在候选里）。只在三通道任一开着时进 dump。"""
     lane_variant_topk: int = 3
+    lane_variant_keep_rare: bool = True
+    """`lane_variant_guard` 的一个例外（A24 2026-10-24，殿本 vol11–20）：坐标对位通道（`lib_coord_primary`）
+    要放的字＝坐标对位字＝库首位，**三者字面相同、且是少见异体**（语义归一后不是它自己，如 䟦 䘮 𤨏）时不拦。
+    护栏防的是「把刻本异体改成通用字」；这里放的就是刻本异体本身，整理本照录、库首位同形，两路独立证据对同一字形。
+    vol11–20 有约 50 格因此误送审，看图 䟦 26、䘮 13、𤨏 8 全是整理本对。属任一字组的字（㕘 㸃 䜟 𢑴 㫖 …）不走这条，
+    由字组按刻形判。只在三通道任一开着时进 dump。"""
     lane_keep_ref_review: bool = True
     """护栏拿整理本字拦下的格不再走待审补放（A24 2026-10-23，vol20 实跑）：`ctx_guard_ref`（ref_prefer）、
     `group_flow_ref_dissent`／`group_flow_coord_dissent` 降审的格，R1/R4 会拿同一个整理本字、再加文渊阁系证人又放回去。
@@ -573,6 +579,15 @@ class SeedAdmitParams(BaseModel):
     rare_ref（两遍）同样不碰这些格（A24 10-23 九册核对：vol18:115:6:3 刻「本」由 rare_ref 放成整理本的「木」）。
     只在三通道或 rare_ref 开着时进 dump；False＝放回（2026-10-23 前的行为）。"""
     lane_witness_fingerprint: str = ""
+    pua_rules: str = ""
+    """整理本缺字特殊规则表（通道 `pua_rule`，A24 2026-10-24 sheldon 定「缺字三层」的第一层）。
+    整理本在这一位写 〓（坐标对位或现役对位字是逐列本的 PUA 生僻字占位）、库首位字在表里 → 按表录字。
+    表是人看过刻形定下的「这个刻形录哪个码位」，所以只认库首位，不看文意。第二层「库高置信放行」是现有
+    `match_solo`（cov ≥ `solo_cov`）；其余照旧送审。格式：逗号分隔，`库首位字` 或 `库首位字=录入字`，
+    如 `絃,鉉,確,埀=垂,點=㸃`。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。
+    殿本 vol11–20：sheldon 看图定 9 族 299 格（玄旁缺笔 絃鉉炫弦眩 录正字、確、㽔、邦、鬼、直、垂、㸃、負）。"""
+    pua_rule_cov: float = 0.85
+    """`pua_rules` 的库首位 cov 下限。殿本 9 族 299 格最低 0.89，全是 verdict=unsure、无护栏。"""
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
 
@@ -684,10 +699,13 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
                       "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
-                      "lane_variant_topk"):
+                      "lane_variant_topk", "lane_variant_keep_rare"):
                 d.pop(k, None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
             d.pop("lane_keep_ref_review", None)
+        if isinstance(d, dict) and not self.pua_rules:
+            d.pop("pua_rules", None)
+            d.pop("pua_rule_cov", None)
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
             d.pop("seal_lib_cov", None)
@@ -921,6 +939,8 @@ class SeedAdmitStep(Step):
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
+        _aref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+        coord_conflict = frozenset(_aref.coord_conflict_ids) if _aref else frozenset()
         coord_cache: dict = {}
         always = set(p.always_review or "")
         context_verdicts = frozenset(
@@ -1130,6 +1150,13 @@ class SeedAdmitStep(Step):
                     if _variant_indirect(_shape, align_char, ledger, ctx.book):
                         ok, channel = False, None
                         doubts.append("variant_indirect")
+                # 库 × 整理本不放两路对位打架的格（A23 2026-10-23，常开、无开关）：`align_ref.coord_conflict_ids`
+                # 里坐标字≠现役 equal 字的格，现役字恰是存疑那一路，「库 top == 现役字」不再是两路独立证据
+                # （vol14 cv0.5.9：60:1:5 拱→撰，库 撰 0.9393／撤 0.9391；103:2:7 双行小注两字被切一格，库 diff 仍放「中」）。
+                # 只拦 match_ref；落人审，doubt `coord_conflict`。vol14 两版产物回放每版拦 8 格，看图确认拦中 2 个真错、误伤 1。
+                if ok and channel == "match_ref" and r.id in coord_conflict:
+                    ok, channel = False, None
+                    doubts.append("coord_conflict")
                 if (ok and p.match_tie_guard and r.verdict != "same"
                         and channel in ("match_ref", "match_replace", "match_margin")
                         and _lib_near_tie(r.candidates, vm_here, p.match_tie_gap)):
@@ -1459,6 +1486,11 @@ class SeedAdmitStep(Step):
                                         if (p.lane_witness3 or p.lane_coord) else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.pua_rules:
+            # 5a pua_rule（升）：整理本缺字（〓）按人定的刻形规则表录字
+            d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_pua
+            n_review -= d_pua
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
@@ -1950,6 +1982,59 @@ def _seal_blank_flip(out: list, seal: dict, coord: dict) -> int:
     return demoted
 
 
+def _parse_pua_rules(spec: str) -> dict[str, str]:
+    """`pua_rules` → {库首位字: 录入字}。纯函数；空项、多字项跳过。"""
+    out: dict[str, str] = {}
+    for item in (spec or "").split(","):
+        item = item.strip()
+        if not item:
+            continue
+        lib, _, to = item.partition("=")
+        lib, to = lib.strip(), (to.strip() or lib.strip())
+        if len(lib) == 1 and len(to) == 1:
+            out[lib] = to
+    return out
+
+
+def _pua_rule_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict) -> int:
+    """整理本缺字特殊规则（`pua_rules`）。→ 放行格数。
+
+    只升不降：只碰 admit=False、非人裁、不在排除名单、没有硬疑问（`_LANE_HARD`）、不是印章区的格。
+    条件：整理本这一位是 〓（坐标对位字，没有坐标对位时看现役对位字）；库首位字在表里、cov ≥ `pua_rule_cov`、
+    库没判 diff、没有护栏（never_match／conflict）。字取表里的录入字，通道 `pua_rule`。"""
+    rules = _parse_pua_rules(p.pua_rules)
+    if not rules:
+        return 0
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            ds = set(rec.doubts or [])
+            if (rec.admit or rec.channel == "human" or rec.provenance == "human"
+                    or "excluded" in ds or "occluded" in ds or ds & _LANE_HARD):
+                continue
+            ref = coord.get(rec.id)
+            if ref is None:
+                ref = (amap.get(rec.id) or (None,))[0]
+            if ref != "〓":
+                continue
+            m = mmap.get(rec.id)
+            if not m or not m.candidates or getattr(m, "guard", None) is not None:
+                continue
+            if getattr(m, "verdict", None) == "diff":
+                continue
+            top, cov = m.candidates[0][0], float(m.candidates[0][1])
+            char = rules.get(top)
+            if char is None or cov < p.pua_rule_cov:
+                continue
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "pua_rule", "pua_rule", char
+            rec.evidence = {**(rec.evidence or {}),
+                            "lane": {"lane": "pua_rule", "lib": top, "cov": round(cov, 4), "ref": "〓",
+                                     "prev_doubts": list(rec.doubts or [])}}
+            rec.doubts = ["lane_pua_rule"]
+            n += 1
+    return n
+
+
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
                        vmap, witnesses_fn) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
@@ -1968,6 +2053,14 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
     def variant_pair(a, b) -> bool:
         """已知异体对：语义同、字面不同（刻本原字 vs 整理本字）。"""
         return bool(a and b and a != b and sem(a) == sem(b))
+
+    from ..groups.registry import GROUPS
+    group_chars = frozenset(c for g in GROUPS.values() for c in g.members) if p.lane_variant_keep_rare else frozenset()
+
+    def keep_rare(name, char, lib, co, lev) -> bool:
+        """`lane_variant_keep_rare`：放的字＝坐标对位字＝库首位，且是少见异体、不属任何字组。"""
+        return bool(p.lane_variant_keep_rare and name == "coord_fallback" and lev.get("via") == "lib_coord_primary"
+                    and char and char == lib == co and sem(char) != char and char not in group_chars)
 
     def lib_top_of(rid):
         m = mmap.get(rid)
@@ -2079,7 +2172,9 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 m = mmap.get(rec.id)
                 forms = [rec.char] + [c for c, _ in ((m.candidates or [])[:max(p.lane_variant_topk, 0)] if m else [])]
                 vf = next((f for f in forms if variant_pair(f, char)), None)
-                if vf is not None:      # 图上可能是刻本异体：别把它改成通用字（#433）
+                if vf is not None and keep_rare(name, char, lib, co, lev):
+                    lev = {**lev, "keep_rare": vf}
+                elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
             rec.admit, rec.channel, rec.provenance, rec.char = True, name, name, char

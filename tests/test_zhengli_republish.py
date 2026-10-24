@@ -65,6 +65,7 @@ def _setup(tmp_path):
 def test_prep_then_push(tmp_path, monkeypatch, capsys):
     ws, export, online = _setup(tmp_path)
     monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.delenv("CELLREVIEW_TOKEN", raising=False)                                       # 换单门别去连网站 KV
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export),
                     "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]) == 0
@@ -225,3 +226,54 @@ def test_ticket_ledger_balances(tmp_path, monkeypatch):
     assert sum(led["counts"].values()) == led["votes"] == 5 and "账平" in rp.ledger_md(led)
     led2 = rp.ticket_ledger(ws, "vol06", "abc123", "006-r2", [vote("1:1:3", "char", t_after, "甲")])
     assert led2["counts"]["与已有人裁一致"] == 1                    # 人裁早于票：判一致跳过
+
+
+def test_prep_recheck_puts_decided_and_admitted_cells_back(tmp_path, monkeypatch):
+    """--recheck：人裁过的 1:1:3、已放行的 1:1:1 都回到单上并带说明；切分里没有的 1:1:9 列进差异单。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    rc = tmp_path / "recheck.tsv"
+    rc.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n1:1:3\t上次投了「乙」，和已有判断不同\tev1\t甲\t2026-10-20T00:00:00Z\n"
+                  "1:1:1\t机改无票，请核\n1:1:9\t切字改过\n", encoding="utf-8")
+    assert rp.main(["prep", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-alt", "--no-sprite",
+                    "--cv-commit", "abc1234", "--recheck", str(rc)]) == 0
+    out = ws / "reports" / "vol06" / "_publish" / "006-r3"
+    new = {c["cell"]: c for c in json.loads((out / "006.pending.json").read_text(encoding="utf-8"))["cells"]}
+    assert sorted(new) == ["1:1:1", "1:1:2", "1:1:3", "1:1:4"]
+    assert new["1:1:3"]["prior"] == {"c": "甲", "id": "ev1", "ts": "2026-10-20T00:00:00Z"} and new["1:1:1"]["note"] == "机改无票，请核"
+    md = (out / "差异单.md").read_text(encoding="utf-8")
+    assert "复审格（--recheck）：上单 2 格，现行切分里没有 1 格" in md and "`1:1:9`" in md
+
+
+def test_publish_web_only_falls_back_to_full(monkeypatch):
+    """issue 只发这一章（only=<书>/<章>）；网站还没 only 输入（触发失败）就退回全站发布。"""
+    import argparse
+    import subprocess
+    calls = []
+
+    def _run(cmd, **kw):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 1 if any(x.startswith("only=") for x in cmd) else 0, "", "")
+
+    monkeypatch.setattr(rp.shutil, "which", lambda name: "/usr/bin/gh")
+    monkeypatch.setattr(rp, "run", _run)
+    assert rp.publish_web(argparse.Namespace(no_publish_web=False, publish_only="abc123/006")) is True
+    assert "only=abc123/006" in calls[0] and not any(x.startswith("only=") for x in calls[1])
+
+
+def test_issue_runs_prep_push_and_skips_empty(tmp_path, monkeypatch):
+    """issue：prep → push（--yes --sync、只发这一章）→ 等发布 → 冒烟；新单 0 格就不推。"""
+    ws, export, online = _setup(tmp_path)
+    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
+    monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
+    seen = {}
+    monkeypatch.setattr(rp, "cmd_push", lambda a: seen.update(yes=a.yes, sync=a.sync, only=a.publish_only, rev=a.rev) or 0)
+    monkeypatch.setattr(rp, "wait_publish", lambda since: "success")
+    monkeypatch.setattr(rp, "smoke", lambda t, c, r: [])
+    base = ["issue", "--book", "vol06", "-w", str(ws), "--export-dir", str(export), "--no-alt", "--no-sprite", "--cv-commit", "abc1234"]
+    assert rp.main(base) == 0
+    assert seen == {"yes": True, "sync": True, "only": "abc123/006", "rev": "006-r3"}
+    monkeypatch.setattr(rp, "smoke", lambda t, c, r: ["p0001.webp → 404"])
+    assert rp.main(base) == 1

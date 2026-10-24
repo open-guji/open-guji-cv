@@ -532,6 +532,10 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         if not counts_as_human(e):
             continue
         p = e.payload or {}
+        if p.get("v") == "figure":
+            # 图片格（GUJI-740）：后来判成图形，先前定的字作废（图上没有这个字）
+            out.pop(e.target.key, None)
+            continue
         # `seg_defect` 带着字也算定了字（2026-09-20 用户定）：「有噪声 / 字形不完整」说的是
         # **这块图**的毛病，人同时看得出是哪个字时，那个字不该被丢——文本照样出字，
         # 缺陷照样反馈给 Step3（`gold_add` 那边本来就留着 shape，见 consumers.py）。

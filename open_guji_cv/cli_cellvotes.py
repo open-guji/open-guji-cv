@@ -2,6 +2,8 @@
 
     guji cellvotes draft vol04 --site-book 96mid1ogzk --rev 004-r3 --cord <book-text>/…/default/004.cord.json \
         --out <目录> -w <工作区>                   # 只读：出 drafts.jsonl（可写的）、held.tsv（挂起的）、report.md
+                                                  # 另出 recheck.tsv：挂起里回网站再看的格（推翻旧裁、意见不一致、
+                                                  # 说无字又给字、格位变了），交 republish.py prep --recheck
     guji cellvotes write vol04 <目录> --batch H-web-vol04-2026-10-20 --reviewer Sheldon -w <工作区>
                                                   # 写进数据目录（锚按现行产物算）并消费；推库另跑 guji db sync
 
@@ -105,10 +107,25 @@ def _use_pack(book: str, label: str) -> Path:
     return root
 
 
+def _sheet(args) -> dict | None:
+    """投票时网站上那张单（读 `prior`：投票人看到的旧人裁）。--sheet 给了就用；否则数据目录线上单 rev 对得上就用它。"""
+    from .core.workspace import feedback_root
+    if getattr(args, "sheet", None):
+        p = Path(args.sheet)
+    else:
+        p = feedback_root() / "lists" / "proofing" / args.site_book / f"{args.rev.split('-r')[0].zfill(3)}.pending.json"
+    if not p.exists():
+        return None
+    doc = json.loads(p.read_text(encoding="utf-8"))
+    if doc.get("rev") != args.rev:
+        return None
+    return {**doc, "_path": str(p)}
+
+
 def cmd_draft(args) -> None:
     from .core.workspace import feedback_root
     from .feedback.events import EventLog
-    from .feedback.web_votes import latest_human, latest_votes, triage
+    from .feedback.web_votes import latest_human, latest_votes, recheck_rows, triage
     pack_root = _use_pack(args.book, args.pack) if args.pack else None
     if not args.cord and not args.no_box_check and not pack_root:
         raise SystemExit("要给 --cord（出单那一版 book-text 的 <册>.cord.json）或 --pack（出单版产物包），或显式 --no-box-check")
@@ -116,7 +133,10 @@ def cmd_draft(args) -> None:
     votes, dropped = latest_votes(raw, args.site_book, args.rev)
     human = latest_human(EventLog(feedback_root()).iter_all())
     check = _box_checker(args.book, Path(args.cord), args.tol) if args.cord else None
-    t = triage(votes, args.book, human, include_none=args.include_none, check=check)
+    sheet = _sheet(args)
+    sheet_prior = {c["cell"]: (c.get("prior") or {}).get("id") for c in (sheet or {}).get("cells", [])
+                   if (c.get("prior") or {}).get("id")}
+    t = triage(votes, args.book, human, include_none=args.include_none, check=check, sheet_prior=sheet_prior)
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -129,7 +149,14 @@ def cmd_draft(args) -> None:
         for d in t.held:
             f.write(f"{d.a}\t{json.dumps(d.payload, ensure_ascii=False)}\t{d.held}\t"
                     f"{'；'.join(v['choice'] + (('=' + v['char']) if v.get('char') else '') for v in d.votes)}\n")
+    rc = recheck_rows(t)
+    with open(out / "recheck.tsv", "w", encoding="utf-8") as f:
+        f.write("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n")
+        for r in rc:
+            f.write("\t".join(r) + "\n")
+    n_over = sum(1 for d in t.ready if d.payload.get("overrides"))
     meta = {"book": args.book, "site_book": args.site_book, "rev": args.rev, "votes_from": where,
+            "recheck": len(rc), "overrides": n_over, "sheet": (sheet or {}).get("_path"),
             "cord": str(args.cord) if args.cord else None, "pack": args.pack,
             "products_root": str(pack_root) if pack_root else None, "n_raw": len(raw), "n_votes": len(votes),
             "dropped": dropped, "ready": len(t.ready), "held": len(t.held), "skipped": t.skipped}
@@ -137,7 +164,9 @@ def cmd_draft(args) -> None:
     lines = [f"# {args.book} 网页投票 → 事件草稿（{args.rev}）", "",
              f"- 票：{where}；原始 {len(raw)} 条，有效 {len(votes)} 条，丢弃 {dropped or 0}",
              f"- 格位核对：{('对 ' + str(args.cord)) if args.cord else ('产物即出单版包 ' + args.pack) if args.pack else '未核（--no-box-check）'}",
-             f"- **可写 {len(t.ready)} 格**（drafts.jsonl），挂起 {len(t.held)} 格（held.tsv），跳过 {len(t.skipped)} 格", "",
+             f"- **可写 {len(t.ready)} 格**（drafts.jsonl，其中在复审单上有意推翻旧人裁 {n_over} 格），挂起 {len(t.held)} 格（held.tsv），"
+             f"跳过 {len(t.skipped)} 格",
+             f"- 挂起里回网站再看的 {len(rc)} 格（recheck.tsv，交 `republish.py prep --recheck`）", "",
              "| 格位 | 拟写 | 状态 |", "|---|---|---|"]
     for d in t.drafts:
         what = d.payload.get("shape") or d.payload.get("quality") or d.payload.get("reason") or ""
@@ -145,7 +174,8 @@ def cmd_draft(args) -> None:
     for a, why in t.skipped:
         lines.append(f"| {a} | — | 跳过：{why} |")
     (out / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-    _print(f"{where}：有效 {len(votes)} 条 → 可写 {len(t.ready)}、挂起 {len(t.held)}、跳过 {len(t.skipped)}")
+    _print(f"{where}：有效 {len(votes)} 条 → 可写 {len(t.ready)}（推翻旧裁 {n_over}）、挂起 {len(t.held)}"
+           f"（回网站再看 {len(rc)}）、跳过 {len(t.skipped)}")
     for d in t.held:
         _print(f"  挂起 {d.a}：{d.held}")
     _print(f"→ {out}/drafts.jsonl、held.tsv、report.md")
@@ -185,6 +215,8 @@ def add_parser(sub) -> None:
     p.add_argument("--no-box-check", action="store_true", help="draft：不核格位（自己担保产物没重切过）")
     p.add_argument("--pack", default=None, help="draft：出单版产物包标签（republish 存的 rev-<rev>），取回当产物根，免重跑")
     p.add_argument("--tol", type=float, default=8.0, help="draft：格框容差（像素，缺省 8）")
+    p.add_argument("--sheet", default=None, help="draft：投票时的待审单（读 prior：复审格上有意推翻旧人裁）；"
+                                                 "缺省数据目录里同 rev 的线上单")
     p.add_argument("--include-none", action="store_true", help="draft：「无字」也写（缺省挂起）")
     p.add_argument("--from", dest="from_file", default=None, help="draft：票从文件读")
     p.add_argument("--from-kv", action="store_true", help="draft：票直接管理读网站")

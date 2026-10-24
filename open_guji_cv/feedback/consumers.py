@@ -609,7 +609,7 @@ def glyphdb_recrop(events, **kw) -> ConsumeResult:
 
 def crop_exclude(events, list_path: str = "", dry_run: bool = False,
                  **kw) -> ConsumeResult:
-    """`not_a_char` / `damaged` 事件 → 追加进 `config/crop_exclusions.jsonl`。
+    """`not_a_char` / `damaged` / `figure` 事件 → 追加进 `config/crop_exclusions.jsonl`。
     `seg_defect` 自 2026-09-20 起**不进名单**（见下面那段注释：切坏与否交给 Step7 准入闸）。
 
     2026-09-05 补的缺口：此前人在卡片上点「有噪声」「字形不完整」「非字」，
@@ -637,6 +637,10 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
             # `guess`（最像的那个字）只进金标与文本层的括注，不进库：形都不全，
             # 拿它当范本会把破损形钉成那个字的刻例。
             hits.append((e, "damaged", "damaged"))
+        elif e.kind == "confirm" and p.get("v") == "figure":
+            # 图片格（GUJI-740）：这格是图形、不是字。同 damaged 一样不进库、不再出卡，字位占住；
+            # 文本层（`report/slots`）按理由 `figure` 出 □＋图，Step9 导出写 char `fig`、fig.json 与裁图。
+            hits.append((e, "figure", "figure"))
         elif e.kind == "confirm" and p.get("v") == "seg_defect":
             # **seg_defect 不再进排除名单**（2026-09-20 用户定）。切坏/带残留的图块
             # 该不该进库，交给 Step7 准入闸判，名单只收「不是字」与「原刻残」。
@@ -675,6 +679,11 @@ def crop_exclude(events, list_path: str = "", dry_run: bool = False,
                 note = f"审查卡片人裁：原图破损，最像「{p['guess']}」"
             else:
                 note = "审查卡片人裁：原图破损，认不出"
+        elif reason == "figure":
+            # `alt`（图的说明）进名单：导出写 fig.json 时取它（`feedback/figures.figure_cells`）。
+            if p.get("alt"):
+                ev.append(f"alt={p['alt']}")
+            note = "审查卡片人裁：图形，不是字" + (f"（{p['alt']}）" if p.get("alt") else "")
         rows.append({
             "date": (e.ts or "")[:10],
             "evidence": ev,
