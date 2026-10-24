@@ -254,3 +254,30 @@ def _seed_one_glyph(db, char, norm):
                 (gid, iid, _now()))
     db._write_derived(cur, iid, norm)
     db.conn.commit()
+
+
+def test_rebuild_derived_cache_hits_and_is_identical(db, tmp_path, monkeypatch):
+    """派生表示按图 sha 进盘上缓存（10-24）：第二次重建命中缓存，派生表与现算逐位相同；关掉缓存结果也一样。"""
+    import sqlite3
+
+    from open_guji_cv.clustering import glyph_db as G
+    from open_guji_cv.clustering.glyph_db import export_store, rebuild_from_store
+
+    monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
+    seed_glyphs(db)
+    store = tmp_path / "store"
+    export_store(db, store)
+
+    def derived(p):
+        with sqlite3.connect(p) as c:
+            return c.execute("SELECT instance_id, kind, algo_version, data FROM derived ORDER BY 1, 2").fetchall()
+
+    calls = []
+    real = G._derived_compute
+    monkeypatch.setattr(G, "_derived_compute", lambda raws, fb, jobs: calls.append(len(raws)) or real(raws, fb, jobs))
+    rebuild_from_store(store, tmp_path / "a.sqlite")
+    rebuild_from_store(store, tmp_path / "b.sqlite")
+    assert calls[0] > 0 and calls[1:] == []            # 第二次全部命中
+    monkeypatch.setenv("GUJI_NO_DERIVED_CACHE", "1")
+    rebuild_from_store(store, tmp_path / "c.sqlite")
+    assert derived(tmp_path / "a.sqlite") == derived(tmp_path / "b.sqlite") == derived(tmp_path / "c.sqlite")
