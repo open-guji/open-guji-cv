@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- 精校出单的 book-text 改走 dev（book-text 10-24 新规矩，open-guji/book-text#235；#507）：`republish.py` 的 `bump_book_text` 先切到最新 dev，升版后跑 `local_check.py --dev`、不重建 `index/texts`，提交并推 dev（别人先推了就 rebase 再推），不再开分支和 PR；`proof_cycle apply` 导出前先切 dev，原第 6 步「推分支、开草稿 PR」去掉。CHANGES 的 PR 列写 `#TBD`，由 book-text 每日合并换号（A32，PATCH）。
+
 ## [0.5.12] - 2026-10-23
 
 PATCH（殿本 vol11–20 统一重落要钉：并进 #504）。
