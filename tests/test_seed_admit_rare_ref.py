@@ -238,3 +238,34 @@ def _VCtx():
 
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+@pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
+def test_keep_ref_review_cells(doubt):
+    """护栏拿整理本字拦下的格不由 rare_ref（两遍）按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」；
+    本/木 在字组里，坐标那遍本就不碰，这里换不在字组里的一对测两遍）。"""
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+    cid = f"{BOOK}:{PAGE}:{COL}:1"
+
+    def run(keep, coord=None):
+        out = [ColumnAdmit(col=COL, chars=[AdmitRec(id=cid, slot=1, char=LIB, doubts=["replace_align", doubt])])]
+        mmap = {cid: SimpleNamespace(verdict="unsure", char=None, candidates=[(LIB, 0.98)], guard=None, cov=0.98)}
+        amap = {} if coord else {cid: (REF, "replace")}
+        n = sa._rare_ref_pass(out, mmap, amap, {cid: [REF]}, coord, keep_ref_review=keep)
+        return n, out[0].chars[0]
+
+    for coord in (None, {cid: REF}):
+        n, r = run(True, coord)
+        assert n == 0 and not r.admit and r.char == LIB
+        if coord and doubt.startswith("group_flow"):
+            continue                    # 坐标那遍本来就不碰 group_flow 降审格（`_rare_ref_coord_ok`）
+        n, r = run(False, coord)
+        assert n == 1 and r.char == REF and r.channel == "rare_ref"
+
+
+def test_keep_ref_review_in_dump_with_rare_ref_only():
+    on = SeedAdmitParams(rare_ref=True, lane_witness3=False, lane_coord=False, lane_seal=False)
+    off = SeedAdmitParams(rare_ref=False, lane_witness3=False, lane_coord=False, lane_seal=False)
+    assert "lane_keep_ref_review" in on.model_dump()
+    assert "lane_keep_ref_review" not in off.model_dump()

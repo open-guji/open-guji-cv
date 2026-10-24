@@ -570,7 +570,8 @@ class SeedAdmitParams(BaseModel):
     `group_flow_ref_dissent`／`group_flow_coord_dissent` 降审的格，R1/R4 会拿同一个整理本字、再加文渊阁系证人又放回去。
     证人与整理本同源，跟殿本刻字不一致时（其/萁、諸/諧）它们照样一致；vol20 这样放回 23 格里改错 5 格
     （45:5:18 諸→諧、144:5:20 其→萁、109:5:10 本→木、178:3:16、178:3:19）。开着 = 这些格留人审，默认字仍是整理本字。
-    只在三通道任一开着时进 dump；False＝放回（2026-10-23 前的行为）。"""
+    rare_ref（两遍）同样不碰这些格（A24 10-23 九册核对：vol18:115:6:3 刻「本」由 rare_ref 放成整理本的「木」）。
+    只在三通道或 rare_ref 开着时进 dump；False＝放回（2026-10-23 前的行为）。"""
     lane_witness_fingerprint: str = ""
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
@@ -683,8 +684,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
                       "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
-                      "lane_variant_topk", "lane_keep_ref_review"):
+                      "lane_variant_topk"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
+            d.pop("lane_keep_ref_review", None)
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
             d.pop("seal_lib_cov", None)
@@ -1446,7 +1449,7 @@ class SeedAdmitStep(Step):
             n_auto += d_gf
             n_review -= d_gf
         if p.rare_ref:
-            d_rr = _rare_ref_pass(out, mmap, amap, rtop)
+            d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
             n_review -= d_rr
         if p.shadow_veto:
@@ -1467,7 +1470,8 @@ class SeedAdmitStep(Step):
             n_review -= d_lane
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
-            d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk)
+            d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
+                                  keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rc
             n_review -= d_rc
         if p.oversplit_gate == "hint":
@@ -1574,11 +1578,14 @@ def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk:
 
 
 def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
-                   coord: dict[str, str] | None = None, variant_topk: int = 3) -> int:
+                   coord: dict[str, str] | None = None, variant_topk: int = 3,
+                   keep_ref_review: bool = False) -> int:
     """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。
 
     `coord` 不给：只看现役对位（`amap`）里的格。`coord` 给了（`rare_ref_coord`，排在审路之后另跑一遍）：
-    只看现役对位里**没有**的格，拿坐标对位字当整理本字（护栏见 `_rare_ref_coord_ok`）。"""
+    只看现役对位里**没有**的格，拿坐标对位字当整理本字（护栏见 `_rare_ref_coord_ok`）。
+    `keep_ref_review`（＝`lane_keep_ref_review`）：护栏拿整理本字拦下的格（`_LANE_REF_REVIEW`）不按整理本字放回，
+    同审路（vol18:115:6:3 刻「本」、整理本与 5-b 都作「木」、字组文意判「本」，旧版 rare_ref 放成「木」）。"""
     from ..variants import are_variants
     group_chars: frozenset[str] = frozenset()
     if coord:
@@ -1588,6 +1595,8 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
     for col in out:
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            if keep_ref_review and set(rec.doubts or []) & _LANE_REF_REVIEW:
                 continue
             m = mmap.get(rec.id)
             al = amap.get(rec.id)

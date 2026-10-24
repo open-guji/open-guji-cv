@@ -17,6 +17,8 @@ from dataclasses import dataclass, field
 import cv2
 import numpy as np
 
+from ..utils.image_io import imread as cv_imread
+
 BIN_THR = 128           # 灰度低于此算墨（殿本 1-bit，0 = 墨）
 RUN_INK = 0.06          # 行墨占列带宽这么多才算有墨（同 eval_char_drop）
 RUN_MIN_H = 14
@@ -186,7 +188,10 @@ def scan_book(book: str, pages: list[int] | None = None, store=None) -> tuple[li
     for k in keys:
         prod = st.read_raw(book, "row_segment", k)
         page = int(k[1:])
-        img = cv2.imread(str(bk.raw_path(page)), cv2.IMREAD_GRAYSCALE)
+        try:
+            img = cv_imread(str(bk.raw_path(page)), cv2.IMREAD_GRAYSCALE)
+        except FileNotFoundError:   # 缺原图同旧口径（cv2.imread 返回 None）：跳过
+            img = None
         if prod is None or img is None:
             continue
         n += 1
