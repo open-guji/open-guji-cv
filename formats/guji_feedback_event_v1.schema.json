@@ -29,7 +29,7 @@
       "enum": ["verdict", "band", "border_class", "recrop", "not_a_char", "confirm", "relabel", "skip", "damaged",
                "mark", "flag", "split", "merge", "note", "cutline", "border_offset", "head_raise", "n_body_slots",
                "collate_ok", "char_convention", "mark_jiajie", "variant_deny", "collate_verdict", "unmark_jiajie",
-               "glyph_audit", "return_resolve", "needs_review", "admit_candidate", "cell_review", "vision_check"],
+               "glyph_audit", "return_resolve", "needs_review", "admit_candidate", "cell_review", "vision_check", "figure_region"],
       "description": "传输层粗分类。recrop/not_a_char/relabel/skip/damaged/mark/flag/split/merge/note 没有写入口（not_a_char/skip/damaged 实走 confirm + payload.v），新代码不许写。"
     },
     "target": {"$ref": "#/$defs/target"},
@@ -109,8 +109,8 @@
       "type": "object",
       "required": ["v"],
       "properties": {
-        "v": {"enum": ["confirm", "seg_defect", "not_a_char", "skip", "damaged"],
-              "description": "confirm=定字（带 shape）；seg_defect=这块图切坏了（可同时带 shape，带了也算定字）；not_a_char=不是字；skip=存疑跳过（待办）；damaged=原刻残、认不出（文本出 □，可带 guess）。"},
+        "v": {"enum": ["confirm", "seg_defect", "not_a_char", "skip", "damaged", "figure"],
+              "description": "confirm=定字（带 shape）；seg_defect=这块图切坏了（可同时带 shape，带了也算定字）；not_a_char=不是字；skip=存疑跳过（待办）；damaged=原刻残、认不出（文本出 □，可带 guess）；figure=图片格，这格是图形不是字（文本出 □＋fig，可带 alt，GUJI-740）。"},
         "shape": {"type": "string", "description": "字形：单字或合法多码位（IDS、PUA+选择符）。写入口拒乱码、折兼容汉字。"},
         "reading": {"type": "string", "description": "2026-09-26 起取消；老事件里只有 己/已/巳 族时才取它。"},
         "conversion": {"type": "integer"},
@@ -119,6 +119,7 @@
         "defect": {"type": "string"},
         "reason": {"type": "string", "description": "seg_defect：jiazhu_as_main（小注当正文，拆）/ main_as_jiazhu（正文当小注，别拆）→ Step3 重跑强制。"},
         "guess": {"type": ["string", "null"], "description": "damaged：最像的字（只进金标与括注，不进字形库）；没有写 null。"},
+        "alt": {"type": "string", "description": "figure（GUJI-740）：这格是图形、不是字，alt 是图的说明（悬停、读屏、复制用）；空时导出写「图形符号」。"},
         "via": {"type": "string", "description": "从哪个台/动作来的：grid、collate_verdict…"},
         "source": {"type": "string", "description": "来源：vision（不算人裁）、auto（机器高可信刻例）、或文字说明（网站意见、更正脚本）。"},
         "group": {"type": "string"},

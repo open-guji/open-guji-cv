@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-guji.org/schema/fig/v0.1.json",
+  "title": "GujiFig",
+  "description": "图表（guji-fig v0.1），book-text original 每章一份（只有用到图的章才有）：char 的图片格与图列引用的每张图的来源、说明与文件；不跟踪内容版本",
+  "type": "object",
+  "required": [
+    "$schema",
+    "book_id",
+    "volume",
+    "figures"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "box": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 4,
+      "maxItems": 4,
+      "description": "IIIF Canvas 像素 [x, y, w, h]，左上原点，与 cord 一致"
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "book_id": {
+      "type": "string"
+    },
+    "volume": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "figures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "page",
+          "box",
+          "alt",
+          "file",
+          "sha256",
+          "mime",
+          "width",
+          "height",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "章内唯一；不跟格位变"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "inline",
+              "block"
+            ],
+            "description": "inline 图片格（char 格上的 fig）／block 插图块（char 图列、cord marks.figure）"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "box": {
+            "$ref": "#/$defs/box"
+          },
+          "alt": {
+            "type": "string",
+            "minLength": 1,
+            "description": "说明文字：悬停、读屏、复制都用它"
+          },
+          "file": {
+            "type": "string",
+            "pattern": "^fig/\\d{3,}/[a-z0-9][a-z0-9-]*\\.(png|webp|svg)$",
+            "description": "相对版本目录的路径 fig/<NNN>/<id>.<扩展名>"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "mime": {
+            "type": "string",
+            "enum": [
+              "image/png",
+              "image/webp",
+              "image/svg+xml"
+            ]
+          },
+          "width": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "height": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "crop",
+              "redraw"
+            ],
+            "description": "crop 从书影裁出／redraw 人工重绘"
+          },
+          "by": {
+            "type": "string",
+            "minLength": 1,
+            "description": "谁做的：cv:export、human:<名字>"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "mime": {
+                  "const": "image/svg+xml"
+                }
+              },
+              "required": [
+                "mime"
+              ]
+            },
+            "then": {
+              "properties": {
+                "file": {
+                  "pattern": "\\.svg$"
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "file": {
+                  "pattern": "\\.(png|webp)$"
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": {
+                "source": {
+                  "const": "crop"
+                }
+              },
+              "required": [
+                "source"
+              ]
+            },
+            "then": {
+              "properties": {
+                "mime": {
+                  "enum": [
+                    "image/png",
+                    "image/webp"
+                  ]
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  }
+}

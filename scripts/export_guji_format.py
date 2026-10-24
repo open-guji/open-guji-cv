@@ -21,6 +21,12 @@ lines.md 逐字相同。`--keys cv|lines` 选格位口径（缺省 cv，照 spec
 
 `--text-version` 在 char-cord 下必填、没有缺省（GUJI-679）：首次出写 0.1.0，已是 0.1.x 的册写 book-text 上的现行版本
 （以前缺省写 0.1.0，出补丁前得先手工改回线上版本，踩过）。
+
+**图（GUJI-740）**：char-cord 下缺省读本册的图片格（排除名单理由 figure）与插图块（`figure_region` 事件），用到图就多出
+`NNN.fig.json` 与 `fig/NNN/<图 id>.png|webp`（从 cord 该页 `image.sha256` 那张页图裁，先找 `--page-images`、工作区原图，
+sha 对得上才用，再取 R2 页图 `blob.open-guji.com`；`--no-fetch` 不上网）。`--prev-fig <book-text 现行 NNN.fig.json>`
+沿用旧图 id、保留重绘图（导出到已有图的册要给）。`--no-figures` 不读插图块事件与图片格说明（图片格本身由 Step7 产物
+定，照出，说明写「图形符号」）。
 """
 from __future__ import annotations
 
@@ -72,6 +78,10 @@ def main(argv=None) -> int:
     ap.add_argument("--keys", choices=cc.KEYS, default="cv", help="char-cord 的格位口径")
     ap.add_argument("--text-version", default=None,
                     help="char-cord 必填：char 的 version（首次 0.1.0；已有的册写 book-text 现行版本）")
+    ap.add_argument("--no-figures", action="store_true", help="不读插图块事件与图片格说明（图片格照 Step7 产物出）")
+    ap.add_argument("--prev-fig", default=None, help="book-text 现行的同章 fig.json：沿用图 id、保留重绘图")
+    ap.add_argument("--page-images", default=None, help="页图目录（<页>.png），裁图先找这里")
+    ap.add_argument("--no-fetch", action="store_true", help="裁图不取 R2 页图（只用本地）")
     a = ap.parse_args(argv)
     if a.format == "char-cord" and not a.text_version:
         ap.error("--format char-cord 要给 --text-version：首次出写 0.1.0，已有的册写 book-text 上的现行版本"
@@ -86,9 +96,14 @@ def main(argv=None) -> int:
     plist = _pages(a.pages, products, a.book)
     from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
     pend = vision_pending_ids(a.book, plist, a.products)
+    figure_alts, regions = {}, {}
+    if a.format == "char-cord" and not a.no_figures:
+        from open_guji_cv.feedback.figures import figure_cells, resolved_figure_regions
+        figure_alts = figure_cells(a.book)
+        regions = {pg: r for pg, r in resolved_figure_regions(a.book).items() if pg in set(plist)}
     for p in plist:
         try:
-            page = export_page(a.products, a.book, p, page_meta(meta, p), pending_ids=pend)
+            page = export_page(a.products, a.book, p, page_meta(meta, p), pending_ids=pend, figure_alts=figure_alts)
         except Exception as e:  # noqa: BLE001 — 缺产物的页报出来、不中断整章
             print(f"   ✗ p{p}: {type(e).__name__}: {e}")
             bad += 1
@@ -106,13 +121,23 @@ def main(argv=None) -> int:
         print("   ✗ 往返自检不过：guji-format 读回的 guji-page 与原页不同")
         bad += 1
     if a.format == "char-cord":
-        new, rep = cc.from_pages_json(pj, zi=files[f"{a.chapter}.zi.json"], norm=files[f"{a.chapter}.norm.json"],
-                                      version=a.text_version, keys=a.keys, chapter=a.chapter)
+        conv = dict(zi=files[f"{a.chapter}.zi.json"], norm=files[f"{a.chapter}.norm.json"],
+                    version=a.text_version, keys=a.keys, chapter=a.chapter)
+        new, rep = cc.from_pages_json(pj, **conv, figure_regions=regions, prev_fig=load(a.prev_fig))
+        fig = new.get(f"{a.chapter}.fig.json")
+        if fig is not None:
+            for e in cc.crop_figures(fig, new[f"{a.chapter}.cord.json"], _image_loader(a), a.out):
+                print(f"   ✗ {e}")
         cc.write_files(new, a.out)
         st = cc.stats(new[f"{a.chapter}.char.json"], new[f"{a.chapter}.cord.json"])
+        fr = rep["figures"]
         print(f"{a.book} 章 {a.chapter}（char-cord，keys={a.keys}）：{st['pages']} 页、{st['cells']} 格（有框 {st['boxed']}）、"
               f"阙文 {st['lacuna']}（其中带推测字 {st['guess_c']}）；没写进 cord 的 {rep['dropped']} → {a.out}")
-        bad += char_cord_report(new, md)
+        if fig is not None:
+            print(f"   图：图片格 {fr['inline']}、插图块 {fr['block']}（占掉的格 {len(fr['dropped_cells'])}）、"
+                  f"保留重绘 {fr['kept']} → {a.out}/fig/{a.chapter}/")
+        base = cc.from_pages_json(pj, **conv)[0][f"{a.chapter}.char.json"] if regions else None
+        bad += char_cord_report(new, md, roundtrip_char=base)
         return 1 if bad else 0
     if a.only == "pages":
         files = {k: v for k, v in files.items() if k.endswith(".pages.json")}
@@ -126,6 +151,44 @@ def main(argv=None) -> int:
             _, rep = gf.reattach(load(path), idx, md)
             print(f"   {name}：按锚点 {rep['by_anchor']}、退到偏移 {rep['by_offset']}、对不上 {len(rep['lost'])}")
     return 1 if bad else 0
+
+
+def _image_loader(a):
+    """`(页, sha256) → PIL 图 | None`：`--page-images/<页>.png` → 工作区原图 → R2 页图；本地的 sha 对不上不用。"""
+    import hashlib
+    import io
+    import urllib.request
+
+    from PIL import Image
+
+    def local(page: int) -> list[Path]:
+        out = [Path(a.page_images) / f"{page}.png"] if a.page_images else []
+        try:
+            from open_guji_cv.core.book import load_book
+            out.append(Path(load_book(a.book).raw_path(page)))
+        except Exception:  # noqa: BLE001 — 没有工作区就只看别的来源
+            pass
+        return out
+
+    def load(page: int, sha: str | None):
+        for p in local(page):
+            if p.exists():
+                data = p.read_bytes()
+                if not sha or hashlib.sha256(data).hexdigest() == sha:
+                    return Image.open(io.BytesIO(data))
+        if sha and not a.no_fetch:
+            url = f"https://blob.open-guji.com/sha256/{sha[:2]}/{sha}.png"
+            req = urllib.request.Request(url, headers={"User-Agent": "open-guji-cv/export-fig"})
+            try:
+                with urllib.request.urlopen(req, timeout=120) as r:
+                    data = r.read()
+            except OSError as e:
+                print(f"   ✗ 取 R2 页图失败 p{page}：{e}")
+                return None
+            if hashlib.sha256(data).hexdigest() == sha:
+                return Image.open(io.BytesIO(data))
+        return None
+    return load
 
 
 if __name__ == "__main__":

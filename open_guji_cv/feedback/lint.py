@@ -34,7 +34,7 @@ from .events import Event, EventLog, replay_key
 from .keys import parse_card_id
 
 #: `confirm` 的 `payload.v` 取值（规范 §5.1）
-CONFIRM_V = frozenset({"confirm", "seg_defect", "not_a_char", "skip", "damaged"})
+CONFIRM_V = frozenset({"confirm", "seg_defect", "not_a_char", "skip", "damaged", "figure"})
 
 #: `anchor.product_key` 只许这几个键（规范 §7.2）
 PRODUCT_KEY_FIELDS = frozenset({"step", "key", "fingerprint"})
@@ -54,6 +54,7 @@ KIND_UNITS = {
     "collate_ok": {"cell"},
     "cell_review": {"cell"},
     "needs_review": {"cell"},
+    "figure_region": {"page"},
 }
 
 _ID = re.compile(r"^evt_(?P<batch>.+)_(?P<seq>\d{6,})$")
