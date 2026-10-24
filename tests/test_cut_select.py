@@ -86,7 +86,8 @@ def test_owner_from_seam_splits_ink_by_row_against_seam():
 
 def test_ckpt_fingerprint_empty_for_missing_file(tmp_path):
     assert ckpt_fingerprint(tmp_path / "nope.pt") == ""
-    if DEFAULT_CKPT.exists():
+    import importlib.util
+    if DEFAULT_CKPT.exists() and importlib.util.find_spec("torch") is not None:   # 没装 torch 按设计返回空串
         assert len(ckpt_fingerprint()) == 12
 
 

@@ -1,0 +1,267 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://open-guji.org/schema/char/v0.3.json",
+  "title": "GujiChar",
+  "description": "定字文本 (guji-char v0.3)，book-text original 每章一份，文本唯一真源；不带坐标、不带候选。v0.3 增图片格（格键 fig）与图列（列 kind: figure），v0.1、v0.2 文件原样合法",
+  "type": "object",
+  "required": [
+    "$schema",
+    "version",
+    "book_id",
+    "volume",
+    "pages"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-3]\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$",
+      "description": "文本线内容版本；index.json 该章 text_version 是它的镜像"
+    },
+    "review": {
+      "type": "object",
+      "description": "验收记录，文本线 major ≥2 时必填",
+      "required": [
+        "date",
+        "signed_by",
+        "sample"
+      ],
+      "properties": {
+        "date": {
+          "type": "string",
+          "minLength": 1
+        },
+        "signed_by": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sample": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1
+            },
+            {
+              "type": "object",
+              "minProperties": 1
+            }
+          ]
+        }
+      }
+    },
+    "book_id": {
+      "type": "string"
+    },
+    "volume": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "册号，等于 book-text original/index.json 该章的 n"
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "page",
+          "columns"
+        ],
+        "properties": {
+          "page": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "label": {
+            "type": "string"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "col",
+                "cells"
+              ],
+              "properties": {
+                "col": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "raised": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "lead_blank": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "body",
+                    "banxin",
+                    "blank",
+                    "figure"
+                  ]
+                },
+                "cells": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "a",
+                      "c"
+                    ],
+                    "properties": {
+                      "a": {
+                        "type": "string",
+                        "pattern": "^\\d+:\\d+:-?[1-9]\\d*[ab]?$"
+                      },
+                      "c": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "lane": {
+                        "type": "string",
+                        "enum": [
+                          "main",
+                          "solo",
+                          "jz_r",
+                          "jz_l"
+                        ]
+                      },
+                      "lacuna": {
+                        "type": "boolean"
+                      },
+                      "guess": {
+                        "type": "boolean"
+                      },
+                      "guess_c": {
+                        "type": "string",
+                        "minLength": 1,
+                        "pattern": "^[^\\s{}]+$",
+                        "description": "阙文格的推测字：单字，或 Unicode 未收字的 IDS／组字式；只许出现在 lacuna: true、c 为 □ 的格上，与 guess 互斥"
+                      },
+                      "zi": {
+                        "type": "string"
+                      },
+                      "fig": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9][a-z0-9-]*$",
+                        "description": "图片格：这格是图形不是字，值是同章 fig.json 里的图 id；c 写 □，不带 lacuna／guess／guess_c／zi"
+                      }
+                    },
+                    "allOf": [
+                      {
+                        "if": {
+                          "required": [
+                            "guess_c"
+                          ]
+                        },
+                        "then": {
+                          "required": [
+                            "lacuna"
+                          ],
+                          "properties": {
+                            "lacuna": {
+                              "const": true
+                            },
+                            "c": {
+                              "const": "□"
+                            },
+                            "guess": false
+                          }
+                        }
+                      },
+                      {
+                        "if": {
+                          "required": [
+                            "fig"
+                          ]
+                        },
+                        "then": {
+                          "properties": {
+                            "c": {
+                              "const": "□"
+                            },
+                            "lacuna": false,
+                            "guess": false,
+                            "guess_c": false,
+                            "zi": false
+                          }
+                        }
+                      }
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                "span": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "图列占几列（含 col 本列），只许 kind: figure 用；缺省 1"
+                },
+                "fig": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]*$",
+                  "description": "图列引用的图 id，在同章 fig.json 里有；只许 kind: figure 用"
+                }
+              },
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "figure"
+                  }
+                },
+                "required": [
+                  "kind"
+                ]
+              },
+              "then": {
+                "required": [
+                  "fig"
+                ],
+                "properties": {
+                  "cells": {
+                    "maxItems": 0
+                  }
+                }
+              },
+              "else": {
+                "not": {
+                  "anyOf": [
+                    {
+                      "required": [
+                        "fig"
+                      ]
+                    },
+                    {
+                      "required": [
+                        "span"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "if": {
+    "properties": {
+      "version": {
+        "pattern": "^[2-3]\\."
+      }
+    },
+    "required": [
+      "version"
+    ]
+  },
+  "then": {
+    "required": [
+      "review"
+    ]
+  }
+}

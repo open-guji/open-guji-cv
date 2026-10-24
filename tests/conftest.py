@@ -291,3 +291,36 @@ def no_cnn(monkeypatch):
         available = False
 
     monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Off())
+
+
+#: 2026-10-23 起缺省开的放行开关（sheldon 定「没问题的 feature 缺省开」）。老的单元测试是在
+#: 「缺省全关」上造的数据（没字块图、没证人），测别的分支时要先把它们关回去；
+#: 新缺省本身由 `test_seed_admit_defaults_on.py` 守。
+SEED_ADMIT_SWITCHES_OFF = {"group_flow": (), "context_guard_diff": False, "context_guard_ref_blank": False,
+                           "lane_witness3": False, "lane_coord": False}
+
+
+@pytest.fixture
+def seed_admit_switches_off():
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams as P
+    saved = {k: (P.model_fields[k].default, P.model_fields[k].default_factory) for k in SEED_ADMIT_SWITCHES_OFF}
+    for k, v in SEED_ADMIT_SWITCHES_OFF.items():
+        P.model_fields[k].default, P.model_fields[k].default_factory = v, None
+    P.model_rebuild(force=True)
+    # 书级铁证通道 `BookSpec.iron_gate`（dataclass）：改 `__init__` 的缺省值表
+    import inspect
+    from open_guji_cv.core.book import BookSpec
+    init = BookSpec.__init__
+    names = [n for n, q in inspect.signature(init).parameters.items() if q.default is not inspect.Parameter.empty]
+    old_defaults = init.__defaults__
+    if old_defaults is not None and "iron_gate" in names:
+        d = list(old_defaults)
+        d[names.index("iron_gate")] = False
+        init.__defaults__ = tuple(d)
+    try:
+        yield
+    finally:
+        init.__defaults__ = old_defaults
+        for k, (d, f) in saved.items():
+            P.model_fields[k].default, P.model_fields[k].default_factory = d, f
+        P.model_rebuild(force=True)

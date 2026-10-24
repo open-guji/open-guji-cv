@@ -231,3 +231,17 @@ def test_inverted_rect_over_gate_is_blocked():
     rules = [{"kind": "inverted_rect", "x0": 50, "x1": 149, "y0": 50, "y1": 149}]
     with pytest.raises(PrecleanGateError, match="闸0未过"):
         apply_preclean(g, rules)
+
+
+# ── inverted_poly：照多边形反，不再量 ─────────────────────────────────
+def test_invert_poly_restores_a_stepped_region():
+    from open_guji_cv.utils.preclean import invert_poly
+    g = np.full((200, 300), 255, np.uint8)
+    g[50:80, 20:150] = 0
+    g[60:100, 150:280] = 0
+    poly = [[20, 50], [149, 50], [149, 60], [279, 60], [279, 99], [150, 99], [150, 79], [20, 79]]
+    out = invert_poly(g, polygons=[poly])
+    assert (out == 255).all()
+    rules = [{"kind": "inverted_poly", "polygons": [poly]}]
+    fixed, notes = apply_preclean(g, rules)
+    assert (fixed == 255).all() and "inverted_poly" in notes[0] and "过闸" in notes[0]
