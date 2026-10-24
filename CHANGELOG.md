@@ -3,6 +3,7 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]`
 ### Fixed
+- seed_admit／align_ref 坐标冲突守卫（常开，无开关，A23）：`align_ref` 产物新增 `coord_conflict_ids`（坐标字≠现役 equal 字的格，全记）；match_ref 不放这些格、落人审（doubt `coord_conflict`）。起因：殿本 vol14 cv0.5.9 的 60:1:5 拱→撰、103:2:7（双行小注两字被切一格）放成「中」。vol14 两版回放每版约多送审 8 格。`seed_admit`、`align_ref` 的 code_hash 变，各册缺省输出会变；冻结册只登记不重跑。
 - seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
  下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 

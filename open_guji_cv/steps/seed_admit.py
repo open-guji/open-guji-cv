@@ -363,13 +363,6 @@ class SeedAdmitParams(BaseModel):
     **缺省关**：v0.5.9 已上线产物离线回放（vol16–20），日曰、人八、官宫 等库近平手而整理本给对的格太多，
     每册多送审 160–400 格，只多拦 2 格错放（vol19 18:9:20 圍→四、24:5:4 官→宫），不划算。"""
     match_tie_gap: float = 0.003
-    coord_conflict_guard: bool = False
-    """库 × 整理本（match_ref）不放两路对位打架的格（A23 2026-10-23，vol14 60:1:5 拱→撰、57:1:16 若→俞、103:2:7 立→中）：
-    `align_ref` 记进 `coord_conflict_ids` 的格——坐标对位字与现役 equal 字不同，列整列退回现役对位——现役字在这一格
-    恰是存疑的那一路，「库 top == 现役字」不再是两路独立证据。命中的 match_ref 撤回放行、落人审，doubt `coord_conflict`。
-    只拦 match_ref（回放只有它的数据）。vol14 两版产物回放：v0.5.9 拦 8 格（全中 3 个错放，另 5 格是对的、转人审），
-    v0.5.7 拦 8 格（含 2 个错放 173:9:20、218:5:7a）。
-    **缺省关**（A20 建议，殿本册 yaml 打开）；关着时不进参数哈希。"""
     replace_form: str = "align"
     """`match_replace` 放行时字形（码位）取谁（2026-09-28，overview#155）：
     - `align`（缺省，旧行为）：库没下 same 断言时取整理本字；
@@ -701,8 +694,7 @@ class SeedAdmitParams(BaseModel):
         for flag, keys in (("context_page_end_review", ()),
                            ("context_variant_form_guard", ("context_variant_ratio", "context_variant_lib_gap")),
                            ("iron_ctx_guard", ("iron_ctx_prob", "iron_ctx_gap")),
-                           ("match_tie_guard", ("match_tie_gap",)),
-                           ("coord_conflict_guard", ())):
+                           ("match_tie_guard", ("match_tie_gap",))):
             if isinstance(d, dict) and not getattr(self, flag):
                 for k in (flag, *keys):
                     d.pop(k, None)
@@ -1137,8 +1129,11 @@ class SeedAdmitStep(Step):
                     if _variant_indirect(_shape, align_char, ledger, ctx.book):
                         ok, channel = False, None
                         doubts.append("variant_indirect")
-                if (ok and p.coord_conflict_guard and channel == "match_ref"
-                        and r.id in coord_conflict):
+                # 库 × 整理本不放两路对位打架的格（A23 2026-10-23，常开、无开关）：`align_ref.coord_conflict_ids`
+                # 里坐标字≠现役 equal 字的格，现役字恰是存疑那一路，「库 top == 现役字」不再是两路独立证据
+                # （vol14 cv0.5.9：60:1:5 拱→撰，库 撰 0.9393／撤 0.9391；103:2:7 双行小注两字被切一格，库 diff 仍放「中」）。
+                # 只拦 match_ref；落人审，doubt `coord_conflict`。vol14 两版产物回放每版拦 8 格，看图确认拦中 2 个真错、误伤 1。
+                if ok and channel == "match_ref" and r.id in coord_conflict:
                     ok, channel = False, None
                     doubts.append("coord_conflict")
                 if (ok and p.match_tie_guard and r.verdict != "same"

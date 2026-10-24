@@ -29,10 +29,8 @@ def test_conflict_ids_skips_blank_replace_and_missing():
     assert _coord_conflict_ids(recs, legacy) == []
 
 
-def test_default_off_and_not_in_hash():
-    assert not SeedAdmitParams().coord_conflict_guard
-    assert "coord_conflict_guard" not in SeedAdmitParams().model_dump()
-    assert SeedAdmitParams(coord_conflict_guard=True).model_dump()["coord_conflict_guard"] is True
+def test_no_switch_param():
+    assert "coord_conflict_guard" not in SeedAdmitParams.model_fields      # 常开，无开关
 
 
 def test_page_align_ref_field_default():
