@@ -9,6 +9,7 @@
 ## [未发版]
 
 ### Fixed
+- 字形库体检（`glyph_audit`）撤库（evict）或改字（relabel）一个人裁入库的刻例时，同时把该格此前的人裁事件记进 `lists/stale_verdicts.tsv` 作废；撤下之后新裁的照常生效，机器入库的刻例不动（A23，GUJI-719 第 4 项）。此前撤库不留标记，旧人裁事件会让该格被误放行。不在任何 Step 的 `code_deps` 里。
 - seed_admit `rare_ref`（两遍）也认 `lane_keep_ref_review`（A24）：被 `ctx_guard_ref`／`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格不再由 rare_ref 按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」，旧版放成「木」）。开了 rare_ref 的册参数 dump 多出该键，`code_hash` 变，各册只需重落 seed_admit。
 - seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
