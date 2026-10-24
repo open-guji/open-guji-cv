@@ -1,0 +1,34 @@
+# 三个准入闸 A/B（A22，2026-10-23）：A＝现行册配置；B 开 runt_cell_review；C 开 oversplit_gate=hint；D 开 nonchar_gate
+# 跑法：guji exp run doc/exp/准入三闸-vol05-vol09.yaml -w $WS --snapshot <products 根> --root <实验根> --only <变体> --pages <分片>（GUJI_CORPUS_DRIFT=warn：dev 的 symbols.tsv 与语料库 v15 清单不符，两臂同代码不影响对比）
+# 快照：vol05 cv0.5.7-c14-g-eda521-full、vol09 cv0.5.7-c14-g-a55aa1-full（各册 main 包）。报告：doc/exp/准入三闸-vol05-vol09-报告.md
+name: admit-gates-vol05-vol09
+books: [vol05, vol09]
+from: seed_admit
+to: seed_admit
+pages: all
+book_params: keep
+match: exact
+base:
+  note: 现行册配置（三闸都关）
+  params:
+    seed_admit: {}
+variants:
+  B:
+    note: 矮格转人审
+    params:
+      seed_admit: {runt_cell_review: true}
+  C:
+    note: 过切提示
+    params:
+      seed_admit: {oversplit_gate: hint}
+  D:
+    note: 非字过滤
+    params:
+      seed_admit: {nonchar_gate: true}
+eval:
+  use_human_verdicts: false
+labels:
+  - {source: human_events}
+guardrails:
+  - {metric: admit_err_rate, scope: body, op: "<=", ref: base}
+  - {metric: flips.right_to_wrong, op: "==", value: 0}
