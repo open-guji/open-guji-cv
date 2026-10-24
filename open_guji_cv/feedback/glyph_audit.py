@@ -31,6 +31,41 @@ from pathlib import Path
 from .consumers import ConsumeResult
 
 
+def _was_human(db, instance_id: str) -> bool:
+    row = db.conn.execute("SELECT provenance FROM admissions WHERE instance_id=?", (instance_id,)).fetchone()
+    return bool(row and str(row[0]) == "human")
+
+
+def _void_human_event(instance_id: str, reason: str) -> str | None:
+    """体检判某个人裁刻例标错（evict／relabel）时，把该格此刻以前的人裁事件一并作废（GUJI-719 第 4 项，2026-10-24 用户定）。
+
+    `evict_instance` 删的是库里四表，不会留 `human_stale_*`；事件侧的 `lookup.human_chars` 只认
+    `stale_human_marks`（库里的标记，或 `<feedback>/lists/stale_verdicts.tsv`），不记就会继续按旧字放行。
+    这里往后者追加一行 `字位id<TAB>撤下时刻(UTC YYYYMMDDTHHMM)<TAB>原因`；撤下之后再裁的事件照常生效。
+    返回写入的字位 id；写不进去返回 None（调用方要报出来，不能静默）。"""
+    from datetime import datetime, timezone
+
+    from ..core.workspace import feedback_root
+    key = instance_id[3:] if instance_id.startswith("v2:") else instance_id
+    try:
+        path = feedback_root() / "lists" / "stale_verdicts.tsv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cut = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M")
+        with open(path, "a", encoding="utf-8") as fh:
+            fh.write(f"{key}\t{cut}\t{reason}\n")
+    except OSError:
+        return None
+    return key
+
+
+def _void_or_report(res, rec: dict, e, instance_id: str, why: str) -> None:
+    key = _void_human_event(instance_id, f"{why} {e.id}")
+    if key:
+        rec["voided_human_event"] = key
+    else:
+        res.errors.append(f"{e.id}: 撤库已做，但人裁事件作废标记没写进 stale_verdicts.tsv（{instance_id}）")
+
+
 def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw) -> ConsumeResult:
     from ..clustering.audit import evict_instance
     from ..clustering.glyph_db import GlyphDB
@@ -72,7 +107,10 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                     res.skipped += 1
                     continue
                 rec["target"] = target
+                was_human = _was_human(db, target)
                 rec["old_char"] = evict_instance(db, target)
+                if was_human:
+                    _void_or_report(res, rec, e, target, "glyph_audit evict")
             elif v == "relabel":
                 ch = p.get("char") or ""
                 if len(ch) != 1 or ord(ch) < 0x2E80:
@@ -87,7 +125,10 @@ def glyph_audit(events, db_path: str | None = None, dry_run: bool = False, **kw)
                     res.skipped += 1
                     continue
                 png, page, col, idx, bbox = row
+                was_human = _was_human(db, iid)
                 rec["old_char"] = evict_instance(db, iid)
+                if was_human:
+                    _void_or_report(res, rec, e, iid, "glyph_audit relabel")
                 rec["char"] = ch
                 db.admit_instance(iid, ch, bytes(png), provenance="human", shape=ch,
                                   evidence={"event": e.id, "batch": e.batch, "via": "glyph_audit",
