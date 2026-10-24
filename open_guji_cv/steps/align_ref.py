@@ -1083,7 +1083,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
 def _coord_conflict_ids(recs, legacy: dict) -> list[str]:
     """退回列里坐标字与现役 `equal` 字不同的**全部**格（`_coord_conflict` 只报第一格）。
 
-    给 seed_admit 的 `coord_conflict_guard` 用：两路对位在这一格打架，match_ref 那句
+    给 seed_admit 的坐标冲突守卫（match_ref 不放这些格）用：两路对位在这一格打架，match_ref 那句
     「库 × 整理本互证」就不独立了（vol14 cv0.5.9：60:1:5 坐标 拱 / 现役 撰，库 top 以 0.0002
     领先放了 撰）。坐标判空的格不计（库 same 认出字的另有 `空格位上库认出了字` 一条）。"""
     out = []
