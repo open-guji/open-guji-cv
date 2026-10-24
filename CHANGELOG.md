@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- `guji source commons`：以 Wikimedia Commons 上的 DjVu 为原图的根（10-24 用户定，设计稿第十二节）：核 Commons sha1、存 R2 镜像、`ddjvu` 原尺寸解页、发布页表；会话连不上 Commons 时 `--djvu` 配 `--commons-json` 用别处下好的文件。四庫總目 99 册全部登记（vol01–20 补记根，页图不变）。只在 `datastore/` 与 CLI，`code_hash` 不变（PATCH）。
+
 ## [0.5.13] - 测试中
 
 PATCH（#452 seed_admit 删准入三闸：`code_hash` 变、缺省参数下产物不变；#509 `guji recheck --glyph-diff`；#507 精校出单走 book-text dev）。

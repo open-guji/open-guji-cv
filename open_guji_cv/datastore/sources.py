@@ -204,16 +204,69 @@ def ia_download(ia_id: str, dest_dir: Path, retries: int = 3) -> dict:
             "fetched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
+def _ascii_name(name: str, sha: str) -> str:
+    """R2 键只收 ASCII（Worker 拒中文前缀）：`NLC403-…-15647_北行日錄_卷一.pdf` → `NLC403-…-15647.pdf`；
+    `CADAL06061320 欽定四庫全書總目·卷四十三~卷四十四.djvu` → `CADAL06061320.djvu`；一个 ASCII 字都没有就用 sha 头。"""
+    p = Path(name)
+    stem = re.sub(r"_+$", "", re.sub(r"[^A-Za-z0-9.-]+", "_", p.stem)).strip("_.") or sha[:16]
+    return stem + re.sub(r"[^A-Za-z0-9.]", "", p.suffix.lower())
+
+
 def local_source(path: Path, url: str = "", kind: str = "file") -> dict:
     """手边已有的源件（国图／Commons 的 PDF、DjVu 等）→ 来源记录，与 `ia_download` 同形。"""
     path = Path(path)
     data = path.read_bytes()
     s = sha256(data)
-    # R2 键只收 ASCII（Worker 拒中文前缀）：`NLC403-…-15647_北行日錄_卷一.pdf` → `NLC403-…-15647.pdf`，原名留在 name
-    stem = re.sub(r"_+$", "", re.sub(r"[^A-Za-z0-9.-]+", "_", path.stem)).strip("_.") or s[:16]
-    file = stem + re.sub(r"[^A-Za-z0-9.]", "", path.suffix.lower())
-    return {"kind": kind, "file": file, "name": path.name, "url": url, "sha256": s, "bytes": len(data),
+    return {"kind": kind, "file": _ascii_name(path.name, s), "name": path.name, "url": url, "sha256": s, "bytes": len(data),
             "path": str(path), "fetched_at": _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}
+
+
+COMMONS_API = "https://commons.wikimedia.org/w/api.php"
+
+
+def commons_info(title: str) -> dict:
+    """Commons 文件当前版本：{title, url, sha1, size, timestamp, pagecount}。`title` 不带 `File:` 也行。"""
+    t = title if title.startswith("File:") else f"File:{title}"
+    q = urllib.parse.urlencode({"action": "query", "format": "json", "formatversion": 2, "titles": t,
+                                "prop": "imageinfo", "iiprop": "url|sha1|size|timestamp"})
+    page = json.loads(_http(f"{COMMONS_API}?{q}"))["query"]["pages"][0]
+    if "imageinfo" not in page:
+        raise FileNotFoundError(f"Commons 没有 {t}")
+    ii = page["imageinfo"][0]
+    return {"title": page["title"], "url": ii["url"].split("?", 1)[0], "sha1": ii["sha1"], "size": ii["size"],
+            "timestamp": ii["timestamp"], "pagecount": ii.get("pagecount")}
+
+
+def commons_source(path: Path, info: dict) -> dict:
+    """手边的 Commons 源件（DjVu／PDF）→ 来源记录。核 Commons 给的 sha1，版本钉在 `commons_timestamp`。
+    Commons 是根（设计稿第十二节）：R2 里这份是根的镜像，IA 等是另一份镜像。"""
+    data = Path(path).read_bytes()
+    if hashlib.sha1(data).hexdigest() != info["sha1"]:
+        raise ValueError(f"{path} 与 Commons {info['title']} 当前版本 sha1 不符")
+    rec = local_source(path, "https://commons.wikimedia.org/wiki/" + urllib.parse.quote(info["title"].replace(" ", "_")),
+                       kind="commons")
+    # R2 里按 Commons 文件名存（ASCII 部分，如 `CADAL06061320.djvu`），不看本地文件叫什么
+    name = info["title"].split(":", 1)[-1]
+    rec["file"] = _ascii_name(name, rec["sha256"])
+    rec.update(name=name, commons_title=info["title"], commons_sha1=info["sha1"], commons_timestamp=info["timestamp"],
+               commons_url=info["url"])
+    return rec
+
+
+def djvu_to_zip(djvu: Path, dest_zip: Path) -> int:
+    """DjVu 每页用 `ddjvu` 原尺寸解成 TIFF（JB2 黑白页解出 1-bit，与 IA `_tif.zip` 逐像素相同），打成叶 zip
+    （`<名>_<叶号4位>.tif`），交给 `build_from_zip`。返回页数。要装 djvulibre（`ddjvu`、`djvused`）。"""
+    import subprocess
+    import tempfile
+    import zipfile
+    n = int(subprocess.run(["djvused", "-e", "n", str(djvu)], capture_output=True, text=True, check=True).stdout)
+    stem = re.sub(r"[^A-Za-z0-9-]+", "_", Path(djvu).stem).strip("_") or "djvu"
+    with tempfile.TemporaryDirectory() as td, zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_STORED) as z:
+        for i in range(1, n + 1):
+            tif = Path(td) / "p.tif"
+            subprocess.run(["ddjvu", "-format=tiff", f"-page={i}", str(djvu), str(tif)], check=True)
+            z.write(tif, f"{stem}_{i:04d}.tif")
+    return n
 
 
 def store_original(src, book_id: str, vol: str, rec: dict) -> str:
