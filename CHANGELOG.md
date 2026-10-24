@@ -4,6 +4,7 @@
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
 ### Fixed
+- seed_admit／align_ref 坐标冲突守卫（常开，无开关，A23）：`align_ref` 产物新增 `coord_conflict_ids`（坐标字≠现役 equal 字的格，全记）；match_ref 不放这些格、落人审（doubt `coord_conflict`）。起因：殿本 vol14 cv0.5.9 的 60:1:5 拱→撰、103:2:7（双行小注两字被切一格）放成「中」。vol14 两版回放每版约多送审 8 格。`seed_admit`、`align_ref` 的 code_hash 变，各册缺省输出会变；冻结册只登记不重跑。
 - 生僻字面板（`rare_panel` 单格／批量入口）找不到识别权重文件时报 `CnnCheckpointMissing`，不再悄悄返回少 CNN／embedding 两路的候选（A23；wheel 安装后引擎仓根错位的同款坑）。只管文件缺席，没装 torch 仍由起跑前自检报；`GUJI_ALLOW_MISSING_DEPS=1` 放行。不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
 
 ## [未发版]

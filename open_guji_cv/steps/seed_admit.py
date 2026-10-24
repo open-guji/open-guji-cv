@@ -921,6 +921,8 @@ class SeedAdmitStep(Step):
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
+        _aref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+        coord_conflict = frozenset(_aref.coord_conflict_ids) if _aref else frozenset()
         coord_cache: dict = {}
         always = set(p.always_review or "")
         context_verdicts = frozenset(
@@ -1130,6 +1132,13 @@ class SeedAdmitStep(Step):
                     if _variant_indirect(_shape, align_char, ledger, ctx.book):
                         ok, channel = False, None
                         doubts.append("variant_indirect")
+                # 库 × 整理本不放两路对位打架的格（A23 2026-10-23，常开、无开关）：`align_ref.coord_conflict_ids`
+                # 里坐标字≠现役 equal 字的格，现役字恰是存疑那一路，「库 top == 现役字」不再是两路独立证据
+                # （vol14 cv0.5.9：60:1:5 拱→撰，库 撰 0.9393／撤 0.9391；103:2:7 双行小注两字被切一格，库 diff 仍放「中」）。
+                # 只拦 match_ref；落人审，doubt `coord_conflict`。vol14 两版产物回放每版拦 8 格，看图确认拦中 2 个真错、误伤 1。
+                if ok and channel == "match_ref" and r.id in coord_conflict:
+                    ok, channel = False, None
+                    doubts.append("coord_conflict")
                 if (ok and p.match_tie_guard and r.verdict != "same"
                         and channel in ("match_ref", "match_replace", "match_margin")
                         and _lib_near_tie(r.candidates, vm_here, p.match_tie_gap)):

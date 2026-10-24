@@ -338,6 +338,7 @@ class PageAlignRef(BaseModel):
     coord_cols: list[int] = Field(default_factory=list)        # 走了坐标对位的列
     coord_fallback: dict[str, str] = Field(default_factory=dict)   # 退回的列 → 原因（键是列号字符串）
     coord_note: str = ""                                        # 整页没走坐标对位时的原因
+    coord_conflict_ids: list[str] = Field(default_factory=list)  # 因「与现役对位冲突」退回的列里，坐标字≠现役 equal 字的格（全记，不止第一格；坐标判空的不计）
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(
