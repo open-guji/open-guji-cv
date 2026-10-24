@@ -553,8 +553,8 @@ def wait_publish(since: str, timeout_s: int = 1800, poll_s: int = 20) -> str | N
              "--jq", f'[.workflow_runs[] | select(.created_at >= "{since}")] | sort_by(.created_at) | .[0] | "\\(.id) \\(.status) \\(.conclusion)"']
         p = subprocess.run(q, capture_output=True, text=True)
         out = (p.stdout or "").strip()
-        if p.returncode == 0 and out and out != "null":
-            rid, status, concl = (out.split() + ["", "", ""])[:3]
+        rid, status, concl = (out.split() + ["", "", ""])[:3]
+        if p.returncode == 0 and rid not in ("", "null"):   # 刚触发时还查不到 run，jq 吐 "null null null"
             if run_id != rid:
                 run_id = rid
                 print(f"网站发布 run {rid}：https://github.com/{WEB_REPO}/actions/runs/{rid}")
@@ -564,8 +564,10 @@ def wait_publish(since: str, timeout_s: int = 1800, poll_s: int = 20) -> str | N
     return None
 
 
-def smoke(text_id: str, chapter: str, rev: str, tries: int = 6, wait_s: int = 30) -> list[str]:
-    """读者侧冒烟：线上单 rev 是新的、单上引用的每张图都取得到（CDN 刚清，旧单可能还要一会儿才换掉）。返回问题列表。"""
+def smoke(text_id: str, chapter: str, rev: str, tries: int = 10, wait_s: int = 60) -> list[str]:
+    """读者侧冒烟：线上单 rev 是新的、单上引用的每张图都取得到（CDN 刚清，旧单可能还要一会儿才换掉）。返回问题列表。
+
+    最多等约 10 分钟：册006 r5（10-24）发布跑完后新图 403 了 3 分钟以上，过一会儿全是 200（CDN 生效慢）。"""
     import time
     for i in range(tries):
         bad = []
@@ -622,7 +624,7 @@ def cmd_issue(a) -> int:
     bad = smoke(text_id, chapter, a.rev)
     if bad:
         print(f"✗ 读者侧冒烟不过（{len(bad)} 处）：" + "；".join(bad[:10]))
-        return 1
+        return 2          # 单子已推、网站已发：调用方据此继续开文本 PR，冒烟另查
     print(f"✓ {a.rev} 已上线：{d['new']} 格，单子和 {len(sprite_pub.refs(json.loads(online.read_text(encoding='utf-8'))))} 张图都取得到"
           f"（https://www.openguji.com/proofing/{text_id}/{chapter}）")
     return 0

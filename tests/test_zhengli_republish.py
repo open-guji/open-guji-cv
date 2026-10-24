@@ -276,4 +276,13 @@ def test_issue_runs_prep_push_and_skips_empty(tmp_path, monkeypatch):
     assert rp.main(base) == 0
     assert seen == {"yes": True, "sync": True, "only": "abc123/006", "rev": "006-r3"}
     monkeypatch.setattr(rp, "smoke", lambda t, c, r: ["p0001.webp → 404"])
-    assert rp.main(base) == 1
+    assert rp.main(base) == 2                                     # 已上线、冒烟没过：2，调用方照样开文本 PR
+
+
+def test_wait_publish_skips_null_run(monkeypatch):
+    """刚触发时 REST 还查不到 run，jq 吐 "null null null"：不能当成 run id，继续等。"""
+    outs = iter(["null null null", "123 in_progress null", "123 completed success"])
+    monkeypatch.setattr(rp.subprocess, "run",
+                        lambda *a, **k: type("P", (), {"returncode": 0, "stdout": next(outs)})())
+    monkeypatch.setattr("time.sleep", lambda s: None)
+    assert rp.wait_publish("2026-10-24T00:00:00Z", timeout_s=60, poll_s=0) == "success"
