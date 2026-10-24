@@ -1,4 +1,4 @@
-"""字组统一评测（S1，设计见 doc/design/形近字组统一接口设计.md §五）。
+"""字组统一评测（S1，规范见 doc/字组/README.md）。
 
 吃 dataset `char-groups/<组>/items.jsonl`，调**同一批适配器**（`open_guji_cv/groups/backends.py`），按册、按真值档报
 dataset README 规定的「分类器层」三个数：**给字率 / 给字准确率 / 弃权率**，分子分母都写，带 Wilson 95% 区间。
