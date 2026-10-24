@@ -302,6 +302,104 @@ def test_sync_renumbers_clashing_events_and_their_ledger(repo, conn, tmp_path, m
     assert notes == {"a": "evt_b_000009", "b": "evt_b_000010"}
 
 
+def test_sync_takes_remote_glyph_store_and_replays_local_events(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """两台机器各有新人裁、各自消费改了字形库 → 不停：取库里的字形库，本地新事件的字形库记账删掉，
+    交给 replay 在库里的字形库上重新消费，再推（册 005 10-23 三次手工 pull --force 的那一步）。"""
+    import json
+
+    from open_guji_cv.datastore.workcopy import (
+        SyncConflict,
+        data_dir,
+        local_changes,
+        sync,
+    )
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    calls: list = []
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", src, cache)
+    da = data_dir(a)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    b = _fresh(files, tmp_path / "b", src, cache)
+    db_ = data_dir(b)
+    ev, adm, glyphs = "feedback/events/b.jsonl", "output/glyph_store/admissions.jsonl", "output/glyph_store/glyphs.jsonl"
+    led, gold = "feedback/consumed/glyphdb_admit.jsonl", "feedback/consumed/gold_add.jsonl"
+
+    def row(rel, eid):
+        if rel == adm:
+            return _line(admitted_at="t", char="乙", evidence=None, instance_id=f"tbook:乙:{eid}", provenance=eid)
+        return _line(char=eid, edition_tag="ed1", ids=None, n_confirmed=1, semantic=eid, status="stable",
+                     unicode_cp=None, updated_at="t")
+
+    def admit(d, rel, eid):
+        (d / rel).write_bytes((d / rel).read_bytes() + (row(rel, eid) + "\n").encode())
+
+    def judge(d, eid, seq, *, store=(adm,)):            # 一条新人裁，消费者改了字形库、记了账
+        (d / ev).write_bytes((d / ev).read_bytes() + (_line(id=eid, batch="b", seq=seq) + "\n").encode())
+        for rel in store:
+            admit(d, rel, eid)
+        for rel in (led, gold):
+            p = d / rel
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes((p.read_bytes() if p.exists() else b"") + (_line(event=eid) + "\n").encode())
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    judge(da, "evt_b_2", 2)
+    assert sync(src, conn, a, actor="a", cache=cache)["action"] == "push"
+    remote_adm = (da / adm).read_bytes()
+
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    judge(db_, "evt_b_3", 3, store=(adm, glyphs))       # glyphs.jsonl 只有本地改了：也回到库里那份
+    hooks = _fake_hooks(tmp_path / "b.db", calls)
+    with pytest.raises(SyncConflict):                    # 不给 replay：照旧停下
+        sync(src, conn, b, actor="b", cache=cache, glyph=hooks)
+
+    seen = {}
+
+    def replay(ids):
+        seen["ids"] = set(ids)
+        seen["adm"] = (db_ / adm).read_bytes()
+        seen["glyphs"] = (db_ / glyphs).read_bytes()
+        seen["led"] = (db_ / led).read_text()
+        for i in sorted(ids):                            # 模拟消费者在库里的字形库上重新进库、记账
+            admit(db_, adm, i)
+            (db_ / led).write_bytes((db_ / led).read_bytes() + (_line(event=i) + "\n").encode())
+        return {"events": len(ids)}
+
+    out = sync(src, conn, b, actor="b", cache=cache, glyph=hooks, replay=replay)
+    assert seen["ids"] == {"evt_b_3"}
+    assert seen["adm"] == remote_adm                     # 重新消费前：字形库是库里的
+    assert seen["glyphs"] == files["W/" + glyphs]
+    assert "evt_b_3" not in seen["led"] and "evt_b_2" in seen["led"]   # 只删本地新事件的字形库记账
+    assert "evt_b_3" in (db_ / gold).read_text()        # 别的消费者的记账不动
+    assert sorted(out["glyph_taken_remote"]) == [adm, glyphs] and out["replay_unconsumed"] == 1
+    assert out["action"] == "merged+push" and local_changes(b) == []
+    admits = [json.loads(x)["provenance"] for x in (db_ / adm).read_text().splitlines()]
+    assert admits[-2:] == ["evt_b_2", "evt_b_3"] and "evt_b_3" not in admits[:-2]
+    ids = {r["id"] for r in src.rows("events", "tws")}
+    assert {"evt_b_2", "evt_b_3"} <= ids
+
+
+def test_sync_glyph_store_clash_without_new_events_still_stops(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """本地字形库改了却没有新人裁（不是消费者算出来的）：有 replay 也照旧停下，不丢本地的。"""
+    from open_guji_cv.datastore.workcopy import SyncConflict, data_dir, sync
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    a = _fresh(files, tmp_path / "a", src, cache)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    b = _fresh(files, tmp_path / "b", src, cache)
+    adm = "output/glyph_store/admissions.jsonl"
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-a"))
+    (data_dir(a) / adm).write_bytes((data_dir(a) / adm).read_bytes() + (_line(admitted_at="t", char="乙", evidence=None, instance_id="tbook:乙:a", provenance="a") + "\n").encode())
+    sync(src, conn, a, actor="a", cache=cache)
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    mine = (data_dir(b) / adm).read_bytes() + (_line(admitted_at="t", char="乙", evidence=None, instance_id="tbook:乙:b",
+                                                                provenance="b") + "\n").encode()
+    (data_dir(b) / adm).write_bytes(mine)
+    with pytest.raises(SyncConflict):
+        sync(src, conn, b, actor="b", cache=cache, glyph=_fake_hooks(tmp_path / "b.db", []), replay=lambda ids: {})
+    assert (data_dir(b) / adm).read_bytes() == mine
+
+
 def test_anchor_patches_round_trip(repo, conn, tmp_path):  # noqa: F811
     """锚图只记在 anchor_patches_meta（不进 source_files）：迁移不该把它们当差异，新机器 pull 要还原出来。"""
     from open_guji_cv.datastore.client import PgSource

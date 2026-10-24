@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- `guji db sync`：字形库（`output/glyph_store/`）本地和库里都改了、本地又有库里没有的新人裁事件时不再整次停下：取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者（`consumed/glyph*.jsonl`）里的记账，在库里的字形库上重新消费一遍再推。本地字形库改了却没有新事件的照旧报冲突。省掉册 005 精校 10-23 三次手工 `pull --force`＋重写票（A32 复盘改进 1；只在 `datastore/`、CLI，不动 Step，PATCH）。
+
 ## [0.5.13] - 2026-10-24
 
 PATCH（#452 seed_admit 删准入三闸：`code_hash` 变、缺省参数下产物不变；#509 `guji recheck --glyph-diff`；#507 精校出单走 book-text dev）。
