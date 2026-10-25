@@ -70,3 +70,20 @@ def test_model_roundtrip_and_gate_abstain(tmp_path):
     v = gate.judge(g0, None)                           # 无 Step1 产物 → 弃权，不拦
     assert not v.nonbody and v.reason.startswith("abstain")
     assert not gate.judge(None, b0).nonbody            # 异常 → 弃权
+
+
+
+def test_eval_pagetype_gold_ignores_new_keys(tmp_path):
+    """金标并列新增的键（A21 2026-10-25：last_text_col 等）读时略过，不报错；blank 并进 body 后照读。"""
+    import importlib.util
+    import json
+    from pathlib import Path
+    spec = importlib.util.spec_from_file_location(
+        "eval_pagetype", Path(__file__).resolve().parent.parent / "scripts" / "eval_pagetype.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    f = tmp_path / "expected.json"
+    f.write_text(json.dumps([{"book": "vol05", "page": "106", "page_type": "body", "schema_version": 1,
+                              "last_text_col": 0, "text_col_count": 0, "col_ink": [0.1] * 9, "weak_cols": []}]))
+    (lab,) = mod.load_gold(f)
+    assert (lab.book, lab.page, lab.page_type) == ("vol05", "106", "body")
