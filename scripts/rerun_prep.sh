@@ -4,7 +4,7 @@
 #   rerun_prep.sh <册> [--cv <tag/分支/提交>] [--corpus N] [--pin-args "<guji corpus pin 的参数>"]
 #                 [--glyph-pin N] [--ws-glob 96mid1ogzk-*] [--base] [--reset]
 #
-# --reset：本机数据目录已被上一次准备改过（册 yaml、钉子账）时先 db pull --force 还原，再按这次的参数改。
+# --reset：本机数据目录已被上一次准备改过（册 yaml、钉子账）时先 db pull --force 还原（并重建 glyph.db），再按这次的参数改。
 #          任务库执行方（guji_jobs）在同一会话接第二张单时用；本机有没推的人裁别加。
 #
 # 依次：cv 切到需求单版本 → 克隆 guji-workspace → guji db pull → 改册 yaml（corpus／glyph_pin；给了 --cv 时 cv_version 跟着改）
@@ -32,7 +32,9 @@ fi
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/open-guji/guji-workspace $GW
 WS=$(ls -d $GW/$WSGLOB | head -n 1); export GUJI_WORKSPACE=$WS; echo "WS=$WS"
-if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force --no-rebuild; else t db-pull $G db pull -w "$WS"; fi
+# --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
+# --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
+if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G db pull -w "$WS"; fi
 Y=$(ls /root/.guji-data/main/*/books/"$VOL".yaml | head -n 1)   # 数据目录里的册配置（db pull 落的）
 [ -n "$CORPUS" ] && sed -i "s/^corpus: .*/corpus: $CORPUS/" "$Y"
 [ -n "$GPIN" ] && { grep -q '^glyph_pin:' "$Y" && sed -i "s/^glyph_pin: .*/glyph_pin: $GPIN/" "$Y" || echo "glyph_pin: $GPIN" >> "$Y"; }
