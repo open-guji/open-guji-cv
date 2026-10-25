@@ -69,8 +69,11 @@ def test_two_class_path_unchanged_shape():
 def test_long_tail_groups_registered_and_banks_match():
     for g, members, extra in (("zy", "子于", "干"), ("sy", "山由出", "曲")):
         spec = GROUPS[g]
-        assert spec.members == frozenset(members) and spec.kind == "near_form"
-        assert spec.flow.solvers == ("ids",) and spec.flow.tolerate == frozenset(extra) and not spec.flow.review
+        assert spec.kind == "near_form" and spec.flow.tolerate == frozenset(extra)
+        if g == "sy":
+            assert spec.members == frozenset(members) and spec.flow.solvers == ("ids",) and not spec.flow.review
+        else:   # 2026-10-24 zy 扩成 于千子干（并入 qg）：文意在前，子于整字 HOG 当第二路（`Only` 限 子于干 入口、只给 子于）
+            assert spec.members == frozenset("于千子干") and spec.flow.solvers == ("ctx", "ids") and spec.flow.review
         sp = O.SPECS[g]
         assert sp.whole == "hog" and O.has_bank(g), g
         bank = O.load_bank(O.bank_path(g))

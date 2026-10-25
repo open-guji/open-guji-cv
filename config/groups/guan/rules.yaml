@@ -1,0 +1,27 @@
+schema: ctx_l1/1
+group: guan
+# 官宫宮（宫族的规则给「宫」，族内形由库形最近定）（2026-10-24，A24「强化于千子干等形近判别」）。
+# mined-a24：vol04–20 已放行格按册分两半（04–12／13–20），两半各 ≥3 格（含数字的词组不收）、合计零冲突的两字词组，再对整理本对位字回测零冲突（research/m7/ctx/mine_l1/）。
+rules:
+  - {id: 'guan-m-官-◎國子', char: 官, src: mined-a24, re: '◎國子', note: 已放行 4+5}
+  - {id: 'guan-m-官-◎禮部', char: 官, src: mined-a24, re: '◎禮部', note: 已放行 5+3}
+  - {id: 'guan-m-官-◎至兵', char: 官, src: mined-a24, re: '◎至兵', note: 已放行 6+5}
+  - {id: 'guan-m-官-◎至吏', char: 官, src: mined-a24, re: '◎至吏', note: 已放行 7+6}
+  - {id: 'guan-m-官-◎至太', char: 官, src: mined-a24, re: '◎至太', note: 已放行 11+5}
+  - {id: 'guan-m-官-◎至禮', char: 官, src: mined-a24, re: '◎至禮', note: 已放行 9+5}
+  - {id: 'guan-m-官-◎至翰', char: 官, src: mined-a24, re: '◎至翰', note: 已放行 5+3}
+  - {id: 'guan-m-官-人◎至', char: 官, src: mined-a24, re: '人◎至', note: 已放行 15+9}
+  - {id: 'guan-m-官-以周◎', char: 官, src: mined-a24, re: '以周◎', note: 已放行 4+3}
+  - {id: 'guan-m-官-府推◎', char: 官, src: mined-a24, re: '府推◎', note: 已放行 7+3}
+  - {id: 'guan-m-官-有周◎', char: 官, src: mined-a24, re: '有周◎', note: 已放行 5+4}
+  - {id: 'guan-m-官-舉人◎', char: 官, src: mined-a24, re: '舉人◎', note: 已放行 26+15}
+  - {id: 'guan-m-官-貢生◎', char: 官, src: mined-a24, re: '貢生◎', note: 已放行 9+6}
+  # hand-a24：手写常见搭配，对 vol04–20 已放行格与整理本回测；冲突格逐条读过，都是已放行错字（如「進士宫至」）或整理本错字，不改规则
+  - {id: 'guan-h1', char: 官, src: hand-a24, re: '(?:舉人|進士|貢生)◎', note: 回测命中 531}
+  - {id: 'guan-h2', char: 官, src: hand-a24, re: '[春夏秋冬]◎', note: 回测命中 152}
+  - {id: 'guan-h3', char: 官, src: hand-a24, re: '人◎至', note: 回测命中 45}
+  - {id: 'guan-h4', char: 官, src: hand-a24, re: '百◎', note: 回测命中 10}
+  - {id: 'guan-h5', char: 宫, src: hand-a24, re: '◎[商角徵羽]', note: 回测命中 22}
+  - {id: 'guan-h6', char: 宫, src: hand-a24, re: '殯◎', note: 回测命中 17}
+  - {id: 'guan-h7', char: 宫, src: hand-a24, re: '新◎', note: 回测命中 20}
+  - {id: 'guan-h8', char: 宫, src: hand-a24, re: '◎室', note: 回测命中 22}

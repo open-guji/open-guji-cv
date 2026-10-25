@@ -679,6 +679,13 @@ class SeedAdmitParams(BaseModel):
             raise ValueError(f"seed_admit.patch_missing 只能是 error/skip，不是 {v!r}")
         return v
 
+    @field_validator("group_flow")
+    @classmethod
+    def _rename_groups(cls, v) -> tuple:
+        """并掉的组照新 id 读（`registry.RENAMED`：千干 qg → 于千子干 zy，2026-10-24）。"""
+        from ..groups.registry import flow_names
+        return flow_names(v)
+
     def _context_guard_on(self) -> bool:
         return (self.context_guard_diff or self.context_guard_flags
                 or self.context_guard_ref_blank or self.context_guard_ref_prefer)

@@ -31,6 +31,7 @@ def test_registry_kinds_match_ids_specs():
     """整字判法的组是 hog，登记了取框的是「取框→hog」复合，其余看图组是 ids；留痕名都沿用 `ids`。"""
     from open_guji_cv.groups.ids_online import SPECS
     img = {g: next(m for m in s.flow.methods if m.name == "ids") for g, s in GROUPS.items() if "ids" in s.flow.solvers}
+    img = {g: (m.inner if isinstance(m, M.Only) else m) for g, m in img.items()}   # zy 的 HOG 包在入口限定里（2026-10-24）
     kinds = {g: m.kind for g, m in img.items()}
     for g in ("lv", "qik", "zy", "sy", "sz", "gm", "xb", "yh", "js", "yr"):
         assert kinds[g] == "hog", g

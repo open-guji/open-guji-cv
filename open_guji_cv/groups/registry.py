@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, Method, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -194,8 +194,8 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/rm",
         flow=FlowSpec((CTX,), review=True), overlaps=("ry", "mz"),
         note="按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"),
-    # —— 第五批（2026-10-19）：目自、一二、千干、十卜、甲申、而面、傅傳、木本。同前：L1 规则（整理本奇偶册交叉验证零冲突）＋逐册 L2 表。
-    #    目自与 rm 共用「目」（互相声明 overlaps）。
+    # —— 第五批（2026-10-19）：目自、一二、十卜、甲申、而面、傅傳、木本。同前：L1 规则（整理本奇偶册交叉验证零冲突）＋逐册 L2 表。
+    #    目自与 rm 共用「目」（互相声明 overlaps）。千干 qg 2026-10-24 并进 于千子干 zy（`RENAMED`）。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
@@ -204,7 +204,6 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
            ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
-           ("qg", "千干", (), "千＝千百、千餘、千里；干＝干支、干戈、干預。"),
            ("sb", "十卜", (), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
            ("js", "甲申", (), "干支：甲子、甲乙；申＝申明、申屠、庚申。"),
            ("em", "而面", (), "而＝虚词；面＝東面、南面、四面。"),
@@ -259,11 +258,16 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
     # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
     #    判不出送人审。模板库在 config/groups/<组>/ids_bank.json（组外的 干／曲 也进库，判成它们就弃权）。
+    # 于千子干（2026-10-24，A24「强化于千子干等形近判别」）：子于 zy 与 千干 qg 并成一组。vol04–20 送审里这四个字常三四个一起紧咬
+    #   （「禘【于】太廟」库排 子于干千），哪一组都装不下。不同义，按文意定（L1 规则＋L2 表）；原子于整字 HOG 留作第二路，
+    #   只在分差内候选与整理本字都落在 子于干 时跑、只给 子于（`Only`：它没见过 千，干 在库里只当陪衬），两路给字须一致。复核只跑文意（L1；表里没有的格不动）。
     "zy": GroupSpec(
-        id="zy", name="子于", members=frozenset("子于"), backends=(),
-        kind="near_form", solvers=("ids",), config_dir="config/groups/zy",
-        flow=FlowSpec((_img("zy"),), combine="first", tolerate=frozenset("干")),
-        note="形近不同义，按整字字形判（整字岭回归，按册留一 0 错）；干 当陪衬字；只补放。"),
+        id="zy", name="于千子干", members=frozenset("于千子干"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2", "ids"), config_dir="config/groups/zy",
+        flow=FlowSpec((CTX, Only("ids", inner=_img("zy"), chars=frozenset("子于干"), give=frozenset("子于"))), review=True, review_methods=(CTX,),
+                      tolerate=frozenset("干")), overlaps=("yz",),
+        note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；子于整字 HOG 当第二路（只在分差内全是 子于干 时跑），给字须一致；"
+             "补放，也复核（只跑文意，只降审不改字）。与 予子 yz 共用「子」。千干 qg 已并入（册配置里的 qg 读作 zy）。"),
     "sy": GroupSpec(
         id="sy", name="山由出", members=frozenset("山由出"), backends=(),
         kind="near_form", solvers=("ids",), config_dir="config/groups/sy",
@@ -369,10 +373,33 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"
              "逈（迥的异体）不进组，归异体对处理；只补放。"),
+    # 形近不同义、按文意定的小组（2026-10-24，A24「强化于千子干等形近判别」）：库常把两三个字排到分差 0.003 以内（「學【官】」库排 宫官），
+    # 形近护栏拦下送审。按文意定（L1 规则＋L2 表；L2 表由 haiku 建、Opus＋Sonnet 复核，同 jys）；补放，也复核（只降审不改字）。
+    # 放这张表不放 `GROUPS`：官 兩 侯 是常用字，进 `GROUPS` 会改 glyph_match 弱命中与 rare_ref_coord 的行为。
+    # 族里有同字异体的走两段判（`families`）：文意定族，族内按库形最近（领先族内另一形 ≥ form_margin），定不下来送审。
+    # 宫宮：殿本 宮 放行只 8 格、人裁 3 格，刻法也不一，不够建字形判法（#5 线程 10-24 结论），所以族内只靠库形最近。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec((CTX,), review=True, families=fam, form_methods=(FORM_TOP1,)), overlaps=ov,
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
+       for gid, name, fam, ov, note in (
+           ("yz", "予子", (), ("zy",), "予＝賜予、予奪、我；子＝孔子、國子、君子。與 于千子干 zy 共用「子」，分差内有 予 的格归本组。"),
+           ("guan", "官宫宮", ("官", "宫宮"), (), "官＝官至、職官、天官；宫＝宫室、殯宫、宫調。宮是宫的异体：先定 官／宫族，族内按库形最近。"),
+           ("hou", "侯候𠉀俟", ("侯", "候𠉀", "俟"), (), "侯＝諸侯、夏侯、某國侯；候＝氣候、七十二候、候補；俟＝等待。𠉀是候的异体。"),
+           ("liang", "兩雨", (), (), "兩＝兩江、兩淮、兩家；雨＝風雨、雨水。"))},
 }
 
 #: 字组流程可点名的全部组。
 FLOW_GROUPS: dict[str, GroupSpec] = {**GROUPS, **CODEPOINT_GROUPS, **SHAPE_GROUPS}
+
+#: 并掉或改名的组：旧 id → 新 id。册配置 `group_flow` 里还写着旧 id 的照新 id 读（`flow_names`），等成批上线改册配置时再换掉。
+RENAMED: dict[str, str] = {"qg": "zy"}
+
+
+def flow_names(names) -> tuple:
+    """册配置点名的组 id → 现行 id（按 `RENAMED` 换，去重，保持先后）。"""
+    return tuple(dict.fromkeys(RENAMED.get(g, g) for g in names))
 
 
 def get_group(group_id: str) -> GroupSpec:
