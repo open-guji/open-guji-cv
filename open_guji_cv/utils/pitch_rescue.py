@@ -9,6 +9,9 @@
 1. 网格模式重探（`column_grid`，版框定死、列距均匀）；
 2. 网格选不出版框对时（外框只有粗外条、不在候选池里）：去掉劈开窄对的那条线，在墨多的一侧
    按中位列距补一条外框线（记成插值线）。
+3. 前两条都不成（假竖线不止一条、网格只对了一半，vol20 p113：c3 里挑了三条错线、真界行淡，网格对上了
+   c3、c4 却在外侧挑歪）：自由模式的线、网格模式的线、两侧按列距外推的外框线（有字那侧）放进一个池，
+   挑一串列宽全在带内的线，自由线优先、网格线其次、外推线最后（`fuse`）。
 
 **接受条件**：新列网每条正文列都在列宽带内，且至少一半的线与原线重合（±`tol` px）
 ——防止网格模式在卷端大印页、书名页上挑出另一套网（vol20 p179）。不满足就原样返回。
@@ -136,10 +139,71 @@ def drop_and_extend(res, gray: np.ndarray, *, leaf_layout: str = "single",
     return True
 
 
+def _ink(res, gray, x0, x1, ink_threshold):
+    """规范空间 [x0, x1) 这条列里的墨占比（原图 x = W−1−x，不量贴着界行的那几 px）；出图返回 -1。"""
+    H, W = gray.shape[:2]
+    top = int(res.top.y_at(0.0)) if res.top is not None else 0
+    bot = int(res.bottom.y_at(0.0)) if res.bottom is not None else H - 1
+    a, b = int(round(W - 1 - max(x0, x1))), int(round(W - 1 - min(x0, x1)))
+    if a < 0 or b > W - 1 or b - a < 10:
+        return -1.0
+    pad = (b - a) // 6
+    return float((gray[top:bot, a + pad:b - pad] < ink_threshold).mean())
+
+
+def fuse(res, g, gray: np.ndarray, bad_cols, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
+    """自由线＋网格线＋有字一侧的外推外框线里挑一串列宽都在带内、线数不变的线（自由 2 分、网格 1 分、外推 0 分，
+    取总分最高）。列宽合格的列两边的线不许动（`keeps_good_lines`）。改了 `res` 返回 True；挑不出、
+    或挑出的网不干净就原样返回 False。"""
+    xs, gx = line_xs(res), line_xs(g)
+    n = len(xs)
+    med = statistics.median(_body_widths(xs, leaf_layout))
+    def straight(r):
+        return list(r.verticals_straight) if len(r.verticals_straight) == len(r.verticals) else list(r.verticals)
+    pool = [(x, 2, v, False, s) for x, v, s in zip(xs, res.verticals, straight(res))]
+    # 网格线只拿来替换自由线范围以内的线；外侧整列只按列距外推、且那侧要有字（网格在外侧可能挑出另一套网）
+    pool += [(x, 1, v, False, s) for x, v, s in zip(gx, g.verticals, straight(g))
+             if xs[0] < x < xs[-1] and all(abs(x - y) > TOL for y in xs)]
+    for x, v, s, sign in ((xs[0], res.verticals[0], straight(res)[0], -1),
+                          (xs[-1], res.verticals[-1], straight(res)[-1], 1)):
+        if _ink(res, gray, x, x + sign * med, ink_threshold) >= MIN_INK:
+            pool.append((x + sign * med, 0, replace(v, x_at_top=v.x_at_top + sign * med), True,
+                         replace(s, x_at_top=s.x_at_top + sign * med)))
+    pool.sort(key=lambda t: t[0])
+
+    def ok(gap, k):
+        lo, hi = OUTER if k in (0, n - 2) else INNER
+        return lo * med <= gap <= hi * med
+    # best[i][k]：以 pool[i] 收尾、已挑 k+1 条线的最高分与前驱
+    best = [[None] * n for _ in pool]
+    for i, t in enumerate(pool):
+        best[i][0] = (t[1], None)
+        for k in range(1, n):
+            cand = [(best[j][k - 1][0] + t[1], j) for j in range(i)
+                    if best[j][k - 1] is not None and ok(t[0] - pool[j][0], k - 1)]
+            best[i][k] = max(cand) if cand else None
+    ends = [(best[i][n - 1][0], i) for i in range(len(pool)) if best[i][n - 1] is not None]
+    if not ends:
+        return False
+    chain, i, k = [], max(ends)[1], n - 1
+    while i is not None:
+        chain.append(pool[i])
+        i, k = best[i][k][1], k - 1
+    chain.reverse()
+    new_xs = [t[0] for t in chain]
+    if (not is_clean(new_xs, leaf_layout=leaf_layout) or n_shared(new_xs, xs) * 2 < n
+            or not keeps_good_lines(xs, new_xs, bad_cols)):
+        return False
+    res.verticals = [t[2] for t in chain]
+    res.vline_filled = [t[3] for t in chain]
+    res.verticals_straight = [t[4] for t in chain]
+    return True
+
+
 def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
            ink_threshold: int = 128) -> tuple[object, str | None]:
     """`detect_grid(pitch)` 用网格模式重探（pitch＝本页中位列宽，书上有列距先验时调用方可以不用它）。
-    返回 (结果, 用了哪条路 'grid'|'extend'|None)。没触发或都不接受就原样返回、路为 None。"""
+    返回 (结果, 用了哪条路 'grid'|'extend'|'fuse'|None)。没触发或都不接受就原样返回、路为 None。"""
     xs = line_xs(res)
     if not needs_rescue(xs, leaf_layout=leaf_layout):
         return res, None
@@ -151,4 +215,6 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
         return g, "grid"
     if drop_and_extend(res, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
         return res, "extend"
+    if len(gx) == len(xs) and fuse(res, g, gray, bad, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
+        return res, "fuse"
     return res, None

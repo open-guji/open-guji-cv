@@ -79,3 +79,25 @@ def test_grid_may_not_move_good_rules():
     assert not pr.keeps_good_lines(old, grid, bad)
     out, how = pr.rescue(_res(old), _gray([]), lambda pitch: _res(grid))
     assert how is None
+
+
+def test_fuse_free_grid_and_extrapolated_lines():
+    """vol20 p113：c3 里挑了三条错线（真界行淡），网格对上了 c3、c4 却在外侧挑歪；两条路都不成时，
+    从自由线＋网格线＋有字一侧的外推外框线里挑一串列宽都在带内的线（自由线优先）。"""
+    p113 = [342, 534, 754, 827, 938, 1092, 1279, 1460, 1634, 1830]
+    grid = [342, 534, 722, 917, 1092, 1284, 1463, 1656, 1888, 2071]
+    g = _gray([(1830, 2011)])                     # 网外那列有字
+    out, how = pr.rescue(_res(p113), g, lambda pitch: _res(grid))
+    assert how == "fuse"
+    xs = [round(x) for x in line_xs(out)]
+    assert xs[:2] == [342, 534] and xs[2:4] == [722, 917] and xs[4:9] == [1092, 1279, 1460, 1634, 1830]
+    assert 2000 <= xs[9] <= 2030
+    assert out.vline_filled == [False] * 9 + [True]
+    assert pr.is_clean(xs)
+
+
+def test_fuse_needs_ink_outside_to_extrapolate():
+    p113 = [342, 534, 754, 827, 938, 1092, 1279, 1460, 1634, 1830]
+    grid = [342, 534, 722, 917, 1092, 1284, 1463, 1656, 1888, 2071]
+    out, how = pr.rescue(_res(p113), _gray([]), lambda pitch: _res(grid))
+    assert how is None and [round(x) for x in line_xs(out)] == p113
