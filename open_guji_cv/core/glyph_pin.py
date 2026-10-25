@@ -195,23 +195,6 @@ def _legacy_pin(p, v: int):
     return type(p)(**{**p.model_dump(), **{f: tok for f in fields}})
 
 
-_FP_CACHE: dict[tuple, dict] = {}
-
-
-def _fingerprints_from_built_db(v: int) -> dict:
-    """清单里没有 fingerprints 时，从已建好的 glyph-g<N>.db 现算（没建就空，等 `ensure_pins` 建了再来）。"""
-    db = pinned_db_path(v)
-    try:
-        st = db.stat()
-    except OSError:
-        return {}
-    key = (str(db), st.st_size, st.st_mtime_ns)
-    if key not in _FP_CACHE:                # params_for 每步都来问
-        from ..ops.glyph_snapshot import _fingerprints
-        _FP_CACHE[key] = _fingerprints(db)
-    return _FP_CACHE[key]
-
-
 def _snapshot_pin(p, v: int, man: dict):
     """有快照的钉号：读字形库的路径换成 g<N> 的库文件，字形库指纹换成快照 digest。
 
@@ -220,7 +203,8 @@ def _snapshot_pin(p, v: int, man: dict):
     from .workspace import glyph_db_path
     tok = man["digest"]
     live, db = str(glyph_db_path()), str(pinned_db_path(v))
-    fp = man.get("fingerprints") or _fingerprints_from_built_db(v)    # 清单没记（g4 起 --no-build 出的）就读已建的库
+    # 清单没记 fingerprints（g4 是 --no-build 出的）就读建库时写进库 meta 的那份
+    fp = man.get("fingerprints") or (pinned_db_meta(Path(db)) or {}).get("fingerprints") or {}
     kw: dict = {}
     if hasattr(p, "db_path") and getattr(p, "db_path", None) == live:
         kw["db_path"] = db
