@@ -140,3 +140,12 @@ def test_merge_recheck_adds_and_overrides(tmp_path):
     rows = [ln.split("\t") for ln in dst.read_text(encoding="utf-8").splitlines()[1:]]
     assert [r[0] for r in rows] == ["4:4:6", "9:6:10", "18:1:3"]
     assert rows[1][1:4] == ["重标疑为「日」", "evt_x", "曰"]
+
+
+def test_engine_version_from_tag(tmp_path):
+    import subprocess as sp
+    g = lambda *a: sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", *a], cwd=tmp_path, check=True, capture_output=True)
+    g("init", "-q"); (tmp_path / "x").write_text("1"); g("add", "x"); g("commit", "-qm", "a")
+    assert pc.engine_version(tmp_path) is None
+    g("tag", "v0.5.17")
+    assert pc.engine_version(tmp_path) == "0.5.17"

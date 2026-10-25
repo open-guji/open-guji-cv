@@ -252,9 +252,12 @@ def cmd_apply(a) -> int:
         if plan["pack_cv_commit"] and not head.startswith(plan["pack_cv_commit"][:7]) and not a.allow_cv_drift:
             sys.exit(f"✗ 引擎 cv（{engine}）是 {head[:9]}，出单版产物包是 {plan['pack_cv_commit'][:9]}（{plan['pack_cv_version']}）："
                      f"plan 加 --engine <那个 commit 的 worktree>，或加 --allow-cv-drift 明说照跑（人裁已推库，重跑 apply 不会重复写）")
-        sandbox = Path(plan["draft_dir"]).parent / "products"
+        sandbox = Path(a.reuse_products).resolve() if a.reuse_products else Path(plan["draft_dir"]).parent / "products"
         env_sb = {**env, "GUJI_PRODUCTS_DIR": str(sandbox)}
-        if not (sandbox / book).is_dir():
+        if a.reuse_products:
+            if not (sandbox / book).is_dir():
+                sys.exit(f"✗ --reuse-products {sandbox} 下没有 {book} 的产物")
+        elif not (sandbox / book).is_dir():
             if not log.step("取出单版产物包到沙箱", [*GUJI, "products", "pack", "fetch", book, "--label", plan["pack"],
                                               "--to", sandbox, "-w", ws], cwd=CV, env=env):
                 return 1
@@ -265,7 +268,9 @@ def cmd_apply(a) -> int:
     # 旧引擎经 engine_run.py 跑：读中心库时跳过它不认的新事件种类（不然一推新种类，每页都失败）
     guji_eng = [sys.executable, HERE / "engine_run.py"] if engine != CV else GUJI
     # --stop-on-error：一页失败就非零退出，免得带着失败的产物接着导出、出单
-    if plan.get("full_book", False):
+    if a.reuse_products:
+        log.note(f"产物用现成的 {sandbox}（引擎换版本后自己从头跑好的），不再重跑 seed_admit")
+    elif plan.get("full_book", False):
         if not log.step("全册重跑 seed_admit", [*guji_eng, "pipeline", "keben_body_v2", book, "--from", "seed_admit",
                                                "--to", "seed_admit", "--stop-on-error", "-w", ws], cwd=engine, env=env_eng):
             return 1
@@ -318,8 +323,9 @@ def cmd_apply(a) -> int:
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
     if cv_commit:
         issue += ["--cv-commit", cv_commit]
-    if plan["pack_cv_version"]:
-        issue += ["--cv-version", plan["pack_cv_version"]]
+    cv_version = engine_version(engine) if engine != CV else plan["pack_cv_version"]
+    if cv_version:
+        issue += ["--cv-version", cv_version]
     # 退出码 2＝单子已推库、网站已发布、文本已推 dev，只是读者侧冒烟没过：记 ⚠ 照常收尾，冒烟另查
     if not log.step(f"出新单 {new_rev}（复审 {len(rows)} 格）并上线", issue, ok_codes=(0, 2), cwd=CV, env=env_sb):
         return 1
@@ -331,6 +337,13 @@ def cmd_apply(a) -> int:
         import progress_report
         progress_report.try_run(book, plan["text_id"], log=log.note)
     return 0
+
+
+def engine_version(engine: Path) -> str | None:
+    """引擎 worktree 的版本号：HEAD 上的 vX.Y.Z 标签去掉 v；没有标签返回 None（出单不写版本）。"""
+    p = subprocess.run(["git", "describe", "--tags", "--exact-match", "--match", "v[0-9]*"], cwd=engine,
+                       capture_output=True, text=True)
+    return p.stdout.strip().lstrip("v") or None
 
 
 def engine_head(engine: Path) -> str:
@@ -445,6 +458,8 @@ def main(argv=None) -> int:
     p.add_argument("--plan", required=True)
     p.add_argument("--hash", required=True, help="计划哈希（计划.md 里有）")
     p.add_argument("--book-text", required=True, help="book-text 仓（工作区干净；apply 会切到最新 dev）")
+    p.add_argument("--reuse-products", help="产物沙箱用这份现成的（引擎换版本后自己从头跑好了，不取出单版包、不再重跑 seed_admit）；"
+                                           "配合 plan --engine <新版 worktree> 与 --allow-cv-drift")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
     p = sp.add_parser("audit", help="只读：一张单的 G0 票账（写入／一致／看不出／挂起／未落），有未落退出码 1")
