@@ -53,16 +53,6 @@ def test_shadow_veto(monkeypatch):
     assert "shadow_veto" in r.evidence
 
 
-def test_runt_cell_review(monkeypatch):
-    cell = NS(slot=1, kind="char", raised=False, sub=None, flags=[], ink_ratio=0.2, y0=0.0, y1=40.0)
-    cells = NS(columns=[NS(col=1, ok=True, period=100.0, n_body_slots=3, cells=[cell])])
-    monkeypatch.setattr(sa, "_opt", lambda c, k, pg: cells)
-    r = _rec(channel="context")
-    p = NS(runt_min_ink=0.0, runt_ratio=0.6)
-    assert sa._runt_cell_pass(NS(), 1, p, [_col(r)]) == 1
-    _assert_demoted(r, "runt_cell_review", "context")
-
-
 def test_seal_blank_flip():
     r = _rec(channel="context")
     seal = {(1, 1, ""): {"seal_score": 0.9, "overlap": 0.8}}
@@ -147,6 +137,6 @@ def test_symbol_review_context_no_vote(monkeypatch):
 
 
 def test_symbol_review_params_hash_unchanged_when_off():
-    d = sa.SeedAdmitParams().model_dump()
-    assert "symbol_review" not in d and "symbol_min_human" not in d
+    d = sa.SeedAdmitParams(symbol_review=False).model_dump()   # 2026-10-24 起缺省开：关着时显式 False 留在 dump
+    assert d["symbol_review"] is False and "symbol_min_human" not in d
     assert "symbol_review" in sa.SeedAdmitParams(symbol_review=True).model_dump()

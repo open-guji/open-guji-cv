@@ -193,6 +193,20 @@ def test_r4_all_witnesses_and_coord_agree_without_lib():
     assert n == 1 and rs[5].char == "天" and rs[5].evidence["lane"]["via"] == "witnesses_coord"
 
 
+@pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
+def test_r4_keeps_ref_review_cells(doubt):
+    """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""
+    chars = BODY[:30]
+    def run(**params):
+        out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", doubt], char="夫")})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+        return _run(out, lib={5: "夫"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, **params)
+    n, rs = run()
+    assert n == 0 and not rs[5].admit
+    n, rs = run(lane_keep_ref_review=False)
+    assert n == 1 and rs[5].char == "天"
+
+
 def test_r4_lib_guard_blocks_witness_branch():
     n, _ = _r4("夫", "天", "天天天", guard="conflict", lane_coord=True)
     assert n == 0
@@ -332,3 +346,53 @@ def test_lane_variant_guard_off_restores_old_behaviour():
     mm = {f"{B}:1:5": NS(char=None, candidates=[("旨", 0.95), ("㫖", 0.94)], guard=None)}
     n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits)
     assert n == 1 and out[0].chars[4].char == "旨"
+
+
+
+# ── lane_variant_keep_rare（A24 10-24，vol11–20：整理本照录刻本异体、库首位同形，却被异体护栏拦）──────
+
+def _keep_rare(char, cands, **params):
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.95)", "上下文 margin 不足(0.10)"], char=char)})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + char + chars[5:] + "後") for k in "dwy"]
+    p = SeedAdmitParams(db_path="x", lane_coord=True, **params)
+    mm = {f"{B}:1:5": NS(char=None, candidates=cands, guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: char}), _vm(), lambda: wits)
+    return n, out[0].chars[4]
+
+
+def test_keep_rare_admits_rare_variant_agreed_by_lib_and_coord():
+    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)])
+    assert n == 1 and r.admit and r.char == "䘮" and r.channel == "coord_fallback"
+    assert r.evidence["lane"]["keep_rare"] == "喪"
+
+
+def test_keep_rare_does_not_turn_rare_variant_into_common_form():
+    # 放的是通用字（喪）、候选里有刻本异体（䘮）：照旧拦——这正是 #433 护栏要防的
+    n, r = _keep_rare("喪", [("喪", 0.95), ("䘮", 0.94)])
+    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_keep_rare_skips_group_members():
+    # 㫖 属字组 zhi，由字组按刻形判，不走这条
+    n, r = _keep_rare("㫖", [("㫖", 0.99), ("旨", 0.97)])
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_keep_rare_off_restores_guard():
+    n, r = _keep_rare("䘮", [("䘮", 0.989), ("喪", 0.955)], lane_variant_keep_rare=False)
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+@pytest.mark.parametrize("doubt", ["group_flow_disagree", "group_flow_ctx_contra"])
+def test_r4_never_lifts_group_flow_contra(doubt):
+    """字组流程里文意给了别的字而留审的格（vol11 18:5:11 顧炎武日知錄被 witness3 按整理本放成曰）：
+    补放通道不按整理本字放回，`lane_keep_ref_review` 关了也不放。"""
+    chars = BODY[:30]
+    for keep in (True, False):
+        out = _page(chars, {5: dict(doubts=[doubt], char="夫")})
+        wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
+        n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_keep_ref_review=keep)
+        assert n == 0 and not rs[5].admit

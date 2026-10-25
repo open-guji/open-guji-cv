@@ -80,6 +80,13 @@ def _isolated_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GUJI_DERIVED_FETCH", "0")
     monkeypatch.setenv("GUJI_AUTO_PACK", "0")       # 整册跑完自动存包（cli_v2._auto_pack）同理关掉
     monkeypatch.setenv("GUJI_ALLOW_MISSING_DEPS", "1")  # 起跑前依赖自检（ops/preflight.py）：云端没装 torch 也要能跑 pipeline 测试
+    # 开跑前备模板索引（cli_v2._ensure_rare_index）会拿真 checkpoint 往 models/ 落 emb_*.npz，测试里关掉
+    monkeypatch.setenv("GUJI_NO_RARE_INDEX_PREP", "1")
+    # `--force` 在进程里设 GUJI_NO_REUSE=1（cli_v2.cmd_pipeline），不清会漏到后面的测试、关掉它们的格级复用
+    monkeypatch.delenv("GUJI_NO_REUSE", raising=False)
+    # 隔离环境里没有人裁事件目录：`lookup.human_chars` 缺目录会报错（生产防静默丢人裁），测试里放行；
+    # 测报错本身的用例自己 delenv（tests/test_human_chars_lookup.py）
+    monkeypatch.setenv("GUJI_ALLOW_NO_EVENTS", "1")
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)
@@ -291,3 +298,39 @@ def no_cnn(monkeypatch):
         available = False
 
     monkeypatch.setattr(cnn_candidates, "shared", lambda *a, **k: _Off())
+
+
+#: 2026-10-23 起缺省开的放行开关（sheldon 定「没问题的 feature 缺省开」）。老的单元测试是在
+#: 「缺省全关」上造的数据（没字块图、没证人），测别的分支时要先把它们关回去；
+#: 新缺省本身由 `test_seed_admit_defaults_on.py` 守。
+SEED_ADMIT_SWITCHES_OFF = {"group_flow": (), "context_guard_diff": False, "context_guard_ref_blank": False,
+                           "lane_witness3": False, "lane_coord": False,
+                           # 2026-10-24 改缺省开的四个（A24）
+                           "context_guard_ref_prefer": False, "rare_ref": False, "symbol_review": False,
+                           "shadow_veto": False}
+
+
+@pytest.fixture
+def seed_admit_switches_off():
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams as P
+    saved = {k: (P.model_fields[k].default, P.model_fields[k].default_factory) for k in SEED_ADMIT_SWITCHES_OFF}
+    for k, v in SEED_ADMIT_SWITCHES_OFF.items():
+        P.model_fields[k].default, P.model_fields[k].default_factory = v, None
+    P.model_rebuild(force=True)
+    # 书级铁证通道 `BookSpec.iron_gate`（dataclass）：改 `__init__` 的缺省值表
+    import inspect
+    from open_guji_cv.core.book import BookSpec
+    init = BookSpec.__init__
+    names = [n for n, q in inspect.signature(init).parameters.items() if q.default is not inspect.Parameter.empty]
+    old_defaults = init.__defaults__
+    if old_defaults is not None and "iron_gate" in names:
+        d = list(old_defaults)
+        d[names.index("iron_gate")] = False
+        init.__defaults__ = tuple(d)
+    try:
+        yield
+    finally:
+        init.__defaults__ = old_defaults
+        for k, (d, f) in saved.items():
+            P.model_fields[k].default, P.model_fields[k].default_factory = d, f
+        P.model_rebuild(force=True)

@@ -129,12 +129,13 @@ def test_model_roundtrip_fingerprint_and_version_guard(tmp_path):
 
 
 def test_seed_admit_params_off_is_invisible(tmp_path):
-    """关着时五个影子字段不进 dump → params_hash 与加字段前逐位相同；开着时路径不进指纹、内容进。"""
+    """关着时影子附属字段不进 dump，只留显式 `shadow_veto: False`（2026-10-24 起缺省开，读回来要仍是关）；
+    开着时路径不进指纹、内容进。"""
     from open_guji_cv.core.engine import params_hash
     from open_guji_cv.steps.seed_admit import SeedAdmitParams, SeedAdmitStep
     db = tmp_path / "g.db"
-    off = SeedAdmitParams(db_path=str(db))
-    assert not any(k.startswith("shadow") for k in off.model_dump())
+    off = SeedAdmitParams(db_path=str(db))              # 模块级夹具把 shadow_veto 设成关
+    assert [k for k in off.model_dump() if k.startswith("shadow")] == ["shadow_veto"]
     assert "shadow_model" in SeedAdmitStep.spec.path_params
     m1, m2 = tmp_path / "a.joblib", tmp_path / "sub" / "b.joblib"
     m2.parent.mkdir()
@@ -186,3 +187,6 @@ def test_seed_admit_shadow_veto_only_demotes(tmp_path, monkeypatch):
     assert on[1].char == "衡"                                   # 字不改，只降级
     assert on[2].admit and on[3].admit                           # 单候选 / 影子同意：不动
     assert all("shadow_veto" not in r.evidence for r in (on[2], on[3]))
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

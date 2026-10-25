@@ -18,7 +18,8 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
     ctx = RunContext(make_book(BOOK, iron_gate=True), ProductStore(products), ImageCache(cache),
-                     params={"seed_admit": params}, log=lambda s: None)
+                     params={"seed_admit": params.model_copy(update={"shadow_veto": False})},   # 影子闸要真字形库，这里没摆
+                     log=lambda s: None)
     recs = [dict(slot=1, verdict="unsure", cov=0.5, wmax=0.0, char="山", candidates=[("山", 0.5)])]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(

@@ -67,13 +67,13 @@ def test_branch_self_ji_prev():                       # 搭配:自己类 → 己
     assert rules.classify("克", "復禮") == ("己", "搭配:自己类")
     assert rules.classify("自", "人") == ("己", "搭配:自己类")   # 10-11 收窄后「知」已不在 JI_PREV（Evan）
     assert rules.classify("文", "人") == (None, "无规则")
-    assert rules.classify("而", "之") == ("已", "搭配:而已")      # 而 ∉ JI_PREV，不走自己类
+    assert rules.classify("而", "矣") == ("已", "搭配:而已")      # 而 ∉ JI_PREV，不走自己类
 
 
 def test_branch_self_ji_yi():                         # 搭配:己意类 → 己（意私欲）
     assert rules.classify("斷以", "欲") == ("己", "搭配:己意类")
     assert rules.classify("輕", "私") == ("己", "搭配:己意类")
-    assert rules.classify("而", "意") == ("已", "搭配:而已")      # p=='而' 不走己意类
+    assert rules.classify("而", "意") == (None, "例外:而◎接谓语")  # p=='而' 不走己意类；10-24 起而◎接谓语不判
     assert rules.classify("斷以", "書") == (None, "无规则")
 
 
@@ -92,7 +92,8 @@ def test_branch_wei_ji_you():                         # 搭配:爲己有 → 己
 
 
 def test_branch_er_yi():                              # 搭配:而已 → 已
-    assert rules.classify("而", "之") == ("已", "搭配:而已")
+    assert rules.classify("而", "") == ("已", "搭配:而已")
+    assert rules.classify("而", "之") == (None, "例外:而◎接谓语")   # 10-24 收窄：只认句末
     assert rules.classify("不過如此而", "矣") == ("已", "搭配:而已")
     assert rules.classify("而", "易") == (None, "例外:而_易")      # 进例外，不进而已
     assert rules.classify("書", "之") == (None, "无规则")
@@ -102,7 +103,7 @@ def test_branch_er_yi_exception():                    # 例外:而_易 → 弃�
     assert rules.classify("而", "易") == (None, "例外:而_易")
     assert rules.classify("名徒生轇轕而", "易芥八卷浙江") == (None, "例外:而_易")
     assert rules.classify("書", "易") == (None, "无规则")
-    assert rules.classify("而", "文") == ("已", "搭配:而已")       # 不是例外
+    assert rules.classify("而", "也") == ("已", "搭配:而已")       # 不是例外
 
 
 def test_branch_ye_yi_class():                        # 搭配:業已类 → 已（業既久早無勿弗）

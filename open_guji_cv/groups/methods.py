@@ -3,7 +3,7 @@
 一个形近字组（两三个字）要解决，就是给它注册一个方法数组（`registry.FlowSpec.methods`）。数组里的方法依次试，
 每个方法输出「放行」（给出组内一个字）或「待定」（`char=None`），带置信度（0–1）和留痕信息。
 `combine="first"` 的组试到第一个放行就停；`combine="agree"` 的组每个方法都跑，给了字的必须一致（第二路当校验，
-如日曰的宽高比、入人八的字形分类器、土士未末的量横）。合并、补放、复核、留证据都在 `flow.py`，本模块只管「一个方法怎么判一格」。
+如日曰的宽高比、入人八的字形分类器、土士未末的量横、一二的数横）。合并、补放、复核、留证据都在 `flow.py`，本模块只管「一个方法怎么判一格」。
 
 ## 八类方法（`Method.kind`）
 
@@ -16,7 +16,7 @@
 | `hog` | 整字 HOG＋岭回归（二类或一对多） | `HogRidge`（`ids_whole`） |
 | `ids` | IDS 部件：U-Net／折线／自动缝切开，部件模板最近邻（目前按组指定切法，`ids_online.SPECS`；将来做通用的） | `Ids`（`ids_online`） |
 | `composite` | 复合：先用一个算子取局部（`Crop` 取框），再交给任意方法 | `Composite` |
-| `custom` | 自定义：任意 python 函数，入参 `MethodInput`、出参 `GroupVerdict`（量横、日曰宽高比、入人八字形分类器、库形最近） | `Custom` |
+| `custom` | 自定义：任意 python 函数，入参 `MethodInput`、出参 `GroupVerdict`（量横、一二数横、日曰宽高比、入人八字形分类器、库形最近） | `Custom` |
 
 数组里也可以放一个子数组 `Chain`：里面的方法依次试、第一个放行的说了算，整体当一个方法（文意 `ctx`＝固定匹配→LLM 表）。
 
@@ -136,7 +136,7 @@ def _spec(g: str):
 
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:
     """文意类方法的留痕口径（沿用旧 `ctx` 解法）：via 记 `ctx:<后端>`，extra 只留命中的规则。"""
-    keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong") if v.extra.get(k) not in (None, [], "")}
+    keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong", "runs") if v.extra.get(k) not in (None, [], "")}
     return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx", extra=keep)
 
 
@@ -277,6 +277,31 @@ class Composite(Method):
         raise ValueError(f"composite：算子 {self.op!r} 与内层方法 {self.inner!r} 的组合还不支持")
 
 
+@dataclass(frozen=True)
+class Only(Method):
+    """限定入口再跑内层方法：库分差内（`cfg.delta`）的候选与整理本字都落在 `chars` 里才跑，否则待定（`abstain:gate`）；
+    内层给的字不在 `give` 里也待定（`abstain:gate_give`）。组扩了成员、而旧判法只在原来那几个字之间验证过时用
+    （于千子干：子于整字 HOG 只认 子于干、只验证过给 子于，碰到 千 会硬判，2026-10-24 A24）。"""
+    inner: Method | None = None
+    chars: frozenset = frozenset()
+    give: frozenset = frozenset()
+    kind = "composite"
+
+    @property
+    def needs_patch(self) -> bool:            # type: ignore[override]
+        return self.inner.needs_patch
+
+    def _run(self, inp):
+        c1 = inp.cands[0][1] if inp.cands else 0.0
+        close = {c for c, v in (inp.cands or []) if c1 - v < inp.cfg.delta}
+        if not close or close - self.chars or (inp.ref and inp.ref not in self.chars):
+            return GroupVerdict(None, why="abstain:gate", via=self.name)
+        v = self.inner.run(inp)
+        if v.char is not None and v.char not in self.give:
+            return GroupVerdict(None, conf=v.conf, why="abstain:gate_give", via=v.via, extra=v.extra)
+        return v
+
+
 # —— 8 自定义函数 ——
 
 @dataclass(frozen=True)
@@ -332,6 +357,14 @@ def bars(inp: MethodInput, img) -> GroupVerdict:
     return GroupVerdict(v.char, conf=v.conf, why=v.why, via="bars", extra={"ratio": v.extra.get("ratio")})
 
 
+def yr_bars(inp: MethodInput, img) -> GroupVerdict:
+    """一二数横（`bars.count_bars`）：一横给「一」，两横（上短下长）给「二」，残笔、噪点、边框线弃权。"""
+    from .bars import count_bars
+    ch, why = count_bars(img)
+    ok = ch in inp.members
+    return GroupVerdict(ch if ok else None, conf=1.0 if ok else 0.0, why="agree" if ok else f"abstain:{why}", via="yr_bars")
+
+
 def rr_img(inp: MethodInput, img) -> GroupVerdict:
     """入人八字形分类器（`utils.rr_clf`，随机森林）：只验证过降审，补放要靠 `lift_needs` 拦。"""
     from ..utils import rr_clf
@@ -363,6 +396,7 @@ FORM_TOP1 = Custom("top1", fn=form_top1)
 BARS = Custom("bars", fn=bars, patch=True)
 RR_IMG = Custom("rr_img", fn=rr_img, patch=True)
 RY_SHAPE = Custom("ry_shape", fn=ry_shape, patch=True)
+YR_BARS = Custom("yr_bars", fn=yr_bars, patch=True)
 IDS = Ids()
 HOG = HogRidge()
 CODEPOINT = Codepoint()
@@ -381,4 +415,6 @@ def describe(m: Method) -> str:
         return "[" + " → ".join(describe(s) for s in m.steps) + "]"
     if isinstance(m, Composite):
         return f"composite(crop{tuple(m.op.region)} → {describe(m.inner)})"
+    if isinstance(m, Only):
+        return f"only({''.join(sorted(m.chars))} → {describe(m.inner)} → {''.join(sorted(m.give))})"
     return f"custom:{m.name}" if m.kind == "custom" else m.kind

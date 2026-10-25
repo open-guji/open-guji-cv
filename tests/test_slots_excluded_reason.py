@@ -134,3 +134,7 @@ def test_seed_admit_attaches_human_char_to_excluded_cell(tmp_path, monkeypatch):
     assert "human_char" not in by[3].evidence
     s1 = _to_slot("tbook", 1, 1, by[1], _cell(1))
     assert s1.char == "手" and s1.defect and not s1.unreadable
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

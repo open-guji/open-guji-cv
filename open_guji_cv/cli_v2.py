@@ -57,30 +57,98 @@ def cli_steps(eng, from_step: str | None, to_step: str | None) -> list[str]:
     return enabled
 
 
-def _warn_rare_index_missing(book: str) -> None:
-    """Step5-b 的 embedding 模板表没预建时先出声（overview#429）。
-
-    缺表时第一页要现建：字表 × 8 套字体逐字渲染 + 前向，单核约 25 字/秒，四庫一册两档
-    约 7.2 万字 ≈ 45–50 分钟，期间只有每千字一行进度，看着像卡死在第一页。只提示，不拦。"""
+def _rare_index_missing(book: str):
+    """→ `(inst, [(名, 字表, key, 路径)…])`：Step5-b 两档 embedding 模板表里盘上缺的；算不出来 → `(None, [])`。"""
     try:
         from .clustering import cnn_candidates as cc
         from .clustering.rare_panel import book_charsets
         from .steps.align_ref import book_corpus
         inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
         if not inst.available:
-            return
+            return None, []
         cs_base, cs_esc, _ = book_charsets(book, book_corpus(book))
-        miss = [(n, len(cs), f.name) for n, cs in (("base", cs_base), ("escalate", cs_esc)) if cs
-                for _k, f, _x in [inst.emb_index_key(cs)] if not f.exists()]
-    except Exception:  # noqa: BLE001 —— 只是提示，算不出来就不提示
+        miss = [(n, cs, k, f) for n, cs in (("base", cs_base), ("escalate", cs_esc)) if cs
+                for k, f, _x in [inst.emb_index_key(cs)] if not f.exists()]
+        return inst, miss
+    except Exception:  # noqa: BLE001 —— 只是预备，算不出来就交给跑批照旧处理
+        return None, []
+
+
+def _ensure_rare_index(book: str, jobs: int = 1, log=print) -> None:
+    """跑批前把 Step5-b 的 embedding 模板表备好（A30 10-24 实测，overview#429 续）。
+
+    缺表时管线在 `rare_candidates.parallel_warm` 里**单核**现建：殿本一册两档约 7.2 万字，
+    云端 4 核会话 37–60 分钟，其余核闲着；同机两册还各建一遍同一张表。现在开跑前：
+
+    1. 有与本机同规格的全字表向量包 → 按 **fp32** 落成（几秒）。fp32 与 `build_emb_matrix`
+       现建逐位相同（v0.5.12 实测 300 字 `np.array_equal`，最大差 0.0）；**不用** int8——
+       `pull-rare-index` 的缺省精度 int8 最大差约 0.004，会改候选，跑批不能悄悄换精度。
+       落盘的 key、路径与现建同一个函数算，产物指纹不变。
+    2. 没有同规格的包、`jobs > 1` → `ops.rare_index_build.build_parallel` 分片多进程现建
+       （逐位相同，4 核约快 4 倍）。
+    3. 其余情况只提示，跑批照旧现建。
+
+    不改任何 Step、不进任何指纹；出错一律退回原行为（只提示）。`GUJI_NO_RARE_INDEX_PREP=1` 关掉 1、2。"""
+    import os
+    import time
+    inst, miss = _rare_index_missing(book)
+    if not miss:
         return
-    if miss:
-        n = sum(m[1] for m in miss)
-        print(f"⚠️ Step5-b 模板索引未预建：{', '.join(f'{a} {b} 字（{c}）' for a, b, c in miss)}。"
-              f"若有页要算，第一页会现建 {n} 字（单核约 {n // 25 // 60} 分钟）。建议先 "
-              f"`guji cache pull-rare-index --book {book} -w <工作区>`（从向量包落成，几秒），"
-              f"没有同规格的向量包时再 `guji cache build-rare-index --book {book} --jobs 4`（runbook S5）",
-              flush=True)
+    from .clustering import cnn_candidates as cc
+    n = sum(len(m[1]) for m in miss)
+    desc = ", ".join(f"{a} {len(b)} 字（{f.name}）" for a, b, _k, f in miss)
+    if os.environ.get("GUJI_NO_RARE_INDEX_PREP") != "1":
+        t0 = time.time()
+        try:
+            from .clustering import emb_pack
+            m = emb_pack.find(emb_pack.current_spec())
+            pk = emb_pack.EmbPack.load(m, precision="fp32") if m else None
+        except Exception as e:  # noqa: BLE001
+            log(f"Step5-b 模板索引：读向量包失败（{type(e).__name__}: {e}），改走现建", flush=True)
+            pk = None
+        if pk is not None:
+            try:
+                import json
+
+                def compute(chars):
+                    if not inst._ensure():
+                        raise RuntimeError("本机没有 torch/checkpoint，包外的字算不了")
+                    from .clustering.synth import render_char
+                    return cc.build_emb_matrix(inst._net, inst._dev, tuple(chars), {}, render_char)
+
+                for name, cs, key, f in miss:
+                    mat, names = pk.materialize(cs, compute)
+                    if mat.shape[0] == 0:
+                        raise RuntimeError(f"{name} 落成 0 行")
+                    cc._save_emb_index(f, mat, names)
+                    f.with_name(f.name + ".source.json").write_text(
+                        json.dumps({"emb": pk.version, "precision": "fp32"}, ensure_ascii=False) + "\n",
+                        encoding="utf-8")
+                    log(f"Step5-b 模板索引：{name} {len(names)}/{len(cs)} 字从向量包 {pk.version}（fp32）落成"
+                        f" → {f.name}", flush=True)
+                log(f"Step5-b 模板索引备好（向量包，{time.time() - t0:.1f}s）", flush=True)
+                return
+            except Exception as e:  # noqa: BLE001
+                log(f"Step5-b 模板索引：从向量包落成失败（{type(e).__name__}: {e}），改走现建", flush=True)
+        if jobs > 1 and inst._ensure():
+            try:
+                from .ops.rare_index_build import build_parallel
+                for name, cs, key, f in miss:
+                    if f.exists():
+                        continue
+                    log(f"Step5-b 模板索引：没有同规格向量包，{name} {len(cs)} 字 {jobs} 进程现建", flush=True)
+                    mat, names = build_parallel(inst, cs, jobs)
+                    if mat.shape[0] == 0:
+                        raise RuntimeError(f"{name} 建成 0 行")
+                    cc._save_emb_index(f, mat, names)
+                log(f"Step5-b 模板索引备好（{jobs} 进程现建，{time.time() - t0:.0f}s）", flush=True)
+                return
+            except Exception as e:  # noqa: BLE001
+                log(f"Step5-b 模板索引：多进程现建失败（{type(e).__name__}: {e}），交给跑批单核现建", flush=True)
+    log(f"⚠️ Step5-b 模板索引未预建：{desc}。若有页要算，第一页会单核现建 {n} 字（约 {n // 25 // 60} 分钟）。"
+        f"建议先 `guji cache pull-rare-index --book {book} -w <工作区> --precision fp32`（从向量包落成，几秒；"
+        f"别用缺省 int8，会改候选），没有同规格的向量包时再 `guji cache build-rare-index --book {book} --jobs 4`",
+        flush=True)
 
 
 def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
@@ -103,6 +171,8 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
         argv.append("--allow-sample-db")
     if getattr(args, "allow_cv_mismatch", False):
         argv.append("--allow-cv-mismatch")
+    if getattr(args, "why", None):
+        argv += ["--why", args.why]
     if getattr(args, "allow_missing_deps", False):
         argv.append("--allow-missing-deps")
     return argv
@@ -164,18 +234,38 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     return rc
 
 
-def _guard_cv_version(book, allow: bool = False, warn_only: bool = False) -> None:
+def _guard_cv_version(book, allow: bool = False, warn_only: bool = False, why: str | None = None,
+                      eng=None) -> None:
     """册配置固定了 `cv_version`、装的 cv 不是这个版本：写产物的命令拒跑（退出码 2），
-    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。`--allow-cv-mismatch` 放行但照样提醒。"""
-    from .core.cv_version import frozen_mismatch, mismatch
+    只读命令只提醒（设计 §2a 第 6 条，GUJI-577）。
+
+    放行只有两条路（2026-10-23 起），都照样提醒，理由记进环境变量 `GUJI_CV_OVERRIDE`、随每条 manifest 落盘：
+    - 在中心库实验分支上跑（`GUJI_DATA_BRANCH=exp/*`，产物、glyph.db 落该分支自己的目录）：自动放行；
+    - `--allow-cv-mismatch --why "<理由>"`：不写理由不放行。
+    给了 `eng` 就把理由补进它已算好的 manifest 字段（引擎先于护栏建）。"""
+    import os
+    from .core.cv_version import OVERRIDE_ENV, frozen_mismatch, isolated_branch, mismatch
     # 冻结册另按冻结时的提交比（M10·D7，GUJI-694）：冻结册顶层常没写 cv_version，以前在 main 上照样能跑
     msg = mismatch(getattr(book, "cv_version", None)) or frozen_mismatch(getattr(book, "freeze", None))
     if not msg:
         return
-    if allow or warn_only:
+    if warn_only:
         print(f"⚠️ {msg}", file=sys.stderr, flush=True)
         return
-    print(f"✗ {msg}", file=sys.stderr, flush=True)
+    why = (why or "").strip() or os.environ.get(OVERRIDE_ENV, "").strip()
+    branch = isolated_branch()
+    if branch and not allow:
+        why = f"exp-branch:{branch}"
+    if branch or (allow and why):
+        os.environ[OVERRIDE_ENV] = why
+        if eng is not None:
+            eng._cv["cv_override"] = why
+        print(f"⚠️ {msg}\n   放行（{why}）：产物 manifest 记装的版本与这条理由", file=sys.stderr, flush=True)
+        return
+    if allow:
+        print(f"✗ {msg}\n   --allow-cv-mismatch 要同时写 --why \"<理由>\"（记进产物 manifest）", file=sys.stderr, flush=True)
+    else:
+        print(f"✗ {msg}", file=sys.stderr, flush=True)
     sys.exit(2)
 
 
@@ -200,16 +290,26 @@ def cmd_pipeline(args) -> None:
     if getattr(args, "allow_sample_db", False):
         import os
         os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
+    if getattr(args, "force", False):
+        # --force 一并关掉格级复用（2026-10-24）。复用只认本步 self_hash，而字形库指纹是软参数：
+        # 殿本 vol07 在空 g2 上跑过一次，修好库后 `--from glyph_match --force` 重跑，引擎确实重跑了每一页，
+        # 可 glyph_match 每格都从旧产物（对空库判的 diff、无候选）原样搬回，seed_admit 送审 86→15,559。
+        # 「强制重算」就该每格重算；要复用就别加 --force。设在建引擎之前：本进程的 RunContext
+        # 与 --isolate-steps 的每步子进程（继承环境）都读得到。
+        import os
+        os.environ["GUJI_NO_REUSE"] = "1"
+        print("  --force：格级复用关闭（GUJI_NO_REUSE=1），每格重算", flush=True)
     from .core.workspace import assert_workspace_declared
     assert_workspace_declared()
     eng = _engine(args.book, args.pipeline, getattr(args, "params", None))
-    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False))
+    _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False), why=getattr(args, "why", None),
+                      eng=eng)
     steps = cli_steps(eng, getattr(args, "from_step", None), getattr(args, "to_step", None))
     pages = eng.book.resolve_pages(args.pages)
     _ensure_glyph_pin(eng.book)
     _preflight_deps(eng, steps, allow=getattr(args, "allow_missing_deps", False))
     if "rare_candidates" in steps:
-        _warn_rare_index_missing(eng.book.id)
+        _ensure_rare_index(eng.book.id, jobs=max(1, getattr(args, "jobs", 1) or 1))
     # 书级跑批锁：同一产物目录同一本书只许一个跑批在写（overview 进度/并行分工.md §三）
     from .core.runlock import book_run_lock, RunLockHeld
     isolate = getattr(args, "isolate_steps", None)
@@ -332,7 +432,7 @@ def cmd_rerun(args) -> None:
     eng = _engine(args.book, args.pipeline, None)
     # 写产物，和 pipeline／step 一样过 cv 版本护栏（GUJI-577）；--dry-run 只提醒
     _guard_cv_version(eng.book, allow=getattr(args, "allow_cv_mismatch", False),
-                      warn_only=args.dry_run)
+                      warn_only=args.dry_run, why=getattr(args, "why", None), eng=eng)
     pages = eng.book.resolve_pages(args.pages)
 
     def steps_after(first, to):
@@ -457,13 +557,35 @@ def cmd_exit_check(args) -> None:
         sys.exit("册名不是 volNN 时要给 --chapter NNN")
     from .core.book import load_book
     b = load_book(args.book)
+    frozen = None
+    if args.frozen_char:
+        from .ops import text_diff as TD
+        frozen = TD.load(args.frozen_char)
     res = EC.run(Path(args.text_dir), chapter, b.freeze, b.cv_version,
-                 repo=Path(args.repo) if args.repo else None)
+                 repo=Path(args.repo) if args.repo else None, frozen_char=frozen)
+    if args.diff_out and res.get("diff") is not None:
+        from .ops import text_diff as TD
+        TD.write_tsv(res["diff"], json.loads((Path(args.text_dir) / f"{chapter}.char.json").read_text(encoding="utf-8")),
+                     frozen, Path(args.diff_out))
     if args.json:
         print(json.dumps(res, ensure_ascii=False))
     else:
         EC.print_report(res)
     sys.exit(0 if res["ok"] else 1)
+
+
+def cmd_char_diff(args) -> None:
+    """`guji char-diff <文本 char.json> <冻结导出 char.json>`：逐格比（只读；1.0 标准 G2）。见 `ops/text_diff.py`。"""
+    from .ops import text_diff as TD
+    text, frozen = TD.load(args.text), TD.load(args.frozen)
+    res = TD.diff(text, frozen)
+    if args.out:
+        TD.write_tsv(res, text, frozen, Path(args.out))
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        print(f"{res['n']} 处差异：{TD.summary(res)}" + (f"（明细 {args.out}）" if args.out and res["n"] else ""))
+    sys.exit(0 if not res["n"] else 1)
 
 
 def cmd_export(args) -> None:
@@ -583,6 +705,12 @@ def cmd_audit(args) -> None:
             cs = cards(book, "all", limit=10 ** 7, only="all", store=eng.store, gate_cut=False,
                        skip_decided=False, cls="*")["cards"]
         todo = [c for c in cs if not c.get("admit")]
+        if getattr(args, "extra", None):
+            # 复审格（republish prep --recheck）多已放行或人裁过，也要相似字，网站卡片才和别的格一样能点选
+            want = {ln.split("\t")[0].strip() for ln in Path(args.extra).read_text(encoding="utf-8").splitlines()
+                    if ln.strip() and not ln.lstrip().startswith("#")}
+            want = {w if w.startswith(f"{book}:") else f"{book}:{w}" for w in want}
+            todo += [c for c in cs if c.get("admit") and c.get("id") in want]
         if args.reviewed:
             # 人裁过的格也算（它们多已放行、不在待审里）：给 alt-eval 拿历史人裁量真实命中，不进待审单
             from .feedback.lookup import human_chars
@@ -760,14 +888,16 @@ def cmd_recheck(args) -> None:
     只标不跑——跑还是 `guji pipeline <p> <book> --from glyph_match`，只重算点名格。"""
     from .core.spec import page_key
     from .steps.glyph_match import live_exemplars, recheck_reasons
-    eng = _engine(args.book, args.pipeline, quiet=True)
+    eng = _engine(args.book, args.pipeline, params=getattr(args, "params", None), quiet=True)
     step = eng.pipeline.producer_of("glyph_match")
     sid = step.spec.id
     p = eng.ctx.params_for(step)
     chars = set((args.chars or "").replace(",", "").replace("，", "").replace(" ", ""))
     verdicts = {v for v in (args.verdicts or "").split(",") if v}
-    if not (chars or verdicts or args.dead or args.all):
-        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all")
+    if not (chars or verdicts or args.dead or args.all or args.glyph_diff):
+        raise SystemExit("至少给一个：--chars / --verdicts / --dead / --all / --glyph-diff")
+    if args.glyph_diff:
+        return _recheck_glyph_diff(args, eng, step, p)
     live = None
     if args.dead:
         edition = p.edition
@@ -815,6 +945,67 @@ def cmd_recheck(args) -> None:
         pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
         print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
               + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
+    if n_pages and not args.dry_run:
+        print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
+              f"--pages {args.pages} -w <workspace>")
+
+
+def _old_glyph_db(spec: str) -> str:
+    """`--glyph-diff` 的旧库：`g<N>`／`N`（钉版库，缺了就建）或库文件路径。"""
+    from pathlib import Path
+    from .core.glyph_pin import parse_pin, pinned_db_path
+    n = parse_pin(spec) if not Path(spec).suffix else None
+    if n is None:
+        if not Path(spec).exists():
+            raise SystemExit(f"--glyph-diff：库文件不存在：{spec}")
+        return str(Path(spec))
+    from .core.workspace import workspace_root
+    from .ops.glyph_snapshot import build_pinned_db
+    build_pinned_db(workspace_root(), n)
+    return str(pinned_db_path(n))
+
+
+def _recheck_glyph_diff(args, eng, step, p) -> None:
+    """`guji recheck --glyph-diff <旧库>`：kNN 邻域差分（`ops/glyph_diff.py`），只点名换库后判决可能变的格。"""
+    from .core.spec import page_key
+    from .ops.glyph_diff import load_view, page_affected
+    from .steps.glyph_match import _FontTier, db_fingerprint
+    sid = step.spec.id
+    old_db = _old_glyph_db(args.glyph_diff)
+    if old_db == p.db_path:
+        raise SystemExit(f"--glyph-diff 给的旧库就是本册现在读的库（{old_db}）：没有可比的")
+    p_old = p.model_copy(update={"db_path": old_db, "db_fingerprint": db_fingerprint(old_db)})
+    tier = _FontTier.rule(p.font_tier) is not None
+    print(f"旧库 {old_db}\n新库 {p.db_path}", flush=True)
+    old, new = load_view(p_old, font_tier=tier), load_view(p, font_tier=tier)
+    manifest = eng.store.manifest(eng.book.id, sid)
+    reason = f"recheck glyph-diff {args.glyph_diff}"
+    n_pages = n_cells = n_total = 0
+    by_why: dict[str, int] = {}
+    for pg in eng.book.resolve_pages(args.pages):
+        key = page_key(pg)
+        if manifest.get(key) is None:
+            continue
+        pm = eng.store.read(eng.book.id, sid, key, "glyph_match")
+        if pm is None:
+            continue
+        hit = page_affected(eng.ctx, pg, pm, p, old, new)
+        n_total += sum(len(c.chars) for c in pm.columns if c.ok)
+        for why in hit.values():
+            for w in why:
+                by_why[w] = by_why.get(w, 0) + 1
+        if hit:
+            n_pages += 1
+            n_cells += len(hit)
+            if not args.dry_run:
+                manifest.invalidate(key, reason, cells=sorted(hit))
+        if args.list:
+            for cid, why in sorted(hit.items()):
+                print(f"  {cid}\t{','.join(why)}")
+    head = "[dry-run] " if args.dry_run else ""
+    pct = f"{n_cells * 100 / n_total:.1f}%" if n_total else "-"
+    print(f"{head}{sid}：{n_pages} 页 {n_cells}/{n_total} 格点名重算（{pct}）  "
+          + "  ".join(f"{k} {v}" for k, v in sorted(by_why.items())))
     if n_pages and not args.dry_run:
         print(f"下一步：guji pipeline {eng.pipeline.id} {eng.book.id} --from {sid} "
               f"--pages {args.pages} -w <workspace>")
@@ -2064,6 +2255,20 @@ def cmd_check(args) -> None:
              "out": args.out or None})
 
 
+def cmd_groups(args) -> None:
+    """字组：table 由注册表重生成 doc/字组/字组总表.md（--check 只比对）；status 一轮产物 × 人工数据 → 每组状态报告。"""
+    if args.action == "table":
+        from .groups import catalog
+        raise SystemExit(catalog.main(["--check"] if args.check else []))
+    from .eval import group_status
+    if not args.prod or not args.out:
+        raise SystemExit("groups status 要 --prod 与 --out")
+    pj, pm = group_status.run([Path(p) for p in args.prod.split(",")], Path(args.out),
+                              labels=Path(args.labels) if args.labels else None,
+                              codepoints=Path(args.codepoints) if args.codepoints else None, tag=args.tag)
+    print("写", pj, "\n写", pm)
+
+
 def cmd_cards(args) -> None:
     """待审卡片的数据：dingzi | cutline | jiazhu | groups，一律出 JSON。
 
@@ -2674,6 +2879,7 @@ COMMANDS_V2 = {
     "exit-check": cmd_exit_check,
     "export": cmd_export,
     "audit": cmd_audit,
+    "char-diff": cmd_char_diff,
     "store": cmd_store,
     "recheck": cmd_recheck,
     "fp-migrate": cmd_fp_migrate,
@@ -2685,6 +2891,7 @@ COMMANDS_V2 = {
     "product": cmd_product,
     "check": cmd_check,
     "cards": cmd_cards,
+    "groups": cmd_groups,
     "rare": cmd_rare,
     "variants": cmd_variants,
     "corpus": cmd_corpus,
@@ -2810,8 +3017,11 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "2026-10-20 起 `guji pipeline` 跑多于一步、不要 --json 时缺省就隔离（GUJI-647），"
                         "代价是每步多付一次 import 与模型加载；--no-isolate-steps 退回单进程连跑。不支持 --json")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577）。"
-                        "做实验、临时核对时用，产物 manifest 照实记装的版本")
+                   help="册配置固定的 cv_version 与装的版本不同时仍然跑（默认拒跑，退出码 2；GUJI-577），"
+                        "须同时给 --why。做实验优先在中心库实验分支上跑（GUJI_DATA_BRANCH=exp/*，自动放行、产物隔离）；"
+                        "产物 manifest 照实记装的版本和理由（cv_override）")
+    p.add_argument("--why", default=None,
+                   help="配 --allow-cv-mismatch：为什么要用非钉定版本在这里跑，记进每条产物 manifest 的 cv_override")
     p.add_argument("--allow-missing-deps", action="store_true",
                    help="这次要跑的步骤本机缺依赖（torch／权重／shadow_veto 要的 joblib）时仍然跑（默认拒跑，退出码 2；GUJI-654）。"
                         "缺的东西会让 Step 悄悄退回旧办法或整页失败，只在明知后果时加")
@@ -2848,7 +3058,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--wait", action="store_true", help="这本书正有别的跑批时排队等")
     p.add_argument("--json", action="store_true")
     p.add_argument("--allow-cv-mismatch", action="store_true",
-                   help="册配置固定了 cv_version 而装的不是它时照跑（只提醒）")
+                   help="册配置固定了 cv_version 而装的不是它时照跑，须同时给 --why（实验分支上自动放行）")
+    p.add_argument("--why", default=None, help="配 --allow-cv-mismatch：理由，记进产物 manifest 的 cv_override")
 
     p = sub.add_parser("binarize",
                        help="[v2] 整页二值副本 → binarized/<book>/（进库与人裁看的都是它）")
@@ -3082,6 +3293,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--text-dir", required=True, help="book-text 本书 default 目录（含 index.json、NNN.char.json）")
     p.add_argument("--chapter", default=None, help="章号 NNN；缺省按 volNN 推")
     p.add_argument("--repo", default=None, help="查 tag 用的 cv 仓目录；缺省本包所在仓")
+    p.add_argument("--frozen-char", default=None, dest="frozen_char",
+                   help="冻结快照导出的 NNN.char.json；给了就核 E9（发布文本＝冻结导出）")
+    p.add_argument("--diff-out", default=None, dest="diff_out", help="E9 的逐格差异写成 tsv")
+    p.add_argument("--json", action="store_true")
+
+    p = sub.add_parser("char-diff", help="[v2] 两份 char.json 逐格比：发布文本 vs 冻结导出（只读，1.0 标准 G2）")
+    p.add_argument("text", help="发布（候选）文本的 NNN.char.json")
+    p.add_argument("frozen", help="冻结快照导出的 NNN.char.json")
+    p.add_argument("--out", default=None, help="差异明细 tsv")
     p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
@@ -3116,6 +3336,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--reviewed", action="store_true",
                    help="alt：人裁过、已放行的格也算相似字（给 alt-eval 用历史人裁量命中；pending_list 只取待审格，不受影响）")
     p.add_argument("--zi-cache", default=None, help="alt：字统网缓存目录，缺省 $GUJI_ZITOOLS_CACHE 或 $GUJI_DATA_HOME/_shared/zitools")
+    p.add_argument("--extra", default=None,
+                   help="alt：另外也要算相似字的格（复审清单，一行一格，第一列格号，可带「册:」前缀）：已放行的复审格也挂上 alt")
 
     p = sub.add_parser("store", help="[v2] glyph.db 导出并推进中心库（= guji db push；check = 只看不写）")
     p.add_argument("action", choices=["check", "commit"])
@@ -3134,6 +3356,13 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--dead", action="store_true",
                    help="same 档命中的库条目已撤或字头已改（撤库后建议跑一次）")
     p.add_argument("--all", action="store_true", help="整页失效（不复用任何格）")
+    p.add_argument("--glyph-diff", default=None, metavar="旧库",
+                   help="换了字形库版本后只点名受影响的格：旧库给 g<N> 或库文件路径，新库＝本册现在读的库"
+                        "（kNN 邻域差分，见 ops/glyph_diff.py）；与其它点名条件互斥")
+    p.add_argument("--list", action="store_true", help="--glyph-diff 时逐格列出点名理由")
+    p.add_argument("--params", default=None,
+                   help="参数覆盖 JSON（同 guji pipeline --params）；如新库不是册 yaml 指的那份："
+                        '{"glyph_match": {"db_path": "…/new.db"}}，之后跑 pipeline 也要带同样的 --params')
     p.add_argument("--dry-run", action="store_true", help="只数不写")
 
     p = sub.add_parser("fp-migrate",
@@ -3302,6 +3531,15 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--out", default="",
                    help="ledger：发现明细另存 jsonl（不给就只在 --json/文字里出汇总数与 counts）")
 
+    p = sub.add_parser("groups", help="[v2] 字组：table 重生成字组总表 | status 每组状态报告（只读）")
+    p.add_argument("action", choices=["table", "status"])
+    p.add_argument("--check", action="store_true", help="table：只比对总表与注册表，不写")
+    p.add_argument("--prod", default="", help="status：产物根，逗号分隔（下面是 <册>/seed_admit/p*.json）")
+    p.add_argument("--labels", default="", help="status：dataset char-groups/labels/unified.jsonl")
+    p.add_argument("--codepoints", default="", help="status：工作区 config/codepoints.yaml（核对人裁时先归一码位）")
+    p.add_argument("--out", default="", help="status：输出目录（dataset char-groups/status）")
+    p.add_argument("--tag", default="", help="status：这一轮产物的标签，进文件名")
+
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
     p.add_argument("book")
@@ -3408,6 +3646,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_products import add_parser as _add_products, cmd_products_entry
     _add_products(sub)
     COMMANDS_V2["products"] = cmd_products_entry
+    # source：原图源件、页图、页表（R2），云会话取原图；自带 -w
+    from .cli_source import add_parser as _add_source, cmd_source
+    _add_source(sub)
+    COMMANDS_V2["source"] = cmd_source
     # opinions（M11）：意见池、证据包、初判、修订 book-text 冻结册；不带 book 位置参数，不要 -w
     from .cli_opinions import add_parser as _add_opinions, cmd_opinions
     _add_opinions(sub)
@@ -3416,6 +3658,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
     _add_cellvotes(sub)
     COMMANDS_V2["cellvotes"] = cmd_cellvotes
+    # freeze（GUJI-694）：冻结登记；带 book，-w 由下面统一加
+    from .cli_freeze import add_parser as _add_freeze, cmd_freeze
+    _add_freeze(sub)
+    COMMANDS_V2["freeze"] = cmd_freeze
     install_workspace_option(sub)
 
 

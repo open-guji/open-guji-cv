@@ -68,17 +68,18 @@ def test_declared_as_gated_optional_upstream():
 
 
 def test_params_off_is_invisible(tmp_path):
-    """关着时新增字段一个都不进 dump → params_hash 与加字段前逐位相同；开着时进。"""
+    """关着时只有显式 False 进 dump（2026-10-24 起缺省开，读回来要仍是关），附属字段不进；开着时进。"""
     db = str(tmp_path / "g.db")
-    off = SeedAdmitParams(db_path=db)
-    assert not any(k.startswith(("rare_ref",)) for k in off.model_dump())
+    off = SeedAdmitParams(db_path=db)                   # 模块级夹具把 rare_ref、shadow_veto 设成关
+    assert [k for k in off.model_dump() if k.startswith("rare_ref")] == ["rare_ref"]
+    assert off.model_dump()["rare_ref"] is False
     assert SeedAdmitParams(db_path=db, rare_ref=False).model_dump() == off.model_dump()
     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
     h = lambda p: params_hash(p, sp, pt)  # noqa: E731
     on = SeedAdmitParams(db_path=db, rare_ref=True)
     assert on.model_dump()["rare_ref"] is True and h(on) != h(off)
     # 只开 rare_ref 不拖进影子模型字段（没有模型文件也能建参数）
-    assert not any(k.startswith("shadow") for k in on.model_dump())
+    assert [k for k in on.model_dump() if k.startswith("shadow")] == ["shadow_veto"]
 
 
 # ── 规则 A 通道 ──────────────────────────────────────────────────────────
@@ -235,3 +236,37 @@ def test_v2_features_and_v1_candidate_set():
 
 def _VCtx():
     return S.SignalContext(vm=_VM(), partners={}, human_ids={}, lib_ids=frozenset())
+
+
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+@pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
+def test_keep_ref_review_cells(doubt):
+    """护栏拿整理本字拦下的格不由 rare_ref（两遍）按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」；
+    本/木 在字组里，坐标那遍本就不碰，这里换不在字组里的一对测两遍）。"""
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+    cid = f"{BOOK}:{PAGE}:{COL}:1"
+
+    def run(keep, coord=None):
+        out = [ColumnAdmit(col=COL, chars=[AdmitRec(id=cid, slot=1, char=LIB, doubts=["replace_align", doubt])])]
+        mmap = {cid: SimpleNamespace(verdict="unsure", char=None, candidates=[(LIB, 0.98)], guard=None, cov=0.98)}
+        amap = {} if coord else {cid: (REF, "replace")}
+        n = sa._rare_ref_pass(out, mmap, amap, {cid: [REF]}, coord, keep_ref_review=keep)
+        return n, out[0].chars[0]
+
+    for coord in (None, {cid: REF}):
+        n, r = run(True, coord)
+        assert n == 0 and not r.admit and r.char == LIB
+        if coord and doubt.startswith("group_flow"):
+            continue                    # 坐标那遍本来就不碰 group_flow 降审格（`_rare_ref_coord_ok`）
+        n, r = run(False, coord)
+        assert n == 1 and r.char == REF and r.channel == "rare_ref"
+
+
+def test_keep_ref_review_in_dump_with_rare_ref_only():
+    on = SeedAdmitParams(rare_ref=True, lane_witness3=False, lane_coord=False, lane_seal=False)
+    off = SeedAdmitParams(rare_ref=False, lane_witness3=False, lane_coord=False, lane_seal=False)
+    assert "lane_keep_ref_review" in on.model_dump()
+    assert "lane_keep_ref_review" not in off.model_dump()

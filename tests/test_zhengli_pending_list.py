@@ -135,3 +135,22 @@ def test_out_and_ws_are_exclusive(tmp_path):
 
 def test_cell_key_orders_numerically():
     assert pl.cell_key("1:10:2a") > pl.cell_key("1:9:3")
+
+
+def test_recheck_puts_cells_back_with_note_and_prior(tmp_path):
+    """--recheck：已放行的格也放回单上，带 recheck／note／prior；现行切分里没有的记进 recheck_missing.tsv。"""
+    out = tmp_path / "out"
+    rc = tmp_path / "recheck.tsv"
+    rc.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n"
+                  "vol01:1:1:1\t旧裁 山，新票 由，请定\tev9\t山\t2026-10-22T08:45:00Z\n"
+                  "1:1:2\t几票不一致\n"
+                  "9:9:9\t切字改过\n", encoding="utf-8")
+    pl.main(base_args(make_products(tmp_path), out) + ["--recheck", str(rc)])
+    doc = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))
+    by = {c["cell"]: c for c in doc["cells"]}
+    assert [c["cell"] for c in doc["cells"]] == ["1:1:1", "1:1:2", "1:2:1a"]
+    assert by["1:1:1"] == {"cell": "1:1:1", "review": "pending", "recheck": True, "note": "旧裁 山，新票 由，请定",
+                           "prior": {"c": "山", "id": "ev9", "ts": "2026-10-22T08:45:00Z"}}
+    assert by["1:1:2"]["recheck"] is True and by["1:1:2"]["note"] == "几票不一致" and "prior" not in by["1:1:2"]
+    assert "recheck" not in by["1:2:1a"]
+    assert (out / "recheck_missing.tsv").read_text(encoding="utf-8").splitlines()[1:] == ["9:9:9\t切字改过"]

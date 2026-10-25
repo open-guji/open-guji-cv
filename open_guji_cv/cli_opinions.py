@@ -11,6 +11,7 @@
     guji opinions to-user --out <目录>／decide --from <裁决 JSON>
     guji opinions revise  --book B --vol 002 --book-text <检出> [--dry-run] --pr N
     guji opinions reply-drafts --book B --ws W
+    guji opinions auto decide|prepare|finish-pr|finish-merged|revert|finish-revert|digest --book B --ws W --remote ...   # 自动化调和器（rules.json 的 auto 段）
     guji opinions publish-status --book B --ws W [--remote] [--dry-run]  # 处理结论 → 中心库 feedback/lists/web/<书>/status.jsonl（网站回显）
 
 意见池在哪：缺省是本机数据目录 `$GUJI_DATA_HOME/<分支>/<工作区>/feedback/lists/opinions/<书>/`（`guji db sync` 推进中心库）；
@@ -463,6 +464,80 @@ def cmd_revise(args) -> None:
         _print(f"log 记 applied {len(todo)} 条（{st.backend.describe()}）")
 
 
+# ---------------- auto（自动化调和器，设计见 book-text docs/design/2026-10-修订流程自动化设计.md）----------------
+
+def _auto_rules(args) -> dict:
+    from .opinions import rules as R
+    return R.load_rules(getattr(args, "rules", None))
+
+
+def _human_cells(args) -> set | None:
+    return set(Path(args.human_cells).read_text(encoding="utf-8").split()) if getattr(args, "human_cells", None) else None
+
+
+def cmd_auto(args) -> None:
+    from .opinions import auto as A
+    from .opinions import webstatus as W
+    rules = _auto_rules(args)
+    st = _store(args, by=args.by)
+    sub = args.auto_cmd
+    try:
+        if sub == "decide":
+            rows = A.decide_pending(st, rules)
+            for r in rows:
+                _print(f"{r['id']}\t{r['action']}\t{r['reason']}")
+            _print(f"{'[dry-run] ' if args.dry_run else ''}自动结案 {sum(1 for r in rows if r['action'] != 'park')} 条，留着 {sum(1 for r in rows if r['action'] == 'park')} 条")
+        elif sub == "prepare":
+            from .opinions.textsrc import default_book_text
+            root = default_book_text(args.book_text)
+            if not root:
+                raise SystemExit("prepare 要本地 book-text 检出（--book-text 或 GUJI_BOOK_TEXT）")
+            plans = A.prepare(st, root, args.book, rules, vols=[v for v in args.vols.split(",") if v] or None,
+                              human_cells=_human_cells(args), run_checks=not args.no_checks, trailers=args.trailer)
+            _print(json.dumps(plans, ensure_ascii=False, indent=1))
+        elif sub == "finish-pr":
+            from .opinions.textsrc import default_book_text
+            res = A.finish_pr(st, default_book_text(args.book_text), args.release, args.pr)
+            _print(json.dumps(res, ensure_ascii=False))
+        elif sub == "finish-merged":
+            backend = W.status_backend(args.book, ws=args.ws, root=args.root, remote=args.remote,
+                                       token_env=args.token_env, branch=args.branch)
+
+            def pub():
+                r = W.publish(st, backend, dry_run=args.dry_run)
+                return {"rows": len(r["rows"]), "written": r["written"], "where": r["where"]}
+            res = A.finish_merged(st, args.release, args.commit, publish_status=pub)
+            _print(json.dumps(res, ensure_ascii=False))
+        elif sub == "revert":
+            from .opinions import revert as RV
+            from .opinions.textsrc import default_book_text
+            root = default_book_text(args.book_text)
+            if not root:
+                raise SystemExit("revert 要本地 book-text 检出（--book-text 或 GUJI_BOOK_TEXT）")
+            res = RV.prepare_revert(st, root, args.release, args.reason or "", run_checks=not args.no_checks, trailers=args.trailer)
+            _print(json.dumps(res, ensure_ascii=False, indent=1))
+        elif sub == "finish-revert":
+            from .opinions import revert as RV
+            backend = W.status_backend(args.book, ws=args.ws, root=args.root, remote=args.remote,
+                                       token_env=args.token_env, branch=args.branch)
+
+            def pub2():
+                r = W.publish(st, backend, dry_run=args.dry_run)
+                return {"rows": len(r["rows"]), "written": r["written"], "where": r["where"]}
+            res = RV.finish_revert_merged(st, args.release, args.commit, publish_status=pub2)
+            _print(json.dumps(res, ensure_ascii=False))
+        elif sub == "digest":
+            _print(A.digest(st, rules, since=args.since))
+            return
+    except A.AutoError as e:
+        raise SystemExit(f"✗ {e}")
+    if args.dry_run:
+        _print("[dry-run] 意见池不写")
+        return
+    st.save()
+    _print(f"已写意见池（{st.backend.describe()}）")
+
+
 # ---------------- 注册 ----------------
 
 def _common(p, store: bool = True) -> None:
@@ -594,6 +669,24 @@ def add_parser(sub) -> None:
     _common(p)
     p.add_argument("--dry-run", action="store_true", help="只打印，不写")
     p.set_defaults(func=cmd_publish_status)
+
+    p = s.add_parser("auto", help="自动化调和器：decide 自动结案、prepare 聚批改文本、finish-pr／finish-merged 收尾、digest 汇总")
+    p.add_argument("auto_cmd", choices=("decide", "prepare", "finish-pr", "finish-merged", "revert", "finish-revert", "digest"))
+    _common(p)
+    p.add_argument("--by", default="auto", help="log 里记谁做的")
+    p.add_argument("--rules", default=None, help="规则表路径（缺省 config/opinions/rules.json）")
+    p.add_argument("--dry-run", action="store_true", help="意见池不写（prepare 仍会在 book-text 里建分支和提交）")
+    p.add_argument("--book-text", default=None, help="book-text 本地检出（prepare／finish-pr 要）")
+    p.add_argument("--vols", default="", help="prepare：只做这些章（逗号分隔，缺省全部）")
+    p.add_argument("--human-cells", default=None, help="prepare：保护格清单（每行一个格号，人裁或手改过的），碰到的意见不自动改")
+    p.add_argument("--no-checks", action="store_true", help="prepare：不跑 local_check（只给测试用）")
+    p.add_argument("--trailer", action="append", default=[], help="prepare：提交信息末尾加的行，可重复")
+    p.add_argument("--release", default=None, help="finish-pr／finish-merged／revert／finish-revert：发布批 id（revert 给要撤销的批，finish-revert 给撤销批）")
+    p.add_argument("--pr", default=None, help="finish-pr：PR 号")
+    p.add_argument("--commit", default=None, help="finish-merged：合并后 main 上的提交")
+    p.add_argument("--reason", default=None, help="revert：撤销理由（必填，写进 CHANGES 和 reverted 事件）")
+    p.add_argument("--since", default=None, help="digest：只列这个时间（ISO）之后的自动结案")
+    p.set_defaults(func=cmd_auto)
 
     p = s.add_parser("schema", help="打印 guji-opinion/0.1 的 JSON Schema")
     p.set_defaults(func=cmd_schema)

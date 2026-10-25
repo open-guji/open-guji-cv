@@ -31,7 +31,7 @@ def _run(tmp_path, monkeypatch, *, prev="一", cov=0.984, top="卷", align="巻"
     if align is not None:
         arecs.append(dict(slot=2, align_char=align, align_op="replace"))
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(PAGE, BOOK, recs=arecs, col=COL))
-    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", **(params or {})})
+    ctx.params["seed_admit"] = SeedAdmitParams(**{"patch_missing": "skip", "context_page_end_review": False, **(params or {})})
     sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
     return sa.columns[0].chars[1]
 
@@ -79,3 +79,7 @@ def test_no_ref_still_admitted(tmp_path, monkeypatch):
 
 def test_jiazhu_cell_skipped(tmp_path, monkeypatch):
     assert not _run(tmp_path, monkeypatch, sub="a", params=ON).admit
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

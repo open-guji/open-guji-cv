@@ -69,8 +69,11 @@ def test_two_class_path_unchanged_shape():
 def test_long_tail_groups_registered_and_banks_match():
     for g, members, extra in (("zy", "子于", "干"), ("sy", "山由出", "曲")):
         spec = GROUPS[g]
-        assert spec.members == frozenset(members) and spec.kind == "near_form"
-        assert spec.flow.solvers == ("ids",) and spec.flow.tolerate == frozenset(extra) and not spec.flow.review
+        assert spec.kind == "near_form" and spec.flow.tolerate == frozenset(extra)
+        if g == "sy":
+            assert spec.members == frozenset(members) and spec.flow.solvers == ("ids",) and not spec.flow.review
+        else:   # 2026-10-24 zy 扩成 于千子干（并入 qg）：文意在前，子于整字 HOG 当第二路（`Only` 限 子于干 入口、只给 子于）
+            assert spec.members == frozenset("于千子干") and spec.flow.solvers == ("ctx", "ids") and spec.flow.review
         sp = O.SPECS[g]
         assert sp.whole == "hog" and O.has_bank(g), g
         bank = O.load_bank(O.bank_path(g))
@@ -134,3 +137,63 @@ def test_qin_is_flow_only_and_bank_loads():
     d = json.loads(p.read_text(encoding="utf-8"))
     assert set("禽會俞命舍曾合愈") <= set(d["templates"]) and d["size"] == sp.size
     assert O.has_bank("qin")
+
+
+def test_shape_pairs_flow_only_and_banks_load():
+    """尙尚 shang、蓋葢 gai、䟦跋 ba、凖準 zhun、宻密 mi、撰𢰅 zhuan（2026-10-24，异体按刻形拆判）：只进字组流程表；复核时按刻形改码位；模板库两形都在、小于 1MB；
+    库里的模板拿回去判，判回自己的字（库与判法参数对得上）。"""
+    from pathlib import Path
+    import json
+    import numpy as np
+    from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
+    root = Path(__file__).resolve().parent.parent
+    for gid, members in (("shang", "尙尚"), ("gai", "蓋葢"), ("ba", "䟦跋"), ("zhun", "凖準"), ("mi", "宻密"), ("zhuan", "撰𢰅")):
+        assert gid in SHAPE_GROUPS and gid not in GROUPS
+        g = FLOW_GROUPS[gid]
+        assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
+        assert g.flow.review and g.flow.review_fix == (gid != "shang")   # 尙尚 复核只降不改（2026-10-25，vol16 错改）
+        sp = O.SPECS[gid]
+        p = root / g.config_dir / "ids_bank.json"
+        assert p.stat().st_size < 1_000_000
+        d = json.loads(p.read_text(encoding="utf-8"))
+        assert set(members) == set(d["templates"]) and d["size"] == sp.size
+        bank = O.load_bank(p)
+        for ch in members:
+            t = (np.asarray(bank[ch][0]) * 255).astype(np.uint8)
+            v = O._judge_whole(255 - t, bank, sp, g.members)
+            assert v.char == ch, (gid, ch, v.why)
+
+
+def test_give_restricts_which_members_get_a_char():
+    """`IdsSpec.give`（2026-10-24，广宀族）：判成成员但不在 give 里 → 弃权 abstain:not_given；在 give 里照常给字。"""
+    from dataclasses import replace
+    d, bank = _bank3()
+    sp = replace(SPEC3, give="由")
+    assert O._judge_whole(_glyph("h"), bank, sp, frozenset("山由出")).char == "由"
+    v = O._judge_whole(_glyph("v"), bank, sp, frozenset("山由出"))
+    assert v.char is None and v.why == "abstain:not_given" and v.extra["form"] == "山"
+
+
+def test_guang_flow_only_gives_only_bin_variants():
+    """广宀族 guang（2026-10-24）：只进字组流程表；只给 賔賓（實廣宸 只当入口）；陪衬都在模板库里有类；补放＋复核降审（不改字）；模板库 <1MB、
+    库里的模板拿回去判：賔／賓 多数判回自己，别的类一个也不给成 賔／賓。"""
+    from pathlib import Path
+    import json
+    from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
+    assert "guang" in SHAPE_GROUPS and "guang" not in GROUPS
+    g = FLOW_GROUPS["guang"]
+    assert set(g.members) == set("廣實賔賓宸") and g.flow.solvers == ("ids",)
+    assert g.flow.review and not g.flow.review_fix
+    sp = O.SPECS["guang"]
+    assert sp.give == "賔賓" and set(sp.give) <= set(g.members)
+    p = Path(__file__).resolve().parent.parent / g.config_dir / "ids_bank.json"
+    assert p.stat().st_size < 1_000_000
+    d = json.loads(p.read_text(encoding="utf-8"))
+    assert d["size"] == sp.size and set(g.members) | set(g.flow.tolerate) | {"〇"} == set(d["templates"])
+    bank = O.load_bank(p)
+    for f, ts in bank.items():
+        got = [O._judge_whole(255 - (np.asarray(t) * 255).astype(np.uint8), bank, sp, g.members).char for t in ts]
+        if f in "賔賓":
+            assert set(got) <= {f, None} and got.count(f) >= 0.8 * len(got), (f, got.count(f), len(got))
+        else:
+            assert set(got) == {None}, f

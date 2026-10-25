@@ -7,7 +7,7 @@
     guji db migrate -w <工作区> [--keep-local] [--dry-run]   # 一次性：工作区里的数据挪进数据目录
     guji db pull    -w <工作区> [--force]                     # 中心库 → 数据目录（有新字形库才重建 glyph.db）
     guji db push    -w <工作区> [--dry-run] [--allow-delete]  # 数据目录 → 中心库，先比版本号
-    guji db sync    -w <工作区> [--dry-run] [--watch 秒]      # 拉＋合并＋推一步做完；--watch 定时反复做
+    guji db sync    -w <工作区> [--dry-run] [--watch 秒] [--no-admit]  # 拉＋合并＋顺带落库＋推；--watch 定时反复做
     guji db status  [-w <工作区>]                             # rev、令牌角色、本地落后几条、没推的文件
     guji db branch  list | create <exp/GUJI-号-说明> [--from-rev N] | delete <名>
     guji db import  --from exp/<名> -w <工作区> [--events ids.txt] [--to main] [--dry-run]
@@ -98,19 +98,58 @@ def _ensure_glyph_pins(ws_dir: Path, res: dict) -> None:
         res["glyph_pins_built"] = [r["pin"] for r in built]
 
 
-def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None) -> dict:
-    """``guji db sync`` 一轮：库里有新改动先合进来（只追加台账两边的新行都留），再推本地的。"""
+def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None, admit: bool = True) -> dict:
+    """``guji db sync`` 一轮：库里有新改动先合进来（只追加台账两边的新行都留），再推本地的。
+
+    合完之后把还没落库的人裁落进字形库（``feedback/auto_admit.py``，``admit=False`` 或 ``GUJI_AUTO_ADMIT=0`` 关），
+    落了就再推一次，结果记在 ``glyph_admit``／``after_admit``。"""
     from .datastore.client import BlobCache, WorkerSource
     from .datastore.r2 import upload_files
     from .datastore.workcopy import sync
+    from .feedback import auto_admit
     actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
     branch = _branch()
     _check_write_branch(branch)
     src = src or WorkerSource(branch=branch)
-    with _pg_conn(branch) as conn:
-        return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
-                    uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
-                    glyph=glyph_hooks(ws_dir))
+
+    def once() -> dict:
+        with _pg_conn(branch) as conn:
+            return sync(src, conn, ws_dir, actor=actor, cache=BlobCache(), dry_run=dry_run,
+                        uploader=lambda imgs, ext="png": upload_files(imgs, bucket=_bucket(branch), ext=ext),
+                        glyph=glyph_hooks(ws_dir), replay=lambda ids: _reconsume(ws_dir, ids))
+
+    res = once()
+    if admit and auto_admit.enabled():
+        res["glyph_admit"] = _admit_pending(ws_dir, dry_run)
+        if not dry_run and auto_admit.touched(res["glyph_admit"]):
+            res["after_admit"] = once()
+    return res
+
+
+def _admit_pending(ws_dir: Path, dry_run: bool) -> dict:
+    """本工作区待落库的人裁跑一遍字形库两个消费者（消费者按 ``GUJI_WORKSPACE`` 找 glyph.db、产物与字块缓存）。"""
+    from .core.workspace import feedback_root
+    from .feedback.auto_admit import admit_pending
+    from .feedback.events import EventLog
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)
+    try:
+        return admit_pending(EventLog(feedback_root()), dry_run=dry_run)
+    except Exception as e:                  # noqa: BLE001 —— 落库失败不挡同步本身，报出来、下一轮再试
+        return {"error": f"{type(e).__name__}: {e}"}
+
+
+def _reconsume(ws_dir: Path, ids: set[str]) -> dict:
+    """sync 取了库里的字形库后，本地新人裁事件在它上面重新过一遍消费者（只有字形库消费者的记账被删了，别的跳过）。"""
+    from .core.workspace import feedback_root, verdicts_root
+    from .feedback.consumers import route_and_consume
+    from .feedback.events import EventLog
+    from .feedback.routes import RouteTable
+    from .gold.store import GoldStore
+    os.environ["GUJI_WORKSPACE"] = str(ws_dir)          # 消费者（glyph.db、排除名单）都按工作区找路径
+    log = EventLog(feedback_root())
+    out = route_and_consume(log, table=RouteTable.load(log.root / "routes.yaml"), store=GoldStore(verdicts_root()),
+                            event_ids=ids)
+    return {"events": len(ids), "results": [str(r) for r in out["results"]], "unrouted": len(out["unrouted"])}
 
 
 def route_imported(ws_dir: Path, ids: set[str], *, branch: str) -> dict:
@@ -125,7 +164,7 @@ def route_imported(ws_dir: Path, ids: set[str], *, branch: str) -> dict:
     if _branch() != branch:
         return {"skipped": f"本机副本在分支 {_branch()}，事件导进了 {branch}；到 {branch} 的副本上 guji db sync 后 "
                            f"guji events route"}
-    pulled = sync_workspace(ws_dir)
+    pulled = sync_workspace(ws_dir, admit=False)     # 这几条下面连同别的消费者一起跑
     os.environ["GUJI_WORKSPACE"] = str(ws_dir)          # 消费者（glyph.db、排除名单）都按工作区找路径
     log = EventLog(feedback_root())
     out = route_and_consume(log, table=RouteTable.load(log.root / "routes.yaml"), store=GoldStore(verdicts_root()),
@@ -146,8 +185,11 @@ def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
         at = datetime.now().isoformat(timespec="seconds")
         try:
             res = sync_workspace(ws_dir, dry_run=dry_run)
+            admitted = {c: r.get("marked", r.get("events")) for c, r in (res.get("glyph_admit") or {}).items()
+                        if isinstance(r, dict)}
             print(json.dumps({"at": at, "action": res["action"], "local": len(res["local_changes"]),
-                              "merged": res.get("merged", []), "rev": res.get("rev_remote")},
+                              "merged": res.get("merged", []), "rev": res.get("rev_remote"),
+                              **({"glyph_admit": admitted} if admitted else {})},
                              ensure_ascii=False), flush=True)
         except SyncConflict as e:
             print(json.dumps({"at": at, "conflict": str(e)}, ensure_ascii=False), file=sys.stderr, flush=True)
@@ -174,10 +216,14 @@ def cmd_db(args) -> None:
     if args.action == "sync":
         if args.watch:
             _watch(ws_dir, args.watch, args.dry_run)
-        res = sync_workspace(ws_dir, dry_run=args.dry_run)
+        res = sync_workspace(ws_dir, dry_run=args.dry_run, admit=not args.no_admit)
         if not args.dry_run:
             _ensure_glyph_pins(ws_dir, res)
         _print(res)
+        left = {c: r.get("left") for c, r in (res.get("glyph_admit") or {}).items() if isinstance(r, dict) and r.get("left")}
+        if left:
+            print(f"⚠️  还有人裁没落进字形库（多为本机没有那一页的产物和字块缓存）：{json.dumps(left, ensure_ascii=False)}"
+                  "——到有产物的机器上 guji db sync，或交 A23 扫尾", file=sys.stderr)
         return
 
     src = WorkerSource(branch=args.branch)
@@ -266,3 +312,5 @@ def add_parser(sub) -> None:
                    help="import：导完不在本机副本上跑消费者（缺省会拉下来、只对导入的事件 route、再推）")
     p.add_argument("--dry-run", action="store_true", help="migrate/push/sync/import：只列计划不写")
     p.add_argument("--watch", type=int, default=None, metavar="秒", help="sync：每隔这么多秒做一轮，不退出")
+    p.add_argument("--no-admit", action="store_true",
+                   help="sync：不顺带把待落库的人裁落进字形库（缺省落；也可设 GUJI_AUTO_ADMIT=0）")

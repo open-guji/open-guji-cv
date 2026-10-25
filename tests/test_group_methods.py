@@ -31,6 +31,7 @@ def test_registry_kinds_match_ids_specs():
     """整字判法的组是 hog，登记了取框的是「取框→hog」复合，其余看图组是 ids；留痕名都沿用 `ids`。"""
     from open_guji_cv.groups.ids_online import SPECS
     img = {g: next(m for m in s.flow.methods if m.name == "ids") for g, s in GROUPS.items() if "ids" in s.flow.solvers}
+    img = {g: (m.inner if isinstance(m, M.Only) else m) for g, m in img.items()}   # zy 的 HOG 包在入口限定里（2026-10-24）
     kinds = {g: m.kind for g, m in img.items()}
     for g in ("lv", "qik", "zy", "sy", "sz", "gm", "xb", "yh", "js", "yr"):
         assert kinds[g] == "hog", g
@@ -118,12 +119,17 @@ def test_composite_crop_equals_registered_region(monkeypatch):
 def test_codepoint_groups_flow_only():
     """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
     from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS, SHAPE_GROUPS
-    assert set(CODEPOINT_GROUPS) == {"nei", "bie", "chu", "juan", "wan"}
+    assert set(CODEPOINT_GROUPS) == {"nei", "bie", "chu", "juan", "wan", "huo", "kui", "lie"}
     assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS) | set(SHAPE_GROUPS)
     check_groups(tuple(CODEPOINT_GROUPS))
     for g, s in CODEPOINT_GROUPS.items():
         assert s.flow.methods == (M.CODEPOINT,) and not s.flow.review and len(s.members) == 2, g
     assert "chu" in FLOW_GROUPS["sy"].overlaps and "sy" in FLOW_GROUPS["chu"].overlaps
+    # 放宽了进入（tolerate 组外繁复字）的组，补放必须与整理本同字
+    for g, s in CODEPOINT_GROUPS.items():
+        assert bool(s.flow.tolerate) == s.flow.lift_ref_agree, g
+        assert not s.flow.tolerate & s.members, g
+    assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie"}
 
 
 def test_codepoint_group_lifts_book_choice():

@@ -182,3 +182,7 @@ def test_literal_same_is_unaffected_by_guard(tmp_path, monkeypatch):
     r = _rec(sa)
     assert r.admit is True and r.channel == "ref_lib" and r.char == "治"
     assert "ref_lib_variant" not in r.doubts
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

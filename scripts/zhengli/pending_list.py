@@ -26,6 +26,12 @@ GUJI-557：给了 --cards（cards(book, pages="all", only="all", skip_decided=Fa
 相似字 `alt`（10-19）：卡片 JSON 用 cv `guji audit alt <册> -w <工作区> [--fetch-zi]` 出（它自己现算全册卡、
 挂好 alt，写 reports/<册>/<册>.cards.alt.json），把这个文件当 --cards 给本脚本即可；字形图再跑同目录 alt_build.py。
 
+复审格（M10 复盘，10-23）：`--recheck <文件>` 把指定格放回单上（不论产物放没放行、人裁过没有），每行
+`格号<TAB>说明<TAB>旧人裁事件 id<TAB>旧人裁的字`（后三列可省；`#` 起注释；可带「册:」前缀）。这些格带
+`recheck: true`、`note`（网站卡片头上常显）、`prior`（{c, id, ts}，网站提示「这次提交的选择会替代它」）；
+pending_route 不扣它们。格号在现行产物里没有的（多半重切过）不硬放，记进 `<out>/recheck_missing.tsv`。
+复审格可能已放行、卡片里不一定有字段，找不到卡片就只带格号和说明，不退出。
+
 字段名集中在下面常量。cv_version 为字符串（cv-vX.Y.Z）或 null；rev 须形如 <册>-r<n>。
 """
 from __future__ import annotations
@@ -65,6 +71,36 @@ def pending_cells(seed_dir: Path, book: str) -> tuple[list[dict], int]:
     return cells, n_review
 
 
+def all_cells(seed_dir: Path, book: str) -> set[str]:
+    """现行产物里的全部格号（放行、待审、排除名单都算）。"""
+    out: set[str] = set()
+    for f in sorted(seed_dir.glob("p*.json")):
+        for col in json.loads(f.read_text(encoding="utf-8"))["seed_admit"]["columns"]:
+            for ch in col["chars"]:
+                out.add(ch["id"].split(":", 1)[1] if ch["id"].startswith(f"{book}:") else ch["id"])
+    return out
+
+
+def read_recheck(path: Path, book: str) -> dict[str, dict]:
+    """复审清单：`格号[\t说明[\t旧人裁 id[\t旧人裁的字[\t旧人裁时间]]]]`，一行一格；表头行（格位／cell 开头）、空行、# 注释跳过。"""
+    out: dict[str, dict] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        parts = [x.strip() for x in line.split("\t")]
+        cell = parts[0].removeprefix(f"{book}:")
+        if cell in ("格位", "格号", "cell"):
+            continue
+        note, pid, pc, pts = (parts[1:] + ["", "", "", ""])[:4]
+        info: dict = {}
+        if note:
+            info["note"] = note
+        if pc:
+            info["prior"] = {"c": pc, **({"id": pid} if pid else {}), **({"ts": pts} if pts else {})}
+        out.setdefault(cell, {}).update(info)
+    return out
+
+
 def read_queue(path: Path, book: str) -> list[str]:
     """读审卡队列格号（去 <册>: 前缀、空行与 # 注释，去重保序）。"""
     out: list[str] = []
@@ -94,6 +130,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--review-queue", type=Path, default=None,
                     help="close-check 审卡队列格号文件（一行一个）；给了就按它出")
     ap.add_argument("--cards", type=Path, default=None, help="cards(cls='*') 的卡片列表 JSON；给了就并入 0.2 字段")
+    ap.add_argument("--recheck", type=Path, default=None,
+                    help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行都放回单上")
     ap.add_argument("--cv-root", type=Path, default=None, help="open-guji-cv 根目录（--cards 时用来 import proof_fields；缺省本仓根）")
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--ws", default=None, help="中心库工作区 id（如 siku-zongmu）；与 --text-id 一起代替 --out")
@@ -133,15 +171,34 @@ def main(argv: list[str] | None = None) -> None:
         extra = sorted(set(queue) - have, key=cell_key)
         cells += [{KEY_CELL: c, KEY_STATUS: STATUS_PENDING} for c in extra]
         note = f"= 产物未放行 {len(have)} ＋ 审卡队列多出 {len(extra)}（排除名单放回待审）"
+    recheck: dict[str, dict] = {}
+    rc_missing: list[str] = []
+    if a.recheck:
+        recheck = read_recheck(a.recheck, a.book)
+        have_all = all_cells(seed_dir, a.book)
+        by_cell = {c[KEY_CELL]: c for c in cells}
+        for cell in sorted(recheck, key=cell_key):
+            if cell not in have_all:
+                rc_missing.append(cell)
+                continue
+            if cell not in by_cell:
+                by_cell[cell] = {KEY_CELL: cell, KEY_STATUS: STATUS_PENDING}
+                cells.append(by_cell[cell])
+        cells.sort(key=lambda c: cell_key(c[KEY_CELL]))
+        note += f"；复审 {len(recheck) - len(rc_missing)} 格（现行切分里没有的 {len(rc_missing)} 格不放）"
     if a.cards:
         sys.path.insert(0, str(a.cv_root))
         from open_guji_cv.review.proof_fields import pending_fields
         by_id = {c["id"]: c for c in json.loads(a.cards.read_text(encoding="utf-8"))}
-        lost = [c[KEY_CELL] for c in cells if f"{a.book}:{c[KEY_CELL]}" not in by_id]
+        lost = [c[KEY_CELL] for c in cells if f"{a.book}:{c[KEY_CELL]}" not in by_id and c[KEY_CELL] not in recheck]
         if lost:
             sys.exit(f"{len(lost)} 个待审格在卡片文件里找不到（如 {lost[:5]}）：卡片口径不对？")
         for c in cells:
-            c.update(pending_fields(by_id[f"{a.book}:{c[KEY_CELL]}"]))
+            if f"{a.book}:{c[KEY_CELL]}" in by_id:
+                c.update(pending_fields(by_id[f"{a.book}:{c[KEY_CELL]}"]))
+    for c in cells:                      # 复审字段最后写：卡片里的同名字段不能盖掉它
+        if c[KEY_CELL] in recheck:
+            c.update({"recheck": True, **recheck[c[KEY_CELL]]})
     doc = {
         KEY_REV: a.rev,
         KEY_CV_VERSION: a.cv_version,
@@ -151,6 +208,9 @@ def main(argv: list[str] | None = None) -> None:
     a.out.mkdir(parents=True, exist_ok=True)
     path = a.out / f"{a.chapter}.pending.json"
     path.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    if a.recheck:
+        (a.out / "recheck_missing.tsv").write_text(
+            "格位\t说明\n" + "".join(f"{c}\t{recheck[c].get('note', '')}\n" for c in rc_missing), encoding="utf-8")
     print(f"{path}: {len(cells)} 格（{note}）")
 
 

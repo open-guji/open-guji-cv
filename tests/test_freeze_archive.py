@@ -93,6 +93,13 @@ def test_frozen_params_alarm_unclear_listed(frozen):
                          [1, 2], ws, feedback_root=ws / "feedback")
     assert it["status"] == CC.PASS and it["data"]["unclear_code_or_config"] == {"seed_admit": 2}
     assert "请人核" in it["detail"]
+    # 只是共享输入（格位表、证人）被别处更新：单列，不报警（复盘 I）
+    it = FZ.fresh_frozen(FakeEng(prod, book, {"row_segment": {"参数变了：layout_fingerprint": 3},
+                                              "seed_admit": {"参数变了：witness_fingerprint、layout_fingerprint": 1}}),
+                         [1, 2], ws, feedback_root=ws / "feedback")
+    assert it["status"] == CC.PASS and it["data"]["config_changed"] is None
+    assert it["data"]["shared_inputs"] == {"layout_fingerprint": 4, "witness_fingerprint": 1}
+    assert "共享输入被别处更新" in it["detail"]
 
 
 def test_frozen_fails_when_product_changed_or_missing(frozen):

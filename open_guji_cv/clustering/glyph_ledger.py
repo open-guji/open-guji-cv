@@ -701,12 +701,12 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
             base = {"instance_id": iid, "cell": cell, "char": ch, "provenance": prov, "admitted_at": at,
                     "v1_guess": iid in v1 and iid not in v1_map}
             x = excl.get(cell)
-            if x and x.get("origin") == "human" and x.get("reason") in ("not_a_char", "damaged"):
+            if x and x.get("origin") == "human" and x.get("reason") in ("not_a_char", "damaged", "figure"):
                 findings.append({**base, "check": "excluded", "why": x.get("reason"),
                                  "evidence": x.get("source_event") or x.get("note")})
             v = conf.get(cell)
             if human and v and (x is None or x.get("origin") != "human"):
-                if v["v"] in ("not_a_char", "damaged", "skip"):
+                if v["v"] in ("not_a_char", "damaged", "skip", "figure"):
                     findings.append({**base, "check": "verdict", "why": f"latest:{v['v']}",
                                      "evidence": v["event"]})
                 elif v["v"] == "confirm" and v["shape"] and v["shape"] != ch and (v["ts"] or "") > (at or ""):

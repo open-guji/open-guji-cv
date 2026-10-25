@@ -123,3 +123,7 @@ def test_caller_value_equal_to_default_is_overridden_by_book_params(tmp_path, mo
     ctx.params["seed_admit"] = SeedAdmitParams()
     got = ctx.params_for(STEPS["seed_admit"])
     assert got.context_margin == 0.90
+
+
+import pytest  # noqa: E402
+pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

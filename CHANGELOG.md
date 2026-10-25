@@ -5,6 +5,125 @@
 
 ## [未发版]
 
+### Fixed
+- 只重跑 seed_admit（基线包没有 `cache/`）时老人裁静默丢：绑定要拿字形库存图比现格字块图，缓存没有就判 unanchored（殿本 vol10 78/146）。现在缺字块图就现切；切不出来报错（`GUJI_ALLOW_LOST_HUMAN=1` 放行）；`human_chars` 读工作区事件而目录不存在时报错（`GUJI_ALLOW_NO_EVENTS=1` 放行）。绑定缓存版本 7→8。`scripts/rerun_prep.sh` 末尾加人裁自检、写 `~/.guji_env`（GUJI_WORKSPACE）。
+- 起跑自检：跑 seed_admit 时字形库有人裁、事件目录却不在（数据目录没指对）就拒跑。此前只在事件里的人裁会被机器通道悄悄放行顶掉（殿本 vol06／vol10 沙箱重跑实测 88／68 格）。
+
+## [0.5.15] - 2026-10-24
+PATCH（#522 seed_admit 1.23 iron_coord_guard；#528 ref_lib_diff 不放行、ref_prefer 等缺省开；#527 #529 #530 #531 #520 字组；#515 重跑提速；#523 guji source commons；#521 #524 控制台插图块）。缺省输出只把少量放行挪到待审、不改字，不属「多数册值得重跑」的核心升级，按 PATCH。`shadow_veto` 从此缺省开，执行方要装 `.[shadow]`（用发版附件装时 `--extras shadow`），否则起跑前自检拒跑 seed_admit；#533 补了 8 条没装 sklearn 就红的老测试。
+
+### Added
+- seed_admit 1.23：铁证与坐标对位字互证 `iron_coord_guard`（缺省开，A31 cv v0.5.12 错放 vol07:30:4:8 水→木，cv#522）：现役对位字被库分歧过滤掉时，铁证字与坐标对位字语义不同、又无直接异体边 → 落审（`iron_vs_coord`）；殿本 17 册 main 包回放命中 14 格（宫/官 ×10 等），看图 13 错 1 难分。`ref_lib_diff`（#528）进 `_LANE_HARD`，待审补放通道不再按整理本字放回。版本号连同 #528 一起记 1.23。只会把放行挪到待审，不改字。
+- `guji source commons`：以 Wikimedia Commons 上的 DjVu 为原图的根（10-24 用户定，设计稿第十二节）：核 Commons sha1、存 R2 镜像、`ddjvu` 原尺寸解页、发布页表；会话连不上 Commons 时 `--djvu` 配 `--commons-json` 用别处下好的文件。四庫總目 99 册全部登记（vol01–20 补记根，页图不变）。只在 `datastore/` 与 CLI，`code_hash` 不变（PATCH）。
+- `groups.ctx_l2.add_verify`：逐格细读复核补进 L2 表（细读与表字不同 → `disagree:verify` 弃权；表里低把握而细读 high → 用细读的字；至少两遍都 high 同字才 strong）。L2 答案留痕加 `runs`（几遍给了这个字）。日曰／日目 vol11–20 细读 197 格与新表在 dataset `char-groups/variant/ry/`，随成批上线替换中心库表（A24）。
+
+### Changed
+- 字组残留送审清理（A24 10-25，铺开 #9）：sb ly mb wj em rr 的 L1 规则拿整部整理本逐处回测修订；rr 随机森林 `rr_img` 改为复核弱票（新 `FlowSpec.review_weak`）；徵徴 复核按刻形改字、门槛单独定（新 `FlowSpec.review_fix_margin`，zheng 0.70）；`seed_admit` 影子闸不再降「同义组已按刻形定的码位」和「形近组补放时整字 HOG 过门槛给的字」（vol16:42:4:3 傳 被降审后又被坐标兜底放成傅）。殿本 vol06–20 离线回放：这几组组内送审 182→133（zheng 35→13、rr 33→21、mb 61→53…），变了的格逐格看图 0 错。`groups/flow.py`、`seed_admit` 的 `code_hash` 变，缺省开。研究脚本在 `research/char_groups/residual_1025/`。
+- 字组补放与坐标对位互证（`group_flow_lift_ref_guard` 同一开关下）：没有现役对位时，坐标对位是**组内另一个字**而给字的只有单遍文意表（不 strong、不是 L1、不到两遍同字、别的方法也没同字）→ 不补放（`group_flow_coord_dissent`）；补放留审时文意（本组或共字组）给了与整理本不同的字另记 `group_flow_ctx_contra`，进 `_LANE_HARD`，witness3、坐标兜底等补放遍不按整理本字放回。殿本 vol11–20 回放：挡下单遍 haiku 读反的 3 格错放和 2 格被 witness3 放错的格；`ctx_contra` 对全部字组（vol04–20 现有产物）还挡下 witness3／rare_ref 按整理本放的 4 个错字（木族「與此本皆合」等应为本），多留审 1 格（間問）（A24）。`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变，缺省开。
+- `config/groups/ry/rules.yaml`、`rm/rules.yaml` 修订（vol11–20 全部日曰目格回测）：rm 规则去掉曰进得来的词组（子、名、題等，原 `rm-目` 334 次命中错 194 次）；ry 加否決「分子目」「◎註曰」「◎月／◎本」，`ry-日鈔書名` 放宽到所有日鈔／日抄，`ry-干支日` 除「乙卯自序」，`ry-ext-r1-日` 除「故曰干祿」（A24）。
+
+## [0.5.14] - 2026-10-24
+
+PATCH（#447 发版自动附带执行包，本版用来首次验证 release workflow；#512–#519 字组与 db sync 改进）。
+
+### Added
+- PATCH：发版自动附带 Python 执行包（#447；新增 `.github/workflows/release.yml`、`scripts/build_release_assets.py`、`scripts/install_release.py`）：推 tag 时 wheel ＋ 资源包（`models/`、`config/`、`formats/`、`precleaned/`，Sheldon 10-24 定过渡期随 CV 包；字体、语料不进）＋ `install_release.py` ＋ 校验和自动挂到 GitHub Release，执行方不必克隆整仓。wheel 补上控制台前端 dist 与 `ops/baseline_tests.json`。不改 `open_guji_cv/` 的 Python 代码，各步 `code_hash` 不变。
+- `guji db sync` 顺带落库：拉完合完对还没落进字形库的人裁只跑 `glyphdb_admit`、`glyph_audit` 两个消费者，逐条记账（报错的留着下次再试），落了再推；`--no-admit` 或 `GUJI_AUTO_ADMIT=0` 关。起因是批量写进中心库的人裁事件没人落库（10-22 起积压 967 条）；字形库更新的分工（落库、出快照、改钉）见 `doc/受控重跑.md` 第六节。只在 `feedback/`、CLI，不动任何 Step（PATCH）。
+
+### Changed
+- seed_admit 四个开关改缺省开（2026-10-24 sheldon 定「确定该做的 feature 一律缺省开，别逐册开、过一阵又忘了其他册」）：`context_guard_ref_prefer`、`rare_ref`、`symbol_review`、`shadow_veto`（`shadow_conf` 缺省 0.97→0.8，殿本册配置一律是 0.8）。殿本 vol06–10 漏开 ref_prefer，vol06 v0.5.12 重跑 111:3:16 商→而（整理本「應時商確」）就是这条该拦的；在新包上开它另拦下旧错 130:5:9 于→子（「興國于氏」），多送审 3 格「入」（整理本作人）。殿本其余册 yaml 本来都开着，行为不变；别的书（北行日錄、全唐文等）从此也开，`shadow_veto` 要装 `.[shadow]`（起跑前自检会点名）。`seed_admit` 的 `code_hash` 不变、`params_hash` 变。
+- `guji db sync`：字形库（`output/glyph_store/`）本地和库里都改了、本地又有库里没有的新人裁事件时不再整次停下：取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者（`consumed/glyph*.jsonl`）里的记账，在库里的字形库上重新消费一遍再推。本地字形库改了却没有新事件的照旧报冲突。省掉册 005 精校 10-23 三次手工 `pull --force`＋重写票（A32 复盘改进 1；只在 `datastore/`、CLI，不动 Step，PATCH）。
+- `guji freeze register` 加 `--repo <cv 检出>`：产物是旧版 cv 跑的就指那个版本的 worktree，登记的 cv 版本与提交取自那里；检出认不出版本号（没拉 tag，记成 `dev+g…`）时计划报问题、不许执行，提示 `git fetch --tags`（A32 复盘改进 2；只在 `ops/`、CLI，PATCH）。
+- close-check 1a 分开报过期原因：manifest 新记参数逐字段短哈希 `param_parts`（不进指纹，产物与 `code_hash` 都不变），`status` 的「参数变了」点名字段；只因共享输入（语料、证人、格位表、字组与异体表、借来的字形库等，`close_check.SHARED_PARAMS`）被别处更新而过期的页，1a（含冻结册）单列一句、不算失败；本册自己的变动照旧失败，两类都列。改动前跑的老产物分不出字段，照旧判失败（A32 复盘改进 3，标准 I；PATCH）。
+
+### Fixed
+- seed_admit `ref_lib_diff_guard`（缺省开，A24）：`relax_ref_agree` 的 `ref_lib` 分支在库判 `diff` 时不放行，记 doubt `ref_lib_diff`、退回人审。vol06 v0.5.12 重跑 149:3:3 图是「也」（框带版框竖线），整理本对位与库 top1 都给「十」、库判 diff（cov 0.83），旧版照放成「十」。vol06 新包 ref_lib 放行 13 格里只拦这 1 格，vol04–10 旧包 0 格。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
+
+## [0.5.13] - 2026-10-24
+
+PATCH（#452 seed_admit 删准入三闸：`code_hash` 变、缺省参数下产物不变；#509 `guji recheck --glyph-diff`；#507 精校出单走 book-text dev）。
+
+### Added
+- `guji recheck <册> --glyph-diff <旧号|旧库>`：换字形库版本后只点名判决可能变的格（kNN 邻域差分：新旧库的 HOG 前 k 邻居、命中条目、共识门槛、近形对刻例），`--list` 逐格列理由，`--params` 指沙箱库。殿本 vol08 实测点名 6.7%（按字点名 32%），点名格重算＋其余照搬与整册全算 10,681 格逐字节相同（`doc/受控重跑.md` 第五节）。只在 `ops/`、CLI，不动任何 Step，`code_hash` 不变（PATCH）。
+
+### Removed
+- seed_admit 1.22：删准入三闸 `runt_cell_review`（矮格转人审，含 `runt_ratio`、`runt_min_ink`）、`oversplit_gate`（过切提示，含 `oversplit_*`）、`nonchar_gate`（非字过滤，含 `nonchar_flags`、`nonchar_strokes`、`nonchar_jiazhu_ignore_rule_bar`）。三闸缺省都关，A/B 在 vol05、vol09 上单开逐格不变，vol04、05、09 触发条件 0 命中（[报告](doc/exp/准入三闸-vol05-vol09-报告.md)，cv#450；Sheldon 10-23 定删）。`seed_admit` 的 `code_hash` 变，各书该步判过期；缺省参数下产物不变。vol04 册 yaml 原开着 `nonchar_gate`，删后该键被忽略（实测 0 格），该步重算一次即可，键要另在中心库删掉。
+
+### Changed
+- 精校出单的 book-text 改走 dev（book-text 10-24 新规矩，open-guji/book-text#235；#507）：`republish.py` 的 `bump_book_text` 先切到最新 dev，升版后跑 `local_check.py --dev`、不重建 `index/texts`，提交并推 dev（别人先推了就 rebase 再推），不再开分支和 PR；`proof_cycle apply` 导出前先切 dev，原第 6 步「推分支、开草稿 PR」去掉。CHANGES 的 PR 列写 `#TBD`，由 book-text 每日合并换号（A32，PATCH）。
+
+## [0.5.12] - 2026-10-23
+
+PATCH（殿本 vol11–20 统一重落要钉：并进 #504）。
+
+### Fixed
+- 异体组按刻形复核（#504，A24 异体线）：13 个异体组对已放行格只跑字形方法复核，判出另一形就降审、不改字（修 旨→㫖 24 格等错放）；`guji groups status` 标疑格号漂移。`seed_admit` 的 `code_deps`（`groups/registry.py`、`flow.py`）变，各册 seed_admit 判过期；vol11–20 回放送审约 +85 格，不新增放行。
+
+### Added
+- 字组规范化（#503）：`doc/字组/`（规范、总表、68 张组卡）＋ `guji groups status`，删旧 M7 文档。
+
+### Changed
+- `republish issue`（#500）：等发布认准 run、冒烟多等，冒烟没过不挡文本 PR。发布脚本，不进任何 Step。
+
+## [0.5.11] - 2026-10-23
+
+PATCH（殿本 vol11–20 统一重落要钉：0.5.10 之后只差 #498）。
+
+### Changed
+- 码位归一可放工作区级 `config/codepoints.yaml`（#498，Sheldon 10-24 定「归一放字形库这一层」）：`load_book` 先读与 `books/` 同级的该文件，再叠册 yaml 的 `codepoints:`（册里写的逐条覆盖）；没有这个文件行为不变。合并后的值经 `seed_admit` 的 `book_deps` 进指纹，加文件的工作区 seed_admit 判过期。
+
+## [0.5.10] - 2026-10-23
+
+PATCH（A30 要钉正式 tag 跑殿本 vol11–19；Sheldon 10-24 定带上 #471 及之后合进 dev 的改动，仍按 PATCH 发）。
+
+### Fixed
+- `proof_cycle apply` 用钉住的旧引擎重跑时经 `scripts/zhengli/engine_run.py` 起，读中心库事件跳过旧引擎不认的新种类（如 #485 的 `inverted_band`），并禁止 compact；重跑加 `--stop-on-error`，有一页失败就停，不再带着失败的产物接着导出出单（A32，册006 实跑 seed_admit 150 页全败后仍往下走）。发布脚本，不进任何 Step（PATCH）。
+- 5a 简体参考字兜底（#486，A23，PATCH）：`match_replace` 系通道的参考字落在人工审定的纯简体清单（`config/dicts/simplified_refs.txt`，104 字）里、库 top 是其正字时，取库里的正字，不再把整理本混入的简体（贯/牵 等）放进产物。`clustering.seeding` 在 `seed_admit` 的 `code_deps` 里，`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit；输出会变，不能登记 `code_equiv`。清单文件本身不进指纹，以后改清单不会让产物判过期。
+- seed_admit／align_ref 坐标冲突守卫（常开，无开关，A23）：`align_ref` 产物新增 `coord_conflict_ids`（坐标字≠现役 equal 字的格，全记）；match_ref 不放这些格、落人审（doubt `coord_conflict`）。起因：殿本 vol14 cv0.5.9 的 60:1:5 拱→撰、103:2:7（双行小注两字被切一格）放成「中」。vol14 两版回放每版约多送审 8 格。`seed_admit`、`align_ref` 的 code_hash 变，各册缺省输出会变；冻结册只登记不重跑。
+- 生僻字面板（`rare_panel` 单格／批量入口）找不到识别权重文件时报 `CnnCheckpointMissing`，不再悄悄返回少 CNN／embedding 两路的候选（A23；wheel 安装后引擎仓根错位的同款坑）。只管文件缺席，没装 torch 仍由起跑前自检报；`GUJI_ALLOW_MISSING_DEPS=1` 放行。不在任何 Step 的 `code_deps` 里，`code_hash` 不变。
+- 字形库体检（`glyph_audit`）撤库（evict）或改字（relabel）一个人裁入库的刻例时，同时把该格此前的人裁事件记进 `lists/stale_verdicts.tsv` 作废；撤下之后新裁的照常生效，机器入库的刻例不动（A23，GUJI-719 第 4 项）。此前撤库不留标记，旧人裁事件会让该格被误放行。不在任何 Step 的 `code_deps` 里。
+- seed_admit `rare_ref`（两遍）也认 `lane_keep_ref_review`（A24）：被 `ctx_guard_ref`／`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格不再由 rare_ref 按整理本字放回（vol18:115:6:3 刻「本」、整理本与 5-b 作「木」，旧版放成「木」）。开了 rare_ref 的册参数 dump 多出该键，`code_hash` 变，各册只需重落 seed_admit。
+- seed_admit `lane_keep_ref_review`（缺省开，A24）：被 `ctx_guard_ref`（ref_prefer）、`group_flow_ref_dissent`／`group_flow_coord_dissent` 拦下的格，不再由待审补放通道（witness3／coord_fallback／seal）按整理本字放回。vol20 实跑放回的格里改错 5 格（諸→諧、其→萁、本→木 等）：证人与整理本同为文渊阁系，与殿本刻字不同时照样一致。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
+
+### Added
+- 图片格与插图块（GUJI-740，设计 book-text `docs/design/2026-10-图片格与插图设计.md` §五，格式 guji-format spec 09）：人裁 `confirm v=figure`（`alt` 说明）＝「这格是图形，不是字」，进排除名单（理由 `figure`），Step7 照排除格处理（不进库、不出卡），字位流占位出 □；网站精校票 `choice=figure`（带 `alt`）经 `guji cellvotes` 落成这一条。新 kind `figure_region`（控制台页级插图框，key `figure:<册>:<页>`）不配消费者。Step9 char-cord 导出用到图的册写 char v0.3（格 `fig`、图列 `kind: figure`）、cord v0.2（`marks.figure`）、新文件 `NNN.fig.json`（fig v0.1）与 `fig/NNN/<图 id>.png|webp`（按框外扩 2px 从页图裁，工作区原图 sha 对得上用它，否则取 R2 页图）；`--prev-fig` 沿用旧图 id、保留重绘图。没用到图的册导出逐字节不变。只动 `feedback/`、`report/slots`、`formats/`、导出脚本，不在任何 Step 的 `code_deps` 里，`code_hash` 不变；有图片格人裁的册 seed_admit 照常因名单变化过期（L0）。
+- `scripts/zhengli/text_release.py`（M10 复盘第 6、7 项，A32）：`pin` 在冲 1.0 开始时记下册 yaml、语料版本与语料包、参照本、逐列格位表、字组配置、glyph_pin、产物包与引擎提交的指纹（数据目录 `feedback/lists/release/<册>.pin.json`，随 db sync 进中心库）；`check-pin` 分「本册输入变」（退出码 1）与「共享输入被别处更新」（2，冻结时记一笔不算失败）；`run` 按 1.0 标准顺序一次跑完输入锁、G0 票账、G1 待审与看不出 ≤2%、G3 close-check（钉住的引擎）、读者侧冒烟、冻结前能核的出口项，全过停在「请用户点头」。只读脚本，不进任何 Step（PATCH）。
+- `proof_cycle.py`（M10 复盘第 4 项，A32）：重跑缺省全册 seed_admit（只跑有票的页会漏早有人裁的格）；`plan --engine <worktree>` 让重跑用出单版 cv、工具用本仓，核引擎的 HEAD 而非本仓；`plan --pack` 给没存 rev 包的老单指定包；导出后与 book-text 现文逐格比，人裁改字进文本、机器改判（无票变字）退回旧字并进下一张单的复审清单；出单换成 `republish.py issue`（只发这一章、等发布、冒烟）；新增只读 `status`（线上单投完没有，退出码 0＝可以落票），给定时任务用。发布脚本，不进任何 Step（PATCH）。
+- 精校复审出单与网站推翻旧人裁（M10 复盘第 1、3、5 项，A32）：`republish.py prep/from-pack --recheck <清单>` 把指定格（人裁过的、已放行的都行）放回待审单，每格带 `recheck`、`note`（网站卡片头上常显的一句说明）、`prior`（已有人裁的字和 id），pending_route 不扣它们，现行切分里没有的列进差异单；`guji audit alt --extra` 给这些格也算相似字。`guji cellvotes draft` 另出 `recheck.tsv`（推翻旧裁、意见不一致、说无字又给字、格位变了四类挂起，可直接交 `--recheck`）；复审单上写明了旧裁、投票人投了不同的字，按有意推翻照写（payload `overrides`），出单后又来新裁的照旧挂起。新增 `republish.py issue`：出单、两道门、传图、推库、只发这一章（kaiyuanguji-web#584 的 `only`，网站没有就退回全站）、等网站发布、读者侧冒烟一条命令做完。发布脚本与 CLI，不进任何 Step，`code_hash` 不变（PATCH）。
+- `guji opinions auto revert|finish-revert`（GUJI-734）：撤销已发布的修订批。在 book-text 开 `auto/revert-…` 分支把原批的格退回（A／B 整格还原，B′ 删格并把 cord 框放回、标点实体锚点跟回），文本线再升 patch，CHANGES 写明撤销了哪批、哪些意见、理由；现文已被后来改过则拒绝。合并后意见记 `reverted`、原批标 `reverted`、格谱系补撤销行，网站状态回到「还要再看」。只在意见池与 CLI，不动任何 Step（PATCH）。
+- `guji source pull|show|list|check|ia|register|replace`：原图（源件 → 页图 → 页表）存 R2 正式桶，云会话一条命令取原图（`doc/design/古籍图片全流程-源件页图管线与IIIF.md`）。殿本 vol01–20、北行日錄、全唐文 v006–v010 已登记，与现用原图逐字节相同；`register --src-file` 登记 PDF、DjVu 等非 IA 源件。只在 `datastore/` 与 CLI，不动任何 Step，`code_hash` 不变（PATCH）。
+
+### Changed
+- 未发布版本跑管线正规化（A20，2026-10-23 sheldon 提）：① 不在 tag 上时 `cv_version` 改记 `0.5.10.dev12+g<12 位 hash>`（原 `0.5.9+12`，不带 hash、会撞号），浅克隆取不到 tag 记 `dev+g<hash>`（原记空、钉版册因此一律被拦）；② 钉版／冻结册在中心库实验分支（`GUJI_DATA_BRANCH=exp/*`，产物隔离）上跑自动放行；正式目录上 `--allow-cv-mismatch` 须带 `--why "<理由>"`；放行理由记进 manifest 新字段 `cv_override`；③ 非正式版 cv 出的产物包不能在正式库标 main（`--why` 例外）。只动 `core/cv_version.py`、`cli_v2.py`、`cli_products.py`、`datastore/packs.py`、`products/manifest.py`，都不在任何 Step 的 `code_deps`，各步 `code_hash` 不变，老产物不过期（L0）。见 `doc/版本号规矩.md` 第五节。
+- Step0 invert_detect 1.2（Sheldon 10-23 审 vol11–20 候选）：建议修法改成新规则 `inverted_poly`（多边形，按黑区实际形状圈：可台阶、可分段，修时不再现量），vol11 p40 范围太大、vol13 p85/86、vol14 p87 略偏、vol17 p126 台阶被抹平都贴合了；下边框按位置排（黑条下方是空白地脚就不报，与页顶外框对称），vol16 p80/p104、vol20 p168 不再送审。`utils/preclean` 加 `inverted_poly` 与通用 `rule_mask`。`invert_detect` 的 `code_hash` 变，各册只需重落 Step0 候选；已在 yaml 登记的反色页不受影响。
+- 删 `glyph_match.near_shape.allow_guarded`（A20／用户 10-24 定）：匹配器已判护栏（never_match／conflict）的格近形决胜一律不升档；书 yaml 里的旧键读进来被忽略。`glyph_match` 的 `code_hash` 变，vol02（唯一开着它的册）的 glyph_match 需重算一次。
+- 放行开关缺省开（2026-10-23 sheldon 定「没问题的 feature 一律缺省开，开关只为方便 A/B」）：`seed_admit.context_guard_diff`、`context_guard_ref_blank`、`lane_witness3`、`lane_coord` 改缺省开，`group_flow` 缺省＝注册表里全部声明了 flow 的字组（书 yaml 写 `[]` 才关），书级 `iron_gate` 缺省开。殿本 20 册 yaml 本来都开着，行为不变；`seed_admit` 参数 dump 变，各册放行判过期。
+- Step1 border_detect 1.6：列距救援 `pitch_rescue`（缺省开，`utils/pitch_rescue`）。自由模式列网里有列 < 0.7×中位列宽时（多挑一条假竖线把一列劈成两窄列、外侧一整列落在网外、字悄悄丢掉），先网格模式重探，选不出版框对再去掉劈线、在有字的一侧补外框；新网干净才接受，没触发的页逐字节不变。殿本 vol11–20 九页里修好 8 页（vol13 p75、vol14 p103/186、vol16 p120、vol19 p29/86、vol20 p68/113），vol16 p8 密排夹注页留人工。`border_detect` 的 `code_hash` 变，全书 Step1 起判过期。
+- Step1 列距救援收紧到实测列宽带（Sheldon 10-23：殿本列宽极一致，按分布严格限）：殿本 vol04–20 共 2,969 页，内列宽／页中位 99.9% 在 0.907–1.088，最外两列 0.84–1.26。触发改为「有列出带」（内列 ±10%、外列 0.85–1.3），新列网也须全在带内；另加「列宽合格的列两边的界行不许动」，防网格把印好的真界行挪进空白（vol13 p46）。vol11–20 触发 31 页、改 8 页（原 7 页列网错位＋vol11 p55 右框线更贴界行），vol04–10 不变。
+
+### Fixed
+- `ops/col_gate.py`（A20，A24 报）：读原图改走 `utils.image_io.imread`，不再直接调 `cv2.imread`（Windows 非 ASCII 路径会静默读空；`test_image_io_guard` 在 dev 上因此失败）。缺原图照旧跳过。不进任何 Step，`code_hash` 不变（L0）。
+- `scripts/dzg_import.py`（A20，A24 报）：daizhige 源用缅甸字母（U+1001 起，登记在每条 `glyphs`）当缺字图占位码，原先只转 PUA，233 处原样进了 `siku_daizhige.txt`、成了坐标对位的整理本字。现在与映不上的 PUA 同记 `〓`；新增 `fix-glyph-codes` 就地修已有整理本（一字换一字）。已据此出殿本语料 v18（中心库 rev 94678）。脚本不进任何 Step，`code_hash` 不变（L0）；换钉 v18 的册语料指纹变。
+- `scripts/zhengli/republish.py add-sprites`（A20，A31 报）：核坐标时把 `img.s` 文件名也一起比了。线上单已是哈希名（`p0001.<sha8>.webp`，册 006–010 先前补过主雪碧图、只缺相似字图），重建出来是 `p0001.webp`，于是 105 格坐标全对也整单被拒。现在比之前去掉内容哈希，页名不同照样拒。发布脚本，不进任何 Step，`code_hash` 不变（L0）。
+
+### Fixed（rc 上修）
+- `guji db sync`／`pull` 读的过程中有人往同一工作区推新行（如 `admissions.jsonl` 追加）时，不再报「库里有超出 n_lines 的行」退出，而是重读（原来只在读完后核 rev，读到一半的不一致直接抛）；没有新写入的不一致照旧报错。10-23 A30 sync 殿本撞上（与 dev／v0.5.9 无关，同一段代码，换时间重试就过）。只动 `datastore/workcopy.py`，各步 `code_hash` 不变。
+
+### Added
+- 指纹覆盖守卫 `tests/test_code_deps_coverage.py`（A20）：`code_hash` 只认 Step 模块与手列的 `code_deps`，不顺 import 走；普查出 11 个 Step 共 39 处「import 了算法模块却没进指纹」（seed_admit 15 处，含 `shadow.*`、`feedback.mojibake`、`clustering.confusable`、`steps.align_ref`/`context_decide`）。现登记为存量、约定搭车补（该步下次本来就改算法时顺手补进 `code_deps`），新增 import 不登记就测试失败。只加测试，不碰任何 Step，`code_hash` 不变（L0）。
+- `guji opinions auto`（M11，GUJI-735 起步；MINOR 级新命令，不碰任何 Step，`code_hash` 不变）：修订流程自动化调和器。`decide`（`to_user` 的意见按 `rules.json` 的 `auto.decide` 自动结案，`decided.by=policy:auto-v1`；刷票、用户亲裁、版本漂移、C 类、看不清、置信不足的留着）、`prepare`（每章聚一批，book-text 里建 `auto/<书>-<章>-<日期>` 分支，套 `revise`、升版本、跑 `local_check`、提交一次，失败不留半成品）、`finish-pr`（CHANGES 的 `#TBD` 换 PR 号）、`finish-merged`（记 `applied`、格谱系、度量、`publish-status`）、`digest`（汇总）。意见池新增 `releases.jsonl`、`lineage.jsonl`、`metrics.jsonl`（只追加）；日志新增 kind `batched`／`pr_opened`／`published`／`reverted`／`policy_applied`，只有 `reverted` 改状态。`rules.json` 升 version 2，加 `auto` 段；合并进 book-text main 缺省不自动（`auto.merge.enabled=false`）。设计见 book-text `docs/design/2026-10-修订流程自动化设计.md`。
+
+### Fixed
+- 续跑加固（#454，A20）：manifest 追加写被杀留下半行时，读表跳过坏行（该页按没记过、重跑补），下一次追加先补换行，不再整册起不来；跑批锁冲突报错在同机时标注持有者 pid「在运行／已不在（锁可能被子进程握着）」。不碰任何 Step，`code_hash` 不变（L0）。
+- seed_admit 放行护栏七条（A24，殿本 vol11/14/15 用 v0.5.9 重跑后逐格核出的错放；新开关缺省开，`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变）：
+  ① `context_variant_form_guard`：Step6 margin 按语义合并算，參㕘叅、簒/篡 等异体各占一半也报 margin 1.0，context 在异体里抓阄（vol14 235:7:4 两版一次 㕘 一次 叅）；放行字在 ranked 里有语义同字的对手、库形又分不开 → 落审（doubt `context_variant_form`）。
+  ② `iron_ctx_guard`：铁证字与上下文第一名（概率 ≥0.5）语义不同、两字在库里近平手（差 <0.005）→ 落审（`iron_vs_ctx`；vol11 12:2:14 官→宫）。
+  ③ `match_tie_guard`：库判非 same、库前两名语义不同且 cov 差 <0.003 时 match_ref／match_replace／match_margin 不放行（`match_tie`）：对位载体取库 top1，近平手时「库与整理本一致」是自证（vol14 60:1:5 拱→撰）。**缺省关**：vol16–20 离线回放每册多送审 160–400 格（日曰、人八等库近平手而整理本给对），只多拦 2 格。
+  ⑤ `context_lib_dissent_gap`（0.03，`context_lib_dissent_cov` 0.93）：库 top1 与 context 字语义不同，context 字在库里落后 ≥0.03 或不在库候选（top1 cov ≥0.93）→ 落审（`context_lib_dissent`；vol14 𣏌→相、㳫→書、牽→事）。原 `context_guard_diff` 只拦库判 diff，这几格库判都是 unsure。
+  ④ `group_flow_lift_ref_guard`：字组补放时只有文意给字、整理本字是组内另一字 → 不补放（`group_flow_ref_dissent`；vol15 118:4:15 面→而）；共字组联合判（日曰目）不受此限。
+  ⑦ 同一开关下加坐标对位拦补放：现役对位缺格、坐标对位（`align_ref.coord`）是组外另一字 → 不补放（`group_flow_coord_dissent`；vol18 107:6:7 叔→叙、vol16 109:6:21 樊→彝）。坐标对位字只用来拦，不参与判字。
+  ⑥ `context_page_end_review`：本页读序最后一格不走 context 放行（`context_page_end`）。对位只收两头被 equal 夹住的 replace，页末格常拿不到整理本字，没人拦 context：v0.5.7→v0.5.9 放行字变率页末格 1.94%／1.67%（vol12／vol14），其余格 0.07%／0.05%。每册约多送审 2–5 格；根治在对位侧，另查。
+
 ## [0.5.9] - 2026-10-22
 
 PATCH（Sheldon 10-23 定发，为殿本 vol11–20 带格位表全体重跑）。

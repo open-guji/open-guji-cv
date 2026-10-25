@@ -28,6 +28,7 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 | 版式留白 | `blank` | **没有** | 行首挪抬那几格、列末空格 | `kind="blank"`，`char=None` |
 | 排除名单·非字 | `char` | 有，`doubts` 含 `excluded`，`evidence.excluded` 理由 `not_a_char` | 墨污/切坏图块，**根本不是字** | `excluded=True`，跳过不占位 |
 | 排除名单·切坏/残 | `char` | 有，理由 `seg_defect` / `damaged` | **字确实在这儿**，只是图块不能进库 | `defect=True`，占位，出阙文（damaged 由 Step7 给 `□`） |
+| 排除名单·图形 | `char` | 有，理由 `figure`（GUJI-740） | **不是字，是图形**（图片格），要以图显示 | `figure=True`，占位，`char="□"`，不算阙文 |
 | 阙文 | `char` | 有，`admit=False and char is None` | 确实是字但认不出 | `unreadable=True` |
 
 排除名单按理由分两路是 2026-09-20 bxgb 对勘查出来的：155 条名单里 131 条是 seg_defect
@@ -114,6 +115,7 @@ class SlotRec:
     human: bool                  # 人裁过（channel == "human"）
     defect: bool = False         # 在排除名单上但**是字**（seg_defect/damaged，或人已给字）：占位，没给字出阙文；见 _to_slot
     guess: str | None = None     # damaged 格人给的「最像哪个字」（Step7 evidence.guess），9.1 出 □{guess=X}
+    figure: bool = False         # 图片格（排除名单理由 figure，GUJI-740）：占位，char 是 □，导出写 char `fig`
     doubts: list[str] = field(default_factory=list)
 
     @property
@@ -199,7 +201,13 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     human_char = (rec.evidence or {}).get("human_char") if on_list and reason != "not_a_char" else None
     if human_char:
         defect = True
-    excluded = on_list and not defect
+    # 图片格（GUJI-740）：人判「是图形，不是字」→ 名单理由 `figure`。字位占住，`char` 写 □（不是阙文），
+    # 导出时这格写 char `fig`＋fig.json。名单上判了图就是图，压过 Step7 挂的 `human_char`（那可能是判图之前
+    # 进字形库的旧字）；要撤图，照名单的规矩撤条目（`crop_exclusions_retired.jsonl`）。
+    figure = on_list and reason == "figure"
+    if figure:
+        human_char, defect = None, False
+    excluded = on_list and not defect and not figure
     # 印章／污损遮挡格（Step7 `occluded_gate`，overview#195）：不放行，但用户定「文本产物
     # 照常输出这个字」——`char` 是整理本的默认字（坐标对位优先），不是机器猜测，照出；
     # 坐标对位说这一位是空格（印章切出来的假格）的，当非字跳过，不占位。seed_admit 的印章区
@@ -234,13 +242,15 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
         char = None
     if human_char:
         char = human_char
+    if figure:
+        char, guess = "□", None
     return SlotRec(
         id=rec.id, page=page, col=col, slot=rec.slot, sub=rec.sub, kind=kind,
         char=char, admit=admit,
         channel=rec.channel, excluded=excluded, defect=defect,
-        guess=guess,
+        guess=guess, figure=figure,
         unreadable=(not admit and char is None and not excluded),
-        human=(rec.channel == "human" or bool(human_char)),
+        human=(rec.channel == "human" or bool(human_char) or figure),
         doubts=[d.split("(")[0] for d in (rec.doubts or [])],
     )
 

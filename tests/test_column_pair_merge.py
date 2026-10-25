@@ -112,9 +112,8 @@ def _run_step(tmp_path, monkeypatch, widths, *, on, redetect=None):
     monkeypatch.setattr(bd, "detect_borders", fake)
     book = make_book(expected_cols=9)
     ctx = make_ctx(tmp_path, book, raw={PAGE: blank_page(1000, 1400)})
-    if on:
-        from open_guji_cv.steps.border_detect import BorderDetectParams
-        ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=True)
+    from open_guji_cv.steps.border_detect import BorderDetectParams
+    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=on, pitch_rescue=False)   # 只测窄对合并
     out = STEPS["border_detect"].run_page(ctx, PAGE)
     return out, seen
 
@@ -284,7 +283,7 @@ def test_end_to_end_merged_page_passes_both_gates(tmp_path, monkeypatch):
     table = {9: make_borders(w=1900, xs=xs9).to_result(), 8: make_borders(w=1900, xs=xs8).to_result()}
     monkeypatch.setattr(bd, "detect_borders", lambda g, expected_cols, **kw: table[expected_cols])
     ctx = make_ctx(tmp_path, make_book(expected_cols=9), raw={PAGE: gray}, monkeypatch=monkeypatch)
-    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=True)
+    ctx.params["border_detect"] = BorderDetectParams(merge_narrow_pair=True, pitch_rescue=False)   # 只测窄对合并
 
     out = run_steps(ctx, PAGE, ["border_detect", "border_detect_gate", "column_warp", "column_gate"])
     g1, g2 = out["border_detect_gate_manifest"], out["gate_manifest"]
