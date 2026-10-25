@@ -5,7 +5,9 @@
 自由模式在某一列里多挑了一条假竖线（字心、夹注缝），把一列劈成两窄列；凑够 `expected_cols+1` 条线，
 外侧真列的那条外框线就挤掉了——**一整列落在网外，字悄悄丢了**，后面列号全错一位。
 
-**做法**（两条路，都只在页上有列宽出带时才走；正常页逐字节不变）：
+**做法**（都只在页上有列宽出带时才走；正常页逐字节不变）：
+0. 外列窄、外侧 0.5 列宽内有界行残段（版框）：外框线吸到那条残段上（`snap_outer_to_frame`）。殿本 vol40 p14、
+   vol46 p118/p148：版心条印在版框外，自由模式的外框线落在框里的字边上，外列只剩 0.75–0.83 列宽；
 1. 网格模式重探（`column_grid`，版框定死、列距均匀）；
 2. 网格选不出版框对时（外框只有粗外条、不在候选池里）：去掉劈开窄对的那条线，在墨多的一侧
    按中位列距补一条外框线（记成插值线）。
@@ -17,12 +19,15 @@
 
 **接受条件**：新列网每条正文列都在列宽带内，且至少一半的线与原线重合（±`tol` px）
 ——防止网格模式在卷端大印页、书名页上挑出另一套网（vol20 p179）。不满足就原样返回。
+另外，外侧贴着版框（有界行残段）的旧外列不许被甩出新网（`drops_framed_col`）：1–3 条路在版心条那样的
+框外墨上外推出一列、把整网平移一列，框里的真列整列丢掉（v0.5.17 首跑 vol40 p14、vol46 p118/p148）。
 
 纯几何，不改 `border_geometry`（那是三个步骤的 `code_deps`）。
 """
 from __future__ import annotations
 
 import statistics
+from copy import deepcopy
 from dataclasses import replace
 
 import cv2
@@ -43,6 +48,8 @@ MIN_INK = 0.02
 #: 界行残段：一条竖向墨线连续 ≥ 此比例 × 中位列宽（容 3px 断口）。字的竖笔不过一格高（殿本 ≤ 0.67 列宽），
 #: 全页小字雙行、版心里没有界行的页（vol16 p8）界行只在天头那一截，也有 1.2 列宽以上
 RULE_RUN = 0.8
+#: 外框吸附：外侧这么宽（× 中位列宽）以内找版框的界行残段
+FRAME_REACH = 0.5
 #: 借形状的自由线斜率与本页中位斜率之差上限（殿本界行斜率差一般 < 0.005）
 SLOPE_TOL = 0.01
 
@@ -251,21 +258,69 @@ def fuse(res, g, gray: np.ndarray, bad_cols, *, leaf_layout: str = "single", ink
     return True
 
 
+def _frame_ridges(res, gray, xs, med, ink_threshold):
+    """两侧外框线外 `FRAME_REACH` 列宽内的界行残段，按离外框线由近到远：(低侧, 高侧)。"""
+    rs = _rule_ridges(res, gray, xs[0] - FRAME_REACH * med, xs[-1] + FRAME_REACH * med, RULE_RUN * med, ink_threshold)
+    lo = sorted((r for r in rs if r < xs[0] - TOL), reverse=True)
+    hi = sorted(r for r in rs if r > xs[-1] + TOL)
+    return lo, hi
+
+
+def snap_outer_to_frame(res, gray: np.ndarray, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
+    """出带的外列偏窄、外侧有版框残段：外框线平移到最近那条残段上。新网干净才改 `res` 返回 True。"""
+    xs = line_xs(res)
+    med = statistics.median(_body_widths(xs, leaf_layout))
+    bad = out_of_band(xs, leaf_layout=leaf_layout) or set()
+    lo, hi = _frame_ridges(res, gray, xs, med, ink_threshold)
+    v, vs = list(res.verticals), list(res.verticals_straight)
+    filled = list(res.vline_filled) or [False] * len(v)
+    moved = False
+    for idx, col, width, ridges in ((0, 1, xs[1] - xs[0], lo), (len(xs) - 1, len(xs) - 1, xs[-1] - xs[-2], hi)):
+        if col not in bad or width >= OUTER[0] * med or not ridges:
+            continue
+        d = ridges[0] - xs[idx]
+        v[idx] = replace(v[idx], x_at_top=v[idx].x_at_top + d)
+        if len(vs) == len(v):
+            vs[idx] = replace(vs[idx], x_at_top=vs[idx].x_at_top + d)
+        filled[idx] = False
+        moved = True
+    if not moved or not is_clean(line_xs(replace(res, verticals=v)), leaf_layout=leaf_layout):
+        return False
+    res.verticals, res.verticals_straight, res.vline_filled = v, vs, filled
+    return True
+
+
+def drops_framed_col(res, gray, new_xs, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
+    """新网把贴着版框的旧外列整列甩出去了？旧外列外侧 `FRAME_REACH` 列宽内有界行残段（版框）＝这列在框里、是真列。"""
+    xs = line_xs(res)
+    med = statistics.median(_body_widths(xs, leaf_layout))
+    lo, hi = _frame_ridges(res, gray, xs, med, ink_threshold)
+    return bool((lo and new_xs[0] > (xs[0] + xs[1]) / 2.0) or (hi and new_xs[-1] < (xs[-2] + xs[-1]) / 2.0))
+
+
 def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
            ink_threshold: int = 128) -> tuple[object, str | None]:
     """`detect_grid(pitch)` 用网格模式重探（pitch＝本页中位列宽，书上有列距先验时调用方可以不用它）。
-    返回 (结果, 用了哪条路 'grid'|'extend'|'fuse'|None)。没触发或都不接受就原样返回、路为 None。"""
+    返回 (结果, 用了哪条路 'frame'|'grid'|'extend'|'fuse'|None)。没触发或都不接受就原样返回、路为 None。"""
     xs = line_xs(res)
     if not needs_rescue(xs, leaf_layout=leaf_layout):
         return res, None
+    if snap_outer_to_frame(res, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
+        return res, "frame"
     bad = out_of_band(xs, leaf_layout=leaf_layout)
     g = detect_grid(statistics.median(_body_widths(xs, leaf_layout)))
     gx = line_xs(g)
+
+    def keeps_frame(new_xs):
+        return not drops_framed_col(res, gray, new_xs, leaf_layout=leaf_layout, ink_threshold=ink_threshold)
     if (len(gx) == len(xs) and is_clean(gx, leaf_layout=leaf_layout)
-            and n_shared(gx, xs) * 2 >= len(xs) and keeps_good_lines(xs, gx, bad)):
+            and n_shared(gx, xs) * 2 >= len(xs) and keeps_good_lines(xs, gx, bad) and keeps_frame(gx)):
         return g, "grid"
-    if drop_and_extend(res, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
-        return res, "extend"
-    if len(gx) == len(xs) and fuse(res, g, gray, bad, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
-        return res, "fuse"
+    r = deepcopy(res)
+    if drop_and_extend(r, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold) and keeps_frame(line_xs(r)):
+        return r, "extend"
+    r = deepcopy(res)
+    if (len(gx) == len(xs) and fuse(r, g, gray, bad, leaf_layout=leaf_layout, ink_threshold=ink_threshold)
+            and keeps_frame(line_xs(r))):
+        return r, "fuse"
     return res, None
