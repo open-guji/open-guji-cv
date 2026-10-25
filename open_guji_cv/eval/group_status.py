@@ -123,32 +123,48 @@ def _pct(a: int, b: int) -> str:
     return f"{a / b:.1%}" if b else "—"
 
 
-def render_md(d: dict, tag: str, date: str) -> str:
+def render_md(d: dict, tag: str, date: str, prev: dict | None = None) -> str:
+    """`prev` 是上一份报告的 json（`run(prev=…)`），给了就在送审后面的括号里写增减。"""
+    pg = (prev or {}).get("groups", {})
     out = [f"# 字组状态 {date}（{tag}）", "",
            f"产物：{len(d['books'])} 册（{'、'.join(d['books'])}）。口径见 cv 仓 `open_guji_cv/eval/group_status.py` 模块头；"
-           "每组 × 每册明细在同名 json。", "",
-           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致（疑格号漂移） | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "每组 × 每册明细在同名 json。" + (f"括号里的增减比的是 {prev.get('date')}（{prev.get('tag') or '—'}）。" if prev else ""), "",
+           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致（疑格号漂移） | 核对一致率 | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for gid, g in d["groups"].items():
         t, lb = g["total"], g["labels"]
+        dr = ""
+        if prev:
+            n0 = pg.get(gid, {}).get("total", {}).get("review", 0) if gid in pg else None
+            dr = "（新）" if n0 is None else f"（{t.get('review', 0) - n0:+d}）" if t.get("review", 0) != n0 else "（0）"
+        real = t.get("mismatch", 0) - t.get("drift", 0)
         out.append(f"| {gid} | {g['name']} | {g['kind']} | {t.get('occ', 0)} | {_pct(t.get('admit', 0), t.get('occ', 0))} | "
-                   f"{t.get('review', 0)} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
+                   f"{t.get('review', 0)}{dr} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
                    f"{t.get('checked', 0)} | {t.get('mismatch', 0)}（{t.get('drift', 0)}） | "
+                   f"{_pct(t.get('checked', 0) - t.get('drift', 0) - real, t.get('checked', 0) - t.get('drift', 0))} | "
                    f"{lb.get('shape', 0)}/{lb.get('reading', 0)}/{lb.get('cut', 0)}/{lb.get('parts', 0)}（{lb.get('central', 0)}） | "
                    f"{lb.get('multi', 0)}／{lb.get('corrected', 0)} | "
                    f"`{g['methods']}` |")
+    if "review" in d:
+        from . import review_breakdown
+        out += [""] + review_breakdown.render_md(d["review"], (prev or {}).get("review"))
     return "\n".join(out) + "\n"
 
 
 def run(prods: list[Path], out: Path, labels: Path | None = None, codepoints: Path | None = None,
-        tag: str = "", date: str | None = None) -> tuple[Path, Path]:
+        tag: str = "", date: str | None = None, prev: Path | None = None, review: bool = True) -> tuple[Path, Path]:
+    """`prev`：上一份报告的 json，表里写增减；`review`：同时出送审格分类（`review_breakdown`）。"""
     date = date or _dt.date.today().isoformat()
     d = collect(prods, labels, codepoints)
+    if review:
+        from . import review_breakdown
+        d["review"] = review_breakdown.collect(prods)
+    pd = json.loads(Path(prev).read_text(encoding="utf-8")) if prev else None
     d.update({"date": date, "tag": tag, "prods": [str(p) for p in prods],
               "labels": str(labels) if labels else None, "codepoints": str(codepoints) if codepoints else None})
     out.mkdir(parents=True, exist_ok=True)
     stem = f"{date}-{tag}" if tag else date
     pj, pm = out / f"{stem}.json", out / f"{stem}.md"
     pj.write_text(json.dumps(d, ensure_ascii=False, indent=1), encoding="utf-8")
-    pm.write_text(render_md(d, tag or "—", date), encoding="utf-8")
+    pm.write_text(render_md(d, tag or "—", date, pd), encoding="utf-8")
     return pj, pm
