@@ -277,6 +277,31 @@ class Composite(Method):
         raise ValueError(f"composite：算子 {self.op!r} 与内层方法 {self.inner!r} 的组合还不支持")
 
 
+@dataclass(frozen=True)
+class Only(Method):
+    """限定入口再跑内层方法：库分差内（`cfg.delta`）的候选与整理本字都落在 `chars` 里才跑，否则待定（`abstain:gate`）；
+    内层给的字不在 `give` 里也待定（`abstain:gate_give`）。组扩了成员、而旧判法只在原来那几个字之间验证过时用
+    （于千子干：子于整字 HOG 只认 子于干、只验证过给 子于，碰到 千 会硬判，2026-10-24 A24）。"""
+    inner: Method | None = None
+    chars: frozenset = frozenset()
+    give: frozenset = frozenset()
+    kind = "composite"
+
+    @property
+    def needs_patch(self) -> bool:            # type: ignore[override]
+        return self.inner.needs_patch
+
+    def _run(self, inp):
+        c1 = inp.cands[0][1] if inp.cands else 0.0
+        close = {c for c, v in (inp.cands or []) if c1 - v < inp.cfg.delta}
+        if not close or close - self.chars or (inp.ref and inp.ref not in self.chars):
+            return GroupVerdict(None, why="abstain:gate", via=self.name)
+        v = self.inner.run(inp)
+        if v.char is not None and v.char not in self.give:
+            return GroupVerdict(None, conf=v.conf, why="abstain:gate_give", via=v.via, extra=v.extra)
+        return v
+
+
 # —— 8 自定义函数 ——
 
 @dataclass(frozen=True)
@@ -381,4 +406,6 @@ def describe(m: Method) -> str:
         return "[" + " → ".join(describe(s) for s in m.steps) + "]"
     if isinstance(m, Composite):
         return f"composite(crop{tuple(m.op.region)} → {describe(m.inner)})"
+    if isinstance(m, Only):
+        return f"only({''.join(sorted(m.chars))} → {describe(m.inner)} → {''.join(sorted(m.give))})"
     return f"custom:{m.name}" if m.kind == "custom" else m.kind

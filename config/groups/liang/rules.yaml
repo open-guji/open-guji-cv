@@ -1,0 +1,13 @@
+schema: ctx_l1/1
+group: liang
+# 兩雨（2026-10-24，A24「强化于千子干等形近判别」）。
+# mined-a24：vol04–20 已放行格按册分两半（04–12／13–20），两半各 ≥3 格（含数字的词组不收）、合计零冲突的两字词组，再对整理本对位字回测零冲突（research/m7/ctx/mine_l1/）。
+rules:
+  - {id: 'liang-m-兩-◎江總', char: 兩, src: mined-a24, re: '◎江總', note: 已放行 79+59}
+  - {id: 'liang-m-兩-◎淮馬', char: 兩, src: mined-a24, re: '◎淮馬', note: 已放行 18+24}
+  - {id: 'liang-m-兩-◎淮鹽', char: 兩, src: mined-a24, re: '◎淮鹽', note: 已放行 16+19}
+  - {id: 'liang-m-兩-卷◎江', char: 兩, src: mined-a24, re: '卷◎江', note: 已放行 74+57}
+  - {id: 'liang-m-兩-卷◎淮', char: 兩, src: mined-a24, re: '卷◎淮', note: 已放行 31+43}
+  # hand-a24：手写常见搭配，对 vol04–20 已放行格与整理本回测；冲突格逐条读过，都是已放行错字（如「進士宫至」）或整理本错字，不改规则
+  - {id: 'liang-h1', char: 兩, src: hand-a24, re: '◎[江淮浙廣漢宋]', note: 回测命中 454}
+  - {id: 'liang-h2', char: 雨, src: hand-a24, re: '風◎', note: 回测命中 14}
