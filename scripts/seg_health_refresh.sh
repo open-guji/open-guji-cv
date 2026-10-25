@@ -4,6 +4,7 @@
 # 用法（云端 Default 环境，有 NEON_DATABASE_URL；约 15 册 10 分钟）：
 #   bash scripts/seg_health_refresh.sh vol06 vol07 … vol20
 #   SEG_NO_PUSH=1 bash scripts/seg_health_refresh.sh vol20     # 只算不推
+#   SEG_VERDICTS=doc/research/seg_accuracy/<定案>.json bash …   # 连看图定案的两级准确率一起重算
 # 产物和原图落在 $SEG_DIR（缺省 /tmp/seg-health），中心库数据（格位表、整理本）要先 guji db pull，没拉过会自动拉。
 set -euo pipefail
 [ $# -ge 1 ] || { echo "用法：bash scripts/seg_health_refresh.sh <册>…" >&2; exit 2; }
@@ -20,4 +21,4 @@ for b in "$@"; do
   guji source pull "$b" --to "$DIR/raw/$b"
 done
 python3 "$HERE/eval_seg_health.py" --root "$DIR/prod" --books "$@" --raw "$DIR/raw/{vol}/{page}.png" \
-  --ws "$WS_ID" --json "$DIR/seg_health.json" $([ -n "${SEG_NO_PUSH:-}" ] || echo --push)
+  --ws "$WS_ID" --json "$DIR/seg_health.json" ${SEG_VERDICTS:+--verdicts "$SEG_VERDICTS"} $([ -n "${SEG_NO_PUSH:-}" ] || echo --push)

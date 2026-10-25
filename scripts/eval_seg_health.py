@@ -16,10 +16,12 @@
 原图目录模板缺省 `<工作区>/data_full/zongmu/{vol}/{page}.png`；没有原图时跳过二级。
 整理本与格位表从中心库数据目录读（`corpus_path("daizhige/…")`，要先 `guji db pull`）。
 
-推到后台数据控制台（网站后台「文本整理 › 切分」，表 progress.metric、section seg，见 kaiyuanguji-web docs/text-progress.md）：
-  python scripts/eval_seg_health.py --root <产物根> --books vol06 … vol20 --push
-  每册写一行（册号按 progress.volume 的 ws＋cv_book 对到 book-text 章号），再按库里各册的数重算整套合计；
-  只跑了几册也不会冲掉别册。「看图核」的两级准确率（l1_acc、l2_acc）是人看图定的，本脚本不碰。
+推到后台数据控制台（网站后台「文本整理」下的四张表：切分总览、切分·一级（列）、切分·二级（格）、切分·回退监控；
+表 progress.metric，见 kaiyuanguji-web docs/text-progress.md）：
+  python scripts/eval_seg_health.py --root <产物根> --books vol06 … vol20 --push [--verdicts doc/research/seg_accuracy/<定案>.json]
+  每册写一行（册号按 progress.volume 的 ws＋cv_book 对到 book-text 章号），再按库里各册重算整套合计，只跑几册也不冲掉别册。
+  不给 --verdicts 只刷新自动数；一级切错列、二级切坏格要看图定案（定案 json 列出每列成因、切坏的格），给了才重算。
+  定案和产物的切分代码版本要对上（格 id 随切分变），新版本切分要重新看图出一份定案。
 """
 from __future__ import annotations
 
@@ -209,31 +211,114 @@ def level2(root: Path, book: str, ref: Ref, raw_tpl: str, thr: float = 0.04) -> 
     return dict(cells=n, geo_flag=len(flags), geo_hit=sorted(hits))
 
 
-PUSH_KEYS = [  # key, 显示名, 单位, 排序；整套合计按各册相加
-    ("suspect_cols", "自动可疑列", "列", 20), ("cols", "列数", "列", 40), ("cells", "格数", "格", 50),
-    ("colnet_pages", "列网异常页（自动）", "页", 60), ("layout_miss", "对格位表错列（自动）", "列", 70),
-    ("text_shift", "对整理本整列错位（自动）", "列", 80), ("merged_cols", "一格挤两字列（自动）", "列", 90),
-    ("geo_flag", "几何标出格（自动）", "格", 100), ("geo_hit", "几何标出且要看图（自动）", "格", 110),
-]
+L1_CAUSES = ["列网错", "整页没切", "字谱页", "挤格列", "列尾丢字", "抬头字没框", "零星"]
+FULL_COL = {"列网错", "整页没切"}          # 整列都坏：这列整理本上的字都算切坏
+ONE_CHAR = {"列尾丢字", "抬头字没框"}      # 丢一个字
 
 
+def verified(root: Path, book: str, ref: Ref, v: dict) -> dict:
+    """按看图定案（doc/research/seg_accuracy/*.json）算本册的一级切错列、二级切坏格。"""
+    l1 = v["l1"].get(book, {})
+    cs = {}
+    bad_cells, known = set(), 0
+    for cause, cols in l1.items():
+        if cause == "格号差一":
+            continue
+        for pc in cols:
+            p, c = map(int, pc.split(":"))
+            if p not in cs:
+                f = root / book / "cell_shrink" / f"p{p:04d}.json"
+                cs[p] = next(iter(json.load(open(f, encoding="utf-8")).values())) if f.exists() else {"columns": []}
+            chs = [ch for col in cs[p]["columns"] if col["col"] == c for ch in col["chars"]
+                   if ch.get("cell_type") != "blank"]
+            if cause in FULL_COL:
+                n = len(ref.text(book, p).get(c, {})) or len(chs)
+                known += n
+            elif cause in ONE_CHAR:
+                known += 1
+            elif cause == "字谱页":
+                sa = next(iter(json.load(open(root / book / "seed_admit" / f"p{p:04d}.json",
+                                              encoding="utf-8")).values()))
+                dz = ref.text(book, p).get(c, {})
+                for ch in (x for col in sa["columns"] if col["col"] == c for x in col["chars"]):
+                    if ch.get("cell_type") != "blank" and not (ch["admit"] and dz.get(ch["slot"]) == ch["char"]):
+                        bad_cells.add(ch["id"])
+            elif cause == "挤格列" and len(chs) >= 6:     # 挤进一格的那个字
+                hs = [ch["bbox_page"][3] - ch["bbox_page"][1] for ch in chs]
+                m = statistics.median(hs)
+                bad_cells.update(ch["id"] for ch, h in zip(chs, hs) if h > 1.6 * m)
+    scattered = {i for i in v["l2_bad"] if i.startswith(book + ":")}
+    in_known = len(bad_cells)
+    bad_cells |= scattered
+    return {cause: len(l1.get(cause, [])) for cause in L1_CAUSES + ["格号差一"]} | {
+        "l1_bad": sum(len(l1.get(c, [])) for c in L1_CAUSES),
+        "l2_known": known + in_known, "l2_scattered": len(bad_cells) - in_known,
+        "l2_bad": known + len(bad_cells),
+        "admitted_wrong": sum(1 for i in v["l2_admitted_wrong"] if i.startswith(book + ":"))}
+
+
+# 后台数据控制台的四张表：section → [(key, 显示名, 单位)]；比率由 _derive 算
+SECTIONS = {
+    "seg": ("切分总览", 40, "切分（A22）总览：一级＝每列字框落在真字上、字数对（单位：列）；二级＝字与字分准、不影响认字（单位：格）。"
+            "两级都是看图定案的数，只在专门分析后更新（见「看图依据」）；自动监控数在「切分·回退监控」。", [
+        ("l1_acc", "一级 列准确率", "%"), ("l1_bad", "一级 切错列", "列"), ("cols", "列数", "列"),
+        ("l2_acc", "二级 格准确率", "%"), ("l2_bad", "二级 切坏格（影响认字）", "格"), ("cells", "格数", "格"),
+        ("admitted_wrong", "已放行成错字", "格")]),
+    "seg_l1": ("切分·一级（列）", 41, "一级按成因分：每列看图定案。格号差一＝字框都对、只是抬头列和整理本差一格，不算错。", [
+        ("cols", "列数", "列"), ("l1_bad", "切错列合计", "列"), ("l1_acc", "列准确率", "%"),
+        ("c_colnet", "列网错（劈列、丢列、整页列号错）", "列"), ("c_page", "整页没切（卷末少字页）", "列"),
+        ("c_pu", "字谱页", "列"), ("c_squeeze", "挤格列（殿本比格位表多字）", "列"), ("c_taildrop", "列尾丢字", "列"),
+        ("c_headdrop", "抬头字没框", "列"), ("c_misc", "零星（列尾框线成格、劈字、框下漂）", "列"),
+        ("c_off1", "格号差一（不算错）", "列"), ("suspect_cols", "自动可疑列（送看图的）", "列")]),
+    "seg_l2": ("切分·二级（格）", 42, "二级：几何标出（截断或侵入 >4%）是最严上限；其中送审或与整理本不一致的要看图，看图确认切坏、影响认字的才算错。"
+               "已知坏页上整列坏的按整理本字数计。", [
+        ("cells", "格数", "格"), ("geo_flag", "几何标出", "格"), ("geo_flag_rate", "几何标出率", "%"),
+        ("geo_hit", "其中要看图", "格"), ("l2_bad", "看图确认切坏", "格"), ("l2_known", "其中在已知坏页/坏列上", "格"),
+        ("l2_scattered", "其中散在别处", "格"), ("admitted_wrong", "已放行成错字", "格"), ("l2_acc", "格准确率", "%")]),
+    "seg_watch": ("切分·回退监控", 43, "全自动、不用人看的数（scripts/eval_seg_health.py），每次发版重跑后刷新；明显变多就是回退。", [
+        ("seg_cv", "切分代码版本", None), ("cols", "列数", "列"), ("suspect_cols", "可疑列", "列"),
+        ("l1_auto", "一级自动估（下限）", "%"), ("colnet_pages", "列网异常页", "页"), ("layout_miss", "对格位表错列", "列"),
+        ("text_shift", "对整理本整列错位", "列"), ("merged_cols", "一格挤两字列", "列"), ("cells", "格数", "格"),
+        ("geo_flag", "几何标出", "格"), ("geo_flag_rate", "几何标出率", "%"), ("geo_hit", "几何标出且要看图", "格")]),
+}
+CAUSE_KEY = {"列网错": "c_colnet", "整页没切": "c_page", "字谱页": "c_pu", "挤格列": "c_squeeze", "列尾丢字": "c_taildrop",
+             "抬头字没框": "c_headdrop", "零星": "c_misc", "格号差一": "c_off1"}
 def _counts(r: dict) -> dict:
-    return {"cols": r["cols"], "suspect_cols": _suspect_cols(r), "colnet_pages": len(r["colnet_pages"]), "layout_miss": len(r["layout_miss"]),
-            "text_shift": len(r["text_shift"]), "merged_cols": len(r["merged_cols"]),
-            **({"cells": r["cells"], "geo_flag": r["geo_flag"], "geo_hit": len(r["geo_hit"])} if "cells" in r else {})}
+    c = {"cols": r["cols"], "colnet_pages": len(r["colnet_pages"]), "layout_miss": len(r["layout_miss"]),
+         "text_shift": len(r["text_shift"]), "merged_cols": len(r["merged_cols"]),
+         "suspect_cols": len({tuple(x) for k in ("layout_miss", "text_shift", "merged_cols") for x in r[k]})}
+    if "cells" in r:
+        c |= {"cells": r["cells"], "geo_flag": r["geo_flag"], "geo_hit": len(r["geo_hit"])}
+    if "verified" in r:
+        c |= {CAUSE_KEY.get(k, k): n for k, n in r["verified"].items()}
+    return c
 
 
-def _suspect_cols(r: dict) -> int:
-    """自动可疑列：对表错、整列错位、挤格三类的并集（含抬头格号差一，所以是下限估）。"""
-    return len({tuple(x) for k in ("layout_miss", "text_shift", "merged_cols") for x in r[k]})
+def _derive(c: dict) -> dict:
+    d = dict(c)
+    if c.get("cols"):
+        d["l1_auto"] = 1 - c["suspect_cols"] / c["cols"]
+        if "l1_bad" in c:
+            d["l1_acc"] = 1 - c["l1_bad"] / c["cols"]
+    if c.get("cells"):
+        d["geo_flag_rate"] = c["geo_flag"] / c["cells"]
+        if "l2_bad" in c:
+            d["l2_acc"] = 1 - c["l2_bad"] / c["cells"]
+    return d
 
 
-def push(out: dict, ws: str, by: str = "A22") -> None:
-    """把各册体检数写进 progress.metric（section seg），再按库里各册重算整套合计。"""
+def push(out: dict, ws: str, verdict_src: str | None = None, by: str = "A22") -> None:
+    """把各册的数写进后台数据控制台（progress.metric 的四个 section），再按库里各册重算整套合计。
+    看图定案的数（一级切错列、二级切坏格等）只在给了 --verdicts 时写，别的时候保留库里上次的。"""
     from datetime import date
     from open_guji_cv.datastore.connect import connect
-    put = "SELECT progress.put_metric(%s, %s, 'seg', %s, %s, %s, %s, %s, %s, %s::jsonb, %s)"
+    today = date.today().isoformat()
+    put = "SELECT progress.put_metric(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)"
     with connect() as conn:
+        for sec, (title, sort, desc, _) in SECTIONS.items():
+            conn.execute("INSERT INTO progress.section (section, title, owner, description, sort) VALUES (%s, %s, 'A22', %s, %s) "
+                         "ON CONFLICT (section) DO UPDATE SET title = EXCLUDED.title, owner = EXCLUDED.owner, "
+                         "description = EXCLUDED.description, sort = EXCLUDED.sort", (sec, title, desc, sort))
         vmap = {cvb: (b, v) for b, v, cvb in conn.execute(
             "SELECT book_id, vol, cv_book FROM progress.volume WHERE ws = %s", (ws,)).fetchall()}
         books = set()
@@ -243,38 +328,33 @@ def push(out: dict, ws: str, by: str = "A22") -> None:
                 continue
             b, v = vmap[cvb]
             books.add(b)
-            c = _counts(r)
-            meta = json.dumps({"seg_rev": r["seg_rev"], "at": date.today().isoformat()})
-            for k, label, unit, sort in PUSH_KEYS:
-                if k in c:
-                    conn.execute(put, (b, v, k, label, c[k], unit, by, None, meta, sort))
-            conn.execute(put, (b, v, "l1_auto", "一级自动估（下限）", 1 - c["suspect_cols"] / max(1, c["cols"]), "%",
-                               by, None, meta, 15))
-            if "cells" in r:
-                conn.execute(put, (b, v, "geo_flag_rate", "几何标出率（自动，最严上限）", r["geo_flag"] / max(1, r["cells"]),
-                                   "%", by, None, meta, 105))
-            conn.execute(put, (b, v, "seg_cv", "切分代码版本", None, None, by, r["seg_rev"], meta, 5))
-        for b in books:     # 整套合计：按库里该书已有的各册行相加（只跑几册也不冲掉别册）
-            rows = conn.execute("SELECT vol, key, value FROM progress.metric WHERE section = 'seg' AND book_id = %s "
-                                "AND vol <> '' AND value IS NOT NULL", (b,)).fetchall()
-            tot, vols = collections.Counter(), set()
-            for v, k, val in rows:
-                tot[k] += val
-                vols.add(v)
-            revs = sorted({r["seg_rev"] for r in out.values()})
-            meta = json.dumps({"vols": sorted(vols), "seg_rev": revs, "at": date.today().isoformat()}, ensure_ascii=False)
-            for k, label, unit, sort in PUSH_KEYS:
-                if k in tot:
-                    conn.execute(put, (b, "", k, label, tot[k], unit, by, None, meta, sort))
-            if tot["cols"]:
-                conn.execute(put, (b, "", "l1_auto", "一级自动估（下限）", 1 - tot["suspect_cols"] / tot["cols"], "%", by, None, meta, 25))
-            if tot["cells"]:
-                conn.execute(put, (b, "", "geo_flag_rate", "几何标出率（自动，最严上限）", tot["geo_flag"] / tot["cells"], "%",
-                                   by, None, meta, 105))
-            conn.execute(put, (b, "", "auto_basis", "自动数依据", None, None, by,
-                               f"{len(vols)} 册 · 本次算的切分代码 {'、'.join(revs)} · {date.today().isoformat()}", meta, 35))
+            c = _derive(_counts(r))
+            meta = json.dumps({"seg_rev": r["seg_rev"], "at": today, "verdicts": verdict_src}, ensure_ascii=False)
+            for sec, (_, _, _, keys) in SECTIONS.items():
+                for i, (k, label, unit) in enumerate(keys):
+                    if k == "seg_cv":
+                        conn.execute(put, (b, v, sec, k, label, None, None, by, r["seg_rev"], meta, i))
+                    elif k in c and isinstance(c[k], (int, float)):
+                        conn.execute(put, (b, v, sec, k, label, c[k], unit, by, None, meta, i))
+        for b in books:     # 整套合计：按库里各册的计数行相加（只跑几册也不冲掉别册），再算比率
+            rows = conn.execute("SELECT vol, section, key, value FROM progress.metric WHERE section LIKE 'seg%%' "
+                                "AND book_id = %s AND vol <> '' AND value IS NOT NULL", (b,)).fetchall()
+            one = {(v, k): val for v, _, k, val in rows}         # 同一个数在几张表里各写一份，按册只取一份
+            tot = collections.Counter()
+            for (v, k), val in one.items():
+                if not k.endswith(("_acc", "_rate", "_auto")):
+                    tot[k] += val
+            vols = sorted({v for v, _ in one})
+            d = _derive(dict(tot))
+            meta = json.dumps({"vols": vols, "at": today}, ensure_ascii=False)
+            for sec, (_, _, _, keys) in SECTIONS.items():
+                for i, (k, label, unit) in enumerate(keys):
+                    if k in d:
+                        conn.execute(put, (b, "", sec, k, label, d[k], unit, by, None, meta, i))
+            conn.execute(put, (b, "", "seg", "basis", "看图依据", None, None, by,
+                               f"{len(vols)} 册 · 定案 {verdict_src or '（沿用上次）'} · 算于 {today}", meta, 99))
         conn.commit()
-    print(f"已推 {len(out)} 册到 progress.metric（section seg）")
+    print(f"已推 {len(out)} 册到后台数据控制台（section {'、'.join(SECTIONS)}）")
 
 
 def main(argv=None):
@@ -287,6 +367,7 @@ def main(argv=None):
     ap.add_argument("--json", help="明细写到这个文件")
     ap.add_argument("--push", action="store_true", help="算完推到后台数据控制台（progress.metric，section seg）")
     ap.add_argument("--ws", default="siku-zongmu", help="--push 用：工作区 id，按它把册对到 book-text 章号")
+    ap.add_argument("--verdicts", help="看图定案 json（doc/research/seg_accuracy/），给了就算一级切错列、二级切坏格")
     a = ap.parse_args(argv)
     if a.corpus:
         corpus = Path(a.corpus)
@@ -299,12 +380,17 @@ def main(argv=None):
         ws = workspace_root()
         raw = str(ws / "data_full" / "zongmu" / "{vol}" / "{page}.png") if ws else None
     ref = Ref(corpus)
+    verdict = json.load(open(a.verdicts, encoding="utf-8")) if a.verdicts else None
     out, tot = {}, collections.Counter()
     print("册     列数   列网页 对表错列 文字错位 挤格列 |   格数  几何标出  要看图")
     for b in a.books:
         r = level1(Path(a.root), b, ref)
         if raw and not a.no_l2:
             r.update(level2(Path(a.root), b, ref, raw))
+        if verdict:
+            if verdict["seg_rev"] not in r["seg_rev"]:
+                print(f"注意：{b} 切分代码 {r['seg_rev']} 与定案 {verdict['seg_rev']} 不同，定案的格 id 可能对不上")
+            r["verified"] = verified(Path(a.root), b, ref, verdict)
         out[b] = r
         row = [r["cols"], len(r["colnet_pages"]), len(r["layout_miss"]), len(r["text_shift"]), len(r["merged_cols"]),
                r.get("cells", 0), r.get("geo_flag", 0), len(r.get("geo_hit", []))]
@@ -319,7 +405,7 @@ def main(argv=None):
     if a.json:
         Path(a.json).write_text(json.dumps(out, ensure_ascii=False, indent=1, default=list), encoding="utf-8")
     if a.push:
-        push(out, a.ws)
+        push(out, a.ws, Path(a.verdicts).name if a.verdicts else None)
 
 
 if __name__ == "__main__":
