@@ -9,6 +9,8 @@
     guji source commons <书id> <册> --file <Commons 文件名> --ws … --book … [--splits 表] --why …
                                                                  # 从 Commons（根）取 DjVu、存档、解页、发布页表（正式令牌，要 ddjvu）
                                                                  # 会话连不上 Commons 时：别处下好 DjVu 与 imageinfo，--djvu 文件 --commons-json 信息
+                                                                 # 修好的新版传上 Commons 以后加 --reroot：页序、页图字节不变，只换根
+    guji source commons-pack <书id> <册> --out <目录>           # 修过的页合进根，出回传 Commons 的新版 DjVu 与摘要（只出文件，不上传）
     guji source register <书id> <册> --dir <原图目录> --map <页号→页序表> [--ia <IA 标识> | --src-file <路径>=<网址> …] --ws … --book … --why …
                                                                  # 已有原图目录原样登记（老册，不重编码）（正式令牌）
     guji source replace <书id> <册> <页序> <png> --why …          # 换一页（人工处理后的图），页表出新版（正式令牌）
@@ -298,8 +300,8 @@ def cmd_replace(args) -> None:
     _finish(src, args, new, blobs, args.why)
 
 
-COMMANDS = {"commons-pack": cmd_commons_pack, "pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
-            "ia": cmd_ia, "commons": cmd_commons, "register": cmd_register, "replace": cmd_replace}
+COMMANDS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
+            "ia": cmd_ia, "commons": cmd_commons, "commons-pack": cmd_commons_pack, "register": cmd_register, "replace": cmd_replace}
 
 
 def add_parser(sub) -> None:
