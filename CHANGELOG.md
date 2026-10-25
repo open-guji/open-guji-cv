@@ -5,6 +5,13 @@
 
 ## [未发版]
 
+## [0.5.19] - 2026-10-25
+
+PATCH（#593 Step3 自动配页，缺省关的新设置）。Step3（`row_segment`）的 `code_hash` 变：版本 1.39、`code_deps` 加 `steps/row_segment_pagemap`、`utils/page_align`、`utils/daizhige`；缺省 `page_map: off` 时参数与输出不变。
+
+### Added
+- Step3 自动配页 `row_segment.page_map: off|loose|strict`（Sheldon 10-25 定殿本 vol51 起不再离线补格位表）：开着时 Step3 开跑前读全册 Step2 列窗口与原图，每页 9×23 格墨量指纹与 daizhige 全书半叶对齐（带状粗找多候选 → 单调 DP → 局部重排 → 回填），得出页→半叶与格位表，存 Step3 产物目录 `_page_map.json` 复用，代替 `layout_prior` 的离线表；`strict` 整册配不上（正文页没配准超过 max(2, 3%) 或有字页平均得分 < 0.95）就拦。钉页 `corpus/daizhige/page_pins.jsonl`。新钩子 `Step.prepare`（引擎分发页前主进程调）、`Step.book_params`（按册填参数）。殿本 vol11/13/14/16/17/19/20/21 自动表与中心库人核表逐格一致，vol51 整册跑通（PATCH）。
+
 ## [0.5.18] - 2026-10-25
 
 PATCH（#589 Step1 列距救援不甩出贴版框的真列，殿本 vol40 p14、vol46 p118、p148 丢整列正文；#587 新册首跑自动标 main；#586 出单版产物包记对 cv；#588 看板）。Step1 的 `code_hash` 变。

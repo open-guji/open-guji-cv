@@ -386,6 +386,9 @@ class RunContext:
         if p is None:
             p = step.spec.params()
         p = _with_book_params(p, step, self)
+        hook = getattr(step, "book_params", None)
+        if hook is not None:            # Step 自己按本册补的派生参数（如 row_segment 自动配页的本册指纹）
+            p = hook(p, self)
         p = _with_book_corpus(p, self)
         p = _with_book_real_proto(p, self)
         p = _with_witness_fingerprint(p, self)

@@ -619,6 +619,10 @@ class Engine:
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
                      f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
                      f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
+        prepare = getattr(step, "prepare", None)
+        if prepare is not None and pages:
+            # 整步开跑前的整册准备（如 row_segment 自动配页），在主进程做一次，并行 worker 读它的结果
+            prepare(self.ctx, pages)
         if jobs > 1 and is_parallel_safe(step, self.ctx.params_for(step)):
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)
