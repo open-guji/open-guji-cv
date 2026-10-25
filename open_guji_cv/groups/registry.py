@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,10 @@ class FlowSpec:
       （2026-10-24，A24：字频永远说主形，拿它复核会把真次形也降掉），如 旨㫖：补放 字频→IDS，复核只跑 IDS；
     - `lift_ref_agree`：补放时方法给的字须与整理本字（现役对位缺这一格时用坐标对位字）同字，否则留人审——整理本缺位
       `group_flow_ref_missing`、不同字 `group_flow_ref_dissent`。形近不同义、组员很多的部首族用（門族、辶族，2026-10-24）：
-      字形只负责认刻形，字由文本互证，两路一致才放。"""
+      字形只负责认刻形，字由文本互证，两路一致才放。
+    - `lift_ref_veto`：补放时整理本字是组里**另一个字**就留人审（`group_flow_ref_dissent`），不论哪个方法给的字；整理本缺位照常补放。
+      一二（2026-10-25，A24）：字块切错时两路字形会一起错（vol19:116:9:8「無一不謬」的格切进了「不」的上横，整字 HOG 与数横都判二），
+      整理本作「一」就不该补成「二」。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -54,6 +57,7 @@ class FlowSpec:
     form_methods: tuple = (FREQ, IDS, FORM_TOP1)
     review_methods: tuple = ()
     lift_ref_agree: bool = False
+    lift_ref_veto: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -125,6 +129,15 @@ GLYPH2 = frozenset({"rr", "ts", "ly", "wj", "zh", "yh", "yt", "js", "em", "fc", 
 
 def _g2(gid: str) -> tuple:
     return (_img(gid),) if gid in GLYPH2 else ()
+
+
+#: 一二（2026-10-25，A24「优化一二判别」）：文意 → 整字 HOG → 数横（`bars.count_bars`），三路 `agree`。
+#: 文意规则在册外回测冲突、10-24 下线了 21 条，剩下的格文意大多定不了（「此本僅◎十卷」「壬戌◎月」），刻形却一眼可辨。
+#: - 补放须文意或数横给字（`lift_needs`）：整字 HOG 在列尾格会把边框线当成第二横（vol08:7:6:21），不许单独补放；
+#: - 整理本是组里另一个字就不补放（`lift_ref_veto`）：字块切错时两路字形一起错（vol19:116:9:8）；
+#: - 复核：任何一路给了另一个字就降审（只降不改）。
+#: vol04–20 已放行 7,545 格：数横给字 7,148、与放行字 0 不一致。见 `doc/字组/yr.md`。
+_YR_FLOW = FlowSpec((CTX, _img("yr"), YR_BARS), review=True, lift_needs=("ctx", "yr_bars"), lift_ref_veto=True)
 
 
 #: 文意组与字形组共字（入口按分差内候选选组，点名靠前的先试）：會（zh／qin）、問間（wj／men）、遺還（yh／chuo）、圓圖（yt／kou）。
@@ -199,7 +212,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
+        flow=_YR_FLOW if gid == "yr" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
