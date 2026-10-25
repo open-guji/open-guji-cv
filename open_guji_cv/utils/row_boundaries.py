@@ -1978,7 +1978,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                         # 都该先把候选补齐（原则 ①：给人最好的选项）。
                         n_old = len(cands)
                         cands = _expand_pool(cands, up_c, dn_c, k_)
-                        adopt = _adopt_expanded(cands, n_old, dis[chosen], 0 if clean else ADOPT_INK)
+                        adopt = _adopt_expanded(cands, n_old, dis[chosen], 0 if clean or _has_clean_seam(cands) else ADOPT_INK)
                         if adopt is not None:
                             chosen, chosen_by = adopt, "unet"
                         elif dis[chosen] >= ESCALATE_BLOB:
@@ -2002,8 +2002,10 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             人审截断（vol02 seg_defect）里「良」的点、「晉」的头被格线留在上一格这类，U-Net 引导缝都把它们
             划回本字、穿墨 2–10px；原来只记候选、打 escalate，产物里照旧是截断的字。
 
-            `ink_cap`：干净格线（直线一点墨不穿）只许换成同样不穿墨的缝（0）——换成穿笔画的缝，等于把上字
-            底横的一截切给下格；下格是「一」时就成了「二」（Sheldon 10-22 看图，vol05「聖/一」「其/一」等 7 处）。"""
+            `ink_cap`：池里已有不穿墨的缝（干净格线，或任何一条零墨候选）时只许换成同样不穿墨的缝（0）——
+            换成穿笔画的缝，等于把一个字的一截切给邻格：上字底横切给下格，下格是「一」时就成了「二」（Sheldon
+            10-22 看图，vol05「聖/一」「其/一」等 7 处）；U-Net 缝也会反过来把下字的点、字头切给上格（刻本样页
+            「聽/應」的广点，vol09 同类，见 `_has_clean_seam`）。"""
             from .cut_select import ADOPT_DIS, ESCALATE_BLOB
             if dis_chosen < ESCALATE_BLOB:
                 return None
@@ -2013,6 +2015,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if not ok:
                 return None
             return max(ok, key=lambda i: (cands[i].agree or 0.0, -cands[i].seam_ink))
+
+        def _has_clean_seam(cands):
+            """池里有不穿墨的折线候选（扩池前后都算）。直线的 `seam_ink` 只是占位 0，不算——直线干净与否由 `clean` 说。
+
+            两字之间已有一条不碰墨的缝，U-Net 缝还要穿墨，就是要把一个连通的字切下一截挪到邻格；U-Net 在这里
+            常错（2026-10-25，刻本样页 c5「聽/應」：零墨窄走廊 agree 0.951，U-Net 缝穿 7px 把「應」的点和广头
+            切给「聽」）。这种切点只换成零墨候选，没有就照旧升级交人。"""
+            return any(c.kind != "straight" and c.seam_ink == 0 for c in cands)
 
         def _expand_pool(cands, up_c, dn_c, k_):
             """L3 扩池（2026-09-15，10 卡）：只对升级的切点，**只加候选不改选法**。

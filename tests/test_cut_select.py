@@ -438,3 +438,31 @@ def test_pending_blob_threshold_is_calibrated_and_ordered():
     assert PENDING_BLOB == 60 and ESCALATE_BLOB == 100
     assert PENDING_BLOB < ESCALATE_BLOB
 
+
+
+def test_expanded_seam_cutting_ink_not_adopted_when_pool_has_a_clean_seam():
+    """扩池自动改选：池里已有零墨折线时，穿墨的 U-Net 缝即使与 U-Net 完全一致也不改选，照旧升级交人。
+    2026-10-25 刻本样页 c5「聽/應」：零墨窄走廊 vs 穿 7px 的 unet_seam，后者把「應」的点和广头切给「聽」。
+    同样几何、池里没有零墨候选时（见上面 split_suspect 那条）照旧改选。"""
+    import numpy as np
+    from open_guji_cv.utils.cut_select import ADOPT_INK, ESCALATE_BLOB
+
+    class _J(_FakeJudge):
+        def guided_seam(self, col_gray, x_lo, x_hi, y0, y1, y_line, ink_threshold=128, band=45):
+            self.unet_y = int(round(y_line)) + 36          # 粘连缝里格线在缝顶下 2 行；+36 在缝底上方，只穿右条（20px）
+            return np.full(x_hi - x_lo, self.unet_y)
+
+        def assess(self, col_gray, x_lo, x_hi, y0, y1, y_line, seams, ink_threshold=128):
+            unet_y = getattr(self, "unet_y", None)
+            sc, dis = [], []
+            for sm in seams:
+                hit = sm is not None and unet_y is not None and all(int(v) == unet_y for v in sm)
+                sc.append(0.999 if hit else 0.9)
+                dis.append(0 if hit else ESCALATE_BLOB + 50)
+            return sc, dis
+    cp = _cut(RB.segment_column(_touching_column(), period=SLOT_H, n_body_slots=N_SLOTS, cut_judge=_J(None)))
+    ext = next(c for c in cp.candidates if c.kind == "unet_seam")
+    assert 0 < ext.seam_ink <= ADOPT_INK and ext.dis_unet == 0          # 旧规则会改选它
+    assert any(c.kind.startswith("seam_") and c.seam_ink == 0 for c in cp.candidates)
+    assert cp.chosen_by == "rule" and cp.candidates[cp.chosen].seam_ink == 0
+    assert cp.escalate is True
