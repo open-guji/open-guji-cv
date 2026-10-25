@@ -23,7 +23,7 @@ def test_group_ids_match_dataset_registry():
     第三批只看字频的异体组六个（kan／jiw／qx／dx／zx／qy，2026-10-20）、按字分类 IDS 三组（xu／ce／jiao）、
     整字岭回归两组（lv 呂吕／zheng 徵徴，2026-10-20）。"""
     assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
-                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "bian", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
+                           "mn", "dian", "can", "chen", "li", "shen", "zhi", "ji", "qing", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
                            "qik", "lih", "jue", "wei", "shuo", "lv", "zheng", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di"}
