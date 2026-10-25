@@ -62,7 +62,14 @@ t 取原图 $G source pull "$VOL" -w "$WS"
 BK=$(basename "$WS"); BK=${BK%%-*}; VN=${VOL#vol}
 t 合扫检查 $G source check "$BK" "$VN" -w "$WS" || echo "⚠️ source check 有报（题签页报疑似合扫属正常），请看上面"
 t 模板索引 $G cache pull-rare-index --book "$VOL" -w "$WS" --precision fp32
-[ -n "$CORPUS" ] && t 语料校验 $G corpus verify --vol "$VOL" -w "$WS"
+# 语料号和这版代码的字组文件对不上：设了 GUJI_CORPUS_DRIFT=warn（跑 pipeline 也照此放行）就只提醒不停
+if [ -n "$CORPUS" ]; then
+  if [ "${GUJI_CORPUS_DRIFT:-}" = warn ]; then
+    echo "== 语料校验"; $G corpus verify --vol "$VOL" -w "$WS" || echo "⚠️ 语料与代码有漂移，按 GUJI_CORPUS_DRIFT=warn 放行"
+  else
+    t 语料校验 $G corpus verify --vol "$VOL" -w "$WS"
+  fi
+fi
 [ $BASE = 1 ] && t 基线包 $G products pack fetch "$VOL" --to "$HOME/base/$VOL"
 t status $G status "$VOL" -w "$WS"
 # 人裁自检（2026-10-25）：读事件看 GUJI_WORKSPACE（不看 GUJI_DATA_HOME）；老人裁要现格字块图才认得了格，

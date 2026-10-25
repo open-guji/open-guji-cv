@@ -356,6 +356,38 @@ class Job:
         return outcome
 
 
+_RUNNER_PATHS = ("open_guji_cv/jobs", "scripts/rerun_prep.sh", "scripts/guji_jobs.sh")
+_outdated_checked_at = 0.0
+
+
+def _runner_outdated() -> bool:
+    """dev 上执行方相关的代码（jobs 模块、准备脚本、启动器）和本执行方检出的不一样了没有。10 分钟查一次。
+
+    执行方进程常驻几个小时，代码是起来时载入的；有修复合进 dev 后，空闲时自己退出，线程重新 start 就换上新代码。
+    只在两张单之间查，不打断在跑的单。查不了（断网）当作没更新。
+    """
+    global _outdated_checked_at
+    if time.time() - _outdated_checked_at < 600 or not (RUNNER_ROOT / ".git").exists():
+        return False
+    _outdated_checked_at = time.time()
+
+    def tree(rev: str) -> list[str] | None:
+        try:
+            r = subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", *[f"{rev}:{p}" for p in _RUNNER_PATHS]],
+                               capture_output=True, text=True, timeout=30)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        return r.stdout.split() if r.returncode == 0 else None
+
+    try:
+        subprocess.run(["git", "-C", str(RUNNER_ROOT), "fetch", "-q", "origin", "dev"], capture_output=True,
+                       timeout=120, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    except (OSError, subprocess.SubprocessError):
+        return False
+    new, cur = tree("origin/dev"), tree("HEAD")
+    return bool(new and cur and new != cur)
+
+
 def _runner_commit() -> str | None:
     try:
         return subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
@@ -392,6 +424,10 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
         while True:
             for jid, st in db(S.reap):
                 say(f"收回 #{jid} → {st}")
+            if not (once or only or dry) and _runner_outdated():
+                say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
+                (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
+                return done
             bad = _preflight()
             if bad:
                 # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
