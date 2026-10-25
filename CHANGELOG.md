@@ -6,7 +6,7 @@
 ## [未发版]
 
 ### Added
-- 字组看板：`group_progress` 每个字组写一张卡（`group:<组>`，送审格＋出现、放行率、组判率），`guji groups status --progress <套书 id>` 出完报告顺手写网站后台 yiti／xingjin 两栏（Neon 正式库）。只是看板数据，`code_hash` 不变。
+- 字组看板：`group_progress` 每个字组写一张卡（`group.<组>`，送审格＋出现、放行率、组判率），`guji groups status --progress <套书 id>` 出完报告顺手写网站后台 yiti／xingjin 两栏（Neon 正式库）。只是看板数据，`code_hash` 不变。
 
 ## [0.5.17] - 2026-10-25
 
