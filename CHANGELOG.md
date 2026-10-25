@@ -5,6 +5,18 @@
 
 ## [未发版]
 
+## [0.5.15] - 2026-10-24
+PATCH（#522 seed_admit 1.23 iron_coord_guard；#528 ref_lib_diff 不放行、ref_prefer 等缺省开；#527 #529 #530 #531 #520 字组；#515 重跑提速；#523 guji source commons；#521 #524 控制台插图块）。缺省输出只把少量放行挪到待审、不改字，不属「多数册值得重跑」的核心升级，按 PATCH。`shadow_veto` 从此缺省开，执行方要装 `.[shadow]`（用发版附件装时 `--extras shadow`），否则起跑前自检拒跑 seed_admit；#533 补了 8 条没装 sklearn 就红的老测试。
+
+### Added
+- seed_admit 1.23：铁证与坐标对位字互证 `iron_coord_guard`（缺省开，A31 cv v0.5.12 错放 vol07:30:4:8 水→木，cv#522）：现役对位字被库分歧过滤掉时，铁证字与坐标对位字语义不同、又无直接异体边 → 落审（`iron_vs_coord`）；殿本 17 册 main 包回放命中 14 格（宫/官 ×10 等），看图 13 错 1 难分。`ref_lib_diff`（#528）进 `_LANE_HARD`，待审补放通道不再按整理本字放回。版本号连同 #528 一起记 1.23。只会把放行挪到待审，不改字。
+- `guji source commons`：以 Wikimedia Commons 上的 DjVu 为原图的根（10-24 用户定，设计稿第十二节）：核 Commons sha1、存 R2 镜像、`ddjvu` 原尺寸解页、发布页表；会话连不上 Commons 时 `--djvu` 配 `--commons-json` 用别处下好的文件。四庫總目 99 册全部登记（vol01–20 补记根，页图不变）。只在 `datastore/` 与 CLI，`code_hash` 不变（PATCH）。
+- `groups.ctx_l2.add_verify`：逐格细读复核补进 L2 表（细读与表字不同 → `disagree:verify` 弃权；表里低把握而细读 high → 用细读的字；至少两遍都 high 同字才 strong）。L2 答案留痕加 `runs`（几遍给了这个字）。日曰／日目 vol11–20 细读 197 格与新表在 dataset `char-groups/variant/ry/`，随成批上线替换中心库表（A24）。
+
+### Changed
+- 字组补放与坐标对位互证（`group_flow_lift_ref_guard` 同一开关下）：没有现役对位时，坐标对位是**组内另一个字**而给字的只有单遍文意表（不 strong、不是 L1、不到两遍同字、别的方法也没同字）→ 不补放（`group_flow_coord_dissent`）；补放留审时文意（本组或共字组）给了与整理本不同的字另记 `group_flow_ctx_contra`，进 `_LANE_HARD`，witness3、坐标兜底等补放遍不按整理本字放回。殿本 vol11–20 回放：挡下单遍 haiku 读反的 3 格错放和 2 格被 witness3 放错的格；`ctx_contra` 对全部字组（vol04–20 现有产物）还挡下 witness3／rare_ref 按整理本放的 4 个错字（木族「與此本皆合」等应为本），多留审 1 格（間問）（A24）。`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变，缺省开。
+- `config/groups/ry/rules.yaml`、`rm/rules.yaml` 修订（vol11–20 全部日曰目格回测）：rm 规则去掉曰进得来的词组（子、名、題等，原 `rm-目` 334 次命中错 194 次）；ry 加否決「分子目」「◎註曰」「◎月／◎本」，`ry-日鈔書名` 放宽到所有日鈔／日抄，`ry-干支日` 除「乙卯自序」，`ry-ext-r1-日` 除「故曰干祿」（A24）。
+
 ## [0.5.14] - 2026-10-24
 
 PATCH（#447 发版自动附带执行包，本版用来首次验证 release workflow；#512–#519 字组与 db sync 改进）。
@@ -14,9 +26,13 @@ PATCH（#447 发版自动附带执行包，本版用来首次验证 release work
 - `guji db sync` 顺带落库：拉完合完对还没落进字形库的人裁只跑 `glyphdb_admit`、`glyph_audit` 两个消费者，逐条记账（报错的留着下次再试），落了再推；`--no-admit` 或 `GUJI_AUTO_ADMIT=0` 关。起因是批量写进中心库的人裁事件没人落库（10-22 起积压 967 条）；字形库更新的分工（落库、出快照、改钉）见 `doc/受控重跑.md` 第六节。只在 `feedback/`、CLI，不动任何 Step（PATCH）。
 
 ### Changed
+- seed_admit 四个开关改缺省开（2026-10-24 sheldon 定「确定该做的 feature 一律缺省开，别逐册开、过一阵又忘了其他册」）：`context_guard_ref_prefer`、`rare_ref`、`symbol_review`、`shadow_veto`（`shadow_conf` 缺省 0.97→0.8，殿本册配置一律是 0.8）。殿本 vol06–10 漏开 ref_prefer，vol06 v0.5.12 重跑 111:3:16 商→而（整理本「應時商確」）就是这条该拦的；在新包上开它另拦下旧错 130:5:9 于→子（「興國于氏」），多送审 3 格「入」（整理本作人）。殿本其余册 yaml 本来都开着，行为不变；别的书（北行日錄、全唐文等）从此也开，`shadow_veto` 要装 `.[shadow]`（起跑前自检会点名）。`seed_admit` 的 `code_hash` 不变、`params_hash` 变。
 - `guji db sync`：字形库（`output/glyph_store/`）本地和库里都改了、本地又有库里没有的新人裁事件时不再整次停下：取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者（`consumed/glyph*.jsonl`）里的记账，在库里的字形库上重新消费一遍再推。本地字形库改了却没有新事件的照旧报冲突。省掉册 005 精校 10-23 三次手工 `pull --force`＋重写票（A32 复盘改进 1；只在 `datastore/`、CLI，不动 Step，PATCH）。
 - `guji freeze register` 加 `--repo <cv 检出>`：产物是旧版 cv 跑的就指那个版本的 worktree，登记的 cv 版本与提交取自那里；检出认不出版本号（没拉 tag，记成 `dev+g…`）时计划报问题、不许执行，提示 `git fetch --tags`（A32 复盘改进 2；只在 `ops/`、CLI，PATCH）。
 - close-check 1a 分开报过期原因：manifest 新记参数逐字段短哈希 `param_parts`（不进指纹，产物与 `code_hash` 都不变），`status` 的「参数变了」点名字段；只因共享输入（语料、证人、格位表、字组与异体表、借来的字形库等，`close_check.SHARED_PARAMS`）被别处更新而过期的页，1a（含冻结册）单列一句、不算失败；本册自己的变动照旧失败，两类都列。改动前跑的老产物分不出字段，照旧判失败（A32 复盘改进 3，标准 I；PATCH）。
+
+### Fixed
+- seed_admit `ref_lib_diff_guard`（缺省开，A24）：`relax_ref_agree` 的 `ref_lib` 分支在库判 `diff` 时不放行，记 doubt `ref_lib_diff`、退回人审。vol06 v0.5.12 重跑 149:3:3 图是「也」（框带版框竖线），整理本对位与库 top1 都给「十」、库判 diff（cov 0.83），旧版照放成「十」。vol06 新包 ref_lib 放行 13 格里只拦这 1 格，vol04–10 旧包 0 格。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
 ## [0.5.13] - 2026-10-24
 

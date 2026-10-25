@@ -133,6 +133,54 @@ def add_confirm(table: dict, runs: dict, need: tuple = ("high",)) -> int:
     return n
 
 
+def add_verify(table: dict, model: str, run: dict, members: str, ctxs: dict | None = None,
+               need: tuple = ("high",)) -> dict:
+    """逐格细读复核（日曰，A24 10-24）：一家逐格读文意（每格写依据）补进表。单遍 haiku 在 vol11–20 的日曰表里
+    176 格错 6 格，其中 3 格与坐标对位字相反、会被补放成错字；细读与之不同就弃权。就地改 `table`，规则：
+    - 记票；表里没有这一格、`ctxs` 里有 → 新建（键按 `ctxs[格]` 取）；
+    - 细读给组内字、置信 ∈ `need`，其余各遍没有以 high 给过别的字 → 用细读的字（原来就是这个字时 why 不变，
+      否则 why=`agree:verify`）；
+    - 细读说「其他」、置信 ∈ `need`，其余各遍没有以 high 给组内字 → 弃权 `abstain:other`；
+    - 以上都不成立、细读给了与表里不同的字（置信 high／mid）→ 弃权 `disagree:verify`；
+    - 细读过的格按全部票重算 strong：至少两遍、都 high、同一个字且就是表里的字。
+    → 各类计数 {verify, other, veto, new, strong}。"""
+    cells = table.setdefault("cells", {})
+    n = dict(verify=0, other=0, veto=0, new=0, strong=0)
+    for cid, v in run.items():
+        ch, conf = v.get("char"), v.get("conf")
+        e = cells.get(cid)
+        if e is None:
+            if not ctxs or cid not in ctxs:
+                continue
+            left, right = ctxs[cid]
+            e = cells[cid] = {"ctx": ctx_key(left[-WIDTH:], right[:WIDTH]), "char": None, "why": "abstain:missing_run",
+                              "votes": {}}
+            n["new"] += 1
+        others = [x for m, x in (e.get("votes") or {}).items() if m != model and x]
+        e.setdefault("votes", {})[model] = [ch, conf]
+        if ch in members and conf in need and not any(x[1] == "high" and x[0] != ch for x in others):
+            if e.get("char") != ch:
+                e["char"], e["why"] = ch, "agree:verify"
+                n["verify"] += 1
+        elif ch == OTHER and conf in need and not any(x[1] == "high" and x[0] in members for x in others):
+            if e.get("char") is not None or e.get("why") != "abstain:other":
+                e["char"], e["why"] = None, "abstain:other"
+                n["other"] += 1
+        elif e.get("char") is not None and ch != e["char"] and conf in ("high", "mid"):
+            e["char"], e["why"] = None, "disagree:verify"
+            n["veto"] += 1
+        vs = [x for x in e["votes"].values() if x]
+        if (e.get("char") is not None and len(vs) >= 2
+                and all(x[0] == e["char"] and x[1] == "high" for x in vs)):
+            e["strong"] = True
+            n["strong"] += 1
+        else:
+            e.pop("strong", None)
+    if model not in table.get("models", []):
+        table["models"] = sorted([*table.get("models", []), model])
+    return n
+
+
 def _canon_str(s, canon) -> str:
     return "".join(canon(c) for c in s) if isinstance(s, str) else ""
 
@@ -212,4 +260,7 @@ class CtxL2Backend:
             extra["other_conf"] = "high" if vs and all(v[1] == "high" for v in vs) else "low"
         if ch is not None and e.get("strong"):
             extra["strong"] = True
+        if ch is not None:
+            # 几遍给了这个字（单遍答案拗整理本时不补放，`flow.group_flow_pass` 的 coord_dissent）
+            extra["runs"] = sum(1 for v in (e.get("votes") or {}).values() if v and v[0] == ch)
         return GroupVerdict(ch, why=why, via="ctx_l2", extra=extra)

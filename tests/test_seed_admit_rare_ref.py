@@ -68,17 +68,18 @@ def test_declared_as_gated_optional_upstream():
 
 
 def test_params_off_is_invisible(tmp_path):
-    """关着时新增字段一个都不进 dump → params_hash 与加字段前逐位相同；开着时进。"""
+    """关着时只有显式 False 进 dump（2026-10-24 起缺省开，读回来要仍是关），附属字段不进；开着时进。"""
     db = str(tmp_path / "g.db")
-    off = SeedAdmitParams(db_path=db)
-    assert not any(k.startswith(("rare_ref",)) for k in off.model_dump())
+    off = SeedAdmitParams(db_path=db)                   # 模块级夹具把 rare_ref、shadow_veto 设成关
+    assert [k for k in off.model_dump() if k.startswith("rare_ref")] == ["rare_ref"]
+    assert off.model_dump()["rare_ref"] is False
     assert SeedAdmitParams(db_path=db, rare_ref=False).model_dump() == off.model_dump()
     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
     h = lambda p: params_hash(p, sp, pt)  # noqa: E731
     on = SeedAdmitParams(db_path=db, rare_ref=True)
     assert on.model_dump()["rare_ref"] is True and h(on) != h(off)
     # 只开 rare_ref 不拖进影子模型字段（没有模型文件也能建参数）
-    assert not any(k.startswith("shadow") for k in on.model_dump())
+    assert [k for k in on.model_dump() if k.startswith("shadow")] == ["shadow_veto"]
 
 
 # ── 规则 A 通道 ──────────────────────────────────────────────────────────

@@ -137,6 +137,6 @@ def test_symbol_review_context_no_vote(monkeypatch):
 
 
 def test_symbol_review_params_hash_unchanged_when_off():
-    d = sa.SeedAdmitParams().model_dump()
-    assert "symbol_review" not in d and "symbol_min_human" not in d
+    d = sa.SeedAdmitParams(symbol_review=False).model_dump()   # 2026-10-24 起缺省开：关着时显式 False 留在 dump
+    assert d["symbol_review"] is False and "symbol_min_human" not in d
     assert "symbol_review" in sa.SeedAdmitParams(symbol_review=True).model_dump()

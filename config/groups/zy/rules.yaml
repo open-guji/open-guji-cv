@@ -1,0 +1,89 @@
+schema: ctx_l1/1
+group: zy
+# 于千子干（2026-10-24，A24「强化于千子干等形近判别」）：千干 qg 并入。原 qg 规则里 qg-千-r1（◎古年里…）、qg-干-l1（[無若翻]◎）
+# 碰上 子 有冲突（朱子九圖、若子男、無子者），删掉；其余原规则对 vol04–20 已放行格与整理本零冲突，留下。
+# mined-a24：vol04–20 已放行格按册分两半（04–12／13–20），两半各 ≥3 格（含数字的词组不收）、合计零冲突的两字词组，再对整理本对位字回测零冲突（research/m7/ctx/mine_l1/）。
+rules:
+  - {id: qg-千-l2, char: 千, src: corpus-pure, re: '(?:虞稷)◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: qg-千-r2, char: 千, src: corpus-pure, re: '◎(?:古之|頃堂|百年)', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: qg-千-m, char: 千, src: corpus-pure, re: '(?:稷◎頃|二◎年)', note: 整理本奇偶册交叉验证零冲突；n≥3}
+  - {id: qg-干-l2, char: 干, src: corpus-pure, re: '(?:虞翻)◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: qg-干-r1, char: 干, src: corpus-pure, re: '◎[寶支]', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: qg-干-r2, char: 干, src: corpus-pure, re: '◎(?:支之|寶諸)', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: qg-干-m, char: 干, src: corpus-pure, re: '(?:翻◎寶)', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: 'zy-m-千-◎頃堂', char: 千, src: mined-a24, re: '◎頃堂', note: 已放行 6+6}
+  - {id: 'zy-m-千-稷◎頃', char: 千, src: mined-a24, re: '稷◎頃', note: 已放行 5+3}
+  - {id: 'zy-m-千-虞稷◎', char: 千, src: mined-a24, re: '虞稷◎', note: 已放行 5+3}
+  - {id: 'zy-m-子-◎之學', char: 子, src: mined-a24, re: '◎之學', note: 已放行 9+6}
+  - {id: 'zy-m-子-◎之書', char: 子, src: mined-a24, re: '◎之書', note: 已放行 7+10}
+  - {id: 'zy-m-子-◎之說', char: 子, src: mined-a24, re: '◎之說', note: 已放行 16+24}
+  - {id: 'zy-m-子-◎儀禮', char: 子, src: mined-a24, re: '◎儀禮', note: 已放行 9+4}
+  - {id: 'zy-m-子-◎家禮', char: 子, src: mined-a24, re: '◎家禮', note: 已放行 3+5}
+  - {id: 'zy-m-子-◎所謂', char: 子, src: mined-a24, re: '◎所謂', note: 已放行 4+6}
+  - {id: 'zy-m-子-◎朱子', char: 子, src: mined-a24, re: '◎朱子', note: 已放行 4+4}
+  - {id: 'zy-m-子-◎監祭', char: 子, src: mined-a24, re: '◎監祭', note: 已放行 6+3}
+  - {id: 'zy-m-子-◎舉人', char: 子, src: mined-a24, re: '◎舉人', note: 已放行 12+6}
+  - {id: 'zy-m-子-◎語錄', char: 子, src: mined-a24, re: '◎語錄', note: 已放行 14+13}
+  - {id: 'zy-m-子-◎語類', char: 子, src: mined-a24, re: '◎語類', note: 已放行 4+4}
+  - {id: 'zy-m-子-◎諸侯', char: 子, src: mined-a24, re: '◎諸侯', note: 已放行 8+7}
+  - {id: 'zy-m-子-之君◎', char: 子, src: mined-a24, re: '之君◎', note: 已放行 5+3}
+  - {id: 'zy-m-子-以孔◎', char: 子, src: mined-a24, re: '以孔◎', note: 已放行 6+4}
+  - {id: 'zy-m-子-以朱◎', char: 子, src: mined-a24, re: '以朱◎', note: 已放行 44+17}
+  - {id: 'zy-m-子-以程◎', char: 子, src: mined-a24, re: '以程◎', note: 已放行 6+5}
+  - {id: 'zy-m-子-仿朱◎', char: 子, src: mined-a24, re: '仿朱◎', note: 已放行 4+3}
+  - {id: 'zy-m-子-傳朱◎', char: 子, src: mined-a24, re: '傳朱◎', note: 已放行 7+5}
+  - {id: 'zy-m-子-列朱◎', char: 子, src: mined-a24, re: '列朱◎', note: 已放行 3+3}
+  - {id: 'zy-m-子-則朱◎', char: 子, src: mined-a24, re: '則朱◎', note: 已放行 5+4}
+  - {id: 'zy-m-子-及朱◎', char: 子, src: mined-a24, re: '及朱◎', note: 已放行 4+6}
+  - {id: 'zy-m-子-取朱◎', char: 子, src: mined-a24, re: '取朱◎', note: 已放行 5+7}
+  - {id: 'zy-m-子-君◎之', char: 子, src: mined-a24, re: '君◎之', note: 已放行 5+6}
+  - {id: 'zy-m-子-國◎監', char: 子, src: mined-a24, re: '國◎監', note: 已放行 15+23}
+  - {id: 'zy-m-子-天◎之', char: 子, src: mined-a24, re: '天◎之', note: 已放行 12+9}
+  - {id: 'zy-m-子-天◎諸', char: 子, src: mined-a24, re: '天◎諸', note: 已放行 8+7}
+  - {id: 'zy-m-子-子朱◎', char: 子, src: mined-a24, re: '子朱◎', note: 已放行 4+4}
+  - {id: 'zy-m-子-孔◎之', char: 子, src: mined-a24, re: '孔◎之', note: 已放行 22+22}
+  - {id: 'zy-m-子-孔◎所', char: 子, src: mined-a24, re: '孔◎所', note: 已放行 10+3}
+  - {id: 'zy-m-子-宋朱◎', char: 子, src: mined-a24, re: '宋朱◎', note: 已放行 5+4}
+  - {id: 'zy-m-子-官國◎', char: 子, src: mined-a24, re: '官國◎', note: 已放行 4+5}
+  - {id: 'zy-m-子-從朱◎', char: 子, src: mined-a24, re: '從朱◎', note: 已放行 6+7}
+  - {id: 'zy-m-子-惟朱◎', char: 子, src: mined-a24, re: '惟朱◎', note: 已放行 4+3}
+  - {id: 'zy-m-子-故朱◎', char: 子, src: mined-a24, re: '故朱◎', note: 已放行 4+6}
+  - {id: 'zy-m-子-於朱◎', char: 子, src: mined-a24, re: '於朱◎', note: 已放行 16+14}
+  - {id: 'zy-m-子-曾◎問', char: 子, src: mined-a24, re: '曾◎問', note: 已放行 8+9}
+  - {id: 'zy-m-子-本朱◎', char: 子, src: mined-a24, re: '本朱◎', note: 已放行 4+5}
+  - {id: 'zy-m-子-朱◎之', char: 子, src: mined-a24, re: '朱◎之', note: 已放行 50+43}
+  - {id: 'zy-m-子-朱◎亦', char: 子, src: mined-a24, re: '朱◎亦', note: 已放行 7+7}
+  - {id: 'zy-m-子-朱◎以', char: 子, src: mined-a24, re: '朱◎以', note: 已放行 9+8}
+  - {id: 'zy-m-子-朱◎作', char: 子, src: mined-a24, re: '朱◎作', note: 已放行 5+13}
+  - {id: 'zy-m-子-朱◎儀', char: 子, src: mined-a24, re: '朱◎儀', note: 已放行 9+4}
+  - {id: 'zy-m-子-朱◎嘗', char: 子, src: mined-a24, re: '朱◎嘗', note: 已放行 3+3}
+  - {id: 'zy-m-子-朱◎大', char: 子, src: mined-a24, re: '朱◎大', note: 已放行 4+3}
+  - {id: 'zy-m-子-朱◎家', char: 子, src: mined-a24, re: '朱◎家', note: 已放行 4+5}
+  - {id: 'zy-m-子-朱◎所', char: 子, src: mined-a24, re: '朱◎所', note: 已放行 17+17}
+  - {id: 'zy-m-子-朱◎撰', char: 子, src: mined-a24, re: '朱◎撰', note: 已放行 4+5}
+  - {id: 'zy-m-子-朱◎於', char: 子, src: mined-a24, re: '朱◎於', note: 已放行 3+4}
+  - {id: 'zy-m-子-朱◎爲', char: 子, src: mined-a24, re: '朱◎爲', note: 已放行 10+9}
+  - {id: 'zy-m-子-朱◎而', char: 子, src: mined-a24, re: '朱◎而', note: 已放行 5+4}
+  - {id: 'zy-m-子-朱◎與', char: 子, src: mined-a24, re: '朱◎與', note: 已放行 5+4}
+  - {id: 'zy-m-子-朱◎語', char: 子, src: mined-a24, re: '朱◎語', note: 已放行 20+17}
+  - {id: 'zy-m-子-朱◎謂', char: 子, src: mined-a24, re: '朱◎謂', note: 已放行 4+3}
+  - {id: 'zy-m-子-朱◎集', char: 子, src: mined-a24, re: '朱◎集', note: 已放行 23+5}
+  - {id: 'zy-m-子-然朱◎', char: 子, src: mined-a24, re: '然朱◎', note: 已放行 6+4}
+  - {id: 'zy-m-子-爲孔◎', char: 子, src: mined-a24, re: '爲孔◎', note: 已放行 12+8}
+  - {id: 'zy-m-子-爲朱◎', char: 子, src: mined-a24, re: '爲朱◎', note: 已放行 10+7}
+  - {id: 'zy-m-子-王世◎', char: 子, src: mined-a24, re: '王世◎', note: 已放行 8+9}
+  - {id: 'zy-m-子-程◎之', char: 子, src: mined-a24, re: '程◎之', note: 已放行 5+4}
+  - {id: 'zy-m-子-稱朱◎', char: 子, src: mined-a24, re: '稱朱◎', note: 已放行 5+7}
+  - {id: 'zy-m-子-考朱◎', char: 子, src: mined-a24, re: '考朱◎', note: 已放行 4+4}
+  - {id: 'zy-m-子-與朱◎', char: 子, src: mined-a24, re: '與朱◎', note: 已放行 22+17}
+  - {id: 'zy-m-子-謂天◎', char: 子, src: mined-a24, re: '謂天◎', note: 已放行 4+6}
+  - {id: 'zy-m-子-謂孔◎', char: 子, src: mined-a24, re: '謂孔◎', note: 已放行 4+9}
+  - {id: 'zy-m-子-謂朱◎', char: 子, src: mined-a24, re: '謂朱◎', note: 已放行 9+4}
+  - {id: 'zy-m-子-載朱◎', char: 子, src: mined-a24, re: '載朱◎', note: 已放行 3+4}
+  - {id: 'zy-m-子-非孔◎', char: 子, src: mined-a24, re: '非孔◎', note: 已放行 6+8}
+  - {id: 'zy-m-子-非朱◎', char: 子, src: mined-a24, re: '非朱◎', note: 已放行 13+4}
+  # hand-a24：手写常见搭配，对 vol04–20 已放行格与整理本回测；冲突格逐条读过，都是已放行错字（如「進士宫至」）或整理本错字，不改规则
+  - {id: 'zy-h1', char: 子, src: hand-a24, re: '[孔孟程曾荀莊墨邵管]◎', note: 回测命中 1330}
+  - {id: 'zy-h2', char: 子, src: hand-a24, re: '◎曰', note: 回测命中 94}
+  - {id: 'zy-h3', char: 于, src: hand-a24, re: '[薨禘殯盟]◎', note: 回测命中 33}
+  - {id: 'zy-h4', char: 干, src: hand-a24, re: '若◎[字卷條篇]', note: 回测命中 20}

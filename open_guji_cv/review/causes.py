@@ -31,7 +31,7 @@ CAUSES: dict[str, tuple[str, str]] = {
 
 _GROUP_CODES = {"near_form", "solo_confusable", "ji_yi_si_review", "group_flow_disagree", "group_flow_abstain"}
 _VARIANT_CODES = {"ref_lib_variant", "variant_indirect", "replace_form", "channel_off"}
-_CONFLICT_CODES = {"context_vs_ref", "iron_vs_ref", "signal_conflict"}
+_CONFLICT_CODES = {"context_vs_ref", "iron_vs_ref", "iron_vs_coord", "signal_conflict"}
 _GARBLE_CODES = {"ctx_garble_shape", "context_single_stroke", "nonchar", "ctx_guard_flag"}
 
 

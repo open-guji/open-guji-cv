@@ -69,8 +69,11 @@ def test_two_class_path_unchanged_shape():
 def test_long_tail_groups_registered_and_banks_match():
     for g, members, extra in (("zy", "子于", "干"), ("sy", "山由出", "曲")):
         spec = GROUPS[g]
-        assert spec.members == frozenset(members) and spec.kind == "near_form"
-        assert spec.flow.solvers == ("ids",) and spec.flow.tolerate == frozenset(extra) and not spec.flow.review
+        assert spec.kind == "near_form" and spec.flow.tolerate == frozenset(extra)
+        if g == "sy":
+            assert spec.members == frozenset(members) and spec.flow.solvers == ("ids",) and not spec.flow.review
+        else:   # 2026-10-24 zy 扩成 于千子干（并入 qg）：文意在前，子于整字 HOG 当第二路（`Only` 限 子于干 入口、只给 子于）
+            assert spec.members == frozenset("于千子干") and spec.flow.solvers == ("ctx", "ids") and spec.flow.review
         sp = O.SPECS[g]
         assert sp.whole == "hog" and O.has_bank(g), g
         bank = O.load_bank(O.bank_path(g))
@@ -137,14 +140,14 @@ def test_qin_is_flow_only_and_bank_loads():
 
 
 def test_shape_pairs_flow_only_and_banks_load():
-    """尙尚 shang、蓋葢 gai、䟦跋 ba、凖準 zhun、宻密 mi（2026-10-24，异体按刻形拆判）：只进字组流程表；复核时按刻形改码位；模板库两形都在、小于 1MB；
+    """尙尚 shang、蓋葢 gai、䟦跋 ba、凖準 zhun、宻密 mi、撰𢰅 zhuan（2026-10-24，异体按刻形拆判）：只进字组流程表；复核时按刻形改码位；模板库两形都在、小于 1MB；
     库里的模板拿回去判，判回自己的字（库与判法参数对得上）。"""
     from pathlib import Path
     import json
     import numpy as np
     from open_guji_cv.groups.registry import FLOW_GROUPS, SHAPE_GROUPS
     root = Path(__file__).resolve().parent.parent
-    for gid, members in (("shang", "尙尚"), ("gai", "蓋葢"), ("ba", "䟦跋"), ("zhun", "凖準"), ("mi", "宻密")):
+    for gid, members in (("shang", "尙尚"), ("gai", "蓋葢"), ("ba", "䟦跋"), ("zhun", "凖準"), ("mi", "宻密"), ("zhuan", "撰𢰅")):
         assert gid in SHAPE_GROUPS and gid not in GROUPS
         g = FLOW_GROUPS[gid]
         assert set(g.members) == set(members) and g.flow.solvers == ("ids",)

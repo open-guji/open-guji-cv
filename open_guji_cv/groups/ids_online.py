@@ -183,6 +183,13 @@ SPECS: dict[str, IdsSpec] = {
     #   模板＝殿本 vol04–10 seed_admit 放行格（命／會／合 各取 60，曾 37、愈 28、舍 25、俞 13）＋禽 11（放行里 witness3 的 10 格＋看图预填 1，sheldon 10-22 已确认，
     #   dataset variant/glyph_expand_1022）；曾 合 愈 进库但不是组员，判成它们＝弃权。含 与 舍 在放行里混用，不进库。按册留出：成员格 150 对／19 弃／0 错（0 错门槛 0.18，取 0.5）。
     "qin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=48),
+    # 口框族 國圖圍園固圓圜（2026-10-24，A24）：模板＝殿本 vol04–20 已放行格（每册每字 ≤12、每字总共 ≤30，放行字当标签）＋人裁刻形，
+    #   圃 圈 囿 当陪衬；看图剔掉切坏的 4 格和标签错的 1 格（`build_shape_pair.PLAN["kou"]`）。字块是线上同款 char_patch（`--char-patch`）。
+    #   只取框内（x 0.12–0.88、y 0.1–0.9），64×64：试过整字 32／40／48 和框内 40／48，圓→圖、圜→園 的错例都更多。
+    #   评测：vol04–20 全部已放行成员格 2,996 格按册留出（判某册时模板不含该册）：0 错门槛 0.90，取 1.0 → 给字 2,304（77%）、0 错。
+    #   清楚的 國 也偶有 0.7–0.9 判成 圓，所以组里另加 `lift_ref_agree`（须与整理本同字才补放）。
+    "kou": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", region=(0.12, 0.88, 0.1, 0.9), lam=1.0, size=64,
+                   clean=True, aspect=(0.45, 2.2)),
     "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
     "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),
     "di": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.55, min_class=8, whole="hog", region=(0.0, 0.75, 0.5, 1.0), lam=3.0, size=64),
@@ -193,6 +200,10 @@ SPECS: dict[str, IdsSpec] = {
     # 凖準 只看左半（冫 点＋长提斜穿／氵 三笔竖排），48×48：按册留出不设门槛也 0 错；宻密 整字 48×48（中部 㐅 交叉／必 带两点）：同样 0 错。门槛沿用 0.5。
     "zhun": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.0, 0.5, 0.0, 1.0), lam=1.0, size=48, clean=True),
     "mi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 䘮喪（2026-10-25，A24「按 IDS 重核䘮喪㣲微變𠮓」）：中部 从（䘮）／吅（喪），整字 48×48。模板＝殿本 vol04–20 已放行格（每册每字 ≤12）
+    #   ＋看图改标（放行成 喪、刻 䘮 的 2 格，送审格 6 格），建库 build_shape_pair.py。按册留出 110 格（喪77 䘮33）不设门槛也 0 错，门槛沿用 0.5。
+    #   㣲微 同时试过（中下 口／几）：看图只十几格作 口，取框／整字 HOG 三种设置按册留出 口 都被高把握判成 微（错例 0.9–1.4），分不开，保留码位归一。
+    "sang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 广宀族 廣實賔賓宸（2026-10-24，A24）：送审的「蕤賔」賔 库里没有字形，被排成 實廣墳須。整字 HOG 一对多（32×32，λ=1），
     #   类＝成员＋陪衬 17 字（寶寳寅賞墳須煩裒盧資質贋寫竇賁責貴）＋「〇」其他池（35 字），每册每字 ≤3（賔賓 全收），
     #   模板＝殿本 vol04–20 放行格＋人裁＋送审格看图补标（research/m7/glyph_expand/build_guang.py）。只给 賔／賓（`give`）：
@@ -206,6 +217,8 @@ SPECS: dict[str, IdsSpec] = {
                    aspect=(0.45, 2.2)),
     "chuo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.65, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True, aspect=(0.45, 2.2)),
+    # 撰𢰅（2026-10-24，3–4 格异体对）：差别在右下（共／丌，𢰅 长撇长捺大开），整字 48×48 按册留出 0 错（取右半反而错多）；门槛沿用 0.5。
+    "zhuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
 }
 
 

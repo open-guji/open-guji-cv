@@ -9,7 +9,7 @@
 - 配置：`config/groups/yt/` 下 ids_bank.json prompt.md rules.yaml
 - 模板库：圓36／圖147（dataset char-groups labels/unified.jsonl 人裁（kind=shape）＋殿本 vol04–10 已放行格（放行字当标签，每册每字 ≤20））
 
-文意为主；整字 HOG（右部框）当第二路。圖＝河圖、圖書；圓＝圓通、方圓。
+文意为主；整字 HOG（右部框）当第二路。与口框族 kou 共用 圓 圖（2026-10-24）：册 group_flow 里 yt 排在 kou 前面，只有 圓圖 两个候选的格归 yt，候选里还有 國 固 等的归 kou（按字形＋整理本同字）。圖＝河圖、圖書；圓＝圓通、方圓。
 
 ## 试过的和负结果
 整字 HOG：人裁 19/32、放行同 608 异 1。vol04 上 top1≠整理本 11 格，是第四批建组的理由。

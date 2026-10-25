@@ -54,23 +54,30 @@ def test_declared_as_gated_optional_upstream(sid, field):
     assert "rare_candidates" in spec.optional_consumes
     assert ("rare_candidates", field) in spec.optional_consumes_when
     assert "rare_candidates" not in spec.consumes
-    off = spec.params()
+    # seed_admit 的 rare_ref、symbol_review 2026-10-24 起缺省开，这里显式关掉看门控
+    off = spec.params(**({"rare_ref": False, "symbol_review": False} if sid == "seed_admit" else {}))
     assert "rare_candidates" not in live_optional_consumes(spec, off)
     on = off.model_copy(update={field: 5 if field == "rare_topk" else True})
     assert "rare_candidates" in live_optional_consumes(spec, on)
 
 
-@pytest.mark.parametrize("P,kw,fields", [
-    (AlignRefParams, {"rare_topk": 5}, ("rare_topk",)),
-    (ContextDecideParams, {"rare_topk": 5}, ("rare_topk", "rare_weight")),
-    (SeedAdmitParams, {"rare_ref": True}, ("rare_ref",)),
+@pytest.mark.parametrize("P,kw,fields,off_kw", [
+    (AlignRefParams, {"rare_topk": 5}, ("rare_topk",), {}),
+    (ContextDecideParams, {"rare_topk": 5}, ("rare_topk", "rare_weight"), {}),
 ])
-def test_switch_off_keeps_params_dump_unchanged(P, kw, fields):
+def test_switch_off_keeps_params_dump_unchanged(P, kw, fields, off_kw):
     """关着时新字段不进 dump → `params_hash` 与加字段之前逐位相同（产物不过期）。"""
-    off = P()
+    off = P(**off_kw)
     assert not any(f in off.model_dump(mode="json") for f in fields)
     on = P(**kw)
     assert all(f in on.model_dump(mode="json") for f in fields)
+
+
+def test_seed_admit_rare_ref_off_survives_dump():
+    """rare_ref 2026-10-24 起缺省开：关着时显式 False 留在 dump 里，读回来仍是关。"""
+    off = SeedAdmitParams(rare_ref=False)
+    assert off.model_dump(mode="json")["rare_ref"] is False
+    assert SeedAdmitParams(**off.model_dump(mode="json")).rare_ref is False
 
 
 # ── 引擎：开关关着不进指纹、不传过期 ────────────────────────────────────

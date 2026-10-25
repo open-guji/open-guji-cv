@@ -26,6 +26,7 @@
 | `glyph_candidates.py` | 2 | 字形库「待纳入」：还没进库的候选刻例清单（`feedback/candidates/*.jsonl`）按字分组、配库里同字刻例；裁决走 `POST /api/events`（2026-09-28，overview#176） |
 | `variants.py` | 2 | 本书用字账、组视图 |
 | `step9.py` | 1 | Step9 结果整理 · 坐标转字符位现场渲染（2026-09-11，不进管线） |
+| `figure_region.py` | 3 | 插图块画框：本册有图的页、一页的尺寸／列范围／现有插图块、存本页插图块（写 `figure_region` 事件，GUJI-737，2026-10-24） |
 | `spa_fallback.py` | 0（非业务） | v2 React 前端路由兜底，**必须最后 include** |
 
 **加一条路由**：找它属于哪一类，写进那个文件即可；`app.py` 不用动。

@@ -179,3 +179,36 @@ seq 已经是 cord 的 canvas id（`…/iiif/<书>/canvas/<册>/<seq>`）和网�
 - 全唐文 DjVu 源件补存（见上）。
 - 项目规则「git 里只放原图」的改写。
 - `scripts/ia_download_zongmu.py` 与 web 仓裁剪框表暂留，新册不再用；等 vol21 起全走页表后再删。
+
+## 十二、Commons 为根的图片树（2026-10-24 用户定）
+
+> 用户 10-24：「Commons 适合当最后的唯一准确来源，所有人都会看；我们在不同节点做不同的缓存，理成树状图，Commons 是根。」
+
+10-23 实测（GitHub runner，vol11、vol03 各两页，含合扫叶）：Commons 上四庫總目的 DjVu 用 `ddjvu` 原尺寸解出来，与 IA `_tif.zip` **逐像素相同**（1-bit、同尺寸；DjVu 里写的 300 dpi 只是标记）。所以把根从 IA 换成 Commons 不改任何页图字节，已跑的产物不过期。
+
+```
+Commons DjVu（根：唯一准确来源，人人可查；按文件版本钉 sha1＋timestamp）
+├─ R2 源件副本  source/orig/<书>/<册>/<名>.djvu        根的逐字节镜像；会话、本机连不上 Commons 时用
+│   └─ R2 页图  sha256/<2>/<sha>.png ＋ 页表 r<NNN>.json  从根解码（ddjvu）＋处理（拆页、转正、换页）
+│       ├─ 云会话／本机：~/.cache/guji-source → data_full/   `guji source pull`（管线）
+│       ├─ COS：iiif/<书>/<册>/… 三档 WebP                  网站（国内只有这一级能到）
+│       └─ 训练集：按页图 sha 取                              与管线同一份图
+└─ IA _tif.zip（同像素的另一份镜像，只作备用，新册不再取）
+```
+
+**规矩**
+1. **只有登记时读根**：`guji source commons` 下 DjVu、核 Commons 给的 sha1、存一份到 R2、解页、发布页表；页表 `sources[]` 记 `commons_title`、`commons_sha1`、`commons_timestamp`。平时一律读缓存（R2 → 本机 → COS），不在跑管线、出书影时去碰 Commons。原因：Commons thumb 只出 1280／1920 宽的有损 JPEG，2560 和原宽回 400，当不了源图；国内连不上；云会话出口常被 429（10-23、10-24 会话里一张都没取到，只能借 GitHub runner）。
+2. **每一级都能从上一级确定地重建**：页图编码 `pillow-rgb-png/1`，解码器 `ddjvu`（页表记 `decoder`）。JB2 黑白页与解码器版本无关；每册第 1 页书脊签是 IW44 彩色有损页，字节随 ddjvu 版本可能变，换版本重建时这一页按 `replace` 处理。
+3. **修图**（一拆四、去污、转正）先在页表出新版（`guji source replace`／带 `--splits` 重登记），全程用修好的图；之后把修好的整册回传 Commons 作新版本（对外发布，**要用户点头**，同 #125 当年 vol03／vol04 的做法），页表换钉新版本，根就始终是对的。
+4. **会话连不上 Commons 时**：在 GitHub runner（或能连的机器）下 DjVu 与 imageinfo，交给 `guji source commons --djvu <文件> --commons-json <信息>`；本仓 `claude/commons-fetch` 分支的一次性 workflow 就是这么下的四庫總目 99 册。
+
+**10-24 执行结果**（四庫總目 99 册、200 卷＋卷首四卷，16,640 页全部在 R2）：
+
+| 册 | 怎么做的 | 核对 |
+|---|---|---|
+| vol21–99（14,936 页） | `guji source commons`，DjVu 由 GitHub runner 从 Commons 下（每册 Commons 页数＝IA 叶数，99 册全对），页表 r001（vol21 为 r002，只改源件存名） | 解出的页与 IA tif 同像素（10-23 抽查） |
+| vol01–20 | 页表出 r002：`sources` 补 Commons 根（R2 存 `source/orig/96mid1ogzk/<册>/CADAL…djvu`），**页图一张不改** | vol01–10 逐像素、vol11–20 逐字节与根解出的相同（含 vol03/04/07/09 拆页）；只有每册第 1 叶书脊签（IW44 彩色有损页）和 vol11 第 89 叶（IA 与 Commons 裁边不同：2354×3115 对 2345×3102）沿用现有图 |
+
+`guji source check` 宽页（第 2 叶题签页不计）：vol04 0129、vol20 0179（横幅约 1.45，已在跑的册，管线已处理过）；vol84 0026、vol95 0157/0159/0175、vol96 0184、vol99 0063（宽高比约 0.9，不像合扫）。跑这些册前人看一眼。
+
+书影：vol01–35 早先从 IA 切好；vol36–99 从页表切（workflow `--source pages`）。
