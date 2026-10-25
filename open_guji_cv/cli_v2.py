@@ -3662,6 +3662,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_freeze import add_parser as _add_freeze, cmd_freeze
     _add_freeze(sub)
     COMMANDS_V2["freeze"] = cmd_freeze
+    # job（2026-10-25）：任务库（Neon jobs schema）——交重跑／评测任务、看谁在跑什么、执行方领单跑单
+    from .jobs.cli import add_parser as _add_job, cmd_job
+    _add_job(sub)
+    COMMANDS_V2["job"] = cmd_job
     install_workspace_option(sub)
 
 
