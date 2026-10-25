@@ -124,7 +124,7 @@ REVIEW_CLASSES: tuple[tuple[str, str, str], ...] = (
     ("occluded", "印章遮挡", "印章／污损遮挡：默认整理本字、字形不入库，可整组确认"),
     ("ji_yi_si", "己已巳", "己／已／巳 刻法不分，按上下文三选一（定的是文意）"),
     ("form_open", "义定形未定", "整理本定得了是哪个字、定不了本书刻哪个形：只在组内形里挑"),
-    ("ref_conflict", "与整理本冲突", "上下文或铁证与整理本对位字不同（context_vs_ref / iron_vs_ref / signal_conflict）"),
+    ("ref_conflict", "与整理本冲突", "上下文或铁证与整理本对位字不同（context_vs_ref / iron_vs_ref / iron_vs_coord / signal_conflict）"),
     ("near_form", "形近字", "形近家族成员（near_form / solo_confusable），对着上下文细看"),
     ("lib_miss", "库里没有", "字形库里没有这个字：多半是生僻字，看「查候选」"),
     ("variant", "异体／通道", "异体间接边、换字取形、本书关掉的通道（variant_indirect / replace_form / channel_off / ref_lib_variant）"),
@@ -134,7 +134,7 @@ REVIEW_CLASSES: tuple[tuple[str, str, str], ...] = (
 CLASS_KEYS = tuple(k for k, _l, _h in REVIEW_CLASSES)
 
 _CLS_CODES = {
-    "ref_conflict": {"context_vs_ref", "iron_vs_ref", "signal_conflict"},
+    "ref_conflict": {"context_vs_ref", "iron_vs_ref", "iron_vs_coord", "signal_conflict"},
     "near_form": {"near_form", "solo_confusable"},
     "variant": {"variant_indirect", "replace_form", "channel_off", "ref_lib_variant"},
     "replace_align": {"replace_align"},

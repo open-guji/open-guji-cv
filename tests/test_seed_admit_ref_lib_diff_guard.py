@@ -50,3 +50,9 @@ def test_guard_default_on_and_switchable(tmp_path, monkeypatch):
     assert SeedAdmitParams().ref_lib_diff_guard is True
     r = _run(tmp_path, monkeypatch, verdict="diff", params={"ref_lib_diff_guard": False})
     assert r.admit is True and r.channel == "ref_lib" and r.char == "變"
+
+
+def test_lane_hard_keeps_it_in_review():
+    """待审补放各通道不按整理本字把 ref_lib_diff 的格放回（A20 cv#522）。"""
+    from open_guji_cv.steps.seed_admit import _LANE_HARD
+    assert "ref_lib_diff" in _LANE_HARD
