@@ -512,6 +512,9 @@ def cmd_push(a) -> int:
     run(cmd, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
     label = pack_rev(a, ws, book, a.rev) if a.sync else None
     published = sync_and_publish(a, ws) if a.sync else False
+    if a.sync:                                                   # 后台「文本整理」的人审进度（A32 的册），失败不挡
+        import progress_report
+        progress_report.try_run(book, plan.get("text_id") or text_id_of(ws))
     todo = [] if a.sync else [f"guji db sync -w {ws}   # 推进中心库，网站每日 proofing-sync 才拿得到"]
     if label:
         print(f"出单版产物包：{label}；落这张单的票用 guji cellvotes draft … --rev {a.rev} --pack {label}")
