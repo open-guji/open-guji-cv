@@ -129,8 +129,8 @@ def _rv(gid: str) -> dict:
 
 
 #: 按刻形拆判的异体对里复核只降不改的（2026-10-25）：尙尚 vol16 重落把两格刻「尚」（上有中竖）改成了「尙」（margin 0.9–1.1），
-#: 32px 整字 HOG 看不清中竖。判法修好前复核判出另一形只降审。
-_SHAPE_PAIR_NO_FIX = frozenset({"shang"})
+#: 32px 整字 HOG 看不清中竖。判法修好前复核判出另一形只降审。瑣𤨏（2026-10-25）：𤨏 模板只 9 格，攒够前同样只降审。
+_SHAPE_PAIR_NO_FIX = frozenset({"shang", "suo"})
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
@@ -370,14 +370,16 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
         flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=gid not in _SHAPE_PAIR_NO_FIX),
-        note=f"异体对按刻形判（{note}）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。")
+        note=f"异体对按刻形判（{note}）；{'补放，复核只降审' if gid in _SHAPE_PAIR_NO_FIX else '补放与复核改码位'}；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
                                # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
                                ("zhun", "凖準", "左旁 冫／氵"), ("mi", "宻密", "中部 㐅／必"),
                                # 3–4 格异体对（2026-10-24）：7 对里只有这一对两形放行都 ≥20、刻形分得开
                                ("zhuan", "撰𢰅", "右下 共／丌"),
                                # 䘮喪（2026-10-25）：殿本两形都常见；整理本 䘮喪 混用，放行跟整理本走时有刻 䘮 放成 喪 的
-                               ("sang", "䘮喪", "中部 从／吅"))},
+                               ("sang", "䘮喪", "中部 从／吅"),
+                               # 瑣𤨏（2026-10-25，GUJI-719）：两种刻法一眼可分，但 𤨏 只 9 格（每类至少 5 例才给字），复核只降审不改码位
+                               ("suo", "瑣𤨏", "右上 ⺌／巛"))},
     # 广宀族（2026-10-24，A24）：「蕤賔」的 賔 字形库里没有，库把它排成 實廣（再往后 墳須寅賞…），形近护栏拦下送审（vol19 十几格）。
     # 整字 HOG 一对多，只给 賔／賓（`ids_online.SPECS["guang"].give`；實廣 判出来也弃权，库本来认得）；賔賓 按刻形各给各的码位。
     # 陪衬＝模板库里的陪衬类（判成它们＝弃权），入口才容许它们紧咬。复核只降不改：已放行 實廣 而判出 賔賓 的降审
