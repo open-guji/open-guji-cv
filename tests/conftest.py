@@ -80,6 +80,10 @@ def _isolated_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GUJI_DERIVED_FETCH", "0")
     monkeypatch.setenv("GUJI_AUTO_PACK", "0")       # 整册跑完自动存包（cli_v2._auto_pack）同理关掉
     monkeypatch.setenv("GUJI_ALLOW_MISSING_DEPS", "1")  # 起跑前依赖自检（ops/preflight.py）：云端没装 torch 也要能跑 pipeline 测试
+    # 开跑前备模板索引（cli_v2._ensure_rare_index）会拿真 checkpoint 往 models/ 落 emb_*.npz，测试里关掉
+    monkeypatch.setenv("GUJI_NO_RARE_INDEX_PREP", "1")
+    # `--force` 在进程里设 GUJI_NO_REUSE=1（cli_v2.cmd_pipeline），不清会漏到后面的测试、关掉它们的格级复用
+    monkeypatch.delenv("GUJI_NO_REUSE", raising=False)
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)

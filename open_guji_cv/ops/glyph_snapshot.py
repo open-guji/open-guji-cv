@@ -204,7 +204,25 @@ def _fonts_fp(live_db: Path) -> str:
 
 def build_pinned_db(ws: Path, version: int, *, force: bool = False, local: bool = True, src=None) -> dict:
     """建 ``glyph-g<N>.db``。库在、digest、建库代码、当前库的字体域都对得上就复用（``force`` 重建）。
-    字体域也要对：新机器常是先拉库建好钉版库、后导字体，导完下次用时要重建一次把字体域带上。"""
+    字体域也要对：新机器常是先拉库建好钉版库、后导字体，导完下次用时要重建一次把字体域带上。
+
+    同一工作区同一个号**排队建**（2026-10-24）：殿本 vol09、vol10 同一秒起跑，两个 `guji pipeline` 各自
+    `ensure_pins` 建 g2，拼真源用的是同一个临时目录 `cache/glyph-pin/g2`，后来的一方开头 `rmtree` 掉前一方
+    拼了一半的目录，前一方于是只读到实例、没读到 glyphs/exemplars，建出 instances 20,661、exemplars 0 的库，
+    两册 Step5-a 起全部无效。现在按号加文件锁，拿到锁后再判一次复用（另一方刚建好就直接用）。"""
+    import fcntl
+    with _ws(ws):
+        lock_path = pinned_db_path(version).with_name(f".glyph-g{int(version)}.build.lock")
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(lock_path, "w") as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        try:
+            return _build_pinned_db_locked(ws, version, force=force, local=local, src=src)
+        finally:
+            fcntl.flock(lk, fcntl.LOCK_UN)
+
+
+def _build_pinned_db_locked(ws: Path, version: int, *, force: bool = False, local: bool = True, src=None) -> dict:
     from ..clustering.glyph_db import GlyphDB, rebuild_from_store
     ws = Path(ws)
     man = load_manifest(ws, version)
@@ -237,6 +255,13 @@ def build_pinned_db(ws: Path, version: int, *, force: bool = False, local: bool 
         db.conn.commit()
     finally:
         db.close()
+    from ..clustering.glyph_db import assert_db_not_silently_empty
+    try:
+        # 建完先自检再换上：空刻例的库（10-24 vol09/10）别落成 glyph-g<N>.db 让跑批读到
+        assert_db_not_silently_empty(part, store_dir=own)
+    except RuntimeError:
+        part.unlink(missing_ok=True)
+        raise
     os.replace(part, db_path)
     shutil.rmtree(tmp, ignore_errors=True)
     return {"pin": version, "db": str(db_path), "reused": False, **info, "fonts": fonts,
