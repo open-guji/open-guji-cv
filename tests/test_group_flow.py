@@ -67,6 +67,21 @@ def test_entry_tolerates_declared_outsiders_only():
     assert entry(r, [("彝", 0.9535), ("指", 0.94)], None, cfg) is None                                  # 别的组外字照挡
 
 
+def test_entry_ref_enter_when_top_is_tolerated_outsider():
+    """`ref_enter`：库里没有 𮅕，库首位是陪衬 莫，整理本作 算 → 按整理本字进组补放（suan）。"""
+    cfg = FlowConfig(groups=("suan",))
+    r = Rec("a")
+    assert entry(r, [("莫", 0.95), ("集", 0.93)], "算", cfg) == ("suan", "lift")
+    assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg) is None              # 没有整理本字不进
+    assert entry(r, [("莫", 0.95), ("集", 0.93)], "莫", cfg) is None              # 整理本字在组外
+    assert entry(r, [("莫", 0.95), ("指", 0.94)], "算", cfg) is None              # 别的组外字紧咬照挡
+    assert entry(r, [("莫", 0.95)], "算", FlowConfig(groups=("yin",))) is None     # 组没点名
+    assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg, coord_ref="𮅕") == ("suan", "lift")   # 对位缺格用坐标对位字
+    men = FlowConfig(groups=("men", "guanm"))
+    assert entry(r, [("闡", 0.97), ("間", 0.96)], "闗", men) == ("guanm", "lift")  # 先于门族
+    assert entry(r, [("闡", 0.97), ("間", 0.96)], "闡", men) == ("men", "lift")
+
+
 def test_entry_jys_tolerates_ba():
     cfg = _cfg()
     assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")

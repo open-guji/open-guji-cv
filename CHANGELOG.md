@@ -5,6 +5,13 @@
 
 ## [未发版]
 
+## [0.5.21] - 2026-10-25
+
+PATCH（#605 字组）。seed_admit 的 `code_hash` 变（`groups/` 注册表、流程、字形判法表）。
+
+- 字组：新 SHAPE 组 yin 隱𨼆、suan 算𮅕、guanm 闗關（与 men 共用 關），模板库在 `config/groups/<组>/ids_bank.json`；新 `FlowSpec.ref_enter`（库首位是陪衬、整理本或坐标对位字在组里也进组补放，先于库首位字的组）；kui 陪衬补 𮑮襄𠮓變雙凌。册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放补放 𮅕87 𨼆28 闗13、改码位 9（PATCH）。
+- proof_cycle apply 加 `--reuse-products <目录>`：引擎换版本后产物已自己从头跑好，沙箱直接用它，不取出单版包、不重跑 seed_admit；发布用的 cv 版本取引擎的 tag。
+
 ## [0.5.20] - 2026-10-25
 
 PATCH（#595 Step1 1.10 列距救援：出带列两边线吸到淡界行；#599 印章定位 1.2：窄密度区按小印取模板位置，不再套整页大印正方形）。Step1、印章定位的 `code_hash` 变。
