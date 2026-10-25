@@ -84,6 +84,9 @@ def _isolated_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GUJI_NO_RARE_INDEX_PREP", "1")
     # `--force` 在进程里设 GUJI_NO_REUSE=1（cli_v2.cmd_pipeline），不清会漏到后面的测试、关掉它们的格级复用
     monkeypatch.delenv("GUJI_NO_REUSE", raising=False)
+    # 隔离环境里没有人裁事件目录：`lookup.human_chars` 缺目录会报错（生产防静默丢人裁），测试里放行；
+    # 测报错本身的用例自己 delenv（tests/test_human_chars_lookup.py）
+    monkeypatch.setenv("GUJI_ALLOW_NO_EVENTS", "1")
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)

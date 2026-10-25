@@ -89,7 +89,7 @@ def strict_enabled() -> bool:
     return os.environ.get("GUJI_BINDINGS_STRICT", "").strip().lower() in ("1", "true", "yes", "on")
 _MEMO: dict = {}
 _PAGE_MEMO: dict = {}    # (书, 产物库根, 页) → (cells_sha, 本页事件签名, rows)；提交一条裁决只让它那一页失效（GUJI-525）
-_VERSION = 7          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳）
+_VERSION = 8          # 判定规则/行格式改了就加 1，缓存自动作废（4：加 return_to/reason/status 三字段；5：补锚档、_prev 起点；6：图像指纹优先、行加 fp_diff；7：缓存键加字块那一步的 sha、字块图验戳；8：缓存缺字块图现切、行加 why=no_patch）
 
 #: 字块图（`char_patch`）是哪一步切的：它的产物 sha 就是缓存图上记的戳（`engine._stamp_cache`）。
 PATCH_STEP = "cell_shrink"
@@ -288,9 +288,49 @@ def _return_trigger_events(book: str, log) -> dict[int, list]:
     return out
 
 
+def _patch_renderer(book: str, store, cache):
+    """缓存里没有的字块图现切一张（经 `RunContext.materialize`，与跑批同一条路、同一个戳）。
+
+    2026-10-25 补（殿本 vol06–10 只重落 seed_admit 的沙箱）：基线包只带 products、不带 `cache/`，
+    老人裁（没有框、只有字形库里当时的图）要拿「当时的图 vs 现格字块图」比像不像才认格；
+    现格字块图不在就比不了，68/146 条（vol10）被判 `unanchored` 静默丢掉。现切要原图
+    （`guji source pull`）；切不出来返回 None，行里记 `why=no_patch`，`human_chars` 据此报错。
+    `GUJI_BINDINGS_NO_RENDER=1` 关掉（只读缓存，与改前一致）。"""
+    import os
+    if os.environ.get("GUJI_BINDINGS_NO_RENDER", "").strip().lower() in ("1", "true", "yes", "on"):
+        return None
+    state: dict = {}
+
+    def render(key: str):
+        if "ctx" not in state:
+            try:
+                from .. import steps as _s  # noqa: F401  注册各步（producer 要用）
+                from ..core.book import load_book
+                from ..core.pipeline import default_pipeline_id, load_pipeline
+                from ..core.step import RunContext
+                b = load_book(book)
+                state["ctx"] = RunContext(b, store, cache, log=lambda _: None,
+                                          pipeline=load_pipeline(default_pipeline_id(b)))
+            except Exception as e:           # 册配置/管线读不出：不现切，退回只读缓存
+                state["ctx"] = None
+                state["err"] = repr(e)
+        ctx = state["ctx"]
+        if ctx is None:
+            return None
+        try:
+            return ctx.materialize(PATCH_STEP_KIND, key)
+        except Exception:
+            return None
+    return render
+
+
+#: 字块图的产物种类 id（`cell_shrink` 产出、`char_patch` 缓存）。
+PATCH_STEP_KIND = "char_patch"
+
+
 def compute_page(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
                  return_events: list | None = None, backfill: dict | None = None,
-                 patch_stamp: str | None = None) -> list[dict]:
+                 patch_stamp: str | None = None, render=None) -> list[dict]:
     """一页裁决的绑定（不读不写缓存）。
 
     `return_events`：这一页的 `cutline`／`n_body_slots`／`return_resolve` 事件（列级/结案，
@@ -312,7 +352,11 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     # 字块图要验戳（`patch_stamp` = 现在这版字块产物的 sha，`page_bindings` 传进来）：缓存里记的
     # 不是这一版 → 当作没有图（退回几何规则），不拿旧字块比指纹。不传 = 不验（与 v7 之前一致）。
     def _patch(c, s_, sb):
-        return cache.get(book, "char_patch", patch_key(page, c, s_, sb), stamp=patch_stamp)
+        k = patch_key(page, c, s_, sb)
+        p = cache.get(book, "char_patch", k, stamp=patch_stamp)
+        if p is None and render is not None:
+            p = render(k)                     # 缓存没有就现切（见 `_patch_renderer`）
+        return p
     current = versions[-1] if versions and versions[-1][0] == "current" else None
     cur_idx = _cell_index(current[3]) if current else {}
     cur_start = current[1] if current else 0.0
@@ -368,6 +412,9 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
             else:
                 row["status"] = "unanchored"
                 row["bound"] = ev.target.key if (same and _ts(ev.ts) >= cur_start) else None
+                if (row["bound"] is None and same and anchor is not None
+                        and (anchor.get("content_png") or anchor.get("content_sha"))):
+                    row["why"] = "no_patch"   # 有当时的图、现格字块图拿不到：比不了，不是「对不上」
             rows.append(row)
             continue
         best, best_iou, inside = None, 0.0, 0
@@ -474,7 +521,7 @@ def _sig(events, return_events: list | None = None, backfill: dict | None = None
 
 def page_bindings(book: str, page: int, events: list, store=None, cache=None, glyph_db=None,
                   refresh: bool = False, return_events: list | None = None,
-                  backfill: dict | None = None, cells_sha: str | None = None) -> list[dict]:
+                  backfill: dict | None = None, cells_sha: str | None = None, render=None) -> list[dict]:
     """读缓存；Step3 产物、本页裁决或打回相关事件变了就重算并写回。
     `cells_sha` 调用方（`book_bindings`）已按页算好就传进来（Step3 与字块两份 sha，见 `page_state`）。"""
     from ..products.store import ProductStore
@@ -490,12 +537,14 @@ def page_bindings(book: str, page: int, events: list, store=None, cache=None, gl
     if not refresh and f.exists():
         try:
             d = json.loads(f.read_text(encoding="utf-8"))
-            if d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == sig:
-                return d["rows"]
+            if (d.get("v") == _VERSION and d.get("cells_sha") == cells_sha and d.get("sig") == sig
+                    and not any(r.get("why") == "no_patch" for r in d["rows"])):
+                return d["rows"]              # 带 no_patch 的行不信缓存：字块图可能已经有了
         except Exception:
             pass
     rows = compute_page(book, page, events, store=store, cache=cache, glyph_db=glyph_db,
-                       return_events=return_events, backfill=backfill, patch_stamp=patch_stamp or None)
+                       return_events=return_events, backfill=backfill, patch_stamp=patch_stamp or None,
+                       render=render)
     f.parent.mkdir(parents=True, exist_ok=True)
     # 先写带进程号的临时文件再换上去（2026-10-20）：Step7 并行时几个 worker 可能同时重算同一页的
     # 绑定，直接 write_text 会让别的进程读到半个文件（读坏会被上面吞掉重算，但写本身会互相截断）。
@@ -534,6 +583,7 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     if hit and not refresh and time.time() - hit[0] < 120:
         return hit[1]
     cache = ImageCache()
+    render = _patch_renderer(book, store, cache)
     try:
         gdb = sqlite3.connect(str(glyph_db_path()))
     except Exception:
@@ -549,7 +599,7 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
         else:
             rows = page_bindings(book, page, evs, store=store, cache=cache, glyph_db=gdb, refresh=refresh,
                                  return_events=by_page_returns.get(page), backfill=backfill,
-                                 cells_sha=cells_sha)
+                                 cells_sha=cells_sha, render=render)
             _PAGE_MEMO[pkey] = (cells_sha, psig, rows)
         for r in rows:
             out[r["event"]] = r
