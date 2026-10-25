@@ -6,7 +6,7 @@
     连同单号、出单时间
   - 已人裁（human_judged）：定了字的人裁事件覆盖的格（口径同 pending_route.deciding：看不出、是图等也算定了），
     只数现行文本里还在的格；格号漂掉的另记在 detail
-  - 人审率：已裁完的格 ÷（已裁 ∪ 待审）。还挂在线上单上的格不算裁完（复审格即使有旧人裁也算待审）
+  - 审完率（key review_rate）：已裁完的格 ÷（已裁 ∪ 待审）。还挂在线上单上的格不算裁完（复审格即使有旧人裁也算待审）
   - 备注（note）：自动一句「卡在哪」＋ `--note` 留的人写备注（存在 extra.a32_note，下次自动带上，`--note ''` 清掉）
 另写 cells_total（全册格数，book-text dev 的 <章>.char.json）和 stage（≥1.0 或冻结＝released，否则 fine）。
 
@@ -39,7 +39,7 @@ from pending_route import cell_of, deciding  # noqa: E402
 WRITER = "A32"
 SECTION = "review"
 SECTION_DESC = ("人审（A32）：待人审＝线上待审单还等人投的格；已人裁＝有定字人裁的格（现行文本里还在的）；"
-                "人审率＝已裁完 ÷（已裁 ∪ 待审），还挂在单上的格不算裁完")
+                "审完率（review_rate）＝已裁完 ÷（已裁 ∪ 待审），还挂在单上的格不算裁完")
 DEFAULT_WS = "siku-zongmu"
 DEFAULT_TEXT = "96mid1ogzk"
 # 精校流程里不分册号：任何册推库出单后都自动刷新（用户 10-25 定）。这些字段一经 A32 写过，网站基础采集就不再碰。
@@ -132,7 +132,7 @@ def compute(book: str, sheet: dict | None, events, char_doc: dict | None, chapte
         ("pending_review", "待人审", len(pend), "格",
          {"on_sheet": len(on_sheet), "judged_since_issue": len(judged_since), "not_in_text": len(gone)}, 10),
         ("human_judged", "已人裁", len(judged), "格", {"drifted": len(judged_all - judged) if cells else None}, 20),
-        ("review_rate", "人审率", rate, "%", {"done": len(done), "scope": len(scope)}, 30),
+        ("review_rate", "审完率", rate, "%", {"done": len(done), "scope": len(scope)}, 30),
         ("judged_share", "人裁覆盖全册", round(len(judged) / len(cells), 4) if cells else None, "%",
          {"cells_total": len(cells) or None}, 40),
         ("note", "备注", None, None, None, 50),
@@ -202,7 +202,7 @@ def run(books: list[str], ws: str | None = None, text_id: str = DEFAULT_TEXT, no
             res = compute(book, sheet, evs, char, entry, book_doc, manual)
             f = res["fields"]
             print(f"{book}（{text_id}/{chapter}）：待人审 {f['pending_review']}，已人裁 {f['human_judged']}，"
-                  f"全册 {f.get('cells_total', '?')} 格，人审率 {res['metrics'][2][2]}，阶段 {f['stage']}；备注：{f['note']}")
+                  f"全册 {f.get('cells_total', '?')} 格，审完率 {res['metrics'][2][2]}，阶段 {f['stage']}；备注：{f['note']}")
             if not dry_run:
                 write(conn, text_id, chapter, res)
         if dry_run:
