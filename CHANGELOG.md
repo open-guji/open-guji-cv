@@ -5,11 +5,23 @@
 
 ## [未发版]
 
+## [0.5.18] - 2026-10-25
+
+PATCH（#589 Step1 列距救援不甩出贴版框的真列，殿本 vol40 p14、vol46 p118、p148 丢整列正文；#587 新册首跑自动标 main；#586 出单版产物包记对 cv；#588 看板）。Step1 的 `code_hash` 变。
+
+- Step1 1.9 列距救援：新加第 0 路「出带的窄外列、外侧半列宽内有版框残段 → 外框线吸到版框」（`snap_outer_to_frame`），并且任何一路都不许把贴版框的旧外列甩出新网（`drops_framed_col`）。修 v0.5.17 首跑 vol40 p14、vol46 p118/p148：版心条在版框外，fuse 外推进版心、整网平移一列，框里的真列整列丢掉、版心被当成一列（A31 报的「无整理本对位」成片页）。vol11–50 触发救援的 100 页样本只这 3 页变。Step1 的 `code_hash` 变（PATCH）。
+- `guji products pack push`：这册还没有 main 指针（新册首跑）时存包后自动标 main，不用加 `--main`（sheldon 10-25 定：新册的第一个包只能是 main）。只在正式库、装的是正式版 cv 时自动；实验分支、dev／rc 版只提示不标。任务库 `push` 步走同一条命令，自动生效。只在 `cli_products.py`，不动任何 Step（PATCH）。
+
+### Added
+- 字组看板：`group_progress` 每个字组写一张卡（`group.<组>`，送审格＋出现、放行率、组判率），`guji groups status --progress <套书 id>` 出完报告顺手写网站后台 yiti／xingjin 两栏（Neon 正式库）。只是看板数据，`code_hash` 不变。
+
 ## [0.5.17] - 2026-10-25
 
 PATCH（A24 字组成批上线第二批的代码部分：#552 suo 组与 719 库标研究；#555 變𠮓 改刻形组；#556 尙尚 恢复复核改字；#558 宮宫 暂归一登记；#570 字组状态写后台看板；另含 #563 #572 Step1 列距救援 fuse、任务库与进度上报若干）。新组要在册配置 `group_flow` 点名才生效；`groups/registry.py`、`groups/flow.py`、Step1 的 `code_hash` 变。
 
 ### Changed
+- 出单版产物包记对 cv：`republish.py issue --engine <worktree>` 用重跑的那份 cv（`engine_run.py`＋PYTHONPATH）存 `rev-<rev>` 包，`proof_cycle apply` 自动传 `--engine`，`--cv-commit` 也改记引擎的提交。此前包里记的是本仓 dev（册006 rev-006-r5 记成 7b40f6e），下一轮 apply 核引擎对不上（A32，PATCH）。
+- `proof_cycle plan --recheck-extra <tsv>`：把别处发现的疑点（如重标时看出的字错）并进本轮复审清单，同格以它为准，可带旧人裁 id 让网站写明「已有判断」（A32，PATCH）。
 - 字组：新建取框组 suo 瑣𤨏（GUJI-719，#552）；bian 變𠮓 改成刻形组（下半 HOG，只给 變，#555）；尙尚 恢复复核改字（vol16 两格放大看是 尙，#540 的「只降不改」撤回，#556）；宮宫 登记为暂归一到 宫（#558）。
 
 ### Added

@@ -207,6 +207,42 @@ def test_upload_plan_dry_run(ws):
     assert plan["txt"] >= 1
 
 
+def test_built_db_meta_carries_fingerprints_for_manifest_without_them(ws):
+    """清单没记 fingerprints（--no-build 出的 g4）时，钉号读建库时写进库 meta 的那份。"""
+    from open_guji_cv.core.glyph_pin import pinned_db_meta, pinned_db_path
+    from open_guji_cv.ops.glyph_snapshot import build_pinned_db, snapshot
+    snapshot(ws, build=False)
+    build_pinned_db(ws, 1)
+    fp = pinned_db_meta(pinned_db_path(1))["fingerprints"]
+    assert fp["n_human"] == 2 and "approx" in fp and "borrow_fingerprint" in fp
+
+
+def test_upload_and_verify_only_new_items_since_previous(ws):
+    """出 g2 时只传、只核相对 g1 新增或改动的条目；``full`` 才全量。"""
+    from open_guji_cv.core.glyph_pin import load_manifest
+    from open_guji_cv.ops.glyph_snapshot import _store_dir, snapshot, upload_blobs, verify_remote
+    snapshot(ws)
+    live = ws / "output" / "glyph.db"
+    _admit(live, [("丁", "human", 4)])
+    _export(live, ws / "output" / "glyph_store")
+    snapshot(ws)
+    g1, g2 = load_manifest(ws, 1), load_manifest(ws, 2)
+    old = {(it["root"], it["path"], it["sha256"]) for it in g1["items"]}
+    new = [it for it in g2["items"] if (it["root"], it["path"], it["sha256"]) not in old]
+    assert 0 < len(new) < len(g2["items"])
+    plan = upload_blobs(ws, 2)
+    assert plan["png"] + plan["txt"] == len(new)
+    assert plan["skipped_same_as_previous"] == len(g2["items"]) - len(new)
+    assert upload_blobs(ws, 2, full=True)["skipped_same_as_previous"] == 0
+    store = _store_dir(ws)
+    blobs = {it["sha256"]: (store / it["path"]).read_bytes() for it in g2["items"]}
+    only_new = {it["sha256"]: blobs[it["sha256"]] for it in new}
+    r = verify_remote(ws, 2, src=_FakeR2(only_new))           # R2 只有新条目也能核过：旧条目上一版核过
+    assert r["ok"] and r["checked"] == len(new) and r["items"] == len(g2["items"])
+    with pytest.raises(SystemExit, match="R2 也取不到"):
+        verify_remote(ws, 2, src=_FakeR2(only_new), full=True)
+
+
 def test_push_collects_new_pack_text_and_refuses_changed(ws):
     from open_guji_cv.core.glyph_pin import load_manifest
     from open_guji_cv.datastore.workcopy import glyph_pack_blobs

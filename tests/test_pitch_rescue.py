@@ -124,3 +124,33 @@ def test_rule_stubs_ignore_char_strokes():
     g[400:510, W - 1 - 1000] = 0                  # 110px 竖笔
     g[800:1100, W - 1 - 1200] = 0                 # 300px 界行残段
     assert pr._rule_ridges(_res(GOOD), g, 900, 1300, 0.8 * 180, 128) == [1200.0]
+
+
+#: vol40 p14（v0.5.17 首跑）：版心条印在版框外（规范空间 x 大的一侧），自由模式的右外框线落在框里首列字边上（343，
+#: 真版框 314），首列只剩 0.83 列宽
+P14 = [343, 497, 679, 866, 1051, 1237, 1421, 1606, 1787, 1973]
+P14_FIXED = [314, 497, 679, 866, 1051, 1237, 1421, 1606, 1787, 1973]
+
+
+def _p14_gray():
+    g = _gray([(343, 497), (1973, 2150)])         # 首列有字；版框外版心条也有墨
+    for x in (314, 1973, 2150):                   # 版框、版心条边线：贯通整页的界行
+        g[300:2700, W - 1 - x - 1:W - 1 - x + 2] = 0
+    return g
+
+
+def test_snap_narrow_outer_col_to_frame():
+    """外列偏窄、外侧半列宽内有版框残段：外框线吸到版框上，别的路都不走。"""
+    out, how = pr.rescue(_res(P14), _p14_gray(), lambda pitch: (_ for _ in ()).throw(AssertionError("不该重探")))
+    assert how == "frame"
+    assert all(abs(a - b) <= 2 for a, b in zip(line_xs(out), P14_FIXED))
+    assert not any(out.vline_filled)
+
+
+def test_rescue_may_not_drop_framed_col():
+    """吸版框不成时，fuse 外推进版心条、把整网平移一列（首列甩出网外）也不接受（vol46 p118/p148 原病）。"""
+    g = _p14_gray()
+    shifted = [497, 679, 866, 1051, 1237, 1421, 1606, 1787, 1973, 2157]
+    assert pr.drops_framed_col(_res(P14), g, shifted)
+    assert not pr.drops_framed_col(_res(P14), g, P14_FIXED)
+    assert not pr.drops_framed_col(_res(GOOD), _gray([]), GOOD)

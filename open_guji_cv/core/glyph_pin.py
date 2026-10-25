@@ -203,7 +203,8 @@ def _snapshot_pin(p, v: int, man: dict):
     from .workspace import glyph_db_path
     tok = man["digest"]
     live, db = str(glyph_db_path()), str(pinned_db_path(v))
-    fp = man.get("fingerprints") or {}
+    # 清单没记 fingerprints（g4 是 --no-build 出的）就读建库时写进库 meta 的那份
+    fp = man.get("fingerprints") or (pinned_db_meta(Path(db)) or {}).get("fingerprints") or {}
     kw: dict = {}
     if hasattr(p, "db_path") and getattr(p, "db_path", None) == live:
         kw["db_path"] = db

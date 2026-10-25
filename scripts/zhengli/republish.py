@@ -346,9 +346,16 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
     if getattr(a, "no_pack", False):
         return None
     label = pack_label(rev)
-    p = run([sys.executable, "-m", "open_guji_cv.cli_v2", "products", "pack", "push", book, "--label", label,
-             "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"],
-            cwd=CV, env={**os.environ, "GUJI_WORKSPACE": str(ws)})
+    args = ["products", "pack", "push", book, "--label", label,
+            "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"]
+    env = {**os.environ, "GUJI_WORKSPACE": str(ws)}
+    engine = getattr(a, "engine", None)
+    if engine and Path(engine).resolve() != CV.resolve():
+        # 产物是钉住的旧引擎跑的：用那份 cv 存包，包的 cv_version／cv_commit 才是它，不是本仓 dev
+        # （册006 r5 曾记成 dev 的提交，下一轮 apply 核引擎对不上）
+        p = run([sys.executable, HERE / "engine_run.py", *args], cwd=engine, env={**env, "PYTHONPATH": str(engine)})
+    else:
+        p = run([sys.executable, "-m", "open_guji_cv.cli_v2", *args], cwd=CV, env=env)
     if p.returncode:
         print(f"⚠ 出单版产物包 {label} 没存成（见上）：落票时只能重跑有票的页算锚")
         return None
@@ -988,6 +995,7 @@ def main(argv=None) -> int:
             p.add_argument("--note", help="book-text CHANGES 一行的说明（给了 --book-text 才升版）")
             p.add_argument("--no-publish-web", action="store_true", help="不触发网站发布")
             p.add_argument("--no-wait", action="store_true", help="触发网站发布后不等、不冒烟")
+            p.add_argument("--engine", help="产物是哪份 cv 跑的（钉住的旧版 worktree）：出单版产物包用它存，包里记它的版本")
             p.add_argument("--no-pack", action="store_true", help="不存出单版产物包 rev-<rev>")
             p.add_argument("--allow-empty", action="store_true", help="新单 0 格也换上去")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")

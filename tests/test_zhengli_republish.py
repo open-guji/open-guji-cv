@@ -314,3 +314,18 @@ def test_book_text_dev_sync_and_push(tmp_path):
     (b / "x.txt").write_text("dirty\n")
     with pytest.raises(SystemExit):
         rp.book_text_to_dev(b)                               # 工作区不干净就停
+
+
+def test_pack_rev_uses_engine(tmp_path, monkeypatch):
+    """出单版产物包用重跑的那份 cv 存（engine_run.py＋PYTHONPATH），包里才记它的版本。"""
+    import argparse
+    calls = []
+    monkeypatch.setattr(rp, "run", lambda cmd, **kw: calls.append((cmd, kw)) or type("P", (), {"returncode": 0})())
+    monkeypatch.setattr(rp, "products_root", lambda ws: tmp_path / "products")
+    eng = tmp_path / "cv-old"
+    eng.mkdir()
+    assert rp.pack_rev(argparse.Namespace(engine=str(eng)), tmp_path, "vol06", "006-r6") == "rev-006-r6"
+    cmd, kw = calls[-1]
+    assert str(cmd[1]).endswith("engine_run.py") and kw["cwd"] == str(eng) and kw["env"]["PYTHONPATH"] == str(eng)
+    rp.pack_rev(argparse.Namespace(engine=None), tmp_path, "vol06", "006-r6")
+    assert calls[-1][0][1:3] == ["-m", "open_guji_cv.cli_v2"]

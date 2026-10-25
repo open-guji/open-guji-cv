@@ -100,7 +100,7 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.8", unit="page",   # 1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.9", unit="page",   # 1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge",
