@@ -37,7 +37,8 @@ SPAN_CATEGORY = {"wrong": "wrong", "missing": "missing", "extra": "extra", "orde
                  "note": "other", "other": "other"}
 FORWARD_TO = {"punct": "punct", "entity": "entity"}
 #: 精校票 choice → 类别（六档：char 选字、none 无字、unsure 看不出、cut 切坏、jiazhu／main 正文与夹注搞反）
-CHOICE_CATEGORY = {"char": "wrong", "none": "extra", "unsure": "unclear", "cut": "seg", "jiazhu": "seg", "main": "seg"}
+CHOICE_CATEGORY = {"char": "wrong", "none": "extra", "unsure": "unclear", "cut": "seg", "jiazhu": "seg", "main": "seg",
+                   "figure": "figure"}
 
 # ---- 脱敏（与网站 edge-functions/api/feedback.js desensitizeText 同口径）----
 _RE_ID_CARD = re.compile(r"(?<!\d)[1-9]\d{5}(?:18|19|20)\d{2}(?:0[1-9]|1[0-2])(?:0[1-9]|[12]\d|3[01])\d{3}[\dXx](?!\d)")
@@ -104,6 +105,13 @@ def _op(channel, book, vol, skey, raw_id, voter, ts, target, category, proposal=
 
 # ---- 改字／一段／专名 ----
 
+def _char_cat_prop(r: dict) -> tuple[str, dict]:
+    """改字的类别与建议：读者勾了「这是图形，不是字」（``figure: true``）就是 figure 类，建议里不放字（免得被当成改 □）。"""
+    if r.get("figure") is True:
+        return "figure", {"choice": "figure", **({"alt": r["alt"]} if r.get("alt") else {})}
+    return "wrong", {"text": r.get("new_char")}
+
+
 def from_fix_record(r: dict, book: str, hidden: set[str] = frozenset(), source: str = "fixes.jsonl") -> Incoming:
     """中心库 ``fixes.jsonl`` 的一行（KV 原值：``{v, kind, book_id, volume, text_version, …, voter, ts}``）。"""
     if r.get("book_id") != book:
@@ -120,7 +128,7 @@ def from_fix_record(r: dict, book: str, hidden: set[str] = frozenset(), source: 
             return Incoming(drop="站方隐藏", source=source)
         op = _op("charfix", book, v3, f"cf:{book}:{v3}:{tv}:{cell}|{w6}", f"cf:{book}:{vol}:{tv}:{cell}", voter,
                  r.get("ts"), {"start": cell, "end": cell, "text_version": tv, **({"check": r["old_char"]} if r.get("old_char") else {})},
-                 "wrong", {"text": r.get("new_char")}, r.get("basis"),
+                 *_char_cat_prop(r), r.get("basis"),
                  {"entity_ids": r["entity_ids"]} if r.get("entity_ids") else None)
         return Incoming(op=op, source=source)
     if kind == "span":
@@ -168,6 +176,8 @@ def from_public_fixes(payload: dict, book: str, hidden: set[str] = frozenset()) 
             rec = {"kind": kind, "book_id": book, "volume": vol, "voter": who, "ts": it.get("ts")}
             if kind == "char":
                 rec.update(text_version=it.get("tv"), cell_id=at, old_char=it.get("old"), new_char=it.get("new"), basis=it.get("note"))
+                if it.get("fig"):
+                    rec.update(figure=True, alt=it.get("alt"))
             elif kind == "span":
                 rec.update(text_version=it.get("tv"), start=at, end=end, sub=sub or "other", old_text=it.get("old"),
                            new_text=it.get("new"), note=it.get("note"))
@@ -195,7 +205,8 @@ def from_cellreview(r: dict, book: str, source: str = "") -> Incoming:
     if choice == "char" and len(r.get("char") or "") != 1:
         return Incoming(drop="char 档要单个字", source=source)
     v3 = vol3(rev.split("-r")[0]) or vol3(r.get("vol"))
-    prop = {"choice": choice, **({"text": r["char"]} if r.get("char") else {})}
+    prop = {"choice": choice, **({"text": r["char"]} if r.get("char") and choice != "figure" else {}),
+            **({"alt": r["alt"]} if choice == "figure" and r.get("alt") else {})}
     extra = {k: r[k] for k in ("shown", "pick_src", "pick_rank", "pivot") if r.get(k) not in (None, "")}
     op = _op("cellreview", book, v3, f"cr:{rev}:{book}:{a}|{voter[:6]}", f"cr:{rev}:{book}:{a}", voter, r.get("ts"),
              {"start": a, "end": a, "rev": rev, **({"check": r["shown"]} if r.get("shown") else {})},
