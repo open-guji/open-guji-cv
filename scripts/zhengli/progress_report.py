@@ -42,8 +42,7 @@ SECTION_DESC = ("人审（A32）：待人审＝线上待审单还等人投的格
                 "人审率＝已裁完 ÷（已裁 ∪ 待审），还挂在单上的格不算裁完")
 DEFAULT_WS = "siku-zongmu"
 DEFAULT_TEXT = "96mid1ogzk"
-# 精校流程里自动写的册（A32 在跑的）；别的册要写就手动跑本脚本，或在这里加
-A32_BOOKS = {"96mid1ogzk": {"vol04", "vol05", "vol06"}}
+# 精校流程里不分册号：任何册推库出单后都自动刷新（用户 10-25 定）。这些字段一经 A32 写过，网站基础采集就不再碰。
 BOOK_TEXT_RAW = os.environ.get("BOOK_TEXT_RAW", "https://raw.githubusercontent.com/open-guji/book-text/dev")
 
 
@@ -215,9 +214,7 @@ def run(books: list[str], ws: str | None = None, text_id: str = DEFAULT_TEXT, no
 
 
 def try_run(book: str, text_id: str = DEFAULT_TEXT, log=print) -> None:
-    """精校流程里调（只对 A32_BOOKS 里的册）：失败只提示，不影响主流程。"""
-    if book not in A32_BOOKS.get(text_id, set()):
-        return
+    """精校流程里调（所有册）：失败只提示，不影响主流程。"""
     try:
         run([book], text_id=text_id)
     except BaseException as e:  # noqa: BLE001  （connect 缺凭据会 SystemExit）

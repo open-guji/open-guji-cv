@@ -298,7 +298,7 @@ def cmd_apply(a) -> int:
     # 6. book-text：republish issue 已把文本升版提交并推到 dev（不开 PR），每日合并进 main
     log.note(f"book-text：文本升版已推到 dev，每日合并（洛杉矶 03:30）进 main")
     log.note(f"完成：写 {plan['ready']} 条、新单 {new_rev} 已推并触发网站发布")
-    if not a.dry_run:                       # 后台「文本整理」的人审进度（A32 的册）；republish push 已写过一次，这里兜底
+    if not a.dry_run:                       # 后台「文本整理」的人审进度（所有册）；republish push 已写过一次，这里兜底
         import progress_report
         progress_report.try_run(book, plan["text_id"], log=log.note)
     return 0

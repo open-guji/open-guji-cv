@@ -58,12 +58,13 @@ def test_no_char_skips_cells_total():
     assert res["fields"]["pending_review"] == 0
 
 
-def test_hook_only_a32_books(monkeypatch):
+def test_hook_runs_for_any_book(monkeypatch):
     called = []
     monkeypatch.setattr(pr, "run", lambda books, **kw: called.append(books))
-    pr.try_run("vol09")
+    pr.try_run("vol03")
     pr.try_run("vol06")
-    assert called == [["vol06"]]
+    pr.try_run("vol20")
+    assert called == [["vol03"], ["vol06"], ["vol20"]]
 
 
 def test_text_base():
