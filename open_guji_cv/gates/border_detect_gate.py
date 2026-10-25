@@ -66,6 +66,14 @@ class BorderDetectGateParams(BaseModel):
     `column_gate.period_prior_pages`：`params: {border_detect_gate: {body_pages: [88]}}`。
     缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
 
+    grid_overrides_skip: bool = True
+    """页型规则判 skip（题签／封面），但 Step1 探出完整、等宽的正文栏格（列数＝版式列数，每列宽都在
+    中位 ±``grid_width_tol`` 内）→ 按正文走，manifest 记 flag `page_type_grid`。卷末少字页只有两三列字、
+    其余空栏，字少被页型规则当成题签整页跳过（殿本 vol05 p106、vol13 p89、vol14 p174，2026-10-25）；
+    真题签、封面探不出这样的栏格（vol01–20 判 skip 的页里列数对上的只有这几页，另一页 vol20 p179
+    列宽乱、不放）。"""
+    grid_width_tol: float = 0.15
+
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
         d = handler(self)
@@ -81,6 +89,16 @@ class BorderDetectGateParams(BaseModel):
             from ..pagetype_model.model import DEFAULT_MODEL, file_fingerprint
             object.__setattr__(self, "pagetype_model_fingerprint",
                                file_fingerprint(self.pagetype_model_path or DEFAULT_MODEL) or "missing")
+
+
+def _uniform_grid(b: Borders, tol: float) -> bool:
+    """每列宽（相邻界行顶端 x 之差）都在中位 ±tol 内。"""
+    xs = sorted(v.x_at_top for v in b.verticals)
+    w = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    if not w:
+        return False
+    m = sorted(w)[len(w) // 2]
+    return m > 0 and all(abs(x / m - 1) <= tol for x in w)
 
 
 _PT_GATES: dict = {}
@@ -99,7 +117,7 @@ def _pagetype_gate(p: "BorderDetectGateParams"):
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.1", unit="page",
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.2", unit="page",
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
@@ -127,6 +145,11 @@ class BorderDetectGateStep(Step):
             page_type, policy = "body", "standard"
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
+        grid_from = None
+        if p.grid_overrides_skip and policy == "skip" and n_cols == expected and \
+                _uniform_grid(b, p.grid_width_tol):
+            grid_from = f"{page_type}/{policy}"
+            page_type, policy = "body", "standard"
         # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
         # `pair_merged` 旗、并把页上列数记在 `Borders.expected_cols`。**显式认旗，不靠两个数相等去猜**。
         # 期望列数对着**本闸自己的**期望（`p.expected_cols or 书级`）减一：旗＋探出列数＝Step1 记的列数＝
@@ -150,6 +173,8 @@ class BorderDetectGateStep(Step):
             flags_forced = [f"page_type_forced：页型规则判「{forced_from}」，册配置 body_pages 点名按正文走"]
         else:
             flags_forced = []
+        if grid_from:
+            flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
         pt_ev = None
