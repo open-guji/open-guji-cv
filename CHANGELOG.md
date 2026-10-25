@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- workflow `commons-upload.yml`＋`scripts/commons_upload.py`：在 runner 上重出修过的册、查根没变和引用，用 bot 账号上传 Commons 新版本并核 sha1（设计稿 §十三）。
+
 ## [0.5.17] - 测试中
 
 PATCH（A24 字组成批上线第二批的代码部分：#552 suo 组与 719 库标研究；#555 變𠮓 改刻形组；#556 尙尚 恢复复核改字；#558 宮宫 暂归一登记；#570 字组状态写后台看板；另含 #563 #572 Step1 列距救援 fuse、任务库与进度上报若干）。新组要在册配置 `group_flow` 点名才生效；`groups/registry.py`、`groups/flow.py`、Step1 的 `code_hash` 变。

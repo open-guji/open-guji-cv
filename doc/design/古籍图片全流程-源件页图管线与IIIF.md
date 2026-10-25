@@ -246,7 +246,7 @@ Commons DjVu（根：唯一准确来源，人人可查；按文件版本钉 sha1
    - 没修过的册直接说「不用回传」。
 3. **查用途**：上传前查 Commons API `prop=globalusage`。被维基文库 `Index:`／`Page:` 引用的文件，页数一变，后面的页号就全错位了。这种情况不覆盖，改传成新文件名，并在原文件页说明。10-25 查过 vol03、vol07，都没有被引用；vol04、vol09 当时被 429 挡住，上传前再查。
 4. **传（对外发布，要用户点头）**：在原文件页点「上传新版本」，摘要用 `.upload.json` 的 `comment`，中英各一句，写明拆了哪页、页数变化、其余页未动。
-   - 用谁的账号由用户定：用户自己在网页上传，或者给 bot 账号（BotPassword）配进 GitHub secret，由 runner 调 `action=upload&ignorewarnings=1`。
+   - 用户自己在网页上传（10-25 用户先手动传一两册），或者走 bot：workflow `commons-upload.yml`（`scripts/commons_upload.py`）。它在 runner 上从公开地址取页表、根和页图，重出新版并逐页核对，再检查两件事：Commons 当前版本还是页表记的根（sha1 相同），文件没有被引用（globalusage）。`upload=true` 时用 BotPassword（仓库 secret `COMMONS_BOT_USER`／`COMMONS_BOT_PASSWORD`）上传，传完核对 Commons 的 sha1 等于本地文件。artifact 里的 `<册>.commons.json` 交给第 5 步。不勾 `upload` 就只做检查，可以先跑一遍看结果。
    - 账号和口令不进仓、不进卡、不进聊天。
    - 改动属于小修，符合 Commons 的覆盖规矩（COM:OVERWRITE，修正扫描缺陷）。
 5. **重登记**：传完用 `guji source commons <书id> <册> --file "<Commons 文件名>" --reroot --why "回传修图后换根"`。会话连不上 Commons 时，照 §十二第 4 条，用 runner 下文件，再加 `--djvu`、`--commons-json`。

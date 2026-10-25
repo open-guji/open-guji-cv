@@ -1,0 +1,48 @@
+name: Commons 回传修图
+
+# 修过的页合进 Commons 根，出新版 DjVu 并「上传新版本」（设计稿 doc/design/古籍图片全流程-源件页图管线与IIIF.md §十三）。
+# 会话连不上 Commons，所以在 runner 上跑。upload=false 只出文件、做检查（根没被别人改过、没被维基文库引用）；
+# upload=true 是对外发布，要用户点头。传完下载 artifact 里的 <册>.commons.json，在会话里 guji source commons … --reroot 换根。
+on:
+  workflow_dispatch:
+    inputs:
+      book_id:
+        description: book-index 书 id
+        required: true
+        default: 96mid1ogzk
+      vols:
+        description: 册号，逗号分隔（如 03,07）
+        required: true
+      upload:
+        description: 真传（对外发布，要用户点头）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: sudo apt-get update -q && sudo apt-get install -y -q djvulibre-bin
+      - run: pip install pillow httpx
+      - name: 出新版、检查、（可选）上传
+        env:
+          COMMONS_BOT_USER: ${{ secrets.COMMONS_BOT_USER }}
+          COMMONS_BOT_PASSWORD: ${{ secrets.COMMONS_BOT_PASSWORD }}
+        run: |
+          python scripts/commons_upload.py --book-id "${{ inputs.book_id }}" --vols "${{ inputs.vols }}" --out out \
+            ${{ inputs.upload && '--upload' || '' }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: commons-upload
+          path: |
+            out/*.json
+          if-no-files-found: ignore
