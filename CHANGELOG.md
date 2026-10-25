@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- `guji source commons-pack`：页表里修过的页（拆页、转正、换图）合进 Commons 根，出回传用的新版 DjVu，逐页解码核对；`guji source commons --reroot`：传完重登记，页序与页图字节不变（设计稿 §十三）。
+
 ## [0.5.16] - 2026-10-25
 
 PATCH（A24 字组成批上线第一批的余下部分：#532 #537 #540 #545；#538 #544 起跑自检与人裁绑定；#539 意见池；#536 #542 #543 #546 #547 字组文档）。新组要在册配置 `group_flow` 点名才生效；`seed_admit`、`groups/flow.py`、`groups/registry.py` 的 `code_hash` 变。

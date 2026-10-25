@@ -208,3 +208,72 @@ def test_commons_source_checks_sha1(tmp_path):
     assert rec["kind"] == "commons" and rec["file"] == "CADAL06061310.djvu" and rec["commons_timestamp"] == info["timestamp"]
     with pytest.raises(ValueError, match="sha1"):
         S.commons_source(p, {**info, "sha1": "0" * 40})
+
+
+def test_is_fix_only_reader_facing():
+    assert S.is_fix({"seq": "0105a", "ops": [{"crop": [0, 0, 1, 1]}]})
+    assert S.is_fix({"seq": "0007", "ops": [{"rotate": 90}]})
+    assert S.is_fix({"seq": "0007", "ops": [{"manual": "去污", "by": "A30"}]})          # guji source replace 换的图
+    assert not S.is_fix({"seq": "0001", "ops": [{"manual": "书脊签，存档时缩小"}]})      # 登记时的存档说明
+    assert not S.is_fix({"seq": "0002", "ops": []})
+
+
+def test_fix_groups_checks_leaves():
+    pages = [{"seq": s, "ops": []} for s in ("0001", "0002a", "0002b", "0003")]
+    pages[1]["ops"] = pages[2]["ops"] = [{"crop": [0, 0, 1, 1]}]
+    groups = S.fix_groups({"pages": pages}, 3)
+    assert [(leaf, [p["seq"] for p in ps]) for leaf, ps in groups] == [(2, ["0002a", "0002b"])]
+    with pytest.raises(ValueError, match="对不上"):
+        S.fix_groups({"pages": pages}, 4)
+    with pytest.raises(ValueError, match="对不上"):
+        S.fix_groups({"pages": [pages[0], pages[3]]}, 3)
+
+
+def test_reroot_keeps_old_bytes():
+    prev = {"pages": [{"seq": "0001", "page": 1, "sha256": "a", "src": "s1:x", "ops": [{"manual": "书脊"}]},
+                      {"seq": "0002a", "page": 2, "sha256": "b", "src": "s1:y", "ops": [{"crop": [0, 0, 1, 1]}]}]}
+    new = [{"seq": "0001", "page": 1, "sha256": "A", "src": "s3:n_0001.tif", "ops": []},
+           {"seq": "0002", "page": 2, "sha256": "B", "src": "s3:n_0002.tif", "ops": []}]
+    pages, kept = S.reroot_pages(prev, new, lambda o, n: o["seq"] != "0001")
+    assert kept == ["0001"] and pages[0] == prev["pages"][0]
+    assert pages[1] == {"seq": "0002a", "page": 2, "sha256": "b", "src": "s3:n_0002.tif", "ops": []}
+    with pytest.raises(ValueError, match="页"):
+        S.reroot_pages(prev, new[:1], lambda o, n: True)
+
+
+@pytest.mark.skipif(not all(__import__("shutil").which(t) for t in ("ddjvu", "cjb2", "djvm", "djvused")),
+                    reason="没装 djvulibre")
+def test_pack_for_commons_splits_one_leaf(tmp_path):
+    import subprocess
+
+    def leaf(w, h, marks):
+        im = Image.new("1", (w, h), 1)
+        for x, y in marks:
+            for d in range(6):
+                im.putpixel((x + d, y), 0)
+        return im
+    leaves = [leaf(40, 60, [(5, 5)]), leaf(80, 120, [(5, 5), (50, 5), (5, 70), (50, 70)]), leaf(40, 60, [(20, 30)])]
+    parts = []
+    for i, im in enumerate(leaves, 1):
+        im.save(tmp_path / f"l{i}.pbm")
+        subprocess.run(["cjb2", "-dpi", "300", str(tmp_path / f"l{i}.pbm"), str(tmp_path / f"l{i}.djvu")], check=True)
+        parts.append(str(tmp_path / f"l{i}.djvu"))
+    root = tmp_path / "root.djvu"
+    subprocess.run(["djvm", "-c", str(root), *parts], check=True)
+    crops = {"a": [40, 0, 40, 60], "b": [0, 0, 40, 60], "c": [40, 60, 40, 60], "d": [0, 60, 40, 60]}
+    blobs, pages = {}, []
+    for seq, im, ops in [("0001", leaves[0], [])] + [(f"0002{k}", leaves[1].crop((c[0], c[1], c[0] + c[2], c[1] + c[3])),
+                                                       [{"crop": c}]) for k, c in crops.items()] + [("0003", leaves[2], [])]:
+        data = S.encode_page(im)
+        blobs[S.sha256(data)] = data
+        pages.append({"seq": seq, "page": len(pages) + 1, "sha256": S.sha256(data), "ops": ops})
+    table = {"book_id": "96mid1ogzk", "vol": "03", "rev": 2, "pages": pages}
+    out = tmp_path / "new.djvu"
+    res = S.pack_for_commons(table, root, blobs.__getitem__, out)
+    assert (res["pages_before"], res["pages_after"]) == (3, 6) and S.djvu_count(out) == 6
+    assert res["changes"] == [{"leaf": 2, "seqs": ["0002a", "0002b", "0002c", "0002d"], "pages": [2, 3, 4, 5],
+                               "ops": [[{"crop": c}] for c in crops.values()]}]
+    msg = S.commons_comment(table, res)
+    assert "原第2页" in msg and "3→6" in msg and "96mid1ogzk/03 r002" in msg
+    with pytest.raises(ValueError, match="对不上"):                     # 页表缺叶就不出文件
+        S.pack_for_commons({**table, "pages": pages[:5]}, root, blobs.__getitem__, tmp_path / "bad.djvu")

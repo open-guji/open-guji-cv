@@ -17,8 +17,10 @@
 """
 from __future__ import annotations
 
+import io
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -174,6 +176,9 @@ def cmd_commons(args) -> None:
         if not path.exists():
             path.write_bytes(S._http(info["url"], timeout=1800))
     rec = S.commons_source(path, info)
+    if args.reroot:                                                  # 同一 Commons 文件的新版本：R2 只增不改，存名带版本时间
+        stamp = re.sub(r"[^0-9TZ]", "", info["timestamp"])
+        rec["file"] = f"{Path(rec['file']).stem}.{stamp}{Path(rec['file']).suffix}"
     print(f"  源件 {info['title']}（{info['timestamp']}）{rec['bytes'] / 1e6:.1f} MB sha1 ✓")
     if not args.dry_run:
         rec["r2"] = S.store_original(src, args.book_id, vol, rec)
@@ -183,12 +188,73 @@ def cmd_commons(args) -> None:
         n = S.djvu_to_zip(path, z)
         if info.get("pagecount") and n != info["pagecount"]:
             raise SystemExit(f"✗ 解出 {n} 页，Commons 记 {info['pagecount']} 页")
-        pages, blobs = S.build_from_zip(z, splits=_load_splits(args.splits, vol))
+        key = "s1"
+        if args.reroot:
+            prev = S.read_table(src, args.book_id, vol)
+            key = f"s{len(prev['sources']) + 1}"
+        pages, blobs = S.build_from_zip(z, source_key=key, splits=_load_splits(args.splits, vol))
     print(f"  生成 {len(pages)} 页（{sum(len(b) for b in blobs.values()) / 1e6:.1f} MB）")
+    sources = [{"key": "s1", **rec}]
+    if args.reroot:
+        from PIL import Image
+        from .datastore.client import BlobCache
+        cache = BlobCache()
+        need = [p["sha256"] for p in prev["pages"] if not cache.has(p["sha256"])]
+        if need and cache.ensure(src, need, bucket="main")["missing"]:
+            raise SystemExit("✗ R2 上缺旧页表的页图")
+
+        def same(o, n) -> bool:
+            if o["sha256"] == n["sha256"]:
+                return True
+            a, b = (Image.open(io.BytesIO(x)) for x in (cache.path(o["sha256"]).read_bytes(), blobs[n["sha256"]]))
+            return S._same(a, b)
+        pages, kept = S.reroot_pages(prev, pages, same)
+        blobs = {}
+        sources = [*prev["sources"], {"key": key, **rec}]
+        print(f"  沿用旧页表 r{prev['rev']:03d} 的页序；图不同、保留旧图的页：{', '.join(kept) or '无'}")
     _expect(pages, args.expect, args.expect_skip)
-    table = S.new_table(args.book_id, vol, ws=args.ws, book=args.book, sources=[{"key": "s1", **rec}], pages=pages,
-                        decoder="ddjvu")
+    table = S.new_table(args.book_id, vol, ws=args.ws or (prev.get("ws") if args.reroot else None),
+                        book=args.book or (prev.get("book") if args.reroot else None), sources=sources, pages=pages,
+                        **({"encoding": prev.get("encoding", S.ENCODING)} if args.reroot else {}), decoder="ddjvu")
     _finish(src, args, table, blobs, args.why)
+
+
+def cmd_commons_pack(args) -> None:
+    """页表里修过的页合进根 DjVu，出回传 Commons 的新版本（设计稿 §十三）。只在本地出文件，不上传。"""
+    from .datastore import sources as S
+    from .datastore.client import BlobCache
+    src = _src()
+    t = S.read_table(src, args.book_id, S.norm_vol(args.vol), args.rev)
+    root = S.root_source(t)
+    n_fix = sum(1 for p in t["pages"] if S.is_fix(p))
+    if not n_fix:
+        print(f"✓ {t['book_id']}/{t['vol']} r{t['rev']:03d}：没有修过的页，不用回传")
+        return
+    out_dir = Path(args.out)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    rp = Path(args.djvu) if args.djvu else out_dir / f"root-{root['file']}"
+    if not rp.exists():
+        from .datastore import packs as PK
+        PK.fetch_file(root["r2"], rp, src=S._MainBucket(src))
+    if S.sha256(rp.read_bytes()) != root["sha256"]:
+        raise SystemExit(f"✗ 根 {rp} 的 sha256 与页表记的不符")
+    cache = BlobCache()
+    need = [p["sha256"] for p in t["pages"] if S.is_fix(p) and not cache.has(p["sha256"])]
+    if need:
+        res = cache.ensure(src, need, bucket="main")
+        if res["missing"]:
+            raise SystemExit(f"✗ R2 上缺 {len(res['missing'])} 张页图")
+    out = out_dir / root["file"]
+    res = S.pack_for_commons(t, rp, lambda sha: cache.path(sha).read_bytes(), out)
+    comment = S.commons_comment(t, res)
+    info = {"commons_title": root.get("commons_title"), "replaces_sha1": root.get("commons_sha1"),
+            "replaces_timestamp": root.get("commons_timestamp"), "file": str(out), "table_rev": t["rev"],
+            "comment": comment, **res}
+    (out_dir / f"{Path(root['file']).stem}.upload.json").write_text(
+        json.dumps(info, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    print(f"✓ {out}（{res['bytes'] / 1e6:.1f} MB，{res['pages_before']}→{res['pages_after']} 页，逐页解码核过）")
+    print(f"  传到：{root.get('commons_title')}（上传新版本）")
+    print(f"  摘要：{comment}")
 
 
 def cmd_register(args) -> None:
@@ -232,14 +298,14 @@ def cmd_replace(args) -> None:
     _finish(src, args, new, blobs, args.why)
 
 
-COMMANDS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
+COMMANDS = {"commons-pack": cmd_commons_pack, "pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
             "ia": cmd_ia, "commons": cmd_commons, "register": cmd_register, "replace": cmd_replace}
 
 
 def add_parser(sub) -> None:
     p = sub.add_parser("source", help="[v2] 原图：源件存档、页图、页表（R2），云会话取原图")
     p.add_argument("action", choices=sorted(COMMANDS))
-    p.add_argument("pos", nargs="*", help="pull：<册>；show/check/ia/register：<书id> <册>；list：<书id>；replace：<书id> <册> <页序> <png>")
+    p.add_argument("pos", nargs="*", help="pull：<册>；show/check/ia/commons/commons-pack/register：<书id> <册>；list：<书id>；replace：<书id> <册> <页序> <png>")
     p.add_argument("-w", "--workspace", default=None, help="pull：工作区（定册配置里的原图目录）")
     p.add_argument("--rev", type=int, default=None, help="页表版本，缺省最新")
     p.add_argument("--to", default=None, help="pull：落到这个目录（<页>.png），不按册配置")
@@ -265,12 +331,15 @@ def add_parser(sub) -> None:
     p.add_argument("--by", default=None, help="写：谁（缺省 GUJI_ACTOR）")
     p.add_argument("--dry-run", action="store_true", help="写：只算不传")
     p.add_argument("--json", action="store_true", help="show：整份页表")
+    p.add_argument("--out", default=None, help="commons-pack：输出目录（新版 DjVu 与 .upload.json）")
+    p.add_argument("--reroot", action="store_true",
+                   help="commons：修好的版本已传上 Commons，按旧页表逐页对上，沿用页序（页 id 不变）")
 
 
 def cmd_source(args) -> None:
     pos = list(args.pos or [])
     a = args.action
-    need = {"pull": 1, "list": 1, "show": 2, "check": 2, "ia": 2, "commons": 2, "register": 2, "replace": 4}[a]
+    need = {"pull": 1, "list": 1, "show": 2, "check": 2, "ia": 2, "commons": 2, "commons-pack": 2, "register": 2, "replace": 4}[a]
     if a == "pull" and args.book_id:
         need = 0
     if len(pos) < need:
@@ -298,6 +367,9 @@ def cmd_source(args) -> None:
         if a == "ia" and not args.ia:
             print("✗ ia 要 --ia <IA 标识>", file=sys.stderr)
             sys.exit(2)
+    if a == "commons-pack" and not args.out:
+        print("✗ commons-pack 要 --out <目录>", file=sys.stderr)
+        sys.exit(2)
     if a == "replace" and not args.why:
         print("✗ replace 要 --why", file=sys.stderr)
         sys.exit(2)

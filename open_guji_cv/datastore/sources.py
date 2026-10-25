@@ -269,6 +269,166 @@ def djvu_to_zip(djvu: Path, dest_zip: Path) -> int:
     return n
 
 
+# ─── 修好的页回传 Commons（设计稿 §十三）────────────────────────────────
+
+def djvu_count(djvu: Path) -> int:
+    import subprocess
+    return int(subprocess.run(["djvused", "-e", "n", str(djvu)], capture_output=True, text=True, check=True).stdout)
+
+
+def djvu_dpi(djvu: Path, page: int) -> int:
+    """第 page 页 INFO 块里的 dpi（新编的页沿用，免得 Commons 上显示尺寸跳）。"""
+    import subprocess
+    out = subprocess.run(["djvused", "-e", f"select {page}; dump", str(djvu)],
+                         capture_output=True, text=True, check=True).stdout
+    m = re.search(r"INFO \[\d+\]\s+DjVu \d+x\d+, v\d+, (\d+) dpi", out)
+    return int(m.group(1)) if m else 300
+
+
+def is_fix(page: dict) -> bool:
+    """给读者看的修正（要回传 Commons）：拆页（seq 带 a–d）、`crop`／`rotate`、`guji source replace` 换的整张图
+    （`manual` 带 `by`）。不带 `by` 的 `manual` 是登记时的存档说明（如书脊签缩小存档），回传时用根的原页。"""
+    if len(page["seq"]) > 4:
+        return True
+    return any("crop" in o or "rotate" in o or ("manual" in o and o.get("by")) for o in page.get("ops") or [])
+
+
+def root_source(table: dict) -> dict:
+    """页表的根：最后一个 `kind=commons` 的源件。"""
+    roots = [s for s in table.get("sources", []) if s.get("kind") == "commons"]
+    if not roots:
+        raise ValueError(f"{table['book_id']}/{table['vol']} r{table['rev']:03d} 没有 Commons 根，先 guji source commons 登记")
+    return roots[-1]
+
+
+def fix_groups(table: dict, n_root: int) -> list[tuple[int, list[dict]]]:
+    """页表按根的叶号（seq 前 4 位）分组，核对每一叶都在、次序不乱；返回含修正的组 `[(叶号, [页…])]`。"""
+    leaves: list[tuple[int, list[dict]]] = []
+    for p in table["pages"]:
+        leaf = int(p["seq"][:4])
+        if leaves and leaves[-1][0] == leaf:
+            leaves[-1][1].append(p)
+        else:
+            leaves.append((leaf, [p]))
+    got = [leaf for leaf, _ in leaves]
+    if got != list(range(1, n_root + 1)):
+        miss = sorted(set(range(1, n_root + 1)) - set(got))
+        raise ValueError(f"页表的叶与根对不上（根 {n_root} 叶；缺 {miss[:5]}，或有重复／乱序）：删叶、换序的回传还不支持")
+    return [(leaf, ps) for leaf, ps in leaves if len(ps) > 1 or any(is_fix(p) for p in ps)]
+
+
+def encode_djvu_page(png: bytes, dpi: int, out: Path) -> None:
+    """一页 PNG → 单页 DjVu。黑白页 `cjb2`（无损 JB2），灰度／彩色页 `c44`（IW44，有损，同 #125 首页做法）。
+    页图一律存成 RGB PNG（`encode_page`），所以按内容判黑白：只有纯黑纯白两种像素就当黑白页。"""
+    import subprocess
+    from PIL import Image
+    im = Image.open(io.BytesIO(png))
+    im.load()
+    if im.mode != "1":
+        colors = im.convert("RGB").getcolors(3)
+        if colors is not None and {c for _, c in colors} <= {(0, 0, 0), (255, 255, 255)}:
+            im = im.convert("L").point(lambda v: 255 if v else 0).convert("1", dither=Image.Dither.NONE)
+    if im.mode == "1":
+        tmp, cmd = out.with_suffix(".pbm"), ["cjb2", "-dpi", str(dpi)]
+    else:
+        im = im.convert("RGB" if im.mode in ("RGB", "RGBA", "P") else "L")
+        tmp, cmd = out.with_suffix(".ppm" if im.mode == "RGB" else ".pgm"), ["c44", "-dpi", str(dpi)]
+    im.save(tmp)
+    subprocess.run([*cmd, str(tmp), str(out)], check=True, capture_output=True)
+    tmp.unlink()
+
+
+def _decoded(djvu: Path, page: int, td: Path):
+    import subprocess
+    from PIL import Image
+    tif = td / "cmp.tif"
+    subprocess.run(["ddjvu", "-format=tiff", f"-page={page}", str(djvu), str(tif)], check=True)
+    im = Image.open(tif)
+    im.load()
+    return im
+
+
+def _same(a, b) -> bool:
+    return a.size == b.size and a.convert("L").tobytes() == b.convert("L").tobytes()
+
+
+def pack_for_commons(table: dict, root: Path, png_of_sha, out: Path) -> dict:
+    """根 DjVu ＋ 页表里修过的页 → 回传 Commons 用的新版 DjVu。
+
+    只动含修正的叶：`djvm -d` 删掉根的这一叶，`djvm -i` 在原位插入页表里的页（从后往前，前面的页号不受影响）；
+    其余页的字节原样保留。写完逐页 `ddjvu` 解码核对：修过的页与页表 PNG 逐像素相同，其余页与根逐像素相同。
+    `png_of_sha(sha) -> bytes`。返回 {pages_before, pages_after, changes: [{leaf, seqs, pages}], sha1, bytes}。"""
+    import hashlib
+    import shutil
+    import subprocess
+    import tempfile
+    n_root = djvu_count(root)
+    groups = fix_groups(table, n_root)
+    shutil.copyfile(root, out)
+    with tempfile.TemporaryDirectory() as tdn:
+        td = Path(tdn)
+        for leaf, ps in reversed(groups):
+            dpi = djvu_dpi(root, leaf)
+            subprocess.run(["djvm", "-d", str(out), str(leaf)], check=True)
+            for j, p in enumerate(ps):
+                one = td / f"fix{p['seq']}.djvu"
+                encode_djvu_page(png_of_sha(p["sha256"]), dpi, one)
+                subprocess.run(["djvm", "-i", str(out), str(one), str(leaf + j)], check=True)
+                one.unlink()
+        if djvu_count(out) != len(table["pages"]):
+            raise RuntimeError(f"新 DjVu {djvu_count(out)} 页 ≠ 页表 {len(table['pages'])} 页")
+        fixed = {p["seq"] for _, ps in groups for p in ps}
+        for i, p in enumerate(table["pages"], 1):
+            got = _decoded(out, i, td)
+            if p["seq"] in fixed:
+                from PIL import Image
+                want = Image.open(io.BytesIO(png_of_sha(p["sha256"])))
+            else:
+                want = _decoded(root, int(p["seq"][:4]), td)
+            if not _same(got, want):
+                raise RuntimeError(f"第 {i} 页（{p['seq']}）解码与{'页表' if p['seq'] in fixed else '根'}不一致")
+    data = out.read_bytes()
+    pos = {p["seq"]: i for i, p in enumerate(table["pages"], 1)}
+    return {"pages_before": n_root, "pages_after": len(table["pages"]),
+            "changes": [{"leaf": leaf, "seqs": [p["seq"] for p in ps], "pages": [pos[p["seq"]] for p in ps],
+                         "ops": [p.get("ops") or [] for p in ps]} for leaf, ps in groups],
+            "sha1": hashlib.sha1(data).hexdigest(), "bytes": len(data)}
+
+
+def commons_comment(table: dict, res: dict) -> str:
+    """Commons「上传新版本」的摘要（中英各一句，每处改动一条）。"""
+    zh, en = [], []
+    for c in res["changes"]:
+        n, leaf = len(c["seqs"]), c["leaf"]
+        if n > 1:
+            zh.append(f"原第{leaf}页为未裁开的合扫，拆为{n}页（新第{c['pages'][0]}–{c['pages'][-1]}页）")
+            en.append(f"split uncut multi-leaf scan p.{leaf} into {n} pages (new pp.{c['pages'][0]}-{c['pages'][-1]})")
+        else:
+            zh.append(f"第{leaf}页修正（{'、'.join(next(iter(o)) for o in c['ops'][0]) or '换图'}）")
+            en.append(f"fixed p.{leaf}")
+    pages = f"{res['pages_before']}→{res['pages_after']}"
+    return (f"{'；'.join(zh)}；页数 {pages}；其余页逐字节未动。"
+            f" / {'; '.join(en)}; pages {pages}; all other pages byte-identical. (open-guji page table "
+            f"{table['book_id']}/{table['vol']} r{table['rev']:03d})")
+
+
+def reroot_pages(prev: dict, new_pages: list[dict], same) -> tuple[list[dict], list[str]]:
+    """修好的版本传上 Commons 以后重登记：新根第 i 页对应旧页表第 i 页。**页图字节一律沿用旧页表**（产物不过期）；
+    `same(旧页, 新页) -> bool` 逐像素相同的页 src 改指新根、ops 清空（修正已在根里）；不同的（如书脊签）原样保留。
+    返回 (页, 保留原样的 seq)。"""
+    old = prev["pages"]
+    if len(old) != len(new_pages):
+        raise ValueError(f"新根 {len(new_pages)} 页 ≠ 旧页表 {len(old)} 页，不是同一版修好的整册")
+    out, kept = [], []
+    for o, n in zip(old, new_pages):
+        if same(o, n):
+            out.append({**o, "src": n["src"], "ops": []})
+        else:
+            out.append(dict(o))
+            kept.append(o["seq"])
+    return out, kept
+
+
 def store_original(src, book_id: str, vol: str, rec: dict) -> str:
     """源件原样存 R2（已有就跳过，核 sha）。返回 R2 键（不含 `pack/`）。"""
     from . import packs as PK
