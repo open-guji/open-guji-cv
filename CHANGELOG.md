@@ -7,7 +7,7 @@
 
 - Step1 1.10 列距救援：前几路都不成时加第 4 路 `snap_lines`，把出带列两边的线吸到附近的淡界行细峰上、没有界行就吸到字间空白中点，列宽进带才收；网格模式线数比自由模式多（自由模式漏线）也照收。修 v0.5.17 首跑界行极淡的 5 页：vol24 p69、vol29 p28、vol37 p76、vol45 p54、vol48 p121（此前整列丢字或两列并一列）。vol11–50 的 100 页样本另有 4 页（vol30 p78、vol31 p159、vol35 p43、vol49 p128）线在列间空白里挪了 2–11px，看图都对；vol13 p46 不动。Step1 的 `code_hash` 变（PATCH）。
 
-## [0.5.19] - 测试中
+## [0.5.19] - 2026-10-25
 
 PATCH（#593 Step3 自动配页，缺省关的新设置）。Step3（`row_segment`）的 `code_hash` 变：版本 1.39、`code_deps` 加 `steps/row_segment_pagemap`、`utils/page_align`、`utils/daizhige`；缺省 `page_map: off` 时参数与输出不变。
 
