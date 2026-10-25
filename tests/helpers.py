@@ -242,17 +242,58 @@ def run_keben_chain(tmp_path, monkeypatch=None, *, page: int = 1, book=None,
 KEBEN_STEPS_FROM_RAW = ["border_detect", "border_detect_gate"] + KEBEN_STEPS
 
 
+#: `run_keben_from_raw` 的进程内备份：{键: (备份目录, 产物字典)}。见该函数说明。
+_RAW_CHAIN_MEMO: dict = {}
+
+
 def run_keben_from_raw(tmp_path, monkeypatch=None, *, book, gray, page: int = 1,
-                       through: str = "cell_shrink"):
+                       through: str = "cell_shrink", memo: bool = True):
     """拿一张**真页**从 Step1 跑到指定步骤，返回 `(ctx, 产物字典)`。
 
     给的图应当是 `tests/fixtures/` 里那几张冻结样页（`fixture_page` fixture），
     不要指向 `data/` 或工作区——那些会变，变了这类端到端用例就跟着红，
     而红的原因跟被测代码无关。
+
+    ⏱ 同一进程里**同一册配置 + 同一张图 + 同一终点**只真跑一次（2026-10-25）：
+    Step3 的 U-Net 切点裁判一页要 4–5 秒，三十来条用例各自从原图重跑，全量里
+    白花两三分钟。第一次跑完把 `products/`、`cache/` 备一份，之后的用例拷进自己的
+    `tmp_path`、产物字典深拷贝一份给它——磁盘上、内存里都与现跑逐字节相同，各条
+    改自己的那份互不影响。**要在跑之前改 Step1–4 的行为**（monkeypatch 某步、
+    换参数）的用例传 `memo=False`，否则拿到的是没打补丁的那份。
     """
+    import atexit
+    import copy
+    import dataclasses
+    import hashlib
+    import shutil
+    import tempfile
+
+    # 册配置里的路径（`raw_dir` 落在每条用例自己的 tmp 工作区下）不进键：原图走
+    # `ctx._raw` 注入，Step1–4 不读它；其余字段一个不漏，册配置不同就不共用
+    spec = tuple((f.name, repr(getattr(book, f.name))) for f in dataclasses.fields(book)
+                 if not isinstance(getattr(book, f.name), Path))
+    key = (spec, page, through, gray.shape, str(gray.dtype),
+           hashlib.sha1(np.ascontiguousarray(gray).tobytes()).hexdigest())
+    hit = _RAW_CHAIN_MEMO.get(key) if memo else None
+    if hit is not None:
+        saved, out = hit
+        for sub in ("products", "cache"):
+            if (saved / sub).exists():
+                shutil.copytree(saved / sub, tmp_path / sub, dirs_exist_ok=True)
+        ctx = make_ctx(tmp_path, book, raw={page: gray}, monkeypatch=monkeypatch)
+        return ctx, copy.deepcopy(out)
+
     ctx = make_ctx(tmp_path, book, raw={page: gray}, monkeypatch=monkeypatch)
     steps = KEBEN_STEPS_FROM_RAW[:KEBEN_STEPS_FROM_RAW.index(through) + 1]
-    return ctx, run_steps(ctx, page, steps)
+    out = run_steps(ctx, page, steps)
+    if memo:
+        saved = Path(tempfile.mkdtemp(prefix="guji_raw_chain_"))
+        atexit.register(shutil.rmtree, saved, ignore_errors=True)
+        for sub in ("products", "cache"):
+            if (tmp_path / sub).exists():
+                shutil.copytree(tmp_path / sub, saved / sub)
+        _RAW_CHAIN_MEMO[key] = (saved, copy.deepcopy(out))
+    return ctx, out
 
 
 # ── Step5 系产物（库匹配 / OCR / 上下文裁决 / 整理本对齐）──────────────

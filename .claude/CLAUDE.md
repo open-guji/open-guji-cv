@@ -35,7 +35,8 @@
 - **产物指纹**：Step 模块和它的 `code_deps` 一改，各书产物就判过期。动这些文件前想清楚是否值得让各书重算。
   纯提速、产物逐字节不变的改动，用 `scripts/code_equiv.py check` 证明后登记进 `core/code_equiv.py`，不让各书过期（见该模块头）。
 - **测试只依赖本仓库、只依赖 `tests/` 下冻结的数据**；单元测试自己造数据（`tests/helpers.py`），对真书数据的质量断言归评测（`guji eval run`），不进测试。细则见 `tests/conftest.py` 模块头、`tests/fixtures/README.md`；`tests/test_suite_hygiene.py` 是守卫。
-- 跑全量：`.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider`（`-s` 必须带；Windows 下要结果就加 `--junitxml=…` 再解析）。
+- 跑全量：`.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider -n auto`（`-s` 必须带；`-n auto` 用 pytest-xdist 按核数并行，随 `[dev]` 装；Windows 下要结果就加 `--junitxml=…` 再解析）。2026-10-25 实测（装 torch、4 核）：原先串行 11 分钟，Step1–4 复用后串行 6 分钟，并行 2 分 23 秒。单跑几个文件不用 `-n`，起 worker 反而慢。
+- 新测试要能并行：不往模块级 `os.environ` 写东西不还原、不写进程外的共享路径；要从原图跑 Step1–4 用 `helpers.run_keben_from_raw`（同进程同输入只真跑一次）。
 - 装了 torch 才跑的约 7 条，装了 `rapidocr-onnxruntime` 才跑的 3 条，缺件是跳过不是失败。
 
 ## 环境

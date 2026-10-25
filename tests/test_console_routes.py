@@ -88,28 +88,44 @@ _SANDBOX = Path(tempfile.mkdtemp(prefix="guji_console_snap_"))
 os.environ["GUJI_FEEDBACK_DIR"] = str(_SANDBOX / "feedback")
 os.environ["GUJI_BATCHES_DIR"] = str(_SANDBOX / "batches")
 os.environ["GUJI_DATASET_DIR"] = str(_SANDBOX / "dataset")
+_SANDBOX_VALUES = {k: os.environ[k] for k in _SANDBOX_ENV}
 
 
-@pytest.fixture(scope="module", autouse=True)
-def _restore_sandbox_env():
-    """本文件跑完把这三个环境变量还原。
-
-    模块级设置是必须的（要赶在 import console.app 之前），但**不还原就会漏给
-    后面的测试文件**：pytest 按字母序跑，`test_console_routes` 在 `test_eval_v2`
-    之前，于是后者去这个已被删掉的临时沙箱里找金标，报
-    「金标路径不存在: /tmp/guji_console_snap_xxxx/dataset/char-normalization」。
-    2026-09-10 集成三条分支时实测到——单跑本文件看不见，跑全仓才暴露。
-    """
-    yield
+def _restore_env() -> None:
     for k, v in _SAVED_ENV.items():
         if v is None:
             os.environ.pop(k, None)
         else:
             os.environ[k] = v
+
+
+@pytest.fixture(scope="module", autouse=True)
+def _restore_sandbox_env():
+    """本文件的测试跑的时候把沙箱环境变量摆上，跑完还原。
+
+    模块级设置是必须的（要赶在 import console.app 之前），但**不还原就会漏给
+    别的测试文件**：pytest 按字母序跑，`test_console_routes` 在 `test_eval_v2`
+    之前，于是后者去这个已被删掉的临时沙箱里找金标，报
+    「金标路径不存在: /tmp/guji_console_snap_xxxx/dataset/char-normalization」。
+    2026-09-10 集成三条分支时实测到——单跑本文件看不见，跑全仓才暴露。
+
+    2026-10-25 再收紧：import 完 app 当场就还原（见下），只在本文件的测试期间
+    由这里重新摆上。原先是「本文件跑完才还原」，而收集阶段会先 import 全部测试
+    文件——并行跑（pytest-xdist）时没分到本文件测试的进程从头到尾带着沙箱路径，
+    `test_gold_transfer` 量到的 `default_dataset_root()` 就成了沙箱里的 `dataset`。
+    """
+    for k, v in _SANDBOX_VALUES.items():
+        os.environ[k] = v
+    yield
+    _restore_env()
+
+
 for _m in [m for m in list(sys.modules) if m.startswith("open_guji_cv.console")]:
     del sys.modules[_m]
 
 import open_guji_cv.console.app as A  # noqa: E402
+
+_restore_env()   # app 的单例已按沙箱构造好；环境变量不留给收集阶段之后的别的文件
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
 from open_guji_cv.core.workspace import products_root  # noqa: E402
 

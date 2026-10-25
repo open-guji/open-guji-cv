@@ -38,6 +38,7 @@ from __future__ import annotations
 
 import shutil
 import sys
+from functools import lru_cache
 from pathlib import Path
 
 import pytest
@@ -282,6 +283,30 @@ def cnn_test_ckpt(tmp_path_factory) -> Path:
     p = d / "best.pt"
     p.write_bytes(DEFAULT_CKPT.read_bytes())
     return p
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _cnn_shared_uses_tmp_ckpt(cnn_test_ckpt):
+    """`cnn_candidates.shared()` 整场改绑到 `cnn_test_ckpt` 那份 tmp 拷贝。
+
+    生产代码里有几条路不经测试之手就调 `shared()`：Step6b 组内定形
+    （`clustering/variant_form.image_ranks_for`）、Step7 背书、rare 面板……
+    它们对 2–4 个字的组内小字表现建 embedding 索引，落进 checkpoint 旁边。
+    绑真实 `DEFAULT_CKPT` 时就落进 `models/glyph_cnn_r5/emb_*.npz`，
+    `_no_new_files_in_models` 在会话收尾报错——报在**最后一条测试**头上
+    （2026-10-25 是 `test_variants_query::test_load_reads_directed`，单跑全过，
+    看着像测试互相干扰；真凶是 `test_seed_admit_variant_indirect` 的 𠮓/變）。
+    指纹按内容算，结果与真实路径逐位相同，只是落盘目录换了。
+    """
+    from open_guji_cv.clustering import cnn_candidates as cc
+
+    real = cc.shared
+    patched = lru_cache(maxsize=1)(lambda ckpt=str(cnn_test_ckpt): cc.CnnCandidates(ckpt))
+    cc.shared = patched
+    try:
+        yield
+    finally:
+        cc.shared = real
 
 
 @pytest.fixture
