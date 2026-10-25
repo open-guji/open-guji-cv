@@ -128,9 +128,9 @@ def _rv(gid: str) -> dict:
     return {"review": True, "review_methods": (_img(gid),)} if gid in SHAPE_REVIEW else {}
 
 
-#: 按刻形拆判的异体对里复核只降不改的（2026-10-25）：尙尚 vol16 重落把两格刻「尚」（上有中竖）改成了「尙」（margin 0.9–1.1），
-#: 32px 整字 HOG 看不清中竖。判法修好前复核判出另一形只降审。瑣𤨏（2026-10-25）：𤨏 模板只 9 格，攒够前同样只降审。
-_SHAPE_PAIR_NO_FIX = frozenset({"shang", "suo"})
+#: 按刻形拆判的异体对里复核只降不改的：瑣𤨏（2026-10-25）：𤨏 模板只 9 格，攒够前只降审。
+#: 尙尚 10-25 曾因 vol16 两格进过这里，放大看是 尙（殿本 尙 上部也有中竖，差在两边外撇／内收），判法没错，已恢复改字。
+_SHAPE_PAIR_NO_FIX = frozenset({"suo"})
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：

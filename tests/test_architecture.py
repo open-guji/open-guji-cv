@@ -33,7 +33,7 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4,
+    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4, "jobs": 4,
     # L5 控制台（Web）
     "console": 5,
     # L6 命令行入口
