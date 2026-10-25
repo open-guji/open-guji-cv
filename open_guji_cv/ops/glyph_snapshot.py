@@ -395,13 +395,26 @@ def list_pins(ws: Path) -> list[dict]:
     return out
 
 
-def upload_blobs(ws: Path, version: int, *, execute: bool = False) -> dict:
+def _new_since_previous(ws: Path, man: dict, full: bool) -> tuple[dict, int]:
+    """只留相对上一版 g<N-1> 清单新增或改动的条目（按 sha 差）。条目内容按 sha 存、不会变，上一版已上传校验过的不必再来一遍；
+    没有上一版或 ``full`` 就原样返回。返回 (清单副本, 跳过的条目数)。"""
+    prev = [n for n in versions(ws) if n < man["n"]]
+    last = load_manifest(ws, prev[-1]) if prev and not full else None
+    if last is None:
+        return man, 0
+    seen = {(it["root"], it["path"], it["sha256"]) for it in last["items"]}
+    items = [it for it in man["items"] if (it["root"], it["path"], it["sha256"]) not in seen]
+    return {**man, "items": items}, len(man["items"]) - len(items)
+
+
+def upload_blobs(ws: Path, version: int, *, execute: bool = False, full: bool = False) -> dict:
     """清单里的文本、图按 sha 传 R2（已有跳过）。缺省演练；``execute`` 才传，要正式令牌 ``GUJI_DATA_TOKEN``。
-    本机文件 sha 与清单不符的拒绝上传。"""
+    本机文件 sha 与清单不符的拒绝上传。缺省只处理相对上一版新增或改动的条目（``full`` 才全量）。"""
     ws = Path(ws)
     man = load_manifest(ws, version)
     if man is None:
         raise SystemExit(f"没有字形库 g{version} 的清单")
+    man, skipped = _new_since_previous(ws, man, full)
     srcs = _local_sources(ws)
     have: dict[str, dict[str, Path]] = {"txt": {}, "png": {}}
     absent = []
@@ -414,7 +427,8 @@ def upload_blobs(ws: Path, version: int, *, execute: bool = False) -> dict:
             absent.append(f'{it["root"]}:{it["path"]}')
     plan = {"pin": version, "txt": len(have["txt"]), "png": len(have["png"]),
             "bytes": sum(p.stat().st_size for d in have.values() for p in d.values()),
-            "not_local": absent[:20], "n_not_local": len(absent), "executed": False}
+            "not_local": absent[:20], "n_not_local": len(absent), "executed": False,
+            "skipped_same_as_previous": skipped}
     if absent:
         plan["warning"] = "本机文件已与清单不同（出快照后又改过），这些条目只能靠 R2 里已有的"
     if execute:
@@ -424,13 +438,16 @@ def upload_blobs(ws: Path, version: int, *, execute: bool = False) -> dict:
     return plan
 
 
-def verify_remote(ws: Path, version: int, src=None) -> dict:
-    """只从 R2 拼一遍（不用本机文件、也不用本机的图缓存），核对每个条目都取得到。成功即新机器能建这一版。"""
+def verify_remote(ws: Path, version: int, src=None, *, full: bool = False) -> dict:
+    """只从 R2 拼一遍（不用本机文件、也不用本机的图缓存），核对每个条目都取得到。成功即新机器能建这一版。
+    缺省只核相对上一版新增或改动的条目（上一版已核过；``full`` 才全量）。"""
     import tempfile
     from ..datastore.client import BlobCache
     man = load_manifest(Path(ws), version)
     if man is None:
         raise SystemExit(f"没有字形库 g{version} 的清单")
+    full_n = len(man["items"])
+    man, skipped = _new_since_previous(Path(ws), man, full)
     with tempfile.TemporaryDirectory() as td:
         info = assemble(Path(ws), man, Path(td) / "g", local=False, src=src, cache=BlobCache(Path(td) / "cache"))
-    return {"pin": version, "items": len(man["items"]), **info, "ok": True}
+    return {"pin": version, "items": full_n, "checked": len(man["items"]), "skipped_same_as_previous": skipped, **info, "ok": True}
