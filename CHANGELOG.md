@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `guji products pack push`：这册还没有 main 指针（新册首跑）时存包后自动标 main，不用加 `--main`（sheldon 10-25 定：新册的第一个包只能是 main）。只在正式库、装的是正式版 cv 时自动；实验分支、dev／rc 版只提示不标。任务库 `push` 步走同一条命令，自动生效。只在 `cli_products.py`，不动任何 Step（PATCH）。
+
 ### Added
 - 字组看板：`group_progress` 每个字组写一张卡（`group.<组>`，送审格＋出现、放行率、组判率），`guji groups status --progress <套书 id>` 出完报告顺手写网站后台 yiti／xingjin 两栏（Neon 正式库）。只是看板数据，`code_hash` 不变。
 

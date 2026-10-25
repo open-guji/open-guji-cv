@@ -166,25 +166,43 @@ def cmd_pack(args) -> None:
         sys.exit(2)
     if args.pack_action == "push":
         root = _root(args.root)
+        first_run = False
         try:
             base_label = PK.main_label(args.book)
+            first_run = base_label is None
         except Exception:      # noqa: BLE001 —— 列不到指针不挡存包
             base_label = None
         vers = book_versions(args.book, root)
         if args.main and not _main_ok(vers.get("cv"), args.why):
             sys.exit(2)
+        auto_main = _auto_main_first(first_run, args.main, vers.get("cv"))
         info = PK.push_products(args.book, root, label=args.label, change=args.change,
                                 vers=vers,
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
         if not args.no_record:
             _record(args.book, info, base_label, args.report, _summary_text(args.summary), root)
-        if args.main:
-            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '', why=args.why)}")
+        if args.main or auto_main:
+            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '', why=args.why)}"
+                  + ("（新册首跑，还没有 main，自动标）" if auto_main else ""))
             _note_main(args.book, info["label"], args.note or "")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
+
+
+def _auto_main_first(first_run: bool, main_flag: bool, cv: str | None) -> bool:
+    """新册首跑（这册还没有 main 指针）存包后自动标 main（sheldon 10-25 定：新册的第一个包只能是 main）。
+    只在正式库、装的是正式版 cv 时自动标；实验分支、dev／rc 版不自动，只提示。"""
+    from .core.cv_version import is_formal
+    from .core.workspace import active_branch
+    from .datastore.client import is_exp_branch
+    if not first_run or main_flag or is_exp_branch(active_branch()):
+        return False
+    if not is_formal(cv):
+        print(f"ⓘ 这册还没有 main，但装的 cv 是 {cv or '未知版本'}（非正式版），不自动标 main", file=sys.stderr)
+        return False
+    return True
 
 
 def _main_ok(cv: str | None, why: str | None) -> bool:
