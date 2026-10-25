@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- 任务库：环境类失败（如会话没挂 guji-workspace 私仓）退回排队后冷却 5×次数 分钟（新列 `run_after`，schema v3，`GUJI_JOBS_BACKOFF_MIN` 可调），并优先让别的执行方领；之前同一个坏会话几秒内把 3 次机会用完。执行方领单前自检能否读 guji-workspace，读不了就只报到不领单（`workers` 列出原因），挂上后自动开始领。`workers` 的「跑完」改称「领过」。
+
 ### Added
 - 任务库常驻执行方：新表 `jobs.worker`（执行方名字、会话、空闲／在跑哪条、最近报到），`guji job workers` 列在线执行方，`ls` 表头带在线数；执行方空闲每 30 秒报到、在跑每分钟心跳。`GUJI_JOBS_LEASE_MIN` 可调租约（测试用）。文档加常驻执行方线程的开法。
 

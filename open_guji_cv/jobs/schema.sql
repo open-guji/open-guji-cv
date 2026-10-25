@@ -100,5 +100,8 @@ CREATE TABLE IF NOT EXISTS jobs.worker (
   note       text
 );
 
-INSERT INTO jobs.meta (key, value) VALUES ('schema_version', '2')
-  ON CONFLICT (key) DO UPDATE SET value = GREATEST(jobs.meta.value::int, 2)::text;
+-- v3（10-25）：环境类失败退回排队时隔几分钟再领（run_after），免得同一个坏会话几秒内把次数用完
+ALTER TABLE jobs.job ADD COLUMN IF NOT EXISTS run_after timestamptz;
+
+INSERT INTO jobs.meta (key, value) VALUES ('schema_version', '3')
+  ON CONFLICT (key) DO UPDATE SET value = GREATEST(jobs.meta.value::int, 3)::text;
