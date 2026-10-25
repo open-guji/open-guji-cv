@@ -47,7 +47,10 @@ class FlowSpec:
     - `review_weak`：复核时这几个方法（按名字）只算弱票：它们给了别的字、而别的方法给的都是放行字（至少一个）时不降审。
       入人八随机森林 `rr_img`：vol06–20 复核里单独反对 7 格，5 格是它错（入 判成 人，整字 HOG 与文意都说 入；A24 10-25）。
     - `review_fix_margin`：复核时给了别的字的方法 margin ≥ 这个值才照 `review_fix` 改字，不到照常降审（0＝不用）。改字门槛
-      单独按册留出定、比降审门槛高（徵徴：线上同款字块按册留出错例最大 0.63 → 取 0.70；A24 10-25）。"""
+      单独按册留出定、比降审门槛高（徵徴：线上同款字块按册留出错例最大 0.63 → 取 0.70；A24 10-25）。
+    - `ref_enter`：库 top1 是本组的陪衬字（`tolerate`）、不在组里，但整理本字在组里 → 也许补放进入（字形库里没有这一形，
+      库把它排成别的字：算𮅕 的 𮅕 被排成 莫；A24 10-25）。只在同时声明了 `lift_ref_agree` 的组生效。
+      先于库首位字所在的组（闗 被库排成 闡間，不先拦就进了门族 men）；现役对位缺格时用坐标对位字（vol49 整页对位缺）。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -64,6 +67,7 @@ class FlowSpec:
     lift_ref_veto: bool = False
     review_weak: tuple = ()
     review_fix_margin: float = 0.0
+    ref_enter: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -131,6 +135,17 @@ def _rv(gid: str) -> dict:
 #: 按刻形拆判的异体对里复核只降不改的：瑣𤨏（2026-10-25）：𤨏 模板只 9 格，攒够前只降审。
 #: 尙尚 10-25 曾因 vol16 两格进过这里，放大看是 尙（殿本 尙 上部也有中竖，差在两边外撇／内收），判法没错，已恢复改字。
 _SHAPE_PAIR_NO_FIX = frozenset({"suo"})
+
+#: 按刻形拆判的异体对的额外流程设置（2026-10-25，vol21–50 首跑 V 类）：字形库没有少的一形，库把它排成别的字（紧咬的陪衬），
+#: 陪衬也进模板库（判成它们＝弃权）；补放须与整理本同字。
+#: 整理本作 隠 的格与 𨼆 是同一刻形（建库并成 𨼆，`build_shape_pair.ALIAS`），码位待定前 隠 只作陪衬：已放行的 隠 不复核，整理本作 隠 不补放。
+_SHAPE_PAIR_FLOW = {
+    "yin": dict(tolerate=frozenset("隠隙臆匱應隔間隋騭隨陋"), lift_ref_agree=True),
+    "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙"), lift_ref_agree=True, ref_enter=True),
+    "guanm": dict(tolerate=frozenset("闡間閱閣聞闌閩開閑問闚闢"), lift_ref_agree=True, ref_enter=True),
+}
+#: 闗關 与门族 men 共用 關：men 只补放不复核，已放行的 關 归 guanm 复核（刻 闗 放成 關 的改码位）
+_SHAPE_PAIR_OVERLAPS = {"guanm": ("men",)}
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
@@ -341,7 +356,8 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                # 繁复字库形常把组外的繁复字排在分差内（夔 后紧咬 囊蘗𢑱憂…），`tolerate` 放它们进入；
                                # 进入放宽了，所以补放须与整理本同字（`lift_ref_agree`，按书级码位归一后比）。
                                ("huo", "獲𫉬", (), "覆複藻襲搜護"),
-                               ("kui", "夔䕫", (), "囊蘗蔑𢑱𢑴憂藝難璉襲喪藎謩蔓雜製鑒甄"),
+                               # vol21–50 首跑（A24 10-25）：夔 后还紧咬 𮑮襄𠮓變雙凌，16 格进不了组送审，补进陪衬
+                               ("kui", "夔䕫", (), "囊蘗蔑𢑱𢑴憂藝難璉襲喪藎謩蔓雜製鑒甄𮑮襄𠮓變雙凌"),
                                ("lie", "獵𤢪", (), "猶亂侃猥"))
 }
 
@@ -369,8 +385,9 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     # 复核时把握够就按刻形改码位（`review_fix`），不够不动。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
-        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=gid not in _SHAPE_PAIR_NO_FIX),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}", overlaps=_SHAPE_PAIR_OVERLAPS.get(gid, ()),
+        flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=gid not in _SHAPE_PAIR_NO_FIX,
+                      **_SHAPE_PAIR_FLOW.get(gid, {})),
         note=f"异体对按刻形判（{note}）；{'补放，复核只降审' if gid in _SHAPE_PAIR_NO_FIX else '补放与复核改码位'}；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
                                # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
@@ -383,7 +400,9 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                # 只给 變（判成 𠮓 弃权，保持码位归一的 𠮓），复核改码位
                                ("bian", "變𠮓", "下部 攵／又"),
                                # 瑣𤨏（2026-10-25，GUJI-719）：两种刻法一眼可分，但 𤨏 只 9 格（每类至少 5 例才给字），复核只降审不改码位
-                               ("suo", "瑣𤨏", "右上 ⺌／巛"))},
+                               ("suo", "瑣𤨏", "右上 ⺌／巛"),
+                               # vol21–50 首跑 V 类（2026-10-25）：字形库没有少的一形（𨼆 𮅕），库排成常见形或别的字；刻形一眼可分
+                               ("yin", "隱𨼆", "右上 爫工／平顶 丅⺊"), ("suan", "算𮅕", "下部 廾／大"), ("guanm", "闗關", "門内下部 灬／丱"))},
     # 广宀族（2026-10-24，A24）：「蕤賔」的 賔 字形库里没有，库把它排成 實廣（再往后 墳須寅賞…），形近护栏拦下送审（vol19 十几格）。
     # 整字 HOG 一对多，只给 賔／賓（`ids_online.SPECS["guang"].give`；實廣 判出来也弃权，库本来认得）；賔賓 按刻形各给各的码位。
     # 陪衬＝模板库里的陪衬类（判成它们＝弃权），入口才容许它们紧咬。复核只降不改：已放行 實廣 而判出 賔賓 的降审
@@ -398,11 +417,11 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     # 与整理本同字才补放（`lift_ref_agree`）；只补放，不复核。组员是殿本里常见的族字，陪衬是库形常排在分差内的组外字。
     "men": GroupSpec(
         id="men", name="門族", members=frozenset("間聞問闡閱閣闢關閩閭開闌閔闇閑闕閨門閒閻閏閉闚閶閎闈闞"), backends=(),
-        kind="near_form", solvers=("ids",), config_dir="config/groups/men", overlaps=("wj",),
+        kind="near_form", solvers=("ids",), config_dir="config/groups/men", overlaps=("wj", "guanm"),
         flow=FlowSpec((_img("men"),), combine="first", lift_ref_agree=True,
                       tolerate=frozenset("刪删圖固同國岡剛圓冊因曲罔四明附則圍副嗣隅制冏團潤蘭困題順顯昭用"
                                          "𠕢𨴀閳䕡𨴏閜閹𨶽𦣧𨳼閰𨵅𨷺𢢅𦚻𭟧𨴕劂𨳸腢闆𨷯𨶇𭬸𠱬𨶏")),
-        note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）；只补放。"),
+        note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"),
     "chuo": GroupSpec(
         id="chuo", name="辶族", members=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾選述近迎造遵遞追邊巡遷遜"),
         backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh",),
