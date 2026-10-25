@@ -82,7 +82,8 @@ class BorderDetectParams(BaseModel):
     pitch_rescue: bool = True
     """列距救援（`utils/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
-    「去掉劈开窄对的线、在有字的一侧补外框线」；新列网干净才接受。没触发的页逐字节不变。"""
+    「去掉劈开窄对的线、在有字的一侧补外框线」，再不成就从自由线、网格线、外推外框线里拼一串等宽列（fuse）；
+    新列网干净才接受。没触发的页逐字节不变。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
@@ -99,7 +100,7 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.6", unit="page",   # 1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.7", unit="page",   # 1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge",
