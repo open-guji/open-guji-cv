@@ -261,6 +261,7 @@ def run_keben_from_raw(tmp_path, monkeypatch=None, *, book, gray, page: int = 1,
     改自己的那份互不影响。**要在跑之前改 Step1–4 的行为**（monkeypatch 某步、
     换参数）的用例传 `memo=False`，否则拿到的是没打补丁的那份。
     """
+    import atexit
     import copy
     import dataclasses
     import hashlib
@@ -287,6 +288,7 @@ def run_keben_from_raw(tmp_path, monkeypatch=None, *, book, gray, page: int = 1,
     out = run_steps(ctx, page, steps)
     if memo:
         saved = Path(tempfile.mkdtemp(prefix="guji_raw_chain_"))
+        atexit.register(shutil.rmtree, saved, ignore_errors=True)
         for sub in ("products", "cache"):
             if (tmp_path / sub).exists():
                 shutil.copytree(tmp_path / sub, saved / sub)
