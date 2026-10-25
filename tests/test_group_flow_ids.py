@@ -182,7 +182,7 @@ def test_seed_admit_can_fetches_patch_for_ids(tmp_path, monkeypatch, can_bank):
         dict(slot=1, verdict="unsure", cov=0.98, wmax=10.0, candidates=[("㕘", 0.98), ("參", 0.975)])]))
     write_product(ctx, "context_decide", 1, context_decision=page_decision(
         1, "tbook", col=1, recs=[dict(slot=1, char=None, margin=0.1, source="prior")]))
-    ctx.params["seed_admit"] = SeedAdmitParams(patch_missing="skip", group_flow=("can",))
+    ctx.params["seed_admit"] = SeedAdmitParams(patch_missing="skip", group_flow=("can",), shadow_veto=False)   # 影子闸要真字形库与 sklearn，这里没摆
     r = STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"].columns[0].chars[0]
     trail = r.evidence["group"]["solvers"]
     assert [t["solver"] for t in trail] == ["freq", "ids", "top1"] and trail[1]["why"] == "abstain:no_patch"

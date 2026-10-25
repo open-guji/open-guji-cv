@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+## [0.5.15] - 2026-10-24
+PATCH（#522 seed_admit 1.23 iron_coord_guard；#528 ref_lib_diff 不放行、ref_prefer 等缺省开；#527 #529 #530 #531 #520 字组；#515 重跑提速；#523 guji source commons；#521 #524 控制台插图块）。缺省输出只把少量放行挪到待审、不改字，不属「多数册值得重跑」的核心升级，按 PATCH。`shadow_veto` 从此缺省开，执行方要装 `.[shadow]`（用发版附件装时 `--extras shadow`），否则起跑前自检拒跑 seed_admit；#533 补了 8 条没装 sklearn 就红的老测试。
+
 ### Added
 - seed_admit 1.23：铁证与坐标对位字互证 `iron_coord_guard`（缺省开，A31 cv v0.5.12 错放 vol07:30:4:8 水→木，cv#522）：现役对位字被库分歧过滤掉时，铁证字与坐标对位字语义不同、又无直接异体边 → 落审（`iron_vs_coord`）；殿本 17 册 main 包回放命中 14 格（宫/官 ×10 等），看图 13 错 1 难分。`ref_lib_diff`（#528）进 `_LANE_HARD`，待审补放通道不再按整理本字放回。版本号连同 #528 一起记 1.23。只会把放行挪到待审，不改字。
 - `guji source commons`：以 Wikimedia Commons 上的 DjVu 为原图的根（10-24 用户定，设计稿第十二节）：核 Commons sha1、存 R2 镜像、`ddjvu` 原尺寸解页、发布页表；会话连不上 Commons 时 `--djvu` 配 `--commons-json` 用别处下好的文件。四庫總目 99 册全部登记（vol01–20 补记根，页图不变）。只在 `datastore/` 与 CLI，`code_hash` 不变（PATCH）。
