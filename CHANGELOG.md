@@ -7,6 +7,7 @@
 
 ### Added
 - 重跑任务库 `guji job`（云端 `guji_jobs`）：重跑、A/B、评测交到 Neon 中心库 `jobs` schema（job／attempt／event／result 四表），同配置按指纹只跑一次；执行方 `FOR UPDATE SKIP LOCKED` 领单、租约心跳，准备→铺底→人裁检查→跑→对比→存包一口气跑完，每步进展与结果（包标签、R2 位置）记库。见 `doc/design/重跑任务库.md`。`scripts/rerun_prep.sh` 加 `--reset`（同一会话接第二张单时先还原本机册配置）。
+- `guji source commons-pack`：页表里修过的页（拆页、转正、换图）合进 Commons 根，出回传用的新版 DjVu，逐页解码核对；`guji source commons --reroot`：传完重登记，页序与页图字节不变（设计稿 §十三）。
 
 ## [0.5.16] - 2026-10-25
 
