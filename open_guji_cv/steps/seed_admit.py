@@ -54,8 +54,7 @@ from ..utils.ji_yi_si import FAMILY as _JYS
 _log = logging.getLogger(__name__)
 
 
-_N_KEYS = ("context_single_stroke_review", "context_narrow_review", "context_narrow_ratio",
-           "context_narrow_ref", "context_narrow_col_review", "context_narrow_col_ratio")
+_N_KEYS = ("context_single_stroke_review",)
 
 
 def _flow_groups():
@@ -160,18 +159,6 @@ class SeedAdmitParams(BaseModel):
     """N1（Esme 规则面，默认关）：context 通道要放行的字是单笔画字（`_SINGLE_STROKES`：一 丨 亅 丶 丿 乀 乁 乚 乛）
     → 不放，转待审并记 doubt `context_single_stroke`。理由：乱码残片上 context 按字频补出的最常见假字；
     真「一」「丨」被降级只是多审几张。只收紧，只管 context 通道。"""
-    context_narrow_review: bool = False
-    """N2（Esme 规则面，默认关）：context 通道要放行、且切片宽 < `context_narrow_ratio`×中位宽
-    或高 < `context_narrow_ratio`×中位高 → 转待审，doubt `context_narrow_slice`。中位＝本页 `char_index`
-    正文格（cell_type=char、step3_kind=char、非夹注）宽／高的中位数；`context_narrow_ref`＝(宽,高)
-    给了就用它（整册中位，由调用方量好传入）。只收紧，只管 context 通道。"""
-    context_narrow_ratio: float = 0.5
-    context_narrow_ref: tuple[float, float] | None = None
-    context_narrow_col_review: bool = False
-    """N3（Esme B4 窄列扫描，默认关）：context 通道要放行、且这一列的文字带宽（`gate_manifest` 的
-    `band_width`）< `context_narrow_col_ratio`×本页各列带宽中位数 → 转待审，doubt `context_narrow_col`。
-    只管 context 通道，不碰 match_ref 等通道。没有 `gate_manifest` 产物 = 弃权。"""
-    context_narrow_col_ratio: float = 0.75
     context_blank_gate: bool = True
     """上下文通道对近空白字块弃权（2026-09-27 D 铁证复核：`vol03:9:9:21` 字块几乎
     是空白，`context` 通道仍把它放行成「今」——上下文判定只看文意，不看这一格
@@ -470,13 +457,9 @@ class SeedAdmitParams(BaseModel):
     context_guard_diff: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """context 通道放行前，库判 `diff` 且 `cov < context_guard_cov` 就不放行（doubt
     `ctx_guard_diff`，overview#333 建议 1 前半）。库已经明确说「不像」，上下文单凭文意不该
-    把它抬成字。缺省关；五个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
+    把它抬成字。缺省关；四个 `context_guard_*` 全是缺省值时都不进 dump，产物逐字节不变。"""
     context_guard_cov: float = 0.8
     """`context_guard_diff` 的 cov 门槛。"""
-    context_guard_flags: bool = False
-    """context 通道放行前，这一格在 Step4 `char_index` 上带 `context_guard_flag_set` 里任一
-    标记就不放行（doubt `ctx_guard_flag`，建议 1 后半）。没有 `char_index` 产物 = 弃权。"""
-    context_guard_flag_set: str = "rule_bar,suspect_empty,bad_seg"
     context_guard_ref_blank: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
     时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
@@ -623,7 +606,7 @@ class SeedAdmitParams(BaseModel):
             for k in ("shadow_conf", "shadow_veto_variant_abstain"):
                 d.pop(k, None)
         if isinstance(d, dict):
-            # N1/N2/N3（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
+            # N1（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
             for k in _N_KEYS:
                 if k in d and d[k] == type(self).model_fields[k].default:
                     d.pop(k)
@@ -675,7 +658,7 @@ class SeedAdmitParams(BaseModel):
                     d.pop(k, None)
         if isinstance(d, dict) and not self._context_guard_on():
             # diff／ref_blank（10-23）、ref_prefer（10-24）已缺省开：全关是显式选择，这三个 False 留在 dump 里
-            for k in ("context_guard_cov", "context_guard_flags", "context_guard_flag_set"):
+            for k in ("context_guard_cov",):
                 d.pop(k, None)
         return d
 
@@ -694,7 +677,7 @@ class SeedAdmitParams(BaseModel):
         return flow_names(v)
 
     def _context_guard_on(self) -> bool:
-        return (self.context_guard_diff or self.context_guard_flags
+        return (self.context_guard_diff
                 or self.context_guard_ref_blank or self.context_guard_ref_prefer)
 
     def model_post_init(self, _ctx) -> None:
@@ -892,8 +875,6 @@ class SeedAdmitStep(Step):
         omap = {r.id: r for cc in (ocr.columns if ocr else []) for r in cc.chars}
         dmap = {r.id: r for cc in (dec.columns if dec else []) for r in cc.chars}
         imap = {r.id: r for cc in (chars.columns if chars else []) for r in cc.chars}
-        gate_cols = (_gate_band_widths(_opt(ctx, "gate_manifest", page))
-                     if p.context_narrow_col_review else {})
         mmap = {r.id: r for cc in match.columns if cc.ok for r in cc.chars}
         rtop: dict[str, list[str]] = {}
         if p.rare_ref:
@@ -1265,19 +1246,13 @@ class SeedAdmitStep(Step):
                         doubts.append("context_blank_cell")
                     elif p.context_single_stroke_review and d.char in _SINGLE_STROKES:
                         doubts.append("context_single_stroke")
-                    elif p.context_narrow_col_review and _narrow_col(
-                            gate_cols, r.id, p.context_narrow_col_ratio):
-                        doubts.append("context_narrow_col")
-                    elif p.context_narrow_review and _narrow_slice(
-                            _ir, p.context_narrow_ref or _page_med_wh(imap), p.context_narrow_ratio):
-                        doubts.append("context_narrow_slice")
                     elif p.context_garble_guard and (_gg := _garble_guard(
                             p, r, d.char, (align_char, _coord_refs(ctx, page, coord_cache).get(r.id),
                                            *(c for c, _ in (o.topk if o else []))),
                             garble_run, vm_here)):
                         doubts.append(_gg)
                     elif p._context_guard_on() and (_g := _context_guard(
-                            p, r, d.char, _ir, _coord_refs(ctx, page, coord_cache), vm_here)):
+                            p, r, d.char, _coord_refs(ctx, page, coord_cache), vm_here)):
                         doubts.append(_g[0])
                         char = _g[1] or char
                     elif p.context_variant_form_guard and _context_variant_tie(
@@ -2358,42 +2333,6 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
 _SINGLE_STROKES = frozenset("一丨亅丶丿乀乁乚乛")
 
 
-def _page_med_wh(imap: dict) -> tuple[float, float]:
-    """本页正文格（char_index）宽、高的中位数；缺数据返回 (0, 0)（= 不判窄）。"""
-    import statistics
-    ws = [r.width for r in imap.values() if r.cell_type == "char" and r.step3_kind == "char"
-          and not r.sub and r.width > 0]
-    hs = [r.height for r in imap.values() if r.cell_type == "char" and r.step3_kind == "char"
-          and not r.sub and r.height > 0]
-    return (statistics.median(ws) if ws else 0.0, statistics.median(hs) if hs else 0.0)
-
-
-def _narrow_slice(rec, med: tuple[float, float], ratio: float) -> bool:
-    """N2：切片宽或高不到中位的 `ratio` 倍。无字块记录／无中位 → False。"""
-    if rec is None or not med[0] or not med[1]:
-        return False
-    return rec.width < ratio * med[0] or rec.height < ratio * med[1]
-
-
-def _gate_band_widths(gm) -> dict:
-    """{col: (本列带宽, 本页带宽中位数)}；无 gate_manifest → {}（弃权）。"""
-    import statistics
-    if gm is None or not getattr(gm, "columns", None):
-        return {}
-    med = statistics.median(c.band_width for c in gm.columns)
-    return {c.col: (c.band_width, med) for c in gm.columns}
-
-
-def _narrow_col(gate_cols: dict, cell_id: str, ratio: float) -> bool:
-    """N3：格 id（book:page:col:idx）所在列的带宽 < ratio×页中位。"""
-    try:
-        col = int(cell_id.split(":")[2])
-    except (IndexError, ValueError):
-        return False
-    bw = gate_cols.get(col)
-    return bool(bw and bw[1] and bw[0] < ratio * bw[1])
-
-
 def _solo_ctx_vetoed(dec, cands, vmap, thresh: float) -> bool:
     """`solo_ctx_veto`：上下文第一名与库 top1 语义不同、且概率 ≥ thresh（无 ranked／候选 = 不拦）。"""
     ranked = getattr(dec, "ranked", None)
@@ -2564,23 +2503,18 @@ def _coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:
     return cache["coord"]
 
 
-def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, im, coord: dict[str, str],
+def _context_guard(p: "SeedAdmitParams", r, ctx_char: str, coord: dict[str, str],
                    vmap) -> tuple[str, str | None] | None:
     """context 通道放行前的最后一道闸（overview#333，G1 道）。命中返回 `(doubt, 默认字|None)`，
-    不命中 None。四条各有开关（`context_guard_*`），依次判，先中先返回；缺信号一律弃权：
-    没有 `char_index` 就不看标记，没有坐标对位就不看整理本。
+    不命中 None。三条各有开关（`context_guard_*`），依次判，先中先返回；缺信号一律弃权：
+    没有坐标对位就不看整理本。
 
     - `ctx_guard_diff`：库判 diff 且 cov < `context_guard_cov`；
-    - `ctx_guard_flag`：字块带 rule_bar／suspect_empty／bad_seg（界行杆、空薄片、坏切）；
     - `ctx_guard_ref_blank`：坐标对位说此位是空格、库又不是 same → 字块不是字；
     - `ctx_guard_ref`：坐标对位的整理本字与 context 字语义不同、库不是 same → 默认字取整理本。
     """
     if p.context_guard_diff and r.verdict == "diff" and r.cov < p.context_guard_cov:
         return "ctx_guard_diff", None
-    if p.context_guard_flags and im is not None:
-        bad = set(p.context_guard_flag_set.split(",")) & set(im.flags)
-        if bad:
-            return "ctx_guard_flag", None
     ref = coord.get(r.id)
     if ref is not None and r.verdict != "same" and ref != "〓":
         if ref == "":

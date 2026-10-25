@@ -2265,7 +2265,8 @@ def cmd_groups(args) -> None:
         raise SystemExit("groups status 要 --prod 与 --out")
     pj, pm = group_status.run([Path(p) for p in args.prod.split(",")], Path(args.out),
                               labels=Path(args.labels) if args.labels else None,
-                              codepoints=Path(args.codepoints) if args.codepoints else None, tag=args.tag)
+                              codepoints=Path(args.codepoints) if args.codepoints else None, tag=args.tag,
+                              prev=Path(args.prev) if args.prev else None)
     print("写", pj, "\n写", pm)
 
 
@@ -3539,6 +3540,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--codepoints", default="", help="status：工作区 config/codepoints.yaml（核对人裁时先归一码位）")
     p.add_argument("--out", default="", help="status：输出目录（dataset char-groups/status）")
     p.add_argument("--tag", default="", help="status：这一轮产物的标签，进文件名")
+    p.add_argument("--prev", default="", help="status：上一份报告的 json，表里写送审增减")
 
     p = sub.add_parser("cards", help="[v2] 待审卡片数据：dingzi | cutline | jiazhu | groups")
     p.add_argument("action", choices=["dingzi", "cutline", "jiazhu", "groups"])
@@ -3662,6 +3664,10 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .cli_freeze import add_parser as _add_freeze, cmd_freeze
     _add_freeze(sub)
     COMMANDS_V2["freeze"] = cmd_freeze
+    # job（2026-10-25）：任务库（Neon jobs schema）——交重跑／评测任务、看谁在跑什么、执行方领单跑单
+    from .jobs.cli import add_parser as _add_job, cmd_job
+    _add_job(sub)
+    COMMANDS_V2["job"] = cmd_job
     install_workspace_option(sub)
 
 

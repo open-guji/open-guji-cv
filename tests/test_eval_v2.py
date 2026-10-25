@@ -50,6 +50,8 @@ NOT_REGISTRY_SHAPED = {
     "context_guard",  # G1（overview#333）Step7 context 护栏对比：--base/--variant 指沙箱里
                       # 各开关各跑一份的 seed_admit 产物目录，--labels 由工作区人裁事件现做，
                       # 不是数据集分片；用法见 research/context_guard/README.md
+    "seg_health",  # 切分体检（回退监控）：靶子是 --root 指的某批产物（--books 必填）＋中心库
+                   # daizhige 格位表与整理本，不是数据集分片；新一批和上一批比数
 }
 
 

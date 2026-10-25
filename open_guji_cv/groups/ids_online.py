@@ -204,6 +204,13 @@ SPECS: dict[str, IdsSpec] = {
     #   ＋看图改标（放行成 喪、刻 䘮 的 2 格，送审格 6 格），建库 build_shape_pair.py。按册留出 110 格（喪77 䘮33）不设门槛也 0 错，门槛沿用 0.5。
     #   㣲微 同时试过（中下 口／几）：看图只十几格作 口，取框／整字 HOG 三种设置按册留出 口 都被高把握判成 微（错例 0.9–1.4），分不开，保留码位归一。
     "sang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 變𠮓（2026-10-25，A24）：下部 攵（左上多一短撇）对 又。工作区码位归一 變→𠮓 让放行字全成 𠮓，放行字不当标签；
+    #   标签全是 sheldon 看图（dataset variant/bian/sheldon_labels.jsonl：變 107、𠮓 624，后者 565 格是「其余下边都是又」未逐格点），
+    #   建库 build_shape_pair.py --labels（𠮓 每册 ≤12 → 238）。按册留出 345 格：判成 變 的 0 错（𠮓 从没被判成 變），
+    #   判成 𠮓 的有 9 格其实是 變（margin 到 1.1，取区域／尺寸／λ 试了 13 种都 7–43 错）→ 只给 變（give），判 𠮓 弃权＝维持码位归一。
+    #   门槛 0.5：按册留出 變 给对 82／107。
+    "bian": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
+                    region=(0.0, 1.0, 0.5, 1.0), give="變"),
     # 广宀族 廣實賔賓宸（2026-10-24，A24）：送审的「蕤賔」賔 库里没有字形，被排成 實廣墳須。整字 HOG 一对多（32×32，λ=1），
     #   类＝成员＋陪衬 17 字（寶寳寅賞墳須煩裒盧資質贋寫竇賁責貴）＋「〇」其他池（35 字），每册每字 ≤3（賔賓 全收），
     #   模板＝殿本 vol04–20 放行格＋人裁＋送审格看图补标（research/m7/glyph_expand/build_guang.py）。只给 賔／賓（`give`）：
@@ -219,6 +226,9 @@ SPECS: dict[str, IdsSpec] = {
                     size=48, clean=True, aspect=(0.45, 2.2)),
     # 撰𢰅（2026-10-24，3–4 格异体对）：差别在右下（共／丌，𢰅 长撇长捺大开），整字 48×48 按册留出 0 错（取右半反而错多）；门槛沿用 0.5。
     "zhuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 瑣𤨏（2026-10-25，A24 GUJI-719「异体组纳入形近比对」）：差别在右上（⺌／巛），只取右上框 48×48。
+    "suo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=5, whole="hog", region=(0.4, 1.0, 0.0, 0.5), lam=1.0, size=48,
+                   clean=True),
 }
 
 

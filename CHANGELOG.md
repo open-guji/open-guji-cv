@@ -5,6 +5,29 @@
 
 ## [未发版]
 
+## [0.5.17] - 2026-10-25
+
+PATCH（A24 字组成批上线第二批的代码部分：#552 suo 组与 719 库标研究；#555 變𠮓 改刻形组；#556 尙尚 恢复复核改字；#558 宮宫 暂归一登记；#570 字组状态写后台看板；另含 #563 #572 Step1 列距救援 fuse、任务库与进度上报若干）。新组要在册配置 `group_flow` 点名才生效；`groups/registry.py`、`groups/flow.py`、Step1 的 `code_hash` 变。
+
+### Changed
+- 字组：新建取框组 suo 瑣𤨏（GUJI-719，#552）；bian 變𠮓 改成刻形组（下半 HOG，只给 變，#555）；尙尚 恢复复核改字（vol16 两格放大看是 尙，#540 的「只降不改」撤回，#556）；宮宫 登记为暂归一到 宫（#558）。
+
+### Added
+- `python -m open_guji_cv.eval.group_progress`：`guji groups status` 的 json 写网站后台「文本整理」的 yiti／xingjin 两栏（缺省只打印，`--write` 写库，#570）；`guji groups status --prev` 出送审分类与增减（#553）。
+
+### Fixed
+- 任务库：执行方同一会话接第二张单（准备带 `--reset`）时 `db pull --force --no-rebuild` 不建 glyph.db；上一次准备在拉库前就失败的会话里 glyph.db 从没建过，建钉版库报 `no such table: sources`（#3–#6）。`--reset` 改成照常重建。
+- 任务库：准备脚本的「语料校验」也认 `GUJI_CORPUS_DRIFT=warn`（之前单上写了放行，准备阶段还是拦下，#1 vol07 因此失败）。常驻执行方两张单之间每 10 分钟看一次 dev 上 jobs 模块、准备脚本、启动器有没有更新，有就空闲时退出，线程重新 start 换上新代码。
+- 任务库：`retry` 过的单再也领不到（领单序号按已清零的次数算，撞 `UNIQUE (job_id, n)`，又被当成「同册被抢」悄悄吞掉）；现在序号接着历来最大的排，只有同册互斥的冲突才换一条，别的冲突照常报错。
+- 任务库：环境类失败（如会话没挂 guji-workspace 私仓）退回排队后冷却 5×次数 分钟（新列 `run_after`，schema v3，`GUJI_JOBS_BACKOFF_MIN` 可调），并优先让别的执行方领；之前同一个坏会话几秒内把 3 次机会用完。执行方领单前自检能否读 guji-workspace，读不了就只报到不领单（`workers` 列出原因），挂上后自动开始领。`workers` 的「跑完」改称「领过」。
+
+### Added
+- 任务库常驻执行方：新表 `jobs.worker`（执行方名字、会话、空闲／在跑哪条、最近报到），`guji job workers` 列在线执行方，`ls` 表头带在线数；执行方空闲每 30 秒报到、在跑每分钟心跳。`GUJI_JOBS_LEASE_MIN` 可调租约（测试用）。文档加常驻执行方线程的开法。
+
+### Added
+- 重跑任务库 `guji job`（云端 `guji_jobs`）：重跑、A/B、评测交到 Neon 中心库 `jobs` schema（job／attempt／event／result 四表），同配置按指纹只跑一次；执行方 `FOR UPDATE SKIP LOCKED` 领单、租约心跳，准备→铺底→人裁检查→跑→对比→存包一口气跑完，每步进展与结果（包标签、R2 位置）记库。见 `doc/design/重跑任务库.md`。`scripts/rerun_prep.sh` 加 `--reset`（同一会话接第二张单时先还原本机册配置）。
+- `guji source commons-pack`：页表里修过的页（拆页、转正、换图）合进 Commons 根，出回传用的新版 DjVu，逐页解码核对；`guji source commons --reroot`：传完重登记，页序与页图字节不变（设计稿 §十三）。
+
 ## [0.5.16] - 2026-10-25
 
 PATCH（A24 字组成批上线第一批的余下部分：#532 #537 #540 #545；#538 #544 起跑自检与人裁绑定；#539 意见池；#536 #542 #543 #546 #547 字组文档）。新组要在册配置 `group_flow` 点名才生效；`seed_admit`、`groups/flow.py`、`groups/registry.py` 的 `code_hash` 变。

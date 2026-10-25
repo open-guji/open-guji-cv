@@ -79,3 +79,48 @@ def test_grid_may_not_move_good_rules():
     assert not pr.keeps_good_lines(old, grid, bad)
     out, how = pr.rescue(_res(old), _gray([]), lambda pitch: _res(grid))
     assert how is None
+
+
+def test_fuse_free_grid_and_extrapolated_lines():
+    """vol20 p113：c3 里挑了三条错线（真界行淡），网格对上了 c3、c4 却在外侧挑歪；两条路都不成时，
+    从自由线＋网格线＋有字一侧的外推外框线里挑一串列宽都在带内的线（自由线优先）。"""
+    p113 = [342, 534, 754, 827, 938, 1092, 1279, 1460, 1634, 1830]
+    grid = [342, 534, 722, 917, 1092, 1284, 1463, 1656, 1888, 2071]
+    g = _gray([(1830, 2011)])                     # 网外那列有字
+    out, how = pr.rescue(_res(p113), g, lambda pitch: _res(grid))
+    assert how == "fuse"
+    xs = [round(x) for x in line_xs(out)]
+    assert xs[:2] == [342, 534] and xs[2:4] == [722, 917] and xs[4:9] == [1092, 1279, 1460, 1634, 1830]
+    assert 2000 <= xs[9] <= 2030
+    assert out.vline_filled == [False] * 9 + [True]
+    assert pr.is_clean(xs)
+
+
+def test_fuse_needs_ink_outside_to_extrapolate():
+    p113 = [342, 534, 754, 827, 938, 1092, 1279, 1460, 1634, 1830]
+    grid = [342, 534, 722, 917, 1092, 1284, 1463, 1656, 1888, 2071]
+    out, how = pr.rescue(_res(p113), _gray([]), lambda pitch: _res(grid))
+    assert how is None and [round(x) for x in line_xs(out)] == p113
+
+
+def test_fuse_takes_rule_stubs_in_head_band():
+    """vol16 p8：全页小字雙行，版心里没有界行、只有天头那一截；自由模式把一条界行探偏进字缝（1495）、
+    在末列里多挑一条（1874），最右整列落在网外。天头的界行残段补上探偏的线和外框线。"""
+    free = [540, 720, 900, 1086, 1265, 1495, 1637, 1812, 1874, 2024]
+    true = [353, 539, 718, 897, 1082, 1263, 1448, 1631, 1812, 2030]
+    g = _gray([(353, 539)])                       # 网外那列有字
+    for x in true:
+        g[300:540, W - 1 - x - 1:W - 1 - x + 2] = 0     # 天头的界行残段（240px，> 0.8 列宽）
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(free))
+    assert how == "fuse"
+    xs = [round(x) for x in line_xs(out)]
+    assert all(abs(a - b) <= pr.TOL for a, b in zip(xs, true)), xs     # 自由线对得上的照用自由线
+    assert not any(out.vline_filled)
+
+
+def test_rule_stubs_ignore_char_strokes():
+    """字的竖笔（不到一格高）不当界行残段。"""
+    g = np.full((H, W), 255, np.uint8)
+    g[400:510, W - 1 - 1000] = 0                  # 110px 竖笔
+    g[800:1100, W - 1 - 1200] = 0                 # 300px 界行残段
+    assert pr._rule_ridges(_res(GOOD), g, 900, 1300, 0.8 * 180, 128) == [1200.0]

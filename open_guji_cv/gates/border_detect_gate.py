@@ -66,6 +66,16 @@ class BorderDetectGateParams(BaseModel):
     `column_gate.period_prior_pages`：`params: {border_detect_gate: {body_pages: [88]}}`。
     缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
 
+    grid_overrides_skip: bool = True
+    """页型规则判 skip（题签／封面），但 Step1 探出完整的正文栏格 → 按正文走，manifest 记 flag `page_type_grid`。
+    完整栏格（`_full_grid`）＝列数＝版式列数、每列宽都在中位 ±``grid_width_tol`` 内、每条竖线都是真探到的
+    （不是网格模式插值补的），且每条界行在原图上从上版框到下版框至少 ``grid_line_cover`` 的行都有墨——挡住框线残留、
+    装订线、题签上的杂线（A21 核对意见，2026-10-25）。卷末少字页只有两三列字、其余空栏，字少被页型规则当成
+    题签整页跳过（殿本 vol13 p89、vol14 p174；vol05 p106、vol06 p88、vol07 p90 同型）；真题签、封面只有
+    4–6 条竖线，列数就对不上（vol04 第 129 叶横页）。"""
+    grid_width_tol: float = 0.15
+    grid_line_cover: float = 0.5
+
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
         d = handler(self)
@@ -81,6 +91,39 @@ class BorderDetectGateParams(BaseModel):
             from ..pagetype_model.model import DEFAULT_MODEL, file_fingerprint
             object.__setattr__(self, "pagetype_model_fingerprint",
                                file_fingerprint(self.pagetype_model_path or DEFAULT_MODEL) or "missing")
+
+
+def _full_grid(b: Borders, raw, width_tol: float, line_cover: float) -> bool:
+    """完整等宽的栏格：每列宽（相邻竖线顶端 x 之差）都在中位 ±width_tol 内；没有插值补的竖线；
+    每条界行（两边外框除外）在原图上、上下版框之间至少 line_cover 的行有墨（线宽按 ±3px 找；x 从右边量）。
+    刻本界行常有断续、磨淡处，实测正文页界行覆盖 0.6–1.0，所以门槛放在一半。"""
+    import numpy as np
+    xs = sorted(v.x_at_top for v in b.verticals)
+    w = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
+    if not w or any(b.vline_filled):
+        return False
+    m = sorted(w)[len(w) // 2]
+    if m <= 0 or any(abs(x / m - 1) > width_tol for x in w):
+        return False
+    g = np.asarray(raw)
+    g = g if g.ndim == 2 else g.mean(axis=2)
+    h, wd = g.shape[:2]
+    for v in b.verticals[1:-1]:                 # 两边的外框已由版框检测认过，只查界行
+        line = v.to_vline()
+        x_mid = line.x_at(h / 2)
+        y0 = int(b.top.to_hline().y_at(x_mid)) + 5
+        y1 = int(b.bottom.to_hline().y_at(x_mid)) - 5
+        ys = range(max(0, y0), min(h, y1), 2)
+        if not ys:
+            return False
+        hit = 0
+        for y in ys:
+            x = int(round(wd - 1 - line.x_at(y)))       # 新坐标系 x 从右边量
+            seg = g[y, max(0, x - 3):min(wd, x + 4)]
+            hit += bool(seg.size) and seg.min() < 128
+        if hit < line_cover * len(ys):
+            return False
+    return True
 
 
 _PT_GATES: dict = {}
@@ -99,7 +142,7 @@ def _pagetype_gate(p: "BorderDetectGateParams"):
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.1", unit="page",
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.2", unit="page",
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
@@ -127,6 +170,11 @@ class BorderDetectGateStep(Step):
             page_type, policy = "body", "standard"
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
+        grid_from = None
+        if p.grid_overrides_skip and policy == "skip" and n_cols == expected and \
+                _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
+            grid_from = f"{page_type}/{policy}"
+            page_type, policy = "body", "standard"
         # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
         # `pair_merged` 旗、并把页上列数记在 `Borders.expected_cols`。**显式认旗，不靠两个数相等去猜**。
         # 期望列数对着**本闸自己的**期望（`p.expected_cols or 书级`）减一：旗＋探出列数＝Step1 记的列数＝
@@ -150,6 +198,8 @@ class BorderDetectGateStep(Step):
             flags_forced = [f"page_type_forced：页型规则判「{forced_from}」，册配置 body_pages 点名按正文走"]
         else:
             flags_forced = []
+        if grid_from:
+            flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":
             reject.append(f"page_type_skip：页型判定为「{page_type}」，无正文栏格，不套列窗口")
         pt_ev = None

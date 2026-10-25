@@ -64,3 +64,50 @@ def test_status_counts_occurrence_flow_and_label_check(tmp_path):
     pj, pm = S.run([tmp_path / "prod"], tmp_path / "out", labels, cp, tag="t", date="2026-10-24")
     assert pj.name == "2026-10-24-t.json" and json.loads(pj.read_text(encoding="utf-8"))["tag"] == "t"
     assert "| ry | 日曰 | 不同义 | 3 | 66.7% | 1 | 2 | 50.0% | 1 | 1（0） |" in pm.read_text(encoding="utf-8")
+
+
+def test_review_breakdown_classifies_and_diffs(tmp_path):
+    from open_guji_cv.eval import group_status as S
+    from open_guji_cv.eval import review_breakdown as RB
+
+    edges = {"䘮": {"喪"}, "喪": {"䘮"}}
+    grp = {"group": {"id": "ry", "pick": None}}
+    for root, extra in (("old", [{"id": "vol01:1:1:9", "char": "曰", "admit": False, "evidence": grp}]), ("new", [])):
+        _page(tmp_path, root, "vol01", [
+            {"id": "vol01:1:1:1", "char": "日", "admit": True, "channel": "match_ref", "evidence": {}},
+            {"id": "vol01:1:1:2", "char": "曰", "admit": False, "evidence": grp},                       # G
+            {"id": "vol01:1:1:3", "char": None, "admit": False, "doubts": ["occluded"], "evidence": {}},  # O 印章
+            {"id": "vol01:1:1:4", "char": None, "admit": False, "evidence": {}},                         # V 䘮/喪
+            {"id": "vol01:1:1:5", "char": None, "admit": False, "evidence": {"guard": "conflict"}},      # N
+        ] + extra)
+        for step, body in (("glyph_match", {"columns": [{"chars": [{"id": "vol01:1:1:4", "candidates": [["喪", 0.9]]},
+                                                                    {"id": "vol01:1:1:5", "candidates": [["千", 0.8], ["子", 0.79]]}]}]}),
+                           ("align_ref", {"chars": [{"id": "vol01:1:1:4", "align_char": "䘮"}], "coord": [{"id": "vol01:1:1:5", "ref_char": "于"}]})):
+            p = tmp_path / root / "vol01" / step
+            p.mkdir(parents=True, exist_ok=True)
+            (p / "p0001.json").write_text(json.dumps({step: body}, ensure_ascii=False), encoding="utf-8")
+
+    d = RB.collect([tmp_path / "new"], edges)
+    assert d["books"]["vol01"] == {"cells": 5, "admit": 1, "review": 4, "G": 1, "O": 1, "V": 1, "N": 1}
+    assert d["keys"]["V"] == {"䘮/喪": 1} and d["keys"]["N"] == {"于/千/子": 1} and d["keys"]["O"] == {"印章遮挡": 1}
+
+    po, _ = S.run([tmp_path / "old"], tmp_path / "out", tag="old", date="2026-10-24")
+    _, pm = S.run([tmp_path / "new"], tmp_path / "out", tag="new", date="2026-10-25", prev=po)
+    md = pm.read_text(encoding="utf-8")
+    assert "| vol01 | 5 | 20.0% | 4（-1） | 1（-1） |" in md
+    assert "| ry | 1（-1） |" in md
+
+
+def test_group_progress_rows_split_sections():
+    from open_guji_cv.eval import group_progress as GP
+
+    d = {"date": "2026-10-25", "tag": "t", "books": ["vol05"],
+         "groups": {"zhi": {"name": "旨㫖", "kind": "同义", "total": {"occ": 10, "admit": 9, "review": 1, "flow": 4, "pick": 3,
+                                                                        "checked": 5, "mismatch": 1},
+                            "by_book": {"vol05": {"occ": 10, "admit": 9, "review": 1, "flow": 4, "pick": 3, "checked": 5, "mismatch": 1}}},
+                    "ry": {"name": "日曰", "kind": "不同义", "total": {"occ": 2, "admit": 2}, "by_book": {"vol05": {"occ": 2, "admit": 2}}}},
+         "review": {"keys": {"V": {"㣲/微": 2}, "N": {}}, "keys_by_book": {"V": {"㣲/微": {"vol05": 2}}, "N": {}}}}
+    rs = {(r[1], r[2], r[3]): r[5] for r in GP.rows(d, "bk")}
+    assert rs[("", "yiti", "review")] == 1 and rs[("", "yiti", "review_out")] == 2 and rs[("", "yiti", "groups")] == 1
+    assert rs[("005", "yiti", "agree_rate")] == 0.8 and rs[("005", "yiti", "pick_rate")] == 0.75
+    assert rs[("005", "xingjin", "review")] == 0 and rs[("005", "xingjin", "admit_rate")] == 1.0
