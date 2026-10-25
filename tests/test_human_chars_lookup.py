@@ -67,3 +67,32 @@ def test_stale_mark_minute_precision_same_day(tmp_path):
     b = _ev("vol01:4:1:3", {"v": "confirm", "shape": "文"}, 2); b.ts = "2026-09-25T08:00:00Z"
     log.append([a, b])
     assert human_chars("vol01", log, stale={"vol01:4:1:3": "20260925T0700"}) == {"vol01:4:1:3": "文"}
+
+
+def test_missing_events_dir_raises(tmp_path, monkeypatch):
+    """读工作区事件日志、目录却不存在 → 报错，不当「没人裁过」（2026-10-25，殿本 vol06/10 没设 GUJI_WORKSPACE）。"""
+    import pytest
+    monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(tmp_path / "nowhere"))
+    monkeypatch.delenv("GUJI_ALLOW_NO_EVENTS", raising=False)
+    with pytest.raises(FileNotFoundError, match="GUJI_WORKSPACE"):
+        human_chars("vol01", stale={})
+    monkeypatch.setenv("GUJI_ALLOW_NO_EVENTS", "1")
+    assert human_chars("vol01", stale={}) == {}
+
+
+def test_unbound_for_missing_patch_raises(tmp_path, monkeypatch):
+    """绑定行 `why=no_patch`（有当时的图、现格字块图拿不到）→ 报错，不悄悄当绑丢（2026-10-25，vol10 丢 68/146）。"""
+    import pytest
+
+    import open_guji_cv.feedback.bindings as B
+    monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(tmp_path))
+    ev = _ev("vol01:4:1:3", {"v": "confirm", "shape": "太"}, 1)
+    EventLog(tmp_path).append([ev])
+    row = {"event": ev.id, "key": ev.target.key, "status": "unanchored", "bound": None, "why": "no_patch"}
+    monkeypatch.setattr(B, "book_bindings", lambda book, log=None: {ev.id: row})
+    monkeypatch.delenv("GUJI_ALLOW_LOST_HUMAN", raising=False)
+    with pytest.raises(RuntimeError, match="字块图"):
+        human_chars("vol01", stale={})
+    monkeypatch.setenv("GUJI_ALLOW_LOST_HUMAN", "1")
+    lost = {}
+    assert human_chars("vol01", stale={}, lost=lost) == {} and "vol01:4:1:3" in lost

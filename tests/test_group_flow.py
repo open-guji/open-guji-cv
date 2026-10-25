@@ -218,11 +218,44 @@ def test_review_conflict_demotes(monkeypatch):
     """复核时两路解法给了不同的字（必有一路≠放行字）→ 降审。"""
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    picks = {"ctx": "人", "rr_img": "入", "ids": None}
+    picks = {"ctx": "人", "rr_img": None, "ids": "入"}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
     r = Rec("b", "人", True, "match_ref", "match")
     group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
     assert not r.admit and "group_flow_disagree" in r.doubts
+
+
+def test_review_weak_vote_overruled(monkeypatch):
+    """入人八随机森林是弱票（`review_weak`）：它单独反对、别的路都支持放行字 → 不降；没人支持放行字、或强路也反对 → 照常降。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    for p, kept in (({"ctx": None, "rr_img": "人", "ids": "入"}, True),
+                    ({"ctx": "入", "rr_img": "人", "ids": "入"}, True),
+                    ({"ctx": None, "rr_img": "人", "ids": None}, False),
+                    ({"ctx": "人", "rr_img": "人", "ids": "入"}, False)):
+        picks.clear(); picks.update(p)
+        r = Rec("b", "入", True, "match_ref", "match")
+        group_flow_pass([r], {}, lambda cid: [], lambda r: False, _cfg())
+        assert r.admit is kept, p
+        if kept:
+            assert r.evidence["group"]["decision"] == "keep"
+            assert r.evidence["group"]["solvers"][-1] == {"solver": "review_weak", "char": None, "why": "overruled", "weak": ["rr_img"]}
+
+
+def test_review_fix_margin_for_zheng(monkeypatch):
+    """徵徴 `review_fix_margin`：字形给了另一形、margin ≥0.70 改字（仍放行），0.45–0.70 照常降审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    mg = {"h": 0.9, "l": 0.6}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "徴" if name == "ids" else None, via=name, extra={"margin": mg[r.id]} if name == "ids" else {}))
+    h, lo = Rec("h", "徵", True, "match_replace", "match"), Rec("l", "徵", True, "match_replace", "match")
+    group_flow_pass([h, Rec("m", "中", True), lo], {}, lambda cid: [], lambda r: False, FlowConfig(groups=("zheng",)))
+    assert (h.char, h.admit, h.evidence["group"]["decision"]) == ("徴", True, "fix")
+    assert h.evidence["fixed_from"] == {"channel": "match_replace", "char": "徵"}
+    assert not lo.admit and "group_flow_disagree" in lo.doubts and lo.char == "徵"
 
 
 def test_review_fix_and_abstain_for_jys(monkeypatch):
@@ -423,3 +456,26 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
 
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+def test_yr_flow_bars_and_ref_veto(monkeypatch):
+    """一二（2026-10-25）：整字 HOG 不许单独补放；数横可补放；整理本是组里另一个字时谁给字都不补放。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    from open_guji_cv.groups.registry import GROUPS
+    f = GROUPS["yr"].flow
+    assert f.solvers == ("ctx", "ids", "yr_bars") and f.lift_needs == ("ctx", "yr_bars") and f.lift_ref_veto and f.review
+    picks = {"ctx": None, "ids": "二", "yr_bars": None}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    cfg = FlowConfig(groups=("yr",))
+    cands = lambda cid: [("一", 0.96), ("二", 0.95)]   # noqa: E731
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_weak" in r.doubts                       # 只有 HOG
+    picks["yr_bars"] = "二"
+    r = Rec("y")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg)
+    assert r.admit and r.char == "二"                                           # 整理本缺位：两路字形一致 → 补放
+    r = Rec("z")
+    group_flow_pass([r], {"z": ("一", "=")}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts                 # 整理本作一 → 不补

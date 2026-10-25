@@ -80,3 +80,34 @@ def test_book_codepoints_pick_abstains(monkeypatch):
     assert n == 0 and rec.admit
     n, rec = _run(monkeypatch, cur="晚", pick="晩", abstain=False, book_cp={})
     assert n == 1 and not rec.admit
+
+
+def test_variant_group_decided_codepoint_is_kept(monkeypatch):
+    """同义字组（can 參㕘叅）流程已按刻形给了放行字：影子挑同组另一个码位 → 不降；组没同意、挑组外字、形近组照常降。"""
+    ev = {"group": {"id": "can", "decision": "keep", "why": "agree", "pick": "㕘"}}
+    n, rec = _run(monkeypatch, cur="㕘", pick="叅", abstain=False, evidence=ev)
+    assert n == 0 and rec.admit
+    n, rec = _run(monkeypatch, cur="㕘", pick="叅", abstain=False,
+                  evidence={"group": {"id": "can", "decision": "keep", "why": "abstain", "pick": None}})
+    assert n == 1 and not rec.admit
+    n, rec = _run(monkeypatch, cur="㕘", pick="參", abstain=False,
+                  evidence={"group": {"id": "can", "decision": "keep", "why": "agree", "pick": "參"}})
+    assert n == 1 and not rec.admit
+    n, rec = _run(monkeypatch, cur="㕘", pick="衆", abstain=False, evidence=ev)
+    assert n == 1 and not rec.admit
+    n, rec = _run(monkeypatch, cur="曰", pick="日", abstain=False,
+                  evidence={"group": {"id": "ry", "decision": "keep", "why": "agree", "pick": "曰"}})
+    assert n == 1 and not rec.admit
+
+
+def test_near_form_group_glyph_lift_is_kept(monkeypatch):
+    """形近组补放、整字 HOG 给了放行字：影子挑同组另一个字 → 不降（vol16:42:4:3 傳）；只有文意表弃权没有字形票、或挑组外字照常降。"""
+    sol = [{"solver": "ctx", "char": None}, {"solver": "ids", "char": "傳", "margin": 1.53}]
+    ev = {"group": {"id": "fc", "decision": "admit", "why": "agree", "pick": "傳", "solvers": sol}}
+    n, rec = _run(monkeypatch, cur="傳", pick="傅", abstain=False, channel="group_flow", provenance="match", evidence=ev)
+    assert n == 0 and rec.admit
+    n, rec = _run(monkeypatch, cur="傳", pick="傅", abstain=False, channel="group_flow", provenance="match",
+                  evidence={"group": {**ev["group"], "solvers": sol[:1]}})
+    assert n == 1 and not rec.admit
+    n, rec = _run(monkeypatch, cur="傳", pick="傷", abstain=False, channel="group_flow", provenance="match", evidence=ev)
+    assert n == 1 and not rec.admit

@@ -67,6 +67,15 @@ def test_q7_lacuna_guess_goes_to_user():
     assert _route(verdict="seg_issue")[0] == "to_user" and _route(verdict="unclear")[0] == "to_user"
 
 
+def test_figure_always_to_user():
+    """GUJI-737：说是图形的意见不自动采纳也不自动驳回，一律交用户（建议里没有字，也推不出修订）。"""
+    op = _op(category="figure", proposal={"choice": "figure", "alt": "圈点"})
+    for verdict in ("accept", "text_ok"):
+        r, why = _route(op, verdict=verdict, revision=None)
+        assert r == "to_user" and "图形" in why[0]
+    assert R.derive_revision(op, "accept", [{"a": "3:1:2", "c": "定"}], None) is None
+
+
 def test_human_and_flood(tmp_path):
     assert _route(human_cells={"3:1:2"})[0] == "to_user"
     st = OpinionStore(BOOK, LocalBackend(tmp_path / BOOK)).load()

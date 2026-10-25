@@ -1634,13 +1634,20 @@ def _group_members(gid) -> frozenset:
     return spec.members if spec is not None else frozenset()
 
 
+def _group_variant(gid) -> bool:
+    from ..groups.registry import FLOW_GROUPS
+    spec = FLOW_GROUPS.get(gid) if gid else None
+    return spec is not None and spec.kind == "variant"
+
+
 def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
     """影子放行闸（只降级）：把现行规则已放行、影子有把握说不对的格降回待审。→ 降级格数。
 
     放在所有通道与 `group_flow` 之后：只会把 admit 从 True 改 False，不改字、不升级。
     字组按文意定的字（通道 `group_flow`、provenance `context`）影子要改成同组另一个字时不降：形近字的库形本就分不开，
     影子挑的只是同一个难点的另一边（sheldon 10-22「文意置信度特别高可以改掉整理本」，vol09:251 改成曰后被影子降、
-    又被 coord_fallback 按坐标放回日）。
+    又被 coord_fallback 按坐标放回日）。同义（异体）字组的流程已给字且与放行字相同（补放、复核同意或改字）时，影子挑同组
+    另一个码位也不降：同义组里只差码位，由字组按刻形定（A24 10-25：參㕘叅 整理本作叅、刻形是㕘，影子照整理本降审 15 格）。字组补放时整字 HOG（`ids`）过门槛给了放行字的，影子挑同组另一个字也不降（形近组同理，vol16:42:4:3 傳）。
     `provenance=="human"`（人裁）一票定案，不经这里。模型文件缺／口径不符 → 抛错（开了开关却没有模型
     是配置错误，不静默当没开）；单格信号异常 → 该格弃权。"""
     from ..shadow.signals import CellEvidence
@@ -1673,6 +1680,14 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             if (rec.channel == "group_flow" and rec.provenance == "context" and v.pick
                     and v.pick in _group_members(g.get("id"))):
                 continue                      # 字组按文意定的字，影子只是挑了同组另一个字：形近本就分不开（vol09:251 曰）
+            if (rec.channel == "group_flow" and v.pick and v.pick in _group_members(g.get("id"))
+                    and any(t.get("solver") == "ids" and t.get("char") == rec.char and t.get("margin") for t in g.get("solvers") or [])):
+                # 字组补放时整字 HOG 过了门槛给的字（按册留出 0 错），影子挑同组另一个字：不降。vol07–18 这样被降的形近组 8 格
+                # 看图全是组对（傳傅 二一 會曾 子于 出山 山由 宋朱 間問），降审后 6 格又被坐标兜底按整理本放错（A24 10-25）
+                continue
+            if (v.pick and _group_variant(g.get("id")) and g.get("why") == "agree" and g.get("pick") == rec.char
+                    and g.get("decision") in ("admit", "keep", "fix") and v.pick in _group_members(g.get("id"))):
+                continue                      # 同义字组按刻形定了码位，影子挑同组另一个码位只是码位口径差（vol13–20 參㕘叅 15 格，A24 10-25）
             if (cbook is not None and v.pick and rec.char and v.pick != rec.char
                     and cbook.canonical_char(v.pick) == cbook.canonical_char(rec.char)):
                 continue                      # 册 `codepoints:` 归一后同字（別别、晚晩、出岀）：影子比字没按册归一，不是认错

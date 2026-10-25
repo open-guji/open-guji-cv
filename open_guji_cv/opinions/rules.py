@@ -251,6 +251,8 @@ def route(op: Opinion, *, verdict: str, confidence: float, public: str, profile:
         r, why = "auto_accept", ["现文已是建议字（已改），只回复"]
     elif located and located.get("drift"):
         r, why = "to_user", [f"版本漂移：{located['drift']}"]
+    elif op.category == "figure":
+        r, why = "to_user", ["读者说这格是图形、不是字，交用户定（定了按人裁 figure 写）"]
     elif verdict in prof.get("to_user_verdicts", []):
         r = "to_user"
         why = {"lacuna_guess": ["图上无字、按文意补（Q7 以图为准的新原则），交用户确认"],

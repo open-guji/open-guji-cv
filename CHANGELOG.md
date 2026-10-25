@@ -5,6 +5,19 @@
 
 ## [未发版]
 
+## [0.5.16] - 2026-10-25
+
+PATCH（A24 字组成批上线第一批的余下部分：#532 #537 #540 #545；#538 #544 起跑自检与人裁绑定；#539 意见池；#536 #542 #543 #546 #547 字组文档）。新组要在册配置 `group_flow` 点名才生效；`seed_admit`、`groups/flow.py`、`groups/registry.py` 的 `code_hash` 变。
+
+### Fixed
+- 只重跑 seed_admit（基线包没有 `cache/`）时老人裁静默丢：绑定要拿字形库存图比现格字块图，缓存没有就判 unanchored（殿本 vol10 78/146）。现在缺字块图就现切；切不出来报错（`GUJI_ALLOW_LOST_HUMAN=1` 放行）；`human_chars` 读工作区事件而目录不存在时报错（`GUJI_ALLOW_NO_EVENTS=1` 放行）。绑定缓存版本 7→8。`scripts/rerun_prep.sh` 末尾加人裁自检、写 `~/.guji_env`（GUJI_WORKSPACE）。
+- 起跑自检：跑 seed_admit 时字形库有人裁、事件目录却不在（数据目录没指对）就拒跑。此前只在事件里的人裁会被机器通道悄悄放行顶掉（殿本 vol06／vol10 沙箱重跑实测 88／68 格）。
+
+### Changed
+- 字组残留送审清理（A24 10-25，铺开 #9）：sb ly mb wj em rr 的 L1 规则拿整部整理本逐处回测修订；rr 随机森林 `rr_img` 改为复核弱票（新 `FlowSpec.review_weak`）；徵徴 复核按刻形改字、门槛单独定（新 `FlowSpec.review_fix_margin`，zheng 0.70）；`seed_admit` 影子闸不再降「同义组已按刻形定的码位」和「形近组补放时整字 HOG 过门槛给的字」（vol16:42:4:3 傳 被降审后又被坐标兜底放成傅）。殿本 vol06–20 离线回放：这几组组内送审 182→133（zheng 35→13、rr 33→21、mb 61→53…），变了的格逐格看图 0 错。`groups/flow.py`、`seed_admit` 的 `code_hash` 变，缺省开。研究脚本在 `research/char_groups/residual_1025/`。
+- 字组：码位组 huo 獲𫉬、kui 夔䕫、lie 獵𤢪（殿本每对只一种刻法，码位 sheldon 10-25 定，#532）；一二 yr 加数横第二路 `yr_bars`，整字 HOG 不许单独补放，新 `FlowSpec.lift_ref_veto`（#537）；尙尚 复核只降不改（vol16 两格刻 尚 被改成 尙，#540 #541）。
+- 字组文档：码位归一分「真归一」「暂归一（可分待拆，只限同义）」两类并补标已有条目（#542 #543 #546 #547）；登记 寃𡨚（#536）。
+
 ## [0.5.15] - 2026-10-24
 PATCH（#522 seed_admit 1.23 iron_coord_guard；#528 ref_lib_diff 不放行、ref_prefer 等缺省开；#527 #529 #530 #531 #520 字组；#515 重跑提速；#523 guji source commons；#521 #524 控制台插图块）。缺省输出只把少量放行挪到待审、不改字，不属「多数册值得重跑」的核心升级，按 PATCH。`shadow_veto` 从此缺省开，执行方要装 `.[shadow]`（用发版附件装时 `--extras shadow`），否则起跑前自检拒跑 seed_admit；#533 补了 8 条没装 sklearn 就红的老测试。
 

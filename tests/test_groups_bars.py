@@ -57,3 +57,53 @@ def test_no_bars_abstains_and_missing_patch_raises():
 
 def test_unknown_group_abstains():
     assert BarsImageBackend().judge(_Spec("jys"), _cell(_glyph(40, 80))).char is None
+
+
+# —— 一二数横（yr，2026-10-25） ——
+
+from open_guji_cv.groups.bars import count_bars  # noqa: E402
+
+
+def _bars(*rows, h=40, w=120):
+    """白底字块，每条横 (y0, 厚, x0, x1)，右端加一个顿笔小三角。"""
+    g = np.full((h, w), 255, np.uint8)
+    for y0, t, x0, x1 in rows:
+        g[y0:y0 + t, x0:x1] = 0
+        g[max(0, y0 - 3):y0 + t + 2, x1 - 8:x1] = 0
+    return g
+
+
+def test_count_one_and_two():
+    assert count_bars(_bars((15, 8, 4, 116))) == ("一", "one")
+    assert count_bars(_bars((8, 7, 30, 90), (60, 8, 4, 116), h=80)) == ("二", "two")
+
+
+def test_two_with_broken_bottom_still_two():
+    g = _bars((8, 7, 30, 90), (60, 8, 4, 116), h=80)
+    g[60:68, 50:54] = 255                     # 下横断一道缝
+    assert count_bars(g)[0] == "二"
+
+
+def test_fragment_with_middle_tick_abstains():
+    """「有」「六」「主」被切开的上半：一横中间竖起一笔（vol15:97:1:3、vol17:112:5:6）。"""
+    g = _bars((26, 8, 4, 116), h=40)
+    g[4:26, 56:64] = 0
+    assert count_bars(g)[0] is None
+
+
+def test_one_plus_border_line_abstains():
+    """列尾格：一＋贴底的细边框线（上重下轻）不当二。"""
+    g = _bars((10, 9, 4, 104), h=60)
+    g[57:59, 0:120] = 0
+    assert count_bars(g)[0] is None
+
+
+def test_top_off_center_and_noise_abstain():
+    assert count_bars(_bars((8, 7, 0, 30), (60, 8, 4, 116), h=80))[0] is None      # 上横只在最左：邻字残笔
+    rng = np.random.default_rng(0)
+    g = _bars((15, 8, 4, 116), h=60)
+    for _ in range(40):                                                           # 印章噪点
+        y, x = rng.integers(28, 56), rng.integers(0, 114)
+        g[y:y + 4, x:x + 5] = 0
+    assert count_bars(g)[0] is None
+    assert count_bars(np.full((40, 40), 255, np.uint8))[0] is None

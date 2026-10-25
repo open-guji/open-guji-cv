@@ -5,6 +5,9 @@
 「文意有字用文意、文意弃权才按量横、两路不一致打旗」做。缺图抛 `PatchUnavailable`，不静默弃权。
 量法细节与评测见 `doc/design/M7-字形量横画法-土士未末.md`、`research/m7/bars/`。
 
+另有一二（yr）的**数横**（`count_bars`，2026-10-25 A24）：一一横、二两横（上短下长、上下对齐），切进邻字的残笔、
+印章噪点、列尾的边框线都弃权。见 `doc/字组/yr.md`。
+
 本模块只是库代码：未登记进 `registry`、未接任何 Step，`code_hash` 不变。
 """
 from __future__ import annotations
@@ -109,3 +112,100 @@ class BarsImageBackend:
         bottom_long, top_long = PAIRS[spec.id]
         return GroupVerdict(bottom_long if r > 1 else top_long, conf=abs(r - 1), why="agree", via="image",
                             extra={"ratio": r})
+
+
+# —— 一二数横（yr，2026-10-25 A24「优化一二判别」） ——
+#
+# 字块是格内墨的外接框（「一」的字块本来就扁）。墨按连通域收，竖向重叠过半的连通域并成一条「横带」；
+# 够长（≥0.3×字块宽）且扁（长 ≥2.5×厚）的横带算一横。门槛是拿殿本 vol04–20 已放行的 7,545 格定的
+# （量出来的字与放行字 0 不一致；量横弃权的 397 格逐格看过图），判不清一律弃权：
+# - 横以外的墨 > 15%（印章噪点、切进来的邻字）→ 弃权；
+# - 一：横外墨 ≤ 5%、横带够实（墨占外接框 ≥18%、最长一段 ≥ 带长一半）、中段没有竖起的小笔
+#   （中段最厚处／中位厚 ≤3：「有」「六」「主」被切开时上半是一横加一点或一竖，vol15:97:1:3、vol17:112:5:6 都被放成过「一」）；
+# - 二：两横上下对齐（上横中点落在下横 20%–85%）、都够实、下横不短于上横的 0.9 倍且墨不少于上横的 0.8 倍
+#   （列尾格常把边框线收进来：一＋边框线是上重下轻），下横贴底又薄于上横 0.6 倍也算边框线；
+# - 三横以上 → 弃权。
+# 量横只认字块里的笔画：字块本身切错（「無一不謬」的格切进了「不」的上横，vol19:116:9:8）它也会跟着错，
+# 所以 yr 流程里它不单独定结论（见 `registry` 的 yr）。
+
+YR_OTHER_MAX = 0.15
+YR_ONE_OTHER_MAX = 0.05
+YR_FILL_MIN = 0.18
+YR_SOLID_MIN = 0.5
+YR_BUMP_MAX = 3.0
+
+
+def yr_bands(gray: np.ndarray) -> list[dict]:
+    """字块 → 横带列表（自上而下）：每条记外接框（占字块宽高的比例）、墨占全字比 `ink`、墨占外接框比 `fill`、
+    最长连通段占带长比 `solid`、中段竖向最厚／中位厚 `bump`、是否算一横 `bar`。"""
+    cv2 = _cv2()
+    g = np.asarray(gray)
+    if g.ndim == 3:
+        g = cv2.cvtColor(g, cv2.COLOR_BGR2GRAY)
+    if g.dtype != np.uint8:
+        g = g.astype(np.uint8)
+    H, W = g.shape
+    _, b = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(b)
+    comps, tot = [], 0
+    for i in range(1, n):
+        x, y, w, h, a = (int(v) for v in st[i])
+        if a >= max(4, 0.002 * H * W):                  # 去掉零星噪点
+            comps.append([y, y + h, x, x + w, a, w, [i]])
+            tot += a
+    comps.sort(key=lambda c: (c[0] + c[1]) / 2)
+    bands: list[list] = []
+    for c in comps:                                     # 竖向重叠过半 → 同一条横带（断开的横画、顿笔）
+        for bb in bands:
+            if min(bb[1], c[1]) - max(bb[0], c[0]) >= 0.5 * min(bb[1] - bb[0], c[1] - c[0]):
+                bb[0], bb[1], bb[2], bb[3] = min(bb[0], c[0]), max(bb[1], c[1]), min(bb[2], c[2]), max(bb[3], c[3])
+                bb[4] += c[4]
+                bb[5] = max(bb[5], c[5])
+                bb[6] += c[6]
+                break
+        else:
+            bands.append([*c[:6], list(c[6])])
+    out = []
+    for y0, y1, x0, x1, a, wmax, ids in bands:
+        col = np.isin(lab[y0:y1, x0:x1], ids).sum(0).astype(float)    # 每列竖向墨厚
+        w = x1 - x0
+        mid = col[int(0.2 * w):max(int(0.2 * w) + 1, int(0.75 * w))]
+        med = float(np.median(col[col > 0])) if (col > 0).any() else 0.0
+        out.append(dict(y0=y0 / H, y1=y1 / H, x0=x0 / W, x1=x1 / W, len=w / W, thick=(y1 - y0) / H,
+                        ink=a / max(tot, 1), fill=a / max(1, w * (y1 - y0)), solid=wmax / max(1, w),
+                        bump=float(mid.max()) / med if med > 0 else 0.0,
+                        bar=w >= 0.3 * W and w >= 2.5 * (y1 - y0)))
+    out.sort(key=lambda s: s["y0"])
+    return out
+
+
+def count_bars(gray: np.ndarray) -> tuple[str | None, str]:
+    """一二数横 → (「一」|「二」|None, 理由)。理由：one／two，或弃权原因（other_ink、one_other_ink、one_sparse、
+    one_bump、off_center、sparse、top_heavy、border、n<横数>）。"""
+    bands = yr_bands(gray)
+    bars = [s for s in bands if s["bar"]]
+    other = sum(s["ink"] for s in bands if not s["bar"])
+    if other > YR_OTHER_MAX:
+        return None, "other_ink"
+    if len(bars) == 1:
+        a = bars[0]
+        if other > YR_ONE_OTHER_MAX:
+            return None, "one_other_ink"
+        if a["fill"] < YR_FILL_MIN or a["solid"] < YR_SOLID_MIN:
+            return None, "one_sparse"
+        if a["bump"] > YR_BUMP_MAX:
+            return None, "one_bump"
+        return "一", "one"
+    if len(bars) == 2:
+        a, b = bars
+        c = ((a["x0"] + a["x1"]) / 2 - b["x0"]) / b["len"]
+        if not 0.2 <= c <= 0.85:
+            return None, "off_center"
+        if min(a["fill"], b["fill"]) < YR_FILL_MIN:
+            return None, "sparse"
+        if b["len"] < 0.9 * a["len"] or b["ink"] < 0.8 * a["ink"]:
+            return None, "top_heavy"
+        if b["y1"] >= 0.95 and b["thick"] < 0.6 * a["thick"]:
+            return None, "border"
+        return "二", "two"
+    return None, f"n{len(bars)}"

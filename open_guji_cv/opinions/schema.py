@@ -15,7 +15,8 @@ SCHEMA = "guji-opinion/0.1"
 
 #: 渠道；机器意见写 ``machine:<检查名>``
 CHANNELS = ("charfix", "span", "cellreview", "feedback")
-CATEGORIES = ("wrong", "missing", "extra", "order", "seg", "lacuna", "unclear", "punct", "entity", "other")
+# figure：读者说这格是图形不是字（GUJI-737 图片格），只交用户定
+CATEGORIES = ("wrong", "missing", "extra", "order", "seg", "lacuna", "unclear", "punct", "entity", "figure", "other")
 LOG_KINDS = ("ingested", "superseded", "dup", "forwarded", "triaged", "decided", "applied", "replied", "cv_written",
              "batched", "pr_opened", "published", "reverted", "policy_applied")
 VERDICTS = ("text_ok", "accept", "lacuna_guess", "seg_issue", "out_of_scope", "unclear")
@@ -315,7 +316,7 @@ def json_schema() -> dict:
                 "entity_version": {"type": "string"},
                 "check": {"type": "string"}}},
             "category": {"enum": list(CATEGORIES)},
-            "proposal": {"type": "object", "properties": {"text": {"type": "string"}, "choice": {"type": "string"}}},
+            "proposal": {"type": "object", "properties": {"text": {"type": "string"}, "choice": {"type": "string"}, "alt": {"type": "string"}}},
             "note": {"type": "string"},
             "normalized_by": {"type": "string"},
             "created_at": {"type": "string"},
