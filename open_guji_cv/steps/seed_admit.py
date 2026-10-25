@@ -232,8 +232,8 @@ class SeedAdmitParams(BaseModel):
     `evidence.lane_skip = {lane: witness3, why: lib_diff}`。`mmap` 缺该格或没有 verdict 时按「非 diff」处理，保持旧放行（fail-open：库没给判定不收紧）。
     三证人一致压过库「不是这个字」的那 31 格里
     Lucian 看图约 4 格放错（含半字红线 vol02:15:9:20）。θ 档（`witness3_min_cov`）不做。只影响 witness3 通道。"""
-    symbol_review: bool = False
-    """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，缺省关；关时 `symbol_review`／`symbol_min_human`
+    symbol_review: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04–20 原本逐册开着）
+    """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，2026-10-24 起缺省开；关时 `symbol_review`／`symbol_min_human`
     不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。
 
     符号形状简单，墨团、残字容易被配成 ●／○，所以第一版：
@@ -249,6 +249,11 @@ class SeedAdmitParams(BaseModel):
     文意取整理本。两册人审位实测 整理本≡库top1 10/10、==上下文 4/4，全部 1,1xx 条
     人裁真值上反例 0。同时让「义定形未定」的位在库 top1 属组内形时直接取它当形
     （evidence.form.state=guess，判据 E 会把它算进抽审分母）。"""
+    ref_lib_diff_guard: bool = True
+    """`relax_ref_agree` 的 `ref_lib` 分支在库判 `diff` 时不放行（A24 2026-10-24，殿本 vol06 v0.5.12 重跑）：
+    149:3:3 图是「也」，框带版框竖线，整理本对位与库 top1 都给「十」，库判 diff（cov 0.83），照旧被
+    `ref_lib` 放成「十」。库已明说「不像」，整理本与 top1 一致不能证明刻的是这个字；记 doubt
+    `ref_lib_diff`、退回人审。vol06 新包 ref_lib 放行 13 格里只有这 1 格库判 diff，vol04–10 旧包 0 格。"""
     ref_lib_variant_guard: bool = True
     """`ref_lib` 通道变体放行加闸（2026-09-27，R 形近溯源实测 `bxgb:52:11:15` 冶→治
     揪出，做法参照 `iron_ref_guard`，参数缺省开）：`relax_ref_agree` 里「库候选与整理本字
@@ -347,8 +352,8 @@ class SeedAdmitParams(BaseModel):
     的双向判据直接读它（`open_guji_cv.variants.regulars_of`），此前 `variants_fingerprint`
     只盯 `variants.auto.tsv`/`variants.tsv` 派生表，盯不到关系层本身的改动。"""
     exclusions_fingerprint: str = ""    # 自动填：名单变了产物过期
-    rare_ref: bool = False
-    """规则 A「5-b × 整理本」放行通道 `rare_ref`（2026-10-02，D3 道 overview#349），缺省关。
+    rare_ref: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol02–20 原本逐册开着）
+    """规则 A「5-b × 整理本」放行通道 `rare_ref`（2026-10-02，D3 道 overview#349），2026-10-24 起缺省开。
 
     给**走完所有现行通道仍待审**的格补一次机会：整理本是 `replace` 段、有整理本字，而 5-b
     （`rare_candidates`，字体模板 emb/CNN，与整理本互相独立）首位**逐字**等于整理本字 → 放行，
@@ -437,13 +442,13 @@ class SeedAdmitParams(BaseModel):
     库判 same 命中的那一例（`matched_id`）是近似例（`via="matched_id"`）；或走候选首位、而这个字在库里
     的刻例**全部**是近似例（`via="char_only"`）。人裁位照旧一票定案，不经这里。
     """
-    shadow_veto: bool = False
-    """影子放行闸（overview#305 第一阶段，缺省关）：对**现行规则已放行**的格再算一次影子预测，
+    shadow_veto: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol05–20 原本逐册开着，门槛都是 0.8）
+    """影子放行闸（overview#305 第一阶段，2026-10-24 起缺省开）：对**现行规则已放行**的格再算一次影子预测，
     影子很有把握选了**不同的字**（`shadow_conf`）就降回待审、evidence 记 `shadow_veto`、doubts 加
     `shadow_veto`。**只降级不升级**；人裁通道不动；信号缺失／本格自身在字形库里／异常 → 弃权。
     关着时下面四个字段都不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
     shadow_model: str = ""              # 模型文件；空 = models/shadow_admit/shadow_gate_v1.joblib。路径不进指纹（path_params）
-    shadow_conf: float = 0.97           # 影子把握度门槛：vol03 标签上影子 top1 错误率 ≤1% 的最低把握度（按页折实测）；实测推荐见 doc/shadow_gate.md
+    shadow_conf: float = 0.8           # 影子把握度门槛：殿本 vol05–20 册配置一律 0.8（2026-10-24 收成缺省）；原缺省 0.97 是 vol03 标签上影子 top1 错误率 ≤1% 的最低把握度，见 doc/shadow_gate.md
     shadow_veto_variant_abstain: bool = True
     """影子选的字与现放行字**语义同字**（`vmap.semantic` 相同，即异体／简繁）时影子弃权、不降级
     （overview#431）：vol04 影子拦 61 格只 5 格真错，56 格是放行字＝证人字＝图上字形的刻本异体
@@ -468,7 +473,7 @@ class SeedAdmitParams(BaseModel):
     context_guard_ref_blank: bool = True   # 2026-10-23 sheldon 定缺省开（20 册全开）
     """坐标对位（`align_ref.coord`）说这一位是**空格**（`ref_char == ''`）、而库判不是 `same`
     时，context 通道不放字（doubt `ctx_guard_ref_blank`，`char=None`，卡片默认非字；建议 2）。"""
-    context_guard_ref_prefer: bool = False
+    context_guard_ref_prefer: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04/05、11–20 原本逐册开着，06–10 漏开致 vol06 商→而 错放）
     """坐标对位给出整理本字、与 context 定字语义不同、库判又不是 `same` 时，不放行 context 字，
     落人审、默认字取整理本字（doubt `ctx_guard_ref`；建议 3）。不直接放行整理本字：这条路没有
     独立形状证据，放不放留给标定结果。"""
@@ -598,8 +603,9 @@ class SeedAdmitParams(BaseModel):
         库里一条近似例都没有时指纹为空、也不进 dump——没用上近似字的书参数哈希不变、产物不过期。
         """
         d = handler(self)
+        # symbol_review／rare_ref／shadow_veto／context_guard_ref_prefer 2026-10-24 起缺省开：关着时开关本身
+        # 留在 dump 里（显式 False），只去掉附属字段——否则 dump 再读回来会变回缺省的开
         if isinstance(d, dict) and not self.symbol_review:
-            d.pop("symbol_review", None)
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
@@ -607,7 +613,7 @@ class SeedAdmitParams(BaseModel):
             for k in [k for k in d if k.startswith("group_flow")]:
                 d.pop(k, None)
         if isinstance(d, dict) and not self.shadow_veto:
-            for k in ("shadow_veto", "shadow_conf", "shadow_veto_variant_abstain"):
+            for k in ("shadow_conf", "shadow_veto_variant_abstain"):
                 d.pop(k, None)
         if isinstance(d, dict):
             # N1/N2/N3（context 通道收紧）：取缺省值就不进 dump（params_hash 不变）；显式设成非缺省值照常进
@@ -616,8 +622,6 @@ class SeedAdmitParams(BaseModel):
                     d.pop(k)
         if isinstance(d, dict) and not self.witness3_no_diff:
             d.pop("witness3_no_diff", None)
-        if isinstance(d, dict) and not self.rare_ref:
-            d.pop("rare_ref", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not self.shadow_veto:
@@ -663,8 +667,8 @@ class SeedAdmitParams(BaseModel):
                 for k in (flag, *keys):
                     d.pop(k, None)
         if isinstance(d, dict) and not self._context_guard_on():
-            for k in ("context_guard_diff", "context_guard_cov", "context_guard_flags",
-                      "context_guard_flag_set", "context_guard_ref_blank", "context_guard_ref_prefer"):
+            # diff／ref_blank（10-23）、ref_prefer（10-24）已缺省开：全关是显式选择，这三个 False 留在 dump 里
+            for k in ("context_guard_cov", "context_guard_flags", "context_guard_flag_set"):
                 d.pop(k, None)
         return d
 
@@ -1283,7 +1287,10 @@ class SeedAdmitStep(Step):
                 if (not ok and p.relax_ref_agree and align_char and align_char not in always):
                     _top = r.candidates[0][0] if r.candidates else None
                     _d = dmap.get(r.id)
-                    if _top and _top not in always \
+                    if _top and _top not in always and p.ref_lib_diff_guard and r.verdict == "diff" \
+                            and vmap.semantic(_top) == vmap.semantic(align_char):
+                        doubts.append("ref_lib_diff")
+                    elif _top and _top not in always \
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         # 字面相同不受加闸影响，照放（任务书「字面相同的放行照旧」）。
                         # 字面不同——变体放行——才要过闸：可信边，或 Step6 margin 过线

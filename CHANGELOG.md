@@ -17,9 +17,13 @@ PATCH（#447 发版自动附带执行包，本版用来首次验证 release work
 - `guji db sync` 顺带落库：拉完合完对还没落进字形库的人裁只跑 `glyphdb_admit`、`glyph_audit` 两个消费者，逐条记账（报错的留着下次再试），落了再推；`--no-admit` 或 `GUJI_AUTO_ADMIT=0` 关。起因是批量写进中心库的人裁事件没人落库（10-22 起积压 967 条）；字形库更新的分工（落库、出快照、改钉）见 `doc/受控重跑.md` 第六节。只在 `feedback/`、CLI，不动任何 Step（PATCH）。
 
 ### Changed
+- seed_admit 四个开关改缺省开（2026-10-24 sheldon 定「确定该做的 feature 一律缺省开，别逐册开、过一阵又忘了其他册」）：`context_guard_ref_prefer`、`rare_ref`、`symbol_review`、`shadow_veto`（`shadow_conf` 缺省 0.97→0.8，殿本册配置一律是 0.8）。殿本 vol06–10 漏开 ref_prefer，vol06 v0.5.12 重跑 111:3:16 商→而（整理本「應時商確」）就是这条该拦的；在新包上开它另拦下旧错 130:5:9 于→子（「興國于氏」），多送审 3 格「入」（整理本作人）。殿本其余册 yaml 本来都开着，行为不变；别的书（北行日錄、全唐文等）从此也开，`shadow_veto` 要装 `.[shadow]`（起跑前自检会点名）。`seed_admit` 的 `code_hash` 不变、`params_hash` 变。
 - `guji db sync`：字形库（`output/glyph_store/`）本地和库里都改了、本地又有库里没有的新人裁事件时不再整次停下：取库里的字形库、重建 glyph.db，删掉这些事件在字形库消费者（`consumed/glyph*.jsonl`）里的记账，在库里的字形库上重新消费一遍再推。本地字形库改了却没有新事件的照旧报冲突。省掉册 005 精校 10-23 三次手工 `pull --force`＋重写票（A32 复盘改进 1；只在 `datastore/`、CLI，不动 Step，PATCH）。
 - `guji freeze register` 加 `--repo <cv 检出>`：产物是旧版 cv 跑的就指那个版本的 worktree，登记的 cv 版本与提交取自那里；检出认不出版本号（没拉 tag，记成 `dev+g…`）时计划报问题、不许执行，提示 `git fetch --tags`（A32 复盘改进 2；只在 `ops/`、CLI，PATCH）。
 - close-check 1a 分开报过期原因：manifest 新记参数逐字段短哈希 `param_parts`（不进指纹，产物与 `code_hash` 都不变），`status` 的「参数变了」点名字段；只因共享输入（语料、证人、格位表、字组与异体表、借来的字形库等，`close_check.SHARED_PARAMS`）被别处更新而过期的页，1a（含冻结册）单列一句、不算失败；本册自己的变动照旧失败，两类都列。改动前跑的老产物分不出字段，照旧判失败（A32 复盘改进 3，标准 I；PATCH）。
+
+### Fixed
+- seed_admit `ref_lib_diff_guard`（缺省开，A24）：`relax_ref_agree` 的 `ref_lib` 分支在库判 `diff` 时不放行，记 doubt `ref_lib_diff`、退回人审。vol06 v0.5.12 重跑 149:3:3 图是「也」（框带版框竖线），整理本对位与库 top1 都给「十」、库判 diff（cov 0.83），旧版照放成「十」。vol06 新包 ref_lib 放行 13 格里只拦这 1 格，vol04–10 旧包 0 格。`seed_admit` 的 `code_hash` 变，各册只需重落 seed_admit。
 
 ## [0.5.13] - 2026-10-24
 

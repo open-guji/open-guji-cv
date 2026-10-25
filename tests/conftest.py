@@ -301,7 +301,10 @@ def no_cnn(monkeypatch):
 #: 「缺省全关」上造的数据（没字块图、没证人），测别的分支时要先把它们关回去；
 #: 新缺省本身由 `test_seed_admit_defaults_on.py` 守。
 SEED_ADMIT_SWITCHES_OFF = {"group_flow": (), "context_guard_diff": False, "context_guard_ref_blank": False,
-                           "lane_witness3": False, "lane_coord": False}
+                           "lane_witness3": False, "lane_coord": False,
+                           # 2026-10-24 改缺省开的四个（A24）
+                           "context_guard_ref_prefer": False, "rare_ref": False, "symbol_review": False,
+                           "shadow_veto": False}
 
 
 @pytest.fixture
