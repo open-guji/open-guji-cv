@@ -9,7 +9,7 @@
 - `yiti` 异体字组：同义组（`kind=同义`）＋送审分类里的 V（组外异体对）；
 - `xingjin` 形近字：不同义组＋送审分类里的 N（形近护栏）。
 每栏写整套（`vol=''`）与各册（`vol`＝册号三位，vol05 → `005`）：送审格、放行率、组判率、人裁核对一致率；
-整套另写组数、组外送审，`detail` 放送审最多的组与键；每个字组再写一张卡（key `group:<组>`，值＝送审格，
+整套另写组数、组外送审，`detail` 放送审最多的组与键；每个字组再写一张卡（key `group.<组>`（库里 key 只许 [a-z0-9_.-]），值＝送审格，
 `value_text` 写出现格、放行率、组判率，`detail` 放整组口径与各册送审），按送审从多到少排。
 """
 from __future__ import annotations
@@ -75,7 +75,7 @@ def rows(d: dict, book_id: str) -> list[tuple]:
             t = v["total"]
             rates = [("放行率", _rate(t.get("admit", 0), t.get("occ", 0))), ("组判率", _rate(t.get("pick", 0), t.get("flow", 0)))]
             text = "　".join([f"出现 {t.get('occ', 0)}"] + [f"{n} {r:.1%}" for n, r in rates if r is not None])
-            out.append((book_id, "", sec, f"group:{g}", f"{v['name']}（{g}）", t.get("review", 0), "格", text,
+            out.append((book_id, "", sec, f"group.{g}", f"{v['name']}（{g}）", t.get("review", 0), "格", text,
                         {"date": d.get("date"), "tag": d.get("tag"), "total": dict(t),
                          "review_by_vol": {_vol(b): c.get("review", 0) for b, c in v["by_book"].items() if c.get("review")}},
                         100 + i))
