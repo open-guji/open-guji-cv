@@ -43,7 +43,11 @@ class FlowSpec:
       字形只负责认刻形，字由文本互证，两路一致才放。
     - `lift_ref_veto`：补放时整理本字是组里**另一个字**就留人审（`group_flow_ref_dissent`），不论哪个方法给的字；整理本缺位照常补放。
       一二（2026-10-25，A24）：字块切错时两路字形会一起错（vol19:116:9:8「無一不謬」的格切进了「不」的上横，整字 HOG 与数横都判二），
-      整理本作「一」就不该补成「二」。"""
+      整理本作「一」就不该补成「二」。
+    - `review_weak`：复核时这几个方法（按名字）只算弱票：它们给了别的字、而别的方法给的都是放行字（至少一个）时不降审。
+      入人八随机森林 `rr_img`：vol06–20 复核里单独反对 7 格，5 格是它错（入 判成 人，整字 HOG 与文意都说 入；A24 10-25）。
+    - `review_fix_margin`：复核时给了别的字的方法 margin ≥ 这个值才照 `review_fix` 改字，不到照常降审（0＝不用）。改字门槛
+      单独按册留出定、比降审门槛高（徵徴：线上同款字块按册留出错例最大 0.63 → 取 0.70；A24 10-25）。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -58,6 +62,8 @@ class FlowSpec:
     review_methods: tuple = ()
     lift_ref_agree: bool = False
     lift_ref_veto: bool = False
+    review_weak: tuple = ()
+    review_fix_margin: float = 0.0
 
     @property
     def solvers(self) -> tuple:
@@ -166,8 +172,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
-        flow=FlowSpec((CTX, RR_IMG, *_g2("rr")), review=True, lift_needs=("ctx", "ids")),
-        note="文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审。"),
+        flow=FlowSpec((CTX, RR_IMG, *_g2("rr")), review=True, lift_needs=("ctx", "ids"), review_weak=("rr_img",)),
+        note="文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审（随机森林是弱票：别的路都支持放行字时它单独反对不降）。"),
     # —— 上下文线（cv#118）：按文意定；土士、未末另加量横（文意弃权才用量横，两路不一致送审） ——
     "wxs": GroupSpec(
         id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
@@ -271,9 +277,10 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid)),
+        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid), review_fix_margin=fm),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
-       for gid, name, note in (("lv", "呂吕", "差在中间连笔，"), ("zheng", "徵徴", "差在字中上部细节，"))},
+       # 徵徴 复核按刻形改字（2026-10-25，同义组照录刻形）：margin ≥0.70 改字，0.45–0.70 仍降审
+       for gid, name, note, fm in (("lv", "呂吕", "差在中间连笔，", 0.0), ("zheng", "徵徴", "差在字中上部细节，", 0.70))},
     # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
     #    判不出送人审。模板库在 config/groups/<组>/ids_bank.json（组外的 干／曲 也进库，判成它们就弃权）。
     # 于千子干（2026-10-24，A24「强化于千子干等形近判别」）：子于 zy 与 千干 qg 并成一组。vol04–20 送审里这四个字常三四个一起紧咬

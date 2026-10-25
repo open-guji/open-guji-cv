@@ -18,6 +18,7 @@ PATCH（#522 seed_admit 1.23 iron_coord_guard；#528 ref_lib_diff 不放行、re
 - `groups.ctx_l2.add_verify`：逐格细读复核补进 L2 表（细读与表字不同 → `disagree:verify` 弃权；表里低把握而细读 high → 用细读的字；至少两遍都 high 同字才 strong）。L2 答案留痕加 `runs`（几遍给了这个字）。日曰／日目 vol11–20 细读 197 格与新表在 dataset `char-groups/variant/ry/`，随成批上线替换中心库表（A24）。
 
 ### Changed
+- 字组残留送审清理（A24 10-25，铺开 #9）：sb ly mb wj em rr 的 L1 规则拿整部整理本逐处回测修订；rr 随机森林 `rr_img` 改为复核弱票（新 `FlowSpec.review_weak`）；徵徴 复核按刻形改字、门槛单独定（新 `FlowSpec.review_fix_margin`，zheng 0.70）；`seed_admit` 影子闸不再降「同义组已按刻形定的码位」和「形近组补放时整字 HOG 过门槛给的字」（vol16:42:4:3 傳 被降审后又被坐标兜底放成傅）。殿本 vol06–20 离线回放：这几组组内送审 182→133（zheng 35→13、rr 33→21、mb 61→53…），变了的格逐格看图 0 错。`groups/flow.py`、`seed_admit` 的 `code_hash` 变，缺省开。研究脚本在 `research/char_groups/residual_1025/`。
 - 字组补放与坐标对位互证（`group_flow_lift_ref_guard` 同一开关下）：没有现役对位时，坐标对位是**组内另一个字**而给字的只有单遍文意表（不 strong、不是 L1、不到两遍同字、别的方法也没同字）→ 不补放（`group_flow_coord_dissent`）；补放留审时文意（本组或共字组）给了与整理本不同的字另记 `group_flow_ctx_contra`，进 `_LANE_HARD`，witness3、坐标兜底等补放遍不按整理本字放回。殿本 vol11–20 回放：挡下单遍 haiku 读反的 3 格错放和 2 格被 witness3 放错的格；`ctx_contra` 对全部字组（vol04–20 现有产物）还挡下 witness3／rare_ref 按整理本放的 4 个错字（木族「與此本皆合」等应为本），多留审 1 格（間問）（A24）。`seed_admit` 与 `groups/flow.py` 的 `code_hash` 变，缺省开。
 - `config/groups/ry/rules.yaml`、`rm/rules.yaml` 修订（vol11–20 全部日曰目格回测）：rm 规则去掉曰进得来的词组（子、名、題等，原 `rm-目` 334 次命中错 194 次）；ry 加否決「分子目」「◎註曰」「◎月／◎本」，`ry-日鈔書名` 放宽到所有日鈔／日抄，`ry-干支日` 除「乙卯自序」，`ry-ext-r1-日` 除「故曰干祿」（A24）。
 
