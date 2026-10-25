@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- 字组看板：`group_progress` 每个字组写一张卡（`group:<组>`，送审格＋出现、放行率、组判率），`guji groups status --progress <套书 id>` 出完报告顺手写网站后台 yiti／xingjin 两栏（Neon 正式库）。只是看板数据，`code_hash` 不变。
+
 ## [0.5.17] - 2026-10-25
 
 PATCH（A24 字组成批上线第二批的代码部分：#552 suo 组与 719 库标研究；#555 變𠮓 改刻形组；#556 尙尚 恢复复核改字；#558 宮宫 暂归一登记；#570 字组状态写后台看板；另含 #563 #572 Step1 列距救援 fuse、任务库与进度上报若干）。新组要在册配置 `group_flow` 点名才生效；`groups/registry.py`、`groups/flow.py`、Step1 的 `code_hash` 变。
