@@ -423,3 +423,26 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
 
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+def test_yr_flow_bars_and_ref_veto(monkeypatch):
+    """一二（2026-10-25）：整字 HOG 不许单独补放；数横可补放；整理本是组里另一个字时谁给字都不补放。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    from open_guji_cv.groups.registry import GROUPS
+    f = GROUPS["yr"].flow
+    assert f.solvers == ("ctx", "ids", "yr_bars") and f.lift_needs == ("ctx", "yr_bars") and f.lift_ref_veto and f.review
+    picks = {"ctx": None, "ids": "二", "yr_bars": None}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    cfg = FlowConfig(groups=("yr",))
+    cands = lambda cid: [("一", 0.96), ("二", 0.95)]   # noqa: E731
+    r = Rec("x")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_weak" in r.doubts                       # 只有 HOG
+    picks["yr_bars"] = "二"
+    r = Rec("y")
+    group_flow_pass([r], {}, cands, lambda r: False, cfg)
+    assert r.admit and r.char == "二"                                           # 整理本缺位：两路字形一致 → 补放
+    r = Rec("z")
+    group_flow_pass([r], {"z": ("一", "=")}, cands, lambda r: False, cfg)
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts                 # 整理本作一 → 不补

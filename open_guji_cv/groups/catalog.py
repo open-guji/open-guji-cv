@@ -44,6 +44,8 @@ def _flags(fl) -> str:
         out.append("补放须 " + "/".join(fl.lift_needs))
     if fl.lift_ref_agree:
         out.append("补放须与整理本同字")
+    if fl.lift_ref_veto:
+        out.append("整理本是组里另一字不补放")
     if fl.tolerate:
         out.append("陪衬 " + "".join(sorted(fl.tolerate)))
     if fl.families:
