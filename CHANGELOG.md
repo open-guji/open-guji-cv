@@ -5,6 +5,16 @@
 
 ## [未发版]
 
+## [0.5.17] - 测试中
+
+PATCH（A24 字组成批上线第二批的代码部分：#552 suo 组与 719 库标研究；#555 變𠮓 改刻形组；#556 尙尚 恢复复核改字；#558 宮宫 暂归一登记；#570 字组状态写后台看板；另含 #563 #572 Step1 列距救援 fuse、任务库与进度上报若干）。新组要在册配置 `group_flow` 点名才生效；`groups/registry.py`、`groups/flow.py`、Step1 的 `code_hash` 变。
+
+### Changed
+- 字组：新建取框组 suo 瑣𤨏（GUJI-719，#552）；bian 變𠮓 改成刻形组（下半 HOG，只给 變，#555）；尙尚 恢复复核改字（vol16 两格放大看是 尙，#540 的「只降不改」撤回，#556）；宮宫 登记为暂归一到 宫（#558）。
+
+### Added
+- `python -m open_guji_cv.eval.group_progress`：`guji groups status` 的 json 写网站后台「文本整理」的 yiti／xingjin 两栏（缺省只打印，`--write` 写库，#570）；`guji groups status --prev` 出送审分类与增减（#553）。
+
 ### Fixed
 - 任务库：执行方同一会话接第二张单（准备带 `--reset`）时 `db pull --force --no-rebuild` 不建 glyph.db；上一次准备在拉库前就失败的会话里 glyph.db 从没建过，建钉版库报 `no such table: sources`（#3–#6）。`--reset` 改成照常重建。
 - 任务库：准备脚本的「语料校验」也认 `GUJI_CORPUS_DRIFT=warn`（之前单上写了放行，准备阶段还是拦下，#1 vol07 因此失败）。常驻执行方两张单之间每 10 分钟看一次 dev 上 jobs 模块、准备脚本、启动器有没有更新，有就空闲时退出，线程重新 start 换上新代码。
