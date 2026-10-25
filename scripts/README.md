@@ -14,7 +14,7 @@
 - `render_guji_markdown.py`：Step9 结果整理 · 坐标转字符位：命令行入口。
 - `export_guji_format.py`：CV 产物 → guji-page → guji-format 一章（A2：`NNN.pages.json` 生成；F3，overview#398）。只读产物，不改现有导出。
 
-## 评测（`guji eval run` 调用或手动跑；对真书数据的质量量法，不是测试）（51）
+## 评测（`guji eval run` 调用或手动跑；对真书数据的质量量法，不是测试）（52）
 
 - `eval_align_replace_gate.py`：Step5-d `replace` 段采信闸评测：长度闸（现役） vs 代价闸（emb 余弦 ⊕ IDS/异体关系）。
 - `eval_char_drop.py`：丢字普查：单字墨段有没有被**字格**接住（char-segmentation/char-drop）。
@@ -30,6 +30,7 @@
 - `eval_font_fallback.py`：字体字形当「兜底候选源」值不值：在真实待审字位上量。
 - `eval_frame_residue.py`：Step2 版框残留：按 `column_border_trim` 自己的判档（a/b/c/d/e）分桶计数，
 - `eval_frame_strip.py`：评测列端格「去框后」的干净度（char-segmentation/frame-strip）。
+- `eval_seg_health.py`：切分体检（回退监控）：一册或几册产物上算两级全自动指标——一级列网劈列、对格位表错列、对整理本文字错位、挤格列；二级字墨截断／邻字侵入超 4% 的格。新跑一批和上一批比，数明显变多就是回退（殿本 vol06–20 v0.5.12 基准见脚本头）。
 - `eval_geometry.py`：版面几何 benchmark（v2 链口径）：界行有没有被列框圈进去 + 列带里界行还歪多少。
 - `eval_guard_ceiling.py`：覆盖率天花板：硬约束 precision ≥ 0.999 下，闸能开多低、recall 有多少。
 - `eval_instance_quality.py`：评测管线对切分缺陷的自检能力（char-segmentation/instances）。
