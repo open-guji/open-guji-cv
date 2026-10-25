@@ -154,3 +154,24 @@ def test_rescue_may_not_drop_framed_col():
     assert pr.drops_framed_col(_res(P14), g, shifted)
     assert not pr.drops_framed_col(_res(P14), g, P14_FIXED)
     assert not pr.drops_framed_col(_res(GOOD), _gray([]), GOOD)
+
+
+def test_snap_lines_to_faint_rule_and_blank():
+    """vol48 p121 形态：界行淡到自由模式探不出，c3 被字缝劈开、末两列并成一列；网格线差 20px 进不了带。
+    出带列两边的线吸到淡界行细峰上（没有界行就吸到字间空白中点），列宽进带才收。"""
+    free = [329, 513, 693, 775, 873, 1056, 1232, 1418, 1619, 1992]
+    grid = [329, 513, 693, 873, 1056, 1232, 1418, 1621, 1778, 1992]
+    true = [329, 513, 693, 873, 1056, 1232, 1418, 1597, 1778, 1992]
+    g = np.full((H, W), 255, np.uint8)
+    for a, b in zip(true, true[1:]):                      # 每列一串字块（字间留白、列间是空白）
+        for y in range(400, 2600, 110):
+            g[y:y + 80, W - 1 - int(b) + 45:W - 1 - int(a) - 45] = 0
+    for x in true[:7] + [1992]:
+        g[300:2700, W - 1 - x - 1:W - 1 - x + 2] = 0      # 印得好的界行
+    for y in range(300, 2700, 40):
+        g[y:y + 12, W - 1 - 1597 - 1:W - 1 - 1597 + 2] = 0  # 淡界行：断成一截截，够不上残段
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
+    assert how == "snap"
+    xs = line_xs(out)
+    assert abs(xs[7] - 1597) <= 2 and abs(xs[8] - 1778) <= 10, xs
+    assert pr.is_clean(xs)
