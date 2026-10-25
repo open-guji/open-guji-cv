@@ -104,6 +104,8 @@ console = [
 ]
 dev = [
     "pytest>=7.0",
+    # 全量测试并行跑（`-n auto`）：四千多条串行 11–15 分钟，4 核并行约 2–3 分钟
+    "pytest-xdist>=3.0",
     "build>=1.0",
     "twine>=4.0",
     "ruff>=0.4",
