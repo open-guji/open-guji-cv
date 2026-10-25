@@ -127,7 +127,7 @@ exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
 open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/**/*", "ops/*.json",
-                "clustering/review/static/*", "datastore/*.sql"]
+                "clustering/review/static/*", "datastore/*.sql", "jobs/*.sql"]
 
 # ── 测试 ────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]

@@ -1,0 +1,255 @@
+"""`guji job`：任务库命令行（也可 `python -m open_guji_cv.jobs …`，云端用 `guji_jobs …`）。
+
+    guji job submit <spec.json|->            # 交一条任务（JSON，字段见 jobs/spec.py 模块头）
+    guji job submit --book vol10 --cv v0.5.16 --from seed_admit --corpus 16 --change seed-c16 --why "…"
+    guji job ls [--book vol10] [--status queued,running] [--all]   # 谁在跑什么、排了什么
+    guji job show <号> [--json] [--log]      # 定义、每次领单、进展流水、结果（包在哪）
+    guji job wait <号>                       # 等到它结束（成功退出码 0）
+    guji job cancel <号> | bump <号> [--priority 10] | retry <号>
+    guji job work [--once] [--idle 分钟]     # 执行方：领单跑单（只在云端执行会话里用）
+    guji job init                            # 建表（幂等）
+
+连库：缺省正式库（NEON_DATABASE_URL）；GUJI_JOBS_BRANCH=ci 连测试分支。提交人名字取 GUJI_JOBS_WHO（如 A24）。
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+import time
+from pathlib import Path
+
+from . import spec as SP
+from . import store as S
+
+_ICON = {"queued": "…", "running": "▶", "succeeded": "✓", "failed": "✗", "blocked": "■", "cancelled": "–",
+         "duplicate": "="}
+
+
+def add_parser(sub) -> argparse.ArgumentParser:
+    p = sub.add_parser("job", help="任务库：交重跑／评测任务、看谁在跑什么、结果在哪（Neon jobs schema）")
+    fill(p)
+    return p
+
+
+def fill(p: argparse.ArgumentParser) -> None:
+    js = p.add_subparsers(dest="job_action", required=True)
+    s = js.add_parser("submit", help="交一条任务")
+    s.add_argument("file", nargs="?", help="spec JSON 文件，- 为标准输入；不给就用下面的参数拼")
+    s.add_argument("--kind", default=None, choices=SP.KINDS)
+    s.add_argument("--book", default=None)
+    s.add_argument("--cv", default=None, help="tag／分支／提交（必填）")
+    s.add_argument("--pipeline", default=None)
+    s.add_argument("--from", dest="from_step", default=None)
+    s.add_argument("--to", dest="to_step", default=None)
+    s.add_argument("--pages", default=None)
+    s.add_argument("--no-force", action="store_true", help="不加 --force（按指纹能跳就跳）")
+    s.add_argument("--corpus", type=int, default=None)
+    s.add_argument("--glyph-pin", type=int, default=None)
+    s.add_argument("--base", default=None, help="铺底包：main｜标签；从中间某步起跑缺省 main")
+    s.add_argument("--human-chars", type=int, default=None, help="开跑前人裁格数必须等于它")
+    s.add_argument("--env", action="append", default=[], help="K=V，只收 GUJI_ 开头")
+    s.add_argument("--params", default=None, help="guji pipeline --params 的 JSON")
+    s.add_argument("--compare-to", default=None, help="main｜包标签｜job:<号>")
+    s.add_argument("--change", default=None, help="存包改动名（缺省 job<号>）")
+    s.add_argument("--note", default=None)
+    s.add_argument("--no-pack", action="store_true", help="跑完不存包")
+    s.add_argument("--run", action="append", default=[], help="command／eval：一条 guji 命令（引号括起，可多次）")
+    s.add_argument("--why", default=None, help="为什么跑（谁要、要回答什么问题）")
+    s.add_argument("--priority", type=int, default=100, help="越小越先，缺省 100；插队给 10")
+    s.add_argument("--after", type=int, action="append", default=[], help="等这条任务成功后再跑（可多次）")
+    s.add_argument("--again", action="store_true", help="同配置已跑过也再跑一次")
+    s.add_argument("--dry-run", action="store_true", help="只打印规整后的定义和指纹，不交")
+
+    s = js.add_parser("ls", help="列任务")
+    s.add_argument("--book", default=None)
+    s.add_argument("--status", default=None, help="逗号分隔，缺省 排队+在跑+最近结束的")
+    s.add_argument("--mine", action="store_true")
+    s.add_argument("--all", action="store_true")
+    s.add_argument("--limit", type=int, default=30)
+    s.add_argument("--json", action="store_true")
+
+    s = js.add_parser("show", help="看一条任务")
+    s.add_argument("id", type=int)
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--log", action="store_true", help="带最后一次的日志尾巴")
+
+    s = js.add_parser("wait", help="等一条任务结束")
+    s.add_argument("id", type=int)
+    s.add_argument("--timeout", type=int, default=0, help="最多等几秒，0 不限")
+
+    for name, h in (("cancel", "取消／停下"), ("retry", "失败、拦下、取消的重新排队")):
+        s = js.add_parser(name, help=h)
+        s.add_argument("id", type=int)
+    s = js.add_parser("bump", help="改优先级（插队）")
+    s.add_argument("id", type=int)
+    s.add_argument("--priority", type=int, default=10)
+
+    s = js.add_parser("work", help="执行方：领单跑单，缺省跑到队列空")
+    s.add_argument("--once", action="store_true", help="只跑一条")
+    s.add_argument("--id", type=int, default=None, help="只跑这一条")
+    s.add_argument("--idle", type=float, default=0, help="队列空了再等几分钟有没有新单")
+    s.add_argument("--kinds", default=None, help="只接这些 kind，逗号分隔")
+    s.add_argument("--dry-run", action="store_true", help="只打印要跑的命令（仍会领单、记库，测试分支上用）")
+
+    js.add_parser("init", help="建表（幂等）")
+
+
+def _spec_from_args(a) -> dict:
+    if a.file:
+        raw = json.load(sys.stdin) if a.file == "-" else json.loads(Path(a.file).read_text(encoding="utf-8"))
+    else:
+        raw = {}
+    put = lambda k, v: raw.__setitem__(k, v) if v is not None else None  # noqa: E731
+    put("kind", a.kind)
+    put("book", a.book)
+    put("cv", a.cv)
+    put("pipeline", a.pipeline)
+    put("pages", a.pages)
+    put("base", a.base)
+    put("why", a.why)
+    if a.from_step or a.to_step:
+        raw["steps"] = {**raw.get("steps", {}), **{k: v for k, v in (("from", a.from_step), ("to", a.to_step)) if v}}
+    if a.no_force:
+        raw["force"] = False
+    ov = {k: v for k, v in (("corpus", a.corpus), ("glyph_pin", a.glyph_pin)) if v is not None}
+    if ov:
+        raw["book_overrides"] = {**raw.get("book_overrides", {}), **ov}
+    if a.human_chars is not None:
+        raw["checks"] = {**raw.get("checks", {}), "human_chars": a.human_chars}
+    if a.env:
+        raw["env"] = {**raw.get("env", {}), **dict(e.split("=", 1) for e in a.env)}
+    if a.params:
+        raw["params"] = json.loads(a.params)
+    if a.compare_to:
+        raw["compare_to"] = {"job": int(a.compare_to[4:])} if a.compare_to.startswith("job:") else a.compare_to
+    out = dict(raw.get("output") or {})
+    if a.change:
+        out["change"] = a.change
+    if a.note:
+        out["note"] = a.note
+    if a.no_pack:
+        out["pack"] = False
+    if out:
+        raw["output"] = out
+    if a.run:
+        import shlex
+        raw["run"] = [shlex.split(r) for r in a.run]
+        raw.setdefault("kind", "command")
+    return raw
+
+
+def _fmt_time(t) -> str:
+    """洛杉矶时间（团队规矩）。"""
+    from zoneinfo import ZoneInfo
+    return t.astimezone(ZoneInfo("America/Los_Angeles")).strftime("%m-%d %H:%M") if t else "-"
+
+
+def _line(j: dict) -> str:
+    sp = j["spec"]
+    st = j["status"] + (f"→#{j['duplicate_of']}" if j.get("duplicate_of") else "")
+    where = f" @{j.get('worker')}" if j["status"] == "running" and j.get("worker") else ""
+    stage = f" [{j['stage']}]" if j["status"] == "running" and j.get("stage") else ""
+    pri = f" p{j['priority']}" if j["status"] == "queued" and j["priority"] != 100 else ""
+    return (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j['book'] or '-'):<6} "
+            f"{SP.summary(sp)}{pri}{stage}{where}  {j['submitted_by']} {_fmt_time(j['created_at'])}")
+
+
+def cmd_job(a) -> None:
+    act = a.job_action
+    if act == "submit":
+        try:
+            spec = SP.normalize(_spec_from_args(a))
+        except SP.SpecError as e:
+            sys.exit(f"✗ {e}")
+        h = SP.spec_hash(spec)
+        if a.dry_run:
+            print(json.dumps(spec, ensure_ascii=False, indent=1))
+            print("指纹", h)
+            return
+        db = S.DB()
+        row = db(S.submit, spec, h, by=S.who(), why=spec.get("why"), priority=a.priority,
+                 depends_on=a.after, again=a.again)
+        if row["status"] == "duplicate":
+            print(f"= #{row['id']} 与 #{row['duplicate_of']}（{row['dup_status']}）同一配置，不另跑；"
+                  f"看结果：guji job show {row['duplicate_of']}（确要再跑加 --again）")
+        else:
+            print(f"已排队 #{row['id']}：{SP.summary(spec)}；看进展：guji job show {row['id']}")
+        return
+    db = S.DB()
+    if act == "init":
+        db(S.init)
+        print("jobs schema 已就绪")
+    elif act == "ls":
+        status = a.status.split(",") if a.status else (None if a.all else None)
+        rows = db(S.list_jobs, status=status, book=a.book, limit=a.limit, mine=S.who() if a.mine else None)
+        if not a.all and not a.status:
+            rows = [r for r in rows if r["status"] in SP.ACTIVE] + \
+                   [r for r in rows if r["status"] not in SP.ACTIVE][:10]
+        if a.json:
+            print(json.dumps(rows, ensure_ascii=False, default=str, indent=1))
+            return
+        live = db(S.live_workers)
+        print(f"排队 {db(S.queue_depth)} 条，在跑 {len(live)} 条" +
+              (f"（{'、'.join(sorted({w['worker'] for w in live}))}）" if live else ""))
+        for r in rows:
+            print(_line(r))
+    elif act == "show":
+        j = db(S.detail, a.id)
+        if j is None:
+            sys.exit(f"✗ 没有 #{a.id}")
+        if a.json:
+            print(json.dumps(j, ensure_ascii=False, default=str, indent=1))
+            return
+        print(_line(j))
+        if j.get("why"):
+            print("为什么：", j["why"])
+        if j.get("progress") and j["status"] == "running":
+            print("进展：", j["progress"])
+        if j.get("error"):
+            print("错误：", j["error"])
+        print("定义：", json.dumps(j["spec"], ensure_ascii=False))
+        for t in j["attempts_rows"]:
+            print(f"  第{t['n']}次 {t['worker']} {t.get('session') or ''} {_fmt_time(t['started_at'])}"
+                  f"→{_fmt_time(t['finished_at'])} {t['outcome'] or '在跑'} 心跳 {_fmt_time(t['heartbeat_at'])}")
+        for e in j["events"]:
+            secs = f" {e['secs']:.0f}s" if e.get("secs") else ""
+            print(f"  {_fmt_time(e['at'])} {e['level']:<5} {e['stage'] or '':<8} {e['msg']}{secs}")
+        for r in j["results"]:
+            d = r.get("data") or {}
+            extra = d.get("report_head", "")[:600] or d.get("tail", "")[-600:] or json.dumps(d, ensure_ascii=False)
+            print(f"  结果 {r['kind']} {r['name']} {r.get('location') or ''}\n    " + extra.replace("\n", "\n    "))
+        if a.log and j["attempts_rows"]:
+            print("── 日志尾巴 ──\n" + (j["attempts_rows"][-1].get("log_tail") or ""))
+    elif act == "wait":
+        t0 = time.time()
+        while True:
+            j = db(S.get, a.id)
+            if j is None:
+                sys.exit(f"✗ 没有 #{a.id}")
+            if j["status"] == "duplicate":
+                a.id = j["duplicate_of"]
+                continue
+            if j["status"] not in SP.ACTIVE:
+                print(_line(j))
+                sys.exit(0 if j["status"] == "succeeded" else 1)
+            if a.timeout and time.time() - t0 > a.timeout:
+                print(_line(j))
+                sys.exit(2)
+            time.sleep(60)
+    elif act == "cancel":
+        print(db(S.cancel, a.id, S.who()))
+    elif act == "bump":
+        print("已改" if db(S.bump, a.id, a.priority, S.who()) else "✗ 只有排队中的能改优先级")
+    elif act == "retry":
+        print("已重新排队" if db(S.retry, a.id, S.who()) else "✗ 只有失败、拦下、取消的能重排")
+    elif act == "work":
+        from .runner import work
+        work(once=a.once, only=a.id, idle_minutes=a.idle, kinds=a.kinds.split(",") if a.kinds else None,
+             dry=a.dry_run, say=lambda m: print(m, flush=True))
+
+
+def main(argv=None) -> None:
+    p = argparse.ArgumentParser(prog="guji_jobs", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
+    fill(p)
+    cmd_job(p.parse_args(argv))

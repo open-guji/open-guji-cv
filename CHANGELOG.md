@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- 重跑任务库 `guji job`（云端 `guji_jobs`）：重跑、A/B、评测交到 Neon 中心库 `jobs` schema（job／attempt／event／result 四表），同配置按指纹只跑一次；执行方 `FOR UPDATE SKIP LOCKED` 领单、租约心跳，准备→铺底→人裁检查→跑→对比→存包一口气跑完，每步进展与结果（包标签、R2 位置）记库。见 `doc/design/重跑任务库.md`。`scripts/rerun_prep.sh` 加 `--reset`（同一会话接第二张单时先还原本机册配置）。
+
 ## [0.5.16] - 2026-10-25
 
 PATCH（A24 字组成批上线第一批的余下部分：#532 #537 #540 #545；#538 #544 起跑自检与人裁绑定；#539 意见池；#536 #542 #543 #546 #547 字组文档）。新组要在册配置 `group_flow` 点名才生效；`seed_admit`、`groups/flow.py`、`groups/registry.py` 的 `code_hash` 变。
