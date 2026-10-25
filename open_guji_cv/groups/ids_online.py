@@ -200,6 +200,10 @@ SPECS: dict[str, IdsSpec] = {
     # 凖準 只看左半（冫 点＋长提斜穿／氵 三笔竖排），48×48：按册留出不设门槛也 0 错；宻密 整字 48×48（中部 㐅 交叉／必 带两点）：同样 0 错。门槛沿用 0.5。
     "zhun": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.0, 0.5, 0.0, 1.0), lam=1.0, size=48, clean=True),
     "mi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 䘮喪（2026-10-25，A24「按 IDS 重核䘮喪㣲微變𠮓」）：中部 从（䘮）／吅（喪），整字 48×48。模板＝殿本 vol04–20 已放行格（每册每字 ≤12）
+    #   ＋看图改标（放行成 喪、刻 䘮 的 2 格，送审格 6 格），建库 build_shape_pair.py。按册留出 110 格（喪77 䘮33）不设门槛也 0 错，门槛沿用 0.5。
+    #   㣲微 同时试过（中下 口／几）：看图只十几格作 口，取框／整字 HOG 三种设置按册留出 口 都被高把握判成 微（错例 0.9–1.4），分不开，保留码位归一。
+    "sang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 广宀族 廣實賔賓宸（2026-10-24，A24）：送审的「蕤賔」賔 库里没有字形，被排成 實廣墳須。整字 HOG 一对多（32×32，λ=1），
     #   类＝成员＋陪衬 17 字（寶寳寅賞墳須煩裒盧資質贋寫竇賁責貴）＋「〇」其他池（35 字），每册每字 ≤3（賔賓 全收），
     #   模板＝殿本 vol04–20 放行格＋人裁＋送审格看图补标（research/m7/glyph_expand/build_guang.py）。只给 賔／賓（`give`）：
