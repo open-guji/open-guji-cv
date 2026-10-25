@@ -256,14 +256,17 @@ def claim(conn, worker: str, *, session: str | None = None, affinity: str | None
                 j = _one(conn.execute(_CLAIM, {"kinds": kinds, "aff": affinity, "only": only, "who": worker}))
                 if j is None:
                     return None
+                # 领单序号接着这条单历来的最大序号往下排：retry 把 attempts（重试额度）清零，但旧 attempt 还在
                 a = _one(conn.execute(
                     "INSERT INTO jobs.attempt (job_id, n, worker, session, host, cv_commit, lease_until)"
-                    " VALUES (%s,%s,%s,%s,%s,%s, now() + make_interval(mins => %s)) RETURNING *",
-                    (j["id"], j["attempts"], worker, session, socket.gethostname(), j["spec"].get("cv"),
-                     LEASE_MIN)))
+                    " SELECT %s, coalesce(max(n), 0) + 1, %s, %s, %s, %s, now() + make_interval(mins => %s)"
+                    " FROM jobs.attempt WHERE job_id = %s RETURNING *",
+                    (j["id"], worker, session, socket.gethostname(), j["spec"].get("cv"), LEASE_MIN, j["id"])))
                 _event(conn, j["id"], a["id"], "claim", f"{worker} 领单（第 {a['n']} 次）")
                 return j, a
-        except psycopg.errors.UniqueViolation:
+        except psycopg.errors.UniqueViolation as e:
+            if e.diag.constraint_name != "job_one_running_per_book":
+                raise
             continue      # 同册被别的执行方同时领走，换一条
     return None
 
