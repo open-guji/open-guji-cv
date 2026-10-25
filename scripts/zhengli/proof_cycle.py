@@ -64,6 +64,29 @@ def sha_file(p: Path) -> str:
     return hashlib.sha256(Path(p).read_bytes()).hexdigest() if Path(p).exists() else ""
 
 
+RECHECK_HEAD = "格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n"
+
+
+def merge_recheck(dst: Path, extra: Path) -> int:
+    """把别处发现的疑点（如重标时看出的字错）并进本轮的复审清单：同格以 extra 为准。返回并进的格数。
+
+    extra 与 recheck.tsv 同格式（格位<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字<TAB>旧人裁时间，首行表头）；
+    格位写不写 `vol06:` 前缀都行。旧人裁 id 填了，网站卡片会写明「已有判断」，新票按有意推翻照写。"""
+    def rows(p: Path) -> dict[str, str]:
+        out = {}
+        if p.exists():
+            for ln in p.read_text(encoding="utf-8").splitlines()[1:]:
+                if ln.strip():
+                    first = ln.split("\t", 1)[0].strip()
+                    cell = first.split(":", 1)[1] if first.count(":") == 3 else first   # vol06:9:6:10 → 9:6:10
+                    out[cell] = "\t".join([cell, *ln.split("\t")[1:]])
+        return out
+    have, add = rows(dst), rows(extra)
+    have.update(add)
+    dst.write_text(RECHECK_HEAD + "".join(r + "\n" for r in have.values()), encoding="utf-8")
+    return len(add)
+
+
 def plan_hash(plan: dict) -> str:
     """计划本身的哈希（不含 hash 字段）：apply 必须给对，确保执行的就是这一份。"""
     body = {k: v for k, v in plan.items() if k != "hash"}
@@ -119,6 +142,9 @@ def cmd_plan(a) -> int:
     if rp.run(cmd, cwd=CV, env=env).returncode:
         return 1
     meta = json.loads((draft / "meta.json").read_text(encoding="utf-8"))
+    if a.recheck_extra:
+        n_extra = merge_recheck(draft / "recheck.tsv", Path(a.recheck_extra))
+        print(f"另加复审 {n_extra} 格（{a.recheck_extra}）")
     pages = voted_pages(draft / "drafts.jsonl")
     engine = str(Path(a.engine).resolve()) if a.engine else None
     plan = {
@@ -407,6 +433,7 @@ def main(argv=None) -> int:
     p.add_argument("--cord", help="没有出单版产物包时：出单那一版 book-text 的 <章>.cord.json")
     p.add_argument("--pack", help="出单用的产物包标签（缺省 rev-<线上单 rev>；老单没存 rev 包时给 main 包的标签）")
     p.add_argument("--engine", help="出单版 cv 的 worktree（重跑用它；缺省本仓，须就是包的 cv_commit）")
+    p.add_argument("--recheck-extra", help="另加复审的格（同 recheck.tsv 格式）：别处发现的疑点，拿不准的回网站再看")
     p.add_argument("--voted-pages-only", action="store_true", help="只重跑有票的页（旧做法；缺省全册 seed_admit）")
     p.add_argument("--no-pull", action="store_true")
     p = sp.add_parser("apply")
