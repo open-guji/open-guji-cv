@@ -75,6 +75,17 @@ def test_stain_seal_is_the_square_at_the_frame_top_right():
     assert detect_seals(_page(), SealDetectParams(), borders) == []
 
 
+def test_narrow_dot_field_is_not_the_frame_wide_stain():
+    """卷末淡印（vol35 p173）：窄密度区不按大印套整个版框宽的正方形；模板又不像，就不算印。"""
+    from types import SimpleNamespace as NS
+    borders = NS(top=NS(y_at_right=330.0),
+                 verticals=[NS(x_at_top=x, slope=0.0) for x in (340.0, 525.0, 2000.0)])
+    img = _page()
+    _dots(img, 900, 400, 1500, 1000, 1000)
+    assert stain_seals(img, min_peak=20)
+    assert detect_seals(img, SealDetectParams(min_cover=2.0), borders) == []
+
+
 def _seal_ctx(cells, seals, gray=None):
     from types import SimpleNamespace as NS
     prods = {"cells": cells, "seals": seals}
