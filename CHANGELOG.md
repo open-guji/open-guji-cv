@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- 只重跑 seed_admit（基线包没有 `cache/`）时老人裁静默丢：绑定要拿字形库存图比现格字块图，缓存没有就判 unanchored（殿本 vol10 78/146）。现在缺字块图就现切；切不出来报错（`GUJI_ALLOW_LOST_HUMAN=1` 放行）；`human_chars` 读工作区事件而目录不存在时报错（`GUJI_ALLOW_NO_EVENTS=1` 放行）。绑定缓存版本 7→8。`scripts/rerun_prep.sh` 末尾加人裁自检、写 `~/.guji_env`（GUJI_WORKSPACE）。
 - 起跑自检：跑 seed_admit 时字形库有人裁、事件目录却不在（数据目录没指对）就拒跑。此前只在事件里的人裁会被机器通道悄悄放行顶掉（殿本 vol06／vol10 沙箱重跑实测 88／68 格）。
 
 ## [0.5.15] - 2026-10-24

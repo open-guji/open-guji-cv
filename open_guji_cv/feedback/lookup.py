@@ -510,6 +510,8 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     from .events import EventLog, counts_as_human, iter_events_readonly
     out: dict[str, tuple[str, str | None]] = {}
     pre = f"{book}:"
+    if log is None:
+        _require_events_dir(EventLog())
     try:
         # 按**时间**后到覆盖，不按批次名：Step8 复核（`<book>-collate`）改的字要压过更早的
         # Step7 定字，而批次名排序下 `bxgb-list-…-decide` 排在 `bxgb-collate` 后面，
@@ -518,6 +520,7 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     except FileNotFoundError:
         return out
     superseded: set[str] = set()
+    no_patch: list[str] = []
     if bind:
         from .bindings import strict_enabled
         if strict_enabled():
@@ -571,6 +574,8 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         if bind:
             from .bindings import usable
             key = usable(bound.get(e.id)) if e.id in bound else key
+            if key is None and (bound.get(e.id) or {}).get("why") == "no_patch":
+                no_patch.append(e.target.key)
             if key is None:
                 # 挂错格 / 切开合并 / 格没了：不采信，回待审（`lost` 记下，见 docstring）
                 if lost is not None:
@@ -582,4 +587,28 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
     if lost is not None:
         for k in [k for k in lost if k in out]:
             del lost[k]
+    miss = sorted({k for k in no_patch if k not in out})
+    if miss and not _env_on("GUJI_ALLOW_LOST_HUMAN"):
+        raise RuntimeError(
+            f"human_chars({book})：{len(miss)} 条人裁因为现格字块图拿不到（cache/ 里没有、原图也切不出）"
+            f"没法认格，会被当成绑丢，例：{', '.join(miss[:5])}。先 `guji source pull {book}`"
+            f"（或 `guji cache warm --book {book}`）再跑；确认要丢再设 GUJI_ALLOW_LOST_HUMAN=1。")
     return out
+
+
+def _env_on(name: str) -> bool:
+    import os
+    return os.environ.get(name, "").strip().lower() in ("1", "true", "yes", "on")
+
+
+def _require_events_dir(log) -> None:
+    """工作区事件日志目录不存在 → 报错，不静默当「没人裁过」（2026-10-25，殿本 vol06/10）。
+
+    没设 `GUJI_WORKSPACE`（或 `GUJI_FEEDBACK_DIR`）时 `feedback_root()` 退回仓内 `feedback/`，
+    那里没有 `events/`，`iter_all()` 照样返回空——seed_admit 于是把全部人裁当没有，整册结果作废。
+    真的是一本没人裁过的新书，设 `GUJI_ALLOW_NO_EVENTS=1`。"""
+    if log.events_dir.is_dir() or _env_on("GUJI_ALLOW_NO_EVENTS"):
+        return
+    raise FileNotFoundError(
+        f"人裁事件目录不存在：{log.events_dir}。多半是没设 GUJI_WORKSPACE（读事件看它，不看 GUJI_DATA_HOME），"
+        f"或没 `guji db pull`；新书确实没有人裁就设 GUJI_ALLOW_NO_EVENTS=1。")
