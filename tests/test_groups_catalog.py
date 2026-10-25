@@ -96,3 +96,18 @@ def test_review_breakdown_classifies_and_diffs(tmp_path):
     md = pm.read_text(encoding="utf-8")
     assert "| vol01 | 5 | 20.0% | 4（-1） | 1（-1） |" in md
     assert "| ry | 1（-1） |" in md
+
+
+def test_group_progress_rows_split_sections():
+    from open_guji_cv.eval import group_progress as GP
+
+    d = {"date": "2026-10-25", "tag": "t", "books": ["vol05"],
+         "groups": {"zhi": {"name": "旨㫖", "kind": "同义", "total": {"occ": 10, "admit": 9, "review": 1, "flow": 4, "pick": 3,
+                                                                        "checked": 5, "mismatch": 1},
+                            "by_book": {"vol05": {"occ": 10, "admit": 9, "review": 1, "flow": 4, "pick": 3, "checked": 5, "mismatch": 1}}},
+                    "ry": {"name": "日曰", "kind": "不同义", "total": {"occ": 2, "admit": 2}, "by_book": {"vol05": {"occ": 2, "admit": 2}}}},
+         "review": {"keys": {"V": {"㣲/微": 2}, "N": {}}, "keys_by_book": {"V": {"㣲/微": {"vol05": 2}}, "N": {}}}}
+    rs = {(r[1], r[2], r[3]): r[5] for r in GP.rows(d, "bk")}
+    assert rs[("", "yiti", "review")] == 1 and rs[("", "yiti", "review_out")] == 2 and rs[("", "yiti", "groups")] == 1
+    assert rs[("005", "yiti", "agree_rate")] == 0.8 and rs[("005", "yiti", "pick_rate")] == 0.75
+    assert rs[("005", "xingjin", "review")] == 0 and rs[("005", "xingjin", "admit_rate")] == 1.0
