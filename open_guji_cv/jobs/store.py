@@ -12,7 +12,7 @@ import os
 import socket
 from importlib import resources
 
-LEASE_MIN = 10
+LEASE_MIN = int(os.environ.get("GUJI_JOBS_LEASE_MIN", "10"))   # 测试时可调短
 
 
 def connect():
@@ -125,7 +125,7 @@ def list_jobs(conn, *, status: list[str] | None = None, book: str | None = None,
         q.append("AND j.submitted_by = %s")
         a.append(mine)
     q.append("ORDER BY (j.status='running') DESC, (j.status='queued') DESC,"
-             " CASE WHEN j.status='queued' THEN j.priority END, j.id DESC LIMIT %s")
+             " CASE WHEN j.status='queued' THEN j.priority END, CASE WHEN j.status='queued' THEN j.id END, j.id DESC LIMIT %s")
     a.append(limit)
     return _rows(conn.execute(" ".join(q), a))
 
@@ -317,6 +317,33 @@ def finish(conn, job_id: int, attempt_id: int, outcome: str, *, error: str | Non
         _event(conn, job_id, attempt_id, "finish", {"succeeded": "完成", "failed": "失败", "blocked": "拦下（检查没过）",
                                                      "cancelled": "已停", "queued": "失败，退回排队重试"}[status]
                + (f"：{error}" if error else ""), level="info" if status == "succeeded" else "warn")
+
+
+def worker_seen(conn, name: str, *, state: str, session: str | None = None, job_id: int | None = None,
+                runner: str | None = None, done: int | None = None, started: bool = False,
+                note: str | None = None) -> None:
+    """执行方报到／心跳：started=True 是刚起（重置开始时间）；state 为 idle／busy／stopped。"""
+    with conn.transaction():
+        conn.execute(
+            "INSERT INTO jobs.worker (name, session, host, runner, state, job_id, done, note) VALUES"
+            " (%s,%s,%s,%s,%s,%s,coalesce(%s,0),%s) ON CONFLICT (name) DO UPDATE SET"
+            " session=coalesce(EXCLUDED.session, jobs.worker.session), host=EXCLUDED.host,"
+            " runner=coalesce(EXCLUDED.runner, jobs.worker.runner), state=EXCLUDED.state, job_id=EXCLUDED.job_id,"
+            " done=coalesce(%s, jobs.worker.done), note=coalesce(EXCLUDED.note, jobs.worker.note), seen_at=now(),"
+            " started_at=CASE WHEN %s THEN now() ELSE jobs.worker.started_at END",
+            (name, session, socket.gethostname(), runner, state, job_id, done, note, done, started))
+
+
+def workers(conn, minutes: int = 5) -> list[dict]:
+    """登记过的执行方，带是否在线（近 minutes 分钟内报到过，且没说已停）。库还没升到有 worker 表时返回空。"""
+    import psycopg
+    try:
+        with conn.transaction():
+            return _rows(conn.execute(
+                "SELECT w.*, (w.state <> 'stopped' AND w.seen_at > now() - make_interval(mins => %s)) AS online"
+                " FROM jobs.worker w ORDER BY online DESC, w.seen_at DESC", (minutes,)))
+    except psycopg.errors.UndefinedTable:
+        return []
 
 
 def live_workers(conn, minutes: int = 3) -> list[dict]:

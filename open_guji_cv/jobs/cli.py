@@ -85,12 +85,15 @@ def fill(p: argparse.ArgumentParser) -> None:
     s.add_argument("id", type=int)
     s.add_argument("--priority", type=int, default=10)
 
-    s = js.add_parser("work", help="执行方：领单跑单，缺省跑到队列空")
+    s = js.add_parser("work", help="执行方：领单跑单，缺省跑到队列空；常驻用 --idle")
     s.add_argument("--once", action="store_true", help="只跑一条")
     s.add_argument("--id", type=int, default=None, help="只跑这一条")
     s.add_argument("--idle", type=float, default=0, help="队列空了再等几分钟有没有新单")
     s.add_argument("--kinds", default=None, help="只接这些 kind，逗号分隔")
     s.add_argument("--dry-run", action="store_true", help="只打印要跑的命令（仍会领单、记库，测试分支上用）")
+
+    s = js.add_parser("workers", help="列执行方：谁在线、空闲还是在跑哪条")
+    s.add_argument("--all", action="store_true", help="连已离线的也列")
 
     js.add_parser("init", help="建表（幂等）")
 
@@ -190,8 +193,11 @@ def cmd_job(a) -> None:
             print(json.dumps(rows, ensure_ascii=False, default=str, indent=1))
             return
         live = db(S.live_workers)
+        ws = [w for w in db(S.workers) if w["online"]]
+        idle = sum(1 for w in ws if w["state"] == "idle")
         print(f"排队 {db(S.queue_depth)} 条，在跑 {len(live)} 条" +
-              (f"（{'、'.join(sorted({w['worker'] for w in live}))}）" if live else ""))
+              (f"（{'、'.join(sorted({w['worker'] for w in live}))}）" if live else "") +
+              f"；执行方在线 {len(ws)} 个（空闲 {idle}）")
         for r in rows:
             print(_line(r))
     elif act == "show":
@@ -237,6 +243,18 @@ def cmd_job(a) -> None:
                 print(_line(j))
                 sys.exit(2)
             time.sleep(60)
+    elif act == "workers":
+        rows = db(S.workers)
+        for w in rows:
+            if not (w["online"] or a.all):
+                continue
+            st = {"idle": "空闲", "busy": f"在跑 #{w['job_id']}", "stopped": "已停"}[w["state"]] if w["online"] or \
+                w["state"] == "stopped" else "离线"
+            print(f"{'●' if w['online'] else '○'} {w['name']:<14} {st:<10} 跑完 {w['done']} 条  "
+                  f"上线 {_fmt_time(w['started_at'])}  最近 {_fmt_time(w['seen_at'])}  runner {w.get('runner') or '?'}"
+                  f"  {w.get('session') or ''}")
+        if not any(w["online"] for w in rows):
+            print("（没有在线的执行方）")
     elif act == "cancel":
         print(db(S.cancel, a.id, S.who()))
     elif act == "bump":

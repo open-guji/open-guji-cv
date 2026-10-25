@@ -85,6 +85,7 @@ class Job:
         db = S.DB(self.db.factory)
         while not self._stop.wait(HEARTBEAT_S):
             try:
+                db(S.worker_seen, S.who(), state="busy", job_id=self.id)
                 if db(S.heartbeat, self.aid, stage=self.stage, progress=self.progress):
                     self.cancel.set()
                     if self.proc and self.proc.poll() is None:
@@ -355,9 +356,21 @@ class Job:
         return outcome
 
 
-def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 0, poll_s: int = 60,
+def _runner_commit() -> str | None:
+    try:
+        return subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
+                              text=True, timeout=10).stdout.strip() or None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 0, poll_s: int = 30,
          only: int | None = None, kinds: list[str] | None = None, dry: bool = False, say=print) -> int:
-    """领单跑单。缺省跑到队列空就退出（定时例程每次开会话跑一轮）；`idle_minutes` 给了就空闲这么久才退。"""
+    """领单跑单。缺省跑到队列空就退出；`idle_minutes` 给了就空闲这么久才退（常驻执行方用，见 doc 第「执行方」节）。
+
+    每个执行方一个名字（GUJI_JOBS_WHO），在 jobs.worker 登记：空闲时每次轮询报到一次，领到单记 busy 和单号，
+    退出记 stopped。同一台机只许一个执行方（本机锁），多开执行方就多开会话。
+    """
     HOME.mkdir(parents=True, exist_ok=True)
     lock = (HOME / "worker.lock").open("w")
     import fcntl
@@ -371,28 +384,37 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     db = S.DB()
     done = 0
     idle_since = time.time()
-    while True:
-        for jid, st in db(S.reap):
-            say(f"收回 #{jid} → {st}")
-        got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
-        if got is None:
-            if until_empty and not idle_minutes:
-                say(f"队列里没有可跑的单，退出（本轮跑了 {done} 条）")
+    rc = _runner_commit()
+    db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True)
+    say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
+    try:
+        while True:
+            for jid, st in db(S.reap):
+                say(f"收回 #{jid} → {st}")
+            got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
+            if got is None:
+                if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
+                    say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
+                    return done
+                db(S.worker_seen, worker, state="idle", session=session, done=done)
+                time.sleep(poll_s)
+                continue
+            job, att = got
+            db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
+            say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
+            outcome = Job(job, att, db, dry=dry).run()
+            _remember_book(job["book"])
+            say(f"#{job['id']} → {outcome}")
+            done += 1
+            db(S.worker_seen, worker, state="idle", session=session, done=done)
+            idle_since = time.time()
+            if once or only:
                 return done
-            if time.time() - idle_since > idle_minutes * 60:
-                say(f"空闲 {idle_minutes} 分钟，退出（本轮跑了 {done} 条）")
-                return done
-            time.sleep(poll_s)
-            continue
-        job, att = got
-        say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
-        outcome = Job(job, att, db, dry=dry).run()
-        _remember_book(job["book"])
-        say(f"#{job['id']} → {outcome}")
-        done += 1
-        idle_since = time.time()
-        if once or only:
-            return done
+    finally:
+        try:
+            db(S.worker_seen, worker, state="stopped", session=session, done=done)
+        except Exception:       # noqa: BLE001 —— 断网时退出就不报了，过几分钟自然算离线
+            pass
 
 
 def _last_book() -> str | None:
