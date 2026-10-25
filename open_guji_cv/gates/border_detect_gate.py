@@ -67,12 +67,14 @@ class BorderDetectGateParams(BaseModel):
     缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
 
     grid_overrides_skip: bool = True
-    """页型规则判 skip（题签／封面），但 Step1 探出完整、等宽的正文栏格（列数＝版式列数，每列宽都在
-    中位 ±``grid_width_tol`` 内）→ 按正文走，manifest 记 flag `page_type_grid`。卷末少字页只有两三列字、
-    其余空栏，字少被页型规则当成题签整页跳过（殿本 vol05 p106、vol13 p89、vol14 p174，2026-10-25）；
-    真题签、封面探不出这样的栏格（vol01–20 判 skip 的页里列数对上的只有这几页，另一页 vol20 p179
-    列宽乱、不放）。"""
+    """页型规则判 skip（题签／封面），但 Step1 探出完整的正文栏格 → 按正文走，manifest 记 flag `page_type_grid`。
+    完整栏格（`_full_grid`）＝列数＝版式列数、每列宽都在中位 ±``grid_width_tol`` 内、每条竖线都是真探到的
+    （不是网格模式插值补的），且每条界行在原图上从上版框到下版框至少 ``grid_line_cover`` 的行都有墨——挡住框线残留、
+    装订线、题签上的杂线（A21 核对意见，2026-10-25）。卷末少字页只有两三列字、其余空栏，字少被页型规则当成
+    题签整页跳过（殿本 vol13 p89、vol14 p174；vol05 p106、vol06 p88、vol07 p90 同型）；真题签、封面只有
+    4–6 条竖线，列数就对不上（vol04 第 129 叶横页）。"""
     grid_width_tol: float = 0.15
+    grid_line_cover: float = 0.5
 
     @model_serializer(mode="wrap")
     def _drop_off_pagetype(self, handler):
@@ -91,14 +93,37 @@ class BorderDetectGateParams(BaseModel):
                                file_fingerprint(self.pagetype_model_path or DEFAULT_MODEL) or "missing")
 
 
-def _uniform_grid(b: Borders, tol: float) -> bool:
-    """每列宽（相邻界行顶端 x 之差）都在中位 ±tol 内。"""
+def _full_grid(b: Borders, raw, width_tol: float, line_cover: float) -> bool:
+    """完整等宽的栏格：每列宽（相邻竖线顶端 x 之差）都在中位 ±width_tol 内；没有插值补的竖线；
+    每条界行（两边外框除外）在原图上、上下版框之间至少 line_cover 的行有墨（线宽按 ±3px 找；x 从右边量）。
+    刻本界行常有断续、磨淡处，实测正文页界行覆盖 0.6–1.0，所以门槛放在一半。"""
+    import numpy as np
     xs = sorted(v.x_at_top for v in b.verticals)
     w = [xs[i + 1] - xs[i] for i in range(len(xs) - 1)]
-    if not w:
+    if not w or any(b.vline_filled):
         return False
     m = sorted(w)[len(w) // 2]
-    return m > 0 and all(abs(x / m - 1) <= tol for x in w)
+    if m <= 0 or any(abs(x / m - 1) > width_tol for x in w):
+        return False
+    g = np.asarray(raw)
+    g = g if g.ndim == 2 else g.mean(axis=2)
+    h, wd = g.shape[:2]
+    for v in b.verticals[1:-1]:                 # 两边的外框已由版框检测认过，只查界行
+        line = v.to_vline()
+        x_mid = line.x_at(h / 2)
+        y0 = int(b.top.to_hline().y_at(x_mid)) + 5
+        y1 = int(b.bottom.to_hline().y_at(x_mid)) - 5
+        ys = range(max(0, y0), min(h, y1), 2)
+        if not ys:
+            return False
+        hit = 0
+        for y in ys:
+            x = int(round(wd - 1 - line.x_at(y)))       # 新坐标系 x 从右边量
+            seg = g[y, max(0, x - 3):min(wd, x + 4)]
+            hit += bool(seg.size) and seg.min() < 128
+        if hit < line_cover * len(ys):
+            return False
+    return True
 
 
 _PT_GATES: dict = {}
@@ -147,7 +172,7 @@ class BorderDetectGateStep(Step):
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
         grid_from = None
         if p.grid_overrides_skip and policy == "skip" and n_cols == expected and \
-                _uniform_grid(b, p.grid_width_tol):
+                _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
             grid_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
         # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打

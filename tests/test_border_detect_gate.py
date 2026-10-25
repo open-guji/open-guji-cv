@@ -173,3 +173,35 @@ def test_uneven_grid_still_skipped(tmp_path, monkeypatch):
     m = STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
     assert not m.admitted and m.page_type == "label"
     assert not any(f.startswith("page_type_grid") for f in m.flags)
+
+
+def _run_grid_case(tmp_path, monkeypatch, *, raw=None, borders=None):
+    import open_guji_cv.gates.border_detect_gate as bdg
+    monkeypatch.setattr(bdg, "classify_page_type", lambda raw: ("label", "skip"))
+    ctx = make_ctx(tmp_path, make_book(), raw={PAGE: body_page(n_cols=NCOLS) if raw is None else raw})
+    ctx.store.write(ctx.book.id, "border_detect", f"p{PAGE:04d}",
+                    {"borders": make_borders(n_cols=NCOLS) if borders is None else borders})
+    return STEPS["border_detect_gate"].run_page(ctx, PAGE)["border_detect_gate_manifest"]
+
+
+def test_grid_lines_missing_on_the_image_still_skipped(tmp_path, monkeypatch):
+    """产物里栏格完整等宽，原图上却没有界行（框线残留、装订线误检）：不放。"""
+    import numpy as np
+    m = _run_grid_case(tmp_path, monkeypatch, raw=np.full_like(body_page(n_cols=NCOLS), 255))
+    assert not m.admitted and m.page_type == "label"
+
+
+def test_interpolated_grid_lines_still_skipped(tmp_path, monkeypatch):
+    """网格模式插值补出来的竖线不算探到。"""
+    b = make_borders(n_cols=NCOLS)
+    b.vline_filled = [False] * len(b.verticals)
+    b.vline_filled[3] = True
+    m = _run_grid_case(tmp_path, monkeypatch, borders=b)
+    assert not m.admitted and m.page_type == "label"
+
+
+def test_few_vertical_lines_still_skipped(tmp_path, monkeypatch):
+    """横页、题签只探到 4 条竖线（殿本 vol04 第 129 叶）：列数对不上，照旧跳过。"""
+    m = _run_grid_case(tmp_path, monkeypatch, borders=make_borders(n_cols=3))
+    assert not m.admitted and m.page_type == "label"
+    assert not any(f.startswith("page_type_grid") for f in m.flags)
