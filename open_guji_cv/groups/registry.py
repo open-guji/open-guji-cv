@@ -122,6 +122,11 @@ def _rv(gid: str) -> dict:
     return {"review": True, "review_methods": (_img(gid),)} if gid in SHAPE_REVIEW else {}
 
 
+#: 按刻形拆判的异体对里复核只降不改的（2026-10-25）：尙尚 vol16 重落把两格刻「尚」（上有中竖）改成了「尙」（margin 0.9–1.1），
+#: 32px 整字 HOG 看不清中竖。判法修好前复核判出另一形只降审。
+_SHAPE_PAIR_NO_FIX = frozenset({"shang"})
+
+
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
 #: 文意弃权时字形可单独补放，两路都给字须一致，否则送审；复核时字形给了别的字就降审。
 GLYPH2 = frozenset({"rr", "ts", "ly", "wj", "zh", "yh", "yt", "js", "em", "fc", "yr"})
@@ -357,7 +362,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=True),
+        flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=gid not in _SHAPE_PAIR_NO_FIX),
         note=f"异体对按刻形判（{note}）；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
                                # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
