@@ -9,7 +9,8 @@
 - `yiti` 异体字组：同义组（`kind=同义`）＋送审分类里的 V（组外异体对）；
 - `xingjin` 形近字：不同义组＋送审分类里的 N（形近护栏）。
 每栏写整套（`vol=''`）与各册（`vol`＝册号三位，vol05 → `005`）：送审格、放行率、组判率、人裁核对一致率；
-整套另写组数、组外送审，`detail` 放送审最多的组与键。
+整套另写组数、组外送审，`detail` 放送审最多的组与键；每个字组再写一张卡（key `group:<组>`，值＝送审格，
+`value_text` 写出现格、放行率、组判率，`detail` 放整组口径与各册送审），按送审从多到少排。
 """
 from __future__ import annotations
 
@@ -34,7 +35,7 @@ def _rate(a: int, b: int):
 
 
 def rows(d: dict, book_id: str) -> list[tuple]:
-    """→ [(book_id, vol, section, key, label, value, unit, value_text, detail)]。"""
+    """→ [(book_id, vol, section, key, label, value, unit, value_text, detail, sort)]；sort 为 None 时按 SORT。"""
     out = []
     rv = d.get("review") or {}
     for sec, (kind, cat, cat_name) in SECTIONS.items():
@@ -53,11 +54,11 @@ def rows(d: dict, book_id: str) -> list[tuple]:
             chk = c.get("checked", 0) - c.get("drift", 0)
             real = c.get("mismatch", 0) - c.get("drift", 0)
             out.extend([
-                (book_id, vol, sec, "review", "送审格（组内）", c.get("review", 0), "格", None, None),
-                (book_id, vol, sec, "review_out", f"送审格（{cat_name}）", extra_review, "格", None, None),
-                (book_id, vol, sec, "admit_rate", "组内放行率", _rate(c.get("admit", 0), c.get("occ", 0)), "%", None, None),
-                (book_id, vol, sec, "pick_rate", "组判率", _rate(c.get("pick", 0), c.get("flow", 0)), "%", None, None),
-                (book_id, vol, sec, "agree_rate", "人裁核对一致率", _rate(chk - real, chk), "%", None, None),
+                (book_id, vol, sec, "review", "送审格（组内）", c.get("review", 0), "格", None, None, None),
+                (book_id, vol, sec, "review_out", f"送审格（{cat_name}）", extra_review, "格", None, None, None),
+                (book_id, vol, sec, "admit_rate", "组内放行率", _rate(c.get("admit", 0), c.get("occ", 0)), "%", None, None, None),
+                (book_id, vol, sec, "pick_rate", "组判率", _rate(c.get("pick", 0), c.get("flow", 0)), "%", None, None, None),
+                (book_id, vol, sec, "agree_rate", "人裁核对一致率", _rate(chk - real, chk), "%", None, None, None),
             ])
 
         put("", tot, sum(cat_by_book.values()))
@@ -66,19 +67,29 @@ def rows(d: dict, book_id: str) -> list[tuple]:
         out.append((book_id, "", sec, "groups", "字组数", len(gs), "组", None,
                     {"date": d.get("date"), "tag": d.get("tag"),
                      "top_groups": [{"group": g, "name": gs[g]["name"], "review": n} for n, g in top_g if n],
-                     "top_keys": [{"key": k, "review": n} for n, k in top_k]}))
+                     "top_keys": [{"key": k, "review": n} for n, k in top_k]}, None))
         for b in d["books"]:
             put(_vol(b), per_book.get(b, Counter()), cat_by_book.get(b, 0))
+        ranked = sorted(gs.items(), key=lambda kv: (-kv[1]["total"].get("review", 0), kv[0]))
+        for i, (g, v) in enumerate(ranked):
+            t = v["total"]
+            rates = [("放行率", _rate(t.get("admit", 0), t.get("occ", 0))), ("组判率", _rate(t.get("pick", 0), t.get("flow", 0)))]
+            text = "　".join([f"出现 {t.get('occ', 0)}"] + [f"{n} {r:.1%}" for n, r in rates if r is not None])
+            out.append((book_id, "", sec, f"group:{g}", f"{v['name']}（{g}）", t.get("review", 0), "格", text,
+                        {"date": d.get("date"), "tag": d.get("tag"), "total": dict(t),
+                         "review_by_vol": {_vol(b): c.get("review", 0) for b, c in v["by_book"].items() if c.get("review")}},
+                        100 + i))
     return out
 
 
 def write(rs: list[tuple]) -> int:
     from ..datastore.connect import connect
     with connect() as conn:
-        for book_id, vol, sec, key, label, value, unit, text, detail in rs:
+        for book_id, vol, sec, key, label, value, unit, text, detail, sort in rs:
             conn.execute("SELECT progress.put_metric(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)",
                          (book_id, vol, sec, key, label, value, unit, WHO, text,
-                          json.dumps(detail, ensure_ascii=False) if detail else None, SORT.get(key, 100)))
+                          json.dumps(detail, ensure_ascii=False) if detail else None,
+                          sort if sort is not None else SORT.get(key, 100)))
     return len(rs)
 
 

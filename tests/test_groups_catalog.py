@@ -111,3 +111,6 @@ def test_group_progress_rows_split_sections():
     assert rs[("", "yiti", "review")] == 1 and rs[("", "yiti", "review_out")] == 2 and rs[("", "yiti", "groups")] == 1
     assert rs[("005", "yiti", "agree_rate")] == 0.8 and rs[("005", "yiti", "pick_rate")] == 0.75
     assert rs[("005", "xingjin", "review")] == 0 and rs[("005", "xingjin", "admit_rate")] == 1.0
+    cards = [r for r in GP.rows(d, "bk") if r[3].startswith("group:")]
+    assert [(r[2], r[3], r[5], r[9]) for r in cards] == [("yiti", "group:zhi", 1, 100), ("xingjin", "group:ry", 0, 100)]
+    assert cards[0][7] == "出现 10　放行率 90.0%　组判率 75.0%" and cards[0][8]["review_by_vol"] == {"005": 1}
