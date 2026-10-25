@@ -38,7 +38,30 @@ def check(eng, steps: list[str]) -> list[str]:
         gone = [m for m in ("joblib", "sklearn") if not _have(m)]
         if gone:
             out.append(f"册配置开了 shadow_veto，但没装 {'、'.join(gone)}：Step7 seed_admit 会整页失败（装 `.[shadow]`）")
+    if "seed_admit" in steps and _params(eng, "seed_admit", "use_human_verdicts"):
+        msg = _human_events_missing(_params(eng, "seed_admit", "db_path"))
+        if msg:
+            out.append(msg)
     return out
+
+
+def _human_events_missing(db_path) -> str | None:
+    """字形库里有人裁、事件目录却不在 → 数据目录没指对，只在事件里的人裁会被机器通道顶掉（A24 2026-10-25）。
+
+    `feedback.lookup.human_chars` 找不到事件目录静默返回空；殿本 vol06／vol10 沙箱重跑实测，
+    只在事件里的人裁（H-M7-ctx-label-1022 等）88／68 格改由 match_ref 等放行，产物照出、没有报错。"""
+    if not db_path or not Path(db_path).is_file():
+        return None
+    from ..feedback.events import EventLog
+    ev = EventLog().events_dir
+    if ev.is_dir():
+        return None
+    from ..steps.seed_admit import _human_shapes
+    n = len(_human_shapes(db_path))
+    if not n:
+        return None
+    return (f"字形库有 {n} 条人裁，事件目录 {ev} 却不在：Step7 seed_admit 读不到只在事件里的人裁，"
+            "会被机器通道放行顶掉（查 GUJI_DATA_HOME／GUJI_FEEDBACK_DIR／GUJI_WORKSPACE）")
 
 
 def _params(eng, step_id: str, field: str):
