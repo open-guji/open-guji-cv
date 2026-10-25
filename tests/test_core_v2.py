@@ -339,7 +339,9 @@ def test_keben_body_v2_on_the_frozen_fixture_page(tmp_path, monkeypatch, ws, cnn
     pl = load_pipeline("keben_body_v2")
     book = load_book("keben")
     store, cache = ProductStore(tmp_path / "products"), ImageCache(tmp_path / "cache")
-    eng = Engine(book, pl, store=store, cache=cache, log=lambda s: None)
+    # 影子闸（2026-10-24 起缺省开）要真字形库与 sklearn，fixture 册没摆
+    eng = Engine(book, pl, store=store, cache=cache, log=lambda s: None,
+                 params={"seed_admit": {"shadow_veto": False}})
 
     # ⚠️ 语料两处都必须显式指到 fixture 里那份，否则这一跑会去读**仓里的生产语料**：
     #   - `AlignRefParams.corpus` 缺省 = `corpus/zongmu_wenyuange_wikisource.txt`；
