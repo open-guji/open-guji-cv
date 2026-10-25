@@ -4,7 +4,7 @@
 #   rerun_prep.sh <册> [--cv <tag/分支/提交>] [--corpus N] [--pin-args "<guji corpus pin 的参数>"]
 #                 [--glyph-pin N] [--ws-glob 96mid1ogzk-*] [--base]
 #
-# 依次：cv 切到需求单版本 → 克隆 guji-workspace → guji db pull → 改册 yaml（corpus／glyph_pin）
+# 依次：cv 切到需求单版本 → 克隆 guji-workspace → guji db pull → 改册 yaml（corpus／glyph_pin；给了 --cv 时 cv_version 跟着改）
 # → 追加语料钉子账 → 建钉版字形库并核刻例非 0 → 取原图并合扫检查 → 预拉 Step5-b 模板索引（fp32）
 # → 语料校验 → guji status。每步计时，最后打印汇总和开跑命令。任何一步失败即停（退出码非 0）。
 # 只做准备，不跑 pipeline、不推库、不存包。环境：/opt/guji-cv-seed + /opt/guji-venv（Default 环境快照）。
@@ -33,7 +33,17 @@ t db-pull $G db pull -w "$WS"
 Y=$(ls /root/.guji-data/main/*/books/"$VOL".yaml | head -n 1)   # 数据目录里的册配置（db pull 落的）
 [ -n "$CORPUS" ] && sed -i "s/^corpus: .*/corpus: $CORPUS/" "$Y"
 [ -n "$GPIN" ] && { grep -q '^glyph_pin:' "$Y" && sed -i "s/^glyph_pin: .*/glyph_pin: $GPIN/" "$Y" || echo "glyph_pin: $GPIN" >> "$Y"; }
-echo "册 yaml $Y：$(grep -E '^(corpus|glyph_pin):' "$Y" | tr '\n' ' ')"
+# 册 yaml 钉了 cv_version、装的又不是它，pipeline 会拒跑（要 --allow-cv-mismatch）。给了 --cv 就是需求单点名的版本：
+# 本地册配置跟着改成装上的版本（只改本机数据目录，不推中心库）；没给 --cv 而对不上就只提醒
+CVV=$(/opt/guji-venv/bin/python -c "from open_guji_cv.core.cv_version import describe;print(describe()[0] or '')")
+OLD=$(sed -n 's/^cv_version: *"\{0,1\}\([^" #]*\).*/\1/p' "$Y")
+if [ -n "$CV" ] && [ -n "$CVV" ] && [ "$OLD" != "$CVV" ]; then
+  grep -q '^cv_version:' "$Y" && sed -i "s/^cv_version: .*/cv_version: \"$CVV\"/" "$Y" || echo "cv_version: \"$CVV\"" >> "$Y"
+  echo "册 yaml cv_version ${OLD:-（未钉）} → $CVV（跟 --cv）"
+elif [ -n "$OLD" ] && [ "$OLD" != "$CVV" ]; then
+  echo "⚠️ 册 yaml 钉 cv_version=$OLD，装的是 $CVV：用 --cv v$OLD 重跑本脚本，或按需求单给 --cv"
+fi
+echo "册 yaml $Y：$(grep -E '^(corpus|glyph_pin|cv_version):' "$Y" | tr '\n' ' ')"
 [ -n "$PIN_ARGS" ] && t 钉子账 $G corpus pin --vol "$VOL" $PIN_ARGS -w "$WS"
 GP=$(sed -n 's/^glyph_pin: *//p' "$Y")
 if [ -n "$GP" ]; then
