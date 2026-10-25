@@ -52,5 +52,30 @@ t 模板索引 $G cache pull-rare-index --book "$VOL" -w "$WS" --precision fp32
 [ -n "$CORPUS" ] && t 语料校验 $G corpus verify --vol "$VOL" -w "$WS"
 [ $BASE = 1 ] && t 基线包 $G products pack fetch "$VOL" --to "$HOME/base/$VOL"
 t status $G status "$VOL" -w "$WS"
+# 人裁自检（2026-10-25）：读事件看 GUJI_WORKSPACE（不看 GUJI_DATA_HOME）；老人裁要现格字块图才认得了格，
+# 只重跑 seed_admit、cache/ 是空的会话里旧版 cv 会静默丢（vol10 78/146）。新版 cv 现切字块，旧版要先 cache warm。
+t 人裁自检 /opt/guji-venv/bin/python - "$VOL" <<'PY'
+import collections, sys
+from open_guji_cv.feedback.bindings import book_bindings, usable
+from open_guji_cv.feedback.lookup import human_chars
+from open_guji_cv.products.store import ProductStore
+from open_guji_cv.report.slots import cells_step
+v = sys.argv[1]
+n0 = len(human_chars(v, bind=False))
+if not ProductStore().step_dir(v, cells_step(v)).is_dir():
+    sys.exit(print(f"人裁 {v}：按编号 {n0}（还没有切分产物，绑定自检等跑完 Step3 再看）"))
+lost = {}
+n = len(human_chars(v, lost=lost))
+rows = book_bindings(v)
+st = collections.Counter(r["status"] for r in rows.values())
+why = collections.Counter(r.get("why") or r["status"] for r in rows.values() if usable(r) is None)
+print(f"人裁 {v}：绑定后 {n}（应与基线包 seed_admit 里 provenance=human 的格数一致），按编号 {n0}，"
+      f"绑丢 {len(lost)} {dict(why)}；绑定状态 {dict(st)}")
+if why.get("no_patch") or why.get("unanchored", 0) > 3:
+    print("⚠️ 有人裁因 cache/ 里没有字块图认不了格。旧版 cv（v0.5.15 及以前）先跑 "
+          "ai-team domain/CV/脚本/warm_human_patches.py 再自检；dev（#540 起）会自己现切")
+PY
+{ echo "export GUJI_WORKSPACE='$WS'"; } > "$HOME/.guji_env"
 echo; echo "== 准备耗时"; printf '%s\n' "${SUM[@]}"
+echo "之后的命令先 source ~/.guji_env（设 GUJI_WORKSPACE；人裁事件只认它）"
 echo "开跑：guard_run $VOL -- $G pipeline keben_body_v2 $VOL -w \"$WS\" --pages all --no-pack"
