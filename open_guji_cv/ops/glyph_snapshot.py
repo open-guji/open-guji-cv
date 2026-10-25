@@ -262,6 +262,18 @@ def _build_pinned_db_locked(ws: Path, version: int, *, force: bool = False, loca
     except RuntimeError:
         part.unlink(missing_ok=True)
         raise
+    with _ws(ws):
+        fps = _fingerprints(part)
+    db = GlyphDB(part)
+    try:       # 清单里没记 fingerprints 的（--no-build 出的）靠这份；`core/glyph_pin._snapshot_pin` 读
+        row = db.conn.execute("SELECT value FROM meta WHERE key=?", (META_KEY,)).fetchone()
+        m = json.loads(row[0])
+        m["fingerprints"] = fps
+        db.conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                        (META_KEY, json.dumps(m, ensure_ascii=False, sort_keys=True)))
+        db.conn.commit()
+    finally:
+        db.close()
     os.replace(part, db_path)
     shutil.rmtree(tmp, ignore_errors=True)
     return {"pin": version, "db": str(db_path), "reused": False, **info, "fonts": fonts,

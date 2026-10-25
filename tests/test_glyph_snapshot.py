@@ -207,6 +207,16 @@ def test_upload_plan_dry_run(ws):
     assert plan["txt"] >= 1
 
 
+def test_built_db_meta_carries_fingerprints_for_manifest_without_them(ws):
+    """清单没记 fingerprints（--no-build 出的 g4）时，钉号读建库时写进库 meta 的那份。"""
+    from open_guji_cv.core.glyph_pin import pinned_db_meta, pinned_db_path
+    from open_guji_cv.ops.glyph_snapshot import build_pinned_db, snapshot
+    snapshot(ws, build=False)
+    build_pinned_db(ws, 1)
+    fp = pinned_db_meta(pinned_db_path(1))["fingerprints"]
+    assert fp["n_human"] == 2 and "approx" in fp and "borrow_fingerprint" in fp
+
+
 def test_upload_and_verify_only_new_items_since_previous(ws):
     """出 g2 时只传、只核相对 g1 新增或改动的条目；``full`` 才全量。"""
     from open_guji_cv.core.glyph_pin import load_manifest
