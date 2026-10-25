@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
 - proof_cycle apply 加 `--reuse-products <目录>`：引擎换版本后产物已自己从头跑好，沙箱直接用它，不取出单版包、不重跑 seed_admit；发布用的 cv 版本取引擎的 tag。
 
 ## [0.5.20] - 2026-10-25
