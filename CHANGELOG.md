@@ -6,6 +6,12 @@
 ## [未发版]
 
 - cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
+
+## [0.5.21] - 2026-10-25
+
+PATCH（#605 字组）。seed_admit 的 `code_hash` 变（`groups/` 注册表、流程、字形判法表）。
+
+- 字组：新 SHAPE 组 yin 隱𨼆、suan 算𮅕、guanm 闗關（与 men 共用 關），模板库在 `config/groups/<组>/ids_bank.json`；新 `FlowSpec.ref_enter`（库首位是陪衬、整理本或坐标对位字在组里也进组补放，先于库首位字的组）；kui 陪衬补 𮑮襄𠮓變雙凌。册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放补放 𮅕87 𨼆28 闗13、改码位 9（PATCH）。
 - proof_cycle apply 加 `--reuse-products <目录>`：引擎换版本后产物已自己从头跑好，沙箱直接用它，不取出单版包、不重跑 seed_admit；发布用的 cv 版本取引擎的 tag。
 
 ## [0.5.20] - 2026-10-25

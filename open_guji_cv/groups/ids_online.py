@@ -229,6 +229,11 @@ SPECS: dict[str, IdsSpec] = {
     # 瑣𤨏（2026-10-25，A24 GUJI-719「异体组纳入形近比对」）：差别在右上（⺌／巛），只取右上框 48×48。
     "suo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=5, whole="hog", region=(0.4, 1.0, 0.0, 0.5), lam=1.0, size=48,
                    clean=True),
+    # 隱𨼆、算𮅕、闗關（2026-10-25，A24 vol21–50 首跑 V 类）：字形库没有少的一形，库排成常见形或别的字；模板＝殿本 vol21–50 已放行格
+    #   （每册每字 ≤12）＋送审格看图补标，建库 build_shape_pair.py。门槛与区域见 doc/字组/ 同名卡。
+    "yin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "suan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "guanm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
 }
 
 

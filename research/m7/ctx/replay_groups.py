@@ -8,6 +8,7 @@
 - `--tables`：L2 表目录，`<组>.json`；没给的组只有 L1。
 - `--patches`：方法要字块时现算（`RunContext.image`，要工作区与原图，同 `research/m7/bench/materialize_patches.py`）；
   不给则字块一律缺（看图的方法弃权）。
+- `--raw <原图根>`：不要工作区，字块按 `cell_shrink` 的 `bbox_page` 从 `<原图根>/<册>/<页>.png` 裁（同 build_shape_pair.py 建库的取法）。
 输出每个进了流程的格一行：前后的放行状态、结论、各方法留痕、窗口。
 """
 import argparse, json, sys
@@ -25,6 +26,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("root"); ap.add_argument("vols"); ap.add_argument("out")
 ap.add_argument("--groups", required=True); ap.add_argument("--redo", default="")
 ap.add_argument("--tables", default=None); ap.add_argument("--patches", action="store_true")
+ap.add_argument("--raw", default=None)
 a = ap.parse_args()
 root = Path(a.root)
 groups = flow_names(a.groups.split(","))
@@ -106,6 +108,16 @@ for v in a.vols.split(","):
                     return rc.image("char_patch", cell_key(page, col, slot) + (sub or ""))
                 except Exception:          # noqa: BLE001 —— 回放：缺图就当缺（方法弃权），不停
                     return None
+        if a.raw:
+            import cv2
+            from open_guji_cv.core.anchor import crop_patch
+            img = cv2.imread(str(Path(a.raw) / v / f"{page}.png"), cv2.IMREAD_GRAYSCALE)
+            sh = root / v / "cell_shrink" / f.name
+            box = ({c["id"]: c["bbox_page"] for col in json.load(open(sh, encoding="utf-8"))["char_index"]["columns"]
+                    for c in col["chars"]} if sh.exists() else {})
+
+            def patch_fn(cid, img=img, box=box):
+                return crop_patch(img, tuple(box[cid])) if img is not None and cid in box else None
         group_flow_pass(seq, amap, lambda cid: list((gm.get(cid) or {}).get("candidates") or []), blocked, cfg,
                         ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH), patch_fn=patch_fn,
                         veto_refs=coord)
@@ -116,6 +128,6 @@ for v in a.vols.split(","):
             out.write(json.dumps(dict(id=r.id, group=grp["id"], mode=grp["mode"], decision=grp["decision"], pick=grp["pick"],
                                       why=grp["why"], solvers=grp["solvers"], before=before[r.id], after=(r.admit, r.char, r.channel),
                                       ref=(amap.get(r.id) or (None,))[0], cands=(gm.get(r.id) or {}).get("candidates", [])[:4],
-                                      left=win[r.id][0], right=win[r.id][1]),
+                                      left=win.get(r.id, (None, None))[0], right=win.get(r.id, (None, None))[1]),
                                  ensure_ascii=False) + "\n")
     print(v, "done", file=sys.stderr, flush=True)
