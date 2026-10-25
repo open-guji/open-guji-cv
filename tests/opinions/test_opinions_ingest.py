@@ -127,3 +127,22 @@ def test_read_dir(tmp_path):
 def test_desensitize():
     assert I.desensitize("QQ: 12345678 微信号abcde_1 vx: wxid_x9") == "QQ: *** 微信号*** vx: ***"
     assert I.desensitize("身份证 110101199003071234") == "身份证 ***"
+
+
+def test_figure_from_three_paths():
+    """GUJI-737：读者说「这是图形，不是字」——网站改字（KV 原值、公开实时读）与精校票都入 figure 类，建议里不放字。"""
+    r = {"v": 1, "kind": "char", "book_id": BOOK, "volume": "005", "text_version": "1.0.1", "cell_id": "148:2:14",
+         "old_char": "〇", "new_char": "□", "figure": True, "alt": "左半圈连一实点", "voter": "aaaaaa1111111111", "ts": T0}
+    op = I.from_fix_record(r, BOOK).op
+    assert op.category == "figure" and op.proposal == {"choice": "figure", "alt": "左半圈连一实点"}
+    assert op.validate()
+    live = {"book": BOOK, "volumes": {"005": [{"kind": "char", "at": "148:2:14", "tv": "1.0.1", "old": "〇", "new": "□",
+                                                "fig": 1, "who": "aaaaaa", "ts": T0}]}}
+    op2 = I.from_public_fixes(live, BOOK)[0].op
+    assert op2.category == "figure" and op2.proposal == {"choice": "figure"}
+    plain = I.from_fix_record({**r, "figure": None, "alt": None, "new_char": "○"}, BOOK).op
+    assert plain.category == "wrong" and plain.proposal == {"text": "○"}
+    v = {"v": 1, "book": BOOK, "vol": "005", "a": "148:2:14", "rev": "005-r1", "choice": "figure", "alt": "圈点",
+         "note": "", "shown": "〇", "voter": "dd04f7895bf5d5d8", "ts": T0}
+    op3 = I.from_cellreview(v, BOOK).op
+    assert op3.category == "figure" and op3.proposal == {"choice": "figure", "alt": "圈点"}
