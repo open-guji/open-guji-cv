@@ -313,8 +313,11 @@ def cmd_apply(a) -> int:
              "--held-file", Path(plan["draft_dir"]) / "held.tsv"]
     if rows:
         issue += ["--recheck", recheck]
-    if plan["pack_cv_commit"]:
-        issue += ["--cv-commit", plan["pack_cv_commit"]]
+    if engine != CV:
+        issue += ["--engine", engine]
+    cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
+    if cv_commit:
+        issue += ["--cv-commit", cv_commit]
     if plan["pack_cv_version"]:
         issue += ["--cv-version", plan["pack_cv_version"]]
     # 退出码 2＝单子已推库、网站已发布、文本已推 dev，只是读者侧冒烟没过：记 ⚠ 照常收尾，冒烟另查
