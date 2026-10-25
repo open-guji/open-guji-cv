@@ -484,6 +484,46 @@ def _split_chars(img, cells, period: float, ink_threshold: int = 128) -> int:
     return k
 
 
+#: 挤格判据：一个字格的墨高超过 MERGE_INK_H 个 period，且中间有一整行白缝把墨分成上下两段、
+#: 两段都高过 MERGE_PART_H 个 period——两个字挤进了一格（不是列端字带进的框线：框线那段矮）。
+#: 一列最多补 MERGE_MAX_FIX 次
+MERGE_INK_H, MERGE_PART_H, MERGE_MAX_FIX = 1.25, 0.4, 3
+
+
+def _merged_cuts(img, cells, period: float, ink_threshold: int = 128) -> list[float]:
+    """一列里挤着两个字的字格，各给一条该补的格线（列图 y，取离墨中点最近的那道白缝的中线）。殿本个别列字排得比
+    整页格网密（挖改处多刻一字等），照格网切会把两个字塞进一格，_split_chars 看不见（没有劈开哪个连通体）。"""
+    import numpy as np
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    w = g.shape[1]
+    out = []
+    for c in cells:
+        if c.kind == "blank" or c.sub:
+            continue
+        y0, y1 = max(0, int(c.y0)), min(g.shape[0], int(round(c.y1)))
+        rows = (g[y0:y1, int(w * 0.1):int(w * 0.9)] < ink_threshold).any(axis=1)
+        ys = np.nonzero(rows)[0]
+        if len(ys) == 0 or ys[-1] - ys[0] < MERGE_INK_H * period:
+            continue
+        mid = (ys[0] + ys[-1]) / 2
+        runs = np.split(ys, np.nonzero(np.diff(ys) > 1)[0] + 1)
+        gaps = [(runs[i - 1][-1] + runs[i][0]) / 2 for i in range(1, len(runs))
+                if runs[i - 1][-1] - ys[0] >= MERGE_PART_H * period and ys[-1] - runs[i][0] >= MERGE_PART_H * period]
+        if gaps:
+            out.append(y0 + min(gaps, key=lambda y: abs(y - mid)))
+    return out
+
+
+#: 格高不匀：字格（缩框前）的高偏离 period 超过这个比例。殿本格高均匀，「一」「二」这类矮字在 Step3 也占满一格，
+#: 到 Step4 缩框才变矮；一格明显偏高或偏矮，多半是格线落错了缝（用户 2026-10-25）
+UNEVEN_TOL = 0.3
+
+
+def _uneven(cells, period: float) -> int:
+    """格高不匀的字格数（只数正文整格；空白格、夹注半格不算）。"""
+    return sum(1 for c in cells if c.kind == "char" and abs((c.y1 - c.y0) / period - 1) > UNEVEN_TOL)
+
+
 def _mask_misses(cells, occ: set) -> int:
     """一种格网违表的格数：表说有字却切成空、表说该空却切出字。掩码是软约束，DP 为躲穿字会违表。"""
     got = {c.slot for c in cells if c.kind != "blank"}
@@ -641,7 +681,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.37", unit="column",   # 1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.38", unit="column",   # 1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.row_grid", "open_guji_cv.utils.jiazhu_split",
@@ -775,7 +815,7 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
-            def _seg(n_body: int, alt: tuple | None = None, grid: bool = False):
+            def _seg(n_body: int, alt: tuple | None = None, grid: bool = False, bounds: list[float] | None = None):
                 n_r, t_s, l_kw, f_jz, f_main = (alt if alt is not None else
                                                 (n_raised_col, top_slack, lay_kw, forced_jz, forced_main))
                 return segment_column(
@@ -791,7 +831,7 @@ class RowSegmentStep(Step):
                     forced_jiazhu=f_jz,
                     forced_main=f_main,
                     detect_bottom_bar=p.detect_bottom_bar,
-                    grid_bounds=grids[gc.col].bounds(n_body, n_r) if grid else None, **l_kw,
+                    grid_bounds=bounds if bounds is not None else grids[gc.col].bounds(n_body, n_r) if grid else None, **l_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
@@ -801,9 +841,11 @@ class RowSegmentStep(Step):
             #   表格网（抬头级数、格的有无都按表）；
             #   闸抬头格网（表与闸的抬头级数不一致时：抬头听闸，表只管格的有无）；
             #   上面每一种抬头级数各再出一张等距格网（utils/row_grid：格号按整列等距排，格线就近落缝，不跑 DP）；
-            #   无先验格网（以上都劈了字、且不看表切出的字比表少时才用：表的字图上装不下，比如整理本分行和刻本不同）。
+            #   无先验格网（以上都劈了字、且不看表切出的字比表少时才用：表的字图上装不下，比如整理本分行和刻本不同）；
+            #   挤格补线格网（选中的格网有一格挤着两个字时：在字缝补一条格线、按打分去掉一条，见 _merged_cuts）。
             # 每张格网先把列端表空格里不像字的墨记空（_blank_frame_junk），再打分：坏格数 = 劈开的字 + 违表的格，取最少；
-            # 一样多时宁可违表也不劈字，再比穿字格线，再打平按上面的顺序（DP 格网在等距格网前）。
+            # 一样多时宁可违表也不劈字，再比格高不匀（_uneven：殿本格高均匀，缩框前「一」「二」也占满一格），再比穿字格线，
+            # 再打平按上面的顺序（DP 格网在等距格网前）。
             # - 闸抬头：表管「有没有抬头字」，图上有几个物理格位要看列图。殿本 vol04 产物包：①表说抬头、列图却从
             #   版框顶起截（p84 c5、p65 c8「御」「欽」没截到）；②表说不抬头、闸给了余量的低起列（p127 c1–2）。
             #   但闸多给的那格在书名列上会把首字吸进 -1，一律听闸也不行（vol04 新坏 10 列），所以按图二选一。
@@ -844,7 +886,8 @@ class RowSegmentStep(Step):
                 def _score(c):
                     k_split = _split_chars(img, c[0].cells, gate.period, p.ink_threshold)
                     k_miss = _mask_misses(c[0].cells, c[3])
-                    return (k_split + k_miss, k_split, _cut_rows(img, c[0].cells, p.ink_threshold))
+                    return (k_split + k_miss, k_split, _uneven(c[0].cells, gate.period),
+                            _cut_rows(img, c[0].cells, p.ink_threshold))
                 wrec = wins.column(gc.col)
                 mapper = None if wrec is None else ColumnMapper(
                     page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y)
@@ -864,10 +907,35 @@ class RowSegmentStep(Step):
                             junk.append(0)
                             scores.append(_score(cands[-1]))
                     best = min(range(len(cands)), key=lambda i: (scores[i], i))
+                    # 挤格：选中的格网里有一格挤着两个字（殿本个别列字排得比整页格网密，如挖改处多刻一字）→ 在两字的缝里
+                    # 补一条格线、再去掉一条，格数不变；去哪条按 _score 挑，坏格、劈字不多才换
+                    for _ in range(MERGE_MAX_FIX):
+                        cuts = _merged_cuts(img, cands[best][0].cells, gate.period, p.ink_threshold)
+                        if not cuts or cands[best][4] == "layout_off":
+                            break
+                        rb, n_rb, t_sb, occ_b, why_b = cands[best]
+                        lines = sorted(rb.boundaries + cuts[:1])
+                        alt = (n_rb, t_sb) + _layout_kw(lay, occ_b, n_body_col, n_rb)
+                        trial = []
+                        for i in range(len(lines)):            # 去掉第 i 条；去端线 = 丢掉列端那一格
+                            ri = _seg(n_body_col, alt, bounds=lines[:i] + lines[i + 1:])
+                            if ri is None:
+                                continue
+                            ji = _blank_frame_junk(img, ri.cells, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal)
+                            if len(_merged_cuts(img, ri.cells, gate.period, p.ink_threshold)) < len(cuts):
+                                ci = (ri, n_rb, t_sb, occ_b, "layout_unmerge" + (f"（{why_b}）" if why_b else ""))
+                                trial.append((_score(ci), i, ci, ji))
+                        if not trial or min(trial)[0][:2] > scores[best][:2]:
+                            break
+                        s_, _i, ci, ji = min(trial)
+                        cands.append(ci)
+                        junk.append(ji)
+                        scores.append(s_)
+                        best = len(cands) - 1
                 if best:
                     r, n_raised_col, top_slack, occ, why = cands[best]
                     base = dict(base, n_raised=n_raised_col, top_slack=top_slack)
-                    prior_flags.append(f"{why}{'（大印下）' if stained else ''}：坏格／劈字／穿字 "
+                    prior_flags.append(f"{why}{'（大印下）' if stained else ''}：坏格／劈字／格高不匀／穿字 "
                                        + "→".join("/".join(map(str, scores[i])) for i in (0, best)))
                     if why == "layout_off":
                         lay = None
