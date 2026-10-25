@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.5.19] - 测试中
+## [0.5.19] - 2026-10-25
 
 PATCH（#593 Step3 自动配页，缺省关的新设置）。Step3（`row_segment`）的 `code_hash` 变：版本 1.39、`code_deps` 加 `steps/row_segment_pagemap`、`utils/page_align`、`utils/daizhige`；缺省 `page_map: off` 时参数与输出不变。
 
