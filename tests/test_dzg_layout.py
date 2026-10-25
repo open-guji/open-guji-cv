@@ -183,6 +183,29 @@ def test_split_chars_counts_lines_through_one_glyph_only():
     assert _split_chars(img, [mk(1, 0, 150), mk(2, 150, 200)], 100.0) == 0      # 落在「二」两横之间（这一型靠违表格数）
 
 
+def test_merged_cuts_finds_two_glyphs_in_one_cell():
+    """挤格：一格的墨高过 1.25 格、中间有白缝分成两段且两段都高过 0.4 格，给出缝中线；一个高字、字带框线都不算。"""
+    from types import SimpleNamespace as C
+    import numpy as np
+    from open_guji_cv.steps.row_segment import _merged_cuts
+    img = np.full((400, 100), 255, np.uint8)
+    img[10:80, 40:60] = 0                      # 字一 10–80
+    img[90:150, 40:60] = 0                     # 字二 90–150，缝在 80–90
+    img[200:330, 40:60] = 0                    # 一个高字 200–330，没有缝
+    img[340:345, 10:90] = 0                    # 高字下面的细横（框线）
+    mk = lambda slot, y0, y1, kind="char": C(slot=slot, y0=y0, y1=y1, kind=kind, sub=None)
+    cuts = _merged_cuts(img, [mk(1, 0, 160), mk(2, 190, 350)], 100.0)
+    assert len(cuts) == 1 and 80 <= cuts[0] <= 90
+    assert _merged_cuts(img, [mk(1, 0, 160, "blank")], 100.0) == []
+
+
+def test_uneven_counts_char_cells_far_from_period():
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _uneven
+    mk = lambda y0, y1, kind="char": C(y0=y0, y1=y1, kind=kind)
+    assert _uneven([mk(0, 100), mk(100, 175), mk(175, 320), mk(320, 360, "blank"), mk(360, 400, "jiazhu_a")], 100.0) == 1
+
+
 def test_mask_misses_counts_both_directions():
     from types import SimpleNamespace as C
     from open_guji_cv.steps.row_segment import _mask_misses
