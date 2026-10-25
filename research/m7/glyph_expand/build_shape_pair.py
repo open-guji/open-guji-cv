@@ -2,6 +2,7 @@
 
 用法：python build_shape_pair.py <组 id> <原图根（<册>/<页>.png）> <数据目录（含 output/glyph_store，取人裁）> <产物根…> [--write] [--char-patch]
       [--dataset=<dataset>/char-groups/variant --by=claude-<线程> --date=YYYY-MM-DD]（训练集落 dataset）
+      [--labels=<labels.jsonl>]（全部标签来自这份人裁表 `{id, form, src}`，不收放行格与中心库人裁：放行字被码位归一过的组用，如 變𠮓）
 产物根下是 `<册>/seed_admit/p*.json` 与 `<册>/cell_shrink/p*.json`（`guji products pack fetch` 的布局）。
 
 标签：已放行格的放行字（人裁格与印章通道不收），每册每字最多 `PER_VOL` 格；人裁刻形；`EXTRA` 是看图补的格（如送审格里的 盖）。
@@ -52,6 +53,9 @@ PLAN = {
     # 补 vol11–20 送审格看图 6 格（5 格 䘮、vol16:82:3:7 喪）。
     "sang": ("䘮喪", {"vol12:147:2:8": "䘮", "vol12:145:6:12": "䘮", "vol11:11:4:10": "䘮", "vol13:18:9:11": "䘮", "vol13:19:2:19": "䘮",
                      "vol17:91:1:9": "䘮", "vol16:82:3:7": "喪"}, set()),
+    # 變／𠮓（2026-10-25）：下部 攵（左上多一短撇）对 又。工作区码位归一 變→𠮓 把放行字全改成 𠮓，放行字不能当标签；
+    # 标签全走 sheldon 的人裁表（dataset variant/bian/sheldon_labels.jsonl，`--labels`）。
+    "bian": ("變𠮓", {}, set()),
     # 口框族 國圖圍園固圓圜（形近不同义，框内部件不同）；圃 圈 囿 进库当陪衬。團 殿本没有放行格，不进库。
     # 首轮按册留出与标签不一致的格看图：vol12:41:9:14 放行 圃、刻形是 園（标签错）；vol19:65:2:12、vol13:223:6:21、vol11:86:2:21、
     # vol20:224:1:21 字块切坏（连进邻字或缺半边）。其余不一致的是真判错（圜↔園、圓↔圖），留着定门槛。
@@ -71,6 +75,25 @@ PLAN = {
 }
 
 
+#: `--labels` 表里 src 以这些字开头的行（人只说了「其余都是 X」、没逐格点的），每册每字也只收 PER_VOL 格
+BULK_SRC = ("其余",)
+
+
+def labels_extra(path: Path) -> dict:
+    """人裁表 → {格: 刻形}；form 为空（别的字）的不收；BULK_SRC 的行每册每字 ≤PER_VOL（按格号定序取前几格）。"""
+    out, per = {}, Counter()
+    for r in sorted((json.loads(l) for l in open(path, encoding="utf-8") if l.strip()), key=lambda r: r["id"]):
+        if not r.get("form"):
+            continue
+        if r.get("src", "").startswith(BULK_SRC):
+            k = (r["id"].split(":")[0], r["form"])
+            if per[k] >= PER_VOL:
+                continue
+            per[k] += 1
+        out[r["id"]] = r["form"]
+    return out
+
+
 #: 剔出模板的格里看图有结论的（只进数据集当记录，不进模板）：组 → {格: (刻形, 说明)}
 LOOKED = {
     "zhun": {"vol05:177:6:17": ("凖", "放行成 準，刻形左旁是 冫"), "vol20:100:1:6": ("凖", "放行成 準（文意通道），刻形左旁是 冫；整理本作 凖")},
@@ -79,14 +102,19 @@ LOOKED = {
 }
 
 
-def export(g: str, cells, data: Path, out: Path, by: str, date: str):
-    """训练集落 dataset `char-groups/variant/<组>/`：labels.jsonl（一格一行）、crops/（建库用的清洗后字块）、split.json（按册分折）。"""
-    human = {k for k, f in freq.human_shapes(data).items() if f in PLAN[g][0]}
+def export(g: str, cells, data: Path, out: Path, by: str, date: str, labsrc: dict | None = None):
+    """训练集落 dataset `char-groups/variant/<组>/`：labels.jsonl（一格一行）、crops/（建库用的清洗后字块）、split.json（按册分折）。
+    `labsrc`（`--labels` 模式）：{格: 人裁表里的 src}，来源照抄人裁表。"""
+    human = set() if labsrc else {k for k, f in freq.human_shapes(data).items() if f in PLAN[g][0]}
     d = out / g
     (d / "crops").mkdir(parents=True, exist_ok=True)
     rows, split = [], {}
     for f, gray, b, k in sorted(cells, key=lambda c: c[3]):
         cv2.imwrite(str(d / "crops" / (k.replace(":", "_") + ".png")), np.asarray(gray))
+        if labsrc:
+            rows.append({"id": k, "form": f, "by": "sheldon", "date": date, "src": labsrc[k], "in_bank": True})
+            split.setdefault(b, []).append(k)
+            continue
         src = "human" if k in human else ("look" if k in PLAN[g][1] else "admit")
         rows.append({"id": k, "form": f, "by": {"human": "sheldon", "look": by, "admit": "auto-admit"}[src], "date": date,
                      "src": {"human": "central:人裁刻形", "look": "看图补", "admit": "已放行格（放行字当标签）"}[src], "in_bank": True})
@@ -203,7 +231,10 @@ if __name__ == "__main__":
     prods = [a for a in sys.argv[4:] if not a.startswith("--")]
     chars, extra, drop = PLAN[g]
     sp = O.SPECS[g]
-    cells = gather(prods, imgs, data, chars, extra, drop, g, char_patch_fn() if "--char-patch" in sys.argv else None)
+    lab = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--labels=")), None)
+    if lab:                                           # 全部标签走人裁表：不收放行格、不收中心库人裁
+        extra = {**labels_extra(Path(lab)), **extra}
+    cells = gather(prods, imgs, data, "" if lab else chars, extra, drop, g, char_patch_fn() if "--char-patch" in sys.argv else None)
     print(g, "cells", Counter(c[0] for c in cells), "册", len({c[2] for c in cells}))
     res = loo(cells, sp)
     wrong = sorted(((m, f, ch, k) for f, ch, m, k in res if ch and ch != f), reverse=True)
@@ -222,4 +253,5 @@ if __name__ == "__main__":
     ds = next((a.split("=", 1)[1] for a in sys.argv if a.startswith("--dataset=")), None)
     if ds:                                            # --dataset=<dataset>/char-groups/variant --by=claude-<线程> --date=YYYY-MM-DD
         kv = dict(a[2:].split("=", 1) for a in sys.argv if a.startswith("--") and "=" in a)
-        export(g, cells, data, Path(ds), kv.get("by", "claude"), kv.get("date", ""))
+        labsrc = {r["id"]: r.get("src", "") for r in map(json.loads, open(lab, encoding="utf-8")) if r.get("form")} if lab else None
+        export(g, cells, data, Path(ds), kv.get("by", "claude"), kv.get("date", ""), labsrc)
