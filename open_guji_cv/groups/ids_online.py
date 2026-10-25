@@ -219,6 +219,9 @@ SPECS: dict[str, IdsSpec] = {
                     size=48, clean=True, aspect=(0.45, 2.2)),
     # 撰𢰅（2026-10-24，3–4 格异体对）：差别在右下（共／丌，𢰅 长撇长捺大开），整字 48×48 按册留出 0 错（取右半反而错多）；门槛沿用 0.5。
     "zhuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 瑣𤨏（2026-10-25，A24 GUJI-719「异体组纳入形近比对」）：差别在右上（⺌／巛），只取右上框 48×48。
+    "suo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=5, whole="hog", region=(0.4, 1.0, 0.0, 0.5), lam=1.0, size=48,
+                   clean=True),
 }
 
 
