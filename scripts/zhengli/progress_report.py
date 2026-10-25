@@ -2,7 +2,8 @@
 """精校进度写进网站后台「文本整理」栏目（A41 的 progress schema，kaiyuanguji-web docs/text-progress.md）。
 
 每册算四样，写中心库 progress.volume 和 progress.metric（栏目 review「人审」）：
-  - 待人审（pending_review）：线上待审单里还等人投的格（review≠human），连同单号、出单时间
+  - 待人审（pending_review）：线上待审单里还等人投的格（review≠human），去掉出单后已有人裁的、现行文本里已没有的格；
+    连同单号、出单时间
   - 已人裁（human_judged）：定了字的人裁事件覆盖的格（口径同 pending_route.deciding：看不出、是图等也算定了），
     只数现行文本里还在的格；格号漂掉的另记在 detail
   - 人审率：已裁完的格 ÷（已裁 ∪ 待审）。还挂在线上单上的格不算裁完（复审格即使有旧人裁也算待审）
@@ -64,11 +65,11 @@ def text_cells(char_doc: dict) -> set[str]:
     return {c["a"] for p in char_doc.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
 
 
-def judged_cells(events, book: str) -> set[str]:
-    """events：可迭代的 dict（kind、target、payload）。返回定了字的格位集合。"""
+def judged_cells(events, book: str, after: str | None = None) -> set[str]:
+    """events：可迭代的 dict（kind、target、payload、ts）。返回定了字的格位集合；给了 after 只算 ts 晚于它的。"""
     out = set()
     for e in events:
-        if deciding(e):
+        if deciding(e) and (not after or str(e.get("ts") or "") > after):
             c = cell_of(e, book)
             if c:
                 out.add(c)
@@ -104,7 +105,11 @@ def compute(book: str, sheet: dict | None, events, char_doc: dict | None, chapte
     cells = text_cells(char_doc) if char_doc else set()
     judged_all = judged_cells(events, book)
     judged = judged_all & cells if cells else judged_all
-    pend = pending_cells(sheet)
+    # 待人审只数线上单里真还等人的格：出单后已有人裁的（落了票还没出下一单）、现行文本里已经没有的（格号漂了）不算
+    on_sheet = pending_cells(sheet)
+    judged_since = on_sheet & judged_cells(events, book, after=(sheet or {}).get("routed_as_of"))
+    gone = on_sheet - cells if cells else set()
+    pend = on_sheet - judged_since - gone
     done = judged - pend
     scope = judged | pend
     rate = round(len(done) / len(scope), 4) if scope else None
@@ -120,12 +125,13 @@ def compute(book: str, sheet: dict | None, events, char_doc: dict | None, chapte
         "pending_at": (sheet or {}).get("routed_as_of"),
         "human_judged": len(judged),
         "note": note,
-        "extra": {"a32_note": manual_note or None, "a32_judged_drifted": len(judged_all - judged) if cells else None},
+        "extra": {"a32_note": manual_note or None, "a32_sheet_cells": len(on_sheet), "a32_judged_drifted": len(judged_all - judged) if cells else None},
     }
     if cells:
         fields["cells_total"] = len(cells)
     metrics = [
-        ("pending_review", "待人审", len(pend), "格", None, 10),
+        ("pending_review", "待人审", len(pend), "格",
+         {"on_sheet": len(on_sheet), "judged_since_issue": len(judged_since), "not_in_text": len(gone)}, 10),
         ("human_judged", "已人裁", len(judged), "格", {"drifted": len(judged_all - judged) if cells else None}, 20),
         ("review_rate", "人审率", rate, "%", {"done": len(done), "scope": len(scope)}, 30),
         ("judged_share", "人裁覆盖全册", round(len(judged) / len(cells), 4) if cells else None, "%",
@@ -141,8 +147,8 @@ def load_db(conn, ws: str, book: str, text_id: str, chapter: str) -> tuple[dict 
     row = conn.execute("SELECT doc FROM files WHERE ws = %s AND src_path = %s",
                        (ws, f"feedback/lists/proofing/{text_id}/{chapter}.pending.json")).fetchone()
     sheet = row[0] if row else None
-    evs = [{"kind": k, "target": t, "payload": p} for k, t, p in conn.execute(
-        "SELECT kind, target, payload FROM events WHERE ws = %s AND kind = 'confirm' AND "
+    evs = [{"kind": k, "target": t, "payload": p, "ts": ts} for k, t, p, ts in conn.execute(
+        "SELECT kind, target, payload, ts FROM events WHERE ws = %s AND kind = 'confirm' AND "
         "(book = %s OR (book IS NULL AND target->>'key' LIKE %s))", (ws, book, f"{book}:%")).fetchall()]
     row = conn.execute("SELECT doc FROM books WHERE ws = %s AND book = %s", (ws, book)).fetchone()
     book_doc = row[0] if row else None

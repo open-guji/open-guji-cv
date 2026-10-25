@@ -68,3 +68,13 @@ def test_hook_only_a32_books(monkeypatch):
 
 def test_text_base():
     assert pr.text_base("96mid1ogzk") == "Book/g/z/k/96mid1ogzk/default"
+
+
+def test_pending_drops_judged_since_issue_and_gone():
+    sheet = {"rev": "006-r5", "routed_as_of": "2026-10-24T03:29:13Z",
+             "cells": [{"cell": "1:1:1"}, {"cell": "1:1:2"}, {"cell": "1:1:3"}, {"cell": "7:7:7"}]}
+    old, new = ev("1:1:1"), ev("1:1:2")
+    old["ts"], new["ts"] = "2026-10-20T00:00:00Z", "2026-10-25T00:00:00Z"
+    res = pr.compute("vol06", sheet, [old, new], CHAR, None, None, None)
+    assert res["fields"]["pending_review"] == 2              # 1:1:1（旧裁、复审）、1:1:3；1:1:2 出单后已裁，7:7:7 不在现文
+    assert res["metrics"][0][4] == {"on_sheet": 4, "judged_since_issue": 1, "not_in_text": 1}
