@@ -189,7 +189,7 @@ def _pin_action(args) -> None:
     if need_pin and not args.pin:
         print(f"{args.action} 要 --pin N"); sys.exit(1)
     if args.action == "snapshot":
-        out = G.snapshot(ws, note=args.note or "", require_clean=not args.allow_dirty)
+        out = G.snapshot(ws, note=args.note or "", require_clean=not args.allow_dirty, build=not args.no_build)
     elif args.action == "pin-build":
         out = ([G.build_pinned_db(ws, args.pin, force=args.force)] if args.pin
                else G.ensure_pins(ws) if not args.force
@@ -197,9 +197,9 @@ def _pin_action(args) -> None:
     elif args.action == "pin-list":
         out = G.list_pins(ws)
     elif args.action == "pin-verify":
-        out = G.verify_remote(ws, args.pin)
+        out = G.verify_remote(ws, args.pin, full=args.full)
     else:
-        out = G.upload_blobs(ws, args.pin, execute=args.execute)
+        out = G.upload_blobs(ws, args.pin, execute=args.execute, full=args.full)
     print(json.dumps(out, ensure_ascii=False, indent=2))
 
 
@@ -261,6 +261,10 @@ def add_parser(sub) -> None:
     p.add_argument("--force", action="store_true", help="pin-build 用：库在且对得上也重建")
     p.add_argument("--execute", action="store_true",
                    help="snapshot-upload 用：真传 R2（要正式令牌 GUJI_DATA_TOKEN；不加只演练）")
+    p.add_argument("--full", action="store_true",
+                   help="pin-verify / snapshot-upload 用：全量核对（缺省只核相对上一版新增或改动的条目）")
+    p.add_argument("--no-build", action="store_true",
+                   help="snapshot 用：不建 glyph-g<N>.db（各册首次钉到这一版时自动建）；清单里不记 fingerprints")
     p.add_argument("--allow-dirty", action="store_true",
                    help="snapshot 用：数据目录有没推的改动也出（快照就对不上中心库的 rev，只供试验）")
 
