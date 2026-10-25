@@ -33,7 +33,8 @@ def _table_of(gid: str) -> str:
 def _flags(fl) -> str:
     out = []
     if fl.review:
-        out.append("复核改字" if fl.review_fix else ("复核改字(强)" if fl.review_fix_strong else "复核降审"))
+        out.append("复核改字" if fl.review_fix else ("复核改字(强)" if fl.review_fix_strong
+                                               else f"复核改字(margin≥{fl.review_fix_margin:g})" if fl.review_fix_margin else "复核降审"))
     if fl.review_methods:
         out.append("复核只跑 " + " → ".join(R.describe(m) for m in fl.review_methods))
     if fl.review_abstain:

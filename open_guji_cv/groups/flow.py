@@ -16,8 +16,10 @@
   留人审的格若文意（本组或共字组）给了与整理本（缺时坐标对位）不同的字，另记 `group_flow_ctx_contra`，后面的补放遍不碰。
 - 复核（组声明了 `review_methods` 就改跑它，依次试）：给了与放行字不同的字、或解法之间不一致 → 降为人审（`group_flow_disagree`，不改字）；组声明了
   `review_fix` 时前者改成解法的字（通道 `group_flow`，`evidence.fixed_from` 记原通道与原字）；声明了
-  `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。
+  `review_abstain` 时解法全弃权也降（`group_flow_abstain`）；其余不动。组声明了 `review_weak` 时，这些方法单独反对、
+  别的方法给的都是放行字 → 不降（留痕 `review_weak: overruled`）。
 
+- 复核时组声明了 `review_fix_margin`：给了别的字的方法 margin 够这个门槛 → 照 `review_fix` 改字，不够照常降审（徵徴）。
 - 复核时组声明了 `review_fix_strong`：文意答案 strong（L2 表多遍都 high 同字）且方法之间一致 → 照 `review_fix` 改字，否则照常降审。
 - 组声明了 `lift_ref_agree`（部首族）：补放的字须与整理本字（缺位时用坐标对位字）同字，否则留人审
   （`group_flow_ref_dissent`／`group_flow_ref_missing`）。
@@ -330,8 +332,17 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 r.doubts = list(dict.fromkeys(list(r.doubts or []) + codes))
         else:
             f = GROUPS[g].flow
+            if f.review_weak and (ch != r.char or why == "conflict"):
+                strong = {t["char"] for t in trail if t["char"] and t["solver"] not in f.review_weak}
+                if strong == {r.char}:
+                    # 弱票（入人八随机森林）单独反对、别的方法都支持放行字：不降（A24 10-25）
+                    ch, why = r.char, "agree"
+                    trail = trail + [{"solver": "review_weak", "char": None, "why": "overruled",
+                                      "weak": [t["solver"] for t in trail if t["solver"] in f.review_weak and t["char"]]}]
             fix = f.review_fix or (f.review_fix_strong and why == "agree" and any(
-                t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail))
+                t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail)) or (
+                f.review_fix_margin > 0 and why == "agree" and any(
+                    t["char"] == ch and (t.get("margin") or 0) >= f.review_fix_margin for t in trail))
             code = ("group_flow_disagree" if (ch is not None and ch != r.char and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
             if ch is not None and ch != r.char and fix:
