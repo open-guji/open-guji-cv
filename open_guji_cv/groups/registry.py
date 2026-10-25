@@ -307,10 +307,16 @@ GROUPS: dict[str, GroupSpec] = {
 #: 这几对进去会改那两处的行为；字组流程（`flow`）与 `seed_admit.group_flow` 点名用的是 `FLOW_GROUPS`（两张表合起来）。
 CODEPOINT_GROUPS: dict[str, GroupSpec] = {
     gid: GroupSpec(id=gid, name=name, members=frozenset(name), backends=(), kind="variant", solvers=(),
-                   flow=FlowSpec((CODEPOINT,), combine="first"), overlaps=ov,
+                   flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol), lift_ref_agree=bool(tol)), overlaps=ov,
                    note="码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。")
-    for gid, name, ov in (("nei", "內内", ()), ("bie", "別别", ()), ("chu", "出岀", ("sy",)),
-                          ("juan", "卷巻", ()), ("wan", "晚晩", ()))
+    for gid, name, ov, tol in (("nei", "內内", (), ""), ("bie", "別别", (), ""), ("chu", "出岀", ("sy",), ""),
+                               ("juan", "卷巻", (), ""), ("wan", "晚晩", (), ""),
+                               # 2026-10-25（A24 异体对 5–11 格）：殿本每对只一种刻法，码位 sheldon 逐对定（𫉬→獲、夔→䕫、獵→𤢪）。
+                               # 繁复字库形常把组外的繁复字排在分差内（夔 后紧咬 囊蘗𢑱憂…），`tolerate` 放它们进入；
+                               # 进入放宽了，所以补放须与整理本同字（`lift_ref_agree`，按书级码位归一后比）。
+                               ("huo", "獲𫉬", (), "覆複藻襲搜護"),
+                               ("kui", "夔䕫", (), "囊蘗蔑𢑱𢑴憂藝難璉襲喪藎謩蔓雜製鑒甄"),
+                               ("lie", "獵𤢪", (), "猶亂侃猥"))
 }
 
 #: 只进字组流程、不进 `GROUPS` 的字形组（2026-10-22）：成员里有命、舍、會 这样的常用字——进了 `GROUPS` 会让 `glyph_match` 的弱命中
