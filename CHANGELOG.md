@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
+
 ## [0.5.21] - 2026-10-25
 
 PATCH（#605 字组）。seed_admit 的 `code_hash` 变（`groups/` 注册表、流程、字形判法表）。

@@ -33,7 +33,18 @@ def test_payload_mapping():
     assert payload_of("main") == {"v": "seg_defect", "reason": "main_as_jiazhu"}
     assert payload_of("jiazhu", "之") == {"v": "seg_defect", "reason": "jiazhu_as_main", "shape": "之"}
     assert payload_of("none") == {"v": "not_a_char"}
+    assert payload_of("damaged") == {"v": "damaged"}
+    assert payload_of("damaged", "日") == {"v": "damaged", "guess": "日"}
     assert payload_of("unsure") is None
+
+
+def test_damaged_vote_is_ready_and_overrides_same_verdict():
+    """破损、阙字（2026-10-25）：带不带「最像的字」都能写；和已有的 damaged 人裁一致就跳过。"""
+    votes, _ = latest_votes([vote("5:1:1", "damaged"), vote("5:1:2", "damaged", "日"), vote("5:1:3", "damaged")], BOOK, REV)
+    human = latest_human([human_ev("vol04:5:1:3", v="damaged")])
+    t = triage(votes, "vol04", human)
+    assert [(d.a, d.payload) for d in t.ready] == [("5:1:1", {"v": "damaged"}), ("5:1:2", {"v": "damaged", "guess": "日"})]
+    assert {a for a, _ in t.skipped} == {"5:1:3"}
 
 
 def test_latest_votes_dedupes_and_filters():

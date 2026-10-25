@@ -15,8 +15,12 @@
     jiazhu → confirm v=seg_defect reason=jiazhu_as_main（给了字就带 shape）
     main   → confirm v=seg_defect reason=main_as_jiazhu（给了字就带 shape）
     none   → confirm v=not_a_char —— **缺省挂起**：排除名单只增不删、不带锚（M10 调研 B 的 P6），要落加 include_none
-    figure → confirm v=figure alt=<说明>（「是图形，不是字」，GUJI-740；票上 `alt` 是卡片说明框里填的，可空）
-    unsure → 不写
+    figure → confirm v=figure alt=<说明>（「符号、篆字等」，GUJI-740；票上 `alt` 是卡片说明框里填的，可空）
+    damaged → confirm v=damaged guess=<字>（「破损、阙字」，2026-10-25：录成阙字方框 □；票上带的字是「最像的字」，只进金标与括注，不进库）
+    unsure → 不写（页面上的「其他」）
+
+页面单选组（用户 2026-10-25）与档的对应：正常字符＝char；非字＝none；字框切分错误＝cut；小注或其他格式＝jiazhu；
+符号、篆字等＝figure；破损、阙字＝damaged；其他＝unsure。
 
 网站 10-21 起四档都能同时带一个字（用户：切分错了也先把字给上，格子先过、切分另修）。cut／jiazhu／main 带字照上
 带 shape；**none、unsure、figure 带字自相矛盾（说没字／看不清／是图形又给了字），挂起交人看**。
@@ -50,7 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-CHOICES = ("char", "none", "unsure", "cut", "jiazhu", "main", "figure")
+CHOICES = ("char", "none", "unsure", "cut", "jiazhu", "main", "figure", "damaged")
 A_RE = re.compile(r"^(\d+):(\d+):(-?\d+)([ab]?)$")
 #: 人裁里算「定了这一格」的 payload.v
 HUMAN_VS = ("confirm", "seg_defect", "not_a_char", "damaged", "figure")
@@ -117,6 +121,8 @@ def payload_of(choice: str, char: str = "", alt: str = "") -> dict | None:
         return {"v": "not_a_char"}
     if choice == "figure":
         return {"v": "figure", **({"alt": alt} if alt else {})}
+    if choice == "damaged":
+        return {"v": "damaged", **({"guess": char} if char else {})}
     return None
 
 
@@ -280,7 +286,8 @@ def vote_label(v: dict) -> str:
     """一票的大白话：选字「X」／没有字／看不清／切分错了「X」……"""
     ch = f"「{v['char']}」" if v.get("char") else ""
     return {"char": ch, "none": "没有字" + ch, "unsure": "看不清" + ch, "cut": "切分错了" + ch,
-            "jiazhu": "小注当正文" + ch, "main": "正文当小注" + ch}.get(v["choice"], v["choice"] + ch)
+            "jiazhu": "小注当正文" + ch, "main": "正文当小注" + ch,
+            "figure": "符号、篆字", "damaged": "破损、阙字" + ch}.get(v["choice"], v["choice"] + ch)
 
 
 def recheck_rows(t: Triage) -> list[tuple[str, str, str, str, str]]:
