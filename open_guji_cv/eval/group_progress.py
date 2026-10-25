@@ -1,16 +1,18 @@
-"""字组状态 → 网站后台「文本整理」栏（2026-10-25，A41 建的 Neon `progress` schema，口径归 A24）。
+"""字组状态 → 网站后台「文本整理 · 形近字」栏（2026-10-25，A41 建的 Neon `progress` schema，口径归 A24）。
 
-    python -m open_guji_cv.eval.group_progress <guji groups status 出的 json> [--book 96mid1ogzk] [--write]
+    python -m open_guji_cv.eval.group_progress <guji groups status 出的 json> [--book 96mid1ogzk] [--prev 上一份 json] [--write]
 
-缺省只打印要写的行；`--write` 才调 `progress.put_metric` 写 Neon 正式库（`datastore.connect`，要 `NEON_DATABASE_URL`）。
+缺省只打印要写的行；`--write` 才写 Neon 正式库（`datastore.connect`，要 `NEON_DATABASE_URL`）。
 只是看板数据，不影响产物与文本。写法见 kaiyuanguji-web `docs/text-progress.md` 第二节。
 
-两栏：
-- `yiti` 异体字组：同义组（`kind=同义`）＋送审分类里的 V（组外异体对）；
-- `xingjin` 形近字：不同义组＋送审分类里的 N（形近护栏）。
-每栏写整套（`vol=''`）与各册（`vol`＝册号三位，vol05 → `005`）：送审格、放行率、组判率、人裁核对一致率；
-整套另写组数、组外送审，`detail` 放送审最多的组与键；每个字组再写一张卡（key `group.<组>`（库里 key 只许 [a-z0-9_.-]），值＝送审格，
-`value_text` 写出现格、放行率、组判率，`detail` 放整组口径与各册送审），按送审从多到少排。
+sheldon 10-25 定：异体（同义）与形近（不同义）字组是混合处理的，并成一栏 `xingjin`（原 `yiti` 栏写库时删掉）；
+主体是一张每组一行的总表。全部写整套（`vol=''`）：
+- 卡片：字组数、组内送审格、组内送审率、放行率、组判率、人裁核对准确率、组外送审（异体对 V、形近护栏 N）；
+- 表（`detail.table`，网站画成可排序的整表）：
+  `table.groups` 各字组总表（行点开是该组各册明细），`table.vols` 各册送审分类，`table.pairs` 组外送审的字对。
+口径同 `group_status`：送审率＝送审／出现，放行率＝放行／出现，组判率＝组判／入流，
+核对准确率＝（人裁核对 − 不一致）／人裁核对，两者都先扣掉疑格号漂移的。
+每次写之前先删掉 A24 在这两栏的旧数，免得改名、删组后留下孤卡。
 """
 from __future__ import annotations
 
@@ -20,9 +22,32 @@ import re
 from collections import Counter
 from pathlib import Path
 
-SECTIONS = {"yiti": ("同义", "V", "组外异体对"), "xingjin": ("不同义", "N", "形近护栏")}
+SECTION = "xingjin"
+OLD_SECTIONS = ("xingjin", "yiti")
+TITLE = "形近字"
+DESCRIPTION = "形近与异体字组（同义、不同义混合处理）：各组出现、送审、送审率、核对准确率"
 WHO = "A24"
-SORT = {"groups": 5, "review": 10, "review_out": 20, "admit_rate": 30, "pick_rate": 40, "agree_rate": 50}   # 页面列序
+CATS = {"G": "字组内", "V": "组外异体对", "N": "形近护栏", "O": "其他"}
+
+GROUP_COLS = [
+    {"key": "group", "label": "组"}, {"key": "name", "label": "字"}, {"key": "kind", "label": "类型", "hint": "同义＝异体，不同义＝形近"},
+    {"key": "occ", "label": "出现", "unit": "格"}, {"key": "review", "label": "送审", "unit": "格"},
+    {"key": "review_rate", "label": "送审率", "unit": "%", "hint": "送审／出现"},
+    {"key": "delta", "label": "送审增减", "hint": "比上一份报告"},
+    {"key": "admit_rate", "label": "放行率", "unit": "%", "hint": "放行／出现"},
+    {"key": "pick_rate", "label": "组判率", "unit": "%", "hint": "组判／入流：字组流程自己判出的比例"},
+    {"key": "checked", "label": "人裁核对", "unit": "格", "hint": "有人裁结论、能核对放行字的格（扣掉疑格号漂移）"},
+    {"key": "wrong", "label": "不一致", "unit": "格", "hint": "放行字与人裁不同（扣掉疑格号漂移）"},
+    {"key": "agree_rate", "label": "核对准确率", "unit": "%", "hint": "（人裁核对 − 不一致）／人裁核对"},
+    {"key": "labels", "label": "人工数据", "hint": "刻形／文意标注条数"},
+    {"key": "methods", "label": "方法"},
+]
+VOL_COLS = [
+    {"key": "vol", "label": "册"}, {"key": "occ", "label": "出现", "unit": "格"}, {"key": "review", "label": "送审", "unit": "格"},
+    {"key": "review_rate", "label": "送审率", "unit": "%"}, {"key": "admit_rate", "label": "放行率", "unit": "%"},
+    {"key": "pick_rate", "label": "组判率", "unit": "%"}, {"key": "checked", "label": "人裁核对", "unit": "格"},
+    {"key": "wrong", "label": "不一致", "unit": "格"}, {"key": "agree_rate", "label": "核对准确率", "unit": "%"},
+]
 
 
 def _vol(book: str) -> str:
@@ -34,62 +59,101 @@ def _rate(a: int, b: int):
     return round(a / b, 4) if b else None
 
 
-def rows(d: dict, book_id: str) -> list[tuple]:
-    """→ [(book_id, vol, section, key, label, value, unit, value_text, detail, sort)]；sort 为 None 时按 SORT。"""
-    out = []
+def _stats(c: dict) -> dict:
+    chk = c.get("checked", 0) - c.get("drift", 0)
+    wrong = c.get("mismatch", 0) - c.get("drift", 0)
+    return {"occ": c.get("occ", 0), "review": c.get("review", 0),
+            "review_rate": _rate(c.get("review", 0), c.get("occ", 0)),
+            "admit_rate": _rate(c.get("admit", 0), c.get("occ", 0)),
+            "pick_rate": _rate(c.get("pick", 0), c.get("flow", 0)),
+            "checked": chk, "wrong": wrong, "agree_rate": _rate(chk - wrong, chk)}
+
+
+def _put(key, label, value, unit, text=None, detail=None, sort=100) -> tuple:
+    return ("", SECTION, key, label, value, unit, text, detail, sort)
+
+
+def rows(d: dict, book_id: str, prev: dict | None = None) -> list[tuple]:
+    """→ [(book_id, vol, section, key, label, value, unit, value_text, detail, sort)]。"""
+    gs = d["groups"]
+    pg = (prev or {}).get("groups", {})
+    tot = Counter()
+    for g in gs.values():
+        tot.update(g["total"])
+    s = _stats(tot)
     rv = d.get("review") or {}
-    for sec, (kind, cat, cat_name) in SECTIONS.items():
-        gs = {g: v for g, v in d["groups"].items() if v["kind"] == kind}
-        per_book: dict = {}
-        tot = Counter()
-        for g in gs.values():
-            for b, c in g["by_book"].items():
-                per_book.setdefault(b, Counter()).update(c)
-            tot.update(g["total"])
-        cat_by_book = Counter()
-        for k, per in (rv.get("keys_by_book", {}).get(cat) or {}).items():
-            cat_by_book.update(per)
+    cat_tot = {c: sum((rv.get("keys", {}).get(c) or {}).values()) for c in CATS}
+    kinds = Counter(g["kind"] for g in gs.values())
+    src = f"{d.get('date') or ''} {d.get('tag') or ''}".strip()
 
-        def put(vol, c, extra_review):
-            chk = c.get("checked", 0) - c.get("drift", 0)
-            real = c.get("mismatch", 0) - c.get("drift", 0)
-            out.extend([
-                (book_id, vol, sec, "review", "送审格（组内）", c.get("review", 0), "格", None, None, None),
-                (book_id, vol, sec, "review_out", f"送审格（{cat_name}）", extra_review, "格", None, None, None),
-                (book_id, vol, sec, "admit_rate", "组内放行率", _rate(c.get("admit", 0), c.get("occ", 0)), "%", None, None, None),
-                (book_id, vol, sec, "pick_rate", "组判率", _rate(c.get("pick", 0), c.get("flow", 0)), "%", None, None, None),
-                (book_id, vol, sec, "agree_rate", "人裁核对一致率", _rate(chk - real, chk), "%", None, None, None),
-            ])
+    out = [
+        _put("groups", "字组数", len(gs), "组", f"同义 {kinds.get('同义', 0)} · 不同义 {kinds.get('不同义', 0)}", sort=1),
+        _put("review", "组内送审", s["review"], "格", sort=2),
+        _put("review_rate", "组内送审率", s["review_rate"], "%", sort=3),
+        _put("admit_rate", "组内放行率", s["admit_rate"], "%", sort=4),
+        _put("pick_rate", "组判率", s["pick_rate"], "%", sort=5),
+        _put("agree_rate", "人裁核对准确率", s["agree_rate"], "%", f"{s['checked'] - s['wrong']}/{s['checked']}", sort=6),
+        _put("review_v", "组外异体对送审", cat_tot["V"], "格", sort=7),
+        _put("review_n", "形近护栏送审", cat_tot["N"], "格", sort=8),
+    ]
 
-        put("", tot, sum(cat_by_book.values()))
-        top_g = sorted(((v["total"].get("review", 0), g) for g, v in gs.items()), reverse=True)[:10]
-        top_k = sorted(((n, k) for k, n in (rv.get("keys", {}).get(cat) or {}).items()), reverse=True)[:10]
-        out.append((book_id, "", sec, "groups", "字组数", len(gs), "组", None,
-                    {"date": d.get("date"), "tag": d.get("tag"),
-                     "top_groups": [{"group": g, "name": gs[g]["name"], "review": n} for n, g in top_g if n],
-                     "top_keys": [{"key": k, "review": n} for n, k in top_k]}, None))
-        for b in d["books"]:
-            put(_vol(b), per_book.get(b, Counter()), cat_by_book.get(b, 0))
-        ranked = sorted(gs.items(), key=lambda kv: (-kv[1]["total"].get("review", 0), kv[0]))
-        for i, (g, v) in enumerate(ranked):
-            t = v["total"]
-            rates = [("放行率", _rate(t.get("admit", 0), t.get("occ", 0))), ("组判率", _rate(t.get("pick", 0), t.get("flow", 0)))]
-            text = "　".join([f"出现 {t.get('occ', 0)}"] + [f"{n} {r:.1%}" for n, r in rates if r is not None])
-            out.append((book_id, "", sec, f"group.{g}", f"{v['name']}（{g}）", t.get("review", 0), "格", text,
-                        {"date": d.get("date"), "tag": d.get("tag"), "total": dict(t),
-                         "review_by_vol": {_vol(b): c.get("review", 0) for b, c in v["by_book"].items() if c.get("review")}},
-                        100 + i))
-    return out
+    grows = []
+    for g, v in sorted(gs.items(), key=lambda kv: (-kv[1]["total"].get("review", 0), kv[0])):
+        st = _stats(v["total"])
+        lab = v.get("labels") or {}
+        delta = None
+        if g in pg:
+            delta = st["review"] - pg[g]["total"].get("review", 0)
+        sub = [{"vol": b, **_stats(c)} for b, c in sorted(v["by_book"].items()) if c.get("occ")]
+        grows.append({"group": g, "name": v["name"], "kind": v["kind"], **st,
+                      "delta": (f"{delta:+d}" if delta else "0") if delta is not None else None,
+                      "labels": f"{lab.get('shape', 0)}／{lab.get('reading', 0)}", "methods": v.get("methods"),
+                      "_sub": {"columns": VOL_COLS, "rows": sub}})
+    out.append(_put("table.groups", "各字组总表", len(gs), "组", src,
+                    {"table": {"columns": GROUP_COLS if prev else [c for c in GROUP_COLS if c["key"] != "delta"], "rows": grows,
+                               "note": "点表头排序，点一行看该组各册明细。口径见 open-guji-cv `eval/group_status.py`；"
+                                       "报告原文在 open-guji-dataset `char-groups/status/`。"}}, sort=20))
+
+    vrows = []
+    for b, c in sorted((rv.get("books") or {}).items()):
+        vrows.append({"vol": b, "cells": c.get("cells", 0), "review": c.get("review", 0),
+                      "review_rate": _rate(c.get("review", 0), c.get("cells", 0)),
+                      **{k: c.get(k, 0) for k in CATS}})
+    if vrows:
+        cols = [{"key": "vol", "label": "册"}, {"key": "cells", "label": "全册格", "unit": "格"},
+                {"key": "review", "label": "送审", "unit": "格"}, {"key": "review_rate", "label": "送审率", "unit": "%"}]
+        cols += [{"key": k, "label": n, "unit": "格"} for k, n in CATS.items()]
+        out.append(_put("table.vols", "各册送审分类", len(vrows), "册", src,
+                        {"table": {"columns": cols, "rows": vrows,
+                                   "note": "全册送审按原因分：字组内（G）、组外异体对（V）、形近护栏（N）、其他（O，缺字、切分等，不归本栏）。"}},
+                        sort=30))
+
+    prows = []
+    for cat in ("V", "N"):
+        per = (rv.get("keys_by_book") or {}).get(cat) or {}
+        for k, n in (rv.get("keys", {}).get(cat) or {}).items():
+            prows.append({"cat": CATS[cat], "key": k, "review": n, "vols": "、".join(sorted(per.get(k, {})))})
+    if prows:
+        prows.sort(key=lambda r: (-r["review"], r["cat"], r["key"]))
+        out.append(_put("table.pairs", "组外送审字对", len(prows), "对", src,
+                        {"table": {"columns": [{"key": "cat", "label": "类别"}, {"key": "key", "label": "字"},
+                                               {"key": "review", "label": "送审", "unit": "格"}, {"key": "vols", "label": "册"}],
+                                   "rows": prows,
+                                   "note": "还没进字组的异体对与形近护栏拦下的格，按送审从多到少；多的可以考虑建组。"}},
+                        sort=40))
+    return [(book_id, *r) for r in out]
 
 
 def write(rs: list[tuple]) -> int:
     from ..datastore.connect import connect
     with connect() as conn:
+        conn.execute("DELETE FROM progress.metric WHERE writer = %s AND section = ANY(%s)", (WHO, list(OLD_SECTIONS)))
+        conn.execute("DELETE FROM progress.section WHERE section = 'yiti' AND owner = %s", (WHO,))
+        conn.execute("UPDATE progress.section SET title = %s, description = %s WHERE section = %s", (TITLE, DESCRIPTION, SECTION))
         for book_id, vol, sec, key, label, value, unit, text, detail, sort in rs:
             conn.execute("SELECT progress.put_metric(%s, %s, %s, %s, %s, %s, %s, %s, %s, %s::jsonb, %s)",
                          (book_id, vol, sec, key, label, value, unit, WHO, text,
-                          json.dumps(detail, ensure_ascii=False) if detail else None,
-                          sort if sort is not None else SORT.get(key, 100)))
+                          json.dumps(detail, ensure_ascii=False) if detail else None, sort))
     return len(rs)
 
 
@@ -97,12 +161,14 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("status_json", type=Path)
     ap.add_argument("--book", default="96mid1ogzk", help="book-index 套书 id（殿本《四庫全書總目》）")
+    ap.add_argument("--prev", type=Path, help="上一份 guji groups status 的 json，总表写送审增减")
     ap.add_argument("--write", action="store_true", help="真写 Neon 正式库（缺省只打印）")
     a = ap.parse_args(argv)
-    rs = rows(json.loads(a.status_json.read_text(encoding="utf-8")), a.book)
+    prev = json.loads(a.prev.read_text(encoding="utf-8")) if a.prev else None
+    rs = rows(json.loads(a.status_json.read_text(encoding="utf-8")), a.book, prev)
     if not a.write:
         for r in rs:
-            print("\t".join("" if x is None else (json.dumps(x, ensure_ascii=False) if isinstance(x, dict) else str(x)) for x in r))
+            print("\t".join("" if x is None else (json.dumps(x, ensure_ascii=False)[:200] if isinstance(x, dict) else str(x)) for x in r))
         print(f"共 {len(rs)} 行（只打印；加 --write 才写库）")
         return 0
     print("写", write(rs), "行")

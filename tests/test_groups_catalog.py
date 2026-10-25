@@ -98,7 +98,7 @@ def test_review_breakdown_classifies_and_diffs(tmp_path):
     assert "| ry | 1（-1） |" in md
 
 
-def test_group_progress_rows_split_sections():
+def test_group_progress_rows_one_section_with_tables():
     from open_guji_cv.eval import group_progress as GP
 
     d = {"date": "2026-10-25", "tag": "t", "books": ["vol05"],
@@ -106,11 +106,21 @@ def test_group_progress_rows_split_sections():
                                                                         "checked": 5, "mismatch": 1},
                             "by_book": {"vol05": {"occ": 10, "admit": 9, "review": 1, "flow": 4, "pick": 3, "checked": 5, "mismatch": 1}}},
                     "ry": {"name": "日曰", "kind": "不同义", "total": {"occ": 2, "admit": 2}, "by_book": {"vol05": {"occ": 2, "admit": 2}}}},
-         "review": {"keys": {"V": {"㣲/微": 2}, "N": {}}, "keys_by_book": {"V": {"㣲/微": {"vol05": 2}}, "N": {}}}}
-    rs = {(r[1], r[2], r[3]): r[5] for r in GP.rows(d, "bk")}
-    assert rs[("", "yiti", "review")] == 1 and rs[("", "yiti", "review_out")] == 2 and rs[("", "yiti", "groups")] == 1
-    assert rs[("005", "yiti", "agree_rate")] == 0.8 and rs[("005", "yiti", "pick_rate")] == 0.75
-    assert rs[("005", "xingjin", "review")] == 0 and rs[("005", "xingjin", "admit_rate")] == 1.0
-    cards = [r for r in GP.rows(d, "bk") if r[3].startswith("group.")]
-    assert [(r[2], r[3], r[5], r[9]) for r in cards] == [("yiti", "group.zhi", 1, 100), ("xingjin", "group.ry", 0, 100)]
-    assert cards[0][7] == "出现 10　放行率 90.0%　组判率 75.0%" and cards[0][8]["review_by_vol"] == {"005": 1}
+         "review": {"books": {"vol05": {"cells": 100, "review": 3, "G": 1, "V": 2}},
+                    "keys": {"V": {"㣲/微": 2}, "N": {}}, "keys_by_book": {"V": {"㣲/微": {"vol05": 2}}, "N": {}}}}
+    prev = {"groups": {"zhi": {"total": {"review": 3}}}}
+    rs = GP.rows(d, "bk", prev)
+    assert {r[2] for r in rs} == {"xingjin"} and {r[1] for r in rs} == {""}
+    v = {r[3]: r for r in rs}
+    assert v["groups"][5] == 2 and v["groups"][7] == "同义 1 · 不同义 1"
+    assert v["review"][5] == 1 and v["review_v"][5] == 2 and v["agree_rate"][5] == 0.8
+    t = v["table.groups"][8]["table"]
+    assert [r["group"] for r in t["rows"]] == ["zhi", "ry"]
+    zhi = t["rows"][0]
+    assert zhi["review_rate"] == 0.1 and zhi["delta"] == "-2" and zhi["agree_rate"] == 0.8 and t["rows"][1]["delta"] is None
+    assert zhi["_sub"]["rows"] == [{"vol": "vol05", "occ": 10, "review": 1, "review_rate": 0.1, "admit_rate": 0.9,
+                                    "pick_rate": 0.75, "checked": 5, "wrong": 1, "agree_rate": 0.8}]
+    assert v["table.vols"][8]["table"]["rows"][0]["review_rate"] == 0.03
+    assert v["table.pairs"][8]["table"]["rows"] == [{"cat": "组外异体对", "key": "㣲/微", "review": 2, "vols": "vol05"}]
+    assert "delta" not in [c["key"] for c in GP.rows(d, "bk")[8][8]["table"]["columns"]]
+

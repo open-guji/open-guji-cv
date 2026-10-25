@@ -2268,10 +2268,11 @@ def cmd_groups(args) -> None:
                               codepoints=Path(args.codepoints) if args.codepoints else None, tag=args.tag,
                               prev=Path(args.prev) if args.prev else None)
     print("写", pj, "\n写", pm)
-    if args.progress:                  # 网站后台「文本整理」的 yiti／xingjin 两栏（Neon 正式库）
+    if args.progress:                  # 网站后台「文本整理 · 形近字」栏（Neon 正式库）
         import json
         from .eval import group_progress
-        rs = group_progress.rows(json.loads(pj.read_text(encoding="utf-8")), args.progress)
+        prev = json.loads(Path(args.prev).read_text(encoding="utf-8")) if args.prev else None
+        rs = group_progress.rows(json.loads(pj.read_text(encoding="utf-8")), args.progress, prev)
         print("写后台", group_progress.write(rs), "行")
 
 
