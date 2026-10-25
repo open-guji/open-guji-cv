@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- 任务库：执行方同一会话接第二张单（准备带 `--reset`）时 `db pull --force --no-rebuild` 不建 glyph.db；上一次准备在拉库前就失败的会话里 glyph.db 从没建过，建钉版库报 `no such table: sources`（#3–#6）。`--reset` 改成照常重建。
 - 任务库：准备脚本的「语料校验」也认 `GUJI_CORPUS_DRIFT=warn`（之前单上写了放行，准备阶段还是拦下，#1 vol07 因此失败）。常驻执行方两张单之间每 10 分钟看一次 dev 上 jobs 模块、准备脚本、启动器有没有更新，有就空闲时退出，线程重新 start 换上新代码。
 - 任务库：`retry` 过的单再也领不到（领单序号按已清零的次数算，撞 `UNIQUE (job_id, n)`，又被当成「同册被抢」悄悄吞掉）；现在序号接着历来最大的排，只有同册互斥的冲突才换一条，别的冲突照常报错。
 - 任务库：环境类失败（如会话没挂 guji-workspace 私仓）退回排队后冷却 5×次数 分钟（新列 `run_after`，schema v3，`GUJI_JOBS_BACKOFF_MIN` 可调），并优先让别的执行方领；之前同一个坏会话几秒内把 3 次机会用完。执行方领单前自检能否读 guji-workspace，读不了就只报到不领单（`workers` 列出原因），挂上后自动开始领。`workers` 的「跑完」改称「领过」。
