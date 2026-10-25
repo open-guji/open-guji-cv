@@ -86,4 +86,19 @@ CREATE TABLE IF NOT EXISTS jobs.result (
 );
 CREATE INDEX IF NOT EXISTS result_job ON jobs.result (job_id);
 
-INSERT INTO jobs.meta (key, value) VALUES ('schema_version', '1') ON CONFLICT (key) DO NOTHING;
+-- 执行方登记：每个常驻执行方一个名字（GUJI_JOBS_WHO），空闲时也按轮询心跳，谁在线、在跑哪条一眼可见。
+CREATE TABLE IF NOT EXISTS jobs.worker (
+  name       text PRIMARY KEY,
+  session    text,
+  host       text,
+  runner     text,
+  state      text NOT NULL DEFAULT 'idle' CHECK (state IN ('idle', 'busy', 'stopped')),
+  job_id     bigint REFERENCES jobs.job (id) ON DELETE SET NULL,
+  done       integer NOT NULL DEFAULT 0,
+  started_at timestamptz NOT NULL DEFAULT now(),
+  seen_at    timestamptz NOT NULL DEFAULT now(),
+  note       text
+);
+
+INSERT INTO jobs.meta (key, value) VALUES ('schema_version', '2')
+  ON CONFLICT (key) DO UPDATE SET value = GREATEST(jobs.meta.value::int, 2)::text;
