@@ -6,6 +6,9 @@
     guji source check <书id> <册>                                # 疑似合扫页（宽高比异常），跑管线前看
     guji source ia <书id> <册> --ia <IA 标识> --ws <工作区 id> --book <册名> [--splits 表] --why …
                                                                  # 从 IA 下源件、存档、生成页图、发布页表（正式令牌）
+    guji source commons <书id> <册> --file <Commons 文件名> --ws … --book … [--splits 表] --why …
+                                                                 # 从 Commons（根）取 DjVu、存档、解页、发布页表（正式令牌，要 ddjvu）
+                                                                 # 会话连不上 Commons 时：别处下好 DjVu 与 imageinfo，--djvu 文件 --commons-json 信息
     guji source register <书id> <册> --dir <原图目录> --map <页号→页序表> [--ia <IA 标识> | --src-file <路径>=<网址> …] --ws … --book … --why …
                                                                  # 已有原图目录原样登记（老册，不重编码）（正式令牌）
     guji source replace <书id> <册> <页序> <png> --why …          # 换一页（人工处理后的图），页表出新版（正式令牌）
@@ -154,6 +157,40 @@ def cmd_ia(args) -> None:
     _finish(src, args, table, blobs, args.why)
 
 
+def cmd_commons(args) -> None:
+    import tempfile
+    from .datastore import sources as S
+    vol = S.norm_vol(args.vol)
+    src = _src()
+    if args.commons_json:
+        info = json.loads(Path(args.commons_json).read_text(encoding="utf-8"))
+    else:
+        info = S.commons_info(args.file)
+    path = Path(args.djvu) if args.djvu else None
+    if path is None:
+        cache = Path(args.cache or Path.home() / ".cache" / "guji-source") / "commons"
+        cache.mkdir(parents=True, exist_ok=True)
+        path = cache / info["url"].rsplit("/", 1)[1]
+        if not path.exists():
+            path.write_bytes(S._http(info["url"], timeout=1800))
+    rec = S.commons_source(path, info)
+    print(f"  源件 {info['title']}（{info['timestamp']}）{rec['bytes'] / 1e6:.1f} MB sha1 ✓")
+    if not args.dry_run:
+        rec["r2"] = S.store_original(src, args.book_id, vol, rec)
+        print(f"  已存 R2 {rec['r2']}")
+    with tempfile.TemporaryDirectory() as td:
+        z = Path(td) / "leaves.zip"
+        n = S.djvu_to_zip(path, z)
+        if info.get("pagecount") and n != info["pagecount"]:
+            raise SystemExit(f"✗ 解出 {n} 页，Commons 记 {info['pagecount']} 页")
+        pages, blobs = S.build_from_zip(z, splits=_load_splits(args.splits, vol))
+    print(f"  生成 {len(pages)} 页（{sum(len(b) for b in blobs.values()) / 1e6:.1f} MB）")
+    _expect(pages, args.expect, args.expect_skip)
+    table = S.new_table(args.book_id, vol, ws=args.ws, book=args.book, sources=[{"key": "s1", **rec}], pages=pages,
+                        decoder="ddjvu")
+    _finish(src, args, table, blobs, args.why)
+
+
 def cmd_register(args) -> None:
     from .datastore import sources as S
     vol = S.norm_vol(args.vol)
@@ -196,7 +233,7 @@ def cmd_replace(args) -> None:
 
 
 COMMANDS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
-            "ia": cmd_ia, "register": cmd_register, "replace": cmd_replace}
+            "ia": cmd_ia, "commons": cmd_commons, "register": cmd_register, "replace": cmd_replace}
 
 
 def add_parser(sub) -> None:
@@ -209,6 +246,9 @@ def add_parser(sub) -> None:
     p.add_argument("--book-id", default=None, help="pull：不查登记，直接给书 id（配 --vol）")
     p.add_argument("--vol", default=None, help="pull：配 --book-id")
     p.add_argument("--ia", default=None, help="ia/register：IA 标识，如 06061310.cn")
+    p.add_argument("--file", default=None, help="commons：Commons 文件名（不带 File: 也行）")
+    p.add_argument("--djvu", default=None, help="commons：本地已下好的源件（会话连不上 Commons 时）")
+    p.add_argument("--commons-json", default=None, help="commons：配 --djvu，Commons imageinfo（title/url/sha1/timestamp/pagecount）")
     p.add_argument("--ws", default=None, help="ia/register：cv 工作区 id（写 by-ws 指针）")
     p.add_argument("--book", dest="book_name", default=None, help="ia/register：cv 册名，如 vol11")
     p.add_argument("--splits", default=None, help="ia：拆页表（同 web 仓 siku-zongmu-splits.json）")
@@ -230,7 +270,7 @@ def add_parser(sub) -> None:
 def cmd_source(args) -> None:
     pos = list(args.pos or [])
     a = args.action
-    need = {"pull": 1, "list": 1, "show": 2, "check": 2, "ia": 2, "register": 2, "replace": 4}[a]
+    need = {"pull": 1, "list": 1, "show": 2, "check": 2, "ia": 2, "commons": 2, "register": 2, "replace": 4}[a]
     if a == "pull" and args.book_id:
         need = 0
     if len(pos) < need:
@@ -244,13 +284,16 @@ def cmd_source(args) -> None:
         args.book_id, args.vol = pos[0], pos[1]
         if a == "replace":
             args.seq, args.png = pos[2], pos[3]
-    if a in ("ia", "register"):
+    if a in ("ia", "commons", "register"):
         args.book = args.book_name
         if not args.why:
             print("✗ 写页表要 --why", file=sys.stderr)
             sys.exit(2)
         if a == "register" and not (args.dir and args.map):
             print("✗ register 要 --dir 与 --map", file=sys.stderr)
+            sys.exit(2)
+        if a == "commons" and not (args.file or args.commons_json):
+            print("✗ commons 要 --file <Commons 文件名>（或 --djvu 配 --commons-json）", file=sys.stderr)
             sys.exit(2)
         if a == "ia" and not args.ia:
             print("✗ ia 要 --ia <IA 标识>", file=sys.stderr)

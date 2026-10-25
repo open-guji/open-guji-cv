@@ -178,3 +178,33 @@ def test_local_source_ascii_key(tmp_path):
     q = tmp_path / "全唐文.PDF"
     q.write_bytes(b"x")
     assert S.local_source(q)["file"] == S.sha256(b"x")[:16] + ".pdf"     # 名字里没有 ASCII 就用 sha 头
+
+
+@pytest.mark.skipif(not __import__("shutil").which("ddjvu") or not __import__("shutil").which("cjb2"),
+                    reason="没装 djvulibre")
+def test_djvu_to_zip_lossless(tmp_path):
+    import subprocess
+    im = Image.new("1", (64, 48), 1)
+    for x in range(10, 30):
+        im.putpixel((x, 20), 0)
+    im.save(tmp_path / "a.pbm")
+    subprocess.run(["cjb2", "-lossless", str(tmp_path / "a.pbm"), str(tmp_path / "a.djvu")], check=True)
+    z = tmp_path / "leaves.zip"
+    assert S.djvu_to_zip(tmp_path / "a.djvu", z) == 1
+    pages, blobs = S.build_from_zip(z)
+    assert [p["seq"] for p in pages] == ["0001"]
+    out = Image.open(io.BytesIO(blobs[pages[0]["sha256"]]))
+    assert out.convert("L").tobytes() == im.convert("L").tobytes()     # JB2 无损页逐像素不变
+    assert blobs[pages[0]["sha256"]] == S.encode_page(im)               # 与 IA tif 走同一条编码，sha 相同
+
+
+def test_commons_source_checks_sha1(tmp_path):
+    p = tmp_path / "vol11.djvu"                                    # 本地叫什么都行，R2 里按 Commons 名存
+    p.write_bytes(b"AT&TFORM")
+    import hashlib
+    info = {"title": "File:CADAL06061310 欽定四庫全書總目·卷二十一~卷二十二.djvu", "sha1": hashlib.sha1(b"AT&TFORM").hexdigest(), "timestamp": "2019-12-28T22:55:27Z",
+            "url": "https://upload.wikimedia.org/x.djvu"}
+    rec = S.commons_source(p, info)
+    assert rec["kind"] == "commons" and rec["file"] == "CADAL06061310.djvu" and rec["commons_timestamp"] == info["timestamp"]
+    with pytest.raises(ValueError, match="sha1"):
+        S.commons_source(p, {**info, "sha1": "0" * 40})
