@@ -57,3 +57,8 @@ L1 单独给字 27.8%；L1→L2 82.3% 给字、1 错。改正金标后 L1→haik
   - 新表（ver `ry-l2-3+v1024`、`rm-l2-1+v1024`）在 dataset `char-groups/variant/ry/l2/`，**成批上线时随「推」替换中心库**
     `config/groups/l2/{ry,rm}.json`，登记在 `char-groups/待上线.md`。
   - vol04–10 已放行格同样有整理本错跟着放的问题，没扫；ry 外字进 rm 补放（rm 说「其他」时可否转 ry 判）没做。
+- 2026-10-25 vol21–50 首跑补表（A24「压低 vol21–50 形近字组送审」）：首跑 jys／ry／rm 送审大半是 L2 表缺格。给这 30 册的进组格补批跑
+  haiku＋opus（ry、jys 再加 sonnet 复核分歧格），合进表（ver 加 `+v2150`，表内注记 `panel_vol21_50`）：
+  haiku 与 opus 同字且都 high ＝ strong；其余新格须 opus 同字才给字，否则 `abstain:strong_dissent`；三家都判「其他」＝ `abstain:other`（日曰目联判用）。
+  离线回放 vol21–50 三组送审 1,181 → 253（jys 678→77、ry 476→149、rm 27→27）；非 strong 的新放行 199 格逐条读过。
+  新表与批跑原始结果在 dataset `char-groups/variant/{jys,ry}/l2/`（`vol21_50/`），上线随「推」替换中心库 `config/groups/l2/`。

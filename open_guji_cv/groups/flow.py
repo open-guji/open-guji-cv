@@ -5,6 +5,7 @@
 **进入**（一个字只属一组，`registry` 有不重叠测试）：
 - 补放：格没放行、不是人裁、没撞硬护栏；库 top1 cov ≥ `min_cov`，top1 所在组 G 在点名里；与 top1 分差 < `delta` 的
   候选全在 G 里（或在 G 的 `FlowSpec.tolerate` 里）；有整理本对位字时它（或按书级 `codepoints` 归一后）也在 G 里。
+  组声明了 `ref_enter` 时，top1 是 G 的陪衬字、整理本字在 G 里也算进入（字形库里没有这一形）。
 - 复核：组声明了 `review`，格已被别的通道放行、放行字在 G 里（人裁位不碰）。
 
 **判**：按组的方法数组（`FlowSpec.methods`，方法见 `groups/methods.py`）依次跑，`combine=first` 遇到第一个放行的就停，
@@ -113,12 +114,14 @@ def groups_in(ch: str | None, groups) -> list[str]:
     return [g for g in groups if ch in GROUPS[g].members]
 
 
-def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c: c) -> tuple[str, str] | None:
+def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c: c,
+          coord_ref: str | None = None) -> tuple[str, str] | None:
     """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。
 
     一个字属于多个组（`overlaps`）时：补放选第一个能把「分差内全部候选＋整理本字」都装下的组，复核选第一个
     声明了 `review` 且装得下整理本字的组。哪一组都装不下、但装得下「组＋它的共字组」（日曰目紧咬：ry＋rm）时，
-    `cfg.joint` 开着 → (组, "joint")，由 `decide_joint` 判。"""
+    `cfg.joint` 开着 → (组, "joint")，由 `decide_joint` 判。
+    `coord_ref`：现役对位缺这一格时的坐标对位字，只给 `ref_enter` 用（vol49 算學諸書整页对位缺，坐标对位作 𮅕）。"""
     if r.provenance == "human" or r.channel in ("human", CHANNEL):
         return None
     if r.admit:
@@ -133,6 +136,13 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     top, c1 = cands[0]
     if c1 < cfg.min_cov:
         return None
+    rr = ref or coord_ref
+    for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
+        f, mem = GROUPS[g].flow, GROUPS[g].members
+        if not (f.ref_enter and f.lift_ref_agree and rr and (rr in mem or canon(rr) in mem) and top in f.tolerate):
+            continue
+        if all(c in mem or c in f.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
+            return g, "lift"
     for g in groups_in(top, cfg.groups):
         mem = GROUPS[g].members
         if not all(c in mem or c in GROUPS[g].flow.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
@@ -265,7 +275,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             continue
         cands = cands_of(r.id) or []
         ref = (amap.get(r.id) or (None, None))[0]
-        e = entry(r, cands, ref, cfg, canon)
+        e = entry(r, cands, ref, cfg, canon, coord_ref=(veto_refs or {}).get(r.id))
         if e is not None:
             entries[i] = (cands, ref, e)
     plans = []
