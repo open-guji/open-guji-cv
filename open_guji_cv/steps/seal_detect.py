@@ -18,11 +18,16 @@
    （Sheldon 10-22）：印紧贴版框上边与右边，宽正好是整个版框（九列），高与宽相等。所以外框
    取版框右上角起、边长＝版框宽的正方形（`stain_square`，`source="frame"`）；页面弯曲带来的
    几十像素误差不管。读不到版框才退回密度区的外接框（`source="density"`）。
+   只有宽 ≥ `BIG_FRAC`×版框宽的密度区才按大印套正方形（1.2，殿本 vol21–50 首跑）：卷末小印印得淡时
+   碎墨也成一块密度区，但只有 600–900px 宽，原来也套了整页正方形，把大半页正文判成遮挡（vol35 p173 42 格）。
+   窄区（≤ `SMALL_FRAC`）落在版框里、页上又没认出小印时，在这块里找模板最像的位置，分数 ≥ `SMALL_SCORE`
+   就按小印记，否则不算印。
 2. **小印 `crisp`**（卷末「乾隆御覽之寶」）：模板（`config/seal_templates/`）在 1/4 降采样图上
    整页搜。分数不用 NCC——印压在正文上时印里有字，NCC 掉到 0.3（vol09 p265 原来认不出）——
    而用「模板笔画处有墨的比例 − 模板空白处有墨的比例」：印下压字只会抬高第二项一点，
    第一项仍接近 1。笔画覆盖 ≥ `min_cover` 且分数 ≥ `min_score` 才算印。十册：印页覆盖
-   0.68–0.87、分数 0.29–0.80；无印页覆盖 ≤ 0.56、分数 ≤ 0.19。
+   0.68–0.87、分数 0.29–0.80；无印页覆盖 ≤ 0.56、分数 ≤ 0.19。vol21–50 卷末印更淡（覆盖 0.50–0.58），
+   门槛 1.2 起由 0.6 降到 0.5，分数门槛不变。
 
 ## 人核覆盖
 
@@ -52,11 +57,18 @@ HOT = 12               # 平滑后 ≥ 这个数的格连成区
 ASPECT = (0.5, 2.0)    # 大印区宽高比
 SCALE = 0.25           # 小印模板搜索的降采样比
 STROKE_DILATE = 9      # 模板笔画膨胀（原分辨率像素），容纳印的错位与晕染
+#: 密度区宽 ≥ 这个比例 × 版框宽才是大印（按版框定正方形外框）。殿本 vol21–50 普查：大印区 1500–1950px（版框约 1650），
+#: 卷末小印（乾隆御覽之寶）印得淡、模板没过门槛时，它的碎墨也会成一块密度区，只有 600–900px 宽
+BIG_FRAC = 0.75
+#: 密度区宽 ≤ 这个比例 × 版框宽、一半以上落在版框里：按小印算，外框取模板在这块里最像的位置
+SMALL_FRAC = 0.55
+#: 按小印算时模板分数的下限：卷末淡印 0.23–0.43；页底、页角的碎墨块（vol47 p7/p63/p87、vol46 p95）≤ 0.16
+SMALL_SCORE = 0.2
 
 
 class SealDetectParams(BaseModel):
     min_peak: float = 20.0
-    min_cover: float = 0.6
+    min_cover: float = 0.5
     min_score: float = 0.25
     overrides: dict[int, list[dict]] = Field(default_factory=dict)
     """页号 → 人核的印列表 `[{"kind": "stain"|"crisp", "bbox": [x0, y0, x1, y1]}]`（规范空间）；空表＝无印。"""
@@ -176,23 +188,59 @@ def stroke_mask(seal: Seal, height: int, width: int) -> np.ndarray | None:
     return out
 
 
+def _in_frame(b, frame, W) -> float:
+    """左上原点的框 `b` 落在版框（右上原点 (x0, y0, x1, y1)）里的面积比例。"""
+    x0, y0, x1, y1 = bbox_tl_to_tr(b, W)
+    fx0, fy0, fx1, fy1 = frame
+    ov = max(0.0, min(x1, fx1) - max(x0, fx0)) * max(0.0, min(y1, fy1) - max(y0, fy0))
+    return ov / max((x1 - x0) * (y1 - y0), 1.0)
+
+
+def _crisp_in(gray: np.ndarray, b) -> tuple[tuple[int, int, int, int], float, str] | None:
+    """在密度区 `b`（左上原点）外扩一格的范围里找模板最像的位置（不设门槛）；区太小放不下模板就返回 None。"""
+    H, W = gray.shape[:2]
+    x0, y0 = max(0, b[0] - GRID), max(0, b[1] - GRID)
+    x1, y1 = min(W, b[2] + GRID), min(H, b[3] + GRID)
+    hits = crisp_seals(gray[y0:y1, x0:x1], min_cover=0.0, min_score=-1.0)
+    if not hits:
+        return None
+    (a, c, d, e), score, name = hits[0]
+    return (a + x0, c + y0, d + x0, e + y0), score, name
+
+
 def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Seal]:
     W = gray.shape[1]
     stains = stain_seals(gray, min_peak=p.min_peak)
+    crisp = crisp_seals(gray, min_cover=p.min_cover, min_score=p.min_score)
     square = stain_square(borders) if stains else None
-    if square is not None:          # 一页只有一方大印，位置按版框定
-        out = [Seal(kind="stain", bbox=square, score=max(s for _b, s in stains), source="frame")]
+    out = []
+    if square is None:
+        out += [Seal(kind="stain", bbox=bbox_tl_to_tr(b, W), score=s, source="density") for b, s in stains]
     else:
-        out = [Seal(kind="stain", bbox=bbox_tl_to_tr(b, W), score=s, source="density") for b, s in stains]
+        fw = square[2] - square[0]
+        big = [s for b, s in stains if b[2] - b[0] >= BIG_FRAC * fw]
+        if big:                     # 一页只有一方大印，位置按版框定
+            out.append(Seal(kind="stain", bbox=square, score=max(big), source="frame"))
+        bottom = getattr(getattr(borders, "bottom", None), "y_at_right", None)
+        frame = (square[0], square[1], square[2], float(bottom) if bottom is not None else float(gray.shape[0]))
+        if not crisp:
+            # 卷末小印印得淡、模板没过门槛（vol35 p173、vol46 p225），碎墨成了一小块密度区：按小印记，
+            # 不再按大印套整个版框宽的正方形（那会把大半页正文判成遮挡）
+            for b, _s in stains:
+                if b[2] - b[0] <= SMALL_FRAC * fw and _in_frame(b, frame, W) >= 0.5:
+                    hit = _crisp_in(gray, b)
+                    if hit is not None and hit[1] >= SMALL_SCORE:
+                        crisp = [hit]
+                        break
     out += [Seal(kind="crisp", bbox=bbox_tl_to_tr(b, W), score=s, source="template", template=t)
-            for b, s, t in crisp_seals(gray, min_cover=p.min_cover, min_score=p.min_score)]
+            for b, s, t in crisp]
     return out
 
 
 @register_step
 class SealDetectStep(Step):
     spec = StepSpec(
-        id="seal_detect", title="印章定位", version="1.1", unit="page",   # 1.1：大印外框按版框定（正方形）
+        id="seal_detect", title="印章定位", version="1.2", unit="page",   # 1.2：只有够宽的密度区才按大印套版框正方形，窄的按小印取模板位置；小印覆盖门槛 0.6→0.5（vol21–50 卷末印淡）；1.1：大印外框按版框定（正方形）
         consumes=("raw_page", "borders"), produces=("seals",), params=SealDetectParams,
     )
 
