@@ -151,7 +151,7 @@ def test_shape_pairs_flow_only_and_banks_load():
         assert gid in SHAPE_GROUPS and gid not in GROUPS
         g = FLOW_GROUPS[gid]
         assert set(g.members) == set(members) and g.flow.solvers == ("ids",)
-        assert g.flow.review and g.flow.review_fix
+        assert g.flow.review and g.flow.review_fix == (gid != "shang")   # 尙尚 复核只降不改（2026-10-25，vol16 错改）
         sp = O.SPECS[gid]
         p = root / g.config_dir / "ids_bank.json"
         assert p.stat().st_size < 1_000_000
