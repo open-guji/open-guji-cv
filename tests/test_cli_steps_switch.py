@@ -49,6 +49,7 @@ def test_rare_candidates_consumed_only_when_a_downstream_reads_it():
         return _p
 
     book = SimpleNamespace()
-    assert rare_candidates_consumed(pipe, params_for(), book) is False
-    assert rare_candidates_consumed(pipe, params_for(seed_admit={"rare_ref": True}), book) is True
-    assert rare_candidates_consumed(pipe, params_for(context_decide={"rare_topk": 3}), book) is True
+    off = {"rare_ref": False, "symbol_review": False}   # 两个都 2026-10-24 起缺省开，缺省就有下游在读
+    assert rare_candidates_consumed(pipe, params_for(), book) is True
+    assert rare_candidates_consumed(pipe, params_for(seed_admit=off), book) is False
+    assert rare_candidates_consumed(pipe, params_for(seed_admit=off, context_decide={"rare_topk": 3}), book) is True
