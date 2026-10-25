@@ -30,27 +30,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from dzg_import import NCOL, _corpus, load_records  # noqa: E402
 
-
-def slot_of(pos: int) -> int:
-    return pos + 1 if pos >= 0 else pos
-
-
-def column_layout(col: dict) -> dict | None:
-    """daizhige 一列 → {slots, notes, half, raised}；空列 None。"""
-    body, a, b = set(), set(), set()
-    for r in col.get("runs", []):
-        if r.get("t") == "text":
-            body |= {slot_of(r["start"] + i) for i in range(len(r.get("s", "")))}
-        elif r.get("t") == "note":
-            for side, acc in (("r", a), ("l", b)):
-                for off, s in r.get(side, []):
-                    acc |= {slot_of(r["start"] + off + i) for i in range(len(s))}
-    slots = body | a | b
-    if not slots:
-        return None
-    neg = [s for s in slots if s < 0]
-    return {"slots": sorted(slots), "notes": sorted(a & b), "half": sorted(a ^ b),
-            "raised": -min(neg) if neg else 0}
+# 一列的格位、覆盖行：与 Step3 自动配页共用一份（open_guji_cv/utils/daizhige.py）
+from open_guji_cv.utils.daizhige import LAYOUT_FIELDS as FIELDS  # noqa: E402,F401
+from open_guji_cv.utils.daizhige import apply_overrides, column_layout, slot_of  # noqa: E402,F401
 
 
 def build(ws: Path, vols: set[str] | None = None) -> list[dict]:
@@ -77,30 +59,6 @@ def build(ws: Path, vols: set[str] | None = None) -> list[dict]:
     n = Counter((r["vol"], r["page"], r["col"]) for r in out)
     out = [r for r in out if n[(r["vol"], r["page"], r["col"])] == 1]
     return apply_overrides(out, dz / "layout_overrides.jsonl", vols)
-
-
-FIELDS = ("slots", "notes", "half", "raised")
-
-
-def apply_overrides(rows: list[dict], path: Path, vols: set[str] | None = None) -> list[dict]:
-    """人核过的覆盖行（见模块头）盖到 daizhige 推出的行上；表里没有的列整行补进来。"""
-    if not path.exists():
-        return rows
-    at = {(r["vol"], r["page"], r["col"]): r for r in rows}
-    for ln in path.read_text(encoding="utf-8").splitlines():
-        if not ln.strip():
-            continue
-        o = json.loads(ln)
-        if vols and o["vol"] not in vols:
-            continue
-        k = (o["vol"], o["page"], o["col"])
-        r = at.get(k)
-        if r is None:
-            r = at[k] = {"vol": k[0], "page": k[1], "col": k[2], "dzg": "override",
-                         "slots": [], "notes": [], "half": [], "raised": 0}
-            rows.append(r)
-        r.update({f: o[f] for f in FIELDS if f in o})
-    return rows
 
 
 def main(argv=None) -> int:

@@ -57,7 +57,6 @@ vol01 用字形库 instances、vol01–10 用人读锚点（`corpus/daizhige/anc
 from __future__ import annotations
 
 import argparse
-import ast
 import difflib
 import hashlib
 import json
@@ -68,7 +67,6 @@ import sys
 import urllib.error
 import urllib.request
 from collections import Counter, defaultdict
-from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -76,9 +74,13 @@ URL = "https://sikuquanshu.daizhige.net/data/{:04d}.jsonl"
 #: 總目（1）与附在 0005 尾部的四庫抽燬書提要（2）。
 ZONGMU_BOOK_IDS = {1, 2}
 FULL = "　"
-UNMAPPED = "〓"
-NCOL = 9
 VOLS = [f"{i:02d}" for i in range(1, 11)]
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# 源记录 → 半叶、PUA 修复、读序串：与 Step3 自动配页共用一份（open_guji_cv/utils/daizhige.py）
+from open_guji_cv.utils.daizhige import (NCOL, SHORT_CHARS, UNMAPPED, Half, _fix_col,  # noqa: F401
+                                         _is_pua, _norm_field, build_halves, column_plain,
+                                         fix_pua, half_kind, han_only, load_records)
 
 _HAN_RE = re.compile(r"[㐀-䶿一-鿿豈-﫿\U00020000-\U0003134f]")
 
@@ -94,123 +96,6 @@ def is_han(ch: str) -> bool:
     return bool(_HAN_RE.fullmatch(ch))
 
 
-def han_only(s: str) -> str:
-    return "".join(_HAN_RE.findall(s))
-
-
-def _is_pua(ch: str) -> bool:
-    cp = ord(ch)
-    return 0xE000 <= cp <= 0xF8FF or 0xF0000 <= cp <= 0x10FFFD
-
-
-# ── 读源文件 ───────────────────────────────────────────────
-
-def _norm_field(v):
-    """个别补丁记录把字段存成了 Python repr 字符串，读回来。"""
-    if isinstance(v, str) and v[:1] in "[{" :
-        try:
-            return ast.literal_eval(v)
-        except (ValueError, SyntaxError):
-            return v
-    return v
-
-
-def load_records(path: Path) -> list[dict]:
-    out = []
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            if not line.strip():
-                continue
-            r = json.loads(line)
-            for k in ("cols", "geom", "roll", "book", "pua_map", "images", "glyphs"):
-                if k in r:
-                    r[k] = _norm_field(r[k])
-            out.append(r)
-    return out
-
-
-def fix_pua(s: str, pua_map: dict | None, glyphs: dict | None = None) -> tuple[str, int]:
-    """PUA → 真字（按本条 `pua_map`），映不上的记 `〓`；本条 `glyphs` 登记的缺字图占位码也记 `〓`。
-    返回（新串，记成 `〓` 的个数）。"""
-    if not s:
-        return s, 0
-    pm = pua_map or {}
-    gl = glyphs if isinstance(glyphs, dict) else {}
-    out, miss = [], 0
-    for ch in s:
-        if f"U+{ord(ch):04X}" in gl:
-            out.append(UNMAPPED)
-            miss += 1
-        elif _is_pua(ch):
-            real = pm.get(f"U+{ord(ch):04X}")
-            if real:
-                out.append(real)
-            else:
-                out.append(UNMAPPED)
-                miss += 1
-        else:
-            out.append(ch)
-    return "".join(out), miss
-
-
-@dataclass
-class Half:
-    """一个半叶 ＝ 我们刻本的一页。`idx` 是 0001–0005 全局顺序号。"""
-    idx: int
-    file: str
-    rid: str
-    page: str
-    side: int                       # 0 前半叶（列 0–8），1 后半叶（列 9–17）
-    roll: str | None
-    book: int | None
-    cover: bool
-    cols: list = field(default_factory=list)   # 本半叶的列（已按 no 排、PUA 已修）
-    unmapped: int = 0
-
-    @property
-    def nchars(self) -> int:
-        return sum(len(han_only(column_plain(c))) for c in self.cols)
-
-
-def _fix_col(col: dict, pua_map, glyphs=None) -> tuple[dict, int]:
-    miss = 0
-    runs = []
-    for run in col.get("runs", []):
-        run = dict(run)
-        if run.get("t") == "text":
-            run["s"], m = fix_pua(run.get("s", ""), pua_map, glyphs)
-            miss += m
-        elif run.get("t") == "note":
-            for side in ("r", "l"):
-                segs = []
-                for off, s in run.get(side, []):
-                    s, m = fix_pua(s, pua_map, glyphs)
-                    miss += m
-                    segs.append([off, s])
-                run[side] = segs
-        runs.append(run)
-    return {"no": col["no"], "runs": runs}, miss
-
-
-def build_halves(files: list[Path]) -> list[Half]:
-    halves: list[Half] = []
-    for f in files:
-        for r in load_records(f):
-            cols = r.get("cols") if isinstance(r.get("cols"), list) else []
-            roll = r["roll"].get("name") if isinstance(r.get("roll"), dict) else None
-            book = r["book"].get("id") if isinstance(r.get("book"), dict) else None
-            for side in (0, 1):
-                mine, miss = [], 0
-                for c in sorted(cols, key=lambda c: c["no"]):
-                    if (c["no"] >= NCOL) == bool(side):
-                        fc, m = _fix_col(c, r.get("pua_map"), r.get("glyphs"))
-                        mine.append(fc)
-                        miss += m
-                halves.append(Half(len(halves), f.name, r["id"], str(r["page"]), side,
-                                   roll, book, bool(r.get("cover")), mine, miss))
-    return halves
-
-
 # ── 一列的两种写法 ────────────────────────────────────────
 
 def _note_line(segs) -> str:
@@ -221,18 +106,6 @@ def _note_line(segs) -> str:
             pos = off
         out.append(s)
         pos += len(s)
-    return "".join(out)
-
-
-def column_plain(col: dict) -> str:
-    """读序串：正文照录，小注先右行后左行，不带空格。用于检索与比对。"""
-    out = []
-    for run in col.get("runs", []):
-        if run.get("t") == "note":
-            out.append("".join(s for _, s in run.get("r", [])))
-            out.append("".join(s for _, s in run.get("l", [])))
-        else:
-            out.append(run.get("s", ""))
     return "".join(out)
 
 
@@ -389,7 +262,6 @@ def cmd_fix_glyph_codes(ws: Path) -> None:
 BLANK_INK = 0.02
 LOW_INK = 0.035
 WIDE_PX = 3500
-SHORT_CHARS = 6
 
 
 def page_ink(path: Path) -> tuple[int, int, float]:
@@ -416,10 +288,6 @@ def page_kind(p: int, w: int, ink: float) -> str:
         return "low"
     return "text"
 
-
-def half_kind(h: Half) -> str:
-    n = h.nchars
-    return "empty" if n == 0 else ("short" if n <= SHORT_CHARS else "full")
 
 
 INF = float("inf")
