@@ -385,12 +385,26 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     done = 0
     idle_since = time.time()
     rc = _runner_commit()
-    db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True)
+    warned = None
+    db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True, note="")
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
     try:
         while True:
             for jid, st in db(S.reap):
                 say(f"收回 #{jid} → {st}")
+            bad = _preflight()
+            if bad:
+                # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
+                if bad != warned:
+                    say(f"不领单：{bad}")
+                    warned = bad
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note=bad)
+                time.sleep(poll_s)
+                continue
+            if warned:
+                say("自检通过，开始领单")
+                warned = None
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
             got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
             if got is None:
                 if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
@@ -415,6 +429,30 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
         except Exception:       # noqa: BLE001 —— 断网时退出就不报了，过几分钟自然算离线
             pass
+
+
+WORKSPACE_REPO = "https://github.com/open-guji/guji-workspace"
+_preflight_ok_at = 0.0
+
+
+def _preflight() -> str | None:
+    """执行方领单前自检，返回缺什么（None 是都齐）。通过后 10 分钟内不再查。
+
+    guji-workspace 是私仓，会话没挂（add_repo）时 git 要账号，每条单都会在准备阶段失败。
+    已克隆过的（~/guji-workspace 在）不查。挂上之后不用重启执行方，下一轮轮询自动开始领单。
+    """
+    global _preflight_ok_at
+    if time.time() - _preflight_ok_at < 600 or (Path.home() / "guji-workspace" / ".git").is_dir():
+        return None
+    try:
+        r = subprocess.run(["git", "ls-remote", "-q", WORKSPACE_REPO, "HEAD"], capture_output=True, text=True,
+                           timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"读不了 guji-workspace（{e}）"
+    if r.returncode:
+        return "本会话读不了 guji-workspace 私仓（请在会话里 add_repo open-guji/guji-workspace）"
+    _preflight_ok_at = time.time()
+    return None
 
 
 def _last_book() -> str | None:

@@ -12,7 +12,8 @@ import os
 import socket
 from importlib import resources
 
-LEASE_MIN = int(os.environ.get("GUJI_JOBS_LEASE_MIN", "10"))   # 测试时可调短
+LEASE_MIN = int(os.environ.get("GUJI_JOBS_LEASE_MIN", "10"))
+RETRY_BACKOFF_MIN = int(os.environ.get("GUJI_JOBS_BACKOFF_MIN", "5"))   # 环境类失败重排后隔几分钟（×次数）
 
 
 def connect():
@@ -184,7 +185,7 @@ def retry(conn, job_id: int, by: str) -> bool:
     with conn.transaction():
         r = conn.execute(
             "UPDATE jobs.job SET status='queued', attempts=0, error=NULL, stage=NULL, progress=NULL,"
-            " cancel_requested=false, finished_at=NULL, updated_at=now()"
+            " cancel_requested=false, finished_at=NULL, run_after=NULL, updated_at=now()"
             " WHERE id=%s AND status IN ('failed','blocked','cancelled')", (job_id,))
         if r.rowcount:
             _event(conn, job_id, None, "retry", f"{by} 重新排队")
@@ -234,10 +235,13 @@ WITH c AS (
     AND (j.book IS NULL OR NOT EXISTS (SELECT 1 FROM jobs.job r WHERE r.book = j.book AND r.status = 'running'))
     AND (%(kinds)s::text[] IS NULL OR j.kind = ANY(%(kinds)s))
     AND (%(only)s::bigint IS NULL OR j.id = %(only)s)
-  ORDER BY j.priority, (j.book IS NOT DISTINCT FROM %(aff)s) DESC, j.created_at, j.id
+    AND (j.run_after IS NULL OR j.run_after <= now() OR %(only)s::bigint IS NOT NULL)
+  ORDER BY j.priority,
+    EXISTS (SELECT 1 FROM jobs.attempt f WHERE f.job_id = j.id AND f.worker = %(who)s AND f.outcome = 'failed'),
+    (j.book IS NOT DISTINCT FROM %(aff)s) DESC, j.created_at, j.id
   FOR UPDATE SKIP LOCKED LIMIT 1)
 UPDATE jobs.job j SET status = 'running', attempts = j.attempts + 1, started_at = coalesce(j.started_at, now()),
-  stage = 'claimed', progress = NULL, error = NULL, updated_at = now()
+  stage = 'claimed', progress = NULL, error = NULL, run_after = NULL, updated_at = now()
 FROM c WHERE j.id = c.id RETURNING j.*
 """
 
@@ -249,7 +253,7 @@ def claim(conn, worker: str, *, session: str | None = None, affinity: str | None
     for _ in range(5):
         try:
             with conn.transaction():
-                j = _one(conn.execute(_CLAIM, {"kinds": kinds, "aff": affinity, "only": only}))
+                j = _one(conn.execute(_CLAIM, {"kinds": kinds, "aff": affinity, "only": only, "who": worker}))
                 if j is None:
                     return None
                 a = _one(conn.execute(
@@ -310,10 +314,12 @@ def finish(conn, job_id: int, attempt_id: int, outcome: str, *, error: str | Non
         status = outcome
         if outcome == "failed" and j and j["attempts"] < j["max_attempts"] and (error or "").startswith("环境："):
             status = "queued"      # 环境类故障（断网、库连不上）换个会话再试；配置或代码错不重试
+        # 退回排队的隔 5×已领次数 分钟再领，且优先让别的执行方领（见 _CLAIM 排序）
         conn.execute(
             "UPDATE jobs.job SET status=%s, error=%s, updated_at=now(), finished_at=CASE WHEN %s='queued'"
-            " THEN NULL ELSE now() END, stage=CASE WHEN %s='queued' THEN NULL ELSE stage END WHERE id=%s",
-            (status, error, status, status, job_id))
+            " THEN NULL ELSE now() END, stage=CASE WHEN %s='queued' THEN NULL ELSE stage END,"
+            " run_after=CASE WHEN %s='queued' THEN now() + make_interval(mins => %s * attempts) END WHERE id=%s",
+            (status, error, status, status, status, RETRY_BACKOFF_MIN, job_id))
         _event(conn, job_id, attempt_id, "finish", {"succeeded": "完成", "failed": "失败", "blocked": "拦下（检查没过）",
                                                      "cancelled": "已停", "queued": "失败，退回排队重试"}[status]
                + (f"：{error}" if error else ""), level="info" if status == "succeeded" else "warn")

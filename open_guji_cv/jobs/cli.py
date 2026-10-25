@@ -154,6 +154,8 @@ def _line(j: dict) -> str:
     where = f" @{j.get('worker')}" if j["status"] == "running" and j.get("worker") else ""
     stage = f" [{j['stage']}]" if j["status"] == "running" and j.get("stage") else ""
     pri = f" p{j['priority']}" if j["status"] == "queued" and j["priority"] != 100 else ""
+    if j["status"] == "queued" and j.get("run_after"):
+        pri += f" 冷却到 {_fmt_time(j['run_after'])}（第 {j['attempts']} 次环境失败后）"
     return (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j['book'] or '-'):<6} "
             f"{SP.summary(sp)}{pri}{stage}{where}  {j['submitted_by']} {_fmt_time(j['created_at'])}")
 
@@ -250,9 +252,9 @@ def cmd_job(a) -> None:
                 continue
             st = {"idle": "空闲", "busy": f"在跑 #{w['job_id']}", "stopped": "已停"}[w["state"]] if w["online"] or \
                 w["state"] == "stopped" else "离线"
-            print(f"{'●' if w['online'] else '○'} {w['name']:<14} {st:<10} 跑完 {w['done']} 条  "
+            print(f"{'●' if w['online'] else '○'} {w['name']:<14} {st:<10} 领过 {w['done']} 条  "
                   f"上线 {_fmt_time(w['started_at'])}  最近 {_fmt_time(w['seen_at'])}  runner {w.get('runner') or '?'}"
-                  f"  {w.get('session') or ''}")
+                  f"  {w.get('session') or ''}" + (f"\n    ⚠ {w['note']}" if w["online"] and w.get("note") else ""))
         if not any(w["online"] for w in rows):
             print("（没有在线的执行方）")
     elif act == "cancel":
