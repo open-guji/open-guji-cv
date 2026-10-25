@@ -129,3 +129,14 @@ def test_status_done_when_all_voted_or_idle(tmp_path, monkeypatch):
     assert pc.sheet_status(ws, "vol06", share=0.5, idle_min=3)["done"] is True
     monkeypatch.setattr(pc.rp, "old_rev_votes", lambda ws_, t, r: ([v("1:1:1", 5), v("1:1:2", 1)], "测试"))
     assert pc.sheet_status(ws, "vol06")["why"] == "全投完"
+
+
+def test_merge_recheck_adds_and_overrides(tmp_path):
+    dst, extra = tmp_path / "recheck.tsv", tmp_path / "extra.tsv"
+    dst.write_text(pc.RECHECK_HEAD + "4:4:6\t机器改判\t\t\t\n9:6:10\t旧说明\t\t\t\n", encoding="utf-8")
+    extra.write_text(pc.RECHECK_HEAD + "vol06:9:6:10\t重标疑为「日」\tevt_x\t曰\t2026-10-24T02:01:33Z\n"
+                     "18:1:3\t重标疑为「日」\tevt_y\t曰\t2026-10-24T02:01:33Z\n", encoding="utf-8")
+    assert pc.merge_recheck(dst, extra) == 2
+    rows = [ln.split("\t") for ln in dst.read_text(encoding="utf-8").splitlines()[1:]]
+    assert [r[0] for r in rows] == ["4:4:6", "9:6:10", "18:1:3"]
+    assert rows[1][1:4] == ["重标疑为「日」", "evt_x", "曰"]
