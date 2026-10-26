@@ -14,9 +14,14 @@
     删         新图上没有对应的格（含没对上的页、重拍页）
     IoU低      配上了但 IoU < 门槛（缺省 0.5）
     合并冲突   两个旧格配到同一个新格，且裁决不同
+    旧绑定失效 给了旧 main 绑定（``--bind``）而这条在旧 main 上没认上格（review／void／unanchored）
+
+给了旧 main 绑定时按**绑定格**查表（rebound 的原始 key 偏一格）。迁出的事件没有框，新包首跑前要给它们写补锚档
+``feedback/anchors/<册>.jsonl``（ai-team ``…/siku-qiefen-v2/scripts/mk_anchors.py``），否则字形库里没有当时图块的
+（网站票等）在新包上判 ``unanchored`` 被丢（vol04 10-26 首跑 100 条）。
 
 新事件（人裁）：id、批次名各加 ``~q``（seq、ts 不变，「后到覆盖」的次序保持）；``target.key/page/col/slot`` 换成新格；
-``target.anchor`` 只写 ``migrated_from``（旧格键、旧事件 id）和 ``source_rev``（新页表 rev），**不带框与图块凭证**——
+``target.anchor`` 只写 ``migrated_from``（旧格键、旧事件 id，改绑过的另记 ``bound``）和 ``source_rev``（新页表 rev），**不带框与图块凭证**——
 写入时 ``enrich_events`` 按新产物补 bbox／content_sha，旧的 evidence 指纹换图后必然对不上，故意不带。
 ``payload.overrides`` 指向的旧事件若也迁了就改指新 id，否则去掉。旧事件不删。
 
@@ -136,10 +141,18 @@ def _label(payload: dict) -> str:
 
 
 def migrate_events(events, rows: list[Row], book: str, source_rev: str, *, min_iou: float = MIN_IOU,
-                   result: Result | None = None) -> Result:
+                   result: Result | None = None, bindings: dict[str, dict] | None = None) -> Result:
+    """``bindings``：旧 main 上的现行绑定 ``{事件 id: {bound, status}}``（`bindings.book_bindings`）。给了就按
+    **绑定格**查表——rebound 的事件原始 key 偏了一格，按 key 迁会落到邻格（vol04 10-26 有 7 条）；
+    旧 main 上没认上格的（review／void／unanchored）本来就没采信，不迁，列进待审。"""
     res = result or Result(book, str(source_rev), min_iou)
     look = _lookup(rows, book, min_iou)
-    evs = list(events)
+    evs = []
+    for e in events:
+        if (e.target.anchor or {}).get("migrated_from"):
+            res.ignored["已是迁移事件（新页号）"] += 1     # 数据目录里已有上一轮迁出的 ~q 事件，不再迁
+        else:
+            evs.append(e)
     latest = latest_human(evs)
     keep = {e.id for e in latest.values()}
     for e in evs:
@@ -153,10 +166,22 @@ def migrate_events(events, rows: list[Row], book: str, source_rev: str, *, min_i
     res.n_events_in += len(latest)
 
     by_new: dict[str, list[tuple[Event, Row]]] = defaultdict(list)
+    src: dict[str, str] = {}
     for e in sorted(latest.values(), key=lambda e: (e.ts, e.batch, e.seq)):
-        r, why, detail = look(e.target.key)
+        k = e.target.key
+        if bindings is not None and e.id in bindings:
+            from .bindings import usable
+            b = bindings[e.id] or {}
+            u = usable(b) if "status" in b else b.get("bound")
+            if not u:
+                res.pending.append(Pending("人裁", k, "旧绑定失效",
+                                           f"{_label(e.payload)}（{e.id}）；旧 main 上 {b.get('status')}，本来就没采信"))
+                continue
+            k = u
+        src[e.id] = k
+        r, why, detail = look(k)
         if why:
-            res.pending.append(Pending("人裁", e.target.key, why, f"{_label(e.payload)}（{e.id}）；{detail}"))
+            res.pending.append(Pending("人裁", k, why, f"{_label(e.payload)}（{e.id}）；{detail}"))
             continue
         by_new[r.new].append((e, r))
 
@@ -165,7 +190,12 @@ def migrate_events(events, rows: list[Row], book: str, source_rev: str, *, min_i
         win_e, win_r = group[-1]
         losers = []
         for e, r in group[:-1]:
-            if same_verdict(e.payload, win_e.payload):
+            if src[e.id] == src[win_e.id]:
+                # 改绑后与更晚的事件落在旧 main 的同一格：旧 main 上就是后到覆盖（bindings R1），不算冲突
+                res.ignored["被同格更晚的人裁盖掉"] += 1
+                res.n_events_in -= 1
+                res.id_map[e.id] = win_e.id + SUFFIX
+            elif same_verdict(e.payload, win_e.payload):
                 res.n_merged += 1                     # 同一个裁决落到同一格，留最晚那条
                 res.id_map[e.id] = win_e.id + SUFFIX
             else:
@@ -173,10 +203,10 @@ def migrate_events(events, rows: list[Row], book: str, source_rev: str, *, min_i
         for e, r in losers:
             res.pending.append(Pending("人裁", e.target.key, "合并冲突",
                                        f"{_label(e.payload)}（{e.id}）与 {win_e.target.key} 的 {_label(win_e.payload)} 同配到 {new_key}"))
-        res.events.append(_new_event(win_e, new_key, source_rev, win_r))
+        res.events.append(_new_event(win_e, new_key, source_rev, win_r, bound=src[win_e.id]))
         res.id_map[win_e.id] = win_e.id + SUFFIX
         if win_r.char_changed:
-            res.watch.append((win_e.target.key, new_key, win_r.old_char, win_r.new_char, _label(win_e.payload)))
+            res.watch.append((src[win_e.id], new_key, win_r.old_char, win_r.new_char, _label(win_e.payload)))
             res.n_watch_events += 1
 
     for d in res.events:                              # overrides 指向的旧事件迁了就换新 id，没迁就去掉
@@ -189,11 +219,14 @@ def migrate_events(events, rows: list[Row], book: str, source_rev: str, *, min_i
     return res
 
 
-def _new_event(e: Event, new_key: str, source_rev: str, r: Row) -> dict:
+def _new_event(e: Event, new_key: str, source_rev: str, r: Row, bound: str | None = None) -> dict:
     pk = parse_cell_key(new_key)
     d = e.model_dump(mode="json")
     t = d["target"]
-    t["anchor"] = {"migrated_from": {"key": e.target.key, "id": e.id}, "source_rev": str(source_rev)}
+    mf = {"key": e.target.key, "id": e.id}
+    if bound and bound != e.target.key:
+        mf["bound"] = bound                          # 旧 main 上改绑到的格（按它查的表）
+    t["anchor"] = {"migrated_from": mf, "source_rev": str(source_rev)}
     t["key"] = new_key
     if pk is not None:
         t["book"], t["page"], t["col"], t["slot"] = pk[0], pk[1], pk[2], pk[3]
