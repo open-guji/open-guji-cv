@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-guji-cv"
-version = "0.5.22"
+version = "0.5.23"
 description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -36,6 +36,8 @@ dependencies = [
     "jsonschema>=4.0",
     # 读字体 cmap：glyph-db import-font、字表构建要用（原先只在 dev 里）
     "fontTools>=4.0",
+    # guji book split 往返读写册 yaml、保留注释（core/book_split.py，#634 起）
+    "ruamel.yaml>=0.17",
 ]
 
 [project.optional-dependencies]
