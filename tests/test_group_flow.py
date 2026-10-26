@@ -30,14 +30,14 @@ class Rec:
 
 
 def _cfg(**kw):
-    return FlowConfig(groups=("zhi", "mn", "jys", "rr"), **kw)
+    return FlowConfig(groups=("zhi", "dian", "jys", "rr"), **kw)
 
 
 # —— 注册表 ——
 
 def test_flow_groups_declared_and_valid():
     flows = {g for g, s in GROUPS.items() if s.flow}
-    assert {"mn", "dian", "can", "chen", "li", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
+    assert {"dian", "can", "chen", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
     check_groups(tuple(flows))
     with pytest.raises(ValueError):
         check_groups(("nope2",))        # 没注册
@@ -56,7 +56,7 @@ def test_entry_lift_needs_near_candidates_and_ref_in_group():
     assert entry(r, [("㫖", 0.98), ("指", 0.90)], None, cfg) == ("zhi", "lift")         # 远的第二名不挡
     assert entry(r, [("㫖", 0.98)], "指", cfg) is None                                  # 整理本字在组外
     assert entry(r, [("㫖", 0.80)], None, cfg) is None                                  # cov 太低
-    assert entry(r, [("點", 0.99)], None, cfg) is None                                  # 组没点名
+    assert entry(r, [("慎", 0.99)], None, cfg) is None                                  # 组没点名
 
 
 def test_entry_tolerates_declared_outsiders_only():
@@ -132,7 +132,7 @@ def test_entry_ref_free_group_ignores_ref():
 def test_entry_review_only_for_review_groups_and_never_human():
     cfg = _cfg()
     assert entry(Rec("a", "己", True, "context"), [], None, cfg) == ("jys", "review")
-    assert entry(Rec("a", "𫎇", True, "match_ref"), [], None, cfg) is None              # 没有字形判法的异体组不复核
+    assert entry(Rec("a", "點", True, "match_ref"), [], None, cfg) is None              # 没有字形判法的异体组不复核
     assert entry(Rec("a", "㫖", True, "match_ref"), [], None, cfg) == ("zhi", "review")  # 按刻形复核（SHAPE_REVIEW）
     assert entry(Rec("a", "己", True, "human", "human"), [], None, cfg) is None
     assert entry(Rec("a", "己", False, None, "human"), [("己", 0.99)], None, cfg) is None
@@ -192,12 +192,12 @@ def test_freq_table_roundtrip_and_build(tmp_path):
 
 def test_pass_lift_review_and_evidence():
     seq = [Rec("a"), Rec("b", "人", True, "context"), Rec("c"), Rec("d", doubts=["occluded"])]
-    cands = {"a": [("𫎇", 0.98), ("蒙", 0.975)], "c": [("𫎇", 0.95), ("蒙", 0.949)], "d": [("𫎇", 0.99)]}
+    cands = {"a": [("點", 0.98), ("㸃", 0.975)], "c": [("點", 0.95), ("㸃", 0.949)], "d": [("點", 0.99)]}
     res = group_flow_pass(seq, {}, lambda cid: cands.get(cid, []),
                           lambda r: "occluded" in r.doubts, _cfg())
     a, b, c, d = seq
-    assert a.admit and a.channel == "group_flow" and a.char == "𫎇" and a.provenance == "match"
-    assert a.evidence["group"]["decision"] == "admit" and a.evidence["group"]["id"] == "mn"
+    assert a.admit and a.channel == "group_flow" and a.char == "點" and a.provenance == "match"
+    assert a.evidence["group"]["decision"] == "admit" and a.evidence["group"]["id"] == "dian"
     assert not c.admit and "group_flow_abstain" in c.doubts and c.evidence["group"]["decision"] == "review"
     assert "group" not in d.evidence                         # 硬护栏不进
     assert b.admit and b.evidence["group"]["mode"] == "review"   # 入人八：没有文意窗口、没有字块，弃权 → 不动
@@ -377,13 +377,13 @@ def _run(tmp_path, monkeypatch, cands, params=None):
 
 
 def test_seed_admit_default_off_and_params_hidden(tmp_path, monkeypatch):
-    assert not _run(tmp_path, monkeypatch, [("𫎇", 0.98), ("蒙", 0.975)]).admit
+    assert not _run(tmp_path, monkeypatch, [("點", 0.98), ("㸃", 0.975)]).admit
     assert not any(k.startswith("group_flow") for k in SeedAdmitParams().model_dump())
 
 
 def test_seed_admit_group_flow_lifts(tmp_path, monkeypatch):
-    r = _run(tmp_path, monkeypatch, [("𫎇", 0.98), ("蒙", 0.975)], {"group_flow": ("mn",)})
-    assert r.admit and r.channel == "group_flow" and r.char == "𫎇"
+    r = _run(tmp_path, monkeypatch, [("點", 0.98), ("㸃", 0.975)], {"group_flow": ("dian",)})
+    assert r.admit and r.channel == "group_flow" and r.char == "點"
     assert r.evidence["group"]["solvers"][-1]["solver"] == "top1"
 
 
@@ -441,7 +441,7 @@ def test_entry_joint_when_close_candidates_span_overlapping_groups():
     assert entry(r, three, None, cfg) == ("ry", "joint")
     assert entry(r, [("曰", 0.98), ("目", 0.975), ("日", 0.97)], "曰", cfg) == ("ry", "joint")
     assert entry(r, three, "白", cfg) is None                                   # 整理本字不在并集里
-    assert entry(r, three + [("師", 0.971)], None, cfg) is None                  # 组外字紧咬
+    assert entry(r, three + [("白", 0.971)], None, cfg) is None                  # 组外字紧咬
     assert entry(r, three, None, FlowConfig(groups=("ry",), joint=True)) is None  # 共字组没点名
     assert entry(r, [("日", 0.98), ("曰", 0.975)], None, cfg) == ("ry", "lift")  # 单组装得下照旧
 
@@ -479,6 +479,61 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_abstain" in r.doubts
 
 
+
+def test_rm_other_hands_off_to_ry(monkeypatch):
+    """库分差内只有日目（曰 cov 0）→ 格进 rm；rm 明说「其他」(high) 时交 ry 联判，ry 给曰才放（vol13 99:8:18「子女子曰」）。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+
+    def solve(name, g, r, *a, **k):
+        ch, why, *extra = out[(g, name)]
+        return GroupVerdict(ch, why=why, via=name, extra=extra[0] if extra else {})
+    monkeypatch.setattr(flow, "_solve", solve)
+    cfg = FlowConfig(groups=("ry", "rm"), joint=True)
+    two = [("日", 0.999), ("目", 0.97)]
+
+    def run(ry, rm):
+        out.update({("ry", "ctx"): ry, ("ry", "ry_shape"): (None, "abstain:aspect"), ("rm", "ctx"): rm})
+        r = Rec("x")
+        group_flow_pass([r], {}, lambda cid: two, lambda r: False, cfg)
+        return r
+    r = run(("曰", "agree"), (None, "abstain:other", {"other_conf": "high"}))
+    assert r.admit and r.char == "曰" and r.evidence["group"]["id"] == "ry"
+    assert "handoff" in [t["solver"] for t in r.evidence["group"]["solvers"]]
+    for ry, rm in ((("日", "agree"), (None, "abstain:other", {"other_conf": "high"})),     # 日在 rm 里，rm 已说不是
+                   (("曰", "agree"), (None, "abstain:other", {"other_conf": "low"})),
+                   ((None, "abstain:low_conf"), (None, "abstain:other", {"other_conf": "high"}))):
+        r = run(ry, rm)
+        assert not r.admit and r.evidence["group"]["id"] == "rm"
+
+
+def test_ry_strong_ctx_overrides_ref_and_l1_with_strong_table_fixes(monkeypatch):
+    """日曰：文意 strong 时补放不受整理本拦（ref_dissent）；L1 规则的字与 strong 表一致才记 strong（可改字）。"""
+    from open_guji_cv.groups import flow, methods
+    from open_guji_cv.groups.methods import CtxRule, Llm, MethodInput
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        *out[name][:1], why="agree", via=name, extra=out[name][1] if len(out[name]) > 1 else {}))
+    cfg = FlowConfig(groups=("ry",), lift_ref_guard=True)
+    cands = [("日", 0.99), ("曰", 0.98)]
+    for strong, admit in ((True, True), (False, False)):
+        out.update(ctx=("日", {"strong": True} if strong else {}), ry_shape=(None,))
+        r = Rec("x")
+        group_flow_pass([r], {"x": ("曰", None)}, lambda cid: cands, lambda r: False, cfg)
+        assert r.admit is admit and (admit or "group_flow_ref_dissent" in r.doubts)
+    monkeypatch.setattr(CtxRule, "_run", lambda self, inp: GroupVerdict("日", why="agree", via="ctx:ctx_l1"))
+    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l2", extra={"strong": True}),
+           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l2"),
+           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l2", extra={"strong": True})}
+    monkeypatch.setattr(Llm, "applies", lambda self, inp: True)
+    monkeypatch.setattr(Llm, "_run", lambda self, inp: tab[inp.cell_id])
+    for cid, want in (("s", True), ("w", None), ("o", None)):
+        inp = MethodInput(group="ry", members=frozenset("日曰"), cell_id=cid, cands=[], ref=None, cfg=FlowConfig(groups=("ry",)))
+        v = methods.CTX.run(inp)
+        assert v.char == "日" and v.extra.get("strong") is want
+
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
 
 
@@ -503,3 +558,120 @@ def test_yr_flow_bars_and_ref_veto(monkeypatch):
     r = Rec("z")
     group_flow_pass([r], {"z": ("一", "=")}, cands, lambda r: False, cfg)
     assert not r.admit and "group_flow_ref_dissent" in r.doubts                 # 整理本作一 → 不补
+
+
+def test_tolerate_ref_agree_shi_yu(monkeypatch):
+    """形近护栏 N 类（A24 10-26）：日曰 被 師 的一个旧切分刻例挡、于千子 被 亍 挡。陪衬放进门，但分差内有陪衬字的格
+    补放须与整理本同字；分差内没有陪衬字的格照旧。"""
+    import open_guji_cv.groups.flow as FL
+    assert "師" in GROUPS["ry"].flow.tolerate and GROUPS["ry"].flow.tolerate_ref_agree
+    assert "亍" in GROUPS["zy"].flow.tolerate and GROUPS["zy"].flow.tolerate_ref_agree
+    cfg = FlowConfig(groups=("ry", "rm", "zy", "yz"))
+    assert entry(Rec("a"), [("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", cfg) == ("ry", "lift")   # 首位是陪衬，按整理本进
+    assert entry(Rec("a"), [("曰", 0.999), ("師", 0.998)], "曰", cfg) == ("ry", "lift")
+    assert entry(Rec("a"), [("師", 0.999), ("曰", 0.998)], "師", cfg) is None                         # 整理本作 師：不进
+    assert entry(Rec("a"), [("千", 0.997), ("于", 0.996), ("亍", 0.987)], "于", cfg) == ("zy", "lift")
+    assert entry(Rec("a"), [("亍", 0.997), ("于", 0.996)], "于", cfg) == ("zy", "lift")
+
+    def fake(ch):
+        return lambda g, r, cands, ref, cfg, *a, **k: (ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree"},
+                                                                 {"solver": "ry_shape", "char": ch, "why": "agree"}])
+
+    def run(cands, ref, ch):
+        monkeypatch.setattr(FL, "decide", fake(ch))
+        r = Rec("a")
+        group_flow_pass([r], {"a": (ref, "=")}, lambda cid: cands, lambda r: False, cfg)
+        return r
+    r = run([("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", "日")
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts                                   # 陪衬带进来、与整理本不同字：留人审
+    r = run([("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", "曰")
+    assert r.admit and r.char == "曰"
+    r = run([("曰", 0.999), ("日", 0.998)], "曰", "日")
+    assert r.admit and r.char == "日"                                                            # 没有陪衬字的格照旧
+def test_rr_ctx_over_image(monkeypatch):
+    """入人八 `ctx_over`：文意够硬（L2 strong 或 L1 规则）时字形方法的异议只当弱票，补放、复核都照文意；文意不硬照旧冲突。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks, ext = {}, {}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        picks[name], via=ext.get(name, (name, {}))[0], extra=ext.get(name, (name, {}))[1]))
+    cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
+    for e, lifted in (({"ctx": ("ctx_l2", {"strong": True})}, True),
+                      ({"ctx": ("ctx:ctx_l1", {})}, True),
+                      ({"ctx": ("ctx_l2", {"runs": 3})}, False)):
+        picks.clear(); picks.update({"ctx": "入", "rr_img": "八", "ids": "八"}); ext.clear(); ext.update(e)
+        r = Rec("x")
+        group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+        assert r.admit is lifted and (r.char == "入") is lifted, e
+        if lifted:
+            assert r.evidence["group"]["solvers"][-1] == {"solver": "ctx_over", "char": None, "why": "overruled",
+                                                          "weak": ["rr_img", "ids"]}
+        else:
+            assert "group_flow_conflict" in r.doubts
+    # 复核：放行字 八（整理本错）、文意 strong 说 入、HOG 也说 八 → ctx_over 后照文意改字（review_fix_strong）
+    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    r = Rec("y", "八", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "入" and r.evidence["group"]["decision"] == "fix"
+    # 文意不 strong：照常降审，不改字
+    ext.update({"ctx": ("ctx_l2", {"runs": 1})})
+    r = Rec("w", "八", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert not r.admit and r.char == "八" and "group_flow_disagree" in r.doubts
+    ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    # 复核：放行字 入、文意 strong 说 入、HOG 说 八 → 不降
+    r = Rec("z", "入", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert r.admit and r.evidence["group"]["decision"] == "keep"
+
+
+def test_rr_img_only_lift_respects_ref(monkeypatch):
+    """入人八 `lift_img_ref_veto`：文意没给字、只有字形给字，整理本是组里另一个字 → 不补放；整理本同字或缺位照常补放。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ctx": None, "rr_img": None, "ids": "八"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
+    r = Rec("a")
+    group_flow_pass([r], {"a": ("入", "=")}, cands, lambda r: False, _cfg())
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = Rec("b")
+    group_flow_pass([r], {"b": ("八", "=")}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "八"
+    picks.update(ctx="八")
+    r = Rec("c")
+    group_flow_pass([r], {"c": ("入", "=")}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "八"                    # 文意也给了这个字：不归本开关管（沿用 lift_ref_guard）
+# —— 同一刻法几个码位（`FlowSpec.ref_canon`／`review_ref_agree`，隸𨽾，A24 2026-10-26）——
+
+_CP = {"𨽾": "隷", "𨽻": "隷", "䝉": "𫎇"}
+
+
+def _canon(c):
+    return _CP.get(c, c)
+
+
+def test_ref_canon_entry_and_review_by_codepoints():
+    cfg = FlowConfig(groups=("li", "mn"))
+    r = Rec("a")
+    # 整理本 隷／𨽻 不是组员，按书级码位归一后与 𨽾 同字：进组
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg, _canon) == ("li", "lift")
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) is None                    # 不给码位照旧拦
+    assert entry(r, [("𫎇", 0.98)], "䝉", cfg, _canon) == ("mn", "lift")
+    # 已放行 隷（别的通道）也复核
+    assert entry(Rec("b", "隷", True, "match_ref"), [], "隷", cfg, _canon) == ("li", "review")
+
+
+def test_review_same_shape_keeps_and_ref_dissent_demotes(monkeypatch):
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    pick = {"x": "𨽾", "y": "𨽾", "z": "隸"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(pick[r.id], via=name))
+    x = Rec("x", "隷", True, "match_ref")       # 判出 𨽾、放行 隷：同一刻法两码位，不动
+    y = Rec("y", "𨽾", True, "match_ref")       # 判出 𨽾、整理本 隸：降审（整理本说是另一形）
+    z = Rec("z", "𨽾", True, "match_ref")       # 判出 隸＝整理本：改字
+    amap = {"x": ("隷", "equal"), "y": ("隸", "equal"), "z": ("隸", "equal")}
+    group_flow_pass([x, y, z], amap, lambda cid: [], lambda r: False, FlowConfig(groups=("li",)), canon=_canon)
+    assert x.admit and x.char == "隷" and x.evidence["group"]["decision"] == "keep"
+    assert not y.admit and "group_flow_ref_dissent" in y.doubts
+    assert z.admit and z.char == "隸" and z.evidence["group"]["decision"] == "fix"
