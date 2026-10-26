@@ -226,7 +226,8 @@ def cmd_migrate(args) -> None:
         events = [e for e in EventLog(feedback_root()).iter_all(raw=True)   # 迁移读旧页号的事件：不过页表 rev 判据
                   if e.target.key.startswith(args.book + ":")]
         where = f"数据目录 {feedback_root()}"
-    res = M.migrate_events(events, rows, args.book, args.source_rev, min_iou=args.min_iou)
+    bindings = json.loads(Path(args.bind).read_text(encoding="utf-8")) if args.bind else None
+    res = M.migrate_events(events, rows, args.book, args.source_rev, min_iou=args.min_iou, bindings=bindings)
     if args.site_book and args.rev:
         raw, vwhere = _votes(args)
         votes, _ = latest_votes(raw, args.site_book, args.rev)
@@ -262,6 +263,8 @@ def add_parser(sub) -> None:
     p.add_argument("--cells", default=None, help="migrate：格级对照表 old_new_cells/<册>.tsv（可 .gz）；旧格取出单那一版")
     p.add_argument("--events", action="append", default=None, help="migrate：旧人裁事件 jsonl（可重复）；缺省读数据目录")
     p.add_argument("--source-rev", default=None, help="migrate：新页表 rev，写进迁移事件 anchor.source_rev")
+    p.add_argument("--bind", default=None, help="migrate：旧 main 上的现行绑定 JSON（{事件 id: {bound, status}}，"
+                                                "`bindings.book_bindings` 的输出）；给了就按绑定格查表，没认上格的不迁")
     p.add_argument("--min-iou", type=float, default=0.5, help="migrate：IoU 门槛，低于它的不迁（缺省 0.5）")
     p.add_argument("--new-rev", default=None, help="migrate：迁出的票改写成这个待审单 rev（缺省不改）")
     p.add_argument("--no-consume", action="store_true", help="write：只写不消费")

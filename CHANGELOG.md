@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `guji cellvotes migrate --bind <旧 main 绑定 JSON>`（GUJI-748）：按旧 main 的**绑定格**查格级表（rebound 的原始 key 偏一格，vol04 有 7 条落到邻格），旧 main 上没认上格的不迁、列「旧绑定失效」；改绑后与同格更晚人裁重合算被盖掉、不列冲突；数据目录里已迁过的 `~q` 事件不再迁。迁出的事件 `migrated_from` 另记 `bound`。
 - 四庫 vol04 换 siku-qiefen-v2 图源（GUJI-748）：`split_table_siku.json` 去掉 vol04 旧图合扫拆页 4 行（新图一页一图），`meta_vol04.json` 快照说明改为新图源。
 - `scripts/rerun_prep.sh` 人裁自检：换图源的册（yaml 钉了 `source_rev`）本机产物的页表 rev 不符时按「还没有切分产物」跳过绑定自检（GUJI-748；vol04 首跑 #255 在执行机旧图产物上认新页号人裁，报 26 条认不出而失败）。不动 Step。
 
