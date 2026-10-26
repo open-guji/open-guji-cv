@@ -144,8 +144,20 @@ def publish(db, *, force: bool = False, dry: bool = False) -> dict | None:
             return table
         db(_put, table, f"在跑 {running}、排队 {queued}")
         return table
-    except Exception:       # noqa: BLE001 —— 看板写不上不能拖垮执行方；进展以任务库为准
+    except Exception as e:      # noqa: BLE001 —— 看板写不上不能拖垮执行方；进展以任务库为准，但原因要留下来
+        _report(db, f"看板写不上：{type(e).__name__}: {str(e)[:150]}")
         return None
+
+
+def _report(db, msg: str) -> None:
+    """把失败原因写进本执行方的 note（guji job workers 能看到）并打到日志；再失败就算了。"""
+    import sys
+    from . import store as S
+    print(f"[board] {msg}", file=sys.stderr, flush=True)
+    try:
+        db(lambda c: c.execute("UPDATE jobs.worker SET note=%s WHERE name=%s", (msg, S.who())))
+    except Exception:       # noqa: BLE001
+        pass
 
 
 def _put(conn, table: dict, text: str) -> None:
