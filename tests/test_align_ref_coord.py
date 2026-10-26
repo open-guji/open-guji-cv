@@ -236,3 +236,31 @@ def test_merge_rescue_never_touches_columns_that_match_one_to_one():
     (ln,) = C.parse_lines("元許衡撰")
     r = C.coord_column([_cu(s, s + 2.0, "某") for s in range(1, 5)], ln)
     assert r.ok and not r.merged
+
+
+# ── 印章页借邻页定位（coord_neighbor，2026-10-26 A32）─────────────────
+def test_neighbor_map_takes_previous_leaf_head_of_next_page(tmp_path, monkeypatch):
+    """本页载体全是乱码、定不了位置：后一页锚上第 3 个半叶，本页就是第 2 个半叶，第 c 列对第 c 行。"""
+    from open_guji_cv.steps import align_ref as A
+    body = _uniq_lines(27)
+    raw = "".join(f"#@ 000{k} h\n" + "\n".join(body[k * 9:(k + 1) * 9]) + "\n" for k in range(3))
+    corpus = tmp_path / "grid.txt"
+    corpus.write_text(raw, encoding="utf-8")
+    lines, starts = C.ref_lines(str(corpus))
+    text = A._corpus_text(str(corpus))
+    garbage = [(c, "龘龘龘龘") for c in range(1, 10)]
+    assert A._locate(garbage, lines, starts, text, str(corpus), grid=True)[0] is None
+    nb_carriers = [(c, body[18 + c - 1]) for c in range(1, 10)]
+    monkeypatch.setattr(A, "_page_carriers", lambda m, o, r: (None, [], m))
+    pm = A._neighbor_map(garbage, lines, starts, text, str(corpus), lambda: iter([(1, nb_carriers, None)]))
+    assert pm is not None and pm.base == 9 and pm.col_line == {c: 8 + c for c in range(1, 10)}
+    assert "后一页" in pm.note
+    pm = A._neighbor_map(garbage, lines, starts, text, str(corpus),
+                         lambda: iter([(-1, [(c, body[c - 1]) for c in range(1, 10)], None)]))
+    assert pm is not None and pm.base == 9
+    # 邻页也锚不上 → None，照旧报定不了位置
+    assert A._neighbor_map(garbage, lines, starts, text, str(corpus), lambda: iter([(1, garbage, None)])) is None
+
+
+def test_coord_neighbor_in_params_dump():
+    assert AlignRefParams(corpus="x").model_dump()["coord_neighbor"] is True

@@ -263,12 +263,37 @@ HR_TEXT_ROWS = 0.4
 HR_TEXT_WALL = 0.5
 HR_TEXT_WALL_OUT = 70
 HR_TEXT_PAD = 8
+#: 抬头框探测的**像素尺度**（2026-10-26，GUJI-748）。上面这些 HR_* 长度常数全是在殿本旧图（列距约 185px）上量的
+#: 绝对像素；换图源 siku-qiefen-v2 之后图缩到约 0.70 倍（缩放 0.66–0.79），常数没跟着缩，抬头框整片认不出：
+#: vol07 新 p43 粗外框半高宽 11~12（卡在细线上限 10 与粗条下限 15 的缝里），内边框／抬头字离主上边框 56~79px
+#: （够不上 HR_DIST_MIN 75），五列抬头一列没认。`scale` 由调用方按册给（`border_detect.head_raise_scale`，
+#: 册 yaml 里与 bottom_gap、period_prior 乘同一个缩放比）；1.0 时取的就是上面这组原值，产物逐位不变。
+#: 墨占比、覆盖率这类比例量不随尺度变，不缩；局部极大值半径、墙线条宽、扫描步长是采样粒度，也不缩。
+HR_SCALE_LENGTHS = ("HR_BAND_ABOVE", "HR_BAND_MARGIN", "HR_THIN_WD_MAX", "HR_FAT_WD_MIN", "HR_FAT_WD_MAX",
+                    "HR_PAIR_MIN", "HR_PAIR_MAX", "HR_DIST_MIN", "HR_DIST_MAX", "HR_CLUSTER_DY",
+                    "HR_WALL_SEARCH", "HR_DEFAULT_PAIR_GAP", "HR_EXTEND_SKIP", "HR_TEXT_WALL_OUT", "HR_TEXT_PAD")
 
 
-def _raised_text_top(binm: np.ndarray, btop: float, xl: int, xr: int) -> float | None:
+class _HRGeom:
+    """按尺度换算过的 HR_* 长度常数。`scale == 1.0` 时每个值都是模块常数原样（int），不做任何运算。"""
+
+    def __init__(self, scale: float = 1.0):
+        self.scale = float(scale)
+        g = globals()
+        for name in HR_SCALE_LENGTHS:
+            v = g[name]
+            setattr(self, name[3:], v if self.scale == 1.0 else int(round(v * self.scale)))
+        self.TEXT_BAND = HR_TEXT_BAND if self.scale == 1.0 else \
+            tuple(int(round(v * self.scale)) for v in HR_TEXT_BAND)
+        self.DEDUP_DY = 12.0 if self.scale == 1.0 else 12.0 * self.scale
+
+
+def _raised_text_top(binm: np.ndarray, btop: float, xl: int, xr: int,
+                     geom: _HRGeom | None = None) -> float | None:
     """字凸出判据（见 HR_TEXT_BAND）：这一列算抬头就返回抬头字的上沿 − HR_TEXT_PAD，否则 None。"""
+    g = geom or _HRGeom()
     h, w = binm.shape
-    y0, y1 = int(btop - HR_TEXT_BAND[0]), int(btop - HR_TEXT_BAND[1])
+    y0, y1 = int(btop - g.TEXT_BAND[0]), int(btop - g.TEXT_BAND[1])
     m = (xr - xl) // 4
     if y0 < 0 or xr - xl < 20:
         return None
@@ -284,18 +309,19 @@ def _raised_text_top(binm: np.ndarray, btop: float, xl: int, xr: int) -> float |
         return None
     wall = 0.0
     for x0, sgn in ((xl, -1), (xr, 1)):
-        for dx in range(-10, HR_TEXT_WALL_OUT + 1, 3):
+        for dx in range(-10, g.TEXT_WALL_OUT + 1, 3):
             xs = int(max(0, min(w - HR_WALL_STRIP_W, x0 + sgn * dx)))
             wall = max(wall, float(binm[y0:y1, xs:xs + HR_WALL_STRIP_W].any(axis=1).mean()))
     if wall < HR_TEXT_WALL:
         return None
-    lo = max(0, int(btop - HR_BAND_ABOVE))
+    lo = max(0, int(btop - g.BAND_ABOVE))
     rows = np.flatnonzero(charlike(binm[lo:y1, xl + m:xr - m]))
-    return float(lo + rows[0] - HR_TEXT_PAD) if len(rows) else None
+    return float(lo + rows[0] - g.TEXT_PAD) if len(rows) else None
 
 
-def _extend_head_raise(per_col: list, curves: list) -> None:
+def _extend_head_raise(per_col: list, curves: list, geom: _HRGeom | None = None) -> None:
     """已认下的抬头列向两侧邻列延伸（见 `detect_head_raise` 第 6 步），原地改 `per_col`。"""
+    g = geom or _HRGeom()
     changed = True
     while changed:
         changed = False
@@ -310,18 +336,19 @@ def _extend_head_raise(per_col: list, curves: list) -> None:
             for ci in local_maxima(curve, radius=3):
                 y, ink = float(lo + ci), float(curve[ci])
                 wd, _ = half_height_score_at(curve, ci)
-                if wd <= HR_THIN_WD_MAX and ink >= HR_EXTEND_INK_MIN \
-                        and min(abs(y - r) for r in refs) <= HR_CLUSTER_DY \
-                        and HR_DIST_MIN <= btop - y <= HR_DIST_MAX and (best is None or ink > best[1]):
+                if wd <= g.THIN_WD_MAX and ink >= HR_EXTEND_INK_MIN \
+                        and min(abs(y - r) for r in refs) <= g.CLUSTER_DY \
+                        and g.DIST_MIN <= btop - y <= g.DIST_MAX and (best is None or ink > best[1]):
                     best = (y, ink)
-            below = curve[int(best[0] - lo) + HR_EXTEND_SKIP:] if best is not None else curve[:0]
+            below = curve[int(best[0] - lo) + g.EXTEND_SKIP:] if best is not None else curve[:0]
             if len(below) and float((below > 0.1).mean()) >= HR_EXTEND_TEXT_ROWS:
-                per_col[i] = dict(col=i + 1, inner_y=best[0], outer_y=best[0] - HR_DEFAULT_PAIR_GAP,
+                per_col[i] = dict(col=i + 1, inner_y=best[0], outer_y=best[0] - g.DEFAULT_PAIR_GAP,
                                   estimated=True, btop=btop, xl=xl, xr=xr)
                 changed = True
 
 
-def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float) -> float:
+def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float,
+               search: int = HR_WALL_SEARCH) -> float:
     """竖直连接墙线的覆盖率：抬头框比主版框高出来的那一截，两侧要有竖墙
     落到主边框上。在 x0 附近 ±HR_WALL_SEARCH 内扫取最好的一条——界行的 x
     来自 find_vertical_lines，vol01/47 那页顶端就系统性偏 13~39px，固定
@@ -331,7 +358,7 @@ def _wall_frac(mask: np.ndarray, y_top: float, y_bottom: float, x0: float) -> fl
     if y_bottom - y_top < 5:
         return 0.0
     best = 0.0
-    for dx in range(-HR_WALL_SEARCH, HR_WALL_SEARCH + 1, 3):
+    for dx in range(-search, search + 1, 3):
         xs = int(max(0, min(w - HR_WALL_STRIP_W, x0 + dx)))
         strip = mask[y_top:y_bottom, xs:xs + HR_WALL_STRIP_W]
         if strip.size:
@@ -368,7 +395,8 @@ def _dedup_peaks(peaks: list[tuple[float, float, float]],
 
 
 def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
-                       width: int, extend: bool = True, text_rule: bool = True) -> list[HeadRaiseBorder]:
+                       width: int, extend: bool = True, text_rule: bool = True,
+                       scale: float = 1.0) -> list[HeadRaiseBorder]:
     """探测抬头框（某几列的版框整体向上抬起一截）。
 
     判据不是"边框上方有字凸出"——那条路走过，9/14/142 三页的"上諭"紧贴
@@ -395,7 +423,10 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     7. 前面都没认下的列，再看字凸出（`text_rule`，2026-10-21，见 `HR_TEXT_BAND`）：主上边框上方有像字的墨、
        旁边有墙线。管只印了粗外框、没有内细线（或连顶线都没有）的抬头框。不是第一句说的那条老路：
        这里去掉了墙线竖条、只数像字的行，而且要有墙。inner_y 取抬头字上沿往上 HR_TEXT_PAD，`estimated=True`。
+
+    `scale`：本页图相对殿本旧图（上面那些像素常数的标定尺度）的缩放比，见 `HR_SCALE_LENGTHS`。缺省 1.0 = 原值。
     """
+    g = _HRGeom(scale)
     h, w = mask.shape
     binm = (mask > 0).astype(np.uint8)
     per_col: list[dict | None] = []
@@ -404,8 +435,8 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
         right_v, left_v = verticals[i], verticals[i + 1]
         x_old = lambda v, y: (width - 1) - v.x_at(y)  # noqa: E731
         btop = float(np.mean([top.y_at(v.x_at(0.0)) for v in (right_v, left_v)]))
-        lo = max(0, int(btop - HR_BAND_ABOVE))
-        hi = max(lo + 20, int(btop - HR_BAND_MARGIN))
+        lo = max(0, int(btop - g.BAND_ABOVE))
+        hi = max(lo + 20, int(btop - g.BAND_MARGIN))
         ym = (lo + hi) / 2.0
         xl = int(max(0, min(x_old(right_v, ym), x_old(left_v, ym))))
         xr = int(min(w, max(x_old(right_v, ym), x_old(left_v, ym))))
@@ -421,35 +452,35 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
             wd, _ = half_height_score_at(curve, ci)
             ink = float(curve[ci])
             y = float(lo + ci)
-            if wd <= HR_THIN_WD_MAX and ink >= HR_THIN_INK_MIN:
+            if wd <= g.THIN_WD_MAX and ink >= HR_THIN_INK_MIN:
                 thin.append((y, ink, wd))
-            elif HR_FAT_WD_MIN <= wd <= HR_FAT_WD_MAX and ink >= HR_FAT_INK_MIN:
+            elif g.FAT_WD_MIN <= wd <= g.FAT_WD_MAX and ink >= HR_FAT_INK_MIN:
                 fat.append((y, ink, wd))
-        thin, fat = _dedup_peaks(thin), _dedup_peaks(fat)
+        thin, fat = _dedup_peaks(thin, g.DEDUP_DY), _dedup_peaks(fat, g.DEDUP_DY)
         if not thin:
             per_col.append(None)
             continue
         inner, outer, estimated = thin[0], None, True
-        above_fat = [f for f in fat if HR_PAIR_MIN <= thin[0][0] - f[0] <= HR_PAIR_MAX]
+        above_fat = [f for f in fat if g.PAIR_MIN <= thin[0][0] - f[0] <= g.PAIR_MAX]
         if above_fat:
             outer, estimated = above_fat[0], False  # 粗条会被拆成上下两个峰，取外沿
-        elif len(thin) >= 2 and HR_PAIR_MIN <= thin[1][0] - thin[0][0] <= HR_PAIR_MAX:
+        elif len(thin) >= 2 and g.PAIR_MIN <= thin[1][0] - thin[0][0] <= g.PAIR_MAX:
             outer, inner, estimated = thin[0], thin[1], False
-        if not (HR_DIST_MIN <= btop - inner[0] <= HR_DIST_MAX):
+        if not (g.DIST_MIN <= btop - inner[0] <= g.DIST_MAX):
             per_col.append(None)
             continue
         per_col.append(dict(
             col=i + 1, inner_y=inner[0],
             outer_y=(_outer_edge(curve, lo, outer[0]) if outer
-                     else inner[0] - HR_DEFAULT_PAIR_GAP),
+                     else inner[0] - g.DEFAULT_PAIR_GAP),
             estimated=estimated, btop=btop, xl=xl, xr=xr))
 
     if extend:
-        _extend_head_raise(per_col, curves)
+        _extend_head_raise(per_col, curves, g)
     blocks: list[list[dict]] = []
     cur: list[dict] = []
     for c in per_col + [None]:
-        if c is not None and (not cur or abs(c["inner_y"] - cur[-1]["inner_y"]) <= HR_CLUSTER_DY):
+        if c is not None and (not cur or abs(c["inner_y"] - cur[-1]["inner_y"]) <= g.CLUSTER_DY):
             cur.append(c)
         else:
             if cur:
@@ -459,8 +490,8 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
     out: list[HeadRaiseBorder] = []
     for blk in blocks:
         wall = max(
-            _wall_frac(binm, blk[0]["inner_y"], blk[0]["btop"], blk[0]["xr"] - HR_WALL_STRIP_W),
-            _wall_frac(binm, blk[-1]["inner_y"], blk[-1]["btop"], blk[-1]["xl"]),
+            _wall_frac(binm, blk[0]["inner_y"], blk[0]["btop"], blk[0]["xr"] - HR_WALL_STRIP_W, g.WALL_SEARCH),
+            _wall_frac(binm, blk[-1]["inner_y"], blk[-1]["btop"], blk[-1]["xl"], g.WALL_SEARCH),
         )
         if wall < HR_WALL_MIN_FRAC:
             continue
@@ -472,9 +503,9 @@ def detect_head_raise(mask: np.ndarray, top: HLine, verticals: list[VLine],
         for i, cv in enumerate(curves):
             if cv is None or i + 1 in got:
                 continue
-            y = _raised_text_top(binm, cv[2], cv[3], cv[4])
+            y = _raised_text_top(binm, cv[2], cv[3], cv[4], g)
             if y is not None:
-                out.append(HeadRaiseBorder(col=i + 1, inner_y=y, outer_y=y - HR_DEFAULT_PAIR_GAP, estimated=True))
+                out.append(HeadRaiseBorder(col=i + 1, inner_y=y, outer_y=y - g.DEFAULT_PAIR_GAP, estimated=True))
         out.sort(key=lambda b: b.col)
     return out
 
@@ -1588,7 +1619,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     outer_shift: dict | None = None,
                     book_outer_gap: dict | None = None,
                     frame_layers: dict | None = None,
-                    head_raise_extend: bool = True) -> BorderDetectionResult:
+                    head_raise_extend: bool = True,
+                    head_raise_scale: float = 1.0) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1685,7 +1717,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
             conv.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
                               yt_ + (yb_ - yt_) / 3.0, yt_ + 2.0 * (yb_ - yt_) / 3.0))
         verticals, vseg = conv, 3
-    head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend)
+    head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
+                                   scale=head_raise_scale)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
                                  outer_shift=outer_shift, book_gap=book_outer_gap,
                                  frame_layers=frame_layers)

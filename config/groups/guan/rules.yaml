@@ -18,10 +18,15 @@ rules:
   - {id: 'guan-m-官-貢生◎', char: 官, src: mined-a24, re: '貢生◎', note: 已放行 9+6}
   # hand-a24：手写常见搭配，对 vol04–20 已放行格与整理本回测；冲突格逐条读过，都是已放行错字（如「進士宫至」）或整理本错字，不改规则
   - {id: 'guan-h1', char: 官, src: hand-a24, re: '(?:舉人|進士|貢生)◎', note: 回测命中 531}
-  - {id: 'guan-h2', char: 官, src: hand-a24, re: '[春夏秋冬]◎', note: 回测命中 152}
+  - {id: 'guan-h2', char: 官, src: hand-a24, re: '[夏秋冬]◎', note: 回测命中 152（10-26 拆出 春◎，见 h2b）}
+  # 10-26 全册回测：「春◎」有 春宫＝東宫（「度宗在春宮時」「石本作春宫有大功」，集本作 東宫）、長春宫、杜荀鶴《春宫怨》，改成排除式，宫 另立 h9 h10
+  - {id: 'guan-h2b', char: 官, src: hand-a24, re: '(?<![在長])春◎(?![時怨有])', note: 10-26 整理本全文回测（vol02–99）30 处 0 冲突}
   - {id: 'guan-h3', char: 官, src: hand-a24, re: '人◎至', note: 回测命中 45}
   - {id: 'guan-h4', char: 官, src: hand-a24, re: '百◎', note: 回测命中 10}
   - {id: 'guan-h5', char: 宫, src: hand-a24, re: '◎[商角徵羽]', note: 回测命中 22}
   - {id: 'guan-h6', char: 宫, src: hand-a24, re: '殯◎', note: 回测命中 17}
-  - {id: 'guan-h7', char: 宫, src: hand-a24, re: '新◎', note: 回测命中 20}
+  # 10-26 全册回测：「新官軌範」（vol63:70:8:20，明代官箴书名）被 新◎ 判成 宫，改成只收《春秋》「新宫灾」一类的后字
+  - {id: 'guan-h7', char: 宫, src: hand-a24, re: '新◎[灾災者在據必非銘]', note: 回测命中 20（10-26 收窄）}
   - {id: 'guan-h8', char: 宫, src: hand-a24, re: '◎室', note: 回测命中 22}
+  - {id: 'guan-h9', char: 宫, src: hand-a24, re: '(?:在|長)春◎', note: 10-26 全册：在春宫（太子）、長春宫}
+  - {id: 'guan-h10', char: 宫, src: hand-a24, re: '春◎怨', note: 10-26 全册：《春宫怨》}

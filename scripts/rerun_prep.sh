@@ -65,6 +65,39 @@ print("字形库", n); sys.exit(0 if n["exemplars"] and n["glyphs"] else "字形
 PY
 fi
 t 取原图 $G source pull "$VOL" -w "$WS"
+# 钉了页表版（source_rev，换图源后）的册：原图目录归页表管，页表外的 <页号>.png 是旧图源残留，删掉（GUJI-748：vol04 新页表 218 页，
+# worker 目录里留着旧的 219–221.png，被当正文跑了）。新版 cv 的 source pull 自己会删，这里兼顾旧 tag。
+GUJI_WORKSPACE="$WS" /opt/guji-venv/bin/python - "$VOL" <<'PY'
+import sys
+from open_guji_cv.core.book import load_book
+from open_guji_cv.datastore import sources as S
+b = load_book(sys.argv[1])
+if getattr(b, "source_rev", None) is None:
+    sys.exit(0)
+from open_guji_cv.datastore.client import WorkerSource
+from open_guji_cv.datastore.packs import _ws_name
+src = WorkerSource()
+book_id, vol = S.resolve(src, _ws_name(), b.id)
+want = {int(p["page"]) for p in S.read_table(src, book_id, vol, b.source_rev)["pages"]}
+d = b.raw_path(next(iter(want))).parent
+gone = sorted((f for f in d.glob("*.png") if f.stem.isdigit() and int(f.stem) not in want), key=lambda f: int(f.stem))
+for f in gone:
+    f.unlink()
+print(f"页表 r{b.source_rev} {len(want)} 页；删掉页表外残留 {len(gone)} 张：{[f.name for f in gone][:10]}")
+# 产物目录里也有旧图源残留：worker 上这册旧页号的页产物（旧页数多于新页表）会被 Step3 配页当正文页读，
+# 找不到原图而停（GUJI-748：vol53 旧 183 页、新 182 页，row_segment 要 183.png）。页表外的页产物一并删。
+import os, re
+from pathlib import Path
+root = Path(os.environ.get("GUJI_PRODUCTS_DIR") or (Path(os.environ["GUJI_WORKSPACE"]) / "products"))
+n = 0
+if (root / b.id).is_dir():
+    for f in (root / b.id).rglob("p[0-9][0-9][0-9][0-9]*"):
+        m = re.match(r"p(\d{4})(?:\D|$)", f.name)
+        if m and f.is_file() and int(m.group(1)) not in want:
+            f.unlink()
+            n += 1
+print(f"删掉产物目录里页表外的旧页产物 {n} 个")
+PY
 BK=$(basename "$WS"); BK=${BK%%-*}; VN=${VOL#vol}
 t 合扫检查 $G source check "$BK" "$VN" -w "$WS" || echo "⚠️ source check 有报（题签页报疑似合扫属正常），请看上面"
 t 模板索引 $G cache pull-rare-index --book "$VOL" -w "$WS" --precision fp32
@@ -90,6 +123,14 @@ v = sys.argv[1]
 n0 = len(human_chars(v, bind=False))
 if not ProductStore().step_dir(v, cells_step(v)).is_dir():
     sys.exit(print(f"人裁 {v}：按编号 {n0}（还没有切分产物，绑定自检等跑完 Step3 再看）"))
+# 换图源（GUJI-748）：册 yaml 钉了 source_rev，本机产物却是别的页表 rev（旧图）——这些产物和新页号的人裁不在一个坐标系，
+# 拿它认格必然「认不出」。等同还没有切分产物。
+from open_guji_cv.core.book import load_book
+want = getattr(load_book(v), "source_rev", None)
+have = ProductStore().source_rev(v)
+if want is not None and have != int(want):
+    sys.exit(print(f"人裁 {v}：按编号 {n0}（本机产物是页表 rev {have}，册 yaml 钉 rev {want}：换图源后还没有新图产物，"
+                   f"绑定自检等跑完 Step3 再看）"))
 lost = {}
 n = len(human_chars(v, lost=lost))
 rows = book_bindings(v)

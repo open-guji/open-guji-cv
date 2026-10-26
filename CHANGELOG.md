@@ -5,6 +5,25 @@
 
 ## [未发版]
 
+## [0.5.26] - 2026-10-26
+
+PATCH（GUJI-748 换图源：#664 source pull 删页表外残留原图、#666 prep 删页表外旧页产物、#670 抬头框探测按图尺度缩放 `head_raise_scale`；另含 #661 印章遮挡格放行、#665 #667 #668 #669 字组规则）。`seed_admit`、`align_ref` 的 `code_hash` 变（#661）；Step1 等价登记，产物不因 #670 过期。
+
+- Step1 抬头框探测按图尺度缩放（GUJI-748）：`border_detect` 加参数 `head_raise_scale`（缺省 1.0，不进参数 dump），把 `border_geometry` 里 HR_* 长度常数（旧图上量的绝对像素）按册缩放比换算。殿本换 siku-qiefen-v2（约 0.70 倍）后粗外框半高宽落进细线／粗条两档之间、内框离主上边框够不上 `HR_DIST_MIN`，抬头框整片认不出（vol07 新 p43 五列抬头全丢）。换源的册在 yaml 写 `params: {border_detect: {head_raise_scale: <缩放比>}}`（与 `bottom_gap` 同一个比）。缺省值产物逐字节不变，`border_geometry`、`steps.border_detect` 登记代码等价。
+- `scripts/rerun_prep.sh`（GUJI-748）：钉了页表版的册，产物目录里页表外的旧页产物（`p<页号>*`）一并删掉。worker 上留着旧图源多出的页（vol53 旧 183 页、新 182 页）会被 Step3 配页当正文页读而停在 183.png。
+- `guji source pull`（GUJI-748）：钉了页表版（`source_rev`）的册，原图目录里页表外的 `<页号>.png` 是旧图源残留，拉完删掉（vol04 新页表 218 页，worker 上残留旧 219–221.png 被当正文跑）。`scripts/rerun_prep.sh` 同步加这一步，旧 tag 跑单也生效。
+### Changed
+- 印章遮挡格放行（A32，sheldon 10-26 定规则 1–4）：`seed_admit` 1.24、`align_ref` 2.2，两步 `code_hash` 变。只在册开 `lane_seal` 时生效。
+  - R5 `lane_seal_via` 缺省改 `coord,align`（align 定位的默认字也放）；题列拦截词只留「書總目／四庫全書」，正文里带「總目」的列不再误拦。
+  - 新 `lane_seal_title_formula`：整列连起来正好是「欽定四庫全書總目卷N」的卷端题列按坐标字直接放，`巻` 一律录作 `卷`（`lane_seal_title_norm`，本项目新规矩，不跟整理本）。
+  - 新护栏 `lane_seal_lib_veto`（0.95）：库首位 cov≥0.95 且与默认字不同、又不是异体对 → 送审；`lane_seal_shift_guard`：整页印章格默认字与库首位系统性错一格 → 整页 R5 不放。
+  - `align_ref.coord_neighbor`（缺省开）：逐列本整页定不了位置时借后一页（再前一页）的位置推本页半叶头，供印章页出坐标字。
+  - 108 页印章页回放见 PR 正文。
+
+- `guji cellvotes migrate --bind <旧 main 绑定 JSON>`（GUJI-748）：按旧 main 的**绑定格**查格级表（rebound 的原始 key 偏一格，vol04 有 7 条落到邻格），旧 main 上没认上格的不迁、列「旧绑定失效」；改绑后与同格更晚人裁重合算被盖掉、不列冲突；数据目录里已迁过的 `~q` 事件不再迁。迁出的事件 `migrated_from` 另记 `bound`。
+- 四庫 vol04 换 siku-qiefen-v2 图源（GUJI-748）：`split_table_siku.json` 去掉 vol04 旧图合扫拆页 4 行（新图一页一图），`meta_vol04.json` 快照说明改为新图源。
+- `scripts/rerun_prep.sh` 人裁自检：换图源的册（yaml 钉了 `source_rev`）本机产物的页表 rev 不符时按「还没有切分产物」跳过绑定自检（GUJI-748；vol04 首跑 #255 在执行机旧图产物上认新页号人裁，报 26 条认不出而失败）。不动 Step。
+
 ## [0.5.25] - 2026-10-26
 
 PATCH（#654 换图源后旧页号事件不采信；#652 qa_pick）。无 Step 的 `code_hash` 变。

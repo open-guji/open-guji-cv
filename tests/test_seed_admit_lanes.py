@@ -238,7 +238,7 @@ def _seal(cells, coord=None, **params):
 
 def test_r5_coord_char_admitted_and_blank_is_nonchar():
     n, rs = _seal({3: ("黃", "coord"), 4: (None, "coord_blank"), 5: ("宇", "align"), 6: (None, "none")},
-                  coord={3: "黃", 4: ""}, lane_seal=True)
+                  coord={3: "黃", 4: ""}, lane_seal=True, lane_seal_via="coord")
     assert n == 2
     assert rs[3].admit and rs[3].char == "黃" and rs[3].channel == "seal" and rs[3].doubts == ["lane_seal"]
     assert rs[4].admit and rs[4].char is None and rs[4].evidence["lane"]["nonchar"] is True
@@ -248,6 +248,73 @@ def test_r5_coord_char_admitted_and_blank_is_nonchar():
 def test_r5_align_via_opt_in():
     n, rs = _seal({5: ("宇", "align")}, lane_seal=True, lane_seal_via="coord,align")
     assert n == 1 and rs[5].char == "宇"
+
+
+def test_r5_align_via_on_by_default():
+    """2026-10-26 起 `lane_seal_via` 缺省 coord,align（A32 印章格研究）。"""
+    n, rs = _seal({5: ("宇", "align")}, lane_seal=True)
+    assert n == 1 and rs[5].char == "宇"
+
+
+def _title_col(text, cells, lib=None, **params):
+    """第 1 列坐标对位整串是 `text`；`cells={slot: 默认字}` 是遮挡格（via=coord）。"""
+    chars = text + BODY[len(text):20]
+    pend = {s: dict(doubts=["occluded"], char=c, evidence={"occluded": {"density": 9.0, "via": "coord"}})
+            for s, c in cells.items()}
+    coord = {i: ch for i, ch in enumerate(text, 1)}
+    coord.update({i: "" for i in range(len(text) + 1, 21)})
+    return _run(_page(chars, pend), coord=_ids(coord), lib=lib, lane_seal=True, **params)
+
+
+def test_r5_title_formula_admits_and_normalizes_juan():
+    """题列套语「欽定四庫全書總目卷N」：整列印章格放行，「巻」写成「卷」，库否决、异体护栏都不管。"""
+    text = "欽定四庫全書總目巻十四"
+    cells = {i: ch for i, ch in enumerate(text, 1)}
+    n, rs = _title_col(text, cells, lib={1: "藏", 9: "卷"})
+    assert n == len(text)
+    assert rs[1].admit and rs[1].char == "欽" and rs[1].evidence["lane"]["title_formula"] is True
+    assert rs[9].char == "卷" and rs[9].evidence["lane"]["norm_from"] == "巻"
+    n, rs = _title_col(text, cells, lane_seal_title_norm="")
+    assert rs[9].char == "巻"
+
+
+def test_r5_title_formula_needs_whole_column_match():
+    """坐标对位只对上半列（vol36 p2：錄····書總目卷七十一）不是套语，仍按题列整列拦。"""
+    n, _ = _title_col("錄書總目卷七十一", {1: "錄", 2: "書"})
+    assert n == 0
+    n, _ = _title_col("欽定四庫全書總目卷十四", {1: "欽"}, lane_seal_title_formula="")
+    assert n == 0
+
+
+def test_r5_body_column_with_zongmu_not_title():
+    """正文里的「崇文總目」不再让整列不走 R5。"""
+    n, rs = _title_col("所註存崇文總目稱其", {4: "崇", 5: "文"})
+    assert n == 2 and rs[4].char == "崇"
+
+
+def test_r5_lib_veto():
+    """库首位覆盖度 ≥0.95、与默认字不同 → 不放，记 lane_skip。"""
+    n, rs = _seal({3: ("兀", "coord")}, coord={3: "兀"}, lane_seal=True, lib={3: "元"})
+    assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
+    n, rs = _seal({3: ("兀", "coord")}, coord={3: "兀"}, lane_seal=True, lib={3: "元"}, lane_seal_lib_veto=0)
+    assert n == 1
+    n, rs = _seal({3: ("兀", "coord")}, coord={3: "兀"}, lane_seal=True, lib={3: "元"}, lane_seal_lib_veto=0.99)
+    assert n == 1                     # 覆盖度 0.95 < 0.99
+
+
+def test_r5_page_shift_guard():
+    """默认字整体错一格（库读出的字都等于下一格的默认字）→ 本页印章格一律不放。"""
+    text = "漢官舊儀一卷補遺一卷"
+    cells = {i: (ch, "coord") for i, ch in enumerate(text, 1)}
+    lib = {i: text[i] for i in range(1, len(text))}        # 第 i 格图上是第 i+1 个字
+    n, rs = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib)
+    assert n == 0 and rs[1].evidence["lane_skip"]["why"] == "page_shift"
+    n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib,
+                 lane_seal_shift_guard=False, lane_seal_lib_veto=0)
+    assert n == len(text)
+    lib_ok = {i: ch for i, ch in enumerate(text, 1)}
+    n, _ = _seal(cells, coord={i: ch for i, ch in enumerate(text, 1)}, lane_seal=True, lib=lib_ok)
+    assert n == len(text)
 
 
 def test_r5_title_column_blocked():
@@ -261,7 +328,7 @@ def test_r5_title_column_blocked():
 def test_seal_lib_agree_off_by_default():
     n, _ = _seal({1: ("書", "coord")}, coord={1: "書", 2: "總", 3: "目"}, lane_seal=True)
     assert n == 0
-    n, _ = _seal({5: ("宇", "align")}, lane_seal=True)
+    n, _ = _seal({5: ("宇", "align")}, lane_seal=True, lane_seal_via="coord")
     assert n == 0
 
 

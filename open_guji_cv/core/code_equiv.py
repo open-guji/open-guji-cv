@@ -48,6 +48,10 @@ _SYM_1022 = ("特殊符号进候选集 S3（seed_admit 加 symbol_review 开关�
              "开关关着时 vol06 30 页（每 5 页取 1，group_flow 的 ctx_l1 规则有命中）与 origin/dev 5826853 产物逐字节相同；"
              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（dev 上 ids_bank 与钉子不符，新旧两边同样），2026-10-22")
 
+_HR_1026 = ("抬头框探测加 head_raise_scale（GUJI-748，缺省 1.0 取原常数）：border_detect 在殿本 vol05 旧图 188 页"
+            "（全册）与 vol07 新图 134 页（全册，缺省尺度下 7 列抬头）上与 origin/dev abeac44 产物逐字节相同；"
+            "scripts/code_equiv.py check，2026-10-26")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -103,6 +107,14 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence=("特殊符号进候选集 S3（5-b 符号门槛：字表里有符号的册才过滤／前移符号）：字表无符号的 vol07 30 页（每 5 页取 1，"
                     "3 页新旧同样失败）、vol04 30 页与 origin/dev 5826853 产物逐字节相同；新旧同一 emb 索引，"
                     "删掉本步旧产物免得格级复用，手工跑 guji step 比 sha，2026-10-22")),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="af34b525f1e3610d8925074747371bccfe1598f7411f7a615ef348eeb7d31d42",
+          old="64386e40f5600be7211a560ce8eaea099ef1a8fd66a97b62f5c398181b56258e",
+          evidence=_HR_1026),
+    Equiv(module="open_guji_cv.utils.border_geometry",
+          new="25e4481b46153b33d17cb4e83eadf5313e67529b13a43a796a9074073508f1e3",
+          old="c6f0f1e26ed8748178597801cffcf6c0d22fe52d46da324355f721108a33c871",
+          evidence=_HR_1026),
 )
 
 
