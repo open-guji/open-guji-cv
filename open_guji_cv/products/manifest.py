@@ -53,6 +53,9 @@ class ManifestEntry:
     cv_override: str | None = None
     """册钉了版本而装的不是它、护栏放行时的理由（`--allow-cv-mismatch --why …`，或 `exp-branch:<分支>`）。
     不进指纹；没过护栏或没钉版本的是 None。"""
+    config_overrides: str | None = None
+    """本次运行覆盖原文（`guji … --override`，环境变量 `GUJI_BOOK_OVERRIDE`），没覆盖是 None。不进指纹：
+    覆盖改了参与指纹的值时，指纹自己会变；这里只为事后说得清这条产物不是按册 yaml 原样跑的。"""
     param_parts: dict[str, str] | None = None
     """跑这一页时参数逐字段的短哈希（`core.engine.param_parts`，2026-10-24）。不进指纹（指纹只认 `params_hash`），
     只给 `stale_reason` 说清「参数变了」是哪几个字段，close-check 1a 据此把共享输入（语料、证人、格位表、字组……）
