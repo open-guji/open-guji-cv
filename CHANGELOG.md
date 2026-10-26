@@ -3,7 +3,9 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
-## [未发版]
+## [0.5.22] - 2026-10-26
+
+PATCH（#612 #614 #616 #619 #621 字组与人裁，#606 #611 #613 #615 #617 工具）。seed_admit、glyphdb_admit 的 `code_hash` 变。
 
 - proof_cycle apply 加 `--ack-unlanded-votes <原因>`：旧单有票没法落成人裁（如图形格）时，原样交给 republish issue 放行换单。
 ### Fixed
