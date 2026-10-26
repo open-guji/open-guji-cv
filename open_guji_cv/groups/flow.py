@@ -190,6 +190,11 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     return None
 
 
+def _ctx_strong(trail: list, ch: str | None) -> bool:
+    """本组文意给了 `ch` 且 strong（L2 表多遍都 high 同字；L1 规则与这样的表一致也算）。"""
+    return any(t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail)
+
+
 def partners(g: str, groups) -> tuple:
     """组 `g` 在点名里的共字组（登记表 `overlaps`）。"""
     return tuple(h for h in GROUPS[g].overlaps if h in groups)
@@ -342,6 +347,16 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         else:
             ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
                                     review=mode == "review")
+        if mode == "lift" and ch is None and cfg.joint and any(
+                t.get("why") == "abstain:other" and t.get("other_conf") == "high" for t in trail):
+            # 本组文意明说「其他」（各遍都 high）：库里分差内没有共字组的字（曰 cov 0、只剩日目），格才进了 rm；
+            # 交共字组联合判，给的须是本组外的字（vol13 99:8:18「子女子曰」、vol16 118:5:21「改題曰」，A24 10-26）
+            for h in partners(g, cfg.groups):
+                hc, hwhy, ht = decide_joint(h, r, cands, ref, cfg, left, right, patch_fn)
+                if hc is not None and hc not in GROUPS[g].members:
+                    trail = trail + [{"solver": "handoff", "char": None, "why": f"other:{h}"}] + ht
+                    g, ch, why = h, hc, hwhy
+                    break
         if why == "conflict" and GROUPS[g].flow.ctx_over:
             ch, why, trail = _ctx_over(g, ch, why, trail)
         plans.append((r, g, mode, ch, why, trail, ref))
@@ -354,8 +369,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not GROUPS[g].ref_free
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
-                  and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)):
-                ch, why = None, "ref_dissent"   # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）
+                  and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)
+                  and not (GROUPS[g].flow.strong_over_ref and _ctx_strong(trail, ch))):
+                # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）；`strong_over_ref` 的组文意 strong
+                # 时照放（日曰：sheldon 10-22「文意置信度特别高可以改掉整理本」，vol22:9:5:19「日者列傳」整理本作曰，A24 10-26）
+                ch, why = None, "ref_dissent"
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_veto and ref and norm(ref) != norm(ch)
                   and norm(ref) in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "ref_dissent"   # 一二：整理本说是组里另一个字，字形怎么判都不补放（vol19:116:9:8）
@@ -406,8 +424,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     ch, why = r.char, "agree"
                     trail = trail + [{"solver": "review_weak", "char": None, "why": "overruled",
                                       "weak": [t["solver"] for t in trail if t["solver"] in f.review_weak and t["char"]]}]
-            fix = f.review_fix or (f.review_fix_strong and why == "agree" and any(
-                t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail)) or (
+            fix = f.review_fix or (f.review_fix_strong and why == "agree" and _ctx_strong(trail, ch)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (t.get("margin") or 0) >= f.review_fix_margin for t in trail))
             other = ch is not None and not _same(g, ch, r.char, norm)
