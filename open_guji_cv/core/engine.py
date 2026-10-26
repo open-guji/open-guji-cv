@@ -302,6 +302,10 @@ class Engine:
         #: 每条 manifest 记生成它的 cv 版本与完整 commit（版本号规矩第五节，GUJI-577），
         #: 和当时本机数据对应的中心库版本（字形库、人裁的内容版本；不进指纹）
         self._cv = {**manifest_fields(), "db_rev": central_rev()}
+        from .book_config import OVERRIDE_ENV
+        import os
+        if os.environ.get(OVERRIDE_ENV):        # 运行覆盖原文记进产物，说得清这次不是按册 yaml 跑的；没覆盖时 manifest 不变
+            self._cv["config_overrides"] = os.environ[OVERRIDE_ENV]
 
     def _stamp_cache(self, step: Step, key: str, sha: str) -> None:
         """这一步刚写完一页产物：它顺手 `cache.put` 的图像类缓存，记上「对着这版产物切的」戳。"""

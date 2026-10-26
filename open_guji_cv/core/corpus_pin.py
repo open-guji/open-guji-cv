@@ -379,7 +379,8 @@ def dev_pins(ws: Path) -> list[str]:
     out = []
     for f in sorted(d.glob("*.yaml")) if d is not None and d.is_dir() else []:
         try:
-            dev = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("corpus_dev")
+            from .book_config import effective_book_dict
+            dev = effective_book_dict(f, apply_override=False).get("corpus_dev")   # 基础配置 ∪ 册 yaml；运行覆盖不是要推库的东西
         except Exception:                          # noqa: BLE001 —— 读不了的册配置不归这里管
             continue
         if dev:

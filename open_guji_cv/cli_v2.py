@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -36,6 +37,11 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
     pl = load_pipeline(pipeline_id)
     book = load_book(book_id)
     overrides = json.loads(params) if params else None
+    from .core.book_config import run_override_params
+    ov_params = run_override_params()           # `--override` 里的 params：当调用方显式参数，压过册 yaml
+    if ov_params:
+        from .core.book_config import merge
+        overrides = merge(overrides or {}, ov_params)
     return Engine(book, pl, params=overrides, log=(lambda s: None) if quiet else None)
 
 
@@ -457,6 +463,21 @@ def cmd_rerun(args) -> None:
 def cmd_step(args) -> None:
     args.from_step = args.to_step = args.step
     cmd_pipeline(args)
+
+
+def cmd_book(args) -> None:
+    from .core.book import _book_yaml_path
+    from .core.book_config import effective_book_dict, provenance
+    path = _book_yaml_path(args.book)
+    d = effective_book_dict(path)
+    src = provenance(path)
+    if args.json:
+        print(json.dumps({"book": args.book, "effective": d, "source": src}, ensure_ascii=False, indent=1, default=str))
+        return
+    print(f"# 册 {args.book} 生效配置（{path}）")
+    for k in sorted(d):
+        v = json.dumps(d[k], ensure_ascii=False, default=str)
+        print(f"{k}: {v if len(v) <= 160 else v[:157] + '…'}    # {src.get(k, '?')}")
 
 
 def cmd_status(args) -> None:
@@ -2882,6 +2903,7 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "book": cmd_book,
     "close-check": cmd_close_check,
     "exit-check": cmd_exit_check,
     "export": cmd_export,
@@ -3002,6 +3024,13 @@ def install_workspace_option(sub: argparse._SubParsersAction) -> None:
 
 
 # ── parsers ──────────────────────────────────────────────────────────
+def _add_override(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--override", default=None, metavar="JSON",
+                   help='运行覆盖：一段册配置片段（内存里叠在册 yaml 上，不改任何文件、不推库），如 '
+                        '{"corpus": 23, "params": {"seed_admit": {"shadow_veto": false}}}；'
+                        "生效值记进产物 manifest。详见 doc/design/册配置分层与运行覆盖.md")
+
+
 def _add_pages(p: argparse.ArgumentParser) -> None:
     import os
     p.add_argument("--pages", default="dev_set",
@@ -3009,6 +3038,7 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
     p.add_argument("--force", action="store_true", help="无视指纹，强制重跑")
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
+    _add_override(p)
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
     p.add_argument("--wait", action="store_true",
                    help="这本书正有别的跑批在写时排队等它跑完（默认直接报持有者并退出，退出码 3）")
@@ -3274,6 +3304,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+    p = sub.add_parser("book", help="[v2] 册配置：show 看合并后的生效配置与各字段来自哪一层")
+    p.add_argument("action", choices=["show"])
+    p.add_argument("book")
+    p.add_argument("--effective", action="store_true", help="show：打印合并后的完整配置并标注来源层")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
 
     p = sub.add_parser("close-check",
                        help="[v2] 一册书交付前逐项体检（只读）：新鲜、缓存、待审、收尾闸、真源已提交、lines/pages 自洽、Step9")
@@ -3687,6 +3725,8 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)
     args = parser.parse_args(argv)
+    if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
+        os.environ["GUJI_BOOK_OVERRIDE"] = args.override
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()
