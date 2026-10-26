@@ -51,7 +51,15 @@ _STEP = re.compile(r"^[a-z][a-z0-9_]*$")
 _BOOK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
-_OVERRIDES = {"corpus": int, "glyph_pin": int}
+_OVERRIDES = {"corpus": int, "glyph_pin": int}     # 有类型要求的两个；其余册级字段不限类型（执行方 `--override` 原样叠上去）
+
+
+def _override_keys() -> set[str]:
+    """能覆盖的册级字段：BookSpec 的字段，去掉身份与图源（`core/book_config.FORBIDDEN_IN_OVERRIDE`）。"""
+    import dataclasses
+    from ..core.book import BookSpec
+    from ..core.book_config import FORBIDDEN_IN_OVERRIDE
+    return {f.name for f in dataclasses.fields(BookSpec)} - FORBIDDEN_IN_OVERRIDE
 _KEYS = {"kind", "book", "cv", "cv_ref", "pipeline", "steps", "pages", "force", "no_reuse", "book_overrides",
          "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "why"}
 _NOT_HASHED = ("why", "output", "cv_ref")
@@ -104,12 +112,16 @@ def normalize(raw: dict, *, resolve=None) -> dict:
     s["no_reuse"] = bool(s.get("no_reuse", s["force"]))
 
     ov = s.get("book_overrides") or {}
-    if not isinstance(ov, dict) or set(ov) - set(_OVERRIDES):
-        raise SpecError(f"book_overrides 只收 {', '.join(_OVERRIDES)}")
+    if not isinstance(ov, dict):
+        raise SpecError("book_overrides 要是 JSON 对象")
+    bad = set(ov) - _override_keys()
+    if bad:
+        raise SpecError(f"book_overrides 不收 {', '.join(sorted(bad))}（身份与图源只能改册 yaml；可覆盖的见 doc/design/册配置分层与运行覆盖.md）")
     try:
-        s["book_overrides"] = {k: _OVERRIDES[k](v) for k, v in sorted(ov.items()) if v is not None}
+        s["book_overrides"] = {k: (_OVERRIDES[k](v) if k in _OVERRIDES else v)
+                               for k, v in sorted(ov.items()) if v is not None}
     except (TypeError, ValueError):
-        raise SpecError("book_overrides 的值要是整数") from None
+        raise SpecError("book_overrides 里 corpus、glyph_pin 的值要是整数") from None
     pa = s.get("pin_args")
     if pa is not None and (not isinstance(pa, str) or re.search(r"[;&|`$<>\n]", pa)):
         raise SpecError("pin_args 是一串普通参数，不能带 shell 符号")

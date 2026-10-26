@@ -36,21 +36,25 @@ WS=$(ls -d $GW/$WSGLOB | head -n 1); export GUJI_WORKSPACE=$WS; echo "WS=$WS"
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
 if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G db pull -w "$WS"; fi
 Y=$(ls /root/.guji-data/main/*/books/"$VOL".yaml | head -n 1)   # 数据目录里的册配置（db pull 落的）
-[ -n "$CORPUS" ] && sed -i "s/^corpus: .*/corpus: $CORPUS/" "$Y"
-[ -n "$GPIN" ] && { grep -q '^glyph_pin:' "$Y" && sed -i "s/^glyph_pin: .*/glyph_pin: $GPIN/" "$Y" || echo "glyph_pin: $GPIN" >> "$Y"; }
+# 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里：
+# 改值 = 册 yaml 里有就替换、没有就追加（册 yaml 压过基础配置）；读值 = 读合并后的生效值，不能再 grep 册 yaml
+eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]),apply_override=False);v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
+setkey() { grep -q "^$1:" "$Y" && sed -i "s/^$1: .*/$1: $2/" "$Y" || echo "$1: $2" >> "$Y"; }
+[ -n "$CORPUS" ] && setkey corpus "$CORPUS"
+[ -n "$GPIN" ] && setkey glyph_pin "$GPIN"
 # 册 yaml 钉了 cv_version、装的又不是它，pipeline 会拒跑（要 --allow-cv-mismatch）。给了 --cv 就是需求单点名的版本：
 # 本地册配置跟着改成装上的版本（只改本机数据目录，不推中心库）；没给 --cv 而对不上就只提醒
 CVV=$(/opt/guji-venv/bin/python -c "from open_guji_cv.core.cv_version import describe;print(describe()[0] or '')")
-OLD=$(sed -n 's/^cv_version: *"\{0,1\}\([^" #]*\).*/\1/p' "$Y")
+OLD=$(eff cv_version)
 if [ -n "$CV" ] && [ -n "$CVV" ] && [ "$OLD" != "$CVV" ]; then
-  grep -q '^cv_version:' "$Y" && sed -i "s/^cv_version: .*/cv_version: \"$CVV\"/" "$Y" || echo "cv_version: \"$CVV\"" >> "$Y"
+  setkey cv_version "\"$CVV\""
   echo "册 yaml cv_version ${OLD:-（未钉）} → $CVV（跟 --cv）"
 elif [ -n "$OLD" ] && [ "$OLD" != "$CVV" ]; then
   echo "⚠️ 册 yaml 钉 cv_version=$OLD，装的是 $CVV：用 --cv v$OLD 重跑本脚本，或按需求单给 --cv"
 fi
-echo "册 yaml $Y：$(grep -E '^(corpus|glyph_pin|cv_version):' "$Y" | tr '\n' ' ')"
+echo "册配置 $Y（生效值）：corpus=$(eff corpus) glyph_pin=$(eff glyph_pin) cv_version=$(eff cv_version)"
 [ -n "$PIN_ARGS" ] && t 钉子账 $G corpus pin --vol "$VOL" $PIN_ARGS -w "$WS"
-GP=$(sed -n 's/^glyph_pin: *//p' "$Y")
+GP=$(eff glyph_pin)
 if [ -n "$GP" ]; then
   t 建字形库g$GP $G glyph-db pin-build -w "$WS" --pin "$GP"
   python3 - "$WS/output/glyph-g$GP.db" <<'PY'
