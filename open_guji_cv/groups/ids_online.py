@@ -250,6 +250,8 @@ SPECS: dict[str, IdsSpec] = {
     "guanm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 派𣲖、奇竒、歲嵗（2026-10-26，A24 vol51–99 首跑 V 类）：模板＝殿本 vol51–99 已放行格（每册每字 ≤12）＋陪衬，首轮留出错例看图改标；
     #   按册留出 派𣲖 歲嵗 0.5 起 0 错；奇竒 陪衬 苛 判成 竒 最高 0.91 → 1.0（放行格每字 ≤160）。见 doc/字组/ 同名卡。
+    "xuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.35, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
+                    size=48, clean=True),
     "pai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "qi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "sui": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
@@ -270,8 +272,9 @@ SPECS: dict[str, IdsSpec] = {
     # 勢𫝑、發𤼵（2026-10-26，A24，sheldon 定按刻形分拆）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）。
     #   勢𫝑 只差左上 坴／幸，整字 48：按册留出 167 格 0.4 起 0 错，取 0.5（给 122）。
     #   發𤼵 右下 殳／矢，取右下框：按册留出 505 格（含陪衬 登務條）0.5 起 0 错（𤼵 给对 77／80）。见 doc/字组/shi.md、fa.md。
+    #   10-26 补 vol51–99：勢𫝑 310 格 0.4 起 0 错，仍取 0.5；發𤼵 660 格最高错例 0.89（vol87:127:7:8 刻 矢、判 殳），门槛提到 0.9。
     "shi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
-    "fa": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.4, 1.0, 0.4, 1.0), lam=1.0,
+    "fa": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.9, min_class=8, whole="hog", region=(0.4, 1.0, 0.4, 1.0), lam=1.0,
                   size=48, clean=True),
     # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮、库首位是形近的另一个字（卿 徵徴 刖則所 鍾愼…）。
     #   两码位并一类，形近字当陪衬进库（判成它们＝弃权），整字 48×48 一对多。门槛按册留出定，见 doc/字组/ 同名卡。

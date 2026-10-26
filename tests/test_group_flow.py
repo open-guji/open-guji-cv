@@ -91,6 +91,16 @@ def test_entry_ref_enter_vol51_99_shape_pairs():
     assert entry(r, [("泒", 0.95), ("指", 0.94)], "𣲖", FlowConfig(groups=("pai",))) is None    # 别的组外字紧咬照挡
 
 
+def test_entry_ref_enter_member_xuan():
+    """`ref_enter_member`（選𨕖）：库首位 選 是辶族 chuo 的成员、点名在前；整理本作 𨕖 → 先进 xuan。整理本作 選 照旧归 chuo。"""
+    r = Rec("a")
+    cfg = FlowConfig(groups=("chuo", "xuan"))
+    assert entry(r, [("選", 0.96), ("遺", 0.95), ("遵", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")
+    assert entry(r, [("遺", 0.96), ("選", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")   # 首位是陪衬也进
+    assert entry(r, [("選", 0.96), ("遺", 0.95)], "選", cfg) == ("chuo", "lift")
+    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="𨕖") is None              # 组外字紧咬照挡
+
+
 def test_entry_jys_tolerates_ba():
     cfg = _cfg()
     assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")

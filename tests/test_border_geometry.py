@@ -454,3 +454,16 @@ def test_stroke_fragments_do_not_fake_a_bend():
     out, seg, w80m, w80x = fit_vlines_polyline(mask, top, bottom, verts, 1400, 2400)
     assert seg == 1, (seg, w80m, w80x)
     assert w80m is not None and w80m <= 7
+
+
+def test_row_windows_drops_rows_outside_image():
+    """下版框贴图底、取行范围外推到图外（siku-qiefen-v2 新图源 vol04 p19/p23 实测 IndexError）：出图的行丢掉，不报错。"""
+    from open_guji_cv.utils.border_geometry import BEND_SEARCH, _row_windows
+    h, w = 100, 300
+    binm = np.zeros((h, w), dtype=np.uint8)
+    binm[:, 150] = 1
+    ys = np.arange(-4, h + 6, 2)
+    rows, lo, win = _row_windows(binm, lambda y: np.full_like(y, w - 1 - 150.0), ys, w)
+    assert rows.min() >= 0 and rows.max() < h
+    assert win.shape == (len(rows), 2 * BEND_SEARCH + 1)
+    assert (win.sum(axis=1) == 1).all()

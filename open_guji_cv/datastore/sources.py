@@ -559,12 +559,18 @@ def revisions(src, book_id: str, vol: str) -> list[int]:
 
 
 def read_table(src, book_id: str, vol: str, rev: int | None = None) -> dict:
+    """取一版页表。`rev` 不给 = 最新的正式版：`status: staged` 的预发版（换图源时先发、册 yaml 钉
+    `source_rev` 才用）跳过，免得别人一 pull 就把新图写进旧配置。"""
     vol = norm_vol(vol)
     if rev is None:
         revs = revisions(src, book_id, vol)
         if not revs:
             raise FileNotFoundError(f"R2 里没有 {book_id}/{vol} 的页表")
-        rev = revs[-1]
+        for r in reversed(revs):
+            t = json.loads(_get(src, table_key(book_id, vol, r)))
+            if t.get("status") != "staged":
+                return t
+        raise FileNotFoundError(f"{book_id}/{vol} 只有预发版页表 r{revs[-1]:03d}，要按 rev 取（册 yaml 写 source_rev）")
     t = json.loads(_get(src, table_key(book_id, vol, rev)))
     if t.get("rev") != rev:
         raise ValueError(f"页表 r{rev:03d} 里写的版本是 {t.get('rev')}")

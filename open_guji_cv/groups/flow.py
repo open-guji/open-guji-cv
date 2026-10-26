@@ -161,7 +161,8 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     rr = ref or coord_ref
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
-        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon) and top in f.tolerate):
+        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon)
+                and (top in f.tolerate or (f.ref_enter_member and top in mem and rr != top))):
             continue
         if all(c in mem or c in f.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
