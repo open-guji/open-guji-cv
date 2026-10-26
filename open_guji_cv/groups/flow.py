@@ -118,6 +118,24 @@ def groups_in(ch: str | None, groups) -> list[str]:
     return [g for g in groups if ch in GROUPS[g].members]
 
 
+def _member(g: str, ch: str | None, canon: Callable[[str], str]) -> bool:
+    """`ch` 算不算组 `g` 的字：是组员，或按书级码位归一后是组员；组声明了 `ref_canon` 时，归一后与某个组员归一后同字也算。"""
+    if not ch:
+        return False
+    mem = GROUPS[g].members
+    if ch in mem or canon(ch) in mem:
+        return True
+    return GROUPS[g].flow.ref_canon and canon(ch) in {canon(m) for m in mem}
+
+
+def _same(g: str, a: str | None, b: str | None, canon: Callable[[str], str]) -> bool:
+    """复核比字：同字；或组声明了 `ref_canon`、两字不同为组员、按书级码位归一后同字（同一刻法的两个码位）。"""
+    if a == b:
+        return True
+    mem = GROUPS[g].members
+    return bool(GROUPS[g].flow.ref_canon and a and b and not (a in mem and b in mem) and canon(a) == canon(b))
+
+
 def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c: c,
           coord_ref: str | None = None) -> tuple[str, str] | None:
     """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。
@@ -129,10 +147,10 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     if r.provenance == "human" or r.channel in ("human", CHANNEL):
         return None
     if r.admit:
-        gs = [g for g in groups_in(r.char, cfg.groups) if GROUPS[g].flow.review]
+        gs = [g for g in cfg.groups if GROUPS[g].flow.review and (r.char in GROUPS[g].members
+                                                                 or (GROUPS[g].flow.ref_canon and _member(g, r.char, canon)))]
         for g in gs:
-            mem = GROUPS[g].members
-            if GROUPS[g].ref_free or not ref or ref in mem or canon(ref) in mem:
+            if GROUPS[g].ref_free or not ref or _member(g, ref, canon):
                 return g, "review"
         return None
     if not cands:
@@ -143,7 +161,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     rr = ref or coord_ref
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
-        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and (rr in mem or canon(rr) in mem) and top in f.tolerate):
+        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon) and top in f.tolerate):
             continue
         if all(c in mem or c in f.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
@@ -151,7 +169,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         mem = GROUPS[g].members
         if not all(c in mem or c in GROUPS[g].flow.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
-        if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
+        if not GROUPS[g].ref_free and ref and not _member(g, ref, canon):
             continue
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
@@ -392,9 +410,13 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 t["solver"] == "ctx" and t["char"] == ch and t.get("strong") for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (t.get("margin") or 0) >= f.review_fix_margin for t in trail))
-            code = ("group_flow_disagree" if (ch is not None and ch != r.char and not fix) or why == "conflict"
+            other = ch is not None and not _same(g, ch, r.char, norm)
+            code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
-            if ch is not None and ch != r.char and fix:
+            if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
+                    and not (ch is not None and _same(g, ch, ref, norm))):
+                other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
+            if other and fix:
                 decision = "fix"
                 r.evidence = {**(r.evidence or {}), "fixed_from": {"channel": r.channel, "char": r.char}}
                 r.char, r.channel, r.provenance = ch, CHANNEL, "context"

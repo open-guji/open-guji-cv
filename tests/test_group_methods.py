@@ -39,7 +39,7 @@ def test_registry_kinds_match_ids_specs():
         assert kinds[g] == "composite", g
         m = img[g]
         assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
-    for g in ("can", "xu", "jiao", "jue", "yi_560", "mn", "ce"):          # 叙敘／教敎／絕絶 10-22 改通用 IDS 判法
+    for g in ("can", "xu", "jiao", "jue", "yi_560", "ce"):          # 叙敘／教敎／絕絶 10-22 改通用 IDS 判法
         assert kinds[g] == "ids", g
     assert GROUPS["zhi"].flow.methods[1].kind == "hog"
 

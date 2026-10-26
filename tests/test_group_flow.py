@@ -30,14 +30,14 @@ class Rec:
 
 
 def _cfg(**kw):
-    return FlowConfig(groups=("zhi", "mn", "jys", "rr"), **kw)
+    return FlowConfig(groups=("zhi", "dian", "jys", "rr"), **kw)
 
 
 # —— 注册表 ——
 
 def test_flow_groups_declared_and_valid():
     flows = {g for g, s in GROUPS.items() if s.flow}
-    assert {"mn", "dian", "can", "chen", "li", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
+    assert {"dian", "can", "chen", "shen", "zhi", "jys", "ry", "rr", "ts", "wm", "wxs"} <= flows
     check_groups(tuple(flows))
     with pytest.raises(ValueError):
         check_groups(("nope2",))        # 没注册
@@ -56,7 +56,7 @@ def test_entry_lift_needs_near_candidates_and_ref_in_group():
     assert entry(r, [("㫖", 0.98), ("指", 0.90)], None, cfg) == ("zhi", "lift")         # 远的第二名不挡
     assert entry(r, [("㫖", 0.98)], "指", cfg) is None                                  # 整理本字在组外
     assert entry(r, [("㫖", 0.80)], None, cfg) is None                                  # cov 太低
-    assert entry(r, [("點", 0.99)], None, cfg) is None                                  # 组没点名
+    assert entry(r, [("慎", 0.99)], None, cfg) is None                                  # 组没点名
 
 
 def test_entry_tolerates_declared_outsiders_only():
@@ -132,7 +132,7 @@ def test_entry_ref_free_group_ignores_ref():
 def test_entry_review_only_for_review_groups_and_never_human():
     cfg = _cfg()
     assert entry(Rec("a", "己", True, "context"), [], None, cfg) == ("jys", "review")
-    assert entry(Rec("a", "𫎇", True, "match_ref"), [], None, cfg) is None              # 没有字形判法的异体组不复核
+    assert entry(Rec("a", "點", True, "match_ref"), [], None, cfg) is None              # 没有字形判法的异体组不复核
     assert entry(Rec("a", "㫖", True, "match_ref"), [], None, cfg) == ("zhi", "review")  # 按刻形复核（SHAPE_REVIEW）
     assert entry(Rec("a", "己", True, "human", "human"), [], None, cfg) is None
     assert entry(Rec("a", "己", False, None, "human"), [("己", 0.99)], None, cfg) is None
@@ -192,12 +192,12 @@ def test_freq_table_roundtrip_and_build(tmp_path):
 
 def test_pass_lift_review_and_evidence():
     seq = [Rec("a"), Rec("b", "人", True, "context"), Rec("c"), Rec("d", doubts=["occluded"])]
-    cands = {"a": [("𫎇", 0.98), ("蒙", 0.975)], "c": [("𫎇", 0.95), ("蒙", 0.949)], "d": [("𫎇", 0.99)]}
+    cands = {"a": [("點", 0.98), ("㸃", 0.975)], "c": [("點", 0.95), ("㸃", 0.949)], "d": [("點", 0.99)]}
     res = group_flow_pass(seq, {}, lambda cid: cands.get(cid, []),
                           lambda r: "occluded" in r.doubts, _cfg())
     a, b, c, d = seq
-    assert a.admit and a.channel == "group_flow" and a.char == "𫎇" and a.provenance == "match"
-    assert a.evidence["group"]["decision"] == "admit" and a.evidence["group"]["id"] == "mn"
+    assert a.admit and a.channel == "group_flow" and a.char == "點" and a.provenance == "match"
+    assert a.evidence["group"]["decision"] == "admit" and a.evidence["group"]["id"] == "dian"
     assert not c.admit and "group_flow_abstain" in c.doubts and c.evidence["group"]["decision"] == "review"
     assert "group" not in d.evidence                         # 硬护栏不进
     assert b.admit and b.evidence["group"]["mode"] == "review"   # 入人八：没有文意窗口、没有字块，弃权 → 不动
@@ -377,13 +377,13 @@ def _run(tmp_path, monkeypatch, cands, params=None):
 
 
 def test_seed_admit_default_off_and_params_hidden(tmp_path, monkeypatch):
-    assert not _run(tmp_path, monkeypatch, [("𫎇", 0.98), ("蒙", 0.975)]).admit
+    assert not _run(tmp_path, monkeypatch, [("點", 0.98), ("㸃", 0.975)]).admit
     assert not any(k.startswith("group_flow") for k in SeedAdmitParams().model_dump())
 
 
 def test_seed_admit_group_flow_lifts(tmp_path, monkeypatch):
-    r = _run(tmp_path, monkeypatch, [("𫎇", 0.98), ("蒙", 0.975)], {"group_flow": ("mn",)})
-    assert r.admit and r.channel == "group_flow" and r.char == "𫎇"
+    r = _run(tmp_path, monkeypatch, [("點", 0.98), ("㸃", 0.975)], {"group_flow": ("dian",)})
+    assert r.admit and r.channel == "group_flow" and r.char == "點"
     assert r.evidence["group"]["solvers"][-1]["solver"] == "top1"
 
 
@@ -587,3 +587,36 @@ def test_rr_img_only_lift_respects_ref(monkeypatch):
     r = Rec("c")
     group_flow_pass([r], {"c": ("入", "=")}, cands, lambda r: False, _cfg())
     assert r.admit and r.char == "八"                    # 文意也给了这个字：不归本开关管（沿用 lift_ref_guard）
+# —— 同一刻法几个码位（`FlowSpec.ref_canon`／`review_ref_agree`，隸𨽾，A24 2026-10-26）——
+
+_CP = {"𨽾": "隷", "𨽻": "隷", "䝉": "𫎇"}
+
+
+def _canon(c):
+    return _CP.get(c, c)
+
+
+def test_ref_canon_entry_and_review_by_codepoints():
+    cfg = FlowConfig(groups=("li", "mn"))
+    r = Rec("a")
+    # 整理本 隷／𨽻 不是组员，按书级码位归一后与 𨽾 同字：进组
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg, _canon) == ("li", "lift")
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) is None                    # 不给码位照旧拦
+    assert entry(r, [("𫎇", 0.98)], "䝉", cfg, _canon) == ("mn", "lift")
+    # 已放行 隷（别的通道）也复核
+    assert entry(Rec("b", "隷", True, "match_ref"), [], "隷", cfg, _canon) == ("li", "review")
+
+
+def test_review_same_shape_keeps_and_ref_dissent_demotes(monkeypatch):
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    pick = {"x": "𨽾", "y": "𨽾", "z": "隸"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(pick[r.id], via=name))
+    x = Rec("x", "隷", True, "match_ref")       # 判出 𨽾、放行 隷：同一刻法两码位，不动
+    y = Rec("y", "𨽾", True, "match_ref")       # 判出 𨽾、整理本 隸：降审（整理本说是另一形）
+    z = Rec("z", "𨽾", True, "match_ref")       # 判出 隸＝整理本：改字
+    amap = {"x": ("隷", "equal"), "y": ("隸", "equal"), "z": ("隸", "equal")}
+    group_flow_pass([x, y, z], amap, lambda cid: [], lambda r: False, FlowConfig(groups=("li",)), canon=_canon)
+    assert x.admit and x.char == "隷" and x.evidence["group"]["decision"] == "keep"
+    assert not y.admit and "group_flow_ref_dissent" in y.doubts
+    assert z.admit and z.char == "隸" and z.evidence["group"]["decision"] == "fix"

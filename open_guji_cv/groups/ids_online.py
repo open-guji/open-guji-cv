@@ -239,6 +239,8 @@ SPECS: dict[str, IdsSpec] = {
     "pai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "qi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "sui": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "mn": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "li": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 勢𫝑、發𤼵（2026-10-26，A24，sheldon 定按刻形分拆）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）。
     #   勢𫝑 只差左上 坴／幸，整字 48：按册留出 167 格 0.4 起 0 错，取 0.5（给 122）。
     #   發𤼵 右下 殳／矢，取右下框：按册留出 505 格（含陪衬 登務條）0.5 起 0 错（𤼵 给对 77／80）。见 doc/字组/shi.md、fa.md。

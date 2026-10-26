@@ -63,7 +63,13 @@ class FlowSpec:
     - `ctx_over`：文意够硬（L1 规则或 L2 表 strong）时，这几个字形方法给了别的字只算弱票，补放、复核都照文意
       （其余方法须不反对）。入人八（A24 10-26）：殿本 入 多刻成两笔分开，整字 HOG 常把 入 判成 八；「不看上下文无法判」。
     - `lift_img_ref_veto`：补放时文意没给这个字（只有字形方法给字）、整理本又是组里另一个字 → 留人审（`group_flow_ref_dissent`）。
-      入人八（A24 10-26）：文意查表落空时整字 HOG 单独把整理本的 入 补成了 八（vol12:147:2:17「分其半入禮器」）。"""
+      入人八（A24 10-26）：文意查表落空时整字 HOG 单独把整理本的 入 补成了 八（vol12:147:2:17「分其半入禮器」）。
+    - `ref_canon`：整理本字、已放行字按书级 `codepoints` 归一后与某个组员归一后同字，也算组里的字（入口、复核都认）；复核时方法给的字与
+      放行字归一后同字（且两字不同为组员）算一致。同一刻法有几个码位、组员只用字形库的那个时用（隸𨽾：士示 整理本作 隷／𨽻，
+      库标 𨽾，册里 𨽾 𨽻→隷；A24 2026-10-26）。
+    - `review_ref_agree`：复核时放行字与整理本字（按码位归一）不是同一字、方法又没给出整理本的字 → 降审（`group_flow_ref_dissent`）；
+      方法给了整理本的字照 `review_fix` 改字。整理本跟刻形走得很准、放行字常被别的通道放错码位的组用（隸𨽾：整理本 隸 被放成 𨽾
+      44 格，夹注小字 HOG 多弃权，A24 2026-10-26）。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -85,6 +91,8 @@ class FlowSpec:
     ref_top_enter: bool = False
     ctx_over: tuple = ()
     lift_img_ref_veto: bool = False
+    ref_canon: bool = False
+    review_ref_agree: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -164,6 +172,10 @@ _SHAPE_PAIR_FLOW = {
     "pai": dict(tolerate=frozenset("泒孤弧滅渢"), lift_ref_agree=True, ref_enter=True),
     "qi": dict(tolerate=frozenset("青音靑苛司可"), lift_ref_agree=True, ref_enter=True),
     "sui": dict(tolerate=frozenset("熾康嚴巖咸戌戲燬"), lift_ref_agree=True, ref_enter=True),
+    # 隸𨽾（2026-10-26）：整理本 隸 有 44 格被别的通道放成 𨽾（码位放错），复核改回；库常把 棣練竦 排在分差内
+    "li": dict(tolerate=frozenset("隷𨽻棣練竦款羔"), ref_canon=True, lift_ref_agree=True, review_ref_agree=True),
+    # 蒙𫎇：整理本 蒙／𫎇 混用（整理本作 蒙、刻 〢丷 的常见），不要求与整理本同字；库常把 家 排在分差内
+    "mn": dict(tolerate=frozenset("䝉家冡豪"), ref_canon=True),
     # 勢𫝑 發𤼵（2026-10-25，sheldon 定按刻形分拆）：库首位几乎都是 勢／發；分差内常紧咬的组外字当陪衬放进入口
     # （登務條 也进模板库，判成它们＝弃权；𫉬顧勞 不进库，只放行入口，字仍由本组判 發𤼵／勢𫝑）。整理本两形混用，不要求与整理本同字。
     "shi": dict(tolerate=frozenset("勞")),
@@ -289,8 +301,8 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=("ids",), config_dir=cfg,
         flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first", **_rv(gid)),
         note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
-       for gid, name, cfg in (("mn", "蒙𫎇", None), ("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
-                              ("chen", "讖識䜟", None), ("li", "隸𨽾", None), ("shen", "慎愼", "config/groups/shen"),
+       for gid, name, cfg in (("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
+                              ("chen", "讖識䜟", None), ("shen", "慎愼", "config/groups/shen"),
                               ("zhi", "旨㫖", "config/groups/zhi"))},
     # —— 第二批异体组（2026-10-18 sheldon 定）：只靠字频。人裁数不够（主形 <20 或次形不为 0）时弃权、送人审，
     #    不退到 IDS／库形最近；字频表重算后数据攒够就自动放行。
@@ -450,7 +462,13 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                # 勢𫝑 發𤼵（2026-10-25）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）
                                ("shi", "勢𫝑", "左上 坴／幸"), ("fa", "發𤼵", "右下 殳／矢"),
                                # vol51–99 首跑 V 类（2026-10-26）：两形都有、刻形一眼可分；放行字跟整理本走、混放，首轮留出错例看图改标
-                               ("pai", "派𣲖", "右边 𠂢 有横／无横三竖"), ("qi", "奇竒", "上部 大／立"), ("sui", "歲嵗", "上部 止／山"))},
+                               ("pai", "派𣲖", "右边 𠂢 有横／无横三竖"), ("qi", "奇竒", "上部 大／立"), ("sui", "歲嵗", "上部 止／山"),
+                               # 隸𨽾（2026-10-26，A24 全册任务 07；原第一批 字频→IDS→库形最近）：殿本两种刻法，左上 木（柰）／士（士示）；
+                               # 士示 整理本作 隷 或 𨽻、字形库标 𨽾，录哪个码位由书级 `codepoints` 定（组只认刻形）
+                               ("li", "隸𨽾", "左上 木（柰）／士（士示）"),
+                               # 蒙𫎇（2026-10-26，同上；原第一批）：头部 艹／〢丷。旧判法「库形最近」会把 艹 头放成 𫎇（库两形紧咬）；
+                               # 整理本作 䝉 的与 𫎇 同一刻法，录哪个码位由书级 `codepoints` 定
+                               ("mn", "蒙𫎇", "头部 艹／〢丷（两竖带点）"))},
     # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮（码位已定 鄉→鄕 㣲→微 别→別 鎮→鎭），字形库却在
     # 形近的另一个字上拿不准（cov 差 0.01 内），库首位常就是它：鄉 排成 卿（殿本 卿 右作 阝，与 鄉 只差左边 乡／卯左），㣲 排成 徵徴，
     # 別 排成 刖所則（cov 0.99 一档），鎭 排成 鍾愼鏤…。別别 原是码位组（只给码位），10-26 移到这里。
