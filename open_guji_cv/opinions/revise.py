@@ -361,6 +361,9 @@ def revise(bt_root: str | Path, book: str, vol: str, todo: list, *, dry_run: boo
     texts = {k: bt.text(n) for k, n in names.items()}
     if texts["char"] is None:
         raise ReviseError(f"{vdir} 没有 {names['char']}")
+    if bt.text(f"{v3}.char-edits.json") is not None:
+        raise ReviseError(f"{vdir} 有未清的改字清单 {v3}.char-edits.json（0.x 精校期专用，book-text docs/design/2026-10-改字清单.md）："
+                          "先让 A33 用 char_edits.py sync 清空，再走 revise")
     old_char = json.loads(texts["char"])
     char, cord = copy.deepcopy(old_char), json.loads(texts["cord"]) if texts["cord"] else {"pages": []}
     applied = [apply_one(char, cord, op.id, rev, guess_style) for op, rev in todo]

@@ -500,7 +500,7 @@ def cmd_push(a) -> int:
     votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
-        bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
+        bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}", ref=a.rev)
     if doc_new.get("sprites"):                                   # 图先进 R2，单子再写：单上线时图一定取得到
         stats = sprite_pub.upload(doc_new["sprites"], Path(plan["sprites"]) / "pub")
         print(f"雪碧图 {len(doc_new['sprites'])} 张 → R2：{stats}")
@@ -848,42 +848,7 @@ def push_book_text_dev(repo: Path, tries: int = 4) -> bool:
     return False
 
 
-def _char_cells(char_json: Path) -> dict[str, str]:
-    d = json.loads(Path(char_json).read_text(encoding="utf-8"))
-    return {c["a"]: c.get("c") or "" for p in d.get("pages") or [] for col in p.get("columns") or [] for c in col.get("cells") or []}
-
-
-def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, str], *, volume: int,
-                       base_commit: str, base_text_version: str) -> tuple[dict | None, list[str]]:
-    """待重标清单（A33 定的格式 guji-punct-stale/0.1）：只登记单字替换（两边都是一个字）。
-
-    base_commit／base_text_version 多轮累积保留最早的；同一格再改，old 保留最早的、new 取最新，改回原字就撤掉。
-    增删字（一边是空）不进清单，返回在第二项里（"页:列:格 旧→新"），调用方要推分支叫 A33 重标。
-    没有任何变化返回 (原清单, [])。清单里 commit 先写空串，提交后由调用方补。"""
-    items = {i["anchor"]: dict(i) for i in (stale or {}).get("items") or []}
-    others: list[str] = []
-    for a_ in sorted(set(old) & set(new), key=_key):
-        o, n = old[a_], new[a_]
-        if o == n:
-            continue
-        if len(o) == 1 and len(n) == 1:
-            first = items.get(a_, {}).get("old", o)
-            if first == n:
-                items.pop(a_, None)
-            else:
-                items[a_] = {"anchor": a_, "old": first, "new": n, "commit": ""}
-        else:
-            others.append(f"{a_} {o or '□'}→{n or '□'}")
-    if not items:
-        return None, others
-    doc = {"schema": "guji-punct-stale/0.1", "volume": volume,
-           "base_commit": (stale or {}).get("base_commit") or base_commit,
-           "base_text_version": (stale or {}).get("base_text_version") or base_text_version,
-           "items": sorted(items.values(), key=lambda i: _key(i["anchor"]))}
-    return doc, others
-
-
-def bump_book_text(repo: Path, plan: dict, note: str) -> None:
+def bump_book_text(repo: Path, plan: dict, note: str, ref: str | None = None) -> None:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
 
     2026-10-24 用户定：流程化小改直接提交 dev，不开 PR；`index/texts` 不在 dev 上提交，CHANGES 的 PR 列写 #TBD，
@@ -891,32 +856,26 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     book_text_to_dev(repo)
     d = book_text_dir(repo, plan["text_id"])
     ch = plan["chapter"]
-    # 待重标清单：本章有标点时，单字替换登记进 NNN.punct-stale.json（A33 批量重标后删），不碰 punct／entity 本身
-    stale_doc, others = None, []
+    # 改字清单（book-text docs/design/2026-10-改字清单.md）：文本线 0.x、本章有标点或实体时，单格替换登记进
+    # NNN.char-edits.json（A33 的 char_edits.py sync 据此同步校验字）；增删字登记不了，推分支请 A33 重标
     old_char = d / f"{ch}.char.json"
     new_char = Path(plan["export_dir"]) / f"{ch}.char.json"
-    has_punct = (d / f"{ch}.punct.json").exists()
-    if has_punct and old_char.exists() and new_char.exists():
-        sp = d / f"{ch}.punct-stale.json"
-        cur = json.loads(sp.read_text(encoding="utf-8")) if sp.exists() else None
-        try:
-            idx = json.loads((d / "index.json").read_text(encoding="utf-8"))
-            tv = str(idx.get("text_version") or idx.get("version") or "")
-        except (OSError, ValueError):
-            tv = ""
-        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
-        stale_doc, others = punct_stale_update(cur, _char_cells(old_char), _char_cells(new_char),
-                                               volume=int(ch), base_commit=head, base_text_version=tv)
-        if others:
-            sys.exit("✗ 本轮有增删字（标点锚点会错位，不能走待重标清单）：" + "、".join(others[:12])
-                     + "\n  把改字推到分支 a32-<册号>-<主题>，通知 A33 在分支上重标，不要推 dev")
+    record = None
+    if old_char.exists() and new_char.exists() and any((d / f"{ch}.{k}.json").exists() for k in ("punct", "entity")):
+        if str(json.loads(old_char.read_text(encoding="utf-8")).get("version") or "").startswith("0."):
+            record = repo / "scripts" / "book-text" / "char_edits.py"
+            if not record.exists():
+                sys.exit("✗ book-text 的 dev 上没有 scripts/book-text/char_edits.py（改字清单工具）：先让 dev 合进含该工具的 main")
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
-    if stale_doc:
-        (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")
+    if record:
+        rc = run([sys.executable, record, "record", d, "--chapter", ch, "--old-char", "git:HEAD",
+                  "--ref", ref or note, "--by", "republish"], cwd=repo).returncode
+        if rc:
+            sys.exit("✗ 改字清单登记失败（多半是本轮有增删字，标点锚点会错位）：把改字推到分支 a32-<册号>-<主题>，"
+                     "通知 A33 在分支上重标，不要推 dev")
     for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
                  "--chapter", ch, "--note", note, "--pr", "TBD"],
                 [sys.executable, "scripts/local_check.py", "--dev"],
@@ -924,14 +883,6 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
                 ["git", "commit", "-qm", f"{note}"]):
         if run(cmd, cwd=repo).returncode:
             sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
-    if stale_doc:                           # 补每条的改字提交号（A33 格式要求），再单独提交一次
-        h = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
-        for i in stale_doc["items"]:
-            if not i["commit"]:
-                i["commit"] = h
-        (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        if run(["git", "add", "-A", str(d)], cwd=repo).returncode or run(["git", "commit", "-qm", f"{ch} 待重标清单补改字提交号"], cwd=repo).returncode:
-            sys.exit("✗ book-text 补待重标清单提交号失败")
     if not push_book_text_dev(repo):
         sys.exit("✗ book-text 推 dev 失败（rebase 冲突或网络）：提交在本地 dev 上，处理后 git push origin HEAD:dev")
     print("book-text 已提交并推到 dev：每日合并（洛杉矶 03:30）进 main，CHANGES 的 #TBD 届时换成 PR 号")
