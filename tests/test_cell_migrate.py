@@ -132,3 +132,41 @@ def test_write_report_files_and_counts_cross_check(rows, tmp_path):
     r.n_events_in += 1
     with pytest.raises(AssertionError):
         r.check()
+
+
+def test_bindings_map_by_bound_cell_and_skip_unbound(rows):
+    """旧 main 上 rebound 的按绑定格查表（原始 key 偏一格）；没认上格的不迁、列待审。"""
+    a = ev("vol04:11:2:4", "隆", seq=1)               # 原始 key 11:2:4，旧 main 改绑到 11:2:5
+    b = ev("vol04:3:1:1", "欽", seq=2)                # 旧 main 上 review，没采信
+    c = ev("vol04:7:1:1a", "湖", seq=3)               # 绑定表里没有：照原始 key
+    bind = {a.id: {"bound": "vol04:11:2:5", "status": "rebound"}, b.id: {"bound": None, "status": "review"}}
+    r = migrate_events([a, b, c], rows, "vol04", "3", bindings=bind)
+    got = {d["id"]: d for d in r.events}
+    assert got[a.id + "~q"]["target"]["key"] == "vol04:9:2:4"
+    assert got[a.id + "~q"]["target"]["anchor"]["migrated_from"] == {"key": "vol04:11:2:4", "id": a.id, "bound": "vol04:11:2:5"}
+    assert got[c.id + "~q"]["target"]["key"] == "vol04:6:1:1a"
+    assert dict(r.reasons("人裁")) == {"旧绑定失效": 1}
+    assert r.watch[0][0] == "vol04:11:2:5"            # 观察表记的是绑定格
+    r.check()
+
+
+def test_already_migrated_events_are_skipped(rows):
+    done = ev("vol04:9:2:3", "乾", seq=1).model_copy(update={"target": EventTarget(
+        step="seed_admit", unit="cell", key="vol04:9:2:3",
+        anchor={"migrated_from": {"key": "vol04:11:2:4", "id": "evt_x"}, "source_rev": "3"})})
+    r = migrate_events([done, ev("vol04:11:2:4", "乾", seq=2)], rows, "vol04", "3")
+    assert len(r.events) == 1 and r.n_events_in == 1 and r.ignored["已是迁移事件（新页号）"] == 1
+    r.check()
+
+
+def test_rebound_into_cell_with_later_native_verdict_is_superseded(rows):
+    """旧 main 上 rebound 到 11:2:5，而 11:2:5 自己有更晚的人裁：更晚的留下，早的算被盖掉，不列冲突；review 的不迁。"""
+    a = ev("vol04:11:2:4", "讖", seq=1, ts="2026-10-20T00:00:00Z")
+    b = ev("vol04:11:2:5", "䜟", seq=2, ts="2026-10-25T00:00:00Z")
+    c = ev("vol04:3:1:1", "欽", seq=3)
+    bind = {a.id: {"bound": "vol04:11:2:5", "status": "rebound"}, b.id: {"bound": "vol04:11:2:5", "status": "valid"},
+            c.id: {"bound": "vol04:3:1:1", "status": "review"}}
+    r = migrate_events([a, b, c], rows, "vol04", "3", bindings=bind)
+    assert [(d["target"]["key"], d["payload"]["shape"]) for d in r.events] == [("vol04:9:2:4", "䜟")]
+    assert dict(r.reasons("人裁")) == {"旧绑定失效": 1} and r.ignored["被同格更晚的人裁盖掉"] == 1
+    r.check()
