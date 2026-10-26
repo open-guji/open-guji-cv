@@ -7,6 +7,8 @@
 
 PATCH（#612 #614 #616 #619 #621 字组与人裁，#606 #611 #613 #615 #617 工具）。seed_admit、glyphdb_admit 的 `code_hash` 变。
 
+- yh 文意规则 還鄉 补 鄕：中心库码位 鄉→鄕（暂归一）后整理本／放行字作 鄕，原规则只认 鄉。
+
 - proof_cycle apply 加 `--ack-unlanded-votes <原因>`：旧单有票没法落成人裁（如图形格）时，原样交给 republish issue 放行换单。
 ### Fixed
 - 字形库人裁以最后一票为准（`glyphdb_admit`，sheldon 10-26 定）：按人裁时间 `ts`（`replay_key`）处理，库里这一格已是更晚的人裁时旧票不再覆盖（此前按消费顺序覆盖，补消费积压时旧票压掉新票：vol04:143:9:16 改判 由 后被 10-22 的 山 盖回，全库 7 格）；更晚的人裁判切坏／非字／破损（`seg_defect`、`not_a_char`、`damaged`，含 `kind=not_a_char`）时撤掉这一格更早的人裁刻例（此前一直留着，全库 16 格）。新刻例证据记 `ts`；路由表 `not_a_char` 加 `glyphdb_admit` 去处。结果多两个计数 `superseded`、`withdrawn`。
