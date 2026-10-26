@@ -199,6 +199,24 @@ def _watch(ws_dir: Path, interval: int, dry_run: bool) -> None:
         time.sleep(interval)
 
 
+def _rev_gate_dropped(ws_dir: Path | None) -> dict[str, int]:
+    """本地数据目录的人裁事件里，因换图源页表 rev 判据不采信的条数，按册（GUJI-748 §六：不静默丢）。"""
+    from .feedback.events import EventLog
+    try:
+        from .core.workspace import data_root
+        d = data_root(ws_dir) if ws_dir is not None else None
+        log = EventLog(d / "feedback" if d is not None else None)
+        for _ in log.iter_all():
+            pass
+    except Exception:                   # 没设工作区、日志读不了：status 照常出
+        return {}
+    out: dict[str, int] = {}
+    for per_book in log.dropped.values():
+        for b, n in per_book.items():
+            out[b] = out.get(b, 0) + n
+    return out
+
+
 def cmd_db(args) -> None:
     from .datastore.client import BlobCache, WorkerSource
     ws_dir = _ws_dir(args)
@@ -238,7 +256,13 @@ def cmd_db(args) -> None:
 
     if args.action == "status":
         from .datastore.pull import status
-        _print(status(src, ws_dir))
+        res = status(src, ws_dir)
+        dropped = _rev_gate_dropped(ws_dir)
+        if dropped:
+            res["rev_gate_dropped"] = dropped
+            print(f"⚠️  本地人裁事件里有 {sum(dropped.values())} 条因页表 rev 不符不采信（换图源前的旧页号）："
+                  f"{json.dumps(dropped, ensure_ascii=False)}", file=sys.stderr)
+        _print(res)
         return
 
     if args.action == "pull":

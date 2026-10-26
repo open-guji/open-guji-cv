@@ -5,6 +5,15 @@
 
 ## [未发版]
 
+## [0.5.25] - 2026-10-26
+
+PATCH（#654 换图源后旧页号事件不采信；#652 qa_pick）。无 Step 的 `code_hash` 变。
+
+### Added
+- 换图源（GUJI-748，设计 `doc/design/殿本换图源-siku-qiefen-v2.md` §六）：册 yaml 写了 `source_rev` 的册（已换图源），指向页的人裁事件锚里 `anchor.source_rev` 相符才采信，旧页号事件一律不采信（不看 ts）；`glyph_audit` 与不指向页的事件豁免，没切的册行为不变。统一读口 `core/event_files.py`，`EventLog` 读缺省过判据、维护日志读原样；写入拒写、`guji db push` 拒收新的旧 rev 事件（提示走 `guji cellvotes migrate`）；`guji db status` 与落票脚本打印不采信条数；原先直接扫事件文件的 11 处改走统一读口，测试禁止别处再直接扫。
+
+- `scripts/zhengli/qa_pick.py` 默认配额加 `follow_ref=10`（v0.5.24 新放行通道），免得质检样本漏掉它（没列的通道不挑）。PATCH，不动 Step。
+
 ## [0.5.24] - 2026-10-26
 
 PATCH（#648 修 `--override` 起不来；字组 #647 等）。

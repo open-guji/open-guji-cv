@@ -38,14 +38,10 @@ def _known_variants(repo: Path = REPO_ROOT) -> set[frozenset]:
 
 
 def _collate_verdicts(events_dir: Path):
-    for f in sorted(Path(events_dir).glob("*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            if e.get("kind") == "collate_verdict":
-                yield e
+    from ..core.event_files import iter_event_dicts
+    for e in iter_event_dicts(Path(events_dir)):
+        if e.get("kind") == "collate_verdict":
+            yield e
 
 
 def mine_corpus(ws_dir: Path, *, min_confusable: int = 3, repo: Path = REPO_ROOT) -> dict:

@@ -615,26 +615,23 @@ def _cell_of(iid: str, v1_ids: set[str], v1_map: dict[str, str]) -> str | None:
 def _latest_confirms(root: Path) -> dict[str, dict]:
     """每格最新一条定字类裁决（confirm 事件，含 v=not_a_char / skip / damaged / seg_defect）。"""
     out: dict[str, dict] = {}
-    for f in sorted((root / "events").glob("*.jsonl")):
-        for ln in open(f, encoding="utf-8"):
-            if not ln.strip():
-                continue
-            e = json.loads(ln)
-            if e.get("kind") != "confirm":
-                continue
-            k = e["target"]["key"]
-            if k.startswith("v2:"):
-                k = k[3:]
-            p = e.get("payload") or {}
-            v = p.get("v") or "confirm"
-            if v == "seg_defect" and k in out:
-                # 切分缺陷与定字是两件事：只补记，不盖掉定字
-                out[k].setdefault("seg_defect", p.get("quality"))
-                continue
-            prev = out.get(k)
-            if prev is None or (e.get("ts") or "") >= prev["ts"]:
-                out[k] = {"ts": e.get("ts") or "", "v": v, "shape": p.get("shape") or p.get("char"),
-                          "event": e["id"], "note": p.get("note")}
+    from ..core.event_files import iter_event_dicts
+    for e in iter_event_dicts(root / "events"):              # 换图源的页表 rev 判据在这里一并生效
+        if e.get("kind") != "confirm":
+            continue
+        k = e["target"]["key"]
+        if k.startswith("v2:"):
+            k = k[3:]
+        p = e.get("payload") or {}
+        v = p.get("v") or "confirm"
+        if v == "seg_defect" and k in out:
+            # 切分缺陷与定字是两件事：只补记，不盖掉定字
+            out[k].setdefault("seg_defect", p.get("quality"))
+            continue
+        prev = out.get(k)
+        if prev is None or (e.get("ts") or "") >= prev["ts"]:
+            out[k] = {"ts": e.get("ts") or "", "v": v, "shape": p.get("shape") or p.get("char"),
+                      "event": e["id"], "note": p.get("note")}
     return out
 
 
