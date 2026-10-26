@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- proof_cycle apply 加 `--ack-unlanded-votes <原因>`：旧单有票没法落成人裁（如图形格）时，原样交给 republish issue 放行换单。
+
 ## [0.5.21] - 2026-10-25
 
 PATCH（#605 字组）。seed_admit 的 `code_hash` 变（`groups/` 注册表、流程、字形判法表）。
