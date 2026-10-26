@@ -1443,7 +1443,7 @@ class SeedAdmitStep(Step):
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。
             for col in out:
                 for rec in col.chars or []:
-                    if rec.admit and rec.char:
+                    if rec.admit and rec.char and not _codepoint_exempt(rec, ctx.book):
                         rec.char = ctx.book.canonical_char(rec.char)
         if patch_missing:
             lanes: dict[str, int] = {}
@@ -1454,6 +1454,31 @@ class SeedAdmitStep(Step):
                     f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
                                         n_review=n_review, columns=out)}
+
+
+def _codepoint_exempt(rec, book) -> bool:
+    """放行字落册码位的例外：这对字已有按刻形拆判的字组（`registry.SHAPE_GROUPS`，如 變𠮓 bian），
+    码位归一只是兜底（「暂归一」），人裁的刻形、该组判出的刻形照录，不归一。
+    vol04:197:7:3 人裁 變 被工作区 變→𠮓 改回 𠮓（A32 10-25 报），bian 组判出的 變 也一样被改回（A24 10-25）。"""
+    tgt = book.canonical_char(rec.char)
+    if tgt == rec.char:
+        return False
+    gids = _shape_split(rec.char, tgt)
+    if not gids:
+        return False
+    if rec.channel == "human" or rec.provenance == "human":
+        return True
+    grp = (rec.evidence or {}).get("group") or {}
+    return grp.get("id") in gids and grp.get("pick") == rec.char
+
+
+@lru_cache(maxsize=256)
+def _shape_split(a: str, b: str) -> frozenset[str]:
+    """把 a、b 拆成两个字判的字组 id。两形同在一族（`FlowSpec.families`，如 guan 的 宫宮：族内只按库形最近取，
+    宮→宫 是 sheldon 定的暂归一）不算拆判。"""
+    from ..groups.registry import SHAPE_GROUPS
+    return frozenset(g for g, s in SHAPE_GROUPS.items() if a in s.members and b in s.members
+                     and not any(a in f and b in f for f in s.flow.families))
 
 
 def _demote(rec, by: str) -> None:
