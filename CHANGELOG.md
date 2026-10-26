@@ -31,6 +31,7 @@ PATCH（#612 #614 #616 #619 #621 字组与人裁，#606 #611 #613 #615 #617 工�
 ### Added
 - 字组：新 SHAPE 组 pai 派𣲖（右边 𠂢 有横／无横）、qi 奇竒（上部 大／立）、sui 歲嵗（上部 止／山）：模板＝vol51–99 已放行格，首轮按册留出错例看图改标；门槛 0.5／1.0／0.5 按册留出 0 错；ref_enter＋lift_ref_agree。册 yaml `group_flow` 不点名就不生效。vol51–99 离线回放补放 74、改码位 14，三组送审 89→16。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
+- 字组 shi、fa 补 vol51–99 标注（勢𫝑 144 格、發𤼵 159 格）进模板库；fa 门槛 0.5→0.9（按册留出 660 格 0 错），shi 310 格门槛 0.5 仍 0 错。vol51–99 样本外回放：补放 79、改码位 81，逐格看图。seed_admit 的 `code_hash` 变。
 - 任务库看板：`guji job board`（执行方领单、收尾、心跳时自动写）把在跑、排队、最近结束的任务整理成一张表，写进中心库 `progress.metric`（栏目 `jobs`），网站后台「文本整理 → 重跑任务」显示：配置、状态、阶段、开始时间、已跑多久、预计完成（同类已成功任务耗时中位数）、结果包。不动任何 Step，`code_hash` 不变。
 
 - cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
