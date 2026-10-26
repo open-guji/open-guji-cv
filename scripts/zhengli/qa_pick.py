@@ -36,6 +36,7 @@ from zoneinfo import ZoneInfo
 DEFAULT_QUOTA = {
     "rare_ref": 20, "context": 12, "witness3": 10, "match_replace": 10, "coord_fallback": 8,
     "group_flow": 6, "iron": 4, "split_ref": 4, "seal": 4, "note_lexicon": 4, "match_ref": 8,
+    "follow_ref": 10,                 # v0.5.24 新通道：照录整理本异体对，刚上线、没质检过，多挑
 }
 MAX_CELLS = 199                      # 用户定：样本少于 200
 VERDICTS = ("对", "错", "看不出")
