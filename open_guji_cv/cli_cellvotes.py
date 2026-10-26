@@ -4,6 +4,9 @@
         --out <目录> -w <工作区>                   # 只读：出 drafts.jsonl（可写的）、held.tsv（挂起的）、report.md
                                                   # 另出 recheck.tsv：挂起里回网站再看的格（推翻旧裁、意见不一致、
                                                   # 说无字又给字、格位变了），交 republish.py prep --recheck
+    guji cellvotes migrate vol04 --cells <old_new_cells/vol04.tsv[.gz]> --source-rev <新页表rev> --out <目录> -w <工作区>
+                                                  # 换图源迁票（GUJI-748）：只读，按格级对照表把每格最新人裁（和给了 --rev 的票）
+                                                  # 迁到新格，出 events.jsonl／votes.jsonl／pending.tsv（没迁的）／report.md
     guji cellvotes write vol04 <目录> --batch H-web-vol04-2026-10-20 --reviewer Sheldon -w <工作区>
                                                   # 写进数据目录（锚按现行产物算）并消费；推库另跑 guji db sync
 
@@ -204,9 +207,39 @@ def cmd_write(args) -> None:
         _print("已写进数据目录；推库：guji db sync -w <工作区>（写中心库前先报告、等点头）")
 
 
+def cmd_migrate(args) -> None:
+    """换图源迁票提案（逻辑在 `feedback/cell_migrate.py`）。只读：不写事件、不写库。"""
+    from .core.workspace import feedback_root
+    from .feedback import cell_migrate as M
+    from .feedback.events import EventLog
+    from .feedback.web_votes import latest_votes
+    miss = [k for k in ("cells", "source_rev", "out") if not getattr(args, k)]
+    if miss:
+        raise SystemExit("migrate 要 " + "、".join("--" + k.replace("_", "-") for k in miss))
+    rows = M.load_table(args.cells)
+    if args.events:
+        from .feedback.events import Event
+        events = [Event.model_validate_json(line) for f in args.events
+                  for line in Path(f).read_text(encoding="utf-8").splitlines() if line.strip()]
+        where = "、".join(args.events)
+    else:
+        events = [e for e in EventLog(feedback_root()).iter_all() if e.target.key.startswith(args.book + ":")]
+        where = f"数据目录 {feedback_root()}"
+    res = M.migrate_events(events, rows, args.book, args.source_rev, min_iou=args.min_iou)
+    if args.site_book and args.rev:
+        raw, vwhere = _votes(args)
+        votes, _ = latest_votes(raw, args.site_book, args.rev)
+        M.migrate_votes(votes, rows, args.book, args.source_rev, min_iou=args.min_iou, new_rev=args.new_rev, result=res)
+        where += f"；票 {vwhere}"
+    M.write_report(res, Path(args.out), cells_path=str(args.cells), extra={"人裁来源": where})
+    pe = sum(res.reasons("人裁").values())
+    _print(f"人裁 {res.n_events_in} → 迁出 {len(res.events)}、合并 {res.n_merged}、没迁 {pe}；"
+           f"票 {res.n_votes_in} → 迁出 {len(res.votes)}、没迁 {sum(res.reasons('票').values())}  → {args.out}/report.md")
+
+
 def add_parser(sub) -> None:
-    p = sub.add_parser("cellvotes", help="网站精校页投票 → 人裁事件：draft（只读出草稿）| write（写入并消费）")
-    p.add_argument("action", choices=["draft", "write"])
+    p = sub.add_parser("cellvotes", help="网站精校页投票 → 人裁事件：draft（只读出草稿）| write（写入并消费）| migrate（换图源迁票提案，只读）")
+    p.add_argument("action", choices=["draft", "write", "migrate"])
     p.add_argument("book", help="cv 册 id，如 vol04")
     p.add_argument("dir", nargs="?", default=None, help="write：draft 的输出目录")
     p.add_argument("--site-book", help="draft：网站书 id，如 96mid1ogzk")
@@ -225,6 +258,11 @@ def add_parser(sub) -> None:
     p.add_argument("--out", default=None, help="draft：输出目录")
     p.add_argument("--batch", default=None, help="write：批次名，如 H-web-vol04-2026-10-20")
     p.add_argument("--reviewer", default=None, help="write：裁决人（投票的人）")
+    p.add_argument("--cells", default=None, help="migrate：格级对照表 old_new_cells/<册>.tsv（可 .gz）；旧格取出单那一版")
+    p.add_argument("--events", action="append", default=None, help="migrate：旧人裁事件 jsonl（可重复）；缺省读数据目录")
+    p.add_argument("--source-rev", default=None, help="migrate：新页表 rev，写进迁移事件 anchor.source_rev")
+    p.add_argument("--min-iou", type=float, default=0.5, help="migrate：IoU 门槛，低于它的不迁（缺省 0.5）")
+    p.add_argument("--new-rev", default=None, help="migrate：迁出的票改写成这个待审单 rev（缺省不改）")
     p.add_argument("--no-consume", action="store_true", help="write：只写不消费")
 
 
@@ -234,6 +272,8 @@ def cmd_cellvotes(args) -> None:
         if missing:
             raise SystemExit("draft 要 " + "、".join("--" + k.replace("_", "-") for k in missing))
         cmd_draft(args)
+    elif args.action == "migrate":
+        cmd_migrate(args)
     else:
         if not args.dir or not args.batch or not args.reviewer:
             raise SystemExit("write 要 <目录> --batch --reviewer")
