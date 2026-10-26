@@ -122,11 +122,11 @@ def test_bank_path_prefers_workspace_and_fingerprint(tmp_path, monkeypatch):
     monkeypatch.setenv("GUJI_WORKSPACE", str(ws))
     assert O.bank_path("can") == p and O.has_bank("can")
     assert O.bank_path("dian") is None and not O.has_bank("dian")          # 没登记判法、也没库（點㸃）
-    f1 = O.fingerprint(("can", "mn"))
-    assert f1.startswith("ids:can=") and "mn" not in f1 and "lv1=" in f1
+    f1 = O.fingerprint(("can", "dian"))
+    assert f1.startswith("ids:can=") and "dian" not in f1 and "lv1=" in f1
     O.write_bank(O.dump_bank("can", _bank(n_bar=10), {}), p)
     assert O.fingerprint(("can",)) != f1                                 # 模板库变 → 指纹变
-    assert O.fingerprint(("mn", "dian", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
+    assert O.fingerprint(("dian", "jys")) == ""                     # 没有在线 IDS 的组：空，不改旧指纹
 
 
 def test_judge_entry_without_bank_or_patch(monkeypatch):
@@ -168,7 +168,7 @@ def test_seed_admit_fingerprint_includes_ids(can_bank):
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     p = SeedAdmitParams(db_path="x", group_flow=("can",))
     assert ":ids:can=" in p.group_flow_fingerprint
-    q = SeedAdmitParams(db_path="x", group_flow=("mn",))
+    q = SeedAdmitParams(db_path="x", group_flow=("dian",))
     assert "ids:" not in q.group_flow_fingerprint
 
 

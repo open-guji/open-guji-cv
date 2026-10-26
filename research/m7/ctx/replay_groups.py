@@ -10,6 +10,7 @@
   不给则字块一律缺（看图的方法弃权）。
 - `--codepoints <工作区 config/codepoints.yaml>`：书级码位归一（码位法组 `codepoint` 要它，同线上 `canon`）。
 - `--raw <原图根>`：不要工作区，字块按 `cell_shrink` 的 `bbox_page` 从 `<原图根>/<册>/<页>.png` 裁（同 build_shape_pair.py 建库的取法）。
+- `--codepoints 䝉=𫎇,𨽾=隷`：书级码位（同工作区 `config/codepoints.yaml`，也可给 yaml 路径），整理本字与组员按它归一（同线上 `canon`）。
 输出每个进了流程的格一行：前后的放行状态、结论、各方法留痕、窗口。
 """
 import argparse, json, sys
@@ -28,8 +29,18 @@ ap.add_argument("root"); ap.add_argument("vols"); ap.add_argument("out")
 ap.add_argument("--groups", required=True); ap.add_argument("--redo", default="")
 ap.add_argument("--tables", default=None); ap.add_argument("--patches", action="store_true")
 ap.add_argument("--raw", default=None)
-ap.add_argument("--codepoints", default=None, help="工作区 config/codepoints.yaml：码位法组与补放互证按它归一（不给则码位法组只会弃权）")
+ap.add_argument("--codepoints", default="", help="工作区 config/codepoints.yaml，或 `䝉=𫎇,𨽾=隷`：码位法组与补放互证按它归一（不给则码位法组只会弃权）")
 a = ap.parse_args()
+if a.codepoints.endswith((".yaml", ".yml")):
+    import yaml
+    CP = {str(k): str(v) for k, v in ((yaml.safe_load(open(a.codepoints, encoding="utf-8")) or {}).get("codepoints") or {}).items()}
+else:
+    CP = dict(kv.split("=", 1) for kv in a.codepoints.split(",") if kv)
+
+
+def canon(c):
+    return CP.get(c, c)
+
 root = Path(a.root)
 groups = flow_names(a.groups.split(","))
 redo = set(a.redo.split(",")) - {""}
@@ -39,11 +50,7 @@ if a.tables:
         t = Path(a.tables) / f"{g}.json"
         if t.exists():
             tables[g] = str(t)
-CANON = {}
-if a.codepoints:
-    import yaml
-    CANON = {str(k): str(v) for k, v in ((yaml.safe_load(open(a.codepoints, encoding="utf-8")) or {}).get("codepoints") or {}).items()}
-canon = (lambda c: CANON.get(c, c)) if CANON else None
+canon = canon if CP else None
 cfg = FlowConfig(groups=groups, l2_tables=tables, l2_drift=2, joint=True, canon=canon)
 FIELDS = ("id", "char", "admit", "channel", "provenance", "doubts", "evidence", "slot", "sub")
 
