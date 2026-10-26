@@ -192,13 +192,17 @@ def rekey_glyph_db(db_path: str | Path, cm: CellMap, rev: int | str, *, dry_run:
     """按格级表改本册实例 id。返回 `{summary, rows}`；`dry_run` 只推演不写。
 
     幂等：改过的库里本册已经没有旧坐标的 id——新格键会被当成「旧格」再查一次表，
-    所以**同一张表不能对同一个库跑两遍**；第二遍会被拒（库里已有本工具写的 `rekey:` 撤例记录）。"""
+    所以**同一册不能对同一个库改两遍**（换一张表也不行）；第二遍会被拒（库里已有本册的 `rekey:` 撤例记录）。"""
     db_path = str(db_path)
     c = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) if dry_run else sqlite3.connect(db_path)
     try:
         tag = f"rekey:{note}:{cm.source}"
-        if c.execute("SELECT 1 FROM evictions WHERE reason LIKE ? LIMIT 1", (tag + "%",)).fetchone():
-            raise SystemExit(f"✗ 这个库已经按 {cm.source} 改过键（evictions 里有 {tag}…），不能再跑一遍")
+        # 按册判，不按表的文件名判：试算表和正式表文件名可以不同，换一张表再跑一遍同样会把新格键当旧格再改一次
+        done = c.execute("SELECT reason FROM evictions WHERE reason LIKE ? AND "
+                         "(instance_id LIKE ? OR instance_id LIKE ?) LIMIT 1",
+                         (f"rekey:{note}:%", f"{cm.book}:%", f"%:{cm.book}:%")).fetchone()
+        if done:
+            raise SystemExit(f"✗ 这个库的 {cm.book} 已经改过键（evictions 里有 {done[0].split('->')[0]}…），不能再跑一遍")
         rows = plan_glyph_db(c, cm, rev)
         summary = _summarize(rows)
         if dry_run or not rows:

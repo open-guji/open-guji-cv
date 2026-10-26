@@ -130,8 +130,12 @@ def test_parked_ids_do_not_read_back_as_cells():
 
 
 def test_glyph_db_second_run_refused(db, cmap):
+    """同一册改第二遍被拒，换一张文件名不同的表（试算表 → 正式表）也拒。"""
     ck.rekey_glyph_db(db, cmap, rev=1)
-    with pytest.raises(SystemExit, match="已经按"):
+    with pytest.raises(SystemExit, match="已经改过键"):
+        ck.rekey_glyph_db(db, cmap, rev=1)
+    cmap.source = "vol04-正式.tsv"
+    with pytest.raises(SystemExit, match="已经改过键"):
         ck.rekey_glyph_db(db, cmap, rev=1)
 
 
