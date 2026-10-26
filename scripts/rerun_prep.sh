@@ -90,6 +90,14 @@ v = sys.argv[1]
 n0 = len(human_chars(v, bind=False))
 if not ProductStore().step_dir(v, cells_step(v)).is_dir():
     sys.exit(print(f"人裁 {v}：按编号 {n0}（还没有切分产物，绑定自检等跑完 Step3 再看）"))
+# 换图源（GUJI-748）：册 yaml 钉了 source_rev，本机产物却是别的页表 rev（旧图）——这些产物和新页号的人裁不在一个坐标系，
+# 拿它认格必然「认不出」。等同还没有切分产物。
+from open_guji_cv.core.book import load_book
+want = getattr(load_book(v), "source_rev", None)
+have = ProductStore().source_rev(v)
+if want is not None and have != int(want):
+    sys.exit(print(f"人裁 {v}：按编号 {n0}（本机产物是页表 rev {have}，册 yaml 钉 rev {want}：换图源后还没有新图产物，"
+                   f"绑定自检等跑完 Step3 再看）"))
 lost = {}
 n = len(human_chars(v, lost=lost))
 rows = book_bindings(v)
