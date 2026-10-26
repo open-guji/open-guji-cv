@@ -4,6 +4,7 @@
 工作区里只留 workspace.yaml（身份）与 `.central.json` 标记；数据在工作区外的数据目录
 （`$GUJI_DATA_HOME`，缺省 `~/.guji-data`，下面按 <分支>/<工作区 id>/）。
 
+    guji db init    -w <工作区> [--dry-run]                   # 新开一部书：库里还没有的工作区，数据挪进数据目录，再 db push
     guji db migrate -w <工作区> [--keep-local] [--dry-run]   # 一次性：工作区里的数据挪进数据目录
     guji db pull    -w <工作区> [--force]                     # 中心库 → 数据目录（有新字形库才重建 glyph.db）
     guji db push    -w <工作区> [--dry-run] [--allow-delete]  # 数据目录 → 中心库，先比版本号
@@ -220,7 +221,7 @@ def _rev_gate_dropped(ws_dir: Path | None) -> dict[str, int]:
 def cmd_db(args) -> None:
     from .datastore.client import BlobCache, WorkerSource
     ws_dir = _ws_dir(args)
-    need_ws = {"pull", "push", "sync", "migrate", "import"}
+    need_ws = {"pull", "push", "sync", "migrate", "import", "init"}
     if args.action in need_ws | {"diff"} and ws_dir is None:
         raise SystemExit(f"db {args.action} 要 -w <工作区>（或 GUJI_WORKSPACE）")
     if args.branch and args.action not in ("branch", "import"):
@@ -275,6 +276,14 @@ def cmd_db(args) -> None:
         _print(res)
         return
 
+    if args.action == "init":
+        from .datastore.workcopy import init
+        res = init(src, ws_dir, dry_run=args.dry_run)
+        if not args.dry_run:
+            print(f"✓ {res['ws']}：{res['pending']} 个文件待推；接着 guji db push -w {ws_dir}（要正式令牌）", file=sys.stderr)
+        _print(res)
+        return
+
     if args.action == "migrate":
         from .datastore.workcopy import migrate
         res = migrate(src, ws_dir, cache=BlobCache(), bucket=args.bucket, keep_local=args.keep_local,
@@ -313,8 +322,8 @@ def cmd_db(args) -> None:
 
 
 def add_parser(sub) -> None:
-    p = sub.add_parser("db", help="中心库：migrate / pull / push / status / branch / import（GUJI-606/608）")
-    p.add_argument("action", choices=["status", "migrate", "pull", "push", "sync", "branch", "import", "diff"])
+    p = sub.add_parser("db", help="中心库：init / migrate / pull / push / status / branch / import（GUJI-606/608）")
+    p.add_argument("action", choices=["status", "init", "migrate", "pull", "push", "sync", "branch", "import", "diff"])
     p.add_argument("args", nargs="*", help="branch 的子命令与分支名")
     p.add_argument("-w", "--workspace", default=None, help="工作区仓根（含 workspace.yaml）；不给读 GUJI_WORKSPACE")
     p.add_argument("--branch", default=None,

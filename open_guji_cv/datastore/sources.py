@@ -269,6 +269,50 @@ def djvu_to_zip(djvu: Path, dest_zip: Path) -> int:
     return n
 
 
+def pdf_to_zip(pdf: Path, dest_zip: Path) -> int:
+    """扫描 PDF（每页一张内嵌图，如哈佛 DRS、国图转存 Commons 的 PDF）→ 叶 zip（`<名>_<页号4位>.<原扩展名>`），
+    交给 `build_from_zip`。用 poppler 的 `pdfimages -all` 原样取出内嵌图（JPEG 不重编码、不按页框重采样），
+    所以页图与 PDF 里的像素逐个相同。每页必须恰好一张图（蒙版 smask 不算），否则拒绝（矢量／拼贴页要另想办法）。
+    返回页数。要装 poppler-utils（`pdfimages`）。"""
+    import subprocess
+    import tempfile
+    import zipfile
+    lst = subprocess.run(["pdfimages", "-list", str(pdf)], capture_output=True, text=True, check=True).stdout
+    per_page: dict[int, int] = {}
+    for line in lst.splitlines()[2:]:
+        f = line.split()
+        if len(f) > 2 and f[0].isdigit() and f[2] == "image":
+            per_page[int(f[0])] = per_page.get(int(f[0]), 0) + 1
+    n = int(re.search(r"Pages:\s+(\d+)", subprocess.run(["pdfinfo", str(pdf)], capture_output=True, text=True,
+                                                           check=True).stdout).group(1))
+    bad = {pg: c for pg, c in per_page.items() if c != 1}
+    miss = sorted(set(range(1, n + 1)) - set(per_page))
+    if bad or miss:
+        raise ValueError(f"{pdf.name}：每页应恰好一张内嵌图；多图的页 {dict(list(bad.items())[:5])}，无图的页 {miss[:5]}")
+    stem = re.sub(r"[^A-Za-z0-9-]+", "_", Path(pdf).stem).strip("_") or "pdf"
+    with tempfile.TemporaryDirectory() as td, zipfile.ZipFile(dest_zip, "w", zipfile.ZIP_STORED) as z:
+        subprocess.run(["pdfimages", "-all", "-p", str(pdf), str(Path(td) / "x")], check=True)
+        got = {}
+        for f in Path(td).iterdir():
+            m = re.match(r"x-(\d+)-\d+\.(\w+)$", f.name)
+            if m:
+                got[int(m.group(1))] = f
+        for pg in range(1, n + 1):
+            f = got[pg]
+            z.write(f, f"{stem}_{pg:04d}{f.suffix.lower()}")
+    return n
+
+
+def source_to_zip(path: Path, dest_zip: Path) -> tuple[int, str]:
+    """Commons 源件 → 叶 zip，按扩展名选解码：DjVu 用 `ddjvu`，PDF 用 `pdfimages`。返回 (页数, 解码器)。"""
+    suf = Path(path).suffix.lower()
+    if suf == ".pdf":
+        return pdf_to_zip(path, dest_zip), "pdfimages"
+    if suf in (".djvu", ".djv"):
+        return djvu_to_zip(path, dest_zip), "ddjvu"
+    raise ValueError(f"不认识的源件格式：{path}（只支持 DjVu、PDF）")
+
+
 # ─── 修好的页回传 Commons（设计稿 §十三）────────────────────────────────
 
 def djvu_count(djvu: Path) -> int:
@@ -457,7 +501,7 @@ def zip_leaves(zip_path: Path) -> list[str]:
     """源件 zip 里的叶，按文件名排序（IA 文件名 `<id>_<叶号4位>.tif`，排序即叶序）。"""
     import zipfile
     with zipfile.ZipFile(zip_path) as z:
-        return sorted(n for n in z.namelist() if n.lower().endswith((".tif", ".tiff", ".jp2", ".png", ".jpg")))
+        return sorted(n for n in z.namelist() if n.lower().endswith((".tif", ".tiff", ".jp2", ".png", ".jpg", ".jpeg")))
 
 
 def _leaf_no(name: str, fallback: int) -> int:

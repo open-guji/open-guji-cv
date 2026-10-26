@@ -277,3 +277,47 @@ def test_pack_for_commons_splits_one_leaf(tmp_path):
     assert "原第2页" in msg and "3→6" in msg and "96mid1ogzk/03 r002" in msg
     with pytest.raises(ValueError, match="对不上"):                     # 页表缺叶就不出文件
         S.pack_for_commons({**table, "pages": pages[:5]}, root, blobs.__getitem__, tmp_path / "bad.djvu")
+
+
+@pytest.mark.skipif(not __import__("shutil").which("pdfimages"), reason="没有 pdfimages（poppler-utils）")
+def test_pdf_to_zip_keeps_embedded_bytes(tmp_path):
+    """PDF 源件（哈佛 DRS 等）：每页一张嵌入图原样抽出（JPEG 字节不变，不重压），按页号排。"""
+    ims = [Image.new("RGB", (60 + 10 * i, 40), (200, 180 - 40 * i, 150)) for i in range(3)]
+    pdf = tmp_path / "s.pdf"
+    ims[0].save(pdf, save_all=True, append_images=ims[1:])
+    z = tmp_path / "leaves.zip"
+    n, dec = S.source_to_zip(pdf, z)
+    assert (n, dec) == (3, "pdfimages")
+    names = S.zip_leaves(z)
+    assert len(names) == 3 and [S._leaf_no(x, i) for i, x in enumerate(names, 1)] == [1, 2, 3]
+    with zipfile.ZipFile(z) as zz:
+        assert [Image.open(io.BytesIO(zz.read(x))).size for x in names] == [(60, 40), (70, 40), (80, 40)]
+
+
+def test_spreads_finds_fold_in_margins(tmp_path):
+    """对开图：书脊折痕在天头地脚里是唯一的暗线；版框里另画一条更黑的竖线，不能被它带偏。"""
+    from PIL import ImageDraw
+
+    from open_guji_cv.datastore import spreads as SP
+    W, H, fold = 1000, 700, 520
+    im = Image.new("L", (W, H), 225)
+    d = ImageDraw.Draw(im)
+    d.rectangle([60, 100, fold - 8, 620], outline=20, width=6)           # 右半叶版框
+    d.rectangle([fold + 8, 100, W - 60, 620], outline=20, width=6)       # 左半叶版框
+    d.line([(fold - 30, 100), (fold - 30, 620)], fill=0, width=8)        # 版框里的栏线（更黑）
+    d.line([(fold, 0), (fold, H)], fill=150, width=3)                    # 折痕（浅）
+    buf = io.BytesIO()
+    im.convert("RGB").save(buf, "PNG")
+    cover = io.BytesIO()
+    Image.new("RGB", (400, 700), "white").save(cover, "PNG")
+    z = tmp_path / "leaves.zip"
+    with zipfile.ZipFile(z, "w") as zz:
+        zz.writestr("s_0001.png", cover.getvalue())                     # 书衣单页：不拆
+        zz.writestr("s_0002.png", buf.getvalue())
+    rows, diag = SP.detect(z, "01")
+    assert [r["canvas_seq"] for r in rows] == ["0002a", "0002b"]
+    x = rows[1]["xywh"][2]
+    assert abs(x - fold) <= 4 and rows[0]["xywh"] == [x, 0, W - x, H]
+    assert not diag[0]["weak"]
+    SP.sheet(z, diag, tmp_path / "sheet.png")
+    assert (tmp_path / "sheet.png").exists()
