@@ -195,7 +195,7 @@ _SHAPE_PAIR_FLOW = {
     "fa": dict(tolerate=frozenset("登務條𫉬顧")),
 }
 #: 闗關 与门族 men 共用 關：men 只补放不复核，已放行的 關 归 guanm 复核（刻 闗 放成 關 的改码位）
-_SHAPE_PAIR_OVERLAPS = {"guanm": ("men",), "xuan": ("chuo",)}
+_SHAPE_PAIR_OVERLAPS = {"guanm": ("men",), "xuan": ("chuo",), "xun": ("chuo",)}
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
@@ -493,6 +493,13 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                # 蒙𫎇（2026-10-26，同上；原第一批）：头部 艹／〢丷。旧判法「库形最近」会把 艹 头放成 𫎇（库两形紧咬）；
                                # 整理本作 䝉 的与 𫎇 同一刻法，录哪个码位由书级 `codepoints` 定
                                ("mn", "蒙𫎇", "头部 艹／〢丷（两竖带点）"),
+                               # 组外异体对（2026-10-26，A24 全册任务 01）：sheldon 在定码位页选「留人审」＝建组按刻形分；HOG 两类聚类看图，
+                               # 15 对确有两种刻法，建了其中复核看图没出错的 11 对（彦彥 㓜幼 复核把已放行格判反、劫刼 𪔂鼎 切块残，不建；另 17 对看不出差别，照旧人审）。标签＝聚类去掉低把握 15%（dataset variant/<组>/）
+                               ("yinv", "陰隂", "右边 今云／侌"), ("xian", "陷䧟", "右上 臽 头 ⺈／平头"), ("shu", "䟽疏", "左旁 足字旁／疋"),
+                               ("ning", "寧寜", "中部 皿／用"), ("yao", "謠謡", "右边写法两种（看组卡图）"),
+                               ("jim", "覊羈", "上部 覀／罒"), ("xun", "巡廵", "走之 辶／廴"),
+                               ("jian", "劍劔", "右边 刂／刃"), ("chi", "勅敕", "右边 力／攵"),
+                               ("bi", "𡚁弊", "下部 大／廾"), ("huiq", "囘回", "内部 己／口"),
                                # 全册任务 03（2026-10-26）：两形都有、整理本混用，sheldon 定按刻形照录
                                ("xuan", "選𨕖", "巽下 共／丌"))},
     # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮（码位已定 鄉→鄕 㣲→微 别→別 鎮→鎭），字形库却在
@@ -527,7 +534,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"),
     "chuo": GroupSpec(
         id="chuo", name="辶族", members=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾選述近迎造遵遞追邊巡遷遜"),
-        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan"),
+        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan", "xun"),
         flow=FlowSpec((_img("chuo"),), combine="first", lift_ref_agree=True,
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"

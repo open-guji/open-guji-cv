@@ -257,6 +257,18 @@ SPECS: dict[str, IdsSpec] = {
     "sui": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "mn": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "li": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    # 组外异体对（2026-10-26，A24 全册任务 01，sheldon 定「留人审」＝建组按刻形分）：标签＝HOG 两类聚类、去掉低把握 15% 后看图；门槛见卡。
+    "yinv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "xian": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "shu": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "ning": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "yao": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "jim": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "xun": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "jian": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "chi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "bi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "huiq": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 勢𫝑、發𤼵（2026-10-26，A24，sheldon 定按刻形分拆）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）。
     #   勢𫝑 只差左上 坴／幸，整字 48：按册留出 167 格 0.4 起 0 错，取 0.5（给 122）。
     #   發𤼵 右下 殳／矢，取右下框：按册留出 505 格（含陪衬 登務條）0.5 起 0 错（𤼵 给对 77／80）。见 doc/字组/shi.md、fa.md。
