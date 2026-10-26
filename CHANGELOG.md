@@ -5,6 +5,14 @@
 
 ## [未发版]
 
+### Changed
+- 印章遮挡格放行（A32，sheldon 10-26 定规则 1–4）：`seed_admit` 1.24、`align_ref` 2.2，两步 `code_hash` 变。只在册开 `lane_seal` 时生效。
+  - R5 `lane_seal_via` 缺省改 `coord,align`（align 定位的默认字也放）；题列拦截词只留「書總目／四庫全書」，正文里带「總目」的列不再误拦。
+  - 新 `lane_seal_title_formula`：整列连起来正好是「欽定四庫全書總目卷N」的卷端题列按坐标字直接放，`巻` 一律录作 `卷`（`lane_seal_title_norm`，本项目新规矩，不跟整理本）。
+  - 新护栏 `lane_seal_lib_veto`（0.95）：库首位 cov≥0.95 且与默认字不同、又不是异体对 → 送审；`lane_seal_shift_guard`：整页印章格默认字与库首位系统性错一格 → 整页 R5 不放。
+  - `align_ref.coord_neighbor`（缺省开）：逐列本整页定不了位置时借后一页（再前一页）的位置推本页半叶头，供印章页出坐标字。
+  - 108 页印章页回放见 PR 正文。
+
 - `scripts/rerun_prep.sh` 人裁自检：换图源的册（yaml 钉了 `source_rev`）本机产物的页表 rev 不符时按「还没有切分产物」跳过绑定自检（GUJI-748；vol04 首跑 #255 在执行机旧图产物上认新页号人裁，报 26 条认不出而失败）。不动 Step。
 
 ## [0.5.25] - 2026-10-26
