@@ -660,6 +660,22 @@ def with_page(table: dict, seq: str, data: bytes, note: str, by: str) -> tuple[d
 PULL_MARK = "_pages.json"
 
 
+def prune_extra_pages(raw_dir, table: dict) -> list[str]:
+    """删掉原图目录里页表没有的 ``<页号>.png``（换图源后页数变少，旧图源残留的尾页会被管线当正文跑）。
+
+    只动纯数字文件名的 png；别的文件（拆页 ``12a.png``、说明等）不碰。返回删掉的文件名。"""
+    from pathlib import Path
+    d = Path(raw_dir)
+    if not d.is_dir():
+        return []
+    want = {int(p["page"]) for p in table["pages"]}
+    gone = sorted((f for f in d.glob("*.png") if f.stem.isdigit() and int(f.stem) not in want),
+                  key=lambda f: int(f.stem))
+    for f in gone:
+        f.unlink()
+    return [f.name for f in gone]
+
+
 def pull(src, table: dict, dest_of_page, *, cache=None, fetch=None) -> dict:
     """按页表把页图落到 cv 原图目录。`dest_of_page(page) -> Path`（一般是 `BookSpec.raw_path`）。
 

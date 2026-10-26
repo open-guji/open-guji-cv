@@ -94,6 +94,11 @@ def cmd_pull(args) -> None:
     res = S.pull(src, table, dest)
     where = args.to or str(dest(table["pages"][0]["page"]).parent)
     print(f"✓ {book_id}/{vol} 页表 r{res['rev']:03d}：{res['pages']} 页，新写 {res['written']}，原有 {res['kept']} → {where}")
+    if not args.to and rev is not None and load_book(args.book).source_rev is not None:
+        # 钉了页表版的册（换图源后）原图目录归页表管：页表外的尾页是旧图源残留，删掉（GUJI-748 vol04 多跑了 3 页旧图）
+        gone = S.prune_extra_pages(where, table)
+        if gone:
+            print(f"  删掉页表外的残留页 {len(gone)} 张：{gone[:10]}")
 
 
 def cmd_show(args) -> None:

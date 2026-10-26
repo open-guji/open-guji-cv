@@ -65,6 +65,26 @@ print("字形库", n); sys.exit(0 if n["exemplars"] and n["glyphs"] else "字形
 PY
 fi
 t 取原图 $G source pull "$VOL" -w "$WS"
+# 钉了页表版（source_rev，换图源后）的册：原图目录归页表管，页表外的 <页号>.png 是旧图源残留，删掉（GUJI-748：vol04 新页表 218 页，
+# worker 目录里留着旧的 219–221.png，被当正文跑了）。新版 cv 的 source pull 自己会删，这里兼顾旧 tag。
+GUJI_WORKSPACE="$WS" /opt/guji-venv/bin/python - "$VOL" <<'PY'
+import sys
+from open_guji_cv.core.book import load_book
+from open_guji_cv.datastore import sources as S
+b = load_book(sys.argv[1])
+if getattr(b, "source_rev", None) is None:
+    sys.exit(0)
+from open_guji_cv.datastore.client import WorkerSource
+from open_guji_cv.datastore.packs import _ws_name
+src = WorkerSource()
+book_id, vol = S.resolve(src, _ws_name(), b.id)
+want = {int(p["page"]) for p in S.read_table(src, book_id, vol, b.source_rev)["pages"]}
+d = b.raw_path(next(iter(want))).parent
+gone = sorted((f for f in d.glob("*.png") if f.stem.isdigit() and int(f.stem) not in want), key=lambda f: int(f.stem))
+for f in gone:
+    f.unlink()
+print(f"页表 r{b.source_rev} {len(want)} 页；删掉页表外残留 {len(gone)} 张：{[f.name for f in gone][:10]}")
+PY
 BK=$(basename "$WS"); BK=${BK%%-*}; VN=${VOL#vol}
 t 合扫检查 $G source check "$BK" "$VN" -w "$WS" || echo "⚠️ source check 有报（题签页报疑似合扫属正常），请看上面"
 t 模板索引 $G cache pull-rare-index --book "$VOL" -w "$WS" --precision fp32

@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `guji source pull`（GUJI-748）：钉了页表版（`source_rev`）的册，原图目录里页表外的 `<页号>.png` 是旧图源残留，拉完删掉（vol04 新页表 218 页，worker 上残留旧 219–221.png 被当正文跑）。`scripts/rerun_prep.sh` 同步加这一步，旧 tag 跑单也生效。
 ### Changed
 - 印章遮挡格放行（A32，sheldon 10-26 定规则 1–4）：`seed_admit` 1.24、`align_ref` 2.2，两步 `code_hash` 变。只在册开 `lane_seal` 时生效。
   - R5 `lane_seal_via` 缺省改 `coord,align`（align 定位的默认字也放）；题列拦截词只留「書總目／四庫全書」，正文里带「總目」的列不再误拦。
