@@ -84,6 +84,19 @@ gone = sorted((f for f in d.glob("*.png") if f.stem.isdigit() and int(f.stem) no
 for f in gone:
     f.unlink()
 print(f"页表 r{b.source_rev} {len(want)} 页；删掉页表外残留 {len(gone)} 张：{[f.name for f in gone][:10]}")
+# 产物目录里也有旧图源残留：worker 上这册旧页号的页产物（旧页数多于新页表）会被 Step3 配页当正文页读，
+# 找不到原图而停（GUJI-748：vol53 旧 183 页、新 182 页，row_segment 要 183.png）。页表外的页产物一并删。
+import os, re
+from pathlib import Path
+root = Path(os.environ.get("GUJI_PRODUCTS_DIR") or (Path(os.environ["GUJI_WORKSPACE"]) / "products"))
+n = 0
+if (root / b.id).is_dir():
+    for f in (root / b.id).rglob("p[0-9][0-9][0-9][0-9]*"):
+        m = re.match(r"p(\d{4})(?:\D|$)", f.name)
+        if m and f.is_file() and int(m.group(1)) not in want:
+            f.unlink()
+            n += 1
+print(f"删掉产物目录里页表外的旧页产物 {n} 个")
 PY
 BK=$(basename "$WS"); BK=${BK%%-*}; VN=${VOL#vol}
 t 合扫检查 $G source check "$BK" "$VN" -w "$WS" || echo "⚠️ source check 有报（题签页报疑似合扫属正常），请看上面"
