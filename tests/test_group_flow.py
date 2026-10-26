@@ -82,6 +82,15 @@ def test_entry_ref_enter_when_top_is_tolerated_outsider():
     assert entry(r, [("闡", 0.97), ("間", 0.96)], "闡", men) == ("men", "lift")
 
 
+def test_entry_ref_enter_vol51_99_shape_pairs():
+    """vol51–99 新建的 派𣲖 奇竒 歲嵗：库没有少的一形、首位是陪衬（泒 音 熾），整理本在组里 → 按整理本进组补放。"""
+    r = Rec("a")
+    assert entry(r, [("泒", 0.95), ("孤", 0.94)], "𣲖", FlowConfig(groups=("pai",))) == ("pai", "lift")
+    assert entry(r, [("音", 0.95), ("青", 0.94)], "竒", FlowConfig(groups=("qi",))) == ("qi", "lift")
+    assert entry(r, [("熾", 0.95), ("歲", 0.94)], "嵗", FlowConfig(groups=("sui",))) == ("sui", "lift")
+    assert entry(r, [("泒", 0.95), ("指", 0.94)], "𣲖", FlowConfig(groups=("pai",))) is None    # 别的组外字紧咬照挡
+
+
 def test_entry_jys_tolerates_ba():
     cfg = _cfg()
     assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")
