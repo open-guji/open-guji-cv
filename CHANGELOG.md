@@ -12,6 +12,7 @@
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
 ### Added
+- 字组 象彖𧰼（xz，全册任务 08）：𧰼 模板换成人裁表（象 129／𧰼 178，含 sheldon 10-26 标注页 173 格），门槛 1.0→0.3、λ=3；组里加 `lift_ref_agree`（字形与整理本同字才补放）。按册留出一致格 0 错。xz 本来就在各册 `group_flow` 里，重落即生效。30 册离线回放：送审 147 补放 93（全 𧰼），复核降审 63（多为 𧰼 被放成 象）。文意 L2 表补格在中心库（xz-l2-2），要另推。seed_admit 的 `code_hash` 变。
 - 册配置分层与运行覆盖（PATCH，设计 `doc/design/册配置分层与运行覆盖.md`）：工作区基础配置 `config/book_defaults.yaml`（册 yaml 只写各自不同的，合并结果与拆前逐字段相同；没有基础配置时行为不变）；`guji pipeline/step/status --override JSON` 运行覆盖（内存里叠在册 yaml 上，不改文件、不推库，原文记进产物 manifest `config_overrides`）；`guji book show <册> --effective` 看生效配置与来源层；`guji book split --books vol51-vol99 [--apply]` 把一组册的共用部分抽成基础配置（逐册强校验）；任务库 `book_overrides` 放开到 BookSpec 字段（`guji_jobs submit --override`），执行方改传 `--override`；`rerun_prep.sh` 读生效值。**注意：旧版本不认基础配置，册 yaml 迁成瘦身形式前，所有跑这些册的会话都要先升到含本改动的版本。** 无 Step 的 `code_hash` 变（对 vol50、vol51 实测 `guji status` 与 dev 逐行相同）。
 ### Fixed
 - `--params` 显式传默认值（如 `shadow_veto:false`）会被册 yaml `params:` 静默改回：`_with_book_params` 改按「调用方有没有显式传」判，不再比是否等于默认值。
