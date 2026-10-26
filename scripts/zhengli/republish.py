@@ -902,7 +902,8 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
         cur = json.loads(sp.read_text(encoding="utf-8")) if sp.exists() else None
         try:
             idx = json.loads((d / "index.json").read_text(encoding="utf-8"))
-            tv = str(idx.get("text_version") or idx.get("version") or "")
+            ent = next((c for c in idx.get("chapters") or [] if int(c.get("n") or 0) == int(ch)), {})
+            tv = str(ent.get("text_version") or idx.get("text_version") or "")
         except (OSError, ValueError):
             tv = ""
         head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True, text=True).stdout.strip()
