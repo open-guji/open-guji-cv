@@ -218,6 +218,24 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     return picks[0], "agree", trail
 
 
+def _ctx_firm(t: dict) -> bool:
+    """文意这一路的字够硬：L1 规则，或 L2 表 strong（多遍同字、至少两遍 high）。"""
+    return t["solver"] == "ctx" and t["char"] is not None and (t.get("via") == "ctx:ctx_l1" or bool(t.get("strong")))
+
+
+def _ctx_over(g: str, ch, why: str, trail: list) -> tuple:
+    """`FlowSpec.ctx_over`：文意够硬（`_ctx_firm`）时，`ctx_over` 里的字形方法给了别的字只当弱票——别的方法都同文意就照文意给字，
+    留痕 `ctx_over: overruled`。入人八（A24 10-26）：殿本 入 多刻成两笔分开、像 八，整字 HOG 常把 入 判成 八。"""
+    f = GROUPS[g].flow
+    firm = {t["char"] for t in trail if _ctx_firm(t)}
+    rest = {t["char"] for t in trail if t["char"] is not None and t["solver"] != "ctx" and t["solver"] not in f.ctx_over}
+    if len(firm) != 1 or not rest <= firm:
+        return ch, why, trail
+    c = next(iter(firm))
+    return c, "agree", trail + [{"solver": "ctx_over", "char": None, "why": "overruled",
+                                 "weak": [t["solver"] for t in trail if t["solver"] in f.ctx_over and t["char"] not in (None, c)]}]
+
+
 def decide_joint(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None) -> tuple[str | None, str, list]:
     """共字组联合判（日曰目三字紧咬，哪一组都装不下；sheldon 10-22「目是真竞争者，不能当陪衬」）：
     先由组 `g` 定字 X，再问每个共字组 h——X 是 h 的成员：h 也须给 X；X 不是 h 的成员：h 须明确说「其他」
@@ -306,6 +324,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         else:
             ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
                                     review=mode == "review")
+        if why == "conflict" and GROUPS[g].flow.ctx_over:
+            ch, why, trail = _ctx_over(g, ch, why, trail)
         plans.append((r, g, mode, ch, why, trail, ref))
     res = FlowResult(entered=len(plans))
     norm = cfg.canon or canon
@@ -321,6 +341,13 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_veto and ref and norm(ref) != norm(ch)
                   and norm(ref) in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "ref_dissent"   # 一二：整理本说是组里另一个字，字形怎么判都不补放（vol19:116:9:8）
+            elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_img_ref_veto
+                  and (ir := ref or (veto_refs or {}).get(r.id)) and norm(ir) != norm(ch)
+                  and norm(ir) in {norm(m) for m in GROUPS[g].members}
+                  and not any(t["solver"] == "ctx" and t["char"] == ch for t in trail)):
+                # 入人八：文意没给字、只有字形给了整理本（现役对位缺格时用坐标对位字）以外的组员，不补放
+                # （vol12:147:2:17 入→八、vol28:20:5:4「國家八旗」八→入，A24 10-26）
+                ch, why = None, "ref_dissent"
             elif ch is not None and ((mode == "lift" and GROUPS[g].flow.lift_ref_agree) or r.id in tol_hit) and norm(
                     rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch):
                 ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族／陪衬字挡门：字形与整理本两路一致才补放

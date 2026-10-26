@@ -533,3 +533,57 @@ def test_tolerate_ref_agree_shi_yu(monkeypatch):
     assert r.admit and r.char == "曰"
     r = run([("曰", 0.999), ("日", 0.998)], "曰", "日")
     assert r.admit and r.char == "日"                                                            # 没有陪衬字的格照旧
+def test_rr_ctx_over_image(monkeypatch):
+    """入人八 `ctx_over`：文意够硬（L2 strong 或 L1 规则）时字形方法的异议只当弱票，补放、复核都照文意；文意不硬照旧冲突。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks, ext = {}, {}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        picks[name], via=ext.get(name, (name, {}))[0], extra=ext.get(name, (name, {}))[1]))
+    cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
+    for e, lifted in (({"ctx": ("ctx_l2", {"strong": True})}, True),
+                      ({"ctx": ("ctx:ctx_l1", {})}, True),
+                      ({"ctx": ("ctx_l2", {"runs": 3})}, False)):
+        picks.clear(); picks.update({"ctx": "入", "rr_img": "八", "ids": "八"}); ext.clear(); ext.update(e)
+        r = Rec("x")
+        group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+        assert r.admit is lifted and (r.char == "入") is lifted, e
+        if lifted:
+            assert r.evidence["group"]["solvers"][-1] == {"solver": "ctx_over", "char": None, "why": "overruled",
+                                                          "weak": ["rr_img", "ids"]}
+        else:
+            assert "group_flow_conflict" in r.doubts
+    # 复核：放行字 八（整理本错）、文意 strong 说 入、HOG 也说 八 → ctx_over 后照文意改字（review_fix_strong）
+    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    r = Rec("y", "八", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "入" and r.evidence["group"]["decision"] == "fix"
+    # 文意不 strong：照常降审，不改字
+    ext.update({"ctx": ("ctx_l2", {"runs": 1})})
+    r = Rec("w", "八", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert not r.admit and r.char == "八" and "group_flow_disagree" in r.doubts
+    ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    # 复核：放行字 入、文意 strong 说 入、HOG 说 八 → 不降
+    r = Rec("z", "入", True, "match_ref", "match")
+    group_flow_pass([r], {}, cands, lambda r: False, _cfg())
+    assert r.admit and r.evidence["group"]["decision"] == "keep"
+
+
+def test_rr_img_only_lift_respects_ref(monkeypatch):
+    """入人八 `lift_img_ref_veto`：文意没给字、只有字形给字，整理本是组里另一个字 → 不补放；整理本同字或缺位照常补放。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ctx": None, "rr_img": None, "ids": "八"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks[name], via=name))
+    cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
+    r = Rec("a")
+    group_flow_pass([r], {"a": ("入", "=")}, cands, lambda r: False, _cfg())
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = Rec("b")
+    group_flow_pass([r], {"b": ("八", "=")}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "八"
+    picks.update(ctx="八")
+    r = Rec("c")
+    group_flow_pass([r], {"c": ("入", "=")}, cands, lambda r: False, _cfg())
+    assert r.admit and r.char == "八"                    # 文意也给了这个字：不归本开关管（沿用 lift_ref_guard）
