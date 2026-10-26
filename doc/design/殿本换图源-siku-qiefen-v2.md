@@ -1,10 +1,11 @@
-# 殿本《四庫全書總目》换图源：siku-qiefen-v2（设计稿 v2，A31，2026-10-26，GUJI-748）
+# 殿本《四庫全書總目》换图源：siku-qiefen-v2（设计稿 v3，A31，2026-10-26，GUJI-748）
 
 > 用户 10-26 定：99 册整套换成 open-guji-core/file_archive release `siku-qiefen-v2` 的图，**按新包重编页号**，每册给下游一张「旧页号→新页号」对照表。
 > 研究结论（页对应、变换精度、试跑数据）见 Claude 文档 https://claude.ai/artifact/5eEUAkUN72C7uWrMa9KZ1m ；
 > 脚本、全套页对应、99 册对照表在 ai-team `domain/CV/图源迁移/siku-qiefen-v2/`。
 > 本稿说的是**怎么切过去**。顺序：vol11 试点 → vol04 → 批量。
 > v2 吸收了 A20 的评审（PR #632）：canvas 换命名空间、册 yaml 钉页表 rev、Commons 根作废、#631 要证明逐字节不变并发 PATCH、钉子账分批、迁移事件不重复进库、dataset 金标、L3 重定基线。
+> v3 吸收了 A30 的评审：旧事件失效改为「切过的册，锚里没有 rev 的一律不采信」，去掉 `source_epoch`；切换窗口停写＋重迁＋计数核对；新基线人裁数；新页表以 staged 登记；产物包标签；推库分步并请用户确认；撤单含在跑的 attempt。
 
 ## 一、已知事实（研究阶段已核）
 
@@ -30,14 +31,15 @@
 
 旧页在新包里没有对应的，对照表标 `retired`（书脊、封面、空白、重拍页），不映射到相邻页。挂在这些页上的意见、cord、金标单列出来，由人处理。99 册对照表已经出了，同时还会出一张 canvas 旧→新对照。
 
-## 三、防混图：册 yaml 钉页表 rev（cv 改动 1）
+## 三、防混图：册 yaml 钉页表 rev、新页表以 staged 登记（cv 改动 1，PR #633）
 
-`read_table` 缺省取最新 rev。新页表一发，谁跑 `guji source pull` 都会把新图写进旧 `raw_dir`，旧 yaml 配上新图也不报错。所以要做两件事：
+`read_table` 缺省取最新 rev。新页表一发，谁跑 `guji source pull` 都会把新图写进旧 `raw_dir`，旧 yaml 配上新图也不报错。所以做三件事：
 
-- 册 yaml 加 `source_rev: <N>`。`guji source pull` 与任务库 prep 都按它取页表；没写的册保持现状，取最新。
-- pull 时核对 yaml 的 `source_rev` 与写入目录：新页表的 `raw_dir` 改成 `data_full/qiefen/<册>`，不和旧图混在一个目录。
+- **新页表一律用 `guji source register --staged` 登记。** `read_table` 不带 rev 时跳过 staged 的 rev，只取最新的正式 rev；某册只剩 staged 时直接报错，要求写 `source_rev`。所以新页表发出去以后，没切的殿本册不管做 pull 还是任务库 prep，拿到的仍是旧图，不必先把 99 册 yaml 都钉一遍。新页表一直保持 staged，不转正式。
+- **册 yaml 加 `source_rev: <N>`。** `guji source pull` 与任务库 prep 都按它取页表。切换时由 A31 写，**切过的册必填**；没切的册不写，行为同上。
+- 新页表的 `raw_dir` 改成 `data_full/qiefen/<册>`，不和旧图混在一个目录。
 
-做好以后，切换就是在 yaml 里同时改 `source_rev` 和 `raw_dir`，一次推库。发页表本身不影响任何人。
+做好以后，切换就是在 yaml 里同时改 `source_rev` 和 `raw_dir`。发页表本身不影响任何人。
 
 ## 四、旧数据怎么处理
 
@@ -47,8 +49,8 @@
 | 图源的根 | **殿本「Commons 为唯一的根」（10-24 定）就此作废**，新根是 file_archive release。`commons-pack`、`commons --reroot` 在新页表上报「没有 Commons 根」是对的。vol03/04/07/09 那四份待传 Commons 的修正版 DjVu 不再传。同步改 `古籍图片全流程-源件页图管线与IIIF.md` §十二、§十三。 |
 | `books/<册>.yaml` | 改 `source_rev`、`raw_dir`；`period_prior`、`bottom_gap` 乘缩放比；去掉按旧页号写的配置（preclean、column_grid_pages、period_prior_pages、roster_pages 等）；`cv_version` 钉含 #631 的正式 tag。 |
 | 版式先验 `page_map`／`layout_slots`／`layout_overrides` | 本册各行按新页号重写；新增页按 daizhige 页号补（新包页脚印的就是同一套号）。改的是书库内容，所以出新书库版本。**每批切过去的册在 `config/corpus-pack/pins/<册>.json` 记新总号，没切的册继续钉旧号。** 三批会出三个书库号。 |
-| 产物包 | 新图整册从 Step1 重跑，格级复用不生效，工作量按整册从零估。用正式 tag 跑出来的才标 main。 |
-| 人裁事件 | 另写一批新事件，旧事件不删：<br>• 锚框按页变换；页号、格键改成新的；去掉 `evidence` 指纹。<br>• 没锚的老裁决，按旧 main 的现行绑定补锚。<br>• 新事件 id 加 `~q`；`anchor.migrated_from` 记旧册页；锚里另记新页表 rev（见 §五）。 |
+| 产物包 | 新图整册从 Step1 重跑，格级复用不生效，工作量按整册从零估。中心产物包只增不改、同名会 409，换源前后同一册会并存旧图包和新图包，所以新图包的 `--change` 标签写明页表 rev 和书库号，如 `qiefen-r<N>-c<书库号>`。只有正式 tag 跑出的那一次标 main；试点用分支跑的只进实验分支。 |
+| 人裁事件 | 另写一批新事件，旧事件不删：<br>• 锚框按页变换；页号、格键改成新的；去掉 `evidence` 指纹。<br>• 没锚的老裁决，按旧 main 的现行绑定补锚。<br>• 新事件 id 加 `~q`；`anchor.migrated_from` 记旧册页；锚里另记新页表 rev，键名 `anchor.source_rev`（见 §五）。 |
 | 旧事件失效 | 见 §五（cv 改动 2）。 |
 | 裁决表 `feedback/verdicts`、`crop_exclusions` | 裁决表由新事件经路由重新生成；`crop_exclusions` 的本册行按页变换。 |
 | 字形库 | **不迁、不出新号**，`glyph_pin` 不动，因为图块与页号无关。路由遇到带 `anchor.migrated_from` 的事件**跳过 glyph 进库**（cv 改动 3），否则同一条人裁会进库两次，`human_verdicts_fingerprint` 也会跟着变。 |
@@ -56,13 +58,17 @@
 | 评测基线 | 页型、列字数先验等全书评测在换源前后不能直接比。AB 记录标出换源时点；跨这个时点的对比，两边都要在新图上重跑。 |
 | book-text 已发文本 | cord 按页变换到新 canvas；新补页的字走文本修订流程补进来；标点、实体由 A33 按对照表重挂。 |
 | 网站书影、char.json、待审单与票 | 书影从新页表切到新路径段（web 仓 `--source pages`）；待审单从新 main 包重出。**有票的册（vol04–10）先和 A32 定迁票办法，再切。** |
-| 任务库 | 切换前，把该册排队中、按旧页号写了 `--pages` 的单子撤掉（`guji_jobs ls` 查）。 |
+| 任务库 | 切换前用 `guji_jobs ls` 查该册的单子：排队中的撤掉；在跑的 attempt 也用 `guji_jobs cancel` 撤，并核对它有没有已经写进产物包（有就记下包名，不让它当铺底包）。 |
+| 基线人裁数 | 现行开跑前自检要求 `human_chars(册)` 等于单上写的数。换源后这个数会变（vol04：迁 693 条，绑回 683 条）。新图首跑没有铺底包，单上不写这项自检。首跑标 main 后，在新 main 包上算 `human_chars` 作新基线，写进该册以后的需求单和册 yaml 的说明。 |
 
 ## 五、旧事件失效（cv 改动 2）
 
-- **主判据**：事件锚里记页表 rev（迁移事件和换源后的新事件都记）。读事件的统一入口按「锚的 rev 等于本册 yaml 的 `source_rev`」判定，不等就不采信。绑定、裁决表、进库、裁切排除都看这一条。
-- **兜底**：锚里没有 rev 的老事件，用册 yaml 的 `source_epoch` 时刻判：早于这个时刻的不采信，带 `migrated_from` 的除外。
-- 为什么不能只看 ts：换源后还开着旧页面的控制台，会产生 ts 晚、页号却是旧的事件。
+只对 yaml 写了 `source_rev` 的册（即切过的册）生效，没切的册行为不变。
+
+- **判据**：读事件的统一入口检查锚里的页表 rev，等于本册 yaml 的 `source_rev` 才采信。绑定、裁决表、进库、裁切排除都看这一条。
+- **锚里没有 rev 的事件一律不采信，不看 ts。** 迁移事件锚里写新 rev，所以也满足判据；`anchor.migrated_from` 只用来跳过字形进库（§四）。
+- 为什么不看 ts：换源后还开着旧页面的控制台，会产生 ts 晚、页号却是旧的事件。v2 的 `source_epoch` 兜底会收下这类事件，v3 去掉了。
+- **前提**：换源后的新事件要在锚里记 rev。写事件的各个入口（网站审阅页、本机控制台、`guji` 命令）都要带上本册当前的 `source_rev`，否则切过的册上的新人裁会全被丢掉。网站这一侧要 A32 确认。
 - 实现方：A30、A24。
 
 ## 六、#631 与 cv 版本
@@ -77,16 +83,21 @@
 ## 七、单册切换步骤（每步的输入与验收）
 
 1. **准备（本机，可撤）**
-   - 产出：新页集、`map.json`、旧→新对照表（含 `retired`）、canvas 对照、新册 yaml、新版式先验行、迁好的事件 jsonl。
+   - 产出：新页集、`map.json`、旧→新对照表（含 `retired`）、canvas 对照、新册 yaml、新版式先验行、迁移脚本试跑一遍的事件 jsonl。
    - 验收：对照表覆盖全部旧页；本机沙箱整册跑通，旧格同编号对上率 ≥ 98%。
-2. **发页表（不影响任何人，因为 yaml 还钉着旧 rev）**
-   - 验收：`guji source show --rev N` 是新图，旧 rev 照常可取。
-3. **切换（一次推库）**
-   - 推册 yaml（`source_rev`、`raw_dir`、`cv_version`、像素参数）、版式先验与新书库号、迁移事件。撤掉任务库里该册按旧页号写的单子。
-   - 验收：`guji db status` 无残留改动。
+2. **发页表与书库号（不影响在跑的册）**
+   - 新页表以 staged 登记；版式先验出新书库号。没切的册 yaml 不变、钉子账不变，照旧取旧图、旧书库号。
+   - 验收：`guji source show --rev N` 是新图；不带 rev 的 `guji source pull` 仍取旧图。
+3. **切换窗口**
+   - 先下线该册的待审单，停掉人裁写入；撤掉任务库里该册的排队单和在跑的 attempt（§四）。
+   - 从中心库最新事件**重跑一遍迁移**，不用第 1 步的试跑结果，免得准备到切换之间的新人裁被漏掉。
+   - 计数核对：切换前该册人裁数 ＝ 迁移条数 ＋ 退役页条数 ＋ 补不出锚的条数；差额逐条列出，对不上就不切。
+   - **推册 yaml 前请用户确认**（书库配置推送要用户亲口同意）。册 yaml 的 `source_rev`、`raw_dir`、`cv_version`、像素参数，钉子账的新书库号，迁移事件，要在同一次推送里生效，否则 corpus verify 会报 StaleBase。
+   - 验收：`guji db status` 无残留改动；计数核对表贴在 GUJI-748。
 4. **重跑、标 main**
-   - 用正式 tag 在任务库重跑。
+   - 用正式 tag 在任务库重跑：不铺底包、单上不写 `human_chars` 自检（§四）。
    - 验收：整册失败 0 页；重绑定 valid＋rebound ≥ 97%，其余进待审单。
+   - 标 main 后算新基线人裁数，写进册 yaml 说明；重新上线待审单。
 5. **重定基线（L3）**
    - 已冻结、已发 book-text 的册违反「放行格只增不改」，要用户点头重定基线：登记新冻结基线，对旧放行格出差异单（约 0.3% 的格会变），变了的走文本修订流程升版。
 6. **下游**
@@ -100,6 +111,7 @@
 |---|---|
 | canvas 新路径段的名字 | A41 |
 | 旧事件失效的实现（§五） | A30、A24 |
+| 写事件的入口在锚里带页表 rev（§五 前提） | A32（网站）、A30／A24（cv） |
 | 有票的册怎么迁票 | A32 |
-| 册 yaml `source_rev`（§三）、迁移事件跳过进库、#631 的逐字节证明 | A31 |
+| 册 yaml `source_rev`、staged 页表（§三）、迁移事件跳过进库：PR #633。#631 的逐字节证明：已完成，vol05／vol21 旧图 416 页逐字节相同 | A31 |
 | 切换前经协调者通知 A21–A24、A30（架构和存储位置变了） | A31 |
