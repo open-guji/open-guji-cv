@@ -87,7 +87,8 @@ class Method:
 
 @dataclass(frozen=True)
 class Codepoint(Method):
-    """册配置 `codepoints:` 把组内某字映到组内另一个字（如 巻→卷）→ 给那个字，置信度 1；这套书没定 → 待定。"""
+    """册配置 `codepoints:` 把组内某字映到组内另一个字（如 巻→卷）→ 给那个字，置信度 1；这套书没定 → 待定。
+    库首位 cov 不到 `FlowConfig.codepoint_min_cov` 也待定（2026-10-26：褪墨页上库形 0.90 档对不上刻形）。"""
     name: str = "codepoint"
     kind = "codepoint"
 
@@ -95,6 +96,9 @@ class Codepoint(Method):
         canon = getattr(inp.cfg, "canon", None)
         if canon is None:
             return GroupVerdict(None, why="abstain:no_codepoints", via=self.name)
+        c1 = max((v for _, v in inp.cands or ()), default=None)
+        if c1 is not None and c1 < getattr(inp.cfg, "codepoint_min_cov", 0.0):
+            return GroupVerdict(None, conf=c1, why="abstain:low_cov", via=self.name, extra={"cov": c1})
         targets = {canon(c) for c in inp.members} & set(inp.members)
         if len(targets) == 1 and any(canon(c) != c for c in inp.members):
             ch = next(iter(targets))

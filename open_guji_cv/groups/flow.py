@@ -7,6 +7,8 @@
   候选全在 G 里（或在 G 的 `FlowSpec.tolerate` 里）；有整理本对位字时它（或按书级 `codepoints` 归一后）也在 G 里。
   组声明了 `ref_enter` 时，top1 是 G 的陪衬字、整理本字在 G 里也算进入（字形库里没有这一形）。
   组声明了 `tolerate_ref_agree` 时，分差内（含 top1）有组外陪衬字的格补放须与整理本字同字（陪衬字挡门，A24 10-26）。
+  组声明了 `ref_top_enter` 时，top1 在 G 里、整理本字（缺位时坐标对位字）也在 G 里，分差内的组外候选不拦
+  （码位归一组：两码位归同一字，整理本×库首位一致就是放行的字）。
 - 复核：组声明了 `review`，格已被别的通道放行、放行字在 G 里（人裁位不碰）。
 
 **判**：按组的方法数组（`FlowSpec.methods`，方法见 `groups/methods.py`）依次跑，`combine=first` 遇到第一个放行的就停，
@@ -67,6 +69,7 @@ class FlowConfig:
     rr_model: str | None = None
     rr_p: float = 0.5
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
+    codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
 
 
 @dataclass
@@ -122,7 +125,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     一个字属于多个组（`overlaps`）时：补放选第一个能把「分差内全部候选＋整理本字」都装下的组，复核选第一个
     声明了 `review` 且装得下整理本字的组。哪一组都装不下、但装得下「组＋它的共字组」（日曰目紧咬：ry＋rm）时，
     `cfg.joint` 开着 → (组, "joint")，由 `decide_joint` 判。
-    `coord_ref`：现役对位缺这一格时的坐标对位字，只给 `ref_enter` 用（vol49 算學諸書整页对位缺，坐标对位作 𮅕）。"""
+    `coord_ref`：现役对位缺这一格时的坐标对位字，只给 `ref_enter`／`ref_top_enter` 用（vol49 算學諸書整页对位缺，坐标对位作 𮅕）。"""
     if r.provenance == "human" or r.channel in ("human", CHANNEL):
         return None
     if r.admit:
@@ -151,6 +154,9 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         if not GROUPS[g].ref_free and ref and ref not in mem and canon(ref) not in mem:
             continue
         return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
+        if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
+            return g, "lift"
     if cfg.joint:
         for g in groups_in(top, cfg.groups):
             parts = partners(g, cfg.groups)

@@ -245,6 +245,13 @@ SPECS: dict[str, IdsSpec] = {
     "shi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "fa": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.4, 1.0, 0.4, 1.0), lam=1.0,
                   size=48, clean=True),
+    # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮、库首位是形近的另一个字（卿 徵徴 刖則所 鍾愼…）。
+    #   两码位并一类，形近字当陪衬进库（判成它们＝弃权），整字 48×48 一对多。门槛按册留出定，见 doc/字组/ 同名卡。
+    "xiang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "weim": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.2, 0.75, 0.2, 1.0), lam=1.0,
+                    size=48, clean=True),
+    "bie": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.4, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "zhen": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
 }
 
 
