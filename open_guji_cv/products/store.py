@@ -130,6 +130,7 @@ class ProductStore:
         if book not in self._raw_index_cache:
             self._raw_index_cache[book] = (
                 json.loads(idx_path.read_text(encoding="utf-8")) if idx_path.exists() else {})
+            self._sync_source(book, path.parent)
         idx = self._raw_index_cache[book]
         st = path.stat()
         rec = idx.get(path.name)
@@ -140,3 +141,35 @@ class ProductStore:
         idx_path.parent.mkdir(parents=True, exist_ok=True)
         idx_path.write_text(json.dumps(idx, ensure_ascii=False, indent=0), encoding="utf-8")
         return sha
+
+    # ── 原图出自哪一版页表（GUJI-748 换图源）────────────────────────
+    SOURCE_FILE = "_source.json"
+
+    def _sync_source(self, book: str, raw_dir: Path) -> None:
+        """把原图目录里 `guji source pull` 留的页表记号（`_pages.json` 的 book_id/vol/rev）抄进本册产物目录。
+
+        这样产物包自带「这些格是在哪一版页表的图上切的」，人裁锚的 `source_rev` 从这里取，
+        不取册 yaml 的现行值（用 `--pack` 取旧图包落旧票时，不会给旧坐标盖上新 rev）。
+        原图目录没有记号（手放的图、pull 之前的老目录）时删掉旧抄件，按「来历不明」处理。"""
+        from ..datastore.sources import PULL_MARK
+        dst = self.root / book / self.SOURCE_FILE
+        try:
+            mark = json.loads((raw_dir / PULL_MARK).read_text(encoding="utf-8"))
+            rec = {k: mark.get(k) for k in ("book_id", "vol", "rev")}
+        except (OSError, ValueError):
+            rec = None
+        if rec is None or rec.get("rev") is None:
+            dst.unlink(missing_ok=True)
+            return
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        text = json.dumps(rec, ensure_ascii=False) + "\n"
+        if not dst.exists() or dst.read_text(encoding="utf-8") != text:
+            dst.write_text(text, encoding="utf-8")
+
+    def source_rev(self, book: str) -> int | None:
+        """本册产物所依页表的 rev；产物包没带来历（旧包）→ None。"""
+        try:
+            rev = json.loads((self.root / book / self.SOURCE_FILE).read_text(encoding="utf-8")).get("rev")
+        except (OSError, ValueError):
+            return None
+        return None if rev is None else int(rev)

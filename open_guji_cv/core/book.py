@@ -78,6 +78,10 @@ class BookSpec:
     #: 70、std 15.6），混进来会把中位数拉偏。只用 page_type == body 的页。
     #: 换书必须重新标定。
     period_prior: float | None = None
+    #: 页表钉版（yaml 的 `source_rev:`）：`guji source pull` 与跑批 prep 按它取 R2 页表的这一版。
+    #: 不写 = 取最新的正式版（status=final；`staged` 预发版只按钉取）。换图源时先发预发版，
+    #: 再在册 yaml 里同时改 `source_rev` 与 `raw_dir`，一次推库就切过去（doc/design/殿本换图源-siku-qiefen-v2.md §三）。
+    source_rev: int | None = None
     #: 这册书有哪些页。空 = 扫 `raw_dir` 目录。yaml 里可写整数，也可写区间
     #: 字符串 `pages: ["10-380"]`（见 `_expand_pages`）——一卷书里装了多种著作时，
     #: 几本册配置共用同一批原图、各自用 `pages:` 划范围，不必复制图像。
@@ -619,6 +623,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         jiazhu=dict(d.get("jiazhu") or {}),
         bottom_gap=(None if d.get("bottom_gap") is None else float(d["bottom_gap"])),
         period_prior=(None if d.get("period_prior") is None else float(d["period_prior"])),
+        source_rev=(None if d.get("source_rev") is None else int(d["source_rev"])),
         outer_shift={str(k): float(v) for k, v in (d.get("outer_shift") or {}).items()},
         outer_gap={str(k): float(v) for k, v in (d.get("outer_gap") or {}).items()},
         frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},

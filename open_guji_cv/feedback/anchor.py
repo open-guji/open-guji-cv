@@ -104,6 +104,9 @@ def cell_anchor(key: str, store=None, cache=None, with_ctx: bool = True) -> dict
     a = {"v": ANCHOR_VERSION, "space": SPACE, "quad": [list(map(float, p)) for p in cell.quad_page],
          "bbox": quad_bbox(cell.quad_page), "source": "live",
          "cells_sha": {step: store.sha(book, step, page_key(page))}}
+    rev = store.source_rev(book)          # 产物自己的页表来历，不取册 yaml（换图源 GUJI-748 §六）
+    if rev is not None:
+        a["source_rev"] = rev
     path = (cache or ImageCache()).get(book, "char_patch", patch_key(page, col, slot, sub))
     if path is not None:
         try:
