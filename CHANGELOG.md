@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 四庫 vol04 换 siku-qiefen-v2 图源（GUJI-748）：`split_table_siku.json` 去掉 vol04 旧图合扫拆页 4 行（新图一页一图），`meta_vol04.json` 快照说明改为新图源。
 - `scripts/rerun_prep.sh` 人裁自检：换图源的册（yaml 钉了 `source_rev`）本机产物的页表 rev 不符时按「还没有切分产物」跳过绑定自检（GUJI-748；vol04 首跑 #255 在执行机旧图产物上认新页号人裁，报 26 条认不出而失败）。不动 Step。
 
 ## [0.5.25] - 2026-10-26
