@@ -25,6 +25,7 @@
 
 - 复核时组声明了 `review_fix_margin`：给了别的字的方法 margin 够这个门槛 → 照 `review_fix` 改字，不够照常降审（徵徴）。
 - 复核时组声明了 `review_fix_strong`：文意答案 strong（L2 表多遍都 high 同字）且方法之间一致 → 照 `review_fix` 改字，否则照常降审。
+  组声明了 `rule_strong` 时 L1 规则命中够条数也算 strong；声明了 `review_fix_ref_rule` 时 L1 规则的字与整理本（现役对位缺格时用坐标对位字）同字也改字（木本）。
 - 组声明了 `lift_ref_agree`（部首族）：补放的字须与整理本字（缺位时用坐标对位字）同字，否则留人审
   （`group_flow_ref_dissent`／`group_flow_ref_missing`）。
 - 组声明了 `lift_ref_veto`（一二）：整理本字是组里另一个字就不补放（`group_flow_ref_dissent`），不论哪个方法给的字。
@@ -429,6 +430,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     trail = trail + [{"solver": "review_weak", "char": None, "why": "overruled",
                                       "weak": [t["solver"] for t in trail if t["solver"] in f.review_weak and t["char"]]}]
             fix = f.review_fix or (f.review_fix_strong and why == "agree" and _ctx_strong(trail, ch)) or (
+                f.review_fix_ref_rule and why == "agree" and ch is not None
+                and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(ch)
+                and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
                     t["char"] == ch and (t.get("margin") or 0) >= f.review_fix_margin for t in trail))
             other = ch is not None and not _same(g, ch, r.char, norm)
