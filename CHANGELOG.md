@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.26] - 测试中
+
+PATCH（GUJI-748 换图源：#664 source pull 删页表外残留原图、#666 prep 删页表外旧页产物、#670 抬头框探测按图尺度缩放 `head_raise_scale`；另含 #661 印章遮挡格放行、#665 #667 #668 #669 字组规则）。`seed_admit`、`align_ref` 的 `code_hash` 变（#661）；Step1 等价登记，产物不因 #670 过期。
+
 - Step1 抬头框探测按图尺度缩放（GUJI-748）：`border_detect` 加参数 `head_raise_scale`（缺省 1.0，不进参数 dump），把 `border_geometry` 里 HR_* 长度常数（旧图上量的绝对像素）按册缩放比换算。殿本换 siku-qiefen-v2（约 0.70 倍）后粗外框半高宽落进细线／粗条两档之间、内框离主上边框够不上 `HR_DIST_MIN`，抬头框整片认不出（vol07 新 p43 五列抬头全丢）。换源的册在 yaml 写 `params: {border_detect: {head_raise_scale: <缩放比>}}`（与 `bottom_gap` 同一个比）。缺省值产物逐字节不变，`border_geometry`、`steps.border_detect` 登记代码等价。
 - `scripts/rerun_prep.sh`（GUJI-748）：钉了页表版的册，产物目录里页表外的旧页产物（`p<页号>*`）一并删掉。worker 上留着旧图源多出的页（vol53 旧 183 页、新 182 页）会被 Step3 配页当正文页读而停在 183.png。
 - `guji source pull`（GUJI-748）：钉了页表版（`source_rev`）的册，原图目录里页表外的 `<页号>.png` 是旧图源残留，拉完删掉（vol04 新页表 218 页，worker 上残留旧 219–221.png 被当正文跑）。`scripts/rerun_prep.sh` 同步加这一步，旧 tag 跑单也生效。
