@@ -55,7 +55,11 @@ class FlowSpec:
     - `tolerate_ref_agree`：补放时分差内（含 top1）出现了**组外**陪衬字的格，方法给的字须与整理本字（缺位时坐标对位字）同字，
       否则留人审（`group_flow_ref_dissent`／`group_flow_ref_missing`）；分差内没有陪衬字的格照旧。陪衬字是库里个别刻例
       「挡门」造成的（形近护栏 N 类，2026-10-26 A24：于千子 被 亍 的一个刻例挡、日曰 被 師 的一个旧切分字块挡），
-      放宽进入时多要整理本一路互证，不让陪衬字带进来的格单凭文意改字。"""
+      放宽进入时多要整理本一路互证，不让陪衬字带进来的格单凭文意改字。
+    - `ref_top_enter`：库 top1 在组里、整理本字（现役对位缺格时用坐标对位字）也在组里（按书级码位归一）→ 分差内有组外候选也进入。
+      码位归一组用（2026-10-26，A24 全册任务 04）：两码位归同一字，整理本×库首位一致就是要放的字（同 `match_ref` 的文本×形状互证，
+      只是库 cov 不到 0.98、整理本只有坐标对位）；繁复字库形常把一串组外字排在分差内（夔 后紧咬 囊蘗𮑮聽臺…，類 后 頗頻顚…），
+      逐个登记陪衬登记不完。没有整理本字的格不走这条。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -74,6 +78,7 @@ class FlowSpec:
     review_fix_margin: float = 0.0
     ref_enter: bool = False
     tolerate_ref_agree: bool = False
+    ref_top_enter: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -361,11 +366,16 @@ GROUPS: dict[str, GroupSpec] = {
 #: 方法数组只有 `codepoint`——直接给册配置定的那个字；这套书没定就待定。只补放，不复核（放行字最后本来就落册指定码位）。
 #: **单独一张表、不进 `GROUPS`**：`GROUPS` 的成员在 `glyph_match`（弱命中）与 `seed_admit.rare_ref_coord` 里当全局字组集合用，
 #: 这几对进去会改那两处的行为；字组流程（`flow`）与 `seed_admit.group_flow` 点名用的是 `FLOW_GROUPS`（两张表合起来）。
+#: 2026-10-26（A24 全册任务 04「码位已定仍送审」）：码位组都开 `ref_top_enter`（库首位与整理本／坐标对位字同在组里就进，分差内的组外字不拦），
+#: 出岀 除外（与 山由出 sy 共字，分差内有 山由 的归 sy 按文意判）；加 類𩔖 竄𥨥 郎郞（sheldon 10-25 定暂归一）。
+#: 別别 改成按字形判（移到 `_NEAR_FAMILY`）：库首位常是 刖 則 所（cov 0.99 一档里分不开），要整字 HOG 认出 別 才补放。
+_CP_NO_TOP = frozenset({"chu"})
 CODEPOINT_GROUPS: dict[str, GroupSpec] = {
     gid: GroupSpec(id=gid, name=name, members=frozenset(name), backends=(), kind="variant", solvers=(),
-                   flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol), lift_ref_agree=bool(tol)), overlaps=ov,
+                   flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol), lift_ref_agree=bool(tol),
+                                 ref_top_enter=gid not in _CP_NO_TOP), overlaps=ov,
                    note="码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。")
-    for gid, name, ov, tol in (("nei", "內内", (), ""), ("bie", "別别", (), ""), ("chu", "出岀", ("sy",), ""),
+    for gid, name, ov, tol in (("nei", "內内", (), ""), ("chu", "出岀", ("sy",), ""),
                                ("juan", "卷巻", (), ""), ("wan", "晚晩", (), ""),
                                # 2026-10-25（A24 异体对 5–11 格）：殿本每对只一种刻法，码位 sheldon 逐对定（𫉬→獲、夔→䕫、獵→𤢪）。
                                # 繁复字库形常把组外的繁复字排在分差内（夔 后紧咬 囊蘗𢑱憂…），`tolerate` 放它们进入；
@@ -373,8 +383,20 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                ("huo", "獲𫉬", (), "覆複藻襲搜護"),
                                # vol21–50 首跑（A24 10-25）：夔 后还紧咬 𮑮襄𠮓變雙凌，16 格进不了组送审，补进陪衬
                                ("kui", "夔䕫", (), "囊蘗蔑𢑱𢑴憂藝難璉襲喪藎謩蔓雜製鑒甄𮑮襄𠮓變雙凌"),
-                               ("lie", "獵𤢪", (), "猶亂侃猥"))
+                               ("lie", "獵𤢪", (), "猶亂侃猥"),
+                               # 2026-10-26（A24 全册任务 04）：sheldon 10-25 定暂归一的三对（𩔖→類 竄→𥨥 郎→郞）
+                               ("lei", "類𩔖", (), ""), ("cuan", "竄𥨥", (), ""), ("lang", "郎郞", (), ""))
 }
+
+#: 码位已定、库在形近字间拿不准的族（2026-10-26，A24 全册任务 04）：(组, 成员, 入口陪衬, 说明)。入口陪衬＝全 98 册整理本作本组字的格里
+#: 库形排在分差内的组外字（模板库只收其中常见的几个，见 build_shape_pair.PLAN；其余判不成它们，靠与整理本同字兜）。
+_NEAR_FAMILY = (
+    ("xiang", "鄉鄕", "卿嫏瑯郡郞鄭柳御綱鄒那郎細邲紳錦郷郵聊辨廓劍螂鄊純絀鉤總酈緗部締鄱狎廁蒯", "左边 乡／卯左；陪衬 卿鄭鄒郡"),
+    ("weim", "微㣲", "徴徵徹倣敝撤", "中部 山一几（口）／山一王；陪衬 徵徴徹"),
+    ("bie", "別别", "刖所則冊册刑問刪創副加", "左边 另／月 等；陪衬 刖則所冊册"),
+    ("zhen", "鎭鎮", "鏤鍾愼錢銀鏡鈿錄傎領鉞鉤銅鑽鐵銷顚集填慎欽鐫窺纂續錐鐘龔錦鈎僎類輿蹟無蠡翼鍵僕鉅餉頒創與錟",
+     "右边 眞／重 等；陪衬 鍾愼慎鏡鏤銷續錢鈿鑽錄鉤鉞銀鍵"),
+)
 
 #: 只进字组流程、不进 `GROUPS` 的字形组（2026-10-22）：成员里有命、舍、會 这样的常用字——进了 `GROUPS` 会让 `glyph_match` 的弱命中
 #: 与 `seed_admit.rare_ref_coord` 把这些字一律当字组字对待，改变全书其他地方的行为。与 `CODEPOINT_GROUPS` 同理单独成表，
@@ -422,6 +444,17 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                ("shi", "勢𫝑", "左上 坴／幸"), ("fa", "發𤼵", "右下 殳／矢"),
                                # vol51–99 首跑 V 类（2026-10-26）：两形都有、刻形一眼可分；放行字跟整理本走、混放，首轮留出错例看图改标
                                ("pai", "派𣲖", "右边 𠂢 有横／无横三竖"), ("qi", "奇竒", "上部 大／立"), ("sui", "歲嵗", "上部 止／山"))},
+    # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮（码位已定 鄉→鄕 㣲→微 别→別 鎮→鎭），字形库却在
+    # 形近的另一个字上拿不准（cov 差 0.01 内），库首位常就是它：鄉 排成 卿（殿本 卿 右作 阝，与 鄉 只差左边 乡／卯左），㣲 排成 徵徴，
+    # 別 排成 刖所則（cov 0.99 一档），鎭 排成 鍾愼鏤…。別别 原是码位组（只给码位），10-26 移到这里。
+    # 整字 HOG 一对多：两码位并成一类，形近字当陪衬进库（判成它们＝弃权）；补放须与整理本（缺位时坐标对位字）同字，库首位是陪衬也按整理本进入
+    # （`ref_enter`）。只补放：成员只一类，复核不会给出组里另一个字。陪衬见 `_NEAR_FAMILY`，判法与门槛见 `ids_online.SPECS` 与卡。
+    **{gid: GroupSpec(
+        id=gid, name=name, members=frozenset(name), backends=(),
+        kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
+        flow=FlowSpec((_img(gid),), combine="first", tolerate=frozenset(tol), lift_ref_agree=True, ref_enter=True),
+        note=f"{name[0]} 与形近字按整字字形判（{note}；陪衬进库，判成它们＝弃权），须与整理本同字才补放；只补放。")
+       for gid, name, tol, note in _NEAR_FAMILY},
     # 广宀族（2026-10-24，A24）：「蕤賔」的 賔 字形库里没有，库把它排成 實廣（再往后 墳須寅賞…），形近护栏拦下送审（vol19 十几格）。
     # 整字 HOG 一对多，只给 賔／賓（`ids_online.SPECS["guang"].give`；實廣 判出来也弃权，库本来认得）；賔賓 按刻形各给各的码位。
     # 陪衬＝模板库里的陪衬类（判成它们＝弃权），入口才容许它们紧咬。复核只降不改：已放行 實廣 而判出 賔賓 的降审
