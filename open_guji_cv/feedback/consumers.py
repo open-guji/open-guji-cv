@@ -8,6 +8,7 @@ P1 只实现 `gold_add`（事件 → 金标条目），另外两个（glyphdb_ad
 
 from __future__ import annotations
 
+import json
 from contextvars import ContextVar
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,6 +34,8 @@ class ConsumeResult:
     no_lib: int = 0            # 正常裁决但按 no_glyph_lib 标志不建库的条数（非错误）
     occluded: int = 0          # 其中：印章遮挡格（不论事件 no_glyph_lib 是什么，一律不建库）
     unbound: int = 0           # glyphdb_admit：绑定判不该采信（重切后待审／作废），不取图、不进库（非错误）
+    superseded: int = 0        # glyphdb_admit：库里这一格已是更晚的人裁，旧票不再覆盖（非错误）
+    withdrawn: int = 0         # glyphdb_admit：更晚的人裁判切坏／非字／破损，撤掉库里旧的人裁刻例
     errors: list[str] = None   # type: ignore[assignment]
 
     def __post_init__(self) -> None:
@@ -43,6 +46,7 @@ class ConsumeResult:
         return {"consumer": self.consumer, "events": self.n_events, "added": self.added,
                 "updated": self.updated, "skipped": self.skipped, "no_lib": self.no_lib,
                 "occluded": self.occluded, "unbound": self.unbound,
+                "superseded": self.superseded, "withdrawn": self.withdrawn,
                 "errors": self.errors}
 
 
@@ -312,7 +316,7 @@ def _occluded_lookup(book: str, page: int):
 
 def glyphdb_admit(events, db_path: str | None = None,
                   dry_run: bool = False, binarize: bool = True,
-                  occluded_of=None, bindings_of=None, **kw) -> ConsumeResult:
+                  occluded_of=None, bindings_of=None, ts_of=None, **kw) -> ConsumeResult:
     """`confirm` 事件 → GlyphDB 进库（2026-09-04 接入，此前是桩）。
 
     这是审查闭环的最后一环：控制台裁决 → Event → 路由 → 这里写库。
@@ -363,12 +367,16 @@ def glyphdb_admit(events, db_path: str | None = None,
     命名空间；将来要合并得先做真正的重键（阶段 B2），不是靠巧合对齐。
     """
     res = ConsumeResult("glyphdb_admit", n_events=len(events))
+    # 撤票（2026-10-26）：同一格人裁过几次以最后一次为准——后来判切坏／非字／破损的，库里更早的人裁刻例要撤。
+    withdraws = [(e, d) for e, d in events
+                 if (e.kind == "not_a_char" or (e.kind == "confirm" and e.payload.get("v") in _WITHDRAW_V))
+                 and counts_as_human(e)]
     # 看图结论（`source="vision"`，overview#428）不进库：字形库只收人定的字，模型判错一个就钉死
     # 一个错范本。口径见 `events.counts_as_human`（码位统一／乱码还原这类人裁的机械更正照旧进）。
     admits = [(e, d) for e, d in events
               if e.kind == "confirm" and (e.payload.get("v") or "confirm") == "confirm" and counts_as_human(e)]
-    res.skipped = len(events) - len(admits)
-    if not admits:
+    res.skipped = len(events) - len(admits)       # 撤票也不进库，照旧算跳过；真撤了刻例另计 withdrawn
+    if not admits and not withdraws:
         return res
     if dry_run:
         res.added = len(admits)
@@ -384,17 +392,73 @@ def glyphdb_admit(events, db_path: str | None = None,
     occ_memo: dict = {}
     occ_tok = _OCC_BOOKS.set({})
     try:
-        return _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bindings_of or _bindings_lookup)
+        return _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bindings_of or _bindings_lookup,
+                             withdraws=withdraws, ts_of=ts_of or _EventTs(events))
     finally:
         _OCC_BOOKS.reset(occ_tok)
 
 
-def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -> ConsumeResult:
-    """`glyphdb_admit` 的逐条进库（拆出来只为外面能包一层 `_OCC_BOOKS`）。"""
+_WITHDRAW_V = ("seg_defect", "not_a_char", "damaged")
+
+
+class _EventTs:
+    """事件 id → 写入时间 `ts`：先查本轮这批，查不到再扫一遍事件日志（只扫一次）。库里旧刻例的证据只记了事件 id。"""
+
+    def __init__(self, events):
+        self._ts = {e.id: e.ts for e, _d in events}
+        self._scanned = False
+
+    def __call__(self, event_id: str | None) -> str | None:
+        if not event_id:
+            return None
+        if event_id not in self._ts and not self._scanned:
+            self._scanned = True
+            try:
+                for e in EventLog().iter_all():
+                    self._ts.setdefault(e.id, e.ts)
+            except Exception:                    # noqa: BLE001 —— 没有事件日志就按老规矩（后消费的覆盖）
+                pass
+        return self._ts.get(event_id)
+
+
+def _lib_newer(db, db_id: str, e: Event, ts_of) -> bool:
+    """库里这一格已有**人裁**刻例、且出自比 `e` 更晚的人裁事件 → True（`e` 是旧票，不再覆盖）。
+
+    同一格人裁过几次以最后一次为准（sheldon 2026-10-26）。此前库按**消费顺序**覆盖：补消费积压时
+    更早的票后消费，就把新票压掉（vol04:143:9:16 10-24 改判 由，10-22 的 山 晚两小时才消费，库里留 山）。
+    证据里查不到事件时间的老刻例按老规矩处理（后消费的覆盖）。"""
+    row = db.conn.execute("SELECT provenance, evidence FROM admissions WHERE instance_id=?", (db_id,)).fetchone()
+    if row is None or not str(row[0]).startswith("human"):
+        return False
+    try:
+        ev = json.loads(row[1] or "{}")
+    except ValueError:
+        return False
+    if ev.get("event") == e.id:
+        return False
+    ts = ev.get("ts") or ts_of(ev.get("event"))
+    return bool(ts) and ts > (e.ts or "")
+
+
+def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of,
+                  withdraws=(), ts_of=lambda _i: None) -> ConsumeResult:
+    """`glyphdb_admit` 的逐条进库（拆出来只为外面能包一层 `_OCC_BOOKS`）。按人裁时间顺序处理，同一格以最后一票为准。"""
     bind_memo: dict = {}
     import cv2
     from ..utils.binarized import binarize_page
-    for e, _dest in admits:
+    wd = {id(e) for e, _d in withdraws}
+    for e, _dest in sorted([*admits, *withdraws], key=lambda x: replay_key(x[0])):
+        if id(e) in wd:
+            db_id = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
+            if _lib_newer(db, db_id, e, ts_of):
+                res.superseded += 1
+                continue
+            row = db.conn.execute("SELECT provenance FROM admissions WHERE instance_id=?", (db_id,)).fetchone()
+            if row is not None and str(row[0]).startswith("human"):
+                from ..clustering.audit import evict_instance
+                evict_instance(db, db_id, reason=f"withdrawn:{e.id}")
+                res.withdrawn += 1
+            continue
         from ..utils.cjk_compat import fold_compat
         shape = fold_compat(_unmojibake(e.payload.get("shape") or e.payload.get("char")))
         if not shape:
@@ -476,6 +540,9 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -
             "  LEFT JOIN exemplars e ON e.instance_id = a.instance_id "
             "  LEFT JOIN glyphs g ON g.glyph_id = e.glyph_id "
             " WHERE a.instance_id = ?", (db_id,)).fetchone()
+        if _lib_newer(db, db_id, e, ts_of):
+            res.superseded += 1
+            continue
         if prev is not None and (prev[2] != shape or prev[1] != shape):
             from ..clustering.audit import evict_instance
             evict_instance(db, db_id)
@@ -498,7 +565,7 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of) -
         ok = db.admit_instance(
             db_id, shape, cv2.imencode(".png", img)[1].tobytes(),
             provenance="human", shape=shape,
-            evidence={"event": e.id, "batch": e.batch,
+            evidence={"event": e.id, "batch": e.batch, "ts": e.ts,
                       "conversion": bool(e.payload.get("conversion")),
                       "shape": shape},
             page=str(e.target.page or ""), col=int(e.target.col or 0),
