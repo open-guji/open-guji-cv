@@ -872,10 +872,11 @@ def _row_windows(binm: np.ndarray, xfn, ys: np.ndarray, w: int
                  ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """每一行以这条线为中心取 ±BEND_SEARCH 的窗口（新坐标方向，右到左翻回来），
     一次 gather 成 (n, 81)。窗口出界的行整行丢掉（跟旧实现的 `continue` 一样）。
+    行 y 出图（上下版框贴着图边、外推的线端落到图外，裁得紧的图源如 siku-qiefen-v2 会碰到）也丢掉。
     返回 (保留的行 y, 各行窗口起点 lo（新坐标）, 窗口矩阵)。"""
     c = np.rint(xfn(ys.astype(np.float64))).astype(int)
     lo = c - BEND_SEARCH
-    ok = (lo >= 0) & (c + BEND_SEARCH + 1 <= w)
+    ok = (lo >= 0) & (c + BEND_SEARCH + 1 <= w) & (ys >= 0) & (ys < binm.shape[0])
     ys, lo = ys[ok], lo[ok]
     # 新坐标 x = lo + j  <=>  旧列 (w-1) - (lo + j)
     cols = (w - 1) - (lo[:, None] + np.arange(2 * BEND_SEARCH + 1)[None, :])

@@ -8,10 +8,10 @@
 ## 怎么判
 方法数组：整字 HOG＋岭回归（`ids_online.SPECS["fa"]`，取右下框 `region=(0.4,1,0.4,1)`，48×48，λ=1，去碎墨），
 SHAPE 组，补放与复核改码位（`registry.py` SHAPE_GROUPS）。
-- 门槛 0.5。
+- 门槛 0.9（10-26 补 vol51–99 后由 0.5 提上来，见评测）。
 - 陪衬 `tolerate`：登務條𫉬顧（登務條 进模板库，判成它们＝弃权；𫉬顧 只放行入口）。
 - 整理本两形混用，**不要求**补放与整理本同字。
-- 模板库 `config/groups/fa/ids_bank.json`：505 格（發 245、𤼵 80，陪衬 登務條 各 60）。
+- 模板库 `config/groups/fa/ids_bank.json`：660 格（發 295、𤼵 185，陪衬 登務條 各 60），约 2MB。
 
 ## 评测
 建库：`research/m7/glyph_expand/build_shape_pair.py fa <原图> <工作区> <产物> --char-patch --labels=<dataset>/char-groups/variant/fa/sheldon_labels.jsonl --write --dataset=…`。
@@ -20,13 +20,22 @@ SHAPE 组，补放与复核改码位（`registry.py` SHAPE_GROUPS）。
 离线回放 vol21–50 main 包（`replay_groups.py --groups shi,fa --patches`，2026-10-26；这些册的格都在模板库里，是样本内）：
 补放 31（全是 𤼵）、改码位 發→𤼵 77、复核照旧 359、仍送审 1；放行结果与标签不一致的只有 2 格（标 𤼵、仍是 發，margin 不够没改）。
 
+**补 vol51–99（2026-10-26）**：先拿 vol21–50 的库在 vol51–99 首跑包上回放（样本外）：481 格进组，补放 31、改码位 發→𤼵 70，
+A24 把补放、改码位和 margin ≥1.2 的复核格右下放大逐张看过，全对；没把握的 60 格上标注页，sheldon 改 3 格（都是放行 發、刻 矢）。
+合进库后按册留出 660 格：门槛 0.5 错 1（vol87:127:7:8 刻 矢、判 殳 0.89），**门槛 0.9 起 0 错**，给 575（𤼵 162）；门槛取 0.9。
+vol21–99 回放（样本内）：vol21–50 补放 28、改码位 73；vol51–99 补放 31、改码位 68；仍送审 7。
+放行成 發、标 𤼵、margin 不到 0.9 没改的 14 格：vol36:55:2:19 vol45:69:5:21 vol46:33:2:12 vol49:49:5:15 vol49:58:6:9 vol49:60:2:10
+vol52:73:3:14 vol53:6:6:6 vol55:130:3:10 vol55:150:1:14 vol68:119:9:6 vol68:120:2:7 vol87:95:2:17 vol96:173:1:18（门槛的代价）。
+
 ## 人工数据
 `dataset char-groups/variant/fa/sheldon_labels.jsonl`（468 行，2026-10-25/26）：
 - 标注页（https://claude.ai/artifact/9bbu5iubFNW9HgH3Hf4jCR，db 集合 fa）预填机器判的刻形（右下 HOG，A24 逐张看过），
   sheldon 过了一遍，点了 34 格；没点的按预填（src「其余」，建库每册每字 ≤12）。
 - 复核 2 格（10-26）：建组后按册留出高把握判反的 vol36:55:2:19（改 𤼵）、vol46:119:1:21（改 發），都是机器对。
 - vol48:61:5:7 看图更正为 𤼵（预填误作 發、未被点；与同页 𤼵 同刻形）。
-计数：發 357、𤼵 111。`labels.jsonl`／`crops/`／`split.json` 是建库用的 505 格。
+- vol51–99（10-26）：标注页 https://claude.ai/artifact/4vJouspkJXp3rYrJcYZ2i4 （db 集合 fa）放回放没把握的 60 格，sheldon 改 3 格；
+  回放高把握改判 𤼵 的 99 格没上页，A24 右下放大逐张看过（by claude-a24，src「其余：A24…」）。
+计数：發 407、𤼵 220。`labels.jsonl`／`crops/`／`split.json` 是建库用的 660 格。
 
 ## 现状与待办
-- 上线：vol21–50 各册 `group_flow` 加 fa；模板库随发版。vol01–20 有没有 𤼵 还没查。
+- 上线：vol21–99 各册 `group_flow` 加 fa（vol06 不碰）；模板库随发版（约 2MB）。vol01–20 有没有 𤼵 还没查。

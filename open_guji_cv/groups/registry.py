@@ -55,6 +55,8 @@ class FlowSpec:
       库把它排成别的字：算𮅕 的 𮅕 被排成 莫；A24 10-25）。只在同时声明了 `lift_ref_agree` 的组生效。
       先于库首位字所在的组（闗 被库排成 闡間，不先拦就进了门族 men）；现役对位缺格时用坐标对位字（vol49 整页对位缺）。
       声明了 `tolerate_ref_agree` 的组也生效。
+    - `ref_enter_member`：`ref_enter` 也放宽到 top1 是本组另一成员、而这个成员又先被别的组点名的情形（選𨕖：整理本作 𨕖、
+      库首位 選 是辶族 chuo 的成员，不先拦就进了 chuo；A24 10-26）。整理本字与 top1 相同时不走这条。
     - `tolerate_ref_agree`：补放时分差内（含 top1）出现了**组外**陪衬字的格，方法给的字须与整理本字（缺位时坐标对位字）同字，
       否则留人审（`group_flow_ref_dissent`／`group_flow_ref_missing`）；分差内没有陪衬字的格照旧。陪衬字是库里个别刻例
       「挡门」造成的（形近护栏 N 类，2026-10-26 A24：于千子 被 亍 的一个刻例挡、日曰 被 師 的一个旧切分字块挡），
@@ -91,6 +93,7 @@ class FlowSpec:
     review_weak: tuple = ()
     review_fix_margin: float = 0.0
     ref_enter: bool = False
+    ref_enter_member: bool = False
     tolerate_ref_agree: bool = False
     ref_top_enter: bool = False
     ctx_over: tuple = ()
@@ -180,13 +183,19 @@ _SHAPE_PAIR_FLOW = {
     "li": dict(tolerate=frozenset("隷𨽻棣練竦款羔"), ref_canon=True, lift_ref_agree=True, review_ref_agree=True),
     # 蒙𫎇：整理本 蒙／𫎇 混用（整理本作 蒙、刻 〢丷 的常见），不要求与整理本同字；库常把 家 排在分差内
     "mn": dict(tolerate=frozenset("䝉家冡豪"), ref_canon=True),
+    # 選𨕖（2026-10-26，A24 全册任务 03，sheldon 定按刻形照录）：字形库没有 𨕖，库排成 選；整理本两形混用（放行 選 里有丌形），
+    # 补放须与整理本同字；整理本作 𨕖、库首位 選 的格先进本组（`ref_enter_member`，選 本是辶族 chuo 的成员）；
+    # 复核（已放行 選）按刻形改码位，不看整理本（放行 選 里有 7 格丌形，整理本作 選）。
+    # 陪衬放宽到整个辶族：库在辶族里紧咬（選 遺 遵 連 還…分差 0.01–0.03），补放须整理本作 𨕖、字形也判 𨕖，陪衬只放进门。
+    "xuan": dict(tolerate=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾述近迎造遵遞追邊巡遷遜遲避邀𨒪遴題"),
+                 lift_ref_agree=True, ref_enter=True, ref_enter_member=True),
     # 勢𫝑 發𤼵（2026-10-25，sheldon 定按刻形分拆）：库首位几乎都是 勢／發；分差内常紧咬的组外字当陪衬放进入口
     # （登務條 也进模板库，判成它们＝弃权；𫉬顧勞 不进库，只放行入口，字仍由本组判 發𤼵／勢𫝑）。整理本两形混用，不要求与整理本同字。
     "shi": dict(tolerate=frozenset("勞")),
     "fa": dict(tolerate=frozenset("登務條𫉬顧")),
 }
 #: 闗關 与门族 men 共用 關：men 只补放不复核，已放行的 關 归 guanm 复核（刻 闗 放成 關 的改码位）
-_SHAPE_PAIR_OVERLAPS = {"guanm": ("men",)}
+_SHAPE_PAIR_OVERLAPS = {"guanm": ("men",), "xuan": ("chuo",), "xun": ("chuo",)}
 
 
 #: 文意组里加了字形第二路的组（2026-10-22；判法与门槛见 `ids_online.SPECS` 同名行）。方法数组里排在文意之后，`agree`：
@@ -483,7 +492,16 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                ("li", "隸𨽾", "左上 木（柰）／士（士示）"),
                                # 蒙𫎇（2026-10-26，同上；原第一批）：头部 艹／〢丷。旧判法「库形最近」会把 艹 头放成 𫎇（库两形紧咬）；
                                # 整理本作 䝉 的与 𫎇 同一刻法，录哪个码位由书级 `codepoints` 定
-                               ("mn", "蒙𫎇", "头部 艹／〢丷（两竖带点）"))},
+                               ("mn", "蒙𫎇", "头部 艹／〢丷（两竖带点）"),
+                               # 组外异体对（2026-10-26，A24 全册任务 01）：sheldon 在定码位页选「留人审」＝建组按刻形分；HOG 两类聚类看图，
+                               # 15 对确有两种刻法，建了其中复核看图没出错的 11 对（彦彥 㓜幼 复核把已放行格判反、劫刼 𪔂鼎 切块残，不建；另 17 对看不出差别，照旧人审）。标签＝聚类去掉低把握 15%（dataset variant/<组>/）
+                               ("yinv", "陰隂", "右边 今云／侌"), ("xian", "陷䧟", "右上 臽 头 ⺈／平头"), ("shu", "䟽疏", "左旁 足字旁／疋"),
+                               ("ning", "寧寜", "中部 皿／用"), ("yao", "謠謡", "右边写法两种（看组卡图）"),
+                               ("jim", "覊羈", "上部 覀／罒"), ("xun", "巡廵", "走之 辶／廴"),
+                               ("jian", "劍劔", "右边 刂／刃"), ("chi", "勅敕", "右边 力／攵"),
+                               ("bi", "𡚁弊", "下部 大／廾"), ("huiq", "囘回", "内部 己／口"),
+                               # 全册任务 03（2026-10-26）：两形都有、整理本混用，sheldon 定按刻形照录
+                               ("xuan", "選𨕖", "巽下 共／丌"))},
     # 码位已定仍送审的形近族（2026-10-26，A24 全册任务 04）：整理本作 鄉鄕／㣲微／別别／鎭鎮（码位已定 鄉→鄕 㣲→微 别→別 鎮→鎭），字形库却在
     # 形近的另一个字上拿不准（cov 差 0.01 内），库首位常就是它：鄉 排成 卿（殿本 卿 右作 阝，与 鄉 只差左边 乡／卯左），㣲 排成 徵徴，
     # 別 排成 刖所則（cov 0.99 一档），鎭 排成 鍾愼鏤…。別别 原是码位组（只给码位），10-26 移到这里。
@@ -516,7 +534,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"),
     "chuo": GroupSpec(
         id="chuo", name="辶族", members=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾選述近迎造遵遞追邊巡遷遜"),
-        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh",),
+        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan", "xun"),
         flow=FlowSpec((_img("chuo"),), combine="first", lift_ref_agree=True,
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"
