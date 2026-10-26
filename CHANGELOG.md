@@ -12,6 +12,7 @@
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
 ### Added
+- 字组：新 SHAPE 组 pai 派𣲖（右边 𠂢 有横／无横）、qi 奇竒（上部 大／立）、sui 歲嵗（上部 止／山）：模板＝vol51–99 已放行格，首轮按册留出错例看图改标；门槛 0.5／1.0／0.5 按册留出 0 错；ref_enter＋lift_ref_agree。册 yaml `group_flow` 不点名就不生效。vol51–99 离线回放补放 74、改码位 14，三组送审 89→16。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
 - 任务库看板：`guji job board`（执行方领单、收尾、心跳时自动写）把在跑、排队、最近结束的任务整理成一张表，写进中心库 `progress.metric`（栏目 `jobs`），网站后台「文本整理 → 重跑任务」显示：配置、状态、阶段、开始时间、已跑多久、预计完成（同类已成功任务耗时中位数）、结果包。不动任何 Step，`code_hash` 不变。
 
