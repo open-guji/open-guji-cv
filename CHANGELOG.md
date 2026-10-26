@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `scripts/zhengli/qa_pick.py` 默认配额加 `follow_ref=10`（v0.5.24 新放行通道），免得质检样本漏掉它（没列的通道不挑）。PATCH，不动 Step。
+
 ## [0.5.24] - 2026-10-26
 
 PATCH（#648 修 `--override` 起不来；字组 #647 等）。
