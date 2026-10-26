@@ -97,23 +97,15 @@ def human_events_since(book_id: str, since: str, feedback_root: Path | None) -> 
     if not ev_dir or not ev_dir.is_dir():
         return 0
     n = 0
-    for f in sorted(ev_dir.glob("*.jsonl")):
-        with open(f, encoding="utf-8") as fh:
-            for line in fh:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    d = json.loads(line)
-                except ValueError:
-                    continue
-                if (d.get("target") or {}).get("book") != book_id:
-                    continue
-                if str(d.get("ts") or "") <= since:
-                    continue
-                e = type("E", (), {"kind": d.get("kind"), "payload": d.get("payload") or {}})()
-                if counts_as_human(e):
-                    n += 1
+    from ..core.event_files import iter_event_dicts
+    for d in iter_event_dicts(ev_dir):
+        if (d.get("target") or {}).get("book") != book_id:
+            continue
+        if str(d.get("ts") or "") <= since:
+            continue
+        e = type("E", (), {"kind": d.get("kind"), "payload": d.get("payload") or {}})()
+        if counts_as_human(e):
+            n += 1
     return n
 
 

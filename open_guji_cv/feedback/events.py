@@ -224,11 +224,17 @@ def _same_content(a: Event, b: Event) -> bool:
 _READ_CACHE: dict[str, tuple[tuple[int, int], list]] = {}
 
 
+def _target_dict(t: EventTarget) -> dict:
+    return {"book": t.book, "page": t.page, "key": t.key, "anchor": t.anchor}
+
+
 class EventLog:
     """只追加的事件日志。一批一个文件，便于按批收割与回看。"""
 
     def __init__(self, root: Path | None = None):
         self.root = Path(root) if root else default_feedback_root()
+        #: 最近一次读各批时，因换图源页表 rev 不符没采信的条数：{批: {册: 条数}}
+        self.dropped: dict[str, dict[str, int]] = {}
 
     # ── 路径 ─────────────────────────────────────────────────────────
     @property
@@ -287,6 +293,13 @@ class EventLog:
         if bad:
             detail = "; ".join(f"{eid}: {f}={v!r}" for eid, f, v in bad)
             raise BadRequest(f"字形字段不合法（不是单字，也不是合法多码位），拒绝写入：{detail}")
+        gate = self._rev_gate()  # 换图源（GUJI-748 §六）：切过的册，锚里页表 rev 不符的事件不许写
+        stale = [e for e in events if not gate.admits(e.kind, _target_dict(e.target))]
+        if stale:
+            ex = "、".join(f"{e.id}（{e.target.key}）" for e in stale[:3])
+            raise BadRequest(f"{gate.note()}。拒绝写入 {len(stale)} 条，如 {ex}。这册已换图源、页号重编："
+                             f"请在新产物上重新取格（锚由产物来历带 source_rev）；旧页号的裁决用 "
+                             f"`guji cellvotes migrate` 按格级对照表迁移")
         from ..utils.cjk_compat import fold_compat
         for e in events:       # 人裁不写兼容汉字（福 U+FA1B → U+798F）
             for f in ("shape", "reading", "char"):
@@ -301,7 +314,7 @@ class EventLog:
             for batch, evs in by_batch.items():
                 path = self.batch_path(batch)
                 path.parent.mkdir(parents=True, exist_ok=True)
-                existing = {(e.batch, e.seq): e for e in self.read(batch)}
+                existing = {(e.batch, e.seq): e for e in self.read(batch, raw=True)}
                 next_seq = max((s for (_, s) in existing), default=0) + 1
                 with open(path, "a", encoding="utf-8") as f:
                     for e in sorted(evs, key=lambda x: x.seq):
@@ -337,7 +350,7 @@ class EventLog:
         """
         from .lock import feedback_write_lock
         with feedback_write_lock(self.root):
-            evs = self.read(batch)
+            evs = self.read(batch, raw=True)
             if not evs:
                 return {"batch": batch, "before": 0, "after": 0, "removed": 0, "dry_run": dry_run}
             keep: dict[tuple, Event] = {}
@@ -358,7 +371,9 @@ class EventLog:
             os.replace(tmp, path)               # 原子替换：中途挂掉不会留半个日志
             return res
 
-    def read(self, batch: str) -> list[Event]:
+    def read(self, batch: str, raw: bool = False) -> list[Event]:
+        """读一批。缺省按换图源的页表 rev 判据过滤（`core.event_files`）：切过图源的册，锚里页表 rev
+        不符的事件不返回。`raw=True` 原样全读，只给写入、压实、编号这类维护自身日志的地方用。"""
         path = self.batch_path(batch)
         if not path.exists():
             return []
@@ -368,15 +383,32 @@ class EventLog:
                 line = line.strip()
                 if line:
                     out.append(Event.model_validate_json(line))
-        return sorted(out, key=lambda e: e.order)
+        out.sort(key=lambda e: e.order)
+        return out if raw else self._gate(batch, out)
+
+    def _rev_gate(self):
+        """册 yaml 优先取和这份日志同一数据目录的 `books/`，没有再用工作区的。"""
+        from ..core.event_files import RevGate, sibling_books_dir
+        return RevGate(sibling_books_dir(self.root / "events"))
+
+    def _gate(self, batch: str, evs: list[Event]) -> list[Event]:
+        """换图源的页表 rev 判据（`core.event_files.RevGate`）。丢掉的条数按批记在 `self.dropped`，
+        给 `guji db status`、落票命令打印「N 条因页表 rev 不符不采信」用，不静默。"""
+        gate = self._rev_gate()
+        out = [e for e in evs if gate.admits(e.kind, _target_dict(e.target))]
+        if gate.dropped:
+            self.dropped[batch] = dict(gate.dropped)
+        else:
+            self.dropped.pop(batch, None)
+        return out
 
     def batches(self) -> list[str]:
         d = self.events_dir
         return sorted(p.stem for p in d.glob("*.jsonl")) if d.exists() else []
 
-    def iter_all(self) -> Iterator[Event]:
+    def iter_all(self, raw: bool = False) -> Iterator[Event]:
         for b in self.batches():
-            yield from self.read(b)
+            yield from self.read(b, raw=raw)
 
     def read_cached(self, batch: str) -> list[Event]:
         """同 `read()`，但按批次文件的 (大小, mtime_ns) 记住解析结果，文件一动就重读。
@@ -394,11 +426,10 @@ class EventLog:
             return []
         key, sig = str(path), (st.st_size, st.st_mtime_ns)
         hit = _READ_CACHE.get(key)
-        if hit is not None and hit[0] == sig:
-            return hit[1]
-        evs = self.read(batch)
-        _READ_CACHE[key] = (sig, evs)
-        return evs
+        if hit is None or hit[0] != sig:
+            hit = (sig, self.read(batch, raw=True))      # 缓存原样解析结果；判据每次现判（册 yaml 可能刚切）
+            _READ_CACHE[key] = hit
+        return self._gate(batch, hit[1])
 
     def iter_all_cached(self) -> Iterator[Event]:
         """`iter_all()` 的缓存版，规矩同 `read_cached()`：只读。"""
@@ -406,7 +437,7 @@ class EventLog:
             yield from self.read_cached(b)
 
     def latest_seq(self, batch: str) -> int:
-        evs = self.read(batch)
+        evs = self.read(batch, raw=True)
         return max((e.seq for e in evs), default=0)
 
     def resolve(self, batch: str | None = None, kinds: Iterable[str] | None = None,

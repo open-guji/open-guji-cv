@@ -69,12 +69,20 @@ def cell_of(e: dict, book: str) -> str | None:
 
 
 def iter_events(paths: list[Path]):
+    """换图源（GUJI-748）：切过的册只认锚里页表 rev 相符的事件（`core.event_files.RevGate`）。"""
+    cv = str(Path(__file__).resolve().parents[2])
+    if cv not in sys.path:
+        sys.path.insert(0, cv)
+    from open_guji_cv.core.event_files import RevGate
+    gate = RevGate()
     for p in paths:
         files = sorted(p.rglob("*.jsonl")) if p.is_dir() else [p]
         for f in files:
             for line in f.read_text(encoding="utf-8").splitlines():
                 if line.strip():
-                    yield json.loads(line)
+                    e = json.loads(line)
+                    if gate.admits_dict(e):
+                        yield e
 
 
 def decided_cells(events, book: str, as_of: str) -> dict[str, list[tuple[str, str]]]:

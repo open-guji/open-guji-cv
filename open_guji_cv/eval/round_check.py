@@ -80,7 +80,6 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
     没传时先认工作区，工作区没有事件文件才退回 DATASET；两边都没读到
     也要说清楚是**哪个目录**空的，不能悄悄回一个空字典让人当成「零人审」。
     """
-    import json
     import sys as _sys
     if root is not None:
         d, src = root / "feedback" / "events", str(root / "feedback" / "events")
@@ -100,19 +99,15 @@ def load_verdicts(book: str, root: Path | None = None) -> dict[str, str]:
         print(f"load_verdicts({book!r})：{src} 下没有事件文件，人裁事件读到 0 条",
              file=_sys.stderr)
     evs: list[tuple] = []
-    for p in files:
-        for ln in p.read_text(encoding="utf-8").splitlines():
-            try:
-                e = json.loads(ln)
-            except json.JSONDecodeError:
-                continue
-            pl = e.get("payload") or {}
-            key = ((e.get("target") or {}).get("key") or "")
-            if not (key[3:] if key.startswith("v2:") else key).startswith(prefix):
-                continue
-            if e.get("actor") == "user" and e.get("kind") == "confirm"                     and pl.get("v") == "confirm" and pl.get("shape"):
-                evs.append((e.get("ts") or "", e.get("batch") or "",
-                            e.get("seq") or 0, key, pl["shape"]))
+    from ..core.event_files import iter_event_dicts
+    for e in (iter_event_dicts(d) if files else ()):          # 换图源的页表 rev 判据在这里一并生效
+        pl = e.get("payload") or {}
+        key = ((e.get("target") or {}).get("key") or "")
+        if not (key[3:] if key.startswith("v2:") else key).startswith(prefix):
+            continue
+        if e.get("actor") == "user" and e.get("kind") == "confirm"                     and pl.get("v") == "confirm" and pl.get("shape"):
+            evs.append((e.get("ts") or "", e.get("batch") or "",
+                        e.get("seq") or 0, key, pl["shape"]))
     out: dict[str, str] = {}
     for _ts, _b, _sq, key, shape in sorted(evs):
         out[key] = shape

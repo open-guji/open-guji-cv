@@ -223,7 +223,8 @@ def cmd_migrate(args) -> None:
                   for line in Path(f).read_text(encoding="utf-8").splitlines() if line.strip()]
         where = "、".join(args.events)
     else:
-        events = [e for e in EventLog(feedback_root()).iter_all() if e.target.key.startswith(args.book + ":")]
+        events = [e for e in EventLog(feedback_root()).iter_all(raw=True)   # 迁移读旧页号的事件：不过页表 rev 判据
+                  if e.target.key.startswith(args.book + ":")]
         where = f"数据目录 {feedback_root()}"
     res = M.migrate_events(events, rows, args.book, args.source_rev, min_iou=args.min_iou)
     if args.site_book and args.rev:

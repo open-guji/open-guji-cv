@@ -50,19 +50,15 @@ def human_shapes(workspace: Path) -> dict[str, str]:
             if r.get("label_status") == "human" and r.get("label") and r.get("instance_id"):
                 out[_cell_key(r["instance_id"])] = r["label"]
     evs = []
-    for f in sorted(glob.glob(str(data / "feedback" / "events" / "*.jsonl"))):
-        for line in open(f, encoding="utf-8"):
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            kind = e.get("kind")
-            if kind not in ("confirm", "glyph_audit"):
-                continue
-            p = e.get("payload") or {}
-            key = (p.get("instance_id") if kind == "glyph_audit" else None) or (e.get("target") or {}).get("key")
-            if key:
-                evs.append((e.get("ts") or "", _cell_key(key), kind, p))
+    from ..core.event_files import iter_event_dicts
+    for e in iter_event_dicts(data / "feedback" / "events"):     # 换图源的页表 rev 判据在这里一并生效
+        kind = e.get("kind")
+        if kind not in ("confirm", "glyph_audit"):
+            continue
+        p = e.get("payload") or {}
+        key = (p.get("instance_id") if kind == "glyph_audit" else None) or (e.get("target") or {}).get("key")
+        if key:
+            evs.append((e.get("ts") or "", _cell_key(key), kind, p))
     for _, key, kind, p in sorted(evs, key=lambda x: x[0]):
         v = p.get("v")
         if kind == "glyph_audit":                 # 字形库体检：改字／撤库
