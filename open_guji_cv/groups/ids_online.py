@@ -66,6 +66,10 @@ class IdsSpec:
                                 # 广宀族只给 賔賓，2026-10-24）
     generic: bool = False       # True：通用判法（`ids_generic`）：切法与判别叶子由成员 IDS 导出（`ids_plan`），缺省形状先验折线切、
                                 # 给了 `unet` 改用 U-Net；模板与在线格同一切法切，最近邻；frame/orient/prior/which/by_form 不用（2026-10-22）
+    sub_prior: float | None = None  # 两段版：给了数＝第二刀（`ids_two.part_of`）：切下的段再在墨迹框内按这个先验找缝，只比缝后一小块
+                                # （參㕘叅 去掉「人」只比 彡／小／𠇍，2026-10-26）；模板库须同样取法
+    dual: float = 0.0           # 两段版：>0＝两路一致才给字（2026-10-26，參㕘叅）：IDS 给了字，还要整字 HOG 岭回归（模板库 `whole_bank.json`，
+                                # 与 ids_bank.json 同目录，参数用本行的 size/region/lam/clean）判成同一字、判别值 ≥ 这个数，否则弃权
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -73,7 +77,13 @@ SPECS: dict[str, IdsSpec] = {
     # 參㕘叅：人标池 74 格（參 35／㕘 37／叅 2），自动缝。留一：margin 0.02 → 65 对／9 弃权／0 错，0.04 → 59／15／0；
     # 留一册（模板不含本册）：0.02 → 64／10／0，0.04 → 57／17／0；不设门槛时两格错（vol04 參→㕘），池图 margin 0.019、0.004，
     # 换成线上 char_patch 是 0.026、0.022（同格两种图 margin 差可到 ±0.018）。所以取 0.04（宁可弃权）。叅不足 8 例，永不给。
-    "can": IdsSpec(frame="⿱厽{}", orient="h", prior=0.52, min_margin=0.04),
+    # 2026-10-26（A24「压低參㕘叅送审」）：vol21 起刻 叅（钩右一点一撇两笔）的格多，旧库只 2 例 叅，把它们判成 㕘 降审（vol21–99 共 126 格）。
+    #   全书小族 722 格看图补标（dataset variant/can/claude_labels_1026.jsonl：㕘 258／叅 364）＋已放行 參 80（库压在 1MB 内），字块用线上 char_patch，
+    #   单一方法按册留出都有高把握错（整字 HOG 错例到 1.5、IDS 一刀 0.1），改两刀（第二刀去「人」只比最下块）＋整字 HOG 两路一致：
+    #   按册留出 702 格，整字 ≥0.4 且 IDS ≥0.03 起 0 错（两路同判错的最高 整字 1.38 但 IDS 只 0.011、IDS 最高 0.050 但整字 0.37）；
+    #   取 整字 0.55、IDS 0.04 → 给 503（叅 273／㕘 155／參 75）、0 错。
+    #   建库 research/m7/glyph_expand/build_can_dual.py。见 doc/字组/can.md。
+    "can": IdsSpec(frame="⿱厽{}", orient="h", prior=0.52, min_margin=0.04, sub_prior=0.45, dual=0.55, size=32, clean=True),
     # 以下几组（2026-10-20）：模板＝sheldon 合审裁过的殿本 vol04–10 格（中心库 confirm 事件），按字分类（by_form）。
     # 教敎（2026-10-21，sheldon 提示「差别在左上角」）：**整字里只取左上角一块做 HOG**（region 左 0–55%、上 0–46%，sheldon 在取框页调的）＋岭回归，
     #   整字／U-Net 切部件／自动缝三法此前都不行（给字格 0 错覆盖 ≤8%）。dataset `jiao/labels.jsonl` 93 格（教 68／敎 25，含 vol01 四格教→敎更正）按册 5 折留出：
@@ -270,6 +280,19 @@ def bank_path(g: str) -> Path | None:
     return None
 
 
+def whole_bank_path(g: str) -> Path | None:
+    """两路一致（`IdsSpec.dual`）的整字模板库：工作区 `config/groups/ids/<g>.whole.json` 优先，其次仓里 `<config_dir>/whole_bank.json`。"""
+    from ..core.workspace import ws_config_dir
+    from .registry import FLOW_GROUPS as GROUPS
+    cfg = ws_config_dir()
+    if cfg is not None and (cfg / "groups" / "ids" / f"{g}.whole.json").exists():
+        return cfg / "groups" / "ids" / f"{g}.whole.json"
+    spec = GROUPS.get(g)
+    if spec is not None and spec.config_dir and (_ROOT / spec.config_dir / "whole_bank.json").exists():
+        return _ROOT / spec.config_dir / "whole_bank.json"
+    return None
+
+
 def has_bank(g: str) -> bool:
     return g in SPECS and bank_path(g) is not None
 
@@ -347,10 +370,14 @@ def fingerprint(groups) -> str:
             d.pop("generic")            # 新字段缺省值不进哈希：不用通用判法的组指纹不变
         if not d["give"]:
             d.pop("give")
+        if d["sub_prior"] is None:
+            d.pop("sub_prior")
+        if not d["dual"]:
+            d.pop("dual")
         spec = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
         fine = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_fine.tsv"
         parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else "")
-                     + (f".f{_sha(fine)}" if SPECS[g].generic else ""))
+                     + (f".f{_sha(fine)}" if SPECS[g].generic else "") + (f".w{_sha(whole_bank_path(g))}" if SPECS[g].dual else ""))
     if not parts:
         return ""
     return "ids:" + ",".join(parts) + f",lv1={_sha(IDS_TABLE)}"
@@ -358,8 +385,9 @@ def fingerprint(groups) -> str:
 
 # —— 判 ——
 
-def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None, net=None) -> GroupVerdict:
-    """用给定模板库判一格（评测与线上共用）。给字条件：IDS 对上组内成员、margin ≥ `min_margin`、该类模板 ≥ `min_class`。"""
+def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None, net=None, whole: dict | None = None) -> GroupVerdict:
+    """用给定模板库判一格（评测与线上共用）。给字条件：IDS 对上组内成员、margin ≥ `min_margin`、该类模板 ≥ `min_class`；
+    `spec.dual` 时另要整字库（`whole`，缺省读 `whole_bank_path`）判成同一字。"""
     from .ids_two import solve_two
     from .registry import FLOW_GROUPS as GROUPS
     spec = spec or SPECS[g]
@@ -379,7 +407,7 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
         if why:
             return GroupVerdict(None, why=why, via="ids")
     v = solve_two(arr, bank, _resolver(g), spec.frame, spec.orient, spec.prior, polyline=pl,
-                  which=spec.which, min_margin=0.0)
+                  which=spec.which, min_margin=0.0, sub_prior=spec.sub_prior)
     m = float(v.margins[0]) if v.margins else 0.0
     slot = v.slots[0] if v.slots else None
     extra = {"ids": v.ids, "slot": slot, "margin": round(m, 4), "kind": v.kind,
@@ -393,7 +421,26 @@ def judge_with(g: str, gray: np.ndarray, bank: dict, spec: IdsSpec | None = None
     n = len(bank.get(slot) or ())
     if n < spec.min_class:
         return GroupVerdict(None, conf=m, why="abstain:few_templates", via="ids", extra={**extra, "n_templates": n})
+    if spec.dual:
+        return _dual_check(g, gray, v.char, m, spec, members, extra, whole)
     return GroupVerdict(v.char, conf=m, why="agree", via="ids", extra=extra)
+
+
+def _dual_check(g: str, gray, ch: str, m: float, spec: IdsSpec, members, extra: dict, whole: dict | None) -> GroupVerdict:
+    """两路一致（`IdsSpec.dual`）：IDS 已给 `ch`，整字 HOG 岭回归也须判成 `ch` 且判别值 ≥ `spec.dual`。"""
+    from dataclasses import replace
+    if whole is None:
+        p = whole_bank_path(g)
+        if p is None:
+            return GroupVerdict(None, conf=m, why="abstain:no_whole_bank", via="ids", extra=extra)
+        whole = load_bank(p)
+    w = _judge_whole(gray, whole, replace(spec, whole="hog", min_margin=spec.dual), members)
+    extra = {**extra, "whole": w.char or (w.extra or {}).get("form"), "whole_margin": (w.extra or {}).get("margin")}
+    if w.char is None:
+        return GroupVerdict(None, conf=m, why="abstain:dual_" + w.why.removeprefix("abstain:"), via="ids", extra=extra)
+    if w.char != ch:
+        return GroupVerdict(None, conf=m, why="abstain:dual_disagree", via="ids", extra=extra)
+    return GroupVerdict(ch, conf=m, why="agree", via="ids", extra=extra)
 
 
 def _auto_three(gray):

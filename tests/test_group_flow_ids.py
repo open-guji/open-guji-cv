@@ -151,9 +151,9 @@ def test_flow_ids_decides_before_top1(can_bank):
     assert (ch, why) == ("參", "agree")
     assert [t["solver"] for t in trail] == ["freq", "ids"]               # IDS 给字就不再看库形最近
     assert trail[1]["ids"] == "⿱厽彡" and trail[1]["margin"] >= 0.02
-    # 没图 → IDS 弃权，退回 top1
+    # 没图 → IDS 弃权；can 不再退回库形最近（2026-10-26：字形库偏 㕘，刻 叅 的格会被它放错），待定
     ch, why, trail = decide("can", Rec("a"), cands, None, cfg, patch_fn=lambda cid: None)
-    assert ch == "㕘" and trail[1]["why"] == "abstain:no_patch" and trail[2]["solver"] == "top1"
+    assert ch is None and trail[1]["why"] == "abstain:no_patch" and [t["solver"] for t in trail] == ["freq", "ids"]
 
 
 def test_flow_ids_no_bank_never_fetches_patch(can_bank):
@@ -173,7 +173,7 @@ def test_seed_admit_fingerprint_includes_ids(can_bank):
 
 
 def test_seed_admit_can_fetches_patch_for_ids(tmp_path, monkeypatch, can_bank):
-    """接进 seed_admit：can 组有模板库 → 去取字块；缺图（patch_missing=skip）记 `patch_missing`，IDS 弃权，退回 top1。"""
+    """接进 seed_admit：can 组有模板库 → 去取字块；缺图（patch_missing=skip）记 `patch_missing`，IDS 弃权（can 不退回 top1，留人审）。"""
     from helpers import make_book, make_ctx, page_decision, page_match, write_product
     from open_guji_cv.core.step import STEPS
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
@@ -185,8 +185,8 @@ def test_seed_admit_can_fetches_patch_for_ids(tmp_path, monkeypatch, can_bank):
     ctx.params["seed_admit"] = SeedAdmitParams(patch_missing="skip", group_flow=("can",), shadow_veto=False)   # 影子闸要真字形库与 sklearn，这里没摆
     r = STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"].columns[0].chars[0]
     trail = r.evidence["group"]["solvers"]
-    assert [t["solver"] for t in trail] == ["freq", "ids", "top1"] and trail[1]["why"] == "abstain:no_patch"
-    assert "group_flow" in r.evidence.get("patch_missing", []) and r.admit and r.char == "㕘"
+    assert [t["solver"] for t in trail] == ["freq", "ids"] and trail[1]["why"] == "abstain:no_patch"
+    assert "group_flow" in r.evidence.get("patch_missing", []) and not r.admit
 
 
 def test_yi_560_three_slot_bank_loads_and_abstains_on_blank():

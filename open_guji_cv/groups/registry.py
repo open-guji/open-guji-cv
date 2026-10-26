@@ -305,9 +305,17 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=("ids",), config_dir=cfg,
         flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first", **_rv(gid)),
         note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
-       for gid, name, cfg in (("dian", "點㸃", None), ("can", "參㕘叅", "config/groups/can"),
-                              ("chen", "讖識䜟", None), ("shen", "慎愼", "config/groups/shen"),
+        for gid, name, cfg in (("dian", "點㸃", None),
+                               ("chen", "讖識䜟", None), ("shen", "慎愼", "config/groups/shen"),
                               ("zhi", "旨㫖", "config/groups/zhi"))},
+    # 參㕘叅（2026-10-26，A24「压低參㕘叅送审」）：殿本 㕘／叅 刻形只差下部钩右边一笔（㕘）还是一点一撇两笔（叅）；
+    # 整理本一律作 叅、字形库偏 㕘，都不能当证据，所以去掉库形最近（TOP1）。IDS 下块（两刀）＋整字 HOG 两路一致才给字
+    # （`ids_online.SPECS["can"].dual`）；复核时两路都判成组里另一形就按刻形改码位（`review_fix`），判不出不动。
+    "can": GroupSpec(
+        id="can", name="參㕘叅", members=frozenset("參㕘叅"), backends=(),
+        kind="variant", solvers=("ids",), config_dir="config/groups/can",
+        flow=FlowSpec((FREQ, _img("can")), combine="first", review_fix=True, **_rv("can")),
+        note="异体组：字频→IDS 下块与整字 HOG 两路一致；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"),
     # —— 第二批异体组（2026-10-18 sheldon 定）：只靠字频。人裁数不够（主形 <20 或次形不为 0）时弃权、送人审，
     #    不退到 IDS／库形最近；字频表重算后数据攒够就自动放行。
     **{gid: GroupSpec(
