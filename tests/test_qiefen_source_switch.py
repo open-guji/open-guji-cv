@@ -65,3 +65,21 @@ def test_migrated_events_not_admitted_twice():
     assert res.added == 0
     res = glyphdb_admit([_ev(1, True), _ev(2, False)], dry_run=True)
     assert res.added == 1
+
+
+def test_products_carry_source_rev_from_pull_mark(tmp_path):
+    from open_guji_cv.products.store import ProductStore
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    (raw / "1.png").write_bytes(b"x")
+    store = ProductStore(tmp_path / "products")
+    store.raw_sha("vol11", raw / "1.png")
+    assert store.source_rev("vol11") is None          # 手放的图：来历不明
+    (raw / S.PULL_MARK).write_text(json.dumps({"book_id": "96mid1ogzk", "vol": "11", "rev": 4}), encoding="utf-8")
+    store = ProductStore(tmp_path / "products")
+    store.raw_sha("vol11", raw / "1.png")
+    assert store.source_rev("vol11") == 4
+    (raw / S.PULL_MARK).unlink()
+    store = ProductStore(tmp_path / "products")
+    store.raw_sha("vol11", raw / "1.png")
+    assert store.source_rev("vol11") is None          # 换回无记号的目录：旧抄件不留
