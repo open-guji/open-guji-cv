@@ -522,7 +522,7 @@ class SeedAdmitParams(BaseModel):
     缺席（锚不上、不覆盖本册、difflib 没配上）就不算一致。"""
     lane_seal_via: str = "coord,align"
     """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。
-    2026-10-26 起缺省 `coord,align`（A32 印章格研究，sheldon 定：印章区 via=align 的 81 格看图未见错字）。"""
+    2026-10-26 起缺省 `coord,align`（A32 印章格研究，sheldon 定：印章区 via=align 的 81 格看图未见错字；108 页回放新放 105 格，看图见 1 错：vol43 p2 整理本漏「有」致对位错一格）。"""
     lane_seal_title_marks: str = "書總目,四庫全書"
     """卷端／版心题列的标记串（本列坐标对位字连起来含任一串 → 整列不走 R5，除非是 `lane_seal_title_formula`
     套语列）。2026-10-26 由「總目,四庫全書」改为「書總目,四庫全書」：正文里的「崇文總目」之类不再连累整列。"""
