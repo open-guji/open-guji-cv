@@ -182,6 +182,8 @@ seq 已经是 cord 的 canvas id（`…/iiif/<书>/canvas/<册>/<seq>`）和网�
 
 ## 十二、Commons 为根的图片树（2026-10-24 用户定）
 
+> **2026-10-26 起殿本《四庫全書總目》不再适用本节与 §十三**：用户定整套换成 siku-qiefen-v2 图源，新页表的根是 open-guji-core/file_archive release，殿本页表上 `commons-pack`、`commons --reroot` 报「没有 Commons 根」是对的；§十三 表里 vol03/04/07/09 的修正版 DjVu 不再回传。见 `殿本换图源-siku-qiefen-v2.md`。其它书照旧。
+
 > 用户 10-24：「Commons 适合当最后的唯一准确来源，所有人都会看；我们在不同节点做不同的缓存，理成树状图，Commons 是根。」
 
 10-23 实测（GitHub runner，vol11、vol03 各两页，含合扫叶）：Commons 上四庫總目的 DjVu 用 `ddjvu` 原尺寸解出来，与 IA `_tif.zip` **逐像素相同**（1-bit、同尺寸；DjVu 里写的 300 dpi 只是标记）。所以把根从 IA 换成 Commons 不改任何页图字节，已跑的产物不过期。
@@ -214,6 +216,8 @@ Commons DjVu（根：唯一准确来源，人人可查；按文件版本钉 sha1
 书影：vol01–35 早先从 IA 切好；vol36–99 从页表切（workflow `--source pages`）。
 
 ## 十三、修过的页回传 Commons（2026-10-25 用户定要做）
+
+> 殿本自 2026-10-26 换图源后不再回传（见 §十二开头的说明）。
 
 根（Commons）要始终是对的：我们修过、给读者看的页（拆页、转正、换页），整册合成新版 DjVu，在 Commons 上对原文件「上传新版本」。只为识别做的修图（Step0 `preclean`）不回传。本节取代 overview `项目进展/新书整理/书/Commons修图记录.md`（09-29 起的旧账，已并入下表）。
 
