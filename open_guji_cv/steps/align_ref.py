@@ -463,6 +463,15 @@ class AlignRefParams(BaseModel):
 
     结果另记在 `PageAlignRef.coord`，**不改现役 `chars`、不进任何准入通道**。"""
 
+    coord_neighbor: bool = True
+    """印章页借邻页定位（2026-10-26，A32「减少印章污渍格的人审」，sheldon 定）：本页的载体串定不了
+    整理本位置（8-gram／4-gram 都没命中）、整理本又是逐列本（`#@` 半叶头）时，改用后一页
+    （其次前一页）的载体串定位，本页的半叶起点＝后一页半叶起点的前一个半叶头（前一页则是后一个）。
+    起因：卷首叶、卷端页的大印把整页字形认成乱码，11 页（vol29 p2、vol46 p2 等，337 格）整页锚不上，
+    印章区连默认字都没有，只能人审。只在定位失败时才走，已锚上的页逐字节不变；配上的列照旧过
+    `coord_column` 的几何检查和 `_coord_conflict`。邻页的 glyph_match 不进本页指纹（邻页重跑不让本页过期，
+    半叶结构不随识别变）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
@@ -511,7 +520,7 @@ def _corpus_index(path: str):
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.1", unit="cell",   # 2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.2", unit="cell",   # 2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -538,8 +547,15 @@ class AlignRefStep(Step):
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
         if _coord_enabled(p, ctx.book) and match is not None:
+            def neighbors():
+                for nb in (page + 1, page - 1):
+                    m = _opt(ctx, "glyph_match", nb)
+                    if m is not None:
+                        yield nb - page, m, (rare_topk_map(_opt(ctx, "rare_candidates", nb), p.rare_topk)
+                                             if p.rare_topk else None)
             attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
-                         _opt(ctx, "cells", page), p.corpus)
+                         _opt(ctx, "cells", page), p.corpus,
+                         neighbors=neighbors if p.coord_neighbor else None)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1014,10 +1030,65 @@ def _corpus_line_is_column(path: str, cap: int) -> bool:
     return ok >= 0.95 * len(lines)
 
 
+def _page_carriers(match, ocr, rare):
+    carrier = carrier_fn(match, ocr, rare)
+    cols = [cc for cc in sorted(match.columns, key=lambda c: c.col) if cc.ok and cc.chars]
+    return carrier, cols, [(cc.col, "".join(carrier(r.id) or "" for r in sort_by_reading(cc.chars)))
+                           for cc in cols]
+
+
+def _locate(carriers, lines, starts, text: str, corpus: str, grid: bool):
+    """载体串 → 整理本里的页映射 `PageMap`；定不了位置返回 (None, 原因)。"""
+    from . import align_ref_coord as C
+    query = "".join(c for _col, c in carriers)
+    off, votes, _ru = _raw_vote_clusters(query, _corpus_index(corpus))
+    if off is None or votes < 2:
+        off, votes = C.scan_offset(query, text)
+    if off is None:
+        return None, "定不了页在整理本里的位置（8-gram/4-gram 都没命中）"
+    l0 = C.line_at(starts, max(0, off))
+    win = C.COORD_WINDOW_LINES + (9 if grid else 0)
+    pm = C.map_columns(carriers, lines, l0 - win, l0 + len(carriers) + win, grid=grid)
+    return (pm, "") if pm.base is not None else (None, pm.note)
+
+
+def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
+    """`coord_neighbor`：邻页定位成功 → 本页的 `PageMap`（逐列本，第 c 列对半叶起点 + c − 1 行）。
+
+    后一页（dp=+1）的半叶起点往前数一个半叶头，前一页（dp=−1）往后数一个。列与行的对应不再投票
+    （本页载体是乱码，票数本来就没意义），只留 `map_columns` 那道「这一列明显更像别的行」的保险。"""
+    from . import align_ref_coord as C
+    heads = [i for i, ln in enumerate(lines) if ln.leaf_start]
+    for dp, m, r in neighbors():
+        _c, _cols, nb_car = _page_carriers(m, None, r)
+        pm, _why = _locate(nb_car, lines, starts, text, corpus, grid=True)
+        if pm is None or not lines[pm.base].leaf_start:
+            continue
+        k = heads.index(pm.base) - dp
+        if not 0 <= k < len(heads):
+            continue
+        base = heads[k]
+        out = C.PageMap(base, note=f"邻页定位（{'后' if dp > 0 else '前'}一页，半叶头第 {base} 行）")
+        for col, c in carriers:
+            li = base + col - 1
+            if li >= len(lines) or (k + 1 < len(heads) and li >= heads[k + 1]):
+                continue
+            own = C.line_sim(c, lines[li])
+            other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
+                         if l2 != li), default=0)
+            if other >= own + 3 and other >= 2 * max(own, 1):
+                continue
+            out.col_line[col] = li
+        return out
+    return None
+
+
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
-                 cells, corpus: str) -> None:
+                 cells, corpus: str, neighbors=None) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
-    `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。"""
+    `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
+
+    `neighbors()`（`coord_neighbor`）→ 迭代 (页差, 邻页 glyph_match, 邻页 rare)：本页定不了位置时借邻页定位。"""
     from . import align_ref_coord as C
     if cells is None:
         res.coord_note = "没有 Step3 字格产物（cells）"
@@ -1027,23 +1098,16 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     if not lines or not text:
         res.coord_note = "整理本读不到"
         return
-    carrier = carrier_fn(match, ocr, rare)
-    cols = [cc for cc in sorted(match.columns, key=lambda c: c.col) if cc.ok and cc.chars]
-    carriers = [(cc.col, "".join(carrier(r.id) or "" for r in sort_by_reading(cc.chars)))
-                for cc in cols]
-    query = "".join(c for _col, c in carriers)
-    off, votes, _ru = _raw_vote_clusters(query, _corpus_index(corpus))
-    if off is None or votes < 2:
-        off, votes = C.scan_offset(query, text)
-    if off is None:
-        res.coord_note = "定不了页在整理本里的位置（8-gram/4-gram 都没命中）"
-        return
+    carrier, cols, carriers = _page_carriers(match, ocr, rare)
     grid = bool(lines) and any(ln.leaf_start for ln in lines[:50])
-    l0 = C.line_at(starts, max(0, off))
-    win = C.COORD_WINDOW_LINES + (9 if grid else 0)
-    pm = C.map_columns(carriers, lines, l0 - win, l0 + len(carriers) + win, grid=grid)
-    if pm.base is None:
-        res.coord_note = pm.note
+    pm, why = _locate(carriers, lines, starts, text, corpus, grid)
+    if pm is None and grid and neighbors is not None:
+        pm = _neighbor_map(carriers, lines, starts, text, corpus, neighbors)
+        if pm is not None:
+            why = ""
+            res.coord_note = pm.note
+    if pm is None:
+        res.coord_note = why
         return
     from ..products.kinds.recog import CoordRec
     legacy = {c.id: c for c in res.chars} if res.anchored else {}

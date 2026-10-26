@@ -520,9 +520,28 @@ class SeedAdmitParams(BaseModel):
     lane_witnesses: str = ""
     """R1/R4 用哪几家证人：书 yaml `references` 的文件名，逗号分隔；空 = 全部。某家这一位
     缺席（锚不上、不覆盖本册、difflib 没配上）就不算一致。"""
-    lane_seal_via: str = "coord"
-    """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。"""
-    lane_seal_title_marks: str = "總目,四庫全書"
+    lane_seal_via: str = "coord,align"
+    """R5 放行哪些来源的默认字（`_occluded` 的 via）：`coord`；加 `align` 连现役对位字也放。
+    2026-10-26 起缺省 `coord,align`（A32 印章格研究，sheldon 定：印章区 via=align 的 81 格看图未见错字；108 页回放新放 105 格，看图见 1 错：vol43 p2 整理本漏「有」致对位错一格）。"""
+    lane_seal_title_marks: str = "書總目,四庫全書"
+    """卷端／版心题列的标记串（本列坐标对位字连起来含任一串 → 整列不走 R5，除非是 `lane_seal_title_formula`
+    套语列）。2026-10-26 由「總目,四庫全書」改为「書總目,四庫全書」：正文里的「崇文總目」之类不再连累整列。"""
+    lane_seal_title_formula: str = "^欽定四庫全書總目[卷巻][〇一二三四五六七八九十百]+$"
+    """R5 题列套语（2026-10-26，A32，sheldon 定）：本列坐标对位字连起来**整串**匹配这个正则 → 这一列的
+    印章格按坐标对位字放行，不受 `lane_seal_title_marks` 整列不放、异体护栏、`lane_seal_lib_veto` 的限制
+    （套语本身就是第二证据；印泥斑点下字形库几乎读不出）。殿本 47 册 58 列题列逐格看图：56 列与整理本全同，
+    另 2 列坐标对位不全或整页错位，本规则或 `lane_seal_shift_guard` 自然不放。空串＝关。"""
+    lane_seal_title_norm: str = "巻卷"
+    """题列套语放行时的字形归一，两两一对「原字→新字」（sheldon 10-26：題列「巻」一律写「卷」，是本项目的
+    新规矩，不必与整理本一致；刻本图上也是「卷」，9 次人裁全取「卷」）。"""
+    lane_seal_lib_veto: float = 0.95
+    """R5 库否决（2026-10-26，A32）：印章格的字形库首位覆盖度 ≥ 此值、与默认字不同又不是异体对 → 不放，
+    照旧送审（`lane_skip.why=lib_veto`）。47 册命中 61 格，看图约 12 格默认字是错的（整理本错字
+    兀/元、新/浙、一/十、門/開，及 vol40 p2 整页错位）。题列套语不受此限。0＝关。"""
+    lane_seal_shift_guard: bool = True
+    """R5 整页错位护栏（2026-10-26，A32）：本页印章格里，字形库首位（覆盖度 ≥ 0.9）与「上一格／下一格的
+    默认字」吻合的格数 ≥ 3 且多过与本格默认字吻合的格数 → 格号整体错了一格，本页印章格一律不放
+    （`lane_skip.why=page_shift`）。47 册只有 vol40 p2 命中（切分漏了列首一行）。"""
     lane_variant_guard: bool = True
     """三通道统一的异体护栏（overview#433 vol04 实测）：要放的字与图上字形的线索——现候选字
     `rec.char`、库匹配前 `lane_variant_topk` 名候选——任一是**已知异体对**（语义同、字面不同）时
@@ -647,7 +666,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("patch_missing", None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
-                      "lane_seal_title_marks", "lane_witness_fingerprint", "lane_variant_guard",
+                      "lane_seal_title_marks", "lane_seal_title_formula", "lane_seal_title_norm",
+                      "lane_seal_lib_veto", "lane_seal_shift_guard",
+                      "lane_witness_fingerprint", "lane_variant_guard",
                       "lane_variant_topk", "lane_variant_keep_rare"):
                 d.pop(k, None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
@@ -767,7 +788,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.23", unit="cell",   # 1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.24", unit="cell",   # 1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
@@ -2062,12 +2083,17 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
 
     seal_vias = {s.strip() for s in (p.lane_seal_via or "").split(",") if s.strip()}
     marks = [s.strip() for s in (p.lane_seal_title_marks or "").split(",") if s.strip()]
-    title_cols = set()
-    if p.lane_seal and marks:
+    formula = re.compile(p.lane_seal_title_formula) if p.lane_seal and p.lane_seal_title_formula else None
+    title_norm = dict(zip(p.lane_seal_title_norm[0::2], p.lane_seal_title_norm[1::2]))
+    title_cols, formula_cols = set(), set()
+    if p.lane_seal and (marks or formula):
         for col in out:
             s = "".join(coord.get(r.id) or "" for r in sort_by_reading(col.chars or []))
-            if any(mk in s for mk in marks):
+            if formula is not None and formula.fullmatch(s):
+                formula_cols.add(col.col)
+            elif any(mk in s for mk in marks):
                 title_cols.add(col.col)
+    page_shift = p.lane_seal and p.lane_seal_shift_guard and _seal_page_shifted(out, mmap)
 
     garble_cols = {col.col for col in out for r in (col.chars or []) if set(r.doubts or []) & _LANE_GARBLE}
     n = 0
@@ -2089,6 +2115,20 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             if occ:
                 if not p.lane_seal or (rec.char and rec.char in _JYS):
                     continue
+                if page_shift:
+                    rec.evidence = {**ev, "lane_skip": {"lane": "seal", "why": "page_shift"}}
+                    continue
+                if col.col in formula_cols and rec.char:
+                    ch = title_norm.get(rec.char, rec.char)
+                    lev = {"via": occ.get("via"), "title_formula": True}
+                    if ch != rec.char:
+                        lev["norm_from"] = rec.char
+                    rec.admit, rec.channel, rec.provenance, rec.char = True, "seal", "seal", ch
+                    rec.evidence = {**ev, "lane": {"lane": "seal", **lev, "prev_doubts": list(rec.doubts or [])},
+                                    "no_glyph_lib": True}
+                    rec.doubts = ["lane_seal"]
+                    n += 1
+                    continue
                 lib_agree = None
                 if p.seal_lib_agree and rec.char and occ.get("via") in ("coord", "align"):
                     m = mmap.get(rec.id)
@@ -2103,6 +2143,14 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                     hit = ("seal", rec.char, {"via": occ.get("via")})
                 elif lib_agree is not None:
                     hit = ("seal", rec.char, {"via": occ.get("via"), "lib_agree": lib_agree})
+                if hit is not None and hit[1] and p.lane_seal_lib_veto:
+                    m = mmap.get(rec.id)
+                    top = (m.candidates[0] if m and m.candidates else None)
+                    if (top and top[1] >= p.lane_seal_lib_veto and top[0] != hit[1]
+                            and not variant_pair(top[0], hit[1])):
+                        rec.evidence = {**ev, "lane_skip": {"lane": "seal", "why": "lib_veto", "lib": top[0],
+                                                            "cov": round(float(top[1]), 4)}}
+                        continue
             else:
                 cls = _lane_class(rec.doubts, ev, rec.char, ref, lib)
                 if cls == "ji_yi_si" or co in _JYS or col.col in garble_cols:
@@ -2156,6 +2204,27 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             rec.doubts = [f"lane_{name}"]
             n += 1
     return n
+
+
+def _seal_page_shifted(out: list, mmap: dict, min_cov: float = 0.9, min_hits: int = 3) -> bool:
+    """`lane_seal_shift_guard`：本页印章格的默认字是否整体错了一格。
+
+    每列按格号排（夹注半格不算），字形库首位（覆盖度 ≥ `min_cov`）分别与本格、下一格、上一格的默认字比；
+    错一格吻合的次数 ≥ `min_hits` 且多过对齐吻合 → 错位。人裁格不算（字是人定的，不是默认字）。"""
+    aligned = nxt = prv = 0
+    for col in out:
+        rs = sorted((r for r in (col.chars or []) if (r.evidence or {}).get("occluded") and not r.sub
+                     and r.channel != "human" and r.provenance != "human"), key=lambda r: max(r.slot, 0))
+        for i, r in enumerate(rs):
+            m = mmap.get(r.id)
+            top = m.candidates[0] if m and m.candidates else None
+            if not top or top[1] < min_cov:
+                continue
+            aligned += top[0] == r.char
+            nxt += i + 1 < len(rs) and rs[i + 1].char == top[0]
+            prv += i > 0 and rs[i - 1].char == top[0]
+    shifted = max(nxt, prv)
+    return shifted >= min_hits and shifted > aligned
 
 
 def _clf_ctx(seq: list, amap: dict, i: int, step: int, width: int = 30) -> str:
