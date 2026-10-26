@@ -5,6 +5,19 @@
 
 ## [未发版]
 
+### Added
+- 字组 象彖𧰼（xz，全册任务 08）：𧰼 模板换成人裁表（象 129／𧰼 178，含 sheldon 10-26 标注页 173 格），门槛 1.0→0.3、λ=3；组里加 `lift_ref_agree`（字形与整理本同字才补放）。按册留出一致格 0 错。xz 本来就在各册 `group_flow` 里，重落即生效。30 册离线回放：送审 147 补放 93（全 𧰼），复核降审 63（多为 𧰼 被放成 象）。文意 L2 表补格在中心库（xz-l2-2），要另推。seed_admit 的 `code_hash` 变。
+- 册配置分层与运行覆盖（PATCH，设计 `doc/design/册配置分层与运行覆盖.md`）：工作区基础配置 `config/book_defaults.yaml`（册 yaml 只写各自不同的，合并结果与拆前逐字段相同；没有基础配置时行为不变）；`guji pipeline/step/status --override JSON` 运行覆盖（内存里叠在册 yaml 上，不改文件、不推库，原文记进产物 manifest `config_overrides`）；`guji book show <册> --effective` 看生效配置与来源层；`guji book split --books vol51-vol99 [--apply]` 把一组册的共用部分抽成基础配置（逐册强校验）；任务库 `book_overrides` 放开到 BookSpec 字段（`guji_jobs submit --override`），执行方改传 `--override`；`rerun_prep.sh` 读生效值。**注意：旧版本不认基础配置，册 yaml 迁成瘦身形式前，所有跑这些册的会话都要先升到含本改动的版本。** 无 Step 的 `code_hash` 变（对 vol50、vol51 实测 `guji status` 与 dev 逐行相同）。
+### Fixed
+- `--params` 显式传默认值（如 `shadow_veto:false`）会被册 yaml `params:` 静默改回：`_with_book_params` 改按「调用方有没有显式传」判，不再比是否等于默认值。
+- 字组（全册任务 04「码位已定仍送审」）：码位组新入口 `FlowSpec.ref_top_enter`（库首位与整理本／坐标对位字同组就进，分差内的组外字不拦；出岀 除外），码位法给字要库首位 cov ≥ 0.91（`FlowConfig.codepoint_min_cov`）；新码位组 lei 類𩔖、cuan 竄𥨥、lang 郎郞；新 SHAPE 组 xiang 鄉鄕｜卿、weim 微㣲｜徵徴徹、zhen 鎭鎮｜鍾愼…，bie 別别 由码位组改成整字 HOG（別｜刖則所冊），两码位并一类、形近字当陪衬进库，ref_enter＋lift_ref_agree，按册留出判成本组字 0 错。册 yaml `group_flow` 不点名 lei cuan lang xiang weim zhen 就不生效（bie 已点名，改判法即生效）。82 册离线回放：任务 04 送审 288 格补放 235，另补放 8，逐格看图 0 错。seed_admit 的 `code_hash` 变。
+
+## [0.5.22] - 2026-10-26
+
+PATCH（#612 #614 #616 #619 #621 字组与人裁，#606 #611 #613 #615 #617 工具）。seed_admit、glyphdb_admit 的 `code_hash` 变。
+
+- yh 文意规则 還鄉 补 鄕：中心库码位 鄉→鄕（暂归一）后整理本／放行字作 鄕，原规则只认 鄉。
+
 - proof_cycle apply 加 `--ack-unlanded-votes <原因>`：旧单有票没法落成人裁（如图形格）时，原样交给 republish issue 放行换单。
 ### Fixed
 - 字形库人裁以最后一票为准（`glyphdb_admit`，sheldon 10-26 定）：按人裁时间 `ts`（`replay_key`）处理，库里这一格已是更晚的人裁时旧票不再覆盖（此前按消费顺序覆盖，补消费积压时旧票压掉新票：vol04:143:9:16 改判 由 后被 10-22 的 山 盖回，全库 7 格）；更晚的人裁判切坏／非字／破损（`seg_defect`、`not_a_char`、`damaged`，含 `kind=not_a_char`）时撤掉这一格更早的人裁刻例（此前一直留着，全库 16 格）。新刻例证据记 `ts`；路由表 `not_a_char` 加 `glyphdb_admit` 去处。结果多两个计数 `superseded`、`withdrawn`。
@@ -12,11 +25,6 @@
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
 ### Added
-- 字组 象彖𧰼（xz，全册任务 08）：𧰼 模板换成人裁表（象 129／𧰼 178，含 sheldon 10-26 标注页 173 格），门槛 1.0→0.3、λ=3；组里加 `lift_ref_agree`（字形与整理本同字才补放）。按册留出一致格 0 错。xz 本来就在各册 `group_flow` 里，重落即生效。30 册离线回放：送审 147 补放 93（全 𧰼），复核降审 63（多为 𧰼 被放成 象）。文意 L2 表补格在中心库（xz-l2-2），要另推。seed_admit 的 `code_hash` 变。
-- 册配置分层与运行覆盖（PATCH，设计 `doc/design/册配置分层与运行覆盖.md`）：工作区基础配置 `config/book_defaults.yaml`（册 yaml 只写各自不同的，合并结果与拆前逐字段相同；没有基础配置时行为不变）；`guji pipeline/step/status --override JSON` 运行覆盖（内存里叠在册 yaml 上，不改文件、不推库，原文记进产物 manifest `config_overrides`）；`guji book show <册> --effective` 看生效配置与来源层；`guji book split --books vol51-vol99 [--apply]` 把一组册的共用部分抽成基础配置（逐册强校验）；任务库 `book_overrides` 放开到 BookSpec 字段（`guji_jobs submit --override`），执行方改传 `--override`；`rerun_prep.sh` 读生效值。**注意：旧版本不认基础配置，册 yaml 迁成瘦身形式前，所有跑这些册的会话都要先升到含本改动的版本。** 无 Step 的 `code_hash` 变（对 vol50、vol51 实测 `guji status` 与 dev 逐行相同）。
-### Fixed
-- `--params` 显式传默认值（如 `shadow_veto:false`）会被册 yaml `params:` 静默改回：`_with_book_params` 改按「调用方有没有显式传」判，不再比是否等于默认值。
-- 字组（全册任务 04「码位已定仍送审」）：码位组新入口 `FlowSpec.ref_top_enter`（库首位与整理本／坐标对位字同组就进，分差内的组外字不拦；出岀 除外），码位法给字要库首位 cov ≥ 0.91（`FlowConfig.codepoint_min_cov`）；新码位组 lei 類𩔖、cuan 竄𥨥、lang 郎郞；新 SHAPE 组 xiang 鄉鄕｜卿、weim 微㣲｜徵徴徹、zhen 鎭鎮｜鍾愼…，bie 別别 由码位组改成整字 HOG（別｜刖則所冊），两码位并一类、形近字当陪衬进库，ref_enter＋lift_ref_agree，按册留出判成本组字 0 错。册 yaml `group_flow` 不点名 lei cuan lang xiang weim zhen 就不生效（bie 已点名，改判法即生效）。82 册离线回放：任务 04 送审 288 格补放 235，另补放 8，逐格看图 0 错。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 pai 派𣲖（右边 𠂢 有横／无横）、qi 奇竒（上部 大／立）、sui 歲嵗（上部 止／山）：模板＝vol51–99 已放行格，首轮按册留出错例看图改标；门槛 0.5／1.0／0.5 按册留出 0 错；ref_enter＋lift_ref_agree。册 yaml `group_flow` 不点名就不生效。vol51–99 离线回放补放 74、改码位 14，三组送审 89→16。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
 - 任务库看板：`guji job board`（执行方领单、收尾、心跳时自动写）把在跑、排队、最近结束的任务整理成一张表，写进中心库 `progress.metric`（栏目 `jobs`），网站后台「文本整理 → 重跑任务」显示：配置、状态、阶段、开始时间、已跑多久、预计完成（同类已成功任务耗时中位数）、结果包。不动任何 Step，`code_hash` 不变。
