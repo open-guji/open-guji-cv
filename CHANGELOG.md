@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Fixed
+- 字形库人裁以最后一票为准（`glyphdb_admit`，sheldon 10-26 定）：按人裁时间 `ts`（`replay_key`）处理，库里这一格已是更晚的人裁时旧票不再覆盖（此前按消费顺序覆盖，补消费积压时旧票压掉新票：vol04:143:9:16 改判 由 后被 10-22 的 山 盖回，全库 7 格）；更晚的人裁判切坏／非字／破损（`seg_defect`、`not_a_char`、`damaged`，含 `kind=not_a_char`）时撤掉这一格更早的人裁刻例（此前一直留着，全库 16 格）。新刻例证据记 `ts`；路由表 `not_a_char` 加 `glyphdb_admit` 去处。结果多两个计数 `superseded`、`withdrawn`。
 - seed_admit 放行字落册码位（`codepoint_semantic` 最后一遍）：这对字已有按刻形拆判的字组（`registry.SHAPE_GROUPS`，同族的不算）时，人裁的刻形、该组判出的刻形照录，不再按工作区 `codepoints` 改回。修 變𠮓：工作区 變→𠮓 把人裁 變（vol04:197:7:3，A32 10-25 报）和 bian 组判出的 變 全改回 𠮓，bian 组上线后线上一格 變 都没有（v0.5.17 产物 vol04–20 有 74 格组判 變 被改回）。判 𠮓、组弃权、组外的格照旧归一；宮→宫（guan 族内）等其余码位不变。seed_admit 的 `code_hash` 变（PATCH）。
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
