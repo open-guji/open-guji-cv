@@ -72,3 +72,11 @@ def test_pad_outer_columns_leaves_normal_page():
     r = _res(xs)
     assert pad_outer_columns(r) == 0
     assert [round(v.x_at(0)) for v in r.verticals] == xs and r.vline_filled == []
+
+
+def test_head_raise_scale_passed_through_and_dropped_when_default(tmp_path, monkeypatch):
+    """GUJI-748：`head_raise_scale` 传到 detect_borders；缺省 1.0 不进参数 dump（params_hash 与加字段前相同）。"""
+    kw = _grid_kwargs(tmp_path, monkeypatch, {"border_detect": {"head_raise_scale": 0.7021}})
+    assert kw["head_raise_scale"] == 0.7021
+    assert "head_raise_scale" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(head_raise_scale=0.7).model_dump()["head_raise_scale"] == 0.7

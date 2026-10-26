@@ -85,6 +85,12 @@ class BorderDetectParams(BaseModel):
     「去掉劈开窄对的线、在有字的一侧补外框线」，再不成就从自由线、网格线、外推外框线里拼一串等宽列（fuse）；
     新列网干净才接受。没触发的页逐字节不变。"""
 
+    head_raise_scale: float = 1.0
+    """抬头框探测的像素尺度（`border_geometry.HR_SCALE_LENGTHS`，2026-10-26，GUJI-748）：本册图相对殿本旧图
+    的缩放比。那组长度常数是在旧图上量的绝对像素，换图源 siku-qiefen-v2（约 0.70 倍）后抬头框整片认不出
+    （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
+    `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
@@ -94,6 +100,8 @@ class BorderDetectParams(BaseModel):
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
+        if isinstance(d, dict) and self.head_raise_scale == 1.0:
+            d.pop("head_raise_scale", None)
         return d
 
 
@@ -146,7 +154,8 @@ class BorderDetectStep(Step):
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
-                                  vline_polyline=ctx.book.vline_polyline)
+                                  vline_polyline=ctx.book.vline_polyline,
+                                  head_raise_scale=p.head_raise_scale)
 
         res = _detect(cols)
         if grid_page:
