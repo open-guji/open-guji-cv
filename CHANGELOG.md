@@ -12,6 +12,9 @@
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
 ### Added
+- 册配置分层与运行覆盖（PATCH，设计 `doc/design/册配置分层与运行覆盖.md`）：工作区基础配置 `config/book_defaults.yaml`（册 yaml 只写各自不同的，合并结果与拆前逐字段相同；没有基础配置时行为不变）；`guji pipeline/step/status --override JSON` 运行覆盖（内存里叠在册 yaml 上，不改文件、不推库，原文记进产物 manifest `config_overrides`）；`guji book show <册> --effective` 看生效配置与来源层；`guji book split --books vol51-vol99 [--apply]` 把一组册的共用部分抽成基础配置（逐册强校验）；任务库 `book_overrides` 放开到 BookSpec 字段（`guji_jobs submit --override`），执行方改传 `--override`；`rerun_prep.sh` 读生效值。**注意：旧版本不认基础配置，册 yaml 迁成瘦身形式前，所有跑这些册的会话都要先升到含本改动的版本。** 无 Step 的 `code_hash` 变（对 vol50、vol51 实测 `guji status` 与 dev 逐行相同）。
+### Fixed
+- `--params` 显式传默认值（如 `shadow_veto:false`）会被册 yaml `params:` 静默改回：`_with_book_params` 改按「调用方有没有显式传」判，不再比是否等于默认值。
 - 字组（全册任务 04「码位已定仍送审」）：码位组新入口 `FlowSpec.ref_top_enter`（库首位与整理本／坐标对位字同组就进，分差内的组外字不拦；出岀 除外），码位法给字要库首位 cov ≥ 0.91（`FlowConfig.codepoint_min_cov`）；新码位组 lei 類𩔖、cuan 竄𥨥、lang 郎郞；新 SHAPE 组 xiang 鄉鄕｜卿、weim 微㣲｜徵徴徹、zhen 鎭鎮｜鍾愼…，bie 別别 由码位组改成整字 HOG（別｜刖則所冊），两码位并一类、形近字当陪衬进库，ref_enter＋lift_ref_agree，按册留出判成本组字 0 错。册 yaml `group_flow` 不点名 lei cuan lang xiang weim zhen 就不生效（bie 已点名，改判法即生效）。82 册离线回放：任务 04 送审 288 格补放 235，另补放 8，逐格看图 0 错。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 pai 派𣲖（右边 𠂢 有横／无横）、qi 奇竒（上部 大／立）、sui 歲嵗（上部 止／山）：模板＝vol51–99 已放行格，首轮按册留出错例看图改标；门槛 0.5／1.0／0.5 按册留出 0 错；ref_enter＋lift_ref_agree。册 yaml `group_flow` 不点名就不生效。vol51–99 离线回放补放 74、改码位 14，三组送审 89→16。seed_admit 的 `code_hash` 变。
 - 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
