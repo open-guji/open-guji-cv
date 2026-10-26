@@ -284,6 +284,9 @@ def _pick_form(g: str, ch: str, r, cands, cfg: FlowConfig, patch_fn, trail: list
     fam = next((x for x in f.families if ch in x), None)
     if fam is None or len(fam) < 2:
         return ch, "agree", trail
+    # 族内各形按书级码位归一后是同一个字（宮宫 sheldon 10-25 暂归一到 宫）：刻形不用再分，直接给归一后的字
+    if cfg.canon is not None and len({cfg.canon(c) for c in fam}) == 1:
+        return cfg.canon(ch), "agree", trail + [{"solver": "form:canon", "char": cfg.canon(ch), "why": "agree"}]
     fam_set = frozenset(fam)
     for name in f.form_solvers:
         v = _solve(name, g, r, cands, None, cfg, None, None, patch_fn, members=fam_set, form=True)
