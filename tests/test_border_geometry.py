@@ -288,6 +288,49 @@ def test_detect_head_raise_text_rule_finds_box_with_walls_but_no_top_line():
     assert [r.col for r in got] == [5]
     assert got[0].estimated and abs(got[0].inner_y - (262 - 8)) <= 3
 
+def test_detect_head_raise_scale_for_shrunk_scan():
+    """GUJI-748 殿本换图源 siku-qiefen-v2：图缩到约 0.70 倍，抬头框跟着缩——粗外框半高宽 ~12（落在细线上限 10
+    与粗条下限 15 的缝里）、内框离主上边框只有 ~60px（够不上 HR_DIST_MIN 75）。按原尺度常数认不出（vol07 新 p43
+    五列抬头全丢）；`scale=0.7` 把长度常数一起缩，就认得出、而且外框是量到的（不是推的）。"""
+    border_top = 400
+    mask, top, verts, xs = _blank_head_raise_page(border_top=border_top)
+    inner_y = border_top + 2 - 60          # top.y_at = border_top + 2
+    _paint_raised_box(mask, xs, cols=[5, 6], inner_y=inner_y, outer_y=inner_y - 25,
+                      border_top=border_top, outer_thickness=12)
+    assert detect_head_raise(mask, top, verts, width=1000) == []
+    got = detect_head_raise(mask, top, verts, width=1000, scale=0.7)
+    assert sorted(r.col for r in got) == [5, 6]
+    for r in got:
+        assert abs(r.inner_y - inner_y) <= 3
+        assert abs(r.outer_y - (inner_y - 25)) <= 3
+        assert r.estimated is False
+
+
+def test_detect_head_raise_scale_keeps_plain_page_clean():
+    """缩了尺度也不能把普通页主边框自己的外框（这里离主框 ~30px × 0.7）当抬头。"""
+    mask = np.zeros((800, 1000), dtype=np.float64)
+    xs_old = np.linspace(80, 920, 10)
+    for x_old in xs_old:
+        mask[400:, int(x_old) - 2:int(x_old) + 3] = 1.0
+    mask[400:404, :] = 1.0
+    mask[400 - 24:400 - 21, :] = 1.0
+    top = HLine(y_at_right=402.0, slope=0.0, kind="top")
+    verts = [VLine(x_at_top=float(999 - x), slope=0.0) for x in xs_old[::-1]]
+    assert detect_head_raise(mask, top, verts, width=1000, scale=0.7) == []
+
+
+def test_hr_geom_scale_one_is_module_constants():
+    """scale=1.0 时取的就是模块常数原值（int，不经乘法），旧图产物逐位不变。"""
+    from open_guji_cv.utils import border_geometry as bg
+    g = bg._HRGeom(1.0)
+    for name in bg.HR_SCALE_LENGTHS:
+        v = getattr(g, name[3:])
+        assert v == getattr(bg, name) and type(v) is type(getattr(bg, name))
+    assert g.TEXT_BAND == bg.HR_TEXT_BAND
+    g7 = bg._HRGeom(0.7)
+    assert g7.DIST_MIN == 52 and g7.FAT_WD_MIN == 10 and g7.THIN_WD_MAX == 7
+
+
 # ---------------------------------------------------------------- 外框探测
 
 def _outer_page(w=1000, h=1200, gap=40, top_y=300, bot_y=900,
