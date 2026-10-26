@@ -263,10 +263,13 @@ GROUPS: dict[str, GroupSpec] = {
                                ("wj", "問間", "間＝其間、間有、年間；問＝詢問、學問。"), ("zh", "曾會㑹", "會＝會典、附會；曾＝曾經、姓氏。㑹是會的异体：先按文意定曾／會族，會㑹再按刻形（字频→IDS→库形最近）定哪一形。"),
                                ("yh", "遺還", "遺＝遺文、補遺；還＝還朝、返還。"))},
     # —— 第四批（2026-10-19）：象彖、王玉、圓圖。同前，L1 零冲突＋逐册 L2 表。
+    #    象彖𧰼 加 `lift_ref_agree`（2026-10-26，A24 全册任务 08）：象／𧰼 刻形差一竖，字形单判过不了按册留出 0 错，
+    #    补放须与整理本（缺位用坐标对位字）同字；整理本跟刻形走（人裁 𧰼 里整理本也作 𧰼 的约九成）。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ())), overlaps=_GLYPH_OVERLAPS.get(gid, ()),
+        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ()),
+                      **({"lift_ref_agree": True} if gid == "xz" else {})), overlaps=_GLYPH_OVERLAPS.get(gid, ()),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
                                ("yt", "圓圖", "圖＝河圖、圖書、圖說；圓＝圓通、渾圓、方圓。"))},

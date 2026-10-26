@@ -170,8 +170,12 @@ SPECS: dict[str, IdsSpec] = {
     # 象／𧰼（2026-10-22，sheldon 指「中间这一块有明显区别」）：只用于 象彖𧰼 组「象族」的形判（族内 象／𧰼），不进组级方法。
     #   判别区＝左半中段 (x 0–0.5, y 0.125–0.625)，64×64；模板只用人裁（象 153／𧰼 13，不收已放行格：里面混着约 1.5% 𧰼）。
     #   按册留一：𧰼 判成象的最大 margin 0.92 → 取 1.0，象 约四成给字、0 错；𧰼 不足 20 例（min_class=20）永不自动给，一律人审。
-    "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
-                  size=64, clean=True, aspect=(0.45, 2.2)),
+    #   2026-10-26（A24 全册任务 08）：sheldon 在标注页点了 173 格（vol11–99 送审格＋已放行疑似放错格），模板改为 象 129／𧰼 178
+    #   （人裁表 dataset variant/xz/sheldon_labels.jsonl，线上同款 char_patch）。字形单判按册留出仍过不了 0 错（最大错 1.47），
+    #   所以组里加 `lift_ref_agree`：字形与整理本（缺位用坐标对位字）同字才补放。一致格按册留出：λ=3 错 1（vol05:89:1:10
+    #   整理本作象、人裁 𧰼、判象 0.20），门槛取 0.3 → 给 象 59／𧰼 118、0 错（research/m7/glyph_expand/eval_xz.py）。
+    "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
+                  lam=3.0, size=64, clean=True, aspect=(0.45, 2.2)),
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
     "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
                      region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
