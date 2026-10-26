@@ -441,7 +441,7 @@ def test_entry_joint_when_close_candidates_span_overlapping_groups():
     assert entry(r, three, None, cfg) == ("ry", "joint")
     assert entry(r, [("曰", 0.98), ("目", 0.975), ("日", 0.97)], "曰", cfg) == ("ry", "joint")
     assert entry(r, three, "白", cfg) is None                                   # 整理本字不在并集里
-    assert entry(r, three + [("師", 0.971)], None, cfg) is None                  # 组外字紧咬
+    assert entry(r, three + [("白", 0.971)], None, cfg) is None                  # 组外字紧咬
     assert entry(r, three, None, FlowConfig(groups=("ry",), joint=True)) is None  # 共字组没点名
     assert entry(r, [("日", 0.98), ("曰", 0.975)], None, cfg) == ("ry", "lift")  # 单组装得下照旧
 
@@ -503,3 +503,33 @@ def test_yr_flow_bars_and_ref_veto(monkeypatch):
     r = Rec("z")
     group_flow_pass([r], {"z": ("一", "=")}, cands, lambda r: False, cfg)
     assert not r.admit and "group_flow_ref_dissent" in r.doubts                 # 整理本作一 → 不补
+
+
+def test_tolerate_ref_agree_shi_yu(monkeypatch):
+    """形近护栏 N 类（A24 10-26）：日曰 被 師 的一个旧切分刻例挡、于千子 被 亍 挡。陪衬放进门，但分差内有陪衬字的格
+    补放须与整理本同字；分差内没有陪衬字的格照旧。"""
+    import open_guji_cv.groups.flow as FL
+    assert "師" in GROUPS["ry"].flow.tolerate and GROUPS["ry"].flow.tolerate_ref_agree
+    assert "亍" in GROUPS["zy"].flow.tolerate and GROUPS["zy"].flow.tolerate_ref_agree
+    cfg = FlowConfig(groups=("ry", "rm", "zy", "yz"))
+    assert entry(Rec("a"), [("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", cfg) == ("ry", "lift")   # 首位是陪衬，按整理本进
+    assert entry(Rec("a"), [("曰", 0.999), ("師", 0.998)], "曰", cfg) == ("ry", "lift")
+    assert entry(Rec("a"), [("師", 0.999), ("曰", 0.998)], "師", cfg) is None                         # 整理本作 師：不进
+    assert entry(Rec("a"), [("千", 0.997), ("于", 0.996), ("亍", 0.987)], "于", cfg) == ("zy", "lift")
+    assert entry(Rec("a"), [("亍", 0.997), ("于", 0.996)], "于", cfg) == ("zy", "lift")
+
+    def fake(ch):
+        return lambda g, r, cands, ref, cfg, *a, **k: (ch, "agree", [{"solver": "ctx", "char": ch, "why": "agree"},
+                                                                 {"solver": "ry_shape", "char": ch, "why": "agree"}])
+
+    def run(cands, ref, ch):
+        monkeypatch.setattr(FL, "decide", fake(ch))
+        r = Rec("a")
+        group_flow_pass([r], {"a": (ref, "=")}, lambda cid: cands, lambda r: False, cfg)
+        return r
+    r = run([("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", "日")
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts                                   # 陪衬带进来、与整理本不同字：留人审
+    r = run([("師", 0.999), ("曰", 0.998), ("日", 0.997)], "曰", "曰")
+    assert r.admit and r.char == "曰"
+    r = run([("曰", 0.999), ("日", 0.998)], "曰", "日")
+    assert r.admit and r.char == "日"                                                            # 没有陪衬字的格照旧
