@@ -892,11 +892,16 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     book_text_to_dev(repo)
     d = book_text_dir(repo, plan["text_id"])
     ch = plan["chapter"]
-    # 待重标清单：本章有标点时，单字替换登记进 NNN.punct-stale.json（A33 批量重标后删），不碰 punct／entity 本身
+    # 本章有标点时，改字会让标点锚点对不上。只换字（单字替换）可以由我们修锚点，增删字交 A33（2026-10-26 A33 定）：
+    #   默认：升文本版本后用 punct_redo 按改字重标受影响句（plan→apply，工作稿挪出仓库），标点线升 patch，
+    #         断句和专名复核由 A33 事后在 dev 上补；
+    #   GUJI_PUNCT_STALE=1：改登记 NNN.punct-stale.json（待 book-text 校验侧放行后再启用）。
     stale_doc, others = None, []
     old_char = d / f"{ch}.char.json"
     new_char = Path(plan["export_dir"]) / f"{ch}.char.json"
     has_punct = (d / f"{ch}.punct.json").exists()
+    use_stale = os.environ.get("GUJI_PUNCT_STALE") == "1"
+    redo = False
     if has_punct and old_char.exists() and new_char.exists():
         sp = d / f"{ch}.punct-stale.json"
         cur = json.loads(sp.read_text(encoding="utf-8")) if sp.exists() else None
@@ -910,8 +915,11 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
         stale_doc, others = punct_stale_update(cur, _char_cells(old_char), _char_cells(new_char),
                                                volume=int(ch), base_commit=head, base_text_version=tv)
         if others:
-            sys.exit("✗ 本轮有增删字（标点锚点会错位，不能走待重标清单）：" + "、".join(others[:12])
+            sys.exit("✗ 本轮有增删字（标点锚点会错位，不能自动修）：" + "、".join(others[:12])
                      + "\n  把改字推到分支 a32-<册号>-<主题>，通知 A33 在分支上重标，不要推 dev")
+        redo = not use_stale and (stale_doc is not None or bool(cur))
+        if not use_stale:
+            stale_doc = None
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
@@ -919,11 +927,20 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     if stale_doc:
         (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")
-    for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
-                 "--chapter", ch, "--note", note, "--pr", "TBD"],
-                [sys.executable, "scripts/local_check.py", "--dev"],
-                ["git", "add", "-A", str(d)],
-                ["git", "commit", "-qm", f"{note}"]):
+    cmds = [[sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
+             "--chapter", ch, "--note", note, "--pr", "TBD"]]
+    if redo:
+        import tempfile
+        tmp = Path(tempfile.mkdtemp(prefix="punct_redo_"))
+        cmds += [[sys.executable, "scripts/book-text/punct_redo.py", "plan", d, "--chapter", ch, "--old-char", "git:" + head],
+                 [sys.executable, "scripts/book-text/punct_redo.py", "apply", d, "--chapter", ch, "--source", "claude:A32"],
+                 ["bash", "-c", f"mv '{d}'/redo-{ch}.txt '{d}'/redo-{ch}.json '{tmp}'/"],
+                 [sys.executable, "scripts/book-text/bump_original.py", d, "--line", "punct", "--level", "patch",
+                  "--chapter", ch, "--note", "跟随改字修锚点（未重标）", "--pr", "TBD"]]
+    cmds += [[sys.executable, "scripts/local_check.py", "--dev"],
+             ["git", "add", "-A", str(d)],
+             ["git", "commit", "-qm", f"{note}"]]
+    for cmd in cmds:
         if run(cmd, cwd=repo).returncode:
             sys.exit(f"✗ book-text 这步失败：{' '.join(map(str, cmd))}")
     if stale_doc:                           # 补每条的改字提交号（A33 格式要求），再单独提交一次
