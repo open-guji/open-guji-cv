@@ -83,3 +83,15 @@ def test_products_carry_source_rev_from_pull_mark(tmp_path):
     store = ProductStore(tmp_path / "products")
     store.raw_sha("vol11", raw / "1.png")
     assert store.source_rev("vol11") is None          # 换回无记号的目录：旧抄件不留
+
+
+def test_prune_extra_pages_removes_leftover_tail(tmp_path):
+    d = tmp_path / "raw"
+    d.mkdir()
+    for n in ("1", "2", "3", "4", "12a"):
+        (d / f"{n}.png").write_bytes(b"x")
+    (d / "note.txt").write_text("x")
+    gone = S.prune_extra_pages(d, {"pages": [{"page": 1}, {"page": 2}]})
+    assert gone == ["3.png", "4.png"]
+    assert sorted(f.name for f in d.iterdir()) == sorted(["1.png", "12a.png", "2.png", "note.txt"])
+    assert S.prune_extra_pages(d / "nope", {"pages": []}) == []
