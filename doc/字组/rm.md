@@ -34,3 +34,5 @@ L1 规则零冲突（vol01–10）；无字形第二路。
   haiku 与 opus 同字且都 high ＝ strong；其余新格须 opus 同字才给字，否则 `abstain:strong_dissent`；三家都判「其他」＝ `abstain:other`（日曰目联判用）。
   离线回放 vol21–50 三组送审 1,181 → 253（jys 678→77、ry 476→149、rm 27→27）；非 strong 的新放行 199 格逐条读过。
   新表与批跑原始结果在 dataset `char-groups/variant/{jys,ry}/l2/`（`vol21_50/`），上线随「推」替换中心库 `config/groups/l2/`。
+- 2026-10-26 vol02–50 残留（A24，见 ry 卡同日条）：曰格因库分差内没有曰（cov 0）进了 rm、rm 说「其他」的，改交 ry 联判（`handoff`）；
+  rm 表随三字联读补票（读成曰或别的字 → 其他），ver `+v1026`。

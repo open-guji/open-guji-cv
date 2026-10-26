@@ -479,6 +479,61 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
     assert not r.admit and "group_flow_abstain" in r.doubts
 
 
+
+def test_rm_other_hands_off_to_ry(monkeypatch):
+    """库分差内只有日目（曰 cov 0）→ 格进 rm；rm 明说「其他」(high) 时交 ry 联判，ry 给曰才放（vol13 99:8:18「子女子曰」）。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+
+    def solve(name, g, r, *a, **k):
+        ch, why, *extra = out[(g, name)]
+        return GroupVerdict(ch, why=why, via=name, extra=extra[0] if extra else {})
+    monkeypatch.setattr(flow, "_solve", solve)
+    cfg = FlowConfig(groups=("ry", "rm"), joint=True)
+    two = [("日", 0.999), ("目", 0.97)]
+
+    def run(ry, rm):
+        out.update({("ry", "ctx"): ry, ("ry", "ry_shape"): (None, "abstain:aspect"), ("rm", "ctx"): rm})
+        r = Rec("x")
+        group_flow_pass([r], {}, lambda cid: two, lambda r: False, cfg)
+        return r
+    r = run(("曰", "agree"), (None, "abstain:other", {"other_conf": "high"}))
+    assert r.admit and r.char == "曰" and r.evidence["group"]["id"] == "ry"
+    assert "handoff" in [t["solver"] for t in r.evidence["group"]["solvers"]]
+    for ry, rm in ((("日", "agree"), (None, "abstain:other", {"other_conf": "high"})),     # 日在 rm 里，rm 已说不是
+                   (("曰", "agree"), (None, "abstain:other", {"other_conf": "low"})),
+                   ((None, "abstain:low_conf"), (None, "abstain:other", {"other_conf": "high"}))):
+        r = run(ry, rm)
+        assert not r.admit and r.evidence["group"]["id"] == "rm"
+
+
+def test_ry_strong_ctx_overrides_ref_and_l1_with_strong_table_fixes(monkeypatch):
+    """日曰：文意 strong 时补放不受整理本拦（ref_dissent）；L1 规则的字与 strong 表一致才记 strong（可改字）。"""
+    from open_guji_cv.groups import flow, methods
+    from open_guji_cv.groups.methods import CtxRule, Llm, MethodInput
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        *out[name][:1], why="agree", via=name, extra=out[name][1] if len(out[name]) > 1 else {}))
+    cfg = FlowConfig(groups=("ry",), lift_ref_guard=True)
+    cands = [("日", 0.99), ("曰", 0.98)]
+    for strong, admit in ((True, True), (False, False)):
+        out.update(ctx=("日", {"strong": True} if strong else {}), ry_shape=(None,))
+        r = Rec("x")
+        group_flow_pass([r], {"x": ("曰", None)}, lambda cid: cands, lambda r: False, cfg)
+        assert r.admit is admit and (admit or "group_flow_ref_dissent" in r.doubts)
+    monkeypatch.setattr(CtxRule, "_run", lambda self, inp: GroupVerdict("日", why="agree", via="ctx:ctx_l1"))
+    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l2", extra={"strong": True}),
+           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l2"),
+           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l2", extra={"strong": True})}
+    monkeypatch.setattr(Llm, "applies", lambda self, inp: True)
+    monkeypatch.setattr(Llm, "_run", lambda self, inp: tab[inp.cell_id])
+    for cid, want in (("s", True), ("w", None), ("o", None)):
+        inp = MethodInput(group="ry", members=frozenset("日曰"), cell_id=cid, cands=[], ref=None, cfg=FlowConfig(groups=("ry",)))
+        v = methods.CTX.run(inp)
+        assert v.char == "日" and v.extra.get("strong") is want
+
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
 
 

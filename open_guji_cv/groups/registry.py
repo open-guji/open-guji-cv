@@ -27,6 +27,9 @@ class FlowSpec:
       是这一族、哪个字全凭文意」的组用（己已巳：别的通道放的字本来就是整理本或库形的猜测）；
     - `review_fix_strong`：同 `review_fix`，但只在文意答案 strong（L2 表第二个模型也以 high 给了同一个字，`ctx_l2.add_confirm`）、
       且其余方法没有反对时才改字，否则照常降审（日曰：sheldon 10-22「文意置信度特别高可以改掉整理本」）；
+    - `strong_over_ref`：L1 规则给的字与 strong 的 L2 表一致也算 strong（`methods.Chain`，配 `review_fix_strong` 可改字）；补放时
+      整理本是组里另一个字（`lift_ref_guard` 的 ref_dissent），文意 strong 也照放。日曰（A24 10-26：「顧炎武日知錄」被 match_ref
+      放成曰、「日者列傳」整理本作曰）；
     - `pair`：相邻两格（读序紧挨）都进了本组时，前一格给 `pair[0]`、后一格给 `pair[1]`，不再跑方法（己已巳：干支「己巳」；
       總目参考文本里己已巳两两相邻 37 处全是干支己巳）。三格以上连着不适用，照常跑方法；
     - `review_abstain`：复核时方法全待定也降为人审（「没有文意证据就不信别的通道」，己已巳用）；
@@ -75,6 +78,7 @@ class FlowSpec:
     review: bool = False
     review_fix: bool = False
     review_fix_strong: bool = False
+    strong_over_ref: bool = False
     pair: tuple = ()
     lift_needs: tuple = ()
     review_abstain: bool = False
@@ -218,7 +222,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, lift_needs=("ctx",),
+        flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, strong_over_ref=True, lift_needs=("ctx",),
                      tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
