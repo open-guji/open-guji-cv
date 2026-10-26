@@ -2536,6 +2536,49 @@ def cmd_glyphlib(args) -> None:
     _out(res)
 
 
+def cmd_rekey_cells(args) -> None:
+    """换图源后按格级对照表改键（GUJI-748）：glyph-db／json／jsonl／ids-bank 改，verify 核对。见 `ops/cell_rekey.py`。"""
+    import os
+
+    from .ops import cell_rekey as ck
+    cm = ck.load_cell_map(args.map)
+    if args.action in ("glyph-db", "verify"):
+        if args.workspace:
+            os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+        from .core.workspace import glyph_db_path
+        db = Path(args.db) if args.db else Path(glyph_db_path())
+        if args.action == "verify":
+            evs = None
+            if args.events:
+                evs = [json.loads(ln) for f in args.events for ln in open(f, encoding="utf-8") if ln.strip()]
+            res = ck.verify_glyph_db(db, cm, evs)
+            _out({"db": str(db), "map": cm.source, **res})
+            sys.exit(0 if res["ok"] else 1)
+        if args.rev is None:
+            print("✗ 要给 --rev 旧页表 rev（停放 id 用）", file=sys.stderr)
+            sys.exit(2)
+        res = ck.rekey_glyph_db(db, cm, args.rev, dry_run=args.dry_run)
+        if args.table:
+            ck.write_glyph_table(res["rows"], args.table)
+        _out({"db": str(db), "map": cm.source, "dry_run": args.dry_run, **cm.counts(), **res["summary"]})
+        return
+    if not args.files:
+        print("✗ 要给要改的文件", file=sys.stderr)
+        sys.exit(2)
+    out = []
+    for f in args.files:
+        if args.action == "json":
+            out.append(ck.rekey_json(f, cm))
+        elif args.action == "jsonl":
+            out.append(ck.rekey_jsonl(f, cm, fields=tuple(args.field or ("id", "key"))))
+        else:
+            if args.rev is None:
+                print("✗ 要给 --rev 旧页表 rev（停放 id 用）", file=sys.stderr)
+                sys.exit(2)
+            out.append(ck.rekey_ids_bank(f, cm, args.rev))
+    _out({"map": cm.source, "files": out})
+
+
 def cmd_promote(args) -> None:
     """升格候选（共享方案 S7，先做语料部分）：只读、只出清单。"""
     from .ops.promote import mine_corpus
@@ -2968,6 +3011,7 @@ COMMANDS_V2 = {
     "variants": cmd_variants,
     "corpus": cmd_corpus,
     "glyphlib": cmd_glyphlib,
+    "rekey-cells": cmd_rekey_cells,
     "promote": cmd_promote,
     "collate": cmd_collate,
     "progress": cmd_progress,
@@ -3686,6 +3730,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--per-char", type=int, default=3, help="每字最多几张（缺省 3）")
     p.add_argument("--note", default="", help="写进升格记录的备注")
     p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
+
+    p = sub.add_parser("rekey-cells", help="[v2] 换图源后按格级对照表改键：字形库、L2 表、金标/回放集、模板库出处（GUJI-748）")
+    p.add_argument("action", choices=["glyph-db", "verify", "json", "jsonl", "ids-bank"],
+                   help="glyph-db 改 glyph.db 实例 id；verify 核对改键后的库；json L2 表等按格当键的 JSON；"
+                        "jsonl 金标/回放集；ids-bank IDS 模板库出处")
+    p.add_argument("--map", required=True, help="格级对照表 old_new_cells/<册>.tsv[.gz]")
+    p.add_argument("files", nargs="*", help="json／jsonl／ids-bank：要改的文件（原地改）")
+    p.add_argument("-w", "--workspace", default=None, help="glyph-db／verify：工作区（取它的 glyph.db）")
+    p.add_argument("--db", default=None, help="glyph-db／verify：直接给 glyph.db 路径")
+    p.add_argument("--rev", default=None, help="旧页表 rev，停放 id 写成 <前缀>~r<rev>~册~页~列~格")
+    p.add_argument("--dry-run", action="store_true", help="glyph-db：只推演不写")
+    p.add_argument("--table", default=None, help="glyph-db：逐实例改键表写到这个 tsv")
+    p.add_argument("--events", nargs="*", default=None, help="verify：迁移事件 jsonl，逐格核对字形")
+    p.add_argument("--field", action="append", default=None, help="jsonl：格键所在字段（可多次，缺省 id、key）")
 
     p = sub.add_parser("promote", help="[v2] 升格候选：mine 从本书人裁挖形近对、异体对（只读，出清单待人审）")
     p.add_argument("action", choices=["mine"])
