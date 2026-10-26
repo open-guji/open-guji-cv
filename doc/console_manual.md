@@ -250,6 +250,11 @@ guji cellvotes write vol04 <目录> --batch H-web-vol04-<日期> --reviewer <投
 guji db sync -w <工作区>                                   # 推库（先报告、等点头）
 ```
 
+**换图源迁票（GUJI-748，只读提案）**：`guji cellvotes migrate vol04 --cells <old_new_cells/vol04.tsv[.gz]> --source-rev <新页表 rev> --out <目录> -w <工作区>`，
+按格级对照表（旧格取出单那一版）把每格最新人裁迁到新格；要连网站票一起迁，再给 `--site-book --rev [--from|--from-kv] [--new-rev]`。
+出 `events.jsonl`（新事件，id 加 `~q`）、`votes.jsonl`、`id_map.tsv`、`pending.tsv`（没迁的，进新待审单）、`watch.tsv`、`report.md`（输入＝迁出＋合并＋没迁，对不上直接报错）。
+不写事件、不写库；逻辑见 `feedback/cell_migrate.py` 模块头，流程见 `doc/design/殿本换图源-siku-qiefen-v2.md` §七。
+
 **出单时存了产物包的单子（2026-10-23 起，`republish.py push --sync` 自动存 `rev-<rev>`）不用重跑**：draft 加
 `--pack rev-<rev>`、不给 `--cord`，锚和格位都按出单版产物算，write 自动用同一份（GUJI-730 P1-1）：
 
