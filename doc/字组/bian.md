@@ -34,3 +34,4 @@ SHAPE 组、补放与复核改码位（`registry.py` SHAPE_GROUPS）。**只给 
 
 ## 现状与待办
 - 上线：各册 `group_flow` 加 bian（全部册）；撤回 vol04 8 格人裁更正。工作区 codepoints 的 變→𠮓 **保留**：它管判 𠮓 的格和组外的格。见 dataset `char-groups/待上线.md`。
+- 2026-10-25 修：seed_admit 落册码位那一遍原先把组判出的 變 和人裁 變 一律按 變→𠮓 改回（v0.5.17 产物 vol04–20 组判 變 74 格全成 𠮓，人裁 vol04:197:7:3 也被改回）。改为拆判组的刻形与人裁照录（`seed_admit._codepoint_exempt`）。

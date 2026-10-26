@@ -6,6 +6,16 @@
 ## [未发版]
 
 - proof_cycle apply 加 `--ack-unlanded-votes <原因>`：旧单有票没法落成人裁（如图形格）时，原样交给 republish issue 放行换单。
+### Fixed
+- 字形库人裁以最后一票为准（`glyphdb_admit`，sheldon 10-26 定）：按人裁时间 `ts`（`replay_key`）处理，库里这一格已是更晚的人裁时旧票不再覆盖（此前按消费顺序覆盖，补消费积压时旧票压掉新票：vol04:143:9:16 改判 由 后被 10-22 的 山 盖回，全库 7 格）；更晚的人裁判切坏／非字／破损（`seg_defect`、`not_a_char`、`damaged`，含 `kind=not_a_char`）时撤掉这一格更早的人裁刻例（此前一直留着，全库 16 格）。新刻例证据记 `ts`；路由表 `not_a_char` 加 `glyphdb_admit` 去处。结果多两个计数 `superseded`、`withdrawn`。
+- seed_admit 放行字落册码位（`codepoint_semantic` 最后一遍）：这对字已有按刻形拆判的字组（`registry.SHAPE_GROUPS`，同族的不算）时，人裁的刻形、该组判出的刻形照录，不再按工作区 `codepoints` 改回。修 變𠮓：工作区 變→𠮓 把人裁 變（vol04:197:7:3，A32 10-25 报）和 bian 组判出的 變 全改回 𠮓，bian 组上线后线上一格 變 都没有（v0.5.17 产物 vol04–20 有 74 格组判 變 被改回）。判 𠮓、组弃权、组外的格照旧归一；宮→宫（guan 族内）等其余码位不变。seed_admit 的 `code_hash` 变（PATCH）。
+- 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
+
+### Added
+- 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
+- 任务库看板：`guji job board`（执行方领单、收尾、心跳时自动写）把在跑、排队、最近结束的任务整理成一张表，写进中心库 `progress.metric`（栏目 `jobs`），网站后台「文本整理 → 重跑任务」显示：配置、状态、阶段、开始时间、已跑多久、预计完成（同类已成功任务耗时中位数）、结果包。不动任何 Step，`code_hash` 不变。
+
+- cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
 
 ## [0.5.21] - 2026-10-25
 

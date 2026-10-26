@@ -143,6 +143,10 @@ _SHAPE_PAIR_FLOW = {
     "yin": dict(tolerate=frozenset("隠隙臆匱應隔間隋騭隨陋"), lift_ref_agree=True),
     "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙"), lift_ref_agree=True, ref_enter=True),
     "guanm": dict(tolerate=frozenset("闡間閱閣聞闌閩開閑問闚闢"), lift_ref_agree=True, ref_enter=True),
+    # 勢𫝑 發𤼵（2026-10-25，sheldon 定按刻形分拆）：库首位几乎都是 勢／發；分差内常紧咬的组外字当陪衬放进入口
+    # （登務條 也进模板库，判成它们＝弃权；𫉬顧勞 不进库，只放行入口，字仍由本组判 發𤼵／勢𫝑）。整理本两形混用，不要求与整理本同字。
+    "shi": dict(tolerate=frozenset("勞")),
+    "fa": dict(tolerate=frozenset("登務條𫉬顧")),
 }
 #: 闗關 与门族 men 共用 關：men 只补放不复核，已放行的 關 归 guanm 复核（刻 闗 放成 關 的改码位）
 _SHAPE_PAIR_OVERLAPS = {"guanm": ("men",)}
@@ -402,7 +406,9 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                                # 瑣𤨏（2026-10-25，GUJI-719）：两种刻法一眼可分，但 𤨏 只 9 格（每类至少 5 例才给字），复核只降审不改码位
                                ("suo", "瑣𤨏", "右上 ⺌／巛"),
                                # vol21–50 首跑 V 类（2026-10-25）：字形库没有少的一形（𨼆 𮅕），库排成常见形或别的字；刻形一眼可分
-                               ("yin", "隱𨼆", "右上 爫工／平顶 丅⺊"), ("suan", "算𮅕", "下部 廾／大"), ("guanm", "闗關", "門内下部 灬／丱"))},
+                               ("yin", "隱𨼆", "右上 爫工／平顶 丅⺊"), ("suan", "算𮅕", "下部 廾／大"), ("guanm", "闗關", "門内下部 灬／丱"),
+                               # 勢𫝑 發𤼵（2026-10-25）：放行格两形混放，标签全是 sheldon 在标注页逐格过的（dataset variant/{shi,fa}）
+                               ("shi", "勢𫝑", "左上 坴／幸"), ("fa", "發𤼵", "右下 殳／矢"))},
     # 广宀族（2026-10-24，A24）：「蕤賔」的 賔 字形库里没有，库把它排成 實廣（再往后 墳須寅賞…），形近护栏拦下送审（vol19 十几格）。
     # 整字 HOG 一对多，只给 賔／賓（`ids_online.SPECS["guang"].give`；實廣 判出来也弃权，库本来认得）；賔賓 按刻形各给各的码位。
     # 陪衬＝模板库里的陪衬类（判成它们＝弃权），入口才容许它们紧咬。复核只降不改：已放行 實廣 而判出 賔賓 的降审

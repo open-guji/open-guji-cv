@@ -165,9 +165,10 @@ DEFAULT_ROUTES: list[dict] = [
     # Step3 把它劈成了 a/b → 该页 Step3 失效，重跑时 `lookup.resolved_forced_main` 让它按整格出。
     {"match": {"kind": "confirm", "payload.reason": "main_as_jiazhu"},
      "to": [{"consumer": "product_invalidate", "extra": {"step": "row_segment"}}]},
-    # 判非字同理：名单变了 seed_admit 该重算。
+    # 判非字同理：名单变了 seed_admit 该重算。字形库也要撤这一格更早的人裁刻例（以最后一票为准，2026-10-26）。
     {"match": {"kind": "not_a_char"},
-     "to": [{"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
+     "to": [{"consumer": "glyphdb_admit"},
+            {"consumer": "product_invalidate", "extra": {"step": "seed_admit"}}]},
     # ── Step8 复核裁决（2026-09-22）─────────────────────────────
     # 三条都**不入字形库、不失效产物**：那一格的字没有变，Step7 早已入过库。
     # 只有「证人对（我们认错了）」要改字，而它走上面 `confirm` 那条现成通道，

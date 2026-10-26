@@ -92,6 +92,8 @@ def fill(p: argparse.ArgumentParser) -> None:
     s.add_argument("--kinds", default=None, help="只接这些 kind，逗号分隔")
     s.add_argument("--dry-run", action="store_true", help="只打印要跑的命令（仍会领单、记库，测试分支上用）")
 
+    s = js.add_parser("board", help="把任务整理成表写进后台「重跑任务」栏（progress.metric）；--dry-run 只打印")
+    s.add_argument("--dry-run", action="store_true")
     s = js.add_parser("workers", help="列执行方：谁在线、空闲还是在跑哪条")
     s.add_argument("--all", action="store_true", help="连已离线的也列")
 
@@ -245,6 +247,15 @@ def cmd_job(a) -> None:
                 print(_line(j))
                 sys.exit(2)
             time.sleep(60)
+    elif act == "board":
+        from . import board
+        t = board.publish(db, force=True, dry=a.dry_run)
+        if t is None:
+            sys.exit("✗ 看板没写成（连库失败或中心库还没有 progress schema）")
+        if a.dry_run:
+            for r in t["rows"]:
+                print(f"#{r['id']:<4} {r['status']:<4} {r['book']:<6} {r['elapsed']:<8} {r['eta']:<14} {r['config']}")
+        print(f"{'（只看，没写）' if a.dry_run else '已写入 progress.metric jobs/board'}：共 {len(t['rows'])} 行")
     elif act == "workers":
         rows = db(S.workers)
         for w in rows:
