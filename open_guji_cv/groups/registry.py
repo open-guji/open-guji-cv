@@ -50,7 +50,12 @@ class FlowSpec:
       单独按册留出定、比降审门槛高（徵徴：线上同款字块按册留出错例最大 0.63 → 取 0.70；A24 10-25）。
     - `ref_enter`：库 top1 是本组的陪衬字（`tolerate`）、不在组里，但整理本字在组里 → 也许补放进入（字形库里没有这一形，
       库把它排成别的字：算𮅕 的 𮅕 被排成 莫；A24 10-25）。只在同时声明了 `lift_ref_agree` 的组生效。
-      先于库首位字所在的组（闗 被库排成 闡間，不先拦就进了门族 men）；现役对位缺格时用坐标对位字（vol49 整页对位缺）。"""
+      先于库首位字所在的组（闗 被库排成 闡間，不先拦就进了门族 men）；现役对位缺格时用坐标对位字（vol49 整页对位缺）。
+      声明了 `tolerate_ref_agree` 的组也生效。
+    - `tolerate_ref_agree`：补放时分差内（含 top1）出现了**组外**陪衬字的格，方法给的字须与整理本字（缺位时坐标对位字）同字，
+      否则留人审（`group_flow_ref_dissent`／`group_flow_ref_missing`）；分差内没有陪衬字的格照旧。陪衬字是库里个别刻例
+      「挡门」造成的（形近护栏 N 类，2026-10-26 A24：于千子 被 亍 的一个刻例挡、日曰 被 師 的一个旧切分字块挡），
+      放宽进入时多要整理本一路互证，不让陪衬字带进来的格单凭文意改字。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -68,6 +73,7 @@ class FlowSpec:
     review_weak: tuple = ()
     review_fix_margin: float = 0.0
     ref_enter: bool = False
+    tolerate_ref_agree: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -189,7 +195,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="ry", name="日曰", members=frozenset("日曰"),
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ry",
-        flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, lift_needs=("ctx",)), overlaps=("rm",),
+        flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, lift_needs=("ctx",),
+                     tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -314,7 +321,7 @@ GROUPS: dict[str, GroupSpec] = {
         id="zy", name="于千子干", members=frozenset("于千子干"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "ids"), config_dir="config/groups/zy",
         flow=FlowSpec((CTX, Only("ids", inner=_img("zy"), chars=frozenset("子于干"), give=frozenset("子于"))), review=True, review_methods=(CTX,),
-                      tolerate=frozenset("干")), overlaps=("yz",),
+                      tolerate=frozenset("干亍"), tolerate_ref_agree=True, ref_enter=True), overlaps=("yz",),
         note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；子于整字 HOG 当第二路（只在分差内全是 子于干 时跑），给字须一致；"
              "补放，也复核（只跑文意，只降审不改字）。与 予子 yz 共用「子」。千干 qg 已并入（册配置里的 qg 读作 zy）。"),
     "sy": GroupSpec(

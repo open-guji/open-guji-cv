@@ -6,6 +6,7 @@
 - 补放：格没放行、不是人裁、没撞硬护栏；库 top1 cov ≥ `min_cov`，top1 所在组 G 在点名里；与 top1 分差 < `delta` 的
   候选全在 G 里（或在 G 的 `FlowSpec.tolerate` 里）；有整理本对位字时它（或按书级 `codepoints` 归一后）也在 G 里。
   组声明了 `ref_enter` 时，top1 是 G 的陪衬字、整理本字在 G 里也算进入（字形库里没有这一形）。
+  组声明了 `tolerate_ref_agree` 时，分差内（含 top1）有组外陪衬字的格补放须与整理本字同字（陪衬字挡门，A24 10-26）。
 - 复核：组声明了 `review`，格已被别的通道放行、放行字在 G 里（人裁位不碰）。
 
 **判**：按组的方法数组（`FlowSpec.methods`，方法见 `groups/methods.py`）依次跑，`combine=first` 遇到第一个放行的就停，
@@ -139,7 +140,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     rr = ref or coord_ref
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
-        if not (f.ref_enter and f.lift_ref_agree and rr and (rr in mem or canon(rr) in mem) and top in f.tolerate):
+        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and (rr in mem or canon(rr) in mem) and top in f.tolerate):
             continue
         if all(c in mem or c in f.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
@@ -270,6 +271,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     `blocked(r)`：硬护栏（遮挡、超时、排除、非字…），True 的格不进流程。就地改 `seq` 里的记录。
     `veto_refs`：{id: 坐标对位字}，只在现役对位缺这一格时用来拦补放（`cfg.lift_ref_guard`），不参与判字。"""
     entries = {}
+    tol_hit = set()                          # 分差内（含 top1）有组外陪衬字的补放格（`FlowSpec.tolerate_ref_agree`）
     for i, r in enumerate(seq):
         if blocked(r):
             continue
@@ -278,6 +280,10 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         e = entry(r, cands, ref, cfg, canon, coord_ref=(veto_refs or {}).get(r.id))
         if e is not None:
             entries[i] = (cands, ref, e)
+            f = GROUPS[e[0]].flow
+            if e[1] in ("lift", "joint") and f.tolerate_ref_agree and cands and any(
+                    c in f.tolerate and c not in GROUPS[e[0]].members for c, v in cands if cands[0][1] - v < cfg.delta):
+                tol_hit.add(r.id)
     plans = []
     for i, (cands, ref, (g, mode)) in entries.items():
         r = seq[i]
@@ -309,9 +315,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_veto and ref and norm(ref) != norm(ch)
                   and norm(ref) in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "ref_dissent"   # 一二：整理本说是组里另一个字，字形怎么判都不补放（vol19:116:9:8）
-            elif ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_agree and norm(
+            elif ch is not None and ((mode == "lift" and GROUPS[g].flow.lift_ref_agree) or r.id in tol_hit) and norm(
                     rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch):
-                ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族：字形与整理本两路一致才补放
+                ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族／陪衬字挡门：字形与整理本两路一致才补放
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):

@@ -48,7 +48,7 @@ def _flags(fl) -> str:
     if fl.lift_ref_veto:
         out.append("整理本是组里另一字不补放")
     if fl.tolerate:
-        out.append("陪衬 " + "".join(sorted(fl.tolerate)))
+        out.append("陪衬 " + "".join(sorted(fl.tolerate)) + ("（陪衬带进的格须与整理本同字）" if fl.tolerate_ref_agree else ""))
     if fl.families:
         out.append("两段判 " + "｜".join(fl.families))
     return "；".join(out)
