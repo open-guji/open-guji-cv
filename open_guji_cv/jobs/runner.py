@@ -18,6 +18,7 @@ import threading
 import time
 from pathlib import Path
 
+from . import board as BOARD
 from . import spec as SP
 from . import store as S
 
@@ -86,6 +87,7 @@ class Job:
         while not self._stop.wait(HEARTBEAT_S):
             try:
                 db(S.worker_seen, S.who(), state="busy", job_id=self.id)
+                BOARD.publish(db)
                 if db(S.heartbeat, self.aid, stage=self.stage, progress=self.progress):
                     self.cancel.set()
                     if self.proc and self.proc.poll() is None:
@@ -452,17 +454,20 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             job, att = got
             db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
             say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
+            BOARD.publish(db, force=True)
             outcome = Job(job, att, db, dry=dry).run()
             _remember_book(job["book"])
             say(f"#{job['id']} → {outcome}")
             done += 1
             db(S.worker_seen, worker, state="idle", session=session, done=done)
+            BOARD.publish(db, force=True)
             idle_since = time.time()
             if once or only:
                 return done
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
+            BOARD.publish(db, force=True)
         except Exception:       # noqa: BLE001 —— 断网时退出就不报了，过几分钟自然算离线
             pass
 
