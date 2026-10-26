@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.24] - 测试中
+
+PATCH（#648 修 `--override` 起不来；字组 #647 等）。
+
 ### Fixed
 - `--override` 运行覆盖的原文写进 manifest 时 `ManifestEntry` 没有 `config_overrides` 字段，带 `--override` 的任何一步都报 TypeError 起不来（v0.5.23 的 #634 漏了；没带 `--override` 的跑法不受影响）：补字段与测试。PATCH，无 Step 的 `code_hash` 变。
 
