@@ -7,14 +7,14 @@ rules:
   - {id: qg-千-l2, char: 千, src: corpus-pure, re: '(?:虞稷)◎', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: qg-千-r2, char: 千, src: corpus-pure, re: '◎(?:古之|頃堂|百年)', note: 整理本奇偶册交叉验证零冲突；n≥3}
   - {id: qg-千-m, char: 千, src: corpus-pure, re: '(?:稷◎頃|二◎年)', note: 整理本奇偶册交叉验证零冲突；n≥3}
-  - {id: qg-干-l2, char: 干, src: corpus-pure, re: '(?:虞翻)◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
-  - {id: qg-干-r1, char: 干, src: corpus-pure, re: '◎[寶支]', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: qg-干-l2, char: 干, src: corpus-pure, re: '虞翻◎(?!夏)', note: 整理本奇偶册交叉验证零冲突；n≥2。10-27 排除「京房虞翻子夏本」vol03:9:5:6}
+  - {id: qg-干-r1, char: 干, src: corpus-pure, re: '(?<![宗庶])◎[寶支]', note: 整理本奇偶册交叉验证零冲突；n≥2。10-27 排除「宗子支子」vol11:118:3:16}
   - {id: qg-干-r2, char: 干, src: corpus-pure, re: '◎(?:支之|寶諸)', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: qg-干-m, char: 干, src: corpus-pure, re: '(?:翻◎寶)', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: 'zy-m-千-◎頃堂', char: 千, src: mined-a24, re: '◎頃堂', note: 已放行 6+6}
   - {id: 'zy-m-千-稷◎頃', char: 千, src: mined-a24, re: '稷◎頃', note: 已放行 5+3}
   - {id: 'zy-m-千-虞稷◎', char: 千, src: mined-a24, re: '虞稷◎', note: 已放行 5+3}
-  - {id: 'zy-m-子-◎之學', char: 子, src: mined-a24, re: '◎之學', note: 已放行 9+6}
+  - {id: 'zy-m-子-◎之學', char: 子, src: mined-a24, re: '(?<!餘)◎之學', note: 已放行 9+6。10-27 排除「餘干之學」vol81:106:6:5}
   - {id: 'zy-m-子-◎之書', char: 子, src: mined-a24, re: '◎之書', note: 已放行 7+10}
   - {id: 'zy-m-子-◎之說', char: 子, src: mined-a24, re: '◎之說', note: 已放行 16+24}
   - {id: 'zy-m-子-◎儀禮', char: 子, src: mined-a24, re: '◎儀禮', note: 已放行 9+4}
@@ -83,7 +83,10 @@ rules:
   - {id: 'zy-m-子-非孔◎', char: 子, src: mined-a24, re: '非孔◎', note: 已放行 6+8}
   - {id: 'zy-m-子-非朱◎', char: 子, src: mined-a24, re: '非朱◎', note: 已放行 13+4}
   # hand-a24：手写常见搭配，对 vol04–20 已放行格与整理本回测；冲突格逐条读过，都是已放行错字（如「進士宫至」）或整理本错字，不改规则
-  - {id: 'zy-h1', char: 子, src: hand-a24, re: '[孔孟程曾荀莊墨邵管]◎', note: 回测命中 1330}
+  - {id: 'zy-h1', char: 子, src: hand-a24, re: '(?<!百)[孔孟程曾荀莊墨邵管]◎', note: 回测命中 1330。10-27 排除「百孔千瘡」vol46:137:5:5}
   - {id: 'zy-h2', char: 子, src: hand-a24, re: '◎曰', note: 回测命中 94}
   - {id: 'zy-h3', char: 于, src: hand-a24, re: '[薨禘殯盟]◎', note: 回测命中 33}
   - {id: 'zy-h4', char: 干, src: hand-a24, re: '若◎[字卷條篇]', note: 回测命中 20}
+  - {id: 'zy-h5', char: 千, src: hand-a24, re: '孔◎瘡', note: 百孔千瘡（10-27 全册回测，vol46:137:5:5）}
+  - {id: 'zy-h6', char: 干, src: hand-a24, re: '餘◎(?:縣|之學)', note: 餘干縣、餘干之學（胡居仁，10-27 全册回测，vol81:106:6:5）}
+  - {id: 'zy-v1', char: null, src: hand-a24, re: '◎之譌', note: 勘誤清單「X之譌Y」裡的字是被引的錯字或人名，詞組規則不適用（10-27 全册回测：vol98:97:9:18「陳天【予】之譌」被 天◎之 判成 子）}
