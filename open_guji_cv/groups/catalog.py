@@ -47,8 +47,12 @@ def _flags(fl) -> str:
         out.append("补放须与整理本同字")
     if fl.lift_ref_veto:
         out.append("整理本是组里另一字不补放")
+    if fl.ref_enter:
+        out.append("库首位是陪衬也按整理本进")
+    if fl.ref_top_enter:
+        out.append("库首位与整理本同组即进")
     if fl.tolerate:
-        out.append("陪衬 " + "".join(sorted(fl.tolerate)))
+        out.append("陪衬 " + "".join(sorted(fl.tolerate)) + ("（陪衬带进的格须与整理本同字）" if fl.tolerate_ref_agree else ""))
     if fl.families:
         out.append("两段判 " + "｜".join(fl.families))
     return "；".join(out)

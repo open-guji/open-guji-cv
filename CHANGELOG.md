@@ -3,6 +3,21 @@
 格式遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号规矩见 `doc/版本号规矩.md`。
 本文件记录**全部**版本（含 PATCH）；动代码的 PR 投 `dev`，在 `## [未发版]` 下加一行；切 rc 时改成 `## [X.Y.Z] - 测试中`，发版时改成日期（见版本号规矩第三节）。
 
+## [未发版]
+
+## [0.5.23] - 2026-10-26
+
+PATCH（#634 #637 册配置分层与运行覆盖；字组与人裁 #623 #624 #625 #626 #627 #629 #630 #638 #640；换图源工具 #636 #639）。seed_admit 的 `code_hash` 变（字组）。**新版起支持册配置分层：A31 把册 yaml 迁成「基础配置＋瘦身册」后，更旧的版本读这些册会静默丢掉基础配置，须改钉本版或更新。**
+
+- rc 修复：核心依赖补 `ruamel.yaml`（`guji book split` 要用，#634 漏声明，干净环境装完一跑就 ModuleNotFoundError）；重生成 `doc/字组/字组总表.md`（#640 改 xz 后没重生成）。
+
+### Added
+- 字组 象彖𧰼（xz，全册任务 08）：𧰼 模板换成人裁表（象 129／𧰼 178，含 sheldon 10-26 标注页 173 格），门槛 1.0→0.3、λ=3；组里加 `lift_ref_agree`（字形与整理本同字才补放）。按册留出一致格 0 错。xz 本来就在各册 `group_flow` 里，重落即生效。30 册离线回放：送审 147 补放 93（全 𧰼），复核降审 63（多为 𧰼 被放成 象）。文意 L2 表补格在中心库（xz-l2-2），要另推。seed_admit 的 `code_hash` 变。
+- 册配置分层与运行覆盖（PATCH，设计 `doc/design/册配置分层与运行覆盖.md`）：工作区基础配置 `config/book_defaults.yaml`（册 yaml 只写各自不同的，合并结果与拆前逐字段相同；没有基础配置时行为不变）；`guji pipeline/step/status --override JSON` 运行覆盖（内存里叠在册 yaml 上，不改文件、不推库，原文记进产物 manifest `config_overrides`）；`guji book show <册> --effective` 看生效配置与来源层；`guji book split --books vol51-vol99 [--apply]` 把一组册的共用部分抽成基础配置（逐册强校验）；任务库 `book_overrides` 放开到 BookSpec 字段（`guji_jobs submit --override`），执行方改传 `--override`；`rerun_prep.sh` 读生效值。**注意：旧版本不认基础配置，册 yaml 迁成瘦身形式前，所有跑这些册的会话都要先升到含本改动的版本。** 无 Step 的 `code_hash` 变（对 vol50、vol51 实测 `guji status` 与 dev 逐行相同）。
+### Fixed
+- `--params` 显式传默认值（如 `shadow_veto:false`）会被册 yaml `params:` 静默改回：`_with_book_params` 改按「调用方有没有显式传」判，不再比是否等于默认值。
+- 字组（全册任务 04「码位已定仍送审」）：码位组新入口 `FlowSpec.ref_top_enter`（库首位与整理本／坐标对位字同组就进，分差内的组外字不拦；出岀 除外），码位法给字要库首位 cov ≥ 0.91（`FlowConfig.codepoint_min_cov`）；新码位组 lei 類𩔖、cuan 竄𥨥、lang 郎郞；新 SHAPE 组 xiang 鄉鄕｜卿、weim 微㣲｜徵徴徹、zhen 鎭鎮｜鍾愼…，bie 別别 由码位组改成整字 HOG（別｜刖則所冊），两码位并一类、形近字当陪衬进库，ref_enter＋lift_ref_agree，按册留出判成本组字 0 错。册 yaml `group_flow` 不点名 lei cuan lang xiang weim zhen 就不生效（bie 已点名，改判法即生效）。82 册离线回放：任务 04 送审 288 格补放 235，另补放 8，逐格看图 0 错。seed_admit 的 `code_hash` 变。
+
 ## [0.5.22] - 2026-10-26
 
 PATCH（#612 #614 #616 #619 #621 字组与人裁，#606 #611 #613 #615 #617 工具）。seed_admit、glyphdb_admit 的 `code_hash` 变。

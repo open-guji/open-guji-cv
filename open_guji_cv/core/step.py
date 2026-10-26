@@ -132,9 +132,10 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
-    default = step.spec.params()
-    overrides = {k: v for k, v in book_kv.items()
-                 if getattr(p, k, object()) == getattr(default, k, object())}
+    # 调用方（CLI `--params`／`--override`／管线 yaml）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
+    # 否则册 yaml 开了的开关，命令行显式传 false（恰是默认值）会被册 yaml 静默改回去。
+    explicit = getattr(p, "model_fields_set", set())
+    overrides = {k: v for k, v in book_kv.items() if k not in explicit}
     if not overrides:
         return p
     return type(p)(**{**p.model_dump(), **overrides})

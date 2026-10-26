@@ -87,7 +87,8 @@ class Method:
 
 @dataclass(frozen=True)
 class Codepoint(Method):
-    """册配置 `codepoints:` 把组内某字映到组内另一个字（如 巻→卷）→ 给那个字，置信度 1；这套书没定 → 待定。"""
+    """册配置 `codepoints:` 把组内某字映到组内另一个字（如 巻→卷）→ 给那个字，置信度 1；这套书没定 → 待定。
+    库首位 cov 不到 `FlowConfig.codepoint_min_cov` 也待定（2026-10-26：褪墨页上库形 0.90 档对不上刻形）。"""
     name: str = "codepoint"
     kind = "codepoint"
 
@@ -95,6 +96,9 @@ class Codepoint(Method):
         canon = getattr(inp.cfg, "canon", None)
         if canon is None:
             return GroupVerdict(None, why="abstain:no_codepoints", via=self.name)
+        c1 = max((v for _, v in inp.cands or ()), default=None)
+        if c1 is not None and c1 < getattr(inp.cfg, "codepoint_min_cov", 0.0):
+            return GroupVerdict(None, conf=c1, why="abstain:low_cov", via=self.name, extra={"cov": c1})
         targets = {canon(c) for c in inp.members} & set(inp.members)
         if len(targets) == 1 and any(canon(c) != c for c in inp.members):
             ch = next(iter(targets))
@@ -198,7 +202,20 @@ class Chain(Method):
                 continue
             v = s.run(inp)
             if v.char is not None:
+                if isinstance(s, CtxRule) and _spec(inp.group).flow.strong_over_ref:
+                    v = self._confirm(v, inp)
                 break
+        return v
+
+    def _confirm(self, v: GroupVerdict, inp) -> GroupVerdict:
+        """L1 规则给了字：组声明了 `strong_over_ref` 时再查 L2 表，表里同字且 strong → L1 的答案也记 strong（可改字）。
+        规则单独不改字（vol34:101:1:11「四至八到曰疆域」`ry-ext-l1-日` 判反，表 strong 是曰）；规则与多遍都 high 的表
+        一致才改（vol11 18:5:11、vol22 112:8:18「顧炎武日知錄」被 match_ref 放成曰，A24 10-26）。"""
+        for s in self.steps:
+            if isinstance(s, Llm) and s.applies(inp):
+                t = s.run(inp)
+                if t.char == v.char and t.extra.get("strong"):
+                    return GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "strong": True})
         return v
 
 

@@ -39,7 +39,7 @@ def test_registry_kinds_match_ids_specs():
         assert kinds[g] == "composite", g
         m = img[g]
         assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
-    for g in ("can", "xu", "jiao", "jue", "yi_560", "mn", "ce"):          # 叙敘／教敎／絕絶 10-22 改通用 IDS 判法
+    for g in ("can", "xu", "jiao", "jue", "yi_560", "ce"):          # 叙敘／教敎／絕絶 10-22 改通用 IDS 判法
         assert kinds[g] == "ids", g
     assert GROUPS["zhi"].flow.methods[1].kind == "hog"
 
@@ -119,7 +119,7 @@ def test_composite_crop_equals_registered_region(monkeypatch):
 def test_codepoint_groups_flow_only():
     """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
     from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS, SHAPE_GROUPS
-    assert set(CODEPOINT_GROUPS) == {"nei", "bie", "chu", "juan", "wan", "huo", "kui", "lie"}
+    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang"}
     assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS) | set(SHAPE_GROUPS)
     check_groups(tuple(CODEPOINT_GROUPS))
     for g, s in CODEPOINT_GROUPS.items():
@@ -130,6 +130,8 @@ def test_codepoint_groups_flow_only():
         assert bool(s.flow.tolerate) == s.flow.lift_ref_agree, g
         assert not s.flow.tolerate & s.members, g
     assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie"}
+    # 库首位与整理本同组即进（2026-10-26）：出岀 除外（与 sy 共字，分差内有 山由 归 sy 按文意判）
+    assert {g for g, s in CODEPOINT_GROUPS.items() if not s.flow.ref_top_enter} == {"chu"}
 
 
 def test_codepoint_group_lifts_book_choice():
@@ -146,17 +148,28 @@ def test_codepoint_group_lifts_book_choice():
         doubts: list = field(default_factory=list)
         evidence: dict = field(default_factory=dict)
 
-    book = {"巻": "卷", "别": "別"}
+    book = {"巻": "卷", "內": "内"}
     canon = lambda c: book.get(c, c)                     # noqa: E731
-    cfg = FlowConfig(groups=("juan", "bie"), canon=canon)
+    cfg = FlowConfig(groups=("juan", "nei"), canon=canon)
     a, b, c = Rec("a"), Rec("b"), Rec("c")
-    cands = {"a": [("巻", 0.97), ("卷", 0.96)], "b": [("别", 0.95)], "c": [("巻", 0.97), ("券", 0.96)]}
+    cands = {"a": [("巻", 0.97), ("卷", 0.96)], "b": [("內", 0.95)], "c": [("巻", 0.97), ("券", 0.96)]}
     res = group_flow_pass([a, b, c], {"a": ("巻", "eq")}, lambda cid: cands[cid], lambda r: False, cfg, canon=canon)
     assert a.admit and a.char == "卷" and a.channel == "group_flow"
     assert a.evidence["group"]["solvers"][0]["solver"] == "codepoint"
-    assert b.admit and b.char == "別"
-    assert not c.admit and "group" not in c.evidence             # 组外字紧咬，不进
+    assert b.admit and b.char == "内"
+    assert not c.admit and "group" not in c.evidence             # 组外字紧咬、没有整理本字，不进
     assert res.lifted == 2
+    # 库首位与整理本（缺位时坐标对位）字同在组里：分差内的组外字不拦（`ref_top_enter`）；库 cov 不到 0.91 码位法弃权
+    e, f, h = Rec("e"), Rec("f"), Rec("h")
+    cands = {"e": [("巻", 0.97), ("券", 0.96)], "f": [("巻", 0.95), ("春", 0.94)], "h": [("巻", 0.90), ("春", 0.89)]}
+    res = group_flow_pass([e, f, h], {"e": ("卷", "replace")}, lambda cid: cands[cid], lambda r: False, cfg, canon=canon,
+                          veto_refs={"f": "巻", "h": "巻"})
+    assert e.admit and e.char == "卷" and f.admit and f.char == "卷"
+    assert not h.admit and "group_flow_abstain" in h.doubts
+    # 整理本是组外字：不走这条
+    k = Rec("k")
+    group_flow_pass([k], {"k": ("春", "replace")}, lambda cid: [("巻", 0.97), ("春", 0.96)], lambda r: False, cfg, canon=canon)
+    assert not k.admit and "group" not in k.evidence
     # 这套书没定码位 → 待定送审
     d = Rec("d")
     group_flow_pass([d], {}, lambda cid: [("巻", 0.97)], lambda r: False, FlowConfig(groups=("juan",)))
@@ -186,3 +199,19 @@ def test_clean_patch_drops_border_specks():
     c = ids_whole.clean_patch(g)
     assert (c[10:50, 20:30] == 0).all() and c[0:3, 0:3].min() == 255 and c[30:32, 46:50].min() == 255
     assert ids_whole.aspect_ok(g, (0.45, 2.2)) and not ids_whole.aspect_ok(np.zeros((10, 40)), (0.45, 2.2))
+
+
+def test_near_family_groups():
+    """码位已定、库在形近字间拿不准的族（2026-10-26）：整字 HOG 一对多、两码位并一类、陪衬进库；须与整理本同字、库首位是陪衬也按整理本进。"""
+    from open_guji_cv.groups.ids_online import SPECS, bank_path
+    from open_guji_cv.groups.registry import SHAPE_GROUPS, _NEAR_FAMILY
+    gs = [g for g, *_ in _NEAR_FAMILY]
+    assert set(gs) == {"xiang", "weim", "bie", "zhen"}
+    check_groups(tuple(gs))
+    for g in gs:
+        f = SHAPE_GROUPS[g].flow
+        assert f.solvers == ("ids",) and f.lift_ref_agree and f.ref_enter and not f.review, g
+        assert not f.tolerate & SHAPE_GROUPS[g].members and len(SHAPE_GROUPS[g].members) == 2, g
+        assert SPECS[g].whole == "hog" and SPECS[g].min_margin >= 0.4 and bank_path(g) is not None, g
+    assert "卿" in SHAPE_GROUPS["xiang"].flow.tolerate and {"徵", "徴"} <= SHAPE_GROUPS["weim"].flow.tolerate
+    assert "刖" in SHAPE_GROUPS["bie"].flow.tolerate

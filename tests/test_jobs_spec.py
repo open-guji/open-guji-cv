@@ -57,7 +57,7 @@ def test_override_order_does_not_matter():
     ({"book": "vol10", "cv": "dev", "colour": 1}, "不认识"),
     ({"book": "vol10", "cv": "dev", "env": {"GUJI_DATA_TOKEN": "x"}}, "凭据"),
     ({"book": "vol10", "cv": "dev", "env": {"PATH": "/x"}}, "GUJI_"),
-    ({"book": "vol10", "cv": "dev", "book_overrides": {"cv_version": "1"}}, "book_overrides"),
+    ({"book": "vol10", "cv": "dev", "book_overrides": {"raw_dir": "x"}}, "book_overrides"),
     ({"book": "vol10", "cv": "dev", "pin_args": "--x; rm -rf /"}, "shell"),
     ({"book": "vol10", "cv": "dev", "kind": "ab"}, "compare_to"),
     ({"book": "vol10", "cv": "dev", "pages": "all; ls"}, "pages"),
@@ -98,3 +98,11 @@ def test_redact_hides_tokens():
     from open_guji_cv.jobs.runner import redact
     s = redact("GUJI_DATA_TOKEN=abc123 ok postgresql://u:p@h/db Bearer xyz")
     assert "abc123" not in s and "u:p" not in s and "xyz" not in s and "ok" in s
+
+
+def test_book_overrides_accept_book_fields():
+    """册级覆盖放开到 BookSpec 的字段（去掉身份与图源）；不认识的字段仍拒。"""
+    a = norm(book="vol10", cv="dev", book_overrides={"cv_version": "0.5.21", "params": {"seed_admit": {"x": 1}}})
+    assert a["book_overrides"]["cv_version"] == "0.5.21"
+    with pytest.raises(SP.SpecError):
+        norm(book="vol10", cv="dev", book_overrides={"nope": 1})

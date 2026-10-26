@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -36,6 +37,11 @@ def _engine(book_id: str, pipeline_id: str, params: str | None = None, quiet: bo
     pl = load_pipeline(pipeline_id)
     book = load_book(book_id)
     overrides = json.loads(params) if params else None
+    from .core.book_config import run_override_params
+    ov_params = run_override_params()           # `--override` 里的 params：当调用方显式参数，压过册 yaml
+    if ov_params:
+        from .core.book_config import merge
+        overrides = merge(overrides or {}, ov_params)
     return Engine(book, pl, params=overrides, log=(lambda s: None) if quiet else None)
 
 
@@ -457,6 +463,64 @@ def cmd_rerun(args) -> None:
 def cmd_step(args) -> None:
     args.from_step = args.to_step = args.step
     cmd_pipeline(args)
+
+
+def _expand_books(spec: str) -> list[str]:
+    import re
+    out: list[str] = []
+    for part in spec.split(","):
+        part = part.strip()
+        m = re.fullmatch(r"([A-Za-z]+)(\d+)-(?:\1)?(\d+)", part)
+        if m:
+            w = len(m.group(2))
+            out += [f"{m.group(1)}{i:0{w}d}" for i in range(int(m.group(2)), int(m.group(3)) + 1)]
+        elif part:
+            out.append(part)
+    return out
+
+
+def _cmd_book_split(args) -> None:
+    from .core.book import _book_yaml_path
+    from .core.book_config import defaults_path
+    from .core.book_split import SplitError, split, write_split
+    if not args.books:
+        print("✗ split 要 --books vol51-vol99（或逗号清单）", file=sys.stderr); sys.exit(2)
+    ids = _expand_books(args.books)
+    books_dir = _book_yaml_path(ids[0]).parent
+    try:
+        res = split(books_dir, ids, header="# 殿本共用配置（工作区基础配置）。各册 yaml 只写自己不同的部分；设计见 cv doc/design/册配置分层与运行覆盖.md\n")
+    except SplitError as e:
+        print(f"✗ {e}", file=sys.stderr); sys.exit(1)
+    base_path = defaults_path(books_dir / f"{ids[0]}.yaml")
+    n = len(res["base"].splitlines())
+    print(f"共 {len(ids)} 册；基础配置 {n} 行 → {base_path}；强校验通过（每册合并结果与拆前逐字段相等）")
+    for b in ids[:3] + (["…"] if len(ids) > 3 else []):
+        if b != "…":
+            print(f"  {b}: {res['lines_before'][b]} 行 → {res['lines_after'][b]} 行")
+    if not args.apply:
+        print("（干跑，没写。加 --apply 才写本机数据目录；之后 `guji db push` 推库）")
+        return
+    write_split(books_dir, res, base_path)
+    print("已写本机数据目录。推库：guji db push -w <工作区>")
+
+
+def cmd_book(args) -> None:
+    if args.action == "split":
+        return _cmd_book_split(args)
+    if not args.book:
+        print("✗ show 要册号", file=sys.stderr); sys.exit(2)
+    from .core.book import _book_yaml_path
+    from .core.book_config import effective_book_dict, provenance
+    path = _book_yaml_path(args.book)
+    d = effective_book_dict(path)
+    src = provenance(path)
+    if args.json:
+        print(json.dumps({"book": args.book, "effective": d, "source": src}, ensure_ascii=False, indent=1, default=str))
+        return
+    print(f"# 册 {args.book} 生效配置（{path}）")
+    for k in sorted(d):
+        v = json.dumps(d[k], ensure_ascii=False, default=str)
+        print(f"{k}: {v if len(v) <= 160 else v[:157] + '…'}    # {src.get(k, '?')}")
 
 
 def cmd_status(args) -> None:
@@ -2472,6 +2536,49 @@ def cmd_glyphlib(args) -> None:
     _out(res)
 
 
+def cmd_rekey_cells(args) -> None:
+    """换图源后按格级对照表改键（GUJI-748）：glyph-db／json／jsonl／ids-bank 改，verify 核对。见 `ops/cell_rekey.py`。"""
+    import os
+
+    from .ops import cell_rekey as ck
+    cm = ck.load_cell_map(args.map)
+    if args.action in ("glyph-db", "verify"):
+        if args.workspace:
+            os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
+        from .core.workspace import glyph_db_path
+        db = Path(args.db) if args.db else Path(glyph_db_path())
+        if args.action == "verify":
+            evs = None
+            if args.events:
+                evs = [json.loads(ln) for f in args.events for ln in open(f, encoding="utf-8") if ln.strip()]
+            res = ck.verify_glyph_db(db, cm, evs)
+            _out({"db": str(db), "map": cm.source, **res})
+            sys.exit(0 if res["ok"] else 1)
+        if args.rev is None:
+            print("✗ 要给 --rev 旧页表 rev（停放 id 用）", file=sys.stderr)
+            sys.exit(2)
+        res = ck.rekey_glyph_db(db, cm, args.rev, dry_run=args.dry_run)
+        if args.table:
+            ck.write_glyph_table(res["rows"], args.table)
+        _out({"db": str(db), "map": cm.source, "dry_run": args.dry_run, **cm.counts(), **res["summary"]})
+        return
+    if not args.files:
+        print("✗ 要给要改的文件", file=sys.stderr)
+        sys.exit(2)
+    out = []
+    for f in args.files:
+        if args.action == "json":
+            out.append(ck.rekey_json(f, cm))
+        elif args.action == "jsonl":
+            out.append(ck.rekey_jsonl(f, cm, fields=tuple(args.field or ("id", "key"))))
+        else:
+            if args.rev is None:
+                print("✗ 要给 --rev 旧页表 rev（停放 id 用）", file=sys.stderr)
+                sys.exit(2)
+            out.append(ck.rekey_ids_bank(f, cm, args.rev))
+    _out({"map": cm.source, "files": out})
+
+
 def cmd_promote(args) -> None:
     """升格候选（共享方案 S7，先做语料部分）：只读、只出清单。"""
     from .ops.promote import mine_corpus
@@ -2882,6 +2989,7 @@ COMMANDS_V2 = {
     "pipeline": cmd_pipeline,
     "step": cmd_step,
     "status": cmd_status,
+    "book": cmd_book,
     "close-check": cmd_close_check,
     "exit-check": cmd_exit_check,
     "export": cmd_export,
@@ -2903,6 +3011,7 @@ COMMANDS_V2 = {
     "variants": cmd_variants,
     "corpus": cmd_corpus,
     "glyphlib": cmd_glyphlib,
+    "rekey-cells": cmd_rekey_cells,
     "promote": cmd_promote,
     "collate": cmd_collate,
     "progress": cmd_progress,
@@ -3002,6 +3111,13 @@ def install_workspace_option(sub: argparse._SubParsersAction) -> None:
 
 
 # ── parsers ──────────────────────────────────────────────────────────
+def _add_override(p: argparse.ArgumentParser) -> None:
+    p.add_argument("--override", default=None, metavar="JSON",
+                   help='运行覆盖：一段册配置片段（内存里叠在册 yaml 上，不改任何文件、不推库），如 '
+                        '{"corpus": 23, "params": {"seed_admit": {"shadow_veto": false}}}；'
+                        "生效值记进产物 manifest。详见 doc/design/册配置分层与运行覆盖.md")
+
+
 def _add_pages(p: argparse.ArgumentParser) -> None:
     import os
     p.add_argument("--pages", default="dev_set",
@@ -3009,6 +3125,7 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
     p.add_argument("--force", action="store_true", help="无视指纹，强制重跑")
     p.add_argument("--stop-on-error", action="store_true", help="一页失败就停")
     p.add_argument("--params", default=None, help='参数覆盖 JSON，如 {"column_gate": {"width_tol": 0.2}}')
+    _add_override(p)
     p.add_argument("--json", action="store_true", help="结束时打印 JSON 报告")
     p.add_argument("--wait", action="store_true",
                    help="这本书正有别的跑批在写时排队等它跑完（默认直接报持有者并退出，退出码 3）")
@@ -3274,6 +3391,16 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
     p.add_argument("--pages", default="dev_set")
     p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+    p = sub.add_parser("book", help="[v2] 册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
+    p.add_argument("action", choices=["show", "split"])
+    p.add_argument("book", nargs="?", default=None, help="show：册号")
+    p.add_argument("--books", default=None, help="split：册号清单，逗号分隔或 vol51-vol99 区间")
+    p.add_argument("--apply", action="store_true", help="split：真写（缺省只干跑，列计划）")
+    p.add_argument("--effective", action="store_true", help="show：打印合并后的完整配置并标注来源层")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
 
     p = sub.add_parser("close-check",
                        help="[v2] 一册书交付前逐项体检（只读）：新鲜、缓存、待审、收尾闸、真源已提交、lines/pages 自洽、Step9")
@@ -3604,6 +3731,20 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--note", default="", help="写进升格记录的备注")
     p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
 
+    p = sub.add_parser("rekey-cells", help="[v2] 换图源后按格级对照表改键：字形库、L2 表、金标/回放集、模板库出处（GUJI-748）")
+    p.add_argument("action", choices=["glyph-db", "verify", "json", "jsonl", "ids-bank"],
+                   help="glyph-db 改 glyph.db 实例 id；verify 核对改键后的库；json L2 表等按格当键的 JSON；"
+                        "jsonl 金标/回放集；ids-bank IDS 模板库出处")
+    p.add_argument("--map", required=True, help="格级对照表 old_new_cells/<册>.tsv[.gz]")
+    p.add_argument("files", nargs="*", help="json／jsonl／ids-bank：要改的文件（原地改）")
+    p.add_argument("-w", "--workspace", default=None, help="glyph-db／verify：工作区（取它的 glyph.db）")
+    p.add_argument("--db", default=None, help="glyph-db／verify：直接给 glyph.db 路径")
+    p.add_argument("--rev", default=None, help="旧页表 rev，停放 id 写成 <前缀>~r<rev>~册~页~列~格")
+    p.add_argument("--dry-run", action="store_true", help="glyph-db：只推演不写")
+    p.add_argument("--table", default=None, help="glyph-db：逐实例改键表写到这个 tsv")
+    p.add_argument("--events", nargs="*", default=None, help="verify：迁移事件 jsonl，逐格核对字形")
+    p.add_argument("--field", action="append", default=None, help="jsonl：格键所在字段（可多次，缺省 id、key）")
+
     p = sub.add_parser("promote", help="[v2] 升格候选：mine 从本书人裁挖形近对、异体对（只读，出清单待人审）")
     p.add_argument("action", choices=["mine"])
     p.add_argument("-w", "--workspace", default=None, help="书的工作区（已迁到中心库、已 db pull）")
@@ -3687,6 +3828,8 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)
     args = parser.parse_args(argv)
+    if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
+        os.environ["GUJI_BOOK_OVERRIDE"] = args.override
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()
