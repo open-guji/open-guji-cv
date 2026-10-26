@@ -59,7 +59,11 @@ class FlowSpec:
     - `ref_top_enter`：库 top1 在组里、整理本字（现役对位缺格时用坐标对位字）也在组里（按书级码位归一）→ 分差内有组外候选也进入。
       码位归一组用（2026-10-26，A24 全册任务 04）：两码位归同一字，整理本×库首位一致就是要放的字（同 `match_ref` 的文本×形状互证，
       只是库 cov 不到 0.98、整理本只有坐标对位）；繁复字库形常把一串组外字排在分差内（夔 后紧咬 囊蘗𮑮聽臺…，類 后 頗頻顚…），
-      逐个登记陪衬登记不完。没有整理本字的格不走这条。"""
+      逐个登记陪衬登记不完。没有整理本字的格不走这条。
+    - `ctx_over`：文意够硬（L1 规则或 L2 表 strong）时，这几个字形方法给了别的字只算弱票，补放、复核都照文意
+      （其余方法须不反对）。入人八（A24 10-26）：殿本 入 多刻成两笔分开，整字 HOG 常把 入 判成 八；「不看上下文无法判」。
+    - `lift_img_ref_veto`：补放时文意没给这个字（只有字形方法给字）、整理本又是组里另一个字 → 留人审（`group_flow_ref_dissent`）。
+      入人八（A24 10-26）：文意查表落空时整字 HOG 单独把整理本的 入 补成了 八（vol12:147:2:17「分其半入禮器」）。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -79,6 +83,8 @@ class FlowSpec:
     ref_enter: bool = False
     tolerate_ref_agree: bool = False
     ref_top_enter: bool = False
+    ctx_over: tuple = ()
+    lift_img_ref_veto: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -207,8 +213,9 @@ GROUPS: dict[str, GroupSpec] = {
         id="rr", name="入人八", members=frozenset("人入八"),
         backends=("image",),
         kind="near_form", solvers=("ctx_l1", "ctx_l2", "image"), config_dir="config/groups/rr",
-        flow=FlowSpec((CTX, RR_IMG, *_g2("rr")), review=True, lift_needs=("ctx", "ids"), review_weak=("rr_img",)),
-        note="文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审（随机森林是弱票：别的路都支持放行字时它单独反对不降）。"),
+        flow=FlowSpec((CTX, RR_IMG, *_g2("rr")), review=True, lift_needs=("ctx", "ids"), review_weak=("rr_img",),
+                      ctx_over=("rr_img", "ids"), lift_img_ref_veto=True, review_fix_strong=True),
+        note="文意＋字形分类器＋整字 HOG（上半）；补放要文意或整字 HOG 给字且各路不冲突（随机森林分类器不单独补放），复核时任一路给了别的字就降审（随机森林是弱票：别的路都支持放行字时它单独反对不降）。文意 strong 或 L1 规则时两路字形都只算弱票，复核可照 strong 文意改字；文意没给字时字形不许拗整理本补放（A24 10-26）。"),
     # —— 上下文线（cv#118）：按文意定；土士、未末另加量横（文意弃权才用量横，两路不一致送审） ——
     "wxs": GroupSpec(
         id="wxs", name="戊戌戍", members=frozenset("戊戌戍"),
