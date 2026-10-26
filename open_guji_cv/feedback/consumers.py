@@ -314,6 +314,12 @@ def _occluded_lookup(book: str, page: int):
         return set()
 
 
+def _migrated(e: Event) -> bool:
+    """换图源时由旧事件迁来的副本（锚里记了 `migrated_from`）。"""
+    a = e.target.anchor
+    return isinstance(a, dict) and bool(a.get("migrated_from"))
+
+
 def glyphdb_admit(events, db_path: str | None = None,
                   dry_run: bool = False, binarize: bool = True,
                   occluded_of=None, bindings_of=None, ts_of=None, **kw) -> ConsumeResult:
@@ -367,6 +373,9 @@ def glyphdb_admit(events, db_path: str | None = None,
     命名空间；将来要合并得先做真正的重键（阶段 B2），不是靠巧合对齐。
     """
     res = ConsumeResult("glyphdb_admit", n_events=len(events))
+    # 换图源迁过来的人裁（锚带 `migrated_from`，doc/design/殿本换图源-siku-qiefen-v2.md）不进库也不撤票：
+    # 同一条人裁当初的原事件已经进过库，再进一次就重复了，`human_verdicts_fingerprint` 也会跟着变。
+    events = [(e, d) for e, d in events if not _migrated(e)]
     # 撤票（2026-10-26）：同一格人裁过几次以最后一次为准——后来判切坏／非字／破损的，库里更早的人裁刻例要撤。
     withdraws = [(e, d) for e, d in events
                  if (e.kind == "not_a_char" or (e.kind == "confirm" and e.payload.get("v") in _WITHDRAW_V))

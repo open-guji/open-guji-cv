@@ -82,7 +82,10 @@ def cmd_pull(args) -> None:
         os.environ["GUJI_WORKSPACE"] = str(Path(args.workspace).expanduser().resolve())
     src = _src()
     book_id, vol = (args.book_id, S.norm_vol(args.vol)) if args.book_id else S.resolve(src, _ws_id(), args.book)
-    table = S.read_table(src, book_id, vol, args.rev)
+    rev = args.rev
+    if rev is None and args.book:
+        rev = load_book(args.book).source_rev          # 册 yaml 钉了页表版就按钉取
+    table = S.read_table(src, book_id, vol, rev)
     if args.to:
         to = Path(args.to)
         dest = lambda page: to / f"{page}.png"   # noqa: E731
@@ -284,7 +287,8 @@ def cmd_register(args) -> None:
                                     ops_of_page={int(k): v.get("ops", []) for k, v in m.items()})
     _expect(pages, args.expect, args.expect_skip)
     table = S.new_table(args.book_id, vol, ws=args.ws, book=args.book, sources=sources, pages=pages,
-                        encoding="as-is", page_numbering="keep" if args.keep_numbering else None)
+                        encoding="as-is", page_numbering="keep" if args.keep_numbering else None,
+                        status="staged" if args.staged else "final")
     if table["page_numbering"] is None:
         del table["page_numbering"]
     _finish(src, args, table, blobs, args.why)
@@ -328,6 +332,8 @@ def add_parser(sub) -> None:
     p.add_argument("--map", default=None, help="register：{cv 页号: {seq, src, ops}} 的 json")
     p.add_argument("--pattern", default="{page}.png", help="register：原图文件名")
     p.add_argument("--keep-numbering", action="store_true", help="register：cv 页号不连续时照留")
+    p.add_argument("--staged", action="store_true",
+                   help="register：发预发版（status=staged），不钉 rev 的 pull 不取它；换图源先发预发、册 yaml 钉 source_rev 再切")
     p.add_argument("--cache", default=None, help="源件下载缓存目录，缺省 ~/.cache/guji-source")
     p.add_argument("--why", default="", help="写：为什么（进页表）")
     p.add_argument("--by", default=None, help="写：谁（缺省 GUJI_ACTOR）")
