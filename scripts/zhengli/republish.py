@@ -154,19 +154,18 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
     latest, dropped = latest_votes(votes, text_id, rev)
     held = set(held or ())
     last: dict[str, float] = {}                 # 格 → 最晚一条定字人裁的时刻（秒）
-    for f in sorted((data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
+    from open_guji_cv.core.event_files import RevGate, iter_event_dicts
+    gate = RevGate(books_dir=data_dir(ws) / "books")      # 换图源：切过的册只认锚里页表 rev 相符的
+    for e in iter_event_dicts(data_dir(ws) / "feedback" / "events", gate=gate):
+        c = cell_of(e, book) if deciding(e) else None
+        if c:
             try:
-                e = json.loads(line)
+                t = dt.datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")).timestamp()
             except ValueError:
-                continue
-            c = cell_of(e, book) if deciding(e) else None
-            if c:
-                try:
-                    t = dt.datetime.fromisoformat(str(e.get("ts")).replace("Z", "+00:00")).timestamp()
-                except ValueError:
-                    t = 0.0
-                last[c] = max(last.get(c, 0.0), t)
+                t = 0.0
+            last[c] = max(last.get(c, 0.0), t)
+    if gate.note():
+        print(f"  ⓘ {gate.note()}", file=sys.stderr)
     rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
     for v in latest:
         a, ts = v["a"], float(v.get("ts") or 0)

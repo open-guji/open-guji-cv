@@ -189,7 +189,9 @@ def _seg_flags(book: str) -> dict:
     from ...feedback.collate_state import seg_flags
     log = deps.event_log()
     d = log.events_dir
-    sig = tuple(sorted((f.name, f.stat().st_mtime) for f in d.glob("*.jsonl"))) if d.exists() else ()
+    from ...core.event_files import book_source_rev, sibling_books_dir
+    sig = (tuple(sorted((f.name, f.stat().st_mtime) for f in d.glob("*.jsonl"))) if d.exists() else (),
+           book_source_rev(book, sibling_books_dir(d)))      # 册刚换图源：判据变了，缓存作废
     hit = _SEG_CACHE.get(book)
     if hit and hit[0] == sig:
         return hit[1]

@@ -516,9 +516,13 @@ def human_chars(book: str, log=None, stale: dict[str, str] | None = None,
         # 按**时间**后到覆盖，不按批次名：Step8 复核（`<book>-collate`）改的字要压过更早的
         # Step7 定字，而批次名排序下 `bxgb-list-…-decide` 排在 `bxgb-collate` 后面，
         # 会把复核改好的字盖回去（2026-09-24）。同一秒内再按批次/seq 定序。
-        evs = sorted(iter_events_readonly(log or EventLog()), key=lambda e: (e.ts, e.batch, e.seq))
+        _log = log or EventLog()
+        evs = sorted(iter_events_readonly(_log), key=lambda e: (e.ts, e.batch, e.seq))
     except FileNotFoundError:
         return out
+    gone = sum(n for d in (getattr(_log, "dropped", None) or {}).values() for b, n in d.items() if b == book)
+    if gone:                  # 换图源：旧页号的事件不采信，要看得见（GUJI-748 §六）
+        _logger.warning("human_chars(%s)：%d 条事件锚里页表 rev 与册 yaml 的 source_rev 不符，不采信", book, gone)
     superseded: set[str] = set()
     no_patch: list[str] = []
     if bind:

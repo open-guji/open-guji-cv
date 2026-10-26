@@ -136,19 +136,13 @@ def review_count(events_dir: Path, book: str, since: str, expect: list[str] | No
     报：事件数、涉及字位数、按裁决类别计数、同一字位裁了多次的、**没带锚点的**（锚点缺了，
     切分一变这条裁决就失效，#403 的教训）；给了 `expect`（请审单上的字位）再报漏审与单外多审。
     """
+    from ..core.event_files import iter_event_records
     evs = []
-    for f in sorted(events_dir.glob("*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            try:
-                e = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            t = e.get("target") or {}
-            if t.get("book") != book or (e.get("ts") or "") < since or e.get("actor") not in ("user", None):
-                continue
-            evs.append((f.name, e))
+    for f, e in iter_event_records(Path(events_dir)):
+        t = e.get("target") or {}
+        if t.get("book") != book or (e.get("ts") or "") < since or e.get("actor") not in ("user", None):
+            continue
+        evs.append((f.name, e))
     keys = Counter((e.get("target") or {}).get("key") for _, e in evs)
     kinds = Counter(((e.get("payload") or {}).get("v") or e.get("kind")) for _, e in evs)
     no_anchor = sorted({(e.get("target") or {}).get("key") for _, e in evs if not (e.get("target") or {}).get("anchor")})

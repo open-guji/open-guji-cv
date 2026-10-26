@@ -487,6 +487,11 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
     if sc.ws != st.get("ws"):
         raise SystemExit(f"数据目录记的工作区是 {st.get('ws')}，workspace.yaml 写的是 {sc.ws}")
     local_paths = {r.src_path for r in sc.rows}
+    # 换图源（GUJI-748 §六）：切过图源的册（册 yaml 有 source_rev），锚里页表 rev 不符的**新**事件拒收
+    from ..core.event_files import RevGate
+    rgate = RevGate(books_dir=data / "books")
+    stale_ev = {r.key[1]: r.src_path for r in sc.rows
+                if r.tbl == "events" and not rgate.admits(r.cols.get("kind"), r.cols.get("target") or {})}
     if not creating and not shared_writer:
         from ..core.corpus_pin import push_problems
         problems = push_problems(ws_dir)
@@ -508,6 +513,14 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         cur.execute("SELECT 1 FROM changes WHERE ws = %s AND rev > %s LIMIT 1", (sc.ws, base))
         if cur.fetchone():
             raise StaleBase(f"工作区 {sc.ws} 在 rev {base} 之后已有别人写入；先 guji db pull 再推")
+        if stale_ev:                                           # 库里已有的旧事件照留，只拦这次新推的
+            cur.execute("SELECT id FROM events WHERE ws = %s AND id = ANY(%s)", (sc.ws, list(stale_ev)))
+            new = sorted(set(stale_ev) - {r[0] for r in cur.fetchall()})
+            if new:
+                raise SystemExit(f"{len(new)} 条新事件指向已换图源的册，锚里页表 rev 与册 yaml 的 source_rev 不符，"
+                                 f"中心库拒收（{rgate.note()}）。如 {new[:3]}（{stale_ev[new[0]]}）。"
+                                 f"旧页号的裁决请用 `guji cellvotes migrate` 按格级对照表迁移后再推，"
+                                 f"或从本地事件文件里删掉这几条")
         if not creating and not shared_writer:                 # 已发布的语料库、字形库版本不可改（用户 10-20；GUJI-727）
             cur.execute("SELECT src_path, sha256 FROM files WHERE ws = %s "
                         "AND (src_path LIKE 'config/corpus-pack/v%%/manifest.json' "

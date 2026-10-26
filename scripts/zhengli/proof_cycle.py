@@ -363,16 +363,17 @@ def human_chars_of(ws: Path, book: str) -> dict[str, str]:
     """每格最新一条定字人裁的字（{格位: 字}；无字＝""）。读数据目录事件，口径同 pending_route.deciding。"""
     from pending_route import cell_of, deciding
     last: dict[str, tuple[str, str]] = {}
-    for f in sorted((rp.data_dir(ws) / "feedback" / "events").glob("*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            k = deciding(e)
-            c = cell_of(e, book) if k else None
-            if c and str(e.get("ts", "")) >= last.get(c, ("", ""))[0]:
-                last[c] = (str(e.get("ts", "")), (e.get("payload") or {}).get("shape") or "")
+    if str(rp.CV) not in sys.path:
+        sys.path.insert(0, str(rp.CV))
+    from open_guji_cv.core.event_files import RevGate, iter_event_dicts
+    gate = RevGate(books_dir=rp.data_dir(ws) / "books")   # 换图源：切过的册只认锚里页表 rev 相符的
+    for e in iter_event_dicts(rp.data_dir(ws) / "feedback" / "events", gate=gate):
+        k = deciding(e)
+        c = cell_of(e, book) if k else None
+        if c and str(e.get("ts", "")) >= last.get(c, ("", ""))[0]:
+            last[c] = (str(e.get("ts", "")), (e.get("payload") or {}).get("shape") or "")
+    if gate.note():
+        print(f"  ⓘ {gate.note()}", file=sys.stderr)
     return {c: ch for c, (_, ch) in last.items()}
 
 

@@ -15,7 +15,6 @@
 """
 from __future__ import annotations
 
-import glob
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -83,25 +82,22 @@ def load_human_events(spec: dict, books: list[str]) -> list[Label]:
     out: list[Label] = []
     for book in books:
         best: dict[str, tuple] = {}
-        for f in sorted(glob.glob(str(d / "*.jsonl"))):   # H 道批名不带册前缀（H-M7-…），按 target.book 筛
-            batch = Path(f).stem
-            for ln in Path(f).read_text(encoding="utf-8").splitlines():
-                if not ln.strip():
-                    continue
-                r = json.loads(ln)
-                t = r.get("target") or {}
-                if t.get("step") != "seed_admit" or t.get("unit") != "cell" or t.get("book") != book:
-                    continue
-                if r.get("kind") not in ("confirm", "verdict") or r.get("actor") != "user":
-                    continue
-                if (r.get("payload") or {}).get("source") == "vision":
-                    continue
-                key = t.get("key")
-                if not key:
-                    continue
-                rank = (r.get("ts") or "", batch, int(r.get("seq") or 0))
-                if key not in best or rank >= best[key][0]:
-                    best[key] = (rank, r, batch)
+        from ..core.event_files import iter_event_records
+        for f, r in iter_event_records(Path(d)):   # H 道批名不带册前缀（H-M7-…），按 target.book 筛
+            batch = f.stem
+            t = r.get("target") or {}
+            if t.get("step") != "seed_admit" or t.get("unit") != "cell" or t.get("book") != book:
+                continue
+            if r.get("kind") not in ("confirm", "verdict") or r.get("actor") != "user":
+                continue
+            if (r.get("payload") or {}).get("source") == "vision":
+                continue
+            key = t.get("key")
+            if not key:
+                continue
+            rank = (r.get("ts") or "", batch, int(r.get("seq") or 0))
+            if key not in best or rank >= best[key][0]:
+                best[key] = (rank, r, batch)
         for key, (_, r, batch) in sorted(best.items()):
             p = r.get("payload") or {}
             v = p.get("v") or p.get("verdict")

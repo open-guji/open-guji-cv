@@ -49,23 +49,19 @@ def _confirm_batches(events_dir: Path) -> tuple[dict[tuple[str, str], set[str]],
     """人裁事件 → ({(格号, 字): 确认过的批次}, 体检标过异常的实例 id)。"""
     conf: dict[tuple[str, str], set[str]] = defaultdict(set)
     bad: set[str] = set()
-    for f in sorted(Path(events_dir).glob("*.jsonl")):
-        for line in f.read_text(encoding="utf-8").splitlines():
-            try:
-                e = json.loads(line)
-            except ValueError:
-                continue
-            p = e.get("payload") or {}
-            k = (e.get("target") or {}).get("key")
-            kind = e.get("kind")
-            if kind == "confirm" and p.get("v") == "confirm" and p.get("shape"):
-                conf[(k, p["shape"])].add(str(e.get("batch")))
-            elif kind == "cell_review" and p.get("verdict") == "pick" and p.get("picked"):
-                conf[(k, p["picked"])].add(str(e.get("batch")))
-            elif kind == "glyph_audit":
-                iid = p.get("instance_id") or k
-                if iid and (p.get("v") != "ok" or p.get("flags")):
-                    bad.add(str(iid))
+    from ..core.event_files import iter_event_dicts
+    for e in iter_event_dicts(Path(events_dir)):          # 换图源的页表 rev 判据在这里一并生效
+        p = e.get("payload") or {}
+        k = (e.get("target") or {}).get("key")
+        kind = e.get("kind")
+        if kind == "confirm" and p.get("v") == "confirm" and p.get("shape"):
+            conf[(k, p["shape"])].add(str(e.get("batch")))
+        elif kind == "cell_review" and p.get("verdict") == "pick" and p.get("picked"):
+            conf[(k, p["picked"])].add(str(e.get("batch")))
+        elif kind == "glyph_audit":
+            iid = p.get("instance_id") or k
+            if iid and (p.get("v") != "ok" or p.get("flags")):
+                bad.add(str(iid))
     return conf, bad
 
 
