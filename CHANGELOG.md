@@ -9,6 +9,7 @@
 - 任务库看板写不上时不再沉默：原因打到执行方日志并写进 `jobs.worker.note`（`guji job workers` 显示）。
 
 ### Added
+- 字组：新 SHAPE 组 shi 勢𫝑（左上 坴／幸）、fa 發𤼵（右下 殳／矢），标签全是 sheldon 在标注页逐格过的；按册留出门槛 0.5 均 0 错。模板库在 `config/groups/{shi,fa}/ids_bank.json`，册 yaml `group_flow` 不点名就不生效。vol21–50 离线回放：补放 𤼵31 𫝑64 勢3、改码位 發→𤼵 77、勢→𫝑 15。seed_admit 的 `code_hash` 变。
 - 任务库看板：`guji job board`（执行方领单、收尾、心跳时自动写）把在跑、排队、最近结束的任务整理成一张表，写进中心库 `progress.metric`（栏目 `jobs`），网站后台「文本整理 → 重跑任务」显示：配置、状态、阶段、开始时间、已跑多久、预计完成（同类已成功任务耗时中位数）、结果包。不动任何 Step，`code_hash` 不变。
 
 - cellvotes：网站精校页新增 `damaged`（破损、阙字）档，映射成 `confirm v=damaged guess=<字>`（录阙字方框 □，票上带的字当「最像的字」）；页面单选组各项与档的对应写进 web_votes 模块说明。
