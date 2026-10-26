@@ -153,6 +153,23 @@ def test_manifest_records_cv_version(tmp_path, monkeypatch):
     assert eng_mod  # 引用一下，免 lint
 
 
+def test_manifest_records_config_overrides(tmp_path, monkeypatch):
+    """`--override`（环境变量 GUJI_BOOK_OVERRIDE）的原文记进每条 manifest；没覆盖时没有这个键（manifest 不变）。"""
+    monkeypatch.setattr(cvv, "manifest_fields", lambda: {"cv_version": "0.3.0+1", "cv_commit": "c" * 40})
+    monkeypatch.setenv("GUJI_BOOK_OVERRIDE", '{"corpus": 23}')
+    raw = tmp_path / "raw"
+    raw.mkdir()
+    cv2.imwrite(str(raw / "1.png"), np.zeros((20, 20), np.uint8))
+    book = BookSpec(id="tcv2", title="t", raw_dir=raw)
+    sid = "border_detect"
+    eng = Engine(book, Pipeline(id="tcvp2", title="t", steps=[sid]), store=ProductStore(tmp_path / "p"),
+                 cache=ImageCache(tmp_path / "c"), log=lambda s: None)
+    assert eng._cv["config_overrides"] == '{"corpus": 23}'
+    eng.run(steps=[sid], pages=[1])
+    line = tmp_path / "p" / "tcv2" / sid / "_manifest.jsonl"
+    assert Manifest(line).get("p0001").config_overrides == '{"corpus": 23}'
+
+
 # ── CLI 护栏 ──────────────────────────────────────────────────────────
 @pytest.fixture(autouse=True)
 def _no_override_env(monkeypatch):
