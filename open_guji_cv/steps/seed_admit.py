@@ -554,6 +554,18 @@ class SeedAdmitParams(BaseModel):
     """`pua_rules` 的库首位 cov 下限。殿本 9 族 299 格最低 0.89，全是 verdict=unsure、无护栏。"""
     """自动填（R1/R4 开着时）：`references` 证人文件内容戳，证人改了本步要过期
     （`core.step._with_witness_fingerprint`）。"""
+    follow_ref: str = ""
+    """照录整理本的异体对（通道 `follow_ref`，A24 2026-10-26「压低组外异体对送审」）。格式：逗号分隔的 `整理本形=库里另一形`，
+    如 `㓜=幼,劔=劍,勅=敕,盖=蓋`。登记的是**殿本两种刻法都有、整理本码位就是刻形**的对（看图定，库里少见形没刻例或很少，
+    库首位总给常见形）。整理本这一位（坐标对位字，没有时看现役对位字）是表里的整理本形时：
+    - 已放行、非人裁、放行字是表里的另一形 → 字改回整理本形（`evidence.follow_ref`）；殿本 vol02–99 看图 21 格全是整理本形；
+    - 待审格：库首位是这一对里的一形、cov ≥ `follow_ref_cov`、库没判 diff、无护栏，且首位领先对外最好的候选 ≥ `follow_ref_gap`
+      → 放行整理本形。带 `ctx_guard_ref` 的格只在上下文字也是这一对时放。
+    不同义的形近对不进这张表。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。"""
+    follow_ref_cov: float = 0.92
+    """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
+    follow_ref_gap: float = 0.005
+    """`follow_ref` 待审格：库首位领先这一对以外最好候选的下限。"""
 
     codepoint_semantic: bool = True
     """书级 `codepoints:` 并进语义判等（缺省开）：册配置声明过的码位对（巻→卷、别→別、岀→出、晩→晚、內→内 …）
@@ -643,6 +655,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.pua_rules:
             d.pop("pua_rules", None)
             d.pop("pua_rule_cov", None)
+        if isinstance(d, dict) and not self.follow_ref:
+            for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
             d.pop("seal_lib_cov", None)
@@ -1424,6 +1439,11 @@ class SeedAdmitStep(Step):
             d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_pua
             n_review -= d_pua
+        if p.follow_ref:
+            # 5a' follow_ref（升＋改字）：照录整理本的异体对
+            d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap)
+            n_auto += d_fr
+            n_review -= d_fr
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
@@ -1914,6 +1934,77 @@ def _pua_rule_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
                                      "prev_doubts": list(rec.doubts or [])}}
             rec.doubts = ["lane_pua_rule"]
             n += 1
+    return n
+
+
+def _parse_follow_ref(spec: str) -> dict[str, str]:
+    """`follow_ref` → {整理本形: 库里另一形}。纯函数；空项、不是「单字=单字」的项跳过。"""
+    out: dict[str, str] = {}
+    for item in (spec or "").split(","):
+        a, _, b = item.strip().partition("=")
+        a, b = a.strip(), b.strip()
+        if len(a) == 1 and len(b) == 1 and a != b:
+            out[a] = b
+    return out
+
+
+def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict, guard, ctx_char,
+                      rules: dict, cov_min: float, gap_min: float) -> str | None:
+    """`follow_ref` 的判据，纯函数（离线回放与线上共用）。→ "fix"（已放行格改回整理本形）、"admit"（待审格放行整理本形）或 None。"""
+    other = rules.get(ref) if ref else None
+    if other is None or channel == "human":
+        return None
+    if admit:
+        return "fix" if char == other else None
+    ds = set(doubts or [])
+    if "excluded" in ds or "occluded" in ds or ds & _LANE_HARD or ds & _LANE_GARBLE or _hard_blocked(doubts or [], guard):
+        return None
+    if verdict == "diff" or not cands:
+        return None
+    pair = {ref, other}
+    top, cov = cands[0][0], float(cands[0][1])
+    if top not in pair or cov < cov_min:
+        return None
+    rival = max((float(c) for ch, c in cands if ch not in pair), default=0.0)
+    if cov - rival < gap_min:
+        return None
+    if ds & _LANE_REF_REVIEW and ctx_char not in pair:
+        return None
+    return "admit"
+
+
+def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict) -> int:
+    """照录整理本的异体对（`follow_ref`）。→ 新放行格数（改字的格不计数）。判据见 `follow_ref_decide`。"""
+    rules = _parse_follow_ref(p.follow_ref)
+    if not rules:
+        return 0
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.provenance == "human":
+                continue
+            ref = coord.get(rec.id)
+            if not ref:
+                ref = (amap.get(rec.id) or (None,))[0]
+            if ref not in rules:
+                continue
+            m = mmap.get(rec.id)
+            d = dmap.get(rec.id)
+            act = follow_ref_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
+                                    cands=list(m.candidates or []) if m else [], verdict=getattr(m, "verdict", None),
+                                    guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=rules,
+                                    cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap)
+            if act == "fix":
+                rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref}}
+                rec.char = ref
+            elif act == "admit":
+                top, cov = m.candidates[0][0], float(m.candidates[0][1])
+                rec.admit, rec.channel, rec.provenance, rec.char = True, "follow_ref", "match", ref
+                rec.evidence = {**(rec.evidence or {}),
+                                "lane": {"lane": "follow_ref", "lib": top, "cov": round(cov, 4), "ref": ref,
+                                         "prev_doubts": list(rec.doubts or [])}}
+                rec.doubts = ["lane_follow_ref"]
+                n += 1
     return n
 
 
