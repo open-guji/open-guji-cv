@@ -260,6 +260,8 @@ class Job:
             args.append("--force")
         if sp.get("params"):
             args += ["--params", json.dumps(sp["params"], ensure_ascii=False)]
+        if sp.get("book_overrides"):      # 册级覆盖在内存里叠（corpus／glyph_pin 准备时另已改本机册 yaml，供钉子账用，值一致）
+            args += ["--override", json.dumps(sp["book_overrides"], ensure_ascii=False)]
         out = self.guji(*args)
         lines = [ln for ln in out.strip().splitlines() if not re.match(r"^\s*\S+ p\d+: 完成", ln)]
         tail = "\n".join(lines[-20:])

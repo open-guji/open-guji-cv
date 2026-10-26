@@ -50,6 +50,7 @@ def fill(p: argparse.ArgumentParser) -> None:
     s.add_argument("--human-chars", type=int, default=None, help="开跑前人裁格数必须等于它")
     s.add_argument("--env", action="append", default=[], help="K=V，只收 GUJI_ 开头")
     s.add_argument("--params", default=None, help="guji pipeline --params 的 JSON")
+    s.add_argument("--override", default=None, help='册配置片段 JSON（写进 book_overrides，运行时叠在册 yaml 上，不改文件不推库），如 \'{"cv_version":"0.5.21","corpus":23}\'')
     s.add_argument("--compare-to", default=None, help="main｜包标签｜job:<号>")
     s.add_argument("--change", default=None, help="存包改动名（缺省 job<号>）")
     s.add_argument("--note", default=None)
@@ -120,6 +121,8 @@ def _spec_from_args(a) -> dict:
     ov = {k: v for k, v in (("corpus", a.corpus), ("glyph_pin", a.glyph_pin)) if v is not None}
     if ov:
         raw["book_overrides"] = {**raw.get("book_overrides", {}), **ov}
+    if getattr(a, "override", None):
+        raw["book_overrides"] = {**raw.get("book_overrides", {}), **json.loads(a.override)}
     if a.human_chars is not None:
         raw["checks"] = {**raw.get("checks", {}), "human_chars": a.human_chars}
     if a.env:

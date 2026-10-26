@@ -104,3 +104,23 @@ def test_explicit_param_false_beats_book_true():
     got = _with_book_params(P(shadow_veto=False), S, Ctx)
     assert got.shadow_veto is False and got.x == 5      # 显式的 false 不被改回；没传的 x 仍取册值
     assert _with_book_params(P(), S, Ctx).shadow_veto is True   # 没显式传：册值生效（行为同以前）
+
+
+def test_split_roundtrip(ws):
+    """拆分：共用部分进基础配置，各册只留不同的；合并结果与拆前逐字段相等。"""
+    from open_guji_cv.core.book_split import SplitError, split
+    common = {"cv_version": "0.5.21", "corpus": 23, "expected_cols": 9,
+              "params": {"seed_admit": {"shadow_veto": True, "x": 1}}}
+    for i in (1, 2, 3):
+        doc = {"id": f"v{i}", "title": f"t{i}", "raw_dir": f"raw/{i}", "dev_set": [], **common}
+        if i == 3:
+            doc["params"] = {"seed_admit": {"shadow_veto": True, "x": 2}}      # 一册单独调参
+        _w(ws, f"v{i}.yaml", doc)
+    res = split(ws / "books", ["v1", "v2", "v3"])
+    base = yaml.safe_load(res["base"])
+    assert base["cv_version"] == "0.5.21" and "id" not in base and "raw_dir" not in base
+    assert base["params"]["seed_admit"] == {"shadow_veto": True}                # x 不共用，留在各册
+    assert yaml.safe_load(res["books"]["v3"])["params"]["seed_admit"] == {"x": 2}
+    assert yaml.safe_load(res["books"]["v1"])["params"]["seed_admit"] == {"x": 1}
+    with pytest.raises(SplitError):
+        split(ws / "books", ["v1"])

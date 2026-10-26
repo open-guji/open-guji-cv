@@ -465,7 +465,50 @@ def cmd_step(args) -> None:
     cmd_pipeline(args)
 
 
+def _expand_books(spec: str) -> list[str]:
+    import re
+    out: list[str] = []
+    for part in spec.split(","):
+        part = part.strip()
+        m = re.fullmatch(r"([A-Za-z]+)(\d+)-(?:\1)?(\d+)", part)
+        if m:
+            w = len(m.group(2))
+            out += [f"{m.group(1)}{i:0{w}d}" for i in range(int(m.group(2)), int(m.group(3)) + 1)]
+        elif part:
+            out.append(part)
+    return out
+
+
+def _cmd_book_split(args) -> None:
+    from .core.book import _book_yaml_path
+    from .core.book_config import defaults_path
+    from .core.book_split import SplitError, split, write_split
+    if not args.books:
+        print("✗ split 要 --books vol51-vol99（或逗号清单）", file=sys.stderr); sys.exit(2)
+    ids = _expand_books(args.books)
+    books_dir = _book_yaml_path(ids[0]).parent
+    try:
+        res = split(books_dir, ids, header="# 殿本共用配置（工作区基础配置）。各册 yaml 只写自己不同的部分；设计见 cv doc/design/册配置分层与运行覆盖.md\n")
+    except SplitError as e:
+        print(f"✗ {e}", file=sys.stderr); sys.exit(1)
+    base_path = defaults_path(books_dir / f"{ids[0]}.yaml")
+    n = len(res["base"].splitlines())
+    print(f"共 {len(ids)} 册；基础配置 {n} 行 → {base_path}；强校验通过（每册合并结果与拆前逐字段相等）")
+    for b in ids[:3] + (["…"] if len(ids) > 3 else []):
+        if b != "…":
+            print(f"  {b}: {res['lines_before'][b]} 行 → {res['lines_after'][b]} 行")
+    if not args.apply:
+        print("（干跑，没写。加 --apply 才写本机数据目录；之后 `guji db push` 推库）")
+        return
+    write_split(books_dir, res, base_path)
+    print("已写本机数据目录。推库：guji db push -w <工作区>")
+
+
 def cmd_book(args) -> None:
+    if args.action == "split":
+        return _cmd_book_split(args)
+    if not args.book:
+        print("✗ show 要册号", file=sys.stderr); sys.exit(2)
     from .core.book import _book_yaml_path
     from .core.book_config import effective_book_dict, provenance
     path = _book_yaml_path(args.book)
@@ -3306,9 +3349,11 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
-    p = sub.add_parser("book", help="[v2] 册配置：show 看合并后的生效配置与各字段来自哪一层")
-    p.add_argument("action", choices=["show"])
-    p.add_argument("book")
+    p = sub.add_parser("book", help="[v2] 册配置：show 看合并后的生效配置与来源层；split 把一组册相同的部分抽成基础配置")
+    p.add_argument("action", choices=["show", "split"])
+    p.add_argument("book", nargs="?", default=None, help="show：册号")
+    p.add_argument("--books", default=None, help="split：册号清单，逗号分隔或 vol51-vol99 区间")
+    p.add_argument("--apply", action="store_true", help="split：真写（缺省只干跑，列计划）")
     p.add_argument("--effective", action="store_true", help="show：打印合并后的完整配置并标注来源层")
     p.add_argument("--json", action="store_true")
     _add_override(p)
