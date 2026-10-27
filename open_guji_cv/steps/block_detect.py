@@ -49,7 +49,7 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.3", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.4", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
@@ -133,6 +133,7 @@ class BlockDetectStep(Step):
                                cols_hint=leaf(i, "cols", hint.cols_for) if hint else None,
                                pitch_hint=leaf(i, "pitch", hint.pitch_for) if hint else None,
                                ruled=bool(leaf(i, "ruled", hint.ruled_for)) if hint else False,
+                               align=hint.align_for(i) if hint else None,
                                vrules=sorted(x_tl_to_tr(x, W) for x in b.vrules))
                       for i, b in enumerate(blocks)]
         return {"layout_blocks": out}

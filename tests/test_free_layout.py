@@ -318,3 +318,30 @@ def test_ruled_flag_in_hints():
     assert h[99].kind_for(1) == "text" and h[99].ruled_for(1) and not h[99].ruled_for(0)
     with pytest.raises(ValueError):
         parse_layout_hints({"99": {"blocks": [{"kind": "table"}]}})
+
+
+def test_align_blocks_share_grid_and_ends_hug_block(tmp_path):
+    """人标 align 同组的上下两块共用一套列线；网格两端就是块边（不留窄条）。"""
+    img, _ = synth_free_page()
+    book = make_book("tfree", pipeline="keben_free",
+                     layout_hints={"1": {"pitch": 130, "cols": 10, "align": [[1, 2]]}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    out = run_steps(ctx, 1, ["block_detect", "column_trace"])
+    lb, fc = out["layout_blocks"], out["free_columns"]
+    assert [b.align for b in lb.blocks] == [1, 1]
+    assert [b.n_source for b in fc.blocks] == ["align", "align"]
+    top = [c for c in fc.columns if c.block == 1]
+    bot = [c for c in fc.columns if c.block == 2]
+    for a, b in zip(top, bot):
+        assert abs(a.right[-1] - b.right[0]) <= 1 and abs(a.left[-1] - b.left[0]) <= 1
+    for blk, cols in ((lb.blocks[0], top), (lb.blocks[1], bot)):
+        x0, _, x1, _ = blk.box                       # 右上原点：x0 是右沿
+        assert abs(cols[0].right[0] - x0) <= 1 and abs(cols[-1].left[0] - x1) <= 1
+
+
+def test_align_in_hints():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    h = parse_layout_hints({"10-16": {"align": [[1, 2, 3]]}, "15-16": {"align": [[2, 3]]}})
+    assert h[10].align_for(0) == 1 and h[15].align_for(0) is None and h[15].align_for(2) == 1
+    with pytest.raises(ValueError):
+        parse_layout_hints({"9": {"align": [1, 3]}})

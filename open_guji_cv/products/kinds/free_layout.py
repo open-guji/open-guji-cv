@@ -36,6 +36,7 @@ class BlockRec(BaseModel):
     pitch_hint: float | None = None  # 人标的列距先验（px）
     vrules: list[float] = Field(default_factory=list)   # 块内竖线 x_tr（块中线高度处）
     ruled: bool = False             # 人标：有界栏但列宽不齐的正文（列宽放宽、列里按横界栏断开）
+    align: int | None = None        # 人标：列线对齐组号（同组的块共用一套列线）
 
 
 class LayoutBlocks(BaseModel):
