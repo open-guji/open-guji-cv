@@ -79,7 +79,12 @@ class FlowSpec:
       配 `strong_over_ref` 可越过整理本补放）；0＝不用。木本（A24 2026-10-27）：「採進本」「家藏本」夹注小字刻形是本，
       字形库木本分不开（木 1.00 本 0.99），match_solo／match_ref 放成木；全册 113 格送审看图，两条以上规则同说本的 0 错。
     - `review_fix_ref_rule`：复核时 L1 规则给的字与整理本字（现役对位缺格时用坐标对位字，按码位归一）相同、方法之间一致 → 照 `review_fix` 改字
-      （文本两路互证压过库形）；只有一条规则、整理本又不同意时照常降审。木本同上（「王楙所見本」「古本」整理本作本、库放木）。"""
+      （文本两路互证压过库形）；只有一条规则、整理本又不同意时照常降审。木本同上（「王楙所見本」「古本」整理本作本、库放木）。
+    - `solo_margin`：补放时整理本没有证人——现役对位缺、坐标对位也缺或是 `〓`（逐列本缺字占位）——只凭字形方法补放，
+      且给字方法每一段的 margin 都要 ≥ 这个值（`ids` 留痕的 `margins`），不到留人审（`group_flow_solo_weak`）；声明了它的组，
+      坐标对位字是 `〓` 不再当「组外字」拦（`coord_dissent`）。0＝不用（`〓` 照旧拦）。
+      彝（A24 2026-10-26）：整理本缺字的格逐列本写 〓，80/90 格 U-Net 三段读作 彐米分大（𢑱）；整理本有字的 651 格里，
+      与整理本对不上、看图能定的段全是整理本记的码位不跟刻形，唯一字形错例（vol45:59:4:20 下段 大 读成 廾）margin 0.16 → 取 0.3。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -107,6 +112,7 @@ class FlowSpec:
     review_fix_ref_rule: bool = False
     ref_canon: bool = False
     review_ref_agree: bool = False
+    solo_margin: float = 0.0
 
     @property
     def solvers(self) -> tuple:
@@ -321,7 +327,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
-        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞"), **_rv("yi_560")),
+        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞彚"), solo_margin=0.3,
+                     review_fix_margin=0.3, **_rv("yi_560")),
         note="异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。"
              "只在 seed_admit.group_flow 点名时生效。"),
     # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。
