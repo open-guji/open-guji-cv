@@ -47,9 +47,20 @@ from pathlib import Path
 KEY_REV, KEY_CV_VERSION, KEY_CV_COMMIT, KEY_CELLS = "rev", "cv_version", "cv_commit", "cells"
 KEY_CELL, KEY_STATUS = "cell", "review"  # book-text F-OV-07（#148）
 STATUS_PENDING = "pending"
+#: 产物所依页表的 rev（产物目录 `_source.json`，`products.store.ProductStore.source_rev` 同口径）；产物没带来历就不写。
+KEY_SOURCE_REV = "source_rev"
 
 #: 本仓根（scripts/zhengli/ 上两级）：--cv-root 的缺省值（GUJI-652 迁入后）。
 CV_ROOT = Path(__file__).resolve().parents[2]
+
+
+def products_source_rev(products: Path, book: str) -> int | None:
+    """本册产物出自哪一版页表（`<产物根>/<册>/_source.json` 的 rev）；没有、读不了 → None。"""
+    try:
+        rev = json.loads((Path(products) / book / "_source.json").read_text(encoding="utf-8")).get("rev")
+        return None if rev is None else int(rev)
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
 
 
 def pending_cells(seed_dir: Path, book: str) -> tuple[list[dict], int]:
@@ -199,10 +210,13 @@ def main(argv: list[str] | None = None) -> None:
     for c in cells:                      # 复审字段最后写：卡片里的同名字段不能盖掉它
         if c[KEY_CELL] in recheck:
             c.update({"recheck": True, **recheck[c[KEY_CELL]]})
+    src_rev = products_source_rev(a.products, a.book)
     doc = {
         KEY_REV: a.rev,
         KEY_CV_VERSION: a.cv_version,
         KEY_CV_COMMIT: a.cv_commit,
+        # 换图源（GUJI-748）：单子记下格号是哪一版页表上的，换单门据此认出换源前的旧单；产物没带来历就不写
+        **({KEY_SOURCE_REV: src_rev} if src_rev is not None else {}),
         KEY_CELLS: cells,
     }
     a.out.mkdir(parents=True, exist_ok=True)

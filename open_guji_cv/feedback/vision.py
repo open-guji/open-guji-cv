@@ -33,6 +33,12 @@ S8 / S10 里模型放大字块看图下的结论，以前只写进 md，攒不�
 
 别的键一律报错（防手误拼错键名静默丢字段）。同一格多行按 `ts` 后到覆盖。
 
+**换过图源的册**（册 yaml 有 `source_rev`，GUJI-748）：读口按页表 rev 判据（`core.event_files.RevGate`）只认锚里
+`source_rev` 与册 yaml 相同的看图结论——换源前写的（锚里没有 rev、格号是旧页号）一律不进请审单、不让导出把新格号
+标 `review: pending`、`gold rebuild` 也不重放（每批丢了几条记在 `VisionLog.dropped`）。换源后导入要
+`--source-rev <新页表 rev>`（写进 `anchor.source_rev`），不给就整批拒写；不自动按产物盖 rev，免得旧格号的老文件
+重导一遍就被当成新图上的结论。
+
 **只追加**：批次缺省 `vision-<文件名>`，`seq` = 行号，所以同一文件改完再导一遍，没动的行不重复写；
 想改结论就在文件末尾追加一行新的，别改旧行（改了旧行会按新内容另记一条，旧的留在账上）。
 """
@@ -78,8 +84,9 @@ def default_batch(path: Path) -> str:
 
 
 def parse_jsonl(path: Path, batch: str, judge: str | None = None, ts: str | None = None,
-                book: str | None = None) -> ParseResult:
-    """jsonl → 事件（不落盘）。有一行不合格式就记一条错，合格的照出——调用方决定要不要整批拒收。"""
+                book: str | None = None, source_rev: int | None = None) -> ParseResult:
+    """jsonl → 事件（不落盘）。有一行不合格式就记一条错，合格的照出——调用方决定要不要整批拒收。
+    `source_rev`：这批结论是在哪一版页表的产物上判的，给了就写进每条的 `anchor.source_rev`（换过图源的册要给）。"""
     res = ParseResult()
     lines = Path(path).read_text(encoding="utf-8-sig").splitlines()
     for no, line in enumerate(lines, 1):
@@ -123,7 +130,8 @@ def parse_jsonl(path: Path, batch: str, judge: str | None = None, ts: str | None
             if row.get(k):
                 payload[k] = str(row[k])
         bk, page, col, slot, _sub = pk
-        target = EventTarget(step=_STEP, unit="cell", key=cell, book=bk, page=page, col=col, slot=slot)
+        target = EventTarget(step=_STEP, unit="cell", key=cell, book=bk, page=page, col=col, slot=slot,
+                             anchor=None if source_rev is None else {"source_rev": int(source_rev)})
         res.events.append(make_event(batch, no, "vision_check", target, payload, actor="model",
                                      ts=str(row.get("ts") or "") or ts))
     return res
@@ -131,13 +139,21 @@ def parse_jsonl(path: Path, batch: str, judge: str | None = None, ts: str | None
 
 def import_vision(path: Path, log: VisionLog | None = None, batch: str | None = None,
                   judge: str | None = None, book: str | None = None, gold: bool = True,
-                  gold_store=None, dry_run: bool = False) -> dict:
+                  gold_store=None, dry_run: bool = False, source_rev: int | None = None) -> dict:
     """jsonl → `feedback/vision/` 事件（+ 裁决表 `VISION_SHARD`，`label_origin="vision"`）。
 
-    **有错就整批不写**：一册的看图结论是一份账，写一半等于账对不上。"""
+    **有错就整批不写**：一册的看图结论是一份账，写一半等于账对不上。换过图源的册不给 `source_rev`
+    （或给的与册 yaml 不同）时写入口按页表 rev 判据整批拒写，记进 `errors`。"""
     log = log or VisionLog()
     batch = batch or default_batch(path)
-    pr = parse_jsonl(path, batch, judge, book=book)
+    pr = parse_jsonl(path, batch, judge, book=book, source_rev=source_rev)
+    if not pr.errors:
+        gate = log._rev_gate()
+        stale = [e for e in pr.events if not gate.admits(e.kind, {"book": e.target.book, "page": e.target.page,
+                                                                  "key": e.target.key, "anchor": e.target.anchor})]
+        if stale:
+            pr.errors.append(f"{gate.note()}：{len(stale)} 行（如 {stale[0].target.key}）。这册已换图源、页号重编，"
+                             f"新图上判的结论导入时给 --source-rev <册 yaml 的 source_rev>；旧页号的结论不再导入")
     out = {"file": str(path), "batch": batch, "rows": len(pr.events), "errors": pr.errors,
            "by_v": {v: sum(1 for e in pr.events if e.payload["v"] == v) for v in VERDICTS},
            "path": str(log.batch_path(batch)), "dry_run": dry_run}

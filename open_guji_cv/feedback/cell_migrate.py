@@ -134,6 +134,12 @@ def _lookup(rows: list[Row], book: str, min_iou: float):
     return look
 
 
+def lookup(rows: list[Row], book: str, min_iou: float = MIN_IOU):
+    """`_lookup` 的公开名：旧格键 → (Row, 拒绝理由|None, 说明)。换单门（`republish.votes_gate`）按它把换源前
+    旧单上的票对到新格，口径与迁票一致（表里没有／删／IoU低）。"""
+    return _lookup(rows, book, min_iou)
+
+
 def _label(payload: dict) -> str:
     v = payload.get("v") or ""
     extra = payload.get("shape") or payload.get("reason") or payload.get("quality") or payload.get("guess") or ""
