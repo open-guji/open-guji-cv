@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- Step1 网格模式按界行反推版框（GUJI-748，殿本换源 vol12 p139）：`border_detect` 加参数 `grid_lattice_fallback`（缺省关，不进参数 dump，只管 `column_grid_pages` 点名页）。版框那条线不在候选池里（右版框贴图边被边窗里的界行顶掉、左边带进邻叶版心）时，网格模式原先选不出版框对、退回截断，与自由模式逐条相同只出 8 列；开了改按已探到的细界行拟等距网格、在图内框出 `expected_cols` 列再逐槽验线（`peak_line_search.lattice_frame_pair`，窗口并列就不猜）。p139 开后 9 列各 21 格、159 字、三道闸都过。缺省产物逐字节不变，`steps.border_detect`、`border_geometry`、`peak_line_search` 登记代码等价。
 - 拆分 M1（10-27）：新 `open_guji_cv/api.py`（pipeline 公开面，只转发）、`core/contract.py`（`CONTRACT_VERSION=1`）、`doc/契约.md`；`guji version [--json]`；manifest 条目加可选字段 `contract_version`、`manager_version`（不进指纹，老条目为 None）。19 步 `code_hash` 合前实算与 dev 逐一相同。PATCH。
 - 拆分 M0（10-27）：`tests/test_architecture.py` 给每个包标 pipeline／manager 一侧，新增守卫「pipeline 不许 import manager」（存量 12 条登记）。只改测试与文档，PATCH。
 - 设计文档 `doc/design/拆分-pipeline与manager.md`（10-27）：把 cv 拆成 pipeline 本体和 pipeline manager 的边界、契约与分步迁移方案。只加文档，不动代码，PATCH。

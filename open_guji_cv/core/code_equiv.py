@@ -52,6 +52,10 @@ _HR_1026 = ("抬头框探测加 head_raise_scale（GUJI-748，缺省 1.0 取原�
             "（全册）与 vol07 新图 134 页（全册，缺省尺度下 7 列抬头）上与 origin/dev abeac44 产物逐字节相同；"
             "scripts/code_equiv.py check，2026-10-26")
 
+_GL_1027 = ("网格模式加 grid_lattice_fallback（GUJI-748 vol12 p139，缺省关不传参）：border_detect 在殿本 vol12 新图 152 页"
+            "（全册，yaml 已点名网格页 p79）与 vol07 新图 134 页（全册）、column_warp 在 vol12 152 页上与 origin/dev 126e021 "
+            "产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -115,6 +119,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="25e4481b46153b33d17cb4e83eadf5313e67529b13a43a796a9074073508f1e3",
           old="c6f0f1e26ed8748178597801cffcf6c0d22fe52d46da324355f721108a33c871",
           evidence=_HR_1026),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="4eb51dad70f96b76222cb084c88d4517ac609ea7354414f14320410c378665c2",
+          old="64386e40f5600be7211a560ce8eaea099ef1a8fd66a97b62f5c398181b56258e",
+          evidence=_GL_1027),
+    Equiv(module="open_guji_cv.utils.border_geometry",
+          new="ce8758574f364ea998b8b07e6d58465bb3e7d4ec895286561dfc8f3c0bf4d7eb",
+          old="c6f0f1e26ed8748178597801cffcf6c0d22fe52d46da324355f721108a33c871",
+          evidence=_GL_1027),
+    Equiv(module="open_guji_cv.utils.peak_line_search",
+          new="5108626482b37582b6f59d772216a9f0cb8bed6cdd5c3fc9aaad3e068a443b6c",
+          old="90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890",
+          evidence=_GL_1027),
 )
 
 

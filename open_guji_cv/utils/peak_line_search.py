@@ -826,13 +826,100 @@ def interpolate_missing(lines: list[LineMatch | None]) -> tuple[list[LineMatch],
     return [ln for ln in out if ln is not None], filled
 
 
+def lattice_frame_pair(mask: np.ndarray, pool: list[LineMatch], n_lines: int, col_pitch: float,
+                       bank: tuple[int, dict[float, np.ndarray]] | None = None,
+                       *, slot_tol: int = GRID_SLOT_TOL, min_score: float = GRID_MIN_SCORE,
+                       max_width: float = GRID_MAX_WIDTH,
+                       pitch_tol_frac: float = GRID_PITCH_TOL,
+                       alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST
+                       ) -> tuple[LineMatch, LineMatch, bool, bool] | None:
+    """版框对不在候选池里时，按细界行拟等距网格反推版框两端。返回
+    `(左端, 右端, 左端是插值, 右端是插值)`，定不下来返回 None。
+
+    1. 池里的细线（`is_thin_rule`）两两配对，隐含列距 dx/round(dx/col_pitch) 落在
+       `col_pitch ± pitch_tol_frac` 内的，当一张候选网格（原点、列距）；数有多少条细线落在
+       某个槽 ± `slot_tol` 内，取支持最多的（同分取残差和小的），再用支持线最小二乘重拟。
+    2. 在这张网格上滑一个 `n_lines` 槽的窗口，两端都要落在图内；按「窗口里的支持线数、
+       两端有没有支持线」排，**并列第一不止一个就返回 None**（宁可让闸1 拒，不猜）。
+       支持线不到 `n_lines` 的一半也返回 None。
+    3. 两端槽位各在 ± `slot_tol` 里做联合精搜（翼朝页心），过 `_snap_to_inner_rule`；
+       搜到的线墨分不到 `min_score` 就按网格位置插一条（斜率取支持线中位），标插值。
+    """
+    h, w = mask.shape
+    n_gap = n_lines - 1
+    thin = sorted((r for r in pool if is_thin_rule(r, min_score, max_width)),
+                  key=lambda r: r.position)
+    if len(thin) < 2:
+        return None
+    xs = np.array([r.position for r in thin])
+
+    best = None
+    for i in range(len(thin)):
+        for j in range(i + 1, len(thin)):
+            dx = xs[j] - xs[i]
+            k = int(round(dx / col_pitch))
+            if k < 1:
+                continue
+            p = dx / k
+            if abs(p - col_pitch) > pitch_tol_frac * col_pitch:
+                continue
+            ks = np.round((xs - xs[i]) / p)
+            res = np.abs(xs - (xs[i] + ks * p))
+            sup = res <= slot_tol
+            key = (int(sup.sum()), -float(res[sup].sum()))
+            if best is None or key > best[0]:
+                best = (key, sup, ks)
+    if best is None:
+        return None
+    _, sup, ks = best
+    kk, xx = ks[sup], xs[sup]
+    if len(set(kk.tolist())) >= 2:
+        p, o = np.polyfit(kk, xx, 1)
+    else:                                                   # 理论上到不了：至少两条支持线、不同槽
+        return None
+    k_sup = set(int(k) for k in kk)
+
+    windows = []
+    for s in range(min(k_sup) - n_gap, max(k_sup) + 1):
+        lo, hi = o + s * p, o + (s + n_gap) * p
+        if lo < 0 or hi > w - 1:
+            continue
+        inside = sum(1 for k in k_sup if s <= k <= s + n_gap)
+        ends = int(s in k_sup) + int((s + n_gap) in k_sup)
+        windows.append(((inside, ends), s))
+    if not windows:
+        return None
+    windows.sort(reverse=True)
+    if len(windows) > 1 and windows[0][0] == windows[1][0]:
+        return None
+    (inside, _), s = windows[0]
+    if inside * 2 < n_lines:
+        return None
+
+    slope = float(np.median([r.slope for r, ok in zip(thin, sup) if ok]))
+
+    def endpoint(c: float, center_side: str) -> tuple[LineMatch, bool]:
+        lo_, hi_ = max(0, int(round(c - slot_tol))), min(w - 1, int(round(c + slot_tol)))
+        r = joint_search_coarse_to_fine(mask, "v", lo_, hi_, alpha=alpha, hyst=hyst,
+                                        coarse_bank=bank, flank_sides=center_side)
+        r = _snap_to_inner_rule(mask, r, center_side, alpha, hyst)
+        if r.score >= min_score and abs(r.position - c) <= slot_tol:
+            return r, False
+        return LineMatch(position=float(c), slope=slope, score=0.0, width=0.0, proj=0.0), True
+
+    a, a_f = endpoint(o + s * p, "right")
+    b, b_f = endpoint(o + (s + n_gap) * p, "left")
+    return a, b, a_f, b_f
+
+
 def find_vertical_lines_grid(mask: np.ndarray, n_lines: int, col_pitch: float | None = None,
                              *, slot_tol: int = GRID_SLOT_TOL, min_score: float = GRID_MIN_SCORE,
                              max_width: float = GRID_MAX_WIDTH,
                              pitch_tol_frac: float = GRID_PITCH_TOL,
                              min_dist: int = 60, nms_percentile: float = 90,
                              edge_margin: int = 200,
-                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST
+                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
+                             lattice_fallback: bool = False
                              ) -> tuple[list[LineMatch], list[bool]]:
     """列数已知（`n_lines` = 列数 + 1）、列距均匀的页：返回恰好 `n_lines` 条线
     （按 x 升序）和同长度的 `filled` 标记（True = 该槽位没探到细线、按几何插值）。
@@ -849,6 +936,11 @@ def find_vertical_lines_grid(mask: np.ndarray, n_lines: int, col_pitch: float | 
     ⚠️ **不是自由模式的超集**：没有 `col_pitch` 先验时 `select_frame_pair` 可能挑到
     被拉伸的版框对，反而不如自由模式（四庫總目 vol02/3 实测）。给**界行没印全**的书
     用，并且**务必配 `col_pitch`**。
+
+    `lattice_fallback=True`（缺省关，关着逐位不变）：`select_frame_pair` 选不出版框对时，
+    不退回截断，改走 `lattice_frame_pair`——按已探到的细界行拟一张等距网格、在图内框出
+    `n_lines` 个槽，再照常逐槽验线、缺槽插值。用在版框那条线压根不在候选池里的页
+    （殿本换源 vol12 p139：右版框贴图边、被边窗里的界行顶掉，左边带进邻叶版心）。
     """
     if n_lines < 2:
         raise ValueError(f"n_lines must be >= 2, got {n_lines}")
@@ -860,6 +952,17 @@ def find_vertical_lines_grid(mask: np.ndarray, n_lines: int, col_pitch: float | 
     pair = select_frame_pair(pool, n_lines, col_pitch, slot_tol=slot_tol,
                              min_score=min_score, max_width=max_width,
                              pitch_tol_frac=pitch_tol_frac, min_dist=min_dist)
+    if pair is None and lattice_fallback and col_pitch is not None:
+        lat = lattice_frame_pair(mask, pool, n_lines, col_pitch, bank, slot_tol=slot_tol,
+                                 min_score=min_score, max_width=max_width,
+                                 pitch_tol_frac=pitch_tol_frac, alpha=alpha, hyst=hyst)
+        if lat is not None:
+            a, b, a_filled, b_filled = lat
+            lines = verify_slots(mask, a, b, n_lines, bank, slot_tol=slot_tol,
+                                 min_score=min_score, max_width=max_width, alpha=alpha, hyst=hyst)
+            out, filled = interpolate_missing(lines)
+            filled[0], filled[-1] = a_filled, b_filled
+            return out, filled
     if pair is None:
         # 没有任何一对满足列距约束——版框本身没探到，退回自由模式的截断，
         # 让闸1 按列数拒掉这一页
