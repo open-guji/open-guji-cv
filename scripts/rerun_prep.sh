@@ -23,12 +23,20 @@ G=/opt/guji-venv/bin/guji; SEED=/opt/guji-cv-seed; GW=$HOME/guji-workspace; SUM=
 case "${GUJI_DATA_TOKEN:-}" in \$*) r=${GUJI_DATA_TOKEN#\$}; r=${r#\{}; r=${r%\}}
   if [ -n "${!r:-}" ]; then export GUJI_DATA_TOKEN=${!r}; else unset GUJI_DATA_TOKEN; fi;; esac
 [ -n "${GUJI_DATA_TOKEN:-}" ] || export GUJI_DATA_TOKEN=${GUJI_DATA_TOKEN_READ:?缺读令牌}
+# guji-manager（cv 拆出来的 manager，私有仓，快照里没有）：这个会话还没装就提示怎么装，不拦（目前 cv 自带的命令都还在；
+# cv 删掉已搬走的包之后会真的缺命令）。装法：add_repo open-guji/guji-manager → git clone --depth 1 → uv pip install --no-deps -e
+manager_hint() {
+  /opt/guji-venv/bin/python -c "import importlib.metadata as m; m.version('guji-manager')" >/dev/null 2>&1 && return 0
+  echo "ⓘ 本会话没装 guji-manager：add_repo open-guji/guji-manager，git clone --depth 1 https://github.com/open-guji/guji-manager ~/guji-manager，" >&2
+  echo "  uv pip install --python /opt/guji-venv/bin/python --no-deps -e ~/guji-manager（详见 ai-team 通用/经验-云端装guji-manager.md）" >&2
+}
 t() { local s=$SECONDS n=$1; shift; echo "== $n"; "$@"; SUM+=("$(printf '%-14s %4ss' "$n" $((SECONDS-s)))"); }
 
 if [ -n "$CV" ]; then
   t cv git -C $SEED fetch -q --tags origin "$CV"
   git -C $SEED checkout -q "$CV" 2>/dev/null || git -C $SEED checkout -q FETCH_HEAD
 fi
+manager_hint
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/open-guji/guji-workspace $GW
 WS=$(ls -d $GW/$WSGLOB | head -n 1); export GUJI_WORKSPACE=$WS; echo "WS=$WS"
