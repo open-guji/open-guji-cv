@@ -1,0 +1,202 @@
+"""自由版式 Step2：块内找列（无界行），产每列的左右缝（逐行 x，块内坐标）。
+
+做法（一块一块做，块由 `free_blocks` 或人标给出）：
+
+1. **剪切校斜**：在 ±3% 斜率里找让竖投影最「尖」（相邻差平方和最大）的剪切量——
+   刻本整版略斜，列是斜的；拉直后投影的列间谷才清楚。
+2. **列距**：投影自相关的峰里，取「不弱于最强峰 0.6 倍」的最小那个。最强峰常落在
+   两倍列距上（大字列与小注列交替），取最小的够强峰避开倍频。
+3. **列数**：人标给了就用；没给就在「块宽 ÷ 列距」±1 里挑平均切线墨量最小的。
+4. **定直线**：DP 在投影上选 n+1 条切线，代价 = 切线处墨量 + 列宽偏离列距的平方罚。
+   不要求等宽——标题列、表格列宽窄不一，罚得轻。
+5. **变缝**：每条内部切线放回剪切前的斜线，在 ±0.18 列宽带里走最省墨竖缝
+   （逐行最多挪 1px），绕开探进邻列的笔画。最外两条就用直线。
+
+块里有竖线（界行、表格线）时先按竖线把块切成几段，各段分别做，竖线本身就是列界。
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import cv2
+import numpy as np
+
+
+def shear(img: np.ndarray, s: float) -> np.ndarray:
+    """x' = x − s·(y − h/2)：把斜率 s（dx/dy）的竖列拉直。"""
+    h, w = img.shape
+    M = np.float32([[1, -s, s * h / 2], [0, 1, 0]])
+    return cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_NEAREST, borderValue=0)
+
+
+def best_shear(ink: np.ndarray, rng: float = 0.03, step: float = 0.0025) -> float:
+    u = ink.astype(np.uint8)
+    best_s, best_sc = 0.0, -1.0
+    for s in np.arange(-rng, rng + 1e-9, step):
+        f = shear(u, float(s)).sum(0).astype(np.float64)
+        sc = float(np.sum(np.diff(f) ** 2))
+        if sc > best_sc:
+            best_s, best_sc = float(s), sc
+    return best_s
+
+
+def smooth(f: np.ndarray, sigma: float) -> np.ndarray:
+    k = int(3 * sigma) * 2 + 1
+    return cv2.GaussianBlur(f.reshape(1, -1).astype(np.float32), (k, 1), sigma).ravel()
+
+
+def estimate_pitch(profile: np.ndarray, lo: int, hi: int, rel: float = 0.6) -> int | None:
+    g = profile - profile.mean()
+    ac = np.correlate(g, g, "full")[len(g) - 1:]
+    ac = ac / (ac[0] + 1e-9)
+    hi = min(hi, len(ac) - 2)
+    if hi <= lo:
+        return None
+    peaks = [x for x in range(lo, hi) if ac[x] > ac[x - 1] and ac[x] >= ac[x + 1] and ac[x] > 0.05]
+    if not peaks:
+        return None
+    top = max(ac[x] for x in peaks)
+    return int(min(x for x in peaks if ac[x] >= rel * top))
+
+
+def dp_cuts(profile: np.ndarray, n: int, pitch: float, reg: float = 1.0,
+            end_slack: float = 0.45) -> tuple[list[int], float]:
+    """在 [0, L) 上选 n+1 条切线，返回 (切线 x 升序, 总代价)。首末切线可在两端 end_slack 列距内浮动。"""
+    L = len(profile)
+    cost = profile / (float(np.percentile(profile, 90)) + 1e-6)
+    lo_w, hi_w = max(1, int(0.45 * pitch)), max(2, int(1.8 * pitch))
+    e = max(1, int(end_slack * pitch))
+    INF = 1e18
+    D = np.full((n + 1, L), INF)
+    P = np.zeros((n + 1, L), int)
+    D[0, :e + 1] = cost[:e + 1]
+    for k in range(1, n + 1):
+        for x in range(L):
+            a, b = max(0, x - hi_w), x - lo_w
+            if b < a:
+                continue
+            gaps = x - np.arange(a, b + 1)
+            tot = D[k - 1, a:b + 1] + reg * ((gaps - pitch) / pitch) ** 2
+            j = int(np.argmin(tot))
+            D[k, x] = tot[j] + cost[x]
+            P[k, x] = a + j
+    tail = np.arange(max(0, L - 1 - e), L)
+    x = int(tail[np.argmin(D[n, tail])])
+    total = float(D[n, x])
+    cuts = [x]
+    for k in range(n, 0, -1):
+        x = int(P[k, x])
+        cuts.append(x)
+    return cuts[::-1], total
+
+
+def min_ink_seam(ink: np.ndarray, x_line: np.ndarray, band: int, move: int = 1) -> np.ndarray:
+    """竖向最省墨缝：第 y 行的 x 在 x_line[y] ± band 内，相邻行最多挪 move px。返回逐行 x。"""
+    h, w = ink.shape
+    c = ink.astype(np.float32)
+    off = np.arange(-band, band + 1)
+    nb = len(off)
+    base = np.round(x_line).astype(int)
+
+    def row_cost(y: int) -> np.ndarray:
+        xs = np.clip(base[y] + off, 0, w - 1)
+        return c[y, xs] + 0.002 * np.abs(off)          # 同等墨量时偏向直线
+
+    D = row_cost(0)
+    P = np.zeros((h, nb), np.int16)
+    idx = np.arange(nb)
+    for y in range(1, h):
+        best = np.full(nb, np.inf, np.float32)
+        arg = np.zeros(nb, np.int16)
+        for d in range(-move, move + 1):
+            sh = np.roll(D, d)
+            if d > 0:
+                sh[:d] = np.inf
+            elif d < 0:
+                sh[d:] = np.inf
+            m = sh < best
+            best[m] = sh[m]
+            arg[m] = (idx - d)[m]
+        D = best + row_cost(y)
+        P[y] = arg
+    i = int(np.argmin(D))
+    path = [i]
+    for y in range(h - 1, 0, -1):
+        i = int(P[y, i])
+        path.append(i)
+    return base + off[np.array(path[::-1])]
+
+
+@dataclass
+class ColumnSeams:
+    """一列（块内坐标）：逐行左右缝 x。"""
+    left: np.ndarray
+    right: np.ndarray
+
+
+@dataclass
+class BlockColumns:
+    columns: list[ColumnSeams]          # 右→左（读序）
+    shear: float
+    pitch: float | None
+    n_source: str                       # hint | auto | rule（竖线分段后各段自估）
+    alt_n: list[int]                    # 自估时同样说得过去的其他列数（给人审看）
+
+
+def _segment_columns(ink: np.ndarray, n: int | None, pitch_range: tuple[int, int],
+                     seam_band: float) -> tuple[list[ColumnSeams], float, float | None, list[int]]:
+    """一段（无竖线）→ 左→右的列。"""
+    h, w = ink.shape
+    s = best_shear(ink)
+    prof = smooth(shear(ink.astype(np.uint8), s).sum(0).astype(np.float32), 3)
+    pitch = estimate_pitch(smooth(prof, 6), *pitch_range)
+    alt: list[int] = []
+    if n is None:
+        guess = max(1, round(w / pitch)) if pitch else 1
+        scored = []
+        for m in range(max(1, guess - 1), guess + 2):
+            cuts, c = dp_cuts(prof, m, w / m)
+            scored.append((c / (m + 1), m, cuts))
+        scored.sort()
+        _, n, cuts = scored[0]
+        alt = [m for c, m, _ in scored[1:] if c <= 1.15 * scored[0][0]]
+    else:
+        cuts, _ = dp_cuts(prof, n, w / n)
+    ys = np.arange(h)
+    lines = [cx + s * (ys - h / 2) for cx in cuts]       # 剪切前坐标
+    band = max(4, int(seam_band * w / n))
+    seams = [np.clip(np.round(lines[0]).astype(int), 0, w - 1)]
+    seams += [np.clip(min_ink_seam(ink, ln, band), 0, w - 1) for ln in lines[1:-1]]
+    seams.append(np.clip(np.round(lines[-1]).astype(int), 0, w - 1))
+    cols = [ColumnSeams(seams[i], seams[i + 1]) for i in range(len(seams) - 1)]
+    return cols, s, (float(pitch) if pitch else None), alt
+
+
+def block_columns(ink: np.ndarray, n: int | None = None, vrules: list[float] | None = None, *,
+                  pitch_range: tuple[int, int] = (80, 300), seam_band: float = 0.18,
+                  rule_pad: int = 6) -> BlockColumns:
+    """块（ink 已裁到块）→ 列。`vrules` 是块内竖线 x（块内坐标）。"""
+    h, w = ink.shape
+    if not vrules:
+        cols, s, pitch, alt = _segment_columns(ink, n, pitch_range, seam_band)
+        return BlockColumns(cols[::-1], s, pitch, "hint" if n else "auto", alt)
+    bounds = [0] + [int(x) for x in sorted(vrules)] + [w]
+    cols: list[ColumnSeams] = []
+    shears, pitches = [], []
+    for a, b in zip(bounds[:-1], bounds[1:]):
+        a2, b2 = (a + rule_pad if a > 0 else a), (b - rule_pad if b < w else b)
+        if b2 - a2 < 0.6 * pitch_range[0]:          # 竖线与块边之间的窄条（双线框的夹缝）
+            continue
+        sub = ink[:, a2:b2]
+        if not sub.any():
+            continue
+        # 段宽不足一个半列距的当一列，不再自估
+        m = 1 if (b2 - a2) < 1.5 * pitch_range[0] else None
+        seg, s, p, _ = _segment_columns(sub, m, pitch_range, seam_band)
+        shears.append(s)
+        if p:
+            pitches.append(p)
+        cols += [ColumnSeams(c.left + a2, c.right + a2) for c in seg]
+    return BlockColumns(cols[::-1], float(np.median(shears)) if shears else 0.0,
+                        float(np.median(pitches)) if pitches else None, "rule", [])

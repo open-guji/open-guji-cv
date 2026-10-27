@@ -211,7 +211,11 @@ DEFAULT_PIPELINE_ID = "keben_body_v2"
 def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
     """这册书默认走哪条管线：`selector.edition` 与 `Book.edition` 相同的那条
     （唯一时）；找不到或多于一条都退回 `keben_body_v2`——刻本链是历史默认，
-    不能因为多了一条现代链就变。`selector` 在此之前只是文档，没人校验。"""
+    不能因为多了一条现代链就变。`selector` 在此之前只是文档，没人校验。
+    册 yaml 显式写了 `pipeline:` 的，照它（自由版式的坊刻本 edition 仍是 keben）。"""
+    explicit = getattr(book, "pipeline", None)
+    if explicit:
+        return explicit
     edition = getattr(book, "edition", None)
     hits = []
     for pid in list_pipelines(pipelines_dir):

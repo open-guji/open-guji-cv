@@ -22,7 +22,7 @@ OVERRIDE_ENV = "GUJI_BOOK_OVERRIDE"
 IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze"})
 #: 实测的版式先验：换书必须重标，不许写进基础配置（运行覆盖可以，做实验用）
 MEASURED_KEYS = frozenset({"bottom_gap", "period_prior", "frame_height", "col_pitch", "outer_shift",
-                           "outer_gap", "preclean", "page_split", "dev_set"})
+                           "outer_gap", "preclean", "page_split", "dev_set", "layout_hints"})
 FORBIDDEN_IN_DEFAULTS = IDENTITY_KEYS | MEASURED_KEYS
 FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS
 
