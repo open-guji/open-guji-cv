@@ -49,6 +49,14 @@ def _why(lines: list[str]) -> str:
     return redact(keep[-1])[:1500] if keep else "（没有输出）"
 
 
+# 连库、连桥断了（Neon 休眠、443 桥掉线）：DB 包装层重连 6 次仍不通时异常会冒到这里，算环境类，换个会话再试
+_CONN_ERRORS = {"OperationalError", "InterfaceError", "ConnectionClosed", "ConnectionClosedError", "ConnectionClosedOK"}
+
+
+def _is_conn_error(e: BaseException) -> bool:
+    return any(c.__name__ in _CONN_ERRORS for c in type(e).__mro__)
+
+
 class Cancelled(Exception):
     pass
 
@@ -349,6 +357,8 @@ class Job:
                 err = "环境：" + err        # 取包、存包、拉库多是网络／库的毛病，换个会话再试
         except Exception as e:          # noqa: BLE001 —— 执行方自己的错也要落库，不能让单永远挂着
             outcome, err = "failed", f"{self.stage}：执行方出错 {type(e).__name__}: {e}"
+            if _is_conn_error(e):
+                err = "环境：" + err        # 连库断了不是 pipeline 的错，换个会话再试
         finally:
             self._stop.set()
             if self.proc and self.proc.poll() is None:
