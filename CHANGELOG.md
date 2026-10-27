@@ -7,6 +7,12 @@
 
 - `align_ref` 坐标对位不再因「孤立弱冲突」整列退回（A31 vol15 p50 列 7／9：整列 24 格成 □，正确的「有」「程」恰是坐标字）。同列现役 equal 与坐标字不合处只有一格、现役 equal 段长 ≤2、坐标字非空、不是邻格错位、同列至少 5 格 equal 全同时，列照用；冲突格仍记进 `coord_conflict_ids`，`seed_admit` 照旧不放它的 match_ref。vol03／14／15 全册回放：新保留 6 列（vol03 2、vol15 4），vol14 不变，原先退回的错位列仍退回。`align_ref.py` 的 `code_hash` 变，各册 `align_ref` 及下游判过期。PATCH。
 
+## [0.5.30] - 2026-10-27
+
+PATCH（GUJI-748 换图源后漏切的抬头字，#706）。**从 v0.5.29（main）加 #706 切出，不含 dev 上的 #701 align_ref、#702 cell_shrink 1.21**：51–99 册正在用 v0.5.28 整册重跑，本版 22 步 `code_hash` 与 v0.5.29 逐一相同（实算；#706 改的 `border_detect`、`row_segment` 已登记代码等价），不让它们过期；#701 #702 随下一版发。
+
+- 人裁逐列抬头覆盖（#706）：中心库 `char-segmentation/head-raise-columns` 的 active 裁决 `{raised: yes|no, n_raised}` 现在有步骤读了。`border_detect` 给 Step1 漏认抬头框的列补框（同页有抬头框取同高，没有按一格高；判 no 的去掉认错的框），`row_segment` 该列抬头级数听裁决、表和闸不再改（line_index 列旗 `head_raise_verdict`）。裁决不进指纹，写裁决 → `guji db sync` → `--from border_detect --pages …` 重跑该页生效（runbook 整理一册书）。没有裁决的页逐字节不变（border_detect vol23 172 页、row_segment vol23 46 页），登记 `code_equiv`。PATCH。
+
 ## [0.5.29] - 2026-10-27
 
 PATCH（GUJI-748 换图源后旧格号数据，#703）。**从 v0.5.28（main）加 #703 切出，不含 dev 上的 #701 align_ref、#702 cell_shrink 1.21**：51–99 册正在用 v0.5.28 整册重跑，本版 22 步 `code_hash` 与 v0.5.28 逐一相同（实算），不让它们过期；#701 #702 随下一版发。
