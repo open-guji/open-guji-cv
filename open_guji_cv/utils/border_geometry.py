@@ -854,6 +854,29 @@ PAIR_WIDTH_TOL = 0.25     # 护栏：相邻两条折线之间的间距（列宽�
                           # 拉偏了 17~29px。
 
 
+KNOT_TEXT_HALF = 12       # 验收折线：沿线 ±这么多 px 量墨密度（同 snap 的 SNAP_TEXT_DENSE 窗口）
+KNOT_TEXT_MARGIN = 0.08   # 折线沿线墨密度比直线高出这么多 ⇒ 折点被字的竖笔勾走了，退回直线。
+                          # 2026-10-27 新图源（qiefen）界行淡且断，整页 w80 中位 40+ 全进折线，
+                          # 「墨落在线上的行数」被一列列字的竖笔骗走：vol70 p77 九条线中段齐刷刷
+                          # 平移 45–70px 压进字里（护栏量列宽变化，整页一起偏它看不见），直线沿线
+                          # 0.02–0.05、折线 0.16–0.27。只单边判（折线比直线**更**压字才退）：真弯页
+                          # 上是直线压字、折线在缝里，不受影响。
+
+
+def _line_ink(binm: np.ndarray, xfn, y0: int, y1: int, w: int) -> float:
+    """沿线（新坐标 x=xfn(y)）±KNOT_TEXT_HALF 窗口的平均墨密度。"""
+    ys = np.arange(max(0, y0), min(binm.shape[0], y1), 4)
+    if len(ys) == 0:
+        return 0.0
+    xr = np.rint((w - 1) - np.array([xfn(float(y)) for y in ys])).astype(int)
+    tot = 0.0
+    for y, x in zip(ys, xr):
+        a, b = max(0, x - KNOT_TEXT_HALF), min(w, x + KNOT_TEXT_HALF + 1)
+        if b > a:
+            tot += float(binm[y, a:b].mean())
+    return tot / len(ys)
+
+
 BEND_COHERE_WIN = 9       # 局部一致性：跟相邻这么多个有效行的 x 中位比
 BEND_COHERE_TOL = 3.0     # 偏离超过这么多 px 的行剔掉——碎片是跳的，线是连的
 
@@ -1400,11 +1423,14 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
             if not moved:
                 break
         new_score = sum(seg_score(i, kx[i], kx[i + 1]) for i in range(3))
-        if new_score <= base_score:
+        cand = _from_knots(kx, ky)
+        if (new_score <= base_score
+                or _line_ink(binm, cand.x_at, int(yt), int(yb), w)
+                > _line_ink(binm, v.x_at, int(yt), int(yb), w) + KNOT_TEXT_MARGIN):
             out.append(VLine(v.x_at_top, v.slope, v.slope, v.slope, ky[1], ky[2]))
             continue
         shifts.append([kx[j] - v.x_at(ky[j]) for j in range(4)])
-        out.append(_from_knots(kx, ky))
+        out.append(cand)
 
     # 拟合失败的线（有效行不够）借同页已拟合线的折点位移——**同一页的线是一起
     # 弯的**（纸张/雕版形变是整页的），这个先验比"退回直线"强得多。

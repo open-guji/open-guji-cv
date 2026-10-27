@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `border_detect` 1.12：三段折线拟合加一道验收——拟出的折线沿线 ±12px 的墨密度比直线高出 0.08 以上就判折点被字的竖笔勾走，这条线退回直线（单边判：真弯页上是直线压字，不受影响）。新图源（siku-qiefen-v2）界行淡而断，整页 w80 中位 40+ 全进折线，A31 整列待审清单里 vol70 p77、vol59 p58、vol24 p67、vol40 p34 九条线中段齐刷刷平移 45–88px 压进字里，整列认字错。vol70／vol59 全册 Step1–3 对比：变 17 页，看图全是改好或持平（列格位不变、只是格框回到字上），vol59 p1 版心列底多一个空格。`border_detect` 的 `code_hash` 变，下游判过期。PATCH。
 - 拆分 M4 地基（10-27）：`guji` 支持插件命令——入口点组 `guji.commands`（装了 guji-manager 即并入它的子命令；本仓自带同名命令优先）。只改 `cli_v2`，不动 Step，19 步 `code_hash` 不变。PATCH。
 - 拆分 M3b（10-27）：`clustering.seeding` 去掉对 `datastore.packs` 的 import（LM 缓存取法改走 `core.derived`，`guji` 入口注册）。`seed_admit` 的 `code_hash` 会变，已登记代码等价（`core/code_equiv.py`）：vol04 40 页逐字节相同，指纹仍与改前一致，产物不过期。pipeline→manager 反向依赖剩 5 条。PATCH。
 - 拆分 M3a（10-27）：pipeline 一侧对 manager 一侧的反向依赖由 12 条清到 6 条。`discover_workspaces` 搬进 `core/workspace`；`parse_cells_spec` 搬进 `core/book`；`is_exp_branch` 搬进 `core/workspace`；`PULL_MARK` 归 `ProductStore`；派生缓存取法抽成 `core/derived`（本机 `GUJI_DERIVED_DIR` 优先，其次入口注册的取法），`font_pack.push_packs` 挪到 `ops/derived_push`。行为不变，19 步 `code_hash` 与 dev 逐一相同。PATCH。
