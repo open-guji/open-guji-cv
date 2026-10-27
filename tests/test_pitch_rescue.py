@@ -77,8 +77,29 @@ def test_grid_may_not_move_good_rules():
     bad = pr.out_of_band(old)
     assert bad == {9}
     assert not pr.keeps_good_lines(old, grid, bad)
-    out, how = pr.rescue(_res(old), _gray([]), lambda pitch: _res(grid))
+    out, how = pr.rescue(_res(old), _rules(old), lambda pitch: _res(grid))
     assert how is None
+
+
+def _rules(xs):
+    """每条线处画一道贯通的界行（规范空间 x，原图 x = W−1−x）。"""
+    g = np.full((H, W), 255, np.uint8)
+    for x in xs:
+        g[300:2700, W - 1 - x - 1:W - 1 - x + 2] = 0
+    return g
+
+
+def test_lines_without_rule_evidence_may_move():
+    """换图源 vol40 新 p1（卷首大印页）：自由模式在印泥斑点里连挑三条字心线，中间两列宽度碰巧合格；
+    这几条线附近没有界行残段，不算真界行，网格探对的网照收。有残段的线照旧护着（上一条测试）。"""
+    old = [111, 266, 396, 525, 653, 778, 973, 1099, 1217, 1298]
+    grid = [111, 265, 393, 525, 653, 778, 908, 1038, 1168, 1298]
+    bad = pr.out_of_band(old)
+    assert not pr.keeps_good_lines(old, grid, bad)
+    g = _rules(grid[:-1])                        # 真界行在网格线上，自由线 973/1099/1217 处没有
+    assert pr.keeps_good_lines(old, grid, bad, ridges=[float(x) for x in grid[:-1]])
+    out, how = pr.rescue(_res(old), g, lambda pitch: _res(grid))
+    assert how == "grid" and [round(x) for x in line_xs(out)] == grid
 
 
 def test_fuse_free_grid_and_extrapolated_lines():

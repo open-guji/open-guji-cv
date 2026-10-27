@@ -92,10 +92,15 @@ def in_band(xs, *, leaf_layout: str = "single") -> bool | None:
     return None if bad is None else not bad
 
 
-def keeps_good_lines(old, new, bad_cols, tol: float = TOL) -> bool:
+def keeps_good_lines(old, new, bad_cols, tol: float = TOL, ridges=None) -> bool:
     """列宽合格的列，两边的界行不许动：旧线里不挨着出带列的，新网里都得有（±tol）。
-    防止网格模式把印得好好的界行挪到空白里（vol13 p46：外列偏宽 1.3，网格把内部三条真界行各挪 9px）。"""
+    防止网格模式把印得好好的界行挪到空白里（vol13 p46：外列偏宽 1.3，网格把内部三条真界行各挪 9px）。
+    给了 `ridges`（`_rule_ridges` 量出的界行残段）就只护 ±tol 内有残段的旧线：没有残段的线是自由模式探进字里的，
+    列宽碰巧合格也不算真界行（换图源 vol40 新 p1：卷首大印页印泥斑点里自由模式连挑三条字心线，
+    中间两列宽度合格，网格探对了却被这条拦下）。"""
     movable = {i for c in bad_cols for i in (c - 1, c)}
+    if ridges is not None:
+        movable |= {i for i, x in enumerate(old) if not any(abs(x - r) <= tol for r in ridges)}
     return all(any(abs(x - y) <= tol for y in new) for i, x in enumerate(old) if i not in movable)
 
 
@@ -395,8 +400,10 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
 
     def keeps_frame(new_xs):
         return not drops_framed_col(res, gray, new_xs, leaf_layout=leaf_layout, ink_threshold=ink_threshold)
+    med = statistics.median(_body_widths(xs, leaf_layout))
+    ridges = _rule_ridges(res, gray, xs[0] - TOL, xs[-1] + TOL, RULE_RUN * med, ink_threshold)
     if (len(gx) >= len(xs) and is_clean(gx, leaf_layout=leaf_layout)
-            and n_shared(gx, xs) * 2 >= len(xs) and keeps_good_lines(xs, gx, bad) and keeps_frame(gx)):
+            and n_shared(gx, xs) * 2 >= len(xs) and keeps_good_lines(xs, gx, bad, ridges=ridges) and keeps_frame(gx)):
         return g, "grid"
     r = deepcopy(res)
     if drop_and_extend(r, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold) and keeps_frame(line_xs(r)):
