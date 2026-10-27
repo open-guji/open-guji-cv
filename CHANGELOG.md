@@ -6,6 +6,7 @@
 ## [未发版]
 
 - `border_detect` 1.12：三段折线拟合加一道验收——拟出的折线沿线 ±12px 的墨密度比直线高出 0.08 以上就判折点被字的竖笔勾走，这条线退回直线（单边判：真弯页上是直线压字，不受影响）。新图源（siku-qiefen-v2）界行淡而断，整页 w80 中位 40+ 全进折线，A31 整列待审清单里 vol70 p77、vol59 p58、vol24 p67、vol40 p34 九条线中段齐刷刷平移 45–88px 压进字里，整列认字错。vol70／vol59 全册 Step1–3 对比：变 17 页，看图全是改好或持平（列格位不变、只是格框回到字上），vol59 p1 版心列底多一个空格。`border_detect` 的 `code_hash` 变，下游判过期。PATCH。
+- 自由版式 `keben_free` 第二轮（Sheldon 审 yxat 9–16 页）：`block_detect` 1.5 上下两块在分隔线处相接（`split_pad` 0）；`cell_cut` 1.2 列上下两端的长横墨不当字；`column_trace` 1.4 正文网格切线先数劈开几个墨块、再取空白正中，列宽放宽到 0.6–1.5、罚 4→1，竖线贯穿块高 80% 才当界行（撤第一轮的 σ 抹平）。只有 keben_free 管线用（yxat 一册）。
 - 拆分 M4（10-27）：`scripts/rerun_prep.sh`、`guji_jobs start` 开工时检测本会话有没有装 guji-manager，没装就提示装法（私有仓，快照里没有）；只提示不拦。不动 Step。PATCH。
 - 自由版式 `keben_free` 找列（Sheldon 审 yxat 9–16 页）：`column_trace` 1.3 等宽网格两端贴块边（版框内沿、版心线，不留窄条）、切线代价按 0.12 列距抹平（切在列间空白正中，不落进小注两行间）；人标 `align`（`block_detect` 1.4 记进 `BlockRec.align`）同组的块共用一套列线。只有 keben_free 管线用（yxat 一册）。
 - 拆分 M4 地基（10-27）：`guji` 支持插件命令——入口点组 `guji.commands`（装了 guji-manager 即并入它的子命令；本仓自带同名命令优先）。只改 `cli_v2`，不动 Step，19 步 `code_hash` 不变。PATCH。

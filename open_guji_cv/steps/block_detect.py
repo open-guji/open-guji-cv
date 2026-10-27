@@ -43,13 +43,14 @@ class BlockDetectParams(BaseModel):
     banxin_pad: int = 4            # 块裁到版心线里面再让几 px
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
+    split_pad: int = 0             # 分栏线两边块边离线中心（1.5 起 0：上下两块在分隔线处相接，Sheldon 10-27「两块之间只有一条横线」）
     split_snap: int = 80           # 人标 splits 吸附的范围（px）：范围内有线（不论贯穿与否）吸到盖得最满的线，没有吸到最空的行
 
 
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.4", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.5", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
@@ -99,7 +100,7 @@ class BlockDetectStep(Step):
         else:
             hl, vl = line_maps(gray, ink, p.bg_win)
             prm = SplitParams(reach=p.div_reach, min_cov=p.div_cov, gap=p.div_gap, auto_v=p.auto_vsplit,
-                              max_depth=p.split_depth, pad=pad)
+                              max_depth=p.split_depth, pad=p.split_pad)
             if hint is not None and hint.tree:
                 pairs = tree_blocks(hint.tree, hl, vl, ink, x0, y0, x1, y1, prm)
                 blocks, leaves = [b for b, _ in pairs], [n for _, n in pairs]
