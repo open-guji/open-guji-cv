@@ -760,7 +760,7 @@ class RowSegmentStep(Step):
         from ..feedback.lookup import resolved_forced_main as _resolved_forced_main
         book_forced_main = _resolved_forced_main(ctx.book.id)
         # 第六个兄弟（2026-10-27）：人裁逐列抬头级数。Step1 按同一张表补了抬头框、列窗已往上开；这里级数听裁决，
-        # 表和闸都不再改（不出「抬头按闸」候选）。级数只定格号起点，格的有无照旧按表
+        # 表和闸都不再改（不出「抬头按闸」候选）。表的级数与裁决不同时，表的字按先后挪到裁决的格号上（_reraise）
         from ..feedback.lookup import resolved_head_raise as _resolved_head_raise
         book_head_raise = _resolved_head_raise(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
@@ -837,10 +837,10 @@ class RowSegmentStep(Step):
             lay_alt = None     # 闸版格网（抬头级数听闸、表只管格的有无），见下
             gate_raised = n_raised_col
             if lay is not None:
+                if hr_verdict is not None:
+                    lay = _reraise(lay, hr_verdict)
                 occ = set(lay["slots"])
-                if hr_verdict is not None:     # 人说抬几格，抬头位就有几个字
-                    occ = {s for s in occ if s > 0} | set(range(-hr_verdict, 0))
-                want = int(lay.get("raised", 0)) if hr_verdict is None else hr_verdict
+                want = int(lay.get("raised", 0))
                 if want != n_raised_col:
                     lay_alt = (n_raised_col, gc.top_slack, {s for s in occ if s > 0 or s >= -n_raised_col})
                 n_raised_col = want
@@ -1195,6 +1195,23 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
+
+
+def _reraise(lay: dict, n_raised: int) -> dict:
+    """格位表一行按人裁抬头级数重编格号：表的字按列内先后不动，整体挪到 `n_raised` 级抬头的格号上。
+
+    表的抬头级数来自整理本，有的列整理本没标抬头（殿本换图源 vol35 p59 c5、vol36 p51 c4、vol28 p28 c7：
+    表记不抬头、首字在 1 号格），人裁说抬一格时首字其实在 -1 号格。只把抬头位记成有字、其余格号照表，
+    整列就多出一个字格，落在列末空白上（切出空格或噪点，2026-10-27 A31 报）。"""
+    r = int(lay.get("raised", 0))
+    if r == n_raised:
+        return lay
+
+    def mv(s: int) -> int:
+        pos = _slot_to_pos(s, r)
+        return pos - n_raised - 1 if pos <= n_raised else pos - n_raised
+
+    return dict(lay, raised=n_raised, **{k: [mv(s) for s in lay.get(k, ())] for k in ("slots", "notes", "half")})
 
 
 def _slot_to_pos(slot: int, n_raised: int) -> int:
