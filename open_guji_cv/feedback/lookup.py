@@ -103,6 +103,38 @@ def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
     return out
 
 
+HEAD_RAISE_SHARD = "char-segmentation/head-raise-columns"
+
+
+def resolved_head_raise(book: str) -> dict[tuple[int, int], int]:
+    """人裁逐列抬头：`(page, col) → n_raised`（0 = 不抬头）。
+
+    Step1 漏认抬头框的列，列窗上沿落在抬头字下面，抬头字整个不在列图里，manual-cells 也框不到
+    （殿本换图源 vol23 p117 c8、vol46 p89 c2）。人在这张表上指认后，`border_detect` 给这一列补抬头框、
+    列窗往上开，`row_segment` 按这里的级数切（不再让表／闸改）。判 `no` 的列反过来去掉 Step1 认的抬头框。
+    卡片 id `book:page:col`，`expected` 是 `{raised: yes|no, n_raised}`（`raised: yes` 没写级数按 1）；
+    `idk` 和非 active（换图源作废的旧页号裁决是 stale）不生效。裁决不进指纹，靠该页显式重跑
+    （`--from border_detect --pages …`）生效，同 `resolved_manual_cells`。
+    """
+    from .consumers import verdict_store
+    out: dict[tuple[int, int], int] = {}
+    try:
+        items = verdict_store().list(HEAD_RAISE_SHARD, legacy=False)
+    except Exception:  # noqa: BLE001
+        return out
+    for it in items:
+        if it.status != "active" or str(it.anchor.book) != book:
+            continue
+        page, col = it.anchor.page, it.anchor.col
+        raised = it.expected.get("raised")
+        if page is None or col is None or raised not in ("yes", "no"):
+            continue
+        n = it.expected.get("n_raised", 1) if raised == "yes" else 0
+        if isinstance(n, int) and n >= 0:
+            out[(page, col)] = n
+    return out
+
+
 MANUAL_CELLS_SHARD = "char-segmentation/manual-cells"
 
 
