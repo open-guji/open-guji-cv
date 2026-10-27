@@ -194,3 +194,53 @@ def test_pipeline_selected_by_book_field():
     from open_guji_cv.core.pipeline import default_pipeline_id
     assert default_pipeline_id(make_book("x", pipeline="keben_free")) == "keben_free"
     assert default_pipeline_id(make_book("x")) == "keben_body_v2"
+
+
+def _mixed_page():
+    """混排（游学鳌头 15b 那种）：下栏右两列一路到底，左边八列再分三层。左边两条横线只盖住下栏宽的约八成。"""
+    img, _ = synth_free_page()
+    x0, y0, x1, y1 = FRAME
+    xv = x1 - 20 - 2 * PITCH + 5                      # 第 2、3 列之间（右两列在右）
+    img[DIV_Y + 5:y1, xv - 2:xv + 2] = 25
+    ys = (DIV_Y + (y1 - DIV_Y) // 3, DIV_Y + 2 * (y1 - DIV_Y) // 3)
+    for y in ys:
+        img[y - 2:y + 2, x0:xv] = 25
+    return img, xv, ys
+
+
+def _tl_boxes(lb):
+    boxes = [tuple(W - 1 - v if i in (0, 2) else v for i, v in enumerate(b.box)) for b in lb.blocks]
+    return [(min(b[0], b[2]), b[1], max(b[0], b[2]), b[3]) for b in boxes]    # 换回左上原点
+
+
+def test_partial_line_does_not_split_without_hint(tmp_path):
+    """没人标时只切首尾贯穿的线：混排页左边的半截横线（约八成宽）不切，免得整栏读序乱。"""
+    img, _, _ = _mixed_page()
+    ctx = make_ctx(tmp_path, make_book("tfree", pipeline="keben_free"), raw={1: img})
+    tl = _tl_boxes(run_steps(ctx, 1, ["block_detect"])["layout_blocks"])
+    assert len(tl) == 2 and tl[0][3] < DIV_Y < tl[1][1], tl
+
+
+def test_tree_hint_splits_mixed_layout(tmp_path):
+    """人标版面树：上下 1:2，下栏右 2 列、左 8 列，左边均分 3 层。人给的是约数，切位吸到线上。"""
+    img, xv, ys = _mixed_page()
+    tree = {"h": [1, 2], "parts": [{"cols": 10}, {"v": [2, 8], "parts": [{"cols": 2}, {"h": 3, "cols": 8}]}]}
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1": {"tree": tree}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    lb = run_steps(ctx, 1, ["block_detect"])["layout_blocks"]
+    tl = _tl_boxes(lb)
+    assert len(tl) == 5, tl
+    top, right, *left = tl
+    assert top[3] < DIV_Y < right[1] and right[0] > xv - 20            # 上栏；下栏右两列
+    assert all(b[2] < xv for b in left)                                  # 左边三层，自上而下
+    assert left[0][3] < ys[0] < left[1][1] and left[1][3] < ys[1] < left[2][1]
+    assert abs(top[3] - DIV_Y) < 20 and abs(left[0][3] - ys[0]) < 20    # 吸到线上，不是按比例的位置
+    assert [b.cols_hint for b in lb.blocks] == [10, 2, 8, 8, 8]
+
+
+def test_tree_hint_rejects_bad_shape():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    with pytest.raises(ValueError):
+        parse_layout_hints({"3": {"tree": {"h": 2, "v": 2}}})
+    with pytest.raises(ValueError):
+        parse_layout_hints({"3": {"tree": {"h": 2, "parts": [{}, {}, {}]}}})
