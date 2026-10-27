@@ -85,6 +85,10 @@
 - **读口收拢**（A24）：现有不少地方直接 glob `feedback/events/*.jsonl`、不经 `EventLog`（含 `groups/freq.py`、`clustering/glyph_ledger.py`、`ops/glyphlib.py`、`eval/round_check.py`、`scripts/zhengli/pending_route.py` 等）。开关打开前，涉及人裁读取的全部改走一个读口，并在 `feedback/lint` 加一条禁止直接 glob。
 - **开关次序**：先落票、先推各方待推的事件包 → 再迁移 → 再打开读口判据。开关一开，旧事件（含刚落的）全部失效，只有迁移批次存活。上线前先在 vol04 干跑（只读，对比有效事件数）。
 - 实现方：A30、A24。
+- **换源后仍按旧格号存着的三类数据（v0.5.29 补，A31 10-27）**：
+  - 换单门（`republish.votes_gate`）：线上旧单出在换源前（单子 `source_rev` ≠ 册 yaml，或没记 rev 且 `routed_as_of` 早于 2026-10-26；`--old-source-rev` 可指明）时，旧格号的票先经采信事件锚里的 `migrated_from` 对（换源前已落、迁成 ~q 的），再按 `--cells` 格级对照表对到新格看新格有没有人裁；对得上新格却没人裁的照旧拦并报「旧格→新格」，表里没有／删／IoU 低的记「无法对位」、写 `旧单票无法对位.tsv`、不拦。没给对照表时除 ~q 对上的外一律算未落。`pending_list.py` 起在单子顶层记 `source_rev`（产物 `_source.json`）。
+  - 看图结论 `feedback/vision/`：`VisionLog` 走同一判据，换源前的（锚无 rev）不进请审单、不让导出标 `review: pending`；`import-vision` 要 `--source-rev`，不自动按产物盖 rev（老文件重导会把旧格号当新图结论）。
+  - `guji gold rebuild`：重放只读采信事件，旧裁决不复活；新页表事件落到与 stale 旧条目同号的格时另立（`consumers.superseded_by_source`），不拿旧条目打底；金标锚记 `source_rev`。
 
 ## 七、迁票（vol04–10，A32 定流程）
 
