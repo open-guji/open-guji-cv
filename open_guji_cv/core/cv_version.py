@@ -98,8 +98,10 @@ OVERRIDE_HINT = ("用当前代码做实验请在中心库实验分支上跑（`G
 
 def manifest_fields() -> dict[str, str | None]:
     """写进每条 `ManifestEntry` 的版本字段。`cv_override` 由护栏放行时补（`cli_v2._guard_cv_version`）。"""
+    from .contract import CONTRACT_VERSION, manager_version
     ver, commit = describe()
-    return {"cv_version": ver, "cv_commit": commit, "cv_override": None}
+    return {"cv_version": ver, "cv_commit": commit, "cv_override": None,
+            "contract_version": CONTRACT_VERSION, "manager_version": manager_version()}
 
 
 def isolated_branch() -> str | None:

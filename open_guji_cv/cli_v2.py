@@ -2972,7 +2972,18 @@ def cmd_runs(args) -> None:
                 return
 
 
+def cmd_version(args) -> None:
+    """装着的 pipeline 版本与契约版本（manager 用它核兼容；`--json` 是契约的一部分，见 doc/契约.md）。"""
+    from .api import version_info
+    info = version_info()
+    if getattr(args, "json", False):
+        print(json.dumps(info, ensure_ascii=False))
+    else:
+        print(f"cv {info['cv_version']}（commit {info['cv_commit'] or '—'}），契约 v{info['contract_version']}，{len(info['steps'])} 个 Step")
+
+
 COMMANDS_V2 = {
+    "version": cmd_version,
     "label-batch": cmd_label_batch,
     "preclean": cmd_preclean,
     "binarize": cmd_binarize,
@@ -3385,6 +3396,9 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="pack：只打印计划（分支名、页数、文件数），不建提交、不推；import/watch：只校验不替换")
     p.add_argument("--force", action="store_true", help="import：被作废的包、会降级的包也照导")
     p.add_argument("--no-push", action="store_true", help="pack：只建本地分支；import/watch：记录只提交不推")
+
+    p = sub.add_parser("version", help="[v2] 装着的 cv 版本与 pipeline/manager 契约版本（--json 给 manager 用）")
+    p.add_argument("--json", action="store_true")
 
     p = sub.add_parser("status", help="[v2] 各步各页的新鲜 / 过期 / 缺失")
     p.add_argument("book")
