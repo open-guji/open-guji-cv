@@ -25,7 +25,8 @@
               parts: [{cols: 2}, {h: 2, cols: 14}]   # 左边再上下均分两层，每层 14 列
 
 人只给大约位置，切位由算法吸到附近的线或空白（`utils/free_blocks.snap_cut`）。
-`kind` 目前只有 `text`（缺省）与 `skip`。`cols`、`pitch` 都不给就全自估。
+`kind`：`text`（缺省）、`table`（有横竖界栏的格表：列宽不硬求一致、列里按横界栏断格）、`skip`（不切）。
+`cols`、`pitch` 都不给就全自估。
 同一页落在几条里时逐字段合并：区间宽的先、窄的后，后写的字段盖前面的（区间给 pitch、单页再给 cols 都生效）。
 """
 
@@ -34,7 +35,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 PAGE_TYPES = ("body", "skip")
-BLOCK_KINDS = ("text", "skip")
+BLOCK_KINDS = ("text", "table", "skip")
 
 
 @dataclass

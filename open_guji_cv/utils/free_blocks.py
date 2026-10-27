@@ -271,6 +271,20 @@ def thin_hlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int 
     return thin_vlines(gray.T, bg_win, width, length).T
 
 
+def rule_hlines(gray: np.ndarray, bg_win: int = 51, *, thr: float = 0.03, bridge: int = 25,
+                length: int = 70) -> np.ndarray:
+    """表格的横界栏图（0/1）：细横线（`thin_hlines`）过阈后横向闭运算接上虚线断口（bridge），
+    再横向开运算只留长过 length 的段——字里的横画短，留不下来。"""
+    m = (thin_hlines(gray, bg_win) > thr).astype(np.uint8)
+    m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, bridge), np.uint8))
+    return cv2.morphologyEx(m, cv2.MORPH_OPEN, np.ones((1, length), np.uint8))
+
+
+def rule_vlines(gray: np.ndarray, bg_win: int = 51, **kw) -> np.ndarray:
+    """表格的竖界栏图（0/1）：`rule_hlines` 转置来做。"""
+    return rule_hlines(gray.T, bg_win, **kw).T
+
+
 def line_maps(gray: np.ndarray, ink: np.ndarray, bg_win: int = 51, long: int = 301) -> tuple[np.ndarray, np.ndarray]:
     """→ (横线强度图, 竖线强度图)，0–1。细线用 `thin_hlines`／`thin_vlines`（浅、过不了墨阈的也在）；
     粗线（比 9px 厚，细线检测会当笔画减掉）另取墨里长度 ≥ long 的横向／竖向连续段补上；long 要比
