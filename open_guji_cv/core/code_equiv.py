@@ -59,6 +59,10 @@ _GL_1027 = ("网格模式加 grid_lattice_fallback（GUJI-748 vol12 p139，缺�
 _BC_1027 = ("push_bottom_to_bar 右界截到图内（GUJI-748，换源新图 vol23 p10、vol37 p74 越界报错）：只在原先越界报错的页上生效；"
             "border_detect 在殿本 vol20 新图 94 页（每 3 页取 1）上与 origin/dev f3b96b9 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
+_HRV_1027 = ("人裁逐列抬头（head-raise-columns 裁决补／去 Step1 抬头框、row_segment 级数听裁决；没有裁决的页不动）："
+             "border_detect 在殿本 vol23 新图 172 页（全册，21 列抬头）、row_segment 在 vol23 46 页（每 4 页取 1，加 p116–119 抬头页）"
+             "上与 origin/dev 78f00ac 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -138,6 +142,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="dd501ed2fae87e402186cfc5b4a7f19e58e92669d68e3b978b8b68c13994f04f",
           old="c6f0f1e26ed8748178597801cffcf6c0d22fe52d46da324355f721108a33c871",
           evidence=_BC_1027),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="e70d82079e5d610cc3d833fac53ac82d439cf6ab7eb7601e4ce4efa48ee5e00d",
+          old="ec4539bc0cc6d76e8bf4630a6b3cdd4f4c0d75071cd559792ca2f614159bc8c7",
+          evidence=_HRV_1027),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="5c8dd9193249b81b1d0e1e0f4ed13103d92771b1feb11feaa40ff87d6447f323",
+          old="58c07dca48941d33c6f9166a49da3c506f49df64efc91620992bb44f70eb125f",
+          evidence=_HRV_1027),
 )
 
 

@@ -63,6 +63,44 @@ def pad_outer_columns(res) -> int:
     return n
 
 
+def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale: float = 1.0) -> dict[int, int]:
+    """人裁逐列抬头（`lookup.resolved_head_raise`，本页 `col → n_raised`）改写 `res.head_raise`，返回改了的列。
+
+    判 0 的列去掉 Step1 认的抬头框；判 n ≥ 1 而 Step1 没认的列补一个 `estimated` 抬头框。补的框高：本页有
+    Step1 认下的抬头列就取它们离主上版框的中位距离（同页抬头框一样高），没有就取一格高（版框高 / `n_rows`）；
+    多抬一级多加一格。内外框间距同理取本页中位，没有就按内框往上 `HR_DEFAULT_PAIR_GAP`（乘本册 `head_raise_scale`）。
+    Step1 已认的抬头列不动（框是量出来的，比估的准）。"""
+    from statistics import median
+
+    from ..utils.border_geometry import HeadRaiseBorder, HR_DEFAULT_PAIR_GAP
+    if not verdicts or len(res.verticals) < 2:
+        return {}
+
+    def btop(col: int) -> float:      # 同 detect_head_raise：主上版框在该列两条界行处的平均高度
+        return sum(res.top.y_at(v.x_at(0.0)) for v in res.verticals[col - 1:col + 1]) / 2.0
+
+    n_cols = len(res.verticals) - 1
+    have = {h.col for h in res.head_raise}
+    measured = [h for h in res.head_raise if h.col <= n_cols]
+    cell = (res.bottom.y_at(0.0) - res.top.y_at(0.0)) / n_rows
+    dist = median(btop(h.col) - h.inner_y for h in measured) if measured else cell
+    gap = median(h.inner_y - h.outer_y for h in measured) if measured else HR_DEFAULT_PAIR_GAP * scale
+    done: dict[int, int] = {}
+    for col, n in sorted(verdicts.items()):
+        if not 1 <= col <= n_cols:
+            continue
+        if n == 0 and col in have:
+            res.head_raise = [h for h in res.head_raise if h.col != col]
+            done[col] = 0
+        elif n >= 1 and col not in have:
+            inner = btop(col) - dist - (n - 1) * cell
+            res.head_raise.append(HeadRaiseBorder(col=col, inner_y=float(inner), outer_y=float(inner - gap),
+                                                  estimated=True))
+            done[col] = n
+    res.head_raise.sort(key=lambda h: h.col)
+    return done
+
+
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
@@ -183,6 +221,11 @@ class BorderDetectStep(Step):
         if p.merge_narrow_pair:
             res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
                                                       leaf_layout=ctx.book.leaf_layout)
+        # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
+        from ..feedback.lookup import resolved_head_raise
+        hr_verdicts = {c: n for (pg, c), n in resolved_head_raise(ctx.book.id).items() if pg == page}
+        hr_done = apply_head_raise_verdicts(res, hr_verdicts, ctx.book.chars_per_line or 21,
+                                            p.head_raise_scale) if hr_verdicts else {}
         borders = Borders.from_result(res, cols)
 
         # 列类型：`borders.verticals` 已是右上原点空间、x 升序（右→左），与
@@ -205,6 +248,9 @@ class BorderDetectStep(Step):
             # 列位 col（1 起）夹在 xs[col-1] 与 xs[col] 之间；任一侧是插值线就标出来
             if filled[c.col - 1] or filled[c.col]:
                 flags.append("rule_interpolated")
+            if c.col in hr_done:
+                flags.append(f"head_raise_verdict：人裁抬头 {hr_done[c.col]} 格，Step1 的抬头框已按裁决"
+                             + ("补上" if hr_done[c.col] else "去掉"))
             if rescued:
                 flags.append(f"pitch_rescued：页上有窄列（多挑假竖线、外侧整列落在网外），已按列距重定（{rescued}）")
             lines.append(LineRec(col=c.col, kind=c.kind, x0=c.x0, x1=c.x1, y0=top_y, y1=bot_y,

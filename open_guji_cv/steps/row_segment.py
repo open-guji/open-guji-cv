@@ -759,6 +759,10 @@ class RowSegmentStep(Step):
         # 第五个兄弟（2026-10-06，overview#415/#436）：反向——人指认的整宽正文格，Step3 别把它劈成 a/b
         from ..feedback.lookup import resolved_forced_main as _resolved_forced_main
         book_forced_main = _resolved_forced_main(ctx.book.id)
+        # 第六个兄弟（2026-10-27）：人裁逐列抬头级数。Step1 按同一张表补了抬头框、列窗已往上开；这里级数听裁决，
+        # 表和闸都不再改（不出「抬头按闸」候选）。级数只定格号起点，格的有无照旧按表
+        from ..feedback.lookup import resolved_head_raise as _resolved_head_raise
+        book_head_raise = _resolved_head_raise(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
         judge = get_judge() if p.cut_judge == "unet" else None
         # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
@@ -803,6 +807,9 @@ class RowSegmentStep(Step):
             # 装得下几个字」（见 GateColumn.n_raised_hint）——同一页上有的抬头列
             # 多一格、有的不多，页级参数给不出这个差别，DP 只能丢掉首字。
             n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
+            hr_verdict = book_head_raise.get((page, gc.col))
+            if hr_verdict is not None:
+                n_raised_col = hr_verdict
             # 版框装不下 n_body 格的页（vol01/5 只有 20 行）按实际行数切，见
             # row_boundaries.effective_body_slots
             n_body_col = effective_body_slots(n_body, gc.border_top, gc.border_bottom, gate.period)
@@ -831,7 +838,9 @@ class RowSegmentStep(Step):
             gate_raised = n_raised_col
             if lay is not None:
                 occ = set(lay["slots"])
-                want = int(lay.get("raised", 0))
+                if hr_verdict is not None:     # 人说抬几格，抬头位就有几个字
+                    occ = {s for s in occ if s > 0} | set(range(-hr_verdict, 0))
+                want = int(lay.get("raised", 0)) if hr_verdict is None else hr_verdict
                 if want != n_raised_col:
                     lay_alt = (n_raised_col, gc.top_slack, {s for s in occ if s > 0 or s >= -n_raised_col})
                 n_raised_col = want
