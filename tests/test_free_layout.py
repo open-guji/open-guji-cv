@@ -246,9 +246,9 @@ def test_tree_hint_rejects_bad_shape():
         parse_layout_hints({"3": {"tree": {"h": 2, "parts": [{}, {}, {}]}}})
 
 
-def _table_page():
-    """格表（游学鳌头 99–102 下栏那种）：格宽不一（右边标题列窄），竖界栏是浅虚线，
-    每列各自的横界栏高低错开；每格一个大字。最左一列下半是空格，有一截没够到格线的横栏残段。"""
+def _ruled_page():
+    """有界栏但不规律的正文（游学鳌头 99–102 下栏那种）：列宽不齐（右边标题列窄），竖界栏浅、有断口，
+    每列各自的横界栏高低错开；每段一个大字。最左一列下半空着，有一截没够到列宽一半的横栏残段。"""
     img = np.full((H, W), 225, np.uint8)
     x0, y0, x1, y1 = FRAME
     for a, b in ((y0 - 8, y0 + 8), (y1 - 8, y1 + 8)):
@@ -285,17 +285,17 @@ def _table_page():
     return img, cols
 
 
-def test_table_block_columns_follow_rules_and_break_at_hrules(tmp_path):
-    """kind: table：列宽不硬求一致（标题列窄也成一列），每列在横界栏处断格，字框不跨格线、界栏残段不当字。"""
-    img, cols = _table_page()
+def test_ruled_block_columns_follow_rules_and_break_at_hrules(tmp_path):
+    """ruled：列宽不硬求一致（标题列窄也成一列），每列在横界栏处断开，字框不跨界栏、界栏残段不当字。"""
+    img, cols = _ruled_page()
     x0, y0, x1, y1 = FRAME
     book = make_book("tfree", pipeline="keben_free",
                      layout_hints={"1": {"blocks": [{"box": [x0 + 10, y0 + 10, x1 - 10, y1 - 10],
-                                                     "kind": "table", "pitch": 150}]}})
+                                                     "ruled": True, "pitch": 150}]}})
     ctx = make_ctx(tmp_path, book, raw={1: img})
     out = run_steps(ctx, 1, ["block_detect", "column_trace", "cell_cut"])
     fc = out["free_columns"]
-    assert [b.n_source for b in fc.blocks] == ["table"]
+    assert [b.n_source for b in fc.blocks] == ["ruled"]
     assert len(fc.columns) == len(cols)
     for c, (xr, xl, ys) in zip(fc.columns, cols):
         r_tl, l_tl = W - 1 - np.median(c.right), W - 1 - np.median(c.left)
@@ -305,14 +305,16 @@ def test_table_block_columns_follow_rules_and_break_at_hrules(tmp_path):
     cells = out["free_cells"].cells
     for c in fc.columns:
         mine = [k for k in cells if k.col == c.col]
-        full = len(c.breaks) + (0 if c.col == len(cols) else 1)              # 最左列最后一格空着
-        assert {k.table_cell for k in mine} == set(range(1, full + 1)), c.col   # 每格有字，空格不出框（残段不当字）
+        full = len(c.breaks) + (0 if c.col == len(cols) else 1)              # 最左列最后一段空着
+        assert {k.rule_seg for k in mine} == set(range(1, full + 1)), c.col     # 每段有字，空处不出框（残段不当字）
         for k in mine:
-            assert not any(k.box[1] < y < k.box[3] for y in c.breaks)        # 字框不跨格线
-            assert k.table_cell >= 1
+            assert not any(k.box[1] < y < k.box[3] for y in c.breaks)        # 字框不跨界栏
+            assert k.rule_seg >= 1
 
 
-def test_table_kind_accepted_in_hints():
+def test_ruled_flag_in_hints():
     from open_guji_cv.utils.layout_hints import parse_layout_hints
-    h = parse_layout_hints({"99": {"blocks": [{"kind": "skip"}, {"kind": "table", "pitch": 150}]}})
-    assert h[99].kind_for(1) == "table" and h[99].pitch_for(1) == 150
+    h = parse_layout_hints({"99": {"blocks": [{"kind": "skip"}, {"ruled": True, "pitch": 150}]}})
+    assert h[99].kind_for(1) == "text" and h[99].ruled_for(1) and not h[99].ruled_for(0)
+    with pytest.raises(ValueError):
+        parse_layout_hints({"99": {"blocks": [{"kind": "table"}]}})

@@ -132,6 +132,7 @@ class BlockDetectStep(Step):
                                kind=leaf(i, "kind", hint.kind_for) if hint else "text", source=b.source,
                                cols_hint=leaf(i, "cols", hint.cols_for) if hint else None,
                                pitch_hint=leaf(i, "pitch", hint.pitch_for) if hint else None,
+                               ruled=bool(leaf(i, "ruled", hint.ruled_for)) if hint else False,
                                vrules=sorted(x_tl_to_tr(x, W) for x in b.vrules))
                       for i, b in enumerate(blocks)]
         return {"layout_blocks": out}

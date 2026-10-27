@@ -273,7 +273,7 @@ def thin_hlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int 
 
 def rule_hlines(gray: np.ndarray, bg_win: int = 51, *, thr: float = 0.03, bridge: int = 25,
                 length: int = 70) -> np.ndarray:
-    """表格的横界栏图（0/1）：细横线（`thin_hlines`）过阈后横向闭运算接上虚线断口（bridge），
+    """横界栏图（0/1，有界栏的正文、格子用）：细横线（`thin_hlines`）过阈后横向闭运算接上虚线断口（bridge），
     再横向开运算只留长过 length 的段——字里的横画短，留不下来。"""
     m = (thin_hlines(gray, bg_win) > thr).astype(np.uint8)
     m = cv2.morphologyEx(m, cv2.MORPH_CLOSE, np.ones((3, bridge), np.uint8))
@@ -281,7 +281,7 @@ def rule_hlines(gray: np.ndarray, bg_win: int = 51, *, thr: float = 0.03, bridge
 
 
 def rule_vlines(gray: np.ndarray, bg_win: int = 51, **kw) -> np.ndarray:
-    """表格的竖界栏图（0/1）：`rule_hlines` 转置来做。"""
+    """竖界栏图（0/1）：`rule_hlines` 转置来做。"""
     return rule_hlines(gray.T, bg_win, **kw).T
 
 
