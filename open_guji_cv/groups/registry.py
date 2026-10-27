@@ -539,6 +539,15 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"
              "逈（迥的异体）不进组，归异体对处理；只补放。"),
+    # 形近不同字对族（2026-10-26，A24「组外异体对未定码位」）：整理本×库首位是一对形近不同字（住往 冶治 壙曠 翦前 冷令…），
+    # 刻形分得开、库里却缺刻例或排错。同门族：整字 HOG 一对多认刻形，与整理本同字才补放；只补放。
+    "xjz": GroupSpec(
+        id="xjz", name="形近不同字对", members=frozenset("冶治冐冑胄齊齋住往榮滎祇祗前翦揚楊水永孰熟窿隆嘗當勾句仝全章草壙曠卑埤可阿令冷偏徧釆采"),
+        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/xjz",
+        flow=FlowSpec((_img("xjz"),), combine="first", lift_ref_agree=True, ref_enter=True,
+                      tolerate=frozenset("柱木未耒米朱洽蔣朝剌牘擴墳墉蹟廣編冒問目常官旬勻甸幻金有舍革尊揭場粲柴禄陸歴匪氷僅性仲周何卓阜肅亦書𤰞"
+                                         "晰岀自日蕪轉華敦")),
+        note="形近不同字对族：整字 HOG 一对多认刻形（门槛 0.7），与整理本同字才补放；只补放。釆 只当入口（库里的 釆 刻例都是 采）。"),
     # 形近不同义、按文意定的小组（2026-10-24，A24「强化于千子干等形近判别」）：库常把两三个字排到分差 0.003 以内（「學【官】」库排 宫官），
     # 形近护栏拦下送审。按文意定（L1 规则＋L2 表；L2 表由 haiku 建、Opus＋Sonnet 复核，同 jys）；补放，也复核（只降审不改字）。
     # 放这张表不放 `GROUPS`：官 兩 侯 是常用字，进 `GROUPS` 会改 glyph_match 弱命中与 rare_ref_coord 的行为。
@@ -554,6 +563,22 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
            ("guan", "官宫宮", ("官", "宫宮"), (), "官＝官至、職官、天官；宫＝宫室、殯宫、宫調。宮是宫的异体：先定 官／宫族，族内按库形最近。"),
            ("hou", "侯候𠉀俟", ("侯", "候𠉀", "俟"), (), "侯＝諸侯、夏侯、某國侯；候＝氣候、七十二候、候補；俟＝等待。𠉀是候的异体。"),
            ("liang", "兩雨", (), (), "兩＝兩江、兩淮、兩家；雨＝風雨、雨水。"))},
+    # 逄逢（2026-10-26，A24「组外异体对未定码位」）：殿本 逢 的刻形与库里的 逄 一样（库形 逄 多是 逢 的刻例），整理本也有把「遭逢」
+    # 录成 逄 的（vol93:12:2:7）。按文意定：逄 只作姓（逄蒙、逄萌、辨逄逢的字书条）；文意 strong 才改已放行的字、才不跟整理本。
+    # 刺剌（2026-10-27，A24；sheldon 10-27 定按文意录）：殿本 刺 常刻成 剌 的样子（左作 束），库形分不开。按文意定：剌 只用于译音人名
+    # （薩都剌、阿剌）与 乖剌、剌謬 这类；其余是 刺。文意 strong 才改已放行的字、才不跟整理本。
+    "ci": GroupSpec(
+        id="ci", name="刺剌", members=frozenset("刺剌"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/ci",
+        flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True,
+                      tolerate=frozenset("刻利刑勸剥軸刪敕勅朝剩"), tolerate_ref_agree=True),
+        note="按文意定（L1 规则，弃权查 L2 表）：剌 只用于译音与 乖剌、剌謬，其余是 刺；补放，也复核，文意 strong 才改字（同 日曰）。"),
+    "feng": GroupSpec(
+        id="feng", name="逄逢", members=frozenset("逄逢"), backends=(),
+        kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir="config/groups/feng",
+        flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True,
+                      tolerate=frozenset("進違達運逸通遙遜途遥迄遲逕迤遴蓬𨒪"), tolerate_ref_agree=True),
+        note="按文意定（L1 规则，弃权查 L2 表）：逄 只作姓，其余是 逢；补放，也复核，文意 strong 才改字（同 日曰）。"),
 }
 
 #: 字组流程可点名的全部组。

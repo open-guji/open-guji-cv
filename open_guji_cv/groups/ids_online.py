@@ -236,6 +236,10 @@ SPECS: dict[str, IdsSpec] = {
     #   辶族 取右上框 x0.25–1、y0–0.8（避开走之底，整字版 邊→選 0.84 高把握错），48×48，λ=1：组员格 870，错例最大 0.59（邊→選），取 0.65 → 给字约 355、0 错。
     "men": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.62, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
                    aspect=(0.45, 2.2)),
+    # 形近不同字对族 xjz（2026-10-26，A24「组外异体对未定码位」）：整字 HOG 一对多（每字 ≤12 格），按册留出（组员格 457）不设门槛
+    # 错例最大 0.59（熟→孰），门槛取 0.7（0 错，给字 119）。字宇 刻形分不开（错例 1.18）不进族；釆 的刻例全是 采，不进库。补放还须与整理本同字。
+    "xjz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
+                   aspect=(0.45, 2.2)),
     "chuo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.65, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True, aspect=(0.45, 2.2)),
     # 撰𢰅（2026-10-24，3–4 格异体对）：差别在右下（共／丌，𢰅 长撇长捺大开），整字 48×48 按册留出 0 错（取右半反而错多）；门槛沿用 0.5。
