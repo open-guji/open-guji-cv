@@ -74,7 +74,17 @@ class FlowSpec:
       库标 𨽾，册里 𨽾 𨽻→隷；A24 2026-10-26）。
     - `review_ref_agree`：复核时放行字与整理本字（按码位归一）不是同一字、方法又没给出整理本的字 → 降审（`group_flow_ref_dissent`）；
       方法给了整理本的字照 `review_fix` 改字。整理本跟刻形走得很准、放行字常被别的通道放错码位的组用（隸𨽾：整理本 隸 被放成 𨽾
-      44 格，夹注小字 HOG 多弃权，A24 2026-10-26）。"""
+      44 格，夹注小字 HOG 多弃权，A24 2026-10-26）。
+    - `rule_strong`：L1 规则里至少这么多条（不同 id）给了同一个字，文意答案就记 strong（配 `review_fix_strong` 可改字、
+      配 `strong_over_ref` 可越过整理本补放）；0＝不用。木本（A24 2026-10-27）：「採進本」「家藏本」夹注小字刻形是本，
+      字形库木本分不开（木 1.00 本 0.99），match_solo／match_ref 放成木；全册 113 格送审看图，两条以上规则同说本的 0 错。
+    - `review_fix_ref_rule`：复核时 L1 规则给的字与整理本字（现役对位缺格时用坐标对位字，按码位归一）相同、方法之间一致 → 照 `review_fix` 改字
+      （文本两路互证压过库形）；只有一条规则、整理本又不同意时照常降审。木本同上（「王楙所見本」「古本」整理本作本、库放木）。
+    - `solo_margin`：补放时整理本没有证人——现役对位缺、坐标对位也缺或是 `〓`（逐列本缺字占位）——只凭字形方法补放，
+      且给字方法每一段的 margin 都要 ≥ 这个值（`ids` 留痕的 `margins`），不到留人审（`group_flow_solo_weak`）；声明了它的组，
+      坐标对位字是 `〓` 不再当「组外字」拦（`coord_dissent`）。0＝不用（`〓` 照旧拦）。
+      彝（A24 2026-10-26）：整理本缺字的格逐列本写 〓，80/90 格 U-Net 三段读作 彐米分大（𢑱）；整理本有字的 651 格里，
+      与整理本对不上、看图能定的段全是整理本记的码位不跟刻形，唯一字形错例（vol45:59:4:20 下段 大 读成 廾）margin 0.16 → 取 0.3。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -98,8 +108,11 @@ class FlowSpec:
     ref_top_enter: bool = False
     ctx_over: tuple = ()
     lift_img_ref_veto: bool = False
+    rule_strong: int = 0
+    review_fix_ref_rule: bool = False
     ref_canon: bool = False
     review_ref_agree: bool = False
+    solo_margin: float = 0.0
 
     @property
     def solvers(self) -> tuple:
@@ -215,6 +228,13 @@ def _g2(gid: str) -> tuple:
 #: vol04–20 已放行 7,545 格：数横给字 7,148、与放行字 0 不一致。见 `doc/字组/yr.md`。
 _YR_FLOW = FlowSpec((CTX, _img("yr"), YR_BARS), review=True, lift_needs=("ctx", "yr_bars"), lift_ref_veto=True)
 
+#: 木本（2026-10-27，A24「压低木本送审」）：文意定字，字形库分不开（夹注小字 本 被库排成 木 1.00）。
+#: - 两条以上 L1 规则同说一个字算 strong（`rule_strong=2`）：复核改字（`review_fix_strong`）、补放越过整理本（`strong_over_ref`）；
+#: - 一条规则＋整理本同字也改字（`review_fix_ref_rule`）；其余照旧降审。
+#: 全册 main 包 60 册离线回放：送审 113→33，改字／补放 83 格逐格看图 0 错。见 `doc/字组/mb.md`。
+_MB_FLOW = FlowSpec((CTX, *_g2("mb")), review=True, review_fix_strong=True, strong_over_ref=True, rule_strong=2,
+                    review_fix_ref_rule=True)
+
 
 #: 文意组与字形组共字（入口按分差内候选选组，点名靠前的先试）：會（zh／qin）、問間（wj／men）、遺還（yh／chuo）、圓圖（yt／kou）。
 _GLYPH_OVERLAPS = {"zh": ("qin",), "wj": ("men",), "yh": ("chuo",), "yt": ("kou",)}
@@ -293,8 +313,8 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l2"), config_dir=f"config/groups/{gid}",
-        flow=_YR_FLOW if gid == "yr" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
-        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
+        flow=_YR_FLOW if gid == "yr" else _MB_FLOW if gid == "mb" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
+        note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（{'规则够硬时改字' if gid == 'mb' else '只降审不改字'}）。{note}")
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
            ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
@@ -307,7 +327,8 @@ GROUPS: dict[str, GroupSpec] = {
         id="yi_560", name="彝彛彜彞𢑱𢑴", members=frozenset("彝彛彜彞𢑱𢑴"),
         backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/yi_560",
-        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞"), **_rv("yi_560")),
+        flow=FlowSpec((FREQ, _img("yi_560")), combine="first", tolerate=frozenset("尋舞彚"), solo_margin=0.3,
+                     review_fix_margin=0.3, **_rv("yi_560")),
         note="异体字组（#560）：字频→IDS 三段（上彑彐／中米糸米分／下廾大，自动缝，42 格模板）；判不出送人审，不退到库形最近。"
              "只在 seed_admit.group_flow 点名时生效。"),
     # —— 异体组（字组统一流程首批，2026-10-18 sheldon 定）：即旧 `variant_tie_extra` 用户裁过的七组。

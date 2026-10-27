@@ -50,6 +50,30 @@ def test_l1_rules_decide_and_family_form():
     # 宫族：库形最近领先族内另一形不到 form_margin → 待定
     ch, why, trail = decide("guan", r, [("官", 0.997), ("宫", 0.996), ("宮", 0.995)], None, cfg, left="不出朱子之一證矣古者", right="室皆有定制")
     assert ch is None and trail[-1]["why"] == "abstain:form_close"
+    # 宮 按书级码位暂归一到 宫（sheldon 10-25）：族内不再按刻形分，直接给 宫
+    cfg_cp = FlowConfig(groups=NEW, canon=lambda c: {"宮": "宫"}.get(c, c))
+    ch, why, trail = decide("guan", r, [("官", 0.997), ("宫", 0.996), ("宮", 0.995)], None, cfg_cp, left="不出朱子之一證矣古者", right="室皆有定制")
+    assert (ch, why) == ("宫", "agree") and trail[-1]["solver"] == "form:canon"
+
+
+def test_l1_guan_spring_rules_1026():
+    """全册回测（10-26）：春◎ 有 春宫（太子）、長春宫、《春宫怨》；新◎ 有「新官軌範」。"""
+    cfg = FlowConfig(groups=NEW)
+    r = _cell()
+    d = lambda left, right: decide("guan", r, [("宫", 0.999), ("官", 0.997)], None, cfg, left=left, right=right)[0]
+    assert d("又周禮乃立春", "宗伯鄭註") == "官"
+    assert d("其後以爲度宗在春", "時盛年潛躍") == "宫"
+    assert d("祖召入西域還燕居長春", "事蹟具元史") == "宫"
+    assert d("禽句本用杜荀鶴春", "怨語南卓") == "宫"
+    assert d("石本作春", "有大功主安得異議") is None
+    assert d("公羊傳曰新", "者宣公之宫也") == "宫"
+    assert d("居官列儀注便覽新", "軌範官級") is None
+    assert d("永樂大典尚載其天官春", "秋官考工記") == "官"
+
+
+def test_hou_l1():
+    cfg = FlowConfig(groups=NEW)
+    r = _cell()
     ch, _, _ = decide("hou", r, [("候", 0.969), ("侯", 0.958)], None, cfg, left="所爲阮諶夏", right="伏")
     assert ch == "侯"
     ch, _, _ = decide("zy", r, [("干", 0.999), ("千", 0.999)], None, cfg, left="詞嚴義正足以爲", right="古之大防矣")

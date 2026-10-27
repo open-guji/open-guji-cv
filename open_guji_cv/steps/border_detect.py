@@ -79,11 +79,24 @@ class BorderDetectParams(BaseModel):
     缺省空，空时本字段与 `grid_col_pitch` 都不进参数 dump，产物与加字段前逐字节相同。"""
     grid_col_pitch: float | None = None
     """`column_grid_pages` 那些页用的列距先验（px）；None = 用书级 `col_pitch`。"""
+    grid_lattice_fallback: bool = False
+    """`column_grid_pages` 那些页上，网格模式选不出版框对（版框那条线不在候选池里）时，按已探到的
+    细界行拟等距网格、在图内框出 `expected_cols` 列再逐槽验线（`peak_line_search.lattice_frame_pair`），
+    不再退回截断。殿本换源 vol12 p139（GUJI-748）：右版框贴图边、左边带进邻叶版心，上下外框都没探到，
+    网格模式与自由模式结果相同、只出 8 列。写法
+    `params: {border_detect: {column_grid_pages: [139], grid_col_pitch: 133, grid_lattice_fallback: true}}`。
+    只管点名页；缺省关不进参数 dump，产物与加字段前逐字节相同。"""
     pitch_rescue: bool = True
     """列距救援（`utils/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
     「去掉劈开窄对的线、在有字的一侧补外框线」，再不成就从自由线、网格线、外推外框线里拼一串等宽列（fuse）；
     新列网干净才接受。没触发的页逐字节不变。"""
+
+    head_raise_scale: float = 1.0
+    """抬头框探测的像素尺度（`border_geometry.HR_SCALE_LENGTHS`，2026-10-26，GUJI-748）：本册图相对殿本旧图
+    的缩放比。那组长度常数是在旧图上量的绝对像素，换图源 siku-qiefen-v2（约 0.70 倍）后抬头框整片认不出
+    （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
+    `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
@@ -94,13 +107,17 @@ class BorderDetectParams(BaseModel):
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
+        if isinstance(d, dict) and not self.grid_lattice_fallback:
+            d.pop("grid_lattice_fallback", None)
+        if isinstance(d, dict) and self.head_raise_scale == 1.0:
+            d.pop("head_raise_scale", None)
         return d
 
 
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.10", unit="page",   # 1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.11", unit="page",   # 1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
                    "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge",
@@ -133,6 +150,8 @@ class BorderDetectStep(Step):
         if grid_page:
             grid = True
             col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
+        # 缺省关时不传这个参数（border_geometry 的缺省就是关），与加字段前的调用一模一样
+        lattice_kw = {"grid_lattice_fallback": True} if (grid_page and p.grid_lattice_fallback) else {}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
@@ -146,7 +165,9 @@ class BorderDetectStep(Step):
                                   outer_shift=ctx.book.outer_shift,
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
-                                  vline_polyline=ctx.book.vline_polyline)
+                                  vline_polyline=ctx.book.vline_polyline,
+                                  head_raise_scale=p.head_raise_scale,
+                                  **lattice_kw)
 
         res = _detect(cols)
         if grid_page:

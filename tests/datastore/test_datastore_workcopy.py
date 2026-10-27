@@ -896,3 +896,54 @@ def test_fresh_pull_seeds_from_snapshot(repo, conn, tmp_path, monkeypatch):  # n
     monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-d"))
     d = _fresh(files, tmp_path / "d", _WithSnapshots(src, {"tws": store["tws"]}), cache)
     assert (data_dir(d) / rel).read_bytes() == files2["W/" + rel]
+
+
+def test_init_new_workspace_then_push_and_pull(repo, conn, tmp_path, monkeypatch):  # noqa: F811
+    """新开一部书：库里没有的工作区 db init → push 进库 → 另一台机器 pull 下来一样；库里已有的拒绝。"""
+    from open_guji_cv.core import workspace as W
+    from open_guji_cv.datastore.workcopy import init, pull, push
+    src, files, cache, _ = _setup(repo, conn, tmp_path)
+    ws = tmp_path / "nws"
+    new = {"workspace.yaml": b"id: nws\n", "books/b01.yaml": b"id: b01\nedition: keben\n",
+           "config/x.yaml": b"a: 1\n"}
+    _checkout({f"W/{k}": v for k, v in new.items()}, ws)
+
+    with pytest.raises(SystemExit, match="已经有工作区"):           # 库里已有的（tws）走 pull
+        init(src, _checkout(files, tmp_path / "old"))
+    rep = init(src, ws, dry_run=True)
+    assert sorted(rep["files"]) == ["books/b01.yaml", "config/x.yaml"] and (ws / "books").is_dir()
+    rep = init(src, ws)
+    left = sorted(p.relative_to(ws).as_posix() for p in ws.rglob("*") if p.is_file())
+    assert left == [".central.json", "workspace.yaml"]
+    data = W.central_data_dir("nws")
+    assert _data_files(data) == {k: v for k, v in new.items() if k != "workspace.yaml"}
+    with pytest.raises(SystemExit, match="已经在中心库"):
+        init(src, ws)
+
+    push(conn, ws, actor="a")
+    with pytest.raises(SystemExit, match="已经有工作区"):           # 推过了，别处不能再 init 同名
+        init(src, _checkout({f"W/{k}": v for k, v in new.items()}, tmp_path / "dup"))
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home-b"))
+    b = tmp_path / "b"
+    b.mkdir()
+    (b / "workspace.yaml").write_bytes(new["workspace.yaml"])
+    (b / ".central.json").write_text('{"ws": "nws", "branch": "main"}')
+    pull(src, b, cache=cache)
+    assert _data_files(W.central_data_dir("nws")) == _data_files(data)
+
+
+def test_init_refuses_workspace_without_books(tmp_path, monkeypatch):
+    import open_guji_cv.datastore.workcopy as WC
+
+    class _Empty:
+        branch = "main"
+
+        def changes_since(self, ws, rev):
+            return []
+
+    monkeypatch.setattr(WC, "_db_manifest", lambda src, w: {})
+    ws = tmp_path / "e"
+    ws.mkdir()
+    (ws / "workspace.yaml").write_text("id: e\n")
+    with pytest.raises(SystemExit, match="没有册 yaml"):
+        WC.init(_Empty(), ws)

@@ -202,7 +202,10 @@ class Chain(Method):
                 continue
             v = s.run(inp)
             if v.char is not None:
-                if isinstance(s, CtxRule) and _spec(inp.group).flow.strong_over_ref:
+                f = _spec(inp.group).flow
+                if isinstance(s, CtxRule) and f.rule_strong and len(set(v.extra.get("rules") or ())) >= f.rule_strong:
+                    v = GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "strong": True})
+                elif isinstance(s, CtxRule) and f.strong_over_ref:
                     v = self._confirm(v, inp)
                 break
         return v

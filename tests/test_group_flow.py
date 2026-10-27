@@ -685,3 +685,23 @@ def test_review_same_shape_keeps_and_ref_dissent_demotes(monkeypatch):
     assert x.admit and x.char == "隷" and x.evidence["group"]["decision"] == "keep"
     assert not y.admit and "group_flow_ref_dissent" in y.doubts
     assert z.admit and z.char == "隸" and z.evidence["group"]["decision"] == "fix"
+
+
+def test_mb_rule_strong_and_ref_rule_fix():
+    """木本（A24 2026-10-27）：两条以上 L1 规则同说「本」算 strong → 复核改掉库放的「木」、补放越过整理本；
+    一条规则须整理本（缺时坐标对位）同字才改，否则照旧降审。用真规则表（`config/groups/mb/rules.yaml`）。"""
+    texts = {"a": ("一卷浙江巡撫採進", "明某撰"),          # l1＋l2＋m 等多条 → strong
+             "b": ("王楙所見", "亦無之則諸"),              # 只有 r1
+             "c": ("王楙所見", "亦無之則諸"),
+             "d": ("此其門目卷帙與此", "皆合則猶宋人")}      # 整理本作木，多条规则 → 补放本
+    seq = [Rec("a", "木", True, "match_solo", "match"), Rec("b", "木", True, "match_solo", "match"),
+           Rec("c", "木", True, "match_solo", "match"), Rec("d")]
+    ctx = lambda s, i, step: texts[s[i].id][0 if step < 0 else 1]
+    cands = {"d": [("本", 0.99), ("木", 0.98)]}
+    group_flow_pass(seq, {"d": ("木", "=")}, lambda cid: cands.get(cid, []), lambda r: False,
+                    FlowConfig(groups=("mb",), lift_ref_guard=True), ctx_fn=ctx, veto_refs={"b": "本"})
+    a, b, c, d = seq
+    assert (a.char, a.admit, a.evidence["group"]["decision"]) == ("本", True, "fix")
+    assert (b.char, b.admit, b.evidence["group"]["decision"]) == ("本", True, "fix")      # 一条规则＋坐标对位本
+    assert not c.admit and "group_flow_disagree" in c.doubts                               # 一条规则、没有整理本
+    assert (d.char, d.admit) == ("本", True)

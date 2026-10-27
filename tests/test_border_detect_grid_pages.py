@@ -72,3 +72,27 @@ def test_pad_outer_columns_leaves_normal_page():
     r = _res(xs)
     assert pad_outer_columns(r) == 0
     assert [round(v.x_at(0)) for v in r.verticals] == xs and r.vline_filled == []
+
+
+def test_head_raise_scale_passed_through_and_dropped_when_default(tmp_path, monkeypatch):
+    """GUJI-748：`head_raise_scale` 传到 detect_borders；缺省 1.0 不进参数 dump（params_hash 与加字段前相同）。"""
+    kw = _grid_kwargs(tmp_path, monkeypatch, {"border_detect": {"head_raise_scale": 0.7021}})
+    assert kw["head_raise_scale"] == 0.7021
+    assert "head_raise_scale" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(head_raise_scale=0.7).model_dump()["head_raise_scale"] == 0.7
+
+
+def test_grid_lattice_fallback_only_on_grid_pages_and_dropped_when_off(tmp_path, monkeypatch):
+    """GUJI-748 vol12 p139：`grid_lattice_fallback` 只在点名网格页传给 detect_borders；
+    缺省关不进参数 dump，也不出现在调用参数里（与加字段前的调用一模一样）。"""
+    on = {"border_detect": {"column_grid_pages": [PAGE], "grid_col_pitch": 133,
+                            "grid_lattice_fallback": True}}
+    assert _grid_kwargs(tmp_path / "a", monkeypatch, on)["grid_lattice_fallback"] is True
+    other = {"border_detect": {"column_grid_pages": [PAGE + 1], "grid_col_pitch": 133,
+                               "grid_lattice_fallback": True}}
+    assert "grid_lattice_fallback" not in _grid_kwargs(tmp_path / "b", monkeypatch, other)
+    off = {"border_detect": {"column_grid_pages": [PAGE], "grid_col_pitch": 133}}
+    assert "grid_lattice_fallback" not in _grid_kwargs(tmp_path / "c", monkeypatch, off)
+    assert "grid_lattice_fallback" not in BorderDetectParams().model_dump()
+    assert BorderDetectParams(column_grid_pages=[139], grid_lattice_fallback=True
+                              ).model_dump()["grid_lattice_fallback"] is True

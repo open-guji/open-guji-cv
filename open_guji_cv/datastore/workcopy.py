@@ -652,6 +652,53 @@ def migrate(src, ws_dir: Path, *, cache=None, bucket: str = "main", keep_local: 
     return report
 
 
+def init(src, ws_dir: Path, *, dry_run: bool = False) -> dict:
+    """新开一部书：中心库里还没有这个工作区时，把工作区里的数据（册 yaml、config 等）挪进数据目录、写标记，
+    基准记成 rev 0、空清单——之后 ``guji db push`` 把它们整批推上去，库里就有了这个工作区（``workspaces`` 一行、
+    ``books`` 各册）。
+
+    和 ``migrate`` 的分别：migrate 要库里已有这个工作区（从 git 灌过），逐文件核对；init 只给库里没有的工作区用，
+    库里已有（哪怕只有一次写入）就拒绝，让用 pull。共享层工作区（``corpus-base``、``glyphlib-*``）由升级脚本开，不走这里。"""
+    from ..core.workspace import central_marker
+    from .pull import workspace_id
+    ws_dir = Path(ws_dir)
+    if central_marker(ws_dir):
+        raise SystemExit(f"{ws_dir} 已经在中心库（有 {CENTRAL_MARKER}）；要更新用 guji db pull／push")
+    ws = workspace_id(ws_dir)
+    if is_shared_ws(ws):
+        raise SystemExit(f"{ws} 是共享层工作区，由升级脚本开，不用 db init")
+    branch = getattr(src, "branch", "main")
+    if _db_manifest(src, ws) or src.changes_since(ws, 0):
+        raise SystemExit(f"中心库（分支 {branch}）里已经有工作区 {ws}：用 guji db pull -w {ws_dir}")
+    if not (ws_dir / "books").is_dir() or not any((ws_dir / "books").glob("*.yaml")):
+        raise SystemExit(f"{ws_dir}/books/ 下没有册 yaml：先写好 books/<册>.yaml（控制台只认有册的工作区）")
+    data = central_data_dir(ws, branch)
+    if data.exists() and any(data.iterdir()):
+        raise SystemExit(f"数据目录 {data} 已有东西；先弄清是哪来的")
+    files = [rel for rel, _ in _walk(ws_dir)]
+    report = {"ws": ws, "branch": branch, "data_dir": str(data), "files": files, "dry_run": dry_run}
+    if dry_run:
+        return report
+    data.mkdir(parents=True, exist_ok=True)
+    for rel, p in list(_walk(ws_dir)):
+        dst = data / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(p), dst)
+    for pre in SCOPE:                                  # 删空目录
+        d = ws_dir / pre.rstrip("/")
+        if d.is_dir():
+            for sub in sorted((x for x in d.rglob("*") if x.is_dir()), key=lambda x: -len(x.parts)):
+                if not any(sub.iterdir()):
+                    sub.rmdir()
+            if not any(d.iterdir()):
+                d.rmdir()
+    write_state(data, ws=ws, branch=branch, rev=0, base={}, glyph_db_fp=None)
+    (ws_dir / CENTRAL_MARKER).write_text(json.dumps({"ws": ws, "branch": branch}, ensure_ascii=False) + "\n",
+                                          encoding="utf-8")
+    report["pending"] = len(files) + 1                 # 加 workspace.yaml
+    return report
+
+
 #: 收录范围后来才扩进来的工作区根目录 → 数据目录里的落点（2026-10-19 共享方案 2.2 节：整理本、语料库清单）
 ADOPT = {"corpus": "corpus", "corpus-pack": "config/corpus-pack"}
 
