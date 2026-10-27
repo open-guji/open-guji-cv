@@ -1139,6 +1139,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
             res.coord_fallback[str(cc.col)] = why
             res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
             continue
+        # 孤立弱冲突（见 `_coord_conflict`）：列照用，冲突格仍记进 coord_conflict_ids（seed_admit 不放 match_ref）。
+        res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in r.recs)
@@ -1158,6 +1160,15 @@ def _coord_conflict_ids(recs, legacy: dict) -> list[str]:
     return out
 
 
+# 孤立弱冲突不退回整列（2026-10-27，vol15 p50 列 7／9：一格现役 equal 与坐标字不同，其余 6／11 格全同，
+# 退回后整列 24 格没字）。整列错一位的特征是多格不合、或不合的现役字恰是邻格的坐标字、或不合处现役 equal 段很长：
+# 只有「现役 equal 段 ≤ COORD_WEAK_RUN（单字孤立匹配，最不可靠）、坐标字非空、非邻格错位、整列只此一格、
+# 同列至少 COORD_WEAK_MIN_AGREE 格现役 equal 与坐标全同」才算孤立弱冲突，列照用。
+COORD_WEAK_RUN = 2
+COORD_WEAK_MAX = 1
+COORD_WEAK_MIN_AGREE = 5
+
+
 def _coord_conflict(recs, legacy: dict, same: dict) -> str:
     """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
 
@@ -1167,13 +1178,25 @@ def _coord_conflict(recs, legacy: dict, same: dict) -> str:
     这些格的现役对位几乎全是 `equal`（认出来的字与整理本逐字相同），所以：
 
     - 与现役 `equal` 位的字不同 → 退回（现役 `replace` 位本身存疑，不作数）；
+      例外：孤立弱冲突（`COORD_WEAK_*`，vol15 p50 列 7／9）不退回；
     - 被判成空格位的格，库却以 `same` 认下了一个字 → 退回（锚不上的页没有现役
       对位可比，靠这条挡同一种错位）。"""
-    for i, _sl, _sub, ch, _g in recs:
+    chs = [r[3] for r in recs]
+    agree, weak, strong = 0, [], []
+    for k, (i, _sl, _sub, ch, _g) in enumerate(recs):
         lg = legacy.get(i)
-        if lg is not None and lg.align_op == "equal" and lg.align_char != ch:
-            return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lg.align_char}）"
+        if lg is not None and lg.align_op == "equal":
+            if lg.align_char == ch:
+                agree += 1
+            elif (ch and lg.ref_run <= COORD_WEAK_RUN
+                  and not (k > 0 and chs[k - 1] == lg.align_char)
+                  and not (k + 1 < len(chs) and chs[k + 1] == lg.align_char)):
+                weak.append(i)
+            else:
+                strong.append((i, ch, lg.align_char))
         if ch == "" and i in same:
             return f"空格位上库认出了字（{i} 库 same {same[i]}）"
+    if strong or len(weak) > COORD_WEAK_MAX or (weak and agree < COORD_WEAK_MIN_AGREE):
+        i, ch, lc = strong[0] if strong else (weak[0], next(r[3] for r in recs if r[0] == weak[0]), legacy[weak[0]].align_char)
+        return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lc}）"
     return ""
-

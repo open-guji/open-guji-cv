@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `align_ref` 坐标对位不再因「孤立弱冲突」整列退回（A31 vol15 p50 列 7／9：整列 24 格成 □，正确的「有」「程」恰是坐标字）。同列现役 equal 与坐标字不合处只有一格、现役 equal 段长 ≤2、坐标字非空、不是邻格错位、同列至少 5 格 equal 全同时，列照用；冲突格仍记进 `coord_conflict_ids`，`seed_admit` 照旧不放它的 match_ref。vol03／14／15 全册回放：新保留 6 列（vol03 2、vol15 4），vol14 不变，原先退回的错位列仍退回。`align_ref.py` 的 `code_hash` 变，各册 `align_ref` 及下游判过期。PATCH。
+
 ## [0.5.28] - 2026-10-27
 
 PATCH（GUJI-748 换图源：#693 Step1 push_bottom_to_bar 右界越界整页失败修复、#696 导出裁出图框；另含 keben_free 自由版式 #686 #692 #694，缺省关）。
