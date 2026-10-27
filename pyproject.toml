@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-guji-cv"
-version = "0.5.26"
+version = "0.5.27"
 description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
 readme = "README.md"
 license = { file = "LICENSE" }
