@@ -7,6 +7,7 @@
 
 - 拆分 M4（10-27）：`scripts/rerun_prep.sh`、`guji_jobs start` 开工时检测本会话有没有装 guji-manager，没装就提示装法（私有仓，快照里没有）；只提示不拦。不动 Step。PATCH。
 - 自由版式 `keben_free` 找列（Sheldon 审 yxat 9–16 页）：`column_trace` 1.3 等宽网格两端贴块边（版框内沿、版心线，不留窄条）、切线代价按 0.12 列距抹平（切在列间空白正中，不落进小注两行间）；人标 `align`（`block_detect` 1.4 记进 `BlockRec.align`）同组的块共用一套列线。只有 keben_free 管线用（yxat 一册）。
+- 同义字组暂归一兜底（sheldon 10-27，A24）：同义组方法拆不开写法、与整理本说法不一而本要留人审／降审的格，库形与整理本（复核时已放行字）都认是这个字，就放成这组最常见的字形，`evidence.group.decision` 记 `provisional`，可筛出来再拆（`groups.flow.is_provisional`、`registry.PROVISIONAL`；开关 `seed_admit.group_flow_provisional` 缺省开）。不同义组不兜底，组里意思不同的字（識）、陪衬不算同一个字。vol07–99 离线回放：同义组送审 676→212，兜底 464 格看图字都认对。`guji groups status` 加「暂归一兜底」列；建模板脚本剔除兜底格。`seed_admit` 参数与 `code_hash` 变，开 `group_flow` 的册判过期。PATCH。
 - 拆分 M4 地基（10-27）：`guji` 支持插件命令——入口点组 `guji.commands`（装了 guji-manager 即并入它的子命令；本仓自带同名命令优先）。只改 `cli_v2`，不动 Step，19 步 `code_hash` 不变。PATCH。
 - 拆分 M3b（10-27）：`clustering.seeding` 去掉对 `datastore.packs` 的 import（LM 缓存取法改走 `core.derived`，`guji` 入口注册）。`seed_admit` 的 `code_hash` 会变，已登记代码等价（`core/code_equiv.py`）：vol04 40 页逐字节相同，指纹仍与改前一致，产物不过期。pipeline→manager 反向依赖剩 5 条。PATCH。
 - 拆分 M3a（10-27）：pipeline 一侧对 manager 一侧的反向依赖由 12 条清到 6 条。`discover_workspaces` 搬进 `core/workspace`；`parse_cells_spec` 搬进 `core/book`；`is_exp_branch` 搬进 `core/workspace`；`PULL_MARK` 归 `ProductStore`；派生缓存取法抽成 `core/derived`（本机 `GUJI_DERIVED_DIR` 优先，其次入口注册的取法），`font_pack.push_packs` 挪到 `ops/derived_push`。行为不变，19 步 `code_hash` 与 dev 逐一相同。PATCH。

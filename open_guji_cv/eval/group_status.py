@@ -8,7 +8,7 @@
 
 - **出现格**：放行字在组里的格，加上进过组流程（`evidence.group.id`＝本组）的格。一个字可属多组（日：ry、rm），各组各算。
 - **组判**：进过组流程的格；**给字**：组流程给出了字（`group.pick`）。组判率＝给字 ÷ 组判。
-- **放行／送审**：出现格里最终放行、送审的格数。
+- **放行／送审**：出现格里最终放行、送审的格数；**暂归一兜底**：其中由同义组暂归一兜底放行的格（`group.decision`＝`provisional`，将来要拆）。
 - **人裁核对**：已放行、非人裁通道、且 `unified.jsonl` 里有刻形（`shape`，没有就用文意 `reading`）的格；
   **不一致**＝放行字与人裁字不同（给了 `--codepoints` 时两边先按它归一，码位差不算）。不一致不等于错：
   人裁可能晚于产物，要逐格看；明细在 json 的 `mismatch`。人裁字不在本组里的记为**疑格号漂移**（`drift`）：
@@ -129,8 +129,8 @@ def render_md(d: dict, tag: str, date: str, prev: dict | None = None) -> str:
     out = [f"# 字组状态 {date}（{tag}）", "",
            f"产物：{len(d['books'])} 册（{'、'.join(d['books'])}）。口径见 cv 仓 `open_guji_cv/eval/group_status.py` 模块头；"
            "每组 × 每册明细在同名 json。" + (f"括号里的增减比的是 {prev.get('date')}（{prev.get('tag') or '—'}）。" if prev else ""), "",
-           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 组判 | 组判率 | 人裁核对 | 不一致（疑格号漂移） | 核对一致率 | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
-           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+           "| 组 | 名 | 类型 | 出现格 | 放行率 | 送审 | 暂归一兜底 | 组判 | 组判率 | 人裁核对 | 不一致（疑格号漂移） | 核对一致率 | 人工数据 刻形/文意/切线/部件（中心库） | 多来源／更正过 | 方法数组 |",
+           "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for gid, g in d["groups"].items():
         t, lb = g["total"], g["labels"]
         dr = ""
@@ -139,7 +139,7 @@ def render_md(d: dict, tag: str, date: str, prev: dict | None = None) -> str:
             dr = "（新）" if n0 is None else f"（{t.get('review', 0) - n0:+d}）" if t.get("review", 0) != n0 else "（0）"
         real = t.get("mismatch", 0) - t.get("drift", 0)
         out.append(f"| {gid} | {g['name']} | {g['kind']} | {t.get('occ', 0)} | {_pct(t.get('admit', 0), t.get('occ', 0))} | "
-                   f"{t.get('review', 0)}{dr} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
+                   f"{t.get('review', 0)}{dr} | {t.get('decision:provisional', 0) or ''} | {t.get('flow', 0)} | {_pct(t.get('pick', 0), t.get('flow', 0))} | "
                    f"{t.get('checked', 0)} | {t.get('mismatch', 0)}（{t.get('drift', 0)}） | "
                    f"{_pct(t.get('checked', 0) - t.get('drift', 0) - real, t.get('checked', 0) - t.get('drift', 0))} | "
                    f"{lb.get('shape', 0)}/{lb.get('reading', 0)}/{lb.get('cut', 0)}/{lb.get('parts', 0)}（{lb.get('central', 0)}） | "

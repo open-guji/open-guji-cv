@@ -63,7 +63,7 @@ def test_status_counts_occurrence_flow_and_label_check(tmp_path):
 
     pj, pm = S.run([tmp_path / "prod"], tmp_path / "out", labels, cp, tag="t", date="2026-10-24")
     assert pj.name == "2026-10-24-t.json" and json.loads(pj.read_text(encoding="utf-8"))["tag"] == "t"
-    assert "| ry | 日曰 | 不同义 | 3 | 66.7% | 1 | 2 | 50.0% | 1 | 1（0） |" in pm.read_text(encoding="utf-8")
+    assert "| ry | 日曰 | 不同义 | 3 | 66.7% | 1 |  | 2 | 50.0% | 1 | 1（0） |" in pm.read_text(encoding="utf-8")
 
 
 def test_review_breakdown_classifies_and_diffs(tmp_path):

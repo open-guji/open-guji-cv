@@ -235,7 +235,7 @@ def test_variant_review_runs_only_shape_method(monkeypatch):
         return GroupVerdict(out[r.id], via=name)
     monkeypatch.setattr(flow, "_solve", solve)
     seq = [Rec(k, "旨", True, "match_solo", "match") for k in "abc"]
-    res = group_flow_pass(seq, {}, lambda cid: [], lambda r: False, _cfg(freq_table={"zhi": {"㫖": 30, "旨": 0}}))
+    res = group_flow_pass(seq, {}, lambda cid: [], lambda r: False, _cfg(freq_table={"zhi": {"㫖": 30, "旨": 0}}, provisional=False))
     a, b, c = seq
     assert set(ran) == {"ids"}
     assert not a.admit and a.char == "旨" and "group_flow_disagree" in a.doubts and a.evidence["group"]["decision"] == "demote"
@@ -686,7 +686,7 @@ def test_review_same_shape_keeps_and_ref_dissent_demotes(monkeypatch):
     y = Rec("y", "𨽾", True, "match_ref")       # 判出 𨽾、整理本 隸：降审（整理本说是另一形）
     z = Rec("z", "𨽾", True, "match_ref")       # 判出 隸＝整理本：改字
     amap = {"x": ("隷", "equal"), "y": ("隸", "equal"), "z": ("隸", "equal")}
-    group_flow_pass([x, y, z], amap, lambda cid: [], lambda r: False, FlowConfig(groups=("li",)), canon=_canon)
+    group_flow_pass([x, y, z], amap, lambda cid: [], lambda r: False, FlowConfig(groups=("li",), provisional=False), canon=_canon)
     assert x.admit and x.char == "隷" and x.evidence["group"]["decision"] == "keep"
     assert not y.admit and "group_flow_ref_dissent" in y.doubts
     assert z.admit and z.char == "隸" and z.evidence["group"]["decision"] == "fix"
@@ -710,3 +710,70 @@ def test_mb_rule_strong_and_ref_rule_fix():
     assert (b.char, b.admit, b.evidence["group"]["decision"]) == ("本", True, "fix")      # 一条规则＋坐标对位本
     assert not c.admit and "group_flow_disagree" in c.doubts                               # 一条规则、没有整理本
     assert (d.char, d.admit) == ("本", True)
+
+
+# —— 暂归一兜底（sheldon 2026-10-27）——
+
+def _pv_run(monkeypatch, recs, amap, cands, g="can", coord=None, **kw):
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, gg, r, *a, **k: GroupVerdict(kw.get("pick", {}).get(r.id), via=name))
+    group_flow_pass(recs, amap, lambda cid: cands[cid], lambda r: False, FlowConfig(groups=(g,)), veto_refs=coord or {})
+    return recs
+
+
+def test_provisional_lift_needs_both_witnesses(monkeypatch):
+    """方法弃权：库首位与分差内候选、整理本（缺时坐标对位）都在同字写法里 → 放成最常见字形，标 provisional；
+    整理本是组外字、没有整理本字、夹注半格只有坐标对位 → 照旧留人审。"""
+    ids = ["v:1:1:1", "v:1:1:2", "v:1:1:3", "v:1:1:4", "v:1:1:5", "v:1:1:6a"]
+    recs = [Rec(k) for k in ids]
+    c = [("㕘", 0.97)]
+    cands = dict(zip(ids, [c, [("㕘", 0.97), ("叅", 0.96)], c, c, [("㕘", 0.97), ("參", 0.96)], c]))
+    _pv_run(monkeypatch, recs, {ids[0]: ("㕘", "equal"), ids[2]: ("麥", "equal"), ids[4]: ("㕘", "equal")}, cands,
+            coord={ids[1]: "叅", ids[5]: "㕘"})
+    a, b, c, d, e, f = recs
+    assert a.admit and a.char == "參" and a.channel == "group_flow" and a.evidence["group"]["decision"] == "provisional"
+    assert a.evidence["group"]["solvers"][-1] == {"solver": "provisional", "char": "參", "why": "fallback:abstain", "witness": "㕘"}
+    assert b.admit and b.char == "參"                                   # 坐标对位字也算一路
+    assert not c.admit                                                  # 整理本说是组外的字
+    assert not d.admit                                                  # 没有整理本字
+    assert e.admit and e.char == "參"
+    assert not f.admit                                                  # 夹注半格只有坐标对位
+    assert flow_is_provisional(a) and not flow_is_provisional(c)
+
+
+def flow_is_provisional(r):
+    from open_guji_cv.groups.flow import is_provisional
+    return is_provisional(r)
+
+
+def test_provisional_keeps_out_non_synonyms(monkeypatch):
+    """讖識䜟：識 是另一个字，不进暂归一；分差内有 識 或整理本作 識 都不兜底。卿 是 鄉 的陪衬（形近不同字）同理。"""
+    recs = [Rec(k) for k in ("v:1:1:1", "v:1:1:2", "v:1:1:3")]
+    cands = {"v:1:1:1": [("䜟", 0.97), ("識", 0.96)], "v:1:1:2": [("䜟", 0.97)], "v:1:1:3": [("䜟", 0.97)]}
+    _pv_run(monkeypatch, recs, {"v:1:1:1": ("䜟", "equal"), "v:1:1:2": ("識", "equal"), "v:1:1:3": ("讖", "equal")}, cands, g="chen")
+    a, b, c = recs
+    assert not a.admit and not b.admit
+    assert c.admit and c.char == "䜟" and c.evidence["group"]["decision"] == "provisional"
+
+
+def test_provisional_review_instead_of_demote(monkeypatch):
+    """复核（絕絶 只降不改）：判出另一形要降审的格，放行字在同字写法里 → 不降，放成最常见字形。"""
+    x, y = Rec("x", "絕", True, "match_ref"), Rec("y", "絕", True, "match_ref")
+    _pv_run(monkeypatch, [x, y], {"x": ("絕", "equal")}, {"x": [], "y": []}, g="jue", pick={"x": "絶", "y": "絶"})
+    assert x.admit and x.char == "絶" and x.evidence["group"]["decision"] == "provisional"
+    assert x.evidence["fixed_from"] == {"channel": "match_ref", "char": "絕"}
+    assert y.admit and y.char == "絶"
+
+
+def test_provisional_off_and_near_form_groups(monkeypatch):
+    from open_guji_cv.groups.registry import FLOW_GROUPS, PROVISIONAL
+    assert all(FLOW_GROUPS[g].kind == "variant" for g in PROVISIONAL)     # 意思不同的形近字组绝不暂归一
+    assert all(p.to in p.forms and p.forms & FLOW_GROUPS[g].members for g, p in PROVISIONAL.items())
+    r = Rec("a")
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda *a, **k: GroupVerdict(None))
+    group_flow_pass([r], {"a": ("㕘", "equal")}, lambda cid: [("㕘", 0.97)], lambda r: False,
+                    FlowConfig(groups=("can",), provisional=False))
+    assert not r.admit and "group_flow_abstain" in r.doubts
