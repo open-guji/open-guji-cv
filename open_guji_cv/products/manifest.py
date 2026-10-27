@@ -64,6 +64,11 @@ class ManifestEntry:
     """跑这一页时本机数据目录对应的中心库版本 `<工作区>@<分支>:<rev>`（`core.workspace.central_rev`）。
     不进指纹；字形库、人裁的内容版本靠它追（`glyph_pin` 只钉指纹）。老条目是 None。"""
 
+    contract_version: int | None = None
+    """生成这条产物时 pipeline 讲的契约版本（`core/contract.py`，2026-10-27 拆分 M1）。不进指纹；老条目是 None（按 0 算）。"""
+    manager_version: str | None = None
+    """调用方 pipeline manager 的版本（环境变量 `GUJI_MANAGER_VERSION`，manager 设）。只供审计：不进指纹、不参与过期判定。"""
+
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)
 

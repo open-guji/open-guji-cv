@@ -38,6 +38,8 @@ LAYER: dict[str, int] = {
     "console": 5,
     # L6 命令行入口
     "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
+    # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
+    "api": 6,
     # L7 `python -m`
     "__main__": 7,
 }
@@ -97,7 +99,7 @@ SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
     "core", "products", "utils", "clustering", "pagetype_model", "groups",
-    "gates", "steps", "shadow", "__main__",
+    "gates", "steps", "shadow", "api", "__main__",
 })
 #: 整包归 manager 的例外之外，按模块前缀改判（最长前缀优先）
 SIDE_OVERRIDE: dict[str, str] = {
