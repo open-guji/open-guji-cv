@@ -7,9 +7,12 @@
     guji source ia <书id> <册> --ia <IA 标识> --ws <工作区 id> --book <册名> [--splits 表] --why …
                                                                  # 从 IA 下源件、存档、生成页图、发布页表（正式令牌）
     guji source commons <书id> <册> --file <Commons 文件名> --ws … --book … [--splits 表] --why …
-                                                                 # 从 Commons（根）取 DjVu、存档、解页、发布页表（正式令牌，要 ddjvu）
+                                                                 # 从 Commons（根）取 DjVu／PDF、存档、解页、发布页表（正式令牌；DjVu 要 ddjvu，PDF 要 pdfimages）
                                                                  # 会话连不上 Commons 时：别处下好 DjVu 与 imageinfo，--djvu 文件 --commons-json 信息
                                                                  # 修好的新版传上 Commons 以后加 --reroot：页序、页图字节不变，只换根
+    guji source spreads <源件 PDF/DjVu/zip> --vol <册号> --out <拆页表.json> [--sheet <核对图.png>]
+                                                                 # 对开页（一开一张图）找书脊，出拆页表，给 ia/commons 的 --splits
+                                                                 # commons 也可直接 --splits auto（现找现用，核对图写在缓存目录）
     guji source commons-pack <书id> <册> --out <目录>           # 修过的页合进根，出回传 Commons 的新版 DjVu 与摘要（只出文件，不上传）
     guji source register <书id> <册> --dir <原图目录> --map <页号→页序表> [--ia <IA 标识> | --src-file <路径>=<网址> …] --ws … --book … --why …
                                                                  # 已有原图目录原样登记（老册，不重编码）（正式令牌）
@@ -41,14 +44,15 @@ def _actor(args) -> str:
     return args.by or os.environ.get("GUJI_ACTOR") or "unknown"
 
 
-def _load_splits(path: str | None, vol: str) -> dict[int, list[dict]]:
+def _load_splits(path, vol: str) -> dict[int, list[dict]]:
     """拆页表：`[{vol: "vol03"|"03", ia_leaf: 105, canvas_seq: "0105a", xywh: [...]}, …]`（与 web 仓
     `ops/iiif/siku-zongmu-splits.json` 同形），取本册，按页序排。"""
     if not path:
         return {}
     from .datastore.sources import norm_vol
     out: dict[int, list[dict]] = {}
-    for r in json.loads(Path(path).read_text(encoding="utf-8")):
+    rows = path if isinstance(path, list) else json.loads(Path(path).read_text(encoding="utf-8"))
+    for r in rows:
         if norm_vol(r["vol"]) != vol:
             continue
         out.setdefault(int(r["ia_leaf"]), []).append({"part": r["canvas_seq"][-1], "crop": r["xywh"],
@@ -195,14 +199,17 @@ def cmd_commons(args) -> None:
         print(f"  已存 R2 {rec['r2']}")
     with tempfile.TemporaryDirectory() as td:
         z = Path(td) / "leaves.zip"
-        n = S.djvu_to_zip(path, z)
+        n, decoder = S.source_to_zip(path, z)
         if info.get("pagecount") and n != info["pagecount"]:
             raise SystemExit(f"✗ 解出 {n} 页，Commons 记 {info['pagecount']} 页")
         key = "s1"
         if args.reroot:
             prev = S.read_table(src, args.book_id, vol)
             key = f"s{len(prev['sources']) + 1}"
-        pages, blobs = S.build_from_zip(z, source_key=key, splits=_load_splits(args.splits, vol))
+        splits = args.splits
+        if splits == "auto":
+            splits = _auto_splits(z, vol, Path(path).with_suffix(".splits.json"))
+        pages, blobs = S.build_from_zip(z, source_key=key, splits=_load_splits(splits, vol))
     print(f"  生成 {len(pages)} 页（{sum(len(b) for b in blobs.values()) / 1e6:.1f} MB）")
     sources = [{"key": "s1", **rec}]
     if args.reroot:
@@ -225,8 +232,43 @@ def cmd_commons(args) -> None:
     _expect(pages, args.expect, args.expect_skip)
     table = S.new_table(args.book_id, vol, ws=args.ws or (prev.get("ws") if args.reroot else None),
                         book=args.book or (prev.get("book") if args.reroot else None), sources=sources, pages=pages,
-                        **({"encoding": prev.get("encoding", S.ENCODING)} if args.reroot else {}), decoder="ddjvu")
+                        **({"encoding": prev.get("encoding", S.ENCODING)} if args.reroot else {}), decoder=decoder)
     _finish(src, args, table, blobs, args.why)
+
+
+def _auto_splits(z: Path, vol: str, out: Path) -> list[dict]:
+    """叶 zip 里的对开页现找书脊；拆页表与核对图存在源件旁，便于事后核。"""
+    from .datastore import spreads as SP
+    rows, diag = SP.detect(z, vol)
+    out.write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    SP.sheet(z, diag, out.with_suffix(".png"))
+    weak = [d["leaf"] for d in diag if d["weak"]]
+    print(f"  对开 {len(diag)} 张按书脊拆成 {len(rows)} 页；拆页表 {out}，核对图 {out.with_suffix('.png')}"
+          + (f"；折痕不明显、要人看：{weak}" if weak else ""))
+    return rows
+
+
+def cmd_spreads(args) -> None:
+    import tempfile
+
+    from .datastore import sources as S
+    from .datastore import spreads as SP
+    src = Path(args.src_path)
+    vol = S.norm_vol(args.vol)
+    with tempfile.TemporaryDirectory() as td:
+        if src.suffix.lower() == ".zip":
+            z = src
+        else:
+            z = Path(td) / "leaves.zip"
+            S.source_to_zip(src, z)
+        rows, diag = SP.detect(z, vol)
+        if args.sheet:
+            SP.sheet(z, diag, Path(args.sheet))
+    Path(args.out).write_text(json.dumps(rows, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    weak = [d["leaf"] for d in diag if d["weak"]]
+    print(f"✓ 对开 {len(diag)} 张 → 拆页表 {len(rows)} 行 → {args.out}"
+          + (f"；折痕不明显、要人看：{weak}" if weak else "")
+          + (f"；核对图 {args.sheet}" if args.sheet else "（加 --sheet 出核对图，登记前逐张看）"))
 
 
 def cmd_commons_pack(args) -> None:
@@ -310,25 +352,26 @@ def cmd_replace(args) -> None:
 
 
 COMMANDS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
-            "ia": cmd_ia, "commons": cmd_commons, "commons-pack": cmd_commons_pack, "register": cmd_register, "replace": cmd_replace}
+            "ia": cmd_ia, "commons": cmd_commons, "commons-pack": cmd_commons_pack, "spreads": cmd_spreads, "register": cmd_register, "replace": cmd_replace}
 
 
 def add_parser(sub) -> None:
     p = sub.add_parser("source", help="[v2] 原图：源件存档、页图、页表（R2），云会话取原图")
     p.add_argument("action", choices=sorted(COMMANDS))
-    p.add_argument("pos", nargs="*", help="pull：<册>；show/check/ia/commons/commons-pack/register：<书id> <册>；list：<书id>；replace：<书id> <册> <页序> <png>")
+    p.add_argument("pos", nargs="*", help="pull：<册>；spreads：<源件>；show/check/ia/commons/commons-pack/register：<书id> <册>；list：<书id>；replace：<书id> <册> <页序> <png>")
     p.add_argument("-w", "--workspace", default=None, help="pull：工作区（定册配置里的原图目录）")
     p.add_argument("--rev", type=int, default=None, help="页表版本，缺省最新")
     p.add_argument("--to", default=None, help="pull：落到这个目录（<页>.png），不按册配置")
     p.add_argument("--book-id", default=None, help="pull：不查登记，直接给书 id（配 --vol）")
-    p.add_argument("--vol", default=None, help="pull：配 --book-id")
+    p.add_argument("--vol", default=None, help="pull：配 --book-id；spreads：册号")
     p.add_argument("--ia", default=None, help="ia/register：IA 标识，如 06061310.cn")
     p.add_argument("--file", default=None, help="commons：Commons 文件名（不带 File: 也行）")
-    p.add_argument("--djvu", default=None, help="commons：本地已下好的源件（会话连不上 Commons 时）")
+    p.add_argument("--djvu", default=None, help="commons：本地已下好的源件 DjVu 或 PDF（会话连不上 Commons 时）")
     p.add_argument("--commons-json", default=None, help="commons：配 --djvu，Commons imageinfo（title/url/sha1/timestamp/pagecount）")
     p.add_argument("--ws", default=None, help="ia/register：cv 工作区 id（写 by-ws 指针）")
     p.add_argument("--book", dest="book_name", default=None, help="ia/register：cv 册名，如 vol11")
-    p.add_argument("--splits", default=None, help="ia：拆页表（同 web 仓 siku-zongmu-splits.json）")
+    p.add_argument("--splits", default=None, help="ia/commons：拆页表（同 web 仓 siku-zongmu-splits.json）；commons 写 auto＝对开页现找书脊")
+    p.add_argument("--sheet", default=None, help="spreads：核对图输出路径")
     p.add_argument("--expect", default=None, help="ia/register：产物包里的 _raw_index.json，逐页核 sha，不符不发布")
     p.add_argument("--expect-skip", default=None, help="ia/register：不比的 cv 页号（册配置 preclean 登记的页），逗号分隔")
     p.add_argument("--src-file", action="append", default=None,
@@ -344,7 +387,7 @@ def add_parser(sub) -> None:
     p.add_argument("--by", default=None, help="写：谁（缺省 GUJI_ACTOR）")
     p.add_argument("--dry-run", action="store_true", help="写：只算不传")
     p.add_argument("--json", action="store_true", help="show：整份页表")
-    p.add_argument("--out", default=None, help="commons-pack：输出目录（新版 DjVu 与 .upload.json）")
+    p.add_argument("--out", default=None, help="commons-pack：输出目录（新版 DjVu 与 .upload.json）；spreads：拆页表路径")
     p.add_argument("--reroot", action="store_true",
                    help="commons：修好的版本已传上 Commons，按旧页表逐页对上，沿用页序（页 id 不变）")
 
@@ -352,7 +395,7 @@ def add_parser(sub) -> None:
 def cmd_source(args) -> None:
     pos = list(args.pos or [])
     a = args.action
-    need = {"pull": 1, "list": 1, "show": 2, "check": 2, "ia": 2, "commons": 2, "commons-pack": 2, "register": 2, "replace": 4}[a]
+    need = {"pull": 1, "list": 1, "spreads": 1, "show": 2, "check": 2, "ia": 2, "commons": 2, "commons-pack": 2, "register": 2, "replace": 4}[a]
     if a == "pull" and args.book_id:
         need = 0
     if len(pos) < need:
@@ -362,6 +405,11 @@ def cmd_source(args) -> None:
         args.book = pos[0] if pos else None
     elif a == "list":
         args.book_id = pos[0]
+    elif a == "spreads":
+        args.src_path = pos[0]
+        if not (args.vol and args.out):
+            print("✗ spreads 要 --vol <册号> 与 --out <拆页表.json>", file=sys.stderr)
+            sys.exit(2)
     else:
         args.book_id, args.vol = pos[0], pos[1]
         if a == "replace":

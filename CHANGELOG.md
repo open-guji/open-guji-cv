@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 新开一部书（《增廣幼學須知鰲頭雜字大全》哈佛本，10-26）：`guji source commons` 收 PDF 源件（`pdfimages` 原样抽每页嵌入图，不重压）；`--splits auto` 与新子命令 `guji source spreads <源件>` 对开图按书脊折痕自动出拆页表（天头地脚里找折痕，附核对图）；新 `guji db init -w <工作区>`：中心库里还没有的工作区，把册 yaml 等挪进数据目录、记 rev 0，之后 `guji db push` 整批进库（原先新工作区没法进库）。不动 Step。
+
 ## [0.5.26] - 2026-10-26
 
 PATCH（GUJI-748 换图源：#664 source pull 删页表外残留原图、#666 prep 删页表外旧页产物、#670 抬头框探测按图尺度缩放 `head_raise_scale`；另含 #661 印章遮挡格放行、#665 #667 #668 #669 字组规则）。`seed_admit`、`align_ref` 的 `code_hash` 变（#661）；Step1 等价登记，产物不因 #670 过期。
