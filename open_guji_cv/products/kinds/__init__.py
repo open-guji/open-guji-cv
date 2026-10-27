@@ -9,3 +9,4 @@ from . import line_index  # noqa: F401  —— 现代印刷链 Step1 的列明�
 from . import page_survey  # noqa: F401  —— Step0 页面预检（任务卡 #54 第22条）
 from . import seals  # noqa: F401  —— 印章定位（2026-10-22）
 from . import inverted  # noqa: F401  —— 反色带候选（2026-10-22）
+from . import free_layout  # noqa: F401  —— 自由版式管线 keben_free 的三种产物（2026-10-27）

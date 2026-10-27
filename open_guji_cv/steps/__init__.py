@@ -24,4 +24,5 @@ from . import (border_detect, column_warp, row_segment,  # noqa: F401
                cell_shrink, glyph_match, rare_candidates,
                context_decide, align_ref, seed_admit)
 from . import line_detect, column_crop, row_segment_runs  # noqa: F401  —— 现代印刷链（modern_body.yaml）
+from . import block_detect, column_trace, cell_cut  # noqa: F401  —— 自由版式链（keben_free.yaml，2026-10-27）
 from .. import gates  # noqa: F401  —— 闸挂在对应 Step 的 spec 上，必须晚于上面几行
