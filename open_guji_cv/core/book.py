@@ -417,7 +417,6 @@ class BookSpec:
         """
         if isinstance(pages, str):
             if pages.startswith("cells:"):
-                from ..review.cards import parse_cells_spec
                 try:
                     ids = parse_cells_spec(pages, self.id)
                 except ValueError as e:
@@ -608,6 +607,28 @@ def _book_yaml_path(book_id: str, books_dir: Path | None = None) -> Path:
             f"册配置只读工作区的 books/（2026-09-15 起），"
             f"跑真书前先 export GUJI_WORKSPACE=/path/to/<书>-workspace")
     return ws_dir / f"{book_id}.yaml"
+
+
+
+def parse_cells_spec(pages: str, book: str) -> set[str]:
+    """`cells:4:1:21,6:8:1` → `{"bxgb:4:1:21", "bxgb:6:8:1"}`（2026-09-17）。
+
+    用户「输入 4:1:21 就显示那张卡」：人裁时报出一个字位要立刻调卡对着看，
+    不必先猜它在哪一页。书号可省（省了补 `book`），逗号/空格/中文逗号都当分隔符。
+
+    返回值进 `cards()` 的 `only_ids`，与点名清单 `list:` 同一条通路，因此同样
+    **不受 only / 顺序闸 / 已裁去重约束**——点名要看的就得出得来，否则「它已自动
+    进库」或「旁边切线没裁」会把它静默吞掉，人对着空面板分不清是没问题还是被吞了。
+    """
+    raw = pages[len("cells:"):].replace("，", ",").replace(" ", ",")
+    ids = {tok if tok.count(":") >= 3 else f"{book}:{tok}"
+           for tok in (t.strip() for t in raw.split(",")) if tok}
+    if not ids:
+        raise ValueError(f"cells: 里没有可用的坐标：{pages!r}")
+    bad = sorted(i for i in ids if i.count(":") < 3 or not i.split(":")[1].isdigit())
+    if bad:
+        raise ValueError(f"坐标要写成 页:列:格（可带书号），这些不对：{bad}")
+    return ids
 
 
 def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:

@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 拆分 M3a（10-27）：pipeline 一侧对 manager 一侧的反向依赖由 12 条清到 6 条。`discover_workspaces` 搬进 `core/workspace`；`parse_cells_spec` 搬进 `core/book`；`is_exp_branch` 搬进 `core/workspace`；`PULL_MARK` 归 `ProductStore`；派生缓存取法抽成 `core/derived`（本机 `GUJI_DERIVED_DIR` 优先，其次入口注册的取法），`font_pack.push_packs` 挪到 `ops/derived_push`。行为不变，19 步 `code_hash` 与 dev 逐一相同。PATCH。
 - `align_ref` 坐标对位不再因「孤立弱冲突」整列退回（A31 vol15 p50 列 7／9：整列 24 格成 □，正确的「有」「程」恰是坐标字）。同列现役 equal 与坐标字不合处只有一格、现役 equal 段长 ≤2、坐标字非空、不是邻格错位、同列至少 5 格 equal 全同时，列照用；冲突格仍记进 `coord_conflict_ids`，`seed_admit` 照旧不放它的 match_ref。vol03／14／15 全册回放：新保留 6 列（vol03 2、vol15 4），vol14 不变，原先退回的错位列仍退回。`align_ref.py` 的 `code_hash` 变，各册 `align_ref` 及下游判过期。PATCH。
 
 ## [0.5.30] - 2026-10-27

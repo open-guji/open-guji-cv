@@ -3707,6 +3707,7 @@ def main(argv: list[str] | None = None) -> None:
     if argv is None:
         from .utils.batch_slice import enter_batch_slice
         enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
+    prep.install_derived_fetcher()
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)

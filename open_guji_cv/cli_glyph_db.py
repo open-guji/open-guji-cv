@@ -166,7 +166,8 @@ def _font_pack_push(db, args) -> dict:
             skipped.append({"edition": spec.edition_tag, "why": "库里这套字体域与清单／字表／--vertical 对不上，先重导"})
             continue
         saved.append(FP.save_pack(db, spec, chars, args.vertical))
-    pushed = FP.push_packs()
+    from .ops.derived_push import push_packs
+    pushed = push_packs()
     if not getattr(args, "keep_pack", False):
         for f in saved:
             f.unlink(missing_ok=True)
