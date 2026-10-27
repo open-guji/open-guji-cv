@@ -128,8 +128,10 @@ SPECS: dict[str, IdsSpec] = {
     # 第四轮（10-21，sheldon 指出窗口法的参数和模板都在同一批 82 格上选，留一偏乐观）：改**按册留出**——留出一册，窗口参数／U-Net／模板
     # 都只用其余九册：窗口法错 5 格（上段 4、中段 1，多数把握不低），**U-Net 切分 + HOG 岭回归只错 1 格**（vol05:74:7:10 极黑，把握 0.018 < 0.05 会弃权）。
     # 所以线上改 U-Net 切三段（unet.npz，约 1.1MB，纯 numpy 推理）；窗口槽不再进库。
+    # 第五轮（A24 2026-10-26，全 99 册）：下段（廾／大，看图最好认）门槛 0.05 → 0.3。整理本有字的 651 格逐格对照，
+    #   下段读错的只 vol45:59:4:20（大 读成 廾，margin 0.16，整理本 彛 也跟错）；其余对不上的下段看图都是 U-Net 对。
     "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
-                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True, unet="unet.npz"),
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.3, nearest_ok=True, unet="unet.npz"),
     # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
     # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
     # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
