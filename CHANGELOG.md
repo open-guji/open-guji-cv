@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.28] - 测试中
+
+PATCH（GUJI-748 换图源：#693 Step1 push_bottom_to_bar 右界越界整页失败修复、#696 导出裁出图框；另含 keben_free 自由版式 #686 #692 #694，缺省关）。
+
 - `scripts/export_guji_format.py` 导出时把略出图边的字框／格框裁到图内（殿本 vol59 p58 贴边一格外沿出图 47px，「字框出图」检查不过，republish 整册出单被拦）；整个在图外的不动、照旧报。不在任何 `code_deps`。PATCH。
 - 换源新图两处修补（GUJI-748）：① Step1 `push_bottom_to_bar` 右界截到图内（vol23 p10、vol37 p74 右界线外推出图，`IndexError` 整页失败）；只在原先越界报错的页上生效，`border_geometry` 登记代码等价（vol20 新图 94 页逐字节相同），各步 `code_hash` 不变。② 引擎：上游某页最近一次跑失败时，盘上那份是更早一轮的旧产物，原先下游照样读它接着跑（vol23 p10 新图拿旧图版框切出 74 格），现在按缺失处理、下游判 blocked；`core/engine.py` 不进指纹。PATCH。
 
