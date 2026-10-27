@@ -196,6 +196,13 @@ def label_origin_of(e: Event) -> str:
     return "align" if e.actor == "align" else "model"
 
 
+def superseded_by_source(old: GoldItem, new: GoldItem) -> bool:
+    """`old` 是换图源前旧页表上的裁决、`new` 是新页表上同号格的：旧条目已标 stale，新条目锚里带了页表 rev，
+    且与旧条目的不同（旧条目多半没记 rev）。这时新条目另立，不合并（GUJI-748）。"""
+    return (old.status == "stale" and new.anchor.source_rev is not None
+            and old.anchor.source_rev != new.anchor.source_rev)
+
+
 def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = None,
              why: str = "", dry_run: bool = False) -> ConsumeResult:
     store = store or verdict_store()
@@ -258,9 +265,15 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
         #
         # 所以按 id 取回旧 expected 打底，新值覆盖同名键，其余保留。
         prev = {i.id: i for i in store.list(shard)}
+        fresh: set[str] = set()
         for it in items:
             old = prev.get(it.id)
             if old is None:
+                continue
+            if superseded_by_source(old, it):
+                # 换图源（GUJI-748）：同一个 id 的旧条目是旧页表上的另一格（已标 stale），不拿它打底——
+                # 旧 expected／input 里的旧图字段、旧 source_events 一样也不能并进新格的裁决
+                fresh.add(it.id)
                 continue
             # 切线重裁：旧判定的几何字段**整组丢掉**，只保留非切线的遗留字段
             # （gold/atomic.py；2026-09-14 实锤：drift 重标改判 ok 的事件不带 polyline，
@@ -270,7 +283,7 @@ def gold_add(events: list[tuple[Event, Destination]], store: GoldStore | None = 
             # `input` 同理：v1 条目把 seed / 载体信息记在这里，人裁事件不带
             # 这些字段，直接写就会把它们清空（upsert 是整体替换）。
             it.input = {**(old.input or {}), **(it.input or {})}
-        a, u = store.upsert(shard, items, why or "由人裁事件自动落入")
+        a, u = store.upsert(shard, items, why or "由人裁事件自动落入", fresh=fresh)
         res.added += a
         res.updated += u
     return res

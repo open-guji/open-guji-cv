@@ -13,7 +13,7 @@ from __future__ import annotations
 import time
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 LabelOrigin = Literal["human", "align", "synth", "model", "derived", "vision", "consensus"]   # vision = 看图结论（overview#428）；consensus = 两份独立来源一致（doc/design/19）
 """human=人工标注；align=v2 对齐产生，带噪声；synth=合成；model=模型自评（不能当验收基准）；
@@ -42,6 +42,18 @@ class Anchor(BaseModel):
     quad: list[tuple[float, float]] | None = None
     content_sha: str | None = None
     product_key: dict | None = None                            # {step, key, fingerprint}
+    source_rev: int | None = None                              # 格号所依页表 rev（换图源 GUJI-748；事件锚里有就抄，没有不写）
+
+    @field_validator("source_rev", mode="before")
+    @classmethod
+    def _rev_int(cls, v):
+        """事件锚里的 rev 可能是字符串（迁移事件写的 "3"）；认不出的当没写，不让整批落金标失败。"""
+        if v is None or isinstance(v, bool):
+            return None
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return None
 
 
 class HistoryEntry(BaseModel):

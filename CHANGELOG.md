@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 换图源后旧格号数据的三处读口（GUJI-748，殿本 siku-qiefen-v2 页号重编）：① 换单门 `republish.votes_gate` 认出换源前出的旧单（单子的 `source_rev`／`--old-source-rev`，老单按 `routed_as_of` 早于 2026-10-26），旧格号的票经 ~q 迁移事件的 `migrated_from` 或格级对照表（push／issue 新参数 `--cells`）对到新格再看落没落，对不上的（表里没有／删／IoU 低）列为「无法对位」、写 `旧单票无法对位.tsv`、不拦；`pending_list.py` 出单起记 `source_rev`。② 看图结论：换源前的（锚里没有 rev）本来就不采信，补回归测试；`guji events import-vision` 加 `--source-rev`，换过源的册不给就整批报错（不再抛异常），不自动按产物盖 rev。③ `guji gold rebuild`：换源前事件照旧不重放、输出加 `dropped_by_source_rev`；新页表事件落到与 stale 旧条目同号的格时另立新条目，不拿旧条目的 expected／input／source_events 打底（金标 `Anchor` 加可选 `source_rev`）。都不在任何 `code_deps`，各步 `code_hash` 不变。PATCH。
 - `align_ref` 坐标对位不再因「孤立弱冲突」整列退回（A31 vol15 p50 列 7／9：整列 24 格成 □，正确的「有」「程」恰是坐标字）。同列现役 equal 与坐标字不合处只有一格、现役 equal 段长 ≤2、坐标字非空、不是邻格错位、同列至少 5 格 equal 全同时，列照用；冲突格仍记进 `coord_conflict_ids`，`seed_admit` 照旧不放它的 match_ref。vol03／14／15 全册回放：新保留 6 列（vol03 2、vol15 4），vol14 不变，原先退回的错位列仍退回。`align_ref.py` 的 `code_hash` 变，各册 `align_ref` 及下游判过期。PATCH。
 
 ## [0.5.28] - 2026-10-27

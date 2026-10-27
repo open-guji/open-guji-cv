@@ -1413,7 +1413,7 @@ def _import_vision(args) -> None:
         print(f"✗ 文件不存在：{path}", file=sys.stderr)
         sys.exit(2)
     res = import_vision(path, batch=args.as_batch, judge=args.judge, book=args.book,
-                        gold=not args.no_gold, dry_run=args.dry_run)
+                        gold=not args.no_gold, dry_run=args.dry_run, source_rev=getattr(args, "source_rev", None))
     print(json.dumps(res, ensure_ascii=False, indent=1))
     if res["errors"]:
         print(f"✗ {len(res['errors'])} 处格式错，整批没写", file=sys.stderr)
@@ -3485,6 +3485,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--judge", default=None, help="import-vision：行里没写 judge 时用的模型名")
     p.add_argument("--as-batch", default=None, help="import-vision：批次名，缺省 vision-<文件名>")
     p.add_argument("--no-gold", action="store_true", help="import-vision：只写事件，不落裁决表")
+    p.add_argument("--source-rev", type=int, default=None,
+                   help="import-vision：结论是在哪一版页表的产物上判的，写进锚 anchor.source_rev；换过图源的册必给（须与册 yaml 相同）")
     p.add_argument("--json", action="store_true", help="lint：出机读结果")
 
     p = sub.add_parser("eval", help="[v2] 评测：list | run")

@@ -144,13 +144,18 @@ class GoldStore:
         tmp.replace(p)
         return len(items)
 
-    def upsert(self, shard: str, items: Iterable[GoldItem], why: str = "") -> tuple[int, int]:
+    def upsert(self, shard: str, items: Iterable[GoldItem], why: str = "",
+               fresh: Iterable[str] = ()) -> tuple[int, int]:
         """按 id 合并：新条目追加，已存在的更新 expected 并记 history。返回 (新增, 更新)。
+
+        `fresh` 里的 id：已有条目是另一版页表上的旧裁决（换图源后同号新格，GUJI-748），新条目**另立**——
+        history 照留并记一笔「换源另立」，`source_events` 不并入旧的（旧事件说的是旧图上的另一格）。
 
         **整读→改→整写**，`self.list` 到 `self._write_all` 之间必须持锁——两个并发
         upsert 各自读到同一版文件、后写覆盖先写，正是并行分工.md §一·1 那类真丢过的坑。
         """
         from ..feedback.lock import feedback_write_lock
+        fresh_ids = set(fresh)
         with feedback_write_lock(self.root):
             existing = {i.id: i for i in self.list(shard)}
             added = updated = 0
@@ -160,6 +165,12 @@ class GoldStore:
                     it.touch("created", why)
                     existing[it.id] = it
                     added += 1
+                elif it.id in fresh_ids and old.anchor.source_rev != it.anchor.source_rev:
+                    it.history = list(old.history)
+                    it.touch(f"换源另立：旧条目（{old.status}，页表 rev {old.anchor.source_rev}）{old.expected} "
+                             f"→ 页表 rev {it.anchor.source_rev} {it.expected}", why)
+                    existing[it.id] = it
+                    updated += 1
                 elif old.expected != it.expected or old.status != it.status:
                     it.history = list(old.history)
                     it.touch(f"expected {old.expected} → {it.expected}", why)
