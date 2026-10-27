@@ -61,6 +61,21 @@ def _pages(spec: str | None, products: Path | None, book: str) -> list[int]:
     return out
 
 
+
+def _clip_boxes(page: dict) -> None:
+    """字框／格框略出图边（切分时贴边一格的外沿超出几十 px，殿本 vol59 p58）→ 裁到图内；整个在图外的不动，让检查报出来。"""
+    W, H = (page.get("image") or {}).get("width"), (page.get("image") or {}).get("height")
+    if not (W and H):
+        return
+    for k in ("glyphs", "cells"):
+        for o in page.get(k, []):
+            b = o.get("box")
+            if not b or (b[0] >= 0 and b[1] >= 0 and b[0] + b[2] <= W and b[1] + b[3] <= H):
+                continue
+            x0, y0, x1, y1 = max(b[0], 0), max(b[1], 0), min(b[0] + b[2], W), min(b[1] + b[3], H)
+            if x1 > x0 and y1 > y0:
+                o["box"] = [x0, y0, x1 - x0, y1 - y0]
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--products", default=None)
@@ -108,6 +123,7 @@ def main(argv=None) -> int:
             print(f"   ✗ p{p}: {type(e).__name__}: {e}")
             bad += 1
             continue
+        _clip_boxes(page)
         errs = gp.check(page)
         if errs:
             print(f"   ✗ p{p} 检查不过：{errs[:3]}")
