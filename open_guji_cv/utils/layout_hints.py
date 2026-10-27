@@ -12,8 +12,11 @@
           - {box: [60, 900, 1530, 2780], cols: 13}
           - {box: [60, 180, 1530, 880], kind: skip}   # 插图，不切
       40: {blocks: [{kind: skip}, {kind: skip}, {}]}  # 不给 box：按序对上自动块，前两块不切
+      9-24: {pitch: 115}            # 列距先验（px）：列数按块宽自估、列按等宽网格拟合
+      35-92: {pitch: [null, 143]}   # 逐块给；null = 这块不给
 
-`kind` 目前只有 `text`（缺省）与 `skip`。`cols` 不给就自估。
+`kind` 目前只有 `text`（缺省）与 `skip`。`cols`、`pitch` 都不给就全自估。
+同一页落在几条里时逐字段合并：区间宽的先、窄的后，后写的字段盖前面的（区间给 pitch、单页再给 cols 都生效）。
 """
 
 from __future__ import annotations
@@ -29,6 +32,7 @@ class BlockHint:
     box: tuple[int, int, int, int] | None = None     # x0, y0, x1, y1（原图像素，左上原点）
     cols: int | None = None
     kind: str = "text"
+    pitch: float | None = None
 
 
 @dataclass
@@ -36,6 +40,7 @@ class PageHint:
     type: str = "body"
     cols: int | list[int] | None = None
     blocks: list[BlockHint] = field(default_factory=list)
+    pitch: float | list[float | None] | None = None
 
     @property
     def manual_blocks(self) -> bool:
@@ -48,6 +53,14 @@ class PageHint:
         if isinstance(self.cols, list):
             return self.cols[i] if i < len(self.cols) and self.cols[i] else None
         return self.cols
+
+    def pitch_for(self, i: int) -> float | None:
+        """第 i 个块的列距先验：blocks[i].pitch 优先，再看页级 pitch。"""
+        if i < len(self.blocks) and self.blocks[i].pitch:
+            return self.blocks[i].pitch
+        if isinstance(self.pitch, list):
+            return self.pitch[i] if i < len(self.pitch) and self.pitch[i] else None
+        return self.pitch
 
     def kind_for(self, i: int) -> str:
         return self.blocks[i].kind if i < len(self.blocks) else "text"
@@ -71,8 +84,15 @@ def _block(d) -> BlockHint:
         if len(box) != 4:
             raise ValueError(f"layout_hints 块 box 要 4 个数 [x0, y0, x1, y1]，写的是 {box!r}")
         box = tuple(int(v) for v in box)
-    cols = d.get("cols")
-    return BlockHint(box=box, cols=None if cols is None else int(cols), kind=kind)
+    cols, pitch = d.get("cols"), d.get("pitch")
+    return BlockHint(box=box, cols=None if cols is None else int(cols), kind=kind,
+                     pitch=None if pitch is None else float(pitch))
+
+
+def _num_or_list(v, cast):
+    if isinstance(v, list):
+        return [None if c is None else cast(c) for c in v]
+    return None if v is None else cast(v)
 
 
 def parse_layout_hints(raw) -> dict[int, PageHint]:
@@ -80,21 +100,22 @@ def parse_layout_hints(raw) -> dict[int, PageHint]:
     if not raw:
         return {}
     out: dict[int, PageHint] = {}
-    for key, v in raw.items():
+    # 区间宽的先、窄的后：单页的提示盖在区间提示上（逐字段，没写的字段不动）
+    for key, v in sorted(raw.items(), key=lambda kv: -len(_pages(kv[0]))):
         if isinstance(v, str):
             v = {"type": v}
         v = dict(v or {})
-        typ = str(v.get("type", "body"))
-        if typ not in PAGE_TYPES:
+        typ = v.get("type")
+        if typ is not None and str(typ) not in PAGE_TYPES:
             raise ValueError(f"layout_hints 第 {key} 页 type 只能是 {PAGE_TYPES}，写的是 {typ!r}")
-        cols = v.get("cols")
-        if isinstance(cols, list):
-            cols = [None if c is None else int(c) for c in cols]
-        elif cols is not None:
-            cols = int(cols)
-        hint = PageHint(type=typ, cols=cols, blocks=[_block(b) for b in (v.get("blocks") or [])])
-        if hint.manual_blocks and not all(b.box is not None for b in hint.blocks):
+        blocks = [_block(b) for b in (v.get("blocks") or [])]
+        if any(b.box is not None for b in blocks) and not all(b.box is not None for b in blocks):
             raise ValueError(f"layout_hints 第 {key} 页：blocks 要么都给 box（人圈块），要么都不给（对自动块）")
+        cols, pitch = _num_or_list(v.get("cols"), int), _num_or_list(v.get("pitch"), float)
         for p in _pages(key):
-            out[p] = hint
+            old = out.get(p, PageHint())
+            out[p] = PageHint(type=str(typ) if typ is not None else old.type,
+                              cols=cols if cols is not None else old.cols,
+                              blocks=blocks or old.blocks,
+                              pitch=pitch if pitch is not None else old.pitch)
     return out

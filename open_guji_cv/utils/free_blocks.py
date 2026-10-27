@@ -11,7 +11,9 @@
    不匀、有断口，开运算一断就整条丢；条带法只要求「多数条带里这一行几乎全黑」；
 3. `page_blocks`：外框四边取内沿（找不到的边退回文字墨外包），框内跨宽 ≥ 60% 的
    横线把框切成上下几块（鳌头的上下栏、帖式的分层）；每块里探到的竖线一并记下，
-   Step2 当硬列界用。
+   Step2 当硬列界用；
+4. `find_banxin`：按书脊拆开的半叶，书脊一侧有一条窄的版心（书名、卷次、页码、鱼尾），
+   不是正文。在书脊一侧框内 20–150px 找版心线（很浅，用 `thin_vlines` 找），找到就把块裁进来。
 """
 
 from __future__ import annotations
@@ -216,3 +218,73 @@ def block_vrules(vs: list[Rule], x0: int, y0: int, x1: int, y1: int, *,
     ym = (y0 + y1) / 2
     return sorted(r.at(ym) for r in vs
                   if r.n_strips >= min_votes and r.lo <= ym <= r.hi and x0 + side < r.at(ym) < x1 - side)
+
+
+def thin_vlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int = 41) -> np.ndarray:
+    """细竖线的强度图（0–1）：比背景暗多少，只留「比 width 窄、比 length 长」的竖向墨。
+
+    浅界行、版心线常常淡到过不了墨阈（`ink_mask`），这里不取阈：横向开运算减掉粗笔画，
+    再竖向开运算只留连续的竖线段。按列取均值就是「这一 x 上有没有竖线」。"""
+    bg = cv2.medianBlur(gray, bg_win).astype(np.float32) + 1.0
+    d = np.clip(1.0 - gray.astype(np.float32) / bg, 0.0, 1.0)
+    th = d - cv2.morphologyEx(d, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (width, 1)))
+    return cv2.morphologyEx(th, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, length)))
+
+
+SPINE_MODES = ("auto", "left", "right", "odd_left", "odd_right", "none")
+
+
+def spine_sides(mode: str, page: int) -> list[str]:
+    """书脊（版心）可能在哪一侧。odd_left：奇数页在左、偶数页在右。auto：两侧都看。"""
+    if mode == "none":
+        return []
+    if mode in ("left", "right"):
+        return [mode]
+    if mode == "odd_left":
+        return ["left" if page % 2 else "right"]
+    if mode == "odd_right":
+        return ["right" if page % 2 else "left"]
+    return ["left", "right"]
+
+
+def find_banxin(prof: np.ndarray, left: float, right: float, sides: list[str], *,
+                lo: int = 20, hi: int = 150, min_line: float = 0.04) -> tuple[str | None, float | None]:
+    """→ (版心在哪一侧, 版心线 x)。`prof` 是框内各 x 的细竖线强度（`thin_vlines` 按列均值）。
+
+    在给的几侧里，各取框边往里 [lo, hi) px 内最强的一条线；够 min_line 的里取最强那侧。
+    线探不到时见 `find_banxin_gap`。
+    只有一侧可选时，线没探到也返回该侧（x 为 None），让 Step2 知道那边的墨可能是版心。"""
+    W = len(prof)
+    best: tuple[float, str, float] | None = None
+    for side in sides:
+        a, b = ((int(left) + lo, int(left) + hi) if side == "left" else (int(right) - hi, int(right) - lo))
+        a, b = max(0, a), min(W, b)
+        if b <= a:
+            continue
+        i = a + int(np.argmax(prof[a:b]))
+        if prof[i] >= min_line and (best is None or prof[i] > best[0]):
+            best = (float(prof[i]), side, float(i))
+    if best is not None:
+        return best[1], best[2]
+    return (sides[0], None) if len(sides) == 1 else (None, None)
+
+
+def find_banxin_gap(ink_prof: np.ndarray, left: float, right: float, side: str, *,
+                    lo: int = 20, hi: int = 100, max_frac: float = 0.35) -> float | None:
+    """版心线太浅探不到时的退路：书脊一侧 [lo, hi) px 内最空的竖缝（墨量 ≤ max_frac × 框内
+    各 x 墨量中位；纸纹、透墨让空白处也有 2–3% 的「墨」，所以门槛是相对的）当版心与正文的
+    分界；缝外（靠框边那边）没墨就不算（没有版心内容，不用裁）。hi 要小于一个列距（实测版心
+    宽 45–80px、列距 ≥ 100），不然没有版心的页会把第一条列缝当版心、裁掉一整列。
+
+    `ink_prof` 是框内各 x 的墨占比（已平滑）。"""
+    W = len(ink_prof)
+    a, b = ((int(left) + lo, int(left) + hi) if side == "left" else (int(right) - hi, int(right) - lo))
+    a, b = max(0, a), min(W, b)
+    if b <= a:
+        return None
+    med = float(np.median(ink_prof[int(left):int(right)])) + 1e-6
+    i = a + int(np.argmin(ink_prof[a:b]))
+    if ink_prof[i] > max_frac * med:
+        return None
+    outer = ink_prof[int(left):i] if side == "left" else ink_prof[i + 1:int(right)]
+    return float(i) if len(outer) and float(outer.max()) > max_frac * med else None

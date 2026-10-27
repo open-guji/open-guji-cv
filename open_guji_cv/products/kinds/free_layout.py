@@ -33,6 +33,7 @@ class BlockRec(BaseModel):
     kind: str = "text"              # text | skip
     source: str = "auto"            # auto | hint
     cols_hint: int | None = None
+    pitch_hint: float | None = None  # 人标的列距先验（px）
     vrules: list[float] = Field(default_factory=list)   # 块内竖线 x_tr（块中线高度处）
 
 
@@ -44,6 +45,8 @@ class LayoutBlocks(BaseModel):
     hinted: bool = False            # 这页有人标提示
     frame: Box | None = None        # 版框内沿
     frame_found: dict[str, bool] = Field(default_factory=dict)
+    spine: str | None = None        # 版心在图的哪一侧：left | right | None（不知道）
+    banxin: float | None = None     # 版心线 x_tr（探到了才有；块已裁到它里面）
     rules: list[RuleRec] = Field(default_factory=list)
     blocks: list[BlockRec] = Field(default_factory=list)
 
@@ -61,7 +64,7 @@ class ColumnRec(BaseModel):
 class BlockColumnsRec(BaseModel):
     block: int
     n: int
-    n_source: str                   # hint | auto | rule
+    n_source: str                   # hint | auto | rule | grid（按列距先验等宽拟合）
     alt_n: list[int] = Field(default_factory=list)
     pitch: float | None = None
     shear: float = 0.0
