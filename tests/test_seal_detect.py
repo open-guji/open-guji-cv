@@ -131,3 +131,29 @@ def test_page_seal_blank_uses_the_small_seal_and_page_coordinates():
     got = page_seal_blank(_seal_ctx(cells, seals, gray), 9, p)
     assert set(got) == {(7, 1, "")}                            # 2 格印外有墨退出；3 格不在印框里
     assert got[(7, 1, "")]["overlap"] == 0.5
+
+
+def test_small_seal_on_rescaled_page():
+    """换图源 siku-qiefen-v2 页图缩到 0.7 倍：先按版框宽缩放回原尺度再找，小印照样认出，框和笔画覆盖区按页图尺度给。"""
+    import cv2
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.steps.seal_detect import SEAL_TPL_DIR, stroke_mask
+    from open_guji_cv.utils.image_io import imread
+    k = 0.7
+    tpl = imread(str(sorted(SEAL_TPL_DIR.glob("*.png"))[0]), cv2.IMREAD_GRAYSCALE)
+    big = _page()
+    th, tw = tpl.shape
+    big[400:400 + th, 900:900 + tw] = tpl
+    img = cv2.resize(big, (int(W * k), int(H * k)), interpolation=cv2.INTER_AREA)
+    borders = NS(top=NS(y_at_right=300 * k), bottom=NS(y_at_right=2700 * k),
+                 verticals=[NS(x_at_top=x * k, slope=0.0) for x in (300.0, 1950.0)])
+    seals = detect_seals(img, SealDetectParams(), borders)
+    assert [s.kind for s in seals] == ["crisp"]
+    x0, y0, x1, _y1 = seals[0].bbox                 # 右上原点
+    w_img = img.shape[1]
+    assert abs((w_img - 1 - x1) - 900 * k) <= 10 and abs(y0 - 400 * k) <= 10
+    m = stroke_mask(seals[0], *img.shape)
+    assert m is not None and m.shape == img.shape
+    ys, xs = np.nonzero(m)
+    assert xs.max() - xs.min() <= tw * k + 10
