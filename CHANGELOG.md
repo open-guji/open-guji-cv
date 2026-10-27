@@ -5,6 +5,17 @@
 
 ## [未发版]
 
+## [0.5.27] - 2026-10-26
+
+PATCH（GUJI-748 换图源缺格页：#683 Step1 网格模式按界行反推版框 `grid_lattice_fallback`；另含 #682 印章页切分（Step1 列距救援、印章定位 1.3）、#686 自由版式管线 keben_free（新三步，独立管线、不影响 keben_body_v2）、#679 #684 #685 #687 字组规则、拆分 M0–M2 #677 #678 #680、#674 PDF 源件、#681 任务库连库断线重排）。相对 v0.5.26，`border_detect`、`row_segment`、`cell_shrink`、`seal_detect`、`seed_admit` 五步 `code_hash` 变（合前实算），新增 `block_detect`、`column_trace`、`cell_cut`；其余步不变。字组文件变了：换用本版重跑的册要按 CorpusDrift 出全局层新底库、改钉 `corpus`。rc 上全量测试：失败 32 条与 v0.5.26 上逐条相同（本机环境类，无新增）。
+
+- Step1 网格模式按界行反推版框（GUJI-748，殿本换源 vol12 p139）：`border_detect` 加参数 `grid_lattice_fallback`（缺省关，不进参数 dump，只管 `column_grid_pages` 点名页）。版框那条线不在候选池里（右版框贴图边被边窗里的界行顶掉、左边带进邻叶版心）时，网格模式原先选不出版框对、退回截断，与自由模式逐条相同只出 8 列；开了改按已探到的细界行拟等距网格、在图内框出 `expected_cols` 列再逐槽验线（`peak_line_search.lattice_frame_pair`，窗口并列就不猜）。p139 开后 9 列各 21 格、159 字、三道闸都过。缺省产物逐字节不变，`steps.border_detect`、`border_geometry`、`peak_line_search` 登记代码等价。
+- 拆分 M2（10-27）：`guji pipeline` 开跑前备输入（钉版字形库、Step5-b 模板索引）和整册跑完自动存包的代码从 `cli_v2` 挪进 `ops/prep.py`；`guji pipeline` 加 `--no-prep`，缺省行为不变。不在任何 `code_deps`，19 步 `code_hash` 不变。PATCH。
+- 拆分 M1（10-27）：新 `open_guji_cv/api.py`（pipeline 公开面，只转发）、`core/contract.py`（`CONTRACT_VERSION=1`）、`doc/契约.md`；`guji version [--json]`；manifest 条目加可选字段 `contract_version`、`manager_version`（不进指纹，老条目为 None）。19 步 `code_hash` 合前实算与 dev 逐一相同。PATCH。
+- 拆分 M0（10-27）：`tests/test_architecture.py` 给每个包标 pipeline／manager 一侧，新增守卫「pipeline 不许 import manager」（存量 12 条登记）。只改测试与文档，PATCH。
+- 设计文档 `doc/design/拆分-pipeline与manager.md`（10-27）：把 cv 拆成 pipeline 本体和 pipeline manager 的边界、契约与分步迁移方案。只加文档，不动代码，PATCH。
+- 新开一部书（《增廣幼學須知鰲頭雜字大全》哈佛本，10-26）：`guji source commons` 收 PDF 源件（`pdfimages` 原样抽每页嵌入图，不重压）；`--splits auto` 与新子命令 `guji source spreads <源件>` 对开图按书脊折痕自动出拆页表（天头地脚里找折痕，附核对图）；新 `guji db init -w <工作区>`：中心库里还没有的工作区，把册 yaml 等挪进数据目录、记 rev 0，之后 `guji db push` 整批进库（原先新工作区没法进库）。不动 Step。
+
 ## [0.5.26] - 2026-10-26
 
 PATCH（GUJI-748 换图源：#664 source pull 删页表外残留原图、#666 prep 删页表外旧页产物、#670 抬头框探测按图尺度缩放 `head_raise_scale`；另含 #661 印章遮挡格放行、#665 #667 #668 #669 字组规则）。`seed_admit`、`align_ref` 的 `code_hash` 变（#661）；Step1 等价登记，产物不因 #670 过期。

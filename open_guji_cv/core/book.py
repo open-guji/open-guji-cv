@@ -89,6 +89,12 @@ class BookSpec:
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
+    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。不写 = 按 `edition` 选（`core/pipeline.default_pipeline_id`）。
+    #: 自由版式的坊刻本（yxat）写 `pipeline: keben_free`——edition 仍是 keben，字形库分域不变。
+    pipeline: str | None = None
+    #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
+    #: 存 yaml 原样（键转成字符串），读配置时用 `utils/layout_hints.parse_layout_hints` 校验形状。
+    layout_hints: dict = field(default_factory=dict)
     notes: str = ""
     #: 已删：Step5-c `ocr_candidates` 与 Step6b `group_decide` 两步连同书级开关
     #: `ocr_candidates:` / `group_decide:`（2026-10-18，sheldon 定）。老 yaml 里还写着
@@ -525,6 +531,15 @@ def _expand_pages(raw) -> list[int]:
     return [p for p in out if not (p in seen or seen.add(p))]
 
 
+def _load_layout_hints(raw) -> dict:
+    """`layout_hints:` 先校验形状（错了在读配置时就报），再原样存（键转字符串，进指纹时稳定）。"""
+    if not raw:
+        return {}
+    from ..utils.layout_hints import parse_layout_hints
+    parse_layout_hints(raw)
+    return {str(k): v for k, v in raw.items()}
+
+
 def _load_preclean(raw) -> dict[int, list[dict]]:
     """yaml 的 preclean 段 → {页号: [规则, ...]}。
 
@@ -629,6 +644,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         frame_layers={str(k): int(v) for k, v in (d.get("frame_layers") or {}).items()},
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
+        pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
+        layout_hints=_load_layout_hints(d.get("layout_hints")),
         notes=d.get("notes", ""),
         iron_gate=bool(d.get("iron_gate", False)),
         references=[dict(r) for r in (d.get("references") or [])],

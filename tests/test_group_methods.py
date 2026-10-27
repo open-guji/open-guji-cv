@@ -35,7 +35,7 @@ def test_registry_kinds_match_ids_specs():
     kinds = {g: m.kind for g, m in img.items()}
     for g in ("lv", "qik", "zy", "sy", "sz", "gm", "xb", "yh", "js", "yr"):
         assert kinds[g] == "hog", g
-    for g in ("zheng", "lih", "rr", "ts", "ly", "wj", "zh", "yt", "em", "fc"):   # lih 10-22 改下半框；文意组字形第二路 10-22
+    for g in ("lih", "rr", "ts", "ly", "wj", "zh", "yt", "em", "fc"):   # lih 10-22 改下半框；文意组字形第二路 10-22
         assert kinds[g] == "composite", g
         m = img[g]
         assert isinstance(m.op, M.Crop) and m.op.region == tuple(SPECS[g].region)
@@ -119,7 +119,7 @@ def test_composite_crop_equals_registered_region(monkeypatch):
 def test_codepoint_groups_flow_only():
     """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
     from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS, SHAPE_GROUPS
-    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang"}
+    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang", "zheng"}
     assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS) | set(SHAPE_GROUPS)
     check_groups(tuple(CODEPOINT_GROUPS))
     for g, s in CODEPOINT_GROUPS.items():

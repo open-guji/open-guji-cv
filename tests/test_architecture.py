@@ -38,6 +38,8 @@ LAYER: dict[str, int] = {
     "console": 5,
     # L6 命令行入口
     "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
+    # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
+    "api": 6,
     # L7 `python -m`
     "__main__": 7,
 }
@@ -87,6 +89,43 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "utils.seed_witness -> clustering.normalize",
     "utils.seed_witness -> clustering.seeding",
 })
+
+
+#: 拆分 pipeline / manager（设计：doc/design/拆分-pipeline与manager.md，用户 2026-10-27 定）。
+#: 判据：同样输入下改这段代码会不会改变识别产物字节——会＝pipeline，不会＝manager。
+#: 规则：pipeline 一侧不许 import manager 一侧（惰性 import 也算）；存量登记在 `ALLOWED_PIPELINE_TO_MANAGER`，只许减不许增。
+SIDE_PIPELINE = "pipeline"
+SIDE_MANAGER = "manager"
+PIPELINE_PKGS: frozenset[str] = frozenset({
+    "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
+    "core", "products", "utils", "clustering", "pagetype_model", "groups",
+    "gates", "steps", "shadow", "api", "__main__",
+})
+#: 整包归 manager 的例外之外，按模块前缀改判（最长前缀优先）
+SIDE_OVERRIDE: dict[str, str] = {
+    # feedback：Step 读人裁结果的一侧归 pipeline，生产一侧归 manager
+    "feedback": SIDE_MANAGER,
+    "feedback.lookup": SIDE_PIPELINE, "feedback.bindings": SIDE_PIPELINE, "feedback.keys": SIDE_PIPELINE,
+    "feedback.mojibake": SIDE_PIPELINE, "feedback.events": SIDE_PIPELINE, "feedback.lock": SIDE_PIPELINE,
+    "feedback.anchor": SIDE_PIPELINE, "feedback.returns": SIDE_PIPELINE,   # bindings 要用
+    "gold.item": SIDE_PIPELINE, "gold.drift": SIDE_PIPELINE,             # lookup / bindings 要用的金标信封与漂移判定
+    # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
+    "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,
+    "report": SIDE_PIPELINE, "report.progress": SIDE_MANAGER, "report.html": SIDE_MANAGER, "report.run": SIDE_MANAGER,
+}
+
+
+def side_of(mod: str) -> str:
+    """`open_guji_cv.x.y` → pipeline / manager（最长前缀优先；未列的顶层包按 PIPELINE_PKGS 判）。"""
+    rel = mod[len(PKG) + 1:] if mod.startswith(PKG + ".") else ("" if mod == PKG else mod)
+    if not rel:
+        return SIDE_PIPELINE        # 包根 __init__
+    parts = rel.split(".")
+    for n in range(len(parts), 0, -1):
+        k = ".".join(parts[:n])
+        if k in SIDE_OVERRIDE:
+            return SIDE_OVERRIDE[k]
+    return SIDE_PIPELINE if parts[0] in PIPELINE_PKGS else SIDE_MANAGER
 
 
 def _modules() -> dict[str, Path]:
@@ -164,3 +203,47 @@ def test_no_new_upward_imports():
 def test_allowlist_has_no_stale_entries():
     stale = sorted(ALLOWED_UPWARD - _upward_edges())
     assert not stale, "存量违规已经修掉了，请从 ALLOWED_UPWARD 里删掉：\n  " + "\n  ".join(stale)
+
+
+def _p2m_edges() -> set[str]:
+    mods = _modules()
+    found: set[str] = set()
+    for mod, path in mods.items():
+        if not _top(mod) or side_of(mod) != SIDE_PIPELINE:
+            continue
+        for tgt in _imports(mod, path, mods):
+            if side_of(tgt) == SIDE_MANAGER:
+                found.add(f"{mod[len(PKG) + 1:]} -> {tgt[len(PKG) + 1:]}")
+    return found
+
+
+ALLOWED_PIPELINE_TO_MANAGER: frozenset[str] = frozenset({
+    "__main__ -> cli_v2",  # 入口：M2/M4 拆出 guji-cv 后消失
+    "clustering.font_pack -> datastore",  # M2/M3 去掉联网取包
+    "clustering.font_pack -> datastore.packs",
+    "clustering.glyph_selfcheck -> console.routers.workspace",
+    "clustering.seeding -> datastore.packs",  # M3：进 seed_admit 的 code_deps，走 code_equiv 登记
+    "core.book -> review.cards",
+    "core.cv_version -> datastore.client",
+    "feedback.bindings -> feedback.anchor_backfill",  # 灰区：同上
+    "feedback.lookup -> feedback.consumers",  # 灰区：consumers 归属待核（设计 2.3）
+    "products.store -> datastore.sources",
+    "report.collate -> eval.round_check",
+    "report.tiers -> eval.round_check",
+})
+
+
+def test_every_top_level_package_has_a_side():
+    """新顶层包要想清归哪边：加进 PIPELINE_PKGS（影响识别产物）或默认归 manager。"""
+    tops = {_top(m) for m in _modules() if _top(m)}
+    assert all(side_of(f"{PKG}.{t}") in (SIDE_PIPELINE, SIDE_MANAGER) for t in tops)
+
+
+def test_pipeline_does_not_import_manager():
+    new = sorted(_p2m_edges() - ALLOWED_PIPELINE_TO_MANAGER)
+    assert not new, "pipeline 一侧新增了对 manager 一侧的 import（惰性 import 也算），见 doc/design/拆分-pipeline与manager.md：\n  " + "\n  ".join(new)
+
+
+def test_p2m_allowlist_has_no_stale_entries():
+    stale = sorted(ALLOWED_PIPELINE_TO_MANAGER - _p2m_edges())
+    assert not stale, "存量已修掉，请从 ALLOWED_PIPELINE_TO_MANAGER 里删掉：\n  " + "\n  ".join(stale)

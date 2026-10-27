@@ -128,8 +128,10 @@ SPECS: dict[str, IdsSpec] = {
     # 第四轮（10-21，sheldon 指出窗口法的参数和模板都在同一批 82 格上选，留一偏乐观）：改**按册留出**——留出一册，窗口参数／U-Net／模板
     # 都只用其余九册：窗口法错 5 格（上段 4、中段 1，多数把握不低），**U-Net 切分 + HOG 岭回归只错 1 格**（vol05:74:7:10 极黑，把握 0.018 < 0.05 会弃权）。
     # 所以线上改 U-Net 切三段（unet.npz，约 1.1MB，纯 numpy 推理）；窗口槽不再进库。
+    # 第五轮（A24 2026-10-26，全 99 册）：下段（廾／大，看图最好认）门槛 0.05 → 0.3。整理本有字的 651 格逐格对照，
+    #   下段读错的只 vol45:59:4:20（大 读成 廾，margin 0.16，整理本 彛 也跟错）；其余对不上的下段看图都是 U-Net 对。
     "yi_560": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.04, min_class=2, three=True,
-                         top_hog=0.05, mid_hog=0.05, bot_hog=0.05, nearest_ok=True, unet="unet.npz"),
+                         top_hog=0.05, mid_hog=0.05, bot_hog=0.3, nearest_ok=True, unet="unet.npz"),
     # 呂吕、徵徴（2026-10-20，道 1 续）：按字分类（缝两侧无差别）改整字岭回归（`ids_whole`），模板＝殿本 vol01–10 人裁 confirm 事件格
     # （吕 48／呂 22、徵 34／徴 41；建库见 research/m7/lane1/build_whole_bank.py，评测同脚本，按册留一＝判某册时模板不含该册）：
     # 呂吕 pix 32×32、λ=1：|d|≥0.5 → 62 对／8 弃权／0 错（≥0.3 68 对 2 弃权 0 错，不设门槛也 0 错；取 0.5 留余量）。
@@ -177,8 +179,7 @@ SPECS: dict[str, IdsSpec] = {
     "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
                   lam=3.0, size=64, clean=True, aspect=(0.45, 2.2)),
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
-    "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
-                     region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
+    # 徵徴 zheng 2026-10-27 撤下（sheldon 定暂归一到 徴，改码位组）；模板库 config/groups/zheng/ids_bank.json 留作日后拆分
     # 子于、山由出（2026-10-21，未覆盖形近字长尾线）：整字 HOG＋岭回归，模板＝殿本 vol04–10 seed_admit 放行格（match_ref、无疑问，
     # 建库与评测见 research/m7/long_tail/build_bank.py）；组外的 干／曲 也进库（判成它们＝abstain:slot），免得真干、真曲被硬判进组。
     # 子于：按册留一 0 错（|d|≥0.3 起；子 250／于 91／干 若干；唯一的错是 3 个予，予不进组、也不进 tolerate）；门槛取 0.4。
@@ -235,6 +236,10 @@ SPECS: dict[str, IdsSpec] = {
     #   門族 整字 48×48，λ=1：按册留出组员格 429，不设门槛错例最大 0.56（閑→閔），取 0.62 → 给字 269、0 错。
     #   辶族 取右上框 x0.25–1、y0–0.8（避开走之底，整字版 邊→選 0.84 高把握错），48×48，λ=1：组员格 870，错例最大 0.59（邊→選），取 0.65 → 给字约 355、0 错。
     "men": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.62, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
+                   aspect=(0.45, 2.2)),
+    # 形近不同字对族 xjz（2026-10-26，A24「组外异体对未定码位」）：整字 HOG 一对多（每字 ≤12 格），按册留出（组员格 457）不设门槛
+    # 错例最大 0.59（熟→孰），门槛取 0.7（0 错，给字 119）。字宇 刻形分不开（错例 1.18）不进族；釆 的刻例全是 采，不进库。补放还须与整理本同字。
+    "xjz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", lam=1.0, size=48, clean=True,
                    aspect=(0.45, 2.2)),
     "chuo": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.65, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True, aspect=(0.45, 2.2)),

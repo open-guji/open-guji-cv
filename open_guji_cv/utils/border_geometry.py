@@ -1620,7 +1620,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     book_outer_gap: dict | None = None,
                     frame_layers: dict | None = None,
                     head_raise_extend: bool = True,
-                    head_raise_scale: float = 1.0) -> BorderDetectionResult:
+                    head_raise_scale: float = 1.0,
+                    grid_lattice_fallback: bool = False) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1644,6 +1645,9 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     （列距 119、框高 1482）上标的**绝对像素**，这两个先验给了就按
     `peak_line_search.grid_thresholds()` 换算到本书尺度。不给则退回那组绝对值
     ——**换一本分辨率差一倍的书不报错、只静默退化**（整页插值或整页验不上）。
+
+    `grid_lattice_fallback`：网格模式选不出版框对时按细界行拟网格反推版框
+    （`peak_line_search.lattice_frame_pair`）。缺省关，关着逐位不变；只在网格模式下有意义。
 
     `vline_polyline=False`：界行不做三段折线拟合，只量 w80。理由见
     `fit_vlines_polyline` 的 `fit` 参数。
@@ -1672,6 +1676,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
         # 北行日錄那组标定值，与加这套之前逐位相同。
         vlines_old, filled_old = find_vertical_lines_grid(
             mask, n_lines=expected_cols + 1, col_pitch=col_pitch,
+            lattice_fallback=grid_lattice_fallback,
             **grid_thresholds(col_pitch, frame_height))
     else:
         vlines_old = find_vertical_lines(mask, expected_count=expected_cols + 1)

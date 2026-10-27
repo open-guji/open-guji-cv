@@ -47,6 +47,8 @@ def _flags(fl) -> str:
         out.append("补放须与整理本同字")
     if fl.lift_ref_veto:
         out.append("整理本是组里另一字不补放")
+    if fl.solo_margin:
+        out.append(f"整理本缺字（〓）只凭字形补放(各段 margin≥{fl.solo_margin:g})")
     if fl.ref_enter:
         out.append("库首位是陪衬也按整理本进")
     if fl.ref_top_enter:

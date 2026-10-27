@@ -28,6 +28,8 @@
   组声明了 `rule_strong` 时 L1 规则命中够条数也算 strong；声明了 `review_fix_ref_rule` 时 L1 规则的字与整理本（现役对位缺格时用坐标对位字）同字也改字（木本）。
 - 组声明了 `lift_ref_agree`（部首族）：补放的字须与整理本字（缺位时用坐标对位字）同字，否则留人审
   （`group_flow_ref_dissent`／`group_flow_ref_missing`）。
+- 组声明了 `solo_margin`（彝）：整理本没有证人（现役对位缺，坐标对位也缺或是 〓）时只凭字形补放，给字方法每段 margin 都要够，
+  否则留人审（`group_flow_solo_weak`）；坐标对位 〓 不当组外字拦。
 - 组声明了 `lift_ref_veto`（一二）：整理本字是组里另一个字就不补放（`group_flow_ref_dissent`），不论哪个方法给的字。
 - 组声明了 `pair`（己已巳：干支「己巳」）：读序紧挨的两格都进了本组 → 前一格给 `pair[0]`、后一格给 `pair[1]`，不跑方法
   （留痕 `ctx:pair`）；三格以上连着照常跑方法。
@@ -50,6 +52,7 @@ from .protocol import GroupVerdict
 from .registry import FLOW_GROUPS as GROUPS   # 含码位归一组（`registry.CODEPOINT_GROUPS`）
 
 CHANNEL = "group_flow"
+GAP = "〓"           # 逐列本（整理本）的生僻字占位：知道有字、不知道是哪个
 
 
 @dataclass
@@ -314,6 +317,14 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
     return 0 if i == lo else 1
 
 
+def _margin(t: dict) -> float | None:
+    """方法留痕的把握：整字方法记 `margin`；三段 IDS 记每段的 `margins`，取最小的一段。"""
+    if t.get("margin") is not None:
+        return float(t["margin"])
+    ms = t.get("margins")
+    return min(float(x) for x in ms) if ms else None
+
+
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
@@ -394,8 +405,15 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族／陪衬字挡门：字形与整理本两路一致才补放
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and not (cr == GAP and GROUPS[g].flow.solo_margin > 0)
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
+            elif (ch is not None and mode == "lift" and GROUPS[g].flow.solo_margin > 0 and not ref
+                  and (veto_refs or {}).get(r.id) in (None, "", GAP)
+                  and not any(t["char"] == ch and (m := _margin(t)) is not None and m >= GROUPS[g].flow.solo_margin
+                              for t in trail)):
+                # 整理本缺字（〓）或无对位：只凭字形，给字方法每段 margin 都够才补放（彝，A24 10-26）
+                ch, why = None, "solo_weak"
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and norm(cr) != norm(ch) and norm(cr) in {norm(m) for m in GROUPS[g].members}
@@ -434,7 +452,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(ch)
                 and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
-                    t["char"] == ch and (t.get("margin") or 0) >= f.review_fix_margin for t in trail))
+                    t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail))
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)

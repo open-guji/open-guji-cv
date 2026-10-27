@@ -1,9 +1,10 @@
-"""`guji pipeline` 开跑前备 Step5-b 模板索引（`cli_v2._ensure_rare_index`，A30 10-24）。"""
+"""`guji pipeline` 开跑前备 Step5-b 模板索引（`prep.ensure_rare_index`，A30 10-24）。"""
 import json
 
 import numpy as np
 
 from open_guji_cv import cli_v2
+from open_guji_cv.ops import prep
 
 
 class _FakePack:
@@ -18,7 +19,7 @@ class _FakePack:
 
 def _setup(monkeypatch, tmp_path, pack):
     f = tmp_path / "emb_k.npz"
-    monkeypatch.setattr(cli_v2, "_rare_index_missing",
+    monkeypatch.setattr(prep, "rare_index_missing",
                         lambda book: (object(), [("base", ("甲", "乙"), "k", f)]))
     from open_guji_cv.clustering import emb_pack
     seen = {}
@@ -36,7 +37,7 @@ def test_pulls_fp32_from_pack(monkeypatch, tmp_path):
     monkeypatch.delenv("GUJI_NO_RARE_INDEX_PREP", raising=False)
     f, seen = _setup(monkeypatch, tmp_path, _FakePack())
     logs = []
-    cli_v2._ensure_rare_index("b", jobs=4, log=lambda s, **k: logs.append(s))
+    prep.ensure_rare_index("b", jobs=4, log=lambda s, **k: logs.append(s))
     assert seen["precision"] == "fp32"                     # 跑批绝不用 int8
     z = np.load(f)
     assert z["mat"].shape == (2, 4) and z["chars"].tolist() == ["甲", "乙"]
@@ -49,15 +50,15 @@ def test_opt_out_only_warns(monkeypatch, tmp_path):
     monkeypatch.setenv("GUJI_NO_RARE_INDEX_PREP", "1")
     f, _ = _setup(monkeypatch, tmp_path, _FakePack())
     logs = []
-    cli_v2._ensure_rare_index("b", jobs=4, log=lambda s, **k: logs.append(s))
+    prep.ensure_rare_index("b", jobs=4, log=lambda s, **k: logs.append(s))
     assert not f.exists()
     assert any("--precision fp32" in s for s in logs)
 
 
 def test_nothing_missing_is_silent(monkeypatch):
-    monkeypatch.setattr(cli_v2, "_rare_index_missing", lambda book: (None, []))
+    monkeypatch.setattr(prep, "rare_index_missing", lambda book: (None, []))
     logs = []
-    cli_v2._ensure_rare_index("b", log=lambda s, **k: logs.append(s))
+    prep.ensure_rare_index("b", log=lambda s, **k: logs.append(s))
     assert logs == []
 
 
