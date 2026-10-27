@@ -34,3 +34,19 @@ def test_cli_version_json(capsys):
     from open_guji_cv.cli_v2 import main
     main(["version", "--json"])
     assert json.loads(capsys.readouterr().out)["contract_version"] == CONTRACT_VERSION
+
+
+def test_derived_fetch_prefers_local_dir_then_fetcher(tmp_path, monkeypatch):
+    from open_guji_cv.core import derived
+    src = tmp_path / "d" / "lm"
+    src.mkdir(parents=True)
+    (src / "x.json").write_text("{}")
+    monkeypatch.setenv(derived.DIR_ENV, str(tmp_path / "d"))
+    dest = tmp_path / "out" / "x.json"
+    assert derived.fetch_derived("lm", "x.json", dest) and dest.read_text() == "{}"
+    monkeypatch.delenv(derived.DIR_ENV)
+    calls = []
+    monkeypatch.setattr(derived, "FETCHER", lambda k, n, d: calls.append((k, n)) or True)
+    assert derived.fetch_derived("lm", "y.json", tmp_path / "y") and calls == [("lm", "y.json")]
+    monkeypatch.setattr(derived, "FETCHER", None)
+    assert not derived.fetch_derived("lm", "z.json", tmp_path / "z")

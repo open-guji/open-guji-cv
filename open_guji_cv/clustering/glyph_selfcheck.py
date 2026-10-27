@@ -587,8 +587,7 @@ def decisions(out: Path | None = None) -> dict[str, dict]:
 
 def sibling_libraries() -> list[tuple[str, Path]]:
     """兄弟工作区的字形库 [(工作区 id, 库路径)]，不含当前工作区。"""
-    from ..console.routers.workspace import discover_workspaces
-    from ..core.workspace import GLYPH_DB_REL, workspace_root
+    from ..core.workspace import GLYPH_DB_REL, discover_workspaces, workspace_root
     cur = workspace_root()
     cur = cur.resolve() if cur else None
     out = []

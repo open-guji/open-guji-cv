@@ -424,3 +424,64 @@ def assert_workspace_declared() -> None:
         "确实想用仓内示例库（本地试跑/开发）：加 --allow-sample-db"
         "（或设 GUJI_ALLOW_SAMPLE_DB=1）显式声明。"
     )
+
+
+# ── 工作区发现（原在 console/routers/workspace.py，2026-10-27 拆分 M3 搬来：pipeline 的字形库自检也要用）──
+def _ws_id(d: Path) -> str:
+    """工作区的 id——**URL 上露出来的就是这个**（`/<ws>/<book>/step/...`）。
+
+    默认取目录名去掉 `-workspace` 后缀（`xx-workspace` → `xx`）：短、稳定。
+    **`guji-workspace` 那套目录名是 `<book-index id>-<书名>`**，不以 `-workspace`
+    结尾，退回来就是一整串中文——那种工作区**必须**放 `workspace.yaml` 写
+    `id: 自定义` 覆盖（四庫總目写的是 `siku-zongmu`，与旧仓时期的 URL 一致）。
+    """
+    import yaml
+    f = d / "workspace.yaml"
+    if f.is_file():
+        try:
+            got = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("id")
+            if got:
+                return str(got)
+        except Exception:
+            pass                        # 写坏了就退回目录名，不让整个列表挂掉
+    name = d.name
+    return name[: -len("-workspace")] if name.endswith("-workspace") else name
+
+
+ROOT_ENV = "GUJI_WORKSPACES_ROOT"
+
+
+def workspaces_root() -> Path | None:
+    """工作区总目录；没配返回 None（此时没有任何工作区可选）。"""
+    env = os.environ.get(ROOT_ENV)
+    return Path(env).expanduser().resolve() if env else None
+
+
+def discover_workspaces(current: Path | None = None) -> list[dict]:
+    """能切到哪些工作区：总目录下有 `books/` 的子目录。`current` 不给就按本请求解析出来的那个，
+    只用来标 `current` 字段，不影响列哪些。"""
+    if current is None:
+        current = workspace_root()
+    root = workspaces_root()
+    cands: list[Path] = sorted(d for d in root.iterdir() if d.is_dir()) if root and root.is_dir() else []
+
+    cur_res = current.resolve() if current else None
+    out: list[dict] = []
+    for d in cands:
+        books = books_dir(d)
+        if not books.is_dir():
+            continue
+        ids = sorted(y.stem for y in books.glob("*.yaml"))
+        if not ids and d.resolve() != cur_res:
+            continue                      # 空工作区不列（当前这个除外，免得自己消失）
+        out.append({"id": _ws_id(d), "path": str(d.resolve()), "name": d.name,
+                    "books": ids, "current": d.resolve() == cur_res})
+    return out
+
+
+#: 实验分支名，与 Worker ``policy.ts`` 的 EXP_BRANCH_RE、MAX_BRANCH_NAME 一致
+EXP_BRANCH_RE = re.compile(r"^exp/GUJI-\d+(?:-[a-z0-9]+)*$")
+
+
+def is_exp_branch(name: str) -> bool:
+    return len(name) <= 63 and bool(EXP_BRANCH_RE.match(name))

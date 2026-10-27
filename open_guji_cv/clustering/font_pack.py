@@ -187,7 +187,7 @@ def find_pack(spec, chars, vertical: bool, fetch: bool = True) -> tuple[Path | N
     if f.exists():
         return f, False
     if fetch:
-        from ..datastore.packs import fetch_derived
+        from ..core.derived import fetch_derived
         if fetch_derived(R2_DIR, name, f):
             return f, True
     return None, False
@@ -198,19 +198,3 @@ def save_pack(db, spec, chars, vertical: bool) -> Path:
     f = local_dir() / pack_name(spec.edition_tag, pack_key(spec, chars, vertical))
     export_pack(db, spec.edition_tag, f)
     return f
-
-
-def push_packs(src=None) -> list[str]:
-    """本机 `cache_root()/fontdb/*.sqlite` 里 R2 还没有的，存上去（gzip）。要正式令牌，手动跑。"""
-    from ..datastore import packs as P
-    src = src or P._client()
-    have = {r["key"].rsplit("/", 1)[0] for r in
-            src._call("GET", "/v1/packs", query={"bucket": P._bucket(src), "prefix": f"derived/{R2_DIR}/"})["packs"]
-            if r["key"].endswith("/manifest.json")}
-    done = []
-    for f in sorted(local_dir().glob("*.sqlite")):
-        key = f"derived/{R2_DIR}/{f.name}"
-        if key not in have:
-            P.push_file(key, f, src=src, gzip_level=1)
-            done.append(key)
-    return done

@@ -64,12 +64,7 @@ class CentralError(RuntimeError):
         self.status, self.code, self.detail = status, code, detail
 
 
-#: 实验分支名，与 Worker ``policy.ts`` 的 EXP_BRANCH_RE、MAX_BRANCH_NAME 一致
-EXP_BRANCH_RE = re.compile(r"^exp/GUJI-\d+(?:-[a-z0-9]+)*$")
-
-
-def is_exp_branch(name: str) -> bool:
-    return len(name) <= 63 and bool(EXP_BRANCH_RE.match(name))
+from ..core.workspace import EXP_BRANCH_RE, is_exp_branch  # noqa: E402,F401  搬到 core（拆分 M3）
 
 
 def _sha(b: bytes) -> str:

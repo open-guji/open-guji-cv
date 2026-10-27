@@ -144,6 +144,8 @@ class ProductStore:
 
     # ── 原图出自哪一版页表（GUJI-748 换图源）────────────────────────
     SOURCE_FILE = "_source.json"
+    #: `guji source pull` 在原图目录留的页表记号文件名（datastore.sources 从这里取，不再各存一份）
+    PULL_MARK = "_pages.json"
 
     def _sync_source(self, book: str, raw_dir: Path) -> None:
         """把原图目录里 `guji source pull` 留的页表记号（`_pages.json` 的 book_id/vol/rev）抄进本册产物目录。
@@ -151,10 +153,9 @@ class ProductStore:
         这样产物包自带「这些格是在哪一版页表的图上切的」，人裁锚的 `source_rev` 从这里取，
         不取册 yaml 的现行值（用 `--pack` 取旧图包落旧票时，不会给旧坐标盖上新 rev）。
         原图目录没有记号（手放的图、pull 之前的老目录）时删掉旧抄件，按「来历不明」处理。"""
-        from ..datastore.sources import PULL_MARK
         dst = self.root / book / self.SOURCE_FILE
         try:
-            mark = json.loads((raw_dir / PULL_MARK).read_text(encoding="utf-8"))
+            mark = json.loads((raw_dir / self.PULL_MARK).read_text(encoding="utf-8"))
             rec = {k: mark.get(k) for k in ("book_id", "vol", "rev")}
         except (OSError, ValueError):
             rec = None

@@ -110,11 +110,10 @@ def isolated_branch() -> str | None:
     `GUJI_PRODUCTS_DIR` 显式指了目录、或工作区没迁中心库（产物不随分支换目录）时不算，照旧过护栏。"""
     import os
     from . import workspace as W
-    from ..datastore.client import is_exp_branch
     if os.environ.get("GUJI_PRODUCTS_DIR") or W._branch_local(W.PRODUCTS_REL) is None:
         return None
     b = W.active_branch()
-    return b if is_exp_branch(b) else None
+    return b if W.is_exp_branch(b) else None
 
 
 def normalize(v: str | None) -> str | None:

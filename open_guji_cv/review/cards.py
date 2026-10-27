@@ -24,28 +24,8 @@ from ..products.store import ProductStore
 from ..variant_ledger import BookLedger
 from .borrow_first import annotate, first_pick_mode, sort_disagree_first
 from .shadow import SHADOW_THR, load_shadow, shadow_view
+from ..core.book import parse_cells_spec  # noqa: F401  搬到 core（拆分 M3）
 from .verdict_view import decided_view, defect_only_cells, flagged_cells
-
-
-def parse_cells_spec(pages: str, book: str) -> set[str]:
-    """`cells:4:1:21,6:8:1` → `{"bxgb:4:1:21", "bxgb:6:8:1"}`（2026-09-17）。
-
-    用户「输入 4:1:21 就显示那张卡」：人裁时报出一个字位要立刻调卡对着看，
-    不必先猜它在哪一页。书号可省（省了补 `book`），逗号/空格/中文逗号都当分隔符。
-
-    返回值进 `cards()` 的 `only_ids`，与点名清单 `list:` 同一条通路，因此同样
-    **不受 only / 顺序闸 / 已裁去重约束**——点名要看的就得出得来，否则「它已自动
-    进库」或「旁边切线没裁」会把它静默吞掉，人对着空面板分不清是没问题还是被吞了。
-    """
-    raw = pages[len("cells:"):].replace("，", ",").replace(" ", ",")
-    ids = {tok if tok.count(":") >= 3 else f"{book}:{tok}"
-           for tok in (t.strip() for t in raw.split(",")) if tok}
-    if not ids:
-        raise ValueError(f"cells: 里没有可用的坐标：{pages!r}")
-    bad = sorted(i for i in ids if i.count(":") < 3 or not i.split(":")[1].isdigit())
-    if bad:
-        raise ValueError(f"坐标要写成 页:列:格（可带书号），这些不对：{bad}")
-    return ids
 
 
 def _ai_view(dr) -> tuple[list[dict] | None, dict | None]:

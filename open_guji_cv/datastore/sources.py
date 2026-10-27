@@ -701,7 +701,9 @@ def with_page(table: dict, seq: str, data: bytes, note: str, by: str) -> tuple[d
 
 # ─── 管线取图 ─────────────────────────────────────────────────────────────
 
-PULL_MARK = "_pages.json"
+from ..products.store import ProductStore as _PS  # noqa: E402
+
+PULL_MARK = _PS.PULL_MARK
 
 
 def prune_extra_pages(raw_dir, table: dict) -> list[str]:
