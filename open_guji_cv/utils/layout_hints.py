@@ -25,7 +25,9 @@
               parts: [{cols: 2}, {h: 2, cols: 14}]   # 左边再上下均分两层，每层 14 列
 
 人只给大约位置，切位由算法吸到附近的线或空白（`utils/free_blocks.snap_cut`）。
-`kind`：`text`（缺省）、`table`（有横竖界栏的格表：列宽不硬求一致、列里按横界栏断格）、`skip`（不切）。
+`kind` 只有 `text`（缺省）与 `skip`（不切）。
+块（或版面树叶子）可加 `ruled: true`：正文列有界栏但不规律（列宽不齐、常几列合一列，列里有横界栏），
+列宽不硬求一致、列里遇横界栏断开（yxat 99–102 下栏）。
 `cols`、`pitch` 都不给就全自估。
 同一页落在几条里时逐字段合并：区间宽的先、窄的后，后写的字段盖前面的（区间给 pitch、单页再给 cols 都生效）。
 """
@@ -35,7 +37,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 PAGE_TYPES = ("body", "skip")
-BLOCK_KINDS = ("text", "table", "skip")
+BLOCK_KINDS = ("text", "skip")
 
 
 @dataclass
@@ -44,6 +46,7 @@ class BlockHint:
     cols: int | None = None
     kind: str = "text"
     pitch: float | None = None
+    ruled: bool = False                              # 有界栏、列宽不齐的正文（见模块头）
 
 
 @dataclass
@@ -78,6 +81,9 @@ class PageHint:
     def kind_for(self, i: int) -> str:
         return self.blocks[i].kind if i < len(self.blocks) else "text"
 
+    def ruled_for(self, i: int) -> bool:
+        return self.blocks[i].ruled if i < len(self.blocks) else False
+
 
 def _pages(key) -> list[int]:
     s = str(key).strip()
@@ -99,7 +105,7 @@ def _block(d) -> BlockHint:
         box = tuple(int(v) for v in box)
     cols, pitch = d.get("cols"), d.get("pitch")
     return BlockHint(box=box, cols=None if cols is None else int(cols), kind=kind,
-                     pitch=None if pitch is None else float(pitch))
+                     pitch=None if pitch is None else float(pitch), ruled=bool(d.get("ruled", False)))
 
 
 def _check_tree(node, key) -> None:

@@ -262,7 +262,7 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
 
     `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
     不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。
-    `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；表格的格宽不一、标题列窄，放到 0.5–1.2。"""
+    `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；界栏不规律的列宽不齐、标题列窄，放到 0.5–1.2。"""
     h, w = ink.shape
     body, _ = split_vlines(ink)
     s = best_shear(body)
@@ -301,9 +301,9 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
 
 def rule_breaks(hlines: np.ndarray, x0: int, x1: int, y0: int, y1: int, *, frac: float = 0.5,
                 merge: int = 30, edge: int = 25) -> list[int]:
-    """表格一列 [x0,x1)×[y0,y1) 里的横界栏 → 格线 y（页面坐标，自上而下）。
+    """有界栏的一列 [x0,x1)×[y0,y1) 里的横界栏 → 断开处 y（页面坐标，自上而下）。
 
-    `hlines` 是 `free_blocks.rule_hlines` 的横界栏图（0/1）。某行界栏像素盖住列宽 ≥ frac 就算格线，
+    `hlines` 是 `free_blocks.rule_hlines` 的横界栏图（0/1）。某行界栏像素盖住列宽 ≥ frac 就算一道，
     挨着的几行并成一条取中；贴着列上下端 edge 以内的不要（那是块边的栏线）。"""
     if x1 - x0 < 4 or y1 - y0 <= 2 * edge:
         return []

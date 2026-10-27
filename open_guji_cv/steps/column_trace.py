@@ -4,8 +4,9 @@
 浅界行当好切线、列宽贴近列距、网格两端浮动但要盖住正文的墨（版心不算）。
 都没有时退回自估：剪切校斜、投影自相关估列距、DP 定列界直线、带内走最省墨竖缝；
 块里有竖线（界行、表格线）就先按竖线分段。
-表格块（`kind: table`，1.2 起）：也走网格，但列数不给死、列宽放宽到 0.5–1.2 倍列距（格宽不一、标题列窄），
-网格外漏的墨罚得重（不漏掉标题列）；每列再找横界栏，记成格线 `breaks`，Step3 按格切字。
+有界栏但不规律的正文块（人标 `ruled: true`，1.2 起；yxat 99–102 下栏）：也走网格，但列数不给死、列宽放宽到
+0.5–1.2 倍列距（列宽不齐、常几列合一列，标题列窄），网格外漏的墨罚得重（不漏掉标题列）；每列再找横界栏，
+记成 `breaks`，Step3 遇到就断开切字。
 算法在 `utils/free_columns.py`。
 """
 
@@ -37,10 +38,10 @@ class ColumnTraceParams(BaseModel):
     grid_line_bonus: float = 3.0   # 细竖线（浅界行）处切线的奖励
     grid_seam_band: float = 0.08   # 内部切线变缝的幅度（× 列距）
     spine_margin: int = 150        # 版心线没探到时，书脊一侧这么宽的墨不要求被网格盖住
-    table_width: tuple[float, float] = (0.5, 1.2)   # 表格块的列宽上下限（× 列距）
-    table_cover: float = 3.0       # 表格块网格外漏墨的罚（标题列墨少，罚轻了会被丢在网格外）
-    break_frac: float = 0.5        # 横界栏盖住列宽这么多才算格线
-    break_inset: int = 8           # 量格线时列两边各让进这么多（别量到竖界栏）
+    ruled_width: tuple[float, float] = (0.5, 1.2)   # ruled 块的列宽上下限（× 列距）
+    ruled_cover: float = 3.0       # ruled 块网格外漏墨的罚（标题列墨少，罚轻了会被丢在网格外）
+    break_frac: float = 0.5        # 横界栏盖住列宽这么多才算断开处
+    break_inset: int = 8           # 量横界栏时列两边各让进这么多（别量到竖界栏）
 
 
 @register_step
@@ -56,7 +57,7 @@ class ColumnTraceStep(Step):
         p: ColumnTraceParams = ctx.params_for(self)  # type: ignore[assignment]
         lb: LayoutBlocks = ctx.product("layout_blocks", page)
         out = FreeColumns(page=page, width=lb.width, height=lb.height)
-        todo = [b for b in lb.blocks if b.kind in ("text", "table")]
+        todo = [b for b in lb.blocks if b.kind == "text"]
         if lb.page_type == "skip" or not todo:
             return {"free_columns": out}
         W = lb.width
@@ -71,18 +72,18 @@ class ColumnTraceStep(Step):
             if sub.size == 0 or not sub.any():
                 continue
             pitch = b.pitch_hint or p.pitch_prior
-            # 表格：人给的列数只当列距的来源（格宽不一，硬给 n 列会切进格里）；列距、列数都没有就当正文自估
-            table_pitch = pitch or ((x1 - x0) / b.cols_hint if b.cols_hint else None)
-            table = b.kind == "table" and table_pitch is not None
-            if table:
+            # ruled：人给的列数只当列距的来源（列宽不齐，硬给 n 列会切进别的列）；列距、列数都没有就照常自估
+            ruled_pitch = pitch or ((x1 - x0) / b.cols_hint if b.cols_hint else None)
+            ruled = b.ruled and ruled_pitch is not None
+            if ruled:
                 if lines is None:
                     lines = thin_vlines(gray, p.bg_win)
                 if hrules is None:
                     hrules = rule_hlines(gray, p.bg_win)
-                bc = grid_columns(sub, lines[y0:y1, x0:x1], pitch=table_pitch, n=None,
-                                  line_bonus=p.grid_line_bonus, reg=p.grid_reg, cover=p.table_cover,
-                                  seam_band=p.grid_seam_band, width=p.table_width)
-                bc.n_source = "table"
+                bc = grid_columns(sub, lines[y0:y1, x0:x1], pitch=ruled_pitch, n=None,
+                                  line_bonus=p.grid_line_bonus, reg=p.grid_reg, cover=p.ruled_cover,
+                                  seam_band=p.grid_seam_band, width=p.ruled_width)
+                bc.n_source = "ruled"
             elif p.grid and (pitch or b.cols_hint):
                 if lines is None:
                     lines = thin_vlines(gray, p.bg_win)
@@ -101,7 +102,7 @@ class ColumnTraceStep(Step):
             for c in bc.columns:                     # 已是右→左
                 col_no += 1
                 breaks: list[float] = []
-                if table:
+                if ruled:
                     cl, cr = int(np.median(c.left)) + x0, int(np.median(c.right)) + x0
                     breaks = [float(y) for y in rule_breaks(hrules, cl + p.break_inset, cr - p.break_inset,
                                                             y0, y1, frac=p.break_frac)]
