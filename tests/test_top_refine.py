@@ -168,6 +168,16 @@ def test_push_bottom_to_bar_moves_line_from_text_baseline_to_bar():
     assert abs(new.y_at(0) - (722 - BPUSH_MARGIN)) < 1e-6
 
 
+def test_push_bottom_to_bar_vertical_beyond_image_width_does_not_crash():
+    """右竖线探到图宽之外（版框贴图边，vol57 p10/p18）→ x 夹进图宽，不抛 IndexError。"""
+    from open_guji_cv.utils.border_geometry import push_bottom_to_bar
+    Wd, Hd = 900, 800
+    binm = np.zeros((Hd, Wd), np.uint8)
+    verts = [_vl(-30, Wd), _vl(860, Wd)]
+    new, shift = push_bottom_to_bar(binm, _hl(700, "bottom"), verts, Wd, Hd)
+    assert shift == 0.0
+
+
 def test_push_bottom_to_bar_leaves_double_frame_and_barless_pages_alone():
     """雙邊框：内框细线在 +5（够格的条）→ 目标 <8 不动；没有条 → 不动；条在线上方 → 不动。"""
     from open_guji_cv.utils.border_geometry import push_bottom_to_bar

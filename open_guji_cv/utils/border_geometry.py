@@ -1047,7 +1047,7 @@ def push_bottom_to_bar(binm: np.ndarray, bottom: HLine, verticals: list[VLine],
     rows = []
     for o in range(0, BPUSH_DOWN + 1):
         yy = (base + o).astype(int)
-        ok = (yy >= 0) & (yy < height)
+        ok = (yy >= 0) & (yy < height) & (xs >= 0) & (xs < binm.shape[1])
         r = np.zeros(fw, bool)
         r[ok] = binm[yy[ok], xs[ok]] > 0
         rows.append(_bridge_row(r, BPUSH_BRIDGE))
