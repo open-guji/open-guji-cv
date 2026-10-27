@@ -422,6 +422,28 @@ def _jiazhu_gap_center(gray: np.ndarray,
     return float(x0 + (ga + gb) / 2), float(strength)
 
 
+JIAZHU_SIDE_MINOR = 0.3   # 跨中缝的连通体，少的一侧不到这么多才整块归多的一侧（两字粘连各占一半的照中缝切）
+
+
+def _jiazhu_sides(pre: np.ndarray, cx: int) -> np.ndarray:
+    """夹注格拆 a/b：每个像素归右行（True）还是左行。先按中缝 cx 一刀切；跨缝的连通体墨大半在一侧
+    （少的一侧 < JIAZHU_SIDE_MINOR）就整块归那侧——右行字偏左、笔画越过中缝（GUJI-748 新图 12、15 册
+    右行字被切半），同 cell_shrink 1.18 跨格界部件整块归墨多的那格。"""
+    h, w = pre.shape[:2]
+    right = np.zeros((h, w), dtype=bool)
+    right[:, max(0, cx):] = True
+    binary = (pre < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    if not 0 < cx < w or not binary[:, cx - 1:cx + 1].any():
+        return right
+    _n, lab, _st, _c = cv2.connectedComponentsWithStats(binary, 8)
+    for k in set(np.unique(lab[:, cx - 1:cx + 1]).tolist()) - {0}:
+        m = lab == k
+        r, tot = int((m & right).sum()), int(m.sum())
+        if min(r, tot - r) < JIAZHU_SIDE_MINOR * tot:
+            right[m] = r * 2 >= tot
+    return right
+
+
 def flag_jiazhu_runs(
         entries: list[tuple[int, tuple[float, float] | None]]
         ) -> dict[int, float]:
@@ -2277,6 +2299,8 @@ FRAME_PIN_ATTACH = 6        # 候选框行的连通体向上伸出 ≥ 此行数
 FRAME_PIN_ATTACH_WIN = 40   # 向上查连通的窗口行数
 FRAME_HINT_TOL = 40         # 调用方给了版框 y 提示时，从提示向外最远找这么多行的框线行
                             # （vol01/151 c4 的下框离 Step 2 的 border_bottom 有 26px）
+FRAME_HINT_TOL_CELL = 0.35  # 知道格高时容差按格高算（40 行 ≈ 0.35 × 旧图格高 115）。新图（siku-qiefen-v2）
+                            # 缩到 0.69 倍，死 40 行够到半格，把列末「士」「王」「二」的底横当下框（GUJI-748）
 PIN_PROBE_MIN = 12         # 文字带外侧探测窗至少这么宽才算「探得到」；v2 列图
                            # 只留 3~6px 边距且框线到窗口就停，探不到时只认密行
 
@@ -2374,13 +2398,31 @@ FRAME_BAND_COV = 0.85
 FRAME_BAND_MIN_RUN = 3
 
 
-def _nearest_bar(is_bar, hint: int, h: int) -> int | None:
-    """从 hint 向两侧交替找最近的框线行，最远 FRAME_HINT_TOL 行；找不到 None。"""
-    for k in range(FRAME_HINT_TOL + 1):
+def _nearest_bar(is_bar, hint: int, h: int, tol: int = FRAME_HINT_TOL, skip=None) -> int | None:
+    """从 hint 向两侧交替找最近的框线行，最远 tol 行；skip(y) 为真的候选跳过；找不到 None。"""
+    for k in range(tol + 1):
         for y in ((hint + k, hint - k) if k else (hint,)):
-            if 0 <= y < h and is_bar(y):
+            if 0 <= y < h and is_bar(y) and not (skip and skip(y)):
                 return int(y)
     return None
+
+
+def _bar_holds_stroke(binary: np.ndarray, y: int, up: bool) -> bool:
+    """行 y 的横条连着字的笔画：与它连通的墨往字那边（up=True 往上）伸出 ≥ FRAME_PIN_ATTACH 行。
+    框线之外是页边，不会挂着笔画；挂着的是字的横（「南」的顶横、「士」「王」的底横）。
+    只看中央 80% 宽，避开边缘界行残段。"""
+    h, w = binary.shape
+    xa, xb = int(0.1 * w), max(int(0.1 * w) + 1, int(0.9 * w))
+    if up:
+        sub = binary[max(0, y - FRAME_PIN_ATTACH_WIN):y + 1, xa:xb]
+    else:
+        sub = binary[y:y + FRAME_PIN_ATTACH_WIN + 1, xa:xb][::-1]
+    _n, lab = cv2.connectedComponents(np.ascontiguousarray(sub).astype(np.uint8), connectivity=8)
+    bar = set(int(v) for v in np.unique(lab[-1])) - {0}
+    if not bar:
+        return False
+    ys = np.nonzero(np.isin(lab, list(bar)))[0]
+    return bool(ys.size) and (lab.shape[0] - 1 - int(ys.min())) >= FRAME_PIN_ATTACH
 
 
 def frame_band_inner(page: np.ndarray,
@@ -2388,7 +2430,8 @@ def frame_band_inner(page: np.ndarray,
                      top_hint: float | None = None,
                      bottom_hint: float | None = None,
                      strategy: str = "side_gap",
-                     band: tuple[int, int] | None = None) -> tuple[int, int]:
+                     band: tuple[int, int] | None = None,
+                     hint_tol: int = FRAME_HINT_TOL) -> tuple[int, int]:
     """整页上下版框带的**内缘**行号 (top_inner, bot_inner)。检不出给页界。
 
     `strategy`（2026-09-19）：`border_line` 时改用「满宽连续段」认框（见 FRAME_BAND_COV
@@ -2451,9 +2494,12 @@ def frame_band_inner(page: np.ndarray,
             # 桩钉上去整条上横就没了。没有框可找，就别找。
             ft = None
         else:
-            ft = _nearest_bar(is_bar, int(round(top_hint)), h)
+            ft = _nearest_bar(is_bar, int(round(top_hint)), h, hint_tol)
     if bottom_hint is not None:
-        fb = _nearest_bar(is_bar, int(round(bottom_hint)), h)
+        # 提示以内（字那边）的候选连着上面的笔画就是字的底横，接着往外找（上框的同一道护栏见下）
+        bh = int(round(bottom_hint))
+        fb = _nearest_bar(is_bar, bh, h, hint_tol,
+                          skip=lambda y: y < bh and _bar_holds_stroke(binary, y, up=True))
     if ft is not None and blank_max is not None and ft > 0:
         blank = rowink[:int(ft)] < FRAME_PIN_BLANK_ROW
         run = best = 0
@@ -2462,18 +2508,10 @@ def frame_band_inner(page: np.ndarray,
             best = max(best, run)
         if best >= blank_max:
             ft = None
-    if ft is not None and blank_max is not None and ft > FRAME_PIN_ATTACH:
-        # 候选框行上方连着墨（「南」的十字竖笔从顶横往上伸 26 行）：框线
-        # 之上是页边，不会有笔画挂着。只看中央 80% 宽，避开边缘界行残段。
-        a = max(0, int(ft) - FRAME_PIN_ATTACH_WIN)
-        xa, xb = int(0.1 * w), max(int(0.1 * w) + 1, int(0.9 * w))
-        sub = binary[a:int(ft) + 1, xa:xb].astype(np.uint8)
-        _n, lab = cv2.connectedComponents(sub, connectivity=8)
-        bar_labels = set(int(v) for v in np.unique(lab[-1])) - {0}
-        if bar_labels:
-            ys = np.nonzero(np.isin(lab, list(bar_labels)))[0]
-            if ys.size and (lab.shape[0] - 1 - int(ys.min())) >= FRAME_PIN_ATTACH:
-                ft = None
+    if ft is not None and blank_max is not None and ft > FRAME_PIN_ATTACH \
+            and _bar_holds_stroke(binary, int(ft), up=True):
+        # 候选框行上方连着墨（「南」的十字竖笔从顶横往上伸 26 行）：框线之上是页边，不会有笔画挂着
+        ft = None
 
     top = 0
     if ft is not None:
@@ -2563,6 +2601,7 @@ class CharExtractor:
         frame_in_top, frame_in_bot = frame_band_inner(
             page_img,
             blank_max=(FRAME_PIN_BLANK_MAX * cell_h_grid if cell_h_grid > 0 else None),
+            hint_tol=(int(round(FRAME_HINT_TOL_CELL * cell_h_grid)) if cell_h_grid > 0 else FRAME_HINT_TOL),
             top_hint=None if frame_top_hint is None else float(frame_top_hint),
             bottom_hint=None if frame_bottom_hint is None else float(frame_bottom_hint),
             strategy=fbi_strategy, band=fbi_band)
@@ -3024,15 +3063,16 @@ class CharExtractor:
                     continue
                 pre, ax0, ay0 = jz_pre[i]
                 cx = jz_runs[i]
-                cxi = int(round(cx))
+                right = _jiazhu_sides(pre, int(round(cx)))
                 halves = []
-                for sub, xs, xe in (("a", cxi, pre.shape[1]), ("b", 0, cxi)):
+                for sub in ("a", "b"):
                     if i in jz_subs:
                         if sub not in jz_subs[i]:
                             continue  # Step3 没发这一半（段尾单字 / 半边墨不够）
                     elif sub == "b" and i in jz_tail_a:
                         continue      # 单字尾：b 侧只有残渣，不发实例
-                    hp = pre[:, xs:xe]
+                    hp = pre.copy()
+                    hp[~right if sub == "a" else right] = 255
                     ty, tx = np.nonzero(hp < BINARY_THRESHOLD_PATCH)
                     if ty.size < 30:
                         continue
@@ -3045,8 +3085,8 @@ class CharExtractor:
                         id=inst.id + sub,
                         book=inst.book, page=inst.page, col=inst.col,
                         idx=inst.idx,
-                        bbox=(ax0 + xs + tx0, ay0 + ty0,
-                              ax0 + xs + tx1, ay0 + ty1),
+                        bbox=(ax0 + tx0, ay0 + ty0,
+                              ax0 + tx1, ay0 + ty1),
                         cell_type="char",
                         ocr_text=None, ocr_confidence=0.0,
                         patch_path=f"patches/{page}/{col_no}_{i}{sub}.png",
