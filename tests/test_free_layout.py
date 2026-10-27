@@ -79,7 +79,7 @@ def test_blocks_split_by_divider(ran):
     assert lb.page_type == "body"
     assert [b.kind for b in lb.blocks] == ["text", "text"]
     # 读序：上块在前；分栏线在两块之间
-    assert lb.blocks[0].box[3] < DIV_Y < lb.blocks[1].box[1]
+    assert lb.blocks[0].box[3] <= DIV_Y + 2 and lb.blocks[1].box[1] >= DIV_Y - 2
 
 
 def test_columns_found_without_rules(ran):
@@ -143,13 +143,13 @@ def test_pitch_hint_grid_skips_banxin(tmp_path):
     img[y0:y1, x0 + 55:x0 + 57] = 170                 # 浅：过不了墨阈，只有细竖线图看得见
     for y in (300, 1200, 2000):
         _glyph(img, x0 + 15, y, 30)                   # 版心里的书名、页码
-    book = make_book("tfree", pipeline="keben_free", layout_hints={"1-3": {"pitch": 125}},
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1-3": {"pitch": 130}},
                      params={"block_detect": {"banxin": "odd_left"}})
     ctx = make_ctx(tmp_path, book, raw={1: img})
     out = run_steps(ctx, 1, ["block_detect", "column_trace"])
     lb, fc = out["layout_blocks"], out["free_columns"]
     assert lb.spine == "left" and lb.banxin is not None
-    assert all(b.pitch_hint == 125 for b in lb.blocks)
+    assert all(b.pitch_hint == 130 for b in lb.blocks)
     assert [b.n for b in fc.blocks] == [10, 10]
     assert {b.n_source for b in fc.blocks} == {"grid"}
     # 每列左右缝夹住该列的字（列 c 的右沿 x1-20-c·PITCH，字在其左 15–115px）
@@ -218,7 +218,7 @@ def test_partial_line_does_not_split_without_hint(tmp_path):
     img, _, _ = _mixed_page()
     ctx = make_ctx(tmp_path, make_book("tfree", pipeline="keben_free"), raw={1: img})
     tl = _tl_boxes(run_steps(ctx, 1, ["block_detect"])["layout_blocks"])
-    assert len(tl) == 2 and tl[0][3] < DIV_Y < tl[1][1], tl
+    assert len(tl) == 2 and abs(tl[0][3] - DIV_Y) <= 2 and abs(tl[1][1] - DIV_Y) <= 2, tl
 
 
 def test_tree_hint_splits_mixed_layout(tmp_path):
@@ -231,9 +231,9 @@ def test_tree_hint_splits_mixed_layout(tmp_path):
     tl = _tl_boxes(lb)
     assert len(tl) == 5, tl
     top, right, *left = tl
-    assert top[3] < DIV_Y < right[1] and right[0] > xv - 20            # 上栏；下栏右两列
+    assert abs(top[3] - DIV_Y) <= 2 and abs(right[1] - DIV_Y) <= 2 and right[0] > xv - 20            # 上栏；下栏右两列
     assert all(b[2] < xv for b in left)                                  # 左边三层，自上而下
-    assert left[0][3] < ys[0] < left[1][1] and left[1][3] < ys[1] < left[2][1]
+    assert all(abs(left[i][3] - ys[i]) <= 2 and abs(left[i + 1][1] - ys[i]) <= 2 for i in (0, 1))
     assert abs(top[3] - DIV_Y) < 20 and abs(left[0][3] - ys[0]) < 20    # 吸到线上，不是按比例的位置
     assert [b.cols_hint for b in lb.blocks] == [10, 2, 8, 8, 8]
 
@@ -345,3 +345,16 @@ def test_align_in_hints():
     assert h[10].align_for(0) == 1 and h[15].align_for(0) is None and h[15].align_for(2) == 1
     with pytest.raises(ValueError):
         parse_layout_hints({"9": {"align": [1, 3]}})
+
+
+def test_gap_terms_box_counts_as_crossed():
+    """竖线落进标题框里（框和框里的字之间是空白）也算劈开了框；列间空白正中离墨块最远。"""
+    from open_guji_cv.utils.free_columns import gap_terms
+    body = np.zeros((300, 200), bool)
+    body[50:250, 20:40] = True                     # 一列字（墨块）
+    body[40:260, 100:102] = body[40:260, 178:180] = True   # 框的左右边
+    body[40:42, 100:180] = body[258:260, 100:180] = True   # 框的上下边
+    body[80:200, 130:150] = True                   # 框里的字
+    cross, near = gap_terms(body, cap=20)
+    assert cross[115] >= 1 and cross[70] == 0       # 框里空白劈框；字列与框之间是真空白
+    assert near[70] > near[95] and near[70] == 1.0

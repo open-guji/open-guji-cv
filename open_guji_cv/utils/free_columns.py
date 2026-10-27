@@ -264,27 +264,64 @@ def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: fl
     return best, cuts[::-1]
 
 
+def gap_terms(body: np.ndarray, *, cap: float, min_area: int = 30) -> tuple[np.ndarray, np.ndarray]:
+    """块墨（已拉直）→ (穿过的墨块数, 离墨块的远近 0–1)，逐 x。
+
+    竖线 x 穿过的墨块：连通域横跨 x（不算两端）的个数——切在这里就把这些字（或框）劈开了。
+    离墨块的远近：x 到最近一个「被穿过」的位置的距离，到 cap 封顶后归一；列间空白的正中最大，
+    双行小注两行之间、字和框之间的窄缝小。"""
+    h, w = body.shape
+    _, _, st, _ = cv2.connectedComponentsWithStats(body.astype(np.uint8), connectivity=8)
+    d = np.zeros(w + 1)
+    for x, _, ww, _, a in st[1:]:
+        if a >= min_area and ww >= 3:
+            d[x + 1] += 1
+            d[x + ww - 1] -= 1
+    cross = np.cumsum(d)[:w]
+    free = cross <= 0
+    dist = np.zeros(w)
+    run = 0.0
+    for x in range(w):
+        run = run + 1 if free[x] else 0
+        dist[x] = run
+    run = 0.0
+    for x in range(w - 1, -1, -1):
+        run = run + 1 if free[x] else 0
+        dist[x] = min(dist[x], run)
+    return cross, np.minimum(dist, cap) / max(cap, 1.0)
+
+
 def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: int | None,
                  spine: str | None = None, spine_margin: int = 150, line_bonus: float = 3.0,
                  line_full: float = 0.05, reg: float = 4.0, cover: float = 1.0,
                  seam_band: float = 0.08, width: tuple[float, float] = (0.8, 1.2),
-                 fixed_ends: bool = False, gap_sigma: float = 0.0) -> BlockColumns:
+                 fixed_ends: bool = False, cross: float = 0.0, center: float = 0.0, center_cap: float = 0.15,
+                 rule_min: float = 0.0) -> BlockColumns:
     """块（ink、lines 已裁到块）→ 等宽网格的列。`lines` 是 `free_blocks.thin_vlines` 的细竖线强度。
 
     `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
     不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。
     `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；界栏不规律的列宽不齐、标题列窄，放到 0.5–1.2。
     `fixed_ends`：两端就是块边（版框内沿、版心线；本书左右不留白），只找内部切线，列宽 ≈ 块宽 ÷ n。
-    `gap_sigma`（× pitch）：切线代价先按这么宽抹平——列间空白抹平后最低点在空白正中；
-    双行小注两行之间的窄缝、字里的空隙抹平后就不低了，切线不会落进去。"""
+    `cross`、`center`（`gap_terms`）：切线每劈开一个墨块（字、框）加罚 cross（最多计 2 个）；落在空白里
+    离两边墨块越远奖励越多（center，离到 center_cap × pitch 封顶）——先不穿墨，再取空白正中。
+    `rule_min`：竖线要盖住块高这么多才当界行（不算墨、切在上面有奖励）；短的（标题框、牌记框的边）
+    墨照算、不奖励——否则切线会贴着框边走，切进框里的字。"""
     h, w = ink.shape
-    body, _ = split_vlines(ink)
+    body, vl = split_vlines(ink)
+    if rule_min > 0:
+        k = np.ones((1, 7), np.uint8)
+        short = cv2.dilate((vl.mean(0) < rule_min).astype(np.uint8)[None], k).ravel() > 0
+        body = body | (ink & vl & short[None])
+        long_ = cv2.dilate(((lines > 0.05).mean(0) >= rule_min).astype(np.uint8)[None], k).ravel() > 0
+        lines = lines * long_[None]
     s = best_shear(body)
     prof = smooth(shear(body.astype(np.uint8), s).sum(0).astype(np.float32), 2) / max(h, 1)
     lp = shear(np.clip(lines * 255, 0, 255).astype(np.uint8), s).mean(0) / 255.0
     raw = prof / (float(np.percentile(prof, 90)) + 1e-6) - line_bonus * np.clip(lp / line_full, 0, 1)
-    if gap_sigma > 0:
-        raw = smooth(raw, max(1.0, gap_sigma * (pitch or w / float(n or 1))))
+    if cross > 0 or center > 0:
+        nc, near = gap_terms(shear(body.astype(np.uint8), s), cap=center_cap * (pitch or w / float(n or 1)))
+        raw = raw + cross * np.minimum(nc, 2) / 2 - center * near
     cost = raw - float(np.median(raw))
     pm = prof.copy()
     if spine == "left":
@@ -295,14 +332,14 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     if pitch is None:
         pitch = w / float(n)
     cands = [n] if n else list(range(max(1, int(w / pitch) - 1), int(w / pitch) + 2))
+    if fixed_ends and not n:                        # 两端定死：列数就是块宽 ÷ 列距取整（比代价会偏向少切）
+        cands = [max(1, round(w / pitch))]
     best: tuple[float, int, list[int]] | None = None
     for m in cands:
         pm_ = w / float(m) if fixed_ends else pitch   # 两端定死：列距按列数回算（块宽 ÷ 列数）
         if m * width[0] * pm_ > w:
             continue
         tot, cuts = dp_grid(cost, mass, m, pm_, reg=reg, cover=cover, width=width, fixed_ends=fixed_ends)
-        if fixed_ends:                              # 两端不计价：比内部切线的平均代价，不偏向多切
-            tot /= max(1, m - 1)
         if best is None or tot < best[0]:
             best = (tot, m, cuts)
     if best is None:                                # 块比一列还窄
