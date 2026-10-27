@@ -10,8 +10,8 @@ from open_guji_cv.steps.align_ref import _coord_conflict, _coord_conflict_ids
 from open_guji_cv.steps.seed_admit import SeedAdmitParams
 
 
-def _lg(ch, op="equal"):
-    return SimpleNamespace(align_char=ch, align_op=op)
+def _lg(ch, op="equal", run=9):
+    return SimpleNamespace(align_char=ch, align_op=op, ref_run=run)
 
 
 def test_conflict_ids_collects_all_cells():
@@ -35,3 +35,54 @@ def test_no_switch_param():
 
 def test_page_align_ref_field_default():
     assert PageAlignRef.model_fields["coord_conflict_ids"].default_factory() == []
+
+
+def _col(n, bad, bad_run, bad_ch="有", bad_lg="本"):
+    """n 格一列，第 bad 格坐标字 bad_ch / 现役 equal bad_lg（段长 bad_run），其余全同。"""
+    chars = "天地玄黄宇宙洪荒日月盈昃辰宿列张寒来暑往"
+    recs, legacy = [], {}
+    for k in range(n):
+        i = f"v:50:7:{k + 1}"
+        ch = bad_ch if k == bad else chars[k]
+        recs.append((i, k + 1, None, ch, 0))
+        legacy[i] = _lg(bad_lg if k == bad else chars[k], run=bad_run if k == bad else 9)
+    return recs, legacy
+
+
+def test_isolated_weak_conflict_keeps_column():
+    # vol15 p50 列 7：现役 equal 段长 1 的孤立一格不合，其余全同 → 不退回，冲突格仍记 ids
+    recs, legacy = _col(14, 10, 1)
+    assert _coord_conflict(recs, legacy, {}) == ""
+    assert _coord_conflict_ids(recs, legacy) == ["v:50:7:11"]
+
+
+def test_long_run_conflict_still_drops():
+    recs, legacy = _col(14, 10, 5)
+    assert "与现役对位冲突" in _coord_conflict(recs, legacy, {})
+
+
+def test_two_weak_conflicts_drop():
+    recs, legacy = _col(14, 10, 1)
+    legacy["v:50:7:3"] = _lg("X", run=1)
+    assert "与现役对位冲突" in _coord_conflict(recs, legacy, {})
+
+
+def test_weak_conflict_with_few_agreeing_drops():
+    recs, legacy = _col(14, 10, 1)
+    for k in range(1, 11):                       # 现役大多缺席：同意的 equal 格不足
+        if k != 11:
+            legacy.pop(f"v:50:7:{k}", None)
+    assert "与现役对位冲突" in _coord_conflict(recs, legacy, {})
+
+
+def test_shift_like_weak_conflict_drops():
+    # 现役字恰是邻格的坐标字 → 整列错位的特征，退回
+    recs, legacy = _col(14, 10, 1, bad_ch="有", bad_lg="宿")
+    recs[9] = (recs[9][0], 10, None, "有", 0)
+    legacy["v:50:7:11"] = _lg(recs[9][3], run=1)   # 现役字 == 前一格坐标字
+    assert "与现役对位冲突" in _coord_conflict(recs, legacy, {})
+
+
+def test_blank_coord_conflict_drops():
+    recs, legacy = _col(14, 10, 1, bad_ch="")
+    assert "与现役对位冲突" in _coord_conflict(recs, legacy, {})
