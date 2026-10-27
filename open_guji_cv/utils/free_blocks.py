@@ -9,11 +9,13 @@
 1. `ink_mask`：除以大窗中值背景再取阈——纸色深浅不均、透墨的扫描也稳；
 2. `find_rules`：找长横线、长竖线。按条带投票，不靠形态学开运算——版框线粗细
    不匀、有断口，开运算一断就整条丢；条带法只要求「多数条带里这一行几乎全黑」；
-3. `page_blocks`：外框四边取内沿（找不到的边退回文字墨外包），框内跨宽 ≥ 60% 的
-   横线把框切成上下几块（鳌头的上下栏、帖式的分层）；每块里探到的竖线一并记下，
-   Step2 当硬列界用；
+3. `find_frame`：外框四边取内沿（找不到的边退回文字墨外包）；
 4. `find_banxin`：按书脊拆开的半叶，书脊一侧有一条窄的版心（书名、卷次、页码、鱼尾），
-   不是正文。在书脊一侧框内 20–150px 找版心线（很浅，用 `thin_vlines` 找），找到就把块裁进来。
+   不是正文。在书脊一侧框内 20–150px 找版心线（很浅，用 `thin_vlines` 找）；
+5. `split_region`：版心以内的版面按**首尾贯穿**的线递归切块（block_detect 1.3）：先找贯穿全区的
+   横线切上下（鳌头的上下栏、帖式的分层），切不动再看竖线一侧有没有只在那一侧贯穿的横线
+   （混排页：下栏右两列一路到底、左边再分层），有就左右切开再递归。线浅、断，量法见 `scan_hlines`；
+   每块里探到的竖线一并记下，Step2 当硬列界用。
 """
 
 from __future__ import annotations
@@ -186,35 +188,6 @@ class Block:
     source: str = "auto"                                 # auto | hint
 
 
-def page_blocks(ink: np.ndarray, frame: Frame, hs: list[Rule], vs: list[Rule], *,
-                div_span: float = 0.6, div_margin: float = 0.05, merge: int = 45,
-                pad: int = 12, min_h: int = 40, extra: tuple[float, ...] | list[float] = ()) -> list[Block]:
-    """框内按分栏横线切块，自上而下。`extra` 是别处找到的分栏 y（浅栏线、人标的分栏）。
-
-    线的位置是线的中心，`pad` 要大过半个线粗（版框线粗 10–16px），不然块边带一条框线渣。"""
-    fw, fh = frame.right - frame.left, frame.bottom - frame.top
-    xm = (frame.left + frame.right) / 2
-    divs = sorted([r.at(xm) for r in hs
-                   if r.span >= div_span * fw
-                   and frame.top + div_margin * fh < r.at(xm) < frame.bottom - div_margin * fh]
-                  + [y for y in extra if frame.top + div_margin * fh < y < frame.bottom - div_margin * fh])
-    cuts: list[list[float]] = []                      # 同一条粗线的两沿并成 [上沿, 下沿]
-    for y in divs:
-        if cuts and y - cuts[-1][1] <= merge:
-            cuts[-1][1] = y
-        else:
-            cuts.append([y, y])
-    edges = [frame.top] + [v for c in cuts for v in c] + [frame.bottom]
-    out: list[Block] = []
-    for i in range(0, len(edges), 2):
-        y0, y1 = int(edges[i] + pad), int(edges[i + 1] - pad)
-        if y1 - y0 < min_h:
-            continue
-        out.append(Block(int(frame.left + pad), y0, int(frame.right - pad), y1,
-                         vrules=block_vrules(vs, int(frame.left + pad), y0, int(frame.right - pad), y1)))
-    return out
-
-
 def block_vrules(vs: list[Rule], x0: int, y0: int, x1: int, y1: int, *,
                  min_votes: int = 2, side: int = 30) -> list[float]:
     """块内的竖线（界行、表格竖线）：穿过块中线高度、离块左右边 > side 的。"""
@@ -298,45 +271,222 @@ def thin_hlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int 
     return thin_vlines(gray.T, bg_win, width, length).T
 
 
-def faint_dividers(lines: np.ndarray, frame: Frame, *, thr: float = 0.03, band: int = 9,
-                   slopes: float = 0.02, min_cov: float = 0.6, margin: float = 0.04,
-                   sep: int = 20) -> list[tuple[float, float]]:
-    """浅分栏线 → [(y, 覆盖率)]（左上原点）。
+def line_maps(gray: np.ndarray, ink: np.ndarray, bg_win: int = 51, long: int = 301) -> tuple[np.ndarray, np.ndarray]:
+    """→ (横线强度图, 竖线强度图)，0–1。细线用 `thin_hlines`／`thin_vlines`（浅、过不了墨阈的也在）；
+    粗线（比 9px 厚，细线检测会当笔画减掉）另取墨里长度 ≥ long 的横向／竖向连续段补上；long 要比
+    最宽的字长得多——齐平的大字横画（合成页、格网整齐的刻本）隔着列缝也能连成一排。"""
+    k_h = cv2.getStructuringElement(cv2.MORPH_RECT, (long, 1))
+    thick_h = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, k_h).astype(np.float32)
+    thick_v = cv2.morphologyEx(ink.astype(np.uint8), cv2.MORPH_OPEN, k_h.T).astype(np.float32)
+    return (np.maximum(thin_hlines(gray, bg_win), thick_h), np.maximum(thin_vlines(gray, bg_win), thick_v))
 
-    条带投票（`find_rules`）要求线过墨阈、条带里 80% 是墨；鳌头本的栏线常常又浅又细、
-    还微微起伏，过不了。这里在细横线图（`thin_hlines`）上取「有线」的像素，按 ±slopes 的
-    几个斜率剪切、竖向膨胀 band 容起伏，看每行在框宽里被线盖住的比例，≥ min_cov 的局部
-    峰就是一条栏线。字的横画在一列里只占一截，凑不到大半个框宽。"""
-    t, b, l, r = int(frame.top), int(frame.bottom), int(frame.left), int(frame.right)
-    m = (lines[t:b, l:r] > thr).astype(np.uint8)
+
+@dataclass
+class LineCand:
+    """区里探到的一条细线（横线：pos 是区中线处的 y；竖线：pos 是区中线处的 x）。"""
+    pos: float
+    slope: float
+    cov: float        # 线像素盖住区宽（竖线：区高）的比例
+    reach: float      # 首尾贯穿度：容 gap 断口后最长一段 ÷ 区宽
+
+
+def _shear(m: np.ndarray, s: float) -> np.ndarray:
     h, w = m.shape
-    if h < 3 * sep or w < 10:
+    return cv2.warpAffine(m, np.float32([[1, 0, 0], [-s, 1, s * w / 2]]), (w, h), flags=cv2.INTER_NEAREST)
+
+
+def _longest_chain(v: np.ndarray, gap: int) -> int:
+    """v 里 True 的点，相邻间距 ≤ gap 的连成一段，返回最长一段的跨度。"""
+    xs = np.flatnonzero(v)
+    if len(xs) == 0:
+        return 0
+    cuts = np.flatnonzero(np.diff(xs) > gap)
+    starts = np.r_[xs[0], xs[cuts + 1]]
+    ends = np.r_[xs[cuts], xs[-1]]
+    return int((ends - starts + 1).max())
+
+
+def scan_hlines(lines: np.ndarray, x0: int, y0: int, x1: int, y1: int, *, thr: float = 0.03,
+                thr_lo: float = 0.03, band: int = 9, slopes: float = 0.02, min_cov: float = 0.4,
+                gap: int = 150, sep: int = 25, margin: int = 30) -> list[LineCand]:
+    """区 [x0,x1)×[y0,y1) 里的细横线（`lines` 是 `thin_hlines` 的强度图）→ 自上而下。
+
+    鳌头本的栏线又浅又细、微斜，木版磨损处断成虚线，字还常贴着线。所以分两层量：
+    `cov`（线像素按 ±slopes 几个斜率剪切、竖向膨胀 band 后，盖住区宽的比例，取峰）定「这是条线」；
+    `reach`（用更低的阈 thr_lo 取线像素，断口 ≤ gap 的连成一段，最长一段占区宽多少）定「线首尾
+    贯穿这一区」。半截线（混排页只盖住一部分列的线）cov 可以很高，reach 到不了 0.95。"""
+    m = (lines[y0:y1, x0:x1] > thr).astype(np.uint8)
+    lo = (lines[y0:y1, x0:x1] > thr_lo).astype(np.uint8)
+    h, w = m.shape
+    if h < 2 * margin + 3 or w < 10:
         return []
+    k = np.ones((band, 1), np.uint8)
+    m, lo = cv2.dilate(m, k), cv2.dilate(lo, k)
     cov = np.zeros(h, np.float32)
+    best = np.zeros(h, np.float32)
     for s in np.linspace(-slopes, slopes, 9):
-        M = np.float32([[1, 0, 0], [-s, 1, s * w / 2]])
-        ms = cv2.warpAffine(m, M, (w, h), flags=cv2.INTER_NEAREST)
-        ms = cv2.dilate(ms, np.ones((band, 1), np.uint8))
-        cov = np.maximum(cov, ms.mean(1))
-    out: list[tuple[float, float]] = []
-    lo, hi = max(sep, int(margin * h)), min(h - sep, int((1 - margin) * h))
-    for y in range(lo, hi):
-        if cov[y] >= min_cov and cov[y] == cov[y - sep:y + sep + 1].max():
-            if out and y + t - out[-1][0] <= sep:      # 平顶：取中
-                continue
-            out.append((float(y + t), float(cov[y])))
+        c = _shear(m, s).mean(1)
+        up = c > cov
+        cov[up], best[up] = c[up], s
+    out: list[LineCand] = []
+    for y in range(margin, h - margin):
+        if cov[y] < min_cov or cov[y] < cov[max(0, y - sep):y + sep + 1].max():
+            continue
+        if out and y + y0 - out[-1].pos <= sep:            # 同一个平顶已经取过
+            continue
+        z = y
+        while z + 1 < h and cov[z + 1] >= cov[y]:          # 平顶（粗线、竖向膨胀）：取中
+            z += 1
+        yc = (y + z) // 2
+        reach = _longest_chain(_shear(lo, float(best[yc]))[yc] > 0, gap) / w
+        out.append(LineCand(float(yc + y0), float(best[yc]), float(cov[y]), reach))
     return out
 
 
-def snap_split(y: float, divs: list[float], ink: np.ndarray, frame: Frame, *, snap: int = 60) -> float:
-    """人标的分栏 y（约数）→ 准位：snap 内有探到的栏线就用它，否则取 snap 内整行最空的那一行
-    （两栏之间的空白）。"""
-    near = [d for d in divs if abs(d - y) <= snap]
-    if near:
-        return min(near, key=lambda d: abs(d - y))
-    a, b = int(max(frame.top, y - snap)), int(min(frame.bottom, y + snap))
-    if b <= a:
-        return y
-    prof = ink[a:b, int(frame.left):int(frame.right)].mean(1).astype(np.float32)
-    prof = cv2.GaussianBlur(prof.reshape(-1, 1), (1, 9), 2).ravel()
-    return float(a + int(np.argmin(prof)))
+def scan_vlines(lines: np.ndarray, x0: int, y0: int, x1: int, y1: int, **kw) -> list[LineCand]:
+    """细竖线（`lines` 是 `thin_vlines` 的强度图）→ 自左而右；量法同 `scan_hlines`，转置来做。"""
+    return scan_hlines(lines.T, y0, x0, y1, x1, **kw)
+
+
+@dataclass
+class SplitParams:
+    reach: float = 0.95      # 分栏线要首尾贯穿当前区的比例（Sheldon 10-27：60% 不够，混排页的半截线会误切）
+    min_cov: float = 0.4     # 线像素至少盖住区宽的比例（低于它不当线）
+    gap: int = 150           # 量贯穿时容许的断口（磨损、贴字）
+    merge: int = 45          # 两条切线挨这么近算同一条（粗线两沿、双线）
+    pad: int = 12            # 块边离线中心（大过半个线粗）
+    min_h: int = 40          # 切出来比这还窄的块不要
+    auto_v: bool = False     # 没人标时也试左右切（混排页）；缺省关，混排页由人标版面树
+    max_depth: int = 3       # auto_v 时的递归深度
+    min_side: float = 0.1    # 左右切时，较窄一边至少占区宽的比例
+    snap: float = 0.25       # 人标切位的吸附范围：相邻两份里较小那份的这个比例
+    snap_cov: float = 0.3    # 吸附时线的门槛（比自动认线低：人已经说了这里有分界）
+
+
+def _cuts(pos: list[float], merge: int) -> list[list[float]]:
+    out: list[list[float]] = []
+    for v in sorted(pos):
+        if out and v - out[-1][1] <= merge:
+            out[-1][1] = v
+        else:
+            out.append([v, v])
+    return out
+
+
+def cut_pieces(lo: int, hi: int, pos: list[float], prm: SplitParams) -> list[tuple[int, int]]:
+    """[lo, hi) 在 pos 处切开（每条切线两边各让 pad）→ 各段。"""
+    edges = [lo] + [v for c in _cuts(pos, prm.merge) for v in c] + [hi]
+    out = []
+    for i in range(0, len(edges), 2):
+        a = int(edges[i] + (prm.pad if i else 0))
+        b = int(edges[i + 1] - (prm.pad if i + 1 < len(edges) - 1 else 0))
+        if b - a >= prm.min_h:
+            out.append((a, b))
+    return out
+
+
+def split_region(hl: np.ndarray, vl: np.ndarray, x0: int, y0: int, x1: int, y1: int, *,
+                 prm: SplitParams = SplitParams(), depth: int = 0) -> list[Block]:
+    """没人标时：一区按**首尾贯穿**的横线切开 → 块（自上而下）。`hl`、`vl` 是横、竖线强度图（`line_maps`）。
+
+    贯穿 = reach ≥ prm.reach（缺省 0.95）。宁漏勿错：漏了的分栏由人标补（`splits`、`tree`），
+    错切一刀则整页读序都乱。`prm.auto_v` 开时再试左右切：区里没有贯穿横线、但某条贯穿上下的竖线
+    一侧有「在那一侧贯穿」的横线（混排页），就在竖线处切开，两边再递归（读序自右而左）。"""
+    pos = [c.pos for c in scan_hlines(hl, x0, y0, x1, y1, min_cov=prm.min_cov, gap=prm.gap)
+           if c.reach >= prm.reach]
+    if pos:
+        out: list[Block] = []
+        for a, b in cut_pieces(y0, y1, pos, prm):
+            out += split_region(hl, vl, x0, a, x1, b, prm=prm, depth=depth + 1) \
+                if prm.auto_v and depth < prm.max_depth else [Block(x0, a, x1, b)]
+        return out or [Block(x0, y0, x1, y1)]
+    if prm.auto_v and depth < prm.max_depth:
+        w = x1 - x0
+        for c in scan_vlines(vl, x0, y0, x1, y1, min_cov=prm.min_cov, gap=prm.gap):
+            x = int(c.pos)
+            if c.reach < prm.reach or min(x - x0, x1 - x) < prm.min_side * w:
+                continue
+            for a, b in ((x + prm.pad, x1), (x0, x - prm.pad)):
+                if any(s.reach >= prm.reach for s in scan_hlines(hl, a, y0, b, y1, min_cov=prm.min_cov, gap=prm.gap)):
+                    return (split_region(hl, vl, x + prm.pad, y0, x1, y1, prm=prm, depth=depth + 1)
+                            + split_region(hl, vl, x0, y0, x - prm.pad, y1, prm=prm, depth=depth + 1))
+    return [Block(x0, y0, x1, y1)]
+
+
+def snap_cut(orient: str, approx: float, window: float, hl: np.ndarray, vl: np.ndarray, ink: np.ndarray,
+             x0: int, y0: int, x1: int, y1: int, prm: SplitParams = SplitParams()) -> float:
+    """人标的大约切位 → 准位。`orient` "h" 切上下（approx 是 y）、"v" 切左右（approx 是 x）。
+
+    window 内有线（cov ≥ prm.snap_cov，贯不贯穿都算——人已经说了这里有分界）就取盖得最满的那条
+    （浅的分栏线断断续续、量出的贯穿反而不如图格里的半截横线，但盖住的总宽度还是它最多）；
+    没有线就取 window 内最空的一行（列）：两栏之间的空白。"""
+    lo, hi = approx - window, approx + window
+    if orient == "h":
+        cand = [c for c in scan_hlines(hl, x0, y0, x1, y1, min_cov=prm.snap_cov, gap=prm.gap) if lo <= c.pos <= hi]
+    else:
+        cand = [c for c in scan_vlines(vl, x0, y0, x1, y1, min_cov=prm.snap_cov, gap=prm.gap) if lo <= c.pos <= hi]
+    if cand:
+        return max(cand, key=lambda c: c.cov).pos
+    if orient == "h":
+        a, b = int(max(y0, lo)), int(min(y1, hi))
+        prof = ink[a:b, x0:x1].mean(1) if b > a else None
+    else:
+        a, b = int(max(x0, lo)), int(min(x1, hi))
+        prof = ink[y0:y1, a:b].mean(0) if b > a else None
+    if prof is None or len(prof) == 0:
+        return approx
+    prof = cv2.GaussianBlur(prof.astype(np.float32).reshape(-1, 1), (1, 9), 2).ravel()
+    low = prof <= prof.min() + 1e-3                 # 最空的几行常连成一片（两栏间整段空白）：取最长那片的中点
+    best, i = (0, 0), 0
+    while i < len(low):
+        if low[i]:
+            j = i
+            while j < len(low) and low[j]:
+                j += 1
+            best = max(best, (j - i, -(i + j) // 2))
+            i = j
+        else:
+            i += 1
+    return float(a - best[1])
+
+
+def _ratios(spec, n_parts: int) -> list[float]:
+    """切法 → 各份占比。int n：均分 n 份；列表：按比例（如 [1, 2]、右 2 列左 14 列写 [2, 14]）。"""
+    r = [1.0] * int(spec) if isinstance(spec, int) else [float(v) for v in spec]
+    if n_parts and len(r) < n_parts:
+        r += [r[-1]] * (n_parts - len(r))
+    return r
+
+
+def tree_blocks(node: dict, hl: np.ndarray, vl: np.ndarray, ink: np.ndarray, x0: int, y0: int, x1: int, y1: int,
+                prm: SplitParams = SplitParams()) -> list[tuple[Block, dict]]:
+    """人标的版面树 → [(叶子块, 叶子的提示)]，按读序（上下切自上而下，左右切自右而左）。
+
+    节点写法（`layout_hints` 的 `tree`）：`{h: 切法, parts: [...]}` 切上下，`{v: 切法, parts: [...]}`
+    切左右；切法是份数或比例（左右切的比例、parts 都按读序**自右而左**写）；不切的是叶子，可带
+    `cols`、`pitch`、`kind`（写在切开的节点上就是各份都这样）。人只给大约比例，切位由 `snap_cut` 吸到线或空白上。"""
+    if "h" not in node and "v" not in node:
+        return [(Block(x0, y0, x1, y1, source="hint"), node)]
+    orient = "h" if "h" in node else "v"
+    r = _ratios(node[orient], len(node.get("parts") or []))
+    inherit = {k: node[k] for k in ("cols", "pitch", "kind") if k in node}   # 切开的节点上写的叶子参数传给各份
+    parts = [{**inherit, **c} for c in (node.get("parts") or [])]
+    parts += [dict(inherit)] * (len(r) - len(parts))
+    tot = sum(r)
+    if orient == "h":
+        lo, span = y0, y1 - y0
+        approx = [lo + span * sum(r[:i + 1]) / tot for i in range(len(r) - 1)]
+    else:                                   # 自右而左：第一份贴右边
+        lo, span = x1, -(x1 - x0)
+        approx = [lo + span * sum(r[:i + 1]) / tot for i in range(len(r) - 1)]
+    win = [prm.snap * abs(span) * min(r[i], r[i + 1]) / tot for i in range(len(r) - 1)]
+    cuts = [snap_cut(orient, a, w, hl, vl, ink, x0, y0, x1, y1, prm) for a, w in zip(approx, win)]
+    out: list[tuple[Block, dict]] = []
+    if orient == "h":
+        for (a, b), child in zip(cut_pieces(y0, y1, cuts, prm), parts):
+            out += tree_blocks(child, hl, vl, ink, x0, a, x1, b, prm)
+    else:
+        segs = cut_pieces(x0, x1, cuts, prm)[::-1]            # 自右而左
+        for (a, b), child in zip(segs, parts):
+            out += tree_blocks(child, hl, vl, ink, a, y0, b, y1, prm)
+    return out
