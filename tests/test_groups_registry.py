@@ -21,12 +21,12 @@ def test_group_ids_match_dataset_registry():
     另有字组统一流程首批七个异体组（mn／dian／can／chen／li／shen／zhi，2026-10-18；li 2026-10-26 改按刻形判、移到 SHAPE_GROUPS）、第二批四个只看字频的（ji／qing／bian／hui）、
     第三批五个形近不同义的（ly／dt／wj／zh／yh，2026-10-19）、第四批三个（xz／wyu／yt）、日目 rm、第五批（mz／yr／sb／js／em／fc／mb；qg 2026-10-24 并进 zy）、
     第三批只看字频的异体组六个（kan／jiw／qx／dx／zx／qy，2026-10-20）、按字分类 IDS 三组（xu／ce／jiao）、
-    整字岭回归两组（lv 呂吕／zheng 徵徴，2026-10-20）。"""
+    整字岭回归 lv 呂吕（2026-10-20；zheng 徵徴 2026-10-27 改成码位组，暂归一到 徴）。"""
     assert set(GROUPS) == {"jys", "ry", "rr", "yi_560", "wxs", "wm", "ts",
                            "dian", "can", "chen", "shen", "zhi", "ji", "qing", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
-                           "qik", "lih", "jue", "wei", "shuo", "lv", "zheng", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di"}
+                           "qik", "lih", "jue", "wei", "shuo", "lv", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 

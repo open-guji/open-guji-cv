@@ -1039,6 +1039,8 @@ def push_bottom_to_bar(binm: np.ndarray, bottom: HLine, verticals: list[VLine],
         return bottom, 0.0
     vx = sorted((width - 1) - v.x_at(height * 0.9) for v in verticals)
     x0, x1 = int(vx[0] + 15), int(vx[-1] - 15)
+    # 右界线外推出图（换源新图，vol23 p10、vol37 p74）时截到图内；原先在这里越界报错，截了不影响没越界的页
+    x1 = min(x1, binm.shape[1])
     if x1 - x0 < 100:
         return bottom, 0.0
     xs = np.arange(x0, x1)

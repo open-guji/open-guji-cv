@@ -83,7 +83,7 @@ def test_evaluate_by_book_leaves_book_out():
 
 
 def test_repo_whole_banks_load_and_match_spec():
-    for g, kind in (("lv", "pix"), ("zheng", "hog")):
+    for g, kind in (("lv", "pix"),):   # zheng 徵徴 2026-10-27 改成码位组
         sp = O.SPECS[g]
         assert sp.whole == kind and O.has_bank(g), g
         bank = O.load_bank(O.bank_path(g))
@@ -94,5 +94,5 @@ def test_repo_whole_banks_load_and_match_spec():
 
 
 def test_fingerprint_covers_whole_groups():
-    f = O.fingerprint(("lv", "zheng"))
-    assert f.startswith("ids:lv=") and ",zheng=" in f
+    f = O.fingerprint(("lv", "xz"))
+    assert f.startswith("ids:lv=") and ",xz=" in f

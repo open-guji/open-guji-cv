@@ -6,6 +6,12 @@
 ## [未发版]
 
 - `scripts/export_guji_format.py` 导出时把略出图边的字框／格框裁到图内（殿本 vol59 p58 贴边一格外沿出图 47px，「字框出图」检查不过，republish 整册出单被拦）；整个在图外的不动、照旧报。不在任何 `code_deps`。PATCH。
+- 换源新图两处修补（GUJI-748）：① Step1 `push_bottom_to_bar` 右界截到图内（vol23 p10、vol37 p74 右界线外推出图，`IndexError` 整页失败）；只在原先越界报错的页上生效，`border_geometry` 登记代码等价（vol20 新图 94 页逐字节相同），各步 `code_hash` 不变。② 引擎：上游某页最近一次跑失败时，盘上那份是更早一轮的旧产物，原先下游照样读它接着跑（vol23 p10 新图拿旧图版框切出 74 格），现在按缺失处理、下游判 blocked；`core/engine.py` 不进指纹。PATCH。
+
+## [0.5.27] - 2026-10-26
+
+PATCH（GUJI-748 换图源缺格页：#683 Step1 网格模式按界行反推版框 `grid_lattice_fallback`；另含 #682 印章页切分（Step1 列距救援、印章定位 1.3）、#686 自由版式管线 keben_free（新三步，独立管线、不影响 keben_body_v2）、#679 #684 #685 #687 字组规则、拆分 M0–M2 #677 #678 #680、#674 PDF 源件、#681 任务库连库断线重排）。相对 v0.5.26，`border_detect`、`row_segment`、`cell_shrink`、`seal_detect`、`seed_admit` 五步 `code_hash` 变（合前实算），新增 `block_detect`、`column_trace`、`cell_cut`；其余步不变。字组文件变了：换用本版重跑的册要按 CorpusDrift 出全局层新底库、改钉 `corpus`。rc 上全量测试：失败 32 条与 v0.5.26 上逐条相同（本机环境类，无新增）。
+
 - Step1 网格模式按界行反推版框（GUJI-748，殿本换源 vol12 p139）：`border_detect` 加参数 `grid_lattice_fallback`（缺省关，不进参数 dump，只管 `column_grid_pages` 点名页）。版框那条线不在候选池里（右版框贴图边被边窗里的界行顶掉、左边带进邻叶版心）时，网格模式原先选不出版框对、退回截断，与自由模式逐条相同只出 8 列；开了改按已探到的细界行拟等距网格、在图内框出 `expected_cols` 列再逐槽验线（`peak_line_search.lattice_frame_pair`，窗口并列就不猜）。p139 开后 9 列各 21 格、159 字、三道闸都过。缺省产物逐字节不变，`steps.border_detect`、`border_geometry`、`peak_line_search` 登记代码等价。
 - 拆分 M2（10-27）：`guji pipeline` 开跑前备输入（钉版字形库、Step5-b 模板索引）和整册跑完自动存包的代码从 `cli_v2` 挪进 `ops/prep.py`；`guji pipeline` 加 `--no-prep`，缺省行为不变。不在任何 `code_deps`，19 步 `code_hash` 不变。PATCH。
 - 拆分 M1（10-27）：新 `open_guji_cv/api.py`（pipeline 公开面，只转发）、`core/contract.py`（`CONTRACT_VERSION=1`）、`doc/契约.md`；`guji version [--json]`；manifest 条目加可选字段 `contract_version`、`manager_version`（不进指纹，老条目为 None）。19 步 `code_hash` 合前实算与 dev 逐一相同。PATCH。

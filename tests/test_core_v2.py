@@ -245,6 +245,19 @@ def test_engine_records_failure_and_blocks_downstream(world):
     assert m.status == "failed"
 
 
+def test_failed_rerun_does_not_feed_stale_upstream_product(world):
+    """先跑成、再跑同一页失败：盘上留着上一轮的旧产物，下游不能拿它接着跑（GUJI-748 vol23 p10）。"""
+    make_engine(world).run()
+    eng = make_engine(world, params={"t_step_a": {"fail_page": 2, "gain": 2.0}})
+    eng.run(steps=["t_step_a"])
+    assert eng.store.exists("tb", "t_step_a", "p0002")          # 旧产物还在盘上
+    st = eng.status()
+    assert st["steps"]["t_step_a"]["pages"][2]["status"] == FAILED
+    assert st["steps"]["t_step_b"]["pages"][2]["status"] == BLOCKED
+    rep = eng.run(steps=["t_step_b"])
+    assert not [o for o in rep.outcomes if o.page == 2 and o.status == "ok"]
+
+
 def test_force_reruns_fresh_pages(world):
     eng = make_engine(world)
     eng.run()

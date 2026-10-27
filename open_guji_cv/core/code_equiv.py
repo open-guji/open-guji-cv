@@ -56,6 +56,9 @@ _GL_1027 = ("网格模式加 grid_lattice_fallback（GUJI-748 vol12 p139，缺�
             "（全册，yaml 已点名网格页 p79）与 vol07 新图 134 页（全册）、column_warp 在 vol12 152 页上与 origin/dev "
             "（border_detect 1.11，1fa91e8；column_warp 比的是 126e021）产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
+_BC_1027 = ("push_bottom_to_bar 右界截到图内（GUJI-748，换源新图 vol23 p10、vol37 p74 越界报错）：只在原先越界报错的页上生效；"
+            "border_detect 在殿本 vol20 新图 94 页（每 3 页取 1）上与 origin/dev f3b96b9 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -131,6 +134,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5108626482b37582b6f59d772216a9f0cb8bed6cdd5c3fc9aaad3e068a443b6c",
           old="90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890",
           evidence=_GL_1027),
+    Equiv(module="open_guji_cv.utils.border_geometry",
+          new="dd501ed2fae87e402186cfc5b4a7f19e58e92669d68e3b978b8b68c13994f04f",
+          old="c6f0f1e26ed8748178597801cffcf6c0d22fe52d46da324355f721108a33c871",
+          evidence=_BC_1027),
 )
 
 
