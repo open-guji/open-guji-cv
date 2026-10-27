@@ -257,11 +257,12 @@ def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: fl
 def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: int | None,
                  spine: str | None = None, spine_margin: int = 150, line_bonus: float = 3.0,
                  line_full: float = 0.05, reg: float = 4.0, cover: float = 1.0,
-                 seam_band: float = 0.08) -> BlockColumns:
+                 seam_band: float = 0.08, width: tuple[float, float] = (0.8, 1.2)) -> BlockColumns:
     """块（ink、lines 已裁到块）→ 等宽网格的列。`lines` 是 `free_blocks.thin_vlines` 的细竖线强度。
 
     `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
-    不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。"""
+    不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。
+    `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；表格的格宽不一、标题列窄，放到 0.5–1.2。"""
     h, w = ink.shape
     body, _ = split_vlines(ink)
     s = best_shear(body)
@@ -280,9 +281,9 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     cands = [n] if n else list(range(max(1, int(w / pitch) - 1), int(w / pitch) + 2))
     best: tuple[float, int, list[int]] | None = None
     for m in cands:
-        if m * 0.8 * pitch > w:
+        if m * width[0] * pitch > w:
             continue
-        tot, cuts = dp_grid(cost, mass, m, pitch, reg=reg, cover=cover)
+        tot, cuts = dp_grid(cost, mass, m, pitch, reg=reg, cover=cover, width=width)
         if best is None or tot < best[0]:
             best = (tot, m, cuts)
     if best is None:                                # 块比一列还窄
@@ -296,3 +297,22 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     seams.append(np.clip(np.round(lines_x[-1]).astype(int), 0, w - 1))
     cols = [ColumnSeams(seams[i], seams[i + 1]) for i in range(len(seams) - 1)]
     return BlockColumns(cols[::-1], s, float(pitch), "hint" if n else "grid", [c for c in cands if c != m])
+
+
+def rule_breaks(hlines: np.ndarray, x0: int, x1: int, y0: int, y1: int, *, frac: float = 0.5,
+                merge: int = 30, edge: int = 25) -> list[int]:
+    """表格一列 [x0,x1)×[y0,y1) 里的横界栏 → 格线 y（页面坐标，自上而下）。
+
+    `hlines` 是 `free_blocks.rule_hlines` 的横界栏图（0/1）。某行界栏像素盖住列宽 ≥ frac 就算格线，
+    挨着的几行并成一条取中；贴着列上下端 edge 以内的不要（那是块边的栏线）。"""
+    if x1 - x0 < 4 or y1 - y0 <= 2 * edge:
+        return []
+    cov = hlines[y0:y1, x0:x1].mean(1)
+    groups: list[list[int]] = []
+    for y in np.flatnonzero(cov >= frac):
+        if groups and y - groups[-1][-1] <= merge:
+            groups[-1].append(int(y))
+        else:
+            groups.append([int(y)])
+    mids = [int(round(np.mean(g))) for g in groups]
+    return [y0 + m for m in mids if edge <= m <= y1 - y0 - edge]
