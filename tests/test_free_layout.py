@@ -135,6 +135,38 @@ def test_hint_manual_box(tmp_path):
     assert [b.n for b in out["free_columns"].blocks] == [10]
 
 
+def test_pitch_hint_grid_skips_banxin(tmp_path):
+    """书脊一侧（奇数页在左）有浅版心线和几个小字：等宽网格只盖正文 10 列，版心裁出块外。"""
+    img, _ = synth_free_page()
+    x0, y0, x1, y1 = FRAME
+    img[y0:y1, x0 + 55:x0 + 57] = 170                 # 浅：过不了墨阈，只有细竖线图看得见
+    for y in (300, 1200, 2000):
+        _glyph(img, x0 + 15, y, 30)                   # 版心里的书名、页码
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1-3": {"pitch": 125}},
+                     params={"block_detect": {"banxin": "odd_left"}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    out = run_steps(ctx, 1, ["block_detect", "column_trace"])
+    lb, fc = out["layout_blocks"], out["free_columns"]
+    assert lb.spine == "left" and lb.banxin is not None
+    assert all(b.pitch_hint == 125 for b in lb.blocks)
+    assert [b.n for b in fc.blocks] == [10, 10]
+    assert {b.n_source for b in fc.blocks} == {"grid"}
+    # 每列左右缝夹住该列的字（列 c 的右沿 x1-20-c·PITCH，字在其左 15–115px）
+    for c in fc.columns:
+        k = (c.col - 1) % 10
+        xr_tl = x1 - 20 - k * PITCH
+        r_tl = W - 1 - np.median(c.right)
+        l_tl = W - 1 - np.median(c.left)
+        assert r_tl >= xr_tl - 15 and l_tl <= xr_tl - 115
+
+
+def test_hints_merge_range_then_page():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    h = parse_layout_hints({"9": {"cols": [12, None]}, "5-20": {"pitch": 115}, "35-40": {"pitch": [None, 143]}})
+    assert h[9].cols_for(0) == 12 and h[9].pitch_for(0) == 115 and h[10].cols_for(0) is None
+    assert h[36].pitch_for(0) is None and h[36].pitch_for(1) == 143
+
+
 def test_parse_hints_rejects_bad_shape():
     from open_guji_cv.utils.layout_hints import parse_layout_hints
     with pytest.raises(ValueError):

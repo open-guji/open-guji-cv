@@ -13,6 +13,18 @@
    （逐行最多挪 1px），绕开探进邻列的笔画。最外两条就用直线。
 
 块里有竖线（界行、表格线）时先按竖线把块切成几段，各段分别做，竖线本身就是列界。
+
+**有列距先验时走等宽网格（`grid_columns`，2026-10-27 起正文页的主路）**：坊刻本虽然界行
+很浅、多半探不全，但一版里列宽非常一致（yxat 幼學段半叶 12 列、列距 110–120 px，杂字段
+约 143）。列距由人按页段标（`layout_hints` 的 `pitch`），算法只做：
+
+1. 代价 = 竖投影墨量（先抠掉细长竖线，界行本身不算墨）− 细竖线强度（浅界行是好切线）；
+2. DP 选 n+1 条切线：列宽偏离列距的平方罚（宽松到 ±20%，容纸面弯曲带来的列宽渐变），
+   两端浮动、但切线外剩下的墨按「漏了几列」计罚——于是网格自己落在正文上，不吞版心；
+3. n 在「块宽 ÷ 列距」±1 里挑总代价最小的；人给了列数就只用它；
+4. 内部切线在 ±8% 列距带里走最省墨竖缝。
+
+不给列距时退回上面的自估（自相关列距常落到两倍，见设计文档）。
 """
 
 from __future__ import annotations
@@ -200,3 +212,87 @@ def block_columns(ink: np.ndarray, n: int | None = None, vrules: list[float] | N
         cols += [ColumnSeams(c.left + a2, c.right + a2) for c in seg]
     return BlockColumns(cols[::-1], float(np.median(shears)) if shears else 0.0,
                         float(np.median(pitches)) if pitches else None, "rule", [])
+
+
+def split_vlines(ink: np.ndarray, length: int = 61) -> tuple[np.ndarray, np.ndarray]:
+    """→ (去掉细长竖线的墨, 细长竖线)。界行、版心线是列界，不该算进列的墨量。"""
+    u = ink.astype(np.uint8)
+    vl = cv2.morphologyEx(u, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, length))) > 0
+    vl = cv2.dilate(vl.astype(np.uint8), np.ones((1, 5), np.uint8)) > 0
+    return ink & ~vl, vl
+
+
+def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: float = 4.0,
+            cover: float = 1.0, width: tuple[float, float] = (0.8, 1.2)) -> tuple[float, list[int]]:
+    """n 列、列宽贴近 pitch 的 n+1 条切线（升序），两端浮动。
+
+    `cost` 已去中位（空白处为负）；`mass` 是墨量前缀和（长 L+1）：第一条线左边、最后一条线
+    右边剩下的墨按「相当于几列」× cover 计罚。返回 (总代价, 切线)。"""
+    L = len(cost)
+    colm = mass[-1] / max(n, 1) + 1e-6
+    lo, hi = max(1, int(width[0] * pitch)), int(width[1] * pitch) + 1
+    INF = 1e18
+    D = cost + cover * mass[:L] / colm
+    P = np.zeros((n + 1, L), int)
+    for k in range(1, n + 1):
+        N = np.full(L, INF)
+        for x in range(lo, L):
+            a, b = max(0, x - hi), x - lo
+            g = x - np.arange(a, b + 1)
+            t = D[a:b + 1] + reg * ((g - pitch) / pitch) ** 2
+            j = int(np.argmin(t))
+            N[x] = t[j] + cost[x]
+            P[k, x] = a + j
+        D = N
+    tot = D + cover * (mass[-1] - mass[:L]) / colm
+    x = int(np.argmin(tot))
+    best = float(tot[x])
+    cuts = [x]
+    for k in range(n, 0, -1):
+        x = int(P[k, x])
+        cuts.append(x)
+    return best, cuts[::-1]
+
+
+def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: int | None,
+                 spine: str | None = None, spine_margin: int = 150, line_bonus: float = 3.0,
+                 line_full: float = 0.05, reg: float = 4.0, cover: float = 1.0,
+                 seam_band: float = 0.08) -> BlockColumns:
+    """块（ink、lines 已裁到块）→ 等宽网格的列。`lines` 是 `free_blocks.thin_vlines` 的细竖线强度。
+
+    `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
+    不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。"""
+    h, w = ink.shape
+    body, _ = split_vlines(ink)
+    s = best_shear(body)
+    prof = smooth(shear(body.astype(np.uint8), s).sum(0).astype(np.float32), 2) / max(h, 1)
+    lp = shear(np.clip(lines * 255, 0, 255).astype(np.uint8), s).mean(0) / 255.0
+    raw = prof / (float(np.percentile(prof, 90)) + 1e-6) - line_bonus * np.clip(lp / line_full, 0, 1)
+    cost = raw - float(np.median(raw))
+    pm = prof.copy()
+    if spine == "left":
+        pm[:spine_margin] = 0
+    elif spine == "right":
+        pm[-spine_margin:] = 0
+    mass = np.r_[0.0, np.cumsum(pm)]
+    if pitch is None:
+        pitch = w / float(n)
+    cands = [n] if n else list(range(max(1, int(w / pitch) - 1), int(w / pitch) + 2))
+    best: tuple[float, int, list[int]] | None = None
+    for m in cands:
+        if m * 0.8 * pitch > w:
+            continue
+        tot, cuts = dp_grid(cost, mass, m, pitch, reg=reg, cover=cover)
+        if best is None or tot < best[0]:
+            best = (tot, m, cuts)
+    if best is None:                                # 块比一列还窄
+        best = (0.0, 1, [0, w - 1])
+    _, m, cuts = best
+    ys = np.arange(h)
+    lines_x = [cx + s * (ys - h / 2) for cx in cuts]
+    band = max(3, int(seam_band * pitch))
+    seams = [np.clip(np.round(lines_x[0]).astype(int), 0, w - 1)]
+    seams += [np.clip(min_ink_seam(body, ln, band), 0, w - 1) for ln in lines_x[1:-1]]
+    seams.append(np.clip(np.round(lines_x[-1]).astype(int), 0, w - 1))
+    cols = [ColumnSeams(seams[i], seams[i + 1]) for i in range(len(seams) - 1)]
+    return BlockColumns(cols[::-1], s, float(pitch), "hint" if n else "grid", [c for c in cands if c != m])
