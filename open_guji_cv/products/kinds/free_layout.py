@@ -30,7 +30,7 @@ class RuleRec(BaseModel):
 class BlockRec(BaseModel):
     index: int                      # 读序，从 1 起
     box: Box
-    kind: str = "text"              # text | skip
+    kind: str = "text"              # text | table（有界栏的格表）| skip
     source: str = "auto"            # auto | hint
     cols_hint: int | None = None
     pitch_hint: float | None = None  # 人标的列距先验（px）
@@ -59,12 +59,13 @@ class ColumnRec(BaseModel):
     step: int                       # 缝的采样行距
     right: list[float]              # 右缝 x_tr，第 i 个是 y0 + i·step 行（最后一个是 y1−1 行）
     left: list[float]               # 左缝 x_tr
+    breaks: list[float] = Field(default_factory=list)   # 表格列里的横界栏 y（格线，自上而下）；正文列为空
 
 
 class BlockColumnsRec(BaseModel):
     block: int
     n: int
-    n_source: str                   # hint | auto | rule | grid（按列距先验等宽拟合）
+    n_source: str                   # hint | auto | rule | grid（按列距先验等宽拟合）| table
     alt_n: list[int] = Field(default_factory=list)
     pitch: float | None = None
     shear: float = 0.0
@@ -83,6 +84,7 @@ class FreeCellRec(BaseModel):
     order: int                      # 列内读序，从 1 起
     kind: str                       # char | jiazhu_a（右线）| jiazhu_b（左线）| jiazhu_solo
     zone: int                       # 列内第几区（大字/双行注/单行注交替），从 1 起
+    table_cell: int = 0             # 表格列里第几格（按横界栏断开，从 1 起）；正文列为 0
     box: Box                        # 页面坐标外接框
     ink: int
 

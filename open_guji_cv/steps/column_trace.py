@@ -4,6 +4,8 @@
 浅界行当好切线、列宽贴近列距、网格两端浮动但要盖住正文的墨（版心不算）。
 都没有时退回自估：剪切校斜、投影自相关估列距、DP 定列界直线、带内走最省墨竖缝；
 块里有竖线（界行、表格线）就先按竖线分段。
+表格块（`kind: table`，1.2 起）：也走网格，但列数不给死、列宽放宽到 0.5–1.2 倍列距（格宽不一、标题列窄），
+网格外漏的墨罚得重（不漏掉标题列）；每列再找横界栏，记成格线 `breaks`，Step3 按格切字。
 算法在 `utils/free_columns.py`。
 """
 
@@ -16,8 +18,8 @@ from ..core.anchor import bbox_tr_to_tl, x_tl_to_tr, x_tr_to_tl
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockColumnsRec, ColumnRec, FreeColumns, LayoutBlocks
-from ..utils.free_blocks import drop_specks, ink_mask, thin_vlines
-from ..utils.free_columns import block_columns, grid_columns
+from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, thin_vlines
+from ..utils.free_columns import block_columns, grid_columns, rule_breaks
 
 
 class ColumnTraceParams(BaseModel):
@@ -35,12 +37,16 @@ class ColumnTraceParams(BaseModel):
     grid_line_bonus: float = 3.0   # 细竖线（浅界行）处切线的奖励
     grid_seam_band: float = 0.08   # 内部切线变缝的幅度（× 列距）
     spine_margin: int = 150        # 版心线没探到时，书脊一侧这么宽的墨不要求被网格盖住
+    table_width: tuple[float, float] = (0.5, 1.2)   # 表格块的列宽上下限（× 列距）
+    table_cover: float = 3.0       # 表格块网格外漏墨的罚（标题列墨少，罚轻了会被丢在网格外）
+    break_frac: float = 0.5        # 横界栏盖住列宽这么多才算格线
+    break_inset: int = 8           # 量格线时列两边各让进这么多（别量到竖界栏）
 
 
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.1", unit="page",
+        id="column_trace", title="Step2 块内找列（自由版式）", version="1.2", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
         code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks"),
         parallel_safe=True,
@@ -50,13 +56,13 @@ class ColumnTraceStep(Step):
         p: ColumnTraceParams = ctx.params_for(self)  # type: ignore[assignment]
         lb: LayoutBlocks = ctx.product("layout_blocks", page)
         out = FreeColumns(page=page, width=lb.width, height=lb.height)
-        todo = [b for b in lb.blocks if b.kind == "text"]
+        todo = [b for b in lb.blocks if b.kind in ("text", "table")]
         if lb.page_type == "skip" or not todo:
             return {"free_columns": out}
         W = lb.width
         gray = ctx.raw_page(page)
         ink = drop_specks(ink_mask(gray, p.bg_win, p.ink_ratio), p.min_speck)
-        lines = None
+        lines = hrules = None
         col_no = 0
         for b in todo:
             x0, y0, x1, y1 = (int(round(v)) for v in bbox_tr_to_tl(b.box, W))
@@ -65,7 +71,19 @@ class ColumnTraceStep(Step):
             if sub.size == 0 or not sub.any():
                 continue
             pitch = b.pitch_hint or p.pitch_prior
-            if p.grid and (pitch or b.cols_hint):
+            # 表格：人给的列数只当列距的来源（格宽不一，硬给 n 列会切进格里）；列距、列数都没有就当正文自估
+            table_pitch = pitch or ((x1 - x0) / b.cols_hint if b.cols_hint else None)
+            table = b.kind == "table" and table_pitch is not None
+            if table:
+                if lines is None:
+                    lines = thin_vlines(gray, p.bg_win)
+                if hrules is None:
+                    hrules = rule_hlines(gray, p.bg_win)
+                bc = grid_columns(sub, lines[y0:y1, x0:x1], pitch=table_pitch, n=None,
+                                  line_bonus=p.grid_line_bonus, reg=p.grid_reg, cover=p.table_cover,
+                                  seam_band=p.grid_seam_band, width=p.table_width)
+                bc.n_source = "table"
+            elif p.grid and (pitch or b.cols_hint):
                 if lines is None:
                     lines = thin_vlines(gray, p.bg_win)
                 # 版心线没探到、块又贴着书脊那侧：那边的墨可能是版心
@@ -82,8 +100,13 @@ class ColumnTraceStep(Step):
             rows = np.r_[np.arange(0, y1 - y0, p.sample_step), y1 - y0 - 1]
             for c in bc.columns:                     # 已是右→左
                 col_no += 1
+                breaks: list[float] = []
+                if table:
+                    cl, cr = int(np.median(c.left)) + x0, int(np.median(c.right)) + x0
+                    breaks = [float(y) for y in rule_breaks(hrules, cl + p.break_inset, cr - p.break_inset,
+                                                            y0, y1, frac=p.break_frac)]
                 out.columns.append(ColumnRec(
                     col=col_no, block=b.index, y0=float(y0), y1=float(y1), step=p.sample_step,
                     right=[round(x_tl_to_tr(float(c.right[r] + x0), W), 1) for r in rows],
-                    left=[round(x_tl_to_tr(float(c.left[r] + x0), W), 1) for r in rows]))
+                    left=[round(x_tl_to_tr(float(c.left[r] + x0), W), 1) for r in rows], breaks=breaks))
         return {"free_columns": out}
