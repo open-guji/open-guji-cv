@@ -26,7 +26,8 @@ def test_cached_lm_uses_fetched_copy_before_training(tmp_path, monkeypatch):
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
         return True
-    monkeypatch.setattr(packs, "fetch_derived", fake_fetch)
+    from open_guji_cv.core import derived
+    monkeypatch.setattr(derived, "FETCHER", fake_fetch)
     monkeypatch.setattr(seeding, "train_ngram", lambda *a, **k: (_ for _ in ()).throw(AssertionError("不该现训")))
     b = seeding.build_seed_lm(book, None)
     assert got == [("lm", src.name)]

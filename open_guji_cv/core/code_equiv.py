@@ -63,6 +63,8 @@ _HRV_1027 = ("人裁逐列抬头（head-raise-columns 裁决补／去 Step1 抬�
              "border_detect 在殿本 vol23 新图 172 页（全册，21 列抬头）、row_segment 在 vol23 46 页（每 4 页取 1，加 p116–119 抬头页）"
              "上与 origin/dev 78f00ac 产物逐字节相同；scripts/code_equiv.py check，2026-10-27")
 
+_SEED_1027 = ('seed_admit 的 clustering.seeding 去掉联网取派生缓存（拆分 M3b：改用 core.derived 注册的取法，行为不变）：seed_admit 在殿本 vol04 新图 40 页（每 6 页取 1，加 p17/p100/p186）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（dev 上语料底库与钉子不符，新旧两边同样），2026-10-27')
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -150,6 +152,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5c8dd9193249b81b1d0e1e0f4ed13103d92771b1feb11feaa40ff87d6447f323",
           old="58c07dca48941d33c6f9166a49da3c506f49df64efc91620992bb44f70eb125f",
           evidence=_HRV_1027),
+    Equiv(module="open_guji_cv.clustering.seeding",
+          new="597e2781a32ab64db886efc716eb215434fbe7a8a4e028d892f35a5a0387a055",
+          old="6d99b28bc637ede04cffaa056f5502eb31f77c6c6ef6d905cccea0f302a34d01",
+          evidence=_SEED_1027),
 )
 
 
