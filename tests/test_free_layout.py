@@ -19,8 +19,9 @@ PITCH = 130
 
 
 def _glyph(img, x0, y0, s):
-    """s 见方的「丰」：三横一竖，横画之间留白（字内缝）。"""
-    t = max(3, s // 12)
+    """s 见方的「丰」：三横一竖，横画之间留白（字内缝）。笔画粗约字身 1/8（刻本大字的
+    横画比栏线粗得多；各列横画在合成页上齐平，太细会被当成一条浅栏线）。"""
+    t = max(3, s // 8)
     for k in range(3):
         y = y0 + int((k + 0.5) * s / 3) - t // 2
         img[y:y + t, x0:x0 + s] = 20
@@ -158,6 +159,18 @@ def test_pitch_hint_grid_skips_banxin(tmp_path):
         r_tl = W - 1 - np.median(c.right)
         l_tl = W - 1 - np.median(c.left)
         assert r_tl >= xr_tl - 15 and l_tl <= xr_tl - 115
+
+
+def test_split_hint_without_rule(tmp_path):
+    """分栏没有线：人标大约 y，吸到两栏之间最空的那一行。"""
+    img, _ = synth_free_page()
+    x0, _, x1, _ = FRAME
+    img[DIV_Y - 5:DIV_Y + 5, x0:x1] = 225              # 抹掉分栏线
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1": {"splits": [DIV_Y + 30]}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    lb = run_steps(ctx, 1, ["block_detect"])["layout_blocks"]
+    assert len(lb.blocks) == 2
+    assert abs(lb.blocks[0].box[3] - DIV_Y) < 40 and abs(lb.blocks[1].box[1] - DIV_Y) < 40
 
 
 def test_hints_merge_range_then_page():

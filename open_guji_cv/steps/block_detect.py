@@ -18,7 +18,8 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockRec, LayoutBlocks, RuleRec
 from ..utils.free_blocks import (SPINE_MODES, Block, block_vrules, find_banxin, find_banxin_gap, find_frame,
-                                 find_rules, ink_mask, page_blocks, spine_sides, thin_vlines)
+                                 find_rules, faint_dividers, ink_mask, page_blocks, snap_split, spine_sides,
+                                 thin_hlines, thin_vlines)
 from ..utils.layout_hints import parse_layout_hints
 
 
@@ -38,12 +39,15 @@ class BlockDetectParams(BaseModel):
     banxin_pad: int = 4            # 块裁到版心线里面再让几 px
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
+    faint_div: bool = True         # 另在细横线图上找浅分栏线
+    faint_div_cov: float = 0.6     # 浅栏线至少盖住框宽的比例
+    split_snap: int = 60           # 人标分栏 y 吸附的范围（px）
 
 
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.1", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.2", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
@@ -67,7 +71,14 @@ class BlockDetectStep(Step):
             blocks = [Block(*b.box, vrules=block_vrules(vs, *b.box), source="hint")  # type: ignore[misc]
                       for b in hint.blocks]
         else:
-            blocks = page_blocks(ink, frame, hs, vs, div_span=p.div_span)
+            divs = [y for y, _ in faint_dividers(thin_hlines(gray, p.bg_win), frame,
+                                                 min_cov=p.faint_div_cov)] if p.faint_div else []
+            if hint is not None and hint.splits:
+                # 人标的是约数：附近（2×snap）已探到栏线的，以探到的为准；没有才吸到空白行
+                auto = list(divs)
+                divs += [snap_split(y, [], ink, frame, snap=p.split_snap) for y in hint.splits
+                         if not any(abs(d - y) <= 2 * p.split_snap for d in auto)]
+            blocks = page_blocks(ink, frame, hs, vs, div_span=p.div_span, extra=divs)
         if p.banxin not in SPINE_MODES:
             raise ValueError(f"block_detect.banxin 只能是 {SPINE_MODES}，写的是 {p.banxin!r}")
         sides = spine_sides(p.banxin, page)

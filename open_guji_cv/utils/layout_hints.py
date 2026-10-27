@@ -14,6 +14,7 @@
       40: {blocks: [{kind: skip}, {kind: skip}, {}]}  # 不给 box：按序对上自动块，前两块不切
       9-24: {pitch: 115}            # 列距先验（px）：列数按块宽自估、列按等宽网格拟合
       35-92: {pitch: [null, 143]}   # 逐块给；null = 这块不给
+      113-123: {splits: [915]}      # 分栏的大约 y（原图像素）：吸到附近的栏线，没线就吸到两栏间的空白
 
 `kind` 目前只有 `text`（缺省）与 `skip`。`cols`、`pitch` 都不给就全自估。
 同一页落在几条里时逐字段合并：区间宽的先、窄的后，后写的字段盖前面的（区间给 pitch、单页再给 cols 都生效）。
@@ -41,6 +42,7 @@ class PageHint:
     cols: int | list[int] | None = None
     blocks: list[BlockHint] = field(default_factory=list)
     pitch: float | list[float | None] | None = None
+    splits: list[float] | None = None              # 人标分栏的大约 y（栏线浅或根本没线时）
 
     @property
     def manual_blocks(self) -> bool:
@@ -112,10 +114,16 @@ def parse_layout_hints(raw) -> dict[int, PageHint]:
         if any(b.box is not None for b in blocks) and not all(b.box is not None for b in blocks):
             raise ValueError(f"layout_hints 第 {key} 页：blocks 要么都给 box（人圈块），要么都不给（对自动块）")
         cols, pitch = _num_or_list(v.get("cols"), int), _num_or_list(v.get("pitch"), float)
+        splits = v.get("splits")
+        if splits is not None:
+            if not isinstance(splits, list):
+                raise ValueError(f"layout_hints 第 {key} 页 splits 要写成 y 的列表，写的是 {splits!r}")
+            splits = [float(y) for y in splits]
         for p in _pages(key):
             old = out.get(p, PageHint())
             out[p] = PageHint(type=str(typ) if typ is not None else old.type,
                               cols=cols if cols is not None else old.cols,
                               blocks=blocks or old.blocks,
-                              pitch=pitch if pitch is not None else old.pitch)
+                              pitch=pitch if pitch is not None else old.pitch,
+                              splits=splits if splits is not None else old.splits)
     return out
