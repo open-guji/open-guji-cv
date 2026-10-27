@@ -3031,6 +3031,36 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
                         "对着示例库跑了一批，产物 status:ok 但库匹配全错，锚不上整理本）")
 
 
+PLUGIN_GROUP = "guji.commands"
+
+
+def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
+    """装了 guji-manager（或别的插件）时，把它提供的子命令并进 `guji`（拆分 M4，doc/design/拆分-pipeline与manager.md）。
+
+    入口点组 `guji.commands`，每个入口点指向一个有 `COMMANDS: dict[str, (add_parser, handler)]` 的模块，
+    `add_parser(sub)` 往 `sub` 上登记子命令，`handler(args)` 执行。**本仓自带的同名命令优先**（过渡期同一条命令
+    两边都有时，不重复登记、不覆盖）；插件加载失败只提示，不影响 `guji` 本身。返回新并进来的命令名。"""
+    from importlib.metadata import entry_points
+    added: list[str] = []
+    try:
+        eps = entry_points(group=PLUGIN_GROUP)
+    except Exception:  # noqa: BLE001
+        return added
+    for ep in eps:
+        try:
+            commands = ep.load().COMMANDS
+        except Exception as e:  # noqa: BLE001
+            print(f"  ⚠ 插件 {ep.name} 加载失败（{type(e).__name__}: {e}），略过", file=sys.stderr)
+            continue
+        for name, (add_parser, handler) in commands.items():
+            if name in sub.choices:
+                continue
+            add_parser(sub)
+            COMMANDS_V2[name] = handler
+            added.append(name)
+    return added
+
+
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
@@ -3700,6 +3730,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     from .jobs.cli import add_parser as _add_job, cmd_job
     _add_job(sub)
     COMMANDS_V2["job"] = cmd_job
+    load_plugin_commands(sub)
     install_workspace_option(sub)
 
 
