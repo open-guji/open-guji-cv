@@ -278,15 +278,20 @@ def test_review_weak_vote_overruled(monkeypatch):
             assert r.evidence["group"]["solvers"][-1] == {"solver": "review_weak", "char": None, "why": "overruled", "weak": ["rr_img"]}
 
 
-def test_review_fix_margin_for_zheng(monkeypatch):
-    """徵徴 `review_fix_margin`：字形给了另一形、margin ≥0.70 改字（仍放行），0.45–0.70 照常降审。"""
+def test_review_fix_margin(monkeypatch):
+    """`review_fix_margin`：字形给了另一形、margin ≥0.70 改字（仍放行），0.45–0.70 照常降审。
+    原来只有 徵徴 zheng 用（2026-10-27 改成码位组），这里把 呂吕 lv 的门槛临时设成 0.70、借 徵徴 两字来测。"""
+    import dataclasses
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
+    g = flow.GROUPS["lv"]
+    monkeypatch.setitem(flow.GROUPS, "lv", dataclasses.replace(
+        g, members=frozenset("徵徴"), flow=dataclasses.replace(g.flow, review_fix_margin=0.70)))
     mg = {"h": 0.9, "l": 0.6}
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
         "徴" if name == "ids" else None, via=name, extra={"margin": mg[r.id]} if name == "ids" else {}))
     h, lo = Rec("h", "徵", True, "match_replace", "match"), Rec("l", "徵", True, "match_replace", "match")
-    group_flow_pass([h, Rec("m", "中", True), lo], {}, lambda cid: [], lambda r: False, FlowConfig(groups=("zheng",)))
+    group_flow_pass([h, Rec("m", "中", True), lo], {}, lambda cid: [], lambda r: False, FlowConfig(groups=("lv",)))
     assert (h.char, h.admit, h.evidence["group"]["decision"]) == ("徴", True, "fix")
     assert h.evidence["fixed_from"] == {"channel": "match_replace", "char": "徵"}
     assert not lo.admit and "group_flow_disagree" in lo.doubts and lo.char == "徵"
