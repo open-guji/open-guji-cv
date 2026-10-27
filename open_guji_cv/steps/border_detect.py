@@ -79,6 +79,13 @@ class BorderDetectParams(BaseModel):
     缺省空，空时本字段与 `grid_col_pitch` 都不进参数 dump，产物与加字段前逐字节相同。"""
     grid_col_pitch: float | None = None
     """`column_grid_pages` 那些页用的列距先验（px）；None = 用书级 `col_pitch`。"""
+    grid_lattice_fallback: bool = False
+    """`column_grid_pages` 那些页上，网格模式选不出版框对（版框那条线不在候选池里）时，按已探到的
+    细界行拟等距网格、在图内框出 `expected_cols` 列再逐槽验线（`peak_line_search.lattice_frame_pair`），
+    不再退回截断。殿本换源 vol12 p139（GUJI-748）：右版框贴图边、左边带进邻叶版心，上下外框都没探到，
+    网格模式与自由模式结果相同、只出 8 列。写法
+    `params: {border_detect: {column_grid_pages: [139], grid_col_pitch: 133, grid_lattice_fallback: true}}`。
+    只管点名页；缺省关不进参数 dump，产物与加字段前逐字节相同。"""
     pitch_rescue: bool = True
     """列距救援（`utils/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
@@ -100,6 +107,8 @@ class BorderDetectParams(BaseModel):
         if isinstance(d, dict) and not self.column_grid_pages:
             d.pop("column_grid_pages", None)
             d.pop("grid_col_pitch", None)
+        if isinstance(d, dict) and not self.grid_lattice_fallback:
+            d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
         return d
@@ -141,6 +150,8 @@ class BorderDetectStep(Step):
         if grid_page:
             grid = True
             col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
+        # 缺省关时不传这个参数（border_geometry 的缺省就是关），与加字段前的调用一模一样
+        lattice_kw = {"grid_lattice_fallback": True} if (grid_page and p.grid_lattice_fallback) else {}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
@@ -155,7 +166,8 @@ class BorderDetectStep(Step):
                                   book_outer_gap=ctx.book.outer_gap,
                                   frame_layers=ctx.book.frame_layers,
                                   vline_polyline=ctx.book.vline_polyline,
-                                  head_raise_scale=p.head_raise_scale)
+                                  head_raise_scale=p.head_raise_scale,
+                                  **lattice_kw)
 
         res = _detect(cols)
         if grid_page:
