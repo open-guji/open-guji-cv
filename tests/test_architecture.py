@@ -217,7 +217,6 @@ def _p2m_edges() -> set[str]:
 
 ALLOWED_PIPELINE_TO_MANAGER: frozenset[str] = frozenset({
     "__main__ -> cli_v2",  # 入口：M2/M4 拆出 guji-cv 后消失
-    "clustering.seeding -> datastore.packs",  # M3：进 seed_admit 的 code_deps，走 code_equiv 登记
     "feedback.bindings -> feedback.anchor_backfill",  # 灰区：同上
     "feedback.lookup -> feedback.consumers",  # 灰区：consumers 归属待核（设计 2.3）
     "report.collate -> eval.round_check",
