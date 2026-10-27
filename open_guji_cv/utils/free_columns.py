@@ -223,16 +223,22 @@ def split_vlines(ink: np.ndarray, length: int = 61) -> tuple[np.ndarray, np.ndar
 
 
 def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: float = 4.0,
-            cover: float = 1.0, width: tuple[float, float] = (0.8, 1.2)) -> tuple[float, list[int]]:
-    """n 列、列宽贴近 pitch 的 n+1 条切线（升序），两端浮动。
+            cover: float = 1.0, width: tuple[float, float] = (0.8, 1.2),
+            fixed_ends: bool = False) -> tuple[float, list[int]]:
+    """n 列、列宽贴近 pitch 的 n+1 条切线（升序）。
 
-    `cost` 已去中位（空白处为负）；`mass` 是墨量前缀和（长 L+1）：第一条线左边、最后一条线
-    右边剩下的墨按「相当于几列」× cover 计罚。返回 (总代价, 切线)。"""
+    `cost` 已去中位（空白处为负）；`mass` 是墨量前缀和（长 L+1）。两端浮动时，第一条线左边、
+    最后一条线右边剩下的墨按「相当于几列」× cover 计罚；`fixed_ends` 时两端就是块边（0 与 L−1）。
+    返回 (总代价, 切线)。"""
     L = len(cost)
     colm = mass[-1] / max(n, 1) + 1e-6
     lo, hi = max(1, int(width[0] * pitch)), int(width[1] * pitch) + 1
     INF = 1e18
-    D = cost + cover * mass[:L] / colm
+    if fixed_ends:
+        D = np.full(L, INF)
+        D[0] = 0.0
+    else:
+        D = cost + cover * mass[:L] / colm
     P = np.zeros((n + 1, L), int)
     for k in range(1, n + 1):
         N = np.full(L, INF)
@@ -241,12 +247,16 @@ def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: fl
             g = x - np.arange(a, b + 1)
             t = D[a:b + 1] + reg * ((g - pitch) / pitch) ** 2
             j = int(np.argmin(t))
-            N[x] = t[j] + cost[x]
+            N[x] = t[j] + (0.0 if fixed_ends and k == n else cost[x])
             P[k, x] = a + j
         D = N
-    tot = D + cover * (mass[-1] - mass[:L]) / colm
-    x = int(np.argmin(tot))
-    best = float(tot[x])
+    if fixed_ends:
+        x = L - 1
+        best = float(D[x])
+    else:
+        tot = D + cover * (mass[-1] - mass[:L]) / colm
+        x = int(np.argmin(tot))
+        best = float(tot[x])
     cuts = [x]
     for k in range(n, 0, -1):
         x = int(P[k, x])
@@ -257,18 +267,24 @@ def dp_grid(cost: np.ndarray, mass: np.ndarray, n: int, pitch: float, *, reg: fl
 def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: int | None,
                  spine: str | None = None, spine_margin: int = 150, line_bonus: float = 3.0,
                  line_full: float = 0.05, reg: float = 4.0, cover: float = 1.0,
-                 seam_band: float = 0.08, width: tuple[float, float] = (0.8, 1.2)) -> BlockColumns:
+                 seam_band: float = 0.08, width: tuple[float, float] = (0.8, 1.2),
+                 fixed_ends: bool = False, gap_sigma: float = 0.0) -> BlockColumns:
     """块（ink、lines 已裁到块）→ 等宽网格的列。`lines` 是 `free_blocks.thin_vlines` 的细竖线强度。
 
     `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
     不要求被网格盖住。pitch、n 至少给一个；只给 n 时 pitch 取「块宽 ÷ n」。
-    `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；界栏不规律的列宽不齐、标题列窄，放到 0.5–1.2。"""
+    `width` 是列宽相对 pitch 的上下限：正文列很齐（0.8–1.2）；界栏不规律的列宽不齐、标题列窄，放到 0.5–1.2。
+    `fixed_ends`：两端就是块边（版框内沿、版心线；本书左右不留白），只找内部切线，列宽 ≈ 块宽 ÷ n。
+    `gap_sigma`（× pitch）：切线代价先按这么宽抹平——列间空白抹平后最低点在空白正中；
+    双行小注两行之间的窄缝、字里的空隙抹平后就不低了，切线不会落进去。"""
     h, w = ink.shape
     body, _ = split_vlines(ink)
     s = best_shear(body)
     prof = smooth(shear(body.astype(np.uint8), s).sum(0).astype(np.float32), 2) / max(h, 1)
     lp = shear(np.clip(lines * 255, 0, 255).astype(np.uint8), s).mean(0) / 255.0
     raw = prof / (float(np.percentile(prof, 90)) + 1e-6) - line_bonus * np.clip(lp / line_full, 0, 1)
+    if gap_sigma > 0:
+        raw = smooth(raw, max(1.0, gap_sigma * (pitch or w / float(n or 1))))
     cost = raw - float(np.median(raw))
     pm = prof.copy()
     if spine == "left":
@@ -281,20 +297,27 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     cands = [n] if n else list(range(max(1, int(w / pitch) - 1), int(w / pitch) + 2))
     best: tuple[float, int, list[int]] | None = None
     for m in cands:
-        if m * width[0] * pitch > w:
+        pm_ = w / float(m) if fixed_ends else pitch   # 两端定死：列距按列数回算（块宽 ÷ 列数）
+        if m * width[0] * pm_ > w:
             continue
-        tot, cuts = dp_grid(cost, mass, m, pitch, reg=reg, cover=cover, width=width)
+        tot, cuts = dp_grid(cost, mass, m, pm_, reg=reg, cover=cover, width=width, fixed_ends=fixed_ends)
+        if fixed_ends:                              # 两端不计价：比内部切线的平均代价，不偏向多切
+            tot /= max(1, m - 1)
         if best is None or tot < best[0]:
             best = (tot, m, cuts)
     if best is None:                                # 块比一列还窄
         best = (0.0, 1, [0, w - 1])
     _, m, cuts = best
+    if fixed_ends:
+        pitch = w / float(m)
     ys = np.arange(h)
     lines_x = [cx + s * (ys - h / 2) for cx in cuts]
     band = max(3, int(seam_band * pitch))
     seams = [np.clip(np.round(lines_x[0]).astype(int), 0, w - 1)]
     seams += [np.clip(min_ink_seam(body, ln, band), 0, w - 1) for ln in lines_x[1:-1]]
     seams.append(np.clip(np.round(lines_x[-1]).astype(int), 0, w - 1))
+    if fixed_ends:                                  # 块边是竖的，不随剪切斜
+        seams[0], seams[-1] = np.zeros(h, int), np.full(h, w - 1)
     cols = [ColumnSeams(seams[i], seams[i + 1]) for i in range(len(seams) - 1)]
     return BlockColumns(cols[::-1], s, float(pitch), "hint" if n else "grid", [c for c in cands if c != m])
 

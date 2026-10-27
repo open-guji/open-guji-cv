@@ -7,6 +7,9 @@
 有界栏但不规律的正文块（人标 `ruled: true`，1.2 起；yxat 99–102 下栏）：也走网格，但列数不给死、列宽放宽到
 0.5–1.2 倍列距（列宽不齐、常几列合一列，标题列窄），网格外漏的墨罚得重（不漏掉标题列）；每列再找横界栏，
 记成 `breaks`，Step3 遇到就断开切字。
+1.3 起（Sheldon 10-27 审 yxat 9–16 页）：网格两端就是块边（版框内沿、版心线，本书左右不留白），
+列宽 ≈ 块宽 ÷ 列数；切线代价按 0.12 列距抹平，切线落在列间空白正中，不落进双行小注两行间的窄缝。
+人标 `align` 同组的块（上下几栏列线本来对齐）摞起来一起拟合一套网格，再各自走缝。
 算法在 `utils/free_columns.py`。
 """
 
@@ -20,7 +23,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockColumnsRec, ColumnRec, FreeColumns, LayoutBlocks
 from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, thin_vlines
-from ..utils.free_columns import block_columns, grid_columns, rule_breaks
+from ..utils.free_columns import BlockColumns, ColumnSeams, block_columns, grid_columns, rule_breaks
 
 
 class ColumnTraceParams(BaseModel):
@@ -42,12 +45,14 @@ class ColumnTraceParams(BaseModel):
     ruled_cover: float = 3.0       # ruled 块网格外漏墨的罚（标题列墨少，罚轻了会被丢在网格外）
     break_frac: float = 0.5        # 横界栏盖住列宽这么多才算断开处
     break_inset: int = 8           # 量横界栏时列两边各让进这么多（别量到竖界栏）
+    grid_fixed_ends: bool = True   # 网格两端就是块边（版心线没探到、块贴书脊那侧时仍浮动）
+    grid_gap_sigma: float = 0.12   # 切线代价的抹平宽度（× 列距）：切线落在空白正中
 
 
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.2", unit="page",
+        id="column_trace", title="Step2 块内找列（自由版式）", version="1.3", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
         code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks"),
         parallel_safe=True,
@@ -64,9 +69,21 @@ class ColumnTraceStep(Step):
         gray = ctx.raw_page(page)
         ink = drop_specks(ink_mask(gray, p.bg_win, p.ink_ratio), p.min_speck)
         lines = hrules = None
-        col_no = 0
+        boxes = {b.index: tuple(int(round(v)) for v in bbox_tr_to_tl(b.box, W)) for b in todo}
+        found: dict[int, tuple[BlockColumns, bool]] = {}
+        # 版心线没探到、块又贴着书脊那侧：那边的墨可能是版心
+        spine = lb.spine if (lb.spine and lb.banxin is None) else None
+
+        def grid(sub, ln, pitch, n):
+            return grid_columns(sub, ln, pitch=pitch, n=n, spine=spine, spine_margin=p.spine_margin,
+                                line_bonus=p.grid_line_bonus, reg=p.grid_reg, cover=p.grid_cover,
+                                seam_band=p.grid_seam_band, fixed_ends=p.grid_fixed_ends and spine is None,
+                                gap_sigma=p.grid_gap_sigma)
+
         for b in todo:
-            x0, y0, x1, y1 = (int(round(v)) for v in bbox_tr_to_tl(b.box, W))
+            if b.index in found:
+                continue
+            x0, y0, x1, y1 = boxes[b.index]
             x0, y0 = max(0, x0), max(0, y0)
             sub = ink[y0:y1, x0:x1]
             if sub.size == 0 or not sub.any():
@@ -87,15 +104,32 @@ class ColumnTraceStep(Step):
             elif p.grid and (pitch or b.cols_hint):
                 if lines is None:
                     lines = thin_vlines(gray, p.bg_win)
-                # 版心线没探到、块又贴着书脊那侧：那边的墨可能是版心
-                spine = lb.spine if (lb.spine and lb.banxin is None) else None
-                bc = grid_columns(sub, lines[y0:y1, x0:x1], pitch=pitch, n=b.cols_hint, spine=spine,
-                                  spine_margin=p.spine_margin, line_bonus=p.grid_line_bonus,
-                                  reg=p.grid_reg, cover=p.grid_cover, seam_band=p.grid_seam_band)
+                grp = [g for g in todo if b.align and g.align == b.align and not g.ruled]
+                if len(grp) > 1:
+                    # 同组摞起来拟合一套网格（左右取第一块的），再按行切回各块
+                    spans = [(max(0, boxes[g.index][1]), boxes[g.index][3]) for g in grp]
+                    whole = grid(np.vstack([ink[a:c, x0:x1] for a, c in spans]),
+                                 np.vstack([lines[a:c, x0:x1] for a, c in spans]), pitch, b.cols_hint)
+                    r = 0
+                    for g, (a, c) in zip(grp, spans):
+                        cols = [ColumnSeams(cs.left[r:r + c - a], cs.right[r:r + c - a]) for cs in whole.columns]
+                        found[g.index] = (BlockColumns(cols, whole.shear, whole.pitch, "align", whole.alt_n), False)
+                        r += c - a
+                    continue
+                bc = grid(sub, lines[y0:y1, x0:x1], pitch, b.cols_hint)
             else:
                 vr = [x_tr_to_tl(x, W) - x0 for x in b.vrules]
                 bc = block_columns(sub, b.cols_hint, vr, pitch_range=(p.pitch_min, p.pitch_max),
                                    seam_band=p.seam_band)
+            found[b.index] = (bc, ruled)
+
+        col_no = 0
+        for b in todo:                               # 按读序落盘
+            if b.index not in found:
+                continue
+            bc, ruled = found[b.index]
+            x0, y0, x1, y1 = boxes[b.index]
+            x0, y0 = max(0, x0), max(0, y0)
             out.blocks.append(BlockColumnsRec(block=b.index, n=len(bc.columns), n_source=bc.n_source,
                                               alt_n=bc.alt_n, pitch=bc.pitch, shear=round(bc.shear, 5)))
             rows = np.r_[np.arange(0, y1 - y0, p.sample_step), y1 - y0 - 1]
