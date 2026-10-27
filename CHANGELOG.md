@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.5.29] - 2026-10-27
+
+PATCH（GUJI-748 换图源后旧格号数据，#703）。**从 v0.5.28（main）加 #703 切出，不含 dev 上的 #701 align_ref、#702 cell_shrink 1.21**：51–99 册正在用 v0.5.28 整册重跑，本版 22 步 `code_hash` 与 v0.5.28 逐一相同（实算），不让它们过期；#701 #702 随下一版发。
+
+- 换图源后旧格号数据的三处读口（GUJI-748，殿本 siku-qiefen-v2 页号重编）：① 换单门 `republish.votes_gate` 认出换源前出的旧单（单子的 `source_rev`／`--old-source-rev`，老单按 `routed_as_of` 早于 2026-10-26），旧格号的票经 ~q 迁移事件的 `migrated_from` 或格级对照表（push／issue 新参数 `--cells`）对到新格再看落没落，对不上的（表里没有／删／IoU 低）列为「无法对位」、写 `旧单票无法对位.tsv`、不拦；`pending_list.py` 出单起记 `source_rev`。② 看图结论：换源前的（锚里没有 rev）本来就不采信，补回归测试；`guji events import-vision` 加 `--source-rev`，换过源的册不给就整批报错（不再抛异常），不自动按产物盖 rev。③ `guji gold rebuild`：换源前事件照旧不重放、输出加 `dropped_by_source_rev`；新页表事件落到与 stale 旧条目同号的格时另立新条目，不拿旧条目的 expected／input／source_events 打底（金标 `Anchor` 加可选 `source_rev`）。都不在任何 `code_deps`，各步 `code_hash` 不变。PATCH。
+
 ## [0.5.28] - 2026-10-27
 
 PATCH（GUJI-748 换图源：#693 Step1 push_bottom_to_bar 右界越界整页失败修复、#696 导出裁出图框；另含 keben_free 自由版式 #686 #692 #694，缺省关）。

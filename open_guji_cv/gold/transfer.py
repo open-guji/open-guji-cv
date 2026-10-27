@@ -150,6 +150,10 @@ def rebuild_verdicts(log, store: GoldStore, table=None, batches: Iterable[str] |
 
     **不看 consumed 记账**——记账是「这条事件消费过没有」，而这里是重建派生物，
     事件本身就是真源。幂等：`gold_add` 按 id upsert，重放两遍结果一样。
+
+    **换图源**（GUJI-748）：`log.iter_all()` 按页表 rev 判据读（`core.event_files.RevGate`），换源前旧页号的
+    事件不重放，已标 stale 的旧裁决不会被改回 active；丢了几条按册记在返回的 `dropped_by_source_rev`。
+    新页表的事件落到与旧条目同号的格上时另立新条目、不拿旧条目打底（`consumers.superseded_by_source`）。
     """
     from ..feedback.consumers import gold_add
     from ..feedback.routes import RouteTable
@@ -157,10 +161,15 @@ def rebuild_verdicts(log, store: GoldStore, table=None, batches: Iterable[str] |
     table = table or RouteTable.load(log.root / "routes.yaml")
     wanted = set(batches) if batches else None
     events = [e for e in log.iter_all() if wanted is None or e.batch in wanted]
+    dropped: dict[str, int] = {}
+    for per_book in (getattr(log, "dropped", None) or {}).values():
+        for b, n in per_book.items():
+            dropped[b] = dropped.get(b, 0) + n
     # = feedback.events.replay_key（写在这里是不新开 gold→feedback.events 的依赖）：时间序重放，
     # 与 human_chars 同口径；按批次名序会让旧裁决盖掉新的
     events.sort(key=lambda e: (e.ts, e.batch, e.seq))
     plan = table.plan(events)
     pairs = plan.get("gold_add", [])
     res = gold_add(pairs, store=store, why=why)
-    return {"events": len(events), "routed_to_gold_add": len(pairs), **res.to_dict()}
+    return {"events": len(events), "routed_to_gold_add": len(pairs),
+            **({"dropped_by_source_rev": dropped} if dropped else {}), **res.to_dict()}

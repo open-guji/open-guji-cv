@@ -141,12 +141,82 @@ def old_rev_votes(ws: Path, text_id: str, rev: str) -> tuple[list[dict], str]:
     return rows, "中心库快照（每日同步之后的票看不到，设 CELLREVIEW_TOKEN 读 KV）"
 
 
-def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None) -> dict:
+#: 单子还没记 `source_rev` 的时代（v0.5.29 之前）出的单，出单时刻早于这一刻的，在换过图源的册上一律算旧图上出的。
+#: 殿本 99 册换 siku-qiefen-v2（GUJI-748）最早 2026-10-26 才切；之后出的单 `pending_list.py` 都记了 `source_rev`。
+#: 晚于这一刻、又没记 rev 的单判不出，按「同一版页表」照旧逐格号比——宁可拦下来人看，不拿旧格号去对。
+LEGACY_SWITCH_BEFORE = "2026-10-26T00:00:00Z"
+
+
+def sheet_predates_source(ws: Path, book: str, sheet: dict | None, override: int | None = None) -> str | None:
+    """线上旧单是不是换图源之前（旧页表、旧页号）出的：是 → 返回一句判据说明；不是或没换源 → None。
+
+    判据：册 yaml 有 `source_rev`（换过源）时，① 命令行 `--old-source-rev` 给了就按它；② 单子记了 `source_rev`
+    （v0.5.29 起 `pending_list.py` 从产物的页表来历抄）就比它；③ 都没有的老单，`routed_as_of` 早于
+    `LEGACY_SWITCH_BEFORE`（或连出单时刻都没记）就算旧图上出的。"""
+    sys.path.insert(0, str(CV))
+    from open_guji_cv.core.event_files import book_source_rev
+    want = book_source_rev(book, data_dir(ws) / "books")
+    if want is None:
+        return None
+    if override is not None:
+        return None if int(override) == want else f"--old-source-rev {override} ≠ 册 yaml source_rev {want}"
+    sheet = sheet or {}
+    got = sheet.get("source_rev")
+    if got is not None:
+        try:
+            same = int(got) == want
+        except (TypeError, ValueError):
+            same = False
+        return None if same else f"单子记的页表 rev {got} ≠ 册 yaml source_rev {want}"
+    ts = str(sheet.get("routed_as_of") or "")
+    if not ts or ts < LEGACY_SWITCH_BEFORE:
+        return (f"单子没记页表 rev，出单于 {ts or '（没记时刻）'}，早于换图源（{LEGACY_SWITCH_BEFORE}），"
+                f"格号是旧页号（册 yaml source_rev {want}）")
+    return None
+
+
+def _cells_table(cells: str | Path | None, book: str) -> Path | None:
+    """`--cells`：格级对照表文件，或放各册表的目录（`<目录>/<册>.tsv.gz`、`<册>.tsv`）。"""
+    if not cells:
+        return None
+    p = Path(cells)
+    if p.is_dir():
+        for name in (f"{book}.tsv.gz", f"{book}.tsv"):
+            if (p / name).exists():
+                return p / name
+        sys.exit(f"✗ --cells 目录 {p} 里没有 {book}.tsv.gz／{book}.tsv")
+    if not p.exists():
+        sys.exit(f"✗ --cells {p} 不存在")
+    return p
+
+
+def _migrated_from_cell(e: dict, book: str, cell: str) -> str | None:
+    """迁移事件（~q）是从哪个旧格迁来的（不带册号）。`cell_migrate` 写 `migrated_from.key`；早先的整页迁移脚本
+    只写 `migrated_from.{book, page}`、列与格序不变，就拿旧页号换掉新格的页号。不是迁移事件 → None。"""
+    mf = (((e.get("target") or {}).get("anchor") or {}).get("migrated_from")) or {}
+    key = str(mf.get("key") or "")
+    if key:
+        return key[len(book) + 1:] if key.startswith(f"{book}:") else None
+    if mf.get("book") == book and mf.get("page") is not None:
+        return f"{mf['page']}:{cell.split(':', 1)[1]}"
+    return None
+
+
+def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict], held=None,
+                  predates: str | None = None, cells: str | Path | None = None) -> dict:
     """一张单的票账（1.0 发布标准 G0）：每格最后一票归到 写入／与已有人裁一致／看不出／挂起／未落 之一。
 
     写入 = 该格有晚于这一票的定字人裁；一致 = 该格的定字人裁早于这一票（cellvotes 判一致跳过）；
     看不出 = 只投了「看不出」；挂起 = 在 cellvotes draft 的挂起清单（held.tsv 第一列）里；其余未落——
-    包括缺省挂起却没记进清单的「无字」。账要平：有效票格数 = 五项之和。"""
+    包括缺省挂起却没记进清单的「无字」。账要平：有效票格数 = 各项之和。
+
+    **旧单出在换图源之前**（`predates`，见 `sheet_predates_source`）时，票上的格号是旧页号，不能拿来对新格号
+    （GUJI-748：vol01／vol06 的旧票因此永远「未落」）。这时逐票：
+      1. 有采信的定字人裁其锚 `migrated_from` 指着这个旧格（换源前已落、按对照表迁过来的 ~q 事件）→ 已落；
+      2. 给了格级对照表（`cells`）就按表找新格：新格上有定字人裁 → 已落；新格在挂起清单 → 挂起；
+         对得上新格却没人裁 → 未落（拦，并报新格号，好用 `guji cellvotes migrate` 迁）；
+         表里没有／删／IoU 低 → 另记一项「无法对位」（不拦，逐条列出、写清单，交复审，不静默丢）；
+      3. 没给对照表：除第 1 条外一律未落（判不出能不能对位，不放）。"""
     import datetime as dt
     sys.path.insert(0, str(CV))
     from open_guji_cv.feedback.web_votes import latest_votes
@@ -154,6 +224,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
     latest, dropped = latest_votes(votes, text_id, rev)
     held = set(held or ())
     last: dict[str, float] = {}                 # 格 → 最晚一条定字人裁的时刻（秒）
+    mig: dict[str, float] = {}                  # 旧格（迁移事件的 migrated_from）→ 最晚时刻；只在旧单出在换源前时用
     from open_guji_cv.core.event_files import RevGate, iter_event_dicts
     gate = RevGate(books_dir=data_dir(ws) / "books")      # 换图源：切过的册只认锚里页表 rev 相符的
     for e in iter_event_dicts(data_dir(ws) / "feedback" / "events", gate=gate):
@@ -164,31 +235,69 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
             except ValueError:
                 t = 0.0
             last[c] = max(last.get(c, 0.0), t)
+            o = _migrated_from_cell(e, book, c) if predates else None
+            if o:
+                mig[o] = max(mig.get(o, 0.0), t)
     if gate.note():
         print(f"  ⓘ {gate.note()}", file=sys.stderr)
+    look = None
+    tab = _cells_table(cells, book) if predates else None
+    if tab is not None:
+        from open_guji_cv.feedback import cell_migrate as M
+        look = M.lookup(M.load_table(tab), book)
     rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
+    if predates:
+        rows["无法对位"] = []
     for v in latest:
         a, ts = v["a"], float(v.get("ts") or 0)
         ts = ts / 1000 if ts > 1e11 else ts       # KV 里是毫秒
         if v["choice"] == "unsure":
             rows["看不出"].append(v)
-        elif a in last:
-            rows["写入" if last[a] >= ts else "与已有人裁一致"].append(v)
+        elif not predates:
+            if a in last:
+                rows["写入" if last[a] >= ts else "与已有人裁一致"].append(v)
+            elif a in held:
+                rows["挂起"].append(v)
+            else:
+                rows["未落"].append(v)
+        elif a in mig:
+            rows["写入" if mig[a] >= ts else "与已有人裁一致"].append({**v, "via": "迁移事件"})
         elif a in held:
             rows["挂起"].append(v)
+        elif look is None:
+            rows["未落"].append({**v, "why": "旧格号；没给格级对照表（--cells），对不到新格"})
         else:
-            rows["未落"].append(v)
-    return {"rev": rev, "votes": len(latest), "dropped": dropped, "rows": rows,
+            r, why, detail = look(f"{book}:{a}")
+            if why:
+                rows["无法对位"].append({**v, "why": why, "detail": detail,
+                                      "new": (r.new.split(":", 1)[1] if r is not None and r.new else "")})
+                continue
+            n = r.new.split(":", 1)[1]
+            if n in last:
+                rows["写入" if last[n] >= ts else "与已有人裁一致"].append({**v, "new": n, "via": "对照表"})
+            elif n in held:
+                rows["挂起"].append({**v, "new": n})
+            else:
+                rows["未落"].append({**v, "new": n, "why": "对照表对到新格，新格上还没有人裁"})
+    return {"rev": rev, "votes": len(latest), "dropped": dropped, "rows": rows, "predates": predates,
+            "cells": str(tab) if tab is not None else None,
             "counts": {k: len(x) for k, x in rows.items()}}
+
+
+def _vote_cell(v: dict) -> str:
+    return f"{v['a']}→{v['new']}" if v.get("new") else v["a"]
 
 
 def ledger_md(led: dict) -> str:
     c = led["counts"]
     ok = "账平" if sum(c.values()) == led["votes"] else "账不平"
     s = (f"票账 {led['rev']}：有效 {led['votes']} 格 = 写入 {c['写入']} ＋ 一致 {c['与已有人裁一致']} ＋ 看不出 {c['看不出']}"
-         f" ＋ 挂起 {c['挂起']} ＋ 未落 {c['未落']}（{ok}）")
+         f" ＋ 挂起 {c['挂起']} ＋ 未落 {c['未落']}" + (f" ＋ 无法对位 {c['无法对位']}" if "无法对位" in c else "") + f"（{ok}）")
+    if led.get("predates"):
+        s += f"\n  ⓘ 旧单出在换图源之前：{led['predates']}；旧格号经迁移事件" + \
+             (f"、格级对照表 {led['cells']}" if led.get("cells") else "（没给 --cells 格级对照表）") + " 对到新格"
     if c["未落"]:
-        s += "；未落：" + " ".join(f"{v['a']}({v['choice']})" for v in led["rows"]["未落"][:20])
+        s += "；未落：" + " ".join(f"{_vote_cell(v)}({v['choice']})" for v in led["rows"]["未落"][:20])
     return s
 
 
@@ -197,24 +306,50 @@ def unlanded_votes(ws: Path, book: str, text_id: str, rev: str, votes: list[dict
     return ticket_ledger(ws, book, text_id, rev, votes, held)["rows"]["未落"]
 
 
-def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a) -> None:
-    """换单门（GUJI-730 P0-3）：旧单上的票没落完不换新单，免得格号漂（换了切分，旧票就对不上格）。"""
+UNMAPPED_TSV = "旧单票无法对位.tsv"
+
+
+def votes_gate(ws: Path, book: str, text_id: str, old_rev: str | None, new_rev: str, a,
+               old_doc: dict | None = None, out: Path | None = None) -> None:
+    """换单门（GUJI-730 P0-3）：旧单上的票没落完不换新单，免得格号漂（换了切分，旧票就对不上格）。
+
+    旧单出在换图源之前（`sheet_predates_source`）时按旧格号→新格对账（`ticket_ledger`）；对不上新格的票
+    （无法对位）不拦，逐条打出来并写 `<出单目录>/旧单票无法对位.tsv`，交复审清单。"""
     if not old_rev or old_rev == new_rev:
         return
     votes, src = old_rev_votes(ws, text_id, old_rev)
     hf = getattr(a, "held_file", None)
     held = [ln.split("\t")[0] for ln in Path(hf).read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if hf else []
-    led = ticket_ledger(ws, book, text_id, old_rev, votes, held)
+    pre = sheet_predates_source(ws, book, old_doc, getattr(a, "old_source_rev", None))
+    led = ticket_ledger(ws, book, text_id, old_rev, votes, held, predates=pre, cells=getattr(a, "cells", None))
     left = led["rows"]["未落"]
     print(f"旧单 {old_rev} 的票（{src}）：{ledger_md(led)}")
+    lost = led["rows"].get("无法对位") or []
+    if lost:
+        print(f"⚠ 旧单 {old_rev} 有 {len(lost)} 格的票在新图上对不到格（不拦，交复审）："
+              + " ".join(f"{v['a']}({v['choice']}{'=' + v['char'] if v.get('char') else ''}；{v['why']})" for v in lost[:50])
+              + (f" …另 {len(lost) - 50} 格" if len(lost) > 50 else ""))
+        if out is not None:
+            out.mkdir(parents=True, exist_ok=True)
+            f = out / UNMAPPED_TSV
+            f.write_text("旧格\t票\t字\t投票人\t原因\t说明\t新格\n" + "".join(
+                f"{v['a']}\t{v['choice']}\t{v.get('char') or ''}\t{v.get('voter') or ''}\t{v['why']}\t{v.get('detail') or ''}"
+                f"\t{v.get('new') or ''}\n" for v in lost), encoding="utf-8")
+            print(f"  清单 → {f}（照书影核这些格，进 --recheck 复审清单）")
     if not left:
         return
-    cells = " ".join(f"{v['a']}({v['choice']})" for v in left[:20])
+    cells = " ".join(f"{_vote_cell(v)}({v['choice']})" for v in left[:20])
     if getattr(a, "ack_unlanded_votes", None):
         print(f"⚠ 未落的票照换（--ack-unlanded-votes：{a.ack_unlanded_votes}）：{cells}")
         return
+    hint = ""
+    if pre and not getattr(a, "cells", None):
+        hint = "\n  旧单出在换图源之前：给 --cells <格级对照表或其目录> 把旧格号对到新格再看（对不上的另列清单、不拦）"
+    elif pre:
+        hint = "\n  旧单出在换图源之前：「旧格→新格」的票用 guji cellvotes migrate 迁到新格、draft/write 落了再换"
     sys.exit(f"✗ 旧单 {old_rev} 还有 {len(left)} 格的票没落成人裁：{cells}\n"
-             f"  先 guji cellvotes draft/write 把票落了再换单；确要照换加 --ack-unlanded-votes \"<原因>\"")
+             f"  先 guji cellvotes draft/write 把票落了再换单；确要照换加 --ack-unlanded-votes \"<原因>\"{hint}")
+
 
 def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: Counter) -> dict:
     """新旧两张单逐格比：去掉的格按原因分（人裁过／机器放行了／排除名单／格号没了，多半是重切）。"""
@@ -495,9 +630,10 @@ def cmd_push(a) -> int:
         sys.exit(f"✗ 推上线前先看 {out / '差异单.md'}，确认后加 --yes")
     doc_new = json.loads(Path(plan["pending"]).read_text(encoding="utf-8"))
     online = Path(plan["online"])
-    old_rev = json.loads(online.read_text(encoding="utf-8")).get("rev") if online.exists() else None
+    old_doc = json.loads(online.read_text(encoding="utf-8")) if online.exists() else None
+    old_rev = (old_doc or {}).get("rev")
     sprites_gate(doc_new, a)                                     # 两道门都在动任何东西之前
-    votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a)
+    votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a, old_doc=old_doc, out=out)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
         bump_book_text(Path(a.book_text), plan, a.note or f"{book} 换最新产物：待审 {d['old']}→{d['new']}，待审单 {a.rev}")
@@ -1065,6 +1201,9 @@ def main(argv=None) -> int:
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
+            p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"
+                                           "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
+            p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
         if name == "push":
             p.add_argument("--yes", action="store_true", help="看过差异单、确认推")
             p.add_argument("--book-text", help="book-text 仓：拷同一次导出、文本线升 minor、提交到新分支")
@@ -1075,6 +1214,9 @@ def main(argv=None) -> int:
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
+            p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"
+                                           "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
+            p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
     a = ap.parse_args(argv)
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
