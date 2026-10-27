@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-## [0.5.27] - 测试中
+## [0.5.27] - 2026-10-26
 
 PATCH（GUJI-748 换图源缺格页：#683 Step1 网格模式按界行反推版框 `grid_lattice_fallback`；另含 #682 印章页切分（Step1 列距救援、印章定位 1.3）、#686 自由版式管线 keben_free（新三步，独立管线、不影响 keben_body_v2）、#679 #684 #685 #687 字组规则、拆分 M0–M2 #677 #678 #680、#674 PDF 源件、#681 任务库连库断线重排）。相对 v0.5.26，`border_detect`、`row_segment`、`cell_shrink`、`seal_detect`、`seed_admit` 五步 `code_hash` 变（合前实算），新增 `block_detect`、`column_trace`、`cell_cut`；其余步不变。字组文件变了：换用本版重跑的册要按 CorpusDrift 出全局层新底库、改钉 `corpus`。rc 上全量测试：失败 32 条与 v0.5.26 上逐条相同（本机环境类，无新增）。
 
