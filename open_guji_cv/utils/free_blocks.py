@@ -188,13 +188,16 @@ class Block:
 
 def page_blocks(ink: np.ndarray, frame: Frame, hs: list[Rule], vs: list[Rule], *,
                 div_span: float = 0.6, div_margin: float = 0.05, merge: int = 45,
-                pad: int = 6, min_h: int = 40) -> list[Block]:
-    """框内按分栏横线切块，自上而下。"""
+                pad: int = 12, min_h: int = 40, extra: tuple[float, ...] | list[float] = ()) -> list[Block]:
+    """框内按分栏横线切块，自上而下。`extra` 是别处找到的分栏 y（浅栏线、人标的分栏）。
+
+    线的位置是线的中心，`pad` 要大过半个线粗（版框线粗 10–16px），不然块边带一条框线渣。"""
     fw, fh = frame.right - frame.left, frame.bottom - frame.top
     xm = (frame.left + frame.right) / 2
-    divs = sorted(r.at(xm) for r in hs
-                  if r.span >= div_span * fw
-                  and frame.top + div_margin * fh < r.at(xm) < frame.bottom - div_margin * fh)
+    divs = sorted([r.at(xm) for r in hs
+                   if r.span >= div_span * fw
+                   and frame.top + div_margin * fh < r.at(xm) < frame.bottom - div_margin * fh]
+                  + [y for y in extra if frame.top + div_margin * fh < y < frame.bottom - div_margin * fh])
     cuts: list[list[float]] = []                      # 同一条粗线的两沿并成 [上沿, 下沿]
     for y in divs:
         if cuts and y - cuts[-1][1] <= merge:
@@ -288,3 +291,52 @@ def find_banxin_gap(ink_prof: np.ndarray, left: float, right: float, side: str, 
         return None
     outer = ink_prof[int(left):i] if side == "left" else ink_prof[i + 1:int(right)]
     return float(i) if len(outer) and float(outer.max()) > max_frac * med else None
+
+
+def thin_hlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int = 21) -> np.ndarray:
+    """细横线的强度图：`thin_vlines` 转置过来。"""
+    return thin_vlines(gray.T, bg_win, width, length).T
+
+
+def faint_dividers(lines: np.ndarray, frame: Frame, *, thr: float = 0.03, band: int = 9,
+                   slopes: float = 0.02, min_cov: float = 0.6, margin: float = 0.04,
+                   sep: int = 20) -> list[tuple[float, float]]:
+    """浅分栏线 → [(y, 覆盖率)]（左上原点）。
+
+    条带投票（`find_rules`）要求线过墨阈、条带里 80% 是墨；鳌头本的栏线常常又浅又细、
+    还微微起伏，过不了。这里在细横线图（`thin_hlines`）上取「有线」的像素，按 ±slopes 的
+    几个斜率剪切、竖向膨胀 band 容起伏，看每行在框宽里被线盖住的比例，≥ min_cov 的局部
+    峰就是一条栏线。字的横画在一列里只占一截，凑不到大半个框宽。"""
+    t, b, l, r = int(frame.top), int(frame.bottom), int(frame.left), int(frame.right)
+    m = (lines[t:b, l:r] > thr).astype(np.uint8)
+    h, w = m.shape
+    if h < 3 * sep or w < 10:
+        return []
+    cov = np.zeros(h, np.float32)
+    for s in np.linspace(-slopes, slopes, 9):
+        M = np.float32([[1, 0, 0], [-s, 1, s * w / 2]])
+        ms = cv2.warpAffine(m, M, (w, h), flags=cv2.INTER_NEAREST)
+        ms = cv2.dilate(ms, np.ones((band, 1), np.uint8))
+        cov = np.maximum(cov, ms.mean(1))
+    out: list[tuple[float, float]] = []
+    lo, hi = max(sep, int(margin * h)), min(h - sep, int((1 - margin) * h))
+    for y in range(lo, hi):
+        if cov[y] >= min_cov and cov[y] == cov[y - sep:y + sep + 1].max():
+            if out and y + t - out[-1][0] <= sep:      # 平顶：取中
+                continue
+            out.append((float(y + t), float(cov[y])))
+    return out
+
+
+def snap_split(y: float, divs: list[float], ink: np.ndarray, frame: Frame, *, snap: int = 60) -> float:
+    """人标的分栏 y（约数）→ 准位：snap 内有探到的栏线就用它，否则取 snap 内整行最空的那一行
+    （两栏之间的空白）。"""
+    near = [d for d in divs if abs(d - y) <= snap]
+    if near:
+        return min(near, key=lambda d: abs(d - y))
+    a, b = int(max(frame.top, y - snap)), int(min(frame.bottom, y + snap))
+    if b <= a:
+        return y
+    prof = ink[a:b, int(frame.left):int(frame.right)].mean(1).astype(np.float32)
+    prof = cv2.GaussianBlur(prof.reshape(-1, 1), (1, 9), 2).ravel()
+    return float(a + int(np.argmin(prof)))
