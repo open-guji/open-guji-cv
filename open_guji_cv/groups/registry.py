@@ -170,7 +170,7 @@ def _img(gid: str) -> Method:
 #: 按刻形复核的异体组（2026-10-24，A24；sheldon「错放的情况也要注意修复」）：别的通道（库形替换、整理本、三证…）已放行、放行字在组里的格，
 #: 复核只跑组的字形方法（`_img`，不跑字频与库形最近）；判出组里另一形就降审，只降不改字，判不出不动。
 #: vol04–20 回放：旨→㫖 24 格、删→刪 约 12 格等是真错放；判法也会错（删 2 格），所以只降审。名单＝在 `ids_online.SPECS` 有判法的异体组。
-SHAPE_REVIEW = frozenset({"zhi", "can", "xu", "jiao", "qik", "lih", "jue", "lv", "zheng", "weiw", "shan", "di", "yi_560"})
+SHAPE_REVIEW = frozenset({"zhi", "can", "xu", "jiao", "qik", "lih", "jue", "lv", "weiw", "shan", "di", "yi_560"})
 
 
 def _rv(gid: str) -> dict:
@@ -379,8 +379,8 @@ GROUPS: dict[str, GroupSpec] = {
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
         flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid), review_fix_margin=fm),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
-       # 徵徴 复核按刻形改字（2026-10-25，同义组照录刻形）：margin ≥0.70 改字，0.45–0.70 仍降审
-       for gid, name, note, fm in (("lv", "呂吕", "差在中间连笔，", 0.0), ("zheng", "徵徴", "差在字中上部细节，", 0.70))},
+       # 徵徴 zheng 2026-10-27 改成码位组（sheldon 定暂归一到 徴，见下方 `CODEPOINT_GROUPS`）
+       for gid, name, note, fm in (("lv", "呂吕", "差在中间连笔，", 0.0),)},
     # —— 未覆盖形近字长尾（2026-10-21）：形近不同义，但字形本身分得开（子于：钩与横；山由出：竖与框），走「整字 HOG＋岭回归」，不看文意。
     #    判不出送人审。模板库在 config/groups/<组>/ids_bank.json（组外的 干／曲 也进库，判成它们就弃权）。
     # 于千子干（2026-10-24，A24「强化于千子干等形近判别」）：子于 zy 与 千干 qg 并成一组。vol04–20 送审里这四个字常三四个一起紧咬
@@ -449,7 +449,9 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                ("kui", "夔䕫", (), "囊蘗蔑𢑱𢑴憂藝難璉襲喪藎謩蔓雜製鑒甄𮑮襄𠮓變雙凌"),
                                ("lie", "獵𤢪", (), "猶亂侃猥"),
                                # 2026-10-26（A24 全册任务 04）：sheldon 10-25 定暂归一的三对（𩔖→類 竄→𥨥 郎→郞）
-                               ("lei", "類𩔖", (), ""), ("cuan", "竄𥨥", (), ""), ("lang", "郎郞", (), ""))
+                               ("lei", "類𩔖", (), ""), ("cuan", "竄𥨥", (), ""), ("lang", "郎郞", (), ""),
+                               # 2026-10-27 sheldon 定 徵→徴 暂归一：整字 HOG 加 59 格人裁重训仍有错（margin 到 0.85），原整字判法撤下
+                               ("zheng", "徵徴", (), ""))
 }
 
 #: 码位已定、库在形近字间拿不准的族（2026-10-26，A24 全册任务 04）：(组, 成员, 入口陪衬, 说明)。入口陪衬＝全 98 册整理本作本组字的格里

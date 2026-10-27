@@ -179,8 +179,7 @@ SPECS: dict[str, IdsSpec] = {
     "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
                   lam=3.0, size=64, clean=True, aspect=(0.45, 2.2)),
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
-    "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
-                     region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
+    # 徵徴 zheng 2026-10-27 撤下（sheldon 定暂归一到 徴，改码位组）；模板库 config/groups/zheng/ids_bank.json 留作日后拆分
     # 子于、山由出（2026-10-21，未覆盖形近字长尾线）：整字 HOG＋岭回归，模板＝殿本 vol04–10 seed_admit 放行格（match_ref、无疑问，
     # 建库与评测见 research/m7/long_tail/build_bank.py）；组外的 干／曲 也进库（判成它们＝abstain:slot），免得真干、真曲被硬判进组。
     # 子于：按册留一 0 错（|d|≥0.3 起；子 250／于 91／干 若干；唯一的错是 3 个予，予不进组、也不进 tolerate）；门槛取 0.4。
