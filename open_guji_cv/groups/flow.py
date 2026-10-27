@@ -214,7 +214,7 @@ def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, 
            patch_fn, members=None, form: bool = False, review: bool = False) -> GroupVerdict:
     """跑组 `g` 方法数组里名叫 `name` 的方法（`groups.methods`）。`members` 给了就只在这些字里选（两段判第二段＝族）。"""
     inp = MethodInput(group=g, members=frozenset(members if members is not None else GROUPS[g].members),
-                      cell_id=r.id, cands=cands, ref=ref, cfg=cfg, left=left, right=right, patch_fn=patch_fn)
+                      cell_id=r.id, cands=cands, ref=ref, cfg=cfg, left=left, right=right, patch_fn=patch_fn, review=review)
     return _method(g, name, form, review).run(inp)
 
 

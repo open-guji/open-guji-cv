@@ -52,6 +52,7 @@ class MethodInput:
     left: str | None = None            # 文意窗口（读序前文／后文）；只有组里有文意方法时才取
     right: str | None = None
     patch_fn: Callable[[str], Any] | None = None   # 格 id → 灰度字块（缺图 → None）
+    review: bool = False               # 复核已放行格（不是补放）
 
     def patch(self):
         return self.patch_fn(self.cell_id) if self.patch_fn is not None else None
@@ -255,6 +256,17 @@ class HogRidge(Method):
         spec = _ids_spec(g)
         if self.region is not None:
             spec = replace(spec, region=tuple(self.region))
+        if spec.guard_when and inp.cands and not inp.review:     # 挡门只管补放入口；复核已放行格照旧
+            c1 = inp.cands[0][1]
+            if any(c in spec.guard_when for c, v in inp.cands if c1 - v < inp.cfg.delta):
+                ok, tr = ids_online.guard_check(g, gray, spec)
+                if not ok:
+                    return GroupVerdict(None, why="abstain:guard", via="ids", extra=tr)
+                v = ids_online._judge_whole(gray, _bank(g), spec, _spec(g).members)
+                v.extra = {**(v.extra or {}), **tr}
+                if v.char is not None and v.conf < spec.guard_floor:
+                    return GroupVerdict(None, conf=v.conf, why="abstain:guard_margin", via="ids", extra=v.extra)
+                return v
         return ids_online._judge_whole(gray, _bank(g), spec, _spec(g).members)
 
 

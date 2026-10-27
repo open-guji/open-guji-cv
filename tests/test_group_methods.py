@@ -215,3 +215,31 @@ def test_near_family_groups():
         assert SPECS[g].whole == "hog" and SPECS[g].min_margin >= 0.4 and bank_path(g) is not None, g
     assert "卿" in SHAPE_GROUPS["xiang"].flow.tolerate and {"徵", "徴"} <= SHAPE_GROUPS["weim"].flow.tolerate
     assert "刖" in SHAPE_GROUPS["bie"].flow.tolerate
+
+
+def test_zheng_guard_runs_only_when_wei_close(monkeypatch):
+    """徵徴 挡门（A24 2026-10-26）：分差内有 微 才先判「微／组」两类；挡门不过弃权，过了还要判别值 ≥ guard_floor。"""
+    from open_guji_cv.groups import ids_online
+    if not ids_online.has_bank("zheng"):
+        pytest.skip("没有徵徴模板库")
+    img = np.full((60, 60), 255, np.uint8)
+    img[10:50, 25:35] = 0
+    calls = []
+    monkeypatch.setattr(ids_online, "guard_check", lambda g, gray, spec, bank=None: (calls.append(g) or GATE[0], {"guard": "组"}))
+    monkeypatch.setattr(ids_online, "_judge_whole",
+                        lambda gray, bank, spec, members: GroupVerdict("徴", conf=MARGIN[0], why="agree", via="ids"))
+    hog = M.HogRidge()
+    assert GROUPS["zheng"].flow.ref_top_enter
+    GATE, MARGIN = [True], [0.9]
+    v = hog.run(_inp("zheng", cands=[("徴", 0.98), ("徵", 0.97)], patch=img))
+    assert v.char == "徴" and calls == []                       # 分差内没有 微：不挡
+    v = hog.run(_inp("zheng", cands=[("徴", 0.98), ("微", 0.96)], patch=img))
+    assert v.char == "徴" and calls == ["zheng"] and v.extra["guard"] == "组"
+    MARGIN[0] = 0.6
+    assert hog.run(_inp("zheng", cands=[("徴", 0.98), ("微", 0.96)], patch=img)).why == "abstain:guard_margin"
+    GATE[0] = False
+    assert hog.run(_inp("zheng", cands=[("微", 0.98), ("徴", 0.97)], patch=img)).why == "abstain:guard"
+    assert hog.run(_inp("zheng", cands=[("徴", 0.98), ("微", 0.90)], patch=img)).char == "徴"   # 微 在分差外
+    rv = _inp("zheng", cands=[("徴", 0.98), ("微", 0.96)], patch=img)
+    rv.review = True
+    assert hog.run(rv).char == "徴"                                  # 复核不挡

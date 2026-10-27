@@ -201,6 +201,10 @@ _SHAPE_PAIR_FLOW = {
     "shi": dict(tolerate=frozenset("勞")),
     "fa": dict(tolerate=frozenset("登務條𫉬顧")),
 }
+#: 整字岭回归异体对的额外流程设置。徵徴（2026-10-26，A24）：库常把 微 排进分差，库首位与整理本（缺位时坐标对位字）都是 徵／徴 时照样进组
+#: （`ref_top_enter`；不把 微 当陪衬，免得没有整理本的格也进来）；微 是真竞争者，补放时分差内有 微 的格先过挡门两分类
+#: （`ids_online.SPECS["zheng"].guard_when`），判成 微 就弃权。
+_WHOLE_FLOW = {"zheng": dict(ref_top_enter=True)}
 #: 闗關 与门族 men 共用 關：men 只补放不复核，已放行的 關 归 guanm 复核（刻 闗 放成 關 的改码位）
 _SHAPE_PAIR_OVERLAPS = {"guanm": ("men",), "xuan": ("chuo",), "xun": ("chuo",)}
 
@@ -370,7 +374,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid), review_fix_margin=fm),
+        flow=FlowSpec((FREQ, _img(gid)), combine="first", **_rv(gid), review_fix_margin=fm, **_WHOLE_FLOW.get(gid, {})),
         note=f"异体组：字频→IDS（整字岭回归）；{note}只在 seed_admit.group_flow 点名时生效。")
        # 徵徴 复核按刻形改字（2026-10-25，同义组照录刻形）：margin ≥0.70 改字，0.45–0.70 仍降审
        for gid, name, note, fm in (("lv", "呂吕", "差在中间连笔，", 0.0), ("zheng", "徵徴", "差在字中上部细节，", 0.70))},

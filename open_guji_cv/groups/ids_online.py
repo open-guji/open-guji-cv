@@ -70,6 +70,15 @@ class IdsSpec:
                                 # （參㕘叅 去掉「人」只比 彡／小／𠇍，2026-10-26）；模板库须同样取法
     dual: float = 0.0           # 两段版：>0＝两路一致才给字（2026-10-26，參㕘叅）：IDS 给了字，还要整字 HOG 岭回归（模板库 `whole_bank.json`，
                                 # 与 ids_bank.json 同目录，参数用本行的 size/region/lam/clean）判成同一字、判别值 ≥ 这个数，否则弃权
+    guard_when: str = ""        # 整字版：分差内候选（含库首位）出现这几个组外字时，先过「挡门两分类」（2026-10-26，徵徴：库常把 微 排进分差）：
+                                # 模板库 `guard_bank.json`（与 ids_bank.json 同目录，类名是 `guard_when` 各字与「组」两类），整字 HOG 岭回归取
+                                # `guard_region`、`guard_size`、`guard_lam`；判成 组 且判别值 ≥ `guard_margin` 才往下判，否则弃权 abstain:guard；
+                                # 过了挡门，本组给字的判别值还须 ≥ `guard_floor`（abstain:guard_margin）
+    guard_margin: float = 0.0
+    guard_floor: float = 0.0
+    guard_region: tuple = (0.0, 1.0, 0.0, 1.0)
+    guard_size: int = 80
+    guard_lam: float = 3.0
 
 
 #: 已过离线评测、允许在线给字的组。每组的门槛与评测数字写在该行注释里（重评：`loo` 子命令）。
@@ -177,8 +186,13 @@ SPECS: dict[str, IdsSpec] = {
     "xz": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=20, whole="hog", region=(0.0, 0.5, 0.125, 0.625),
                   lam=3.0, size=64, clean=True, aspect=(0.45, 2.2)),
     "lv": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.3, min_class=8, whole="pix", lam=1.0, size=32),
+    # 徵徴 挡门（2026-10-26，A24「压低徵徴送审」）：库常把 微 排进分差（vol02–99 约 17 格整理本作 徵徴 却进不了组）。分差内有 微 时
+    #   先判「微／组」两类：下半框 (x0.25–0.75, y0.3–1) HOG 48×48，模板 微 253（match_ref 已放行）／组 248（人裁＋keep 判别值≥0.7），
+    #   按册留出 微 判成组 最大 0.066、组 判成 微 最大 0.40（只会弃权）→ 门槛 0.3；过了挡门，徵／徴 判别值还须 ≥0.70（同复核改字门槛）。
+    #   建库 research/char_groups/zheng_1026/build_guard.py。
     "zheng": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.45, min_class=8, whole="hog",
-                     region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80),
+                     region=(0.28, 0.78, 0.15, 0.65), lam=3.0, size=80,
+                     guard_when="微", guard_margin=0.3, guard_floor=0.70, guard_region=(0.25, 0.75, 0.3, 1.0), guard_size=48, guard_lam=3.0),
     # 子于、山由出（2026-10-21，未覆盖形近字长尾线）：整字 HOG＋岭回归，模板＝殿本 vol04–10 seed_admit 放行格（match_ref、无疑问，
     # 建库与评测见 research/m7/long_tail/build_bank.py）；组外的 干／曲 也进库（判成它们＝abstain:slot），免得真干、真曲被硬判进组。
     # 子于：按册留一 0 错（|d|≥0.3 起；子 250／于 91／干 若干；唯一的错是 3 个予，予不进组、也不进 tolerate）；门槛取 0.4。
@@ -312,6 +326,37 @@ def whole_bank_path(g: str) -> Path | None:
     return None
 
 
+def guard_bank_path(g: str) -> Path | None:
+    """挡门两分类（`IdsSpec.guard_when`）的模板库：工作区 `config/groups/ids/<g>.guard.json` 优先，其次仓里 `<config_dir>/guard_bank.json`。"""
+    from ..core.workspace import ws_config_dir
+    from .registry import FLOW_GROUPS as GROUPS
+    cfg = ws_config_dir()
+    if cfg is not None and (cfg / "groups" / "ids" / f"{g}.guard.json").exists():
+        return cfg / "groups" / "ids" / f"{g}.guard.json"
+    spec = GROUPS.get(g)
+    if spec is not None and spec.config_dir and (_ROOT / spec.config_dir / "guard_bank.json").exists():
+        return _ROOT / spec.config_dir / "guard_bank.json"
+    return None
+
+
+GUARD_GROUP = "组"   # 挡门库里组员合成的那一类的名字
+
+
+def guard_check(g: str, gray, spec: IdsSpec, bank: dict | None = None) -> tuple[bool, dict]:
+    """挡门两分类：→ (过没过, 留痕)。没库 → 不过（abstain:guard_no_bank）。"""
+    from . import ids_whole
+    if bank is None:
+        p = guard_bank_path(g)
+        if p is None:
+            return False, {"guard": "no_bank"}
+        bank = load_bank(p)
+    if spec.clean:
+        gray = ids_whole.clean_patch(gray)
+    best, m, _ = ids_whole.score(np.asarray(gray), bank, "hog", tuple(spec.guard_region), spec.guard_lam, spec.guard_size)
+    tr = {"guard": best, "guard_margin": round(float(m), 4)}
+    return best == GUARD_GROUP and m >= spec.guard_margin, tr
+
+
 def has_bank(g: str) -> bool:
     return g in SPECS and bank_path(g) is not None
 
@@ -393,10 +438,14 @@ def fingerprint(groups) -> str:
             d.pop("sub_prior")
         if not d["dual"]:
             d.pop("dual")
+        if not d["guard_when"]:
+            for k in ("guard_when", "guard_margin", "guard_floor", "guard_region", "guard_size", "guard_lam"):
+                d.pop(k)
         spec = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
         fine = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_fine.tsv"
         parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else "")
-                     + (f".f{_sha(fine)}" if SPECS[g].generic else "") + (f".w{_sha(whole_bank_path(g))}" if SPECS[g].dual else ""))
+                     + (f".f{_sha(fine)}" if SPECS[g].generic else "") + (f".w{_sha(whole_bank_path(g))}" if SPECS[g].dual else "")
+                     + (f".g{_sha(guard_bank_path(g))}" if SPECS[g].guard_when else ""))
     if not parts:
         return ""
     return "ids:" + ",".join(parts) + f",lv1={_sha(IDS_TABLE)}"
