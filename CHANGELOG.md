@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 换源新图两处修补（GUJI-748）：① Step1 `push_bottom_to_bar` 右界截到图内（vol23 p10、vol37 p74 右界线外推出图，`IndexError` 整页失败）；只在原先越界报错的页上生效，`border_geometry` 登记代码等价（vol20 新图 94 页逐字节相同），各步 `code_hash` 不变。② 引擎：上游某页最近一次跑失败时，盘上那份是更早一轮的旧产物，原先下游照样读它接着跑（vol23 p10 新图拿旧图版框切出 74 格），现在按缺失处理、下游判 blocked；`core/engine.py` 不进指纹。PATCH。
+
 ## [0.5.27] - 2026-10-26
 
 PATCH（GUJI-748 换图源缺格页：#683 Step1 网格模式按界行反推版框 `grid_lattice_fallback`；另含 #682 印章页切分（Step1 列距救援、印章定位 1.3）、#686 自由版式管线 keben_free（新三步，独立管线、不影响 keben_body_v2）、#679 #684 #685 #687 字组规则、拆分 M0–M2 #677 #678 #680、#674 PDF 源件、#681 任务库连库断线重排）。相对 v0.5.26，`border_detect`、`row_segment`、`cell_shrink`、`seal_detect`、`seed_admit` 五步 `code_hash` 变（合前实算），新增 `block_detect`、`column_trace`、`cell_cut`；其余步不变。字组文件变了：换用本版重跑的册要按 CorpusDrift 出全局层新底库、改钉 `corpus`。rc 上全量测试：失败 32 条与 v0.5.26 上逐条相同（本机环境类，无新增）。

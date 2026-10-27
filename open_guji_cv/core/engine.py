@@ -382,6 +382,10 @@ class Engine:
             return self.store.raw_sha(self.book.id, p)
         prod = self.pipeline.producer_of(kind)
         entry = self.store.manifest(self.book.id, prod.spec.id).get(page_key(page))
+        # 上游这一页最近一次跑失败了：盘上那份是更早一轮的旧产物（换源 vol23 p10 新图拿旧图版框切了 74 格），
+        # 不能拿来接着跑，按缺失处理，下游判 blocked
+        if entry and entry.status == "failed":
+            return None
         if entry and entry.status == "ok" and entry.sha256 and \
                 self.store.exists(self.book.id, prod.spec.id, page_key(page)):
             return entry.sha256
