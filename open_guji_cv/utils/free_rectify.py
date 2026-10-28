@@ -37,8 +37,17 @@ def _bands(prof: np.ndarray, at: int, inward: int, thr: float, reach: int, inner
         k += inward
     e1 = k + inward
     e2 = None
+    # 量到的这条墨带本身细（就是细框线）就不再往里找——往里是字（Sheldon 10-28 p32 左框）；
+    # 墨带越粗（粗外框、扫描的黑边）细内框可以离得越远
+    o = hit
+    while 0 <= o - inward < n and prof[o - inward] >= thr:
+        o -= inward
+    band_w = abs(k - o) + 1
+    if band_w <= thin:
+        return float(e1), None
+    reach_in = min(2 * inner, max(inner, 2 * band_w))
     j = e1
-    while abs(j - e1) <= inner and 0 <= j < n:
+    while abs(j - e1) <= reach_in and 0 <= j < n:
         if prof[j] >= thr:                 # 下一条墨带：量宽度，够细才算内线
             m = j
             while 0 <= m + inward < n and prof[m + inward] >= thr and abs(m - j) <= thin:

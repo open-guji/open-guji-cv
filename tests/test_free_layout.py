@@ -473,3 +473,42 @@ def test_grid_seams_follow_dashed_rules():
                       rule_min=0.65, snap=0.15)
     cuts = sorted(int(np.median(c.left)) for c in bc.columns)[1:]
     assert all(abs(c - r) <= 3 for c, r in zip(cuts, rules))
+
+
+def test_grid_seams_follow_slanted_dashed_rules():
+    """各条界栏斜得不一样（扫描拉伸不匀）：逐条顺着线找，切线贴在各自的界栏上。"""
+    from open_guji_cv.utils.free_blocks import thin_vlines
+    from open_guji_cv.utils.free_columns import grid_columns
+    h, w, pitch = 900, 600, 100
+    img = np.full((h, w), 230, np.uint8)
+    slopes = [0.0, 0.02, -0.02, 0.03, -0.01]          # 每条界栏自己的斜率（dx/dy）
+    rules = [100, 200, 300, 400, 500]
+    for k in range(6):
+        for y in range(20, h - 60, 70):
+            _glyph(img, k * pitch + 25 + int(slopes[min(k, 4)] * (y - h / 2) * 0), y, 45)
+    for x, sl in zip(rules, slopes):
+        for y in range(0, h, 20):
+            xx = int(round(x + sl * (y - h / 2)))
+            img[y:y + 12, xx - 1:xx + 2] = 40
+    ink = img < 128
+    lines = thin_vlines(img, 51, length=11, bridge=41)
+    bc = grid_columns(ink, lines, pitch=pitch, n=6, fixed_ends=True, cross=3.0, center=0.5, rule_min=0.65)
+    seams = sorted((c.left for c in bc.columns), key=lambda a: float(np.median(a)))[1:]
+    for sm, x, sl in zip(seams, rules, slopes):
+        for y in (60, h // 2, h - 60):
+            assert abs(sm[y] - (x + sl * (y - h / 2))) <= 4
+
+
+def test_trace_side_thin_frame_line_does_not_look_inward():
+    """量到的框线本身是细线：不再往里找「细内框」——往里是字（p32 左框）。"""
+    from open_guji_cv.utils.free_rectify import _bands
+    prof = np.zeros(200)
+    prof[50:54] = 1.0                                 # 细框线
+    prof[70:78] = 1.0                                 # 往里 16px 处字的竖画
+    e1, e2 = _bands(prof, 52, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 is None
+    prof[30:54] = 1.0                                 # 粗外框 + 往里的细线：取细线
+    prof[70:78] = 0.0
+    prof[62:65] = 1.0
+    e1, e2 = _bands(prof, 40, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 == 65

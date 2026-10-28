@@ -43,7 +43,7 @@ class BlockDetectParams(BaseModel):
     banxin_min: int = 20           # 版心线离框边的距离范围（px）
     banxin_max: int = 120
     banxin_line: float = 0.04      # 细竖线强度（框内列均值）够这个才算版心线
-    banxin_pad: int = 4            # 块裁到版心线里面再让几 px
+    banxin_pad: int = 1            # 块裁到版心线里面再让几 px（1.9 起 4→1：字常贴着版心线，让多了切字，Sheldon 10-28 p32）
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
     rectify: bool = True           # 1.7 起：按框线把页面拉正（倾斜、透视、弯框），之后各步都在拉正后的图上做
@@ -57,7 +57,7 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.8", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.9", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
