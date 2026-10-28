@@ -1,0 +1,23 @@
+name: commons-fetch-shiji
+on: workflow_dispatch
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: download
+        run: |
+          mkdir out && cd out
+          UA="guji-bot/1.0 (https://github.com/open-guji; lisdpku@gmail.com)"
+          for n in 0243 0244; do
+            T="文淵閣四庫全書_${n}冊.djvu"
+            curl -sS -G -A "$UA" "https://commons.wikimedia.org/w/api.php" --data-urlencode "action=query" --data-urlencode "titles=File:${T}" --data-urlencode "prop=imageinfo" --data-urlencode "iiprop=url|size|sha1|timestamp|mediatype" --data-urlencode "format=json" -o info_${n}.json
+            cat info_${n}.json | head -c 600; echo
+            URL=$(python3 -c "import json;d=json.load(open('info_${n}.json'));print(list(d['query']['pages'].values())[0]['imageinfo'][0]['url'])")
+            curl -sS -L --retry 5 --retry-delay 20 -A "$UA" -o "${n}.djvu" "$URL"
+            ls -l ${n}.djvu; sha1sum ${n}.djvu
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: shiji-djvu
+          path: out/
+          retention-days: 3
