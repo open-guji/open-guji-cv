@@ -203,7 +203,7 @@ class SeedAdmitParams(BaseModel):
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
-    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "jys")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
+    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "jys", "kgc", "tsh")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
     group_flow_llm_effort: str = "low"
     group_flow_llm_need_l2_agree: bool = False   # L3 在线的字须与 L2 模型弃权时的首选字相同
     group_flow_delta: float = 0.03
