@@ -75,7 +75,7 @@ def test_entry_ref_enter_when_top_is_tolerated_outsider():
     assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg) is None              # 没有整理本字不进
     assert entry(r, [("莫", 0.95), ("集", 0.93)], "莫", cfg) is None              # 整理本字在组外
     assert entry(r, [("莫", 0.95), ("指", 0.94)], "算", cfg) is None              # 别的组外字紧咬照挡
-    assert entry(r, [("莫", 0.95)], "算", FlowConfig(groups=("yin",))) is None     # 组没点名
+    assert entry(r, [("莫", 0.95)], "算", FlowConfig(groups=("guanm",))) is None    # 组没点名
     assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg, coord_ref="𮅕") == ("suan", "lift")   # 对位缺格用坐标对位字
     men = FlowConfig(groups=("men", "guanm"))
     assert entry(r, [("闡", 0.97), ("間", 0.96)], "闗", men) == ("guanm", "lift")  # 先于门族
