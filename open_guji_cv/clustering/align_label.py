@@ -187,7 +187,7 @@ def index_structure(index_path: str | Path,
 
 def label_page(page: str, slots: list[tuple], book: str,
                corpus: str, corpus_index: dict[str, list[int]],
-               window_pad: int = WINDOW_PAD,
+               window_pad: int = WINDOW_PAD, offset: int | None = None,
                ) -> tuple[list[AlignedLabel], bool]:
     """单页对齐 → 该页可标注的实例。返回 (标签, 是否锚定成功)。
 
@@ -197,7 +197,7 @@ def label_page(page: str, slots: list[tuple], book: str,
     连累整页对齐。`sub` 非空时 `instance_id` 带后缀（`book:page:col:slot` + `a`/`b`），
     与 `cell_shrink` / `seed_admit` 的字位 id 一致。
     """
-    aligned = align_ops(slots, corpus, corpus_index, window_pad)
+    aligned = align_ops(slots, corpus, corpus_index, window_pad, offset)
     if aligned is None:
         return [], False
     norm, window, ops = aligned
@@ -221,7 +221,7 @@ def label_page(page: str, slots: list[tuple], book: str,
 
 
 def align_ops(slots: list[tuple], corpus: str, corpus_index: dict[str, list[int]],
-              window_pad: int = WINDOW_PAD):
+              window_pad: int = WINDOW_PAD, offset: int | None = None):
     """锚定 + difflib，**不过闸**：返回 `(norm, window, ops)`，锚不上返回 None。
 
     2026-09-22 从 `label_page` 拆出来，给 `scripts/eval_align_replace_gate.py`
@@ -232,7 +232,8 @@ def align_ops(slots: list[tuple], corpus: str, corpus_index: dict[str, list[int]
     """
     norm = [(t[0], t[1], (t[2] or "") if len(t) > 3 else "", t[-1]) for t in slots]
     text = "".join(ch for _, _, _, ch in norm)
-    offset = anchor_page(text, corpus_index)
+    if offset is None:          # 页钉位（`align_ref` 的 `page_pins`）直接给偏移，不靠 8-gram 投票
+        offset = anchor_page(text, corpus_index)
     if offset is None:
         return None
 
