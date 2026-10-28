@@ -36,8 +36,9 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 
 from ..auth import require_reviewer
-from ...core.workspace import (ROOT_ENV, _ws_id, describe, discover_workspaces,  # noqa: F401  搬到 core（拆分 M3）
-                                workspace_root, workspaces_root)
+from open_guji_cv.console_api import (  # noqa: F401  ROOT_ENV 等是给老调用方的再导出（拆分 M3）
+    ROOT_ENV, workspace_id as _ws_id, describe, discover_workspaces, workspace_root, workspaces_root,
+)
 
 #: 只读、只列清单——真正的越权闸在 `WorkspaceMiddleware`（白名单，见模块头注）。
 #: **不是** admin 专属：选工作区/选书是校对者进控制台的第一步（`WorkspacePickerPage`

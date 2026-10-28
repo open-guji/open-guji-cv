@@ -73,8 +73,8 @@ def sample_exemplars(db_path: str | Path, provenance: str = "auto", batch: str =
 def api_glyphlib_spotcheck(provenance: str = "auto", batch: str = "", n: int = 100,
                            seed: int = 0) -> dict:
     """抽检样本 + 每条已有的裁决（`decisions.jsonl` 里 key=`spot:<实例>` 的最后一条）。"""
-    from ...clustering.glyph_selfcheck import decisions
-    from ...core.workspace import glyph_db_path
+    from open_guji_cv.console_api import decisions
+    from open_guji_cv.console_api import glyph_db_path
     db = glyph_db_path()
     if not Path(db).exists():
         raise HTTPException(404, f"这个工作区没有字形库：{db}")

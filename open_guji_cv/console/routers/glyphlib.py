@@ -26,7 +26,7 @@ router = APIRouter(dependencies=[Depends(require_reviewer)])
 
 
 def _paths():
-    from ...core.workspace import glyph_db_path, glyph_store_path
+    from open_guji_cv.console_api import glyph_db_path, glyph_store_path
     db = glyph_db_path()
     if not Path(db).exists():
         raise HTTPException(404, f"这个工作区没有字形库：{db}")
@@ -35,7 +35,7 @@ def _paths():
 
 def _siblings() -> list[dict]:
     """其它工作区的字形库：[{ws, name, db}]，不含当前这个。"""
-    from ...core.workspace import GLYPH_DB_REL, workspace_root
+    from open_guji_cv.console_api import GLYPH_DB_REL, workspace_root
     from .workspace import discover_workspaces
     cur = workspace_root()
     cur = cur.resolve() if cur else None
@@ -55,7 +55,7 @@ def _siblings() -> list[dict]:
 def api_glyphlib_summary() -> dict:
     """总账：各来源、本书套（字种/刻例/来路/单例）、字体覆盖、store 漂移。
     另附兄弟工作区的字种数与共有字数（跨书比对的素材量）。"""
-    from ...clustering.glyph_ledger import char_table, library_summary
+    from open_guji_cv.console_api import char_table, library_summary
     db, store = _paths()
     s = library_summary(db, store)
     mine = {r["char"] for r in char_table(db)}
@@ -78,8 +78,8 @@ def api_glyphlib_chars() -> dict:
     """字表：一字一行（刻例数按格去重、来路分布、字头所在来源、字体里有没有）。
     过滤与排序在前端做——两本书都只有几千行。另附兄弟工作区的字集，
     供「只看本书独有 / 与某书共有」过滤。"""
-    from ...clustering.glyph_ledger import char_table
-    from ...clustering.glyph_selfcheck import load_findings
+    from open_guji_cv.console_api import char_table
+    from open_guji_cv.console_api import load_findings
     db, _ = _paths()
     rows = char_table(db)
     # 体检算过的「本字与各字体的最优相似度」（按字取刻例中位）；没跑过体检就没有
@@ -102,7 +102,7 @@ def api_glyphlib_chars() -> dict:
 @maps_http
 def api_glyphlib_char(char: str, others: int = 12) -> dict:
     """单字页：本书全部刻例（按来路）＋ 字体渲染 ＋ 兄弟工作区同字刻例（各取前 N）。"""
-    from ...clustering.glyph_ledger import char_detail
+    from open_guji_cv.console_api import char_detail
     db, _ = _paths()
     d = char_detail(db, char)
     d["others"] = []
@@ -171,9 +171,8 @@ def api_glyphlib_audit(all: bool = False) -> dict:
     出卡前核对库指纹（GUJI-710，`glyph_selfcheck.freshness`）：结果没带指纹、或卡上刻例的
     图与体检时对不上（刻例重排编号）→ 409「体检结果已过期（库已变），请重跑 …」，一张卡也不出；
     只是撤了、改了字的刻例，那几张卡不出（计入 `n_gone`）。"""
-    from ...clustering.glyph_selfcheck import (FLAG_LABELS, STALE_MSG, decisions, freshness,
-                                               load_findings, out_dir)
-    from ...errors import Conflict
+    from open_guji_cv.console_api import FLAG_LABELS, STALE_MSG, decisions, freshness, load_findings, out_dir
+    from open_guji_cv.console_api import Conflict
     import sqlite3
     db, _ = _paths()
     meta, rows = load_findings()
@@ -222,9 +221,9 @@ def api_glyphlib_audit_decide(d: AuditDecideIn) -> dict:
     """写一条 `glyph_audit` 事件并立即消费（撤库 / 改字 / 白名单）。
 
     批次固定 `glyphlib-audit`：与定字（`*-decide`）、复核（`*-collate`）分开记账。"""
-    from ...feedback.consumers import route_and_consume
-    from ...feedback.events import EventTarget, make_event
-    from ...feedback.routes import RouteTable
+    from open_guji_cv.console_api import route_and_consume
+    from open_guji_cv.console_api import EventTarget, make_event
+    from open_guji_cv.console_api import RouteTable
     from .. import deps
 
     if d.v not in ("ok", "near_form", "evict", "relabel", "fidelity"):
@@ -260,7 +259,7 @@ def api_glyphlib_font(char: str, font: str = "", crop: bool = True) -> Response:
     import sqlite3
     if font:
         import cv2
-        from ...clustering.glyph_selfcheck import FONT_SETS, font_renderer
+        from open_guji_cv.console_api import FONT_SETS, font_renderer
         if font not in FONT_SETS:
             raise HTTPException(404, f"没有这套字体：{font}")
         r = font_renderer(font)
@@ -294,7 +293,7 @@ def api_glyphlib_ids_lookup(q: str, near: int = 12) -> dict:
     标「最近似码位 / 无码」之前先查——很多「没有」的字其实在扩展区有编码。
     每个命中另标本书库里有没有这个字（`in_book`）。"""
     import sqlite3
-    from ...clustering.ids_lookup import lookup
+    from open_guji_cv.console_api import lookup
     r = lookup(q, near=near)
     try:
         db, _ = _paths()

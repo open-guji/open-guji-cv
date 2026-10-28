@@ -13,10 +13,11 @@ from fastapi.responses import HTMLResponse
 
 from ..auth import require_reviewer
 from ..static_path import STATIC
-from ...core.book import list_books, load_book
-from ...core.pipeline import list_pipelines, load_pipeline
-from ...core.step import KINDS, STEPS
-from ... import steps as _steps  # noqa: F401  —— 注册全部 Step 与产物种类
+from open_guji_cv.console_api import list_books, load_book
+from open_guji_cv.console_api import list_pipelines, load_pipeline
+from open_guji_cv.console_api import KINDS, STEPS
+from open_guji_cv.console_api import register_all  # 注册全部 Step 与产物种类
+register_all()
 
 router = APIRouter()
 #: 「/」「/v1/」是 SPA 外壳，**不挂鉴权**——未登录时前端要能加载出这层壳，
@@ -40,14 +41,16 @@ def api_pipelines() -> list[dict]:
 
 @router.get("/api/steps", dependencies=[_auth])
 def api_steps() -> list[dict]:
-    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.console_api import register_all
+    register_all()
     return [s.describe() for s in STEPS.values()]
 
 
 
 @router.get("/api/kinds", dependencies=[_auth])
 def api_kinds() -> list[dict]:
-    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.console_api import register_all
+    register_all()
     return [{"id": k.id, "title": k.title, "storage": k.storage, "unit": k.unit,
              "coord_space": k.coord_space} for k in KINDS.values()]
 

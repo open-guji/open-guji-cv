@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends
 
 from .. import deps
 from ..auth import require_admin
-from ...utils.image_io import imread as cv_imread
+from open_guji_cv.console_api import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -43,7 +43,7 @@ def api_gold_import(shard: str, book: str | None = None, pages: str | None = Non
                     why: str = "", dry_run: bool = True) -> dict:
     """workspace 裁决表 → 测试集仓：唯一往 dataset 写人裁数据的入口，**默认 dry_run**，
     看清清单再 `dry_run=false`。同 CLI `guji gold import`。"""
-    from ...gold.transfer import ImportFilter, import_to_dataset, parse_pages
+    from open_guji_cv.console_api import ImportFilter, import_to_dataset, parse_pages
     flt = ImportFilter(book=book, pages=parse_pages(pages), stratum=stratum,
                        include_uncertain=include_uncertain)
     return import_to_dataset(shard, deps.verdict_store(), deps.gold_store(), flt,
@@ -61,7 +61,7 @@ def api_gold_migrate(shard: str, dry_run: bool = False) -> dict:
 @router.post("/api/gold/{shard:path}/drift")
 def api_gold_drift(shard: str, apply: bool = False) -> dict:
     """图像指纹漂移检查：产物重生后哪些金标还成立。"""
-    from ...gold.drift import check_shard, mark_drifted
+    from open_guji_cv.console_api import check_shard, mark_drifted
     root = Path(__file__).resolve().parent.parent.parent
 
     def image_of(it):

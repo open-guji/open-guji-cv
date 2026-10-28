@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import Identity, require_reviewer
 from ..errors import maps_http
-from ...feedback import figures as F
+from open_guji_cv.console_api import figures as F
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 

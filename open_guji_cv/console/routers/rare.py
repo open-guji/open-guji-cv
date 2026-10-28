@@ -14,9 +14,8 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...clustering.rare_panel import (font_index_status, ids_fallback, rare_batch,
-                                      rare_for, rare_patch)
-from ...errors import ImageMissing
+from open_guji_cv.console_api import font_index_status, ids_fallback, rare_batch, rare_for, rare_patch
+from open_guji_cv.console_api import ImageMissing
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -77,7 +76,7 @@ def api_rare_candidates(book: str, page: int, col: int, slot: int,
     # 有效的是**位次合并**：小表 top3 占据前三名（那里最可能是对的），
     # 其后接大表结果补召回。实测 top1 43% / top10 76%，两头都拿到。
     # 字表按这册书的整理本算，不写死刻本链那份（2026-09-15，见 rare_panel.rare_batch）
-    from ...steps.align_ref import book_corpus
+    from open_guji_cv.console_api import book_corpus
     return {"id": f"{book}:{page}:{col}:{slot}{sub or ''}",
             "candidates": rare_for(img, k, book_corpus(book), book)}
 
@@ -112,8 +111,8 @@ def api_rare_alt(book: str, page: int, col: int, slot: int, sub: str = "",
     `q`＝人键入的近似字，缓存里没有就去字统网取一次（约 2.5 秒，取到写缓存）。
     出待审单时同一函数批量算好写进 pending（`guji audit alt`），网站只显示；控制台在这里现算。
     引擎 `review/alt_cands.py`；只出候选、不进放行。"""
-    from ...clustering.variant_sources import shared_zi
-    from ...review.alt_cands import alt_for_image, pivots_of
+    from open_guji_cv.console_api import shared_zi
+    from open_guji_cv.console_api import alt_for_image, pivots_of
     img = rare_patch(book, page, col, slot, sub, deps.image_cache())
     if img is None:
         raise ImageMissing(f"没有字块 p{page:04d}c{col:02d}s{slot}{sub or ''}")

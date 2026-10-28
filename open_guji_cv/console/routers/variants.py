@@ -13,8 +13,8 @@ from fastapi import APIRouter, Depends
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...errors import NotFound
-from ...review.group_view import group_view
+from open_guji_cv.console_api import NotFound
+from open_guji_cv.console_api import group_view
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -31,7 +31,7 @@ def api_variants_book(edition: str = "") -> dict:
     """
     import json
 
-    from ...variant_ledger import DEFAULT_EDITION, ledger_path
+    from open_guji_cv.console_api import DEFAULT_EDITION, ledger_path
 
     ed = edition or DEFAULT_EDITION
     p = ledger_path(ed)

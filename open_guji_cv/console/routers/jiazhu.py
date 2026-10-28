@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends
 
 from .. import deps
 from ..auth import require_reviewer
-from ...review.jiazhu_cards import jiazhu_segments
+from open_guji_cv.console_api import jiazhu_segments
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
