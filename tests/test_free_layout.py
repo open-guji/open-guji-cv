@@ -549,3 +549,26 @@ def test_segment_ocr_horizontal_pair_and_missed_ink_fall_back_to_rules():
     items = [(82, 20, 40), (12, 20, 40), (35, 120, 60)]
     cells = segment_ocr(_col_img(items), [(8, 15, 126, 64, "右左", 0.95)])
     assert [c.kind for c in cells] == ["jiazhu_a", "jiazhu_b", "char"]
+
+
+def test_tree_label_by_level():
+    from open_guji_cv.utils.free_blocks import tree_label
+    assert [tree_label(p) for p in [(0, 0), (0, 1), (1,), (2, 1, 0)]] == ["1a", "1b", "2", "3b1"]
+
+
+def test_fmt_hint_parsed_and_checked():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints as parse_hints
+    h = parse_hints({10: {"blocks": [{"cols": 24, "fmt": "plain"}, {}]}})[10]
+    assert h.fmt_for(0) == "plain" and h.fmt_for(1) is None
+    with pytest.raises(ValueError):
+        parse_hints({10: {"blocks": [{"fmt": "notes"}]}})
+    with pytest.raises(ValueError):
+        parse_hints({9: {"tree": {"v": 2, "parts": [{"fmt": "x"}, {}]}}})
+
+
+def test_segment_plain_uses_hinted_char_height():
+    """标题列：字比列宽小，按块里识别出的字高切，不按列宽并成一个框。"""
+    from open_guji_cv.utils.free_cells import segment_plain
+    img = _col_img([(30, 10, 64), (30, 80, 64)], wc=130, h=200)
+    assert len(segment_plain(img, col_w=120)) == 1
+    assert [c.kind for c in segment_plain(img, col_w=120, em_hint=66)] == ["char", "char"]

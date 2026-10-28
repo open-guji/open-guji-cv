@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 自由版式 `keben_free` 第八轮（Sheldon 10-28 盯 yxat 9、10 页）：`layout_hints` 块与版面树叶子可写格式 `fmt`（plain 每列一行字／mixed 大字夹小注），`block_detect` 1.10 落进产物并给块编号 `label`（版面树按层 1a、1b）；`cell_cut` 1.5 `fmt: plain` 走 `segment_plain`（整列按墨切、块内识别字高作先验），字框加字号 `cid`＝页-块-行-字。只有 keben_free 管线用（yxat 一册）。
 ## [0.5.32] - 2026-10-28
 
 PATCH。含控制台拆成独立包 guji-console（C0–C3）、keben_free 第七轮、A24 码位组与字组送审若干（见下）。

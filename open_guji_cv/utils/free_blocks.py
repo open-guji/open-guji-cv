@@ -537,18 +537,24 @@ def _ratios(spec, n_parts: int) -> list[float]:
     return r
 
 
+def tree_label(path: tuple[int, ...]) -> str:
+    """版面树叶子的块号：第一层切出的份是 1、2、3，第二层在后面加 a、b、c，第三层再加数字（1a、1b、2、3b2）。"""
+    return "".join(str(i + 1) if d % 2 == 0 else chr(ord("a") + i) for d, i in enumerate(path))
+
+
 def tree_blocks(node: dict, hl: np.ndarray, vl: np.ndarray, ink: np.ndarray, x0: int, y0: int, x1: int, y1: int,
-                prm: SplitParams = SplitParams()) -> list[tuple[Block, dict]]:
+                prm: SplitParams = SplitParams(), path: tuple[int, ...] = ()) -> list[tuple[Block, dict]]:
     """人标的版面树 → [(叶子块, 叶子的提示)]，按读序（上下切自上而下，左右切自右而左）。
 
     节点写法（`layout_hints` 的 `tree`）：`{h: 切法, parts: [...]}` 切上下，`{v: 切法, parts: [...]}`
     切左右；切法是份数或比例（左右切的比例、parts 都按读序**自右而左**写）；不切的是叶子，可带
-    `cols`、`pitch`、`kind`（写在切开的节点上就是各份都这样）。人只给大约比例，切位由 `snap_cut` 吸到线或空白上。"""
+    `cols`、`pitch`、`kind`、`fmt`（写在切开的节点上就是各份都这样）。人只给大约比例，切位由 `snap_cut` 吸到线或空白上。
+    叶子的提示里加 `_label`：按切的层次编的块号（`tree_label`）。"""
     if "h" not in node and "v" not in node:
-        return [(Block(x0, y0, x1, y1, source="hint"), node)]
+        return [(Block(x0, y0, x1, y1, source="hint"), {**node, "_label": tree_label(path) or "1"})]
     orient = "h" if "h" in node else "v"
     r = _ratios(node[orient], len(node.get("parts") or []))
-    inherit = {k: node[k] for k in ("cols", "pitch", "kind") if k in node}   # 切开的节点上写的叶子参数传给各份
+    inherit = {k: node[k] for k in ("cols", "pitch", "kind", "ruled", "fmt") if k in node}   # 切开的节点上写的叶子参数传给各份
     parts = [{**inherit, **c} for c in (node.get("parts") or [])]
     parts += [dict(inherit)] * (len(r) - len(parts))
     tot = sum(r)
@@ -562,10 +568,10 @@ def tree_blocks(node: dict, hl: np.ndarray, vl: np.ndarray, ink: np.ndarray, x0:
     cuts = [snap_cut(orient, a, w, hl, vl, ink, x0, y0, x1, y1, prm) for a, w in zip(approx, win)]
     out: list[tuple[Block, dict]] = []
     if orient == "h":
-        for (a, b), child in zip(cut_pieces(y0, y1, cuts, prm), parts):
-            out += tree_blocks(child, hl, vl, ink, x0, a, x1, b, prm)
+        for k, ((a, b), child) in enumerate(zip(cut_pieces(y0, y1, cuts, prm), parts)):
+            out += tree_blocks(child, hl, vl, ink, x0, a, x1, b, prm, (*path, k))
     else:
         segs = cut_pieces(x0, x1, cuts, prm)[::-1]            # 自右而左
-        for (a, b), child in zip(segs, parts):
-            out += tree_blocks(child, hl, vl, ink, a, y0, b, y1, prm)
+        for k, ((a, b), child) in enumerate(zip(segs, parts)):
+            out += tree_blocks(child, hl, vl, ink, a, y0, b, y1, prm, (*path, k))
     return out

@@ -5,6 +5,7 @@
 人标的 `layout_hints` 优先：整页 skip、人圈的块、每块列数／列距提示都在这里落进产物。
 找到框后先按框线把页面拉正（`utils/free_rectify.py`，产物 `warp`），后面都在拉正后的图上做；
 1.8 起人标 splits 处的分栏线也一起拉成水平。
+1.10 起人标块格式 `fmt`（plain／mixed）落进产物，Step3 按它选切字流程；块有块号 `label`（版面树按层编 1a、1b，见 `tree_label`）。
 自动分出的块再按版心裁一刀（`banxin` 参数说版心在哪侧；yxat 是奇数页在左）。
 算法在 `utils/free_blocks.py`，提示的写法在 `utils/layout_hints.py`。
 """
@@ -57,7 +58,7 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.9", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.10", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
@@ -162,6 +163,8 @@ class BlockDetectStep(Step):
                                pitch_hint=leaf(i, "pitch", hint.pitch_for) if hint else None,
                                ruled=bool(leaf(i, "ruled", hint.ruled_for)) if hint else False,
                                align=hint.align_for(i) if hint else None,
+                               fmt=leaf(i, "fmt", hint.fmt_for) if hint else None,
+                               label=leaves[i]["_label"] if leaves else str(i + 1),
                                vrules=sorted(x_tl_to_tr(x, W) for x in b.vrules))
                       for i, b in enumerate(blocks)]
         return {"layout_blocks": out}
