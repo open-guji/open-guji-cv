@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 按刻形拆判的异体对组（shang ba sang xian yin … 共 31 个）与 dian 开 `ref_top_enter`（A24 压低组外异体对送审第 1 轮，10-28）：库首位与整理本同在组里就进，分差内的组外字不再挡入口；给字仍由整字 HOG 判。vol01–99 回放新进 100 格，逐格看图 0 错。只动 `registry`。
 ## [0.5.31] - 2026-10-28
 
 PATCH。含遮挡卡 seed_admit 1.25/1.26（异体优先于印章、印框内背景干净格不算遮挡）、align_ref 2.3、row_segment 1.40/1.41、border_detect 1.12 弯列、字组暂归一与码位组、keben_free 第二至四轮等（见下）。

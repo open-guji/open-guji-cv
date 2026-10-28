@@ -98,7 +98,9 @@ def test_entry_ref_enter_member_xuan():
     assert entry(r, [("選", 0.96), ("遺", 0.95), ("遵", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")
     assert entry(r, [("遺", 0.96), ("選", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")   # 首位是陪衬也进
     assert entry(r, [("選", 0.96), ("遺", 0.95)], "選", cfg) == ("chuo", "lift")
-    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="𨕖") is None              # 组外字紧咬照挡
+    # 库首位 選 与坐标对位 𨕖 同在组里：组外字紧咬也进（`ref_top_enter`，2026-10-28）；整理本是组外字则照挡
+    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")
+    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="指") is None
 
 
 def test_entry_jys_tolerates_ba():
