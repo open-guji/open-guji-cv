@@ -51,19 +51,19 @@ class ColumnTraceParams(BaseModel):
     break_frac: float = 0.5        # 横界栏盖住列宽这么多才算断开处
     break_inset: int = 8           # 量横界栏时列两边各让进这么多（别量到竖界栏）
     grid_fixed_ends: bool = True   # 网格两端就是块边（版心线没探到、块贴书脊那侧时仍浮动）
-    grid_cross: float = 1.0        # 正文网格：切线劈开一个墨块（字、框）的罚（最多计 2 个）
+    grid_cross: float = 3.0        # 正文网格：切线劈开一个墨块（字、框）的罚（最多计 2 个；1.7 起 1→3：不穿墨压过列宽均匀，Sheldon 10-28 p12 题头）
     grid_center: float = 0.5       # 正文网格：切线落在空白正中的奖励
     grid_width: tuple[float, float] = (0.6, 1.5)   # 正文网格列宽上下限（× 列距；标题框列宽、两行小注列窄）
     grid_rule_min: float = 0.65    # 正文网格：竖线盖住块高这么多才当界行（标题框边不算；1.6 起量虚线接上后的，0.8→0.65）
     grid_dash: int = 11            # 1.6 起：正文网格量竖线，短划长过这个就算（虚线界栏）
     grid_bridge: int = 41          # 再把这么长以内的断口接上
-    grid_snap: float = 0.15        # 有界栏的块：切线吸到 ± 这么多列距内的界栏，顺着它走
+    grid_snap: float = 0.3         # 有界栏的块：切线旁 ± 这么多列距内顺着竖线像素找界栏（1.7 起 0.15→0.3，逐条跟线）
 
 
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.6", unit="page",
+        id="column_trace", title="Step2 块内找列（自由版式）", version="1.7", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
         code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks",
                    "open_guji_cv.utils.free_rectify"),
