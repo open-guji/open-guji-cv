@@ -1,5 +1,7 @@
 name: commons-fetch-shiji
-on: workflow_dispatch
+on:
+  push:
+    branches: [claude/commons-fetch-siku-shiji]
 jobs:
   fetch:
     runs-on: ubuntu-latest
