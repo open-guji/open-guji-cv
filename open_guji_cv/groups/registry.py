@@ -468,7 +468,7 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                ("cp_kou4", "宼寇冦", (), ""), ("cp_ming2", "冥㝠", (), ""), ("cp_fei1", "𡚱妃", (), ""), 
                                ("cp_she4", "渉涉", (), ""), ("cp_su4", "宿𪧐", (), ""), ("cp_yang4", "漾𣻌", (), ""), 
                                ("cp_jing1", "荆荊", (), ""), ("cp_feng4", "鳳鳯", (), ""), ("cp_ta4", "沓㳫", (), ""), 
-                               ("cp_shu4", "述𫐠", (), ""), ("cp_yu4", "鬰鬱", (), ""), ("cp_yan2", "顔顏", (), ""), 
+                               ("cp_shu4", "述𫐠", ("chuo",), ""), ("cp_yu4", "鬰鬱", (), ""), ("cp_yan2", "顔顏", (), ""), 
                                ("cp_hui1", "徽𡽪", (), ""), ("cp_jiu1", "究䆒", (), ""), ("cp_fa4", "髮髪", (), ""), 
                                ("cp_shu4b", "樹𣗳", (), ""), ("cp_huai2", "懷懐", (), ""), ("cp_han2", "涵𣹢", (), ""))
 }
@@ -576,7 +576,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"),
     "chuo": GroupSpec(
         id="chuo", name="辶族", members=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾選述近迎造遵遞追邊巡遷遜"),
-        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan", "xun"),
+        backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan", "xun", "cp_shu4"),
         flow=FlowSpec((_img("chuo"),), combine="first", lift_ref_agree=True,
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"
