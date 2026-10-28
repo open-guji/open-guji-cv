@@ -542,6 +542,15 @@ class SeedAdmitParams(BaseModel):
     """R5 整页错位护栏（2026-10-26，A32）：本页印章格里，字形库首位（覆盖度 ≥ 0.9）与「上一格／下一格的
     默认字」吻合的格数 ≥ 3 且多过与本格默认字吻合的格数 → 格号整体错了一格，本页印章格一律不放
     （`lane_skip.why=page_shift`）。47 册只有 vol40 p2 命中（切分漏了列首一行）。"""
+    occluded_variant_first: bool = True
+    """异体形近规则先于印章遮挡（A31 2026-10-28，sheldon 定：「异体字能处理的就让它处理，处理不了再按印章走」）。
+    遮挡格原先在主循环里直接拒、并被所有放行通道当硬护栏，结果库首位＝整理本字的格也因「候选里有异体」留在待审
+    （vol20–99 遮挡卡 220 格）。开着时：
+    ① R5：默认字＝库首位且库首位覆盖度 ≥ `seal_lib_cov` 时不受 `lane_variant_guard` 限制（放的就是库形，没有把刻本异体改成通用字的风险）；
+    ② `follow_ref`（登记的异体对）不再把遮挡当硬护栏，条件不变；
+    ③ `group_flow`（字组统一流程）不再把遮挡当硬护栏，但遮挡格只在它给出的字＝默认字（整理本字）时放行，给别的字照旧待审
+       （印章底下字形类解法不可靠，不让它单独改字）。
+    都不能处理的，仍按 R5 的印章规则走。放行的格字形一律不进库（`no_glyph_lib`）。关着＝回到 1.24 行为。"""
     lane_variant_guard: bool = True
     """三通道统一的异体护栏（overview#433 vol04 实测）：要放的字与图上字形的线索——现候选字
     `rec.char`、库匹配前 `lane_variant_topk` 名候选——任一是**已知异体对**（语义同、字面不同）时
@@ -679,6 +688,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.follow_ref:
             for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.occluded_variant_first:
+            d.pop("occluded_variant_first", None)      # 缺省值不进 dump
         if isinstance(d, dict) and not self.seal_lib_agree:
             d.pop("seal_lib_agree", None)
             d.pop("seal_lib_cov", None)
@@ -788,7 +799,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.24", unit="cell",   # 1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.25", unit="cell",   # 1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
@@ -1970,7 +1981,7 @@ def _parse_follow_ref(spec: str) -> dict[str, str]:
 
 
 def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict, guard, ctx_char,
-                      rules: dict, cov_min: float, gap_min: float) -> str | None:
+                      rules: dict, cov_min: float, gap_min: float, allow_occluded: bool = False) -> str | None:
     """`follow_ref` 的判据，纯函数（离线回放与线上共用）。→ "fix"（已放行格改回整理本形）、"admit"（待审格放行整理本形）或 None。"""
     other = rules.get(ref) if ref else None
     if other is None or channel == "human":
@@ -1978,6 +1989,9 @@ def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict
     if admit:
         return "fix" if char == other else None
     ds = set(doubts or [])
+    if allow_occluded:                       # `occluded_variant_first`：异体规则先于印章
+        ds.discard("occluded")
+        doubts = [d for d in (doubts or []) if d != "occluded"]
     if "excluded" in ds or "occluded" in ds or ds & _LANE_HARD or ds & _LANE_GARBLE or _hard_blocked(doubts or [], guard):
         return None
     if verdict == "diff" or not cands:
@@ -2014,7 +2028,8 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
             act = follow_ref_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
                                     cands=list(m.candidates or []) if m else [], verdict=getattr(m, "verdict", None),
                                     guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=rules,
-                                    cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap)
+                                    cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap,
+                                    allow_occluded=p.occluded_variant_first)
             if act == "fix":
                 rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref}}
                 rec.char = ref
@@ -2195,6 +2210,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                 vf = next((f for f in forms if variant_pair(f, char)), None)
                 if vf is not None and keep_rare(name, char, lib, co, lev):
                     lev = {**lev, "keep_rare": vf}
+                elif vf is not None and name == "seal" and p.occluded_variant_first and _seal_lib_same(m, char, p.seal_lib_cov):
+                    lev = {**lev, "variant_first": vf}      # 库首位就是默认字：放的是库形，不是把异体改成通用字
                 elif vf is not None:    # 图上可能是刻本异体：别把它改成通用字（#433）
                     rec.evidence = {**ev, "lane_skip": {"lane": name, "why": "cand_variant", "form": vf, "char": char}}
                     continue
@@ -2204,6 +2221,13 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
             rec.doubts = [f"lane_{name}"]
             n += 1
     return n
+
+
+def _seal_lib_same(m, char: str | None, min_cov: float) -> bool:
+    """库首位＝默认字且覆盖度 ≥ min_cov（`occluded_variant_first` ①）。"""
+    top = m.candidates[0] if m and m.candidates else None
+    return bool(top and char and top[0] == char and float(top[1]) >= min_cov
+                and getattr(m, "verdict", None) != "diff")
 
 
 def _seal_page_shifted(out: list, mmap: dict, min_cov: float = 0.9, min_hits: int = 3) -> bool:
@@ -2302,6 +2326,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         if guard in _GROUP_FLOW_OWN_GUARDS:
             guard = None
         ds = [d for d in (r.doubts or []) if isinstance(d, str) and d not in _GROUP_FLOW_OWN_DOUBTS]
+        if p.occluded_variant_first:         # 异体形近规则先于印章：遮挡不当硬护栏（放行后核对见下）
+            ds = [d for d in ds if d != "occluded"]
         return _hard_blocked(ds, guard) or any(d in _GROUP_FLOW_HARD for d in ds)
 
     def cands_of(cid: str):
@@ -2324,11 +2350,25 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                 recs[cid].evidence = {**(recs[cid].evidence or {}), "patch_missing": list(miss[cid])}
                 return None
     canon = ctx.book.canonical_char if ctx is not None else (lambda c: c)
+    # 遮挡格先留底：字组流程放行的字不等于默认字（整理本字）时退回（印章底下字形类解法不可靠）
+    occ_snap = ({r.id: (r, r.admit, r.channel, r.provenance, r.char, list(r.doubts or []), dict(r.evidence or {}))
+                 for r in seq if (r.evidence or {}).get("occluded") and not r.admit}
+                if p.occluded_variant_first else {})
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
                           veto_refs=_coord_refs(ctx, page, {}) if (p.group_flow_lift_ref_guard and ctx is not None) else None)
-    return res.lifted - res.demoted
+    net = res.lifted - res.demoted
+    for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
+        if not r.admit:                       # 没放成：原样退回，免得字组的复核疑问（`_LANE_HARD`）拦掉后面的 R5
+            r.doubts, r.evidence = doubts0, ev0
+            continue
+        if r.char == char0:
+            r.evidence = {**(r.evidence or {}), "occluded_variant_first": "group_flow"}
+            continue
+        r.admit, r.channel, r.provenance, r.char, r.doubts, r.evidence = admit0, ch0, pv0, char0, doubts0, ev0
+        net -= 1
+    return net
 
 
 @lru_cache(maxsize=4)

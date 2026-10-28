@@ -463,3 +463,78 @@ def test_r4_never_lifts_group_flow_contra(doubt):
         wits = [_wit(f"{k}.txt", "前" + chars[:4] + "天" + chars[5:] + "後") for k in "dwy"]
         n, rs = _run(out, lib={5: "天"}, coord=_ids({5: "天"}), wits=wits, lane_coord=True, lane_keep_ref_review=keep)
         assert n == 0 and not rs[5].admit
+
+
+# ── 异体形近规则先于印章（occluded_variant_first，A31 10-28）──────────────────
+
+def _seal_variant(cands, **params):
+    """第 5 格遮挡、默认字＝坐标对位字「旨」；库候选 `cands`。"""
+    chars = BODY[:20]
+    out = _page(chars, {5: dict(doubts=["occluded"], char="旨",
+                                evidence={"occluded": {"density": 9.0, "via": "coord"}})})
+    p = SeedAdmitParams(db_path="x", lane_seal=True, **params)
+    mm = {f"{B}:1:5": NS(char=None, candidates=cands, guard=None)}
+    n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), None)
+    return n, out[0].chars[4]
+
+
+def test_seal_variant_first_admits_when_lib_top_is_default():
+    """库首位＝默认字、候选里有它的异体：异体护栏不拦，R5 放默认字。"""
+    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)])
+    assert n == 1 and r.admit and r.char == "旨" and r.channel == "seal"
+    assert r.evidence["lane"]["variant_first"] == "㫖"
+
+
+def test_seal_variant_first_off_keeps_old_guard():
+    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)], occluded_variant_first=False)
+    assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_seal_variant_first_needs_lib_top_equal_and_cov():
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])        # 库首位是异体：形说不准，照旧送审
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)])        # 覆盖度 < seal_lib_cov
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
+def test_occluded_variant_first_default_not_in_dump():
+    assert "occluded_variant_first" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", occluded_variant_first=False).model_dump()["occluded_variant_first"] is False
+
+
+def test_follow_ref_decide_allows_occluded_only_when_variant_first():
+    from open_guji_cv.steps.seed_admit import follow_ref_decide
+    kw = dict(admit=False, channel=None, char="盖", doubts=["occluded"], ref="盖", cands=[("蓋", 0.97), ("善", 0.5)],
+              verdict=None, guard=None, ctx_char=None, rules={"盖": "蓋"}, cov_min=0.92, gap_min=0.005)
+    assert follow_ref_decide(**kw) is None
+    assert follow_ref_decide(**kw, allow_occluded=True) == "admit"
+
+
+def _flow_occluded(monkeypatch, lifted_char, **params):
+    """字组流程在遮挡格上放行 `lifted_char` 时，`_group_flow_pass` 的核对（`occluded_variant_first` ③）。"""
+    from types import SimpleNamespace as _NS
+    import open_guji_cv.groups.flow as flow
+    from open_guji_cv.steps.seed_admit import _group_flow_pass
+    out = _page(BODY[:10], {3: dict(doubts=["occluded"], char="黃", evidence={"occluded": {"density": 9.0, "via": "coord"}})})
+
+    def fake(seq, amap, cands_of, blocked, cfg, **kw):
+        rec = next(r for r in seq if r.slot == 3)
+        assert not blocked(rec) if params.get("occluded_variant_first", True) else blocked(rec)
+        rec.admit, rec.channel, rec.provenance, rec.char, rec.doubts = True, "group_flow", "context", lifted_char, []
+        return _NS(lifted=1, demoted=0)
+    monkeypatch.setattr(flow, "group_flow_pass", fake)
+    p = SeedAdmitParams(db_path="x", **params)
+    net = _group_flow_pass(p, out, {}, {}, None, 1, {})
+    return net, out[0].chars[2]
+
+
+def test_group_flow_occluded_admits_only_when_char_is_default(monkeypatch):
+    net, r = _flow_occluded(monkeypatch, "黃")
+    assert net == 1 and r.admit and r.char == "黃" and r.evidence["occluded_variant_first"] == "group_flow"
+    net, r = _flow_occluded(monkeypatch, "黄")            # 给了别的字：退回待审，字和疑问原样
+    assert net == 0 and not r.admit and r.char == "黃" and r.doubts == ["occluded"] and r.channel is None
+
+
+def test_group_flow_occluded_still_blocked_when_off(monkeypatch):
+    net, r = _flow_occluded(monkeypatch, "黃", occluded_variant_first=False)
+    assert r.admit      # 关着时 blocked() 为真（fake 里断言过），这里的放行是 fake 硬放的，不退回

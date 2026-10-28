@@ -77,12 +77,16 @@ def test_gates():
            2: ([("切", 0.97), ("幼", 0.96)],),         # 首位不在对里
            3: ([("幼", 0.960), ("切", 0.958)],),       # 领先对外不够
            4: ([("幼", 0.97)], "diff"),                # 库判 diff
-           5: ([("幼", 0.97)],),                       # occluded
+           5: ([("幼", 0.97)],),                       # occluded（`occluded_variant_first` 关着时才是门）
            6: ([("幼", 0.97)],)}                       # 表外整理本字
     cells = {s: {} for s in lib}
     cells[5] = {"doubts": ["occluded"]}
-    n, r = _run(cells, lib, coord={1: "㓜", 2: "㓜", 3: "㓜", 4: "㓜", 5: "㓜", 6: "幻"})
+    coord = {1: "㓜", 2: "㓜", 3: "㓜", 4: "㓜", 5: "㓜", 6: "幻"}
+    n, r = _run(cells, lib, coord=coord, occluded_variant_first=False)
     assert n == 0 and all(not x.admit for x in r.values())
+    # 异体形近规则先于印章（A31 10-28，缺省开）：遮挡格照样走这张表，别的门不变
+    n, r = _run(cells, lib, coord=coord)
+    assert n == 1 and r[5].admit and r[5].char == "㓜" and not any(r[s].admit for s in (1, 2, 3, 4, 6))
 
 
 def test_ctx_guard_ref_needs_ctx_in_pair():
