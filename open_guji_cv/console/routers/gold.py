@@ -8,14 +8,11 @@
 """
 from __future__ import annotations
 
-from pathlib import Path
-
-import cv2
 from fastapi import APIRouter, Depends
 
 from .. import deps
 from ..auth import require_admin
-from open_guji_cv.console_api import imread as cv_imread
+from ..cli import run_guji
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -42,37 +39,27 @@ def api_gold_import(shard: str, book: str | None = None, pages: str | None = Non
                     stratum: str | None = None, include_uncertain: bool = False,
                     why: str = "", dry_run: bool = True) -> dict:
     """workspace 裁决表 → 测试集仓：唯一往 dataset 写人裁数据的入口，**默认 dry_run**，
-    看清清单再 `dry_run=false`。同 CLI `guji gold import`。"""
-    from open_guji_cv.console_api import ImportFilter, import_to_dataset, parse_pages
-    flt = ImportFilter(book=book, pages=parse_pages(pages), stratum=stratum,
-                       include_uncertain=include_uncertain)
-    return import_to_dataset(shard, deps.verdict_store(), deps.gold_store(), flt,
-                             why=why, dry_run=dry_run).to_dict()
+    看清清单再 `dry_run=false`。走命令行 `guji gold import`（写测试集仓，设计第五节）。"""
+    args = ["gold", "import", shard, "--why", why]
+    for flag, v in (("--book", book), ("--pages", pages), ("--stratum", stratum)):
+        if v:
+            args += [flag, v]
+    if include_uncertain:
+        args.append("--include-uncertain")
+    if dry_run:
+        args.append("--dry-run")
+    return run_guji(*args)
 
 
 
 @router.post("/api/gold/{shard:path}/migrate")
 def api_gold_migrate(shard: str, dry_run: bool = False) -> dict:
-    """旧载体 → items.jsonl。不删旧文件，两边并存。"""
-    return deps.gold_store().migrate(shard, dry_run=dry_run)
+    """旧载体 → items.jsonl。不删旧文件，两边并存。走命令行 `guji gold migrate`。"""
+    return run_guji("gold", "migrate", shard, *(["--dry-run"] if dry_run else []))
 
 
 
 @router.post("/api/gold/{shard:path}/drift")
 def api_gold_drift(shard: str, apply: bool = False) -> dict:
-    """图像指纹漂移检查：产物重生后哪些金标还成立。"""
-    from open_guji_cv.console_api import check_shard, mark_drifted
-    root = Path(__file__).resolve().parent.parent.parent
-
-    def image_of(it):
-        p = (it.input.get("input") or {}).get("column_image")
-        if not p:
-            return None
-        f = root / str(p).replace("open-guji-cv ", "")
-        return cv_imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
-
-    rep = check_shard(shard, deps.gold_store().list(shard), image_of)
-    out = rep.to_dict()
-    if apply:
-        out["marked_stale"] = mark_drifted(deps.gold_store(), shard, rep)
-    return out
+    """图像指纹漂移检查：产物重生后哪些金标还成立。走命令行 `guji gold drift --json`。"""
+    return run_guji("gold", "drift", shard, "--json", *(["--apply"] if apply else []))

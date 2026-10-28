@@ -25,6 +25,9 @@ _PKG = "open_guji_cv"
 #: 对外名字 → (cv 内模块, 属性名)。属性名为 None 表示导出模块本身。
 #: 加名字前先想：控制台真的要在进程里做这件事吗？会写盘或耗时的改走命令行（设计第五节）。
 _EXPORTS: dict[str, tuple[str, str | None]] = {
+    # api（pipeline 公开面）：控制台启动时核契约版本
+    "CONTRACT_VERSION": ("core.contract", 'CONTRACT_VERSION'),
+    "version_info": ("api", 'version_info'),
     # clustering.cnn_candidates
     "cnn_candidates": ("clustering.cnn_candidates", None),
     # clustering.confusables
@@ -112,11 +115,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "NotFound": ("errors", 'NotFound'),
     "ProductMissing": ("errors", 'ProductMissing'),
     "Unsupported": ("errors", 'Unsupported'),
-    # eval
-    "run_eval": ("eval", 'run_eval'),
     # eval.colgeom
     "current_geom": ("eval.colgeom", 'current_geom'),
-    "stamp": ("eval.colgeom", 'stamp'),
     # eval.llm_online_accuracy
     "compute_report": ("eval.llm_online_accuracy", 'compute_report'),
     "load_online_calls": ("eval.llm_online_accuracy", 'load_online_calls'),
@@ -175,15 +175,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # gates.query
     "GATES": ("gates.query", 'GATES'),
     "gate_summary": ("gates.query", 'gate_summary'),
-    # gold.drift
-    "check_shard": ("gold.drift", 'check_shard'),
-    "mark_drifted": ("gold.drift", 'mark_drifted'),
     # gold.store
     "GoldStore": ("gold.store", 'GoldStore'),
-    # gold.transfer
-    "ImportFilter": ("gold.transfer", 'ImportFilter'),
-    "import_to_dataset": ("gold.transfer", 'import_to_dataset'),
-    "parse_pages": ("gold.transfer", 'parse_pages'),
     # products.cache
     "ImageCache": ("products.cache", 'ImageCache'),
     # products.store
@@ -242,8 +235,6 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "invert_cards": ("review.invert_cards", None),
     # review.jiazhu_cards
     "jiazhu_segments": ("review.jiazhu_cards", 'jiazhu_segments'),
-    # review.label_batches
-    "is_label_batch": ("review.label_batches", 'is_label_batch'),
     # review.shadow
     "shadow_sig": ("review.shadow", 'shadow_sig'),
     # review.slot_count_cards

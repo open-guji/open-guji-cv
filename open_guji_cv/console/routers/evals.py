@@ -38,8 +38,10 @@ def api_evals() -> list[dict]:
 
 @router.post("/api/evals/{eval_id}/run", dependencies=[Depends(require_admin)])
 def api_eval_run(eval_id: str, timeout: int = 900) -> dict:
-    from open_guji_cv.console_api import run_eval
-    return run_eval(eval_id, timeout=timeout).to_dict()
+    """跑一个评测器：走命令行 `guji eval run --json`（跑得久，设计第五节）。"""
+    from ..cli import run_guji
+    reports = run_guji("eval", "run", eval_id, "--timeout", str(timeout), "--json", timeout=timeout + 60)
+    return reports[0]
 
 
 

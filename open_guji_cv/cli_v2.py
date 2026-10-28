@@ -1492,9 +1492,15 @@ def cmd_gold(args) -> None:
             return cv_imread(str(f), cv2.IMREAD_GRAYSCALE) if f.exists() else None
 
         rep = check_shard(args.shard, items, image_of)
+        out = rep.to_dict()
+        if args.apply:
+            out["marked_stale"] = mark_drifted(store, args.shard, rep)
+        if getattr(args, "json", False):
+            print(json.dumps(out, ensure_ascii=False))
+            return
         print(json.dumps(rep.to_dict(), ensure_ascii=False, indent=1))
         if args.apply:
-            print(f"标 stale: {mark_drifted(store, args.shard, rep)} 条")
+            print(f"标 stale: {out['marked_stale']} 条")
 
 
 def cmd_eval(args) -> None:
@@ -3535,6 +3541,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
                    help="分片名；rebuild 时是批次名（留空=全部批次）")
     p.add_argument("--dry-run", action="store_true", help="migrate / import：只报数不写")
     p.add_argument("--apply", action="store_true", help="drift：把漂移条目标成 stale")
+    p.add_argument("--json", action="store_true", help="drift：只出一个 JSON（含 marked_stale），控制台调用用")
     p.add_argument("--verdicts", action="store_true",
                    help="shards / show 看 workspace 裁决表而不是测试集仓")
     # import：裁决表 → 测试集的过滤条件（都可省；省了就是整个分片的 active 条目）
