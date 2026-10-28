@@ -112,11 +112,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "NotFound": ("errors", 'NotFound'),
     "ProductMissing": ("errors", 'ProductMissing'),
     "Unsupported": ("errors", 'Unsupported'),
-    # eval
-    "run_eval": ("eval", 'run_eval'),
     # eval.colgeom
     "current_geom": ("eval.colgeom", 'current_geom'),
-    "stamp": ("eval.colgeom", 'stamp'),
     # eval.llm_online_accuracy
     "compute_report": ("eval.llm_online_accuracy", 'compute_report'),
     "load_online_calls": ("eval.llm_online_accuracy", 'load_online_calls'),
@@ -175,15 +172,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # gates.query
     "GATES": ("gates.query", 'GATES'),
     "gate_summary": ("gates.query", 'gate_summary'),
-    # gold.drift
-    "check_shard": ("gold.drift", 'check_shard'),
-    "mark_drifted": ("gold.drift", 'mark_drifted'),
     # gold.store
     "GoldStore": ("gold.store", 'GoldStore'),
-    # gold.transfer
-    "ImportFilter": ("gold.transfer", 'ImportFilter'),
-    "import_to_dataset": ("gold.transfer", 'import_to_dataset'),
-    "parse_pages": ("gold.transfer", 'parse_pages'),
     # products.cache
     "ImageCache": ("products.cache", 'ImageCache'),
     # products.store
@@ -242,8 +232,6 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "invert_cards": ("review.invert_cards", None),
     # review.jiazhu_cards
     "jiazhu_segments": ("review.jiazhu_cards", 'jiazhu_segments'),
-    # review.label_batches
-    "is_label_batch": ("review.label_batches", 'is_label_batch'),
     # review.shadow
     "shadow_sig": ("review.shadow", 'shadow_sig'),
     # review.slot_count_cards

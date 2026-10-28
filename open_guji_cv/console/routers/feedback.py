@@ -14,12 +14,11 @@ from pydantic import BaseModel
 
 from .. import deps
 from ..auth import Identity, require_admin, require_reviewer
+from ..cli import run_guji
 from ..errors import maps_http
 from open_guji_cv.console_api import enrich_events as _anchor_events
-from open_guji_cv.console_api import route_and_consume
 from open_guji_cv.console_api import make_event, replay_key
 from open_guji_cv.console_api import harvest_text
-from open_guji_cv.console_api import RouteTable
 from open_guji_cv.console_api import Batch, render_registry_markdown
 from open_guji_cv.console_api import write_events
 
@@ -176,9 +175,8 @@ def api_harvest(batch_id: str, req: HarvestIn) -> dict:
 
 @router.post("/api/batches/{batch_id}/route", dependencies=[Depends(require_admin)])
 def api_route(batch_id: str, dry_run: bool = False) -> dict:
-    table = RouteTable.load(deps.event_log().root / "routes.yaml")
-    out = route_and_consume(deps.event_log(), batch_id, table, deps.verdict_store(),
-                            dry_run=dry_run)
+    """按路由表消费一批事件：走命令行 `guji events route`（会写裁决表，设计第五节）。"""
+    out = run_guji("events", "route", batch_id, *(["--dry-run"] if dry_run else []))
     b = deps.batch_store().get(batch_id)
     if b:
         deps.batch_store().refresh_counts(b, deps.event_log())
