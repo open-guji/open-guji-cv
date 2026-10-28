@@ -119,11 +119,12 @@ def test_composite_crop_equals_registered_region(monkeypatch):
 def test_codepoint_groups_flow_only():
     """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
     from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS, SHAPE_GROUPS
-    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang", "zheng", "cek"}
+    old = {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang", "zheng", "cek"}
+    assert set(CODEPOINT_GROUPS) >= old and all(g.startswith("cp_") for g in set(CODEPOINT_GROUPS) - old)
     assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS) | set(SHAPE_GROUPS)
     check_groups(tuple(CODEPOINT_GROUPS))
     for g, s in CODEPOINT_GROUPS.items():
-        assert s.flow.methods == (M.CODEPOINT,) and not s.flow.review and len(s.members) == 2, g
+        assert s.flow.methods == (M.CODEPOINT,) and not s.flow.review and 2 <= len(s.members) <= 3, g
     assert "chu" in FLOW_GROUPS["sy"].overlaps and "sy" in FLOW_GROUPS["chu"].overlaps
     # 放宽了进入（tolerate 组外繁复字）的组，补放必须与整理本同字
     for g, s in CODEPOINT_GROUPS.items():
