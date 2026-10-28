@@ -29,6 +29,8 @@ def check(eng, steps: list[str]) -> list[str]:
             out.append("没装 torch：Step3 row_segment 的切点裁判（cut_judge=unet）会悄悄退回旧规则，产物和装了 torch 的不一样")
         elif not Path(JUDGE_CKPT).is_file():
             out.append(f"缺切点裁判权重 {JUDGE_CKPT}：Step3 会悄悄退回旧规则")
+    if "line_ocr" in steps and not _have("paddleocr"):
+        out.append("没装 paddleocr：自由版式 Step2-b line_ocr 跑不了，Step3 cell_cut 只用规则切字（装 `.[cpu]`）")
     if "rare_candidates" in steps:
         if not _have("torch"):
             out.append("没装 torch：Step5-b rare_candidates 没有 embedding 候选")

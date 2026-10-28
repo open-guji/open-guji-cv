@@ -5,6 +5,10 @@
 ruled 块的列（Step2 给了横界栏 `breaks`，1.1 起）先在横界栏处断开，各段分别分区、切字，字框不跨界栏；
 ruled 块里界栏（横、竖）的墨先抠掉，不当字。
 1.2 起块在分栏线处相接（block_detect 1.5，块边就是线）：每列上下两端 `edge_band` 内的横线墨先抠掉，分栏线不当字。
+1.4 起按栏定类型：按字形认出了大字、但大字行不到有墨行一半的栏是混排栏（大字夹双行小注），改用 `segment_mixed` 按字形认大字；
+全大字栏照旧逐行分区（窄字不居中也不够宽，按字形认会当成小注）。
+同在 1.4（Sheldon 10-28「考虑用识别软件作为辅助」）：有 Step2-b `line_ocr` 的识别行时，非 ruled 块的列改走
+`segment_ocr`——识别行定区（大字行、并排的小注行）和每行字数，切点照旧按墨，识别漏掉的段落交给上面的规则。
 """
 
 from __future__ import annotations
@@ -13,12 +17,13 @@ import cv2
 import numpy as np
 from pydantic import BaseModel
 
-from ..core.anchor import bbox_tl_to_tr, x_tr_to_tl
+from ..core.anchor import bbox_tl_to_tr, bbox_tr_to_tl
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
-from ..products.kinds.free_layout import ColumnRec, FreeCellRec, FreeCells, FreeColumns
+from ..products.kinds.free_layout import ColumnRec, FreeCellRec, FreeCells, FreeColumns, FreeOcrLines
 from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, rule_vlines
-from ..utils.free_cells import note_line_width, segment_column, straighten
+from ..utils.free_cells import (big_share, column_span, note_line_width, seam_rows, segment_column, segment_mixed,
+                                 segment_ocr, straighten)
 from ..utils.free_rectify import rectify_gray
 
 
@@ -30,16 +35,8 @@ class CellCutParams(BaseModel):
     break_pad: int = 6             # 横界栏上下各让这么多（界栏本身的墨不进字框）
     edge_band: int = 25            # 列上下两端这么高内的长横墨（分栏线、框线）不当字
     edge_line: int = 150           # 横墨连续这么长才算线（px）
-
-
-def _seam_rows(col: ColumnRec, W: int) -> tuple[np.ndarray, np.ndarray]:
-    """采样的缝 → 逐行左右缝 x（左上原点，相对列所在块的 y0）。"""
-    h = int(col.y1 - col.y0)
-    ys = np.r_[np.arange(0, h, col.step), h - 1][:len(col.right)]
-    rows = np.arange(h)
-    right = np.interp(rows, ys, [x_tr_to_tl(x, W) for x in col.right])
-    left = np.interp(rows, ys, [x_tr_to_tl(x, W) for x in col.left])
-    return np.round(left).astype(int), np.round(right).astype(int)
+    mixed_below: float = 0.5       # 1.4 起：按字形认出的大字行占有墨行不到这么多的栏是混排栏（大字夹小注），按字形切
+    use_ocr: bool = True           # 1.4 起：有 Step2-b 识别行就用它定区、定字数
 
 
 def _pieces(col: ColumnRec, h: int, pad: int) -> list[tuple[int, int]]:
@@ -48,11 +45,33 @@ def _pieces(col: ColumnRec, h: int, pad: int) -> list[tuple[int, int]]:
     return [(a, b) for a, b in zip(edges[::2], edges[1::2]) if b - a > 2 * pad]
 
 
+def _ocr_lines(ctx: RunContext, page: int) -> FreeOcrLines | None:
+    """可选上游：没跑 Step2-b（没装识别软件）就 None。"""
+    try:
+        return ctx.product("free_ocr_lines", page)
+    except Exception:
+        return None
+
+
+def _col_lines(ocr: FreeOcrLines, col: ColumnRec, off: np.ndarray, xa: int, y0: int, W: int) -> list[tuple]:
+    """这一列的识别行 → 列图坐标（拉直后：逐行减去左缝平移，取行框中线处）。"""
+    out = []
+    for ln in ocr.lines:
+        if ln.col != col.col:
+            continue
+        x0, ya, x1, yb = bbox_tr_to_tl(ln.box, W)
+        ya, yb = int(ya) - y0, int(yb) + 1 - y0
+        dx = int(off[min(max((ya + yb) // 2, 0), len(off) - 1)]) + xa
+        out.append((int(x0) - dx, ya, int(x1) + 1 - dx, yb, ln.text, ln.score))
+    return out
+
+
 @register_step
 class CellCutStep(Step):
     spec = StepSpec(
-        id="cell_cut", title="Step3 列内切字（自由版式）", version="1.3", unit="page",
+        id="cell_cut", title="Step3 列内切字（自由版式）", version="1.4", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_cells",), params=CellCutParams,
+        optional_consumes=("free_ocr_lines",), optional_consumes_when=(("free_ocr_lines", "use_ocr"),),
         code_deps=("open_guji_cv.utils.free_cells", "open_guji_cv.utils.free_columns",
                    "open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify"),
         parallel_safe=True,
@@ -79,9 +98,8 @@ class CellCutStep(Step):
         cols = []
         for col in fc.columns:
             y0, y1 = int(col.y0), int(col.y1)
-            left, right = _seam_rows(col, W)
-            xa = max(0, int(left.min()) - 4)
-            xb = min(W, int(right.max()) + 5)
+            left, right = seam_rows(col, W)
+            xa, xb = column_span(col, W)
             src = (ink_t if col.block in ruled else ink)[y0:y1, xa:xb].copy()
             e = min(p.edge_band, (y1 - y0) // 4)
             for a, b in ((0, e), (y1 - y0 - e, y1 - y0)):
@@ -91,10 +109,26 @@ class CellCutStep(Step):
         # 两遍：先量页上双行小注的字线墨宽（小字字身），再拿它分大字与单行小注
         widths = [w for _, cimg, _, _, _, pieces in cols for a, b in pieces for w in note_line_width(cimg[a:b])]
         small_em = float(np.median(widths)) if len(widths) >= 6 else None
+        # 按栏定类型：全大字栏照逐行分区切；混排栏（大字夹小注）按字形认大字（1.4，Sheldon 10-28）
+        share: dict[int, list[int]] = {}
+        for col, cimg, _, _, _, pieces in cols:
+            acc = share.setdefault(col.block, [0, 0])
+            for a, b in pieces:
+                big, tot = big_share(cimg[a:b])
+                acc[0] += big
+                acc[1] += tot
+        ocr = _ocr_lines(ctx, page) if p.use_ocr else None
+        mixed = {blk for blk, (big, tot) in share.items() if blk not in ruled and 0 < big < p.mixed_below * tot}
         for col, cimg, off, xa, y0, pieces in cols:
             order = zone = 0
             for k, (a, b) in enumerate(pieces):
-                found = segment_column(cimg[a:b], small_em=small_em, big_ratio=p.big_ratio)
+                lines = _col_lines(ocr, col, off, xa, y0 + a, W) if ocr is not None and col.block not in ruled else []
+                if lines:
+                    found = segment_ocr(cimg[a:b], lines)
+                elif col.block in mixed:
+                    found = segment_mixed(cimg[a:b])
+                else:
+                    found = segment_column(cimg[a:b], small_em=small_em, big_ratio=p.big_ratio)
                 for c in found:
                     order += 1
                     ym = a + (c.y0 + c.y1) // 2
