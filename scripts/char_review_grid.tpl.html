@@ -46,7 +46,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <header>
   <div><h1>字形快审表</h1><div class="sub" id="sub"></div></div>
   <div class="bar" title="已审页数"><i id="bar"></i></div>
-  <div class="stat" id="stat"></div>
+  <div class="stat" id="stat"></div><div class="stat" id="sync"></div>
   <div class="ctl">
     <button id="prev">上一页</button><span class="stat" id="pg"></span><button id="next" class="primary">本页没问题，下一页</button>
     <button id="export">导出</button>
@@ -55,7 +55,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <p class="hint">每格是一张字块图配它的字（殿本字形库认的字 ＝ 整理本的字）。默认全对，只点不对的格（变红）。点「下一页」就算这一页审完，导出时只带已审完的页。</p>
 <main><div class="grid" id="grid"></div>
 <div class="foot"><button id="prev2">上一页</button><button id="next2" class="primary">本页没问题，下一页</button></div></main>
-<dialog id="dlg"><p>审完结果（复制下面的 JSON 发回给我）：</p><textarea id="out" readonly></textarea><p><button id="copy" class="primary">复制</button> <button id="close">关闭</button></p></dialog>
+<dialog id="dlg"><p>结果已自动存到后台，不用发给我。下面的 JSON 只是备份：</p><textarea id="out" readonly></textarea><p><button id="copy" class="primary">复制</button> <button id="close">关闭</button></p></dialog>
 <script>
 const D=/*DATA*/null;
 const KEY="char-grid-"+D.book+"-"+D.per_page;
@@ -64,6 +64,33 @@ let st={bad:{},seen:0,page:0};
 try{const s=localStorage.getItem(KEY);if(s)st=Object.assign(st,JSON.parse(s))}catch(e){}
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
 const $=id=>document.getElementById(id);
+// 后台存档：每审完一页写一份 review/b<册>_p<页>；我用 scripts/pull_char_review.py 直接取，不用复制 JSON
+let DB=null;
+function pageDoc(pi){
+  const ts=D.tiles.slice(pi*P,(pi+1)*P);
+  return {book:D.book,page:pi,bad:ts.filter(t=>st.bad[t[0]]).map(t=>t[0]),ok:ts.filter(t=>!st.bad[t[0]]).map(t=>[t[0],t[1]])};
+}
+async function saveRemote(pi){
+  if(!DB){$("sync").textContent="未联网存档（只存在本浏览器）";return}
+  try{await DB.doc("review/b"+D.book+"_p"+pi).set(pageDoc(pi));$("sync").textContent="已存后台 · 第 "+(pi+1)+" 页"}
+  catch(e){$("sync").textContent="后台存档失败："+(e.code||e.message)}
+}
+async function loadRemote(){
+  try{
+    DB=await claude.use("db"); if(!DB)return;
+    const snap=await DB.collection("review").get();
+    let n=0;
+    for(const d of snap.docs){const v=d.data();if(!v||v.book!==D.book)continue;
+      const t=D.tiles.slice(v.page*P,(v.page+1)*P);for(const x of t)delete st.bad[x[0]];
+      for(const id of v.bad)st.bad[id]=1;n=Math.max(n,v.page+1)}
+    if(n>st.seen){st.seen=n;st.page=Math.min(n,NP-1)}
+    // 本机已审但后台还没有的页，补传一次
+    const have=new Set(snap.docs.map(d=>d.data()).filter(v=>v&&v.book===D.book).map(v=>v.page));
+    let up=0;for(let i=0;i<st.seen;i++)if(!have.has(i)){await saveRemote(i);up++}
+    if(up)$("sync").textContent="已补传 "+up+" 页到后台";
+    render();
+  }catch(e){}
+}
 function render(){
   st.page=Math.min(Math.max(0,st.page),NP-1);
   const g=$("grid");g.textContent="";
@@ -85,7 +112,7 @@ function render(){
   for(const id of ["next","next2"]){$(id).textContent=st.page===NP-1?"本页没问题，完成":"本页没问题，下一页"}
   save();
 }
-function next(){st.seen=Math.max(st.seen,st.page+1);if(st.page<NP-1)st.page++;else{exportNow()}render();scrollTo(0,0)}
+function next(){saveRemote(st.page);st.seen=Math.max(st.seen,st.page+1);if(st.page<NP-1)st.page++;else{exportNow()}render();scrollTo(0,0)}
 function prev(){st.page--;render();scrollTo(0,0)}
 function exportNow(){
   const seenTiles=D.tiles.slice(0,st.seen*P);
@@ -100,5 +127,5 @@ $("export").onclick=exportNow;
 $("close").onclick=()=>$("dlg").close();
 $("copy").onclick=async()=>{const t=$("out");try{await navigator.clipboard.writeText(t.value)}catch(e){t.select()}$("copy").textContent="已复制"};
 addEventListener("keydown",e=>{if(e.target.tagName==="TEXTAREA")return;if(e.key==="ArrowRight")next();if(e.key==="ArrowLeft"&&st.page>0)prev()});
-render();
+render();loadRemote();
 </script>
