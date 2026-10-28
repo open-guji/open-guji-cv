@@ -255,15 +255,21 @@ def block_vrules(vs: list[Rule], x0: int, y0: int, x1: int, y1: int, *,
                   if r.n_strips >= min_votes and r.lo <= ym <= r.hi and x0 + side < r.at(ym) < x1 - side)
 
 
-def thin_vlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int = 41) -> np.ndarray:
+def thin_vlines(gray: np.ndarray, bg_win: int = 51, width: int = 9, length: int = 41,
+                bridge: int = 0) -> np.ndarray:
     """细竖线的强度图（0–1）：比背景暗多少，只留「比 width 窄、比 length 长」的竖向墨。
 
     浅界行、版心线常常淡到过不了墨阈（`ink_mask`），这里不取阈：横向开运算减掉粗笔画，
-    再竖向开运算只留连续的竖线段。按列取均值就是「这一 x 上有没有竖线」。"""
+    再竖向开运算只留连续的竖线段。按列取均值就是「这一 x 上有没有竖线」。
+    `bridge` > 0：虚线界栏（yxat 35 页起，一段段的短划）——竖段只要长过 length，再竖向闭运算把
+    bridge 以内的断口接上。"""
     bg = cv2.medianBlur(gray, bg_win).astype(np.float32) + 1.0
     d = np.clip(1.0 - gray.astype(np.float32) / bg, 0.0, 1.0)
     th = d - cv2.morphologyEx(d, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (width, 1)))
-    return cv2.morphologyEx(th, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, length)))
+    out = cv2.morphologyEx(th, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (1, length)))
+    if bridge:
+        out = cv2.morphologyEx(out, cv2.MORPH_CLOSE, cv2.getStructuringElement(cv2.MORPH_RECT, (1, bridge)))
+    return out
 
 
 SPINE_MODES = ("auto", "left", "right", "odd_left", "odd_right", "none")

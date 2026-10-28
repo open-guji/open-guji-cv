@@ -6,7 +6,10 @@
 ## [未发版]
 
 - 规则 A 坐标对位那支放宽 `near_form`（A24「复盘形近护栏 N 类」，10-28）：整理本字（坐标对位字）在库里刻例 ≤2、BMP 字、不在册 `codepoints` 里、5-b 首位逐字等于它、库候选里没有 cov ≥0.96 的对手（cov ≥0.80 的候选也不是它的异体）时，`near_form` 疑问不再拦 `rare_ref`（库前三名里的形近字只是最像的邻居，不是真对手）。`never_match`／`conflict` 护栏与其余硬疑问照拦。开关 `seed_admit.rare_ref_nf`（缺省开，`rare_ref_nf_max_n`／`rare_ref_nf_cov` 调门槛），放行格 `evidence.rare_ref.near_form_relaxed`。依据：5,980 条人裁金标上符合条件的坐标对位格 83 格 0 错；95 册 N 类 536 格所在页真回放（seed_admit 重跑）新放行 59 格，逐格看图无错放。`seed_admit` 的 `code_hash` 变，各册 `seed_admit` 及下游判过期。PATCH。
+- 字组 `cek` 策䇿（码位组，暂归一到 䇿，登记 `PROVISIONAL`）：策→䇿 是 sheldon 10-26 定的暂归一，但库里 策／䇿 cov 并列（< same 档 0.996）、文意 margin≈0，整理本字归一成 䇿 又不在任何字组，全册 244 格送审（分类 V）。册配置 `group_flow` 加 `cek` 后库首位与整理本同在组里就放行，字落 䇿。只动 `groups/registry.py`，不动 Step。MINOR。
+- 36 个 `cp_*` 码位组（A24 压低组外异体对送审第 1 轮，10-28）：sheldon 在 `config/codepoints.yaml` 早定了用哪个字（寄𭔃 急𢚩 耶𫆀 尋㝷 黎𥠖 寶寳 泰㤗 步歩 …）、但没建码位组的异体对，流水线见「库首位与整理本是异体对」一律送审。加 `CODEPOINT_GROUPS`／`PROVISIONAL` 各 36 行，各册 `group_flow` 加了才生效；vol01–99 main 包回放补放 268 格，逐格看图 0 错。只动 `registry`，不动 Step。
 - 标 main 之后的插件钩子：`guji products pack promote`／`pack push --main` 标完 main，调入口点组 `guji.post_promote` 的函数 `(book, label, ws)`；manager 用它自动重出线上待审单（取代 2 小时轮询定时任务）。不动 Step。PATCH。
+- 自由版式 `keben_free` 第四轮（Sheldon 审 yxat 9–40 页）：`block_detect` 1.8 双线框取细内框、框线改折线、人标分栏线一起拉成水平（分段 Coons）；`column_trace` 1.6 认虚线界栏、有界栏的块切线顺着界栏走，走缝离字留空（笔画旁 4px 有代价、小墨点便宜），变缝幅度 0.08→0.15 列距。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 第三轮（Sheldon 审 yxat 17–36 页）：`block_detect` 1.7 按框线把页面拉正（框四边量内沿拟二次曲线、Coons 曲面片映成矩形，产物加 `warp`，三种产物坐标都在拉正后的图上），同一条线的重叠段也连起来；`column_trace` 1.5 列宽罚 1→4（空缝之间按均匀挑）；`cell_cut` 1.3 在拉正后的图上切。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 往下自审 yxat 17–36 页：`block_detect` 1.6 框线吸到框线墨带内沿（粗框线、双线框不再吃掉贴框的标题列），块边离内沿 12→2px；首尾相接的断线段连成一条再找框（弯框线认不出时不再退到纸边）。只有 keben_free 管线用（yxat 一册）。
 - `border_detect` 1.12：三段折线拟合加一道验收——拟出的折线沿线 ±12px 的墨密度比直线高出 0.08 以上就判折点被字的竖笔勾走，这条线退回直线（单边判：真弯页上是直线压字，不受影响）。新图源（siku-qiefen-v2）界行淡而断，整页 w80 中位 40+ 全进折线，A31 整列待审清单里 vol70 p77、vol59 p58、vol24 p67、vol40 p34 九条线中段齐刷刷平移 45–88px 压进字里，整列认字错。vol70／vol59 全册 Step1–3 对比：变 17 页，看图全是改好或持平（列格位不变、只是格框回到字上），vol59 p1 版心列底多一个空格。`border_detect` 的 `code_hash` 变，下游判过期。PATCH。
