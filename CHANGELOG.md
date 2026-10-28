@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 规则 A 坐标对位那支放宽 `near_form`（A24「复盘形近护栏 N 类」，10-28）：整理本字（坐标对位字）在库里刻例 ≤2、BMP 字、不在册 `codepoints` 里、5-b 首位逐字等于它、库候选里没有 cov ≥0.96 的对手（cov ≥0.80 的候选也不是它的异体）时，`near_form` 疑问不再拦 `rare_ref`（库前三名里的形近字只是最像的邻居，不是真对手）。`never_match`／`conflict` 护栏与其余硬疑问照拦。开关 `seed_admit.rare_ref_nf`（缺省开，`rare_ref_nf_max_n`／`rare_ref_nf_cov` 调门槛），放行格 `evidence.rare_ref.near_form_relaxed`。依据：5,980 条人裁金标上符合条件的坐标对位格 83 格 0 错；95 册 N 类 536 格所在页真回放（seed_admit 重跑）新放行 59 格，逐格看图无错放。`seed_admit` 的 `code_hash` 变，各册 `seed_admit` 及下游判过期。PATCH。
 - 标 main 之后的插件钩子：`guji products pack promote`／`pack push --main` 标完 main，调入口点组 `guji.post_promote` 的函数 `(book, label, ws)`；manager 用它自动重出线上待审单（取代 2 小时轮询定时任务）。不动 Step。PATCH。
 - 自由版式 `keben_free` 第三轮（Sheldon 审 yxat 17–36 页）：`block_detect` 1.7 按框线把页面拉正（框四边量内沿拟二次曲线、Coons 曲面片映成矩形，产物加 `warp`，三种产物坐标都在拉正后的图上），同一条线的重叠段也连起来；`column_trace` 1.5 列宽罚 1→4（空缝之间按均匀挑）；`cell_cut` 1.3 在拉正后的图上切。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 往下自审 yxat 17–36 页：`block_detect` 1.6 框线吸到框线墨带内沿（粗框线、双线框不再吃掉贴框的标题列），块边离内沿 12→2px；首尾相接的断线段连成一条再找框（弯框线认不出时不再退到纸边）。只有 keben_free 管线用（yxat 一册）。

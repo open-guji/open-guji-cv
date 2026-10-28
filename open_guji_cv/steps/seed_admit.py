@@ -380,6 +380,18 @@ class SeedAdmitParams(BaseModel):
     坐标对位字或库首位落在任一字组（`groups.registry`）里不放（归字组流程判）；库前
     `lane_variant_topk` 名候选里有坐标对位字的异体不放（同 `lane_variant_guard`，免得把刻本异体改成通用字）。
     整页没锚上（现役对位整页为空）时不用坐标对位。关着（或 `rare_ref` 关着）时不进参数哈希。"""
+    rare_ref_nf: bool = True
+    """规则 A 坐标对位那支放宽 `near_form` 疑问（2026-10-28，A24「复盘形近护栏 N 类」，缺省开；只在 `rare_ref_coord` 开着时起作用）。
+
+    `near_form` 只是「库前三名候选里有形近家族的字」，整理本字在库里没有（或只有 ≤2 条刻例）时，那几个候选只是
+    库里最像的邻居、不是真对手，却把 5-b 首位＝坐标对位字的格整个拦下（N 类 536 格里 174 格如此）。
+    放宽的条件（缺一不放）：坐标对位字是 BMP 字（扩展 B 以上稀有字 5-b 不可靠，金标里错放的几乎全是它们）；
+    坐标对位字在库里的刻例数 ≤ `rare_ref_nf_max_n`（库对这个字没有判力）；库候选里除该字外**没有** cov ≥ `rare_ref_nf_cov`
+    的对手（强对手说明库有把握认成别的字）；候选里 cov ≥ 0.80 的字不是它的异体（`are_variants`）。
+    护栏 `never_match`／`conflict`、`occluded`／`excluded` 等其余硬条件照旧。金标（5,980 条人裁格）回放：
+    坐标对位×BMP 字×本规则 83 格 0 错。关着时不进参数哈希。"""
+    rare_ref_nf_max_n: int = 2
+    rare_ref_nf_cov: float = 0.96
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -661,6 +673,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("witness3_no_diff", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
+        if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
+            for k in ("rare_ref_nf", "rare_ref_nf_max_n", "rare_ref_nf_cov"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.shadow_veto:
             for k in ("shadow_model", "shadow_model_fingerprint"):
                 d.pop(k, None)
@@ -1486,7 +1501,10 @@ class SeedAdmitStep(Step):
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
-                                  keep_ref_review=p.lane_keep_ref_review)
+                                  keep_ref_review=p.lane_keep_ref_review,
+                                  nf=((_keben_counts(p.db_path), p.rare_ref_nf_max_n, p.rare_ref_nf_cov,
+                                       frozenset(k for kv in (ctx.book.codepoints or {}).items() for k in kv))
+                                      if p.rare_ref_nf else None))
             n_auto += d_rc
             n_review -= d_rc
         if p.symbol_review:
@@ -1569,20 +1587,23 @@ def _after_number(prev: AdmitRec, amap: dict, dmap: dict, mmap: dict) -> bool:
     return bool(ch) and ch in _NUMERALS
 
 
-def _hard_blocked(doubts, guard) -> bool:
-    """规则 A／影子升级共用的硬护栏：这些格任何新增通道都不碰。"""
+def _hard_blocked(doubts, guard, allow_near_form: bool = False) -> bool:
+    """规则 A／影子升级共用的硬护栏：这些格任何新增通道都不碰。
+    `allow_near_form`：规则 A 坐标对位那支放宽 `near_form`（`rare_ref_nf`，见 `_rare_ref_nf_ok`），其余照拦。"""
     return (guard in ("never_match", "conflict", "timeout")
-            or any(d.startswith("护栏:") or d in _RARE_REF_HARD for d in doubts))
+            or any(d.startswith("护栏:") or (d in _RARE_REF_HARD and not (allow_near_form and d == "near_form"))
+                   for d in doubts))
 
 
-def rare_ref_decide(*, doubts, guard, verdict, lib_char, lib_top, ref, op, rare_top, are_variants) -> str | None:
+def rare_ref_decide(*, doubts, guard, verdict, lib_char, lib_top, ref, op, rare_top, are_variants,
+                    allow_near_form: bool = False) -> str | None:
     """规则 A（`SeedAdmitParams.rare_ref`）的判据，纯函数（离线评测与线上共用）。→ 放行字（=整理本字）或 None。
 
     `lib_char`：库判 same 时的字（否则 None）；`lib_top`：库首位（same 取 char，否则候选第一名）；
     `rare_top`：5-b 首位；`are_variants(a, b)`：两字有无直接异体关系。"""
     if op != "replace" or not ref or ref in _JYS or not rare_top or rare_top != ref:
         return None
-    if _hard_blocked(doubts, guard):
+    if _hard_blocked(doubts, guard, allow_near_form):
         return None
     if verdict == "same" and lib_char and lib_char != ref:
         return None                       # 库明确认成了别的字
@@ -1611,9 +1632,49 @@ def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk:
     return not any(f != ref and are_variants(f, ref) for f in forms)
 
 
+_KEBEN_COUNTS: dict = {}
+
+
+def _keben_counts(db_path: str) -> dict[str, int]:
+    """字形库里每个字的刻例（exemplar）数，`rare_ref_nf` 用；按库路径＋mtime 缓存。读不了＝空表（调用方当没有这路放宽）。"""
+    import sqlite3
+    try:
+        from pathlib import Path
+        key = (db_path, Path(db_path).stat().st_mtime_ns)
+    except OSError:
+        return {}
+    hit = _KEBEN_COUNTS.get(key)
+    if hit is not None:
+        return hit
+    out: dict[str, int] = {}
+    try:
+        with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            for ch, n in c.execute("SELECT g.char, COUNT(*) FROM exemplars e JOIN glyphs g USING(glyph_id) GROUP BY g.char"):
+                out[str(ch)] = int(n or 0)
+    except Exception:
+        return {}
+    _KEBEN_COUNTS.clear()
+    _KEBEN_COUNTS[key] = out
+    return out
+
+
+def _rare_ref_nf_ok(ref: str, cands: list, n_lib: int, max_n: int, strong_cov: float, are_variants,
+                    cp_skip: frozenset = frozenset()) -> bool:
+    """规则 A 坐标对位那支放宽 `near_form` 的条件（`rare_ref_nf`）。纯函数。BMP 字、库对该字没有判力（刻例 ≤ max_n）、
+    候选里没有强对手（非该字且 cov ≥ strong_cov）、cov ≥ 0.80 的候选不是该字的异体、该字不在册 codepoints 里。"""
+    if not ref or ord(ref[0]) >= 0x20000 or n_lib > max_n or ref in cp_skip:
+        return False                       # cp_skip：册 codepoints 登记过的字（异体对码位未定，如 竄／𥨥，金标里错放都在这类）
+    for ch, cov in cands:
+        if ch == ref:
+            continue
+        if cov >= strong_cov or (cov >= 0.80 and are_variants(ch, ref)):
+            return False
+    return True
+
+
 def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                    coord: dict[str, str] | None = None, variant_topk: int = 3,
-                   keep_ref_review: bool = False) -> int:
+                   keep_ref_review: bool = False, nf: tuple | None = None) -> int:
     """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。
 
     `coord` 不给：只看现役对位（`amap`）里的格。`coord` 给了（`rare_ref_coord`，排在审路之后另跑一遍）：
@@ -1650,15 +1711,20 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                 al, via = (co, "replace"), "coord"      # 坐标对位字与库首位不同才有意义，按 replace 段判
             elif al is None:
                 continue
+            nf_ok = bool(nf and via == "coord" and _rare_ref_nf_ok(
+                al[0], list(m.candidates or []), nf[0].get(al[0], 0), nf[1], nf[2], are_variants, nf[3]))
             ch = rare_ref_decide(doubts=rec.doubts, guard=m.guard, verdict=m.verdict,
                                  lib_char=m.char if m.verdict == "same" else None, lib_top=lib_top,
-                                 ref=al[0], op=al[1], rare_top=top5[0], are_variants=are_variants)
+                                 ref=al[0], op=al[1], rare_top=top5[0], are_variants=are_variants,
+                                 allow_near_form=nf_ok)
             if ch is None:
                 continue
+            nf_used = nf_ok and "near_form" in (rec.doubts or [])
             rec.admit, rec.channel, rec.provenance, rec.char = True, "rare_ref", "rare_ref", ch
             rec.doubts = []
             rec.evidence = {**rec.evidence, "rare_ref": {
-                "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov, **({"via": via} if via else {})}}
+                "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov, **({"via": via} if via else {}),
+                **({"near_form_relaxed": True} if nf_used else {})}}
             n += 1
     return n
 
