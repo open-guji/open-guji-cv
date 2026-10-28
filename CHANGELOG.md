@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.31] - 测试中
+
+PATCH。含遮挡卡 seed_admit 1.25/1.26（异体优先于印章、印框内背景干净格不算遮挡）、align_ref 2.3、row_segment 1.40/1.41、border_detect 1.12 弯列、字组暂归一与码位组、keben_free 第二至四轮等（见下）。
+
 - 修 #731 的 `cp_shu4`（述𫐠）与 `chuo`（辶族）共用「述」却没互相声明 `overlaps`，`test_members_of_different_groups_do_not_overlap` 挂；补上互相声明、重生成字组总表。PATCH。
 - 规则 A 坐标对位那支放宽 `near_form`（A24「复盘形近护栏 N 类」，10-28）：整理本字（坐标对位字）在库里刻例 ≤2、BMP 字、不在册 `codepoints` 里、5-b 首位逐字等于它、库候选里没有 cov ≥0.96 的对手（cov ≥0.80 的候选也不是它的异体）时，`near_form` 疑问不再拦 `rare_ref`（库前三名里的形近字只是最像的邻居，不是真对手）。`never_match`／`conflict` 护栏与其余硬疑问照拦。开关 `seed_admit.rare_ref_nf`（缺省开，`rare_ref_nf_max_n`／`rare_ref_nf_cov` 调门槛），放行格 `evidence.rare_ref.near_form_relaxed`。依据：5,980 条人裁金标上符合条件的坐标对位格 83 格 0 错；95 册 N 类 536 格所在页真回放（seed_admit 重跑）新放行 59 格，逐格看图无错放。`seed_admit` 的 `code_hash` 变，各册 `seed_admit` 及下游判过期。PATCH。
 - 字组 `cek` 策䇿（码位组，暂归一到 䇿，登记 `PROVISIONAL`）：策→䇿 是 sheldon 10-26 定的暂归一，但库里 策／䇿 cov 并列（< same 档 0.996）、文意 margin≈0，整理本字归一成 䇿 又不在任何字组，全册 244 格送审（分类 V）。册配置 `group_flow` 加 `cek` 后库首位与整理本同在组里就放行，字落 䇿。只动 `groups/registry.py`，不动 Step。MINOR。
