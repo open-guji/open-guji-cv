@@ -123,7 +123,9 @@ fi
 t status $G status "$VOL" -w "$WS"
 # 人裁自检（2026-10-25）：读事件看 GUJI_WORKSPACE（不看 GUJI_DATA_HOME）；老人裁要现格字块图才认得了格，
 # 只重跑 seed_admit、cache/ 是空的会话里旧版 cv 会静默丢（vol10 78/146）。新版 cv 现切字块，旧版要先 cache warm。
-t 人裁自检 /opt/guji-venv/bin/python - "$VOL" <<'PY'
+# 新书没有任何人裁事件，中心库里就没有 feedback/events 目录，db pull 不会建；这里只是自检，目录不在当没有（GUJI_ALLOW_NO_EVENTS=1），
+# 不影响 pipeline 里 seed_admit 自己的检查（全唐文 10-28 #891 卡在这里）
+t 人裁自检 env GUJI_ALLOW_NO_EVENTS=1 /opt/guji-venv/bin/python - "$VOL" <<'PY'
 import collections, sys
 from open_guji_cv.feedback.bindings import book_bindings, usable
 from open_guji_cv.feedback.lookup import human_chars
