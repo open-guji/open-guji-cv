@@ -128,6 +128,26 @@ def page_causes(seed: dict, align: dict | None) -> dict[str, tuple[str, str]]:
     return out
 
 
+def page_facts(seed: dict, align: dict | None) -> dict[str, dict]:
+    """一页没放行的格 → 分类要用、待审单里没有的事实：字组 id（`grp`）、整理本字（`refc`）。给 `review/taxonomy.py` 用。"""
+    align = align or {}
+    by_id = {c["id"]: c for c in align.get("chars", [])}
+    by_coord = {c["id"]: c for c in align.get("coord", [])}
+    out: dict[str, dict] = {}
+    for col in seed.get("columns", []):
+        for ch in col.get("chars", []):
+            if ch.get("admit") or "excluded" in (ch.get("doubts") or []):
+                continue
+            cid = ch["id"]
+            f = {}
+            if (g := ((ch.get("evidence") or {}).get("group") or {}).get("id")):
+                f["grp"] = g
+            if (r := (by_id.get(cid) or {}).get("align_char") or (by_coord.get(cid) or {}).get("ref_char")):
+                f["refc"] = r
+            out[cid] = f
+    return out
+
+
 def book_causes(products_dir, book: str) -> dict[str, dict]:
     """全册：`{格号（不带册前缀）: {cause, detail}}`。读 `<产物根>/<册>/seed_admit|align_ref/p*.json`。"""
     import json
@@ -138,8 +158,9 @@ def book_causes(products_dir, book: str) -> dict[str, dict]:
         seed = json.loads(f.read_text(encoding="utf-8"))["seed_admit"]
         af = root / "align_ref" / f.name
         align = json.loads(af.read_text(encoding="utf-8"))["align_ref"] if af.exists() else None
+        facts = page_facts(seed, align)
         for cid, (code, detail) in page_causes(seed, align).items():
-            out[cid.split(":", 1)[1]] = {"cause": code, "detail": detail}
+            out[cid.split(":", 1)[1]] = {"cause": code, "detail": detail, **facts.get(cid, {})}
     return out
 
 

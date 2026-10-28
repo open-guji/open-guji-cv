@@ -50,7 +50,7 @@ def test_page_and_book_causes(tmp_path):
         d.mkdir(parents=True)
         (d / "p0001.json").write_text(json.dumps({step: doc}, ensure_ascii=False), encoding="utf-8")
     res = book_causes(tmp_path, "v")
-    assert res == {"1:1:3": {"cause": "I", "detail": "甲/乙"},
+    assert res == {"1:1:3": {"cause": "I", "detail": "甲/乙", "refc": "乙"},
                    "1:2:1": {"cause": "A3", "detail": "格数少于整理本字数（1 < 10）"}}
     md = causes_md("v", res)
     assert "| A3 |" in md and CAUSES["A3"][1] in md and "50%" in md
