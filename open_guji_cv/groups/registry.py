@@ -177,6 +177,8 @@ def _rv(gid: str) -> dict:
     return {"review": True, "review_methods": (_img(gid),)} if gid in SHAPE_REVIEW else {}
 
 
+#: 按刻形拆判的异体对都开 `ref_top_enter`（2026-10-28，A24 压低组外异体对送审第 1 轮）：库首位与整理本（缺位时坐标对位）字同在组里就进，
+#: 分差内的组外字（尚↔衛會同、陷↔隋 等）不拦；给字仍由整字 HOG 判、须过门槛。回放 99 册新进 100 格（尙尚 29 陷䧟 11 䘮喪 9 點㸃 9 䟦跋 9 …），看图 0 错。
 #: 按刻形拆判的异体对里复核只降不改的：瑣𤨏（2026-10-25）：𤨏 模板只 9 格，攒够前只降审。
 #: 尙尚 10-25 曾因 vol16 两格进过这里，放大看是 尙（殿本 尙 上部也有中竖，差在两边外撇／内收），判法没错，已恢复改字。
 _SHAPE_PAIR_NO_FIX = frozenset({"suo"})
@@ -336,7 +338,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=cfg,
-        flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first", **_rv(gid)),
+        flow=FlowSpec((FREQ, _img(gid), TOP1), combine="first", ref_top_enter=gid == "dian", **_rv(gid)),
         note="异体组：字频→IDS→库形最近；只在 seed_admit.group_flow 点名时生效。")
         for gid, name, cfg in (("dian", "點㸃", None),
                                ("chen", "讖識䜟", None), ("shen", "慎愼", "config/groups/shen"),
@@ -509,7 +511,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="variant", solvers=("ids",), config_dir=f"config/groups/{gid}", overlaps=_SHAPE_PAIR_OVERLAPS.get(gid, ()),
         flow=FlowSpec((_img(gid),), combine="first", review=True, review_fix=gid not in _SHAPE_PAIR_NO_FIX,
-                      **_SHAPE_PAIR_FLOW.get(gid, {})),
+                      ref_top_enter=True, **_SHAPE_PAIR_FLOW.get(gid, {})),
         note=f"异体对按刻形判（{note}）；{'补放，复核只降审' if gid in _SHAPE_PAIR_NO_FIX else '补放与复核改码位'}；只在 seed_admit.group_flow 点名时生效。")
        for gid, name, note in (("shang", "尙尚", "上部 小／⺌"), ("gai", "蓋葢", "草头下 去／大"), ("ba", "䟦跋", "右边 叐／犮"),
                                # 长尾异体对（2026-10-24）：两形放行都 ≥20、刻形分得开的只有这两对；緒緖、鄉鄕 殿本只一种刻形，不建组
