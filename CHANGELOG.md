@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 标 main 之后的插件钩子：`guji products pack promote`／`pack push --main` 标完 main，调入口点组 `guji.post_promote` 的函数 `(book, label, ws)`；manager 用它自动重出线上待审单（取代 2 小时轮询定时任务）。不动 Step。PATCH。
 - 自由版式 `keben_free` 第三轮（Sheldon 审 yxat 17–36 页）：`block_detect` 1.7 按框线把页面拉正（框四边量内沿拟二次曲线、Coons 曲面片映成矩形，产物加 `warp`，三种产物坐标都在拉正后的图上），同一条线的重叠段也连起来；`column_trace` 1.5 列宽罚 1→4（空缝之间按均匀挑）；`cell_cut` 1.3 在拉正后的图上切。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 往下自审 yxat 17–36 页：`block_detect` 1.6 框线吸到框线墨带内沿（粗框线、双线框不再吃掉贴框的标题列），块边离内沿 12→2px；首尾相接的断线段连成一条再找框（弯框线认不出时不再退到纸边）。只有 keben_free 管线用（yxat 一册）。
 - `border_detect` 1.12：三段折线拟合加一道验收——拟出的折线沿线 ±12px 的墨密度比直线高出 0.08 以上就判折点被字的竖笔勾走，这条线退回直线（单边判：真弯页上是直线压字，不受影响）。新图源（siku-qiefen-v2）界行淡而断，整页 w80 中位 40+ 全进折线，A31 整列待审清单里 vol70 p77、vol59 p58、vol24 p67、vol40 p34 九条线中段齐刷刷平移 45–88px 压进字里，整列认字错。vol70／vol59 全册 Step1–3 对比：变 17 页，看图全是改好或持平（列格位不变、只是格框回到字上），vol59 p1 版心列底多一个空格。`border_detect` 的 `code_hash` 变，下游判过期。PATCH。
