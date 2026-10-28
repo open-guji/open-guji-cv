@@ -4,12 +4,12 @@ import sys, json
 sys.path.insert(0, "/home/user/open-guji-cv")
 from common import *
 from open_guji_cv.groups.ctx_l1 import CtxL1Backend
-from open_guji_cv.groups.ctx_l2 import CtxL2Backend
+from open_guji_cv.groups.ctx_l3 import CtxL3Backend
 from open_guji_cv.groups.protocol import JudgeInput, window_from_text
 from open_guji_cv.groups.registry import GROUPS
 g = sys.argv[1]; spec = GROUPS[g]
 l1 = CtxL1Backend(f"/home/user/open-guji-cv/{spec.config_dir}/rules.yaml", spec.members)
-l2 = CtxL2Backend(sys.argv[2])
+l2 = CtxL3Backend(sys.argv[2])
 rows = [r for r in load(g)]
 tab = json.load(open(sys.argv[2]))["cells"]
 rows = [r for r in rows if r["id"] in tab]

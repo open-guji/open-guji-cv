@@ -539,9 +539,9 @@ def test_ry_strong_ctx_overrides_ref_and_l1_with_strong_table_fixes(monkeypatch)
         group_flow_pass([r], {"x": ("曰", None)}, lambda cid: cands, lambda r: False, cfg)
         assert r.admit is admit and (admit or "group_flow_ref_dissent" in r.doubts)
     monkeypatch.setattr(CtxRule, "_run", lambda self, inp: GroupVerdict("日", why="agree", via="ctx:ctx_l1"))
-    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l2", extra={"strong": True}),
-           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l2"),
-           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l2", extra={"strong": True})}
+    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l3", extra={"strong": True}),
+           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l3"),
+           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l3", extra={"strong": True})}
     monkeypatch.setattr(Llm, "applies", lambda self, inp: True)
     monkeypatch.setattr(Llm, "_run", lambda self, inp: tab[inp.cell_id])
     for cid, want in (("s", True), ("w", None), ("o", None)):
@@ -611,9 +611,9 @@ def test_rr_ctx_over_image(monkeypatch):
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
         picks[name], via=ext.get(name, (name, {}))[0], extra=ext.get(name, (name, {}))[1]))
     cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
-    for e, lifted in (({"ctx": ("ctx_l2", {"strong": True})}, True),
+    for e, lifted in (({"ctx": ("ctx_l3", {"strong": True})}, True),
                       ({"ctx": ("ctx:ctx_l1", {})}, True),
-                      ({"ctx": ("ctx_l2", {"runs": 3})}, False)):
+                      ({"ctx": ("ctx_l3", {"runs": 3})}, False)):
         picks.clear(); picks.update({"ctx": "入", "rr_img": "八", "ids": "八"}); ext.clear(); ext.update(e)
         r = Rec("x")
         group_flow_pass([r], {}, cands, lambda r: False, _cfg())
@@ -624,16 +624,16 @@ def test_rr_ctx_over_image(monkeypatch):
         else:
             assert "group_flow_conflict" in r.doubts
     # 复核：放行字 八（整理本错）、文意 strong 说 入、HOG 也说 八 → ctx_over 后照文意改字（review_fix_strong）
-    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l3", {"strong": True})})
     r = Rec("y", "八", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())
     assert r.admit and r.char == "入" and r.evidence["group"]["decision"] == "fix"
     # 文意不 strong：照常降审，不改字
-    ext.update({"ctx": ("ctx_l2", {"runs": 1})})
+    ext.update({"ctx": ("ctx_l3", {"runs": 1})})
     r = Rec("w", "八", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())
     assert not r.admit and r.char == "八" and "group_flow_disagree" in r.doubts
-    ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    ext.update({"ctx": ("ctx_l3", {"strong": True})})
     # 复核：放行字 入、文意 strong 说 入、HOG 说 八 → 不降
     r = Rec("z", "入", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())

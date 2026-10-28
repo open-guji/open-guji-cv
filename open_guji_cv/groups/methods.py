@@ -11,14 +11,17 @@
 |---|---|---|
 | `codepoint` | 码位归一：这套书在册配置 `codepoints:` 里定了用哪个码位，组内字一律给那个字（內内 別别 出岀 卷巻 晚晩，`registry.CODEPOINT_GROUPS`） | `Codepoint` |
 | `freq` | 字频：殿本人裁只见一形（主形 ≥10 且 ≥2 册、其余 0）就给主形 | `Freq`（`freq.decide`） |
-| `ctx_rule` | 上下文固定匹配：前后各 20 字的词组／正则（`rules.yaml`），零模型 | `CtxRule`（`ctx_l1`） |
-| `llm` | LLM 分析：离线跑好的 haiku 答案表，只收 conf=high | `Llm`（`ctx_l2`） |
+| `ctx_rule` | 文意 L1 固定搭配：前后各 20 字的词组／正则（`rules.yaml`），零模型 | `CtxRule`（`ctx_l1`） |
+| `model` | 文意 L2 训练好的模型：SikuRoBERTa 目标位向量＋逻辑回归小头，按册留出定门槛 | `CtxModel`（`ctx_l2`） |
+| `llm` | 文意 L3 大模型：大模型读过的格的答案表（只收 conf=high）；表里没有、L2 也给不出的格在线问（按窗口内容缓存，记 token） | `Llm`（`ctx_l3`）、`CtxOnline`（`ctx_llm`） |
 | `hog` | 整字 HOG＋岭回归（二类或一对多） | `HogRidge`（`ids_whole`） |
 | `ids` | IDS 部件：U-Net／折线／自动缝切开，部件模板最近邻（目前按组指定切法，`ids_online.SPECS`；将来做通用的） | `Ids`（`ids_online`） |
 | `composite` | 复合：先用一个算子取局部（`Crop` 取框），再交给任意方法 | `Composite` |
 | `custom` | 自定义：任意 python 函数，入参 `MethodInput`、出参 `GroupVerdict`（量横、一二数横、日曰宽高比、入人八字形分类器、库形最近） | `Custom` |
 
-数组里也可以放一个子数组 `Chain`：里面的方法依次试、第一个放行的说了算，整体当一个方法（文意 `ctx`＝固定匹配→LLM 表）。
+数组里也可以放一个子数组 `Chain`：里面的方法依次试、第一个放行的说了算，整体当一个方法
+（文意 `ctx`＝L1 固定搭配 → L3 大模型答案表 → L2 模型 → L3 在线；表在前是因为表里读过的格有多家 strong 票，模型只补表里没有的格，
+见 `CtxModel`；L3 在线只问前面都给不出字的格，见 `CtxOnline`）。
 
 ## 约定
 
@@ -37,7 +40,7 @@ from typing import Any, Callable
 from . import freq as _freq
 from .protocol import GroupVerdict
 
-KINDS = ("codepoint", "freq", "ctx_rule", "llm", "hog", "ids", "composite", "custom")
+KINDS = ("codepoint", "freq", "ctx_rule", "model", "llm", "hog", "ids", "composite", "custom")
 
 
 @dataclass
@@ -122,10 +125,12 @@ class Freq(Method):
         return v
 
 
-# —— 3 上下文固定匹配、4 LLM 分析（两者合成子数组 `ctx`） ——
+# —— 3 文意 L1 固定搭配、L2 训练模型、L3 大模型（合成子数组 `ctx`） ——
 
 _L1: dict = {}
-_L2: dict = {}
+_L2: dict = {}      # L3 答案表（变量名沿用旧名）
+_HEADS: dict = {}
+_L3C: dict = {}                    # L3 在线答案缓存（路径 → `ctx_llm.AnswerCache`）
 
 
 def _cell(inp: MethodInput):
@@ -140,7 +145,9 @@ def _spec(g: str):
 
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:
     """文意类方法的留痕口径（沿用旧 `ctx` 解法）：via 记 `ctx:<后端>`，extra 只留命中的规则。"""
-    keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong", "runs") if v.extra.get(k) not in (None, [], "")}
+    keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong", "runs", "p", "gap", "top",
+                                     "llm_model", "llm_conf", "cached", "tok", "l2_top")
+            if v.extra.get(k) not in (None, [], "")}
     return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx", extra=keep)
 
 
@@ -173,16 +180,76 @@ class Llm(Method):
         return bool(inp.cfg.l2_tables.get(inp.group))
 
     def _run(self, inp):
-        from .ctx_l2 import CtxL2Backend
+        from .ctx_l3 import CtxL3Backend
         if self.after_pair and inp.left and inp.left[-1] in self.after_pair:
-            return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_l2"))
+            return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_l3"))
         table = inp.cfg.l2_tables.get(inp.group)
         if table not in _L2:
-            _L2[table] = CtxL2Backend(table)
+            _L2[table] = CtxL3Backend(table)
         v = _L2[table].judge(_spec(inp.group), _cell(inp), inp.cfg.canon, getattr(inp.cfg, "l2_drift", 0))
         if v.char is not None:
             v.conf = 1.0          # 表里只收 conf=high
         return _ctx_out(v)
+
+
+@dataclass(frozen=True)
+class CtxModel(Method):
+    """文意 L2：训练好的模型（`ctx_l2`，小头 `FlowConfig.l2_models[组]`）。这册没给小头 → 不适用。
+    只补 L3 表里没有可用答案的格（前一步的 why 在 `FILLS` 里，或前面没有表）；表里大模型说「其他」、互相反对的格不补，留人审。"""
+    name: str = "model"
+    kind = "model"
+    after_pair: frozenset = frozenset()   # 同 `Llm.after_pair`
+
+    FILLS = frozenset({"cache_miss", "ctx_mismatch", "ver_mismatch", "abstain:new", "abstain:low_conf",
+                       "abstain:missing_run", "abstain:empty", "abstain:ctx_l1"})
+
+    def applies(self, inp) -> bool:
+        return bool(getattr(inp.cfg, "l2_models", {}).get(inp.group))
+
+    def _run(self, inp):
+        from . import ctx_l2
+        if self.after_pair and inp.left and inp.left[-1] in self.after_pair:
+            return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_l2"))
+        path = inp.cfg.l2_models[inp.group]
+        if path not in _HEADS:
+            _HEADS[path] = ctx_l2.load_head(path)
+        return _ctx_out(ctx_l2.judge(_HEADS[path], inp.left or "", inp.right or "", inp.members))
+
+
+@dataclass(frozen=True)
+class CtxOnline(Method):
+    """文意 L3 在线：管线里直接问大模型（`ctx_llm`，`FlowConfig.l3_online[组]` 给了提示词才适用）。
+    只问前面各层都没给出字、也没有大模型读过下了结论的格（前一步的 why 在 `FILLS` 里）；L2 模型弃权时它的首选字记 `l2_top`，
+    `FlowConfig.l3_need_l2_agree` 开时两者不同就弃权 `disagree:l2`。"""
+    name: str = "llm_online"
+    kind = "llm"
+    after_pair: frozenset = frozenset()   # 同 `Llm.after_pair`
+
+    FILLS = CtxModel.FILLS | frozenset({"abstain:low_p", "abstain:other_form", "abstain:right_only", "abstain:no_encoder"})
+
+    def applies(self, inp) -> bool:
+        return bool(getattr(inp.cfg, "l3_online", {}).get(inp.group))
+
+    def run_after(self, inp, prev: GroupVerdict) -> GroupVerdict:
+        from . import ctx_llm
+        if self.after_pair and inp.left and inp.left[-1] in self.after_pair:
+            return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_llm"))
+        cfg = inp.cfg
+        o = cfg.l3_online[inp.group]
+        path = o.get("cache") or ""
+        if path not in _L3C:
+            _L3C[path] = ctx_llm.AnswerCache(path or None)
+        v = ctx_llm.judge(inp.group, o["system"], o["ver"], inp.left or "", inp.right or "", inp.members,
+                          model=cfg.l3_model, effort=cfg.l3_effort, cache=_L3C[path])
+        top = prev.extra.get("top")
+        if top:
+            v.extra["l2_top"] = top
+            if v.char is not None and cfg.l3_need_l2_agree and v.char != top:
+                v = GroupVerdict(None, why="disagree:l2", via=v.via, extra=v.extra)
+        return _ctx_out(v)
+
+    def _run(self, inp):
+        return self.run_after(inp, GroupVerdict(None, why="abstain:empty"))
 
 
 @dataclass(frozen=True)
@@ -200,7 +267,9 @@ class Chain(Method):
         for s in self.steps:
             if hasattr(s, "applies") and not s.applies(inp):
                 continue
-            v = s.run(inp)
+            if isinstance(s, (CtxModel, CtxOnline)) and v.why not in type(s).FILLS:
+                continue
+            v = _out(s.run_after(inp, v)) if isinstance(s, CtxOnline) else s.run(inp)
             if v.char is not None:
                 f = _spec(inp.group).flow
                 if isinstance(s, CtxRule) and f.rule_strong and len(set(v.extra.get("rules") or ())) >= f.rule_strong:
@@ -408,9 +477,10 @@ def ry_shape(inp: MethodInput, img) -> GroupVerdict:
 # —— 常用方法与数组（registry 用） ——
 
 FREQ = Freq()
-CTX = Chain("ctx", steps=(CtxRule(), Llm()))
+CTX = Chain("ctx", steps=(CtxRule(), Llm(), CtxModel(), CtxOnline()))
 #: 己已巳的文意：两个族字相连（干支「己巳」）时第二字不查表，规则判不了就待定（vol06:125:6:8「嘉定己巳書成」表里是「已」）
-JYS_CTX = Chain("ctx", steps=(CtxRule(), Llm(after_pair=frozenset("己已巳"))))
+JYS_CTX = Chain("ctx", steps=(CtxRule(), Llm(after_pair=frozenset("己已巳")), CtxModel(after_pair=frozenset("己已巳")),
+                                 CtxOnline(after_pair=frozenset("己已巳"))))
 TOP1 = Custom("top1", fn=top1)
 FORM_TOP1 = Custom("top1", fn=form_top1)
 BARS = Custom("bars", fn=bars, patch=True)
@@ -437,4 +507,6 @@ def describe(m: Method) -> str:
         return f"composite(crop{tuple(m.op.region)} → {describe(m.inner)})"
     if isinstance(m, Only):
         return f"only({''.join(sorted(m.chars))} → {describe(m.inner)} → {''.join(sorted(m.give))})"
+    if isinstance(m, CtxOnline):
+        return "llm_online"
     return f"custom:{m.name}" if m.kind == "custom" else m.kind

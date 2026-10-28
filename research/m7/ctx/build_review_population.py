@@ -13,7 +13,7 @@ FAM = {"ry": "日曰", "rr": "入人八"}
 FROZEN = Path(__file__).parent / "l2_results" / "pop1" / "cards.jsonl"
 
 def build(S):
-    from open_guji_cv.groups.ctx_l2 import parse_output
+    from open_guji_cv.groups.ctx_l3 import parse_output
     random.seed(1020)
     cards = []
     for g in FAM:

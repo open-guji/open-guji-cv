@@ -200,7 +200,12 @@ class SeedAdmitParams(BaseModel):
     group_flow_freq: str = ""               # 字频表（`python -m open_guji_cv.groups.freq <工作区>` 冻结），空＝字频解法弃权
     group_flow_freq_major: int = 10         # 主形人裁数下限；其余成员须为 0（2026-10-20 sheldon 定 20→10）
     group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
-    group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 上下文 L2 答案表（ctx_ver 3）
+    group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
+    group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
+    group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
+    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "jys")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
+    group_flow_llm_effort: str = "low"
+    group_flow_llm_need_l2_agree: bool = False   # L3 在线的字须与 L2 模型弃权时的首选字相同
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
     group_flow_top1_cov: float = 0.97
@@ -787,6 +792,11 @@ class SeedAdmitParams(BaseModel):
                 from ..groups.registry import FLOW_GROUPS as _G
                 _ctx_groups = tuple(g for g in self.group_flow if "ctx" in _G[g].flow.solvers)
                 parts = [_fq_fp(self.group_flow_freq), _ctx_fp(_ctx_groups, self.group_flow_tables)]
+                if self.group_flow_models:           # 文意 L2 模型小头（没有小头的书不加，旧指纹不变）
+                    from ..groups.ctx_l2 import head_fingerprint as _hd_fp
+                    parts.append("m" + "".join(_hd_fp(self.group_flow_models[g]) for g in sorted(self.group_flow_models)))
+                if _l3_groups(self):                 # 文意 L3 在线：模型、档位、提示词（没开的书不加，旧指纹不变）
+                    parts.append("l" + _l3_fingerprint(self))
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
                     parts.append(_rr_fp(None) or "missing")
                 from ..groups.ids_online import fingerprint as _ids_fp
@@ -819,7 +829,9 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.context",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm",
+                   "open_guji_cv.groups.prompt_template",
+                   "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
                    "open_guji_cv.groups.ids_online", "open_guji_cv.groups.ids", "open_guji_cv.groups.ids_two",
@@ -844,7 +856,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -2288,8 +2300,57 @@ def _resolve_group_flow_paths(p) -> None:
             t = cfg / "l2" / f"{g}.json"
             if t.exists():
                 tables[g] = str(t)
+    models = {g: _abs(v) for g, v in p.group_flow_models.items()}
+    for g in p.group_flow:
+        if "ctx" in GROUPS[g].flow.solvers and g not in models:
+            t = cfg / "l2model" / f"{g}.json"
+            if t.exists():
+                models[g] = str(t)
     object.__setattr__(p, "group_flow_freq", freq)
     object.__setattr__(p, "group_flow_tables", tables)
+    object.__setattr__(p, "group_flow_models", models)
+
+
+def _l3_groups(p) -> tuple:
+    from ..groups.flow import rules_path
+    if not p.group_flow_llm_model:
+        return ()
+    return tuple(g for g in p.group_flow_llm_groups
+                 if g in p.group_flow and rules_path(g).with_name("prompt.md").exists())
+
+
+_L3_ONLINE: dict = {}
+
+
+def _l3_online(p) -> dict:
+    """文意 L3 在线各组的 {system, ver, cache}：提示词按本书变量填好（`prompt_template`），缓存在数据目录
+    `config/groups/l3cache/<组>.jsonl`（按窗口内容存答案，见 `groups/ctx_llm`）。"""
+    from ..core.workspace import REPO_ROOT, data_root
+    from ..groups.flow import rules_path
+    from ..groups.prompt_template import book_prompt_vars, load_rendered_prompt
+    gs = _l3_groups(p)
+    root = data_root() or REPO_ROOT
+    key = (gs, str(root))
+    if key not in _L3_ONLINE:
+        bv = book_prompt_vars()
+        d = {}
+        for g in gs:
+            try:
+                meta, body = load_rendered_prompt(rules_path(g).with_name("prompt.md"), bv)
+            except KeyError:              # 本书没给提示词变量（book_prompt.json）：这组不问
+                continue
+            d[g] = {"system": body, "ver": meta.get("ver", ""),
+                    "cache": str(root / "config" / "groups" / "l3cache" / f"{g}.jsonl")}
+        _L3_ONLINE[key] = d
+    return _L3_ONLINE[key]
+
+
+def _l3_fingerprint(p) -> str:
+    import hashlib
+    h = hashlib.sha256(f"{p.group_flow_llm_model}|{p.group_flow_llm_effort}|{p.group_flow_llm_need_l2_agree}".encode())
+    for g, o in sorted(_l3_online(p).items()):
+        h.update(f"|{g}|{o['ver']}|".encode() + o["system"].encode("utf-8"))
+    return h.hexdigest()[:16]
 
 
 #: 字组统一流程不碰的格：硬护栏（同规则 A）＋待审补放不碰的＋乱码护栏＋排除、非字、超时；形近护栏除外（见 `blocked`）
@@ -2315,7 +2376,9 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
                      freq_min_vols=p.group_flow_freq_min_vols,
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
-                     l2_tables=dict(p.group_flow_tables), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
+                     l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
+                     l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
+                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree,
                      lift_ref_guard=p.group_flow_lift_ref_guard,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None

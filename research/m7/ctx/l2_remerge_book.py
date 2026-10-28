@@ -4,7 +4,7 @@
 import argparse, json, glob
 from pathlib import Path
 
-from open_guji_cv.groups.ctx_l2 import load_prompt, merge_runs, parse_output
+from open_guji_cv.groups.ctx_l3 import load_prompt, merge_runs, parse_output
 from open_guji_cv.groups.registry import GROUPS
 
 ap = argparse.ArgumentParser(); ap.add_argument("old"); ap.add_argument("new"); ap.add_argument("model"); ap.add_argument("out")

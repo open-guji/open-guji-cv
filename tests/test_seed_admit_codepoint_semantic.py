@@ -63,7 +63,7 @@ def test_other_char_still_blocked(tmp_path, monkeypatch):
 
 def test_l2_key_compared_after_codepoint_canon():
     """文意 L2 表的键按书级码位归一再比：邻格放行字与表里只差 巻/卷、别/別，不算上下文变了。"""
-    from open_guji_cv.groups.ctx_l2 import CtxL2Backend
+    from open_guji_cv.groups.ctx_l3 import CtxL3Backend
     from open_guji_cv.groups.context import CTX_VER, ctx_key
     from open_guji_cv.groups.protocol import JudgeInput, window_from_text
     from open_guji_cv.groups.registry import GROUPS
@@ -72,7 +72,7 @@ def test_l2_key_compared_after_codepoint_canon():
              "cells": {"c1": {"ctx": ctx_key("三巻", "別行"), "char": "曰", "why": "x"}}}
     book = make_book(BOOK, codepoints={"巻": "卷", "别": "別"})
     cell = JudgeInput(id="c1", ref=None, window=window_from_text("三卷", "别行"))
-    be = CtxL2Backend(table)
+    be = CtxL3Backend(table)
     assert be.judge(spec, cell).why == "ctx_mismatch"
     v = be.judge(spec, cell, book.canonical_char)
     assert v.char == "曰" and v.why == "x"

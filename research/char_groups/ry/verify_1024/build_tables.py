@@ -2,7 +2,7 @@
 
 输入：中心库现行表、逐格细读（dataset `char-groups/variant/ry/labels.jsonl`：每格 id、form、conf、依据、原标签、事件号、建表窗口 left/right）、
 补跑的 haiku 一遍（`haiku.json`，ry 提示词，只补表里没有 haiku 票的格）。
-输出：新表 `<out>/ry.json`、`<out>/rm.json`（ver 加 `+v1024`），规则见 `ctx_l2.add_verify`。
+输出：新表 `<out>/ry.json`、`<out>/rm.json`（ver 加 `+v1024`），规则见 `ctx_l3.add_verify`。
 细读的字映射到各组：ry 组 日／曰 照写、目和别的字记「其他」；rm 组 日／目 照写、曰和别的字记「其他」。
 用法：python build_tables.py <中心库 l2 目录> labels.jsonl haiku_1024.json <out>
 """
@@ -10,7 +10,7 @@ import json
 import sys
 from pathlib import Path
 
-from open_guji_cv.groups.ctx_l2 import OTHER, add_verify
+from open_guji_cv.groups.ctx_l3 import OTHER, add_verify
 from open_guji_cv.groups.context import WIDTH, ctx_key
 
 MODEL = "opus"

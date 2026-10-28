@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv"); sys.path.insert(0, str(Path(__file__).parent))
 from common import *
 from open_guji_cv.groups.ctx_l1 import CtxL1Backend
-from open_guji_cv.groups.ctx_l2 import parse_output
+from open_guji_cv.groups.ctx_l3 import parse_output
 from open_guji_cv.groups.registry import GROUPS
 
 R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse", "gemini"); MIN_SIDE = 8
