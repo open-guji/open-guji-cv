@@ -129,7 +129,7 @@ def page_causes(seed: dict, align: dict | None) -> dict[str, tuple[str, str]]:
 
 
 def page_facts(seed: dict, align: dict | None) -> dict[str, dict]:
-    """一页没放行的格 → 分类要用、待审单里没有的事实：字组 id（`grp`）、整理本字（`refc`）。给 `review/taxonomy.py` 用。"""
+    """一页没放行的格 → 分类要用、待审单里没有的事实：字组 id（`grp`）、整理本字（`refc`）。给 guji-manager 的 `taxonomy` 用。"""
     align = align or {}
     by_id = {c["id"]: c for c in align.get("chars", [])}
     by_coord = {c["id"]: c for c in align.get("coord", [])}
