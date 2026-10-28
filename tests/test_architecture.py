@@ -73,8 +73,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "report.progress -> review.cards",
     "report.progress -> review.verdict_view",
     "report.tiers -> eval.round_check",
-    "review.cards -> console",
-    "review.cards -> console.deps",
     "utils.binarized -> clustering.normalize",
     "utils.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
@@ -246,18 +244,15 @@ def test_p2m_allowlist_has_no_stale_entries():
 
 FACADE = f"{PKG}.console_api"
 
-#: cv（控制台以外）→ 控制台 的存量反向边。只许减不许增；C1 清零，C3 控制台搬走前必须为空。
+#: cv（控制台以外）→ 控制台 的存量反向边。只许减不许增。剩下的是 `guji console` / `guji runs` 两条命令，
+#: C3 控制台搬进 guji-console 时改由它经入口点 `guji.commands` 提供，这张表随之清空。
 ALLOWED_INTO_CONSOLE: frozenset[str] = frozenset({
-    "cli_cellvotes -> console.routers",
-    "cli_cellvotes -> console.routers.feedback",
     "cli_v2 -> console.app",
     "cli_v2 -> console.auth",
     "cli_v2 -> console.auth.config",
     "cli_v2 -> console.jobs",
     "cli_v2 -> console.routers.workspace",
     "cli_v2 -> console.sse",
-    "review.cards -> console",
-    "review.cards -> console.deps",
 })
 
 

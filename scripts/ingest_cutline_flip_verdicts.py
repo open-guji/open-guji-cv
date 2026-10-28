@@ -154,9 +154,10 @@ def main() -> None:
         print("\n（演练，未写入。加 --apply 真写）")
         return
 
-    from open_guji_cv.console import deps
+    from open_guji_cv.core.workspace import feedback_root
+    from open_guji_cv.feedback.events import EventLog
     # append 收的是可迭代的一批，并按 (batch, seq) 去重——重跑本脚本不会灌重
-    n = deps.event_log().append(events)
+    n = EventLog(feedback_root()).append(events)
     print(f"\n已写入 {n} 条（重复的自动跳过）。接着跑 harvest 落金标：")
     print(f"  PYTHONPATH=. python -m open_guji_cv.cli_v2 feedback harvest --batch {BATCH}")
 

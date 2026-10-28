@@ -17,10 +17,11 @@ from ..auth import Identity, require_admin, require_reviewer
 from ..errors import maps_http
 from open_guji_cv.console_api import enrich_events as _anchor_events
 from open_guji_cv.console_api import route_and_consume
-from open_guji_cv.console_api import EventTarget, make_event, replay_key
+from open_guji_cv.console_api import make_event, replay_key
 from open_guji_cv.console_api import harvest_text
 from open_guji_cv.console_api import RouteTable
 from open_guji_cv.console_api import Batch, render_registry_markdown
+from open_guji_cv.console_api import write_events
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -102,39 +103,6 @@ def api_batch_get(batch_id: str) -> dict:
 
 
 
-def _product_anchor(step: str, ids: dict) -> dict | None:
-    """裁决是**对哪一版产物**做的——写进 `target.anchor.product_key`。
-
-    ## 为什么要有
-
-    `Anchor` 设计时就写着「product_key 允许失效，bbox + content_sha 不失效」，
-    可实测这三个字段**填充率全是 0%**（2984 条裁决表条目里一条都没有），
-    「产物重生后仍可定位」这个核心能力从来没兑现过。
-
-    后果是真实的：2026-09-18 改了 Step3 的 `ink_lam` 重跑全书，切线坐标基准
-    随之变化，而金标里没有任何东西能判断「这条裁决是对哪一版产物裁的」——
-    只能靠人记得。切线台自己发明了一个补丁（把 `col_h` 塞进 payload，233/233
-    条都有，前端 drift 档据此判断裁决是否过期），但那是**私有解法**，
-    别的台没有。这里把它提升成通用字段，由写入路径统一填，不靠各台自觉。
-
-    取不到指纹就返回 None（页号解析不出、产物还没跑、step 不产页级产物），
-    **不抛异常**——anchor 是锦上添花，不该让裁决写不进去。
-    """
-    pg = ids.get("page")
-    if not step or pg is None:
-        return None
-    try:
-        from open_guji_cv.console_api import page_key
-        man = deps.product_store().manifest(ids.get("book") or "", step)
-        rec = man.get(page_key(int(pg))) if man else None
-        fp = getattr(rec, "fingerprint", None)
-        if not fp:
-            return None
-        return {"product_key": {"step": step, "key": page_key(int(pg)), "fingerprint": fp}}
-    except Exception:                                    # noqa: BLE001
-        return None
-
-
 _EVENTS_LOCK = __import__("threading").Lock()
 
 
@@ -151,109 +119,10 @@ def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) ->
         return _api_events(req, identity.email)
 
 
-def _check_cell_review(req: EventsIn) -> None:
-    """格级审阅（GUJI-364b）写入前校验：批次须是 cellreview-<清单 id>，格须在清单里，裁决须合法。
-    不合法整批拒掉（400），不写半截。"""
-    from open_guji_cv.console_api import cell_review as cr
-    from open_guji_cv.console_api import candidates as cand
-    if not req.batch.startswith(cr.BATCH_PREFIX):
-        raise HTTPException(400, f"cell_review 的批次须以 {cr.BATCH_PREFIX} 开头：{req.batch!r}")
-    try:
-        path = cand.list_path(req.batch[len(cr.BATCH_PREFIX):], deps.event_log().root / "candidates")
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-    if not path.exists():
-        raise HTTPException(404, f"没有这份候选清单：{path.name}")
-    _, rows, _ = cr.load(path)
-    cands = {r["cell_id"]: r["cands"] for r in rows}
-    for row in req.events:
-        cid = row.get("id")
-        if cid not in cands:
-            raise HTTPException(400, f"{cid!r} 不在清单里")
-        why = cr.check_payload(row, cands[cid])
-        if why:
-            raise HTTPException(400, f"{cid}：{why}")
-
-
 def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
-    if req.kind == "cell_review":
-        _check_cell_review(req)
-    if req.request_id and any(e.payload.get("request_id") == req.request_id
-                              for e in deps.event_log().read(req.batch)):
-        return {"appended": 0, "batch": req.batch, "duplicate": True,
-                "total": deps.event_log().latest_seq(req.batch)}
-    base = deps.event_log().latest_seq(req.batch)
-    evs = []
-    for i, row in enumerate(sorted(req.events, key=lambda r: (r.get("t") or 0, str(r.get("id")))), 1):
-        if not row.get("id"):
-            continue
-        payload = {k: v for k, v in row.items() if k not in ("id", "t")}
-        if req.request_id:
-            payload["request_id"] = req.request_id
-        ct = payload.get("client_ts")
-        if isinstance(ct, (int, float)) and not isinstance(ct, bool) and 0 < ct < 1e11:
-            # 一律毫秒（2026-10-20）：09 月的夹注台发的是秒（float），vol02/03-jiazhu 327 条
-            # 与别的台混在一起，按毫秒读会算出 1970 年。1e11 毫秒 = 1973 年，秒数到 5138 年才越界。
-            payload["client_ts"] = int(round(ct * 1000))
-        # `client_ts` / `dwell_ms` 留在 payload 里：事件的 `ts` 是**收割时间**
-        # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
-        # 指标就是这个耗时，没有它 D 刀无法证伪。
-        from open_guji_cv.console_api import parse_card_id
-        ids = parse_card_id(row["id"])
-        if req.kind == "cutline" and ids.get("page") is not None and ids.get("col") is not None:
-            # 切线坐标在列图里，列窗几何一变就漂（col_h 还可能不变）；写入时顺手记下页面坐标
-            # 与几何签名，评测据此换算到当前列图（eval/colgeom.py）。取不到几何就不记，不挡写入。
-            from open_guji_cv.console_api import current_geom, stamp
-            geom = current_geom(deps.product_store(), ids.get("book") or "", ids["page"], ids["col"])
-            payload = {**payload, **stamp(payload, geom)}
-        evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
-                              EventTarget(step=req.step, unit=req.unit, key=row["id"],
-                                          anchor=_product_anchor(req.step, ids), **ids),
-                              payload, source_format="server", reviewer=reviewer))
-    _anchor_events(evs)   # 人裁带锚：重切后靠它找回是哪个字（总览/15）
-    n = deps.event_log().append(evs)
-    b = deps.batch_store().get(req.batch)
-    if b is None:
-        # **批次不存在就自动登记**（2026-09-04 修）。控制台的定字裁决直接 POST
-        # 到这里，此前只写事件、不建批次，于是「收割」那块的批次下拉是空的，
-        # 人裁完了却没法点「按路由表消费」——看着像「必须全部审完才行」，
-        # 其实是登记漏了。批次是台账（谁裁的、多少条、消费了没），不是闸。
-        b = Batch(id=req.batch, title=req.batch, step=req.step,
-                  kind=req.kind, transport="server", status="open",
-                  notes="控制台直连裁决自动登记")
-    if b.status == "draft":
-        b.status = "open"
-    out = {"appended": n, "batch": req.batch}
-    from open_guji_cv.console_api import is_label_batch
-    if req.consume and n and is_label_batch(req.batch, deps.batch_store().root):
-        # L3 补标签批（`guji label-batch make` 冻结了卡片文件）：**只写事件，不消费**。
-        # 路由表会把 cutline/glued/none 事件落进工作区裁决表并把 Step3/Step2 产物标 invalidated——
-        # 补标签不该动现行产物；收割走 `guji label-batch harvest`，直接进 dataset。
-        out_skip = "L3 补标签批：只写事件，不自动消费（收割用 guji label-batch harvest）"
-    else:
-        out_skip = None
-    if out_skip:
-        out["consume_skipped"] = out_skip
-    if req.consume and n and not out_skip:
-        # 写完直接消费（见 EventsIn.consume）。**失败不抛**：事件已经落盘，
-        # 消费只是把它送进字形库/金标，出了岔子在「收割与消费」那块补跑即可——
-        # 让整个 POST 报错会让人以为裁决没保存，那才是真的坏。
-        try:
-            table = RouteTable.load(deps.event_log().root / "routes.yaml")
-            # 只消费刚写进来的这几条（见 route_and_consume 的 event_ids）
-            res = route_and_consume(deps.event_log(), req.batch, table, deps.verdict_store(),
-                                    event_ids={e.id for e in evs})
-            out["consumed"] = [
-                {"consumer": x["consumer"], "added": x["added"],
-                 "skipped": x["skipped"], "errors": x["errors"][:3]}
-                for x in res["results"] if x["events"]]
-            out["unrouted"] = res["unrouted"]
-        except Exception as exc:                       # noqa: BLE001
-            out["consume_error"] = f"{type(exc).__name__}: {exc}"
-    # 批次计数只在最后刷一次（原来消费前后各刷一次，一次 0.3 s）；refresh_counts 自己会 save
-    deps.batch_store().refresh_counts(b, deps.event_log())
-    out["total"] = b.n_events
-    return out
+    """写入逻辑在 cv 的 `review/event_write.py`（命令行 `guji cellvotes write` 也调它）；这里只递四个 Store。"""
+    return write_events(deps.event_log(), deps.batch_store(), deps.verdict_store(), deps.product_store(),
+                        reviewer=reviewer, **req.model_dump())
 
 
 
