@@ -358,3 +358,31 @@ def test_gap_terms_box_counts_as_crossed():
     cross, near = gap_terms(body, cap=20)
     assert cross[115] >= 1 and cross[70] == 0       # 框里空白劈框；字列与框之间是真空白
     assert near[70] > near[95] and near[70] == 1.0
+
+
+def test_snap_frame_edges_to_inner_edge_of_frame_band():
+    """粗框线／双线框：框线位置吸到墨带内沿，块从内沿起，不留空白；没找到的边不动。"""
+    from open_guji_cv.utils.free_blocks import Frame, snap_frame_edges
+    ink = np.zeros((400, 300), bool)
+    ink[50:62, 30:270] = True                      # 上边粗框线 50–61
+    ink[50:350, 30:42] = True                      # 左边粗框线 30–41
+    ink[50:350, 258:270] = True                    # 右边
+    fr = snap_frame_edges(ink, Frame(top=52.0, bottom=380.0, left=33.0, right=262.0,
+                                     found={"top": True, "bottom": False, "left": True, "right": True}))
+    assert fr.top == 62 and fr.left == 42 and fr.right == 257
+    assert fr.bottom == 380.0                      # 没找到的边留兜底值
+    fr = snap_frame_edges(ink, Frame(top=80.0, bottom=380.0, left=60.0, right=240.0,
+                                     found={"top": True, "bottom": False, "left": True, "right": True}))
+    assert fr.top == 62 and fr.left == 42 and fr.right == 257   # 认在框里面：往外找到墨带
+
+
+def test_join_segments_bent_frame_line():
+    """框线中段弯一下，两段各自票数不够：首尾相接的连成一条、票数相加；平行的两条不连。"""
+    from open_guji_cv.utils.free_blocks import Rule, join_segments
+    a = Rule("h", 303.0, -0.039, 790, 1380, 3)
+    b = Rule("h", 292.0, -0.019, 200, 789, 3)
+    c = Rule("h", 300.0, 0.0, 200, 1380, 5)         # 平行的另一条
+    out = join_segments([a, b, c])
+    assert len(out) == 2
+    j = next(r for r in out if r.n_strips == 6)
+    assert j.lo == 200 and j.hi == 1380 and abs(j.at(800) - 272) < 10
