@@ -112,6 +112,19 @@ def test_conflict_with_legacy_equal_rejects_column():
     assert _coord_conflict([("x2", 2, None, "", 2.0)], {}, {"x2": "據"})
 
 
+def test_title_column_ignores_isolated_weak_conflicts():
+    """vol27 p1 列 1（A31 10-28）：卷首题列坐标字整串对，现役在印章乱码里零星对上「庫」却落在「四」格。
+    题列不会分行错位：孤立弱冲突（单字匹配）不退回；强冲突（长 equal 段）照旧退回。"""
+    title = "欽定四庫全書總目卷五十三"
+    recs = [(f"x{k}", k, None, ch, float(k)) for k, ch in enumerate(title, start=1)]
+    legacy = {"x3": AlignRec(id="x3", col=1, slot=3, align_char="庫", align_op="equal", ref_run=1),
+              "x7": AlignRec(id="x7", col=1, slot=7, align_char="總", align_op="equal", ref_run=1)}
+    assert _coord_conflict(recs, legacy, {})                  # 普通列：邻格错位特征，退回
+    assert not _coord_conflict(recs, legacy, {}, title=True)
+    strong = {"x3": AlignRec(id="x3", col=1, slot=3, align_char="庫", align_op="equal", ref_run=6)}
+    assert _coord_conflict(recs, strong, {}, title=True)
+
+
 # ── 端到端：align_ref 产物 ───────────────────────────────────────────────
 def _uniq_lines(n: int, width: int = 19) -> list[str]:
     base = 0x4E00

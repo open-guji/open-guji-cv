@@ -5,12 +5,25 @@
 
 ## [未发版]
 
+- 按刻形拆判的异体对组（shang ba sang xian yin … 共 31 个）与 dian 开 `ref_top_enter`（A24 压低组外异体对送审第 1 轮，10-28）：库首位与整理本同在组里就进，分差内的组外字不再挡入口；给字仍由整字 HOG 判。vol01–99 回放新进 100 格，逐格看图 0 错。只动 `registry`。
+## [0.5.31] - 2026-10-28
+
+PATCH。含遮挡卡 seed_admit 1.25/1.26（异体优先于印章、印框内背景干净格不算遮挡）、align_ref 2.3、row_segment 1.40/1.41、border_detect 1.12 弯列、字组暂归一与码位组、keben_free 第二至四轮等（见下）。
+
+- 修 #731 的 `cp_shu4`（述𫐠）与 `chuo`（辶族）共用「述」却没互相声明 `overlaps`，`test_members_of_different_groups_do_not_overlap` 挂；补上互相声明、重生成字组总表。PATCH。
+- 规则 A 坐标对位那支放宽 `near_form`（A24「复盘形近护栏 N 类」，10-28）：整理本字（坐标对位字）在库里刻例 ≤2、BMP 字、不在册 `codepoints` 里、5-b 首位逐字等于它、库候选里没有 cov ≥0.96 的对手（cov ≥0.80 的候选也不是它的异体）时，`near_form` 疑问不再拦 `rare_ref`（库前三名里的形近字只是最像的邻居，不是真对手）。`never_match`／`conflict` 护栏与其余硬疑问照拦。开关 `seed_admit.rare_ref_nf`（缺省开，`rare_ref_nf_max_n`／`rare_ref_nf_cov` 调门槛），放行格 `evidence.rare_ref.near_form_relaxed`。依据：5,980 条人裁金标上符合条件的坐标对位格 83 格 0 错；95 册 N 类 536 格所在页真回放（seed_admit 重跑）新放行 59 格，逐格看图无错放。`seed_admit` 的 `code_hash` 变，各册 `seed_admit` 及下游判过期。PATCH。
+- 字组 `cek` 策䇿（码位组，暂归一到 䇿，登记 `PROVISIONAL`）：策→䇿 是 sheldon 10-26 定的暂归一，但库里 策／䇿 cov 并列（< same 档 0.996）、文意 margin≈0，整理本字归一成 䇿 又不在任何字组，全册 244 格送审（分类 V）。册配置 `group_flow` 加 `cek` 后库首位与整理本同在组里就放行，字落 䇿。只动 `groups/registry.py`，不动 Step。MINOR。
+- 36 个 `cp_*` 码位组（A24 压低组外异体对送审第 1 轮，10-28）：sheldon 在 `config/codepoints.yaml` 早定了用哪个字（寄𭔃 急𢚩 耶𫆀 尋㝷 黎𥠖 寶寳 泰㤗 步歩 …）、但没建码位组的异体对，流水线见「库首位与整理本是异体对」一律送审。加 `CODEPOINT_GROUPS`／`PROVISIONAL` 各 36 行，各册 `group_flow` 加了才生效；vol01–99 main 包回放补放 268 格，逐格看图 0 错。只动 `registry`，不动 Step。
+- 自由版式 `keben_free` 第五轮（Sheldon 审 yxat 9–42 页）：`column_trace` 1.7 界栏逐条顺着竖线像素找（各条斜得不一样也跟得上），按界栏切只躲压线的字；劈开墨块的罚 1→3。`block_detect` 1.9 细框线不再往里找内框、版心线让 4→1px。只有 keben_free 管线用（yxat 一册）。
+- 标 main 之后的插件钩子：`guji products pack promote`／`pack push --main` 标完 main，调入口点组 `guji.post_promote` 的函数 `(book, label, ws)`；manager 用它自动重出线上待审单（取代 2 小时轮询定时任务）。不动 Step。PATCH。
+- 自由版式 `keben_free` 第四轮（Sheldon 审 yxat 9–40 页）：`block_detect` 1.8 双线框取细内框、框线改折线、人标分栏线一起拉成水平（分段 Coons）；`column_trace` 1.6 认虚线界栏、有界栏的块切线顺着界栏走，走缝离字留空（笔画旁 4px 有代价、小墨点便宜），变缝幅度 0.08→0.15 列距。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 第三轮（Sheldon 审 yxat 17–36 页）：`block_detect` 1.7 按框线把页面拉正（框四边量内沿拟二次曲线、Coons 曲面片映成矩形，产物加 `warp`，三种产物坐标都在拉正后的图上），同一条线的重叠段也连起来；`column_trace` 1.5 列宽罚 1→4（空缝之间按均匀挑）；`cell_cut` 1.3 在拉正后的图上切。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 往下自审 yxat 17–36 页：`block_detect` 1.6 框线吸到框线墨带内沿（粗框线、双线框不再吃掉贴框的标题列），块边离内沿 12→2px；首尾相接的断线段连成一条再找框（弯框线认不出时不再退到纸边）。只有 keben_free 管线用（yxat 一册）。
 - `border_detect` 1.12：三段折线拟合加一道验收——拟出的折线沿线 ±12px 的墨密度比直线高出 0.08 以上就判折点被字的竖笔勾走，这条线退回直线（单边判：真弯页上是直线压字，不受影响）。新图源（siku-qiefen-v2）界行淡而断，整页 w80 中位 40+ 全进折线，A31 整列待审清单里 vol70 p77、vol59 p58、vol24 p67、vol40 p34 九条线中段齐刷刷平移 45–88px 压进字里，整列认字错。vol70／vol59 全册 Step1–3 对比：变 17 页，看图全是改好或持平（列格位不变、只是格框回到字上），vol59 p1 版心列底多一个空格。`border_detect` 的 `code_hash` 变，下游判过期。PATCH。
 - 自由版式 `keben_free` 第二轮（Sheldon 审 yxat 9–16 页）：`block_detect` 1.5 上下两块在分隔线处相接（`split_pad` 0）；`cell_cut` 1.2 列上下两端的长横墨不当字；`column_trace` 1.4 正文网格切线先数劈开几个墨块、再取空白正中，列宽放宽到 0.6–1.5、罚 4→1，竖线贯穿块高 80% 才当界行（撤第一轮的 σ 抹平）。只有 keben_free 管线用（yxat 一册）。
 - 拆分 M4（10-27）：`scripts/rerun_prep.sh`、`guji_jobs start` 开工时检测本会话有没有装 guji-manager，没装就提示装法（私有仓，快照里没有）；只提示不拦。不动 Step。PATCH。
 - 自由版式 `keben_free` 找列（Sheldon 审 yxat 9–16 页）：`column_trace` 1.3 等宽网格两端贴块边（版框内沿、版心线，不留窄条）、切线代价按 0.12 列距抹平（切在列间空白正中，不落进小注两行间）；人标 `align`（`block_detect` 1.4 记进 `BlockRec.align`）同组的块共用一套列线。只有 keben_free 管线用（yxat 一册）。
+- 同义字组暂归一兜底（sheldon 10-27，A24）：同义组方法拆不开写法、与整理本说法不一而本要留人审／降审的格，库形与整理本（复核时已放行字）都认是这个字，就放成这组最常见的字形，`evidence.group.decision` 记 `provisional`，可筛出来再拆（`groups.flow.is_provisional`、`registry.PROVISIONAL`；开关 `seed_admit.group_flow_provisional` 缺省开）。不同义组不兜底，组里意思不同的字（識）、陪衬不算同一个字。vol07–99 离线回放：同义组送审 676→212，兜底 464 格看图字都认对。`guji groups status` 加「暂归一兜底」列；建模板脚本剔除兜底格。`seed_admit` 参数与 `code_hash` 变，开 `group_flow` 的册判过期。PATCH。
 - 拆分 M4 地基（10-27）：`guji` 支持插件命令——入口点组 `guji.commands`（装了 guji-manager 即并入它的子命令；本仓自带同名命令优先）。只改 `cli_v2`，不动 Step，19 步 `code_hash` 不变。PATCH。
 - 拆分 M3b（10-27）：`clustering.seeding` 去掉对 `datastore.packs` 的 import（LM 缓存取法改走 `core.derived`，`guji` 入口注册）。`seed_admit` 的 `code_hash` 会变，已登记代码等价（`core/code_equiv.py`）：vol04 40 页逐字节相同，指纹仍与改前一致，产物不过期。pipeline→manager 反向依赖剩 5 条。PATCH。
 - 拆分 M3a（10-27）：pipeline 一侧对 manager 一侧的反向依赖由 12 条清到 6 条。`discover_workspaces` 搬进 `core/workspace`；`parse_cells_spec` 搬进 `core/book`；`is_exp_branch` 搬进 `core/workspace`；`PULL_MARK` 归 `ProductStore`；派生缓存取法抽成 `core/derived`（本机 `GUJI_DERIVED_DIR` 优先，其次入口注册的取法），`font_pack.push_packs` 挪到 `ops/derived_push`。行为不变，19 步 `code_hash` 与 dev 逐一相同。PATCH。

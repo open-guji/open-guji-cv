@@ -412,3 +412,103 @@ def test_rectify_straightens_slanted_frame():
         assert out[y, x1:x1 + 6].any() and not out[y, x1 - 40:x1 - 3].any()
     for x in (x0 + 50, (x0 + x1) // 2, x1 - 50):
         assert out[y0 - 6:y0, x].any() and not out[y0 + 3:y0 + 40, x].any()
+
+
+def test_rectify_straightens_slanted_split_line():
+    """框是正的，框里的分栏横线是斜的、断断续续：量出来一起拉正，拉正后在一条水平带里。"""
+    import cv2
+
+    from open_guji_cv.utils.free_blocks import Frame
+    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray, trace_hline
+    H, W = 900, 700
+    img = np.full((H, W), 230, np.uint8)
+    cv2.rectangle(img, (100, 100), (600, 800), 20, 10)
+    for x in range(110, 590, 40):                      # 断线：左高右低差 24px，每段 28px 长
+        cv2.line(img, (x, 440 + (x - 100) * 24 // 500), (x + 28, 440 + (x + 28 - 100) * 24 // 500), 20, 3)
+    ink = img < 128
+    fr = Frame(top=105.0, bottom=795.0, left=105.0, right=595.0,
+               found={"top": True, "bottom": True, "left": True, "right": True})
+    mid = trace_hline(ink.astype(np.float32), 450, 120, 580)
+    assert mid is not None
+    warp = make_warp(fit_frame_curves(ink, fr, fr.found), fr, (W, H), [mid])
+    assert len(warp["mids"]) == 1
+    yy = int(round(warp["mids"][0]["y"]))
+    out = rectify_gray(img, warp) < 128
+    rows = [np.flatnonzero(out[yy - 20:yy + 21, x]) for x in (130, 330, 530)]
+    assert all(len(r) for r in rows)
+    assert max(r.mean() for r in rows) - min(r.mean() for r in rows) <= 3
+
+
+def test_seam_cost_keeps_off_strokes_and_ignores_specks():
+    """走缝代价：笔画 1，笔画旁 halo 内有代价，界栏的小点便宜——窄缝里缝离字留空、走过小点。"""
+    from open_guji_cv.utils.free_columns import min_ink_seam, seam_cost
+    ink = np.zeros((120, 60), bool)
+    ink[:, 10:24] = True                              # 左边一列字（简化成墨条）
+    ink[:, 40:54] = True                              # 右边一列字
+    for y in range(0, 120, 12):                       # 缝正中一串界栏小点
+        ink[y:y + 3, 31:33] = True
+    c = seam_cost(ink)
+    assert c[5, 31] < 0.5 and c[5, 25] > 0 and c[5, 32] < 1
+    x = min_ink_seam(c, np.full(120, 25.0), 6)        # 从贴着左列的位置出发
+    assert np.all((x >= 28) & (x <= 35))              # 离两边字都 ≥ halo（4px），可以走过小点
+
+
+def test_grid_seams_follow_dashed_rules():
+    """虚线界栏（一段段短划）：认成界栏，切线顺着界栏走（不在列间空白正中）。"""
+    from open_guji_cv.utils.free_blocks import thin_vlines
+    from open_guji_cv.utils.free_columns import grid_columns
+    h, w, pitch = 800, 600, 100
+    img = np.full((h, w), 230, np.uint8)
+    for k in range(6):                                # 每列字偏右：列间空白正中离界栏 ~12px
+        x0 = k * pitch + 30
+        for y in range(20, h - 60, 70):
+            _glyph(img, x0, y, 50)
+    rules = [100, 200, 300, 400, 500]
+    for x in rules:
+        for y in range(0, h, 20):                     # 12px 短划、8px 断口
+            img[y:y + 12, x - 1:x + 2] = 40
+    ink = img < 128
+    lines = thin_vlines(img, 51, length=11, bridge=41)
+    bc = grid_columns(ink, lines, pitch=pitch, n=6, fixed_ends=True, cross=1.0, center=0.5,
+                      rule_min=0.65, snap=0.15)
+    cuts = sorted(int(np.median(c.left)) for c in bc.columns)[1:]
+    assert all(abs(c - r) <= 3 for c, r in zip(cuts, rules))
+
+
+def test_grid_seams_follow_slanted_dashed_rules():
+    """各条界栏斜得不一样（扫描拉伸不匀）：逐条顺着线找，切线贴在各自的界栏上。"""
+    from open_guji_cv.utils.free_blocks import thin_vlines
+    from open_guji_cv.utils.free_columns import grid_columns
+    h, w, pitch = 900, 600, 100
+    img = np.full((h, w), 230, np.uint8)
+    slopes = [0.0, 0.02, -0.02, 0.03, -0.01]          # 每条界栏自己的斜率（dx/dy）
+    rules = [100, 200, 300, 400, 500]
+    for k in range(6):
+        for y in range(20, h - 60, 70):
+            _glyph(img, k * pitch + 25 + int(slopes[min(k, 4)] * (y - h / 2) * 0), y, 45)
+    for x, sl in zip(rules, slopes):
+        for y in range(0, h, 20):
+            xx = int(round(x + sl * (y - h / 2)))
+            img[y:y + 12, xx - 1:xx + 2] = 40
+    ink = img < 128
+    lines = thin_vlines(img, 51, length=11, bridge=41)
+    bc = grid_columns(ink, lines, pitch=pitch, n=6, fixed_ends=True, cross=3.0, center=0.5, rule_min=0.65)
+    seams = sorted((c.left for c in bc.columns), key=lambda a: float(np.median(a)))[1:]
+    for sm, x, sl in zip(seams, rules, slopes):
+        for y in (60, h // 2, h - 60):
+            assert abs(sm[y] - (x + sl * (y - h / 2))) <= 4
+
+
+def test_trace_side_thin_frame_line_does_not_look_inward():
+    """量到的框线本身是细线：不再往里找「细内框」——往里是字（p32 左框）。"""
+    from open_guji_cv.utils.free_rectify import _bands
+    prof = np.zeros(200)
+    prof[50:54] = 1.0                                 # 细框线
+    prof[70:78] = 1.0                                 # 往里 16px 处字的竖画
+    e1, e2 = _bands(prof, 52, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 is None
+    prof[30:54] = 1.0                                 # 粗外框 + 往里的细线：取细线
+    prof[70:78] = 0.0
+    prof[62:65] = 1.0
+    e1, e2 = _bands(prof, 40, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 == 65

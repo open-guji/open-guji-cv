@@ -85,11 +85,11 @@ def test_gap_other_group_unchanged(monkeypatch):
     assert not r.admit and "group_flow_coord_dissent" in r.doubts
 
 
-def _review(monkeypatch, margins):
+def _review(monkeypatch, margins, provisional=False):
     monkeypatch.setattr(flow, "_solve", _ids("𢑴", margins))
     r = Rec("x", char="彝", admit=True, channel="match_ref")
     group_flow_pass([r], {"x": ("彝", "equal")}, lambda cid: [("彝", 0.99), ("𢑴", 0.98)], lambda r: False,
-                    FlowConfig(groups=(G,)))
+                    FlowConfig(groups=(G,), provisional=provisional))
     return r
 
 
@@ -99,6 +99,8 @@ def test_review_fix_by_margin(monkeypatch):
     assert r.admit and r.char == "𢑴" and r.evidence["fixed_from"]["char"] == "彝"
     r = _review(monkeypatch, (0.11, 1.12, 0.62))                     # 有一段不到 0.3：只降审
     assert not r.admit and "group_flow_disagree" in r.doubts
+    r = _review(monkeypatch, (0.11, 1.12, 0.62), provisional=True)   # 暂归一兜底开：不降审，放成最常见的 𢑱
+    assert r.admit and r.char == "𢑱" and r.evidence["group"]["decision"] == "provisional"
 
 
 def test_margin_helper():

@@ -231,6 +231,26 @@ def _note_main(book: str, label: str, note: str) -> None:
     p = ER.note_main(ws, book, label, note) if ws is not None else None
     if p:
         print(f"实验记录已记「标为 main」：{p}")
+    _run_post_promote(book, label, str(ws) if ws is not None else None)
+
+
+POST_PROMOTE_GROUP = "guji.post_promote"
+
+
+def _run_post_promote(book: str, label: str, ws: str | None) -> None:
+    """标 main 之后的插件钩子（入口点组 `guji.post_promote`，函数签名 `(book, label, ws)`）。
+
+    manager 用它在标 main 后自动重出线上待审单；pipeline 自己不知道有哪些插件。插件抛错只提示，不挡标 main。"""
+    from importlib.metadata import entry_points
+    try:
+        eps = entry_points(group=POST_PROMOTE_GROUP)
+    except Exception:  # noqa: BLE001
+        return
+    for ep in eps:
+        try:
+            ep.load()(book, label, ws)
+        except Exception as e:  # noqa: BLE001
+            print(f"（标 main 后的插件 {ep.name} 出错，已忽略：{e}）", file=sys.stderr)
 
 
 def cmd_exclusions(args) -> None:

@@ -472,6 +472,13 @@ class AlignRefParams(BaseModel):
     `coord_column` 的几何检查和 `_coord_conflict`。邻页的 glyph_match 不进本页指纹（邻页重跑不让本页过期，
     半叶结构不随识别变）。"""
 
+    coord_title_formula: str = "^欽定四庫全書總目[卷巻][〇一二三四五六七八九十百]+$"
+    """卷首题列的定式（2026-10-28，A31 印章遮挡卡 via=none 39 页）：本列坐标字连起来整串合这个式子，
+    与现役对位的孤立弱冲突（`COORD_WEAK_RUN` 以内的单字匹配）就不再退回整列（见 `_coord_conflict`）。
+    起因：卷首叶大印压着题列，现役 difflib 在乱码载体里零星对上「欽／定／四／庫」这类满书都是的字，
+    位置却错一两格；坐标对位按格位配的整串对，却被这一两格冲突整列退回，10 列 87 格没有默认字。
+    题列自成一列，不会有「整理本分行错一位」。空串＝关。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
@@ -520,7 +527,7 @@ def _corpus_index(path: str):
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.2", unit="cell",   # 2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.3", unit="cell",   # 2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -555,7 +562,8 @@ class AlignRefStep(Step):
                                              if p.rare_topk else None)
             attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
                          _opt(ctx, "cells", page), p.corpus,
-                         neighbors=neighbors if p.coord_neighbor else None)
+                         neighbors=neighbors if p.coord_neighbor else None,
+                         title_formula=p.coord_title_formula)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1084,7 +1092,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
-                 cells, corpus: str, neighbors=None) -> None:
+                 cells, corpus: str, neighbors=None, title_formula: str = "") -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1125,6 +1133,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
     # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
     # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
+    title_re = re.compile(title_formula) if title_formula else None
     bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
     if grid and bs:
         b_page = bs[len(bs) // 2]
@@ -1134,7 +1143,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         if not r.ok:
             res.coord_fallback[str(cc.col)] = r.note
             continue
-        why = _coord_conflict(r.recs, legacy, same)
+        why = _coord_conflict(r.recs, legacy, same, title=title_re is not None and bool(
+            title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs))))
         if why:
             res.coord_fallback[str(cc.col)] = why
             res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
@@ -1169,7 +1179,7 @@ COORD_WEAK_MAX = 1
 COORD_WEAK_MIN_AGREE = 5
 
 
-def _coord_conflict(recs, legacy: dict, same: dict) -> str:
+def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False) -> str:
     """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
 
     vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
@@ -1180,7 +1190,10 @@ def _coord_conflict(recs, legacy: dict, same: dict) -> str:
     - 与现役 `equal` 位的字不同 → 退回（现役 `replace` 位本身存疑，不作数）；
       例外：孤立弱冲突（`COORD_WEAK_*`，vol15 p50 列 7／9）不退回；
     - 被判成空格位的格，库却以 `same` 认下了一个字 → 退回（锚不上的页没有现役
-      对位可比，靠这条挡同一种错位）。"""
+      对位可比，靠这条挡同一种错位）。
+
+    `title`（本列坐标字整串合卷首题式，`coord_title_formula`）：孤立弱冲突不计数、不看邻格，
+    多少格都不退回——题列不会分行错位，现役在印章乱码里零星对上的单字才是错的。强冲突照旧退回。"""
     chs = [r[3] for r in recs]
     agree, weak, strong = 0, [], []
     for k, (i, _sl, _sub, ch, _g) in enumerate(recs):
@@ -1188,6 +1201,8 @@ def _coord_conflict(recs, legacy: dict, same: dict) -> str:
         if lg is not None and lg.align_op == "equal":
             if lg.align_char == ch:
                 agree += 1
+            elif ch and lg.ref_run <= COORD_WEAK_RUN and title:
+                continue
             elif (ch and lg.ref_run <= COORD_WEAK_RUN
                   and not (k > 0 and chs[k - 1] == lg.align_char)
                   and not (k + 1 < len(chs) and chs[k + 1] == lg.align_char)):
