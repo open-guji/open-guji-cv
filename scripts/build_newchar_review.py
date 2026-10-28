@@ -43,6 +43,7 @@ import base64
 import collections
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -50,6 +51,14 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
+
+def _codepoint_canon() -> dict[str, str]:
+    """码位归一组（groups.registry.CODEPOINT_GROUPS）里，非首字的成员 → 组名首字（卷巻→卷）。"""
+    from open_guji_cv.groups.registry import CODEPOINT_GROUPS
+    return {ch: g.name[0] for g in CODEPOINT_GROUPS.values() for ch in g.name[1:]}
+
+
+CODEPOINT_CANON = _codepoint_canon()
 
 KEY = "newchar-review-v1"
 TITLE = "新字确认"
@@ -122,6 +131,10 @@ def collect_book(book: str, products: Path, counts: collections.Counter, min_cou
                 if counts.get(ref, 0) >= min_count:
                     stats["ref_in_lib"] += 1
                     continue
+                # 真归一的码位组（卷巻、內内…）：整理本用组内另一写法，码位字库里有就不算新字，不再出卡
+                if counts.get(CODEPOINT_CANON.get(ref, ref), 0) >= min_count:
+                    stats["ref_in_lib"] += 1
+                    continue
                 if cid in skip:
                     stats["already_judged"] += 1
                     continue
@@ -178,7 +191,9 @@ def crop_images(cards: list[dict], crops_dir: Path) -> dict[str, str]:
         if book not in ctxs:
             ctxs[book] = RunContext(load_book(book), st, cache, log=lambda s: None)
         _, page, col, slot, *rest = card["id"].split(":") + [""]
-        sub = rest[0] if rest else ""
+        # 格号的子位写在槽号后（vol28:193:5:2b）；也容忍写成第五段
+        m = re.fullmatch(r"(\d+)([a-z]*)", slot)
+        slot, sub = m.group(1), (m.group(2) or (rest[0] if rest else ""))
         key = cell_key(int(page), int(col), int(slot)) + (sub or "")
         try:
             f = cache.get(book, "char_patch", key) or ctxs[book].materialize("char_patch", key)
@@ -198,6 +213,67 @@ def crop_images(cards: list[dict], crops_dir: Path) -> dict[str, str]:
         if ok:
             imgs[card["id"]] = "data:image/png;base64," + base64.b64encode(buf.tobytes()).decode()
     return imgs
+
+
+# ───────────────────────────── 聚类 ─────────────────────────────
+
+CLUSTER_T = 0.5  # 同字头内，两格字块图最大平移相关 ≥ T 才算「长得一样」（完全连接）
+
+
+def _norm_img(raw: bytes):
+    import cv2
+    import numpy as np
+    im = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_GRAYSCALE)
+    im = 255 - im.astype("float32")  # 黑字白底 → 字亮底暗
+    h, w = im.shape
+    s = 40 / max(h, w)
+    im = cv2.resize(im, (max(1, round(w * s)), max(1, round(h * s))), interpolation=cv2.INTER_AREA)
+    out = np.zeros((48, 48), "float32")
+    y, x = (48 - im.shape[0]) // 2, (48 - im.shape[1]) // 2
+    out[y:y + im.shape[0], x:x + im.shape[1]] = im
+    return cv2.GaussianBlur(out, (3, 3), 0)
+
+
+def _ncc(a, b) -> float:
+    import cv2
+    import numpy as np
+    x = a - a.mean()
+    best = -1.0
+    for dy in range(-3, 4):
+        for dx in range(-3, 4):
+            bb = cv2.warpAffine(b, np.float32([[1, 0, dx], [0, 1, dy]]), (48, 48))
+            y = bb - bb.mean()
+            best = max(best, float((x * y).sum() / (np.sqrt((x * x).sum() * (y * y).sum()) + 1e-6)))
+    return best
+
+
+def cluster_cards(cards: list[dict], crops_dir: Path, t: float = CLUSTER_T) -> None:
+    """同整理本字的格里，字块图长得一样的归一组：给每张卡写 `grp`（组号，字头-序号）。
+    只是把「该点的次数」合并，**不改任何字的认定**；组里个别格不像，页上点缩略图可拆出来。"""
+    import numpy as np
+    from scipy.cluster.hierarchy import fcluster, linkage
+    from scipy.spatial.distance import squareform
+    by: dict[str, list[dict]] = collections.defaultdict(list)
+    for c in cards:
+        by[c["ref"]].append(c)
+    for ref, cs in by.items():
+        ims = []
+        for c in cs:
+            f = crops_dir / (c["id"].replace(":", "_") + ".png")
+            ims.append(_norm_img(f.read_bytes()) if f.exists() else None)
+        n = len(cs)
+        lab = list(range(n))
+        ok = [i for i in range(n) if ims[i] is not None]
+        if len(ok) >= 2:
+            D = np.zeros((len(ok), len(ok)))
+            for a in range(len(ok)):
+                for b in range(a + 1, len(ok)):
+                    D[a, b] = D[b, a] = max(0.0, 1 - _ncc(ims[ok[a]], ims[ok[b]]))
+            fl = fcluster(linkage(squareform(D), "complete"), 1 - t, "distance")
+            for k, i in enumerate(ok):
+                lab[i] = int(fl[k]) + n  # 避开无图格的单独号
+        for c, g in zip(cs, lab):
+            c["grp"] = f"{ref}-{g}"
 
 
 # ───────────────────────────── 页 ─────────────────────────────
@@ -229,6 +305,11 @@ CSS = """
 .verdicts button.sg[aria-pressed="true"]{background:var(--zhu)}
 .verdicts button.other[aria-pressed="true"]{background:var(--ochre)}
 .verdicts button.unclear[aria-pressed="true"]{background:var(--faint)}
+.thumbs{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+.thumbs img{height:56px;background:var(--tile);border-radius:2px;image-rendering:pixelated;cursor:pointer;
+  border:2px solid transparent}
+.thumbs img:hover{border-color:var(--zhu)}
+.tag.n{background:var(--indigo-soft);color:var(--indigo)}
 .bulk{margin:10px 0 0}
 .bulk button{min-height:40px;padding:0 12px;border:1px dashed var(--rule-hard);border-radius:3px;background:var(--surface);
   color:var(--ink);font-size:13px;cursor:pointer}
@@ -281,16 +362,34 @@ function buttons(r){
   return bs;
 }
 
+/* ---- 聚类：一张卡 = 一组长得一样的格；点裁决键 = 组里所有格同裁 ---- */
+const splitKey = id => 'split:' + id;
+const isSplit = id => !!state[splitKey(id)];
+function units(){
+  const seen = new Map(), out = [];
+  D.rows.forEach(r => {
+    if (!r.grp || isSplit(r.id)){ out.push([r]); return; }
+    let u = seen.get(r.grp);
+    if (!u){ u = []; seen.set(r.grp, u); out.push(u); }
+    u.push(r);
+  });
+  return out;
+}
+const unitOf = id => units().find(u => u.some(r => r.id === id)) || [];
+
 function card(r){
+  const mem = unitOf(r.id);
   const v = verdictOf(r.id);
   const btn = ([cls, val, lab, ch]) =>
     `<button class="${cls}" data-v="${esc(val)}" aria-pressed="${v === val}">${lab}${ch ? `<span class="c">${esc(ch)}</span>` : ''}</button>`;
   const img = D.imgs[r.id] ? `<img data-src="${esc(r.id)}" alt="">` : `<div class="noimg">无图</div>`;
   return `<article class="card${r.warn ? ' warn' : ''}" data-id="${esc(r.id)}"${v ? ` data-v="${esc(v)}"` : ''}>
-    <div class="row1">${img}
+    <div class="row1">${mem.length > 1 ? '' : img}
       <div><div class="big">${esc(r.ref)}</div>
-        <p class="meta">${r.warn ? '<span class="tag w">⚠ 护栏顶上来的</span>' : ''}<span class="tag">${esc(r.id)}</span></p>
+        <p class="meta">${r.warn ? '<span class="tag w">⚠ 护栏顶上来的</span>' : ''}${mem.length > 1 ? `<span class="tag n">${mem.length} 格同形</span>` : ''}<span class="tag">${esc(r.id)}</span></p>
         <p class="meta">库首选 ${esc(r.lib_top || '—')}${r.lib_cov ? ' cov ' + r.lib_cov : ''}　5b ${esc((r.r5 || []).join(' ') || '—')}</p></div></div>
+    ${mem.length > 1 ? `<div class="thumbs">${mem.map(m => D.imgs[m.id]
+      ? `<img data-src="${esc(m.id)}" data-m="${esc(m.id)}" title="${esc(m.id)}（点一下把它从这组拆出去）" alt="">` : '').join('')}</div>` : ''}
     <p class="ctx">${esc(r.ctx)}</p>
     <div class="verdicts">${buttons(r).map(btn).join('')}</div>
   </article>`;
@@ -298,10 +397,35 @@ function card(r){
 
 let filter = 'todo';
 function visibleRows(){
-  if (filter === 'all') return D.rows;
+  const us = units().map(u => u[0]);
+  if (filter === 'all') return us;
   const done = filter === 'done';
-  return D.rows.filter(r => !!verdictOf(r.id) === done);
+  return us.filter(r => !!verdictOf(r.id) === done);
 }
+function setUnit(id, v){
+  const u = unitOf(id), t = Date.now();
+  const same = u.every(r => verdictOf(r.id) === v);
+  u.forEach(r => { if (same) delete state[r.id]; else state[r.id] = {v, t}; });
+}
+/* 捕获阶段先接：裁决键按「整组」写，不让壳按单格写 */
+document.addEventListener('click', e => {
+  const b = e.target.closest('.verdicts button'); if (!b) return;
+  const art = b.closest('.card'); if (!art) return;
+  e.stopPropagation();
+  setUnit(art.dataset.id, b.dataset.v);
+  persist();
+  draw();
+}, true);
+/* 点缩略图：把这一格从组里拆出去（单独成卡，裁决清空） */
+document.addEventListener('click', e => {
+  const im = e.target.closest('.thumbs img'); if (!im) return;
+  e.stopPropagation();
+  const id = im.dataset.m;
+  if (unitOf(id).length < 2) return;
+  state[splitKey(id)] = {v: 's', t: Date.now()};
+  delete state[id];
+  persist(); draw();
+}, true);
 document.addEventListener('click', e => {
   const b = e.target.closest('#filter button'); if (!b) return;
   filter = b.dataset.f;
@@ -385,6 +509,13 @@ def cmd_collect(a) -> None:
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     imgs = {} if a.no_images else crop_images(cards, out / "crops")
+    if not a.no_images and not a.no_cluster:
+        cluster_cards(cards, out / "crops", a.cluster)
+        gs = {c["grp"] for c in cards}
+        print(f"聚类（T={a.cluster}）：{len(cards)} 格 → {len(gs)} 组")
+        # 同组挨着排：组按出现格数多的先
+        gn = collections.Counter(c["grp"] for c in cards)
+        cards.sort(key=lambda c: (not c["warn"], -gn[c["grp"]], c["grp"], _cell_sort(c["id"])))
     with (out / "cards.jsonl").open("w", encoding="utf-8") as f:
         for c in cards:
             f.write(json.dumps(c, ensure_ascii=False, sort_keys=True) + "\n")
@@ -407,7 +538,7 @@ def load_verdicts(path: Path) -> dict[str, str]:
     for line in path.read_text(encoding="utf-8").splitlines():
         if line.strip():
             d = json.loads(line)
-            if d.get("verdict"):
+            if d.get("verdict") and not str(d["id"]).startswith("split:"):  # split: 是页上拆组标记
                 out[d["id"]] = d["verdict"]
     return out
 
@@ -499,6 +630,8 @@ def main() -> None:
     c.add_argument("--db", help="字形库 glyph.db（缺省取工作区的）")
     c.add_argument("--min-count", type=int, default=1, help="整理本字在库里刻例数低于它算新字（缺省 1）")
     c.add_argument("--no-images", action="store_true", help="不出字块图（没原图时用）")
+    c.add_argument("--cluster", type=float, default=CLUSTER_T, help="同字头内字块图相似度阈值（缺省 0.5）")
+    c.add_argument("--no-cluster", action="store_true", help="不聚类，一格一卡")
     c.add_argument("--out", required=True)
     c.set_defaults(fn=cmd_collect)
     p = sub.add_parser("apply", help="收回的裁决 → 人裁事件（缺省 dry-run）")
