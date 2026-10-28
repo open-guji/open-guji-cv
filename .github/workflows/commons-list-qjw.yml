@@ -3,10 +3,10 @@ on:
   push:
     branches: [claude/commons-list-qjw]
 jobs:
-  smp:
+  dl:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: bash tmp_qjw/smp.sh
+      - run: bash tmp_qjw/dl.sh
       - uses: actions/upload-artifact@v4
-        with: { name: cadal-covers, path: out }
+        with: { name: djvu, path: out, compression-level: 0 }
