@@ -184,6 +184,25 @@ def text_ink_fraction(gray: np.ndarray, cells) -> dict[tuple[int, int, str], flo
     return out
 
 
+def cell_ink_fraction(gray: np.ndarray, cells) -> dict[tuple[int, int, str], float]:
+    """每格（不扩框）全部墨（灰度 < 128）占格面积的比例；`gray` 的坐标系须与 `quad_page` 一致。"""
+    b = gray < 128
+    H, W = b.shape
+    out: dict[tuple[int, int, str], float] = {}
+    for c in cells.columns:
+        for x in c.cells:
+            if not x.quad_page:
+                continue
+            q = np.asarray(x.quad_page, dtype=float)
+            x0, y0 = q.min(0)
+            x1, y1 = q.max(0)
+            X0, X1, Y0, Y1 = int(max(0, x0)), int(min(W, x1)), int(max(0, y0)), int(min(H, y1))
+            if X1 <= X0 or Y1 <= Y0:
+                continue
+            out[(c.col, x.slot, x.sub or "")] = float(b[Y0:Y1, X0:X1].mean())
+    return out
+
+
 def seal_overlap_cells(cells, seals, kind: str, overlap: float) -> dict[tuple[int, int, str], tuple[float, object]]:
     """格（`quad_page`，规范空间）与 `kind` 类印（`seals` 产物的 `Seal`）的外框重叠 ÷ 格面积 ≥ `overlap` 的格
     → {(col, slot, sub): (重叠比, 那方印)}；一格压着几方印取重叠最大的。"""
@@ -215,6 +234,26 @@ OCC_SEAL_OVERLAP = 0.5
 #: 小印压字：格与小印外框重叠 ≥ 这个比例（印章系统化第 4 期）。比大印低：小印的边框正好横穿印边那一列的字
 #: （vol09 p68 c7、p265 c7，重叠 0.35–0.44，字上压着一道印边）；印边外一列只蹭到 ≤ 0.18。
 OCC_CRISP_OVERLAP = 0.3
+#: 印框内的格，自己的背景噪点密度（`cell_densities`，每万像素中等墨点数）低于此值、且全部墨占格面积 < `OCC_SEAL_MAX_INK`
+#: 的，不算遮挡：框边缘擦到、背景干净的字（20–99 册 7 册抽样 516 遮挡格里约 14% 是这种；sheldon 10-28 定
+#: 「印章范围内＋背景有大量噪点」才算）。`seed_admit.occluded_seal_min_noise` 可调，0＝关。
+OCC_SEAL_MIN_NOISE = 4.0
+OCC_SEAL_MAX_INK = 0.5
+
+
+def _drop_clean_cells(ctx, page: int, cells, occ: dict, p) -> dict:
+    """大印框内但格内背景干净（噪点密度低、不是整块黑）的格不算遮挡。读不到原图就原样返回。"""
+    thr = float(getattr(p, "occluded_seal_min_noise", OCC_SEAL_MIN_NOISE) or 0.0)
+    if not occ or thr <= 0:
+        return occ
+    try:
+        gray = ctx.raw_page(page)[:, ::-1]   # 原图左上原点、格框右上原点（规范空间）：翻成同一坐标系
+    except Exception:
+        return occ
+    dens = cell_densities(gray, cells)
+    ink = cell_ink_fraction(gray, cells)
+    return {k: v for k, v in occ.items()
+            if not (dens.get(k, thr) < thr and ink.get(k, 1.0) < OCC_SEAL_MAX_INK)}
 
 
 def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
@@ -245,6 +284,7 @@ def page_occluded(ctx, page: int, p) -> dict[tuple[int, int, str], float]:
         seals = ctx.product("seals", page).seals
         hit = seal_overlap_cells(cells, seals, "stain", OCC_SEAL_OVERLAP)
         occ = {k: float(s.score) for k, (_ov, s) in hit.items()}
+        occ = _drop_clean_cells(ctx, page, cells, occ, p)
         # 小印压着的字（用户 10-22 定：同大印，默认整理本字、不进字形库）；只有印没有字的格是盖章空栏，归 page_seal_blank
         small = seal_overlap_cells(cells, seals, "crisp", OCC_CRISP_OVERLAP)
         if small:
