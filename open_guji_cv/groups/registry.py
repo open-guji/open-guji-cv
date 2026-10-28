@@ -84,7 +84,10 @@ class FlowSpec:
       且给字方法每一段的 margin 都要 ≥ 这个值（`ids` 留痕的 `margins`），不到留人审（`group_flow_solo_weak`）；声明了它的组，
       坐标对位字是 `〓` 不再当「组外字」拦（`coord_dissent`）。0＝不用（`〓` 照旧拦）。
       彝（A24 2026-10-26）：整理本缺字的格逐列本写 〓，80/90 格 U-Net 三段读作 彐米分大（𢑱）；整理本有字的 651 格里，
-      与整理本对不上、看图能定的段全是整理本记的码位不跟刻形，唯一字形错例（vol45:59:4:20 下段 大 读成 廾）margin 0.16 → 取 0.3。"""
+      与整理本对不上、看图能定的段全是整理本记的码位不跟刻形，唯一字形错例（vol45:59:4:20 下段 大 读成 廾）margin 0.16 → 取 0.3。
+    - `lift_ref_missing_ctx`：配 `lift_ref_agree` 用——整理本（含坐标对位）完全没有字时，只要文意（L3 在线 high、L1 规则、L2）给了字就放行，
+      不再记 `ref_missing`；整理本有字的照旧须同字。门族、辶族（A24 2026-10-28 第 1 轮）：字形 HOG 在这两族里常「间 问 闻」紧咬弃权，
+      整理本又缺位（约六成），文意（人名、书名、词组）几乎总能定。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -113,6 +116,7 @@ class FlowSpec:
     ref_canon: bool = False
     review_ref_agree: bool = False
     solo_margin: float = 0.0
+    lift_ref_missing_ctx: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -574,14 +578,14 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     "men": GroupSpec(
         id="men", name="門族", members=frozenset("間聞問闡閱閣闢關閩閭開闌閔闇閑闕閨門閒閻閏閉闚閶閎闈闞"), backends=(),
         kind="near_form", solvers=("ids",), config_dir="config/groups/men", overlaps=("wj", "guanm"),
-        flow=FlowSpec((_img("men"),), combine="first", lift_ref_agree=True,
+        flow=FlowSpec((_img("men"), CTX), combine="first", lift_ref_agree=True, lift_ref_missing_ctx=True,
                       tolerate=frozenset("刪删圖固同國岡剛圓冊因曲罔四明附則圍副嗣隅制冏團潤蘭困題順顯昭用"
                                          "𠕢𨴀閳䕡𨴏閜閹𨶽𦣧𨳼閰𨵅𨷺𢢅𦚻𭟧𨴕劂𨳸腢闆𨷯𨶇𭬸𠱬𨶏")),
         note="門族（形近不同义）：整字 HOG 一对多认刻形，与整理本同字才补放；問間 与 wj 共用（点名排在 wj 之后）、關 与 guanm 共用；只补放。"),
     "chuo": GroupSpec(
         id="chuo", name="辶族", members=frozenset("通過遺適迥遇運道迫遁遣進違逋邁還遼逆遍逸遭連邇遠退逾選述近迎造遵遞追邊巡遷遜"),
         backends=(), kind="near_form", solvers=("ids",), config_dir="config/groups/chuo", overlaps=("yh", "xuan", "xun", "cp_shu4"),
-        flow=FlowSpec((_img("chuo"),), combine="first", lift_ref_agree=True,
+        flow=FlowSpec((_img("chuo"), CTX), combine="first", lift_ref_agree=True, lift_ref_missing_ctx=True,
                       tolerate=frozenset("逈𮞉䢛𨓺𮞘蓮𨖳𨒪遖遗𨑬迵𨒵週𬨡遴适𨒒𨓓逓𲆌逝題𨒡𨓠𨕝𨖍𨗞𮞪䢗地")),
         note="辶族（形近不同义）：取右上框（避开走之底）HOG 一对多认刻形，与整理本同字才补放；遺還 与 yh 共用（点名排在 yh 之后）；"
              "逈（迥的异体）不进组，归异体对处理；只补放。"),
