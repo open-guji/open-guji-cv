@@ -39,6 +39,8 @@ fi
 manager_hint
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/open-guji/guji-workspace $GW
+# 快照里的旧克隆没有这之后新建的书目录（GUJI-全唐文 10-28：#891 找不到 995ejelvk0-*），匹配不到就先拉一次
+ls -d $GW/$WSGLOB >/dev/null 2>&1 || t 更新工作区 git -C $GW pull -q --ff-only origin main
 WS=$(ls -d $GW/$WSGLOB | head -n 1); export GUJI_WORKSPACE=$WS; echo "WS=$WS"
 # --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
