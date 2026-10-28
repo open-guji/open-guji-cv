@@ -21,6 +21,7 @@ import cv2
 
 from open_guji_cv.core.anchor import crop_patch
 from open_guji_cv.groups import ids_online as O, ids_whole
+from open_guji_cv.groups.flow import is_provisional
 
 PER_VOL = 4
 CAP = 30
@@ -55,7 +56,7 @@ def gather(prod: Path, imgs: Path, chars: str, drop: set, per_vol: int = PER_VOL
         for f in sorted(glob.glob(f"{vd}/seed_admit/p*.json")):
             for col in json.load(open(f, encoding="utf-8"))["seed_admit"]["columns"]:
                 rs += [r for r in col["chars"] if r.get("admit") and r.get("char") in set(chars) and not r.get("doubts")
-                       and r.get("channel") not in ("human", "seal") and r["id"] not in drop]
+                       and r.get("channel") not in ("human", "seal") and r["id"] not in drop and not is_provisional(r)]
         random.shuffle(rs)
         per: Counter = Counter()
         for r in rs:

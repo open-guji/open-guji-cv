@@ -34,6 +34,10 @@
 - 组声明了 `pair`（己已巳：干支「己巳」）：读序紧挨的两格都进了本组 → 前一格给 `pair[0]`、后一格给 `pair[1]`，不跑方法
   （留痕 `ctx:pair`）；三格以上连着照常跑方法。
 
+**暂归一兜底**（同义组，`registry.PROVISIONAL`，sheldon 2026-10-27）：上面补放留人审、复核要降审的格，若「是这个字」两路都认（`_provisional`：
+库首位与分差内候选、整理本字都在这组的同字写法里；复核时放行字在里面），就放成这组最常见的字形，`evidence.group.decision`
+记 `provisional`、留痕末尾记原来没放的原因与证人，将来按这个标记筛出来再拆（`is_provisional`）。意思不同的形近字组不兜底。
+
 每个进了流程的格都写 `evidence.group`：组、入口、每个解法的给字与理由、最终结论。
 
 判格在前、改格在后：先用遍前状态给所有格算好结论，再逐格执行，前一格改字不污染后一格的窗口。
@@ -50,6 +54,7 @@ from . import freq as _freq
 from .methods import KINDS, Method, MethodInput
 from .protocol import GroupVerdict
 from .registry import FLOW_GROUPS as GROUPS   # 含码位归一组（`registry.CODEPOINT_GROUPS`）
+from .registry import PROVISIONAL
 
 CHANNEL = "group_flow"
 GAP = "〓"           # 逐列本（整理本）的生僻字占位：知道有字、不知道是哪个
@@ -74,6 +79,8 @@ class FlowConfig:
     rr_p: float = 0.5
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
     codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
+    provisional: bool = True                           # 同义组暂归一兜底（`registry.PROVISIONAL`，seed_admit `group_flow_provisional`）
+    provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
 
 
 @dataclass
@@ -317,6 +324,39 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
     return 0 if i == lo else 1
 
 
+def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
+                 canon: Callable[[str], str]) -> tuple[str, str | None] | None:
+    """同义组暂归一兜底（`registry.PROVISIONAL`，sheldon 2026-10-27「先 IDS 拆分，拆不开或置信度不够就暂归一到一个字形，
+    记下是暂归一定的」）：方法没定下来（弃权、冲突、被整理本拦、复核要降）的格，「是这个字」两路都认 → (暂归一的字, 证人)，否则 None。
+    - 复核：放行字在 `forms` 里（别的通道已认了字），整理本没有字、是 〓 或也在 `forms` 里；
+    - 补放：库首位在 `forms` 里、cov ≥ `min_cov`，分差内的候选全在 `forms` 里（陪衬、形近的别的字都不许在）；
+      整理本字（现役对位缺时坐标对位字，夹注半格不认坐标对位）也在 `forms` 里；表里声明了 `gap` 的组，整理本缺字（〓）且库首位 cov ≥ `provisional_gap_cov` 也算。
+    整理本说是组外的字、没有整理本字、库里分差内有别的字 → 字认不准，照旧留人审。"""
+    pv = PROVISIONAL.get(g)
+    if pv is None or not cfg.provisional or mode == "joint":
+        return None
+    inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
+    if mode == "review":
+        return (pv.to, ref) if inn(r.char) and (not ref or ref == GAP or inn(ref)) else None
+    if not cands:
+        return None
+    top, c1 = cands[0]
+    if not inn(top) or c1 < cfg.min_cov or not all(inn(c) for c, v in cands[1:] if c1 - v < cfg.delta):
+        return None
+    w = ref or coord
+    if not ref and r.id[-1:] in ("a", "b"):
+        return None    # 夹注半格只有坐标对位：列尾切残的半格会把上一格的字对过来（vol20:175:7:21a 坐标对位 𨽻、刻的不是 隸）
+    if inn(w) or (w == GAP and pv.gap and c1 >= cfg.provisional_gap_cov):
+        return pv.to, w
+    return None
+
+
+def is_provisional(rec) -> bool:
+    """产物里的一格（dict 或放行记录）是不是暂归一兜底放的（建模板、统计时要剔除或单列）。"""
+    ev = rec.get("evidence") if isinstance(rec, dict) else getattr(rec, "evidence", None)
+    return ((ev or {}).get("group") or {}).get("decision") == "provisional"
+
+
 def _margin(t: dict) -> float | None:
     """方法留痕的把握：整字方法记 `margin`；三段 IDS 记每段的 `margins`，取最小的一段。"""
     if t.get("margin") is not None:
@@ -423,7 +463,15 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 坐标对位说是组里另一个字、给字的只有单遍文意表：不补放（vol13 63:5:18、vol17 161:8:8、vol19 27:7:9
                 # 单遍 haiku 读反，A24 10-24）；文意 strong、两遍以上同字、L1 规则或别的方法同字时照放
                 ch, why = None, "coord_dissent"
-            if ch is not None:
+            pv = None if ch is not None else _provisional(g, mode, r, cands_of(r.id) or [], ref, (veto_refs or {}).get(r.id), cfg, norm)
+            if pv is not None:
+                # 暂归一兜底：字认得准、写法拆不开 → 放成这组最常见的字形，留痕记原来没放的原因与证人
+                decision, ch = "provisional", pv[0]
+                trail = trail + [{"solver": "provisional", "char": ch, "why": f"fallback:{why}", "witness": pv[1]}]
+                why = "provisional"
+                r.char, r.admit, r.channel, r.provenance, r.doubts = ch, True, CHANNEL, "match", []
+                res.lifted += 1
+            elif ch is not None:
                 decision = "admit"
                 prov = "context" if any(t["solver"] == "ctx" and t["char"] == ch for t in trail) else "match"
                 r.char, r.admit, r.channel, r.provenance, r.doubts = ch, True, CHANNEL, prov, []
@@ -459,7 +507,17 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
-            if other and fix:
+            pv = _provisional(g, mode, r, [], ref, None, cfg, norm) if code and not (other and fix) else None
+            if pv is not None:
+                # 暂归一兜底：别的通道认了字、组里拆不开写法（判出另一形、弃权、与整理本不一） → 不降审，放成这组最常见的字形
+                decision = "provisional"
+                trail = trail + [{"solver": "provisional", "char": pv[0], "why": f"fallback:{code[len('group_flow_'):]}",
+                                  "witness": pv[1]}]
+                if r.char != pv[0]:
+                    r.evidence = {**(r.evidence or {}), "fixed_from": {"channel": r.channel, "char": r.char}}
+                ch, why = pv[0], "provisional"
+                r.char, r.channel, r.provenance = ch, CHANNEL, "match"
+            elif other and fix:
                 decision = "fix"
                 r.evidence = {**(r.evidence or {}), "fixed_from": {"channel": r.channel, "char": r.char}}
                 r.char, r.channel, r.provenance = ch, CHANNEL, "context"

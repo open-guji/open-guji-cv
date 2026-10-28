@@ -24,6 +24,7 @@ import numpy as np
 
 from open_guji_cv.core.anchor import crop_patch
 from open_guji_cv.groups import freq, ids_online as O, ids_whole
+from open_guji_cv.groups.flow import is_provisional
 
 PER_VOL = 12      # 每册每字最多收几格（模板库 <1MB）
 #: 组 → 放行格每字总共最多收几格（人裁与看图补的格不限）：口框族 國圖固 放行格多、64×64 模板大，不封顶模板库 4MB
@@ -288,7 +289,7 @@ def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set, gr
             for f in sorted(glob.glob(f"{vd}/seed_admit/p*.json")):
                 for col in json.load(open(f, encoding="utf-8"))["seed_admit"]["columns"]:
                     rs += [r for r in col["chars"] if r.get("admit") and r.get("char") in set(chars)
-                           and r.get("channel") not in ("human", "seal")]
+                           and r.get("channel") not in ("human", "seal") and not is_provisional(r)]   # 暂归一兜底的格写法没拆，不当模板
             random.shuffle(rs)
             for r in rs:
                 if per[(book, r["char"])] < PER_VOL and r["id"] not in drop:
