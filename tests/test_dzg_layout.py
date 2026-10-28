@@ -385,3 +385,13 @@ def test_row_segment_refuses_book_missing_from_layout(tmp_path):
     assert RS.load_layout(str(p), "vol11") == {}
     src = Path(RS.__file__).read_text(encoding="utf-8")
     assert "if p.layout_prior and not layout:" in src and "raise ValueError" in src
+
+
+def test_shift_occ_moves_body_slots_and_refuses_out_of_range():
+    """表整列挪一格（row_segment 1.40，vol68 p31 c8「右釋家類」首字在 2 号格、表记 3–20）。"""
+    from open_guji_cv.steps.row_segment import _shift_lay, _shift_occ
+    assert _shift_occ({3, 4, 20}, -1, 21) == {2, 3, 19}
+    assert _shift_occ({1, 2}, -1, 21) is None            # 挪出 1 号格
+    assert _shift_occ({20, 21}, 1, 21) is None           # 挪出列末
+    assert _shift_occ({-1, 1, 2}, 1, 21) is None         # 有抬头格的不挪
+    assert _shift_lay({"slots": [3, 4], "notes": [4], "half": []}, -1) == {"slots": [2, 3], "notes": [3], "half": []}
