@@ -3,10 +3,10 @@ on:
   push:
     branches: [claude/commons-list-qjw]
 jobs:
-  list:
+  smp:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: mkdir -p out && python3 tmp_qjw/list.py
+      - run: bash tmp_qjw/smp.sh
       - uses: actions/upload-artifact@v4
-        with: { name: cadal-list, path: out }
+        with: { name: cadal-covers, path: out }
