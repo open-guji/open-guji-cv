@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.5.32] - 测试中
+
+PATCH。含控制台拆成独立包 guji-console（C0–C3）、keben_free 第七轮、A24 码位组与字组送审若干（见下）。
+
 - **控制台拆成独立包 `guji-console`**（Sheldon 10-28，设计 `doc/design/拆分-控制台独立成包与上网站.md`，C0–C3）：`open_guji_cv/console/` 连提交历史搬进 open-guji/guji-console，cv 里删掉；控制台只经门面 `open_guji_cv.console_api` 读 cv，消费事件、导金标、迁载体、漂移检查、跑评测改调命令行；写人裁事件的逻辑挪到 `review/event_write.py`（`guji cellvotes write` 也用它）；`guji gold drift` 加 `--json`。**要用控制台就另装**：`uv pip install -e ../guji-console`（同一个环境），装上后 `guji console` / `guji runs` 由它经入口点提供，参数不变；`.[console]` extra 留成空的。37 个控制台测试文件（253 条）随包搬走。不动任何 Step 的 `code_hash`（L0）。PATCH。
 - 自由版式 `keben_free` 第七轮切字（Sheldon 10-28「先实现十几页」「考虑识别软件辅助」）：新可选步 `line_ocr`（逐列送 PaddleOCR 读文本行，产物 `free_ocr_lines`）；`cell_cut` 1.4 有识别行时按行定区（大字行／并排小注行）、按读出的字数切，漏掉的段落与没有识别行的列走规则；混排栏（认出了大字、但大字行不到一半）按字形认大字（`segment_mixed`）。`.[cpu]`／`.[gpu]` 的 paddleocr 下限提到 3.2。只有 keben_free 管线用（yxat 一册）。
 - 倚𠋣 麓𪋤 邃𮟏 冥㝠𡨋 隱隠𨼆 码位组（A24 第 1 轮，sheldon 10-28 定 倚/麓/邃/㝠/隠）：新 cp_yi3 cp_lu4 cp_sui4 cp_yin3b，cp_ming2 成员加 𡨋 并改给 㝠；撤 yin 刻形组（隱𨼆 刻形差别暂不拆）。99 册回放补放 112 格看图 0 错。
