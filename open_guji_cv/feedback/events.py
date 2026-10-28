@@ -100,6 +100,10 @@ Kind = Literal[
                       #   unsure, char, shown, note）。**不是人裁**：actor="model"，不进字形库、不算已裁、
                       #   human_chars 不认；只存 `feedback/vision/`（不进 events/），金标来源记 vision，
                       #   判 wrong 的格送回待审队列（doubt `vision_flag`）。
+    # ── 大模型的文意裁定（2026-10-28，sheldon 定）。见 feedback/rulings.py。
+    "ctx_ruling",     # 形近字组文意 L3 在线：大模型对一个窗口（前后各 20 字）判的字（payload: source="llm", group, char|None,
+                      #   conf, why, model, prompt_ver, ctx{left,right,hash}, cell, tok）。**不是人裁**：actor="model"，存
+                      #   `<feedback>/rulings/<批次>.jsonl`，不进 events/；管线 L3 先查它，有就按它来、没有才问大模型。
     # ── 插图块（GUJI-740，2026-10-24）。见 feedback/figures.py。
     "figure_region",  # 控制台在页上画的插图框：占若干列、半页或整页的图（payload: box=[x,y,w,h] canvas 像素、
                       #   col（图块右边第一列）、span、alt、fig（图 id，可空）；v="delete" 撤掉）。
@@ -112,7 +116,7 @@ Actor = Literal["user", "model", "align"]
 
 
 #: 「模型的判断」类来源：`payload.source` 取这些值的事件**不当人裁用**（overview#428）。
-MODEL_JUDGMENT_SOURCES = frozenset({"vision"})
+MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm"})
 
 
 def counts_as_human(e) -> bool:
@@ -126,7 +130,7 @@ def counts_as_human(e) -> bool:
     `scripts/mojibake_census.py` 乱码还原）——它们压的就是人裁本身，不认的话旧码位／乱码那条人裁
     会原样复活；②`scripts/book_lib_auto.py` 的机器高可信刻例（`source="auto"`），有自己的口径
     （replay 已跳过）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
-    if getattr(e, "kind", None) == "vision_check":
+    if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
         return False
     return (getattr(e, "payload", None) or {}).get("source") not in MODEL_JUDGMENT_SOURCES
 

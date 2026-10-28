@@ -236,11 +236,14 @@ class CtxOnline(Method):
             return _ctx_out(GroupVerdict(None, why="abstain:pair", via="ctx_llm"))
         cfg = inp.cfg
         o = cfg.l3_online[inp.group]
-        path = o.get("cache") or ""
-        if path not in _L3C:
-            _L3C[path] = ctx_llm.AnswerCache(path or None)
+        cache = o.get("rulings")            # 裁定库（seed_admit 给的 `RulingCache`）；缺省退本地 jsonl
+        if cache is None:
+            path = o.get("cache") or ""
+            if path not in _L3C:
+                _L3C[path] = ctx_llm.AnswerCache(path or None)
+            cache = _L3C[path]
         v = ctx_llm.judge(inp.group, o["system"], o["ver"], inp.left or "", inp.right or "", inp.members,
-                          model=cfg.l3_model, effort=cfg.l3_effort, cache=_L3C[path])
+                          model=cfg.l3_model, effort=cfg.l3_effort, cache=cache, cell=inp.cell_id)
         top = prev.extra.get("top")
         if top:
             v.extra["l2_top"] = top

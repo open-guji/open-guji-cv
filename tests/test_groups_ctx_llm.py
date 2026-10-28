@@ -81,3 +81,37 @@ def test_chain_asks_only_when_lower_layers_abstain(tmp_path, monkeypatch):
     _L3C.clear()
     v = run(cfg(0.999999999999, agree=True))
     assert v.char is None and v.why == "disagree:l2"
+
+
+def test_ruling_cache_roundtrip_and_layout_independent(tmp_path):
+    """裁定库当缓存：问过的窗口存成 ctx_ruling 事件（来源 llm、不算人裁），换格号也命中，提示词换版本才重问。"""
+    from open_guji_cv.feedback.events import counts_as_human
+    from open_guji_cv.feedback.rulings import RulingCache, RulingLog, RulingStore
+    fc = FakeClient()
+    rc = RulingCache(RulingStore(tmp_path))
+    v = j(rc, fc, cell="vol01:1:1:1")
+    assert v.char == "曰" and len(fc.calls) == 1
+    evs = list(RulingLog(tmp_path).iter_all(raw=True))
+    assert len(evs) == 1 and evs[0].kind == "ctx_ruling" and evs[0].actor == "model" and not counts_as_human(evs[0])
+    assert evs[0].payload["cell"] == "vol01:1:1:1" and (tmp_path / "rulings").is_dir() and not (tmp_path / "events").exists()
+    v = j(RulingCache(RulingStore(tmp_path)), fc, cell="vol99:7:7:7")        # 新进程、换格号
+    assert v.char == "曰" and v.extra.get("cached") and len(fc.calls) == 1
+    ctx_llm.judge("ry", "提示詞", "ry-l2-3", "子", "學而時習之", frozenset("日曰"), cache=RulingCache(RulingStore(tmp_path)),
+                  client=fc)                                                  # 提示词换版本
+    assert len(fc.calls) == 2
+
+
+def test_ruling_abstain_is_recorded(tmp_path):
+    from open_guji_cv.feedback.rulings import RulingCache, RulingStore
+    fc = FakeClient({"char": "曰", "conf": "low", "why": "不确定"})
+    rc = RulingCache(RulingStore(tmp_path))
+    assert j(rc, fc).why == "abstain:low_conf"
+    assert j(RulingCache(RulingStore(tmp_path)), fc).why == "abstain:low_conf" and len(fc.calls) == 1
+
+
+def test_ruling_other_is_recorded(tmp_path):
+    from open_guji_cv.feedback.rulings import RulingCache, RulingStore
+    fc = FakeClient({"char": "其他", "conf": "high", "why": "窠臼"})
+    j(RulingCache(RulingStore(tmp_path)), fc)
+    v = j(RulingCache(RulingStore(tmp_path)), fc)
+    assert v.why == "abstain:other" and v.extra["other_conf"] == "high" and len(fc.calls) == 1

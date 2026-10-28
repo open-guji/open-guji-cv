@@ -3,8 +3,9 @@
 只问 L1 规则、L3 答案表、L2 模型都给不出字的格（`methods.CtxOnline`），一格一问：
 - 系统提示＝该组的 `config/groups/<组>/prompt.md`（书名等占位符先填，`prompt_template`），打 `cache_control`，同组各格复用；
 - 用户消息＝一行「id、前文【?】后文」（与离线批跑同一取法，`ctx_l3.render_cell`），结构化输出 `{char, conf, why}`；
-- 答案**按窗口内容缓存**（组、提示词版本、模型、前后文 → 答案），不按格 id：格 id 改键、重跑都不重问，同一上下文跨册共用；
-  缓存是追加写的 jsonl（`cache` 路径，缺省 `<数据目录>/config/groups/l3cache/<组>.jsonl`），出错、拒答不进缓存；
+- 答案**按窗口内容缓存**，不按格 id：格 id 改键、重跑都不重问，同一上下文跨册共用。缓存缺省是裁定库
+  （`feedback.rulings`：模型的裁定事件，kind `ctx_ruling`，来源 llm，和人裁同一个事件库、同步到中心库），
+  也可以给本地 jsonl（`AnswerCache`，脚本用）；出错、拒答不进缓存；
 - 只收 conf=high、组内字；「其他」→ `abstain:other`（high 时 `other_conf: high`，共字组联判认它）。
 
 密钥只从环境变量 `GUJI_ANTHROPIC_API_KEY` 读（不进仓、不进配置）；没有密钥 → 先查缓存，缓存没有就弃权 `abstain:no_api_key`，
@@ -76,6 +77,13 @@ class AnswerCache:
 
     def get(self, k: str) -> dict | None:
         return self._load().get(k)
+
+    # judge 用的统一接口（裁定库 `feedback.rulings.RulingCache` 同款）：问过的窗口直接取，没问过 None
+    def lookup(self, group, prompt_ver, model, left, right):
+        return self.get(cache_key(group, prompt_ver, model, left, right))
+
+    def store(self, group, prompt_ver, model, left, right, e: dict, cell=None) -> None:
+        self.put(cache_key(group, prompt_ver, model, left, right), e)
 
     def put(self, k: str, e: dict) -> None:
         e = {"k": k, **e}
@@ -150,11 +158,10 @@ def user_message(left: str, right: str) -> str:
 
 
 def judge(group: str, system: str, prompt_ver: str, left: str, right: str, members, *, model: str = DEFAULT_MODEL,
-          effort: str = DEFAULT_EFFORT, cache: AnswerCache | None = None, client=None) -> GroupVerdict:
+          effort: str = DEFAULT_EFFORT, cache=None, client=None, cell: str | None = None) -> GroupVerdict:
     """一格 → `GroupVerdict`（via `ctx_llm`）。extra：`llm_model`、`llm_conf`（大模型自报）、`cached`、`tok`（这一格真问时的用量）。"""
     left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
-    k = cache_key(group, prompt_ver, model, left, right)
-    e = cache.get(k) if cache else None
+    e = cache.lookup(group, prompt_ver, model, left, right) if cache else None
     extra: dict = {"llm_model": model}
     if e is not None:
         _bump(hits=1)
@@ -172,7 +179,7 @@ def judge(group: str, system: str, prompt_ver: str, left: str, right: str, membe
         e = {"char": ans.get("char"), "conf": ans.get("conf"), "why": str(ans.get("why") or "")[:60],
              "model": tok.get("model") or model, "tok": extra["tok"]}
         if cache:
-            cache.put(k, e)
+            cache.store(group, prompt_ver, model, left, right, e, cell)
     ch, conf = e.get("char"), e.get("conf")
     extra["llm_conf"] = conf
     if ch == OTHER:

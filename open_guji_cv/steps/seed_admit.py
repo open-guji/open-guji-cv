@@ -849,7 +849,7 @@ class SeedAdmitStep(Step):
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry",
                    "open_guji_cv.groups.methods",
                    "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm",
-                   "open_guji_cv.groups.prompt_template",
+                   "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
                    # 其 `ids` 解法（方案 S7）：在线判别＋它用到的 IDS 路模块
@@ -2402,8 +2402,8 @@ _L3_ONLINE: dict = {}
 
 
 def _l3_online(p) -> dict:
-    """文意 L3 在线各组的 {system, ver, cache}：提示词按本书变量填好（`prompt_template`），缓存在数据目录
-    `config/groups/l3cache/<组>.jsonl`（按窗口内容存答案，见 `groups/ctx_llm`）。"""
+    """文意 L3 在线各组的 {system, ver, rulings}：提示词按本书变量填好（`prompt_template`），问过的窗口存成大模型裁定事件
+    （`feedback/rulings`，按窗口内容查，见 `groups/ctx_llm`）。"""
     from ..core.workspace import REPO_ROOT, data_root
     from ..groups.flow import rules_path
     from ..groups.prompt_template import book_prompt_vars, load_rendered_prompt
@@ -2418,8 +2418,12 @@ def _l3_online(p) -> dict:
                 meta, body = load_rendered_prompt(rules_path(g).with_name("prompt.md"), bv)
             except KeyError:              # 本书没给提示词变量（book_prompt.json）：这组不问
                 continue
-            d[g] = {"system": body, "ver": meta.get("ver", ""),
-                    "cache": str(root / "config" / "groups" / "l3cache" / f"{g}.jsonl")}
+            d[g] = {"system": body, "ver": meta.get("ver", "")}
+        if d:                  # 问过的窗口存成裁定事件（feedback/rulings，同人裁事件库），下次先查它
+            from ..feedback.rulings import RulingCache, RulingStore
+            rc = RulingCache(RulingStore())
+            for o in d.values():
+                o["rulings"] = rc
         _L3_ONLINE[key] = d
     return _L3_ONLINE[key]
 
