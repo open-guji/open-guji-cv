@@ -2,7 +2,7 @@
 # bootstrap_cloud.sh — 全新云端容器一条命令把 open-guji-cv 环境装到「自检通过」（GUJI-476 / Z1.4）
 #
 # 用法（在仓根或任意目录都行）：
-#   bash scripts/bootstrap_cloud.sh              # 装 .[console,torch,dev] 到 $GUJI_VENV，装完自检
+#   bash scripts/bootstrap_cloud.sh              # 装 .[torch,dev] 到 $GUJI_VENV（控制台另装 guji-console），装完自检
 #   bash scripts/bootstrap_cloud.sh --check      # 只自检，不装（rc 0＝可用，1＝不可用）
 #   bash scripts/bootstrap_cloud.sh --force      # 删掉重装（仅在明说时才会动已有 venv）
 # 环境变量（都可不设）：

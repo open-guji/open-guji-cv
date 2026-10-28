@@ -12,11 +12,6 @@
 """
 from __future__ import annotations
 
-import importlib
-import json
-import shutil
-import subprocess
-from pathlib import Path
 
 import pytest
 
@@ -155,99 +150,7 @@ def test_cards_without_cls_unchanged(env):
     assert all("cls_sub" not in c for c in d["cards"])
 
 
-@pytest.fixture
-def client(env):
-    from fastapi.testclient import TestClient
-    app = importlib.import_module("open_guji_cv.console.app").app
-    console_auth = importlib.import_module("open_guji_cv.console.auth")
-    Identity = importlib.import_module("open_guji_cv.console.auth.identity").Identity
-    app.dependency_overrides[console_auth.get_identity] = lambda: Identity(
-        email="r@example.com", role="reviewer", tier="reviewer")
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-def test_route_cls_sub(client):
-    q = "/api/review/cards?book=keben&pages=1&gate_cut=false&skip_decided=false"
-    r = client.get(q + "&cls=replace_align&cls_sub=tail")
-    assert r.status_code == 200, r.text
-    assert [c["id"] for c in r.json()["cards"]] == ["keben:1:1:20", "keben:1:1:21"]
-    g = client.get(q + "&cls=replace_align&cls_sub=grid").json()      # 缓存键带 cls_sub，不串
-    assert [c["id"] for c in g["cards"]] == ["keben:1:1:3", "keben:1:1:4"]
-    assert client.get(q + "&cls=variant&cls_sub=grid").status_code == 400
-    assert client.get(q + "&cls=replace_align&cls_sub=bogus").status_code == 400
-
-
 # ── 2. 网格事件 = 逐张事件（node 跑 reviewClass.ts）──────────────────
-
-TS = (Path(__file__).resolve().parents[1]
-      / "open_guji_cv/console/frontend/src/components/review/reviewClass.ts")
-
-
-def _node_ok() -> bool:
-    node = shutil.which("node")
-    if not node:
-        return False
-    return subprocess.run([node, "--experimental-strip-types", "-e", "0"],
-                          capture_output=True).returncode == 0
-
-
-needs_node = pytest.mark.skipif(not _node_ok(), reason="没有支持 --experimental-strip-types 的 node（≥22.6）")
-
-
-def _run_ts(tmp_path, body: str):
-    mod = tmp_path / "reviewClass.mts"
-    shutil.copy(TS, mod)
-    runner = tmp_path / "run.mts"
-    runner.write_text("import * as R from './reviewClass.mts'\n" + body, encoding="utf-8")
-    r = subprocess.run([shutil.which("node"), "--experimental-strip-types", "--no-warnings", str(runner)],
-                       capture_output=True, text=True, check=True)
-    return json.loads(r.stdout)
-
-
-@needs_node
-def test_ts_grid_rows_equal_per_card_rows(tmp_path):
-    out = _run_ts(tmp_path, """
-const seen = 400, now = 1000
-const cards = [{ id: 'a', ref: { char: '天' } }, { id: 'b', ref: { char: '地' } },
-               { id: 'c', ref: { char: '玄' } }, { id: 'd', ref: null }]
-const states = { b: 'review', c: 'review' }
-const grid = R.gridRows(cards, states, seen, now)
-const flags = R.gridFlagRows(cards, states, now)
-// 逐张卡：a 按 1（候选第一位 = 整理本字）→ setVerdict(i, ch) → pickVerdict（ReviewPanel.setVerdict）
-const per = [R.verdictRow('a', R.pickVerdict('天', undefined, seen, now))]
-const withAi = R.gridRows([cards[0]], {}, seen, now, () => true)
-const cycle = [R.nextGridState(undefined), R.nextGridState('review')]
-console.log(JSON.stringify({ grid, per, flags, withAi, cycle,
-  help: [R.classHelpKey('replace_align', 'grid'), R.classHelpKey('occluded', 'grid')],
-  hasGridHelp: !!R.CLASS_HELP['replace_align:grid'], zInHelp: R.DEFAULT_HELP.includes('小注当正文') }))
-""")
-    # 逐字段相同；b/c 点了要细审 → 不写裁决；d 没有整理本字 → 不提交
-    assert out["grid"] == out["per"]
-    assert out["grid"][0] == {"id": "a", "v": "confirm", "shape": "天", "no_glyph_lib": False,
-                              "client_ts": 1000, "dwell_ms": 600}
-    assert out["flags"] == [{"id": "b", "via": "grid", "client_ts": 1000},
-                            {"id": "c", "via": "grid", "client_ts": 1000}]
-    assert out["withAi"][0]["ai_accepted"] is True
-    assert out["cycle"] == ["review", "accept"]
-    assert out["help"] == ["replace_align:grid", "occluded"] and out["hasGridHelp"] and out["zInHelp"]
-
-
-@needs_node
-def test_ts_jiazhu_row_and_defect_kept(tmp_path):
-    out = _run_ts(tmp_path, """
-const row = R.verdictRow('x', { shape: '', done: 'jiazhu', ts: 5, dwell: 9 })
-// 先标「小注当正文」再点候选：缺陷档保住，字照样带上（与 T/C 同一口径）
-const kept = R.verdictRow('x', R.pickVerdict('天', { shape: '', done: 'jiazhu', dwell: 7 }, 1, 5))
-console.log(JSON.stringify({ row, kept, reason: R.JIAZHU_REASON }))
-""")
-    assert out["row"] == {"id": "x", "v": "seg_defect", "quality": "truncated", "reason": "jiazhu_as_main",
-                          "shape": "", "client_ts": 5, "dwell_ms": 9}
-    assert out["kept"] == {"id": "x", "v": "seg_defect", "quality": "truncated", "reason": "jiazhu_as_main",
-                           "shape": "天", "client_ts": 5, "dwell_ms": 7}
-    assert out["reason"] == "jiazhu_as_main"
 
 
 # ── 3. 下游：多了 reason 行为不变 ──────────────────────────────────────
@@ -331,37 +234,6 @@ def test_seed_admit_same_with_or_without_reason(tmp_path, monkeypatch):
 
 
 # ── 4. 补丁：提交只收当前屏（先「全部」载入，再换类别提交，不许带上印章遮挡默认行）──────────
-
-@needs_node
-def test_ts_submit_only_screen_and_drop_on_switch(tmp_path):
-    out = _run_ts(tmp_path, """
-// 「全部」那一屏：o1/o2 是印章遮挡默认（载入时预填、登记 touched + auto），h 是人亲手点的
-const verdicts = {
-  o1: { shape: '天', done: '1', ts: 1, noGlyphLib: true },
-  o2: { shape: '', done: 'non', ts: 1 },
-  h: { shape: '地', done: '1', ts: 2, dwell: 5 },
-  r: { shape: '玄', done: '1', ts: 3, dwell: 6 },      // 新一屏（对齐改字层）上人点的
-  old: { shape: '黃', done: '1' },                    // 服务端读回的历史裁决，没动过
-}
-const touched = new Set(['o1', 'o2', 'h', 'r'])
-const auto = new Set(['o1', 'o2'])
-const screen = [{ id: 'r' }, { id: 'old' }, { id: 'x' }]
-const rows = R.screenRows(screen, verdicts, touched)
-const drop = R.dropOffScreen(new Set(screen.map((c) => c.id)), touched, auto)
-const toGrid = R.dropOffScreen(new Set(), touched, auto)
-console.log(JSON.stringify({ rows, drop, toGrid }))
-""")
-    # 印章遮挡默认行、上一屏人点的都不在当前屏 → 不提交；没动过的历史裁决也不提交
-    assert out["rows"] == [{"id": "r", "v": "confirm", "shape": "玄", "no_glyph_lib": False,
-                            "client_ts": 3, "dwell_ms": 6}]
-    assert sorted(out["drop"]["dropped"]) == ["h", "o1", "o2"] and out["drop"]["human"] == ["h"]
-    assert sorted(out["toGrid"]["dropped"]) == ["h", "o1", "o2", "r"] and sorted(out["toGrid"]["human"]) == ["h", "r"]
-
-
-@needs_node
-def test_ts_tail_label_and_help(tmp_path):
-    out = _run_ts(tmp_path, "console.log(JSON.stringify(R.CLASS_HELP['replace_align:tail']))")
-    assert "易混框线" in out and "小注当正文" in out and "疑似小注" not in out
 
 
 def test_tail_sub_label_renamed():
