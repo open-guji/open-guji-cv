@@ -4,6 +4,7 @@
 - `layout_blocks`（Step1 `block_detect`）：版框、长线、文字块（自动或人标）；
 - `free_columns`（Step2 `column_trace`）：每块的列，左右缝是逐行 x 的折线（按 `step` 行采样）；
 - `free_cells`（Step3 `cell_cut`）：字框（页面坐标）＋种类＋读序。
+- `free_ocr_lines`（Step2-b `line_ocr`，可选）：逐列送识别软件读出的文本行（框＋文字＋置信度），给 Step3 定区、定字数。
 
 与刻本链 `borders / column_windows / cells` 分开立种类：这里的块可以有好几块、列界是弯缝、
 列里大字和双行小注交替，硬塞进那几种会把它们的含义撑坏。要接 Step4 以后的步骤时再写转换。
@@ -85,6 +86,21 @@ class FreeColumns(BaseModel):
     columns: list[ColumnRec] = Field(default_factory=list)
 
 
+class OcrLineRec(BaseModel):
+    col: int                        # 属于第几列
+    box: Box                        # 页面坐标外接框
+    text: str
+    score: float
+
+
+class FreeOcrLines(BaseModel):
+    page: int
+    width: int
+    height: int
+    engine: str = ""                # 识别引擎与模型，如 paddleocr-3.7
+    lines: list[OcrLineRec] = Field(default_factory=list)
+
+
 class FreeCellRec(BaseModel):
     col: int
     order: int                      # 列内读序，从 1 起
@@ -112,3 +128,6 @@ FREE_COLUMNS = register_kind(ProductKindSpec(
 FREE_CELLS = register_kind(ProductKindSpec(
     id="free_cells", title="自由版式 Step3 字框", storage="numeric", unit="page",
     schema=FreeCells, coord_space=RAW_TR))
+FREE_OCR_LINES = register_kind(ProductKindSpec(
+    id="free_ocr_lines", title="自由版式 Step2-b 列内识别行", storage="numeric", unit="page",
+    schema=FreeOcrLines, coord_space=RAW_TR))

@@ -44,12 +44,12 @@ dependencies = [
 # CPU 模式：pip install open-guji-cv[cpu]
 cpu = [
     "paddlepaddle>=3.0.0b2",
-    "paddleocr>=2.8.0",
+    "paddleocr>=3.2",
 ]
 # GPU 模式：先手动 pip install paddlepaddle-gpu，再 pip install open-guji-cv[gpu]
 # 详见 install_gpu.sh / install_gpu.bat
 gpu = [
-    "paddleocr>=2.8.0",
+    "paddleocr>=3.2",
 ]
 # 轻量 OCR：PP-OCRv4 的 ONNX 版，模型随包分发（无需联网下载模型），
 # 无 GPU / 无法访问模型源的环境用这个跑 label --sources rapidocr

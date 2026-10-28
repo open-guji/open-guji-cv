@@ -512,3 +512,40 @@ def test_trace_side_thin_frame_line_does_not_look_inward():
     prof[62:65] = 1.0
     e1, e2 = _bands(prof, 40, 1, 0.5, 30, 45, 12)
     assert e1 == 54 and e2 == 65
+
+
+def _col_img(items, wc=130, h=900):
+    """列图（True＝墨）：items 是 (x0, y0, 字身) 的「丰」。"""
+    img = np.full((h, wc), 225, np.uint8)
+    for x0, y0, s in items:
+        _glyph(img, x0, y0, s, t=max(3, s // 8))
+    return img < 128
+
+
+def test_segment_mixed_finds_big_between_notes():
+    from open_guji_cv.utils.free_cells import segment_mixed
+    items = [(35, 20, 60)]                                     # 居中大字
+    items += [(x, y, 40) for y in (100, 150) for x in (80, 15)]  # 两对小注（右、左）
+    items += [(35, 210, 60)]
+    kinds = [c.kind for c in segment_mixed(_col_img(items))]
+    assert kinds == ["char", "jiazhu_a", "jiazhu_a", "jiazhu_b", "jiazhu_b", "char"]
+
+
+def test_segment_ocr_uses_lines_for_offset_big_and_counts():
+    """大字偏右、不居中（规则认不出），识别行给了大字行和两条并排小注行，按行定区、按字数切。"""
+    from open_guji_cv.utils.free_cells import segment_ocr
+    items = [(62, 20 + 70 * k, 60) for k in range(3)]             # 三个偏右的大字
+    items += [(x, 240 + 50 * k, 40) for k in range(3) for x in (82, 12)]  # 三对小注
+    lines = [(40, 15, 128, 225, "甲乙丙", 0.95),
+             (75, 235, 128, 390, "子丑寅", 0.9), (5, 235, 58, 390, "卯辰巳", 0.9)]
+    cells = segment_ocr(_col_img(items), lines)
+    assert [c.kind for c in cells] == ["char"] * 3 + ["jiazhu_a"] * 3 + ["jiazhu_b"] * 3
+    assert all(c.y1 - c.y0 < 70 for c in cells)
+
+
+def test_segment_ocr_horizontal_pair_and_missed_ink_fall_back_to_rules():
+    """一对小注被横着读成「右左」一行 → 小注区；识别漏掉的大字留给规则。"""
+    from open_guji_cv.utils.free_cells import segment_ocr
+    items = [(82, 20, 40), (12, 20, 40), (35, 120, 60)]
+    cells = segment_ocr(_col_img(items), [(8, 15, 126, 64, "右左", 0.95)])
+    assert [c.kind for c in cells] == ["jiazhu_a", "jiazhu_b", "char"]

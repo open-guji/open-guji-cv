@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 自由版式 `keben_free` 第七轮切字（Sheldon 10-28「先实现十几页」「考虑识别软件辅助」）：新可选步 `line_ocr`（逐列送 PaddleOCR 读文本行，产物 `free_ocr_lines`）；`cell_cut` 1.4 有识别行时按行定区（大字行／并排小注行）、按读出的字数切，漏掉的段落与没有识别行的列走规则；混排栏（认出了大字、但大字行不到一半）按字形认大字（`segment_mixed`）。`.[cpu]`／`.[gpu]` 的 paddleocr 下限提到 3.2。只有 keben_free 管线用（yxat 一册）。
 - 倚𠋣 麓𪋤 邃𮟏 冥㝠𡨋 隱隠𨼆 码位组（A24 第 1 轮，sheldon 10-28 定 倚/麓/邃/㝠/隠）：新 cp_yi3 cp_lu4 cp_sui4 cp_yin3b，cp_ming2 成员加 𡨋 并改给 㝠；撤 yin 刻形组（隱𨼆 刻形差别暂不拆）。99 册回放补放 112 格看图 0 错。
 - 按刻形拆判的异体对组（shang ba sang xian yin … 共 31 个）与 dian 开 `ref_top_enter`（A24 压低组外异体对送审第 1 轮，10-28）：库首位与整理本同在组里就进，分差内的组外字不再挡入口；给字仍由整字 HOG 判。vol01–99 回放新进 100 格，逐格看图 0 错。只动 `registry`。
 - 第 1 轮压低字组送审（A24，2026-10-28）：men／chuo 加文意第二路（`FlowSpec.lift_ref_missing_ctx`，整理本与坐标对位都缺时 ctx 给字可补放，有参照不越过）并新增 `config/groups/{men,chuo}/{prompt.md,rules.yaml}`；`seed_admit.group_flow_llm_groups` 缺省加 zy xz rr guan men chuo。vol07–99 离线回放九组送审 815→约 391。`seed_admit` 与 flow 代码变，开 `group_flow` 的册判过期。PATCH。
