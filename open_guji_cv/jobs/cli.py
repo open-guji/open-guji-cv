@@ -153,6 +153,19 @@ def _fmt_time(t) -> str:
     return t.astimezone(ZoneInfo("America/Los_Angeles")).strftime("%m-%d %H:%M") if t else "-"
 
 
+_FAILED = ("failed", "blocked", "cancelled")
+_REASON_MAX = 160
+_TAG = {"failed": "失败原因", "blocked": "拦下原因", "cancelled": "取消", "queued": "上次失败"}
+
+
+def _reason(j: dict) -> str | None:
+    """失败／拦下的一行原因（库里 error 列，执行方收尾时写的）。排队中的单是上次失败留下的原因。"""
+    err = " ".join((j.get("error") or "").split())
+    if not err or j["status"] not in _FAILED + ("queued",):
+        return None
+    return err if len(err) <= _REASON_MAX else err[:_REASON_MAX - 1] + "…"
+
+
 def _line(j: dict) -> str:
     sp = j["spec"]
     st = j["status"] + (f"→#{j['duplicate_of']}" if j.get("duplicate_of") else "")
@@ -161,8 +174,10 @@ def _line(j: dict) -> str:
     pri = f" p{j['priority']}" if j["status"] == "queued" and j["priority"] != 100 else ""
     if j["status"] == "queued" and j.get("run_after"):
         pri += f" 冷却到 {_fmt_time(j['run_after'])}（第 {j['attempts']} 次环境失败后）"
-    return (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j['book'] or '-'):<6} "
+    head = (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j['book'] or '-'):<6} "
             f"{SP.summary(sp)}{pri}{stage}{where}  {j['submitted_by']} {_fmt_time(j['created_at'])}")
+    why = _reason(j)
+    return head if why is None else f"{head}\n      ↳ {_TAG[j['status']]}：{why}"
 
 
 def cmd_job(a) -> None:
@@ -221,6 +236,10 @@ def cmd_job(a) -> None:
             print("进展：", j["progress"])
         if j.get("error"):
             print("错误：", j["error"])
+        if j["status"] in _FAILED and j["attempts_rows"]:
+            last = j["attempts_rows"][-1]
+            print(f"看日志：guji_jobs show {j['id']} --log（第 {last['n']} 次领单的尾巴，执行方 {last['worker']}；"
+                  f"完整日志只在执行方机器上）")
         print("定义：", json.dumps(j["spec"], ensure_ascii=False))
         for t in j["attempts_rows"]:
             print(f"  第{t['n']}次 {t['worker']} {t.get('session') or ''} {_fmt_time(t['started_at'])}"
