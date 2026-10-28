@@ -18,7 +18,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockRec, LayoutBlocks, RuleRec
 from ..utils.free_blocks import (SPINE_MODES, Block, SplitParams, block_vrules, cut_pieces, find_banxin, find_banxin_gap,
-                                 find_frame, find_rules, ink_mask, line_maps, snap_cut, spine_sides,
+                                 find_frame, find_rules, ink_mask, line_maps, snap_cut, snap_frame_edges, spine_sides,
                                  split_region, thin_vlines, tree_blocks)
 from ..utils.layout_hints import parse_layout_hints
 
@@ -43,6 +43,8 @@ class BlockDetectParams(BaseModel):
     banxin_pad: int = 4            # 块裁到版心线里面再让几 px
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
+    frame_snap: bool = True        # 1.6 起：框线位置吸到框线墨带的内沿（双线框、粗框线）
+    frame_pad: int = 2             # 块边离框线内沿（1.6 起 12→2：本书「边框就是起点」）
     split_pad: int = 0             # 分栏线两边块边离线中心（1.5 起 0：上下两块在分隔线处相接，Sheldon 10-27「两块之间只有一条横线」）
     split_snap: int = 80           # 人标 splits 吸附的范围（px）：范围内有线（不论贯穿与否）吸到盖得最满的线，没有吸到最空的行
 
@@ -50,7 +52,7 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.5", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.6", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
         code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
@@ -70,6 +72,8 @@ class BlockDetectStep(Step):
         ink = ink_mask(gray, p.bg_win, p.ink_ratio)
         hs, vs = find_rules(ink, p.n_strips, p.fill, p.run, min_votes=p.min_votes)
         frame = find_frame(ink, hs, vs, min_votes=p.frame_votes)
+        if p.frame_snap:
+            frame = snap_frame_edges(ink, frame)
         # 先认版心：分栏线「贯穿」是对版心以内的版面说的（版心线把栏线截在那里）
         if p.banxin not in SPINE_MODES:
             raise ValueError(f"block_detect.banxin 只能是 {SPINE_MODES}，写的是 {p.banxin!r}")
@@ -84,7 +88,7 @@ class BlockDetectStep(Step):
                 band = cv2.GaussianBlur(band.reshape(1, -1), (9, 1), 2).ravel()
                 bx = find_banxin_gap(band, frame.left, frame.right, spine, lo=p.banxin_min,
                                      hi=p.banxin_gap_max, max_frac=p.banxin_gap)
-        pad = 12
+        pad = p.frame_pad
         x0, x1 = int(frame.left + pad), int(frame.right - pad)
         if bx is not None:
             if spine == "left":

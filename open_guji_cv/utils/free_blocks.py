@@ -135,12 +135,33 @@ class Frame:
     found: dict[str, bool] = field(default_factory=dict)
 
 
+def join_segments(rules: list[Rule], *, tol: float = 15, overlap: int = 40) -> list[Rule]:
+    """首尾相接的同一条线的几段（版片弯、框线中间换了斜率，各段条带票数都不够）连成一条：
+    两段沿线方向几乎不重叠（≤ overlap px），在接口处位置差 ≤ tol px，就连起来、票数相加，
+    位置取两端点连线。重叠多的是平行的两条线（双线框），不连。"""
+    out: list[Rule] = []
+    for r in sorted(rules, key=lambda r: r.lo):
+        for i, q in enumerate(out):
+            if q.orient != r.orient or r.lo < q.hi - overlap:
+                continue
+            j = (q.hi + r.lo) / 2
+            if abs(q.at(j) - r.at(j)) <= tol:
+                slope = (r.at(r.hi) - q.at(q.lo)) / max(1, r.hi - q.lo)
+                out[i] = Rule(q.orient, q.at(q.lo) - slope * q.lo, slope, q.lo, max(q.hi, r.hi),
+                              q.n_strips + r.n_strips)
+                break
+        else:
+            out.append(r)
+    return out
+
+
 def find_frame(ink: np.ndarray, hs: list[Rule], vs: list[Rule], *, edge_y: float = 0.025,
                edge_x: float = 0.012, min_votes: int = 4, merge: int = 45) -> Frame:
     """四边各取最外一条够完整（≥ min_votes 条带）的线，再取它 merge px 内最靠里的一条
     （粗框线的两沿、双线框的内线）当内沿。贴图边 edge_y／edge_x 以内的线是扫描纸边，不算
     （左右边距窄：书脊一侧的框线可以离图边只有 2% 页宽）。"""
     H, W = ink.shape
+    hs, vs = join_segments(hs), join_segments(vs)
     hh = sorted((r for r in hs if r.n_strips >= min_votes and edge_y * H < r.at(W / 2) < (1 - edge_y) * H),
                 key=lambda r: r.at(W / 2))
     vv = sorted((r for r in vs if r.n_strips >= min_votes and edge_x * W < r.at(H / 2) < (1 - edge_x) * W),
@@ -175,6 +196,43 @@ def find_frame(ink: np.ndarray, hs: list[Rule], vs: list[Rule], *, edge_y: float
         if right is None:
             right = float(cols.max()) if len(cols) else float(W - 1)
     return Frame(float(top), float(bottom), float(left), float(right), found)
+
+
+def snap_frame_edges(ink: np.ndarray, frame: Frame, *, thr: float = 0.3, reach: int = 45,
+                     inward: int = 20) -> Frame:
+    """框线位置（线中心，或双线框里认成内线的位置）→ 框线墨带的内沿。
+
+    每边在框线附近量墨的投影（只量边长中间 80%）：所在处已在墨带里（≥ thr）就往里走到墨带尽头
+    （最多 inward px，别把贴框的一列字吃进去）；不在墨带里就往外找最近的墨带（最多 reach px），
+    取它的内沿。块从这里起算，左右上下不再另留空白（Sheldon 10-27：「边框就是起点」）。"""
+    H, W = ink.shape
+    t, b, l, r = (int(round(v)) for v in (frame.top, frame.bottom, frame.left, frame.right))
+    ys, xs = slice(t + (b - t) // 10, b - (b - t) // 10), slice(l + (r - l) // 10, r - (r - l) // 10)
+    colp = ink[ys].mean(0)
+    rowp = ink[:, xs].mean(1)
+
+    def edge(prof: np.ndarray, at: int, out: int) -> float:
+        n = len(prof)
+        if not 0 <= at < n:
+            return float(at)
+        if prof[at] >= thr:
+            k = at
+            while 0 <= k - out < n and prof[k - out] >= thr and abs(k - out - at) <= inward:
+                k -= out
+            return float(k - out)
+        for d in range(1, reach + 1):
+            k = at + out * d
+            if not 0 <= k < n:
+                break
+            if prof[k] >= thr:
+                return float(k - out)
+        return float(at)
+
+    found = frame.found or {}
+    return Frame(top=edge(rowp, t, -1) if found.get("top") else frame.top,
+                 bottom=edge(rowp, b, 1) if found.get("bottom") else frame.bottom,
+                 left=edge(colp, l, -1) if found.get("left") else frame.left,
+                 right=edge(colp, r, 1) if found.get("right") else frame.right, found=frame.found)
 
 
 @dataclass
