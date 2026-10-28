@@ -25,6 +25,9 @@ _PKG = "open_guji_cv"
 #: 对外名字 → (cv 内模块, 属性名)。属性名为 None 表示导出模块本身。
 #: 加名字前先想：控制台真的要在进程里做这件事吗？会写盘或耗时的改走命令行（设计第五节）。
 _EXPORTS: dict[str, tuple[str, str | None]] = {
+    # api（pipeline 公开面）：控制台启动时核契约版本
+    "CONTRACT_VERSION": ("core.contract", 'CONTRACT_VERSION'),
+    "version_info": ("api", 'version_info'),
     # clustering.cnn_candidates
     "cnn_candidates": ("clustering.cnn_candidates", None),
     # clustering.confusables
