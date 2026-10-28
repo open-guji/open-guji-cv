@@ -21,6 +21,7 @@ from pathlib import Path
 from PIL import Image
 
 TEMPLATE = Path(__file__).with_name("char_review_sheet.tpl.html")
+GRID_TEMPLATE = Path(__file__).with_name("char_review_grid.tpl.html")
 
 
 def load(prod: Path):
@@ -67,12 +68,31 @@ def pick(ids: list[str], k: int) -> list[str]:
     return [ids[round(i * (len(ids) - 1) / (k - 1))] for i in range(k)]
 
 
+def grid_mode(a, groups, gm, patches) -> None:
+    """一页 N 格、一图一字：每字挑像素匹配度（glyph_match 首位 cov）最高的 `--per-char` 格，
+    污渍、半截字块 cov 低，自然排在外面。按字频排，同字相邻。"""
+    tiles = []
+    for ch, ids in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        best = sorted(ids, key=lambda i: -float(gm[i].get("cov") or 0))[:a.per_char]
+        for i in sorted(best, key=lambda i: tuple(int(x) for x in re.findall(r"\d+", i))):
+            p = patches / patch_name(i)
+            if p.exists():
+                tiles.append([i, ch, round(float(gm[i].get("cov") or 0), 3), thumb(p, 72), len(ids)])
+    data = {"book": a.book, "per_page": a.grid, "n_chars": len(groups),
+            "n_cells": sum(len(v) for v in groups.values()), "tiles": tiles}
+    html = GRID_TEMPLATE.read_text(encoding="utf-8").replace("/*DATA*/null", json.dumps(data, ensure_ascii=False))
+    Path(a.out).write_text(html, encoding="utf-8")
+    print(f"{len(tiles)} 格（{len(groups)} 字，共 {data['n_cells']} 格可验）→ {a.out}（{Path(a.out).stat().st_size / 1e6:.1f} MB）")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("ws")
     ap.add_argument("book")
     ap.add_argument("out")
     ap.add_argument("--per-char", type=int, default=14)
+    ap.add_argument("--grid", type=int, default=0,
+                    help="每页 N 格、一图一字、默认全对（只点不对的）；每字挑 --per-char 个像素匹配度最高的格")
     a = ap.parse_args()
     ws = Path(a.ws)
     gm, ar, sa = load(ws / "products" / a.book)
@@ -82,6 +102,8 @@ def main() -> None:
         if top and ar.get(i) == top:
             groups[top].append(i)
     patches = ws / "cache" / a.book / "char_patch"
+    if a.grid:
+        return grid_mode(a, groups, gm, patches)
     rows = []
     for ch, ids in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         shown = []

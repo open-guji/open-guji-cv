@@ -1,0 +1,104 @@
+<title>字形快审表</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：吸顶栏（页码、进度、翻页、导出）＋ 一页 30 格的网格，每格一图配一个字，默认全对，点不对的变红 */
+:root{
+  --bg:#f5f4f0; --panel:#ffffff; --fg:#1d1f1c; --muted:#6d716a; --line:#dcdad2; --tile:#ffffff;
+  --accent:#2f5d50; --accent-fg:#ffffff; --ok:#2f7d4f; --bad:#b3372c; --bad-bg:#f8e1de;
+  --font-ui:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --font-glyph:"Noto Serif SC","Songti SC","SimSun",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171a18; --panel:#202421; --fg:#e7e9e4; --muted:#9aa096; --line:#333832; --tile:#262b27;
+  --accent:#7fb7a4; --accent-fg:#11201a; --ok:#6fcf93; --bad:#f0857a; --bad-bg:#3a1f1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171a18; --panel:#202421; --fg:#e7e9e4; --muted:#9aa096; --line:#333832; --tile:#262b27;
+  --accent:#7fb7a4; --accent-fg:#11201a; --ok:#6fcf93; --bad:#f0857a; --bad-bg:#3a1f1c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-ui);padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 40px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center}
+h1{font-size:16px;margin:0;font-weight:600}
+.sub,.stat{color:var(--muted);font-size:12px;font-variant-numeric:tabular-nums}
+.bar{flex:1 1 140px;min-width:100px;height:8px;background:var(--line);border-radius:4px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--ok);width:0}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:6px;padding:5px 12px}
+button:focus-visible,.tile:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button:disabled{opacity:.45;cursor:default}
+main{max-width:1100px;margin:12px auto 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(112px,1fr));gap:8px}
+.tile{position:relative;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px 6px;background:var(--tile);border:2px solid var(--line);border-radius:8px;cursor:pointer;color:var(--fg)}
+.tile .img{background:#fff;border-radius:4px;padding:2px;line-height:0;height:80px;display:flex;align-items:center;justify-content:center;width:100%}
+.tile img{max-height:72px;max-width:100%;object-fit:contain}
+.tile .c{font:600 26px/1 var(--font-glyph)}
+.tile .m{font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tile.bad{border-color:var(--bad);background:var(--bad-bg)}
+.tile.bad .img{opacity:.55}
+.tile.bad::after{content:"不对";position:absolute;top:4px;right:6px;font-size:11px;font-weight:600;color:var(--bad)}
+.foot{display:flex;gap:8px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+.hint{color:var(--muted);font-size:12px;margin:8px 0 0;max-width:1100px;margin-inline:auto}
+#out{width:100%;min-height:90px;font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);max-width:min(640px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+</style>
+<header>
+  <div><h1>字形快审表</h1><div class="sub" id="sub"></div></div>
+  <div class="bar" title="已审页数"><i id="bar"></i></div>
+  <div class="stat" id="stat"></div>
+  <div class="ctl">
+    <button id="prev">上一页</button><span class="stat" id="pg"></span><button id="next" class="primary">本页没问题，下一页</button>
+    <button id="export">导出</button>
+  </div>
+</header>
+<p class="hint">每格是一张字块图配它的字（殿本字形库认的字 ＝ 整理本的字）。默认全对，只点不对的格（变红）。点「下一页」就算这一页审完，导出时只带已审完的页。</p>
+<main><div class="grid" id="grid"></div>
+<div class="foot"><button id="prev2">上一页</button><button id="next2" class="primary">本页没问题，下一页</button></div></main>
+<dialog id="dlg"><p>审完结果（复制下面的 JSON 发回给我）：</p><textarea id="out" readonly></textarea><p><button id="copy" class="primary">复制</button> <button id="close">关闭</button></p></dialog>
+<script>
+const D=/*DATA*/null;
+const KEY="char-grid-"+D.book+"-"+D.per_page;
+const P=D.per_page, NP=Math.ceil(D.tiles.length/P);
+let st={bad:{},seen:0,page:0};
+try{const s=localStorage.getItem(KEY);if(s)st=Object.assign(st,JSON.parse(s))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
+const $=id=>document.getElementById(id);
+function render(){
+  st.page=Math.min(Math.max(0,st.page),NP-1);
+  const g=$("grid");g.textContent="";
+  const frag=document.createDocumentFragment();
+  for(const [id,ch,cov,src] of D.tiles.slice(st.page*P,(st.page+1)*P)){
+    const b=document.createElement("button");b.className="tile"+(st.bad[id]?" bad":"");b.title=id;b.setAttribute("aria-label",`${ch} ${id}`);
+    const w=document.createElement("div");w.className="img";const im=document.createElement("img");im.src=src;im.alt=ch;w.appendChild(im);
+    const c=document.createElement("div");c.className="c";c.textContent=ch;
+    const m=document.createElement("div");m.className="m";m.textContent=cov.toFixed(2);
+    b.append(w,c,m);b.onclick=()=>{if(st.bad[id])delete st.bad[id];else st.bad[id]=1;save();b.classList.toggle("bad")};
+    frag.appendChild(b);
+  }
+  g.appendChild(frag);
+  $("pg").textContent=`第 ${st.page+1} / ${NP} 页`;
+  $("sub").textContent=`册 ${D.book} · ${D.tiles.length} 格 · 覆盖 ${D.n_chars} 个字`;
+  $("stat").textContent=`已审 ${st.seen}/${NP} 页 · 不对 ${Object.keys(st.bad).length}`;
+  $("bar").style.width=(st.seen/NP*100)+"%";
+  for(const id of ["prev","prev2"])$(id).disabled=st.page===0;
+  for(const id of ["next","next2"]){$(id).textContent=st.page===NP-1?"本页没问题，完成":"本页没问题，下一页"}
+  save();
+}
+function next(){st.seen=Math.max(st.seen,st.page+1);if(st.page<NP-1)st.page++;else{exportNow()}render();scrollTo(0,0)}
+function prev(){st.page--;render();scrollTo(0,0)}
+function exportNow(){
+  const seenTiles=D.tiles.slice(0,st.seen*P);
+  const bad=seenTiles.filter(t=>st.bad[t[0]]).map(t=>t[0]);
+  const ok=seenTiles.filter(t=>!st.bad[t[0]]).map(t=>[t[0],t[1]]);
+  $("out").value=JSON.stringify({book:D.book,pages_seen:st.seen,ok,bad});
+  $("dlg").showModal();
+}
+for(const id of ["next","next2"])$(id).onclick=next;
+for(const id of ["prev","prev2"])$(id).onclick=prev;
+$("export").onclick=exportNow;
+$("close").onclick=()=>$("dlg").close();
+$("copy").onclick=async()=>{const t=$("out");try{await navigator.clipboard.writeText(t.value)}catch(e){t.select()}$("copy").textContent="已复制"};
+addEventListener("keydown",e=>{if(e.target.tagName==="TEXTAREA")return;if(e.key==="ArrowRight")next();if(e.key==="ArrowLeft"&&st.page>0)prev()});
+render();
+</script>
