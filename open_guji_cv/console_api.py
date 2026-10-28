@@ -234,6 +234,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # review.cutline_default
     "attach_default_pick": ("review.cutline_default", 'attach_default_pick'),
     "cutline_default_mode": ("review.cutline_default", 'cutline_default_mode'),
+    # review.event_write
+    "write_events": ("review.event_write", 'write_events'),
     # review.group_view
     "group_view": ("review.group_view", 'group_view'),
     # review.invert_cards

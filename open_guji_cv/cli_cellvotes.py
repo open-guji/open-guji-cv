@@ -185,7 +185,12 @@ def cmd_draft(args) -> None:
 
 
 def cmd_write(args) -> None:
-    from .console.routers import feedback as F
+    from .core.workspace import batches_root, feedback_root, verdicts_root
+    from .feedback.events import EventLog
+    from .gold.store import GoldStore
+    from .products.store import ProductStore
+    from .review.batches import BatchStore
+    from .review.event_write import write_events
     out = Path(args.dir)
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
     if meta["book"] != args.book:
@@ -199,9 +204,9 @@ def cmd_write(args) -> None:
         return
     # 幂等键：同一份草稿重跑 write 不重复写（控制台写入路径按 payload.request_id 判重）
     rid = "cellvotes-" + hashlib.sha256(json.dumps(rows, ensure_ascii=False, sort_keys=True).encode()).hexdigest()[:16]
-    req = F.EventsIn(batch=args.batch, step="seed_admit", unit="cell", kind="confirm",
-                     events=rows, request_id=rid, consume=not args.no_consume)
-    res = F._api_events(req, reviewer=args.reviewer)
+    res = write_events(EventLog(feedback_root()), BatchStore(batches_root()), GoldStore(verdicts_root()),
+                       ProductStore(None), batch=args.batch, step="seed_admit", unit="cell", kind="confirm",
+                       events=rows, request_id=rid, consume=not args.no_consume, reviewer=args.reviewer)
     _print(json.dumps(res, ensure_ascii=False, indent=1))
     if not res.get("duplicate"):
         _print("已写进数据目录；推库：guji db sync -w <工作区>（写中心库前先报告、等点头）")

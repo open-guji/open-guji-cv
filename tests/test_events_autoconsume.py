@@ -77,7 +77,7 @@ def test_empty_events_do_not_trigger_consume(client):
 
 def test_consume_failure_does_not_break_the_write(client, monkeypatch):
     """消费炸了也得把「事件已保存」如实告诉前端——否则人以为裁决丢了。"""
-    from open_guji_cv.console.routers import feedback as mod
+    from open_guji_cv.review import event_write as mod
 
     def boom(*a, **kw):
         raise RuntimeError("路由表坏了")
