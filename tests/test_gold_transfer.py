@@ -147,13 +147,3 @@ def test_gold_add_defaults_to_workspace_verdicts_not_dataset(monkeypatch, tmp_pa
     assert default_dataset_root().name == "open-guji-dataset"
 
 
-def test_console_verdict_store_follows_feedback_root(monkeypatch, tmp_path):
-    from open_guji_cv.console import deps
-    deps.set_roots(feedback=tmp_path / "fb", dataset=tmp_path / "ds")
-    try:
-        assert deps.verdict_store().root == tmp_path / "fb" / "verdicts"
-        assert deps.gold_store().root == tmp_path / "ds"
-    finally:
-        deps.set_roots()
-        deps._roots.update({"feedback": None, "dataset": None})
-        deps._log = deps._batches = deps._gold = deps._verdicts = None

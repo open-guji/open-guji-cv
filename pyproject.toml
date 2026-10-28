@@ -105,14 +105,11 @@ shadow = [
 exp = [
     "mlflow>=3.0",
 ]
+# 控制台 2026-10-28 拆成独立包 guji-console（open-guji/guji-console），不再随 cv 装：
+#   pip install -e ../guji-console   （与 cv 装在同一个环境；装上后 `guji console` / `guji runs` 由它经入口点提供）
+# 这个 extra 留成空的，免得老的 `pip install -e ".[console,…]"` 报未知 extra。
+console = []
 # 开发依赖：pip install open-guji-cv[dev]
-# 本地控制台：pip install open-guji-cv[console]
-console = [
-    "fastapi>=0.110",
-    "uvicorn>=0.27",
-    # console/auth/oauth.py 顶层 import httpx；本地整理道 09-30 装 [console] 起控制台时缺它
-    "httpx>=0.25",
-]
 dev = [
     "pytest>=7.0",
     # 全量测试并行跑（`-n auto`）：四千多条串行 11–15 分钟，4 核并行约 2–3 分钟
@@ -125,7 +122,7 @@ dev = [
 [project.scripts]
 # python -m open_guji_cv 的 CLI 包装
 guji-cv = "open_guji_cv.__main__:main"
-# 四个抽象的 CLI（pipeline / step / status / console / cache），同样的子命令也挂在 guji-cv 下
+# 四个抽象的 CLI（pipeline / step / status / cache …；console 由 guji-console 插件提供），同样的子命令也挂在 guji-cv 下
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]
@@ -139,7 +136,7 @@ include = ["open_guji_cv*"]
 exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
-open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/**/*", "ops/*.json",
+open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "ops/*.json",
                 "clustering/review/static/*", "datastore/*.sql", "jobs/*.sql"]
 
 # ── 测试 ────────────────────────────────────────────────────────────────

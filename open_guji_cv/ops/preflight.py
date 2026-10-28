@@ -12,7 +12,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 
-INSTALL_HINT = 'uv pip install -e ".[console,torch,dev,datastore,shadow,pdf]"'
+INSTALL_HINT = 'uv pip install -e ".[torch,dev,datastore,shadow,pdf]"（要控制台另装 guji-console）'
 
 
 def _have(mod: str) -> bool:

@@ -6,8 +6,6 @@
 """
 from __future__ import annotations
 
-import importlib
-import json
 
 import pytest
 
@@ -124,50 +122,4 @@ def test_counts_not_truncated_by_limit(env):
 
 # ── 路由 ────────────────────────────────────────────────────────────
 
-@pytest.fixture
-def client(env):
-    from fastapi.testclient import TestClient
-    app = importlib.import_module("open_guji_cv.console.app").app
-    console_auth = importlib.import_module("open_guji_cv.console.auth")
-    Identity = importlib.import_module("open_guji_cv.console.auth.identity").Identity
-    app.dependency_overrides[console_auth.get_identity] = lambda: Identity(
-        email="r@example.com", role="reviewer", tier="reviewer")
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
 
-
-def test_route_no_param_byte_identical(client, env):
-    """不传 doubt 的响应体 = 直接调 `cards()`（改前的装配）序列化出来的那份。"""
-    from open_guji_cv.review.cards import cards
-    r = client.get("/api/review/cards?book=keben&pages=1-2&gate_cut=false&skip_decided=false")
-    assert r.status_code == 200, r.text
-    want = cards("keben", "1-2", 400, "review", env, gate_cut=False, skip_decided=False)
-    assert r.json() == json.loads(json.dumps(want, ensure_ascii=False))
-    assert "doubt_counts" not in r.json()
-
-
-def test_route_filter_counts_and_cache_key(client):
-    q = "/api/review/cards?book=keben&pages=1-2&gate_cut=false&skip_decided=false"
-    r0 = client.get(q)
-    r1 = client.get(q + "&doubt=occluded")
-    r2 = client.get(q + "&doubt=occluded")
-    r3 = client.get(q + "&doubt=channel_off")
-    assert r1.status_code == 200, r1.text
-    # 新参数进了缓存键：头一回带 doubt 是 miss，不会读回不带 doubt 的那份
-    assert r0.headers["X-Cards-Cache"] == "miss" and r1.headers["X-Cards-Cache"] == "miss"
-    assert r2.headers["X-Cards-Cache"] == "mem" and r3.headers["X-Cards-Cache"] == "miss"
-    assert [c["id"] for c in r1.json()["cards"]] == ["keben:1:1:1", "keben:2:1:2"]
-    assert [c["id"] for c in r3.json()["cards"]] == ["keben:1:1:2", "keben:2:1:1"]
-    assert r1.json()["doubt_counts"]["occluded"] == 2
-    assert client.get(q + "&doubt=坏码").status_code == 400
-
-
-def test_route_grouped_modes_carry_counts(client):
-    q = "/api/review/cards?book=keben&pages=1-2&gate_cut=false&skip_decided=false&group=char"
-    r = client.get(q + "&doubt=channel_off")
-    assert r.status_code == 200, r.text
-    d = r.json()
-    assert d["n_total"] == 2 and d["doubt_counts"]["channel_off"] == 2
-    assert "doubt_counts" not in client.get(q).json()

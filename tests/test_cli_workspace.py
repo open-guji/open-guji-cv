@@ -27,7 +27,7 @@ def test_book_commands_get_the_flag_and_others_do_not():
     sub = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction))
     assert any(a.dest == "workspace" for a in sub.choices["pipeline"]._actions)
     assert any(a.dest == "workspace" for a in sub.choices["status"]._actions)
-    assert not any(a.dest == "workspace" for a in sub.choices["console"]._actions)
+    assert not any(a.dest == "workspace" for a in sub.choices["version"]._actions)
 
 
 def test_missing_workspace_is_a_parse_error(capsys):
@@ -57,8 +57,3 @@ def test_valid_workspace_is_exported_to_env(tmp_path, monkeypatch):
     assert os.environ["GUJI_WORKSPACE"] == str(tmp_path.resolve())
 
 
-def test_job_argv_carries_workspace():
-    from open_guji_cv.console.jobs import JobSpec
-    spec = JobSpec(pipeline="keben_body_v2", book="bxgb", pages="all", workspace="D:/ws")
-    argv = spec.argv()
-    assert "--workspace" in argv and argv[argv.index("--workspace") + 1] == "D:/ws"
