@@ -119,7 +119,7 @@ def test_composite_crop_equals_registered_region(monkeypatch):
 def test_codepoint_groups_flow_only():
     """码位归一组只进字组流程（`FLOW_GROUPS`），不进 `GROUPS`（glyph_match、rare_ref_coord 的全局字组集合不变）。"""
     from open_guji_cv.groups.registry import CODEPOINT_GROUPS, FLOW_GROUPS, SHAPE_GROUPS
-    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang", "zheng"}
+    assert set(CODEPOINT_GROUPS) == {"nei", "chu", "juan", "wan", "huo", "kui", "lie", "lei", "cuan", "lang", "zheng", "cek"}
     assert not set(CODEPOINT_GROUPS) & set(GROUPS) and set(FLOW_GROUPS) == set(GROUPS) | set(CODEPOINT_GROUPS) | set(SHAPE_GROUPS)
     check_groups(tuple(CODEPOINT_GROUPS))
     for g, s in CODEPOINT_GROUPS.items():
