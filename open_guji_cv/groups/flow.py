@@ -446,8 +446,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # （vol12:147:2:17 入→八、vol28:20:5:4「國家八旗」八→入，A24 10-26）
                 ch, why = None, "ref_dissent"
             elif ch is not None and ((mode == "lift" and GROUPS[g].flow.lift_ref_agree) or r.id in tol_hit) and norm(
-                    rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch):
+                    rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch) and not (
+                    not rr and mode == "lift" and GROUPS[g].flow.lift_ref_missing_ctx and r.id not in tol_hit
+                    and any(t["solver"] == "ctx" and t["char"] == ch for t in trail)):
                 ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族／陪衬字挡门：字形与整理本两路一致才补放
+                # `lift_ref_missing_ctx`：整理本完全缺位时文意给的字照放（门族辶族，A24 10-28）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and not (cr == GAP and GROUPS[g].flow.solo_margin > 0)

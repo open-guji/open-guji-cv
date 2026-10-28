@@ -84,3 +84,41 @@ def test_other_groups_unaffected_by_ref_agree(monkeypatch):
     r = Rec("x")
     group_flow_pass([r], {}, lambda cid: [("會", 0.96), ("禽", 0.955)], lambda r: False, FlowConfig(groups=("qin",)))
     assert r.admit and r.char == "禽"
+
+
+def _run_ctx(monkeypatch, pick, ref=None, coord=None, img=None):
+    """门族／辶族第二路是文意（A24 2026-10-28）：字形（ids）弃权或给 `img`，文意（ctx）给 `pick`。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(pick if name == "ctx" else img, via=name))
+    r = Rec("x")
+    amap = {"x": (ref, "replace")} if ref else {}
+    group_flow_pass([r], amap, lambda cid: [("間", 0.955), ("閩", 0.952), ("聞", 0.951)], lambda r: False,
+                    FlowConfig(groups=("men",)), veto_refs={"x": coord} if coord is not None else None,
+                    ctx_fn=lambda seq, i, step: "文淵" if step < 0 else "藏本")
+    return r
+
+
+@pytest.mark.parametrize("gid", ["men", "chuo"])
+def test_family_has_ctx_second_path(gid):
+    f = FLOW_GROUPS[gid].flow
+    assert f.solvers[-1] == "ctx" and f.combine == "first" and f.lift_ref_agree and f.lift_ref_missing_ctx
+
+
+def test_ctx_lifts_when_ref_missing_but_not_against_ref(monkeypatch):
+    r = _run_ctx(monkeypatch, "閣")                             # 整理本、坐标对位都缺：文意说了算
+    assert r.admit and r.char == "閣" and r.provenance == "context"
+    r = _run_ctx(monkeypatch, "閣", ref="閣")
+    assert r.admit and r.char == "閣"
+    r = _run_ctx(monkeypatch, "閣", ref="開")                   # 整理本是另一字：不补放
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = _run_ctx(monkeypatch, "閣", coord="開")
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = _run_ctx(monkeypatch, None)
+    assert not r.admit and "group_flow_abstain" in r.doubts
+
+
+def test_shape_still_needs_ref_even_with_ctx_path(monkeypatch):
+    """字形先给字（combine=first）：整理本缺位仍 ref_missing（文意没轮到），与原来一致。"""
+    r = _run_ctx(monkeypatch, "閣", img="閣")
+    assert not r.admit and "group_flow_ref_missing" in r.doubts
