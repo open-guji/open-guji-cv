@@ -296,7 +296,7 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
                  line_full: float = 0.05, reg: float = 4.0, cover: float = 1.0,
                  seam_band: float = 0.08, width: tuple[float, float] = (0.8, 1.2),
                  fixed_ends: bool = False, cross: float = 0.0, center: float = 0.0, center_cap: float = 0.15,
-                 rule_min: float = 0.0) -> BlockColumns:
+                 rule_min: float = 0.0, snap: float = 0.15, rule_off: float = 0.2) -> BlockColumns:
     """块（ink、lines 已裁到块）→ 等宽网格的列。`lines` 是 `free_blocks.thin_vlines` 的细竖线强度。
 
     `spine`：块的这一侧可能还带着没裁掉的版心（版心线没探到），那一侧 spine_margin 内的墨
@@ -306,15 +306,19 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     `cross`、`center`（`gap_terms`）：切线每劈开一个墨块（字、框）加罚 cross（最多计 2 个）；落在空白里
     离两边墨块越远奖励越多（center，离到 center_cap × pitch 封顶）——先不穿墨，再取空白正中。
     `rule_min`：竖线要盖住块高这么多才当界行（不算墨、切在上面有奖励）；短的（标题框、牌记框的边）
-    墨照算、不奖励——否则切线会贴着框边走，切进框里的字。"""
+    墨照算、不奖励——否则切线会贴着框边走，切进框里的字。
+    有界栏的块（过半的内部切线 snap × 列距内有够长的竖线）：切线顺着界栏走，界栏斜、折都跟得上。"""
     h, w = ink.shape
     body, vl = split_vlines(ink)
+    lm = cv2.dilate((lines > 0.05).astype(np.uint8), np.ones((1, 5), np.uint8)) > 0   # 竖线像素（左右放宽 2px）
+    long_ = np.zeros(w, bool)
     if rule_min > 0:
         k = np.ones((1, 7), np.uint8)
         short = cv2.dilate((vl.mean(0) < rule_min).astype(np.uint8)[None], k).ravel() > 0
         body = body | (ink & vl & short[None])
-        long_ = cv2.dilate(((lines > 0.05).mean(0) >= rule_min).astype(np.uint8)[None], k).ravel() > 0
+        long_ = cv2.dilate((lm.mean(0) >= rule_min).astype(np.uint8)[None], k).ravel() > 0
         lines = lines * long_[None]
+        body = body & ~(lm & long_[None])           # 界栏（虚线也算）的墨不算字
     s = best_shear(body)
     prof = smooth(shear(body.astype(np.uint8), s).sum(0).astype(np.float32), 2) / max(h, 1)
     lp = shear(np.clip(lines * 255, 0, 255).astype(np.uint8), s).mean(0) / 255.0
@@ -350,13 +354,50 @@ def grid_columns(ink: np.ndarray, lines: np.ndarray, *, pitch: float | None, n: 
     ys = np.arange(h)
     lines_x = [cx + s * (ys - h / 2) for cx in cuts]
     band = max(3, int(seam_band * pitch))
+    # 有界栏的块（多数内部切线旁 snap×列距内有界栏）：切线顺着那条界栏走（线可斜、可折）；
+    # 小字压过界栏的地方绕开字（不穿字最要紧，Sheldon 10-28 p17）：字的墨罚 1，离开界栏只罚 rule_off
+    rule_x = [_near_rule(long_, cx, snap * pitch) for cx in cuts[1:-1]]
+    ruled = bool(rule_x) and sum(x is not None for x in rule_x) >= 0.5 * len(rule_x)
+    off_rule = (~lm).astype(np.float32) * rule_off
+    sc = seam_cost(body)
+    inner = []
+    for ln, rx in zip(lines_x[1:-1], rule_x):
+        if ruled and rx is not None:
+            inner.append(min_ink_seam(sc + off_rule, np.full(h, float(rx)), max(band, int(snap * pitch))))
+        else:
+            inner.append(min_ink_seam(sc, ln, band))
     seams = [np.clip(np.round(lines_x[0]).astype(int), 0, w - 1)]
-    seams += [np.clip(min_ink_seam(body, ln, band), 0, w - 1) for ln in lines_x[1:-1]]
+    seams += [np.clip(sm, 0, w - 1) for sm in inner]
     seams.append(np.clip(np.round(lines_x[-1]).astype(int), 0, w - 1))
     if fixed_ends:                                  # 块边是竖的，不随剪切斜
         seams[0], seams[-1] = np.zeros(h, int), np.full(h, w - 1)
     cols = [ColumnSeams(seams[i], seams[i + 1]) for i in range(len(seams) - 1)]
     return BlockColumns(cols[::-1], s, float(pitch), "hint" if n else "grid", [c for c in cands if c != m])
+
+
+def seam_cost(ink: np.ndarray, *, speck_area: int = 40, speck_cost: float = 0.15, halo: int = 4,
+              halo_cost: float = 0.3) -> np.ndarray:
+    """走缝用的墨代价（Sheldon 10-28 p17：列缝常窄到几 px，缝贴着字走、削掉淡笔画头）：
+    字的笔画算 1；笔画左右 halo px 内算 halo_cost（墨图量不全淡笔画头，缝要离字留点空）；
+    小墨点（面积 < speck_area：虚线界栏的点、噪点）只算 speck_cost。"""
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), connectivity=8)
+    wt = np.where(st[:, cv2.CC_STAT_AREA] < speck_area, speck_cost, 1.0).astype(np.float32)
+    wt[0] = 0.0
+    c = wt[lab]
+    strokes = (c >= 1.0).astype(np.uint8)
+    near = cv2.dilate(strokes, np.ones((1, 2 * halo + 1), np.uint8)) > 0
+    return np.maximum(c, near * np.float32(halo_cost))
+
+
+def _near_rule(long_: np.ndarray, x: float, reach: float) -> float | None:
+    """x 两边 reach 内最近的一段界栏（long_ 连续为真的一段）的中线；没有返回 None。"""
+    lo, hi = max(0, int(x - reach)), min(len(long_), int(x + reach) + 1)
+    xs = np.flatnonzero(long_[lo:hi]) + lo
+    if not len(xs):
+        return None
+    runs = np.split(xs, np.flatnonzero(np.diff(xs) > 1) + 1)
+    mids = [float(r.mean()) for r in runs]
+    return min(mids, key=lambda m: abs(m - x))
 
 
 def rule_breaks(hlines: np.ndarray, x0: int, x1: int, y0: int, y1: int, *, frac: float = 0.5,
