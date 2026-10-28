@@ -30,7 +30,7 @@ class LineOcrStep(Step):
     spec = StepSpec(
         id="line_ocr", title="Step2-b 列内识别行（自由版式，可选）", version="1.0", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_ocr_lines",), params=LineOcrParams,
-        code_deps=("open_guji_cv.utils.free_ocr", "open_guji_cv.utils.free_rectify"),
+        code_deps=("open_guji_cv.utils.free_ocr", "open_guji_cv.utils.free_cells", "open_guji_cv.utils.free_rectify"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
