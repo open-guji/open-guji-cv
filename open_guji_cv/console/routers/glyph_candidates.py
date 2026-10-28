@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...feedback import candidates as cand
+from open_guji_cv.console_api import candidates as cand
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -39,8 +39,8 @@ def _root() -> Path:
 def _lib_exemplars(char: str, refs: list[str], limit: int) -> tuple[int | None, list[dict]]:
     """库里同字的已有刻例：(总数, 前 limit 条)。清单点名的对照刻例排最前，其次人裁。
     本工作区没有库 → (None, [])，页面照样能裁（只是没有对照）。"""
-    from ...clustering.glyph_ledger import char_detail
-    from ...core.workspace import glyph_db_path
+    from open_guji_cv.console_api import char_detail
+    from open_guji_cv.console_api import glyph_db_path
     db = glyph_db_path()
     if not Path(db).exists():
         return None, []

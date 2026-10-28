@@ -16,12 +16,12 @@ from fastapi.responses import FileResponse, Response
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...core.book import load_book
-from ...core.step import KINDS, RunContext
-from ...errors import EncodeFailed, ImageMissing
-from ...gates.query import GATES, gate_summary
-from ...render.overlay import encode_png, overlay, preclean_overlay, preclean_report
-from ...utils.image_io import imread as cv_imread
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import KINDS, RunContext
+from open_guji_cv.console_api import EncodeFailed, ImageMissing
+from open_guji_cv.console_api import GATES, gate_summary
+from open_guji_cv.console_api import encode_png, overlay, preclean_overlay, preclean_report
+from open_guji_cv.console_api import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -78,7 +78,8 @@ def api_cache(book: str, kind: str, key: str, src: str = "raw") -> Response:
     `bbox_page` 去 `binarized/<book>/<page>.png` 上重裁——**同一个坐标、两套图**，
     人可以对照着看。二值副本没生成时**退回灰度**（不报错，页面照常出图）。
     """
-    import open_guji_cv.steps  # noqa: F401
+    from open_guji_cv.console_api import register_all
+    register_all()
     if kind not in KINDS or KINDS[kind].storage != "image_cache":
         raise HTTPException(404, "不是缓存图像种类")
     if src == "bin" and kind == "char_patch":
@@ -98,8 +99,8 @@ def _char_patch_binarized(book: str, key: str) -> Response | None:
     """`p0030c01s1` → 从二值页上按该字位的 `bbox_page` 重裁。拿不到就 None（调用方退回灰度）。"""
     import re
 
-    from ...core.step import page_key
-    from ...utils.binarized import binarized_or_none
+    from open_guji_cv.console_api import page_key
+    from open_guji_cv.console_api import binarized_or_none
 
     m = re.fullmatch(r"p(\d+)c(\d+)s(-?\d+)([ab]?)", key)
     if not m:
@@ -188,7 +189,7 @@ def api_preclean_before(book: str, page: int, scale: float = 0.35) -> Response:
 @maps_http
 def api_preclean_after(book: str, page: int, scale: float = 0.35) -> Response:
     """修复后的产物图（precleaned/<book>/<page>.png）。没生成就报 404 并提示怎么生成。"""
-    from ...utils.preclean import precleaned_path
+    from open_guji_cv.console_api import precleaned_path
 
     p = precleaned_path(book, page)
     if not p.exists():
@@ -218,7 +219,7 @@ def api_align_ref_summary(book: str, pages: str | None = None) -> dict:
     （n_grams/n_votes/vote_frac/dominance），不用再临时写脚本复算。
     `align_ref` 不是闸，不进 `gates.query.GATES`，见 `steps.align_ref.align_ref_summary`。
     """
-    from ...steps.align_ref import align_ref_summary
+    from open_guji_cv.console_api import align_ref_summary
 
     b = load_book(book)
     page_list = b.resolve_pages_ext(pages) if pages else None
@@ -230,7 +231,7 @@ def api_align_ref_summary(book: str, pages: str | None = None) -> dict:
 @maps_http
 def api_cutline_img(book: str, page: int, col: int, y0: int = 0, y1: int = 0) -> Response:
     """列图的一段（上下两格 + 边距），1:1 像素，前端在上面叠可拖的横线。"""
-    from ...core.spec import column_key
+    from open_guji_cv.console_api import column_key
 
     path = deps.image_cache().get(book, "column_image", column_key(page, col))
     if path is None:

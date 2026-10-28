@@ -34,8 +34,8 @@ LAYER: dict[str, int] = {
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
     "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4, "jobs": 4,
-    # L5 控制台（Web）
-    "console": 5,
+    # L5 控制台（Web）与它的门面（2026-10-28 控制台拆包 C0）
+    "console": 5, "console_api": 5,
     # L6 命令行入口
     "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
@@ -239,3 +239,70 @@ def test_pipeline_does_not_import_manager():
 def test_p2m_allowlist_has_no_stale_entries():
     stale = sorted(ALLOWED_PIPELINE_TO_MANAGER - _p2m_edges())
     assert not stale, "存量已修掉，请从 ALLOWED_PIPELINE_TO_MANAGER 里删掉：\n  " + "\n  ".join(stale)
+
+
+# ── 控制台拆成独立包（设计：doc/design/拆分-控制台独立成包与上网站.md，用户 2026-10-28 定）──
+#: 控制台只许经门面 `console_api` 用 cv；cv 其余部分不许 import 控制台。
+
+FACADE = f"{PKG}.console_api"
+
+#: cv（控制台以外）→ 控制台 的存量反向边。只许减不许增；C1 清零，C3 控制台搬走前必须为空。
+ALLOWED_INTO_CONSOLE: frozenset[str] = frozenset({
+    "cli_cellvotes -> console.routers",
+    "cli_cellvotes -> console.routers.feedback",
+    "cli_v2 -> console.app",
+    "cli_v2 -> console.auth",
+    "cli_v2 -> console.auth.config",
+    "cli_v2 -> console.jobs",
+    "cli_v2 -> console.routers.workspace",
+    "cli_v2 -> console.sse",
+    "review.cards -> console",
+    "review.cards -> console.deps",
+})
+
+
+def _is_console(mod: str) -> bool:
+    return _top(mod) == "console"
+
+
+def _console_edges() -> tuple[set[str], set[str]]:
+    """(控制台 → 门面以外的 cv, cv → 控制台)。"""
+    mods = _modules()
+    out_bad: set[str] = set()
+    into: set[str] = set()
+    for mod, path in mods.items():
+        for tgt in _imports(mod, path, mods):
+            if _is_console(mod) and not _is_console(tgt) and tgt not in (FACADE, PKG):
+                out_bad.add(f"{mod[len(PKG) + 1:]} -> {tgt[len(PKG) + 1:]}")
+            if not _is_console(mod) and _is_console(tgt):
+                into.add(f"{mod[len(PKG) + 1:]} -> {tgt[len(PKG) + 1:]}")
+    return out_bad, into
+
+
+def test_console_only_uses_facade():
+    bad = sorted(_console_edges()[0])
+    assert not bad, ("控制台只许 `from open_guji_cv.console_api import …`；要用新东西先在门面 `_EXPORTS` 登记"
+                     "（会写盘或耗时的改走命令行，见设计第五节）：\n  " + "\n  ".join(bad))
+
+
+def test_nothing_imports_console():
+    new = sorted(_console_edges()[1] - ALLOWED_INTO_CONSOLE)
+    assert not new, "cv 新增了对控制台的 import（控制台要拆成独立包，cv 不能依赖它）：\n  " + "\n  ".join(new)
+
+
+def test_into_console_allowlist_has_no_stale_entries():
+    stale = sorted(ALLOWED_INTO_CONSOLE - _console_edges()[1])
+    assert not stale, "存量已修掉，请从 ALLOWED_INTO_CONSOLE 里删掉：\n  " + "\n  ".join(stale)
+
+
+def test_facade_exports_resolve():
+    """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台运行时 500）。"""
+    import importlib
+    facade = importlib.import_module(FACADE)
+    missing = []
+    for name in facade.__all__:
+        try:
+            getattr(facade, name)
+        except Exception as e:   # noqa: BLE001
+            missing.append(f"{name}: {e!r}")
+    assert not missing, "门面里取不到的名字：\n  " + "\n  ".join(missing)

@@ -17,9 +17,9 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...core.book import load_book
-from ...errors import ImageMissing
-from ...utils.image_io import imread as cv_imread
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import ImageMissing
+from open_guji_cv.console_api import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -28,8 +28,8 @@ def _params_for_book(book: str, k: int):
     """这册书跑 `glyph_match` 时实际用的参数：管线 yaml 的 `params.glyph_match`
     覆盖在 `GlyphMatchParams` 默认值上，再补 Step 自己对现代书的 edition 缺省。
     台上看到的证据必须与管线判的是同一次匹配，否则人裁的是幻觉。"""
-    from ...core.pipeline import default_pipeline_id, load_pipeline
-    from ...steps.glyph_match import GlyphMatchParams
+    from open_guji_cv.console_api import default_pipeline_id, load_pipeline
+    from open_guji_cv.console_api import GlyphMatchParams
 
     b = load_book(book)
     overrides: dict = {}
@@ -67,9 +67,9 @@ def api_glyph_match_query(book: str, page: int, col: int, slot: int,
     在台上看到的是另一把尺子——管线跑的是笔宽归一 3px、库域 `modern:<book>`，调试视图
     却拿不归一的全库比，人照着台上的证据判，判的是不存在的那次匹配。
     """
-    from ...clustering.normalize import normalize_patch
-    from ...clustering.seeding import cached_matcher_from_db
-    from ...steps.glyph_match import db_fingerprint
+    from open_guji_cv.console_api import normalize_patch
+    from open_guji_cv.console_api import cached_matcher_from_db
+    from open_guji_cv.console_api import db_fingerprint
 
     ck = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
     path = deps.image_cache().get(book, "char_patch", ck)
@@ -101,8 +101,8 @@ def api_glyph_match_exemplar(instance_id: str) -> Response:
     「这是谁 vs 库里像谁」两栏并排比对。直接读 `glyph.db` 的 `derived`
     表（`kind='norm'`），数据本身就是 PNG blob，不必再解码/重编码。
     """
-    from ...clustering.glyph_db import GlyphDB
-    from ...core.workspace import glyph_db_path
+    from open_guji_cv.console_api import GlyphDB
+    from open_guji_cv.console_api import glyph_db_path
 
     db = GlyphDB(str(glyph_db_path()))
     row = db.conn.execute(
@@ -119,7 +119,7 @@ def api_glyph_match_summary(book: str, pages: str | None = None) -> dict:
     """板块②聚合数字：匹配档位分布（same/unsure/diff 计数）+ 护栏触发计数。
     见 `steps.glyph_match.glyph_match_summary`。
     """
-    from ...steps.glyph_match import glyph_match_summary
+    from open_guji_cv.console_api import glyph_match_summary
 
     b = load_book(book)
     page_list = b.resolve_pages_ext(pages) if pages else None

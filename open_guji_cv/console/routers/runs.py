@@ -18,10 +18,10 @@ from .. import deps
 from ..auth import require_admin
 from ..jobs import JobSpec
 from ..sse import sse
-from ...core.book import load_book
-from ...core.engine import Engine
-from ...core.pipeline import load_pipeline
-from ...errors import BadRequest
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import Engine
+from open_guji_cv.console_api import load_pipeline
+from open_guji_cv.console_api import BadRequest
 
 router = APIRouter(dependencies=[Depends(require_admin)])
 
@@ -70,7 +70,7 @@ def api_status(book: str, pipeline: str = "keben_body_v2", pages: str = "dev_set
     st["running"] = running.to_dict() if running else None
     # 当前库来源常驻可见（2026-09-09 教训：漏设 GUJI_WORKSPACE 时完全无提示，
     # 对着仓内示例库跑了一批才在产物指纹里事后发现）——这里跟入队闸同一份判断。
-    from ...core.workspace import describe, using_sample_db
+    from open_guji_cv.console_api import describe, using_sample_db
     st["workspace"] = {**describe(), "is_sample_db": using_sample_db()}
     return st
 
@@ -98,7 +98,7 @@ def api_run(req: RunRequest) -> dict:
     if req.allow_sample_db:
         import os
         os.environ["GUJI_ALLOW_SAMPLE_DB"] = "1"
-    from ...core.workspace import assert_workspace_declared
+    from open_guji_cv.console_api import assert_workspace_declared
     try:
         assert_workspace_declared()
     except RuntimeError as e:
@@ -114,7 +114,7 @@ def api_run(req: RunRequest) -> dict:
     # **本请求**那个（X-Guji-Workspace 头 → contextvar），也就是「下单的这个标签页
     # 当时在看哪个工作区」。写进工单之后就定死了：别的标签页切来切去、这个标签页
     # 自己再切，都影响不到这张已经下出去的单子。
-    from ...core.workspace import workspace_root
+    from open_guji_cv.console_api import workspace_root
     ws = workspace_root()
     job = deps.runner().submit(JobSpec(
         book=req.book, pipeline=req.pipeline, from_step=req.from_step,

@@ -22,21 +22,23 @@ from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
 from .review_cluster import CLUSTER_THR, cluster_tiles
-from ...clustering import cnn_candidates
-from ...clustering.confusables import load_pairs
-from ...core.anchor import x_tr_to_tl
-from ...core.book import load_book
-from ...core.spec import cell_key, column_key, page_key
-from ...core.step import RunContext
-from ...errors import EncodeFailed, ImageMissing
-from ...review.borrow_first import first_pick_mode
-from ...review.cards import (REPLACE_ALIGN_SUB_KEYS, _align_ref_maps, cached_cards, cards,
-                              parse_class_filter, parse_doubt_filter)
-from ...review.cell_shrink_rand import rand_sample
-from ...review.verdict_view import review_verdicts, verdicts_by_question
-from ...steps._warpmap import ColumnMapper
-from ...utils.preclean import effective_raw_path
-from ...utils.image_io import imread as cv_imread
+from open_guji_cv.console_api import cnn_candidates
+from open_guji_cv.console_api import confusable_pairs as load_pairs
+from open_guji_cv.console_api import x_tr_to_tl
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import cell_key, column_key, page_key
+from open_guji_cv.console_api import RunContext
+from open_guji_cv.console_api import EncodeFailed, ImageMissing
+from open_guji_cv.console_api import first_pick_mode
+from open_guji_cv.console_api import (
+    REPLACE_ALIGN_SUB_KEYS, align_ref_maps as _align_ref_maps, cached_cards, cards, parse_class_filter,
+    parse_doubt_filter,
+)
+from open_guji_cv.console_api import rand_sample
+from open_guji_cv.console_api import review_verdicts, verdicts_by_question
+from open_guji_cv.console_api import ColumnMapper
+from open_guji_cv.console_api import effective_raw_path
+from open_guji_cv.console_api import imread as cv_imread
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -133,7 +135,7 @@ def api_review_cards(response: Response, book: str, pages: str = "dev_set", limi
     if cls.strip():
         # 影子预测文件（overview#269）：文件指纹进缓存键（换了文件自动失效）；关掉影子进键，
         # 两种请求互不串。文件不存在时不进键，与改前的缓存键相同。
-        from ...review.shadow import shadow_sig
+        from open_guji_cv.console_api import shadow_sig
         if shadow_sig(book) is not None:
             req["shadow"] = shadow_sig(book) if shadow else "off"
 
@@ -656,7 +658,7 @@ def _card_norm_patch(book: str, ctx: RunContext, card: dict):
     （同一份坐标 → 同一张缓存图，不能各拼各的）；`ctx.materialize` 没有缓存时
     会从原图现算（子会话须知 §〇·1：云端能看字块图）。
     """
-    from ...clustering.normalize import normalize_patch
+    from open_guji_cv.console_api import normalize_patch
 
     key = cell_key(card["page"], card["col"], card["slot"]) + (card.get("sub") or "")
     try:
@@ -873,7 +875,7 @@ def _column_slots(st, book: str, page: int, col: int, cache: dict) -> list[dict]
     标出取自哪（`ref`/`coord`/原 `source`）。读序按 `sort_by_reading`（夹注 a/b 各成一行），
     无夹注的列与原来的 (slot, sub) 排序完全相同。
     """
-    from ...utils.jiazhu_order import sort_by_reading
+    from open_guji_cv.console_api import sort_by_reading
     d, m, o, a, dm, om, am, refm, coord = _page_maps(st, book, page, cache)
     if d is None and m is None:
         return None
@@ -1239,7 +1241,7 @@ def api_review_conflicts(batch: str | None = None, book: str | None = None) -> l
     out = []
     for (step, unit, kind, key), group in groups.items():
         last_by_reviewer = {}
-        from ...feedback.events import replay_key
+        from open_guji_cv.console_api import replay_key
         for e in sorted(group, key=replay_key):
             last_by_reviewer[e.reviewer] = e
         if len(last_by_reviewer) < 2:

@@ -28,7 +28,7 @@ from __future__ import annotations
 
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from ..core.workspace import reset_workspace_override, set_workspace_override
+from open_guji_cv.console_api import reset_workspace_override, set_workspace_override
 
 HEADER = "X-Guji-Workspace"
 QUERY = "ws"       # 图片类 URL 走查询参数（<img src> 带不了头）

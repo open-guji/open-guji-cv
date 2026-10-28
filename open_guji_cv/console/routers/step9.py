@@ -18,9 +18,9 @@ from fastapi import APIRouter, Depends
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...core.book import load_book
-from ...render.guji_markdown import render_page
-from ...render.reading_layout import DEFAULT_BASELINE_KG, reflow_page_structured
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import render_page
+from open_guji_cv.console_api import DEFAULT_BASELINE_KG, reflow_page_structured
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -38,7 +38,7 @@ def api_step9_render(book: str, pages: str, approx: str = "sidecar") -> dict:
     `approx`：近似字（overview#276）怎么出——`sidecar`（缺省：正文照填，响应另带 `approx` 侧表行）、
     `inline_ids`（正文括注 `字{ids=…}`）、`off`。见 `render/approx.py`。
     """
-    from ...render.approx import APPROX_MODES, book_marks, inline_ids_map, sidecar_rows
+    from open_guji_cv.console_api import APPROX_MODES, book_marks, inline_ids_map, sidecar_rows
     if approx not in APPROX_MODES:
         raise ValueError(f"approx 只能是 {'/'.join(APPROX_MODES)}，不是 {approx!r}")
     bk = load_book(book)
@@ -98,6 +98,6 @@ def api_step9_reflow(book: str, pages: str, baseline_kg: int = DEFAULT_BASELINE_
 def api_step9_progress(book: str, pages: str = "all") -> dict:
     """9.0：页范围内每页还挂着哪些待办（过期/待审/切线/阙文/非字/坏列）。
     是看板不是闸——有待办也照样允许 9.1/9.2（用户 2026-09-20）。口径见 `report/progress.py`。"""
-    from ...report.progress import page_progress
+    from open_guji_cv.console_api import page_progress
     bk = load_book(book)
     return page_progress(book, bk.resolve_pages_ext(pages), deps.product_store())

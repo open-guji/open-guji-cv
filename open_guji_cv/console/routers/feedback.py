@@ -15,12 +15,12 @@ from pydantic import BaseModel
 from .. import deps
 from ..auth import Identity, require_admin, require_reviewer
 from ..errors import maps_http
-from ...feedback.anchor import enrich_events as _anchor_events
-from ...feedback.consumers import route_and_consume
-from ...feedback.events import EventTarget, make_event, replay_key
-from ...feedback.harvest import harvest_text
-from ...feedback.routes import RouteTable
-from ...review.batches import Batch, render_registry_markdown
+from open_guji_cv.console_api import enrich_events as _anchor_events
+from open_guji_cv.console_api import route_and_consume
+from open_guji_cv.console_api import EventTarget, make_event, replay_key
+from open_guji_cv.console_api import harvest_text
+from open_guji_cv.console_api import RouteTable
+from open_guji_cv.console_api import Batch, render_registry_markdown
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -124,7 +124,7 @@ def _product_anchor(step: str, ids: dict) -> dict | None:
     if not step or pg is None:
         return None
     try:
-        from ...core.spec import page_key
+        from open_guji_cv.console_api import page_key
         man = deps.product_store().manifest(ids.get("book") or "", step)
         rec = man.get(page_key(int(pg))) if man else None
         fp = getattr(rec, "fingerprint", None)
@@ -154,8 +154,8 @@ def api_events(req: EventsIn, identity: Identity = Depends(require_reviewer)) ->
 def _check_cell_review(req: EventsIn) -> None:
     """格级审阅（GUJI-364b）写入前校验：批次须是 cellreview-<清单 id>，格须在清单里，裁决须合法。
     不合法整批拒掉（400），不写半截。"""
-    from ...feedback import cell_review as cr
-    from ...feedback import candidates as cand
+    from open_guji_cv.console_api import cell_review as cr
+    from open_guji_cv.console_api import candidates as cand
     if not req.batch.startswith(cr.BATCH_PREFIX):
         raise HTTPException(400, f"cell_review 的批次须以 {cr.BATCH_PREFIX} 开头：{req.batch!r}")
     try:
@@ -198,12 +198,12 @@ def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
         # `client_ts` / `dwell_ms` 留在 payload 里：事件的 `ts` 是**收割时间**
         # （历史 324 条只有 4 个不同值），量不出人裁一条要多久。UI 改造的验收
         # 指标就是这个耗时，没有它 D 刀无法证伪。
-        from ...feedback.harvest import parse_card_id
+        from open_guji_cv.console_api import parse_card_id
         ids = parse_card_id(row["id"])
         if req.kind == "cutline" and ids.get("page") is not None and ids.get("col") is not None:
             # 切线坐标在列图里，列窗几何一变就漂（col_h 还可能不变）；写入时顺手记下页面坐标
             # 与几何签名，评测据此换算到当前列图（eval/colgeom.py）。取不到几何就不记，不挡写入。
-            from ...eval.colgeom import current_geom, stamp
+            from open_guji_cv.console_api import current_geom, stamp
             geom = current_geom(deps.product_store(), ids.get("book") or "", ids["page"], ids["col"])
             payload = {**payload, **stamp(payload, geom)}
         evs.append(make_event(req.batch, base + i, req.kind,   # type: ignore[arg-type]
@@ -224,7 +224,7 @@ def _api_events(req: EventsIn, reviewer: str | None = None) -> dict:
     if b.status == "draft":
         b.status = "open"
     out = {"appended": n, "batch": req.batch}
-    from ...review.label_batches import is_label_batch
+    from open_guji_cv.console_api import is_label_batch
     if req.consume and n and is_label_batch(req.batch, deps.batch_store().root):
         # L3 补标签批（`guji label-batch make` 冻结了卡片文件）：**只写事件，不消费**。
         # 路由表会把 cutline/glued/none 事件落进工作区裁决表并把 Step3/Step2 产物标 invalidated——

@@ -15,8 +15,8 @@ from fastapi.responses import Response
 from .. import deps
 from ..auth import require_reviewer
 from ..errors import maps_http
-from ...feedback import candidates as cand
-from ...feedback import cell_review as cr
+from open_guji_cv.console_api import candidates as cand
+from open_guji_cv.console_api import cell_review as cr
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 

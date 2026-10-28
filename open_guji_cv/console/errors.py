@@ -21,8 +21,9 @@ from typing import Any, TypeVar
 
 from fastapi import HTTPException
 
-from ..errors import (BadRequest, Conflict, EncodeFailed, GujiError, IndexNotBuilt,
-                      NotFound, Unsupported)
+from open_guji_cv.console_api import (
+    BadRequest, Conflict, EncodeFailed, GujiError, IndexNotBuilt, NotFound, Unsupported,
+)
 
 # 顺序有意义：先匹配到的先用，所以子类要排在父类前面
 _CODES: tuple[tuple[type[GujiError], int], ...] = (

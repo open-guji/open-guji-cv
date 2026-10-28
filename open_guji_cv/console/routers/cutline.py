@@ -12,9 +12,9 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import deps
 from ..auth import require_reviewer
-from ...core.book import load_book
-from ...review.cutline_default import attach_default_pick, cutline_default_mode
-from ...review.verdict_view import cutline_verdicts
+from open_guji_cv.console_api import load_book
+from open_guji_cv.console_api import attach_default_pick, cutline_default_mode
+from open_guji_cv.console_api import cutline_verdicts
 
 router = APIRouter(dependencies=[Depends(require_reviewer)])
 
@@ -39,14 +39,14 @@ def _cutline_list_or_cells_ids(pages: str, book: str) -> set[str] | None:
     坐标约定同 `console/routers/evals.py::_rulers_pages`、`review/cards.py::parse_cells_spec`。
     """
     if pages.startswith("list:"):
-        from ...core.workspace import feedback_root
+        from open_guji_cv.console_api import feedback_root
         lp = feedback_root() / "lists" / f"{pages[5:].strip()}.txt"
         if not lp.exists():
             raise HTTPException(404, f"清单不存在：{lp}")
         return {ln.strip() for ln in lp.read_text(encoding="utf-8").splitlines()
                 if ln.strip() and not ln.startswith("#")}
     if pages.startswith("cells:"):
-        from ...review.cards import parse_cells_spec
+        from open_guji_cv.console_api import parse_cells_spec
         try:
             return parse_cells_spec(pages, book)
         except ValueError as exc:
@@ -70,8 +70,8 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     `review/cards.py::blocking_cutline_cases`）。两处共用同一份判据，
     不重新发明一套（那样两边会对不上号，见该函数 docstring 里踩过的坑）。
     """
-    from ...eval import touching as T
-    from ...review.cards import blocking_cutline_cases
+    from open_guji_cv.console_api import touching as T
+    from open_guji_cv.console_api import blocking_cutline_cases
 
     bk = load_book(book)
     st = deps.product_store()
@@ -145,8 +145,8 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
         # 清单模式（2026-09-26）：本批次里**对着当前列窗几何**裁过的算已裁（事件带的 geom_sig
         # 等于当前签名，见 eval/colgeom.py）。原来清单模式一律不滤——那时只能靠 col_h 变化出池，
         # 而清单里的条目 col_h 本来就没变，裁完刷新又全回来，「只看未裁」形同虚设。
-        from ...eval.colgeom import current_geom
-        from ...feedback.harvest import parse_card_id
+        from open_guji_cv.console_api import current_geom
+        from open_guji_cv.console_api import parse_card_id
         for e in deps.event_log().read(batch):
             sig = e.payload.get("geom_sig") if e.kind == "cutline" else None
             if not sig or e.target.key not in only_ids:
@@ -215,7 +215,7 @@ def api_cutline_cases(book: str = "vol01", pages: str = "body", limit: int = 250
     # 「整理本期望」那两个字是拿 6000 字样本硬锚出来的噪声。这种情况下页面
     # 照常渲染、没有任何报错，人只会觉得「附带信息不准确」而不会想到是环境
     # 变量——所以必须把它摆到返回值里，让面板显式警告。2026-09-12 实锤。
-    from ...core.workspace import corpus_path, using_sample_corpus
+    from open_guji_cv.console_api import corpus_path, using_sample_corpus
     warn = None
     if using_sample_corpus():
         warn = (f"读到的是仓内小样本语料（{corpus_path('zongmu_wenyuange_wikisource.txt')}），"
@@ -246,7 +246,7 @@ def _attach_candidates(st, book: str, picked: list[dict]) -> None:
     没跑过 Step4/5、或该格位/候选没有匹配结果时留空，前端按"没有识别信息"处理，
     不是错误。
     """
-    from ...core.step import page_key
+    from open_guji_cv.console_api import page_key
 
     per_page: dict[int, dict] = {}
     match_cache: dict[tuple[int, int, int], dict] = {}  # (page, col, slot) → {side: {cand_idx: MatchRec-ish dict}}

@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from ..clustering.rare_panel import warm_font_index
+from open_guji_cv.console_api import warm_font_index
 from .static_path import STATIC
 from .routers import (auth, border_review, cell_review, column_review, cutline, evals, feedback, figure_region,
                       glyph_candidates, glyph_match, glyph_spotcheck, glyphlib, gold, invert_review, jiazhu, products,
@@ -82,6 +82,6 @@ def serve(port: int = 8640, open_browser: bool = True, host: str = "127.0.0.1",
     threading.Thread(target=warm_font_index, name="font-index-warm",
                      daemon=True).start()
     # IDS 反查索引（10 万字，约 4 秒）：预热，免得字形库页第一次反查卡住
-    from ..clustering.ids_lookup import warm as warm_ids
+    from open_guji_cv.console_api import warm as warm_ids
     threading.Thread(target=warm_ids, name="ids-lookup-warm", daemon=True).start()
     uvicorn.run(app, host=host, port=port, log_level="warning", root_path=root_path)
