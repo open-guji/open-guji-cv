@@ -26,6 +26,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockColumnsRec, ColumnRec, FreeColumns, LayoutBlocks
 from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, thin_vlines
 from ..utils.free_columns import BlockColumns, ColumnSeams, block_columns, grid_columns, rule_breaks
+from ..utils.free_rectify import rectify_gray
 
 
 class ColumnTraceParams(BaseModel):
@@ -38,7 +39,7 @@ class ColumnTraceParams(BaseModel):
     min_speck: int = 15            # 面积小于此的墨点先去掉
     pitch_prior: float | None = None   # 全册列距先验（px）；人标的 pitch 优先
     grid: bool = True              # 有列距先验或人标列数时走等宽网格
-    grid_reg: float = 1.0          # 列宽偏离列距的罚（1.4 起 4→1：先不穿墨，再求均匀）
+    grid_reg: float = 4.0          # 列宽偏离列距的罚（1.4 起 4→1，1.5 回 4：劈开墨块仍最重，但几条空缝之间按均匀挑，一列正好两行小字，Sheldon 10-28 p10、p11、p24）
     grid_cover: float = 1.0        # 网格外剩下的墨（按列计）的罚
     grid_line_bonus: float = 3.0   # 细竖线（浅界行）处切线的奖励
     grid_seam_band: float = 0.08   # 内部切线变缝的幅度（× 列距）
@@ -58,9 +59,10 @@ class ColumnTraceParams(BaseModel):
 @register_step
 class ColumnTraceStep(Step):
     spec = StepSpec(
-        id="column_trace", title="Step2 块内找列（自由版式）", version="1.4", unit="page",
+        id="column_trace", title="Step2 块内找列（自由版式）", version="1.5", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
-        code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks"),
+        code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks",
+                   "open_guji_cv.utils.free_rectify"),
         parallel_safe=True,
     )
 
@@ -72,7 +74,7 @@ class ColumnTraceStep(Step):
         if lb.page_type == "skip" or not todo:
             return {"free_columns": out}
         W = lb.width
-        gray = ctx.raw_page(page)
+        gray = rectify_gray(ctx.raw_page(page), lb.warp)
         ink = drop_specks(ink_mask(gray, p.bg_win, p.ink_ratio), p.min_speck)
         lines = hrules = None
         boxes = {b.index: tuple(int(round(v)) for v in bbox_tr_to_tl(b.box, W)) for b in todo}
