@@ -13,7 +13,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from open_guji_cv.groups.context import WIDTH, ctx_key
-from open_guji_cv.groups.ctx_l2 import parse_output
+from open_guji_cv.groups.ctx_l3 import parse_output
 from open_guji_cv.groups.flow import ctx_judge as judge
 from open_guji_cv.groups.l2_panel import panel_merge
 from open_guji_cv.groups.prompt_template import book_prompt_vars, build_batch_rendered as build_batch

@@ -106,6 +106,7 @@ SIDE_OVERRIDE: dict[str, str] = {
     "feedback.lookup": SIDE_PIPELINE, "feedback.bindings": SIDE_PIPELINE, "feedback.keys": SIDE_PIPELINE,
     "feedback.mojibake": SIDE_PIPELINE, "feedback.events": SIDE_PIPELINE, "feedback.lock": SIDE_PIPELINE,
     "feedback.anchor": SIDE_PIPELINE, "feedback.returns": SIDE_PIPELINE,   # bindings 要用
+    "feedback.rulings": SIDE_PIPELINE,   # 大模型裁定：L3 在线读、问完写回（2026-10-28）
     "gold.item": SIDE_PIPELINE, "gold.drift": SIDE_PIPELINE,             # lookup / bindings 要用的金标信封与漂移判定
     # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
     "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,

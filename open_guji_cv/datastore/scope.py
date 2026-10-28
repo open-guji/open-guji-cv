@@ -123,7 +123,7 @@ def classify(rel: str) -> str | None:
     if len(parts) == 2 and parts[0] == "books" and p.suffix == ".yaml":
         return "books"
     if parts[0] == "feedback":
-        if len(parts) == 3 and parts[1] in ("events", "vision") and p.suffix == ".jsonl":
+        if len(parts) == 3 and parts[1] in ("events", "vision", "rulings") and p.suffix == ".jsonl":
             return "events"
         if len(parts) == 3 and parts[1] == "consumed" and p.suffix == ".jsonl":
             return "consumed"

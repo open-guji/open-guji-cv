@@ -71,9 +71,14 @@ class FlowConfig:
     freq_major: int = _freq.MAJOR
     freq_vols: dict = field(default_factory=dict)      # 组 id → {成员: 人裁册数}（`freq.load_vols`）
     freq_min_vols: int = _freq.MIN_VOLS
-    l2_tables: dict = field(default_factory=dict)      # 组 id → 上下文 L2 答案表路径
+    l2_tables: dict = field(default_factory=dict)      # 组 id → 文意 L3 大模型答案表路径（字段名沿用旧名）
+    l2_models: dict = field(default_factory=dict)      # 组 id → 文意 L2 模型小头路径（`ctx_l2`）
+    l3_online: dict = field(default_factory=dict)      # 组 id → {system 提示词, ver, cache 路径}：文意 L3 在线（`ctx_llm`）；空＝不问
+    l3_model: str = "claude-opus-5-5"
+    l3_effort: str = "low"
+    l3_need_l2_agree: bool = False                     # L3 在线给的字须与 L2 模型弃权时的首选字相同
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
-    l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l2.ctx_drift`；0＝逐字比）
+    l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -562,7 +567,7 @@ def ctx_fingerprint(groups, tables: dict) -> str:
 def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None,
               canon: Callable[[str], str] | None = None) -> GroupVerdict:
     from .ctx_l1 import CtxL1Backend
-    from .ctx_l2 import CtxL2Backend
+    from .ctx_l3 import CtxL3Backend
     from .protocol import JudgeInput, window_from_text
     spec = GROUPS[g]
     cell = JudgeInput(id=cid, ref=ref, window=window_from_text(left, right))
@@ -572,7 +577,7 @@ def ctx_judge(g: str, cid: str, ref, left: str, right: str, table: str | None,
     if v.char is not None or not table:
         return v
     if table not in _L2:
-        _L2[table] = CtxL2Backend(table)
+        _L2[table] = CtxL3Backend(table)
     v2 = _L2[table].judge(spec, cell, canon)
     v2.extra = {**v2.extra, "l1_why": v.why}
     return v2

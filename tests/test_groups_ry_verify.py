@@ -1,4 +1,4 @@
-"""日曰（ry）＋日目（rm）A24 2026-10-24：L2 表逐格细读复核（`ctx_l2.add_verify`）、单遍文意拗坐标对位不补放、
+"""日曰（ry）＋日目（rm）A24 2026-10-24：L2 表逐格细读复核（`ctx_l3.add_verify`）、单遍文意拗坐标对位不补放、
 文意与整理本相反的待审格记 `group_flow_ctx_contra`、ry／rm L1 规则修订。自造数据。"""
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import pytest
 import open_guji_cv.steps  # noqa: F401
 from open_guji_cv.groups import flow
 from open_guji_cv.groups.ctx_l1 import CtxL1Backend
-from open_guji_cv.groups.ctx_l2 import CtxL2Backend, add_verify, merge_runs
+from open_guji_cv.groups.ctx_l3 import CtxL3Backend, add_verify, merge_runs
 from open_guji_cv.groups.flow import FlowConfig, group_flow_pass
 from open_guji_cv.groups.protocol import GroupVerdict, JudgeInput, window_from_text
 from open_guji_cv.groups.registry import GROUPS
@@ -66,7 +66,7 @@ def test_verify_creates_missing_cells_and_backend_reports_runs():
                                "x": {"char": "日", "conf": "high"}}, "日曰", ctxs={"z": ("甲", "乙"), "y": ("丙", "丁")})
     assert "x" not in t["cells"] and n["new"] == 2                   # 没给窗口的格不建
     assert (t["cells"]["z"]["char"], t["cells"]["z"]["why"]) == (None, "abstain:other")
-    be = CtxL2Backend(t)
+    be = CtxL3Backend(t)
     v = be.judge(GROUPS["ry"], JudgeInput("z", None, window_from_text("甲", "乙")))
     assert v.char is None and v.extra["other_conf"] == "high"
     v = be.judge(GROUPS["ry"], JudgeInput("y", None, window_from_text("丙", "丁")))
@@ -80,7 +80,7 @@ def test_verify_creates_missing_cells_and_backend_reports_runs():
 
 def _patch(monkeypatch, ctx_extra: dict, shape=None):
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
-        "日" if name == "ctx" else shape, via="ctx_l2" if name == "ctx" else name,
+        "日" if name == "ctx" else shape, via="ctx_l3" if name == "ctx" else name,
         extra=dict(ctx_extra) if name == "ctx" else {}))
 
 

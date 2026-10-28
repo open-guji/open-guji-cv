@@ -66,8 +66,12 @@ onnx = [
 # tests/test_cnn_candidates.py 5 条全跳过；更早之前守卫只查 checkpoint 不查 torch，
 # 其中 3 条断言太弱（`len([]) <= 3`）一直在假通过，另 2 条才红出来。
 # 跑测试想覆盖 CNN 那几条就装这个 extra；推理只用 CPU 轮子就够（两处都 CPU/CUDA 自适应）。
+#
+# 文意 L2 模型（groups/ctx_l2.py：SikuRoBERTa 填空向量＋小头，A24 10-28）也在这个 extra：要 transformers 读编码器；
+# 缺件时该方法弃权（`abstain:no_encoder`），字组照旧走 L1／L3。
 torch = [
     "torch>=2.0",
+    "transformers>=4.40",
 ]
 # 原生 YOLO 并格闸（row_segment.yolo_merge，doc/design/19 块 D）：跑 yolo-tool 的 best.onnx。
 # 缺省关，不开不用装；模型文件不随包分发，册 yaml 给 yolo_model_dir。
@@ -79,6 +83,11 @@ datastore = [
     "psycopg[binary]>=3.1",
     "boto3>=1.28",
     "websockets>=13",
+]
+# 文意 L3 在线（groups/ctx_llm.py，A24 10-28）：管线里问 Claude；密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，
+# 不装或没密钥时该方法弃权（`abstain:no_api_key`），字组照旧留人审。
+llm = [
+    "anthropic>=2.3",
 ]
 # PDF 抽页（guji import-pdf）
 pdf = [

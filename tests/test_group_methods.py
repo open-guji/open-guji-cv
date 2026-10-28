@@ -46,8 +46,8 @@ def test_registry_kinds_match_ids_specs():
 
 def test_ctx_is_rule_then_llm_chain():
     m = GROUPS["jys"].flow.methods[0]
-    assert m.name == "ctx" and [s.kind for s in m.steps] == ["ctx_rule", "llm"]
-    assert GROUPS["ry"].flow.describe() == "[ctx_rule → llm] ＋ custom:ry_shape"
+    assert m.name == "ctx" and [s.kind for s in m.steps] == ["ctx_rule", "llm", "model", "llm"]
+    assert GROUPS["ry"].flow.describe() == "[ctx_rule → llm → model → llm_online] ＋ custom:ry_shape"
 
 
 def test_chain_first_release_wins_and_skips_inapplicable():

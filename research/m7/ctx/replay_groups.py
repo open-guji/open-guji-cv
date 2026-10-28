@@ -5,7 +5,8 @@
 
 - `--redo`：产物里由这些组判过的格先退回进组前的状态（补放的退回待审、降审的退回原通道放行），再由新组重判。
   并组、改组时用（千干 qg 并进 zy：产物里 qg／zy 的结论都作废）。
-- `--tables`：L2 表目录，`<组>.json`；没给的组只有 L1。
+- `--tables`：L3 答案表目录，`<组>.json`；没给的组只有 L1。
+- `--models`：L2 模型小头目录，`<组>.json`（`ctx_model/1`，`l2model_train.py` 出）。L3 在线不回放（要密钥、花钱）。
 - `--patches`：方法要字块时现算（`RunContext.image`，要工作区与原图，同 `research/m7/bench/materialize_patches.py`）；
   不给则字块一律缺（看图的方法弃权）。
 - `--codepoints <工作区 config/codepoints.yaml>`：书级码位归一（码位法组 `codepoint` 要它，同线上 `canon`）。
@@ -28,7 +29,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("root"); ap.add_argument("vols"); ap.add_argument("out")
 ap.add_argument("--groups", required=True); ap.add_argument("--redo", default="")
 ap.add_argument("--tables", default=None); ap.add_argument("--patches", action="store_true")
-ap.add_argument("--raw", default=None)
+ap.add_argument("--raw", default=None); ap.add_argument("--models", default=None)
 ap.add_argument("--codepoints", default="", help="工作区 config/codepoints.yaml，或 `䝉=𫎇,𨽾=隷`：码位法组与补放互证按它归一（不给则码位法组只会弃权）")
 a = ap.parse_args()
 if a.codepoints.endswith((".yaml", ".yml")):
@@ -50,8 +51,9 @@ if a.tables:
         t = Path(a.tables) / f"{g}.json"
         if t.exists():
             tables[g] = str(t)
+models = {g: str(Path(a.models) / f"{g}.json") for g in groups if a.models and (Path(a.models) / f"{g}.json").exists()}
 canon = canon if CP else None
-cfg = FlowConfig(groups=groups, l2_tables=tables, l2_drift=2, joint=True, canon=canon)
+cfg = FlowConfig(groups=groups, l2_tables=tables, l2_models=models, l2_drift=2, joint=True, canon=canon)
 FIELDS = ("id", "char", "admit", "channel", "provenance", "doubts", "evidence", "slot", "sub")
 
 

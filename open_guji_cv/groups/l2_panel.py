@@ -10,14 +10,14 @@
 - 其余照旧；每格记下各模型的票（`votes`），补字和否决的格另记强模型的理由（`note`，文意判断的备注）。
 
 金标（vol01–05 强真值，215 格）上：L1 → haiku high → 本规则，给字 209，错 1（vol03:109:6:5，金标与维基文库本不一，待 sheldon 定）。
-本模块不被任何 Step 引用，不改产物指纹；管线照旧只查表（`ctx_l2.CtxL2Backend`）。
+本模块不被任何 Step 引用，不改产物指纹；管线照旧只查表（`ctx_l3.CtxL3Backend`）。
 """
 from __future__ import annotations
 
 from collections import Counter
 
 from .context import WIDTH, ctx_key
-from .ctx_l2 import OTHER
+from .ctx_l3 import OTHER
 
 GIVE_WHY = ("agree", "agree:review", "agree:panel")
 
@@ -28,7 +28,7 @@ def _vote(v: dict | None):
 
 def panel_merge(table: dict, runs: dict[str, dict], members: str, ctxs: dict[str, tuple[str, str]] | None = None,
                 main: str = "haiku", strong: str = "opus", second: str = "sonnet") -> Counter:
-    """就地改 `table`。`runs`＝{模型名: {格: {char, conf, why}}}（`ctx_l2.parse_output` 的输出）；`ctxs`＝表里没有的新格的
+    """就地改 `table`。`runs`＝{模型名: {格: {char, conf, why}}}（`ctx_l3.parse_output` 的输出）；`ctxs`＝表里没有的新格的
     窗口 {格: (left, right)}（与管线同一取法，见 `research/m7/ctx/l2_make_book.py`）。→ 各结局的格数。"""
     cells = table.setdefault("cells", {})
     ctxs = ctxs or {}

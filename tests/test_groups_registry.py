@@ -80,7 +80,7 @@ def test_m7_solvers_declared_and_config_dirs_exist():
     root = Path(__file__).resolve().parents[1]
     assert GROUPS["yi_560"].kind == "variant" and GROUPS["yi_560"].solvers == ("ids",)
     for gid in ("jys", "ry", "rr", "wxs", "wm", "ts"):
-        assert GROUPS[gid].kind == "near_form" and GROUPS[gid].solvers[:2] == ("ctx_l1", "ctx_l2")
+        assert GROUPS[gid].kind == "near_form" and GROUPS[gid].solvers[:2] == ("ctx_l1", "ctx_l3")
     assert (root / GROUPS["yi_560"].config_dir / "ids_override.tsv").exists()
     for g in GROUPS.values():
-        assert set(g.solvers) <= {"ids", "ctx_l1", "ctx_l2", "image"}
+        assert set(g.solvers) <= {"ids", "ctx_l1", "ctx_l3", "image"}

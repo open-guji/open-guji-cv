@@ -1,8 +1,8 @@
 """字组提示词模板的渲染：模板（``config/groups/<组>/prompt.md``，全局层）里的 ``{{名字}}`` 占位符用本书的变量填
 （书名那一句等，书层语料，见 doc/design/语料库分层版本.md 4.1）。
 
-单独成模块、不改 ``ctx_l2``：``ctx_l2`` 在 ``seed_admit`` 的 ``code_deps`` 里，改它会让各书产物过期；
-提示词只在离线造批、不进 Step 运行路径。没有占位符的提示词渲染结果与 ``ctx_l2.load_prompt`` 逐字相同。
+单独成模块、不改 ``ctx_l3``：``ctx_l3`` 在 ``seed_admit`` 的 ``code_deps`` 里，改它会让各书产物过期；
+提示词只在离线造批、不进 Step 运行路径。没有占位符的提示词渲染结果与 ``ctx_l3.load_prompt`` 逐字相同。
 """
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import json
 import re
 from pathlib import Path
 
-from .ctx_l2 import build_batch, load_prompt
+from .ctx_l3 import build_batch, load_prompt
 
 _PLACEHOLDER = re.compile(r"\{\{(\w+)\}\}")
 
@@ -37,7 +37,7 @@ def load_rendered_prompt(path: str | Path, book_vars: dict[str, str] | None = No
 
 
 def build_batch_rendered(prompt_path: str | Path, cells: list[dict], book_vars: dict[str, str] | None = None) -> str:
-    """同 ``ctx_l2.build_batch``，提示词里的占位符先用 ``book_vars`` 填。"""
+    """同 ``ctx_l3.build_batch``，提示词里的占位符先用 ``book_vars`` 填。"""
     import tempfile
     _, body = load_rendered_prompt(prompt_path, book_vars)
     with tempfile.TemporaryDirectory() as d:                 # build_batch 只收路径：把渲染后的正文交给它拼逐条输入
