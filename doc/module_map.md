@@ -67,7 +67,7 @@
 
 ## 六、后续
 
-- **pipeline / manager 拆分（2026-10-27 起）**：每个包／模块归哪一侧见 `tests/test_architecture.py` 的 `PIPELINE_PKGS`／`SIDE_OVERRIDE`，设计见 [design/拆分-pipeline与manager.md](design/拆分-pipeline与manager.md)。守卫：pipeline 一侧不许 import manager 一侧，存量 12 条在 `ALLOWED_PIPELINE_TO_MANAGER`，只许减不许增。
+- **pipeline / manager 拆分（2026-10-27 起）**：每个包／模块归哪一侧见 `tests/test_architecture.py` 的 `PIPELINE_PKGS`／`SIDE_OVERRIDE`，设计见 [design/拆分-pipeline与manager.md](design/拆分-pipeline与manager.md)。守卫：pipeline 一侧不许 import manager 一侧，存量（M3a 后 6 条）在 `ALLOWED_PIPELINE_TO_MANAGER`，只许减不许增。
 
 - 剩余的包级向上依赖怎么分批清理：[design/模块化后续计划（待Mila定）.md](design/模块化后续计划（待Mila定）.md)（**待 Mila 定，未执行**）。
 - 形近字／异体字组：规范、总表与各组卡在 [字组/](字组/README.md)。

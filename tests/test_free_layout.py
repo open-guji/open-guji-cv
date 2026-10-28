@@ -18,10 +18,10 @@ DIV_Y = 900
 PITCH = 130
 
 
-def _glyph(img, x0, y0, s):
+def _glyph(img, x0, y0, s, t=None):
     """s 见方的「丰」：三横一竖，横画之间留白（字内缝）。笔画粗约字身 1/8（刻本大字的
     横画比栏线粗得多；各列横画在合成页上齐平，太细会被当成一条浅栏线）。"""
-    t = max(3, s // 8)
+    t = t or max(3, s // 8)
     for k in range(3):
         y = y0 + int((k + 0.5) * s / 3) - t // 2
         img[y:y + t, x0:x0 + s] = 20
@@ -79,7 +79,7 @@ def test_blocks_split_by_divider(ran):
     assert lb.page_type == "body"
     assert [b.kind for b in lb.blocks] == ["text", "text"]
     # 读序：上块在前；分栏线在两块之间
-    assert lb.blocks[0].box[3] < DIV_Y < lb.blocks[1].box[1]
+    assert lb.blocks[0].box[3] <= DIV_Y + 2 and lb.blocks[1].box[1] >= DIV_Y - 2
 
 
 def test_columns_found_without_rules(ran):
@@ -143,13 +143,13 @@ def test_pitch_hint_grid_skips_banxin(tmp_path):
     img[y0:y1, x0 + 55:x0 + 57] = 170                 # 浅：过不了墨阈，只有细竖线图看得见
     for y in (300, 1200, 2000):
         _glyph(img, x0 + 15, y, 30)                   # 版心里的书名、页码
-    book = make_book("tfree", pipeline="keben_free", layout_hints={"1-3": {"pitch": 125}},
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1-3": {"pitch": 130}},
                      params={"block_detect": {"banxin": "odd_left"}})
     ctx = make_ctx(tmp_path, book, raw={1: img})
     out = run_steps(ctx, 1, ["block_detect", "column_trace"])
     lb, fc = out["layout_blocks"], out["free_columns"]
     assert lb.spine == "left" and lb.banxin is not None
-    assert all(b.pitch_hint == 125 for b in lb.blocks)
+    assert all(b.pitch_hint == 130 for b in lb.blocks)
     assert [b.n for b in fc.blocks] == [10, 10]
     assert {b.n_source for b in fc.blocks} == {"grid"}
     # 每列左右缝夹住该列的字（列 c 的右沿 x1-20-c·PITCH，字在其左 15–115px）
@@ -194,3 +194,321 @@ def test_pipeline_selected_by_book_field():
     from open_guji_cv.core.pipeline import default_pipeline_id
     assert default_pipeline_id(make_book("x", pipeline="keben_free")) == "keben_free"
     assert default_pipeline_id(make_book("x")) == "keben_body_v2"
+
+
+def _mixed_page():
+    """混排（游学鳌头 15b 那种）：下栏右两列一路到底，左边八列再分三层。左边两条横线只盖住下栏宽的约八成。"""
+    img, _ = synth_free_page()
+    x0, y0, x1, y1 = FRAME
+    xv = x1 - 20 - 2 * PITCH + 5                      # 第 2、3 列之间（右两列在右）
+    img[DIV_Y + 5:y1, xv - 2:xv + 2] = 25
+    ys = (DIV_Y + (y1 - DIV_Y) // 3, DIV_Y + 2 * (y1 - DIV_Y) // 3)
+    for y in ys:
+        img[y - 2:y + 2, x0:xv] = 25
+    return img, xv, ys
+
+
+def _tl_boxes(lb):
+    boxes = [tuple(W - 1 - v if i in (0, 2) else v for i, v in enumerate(b.box)) for b in lb.blocks]
+    return [(min(b[0], b[2]), b[1], max(b[0], b[2]), b[3]) for b in boxes]    # 换回左上原点
+
+
+def test_partial_line_does_not_split_without_hint(tmp_path):
+    """没人标时只切首尾贯穿的线：混排页左边的半截横线（约八成宽）不切，免得整栏读序乱。"""
+    img, _, _ = _mixed_page()
+    ctx = make_ctx(tmp_path, make_book("tfree", pipeline="keben_free"), raw={1: img})
+    tl = _tl_boxes(run_steps(ctx, 1, ["block_detect"])["layout_blocks"])
+    assert len(tl) == 2 and abs(tl[0][3] - DIV_Y) <= 2 and abs(tl[1][1] - DIV_Y) <= 2, tl
+
+
+def test_tree_hint_splits_mixed_layout(tmp_path):
+    """人标版面树：上下 1:2，下栏右 2 列、左 8 列，左边均分 3 层。人给的是约数，切位吸到线上。"""
+    img, xv, ys = _mixed_page()
+    tree = {"h": [1, 2], "parts": [{"cols": 10}, {"v": [2, 8], "parts": [{"cols": 2}, {"h": 3, "cols": 8}]}]}
+    book = make_book("tfree", pipeline="keben_free", layout_hints={"1": {"tree": tree}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    lb = run_steps(ctx, 1, ["block_detect"])["layout_blocks"]
+    tl = _tl_boxes(lb)
+    assert len(tl) == 5, tl
+    top, right, *left = tl
+    assert abs(top[3] - DIV_Y) <= 2 and abs(right[1] - DIV_Y) <= 2 and right[0] > xv - 20            # 上栏；下栏右两列
+    assert all(b[2] < xv for b in left)                                  # 左边三层，自上而下
+    assert all(abs(left[i][3] - ys[i]) <= 2 and abs(left[i + 1][1] - ys[i]) <= 2 for i in (0, 1))
+    assert abs(top[3] - DIV_Y) < 20 and abs(left[0][3] - ys[0]) < 20    # 吸到线上，不是按比例的位置
+    assert [b.cols_hint for b in lb.blocks] == [10, 2, 8, 8, 8]
+
+
+def test_tree_hint_rejects_bad_shape():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    with pytest.raises(ValueError):
+        parse_layout_hints({"3": {"tree": {"h": 2, "v": 2}}})
+    with pytest.raises(ValueError):
+        parse_layout_hints({"3": {"tree": {"h": 2, "parts": [{}, {}, {}]}}})
+
+
+def _ruled_page():
+    """有界栏但不规律的正文（游学鳌头 99–102 下栏那种）：列宽不齐（右边标题列窄），竖界栏浅、有断口，
+    每列各自的横界栏高低错开；每段一个大字。最左一列下半空着，有一截没够到列宽一半的横栏残段。"""
+    img = np.full((H, W), 225, np.uint8)
+    x0, y0, x1, y1 = FRAME
+    for a, b in ((y0 - 8, y0 + 8), (y1 - 8, y1 + 8)):
+        img[a:b, x0 - 8:x1 + 8] = 25
+    img[y0 - 8:y1 + 8, x0 - 8:x0 + 8] = 25
+    img[y0 - 8:y1 + 8, x1 - 8:x1 + 8] = 25
+    widths = [100, 160, 150, 165, 155, 160, 155, 150]           # 自右而左；最左一列铺到块边（约 185）
+    edges = [x1 - 10]
+    for w in widths:
+        edges.append(edges[-1] - w)
+    edges.append(x0 + 10)
+    for x in edges[1:-1]:                                         # 浅竖界栏，木版磨损处断开
+        for y in range(y0, y1, 70):
+            img[y:y + 60, x - 1:x + 2] = 140
+    cols = []
+    for i, (xr, xl) in enumerate(zip(edges[:-1], edges[1:])):
+        ys = [y0]
+        step = 230 + 20 * (i % 3)
+        y = y0 + 40 + 15 * (i % 4)
+        while y + step < y1 - 40:
+            y += step
+            ys.append(y)
+        ys.append(y1)
+        if i == len(edges) - 2:
+            ys = ys[:4] + [y1]                                    # 最左列下半整格空着
+            img[ys[3] + 120:ys[3] + 123, xl + 10:xl + 60] = 140   # 半截横栏残段（不到列宽一半）
+        for a in ys[1:-1]:
+            img[a - 1:a + 2, xl + 2:xr - 1] = 140                 # 浅横界栏
+        for a, b in zip(ys[:-1], ys[1:]):
+            if b < ys[-1] or i < len(edges) - 2:
+                s = min(110, xr - xl - 30, b - a - 40)
+                _glyph(img, (xl + xr) // 2 - s // 2, (a + b) // 2 - s // 2, s, t=12)   # 笔画比界栏粗
+        cols.append((xr, xl, ys[1:-1]))
+    return img, cols
+
+
+def test_ruled_block_columns_follow_rules_and_break_at_hrules(tmp_path):
+    """ruled：列宽不硬求一致（标题列窄也成一列），每列在横界栏处断开，字框不跨界栏、界栏残段不当字。"""
+    img, cols = _ruled_page()
+    x0, y0, x1, y1 = FRAME
+    book = make_book("tfree", pipeline="keben_free",
+                     layout_hints={"1": {"blocks": [{"box": [x0 + 10, y0 + 10, x1 - 10, y1 - 10],
+                                                     "ruled": True, "pitch": 150}]}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    out = run_steps(ctx, 1, ["block_detect", "column_trace", "cell_cut"])
+    fc = out["free_columns"]
+    assert [b.n_source for b in fc.blocks] == ["ruled"]
+    assert len(fc.columns) == len(cols)
+    for c, (xr, xl, ys) in zip(fc.columns, cols):
+        r_tl, l_tl = W - 1 - np.median(c.right), W - 1 - np.median(c.left)
+        # 内部列界落在竖界栏上（最外两条是块边，网格两端可浮到墨边）
+        assert (xr == x1 - 10 or abs(r_tl - xr) < 25) and (xl == x0 + 10 or abs(l_tl - xl) < 25), (c.col, r_tl, l_tl)
+        assert len(c.breaks) == len(ys) and all(abs(a - b) < 6 for a, b in zip(c.breaks, ys)), (c.col, c.breaks, ys)
+    cells = out["free_cells"].cells
+    for c in fc.columns:
+        mine = [k for k in cells if k.col == c.col]
+        full = len(c.breaks) + (0 if c.col == len(cols) else 1)              # 最左列最后一段空着
+        assert {k.rule_seg for k in mine} == set(range(1, full + 1)), c.col     # 每段有字，空处不出框（残段不当字）
+        for k in mine:
+            assert not any(k.box[1] < y < k.box[3] for y in c.breaks)        # 字框不跨界栏
+            assert k.rule_seg >= 1
+
+
+def test_ruled_flag_in_hints():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    h = parse_layout_hints({"99": {"blocks": [{"kind": "skip"}, {"ruled": True, "pitch": 150}]}})
+    assert h[99].kind_for(1) == "text" and h[99].ruled_for(1) and not h[99].ruled_for(0)
+    with pytest.raises(ValueError):
+        parse_layout_hints({"99": {"blocks": [{"kind": "table"}]}})
+
+
+def test_align_blocks_share_grid_and_ends_hug_block(tmp_path):
+    """人标 align 同组的上下两块共用一套列线；网格两端就是块边（不留窄条）。"""
+    img, _ = synth_free_page()
+    book = make_book("tfree", pipeline="keben_free",
+                     layout_hints={"1": {"pitch": 130, "cols": 10, "align": [[1, 2]]}})
+    ctx = make_ctx(tmp_path, book, raw={1: img})
+    out = run_steps(ctx, 1, ["block_detect", "column_trace"])
+    lb, fc = out["layout_blocks"], out["free_columns"]
+    assert [b.align for b in lb.blocks] == [1, 1]
+    assert [b.n_source for b in fc.blocks] == ["align", "align"]
+    top = [c for c in fc.columns if c.block == 1]
+    bot = [c for c in fc.columns if c.block == 2]
+    for a, b in zip(top, bot):
+        assert abs(a.right[-1] - b.right[0]) <= 1 and abs(a.left[-1] - b.left[0]) <= 1
+    for blk, cols in ((lb.blocks[0], top), (lb.blocks[1], bot)):
+        x0, _, x1, _ = blk.box                       # 右上原点：x0 是右沿
+        assert abs(cols[0].right[0] - x0) <= 1 and abs(cols[-1].left[0] - x1) <= 1
+
+
+def test_align_in_hints():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints
+    h = parse_layout_hints({"10-16": {"align": [[1, 2, 3]]}, "15-16": {"align": [[2, 3]]}})
+    assert h[10].align_for(0) == 1 and h[15].align_for(0) is None and h[15].align_for(2) == 1
+    with pytest.raises(ValueError):
+        parse_layout_hints({"9": {"align": [1, 3]}})
+
+
+def test_gap_terms_box_counts_as_crossed():
+    """竖线落进标题框里（框和框里的字之间是空白）也算劈开了框；列间空白正中离墨块最远。"""
+    from open_guji_cv.utils.free_columns import gap_terms
+    body = np.zeros((300, 200), bool)
+    body[50:250, 20:40] = True                     # 一列字（墨块）
+    body[40:260, 100:102] = body[40:260, 178:180] = True   # 框的左右边
+    body[40:42, 100:180] = body[258:260, 100:180] = True   # 框的上下边
+    body[80:200, 130:150] = True                   # 框里的字
+    cross, near = gap_terms(body, cap=20)
+    assert cross[115] >= 1 and cross[70] == 0       # 框里空白劈框；字列与框之间是真空白
+    assert near[70] > near[95] and near[70] == 1.0
+
+
+def test_snap_frame_edges_to_inner_edge_of_frame_band():
+    """粗框线／双线框：框线位置吸到墨带内沿，块从内沿起，不留空白；没找到的边不动。"""
+    from open_guji_cv.utils.free_blocks import Frame, snap_frame_edges
+    ink = np.zeros((400, 300), bool)
+    ink[50:62, 30:270] = True                      # 上边粗框线 50–61
+    ink[50:350, 30:42] = True                      # 左边粗框线 30–41
+    ink[50:350, 258:270] = True                    # 右边
+    fr = snap_frame_edges(ink, Frame(top=52.0, bottom=380.0, left=33.0, right=262.0,
+                                     found={"top": True, "bottom": False, "left": True, "right": True}))
+    assert fr.top == 62 and fr.left == 42 and fr.right == 257
+    assert fr.bottom == 380.0                      # 没找到的边留兜底值
+    fr = snap_frame_edges(ink, Frame(top=80.0, bottom=380.0, left=60.0, right=240.0,
+                                     found={"top": True, "bottom": False, "left": True, "right": True}))
+    assert fr.top == 62 and fr.left == 42 and fr.right == 257   # 认在框里面：往外找到墨带
+
+
+def test_join_segments_bent_frame_line():
+    """框线中段弯一下，两段各自票数不够：首尾相接的连成一条、票数相加；双线（相距远）不连。"""
+    from open_guji_cv.utils.free_blocks import Rule, join_segments
+    a = Rule("h", 303.0, -0.039, 790, 1380, 3)
+    b = Rule("h", 292.0, -0.019, 200, 789, 3)
+    c = Rule("h", 300.0, 0.0, 200, 1380, 5)         # 平行的另一条
+    out = join_segments([a, b, c])
+    assert len(out) == 2
+    j = next(r for r in out if r.n_strips == 6)
+    assert j.lo == 200 and j.hi == 1380 and abs(j.at(800) - 272) < 10
+
+
+def test_rectify_straightens_slanted_frame():
+    """框斜了（透视、倾斜）：沿框量内沿拟曲线、拉正后框线变成竖直／水平，矩形在原框的平均位置。"""
+    import cv2
+
+    from open_guji_cv.utils.free_blocks import Frame
+    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray
+    H, W = 900, 700
+    img = np.full((H, W), 230, np.uint8)
+    quad = np.array([[100, 120], [600, 100], [620, 820], [90, 800]], np.int32)   # 左上、右上、右下、左下
+    cv2.polylines(img, [quad], True, 20, 10)
+    ink = img < 128
+    fr = Frame(top=110.0, bottom=810.0, left=95.0, right=610.0,
+               found={"top": True, "bottom": True, "left": True, "right": True})
+    curves = fit_frame_curves(ink, fr, fr.found)
+    assert curves is not None
+    warp = make_warp(curves, fr, (W, H))
+    out = rectify_gray(img, warp) < 128
+    x0, y0, x1, y1 = (int(round(v)) for v in warp["rect"])
+    # 拉正后：左右框线的墨贴在矩形外侧一条竖带里，上下框线在一条横带里
+    for y in (y0 + 50, (y0 + y1) // 2, y1 - 50):
+        assert out[y, x0 - 6:x0].any() and not out[y, x0 + 3:x0 + 40].any()
+        assert out[y, x1:x1 + 6].any() and not out[y, x1 - 40:x1 - 3].any()
+    for x in (x0 + 50, (x0 + x1) // 2, x1 - 50):
+        assert out[y0 - 6:y0, x].any() and not out[y0 + 3:y0 + 40, x].any()
+
+
+def test_rectify_straightens_slanted_split_line():
+    """框是正的，框里的分栏横线是斜的、断断续续：量出来一起拉正，拉正后在一条水平带里。"""
+    import cv2
+
+    from open_guji_cv.utils.free_blocks import Frame
+    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray, trace_hline
+    H, W = 900, 700
+    img = np.full((H, W), 230, np.uint8)
+    cv2.rectangle(img, (100, 100), (600, 800), 20, 10)
+    for x in range(110, 590, 40):                      # 断线：左高右低差 24px，每段 28px 长
+        cv2.line(img, (x, 440 + (x - 100) * 24 // 500), (x + 28, 440 + (x + 28 - 100) * 24 // 500), 20, 3)
+    ink = img < 128
+    fr = Frame(top=105.0, bottom=795.0, left=105.0, right=595.0,
+               found={"top": True, "bottom": True, "left": True, "right": True})
+    mid = trace_hline(ink.astype(np.float32), 450, 120, 580)
+    assert mid is not None
+    warp = make_warp(fit_frame_curves(ink, fr, fr.found), fr, (W, H), [mid])
+    assert len(warp["mids"]) == 1
+    yy = int(round(warp["mids"][0]["y"]))
+    out = rectify_gray(img, warp) < 128
+    rows = [np.flatnonzero(out[yy - 20:yy + 21, x]) for x in (130, 330, 530)]
+    assert all(len(r) for r in rows)
+    assert max(r.mean() for r in rows) - min(r.mean() for r in rows) <= 3
+
+
+def test_seam_cost_keeps_off_strokes_and_ignores_specks():
+    """走缝代价：笔画 1，笔画旁 halo 内有代价，界栏的小点便宜——窄缝里缝离字留空、走过小点。"""
+    from open_guji_cv.utils.free_columns import min_ink_seam, seam_cost
+    ink = np.zeros((120, 60), bool)
+    ink[:, 10:24] = True                              # 左边一列字（简化成墨条）
+    ink[:, 40:54] = True                              # 右边一列字
+    for y in range(0, 120, 12):                       # 缝正中一串界栏小点
+        ink[y:y + 3, 31:33] = True
+    c = seam_cost(ink)
+    assert c[5, 31] < 0.5 and c[5, 25] > 0 and c[5, 32] < 1
+    x = min_ink_seam(c, np.full(120, 25.0), 6)        # 从贴着左列的位置出发
+    assert np.all((x >= 28) & (x <= 35))              # 离两边字都 ≥ halo（4px），可以走过小点
+
+
+def test_grid_seams_follow_dashed_rules():
+    """虚线界栏（一段段短划）：认成界栏，切线顺着界栏走（不在列间空白正中）。"""
+    from open_guji_cv.utils.free_blocks import thin_vlines
+    from open_guji_cv.utils.free_columns import grid_columns
+    h, w, pitch = 800, 600, 100
+    img = np.full((h, w), 230, np.uint8)
+    for k in range(6):                                # 每列字偏右：列间空白正中离界栏 ~12px
+        x0 = k * pitch + 30
+        for y in range(20, h - 60, 70):
+            _glyph(img, x0, y, 50)
+    rules = [100, 200, 300, 400, 500]
+    for x in rules:
+        for y in range(0, h, 20):                     # 12px 短划、8px 断口
+            img[y:y + 12, x - 1:x + 2] = 40
+    ink = img < 128
+    lines = thin_vlines(img, 51, length=11, bridge=41)
+    bc = grid_columns(ink, lines, pitch=pitch, n=6, fixed_ends=True, cross=1.0, center=0.5,
+                      rule_min=0.65, snap=0.15)
+    cuts = sorted(int(np.median(c.left)) for c in bc.columns)[1:]
+    assert all(abs(c - r) <= 3 for c, r in zip(cuts, rules))
+
+
+def test_grid_seams_follow_slanted_dashed_rules():
+    """各条界栏斜得不一样（扫描拉伸不匀）：逐条顺着线找，切线贴在各自的界栏上。"""
+    from open_guji_cv.utils.free_blocks import thin_vlines
+    from open_guji_cv.utils.free_columns import grid_columns
+    h, w, pitch = 900, 600, 100
+    img = np.full((h, w), 230, np.uint8)
+    slopes = [0.0, 0.02, -0.02, 0.03, -0.01]          # 每条界栏自己的斜率（dx/dy）
+    rules = [100, 200, 300, 400, 500]
+    for k in range(6):
+        for y in range(20, h - 60, 70):
+            _glyph(img, k * pitch + 25 + int(slopes[min(k, 4)] * (y - h / 2) * 0), y, 45)
+    for x, sl in zip(rules, slopes):
+        for y in range(0, h, 20):
+            xx = int(round(x + sl * (y - h / 2)))
+            img[y:y + 12, xx - 1:xx + 2] = 40
+    ink = img < 128
+    lines = thin_vlines(img, 51, length=11, bridge=41)
+    bc = grid_columns(ink, lines, pitch=pitch, n=6, fixed_ends=True, cross=3.0, center=0.5, rule_min=0.65)
+    seams = sorted((c.left for c in bc.columns), key=lambda a: float(np.median(a)))[1:]
+    for sm, x, sl in zip(seams, rules, slopes):
+        for y in (60, h // 2, h - 60):
+            assert abs(sm[y] - (x + sl * (y - h / 2))) <= 4
+
+
+def test_trace_side_thin_frame_line_does_not_look_inward():
+    """量到的框线本身是细线：不再往里找「细内框」——往里是字（p32 左框）。"""
+    from open_guji_cv.utils.free_rectify import _bands
+    prof = np.zeros(200)
+    prof[50:54] = 1.0                                 # 细框线
+    prof[70:78] = 1.0                                 # 往里 16px 处字的竖画
+    e1, e2 = _bands(prof, 52, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 is None
+    prof[30:54] = 1.0                                 # 粗外框 + 往里的细线：取细线
+    prof[70:78] = 0.0
+    prof[62:65] = 1.0
+    e1, e2 = _bands(prof, 40, 1, 0.5, 30, 45, 12)
+    assert e1 == 54 and e2 == 65

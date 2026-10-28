@@ -34,3 +34,44 @@ def test_cli_version_json(capsys):
     from open_guji_cv.cli_v2 import main
     main(["version", "--json"])
     assert json.loads(capsys.readouterr().out)["contract_version"] == CONTRACT_VERSION
+
+
+def test_derived_fetch_prefers_local_dir_then_fetcher(tmp_path, monkeypatch):
+    from open_guji_cv.core import derived
+    src = tmp_path / "d" / "lm"
+    src.mkdir(parents=True)
+    (src / "x.json").write_text("{}")
+    monkeypatch.setenv(derived.DIR_ENV, str(tmp_path / "d"))
+    dest = tmp_path / "out" / "x.json"
+    assert derived.fetch_derived("lm", "x.json", dest) and dest.read_text() == "{}"
+    monkeypatch.delenv(derived.DIR_ENV)
+    calls = []
+    monkeypatch.setattr(derived, "FETCHER", lambda k, n, d: calls.append((k, n)) or True)
+    assert derived.fetch_derived("lm", "y.json", tmp_path / "y") and calls == [("lm", "y.json")]
+    monkeypatch.setattr(derived, "FETCHER", None)
+    assert not derived.fetch_derived("lm", "z.json", tmp_path / "z")
+
+
+def test_plugin_commands_merge_and_builtin_wins(monkeypatch):
+    import argparse
+    import types
+    from open_guji_cv import cli_v2
+    calls = []
+
+    def add_new(sub):
+        sub.add_parser("zz-plugin-cmd")
+
+    def add_dup(sub):                      # 本仓自带 pipeline：不应被登记
+        raise AssertionError("builtin 命令不该被插件覆盖")
+    mod = types.SimpleNamespace(COMMANDS={"zz-plugin-cmd": (add_new, lambda a: calls.append(1)),
+                                          "pipeline": (add_dup, lambda a: None)})
+    ep = types.SimpleNamespace(name="t", load=lambda: mod)
+    monkeypatch.setattr("importlib.metadata.entry_points", lambda group=None: [ep])
+    parser = argparse.ArgumentParser()
+    sub = parser.add_subparsers(dest="command")
+    sub.add_parser("pipeline")
+    try:
+        assert cli_v2.load_plugin_commands(sub) == ["zz-plugin-cmd"]
+        assert cli_v2.COMMANDS_V2["zz-plugin-cmd"] is not None
+    finally:
+        cli_v2.COMMANDS_V2.pop("zz-plugin-cmd", None)

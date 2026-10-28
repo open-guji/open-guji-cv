@@ -111,6 +111,7 @@ def test_page_occluded_is_the_cells_under_the_big_seal():
         Seal(kind="stain", bbox=(300, 330, 2000, 1490), score=33.0, source="frame"),
         Seal(kind="crisp", bbox=(300, 1500, 960, 2180), score=0.6, source="template", template="x.png")])
     gray = _page()
+    _dots(gray, W - 520, 300, W - 260, 520, 400)               # 1、2 格背景有一片噪点（干净的大印框内格不算遮挡）
     gray[1520:1580, W - 1 - 460:W - 1 - 320] = 0               # 9 格（规范空间 x 300..480）里有字；10 格只有印（这里没墨）
     occ = page_occluded(_seal_ctx(cells, seals, gray), 3, SeedAdmitParams())
     # 1 格与大印重叠 0.7、2 格 1.0；9 格是小印压着的字；10 格没有印外的墨，是盖章空栏，不算遮挡
@@ -157,3 +158,18 @@ def test_small_seal_on_rescaled_page():
     assert m is not None and m.shape == img.shape
     ys, xs = np.nonzero(m)
     assert xs.max() - xs.min() <= tw * k + 10
+
+
+def test_clean_background_cells_inside_big_seal_are_not_occluded():
+    """印框内、格内背景干净（噪点密度低、不是整块黑）的格不算遮挡；`occluded_seal_min_noise=0` 关掉则照旧。"""
+    from open_guji_cv.products.kinds.seals import PageSeals, Seal
+    from open_guji_cv.steps.occlusion import page_occluded
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    cells = _cells((1, [(1, 300, 300, 480, 400), (2, 300, 800, 480, 900), (3, 300, 500, 480, 600)]))
+    seals = PageSeals(page=3, width=W, height=H, seals=[Seal(kind="stain", bbox=(300, 290, 500, 910), score=33.0, source="frame")])
+    gray = _page()
+    _dots(gray, W - 480, 300, W - 300, 400, 400)               # 1 格噪点多
+    gray[500:600, W - 480:W - 300] = 0                          # 3 格整块黑（印芯）
+    ctx = _seal_ctx(cells, seals, gray)
+    assert set(page_occluded(ctx, 3, SeedAdmitParams())) == {(1, 1, ""), (1, 3, "")}   # 2 格干净，放出
+    assert set(page_occluded(ctx, 3, SeedAdmitParams(occluded_seal_min_noise=0))) == {(1, 1, ""), (1, 2, ""), (1, 3, "")}

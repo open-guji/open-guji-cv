@@ -36,66 +36,14 @@ from pathlib import Path
 from fastapi import APIRouter, Depends
 
 from ..auth import require_reviewer
-from ...core.workspace import describe, workspace_root
+from ...core.workspace import (ROOT_ENV, _ws_id, describe, discover_workspaces,  # noqa: F401  搬到 core（拆分 M3）
+                                workspace_root, workspaces_root)
 
 #: 只读、只列清单——真正的越权闸在 `WorkspaceMiddleware`（白名单，见模块头注）。
 #: **不是** admin 专属：选工作区/选书是校对者进控制台的第一步（`WorkspacePickerPage`
 #: 挂在根路径，谁登录进来都要经过它），2026-09-26 鉴权改造第一版把它划成
 #: admin-only 之后前端实测发现校对者连书都选不到，改回 reviewer。
 router = APIRouter(dependencies=[Depends(require_reviewer)])
-
-
-def _ws_id(d: Path) -> str:
-    """工作区的 id——**URL 上露出来的就是这个**（`/<ws>/<book>/step/...`）。
-
-    默认取目录名去掉 `-workspace` 后缀（`xx-workspace` → `xx`）：短、稳定。
-    **`guji-workspace` 那套目录名是 `<book-index id>-<书名>`**，不以 `-workspace`
-    结尾，退回来就是一整串中文——那种工作区**必须**放 `workspace.yaml` 写
-    `id: 自定义` 覆盖（四庫總目写的是 `siku-zongmu`，与旧仓时期的 URL 一致）。
-    """
-    import yaml
-    f = d / "workspace.yaml"
-    if f.is_file():
-        try:
-            got = (yaml.safe_load(f.read_text(encoding="utf-8")) or {}).get("id")
-            if got:
-                return str(got)
-        except Exception:
-            pass                        # 写坏了就退回目录名，不让整个列表挂掉
-    name = d.name
-    return name[: -len("-workspace")] if name.endswith("-workspace") else name
-
-
-ROOT_ENV = "GUJI_WORKSPACES_ROOT"
-
-
-def workspaces_root() -> Path | None:
-    """工作区总目录；没配返回 None（此时没有任何工作区可选）。"""
-    env = os.environ.get(ROOT_ENV)
-    return Path(env).expanduser().resolve() if env else None
-
-
-def discover_workspaces(current: Path | None = None) -> list[dict]:
-    """能切到哪些工作区：总目录下有 `books/` 的子目录。`current` 不给就按本请求解析出来的那个，
-    只用来标 `current` 字段，不影响列哪些。"""
-    if current is None:
-        current = workspace_root()
-    root = workspaces_root()
-    cands: list[Path] = sorted(d for d in root.iterdir() if d.is_dir()) if root and root.is_dir() else []
-
-    cur_res = current.resolve() if current else None
-    out: list[dict] = []
-    for d in cands:
-        from ...core.workspace import books_dir
-        books = books_dir(d)
-        if not books.is_dir():
-            continue
-        ids = sorted(y.stem for y in books.glob("*.yaml"))
-        if not ids and d.resolve() != cur_res:
-            continue                      # 空工作区不列（当前这个除外，免得自己消失）
-        out.append({"id": _ws_id(d), "path": str(d.resolve()), "name": d.name,
-                    "books": ids, "current": d.resolve() == cur_res})
-    return out
 
 
 def resolve_workspace_id(ws_id: str) -> str | None:

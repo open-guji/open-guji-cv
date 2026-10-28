@@ -1,4 +1,5 @@
-"""自由版式管线 `keben_free` 的三种产物（numeric，页级）。坐标一律规范空间 raw_page_px@top-right。
+"""自由版式管线 `keben_free` 的三种产物（numeric，页级）。坐标一律规范空间 raw_page_px@top-right，
+在按版框拉正后的图上（`layout_blocks.warp`，没拉就是原图）。
 
 - `layout_blocks`（Step1 `block_detect`）：版框、长线、文字块（自动或人标）；
 - `free_columns`（Step2 `column_trace`）：每块的列，左右缝是逐行 x 的折线（按 `step` 行采样）；
@@ -35,6 +36,8 @@ class BlockRec(BaseModel):
     cols_hint: int | None = None
     pitch_hint: float | None = None  # 人标的列距先验（px）
     vrules: list[float] = Field(default_factory=list)   # 块内竖线 x_tr（块中线高度处）
+    ruled: bool = False             # 人标：有界栏但列宽不齐的正文（列宽放宽、列里按横界栏断开）
+    align: int | None = None        # 人标：列线对齐组号（同组的块共用一套列线）
 
 
 class LayoutBlocks(BaseModel):
@@ -49,6 +52,9 @@ class LayoutBlocks(BaseModel):
     banxin: float | None = None     # 版心线 x_tr（探到了才有；块已裁到它里面）
     rules: list[RuleRec] = Field(default_factory=list)
     blocks: list[BlockRec] = Field(default_factory=list)
+    # 拉正参数（block_detect 1.7 起；None = 没拉）：本产物和下游两种产物的坐标都在拉正后的图上。
+    # 字段见 `utils/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
+    warp: dict | None = None
 
 
 class ColumnRec(BaseModel):
@@ -59,12 +65,13 @@ class ColumnRec(BaseModel):
     step: int                       # 缝的采样行距
     right: list[float]              # 右缝 x_tr，第 i 个是 y0 + i·step 行（最后一个是 y1−1 行）
     left: list[float]               # 左缝 x_tr
+    breaks: list[float] = Field(default_factory=list)   # ruled 块列里的横界栏 y（自上而下）；其余为空
 
 
 class BlockColumnsRec(BaseModel):
     block: int
     n: int
-    n_source: str                   # hint | auto | rule | grid（按列距先验等宽拟合）
+    n_source: str                   # hint | auto | rule | grid（按列距先验等宽拟合）| ruled（有界栏、列宽不齐）
     alt_n: list[int] = Field(default_factory=list)
     pitch: float | None = None
     shear: float = 0.0
@@ -83,6 +90,7 @@ class FreeCellRec(BaseModel):
     order: int                      # 列内读序，从 1 起
     kind: str                       # char | jiazhu_a（右线）| jiazhu_b（左线）| jiazhu_solo
     zone: int                       # 列内第几区（大字/双行注/单行注交替），从 1 起
+    rule_seg: int = 0               # ruled 块：列里被横界栏断开的第几段（从 1 起）；其余为 0
     box: Box                        # 页面坐标外接框
     ink: int
 

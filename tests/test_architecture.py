@@ -46,10 +46,8 @@ LAYER: dict[str, int] = {
 
 #: 2026-10-17 的存量违规（低层 → 高层）。只许删，不许加。
 ALLOWED_UPWARD: frozenset[str] = frozenset({
-    "clustering.glyph_selfcheck -> console.routers.workspace",
     "clustering.rare_panel -> steps.align_ref",
     "clustering.rare_panel -> steps.glyph_match",
-    "core.book -> review.cards",
     "core.pipeline -> steps",
     "core.step -> clustering.cnn_candidates",
     "core.step -> steps.align_ref",
@@ -219,15 +217,8 @@ def _p2m_edges() -> set[str]:
 
 ALLOWED_PIPELINE_TO_MANAGER: frozenset[str] = frozenset({
     "__main__ -> cli_v2",  # 入口：M2/M4 拆出 guji-cv 后消失
-    "clustering.font_pack -> datastore",  # M2/M3 去掉联网取包
-    "clustering.font_pack -> datastore.packs",
-    "clustering.glyph_selfcheck -> console.routers.workspace",
-    "clustering.seeding -> datastore.packs",  # M3：进 seed_admit 的 code_deps，走 code_equiv 登记
-    "core.book -> review.cards",
-    "core.cv_version -> datastore.client",
     "feedback.bindings -> feedback.anchor_backfill",  # 灰区：同上
     "feedback.lookup -> feedback.consumers",  # 灰区：consumers 归属待核（设计 2.3）
-    "products.store -> datastore.sources",
     "report.collate -> eval.round_check",
     "report.tiers -> eval.round_check",
 })

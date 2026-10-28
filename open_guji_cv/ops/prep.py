@@ -151,3 +151,11 @@ def print_unpacked(book: str, store) -> None:
         print(f"  ⓘ {msg}")
 
 
+
+
+def install_derived_fetcher() -> None:
+    """过渡期：`guji` 入口把"去 R2 取派生缓存"注册给 pipeline（`core.derived.FETCHER`）。
+    pipeline 自己不 import datastore；M4 后改由 manager 在跑之前把文件取到 `GUJI_DERIVED_DIR`。"""
+    from ..core import derived
+    from ..datastore.packs import fetch_derived
+    derived.FETCHER = fetch_derived

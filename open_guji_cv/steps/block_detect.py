@@ -3,6 +3,8 @@
 坊刻本（yxat 起）没有固定格网、多半没有界行、一页可能分上下栏或好几格。这一步只回答
 「页上有哪几块文字、按什么顺序读」，块内分列交给 Step2 `column_trace`。
 人标的 `layout_hints` 优先：整页 skip、人圈的块、每块列数／列距提示都在这里落进产物。
+找到框后先按框线把页面拉正（`utils/free_rectify.py`，产物 `warp`），后面都在拉正后的图上做；
+1.8 起人标 splits 处的分栏线也一起拉成水平。
 自动分出的块再按版心裁一刀（`banxin` 参数说版心在哪侧；yxat 是奇数页在左）。
 算法在 `utils/free_blocks.py`，提示的写法在 `utils/layout_hints.py`。
 """
@@ -17,9 +19,10 @@ from ..core.anchor import bbox_tl_to_tr, x_tl_to_tr
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockRec, LayoutBlocks, RuleRec
-from ..utils.free_blocks import (SPINE_MODES, Block, block_vrules, find_banxin, find_banxin_gap, find_frame,
-                                 find_rules, faint_dividers, ink_mask, page_blocks, snap_split, spine_sides,
-                                 thin_hlines, thin_vlines)
+from ..utils.free_blocks import (SPINE_MODES, Block, Frame, SplitParams, block_vrules, cut_pieces, find_banxin, find_banxin_gap,
+                                 find_frame, find_rules, ink_mask, line_maps, snap_cut, snap_frame_edges, spine_sides,
+                                 split_region, thin_vlines, tree_blocks)
+from ..utils.free_rectify import fit_frame_curves, make_warp, rectify_gray, trace_hline
 from ..utils.layout_hints import parse_layout_hints
 
 
@@ -31,25 +34,32 @@ class BlockDetectParams(BaseModel):
     run: float = 0.65              # 且最长连续墨段 ≥ 此 × 条带宽，算「这一行是线」
     min_votes: int = 3             # 成线最少条带票数
     frame_votes: int = 4           # 当版框的线最少条带票数
-    div_span: float = 0.6          # 分栏横线至少跨版框宽的比例
+    div_reach: float = 0.95        # 分栏线要首尾贯穿当前区（版心以内）的比例（1.3 起；原 div_span 0.6 会把混排页的半截线当分栏）
+    div_cov: float = 0.4           # 细线像素至少盖住区宽的比例，才当一条线
+    div_gap: int = 150             # 量贯穿时容许的断口（px；木版磨损、字贴线）
+    auto_vsplit: bool = False      # 没人标时也试左右切（混排页）；缺省关：混排页由人标 tree
+    split_depth: int = 3           # auto_vsplit 时递归切的层数（上下 → 左右 → 上下）
     banxin: str = "auto"           # 版心在哪侧：auto | left | right | odd_left | odd_right | none
     banxin_min: int = 20           # 版心线离框边的距离范围（px）
-    banxin_max: int = 150
+    banxin_max: int = 120
     banxin_line: float = 0.04      # 细竖线强度（框内列均值）够这个才算版心线
-    banxin_pad: int = 4            # 块裁到版心线里面再让几 px
+    banxin_pad: int = 1            # 块裁到版心线里面再让几 px（1.9 起 4→1：字常贴着版心线，让多了切字，Sheldon 10-28 p32）
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
-    faint_div: bool = True         # 另在细横线图上找浅分栏线
-    faint_div_cov: float = 0.6     # 浅栏线至少盖住框宽的比例
-    split_snap: int = 60           # 人标分栏 y 吸附的范围（px）
+    rectify: bool = True           # 1.7 起：按框线把页面拉正（倾斜、透视、弯框），之后各步都在拉正后的图上做
+    rectify_splits: bool = True    # 1.8 起：人标 splits 处的分栏线也拉成水平（分段 Coons）
+    frame_snap: bool = True        # 1.6 起：框线位置吸到框线墨带的内沿（双线框、粗框线）
+    frame_pad: int = 2             # 块边离框线内沿（1.6 起 12→2：本书「边框就是起点」）
+    split_pad: int = 0             # 分栏线两边块边离线中心（1.5 起 0：上下两块在分隔线处相接，Sheldon 10-27「两块之间只有一条横线」）
+    split_snap: int = 80           # 人标 splits 吸附的范围（px）：范围内有线（不论贯穿与否）吸到盖得最满的线，没有吸到最空的行
 
 
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.2", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.9", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
-        code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
+        code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
         parallel_safe=True,
     )
@@ -67,25 +77,33 @@ class BlockDetectStep(Step):
         ink = ink_mask(gray, p.bg_win, p.ink_ratio)
         hs, vs = find_rules(ink, p.n_strips, p.fill, p.run, min_votes=p.min_votes)
         frame = find_frame(ink, hs, vs, min_votes=p.frame_votes)
-        if hint is not None and hint.manual_blocks:
-            blocks = [Block(*b.box, vrules=block_vrules(vs, *b.box), source="hint")  # type: ignore[misc]
-                      for b in hint.blocks]
-        else:
-            divs = [y for y, _ in faint_dividers(thin_hlines(gray, p.bg_win), frame,
-                                                 min_cov=p.faint_div_cov)] if p.faint_div else []
-            if hint is not None and hint.splits:
-                # 人标的是约数：附近（2×snap）已探到栏线的，以探到的为准；没有才吸到空白行
-                auto = list(divs)
-                divs += [snap_split(y, [], ink, frame, snap=p.split_snap) for y in hint.splits
-                         if not any(abs(d - y) <= 2 * p.split_snap for d in auto)]
-            blocks = page_blocks(ink, frame, hs, vs, div_span=p.div_span, extra=divs)
+        if p.frame_snap:
+            frame = snap_frame_edges(ink, frame)
+        if p.rectify:
+            # 拉正：框的四条内沿曲线变成矩形 warp["rect"]（就在原框的平均位置，人标坐标照样吸附），
+            # 框就取这个矩形，不再重找（书脊一侧的「框」常是纸边，拉正后重找会认成版心线）；长线在新图上重找
+            curves = fit_frame_curves(ink, frame, frame.found or {})
+            if curves is not None:
+                mids = None
+                if p.rectify_splits and hint is not None and hint.splits and not hint.tree:
+                    # 人标的分栏线也拉成水平（它常和框不平行，Sheldon 10-28 p12）；量不出（没线、空白分栏）就不管
+                    m = 0.03 * (frame.right - frame.left)
+                    hmap = (thin_vlines(gray.T, p.bg_win, length=11, bridge=41).T > 0.05).astype(np.float32)
+                    mids = [c for c in (trace_hline(hmap, y, frame.left + m, frame.right - m) for y in hint.splits)
+                            if c is not None]
+                out.warp = make_warp(curves, frame, (W, H), mids)
+                gray = rectify_gray(gray, out.warp)
+                ink = ink_mask(gray, p.bg_win, p.ink_ratio)
+                hs, vs = find_rules(ink, p.n_strips, p.fill, p.run, min_votes=p.min_votes)
+                left, top, right, bottom = out.warp["rect"]
+                frame = Frame(top=top, bottom=bottom, left=left, right=right, found=frame.found)
+        # 先认版心：分栏线「贯穿」是对版心以内的版面说的（版心线把栏线截在那里）
         if p.banxin not in SPINE_MODES:
             raise ValueError(f"block_detect.banxin 只能是 {SPINE_MODES}，写的是 {p.banxin!r}")
         sides = spine_sides(p.banxin, page)
         spine, bx = None, None
         if sides:
-            lines = thin_vlines(gray, p.bg_win)
-            prof = lines[int(frame.top):int(frame.bottom)].mean(0)
+            prof = thin_vlines(gray, p.bg_win)[int(frame.top):int(frame.bottom)].mean(0)
             spine, bx = find_banxin(prof, frame.left, frame.right, sides, lo=p.banxin_min,
                                     hi=p.banxin_max, min_line=p.banxin_line)
             if spine is not None and bx is None:     # 线太浅：退到书脊一侧最空的竖缝
@@ -93,14 +111,34 @@ class BlockDetectStep(Step):
                 band = cv2.GaussianBlur(band.reshape(1, -1), (9, 1), 2).ravel()
                 bx = find_banxin_gap(band, frame.left, frame.right, spine, lo=p.banxin_min,
                                      hi=p.banxin_gap_max, max_frac=p.banxin_gap)
-        if bx is not None and not (hint is not None and hint.manual_blocks):
-            for b in blocks:                 # 人圈的块不动
-                if spine == "left":
-                    b.x0 = max(b.x0, int(bx) + p.banxin_pad)
-                else:
-                    b.x1 = min(b.x1, int(bx) - p.banxin_pad)
-                b.vrules = [x for x in b.vrules if b.x0 < x < b.x1]
-            blocks = [b for b in blocks if b.x1 > b.x0]
+        pad = p.frame_pad
+        x0, x1 = int(frame.left + pad), int(frame.right - pad)
+        if bx is not None:
+            if spine == "left":
+                x0 = max(x0, int(bx) + p.banxin_pad)
+            else:
+                x1 = min(x1, int(bx) - p.banxin_pad)
+        y0, y1 = int(frame.top + pad), int(frame.bottom - pad)
+
+        leaves: list[dict] | None = None             # 版面树的叶子提示（与 blocks 一一对应）
+        if hint is not None and hint.manual_blocks:
+            blocks = [Block(*b.box, vrules=block_vrules(vs, *b.box), source="hint")  # type: ignore[misc]
+                      for b in hint.blocks]
+        else:
+            hl, vl = line_maps(gray, ink, p.bg_win)
+            prm = SplitParams(reach=p.div_reach, min_cov=p.div_cov, gap=p.div_gap, auto_v=p.auto_vsplit,
+                              max_depth=p.split_depth, pad=p.split_pad)
+            if hint is not None and hint.tree:
+                pairs = tree_blocks(hint.tree, hl, vl, ink, x0, y0, x1, y1, prm)
+                blocks, leaves = [b for b, _ in pairs], [n for _, n in pairs]
+            elif hint is not None and hint.splits:
+                # 人标说了切几刀就切几刀：每刀吸到附近盖得最满的线，没线吸到最空的行；不再自动加线
+                ys = [snap_cut("h", y, p.split_snap, hl, vl, ink, x0, y0, x1, y1, prm) for y in hint.splits]
+                blocks = [Block(x0, a, x1, b, source="hint") for a, b in cut_pieces(y0, y1, ys, prm)]
+            else:
+                blocks = split_region(hl, vl, x0, y0, x1, y1, prm=prm)
+            for b in blocks:
+                b.vrules = block_vrules(vs, b.x0, b.y0, b.x1, b.y1)
 
         def rule_rec(r) -> RuleRec:
             if r.orient == "h":      # y = a + s·x_tl → x_tl = W−1−x_tr
@@ -114,10 +152,16 @@ class BlockDetectStep(Step):
         out.spine = spine
         out.banxin = None if bx is None else x_tl_to_tr(bx, W)
         out.rules = [rule_rec(r) for r in (*hs, *vs)]
+        def leaf(i: int, k: str, fallback):
+            v = leaves[i].get(k) if leaves else None
+            return v if v is not None else fallback(i) if hint else None
+
         out.blocks = [BlockRec(index=i + 1, box=bbox_tl_to_tr((b.x0, b.y0, b.x1, b.y1), W),
-                               kind=hint.kind_for(i) if hint else "text", source=b.source,
-                               cols_hint=hint.cols_for(i) if hint else None,
-                               pitch_hint=hint.pitch_for(i) if hint else None,
+                               kind=leaf(i, "kind", hint.kind_for) if hint else "text", source=b.source,
+                               cols_hint=leaf(i, "cols", hint.cols_for) if hint else None,
+                               pitch_hint=leaf(i, "pitch", hint.pitch_for) if hint else None,
+                               ruled=bool(leaf(i, "ruled", hint.ruled_for)) if hint else False,
+                               align=hint.align_for(i) if hint else None,
                                vrules=sorted(x_tl_to_tr(x, W) for x in b.vrules))
                       for i, b in enumerate(blocks)]
         return {"layout_blocks": out}

@@ -680,7 +680,7 @@ def _cached_lm(kind: str, sources: list[tuple[str, bytes]], params: list,
             pass                                  # 坏文件：下面重建覆盖
     # 本机没有：先去 R2 取别的机器训好、手动推上去的同一份（键相同即内容相同；要 GUJI_DATA_TOKEN，
     # 读令牌就够；取不到、没令牌就现训）。见 datastore/packs.py「派生缓存」。
-    from ..datastore.packs import fetch_derived
+    from ..core.derived import fetch_derived
     if fetch_derived("lm", f.name, f):
         try:
             return CharNgramLM.load(f)

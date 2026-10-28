@@ -98,7 +98,7 @@ def test_pack_fetched_from_r2_is_deleted_after_import_local_one_kept(tmp_path, m
     import shutil
 
     from open_guji_cv.clustering import font_glyphs as FG
-    from open_guji_cv.datastore import packs
+    from open_guji_cv.core import derived as packs
     monkeypatch.setenv("GUJI_CACHE_DIR", str(tmp_path / "cache"))
     s = _spec()
     cs = tmp_path / "cs.txt"

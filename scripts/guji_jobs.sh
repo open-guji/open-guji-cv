@@ -12,6 +12,13 @@ set -euo pipefail
 R=${GUJI_JOBS_RUNNER:-/opt/guji-runner}; SEED=${GUJI_JOBS_SEED:-/opt/guji-cv-seed}
 H=${GUJI_JOBS_HOME:-$HOME/.guji-jobs}; PY=${GUJI_JOBS_PY:-/opt/guji-venv/bin/python}
 mkdir -p "$H"
+# guji-manager（cv 拆出来的 manager，私有仓，快照里没有）：这个会话还没装就提示怎么装，不拦（目前 cv 自带的命令都还在；
+# cv 删掉已搬走的包之后会真的缺命令）。装法：add_repo open-guji/guji-manager → git clone --depth 1 → uv pip install --no-deps -e
+manager_hint() {
+  /opt/guji-venv/bin/python -c "import importlib.metadata as m; m.version('guji-manager')" >/dev/null 2>&1 && return 0
+  echo "ⓘ 本会话没装 guji-manager：add_repo open-guji/guji-manager，git clone --depth 1 https://github.com/open-guji/guji-manager ~/guji-manager，" >&2
+  echo "  uv pip install --python /opt/guji-venv/bin/python --no-deps -e ~/guji-manager（详见 ai-team 通用/经验-云端装guji-manager.md）" >&2
+}
 busy() { [ -e "$H/worker.lock" ] && ! flock -n "$H/worker.lock" true; }
 refresh() {
   if [ ! -d "$R/open_guji_cv" ]; then
@@ -24,7 +31,7 @@ refresh() {
 }
 case "${1:-}" in
   start)
-    shift; refresh
+    shift; refresh; manager_hint
     if busy; then echo "执行方已在跑（$H/worker.lock）"; exit 0; fi
     PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
     echo "执行方已起（pid $!），日志 $H/worker.log；guji_jobs follow 跟着看";;

@@ -270,3 +270,60 @@ def test_keep_ref_review_in_dump_with_rare_ref_only():
     off = SeedAdmitParams(rare_ref=False, lane_witness3=False, lane_coord=False, lane_seal=False)
     assert "lane_keep_ref_review" in on.model_dump()
     assert "lane_keep_ref_review" not in off.model_dump()
+
+
+# ── 坐标对位那支放宽 near_form（rare_ref_nf，2026-10-28） ───────────────────
+def _nf_run(*, coord, amap=None, doubts=("near_form",), cands=(("西", 0.95), ("面", 0.93)), n_lib=0, ref="凶",
+            guard=None, nf=True, cov_strong=0.96, skip=()):
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+    cid = f"{BOOK}:{PAGE}:{COL}:1"
+    out = [ColumnAdmit(col=COL, chars=[AdmitRec(id=cid, slot=1, char=None, doubts=list(doubts))])]
+    mmap = {cid: SimpleNamespace(verdict="unsure", char=None, candidates=list(cands), guard=guard,
+                                 cov=cands[0][1])}
+    n = sa._rare_ref_pass(out, mmap, amap if amap is not None else {}, {cid: [ref]},
+                          {cid: ref} if coord else None, 3,
+                          nf=({} if n_lib is None else {ref: n_lib}, 2, cov_strong, frozenset(skip)) if nf else None)
+    return n, out[0].chars[0]
+
+
+def test_rare_ref_nf_releases_near_form_on_coord_branch():
+    n, r = _nf_run(coord=True, amap={"x": ("之", "equal")})
+    assert n == 1 and r.admit and r.char == "凶" and r.channel == "rare_ref"
+    assert r.evidence["rare_ref"]["near_form_relaxed"] and r.evidence["rare_ref"]["via"] == "coord"
+
+
+@pytest.mark.parametrize("kw", [
+    dict(nf=False),                                   # 开关关着：近形照拦
+    dict(n_lib=3),                                    # 库对这个字有判力（刻例 > 2）：近形照拦
+    dict(cands=(("西", 0.97), ("面", 0.93))),         # 强对手（cov ≥ 0.96）
+    dict(guard="conflict"),                           # 护栏照拦
+    dict(skip=("凶",)),                               # 册 codepoints 登记过的字（异体对码位未定）
+    dict(ref="𪔂"),                                    # 扩展 B 以上稀有字 5-b 不可靠
+])
+def test_rare_ref_nf_still_blocks(kw):
+    n, r = _nf_run(coord=True, amap={"x": ("之", "equal")}, **kw)
+    assert n == 0 and not r.admit
+
+
+def test_rare_ref_nf_only_on_coord_branch():
+    cid = f"{BOOK}:{PAGE}:{COL}:1"
+    n, r = _nf_run(coord=False, amap={cid: ("凶", "replace")})
+    assert n == 0 and not r.admit                     # 现役对位（replace 段）那支不放宽
+
+
+def test_rare_ref_nf_other_hard_doubts_still_block():
+    n, r = _nf_run(coord=True, amap={"x": ("之", "equal")}, doubts=("near_form", "approx_exemplar"))
+    assert n == 0 and not r.admit
+
+
+def test_rare_ref_nf_ok_variant_competitor():
+    from open_guji_cv.variants import are_variants
+    assert sa._rare_ref_nf_ok("歩", [("步", 0.90)], 0, 2, 0.96, are_variants) is False   # 异体且 cov ≥ 0.80
+    assert sa._rare_ref_nf_ok("凶", [("西", 0.90)], 0, 2, 0.96, are_variants) is True
+
+
+def test_rare_ref_nf_not_in_dump_when_off():
+    on = SeedAdmitParams(rare_ref=True, rare_ref_coord=True, lane_witness3=False, lane_coord=False, lane_seal=False)
+    off = SeedAdmitParams(rare_ref=True, rare_ref_nf=False, lane_witness3=False, lane_coord=False, lane_seal=False)
+    assert "rare_ref_nf" in on.model_dump() and "rare_ref_nf" not in off.model_dump()
