@@ -3,6 +3,7 @@
 坊刻本（yxat 起）没有固定格网、多半没有界行、一页可能分上下栏或好几格。这一步只回答
 「页上有哪几块文字、按什么顺序读」，块内分列交给 Step2 `column_trace`。
 人标的 `layout_hints` 优先：整页 skip、人圈的块、每块列数／列距提示都在这里落进产物。
+找到框后先按框线把页面拉正（`utils/free_rectify.py`，产物 `warp`），后面都在拉正后的图上做。
 自动分出的块再按版心裁一刀（`banxin` 参数说版心在哪侧；yxat 是奇数页在左）。
 算法在 `utils/free_blocks.py`，提示的写法在 `utils/layout_hints.py`。
 """
@@ -17,9 +18,10 @@ from ..core.anchor import bbox_tl_to_tr, x_tl_to_tr
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockRec, LayoutBlocks, RuleRec
-from ..utils.free_blocks import (SPINE_MODES, Block, SplitParams, block_vrules, cut_pieces, find_banxin, find_banxin_gap,
+from ..utils.free_blocks import (SPINE_MODES, Block, Frame, SplitParams, block_vrules, cut_pieces, find_banxin, find_banxin_gap,
                                  find_frame, find_rules, ink_mask, line_maps, snap_cut, snap_frame_edges, spine_sides,
                                  split_region, thin_vlines, tree_blocks)
+from ..utils.free_rectify import fit_frame_curves, make_warp, rectify_gray
 from ..utils.layout_hints import parse_layout_hints
 
 
@@ -43,6 +45,7 @@ class BlockDetectParams(BaseModel):
     banxin_pad: int = 4            # 块裁到版心线里面再让几 px
     banxin_gap: float = 0.35       # 线探不到时，书脊侧最空竖缝的墨 ≤ 此 × 框内中位才算版心分界
     banxin_gap_max: int = 100      # 退路只在框边往里这么远内找缝（再远就是正文列缝了）
+    rectify: bool = True           # 1.7 起：按框线把页面拉正（倾斜、透视、弯框），之后各步都在拉正后的图上做
     frame_snap: bool = True        # 1.6 起：框线位置吸到框线墨带的内沿（双线框、粗框线）
     frame_pad: int = 2             # 块边离框线内沿（1.6 起 12→2：本书「边框就是起点」）
     split_pad: int = 0             # 分栏线两边块边离线中心（1.5 起 0：上下两块在分隔线处相接，Sheldon 10-27「两块之间只有一条横线」）
@@ -52,9 +55,9 @@ class BlockDetectParams(BaseModel):
 @register_step
 class BlockDetectStep(Step):
     spec = StepSpec(
-        id="block_detect", title="Step1 分块（自由版式）", version="1.6", unit="page",
+        id="block_detect", title="Step1 分块（自由版式）", version="1.7", unit="page",
         consumes=("raw_page",), produces=("layout_blocks",), params=BlockDetectParams,
-        code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.layout_hints"),
+        code_deps=("open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify", "open_guji_cv.utils.layout_hints"),
         book_deps=("layout_hints",),
         parallel_safe=True,
     )
@@ -74,6 +77,17 @@ class BlockDetectStep(Step):
         frame = find_frame(ink, hs, vs, min_votes=p.frame_votes)
         if p.frame_snap:
             frame = snap_frame_edges(ink, frame)
+        if p.rectify:
+            # 拉正：框的四条内沿曲线变成矩形 warp["rect"]（就在原框的平均位置，人标坐标照样吸附），
+            # 框就取这个矩形，不再重找（书脊一侧的「框」常是纸边，拉正后重找会认成版心线）；长线在新图上重找
+            curves = fit_frame_curves(ink, frame, frame.found or {})
+            if curves is not None:
+                out.warp = make_warp(curves, frame, (W, H))
+                gray = rectify_gray(gray, out.warp)
+                ink = ink_mask(gray, p.bg_win, p.ink_ratio)
+                hs, vs = find_rules(ink, p.n_strips, p.fill, p.run, min_votes=p.min_votes)
+                left, top, right, bottom = out.warp["rect"]
+                frame = Frame(top=top, bottom=bottom, left=left, right=right, found=frame.found)
         # 先认版心：分栏线「贯穿」是对版心以内的版面说的（版心线把栏线截在那里）
         if p.banxin not in SPINE_MODES:
             raise ValueError(f"block_detect.banxin 只能是 {SPINE_MODES}，写的是 {p.banxin!r}")

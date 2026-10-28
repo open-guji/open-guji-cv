@@ -135,19 +135,20 @@ class Frame:
     found: dict[str, bool] = field(default_factory=dict)
 
 
-def join_segments(rules: list[Rule], *, tol: float = 15, overlap: int = 40) -> list[Rule]:
-    """首尾相接的同一条线的几段（版片弯、框线中间换了斜率，各段条带票数都不够）连成一条：
-    两段沿线方向几乎不重叠（≤ overlap px），在接口处位置差 ≤ tol px，就连起来、票数相加，
-    位置取两端点连线。重叠多的是平行的两条线（双线框），不连。"""
+def join_segments(rules: list[Rule], *, tol: float = 15) -> list[Rule]:
+    """同一条线断成的几段（版片弯、框线中间换了斜率、粗线两段各拟了个斜率，各段条带票数都不够）连成一条：
+    两段在接口处（有重叠就取重叠段中点）位置差 ≤ tol px，就连起来、票数相加，位置取两端点连线。
+    双线框的两条线相距 20px 以上，不连。"""
     out: list[Rule] = []
     for r in sorted(rules, key=lambda r: r.lo):
         for i, q in enumerate(out):
-            if q.orient != r.orient or r.lo < q.hi - overlap:
+            if q.orient != r.orient:
                 continue
-            j = (q.hi + r.lo) / 2
+            j = (max(q.lo, r.lo) + min(q.hi, r.hi)) / 2
             if abs(q.at(j) - r.at(j)) <= tol:
-                slope = (r.at(r.hi) - q.at(q.lo)) / max(1, r.hi - q.lo)
-                out[i] = Rule(q.orient, q.at(q.lo) - slope * q.lo, slope, q.lo, max(q.hi, r.hi),
+                end = r if r.hi >= q.hi else q
+                slope = (end.at(end.hi) - q.at(q.lo)) / max(1, end.hi - q.lo)
+                out[i] = Rule(q.orient, q.at(q.lo) - slope * q.lo, slope, q.lo, end.hi,
                               q.n_strips + r.n_strips)
                 break
         else:

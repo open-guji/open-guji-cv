@@ -1,4 +1,5 @@
-"""自由版式管线 `keben_free` 的三种产物（numeric，页级）。坐标一律规范空间 raw_page_px@top-right。
+"""自由版式管线 `keben_free` 的三种产物（numeric，页级）。坐标一律规范空间 raw_page_px@top-right，
+在按版框拉正后的图上（`layout_blocks.warp`，没拉就是原图）。
 
 - `layout_blocks`（Step1 `block_detect`）：版框、长线、文字块（自动或人标）；
 - `free_columns`（Step2 `column_trace`）：每块的列，左右缝是逐行 x 的折线（按 `step` 行采样）；
@@ -51,6 +52,9 @@ class LayoutBlocks(BaseModel):
     banxin: float | None = None     # 版心线 x_tr（探到了才有；块已裁到它里面）
     rules: list[RuleRec] = Field(default_factory=list)
     blocks: list[BlockRec] = Field(default_factory=list)
+    # 拉正参数（block_detect 1.7 起；None = 没拉）：本产物和下游两种产物的坐标都在拉正后的图上。
+    # 字段见 `utils/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
+    warp: dict | None = None
 
 
 class ColumnRec(BaseModel):

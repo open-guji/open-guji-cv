@@ -377,7 +377,7 @@ def test_snap_frame_edges_to_inner_edge_of_frame_band():
 
 
 def test_join_segments_bent_frame_line():
-    """框线中段弯一下，两段各自票数不够：首尾相接的连成一条、票数相加；平行的两条不连。"""
+    """框线中段弯一下，两段各自票数不够：首尾相接的连成一条、票数相加；双线（相距远）不连。"""
     from open_guji_cv.utils.free_blocks import Rule, join_segments
     a = Rule("h", 303.0, -0.039, 790, 1380, 3)
     b = Rule("h", 292.0, -0.019, 200, 789, 3)
@@ -386,3 +386,29 @@ def test_join_segments_bent_frame_line():
     assert len(out) == 2
     j = next(r for r in out if r.n_strips == 6)
     assert j.lo == 200 and j.hi == 1380 and abs(j.at(800) - 272) < 10
+
+
+def test_rectify_straightens_slanted_frame():
+    """框斜了（透视、倾斜）：沿框量内沿拟曲线、拉正后框线变成竖直／水平，矩形在原框的平均位置。"""
+    import cv2
+
+    from open_guji_cv.utils.free_blocks import Frame
+    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray
+    H, W = 900, 700
+    img = np.full((H, W), 230, np.uint8)
+    quad = np.array([[100, 120], [600, 100], [620, 820], [90, 800]], np.int32)   # 左上、右上、右下、左下
+    cv2.polylines(img, [quad], True, 20, 10)
+    ink = img < 128
+    fr = Frame(top=110.0, bottom=810.0, left=95.0, right=610.0,
+               found={"top": True, "bottom": True, "left": True, "right": True})
+    curves = fit_frame_curves(ink, fr, fr.found)
+    assert curves is not None
+    warp = make_warp(curves, fr, (W, H))
+    out = rectify_gray(img, warp) < 128
+    x0, y0, x1, y1 = (int(round(v)) for v in warp["rect"])
+    # 拉正后：左右框线的墨贴在矩形外侧一条竖带里，上下框线在一条横带里
+    for y in (y0 + 50, (y0 + y1) // 2, y1 - 50):
+        assert out[y, x0 - 6:x0].any() and not out[y, x0 + 3:x0 + 40].any()
+        assert out[y, x1:x1 + 6].any() and not out[y, x1 - 40:x1 - 3].any()
+    for x in (x0 + 50, (x0 + x1) // 2, x1 - 50):
+        assert out[y0 - 6:y0, x].any() and not out[y0 + 3:y0 + 40, x].any()

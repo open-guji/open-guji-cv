@@ -19,6 +19,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import ColumnRec, FreeCellRec, FreeCells, FreeColumns
 from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, rule_vlines
 from ..utils.free_cells import note_line_width, segment_column, straighten
+from ..utils.free_rectify import rectify_gray
 
 
 class CellCutParams(BaseModel):
@@ -50,10 +51,10 @@ def _pieces(col: ColumnRec, h: int, pad: int) -> list[tuple[int, int]]:
 @register_step
 class CellCutStep(Step):
     spec = StepSpec(
-        id="cell_cut", title="Step3 列内切字（自由版式）", version="1.2", unit="page",
-        consumes=("raw_page", "free_columns"), produces=("free_cells",), params=CellCutParams,
+        id="cell_cut", title="Step3 列内切字（自由版式）", version="1.3", unit="page",
+        consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_cells",), params=CellCutParams,
         code_deps=("open_guji_cv.utils.free_cells", "open_guji_cv.utils.free_columns",
-                   "open_guji_cv.utils.free_blocks"),
+                   "open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify"),
         parallel_safe=True,
     )
 
@@ -64,7 +65,7 @@ class CellCutStep(Step):
         if not fc.columns:
             return {"free_cells": out}
         W = fc.width
-        gray = ctx.raw_page(page)
+        gray = rectify_gray(ctx.raw_page(page), ctx.product("layout_blocks", page).warp)
         ink = drop_specks(ink_mask(gray, p.bg_win, p.ink_ratio), p.min_speck)
         ruled = {b.block for b in fc.blocks if b.n_source == "ruled"}
         if ruled:    # 有界栏的块：界栏的墨（含伸进空处、没够上断开线的半截）不算字
