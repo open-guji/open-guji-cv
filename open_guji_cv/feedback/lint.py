@@ -1,4 +1,4 @@
-"""人裁事件体检：按 `doc/formats/人裁事件规范.md` 逐行查 `feedback/events/`、`feedback/vision/`。
+"""人裁事件体检：按 `doc/formats/人裁事件规范.md` 逐行查 `feedback/events/`、`feedback/vision/`、`feedback/rulings/`。
 
 只读、不改账。人裁日志只追加，查出来的问题靠追加更正事件解决；改行要连 `consumed/`、金标 `source_events`
 一起改（`consumed/` 认的是事件 id），只在一次性规整里做（`migrate_v1`，2026-10-21 把下表的历史遗留清完了）。
@@ -50,6 +50,7 @@ KIND_UNITS = {
     "inverted_band": {"page"},
     "n_body_slots": {"column"},
     "vision_check": {"cell"},
+    "ctx_ruling": {"cell"},
     "collate_verdict": {"cell"},
     "collate_ok": {"cell"},
     "cell_review": {"cell"},
@@ -166,7 +167,7 @@ def lint(feedback_root: Path) -> Report:
     rep = Report()
     seen: dict[str, tuple[str, str]] = {}
     events: list[Event] = []
-    for sub in ("events", "vision"):
+    for sub in ("events", "vision", "rulings"):
         d = Path(feedback_root) / sub
         if d.is_dir():
             lint_dir(d, rep, seen, events)

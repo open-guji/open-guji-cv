@@ -16,7 +16,7 @@
   中心库镜像与审计能分清「改键挪走」和「漏了」。
   所有本册实例先挪到临时 id 再落到终点：新旧页号互相交错（旧 3 页 → 新 1 页、旧 5 页 → 新 3 页…），一次改名会撞主键。
 - **L2 文意答案表／按格 id 当键的 JSON**（`rekey_json`）：`cells` 字典（`group_clf/1`）或顶层字典的键改成新格；
-  `删` 的去掉、记进 `rekey.dropped`。`ctx_key` 护栏不动，`CtxL2Backend` 查表时会按新格的上下文再验一遍。
+  `删` 的去掉、记进 `rekey.dropped`。`ctx_key` 护栏不动，`CtxL3Backend` 查表时会按新格的上下文再验一遍。
 - **金标／回放集 jsonl**（`rekey_jsonl`）：`id`／`key` 改成新格，`page`／`col`／`slot` 跟着改；`删` 的行挪到
   `<文件名>.retired.jsonl`，不留在原文件里（留着就可能按旧号对上新页的另一格）。
 - **IDS 模板库出处**（`rekey_ids_bank`）：模板图内嵌，不受影响；`source.cells` 只是出处，改成新格，对不上的写停放 id

@@ -4,6 +4,7 @@
 # 与 keben_body_v2 的 Step1–3 全不共用（殿本那套 21 格、界行定列、layout_prior 一条不适用）：
 #   block_detect   Step1 分块：版框 + 长线 → 文字块（人标 layout_hints 可整页 skip、圈块、给列数）
 #   column_trace   Step2 块内找列：剪切校斜 + 投影 DP + 最省墨竖缝 → 每列左右弯缝
+#   line_ocr       Step2-b 逐列送识别软件（PaddleOCR）读文本行，给 Step3 定区、定字数（要装 `.[cpu]`；没有它 Step3 只用规则）
 #   cell_cut       Step3 列内切字：大字 / 双行小注 / 单行小注分区，各自切字
 # Step4 以后（字框收缩、识别）暂未接：本书还没有语料、字形库，先把切分做对。
 # 选管线：册 yaml 写 `pipeline: keben_free`（edition 仍是 keben）。
@@ -15,4 +16,5 @@ selector:
 steps:
   - block_detect
   - column_trace
+  - line_ocr
   - cell_cut

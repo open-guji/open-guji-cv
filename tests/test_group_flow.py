@@ -75,7 +75,7 @@ def test_entry_ref_enter_when_top_is_tolerated_outsider():
     assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg) is None              # 没有整理本字不进
     assert entry(r, [("莫", 0.95), ("集", 0.93)], "莫", cfg) is None              # 整理本字在组外
     assert entry(r, [("莫", 0.95), ("指", 0.94)], "算", cfg) is None              # 别的组外字紧咬照挡
-    assert entry(r, [("莫", 0.95)], "算", FlowConfig(groups=("yin",))) is None     # 组没点名
+    assert entry(r, [("莫", 0.95)], "算", FlowConfig(groups=("guanm",))) is None    # 组没点名
     assert entry(r, [("莫", 0.95), ("集", 0.93)], None, cfg, coord_ref="𮅕") == ("suan", "lift")   # 对位缺格用坐标对位字
     men = FlowConfig(groups=("men", "guanm"))
     assert entry(r, [("闡", 0.97), ("間", 0.96)], "闗", men) == ("guanm", "lift")  # 先于门族
@@ -98,7 +98,9 @@ def test_entry_ref_enter_member_xuan():
     assert entry(r, [("選", 0.96), ("遺", 0.95), ("遵", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")
     assert entry(r, [("遺", 0.96), ("選", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")   # 首位是陪衬也进
     assert entry(r, [("選", 0.96), ("遺", 0.95)], "選", cfg) == ("chuo", "lift")
-    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="𨕖") is None              # 组外字紧咬照挡
+    # 库首位 選 与坐标对位 𨕖 同在组里：组外字紧咬也进（`ref_top_enter`，2026-10-28）；整理本是组外字则照挡
+    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="𨕖") == ("xuan", "lift")
+    assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="指") is None
 
 
 def test_entry_jys_tolerates_ba():
@@ -539,9 +541,9 @@ def test_ry_strong_ctx_overrides_ref_and_l1_with_strong_table_fixes(monkeypatch)
         group_flow_pass([r], {"x": ("曰", None)}, lambda cid: cands, lambda r: False, cfg)
         assert r.admit is admit and (admit or "group_flow_ref_dissent" in r.doubts)
     monkeypatch.setattr(CtxRule, "_run", lambda self, inp: GroupVerdict("日", why="agree", via="ctx:ctx_l1"))
-    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l2", extra={"strong": True}),
-           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l2"),
-           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l2", extra={"strong": True})}
+    tab = {"s": GroupVerdict("日", why="agree", via="ctx:ctx_l3", extra={"strong": True}),
+           "w": GroupVerdict("日", why="agree", via="ctx:ctx_l3"),
+           "o": GroupVerdict("曰", why="agree", via="ctx:ctx_l3", extra={"strong": True})}
     monkeypatch.setattr(Llm, "applies", lambda self, inp: True)
     monkeypatch.setattr(Llm, "_run", lambda self, inp: tab[inp.cell_id])
     for cid, want in (("s", True), ("w", None), ("o", None)):
@@ -611,9 +613,9 @@ def test_rr_ctx_over_image(monkeypatch):
     monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
         picks[name], via=ext.get(name, (name, {}))[0], extra=ext.get(name, (name, {}))[1]))
     cands = lambda cid: [("八", 0.99), ("入", 0.98)]   # noqa: E731
-    for e, lifted in (({"ctx": ("ctx_l2", {"strong": True})}, True),
+    for e, lifted in (({"ctx": ("ctx_l3", {"strong": True})}, True),
                       ({"ctx": ("ctx:ctx_l1", {})}, True),
-                      ({"ctx": ("ctx_l2", {"runs": 3})}, False)):
+                      ({"ctx": ("ctx_l3", {"runs": 3})}, False)):
         picks.clear(); picks.update({"ctx": "入", "rr_img": "八", "ids": "八"}); ext.clear(); ext.update(e)
         r = Rec("x")
         group_flow_pass([r], {}, cands, lambda r: False, _cfg())
@@ -624,16 +626,16 @@ def test_rr_ctx_over_image(monkeypatch):
         else:
             assert "group_flow_conflict" in r.doubts
     # 复核：放行字 八（整理本错）、文意 strong 说 入、HOG 也说 八 → ctx_over 后照文意改字（review_fix_strong）
-    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    picks.clear(); picks.update({"ctx": "入", "rr_img": None, "ids": "八"}); ext.clear(); ext.update({"ctx": ("ctx_l3", {"strong": True})})
     r = Rec("y", "八", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())
     assert r.admit and r.char == "入" and r.evidence["group"]["decision"] == "fix"
     # 文意不 strong：照常降审，不改字
-    ext.update({"ctx": ("ctx_l2", {"runs": 1})})
+    ext.update({"ctx": ("ctx_l3", {"runs": 1})})
     r = Rec("w", "八", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())
     assert not r.admit and r.char == "八" and "group_flow_disagree" in r.doubts
-    ext.update({"ctx": ("ctx_l2", {"strong": True})})
+    ext.update({"ctx": ("ctx_l3", {"strong": True})})
     # 复核：放行字 入、文意 strong 说 入、HOG 说 八 → 不降
     r = Rec("z", "入", True, "match_ref", "match")
     group_flow_pass([r], {}, cands, lambda r: False, _cfg())
@@ -777,3 +779,30 @@ def test_provisional_off_and_near_form_groups(monkeypatch):
     group_flow_pass([r], {"a": ("㕘", "equal")}, lambda cid: [("㕘", 0.97)], lambda r: False,
                     FlowConfig(groups=("can",), provisional=False))
     assert not r.admit and "group_flow_abstain" in r.doubts
+
+
+def test_entry_kgc_tsh_cp_li2_round2():
+    """第 2 轮（A24 10-28）：冠寇（库首位 冠、整理本 冦）、塡愼（库首位 愼、整理本 塡）、黎𥠖（库首位 藜、整理本 𥠖）进组补放；整理本不在组里照挡。"""
+    r = Rec("a")
+    assert entry(r, [("冠", 0.957), ("宼", 0.953)], "冦", FlowConfig(groups=("cp_kou4", "kgc"))) == ("kgc", "lift")
+    assert entry(r, [("冠", 0.957), ("指", 0.955)], "冦", FlowConfig(groups=("cp_kou4", "kgc"))) == ("kgc", "lift")   # ref_top_enter：组外字紧咬不拦
+    assert entry(r, [("冠", 0.957), ("宼", 0.953)], "冕", FlowConfig(groups=("cp_kou4", "kgc"))) is None             # 整理本在组外
+    assert entry(r, [("宼", 0.97), ("寇", 0.96)], "寇", FlowConfig(groups=("cp_kou4", "kgc"))) == ("cp_kou4", "lift")   # 分差内只有寇族字：码位组
+    assert entry(r, [("宼", 0.97), ("冠", 0.96)], "寇", FlowConfig(groups=("cp_kou4", "kgc"))) == ("kgc", "lift")     # 冠 紧咬：码位组装不下，归文意组
+    assert entry(r, [("愼", 0.95), ("慎", 0.94)], "塡", FlowConfig(groups=("shen", "tsh"))) == ("tsh", "lift")
+    assert entry(r, [("愼", 0.95), ("慎", 0.94)], "愼", FlowConfig(groups=("shen", "tsh"))) == ("shen", "lift")
+    assert entry(r, [("藜", 0.95), ("黎", 0.947), ("蕪", 0.93)], "𥠖", FlowConfig(groups=("cp_li2",))) == ("cp_li2", "lift")
+    assert entry(r, [("藜", 0.95), ("黎", 0.947), ("指", 0.94)], "𥠖", FlowConfig(groups=("cp_li2",))) is None       # 别的组外字紧咬照挡
+    assert entry(r, [("藜", 0.95), ("黎", 0.947)], "藜", FlowConfig(groups=("cp_li2",))) is None                    # 整理本作 藜 不进
+
+
+def test_kgc_tsh_two_stage_form_pick_follows_codepoints():
+    """文意定族后，族内各写法按书级码位归一给字：冦宼㓂 → 寇、填 → 塡。"""
+    from open_guji_cv.groups.flow import _pick_form
+    canon = {"冦": "寇", "宼": "寇", "㓂": "寇", "填": "塡", "慎": "愼"}
+    cfg = FlowConfig(groups=("kgc", "tsh"), canon=lambda c: canon.get(c, c))
+    r = Rec("a")
+    assert _pick_form("kgc", "寇", r, [("冠", 0.96)], cfg, None, [])[:2] == ("寇", "agree")
+    assert _pick_form("kgc", "冠", r, [("冠", 0.96)], cfg, None, [])[:2] == ("冠", "agree")
+    assert _pick_form("tsh", "塡", r, [("愼", 0.96)], cfg, None, [])[:2] == ("塡", "agree")
+    assert _pick_form("tsh", "愼", r, [("愼", 0.96)], cfg, None, [])[:2] == ("愼", "agree")

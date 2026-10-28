@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from open_guji_cv.groups.ctx_l2 import build_batch, load_prompt
+from open_guji_cv.groups.ctx_l3 import build_batch, load_prompt
 from open_guji_cv.groups.prompt_template import (book_prompt_vars, build_batch_rendered,
                                                  load_rendered_prompt)
 
@@ -21,7 +21,7 @@ def test_placeholders_filled_and_missing_raises(tmp_path):
     assert "《某書》刻本" in build_batch_rendered(p, cells, {"book_desc": "《某書》刻本"})
 
 
-def test_plain_prompt_is_identical_to_ctx_l2(tmp_path):
+def test_plain_prompt_is_identical_to_ctx_l3(tmp_path):
     p = tmp_path / "plain.md"
     p.write_text("---\nver: x\n---\n没有占位符{x}", encoding="utf-8")
     assert load_rendered_prompt(p, {"a": "b"}) == load_prompt(p)

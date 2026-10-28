@@ -34,8 +34,8 @@ LAYER: dict[str, int] = {
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
     "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4, "jobs": 4,
-    # L5 控制台（Web）
-    "console": 5,
+    # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
+    "console_api": 5,
     # L6 命令行入口
     "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
@@ -73,8 +73,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "report.progress -> review.cards",
     "report.progress -> review.verdict_view",
     "report.tiers -> eval.round_check",
-    "review.cards -> console",
-    "review.cards -> console.deps",
     "utils.binarized -> clustering.normalize",
     "utils.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
@@ -106,6 +104,7 @@ SIDE_OVERRIDE: dict[str, str] = {
     "feedback.lookup": SIDE_PIPELINE, "feedback.bindings": SIDE_PIPELINE, "feedback.keys": SIDE_PIPELINE,
     "feedback.mojibake": SIDE_PIPELINE, "feedback.events": SIDE_PIPELINE, "feedback.lock": SIDE_PIPELINE,
     "feedback.anchor": SIDE_PIPELINE, "feedback.returns": SIDE_PIPELINE,   # bindings 要用
+    "feedback.rulings": SIDE_PIPELINE,   # 大模型裁定：L3 在线读、问完写回（2026-10-28）
     "gold.item": SIDE_PIPELINE, "gold.drift": SIDE_PIPELINE,             # lookup / bindings 要用的金标信封与漂移判定
     # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
     "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,
@@ -238,3 +237,34 @@ def test_pipeline_does_not_import_manager():
 def test_p2m_allowlist_has_no_stale_entries():
     stale = sorted(ALLOWED_PIPELINE_TO_MANAGER - _p2m_edges())
     assert not stale, "存量已修掉，请从 ALLOWED_PIPELINE_TO_MANAGER 里删掉：\n  " + "\n  ".join(stale)
+
+
+# ── 控制台拆成独立包（设计：doc/design/拆分-控制台独立成包与上网站.md，用户 2026-10-28 定）──
+#: 控制台已在 guji-console 仓，只经门面 `console_api` 用 cv（守卫在那边）。cv 这边：门面名字都得取得到，
+#: cv 不许反过来 import 控制台。
+
+FACADE = f"{PKG}.console_api"
+
+
+def test_cv_does_not_import_console():
+    bad = []
+    for p in PKG_ROOT.rglob("*.py"):
+        for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                     else [node.module or ""] if isinstance(node, ast.ImportFrom) else [])
+            if any(n == "guji_console" or n.startswith("guji_console.") for n in names):
+                bad.append(f"{p.relative_to(PKG_ROOT)}:{node.lineno}")
+    assert not bad, "cv 不能依赖控制台（guji-console）：\n  " + "\n  ".join(bad)
+
+
+def test_facade_exports_resolve():
+    """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台运行时 500）。"""
+    import importlib
+    facade = importlib.import_module(FACADE)
+    missing = []
+    for name in facade.__all__:
+        try:
+            getattr(facade, name)
+        except Exception as e:   # noqa: BLE001
+            missing.append(f"{name}: {e!r}")
+    assert not missing, "门面里取不到的名字：\n  " + "\n  ".join(missing)

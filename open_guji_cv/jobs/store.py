@@ -219,7 +219,9 @@ def reap(conn) -> list[tuple[int, str]]:
                    if out[-1][1] == "queued" else f"{a['worker']} 失联，次数用完", level="warn")
         dead = _rows(conn.execute(
             "UPDATE jobs.job j SET status='blocked', finished_at=now(), updated_at=now(),"
-            " error='依赖的任务没成功' WHERE j.status='queued' AND EXISTS (SELECT 1 FROM jobs.job d"
+            " error=(SELECT '依赖 ' || string_agg('#' || d.id || '（' || d.status || '）', '、') || ' 没成功，不跑'"
+            " FROM jobs.job d WHERE d.id = ANY(j.depends_on) AND d.status IN ('failed','blocked','cancelled'))"
+            " WHERE j.status='queued' AND EXISTS (SELECT 1 FROM jobs.job d"
             " WHERE d.id = ANY(j.depends_on) AND d.status IN ('failed','blocked','cancelled')) RETURNING id"))
         for d in dead:
             _event(conn, d["id"], None, "reap", "依赖的任务没成功，不跑", level="warn")

@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import json
 import shutil
 import sqlite3
 
@@ -121,29 +120,3 @@ def test_freshness_relabel_drops_card(lib):
     assert fr["drop"] == {next(r["key"] for r in rows if r["instance_id"] == "bk:1:1:4")}
 
 
-def test_console_route_refuses_stale(lib, monkeypatch):
-    pytest.importorskip("fastapi")
-    from fastapi import HTTPException
-
-    from open_guji_cv.console.routers.glyphlib import api_glyphlib_audit
-    monkeypatch.setenv("GUJI_GLYPH_DB", str(lib))
-    out = G.save(_result(lib), G.out_dir())
-    assert out == lib.parent / "glyph_selfcheck"
-    got = api_glyphlib_audit()
-    assert got["n_total"] == 2 and len(got["findings"]) == 2
-    assert got["db_fp"] == G.library_fingerprint(lib)
-
-    _swap_image(lib, "bk:1:1:1", 8)
-    with pytest.raises(HTTPException) as ei:
-        api_glyphlib_audit()
-    assert ei.value.status_code == 409
-    assert G.STALE_MSG in ei.value.detail
-
-    # 旧结果（没有 db_fp）同样不出卡
-    _swap_image(lib, "bk:1:1:1", 0)
-    meta = json.loads((out / "summary.json").read_text(encoding="utf-8"))
-    meta.pop("db_fp")
-    (out / "summary.json").write_text(json.dumps(meta, ensure_ascii=False), encoding="utf-8")
-    with pytest.raises(HTTPException) as ei:
-        api_glyphlib_audit()
-    assert ei.value.status_code == 409

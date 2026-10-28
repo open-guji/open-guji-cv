@@ -30,7 +30,7 @@ def test_registered_path_params_exist_and_leave_hash():
     expect = {
         "glyph_match": ("db_path",),
         "seed_admit": ("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                       "group_flow_freq", "group_flow_tables"),
+                       "group_flow_freq", "group_flow_tables", "group_flow_models"),
         "context_decide": ("corpus", "general_corpus_dir", "ai_evidence", "llm_log_dir"),
         "align_ref": ("corpus",),
     }

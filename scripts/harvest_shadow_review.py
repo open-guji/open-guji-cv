@@ -20,7 +20,7 @@
 用户以后接着裁剩下的卡，重复跑只会追加新裁的；已写过的格若页上裁决变了，只报告、不改
 （事件日志只追加，要改走 `EventLog.compact` / 追加更正事件，由 H 道决定）。
 
-`target.anchor` 口径同控制台写入路径（`console/routers/feedback.py::_product_anchor`）：
+`target.anchor` 口径同控制台写入路径（`review/event_write.py::product_anchor`）：
 `{"product_key": {"step": "seed_admit", "key": "p0068", "fingerprint": …}}`。指纹优先取工作区
 产物清单里 seed_admit 该页的现值；工作区没有产物（云端只有事件，无 products/）时，取
 **同一页、同 step 已有事件里带的指纹**（同一次 seed_admit 产物上裁的）；两者都没有就不写

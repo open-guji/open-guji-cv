@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-guji-cv"
-version = "0.5.31"
+version = "0.5.32"
 description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -44,12 +44,12 @@ dependencies = [
 # CPU 模式：pip install open-guji-cv[cpu]
 cpu = [
     "paddlepaddle>=3.0.0b2",
-    "paddleocr>=2.8.0",
+    "paddleocr>=3.2",
 ]
 # GPU 模式：先手动 pip install paddlepaddle-gpu，再 pip install open-guji-cv[gpu]
 # 详见 install_gpu.sh / install_gpu.bat
 gpu = [
-    "paddleocr>=2.8.0",
+    "paddleocr>=3.2",
 ]
 # 轻量 OCR：PP-OCRv4 的 ONNX 版，模型随包分发（无需联网下载模型），
 # 无 GPU / 无法访问模型源的环境用这个跑 label --sources rapidocr
@@ -66,8 +66,12 @@ onnx = [
 # tests/test_cnn_candidates.py 5 条全跳过；更早之前守卫只查 checkpoint 不查 torch，
 # 其中 3 条断言太弱（`len([]) <= 3`）一直在假通过，另 2 条才红出来。
 # 跑测试想覆盖 CNN 那几条就装这个 extra；推理只用 CPU 轮子就够（两处都 CPU/CUDA 自适应）。
+#
+# 文意 L2 模型（groups/ctx_l2.py：SikuRoBERTa 填空向量＋小头，A24 10-28）也在这个 extra：要 transformers 读编码器；
+# 缺件时该方法弃权（`abstain:no_encoder`），字组照旧走 L1／L3。
 torch = [
     "torch>=2.0",
+    "transformers>=4.40",
 ]
 # 原生 YOLO 并格闸（row_segment.yolo_merge，doc/design/19 块 D）：跑 yolo-tool 的 best.onnx。
 # 缺省关，不开不用装；模型文件不随包分发，册 yaml 给 yolo_model_dir。
@@ -79,6 +83,11 @@ datastore = [
     "psycopg[binary]>=3.1",
     "boto3>=1.28",
     "websockets>=13",
+]
+# 文意 L3 在线（groups/ctx_llm.py，A24 10-28）：管线里问 Claude；密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，
+# 不装或没密钥时该方法弃权（`abstain:no_api_key`），字组照旧留人审。
+llm = [
+    "anthropic>=2.3",
 ]
 # PDF 抽页（guji import-pdf）
 pdf = [
@@ -96,14 +105,11 @@ shadow = [
 exp = [
     "mlflow>=3.0",
 ]
+# 控制台 2026-10-28 拆成独立包 guji-console（open-guji/guji-console），不再随 cv 装：
+#   pip install -e ../guji-console   （与 cv 装在同一个环境；装上后 `guji console` / `guji runs` 由它经入口点提供）
+# 这个 extra 留成空的，免得老的 `pip install -e ".[console,…]"` 报未知 extra。
+console = []
 # 开发依赖：pip install open-guji-cv[dev]
-# 本地控制台：pip install open-guji-cv[console]
-console = [
-    "fastapi>=0.110",
-    "uvicorn>=0.27",
-    # console/auth/oauth.py 顶层 import httpx；本地整理道 09-30 装 [console] 起控制台时缺它
-    "httpx>=0.25",
-]
 dev = [
     "pytest>=7.0",
     # 全量测试并行跑（`-n auto`）：四千多条串行 11–15 分钟，4 核并行约 2–3 分钟
@@ -116,7 +122,7 @@ dev = [
 [project.scripts]
 # python -m open_guji_cv 的 CLI 包装
 guji-cv = "open_guji_cv.__main__:main"
-# 四个抽象的 CLI（pipeline / step / status / console / cache），同样的子命令也挂在 guji-cv 下
+# 四个抽象的 CLI（pipeline / step / status / cache …；console 由 guji-console 插件提供），同样的子命令也挂在 guji-cv 下
 guji = "open_guji_cv.cli_v2:main"
 
 [project.urls]
@@ -130,7 +136,7 @@ include = ["open_guji_cv*"]
 exclude = ["venv*", "output*", "data*", ".claude*"]
 
 [tool.setuptools.package-data]
-open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "console/static/**/*", "ops/*.json",
+open_guji_cv = ["py.typed", "pipelines/*.yaml", "books/*.yaml", "ops/*.json",
                 "clustering/review/static/*", "datastore/*.sql", "jobs/*.sql"]
 
 # ── 测试 ────────────────────────────────────────────────────────────────

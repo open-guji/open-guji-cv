@@ -1,5 +1,7 @@
 # 控制台使用手册
 
+> **2026-10-28 起控制台是独立包 [guji-console](https://github.com/open-guji/guji-console)**：代码不在本仓了，装法 `uv pip install -e ../guji-console`（和 cv 同一个环境），`guji console` 等命令照旧。拆分设计见 [design/拆分-控制台独立成包与上网站.md](design/拆分-控制台独立成包与上网站.md)。下文里 `open_guji_cv/console/…` 的路径对应 guji-console 仓的 `guji_console/…`。
+
 给**用这套东西干活的人**。架构为什么这么设计看
 [console_architecture.md](console_architecture.md)，这里只讲怎么用。
 

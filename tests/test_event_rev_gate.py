@@ -160,7 +160,6 @@ _ALLOWED = {
     "ops/glyphlib.py",             # 扫的是字形库 instances/；人裁事件已走 iter_event_dicts
     "feedback/candidates.py",      # 候选清单文件
     "eval/llm_online_accuracy.py", # 线上调用日志
-    "console/routers/step8.py",    # 只取 mtime 做缓存键
 }
 
 

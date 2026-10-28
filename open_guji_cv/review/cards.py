@@ -514,6 +514,23 @@ def _finish(book: str, bk, st: ProductStore, res: dict, emb_out: dict | None = N
     return res
 
 
+_EVENT_LOGS: dict[str, object] = {}
+
+
+def _event_log():
+    """本工作区的人裁事件日志，按根复用一个实例（`EventLog` 自带缓存）。
+
+    原先借控制台的 `console.deps.event_log()`，cv 反过来依赖控制台；控制台要拆成独立包
+    （doc/design/拆分-控制台独立成包与上网站.md 第二节 R1），这里自己按同一个根解析。"""
+    from ..core.workspace import feedback_root
+    from ..feedback.events import EventLog
+    root = feedback_root()
+    log = _EVENT_LOGS.get(str(root))
+    if log is None:
+        log = _EVENT_LOGS[str(root)] = EventLog(root)
+    return log
+
+
 def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
                            with_fallback: bool = False) -> list[dict]:
     """顺序闸正在挡住字卡的那批切线用例（原始 case，未展开成格位字典）。
@@ -537,7 +554,6 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     定字审查用）与 Step7「切分裁决」板块（`scope=blocking` 时直接要这批
     完整 case 拖切线）两处共用。
     """
-    from ..console import deps
     from ..eval import touching as T
     from ..utils.cut_select import PENDING_BLOB
 
@@ -559,7 +575,7 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     # 收进 `touching-cuts` 金标，顺序闸才认账；面板「落定 → 字卡放行」这条
     # 即时反馈链一直是哑的。
     try:
-        for e in deps.event_log().iter_all():
+        for e in _event_log().iter_all():
             if e.kind == "cutline":
                 done.add(e.target.key)
     except FileNotFoundError:

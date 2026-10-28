@@ -40,7 +40,7 @@
 - 装了 torch 才跑的约 7 条，装了 `rapidocr-onnxruntime` 才跑的 3 条，缺件是跳过不是失败。
 
 ## 环境
-- Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[console,torch,dev]"`。仓里旧的 `venv/` 是死的。
+- Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[torch,dev]"`；要控制台再装 `uv pip install -e ../guji-console`（2026-10-28 拆成独立包，`guji console` 由它提供）。仓里旧的 `venv/` 是死的。
 - **装完自检** `python -c "import torch, scipy, cv2"`：缺件不报错，只会悄悄降级。`guji pipeline`／`step` 起跑前会查这次要跑的步骤缺不缺 torch／权重／joblib，缺了拒跑（`--allow-missing-deps` 放行）。
 - 环境变量：`PYTHONIOENCODING=utf-8`（Windows 必设）、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`、`GUJI_WORKSPACE=<书的工作区>`。
 - 带 book 的命令都要 `-w <工作区>`。

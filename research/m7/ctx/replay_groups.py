@@ -5,7 +5,8 @@
 
 - `--redo`：产物里由这些组判过的格先退回进组前的状态（补放的退回待审、降审的退回原通道放行），再由新组重判。
   并组、改组时用（千干 qg 并进 zy：产物里 qg／zy 的结论都作废）。
-- `--tables`：L2 表目录，`<组>.json`；没给的组只有 L1。
+- `--tables`：L3 答案表目录，`<组>.json`；没给的组只有 L1。
+- `--models`：L2 模型小头目录，`<组>.json`（`ctx_model/1`，`l2model_train.py` 出）。L3 在线不回放（要密钥、花钱）。
 - `--patches`：方法要字块时现算（`RunContext.image`，要工作区与原图，同 `research/m7/bench/materialize_patches.py`）；
   不给则字块一律缺（看图的方法弃权）。
 - `--codepoints <工作区 config/codepoints.yaml>`：书级码位归一（码位法组 `codepoint` 要它，同线上 `canon`）。
@@ -28,7 +29,13 @@ ap = argparse.ArgumentParser()
 ap.add_argument("root"); ap.add_argument("vols"); ap.add_argument("out")
 ap.add_argument("--groups", required=True); ap.add_argument("--redo", default="")
 ap.add_argument("--tables", default=None); ap.add_argument("--patches", action="store_true")
-ap.add_argument("--raw", default=None)
+ap.add_argument("--raw", default=None); ap.add_argument("--models", default=None)
+ap.add_argument("--l3", default="", help="L3 在线（问 Claude）的组，逗号分隔；要环境变量 GUJI_ANTHROPIC_API_KEY，没有就只查缓存")
+ap.add_argument("--l3-cache", default=None, help="L3 缓存目录（<组>.jsonl，按窗口内容存答案）")
+ap.add_argument("--l3-model", default="claude-opus-5-5"); ap.add_argument("--l3-effort", default="low")
+ap.add_argument("--l3-need-l2-agree", action="store_true")
+ap.add_argument("--pages", default=None, help="只回放这些页：json 列表，元素 \"册:页\"（或格 id \"册:页:列:格\"）；省钱用，L3 在线按格收费")
+ap.add_argument("--book-prompt", default=None, help="book_prompt.json（提示词里 {{book_desc}} 之类的变量），缺省殿本")
 ap.add_argument("--codepoints", default="", help="工作区 config/codepoints.yaml，或 `䝉=𫎇,𨽾=隷`：码位法组与补放互证按它归一（不给则码位法组只会弃权）")
 a = ap.parse_args()
 if a.codepoints.endswith((".yaml", ".yml")):
@@ -50,8 +57,18 @@ if a.tables:
         t = Path(a.tables) / f"{g}.json"
         if t.exists():
             tables[g] = str(t)
+models = {g: str(Path(a.models) / f"{g}.json") for g in groups if a.models and (Path(a.models) / f"{g}.json").exists()}
 canon = canon if CP else None
-cfg = FlowConfig(groups=groups, l2_tables=tables, l2_drift=2, joint=True, canon=canon)
+l3 = {}
+if a.l3:
+    from open_guji_cv.groups.flow import rules_path
+    from open_guji_cv.groups.prompt_template import load_rendered_prompt
+    bv = json.load(open(a.book_prompt, encoding="utf-8")) if a.book_prompt else {"book_desc": "《欽定四庫全書總目》武英殿刻本"}
+    for g in flow_names(a.l3.split(",")):
+        meta, body = load_rendered_prompt(rules_path(g).with_name("prompt.md"), bv)
+        l3[g] = {"system": body, "ver": meta.get("ver", ""), "cache": str(Path(a.l3_cache) / f"{g}.jsonl") if a.l3_cache else ""}
+cfg = FlowConfig(groups=groups, l2_tables=tables, l2_models=models, l2_drift=2, joint=True, canon=canon,
+                 l3_online=l3, l3_model=a.l3_model, l3_effort=a.l3_effort, l3_need_l2_agree=a.l3_need_l2_agree)
 FIELDS = ("id", "char", "admit", "channel", "provenance", "doubts", "evidence", "slot", "sub")
 
 
@@ -81,9 +98,12 @@ def ctx_for(book: str):
 
 
 out = open(a.out, "w", encoding="utf-8")
+ONLY = {tuple(x.split(":")[:2]) for x in json.load(open(a.pages))} if a.pages else None
 for v in a.vols.split(","):
     rc = ctx_for(v) if a.patches else None
     for f in sorted((root / v / "seed_admit").glob("p*.json")):
+        if ONLY is not None and (v, str(int(f.stem[1:]))) not in ONLY:
+            continue
         d = json.load(open(f, encoding="utf-8"))["seed_admit"]
         page = int(d["page"])
         ar = json.load(open(root / v / "align_ref" / f.name, encoding="utf-8"))["align_ref"]
@@ -145,3 +165,6 @@ for v in a.vols.split(","):
                                       left=win.get(r.id, (None, None))[0], right=win.get(r.id, (None, None))[1]),
                                  ensure_ascii=False) + "\n")
     print(v, "done", file=sys.stderr, flush=True)
+if a.l3:
+    from open_guji_cv.groups import ctx_llm
+    print("L3 用量", json.dumps(ctx_llm.usage_summary(), ensure_ascii=False), file=sys.stderr, flush=True)

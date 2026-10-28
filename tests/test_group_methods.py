@@ -46,8 +46,8 @@ def test_registry_kinds_match_ids_specs():
 
 def test_ctx_is_rule_then_llm_chain():
     m = GROUPS["jys"].flow.methods[0]
-    assert m.name == "ctx" and [s.kind for s in m.steps] == ["ctx_rule", "llm"]
-    assert GROUPS["ry"].flow.describe() == "[ctx_rule → llm] ＋ custom:ry_shape"
+    assert m.name == "ctx" and [s.kind for s in m.steps] == ["ctx_rule", "llm", "model", "llm"]
+    assert GROUPS["ry"].flow.describe() == "[ctx_rule → llm → model → llm_online] ＋ custom:ry_shape"
 
 
 def test_chain_first_release_wins_and_skips_inapplicable():
@@ -130,7 +130,7 @@ def test_codepoint_groups_flow_only():
     for g, s in CODEPOINT_GROUPS.items():
         assert bool(s.flow.tolerate) == s.flow.lift_ref_agree, g
         assert not s.flow.tolerate & s.members, g
-    assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie"}
+    assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie", "cp_li2"}
     # 库首位与整理本同组即进（2026-10-26）：出岀 除外（与 sy 共字，分差内有 山由 归 sy 按文意判）
     assert {g for g, s in CODEPOINT_GROUPS.items() if not s.flow.ref_top_enter} == {"chu"}
 

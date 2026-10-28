@@ -7,7 +7,7 @@ import argparse, json, random, sys
 from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv")
 from common import *
-from open_guji_cv.groups.ctx_l2 import parse_output, merge_runs
+from open_guji_cv.groups.ctx_l3 import parse_output, merge_runs
 from open_guji_cv.groups.prompt_template import book_prompt_vars, build_batch_rendered as build_batch
 from open_guji_cv.groups.registry import GROUPS
 
@@ -29,7 +29,7 @@ if a.cmd == "make":
     (D / f"{g}_manifest.json").write_text(json.dumps(man, ensure_ascii=False), encoding="utf-8")
     print(g, len(rows), "格", len(man), "批")
 elif a.cmd == "ingest":
-    from open_guji_cv.groups.ctx_l2 import load_prompt
+    from open_guji_cv.groups.ctx_l3 import load_prompt
     meta, _ = load_prompt(prompt)
     man = json.loads((D / f"{g}_manifest.json").read_text(encoding="utf-8"))
     models = a.models.split(",") if a.models else sorted(p.name for p in D.iterdir() if p.is_dir())

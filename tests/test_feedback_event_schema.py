@@ -82,22 +82,6 @@ def test_target_fields_not_overwritten_and_instance_keys_left_alone():
     assert g.book is None                                   # 刻例 id 不是格键
 
 
-def test_api_events_writes_client_ts_in_ms(tmp_path, monkeypatch):
-    from open_guji_cv.console import deps
-    from open_guji_cv.console.auth import Identity
-    from open_guji_cv.console.routers import feedback as mod
-    for key in ("feedback", "batches", "dataset"):
-        monkeypatch.setitem(deps._roots, key, tmp_path / key)
-    for cached in ("_log", "_batches", "_gold"):
-        monkeypatch.setattr(deps, cached, None)
-    req = mod.EventsIn(batch="vol02-jiazhu", step="seed_admit", unit="cell", kind="confirm", consume=False,
-                       events=[{"id": "vol02:4:1:3", "v": "confirm", "shape": "之", "client_ts": 1788741500.438},
-                               {"id": "vol02:4:1:4", "v": "confirm", "shape": "乎", "client_ts": 1788741500438}])
-    mod.api_events(req, identity=Identity(email="t@example.com", role="reviewer", tier="reviewer"))
-    got = [e.payload["client_ts"] for e in deps.event_log().read("vol02-jiazhu")]
-    assert got == [1788741500438, 1788741500438]
-
-
 def test_lint_reports_known_problems(tmp_path):
     from open_guji_cv.feedback.lint import lint
     ev = tmp_path / "events"

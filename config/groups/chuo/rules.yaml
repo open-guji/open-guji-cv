@@ -1,0 +1,5 @@
+schema: ctx_l1/1
+group: chuo
+# 辶族 L1：只收词组唯一的（採進本）。其余交 L3（`prompt.md`）按文意定；整理本与文意不同时不补放（flow `lift_ref_agree`）。
+rules:
+  - {id: chuo-進-採進本, char: 進, src: hand, re: '採◎本', note: 四庫提要套语「某某巡撫採進本」}

@@ -85,27 +85,6 @@ def test_cached_cards_disk_pruned(cache_env, tmp_path, monkeypatch):
 
 # ── 路由：缓存头、响应体与直接装配逐字节一致 ────────────────────────────────
 
-def test_route_cards_cache_header_and_identical_body(cache_env, monkeypatch):
-    import importlib
-
-    from fastapi.testclient import TestClient
-    app = importlib.import_module("open_guji_cv.console.app").app
-    console_auth = importlib.import_module("open_guji_cv.console.auth")
-    Identity = importlib.import_module("open_guji_cv.console.auth.identity").Identity
-    app.dependency_overrides[console_auth.get_identity] = lambda: Identity(
-        email="r@example.com", role="reviewer", tier="reviewer")
-    try:
-        c = TestClient(app)
-        q = "/api/review/cards?book=keben&pages=1&group=char&gate_cut=false"
-        r1, r2 = c.get(q), c.get(q)
-        assert r1.status_code == 200, r1.text
-        assert r1.headers["X-Cards-Cache"] == "miss" and r2.headers["X-Cards-Cache"] == "mem"
-        assert r1.content == r2.content
-        r3 = c.get("/api/review/cards?book=keben&pages=1&gate_cut=false")
-        assert r3.status_code == 200 and r3.json()["cards"] == []
-    finally:
-        app.dependency_overrides.clear()
-
 
 # ── 按格 embedding 缓存（`borrow_first.EmbCache`）─────────────────────────
 
@@ -142,7 +121,6 @@ def test_emb_cache_roundtrip_and_rekey_on_product_change(ws, tmp_path, monkeypat
 def _mini_db(path, items):
     import sqlite3
 
-    import cv2
     c = sqlite3.connect(path)
     c.executescript("""
       CREATE TABLE glyphs (glyph_id INTEGER PRIMARY KEY, char TEXT, updated_at TEXT);

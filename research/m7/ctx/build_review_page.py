@@ -8,7 +8,7 @@ from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv"); sys.path.insert(0, "/home/user/open-guji-cv/.claude/skills/review-artifact/scripts")
 import cv2
 from common import *
-from open_guji_cv.groups.ctx_l2 import parse_output
+from open_guji_cv.groups.ctx_l3 import parse_output
 from review_shell import render
 
 R = Path(__file__).parent / "l2_results"; MODELS = ("opus", "sonnet", "haiku", "muse")

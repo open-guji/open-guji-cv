@@ -21,12 +21,12 @@
 | `content_sha` | 当时字块图（Step4 `char_patch`）的 sha1；图本身按内容存 `feedback/anchor_patches/<book>/` |
 | `ctx` | 当时本页读序里前后各 2 个字（`[前, 后]`），辅助判断整列错位 |
 | `cells_sha` | `{<cells 那一步>: sha256}`：算 `bbox` 用的那一版切分产物（知道这条裁决是按哪一版切分做的） |
-| `product_key` | **不归这里写**：控制台 `_product_anchor` 写的 `{step, key, fingerprint}`（出卡那一步的页产物指纹）。2026-10-21 前这里也写进 `product_key`（`{<步>: sha}`），两种形状混在一个键里，已迁成 `cells_sha`（`migrate_v1`） |
+| `product_key` | **不归这里写**：控制台写入路径 `review/event_write.py::product_anchor` 写的 `{step, key, fingerprint}`（出卡那一步的页产物指纹）。2026-10-21 前这里也写进 `product_key`（`{<步>: sha}`），两种形状混在一个键里，已迁成 `cells_sha`（`migrate_v1`） |
 | `source` | `live`（裁决当时取的）或 `backfill:<来源>`（老裁决事后补的，见 `bindings.py`） |
 | `evidence` | **人当时看到的图的凭证**（2026-10-01，D2/#323）：`fp`（`gold/drift.fingerprint` 口径的图像指纹）+ `fp_size` + `fp_of`（`char_patch`/`column_image`）+ `step`/`key`/`sha256`/`params_hash`/`manifest_fp`（当时产物版本）。见 `evidence_for`；`bindings.py` 判「还挂得上吗」时优先比它 |
 
 `evidence` 与其余键**互相独立、可单独存在**：旧事件没有它照常可读；`enrich_events` 对已有锚（如控制台
-`_product_anchor` 写的只含 `product_key` 的锚）**补缺的键、不覆盖已有键**。
+`product_anchor` 写的只含 `product_key` 的锚）**补缺的键、不覆盖已有键**。
 """
 from __future__ import annotations
 

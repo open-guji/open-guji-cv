@@ -33,7 +33,6 @@ def _store(cols):
 
 @pytest.fixture
 def patched(monkeypatch):
-    from open_guji_cv.console import deps
     from open_guji_cv.eval import touching as T
     state = {"cases": [], "raise": None, "unavailable": set()}
 
@@ -44,7 +43,7 @@ def patched(monkeypatch):
     monkeypatch.setattr(T, "r2s_boundaries", cases)
     monkeypatch.setattr(T, "split_char_boundaries", lambda *a, **k: [])
     monkeypatch.setattr(T, "gold_ids", lambda: set())
-    monkeypatch.setattr(deps, "event_log", lambda: NS(iter_all=lambda: []))
+    monkeypatch.setattr(C, "_event_log", lambda: NS(iter_all=lambda: []))
     monkeypatch.setattr(C, "_warm_column_images", lambda b, p, s: set(state["unavailable"]))
     return state
 

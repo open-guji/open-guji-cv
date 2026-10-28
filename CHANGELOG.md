@@ -5,6 +5,15 @@
 
 ## [未发版]
 
+## [0.5.32] - 2026-10-28
+
+PATCH。含控制台拆成独立包 guji-console（C0–C3）、keben_free 第七轮、A24 码位组与字组送审若干（见下）。
+
+- **控制台拆成独立包 `guji-console`**（Sheldon 10-28，设计 `doc/design/拆分-控制台独立成包与上网站.md`，C0–C3）：`open_guji_cv/console/` 连提交历史搬进 open-guji/guji-console，cv 里删掉；控制台只经门面 `open_guji_cv.console_api` 读 cv，消费事件、导金标、迁载体、漂移检查、跑评测改调命令行；写人裁事件的逻辑挪到 `review/event_write.py`（`guji cellvotes write` 也用它）；`guji gold drift` 加 `--json`。**要用控制台就另装**：`uv pip install -e ../guji-console`（同一个环境），装上后 `guji console` / `guji runs` 由它经入口点提供，参数不变；`.[console]` extra 留成空的。37 个控制台测试文件（253 条）随包搬走。不动任何 Step 的 `code_hash`（L0）。PATCH。
+- 自由版式 `keben_free` 第七轮切字（Sheldon 10-28「先实现十几页」「考虑识别软件辅助」）：新可选步 `line_ocr`（逐列送 PaddleOCR 读文本行，产物 `free_ocr_lines`）；`cell_cut` 1.4 有识别行时按行定区（大字行／并排小注行）、按读出的字数切，漏掉的段落与没有识别行的列走规则；混排栏（认出了大字、但大字行不到一半）按字形认大字（`segment_mixed`）。`.[cpu]`／`.[gpu]` 的 paddleocr 下限提到 3.2。只有 keben_free 管线用（yxat 一册）。
+- 倚𠋣 麓𪋤 邃𮟏 冥㝠𡨋 隱隠𨼆 码位组（A24 第 1 轮，sheldon 10-28 定 倚/麓/邃/㝠/隠）：新 cp_yi3 cp_lu4 cp_sui4 cp_yin3b，cp_ming2 成员加 𡨋 并改给 㝠；撤 yin 刻形组（隱𨼆 刻形差别暂不拆）。99 册回放补放 112 格看图 0 错。
+- 按刻形拆判的异体对组（shang ba sang xian yin … 共 31 个）与 dian 开 `ref_top_enter`（A24 压低组外异体对送审第 1 轮，10-28）：库首位与整理本同在组里就进，分差内的组外字不再挡入口；给字仍由整字 HOG 判。vol01–99 回放新进 100 格，逐格看图 0 错。只动 `registry`。
+- 第 1 轮压低字组送审（A24，2026-10-28）：men／chuo 加文意第二路（`FlowSpec.lift_ref_missing_ctx`，整理本与坐标对位都缺时 ctx 给字可补放，有参照不越过）并新增 `config/groups/{men,chuo}/{prompt.md,rules.yaml}`；`seed_admit.group_flow_llm_groups` 缺省加 zy xz rr guan men chuo。vol07–99 离线回放九组送审 815→约 391。`seed_admit` 与 flow 代码变，开 `group_flow` 的册判过期。PATCH。
 ## [0.5.31] - 2026-10-28
 
 PATCH。含遮挡卡 seed_admit 1.25/1.26（异体优先于印章、印框内背景干净格不算遮挡）、align_ref 2.3、row_segment 1.40/1.41、border_detect 1.12 弯列、字组暂归一与码位组、keben_free 第二至四轮等（见下）。
@@ -13,6 +22,7 @@ PATCH。含遮挡卡 seed_admit 1.25/1.26（异体优先于印章、印框内背
 - 规则 A 坐标对位那支放宽 `near_form`（A24「复盘形近护栏 N 类」，10-28）：整理本字（坐标对位字）在库里刻例 ≤2、BMP 字、不在册 `codepoints` 里、5-b 首位逐字等于它、库候选里没有 cov ≥0.96 的对手（cov ≥0.80 的候选也不是它的异体）时，`near_form` 疑问不再拦 `rare_ref`（库前三名里的形近字只是最像的邻居，不是真对手）。`never_match`／`conflict` 护栏与其余硬疑问照拦。开关 `seed_admit.rare_ref_nf`（缺省开，`rare_ref_nf_max_n`／`rare_ref_nf_cov` 调门槛），放行格 `evidence.rare_ref.near_form_relaxed`。依据：5,980 条人裁金标上符合条件的坐标对位格 83 格 0 错；95 册 N 类 536 格所在页真回放（seed_admit 重跑）新放行 59 格，逐格看图无错放。`seed_admit` 的 `code_hash` 变，各册 `seed_admit` 及下游判过期。PATCH。
 - 字组 `cek` 策䇿（码位组，暂归一到 䇿，登记 `PROVISIONAL`）：策→䇿 是 sheldon 10-26 定的暂归一，但库里 策／䇿 cov 并列（< same 档 0.996）、文意 margin≈0，整理本字归一成 䇿 又不在任何字组，全册 244 格送审（分类 V）。册配置 `group_flow` 加 `cek` 后库首位与整理本同在组里就放行，字落 䇿。只动 `groups/registry.py`，不动 Step。MINOR。
 - 36 个 `cp_*` 码位组（A24 压低组外异体对送审第 1 轮，10-28）：sheldon 在 `config/codepoints.yaml` 早定了用哪个字（寄𭔃 急𢚩 耶𫆀 尋㝷 黎𥠖 寶寳 泰㤗 步歩 …）、但没建码位组的异体对，流水线见「库首位与整理本是异体对」一律送审。加 `CODEPOINT_GROUPS`／`PROVISIONAL` 各 36 行，各册 `group_flow` 加了才生效；vol01–99 main 包回放补放 268 格，逐格看图 0 错。只动 `registry`，不动 Step。
+- 自由版式 `keben_free` 第六轮（Sheldon 审 yxat p13、p15「要保持均匀」）：`column_trace` 1.8 接断口的竖线图只用来认界栏、排网格用原图；认界栏量拟成的中线踩线（不量弯路），无界栏的密排正文不再被认成有界栏；劈墨罚 3→2。只有 keben_free 管线用（yxat 一册）。
 - 自由版式 `keben_free` 第五轮（Sheldon 审 yxat 9–42 页）：`column_trace` 1.7 界栏逐条顺着竖线像素找（各条斜得不一样也跟得上），按界栏切只躲压线的字；劈开墨块的罚 1→3。`block_detect` 1.9 细框线不再往里找内框、版心线让 4→1px。只有 keben_free 管线用（yxat 一册）。
 - 标 main 之后的插件钩子：`guji products pack promote`／`pack push --main` 标完 main，调入口点组 `guji.post_promote` 的函数 `(book, label, ws)`；manager 用它自动重出线上待审单（取代 2 小时轮询定时任务）。不动 Step。PATCH。
 - 自由版式 `keben_free` 第四轮（Sheldon 审 yxat 9–40 页）：`block_detect` 1.8 双线框取细内框、框线改折线、人标分栏线一起拉成水平（分段 Coons）；`column_trace` 1.6 认虚线界栏、有界栏的块切线顺着界栏走，走缝离字留空（笔画旁 4px 有代价、小墨点便宜），变缝幅度 0.08→0.15 列距。只有 keben_free 管线用（yxat 一册）。

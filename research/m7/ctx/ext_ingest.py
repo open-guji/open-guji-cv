@@ -3,7 +3,7 @@
 import json, sys, collections
 from pathlib import Path
 sys.path.insert(0, "/home/user/open-guji-cv")
-from open_guji_cv.groups.ctx_l2 import parse_output
+from open_guji_cv.groups.ctx_l3 import parse_output
 cells_f, D, human_f, out = sys.argv[1:5]; D = Path(D)
 human = json.load(open(human_f)); cells = {}
 for l in open(cells_f, encoding="utf-8"):

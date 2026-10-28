@@ -13,10 +13,7 @@
 """
 from __future__ import annotations
 
-import json
-import shutil
 import sqlite3
-import subprocess
 from pathlib import Path
 
 import cv2
@@ -188,8 +185,6 @@ def test_fingerprints_ignore_approx_tables(tmp_path):
     assert export_signature(p) != sig0, "同步签名要变：只标了近似也得导出"
 
 
-
-
 # ── 4. 查询 ──────────────────────────────────────────────────────────────
 
 def test_has_approx_query_and_char_table(db):
@@ -317,40 +312,6 @@ def test_text_sidecar_default_and_inline_option(tmp_path):
 
 
 # ── 7. 前端事件行 ─────────────────────────────────────────────────────────
-
-TS = (Path(__file__).resolve().parents[1]
-      / "open_guji_cv/console/frontend/src/components/review/reviewClass.ts")
-
-
-def _node_ok() -> bool:
-    node = shutil.which("node")
-    return bool(node) and subprocess.run([node, "--experimental-strip-types", "-e", "0"],
-                                         capture_output=True).returncode == 0
-
-
-@pytest.mark.skipif(not _node_ok(), reason="没有支持 --experimental-strip-types 的 node（≥22.6）")
-def test_ts_verdict_row_approx(tmp_path):
-    shutil.copy(TS, tmp_path / "reviewClass.mts")
-    runner = tmp_path / "run.mts"
-    runner.write_text("""import * as R from './reviewClass.mts'
-const base = { shape: '乃', done: '1', ts: 1, dwell: 2 }
-const prev = { ...base, approx: true, approxIds: '⿱丿乃', approxNote: '' }
-console.log(JSON.stringify({
-  old: R.verdictRow('a', base),
-  off: R.verdictRow('a', { ...base, approx: false, approxIds: 'x' }),
-  on: R.verdictRow('a', prev),
-  kept: R.pickVerdict('及', prev, 0, 5),
-  seg: R.verdictRow('a', { ...prev, done: 'truncated' }),
-}))
-""", encoding="utf-8")
-    out = json.loads(subprocess.run([shutil.which("node"), "--experimental-strip-types", "--no-warnings",
-                                     str(runner)], capture_output=True, text=True, check=True).stdout)
-    assert out["old"] == {"id": "a", "v": "confirm", "shape": "乃", "no_glyph_lib": False,
-                          "client_ts": 1, "dwell_ms": 2}, "不勾近似：事件逐字段与原来相同"
-    assert out["off"] == out["old"]
-    assert out["on"] == {**out["old"], "approx": True, "ids": "⿱丿乃"}, "note 空串不写"
-    assert out["kept"]["approx"] is True and out["kept"]["shape"] == "及", "改字不丢勾选"
-    assert "approx" not in out["seg"], "近似只随定字（v=confirm）走"
 
 
 def test_text_sidecar_includes_matched_cells(tmp_path, monkeypatch):

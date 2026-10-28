@@ -418,6 +418,9 @@ def add_causes(pending: Path, products: Path, book: str) -> None:
             c["cause"] = res[c["cell"]]["cause"]
             if res[c["cell"]]["detail"]:
                 c["cause_detail"] = res[c["cell"]]["detail"]
+            for k in ("grp", "refc"):                 # 待审分类统计（guji-manager 的 taxonomy）要的事实，只查库就能分到字组
+                if res[c["cell"]].get(k):
+                    c[k] = res[c["cell"]][k]
     pending.write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
 
 
