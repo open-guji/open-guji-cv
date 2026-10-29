@@ -121,6 +121,7 @@ class RefLine:
     han_start: int           # 本行在 `_corpus_text`（只留 [一-鿿]）里的起始偏移
     text: str = ""           # 本行全部字（正文 + 夹注 a + 夹注 b，阅读顺序），算重合用
     leaf_start: bool = False # 逐列本（带 `#@` 半叶头）里半叶的第一列
+    head: str = ""           # 逐列本半叶头 `#@` 之后的文字（`leaf_start` 行才有），页钉位按它找半叶
 
     @property
     def n(self) -> int:
@@ -163,9 +164,11 @@ def parse_lines(raw: str) -> list[RefLine]:
     han = 0
     in_note = False
     leaf_start = False
+    head = ""
     for line in raw.splitlines():
         if grid and line.startswith("#"):
             leaf_start = True
+            head = line[len(GRID_HEADER):].strip() if line.startswith(GRID_HEADER) else ""
             continue
         units: list[Unit] = []
         note: list[str] = []
@@ -211,7 +214,7 @@ def parse_lines(raw: str) -> list[RefLine]:
         n_han = len(_HAN_RE.findall(line))
         if units or grid:
             out.append(RefLine(idx=len(out), units=units, han_start=han, text="".join(text),
-                               leaf_start=grid and leaf_start))
+                               leaf_start=grid and leaf_start, head=head if leaf_start else ""))
             leaf_start = False
         han += n_han
     return out
