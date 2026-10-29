@@ -173,6 +173,13 @@ def test_guess_styles_and_guards(bt):
         V.revise(bt, BOOK, "002", [(_op(), {"class": "A", "cells": [{"a": "3:2:1", "to": "制"}]})], dry_run=False)
 
 
+def test_refuses_while_char_edits_pending(bt):
+    (_vd(bt) / "002.char-edits.json").write_text("{}", encoding="utf-8")
+    rev = {"class": "A", "cells": [{"a": "3:2:1", "from": "製", "to": "制"}]}
+    with pytest.raises(V.ReviseError, match="改字清单"):
+        V.revise(bt, BOOK, "002", [(_op(), rev)], dry_run=True)
+
+
 def test_dry_run_writes_nothing(bt):
     before = {p.name: p.read_bytes() for p in _vd(bt).iterdir()}
     res = V.revise(bt, BOOK, "002", [(_op(), {"class": "A", "cells": [{"a": "3:2:1", "from": "製", "to": "制"}]})])
