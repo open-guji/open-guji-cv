@@ -93,13 +93,18 @@ def main() -> None:
     ap.add_argument("--per-char", type=int, default=14)
     ap.add_argument("--grid", type=int, default=0,
                     help="每页 N 格、一图一字、默认全对（只点不对的）；每字挑 --per-char 个像素匹配度最高的格")
+    ap.add_argument("--unadmitted", action="store_true",
+                    help="只出还没放行、但整理本有对应字的格（按整理本的字分组），用于第二轮")
     a = ap.parse_args()
     ws = Path(a.ws)
     gm, ar, sa = load(ws / "products" / a.book)
     groups: dict[str, list[str]] = collections.defaultdict(list)
     for i, r in gm.items():
         top = (r.get("candidates") or [[None]])[0][0]
-        if top and ar.get(i) == top:
+        if a.unadmitted:
+            if ar.get(i) and not sa.get(i, {}).get("admit"):
+                groups[ar[i]].append(i)
+        elif top and ar.get(i) == top:
             groups[top].append(i)
     patches = ws / "cache" / a.book / "char_patch"
     if a.grid:
