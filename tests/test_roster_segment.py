@@ -304,3 +304,39 @@ def test_roster_glyph_switch_off_keeps_params_unchanged():
     assert off.roster_glyph_db == "" and off.roster_glyph_fingerprint == ""
     on = RowSegmentParams(cut_judge="rule", roster_glyph_refine=True, roster_glyph_db="/no/such.db")
     assert on.roster_glyph_fingerprint == "nodb"
+
+
+def _xieben_column(chen_y):
+    """写本职名列：官衔 3 字 + 偏右小「臣」（上缘在 chen_y）+ 两字人名；「臣」上贴官衔末字、下贴人名首字。"""
+    g = _column()
+    for y in (100, 560, chen_y - 90):
+        _glyph(g, y, 20, 100)
+    _glyph(g, chen_y, 124, 44, stroke=5)        # 偏右，与官衔末字 y 重叠 10px，离人名首字 4px
+    _glyph(g, chen_y + 48, 20, 100)
+    _glyph(g, chen_y + 400, 20, 100)
+    return g
+
+
+def test_xieben_chen_stuck_to_neighbours_split_by_page_chen_row():
+    """写本（史記文淵閣本）「臣」斜贴邻字：一带里粘着官衔末字和人名首字，按全页臣行拆成三字。"""
+    cols = [(_roster_column()[0], (10.0, W - 10.0)) for _ in range(2)]   # 两列「臣」自成一带，量出臣行 1610
+    cols.append((_xieben_column(1620), (10.0, W - 10.0)))
+    rc = segment_roster_page(cols)[2]
+    assert len(rc.items) == 6 and all(it.kind == "char" for it in rc.items)
+    chen = rc.items[3]
+    assert chen.y0 == 1620 and chen.x0 > W / 2
+
+
+def test_xieben_chen_not_split_without_page_chen_row():
+    """单列（量不出全页臣行）不拆：偏右小字只在臣行附近才认，免得把雙行右行、「阝」这类当「臣」。"""
+    rc = _seg_one(_xieben_column(1620))
+    assert len(rc.items) < 6
+
+
+def test_frame_bar_residue_at_column_end_dropped():
+    """列端扁块（写本框线断续残段，整行横跨判不出）不当字；列中间的「一」照留。"""
+    g, ys = _roster_column()
+    g[3:15, 40:110] = 0                         # 列首残段：12px 高、70px 宽
+    g[1300:1308, 40:140] = 0                    # 列中「一」
+    rc = _seg_one(g)
+    assert len(rc.items) == 8 and rc.items[0].y0 == ys[0]
