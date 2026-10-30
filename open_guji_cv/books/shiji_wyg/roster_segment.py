@@ -966,3 +966,25 @@ def _load_records(dz_dir: str) -> dict[str, dict]:
                     recs[r["id"]] = r
         _REC_CACHE[dz_dir] = recs
     return _REC_CACHE[dz_dir]
+
+
+# ═══ 卷端标题列（史記文淵閣本，2026-10-30）══════════════════════════════════════
+# 每卷开头一页：欽定四庫全書／史記卷N／漢太史令司馬遷撰／宋中郎外兵曹參軍裴駰集解／唐國子博士…司馬貞索隱／
+# 唐諸王侍讀率府長史張守節正義／X本紀第N。写本这些行字距不跟格网（「第二十二」挤成两格高，撰者行疏），
+# 格网切把「首」「長」「讀」劈开、「兵」的两点分给下一格。这几列字数整理本里有，按职名页同一条路切
+# （几何切 + 按整理本字数重切），壳见 `steps/row_segment._header_columns`。
+_HEADER_RE = re.compile(
+    r"^(欽定四庫全書"
+    r"|史記卷[一二三四五六七八九十百]+(上|中|下)?"
+    r"|[漢宋唐].{4,18}(撰|集解|索隱|索隠|正義)"
+    r"|.{1,10}(本紀|世家|列傳|表|書)第[一二三四五六七八九十百]+(上|中|下)?)$")
+
+
+def header_cols(refs: dict[int, str]) -> set[int]:
+    """这一页里卷端标题列的列号（整理本整列就是一个标题，没有小注）。"""
+    out = set()
+    for col, line in refs.items():
+        t = re.sub(r"\s", "", line or "").replace("　", "")
+        if t and "<" not in t and _HEADER_RE.match(t):
+            out.add(col)
+    return out

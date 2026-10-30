@@ -132,3 +132,11 @@ def test_bottom_rule_stripped():
     out = SJ._strip_rules(ink)
     assert not out[1890:1920].any()
     assert out[200:700].any()
+
+
+def test_header_cols():
+    refs = {1: "欽定四庫全書", 2: "史記卷一百十一", 3: "漢太史令司馬遷撰", 4: "宋中郎外兵曹參軍裴駰集解",
+            5: "唐國子博士𢎞文館學士司馬貞索隠", 6: "唐諸王侍讀率府長史張守節正義", 7: "衛將軍驃騎列傳第五十一",
+            8: "集解裴駰曰凡是徐氏義稱徐姓名以别之餘者悉是駰註解并集衆家義"}
+    assert SJ.header_cols(refs) == {1, 2, 3, 4, 5, 6, 7}
+    assert SJ.header_cols({1: "總纂官<臣|>紀昀", 2: ""}) == set()

@@ -1104,7 +1104,37 @@ class RowSegmentStep(Step):
                                        ) for cp in r.cut_candidates],
                                    **base))
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
+        pc = self._header_columns(ctx, p, page, gate, wins, pc)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
+
+    def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
+                        gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
+        """套书认得出的卷端标题列（卷题、撰者行、篇题；`header_cols`，只史記有）改走职名页分支按整理本字数切。
+        写本这些行字距不跟格网（小数字「第二十二」挤、撰者行疏），格网切会劈字、把字脚分给下一格。
+        没开整理本重切（roster_ref_corpus）或套书没有 `header_cols` 时原样返回。"""
+        if not (p.roster_ref_corpus and p.roster_ref_pins):
+            return pc
+        import importlib
+        from ..core.seg_set import resolve
+        mod = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.roster_segment"))
+        header_cols = getattr(mod, "header_cols", None)
+        if header_cols is None:
+            return pc
+        from ..core.workspace import corpus_path
+        refs = mod.page_ref_lines(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+        cols = header_cols(refs or {})
+        # 大印压着的列不改：印泥斑点和印文笔画在几何切里成串成块，按字数重切会把印切成字（卷首页的大印）
+        seals = _page_seals(ctx, page)
+        for cc in pc.columns:
+            qs = [xy for c in cc.cells if c.quad_page for xy in c.quad_page]
+            if cc.col in cols and qs and any(
+                    s[0] < max(x for x, _ in qs) and min(x for x, _ in qs) < s[2] for s in seals):
+                cols.discard(cc.col)
+        if not cols:
+            return pc
+        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols).columns if cc.ok}
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w,
+                         columns=[got.get(cc.col, cc) for cc in pc.columns])
 
 
     @staticmethod
@@ -1126,7 +1156,7 @@ class RowSegmentStep(Step):
 
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
-                    gate: GateManifest, wins: PageWindows) -> PageCells:
+                    gate: GateManifest, wins: PageWindows, only: set[int] | None = None) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
@@ -1140,7 +1170,8 @@ class RowSegmentStep(Step):
         load_scorer = _impl("roster_glyph").load_scorer
         segment_roster_page = _impl("roster_segment").segment_roster_page
         page_w = wins.page_size[0]
-        admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
+        admitted = [gc for gc in gate.columns if (gc.admitted or not p.only_admitted)
+                    and (only is None or gc.col in only)]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
         scorer = None
         if p.roster_glyph_refine:
@@ -1169,6 +1200,8 @@ class RowSegmentStep(Step):
         seals = _page_seals(ctx, page)
         out: list[ColumnCells] = []
         for gc in gate.columns:
+            if only is not None and gc.col not in only:
+                continue
             base = dict(col=gc.col, n_raised=0, period=gate.period, ref_w=gate.ref_w,
                         content_x=gc.content_x, border_top=gc.border_top,
                         border_bottom=gc.border_bottom, top_slack=0.0)
