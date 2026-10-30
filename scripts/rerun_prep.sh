@@ -40,11 +40,17 @@ fi
 manager_hint
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 if [ -n "$WSREPO" ]; then
-  GW=$HOME/${WSREPO##*/}
-  [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/$WSREPO $GW
-  git -C $GW pull -q --ff-only origin main || true
-  WS=$GW; export GUJI_WORKSPACE=$WS; 
-else
+  GW1=$HOME/${WSREPO##*/}
+  if [ -d $GW1/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/$WSREPO $GW1; then
+    GW=$GW1
+    git -C $GW pull -q --ff-only origin main || true
+    WS=$GW; export GUJI_WORKSPACE=$WS
+  else   # 会话没挂这个仓（迁仓过渡期）：退回旧总仓里同一本书的目录（内容相同）
+    echo "⚠️ 读不了 $WSREPO（会话里 add_repo $WSREPO 就走新仓），退回 open-guji/guji-workspace" >&2
+    rm -rf "$GW1"; WSREPO=
+  fi
+fi
+if [ -z "$WSREPO" ]; then
   [ -d $GW/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/open-guji/guji-workspace $GW
   # 快照里的旧克隆没有这之后新建的书目录（GUJI-全唐文 10-28：#891 找不到 995ejelvk0-*），匹配不到就先拉一次
   ls -d $GW/$WSGLOB >/dev/null 2>&1 || t 更新工作区 git -C $GW pull -q --ff-only origin main
