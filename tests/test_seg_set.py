@@ -37,8 +37,8 @@ def test_shiji_row_segment_fingerprint_is_its_own():
     sj, dian = make_book(seg_set="shiji_wyg"), make_book()
     rs = STEPS["row_segment"]
     assert code_hash(rs, book=sj) != code_hash(rs, book=dian)
-    assert S.replace_deps(sj, ["open_guji_cv.books.siku_zongmu.roster_segment", "open_guji_cv.utils.seam"]) == \
-        ["open_guji_cv.books.shiji_wyg.roster_segment", "open_guji_cv.utils.seam"]
+    assert S.replace_deps(sj, ["open_guji_cv.books.siku_zongmu.roster_segment", "open_guji_cv.seg.seam"]) == \
+        ["open_guji_cv.books.shiji_wyg.roster_segment", "open_guji_cv.seg.seam"]
     for sid in ("border_detect", "cell_shrink", "column_warp"):
         assert code_hash(STEPS[sid], book=sj) == code_hash(STEPS[sid])
 

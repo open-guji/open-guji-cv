@@ -438,7 +438,7 @@ class Cell:
                                         # 只标记不改切分，人工审查用
     seam_top: list[int] | None = None
     seam_bottom: list[int] | None = None
-    """折线切分（2026-09-05，见 `utils/seam.py`）：与上/下邻格之间的缝，列图坐标下每个 x
+    """折线切分（2026-09-05，见 `seg/seam.py`）：与上/下邻格之间的缝，列图坐标下每个 x
     （从内容窗口 `x0` 起）一个 y。None = 直线切点处没墨，格线就是直线。上缝：行 < y 的
     像素属上一格；下缝：行 ≥ y 的像素属下一格。只在 char–char 相邻且直线穿墨时才算。"""
 
@@ -460,7 +460,7 @@ class SeamCandidate:
     y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
     seam_ink: int = 0
     dev_max: int = 0
-    agree: float | None = None     # U-Net 裁判给的一致率 [0,1]（utils/cut_select.py）；没过裁判为 None
+    agree: float | None = None     # U-Net 裁判给的一致率 [0,1]（seg/cut_select.py）；没过裁判为 None
     dis_unet: int | None = None    # 与 U-Net 归属分歧的最大连通块面积 px（L2′ 升级门槛看它）
 
 
@@ -1628,9 +1628,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       `doc/design/row_boundaries_design.md`「5 条都不对」节）。裁决认定的 kind
       不在候选池里（比如几何变了，候选池不再产出 `seam_narrow`）时
       **原样不收敛**——按旧逻辑走多候选，静默套错误的收敛比继续挡人更危险。
-    - `cut_judge`：候选池裁判（`utils/cut_select.get_judge()` 的 U-Net），None = 只用现役规则。
+    - `cut_judge`：候选池裁判（`seg/cut_select.get_judge()` 的 U-Net），None = 只用现役规则。
       候选池经现役规则、收缩、**人裁回流**之后仍 ≥2 条（人没裁过）时，用它给每条候选打一致率、
-      改选高出门槛的最优者。人裁在前：`seam_ok` 收敛的是人当时看到的现役折线。见 `utils/cut_select.py` 模块头。
+      改选高出门槛的最优者。人裁在前：`seam_ok` 收敛的是人当时看到的现役折线。见 `seg/cut_select.py` 模块头。
     - `forced_solo`：人裁指认为單行小注的格（对外 `slot` 编号，来自
       `feedback/lookup.resolved_solo_notes`）。只管判据落空的那一型（左半有碎墨把
       跨度撑满），已被雙行段收走的格不动；缝取右半墨迹左缘。
@@ -1907,7 +1907,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 候选里，0 条不省墨（即每一条都既偏了又真绕开了墨）。下面第 2 步的过滤是把这个
     # 不变量**显式写出来**，现在恒不触发，是留给将来放宽 append 条件时的守卫。
     if seam_band > 0:
-        from ...utils import seam as _seam
+        from ...seg import seam as _seam
         ink_bin = (col_gray[:, x_lo:x_hi] < ink_threshold)
         by_pos: dict[int, list[Cell]] = {}
         for c in cells:
@@ -1936,7 +1936,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
         def _height_off(u: Cell, d: Cell) -> bool:
             """干净格线两侧有一格高偏离 period 超过 `CLEAN_PROBE_DEV`：格线可能落在字内空隙里，过一次 U-Net。"""
-            from ...utils.cut_select import CLEAN_PROBE_DEV
+            from ...seg.cut_select import CLEAN_PROBE_DEV
             return period > 0 and max(abs((u.y1 - u.y0) / period - 1),
                                       abs((d.y1 - d.y0) / period - 1)) > CLEAN_PROBE_DEV
 
@@ -1953,7 +1953,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if cut_judge is not None and len(cands) == 1 and period > 0 and resolved is None:
                 # 单候选：裁判无可改选，只剩探针；两侧格高都正常就不探（见 cut_select.PROBE_DEV）。
                 # 有人裁的不跳：人裁可能指向扩池才生成的候选（unet_seam / period_*），要走完下面的扩池才收敛得上
-                from ...utils.cut_select import PROBE_DEV
+                from ...seg.cut_select import PROBE_DEV
                 if max(abs((up_c.y1 - up_c.y0) / period - 1),
                        abs((dn_c.y1 - dn_c.y0) / period - 1)) <= PROBE_DEV:
                     return cands, chosen, chosen_by, escalate, escalate_reason
@@ -1961,7 +1961,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)
                 if res is not None and len(res[0]) == len(cands):
-                    from ...utils.cut_select import ADOPT_INK, ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
+                    from ...seg.cut_select import ADOPT_INK, ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
                     sc, dis = res
                     for c, s_, d_ in zip(cands, sc, dis):
                         c.agree = s_
@@ -2004,7 +2004,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
             `ink_cap`：干净格线（直线一点墨不穿）只许换成同样不穿墨的缝（0）——换成穿笔画的缝，等于把上字
             底横的一截切给下格；下格是「一」时就成了「二」（Sheldon 10-22 看图，vol05「聖/一」「其/一」等 7 处）。"""
-            from ...utils.cut_select import ADOPT_DIS, ESCALATE_BLOB
+            from ...seg.cut_select import ADOPT_DIS, ESCALATE_BLOB
             if dis_chosen < ESCALATE_BLOB:
                 return None
             ok = [i for i in range(n_old, len(cands))
@@ -2030,7 +2030,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 if sm is not None and len(sm) == n:
                     extra.append(("unet_seam", np.asarray(sm, dtype=int)))
             if med_h > 0:
-                from ...utils import seam as _seam2
+                from ...seg import seam as _seam2
                 for kind, center in (("period_up", int(round(up_c.y0 + med_h))), ("period_dn", int(round(dn_c.y1 - med_h)))):
                     if 0 < center < h and abs(center - y_line) >= 4:
                         sm = _seam2.find_seam(ink_bin, center, band=_seam2.SEAM_BAND)

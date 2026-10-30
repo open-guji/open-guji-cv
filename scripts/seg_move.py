@@ -2,7 +2,7 @@
 并算出指纹不变所需的登记行（`core/code_equiv.py` 的 `MOVED` 与 `ENTRIES`）。
 
     # 在干净的工作区（已 checkout 到从 origin/dev 起的新分支）上：
-    python scripts/seg_move.py move siku_zongmu row_boundaries row_grid jiazhu_split ...
+    python scripts/seg_move.py move siku_zongmu row_boundaries row_grid jiazhu_split ...   # 套书写 seg 则搬进共用原语库 seg/
     # 搬完后核登记：对 --base（缺省 origin/dev）每个被改过的模块算哈希，出登记行
     python scripts/seg_move.py register --base origin/dev
 
@@ -112,13 +112,18 @@ def _rewrite_file(path: Path, old_pkg: str, new_pkg: str, rename: dict[str, str]
     return changed
 
 
+def _dest(seg_set: str) -> str:
+    """目标包：`seg` = 共用原语库 `open_guji_cv/seg/`；其余是套书目录 `books/<套书>/`。"""
+    return "seg" if seg_set == "seg" else f"books.{seg_set}"
+
+
 def cmd_move(args) -> None:
     rename: dict[str, str] = {}
     for m in args.modules:
         old = f"{PKG}.utils.{m}" if "." not in m else m
         name = old.rsplit(".", 1)[1]
-        rename[old] = f"{PKG}.books.{args.seg_set}.{name}"
-    dest = ROOT / "open_guji_cv" / "books" / args.seg_set
+        rename[old] = f"{PKG}.{_dest(args.seg_set)}.{name}"
+    dest = ROOT / "open_guji_cv" / _dest(args.seg_set).replace(".", "/")
     dest.mkdir(parents=True, exist_ok=True)
     (dest / "__init__.py").touch()
     moved_files: dict[Path, tuple[str, str]] = {}

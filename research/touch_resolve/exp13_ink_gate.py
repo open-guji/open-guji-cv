@@ -24,7 +24,7 @@ from open_guji_cv.feedback.consumers import verdict_store
 from open_guji_cv.products import kinds as _k  # noqa: F401
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
-from open_guji_cv.utils.cut_select import INK_TH, get_judge, guided_seam_from_owner
+from open_guji_cv.seg.cut_select import INK_TH, get_judge, guided_seam_from_owner
 
 
 def gold_seam(ex, w, x_lo):

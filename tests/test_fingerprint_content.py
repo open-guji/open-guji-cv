@@ -18,7 +18,7 @@ def test_corpus_fingerprint_ignores_mtime(tmp_path):
 
 def test_ckpt_fingerprint_ignores_mtime(tmp_path):
     pytest.importorskip("torch")
-    from open_guji_cv.utils.cut_select import ckpt_fingerprint
+    from open_guji_cv.seg.cut_select import ckpt_fingerprint
     p = tmp_path / "m.pt"
     p.write_bytes(b"\x00" * 1024)
     a = ckpt_fingerprint(p)

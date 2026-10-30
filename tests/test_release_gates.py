@@ -193,7 +193,7 @@ def test_close_check_1c_models(monkeypatch, tmp_path):
     import types
     from open_guji_cv.clustering import cnn_candidates as CNN
     from open_guji_cv.products.kinds.recog import ColumnRare, PageRare, RareRec
-    from open_guji_cv.utils import cut_select
+    from open_guji_cv.seg import cut_select
     w1, w2 = tmp_path / "judge.pt", tmp_path / "cnn.pt"
     w1.write_bytes(b"x")
     w2.write_bytes(b"x")

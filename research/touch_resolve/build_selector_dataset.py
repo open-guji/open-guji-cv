@@ -38,7 +38,7 @@ from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.steps.row_segment import RowSegmentParams  # noqa: E402
-from open_guji_cv.utils.cut_select import get_judge  # noqa: E402
+from open_guji_cv.seg.cut_select import get_judge  # noqa: E402
 from verify_prod_judge import run_column  # noqa: E402
 
 KINDS = ("straight", "seam_narrow", "seam_wide", "unet_seam", "period_up", "period_dn")

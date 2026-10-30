@@ -30,7 +30,7 @@ from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.utils.cut_select import get_judge, owner_from_seam  # noqa: E402
+from open_guji_cv.seg.cut_select import get_judge, owner_from_seam  # noqa: E402
 
 
 def gold_seam(ex: dict, x_lo: int, x_hi: int):

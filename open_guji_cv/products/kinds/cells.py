@@ -30,7 +30,7 @@ class CellRec(BaseModel):
     raised: bool = False
     suspect_jiazhu_body: bool = False      # 疑似被缝位骗过的整宽正文字（jiazhu_split.suspect_full_width_cells）
     quad_page: list[Point] | None = None   # 原图规范空间四角 [(x,y)…]，右上原点
-    seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 utils/seam.py
+    seam_top: list[int] | None = None      # 折线缝（列图坐标，每 x 一个 y，从 x0 起）；见 seg/seam.py
     seam_bottom: list[int] | None = None
     flags: list[str] = Field(default_factory=list)   # 现代链 row_segment_runs 的项级标记（small / tall / punct_absorbed）
 
@@ -46,7 +46,7 @@ class SeamCandidate(BaseModel):
     y: list[int] | None = None     # 折线逐列 y（从 content_x[0] 起）；straight 为 None
     seam_ink: int = 0              # 这条线穿过的墨量（下游打分可用，也便于审计）
     dev_max: int = 0               # 相对直线的最大偏移 px（0 = 与直线重合）
-    agree: float | None = None     # U-Net 裁判的置信加权一致率 [0,1]（utils/cut_select.py）；没过裁判为 None
+    agree: float | None = None     # U-Net 裁判的置信加权一致率 [0,1]（seg/cut_select.py）；没过裁判为 None
     dis_unet: int | None = None    # 与 U-Net 归属分歧的最大连通块 px（2026-09-15 L2′ 升级门槛看它）
 
 
