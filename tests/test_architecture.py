@@ -306,7 +306,7 @@ def test_book_sets_do_not_import_each_other():
 def test_seg_set_registry_sane():
     from open_guji_cv.core import seg_set as S
     assert set(S.PIPELINE_SEG_SET.values()) <= set(S.SEG_SETS)
-    for (ss, _step), mods in S.SERIES_MODULES.items():
+    for ss, ov in S.OVERRIDES.items():
         assert ss in S.SEG_SETS
-        assert all(m.startswith(f"{PKG}.books.{ss}.") or m == f"{PKG}.books.{ss}" for m in mods), \
-            f"{ss} 的指纹模块必须在 books/{ss}/ 里：{mods}"
+        for default, mine in ov.items():
+            assert default.startswith(f"{PKG}.books.siku_zongmu.") and mine.startswith(f"{PKG}.books.{ss}."), (ss, default, mine)
