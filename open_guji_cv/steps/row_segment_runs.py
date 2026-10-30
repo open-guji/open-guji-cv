@@ -1,7 +1,7 @@
 """Step3（现代印刷链）单列切分：墨段 + 字身盒模型 DP → 带类型的项（char / punct / blank）。
 
 顶替刻本链的 `row_segment`（固定 N 格弹性 DP）：现代排印本每列项数不定、标点挤压、
-字距随列调整，前提不成立（见 `utils/run_segment.py` 模块头）。产同一种 `cells`——
+字距随列调整，前提不成立（见 `books/beixing/run_segment.py` 模块头）。产同一种 `cells`——
 `slot`/`pos` 从 1 起连续编号、`n_body_slots` = 本列实际项数；`kind` 多了 `punct`；
 不出折线缝、不出多候选切点（现代字间是纸，切点没有歧义）。Step4 `cell_shrink`
 原样复用。
@@ -16,7 +16,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, PageCells
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..utils.run_segment import segment_column_runs
+from ..books.beixing.run_segment import segment_column_runs
 from ._warpmap import ColumnMapper
 
 
@@ -46,7 +46,7 @@ class RowSegmentRunsStep(Step):
         unit="column",
         consumes=("gate_manifest", "column_windows", "column_image", "line_index"), produces=("cells",),
         params=RowSegmentRunsParams,
-        code_deps=("open_guji_cv.utils.run_segment",),
+        code_deps=("open_guji_cv.books.beixing.run_segment",),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
