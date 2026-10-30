@@ -140,9 +140,13 @@ def code_hash_of_module(mod_name: str) -> str:
     return _module_source_hash(mod_name)[:16]
 
 
-def code_hash(step: Step, legacy: bool = False) -> str:
-    """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。"""
+def code_hash(step: Step, legacy: bool = False, book=None) -> str:
+    """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。
+    给了 `book` 时，再并入这册所属套书在本步的模块（`core/seg_set.series_modules`，搬家前为空）。"""
     mods = [type(step).__module__, *step.spec.code_deps]
+    if book is not None:
+        from .seg_set import series_modules
+        mods += series_modules(book, step.spec.id)
     fn = _module_source_hash_legacy if legacy else _module_source_hash
     h = hashlib.sha256()
     for m in mods:
@@ -248,7 +252,7 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
     键集与 2026-09-20 之前的 `fingerprint` payload 逐位相同，现有产物指纹不变。"""
     payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
-               "code": code_hash(step, legacy=legacy_code)}
+               "code": code_hash(step, legacy=legacy_code, book=book)}
     # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
     # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
     # 保证现有产物的指纹逐位不变、不触发全量重跑。

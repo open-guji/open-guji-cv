@@ -28,6 +28,8 @@ LAYER: dict[str, int] = {
     "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0,
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
     "core": 1, "products": 1, "utils": 1, "formats": 1, "datastore": 1,
+    # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
+    "seg": 1, "books": 2,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
     "clustering": 2, "gold": 2, "report": 2, "render": 2, "pagetype_model": 2, "groups": 2,
     # L3 管线：Step、门、影子模型、反馈事件
@@ -268,3 +270,43 @@ def test_facade_exports_resolve():
         except Exception as e:   # noqa: BLE001
             missing.append(f"{name}: {e!r}")
     assert not missing, "门面里取不到的名字：\n  " + "\n  ".join(missing)
+
+
+def _book_imports(src_dir: Path) -> list[tuple[str, str]]:
+    out = []
+    for p in src_dir.rglob("*.py"):
+        for node in ast.walk(ast.parse(p.read_text(encoding="utf-8"))):
+            names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                     else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
+            out += [(str(p.relative_to(PKG_ROOT)), n) for n in names]
+            if isinstance(node, ast.ImportFrom) and node.level:      # 相对 import：数 ..（出了套书目录就是越界）
+                out.append((str(p.relative_to(PKG_ROOT)), "." * node.level + (node.module or "")))
+    return out
+
+
+def test_seg_does_not_import_books():
+    """共用原语不认识任何一套书。"""
+    bad = [f"{f} -> {n}" for f, n in _book_imports(PKG_ROOT / "seg")
+           if n == f"{PKG}.books" or n.startswith(f"{PKG}.books.")]
+    assert not bad, "seg 不许 import books：\n  " + "\n  ".join(bad)
+
+
+def test_book_sets_do_not_import_each_other():
+    """套书之间不互相 import（修史記只动 books/shiji_wyg/，殿本的代码一行不碰）。"""
+    bad = []
+    books = PKG_ROOT / "books"
+    for d in sorted(x for x in books.iterdir() if x.is_dir() and not x.name.startswith("_")):
+        for f, n in _book_imports(d):
+            m = n[len(PKG) + 7:].split(".")[0] if n.startswith(f"{PKG}.books.") else None
+            if m and m != d.name:
+                bad.append(f"{f} -> {n}")
+    assert not bad, "套书之间不许互相 import：\n  " + "\n  ".join(bad)
+
+
+def test_seg_set_registry_sane():
+    from open_guji_cv.core import seg_set as S
+    assert set(S.PIPELINE_SEG_SET.values()) <= set(S.SEG_SETS)
+    for (ss, _step), mods in S.SERIES_MODULES.items():
+        assert ss in S.SEG_SETS
+        assert all(m.startswith(f"{PKG}.books.{ss}.") or m == f"{PKG}.books.{ss}" for m in mods), \
+            f"{ss} 的指纹模块必须在 books/{ss}/ 里：{mods}"
