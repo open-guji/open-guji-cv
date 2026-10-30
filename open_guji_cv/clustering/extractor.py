@@ -1424,7 +1424,8 @@ def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]
 
 def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
                      win_x0: float, win_x1: float, bottom: bool = True,
-                     gap: bool = False, line_ys: tuple[tuple[float, float], ...] = ()) -> np.ndarray:
+                     gap: bool = False, line_ys: tuple[tuple[float, float], ...] = (),
+                     frame_reach: tuple[float, float] | None = None) -> np.ndarray:
     """列尾格（bottom=True）／列首格的版框细线连同线外一并抹白。
 
     cell_top/cell_bot 为格界、win_x0/win_x1 为列内容窗口，都在图块坐标系里。线内侧（字那边）
@@ -1432,12 +1433,15 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
     列首格用（字头碰不到框，紧贴着字的满宽横是字的上横——卷首「欽定」页满纸噪点，「周」的上横
     连着噪点落进 FRAME_LINE_ZONE）；列尾不要求，字脚常压在框线上（「見」）。line_ys 是全页线位
     （图块坐标）和线厚（见 page_frame_line_offsets）：线位上放宽覆盖认淡线；不满 FRAME_LINE_SPAN 的实线，
-    位置、厚度都跟全页那道线对上也认（字脚压着的双边框内框）。"""
+    位置、厚度都跟全页那道线对上也认（字脚压着的双边框内框）。
+    frame_reach=(版框 y, 距离)（图块坐标）：只认离版框这么近的线（写本开：列尾字的满宽横画离框一格多，
+    也会被认成线、连同线外的字脚抹掉——史記 02 册 100 页 7 列「冀」）；None＝不限。"""
     if not bottom:      # 列首格上下翻转同解
         h = patch.shape[0]
         flip = patch[::-1]
         out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True,
-                               line_ys=tuple((h - ly, th) for ly, th in line_ys))
+                               line_ys=tuple((h - ly, th) for ly, th in line_ys),
+                               frame_reach=None if frame_reach is None else (h - frame_reach[0], frame_reach[1]))
         return patch if out is flip else np.ascontiguousarray(out[::-1])
     h, w = patch.shape[:2]
     a = int(round(win_x0 + FRAME_LINE_INNER * (win_x1 - win_x0)))
@@ -1470,6 +1474,8 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
                    for ly, th in line_ys):
                 line[y:y1] = True
             y = y1
+    if frame_reach is not None:
+        line[:max(0, int(np.floor(frame_reach[0] - frame_reach[1])))] = False
     runs: list[tuple[int, int]] = []
     y = 0
     while y < h:
@@ -2821,22 +2827,37 @@ class CharExtractor:
                               or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
                 if near_frame and _jiazhu_gap_center(patch, jz_ref_w) is None:
                     lys = gmeta.get("frame_lines_bottom" if idx == tail_cell else "frame_lines_top") or ()
+                    reach = gmeta.get("frame_line_reach")
+                    fy = frame_in_bot if idx == tail_cell else frame_in_top
                     patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
                                              bottom=idx == tail_cell,
-                                             line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys))
+                                             line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys),
+                                             frame_reach=None if not reach else
+                                             (float(fy) - (sy0 + y0), float(reach) * cell_h_ref))
                 if idx in end_cand:
-                    patch = strip_frame_debris(patch, ltop - y0,
-                                               lbot - y0, cell_h)
-                    # 框线断段：判据在图块之外（列外墨率），必须传整页
-                    patch = strip_frame_stub(patch, page_img, int(sx0),
-                                             int(sx1), int(sy0 + y0))
-                    # 曲线切边：列末切下边、列首切上边（用户定——图块的
-                    # 边不必是直线，绕开版框即可）。放在框渣剥离之后，
-                    # 剥不掉的粘连/侧下方断段由它兜底。
-                    if idx == tail_cell:
-                        patch = carve_end_edge(patch, bottom=True)
-                    if idx == head_cell:
-                        patch = carve_end_edge(patch, bottom=False)
+                    # 列端的雙行小注格（Step3 给了缝）可按两半各剥（`jiazhu_end_halves`，写本开）：
+                    # 两个小字各是各的字身，整格只认最大连通体当字身，另一半小字与它分离的下半截
+                    # （「冀」的八、「集」的木）就被当框渣抹掉（史記 02 册 100 页 7 列、130 页 8 列）
+                    jcx = cell.get("jiazhu_cx") if gmeta.get("jiazhu_end_halves") else None
+                    k = None if jcx is None else int(round(float(jcx) - sx0))
+                    parts = [(0, patch.shape[1])] if k is None or not 8 <= k <= patch.shape[1] - 8 \
+                        else [(0, k), (k, patch.shape[1])]
+                    out_p = patch.copy()
+                    for a, b in parts:
+                        sub_p = np.ascontiguousarray(patch[:, a:b])
+                        sub_p = strip_frame_debris(sub_p, ltop - y0, lbot - y0, cell_h)
+                        if len(parts) == 1:
+                            # 框线断段：判据在图块之外（列外墨率），必须传整页
+                            sub_p = strip_frame_stub(sub_p, page_img, int(sx0), int(sx1), int(sy0 + y0))
+                        # 曲线切边：列末切下边、列首切上边（用户定——图块的
+                        # 边不必是直线，绕开版框即可）。放在框渣剥离之后，
+                        # 剥不掉的粘连/侧下方断段由它兜底。
+                        if idx == tail_cell:
+                            sub_p = carve_end_edge(sub_p, bottom=True)
+                        if idx == head_cell:
+                            sub_p = carve_end_edge(sub_p, bottom=False)
+                        out_p[:, a:b] = sub_p
+                    patch = out_p if len(parts) > 1 else sub_p
 
                 x0 = float(sx0)
                 x1 = float(sx1)
