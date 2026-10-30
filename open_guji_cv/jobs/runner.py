@@ -497,7 +497,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             pass
 
 
-WORKSPACE_REPO = "https://github.com/open-guji/guji-workspace"
+WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
 _preflight_ok_at = 0.0
 
 
@@ -508,15 +508,15 @@ def _preflight() -> str | None:
     已克隆过的（~/guji-workspace 在）不查。挂上之后不用重启执行方，下一轮轮询自动开始领单。
     """
     global _preflight_ok_at
-    if time.time() - _preflight_ok_at < 600 or (Path.home() / "guji-workspace" / ".git").is_dir():
+    if time.time() - _preflight_ok_at < 600 or (Path.home() / WORKSPACE_REPO.rsplit("/", 1)[-1] / ".git").is_dir():
         return None
     try:
         r = subprocess.run(["git", "ls-remote", "-q", WORKSPACE_REPO, "HEAD"], capture_output=True, text=True,
                            timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
     except (OSError, subprocess.SubprocessError) as e:
-        return f"读不了 guji-workspace（{e}）"
+        return f"读不了 {WORKSPACE_REPO.split('github.com/')[-1]}（{e}）"
     if r.returncode:
-        return "本会话读不了 guji-workspace 私仓（请在会话里 add_repo open-guji/guji-workspace）"
+        return f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
     _preflight_ok_at = time.time()
     return None
 
