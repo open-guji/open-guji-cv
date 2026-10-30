@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils.row_boundaries import fit_row_boundaries
+from open_guji_cv.books.siku_zongmu.row_boundaries import fit_row_boundaries
 
 PERIOD, DST_W = 110, 180
 
@@ -78,7 +78,7 @@ def test_two_missing_chars_at_tail():
 
 def test_effective_body_slots_drops_one_when_frame_is_a_row_short():
     """版框高只有 20.0 个 period（vol01/5）：按 20 格切，别硬凑 21 格造假空白。"""
-    from open_guji_cv.utils.row_boundaries import effective_body_slots
+    from open_guji_cv.books.siku_zongmu.row_boundaries import effective_body_slots
     assert effective_body_slots(21, 0.0, 20.02 * 116, 116) == 20
     assert effective_body_slots(21, 0.0, 20.40 * 112, 112) == 20      # vol02/26
     assert effective_body_slots(21, 0.0, 20.56 * 115, 115) == 21      # vol01/3：够 21 格
@@ -88,7 +88,7 @@ def test_effective_body_slots_drops_one_when_frame_is_a_row_short():
 
 def test_effective_body_slots_never_drops_more_than_one():
     """版框矮得离谱是探测失败：不动，让 DP 照旧无解报错。"""
-    from open_guji_cv.utils.row_boundaries import effective_body_slots
+    from open_guji_cv.books.siku_zongmu.row_boundaries import effective_body_slots
     assert effective_body_slots(21, 0.0, 15 * 116, 116) == 21
     assert effective_body_slots(21, 0.0, None, 116) == 21
     assert effective_body_slots(21, 0.0, 2400.0, None) == 21

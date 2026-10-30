@@ -73,6 +73,10 @@ _MV_BEIXING = ("切分模块化第 2b 步：line_layout、run_segment 从 utils/
                "（line_layout 的 `.border_geometry` → `...utils.border_geometry`；两个现代印刷步骤只改 import 与 code_deps 里的模块名），"
                "算法未动；搬前搬后 24 个 Step 的 code_hash 逐位相同（对 origin/dev 逐步比对），2026-10-30")
 
+_MV_SIKU = ("切分模块化第 2c 步：殿本 Step3 的 row_boundaries、row_grid、jiazhu_split、roster_segment、roster_glyph、yolo_tool_infer 与 calibrate "
+            "从 utils/ 原样搬进 books/siku_zongmu/，只有 import 路径变（相对层数加一、指向 utils 里留下的模块改成 `...utils.x`），"
+            "算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 3d064ce 逐步比对），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -196,6 +200,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="af18d5d39d00d353c2e04de755ec616457d379c07a5ce9ad1be0382cbda16bb0",
           old="4762e1c3f71c857f8afe44091a488ac4c2a4c3337eed32e3d467cf7baba1679d",
           evidence=_MV_BEIXING),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="69c95d3cb5fff6ceeabda2314251b443e08929e0304d4c81009830f290da5507",
+          old="7ca231b5277f35b458362ba6ede3e992585607d06c4e9cd01d78cea71e4633be",
+          evidence=_MV_SIKU),
+    Equiv(module="open_guji_cv.gates.column_gate",
+          new="a072761f50f0c01481e94db76abf3be9856bda7705230e0fc1027ddda2ba9090",
+          old="bc4749f1f07753e004d84b5006ec4cfbdf1af23383c457f085475acc05063b22",
+          evidence=_MV_SIKU),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="deaf1c8e1b0de1b6b791e47f7d0a90edf72811161b14493cfa1a9e9d0e5799ad",
+          old="9183257430cb19c877746f9ca8d5f78c54c8290baa7a18513778d3711d7a27af",
+          evidence=_MV_SIKU),
 )
 
 
@@ -204,6 +220,12 @@ ENTRIES: tuple[Equiv, ...] = (
 #: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
 #: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
 MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.siku_zongmu.jiazhu_split": ("open_guji_cv.utils.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
+    "open_guji_cv.books.siku_zongmu.roster_glyph": ("open_guji_cv.utils.roster_glyph", "84f0636a76c93b4c74dbe25919b99100ae8dce8db18e7e41561db839d5f3ab68"),
+    "open_guji_cv.books.siku_zongmu.roster_segment": ("open_guji_cv.utils.roster_segment", "894c946b329304625f8db915124b62a2308affe244fbb9b301506d43d008496f"),
+    "open_guji_cv.books.siku_zongmu.row_boundaries": ("open_guji_cv.utils.row_boundaries", "7ca231b5277f35b458362ba6ede3e992585607d06c4e9cd01d78cea71e4633be"),
+    "open_guji_cv.books.siku_zongmu.row_grid": ("open_guji_cv.utils.row_grid", "283f1e2564615d55bf27c6f5638ee10d949c05d3953c74eb5398d6c2a38d2a0e"),
+    "open_guji_cv.books.siku_zongmu.yolo_tool_infer": ("open_guji_cv.utils.yolo_tool_infer", "33de2955e1c3eb8871f723c7929a8f62bd8baf37074777f20362918fdc33ba95"),
     "open_guji_cv.books.beixing.line_layout": ("open_guji_cv.utils.line_layout", "33f17f6be1f6f2f54345bc970f61c2772b41dc670bb602d006e478c1b6259d24"),
     "open_guji_cv.books.beixing.run_segment": ("open_guji_cv.utils.run_segment", "e770b30c24de8dfa927e615547d66e109b8f6a97ae6e6a0726bbdf66473a6a17"),
     "open_guji_cv.books.zengguang_youxue.free_blocks": ("open_guji_cv.utils.free_blocks", "eef4c4c127d5f5acb5f5b143a276d613f76fc2d78239be2cb298b5a5050e8d5f"),

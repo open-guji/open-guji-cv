@@ -13,7 +13,7 @@ from __future__ import annotations
 import numpy as np
 
 from open_guji_cv.clustering.extractor import CharExtractor
-from open_guji_cv.utils import row_boundaries as fit_mod
+from open_guji_cv.books.siku_zongmu import row_boundaries as fit_mod
 
 W, P = 180, 115.0
 SEAM = 90

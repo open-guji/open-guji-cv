@@ -126,7 +126,7 @@ def test_status_cli_prints_reason(world, monkeypatch, capsys):
 
 
 def test_calibrate_hint_names_column_gate():
-    from open_guji_cv.utils.calibrate import Row, format_table
+    from open_guji_cv.books.siku_zongmu.calibrate import Row, format_table
     diag = {"pages": 10, "body_pages": 10, "body_source": "t", "stale": 0, "checked": 10}
     txt = format_table([Row("period_prior", 180.0, 204.0)], diag, "b")
     assert "column_gate" in txt and "须重跑" in txt

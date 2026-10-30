@@ -1176,7 +1176,7 @@ SNAP_FRAC = 0.2
 
 
 def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -> list[float]:
-    """等距格网（`utils/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
+    """等距格网（`books/siku_zongmu/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
     直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。"""
     h = len(row_proj)
     sm = np.convolve(row_proj, np.ones(5) / 5.0, mode="same")
@@ -1652,7 +1652,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       把 DP 的那条格线钉到人给的位置（2026-09-26）。缝照常在新位置附近找。
     - `detect_bottom_bar`：`border_bottom` 之上若还躺着一道下版框线（`find_bottom_frame_bar`），
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
-    - `grid_bounds`：等距格网（`utils/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
+    - `grid_bounds`：等距格网（`books/siku_zongmu/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
       就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
@@ -1907,7 +1907,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # 候选里，0 条不省墨（即每一条都既偏了又真绕开了墨）。下面第 2 步的过滤是把这个
     # 不变量**显式写出来**，现在恒不触发，是留给将来放宽 append 条件时的守卫。
     if seam_band > 0:
-        from . import seam as _seam
+        from ...utils import seam as _seam
         ink_bin = (col_gray[:, x_lo:x_hi] < ink_threshold)
         by_pos: dict[int, list[Cell]] = {}
         for c in cells:
@@ -1936,7 +1936,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
         def _height_off(u: Cell, d: Cell) -> bool:
             """干净格线两侧有一格高偏离 period 超过 `CLEAN_PROBE_DEV`：格线可能落在字内空隙里，过一次 U-Net。"""
-            from .cut_select import CLEAN_PROBE_DEV
+            from ...utils.cut_select import CLEAN_PROBE_DEV
             return period > 0 and max(abs((u.y1 - u.y0) / period - 1),
                                       abs((d.y1 - d.y0) / period - 1)) > CLEAN_PROBE_DEV
 
@@ -1953,7 +1953,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if cut_judge is not None and len(cands) == 1 and period > 0 and resolved is None:
                 # 单候选：裁判无可改选，只剩探针；两侧格高都正常就不探（见 cut_select.PROBE_DEV）。
                 # 有人裁的不跳：人裁可能指向扩池才生成的候选（unet_seam / period_*），要走完下面的扩池才收敛得上
-                from .cut_select import PROBE_DEV
+                from ...utils.cut_select import PROBE_DEV
                 if max(abs((up_c.y1 - up_c.y0) / period - 1),
                        abs((dn_c.y1 - dn_c.y0) / period - 1)) <= PROBE_DEV:
                     return cands, chosen, chosen_by, escalate, escalate_reason
@@ -1961,7 +1961,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 res = cut_judge.assess(col_gray, x_lo, x_hi, int(round(up_c.y0)), int(round(dn_c.y1)),
                                        float(bounds[k_]), [c.y for c in cands], ink_threshold=ink_threshold)
                 if res is not None and len(res[0]) == len(cands):
-                    from .cut_select import ADOPT_INK, ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
+                    from ...utils.cut_select import ADOPT_INK, ESCALATE_BLOB, JUDGE_MARGIN, PENDING_BLOB
                     sc, dis = res
                     for c, s_, d_ in zip(cands, sc, dis):
                         c.agree = s_
@@ -2004,7 +2004,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
 
             `ink_cap`：干净格线（直线一点墨不穿）只许换成同样不穿墨的缝（0）——换成穿笔画的缝，等于把上字
             底横的一截切给下格；下格是「一」时就成了「二」（Sheldon 10-22 看图，vol05「聖/一」「其/一」等 7 处）。"""
-            from .cut_select import ADOPT_DIS, ESCALATE_BLOB
+            from ...utils.cut_select import ADOPT_DIS, ESCALATE_BLOB
             if dis_chosen < ESCALATE_BLOB:
                 return None
             ok = [i for i in range(n_old, len(cands))
@@ -2030,7 +2030,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                 if sm is not None and len(sm) == n:
                     extra.append(("unet_seam", np.asarray(sm, dtype=int)))
             if med_h > 0:
-                from . import seam as _seam2
+                from ...utils import seam as _seam2
                 for kind, center in (("period_up", int(round(up_c.y0 + med_h))), ("period_dn", int(round(dn_c.y1 - med_h)))):
                     if 0 < center < h and abs(center - y_line) >= 4:
                         sm = _seam2.find_seam(ink_bin, center, band=_seam2.SEAM_BAND)
@@ -2195,7 +2195,7 @@ def measure_book_period(store, book_id: str, pages=None,
     """
     import statistics
 
-    from ..core.spec import page_key
+    from ...core.spec import page_key
 
     vals: list[float] = []
     for pg in (pages if pages is not None else []):

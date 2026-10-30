@@ -44,7 +44,7 @@ EXISTING_GAPS: dict[str, set[str]] = {
         "open_guji_cv.pagetype_model.model",
     },
     "open_guji_cv.gates.column_gate": {
-        "open_guji_cv.utils.jiazhu_split",
+        "open_guji_cv.books.siku_zongmu.jiazhu_split",
     },
     "open_guji_cv.steps.align_ref": {
         "open_guji_cv.clustering.align_eval",

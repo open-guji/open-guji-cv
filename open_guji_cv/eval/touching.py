@@ -31,7 +31,7 @@ def _pages_of_type(book: str, types: frozenset[str]) -> list[int]:
 
 
 def body_pages(book: str) -> list[int]:
-    """严格的正文页。标定（`utils/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
+    """严格的正文页。标定（`books/siku_zongmu/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
     return _pages_of_type(book, frozenset({"body"}))
 
 

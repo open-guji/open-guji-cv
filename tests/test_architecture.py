@@ -76,7 +76,7 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "report.progress -> review.verdict_view",
     "report.tiers -> eval.round_check",
     "utils.binarized -> clustering.normalize",
-    "utils.calibrate -> steps",
+    "books.siku_zongmu.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
     "utils.font_calibrate -> clustering.normalize",
     "utils.font_calibrate_direct -> clustering.canonical",

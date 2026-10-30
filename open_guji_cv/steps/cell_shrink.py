@@ -299,7 +299,7 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                # 职名列的框屑 Step3 已剥掉（utils/roster_segment._denoise），首格就是字，不再猜框条
+                # 职名列的框屑 Step3 已剥掉（books/siku_zongmu/roster_segment._denoise），首格就是字，不再猜框条
                 frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
                 if frame_bar:
                     cell_type, has_patch = "empty", False

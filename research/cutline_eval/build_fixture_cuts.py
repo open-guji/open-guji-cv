@@ -11,7 +11,7 @@ from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.utils.row_boundaries import segment_column
+from open_guji_cv.books.siku_zongmu.row_boundaries import segment_column
 RUNT = [(15, 9, 20), (113, 1, 4), (188, 4, 20)]
 def main(items, out):
     out = pathlib.Path(out); (out / "cols").mkdir(parents=True, exist_ok=True)

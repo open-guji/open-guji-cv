@@ -7,7 +7,7 @@
 import numpy as np
 import pytest
 
-from open_guji_cv.utils import jiazhu_split as jz
+from open_guji_cv.books.siku_zongmu import jiazhu_split as jz
 
 W = 185          # 列距量级（vol02 实测 184px）
 H = 110          # 字距量级

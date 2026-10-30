@@ -1,8 +1,8 @@
 """row_boundaries 单测：波谷/空白探测、周期估计、弹性 DP，用合成投影曲线验证。"""
 import numpy as np
 
-from open_guji_cv.utils import row_boundaries as fit_mod
-from open_guji_cv.utils.row_boundaries import (
+from open_guji_cv.books.siku_zongmu import row_boundaries as fit_mod
+from open_guji_cv.books.siku_zongmu.row_boundaries import (
     _apply_resolved_cut,
     estimate_period,
     estimate_shared_period,

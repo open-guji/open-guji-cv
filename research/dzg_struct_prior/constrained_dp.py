@@ -1,7 +1,7 @@
 """row_boundaries._bounded_elastic_dp 的替身：源码替换，加「第 k 格该空 / 该有字」软罚分。"""
 import inspect, os, textwrap
 import numpy as np
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 MASK = {'m': None}
 PEN = float(os.environ.get('CONSTRAINED_PEN', '0.5'))

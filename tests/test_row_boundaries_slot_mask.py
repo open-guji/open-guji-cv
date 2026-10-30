@@ -12,7 +12,7 @@ from pathlib import Path
 
 import numpy as np
 
-from open_guji_cv.utils.row_boundaries import (_pos_to_slot, fit_row_boundaries,
+from open_guji_cv.books.siku_zongmu.row_boundaries import (_pos_to_slot, fit_row_boundaries,
                                                 slot_mask_from_occupied)
 
 FIX = Path(__file__).parent / "fixtures" / "slot_mask" / "split_chars.json"
