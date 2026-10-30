@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-- 任务库按书 ID 区分、殿本工作区迁到自己的仓（Sheldon 10-30）：四库总目（96mid1ogzk）的工作区搬进 `guji-workspace/96mid1ogzk-si-ku-zong-mu`（仓根即工作区，3711 个文件与旧仓逐文件核对 0 差异），`spec.WS_REPOS` 登记「书 ID → 仓」，ws_glob 里的书 ID 查得到又没显式给 `ws_repo` 就走它，执行方自检也查这个仓。册号（vol01）每部书都有，`jobs.job` 加 `book_id`（旧行按 ws_glob 补），同册互斥锁改成（书 ID，册号）——不同书的 vol01 能并跑；`guji_jobs submit --book-id`、`ls --book-id`，`ls`／板子多一列书 ID；`ws_repo` 不进指纹。`rerun_prep.sh` 找册 yaml 改按工作区 `.central.json` 的 ws id（原先取数据目录里第一个，多书会话会取错）。
+- 任务库按书 ID 区分、殿本工作区迁到自己的仓（Sheldon 10-30）：四库总目（96mid1ogzk）的工作区搬进 `guji-workspace/96mid1ogzk-si-ku-zong-mu`（仓根即工作区，3711 个文件与旧仓逐文件核对 0 差异），`spec.WS_REPOS` 登记「书 ID → 仓」，ws_glob 里的书 ID 查得到又没显式给 `ws_repo` 就走它，执行方自检也查这个仓。册号（vol01）每部书都有，`jobs.job` 加 `book_id`（旧行按 ws_glob 补），同册互斥锁改成（书 ID，册号）——不同书的 vol01 能并跑；`guji_jobs submit --book-id`、`ls --book-id`，`ls`／板子多一列书 ID；`ws_repo` 不进指纹。`rerun_prep.sh` 找册 yaml 改按工作区 `.central.json` 的 ws id（原先取数据目录里第一个，多书会话会取错）。迁仓过渡期：会话没挂新仓时，执行方自检放行旧总仓，`rerun_prep.sh` 克隆不了 `--ws-repo` 就退回旧总仓里同一本书的目录。
 - 自由版式 `keben_free` 第八轮（Sheldon 10-28 盯 yxat 9、10 页）：`layout_hints` 块与版面树叶子可写格式 `fmt`（plain 每列一行字／mixed 大字夹小注），`block_detect` 1.10 落进产物并给块编号 `label`（版面树按层 1a、1b）；`cell_cut` 1.5 `fmt: plain` 走 `segment_plain`（整列按墨切、块内识别字高作先验），字框加字号 `cid`＝页-块-行-字。只有 keben_free 管线用（yxat 一册）。
 ## [0.5.32] - 2026-10-28
 

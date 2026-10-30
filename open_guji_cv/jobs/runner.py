@@ -498,27 +498,33 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
 
 
 WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
+LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
 _preflight_ok_at = 0.0
 
 
 def _preflight() -> str | None:
     """执行方领单前自检，返回缺什么（None 是都齐）。通过后 10 分钟内不再查。
 
-    guji-workspace 是私仓，会话没挂（add_repo）时 git 要账号，每条单都会在准备阶段失败。
-    已克隆过的（~/guji-workspace 在）不查。挂上之后不用重启执行方，下一轮轮询自动开始领单。
+    工作区仓是私仓，会话没挂（add_repo）时 git 要账号，每条单都会在准备阶段失败。
+    已克隆过的（~/<仓名> 在）不查。新仓和旧总仓有一个读得了就领（旧总仓里殿本目录内容相同）。
+    挂上之后不用重启执行方，下一轮轮询自动开始领单。
     """
     global _preflight_ok_at
-    if time.time() - _preflight_ok_at < 600 or (Path.home() / WORKSPACE_REPO.rsplit("/", 1)[-1] / ".git").is_dir():
+    repos = [WORKSPACE_REPO, *LEGACY_WORKSPACE_REPOS]
+    if time.time() - _preflight_ok_at < 600 or any((Path.home() / r.rsplit("/", 1)[-1] / ".git").is_dir() for r in repos):
         return None
-    try:
-        r = subprocess.run(["git", "ls-remote", "-q", WORKSPACE_REPO, "HEAD"], capture_output=True, text=True,
-                           timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
-    except (OSError, subprocess.SubprocessError) as e:
-        return f"读不了 {WORKSPACE_REPO.split('github.com/')[-1]}（{e}）"
-    if r.returncode:
-        return f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
-    _preflight_ok_at = time.time()
-    return None
+    err = None
+    for repo in repos:
+        try:
+            r = subprocess.run(["git", "ls-remote", "-q", repo, "HEAD"], capture_output=True, text=True,
+                               timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+        except (OSError, subprocess.SubprocessError) as e:
+            err = err or f"读不了 {repo.split('github.com/')[-1]}（{e}）"
+            continue
+        if not r.returncode:
+            _preflight_ok_at = time.time()
+            return None
+    return err or f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
 
 
 def _last_book() -> str | None:
