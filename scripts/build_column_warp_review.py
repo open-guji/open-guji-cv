@@ -33,7 +33,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / ".claude" / "skills" / "review-artifact" / "scripts"))
 
-from open_guji_cv.utils.border_geometry import HLine, VLine  # noqa: E402
+from open_guji_cv.seg.frame_types import HLine, VLine  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
     column_profile,
     column_text_band,

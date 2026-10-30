@@ -98,6 +98,12 @@ _SP_PLS = ("切分模块化第 3 步（四）：peak_line_search 拆成两块—
            "从 seg.lines import；border_geometry 与 locate_gutter 改 import，border_detect 把 seg.lines 列进 code_deps；"
            "算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 289ef4b），2026-10-30")
 
+_SP_BG = ("切分模块化第 3 步（五）：utils/border_geometry 拆完——界行折线拟合（BEND_*／KNOT_*、_rule_rows、gutter_projection、"
+          "_fit_knots、fit_vlines_polyline 等，只依赖自己的常量）原样拆进 seg/polyline.py，其余（抬头框、双边外框与下框条、"
+          "按横带证据回直、整册标定、detect_borders）原样搬成 books/siku_zongmu/border.py；utils/peak_line_search 剩下的网格模式"
+          "原样搬成 seg/grid.py（北行日錄与殿本都用）。各处 import 按名字改到定义模块，三步 code_deps 换成新模块；"
+          "算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 88a8a9e），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -285,6 +291,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new="3f8bc2f3e63edddab45356c10f458c9cd281602962223d366d3ff23c5cba5b08",
           old="3a3c072df391d6e2dd7d26ce77428e4dd3370e183bebcb038cb16a793fc82dda",
           evidence=_SP_PLS),
+    Equiv(module="open_guji_cv.gates.border_detect_gate",
+          new="4dbead785e9980af73a144ad628529c53a0cf33dd0327e0b3ca7c94630a2e79f",
+          old="ee7454ae45bfc1bd9ea91c85b853ae929b7443b6ac9cfbbfbdc25fb282a1cdf6",
+          evidence=_SP_BG),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="80ecf12a3dee7e3c8d4f5116f202707ff3f61bc3af3bbace3110bf8741229663",
+          old="3f8bc2f3e63edddab45356c10f458c9cd281602962223d366d3ff23c5cba5b08",
+          evidence=_SP_BG),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="eca98f041edf9ebe762c92a2979b49f427175a5b20cdd45df5ebf437d0e1c404",
+          old="d33d045963883e8b4f53e9d37e2b50b11e7ba4288da96850628dca8da80d4d6d",
+          evidence=_SP_BG),
+    Equiv(module="open_guji_cv.utils.column_projection",
+          new="b513802033538bd3475050c0e0575ed3787b1bd7f69c581b9521f3c87d26fc7a",
+          old="614cc9b0f4ffcb6f151c15c8bd56824df81d5e01edb4fb3bd8df3176e3c645ef",
+          evidence=_SP_BG),
 )
 
 
@@ -317,13 +339,15 @@ MOVED: dict[str, tuple[str, str]] = {
 #: 拆过的模块：旧模块名 → (拆分前的代码哈希, [(拆出来的新模块, 拆分时的代码哈希), …])。
 #: 一个模块拆成几块，Step 的模块表从一项变几项，指纹公式就变了；这里登记了，算指纹时几块都在、代码都还是
 #: 拆分时那一版，就合回一项（旧名＋旧哈希，见 engine._collapse_splits），产物不过期。之后任何一块真改了就不合并，
-#: 照常过期。用到旧模块的 Step 要在 code_deps 里列齐全部几块。纪律同 ENTRIES：只增不删。
+#: 照常过期。用到旧模块的 Step 要在 code_deps 里列齐全部几块。纪律同 ENTRIES：只增不删；拆出来的块又拆或又搬时，
+#: 把那一项的块表换成最新的几块（旧哈希不动，块表里的旧块已不存在，留着也合不上）。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
-        ("open_guji_cv.utils.border_geometry", "ddfdb066f247b0a93790fd9a1c7e8c4e497f8471b0334b417a9e939c0707782e"),
+        ("open_guji_cv.books.siku_zongmu.border", "f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1"),
+        ("open_guji_cv.seg.polyline", "bf94b777e8bd227b12a64916ee3a2bf7bc457163047bdc9126a3f164e52825d4"),
         ("open_guji_cv.seg.frame_types", "910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b"))),
     "open_guji_cv.utils.peak_line_search": ("90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890", (
-        ("open_guji_cv.utils.peak_line_search", "4d05fa1b86601288bf68b5d4ba912b61f9b09f448dc16903e3ca35cccb82539d"),
+        ("open_guji_cv.seg.grid", "93f436b06ca22e975e211d5e194b5bc657cc6cdba0b6b3438bb6ba9c4e49780a"),
         ("open_guji_cv.seg.lines", "322ed871071601159e4123bfdb1b4b8ffb10c07cb0616c7783c003f0e88d8e61"))),
 }
 

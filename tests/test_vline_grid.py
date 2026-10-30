@@ -6,9 +6,9 @@
 import numpy as np
 import pytest
 
-from open_guji_cv.utils.border_geometry import detect_borders
+from open_guji_cv.books.siku_zongmu.border import detect_borders
 from open_guji_cv.seg.lines import LineMatch, find_vertical_lines, _vline_pool
-from open_guji_cv.utils.peak_line_search import (
+from open_guji_cv.seg.grid import (
     find_vertical_lines_grid,
     interpolate_missing,
     is_thin_rule,
@@ -177,21 +177,29 @@ def test_three_steps_compose_back_to_find_vertical_lines_grid():
 
 def test_grid_thresholds_without_priors_are_the_calibrated_absolutes():
     """两个先验都不给 → 原样返回北行日錄那组标定值，与加这套之前逐位相同。"""
-    from open_guji_cv.utils.peak_line_search import (
-        GRID_MAX_WIDTH, GRID_MIN_SCORE, GRID_PITCH_TOL, GRID_SLOT_TOL, grid_thresholds,
+    from open_guji_cv.seg.grid import (
+        GRID_MAX_WIDTH,
+        GRID_MIN_SCORE,
+        GRID_PITCH_TOL,
+        GRID_SLOT_TOL,
+        grid_thresholds,
     )
     assert grid_thresholds() == {"pitch_tol_frac": GRID_PITCH_TOL, "slot_tol": GRID_SLOT_TOL,
                                  "max_width": GRID_MAX_WIDTH, "min_score": GRID_MIN_SCORE}
     # 传本书自己的标定值 = 恒等（比例 1.0）
-    from open_guji_cv.utils.peak_line_search import GRID_REF_FRAME_H, GRID_REF_PITCH
+    from open_guji_cv.seg.grid import GRID_REF_FRAME_H, GRID_REF_PITCH
     assert grid_thresholds(GRID_REF_PITCH, GRID_REF_FRAME_H) == grid_thresholds()
 
 
 def test_grid_thresholds_scale_with_resolution():
     """分辨率减半 → 横向尺度（slot_tol / max_width）跟列距减半，
     min_score 跟框高减半。换书不重标这几个数**不报错、只静默退化**。"""
-    from open_guji_cv.utils.peak_line_search import (
-        GRID_MAX_WIDTH, GRID_MIN_SCORE, GRID_REF_FRAME_H, GRID_REF_PITCH, GRID_SLOT_TOL,
+    from open_guji_cv.seg.grid import (
+        GRID_MAX_WIDTH,
+        GRID_MIN_SCORE,
+        GRID_REF_FRAME_H,
+        GRID_REF_PITCH,
+        GRID_SLOT_TOL,
         grid_thresholds,
     )
     half = grid_thresholds(GRID_REF_PITCH / 2, GRID_REF_FRAME_H / 2)
@@ -204,8 +212,12 @@ def test_grid_thresholds_scale_with_resolution():
 
 def test_grid_thresholds_accepts_one_prior_at_a_time():
     """只给列距 → 只换横向两个；只给框高 → 只换 min_score。缺哪个留哪个的缺省。"""
-    from open_guji_cv.utils.peak_line_search import (
-        GRID_MIN_SCORE, GRID_REF_FRAME_H, GRID_REF_PITCH, GRID_SLOT_TOL, grid_thresholds,
+    from open_guji_cv.seg.grid import (
+        GRID_MIN_SCORE,
+        GRID_REF_FRAME_H,
+        GRID_REF_PITCH,
+        GRID_SLOT_TOL,
+        grid_thresholds,
     )
     only_pitch = grid_thresholds(col_pitch=GRID_REF_PITCH * 2)
     assert only_pitch["slot_tol"] == GRID_SLOT_TOL * 2
@@ -240,7 +252,7 @@ def test_stretched_frame_pair_pushes_far_slots_out_of_tolerance():
     missed = [i for i, ln in enumerate(lines) if ln is None]
     assert missed, "拉伸的版框对应当让末几槽验不上"
     # 漂移线性累积：最先失败的槽，其理论漂移已超出容差
-    from open_guji_cv.utils.peak_line_search import GRID_SLOT_TOL
+    from open_guji_cv.seg.grid import GRID_SLOT_TOL
     assert (stretched - PITCH) * missed[0] > GRID_SLOT_TOL
     # 而正确的版框对全槽验得上
     good_b = next(r for r in pool if abs(r.position - XS_ALL[-1]) <= 2)

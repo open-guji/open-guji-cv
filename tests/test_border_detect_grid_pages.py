@@ -50,7 +50,7 @@ def test_grid_pages_empty_not_in_params_dump():
 
 
 def _res(xs, width=2300, height=3000):
-    from open_guji_cv.utils.border_geometry import BorderDetectionResult, HLine, VLine
+    from open_guji_cv.seg.frame_types import BorderDetectionResult, HLine, VLine
     h = HLine(y_at_right=300.0, slope=0.0, kind="top")
     return BorderDetectionResult(width=width, height=height, top=h, bottom=h,
                                  verticals=[VLine(x_at_top=float(x), slope=0.0) for x in xs])

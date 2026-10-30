@@ -53,7 +53,8 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.utils.border_geometry import HLine, detect_borders  # noqa: E402
+from open_guji_cv.books.siku_zongmu.border import detect_borders  # noqa: E402
+from open_guji_cv.seg.frame_types import HLine  # noqa: E402
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 GOLD = ROOT.parent / "open-guji-dataset" / "border-detection" / "samples"
 
@@ -186,7 +187,7 @@ def coherence(binm, A, w, h, xs, off):
 
 def geom_stats(book, pages):
     """在清楚的页上量版框几何：内框线宽 / 外条宽 / 内外间距（近沿与外延两种口径）。"""
-    from open_guji_cv.utils.border_geometry import VLine  # noqa: F401
+    from open_guji_cv.seg.frame_types import VLine  # noqa: F401
     acc = {k: [] for k in ("top", "bottom", "vert")}
     for page in pages:
         g = json.loads((GOLD / f"{book}_{page}.json").read_text(encoding="utf-8"))

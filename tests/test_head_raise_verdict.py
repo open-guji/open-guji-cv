@@ -1,7 +1,7 @@
 """人裁逐列抬头（`lookup.resolved_head_raise` → `border_detect.apply_head_raise_verdicts`）。"""
 from open_guji_cv.steps.border_detect import apply_head_raise_verdicts
-from open_guji_cv.utils.border_geometry import (HR_DEFAULT_PAIR_GAP, BorderDetectionResult, HeadRaiseBorder,
-                                                HLine, VLine)
+from open_guji_cv.books.siku_zongmu.border import HR_DEFAULT_PAIR_GAP
+from open_guji_cv.seg.frame_types import BorderDetectionResult, HeadRaiseBorder, HLine, VLine
 
 
 def _res(head_raise):

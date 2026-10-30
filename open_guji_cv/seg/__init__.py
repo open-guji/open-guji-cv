@@ -15,5 +15,7 @@
 - `cut_select`：U-Net 切点裁判与引导缝（自带权重指纹，缺 torch 时退回旧规则）；
 - `frame_types`：边框结果的数据类型（右上原点的横线、竖线、抬头框、整页结果）；
 - `lines`：投影找峰（半高宽匹配度）、位置＋角度联合搜一条直线、整页找竖线与上下框线（原 `utils/peak_line_search`
-  的通用部分；网格模式先留在那里，等 `border_geometry` 的殿本部分一起搬）。
+  的前半）；
+- `grid`：网格模式，列数已知、列距均匀时逐槽验线、缺槽插值（原 `utils/peak_line_search` 的后半，北行日錄与殿本都用）；
+- `polyline`：界行按弯度拟直线或三段折线（原 `utils/border_geometry` 的一段）。
 """
