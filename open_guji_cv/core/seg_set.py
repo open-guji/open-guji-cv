@@ -35,9 +35,15 @@ def seg_set_of(book) -> str:
     explicit = getattr(book, "seg_set", None)
     if explicit:
         return explicit
-    return PIPELINE_SEG_SET.get(book.default_pipeline_id(), "siku_zongmu")
+    pid = getattr(book, "pipeline", None)
+    if not pid:
+        f = getattr(book, "default_pipeline_id", None)
+        pid = f() if callable(f) else None
+    return PIPELINE_SEG_SET.get(pid, "siku_zongmu")
 
 
 def series_modules(book, step_id: str) -> tuple[str, ...]:
     """本册在这一步额外参与指纹的套书模块；搬家前恒为空。"""
+    if not SERIES_MODULES:          # 搬家前：不必解析管线（code_hash 每页都调）
+        return ()
     return SERIES_MODULES.get((seg_set_of(book), step_id), ())
