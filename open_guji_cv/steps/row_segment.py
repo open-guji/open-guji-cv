@@ -568,8 +568,8 @@ class RowSegmentParams(BaseModel):
     roster_glyph_refine: bool = False
     roster_glyph_db: str = ""            # 空 = 工作区 output/glyph.db（core.workspace.glyph_db_path）
     roster_glyph_fingerprint: str = ""   # 库内容指纹，开关开着时自动填；soft：库变只记漂移不判过期（同 glyph_match）
-    #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：整理本逐列本与页钉位表
-    #: （语料目录下的文件名，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
+    #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：殆知阁源记录目录
+    #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
     #: 殿本的职名页实现不认，关时产物逐字节不变。
     roster_ref_corpus: str = ""
     roster_ref_pins: str = ""
@@ -666,8 +666,10 @@ class RowSegmentParams(BaseModel):
         if self.roster_ref_corpus and self.roster_ref_pins and not self.roster_ref_fingerprint:
             from ..core.workspace import corpus_path
             from .context_decide import corpus_fingerprint
+            dz = corpus_path(self.roster_ref_corpus)
+            files = sorted(dz.glob("[0-9][0-9][0-9][0-9].jsonl")) if dz.is_dir() else [dz]
             object.__setattr__(self, "roster_ref_fingerprint", corpus_fingerprint(
-                [str(corpus_path(self.roster_ref_corpus)), str(corpus_path(self.roster_ref_pins))]))
+                [*map(str, files), str(corpus_path(self.roster_ref_pins))]))
         return self
 
     @model_serializer(mode="wrap")
@@ -1150,7 +1152,17 @@ class RowSegmentStep(Step):
             from ..core.workspace import corpus_path
             refs = ref_lines_of(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
             if refs is not None:
-                kw["refs"] = refs
+                kw["refs"] = [refs.get(gc.col) for gc in admitted]
+                # 按整理本重切前先丢印里的块（同下面切完后的印过滤）：印文笔画会被数成字，字数就对不上
+                seals_pre = _page_seals(ctx, page)
+                drops = []
+                for gc, (im, _cx) in zip(admitted, imgs):
+                    wrec = wins.column(gc.col)
+                    mp = (None if wrec is None else
+                          ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                       wrec.top_y, wrec.bottom_y))
+                    drops.append(_in_seal(seals_pre, mp, im, p.ink_threshold))
+                kw["drops"] = drops
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}

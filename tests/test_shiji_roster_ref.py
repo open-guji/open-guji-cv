@@ -43,11 +43,12 @@ def _run(n_title, n_name, ref):
 
 
 def test_parse_ref():
-    assert SJ.parse_ref("　　翰林院編修今任監察御史<臣|>沈廷芳") == (11, 3)
-    assert SJ.parse_ref("　　翰　　林　　院　　檢　　討<臣|>萬松齡") == (5, 3)
-    assert SJ.parse_ref("　　　監理") == (2, -1)                       # 整列普通字
-    assert SJ.parse_ref("　（字位過密　無法显示）　<臣|>鄂爾泰") is None   # 整理本自己缺字
-    assert SJ.parse_ref("和碩和親王<臣|>𢎞晝等上言<臣|>等奉") is None     # 正文进表页，不是职名列
+    assert SJ.parse_ref("　　翰林院編修今任監察御史<臣|>沈廷芳") == [11, 3]
+    assert SJ.parse_ref("　　翰　　林　　院　　檢　　討<臣|>萬松齡") == [5, 3]
+    assert SJ.parse_ref("總纂官<臣|>紀昀<臣|>陸錫熊<臣|>孫士毅") == [3, 2, 3, 3]   # 一列几位
+    assert SJ.parse_ref("　　　監理") == [2]                                 # 整列普通字
+    assert SJ.parse_ref("") == []                                            # 这一列不该有字
+    assert SJ.parse_ref("（字位過密無法显示）<臣|>鄂爾泰") is None              # 整理本自己没录
 
 
 def test_dense_title_is_recut_to_ref_count():
@@ -78,17 +79,56 @@ def test_plain_column_without_chen_is_split_to_ref_count():
     assert len(rc.items) == 5
 
 
-def test_page_with_other_column_count_than_ref_is_untouched():
-    cols = [(_col(9, 3), (10.0, 170.0)) for _ in range(3)]
-    plain = SJ.segment_roster_page(cols)
-    out = SJ.segment_roster_page(cols, refs=["甲乙<臣|>丙"])      # 1 行 ≠ 3 列
-    assert [len(c.items) for c in out] == [len(c.items) for c in plain]
+def test_empty_ref_column_drops_everything():
+    cols = [(_col(4, 3), (10.0, 170.0)) for _ in range(2)]
+    out = SJ.segment_roster_page(cols, refs=["", None])          # 整理本说第一列空（印章、墨污）
+    assert out[0].items == [] and "roster_ref_empty" in out[0].flags
+    assert out[1].items                                           # None＝不知道，不动
 
 
-def test_page_ref_lines_reads_pins_and_block(tmp_path):
-    corpus = tmp_path / "c.txt"
-    corpus.write_text("#@ H1\n甲乙<臣|>丙\n\n丁戊<臣|>己\n#@ H2\n庚\n", encoding="utf-8")
+def test_page_ref_lines_reads_daizhige_record_by_column(tmp_path):
+    rec = {"id": "0243-0049", "geom": {"ncol": 8}, "cols": [
+        {"no": 8, "runs": [{"t": "text", "start": 2, "s": "翰林院"},
+                           {"t": "note", "start": 5, "r": [[0, "臣"]], "l": []},
+                           {"t": "text", "start": 6, "s": "萬松齡"}]},
+        {"no": 10, "runs": [{"t": "text", "start": 2, "s": "史記目錄"}]},
+        {"no": 1, "runs": [{"t": "text", "start": 2, "s": "前半葉"}]}]}
+    (tmp_path / "0243.jsonl").write_text(json.dumps(rec, ensure_ascii=False) + "\n", encoding="utf-8")
     pins = tmp_path / "p.jsonl"
-    pins.write_text(json.dumps({"book": "01", "page": 7, "head": "H1"}) + "\n", encoding="utf-8")
-    assert SJ.page_ref_lines(corpus, pins, "01", 7) == ["甲乙<臣|>丙", "丁戊<臣|>己"]
-    assert SJ.page_ref_lines(corpus, pins, "01", 8) is None
+    pins.write_text(json.dumps({"book": "01", "page": 47, "head": "0243-0049 243-12b h1"}) + "\n", encoding="utf-8")
+    got = SJ.page_ref_lines(tmp_path, pins, "01", 47)
+    assert got[1] == "翰林院<臣|>萬松齡" and got[3] == "史記目錄"
+    assert got[2] == "" and len(got) == 8                          # 后半叶 8 列，空列给空串
+    assert SJ.page_ref_lines(tmp_path, pins, "01", 48) is None
+
+
+def test_three_chens_glued_to_neighbours():
+    """一列三位（总纂官三人），每个小「臣」都和上下字粘成一块：靠「左半边没墨」认出三个臣。"""
+    g = np.full((H, 180), 255, np.uint8)
+    y = 100
+    _stack(g, y, 3, 75)                        # 官衔 3 字，密排
+    y += 2 * 75 + EM
+    spans = []
+    for n in (2, 3, 3):
+        _stack(g, y - 8, 1, 0, x=110, size=50, stroke=5)     # 臣，上沿压进上一字
+        g[y - 10:y + 2, 100:112] = 0                         # 和上一字粘一笔
+        y += 50
+        _stack(g, y, n, EM + 10)
+        spans.append(n)
+        y += n * (EM + 10)
+    ink, _w = SJ.prepare(g, (10.0, 170.0))
+    rc = SJ.segment_roster_column(ink, EM)
+    assert SJ.refit_column(rc, ink, "總纂官<臣|>紀昀<臣|>陸錫熊<臣|>孫士毅", chen_row=None, em=EM)
+    assert len(rc.items) == 3 + 2 + 3 + 3 + 3
+
+
+def test_bottom_rule_stripped():
+    """列底横框线（断成几截斜碎片）抹掉，末字框不往下拖到框线。"""
+    g = np.full((H, 180), 255, np.uint8)
+    _stack(g, 200, 3, EM + 30)
+    g[1900:1903, 5:70] = 0
+    g[1906:1909, 100:175] = 0
+    ink, _w = SJ.prepare(g, (10.0, 170.0))
+    out = SJ._strip_rules(ink)
+    assert not out[1890:1920].any()
+    assert out[200:700].any()
