@@ -147,7 +147,7 @@ class BorderDetectGateStep(Step):
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
         path_params=("pagetype_model_path",),
-        code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type",
+        code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.seg.frame_types", "open_guji_cv.clustering.page_type",
                    "open_guji_cv.books.siku_zongmu.column_pair_merge"),
     )
 

@@ -98,7 +98,7 @@ class ColumnWarpStep(Step):
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
-        code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry",
+        code_deps=("open_guji_cv.utils.column_projection", "open_guji_cv.utils.border_geometry", "open_guji_cv.seg.frame_types",
                    "open_guji_cv.utils.column_triage"),
         # 双线版框剥第二道读册配置（2026-09-26）——改 yaml 要让列图过期
         book_deps=("frame_layers", "outer_gap"),
