@@ -21,15 +21,14 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .peak_line_search import (
+from ..seg.lines import (
     LineMatch,
     find_horizontal_border,
     find_vertical_lines,
-    find_vertical_lines_grid,
-    grid_thresholds,
     half_height_score_at,
     local_maxima,
 )
+from .peak_line_search import find_vertical_lines_grid, grid_thresholds
 
 
 from ..seg.frame_types import BorderDetectionResult, HeadRaiseBorder, HLine, VLine  # noqa: F401  数据类型在 seg，这里转出口给旧引用

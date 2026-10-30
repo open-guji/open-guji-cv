@@ -92,6 +92,12 @@ _SP_FT = ("切分模块化第 3 步（三）：border_geometry 里的边框结�
           "原样拆进 seg/frame_types.py，border_geometry 从那里 import 并转出口；用到 border_geometry 的三步把 frame_types 列进 code_deps，"
           "products 与北行日錄 line_layout 改从 seg 引；算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 7111864），2026-10-30")
 
+_SP_PLS = ("切分模块化第 3 步（四）：peak_line_search 拆成两块——投影找峰、位置＋角度联合搜索、整页找竖线／上下框线（含粗外条吸内框、"
+           "胖假峰换线、下框救援，这几样在通用函数里一直开着）原样拆进 seg/lines.py；网格模式（GRID_*、grid_thresholds、"
+           "select_frame_pair、verify_slots、lattice_frame_pair、find_vertical_lines_grid 等）留在 utils/peak_line_search，"
+           "从 seg.lines import；border_geometry 与 locate_gutter 改 import，border_detect 把 seg.lines 列进 code_deps；"
+           "算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 289ef4b），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -271,6 +277,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d33d045963883e8b4f53e9d37e2b50b11e7ba4288da96850628dca8da80d4d6d",
           old="7b269c9f7a5faf1f61180e4e58c7cd56cac8691745a571adda899c5423ab368c",
           evidence=_SP_FT),
+    Equiv(module="open_guji_cv.utils.border_geometry",
+          new="eae44439b1333ab5c3ce686232c20b6292ac46d9f597875b43b7ed54a3d80019",
+          old="ddfdb066f247b0a93790fd9a1c7e8c4e497f8471b0334b417a9e939c0707782e",
+          evidence=_SP_PLS),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="3f8bc2f3e63edddab45356c10f458c9cd281602962223d366d3ff23c5cba5b08",
+          old="3a3c072df391d6e2dd7d26ce77428e4dd3370e183bebcb038cb16a793fc82dda",
+          evidence=_SP_PLS),
 )
 
 
@@ -308,6 +322,9 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
         ("open_guji_cv.utils.border_geometry", "ddfdb066f247b0a93790fd9a1c7e8c4e497f8471b0334b417a9e939c0707782e"),
         ("open_guji_cv.seg.frame_types", "910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b"))),
+    "open_guji_cv.utils.peak_line_search": ("90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890", (
+        ("open_guji_cv.utils.peak_line_search", "4d05fa1b86601288bf68b5d4ba912b61f9b09f448dc16903e3ca35cccb82539d"),
+        ("open_guji_cv.seg.lines", "322ed871071601159e4123bfdb1b4b8ffb10c07cb0616c7783c003f0e88d8e61"))),
 }
 
 

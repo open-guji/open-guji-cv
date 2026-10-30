@@ -7,15 +7,13 @@ import numpy as np
 import pytest
 
 from open_guji_cv.utils.border_geometry import detect_borders
+from open_guji_cv.seg.lines import LineMatch, find_vertical_lines, _vline_pool
 from open_guji_cv.utils.peak_line_search import (
-    LineMatch,
-    find_vertical_lines,
     find_vertical_lines_grid,
     interpolate_missing,
     is_thin_rule,
     select_frame_pair,
     verify_slots,
-    _vline_pool,
 )
 
 H, W = 600, 2400

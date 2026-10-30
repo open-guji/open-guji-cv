@@ -6,7 +6,8 @@
 import numpy as np
 
 import open_guji_cv.utils.peak_line_search as P
-from open_guji_cv.utils.peak_line_search import LineMatch, find_vertical_lines_grid, lattice_frame_pair
+from open_guji_cv.seg.lines import LineMatch
+from open_guji_cv.utils.peak_line_search import find_vertical_lines_grid, lattice_frame_pair
 
 H, W = 600, 1400
 PITCH = 133.0
