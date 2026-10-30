@@ -378,6 +378,7 @@ class Job:
                 os.killpg(self.proc.pid, signal.SIGTERM)
         self.log.close()
         tail = redact((self.dir / "run.log").read_text(encoding="utf-8", errors="replace")[-8000:])
+        self.env_failed = bool(err and err.startswith("环境："))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
         return outcome
@@ -445,6 +446,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     idle_since = time.time()
     rc = _runner_commit()
     warned = None
+    env_streak = 0                       # 连续几单环境类失败：本会话自己的毛病（令牌、网络）会让它一路失败，到 3 就暂停
     db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True, note="")
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
     try:
@@ -480,7 +482,9 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
             say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
             BOARD.publish(db, force=True)
-            outcome = Job(job, att, db, dry=dry).run()
+            jobrun = Job(job, att, db, dry=dry)
+            outcome = jobrun.run()
+            env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
             _remember_book(job["book"])
             say(f"#{job['id']} → {outcome}")
             done += 1
@@ -489,6 +493,14 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             idle_since = time.time()
             if once or only:
                 return done
+            if env_streak >= ENV_STREAK_PAUSE:
+                note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
+                say(note)
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
+                time.sleep(ENV_PAUSE_MIN * 60)
+                env_streak = 0
+                idle_since = time.time()
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
@@ -497,6 +509,8 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             pass
 
 
+ENV_STREAK_PAUSE = 3
+ENV_PAUSE_MIN = 30
 WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
 LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
 _preflight_ok_at = 0.0
