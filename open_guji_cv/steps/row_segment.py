@@ -17,7 +17,7 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..utils.cut_select import ckpt_fingerprint, get_judge
+from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..books.siku_zongmu.row_grid import fit_page_grids
 from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
                                     segment_column, slot_mask_from_occupied)
@@ -548,8 +548,8 @@ class RowSegmentParams(BaseModel):
     raise_tol: float = 2.0
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
-    seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
-    cut_judge: str = "unet"              # 候选池裁判：unet（utils/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
+    cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
     #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
@@ -699,8 +699,8 @@ class RowSegmentStep(Step):
         consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.books.siku_zongmu.row_grid", "open_guji_cv.books.siku_zongmu.jiazhu_split",
-                   "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
-                   "open_guji_cv.utils.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
+                   "open_guji_cv.utils.column_projection", "open_guji_cv.seg.seam",
+                   "open_guji_cv.seg.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
                    "open_guji_cv.books.siku_zongmu.roster_glyph", "open_guji_cv.books.siku_zongmu.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),

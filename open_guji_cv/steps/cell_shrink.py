@@ -99,7 +99,7 @@ class CellShrinkStep(Step):
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
     )
 
@@ -374,7 +374,7 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
     缝在列图坐标（每 x 一个 y，x 从格的内容窗口 x0 起）；紧框 bbox = (x0, y0, x1, y1) 也是列图
     坐标。抹白后若有整行/整列空了，紧框相应收缩——邻字拖过格线的那截笔画正是要去掉的。
     """
-    from ..utils.seam import mask_outside
+    from ..seg.seam import mask_outside
     x0, y0, x1, y1 = (int(round(v)) for v in bbox)
     if patch.shape[0] != y1 - y0 or patch.shape[1] != x1 - x0:
         # 裁片与 bbox 不对应（extractor 可能加了 padding），直接从列图重裁

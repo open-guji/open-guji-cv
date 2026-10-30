@@ -182,7 +182,7 @@ def _patch_seamcost(band=20, weight=1.0):
     挤排列里没有干净的行，但常有干净的折线；行墨代价会把锚点放到高字内部的空隙上
     （vol01:10:5:6 典/道 偏 39px），缝代价会把它放到能绕开的地方。"""
     import numpy as np
-    from open_guji_cv.utils.seam import find_seam, seam_ink
+    from open_guji_cv.seg.seam import find_seam, seam_ink
     orig_proj = RB.row_ink_projection
     orig_fit = RB.fit_row_boundaries
 
@@ -367,7 +367,7 @@ def main() -> int:
         ensure_products(bk, pages, store=st, cache=ic)
     # 与 RowSegmentStep.run_page 同一套：U-Net 裁判 + 人裁已定的切点。
     from open_guji_cv.feedback.lookup import resolved_cuts as _resolved_cuts
-    from open_guji_cv.utils.cut_select import get_judge
+    from open_guji_cv.seg.cut_select import get_judge
     book_resolved = _resolved_cuts(book)
     judge = get_judge() if p.cut_judge == "unet" else None
     rulers = Counter(); rulers_base = Counter()

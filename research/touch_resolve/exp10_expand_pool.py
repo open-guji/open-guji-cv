@@ -38,8 +38,8 @@ from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.utils.cut_select import ESCALATE_BLOB, get_judge, owner_from_seam  # noqa: E402
-from open_guji_cv.utils.seam import SEAM_BAND, find_seam, seam_ink  # noqa: E402
+from open_guji_cv.seg.cut_select import ESCALATE_BLOB, get_judge, owner_from_seam  # noqa: E402
+from open_guji_cv.seg.seam import SEAM_BAND, find_seam, seam_ink  # noqa: E402
 
 
 def unet_seam(owner: np.ndarray, y_line_local: int, band: int = 45, step: int = 2, turn: float = 0.02) -> np.ndarray | None:

@@ -11,7 +11,7 @@ from open_guji_cv.core.step import STEPS
 
 def test_moved_modules_are_gone_from_old_place_and_live_in_books():
     for new, (old, h) in code_equiv.MOVED.items():
-        assert new.startswith("open_guji_cv.books."), new
+        assert new.startswith(("open_guji_cv.books.", "open_guji_cv.seg.")), new
         assert importlib.util.find_spec(new) is not None, f"{new} 不存在"
         assert importlib.util.find_spec(old) is None, f"{old} 搬走后旧位置还留着文件"
         assert len(h) == 64

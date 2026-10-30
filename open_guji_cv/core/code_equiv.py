@@ -81,6 +81,9 @@ _MV_SJ = ("切分模块化第 2d 步：row_segment._run_roster 里职名页的 l
           "（core/seg_set.resolve；史記册取 books/shiji_wyg 的复制，其余册取到的仍是原模块），非史記册逻辑与产物不变；"
           "非史記册 23 个 Step 与闸的 code_hash 前后逐位相同，史記册的 row_segment 指纹另按自己的模块算，2026-10-30")
 
+_MV_SEG1 = ("切分模块化第 3 步（一）：seam、cut_select 从 utils/ 原样搬进共用原语库 seg/（两套以上的书在用的走缝、切点裁判），"
+            "只有 import 路径变，算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 869694b 逐步比对），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -220,6 +223,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1affc6f9cd9dcf98505b48ec3d7d248535395b94363b062f2baa4457bd6f1826",
           old="deaf1c8e1b0de1b6b791e47f7d0a90edf72811161b14493cfa1a9e9d0e5799ad",
           evidence=_MV_SJ),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="9bf54284729da3494d71a9a13547f660b679f96232fa2539d55bfaeca2018910",
+          old="69c95d3cb5fff6ceeabda2314251b443e08929e0304d4c81009830f290da5507",
+          evidence=_MV_SEG1),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="86a46b8055a48170102e1182d49c741ce2c32d0a9d015035a946b61e633261b1",
+          old="1010e8943e3f1519b71f4659d25603f5f1f00a364dfec29018e2168d29c0b822",
+          evidence=_MV_SEG1),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="93d48d4cd24d4304b223c94e3abff8c14e81de2763f46d325e9a2a0783eecc8e",
+          old="1affc6f9cd9dcf98505b48ec3d7d248535395b94363b062f2baa4457bd6f1826",
+          evidence=_MV_SEG1),
 )
 
 
@@ -228,6 +243,8 @@ ENTRIES: tuple[Equiv, ...] = (
 #: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
 #: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
 MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.seg.cut_select": ("open_guji_cv.utils.cut_select", "fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b"),
+    "open_guji_cv.seg.seam": ("open_guji_cv.utils.seam", "2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671"),
     "open_guji_cv.books.siku_zongmu.jiazhu_split": ("open_guji_cv.utils.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
     "open_guji_cv.books.siku_zongmu.roster_glyph": ("open_guji_cv.utils.roster_glyph", "84f0636a76c93b4c74dbe25919b99100ae8dce8db18e7e41561db839d5f3ab68"),
     "open_guji_cv.books.siku_zongmu.roster_segment": ("open_guji_cv.utils.roster_segment", "894c946b329304625f8db915124b62a2308affe244fbb9b301506d43d008496f"),

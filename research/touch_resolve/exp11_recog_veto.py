@@ -32,7 +32,7 @@ from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.utils.cut_select import owner_from_seam  # noqa: E402
+from open_guji_cv.seg.cut_select import owner_from_seam  # noqa: E402
 
 
 def main() -> int:
@@ -63,7 +63,7 @@ def main() -> int:
     # 与 Step3 同一套入参（verify_prod_judge.run_column 已封装），judge 传真裁判，扩池照跑。
     from open_guji_cv.core.book import load_book
     from open_guji_cv.steps.row_segment import RowSegmentParams
-    from open_guji_cv.utils.cut_select import get_judge
+    from open_guji_cv.seg.cut_select import get_judge
     from verify_prod_judge import run_column
     bk = load_book(a.book)
     rp = RowSegmentParams()
