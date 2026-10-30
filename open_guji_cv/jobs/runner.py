@@ -171,7 +171,7 @@ class Job:
     # ── 各阶段 ──
     def prep(self) -> None:
         sp = self.spec
-        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob")},
+        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
                          sort_keys=True)
         mark = HOME / "prepped.json"
         try:
@@ -187,6 +187,8 @@ class Job:
             return
         argv = ["bash", str(RUNNER_ROOT / "scripts" / "rerun_prep.sh"), sp["book"], "--cv", sp["cv"],
                 "--ws-glob", sp["ws_glob"]]
+        if sp.get("ws_repo"):
+            argv += ["--ws-repo", sp["ws_repo"]]
         ov = sp.get("book_overrides") or {}
         if "corpus" in ov:
             argv += ["--corpus", str(ov["corpus"])]

@@ -20,6 +20,7 @@
     output          {"change": 包改动名, "note": 说明, "pack": true}；永不标 main
     run             command／eval 用：[[guji 子命令, 参数…], …]，可用 {book} {ws}
     ws_glob         缺省 96mid1ogzk-*（殿本工作区）
+    ws_repo         <owner>/<repo>：这部书自己一个仓（仓根即工作区）；缺省走 guji-workspace 里 ws_glob 匹配的目录
 
 不进指纹：why、priority、output（换个包名也是同一次计算）、cv_ref（已解析成提交）。
 """
@@ -61,7 +62,7 @@ def _override_keys() -> set[str]:
     from ..core.book_config import FORBIDDEN_IN_OVERRIDE
     return {f.name for f in dataclasses.fields(BookSpec)} - FORBIDDEN_IN_OVERRIDE
 _KEYS = {"kind", "book", "cv", "cv_ref", "pipeline", "steps", "pages", "force", "no_reuse", "book_overrides",
-         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "why"}
+         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "ws_repo", "why"}
 _NOT_HASHED = ("why", "output", "cv_ref")
 
 
@@ -186,6 +187,9 @@ def normalize(raw: dict, *, resolve=None) -> dict:
     s["ws_glob"] = s.get("ws_glob") or DEFAULT_WS_GLOB
     if not re.match(r"^[A-Za-z0-9_*.-]+$", s["ws_glob"]):
         raise SpecError(f"ws_glob 不合规：{s['ws_glob']!r}")
+    s["ws_repo"] = s.get("ws_repo") or None
+    if s["ws_repo"] and not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", s["ws_repo"]):
+        raise SpecError(f"ws_repo 不合规（要 owner/repo）：{s['ws_repo']!r}")
     s["why"] = s.get("why") or None
     return s
 
