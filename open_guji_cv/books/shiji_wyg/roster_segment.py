@@ -52,6 +52,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import json
+import re
+from pathlib import Path
+
 import numpy as np
 from scipy import ndimage as ndi
 
@@ -611,7 +615,8 @@ def _glyph_refine(rc: RosterColumn, ink: np.ndarray, chen_row: float, scorer) ->
 
 
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
-                        ink_threshold: int = 128, scorer=None) -> list[RosterColumn]:
+                        ink_threshold: int = 128, scorer=None,
+                        refs: list[str] | None = None) -> list[RosterColumn]:
     """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
 
     给了 `scorer`（`roster_glyph.GlyphScorer`）就再把官衔区的连续密排段按本书字形库重切
@@ -631,4 +636,235 @@ def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]
     if scorer is not None and chen is not None:
         for rc, (ink, _w) in zip(out, prepared):
             _glyph_refine(rc, ink, chen, scorer)
+    if refs is not None:
+        # 整理本这一列的官衔／人名字数已知：几何切出的字数不符时按它重切（见本模块「按整理本字数重切」一节）。
+        # refs＝整理本这一页的各行（右→左）；按读序对上有字的列，对不上（列数≠行数）就整页不动。
+        ne = [i for i, rc in enumerate(out) if rc.items]
+        if len(ne) == len(refs):
+            for i, ref in zip(ne, refs):
+                refit_column(out[i], prepared[i][0], ref, chen_row=chen, em=ems[i])
     return out
+
+
+# ═══ 按整理本字数重切（史記文淵閣本，2026-10-30）═══════════════════════════════
+# 职名页按整理本字数重切（史記文淵閣本，2026-10-30）。
+# 
+# 为什么要整理本参与
+# ------------------
+# 写本职名页大量列是官衔密排：字压到半格高、一个挨一个，几何上没有可靠的缝，
+# `roster_segment` 只看墨迹会并字（日講官起居注 → 并成几块）或劈字。
+# 整理本（殆知阁）这一列的官衔、「臣」、人名各几个字是确定的：
+# `官衔(T 字) <臣|> 人名(M 字)`，空格只是版面间距，不占字。
+# 
+# 做法（只在几何切出的字数与整理本不符时才动，对的列一概不碰）
+# ------------------------------------------------------------
+# 1. 解析整理本这一行：官衔 T 字、人名 M 字；有「字位過密」占位的行不用（整理本自己没字）。
+# 2. 在几何结果里认「臣」：人名前面那个偏右小字。认不出就不动，交人核。
+# 3. 人名区、官衔区各自按字数 T/M 等分重切：墨量投影上走 DP，切点落在墨少处，
+#    字高偏离均匀字距的罚平方（密排列字距基本一致，写本不匀处由墨缝吸附）。
+# 4. 重切后的每块取墨的紧外框；列标 `roster_ref_refit`。
+
+PLACEHOLDER = "字位過密"
+SMOOTH = 5            # 投影平滑窗（px）
+LEN_LO, LEN_HI = 0.55, 1.6   # 每段长占均匀字距的允许范围
+SEAM_W = 1.0          # 切点处墨量的权重（投影归一到 0–1）
+LEN_W = 2.0           # 段长偏离均匀字距的罚权重
+CHEN_MAX_W = 0.62     # 「臣」宽 ≤ 此 × 列墨宽，且偏右
+
+
+def parse_ref(line: str) -> tuple[int, int] | None:
+    """整理本一行 → (官衔字数 T, 人名字数 M)；M=-1 表示整列是不带「臣」的普通字（题名、衔名等）。
+    有占位或有多处「臣」（正文进表页）就 None。"""
+    if PLACEHOLDER in line:
+        return None
+    clean = lambda s: re.sub(r"[\s　]", "", s)  # noqa: E731
+    parts = re.split(r"<臣\|>", line)
+    if len(parts) == 1:
+        t = clean(line)
+        return (len(t), -1) if t and "<" not in t else None
+    if len(parts) != 2:
+        return None
+    t, m = clean(parts[0]), clean(parts[1])
+    if not t or not m:
+        return None
+    return len(t), len(m)
+
+
+def _profile(ink: np.ndarray, y0: int, y1: int) -> np.ndarray:
+    prof = ink[y0:y1].sum(axis=1).astype(np.float64)
+    if prof.max() > 0:
+        prof /= prof.max()
+    k = np.ones(SMOOTH) / SMOOTH
+    return np.convolve(prof, k, mode="same")
+
+
+def equal_cuts(prof: np.ndarray, n: int) -> list[int]:
+    """把长 L 的投影分成 n 段：DP 选 n-1 个切点（相对位置），返回 n+1 个边界 [0, …, L]。"""
+    L = len(prof)
+    if n <= 1:
+        return [0, L]
+    L0 = L / n
+    lo, hi = max(1, int(LEN_LO * L0)), max(2, int(LEN_HI * L0))
+    INF = 1e18
+    # best[k][y]：前 k 段恰好在 y 处结束的最小代价
+    best = np.full((n + 1, L + 1), INF)
+    back = np.zeros((n + 1, L + 1), dtype=np.int32)
+    best[0, 0] = 0.0
+    seam = np.concatenate([prof, [0.0]])
+    for k in range(1, n + 1):
+        for y in range(k * lo, min(L, k * hi) + 1):
+            a, b = max(0, y - hi), y - lo
+            if b < a:
+                continue
+            prev = best[k - 1, a:b + 1]
+            lens = y - np.arange(a, b + 1)
+            cost = prev + LEN_W * ((lens - L0) / L0) ** 2
+            j = int(np.argmin(cost))
+            c = cost[j]
+            if c >= INF:
+                continue
+            best[k, y] = c + (SEAM_W * seam[y] if k < n else 0.0)
+            back[k, y] = a + j
+    if best[n, L] >= INF:
+        return [int(round(i * L0)) for i in range(n + 1)]
+    cuts = [L]
+    y = L
+    for k in range(n, 0, -1):
+        y = int(back[k, y])
+        cuts.append(y)
+    return cuts[::-1]
+
+
+def _tight_item(ink: np.ndarray, y0: int, y1: int) -> RosterItem | None:
+    sub = ink[y0:y1]
+    ys, xs = np.nonzero(sub)
+    if not len(ys):
+        return None
+    return RosterItem(y0=int(y0 + ys.min()), x0=int(xs.min()), y1=int(y0 + ys.max() + 1),
+                      x1=int(xs.max() + 1))
+
+
+def _resplit(ink: np.ndarray, y0: int, y1: int, n: int) -> list[RosterItem] | None:
+    if y1 - y0 < n * 4:
+        return None
+    cuts = equal_cuts(_profile(ink, y0, y1), n)
+    out = [_tight_item(ink, y0 + a, y0 + b) for a, b in zip(cuts, cuts[1:])]
+    return None if any(it is None for it in out) else out  # type: ignore[return-value]
+
+
+def _find_chen(items: list[RosterItem], col_x0: int, col_x1: int, n_tail: int) -> int | None:
+    """从后往前数：人名 n_tail 字之前那个偏右小字就是「臣」。几何已切对人名字数时才可靠，
+    否则在下半列找最靠下的偏右小字。"""
+    width = col_x1 - col_x0
+    cx = col_x0 + 0.5 * width
+
+    def small_right(it: RosterItem) -> bool:
+        return (it.kind == "char" and it.x1 - it.x0 <= CHEN_MAX_W * width
+                and (it.x0 + it.x1) / 2 > cx)
+
+    if len(items) > n_tail and small_right(items[-n_tail - 1]):
+        return len(items) - n_tail - 1
+    cand = [i for i, it in enumerate(items) if small_right(it)]
+    return cand[-1] if cand else None
+
+
+def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
+                 chen_row: float | None = None, em: float | None = None) -> bool:
+    """字数与整理本不符的列按整理本重切；返回是否改了。改不了（认不出臣、切不动）原样留着。
+    `chen_row`：全页「臣」行 y（列图坐标）。列里没有自成一块的「臣」（和邻字粘住）时，
+    按它在臣行处补一块「臣」，官衔、人名从两侧切。"""
+    spec = parse_ref(ref_line)
+    if spec is None or not rc.items:
+        return False
+    t, m = spec
+    top = min(it.y0 for it in rc.items)
+    bottom = max(it.y1 for it in rc.items)
+    if m < 0:                                   # 整列普通字：不分官衔人名，全列等分
+        if len(rc.items) == t:
+            return False
+        got = _resplit(ink, top, bottom, t)
+        if got is None:
+            return False
+        rc.items = got
+        rc.items = [it for it in rc.items]
+        rc.flags = [f for f in rc.flags if f != "roster_jiazhu"]
+        if "roster_ref_refit" not in rc.flags:
+            rc.flags.append("roster_ref_refit")
+        return True
+    if len(rc.items) == t + 1 + m and all(it.kind == "char" for it in rc.items):
+        return False
+    xs0 = min(it.x0 for it in rc.items)
+    xs1 = max(it.x1 for it in rc.items)
+    ci = _find_chen(rc.items, xs0, xs1, m)
+    if ci is None:
+        if chen_row is None or em is None:
+            return False
+        y0, y1 = int(chen_row), int(chen_row + 0.75 * em)
+        chen = _tight_item(ink, y0, y1)
+        if chen is None:
+            return False
+        title_old = [it for it in rc.items if it.y1 <= chen.y0 + 0.3 * em]
+        names_old = [it for it in rc.items if it.y0 >= chen.y1 - 0.3 * em]
+        if not title_old:
+            return False
+    else:
+        chen = rc.items[ci]
+        title_old, names_old = rc.items[:ci], rc.items[ci + 1:]
+    names, title = names_old, title_old
+    redo = ci is None or any(it.kind != "char" for it in rc.items)
+    if len(names_old) != m or redo:
+        got = _resplit(ink, names_old[0].y0 if names_old else chen.y1, bottom, m)
+        if got is None:
+            return False
+        names = got
+    if len(title_old) != t or redo:
+        got = _resplit(ink, top, title_old[-1].y1 if title_old else chen.y0, t)
+        if got is None:
+            return False
+        title = got
+    rc.items = [*title, chen, *names]
+    rc.flags = [f for f in rc.flags if f not in ("roster_jiazhu", "roster_dense_guess")]
+    if "roster_ref_refit" not in rc.flags:
+        rc.flags.append("roster_ref_refit")
+    return True
+
+
+def page_ref_lines(corpus_file: str | Path, pins_file: str | Path, book: str, page: int) -> list[str] | None:
+    """这一页在整理本里的各行（右→左，去掉空行）。`pins_file` 每行 {book, page, head}，`corpus_file`
+    里 `#@ <head>` 起一块；钉位或块缺失返回 None（该页不做整理本重切）。"""
+    pins = _load_pins(str(pins_file))
+    head = pins.get((str(book), int(page)))
+    if not head:
+        return None
+    blocks = _load_blocks(str(corpus_file))
+    lines = blocks.get(head)
+    return [ln for ln in lines if ln.strip()] if lines else None
+
+
+_PINS_CACHE: dict[str, dict] = {}
+_BLOCKS_CACHE: dict[str, dict] = {}
+
+
+def _load_pins(path: str) -> dict[tuple[str, int], str]:
+    if path not in _PINS_CACHE:
+        out: dict[tuple[str, int], str] = {}
+        for ln in Path(path).read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                r = json.loads(ln)
+                out[(str(r["book"]), int(r["page"]))] = str(r["head"]).strip()
+        _PINS_CACHE[path] = out
+    return _PINS_CACHE[path]
+
+
+def _load_blocks(path: str) -> dict[str, list[str]]:
+    if path not in _BLOCKS_CACHE:
+        blocks: dict[str, list[str]] = {}
+        cur = None
+        for ln in Path(path).read_text(encoding="utf-8").split("\n"):
+            if ln.startswith("#@ "):
+                cur = ln[3:].strip()
+                blocks[cur] = []
+            elif cur is not None:
+                blocks[cur].append(ln)
+        _BLOCKS_CACHE[path] = blocks
+    return _BLOCKS_CACHE[path]

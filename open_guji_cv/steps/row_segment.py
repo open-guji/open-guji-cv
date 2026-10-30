@@ -568,6 +568,12 @@ class RowSegmentParams(BaseModel):
     roster_glyph_refine: bool = False
     roster_glyph_db: str = ""            # 空 = 工作区 output/glyph.db（core.workspace.glyph_db_path）
     roster_glyph_fingerprint: str = ""   # 库内容指纹，开关开着时自动填；soft：库变只记漂移不判过期（同 glyph_match）
+    #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：整理本逐列本与页钉位表
+    #: （语料目录下的文件名，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
+    #: 殿本的职名页实现不认，关时产物逐字节不变。
+    roster_ref_corpus: str = ""
+    roster_ref_pins: str = ""
+    roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -655,6 +661,15 @@ class RowSegmentParams(BaseModel):
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
         return self
 
+    @model_validator(mode="after")
+    def _fill_roster_ref_fingerprint(self):
+        if self.roster_ref_corpus and self.roster_ref_pins and not self.roster_ref_fingerprint:
+            from ..core.workspace import corpus_path
+            from .context_decide import corpus_fingerprint
+            object.__setattr__(self, "roster_ref_fingerprint", corpus_fingerprint(
+                [str(corpus_path(self.roster_ref_corpus)), str(corpus_path(self.roster_ref_pins))]))
+        return self
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump（同 `border_detect`）：没开的书 `params_hash` 与加这些字段之前（v0.4.5）逐位相同，
@@ -666,6 +681,9 @@ class RowSegmentParams(BaseModel):
                 d.pop("colgold_fingerprint", None)
             if not self.yolo_merge:
                 for k in ("yolo_merge", "yolo_model_dir", "yolo_fingerprint", "yolo_conf", "yolo_cover", "yolo_max_h"):
+                    d.pop(k, None)
+            if not (self.roster_ref_corpus and self.roster_ref_pins):
+                for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
@@ -705,7 +723,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),
         soft_params=("roster_glyph_fingerprint",),
-        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior"),
+        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins"),
     )
 
     def book_params(self, p: "RowSegmentParams", ctx: RunContext) -> "RowSegmentParams":
@@ -1126,8 +1144,15 @@ class RowSegmentStep(Step):
         if p.roster_glyph_refine:
             # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
             scorer = load_scorer(p.roster_glyph_db, p.roster_glyph_fingerprint)
+        kw = {}
+        ref_lines_of = getattr(_impl("roster_segment"), "page_ref_lines", None)
+        if p.roster_ref_corpus and p.roster_ref_pins and ref_lines_of is not None:
+            from ..core.workspace import corpus_path
+            refs = ref_lines_of(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+            if refs is not None:
+                kw["refs"] = refs
         results = dict(zip((gc.col for gc in admitted),
-                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer)))
+                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
         seals = _page_seals(ctx, page)
         out: list[ColumnCells] = []
