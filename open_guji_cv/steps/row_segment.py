@@ -699,7 +699,7 @@ class RowSegmentStep(Step):
         consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.books.siku_zongmu.row_grid", "open_guji_cv.books.siku_zongmu.jiazhu_split",
-                   "open_guji_cv.utils.column_projection", "open_guji_cv.seg.seam",
+                   "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column", "open_guji_cv.seg.seam",
                    "open_guji_cv.seg.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
                    "open_guji_cv.books.siku_zongmu.roster_glyph", "open_guji_cv.books.siku_zongmu.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",

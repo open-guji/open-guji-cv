@@ -3,20 +3,14 @@ import cv2
 import numpy as np
 
 from open_guji_cv.seg.frame_types import BorderDetectionResult, HeadRaiseBorder, HLine, VLine
-from open_guji_cv.utils.column_projection import (
-    BOTTOM_PAD,
+from open_guji_cv.books.siku_zongmu.column import (
     column_border_trim,
-    column_bounds,
-    column_profile,
-    column_row_profile,
-    column_text_band,
-    denoise_column,
-    page_column_windows,
     strip_column_borders,
     strip_column_rules,
-    warp_column,
     warp_page_columns,
 )
+from open_guji_cv.seg.profile import column_profile, column_row_profile, column_text_band, denoise_column
+from open_guji_cv.seg.warp import BOTTOM_PAD, column_bounds, page_column_windows, warp_column
 
 H, W = 200, 160
 
@@ -308,7 +302,7 @@ def test_warp_column_three_segment_stacks_strips_seamlessly():
     且一条随折线弯的竖直墨线在列图里必须变成一根直的竖线。"""
     import numpy as np
     from open_guji_cv.seg.frame_types import VLine
-    from open_guji_cv.utils.column_projection import warp_column
+    from open_guji_cv.seg.warp import warp_column
     w, h = 800, 1500
     gray = np.full((h, w), 255, np.uint8)
     # 左边线折线：中段往左鼓 20px；右边线直

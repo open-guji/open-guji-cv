@@ -7,7 +7,7 @@ from open_guji_cv.core.step import RunContext
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.core.spec import column_key
-from open_guji_cv.utils.column_projection import column_text_band
+from open_guji_cv.seg.profile import column_text_band
 ctx = RunContext(load_book("vol02"), ProductStore(), ImageCache(), log=lambda s: None)
 rep = json.load(open(sys.argv[1])); out = []
 for x in [x for x in rep if "dy" in x and abs(x["dy"]) > 3]:

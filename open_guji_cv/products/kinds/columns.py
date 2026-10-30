@@ -20,7 +20,7 @@ class BorderTrim(BaseModel):
 
 
 class ColumnTriage(BaseModel):
-    """这一列清得「拿得准还是拿不准」（2026-09-17，见 utils/column_triage.py）。
+    """这一列清得「拿得准还是拿不准」（2026-09-17，见 books/siku_zongmu/column_triage.py）。
 
     Step2 此前只输出「削了几行」，把**拿得准与拿不准的区别**丢掉了：两种列在
     产物里长得一模一样，人不知道该复核哪些。这里显式记下来，供审阅台按类抽样、

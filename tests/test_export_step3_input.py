@@ -90,7 +90,7 @@ def test_side_floor_is_measured_on_the_raw_column_not_the_cleaned_one():
     `clean` 列（最高 0.088）还低。要是有人把 `side_floor` 改成量清理后的图，
     这条会响。
     """
-    from open_guji_cv.utils.column_projection import clean_column
+    from open_guji_cv.books.siku_zongmu.column import clean_column
     rng = np.random.default_rng(1)
     col = np.full((400, 120), 255, np.uint8)
     for y in range(20, 380, 40):

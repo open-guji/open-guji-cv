@@ -13,7 +13,8 @@ import pytest
 
 from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
 from open_guji_cv.seg.frame_types import HLine, VLine
-from open_guji_cv.utils.column_projection import ColumnWindow, refine_top_by_frame
+from open_guji_cv.books.siku_zongmu.column import refine_top_by_frame
+from open_guji_cv.seg.warp import ColumnWindow
 
 W, H = 300, 400
 RAW_L, RAW_R = 50, 150            # 列在原图里的 x 范围

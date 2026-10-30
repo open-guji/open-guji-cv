@@ -152,9 +152,8 @@ def strip_trailing_blank(row_prof: np.ndarray, eps: float = 0.02) -> np.ndarray:
 
 def triage_column(gray: np.ndarray) -> dict:
     """一列矫正图（**清理前**）→ 分诊结果。供 Step2、审阅台、评测共用。"""
-    from .column_projection import (column_profile, column_row_profile,
-                                     column_text_band, denoise_column,
-                                     strip_column_rules)
+    from .column import strip_column_rules
+    from ...seg.profile import column_profile, column_row_profile, column_text_band, denoise_column
     dn = denoise_column(gray)
     band = column_text_band(dn)
     sc = side_class(column_profile(dn), band)

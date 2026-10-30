@@ -10,7 +10,7 @@ import json
 import numpy as np
 import pytest
 
-from open_guji_cv.utils.locate_gutter import locate_gutter
+from open_guji_cv.seg.locate_gutter import locate_gutter
 
 
 def spread(*, w=2400, h=1600, n=8, pitch=110, gutter=120, frame=60, shift=0,

@@ -45,13 +45,9 @@ from ..core.spec import page_key
 from ..core.step import RunContext
 from ..errors import ImageMissing, ProductMissing
 from ..products.store import ProductStore
-from ..utils.column_projection import (
-    column_row_profile,
-    column_text_band,
-    denoise_column,
-    page_column_windows,
-    strip_column_rules,
-)
+from ..books.siku_zongmu.column import strip_column_rules
+from ..seg.profile import column_row_profile, column_text_band, denoise_column
+from ..seg.warp import page_column_windows
 from ..utils.preclean import effective_raw_path
 from ..utils.image_io import imread as cv_imread
 

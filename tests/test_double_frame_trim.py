@@ -2,7 +2,7 @@
 """双线版框：剥第二道 / 按 Step1 内框位置剥贴字的内框线（column_projection，2026-09-26）。"""
 import numpy as np
 
-from open_guji_cv.utils.column_projection import clean_column, column_border_trim
+from open_guji_cv.books.siku_zongmu.column import clean_column, column_border_trim
 
 
 def _col(h=400, w=120):
@@ -90,7 +90,7 @@ def test_worn_inner_line_uses_step1_position_for_extent():
 
 def test_inner_vertical_bar_next_to_edge_rule_is_outside_band():
     # 页边列：外框贴边、内框是离边十几像素的一条孤立竖线（vol02 p73c1）
-    from open_guji_cv.utils.column_projection import column_text_band
+    from open_guji_cv.seg.profile import column_text_band
     img = np.full((240, 200), 255, np.uint8)
     img[:, 196:200] = 0                    # 贴边的外框
     img[:, 180:186] = 0                    # 内框竖线，两侧白

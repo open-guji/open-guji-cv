@@ -219,7 +219,7 @@ class ColumnGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
-        code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.utils.column_projection",
+        code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column",
                    "open_guji_cv.books.siku_zongmu.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹

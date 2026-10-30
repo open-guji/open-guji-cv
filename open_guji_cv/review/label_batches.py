@@ -422,7 +422,7 @@ def build_column_end(book: str, n: int = 240, batch_id: str | None = None, pages
     from ..eval.colgeom import current_geom
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    from ..utils.column_projection import column_text_band, denoise_column
+    from ..seg.profile import column_text_band, denoise_column
     from ..utils.image_io import imread as cv_imread
     import cv2
     store = store or ProductStore()
