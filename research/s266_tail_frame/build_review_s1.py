@@ -39,7 +39,7 @@ def draw_resplit(pg):
     """按 crop_recipe_v2 重切后的图 + 现役 Step1（不含任何版心代码）的分列。"""
     sys.path.insert(0, str(ROOT))
     from open_guji_cv.core.book import load_book
-    from open_guji_cv.utils.border_geometry import detect_borders
+    from open_guji_cv.books.siku_zongmu.border import detect_borders
     bk = load_book("vol03")
     im = cv2.imread(str(S / "resplit" / "out" / f"{pg}.png")); H, W = im.shape[:2]
     r = detect_borders(cv2.cvtColor(im, cv2.COLOR_BGR2GRAY), expected_cols=bk.expected_cols, book_bottom_gap=bk.bottom_gap,

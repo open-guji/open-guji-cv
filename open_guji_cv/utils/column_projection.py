@@ -25,7 +25,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from .border_geometry import BorderDetectionResult, HLine, VLine
+from ..seg.frame_types import BorderDetectionResult, HLine, VLine
 
 
 def column_warp_matrix(page_width: int, left: VLine, right: VLine,

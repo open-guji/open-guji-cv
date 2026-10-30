@@ -213,7 +213,7 @@ def calibrate(book, store, pages: list[int] | None = None,
                     if rw is not None else "闸2 产物不足，无参照"))
 
     if with_bottom_gap:
-        from ...utils.border_geometry import measure_book_bottom_gap
+        from .border import measure_book_bottom_gap
         grays = []
         for pg in pgs:
             try:

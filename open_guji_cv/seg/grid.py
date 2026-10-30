@@ -1,15 +1,15 @@
 """版框线的网格模式（列数已知、列距均匀 → 逐槽验线、缺槽补线）。
 
-2026-10-30 切分模块化第 3 步：投影找峰、位置＋角度联合搜索、整页找竖线／上下框线这些通用部分拆进了
-`open_guji_cv/seg/lines.py`，这里只留网格模式。网格模式先留在 `utils/`，等 `border_geometry` 里殿本那块
-一起搬进套书目录（`border_geometry` 现在还在 `utils/`，从这里 import）。
+原是 `utils/peak_line_search` 的后半，2026-10-30 切分模块化第 3 步原样搬进 `seg/`（通用部分在 `seg/lines.py`）。
+放在原语库而不是殿本目录：北行日錄刻本整书走网格模式（`column_grid`），殿本是逐页点名（`column_grid_pages`），
+两套书都在用。下面 GRID_* 是在北行日錄上标定的绝对像素，换书用 `grid_thresholds()` 按列距／框高换算。
 """
 
 from __future__ import annotations
 
 import numpy as np
 
-from ..seg.lines import (
+from .lines import (
     DEFAULT_ALPHA,
     DEFAULT_HYST,
     LineMatch,

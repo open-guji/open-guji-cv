@@ -148,7 +148,7 @@ def crop_top_for(book: str, page: int, after_rescue: bool) -> float | None:
         return None
     h, w = gray.shape
     if after_rescue:
-        from open_guji_cv.utils.border_geometry import detect_borders as _cur
+        from open_guji_cv.books.siku_zongmu.border import detect_borders as _cur
         bottom = _cur(gray, expected_cols=9, book_bottom_gap=BOOK_GAP.get(book)).bottom
     else:
         bottom = _PREFIX_MOD.detect_borders(gray, expected_cols=9).bottom

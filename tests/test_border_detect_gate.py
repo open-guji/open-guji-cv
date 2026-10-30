@@ -117,7 +117,7 @@ def test_bend_w80_uses_same_constant_as_detection():
     """闸1的 w80 阈值必须与探测阶段判「单条线跑飞」用的是同一个常量——
     不各写一份阈值（Step0 闸0 的教训：文档说的量和代码实际算的量对不上）。"""
     from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
-    from open_guji_cv.utils.border_geometry import BEND_W80_MAX
+    from open_guji_cv.seg.polyline import BEND_W80_MAX
     assert BorderDetectGateParams().bend_w80_max_gate == BEND_W80_MAX
 
 

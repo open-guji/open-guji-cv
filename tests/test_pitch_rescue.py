@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils.border_geometry import BorderDetectionResult, HLine, VLine
+from open_guji_cv.seg.frame_types import BorderDetectionResult, HLine, VLine
 from open_guji_cv.books.siku_zongmu.column_pair_merge import line_xs
 from open_guji_cv.books.siku_zongmu import pitch_rescue as pr
 
