@@ -51,6 +51,21 @@ def test_no_api_key(monkeypatch):
     assert j(None, None).why == "abstain:no_api_key"
 
 
+def test_key_without_anthropic_abstains(monkeypatch):
+    """机器有密钥却没装 anthropic：弃权（不抛 ImportError 拖垮整页）。"""
+    import builtins
+    real = builtins.__import__
+
+    def no_anthropic(name, *a, **k):
+        if name == "anthropic":
+            raise ImportError(name)
+        return real(name, *a, **k)
+    monkeypatch.setenv(ctx_llm.ENV_KEY, "k")
+    monkeypatch.setattr(builtins, "__import__", no_anthropic)
+    ctx_llm._CLIENT.clear()
+    assert j(None, None).why == "abstain:no_api_key"
+
+
 def test_chain_asks_only_when_lower_layers_abstain(tmp_path, monkeypatch):
     """L2 模型给了字 → 不问；L2 低于门槛 → 问，L2 首选字记 `l2_top`；开 need_l2_agree 时不同就弃权。"""
     from tests.test_groups_ctx_l2 import FakeEnc, head
