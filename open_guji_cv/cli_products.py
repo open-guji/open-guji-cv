@@ -201,6 +201,9 @@ def cmd_pack(args) -> None:
 def _purity(book: str, root: Path) -> dict:
     """存包前查纯净性（`ops/pack_purity`，A32 精校前移 A2/A3）：混版本、图源对不上。只读；查不成记 error，不挡存包。"""
     from .ops import pack_purity as PP
+    from .products.store import default_products_root
+    if Path(root).resolve() != Path(default_products_root()).resolve():
+        return {"pure": None, "error": "产物根不是本机缺省的（--root），引擎看不到它，没查"}
     try:
         pur = PP.check(book, root)
     except Exception as e:  # noqa: BLE001
