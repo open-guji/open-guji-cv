@@ -156,6 +156,7 @@ def cmd_pack(args) -> None:
             sys.exit(2)
         try:
             print(f"已标 main：{PK.promote(args.book, args.label, note=args.note or '', why=args.why)}")
+            _warn_impure(args.book, args.label)
         except ValueError as e:
             print(f"✗ {e}", file=sys.stderr)
             sys.exit(2)
@@ -176,19 +177,53 @@ def cmd_pack(args) -> None:
         if args.main and not _main_ok(vers.get("cv"), args.why):
             sys.exit(2)
         auto_main = _auto_main_first(first_run, args.main, vers.get("cv"))
+        purity = None if (args.steps or args.no_purity) else _purity(args.book, root)
         info = PK.push_products(args.book, root, label=args.label, change=args.change,
-                                vers=vers,
+                                vers=vers, purity=purity,
                                 steps=args.steps.split(",") if args.steps else None, note=args.note or "")
         print(f"已存：{info['name']}（{info['bytes'] / 1e6:.1f} MB，{info['files']} 个文件，{len(info['parts'])} 段）")
         if not args.no_record:
             _record(args.book, info, base_label, args.report, _summary_text(args.summary), root)
         if args.main or auto_main:
-            print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '', why=args.why)}"
-                  + ("（新册首跑，还没有 main，自动标）" if auto_main else ""))
+            try:
+                print(f"已标 main：{PK.promote(args.book, info['label'], note=args.note or '', why=args.why)}"
+                      + ("（新册首跑，还没有 main，自动标）" if auto_main else ""))
+            except ValueError as e:
+                print(f"✗ 包已存，没标 main：{e}", file=sys.stderr)
+                sys.exit(2)
+            _warn_impure(args.book, info["label"])
             _note_main(args.book, info["label"], args.note or "")
     else:
         info = PK.fetch_products(args.book, _root(args.to or args.root), label=args.label, force=args.force)
         print(f"已取：{info['name']} → {info['dest']}（{info['files']} 个文件）")
+
+
+def _purity(book: str, root: Path) -> dict:
+    """存包前查纯净性（`ops/pack_purity`，A32 精校前移 A2/A3）：混版本、图源对不上。只读；查不成记 error，不挡存包。"""
+    from .ops import pack_purity as PP
+    from .products.store import default_products_root
+    if Path(root).resolve() != Path(default_products_root()).resolve():
+        return {"pure": None, "error": "产物根不是本机缺省的（--root），引擎看不到它，没查"}
+    try:
+        pur = PP.check(book, root)
+    except Exception as e:  # noqa: BLE001
+        pur = {"pure": None, "error": f"{type(e).__name__}: {e}"[:300]}
+    print(f"纯净性：{PP.describe(pur)}", file=sys.stderr if pur.get("pure") is False else sys.stdout)
+    return pur
+
+
+def _warn_impure(book: str, label: str) -> None:
+    """标了 main 的包存包时查出不纯（混版本、图源对不上）就提醒一句；不拦（见 datastore/packs.promote）。"""
+    import json
+    from .datastore import packs as PK
+    from .ops.pack_purity import describe
+    try:
+        man = json.loads(PK._call(PK._client(), "GET", f"{PK._prefix(PK._ws_name(), book)}/{label}/manifest.json", raw=True))
+    except Exception:  # noqa: BLE001
+        return
+    pur = man.get("purity")
+    if pur and pur.get("pure") is False:
+        print(f"⚠ 这份 main 包{describe(pur)}（指针里已记一笔）", file=sys.stderr)
 
 
 def _auto_main_first(first_run: bool, main_flag: bool, cv: str | None) -> bool:
@@ -308,10 +343,12 @@ def add_parser(sub) -> None:
     p.add_argument("--main", action="store_true",
                    help="pack push：存完顺手标成该册 main（正式结果；只收正式版 cv 出的包，见 --why）")
     p.add_argument("--why", default=None,
-                   help="pack promote／push --main：包不是正式版 cv 出的（dev、rc、任意提交）也要标 main 时的理由，记进指针")
+                   help="pack promote／push --main：包不是正式版 cv 出的（dev、rc、任意提交），也要标 main 时的理由，记进指针；存包时查出不纯的包也记进指针")
     p.add_argument("--report", default=None, help="pack push：这次 diff 的报告目录（含 report.md），抄进实验记录")
     p.add_argument("--summary", default=None,
                    help="pack push：实验记录开头的摘要（目的、改了什么、怎么跑、结论）；@文件 读文件")
+    p.add_argument("--no-purity", action="store_true",
+                   help="pack push：不查纯净性（混版本、图源，见 ops/pack_purity）")
     p.add_argument("--no-record", action="store_true",
                    help="pack push：不在工作区仓 experiments/<册>/<标签>.md 写实验记录（试存、测试用）")
 

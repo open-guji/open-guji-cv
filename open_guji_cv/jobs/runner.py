@@ -259,6 +259,15 @@ class Job:
             raise StageError("blocked", f"人裁绑定后 {got} 格，单上写应为 {want}：不跑，先查人裁事件／字块图")
         self.ev(f"人裁 {got} 格，对上")
 
+    def glyph_recheck(self) -> None:
+        """改钉字形库后只点名受影响的格（`guji recheck --glyph-diff <旧号>`，见 doc/受控重跑.md 第五节）；
+        接着的 pipeline 不加 --force，只重算点名的格和它们的下游。"""
+        sp = self.spec
+        out = self.guji("recheck", sp["book"], "--glyph-diff", str(sp["glyph_diff"]), "-w", self.ws or "")
+        tail = "\n".join(out.strip().splitlines()[-8:])
+        self.db(S.add_result, self.id, self.aid, "output", "recheck", data={"tail": redact(tail)[-2000:]})
+        self.ev(f"按 g{sp['glyph_diff']}→g{sp['book_overrides'].get('glyph_pin')} 点名受影响的格")
+
     def run_pipeline(self) -> None:
         sp = self.spec
         args = ["pipeline", sp["pipeline"], sp["book"], "-w", self.ws or "", "--pages", sp["pages"], "--no-pack"]
@@ -342,6 +351,8 @@ class Job:
                 if sp["base"]:
                     self.step("base", self.base)
                 self.step("check", self.checks)
+                if sp.get("glyph_diff") is not None:
+                    self.step("recheck", self.glyph_recheck)
                 self.step("run", self.run_pipeline)
             else:
                 if sp.get("checks"):

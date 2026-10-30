@@ -46,6 +46,8 @@ def fill(p: argparse.ArgumentParser) -> None:
     s.add_argument("--no-force", action="store_true", help="不加 --force（按指纹能跳就跳）")
     s.add_argument("--corpus", type=int, default=None)
     s.add_argument("--glyph-pin", type=int, default=None)
+    s.add_argument("--glyph-diff", type=int, default=None,
+                   help="改钉字形库后只重算受影响的格：旧钉号（新号用 --glyph-pin）；缺省从 glyph_match 起、不 force")
     s.add_argument("--base", default=None, help="铺底包：main｜标签；从中间某步起跑缺省 main")
     s.add_argument("--human-chars", type=int, default=None, help="开跑前人裁格数必须等于它")
     s.add_argument("--env", action="append", default=[], help="K=V，只收 GUJI_ 开头")
@@ -114,6 +116,7 @@ def _spec_from_args(a) -> dict:
     put("pages", a.pages)
     put("base", a.base)
     put("why", a.why)
+    put("glyph_diff", getattr(a, "glyph_diff", None))
     if a.from_step or a.to_step:
         raw["steps"] = {**raw.get("steps", {}), **{k: v for k, v in (("from", a.from_step), ("to", a.to_step)) if v}}
     if a.no_force:

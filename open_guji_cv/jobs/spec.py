@@ -21,6 +21,9 @@
     run             command／eval 用：[[guji 子命令, 参数…], …]，可用 {book} {ws}
     ws_glob         缺省 96mid1ogzk-*（殿本工作区）
     ws_repo         <owner>/<repo>：这部书自己一个仓（仓根即工作区）；缺省走 guji-workspace 里 ws_glob 匹配的目录
+    glyph_diff      rerun／ab：改钉字形库后只重算受影响的格——旧的钉号 N（新号写 book_overrides.glyph_pin）。
+                    铺底包后先 `guji recheck <册> --glyph-diff N` 点名，再从 glyph_match 起增量跑；
+                    缺省 steps.from=glyph_match、force=false（定字层增量跟进，A32 精校前移 A4，2026-10-30）
 
 不进指纹：why、priority、output（换个包名也是同一次计算）、cv_ref（已解析成提交）。
 """
@@ -62,7 +65,8 @@ def _override_keys() -> set[str]:
     from ..core.book_config import FORBIDDEN_IN_OVERRIDE
     return {f.name for f in dataclasses.fields(BookSpec)} - FORBIDDEN_IN_OVERRIDE
 _KEYS = {"kind", "book", "cv", "cv_ref", "pipeline", "steps", "pages", "force", "no_reuse", "book_overrides",
-         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "ws_repo", "why"}
+         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "ws_repo", "why",
+         "glyph_diff"}
 _NOT_HASHED = ("why", "output", "cv_ref")
 
 
@@ -98,6 +102,20 @@ def normalize(raw: dict, *, resolve=None) -> dict:
         raise SpecError(f"cv {ref!r} 解析不出 40 位提交")
 
     s["pipeline"] = s.get("pipeline") or DEFAULT_PIPELINE
+    gd = s.get("glyph_diff")
+    if gd is not None:
+        if kind not in ("rerun", "ab"):
+            raise SpecError("glyph_diff 只给 rerun／ab 用")
+        if isinstance(gd, bool) or not isinstance(gd, int) or gd < 0:
+            raise SpecError("glyph_diff 是改钉前的字形库号（整数）")
+        new_pin = (s.get("book_overrides") or {}).get("glyph_pin")
+        if not isinstance(new_pin, int) or isinstance(new_pin, bool) or new_pin == gd:
+            raise SpecError("glyph_diff 要配 book_overrides.glyph_pin（改钉后的新号，整数，与旧号不同）")
+        s.setdefault("steps", {"from": "glyph_match", "to": None})
+        s.setdefault("force", False)
+        s["glyph_diff"] = gd
+    else:
+        s.pop("glyph_diff", None)      # 不给就不出这个键：老任务的指纹不变
     st = s.get("steps") or {}
     if not isinstance(st, dict) or set(st) - {"from", "to"}:
         raise SpecError('steps 写成 {"from": 起步, "to": 止步}')
