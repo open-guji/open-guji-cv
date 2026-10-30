@@ -24,7 +24,7 @@
             - v: [2, 14]            # 下栏右 2 列、左 14 列
               parts: [{cols: 2}, {h: 2, cols: 14}]   # 左边再上下均分两层，每层 14 列
 
-人只给大约位置，切位由算法吸到附近的线或空白（`utils/free_blocks.snap_cut`）。
+人只给大约位置，切位由算法吸到附近的线或空白（books/zengguang_youxue/free_blocks.snap_cut`）。
 `kind` 只有 `text`（缺省）与 `skip`（不切）。
 块（或版面树叶子）可加 `ruled: true`：正文列有界栏但不规律（列宽不齐、常几列合一列，列里有横界栏），
 列宽不硬求一致、列里遇横界栏断开（yxat 99–102 下栏）。

@@ -47,15 +47,34 @@ def _module_source_hash(mod_name: str) -> str:
     """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
-    mod = importlib.import_module(mod_name)
-    src = inspect.getsourcefile(mod)
-    h = hashlib.sha256(code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() \
-        if src else "nosrc"
     # 产物逐字节不变的提速改动登记过等价的，换回旧哈希（core/code_equiv.py）
     from .code_equiv import canonical
-    h = canonical(mod_name, h)
+    h = canonical(mod_name, _module_raw_hash(mod_name))
     _code_hash_cache[mod_name] = h
     return h
+
+
+_raw_hash_cache: dict[str, str] = {}
+
+
+def _module_raw_hash(mod_name: str) -> str:
+    """`_module_source_hash` 的原始值（不经等价登记换算）。"""
+    if mod_name not in _raw_hash_cache:
+        mod = importlib.import_module(mod_name)
+        src = inspect.getsourcefile(mod)
+        _raw_hash_cache[mod_name] = hashlib.sha256(
+            code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() if src else "nosrc"
+    return _raw_hash_cache[mod_name]
+
+
+def _fingerprint_name(mod_name: str) -> str:
+    """进指纹的模块名。搬过家的模块（`code_equiv.MOVED`）、代码仍等价于搬家时登记的那一版时，
+    用搬家前的名字，产物不过期；之后真改了代码，等价不再成立，用新名字，照常判过期。"""
+    from .code_equiv import MOVED
+    mv = MOVED.get(mod_name)
+    if mv and _module_source_hash(mod_name) == mv[1]:
+        return mv[0]
+    return mod_name
 
 
 _legacy_hash_cache: dict[str, str] = {}
@@ -150,7 +169,7 @@ def code_hash(step: Step, legacy: bool = False, book=None) -> str:
     fn = _module_source_hash_legacy if legacy else _module_source_hash
     h = hashlib.sha256()
     for m in mods:
-        h.update(m.encode())
+        h.update((m if legacy else _fingerprint_name(m)).encode())
         h.update(fn(m).encode())
     return h.hexdigest()[:16]
 

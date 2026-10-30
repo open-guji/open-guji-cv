@@ -96,7 +96,7 @@ SIDE_PIPELINE = "pipeline"
 SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
-    "core", "products", "utils", "clustering", "pagetype_model", "groups",
+    "core", "products", "utils", "seg", "books", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__",
 })
 #: 整包归 manager 的例外之外，按模块前缀改判（最长前缀优先）

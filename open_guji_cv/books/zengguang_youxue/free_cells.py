@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from ..core.anchor import x_tr_to_tl
+from ...core.anchor import x_tr_to_tl
 from .free_columns import min_ink_seam
 
 ZONE_KINDS = ("big", "note", "solo")

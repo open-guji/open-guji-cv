@@ -1,7 +1,7 @@
 """自由版式 Step3：列 → 字框（`free_cells`）。
 
 列内先分「大字 / 双行小注 / 单行小注」三种区（Viterbi），再在每区按字线切字；
-双行小注先走竖缝分右/左两线，读序右线先。不假定每列字数。算法在 `utils/free_cells.py`。
+双行小注先走竖缝分右/左两线，读序右线先。不假定每列字数。算法在 books/zengguang_youxue/free_cells.py`。
 ruled 块的列（Step2 给了横界栏 `breaks`，1.1 起）先在横界栏处断开，各段分别分区、切字，字框不跨界栏；
 ruled 块里界栏（横、竖）的墨先抠掉，不当字。
 1.2 起块在分栏线处相接（block_detect 1.5，块边就是线）：每列上下两端 `edge_band` 内的横线墨先抠掉，分栏线不当字。
@@ -24,10 +24,10 @@ from ..core.anchor import bbox_tl_to_tr, bbox_tr_to_tl
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import ColumnRec, FreeCellRec, FreeCells, FreeColumns, FreeOcrLines
-from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, rule_vlines
-from ..utils.free_cells import (big_share, column_span, line_char_heights, note_line_width, seam_rows, segment_column,
+from ..books.zengguang_youxue.free_blocks import drop_specks, ink_mask, rule_hlines, rule_vlines
+from ..books.zengguang_youxue.free_cells import (big_share, column_span, line_char_heights, note_line_width, seam_rows, segment_column,
                                  segment_mixed, segment_ocr, segment_plain, straighten)
-from ..utils.free_rectify import rectify_gray
+from ..books.zengguang_youxue.free_rectify import rectify_gray
 
 
 class CellCutParams(BaseModel):
@@ -75,8 +75,8 @@ class CellCutStep(Step):
         id="cell_cut", title="Step3 列内切字（自由版式）", version="1.5", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_cells",), params=CellCutParams,
         optional_consumes=("free_ocr_lines",), optional_consumes_when=(("free_ocr_lines", "use_ocr"),),
-        code_deps=("open_guji_cv.utils.free_cells", "open_guji_cv.utils.free_columns",
-                   "open_guji_cv.utils.free_blocks", "open_guji_cv.utils.free_rectify"),
+        code_deps=("open_guji_cv.books.zengguang_youxue.free_cells", "open_guji_cv.books.zengguang_youxue.free_columns",
+                   "open_guji_cv.books.zengguang_youxue.free_blocks", "open_guji_cv.books.zengguang_youxue.free_rectify"),
         parallel_safe=True,
     )
 
