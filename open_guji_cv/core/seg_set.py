@@ -4,11 +4,12 @@
 keben_body_v2 → siku_zongmu，keben_free → zengguang_youxue，modern_body → beixing。
 shiji_wyg（史記文淵閣本，写本）从殿本分叉，必须在册 yaml 里显式写。
 
-## 指纹
+## 套书各自的实现
 
-`SERIES_MODULES[(套书, 步 id)]` 是这套书在这一步额外参与产物指纹的模块（`books/<套书>/…`）。
-搬家前（第 1 步）全空，所以现有产物的指纹逐位不变；代码搬进套书目录后，把它们登记到这里，
-指纹就按套书算：改史記的文件，殿本的产物不过期。本模块在 core，只放数据与字符串，不 import `books`。
+套书之间不互相 import，但共用同一个 Step 壳：壳问 `resolve(book, 缺省实现模块)`，这套书有自己的实现就用它，
+没有就用缺省（殿本）的。`OVERRIDES[套书]` 登记「缺省模块 → 这套书自己的模块」。同一张表也进指纹
+（`engine.code_hash` 把 Step 的 `code_deps` 里被覆盖的模块换成这套书的），所以改史記的模块只让史記的产物过期，
+改殿本的同名模块也不会牵动史記。本模块在 core，只放数据与字符串，不 import `books`。
 """
 
 from __future__ import annotations
@@ -21,7 +22,17 @@ PIPELINE_SEG_SET: dict[str, str] = {
     "modern_body": "beixing",
 }
 
-SERIES_MODULES: dict[tuple[str, str], tuple[str, ...]] = {}
+_SIKU = "open_guji_cv.books.siku_zongmu."
+_SJ = "open_guji_cv.books.shiji_wyg."
+
+#: 套书 → {缺省实现模块: 这套书自己的模块}。史記是从殿本分叉出来的写本：先只分叉职名页（臣行拆分等写本专用逻辑），
+#: 别的步骤仍走缺省实现；以后哪一步要为写本改，就把那个模块复制进 books/shiji_wyg/ 再登记在这里。
+OVERRIDES: dict[str, dict[str, str]] = {
+    "shiji_wyg": {
+        _SIKU + "roster_segment": _SJ + "roster_segment",
+        _SIKU + "roster_glyph": _SJ + "roster_glyph",
+    },
+}
 
 
 def validate_seg_set(name: str | None) -> str | None:
@@ -42,8 +53,14 @@ def seg_set_of(book) -> str:
     return PIPELINE_SEG_SET.get(pid, "siku_zongmu")
 
 
-def series_modules(book, step_id: str) -> tuple[str, ...]:
-    """本册在这一步额外参与指纹的套书模块；搬家前恒为空。"""
-    if not SERIES_MODULES:          # 搬家前：不必解析管线（code_hash 每页都调）
-        return ()
-    return SERIES_MODULES.get((seg_set_of(book), step_id), ())
+def resolve(book, default_module: str) -> str:
+    """这册书在 `default_module` 这个位置该用哪个模块：套书有覆盖用覆盖，否则用缺省。"""
+    ov = OVERRIDES.get(seg_set_of(book))
+    return ov.get(default_module, default_module) if ov else default_module
+
+
+def replace_deps(book, mods: list[str]) -> list[str]:
+    """指纹用：把 Step 的模块表里被这册套书覆盖的模块换成套书自己的（顺序不变）。"""
+    if not OVERRIDES:
+        return mods
+    return [resolve(book, m) for m in mods]

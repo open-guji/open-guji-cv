@@ -18,8 +18,6 @@ from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, Pag
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..utils.cut_select import ckpt_fingerprint, get_judge
-from ..books.siku_zongmu.roster_glyph import load_scorer
-from ..books.siku_zongmu.roster_segment import segment_roster_page
 from ..books.siku_zongmu.row_grid import fit_page_grids
 from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
                                     segment_column, slot_mask_from_occupied)
@@ -1115,6 +1113,12 @@ class RowSegmentStep(Step):
         `gap_center` = 两行之间的缝——Step4 按 pos 合成满宽格再从缝拆开，与正文雙行同一条路。
         列级 flags 一律带 `roster`（闸3 据此不按版式格数拦）；字数是推出来的列另带
         `roster_dense_guess`，相邻字 y 重叠的带 `roster_overlap`（见 books/siku_zongmu/roster_segment）。"""
+        # 职名页的实现按册的套书选（core/seg_set.OVERRIDES）：史記写本用 books/shiji_wyg 自己的，别的书用殿本的
+        import importlib
+        from ..core.seg_set import resolve
+        _impl = lambda name: importlib.import_module(resolve(ctx.book, f"open_guji_cv.books.siku_zongmu.{name}"))  # noqa: E731
+        load_scorer = _impl("roster_glyph").load_scorer
+        segment_roster_page = _impl("roster_segment").segment_roster_page
         page_w = wins.page_size[0]
         admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]

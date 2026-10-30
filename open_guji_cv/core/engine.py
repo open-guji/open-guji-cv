@@ -161,11 +161,11 @@ def code_hash_of_module(mod_name: str) -> str:
 
 def code_hash(step: Step, legacy: bool = False, book=None) -> str:
     """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。
-    给了 `book` 时，再并入这册所属套书在本步的模块（`core/seg_set.series_modules`，搬家前为空）。"""
+    给了 `book` 时，Step 模块表里被这册所属套书覆盖的模块换成套书自己的（`core/seg_set.replace_deps`）。"""
     mods = [type(step).__module__, *step.spec.code_deps]
     if book is not None:
-        from .seg_set import series_modules
-        mods += series_modules(book, step.spec.id)
+        from .seg_set import replace_deps
+        mods = replace_deps(book, mods)
     fn = _module_source_hash_legacy if legacy else _module_source_hash
     h = hashlib.sha256()
     for m in mods:
