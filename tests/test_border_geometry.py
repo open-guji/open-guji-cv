@@ -10,7 +10,7 @@ from open_guji_cv.utils.border_geometry import (
     detect_head_raise,
     detect_outer_borders,
 )
-from open_guji_cv.utils.peak_line_search import LineMatch
+from open_guji_cv.seg.lines import LineMatch
 
 
 def test_vline_to_new_flips_x_and_slope_no_tilt():
