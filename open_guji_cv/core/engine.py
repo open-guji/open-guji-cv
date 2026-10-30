@@ -167,11 +167,29 @@ def code_hash(step: Step, legacy: bool = False, book=None) -> str:
         from .seg_set import replace_deps
         mods = replace_deps(book, mods)
     fn = _module_source_hash_legacy if legacy else _module_source_hash
+    pairs = [(m, fn(m)) for m in mods] if legacy else _collapse_splits(mods)
     h = hashlib.sha256()
-    for m in mods:
-        h.update((m if legacy else _fingerprint_name(m)).encode())
-        h.update(fn(m).encode())
+    for name, mh in pairs:
+        h.update(name.encode())
+        h.update(mh.encode())
     return h.hexdigest()[:16]
+
+
+def _collapse_splits(mods: list[str]) -> list[tuple[str, str]]:
+    """模块表 → 进指纹的 (名字, 哈希) 序列。拆过的模块（`code_equiv.SPLITS`）：拆出来的几块都在表里、
+    代码都还是拆分时那一版，就在第一块的位置合回一项（旧名＋旧哈希），其余几块去掉——产物不过期；
+    任何一块之后真改了，就不合并，照常过期。"""
+    from .code_equiv import SPLITS
+    pairs = [(_fingerprint_name(m), _module_source_hash(m)) for m in mods]
+    for old, (old_hash, parts) in SPLITS.items():
+        idx = [mods.index(p) if p in mods else -1 for p, _ in parts]
+        if -1 in idx or any(_module_source_hash(p) != ph for p, ph in parts):
+            continue
+        first = min(idx)
+        keep = [(i, pr) for i, pr in enumerate(pairs) if i == first or i not in idx]
+        pairs = [((old, old_hash) if i == first else pr) for i, pr in keep]
+        mods = [mods[i] for i, _ in keep]
+    return pairs
 
 
 def _jsonable(v):

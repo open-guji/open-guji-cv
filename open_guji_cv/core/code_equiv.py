@@ -88,6 +88,10 @@ _MV_SIKU2 = ("切分模块化第 3 步（二）：殿本 Step1 专用的 pitch_r
              "books/siku_zongmu/，只有 import 路径变，算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同"
              "（对 origin/dev d974185 逐步比对），2026-10-30")
 
+_SP_FT = ("切分模块化第 3 步（三）：border_geometry 里的边框结果数据类型（HLine／VLine／HeadRaiseBorder／BorderDetectionResult）"
+          "原样拆进 seg/frame_types.py，border_geometry 从那里 import 并转出口；用到 border_geometry 的三步把 frame_types 列进 code_deps，"
+          "products 与北行日錄 line_layout 改从 seg 引；算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 7111864），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -251,6 +255,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5a0785bdbf2d9a63edc13a43838e1c8b4ad2df2bea4d41f92789e3ac9cabb5b3",
           old="51a8a57c3b0f7364a624690fbbdd90d90a8dba587aabbde009d8cda0b6743093",
           evidence=_MV_SIKU2),
+    Equiv(module="open_guji_cv.books.beixing.line_layout",
+          new="3b932525eb96c42c3ac8323d3a316cb526f2f42e28ad01dd6fcbaa72870ee627",
+          old="b8c1a2ca0a78502a546d169a26909ae8d07219a8e31e4a0b722ef47e5aa70058",
+          evidence=_SP_FT),
+    Equiv(module="open_guji_cv.gates.border_detect_gate",
+          new="ee7454ae45bfc1bd9ea91c85b853ae929b7443b6ac9cfbbfbdc25fb282a1cdf6",
+          old="43f4e1d70c019a9a2fd3e451a7099718384848bc6eb202143f645fdc5477cc75",
+          evidence=_SP_FT),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="3a3c072df391d6e2dd7d26ce77428e4dd3370e183bebcb038cb16a793fc82dda",
+          old="5a0785bdbf2d9a63edc13a43838e1c8b4ad2df2bea4d41f92789e3ac9cabb5b3",
+          evidence=_SP_FT),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="d33d045963883e8b4f53e9d37e2b50b11e7ba4288da96850628dca8da80d4d6d",
+          old="7b269c9f7a5faf1f61180e4e58c7cd56cac8691745a571adda899c5423ab368c",
+          evidence=_SP_FT),
 )
 
 
@@ -277,6 +297,17 @@ MOVED: dict[str, tuple[str, str]] = {
     "open_guji_cv.books.zengguang_youxue.free_cells": ("open_guji_cv.utils.free_cells", "761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6"),
     "open_guji_cv.books.zengguang_youxue.free_rectify": ("open_guji_cv.utils.free_rectify", "9f39c373de06349d1d040ff488b152f36820f11c2b20e9b2a43a8563c7093ab0"),
     "open_guji_cv.books.zengguang_youxue.free_ocr": ("open_guji_cv.utils.free_ocr", "d913668cfa50b267394c24ae0193d1d9ae859d5510179f74e40499dd477ebf41"),
+}
+
+
+#: 拆过的模块：旧模块名 → (拆分前的代码哈希, [(拆出来的新模块, 拆分时的代码哈希), …])。
+#: 一个模块拆成几块，Step 的模块表从一项变几项，指纹公式就变了；这里登记了，算指纹时几块都在、代码都还是
+#: 拆分时那一版，就合回一项（旧名＋旧哈希，见 engine._collapse_splits），产物不过期。之后任何一块真改了就不合并，
+#: 照常过期。用到旧模块的 Step 要在 code_deps 里列齐全部几块。纪律同 ENTRIES：只增不删。
+SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
+    "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
+        ("open_guji_cv.utils.border_geometry", "ddfdb066f247b0a93790fd9a1c7e8c4e497f8471b0334b417a9e939c0707782e"),
+        ("open_guji_cv.seg.frame_types", "910317f58be2061fbe06468ba3abf2de685e6250440b1008b8308fd37561fa4b"))),
 }
 
 

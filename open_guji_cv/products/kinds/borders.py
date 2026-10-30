@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 
 from ...core.spec import RAW_TR, ProductKindSpec
 from ...core.step import register_kind
-from ...utils.border_geometry import (BorderDetectionResult, HeadRaiseBorder, HLine,
+from ...seg.frame_types import (BorderDetectionResult, HeadRaiseBorder, HLine,
                                       VLine)
 
 
