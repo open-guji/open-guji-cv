@@ -12,6 +12,8 @@ import os
 import socket
 from importlib import resources
 
+from .spec import book_id as _book_id
+
 LEASE_MIN = int(os.environ.get("GUJI_JOBS_LEASE_MIN", "10"))
 RETRY_BACKOFF_MIN = int(os.environ.get("GUJI_JOBS_BACKOFF_MIN", "5"))   # 环境类失败重排后隔几分钟（×次数）
 
@@ -96,9 +98,9 @@ def submit(conn, spec: dict, h: str, *, by: str, why: str | None, priority: int 
                 "SELECT id, status FROM jobs.job WHERE spec_hash=%s AND status IN ('queued','running','succeeded')"
                 " ORDER BY (status='succeeded') DESC, id DESC LIMIT 1", (h,)))
         row = _one(conn.execute(
-            "INSERT INTO jobs.job (kind, book, spec, spec_hash, status, priority, depends_on, duplicate_of,"
-            " submitted_by, why, finished_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
-            (spec["kind"], spec["book"], json.dumps(spec, ensure_ascii=False), h,
+            "INSERT INTO jobs.job (kind, book, book_id, spec, spec_hash, status, priority, depends_on, duplicate_of,"
+            " submitted_by, why, finished_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING *",
+            (spec["kind"], spec["book"], spec["book"] and _book_id(spec), json.dumps(spec, ensure_ascii=False), h,
              "duplicate" if dup else "queued", priority, depends_on or [], dup and dup["id"], by, why,
              None if not dup else _now(conn))))
         _event(conn, row["id"], None, "submit", f"{by} 提交" + (f"；与 #{dup['id']}（{dup['status']}）同一配置，不另跑"
@@ -112,7 +114,7 @@ def _now(conn):
 
 
 def list_jobs(conn, *, status: list[str] | None = None, book: str | None = None, limit: int = 30,
-              mine: str | None = None) -> list[dict]:
+              mine: str | None = None, book_id: str | None = None) -> list[dict]:
     q = ["SELECT j.*, (SELECT a.worker FROM jobs.attempt a WHERE a.job_id=j.id ORDER BY a.n DESC LIMIT 1) worker"
          " FROM jobs.job j WHERE true"]
     a: list = []
@@ -122,6 +124,9 @@ def list_jobs(conn, *, status: list[str] | None = None, book: str | None = None,
     if book:
         q.append("AND j.book = %s")
         a.append(book)
+    if book_id:
+        q.append("AND j.book_id = %s")
+        a.append(book_id)
     if mine:
         q.append("AND j.submitted_by = %s")
         a.append(mine)
@@ -234,7 +239,8 @@ WITH c AS (
   SELECT j.id FROM jobs.job j
   WHERE j.status = 'queued'
     AND NOT EXISTS (SELECT 1 FROM jobs.job d WHERE d.id = ANY(j.depends_on) AND d.status <> 'succeeded')
-    AND (j.book IS NULL OR NOT EXISTS (SELECT 1 FROM jobs.job r WHERE r.book = j.book AND r.status = 'running'))
+    AND (j.book IS NULL OR NOT EXISTS (SELECT 1 FROM jobs.job r WHERE r.book = j.book
+         AND coalesce(r.book_id, '') = coalesce(j.book_id, '') AND r.status = 'running'))
     AND (%(kinds)s::text[] IS NULL OR j.kind = ANY(%(kinds)s))
     AND (%(only)s::bigint IS NULL OR j.id = %(only)s)
     AND (j.run_after IS NULL OR j.run_after <= now() OR %(only)s::bigint IS NOT NULL)

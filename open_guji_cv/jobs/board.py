@@ -89,7 +89,7 @@ def build(conn) -> dict:
     rows = []
     for j in jobs:
         st = j["status"]
-        row = {"id": j["id"], "book": j["book"] or "—", "kind": j["kind"], "status": _STATUS.get(st, st),
+        row = {"id": j["id"], "bookid": j.get("book_id") or "—", "book": j["book"] or "—", "kind": j["kind"], "status": _STATUS.get(st, st),
                "config": _config(j), "who": j["submitted_by"], "worker": "—", "stage": "—",
                "submitted": _la(j["created_at"]), "started": "—", "elapsed": "—", "eta": "—",
                "result": results.get(j["id"]) or "—", "note": (j["why"] or "")[:80]}
@@ -121,7 +121,7 @@ def build(conn) -> dict:
             if st in ("failed", "blocked") and j.get("error"):
                 row["note"] = j["error"].splitlines()[0][:120]
         rows.append(row)
-    cols = [("id", "号"), ("book", "册"), ("kind", "种类"), ("status", "状态"), ("config", "配置"),
+    cols = [("id", "号"), ("bookid", "书 ID"), ("book", "册"), ("kind", "种类"), ("status", "状态"), ("config", "配置"),
             ("stage", "阶段／排队"), ("worker", "执行方"), ("started", "开始（洛杉矶）"), ("elapsed", "已跑"),
             ("eta", "预计完成／结束"), ("result", "结果包"), ("who", "提交人"), ("submitted", "提交时间"),
             ("note", "原因／说明")]

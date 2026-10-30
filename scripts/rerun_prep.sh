@@ -54,7 +54,9 @@ echo "WS=$WS"
 # --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
 if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G db pull -w "$WS"; fi
-Y=$(ls /root/.guji-data/main/*/books/"$VOL".yaml | head -n 1)   # 数据目录里的册配置（db pull 落的）
+# 数据目录里的册配置（db pull 落的）。各书的册号会重名（vol01），按工作区自己的 .central.json 里的 ws id 找，不能取第一个
+WSID=$(sed -n 's/.*"ws": *"\([^"]*\)".*/\1/p' "$WS/.central.json" 2>/dev/null | head -n 1)
+Y=$(ls /root/.guji-data/main/${WSID:-*}/books/"$VOL".yaml | head -n 1)
 # 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里：
 # 改值 = 册 yaml 里有就替换、没有就追加（册 yaml 压过基础配置）；读值 = 读合并后的生效值，不能再 grep 册 yaml
 eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]),apply_override=False);v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
