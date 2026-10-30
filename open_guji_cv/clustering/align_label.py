@@ -188,6 +188,7 @@ def index_structure(index_path: str | Path,
 def label_page(page: str, slots: list[tuple], book: str,
                corpus: str, corpus_index: dict[str, list[int]],
                window_pad: int = WINDOW_PAD, offset: int | None = None,
+               max_replace_len: int = 3,
                ) -> tuple[list[AlignedLabel], bool]:
     """单页对齐 → 该页可标注的实例。返回 (标签, 是否锚定成功)。
 
@@ -207,7 +208,7 @@ def label_page(page: str, slots: list[tuple], book: str,
         if tag == "equal":
             pass
         elif tag == "replace" and (i2 - i1) == (j2 - j1):
-            if not replace_len_gate(ops, n):
+            if not replace_len_gate(ops, n, max_replace_len):
                 continue
         else:
             # insert/delete/不等长 replace：实例与语料字对不上号，整段丢弃
@@ -261,8 +262,13 @@ def flank_runs(ops: list[tuple], n: int) -> tuple[int, int]:
     return prev_run, next_run
 
 
-def replace_len_gate(ops: list[tuple], n: int) -> bool:
-    """等长 `replace` 段的**长度闸**（生产现役）：段长 ≤3 且被 equal 夹住。"""
+def replace_len_gate(ops: list[tuple], n: int, max_len: int = 3) -> bool:
+    """等长 `replace` 段的**长度闸**（生产现役）：段长 ≤`max_len`（缺省 3）且被 equal 夹住。
+
+    `max_len` 由 `align_ref.replace_max_len` 按册放宽（2026-10-30 北行 bxgb）：同书异版、
+    整理本整段录入时，长段多是刻本侧字形认错（「食香狼復」↔「貪沓很愎」），两头 equal
+    已把位置钉死。放宽只决定「给不给整理本字」，放不放行仍由 `lib_gate` 与 seed_admit 的
+    库证据通道定。"""
     tag, i1, i2, j1, j2 = ops[n]
     # G5 的采信规则（2ec0a00，OCR 载体噪声更大后必须有）：
     # replace 段的标签只靠位置站着，段一长或没被 equal 夹住，
@@ -281,7 +287,7 @@ def replace_len_gate(ops: list[tuple], n: int) -> bool:
     # 准确率一模一样而覆盖多 337 条（现有 1523 条的 22%）。
     # 那 18% 的「不一致」也不是错标，是「忠于刻本字形」方针下的正常
     # 分歧：刻本刻 櫽/祗/囘/𨽾，整理本印 檃/祇/回/隷。
-    if (i2 - i1) > 3:
+    if (i2 - i1) > max_len:
         return False
     prev_run, next_run = flank_runs(ops, n)
     return max(prev_run, next_run) >= 2 and min(prev_run, next_run) >= 1
