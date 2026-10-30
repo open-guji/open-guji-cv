@@ -2,7 +2,7 @@
 """只有框线的格判空（row_boundaries._frame_mask/_frame_only，2026-09-26）。"""
 import numpy as np
 
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 P = 60.0
 

@@ -2,7 +2,7 @@
 """列端虚线残段记空白（segment_column dash_blank，overview#376 后续，缺省关）。"""
 import numpy as np
 
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 SLOT_H, N = 60, 6
 

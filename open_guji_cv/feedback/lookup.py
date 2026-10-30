@@ -12,7 +12,7 @@ import sys
 from typing import NamedTuple
 
 from ..utils.ji_yi_si import FAMILY as _JYS
-from ..utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
+from ..books.siku_zongmu.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
 from .mojibake import is_legal_shape
 
 # 不叫 `log`：`human_chars(book, log=None, …)` 的形参 `log` 是 EventLog 实例，

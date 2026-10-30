@@ -73,10 +73,10 @@ class Row:
 
 def _body_pages(store, book_id: str, pages: list[int]) -> set[int] | None:
     """闸1 判为正文的页。拿不到页型产物就返回 None（让 measure_* 走它的粗筛兜底）。"""
-    from ..core.spec import page_key
-    from ..products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
+    from ...core.spec import page_key
+    from ...products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
     # `kinds/__init__` 没有 import 这一个模块，得显式引（闸1 产物种类在它里面注册）
-    from ..products.kinds import border_detect_gate as _bg  # noqa: F401
+    from ...products.kinds import border_detect_gate as _bg  # noqa: F401
 
     out: set[int] = set()
     seen_any = False
@@ -94,10 +94,10 @@ def _body_pages(store, book_id: str, pages: list[int]) -> set[int] | None:
 def _measured_ref_w(store, book_id: str, pages: list[int],
                     body: set[int] | None) -> tuple[float | None, int]:
     """闸2 产物里 `ref_w` 的中位数 + 参与的页数。见模块头「口径」：只作量级参照。"""
-    from ..core.spec import page_key
-    from ..products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
+    from ...core.spec import page_key
+    from ...products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
     # `kinds/__init__` 没有 import 这一个模块，得显式引（闸1 产物种类在它里面注册）
-    from ..products.kinds import border_detect_gate as _bg  # noqa: F401
+    from ...products.kinds import border_detect_gate as _bg  # noqa: F401
 
     vals: list[float] = []
     for pg in pages:
@@ -125,9 +125,9 @@ def _period_coverage(store, book_id: str, pages: list[int],
     够不够覆盖全书」，跟 `_stale_pages`（判「有没有跑完」）是两件不同的事——
     产物可以逐条都新鲜、但只新鲜了一小部分页。
     """
-    from ..core.spec import page_key
-    from ..products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
-    from ..products.kinds import border_detect_gate as _bg  # noqa: F401
+    from ...core.spec import page_key
+    from ...products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
+    from ...products.kinds import border_detect_gate as _bg  # noqa: F401
 
     n = 0
     for pg in pages:
@@ -150,9 +150,9 @@ def _stale_pages(book, store, pages: list[int]) -> tuple[int, int] | None:
     这正是它要防的那种错，自己却先犯了。
     """
     try:
-        from ..core.engine import Engine
-        from ..core.pipeline import default_pipeline_id, load_pipeline
-        from ..core.step import STEPS
+        from ...core.engine import Engine
+        from ...core.pipeline import default_pipeline_id, load_pipeline
+        from ...core.step import STEPS
 
         eng = Engine(book, load_pipeline(default_pipeline_id(book)),
                      store=store, log=lambda _s: None)
@@ -176,10 +176,10 @@ def calibrate(book, store, pages: list[int] | None = None,
 
     `pages` 不给时用 `book.pages`。`with_bottom_gap` 要读整册原图，慢。
     """
-    from ..products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
+    from ...products import kinds as _k  # noqa: F401  (side effect: 注册产物种类)
     # `kinds/__init__` 没有 import 这一个模块，得显式引（闸1 产物种类在它里面注册）
-    from ..products.kinds import border_detect_gate as _bg  # noqa: F401
-    from ..utils.row_boundaries import measure_book_period
+    from ...products.kinds import border_detect_gate as _bg  # noqa: F401
+    from .row_boundaries import measure_book_period
 
     # `pages` 不给时：yaml 写了 `pages:` 就用它，没写就扫 raw_dir（`all_pages`）。
     # 不能只认 `book.pages`——四庫總目那十册都没写 `pages:`，会得到 0 页而静默什么都没测。
@@ -213,7 +213,7 @@ def calibrate(book, store, pages: list[int] | None = None,
                     if rw is not None else "闸2 产物不足，无参照"))
 
     if with_bottom_gap:
-        from ..utils.border_geometry import measure_book_bottom_gap
+        from ...utils.border_geometry import measure_book_bottom_gap
         grays = []
         for pg in pgs:
             try:
@@ -234,8 +234,8 @@ def calibrate(book, store, pages: list[int] | None = None,
 def _read_gray(book, page: int):
     """读一页灰度原图。走与 RunContext 相同的 preclean 改写规则。"""
     import numpy as np
-    from ..utils.image_io import imread
-    from ..utils.preclean import effective_raw_path
+    from ...utils.image_io import imread
+    from ...utils.preclean import effective_raw_path
 
     path = effective_raw_path(book, page)
     img = imread(str(path), 0)
@@ -252,7 +252,7 @@ def _read_gray(book, page: int):
 def dependent_steps(field: str) -> list[str]:
     """哪些步（含闸）把这个册配置字段列进了 `book_deps`——改了 yaml 这些步的产物就过期。"""
     import open_guji_cv.steps  # noqa: F401 —— 触发 Step 与闸注册
-    from ..core.step import STEPS
+    from ...core.step import STEPS
     return sorted(sid for sid, st in STEPS.items() if field in (st.spec.book_deps or ()))
 
 

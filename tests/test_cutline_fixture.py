@@ -18,7 +18,7 @@ import pytest
 from PIL import Image
 
 import open_guji_cv.steps  # noqa: F401  —— 注册产物种类
-from open_guji_cv.utils.row_boundaries import segment_column
+from open_guji_cv.books.siku_zongmu.row_boundaries import segment_column
 
 CUT = Path(__file__).resolve().parent / "fixtures" / "cutline"
 

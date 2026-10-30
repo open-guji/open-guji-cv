@@ -23,7 +23,7 @@ import structcmp as SC
 from open_guji_cv.feedback import lookup as LK
 from open_guji_cv.steps import row_segment as RS
 from open_guji_cv.core import step as CS
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 # ── daizhige 期望表：(book, page, col) → E ──
 _recs = SC.load_dzg()

@@ -12,7 +12,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 from open_guji_cv.utils.cut_select import DEFAULT_CKPT, ckpt_fingerprint, owner_from_seam
 
 # 与 tests/test_row_boundaries.py 的合成列同一套几何
@@ -181,7 +181,7 @@ def test_real_judge_prefers_seam_that_respects_two_blobs():
 def test_seam_ok_resolution_collapses_to_the_rule_seam_not_the_judge_choice():
     """`seam_ok`（RESOLVED_CHOSEN）= 人当时看到的现役折线就对。裁判想改直线也不行，而且收敛到的必须是规则选的那条折线
     （2026-09-14 vol02 p33 实锤：裁判先改选、seam_ok 再收敛，就把裁判的选择当成了人裁）。"""
-    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
+    from open_guji_cv.books.siku_zongmu.row_boundaries import RESOLVED_CHOSEN, ResolvedCut
     img = _touching_column()
     base = _cut(RB.segment_column(img, period=SLOT_H, n_body_slots=N_SLOTS))
     rule_seam = base.candidates[base.chosen].y
@@ -196,7 +196,7 @@ def test_seam_ok_resolution_collapses_to_the_rule_seam_not_the_judge_choice():
 def test_seam_ok_with_polyline_collapses_to_the_matching_seam_not_the_current_choice():
     """`seam_ok` 带人看到的折线：池里与它一致的那条才是人裁的，哪怕规则这次选中了别的；
     池里没有一致的就不收敛（留给裁判）。2026-09-14 vol02 p33 c9 s18 实锤。"""
-    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN, ResolvedCut, SeamCandidate, _apply_resolved_cut
+    from open_guji_cv.books.siku_zongmu.row_boundaries import RESOLVED_CHOSEN, ResolvedCut, SeamCandidate, _apply_resolved_cut
     narrow = SeamCandidate("seam_narrow", y=[100] * 5 + [112] * 5, seam_ink=4, dev_max=12)
     wide = SeamCandidate("seam_wide", y=[100] * 5 + [121] * 5, seam_ink=2, dev_max=21)
     pool = [SeamCandidate("straight"), narrow, wide]
@@ -229,7 +229,7 @@ def test_escalate_flag_set_when_chosen_disagrees_with_unet_by_a_big_blob():
 
 def _single_straight_cut(j):
     """monkeypatch 缝搜索不产出折线 → 池里只剩直线，跑一列取那个切点。"""
-    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.books.siku_zongmu import row_boundaries as RBm
     import open_guji_cv.utils.seam as seam_mod
     img = _touching_column()
     orig = seam_mod.find_seam
@@ -253,7 +253,7 @@ def test_single_candidate_with_normal_cells_skips_the_probe(monkeypatch):
 def test_single_candidate_cut_is_also_probed_and_can_escalate(monkeypatch):
     """单候选（例：文言 vol02:163:1:6，池里只有直线）也要过探针：U-Net 说差一大块就升级，选法仍是直线。
     2026-09-25 起只在两侧格高偏离 period 超过 PROBE_DEV 时才探；这里把门槛关掉测探针本身。"""
-    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.books.siku_zongmu import row_boundaries as RBm
     from open_guji_cv.utils import cut_select as CSm
     from open_guji_cv.utils.cut_select import ESCALATE_BLOB
     monkeypatch.setattr(CSm, "PROBE_DEV", -1.0)
@@ -285,7 +285,7 @@ def test_clean_line_between_short_and_tall_cells_with_full_ink_becomes_probe_cut
     """L0′：直线不穿墨（DP 切在字内空隙），但一矮一高且矮格墨满 → 建一个只有直线的切点、过探针；
     U-Net 分歧大就升级；选法仍是直线。文言 vol02:163:1:6 的形态：言的顶横被切给文，格线落在言内部的空隙。"""
     import numpy as np
-    from open_guji_cv.utils import row_boundaries as RBm
+    from open_guji_cv.books.siku_zongmu import row_boundaries as RBm
     from open_guji_cv.utils.cut_select import ESCALATE_BLOB
     h = GRID_Y0 + N_SLOTS * SLOT_H + 20
     img = np.full((h, COL_W), 255, dtype=np.uint8)
@@ -423,7 +423,7 @@ def test_human_pick_of_an_l3_candidate_converges_after_expansion():
 def test_human_pick_straight_recreates_it_when_shrink_rule_dropped_it():
     """第 3 步「窄走廊零墨且贴线」把直线从池里删了，但卡片仍画直线、人能选它。
     人裁 straight 时按切点补回一条（2026-09-15 实锤 23 条因此没生效）；其余 kind 找不到仍不动。"""
-    from open_guji_cv.utils.row_boundaries import ResolvedCut, SeamCandidate, _apply_resolved_cut
+    from open_guji_cv.books.siku_zongmu.row_boundaries import ResolvedCut, SeamCandidate, _apply_resolved_cut
     pool = [SeamCandidate("seam_narrow", y=[100] * 10, seam_ink=0, dev_max=3)]      # 收缩后只剩折线
     cands, chosen = _apply_resolved_cut(pool, 0, ResolvedCut("straight", y_ref=100.0), y_line=100.0)
     assert [c.kind for c in cands] == ["straight"] and chosen == 0 and cands[0].y is None

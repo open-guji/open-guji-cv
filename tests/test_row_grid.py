@@ -1,7 +1,7 @@
-"""utils/row_grid：等距格网的相位与整数格（自造列图）。"""
+"""books/siku_zongmu/row_grid：等距格网的相位与整数格（自造列图）。"""
 import numpy as np
 
-from open_guji_cv.utils.row_grid import fit_page_grids
+from open_guji_cv.books.siku_zongmu.row_grid import fit_page_grids
 
 
 def _column(h=2500, w=120, top=40.0, pitch=115.0, n=21, blank=(), offset=0.0, bar=None):
@@ -53,7 +53,7 @@ def test_pitch_is_searched_around_period():
 
 def test_snap_moves_each_line_into_nearest_gap():
     """等距格线各自在 ±0.2 格内挪进字缝；缝不在范围内就留在行墨最少处，格数不变。"""
-    from open_guji_cv.utils.row_boundaries import snap_to_gaps
+    from open_guji_cv.books.siku_zongmu.row_boundaries import snap_to_gaps
     proj = np.full(400, 50.0)
     for gap in (95, 212, 300):
         proj[gap - 3:gap + 4] = 0.0
@@ -64,7 +64,7 @@ def test_snap_moves_each_line_into_nearest_gap():
 
 def test_segment_column_with_grid_bounds_skips_dp():
     """给了 grid_bounds 就按它切（落缝后），格数、格号照常，空格照常判空。"""
-    from open_guji_cv.utils.row_boundaries import segment_column
+    from open_guji_cv.books.siku_zongmu.row_boundaries import segment_column
     img = _column(blank={20, 21})
     bounds = [40.0 + i * 115.0 for i in range(22)]
     r = segment_column(img, period=115.0, n_body_slots=21, border_top=40.0, border_bottom=40.0 + 21 * 115.0,

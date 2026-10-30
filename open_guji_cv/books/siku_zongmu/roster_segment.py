@@ -533,7 +533,7 @@ def _column_flags(items: list[RosterItem]) -> list[str]:
     if any(b.y0 < a.y1 for a, b in zip(body, body[1:])):
         flags.append("roster_overlap")        # 相邻两字 y 有重叠（多是「臣」贴着官衔末字），Step4 满宽裁会互相带墨
     if any(it.glyph is not None for it in items):
-        flags.append("roster_glyph_refined")  # 有密排段按字形库重切过（utils/roster_glyph）
+        flags.append("roster_glyph_refined")  # 有密排段按字形库重切过（books/siku_zongmu/roster_glyph）
     return flags
 
 

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 W, H, P = 180, 2560, 115.0
 BB = 2536.0                      # border_bottom（列图坐标，框下白纸）

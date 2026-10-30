@@ -39,7 +39,7 @@ class BookSpec:
     sets: dict[str, list[int]] = field(default_factory=dict)
     #: 夹注（雙行小注）的**本书文字约定**（yaml 的 `jiazhu:`）。默认全空 = 不启用。
     #:
-    #: ⚠️ **探测夹注本身不看文字**（`utils/jiazhu_split` 纯几何：墨迹跨度、缝中心、
+    #: ⚠️ **探测夹注本身不看文字**（`books/siku_zongmu/jiazhu_split` 纯几何：墨迹跨度、缝中心、
     #: 段连缀），换书照样能用。这里放的只是「这一套书的注文长什么样」这类**书级先验**：
     #:
     #: - `note_suffixes`：版本注的收尾词（《四庫全書總目》是「…採進本 / …藏本」）。
@@ -70,7 +70,7 @@ class BookSpec:
     #: **只在估不出来时兜底**，能估出来的页一律用当场估的值——所以给了这个数
     #: 也不会改变任何正常页的产物（有单测守着）。
     #:
-    #: **怎么标定**：`utils/row_boundaries.measure_book_period()`，或直接取整册
+    #: **怎么标定**：`books/siku_zongmu/row_boundaries.measure_book_period()`，或直接取整册
     #: 已有产物里正文页 period 的中位数。**不需要金标**：正文页的 period 是
     #: 书级常量，vol01 正文 108 页实测 115.0±1.67px、vol02 186 页 113.0±2.37px。
     #:

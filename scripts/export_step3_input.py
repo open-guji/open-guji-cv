@@ -166,7 +166,7 @@ from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.utils.column_projection import (  # noqa: E402
     clean_column, column_profile, denoise_column, stamp_noise_density,
 )
-from open_guji_cv.utils.row_boundaries import (  # noqa: E402
+from open_guji_cv.books.siku_zongmu.row_boundaries import (  # noqa: E402
     estimate_shared_period, row_ink_projection,
 )
 

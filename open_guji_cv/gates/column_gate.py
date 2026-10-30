@@ -56,10 +56,10 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
-from ..utils import jiazhu_split
+from ..books.siku_zongmu import jiazhu_split
 from ..utils.column_pair_merge import has_pair_merged
 from ..core.book import _expand_pages
-from ..utils.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
+from ..books.siku_zongmu.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
                                     row_ink_projection)
 
 
@@ -219,7 +219,7 @@ class ColumnGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
-        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection",
+        code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.utils.column_projection",
                    "open_guji_cv.utils.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
