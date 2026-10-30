@@ -56,7 +56,7 @@ class LayoutBlocks(BaseModel):
     rules: list[RuleRec] = Field(default_factory=list)
     blocks: list[BlockRec] = Field(default_factory=list)
     # 拉正参数（block_detect 1.7 起；None = 没拉）：本产物和下游两种产物的坐标都在拉正后的图上。
-    # 字段见 `utils/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
+    # 字段见 books/zengguang_youxue/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
     warp: dict | None = None
 
 

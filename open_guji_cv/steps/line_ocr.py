@@ -1,6 +1,6 @@
 """自由版式 Step2-b：逐列送识别软件读文本行（`free_ocr_lines`，可选）。
 
-列按 Step2 的左右缝外接框裁出（拉正后的灰度图），送 PaddleOCR（`utils/free_ocr.py`）。
+列按 Step2 的左右缝外接框裁出（拉正后的灰度图），送 PaddleOCR（books/zengguang_youxue/free_ocr.py`）。
 出的行框换回页面坐标，Step3 `cell_cut` 拿它定区（大字行／并排小注行）和每行字数；
 没跑这一步、或没装 paddleocr，Step3 照旧只用规则。Sheldon 10-28：「考虑用识别软件作为辅助」。
 """
@@ -13,9 +13,9 @@ from ..core.anchor import bbox_tl_to_tr
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import FreeColumns, FreeOcrLines, OcrLineRec
-from ..utils import free_ocr
-from ..utils.free_cells import column_span
-from ..utils.free_rectify import rectify_gray
+from ..books.zengguang_youxue import free_ocr
+from ..books.zengguang_youxue.free_cells import column_span
+from ..books.zengguang_youxue.free_rectify import rectify_gray
 
 
 class LineOcrParams(BaseModel):
@@ -30,7 +30,7 @@ class LineOcrStep(Step):
     spec = StepSpec(
         id="line_ocr", title="Step2-b 列内识别行（自由版式，可选）", version="1.0", unit="page",
         consumes=("raw_page", "layout_blocks", "free_columns"), produces=("free_ocr_lines",), params=LineOcrParams,
-        code_deps=("open_guji_cv.utils.free_ocr", "open_guji_cv.utils.free_cells", "open_guji_cv.utils.free_rectify"),
+        code_deps=("open_guji_cv.books.zengguang_youxue.free_ocr", "open_guji_cv.books.zengguang_youxue.free_cells", "open_guji_cv.books.zengguang_youxue.free_rectify"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:

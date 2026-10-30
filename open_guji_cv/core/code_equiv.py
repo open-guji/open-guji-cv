@@ -65,6 +65,10 @@ _HRV_1027 = ("人裁逐列抬头（head-raise-columns 裁决补／去 Step1 抬�
 
 _SEED_1027 = ('seed_admit 的 clustering.seeding 去掉联网取派生缓存（拆分 M3b：改用 core.derived 注册的取法，行为不变）：seed_admit 在殿本 vol04 新图 40 页（每 6 页取 1，加 p17/p100/p186）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（dev 上语料底库与钉子不符，新旧两边同样），2026-10-27')
 
+_MV_FREE = ("切分模块化第 2a 步：free_* 五个模块从 utils/ 原样搬进 books/zengguang_youxue/，只有 import 路径变"
+            "（free_cells 的 `..core` → `...core`；四个自由版式步骤只改 import 与 code_deps 里的模块名），算法未动；"
+            "搬前搬后 24 个 Step 的 code_hash 逐位相同（对 origin/dev d199da5 逐步比对），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -156,7 +160,40 @@ ENTRIES: tuple[Equiv, ...] = (
           new="597e2781a32ab64db886efc716eb215434fbe7a8a4e028d892f35a5a0387a055",
           old="6d99b28bc637ede04cffaa056f5502eb31f77c6c6ef6d905cccea0f302a34d01",
           evidence=_SEED_1027),
+    Equiv(module="open_guji_cv.books.zengguang_youxue.free_cells",
+          new="27f2942643b95ad4da9d0d1630821a0deda75dc69e4480988b5c639097f2f916",
+          old="761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6",
+          evidence=_MV_FREE),
+    Equiv(module="open_guji_cv.steps.block_detect",
+          new="b9a010a31810b2b66c97c4fedef2c644e6ea670e4e9f0a0d54fc686391163624",
+          old="c4e3f4c3ced328953f14599c97fbd171fb17bf8e755da4bf942168fc8f7802c2",
+          evidence=_MV_FREE),
+    Equiv(module="open_guji_cv.steps.column_trace",
+          new="dbe4e9a055e0662f8373d74a55346c68970b1d3c47a8bea5f02741a0df01a469",
+          old="e18bbbe1054d2f13dd4b6547018046c544a68dd6a745bb9648942337384bc901",
+          evidence=_MV_FREE),
+    Equiv(module="open_guji_cv.steps.cell_cut",
+          new="9327219c48a4983be825455085605abec84fc5b0e45f770d9979a51e4a27ee0b",
+          old="ee41ec3a4b2ec3f7fb57fe0d5803cbc629524b68c428ad491450534cfa8e695a",
+          evidence=_MV_FREE),
+    Equiv(module="open_guji_cv.steps.line_ocr",
+          new="5fd4d98a143ff15bd63ee77413c81ea2bc42d3415b07d87758a6ac1811e756b7",
+          old="3c460388cd9a000f4195e41137f347ec9d553cd0a0857ffec73a7f5ac75afd85",
+          evidence=_MV_FREE),
 )
+
+
+#: 搬过家的模块：新模块名 → (搬家前的模块名, 搬家前的代码哈希)。指纹里模块名也进哈希，所以搬家要换回旧名字。
+#: 只在「现在的代码（经 ENTRIES 换算后）仍等于搬家前那一版」时生效（见 engine._fingerprint_name）；之后真改了就按新名字，
+#: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
+#: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
+MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.zengguang_youxue.free_blocks": ("open_guji_cv.utils.free_blocks", "eef4c4c127d5f5acb5f5b143a276d613f76fc2d78239be2cb298b5a5050e8d5f"),
+    "open_guji_cv.books.zengguang_youxue.free_columns": ("open_guji_cv.utils.free_columns", "277550471a0881db4e62e7192e6c6fb25f785fe545f9eb9912f447ab35a06a6f"),
+    "open_guji_cv.books.zengguang_youxue.free_cells": ("open_guji_cv.utils.free_cells", "761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6"),
+    "open_guji_cv.books.zengguang_youxue.free_rectify": ("open_guji_cv.utils.free_rectify", "9f39c373de06349d1d040ff488b152f36820f11c2b20e9b2a43a8563c7093ab0"),
+    "open_guji_cv.books.zengguang_youxue.free_ocr": ("open_guji_cv.utils.free_ocr", "d913668cfa50b267394c24ae0193d1d9ae859d5510179f74e40499dd477ebf41"),
+}
 
 
 def _table() -> dict[str, dict[str, str]]:
