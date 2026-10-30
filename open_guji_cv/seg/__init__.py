@@ -17,5 +17,7 @@
 - `lines`：投影找峰（半高宽匹配度）、位置＋角度联合搜一条直线、整页找竖线与上下框线（原 `utils/peak_line_search`
   的前半）；
 - `grid`：网格模式，列数已知、列距均匀时逐槽验线、缺槽插值（原 `utils/peak_line_search` 的后半，北行日錄与殿本都用）；
-- `polyline`：界行按弯度拟直线或三段折线（原 `utils/border_geometry` 的一段）。
+- `polyline`：界行按弯度拟直线或三段折线（原 `utils/border_geometry` 的一段）；
+- `warp`：单列射影矫正与列窗口；`profile`：列图投影、去噪、找文字带（原 `utils/column_projection` 的两段）；
+- `locate_gutter`：找书口（命令行用）。
 """

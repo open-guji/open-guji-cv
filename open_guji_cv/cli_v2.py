@@ -1462,10 +1462,10 @@ def cmd_eval(args) -> None:
 
 def cmd_locate_gutter(args) -> None:
     """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
-    判据见 `utils/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
+    判据见 `seg/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
     import cv2
     from .utils.image_io import imread
-    from .utils.locate_gutter import locate_gutter
+    from .seg.locate_gutter import locate_gutter
     gray = imread(args.image, cv2.IMREAD_GRAYSCALE)
     if gray is None:
         raise SystemExit(f"读不了图：{args.image}")

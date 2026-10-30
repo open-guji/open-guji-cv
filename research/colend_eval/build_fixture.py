@@ -15,7 +15,7 @@ from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.utils.column_projection import clean_column
+from open_guji_cv.books.siku_zongmu.column import clean_column
 
 def save_1bit(a: np.ndarray, fn) -> None:
     Image.fromarray(a >= 128).convert("1").save(fn, optimize=True)

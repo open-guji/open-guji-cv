@@ -41,7 +41,7 @@ import open_guji_cv.products.kinds  # noqa: E402,F401  注册产物种类
 from open_guji_cv.core.spec import column_key, page_key  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.utils.column_projection import column_profile  # noqa: E402
+from open_guji_cv.seg.profile import column_profile  # noqa: E402
 
 FP_TOL = 6.0
 COL_FP_SIZE = (24, 96)

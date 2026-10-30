@@ -7,7 +7,8 @@ from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.utils.column_projection import denoise_column, column_text_band, strip_column_rules
+from open_guji_cv.books.siku_zongmu.column import strip_column_rules
+from open_guji_cv.seg.profile import denoise_column, column_text_band
 CROP = 220
 def make(ctx, book, pg, col, end):
     wins = ctx.store.read(book, "column_warp", page_key(pg), "column_windows")

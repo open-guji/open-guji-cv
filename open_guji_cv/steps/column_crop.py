@@ -20,8 +20,8 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders, VLineRec
 from ..products.kinds.columns import BorderTrim, ColumnWindowRec, PageWindows
-from ..utils.column_projection import (ColumnWindow, denoise_column, page_column_windows,
-                                       stamp_noise_density, warp_column)
+from ..seg.profile import denoise_column, stamp_noise_density
+from ..seg.warp import ColumnWindow, page_column_windows, warp_column
 from .column_warp import side_floor
 
 
@@ -38,7 +38,7 @@ class ColumnCropStep(Step):
         consumes=("raw_page", "borders", "border_detect_gate_manifest", "line_index"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnCropParams,
-        code_deps=("open_guji_cv.utils.column_projection",),
+        code_deps=("open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column",),
     )
 
     def _windows(self, ctx: RunContext, page: int) -> tuple[np.ndarray, Borders, list[ColumnWindow]]:

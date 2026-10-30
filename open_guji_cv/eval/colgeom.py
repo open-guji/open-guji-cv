@@ -57,7 +57,7 @@ class ColumnGeom:
 
     def __init__(self, rec: dict, page_w: int):
         from ..products.kinds.borders import VLineRec
-        from ..utils.column_projection import _strip_bounds, column_warp_matrix
+        from ..seg.warp import _strip_bounds, column_warp_matrix
         self.sig = geom_sig(rec, page_w)
         self.left = VLineRec(**rec["left_line"]).to_vline()
         self.right = VLineRec(**rec["right_line"]).to_vline()

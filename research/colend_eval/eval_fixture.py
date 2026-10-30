@@ -8,7 +8,7 @@ FX = pathlib.Path(sys.argv[1]) if len(sys.argv) > 1 and not sys.argv[1].startswi
 man = json.loads((FX / "manifest.json").read_text(encoding="utf-8"))
 if "--rerun" in sys.argv:
     import numpy as np; from PIL import Image
-    from open_guji_cv.utils.column_projection import clean_column
+    from open_guji_cv.books.siku_zongmu.column import clean_column
     cache = {}
     for e in man["ends"]:
         k = e["col_key"]

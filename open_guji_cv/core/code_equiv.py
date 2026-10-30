@@ -104,6 +104,12 @@ _SP_BG = ("切分模块化第 3 步（五）：utils/border_geometry 拆完—�
           "原样搬成 seg/grid.py（北行日錄与殿本都用）。各处 import 按名字改到定义模块，三步 code_deps 换成新模块；"
           "算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 88a8a9e），2026-10-30")
 
+_SP_CP = ("切分模块化第 3 步（六）：utils/column_projection 拆成三块——单列射影矫正与列窗口（column_warp_matrix、warp_column、"
+          "page_column_windows 等）原样拆进 seg/warp.py，列投影／去噪／文字带（denoise_column、column_profile、column_row_profile、"
+          "column_text_band、stamp_noise_density）原样拆进 seg/profile.py，界行与版框残墨剥法、clean_column、refine_top_by_frame、"
+          "warp_page_columns 原样搬成 books/siku_zongmu/column.py；column_triage 搬 books/siku_zongmu、locate_gutter 搬 seg（只改 import）。"
+          "四步 code_deps 换成三块；算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev eef311e），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -307,6 +313,26 @@ ENTRIES: tuple[Equiv, ...] = (
           new="b513802033538bd3475050c0e0575ed3787b1bd7f69c581b9521f3c87d26fc7a",
           old="614cc9b0f4ffcb6f151c15c8bd56824df81d5e01edb4fb3bd8df3176e3c645ef",
           evidence=_SP_BG),
+    Equiv(module="open_guji_cv.gates.column_gate",
+          new="08beb5ff74c9f5358d1036c4877e972dd9cbc8b3971733cec91bc6db136544f7",
+          old="e7b6a6f69e80258beefc3f0fee5fa9d867a6dc9b19bcff3283dd0f94f7cdbb15",
+          evidence=_SP_CP),
+    Equiv(module="open_guji_cv.steps.column_crop",
+          new="0a290a058d9ce72b754e0326d4c4fa505491baab393fe5d6517ccc64e903a57f",
+          old="3dcc21da5a93afe0af339c2356c874ec591090fbc1930a1ee1e0af0f22c664e8",
+          evidence=_SP_CP),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="06755e382dd648af0c0f766f44f37e5414995a83f3fe0745d7616f96008a6e8a",
+          old="eca98f041edf9ebe762c92a2979b49f427175a5b20cdd45df5ebf437d0e1c404",
+          evidence=_SP_CP),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="9a2fa559f6e056ad2b1a58f726fe4d4b1c3849c0efcc3bbd1fb7ecb2d6c6238a",
+          old="93d48d4cd24d4304b223c94e3abff8c14e81de2763f46d325e9a2a0783eecc8e",
+          evidence=_SP_CP),
+    Equiv(module="open_guji_cv.books.siku_zongmu.column_triage",
+          new="73ff9002ed6ab67e0b617a0a459d68dbb69e18cea5c8d1d43cc9be3508f6a23d",
+          old="9b98ee76d1a45032e014e3d385297dac192f3a07e2b0e0de7b96f226e716580b",
+          evidence=_SP_CP),
 )
 
 
@@ -315,6 +341,7 @@ ENTRIES: tuple[Equiv, ...] = (
 #: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
 #: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
 MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.siku_zongmu.column_triage": ("open_guji_cv.utils.column_triage", "9b98ee76d1a45032e014e3d385297dac192f3a07e2b0e0de7b96f226e716580b"),
     "open_guji_cv.books.siku_zongmu.column_pair_merge": ("open_guji_cv.utils.column_pair_merge", "1b943e53a2d01db37949866b3b8f43c25f64e787096c6b0ce14a456441a7ecfd"),
     "open_guji_cv.books.siku_zongmu.column_types": ("open_guji_cv.utils.column_types", "85b6a36a684c2236c43f60a3826357e4785f17abbe2dcb4ad97dc4f7bfa6a41a"),
     "open_guji_cv.books.siku_zongmu.pitch_rescue": ("open_guji_cv.utils.pitch_rescue", "e28dc2b23ab157ae34104369194741aad2d87e8a8966267f8fcb558247818b72"),
@@ -349,6 +376,10 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.peak_line_search": ("90afd63cf2eec6ace053c4d470d1568c3c39582a532c99d2a929cec5bf016890", (
         ("open_guji_cv.seg.grid", "93f436b06ca22e975e211d5e194b5bc657cc6cdba0b6b3438bb6ba9c4e49780a"),
         ("open_guji_cv.seg.lines", "322ed871071601159e4123bfdb1b4b8ffb10c07cb0616c7783c003f0e88d8e61"))),
+    "open_guji_cv.utils.column_projection": ("614cc9b0f4ffcb6f151c15c8bd56824df81d5e01edb4fb3bd8df3176e3c645ef", (
+        ("open_guji_cv.seg.warp", "5e750f4a8781a7ca6ea8a6916d330d7a27719a91fafb4814aa2e62a8bc5af353"),
+        ("open_guji_cv.seg.profile", "508270c9484b07c734e3c671f123093ecdd2405c0851340e5d0deb3437cd6609"),
+        ("open_guji_cv.books.siku_zongmu.column", "4465ac6dfe85c0eaba56e06d75c260285f7fd5a02cef69cc5787ba8e0caae3dd"))),
 }
 
 
