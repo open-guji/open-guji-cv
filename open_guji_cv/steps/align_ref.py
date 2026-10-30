@@ -496,6 +496,21 @@ class AlignRefParams(BaseModel):
     """钉位后现役对位 `equal` 字数占载体串的比例低于这个，判「钉了也对不上」（版式不是满行的
     表页、考證页、半叶头钉错），退回未锚定、note 写明；不拿一个对不上的窗口硬出标签。"""
 
+    anchor_merge_gap: int = 0
+    """锚定时把相距不超过这么多字的票簇并成一个（2026-10-30，A31 北行 bxgb p45）。0＝关（缺省，不进参数哈希）。
+
+    8-gram 投票按 ±`POOL_RADIUS`（8）合簇；同书异版时，一页里整理本多出一整句（北行 p45 整理本有
+    「又承應人指其首曰幾時得這些髮長起去」17 字，清刻本删了），这一句前后两半的票落在相差 17 的两个偏移上，
+    互相当成对手：前半 39 票、后半 65 票，占比与优势都不够，整页锚不上。两个簇其实都在同一窗口里——
+    只要相距不超过 `WINDOW_PAD`（60），起点取靠前那个，窗口右侧照样盖得住。
+    只在正常投票失败、没有页钉位时才走；合并后仍要过同一套绝对票数、占比／优势判据（次高票簇是窗口外的票）。
+    已锚上的页逐字节不变。上限 `WINDOW_PAD`。"""
+
+    replace_max_len: int = 3
+    """等长 replace 段的长度上限（见 `align_label.replace_len_gate`）。3＝缺省（不进参数哈希）。
+    同书异版、整理本整段录入的书可按册放宽（北行 bxgb 取 12）：两头仍要被 equal 夹住。
+    只多给整理本字，放行照旧要 `lib_gate`／seed_admit 的库证据。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -506,6 +521,10 @@ class AlignRefParams(BaseModel):
         if isinstance(d, dict) and not self.page_pins:
             for k in ("page_pins", "page_pins_fingerprint", "pin_min_equal_frac"):
                 d.pop(k, None)
+        if isinstance(d, dict) and not self.anchor_merge_gap:
+            d.pop("anchor_merge_gap", None)
+        if isinstance(d, dict) and self.replace_max_len == 3:
+            d.pop("replace_max_len", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -684,8 +703,16 @@ class AlignRefStep(Step):
         pin = page_pin(p, ctx.book.id, page)
         labs, ok = label_page(str(page), slots, ctx.book.id, text,
                               _corpus_index(p.corpus),
-                              offset=pin[2] if pin else None)
+                              offset=pin[2] if pin else None,
+                              max_replace_len=p.replace_max_len)
         anchor_via = "pin" if pin else "ngram"
+        if not ok and not pin and p.anchor_merge_gap > 0:
+            off = merged_anchor(slots, _corpus_index(p.corpus), p.anchor_merge_gap)
+            if off is not None:
+                labs, ok = label_page(str(page), slots, ctx.book.id, text,
+                                      _corpus_index(p.corpus), offset=off,
+                                      max_replace_len=p.replace_max_len)
+                anchor_via = "merged"
         if pin and not _pin_holds(labs, slots, p):
             return {"align_ref": PageAlignRef(
                 page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
@@ -762,6 +789,41 @@ def _raw_vote_clusters(text: str, index: dict[str, list[int]],
         peak2 = max(rest, key=rest.get)
         runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
     return min(near), peak_votes, runner_up
+
+
+def merged_anchor(slots: list[tuple], index: dict[str, list[int]], gap: int,
+                  gram: int = GRAM) -> int | None:
+    """`AlignRefParams.anchor_merge_gap` 的锚定：最高票偏移 ±(gap+POOL_RADIUS) 内的票并成一簇，
+    再过 `align_eval.anchor_page_diag` 同一套判据（绝对下限、占比或优势；次高票簇取窗口外的票）。
+    过了返回簇内最小偏移，否则 None。"""
+    from collections import Counter
+
+    from ..clustering.align_eval import (MIN_DOMINANCE, MIN_VOTE_FRAC, MIN_VOTES,
+                                         POOL_RADIUS, index_lookup)
+    query = "".join(t[-1] for t in _norm_slots(slots))
+    if len(query) < gram:
+        return None
+    reach = min(gap, WINDOW_PAD) + POOL_RADIUS
+    votes: Counter[int] = Counter()
+    n_grams = len(query) - gram + 1
+    for i in range(n_grams):
+        for pos in index_lookup(index, query[i:i + gram]):
+            votes[pos - i] += 1
+    if not votes:
+        return None
+    peak = votes.most_common(1)[0][0]
+    near = [o for o in votes if abs(o - peak) <= reach]
+    n_votes = sum(votes[o] for o in near)
+    if n_votes < MIN_VOTES:
+        return None
+    rest = {o: v for o, v in votes.items() if abs(o - peak) > reach}
+    runner_up = 0
+    if rest:
+        peak2 = max(rest, key=rest.get)
+        runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
+    if n_votes / n_grams >= MIN_VOTE_FRAC or runner_up == 0 or n_votes >= MIN_DOMINANCE * runner_up:
+        return min(near)
+    return None
 
 
 def _uncontested_fallback(book: str, page: int, slots: list[tuple], corpus: str,

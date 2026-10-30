@@ -331,7 +331,7 @@ class PageAlignRef(BaseModel):
     n_lib_dropped: int = 0                   # 被「库证据闸」拦下的 replace 位数（align_ref 模块头 2026-09-22）
     witness_strategy: str = "legacy"         # 多证人合并策略（align_ref 模块头 2026-09-27，任务书 D-多证人对齐策略）
     n_witnesses: int = 1                     # 这一页参与合并的证人数（legacy 恒 1）
-    anchor_via: str = "ngram"                # "ngram"=常规 8-gram 投票过线；"uncontested"=低票兜底
+    anchor_via: str = "ngram"                # "ngram"=常规 8-gram 投票过线；"uncontested"=低票兜底；"merged"=近簇合并（anchor_merge_gap）
                                               # （align_ref 模块头「低票兜底」一节，任务书 D-align_ref锚定召回-全唐文）
     # 按坐标对位（`AlignRefParams.coord`，overview#195）。与上面 `chars` 互不影响：
     coord: list[CoordRec] = Field(default_factory=list)
