@@ -84,6 +84,10 @@ _MV_SJ = ("切分模块化第 2d 步：row_segment._run_roster 里职名页的 l
 _MV_SEG1 = ("切分模块化第 3 步（一）：seam、cut_select 从 utils/ 原样搬进共用原语库 seg/（两套以上的书在用的走缝、切点裁判），"
             "只有 import 路径变，算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 869694b 逐步比对），2026-10-30")
 
+_MV_SIKU2 = ("切分模块化第 3 步（二）：殿本 Step1 专用的 pitch_rescue、column_pair_merge、column_types 从 utils/ 原样搬进 "
+             "books/siku_zongmu/，只有 import 路径变，算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同"
+             "（对 origin/dev d974185 逐步比对），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -235,6 +239,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="93d48d4cd24d4304b223c94e3abff8c14e81de2763f46d325e9a2a0783eecc8e",
           old="1affc6f9cd9dcf98505b48ec3d7d248535395b94363b062f2baa4457bd6f1826",
           evidence=_MV_SEG1),
+    Equiv(module="open_guji_cv.gates.border_detect_gate",
+          new="43f4e1d70c019a9a2fd3e451a7099718384848bc6eb202143f645fdc5477cc75",
+          old="0d0ce595139eeeb9bfa94839061b768e5d2b497803daf8067c4f3508fc3b2766",
+          evidence=_MV_SIKU2),
+    Equiv(module="open_guji_cv.gates.column_gate",
+          new="e7b6a6f69e80258beefc3f0fee5fa9d867a6dc9b19bcff3283dd0f94f7cdbb15",
+          old="a072761f50f0c01481e94db76abf3be9856bda7705230e0fc1027ddda2ba9090",
+          evidence=_MV_SIKU2),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="5a0785bdbf2d9a63edc13a43838e1c8b4ad2df2bea4d41f92789e3ac9cabb5b3",
+          old="51a8a57c3b0f7364a624690fbbdd90d90a8dba587aabbde009d8cda0b6743093",
+          evidence=_MV_SIKU2),
 )
 
 
@@ -243,6 +259,9 @@ ENTRIES: tuple[Equiv, ...] = (
 #: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
 #: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
 MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.siku_zongmu.column_pair_merge": ("open_guji_cv.utils.column_pair_merge", "1b943e53a2d01db37949866b3b8f43c25f64e787096c6b0ce14a456441a7ecfd"),
+    "open_guji_cv.books.siku_zongmu.column_types": ("open_guji_cv.utils.column_types", "85b6a36a684c2236c43f60a3826357e4785f17abbe2dcb4ad97dc4f7bfa6a41a"),
+    "open_guji_cv.books.siku_zongmu.pitch_rescue": ("open_guji_cv.utils.pitch_rescue", "e28dc2b23ab157ae34104369194741aad2d87e8a8966267f8fcb558247818b72"),
     "open_guji_cv.seg.cut_select": ("open_guji_cv.utils.cut_select", "fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b"),
     "open_guji_cv.seg.seam": ("open_guji_cv.utils.seam", "2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671"),
     "open_guji_cv.books.siku_zongmu.jiazhu_split": ("open_guji_cv.utils.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),

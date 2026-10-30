@@ -38,7 +38,7 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders
 from ..utils.border_geometry import BEND_W80_MAX
-from ..utils.column_pair_merge import (PAIR_MERGED_FLAG, PAIR_MERGED_INCONSISTENT_FLAG,
+from ..books.siku_zongmu.column_pair_merge import (PAIR_MERGED_FLAG, PAIR_MERGED_INCONSISTENT_FLAG,
                                        has_pair_merged)
 
 
@@ -148,7 +148,7 @@ class BorderDetectGateStep(Step):
         params=BorderDetectGateParams,
         path_params=("pagetype_model_path",),
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.clustering.page_type",
-                   "open_guji_cv.utils.column_pair_merge"),
+                   "open_guji_cv.books.siku_zongmu.column_pair_merge"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -175,7 +175,7 @@ class BorderDetectGateStep(Step):
                 _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
             grid_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
-        # 窄对合并（`utils/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
+        # 窄对合并（`books/siku_zongmu/column_pair_merge`）：Step1 用 expected−1 重探，在 `line_index` 的合并列上打
         # `pair_merged` 旗、并把页上列数记在 `Borders.expected_cols`。**显式认旗，不靠两个数相等去猜**。
         # 期望列数对着**本闸自己的**期望（`p.expected_cols or 书级`）减一：旗＋探出列数＝Step1 记的列数＝
         # 闸期望−1 三者都对得上才放宽；只要有一个对不上（产物不自洽：旗是别的版本留的、闸参数与 Step1 不同…），
