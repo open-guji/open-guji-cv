@@ -69,6 +69,10 @@ _MV_FREE = ("切分模块化第 2a 步：free_* 五个模块从 utils/ 原样搬
             "（free_cells 的 `..core` → `...core`；四个自由版式步骤只改 import 与 code_deps 里的模块名），算法未动；"
             "搬前搬后 24 个 Step 的 code_hash 逐位相同（对 origin/dev d199da5 逐步比对），2026-10-30")
 
+_MV_BEIXING = ("切分模块化第 2b 步：line_layout、run_segment 从 utils/ 原样搬进 books/beixing/，只有 import 路径变"
+               "（line_layout 的 `.border_geometry` → `...utils.border_geometry`；两个现代印刷步骤只改 import 与 code_deps 里的模块名），"
+               "算法未动；搬前搬后 24 个 Step 的 code_hash 逐位相同（对 origin/dev 逐步比对），2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -180,6 +184,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5fd4d98a143ff15bd63ee77413c81ea2bc42d3415b07d87758a6ac1811e756b7",
           old="3c460388cd9a000f4195e41137f347ec9d553cd0a0857ffec73a7f5ac75afd85",
           evidence=_MV_FREE),
+    Equiv(module="open_guji_cv.books.beixing.line_layout",
+          new="b8c1a2ca0a78502a546d169a26909ae8d07219a8e31e4a0b722ef47e5aa70058",
+          old="33f17f6be1f6f2f54345bc970f61c2772b41dc670bb602d006e478c1b6259d24",
+          evidence=_MV_BEIXING),
+    Equiv(module="open_guji_cv.steps.line_detect",
+          new="bef809bd600afea1d8f038fc480e8a92a244bb63cd67ec5adf0b4e9495446ddd",
+          old="a90fc471a3e806a2b3655b663295bc66957e68d651e2a1372dbdbad195de2d1c",
+          evidence=_MV_BEIXING),
+    Equiv(module="open_guji_cv.steps.row_segment_runs",
+          new="af18d5d39d00d353c2e04de755ec616457d379c07a5ce9ad1be0382cbda16bb0",
+          old="4762e1c3f71c857f8afe44091a488ac4c2a4c3337eed32e3d467cf7baba1679d",
+          evidence=_MV_BEIXING),
 )
 
 
@@ -188,6 +204,8 @@ ENTRIES: tuple[Equiv, ...] = (
 #: 照常判过期。搬家时只有 import 路径变的模块，在 ENTRIES 里另登 new→old 哈希。登记纪律同 ENTRIES：只增不删。
 #: 切分模块化（2026-10-30，Sheldon 定）：代码搬进 books/<套书>/。
 MOVED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.beixing.line_layout": ("open_guji_cv.utils.line_layout", "33f17f6be1f6f2f54345bc970f61c2772b41dc670bb602d006e478c1b6259d24"),
+    "open_guji_cv.books.beixing.run_segment": ("open_guji_cv.utils.run_segment", "e770b30c24de8dfa927e615547d66e109b8f6a97ae6e6a0726bbdf66473a6a17"),
     "open_guji_cv.books.zengguang_youxue.free_blocks": ("open_guji_cv.utils.free_blocks", "eef4c4c127d5f5acb5f5b143a276d613f76fc2d78239be2cb298b5a5050e8d5f"),
     "open_guji_cv.books.zengguang_youxue.free_columns": ("open_guji_cv.utils.free_columns", "277550471a0881db4e62e7192e6c6fb25f785fe545f9eb9912f447ab35a06a6f"),
     "open_guji_cv.books.zengguang_youxue.free_cells": ("open_guji_cv.utils.free_cells", "761eaa8e09be2cb1c1736bf1aaf528a2c62e6e63aee8ffb001f32e0ca47559c6"),

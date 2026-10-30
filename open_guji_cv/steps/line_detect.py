@@ -2,7 +2,7 @@
 
 顶替刻本链的 `border_detect`（三模式方案 §四.1，overview `图片初步数字化/进度/总览/
 05-三模式管线方案.md`）。产出**同一种** `borders`——下游 Step2 拿它算列窗口一行不改；
-另产 `line_index` 记页上每一列（含脚注、书口小字）的类型。算法在 `utils/line_layout.py`。
+另产 `line_index` 记页上每一列（含脚注、书口小字）的类型。算法在 `books/beixing/line_layout.py`。
 
 只处理竖排；横排按方案 §三在原图入口旋转后也走这里，尚未接入。
 """
@@ -16,7 +16,7 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders, HLineRec
 from ..products.kinds.line_index import LineIndex, LineRec
-from ..utils.line_layout import detect_lines, layout_to_borders
+from ..books.beixing.line_layout import detect_lines, layout_to_borders
 
 
 class LineDetectParams(BaseModel):
@@ -39,7 +39,7 @@ class LineDetectStep(Step):
     spec = StepSpec(
         id="line_detect", title="Step1 行探测（现代印刷）", version="1.0", unit="page",
         consumes=("raw_page",), produces=("borders", "line_index"), params=LineDetectParams,
-        code_deps=("open_guji_cv.utils.line_layout",),
+        code_deps=("open_guji_cv.books.beixing.line_layout",),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
         # 与 border_detect 同构（同一批 sha256 三方验证方法核对过）。
         parallel_safe=True,
