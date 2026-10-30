@@ -77,6 +77,10 @@ _MV_SIKU = ("切分模块化第 2c 步：殿本 Step3 的 row_boundaries、row_g
             "从 utils/ 原样搬进 books/siku_zongmu/，只有 import 路径变（相对层数加一、指向 utils 里留下的模块改成 `...utils.x`），"
             "算法未动；搬前搬后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev 3d064ce 逐步比对），2026-10-30")
 
+_MV_SJ = ("切分模块化第 2d 步：row_segment._run_roster 里职名页的 load_scorer／segment_roster_page 改成按册的套书取模块"
+          "（core/seg_set.resolve；史記册取 books/shiji_wyg 的复制，其余册取到的仍是原模块），非史記册逻辑与产物不变；"
+          "非史記册 23 个 Step 与闸的 code_hash 前后逐位相同，史記册的 row_segment 指纹另按自己的模块算，2026-10-30")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -212,6 +216,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="deaf1c8e1b0de1b6b791e47f7d0a90edf72811161b14493cfa1a9e9d0e5799ad",
           old="9183257430cb19c877746f9ca8d5f78c54c8290baa7a18513778d3711d7a27af",
           evidence=_MV_SIKU),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="1affc6f9cd9dcf98505b48ec3d7d248535395b94363b062f2baa4457bd6f1826",
+          old="deaf1c8e1b0de1b6b791e47f7d0a90edf72811161b14493cfa1a9e9d0e5799ad",
+          evidence=_MV_SJ),
 )
 
 
