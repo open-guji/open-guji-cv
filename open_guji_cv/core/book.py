@@ -92,6 +92,8 @@ class BookSpec:
     #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。不写 = 按 `edition` 选（`core/pipeline.default_pipeline_id`）。
     #: 自由版式的坊刻本（yxat）写 `pipeline: keben_free`——edition 仍是 keben，字形库分域不变。
     pipeline: str | None = None
+    #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
+    seg_set: str | None = None
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
     #: 存 yaml 原样（键转成字符串），读配置时用 `utils/layout_hints.parse_layout_hints` 校验形状。
     layout_hints: dict = field(default_factory=dict)
@@ -530,6 +532,11 @@ def _expand_pages(raw) -> list[int]:
     return [p for p in out if not (p in seen or seen.add(p))]
 
 
+def _load_seg_set(v):
+    from .seg_set import validate_seg_set
+    return validate_seg_set(None if v is None else str(v))
+
+
 def _load_layout_hints(raw) -> dict:
     """`layout_hints:` 先校验形状（错了在读配置时就报），再原样存（键转字符串，进指纹时稳定）。"""
     if not raw:
@@ -666,6 +673,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
+        seg_set=_load_seg_set(d.get("seg_set")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
         notes=d.get("notes", ""),
         iron_gate=bool(d.get("iron_gate", False)),
