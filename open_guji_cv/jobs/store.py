@@ -50,7 +50,8 @@ class DB:
                 if self.c is None or self.c.closed:
                     self.c = self.factory()
                 return fn(self.c, *a, **kw)
-            except (psycopg.OperationalError, psycopg.InterfaceError):
+            except (psycopg.OperationalError, psycopg.InterfaceError, psycopg.errors.FeatureNotSupported):
+                # FeatureNotSupported：表加列后老连接缓存的计划失效（cached plan must not change result type），重连即好
                 self.close()
                 if i == 5:
                     raise
