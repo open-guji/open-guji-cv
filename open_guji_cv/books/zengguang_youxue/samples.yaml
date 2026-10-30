@@ -1,0 +1,20 @@
+# 增廣幼學須知鰲頭雜字的切分样页单（切分模块化第 4 步，2026-10-30）。
+# 版面靠册 yaml 的人标 layout_hints（splits、tree、ruled），比之前先确认中心库里的册 yaml 是最新的。
+pipeline: keben_free
+steps: {from: block_detect, to: cell_cut}
+books:
+  - book: yxat
+    ws_glob: "998a1ukohs-*"
+    pages:
+      9: 鰲頭两栏正文首页（pitch 115）
+      15: 正文页
+      20: 正文页，大字夹双行小注
+      29: 人标版面树 tree（上栏两层）
+      35: 杂字页首页，上栏两层图格（人标 splits）
+      60: 杂字页
+      87: 杂字页，下框弯、框底偏（未修）
+      92: 杂字页末页
+      99: 下栏不规则界栏正文（ruled）
+      101: 下栏 ruled，第 2 块
+      113: 两块版面（splits 945）
+      120: 两块版面

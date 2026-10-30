@@ -1,0 +1,20 @@
+# 北行日錄现代排印本 bxrl 的切分样页单（切分模块化第 4 步，2026-10-30）。
+# 工作区只在本机（beixingrilu-workspace，不在 guji-workspace），任务库执行方拿不到，只能
+# `python scripts/seg_samples.py local --set beixing --ws bxrl=<工作区>` 在本机跑。页是逻辑页（guji split 之后）。
+pipeline: modern_body
+steps: {from: line_detect, to: cell_shrink}
+local_only: true
+books:
+  - book: bxrl
+    pages:
+      1: 首页
+      3: 正文页（M1 实测页）
+      4: 正文页（M1 实测页）
+      5: 正文页（M1 实测页）
+      6: 正文页
+      10: 正文页
+      36: 正文页
+      58: 正文页
+      65: 正文页
+      70: 正文页
+      90: 正文页

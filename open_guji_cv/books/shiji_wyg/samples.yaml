@@ -1,0 +1,15 @@
+# 史記文淵閣本（写本）的切分样页单（切分模块化第 4 步，2026-10-30）。
+# 册 yaml 要写 `seg_set: shiji_wyg` 才走本套书的职名页实现（books/shiji_wyg/roster_*）；没写时跑的是殿本那份。
+# 现在只有册 01 职名页的问题页，正文页待负责史記的同事补到 10 页以上。
+pipeline: keben_body_v2
+steps: {from: border_detect, to: cell_shrink}
+books:
+  - book: "01"
+    ws_glob: "988g3f0wsu-*"
+    pages:
+      32: 正文进表页（不该点名职名，走正文切法 8 列全对）
+      40: 职名页，「臣」斜贴邻字（row_segment 1.42）
+      45: 职名页
+      50: 职名页，密排字压扁相粘（未修）
+      52: 职名页
+      139: 卷末大印压职名列（要 seal_detect.overrides 挡印）

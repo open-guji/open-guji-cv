@@ -1,0 +1,58 @@
+# 殿本四庫總目的切分样页单（切分模块化第 4 步，2026-10-30）。
+# 改 books/siku_zongmu/ 或共用原语 seg/ 的 PR，用 `python scripts/seg_samples.py submit --set siku_zongmu …` 在这些页上比改前改后。
+# 页都是以前修过的问题页（理由里写着修在哪一版），挑得够杂：抬头框、职名页、大印、双边框、新旧两种图源、网格模式。
+# **册换图源（页号重编，见 GUJI-748）后要跟着改页号**，不然比的是另一页。
+# 北行日錄古本 bxgb 走的也是这条管线（没写 seg_set，按 keben_body_v2 归殿本这套），所以也列在这里。
+pipeline: keben_body_v2
+steps: {from: border_detect, to: cell_shrink}
+books:
+  - book: vol01
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      87: 职名页（row_segment 1.42 臣行拆分改动殿本这批 396 列都没变）
+      100: 职名页
+      130: 职名页末页
+  - book: vol04
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      9: 抬头框向邻列延伸（border_detect 1.3，c8 内边框淡）
+      11: 格位表与抬头框（c2 override、c5 字凸出）
+      65: 只印粗外框的抬头框，字凸出判据（border_detect 1.4）
+      84: 抬头框没有顶线（border_detect 1.4）
+  - book: vol06
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      58: 抬头框字凸出（border_detect 1.4）
+      112: 双边框内框贴字脚（cell_shrink 1.20「而」）
+  - book: vol08
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      2: 卷首大印页，左外框淡、折线被字竖笔吸进（#425）
+  - book: vol16
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      8: 全页小字雙行，界行只在天头一截（border_detect 1.8 列距救援候选池）
+  - book: vol40
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      1: 新图源卷首大印页（border_detect 1.11）
+      14: 外列被外推进版心条（border_detect 1.9）
+      34: 新图源界行淡、折点被字勾走（border_detect 1.12）
+  - book: vol46
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      106: 大印下挤格列（row_segment 1.41）
+      118: 贴版框的外列（border_detect 1.9）
+      148: 贴版框的外列（border_detect 1.9）
+  - book: vol48
+    ws_glob: "96mid1ogzk-*"
+    pages:
+      34: 大印下挤格列（row_segment 1.41）
+      121: 出带列两边的线吸到淡界行（border_detect 1.10）
+  - book: bxgb
+    ws_glob: "988g7gsqhd-*"
+    note: 北行日錄古本，界行缺印，整书网格模式（seg/grid）
+    pages:
+      20: 网格模式标定页
+      41: 左半叶整片无界行
+      53: 顶部搜索带贴边要放宽（WIDEN_RATIO）
