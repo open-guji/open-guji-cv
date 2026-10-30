@@ -5,7 +5,7 @@
 
 另产 `line_index`（与现代链 `line_detect` **同一种产物**）：逐列位记类型
 `body | margin | edge`，下游据此把非正文列排除在外。筒子页（`leaf_layout: folio`）
-的版心就是靠它标成 `margin` 的——判据与两条负结果见 `utils/column_types.py`。
+的版心就是靠它标成 `margin` 的——判据与两条负结果见 `books/siku_zongmu/column_types.py`。
 一页一个半叶的书（`leaf_layout: single`，即默认）只会标出 `edge`，其余全是 `body`，
 与加这套东西之前的行为等价。
 
@@ -26,9 +26,9 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
 from ..utils.border_geometry import detect_borders
-from ..utils.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
-from ..utils.column_types import classify_columns
-from ..utils.pitch_rescue import rescue as pitch_rescue
+from ..books.siku_zongmu.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
+from ..books.siku_zongmu.column_types import classify_columns
+from ..books.siku_zongmu.pitch_rescue import rescue as pitch_rescue
 
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
@@ -105,7 +105,7 @@ class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
     merge_narrow_pair: bool = False
-    """窄对合并（`utils/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
+    """窄对合并（`books/siku_zongmu/column_pair_merge`，overview GUJI-155）：相邻两条**内部**窄列、宽度和≈一列时，
     用 `expected_cols−1` 重探，接受条件见该模块。**缺省关**（要不要让各册 Step1 重算由 Morgan 定）；
     关着、或页上没有窄对时，产物逐字节不变。触发页的 `expected_cols` 记成少一列，闸读它。"""
 
@@ -125,7 +125,7 @@ class BorderDetectParams(BaseModel):
     `params: {border_detect: {column_grid_pages: [139], grid_col_pitch: 133, grid_lattice_fallback: true}}`。
     只管点名页；缺省关不进参数 dump，产物与加字段前逐字节相同。"""
     pitch_rescue: bool = True
-    """列距救援（`utils/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
+    """列距救援（`books/siku_zongmu/pitch_rescue`，2026-10-23 sheldon 定缺省开）：自由模式探出的页上有一条列
     < 0.7 × 中位列宽（多挑了假竖线、外侧一整列落到网外）时，先用网格模式重探，选不出版框对再
     「去掉劈开窄对的线、在有字的一侧补外框线」，再不成就从自由线、网格线、外推外框线里拼一串等宽列（fuse）；
     新列网干净才接受。没触发的页逐字节不变。"""
@@ -155,11 +155,11 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.12", unit="page",   # 1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，utils/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.12", unit="page",   # 1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，books/siku_zongmu/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.utils.border_geometry", "open_guji_cv.utils.peak_line_search",
-                   "open_guji_cv.utils.column_types", "open_guji_cv.utils.column_pair_merge",
-                   "open_guji_cv.utils.pitch_rescue"),
+                   "open_guji_cv.books.siku_zongmu.column_types", "open_guji_cv.books.siku_zongmu.column_pair_merge",
+                   "open_guji_cv.books.siku_zongmu.pitch_rescue"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
         # `column_grid` / `col_pitch` / `frame_height` / `vline_polyline` 决定竖线
         # 走哪条路、用哪组阈值，同理。

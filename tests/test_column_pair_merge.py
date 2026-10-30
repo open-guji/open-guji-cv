@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""窄对合并（Step1 后处理，`utils/column_pair_merge`；overview GUJI-155／208ax）。
+"""窄对合并（Step1 后处理，`books/siku_zongmu/column_pair_merge`；overview GUJI-155／208ax）。
 
 只用纯内存构造的列宽表（`helpers.make_borders(xs=…)`），不依赖真书；列宽形态取自七册 1191 页
 扫描里的真页（vol04 p80／p217、vol07 p128／p130 是正例；vol05 p55／p123、vol04 p63、p216／p218、
@@ -12,7 +12,7 @@ import pytest
 import open_guji_cv.steps  # noqa: F401
 from helpers import blank_page, make_book, make_borders, make_ctx
 from open_guji_cv.core.step import STEPS
-from open_guji_cv.utils import column_pair_merge as cpm
+from open_guji_cv.books.siku_zongmu import column_pair_merge as cpm
 
 PAGE = 1
 
@@ -260,8 +260,8 @@ def test_gate1_only_swallows_missing_line_index(tmp_path, monkeypatch):
 
 def test_border_detect_gate_declares_line_index_as_optional_upstream():
     assert "line_index" in STEPS["border_detect_gate"].spec.optional_consumes
-    assert "open_guji_cv.utils.column_pair_merge" in STEPS["border_detect_gate"].spec.code_deps
-    assert "open_guji_cv.utils.column_pair_merge" in STEPS["column_gate"].spec.code_deps
+    assert "open_guji_cv.books.siku_zongmu.column_pair_merge" in STEPS["border_detect_gate"].spec.code_deps
+    assert "open_guji_cv.books.siku_zongmu.column_pair_merge" in STEPS["column_gate"].spec.code_deps
 
 
 def test_pair_merged_flag_helpers_do_not_confuse_inconsistent_with_merged():
