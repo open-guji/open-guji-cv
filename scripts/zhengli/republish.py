@@ -466,8 +466,11 @@ def source_gate(ws: Path, book: str, doc: dict, a) -> None:
     """图源门（A32 精校前移 A3，2026-10-30 sheldon 定）：单子上的格号出自哪一版页表，要等于册 yaml 钉的 `source_rev`。
 
     停在 v0.1 等网站读者的册，单子一挂就是几周；页表一换（拆页、换图源）后面的页号就整体后移、票全要迁。
-    所以出单前要求册 yaml 钉了 `source_rev`（钉了才不会被别人新发的页表悄悄换图），且产物就是那一版的图上切的。
-    单子没记 `source_rev`（产物没带来历：原图不是从页表取的）只提示。`--source-why "<理由>"` 越过。"""
+    册 yaml 钉了 `source_rev` 的，单子必须出自那一版页表，不符拒推（`--source-why "<理由>"` 越过）。
+
+    册 yaml 没钉的**只提示、不拦**：钉 `source_rev` 会让事件读口（`core.event_files.RevGate`）不再采信锚里没有
+    `anchor.source_rev` 的旧事件——北行日錄 bxgb 一钉就丢 2,267 条（2026-10-30 试推前 dry-run 发现，已撤）。
+    所以没换过图源的书要先给旧事件补锚，再钉。单子没记 `source_rev`（原图不是从页表取的）也只提示。"""
     from open_guji_cv.core.event_files import book_source_rev
     want = book_source_rev(book, data_dir(ws) / "books")
     got = doc.get("source_rev")
@@ -476,9 +479,10 @@ def source_gate(ws: Path, book: str, doc: dict, a) -> None:
         print("  ⓘ 图源门：册 yaml 没钉 source_rev、单子也没记（原图不是从页表取的），没法核图源；照推", file=sys.stderr)
         return
     if want is None:
-        msg = (f"册 yaml 没钉 source_rev：先在册 yaml 写 `source_rev: {got if got is not None else '<页表版本>'}`"
-               f"（guji source show 看页表版本）再出单")
-    elif got is None:
+        print(f"  ⓘ 图源门：册 yaml 没钉 source_rev（单子出自页表 r{got}）：页表一换图就会变；"
+              f"钉之前先给本册旧事件补 anchor.source_rev，不然读口会丢掉它们。照推", file=sys.stderr)
+        return
+    if got is None:
         print(f"  ⓘ 图源门：单子没记 source_rev（产物没带页表来历），没法核是不是 r{want} 的图；照推", file=sys.stderr)
         return
     elif int(got) != int(want):
