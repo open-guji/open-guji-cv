@@ -170,9 +170,11 @@ def unpacked_note(root: Path, book: str) -> str | None:
 
 
 def push_products(book: str, root: Path, label: str | None = None, steps: list[str] | None = None,
-                  note: str = "", src=None, change: str | None = None, vers: dict | None = None) -> dict:
+                  note: str = "", src=None, change: str | None = None, vers: dict | None = None,
+                  purity: dict | None = None) -> dict:
     """`label` 给了就整个用它；不给就拼 `<版本三段>-<change>`（change 缺省 UTC 时刻），如 `cv0.4.7-c1-g2-layout`。
-    `vers`：三样版本（`cli_products.book_versions` 读册配置算好传进来；不传只记 cv）。"""
+    `vers`：三样版本（`cli_products.book_versions` 读册配置算好传进来；不传只记 cv）。
+    `purity`：存包前的纯净性检查（`ops/pack_purity.check`），原样记进 manifest，标 main 时看。"""
     from ..core import cv_version as CV
     src = src or _client()
     if vers is None:
@@ -195,6 +197,8 @@ def push_products(book: str, root: Path, label: str | None = None, steps: list[s
            "created": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "note": note,
            "files": nfiles, "steps": per, "bytes": len(data), "parts": parts,
            "pack_sha256": hashlib.sha256(data).hexdigest()}
+    if purity is not None:
+        man["purity"] = purity
     _call(src, "PUT", f"{pre}/manifest.json", data=json.dumps(man, ensure_ascii=False, indent=1).encode("utf-8"),
           content_type="application/json", tries=3)
     if not steps:                       # 只打了几步的包不算整册存过
@@ -250,7 +254,11 @@ def promote(book: str, label: str, note: str = "", src=None, why: str | None = N
 
     main 是正式结果，只收正式版 cv 出的包（2026-10-23 起）：正式库里包的 `cv_version` 不是三段数字
     （dev／rc／任意提交跑的 `0.5.10.dev3+g…`、`dev+g…`、带 dirty、没记版本）就拒，
-    确要标给 `why`（记进指针）。实验桶里的包不查。"""
+    确要标给 `why`（记进指针）。实验桶里的包不查。
+
+    存包时记了纯净性（`purity`，`ops/pack_purity`）且不纯（混版本、图源对不上）的，先照标、在指针里记一笔
+    `impure`（2026-10-30 起，A32 精校前移 A2）。没有改成拦：实测册 007 近期的 main 候选包（A24 全册重放）
+    切分步、5-b 都是旧代码跑的，严格口径下全部「不纯」，拦就等于改了现行重跑做法，要用户先定（见 ops/pack_purity）。"""
     from ..core.cv_version import is_formal
     src = src or _client()
     check_label(label)
@@ -262,10 +270,14 @@ def promote(book: str, label: str, note: str = "", src=None, why: str | None = N
     if _bucket(src) == "main" and not is_formal(ver) and not (why or "").strip():
         raise ValueError(f"包 {label} 是 cv {ver or '未知版本'} 出的，不是正式版，不能标 main："
                          f"发正式 tag 后在它上面重跑再存；确要标加 --why \"<理由>\"")
+    from ..ops.pack_purity import describe
+    pur = man.get("purity")
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     rec = {"book": book, "label": label, "at": ts, "note": note}
     if not is_formal(ver):
         rec.update(cv_version=ver, cv_override=(why or "").strip() or None)
+    if pur and pur.get("pure") is False:
+        rec.update(impure=describe(pur), impure_why=(why or "").strip() or None)
     _call(src, "PUT", f"{pre}/{MAIN_DIR}/{ts}-{label}.json", data=json.dumps(rec, ensure_ascii=False).encode("utf-8"),
           content_type="application/json", tries=3)
     return f"{pre}/{label}"

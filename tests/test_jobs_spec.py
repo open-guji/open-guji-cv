@@ -106,3 +106,16 @@ def test_book_overrides_accept_book_fields():
     assert a["book_overrides"]["cv_version"] == "0.5.21"
     with pytest.raises(SP.SpecError):
         norm(book="vol10", cv="dev", book_overrides={"nope": 1})
+
+
+def test_glyph_diff_incremental_defaults():
+    """改钉字形库只重算受影响的格（A32 精校前移 A4）：缺省从 glyph_match 起、不 force、复用照开。"""
+    s = norm(book="vol10", cv="v0.5.16", glyph_diff=3, book_overrides={"glyph_pin": 5})
+    assert s["glyph_diff"] == 3 and s["steps"] == {"from": "glyph_match", "to": None}
+    assert s["force"] is False and s["no_reuse"] is False and s["base"] == "main"
+    assert "glyph_diff" not in norm(book="vol10", cv="v0.5.16")       # 不给就没有这个键，老任务指纹不变
+    for bad in ({"glyph_diff": 3}, {"glyph_diff": 3, "book_overrides": {"glyph_pin": 3}},
+                {"glyph_diff": "3", "book_overrides": {"glyph_pin": 5}},
+                {"glyph_diff": 3, "book_overrides": {"glyph_pin": 5}, "kind": "command", "run": [["status"]]}):
+        with pytest.raises(SP.SpecError):
+            norm(book="vol10", cv="v0.5.16", **bad)
