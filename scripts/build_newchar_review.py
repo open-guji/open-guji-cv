@@ -43,6 +43,7 @@ import base64
 import collections
 import json
 import os
+import re
 import sqlite3
 import sys
 import time
@@ -54,7 +55,7 @@ sys.path.insert(0, str(REPO))
 KEY = "newchar-review-v1"
 TITLE = "新字确认"
 CTX_RADIUS = 6
-IMG_H = 96
+IMG_H = 72
 
 DOC = __doc__
 
@@ -84,7 +85,7 @@ def _cell_sort(cid: str):
 
 
 def collect_book(book: str, products: Path, counts: collections.Counter, min_count: int,
-                 skip: set[str], stats: collections.Counter) -> list[dict]:
+                 skip: set[str], stats: collections.Counter, only: set[str] | None = None) -> list[dict]:
     """一册里的新字待审格 → 卡片 dict 列表。"""
     root = products / book
     if not (root / "seed_admit").is_dir():
@@ -97,6 +98,14 @@ def collect_book(book: str, products: Path, counts: collections.Counter, min_cou
         gm = root / "glyph_match" / sf.name
         rc = root / "rare_candidates" / sf.name
         align = _read(ar)["align_ref"] if ar.exists() else {"chars": []}
+        # 序列对位（chars）没对上的格，坐标对位（coord）常能给出整理本字：seed_admit 的 rare_ref_coord 就吃这个
+        chars = list(align.get("chars", []))
+        have = {c["id"] for c in chars}
+        for c in align.get("coord", []):
+            if c["id"] not in have and c.get("ref_char") and c["ref_char"] != "〓":
+                chars.append({"id": c["id"], "col": c["col"], "slot": c["slot"], "sub": c.get("sub"),
+                              "align_char": c["ref_char"]})
+        align = {"chars": chars}
         ref_by_id = {c["id"]: c for c in align.get("chars", [])}
         # 同列按读序排的整理本字，给上下文用
         cols: dict[int, list[dict]] = collections.defaultdict(list)
@@ -111,20 +120,27 @@ def collect_book(book: str, products: Path, counts: collections.Counter, min_cou
         for col in page["columns"]:
             for c in col.get("chars", []):
                 stats["cells"] += 1
+                cid = c["id"]
+                if only is not None and cid not in only:
+                    continue
                 if c["admit"]:
+                    if only is not None:
+                        stats["admitted_now"] += 1  # 清单里的格这版已放行，不用再看
                     continue
                 stats["review"] += 1
-                cid = c["id"]
                 ref = (ref_by_id.get(cid) or {}).get("align_char") or ""
-                if not ref or len(ref) != 1:
-                    stats["no_ref"] += 1
-                    continue
-                if counts.get(ref, 0) >= min_count:
-                    stats["ref_in_lib"] += 1
-                    continue
-                if cid in skip:
-                    stats["already_judged"] += 1
-                    continue
+                if only is None:
+                    if not ref or len(ref) != 1:
+                        stats["no_ref"] += 1
+                        continue
+                    if counts.get(ref, 0) >= min_count:
+                        stats["ref_in_lib"] += 1
+                        continue
+                    if cid in skip:
+                        stats["already_judged"] += 1
+                        continue
+                elif len(ref) != 1:
+                    ref = ""  # 整理本缺字（〓）或多字：没有整理本字，按 5b 首选分组
                 g = gm_by_id.get(cid) or {}
                 lib_top = (g.get("candidates") or [[None, 0]])[0][0] or c.get("char") or ""
                 r5 = []
@@ -134,17 +150,27 @@ def collect_book(book: str, products: Path, counts: collections.Counter, min_cou
                         r5.append(ch)
                     if len(r5) == 3:
                         break
-                seq = cols.get(ref_by_id[cid]["col"], [])
-                idx = next((i for i, x in enumerate(seq) if x["id"] == cid), None)
                 ctx = ""
-                if idx is not None:
-                    lo, hi = max(0, idx - CTX_RADIUS), idx + CTX_RADIUS + 1
-                    ctx = "".join((f"【{x['align_char']}】" if i == idx else (x.get("align_char") or "□"))
-                                  for i, x in enumerate(seq[lo:hi], start=lo))
+                if cid in ref_by_id:
+                    seq = cols.get(ref_by_id[cid]["col"], [])
+                    idx = next((i for i, x in enumerate(seq) if x["id"] == cid), None)
+                    if idx is not None:
+                        lo, hi = max(0, idx - CTX_RADIUS), idx + CTX_RADIUS + 1
+                        ctx = "".join((f"【{x['align_char']}】" if i == idx else (x.get("align_char") or "□"))
+                                      for i, x in enumerate(seq[lo:hi], start=lo))
+                else:  # 整理本里没这格：拿本列已识别的字当上下文
+                    seq = col.get("chars", [])
+                    idx = next((i for i, x in enumerate(seq) if x["id"] == cid), None)
+                    if idx is not None:
+                        lo, hi = max(0, idx - CTX_RADIUS), idx + CTX_RADIUS + 1
+                        ctx = "".join((f"【{x.get('char') or '□'}】" if i == idx else
+                                       ((x.get("char") or "□") if x.get("admit") else "□"))
+                                      for i, x in enumerate(seq[lo:hi], start=lo))
                 doubts = [d if isinstance(d, str) else json.dumps(d, ensure_ascii=False) for d in c["doubts"]]
                 out.append({
                     "id": cid, "book": book, "page": int(key[1:]),
-                    "ref": ref, "ref_n_lib": counts.get(ref, 0),
+                    "ref": ref, "ref_n_lib": counts.get(ref, 0) if ref else 0,
+                    "grp": ref or (r5[0] if r5 else lib_top), "kind": "ref" if ref else "cand",
                     "lib_top": lib_top, "lib_cov": g.get("cov"), "r5": r5, "ctx": ctx,
                     "doubts": doubts,
                     # 上下文护栏拿整理本字顶上来的格：整理本字未必对，页上黄底单独标
@@ -179,6 +205,11 @@ def crop_images(cards: list[dict], crops_dir: Path) -> dict[str, str]:
             ctxs[book] = RunContext(load_book(book), st, cache, log=lambda s: None)
         _, page, col, slot, *rest = card["id"].split(":") + [""]
         sub = rest[0] if rest else ""
+        m = re.match(r"(\d+)(.*)", slot)  # 槽号带字母后缀（如 8b）：后缀算 sub
+        if not m:  # 槽号 -1 等（抬头外的特殊位）：没有字块图
+            print(f"  [无图] {card['id']}: 槽号 {slot!r} 不是正常格", file=sys.stderr)
+            continue
+        slot, sub = m.group(1), (m.group(2) + sub)
         key = cell_key(int(page), int(col), int(slot)) + (sub or "")
         try:
             f = cache.get(book, "char_patch", key) or ctxs[book].materialize("char_patch", key)
@@ -341,10 +372,186 @@ def build_html(cards: list[dict], imgs: dict[str, str], verdicts: dict | None = 
                   payload={"rows": cards, "imgs": imgs})
 
 
+
+# ───────────────────────────── 一字一卡 ─────────────────────────────
+
+GROUP_CSS = r"""
+.g-card{background:var(--surface);border:1px solid var(--rule);border-radius:3px;padding:10px 12px;
+  box-shadow:var(--shadow);margin-top:12px}
+.g-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.g-head .big{font-family:var(--serif);font-size:40px;line-height:1.1}
+.g-head .gm{font-size:12px;color:var(--muted);flex:1;min-width:8rem}
+.g-head .gm b{color:var(--ink);font-weight:600}
+.gbtns{display:flex;gap:6px}
+.gbtn{min-height:40px;padding:0 10px;border:1px solid var(--rule-hard);border-radius:3px;background:var(--surface);
+  color:var(--ink);font-size:13px;font-weight:500;cursor:pointer}
+.gbtn.ok{border-color:var(--ok);color:var(--ok)}
+.gbtn:active{background:var(--sunk)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:8px;margin-top:10px}
+.tile{border:1px solid var(--rule);border-left:3px solid var(--rule-hard);border-radius:3px;padding:5px 6px;
+  background:var(--ground);cursor:pointer;min-width:0;user-select:none}
+.tile.warn{background:var(--ochre-soft)}
+.tile img{display:block;height:64px;max-width:100%;margin:0 auto;background:var(--tile);border-radius:2px;
+  image-rendering:pixelated}
+.tile .noimg{height:64px;width:100%}
+.tile .tl{font-size:12px;font-weight:600;margin-top:3px;min-height:1.2em;color:var(--faint)}
+.tile .tc{font-family:var(--serif);font-size:12px;line-height:1.35;word-break:break-all;color:var(--ink)}
+.tile .tm{font-size:10.5px;color:var(--muted);line-height:1.3;margin-top:2px;word-break:break-all}
+.tile[data-v="ok"]{border-left-color:var(--ok)} .tile[data-v="ok"] .tl{color:var(--ok)}
+.tile[data-v="pick"]{border-left-color:var(--indigo)} .tile[data-v="pick"] .tl{color:var(--indigo)}
+.tile[data-v="seg"]{border-left-color:var(--zhu)} .tile[data-v="seg"] .tl{color:var(--zhu)}
+.tile[data-v="other"]{border-left-color:var(--ochre)} .tile[data-v="other"] .tl{color:var(--ochre)}
+.tile[data-v="unclear"]{border-left-color:var(--faint)}
+.ctrl2{display:flex;gap:8px;margin:8px 0 0}
+"""
+
+GROUP_JS = r"""
+const BODY = `
+<header class="top"><div class="top-in">
+  <span class="brand">__TITLE__</span>
+  <span class="save" id="save">本机</span>
+  <span class="count" id="count">0 / 0</span>
+</div><div class="bar"><i id="prog"></i></div></header>
+<div class="wrap">
+  <details class="intro" id="intro" open>
+    <summary>怎么裁（一字一卡）</summary>
+    <p>每张卡是<b>一个字</b>，下面是这个字的所有待审格。<b>点格子</b>切换：
+       <b>✓ 对</b>（整理本字或 5b 首选字就是这格的字）→ <b>看不清</b> → <b>切分有问题</b> → <b>另有其字</b> → 清除。
+       一组基本都对时点<b>「整组都对」</b>，只会标还没裁的格，之后把例外的格点掉即可。
+       黄底 ⚠ = 上下文护栏拿整理本字顶上来的格，整理本字未必对。<br>
+       <b>整理本缺字</b>那类没有整理本字，卡头是 5b 首选字，只能看图判断是不是这个字。
+       <b>只收意思相同的字</b>：形近但意思不同的（个/今、己/已/巳）不能并，拆不开就点「看不清」。</p>
+  </details>
+  <div class="ctrl">
+    <div class="seg" id="filter">
+      <button data-f="todo" aria-pressed="true">未裁</button>
+      <button data-f="all" aria-pressed="false">全部</button>
+      <button data-f="done" aria-pressed="false">已裁</button>
+    </div>
+    <button class="ghost" id="copy">复制</button>
+    <button class="ghost" id="reset">清空</button>
+  </div>
+  <div class="ctrl2"><div class="seg" id="kfilter">
+      <button data-k="" aria-pressed="true">全部类</button>
+      <button data-k="ref" aria-pressed="false">有整理本字</button>
+      <button data-k="cand" aria-pressed="false">整理本缺字</button>
+  </div></div>
+  <div class="list" id="list"></div>
+</div>
+<div class="sheet" id="sheet" hidden><div class="sheet-in">
+  <h2>裁决结果</h2><p id="sheet-note"></p>
+  <textarea id="sheet-text" readonly></textarea>
+  <div class="row"><button class="ghost" id="sheet-copy">复制</button>
+  <button class="ghost" id="sheet-close">关闭</button></div>
+</div></div>`;
+
+const rowId = r => r.id;
+let _groups = null;  /* page_js 先于壳里的 D 初始化，所以分组要用到时才建 */
+const groups = () => _groups || (_groups = (() => {
+  const m = new Map();
+  D.rows.forEach(r => {
+    const k = r.kind + ':' + r.grp;
+    if (!m.has(k)) m.set(k, {id: 'G:' + k, key: r.grp, kind: r.kind, cells: []});
+    m.get(k).cells.push(r);
+  });
+  return [...m.values()].sort((a, b) => b.cells.length - a.cells.length || a.key.localeCompare(b.key));
+})());
+const okVal = r => r.kind === 'ref' ? 'ref' : 'pick:' + r.grp;
+const CYCLE = r => [okVal(r), 'unclear', 'seg', 'other'];
+function vclass(r, v){
+  if (!v) return '';
+  if (v === okVal(r)) return 'ok';
+  if (v.startsWith('pick:')) return 'pick';
+  return v;
+}
+function vlabel(r, v){
+  if (!v) return '';
+  if (v === okVal(r)) return '✓ 对';
+  if (v.startsWith('pick:')) return '→ ' + v.slice(5);
+  return {unclear: '看不清', seg: '切分有问题', other: '另有其字', ref: '✓ 对'}[v] || v;
+}
+function short(ctx){
+  const i = ctx.indexOf('【'), j = ctx.indexOf('】');
+  if (i < 0) return ctx;
+  return ctx.slice(Math.max(0, i - 3), i) + ctx.slice(i, j + 1) + ctx.slice(j + 1, j + 4);
+}
+function tile(r){
+  const v = verdictOf(r.id), img = D.imgs[r.id] ? `<img data-src="${esc(r.id)}" alt="">` : `<div class="noimg">无图</div>`;
+  const cand = (r.lib_top ? '库 ' + r.lib_top : '') + (r.r5 && r.r5.length ? ' · 5b ' + r.r5.slice(0, 2).join('') : '');
+  return `<div class="tile${r.warn ? ' warn' : ''}" data-cell="${esc(r.id)}"${v ? ` data-v="${vclass(r, v)}"` : ''}
+    title="${esc(r.id)}">${img}<div class="tl">${esc(vlabel(r, v))}</div>
+    <div class="tc">${esc(short(r.ctx || ''))}</div><div class="tm">${esc(cand)}</div></div>`;
+}
+function ghead(g){
+  const n = g.cells.length, d = g.cells.filter(r => verdictOf(r.id)).length;
+  const kind = g.kind === 'ref' ? '整理本字' : '整理本缺字 · 5b 首选字';
+  const lib = g.kind === 'ref' ? `　库内 <b>${g.cells[0].ref_n_lib}</b> 例` : '';
+  return `<span class="big">${esc(g.key)}</span><div class="gm"><b>${n}</b> 格　${kind}${lib}<br>已裁 <b>${d}</b> / ${n}</div>
+    <div class="gbtns"><button class="gbtn ok" data-a="ok">整组都对</button><button class="gbtn" data-a="unclear">整组看不清</button></div>`;
+}
+function card(g){
+  return `<article class="g-card" data-id="${esc(g.id)}"><div class="g-head">${ghead(g)}</div>
+    <div class="tiles">${g.cells.map(tile).join('')}</div></article>`;
+}
+let filter = 'todo', kfilter = '';
+function visibleRows(){
+  return groups().filter(g => (!kfilter || g.kind === kfilter) &&
+    (filter === 'all' || (filter === 'done') === g.cells.every(r => verdictOf(r.id))));
+}
+function groupOf(art){ return groups().find(g => g.id === art.dataset.id); }
+function repaint(art, r){
+  const g = groupOf(art);
+  if (r){
+    const t = art.querySelector(`.tile[data-cell="${CSS.escape(r.id)}"]`), v = verdictOf(r.id);
+    if (v) t.dataset.v = vclass(r, v); else t.removeAttribute('data-v');
+    t.querySelector('.tl').textContent = vlabel(r, v);
+  }
+  art.querySelector('.g-head').innerHTML = ghead(g);
+  tally();
+}
+document.addEventListener('click', e => {
+  let b = e.target.closest('#filter button');
+  if (b){ filter = b.dataset.f; [...b.parentElement.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); return; }
+  b = e.target.closest('#kfilter button');
+  if (b){ kfilter = b.dataset.k; [...b.parentElement.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); return; }
+  b = e.target.closest('.gbtn');
+  if (b){
+    const art = b.closest('.g-card'), g = groupOf(art), t = Date.now();
+    g.cells.forEach(r => { if (!verdictOf(r.id)) state[r.id] = {v: b.dataset.a === 'ok' ? okVal(r) : 'unclear', t}; });
+    persist();
+    g.cells.forEach(r => repaint(art, r));
+    return;
+  }
+  b = e.target.closest('.tile');
+  if (b){
+    const art = b.closest('.g-card'), g = groupOf(art), r = g.cells.find(x => x.id === b.dataset.cell);
+    const cyc = CYCLE(r), cur = verdictOf(r.id), i = cyc.indexOf(cur);
+    if (cur && i < 0) delete state[r.id];
+    else if (i === cyc.length - 1) delete state[r.id];
+    else state[r.id] = {v: cyc[i + 1], t: Date.now()};
+    persist(); repaint(art, r);
+  }
+});
+function afterVerdict(){}
+function payload(){
+  return D.rows.filter(r => verdictOf(r.id))
+    .map(r => JSON.stringify({id: r.id, verdict: verdictOf(r.id)})).join('\n');
+}
+"""
+
+
+def build_html_grouped(cards: list[dict], imgs: dict[str, str], verdicts: dict | None = None) -> str:
+    sys.path.insert(0, str(REPO / ".claude" / "skills" / "review-artifact" / "scripts"))
+    from review_shell import render
+    return render(TITLE, KEY + "-g", verdicts=verdicts or {}, css=CSS + GROUP_CSS,
+                  page_js=GROUP_JS.replace("__TITLE__", TITLE), payload={"rows": cards, "imgs": imgs})
+
+
 def order_cards(cards: list[dict]) -> list[dict]:
     """⚠ 的排前面；其余同字头挨着（字头按出现格数多的先）。"""
-    n = collections.Counter(c["ref"] for c in cards)
-    return sorted(cards, key=lambda c: (not c["warn"], -n[c["ref"]], c["ref"], _cell_sort(c["id"])))
+    g = lambda c: c.get("grp") or c["ref"]  # noqa: E731
+    n = collections.Counter(g(c) for c in cards)
+    return sorted(cards, key=lambda c: (not c["warn"], -n[g(c)], g(c), _cell_sort(c["id"])))
 
 
 # ───────────────────────────── collect ─────────────────────────────
@@ -373,14 +580,31 @@ def cmd_collect(a) -> None:
     db = Path(a.db) if a.db else glyph_db_path()
     counts = lib_counts(db)
     print(f"字形库 {db}：{len(counts)} 个字头，{sum(counts.values())} 例")
+    only = None
+    if a.cells_file:
+        only = {ln.split("\t")[0].strip() for ln in Path(a.cells_file).read_text(encoding="utf-8").splitlines()[1:]
+                if ln.strip()}
+        if a.books == "auto":
+            books = sorted({c.split(":")[0] for c in only})
     skip = _judged_cells(books)
     cards: list[dict] = []
     for b in books:
         st: collections.Counter = collections.Counter()
-        got = collect_book(b, products, counts, a.min_count, skip, st)
+        got = collect_book(b, products, counts, a.min_count, skip, st, only)
         cards += got
         print(f"  {b}: 格 {st['cells']}  待审 {st['review']}  无整理本字 {st['no_ref']}  "
-              f"整理本字库里有 {st['ref_in_lib']}  已有人裁 {st['already_judged']}  →新字格 {len(got)}")
+              f"整理本字库里有 {st['ref_in_lib']}  已有人裁 {st['already_judged']}  这版已放行 {st['admitted_now']}  →格 {len(got)}")
+    if only is not None:
+        missing = only - {c["id"] for c in cards}
+        (Path(a.out)).mkdir(parents=True, exist_ok=True)
+        (Path(a.out) / "not_pending.txt").write_text("\n".join(sorted(missing)), encoding="utf-8")
+        print(f"  清单 {len(only)} 格，出卡 {len(cards)}，不在这版待审里 {len(missing)}（见 not_pending.txt）")
+    if a.kind:
+        cards = [c for c in cards if c["kind"] == a.kind]
+    if a.refs:
+        keep = set(a.refs)
+        cards = [c for c in cards if c["ref"] in keep]
+        print(f"  --refs：只留整理本字属 {len(keep)} 字头的格 → {len(cards)} 格")
     cards = order_cards(cards)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -388,13 +612,19 @@ def cmd_collect(a) -> None:
     with (out / "cards.jsonl").open("w", encoding="utf-8") as f:
         for c in cards:
             f.write(json.dumps(c, ensure_ascii=False, sort_keys=True) + "\n")
-    html = build_html(cards, imgs)
+    pre = {}
+    if a.preset:
+        for ln in Path(a.preset).read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                d = json.loads(ln)
+                pre[d["id"]] = {"v": d["verdict"], "t": d.get("t") or int(time.time() * 1000)}
+    html = (build_html_grouped(cards, imgs, pre) if a.group else build_html(cards, imgs))
     (out / "review.html").write_text(html, encoding="utf-8")
-    ref_n = collections.Counter(c["ref"] for c in cards)
+    ref_n = collections.Counter(c.get("grp") or c["ref"] for c in cards)
     with (out / "summary.tsv").open("w", encoding="utf-8") as f:
         f.write("字头\t格数\t⚠格数\t格号\n")
         for ch, n in ref_n.most_common():
-            cs = [c for c in cards if c["ref"] == ch]
+            cs = [c for c in cards if (c.get("grp") or c["ref"]) == ch]
             f.write(f"{ch}\t{n}\t{sum(c['warn'] for c in cs)}\t{' '.join(c['id'] for c in cs)}\n")
     print(f"→ {out}/review.html  {len(html)/1024:.0f} KB　{len(cards)} 格 / {len(ref_n)} 个新字头"
           f"（⚠ {sum(c['warn'] for c in cards)} 格）；无图 {len(cards) - len(imgs)} 格")
@@ -493,11 +723,16 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=DOC)
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("collect", help="挑新字待审格，出 cards.jsonl + review.html（只读）")
-    c.add_argument("--books", required=True, help="逗号分隔，如 vol06,vol07")
+    c.add_argument("--books", required=True, help="逗号分隔，如 vol06,vol07；配 --cells-file 时可写 auto")
     c.add_argument("--products-root", required=True, help="产物根（内含 <册>/seed_admit/…）")
     c.add_argument("-w", "--workspace", help="工作区（取 glyph.db、册配置、原图）")
     c.add_argument("--db", help="字形库 glyph.db（缺省取工作区的）")
     c.add_argument("--min-count", type=int, default=1, help="整理本字在库里刻例数低于它算新字（缺省 1）")
+    c.add_argument("--cells-file", help="只收这个 TSV 第一列列出的格（跳过新字判定；整理本缺字的格没有整理本字，按 5b 首选字分组）")
+    c.add_argument("--group", action="store_true", help="按整理本字（缺字格按 5b 首选字）一字一卡出页")
+    c.add_argument("--preset", help="已有的裁决 jsonl（harvest_verdicts 出的），预置进新页")
+    c.add_argument("--kind", choices=["ref", "cand"], help="只出一类：ref=有整理本字，cand=整理本缺字")
+    c.add_argument("--refs", help="只收这些整理本字（字符串里每个字符算一个字头），如补库候选清单的字头")
     c.add_argument("--no-images", action="store_true", help="不出字块图（没原图时用）")
     c.add_argument("--out", required=True)
     c.set_defaults(fn=cmd_collect)
