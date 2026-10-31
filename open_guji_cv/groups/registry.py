@@ -442,10 +442,26 @@ GROUPS: dict[str, GroupSpec] = {
 _CP_NO_TOP = frozenset({"chu"})
 #: 库首位是组外字、整理本在组里就进（`FlowSpec.ref_enter`；与 `tolerate` 配用，补放须与整理本同字）：黎𥠖（2026-10-28，A24 第 2 轮）整理本作 𥠖、
 #: 刻的是无草头的 黎 形，库把它排成 藜（草头）或 恭，两形一眼可分（有无草头），整理本又跟刻形走。
-_CP_REF_ENTER = frozenset({"cp_li2"})
+_CP_REF_ENTER = frozenset({"cp_li2"}) | frozenset({
+    # 2026-10-31（A24 第 3 轮 r5 V 类「码位已定」42 对）：整理本字在组里、库首位是组外形近字（陪衬）的格也进（见 `_CP_TOL_R5`）
+    "cp_bao3", "cp_ji4", "zheng", "cp_yan2", "kui", "cp_tai4", "cp_yi3", "cp_ye", "cp_ji2", "cek", "cp_zhen1", "cp_shu4",
+    "cp_hui1", "lei", "cp_yin3", "cp_shu4b", "cp_ta4", "cp_jing1", "cp_xu1", "huo", "lang", "nei", "wan",
+    "cp_sheng2", "cp_xie2", "cp_yuan4", "cp_xiao3", "cp_kuan1", "cp_zeng1", "cp_zao3", "cp_feng4b", "cp_mao4", "cp_gao1",
+    "cp_du2", "cp_li2b", "cp_yin3c"})
+#: 陪衬字（库首位／分差内的组外形近字）：r5 产物里整理本作本组字、库在这些字间拿不准的 V 类格（逐格看图见 PR）。
+_CP_TOL_R5 = {
+    "cp_bao3": "實賓賁賢竇責賔賞買", "cp_ji4": "𤯝奇眚靑書竒宻需晉密音笥當傅博", "zheng": "微徹數", "cp_yan2": "頄頗頼頥贑頏頤類",
+    "cp_tai4": "奉奏恭秦忝春", "cp_yi3": "備傅何偶椅僣", "cp_ye": "郞朗郎則副", "cp_ji2": "卷", "cek": "東",
+    "cp_zhen1": "具異輿翼興典", "cp_shu4": "迹進連", "cp_hui1": "徴繳微徵教校", "lei": "遺遣頓頗領", "cp_yin3": "欽欲",
+    "cp_shu4b": "備栢楷桐", "cp_ta4": "書舊譜萬香", "cp_jing1": "别刑拙", "cp_xu1": "盧", "lang": "目朗曰", "nei": "丙",
+    "wan": "脫視鹽", "cp_sheng2": "綱總絕絶", "cp_xie2": "揣播捫揭", "cp_yuan4": "死在", "cp_xiao3": "嘵睦晚", "cp_kuan1": "竟",
+    "cp_zeng1": "贈", "cp_zao3": "裏熹", "cp_mao4": "晚觀臲", "cp_gao1": "臬泉皋", "cp_du2": "竇續質須",
+    "cp_li2b": "棨栗菜棐黎架業", "cp_yin3c": "渠栗槩粟",
+    "kui": "衰䙝袠裴藻", "huo": "𮑮麓"}
 CODEPOINT_GROUPS: dict[str, GroupSpec] = {
     gid: GroupSpec(id=gid, name=name, members=frozenset(name), backends=(), kind="variant", solvers=(),
-                   flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol), lift_ref_agree=bool(tol),
+                   flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol) | frozenset(_CP_TOL_R5.get(gid, "")),
+                                 lift_ref_agree=bool(tol), tolerate_ref_agree=gid in _CP_TOL_R5,
                                  ref_top_enter=gid not in _CP_NO_TOP, ref_enter=gid in _CP_REF_ENTER), overlaps=ov,
                    note="码位归一：给册配置 codepoints 定的那个字；只在 seed_admit.group_flow 点名时生效。")
     for gid, name, ov, tol in (("nei", "內内", (), ""), ("chu", "出岀", ("sy",), ""),
@@ -482,7 +498,13 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                ("cp_shu4b", "樹𣗳", (), ""), ("cp_huai2", "懷懐", (), ""), ("cp_han2", "涵𣹢", (), ""),
                                # 2026-10-28 sheldon 定：𠋣→倚 𪋤→麓 𮟏→邃；冥𡨋→㝠（推翻 10-2x 的 㝠→冥）；隱𨼆→隠（推翻 隠→𨼆，原 yin 刻形组撤下）
                                ("cp_yi3", "倚𠋣", (), ""), ("cp_lu4", "麓𪋤", (), ""), ("cp_sui4", "邃𮟏", (), ""),
-                               ("cp_yin3b", "隱隠𨼆", (), ""))
+                               ("cp_yin3b", "隱隠𨼆", (), ""),
+                               # 2026-10-31（A24 第 3 轮「为已定码位异体对建组」）：codepoints 早定、r5 仍有 V 类送审的 12 对，沿第 1 轮办法建码位组
+                               ("cp_sheng2", "繩䋲", (), ""), ("cp_xie2", "攜𢹂", (), ""), ("cp_yuan4", "苑𫟍", (), ""),
+                               ("cp_xiao3", "曉暁", (), ""), ("cp_kuan1", "寛寬", (), ""), ("cp_zeng1", "增増", (), ""),
+                               ("cp_zao3", "棗𬃷", (), ""), ("cp_feng4b", "奉𫯠", (), ""), ("cp_mao4", "貌貎", (), ""),
+                               ("cp_gao1", "臯𦤎", (), ""), ("cp_du2", "瀆凟", (), ""), ("cp_li2b", "梨棃", (), ""),
+                               ("cp_yin3c", "櫽𭬚", (), ""))
 }
 
 #: 码位已定、库在形近字间拿不准的族（2026-10-26，A24 全册任务 04）：(组, 成员, 入口陪衬, 说明)。入口陪衬＝全 98 册整理本作本组字的格里
@@ -701,6 +723,10 @@ PROVISIONAL: dict[str, Provisional] = {
         ("cp_hui1", "徽", "徽𡽪"), ("cp_jiu1", "究", "究䆒"), ("cp_fa4", "髮", "髮髪"), 
         ("cp_shu4b", "樹", "樹𣗳"), ("cp_huai2", "懷", "懷懐"), ("cp_han2", "涵", "涵𣹢"),
         ("cp_yi3", "倚", "倚𠋣"), ("cp_lu4", "麓", "麓𪋤"), ("cp_sui4", "邃", "邃𮟏"), ("cp_yin3b", "隠", "隱隠𨼆"),
+        ("cp_sheng2", "繩", "繩䋲"), ("cp_xie2", "攜", "攜𢹂"), ("cp_yuan4", "苑", "苑𫟍"), ("cp_xiao3", "曉", "曉暁"),
+        ("cp_kuan1", "寛", "寛寬"), ("cp_zeng1", "增", "增増"), ("cp_zao3", "棗", "棗𬃷"), ("cp_feng4b", "奉", "奉𫯠"),
+        ("cp_mao4", "貌", "貌貎"), ("cp_gao1", "臯", "臯𦤎"), ("cp_du2", "瀆", "瀆凟"), ("cp_li2b", "梨", "梨棃"),
+        ("cp_yin3c", "櫽", "櫽𭬚"),
         ("xiang", "鄕", "鄉鄕郷"), ("weim", "微", "微㣲"), ("bie", "別", "別别"), ("zhen", "鎭", "鎭鎮"))
 }
 
