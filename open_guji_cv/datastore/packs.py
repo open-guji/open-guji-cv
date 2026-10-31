@@ -270,14 +270,13 @@ def promote(book: str, label: str, note: str = "", src=None, why: str | None = N
     if _bucket(src) == "main" and not is_formal(ver) and not (why or "").strip():
         raise ValueError(f"包 {label} 是 cv {ver or '未知版本'} 出的，不是正式版，不能标 main："
                          f"发正式 tag 后在它上面重跑再存；确要标加 --why \"<理由>\"")
-    from ..ops.pack_purity import describe
     pur = man.get("purity")
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     rec = {"book": book, "label": label, "at": ts, "note": note}
     if not is_formal(ver):
         rec.update(cv_version=ver, cv_override=(why or "").strip() or None)
     if pur and pur.get("pure") is False:
-        rec.update(impure=describe(pur), impure_why=(why or "").strip() or None)
+        rec.update(impure=describe_purity(pur), impure_why=(why or "").strip() or None)
     _call(src, "PUT", f"{pre}/{MAIN_DIR}/{ts}-{label}.json", data=json.dumps(rec, ensure_ascii=False).encode("utf-8"),
           content_type="application/json", tries=3)
     return f"{pre}/{label}"
@@ -487,3 +486,26 @@ def push_derived(src=None) -> list[str]:
             push_file(key, f, src=src)
             done.append(key)
     return done
+
+
+def describe_purity(purity: dict | None) -> str:
+    """一句中文：给 promote 的拒绝理由、存包时的打印用。"""
+    if not purity:
+        return "没有纯净性记录（老包或存包时没查）"
+    if purity.get("error"):
+        return f"纯净性没查成：{purity['error']}"
+    bits = []
+    if purity.get("code_mixed"):
+        bits.append("代码对不上（混版本）：" + "、".join(f"{s} {n} 页" for s, n in purity["code_mixed"].items()))
+    s = purity.get("source") or {}
+    st = s.get("status")
+    if st == "mismatch":
+        bits.append(f"图源对不上：产物页表 r{s.get('products_rev')}，册 yaml source_rev {s.get('yaml_rev')}"
+                    + (f"，原图 sha 不符 {len(s['bad_pages'])} 页（{s['bad_pages'][:5]}…）" if s.get("bad_pages") else ""))
+    elif st == "unknown":
+        bits.append("产物没记出自哪一版页表（_source.json 缺），原图来历不明")
+    elif st == "unpinned":
+        bits.append("册 yaml 没钉 source_rev（只记，不算不纯）")
+    if purity.get("pure"):
+        return "纯净" + (f"（{'；'.join(bits)}）" if bits else "")
+    return "不纯：" + "；".join(bits)
