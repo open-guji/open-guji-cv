@@ -511,6 +511,13 @@ class AlignRefParams(BaseModel):
     同书异版、整理本整段录入的书可按册放宽（北行 bxgb 取 12）：两头仍要被 equal 夹住。
     只多给整理本字，放行照旧要 `lib_gate`／seed_admit 的库证据。"""
 
+    coord_relaxed: bool = False
+    """坐标对位的三条补路（2026-10-31，史記文淵閣本册 01–03；见 `align_ref_coord._coord_relaxed`）：
+    圈号「○」格不占整理本字位、几何拟不上时按 Step3 格号配、职名分支切的列格数等于字数时按次序配。
+    起因：册 01–03 坐标对位退回的 411 列里，158 列是考證／注文的「○」把其后字位挤错一格（与现役对位冲突），
+    180 列是目录、卷端题列、职名页字距不匀，几何行号拟不上；这些格因此没有整理本字，只能人审。
+    配上的列照旧过 `_coord_conflict` 与错位闸。False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -525,6 +532,8 @@ class AlignRefParams(BaseModel):
             d.pop("anchor_merge_gap", None)
         if isinstance(d, dict) and self.replace_max_len == 3:
             d.pop("replace_max_len", None)
+        if isinstance(d, dict) and not self.coord_relaxed:
+            d.pop("coord_relaxed", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -664,7 +673,8 @@ class AlignRefStep(Step):
                          _opt(ctx, "cells", page), p.corpus,
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
-                         pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1])
+                         pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
+                         relaxed=p.coord_relaxed)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1269,7 +1279,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
-                 pin_line: int | None = None) -> None:
+                 pin_line: int | None = None, relaxed: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1303,23 +1313,29 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     legacy = {c.id: c for c in res.chars} if res.anchored else {}
     same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
     work = []
+    roster_cols: set[int] = set()
     for cc in cols:
         li = pm.col_line.get(cc.col)
         if li is None:
             res.coord_fallback[str(cc.col)] = "列行对应不成立"
             continue
-        units = C.column_units(book, page, cc.col, cc, cells.column(cc.col), carrier)
+        ccells = cells.column(cc.col)
+        units = C.column_units(book, page, cc.col, cc, ccells, carrier, symbols=relaxed)
         if not units:
             res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
             continue
-        work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
+        if relaxed and ccells is not None and "roster" in ccells.flags:
+            roster_cols.add(cc.col)          # 职名分支切的列：`coord_relaxed` 可按次序配
+        work.append((cc, units, lines[li], C.coord_column(units, lines[li], relaxed=relaxed,
+                                                          order_ok=cc.col in roster_cols)))
     # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
     # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
     title_re = re.compile(title_formula) if title_formula else None
     bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
     if grid and bs:
         b_page = bs[len(bs) // 2]
-        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page))
+        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page, relaxed=relaxed,
+                                                          order_ok=cc.col in roster_cols))
                 for cc, u, ln, r in work]
     for cc, _units, _ln, r in work:
         if not r.ok:
