@@ -42,7 +42,8 @@ CV_REPO = "https://github.com/open-guji/open-guji-cv"
 DEFAULT_PIPELINE = "keben_body_v2"
 DEFAULT_WS_GLOB = "96mid1ogzk-*"
 # 册 ID → 这部书自己的工作区仓（仓根即工作区）。ws_glob 的册 ID 在表里、又没显式给 ws_repo 时用它（2026-10-30 起）。
-WS_REPOS = {"96mid1ogzk": "guji-workspace/96mid1ogzk-si-ku-zong-mu"}
+WS_REPOS = {"96mid1ogzk": "guji-workspace/96mid1ogzk-si-ku-zong-mu",
+            "988g3f0wsu": "guji-workspace/988g3f0wsu-shi-ji-wen-yuan-ge"}   # 史記文淵閣本（2026-10-31）
 
 
 def book_id(spec: dict) -> str | None:
