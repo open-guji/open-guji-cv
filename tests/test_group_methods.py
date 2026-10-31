@@ -128,9 +128,10 @@ def test_codepoint_groups_flow_only():
     assert "chu" in FLOW_GROUPS["sy"].overlaps and "sy" in FLOW_GROUPS["chu"].overlaps
     # 放宽了进入（tolerate 组外繁复字）的组，补放必须与整理本同字
     for g, s in CODEPOINT_GROUPS.items():
-        assert bool(s.flow.tolerate) == s.flow.lift_ref_agree, g
+        assert bool(s.flow.tolerate) == (s.flow.lift_ref_agree or s.flow.tolerate_ref_agree), g
         assert not s.flow.tolerate & s.members, g
-    assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie", "cp_li2"}
+    from open_guji_cv.groups.registry import _CP_TOL_R5
+    assert {g for g, s in CODEPOINT_GROUPS.items() if s.flow.tolerate} == {"huo", "kui", "lie", "cp_li2"} | set(_CP_TOL_R5)
     # 库首位与整理本同组即进（2026-10-26）：出岀 除外（与 sy 共字，分差内有 山由 归 sy 按文意判）
     assert {g for g, s in CODEPOINT_GROUPS.items() if not s.flow.ref_top_enter} == {"chu"}
 
