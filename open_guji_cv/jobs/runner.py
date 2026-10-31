@@ -32,6 +32,12 @@ _PREP_ENV_PARTS = {"cv", "克隆工作区", "db-pull", "取原图", "模板索�
 _TOKEN_RE = re.compile(r"(TOKEN|SECRET|KEY|PASS|DSN)[A-Z_]*=\S+|postgres(ql)?://\S+|Bearer \S+", re.I)
 
 
+def resolve_ws_repo(sp: dict) -> str | None:
+    """这单的工作区仓：单子存的 ws_repo 优先；空的（提交时没映射上、或书 ID 后来才登记）就按册 ID 现查 WS_REPOS。
+    都没有返回 None，prep 退回 open-guji/guji-workspace 里 ws_glob 匹配的目录。"""
+    return sp.get("ws_repo") or SP.WS_REPOS.get(SP.book_id(sp) or "") or None
+
+
 class StageError(Exception):
     """一段没过。`env` 为真表示多半是网络／库的毛病，换个会话重试；否则是配置或代码问题，等人看。"""
 
@@ -187,8 +193,9 @@ class Job:
             return
         argv = ["bash", str(RUNNER_ROOT / "scripts" / "rerun_prep.sh"), sp["book"], "--cv", sp["cv"],
                 "--ws-glob", sp["ws_glob"]]
-        if sp.get("ws_repo"):
-            argv += ["--ws-repo", sp["ws_repo"]]
+        ws_repo = resolve_ws_repo(sp)
+        if ws_repo:
+            argv += ["--ws-repo", ws_repo]
         ov = sp.get("book_overrides") or {}
         if "corpus" in ov:
             argv += ["--corpus", str(ov["corpus"])]
