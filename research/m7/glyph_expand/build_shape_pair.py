@@ -28,12 +28,14 @@ from open_guji_cv.groups.flow import is_provisional
 
 PER_VOL = 12      # 每册每字最多收几格（模板库 <1MB）
 #: 组 → 放行格每字总共最多收几格（人裁与看图补的格不限）：口框族 國圖固 放行格多、64×64 模板大，不封顶模板库 4MB
-CAP = {"kou": 30, "fa": 60, "qi": 160, "xiang": 80, "weim": 80, "bie": 80, "zhen": 80, "li": 110, "xuan": 300}   # qi：陪衬 司音 放行格多
+#: 组 → 陪衬（非成员）每字最多收几格（成员不封顶）：陪衬只用来让判法在紧咬的组外字上弃权，不用太多
+CAP_OTHER = {"shang": 25, "sang": 50, "qi": 80, "suan": 50}
+CAP = {"shang": 130, "kou": 30, "fa": 60, "qi": 160, "xiang": 80, "weim": 80, "bie": 80, "zhen": 80, "li": 110, "xuan": 300}   # qi：陪衬 司音 放行格多
 #: 组 → (字, 看图补的格 {id: 字}, 看图剔出的格)
 PLAN = {
     # 尙／尚：上部 小（左撇外撇）对 ⺌（两点内收）。首轮按册留出与放行字不一致的 12 格看图：10 格是放行字码位错（按刻形改标签不如直接剔），
     # vol08:67:9:3（顶上压黑框）、vol14:3:9:12（印章底纹）看不清。
-    "shang": ("尙尚", {}, {"vol16:48:2:12", "vol16:28:7:9", "vol13:188:8:8", "vol04:98:5:6", "vol17:72:9:19", "vol10:114:7:11",
+    "shang": ("尙尚同問會衛何間備傅偷倚簡借", {}, {"vol16:48:2:12", "vol16:28:7:9", "vol13:188:8:8", "vol04:98:5:6", "vol17:72:9:19", "vol10:114:7:11",
                           "vol10:104:6:9", "vol05:115:6:7b", "vol09:116:3:11", "vol08:67:1:1", "vol08:67:9:3", "vol14:3:9:12"}),
     # 盖／蓋／葢：盖 无草头；蓋 草头下 去皿；葢 草头下 大皿（殿本多作葢）。盖 放行只 5 格，补 vol16–20 送审里看图确认是 盖 的 6 格。
     "gai": ("蓋葢", {}, {"vol16:30:2:12", "vol05:181:1:6"}),
@@ -52,7 +54,7 @@ PLAN = {
     "mi": ("宻密", {}, {"vol17:139:4:15", "vol17:70:4:21", "vol20:104:3:6"}),
     # 䘮／喪（2026-10-25）：中部 从（两人）对 吅（两口）。首轮按册留出的 2 个错例看图是放行成 喪、刻 䘮（vol12:147:2:8、145:6:12），改标；
     # 补 vol11–20 送审格看图 6 格（5 格 䘮、vol16:82:3:7 喪）。
-    "sang": ("䘮喪", {"vol12:147:2:8": "䘮", "vol12:145:6:12": "䘮", "vol11:11:4:10": "䘮", "vol13:18:9:11": "䘮", "vol13:19:2:19": "䘮",
+    "sang": ("䘮喪表褒裘䙝棗𠐇", {"vol12:147:2:8": "䘮", "vol12:145:6:12": "䘮", "vol11:11:4:10": "䘮", "vol13:18:9:11": "䘮", "vol13:19:2:19": "䘮",
                      "vol17:91:1:9": "䘮", "vol16:82:3:7": "喪"}, set()),
     # 變／𠮓（2026-10-25）：下部 攵（左上多一短撇）对 又。工作区码位归一 變→𠮓 把放行字全改成 𠮓，放行字不能当标签；
     # 标签全走 sheldon 的人裁表（dataset variant/bian/sheldon_labels.jsonl，`--labels`）。
@@ -94,7 +96,7 @@ PLAN = {
     ], "𨼆") | dict.fromkeys(["vol49:138:4:12", "vol44:227:7:20", "vol45:109:6:8"], "𨼆") | {"vol22:85:1:8": "隱"}, {"vol44:37:6:20", "vol46:47:3:19"}),
     # 算／𮅕（同上）：下部 廾（两竖）对 大（长撇长捺，𮅕 ⿱𥫗狊）。字形库没有 𮅕，库多排成 莫。补送审看图确认的 40 格；
     # vol49:191:4:1（「算學八卷」）上部墨重像 冖，剔出。
-    "suan": ("算𮅕莫㝠箕集篇", dict.fromkeys([
+    "suan": ("算𮅕莫㝠箕集篇翼𢑱", dict.fromkeys([
         "vol49:105:2:9", "vol49:111:7:9", "vol49:119:5:5", "vol49:119:6:9", "vol49:125:7:19", "vol49:132:1:11", "vol49:136:2:3",
         "vol49:139:7:5", "vol49:148:8:18", "vol49:151:1:20", "vol49:151:9:6", "vol49:152:8:13", "vol49:154:9:11",
         "vol49:156:8:8", "vol49:175:4:5", "vol49:176:1:12", "vol49:176:7:21", "vol49:177:3:4", "vol49:178:3:4", "vol49:178:6:16",
@@ -152,7 +154,7 @@ PLAN = {
     # 放行成 奇、刻 竒 的 11 格改标；放行成 苛、刻 竒 的 vol92:5:4:6 改标；放行成 竒、刻 奇 的 3 格改标；
     # vol67:11:9:17、vol70:37:6:15（字块切掉上半）、vol87:94:6:8 看不清，剔出。
     # 音苛司 是库形紧咬的陪衬（送审格库首位多是 音）。苛 放行只 14 格，按册留出 苛 判成 竒 最高 0.91，门槛取 1.0。
-    "qi": ("奇竒音苛司", dict.fromkeys(["vol55:11:8:3", "vol88:143:5:3", "vol88:155:2:9", "vol68:138:7:3", "vol88:148:9:17", "vol80:110:2:16",
+    "qi": ("奇竒音苛司帝靑背", dict.fromkeys(["vol55:11:8:3", "vol88:143:5:3", "vol88:155:2:9", "vol68:138:7:3", "vol88:148:9:17", "vol80:110:2:16",
                                       "vol64:152:8:7", "vol79:120:8:16", "vol64:71:8:6", "vol68:138:4:17", "vol64:198:7:2", "vol92:5:4:6"], "竒")
            | dict.fromkeys(["vol67:74:5:11", "vol63:34:5:9", "vol83:60:8:3"], "奇"), {"vol67:11:9:17", "vol70:37:6:15", "vol87:94:6:8"}),
     # 歲／嵗（同上）：上部 止（歲）对 山（嵗）。嚴巖熾 是陪衬（送审格库首位多是 歲，其次 熾嚴巖）。
@@ -295,6 +297,17 @@ def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set, gr
                 if per[(book, r["char"])] < PER_VOL and r["id"] not in drop:
                     per[(book, r["char"])] += 1
                     want[r["id"]] = (alias.get(r["char"], r["char"]), r["channel"])
+    cap_o = CAP_OTHER.get(group)
+    if cap_o:
+        mem = set(PLAN[group][0][:2])
+        byo: dict = {}
+        for k, (f, _) in sorted(want.items()):
+            if f not in mem:
+                byo.setdefault(f, []).append(k)
+        for f, ks in byo.items():
+            if len(ks) > cap_o:
+                for k in set(ks) - set(random.sample(ks, cap_o)):
+                    del want[k]
     cap = CAP.get(group)
     if cap:
         byc: dict = {}
@@ -305,7 +318,10 @@ def gather(prods, imgs: Path, data: Path, chars: str, extra: dict, drop: set, gr
                 for k in set(ks) - set(random.sample(ks, cap)):
                     del want[k]
     for k, f in freq.human_shapes(data).items():
-        if f in chars and k not in drop:
+        if "~" in k:                                      # 中心库新格式 v1~r2~vol01~12~6~20 → vol01:12:6:20
+            q = k.split("~")
+            k = ":".join(q[2:6]) if len(q) >= 6 else k
+        if f in chars and k not in drop and k.count(":") >= 3:
             want[k] = (alias.get(f, f), "human")
     for k, f in extra.items():
         want[k] = (f, "look")
