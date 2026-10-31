@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
 import threading
 from pathlib import Path
@@ -139,6 +140,8 @@ class Client:
 
 
 _CLIENT: dict = {}
+_IMPORT_WARNED: set = set()
+_log = logging.getLogger(__name__)
 
 
 def _client():
@@ -150,6 +153,12 @@ def _client():
         try:
             _CLIENT[key] = Client(key, os.environ.get(ENV_BASE) or None)
         except ImportError:        # 机器给了密钥却没装 anthropic：按没密钥处理（先查缓存，没有就弃权），不让整页失败
+            # 2026-10-31：原来静默。worker 的 /opt/guji-venv 没装 llm 可选依赖，1.7 万格全记成 abstain:no_api_key，
+            # 看起来像「没密钥」，其实是没装包。这里大声报一次。
+            if key not in _IMPORT_WARNED:
+                _IMPORT_WARNED.add(key)
+                _log.warning("GUJI_ANTHROPIC_API_KEY 已设，但 anthropic 包装不上（venv 缺 llm 依赖：uv pip install 'anthropic>=2.3'）；"
+                             "裁定库没命中的格都按 abstain:no_api_key 弃权")
             return None
     return _CLIENT[key]
 

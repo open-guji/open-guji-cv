@@ -7,7 +7,7 @@
 #   bash scripts/bootstrap_cloud.sh --force      # 删掉重装（仅在明说时才会动已有 venv）
 # 环境变量（都可不设）：
 #   GUJI_VENV     虚拟环境位置，默认 <仓根>/.venv
-#   GUJI_EXTRAS   要装的 extras，默认 console,torch,dev
+#   GUJI_EXTRAS   要装的 extras，默认 console,torch,dev,llm
 #   GUJI_TORCH_INDEX  torch 的 wheel 源，默认 https://download.pytorch.org/whl/cpu（云端无 GPU，免拖 CUDA 大包）；设成空串＝用默认 PyPI
 #   GUJI_PYTHON   指定 python（默认 3.12，装不到就退而用 PATH 里 3.10–3.13 的 python3）
 # 退出码：0＝环境就绪（自检通过）；1＝装失败或自检不过（原样再跑即可续装）；2＝参数错
@@ -28,7 +28,7 @@ set -uo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="${GUJI_VENV:-$ROOT/.venv}"
-EXTRAS="${GUJI_EXTRAS:-console,torch,dev}"
+EXTRAS="${GUJI_EXTRAS:-console,torch,dev,llm}"   # llm＝anthropic（文意 L3 在线）；没装时 L3 会悄悄弃权，2026-10-31 起默认装上
 TORCH_INDEX="${GUJI_TORCH_INDEX-https://download.pytorch.org/whl/cpu}"
 WANT_PY="${GUJI_PYTHON:-3.12}"
 MODE=install

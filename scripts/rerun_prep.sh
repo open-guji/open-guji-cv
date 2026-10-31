@@ -63,6 +63,14 @@ if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G
 # 数据目录里的册配置（db pull 落的）。各书的册号会重名（vol01），按工作区自己的 .central.json 里的 ws id 找，不能取第一个
 WSID=$(sed -n 's/.*"ws": *"\([^"]*\)".*/\1/p' "$WS/.central.json" 2>/dev/null | head -n 1)
 Y=$(ls /root/.guji-data/main/${WSID:-*}/books/"$VOL".yaml | head -n 1)
+# 文意 L2／L3 自检（2026-10-31，A24 查「ctx_l2 没挂上、裁定 no_api_key」）：venv 有没有 anthropic，密钥有没有，L2 小头落没落
+if /opt/guji-venv/bin/python -c "import anthropic" 2>/dev/null; then echo "自检 anthropic：可导入"
+else echo "⚠️ 自检 anthropic：装不上（llm 依赖缺）；有密钥时 L3 会按无密钥弃权，试着补装"
+  if command -v uv >/dev/null && uv pip install -q --python /opt/guji-venv/bin/python 'anthropic>=2.3'; then echo "  已补装 anthropic"
+  else echo "  补装失败，请看环境" >&2; fi
+fi
+echo "自检 GUJI_ANTHROPIC_API_KEY：$([ -n "${GUJI_ANTHROPIC_API_KEY:-}" ] && echo 已设 || echo 未设)"
+echo "自检 l2model（数据目录 config/groups/l2model）：$(ls /root/.guji-data/main/${WSID:-*}/config/groups/l2model/ 2>/dev/null | tr '\n' ' ' || true)"
 # 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里：
 # 改值 = 册 yaml 里有就替换、没有就追加（册 yaml 压过基础配置）；读值 = 读合并后的生效值，不能再 grep 册 yaml
 eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]),apply_override=False);v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
