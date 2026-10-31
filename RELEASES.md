@@ -79,7 +79,7 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 ### Removed
 - 控制台代码（`open_guji_cv/console/`，随 guji-console 搬走）。
 
-影响：`guji release check HEAD --against v0.5.32` 静态比对，**没有任何 Step 的 `code_hash` 变**（模块化各步登记「指纹逐位不变」）。组合验收：切分样页 v0.5.32 对 rc/v0.6.0 逐页比，殿本 vol04／08／16／40／46／48 与北行古本 bxgb 共 7 册 1,350 余页，cells／text／state／geom 全部 0 列变化。**未比**：史記与增廣幼學（工作区不在旧总仓，没来得及按新仓提单）、北行日錄（本机跑）、vol01（已冻结，当前代码拒跑）、vol06（册 yaml 的 seed_admit 参数比旧版新，旧版 cv 校验不过）。全量测试 4268 过；`test_frame_pin::test_real_page_tight_boxes_do_not_clip_char_tops` 在已发的 v0.5.32 上就红，非本版引入。
+影响：`guji release check HEAD --against v0.5.32` 静态比对，**没有任何 Step 的 `code_hash` 变**（模块化各步登记「指纹逐位不变」）。组合验收：切分样页 v0.5.32 对 rc/v0.6.0 逐页比，殿本 vol04／08／16／40／46／48 与北行古本 bxgb 共 7 册、比对产物页 1,174 页，cells／text／state／geom 全部 0 列变化。**未比**：史記与增廣幼學（工作区不在旧总仓，没来得及按新仓提单）、北行日錄（本机跑）、vol01（已冻结，当前代码拒跑）、vol06（册 yaml 的 seed_admit 参数比旧版新，旧版 cv 校验不过）。全量测试 4268 过；`test_frame_pin::test_real_page_tight_boxes_do_not_clip_char_tops` 在已发的 v0.5.32 上就红，非本版引入。
 
 ## v0.5.0
 
