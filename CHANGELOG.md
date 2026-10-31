@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `seg_samples.py submit --base <带注释的 tag>` 把 tag 对象的 sha 当提交交单，执行方检出后对不上（「cv 没切对」），改成 `rev-parse <base>^{commit}`（v0.6.0 组合验收时发现）。
+
 ## [0.6.0] - 测试中
 
 MINOR（用户 10-31 定）。含切分模块化（共用原语库 `seg/`、各套书自管 `books/`，M2–M4）、控制台与 manager 拆出、任务库按书 ID 区分与殿本工作区独立成仓、keben_free 第八轮等（见下）。

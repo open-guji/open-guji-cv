@@ -347,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_local)
     a = ap.parse_args(argv)
     if a.cmd == "submit" and a.base_cv is None:      # 改前那版钉成 --base 当前指着的提交（要已推到 GitHub）
-        a.base_cv = subprocess.run(["git", "-C", str(ROOT), "rev-parse", a.base], capture_output=True, text=True,
+        a.base_cv = subprocess.run(["git", "-C", str(ROOT), "rev-parse", a.base + "^{commit}"], capture_output=True, text=True,
                                    check=True).stdout.strip()
     return a.fn(a)
 
