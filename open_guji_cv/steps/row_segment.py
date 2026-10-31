@@ -568,6 +568,12 @@ class RowSegmentParams(BaseModel):
     roster_glyph_refine: bool = False
     roster_glyph_db: str = ""            # 空 = 工作区 output/glyph.db（core.workspace.glyph_db_path）
     roster_glyph_fingerprint: str = ""   # 库内容指纹，开关开着时自动填；soft：库变只记漂移不判过期（同 glyph_match）
+    #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：殆知阁源记录目录
+    #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
+    #: 殿本的职名页实现不认，关时产物逐字节不变。
+    roster_ref_corpus: str = ""
+    roster_ref_pins: str = ""
+    roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -655,6 +661,17 @@ class RowSegmentParams(BaseModel):
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
         return self
 
+    @model_validator(mode="after")
+    def _fill_roster_ref_fingerprint(self):
+        if self.roster_ref_corpus and self.roster_ref_pins and not self.roster_ref_fingerprint:
+            from ..core.workspace import corpus_path
+            from .context_decide import corpus_fingerprint
+            dz = corpus_path(self.roster_ref_corpus)
+            files = sorted(dz.glob("[0-9][0-9][0-9][0-9].jsonl")) if dz.is_dir() else [dz]
+            object.__setattr__(self, "roster_ref_fingerprint", corpus_fingerprint(
+                [*map(str, files), str(corpus_path(self.roster_ref_pins))]))
+        return self
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump（同 `border_detect`）：没开的书 `params_hash` 与加这些字段之前（v0.4.5）逐位相同，
@@ -666,6 +683,9 @@ class RowSegmentParams(BaseModel):
                 d.pop("colgold_fingerprint", None)
             if not self.yolo_merge:
                 for k in ("yolo_merge", "yolo_model_dir", "yolo_fingerprint", "yolo_conf", "yolo_cover", "yolo_max_h"):
+                    d.pop(k, None)
+            if not (self.roster_ref_corpus and self.roster_ref_pins):
+                for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
@@ -705,7 +725,7 @@ class RowSegmentStep(Step):
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),
         soft_params=("roster_glyph_fingerprint",),
-        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior"),
+        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins"),
     )
 
     def book_params(self, p: "RowSegmentParams", ctx: RunContext) -> "RowSegmentParams":
@@ -1084,7 +1104,51 @@ class RowSegmentStep(Step):
                                        ) for cp in r.cut_candidates],
                                    **base))
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
+        pc = self._header_columns(ctx, p, page, gate, wins, pc)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
+
+    def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
+                        gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
+        """套书认得出的卷端标题列（卷题、撰者行、篇题；`header_cols`，只史記有）改走职名页分支按整理本字数切。
+        写本这些行字距不跟格网（小数字「第二十二」挤、撰者行疏），格网切会劈字、把字脚分给下一格。
+        没开整理本重切（roster_ref_corpus）或套书没有 `header_cols` 时原样返回。"""
+        if not (p.roster_ref_corpus and p.roster_ref_pins):
+            return pc
+        import importlib
+        from ..core.seg_set import resolve
+        mod = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.roster_segment"))
+        header_cols = getattr(mod, "header_cols", None)
+        if header_cols is None:
+            return pc
+        from ..core.workspace import corpus_path
+        refs = mod.page_ref_lines(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+        cols = header_cols(refs or {})
+        # 大印压着的列不改：印泥斑点和印文笔画在几何切里成串成块，按字数重切会把印切成字（卷首页的大印）
+        seals = _page_seals(ctx, page)
+        for cc in pc.columns:
+            qs = [xy for c in cc.cells if c.quad_page for xy in c.quad_page]
+            if cc.col in cols and qs and any(
+                    s[0] < max(x for x, _ in qs) and min(x for x, _ in qs) < s[2] for s in seals):
+                cols.discard(cc.col)
+        if not cols:
+            return pc
+        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols).columns if cc.ok}
+        out = []
+        for cc in pc.columns:
+            new = got.get(cc.col)
+            if new is None:
+                out.append(cc)
+                continue
+            # 格号沿用格网切出的起格（标题行在格网里的起始格，与格位表、整理本格位一致），
+            # 职名分支自己从 1 数，下游按格号对整理本会错位
+            first = [c.slot for c in cc.cells if c.kind != "blank" and c.slot >= 1]
+            off = min(first) - 1 if cc.ok and first else 0
+            if off:
+                new = new.model_copy(update=dict(
+                    n_body_slots=new.n_body_slots + off,
+                    cells=[c.model_copy(update=dict(slot=c.slot + off, pos=c.pos + off)) for c in new.cells]))
+            out.append(new)
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
 
 
     @staticmethod
@@ -1106,7 +1170,7 @@ class RowSegmentStep(Step):
 
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
-                    gate: GateManifest, wins: PageWindows) -> PageCells:
+                    gate: GateManifest, wins: PageWindows, only: set[int] | None = None) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
@@ -1120,18 +1184,38 @@ class RowSegmentStep(Step):
         load_scorer = _impl("roster_glyph").load_scorer
         segment_roster_page = _impl("roster_segment").segment_roster_page
         page_w = wins.page_size[0]
-        admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
+        admitted = [gc for gc in gate.columns if (gc.admitted or not p.only_admitted)
+                    and (only is None or gc.col in only)]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
         scorer = None
         if p.roster_glyph_refine:
             # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
             scorer = load_scorer(p.roster_glyph_db, p.roster_glyph_fingerprint)
+        kw = {}
+        ref_lines_of = getattr(_impl("roster_segment"), "page_ref_lines", None)
+        if p.roster_ref_corpus and p.roster_ref_pins and ref_lines_of is not None:
+            from ..core.workspace import corpus_path
+            refs = ref_lines_of(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+            if refs is not None:
+                kw["refs"] = [refs.get(gc.col) for gc in admitted]
+                # 按整理本重切前先丢印里的块（同下面切完后的印过滤）：印文笔画会被数成字，字数就对不上
+                seals_pre = _page_seals(ctx, page)
+                drops = []
+                for gc, (im, _cx) in zip(admitted, imgs):
+                    wrec = wins.column(gc.col)
+                    mp = (None if wrec is None else
+                          ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                       wrec.top_y, wrec.bottom_y))
+                    drops.append(_in_seal(seals_pre, mp, im, p.ink_threshold))
+                kw["drops"] = drops
         results = dict(zip((gc.col for gc in admitted),
-                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer)))
+                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
         seals = _page_seals(ctx, page)
         out: list[ColumnCells] = []
         for gc in gate.columns:
+            if only is not None and gc.col not in only:
+                continue
             base = dict(col=gc.col, n_raised=0, period=gate.period, ref_w=gate.ref_w,
                         content_x=gc.content_x, border_top=gc.border_top,
                         border_bottom=gc.border_bottom, top_slack=0.0)

@@ -52,6 +52,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+import json
+import re
+from pathlib import Path
+
 import numpy as np
 from scipy import ndimage as ndi
 
@@ -611,12 +615,14 @@ def _glyph_refine(rc: RosterColumn, ink: np.ndarray, chen_row: float, scorer) ->
 
 
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
-                        ink_threshold: int = 128, scorer=None) -> list[RosterColumn]:
+                        ink_threshold: int = 128, scorer=None,
+                        refs: list[str | None] | None = None,
+                        drops: list | None = None) -> list[RosterColumn]:
     """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
 
     给了 `scorer`（`roster_glyph.GlyphScorer`）就再把官衔区的连续密排段按本书字形库重切
     （overview#450：p90 类压扁粘连字，几何数不准字数）。"""
-    prepared = [prepare(g, cx, ink_threshold) for g, cx in cols]
+    prepared = [(_strip_rules(ink), w) for ink, w in (prepare(g, cx, ink_threshold) for g, cx in cols)]
     em_page = page_em(prepared)
     ems = [em_page or 0.65 * width for _ink, width in prepared]
     out = [segment_roster_column(ink, em) for (ink, _w), em in zip(prepared, ems)]
@@ -631,4 +637,355 @@ def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]
     if scorer is not None and chen is not None:
         for rc, (ink, _w) in zip(out, prepared):
             _glyph_refine(rc, ink, chen, scorer)
+    if refs is not None:
+        # 整理本这一列的官衔／人名字数已知：几何切出的字数不符时按它重切（见本模块「按整理本字数重切」一节）。
+        # refs 与 cols 逐个对应（None＝不知道）。
+        # drops：每列一个判据（落在印里的块），重切前先丢，印文笔画不算字
+        for rc, drop in zip(out, drops or []):
+            if drop is not None:
+                rc.items = [it for it in rc.items if not drop(it)]
+        for rc, (ink, _w), ref, em in zip(out, prepared, refs, ems):
+            if ref is not None:
+                refit_column(rc, ink, ref, chen_row=chen, em=em)
+    return out
+
+
+# ═══ 按整理本字数重切（史記文淵閣本，2026-10-30）═══════════════════════════════
+# 职名页按整理本字数重切（史記文淵閣本，2026-10-30）。
+# 
+# 为什么要整理本参与
+# ------------------
+# 写本职名页大量列是官衔密排：字压到半格高、一个挨一个，几何上没有可靠的缝，
+# `roster_segment` 只看墨迹会并字（日講官起居注 → 并成几块）或劈字。
+# 整理本（殆知阁）这一列的官衔、「臣」、人名各几个字是确定的：
+# `官衔(T 字) <臣|> 人名(M 字)`，空格只是版面间距，不占字。
+# 
+# 做法（只在几何切出的字数与整理本不符时才动，对的列一概不碰）
+# ------------------------------------------------------------
+# 1. 解析整理本这一行：官衔 T 字、人名 M 字；有「字位過密」占位的行不用（整理本自己没字）。
+# 2. 在几何结果里认「臣」：人名前面那个偏右小字。认不出就不动，交人核。
+# 3. 人名区、官衔区各自按字数 T/M 等分重切：墨量投影上走 DP，切点落在墨少处，
+#    字高偏离均匀字距的罚平方（密排列字距基本一致，写本不匀处由墨缝吸附）。
+# 4. 重切后的每块取墨的紧外框；列标 `roster_ref_refit`。
+
+PLACEHOLDER = "字位過密"
+SMOOTH = 5            # 投影平滑窗（px）
+LEN_LO, LEN_HI = 0.55, 1.6   # 每段长占均匀字距的允许范围
+SEAM_W = 1.0          # 切点处墨量的权重（投影归一到 0–1）
+LEN_W = 2.0           # 段长偏离均匀字距的罚权重
+CHEN_MAX_W = 0.62     # 「臣」宽 ≤ 此 × 列墨宽，且偏右
+
+
+def parse_ref(line: str) -> list[int] | None:
+    """整理本一行 → 各段字数 [官衔, 人名1, 人名2, …]（段与段之间各隔一个小字「臣」）；只有一段＝整列普通字。
+    空行 → []（这一列不该有字）。有「字位過密」占位（整理本自己没录）→ None。"""
+    if PLACEHOLDER in line:
+        return None
+    clean = lambda s: re.sub(r"[\s　]", "", s)  # noqa: E731
+    parts = [clean(x) for x in re.split(r"<臣\|>", line)]
+    if any("<" in x for x in parts):
+        return None
+    if len(parts) == 1:
+        return [len(parts[0])] if parts[0] else []
+    if any(not x for x in parts[1:]):
+        return None
+    return [len(x) for x in parts]
+
+
+def _profile(ink: np.ndarray, y0: int, y1: int) -> np.ndarray:
+    prof = ink[y0:y1].sum(axis=1).astype(np.float64)
+    if prof.max() > 0:
+        prof /= prof.max()
+    k = np.ones(SMOOTH) / SMOOTH
+    return np.convolve(prof, k, mode="same")
+
+
+def equal_cuts(prof: np.ndarray, n: int) -> list[int]:
+    """把长 L 的投影分成 n 段：DP 选 n-1 个切点（相对位置），返回 n+1 个边界 [0, …, L]。"""
+    L = len(prof)
+    if n <= 1:
+        return [0, L]
+    L0 = L / n
+    lo, hi = max(1, int(LEN_LO * L0)), max(2, int(LEN_HI * L0))
+    INF = 1e18
+    # best[k][y]：前 k 段恰好在 y 处结束的最小代价
+    best = np.full((n + 1, L + 1), INF)
+    back = np.zeros((n + 1, L + 1), dtype=np.int32)
+    best[0, 0] = 0.0
+    seam = np.concatenate([prof, [0.0]])
+    for k in range(1, n + 1):
+        for y in range(k * lo, min(L, k * hi) + 1):
+            a, b = max(0, y - hi), y - lo
+            if b < a:
+                continue
+            prev = best[k - 1, a:b + 1]
+            lens = y - np.arange(a, b + 1)
+            cost = prev + LEN_W * ((lens - L0) / L0) ** 2
+            j = int(np.argmin(cost))
+            c = cost[j]
+            if c >= INF:
+                continue
+            best[k, y] = c + (SEAM_W * seam[y] if k < n else 0.0)
+            back[k, y] = a + j
+    if best[n, L] >= INF:
+        return [int(round(i * L0)) for i in range(n + 1)]
+    cuts = [L]
+    y = L
+    for k in range(n, 0, -1):
+        y = int(back[k, y])
+        cuts.append(y)
+    return cuts[::-1]
+
+
+def _tight_item(ink: np.ndarray, y0: int, y1: int) -> RosterItem | None:
+    sub = ink[y0:y1]
+    ys, xs = np.nonzero(sub)
+    if not len(ys):
+        return None
+    return RosterItem(y0=int(y0 + ys.min()), x0=int(xs.min()), y1=int(y0 + ys.max() + 1),
+                      x1=int(xs.max() + 1))
+
+
+def _resplit(ink: np.ndarray, y0: int, y1: int, n: int) -> list[RosterItem] | None:
+    if y1 - y0 < n * 4:
+        return None
+    cuts = equal_cuts(_profile(ink, y0, y1), n)
+    out = [_tight_item(ink, y0 + a, y0 + b) for a, b in zip(cuts, cuts[1:])]
+    return None if any(it is None for it in out) else out  # type: ignore[return-value]
+
+
+def _small_right(it: RosterItem, cx: float, width: float) -> bool:
+    return it.kind == "char" and it.x1 - it.x0 <= CHEN_MAX_W * width and (it.x0 + it.x1) / 2 > cx
+
+
+def _find_chens(items: list[RosterItem], k: int, n_last: int, chen_row: float | None,
+                em: float | None, ink: np.ndarray) -> list[RosterItem] | None:
+    """列里的 k 个「臣」（读序）。偏右小字恰好 k 个就用它们；k=1 时先看人名前那个，
+    再退到全页臣行处补一块（写本「臣」常和邻字粘成一块）。"""
+    xs0 = min(it.x0 for it in items)
+    xs1 = max(it.x1 for it in items)
+    width = xs1 - xs0
+    cx = xs0 + 0.5 * width
+    cand = [it for it in items if _small_right(it, cx, width)]
+    if k == 1 and len(items) > n_last and _small_right(items[-n_last - 1], cx, width):
+        return [items[-n_last - 1]]
+    if len(cand) == k:
+        return cand
+    if k == 1 and chen_row is not None and em is not None:
+        got = _tight_item(ink, int(chen_row), int(chen_row + 0.75 * em))
+        return [got] if got is not None else None
+    hs = sorted(it.y1 - it.y0 for it in items)
+    em_col = min(em or width, hs[len(hs) // 2])    # 职名页字比正文小，臣段高度按本列字高量
+    return _chen_bands(ink, min(it.y0 for it in items), max(it.y1 for it in items), k, xs0, int(cx), em_col)
+
+
+def _chen_bands(ink: np.ndarray, y0: int, y1: int, k: int, xl: int, xm: int, em: float) -> list[RosterItem] | None:
+    """臣和上下字粘成一块时：小字「臣」靠右，它那几行左半边没墨。取左空右有、高 ≥ 0.3 字的行段，最长的 k 段（读序）。"""
+    left = ink[y0:y1, xl:xm].sum(axis=1)
+    right = ink[y0:y1, xm:].sum(axis=1)
+    on = (left <= 2) & (right > 0)
+    runs, start = [], None
+    for i, v in enumerate([*on, False]):
+        if v and start is None:
+            start = i
+        elif not v and start is not None:
+            if i - start >= 0.3 * em:
+                runs.append((start, i))
+            start = None
+    if len(runs) < k:
+        return None
+    runs = sorted(sorted(runs, key=lambda r: r[0] - r[1])[:k])
+    out = [_tight_item(ink, y0 + a, y0 + b) for a, b in runs]
+    return None if any(it is None for it in out) else out  # type: ignore[return-value]
+
+
+def _strip_rules(ink: np.ndarray) -> np.ndarray:
+    """抹掉列图两端的横向框线：列底边框常被当成末字的一部分。`prepare` 去竖线后横线断成几截斜碎片，
+    所以从列的两头往里，把上下被空行隔开、不过 8 行高、宽是高 6 倍以上的薄片抹掉，碰到第一块不是薄片的墨就停
+    （只抹两头，正文里的「一」不碰）。"""
+    rows = ink.any(axis=1)
+    runs, y, h = [], 0, len(ink)
+    while y < h:
+        if rows[y]:
+            a = y
+            while y < h and rows[y]:
+                y += 1
+            runs.append((a, y))
+        y += 1
+
+    def thin(r):
+        xs = np.nonzero(ink[r[0]:r[1]].any(axis=0))[0]
+        return r[1] - r[0] <= 8 and xs[-1] - xs[0] + 1 >= 6 * (r[1] - r[0])
+
+    kill = []
+    for seq in (runs, runs[::-1]):
+        for r in seq:
+            if not thin(r):
+                break
+            kill.append(r)
+    if not kill:
+        return ink
+    out = ink.copy()
+    for a, b in kill:
+        out[a:b] = False
+    return out
+
+
+def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
+                 chen_row: float | None = None, em: float | None = None) -> bool:
+    """字数与整理本不符的列按整理本重切；返回是否改了。改不了（认不出臣、切不动）原样留着。
+    `chen_row`：全页「臣」行 y（列图坐标）。列里没有自成一块的「臣」（和邻字粘住）时，
+    按它在臣行处补一块「臣」，官衔、人名从两侧切。整理本说这一列空的，切出的东西（印章、墨污）全丢。"""
+    spec = parse_ref(ref_line)
+    if spec is None:
+        return False
+    if not spec:
+        if not rc.items:
+            return False
+        rc.items = []
+        rc.flags = ["roster_ref_empty"]
+        return True
+    if not rc.items:
+        return False
+    ink = _strip_rules(ink)
+    top = min(it.y0 for it in rc.items)
+    bottom = max(it.y1 for it in rc.items)
+    all_char = all(it.kind == "char" for it in rc.items)
+    if len(spec) == 1:                          # 整列普通字：全列等分
+        if len(rc.items) == spec[0] and all_char:
+            return False
+        got = _resplit(ink, top, bottom, spec[0])
+        if got is None:
+            return False
+        rc.items = got
+        _mark_refit(rc)
+        return True
+    k = len(spec) - 1
+    if len(rc.items) == sum(spec) + k and all_char:
+        return False
+    chens = _find_chens(rc.items, k, spec[-1], chen_row, em, ink)
+    if chens is None:
+        return False
+    # 段界：第一段从列顶到第一个臣，之后每段夹在两个臣之间，末段到列底。
+    # 段内先用几何块（裁到段界内）：多了并最矮的相邻两块，少了劈最高的一块；一块没有才整段等分
+    chen_ids = {id(c) for c in chens}
+    new: list[RosterItem] = []
+    for si, n in enumerate(spec):
+        y0 = top if si == 0 else chens[si - 1].y1
+        y1 = bottom if si == k else chens[si].y0
+        seg = []
+        for it in rc.items:
+            if id(it) in chen_ids or not y0 <= (it.y0 + it.y1) / 2 <= y1 or it.kind != "char":
+                continue
+            t = _tight_item(ink, max(it.y0, y0), min(it.y1, y1))
+            if t is not None:
+                seg.append(t)
+        seg = _fit_count(ink, seg, n) if seg else _resplit(ink, int(y0), int(y1), n)
+        if seg is None:
+            return False
+        new.extend(seg)
+        if si < k:
+            new.append(chens[si])
+    rc.items = new
+    _mark_refit(rc)
+    return True
+
+
+def _fit_count(ink: np.ndarray, seg: list[RosterItem], n: int) -> list[RosterItem] | None:
+    """几何块凑成 n 个：多了并相邻两块里合起来最矮的一对（写本官衔字常被横缝劈成上下两半），
+    少了把最高的一块劈成两块（两字粘成一块）。"""
+    seg = sorted(seg, key=lambda it: it.y0)
+    while len(seg) > n:
+        i = min(range(len(seg) - 1), key=lambda j: seg[j + 1].y1 - seg[j].y0)
+        a, b = seg[i], seg[i + 1]
+        seg[i:i + 2] = [RosterItem(y0=a.y0, x0=min(a.x0, b.x0), y1=max(a.y1, b.y1), x1=max(a.x1, b.x1))]
+    while len(seg) < n:
+        i = max(range(len(seg)), key=lambda j: seg[j].y1 - seg[j].y0)
+        two = _resplit(ink, seg[i].y0, seg[i].y1, 2)
+        if two is None:
+            return None
+        seg[i:i + 1] = two
+    return seg
+
+
+def _mark_refit(rc: RosterColumn) -> None:
+    rc.flags = [f for f in rc.flags if f not in ("roster_jiazhu", "roster_dense_guess")]
+    if "roster_ref_refit" not in rc.flags:
+        rc.flags.append("roster_ref_refit")
+
+def page_ref_lines(dz_dir: str | Path, pins_file: str | Path, book: str, page: int) -> dict[int, str] | None:
+    """这一页在殆知阁源记录里的各列 → {列号: 整理本行}。列号 ＝ `no % ncol + 1`（史記一个半叶 8 列）；
+    源记录里空的列给空串（这一列不该有字）。整理本行的写法同逐列本：正文照抄，小字「臣」记 `<臣|>`，
+    别的小注两行文字照读序接上。钉位或源记录缺失返回 None（该页不做整理本重切）。"""
+    head = _load_pins(str(pins_file)).get((str(book), int(page)))
+    if not head:
+        return None
+    rid, _leaf, side = head.split()
+    rec = _load_records(str(dz_dir)).get(rid)
+    if rec is None or not isinstance(rec.get("cols"), list):
+        return None
+    ncol = int((rec.get("geom") or {}).get("ncol") or 8)
+    side_i = int(side[1:])
+    out = {c: "" for c in range(1, ncol + 1)}
+    for c in rec["cols"]:
+        if c["no"] // ncol != side_i:
+            continue
+        buf = []
+        for r in c.get("runs", []):
+            if r.get("t") == "text":
+                buf.append(r.get("s", ""))
+            elif r.get("t") == "note":
+                txt = "".join(t for _o, t in r.get("r", [])) + "".join(t for _o, t in r.get("l", []))
+                buf.append("<臣|>" if txt == "臣" else txt)
+        out[c["no"] % ncol + 1] = "".join(buf)
+    return out
+
+
+_PINS_CACHE: dict[str, dict] = {}
+_REC_CACHE: dict[str, dict] = {}
+
+
+def _load_pins(path: str) -> dict[tuple[str, int], str]:
+    if path not in _PINS_CACHE:
+        out: dict[tuple[str, int], str] = {}
+        for ln in Path(path).read_text(encoding="utf-8").splitlines():
+            if ln.strip():
+                r = json.loads(ln)
+                out[(str(r["book"]), int(r["page"]))] = str(r["head"]).strip()
+        _PINS_CACHE[path] = out
+    return _PINS_CACHE[path]
+
+
+def _load_records(dz_dir: str) -> dict[str, dict]:
+    if dz_dir not in _REC_CACHE:
+        recs: dict[str, dict] = {}
+        for f in sorted(Path(dz_dir).glob("[0-9][0-9][0-9][0-9].jsonl")):
+            for ln in f.read_text(encoding="utf-8").splitlines():
+                if ln.strip():
+                    r = json.loads(ln)
+                    recs[r["id"]] = r
+        _REC_CACHE[dz_dir] = recs
+    return _REC_CACHE[dz_dir]
+
+
+# ═══ 卷端标题列（史記文淵閣本，2026-10-30）══════════════════════════════════════
+# 每卷开头一页：欽定四庫全書／史記卷N／漢太史令司馬遷撰／宋中郎外兵曹參軍裴駰集解／唐國子博士…司馬貞索隱／
+# 唐諸王侍讀率府長史張守節正義／X本紀第N。写本这些行字距不跟格网（「第二十二」挤成两格高，撰者行疏），
+# 格网切把「首」「長」「讀」劈开、「兵」的两点分给下一格。这几列字数整理本里有，按职名页同一条路切
+# （几何切 + 按整理本字数重切），壳见 `steps/row_segment._header_columns`。
+_HEADER_RE = re.compile(
+    r"^(欽定四庫全書"
+    r"|史記卷[一二三四五六七八九十百]+(上|中|下)?"
+    r"|[漢宋唐].{4,18}(撰|集解|索隱|索隠|正義)"
+    r"|.{0,10}(本紀|世家|列傳|表|書)第[一二三四五六七八九十百]+(上|中|下)?"
+    r"|.{2,10}(年表|月表))$")
+
+
+def header_cols(refs: dict[int, str]) -> set[int]:
+    """这一页里卷端标题列的列号（整理本整列就是一个标题，没有小注）。"""
+    out = set()
+    for col, line in refs.items():
+        t = re.sub(r"\s", "", line or "").replace("　", "")
+        if t and "<" not in t and _HEADER_RE.match(t):
+            out.add(col)
     return out
