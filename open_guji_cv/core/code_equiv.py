@@ -350,6 +350,12 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1cb1977e26c99263aee9fe5e4bbd211c8d644a2d3eaf5610ef5ea9ac47dafcdc",
           old="4fbb1535a764d403f566aa1ce7c00bdbf82a082a1c05dcaec03a379fa0facff7",
           evidence=_SJ_780),
+    # 2026-10-31：detect_outer_borders／measure_book_outer_shift 的 xs 截掉 >= 图宽的列（竖线外推出图右界时越界，
+    # 史記 09 册 11 页失败）；原来能跑通的页 xs 全在界内，截了等于没截。
+    Equiv(module="open_guji_cv.books.siku_zongmu.border",
+          new="91e147668950f5320579ef1d65cda8dc5d19228e605ca92b7571f3657a61a222",
+          old="f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1",
+          evidence="border_detect 在史記 01 册 10 页（--pages 2,10,25,40,55,70,90,102,120,140）上与改前产物逐字节相同"),
 )
 
 

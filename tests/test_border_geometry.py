@@ -509,3 +509,12 @@ def test_row_windows_drops_rows_outside_image():
     assert rows.min() >= 0 and rows.max() < h
     assert win.shape == (len(rows), 2 * BEND_SEARCH + 1)
     assert (win.sum(axis=1) == 1).all()
+
+
+def test_detect_outer_borders_vertical_outside_image_does_not_crash():
+    """竖线外推到图右界之外（史記 09 册 11 页：x_at 为负，翻转后 >= 图宽），
+    上下外框取样的 xs 不得越界。"""
+    mask, top, bottom, verts = _outer_page(gap=40)
+    verts = list(verts) + [VLine(x_at_top=-60.0, slope=0.0)]
+    r = detect_outer_borders(mask, top, bottom, verts, width=1000, height=1200)
+    assert abs(abs(r["top_outer_offset"]) - (40 + 6)) < 4
