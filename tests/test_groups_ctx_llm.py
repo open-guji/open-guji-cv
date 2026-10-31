@@ -130,3 +130,19 @@ def test_ruling_other_is_recorded(tmp_path):
     j(RulingCache(RulingStore(tmp_path)), fc)
     v = j(RulingCache(RulingStore(tmp_path)), fc)
     assert v.why == "abstain:other" and v.extra["other_conf"] == "high" and len(fc.calls) == 1
+
+
+def test_client_missing_anthropic_warns_once(monkeypatch, caplog):
+    """有密钥却没装 anthropic：按无密钥弃权，但要大声报一次（2026-10-31，worker 上 1.7 万格静默丢成 no_api_key）。"""
+    import logging
+    from open_guji_cv.groups import ctx_llm
+    monkeypatch.setenv(ctx_llm.ENV_KEY, "k-test-missing-pkg")
+
+    def no_pkg(*a, **k):
+        raise ImportError("No module named 'anthropic'")
+    monkeypatch.setattr(ctx_llm, "Client", no_pkg)
+    ctx_llm._IMPORT_WARNED.discard("k-test-missing-pkg")
+    with caplog.at_level(logging.WARNING, logger="open_guji_cv.groups.ctx_llm"):
+        assert ctx_llm._client() is None
+        assert ctx_llm._client() is None
+    assert sum("anthropic" in r.getMessage() for r in caplog.records) == 1

@@ -2399,6 +2399,7 @@ def _l3_groups(p) -> tuple:
 
 
 _L3_ONLINE: dict = {}
+_FLOW_MOUNT_LOGGED: list = []     # 本进程只记一次文意挂载情况（见 _flow_config）
 
 
 def _l3_online(p) -> dict:
@@ -2454,6 +2455,13 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     # 读序展平，剔除排除名单格（与建 L2 表的 `research/m7/ctx/l2_make_book.py` 同一取法，表键才对得上）
     seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
            if not (r.doubts and "excluded" in r.doubts)]
+    # 2026-10-31（A24 查 ctx_l2 没挂上）：本进程记一次文意各层的挂载情况（L2 小头、L3 在线、密钥有无），
+    # 日志里一眼看得出 L2 小头／L3 在线有没有进来
+    if not _FLOW_MOUNT_LOGGED:
+        _FLOW_MOUNT_LOGGED.append(True)
+        import os
+        _log.warning("文意挂载：L2 小头 %s；L3 在线 %s；GUJI_ANTHROPIC_API_KEY %s", sorted(p.group_flow_models) or "无",
+                     sorted(_l3_online(p)) or "无", "已设" if os.environ.get("GUJI_ANTHROPIC_API_KEY") else "未设")
     cfg = FlowConfig(groups=tuple(p.group_flow), delta=p.group_flow_delta, min_cov=p.group_flow_min_cov,
                      top1_cov=p.group_flow_top1_cov, freq_major=p.group_flow_freq_major,
                      freq_vols=_load_vols(p.group_flow_freq) if p.group_flow_freq else {},
