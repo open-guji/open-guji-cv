@@ -171,7 +171,7 @@ class Job:
     # ── 各阶段 ──
     def prep(self) -> None:
         sp = self.spec
-        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob")},
+        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
                          sort_keys=True)
         mark = HOME / "prepped.json"
         try:
@@ -187,6 +187,8 @@ class Job:
             return
         argv = ["bash", str(RUNNER_ROOT / "scripts" / "rerun_prep.sh"), sp["book"], "--cv", sp["cv"],
                 "--ws-glob", sp["ws_glob"]]
+        if sp.get("ws_repo"):
+            argv += ["--ws-repo", sp["ws_repo"]]
         ov = sp.get("book_overrides") or {}
         if "corpus" in ov:
             argv += ["--corpus", str(ov["corpus"])]
@@ -256,6 +258,15 @@ class Job:
         if not self.dry and got != want:
             raise StageError("blocked", f"人裁绑定后 {got} 格，单上写应为 {want}：不跑，先查人裁事件／字块图")
         self.ev(f"人裁 {got} 格，对上")
+
+    def glyph_recheck(self) -> None:
+        """改钉字形库后只点名受影响的格（`guji recheck --glyph-diff <旧号>`，见 doc/受控重跑.md 第五节）；
+        接着的 pipeline 不加 --force，只重算点名的格和它们的下游。"""
+        sp = self.spec
+        out = self.guji("recheck", sp["book"], "--glyph-diff", str(sp["glyph_diff"]), "-w", self.ws or "")
+        tail = "\n".join(out.strip().splitlines()[-8:])
+        self.db(S.add_result, self.id, self.aid, "output", "recheck", data={"tail": redact(tail)[-2000:]})
+        self.ev(f"按 g{sp['glyph_diff']}→g{sp['book_overrides'].get('glyph_pin')} 点名受影响的格")
 
     def run_pipeline(self) -> None:
         sp = self.spec
@@ -340,6 +351,8 @@ class Job:
                 if sp["base"]:
                     self.step("base", self.base)
                 self.step("check", self.checks)
+                if sp.get("glyph_diff") is not None:
+                    self.step("recheck", self.glyph_recheck)
                 self.step("run", self.run_pipeline)
             else:
                 if sp.get("checks"):
@@ -365,6 +378,7 @@ class Job:
                 os.killpg(self.proc.pid, signal.SIGTERM)
         self.log.close()
         tail = redact((self.dir / "run.log").read_text(encoding="utf-8", errors="replace")[-8000:])
+        self.env_failed = bool(err and err.startswith("环境："))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
         return outcome
@@ -432,6 +446,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     idle_since = time.time()
     rc = _runner_commit()
     warned = None
+    env_streak = 0                       # 连续几单环境类失败：本会话自己的毛病（令牌、网络）会让它一路失败，到 3 就暂停
     db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True, note="")
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
     try:
@@ -467,7 +482,9 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
             say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
             BOARD.publish(db, force=True)
-            outcome = Job(job, att, db, dry=dry).run()
+            jobrun = Job(job, att, db, dry=dry)
+            outcome = jobrun.run()
+            env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
             _remember_book(job["book"])
             say(f"#{job['id']} → {outcome}")
             done += 1
@@ -476,6 +493,14 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             idle_since = time.time()
             if once or only:
                 return done
+            if env_streak >= ENV_STREAK_PAUSE:
+                note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
+                say(note)
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
+                time.sleep(ENV_PAUSE_MIN * 60)
+                env_streak = 0
+                idle_since = time.time()
+                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
@@ -484,28 +509,36 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
             pass
 
 
-WORKSPACE_REPO = "https://github.com/open-guji/guji-workspace"
+ENV_STREAK_PAUSE = 3
+ENV_PAUSE_MIN = 30
+WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
+LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
 _preflight_ok_at = 0.0
 
 
 def _preflight() -> str | None:
     """执行方领单前自检，返回缺什么（None 是都齐）。通过后 10 分钟内不再查。
 
-    guji-workspace 是私仓，会话没挂（add_repo）时 git 要账号，每条单都会在准备阶段失败。
-    已克隆过的（~/guji-workspace 在）不查。挂上之后不用重启执行方，下一轮轮询自动开始领单。
+    工作区仓是私仓，会话没挂（add_repo）时 git 要账号，每条单都会在准备阶段失败。
+    已克隆过的（~/<仓名> 在）不查。新仓和旧总仓有一个读得了就领（旧总仓里殿本目录内容相同）。
+    挂上之后不用重启执行方，下一轮轮询自动开始领单。
     """
     global _preflight_ok_at
-    if time.time() - _preflight_ok_at < 600 or (Path.home() / "guji-workspace" / ".git").is_dir():
+    repos = [WORKSPACE_REPO, *LEGACY_WORKSPACE_REPOS]
+    if time.time() - _preflight_ok_at < 600 or any((Path.home() / r.rsplit("/", 1)[-1] / ".git").is_dir() for r in repos):
         return None
-    try:
-        r = subprocess.run(["git", "ls-remote", "-q", WORKSPACE_REPO, "HEAD"], capture_output=True, text=True,
-                           timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
-    except (OSError, subprocess.SubprocessError) as e:
-        return f"读不了 guji-workspace（{e}）"
-    if r.returncode:
-        return "本会话读不了 guji-workspace 私仓（请在会话里 add_repo open-guji/guji-workspace）"
-    _preflight_ok_at = time.time()
-    return None
+    err = None
+    for repo in repos:
+        try:
+            r = subprocess.run(["git", "ls-remote", "-q", repo, "HEAD"], capture_output=True, text=True,
+                               timeout=60, env={**os.environ, "GIT_TERMINAL_PROMPT": "0"})
+        except (OSError, subprocess.SubprocessError) as e:
+            err = err or f"读不了 {repo.split('github.com/')[-1]}（{e}）"
+            continue
+        if not r.returncode:
+            _preflight_ok_at = time.time()
+            return None
+    return err or f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
 
 
 def _last_book() -> str | None:

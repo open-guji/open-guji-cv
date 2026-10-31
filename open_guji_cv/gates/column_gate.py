@@ -13,7 +13,7 @@
   「版式如此」。这类列位在几何上完全正常，靠 L1c/L2 拦不住（版心宽度跟正文一样），
   而且**拒因说错会误导人**：报「列宽偏离」会让人去查切列算法，真实原因是这一列
   本来就不是正文。`line_index` 是可选上游，老书的 Step1 产物里没有，缺了就当全是
-  正文——行为与加这套东西之前逐位一致。判据与两条负结果见 `utils/column_types.py`；
+  正文——行为与加这套东西之前逐位一致。判据与两条负结果见 `books/siku_zongmu/column_types.py`；
 - **L0 页级**（读闸1，不看几何）：闸1 判 `page_type_policy == "skip"` 的页
   （封面/书签/牌记）直接拒，拒因写页型。这类页 Step2 根本没切列，列数必然
   是 0，再按列数报一句 L1「只探出 0 列」会把人引去查切列算法。page_type 只有
@@ -56,10 +56,10 @@ from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateColumn, GateManifest
-from ..utils import jiazhu_split
-from ..utils.column_pair_merge import has_pair_merged
+from ..books.siku_zongmu import jiazhu_split
+from ..books.siku_zongmu.column_pair_merge import has_pair_merged
 from ..core.book import _expand_pages
-from ..utils.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
+from ..books.siku_zongmu.row_boundaries import (PERIOD_WINDOW_LO, estimate_shared_period,
                                     row_ink_projection)
 
 
@@ -219,8 +219,8 @@ class ColumnGateStep(Step):
         optional_consumes=("line_index",),
         produces=("gate_manifest",),
         params=ColumnGateParams,
-        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.column_projection",
-                   "open_guji_cv.utils.column_pair_merge"),
+        code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column",
+                   "open_guji_cv.books.siku_zongmu.column_pair_merge"),
         # `period_prior` 既派生自相关窗口、又是空栏页兜底值；`expected_cols` /
         # `chars_per_line` 是参数为 None 时的取值来源——都影响输出，必须进指纹
         book_deps=("period_prior", "expected_cols", "chars_per_line"),

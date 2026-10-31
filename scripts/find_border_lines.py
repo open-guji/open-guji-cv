@@ -29,11 +29,7 @@ _project_root = Path(__file__).resolve().parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
 
-from open_guji_cv.utils.peak_line_search import (
-    LineMatch,
-    find_horizontal_border,
-    find_vertical_lines,
-)
+from open_guji_cv.seg.lines import LineMatch, find_horizontal_border, find_vertical_lines
 
 INK_THRESHOLD = 128  # 灰度 < 128 记黑
 

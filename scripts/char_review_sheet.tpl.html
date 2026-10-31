@@ -1,0 +1,117 @@
+<title>字形快审表</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：顶栏吸顶（进度、筛选、导出），下面一字一行，左边大字＋计数，右边字块网格 */
+:root{
+  --bg:#f5f4f0; --panel:#ffffff; --fg:#1d1f1c; --muted:#6d716a; --line:#dcdad2;
+  --accent:#2f5d50; --accent-fg:#ffffff; --ok:#2f7d4f; --ok-bg:#e3f1e8; --bad:#b3372c; --bad-bg:#f8e1de; --warn:#946b0e; --warn-bg:#f6ecd0;
+  --font-ui:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --font-glyph:"Noto Serif SC","Songti SC","SimSun",serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#171a18; --panel:#202421; --fg:#e7e9e4; --muted:#9aa096; --line:#333832;
+  --accent:#7fb7a4; --accent-fg:#11201a; --ok:#6fcf93; --ok-bg:#1d3326; --bad:#f0857a; --bad-bg:#3a1f1c; --warn:#e0b85a; --warn-bg:#352c14; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#171a18; --panel:#202421; --fg:#e7e9e4; --muted:#9aa096; --line:#333832;
+  --accent:#7fb7a4; --accent-fg:#11201a; --ok:#6fcf93; --ok-bg:#1d3326; --bad:#f0857a; --bad-bg:#3a1f1c; --warn:#e0b85a; --warn-bg:#352c14; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-ui);padding-inline:max(16px,env(safe-area-inset-left,0px)) max(16px,env(safe-area-inset-right,0px));padding-block:0 48px}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--panel)}
+header{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--panel);margin-inline:calc(-1 * max(16px,env(safe-area-inset-left,0px)));padding:10px max(16px,env(safe-area-inset-left,0px));border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center}
+h1{font-size:16px;margin:0;font-weight:600}
+.sub{color:var(--muted);font-size:12px}
+.bar{flex:1 1 180px;min-width:120px;height:8px;background:var(--line);border-radius:4px;overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bar .o{background:var(--ok)} .bar .c{background:var(--warn)}
+.stat{font-variant-numeric:tabular-nums;font-size:12px;color:var(--muted)}
+.ctl{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+button{font:inherit;cursor:pointer;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:6px;padding:4px 10px}
+button:focus-visible,.cell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.on{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+button.primary{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
+main{max-width:1100px;margin:12px auto 0;display:flex;flex-direction:column;gap:8px}
+.row{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:start}
+.row.ok{border-color:var(--ok);background:linear-gradient(var(--ok-bg),var(--ok-bg)),var(--panel)}
+.row.check{border-color:var(--warn)}
+.who{display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.ch{font:600 40px/1 var(--font-glyph)}
+.meta{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.btns{display:flex;gap:4px}
+.btns button{padding:2px 8px;font-size:12px}
+.btns .okb.on{background:var(--ok);border-color:var(--ok);color:var(--bg)}
+.btns .chk.on{background:var(--warn);border-color:var(--warn);color:var(--bg)}
+.cells{display:flex;flex-wrap:wrap;gap:4px;min-width:0}
+.cell{border:2px solid var(--line);background:#fff;border-radius:4px;padding:1px;cursor:pointer;line-height:0}
+.cell img{height:52px;width:auto;display:block}
+.cell.bad{border-color:var(--bad);background:var(--bad-bg);box-shadow:0 0 0 1px var(--bad)}
+.cell.bad img{opacity:.55}
+.hint{color:var(--muted);font-size:12px;margin:10px 0 0;max-width:1100px;margin-inline:auto}
+@media (max-width:520px){.row{grid-template-columns:1fr}.who{flex-direction:row;align-items:center;gap:10px}}
+#out{width:100%;min-height:90px;font:12px/1.4 ui-monospace,Menlo,monospace;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px}
+dialog{border:1px solid var(--line);border-radius:10px;background:var(--panel);color:var(--fg);max-width:min(640px,92vw)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+</style>
+<header>
+  <div><h1 id="title">字形快审表</h1><div class="sub" id="sub"></div></div>
+  <div class="bar" title="绿＝整字 OK，黄＝存疑"><i class="o" id="bo"></i><i class="c" id="bc"></i></div>
+  <div class="stat" id="stat"></div>
+  <div class="ctl">
+    <button data-f="all" class="on">全部</button><button data-f="todo">未看</button><button data-f="check">存疑</button><button data-f="bad">有错格</button>
+    <button id="export" class="primary">导出审完结果</button>
+  </div>
+</header>
+<p class="hint">每行是一个字：殿本字形库认出的字 ＝ 整理本的字，两路一致的格。看整行字块是不是同一个字；整行都对点「OK」，混进错的字块就点它（变红），拿不准的点「存疑」。只看抽样的字块，整字 OK 会作用到这个字的全部格。</p>
+<main id="rows"></main>
+<dialog id="dlg"><p>审完结果（复制下面的 JSON 发回给我）：</p><textarea id="out" readonly></textarea><p><button id="copy" class="primary">复制</button> <button id="close">关闭</button></p></dialog>
+<script>
+const DATA=/*DATA*/null;
+const KEY="char-review-"+DATA.book;
+let st={ok:{},check:{},bad:{}};
+try{const s=localStorage.getItem(KEY);if(s)st=Object.assign(st,JSON.parse(s))}catch(e){}
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(st))}catch(e){}};
+let filter="all";
+const $=id=>document.getElementById(id);
+function status(r){return st.ok[r.ch]?"ok":st.check[r.ch]?"check":""}
+function badIn(r){return r.cells.filter(c=>st.bad[c[0]]).length}
+function render(){
+  const box=$("rows");box.textContent="";
+  const frag=document.createDocumentFragment();
+  for(const r of DATA.rows){
+    const s=status(r),nb=badIn(r);
+    if(filter==="todo"&&(s||nb))continue;
+    if(filter==="check"&&s!=="check")continue;
+    if(filter==="bad"&&!nb)continue;
+    const row=document.createElement("div");row.className="row "+s;
+    const who=document.createElement("div");who.className="who";
+    who.innerHTML=`<div class="ch"></div><div class="meta"></div><div class="btns"><button class="okb">OK</button><button class="chk">存疑</button></div>`;
+    who.querySelector(".ch").textContent=r.ch;
+    who.querySelector(".meta").textContent=`${r.n} 格 · 已放行 ${r.auto}`+(nb?` · 错 ${nb}`:"");
+    const okb=who.querySelector(".okb"),chk=who.querySelector(".chk");
+    okb.classList.toggle("on",s==="ok");chk.classList.toggle("on",s==="check");
+    okb.onclick=()=>{if(st.ok[r.ch])delete st.ok[r.ch];else{st.ok[r.ch]=1;delete st.check[r.ch]}save();render()};
+    chk.onclick=()=>{if(st.check[r.ch])delete st.check[r.ch];else{st.check[r.ch]=1;delete st.ok[r.ch]}save();render()};
+    const cells=document.createElement("div");cells.className="cells";
+    for(const [id,src] of r.cells){
+      const b=document.createElement("button");b.className="cell"+(st.bad[id]?" bad":"");b.title=id;b.setAttribute("aria-label","字块 "+id);
+      const im=document.createElement("img");im.src=src;im.alt=r.ch;im.loading="lazy";b.appendChild(im);
+      b.onclick=()=>{if(st.bad[id])delete st.bad[id];else st.bad[id]=1;save();render()};
+      cells.appendChild(b);
+    }
+    row.append(who,cells);frag.appendChild(row);
+  }
+  box.appendChild(frag);
+  const ok=DATA.rows.filter(r=>st.ok[r.ch]),ck=DATA.rows.filter(r=>st.check[r.ch]);
+  const okn=ok.reduce((a,r)=>a+r.n,0);
+  $("sub").textContent=`册 ${DATA.book} · ${DATA.rows.length} 个字 · ${DATA.n_cells} 格`;
+  $("stat").textContent=`OK ${ok.length}/${DATA.rows.length} 字（${okn} 格） · 存疑 ${ck.length} · 错格 ${Object.keys(st.bad).length}`;
+  $("bo").style.width=(ok.length/DATA.rows.length*100)+"%";$("bc").style.width=(ck.length/DATA.rows.length*100)+"%";
+}
+document.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{filter=b.dataset.f;document.querySelectorAll("[data-f]").forEach(x=>x.classList.toggle("on",x===b));render()});
+$("export").onclick=()=>{
+  const out={book:DATA.book,ok:Object.keys(st.ok),check:Object.keys(st.check),bad:Object.keys(st.bad)};
+  $("out").value=JSON.stringify(out);$("dlg").showModal();
+};
+$("close").onclick=()=>$("dlg").close();
+$("copy").onclick=async()=>{const t=$("out");try{await navigator.clipboard.writeText(t.value)}catch(e){t.select()}$("copy").textContent="已复制"};
+render();
+</script>

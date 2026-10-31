@@ -41,7 +41,8 @@ def _cid(ch: dict) -> tuple[int, int]:
 class Ref:
     """格位表 + daizhige 逐列文字（我们一页＝一个半叶，列一一对应）。"""
 
-    def __init__(self, corpus: Path):
+    def __init__(self, corpus: Path, ncol: int = 9):
+        self.ncol = ncol
         self.slots = {}
         for line in open(corpus / "layout_slots.jsonl", encoding="utf-8"):
             d = json.loads(line)
@@ -52,7 +53,7 @@ class Ref:
             if d.get("dzg_id"):
                 self.pm[(d["vol"], d["page"])] = (d["dzg_id"], d["side"])
         self.rec = {}
-        for f in sorted(corpus.glob("000*.jsonl")):
+        for f in sorted(corpus.glob("[0-9][0-9][0-9][0-9].jsonl")):
             for line in open(f, encoding="utf-8"):
                 d = json.loads(line)
                 self.rec[d["id"]] = d
@@ -63,14 +64,14 @@ class Ref:
             return {}
         out = {}
         for c in self.rec[m[0]]["cols"]:
-            if c["no"] // 9 != m[1]:
+            if c["no"] // self.ncol != m[1]:
                 continue
             s = {}
             for run in c["runs"]:
                 if run["t"] == "text":
                     for i, ch in enumerate(run["s"]):
                         s[run["start"] + 1 + i] = ch
-            out[c["no"] % 9 + 1] = s
+            out[c["no"] % self.ncol + 1] = s
         return out
 
 
@@ -195,6 +196,7 @@ def main(argv=None):
     ap.add_argument("--books", nargs="+", required=True)
     ap.add_argument("--corpus", help="daizhige 目录；缺省 corpus_path('daizhige')")
     ap.add_argument("--raw", help="原图路径模板，{vol}、{page}；缺省 <工作区>/data_full/zongmu/{vol}/{page}.png")
+    ap.add_argument("--ncol", type=int, default=9, help="一个半叶几列（daizhige geom.ncol；殿本 9，史記文淵閣本 8）")
     ap.add_argument("--no-l2", action="store_true", help="不算二级（不读原图，快）")
     ap.add_argument("--json", help="明细写到这个文件")
     a = ap.parse_args(argv)
@@ -208,7 +210,7 @@ def main(argv=None):
         from open_guji_cv.core.workspace import workspace_root
         ws = workspace_root()
         raw = str(ws / "data_full" / "zongmu" / "{vol}" / "{page}.png") if ws else None
-    ref = Ref(corpus)
+    ref = Ref(corpus, a.ncol)
     out, tot = {}, collections.Counter()
     print("册     列数   列网页 对表错列 文字错位 挤格列 |   格数  几何标出  要看图")
     for b in a.books:

@@ -39,8 +39,8 @@ import cv2
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from open_guji_cv.utils.border_geometry import detect_borders
-from open_guji_cv.utils.column_projection import clean_column, warp_page_columns
+from open_guji_cv.books.siku_zongmu.border import detect_borders
+from open_guji_cv.books.siku_zongmu.column import clean_column, warp_page_columns
 
 RAW_ROOT = Path("/home/user/rebuild_src")
 FALLBACK_ROOT = Path(__file__).resolve().parent.parent / "data_full" / "zongmu"

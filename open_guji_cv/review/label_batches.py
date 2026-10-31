@@ -225,7 +225,7 @@ def cutline_population(store, book: str, pages: list[int], exclude_ids: set[str]
     不含：上下任一格是 blank、带 a/b 小注的（切线卡按 sub=None 配格，出不了卡）、已在金标里的。
     """
     from ..core.spec import page_key
-    from ..utils.cut_select import PENDING_BLOB
+    from ..seg.cut_select import PENDING_BLOB
     pool: dict[str, list[dict]] = defaultdict(list)
     n_all = 0
     skipped = defaultdict(int)
@@ -422,7 +422,7 @@ def build_column_end(book: str, n: int = 240, batch_id: str | None = None, pages
     from ..eval.colgeom import current_geom
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    from ..utils.column_projection import column_text_band, denoise_column
+    from ..seg.profile import column_text_band, denoise_column
     from ..utils.image_io import imread as cv_imread
     import cv2
     store = store or ProductStore()

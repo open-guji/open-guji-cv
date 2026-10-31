@@ -163,10 +163,9 @@ sys.path.insert(0, str(ROOT))
 import open_guji_cv.gates  # noqa: E402,F401  —— 注册产物种类（含 border_detect_gate_manifest）
 from open_guji_cv.core.spec import page_key  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.utils.column_projection import (  # noqa: E402
-    clean_column, column_profile, denoise_column, stamp_noise_density,
-)
-from open_guji_cv.utils.row_boundaries import (  # noqa: E402
+from open_guji_cv.books.siku_zongmu.column import clean_column
+from open_guji_cv.seg.profile import column_profile, denoise_column, stamp_noise_density
+from open_guji_cv.books.siku_zongmu.row_boundaries import (  # noqa: E402
     estimate_shared_period, row_ink_projection,
 )
 

@@ -233,7 +233,7 @@ def test_resolved_cuts_ok_and_seam_ok_resolve_with_y_guard(monkeypatch):
     """切线卡的 `ok`（现役直线就对）→ straight，`seam_ok`（现役折线就对）→ 现役折线；
     两者都带当时的 y 当护栏（`_apply_resolved_cut` 里比）。`moved` 无 cand 收不了。"""
     from open_guji_cv.feedback.lookup import resolved_cuts
-    from open_guji_cv.utils.row_boundaries import RESOLVED_CHOSEN
+    from open_guji_cv.books.siku_zongmu.row_boundaries import RESOLVED_CHOSEN
     _patch_verdicts(monkeypatch, [
         _verdict(1, 1, 1, "ok", None, y=1980, y_old=1980),
         _verdict(1, 1, 2, "seam_ok", None, y=1990, y_old=1986, polyline=[[0, 1990], [60, 1992]]),

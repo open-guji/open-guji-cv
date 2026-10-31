@@ -36,13 +36,12 @@ import numpy as np
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.utils.border_geometry import detect_borders  # noqa: E402
+from open_guji_cv.books.siku_zongmu.border import detect_borders  # noqa: E402
 
 RAW = Path(os.environ.get("GUJI_RAW", "/home/user/rebuild_src"))
 PAGE_TYPE = ROOT.parent / "open-guji-dataset" / "page-type" / "expected.json"
 
-from open_guji_cv.utils.border_geometry import (  # noqa: E402
-    gutter_projection, BEND_SEARCH, BEND_INK_W_MAX, BEND_MIN_ROWS)
+from open_guji_cv.seg.polyline import gutter_projection, BEND_SEARCH, BEND_INK_W_MAX, BEND_MIN_ROWS
 
 # 投影/行过滤的实现**只在 border_geometry.gutter_projection 里有一份**——本脚本
 # 曾自带一份，后来库里加了「局部一致性」闸（碎片是跳的、线是连的），两份就

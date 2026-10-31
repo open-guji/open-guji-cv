@@ -555,7 +555,7 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     完整 case 拖切线）两处共用。
     """
     from ..eval import touching as T
-    from ..utils.cut_select import PENDING_BLOB
+    from ..seg.cut_select import PENDING_BLOB
 
     # 2026-09-28 修（C 道，冷缓存下顺序闸静默放行）：面板取用例要读**列图缓存**
     # （`eval.rulers._col_profile`），缓存里没有就把那一列整列跳过——不报错、只是

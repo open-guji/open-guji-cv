@@ -11,8 +11,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_guji_cv.utils.border_geometry import HLine, VLine, detect_outer_borders
-from open_guji_cv.utils.column_projection import ColumnWindow, refine_top_by_frame
+from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+from open_guji_cv.seg.frame_types import HLine, VLine
+from open_guji_cv.books.siku_zongmu.column import refine_top_by_frame
+from open_guji_cv.seg.warp import ColumnWindow
 
 W, H = 300, 400
 RAW_L, RAW_R = 50, 150            # 列在原图里的 x 范围
@@ -106,7 +108,7 @@ def test_outer_run_thickness_counts_rows_not_endpoint_gap():
     原来 `thick = offs[b]-offs[a]` 少算 1px，占 4 行的条算成 3、被 RUN_MIN 挡掉，
     整册漏报几十页。
     """
-    from open_guji_cv.utils.border_geometry import _outer_run, OUTER_INK_MIN
+    from open_guji_cv.books.siku_zongmu.border import _outer_run, OUTER_INK_MIN
     prof = np.zeros(40)
     prof[20:24] = OUTER_INK_MIN + 0.2        # 占 20,21,22,23 共 4 行 => 厚 4px
     offs = -np.arange(0, 40, 1.0)
@@ -124,8 +126,8 @@ def test_outer_borders_single_bar_and_weak_vertical_prior():
     一条 5 行的外框（雙邊框）；竖直只有 3px 细内框、没有外框。期望：top 判 single 且
     不报 outer；bottom 判 double 且报 outer；竖直先验为 None（不能凭噪点造先验）。
     """
-    from open_guji_cv.utils.border_geometry import (HLine, SINGLE_BAR_MIN,
-                                                   detect_outer_borders)
+    from open_guji_cv.books.siku_zongmu.border import SINGLE_BAR_MIN, detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[89:101, :] = 255                        # 上：單邊框粗条 12 行（从内框线往外=往上）
@@ -145,7 +147,7 @@ def test_outer_borders_single_bar_and_weak_vertical_prior():
 
 
 def _hl(y, kind):
-    from open_guji_cv.utils.border_geometry import HLine
+    from open_guji_cv.seg.frame_types import HLine
     return HLine(y_at_right=float(y), slope=0.0, kind=kind)
 
 
@@ -155,7 +157,7 @@ def _vl(x_raw, w):
 
 def test_push_bottom_to_bar_moves_line_from_text_baseline_to_bar():
     """线塌在最后一行字底边、真框条在 22px 之下 → 推到条上沿 −4（2026-09-20 vol02 p35/p106）。"""
-    from open_guji_cv.utils.border_geometry import push_bottom_to_bar, BPUSH_MARGIN
+    from open_guji_cv.books.siku_zongmu.border import push_bottom_to_bar, BPUSH_MARGIN
     Wd, Hd = 900, 800
     binm = np.zeros((Hd, Wd), np.uint8)
     for cx in range(120, 800, 90):                    # 一行字：底边 698
@@ -170,7 +172,7 @@ def test_push_bottom_to_bar_moves_line_from_text_baseline_to_bar():
 
 def test_push_bottom_to_bar_leaves_double_frame_and_barless_pages_alone():
     """雙邊框：内框细线在 +5（够格的条）→ 目标 <8 不动；没有条 → 不动；条在线上方 → 不动。"""
-    from open_guji_cv.utils.border_geometry import push_bottom_to_bar
+    from open_guji_cv.books.siku_zongmu.border import push_bottom_to_bar
     Wd, Hd = 900, 800
     verts = [_vl(40, Wd), _vl(860, Wd)]
     binm = np.zeros((Hd, Wd), np.uint8)
@@ -209,7 +211,7 @@ def _leaning_page(lean_px: float, rule_frac: float):
 
 def test_snap_verticals_follows_text_gaps_where_rules_are_missing():
     """界行只印了顶部 15%、文字列往下渐偏 60px（线压进字里）：按文字缝重定位（2026-09-20 p177）。"""
-    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    from open_guji_cv.books.siku_zongmu.border import snap_verticals_to_evidence
     binm, top, bot, verts, Wd, Hd = _leaning_page(60.0, 0.15)     # 页底线要压进字里 ~15px 才算「有病」
     out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd, straight=verts)
     assert n == 3, n                                   # 三条内部线都动了，框线不动
@@ -229,7 +231,7 @@ def test_snap_verticals_follows_text_gaps_where_rules_are_missing():
 
 def test_snap_verticals_keeps_fully_ruled_page():
     """整页都有界行且线在界行上 → 一条不动。"""
-    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    from open_guji_cv.books.siku_zongmu.border import snap_verticals_to_evidence
     binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 1.0)
     out, n = snap_verticals_to_evidence(binm, top, bot, verts, Wd, Hd)
     assert n == 0 and all(a is b for a, b in zip(out, verts))
@@ -238,7 +240,7 @@ def test_snap_verticals_keeps_fully_ruled_page():
 def test_snap_keeps_lines_that_sit_inside_the_gap_even_off_center():
     """整页没印界行、文字不偏、线整体偏离缝中心 15px（仍在缝里、离字 ≥8px）→ 一条不动。
     缝中心不是界行位置（两侧文字不对称时差 ±18px），线在缝里就是对的。"""
-    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence
+    from open_guji_cv.books.siku_zongmu.border import snap_verticals_to_evidence
     binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.0)      # 整页一条界行都没印
     shifted = [verts[0]] + [VLine(x_at_top=v.x_at_top - 15.0, slope=0.0) for v in verts[1:-1]] + [verts[-1]]
     out, n = snap_verticals_to_evidence(binm, top, bot, shifted, Wd, Hd)
@@ -247,7 +249,8 @@ def test_snap_keeps_lines_that_sit_inside_the_gap_even_off_center():
 
 def test_single_bar_tolerates_a_few_white_rows_before_the_bar():
     """下版框被推到条上沿 −4 之后，粗条从 +4 起：仍判 single，不报「外框没探到」。"""
-    from open_guji_cv.utils.border_geometry import detect_outer_borders, HLine
+    from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[704:716, :] = 255                       # 下：粗条 12 行，线在 700（条从 +4 起）
@@ -263,7 +266,8 @@ def test_single_bar_tolerates_a_few_white_rows_before_the_bar():
 def test_snap_reverts_unruled_polyline_bends_to_the_straight_fit():
     """界行只印顶部、文字不偏：折线在下段被（模拟）勾到字上偏 30px，直线拟合是对的 →
     无界行横带锚回直线（2026-09-20 vol02 p160 c4~c7）。"""
-    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence, _from_knots
+    from open_guji_cv.books.siku_zongmu.border import snap_verticals_to_evidence
+    from open_guji_cv.seg.polyline import _from_knots
     binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.15)
     yt, yb = 100.0, 1400.0
     ky = [yt, yt + (yb - yt) / 3, yt + 2 * (yb - yt) / 3, yb]
@@ -282,7 +286,8 @@ def test_snap_reverts_unruled_polyline_bends_to_the_straight_fit():
 def test_snap_reverts_outer_frame_line_pulled_into_text():
     """外框线下半段没印、折线被首末列字的竖笔吸进 30px → 同样锚回直线；内部界行不受影响
     （2026-10-22 vol08 p2 左外框吸进第 9 列 42px）。"""
-    from open_guji_cv.utils.border_geometry import snap_verticals_to_evidence, _from_knots
+    from open_guji_cv.books.siku_zongmu.border import snap_verticals_to_evidence
+    from open_guji_cv.seg.polyline import _from_knots
     binm, top, bot, verts, Wd, Hd = _leaning_page(0.0, 0.15)
     yt, yb = 100.0, 1400.0
     ky = [yt, yt + (yb - yt) / 3, yt + 2 * (yb - yt) / 3, yb]
@@ -298,7 +303,8 @@ def test_snap_reverts_outer_frame_line_pulled_into_text():
 def test_thick_inner_bar_with_an_outer_rule_is_double_not_single():
     """粗条（12 行）之外还有一条外框 → 判 double 并报 outer，不许当成 single
     （2026-09-20 vol02 p12/16/110/185）。"""
-    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[700:712, :] = 255                       # 内框粗条 12 行（线在 700）
@@ -314,7 +320,8 @@ def test_thick_inner_bar_with_an_outer_rule_is_double_not_single():
 
 def test_thick_bar_with_nothing_beyond_stays_single():
     """反证：粗条之外是纸 → 仍判 single（vol02 判 single 的 30 页里 25 页是这种）。"""
-    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[700:722, :] = 255                       # 只有一条 22 行粗条
@@ -329,7 +336,8 @@ def test_thick_bar_with_nothing_beyond_stays_single():
 def test_book_gap_fallback_is_marked_estimated_and_not_counted_as_detected():
     """外框磨到够不着 OUTER_INK_MIN 时，按书级 outer_gap 兜底给位置，但标 estimated；
     闸1 仍报 outer_frame_missing（2026-09-20 用户定：只当位置提示）。"""
-    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[:, 60:63] = 255; mask[:, 537:540] = 255
@@ -355,7 +363,8 @@ def test_fallback_window_reaches_frames_closer_than_the_book_median():
     `基准±12` 把下界收到 15，根本扫不到。外框只可能在内框之外，
     `OUTER_GAP_MIN` 已是物理下界，下界不该再跟着基准收。
     """
-    from open_guji_cv.utils.border_geometry import HLine, detect_outer_borders
+    from open_guji_cv.books.siku_zongmu.border import detect_outer_borders
+    from open_guji_cv.seg.frame_types import HLine
     Wd, Hd = 600, 800
     mask = np.zeros((Hd, Wd), np.uint8)
     mask[:, 60:63] = 255; mask[:, 537:540] = 255

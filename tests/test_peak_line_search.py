@@ -1,7 +1,7 @@
 """peak_line_search 单测：半高宽匹配度 + 位置角度联合搜索，用合成图验证。"""
 import numpy as np
 
-from open_guji_cv.utils.peak_line_search import (
+from open_guji_cv.seg.lines import (
     BOTTOM_SAFETY_MARGIN,
     EDGE_MAX_WALK,
     LineMatch,
@@ -97,7 +97,7 @@ def test_joint_search_recovers_tilted_line_position_and_angle():
     # 对照：把位置锁死在 naive_x0、只搜角度——这是早期版本的 bug。位置锁死后
     # 怎么调角度都碰不到真实的线，捕到的墨量应该远低于联合搜索（后者几乎
     # 捕全了这条线的墨）。防止回归。
-    from open_guji_cv.utils.peak_line_search import sample_line_curve, half_height_score_at as hh
+    from open_guji_cv.seg.lines import sample_line_curve, half_height_score_at as hh
     locked_best_proj = -1.0
     for s in np.linspace(-0.08, 0.08, 33):
         _, curve = sample_line_curve(mask, "v", naive_x0, naive_x0, float(s))

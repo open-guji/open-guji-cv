@@ -31,7 +31,7 @@ def _pages_of_type(book: str, types: frozenset[str]) -> list[int]:
 
 
 def body_pages(book: str) -> list[int]:
-    """严格的正文页。标定（`utils/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
+    """严格的正文页。标定（`books/siku_zongmu/calibrate`）、对勘报告、抽查用它——那些口径要「纯正文」。"""
     return _pages_of_type(book, frozenset({"body"}))
 
 
@@ -431,7 +431,7 @@ def escalated_boundaries(book: str, pages: list[int], store=None,
             # 出卡的口径与顺序闸一致（2026-09-15）：`escalate`（L2′ 说拿不准）+ 多候选且所选与 U-Net
             # 分歧 ≥ PENDING_BLOB 的（60 条抽样标定：这一档坏率 35%，<20 的一条都不坏）。
             # 人裁过的不出（人是终审）。`include_pending=False` 只出 escalate 那几条。
-            from ..utils.cut_select import PENDING_BLOB
+            from ..seg.cut_select import PENDING_BLOB
             esc = []
             for cp in (cc.cut_candidates or []):
                 if getattr(cp, "chosen_by", None) == "human":

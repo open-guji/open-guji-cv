@@ -2,7 +2,7 @@
 """人拖过的切线钉住（segment_column pinned_cuts，2026-09-26）。"""
 import numpy as np
 
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 SLOT_H, N = 60, 6
 

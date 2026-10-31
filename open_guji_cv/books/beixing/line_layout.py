@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from .border_geometry import BorderDetectionResult, HLine, VLine
+from ...seg.frame_types import BorderDetectionResult, HLine, VLine
 
 LINE_KINDS = ("body", "empty", "footnote", "margin", "wide", "noise")
 

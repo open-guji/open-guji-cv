@@ -13,7 +13,7 @@ P0 的已知简化：Step3 已拆好的夹注 a/b 半格在这里合成一个满
 from __future__ import annotations
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec, cell_key, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
@@ -40,6 +40,24 @@ class CellShrinkParams(BaseModel):
     清理后的图块上把 v1 判据（段端收编、桥接）再跑一遍，两步各留一套格位：Step3 记整格、这里拆 a/b
     （#434 vol04 p218c2:13/21），下游用的是这里那套，Step3 的产物就成了错的。关掉 = 旧行为（两套判据
     取并集）。缝位不受影响：两边都认的格仍用这里自己量的缝。"""
+    frame_line_max_off: float = 0.0
+    """全页框线线位（`extractor.page_frame_line_offsets`）只认离版框这么多格高以内的；0＝不限（缺省，刻本）。
+    写本（史記文淵閣本）列尾几列的字脚、列首几列的字头常落在差不多同一高度，线位统计把它们当成第二、三道框线
+    （02 册 67 页：离下框 66、88 行各认出一道），列尾「為」的四点、「集」的木字底被当框线抹掉。
+    这本书真框线都贴着版框（离框 2 行），设 0.3 就只留真线。列端格剥框线（`strip_frame_line`）也只认这么近的线。"""
+    jiazhu_end_halves: bool = False
+    """列首／列尾的雙行小注格剥框渣、曲线切边时左右两半各算（extractor 同名开关）。缺省关＝整格算（刻本旧行为）。
+    写本列尾小注两个小字各有字身，整格只认最大连通体，另一半字与之分离的下半截被当框渣抹掉。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_switches(self, handler):
+        """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.frame_line_max_off:
+            d.pop("frame_line_max_off", None)
+        if isinstance(d, dict) and not self.jiazhu_end_halves:
+            d.pop("jiazhu_end_halves", None)
+        return d
 
 
 def _upright(ctx: RunContext, patch):
@@ -99,7 +117,7 @@ class CellShrinkStep(Step):
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.utils.seam",
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
     )
 
@@ -119,6 +137,10 @@ class CellShrinkStep(Step):
             offs = page_frame_line_offsets(
                 [(imgs[cc.col], *cc.content_x, edge[cc.col]) for cc in cols if edge[cc.col] is not None],
                 cell_h, bottom=bottom)
+            lim = ctx.params_for(self).frame_line_max_off * cell_h  # type: ignore[attr-defined]
+            if lim > 0:
+                # 列首：border_top=0 是列裁切已把上框排除，列图里没有框线，认出来的全是字头
+                offs = [(d, th) for d, th in offs if d <= lim and (bottom or any(edge[cc.col] > 0.5 for cc in cols))]
             out[key] = {cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in offs]
                         for cc in cols if edge[cc.col] is not None}
         return out
@@ -183,7 +205,9 @@ class CellShrinkStep(Step):
                      # 落在 y≈0 与 y≈border_bottom 附近。
                      "frame_bar_strategy": getattr(ctx.book, "frame_bar_strategy", "side_gap"),
                      **{k: v.get(cc.col, []) for k, v in (frame_lines or {}).items()},
-                     **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {})},
+                     **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {}),
+                     **({"jiazhu_end_halves": True} if p.jiazhu_end_halves else {}),
+                     **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
@@ -299,7 +323,7 @@ class CellShrinkStep(Step):
                 if pos in seams and not inst.sub and has_patch:
                     patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
                 cell_type = inst.cell_type
-                # 职名列的框屑 Step3 已剥掉（utils/roster_segment._denoise），首格就是字，不再猜框条
+                # 职名列的框屑 Step3 已剥掉（books/siku_zongmu/roster_segment._denoise），首格就是字，不再猜框条
                 frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
                 if frame_bar:
                     cell_type, has_patch = "empty", False
@@ -374,7 +398,7 @@ def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_
     缝在列图坐标（每 x 一个 y，x 从格的内容窗口 x0 起）；紧框 bbox = (x0, y0, x1, y1) 也是列图
     坐标。抹白后若有整行/整列空了，紧框相应收缩——邻字拖过格线的那截笔画正是要去掉的。
     """
-    from ..utils.seam import mask_outside
+    from ..seg.seam import mask_outside
     x0, y0, x1, y1 = (int(round(v)) for v in bbox)
     if patch.shape[0] != y1 - y0 or patch.shape[1] != x1 - x0:
         # 裁片与 bbox 不对应（extractor 可能加了 padding），直接从列图重裁

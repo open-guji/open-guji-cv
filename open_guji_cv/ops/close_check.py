@@ -125,7 +125,7 @@ def _models(eng, pages) -> dict:
     import importlib.util
     from ..clustering import cnn_candidates as CNN
     from ..core.spec import page_key
-    from ..utils.cut_select import DEFAULT_CKPT as JUDGE_CKPT
+    from ..seg.cut_select import DEFAULT_CKPT as JUDGE_CKPT
     env = []
     if importlib.util.find_spec("torch") is None:
         env.append("没装 torch")

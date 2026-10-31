@@ -39,7 +39,7 @@ class BookSpec:
     sets: dict[str, list[int]] = field(default_factory=dict)
     #: 夹注（雙行小注）的**本书文字约定**（yaml 的 `jiazhu:`）。默认全空 = 不启用。
     #:
-    #: ⚠️ **探测夹注本身不看文字**（`utils/jiazhu_split` 纯几何：墨迹跨度、缝中心、
+    #: ⚠️ **探测夹注本身不看文字**（`books/siku_zongmu/jiazhu_split` 纯几何：墨迹跨度、缝中心、
     #: 段连缀），换书照样能用。这里放的只是「这一套书的注文长什么样」这类**书级先验**：
     #:
     #: - `note_suffixes`：版本注的收尾词（《四庫全書總目》是「…採進本 / …藏本」）。
@@ -70,7 +70,7 @@ class BookSpec:
     #: **只在估不出来时兜底**，能估出来的页一律用当场估的值——所以给了这个数
     #: 也不会改变任何正常页的产物（有单测守着）。
     #:
-    #: **怎么标定**：`utils/row_boundaries.measure_book_period()`，或直接取整册
+    #: **怎么标定**：`books/siku_zongmu/row_boundaries.measure_book_period()`，或直接取整册
     #: 已有产物里正文页 period 的中位数。**不需要金标**：正文页的 period 是
     #: 书级常量，vol01 正文 108 页实测 115.0±1.67px、vol02 186 页 113.0±2.37px。
     #:
@@ -92,6 +92,8 @@ class BookSpec:
     #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。不写 = 按 `edition` 选（`core/pipeline.default_pipeline_id`）。
     #: 自由版式的坊刻本（yxat）写 `pipeline: keben_free`——edition 仍是 keben，字形库分域不变。
     pipeline: str | None = None
+    #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
+    seg_set: str | None = None
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
     #: 存 yaml 原样（键转成字符串），读配置时用 `utils/layout_hints.parse_layout_hints` 校验形状。
     layout_hints: dict = field(default_factory=dict)
@@ -530,6 +532,11 @@ def _expand_pages(raw) -> list[int]:
     return [p for p in out if not (p in seen or seen.add(p))]
 
 
+def _load_seg_set(v):
+    from .seg_set import validate_seg_set
+    return validate_seg_set(None if v is None else str(v))
+
+
 def _load_layout_hints(raw) -> dict:
     """`layout_hints:` 先校验形状（错了在读配置时就报），再原样存（键转字符串，进指纹时稳定）。"""
     if not raw:
@@ -666,6 +673,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pages=_expand_pages(d.get("pages")),
         preclean=_load_preclean(d.get("preclean")),
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
+        seg_set=_load_seg_set(d.get("seg_set")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
         notes=d.get("notes", ""),
         iron_gate=bool(d.get("iron_gate", False)),

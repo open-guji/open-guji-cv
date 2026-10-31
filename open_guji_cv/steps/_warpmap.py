@@ -10,8 +10,8 @@ from __future__ import annotations
 import numpy as np
 
 from ..core.anchor import x_tl_to_tr
-from ..utils.border_geometry import VLine
-from ..utils.column_projection import _strip_bounds, column_warp_matrix
+from ..seg.frame_types import VLine
+from ..seg.warp import _strip_bounds, column_warp_matrix
 
 Point = tuple[float, float]
 

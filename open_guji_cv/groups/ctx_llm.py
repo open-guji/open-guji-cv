@@ -147,7 +147,10 @@ def _client():
         return None
     if key not in _CLIENT:
         _CLIENT.clear()
-        _CLIENT[key] = Client(key, os.environ.get(ENV_BASE) or None)
+        try:
+            _CLIENT[key] = Client(key, os.environ.get(ENV_BASE) or None)
+        except ImportError:        # 机器给了密钥却没装 anthropic：按没密钥处理（先查缓存，没有就弃权），不让整页失败
+            return None
     return _CLIENT[key]
 
 

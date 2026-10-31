@@ -15,7 +15,7 @@
 1.6 起（Sheldon 第四轮）：虚线界栏也认，有界栏的块切线顺着界栏走；走缝离字留空（`free_columns.seam_cost`）。
 1.8 起（Sheldon 第六轮 p13、p15「要保持均匀」）：接断口的竖线图只用来认界栏，排网格用原竖线图（接断口会把一列字的竖画连成线）；
 认界栏量的是拟出的直线踩线多少（不是弯来弯去的路），劈墨罚 3→2。
-算法在 `utils/free_columns.py`。
+算法在 books/zengguang_youxue/free_columns.py`。
 """
 
 from __future__ import annotations
@@ -27,9 +27,9 @@ from ..core.anchor import bbox_tr_to_tl, x_tl_to_tr, x_tr_to_tl
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.free_layout import BlockColumnsRec, ColumnRec, FreeColumns, LayoutBlocks
-from ..utils.free_blocks import drop_specks, ink_mask, rule_hlines, thin_vlines
-from ..utils.free_columns import BlockColumns, ColumnSeams, block_columns, grid_columns, rule_breaks
-from ..utils.free_rectify import rectify_gray
+from ..books.zengguang_youxue.free_blocks import drop_specks, ink_mask, rule_hlines, thin_vlines
+from ..books.zengguang_youxue.free_columns import BlockColumns, ColumnSeams, block_columns, grid_columns, rule_breaks
+from ..books.zengguang_youxue.free_rectify import rectify_gray
 
 
 class ColumnTraceParams(BaseModel):
@@ -67,8 +67,8 @@ class ColumnTraceStep(Step):
     spec = StepSpec(
         id="column_trace", title="Step2 块内找列（自由版式）", version="1.8", unit="page",
         consumes=("raw_page", "layout_blocks"), produces=("free_columns",), params=ColumnTraceParams,
-        code_deps=("open_guji_cv.utils.free_columns", "open_guji_cv.utils.free_blocks",
-                   "open_guji_cv.utils.free_rectify"),
+        code_deps=("open_guji_cv.books.zengguang_youxue.free_columns", "open_guji_cv.books.zengguang_youxue.free_blocks",
+                   "open_guji_cv.books.zengguang_youxue.free_rectify"),
         parallel_safe=True,
     )
 

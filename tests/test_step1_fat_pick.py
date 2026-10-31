@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """Step1 竖线：候选名额被字身假峰占掉、真线漏在双倍宽缝里（overview#266，vol03 p49）。
 
-`peak_line_search._repair_fat_pick` 只对这一种形态动。合成数据按 vol03 几何画：列距 180、线宽 4。"""
+`seg.lines._repair_fat_pick` 只对这一种形态动。合成数据按 vol03 几何画：列距 180、线宽 4。"""
 
 from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils import peak_line_search as P
+from open_guji_cv.seg import lines as P
 
 PITCH = 180
 

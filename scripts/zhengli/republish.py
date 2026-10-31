@@ -15,7 +15,8 @@ rev 自己数、差异没人看。本脚本分两步，中间停下等人看差�
          写一行台账（ledger.py），加 --sync 再 `guji db sync` 推进中心库，成功后触发网站 proofing-sync（publish）。
          雪碧图（改名带内容哈希、`sprites[]` 写进单子）在这里按 sha256 传进 R2；proofing-sync 再把图
          和单子一起发到 COS（GUJI-675）。产物包标 main、book-text 换文本这两样还要另做，push 末尾逐条打出来。
-         动手之前先过两道门（GUJI-730）：单子引用的图都登记在 `sprites[]` 里；旧单上的票都落成了人裁。
+         动手之前先过三道门：单子的格号出自册 yaml 钉的那版页表（`source_rev`，图源门，2026-10-30）；
+         单子引用的图都登记在 `sprites[]` 里；旧单上的票都落成了人裁（GUJI-730）。
 
 **文本和待审单要一起换**：新单的格号按新切分排，网站显示的还是 book-text 的旧文本就会对不上。
 所以 prep 要 --export-dir（同一次导出的 char／cord／pages），push 前先把同一次导出推到 book-text。
@@ -461,6 +462,39 @@ def publish_web(a) -> bool:
     return True
 
 
+def source_gate(ws: Path, book: str, doc: dict, a) -> None:
+    """图源门（A32 精校前移 A3，2026-10-30 sheldon 定）：单子上的格号出自哪一版页表，要等于册 yaml 钉的 `source_rev`。
+
+    停在 v0.1 等网站读者的册，单子一挂就是几周；页表一换（拆页、换图源）后面的页号就整体后移、票全要迁。
+    册 yaml 钉了 `source_rev` 的，单子必须出自那一版页表，不符拒推（`--source-why "<理由>"` 越过）。
+
+    册 yaml 没钉的**只提示、不拦**：钉 `source_rev` 会让事件读口（`core.event_files.RevGate`）不再采信锚里没有
+    `anchor.source_rev` 的旧事件——北行日錄 bxgb 一钉就丢 2,267 条（2026-10-30 试推前 dry-run 发现，已撤）。
+    所以没换过图源的书要先给旧事件补锚，再钉。单子没记 `source_rev`（原图不是从页表取的）也只提示。"""
+    from open_guji_cv.core.event_files import book_source_rev
+    want = book_source_rev(book, data_dir(ws) / "books")
+    got = doc.get("source_rev")
+    why = (getattr(a, "source_why", None) or "").strip()
+    if want is None and got is None:
+        print("  ⓘ 图源门：册 yaml 没钉 source_rev、单子也没记（原图不是从页表取的），没法核图源；照推", file=sys.stderr)
+        return
+    if want is None:
+        print(f"  ⓘ 图源门：册 yaml 没钉 source_rev（单子出自页表 r{got}）：页表一换图就会变；"
+              f"钉之前先给本册旧事件补 anchor.source_rev，不然读口会丢掉它们。照推", file=sys.stderr)
+        return
+    if got is None:
+        print(f"  ⓘ 图源门：单子没记 source_rev（产物没带页表来历），没法核是不是 r{want} 的图；照推", file=sys.stderr)
+        return
+    elif int(got) != int(want):
+        msg = f"单子格号出自页表 r{got}，册 yaml 钉的是 r{want}：按 r{want} 的图重跑再出单"
+    else:
+        return
+    if why:
+        print(f"  ⚠ 图源门：{msg}——已按 --source-why 越过：{why}", file=sys.stderr)
+        return
+    sys.exit(f"✗ 图源门：{msg}；确要推加 --source-why \"<理由>\"")
+
+
 def sprites_gate(doc: dict, a) -> None:
     """出单门（GUJI-730 P0-2）：单子引用的每张图都要登记在 `sprites[]` 里，否则网站上就是 404（册 004–007 的 alt 图）。
     不过就停；确知要带缺图上线才加 --ack-missing-sprites。"""
@@ -635,7 +669,8 @@ def cmd_push(a) -> int:
     online = Path(plan["online"])
     old_doc = json.loads(online.read_text(encoding="utf-8")) if online.exists() else None
     old_rev = (old_doc or {}).get("rev")
-    sprites_gate(doc_new, a)                                     # 两道门都在动任何东西之前
+    source_gate(ws, book, doc_new, a)                            # 三道门都在动任何东西之前
+    sprites_gate(doc_new, a)
     votes_gate(ws, book, plan.get("text_id") or text_id_of(ws), old_rev, a.rev, a, old_doc=old_doc, out=out)
     if a.book_text:
         d = json.loads((out / "diff.json").read_text(encoding="utf-8"))
@@ -1202,6 +1237,7 @@ def main(argv=None) -> int:
             p.add_argument("--no-pack", action="store_true", help="不存出单版产物包 rev-<rev>")
             p.add_argument("--allow-empty", action="store_true", help="新单 0 格也换上去")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
+            p.add_argument("--source-why", metavar="原因", help="图源门：册 yaml 没钉 source_rev、或单子出自别的页表版本也照推（写明原因）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
             p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"
@@ -1215,6 +1251,7 @@ def main(argv=None) -> int:
             p.add_argument("--no-publish-web", action="store_true", help="--sync 后不触发网站 proofing-sync")
             p.add_argument("--no-pack", action="store_true", help="--sync 时不存出单版产物包 rev-<rev>")
             p.add_argument("--ack-missing-sprites", action="store_true", help="单子引用的图没全登记也照推（会 404）")
+            p.add_argument("--source-why", metavar="原因", help="图源门：册 yaml 没钉 source_rev、或单子出自别的页表版本也照推（写明原因）")
             p.add_argument("--ack-unlanded-votes", metavar="原因", help="旧单上的票没落完也照换（写明原因）")
             p.add_argument("--held-file", help="cellvotes draft 的 held.tsv：里面的格已记为挂起，换单门不拦")
             p.add_argument("--cells", help="换单门：线上旧单出在换图源之前时，用这张格级对照表（old_new_cells/<册>.tsv[.gz]，"

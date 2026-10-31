@@ -35,7 +35,7 @@ from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.steps.row_segment import RowSegmentParams  # noqa: E402
-from open_guji_cv.utils import row_boundaries as RB  # noqa: E402
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB  # noqa: E402
 from open_guji_cv.utils.bootstrap import BOOTSTRAP_STEPS, ensure_products  # noqa: E402,F401
 
 SHARD = "char-segmentation/touching-cuts"
@@ -182,7 +182,7 @@ def _patch_seamcost(band=20, weight=1.0):
     挤排列里没有干净的行，但常有干净的折线；行墨代价会把锚点放到高字内部的空隙上
     （vol01:10:5:6 典/道 偏 39px），缝代价会把它放到能绕开的地方。"""
     import numpy as np
-    from open_guji_cv.utils.seam import find_seam, seam_ink
+    from open_guji_cv.seg.seam import find_seam, seam_ink
     orig_proj = RB.row_ink_projection
     orig_fit = RB.fit_row_boundaries
 
@@ -276,7 +276,7 @@ def run_column(book, bk, gate, wins, gc, img, p: RowSegmentParams, fit_kw: dict,
     `RowSegmentStep.run_page` 有的 `effective_body_slots` 调用——版框装不下
     `n_body` 格的页（vol01/5 只有 20 行）现役会少切一格，台子这里此前一直按
     标准格数硬切，两边用的 n_body_slots 就对不上了。补上后台子与现役才是
-    真的同一套入参（见 utils/row_boundaries.py::effective_body_slots 的 docstring）。
+    真的同一套入参（见 books/siku_zongmu/row_boundaries.py::effective_body_slots 的 docstring）。
     """
     n_body = p.n_body_slots or bk.chars_per_line
     n_raised_col = max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)
@@ -367,7 +367,7 @@ def main() -> int:
         ensure_products(bk, pages, store=st, cache=ic)
     # 与 RowSegmentStep.run_page 同一套：U-Net 裁判 + 人裁已定的切点。
     from open_guji_cv.feedback.lookup import resolved_cuts as _resolved_cuts
-    from open_guji_cv.utils.cut_select import get_judge
+    from open_guji_cv.seg.cut_select import get_judge
     book_resolved = _resolved_cuts(book)
     judge = get_judge() if p.cut_judge == "unet" else None
     rulers = Counter(); rulers_base = Counter()

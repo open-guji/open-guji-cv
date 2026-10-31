@@ -106,3 +106,29 @@ def test_book_overrides_accept_book_fields():
     assert a["book_overrides"]["cv_version"] == "0.5.21"
     with pytest.raises(SP.SpecError):
         norm(book="vol10", cv="dev", book_overrides={"nope": 1})
+
+
+def test_glyph_diff_incremental_defaults():
+    """改钉字形库只重算受影响的格（A32 精校前移 A4）：缺省从 glyph_match 起、不 force、复用照开。"""
+    s = norm(book="vol10", cv="v0.5.16", glyph_diff=3, book_overrides={"glyph_pin": 5})
+    assert s["glyph_diff"] == 3 and s["steps"] == {"from": "glyph_match", "to": None}
+    assert s["force"] is False and s["no_reuse"] is False and s["base"] == "main"
+    assert "glyph_diff" not in norm(book="vol10", cv="v0.5.16")       # 不给就没有这个键，老任务指纹不变
+    for bad in ({"glyph_diff": 3}, {"glyph_diff": 3, "book_overrides": {"glyph_pin": 3}},
+                {"glyph_diff": "3", "book_overrides": {"glyph_pin": 5}},
+                {"glyph_diff": 3, "book_overrides": {"glyph_pin": 5}, "kind": "command", "run": [["status"]]}):
+        with pytest.raises(SP.SpecError):
+            norm(book="vol10", cv="v0.5.16", **bad)
+
+
+def test_book_id_and_default_ws_repo():
+    """册号（vol01）每部书都有：书 ID 取 ws_glob 的第一段，缺省殿本；已登记的书默认走自己的工作区仓，且不进指纹。"""
+    base = {"kind": "rerun", "book": "vol01", "cv": "a" * 40}
+    d = SP.normalize(base)
+    assert SP.book_id(d) == "96mid1ogzk"
+    assert d["ws_repo"] == "guji-workspace/96mid1ogzk-si-ku-zong-mu"
+    q = SP.normalize({**base, "ws_glob": "995ejelvk0-*"})
+    assert SP.book_id(q) == "995ejelvk0" and q["ws_repo"] is None
+    assert SP.spec_hash(d) != SP.spec_hash(q)
+    assert SP.spec_hash(d) == SP.spec_hash({**d, "ws_repo": None})
+    assert SP.book_id({"ws_glob": "x*"}) is None

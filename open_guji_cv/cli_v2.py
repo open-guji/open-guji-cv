@@ -1462,10 +1462,10 @@ def cmd_eval(args) -> None:
 
 def cmd_locate_gutter(args) -> None:
     """版心定位（给拆页用，#174）：输入原图，输出版心 x 与置信度。只定位、不裁图、不接管线。
-    判据见 `utils/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
+    判据见 `seg/locate_gutter.py`（竖线复用 Step1 的 find_vertical_lines）。"""
     import cv2
     from .utils.image_io import imread
-    from .utils.locate_gutter import locate_gutter
+    from .seg.locate_gutter import locate_gutter
     gray = imread(args.image, cv2.IMREAD_GRAYSCALE)
     if gray is None:
         raise SystemExit(f"读不了图：{args.image}")
@@ -1560,12 +1560,12 @@ def cmd_witness_align_stream(args) -> None:
 def cmd_calibrate(args) -> None:
     """册级先验复核：把 `measure_*` 跑一遍，和 `books/<id>.yaml` 里的现值对照。
 
-    **只印表，不改 yaml**（理由见 `utils/calibrate.py` 模块头：自动回写会让一次
+    **只印表，不改 yaml**（理由见 `books/siku_zongmu/calibrate.py` 模块头：自动回写会让一次
     坏标定悄悄固化，还容易冲掉人写的 note）。
     """
     from .core.book import load_book
     from .products.store import ProductStore
-    from .utils.calibrate import calibrate, format_table
+    from .books.siku_zongmu.calibrate import calibrate, format_table
 
     book = load_book(args.book)
     pages = book.resolve_pages(args.pages) if args.pages else None

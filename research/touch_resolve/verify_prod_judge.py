@@ -32,8 +32,8 @@ from open_guji_cv.core.step import page_key  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.steps.row_segment import RowSegmentParams  # noqa: E402
-from open_guji_cv.utils import row_boundaries as RB  # noqa: E402
-from open_guji_cv.utils.cut_select import get_judge, owner_from_seam  # noqa: E402
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB  # noqa: E402
+from open_guji_cv.seg.cut_select import get_judge, owner_from_seam  # noqa: E402
 
 
 def run_column(bk, gate, gc, img, p: RowSegmentParams, judge):

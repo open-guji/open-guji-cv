@@ -349,7 +349,7 @@ def test_align_in_hints():
 
 def test_gap_terms_box_counts_as_crossed():
     """竖线落进标题框里（框和框里的字之间是空白）也算劈开了框；列间空白正中离墨块最远。"""
-    from open_guji_cv.utils.free_columns import gap_terms
+    from open_guji_cv.books.zengguang_youxue.free_columns import gap_terms
     body = np.zeros((300, 200), bool)
     body[50:250, 20:40] = True                     # 一列字（墨块）
     body[40:260, 100:102] = body[40:260, 178:180] = True   # 框的左右边
@@ -362,7 +362,7 @@ def test_gap_terms_box_counts_as_crossed():
 
 def test_snap_frame_edges_to_inner_edge_of_frame_band():
     """粗框线／双线框：框线位置吸到墨带内沿，块从内沿起，不留空白；没找到的边不动。"""
-    from open_guji_cv.utils.free_blocks import Frame, snap_frame_edges
+    from open_guji_cv.books.zengguang_youxue.free_blocks import Frame, snap_frame_edges
     ink = np.zeros((400, 300), bool)
     ink[50:62, 30:270] = True                      # 上边粗框线 50–61
     ink[50:350, 30:42] = True                      # 左边粗框线 30–41
@@ -378,7 +378,7 @@ def test_snap_frame_edges_to_inner_edge_of_frame_band():
 
 def test_join_segments_bent_frame_line():
     """框线中段弯一下，两段各自票数不够：首尾相接的连成一条、票数相加；双线（相距远）不连。"""
-    from open_guji_cv.utils.free_blocks import Rule, join_segments
+    from open_guji_cv.books.zengguang_youxue.free_blocks import Rule, join_segments
     a = Rule("h", 303.0, -0.039, 790, 1380, 3)
     b = Rule("h", 292.0, -0.019, 200, 789, 3)
     c = Rule("h", 300.0, 0.0, 200, 1380, 5)         # 平行的另一条
@@ -392,8 +392,8 @@ def test_rectify_straightens_slanted_frame():
     """框斜了（透视、倾斜）：沿框量内沿拟曲线、拉正后框线变成竖直／水平，矩形在原框的平均位置。"""
     import cv2
 
-    from open_guji_cv.utils.free_blocks import Frame
-    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray
+    from open_guji_cv.books.zengguang_youxue.free_blocks import Frame
+    from open_guji_cv.books.zengguang_youxue.free_rectify import fit_frame_curves, make_warp, rectify_gray
     H, W = 900, 700
     img = np.full((H, W), 230, np.uint8)
     quad = np.array([[100, 120], [600, 100], [620, 820], [90, 800]], np.int32)   # 左上、右上、右下、左下
@@ -418,8 +418,8 @@ def test_rectify_straightens_slanted_split_line():
     """框是正的，框里的分栏横线是斜的、断断续续：量出来一起拉正，拉正后在一条水平带里。"""
     import cv2
 
-    from open_guji_cv.utils.free_blocks import Frame
-    from open_guji_cv.utils.free_rectify import fit_frame_curves, make_warp, rectify_gray, trace_hline
+    from open_guji_cv.books.zengguang_youxue.free_blocks import Frame
+    from open_guji_cv.books.zengguang_youxue.free_rectify import fit_frame_curves, make_warp, rectify_gray, trace_hline
     H, W = 900, 700
     img = np.full((H, W), 230, np.uint8)
     cv2.rectangle(img, (100, 100), (600, 800), 20, 10)
@@ -441,7 +441,7 @@ def test_rectify_straightens_slanted_split_line():
 
 def test_seam_cost_keeps_off_strokes_and_ignores_specks():
     """走缝代价：笔画 1，笔画旁 halo 内有代价，界栏的小点便宜——窄缝里缝离字留空、走过小点。"""
-    from open_guji_cv.utils.free_columns import min_ink_seam, seam_cost
+    from open_guji_cv.books.zengguang_youxue.free_columns import min_ink_seam, seam_cost
     ink = np.zeros((120, 60), bool)
     ink[:, 10:24] = True                              # 左边一列字（简化成墨条）
     ink[:, 40:54] = True                              # 右边一列字
@@ -455,8 +455,8 @@ def test_seam_cost_keeps_off_strokes_and_ignores_specks():
 
 def test_grid_seams_follow_dashed_rules():
     """虚线界栏（一段段短划）：认成界栏，切线顺着界栏走（不在列间空白正中）。"""
-    from open_guji_cv.utils.free_blocks import thin_vlines
-    from open_guji_cv.utils.free_columns import grid_columns
+    from open_guji_cv.books.zengguang_youxue.free_blocks import thin_vlines
+    from open_guji_cv.books.zengguang_youxue.free_columns import grid_columns
     h, w, pitch = 800, 600, 100
     img = np.full((h, w), 230, np.uint8)
     for k in range(6):                                # 每列字偏右：列间空白正中离界栏 ~12px
@@ -477,8 +477,8 @@ def test_grid_seams_follow_dashed_rules():
 
 def test_grid_seams_follow_slanted_dashed_rules():
     """各条界栏斜得不一样（扫描拉伸不匀）：逐条顺着线找，切线贴在各自的界栏上。"""
-    from open_guji_cv.utils.free_blocks import thin_vlines
-    from open_guji_cv.utils.free_columns import grid_columns
+    from open_guji_cv.books.zengguang_youxue.free_blocks import thin_vlines
+    from open_guji_cv.books.zengguang_youxue.free_columns import grid_columns
     h, w, pitch = 900, 600, 100
     img = np.full((h, w), 230, np.uint8)
     slopes = [0.0, 0.02, -0.02, 0.03, -0.01]          # 每条界栏自己的斜率（dx/dy）
@@ -501,7 +501,7 @@ def test_grid_seams_follow_slanted_dashed_rules():
 
 def test_trace_side_thin_frame_line_does_not_look_inward():
     """量到的框线本身是细线：不再往里找「细内框」——往里是字（p32 左框）。"""
-    from open_guji_cv.utils.free_rectify import _bands
+    from open_guji_cv.books.zengguang_youxue.free_rectify import _bands
     prof = np.zeros(200)
     prof[50:54] = 1.0                                 # 细框线
     prof[70:78] = 1.0                                 # 往里 16px 处字的竖画
@@ -523,7 +523,7 @@ def _col_img(items, wc=130, h=900):
 
 
 def test_segment_mixed_finds_big_between_notes():
-    from open_guji_cv.utils.free_cells import segment_mixed
+    from open_guji_cv.books.zengguang_youxue.free_cells import segment_mixed
     items = [(35, 20, 60)]                                     # 居中大字
     items += [(x, y, 40) for y in (100, 150) for x in (80, 15)]  # 两对小注（右、左）
     items += [(35, 210, 60)]
@@ -533,7 +533,7 @@ def test_segment_mixed_finds_big_between_notes():
 
 def test_segment_ocr_uses_lines_for_offset_big_and_counts():
     """大字偏右、不居中（规则认不出），识别行给了大字行和两条并排小注行，按行定区、按字数切。"""
-    from open_guji_cv.utils.free_cells import segment_ocr
+    from open_guji_cv.books.zengguang_youxue.free_cells import segment_ocr
     items = [(62, 20 + 70 * k, 60) for k in range(3)]             # 三个偏右的大字
     items += [(x, 240 + 50 * k, 40) for k in range(3) for x in (82, 12)]  # 三对小注
     lines = [(40, 15, 128, 225, "甲乙丙", 0.95),
@@ -545,7 +545,30 @@ def test_segment_ocr_uses_lines_for_offset_big_and_counts():
 
 def test_segment_ocr_horizontal_pair_and_missed_ink_fall_back_to_rules():
     """一对小注被横着读成「右左」一行 → 小注区；识别漏掉的大字留给规则。"""
-    from open_guji_cv.utils.free_cells import segment_ocr
+    from open_guji_cv.books.zengguang_youxue.free_cells import segment_ocr
     items = [(82, 20, 40), (12, 20, 40), (35, 120, 60)]
     cells = segment_ocr(_col_img(items), [(8, 15, 126, 64, "右左", 0.95)])
     assert [c.kind for c in cells] == ["jiazhu_a", "jiazhu_b", "char"]
+
+
+def test_tree_label_by_level():
+    from open_guji_cv.books.zengguang_youxue.free_blocks import tree_label
+    assert [tree_label(p) for p in [(0, 0), (0, 1), (1,), (2, 1, 0)]] == ["1a", "1b", "2", "3b1"]
+
+
+def test_fmt_hint_parsed_and_checked():
+    from open_guji_cv.utils.layout_hints import parse_layout_hints as parse_hints
+    h = parse_hints({10: {"blocks": [{"cols": 24, "fmt": "plain"}, {}]}})[10]
+    assert h.fmt_for(0) == "plain" and h.fmt_for(1) is None
+    with pytest.raises(ValueError):
+        parse_hints({10: {"blocks": [{"fmt": "notes"}]}})
+    with pytest.raises(ValueError):
+        parse_hints({9: {"tree": {"v": 2, "parts": [{"fmt": "x"}, {}]}}})
+
+
+def test_segment_plain_uses_hinted_char_height():
+    """标题列：字比列宽小，按块里识别出的字高切，不按列宽并成一个框。"""
+    from open_guji_cv.books.zengguang_youxue.free_cells import segment_plain
+    img = _col_img([(30, 10, 64), (30, 80, 64)], wc=130, h=200)
+    assert len(segment_plain(img, col_w=120)) == 1
+    assert [c.kind for c in segment_plain(img, col_w=120, em_hint=66)] == ["char", "char"]

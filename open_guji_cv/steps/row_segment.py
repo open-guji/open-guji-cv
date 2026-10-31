@@ -1,6 +1,6 @@
 """Step3 单列文字切分：清理后列图 → 带类型的字格 + 读序。
 
-包的是 `utils/row_boundaries.segment_column`。输入参数全部来自交接闸（页级 period / ref_w，
+包的是 `books/siku_zongmu/row_boundaries.segment_column`。输入参数全部来自交接闸（页级 period / ref_w，
 列级 content_x / border_top / border_bottom / top_slack）；n_body_slots 来自 Book / 参数。
 产物坐标是列图坐标，另带经 Step2 逆映射回原图的 quad_page（规范空间）。
 """
@@ -17,11 +17,9 @@ from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import CellRec, ColumnCells, CutPointCandidates, PageCells, SeamCandidate
 from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
-from ..utils.cut_select import ckpt_fingerprint, get_judge
-from ..utils.roster_glyph import load_scorer
-from ..utils.roster_segment import segment_roster_page
-from ..utils.row_grid import fit_page_grids
-from ..utils.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
+from ..seg.cut_select import ckpt_fingerprint, get_judge
+from ..books.siku_zongmu.row_grid import fit_page_grids
+from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
                                     segment_column, slot_mask_from_occupied)
 from ._warpmap import ColumnMapper
 
@@ -144,7 +142,7 @@ _YOLO_CACHE: dict[tuple, object] = {}
 
 
 def _yolo(model_dir: str):
-    from ..utils.yolo_tool_infer import YoloTool
+    from ..books.siku_zongmu.yolo_tool_infer import YoloTool
     d = _colgold_path(model_dir)
     key = _sig(d / "type" / "best.onnx", d / "slide" / "best.onnx")
     if key not in _YOLO_CACHE:
@@ -550,12 +548,12 @@ class RowSegmentParams(BaseModel):
     raise_tol: float = 2.0
     detect_jiazhu: bool = True
     only_admitted: bool = True           # 只切过闸的列
-    seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（utils/seam.py）
-    cut_judge: str = "unet"              # 候选池裁判：unet（utils/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
+    cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
     #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
-    #: `utils/roster_segment`（不定字数、二维递归切）。默认空 = 关，别的书别的页产物逐字节不变。
+    #: `books/siku_zongmu/roster_segment`（不定字数、二维递归切）。默认空 = 关，别的书别的页产物逐字节不变。
     #: 只在册配置里点名开（`params: {row_segment: {roster_pages: ["89-132"]}}`），不自动判页型——
     #: 闸1 判不出职名页（见 row_segment_gate 模块头 L0u 一节），点名是人定的。
     roster_pages: list[int | str] = []
@@ -565,11 +563,17 @@ class RowSegmentParams(BaseModel):
     dash_blank: bool = False
     dash_h_frac: float = 0.3
     dash_w_frac: float = 0.25
-    #: 职名页密排段**按本书字形库重切**（overview#450，2026-10-07，`utils/roster_glyph`）：
+    #: 职名页密排段**按本书字形库重切**（overview#450，2026-10-07，`books/siku_zongmu/roster_glyph`）：
     #: 压扁粘连字几何上数不准字数，拿库里刻例比相似度定切法。默认关；开了才读库、才填指纹。
     roster_glyph_refine: bool = False
     roster_glyph_db: str = ""            # 空 = 工作区 output/glyph.db（core.workspace.glyph_db_path）
     roster_glyph_fingerprint: str = ""   # 库内容指纹，开关开着时自动填；soft：库变只记漂移不判过期（同 glyph_match）
+    #: 职名页按整理本字数重切（史記文淵閣本，`books/shiji_wyg/roster_segment.refit_column`）：殆知阁源记录目录
+    #: （放 0243.jsonl 等，如 `daizhige`）与页钉位表（语料目录下的名字，同 align_ref.page_pins）。两个都给才开；只有实现了 `page_ref_lines` 的套书用得上，
+    #: 殿本的职名页实现不认，关时产物逐字节不变。
+    roster_ref_corpus: str = ""
+    roster_ref_pins: str = ""
+    roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -578,7 +582,7 @@ class RowSegmentParams(BaseModel):
     colgold_prior: str = ""
     colgold_fingerprint: str = ""        # 表内容 sha，开关开着时自动填（表一改 → Step3 判过期）
     #: **原生 YOLO 并格闸**（doc/design/19 块 D，2026-10-19）：缺省关，关时不读模型、产物逐字节不变。
-    #: 开了以后整页跑一遍 yolo-tool 两段模型（`utils/yolo_tool_infer`，onnxruntime），同列相邻两个
+    #: 开了以后整页跑一遍 yolo-tool 两段模型（`books/siku_zongmu/yolo_tool_infer`，onnxruntime），同列相邻两个
     #: 字格的墨迹框都有 ≥`yolo_cover` 落进同一个**正常高**（≤`yolo_max_h`×本页中位）的 YOLO 字框，
     #: 记一对「一字被切成两格」；有 k 对就把目标字数定为「现字数 − k」走 `apply_count_target` 重切，
     #: 字数恰好对上才采用。两个开关都开时先 D 后 C（D 改过的列 C 再按金标核一遍）。
@@ -602,7 +606,7 @@ class RowSegmentParams(BaseModel):
                 raise ValueError(f"yolo_merge 开着但 yolo_model_dir 下没有 type/、slide/ 的 best.onnx：{d}")
             key = ("yolo",) + _sig(*onnx)       # 每页都要建一次参数，两份模型约 116 MB，按签名缓存
             if key not in _FP_CACHE:
-                from ..utils.yolo_tool_infer import model_fingerprint
+                from ..books.siku_zongmu.yolo_tool_infer import model_fingerprint
                 _FP_CACHE[key] = model_fingerprint(d)
             object.__setattr__(self, "yolo_fingerprint", _FP_CACHE[key])
         return self
@@ -657,6 +661,17 @@ class RowSegmentParams(BaseModel):
             object.__setattr__(self, "layout_fingerprint", _FP_CACHE[key])
         return self
 
+    @model_validator(mode="after")
+    def _fill_roster_ref_fingerprint(self):
+        if self.roster_ref_corpus and self.roster_ref_pins and not self.roster_ref_fingerprint:
+            from ..core.workspace import corpus_path
+            from .context_decide import corpus_fingerprint
+            dz = corpus_path(self.roster_ref_corpus)
+            files = sorted(dz.glob("[0-9][0-9][0-9][0-9].jsonl")) if dz.is_dir() else [dz]
+            object.__setattr__(self, "roster_ref_fingerprint", corpus_fingerprint(
+                [*map(str, files), str(corpus_path(self.roster_ref_pins))]))
+        return self
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump（同 `border_detect`）：没开的书 `params_hash` 与加这些字段之前（v0.4.5）逐位相同，
@@ -668,6 +683,9 @@ class RowSegmentParams(BaseModel):
                 d.pop("colgold_fingerprint", None)
             if not self.yolo_merge:
                 for k in ("yolo_merge", "yolo_model_dir", "yolo_fingerprint", "yolo_conf", "yolo_cover", "yolo_max_h"):
+                    d.pop(k, None)
+            if not (self.roster_ref_corpus and self.roster_ref_pins):
+                for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
@@ -697,17 +715,17 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.41", unit="column",   # 1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（utils/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.42", unit="column",   # 1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（books/siku_zongmu/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
-        code_deps=("open_guji_cv.utils.row_boundaries", "open_guji_cv.utils.row_grid", "open_guji_cv.utils.jiazhu_split",
-                   "open_guji_cv.utils.column_projection", "open_guji_cv.utils.seam",
-                   "open_guji_cv.utils.cut_select", "open_guji_cv.utils.roster_segment",
-                   "open_guji_cv.utils.roster_glyph", "open_guji_cv.utils.yolo_tool_infer", "open_guji_cv.steps.occlusion",
+        code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.books.siku_zongmu.row_grid", "open_guji_cv.books.siku_zongmu.jiazhu_split",
+                   "open_guji_cv.seg.warp", "open_guji_cv.seg.profile", "open_guji_cv.books.siku_zongmu.column", "open_guji_cv.seg.seam",
+                   "open_guji_cv.seg.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
+                   "open_guji_cv.books.siku_zongmu.roster_glyph", "open_guji_cv.books.siku_zongmu.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),
         soft_params=("roster_glyph_fingerprint",),
-        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior"),
+        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins"),
     )
 
     def book_params(self, p: "RowSegmentParams", ctx: RunContext) -> "RowSegmentParams":
@@ -789,7 +807,7 @@ class RowSegmentStep(Step):
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
-        # 等距格网（utils/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
+        # 等距格网（books/siku_zongmu/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
         grids = {}
         # 印框（列端表空格记空的判据之一）：同样只给格位先验命中的页用
         seals = _page_seals(ctx, page) if any(pg_ == page for (pg_, _c) in layout) else []
@@ -884,7 +902,7 @@ class RowSegmentStep(Step):
             # 逐列格位先验命中的列，候选格网按图挑：
             #   表格网（抬头级数、格的有无都按表）；
             #   闸抬头格网（表与闸的抬头级数不一致时：抬头听闸，表只管格的有无）；
-            #   上面每一种抬头级数各再出一张等距格网（utils/row_grid：格号按整列等距排，格线就近落缝，不跑 DP）；
+            #   上面每一种抬头级数各再出一张等距格网（books/siku_zongmu/row_grid：格号按整列等距排，格线就近落缝，不跑 DP）；
             #   无先验格网（以上都劈了字、且不看表切出的字比表少时才用：表的字图上装不下，比如整理本分行和刻本不同）；
             #   挤格补线格网（选中的格网有一格挤着两个字时：在字缝补一条格线、按打分去掉一条，见 _merged_cuts）。
             # 每张格网先把列端表空格里不像字的墨记空（_blank_frame_junk），再打分：坏格数 = 劈开的字 + 违表的格，取最少；
@@ -1086,7 +1104,51 @@ class RowSegmentStep(Step):
                                        ) for cp in r.cut_candidates],
                                    **base))
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
+        pc = self._header_columns(ctx, p, page, gate, wins, pc)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
+
+    def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
+                        gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
+        """套书认得出的卷端标题列（卷题、撰者行、篇题；`header_cols`，只史記有）改走职名页分支按整理本字数切。
+        写本这些行字距不跟格网（小数字「第二十二」挤、撰者行疏），格网切会劈字、把字脚分给下一格。
+        没开整理本重切（roster_ref_corpus）或套书没有 `header_cols` 时原样返回。"""
+        if not (p.roster_ref_corpus and p.roster_ref_pins):
+            return pc
+        import importlib
+        from ..core.seg_set import resolve
+        mod = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.roster_segment"))
+        header_cols = getattr(mod, "header_cols", None)
+        if header_cols is None:
+            return pc
+        from ..core.workspace import corpus_path
+        refs = mod.page_ref_lines(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+        cols = header_cols(refs or {})
+        # 大印压着的列不改：印泥斑点和印文笔画在几何切里成串成块，按字数重切会把印切成字（卷首页的大印）
+        seals = _page_seals(ctx, page)
+        for cc in pc.columns:
+            qs = [xy for c in cc.cells if c.quad_page for xy in c.quad_page]
+            if cc.col in cols and qs and any(
+                    s[0] < max(x for x, _ in qs) and min(x for x, _ in qs) < s[2] for s in seals):
+                cols.discard(cc.col)
+        if not cols:
+            return pc
+        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols).columns if cc.ok}
+        out = []
+        for cc in pc.columns:
+            new = got.get(cc.col)
+            if new is None:
+                out.append(cc)
+                continue
+            # 格号沿用格网切出的起格（标题行在格网里的起始格，与格位表、整理本格位一致），
+            # 职名分支自己从 1 数，下游按格号对整理本会错位
+            first = [c.slot for c in cc.cells if c.kind != "blank" and c.slot >= 1]
+            off = min(first) - 1 if cc.ok and first else 0
+            if off:
+                new = new.model_copy(update=dict(
+                    n_body_slots=new.n_body_slots + off,
+                    cells=[c.model_copy(update=dict(slot=c.slot + off, pos=c.pos + off)) for c in new.cells]))
+            out.append(new)
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
 
 
     @staticmethod
@@ -1108,24 +1170,52 @@ class RowSegmentStep(Step):
 
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
-                    gate: GateManifest, wins: PageWindows) -> PageCells:
+                    gate: GateManifest, wins: PageWindows, only: set[int] | None = None) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
         `gap_center` = 两行之间的缝——Step4 按 pos 合成满宽格再从缝拆开，与正文雙行同一条路。
         列级 flags 一律带 `roster`（闸3 据此不按版式格数拦）；字数是推出来的列另带
-        `roster_dense_guess`，相邻字 y 重叠的带 `roster_overlap`（见 utils/roster_segment）。"""
+        `roster_dense_guess`，相邻字 y 重叠的带 `roster_overlap`（见 books/siku_zongmu/roster_segment）。"""
+        # 职名页的实现按册的套书选（core/seg_set.OVERRIDES）：史記写本用 books/shiji_wyg 自己的，别的书用殿本的
+        import importlib
+        from ..core.seg_set import resolve
+        _impl = lambda name: importlib.import_module(resolve(ctx.book, f"open_guji_cv.books.siku_zongmu.{name}"))  # noqa: E731
+        load_scorer = _impl("roster_glyph").load_scorer
+        segment_roster_page = _impl("roster_segment").segment_roster_page
         page_w = wins.page_size[0]
-        admitted = [gc for gc in gate.columns if gc.admitted or not p.only_admitted]
+        admitted = [gc for gc in gate.columns if (gc.admitted or not p.only_admitted)
+                    and (only is None or gc.col in only)]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
         scorer = None
         if p.roster_glyph_refine:
             # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
             scorer = load_scorer(p.roster_glyph_db, p.roster_glyph_fingerprint)
+        kw = {}
+        ref_lines_of = getattr(_impl("roster_segment"), "page_ref_lines", None)
+        if p.roster_ref_corpus and p.roster_ref_pins and ref_lines_of is not None:
+            from ..core.workspace import corpus_path
+            refs = ref_lines_of(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
+            if refs is not None:
+                kw["refs"] = [refs.get(gc.col) for gc in admitted]
+                # 按整理本重切前先丢印里的块（同下面切完后的印过滤）：印文笔画会被数成字，字数就对不上
+                seals_pre = _page_seals(ctx, page)
+                drops = []
+                for gc, (im, _cx) in zip(admitted, imgs):
+                    wrec = wins.column(gc.col)
+                    mp = (None if wrec is None else
+                          ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                       wrec.top_y, wrec.bottom_y))
+                    drops.append(_in_seal(seals_pre, mp, im, p.ink_threshold))
+                kw["drops"] = drops
         results = dict(zip((gc.col for gc in admitted),
-                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer)))
+                           segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
+        col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
+        seals = _page_seals(ctx, page)
         out: list[ColumnCells] = []
         for gc in gate.columns:
+            if only is not None and gc.col not in only:
+                continue
             base = dict(col=gc.col, n_raised=0, period=gate.period, ref_w=gate.ref_w,
                         content_x=gc.content_x, border_top=gc.border_top,
                         border_bottom=gc.border_bottom, top_slack=0.0)
@@ -1139,6 +1229,10 @@ class RowSegmentStep(Step):
             if wrec is not None:
                 mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                       wrec.top_y, wrec.bottom_y)
+            # 落在印里的字丢掉（同正文列端表空格认印，读 seals 产物）：印文笔画会被当成一串字
+            in_seal = _in_seal(seals, mapper, col_img[gc.col], p.ink_threshold)
+            if in_seal is not None:
+                rc.items = [it for it in rc.items if not in_seal(it)]
             # 物理位：正文字各占一位；雙行按「右行第 i 字 ↔ 左行第 i 字」配对共占一位
             pos_of: list[int] = []
             gap_of: list[float | None] = []

@@ -17,7 +17,7 @@ from __future__ import annotations
 from open_guji_cv.feedback.consumers import _expected_of
 from open_guji_cv.feedback.events import EventTarget, make_event
 from open_guji_cv.feedback.lookup import ResolvedColumn
-from open_guji_cv.utils.row_boundaries import NONUNIFORM_LAM
+from open_guji_cv.books.siku_zongmu.row_boundaries import NONUNIFORM_LAM
 
 
 def _ev(payload: dict):

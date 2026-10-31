@@ -256,16 +256,16 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # utils.binarized
     "binarize_page": ("utils.binarized", 'binarize_page'),
     "binarized_or_none": ("utils.binarized", 'binarized_or_none'),
-    # utils.column_projection
-    "column_profile": ("utils.column_projection", 'column_profile'),
-    "column_row_profile": ("utils.column_projection", 'column_row_profile'),
-    "column_text_band": ("utils.column_projection", 'column_text_band'),
-    "denoise_column": ("utils.column_projection", 'denoise_column'),
-    "strip_column_rules": ("utils.column_projection", 'strip_column_rules'),
-    # utils.column_triage
-    "BLOCKING": ("utils.column_triage", 'BLOCKING'),
-    "REVIEW": ("utils.column_triage", 'REVIEW'),
-    "triage_column": ("utils.column_triage", 'triage_column'),
+    # seg.profile、books.siku_zongmu.column（原 utils.column_projection）
+    "column_profile": ("seg.profile", 'column_profile'),
+    "column_row_profile": ("seg.profile", 'column_row_profile'),
+    "column_text_band": ("seg.profile", 'column_text_band'),
+    "denoise_column": ("seg.profile", 'denoise_column'),
+    "strip_column_rules": ("books.siku_zongmu.column", 'strip_column_rules'),
+    # books.siku_zongmu.column_triage
+    "BLOCKING": ("books.siku_zongmu.column_triage", 'BLOCKING'),
+    "REVIEW": ("books.siku_zongmu.column_triage", 'REVIEW'),
+    "triage_column": ("books.siku_zongmu.column_triage", 'triage_column'),
     # utils.image_io
     "imread": ("utils.image_io", 'imread'),
     # utils.jiazhu_order

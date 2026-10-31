@@ -3,7 +3,7 @@
 import copy, sys
 sys.path.insert(0, "/home/user/open-guji-cv")
 import open_guji_cv.steps.border_detect as bd
-from open_guji_cv.utils.border_geometry import VLine
+from open_guji_cv.seg.frame_types import VLine
 orig = bd.detect_borders
 NEWX = float(sys.argv[1])          # 缺的右线 x_at_top（右起）
 def patched(*a, **k):

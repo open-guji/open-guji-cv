@@ -47,15 +47,34 @@ def _module_source_hash(mod_name: str) -> str:
     """
     if mod_name in _code_hash_cache:
         return _code_hash_cache[mod_name]
-    mod = importlib.import_module(mod_name)
-    src = inspect.getsourcefile(mod)
-    h = hashlib.sha256(code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() \
-        if src else "nosrc"
     # 产物逐字节不变的提速改动登记过等价的，换回旧哈希（core/code_equiv.py）
     from .code_equiv import canonical
-    h = canonical(mod_name, h)
+    h = canonical(mod_name, _module_raw_hash(mod_name))
     _code_hash_cache[mod_name] = h
     return h
+
+
+_raw_hash_cache: dict[str, str] = {}
+
+
+def _module_raw_hash(mod_name: str) -> str:
+    """`_module_source_hash` 的原始值（不经等价登记换算）。"""
+    if mod_name not in _raw_hash_cache:
+        mod = importlib.import_module(mod_name)
+        src = inspect.getsourcefile(mod)
+        _raw_hash_cache[mod_name] = hashlib.sha256(
+            code_only_text(Path(src).read_text(encoding="utf-8")).encode("utf-8")).hexdigest() if src else "nosrc"
+    return _raw_hash_cache[mod_name]
+
+
+def _fingerprint_name(mod_name: str) -> str:
+    """进指纹的模块名。搬过家的模块（`code_equiv.MOVED`）、代码仍等价于搬家时登记的那一版时，
+    用搬家前的名字，产物不过期；之后真改了代码，等价不再成立，用新名字，照常判过期。"""
+    from .code_equiv import MOVED
+    mv = MOVED.get(mod_name)
+    if mv and _module_source_hash(mod_name) == mv[1]:
+        return mv[0]
+    return mod_name
 
 
 _legacy_hash_cache: dict[str, str] = {}
@@ -140,15 +159,37 @@ def code_hash_of_module(mod_name: str) -> str:
     return _module_source_hash(mod_name)[:16]
 
 
-def code_hash(step: Step, legacy: bool = False) -> str:
-    """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。"""
+def code_hash(step: Step, legacy: bool = False, book=None) -> str:
+    """`legacy=True` 用 10-06 之前的老公式（见 `_module_source_hash_legacy`）。
+    给了 `book` 时，Step 模块表里被这册所属套书覆盖的模块换成套书自己的（`core/seg_set.replace_deps`）。"""
     mods = [type(step).__module__, *step.spec.code_deps]
+    if book is not None:
+        from .seg_set import replace_deps
+        mods = replace_deps(book, mods)
     fn = _module_source_hash_legacy if legacy else _module_source_hash
+    pairs = [(m, fn(m)) for m in mods] if legacy else _collapse_splits(mods)
     h = hashlib.sha256()
-    for m in mods:
-        h.update(m.encode())
-        h.update(fn(m).encode())
+    for name, mh in pairs:
+        h.update(name.encode())
+        h.update(mh.encode())
     return h.hexdigest()[:16]
+
+
+def _collapse_splits(mods: list[str]) -> list[tuple[str, str]]:
+    """模块表 → 进指纹的 (名字, 哈希) 序列。拆过的模块（`code_equiv.SPLITS`）：拆出来的几块都在表里、
+    代码都还是拆分时那一版，就在第一块的位置合回一项（旧名＋旧哈希），其余几块去掉——产物不过期；
+    任何一块之后真改了，就不合并，照常过期。"""
+    from .code_equiv import SPLITS
+    pairs = [(_fingerprint_name(m), _module_source_hash(m)) for m in mods]
+    for old, (old_hash, parts) in SPLITS.items():
+        idx = [mods.index(p) if p in mods else -1 for p, _ in parts]
+        if -1 in idx or any(_module_source_hash(p) != ph for p, ph in parts):
+            continue
+        first = min(idx)
+        keep = [(i, pr) for i, pr in enumerate(pairs) if i == first or i not in idx]
+        pairs = [((old, old_hash) if i == first else pr) for i, pr in keep]
+        mods = [mods[i] for i, _ in keep]
+    return pairs
 
 
 def _jsonable(v):
@@ -248,7 +289,7 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     `fingerprint` = 它 + 上游 sha；`self_hash` = 只有它（格级复用的判据，见 core/reuse.py）。
     键集与 2026-09-20 之前的 `fingerprint` payload 逐位相同，现有产物指纹不变。"""
     payload = {"step": step.spec.id, "version": step.spec.version, "params": ph,
-               "code": code_hash(step, legacy=legacy_code)}
+               "code": code_hash(step, legacy=legacy_code, book=book)}
     # 册配置里影响产物的字段（`StepSpec.book_deps`）也要进指纹，否则改了
     # yaml 已有产物会照报「新鲜」。空 tuple（绝大多数步）时不写这个键，
     # 保证现有产物的指纹逐位不变、不触发全量重跑。

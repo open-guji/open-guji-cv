@@ -252,3 +252,23 @@ def test_rebuild_does_not_revive_pre_switch_verdicts(tmp_path):
     rebuild_verdicts(log, store, table)
     again = {i.id: i for i in store.list(shard)}
     assert again["vol01:5:3:4"].expected == {"quality": "clean"} and again["vol01:9:1:1"].status == "stale"
+
+
+def test_source_gate(tmp_path, capsys):
+    """图源门（A32 精校前移 A3）：册 yaml 钉了 source_rev 的，单子要出自那一版；没钉的只提示。"""
+    from types import SimpleNamespace
+    ws = tmp_path / "abc123-书"
+    a = lambda why=None: SimpleNamespace(source_why=why)
+    _yaml(ws / "books", "vol06", 3)
+    rp.source_gate(ws, "vol06", {"source_rev": 3}, a())                  # 对得上：过
+    rp.source_gate(ws, "vol06", {}, a())                                 # 单子没记：只提示
+    assert "没记 source_rev" in capsys.readouterr().err
+    with pytest.raises(SystemExit, match="r2"):
+        rp.source_gate(ws, "vol06", {"source_rev": 2}, a())
+    rp.source_gate(ws, "vol06", {"source_rev": 2}, a("知情"))
+    assert "已按 --source-why 越过" in capsys.readouterr().err
+    _yaml(ws / "books", "vol07", None)
+    rp.source_gate(ws, "vol07", {"source_rev": 1}, a())                  # 没钉：只提示（钉了会丢旧事件，先补锚）
+    assert "没钉 source_rev" in capsys.readouterr().err
+    rp.source_gate(ws, "vol07", {}, a())                                 # 两边都没有（原图不是从页表取的）：只提示
+    assert "没法核图源" in capsys.readouterr().err

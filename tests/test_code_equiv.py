@@ -18,6 +18,7 @@ def test_registry_is_not_a_code_dep():
 
 def test_entries_are_well_formed():
     mods = {m for st in STEPS.values() for m in (type(st).__module__, *st.spec.code_deps)}
+    mods |= set(code_equiv.SPLITS)   # 拆没了的旧模块：登记留着当历史（只增不删），指纹靠 SPLITS 里的旧哈希
     seen = set()
     for e in code_equiv.ENTRIES:
         assert e.module in mods, f"{e.module} 不在任何 Step 的指纹里，登记它没用"

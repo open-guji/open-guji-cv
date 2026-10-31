@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
-"""`utils/calibrate.py`：册级先验的实测 vs yaml 现值对照。
+"""`books/siku_zongmu/calibrate.py`：册级先验的实测 vs yaml 现值对照。
 
 这里钉死的是**判定口径**，不是量法本身（量法是 `measure_*` 的事，各有自己的测试）。
 最要紧的一条是最后那个：一个都没测出来时**不许报成功**。
 """
 from __future__ import annotations
 
-from open_guji_cv.utils.calibrate import DRIFT_FRAC, Row, format_table
+from open_guji_cv.books.siku_zongmu.calibrate import DRIFT_FRAC, Row, format_table
 
 
 def test_verdict_一致_与_漂了():

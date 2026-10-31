@@ -22,7 +22,7 @@ def _have(mod: str) -> bool:
 def check(eng, steps: list[str]) -> list[str]:
     """返回缺的东西，一条一句人话；空表＝齐了。"""
     from ..clustering import cnn_candidates as CNN
-    from ..utils.cut_select import DEFAULT_CKPT as JUDGE_CKPT
+    from ..seg.cut_select import DEFAULT_CKPT as JUDGE_CKPT
     out: list[str] = []
     if "row_segment" in steps and _params(eng, "row_segment", "cut_judge") == "unet":
         if not _have("torch"):

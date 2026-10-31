@@ -8,7 +8,8 @@ from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import RunContext
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.products.cache import ImageCache
-from open_guji_cv.utils import column_projection as cp
+from open_guji_cv.books.siku_zongmu import column as cp
+from open_guji_cv.seg import profile as _pf
 ctx = RunContext(load_book("vol02"), ProductStore(), ImageCache(), log=lambda s: None)
 out = {}
 for l in open(sys.argv[1], encoding="utf-8"):
@@ -18,14 +19,14 @@ for l in open(sys.argv[1], encoding="utf-8"):
     if int(re.sub(r"\D", "", case) or 1) < 2: continue
     _, pg, col, end = d["id"].split(":"); pg, col = int(pg), int(col); px = int(e["engine_trim_px"])
     img = cv2.imdecode(np.fromfile(str(ctx.materialize("column_raw", column_key(pg, col))), np.uint8), cv2.IMREAD_GRAYSCALE)
-    dn = cp.denoise_column(img); band = cp.column_text_band(dn); nr = cp.strip_column_rules(dn)
+    dn = _pf.denoise_column(img); band = _pf.column_text_band(dn); nr = cp.strip_column_rules(dn)
     mp = None
     lo, hi = band
     if lo + (dn.shape[1] - hi) >= cp.MARGIN_MIN_PX:
         b = dn < 128; mp = np.concatenate([b[:, :lo], b[:, hi:]], axis=1).mean(axis=1)
     (t1, tc), (b1, bc) = cp.column_border_trim(nr, band, margin_profile=mp)
     px1 = t1 if end == "top" else b1; c1 = tc if end == "top" else bc
-    prof = cp.column_row_profile(nr, band); prof = prof if end == "top" else prof[::-1]
+    prof = _pf.column_row_profile(nr, band); prof = prof if end == "top" else prof[::-1]
     seg = prof[px1:px]
     out[d["id"]] = dict(label=e["class"], case=case, px=px, px1=int(px1), case1=c1, delta=px - int(px1),
                         seg_peak=round(float(seg.max()), 2) if len(seg) else 0.0,

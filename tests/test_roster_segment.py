@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""职名页分支（overview#450，S4）：`utils/roster_segment` + `row_segment.roster_pages` +
+"""职名页分支（overview#450，S4）：`books/siku_zongmu/roster_segment` + `row_segment.roster_pages` +
 闸3 豁免 + Step4 逐框裁。合成数据，不读任何真书。
 
 合成字照 cv-debug-method §七：**用笔画画，不画实心块**——几条 5～8px 的横竖笔，
@@ -14,7 +14,7 @@ import open_guji_cv.steps  # noqa: F401  —— 注册 Step / 产物种类
 from helpers import make_book, run_keben_chain
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
-from open_guji_cv.utils.roster_segment import (prepare, segment_roster_column,
+from open_guji_cv.books.siku_zongmu.roster_segment import (prepare, segment_roster_column,
                                                segment_roster_page)
 
 W = 180          # 列图宽
@@ -221,7 +221,7 @@ def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
     assert len(rc.items) == 4 and all(it.kind == "char" for it in rc.items)
 
 
-# ── 字形库参与切分（utils/roster_glyph，2026-10-07）─────────────────────────
+# ── 字形库参与切分（books/siku_zongmu/roster_glyph，2026-10-07）─────────────────────────
 
 def _shape(kind: str, size: int = 100, stroke: int = 8) -> np.ndarray:
     """两种区分度高的笔画字：A =「目」型（框 + 三横），B =「十」叉型（一竖一横 + 两斜撇）。"""
@@ -242,7 +242,7 @@ def _shape(kind: str, size: int = 100, stroke: int = 8) -> np.ndarray:
 def _scorer():
     import io
     from PIL import Image as _I
-    from open_guji_cv.utils.roster_glyph import GlyphScorer
+    from open_guji_cv.books.siku_zongmu.roster_glyph import GlyphScorer
     rows = []
     for ch in "AB":
         for k in range(3):
@@ -261,7 +261,7 @@ def _squash(m: np.ndarray, h: int) -> np.ndarray:
 
 
 def test_glyph_dp_splits_two_squashed_touching_glyphs():
-    from open_guji_cv.utils.roster_glyph import glyph_dp
+    from open_guji_cv.books.siku_zongmu.roster_glyph import glyph_dp
     ink = np.zeros((400, 120), bool)
     a, b = _squash(_shape("A"), 55), _squash(_shape("B"), 55)
     ink[100:155, 10:110] = a                                  # 两个压扁字上下紧贴（没有白行）
@@ -304,3 +304,39 @@ def test_roster_glyph_switch_off_keeps_params_unchanged():
     assert off.roster_glyph_db == "" and off.roster_glyph_fingerprint == ""
     on = RowSegmentParams(cut_judge="rule", roster_glyph_refine=True, roster_glyph_db="/no/such.db")
     assert on.roster_glyph_fingerprint == "nodb"
+
+
+def _xieben_column(chen_y):
+    """写本职名列：官衔 3 字 + 偏右小「臣」（上缘在 chen_y）+ 两字人名；「臣」上贴官衔末字、下贴人名首字。"""
+    g = _column()
+    for y in (100, 560, chen_y - 90):
+        _glyph(g, y, 20, 100)
+    _glyph(g, chen_y, 124, 44, stroke=5)        # 偏右，与官衔末字 y 重叠 10px，离人名首字 4px
+    _glyph(g, chen_y + 48, 20, 100)
+    _glyph(g, chen_y + 400, 20, 100)
+    return g
+
+
+def test_xieben_chen_stuck_to_neighbours_split_by_page_chen_row():
+    """写本（史記文淵閣本）「臣」斜贴邻字：一带里粘着官衔末字和人名首字，按全页臣行拆成三字。"""
+    cols = [(_roster_column()[0], (10.0, W - 10.0)) for _ in range(2)]   # 两列「臣」自成一带，量出臣行 1610
+    cols.append((_xieben_column(1620), (10.0, W - 10.0)))
+    rc = segment_roster_page(cols)[2]
+    assert len(rc.items) == 6 and all(it.kind == "char" for it in rc.items)
+    chen = rc.items[3]
+    assert chen.y0 == 1620 and chen.x0 > W / 2
+
+
+def test_xieben_chen_not_split_without_page_chen_row():
+    """单列（量不出全页臣行）不拆：偏右小字只在臣行附近才认，免得把雙行右行、「阝」这类当「臣」。"""
+    rc = _seg_one(_xieben_column(1620))
+    assert len(rc.items) < 6
+
+
+def test_frame_bar_residue_at_column_end_dropped():
+    """列端扁块（写本框线断续残段，整行横跨判不出）不当字；列中间的「一」照留。"""
+    g, ys = _roster_column()
+    g[3:15, 40:110] = 0                         # 列首残段：12px 高、70px 宽
+    g[1300:1308, 40:140] = 0                    # 列中「一」
+    rc = _seg_one(g)
+    assert len(rc.items) == 8 and rc.items[0].y0 == ys[0]

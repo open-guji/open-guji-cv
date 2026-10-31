@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils import jiazhu_split as jz
-from open_guji_cv.utils import row_boundaries as fit_mod
+from open_guji_cv.books.siku_zongmu import jiazhu_split as jz
+from open_guji_cv.books.siku_zongmu import row_boundaries as fit_mod
 
 COL_W, SLOT_H, N_SLOTS, GRID_Y0, RULE_W = 185, 110, 21, 10, 4
 

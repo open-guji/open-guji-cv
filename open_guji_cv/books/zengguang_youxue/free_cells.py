@@ -29,7 +29,7 @@ from dataclasses import dataclass
 import cv2
 import numpy as np
 
-from ..core.anchor import x_tr_to_tl
+from ...core.anchor import x_tr_to_tl
 from .free_columns import min_ink_seam
 
 ZONE_KINDS = ("big", "note", "solo")
@@ -487,6 +487,46 @@ def segment_ocr(cimg: np.ndarray, lines: list[tuple], prm: OcrParams = OcrParams
                 xs = np.flatnonzero(part.any(0))
                 if len(xs) and part.sum() >= min_ink_frac * em * em:
                     cells.append(Cell(z.a + y0, z.a + y1, int(xs[0]), int(xs[-1]) + 1, k, zi, int(part.sum())))
+    return cells
+
+
+def line_char_heights(lines: list[tuple], prm: OcrParams = OcrParams()) -> list[float]:
+    """可信识别行的平均字高（行高 ÷ 字数），给同一块的列当字高先验。"""
+    return [(ln[3] - ln[1]) / len(ln[4]) for ln in lines if ln[5] >= prm.sure and ln[4] and ln[3] > ln[1]]
+
+
+def segment_plain(cimg: np.ndarray, lines: list[tuple] | None = None, prm: OcrParams = OcrParams(),
+                  col_w: float | None = None, em_hint: float | None = None, char_ratio: float = 0.9,
+                  min_ink_frac: float = 0.03, min_w: float = 0.25) -> list[Cell]:
+    """每列一行字的块（人标 `fmt: plain`：正文或标题，字宽约等于列宽）→ 读序的字框。
+
+    不分大字、小注，整列一条字线按墨切。字高先验 = 列宽 `col_w`（左右缝间距的中位数；列图本身比它宽，
+    缝会弯、两边还各让了几 px）× `char_ratio`，块里别的列识别出的字高 `em_hint` 优先（标题字常比列宽小）；有识别行时：都可信且盖住了
+    这列的墨，就按读出的总字数切，否则拿可信行的平均字高当先验。`lines` 同 `segment_ocr`。"""
+    h, wc = cimg.shape
+    prof = cimg.sum(1)
+    ys = np.flatnonzero(prof > 0)
+    if not len(ys):
+        return []
+    wc = col_w or wc
+    em = em_hint or char_ratio * wc
+    good = [ln for ln in lines or [] if ln[5] >= prm.min_score and ln[4] and ln[3] > ln[1]]
+    sure = [ln for ln in good if ln[5] >= prm.sure]
+    span = ys[-1] + 1 - ys[0]
+    covered = sum(min(ln[3], ys[-1] + 1) - max(ln[1], ys[0]) for ln in good)
+    if good and len(sure) == len(good) and covered >= 0.8 * span:
+        segs = _cut_count(prof, sum(len(ln[4]) for ln in good), True)
+    else:
+        if sure:
+            em = float(np.median(line_char_heights(sure, prm)))
+        segs = cut_line(prof, float(np.clip(em, 0.5 * wc, 1.4 * wc)))
+    cells: list[Cell] = []
+    for y0, y1 in segs:
+        part = cimg[y0:y1]
+        xs = np.flatnonzero(part.any(0))
+        # 太少的墨、太窄的条（邻列的字伸过列界的边角）不算字
+        if len(xs) and part.sum() >= min_ink_frac * em * em and xs[-1] + 1 - xs[0] >= min_w * em:
+            cells.append(Cell(y0, y1, int(xs[0]), int(xs[-1]) + 1, "char", 0, int(part.sum())))
     return cells
 
 

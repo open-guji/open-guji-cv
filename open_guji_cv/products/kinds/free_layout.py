@@ -39,6 +39,8 @@ class BlockRec(BaseModel):
     vrules: list[float] = Field(default_factory=list)   # 块内竖线 x_tr（块中线高度处）
     ruled: bool = False             # 人标：有界栏但列宽不齐的正文（列宽放宽、列里按横界栏断开）
     align: int | None = None        # 人标：列线对齐组号（同组的块共用一套列线）
+    label: str = ""                 # 块号：没有版面树就是 index；版面树按层编（1a、1b、2…），字号「页-块-行-字」用它
+    fmt: str | None = None          # 人标：块格式 plain（每列一行字）| mixed（大字夹双行小注）；None 自动判
 
 
 class LayoutBlocks(BaseModel):
@@ -54,7 +56,7 @@ class LayoutBlocks(BaseModel):
     rules: list[RuleRec] = Field(default_factory=list)
     blocks: list[BlockRec] = Field(default_factory=list)
     # 拉正参数（block_detect 1.7 起；None = 没拉）：本产物和下游两种产物的坐标都在拉正后的图上。
-    # 字段见 `utils/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
+    # 字段见 books/zengguang_youxue/free_rectify.make_warp`（原图左上原点像素）；取拉正后的图用 `rectify_gray(raw, warp)`。
     warp: dict | None = None
 
 
@@ -107,6 +109,9 @@ class FreeCellRec(BaseModel):
     kind: str                       # char | jiazhu_a（右线）| jiazhu_b（左线）| jiazhu_solo
     zone: int                       # 列内第几区（大字/双行注/单行注交替），从 1 起
     rule_seg: int = 0               # ruled 块：列里被横界栏断开的第几段（从 1 起）；其余为 0
+    block: str = ""                 # 块号（`BlockRec.label`）
+    line: int = 0                   # 块内第几行（竖排的一列，自右而左从 1 起）
+    cid: str = ""                   # 字号「页-块-行-字」，字是行内读序 order（小注右行先、左行后）
     box: Box                        # 页面坐标外接框
     ink: int
 

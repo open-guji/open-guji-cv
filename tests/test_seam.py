@@ -1,4 +1,4 @@
-"""折线切分（utils/seam.py）：最小墨量缝 + 按缝掩膜。
+"""折线切分（seg/seam.py）：最小墨量缝 + 按缝掩膜。
 
 场景：上字有一笔往下拖、下字有一笔往上探，两笔在水平投影上重叠——任何一条直线都穿墨，
 但绕一下就能无墨通过。这是用户 2026-09-05 在 400 条金标里看出来的典型。
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils.seam import find_seam, mask_outside, seam_ink
+from open_guji_cv.seg.seam import find_seam, mask_outside, seam_ink
 
 
 def _two_glyphs(h=80, w=60):
@@ -60,7 +60,7 @@ def test_mask_outside_removes_neighbour_pixels_only():
 
 def test_segment_column_keeps_straight_cut_when_seam_cannot_avoid_ink():
     """一道贯穿全宽的粗横杠：任何折线都穿墨 → 不存缝，格线仍是直线（seam_ink > SEAM_MAX_INK）。"""
-    from open_guji_cv.utils.seam import SEAM_MAX_INK, find_seam, seam_ink
+    from open_guji_cv.seg.seam import SEAM_MAX_INK, find_seam, seam_ink
     ink = np.zeros((60, 40), bool)
     ink[20:40, :] = True          # 20 行厚的横杠横贯整宽
     seam = find_seam(ink, 30, band=8)
@@ -70,7 +70,7 @@ def test_segment_column_keeps_straight_cut_when_seam_cannot_avoid_ink():
 def test_segment_column_widens_corridor_only_when_narrow_seam_is_blocked():
     """窄走廊（±20）里的最优缝要穿墨、±40 里有无墨路 → 用宽走廊的缝；
     窄走廊已有无墨缝时不放宽（放宽会换到别的空隙，实测偏 22–41px）。"""
-    from open_guji_cv.utils.seam import SEAM_BAND_WIDE, SEAM_MAX_INK, find_seam, seam_ink
+    from open_guji_cv.seg.seam import SEAM_BAND_WIDE, SEAM_MAX_INK, find_seam, seam_ink
     ink = np.zeros((120, 60), bool)
     ink[10:50, 5:55] = True           # 上字主体 10..49
     ink[50:64, 20:30] = True          # 上字一笔下垂到 63 行（离直线 26px，超出 ±20）

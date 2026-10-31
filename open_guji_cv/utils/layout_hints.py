@@ -24,12 +24,14 @@
             - v: [2, 14]            # 下栏右 2 列、左 14 列
               parts: [{cols: 2}, {h: 2, cols: 14}]   # 左边再上下均分两层，每层 14 列
 
-人只给大约位置，切位由算法吸到附近的线或空白（`utils/free_blocks.snap_cut`）。
+人只给大约位置，切位由算法吸到附近的线或空白（books/zengguang_youxue/free_blocks.snap_cut`）。
 `kind` 只有 `text`（缺省）与 `skip`（不切）。
 块（或版面树叶子）可加 `ruled: true`：正文列有界栏但不规律（列宽不齐、常几列合一列，列里有横界栏），
 列宽不硬求一致、列里遇横界栏断开（yxat 99–102 下栏）。
 页可加 `align: [[1, 3]]`：同一组的块（块号按读序从 1 起）共用一套列线——上下几栏版面同一块板刻的、
 列线本来对齐时用（yxat 9–14 页）；组里的块要左右对齐、列数相同。
+块（或版面树叶子）可加 `fmt` 定这块的格式，Step3 按它选切字流程（Sheldon 10-28：拆到每个小块内部同一格式、用一套流程和参数）：
+`plain`（每列一行字，正文或标题，字宽约等于列宽；yxat 9–11 上栏的小字七言歌）、`mixed`（大字夹双行小注）；不写就自动判。
 `cols`、`pitch` 都不给就全自估。
 同一页落在几条里时逐字段合并：区间宽的先、窄的后，后写的字段盖前面的（区间给 pitch、单页再给 cols 都生效）。
 """
@@ -40,6 +42,7 @@ from dataclasses import dataclass, field
 
 PAGE_TYPES = ("body", "skip")
 BLOCK_KINDS = ("text", "skip")
+BLOCK_FMTS = ("plain", "mixed")
 
 
 @dataclass
@@ -49,6 +52,7 @@ class BlockHint:
     kind: str = "text"
     pitch: float | None = None
     ruled: bool = False                              # 有界栏、列宽不齐的正文（见模块头）
+    fmt: str | None = None                           # 块格式：plain | mixed | None（自动，见模块头）
 
 
 @dataclass
@@ -87,6 +91,9 @@ class PageHint:
     def ruled_for(self, i: int) -> bool:
         return self.blocks[i].ruled if i < len(self.blocks) else False
 
+    def fmt_for(self, i: int) -> str | None:
+        return self.blocks[i].fmt if i < len(self.blocks) else None
+
     def align_for(self, i: int) -> int | None:
         """第 i 个块（从 0 起）在第几个对齐组（从 1 起）；不在组里给 None。"""
         for g, grp in enumerate(self.align or []):
@@ -115,7 +122,14 @@ def _block(d) -> BlockHint:
         box = tuple(int(v) for v in box)
     cols, pitch = d.get("cols"), d.get("pitch")
     return BlockHint(box=box, cols=None if cols is None else int(cols), kind=kind,
-                     pitch=None if pitch is None else float(pitch), ruled=bool(d.get("ruled", False)))
+                     pitch=None if pitch is None else float(pitch), ruled=bool(d.get("ruled", False)),
+                     fmt=_fmt(d.get("fmt"), "块"))
+
+
+def _fmt(v, where: str) -> str | None:
+    if v is not None and v not in BLOCK_FMTS:
+        raise ValueError(f"layout_hints {where} fmt 只能是 {BLOCK_FMTS}，写的是 {v!r}")
+    return v
 
 
 def _check_tree(node, key) -> None:
@@ -126,6 +140,7 @@ def _check_tree(node, key) -> None:
     kind = str(node.get("kind", "text"))
     if kind not in BLOCK_KINDS:
         raise ValueError(f"layout_hints 第 {key} 页 tree 叶子 kind 只能是 {BLOCK_KINDS}，写的是 {kind!r}")
+    _fmt(node.get("fmt"), f"第 {key} 页 tree 叶子")
     for o in ("h", "v"):
         if o in node:
             spec = node[o]

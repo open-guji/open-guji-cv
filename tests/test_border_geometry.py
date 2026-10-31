@@ -1,16 +1,15 @@
 """border_geometry 单测：新坐标系(右上角原点/从右到左/从1开始)转换 + 整页探测。"""
 import numpy as np
 
-from open_guji_cv.utils.border_geometry import (
-    HLine,
-    VLine,
+from open_guji_cv.books.siku_zongmu.border import (
     _hline_to_new,
     _vline_to_new,
     detect_borders,
     detect_head_raise,
     detect_outer_borders,
 )
-from open_guji_cv.utils.peak_line_search import LineMatch
+from open_guji_cv.seg.frame_types import HLine, VLine
+from open_guji_cv.seg.lines import LineMatch
 
 
 def test_vline_to_new_flips_x_and_slope_no_tilt():
@@ -321,7 +320,7 @@ def test_detect_head_raise_scale_keeps_plain_page_clean():
 
 def test_hr_geom_scale_one_is_module_constants():
     """scale=1.0 时取的就是模块常数原值（int，不经乘法），旧图产物逐位不变。"""
-    from open_guji_cv.utils import border_geometry as bg
+    from open_guji_cv.books.siku_zongmu import border as bg
     g = bg._HRGeom(1.0)
     for name in bg.HR_SCALE_LENGTHS:
         v = getattr(g, name[3:])
@@ -411,7 +410,7 @@ def test_detect_outer_borders_rejects_when_ink_continues_beyond():
 
 # ---------------------------------------------------------------- 界行折线
 
-from open_guji_cv.utils.border_geometry import fit_vlines_polyline, gutter_projection
+from open_guji_cv.seg.polyline import fit_vlines_polyline, gutter_projection
 
 
 def _bent_page(w=1400, h=2400, n_cols=6, top_y=300, bot_y=2100, bend=22.0):
@@ -501,7 +500,7 @@ def test_stroke_fragments_do_not_fake_a_bend():
 
 def test_row_windows_drops_rows_outside_image():
     """下版框贴图底、取行范围外推到图外（siku-qiefen-v2 新图源 vol04 p19/p23 实测 IndexError）：出图的行丢掉，不报错。"""
-    from open_guji_cv.utils.border_geometry import BEND_SEARCH, _row_windows
+    from open_guji_cv.seg.polyline import BEND_SEARCH, _row_windows
     h, w = 100, 300
     binm = np.zeros((h, w), dtype=np.uint8)
     binm[:, 150] = 1

@@ -33,8 +33,7 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
 from open_guji_cv.core.book import load_book  # noqa: E402
-from open_guji_cv.utils.peak_line_search import (  # noqa: E402
-    find_horizontal_border, find_vertical_lines)
+from open_guji_cv.seg.lines import find_horizontal_border, find_vertical_lines  # noqa: E402
 
 GOLD = ROOT.parent / "open-guji-dataset" / "border-detection" / "bottom-offset" / "frozen_absolute.jsonl"
 INK_THRESHOLD = 128

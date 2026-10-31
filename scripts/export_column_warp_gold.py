@@ -45,11 +45,7 @@ import cv2
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from open_guji_cv.utils.column_projection import (  # noqa: E402
-    column_profile,
-    column_text_band,
-    denoise_column,
-)
+from open_guji_cv.seg.profile import column_profile, column_text_band, denoise_column
 
 sys.path.insert(0, str(ROOT / "scripts"))
 from migrate_column_warp_gold import COL_FP_SIZE, fingerprint  # noqa: E402

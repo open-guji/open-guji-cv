@@ -20,6 +20,10 @@
     output          {"change": 包改动名, "note": 说明, "pack": true}；永不标 main
     run             command／eval 用：[[guji 子命令, 参数…], …]，可用 {book} {ws}
     ws_glob         缺省 96mid1ogzk-*（殿本工作区）
+    ws_repo         <owner>/<repo>：这部书自己一个仓（仓根即工作区）；缺省按 ws_glob 里的册 ID 查 WS_REPOS，查不到走 open-guji/guji-workspace 里 ws_glob 匹配的目录
+    glyph_diff      rerun／ab：改钉字形库后只重算受影响的格——旧的钉号 N（新号写 book_overrides.glyph_pin）。
+                    铺底包后先 `guji recheck <册> --glyph-diff N` 点名，再从 glyph_match 起增量跑；
+                    缺省 steps.from=glyph_match、force=false（定字层增量跟进，A32 精校前移 A4，2026-10-30）
 
 不进指纹：why、priority、output（换个包名也是同一次计算）、cv_ref（已解析成提交）。
 """
@@ -37,6 +41,15 @@ ACTIVE = ("queued", "running")
 CV_REPO = "https://github.com/open-guji/open-guji-cv"
 DEFAULT_PIPELINE = "keben_body_v2"
 DEFAULT_WS_GLOB = "96mid1ogzk-*"
+# 册 ID → 这部书自己的工作区仓（仓根即工作区）。ws_glob 的册 ID 在表里、又没显式给 ws_repo 时用它（2026-10-30 起）。
+WS_REPOS = {"96mid1ogzk": "guji-workspace/96mid1ogzk-si-ku-zong-mu"}
+
+
+def book_id(spec: dict) -> str | None:
+    """这条任务属于哪部书（book-index 的 10 位 Book ID）：任务里的 `book` 只是册号（vol01），
+    不同书的 vol01 是两回事，同册并跑的锁、按册过滤、板子显示都要带上它。取 ws_glob 里第一个 `-` 之前那段。"""
+    g = (spec.get("ws_glob") or DEFAULT_WS_GLOB).split("-", 1)[0]
+    return g if re.match(r"^[0-9a-z]{10}$", g) else None
 
 #: command／eval 的 run 里允许的 guji 子命令。不收会推库、改中心库、标 main 的（db、promote 等）。
 RUN_SUBCOMMANDS = frozenset({
@@ -61,8 +74,9 @@ def _override_keys() -> set[str]:
     from ..core.book_config import FORBIDDEN_IN_OVERRIDE
     return {f.name for f in dataclasses.fields(BookSpec)} - FORBIDDEN_IN_OVERRIDE
 _KEYS = {"kind", "book", "cv", "cv_ref", "pipeline", "steps", "pages", "force", "no_reuse", "book_overrides",
-         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "why"}
-_NOT_HASHED = ("why", "output", "cv_ref")
+         "pin_args", "base", "checks", "env", "params", "compare_to", "output", "run", "ws_glob", "ws_repo", "why",
+         "glyph_diff"}
+_NOT_HASHED = ("why", "output", "cv_ref", "ws_repo")      # ws_repo 只是去哪个仓取工作区，不改计算（册 ID 由 ws_glob 定）
 
 
 class SpecError(ValueError):
@@ -97,6 +111,20 @@ def normalize(raw: dict, *, resolve=None) -> dict:
         raise SpecError(f"cv {ref!r} 解析不出 40 位提交")
 
     s["pipeline"] = s.get("pipeline") or DEFAULT_PIPELINE
+    gd = s.get("glyph_diff")
+    if gd is not None:
+        if kind not in ("rerun", "ab"):
+            raise SpecError("glyph_diff 只给 rerun／ab 用")
+        if isinstance(gd, bool) or not isinstance(gd, int) or gd < 0:
+            raise SpecError("glyph_diff 是改钉前的字形库号（整数）")
+        new_pin = (s.get("book_overrides") or {}).get("glyph_pin")
+        if not isinstance(new_pin, int) or isinstance(new_pin, bool) or new_pin == gd:
+            raise SpecError("glyph_diff 要配 book_overrides.glyph_pin（改钉后的新号，整数，与旧号不同）")
+        s.setdefault("steps", {"from": "glyph_match", "to": None})
+        s.setdefault("force", False)
+        s["glyph_diff"] = gd
+    else:
+        s.pop("glyph_diff", None)      # 不给就不出这个键：老任务的指纹不变
     st = s.get("steps") or {}
     if not isinstance(st, dict) or set(st) - {"from", "to"}:
         raise SpecError('steps 写成 {"from": 起步, "to": 止步}')
@@ -186,6 +214,11 @@ def normalize(raw: dict, *, resolve=None) -> dict:
     s["ws_glob"] = s.get("ws_glob") or DEFAULT_WS_GLOB
     if not re.match(r"^[A-Za-z0-9_*.-]+$", s["ws_glob"]):
         raise SpecError(f"ws_glob 不合规：{s['ws_glob']!r}")
+    s["ws_repo"] = s.get("ws_repo") or None
+    if s["ws_repo"] and not re.match(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", s["ws_repo"]):
+        raise SpecError(f"ws_repo 不合规（要 owner/repo）：{s['ws_repo']!r}")
+    if not s["ws_repo"]:
+        s["ws_repo"] = WS_REPOS.get(book_id(s) or "")
     s["why"] = s.get("why") or None
     return s
 

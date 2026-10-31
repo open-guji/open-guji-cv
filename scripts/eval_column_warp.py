@@ -33,14 +33,10 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
-from open_guji_cv.utils.border_geometry import VLine  # noqa: E402
-from open_guji_cv.utils.column_projection import (  # noqa: E402
-    clean_column,
-    column_profile,
-    column_text_band,
-    denoise_column,
-    warp_column,
-)
+from open_guji_cv.seg.frame_types import VLine  # noqa: E402
+from open_guji_cv.books.siku_zongmu.column import clean_column
+from open_guji_cv.seg.profile import column_profile, column_text_band, denoise_column
+from open_guji_cv.seg.warp import warp_column
 
 SRC = ROOT / "data_full" / "zongmu" / "{book}" / "{page}.png"
 

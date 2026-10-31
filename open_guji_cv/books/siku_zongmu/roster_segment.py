@@ -27,6 +27,13 @@
    出来的不是看出来的**，列级标 `dense_guess` 交人核。
 7. 最后丢掉 < 0.3em 的碎屑。
 
+写本（史記文淵閣本职名页，2026-10-29）多两处不同，各加一步：
+- 「臣」不自占一行，斜贴在官衔末字右下、人名首字右上，和邻字粘成一带：先照上面切一遍，
+  从自成一带的「臣」量出全页臣行（`_chen_row`），第二遍在臣行附近把粘着的偏右小字按连通体拆出
+  （`_split_side_small`）。只在臣行附近认，雙行小注的右行、「部」的「阝」不会被当成「臣」。
+- 版框线粗细不匀、断续，整行横跨认不全：列端扁块当框线残段丢掉（`_drop_edge_bars`）。
+密排列字压扁到彼此相粘（几何上没有缝），这一型仍数不准，要字数先验或识别参与切分。
+
 字号 em 取**全页**孤立大字（宽 > 0.45 列宽、高宽比 0.6–1.25）高的中位数——单列估在
 雙行列上会偏小。
 
@@ -61,6 +68,13 @@ PAIR_MAX_ASPECT = 1.6      # 两侧各自高/宽 ≤ 此（窄偏旁高宽比常
 SPECK = 0.3                # 字框长边 < 此 × em 当碎屑丢
 ISOLATED_SMALL = 0.45      # 长边 < 此 × em、且上或下离邻字 ≥ ISOLATED_GAP × em 的孤立小块当墨点丢
 ISOLATED_GAP = 0.5         # （「臣」也小，但上贴官衔末字、下贴人名，两侧都近）
+EDGE_ZONE = 0.05           # 列图上下这个比例内的扁块当框线残段（_drop_edge_bars）
+EDGE_BAR_H = 0.15          # 框线残段高上限（× em）
+SIDE_MIN_H = 1.1           # 带高 > 此 × em 才试拆偏右小字（写本「臣」斜贴邻字，见 _split_side_small）
+SIDE_MAX = 0.8             # 偏右小字并框长边上限（× em）
+SIDE_OVERLAP = 0.5         # 偏右小字与邻字 y 重叠上限（× 小字高）
+CHEN_TOL = 1.0             # 偏右小字上缘离全页「臣」行的上限（× em）
+SIDE_MIN = 0.3             # 偏右小字并框短边下限（× em）：再小是字里的点画（「戈」右上点），不是字
 
 
 @dataclass
@@ -203,6 +217,14 @@ def _compressed_runs(m: np.ndarray, bs: list[list[int]], em: float) -> dict[int,
     return pitch
 
 
+def _is_side(box: tuple[int, int, int, int], em: float, col_x: tuple[int, int]) -> bool:
+    """(y0, x0, y1, x1) 是不是偏右小字：整个在列中线右边、大小像个小字。"""
+    h, w = box[2] - box[0], box[3] - box[1]
+    mid = (col_x[0] + col_x[1]) / 2
+    return (SIDE_MIN * em <= min(h, w) and max(h, w) <= SIDE_MAX * em
+            and box[1] >= mid - 0.1 * em and (box[1] + box[3]) / 2 > mid)
+
+
 def _merge_frags(m: np.ndarray, bs: list[list[int]], em: float) -> list[list[int]]:
     """碎块并字，每次并间隙最小的一对，直到没有可并的。"""
     bs = [list(b) for b in bs]
@@ -246,6 +268,57 @@ def _split_lr(band: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
     if right.sum() < LR_SIDE_MIN * tot or left.sum() < LR_SIDE_MIN * tot:
         return None
     return right, left
+
+
+def _split_side_small(band: np.ndarray, em: float, col_x: tuple[int, int],
+                      chen: float) -> list[np.ndarray] | None:
+    """一条带里有偏右小字粘着上下邻字（写本的「臣」斜贴在官衔末字右下、人名首字右上）。
+
+    连通体按质心 y 排开，取连续的一组当小字：并框是偏右小字（`_is_side`）、上缘在全页「臣」行
+    （`chen`，带内坐标）±CHEN_TOL×em 内，且大半露在上下两侧的字外、露出的几行左边没有墨，就按连通体
+    把带分成 上｜小字｜下 几段（自上而下返回；上下段可以还有几个字，回 `_seg_mask` 接着切）。刻本的「臣」自占一行，带本来就断开，走不到这里。"""
+    lab, n = ndi.label(band, structure=np.ones((3, 3)))
+    if n < 2:
+        return None
+    objs = ndi.find_objects(lab)
+    order = sorted(range(n), key=lambda i: (objs[i][0].start + objs[i][0].stop) / 2)
+
+    def box(ids):
+        return (min(objs[i][0].start for i in ids), min(objs[i][1].start for i in ids),
+                max(objs[i][0].stop for i in ids), max(objs[i][1].stop for i in ids))
+
+    def clear(side, ids):
+        # 小字只斜贴着邻字、大半露在它上下；整个落在邻字高度里的是字的右半边（「桐」的「同」）
+        if not ids:
+            return True
+        b = box(ids)
+        return min(side[2], b[2]) - max(side[0], b[0]) <= SIDE_OVERLAP * (side[2] - side[0])
+
+    for k1 in range(n):
+        for k2 in range(k1 + 1, n + 1):
+            if k2 - k1 == n:
+                continue
+            up, mid, dn = order[:k1], order[k1:k2], order[k2:]
+            side = box(mid)
+            if not (_is_side(side, em, col_x) and abs(side[0] - chen) <= CHEN_TOL * em
+                    and clear(side, up) and clear(side, dn)):
+                continue
+            # 露出来的那几行，小字左边得是空的：雙行小注的右行、「部」的「阝」左边都有字
+            rows = np.ones(side[2] - side[0], bool)
+            for ids in (up, dn):
+                if ids:
+                    b = box(ids)
+                    rows[max(0, b[0] - side[0]):max(0, b[2] - side[0])] = False
+            if band[side[0]:side[2]][rows, :side[1]].sum() <= 0.02 * rows.sum() * (side[3] - side[1]):
+                parts = []
+                for ids in (up, mid, dn):
+                    if ids:
+                        part = np.zeros_like(band)
+                        for i in ids:
+                            part[lab == i + 1] = True
+                        parts.append(part)
+                return parts
+    return None
 
 
 def _pair_split(band: np.ndarray, em: float) -> tuple[np.ndarray, np.ndarray] | None:
@@ -331,8 +404,9 @@ def _full_square(t: list[int], em: float) -> bool:
 
 
 # ── 递归主体 ─────────────────────────────────────────────────────────────
-def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
+def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = None) -> list[RosterItem]:
     out: list[RosterItem] = []
+    col_x = _xext(m)
     bs = _bands(m)
     pitch = _compressed_runs(m, bs, em)
     # 压扁密排段的带原样保留（带着段字距）；其余带按段落成组各自并碎块
@@ -384,6 +458,14 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0) -> list[RosterItem]:
         h = y1 - y0
         x0, x1 = _xext(m, y0, y1)
         w = x1 - x0
+        if depth == 0 and chen is not None and hint is None and h > SIDE_MIN_H * em:
+            sp = _split_side_small(m[y0:y1], em, col_x, chen - y0)
+            if sp is not None:
+                for part in sp:
+                    pm = np.zeros_like(m)
+                    pm[y0:y1] = part
+                    out += _seg_mask(pm, em, depth + 1)
+                continue
         if depth == 0 and h > LR_MIN_H * em:
             sp = _split_lr(m[y0:y1])
             if sp is not None:
@@ -432,6 +514,15 @@ def _drop_isolated_specks(items: list[RosterItem], em: float) -> list[RosterItem
     return keep
 
 
+def _drop_edge_bars(items: list[RosterItem], em: float, h_img: int) -> list[RosterItem]:
+    """列图上下 EDGE_ZONE 内扁平的块是版框横条残段（写本框线粗细不匀、断续，`_clear_edge_bars` 按整行
+    横跨认不全），不是字；「一」也扁，但不会贴着列端。"""
+    zone = EDGE_ZONE * h_img
+    return [it for it in items
+            if not (it.y1 - it.y0 < EDGE_BAR_H * em and it.x1 - it.x0 > 2 * (it.y1 - it.y0)
+                    and (it.y0 < zone or it.y1 > h_img - zone))]
+
+
 def _column_flags(items: list[RosterItem]) -> list[str]:
     flags: list[str] = []
     if any(it.dense_guess for it in items):
@@ -442,15 +533,16 @@ def _column_flags(items: list[RosterItem]) -> list[str]:
     if any(b.y0 < a.y1 for a, b in zip(body, body[1:])):
         flags.append("roster_overlap")        # 相邻两字 y 有重叠（多是「臣」贴着官衔末字），Step4 满宽裁会互相带墨
     if any(it.glyph is not None for it in items):
-        flags.append("roster_glyph_refined")  # 有密排段按字形库重切过（utils/roster_glyph）
+        flags.append("roster_glyph_refined")  # 有密排段按字形库重切过（books/siku_zongmu/roster_glyph）
     return flags
 
 
-def segment_roster_column(ink: np.ndarray, em: float) -> RosterColumn:
-    """一列（已 prepare 过的墨 mask）→ 读序排好的字。"""
-    items = [it for it in _seg_mask(ink, em)
+def segment_roster_column(ink: np.ndarray, em: float, chen: float | None = None) -> RosterColumn:
+    """一列（已 prepare 过的墨 mask）→ 读序排好的字。给了全页「臣」行 `chen`，再拆贴着邻字的偏右小字。"""
+    items = [it for it in _seg_mask(ink, em, chen=chen)
              if max(it.y1 - it.y0, it.x1 - it.x0) >= SPECK * em]
     items = _drop_isolated_specks(items, em)
+    items = _drop_edge_bars(items, em, ink.shape[0])
     return RosterColumn(items=items, em=em, flags=_column_flags(items))
 
 
@@ -526,11 +618,17 @@ def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]
     （overview#450：p90 类压扁粘连字，几何数不准字数）。"""
     prepared = [prepare(g, cx, ink_threshold) for g, cx in cols]
     em_page = page_em(prepared)
-    out = [segment_roster_column(ink, em_page or 0.65 * width) for ink, width in prepared]
-    if scorer is not None and out:
-        xs = [float(cx[0]) if cx is not None else 0.0 for _, cx in cols]
-        chen = _chen_row(out, prepared, xs, em_page or out[0].em)
-        if chen is not None:
-            for rc, (ink, _w) in zip(out, prepared):
-                _glyph_refine(rc, ink, chen, scorer)
+    ems = [em_page or 0.65 * width for _ink, width in prepared]
+    out = [segment_roster_column(ink, em) for (ink, _w), em in zip(prepared, ems)]
+    if not out:
+        return out
+    xs = [float(cx[0]) if cx is not None else 0.0 for _, cx in cols]
+    chen = _chen_row(out, prepared, xs, em_page or out[0].em)
+    if chen is not None:
+        # 第二遍：写本的「臣」斜贴邻字、和官衔末字或人名首字粘成一带（史記文淵閣本职名页），
+        # 第一遍从自成一带的「臣」量出全页臣行，再按它把贴着的拆出来
+        out = [segment_roster_column(ink, em, chen) for (ink, _w), em in zip(prepared, ems)]
+    if scorer is not None and chen is not None:
+        for rc, (ink, _w) in zip(out, prepared):
+            _glyph_refine(rc, ink, chen, scorer)
     return out

@@ -16,6 +16,7 @@
 | 用控制台、`guji` 命令 | [doc/console_manual.md](../doc/console_manual.md) |
 | 开新书、找数据在哪 | [doc/workspace_layout.md](../doc/workspace_layout.md) |
 | 看包分层、谁能依赖谁、改动前要注意什么 | [doc/module_map.md](../doc/module_map.md)（守卫：`tests/test_architecture.py`） |
+| 改切分代码（各套书自管、原语库、样页对比） | [doc/切分代码结构.md](../doc/切分代码结构.md) |
 | 改算法之前 | [doc/pipeline_handbook.md](../doc/pipeline_handbook.md)（踩坑、量法、负结果）、[doc/segmentation_v2_pipeline.md](../doc/segmentation_v2_pipeline.md)（切分四步） |
 | 各步的设计与失败案例 | [doc/design/](../doc/design/) |
 | 调研、文献、基准、负结果 | [doc/research/](../doc/research/) |

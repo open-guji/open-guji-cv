@@ -39,7 +39,7 @@ from dataclasses import asdict, dataclass, field
 
 import numpy as np
 
-from .peak_line_search import find_vertical_lines
+from .lines import find_vertical_lines
 
 #: 居中项的宽度：版面宽的这个比例（σ）。
 CENTER_SIGMA = 0.02

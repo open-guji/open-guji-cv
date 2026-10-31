@@ -37,7 +37,8 @@ def fill(p: argparse.ArgumentParser) -> None:
     s = js.add_parser("submit", help="交一条任务")
     s.add_argument("file", nargs="?", help="spec JSON 文件，- 为标准输入；不给就用下面的参数拼")
     s.add_argument("--kind", default=None, choices=SP.KINDS)
-    s.add_argument("--book", default=None)
+    s.add_argument("--book", default=None, help="册号（vol10），不同书的册号会重名，配 --book-id")
+    s.add_argument("--book-id", default=None, help="书 ID（book-index 的 10 位 Book ID）；缺省 96mid1ogzk（殿本四库总目）")
     s.add_argument("--cv", default=None, help="tag／分支／提交（必填）")
     s.add_argument("--pipeline", default=None)
     s.add_argument("--from", dest="from_step", default=None)
@@ -46,6 +47,8 @@ def fill(p: argparse.ArgumentParser) -> None:
     s.add_argument("--no-force", action="store_true", help="不加 --force（按指纹能跳就跳）")
     s.add_argument("--corpus", type=int, default=None)
     s.add_argument("--glyph-pin", type=int, default=None)
+    s.add_argument("--glyph-diff", type=int, default=None,
+                   help="改钉字形库后只重算受影响的格：旧钉号（新号用 --glyph-pin）；缺省从 glyph_match 起、不 force")
     s.add_argument("--base", default=None, help="铺底包：main｜标签；从中间某步起跑缺省 main")
     s.add_argument("--human-chars", type=int, default=None, help="开跑前人裁格数必须等于它")
     s.add_argument("--env", action="append", default=[], help="K=V，只收 GUJI_ 开头")
@@ -64,6 +67,7 @@ def fill(p: argparse.ArgumentParser) -> None:
 
     s = js.add_parser("ls", help="列任务")
     s.add_argument("--book", default=None)
+    s.add_argument("--book-id", default=None, help="书 ID（book-index 的 10 位 Book ID，如 96mid1ogzk）")
     s.add_argument("--status", default=None, help="逗号分隔，缺省 排队+在跑+最近结束的")
     s.add_argument("--mine", action="store_true")
     s.add_argument("--all", action="store_true")
@@ -109,11 +113,14 @@ def _spec_from_args(a) -> dict:
     put = lambda k, v: raw.__setitem__(k, v) if v is not None else None  # noqa: E731
     put("kind", a.kind)
     put("book", a.book)
+    if getattr(a, "book_id", None):
+        put("ws_glob", f"{a.book_id}-*")
     put("cv", a.cv)
     put("pipeline", a.pipeline)
     put("pages", a.pages)
     put("base", a.base)
     put("why", a.why)
+    put("glyph_diff", getattr(a, "glyph_diff", None))
     if a.from_step or a.to_step:
         raw["steps"] = {**raw.get("steps", {}), **{k: v for k, v in (("from", a.from_step), ("to", a.to_step)) if v}}
     if a.no_force:
@@ -174,7 +181,7 @@ def _line(j: dict) -> str:
     pri = f" p{j['priority']}" if j["status"] == "queued" and j["priority"] != 100 else ""
     if j["status"] == "queued" and j.get("run_after"):
         pri += f" 冷却到 {_fmt_time(j['run_after'])}（第 {j['attempts']} 次环境失败后）"
-    head = (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j['book'] or '-'):<6} "
+    head = (f"{_ICON.get(j['status'], '?')} #{j['id']:<4} {st:<10} {j['kind']:<7} {(j.get('book_id') or '-'):<10} {(j['book'] or '-'):<6} "
             f"{SP.summary(sp)}{pri}{stage}{where}  {j['submitted_by']} {_fmt_time(j['created_at'])}")
     why = _reason(j)
     return head if why is None else f"{head}\n      ↳ {_TAG[j['status']]}：{why}"
@@ -207,7 +214,7 @@ def cmd_job(a) -> None:
         print("jobs schema 已就绪")
     elif act == "ls":
         status = a.status.split(",") if a.status else (None if a.all else None)
-        rows = db(S.list_jobs, status=status, book=a.book, limit=a.limit, mine=S.who() if a.mine else None)
+        rows = db(S.list_jobs, status=status, book=a.book, book_id=a.book_id, limit=a.limit, mine=S.who() if a.mine else None)
         if not a.all and not a.status:
             rows = [r for r in rows if r["status"] in SP.ACTIVE] + \
                    [r for r in rows if r["status"] not in SP.ACTIVE][:10]
@@ -276,7 +283,7 @@ def cmd_job(a) -> None:
             sys.exit("✗ 看板没写成（连库失败或中心库还没有 progress schema）")
         if a.dry_run:
             for r in t["rows"]:
-                print(f"#{r['id']:<4} {r['status']:<4} {r['book']:<6} {r['elapsed']:<8} {r['eta']:<14} {r['config']}")
+                print(f"#{r['id']:<4} {r['status']:<4} {r['bookid']:<10} {r['book']:<6} {r['elapsed']:<8} {r['eta']:<14} {r['config']}")
         print(f"{'（只看，没写）' if a.dry_run else '已写入 progress.metric jobs/board'}：共 {len(t['rows'])} 行")
     elif act == "workers":
         rows = db(S.workers)

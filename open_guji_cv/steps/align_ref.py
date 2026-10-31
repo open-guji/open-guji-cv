@@ -142,6 +142,7 @@ v006 新锚上的 11 页照旧走现有通道放行；人裁难例里新放出 1
 
 from __future__ import annotations
 
+import json
 import re
 from functools import lru_cache
 from pathlib import Path
@@ -479,12 +480,51 @@ class AlignRefParams(BaseModel):
     位置却错一两格；坐标对位按格位配的整串对，却被这一两格冲突整列退回，10 列 87 格没有默认字。
     题列自成一列，不会有「整理本分行错一位」。空串＝关。"""
 
+    page_pins: str = ""
+    """页钉位（2026-10-28，GUJI-750 史记文渊阁）：整理本文件所在目录里的一份 `jsonl`，每行
+    `{"book": 册 id, "page": 页号, "head": "<逐列本 #@ 半叶头文字>"}`，把**我们的页与整理本的半叶一一钉死**。
+    刻本页与参校本半叶的对应本来就是确定的（影印页号＋拆页表＋列序），不必靠识别结果去猜：
+    手写本冷启动时字形库认不了字，载体串全是乱码，8-gram 锚不上（册01 143 页只锚上 15 页）。
+    钉了的页：现役对位直接以半叶起点为窗口起点（不投票），坐标对位的列→行也按半叶头定
+    （第 c 列对半叶头后第 c−1 行），不走 `_locate`。没钉的页、钉了但半叶头在整理本里找不到的页，
+    行为与不配这一项逐字节相同。空串＝关。
+    钉位只决定「对哪一段整理本」，对上之后的采信闸（等长 replace 的夹住条件、库证据闸、坐标列的
+    几何检查与 `_coord_conflict`）一概照旧。"""
+    page_pins_fingerprint: str = ""
+    """钉位文件指纹，`page_pins` 非空才填；留空自动填（同 `corpus_fingerprint`）。"""
+    pin_min_equal_frac: float = 0.15
+    """钉位后现役对位 `equal` 字数占载体串的比例低于这个，判「钉了也对不上」（版式不是满行的
+    表页、考證页、半叶头钉错），退回未锚定、note 写明；不拿一个对不上的窗口硬出标签。"""
+
+    anchor_merge_gap: int = 0
+    """锚定时把相距不超过这么多字的票簇并成一个（2026-10-30，A31 北行 bxgb p45）。0＝关（缺省，不进参数哈希）。
+
+    8-gram 投票按 ±`POOL_RADIUS`（8）合簇；同书异版时，一页里整理本多出一整句（北行 p45 整理本有
+    「又承應人指其首曰幾時得這些髮長起去」17 字，清刻本删了），这一句前后两半的票落在相差 17 的两个偏移上，
+    互相当成对手：前半 39 票、后半 65 票，占比与优势都不够，整页锚不上。两个簇其实都在同一窗口里——
+    只要相距不超过 `WINDOW_PAD`（60），起点取靠前那个，窗口右侧照样盖得住。
+    只在正常投票失败、没有页钉位时才走；合并后仍要过同一套绝对票数、占比／优势判据（次高票簇是窗口外的票）。
+    已锚上的页逐字节不变。上限 `WINDOW_PAD`。"""
+
+    replace_max_len: int = 3
+    """等长 replace 段的长度上限（见 `align_label.replace_len_gate`）。3＝缺省（不进参数哈希）。
+    同书异版、整理本整段录入的书可按册放宽（北行 bxgb 取 12）：两头仍要被 equal 夹住。
+    只多给整理本字，放行照旧要 `lib_gate`／seed_admit 的库证据。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
-        """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。"""
+        """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
+        `page_pins` 为空同理（三个钉位字段一并去掉）。"""
         d = handler(self)
         if isinstance(d, dict) and not self.rare_topk:
             d.pop("rare_topk", None)
+        if isinstance(d, dict) and not self.page_pins:
+            for k in ("page_pins", "page_pins_fingerprint", "pin_min_equal_frac"):
+                d.pop(k, None)
+        if isinstance(d, dict) and not self.anchor_merge_gap:
+            d.pop("anchor_merge_gap", None)
+        if isinstance(d, dict) and self.replace_max_len == 3:
+            d.pop("replace_max_len", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -492,6 +532,10 @@ class AlignRefParams(BaseModel):
             from .context_decide import corpus_fingerprint
             object.__setattr__(self, "corpus_fingerprint",
                                corpus_fingerprint([self.corpus]))
+        if self.page_pins and not self.page_pins_fingerprint:
+            from .context_decide import corpus_fingerprint
+            object.__setattr__(self, "page_pins_fingerprint",
+                               corpus_fingerprint([str(corpus_path(self.page_pins))]))
 
 
 #: 锚定载体是**刻本字位**：没有标点、没有整理者补的注记。语料这一侧必须同样
@@ -524,10 +568,66 @@ def _corpus_index(path: str):
     return build_ngram_index(_corpus_text(path))
 
 
+def _pin_file(name: str) -> Path:
+    return Path(corpus_path(name))
+
+
+@lru_cache(maxsize=4)
+def _page_pin_heads(name: str) -> dict[tuple[str, int], str]:
+    """`page_pins` 文件 → {(册 id, 页号): 半叶头文字}。读不到、坏行一律当没有（不炸）。"""
+    p = _pin_file(name)
+    if not p.exists():
+        return {}
+    out: dict[tuple[str, int], str] = {}
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        ln = ln.strip()
+        if not ln:
+            continue
+        try:
+            r = json.loads(ln)
+            out[(str(r["book"]), int(r["page"]))] = str(r["head"]).strip()
+        except (ValueError, KeyError, TypeError):
+            continue
+    return out
+
+
+@lru_cache(maxsize=4)
+def _head_index(corpus: str) -> tuple[dict[str, int], dict[str, int]]:
+    """整理本逐列本的半叶头 → (行表下标, `_corpus_text` 里的字偏移)。
+
+    偏移按 `_corpus_text` 同一把尺子（折兼容汉字、只留 [一-鿿]）逐行累计，不借
+    `RefLine.han_start`（后者不折兼容汉字，遇到兼容汉字会和 `_corpus_text` 错开）。"""
+    from ..utils.cjk_compat import fold_compat
+    from .align_ref_coord import GRID_HEADER, ref_lines
+    lines, _ = ref_lines(corpus)
+    line_of = {ln.head: ln.idx for ln in lines if ln.leaf_start and ln.head}
+    off_of: dict[str, int] = {}
+    n = 0
+    for raw in Path(corpus).read_text(encoding="utf-8").splitlines():
+        if raw.startswith(GRID_HEADER):
+            off_of.setdefault(raw[len(GRID_HEADER):].strip(), n)
+            continue
+        n += len(_NON_HAN_RE.sub("", fold_compat(raw)))
+    return line_of, off_of
+
+
+def page_pin(p: "AlignRefParams", book: str, page: int) -> tuple[str, int, int] | None:
+    """这一页的钉位 → (半叶头, 行表下标, 字偏移)；没配、没钉、头在整理本里找不到 → None。"""
+    if not p.page_pins:
+        return None
+    head = _page_pin_heads(p.page_pins).get((book, page))
+    if not head:
+        return None
+    line_of, off_of = _head_index(p.corpus)
+    if head not in line_of or head not in off_of:
+        return None
+    return head, line_of[head], off_of[head]
+
+
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.3", unit="cell",   # 2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.4", unit="cell",   # 2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -563,7 +663,8 @@ class AlignRefStep(Step):
             attach_coord(out["align_ref"], ctx.book.id, page, match, ocr, rare,
                          _opt(ctx, "cells", page), p.corpus,
                          neighbors=neighbors if p.coord_neighbor else None,
-                         title_formula=p.coord_title_formula)
+                         title_formula=p.coord_title_formula,
+                         pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1])
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -599,10 +700,24 @@ class AlignRefStep(Step):
         # ⚠️ book 必须传真名：`label_page` 拼的是 `book:page:col:idx`，传空字符串
         # 会得到 ":24:1:2" 这种键，与产物的 "vol01:24:1:2" 对不上——查表全 miss，
         # 整理本通道一条都不触发（本轮实际踩到，靠比对键样例才发现）。
+        pin = page_pin(p, ctx.book.id, page)
         labs, ok = label_page(str(page), slots, ctx.book.id, text,
-                              _corpus_index(p.corpus))
-        anchor_via = "ngram"
-        if not ok and p.uncontested_relax:
+                              _corpus_index(p.corpus),
+                              offset=pin[2] if pin else None,
+                              max_replace_len=p.replace_max_len)
+        anchor_via = "pin" if pin else "ngram"
+        if not ok and not pin and p.anchor_merge_gap > 0:
+            off = merged_anchor(slots, _corpus_index(p.corpus), p.anchor_merge_gap)
+            if off is not None:
+                labs, ok = label_page(str(page), slots, ctx.book.id, text,
+                                      _corpus_index(p.corpus), offset=off,
+                                      max_replace_len=p.replace_max_len)
+                anchor_via = "merged"
+        if pin and not _pin_holds(labs, slots, p):
+            return {"align_ref": PageAlignRef(
+                page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
+                note=f"页钉位（{pin[0]}）后对不上：equal 字不足载体串的 {p.pin_min_equal_frac:.0%}")}
+        if not ok and not pin and p.uncontested_relax:
             alt = _uncontested_fallback(ctx.book.id, page, slots, text,
                                         _corpus_index(p.corpus), p)
             if alt:
@@ -631,6 +746,12 @@ class AlignRefStep(Step):
         return {"align_ref": PageAlignRef(
             page=page, anchored=True, corpus_fingerprint=p.corpus_fingerprint,
             chars=chars, n_lib_dropped=n_dropped, anchor_via=anchor_via)}
+
+
+def _pin_holds(labs: list, slots: list[tuple], p: "AlignRefParams") -> bool:
+    """钉位后的对位是否靠谱：采信的 equal 字数占载体串长度的比例。"""
+    n_equal = sum(1 for lab in labs if lab.op == "equal")
+    return n_equal >= p.pin_min_equal_frac * max(1, len(slots))
 
 
 def _raw_vote_clusters(text: str, index: dict[str, list[int]],
@@ -668,6 +789,41 @@ def _raw_vote_clusters(text: str, index: dict[str, list[int]],
         peak2 = max(rest, key=rest.get)
         runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
     return min(near), peak_votes, runner_up
+
+
+def merged_anchor(slots: list[tuple], index: dict[str, list[int]], gap: int,
+                  gram: int = GRAM) -> int | None:
+    """`AlignRefParams.anchor_merge_gap` 的锚定：最高票偏移 ±(gap+POOL_RADIUS) 内的票并成一簇，
+    再过 `align_eval.anchor_page_diag` 同一套判据（绝对下限、占比或优势；次高票簇取窗口外的票）。
+    过了返回簇内最小偏移，否则 None。"""
+    from collections import Counter
+
+    from ..clustering.align_eval import (MIN_DOMINANCE, MIN_VOTE_FRAC, MIN_VOTES,
+                                         POOL_RADIUS, index_lookup)
+    query = "".join(t[-1] for t in _norm_slots(slots))
+    if len(query) < gram:
+        return None
+    reach = min(gap, WINDOW_PAD) + POOL_RADIUS
+    votes: Counter[int] = Counter()
+    n_grams = len(query) - gram + 1
+    for i in range(n_grams):
+        for pos in index_lookup(index, query[i:i + gram]):
+            votes[pos - i] += 1
+    if not votes:
+        return None
+    peak = votes.most_common(1)[0][0]
+    near = [o for o in votes if abs(o - peak) <= reach]
+    n_votes = sum(votes[o] for o in near)
+    if n_votes < MIN_VOTES:
+        return None
+    rest = {o: v for o, v in votes.items() if abs(o - peak) > reach}
+    runner_up = 0
+    if rest:
+        peak2 = max(rest, key=rest.get)
+        runner_up = sum(v for o, v in rest.items() if abs(o - peak2) <= POOL_RADIUS)
+    if n_votes / n_grams >= MIN_VOTE_FRAC or runner_up == 0 or n_votes >= MIN_DOMINANCE * runner_up:
+        return min(near)
+    return None
 
 
 def _uncontested_fallback(book: str, page: int, slots: list[tuple], corpus: str,
@@ -1060,6 +1216,26 @@ def _locate(carriers, lines, starts, text: str, corpus: str, grid: bool):
     return (pm, "") if pm.base is not None else (None, pm.note)
 
 
+def _pin_map(carriers, lines, base: int):
+    """页钉位 → `PageMap`：第 c 列对半叶头后第 c−1 行（逐列本空列也留一行），不出本半叶。
+    每列仍过 `map_columns` 同一道保险：这一列明显更像别的行就不认。"""
+    from . import align_ref_coord as C
+    heads = [i for i, ln in enumerate(lines) if ln.leaf_start]
+    nxt = next((h for h in heads if h > base), len(lines))
+    out = C.PageMap(base, note=f"页钉位（半叶头第 {base} 行）")
+    for col, c in carriers:
+        li = base + col - 1
+        if li >= nxt:
+            continue
+        own = C.line_sim(c, lines[li])
+        other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
+                     if l2 != li), default=0)
+        if other >= own + 3 and other >= 2 * max(own, 1):
+            continue
+        out.col_line[col] = li
+    return out
+
+
 def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
     """`coord_neighbor`：邻页定位成功 → 本页的 `PageMap`（逐列本，第 c 列对半叶起点 + c − 1 行）。
 
@@ -1092,11 +1268,13 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
-                 cells, corpus: str, neighbors=None, title_formula: str = "") -> None:
+                 cells, corpus: str, neighbors=None, title_formula: str = "",
+                 pin_line: int | None = None) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
-    `neighbors()`（`coord_neighbor`）→ 迭代 (页差, 邻页 glyph_match, 邻页 rare)：本页定不了位置时借邻页定位。"""
+    `neighbors()`（`coord_neighbor`）→ 迭代 (页差, 邻页 glyph_match, 邻页 rare)：本页定不了位置时借邻页定位。
+    `pin_line`（`page_pins`）：这一页钉死的半叶头所在行，直接用，不定位、不借邻页。"""
     from . import align_ref_coord as C
     if cells is None:
         res.coord_note = "没有 Step3 字格产物（cells）"
@@ -1108,7 +1286,11 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         return
     carrier, cols, carriers = _page_carriers(match, ocr, rare)
     grid = bool(lines) and any(ln.leaf_start for ln in lines[:50])
-    pm, why = _locate(carriers, lines, starts, text, corpus, grid)
+    if pin_line is not None and grid:
+        pm, why = _pin_map(carriers, lines, pin_line), ""
+        res.coord_note = pm.note
+    else:
+        pm, why = _locate(carriers, lines, starts, text, corpus, grid)
     if pm is None and grid and neighbors is not None:
         pm = _neighbor_map(carriers, lines, starts, text, corpus, neighbors)
         if pm is not None:

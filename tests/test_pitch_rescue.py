@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
-"""列距救援（Step1 后处理，`utils/pitch_rescue`）：列网里多挑一条假竖线、外侧整列落到网外时按列距重定。
+"""列距救援（Step1 后处理，`books/siku_zongmu/pitch_rescue`）：列网里多挑一条假竖线、外侧整列落到网外时按列距重定。
 
 纯内存构造：竖线位置取殿本 vol14 p186、vol20 p68 的真页形态（数是形态，不是 fixture 文件）。"""
 from __future__ import annotations
 
 import numpy as np
 
-from open_guji_cv.utils.border_geometry import BorderDetectionResult, HLine, VLine
-from open_guji_cv.utils.column_pair_merge import line_xs
-from open_guji_cv.utils import pitch_rescue as pr
+from open_guji_cv.seg.frame_types import BorderDetectionResult, HLine, VLine
+from open_guji_cv.books.siku_zongmu.column_pair_merge import line_xs
+from open_guji_cv.books.siku_zongmu import pitch_rescue as pr
 
 W, H = 2325, 3000
 #: vol14 p186：c3 被劈成 83＋100，最右（规范空间 x 小）那列「春秋四傳三十八卷」落在网外

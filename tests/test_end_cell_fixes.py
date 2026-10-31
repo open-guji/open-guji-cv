@@ -18,7 +18,7 @@ from __future__ import annotations
 import numpy as np
 
 from open_guji_cv.clustering import extractor as EX
-from open_guji_cv.utils import row_boundaries as RB
+from open_guji_cv.books.siku_zongmu import row_boundaries as RB
 
 
 # ── Step3：周期锚定候选 ──────────────────────────────────────────────
