@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.0] - 测试中
+
+MINOR（用户 10-31 定）。含切分模块化（共用原语库 `seg/`、各套书自管 `books/`，M2–M4）、控制台与 manager 拆出、任务库按书 ID 区分与殿本工作区独立成仓、keben_free 第八轮等（见下）。
+
 - jobs：执行方连续 3 单环境类失败就暂停领单 30 分钟并在 `workers` 里写原因（10-30 worker-23 的数据令牌坏了，一小时内 23 次 db-pull 500，别的执行方都正常），免得一个坏会话把排队的单的重试次数耗光。
 - jobs：任务库加列后老连接报 `cached plan must not change result type` 会让执行方领单崩掉（10-30 加 book_id 时 #1153／#1156），`DB` 遇到这个错误自动重连重试。
 - 任务库按书 ID 区分、殿本工作区迁到自己的仓（Sheldon 10-30）：四库总目（96mid1ogzk）的工作区搬进 `guji-workspace/96mid1ogzk-si-ku-zong-mu`（仓根即工作区，3711 个文件与旧仓逐文件核对 0 差异），`spec.WS_REPOS` 登记「书 ID → 仓」，ws_glob 里的书 ID 查得到又没显式给 `ws_repo` 就走它，执行方自检也查这个仓。册号（vol01）每部书都有，`jobs.job` 加 `book_id`（旧行按 ws_glob 补），同册互斥锁改成（书 ID，册号）——不同书的 vol01 能并跑；`guji_jobs submit --book-id`、`ls --book-id`，`ls`／板子多一列书 ID；`ws_repo` 不进指纹。`rerun_prep.sh` 找册 yaml 改按工作区 `.central.json` 的 ws id（原先取数据目录里第一个，多书会话会取错）。迁仓过渡期：会话没挂新仓时，执行方自检放行旧总仓，`rerun_prep.sh` 克隆不了 `--ws-repo` 就退回旧总仓里同一本书的目录。
