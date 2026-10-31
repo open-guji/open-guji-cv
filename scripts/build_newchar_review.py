@@ -682,6 +682,9 @@ def cmd_apply(a) -> None:
             c = json.loads(line)
             cards[c["id"]] = c
     verdicts = load_verdicts(Path(a.verdicts))
+    # 整理本未收字按码位成组：组头 `N:<码位>` 的值 `char:<近似字>` 展开给该组里标了 `same` 的格
+    notes = {k[2:]: v[5:].strip() for k, v in verdicts.items() if k.startswith("N:") and v.startswith("char:")}
+    verdicts = {k: v for k, v in verdicts.items() if not k.startswith("N:")}
     unknown = [k for k in verdicts if k not in cards]
     if unknown:
         sys.exit(f"裁决里有 {len(unknown)} 个格号不在 cards.jsonl（页换过版？）：{unknown[:5]}")
@@ -695,6 +698,20 @@ def cmd_apply(a) -> None:
     events, lists = [], collections.defaultdict(list)
     for cid in sorted(verdicts, key=_cell_sort):
         v, card = verdicts[cid], cards[cid]
+        if card.get("kind") == "pua" and v == "same":
+            ch = notes.get(card["grp"], "")
+            if not ch:
+                lists["pua_nochar"].append(card)
+                continue
+            tgt = EventTarget(step="seed_admit", unit="cell", key=cid, book=card["book"])
+            # approx=True：走既有「近似字」侧表（approx_labels），库里查得出来；ids 只在近似字是多字 IDS 时填
+            pl = {"v": "confirm", "shape": ch[0] if len(ch) == 1 else ch, "approx": True, "via": "newchar_review",
+                  "note": f"近似异体字（Unicode 未收字，整理本码位 {card['grp']}），非精确字形；意思相同的最近似字",
+                  "source": a.source}
+            if len(ch) > 1:
+                pl["ids"] = ch
+            events.append(make_event(batch, len(events) + 1, "confirm", tgt, pl, reviewer=a.reviewer))
+            continue
         ch = verdict_to_char(card, v)
         if ch:
             tgt = EventTarget(step="seed_admit", unit="cell", key=cid, book=card["book"])
@@ -710,7 +727,7 @@ def cmd_apply(a) -> None:
     with (out / "events.jsonl").open("w", encoding="utf-8") as f:
         for e in events:
             f.write(e.model_dump_json() + "\n")
-    names = {"seg": "seg_issues.tsv", "unclear": "unclear.tsv", "other": "other.tsv"}
+    names = {"seg": "seg_issues.tsv", "unclear": "unclear.tsv", "other": "other.tsv", "pua_nochar": "pua_nochar.tsv"}
     for k, rows in lists.items():
         with (out / names[k]).open("w", encoding="utf-8") as f:
             f.write("格号\t整理本字\t库首选\t5b\t上下文\n")
@@ -730,6 +747,16 @@ def cmd_apply(a) -> None:
     from open_guji_cv.feedback.events import EventLog
     log = EventLog()
     enriched = enrich_events(events)
+    # 换过图源的册（页号重编）：旧页号的裁决不写，列出来等在新产物上重新取格
+    from open_guji_cv.feedback.events import _target_dict
+    gate = log._rev_gate()
+    stale = [e for e in events if not gate.admits(e.kind, _target_dict(e.target))]
+    if stale:
+        sid = {e.id for e in stale}
+        events = [e for e in events if e.id not in sid]
+        with (out / "stale_source.tsv").open("w", encoding="utf-8") as f:
+            f.write("格号\t字\n" + "\n".join(f"{e.target.key}\t{e.payload['shape']}" for e in stale) + "\n")
+        print(f"  [换图源] {len(stale)} 条所属册已换图源（{sorted({e.target.book for e in stale})}），不写，见 {out}/stale_source.tsv")
     n = log.append(events)
     print(f"已追加 {n} 条（补锚 {enriched}）→ {log.batch_path(batch)}")
     if a.admit:
