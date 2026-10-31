@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+### Changed
+- 印章遮挡格再放宽两条（A32，GUJI-637，vol20–99 r3 遮挡 931 格）：`seed_admit` 1.27，`code_hash` 变。只在册开 `lane_seal` 时生效。
+  - `lane_seal_lib_veto_second`（缺省开）：默认字正是字形库第二名时库否决不生效。r3 包里库否决 340 格，看图默认字错的约 10 格全在「默认字不在库前二」那一档。
+  - `lane_seal_codepoint_variant`（缺省开）：异体护栏遇到本书 `codepoints:` 已归一的异体对（𩔖→類、巻→卷、别→別…）或同在暂归一组 `PROVISIONAL` 的两形，不再拦，放归一后的字。
 - `rerun_prep.sh`：迁仓过渡期的退回旧总仓没生效（`t` 包装总返回 0，克隆新仓失败也当成功），改成直接判克隆是否成功。
 
 - `seg_samples.py submit --base <带注释的 tag>` 把 tag 对象的 sha 当提交交单，执行方检出后对不上（「cv 没切对」），改成 `rev-parse <base>^{commit}`（v0.6.0 组合验收时发现）。
