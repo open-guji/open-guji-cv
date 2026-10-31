@@ -544,6 +544,7 @@ def detect_outer_borders(mask: np.ndarray, top: HLine, bottom: HLine,
                      v_outer_side=None, v_outer_offset=None)
     vx = sorted((width - 1) - v.x_at(height / 2.0) for v in verticals)
     xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
+    xs = xs[xs < width]   # 竖线外推出图右界（史記 09 p11）时别越界；负下标原样保留，已成功的页逐字节不变
     ys = np.arange(int(height * 0.12), int(height * 0.88), 3)
     # 先测竖直外框——那一侧的墨最稳（峰值 0.48~1.00），拿它当上下的间距先验
     if len(ys) > 10 and len(verticals) >= 2:
@@ -1028,6 +1029,7 @@ def measure_book_outer_shift(results, masks, ink: float = OUTER_INK_MIN) -> dict
         if len(vx) < 2:
             continue
         xs = np.arange(int(vx[0] + 30), int(vx[-1] - 30), 2)
+        xs = xs[xs < w]
         if len(xs) < 10:
             continue
         prior = abs(res.v_outer_offset)
