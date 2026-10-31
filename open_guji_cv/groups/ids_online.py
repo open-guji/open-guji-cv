@@ -208,7 +208,7 @@ SPECS: dict[str, IdsSpec] = {
     "weiw": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.7, min_class=8, whole="hog", region=(0.25, 0.75, 0.5, 1.0), lam=1.0, size=48),
     "shan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", region=(0.0, 0.5, 0.5, 1.0), lam=1.0, size=48),
     "di": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.55, min_class=8, whole="hog", region=(0.0, 0.75, 0.5, 1.0), lam=3.0, size=64),
-    "shang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
+    "shang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.95, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
     "gai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=32, clean=True),
     "ba": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", region=(0.5, 1.0, 0.0, 1.0), lam=1.0, size=48, clean=True),
     # 凖準、宻密（2026-10-24，长尾异体对）：模板同上（已放行格＋人裁，看图剔出码位错的格），建库 build_shape_pair.py。
@@ -218,7 +218,7 @@ SPECS: dict[str, IdsSpec] = {
     # 䘮喪（2026-10-25，A24「按 IDS 重核䘮喪㣲微變𠮓」）：中部 从（䘮）／吅（喪），整字 48×48。模板＝殿本 vol04–20 已放行格（每册每字 ≤12）
     #   ＋看图改标（放行成 喪、刻 䘮 的 2 格，送审格 6 格），建库 build_shape_pair.py。按册留出 110 格（喪77 䘮33）不设门槛也 0 错，门槛沿用 0.5。
     #   㣲微 同时试过（中下 口／几）：看图只十几格作 口，取框／整字 HOG 三种设置按册留出 口 都被高把握判成 微（错例 0.9–1.4），分不开，保留码位归一。
-    "sang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "sang": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.25, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 變𠮓（2026-10-25，A24）：下部 攵（左上多一短撇）对 又。工作区码位归一 變→𠮓 让放行字全成 𠮓，放行字不当标签；
     #   标签全是 sheldon 看图（dataset variant/bian/sheldon_labels.jsonl：變 107、𠮓 624，后者 565 格是「其余下边都是又」未逐格点），
     #   建库 build_shape_pair.py --labels（𠮓 每册 ≤12 → 238）。按册留出 345 格：判成 變 的 0 错（𠮓 从没被判成 變），
@@ -251,14 +251,14 @@ SPECS: dict[str, IdsSpec] = {
     # 隱𨼆、算𮅕、闗關（2026-10-25，A24 vol21–50 首跑 V 类）：字形库没有少的一形，库排成常见形或别的字；模板＝殿本 vol21–50 已放行格
     #   （每册每字 ≤12）＋送审格看图补标，建库 build_shape_pair.py。门槛与区域见 doc/字组/ 同名卡。
     "yin": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.85, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
-    "suan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "suan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.95, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "guanm": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     # 派𣲖、奇竒、歲嵗（2026-10-26，A24 vol51–99 首跑 V 类）：模板＝殿本 vol51–99 已放行格（每册每字 ≤12）＋陪衬，首轮留出错例看图改标；
     #   按册留出 派𣲖 歲嵗 0.5 起 0 错；奇竒 陪衬 苛 判成 竒 最高 0.91 → 1.0（放行格每字 ≤160）。见 doc/字组/ 同名卡。
     "xuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.35, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True),
     "pai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
-    "qi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.0, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
+    "qi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=2.0, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "sui": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "mn": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "li": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),

@@ -191,11 +191,14 @@ _SHAPE_PAIR_NO_FIX = frozenset({"suo"})
 #: 陪衬也进模板库（判成它们＝弃权）；补放须与整理本同字。
 #: 整理本作 隠 的格与 𨼆 是同一刻形（建库并成 𨼆，`build_shape_pair.ALIAS`），码位待定前 隠 只作陪衬：已放行的 隠 不复核，整理本作 隠 不补放。
 _SHAPE_PAIR_FLOW = {
-    "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙"), lift_ref_agree=True, ref_enter=True),
+    "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙翼𢑱筆隻篤"), lift_ref_agree=True, ref_enter=True),
+    # 2026-10-31（A24 r5 未定码位异体对）：r5 这 12／6 格库首位是组外字（同會何問備…／表裘褒…），没进组；陪衬放进入口并进模板库（判成它们＝弃权），补放须与整理本同字
+    "shang": dict(tolerate=frozenset("同問會衛何間備傅偷倚簡借"), lift_ref_agree=True, ref_enter=True),
+    "sang": dict(tolerate=frozenset("表褒裘䙝棗𠐇"), lift_ref_agree=True, ref_enter=True),
     "guanm": dict(tolerate=frozenset("闡間閱閣聞闌閩開閑問闚闢"), lift_ref_agree=True, ref_enter=True),
     # vol51–99 首跑 V 类（2026-10-26）：字形库没有 𣲖，库排成 泒孤弧；竒 库常排成 青音；嵗 库排成 歲，也常排成 熾康
     "pai": dict(tolerate=frozenset("泒孤弧滅渢"), lift_ref_agree=True, ref_enter=True),
-    "qi": dict(tolerate=frozenset("青音靑苛司可"), lift_ref_agree=True, ref_enter=True),
+    "qi": dict(tolerate=frozenset("青音靑苛司可帝背"), lift_ref_agree=True, ref_enter=True),
     "sui": dict(tolerate=frozenset("熾康嚴巖咸戌戲燬"), lift_ref_agree=True, ref_enter=True),
     # 隸𨽾（2026-10-26）：整理本 隸 有 44 格被别的通道放成 𨽾（码位放错），复核改回；库常把 棣練竦 排在分差内
     "li": dict(tolerate=frozenset("隷𨽻棣練竦款羔"), ref_canon=True, lift_ref_agree=True, review_ref_agree=True),
@@ -353,7 +356,7 @@ GROUPS: dict[str, GroupSpec] = {
     "can": GroupSpec(
         id="can", name="參㕘叅", members=frozenset("參㕘叅"), backends=(),
         kind="variant", solvers=("ids",), config_dir="config/groups/can",
-        flow=FlowSpec((FREQ, _img("can")), combine="first", review_fix=True, **_rv("can")),
+        flow=FlowSpec((FREQ, _img("can")), combine="first", review_fix=True, ref_top_enter=True, **_rv("can")),
         note="异体组：字频→IDS 下块与整字 HOG 两路一致；补放与复核改码位；只在 seed_admit.group_flow 点名时生效。"),
     # —— 第二批异体组（2026-10-18 sheldon 定）：只靠字频。人裁数不够（主形 <20 或次形不为 0）时弃权、送人审，
     #    不退到 IDS／库形最近；字频表重算后数据攒够就自动放行。
@@ -499,6 +502,12 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                # 2026-10-28 sheldon 定：𠋣→倚 𪋤→麓 𮟏→邃；冥𡨋→㝠（推翻 10-2x 的 㝠→冥）；隱𨼆→隠（推翻 隠→𨼆，原 yin 刻形组撤下）
                                ("cp_yi3", "倚𠋣", (), ""), ("cp_lu4", "麓𪋤", (), ""), ("cp_sui4", "邃𮟏", (), ""),
                                ("cp_yin3b", "隱隠𨼆", (), ""),
+                               # 2026-10-31（A24 r5 未定码位异体对，sheldon 同日定「全部按预选」）：祿禄 照录刻形 祿（殿本只一种刻法）；
+                               # 其余暂归一到常见字形。码位 `禄: 祿 …` 等随「推」写中心库 codepoints.yaml。
+                               ("cp_lu4b", "祿禄", (), ""), ("cp_shou4", "壽夀", (), ""), ("cp_zan4", "贊賛", (), ""),
+                               ("cp_mo4", "黙默", (), ""), ("cp_lian2", "濂濓", (), ""), ("cp_lian2b", "廉亷", (), ""),
+                               ("cp_chu3", "楚椘", (), ""), ("cp_shuang1", "雙䨇", (), ""), ("cp_shu4c", "豎䜿", (), ""),
+                               ("cp_dou4", "鬬鬭", (), ""), ("cp_yan4", "艷艶", (), ""), ("cp_gao1b", "高髙", (), ""),
                                # 2026-10-31（A24 第 3 轮「为已定码位异体对建组」）：codepoints 早定、r5 仍有 V 类送审的 12 对，沿第 1 轮办法建码位组
                                ("cp_sheng2", "繩䋲", (), ""), ("cp_xie2", "攜𢹂", (), ""), ("cp_yuan4", "苑𫟍", (), ""),
                                ("cp_xiao3", "曉暁", (), ""), ("cp_kuan1", "寛寬", (), ""), ("cp_zeng1", "增増", (), ""),
@@ -668,7 +677,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
         id="feng", name="逄逢", members=frozenset("逄逢"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/feng",
         flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True,
-                      tolerate=frozenset("進違達運逸通遙遜途遥迄遲逕迤遴蓬𨒪"), tolerate_ref_agree=True),
+                      tolerate=frozenset("進違達運逸通遙遜途遥迄遲逕迤遴蓬𨒪遂連逯蠱逵蓮逆"), tolerate_ref_agree=True),
         note="按文意定（L1 规则，弃权查 L2 表）：逄 只作姓，其余是 逢；补放，也复核，文意 strong 才改字（同 日曰）。"),
 }
 
@@ -723,6 +732,9 @@ PROVISIONAL: dict[str, Provisional] = {
         ("cp_hui1", "徽", "徽𡽪"), ("cp_jiu1", "究", "究䆒"), ("cp_fa4", "髮", "髮髪"), 
         ("cp_shu4b", "樹", "樹𣗳"), ("cp_huai2", "懷", "懷懐"), ("cp_han2", "涵", "涵𣹢"),
         ("cp_yi3", "倚", "倚𠋣"), ("cp_lu4", "麓", "麓𪋤"), ("cp_sui4", "邃", "邃𮟏"), ("cp_yin3b", "隠", "隱隠𨼆"),
+        ("cp_lu4b", "祿", "祿禄"), ("cp_shou4", "壽", "壽夀"), ("cp_zan4", "贊", "贊賛"), ("cp_mo4", "黙", "黙默"),
+        ("cp_lian2", "濂", "濂濓"), ("cp_lian2b", "廉", "廉亷"), ("cp_chu3", "楚", "楚椘"), ("cp_shuang1", "雙", "雙䨇"),
+        ("cp_shu4c", "豎", "豎䜿"), ("cp_dou4", "鬬", "鬬鬭"), ("cp_yan4", "艷", "艷艶"), ("cp_gao1b", "高", "高髙"),
         ("cp_sheng2", "繩", "繩䋲"), ("cp_xie2", "攜", "攜𢹂"), ("cp_yuan4", "苑", "苑𫟍"), ("cp_xiao3", "曉", "曉暁"),
         ("cp_kuan1", "寛", "寛寬"), ("cp_zeng1", "增", "增増"), ("cp_zao3", "棗", "棗𬃷"), ("cp_feng4b", "奉", "奉𫯠"),
         ("cp_mao4", "貌", "貌貎"), ("cp_gao1", "臯", "臯𦤎"), ("cp_du2", "瀆", "瀆凟"), ("cp_li2b", "梨", "梨棃"),

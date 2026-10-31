@@ -157,7 +157,7 @@ def test_shape_pairs_flow_only_and_banks_load():
         p = root / g.config_dir / "ids_bank.json"
         assert p.stat().st_size < 1_000_000
         d = json.loads(p.read_text(encoding="utf-8"))
-        assert set(members) == set(d["templates"]) and d["size"] == sp.size
+        assert set(members) <= set(d["templates"]) and d["size"] == sp.size   # 陪衬也进库（shang：同會何問…）
         bank = O.load_bank(p)
         for ch in members:
             t = (np.asarray(bank[ch][0]) * 255).astype(np.uint8)
