@@ -135,3 +135,26 @@ def test_rebuild_with_worker_pool_equals_single_process(tmp_path, monkeypatch):
     a, b = dump(tmp_path / "one.db"), dump(tmp_path / "pool.db")
     assert a["derived"] and len(a["derived"]) == 3 * len(rows)
     assert a == b
+
+
+def test_export_keeps_own_instances_under_borrowed_only_source(two, tmp_path):
+    """冷启动：本书库是空的，借来库的 source（v2）被记成「只属于借来库」；之后本书人裁入库的实例
+    也挂在 v2 下，导出要留下它们（史記文淵閣本 2026-10-31：3,215 例被整个 source 跳过）。"""
+    siku, _ = two
+    empty = tmp_path / "empty.db"
+    db0 = GlyphDB(empty)
+    db0.set_book_edition("book-c")
+    export_store(db0, tmp_path / "own0")
+    db0.close()
+    rebuild_from_store(tmp_path / "own0", tmp_path / "m.db", extra_stores=[siku])
+    db = GlyphDB(tmp_path / "m.db")
+    db.admit_instance("v2:01:3:1:1", "以", _png(5), provenance="human")
+    out = tmp_path / "re"
+    c = export_store(db, out)
+    db.close()
+    ids = {json.loads(l)["instance_id"] for f in (out / "instances").glob("*.jsonl")
+           for l in open(f, encoding="utf-8")}
+    assert ids == {"v2:01:3:1:1"} and c["instances"] == 1 and c["patches"] == 1
+    assert not (out / "events" / "v2.jsonl").exists()        # 借来 source 的事件照旧不导
+    r = rebuild_from_store(out, tmp_path / "own.db")          # 导出再重建：本书刻例在
+    assert r["instances"] == 1
