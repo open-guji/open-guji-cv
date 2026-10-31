@@ -403,6 +403,12 @@ GROUP_CSS = r"""
 .tile[data-v="other"]{border-left-color:var(--ochre)} .tile[data-v="other"] .tl{color:var(--ochre)}
 .tile[data-v="unclear"]{border-left-color:var(--faint)}
 .ctrl2{display:flex;gap:8px;margin:8px 0 0}
+.g-note{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px}
+.g-note input{min-height:40px;width:7.5rem;padding:0 8px;border:1px solid var(--rule-hard);border-radius:3px;
+  background:var(--ground);color:var(--ink);font-family:var(--serif);font-size:18px}
+.g-note .chip{min-height:36px;min-width:36px;padding:0 8px;border:1px solid var(--rule-hard);border-radius:3px;
+  background:var(--surface);color:var(--ink);font-family:var(--serif);font-size:18px;cursor:pointer}
+.g-note small{color:var(--muted);font-size:11.5px}
 """
 
 GROUP_JS = r"""
@@ -434,7 +440,8 @@ const BODY = `
   <div class="ctrl2"><div class="seg" id="kfilter">
       <button data-k="" aria-pressed="true">全部类</button>
       <button data-k="ref" aria-pressed="false">有整理本字</button>
-      <button data-k="cand" aria-pressed="false">整理本缺字</button>
+      <button data-k="pua" aria-pressed="false">未收字（按码位）</button>
+      <button data-k="cand" aria-pressed="false">其它缺字</button>
   </div></div>
   <div class="list" id="list"></div>
 </div>
@@ -456,7 +463,7 @@ const groups = () => _groups || (_groups = (() => {
   });
   return [...m.values()].sort((a, b) => b.cells.length - a.cells.length || a.key.localeCompare(b.key));
 })());
-const okVal = r => r.kind === 'ref' ? 'ref' : 'pick:' + r.grp;
+const okVal = r => r.kind === 'ref' ? 'ref' : r.kind === 'pua' ? 'same' : 'pick:' + r.grp;
 const CYCLE = r => [okVal(r), 'unclear', 'seg', 'other'];
 function vclass(r, v){
   if (!v) return '';
@@ -468,7 +475,7 @@ function vlabel(r, v){
   if (!v) return '';
   if (v === okVal(r)) return '✓ 对';
   if (v.startsWith('pick:')) return '→ ' + v.slice(5);
-  return {unclear: '看不清', seg: '切分有问题', other: '另有其字', ref: '✓ 对'}[v] || v;
+  return {unclear: '看不清', seg: '切分有问题', other: '另有其字', ref: '✓ 对', same: '✓ 同字'}[v] || v;
 }
 function short(ctx){
   const i = ctx.indexOf('【'), j = ctx.indexOf('】');
@@ -484,19 +491,28 @@ function tile(r){
 }
 function ghead(g){
   const n = g.cells.length, d = g.cells.filter(r => verdictOf(r.id)).length;
-  const kind = g.kind === 'ref' ? '整理本字' : '整理本缺字 · 5b 首选字';
+  const kind = g.kind === 'ref' ? '整理本字' : g.kind === 'pua' ? '整理本未收字（同码位＝同一个字）' : '整理本缺字 · 5b 首选字';
   const lib = g.kind === 'ref' ? `　库内 <b>${g.cells[0].ref_n_lib}</b> 例` : '';
   return `<span class="big">${esc(g.key)}</span><div class="gm"><b>${n}</b> 格　${kind}${lib}<br>已裁 <b>${d}</b> / ${n}</div>
-    <div class="gbtns"><button class="gbtn ok" data-a="ok">整组都对</button><button class="gbtn" data-a="unclear">整组看不清</button></div>`;
+    <div class="gbtns"><button class="gbtn ok" data-a="ok">${g.kind === 'pua' ? '整组同字' : '整组都对'}</button><button class="gbtn" data-a="unclear">整组看不清</button></div>`;
+}
+function gnote(g){
+  const cnt = {};
+  g.cells.forEach(r => [r.lib_top].concat((r.r5 || []).slice(0, 1)).forEach(ch => { if (ch) cnt[ch] = (cnt[ch] || 0) + 1; }));
+  const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 4).map(x => x[0]);
+  const cur = (verdictOf('N:' + g.key) || '').replace(/^char:/, '');
+  return `<div class="g-note"><input type="text" data-note="${esc(g.key)}" value="${esc(cur)}" placeholder="这个字是…" autocomplete="off">
+    ${top.map(c => `<button class="chip" data-chip="${esc(c)}" title="库首选或 5b 里出现最多的字">${esc(c)}</button>`).join('')}
+    <small>输入近似字，没有就留空；可写 IDS（如 ⿰言反）</small></div>`;
 }
 function card(g){
   return `<article class="g-card" data-id="${esc(g.id)}"><div class="g-head">${ghead(g)}</div>
-    <div class="tiles">${g.cells.map(tile).join('')}</div></article>`;
+    ${g.kind === 'pua' ? gnote(g) : ''}<div class="tiles">${g.cells.map(tile).join('')}</div></article>`;
 }
 let filter = 'todo', kfilter = '';
 function visibleRows(){
   return groups().filter(g => (!kfilter || g.kind === kfilter) &&
-    (filter === 'all' || (filter === 'done') === g.cells.every(r => verdictOf(r.id))));
+    (filter === 'all' || (filter === 'done') === (g.cells.every(r => verdictOf(r.id)) && (g.kind !== 'pua' || !!verdictOf('N:' + g.key)))));
 }
 function groupOf(art){ return groups().find(g => g.id === art.dataset.id); }
 function repaint(art, r){
@@ -509,8 +525,16 @@ function repaint(art, r){
   art.querySelector('.g-head').innerHTML = ghead(g);
   tally();
 }
+function setNote(key, val){
+  val = (val || '').trim();
+  if (val) state['N:' + key] = {v: 'char:' + val, t: Date.now()}; else delete state['N:' + key];
+  persist();
+}
+document.addEventListener('input', e => { const i = e.target.closest('input[data-note]'); if (i) setNote(i.dataset.note, i.value); });
 document.addEventListener('click', e => {
-  let b = e.target.closest('#filter button');
+  let b = e.target.closest('.chip');
+  if (b){ const i = b.closest('.g-note').querySelector('input'); i.value = b.dataset.chip; setNote(i.dataset.note, i.value); return; }
+  b = e.target.closest('#filter button');
   if (b){ filter = b.dataset.f; [...b.parentElement.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); return; }
   b = e.target.closest('#kfilter button');
   if (b){ kfilter = b.dataset.k; [...b.parentElement.children].forEach(x => x.setAttribute('aria-pressed', String(x === b))); draw(); return; }
