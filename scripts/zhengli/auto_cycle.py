@@ -80,8 +80,11 @@ def decide(ws: Path, book: str) -> dict:
         return {"verdict": "no-main", "why": "册没有 main 产物包", "online_rev": rev}
     rev_pack = next((r for r in rows if r["label"] == rp.pack_label(rev)), None)
     base = {"online_rev": rev, "main": main["label"], "main_time": main["time"]}
-    if rev_pack and rev_pack["time"] >= main["time"]:
-        return {**base, "verdict": "fresh", "why": f"线上单 {rev} 的出单版包 {rev_pack['time']} 不早于 main 包 {main['time']}"}
+    # 包的时间是它跑完存库的时间，不是标 main 的时间（r5 先存、后标 main 的情形会反过来），所以不比时间：
+    # 出单版包的备注记了「基于 main 包 <标签>」，与现在的 ★main 标签相同才算新；备注里没有（旧单）一律当过期。
+    m = re.search(r"基于 main 包 (\S+)", (rev_pack or {}).get("note", ""))
+    if m and m.group(1) == main["label"]:
+        return {**base, "verdict": "fresh", "why": f"线上单 {rev} 就是基于现在的 main 包出的"}
     st = None
     for _ in range(4):                       # 网站 KV 偶发连接被重置，隔几秒重试
         p = subprocess.run([sys.executable, HERE / "proof_cycle.py", "status", "--book", book, "-w", str(ws)],

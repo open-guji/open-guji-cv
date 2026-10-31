@@ -264,6 +264,8 @@ def cmd_apply(a) -> int:
     else:
         sandbox, env_sb = rp.products_root(ws), env
         log.note("ⓘ 没有出单版产物包：在本机产物根上重跑（要自己担保本机产物就是出单那一版）")
+    if plan.get("pack"):                    # 出单版包的备注记下来源包，auto_cycle 靠它判断线上单是不是基于现在的 main
+        env_sb = {**env_sb, "GUJI_ISSUE_SRC_PACK": plan["pack"]}
     env_eng = {**env_sb, "PYTHONPATH": str(engine)} if engine != CV else env_sb
     # 旧引擎经 engine_run.py 跑：读中心库时跳过它不认的新事件种类（不然一推新种类，每页都失败）
     guji_eng = [sys.executable, HERE / "engine_run.py"] if engine != CV else GUJI

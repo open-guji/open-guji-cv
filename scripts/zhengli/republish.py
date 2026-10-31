@@ -538,7 +538,8 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
         return None
     label = pack_label(rev)
     args = ["products", "pack", "push", book, "--label", label,
-            "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"]
+            "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"
+            + (f"；基于 main 包 {os.environ['GUJI_ISSUE_SRC_PACK']}" if os.environ.get("GUJI_ISSUE_SRC_PACK") else "")]
     env = {**os.environ, "GUJI_WORKSPACE": str(ws)}
     engine = getattr(a, "engine", None)
     if engine and Path(engine).resolve() != CV.resolve():
