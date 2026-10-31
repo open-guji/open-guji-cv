@@ -41,7 +41,8 @@ manager_hint
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 if [ -n "$WSREPO" ]; then
   GW1=$HOME/${WSREPO##*/}
-  if [ -d $GW1/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/$WSREPO $GW1; then
+  # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功，退不回旧仓（10-31 #1203 起的验收单就这样失败）
+  if [ -d $GW1/.git ] || { echo "== 克隆工作区"; git clone -q --depth 1 https://github.com/$WSREPO $GW1; }; then
     GW=$GW1
     git -C $GW pull -q --ff-only origin main || true
     WS=$GW; export GUJI_WORKSPACE=$WS
