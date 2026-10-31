@@ -113,6 +113,19 @@ def engine_for(cv_commit: str) -> Path:
     return d
 
 
+TRANSIENT = ("Connection reset", "HTTP Error 5", "timed out", "Temporary failure", "RemoteDisconnected")
+
+
+def sh(cmd, tries: int = 3, **kw) -> subprocess.CompletedProcess:
+    """跑命令；输出里是网络瞬时错误（连接被重置、5xx）才重试，其余失败原样返回。"""
+    for i in range(tries):
+        r = subprocess.run([str(c) for c in cmd], capture_output=True, text=True, **kw)
+        if r.returncode == 0 or not any(t in (r.stdout + r.stderr) for t in TRANSIENT):
+            return r
+        time.sleep(10 * (i + 1))
+    return r
+
+
 def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> dict:
     env = {**os.environ, "GUJI_WORKSPACE": str(ws), "PYTHONIOENCODING": "utf-8"}
     label, rev = d["main"], d["online_rev"]
@@ -121,11 +134,10 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
         return {"verdict": "blocked", "why": f"main 包 {label} 的 manifest 没有 cv_commit"}
     eng = engine_for(man["cv_commit"])
     # 页表／原图：登记过的册从 R2 取，几秒
-    if subprocess.run([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env, capture_output=True).returncode:
+    if sh([*GUJI, "source", "pull", book, "-w", str(ws)], cwd=CV, env=env).returncode:
         return {"verdict": "blocked", "why": "guji source pull 失败"}
-    pl = subprocess.run([sys.executable, HERE / "proof_cycle.py", "plan", "--book", book, "-w", str(ws), "--no-pull",
-                         "--pack", label, "--engine", str(eng), "--reviewer", reviewer],
-                        cwd=CV, env=env, capture_output=True, text=True)
+    pl = sh([sys.executable, HERE / "proof_cycle.py", "plan", "--book", book, "-w", str(ws), "--no-pull",
+             "--pack", label, "--engine", str(eng), "--reviewer", reviewer], cwd=CV, env=env)
     plan_path = ws / "reports" / book / "_cycle" / rev / "plan.json"
     if pl.returncode or not plan_path.exists():
         return {"verdict": "blocked", "why": "plan 失败：" + (pl.stdout + pl.stderr).strip()[-300:]}
@@ -133,11 +145,16 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
     sandbox = ws / "_packs" / label
     if not (sandbox / book).is_dir():
         return {"verdict": "blocked", "why": f"plan 之后没有产物沙箱 {sandbox}"}
-    ap = subprocess.run([sys.executable, HERE / "proof_cycle.py", "apply", "--book", book, "-w", str(ws),
-                         "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
-                         "--reuse-products", str(sandbox), "--no-web"],
-                        cwd=CV, env=env, capture_output=True, text=True)
+    ap = sh([sys.executable, HERE / "proof_cycle.py", "apply", "--book", book, "-w", str(ws),
+             "--plan", str(plan_path), "--hash", plan["hash"], "--book-text", str(book_text),
+             "--reuse-products", str(sandbox), "--no-web"], cwd=CV, env=env)
     log = plan_path.parent / "执行记录.md"
+    out = ap.stdout + ap.stderr
+    if ap.returncode and "book-text 这步失败" in out:
+        # 本地检查没过（多半是标点／实体锚点在新切分里不存在）：线上单还没换（这步在推库之前）；清掉未提交的升版改动，交 A33
+        subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
+        return {"verdict": "need-A33", "why": "book-text 本地检查不过（锚点落空等），线上单未换；交 A33 走 punct_redo／分支 PR",
+                "log": str(log)}
     if ap.returncode:
         return {"verdict": "blocked", "why": f"apply 失败（退出码 {ap.returncode}）：" + (ap.stdout + ap.stderr).strip()[-300:],
                 "log": str(log)}
@@ -199,7 +216,7 @@ def main(argv=None) -> int:
             print(f"{b}\t发布/冒烟\t{s}", flush=True)
             with tsv.open("a", encoding="utf-8") as f:
                 f.write(f"{b}\t发布冒烟\t\t\t{s}\n")
-    return 1 if any(r["verdict"] == "blocked" for r in rows.values()) else 0
+    return 1 if any(r["verdict"] in ("blocked",) for r in rows.values()) else 0
 
 
 if __name__ == "__main__":
