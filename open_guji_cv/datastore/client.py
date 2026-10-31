@@ -195,9 +195,11 @@ class WorkerSource:
             try:
                 page = self._call("GET", f"/v1/tables/{table}", query=q, tries=2)
             except CentralError as e:
-                if e.status != 503 or q["limit"] <= 100:
+                if e.status not in (500, 503) or q["limit"] <= 50:
                     raise
-                q["limit"] //= 2                   # Worker 超资源（1102）：页减半再试
+                # Worker 超资源（1102 回 503）、整页太大读挂（files 表整文件行，史記 988g3f0wsu 2000 行一页回 500，
+                # 2026-10-31 任务库执行方 db-pull 全挂）：页减半再试
+                q["limit"] //= 2
                 continue
             yield from page["rows"]
             if not page.get("next"):
