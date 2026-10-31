@@ -45,15 +45,24 @@ def product_anchor(products, step: str, ids: dict) -> dict | None:
     pg = ids.get("page")
     if not step or pg is None:
         return None
+    out: dict = {}
     try:
         man = products.manifest(ids.get("book") or "", step)
         rec = man.get(page_key(int(pg))) if man else None
         fp = getattr(rec, "fingerprint", None)
-        if not fp:
-            return None
-        return {"product_key": {"step": step, "key": page_key(int(pg)), "fingerprint": fp}}
+        if fp:
+            out["product_key"] = {"step": step, "key": page_key(int(pg)), "fingerprint": fp}
     except Exception:                                    # noqa: BLE001
-        return None
+        pass
+    # 换图源（GUJI-748 §六）：事件锚要带产物自己的页表 rev，否则写入口的 rev 闸（RevGate）会把
+    # 切线／夹注等非逐格事件整条拒掉（enrich_events 只给 unit=cell 补 source_rev）。
+    try:
+        rev = products.source_rev(ids.get("book") or "")
+        if rev is not None:
+            out["source_rev"] = rev
+    except Exception:                                    # noqa: BLE001
+        pass
+    return out or None
 
 
 def check_cell_review(log, batch: str, events: list[dict]) -> None:
