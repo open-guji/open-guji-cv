@@ -56,6 +56,31 @@ check` 健康检查失败会自动回滚，见下）。通过后把草稿贴进�
 
 - `cv-2026.09.26-base`
 
+## v0.6.0
+
+对比 `v0.5.32`。用户 2026-10-31 定升 MINOR：切分代码模块化（共用原语库 `seg/`、各套书自管 `books/`）和一批功能拆分出去。tag 经 ai-team 中转站打在 main 的发版合并提交上。
+
+### Added
+- 切分模块化 M2–M4：共用原语库 `seg/`（lines、grid、polyline、frame_types、seam、cut_select、warp、profile …）、每套书自管的 `books/<套书>/`（殿本 siku_zongmu、史記 shiji_wyg、增廣幼學 zengguang_youxue、北行日錄 beixing）、套书登记 `core/seg_set.py`、每套书的样页单 `samples.yaml` 与 `scripts/seg_samples.py` 改前改后对比。
+- 任务库按书 ID 区分：`jobs.job.book_id`、`guji_jobs submit/ls --book-id`；网站「重跑任务」表多「书 ID」列；`spec.WS_REPOS` 登记「书 ID → 工作区仓」。
+- 精校前移：存包查纯净性、出单图源门、任务库按字形库差分增量重算（A2–A4）。
+- `align_ref` 近簇合并 `anchor_merge_gap`、replace 段长上限 `replace_max_len`（按册开，缺省关）；页钉位 `page_pins`；keben_free 第八轮块格式 `fmt`。
+
+### Changed
+- 控制台拆成独立包 `guji-console`、manager 部分拆出（用 `guji.commands` 插件命令并入）。
+- 殿本四庫總目工作区迁到独立仓 `guji-workspace/96mid1ogzk-si-ku-zong-mu`（仓根即工作区）；执行方按册所属的书取工作区。
+- 同册互斥锁改成（书 ID，册号）：不同书的 vol01 可以并跑。
+
+### Fixed
+- 执行方：加列后老连接计划失效自动重连；连续 3 单环境类失败暂停领单；`seg_samples --base` 取提交而不是 tag 对象；`rerun_prep.sh` 按工作区 `.central.json` 找册 yaml。
+- 史記前三册职名页、卷端标题按整理本字数切，列端字不再被当框线抹掉。
+- 纯净性 `describe` 下沉到 `datastore`，修架构守卫。
+
+### Removed
+- 控制台代码（`open_guji_cv/console/`，随 guji-console 搬走）。
+
+影响：`guji release check HEAD --against v0.5.32` 静态比对，**没有任何 Step 的 `code_hash` 变**（模块化各步登记「指纹逐位不变」）。组合验收：切分样页 v0.5.32 对 rc/v0.6.0 逐页比，殿本 vol04／08／16／40／46／48 与北行古本 bxgb 共 7 册、比对产物页 1,174 页，cells／text／state／geom 全部 0 列变化。**未比**：史記与增廣幼學（工作区不在旧总仓，没来得及按新仓提单）、北行日錄（本机跑）、vol01（已冻结，当前代码拒跑）、vol06（册 yaml 的 seed_admit 参数比旧版新，旧版 cv 校验不过）。全量测试 4268 过；`test_frame_pin::test_real_page_tight_boxes_do_not_clip_char_tops` 在已发的 v0.5.32 上就红，非本版引入。
+
 ## v0.5.0
 
 对比 `v0.4.9`。用户 2026-10-20 定升 MINOR：切分 `layout_prior` 改了命中格位表各册的缺省输出，值得重跑。tag 经 ai-team 中转站打在 main 的发版合并提交上（annotated）。
