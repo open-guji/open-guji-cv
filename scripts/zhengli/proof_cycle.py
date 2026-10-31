@@ -286,9 +286,9 @@ def cmd_apply(a) -> int:
     export = out / "export"
     cmd = [sys.executable, CV / "scripts/export_guji_format.py", "--products", sandbox, "--book", book,
            "--chapter", plan["chapter"], "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
-    for flag, f in (("--meta", CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"),
+    for flag, f in (("--meta", rp.meta_file(book, out)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
-        if f.exists():
+        if f and Path(f).exists():
             cmd += [flag, f]
     if not log.step("导出 char／cord", cmd, cwd=CV, env=env_sb):
         return 1
@@ -322,6 +322,8 @@ def cmd_apply(a) -> int:
         issue += ["--engine", engine]
     if a.ack_unlanded_votes:
         issue += ["--ack-unlanded-votes", a.ack_unlanded_votes]
+    if getattr(a, "no_web", False):          # 批量时每册不单独触发网站发布，由 auto_cycle 最后统一发一次
+        issue += ["--no-publish-web"]
     cv_commit = plan.get("engine_commit") if engine != CV else plan["pack_cv_commit"]   # 重跑用的是哪份 cv 就记哪份
     if cv_commit:
         issue += ["--cv-commit", cv_commit]
@@ -466,6 +468,7 @@ def main(argv=None) -> int:
     p.add_argument("--ack-unlanded-votes", help="旧单还有票没落成人裁（如图形格）也照换单；写明原因，原样交给 republish issue")
     p.add_argument("--allow-cv-drift", action="store_true", help="本机 cv 与出单版不同也照跑重跑那一步")
     p.add_argument("--dry-run", action="store_true", help="只核计划、打出要跑的命令，不执行")
+    p.add_argument("--no-web", action="store_true", help="出单、推库、升 book-text，但不触发网站发布、不冒烟（批量用，最后统一发）")
     p = sp.add_parser("audit", help="只读：一张单的 G0 票账（写入／一致／看不出／挂起／未落），有未落退出码 1")
     p.add_argument("--book", required=True)
     p.add_argument("-w", "--workspace", required=True)

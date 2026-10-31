@@ -56,6 +56,26 @@ sys.path.insert(0, str(HERE))
 import sprite_pub
 
 
+def meta_file(book: str, out_dir: Path) -> Path | None:
+    """导出用的 meta：仓里有 meta_<册>.json 就用它；没有（vol11 之后多数册没备）按四庫總目殿本的固定模板现生成，
+    只填册序号（与 meta_vol15.json 逐字段一致）。生成到 out_dir，不进仓。"""
+    f = CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"
+    if f.exists():
+        return f
+    m = re.fullmatch(r"vol(\d+)", book)
+    if not m:
+        return None
+    n = int(m.group(1))
+    meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
+                         "volume": {"index": n, "cv_book": book},
+                         "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    g = out_dir / f"meta_{book}.json"
+    g.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
+    return g
+
+
 def chapter_of(book: str) -> str:
     return re.sub(r"\D", "", book).zfill(3)
 
@@ -932,9 +952,9 @@ def cmd_from_pack(a) -> int:
     export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
     cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
            "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
-    for flag, f in (("--meta", CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"),
+    for flag, f in (("--meta", meta_file(book, export.parent)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
-        if f.exists():
+        if f and Path(f).exists():
             cmd += [flag, f]
     if run(cmd, cwd=CV, env=env).returncode:
         return 1
