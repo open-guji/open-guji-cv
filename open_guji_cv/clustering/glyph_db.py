@@ -854,11 +854,13 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     for (src,) in db.conn.execute(
             "SELECT source_id FROM sources WHERE COALESCE(kind,'woodblock') "
             "!= 'font' ORDER BY 1"):
-        if src in b_srcs:
-            continue
-        n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
-            "SELECT source_id, batch, seq, ts, op, payload FROM events "
-            "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
+        # 只属于借来库的 source：事件不导；实例照样逐条看（下面按 b_ids 剔借来的）——本书人裁入库的实例
+        # 也挂在通用 source（如 "v2"）下，冷启动时这个 source 只有借来的实例、被记成「只属于借来库」，
+        # 整个跳过就把本书自己的人裁刻例一起丢了（史記文淵閣本 2026-10-31：3,215 例没进真源）。
+        if src not in b_srcs:
+            n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
+                "SELECT source_id, batch, seq, ts, op, payload FROM events "
+                "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
         rows = cur.execute(
             """SELECT * FROM instances WHERE source_id=? AND (label IS NOT NULL
                  OR instance_id IN (SELECT instance_id FROM exemplars))
@@ -879,7 +881,8 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
             written.add(name)
             n_png += 1
             meta.append(d)
-        n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
+        if meta or src not in b_srcs:
+            n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
     # 清孤兒：上輪導出遺留、已不被任何實例引用的 PNG（冪等覆寫的補全）
     n_orphan = 0
     for f in (out / "patches").glob("*.png"):
