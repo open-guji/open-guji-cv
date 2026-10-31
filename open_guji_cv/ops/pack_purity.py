@@ -110,24 +110,4 @@ def check(book_id: str, products_root: Path, src=None) -> dict:
             "checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
 
 
-def describe(purity: dict | None) -> str:
-    """一句中文：给 promote 的拒绝理由、存包时的打印用。"""
-    if not purity:
-        return "没有纯净性记录（老包或存包时没查）"
-    if purity.get("error"):
-        return f"纯净性没查成：{purity['error']}"
-    bits = []
-    if purity.get("code_mixed"):
-        bits.append("代码对不上（混版本）：" + "、".join(f"{s} {n} 页" for s, n in purity["code_mixed"].items()))
-    s = purity.get("source") or {}
-    st = s.get("status")
-    if st == "mismatch":
-        bits.append(f"图源对不上：产物页表 r{s.get('products_rev')}，册 yaml source_rev {s.get('yaml_rev')}"
-                    + (f"，原图 sha 不符 {len(s['bad_pages'])} 页（{s['bad_pages'][:5]}…）" if s.get("bad_pages") else ""))
-    elif st == "unknown":
-        bits.append("产物没记出自哪一版页表（_source.json 缺），原图来历不明")
-    elif st == "unpinned":
-        bits.append("册 yaml 没钉 source_rev（只记，不算不纯）")
-    if purity.get("pure"):
-        return "纯净" + (f"（{'；'.join(bits)}）" if bits else "")
-    return "不纯：" + "；".join(bits)
+from ..datastore.packs import describe_purity as describe  # noqa: E402  —— 给 promote 的拒绝理由、存包时的打印用；实现在低层 datastore.packs（标 main 也要用，不能反向依赖 ops）
