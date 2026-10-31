@@ -1133,8 +1133,22 @@ class RowSegmentStep(Step):
         if not cols:
             return pc
         got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols).columns if cc.ok}
-        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w,
-                         columns=[got.get(cc.col, cc) for cc in pc.columns])
+        out = []
+        for cc in pc.columns:
+            new = got.get(cc.col)
+            if new is None:
+                out.append(cc)
+                continue
+            # 格号沿用格网切出的起格（标题行在格网里的起始格，与格位表、整理本格位一致），
+            # 职名分支自己从 1 数，下游按格号对整理本会错位
+            first = [c.slot for c in cc.cells if c.kind != "blank" and c.slot >= 1]
+            off = min(first) - 1 if cc.ok and first else 0
+            if off:
+                new = new.model_copy(update=dict(
+                    n_body_slots=new.n_body_slots + off,
+                    cells=[c.model_copy(update=dict(slot=c.slot + off, pos=c.pos + off)) for c in new.cells]))
+            out.append(new)
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
 
 
     @staticmethod
