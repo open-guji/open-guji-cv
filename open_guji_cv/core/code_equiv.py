@@ -110,6 +110,11 @@ _SP_CP = ("切分模块化第 3 步（六）：utils/column_projection 拆成三
           "warp_page_columns 原样搬成 books/siku_zongmu/column.py；column_triage 搬 books/siku_zongmu、locate_gutter 搬 seg（只改 import）。"
           "四步 code_deps 换成三块；算法未动；拆前拆后全部 Step 与闸的 code_hash 逐位相同（对 origin/dev eef311e），2026-10-30")
 
+_SJ_780 = ("史記文淵閣本前三册切分（#780）在 Step 壳加缺省关的开关：row_segment 的 roster_ref_corpus／roster_ref_pins（职名页、"
+           "卷端标题列按整理本字数重切，只史記套书实现钩子）、cell_shrink／extractor 的 frame_line_max_off、jiazhu_end_halves；"
+           "开关关着时 row_segment、cell_shrink 在殿本 vol01 43 页（每 6 页取 1，加职名页 87–130 每 3 页）与 vol06 37 页"
+           "（每 4 页取 1）上与 origin/dev e2cb245 产物逐字节相同；scripts/code_equiv.py check，2026-10-31")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -333,6 +338,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="73ff9002ed6ab67e0b617a0a459d68dbb69e18cea5c8d1d43cc9be3508f6a23d",
           old="9b98ee76d1a45032e014e3d385297dac192f3a07e2b0e0de7b96f226e716580b",
           evidence=_SP_CP),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="9aaf71e13388c447b41ed3f9723ea805b1e193dac238b5cf7cc26788b9c1c7ce",
+          old="9183257430cb19c877746f9ca8d5f78c54c8290baa7a18513778d3711d7a27af",
+          evidence=_SJ_780),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="388770763eaa474c4989c4c7068edd4c742e7ad271208e7ef0289435d3131488",
+          old="1010e8943e3f1519b71f4659d25603f5f1f00a364dfec29018e2168d29c0b822",
+          evidence=_SJ_780),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="1cb1977e26c99263aee9fe5e4bbd211c8d644a2d3eaf5610ef5ea9ac47dafcdc",
+          old="4fbb1535a764d403f566aa1ce7c00bdbf82a082a1c05dcaec03a379fa0facff7",
+          evidence=_SJ_780),
 )
 
 
