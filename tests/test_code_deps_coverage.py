@@ -35,6 +35,8 @@ NOT_IN_FP: dict[tuple[str, str], str] = {
     ("open_guji_cv.steps.invert_detect", "open_guji_cv.utils.preclean"): "只解析预处理后的原图路径",
     ("open_guji_cv.steps.border_detect", "open_guji_cv.feedback.lookup"):
         "只读人裁逐列抬头（head-raise-columns）；裁决不进指纹、靠该页显式重跑生效，同 row_segment 读 manual-cells（#706）",
+    ("open_guji_cv.steps.row_segment", "open_guji_cv.steps.context_decide"):
+        "只借 corpus_fingerprint 算整理本文件指纹（roster_ref_fingerprint 进参数指纹），不影响切分",
 }
 
 #: 存量缺口（2026-10-23 普查）：搭车补，只减不加。
