@@ -107,3 +107,28 @@ def test_top_off_center_and_noise_abstain():
         g[y:y + 4, x:x + 5] = 0
     assert count_bars(g)[0] is None
     assert count_bars(np.full((40, 40), 255, np.uint8))[0] is None
+
+
+# —— 十士数横（ss，2026-11-01） ——
+
+from open_guji_cv.groups.bars import ss_count  # noqa: E402
+
+
+def _cross(*bars, h=100, w=100):
+    """竖画居中，横条 (y0, 厚, x0, x1)。"""
+    g = np.full((h, w), 255, np.uint8)
+    g[2:h - 2, 46:54] = 0
+    for y0, t, x0, x1 in bars:
+        g[y0:y0 + t, x0:x1] = 0
+    return g
+
+
+def test_ss_one_bar_is_shi10_two_bars_is_shi4():
+    assert ss_count(_cross((30, 7, 4, 96))) == ("十", "one")
+    assert ss_count(_cross((28, 6, 25, 75), (86, 7, 4, 96))) == ("士", "two")
+
+
+def test_ss_one_bar_near_bottom_and_close_bars_abstain():
+    assert ss_count(_cross((85, 7, 4, 96)))[0] is None                  # 横在底部：切碎的字
+    assert ss_count(_cross((30, 6, 4, 96), (40, 6, 4, 96)))[0] is None  # 两横挤在一起
+    assert ss_count(np.full((40, 40), 255, np.uint8))[0] is None

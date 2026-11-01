@@ -209,3 +209,51 @@ def count_bars(gray: np.ndarray) -> tuple[str | None, str]:
             return None, "border"
         return "二", "two"
     return None, f"n{len(bars)}"
+
+
+# —— 十士 数横（ss，2026-11-01 A24「压低剩余 V 与 N 类送审」） ——
+#
+# 十＝一横一竖，士＝两横一竖。字块里先取横向膨胀后的最大连通域（把被竖画断开的横连回来），逐行找最长连续墨，
+# 够长（≥0.45×字块宽）的行成带：一条带、横下面的竖还有 ≥30% 字高、带不厚（<25% 字高）→ 十；
+# 两条带、中间留白 ≥12% 字高 → 士；其余弃权。殿本已放行的 23,246 格（十 17,316、士 5,930；vol20–99 抽 3,000）
+# 单独量横错 0.4%，错的全是列尾格把栏框线收进来当了第二横（十量成士）；所以只当「证据」用，补放须整理本也同意（`lift_ref_agree`）。
+SS_FRAC = 0.45
+SS_BELOW_MIN = 0.3
+SS_THICK_MAX = 0.25
+SS_GAP_MIN = 0.12
+
+
+def ss_count(gray: np.ndarray) -> tuple[str | None, str]:
+    """十士数横 → (「十」|「士」|None, 理由)。理由：one／two，或弃权原因（nomain、one_odd、two_close、n<横数>）。"""
+    cv2 = _cv2()
+    g = np.asarray(gray)
+    if g.ndim == 3:
+        g = cv2.cvtColor(g, cv2.COLOR_BGR2GRAY)
+    if g.dtype != np.uint8:
+        g = g.astype(np.uint8)
+    _, b = cv2.threshold(g, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    m = _main_cc(b > 0)
+    if m is None:
+        return None, "nomain"
+    H, W = m.shape
+    L = np.array([_longest_run(r, _GAP) for r in m])
+    on = L > SS_FRAC * W
+    bands, y = [], 0
+    while y < H:
+        if on[y]:
+            y0 = y
+            while y < H and on[y]:
+                y += 1
+            bands.append((y0, y - 1))
+        else:
+            y += 1
+    if len(bands) == 1:
+        y0, y1 = bands[0]
+        if (H - 1 - y1) / H >= SS_BELOW_MIN and (y1 - y0 + 1) < SS_THICK_MAX * H:
+            return "十", "one"
+        return None, "one_odd"
+    if len(bands) == 2:
+        if (bands[1][0] - bands[0][1]) >= SS_GAP_MIN * H:
+            return "士", "two"
+        return None, "two_close"
+    return None, f"n{len(bands)}"

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -294,6 +294,13 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/wxs",
         flow=FlowSpec((CTX,), review=True),
         note="按文意定（只有 L1 规则）。"),
+    # 十士（2026-11-01，A24「压低剩余 V 与 N 类送审」）：第 1 轮 g18-r1 N 类 26 格，库 十士 cov 都是 0.999 以上互相咬住，护栏 conflict；
+    #   看图 26 格全是十，整理本也都作十。十＝一横一竖、士＝两横一竖，数横（`bars.ss_count`）；补放须整理本同字（整理本缺位送审）。
+    "ss": GroupSpec(
+        id="ss", name="十士", members=frozenset("十士"), backends=(),
+        kind="near_form", solvers=("image",), config_dir="config/groups/ss",
+        flow=FlowSpec((SS_BARS,), combine="first", lift_ref_agree=True), overlaps=("ts", "sb"),
+        note="形近不同义，按数横定（十一横一竖，士两横一竖）；补放须与整理本（缺位用坐标对位字）同字，只补放不复核。与 土士 ts、十卜 sb 共用「士」「十」。"),
     "wm": GroupSpec(
         id="wm", name="未末", members=frozenset("未末"),
         backends=(),
