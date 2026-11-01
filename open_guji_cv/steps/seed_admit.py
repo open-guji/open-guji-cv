@@ -121,6 +121,16 @@ class SeedAdmitParams(BaseModel):
     （`doubts` 记 `human_unbound`，`evidence.human_unbound = {char, status, event}`，日志 warning）；
     放行的字与人裁一致的照常放行，只在 evidence 上挂标记。只降级、不改字、不放行。放在所有遍之后。
     格是不是还是当年那一格不知道（正因为绑不上），所以交给人看图，不拿旧字直接顶上。"""
+    human_unbound_shift_ok: bool = False
+    """人裁绑丢闸的顺移豁免（缺省关；史記 2026-11-01 实测）。
+
+    早期快审的人裁是在旧切分上做的，重切后同列多/少了一格，旧编号上现在是另一个字；补锚档
+    （`feedback/anchor_backfill.py`）同列旁证不够时锚不上，人裁按原编号挂到现格上，现格机器放行的字
+    （与整理本一致）跟旧人裁不同 → 被闸退回待审。史記册 01–03 这样退回的 401 格里约 360 格是这种。
+
+    开着时，绑丢的人裁只在下面三条**同时**成立时不降级（evidence 照挂 `human_unbound`，另挂 `shift_ok`）：
+    绑定状态是 `unanchored`（没有几何，只是编号对不上）；本格放行的字＝整理本在本格的字；
+    旧人裁的字＝整理本在同列同半行 ±2 格内某一格的字（即旧编号顺移到了邻格）。只免降级，不改字、不放行。"""
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
     iron_config_fingerprint: str = ""
@@ -699,6 +709,8 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and self.codepoint_semantic:
             d.pop("codepoint_semantic", None)
+        if isinstance(d, dict) and not self.human_unbound_shift_ok:
+            d.pop("human_unbound_shift_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.juan_rule:
@@ -1530,7 +1542,8 @@ class SeedAdmitStep(Step):
             n_auto -= d_sym
             n_review += d_sym
         if human_lost:
-            d_hu = _human_unbound_pass(ctx, page, out, human_lost)
+            d_hu = _human_unbound_pass(ctx, page, out, human_lost,
+                                       amap if p.human_unbound_shift_ok else None)
             n_auto -= d_hu
             n_review += d_hu
         if p.codepoint_semantic and ctx.book.codepoints:
@@ -1855,7 +1868,24 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
     return n
 
 
-def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict) -> int:
+def _unbound_shifted(rec, h: dict, amap: dict) -> int | None:
+    """`human_unbound_shift_ok` 的判据：旧人裁像是顺移到邻格的 → 顺移量；否则 None。"""
+    if h.get("status") != "unanchored" or not h.get("char"):
+        return None
+    here = amap.get(rec.id)
+    if not here or here[0] != rec.char or h["char"] == rec.char:
+        return None
+    head = rec.id.rpartition(":")[0]
+    sub = rec.sub or ""
+    for d in (-1, 1, -2, 2):
+        nb = amap.get(f"{head}:{rec.slot + d}{sub}")
+        if nb and nb[0] == h["char"]:
+            return d
+    return None
+
+
+def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict,
+                        amap: dict | None = None) -> int:
     """人裁绑丢闸（只降级，放在所有通道与各遍之后）。→ 降级格数。见 `SeedAdmitParams.human_unbound_review`。
 
     `lost`：`{原编号: {"char", "status", "event", ...}}`，绑定后不采信的人裁。本格放行的字与人裁不同 →
@@ -1869,6 +1899,10 @@ def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict) -> in
                 continue
             rec.evidence = {**(rec.evidence or {}),
                             "human_unbound": {k: h.get(k) for k in ("char", "status", "event")}}
+            sh = _unbound_shifted(rec, h, amap) if (amap and rec.admit) else None
+            if sh is not None:
+                rec.evidence["human_unbound"]["shift_ok"] = sh
+                continue
             if rec.admit and rec.char != h.get("char"):
                 _demote(rec, "human_unbound")
                 hits.append(f"{rec.id} 人裁「{h.get('char')}」/放行「{rec.char}」({h.get('status')})")
