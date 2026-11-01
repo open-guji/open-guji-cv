@@ -389,7 +389,7 @@ class Job:
         self.env_failed = bool(err and err.startswith("环境："))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
-        shutil.rmtree(self.dir, ignore_errors=True)      # 结果（含日志尾巴）已落库、产物已推完：本单目录不留
+        _retire_dir(self.dir, outcome, self.id, self.att["n"])     # 结果（含日志尾巴）已落库、产物已推完
         return outcome
 
 
@@ -526,7 +526,22 @@ _preflight_ok_at = 0.0
 
 
 #: 领单前至少要有这么多剩余空间（GB）：准备要克隆工作区、取原图、跑 pipeline
-MIN_FREE_GB = float(os.environ.get("GUJI_JOBS_MIN_FREE_GB") or 10)
+MIN_FREE_GB = float(os.environ.get("GUJI_JOBS_MIN_FREE_GB") or 3)
+#: 失败单只留 run.log，在 failed-logs 里留最近这么多份
+FAILED_LOGS = HOME / "failed-logs"
+FAILED_LOGS_KEEP = 20
+
+
+def _retire_dir(d: Path, outcome: str, job_id: int, n: int) -> None:
+    """单子结束：失败的只留 run.log（移到 failed-logs，超过 20 份删最旧的），其余目录整个删。"""
+    log = d / "run.log"
+    if outcome == "failed" and log.is_file():
+        FAILED_LOGS.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(log), str(FAILED_LOGS / f"job{job_id}-a{n}.log"))
+        kept = sorted(FAILED_LOGS.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in kept[FAILED_LOGS_KEEP:]:
+            old.unlink(missing_ok=True)
+    shutil.rmtree(d, ignore_errors=True)
 
 
 def _clean_job_dirs() -> float:
