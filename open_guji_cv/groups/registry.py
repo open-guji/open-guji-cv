@@ -125,6 +125,7 @@ class FlowSpec:
     lift_ref_missing_ctx: bool = False
     ref_margin: float = 0.0
     ref_margin_forms: str = ""
+    vis: bool = False
 
     @property
     def solvers(self) -> tuple:
@@ -141,7 +142,7 @@ class FlowSpec:
     @property
     def needs_patch(self) -> bool:
         """有方法要字块图（两段判时连第二段一起算）。"""
-        return any(m.needs_patch for m in (*self.methods, *self.review_methods,
+        return self.vis or any(m.needs_patch for m in (*self.methods, *self.review_methods,
                                             *(self.form_methods if self.families else ())))
 
     def describe(self) -> str:
@@ -760,6 +761,18 @@ PROVISIONAL: dict[str, Provisional] = {
         ("cp_yin3c", "櫽", "櫽𭬚"),
         ("xiang", "鄕", "鄉鄕郷"), ("weim", "微", "微㣲"), ("bie", "別", "別别"), ("zhen", "鎭", "鎭鎮"))
 }
+
+# 字块图像＋文意 L4（`vis_llm`，A24 2026-11-01 第 2 轮）：形近不同义、字形库与文意各自常定不下来的几个组，字组流程没放成（或要降审）时
+# 再把字块图连同前后文问一次大模型，高置信且有证人同字才放（见 `flow._vis_try`）。其余组不动。
+import dataclasses as _dc
+VIS_GROUPS = ("zy", "yz", "men", "wj", "guanm", "chuo", "yh", "xuan")
+for _g in VIS_GROUPS:
+    _s = FLOW_GROUPS[_g]
+    _s2 = _dc.replace(_s, flow=_dc.replace(_s.flow, vis=True))
+    for _d in (GROUPS, CODEPOINT_GROUPS, SHAPE_GROUPS):
+        if _g in _d:
+            _d[_g] = _s2
+    FLOW_GROUPS[_g] = _s2
 
 #: 并掉或改名的组：旧 id → 新 id。册配置 `group_flow` 里还写着旧 id 的照新 id 读（`flow_names`），等成批上线改册配置时再换掉。
 RENAMED: dict[str, str] = {"qg": "zy"}

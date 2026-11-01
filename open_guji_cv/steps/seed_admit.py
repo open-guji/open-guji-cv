@@ -218,12 +218,13 @@ class SeedAdmitParams(BaseModel):
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
-    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "xz", "rr", "guan", "men", "chuo", "kgc", "tsh")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
+    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "yz", "xz", "rr", "guan", "men", "wj", "chuo", "yh", "kgc", "tsh")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
     group_flow_llm_effort: str = "low"
     group_flow_llm_panel: tuple[str, ...] = ("claude-opus-5-5:high", "claude-fable-5-1:high")
     group_flow_llm_panel_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys")   # 用二审小组的组（别的组的 strong 语义没验过，先不开）
     """L3 二审小组（A24 2026-11-01）：首问不是「组内字、high」、或首问的字与整理本不同时，再让这几个模型（`"模型:effort"`）各自高 effort 独立读：
     全部同字（置信 ≥ mid）→ 给字且记 strong；全部说「其他」→ 共字组接手；其余照首问。空＝不开。见 `groups/ctx_llm.panel_verdict`。"""
+    group_flow_vis: bool = True             # 字块图像＋文意 L4（`groups/vis_llm`，FlowSpec.vis 的组才问；用 group_flow_llm_model；没密钥＝不问）
     group_flow_llm_need_l2_agree: bool = False   # L3 在线的字须与 L2 模型弃权时的首选字相同
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
@@ -879,6 +880,10 @@ class SeedAdmitParams(BaseModel):
                     parts.append("m" + "".join(_hd_fp(self.group_flow_models[g]) for g in sorted(self.group_flow_models)))
                 if _l3_groups(self):                 # 文意 L3 在线：模型、档位、提示词（没开的书不加，旧指纹不变）
                     parts.append("l" + _l3_fingerprint(self))
+                if self.group_flow_vis and self.group_flow_llm_model and any(_G[g].flow.vis for g in self.group_flow):
+                    from ..groups import vis_llm as _vis
+                    import hashlib as _hl
+                    parts.append("v" + _hl.sha256((_vis.VER + _vis.SYSTEM + self.group_flow_llm_model).encode()).hexdigest()[:12])
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
                     parts.append(_rr_fp(None) or "missing")
                 from ..groups.ids_online import fingerprint as _ids_fp
@@ -912,7 +917,7 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
@@ -2579,6 +2584,17 @@ def _l3_online(p) -> dict:
     return _L3_ONLINE[key]
 
 
+_VIS_CACHE: list = []
+
+
+def _vis_cache():
+    """字块图像＋文意 L4 的缓存：同文意 L3，落裁定库（按组、字块哈希、前后文）。"""
+    if not _VIS_CACHE:
+        from ..feedback.rulings import RulingCache, RulingStore
+        _VIS_CACHE.append(RulingCache(RulingStore()))
+    return _VIS_CACHE[0]
+
+
 def _l3_fingerprint(p) -> str:
     import hashlib
     h = hashlib.sha256(f"{p.group_flow_llm_model}|{p.group_flow_llm_effort}|{p.group_flow_llm_need_l2_agree}|{','.join(p.group_flow_llm_panel)}|{','.join(p.group_flow_llm_panel_groups)}".encode())
@@ -2622,6 +2638,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      lift_shape_ref=frozenset(p.group_flow_lift_shape_ref),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
                      l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
+                     vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
+                     vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
