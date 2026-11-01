@@ -460,56 +460,63 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
     try:
         while True:
-            for jid, st in db(S.reap):
-                say(f"收回 #{jid} → {st}")
-            if not (once or only or dry) and _runner_outdated():
-                say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
-                (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
-                return done
-            bad = _preflight() or _disk_gate(say)
-            if bad:
-                # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
-                if bad != warned:
-                    say(f"不领单：{bad}")
-                    warned = bad
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note=bad)
-                time.sleep(poll_s)
-                continue
-            if warned:
-                say("自检通过，开始领单")
-                warned = None
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
-            got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
-            if got is None:
-                if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
-                    say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
+            try:
+                for jid, st in db(S.reap):
+                    say(f"收回 #{jid} → {st}")
+                if not (once or only or dry) and _runner_outdated():
+                    say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
+                    (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
                     return done
+                bad = _preflight() or _disk_gate(say)
+                if bad:
+                    # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
+                    if bad != warned:
+                        say(f"不领单：{bad}")
+                        warned = bad
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note=bad)
+                    time.sleep(poll_s)
+                    continue
+                if warned:
+                    say("自检通过，开始领单")
+                    warned = None
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
+                if got is None:
+                    if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
+                        say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
+                        return done
+                    db(S.worker_seen, worker, state="idle", session=session, done=done)
+                    time.sleep(poll_s)
+                    continue
+                job, att = got
+                db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
+                say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
+                BOARD.publish(db, force=True)
+                jobrun = Job(job, att, db, dry=dry)
+                outcome = jobrun.run()
+                env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
+                _remember_book(job["book"])
+                say(f"#{job['id']} → {outcome}")
+                done += 1
                 db(S.worker_seen, worker, state="idle", session=session, done=done)
-                time.sleep(poll_s)
-                continue
-            job, att = got
-            db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
-            say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
-            BOARD.publish(db, force=True)
-            jobrun = Job(job, att, db, dry=dry)
-            outcome = jobrun.run()
-            env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
-            _remember_book(job["book"])
-            say(f"#{job['id']} → {outcome}")
-            done += 1
-            db(S.worker_seen, worker, state="idle", session=session, done=done)
-            BOARD.publish(db, force=True)
-            idle_since = time.time()
-            if once or only:
-                return done
-            if env_streak >= ENV_STREAK_PAUSE:
-                note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
-                say(note)
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
-                time.sleep(ENV_PAUSE_MIN * 60)
-                env_streak = 0
+                BOARD.publish(db, force=True)
                 idle_since = time.time()
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                if once or only:
+                    return done
+                if env_streak >= ENV_STREAK_PAUSE:
+                    note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
+                    say(note)
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
+                    time.sleep(ENV_PAUSE_MIN * 60)
+                    env_streak = 0
+                    idle_since = time.time()
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+            except Exception as e:  # noqa: BLE001 —— 连库断了（DB 重试也耗尽）不能让执行方整个退出
+                if not _is_conn_error(e):
+                    raise
+                say(f"连库断了（{type(e).__name__}），{CONN_RETRY_S} 秒后再试：{str(e)[:200]}")
+                time.sleep(CONN_RETRY_S)
+                continue
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
@@ -519,6 +526,8 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
 
 
 ENV_STREAK_PAUSE = 3
+#: 连库全断时，执行方整体重试前等这么久（秒）
+CONN_RETRY_S = int(os.environ.get("GUJI_JOBS_CONN_RETRY_S") or 60)
 ENV_PAUSE_MIN = 30
 WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
 LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
