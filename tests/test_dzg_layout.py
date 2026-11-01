@@ -206,6 +206,18 @@ def test_uneven_counts_char_cells_far_from_period():
     assert _uneven([mk(0, 100), mk(100, 175), mk(175, 320), mk(320, 360, "blank"), mk(360, 400, "jiazhu_a")], 100.0) == 1
 
 
+
+def test_uneven_counts_blank_run_cut_into_too_many_cells():
+    """空白也按格高算：两格高的列首空白切成三个矮格，多出的一格算不匀；整格高的空白不算。"""
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _uneven
+    mk = lambda y0, y1, kind="char": C(y0=y0, y1=y1, kind=kind)
+    squeezed = [mk(0, 70, "blank"), mk(70, 140, "blank"), mk(140, 210, "blank"), mk(210, 310), mk(310, 410)]
+    even = [mk(0, 100, "blank"), mk(100, 200, "blank"), mk(200, 300), mk(300, 400), mk(400, 500, "blank")]
+    assert _uneven(squeezed, 100.0) == 1
+    assert _uneven(even, 100.0) == 0
+
+
 def test_mask_misses_counts_both_directions():
     from types import SimpleNamespace as C
     from open_guji_cv.steps.row_segment import _mask_misses
