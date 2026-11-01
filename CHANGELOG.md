@@ -6,6 +6,9 @@
 ## [未发版]
 
 ### Changed
+- 卷末印页的空栏不再人审（A32，GUJI-637，vol20–99 r1 遮挡格 443）：`align_ref` 2.5、`seed_admit` 1.29，`code_hash` 变（从 align_ref 起重跑）。卷末页整理本只到「…皆附存目」，后面几列是「乾隆御覽之寶」压着的空栏；邻页／页钉位定位时这些列已过了整理本这半叶的末行，原先记「列行对应不成立」、印里的格 `via=none` 只能人审。
+  - `align_ref`：这种列的退回原因改记 `COORD_PAST_LEAF`（「整理本这半叶没有这一列」），其他不变。
+  - `seed_admit.occluded_past_leaf_blank`（缺省开）：遮挡格所在列是 `COORD_PAST_LEAF`、且这一列没有现役对位字 → 默认字来源记 `coord_blank`，由 R5 判非字。r1 包 80 册只有 5 页命中（vol21 p225、vol30 p140、vol37 p71、vol39 p176、vol44 p65），回放放 55 格，逐页看图全是印文碎块；其余页逐格不变。
 - 异体边表自动暂归一 `seed_admit.edge_pair`（缺省开；A24 10-31，r5 重放 V 类「组外异体对」单格长尾约 360 对，`seed_admit` 1.28，`code_hash` 变）：整理本字与库首位互为「自动对」（`groups/edge_pairs.is_auto_pair`：边表 `edge_tier`=T1 纯异体且 ≥2 个异体来源、不在字组、不在 `config/variants/edge_pair_exclude.tsv`）、库首位 cov≥0.92 领先≥0.005、无护栏的待审格，放两形里已放行字频较高的一形（`config/variants/form_freq.tsv`）。通道 `edge_pair`，证据 `edge_pair.decision=provisional`（暂归一，将来筛出再拆）。只升不降、不碰人裁。r5 包 vol07–99 回放约放 94 格，看图全对；其余单格对多数不是异体（无边或只有 link／通假边），不碰。新增 `groups/edge_pairs.py`、两张表、`tests/test_seed_admit_edge_pair.py`。
 - 印章遮挡格再放宽两条（A32，GUJI-637，vol20–99 r3 遮挡 931 格）：`seed_admit` 1.27，`code_hash` 变。只在册开 `lane_seal` 时生效。
   - `lane_seal_lib_veto_second`（缺省开）：默认字正是字形库第二名时库否决不生效。r3 包里库否决 340 格，看图默认字错的约 10 格全在「默认字不在库前二」那一档。

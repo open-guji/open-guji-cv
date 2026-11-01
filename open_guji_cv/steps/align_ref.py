@@ -627,7 +627,7 @@ def page_pin(p: "AlignRefParams", book: str, page: int) -> tuple[str, int, int] 
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.4", unit="cell",   # 2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.5", unit="cell",   # 2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -1226,6 +1226,7 @@ def _pin_map(carriers, lines, base: int):
     for col, c in carriers:
         li = base + col - 1
         if li >= nxt:
+            out.past_leaf.append(col)
             continue
         own = C.line_sim(c, lines[li])
         other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
@@ -1256,6 +1257,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
         for col, c in carriers:
             li = base + col - 1
             if li >= len(lines) or (k + 1 < len(heads) and li >= heads[k + 1]):
+                out.past_leaf.append(col)
                 continue
             own = C.line_sim(c, lines[li])
             other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
@@ -1306,7 +1308,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     for cc in cols:
         li = pm.col_line.get(cc.col)
         if li is None:
-            res.coord_fallback[str(cc.col)] = "列行对应不成立"
+            res.coord_fallback[str(cc.col)] = (C.COORD_PAST_LEAF if cc.col in pm.past_leaf
+                                               else "列行对应不成立")
             continue
         units = C.column_units(book, page, cc.col, cc, cells.column(cc.col), carrier)
         if not units:
