@@ -463,6 +463,7 @@ const groups = () => _groups || (_groups = (() => {
   });
   return [...m.values()].sort((a, b) => b.cells.length - a.cells.length || a.key.localeCompare(b.key));
 })());
+const nkey = g => g.kind === 'pua' ? 'N:' + g.key : 'O:' + g.kind + ':' + g.key;
 const okVal = r => r.kind === 'ref' ? 'ref' : r.kind === 'pua' ? 'same' : 'pick:' + r.grp;
 const CYCLE = r => [okVal(r), 'unclear', 'seg', 'other'];
 function vclass(r, v){
@@ -500,19 +501,21 @@ function gnote(g){
   const cnt = {};
   g.cells.forEach(r => [r.lib_top].concat((r.r5 || []).slice(0, 1)).forEach(ch => { if (ch) cnt[ch] = (cnt[ch] || 0) + 1; }));
   const top = Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 4).map(x => x[0]);
-  const cur = (verdictOf('N:' + g.key) || '').replace(/^char:/, '');
-  return `<div class="g-note"><input type="text" data-note="${esc(g.key)}" value="${esc(cur)}" placeholder="这个字是…" autocomplete="off">
+  const nk = nkey(g), cur = (verdictOf(nk) || '').replace(/^char:/, '');
+  const hint = g.kind === 'pua' ? '输入近似字，没有就留空；可写 IDS（如 ⿰言反）'
+    : '这组其实是别的字？填在这里，标「对」的格都按它入库（真字，非近似）；没有就留空';
+  return `<div class="g-note"><input type="text" data-note="${esc(nk)}" value="${esc(cur)}" placeholder="${g.kind === 'pua' ? '这个字是…' : '改字为…'}" autocomplete="off">
     ${top.map(c => `<button class="chip" data-chip="${esc(c)}" title="库首选或 5b 里出现最多的字">${esc(c)}</button>`).join('')}
-    <small>输入近似字，没有就留空；可写 IDS（如 ⿰言反）</small></div>`;
+    <small>${hint}</small></div>`;
 }
 function card(g){
   return `<article class="g-card" data-id="${esc(g.id)}"><div class="g-head">${ghead(g)}</div>
-    ${g.kind === 'pua' ? gnote(g) : ''}<div class="tiles">${g.cells.map(tile).join('')}</div></article>`;
+    ${gnote(g)}<div class="tiles">${g.cells.map(tile).join('')}</div></article>`;
 }
 let filter = 'todo', kfilter = '';
 function visibleRows(){
   return groups().filter(g => (!kfilter || g.kind === kfilter) &&
-    (filter === 'all' || (filter === 'done') === (g.cells.every(r => verdictOf(r.id)) && (g.kind !== 'pua' || !!verdictOf('N:' + g.key)))));
+    (filter === 'all' || (filter === 'done') === (g.cells.every(r => verdictOf(r.id)) && (g.kind !== 'pua' || !!verdictOf(nkey(g))))));
 }
 function groupOf(art){ return groups().find(g => g.id === art.dataset.id); }
 function repaint(art, r){
@@ -527,7 +530,7 @@ function repaint(art, r){
 }
 function setNote(key, val){
   val = (val || '').trim();
-  if (val) state['N:' + key] = {v: 'char:' + val, t: Date.now()}; else delete state['N:' + key];
+  if (val) state[key] = {v: 'char:' + val, t: Date.now()}; else delete state[key];
   persist();
 }
 document.addEventListener('input', e => { const i = e.target.closest('input[data-note]'); if (i) setNote(i.dataset.note, i.value); });
@@ -684,7 +687,9 @@ def cmd_apply(a) -> None:
     verdicts = load_verdicts(Path(a.verdicts))
     # 整理本未收字按码位成组：组头 `N:<码位>` 的值 `char:<近似字>` 展开给该组里标了 `same` 的格
     notes = {k[2:]: v[5:].strip() for k, v in verdicts.items() if k.startswith("N:") and v.startswith("char:")}
-    verdicts = {k: v for k, v in verdicts.items() if not k.startswith("N:")}
+    # 非未收字的组：`O:<kind>:<组头>` 的 `char:字` 是「这组其实是别的字」，标了「对」的格按它入库（真字，非近似）
+    overrides = {k[2:]: v[5:].strip() for k, v in verdicts.items() if k.startswith("O:") and v.startswith("char:")}
+    verdicts = {k: v for k, v in verdicts.items() if not k.startswith(("N:", "O:"))}
     unknown = [k for k in verdicts if k not in cards]
     if unknown:
         sys.exit(f"裁决里有 {len(unknown)} 个格号不在 cards.jsonl（页换过版？）：{unknown[:5]}")
@@ -713,6 +718,12 @@ def cmd_apply(a) -> None:
             events.append(make_event(batch, len(events) + 1, "confirm", tgt, pl, reviewer=a.reviewer))
             continue
         ch = verdict_to_char(card, v)
+        ov = overrides.get(f"{card.get('kind')}:{card.get('grp')}", "")
+        if ov and (v == "ref" or (v.startswith("pick:") and v[5:] == card.get("grp"))):
+            ch = ov if len(ov) == 1 else None
+            if ch is None:
+                lists["other"].append(card)
+                continue
         if ch:
             tgt = EventTarget(step="seed_admit", unit="cell", key=cid, book=card["book"])
             note = ("新字确认：整理本字对" if v == "ref" else f"新字确认：改为 {ch}（整理本字 {card['ref']}）")
