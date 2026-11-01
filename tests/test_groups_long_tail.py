@@ -73,8 +73,9 @@ def test_long_tail_groups_registered_and_banks_match():
         assert spec.kind == "near_form" and spec.flow.tolerate - frozenset("亍") == frozenset(extra)
         if g == "sy":
             assert spec.members == frozenset(members) and spec.flow.solvers == ("ids",) and not spec.flow.review
-        else:   # 2026-10-24 zy 扩成 于千子干（并入 qg）：文意在前，子于整字 HOG 当第二路（`Only` 限 子于干 入口、只给 子于）
-            assert spec.members == frozenset("于千子干") and spec.flow.solvers == ("ctx", "ids") and spec.flow.review
+        else:   # 2026-10-24 zy 扩成 于千子干（并入 qg）：文意在前，子于整字 HOG 当第二路（`Only` 限 子于干 入口、只给 子于）；
+            # 11-01 最前加拆笔画 zy_strokes（`groups.strokes`）
+            assert spec.members == frozenset("于千子干") and spec.flow.solvers == ("zy_strokes", "ctx", "ids") and spec.flow.review
         sp = O.SPECS[g]
         assert sp.whole == "hog" and O.has_bank(g), g
         bank = O.load_bank(O.bank_path(g))
