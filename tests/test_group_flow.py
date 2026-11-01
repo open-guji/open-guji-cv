@@ -839,7 +839,9 @@ def test_provisional_review_instead_of_demote(monkeypatch):
 
 def test_provisional_off_and_near_form_groups(monkeypatch):
     from open_guji_cv.groups.registry import FLOW_GROUPS, PROVISIONAL
-    assert all(FLOW_GROUPS[g].kind == "variant" for g in PROVISIONAL)     # 意思不同的形近字组绝不暂归一
+    # 意思不同的形近字组绝不暂归一；文意＋异体的混合组（象彖𧰼 xz、冠寇冦宼㓂 kgc，A24 11-01）只能归族内的同义写法，forms 不得跨族
+    assert all(FLOW_GROUPS[g].kind == "variant" or any(frozenset(p.forms) <= frozenset(fam) for fam in FLOW_GROUPS[g].flow.families)
+               for g, p in PROVISIONAL.items())
     assert all(p.to in p.forms and p.forms & FLOW_GROUPS[g].members for g, p in PROVISIONAL.items())
     r = Rec("a")
     from open_guji_cv.groups import flow
@@ -905,3 +907,23 @@ def test_lift_shape_ref_book_level(monkeypatch):
 def test_lift_shape_ref_not_in_params_dump():
     assert "group_flow_lift_shape_ref" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ref=["ry"]).model_dump()["group_flow_lift_shape_ref"] == ["ry"]
+
+
+def test_provisional_family_fallback_xz_kgc(monkeypatch):
+    """混合组（A24 11-01）：文意定族（象𧰼／寇族）、族内字形判不出或与整理本不一 → 暂归一到 象／寇；文意给 彖、整理本在族外照旧留人审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+
+    def run(g, ctx_char, ref, cand):
+        r = Rec("a")
+        monkeypatch.setattr(flow, "_solve", lambda name, *a, **k: GroupVerdict(ctx_char if name == "ctx" else None, why="agree" if name == "ctx" else "abstain"))
+        group_flow_pass([r], {"a": (ref, "equal")}, lambda cid: [(cand, 0.97)], lambda r: False, FlowConfig(groups=(g,)))
+        return r
+
+    r = run("kgc", "寇", "㓂", "宼")
+    assert r.admit and r.char == "寇" and r.evidence["group"]["decision"] == "provisional"
+    assert not run("kgc", "寇", "冠", "宼").admit        # 整理本作 冠（族外）：留人审
+    assert not run("kgc", "冠", "冠", "冠").char == "寇"
+    r = run("xz", "象", "象", "𧰼")
+    assert r.admit and r.char == "象" and r.evidence["group"]["decision"] == "provisional"
+    assert not run("xz", "彖", "象", "𧰼").admit        # 文意给 彖：不兜底成 象

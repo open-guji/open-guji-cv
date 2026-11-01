@@ -372,7 +372,7 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
 
 
 def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
-                 canon: Callable[[str], str]) -> tuple[str, str | None] | None:
+                 canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
     """同义组暂归一兜底（`registry.PROVISIONAL`，sheldon 2026-10-27「先 IDS 拆分，拆不开或置信度不够就暂归一到一个字形，
     记下是暂归一定的」）：方法没定下来（弃权、冲突、被整理本拦、复核要降）的格，「是这个字」两路都认 → (暂归一的字, 证人)，否则 None。
     - 复核：放行字在 `forms` 里（别的通道已认了字），整理本没有字、是 〓 或也在 `forms` 里；
@@ -385,6 +385,19 @@ def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowC
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     if mode == "review":
         return (pv.to, ref) if inn(r.char) and (not ref or ref == GAP or inn(ref)) else None
+    fam = GROUPS[g].flow.families
+    if fam and trail is not None:
+        # 混合组（文意定族、族内是同义异体：象彖𧰼、冠寇冦宼㓂，A24 11-01 sheldon「族内识别不了的暂归一到 象／寇」）：
+        # 文意给的字在 forms 里（族外的字——彖、冠——文意给了就不兜底），整理本（缺位用坐标对位）也在 forms 里，
+        # 就不看库候选里有没有形近的别的字（冠 与 寇 的库分差常在 delta 内），按文意认定族、写法拆不开暂归一到 `to`。
+        cc = {t["char"] for t in trail if t["solver"] == "ctx" and t["char"]}
+        if cc and not all(inn(c) for c in cc):
+            return None                                        # 文意给了族外的字（彖、冠）：不兜底
+        if cc:
+            w = ref or coord
+            if not ref and r.id[-1:] in ("a", "b"):
+                return None
+            return (pv.to, w) if inn(w) else None
     if not cands:
         return None
     top, c1 = cands[0]
@@ -602,7 +615,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     trail = trail + [vitem]
                 if vch is not None:
                     ch, why = vch, "vis"
-            pv = None if ch is not None else _provisional(g, mode, r, cands_of(r.id) or [], ref, (veto_refs or {}).get(r.id), cfg, norm)
+            pv = None if ch is not None else _provisional(g, mode, r, cands_of(r.id) or [], ref, (veto_refs or {}).get(r.id), cfg, norm, trail)
             if pv is not None:
                 # 暂归一兜底：字认得准、写法拆不开 → 放成这组最常见的字形，留痕记原来没放的原因与证人
                 decision, ch = "provisional", pv[0]
