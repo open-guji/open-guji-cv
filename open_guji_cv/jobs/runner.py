@@ -581,30 +581,48 @@ def _glyph_pin_dbs() -> list[tuple[Path, Path, int]]:
     return out
 
 
-def _prune_glyph_dbs(say=print) -> int:
+#: 空间不够、按册 yaml 清完还不够时，每个工作区只留最近修改的这几个钉版库
+GLYPH_DB_KEEP_RECENT = 3
+
+
+def _prune_glyph_dbs(say=print, keep_recent: int | None = None) -> int:
     """删各工作区里没人用的旧钉版字形库，返回释放的字节数。可重建的缓存（总授权里的「清本地缓存」）。
 
-    只保留该工作区各册 yaml 当前钉住的版本；其余的，本机有那一版的清单（config/glyph-pack/g<N>/manifest.json）
-    才删——有清单就能按 ``ensure_pins`` / ``--glyph-diff`` 从中心库重新拼出来。
-    读不出在用号（工作区读 yaml 出错）、没有清单的一律不删。领单前才跑，本机同时只一个执行方，没有在跑的单。"""
+    缺省：只保留该工作区各册 yaml 当前钉住的版本；其余的，本机有 g<N> 清单（config/glyph-pack/g<N>/manifest.json）
+    才删。读不出在用号（读 yaml 出错）的工作区不删。
+    ``keep_recent=K``（空间不够时的第二档）：不看 yaml 和本机清单，每个工作区只留最近修改的 K 个。
+    钉版库是中心库快照（一个号只写一次）的本地建物，下一张单准备阶段 db pull 后 ``ensure_pins`` 会重建，
+    代价是重建的几分钟。领单前才跑，本机同时只一个执行方，没有在跑的单。"""
     from ..core.glyph_pin import load_manifest
     from ..ops.glyph_snapshot import pins_in_use
-    keep_cache: dict[Path, set[int] | None] = {}
-    freed = 0
-    for ws, f, n in _glyph_pin_dbs():
-        if ws not in keep_cache:
-            try:
-                keep_cache[ws] = set(pins_in_use(ws))
-            except Exception:       # noqa: BLE001 —— 算不出来就当都在用
-                keep_cache[ws] = None
-        keep = keep_cache[ws]
-        if keep is None or n in keep:
-            continue
-        try:
-            if load_manifest(ws, n) is None:
+    found = _glyph_pin_dbs()
+    doomed: list[tuple[Path, Path, int, str]] = []
+    if keep_recent is not None:
+        by_ws: dict[Path, list] = {}
+        for ws, f, n in found:
+            by_ws.setdefault(ws, []).append((f.stat().st_mtime, ws, f, n))
+        for items in by_ws.values():
+            items.sort(key=lambda t: t[0], reverse=True)
+            doomed += [(ws, f, n, f"只留最近 {keep_recent} 个") for _, ws, f, n in items[keep_recent:]]
+    else:
+        keep_cache: dict[Path, set[int] | None] = {}
+        for ws, f, n in found:
+            if ws not in keep_cache:
+                try:
+                    keep_cache[ws] = set(pins_in_use(ws))
+                except Exception:       # noqa: BLE001 —— 算不出来就当都在用
+                    keep_cache[ws] = None
+            keep = keep_cache[ws]
+            if keep is None or n in keep:
                 continue
-        except Exception:           # noqa: BLE001
-            continue
+            try:
+                if load_manifest(ws, n) is None:
+                    continue
+            except Exception:           # noqa: BLE001
+                continue
+            doomed.append((ws, f, n, f"册 yaml 没钉 g{n}"))
+    freed = 0
+    for ws, f, n, why in doomed:
         size = 0
         for g in (f, f.with_name(f.name + "-wal"), f.with_name(f.name + "-shm")):
             try:
@@ -613,7 +631,7 @@ def _prune_glyph_dbs(say=print) -> int:
             except OSError:
                 pass
         if size:
-            say(f"清旧字形库 {f}（{size / 2**20:.0f} MB，册 yaml 没钉 g{n}，可从中心库重建）")
+            say(f"清旧字形库 {f}（{size / 2**20:.0f} MB，{why}，可从中心库重建）")
         freed += size
     return freed
 
@@ -623,6 +641,8 @@ def _disk_gate(say=print) -> str | None:
     _clean_job_dirs()
     try:
         _prune_glyph_dbs(say)
+        if _free_gb() < MIN_FREE_GB:        # 册 yaml 钉的版本多（殿本各册钉号不一），上面清不够：只留最近用的几个
+            _prune_glyph_dbs(say, keep_recent=GLYPH_DB_KEEP_RECENT)
     except Exception as e:      # noqa: BLE001 —— 清缓存失败不碍领单
         say(f"清旧字形库出错（忽略）：{e}")
     for cache in _CACHES:
