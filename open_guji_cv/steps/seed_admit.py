@@ -632,6 +632,13 @@ class SeedAdmitParams(BaseModel):
     - 待审格：库首位是这一对里的一形、cov ≥ `follow_ref_cov`、库没判 diff、无护栏，且首位领先对外最好的候选 ≥ `follow_ref_gap`
       → 放行整理本形。带 `ctx_guard_ref` 的格只在上下文字也是这一对时放。
     不同义的形近对不进这张表。表是一套书的数据，写在册 yaml；空 = 关（不进 dump）。"""
+    follow_ref_variants: bool = False
+    """书级：`follow_ref` 不限表——整理本字（坐标对位字，没有时看现役对位字）与库首位／已放行字**同义异体**
+    （本步异体关系 `vmap.semantic` 相同、字面不同）的对子都照录整理本形，判据同 `follow_ref`（待审格放行、已放行格改回）。
+    Sheldon 2026-11-01（史記文淵閣本）：「四库全书有一个置信度非常高的参校本，与其暂归一，不如按参校本取字；
+    万一参校本有错，我们还可以回过头来再次整理」——字组拆不开的写法、码位异体（隠𨼆隱、傳𫝊）落整理本码位，
+    暂归一放行的格也改回整理本形；证据 `follow_ref.via=variants`／`lane.via=variants` 留痕，方便按参校本错误回查。
+    没有参校本的书别开。False＝只认 `follow_ref` 表（不进 dump）。"""
     follow_ref_cov: float = 0.92
     """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
     follow_ref_gap: float = 0.005
@@ -736,7 +743,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.pua_rules:
             d.pop("pua_rules", None)
             d.pop("pua_rule_cov", None)
-        if isinstance(d, dict) and not self.follow_ref:
+        if isinstance(d, dict) and not self.follow_ref_variants:
+            d.pop("follow_ref_variants", None)
+        if isinstance(d, dict) and not self.follow_ref and not self.follow_ref_variants:
             for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.occluded_variant_first:
@@ -1529,9 +1538,10 @@ class SeedAdmitStep(Step):
             d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_pua
             n_review -= d_pua
-        if p.follow_ref:
+        if p.follow_ref or p.follow_ref_variants:
             # 5a' follow_ref（升＋改字）：照录整理本的异体对
-            d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap)
+            d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap,
+                                    vmap if p.follow_ref_variants else None)
             n_auto += d_fr
             n_review -= d_fr
         if p.rare_ref and p.rare_ref_coord and amap:
@@ -2148,10 +2158,12 @@ def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict
     return "admit"
 
 
-def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict) -> int:
-    """照录整理本的异体对（`follow_ref`）。→ 新放行格数（改字的格不计数）。判据见 `follow_ref_decide`。"""
-    rules = _parse_follow_ref(p.follow_ref)
-    if not rules:
+def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict,
+                     vmap=None) -> int:
+    """照录整理本的异体对（`follow_ref`）。→ 新放行格数（改字的格不计数）。判据见 `follow_ref_decide`。
+    `vmap` 给了（`follow_ref_variants`）：表里没有的整理本字，与本格字（已放行字／库首位）同义异体的也按一对处理。"""
+    rules = _parse_follow_ref(p.follow_ref) if p.follow_ref else {}
+    if not rules and vmap is None:
         return 0
     n = 0
     for col in out:
@@ -2161,23 +2173,31 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
             ref = coord.get(rec.id)
             if not ref:
                 ref = (amap.get(rec.id) or (None,))[0]
-            if ref not in rules:
-                continue
             m = mmap.get(rec.id)
+            here, via = rules, None
+            if ref not in rules:
+                if vmap is None or not ref or ref == "〓":
+                    continue
+                other = rec.char if rec.admit else ((m.candidates or [(None,)])[0][0] if m else None)
+                if not other or other == ref or vmap.semantic(other) != vmap.semantic(ref):
+                    continue
+                here, via = {ref: other}, "variants"
             d = dmap.get(rec.id)
             act = follow_ref_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
                                     cands=list(m.candidates or []) if m else [], verdict=getattr(m, "verdict", None),
-                                    guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=rules,
+                                    guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=here,
                                     cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap,
                                     allow_occluded=p.occluded_variant_first)
             if act == "fix":
-                rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref}}
+                rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref,
+                                                                       **({"via": via} if via else {})}}
                 rec.char = ref
             elif act == "admit":
                 top, cov = m.candidates[0][0], float(m.candidates[0][1])
                 rec.admit, rec.channel, rec.provenance, rec.char = True, "follow_ref", "match", ref
                 rec.evidence = {**(rec.evidence or {}),
                                 "lane": {"lane": "follow_ref", "lib": top, "cov": round(cov, 4), "ref": ref,
+                                         **({"via": via} if via else {}),
                                          "prev_doubts": list(rec.doubts or [])}}
                 rec.doubts = ["lane_follow_ref"]
                 n += 1
