@@ -187,6 +187,11 @@ class SeedAdmitParams(BaseModel):
     安全）。取 **0.05**：压在「确认空白」（≤0.0493）与「确认真字」（0.0677）
     之间。bxgb 全书 `channel=context` 134 格最低也有 0.1093（臣），阈值对它
     是纯保险栓、不会误伤。"""
+    context_max_aspect: float = 2.5
+    """`context_blank_gate` 的姊妹闸（A24 11-01，A32 报错放 vol39:176:3:1）：正文字块（不是夹注）高宽比大于它时不走 context 通道，
+    落人审（`context_tall_cell`）。高宽比 ≥2.5 的字块是印章边框碎块／粘连切多了的残片，字形库「像」只因为十、卜、丨 这类
+    竖笔字太容易匹配，context 又只看文意。r5 全 93 册 context 通道放行里只有 3 格（vol39:176:3:1 十 3.3、vol82:191:4:4 十 3.9、
+    vol96:95:9:2 卜 4.0）；字形通道（match_ref 等，库验过 same）不受影响。0＝关。只收紧。"""
     relax_split_ref: bool = True
     """己/已/巳：整理本给了字就放行——文意取整理本，字形取库 top1（用户 2026-09-06：
     「没必要每次都单独让我选文意，根据上下文或整理本直接选；字形选哪个都行」）。
@@ -885,7 +890,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.29", unit="cell",   # 1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.30", unit="cell",   # 1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
@@ -1380,6 +1385,9 @@ class SeedAdmitStep(Step):
                     elif p.context_blank_gate and _ir is not None \
                             and _ir.ink_ratio < p.context_min_ink:
                         doubts.append("context_blank_cell")
+                    elif p.context_max_aspect > 0 and _ir is not None and not r.sub and _ir.width > 0 \
+                            and _ir.height / _ir.width > p.context_max_aspect:
+                        doubts.append("context_tall_cell")
                     elif p.context_single_stroke_review and d.char in _SINGLE_STROKES:
                         doubts.append("context_single_stroke")
                     elif p.context_garble_guard and (_gg := _garble_guard(
@@ -1641,7 +1649,7 @@ def _demote(rec, by: str) -> None:
         rec.evidence = {**(rec.evidence or {}), "demoted_from": {"channel": rec.channel, "by": by}}
 
 
-_RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "form_open", "approx_exemplar")
+_RARE_REF_HARD = ("occluded", "excluded", "near_form", "context_blank_cell", "context_tall_cell", "form_open", "approx_exemplar")
 
 
 _JUAN_FORMS = frozenset("卷巻")
@@ -2010,7 +2018,7 @@ _LANE_CLS_CODES = {
 }
 _LANE_R1_CLASSES = frozenset({"replace_align", "ref_conflict", "near_form"})
 #: 三通道都不碰的疑问：字块本身不成立（空白、近似例）或形未定。
-_LANE_HARD = frozenset({"context_blank_cell", "form_open", "approx_exemplar", "glyph_timeout",
+_LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", "approx_exemplar", "glyph_timeout",
                         # 字组流程复核时文意明确给了别的字（或解法互相冲突）而降审的格：待审补放通道不许再放回去
                         # （vol04：象彖复核降审的格被 coord_fallback 按整理本字又放行，降审白降）
                         "group_flow_disagree", "group_flow_conflict",
