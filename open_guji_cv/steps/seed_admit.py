@@ -237,6 +237,10 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
     字形宽高比路判 曰、坐标对位也是 曰，01–10 约 100 格因此送审）。空＝不放宽（不进参数 dump）。"""
+    group_flow_abstain_ref_ok: list[str] = Field(default_factory=list)
+    """书级：这几组复核已放行格时，解法全弃权（`group_flow_abstain`）、没有任何解法给出别的字、已放行字＝整理本字
+    （现役对位缺格时用坐标对位字）→ 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：己已巳文意 L2 首选同字但 low_p、
+    曾會㑹 L1 弃权，01–10 正文约 170 格因此送审）。空＝不放宽（不进参数 dump）。"""
     group_flow_joint: bool = True
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
@@ -756,6 +760,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("human_unbound_shift_ok", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
             d.pop("group_flow_lift_shape_ref", None)
+        if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
+            d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.juan_rule:
@@ -2656,6 +2662,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=frozenset(p.group_flow_lift_shape_ref),
+                     abstain_ref_ok=frozenset(p.group_flow_abstain_ref_ok),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
                      l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
@@ -2704,7 +2711,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_lift_shape_ref)
+                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_lift_shape_ref or p.group_flow_abstain_ref_ok)
                                                                    and ctx is not None) else None)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
