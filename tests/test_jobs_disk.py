@@ -141,3 +141,32 @@ def test_disk_gate_prunes_old_glyph_dbs(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "MIN_FREE_GB", 0)
     assert R._disk_gate(say=lambda *_: None) is None
     assert not (ws / "output" / "glyph-g1.db").exists()
+
+
+def test_prune_keep_recent_ignores_yaml_and_manifest(tmp_path, monkeypatch):
+    import os
+    ws = _mk_ws(tmp_path, "wsrepo", [1, 2, 3, 4, 5])      # 都被钉，且没有任何清单
+    for n in range(1, 6):
+        f = ws / "output" / f"glyph-g{n}.db"
+        f.write_bytes(b"x" * 10)
+        os.utime(f, (1000 + n, 1000 + n))
+    _patch_pins(monkeypatch, tmp_path, {ws: [1, 2, 3, 4, 5]})
+    assert R._prune_glyph_dbs(say=lambda *_: None) == 0             # 缺省档：全在用，不动
+    assert R._prune_glyph_dbs(say=lambda *_: None, keep_recent=2) == 30
+    left = sorted(p.name for p in (ws / "output").glob("glyph-g*.db"))
+    assert left == ["glyph-g4.db", "glyph-g5.db"]
+
+
+def test_disk_gate_escalates_to_keep_recent_only_when_short(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path, "wsrepo", [1, 2, 3, 4])
+    for n in range(1, 5):
+        (ws / "output" / f"glyph-g{n}.db").write_bytes(b"x")
+    _patch_pins(monkeypatch, tmp_path, {ws: [1, 2, 3, 4]})
+    monkeypatch.setattr(R, "HOME", tmp_path)
+    monkeypatch.setattr(R, "MIN_FREE_GB", 0)
+    monkeypatch.setattr(R, "GLYPH_DB_KEEP_RECENT", 1)
+    R._disk_gate(say=lambda *_: None)
+    assert len(list((ws / "output").glob("glyph-g*.db"))) == 4      # 空间够，不动
+    monkeypatch.setattr(R, "MIN_FREE_GB", 10 ** 9)
+    R._disk_gate(say=lambda *_: None)
+    assert len(list((ws / "output").glob("glyph-g*.db"))) == 1
