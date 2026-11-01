@@ -15,6 +15,7 @@ import shlex
 import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
@@ -425,6 +426,21 @@ def _runner_outdated() -> bool:
     return bool(new and cur and new != cur)
 
 
+def _refresh_runner() -> bool:
+    """把执行方自己的检出快进到 origin/dev。只有 HEAD 真的等于 origin/dev 才算成（否则 exec 完还会判定过期、来回折腾）。"""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        subprocess.run(["git", "-C", str(RUNNER_ROOT), "merge", "--ff-only", "-q", "origin/dev"], capture_output=True,
+                       text=True, timeout=120, env=env, check=True)
+        head = subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=30).stdout.strip()
+        tip = subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "origin/dev"], capture_output=True, text=True,
+                             timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(head) and head == tip
+
+
 def _runner_commit() -> str | None:
     try:
         return subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
@@ -464,8 +480,16 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 for jid, st in db(S.reap):
                     say(f"收回 #{jid} → {st}")
                 if not (once or only or dry) and _runner_outdated():
-                    say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
+                    # 走到这里手上没单（上一张单已收尾，这一张还没领）：可以换代码了。
+                    # 拉新代码后用原命令行自己 exec 一次，不退出等人重起；拉不动才照旧退出。
                     (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
+                    if _refresh_runner():
+                        say("执行方代码在 dev 上有更新，空闲中，已拉新代码，用原参数重新 exec 自己")
+                        db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                        lock.close()                                    # 释放本机锁，新进程自己拿
+                        sys.stdout.flush()
+                        os.execv(sys.executable, sys.orig_argv)
+                    say("执行方代码在 dev 上有更新，但拉不动（本地有改动或分叉），退出让执行方线程重新 start")
                     return done
                 bad = _preflight() or _disk_gate(say)
                 if bad:
