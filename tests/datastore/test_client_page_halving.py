@@ -29,3 +29,27 @@ def test_rows_other_errors_raise():
     src, _ = _src(fail_above=0, status=404)
     with pytest.raises(CentralError):
         list(src._rows("files", "ws1", None, {}))
+
+
+def test_rows_halve_down_to_one_then_grow_back():
+    """大行挨着时一页只取 1 行也要能过；过了大行页长按倍数放回（siku-zongmu glyph-pack 清单，2026-11-01）。"""
+    src = WorkerSource(url="https://example.invalid", token="x", branch="main")
+    calls = []
+
+    def fake_call(method, path, *, query=None, **kw):
+        calls.append(query["limit"])
+        after = int(query.get("after") or 0)
+        if after == 0 and query["limit"] > 1:
+            raise CentralError(500, "internal", "too big")
+        return {"rows": [{"n": after}], "next": str(after + 1) if after < 2 else None}
+
+    src._call = fake_call
+    rows = list(src._rows("files", "ws1", None, {}))
+    assert rows == [{"n": 0}, {"n": 1}, {"n": 2}]
+    assert calls[-3:] == [1, 2, 4] and calls[0] == 2000
+
+
+def test_rows_raise_when_single_row_still_fails():
+    src, _ = _src(fail_above=0, status=500)
+    with pytest.raises(CentralError):
+        list(src._rows("files", "ws1", None, {}))
