@@ -208,7 +208,7 @@ def test_near_family_groups():
     from open_guji_cv.groups.ids_online import SPECS, bank_path
     from open_guji_cv.groups.registry import SHAPE_GROUPS, _NEAR_FAMILY
     gs = [g for g, *_ in _NEAR_FAMILY]
-    assert set(gs) == {"xiang", "weim", "bie", "zhen"}
+    assert set(gs) == {"xiang", "weim", "bie", "zhen", "fu"}
     check_groups(tuple(gs))
     for g in gs:
         f = SHAPE_GROUPS[g].flow
