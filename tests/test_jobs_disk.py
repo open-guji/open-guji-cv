@@ -63,3 +63,81 @@ def test_disk_gate_clears_caches_before_refusing(tmp_path, monkeypatch):
     msg = R._disk_gate(say=lambda *_: None)
     assert msg and "不领单" in msg
     assert not uv.exists()
+
+
+def _mk_ws(root, name, pins, *, manifests=()):
+    """造一个工作区：books/*.yaml 钉 pins，config/glyph-pack/g<N>/manifest.json 给 manifests。"""
+    ws = root / name
+    (ws / "books").mkdir(parents=True)
+    (ws / "output").mkdir()
+    for i, p in enumerate(pins):
+        (ws / "books" / f"v{i}.yaml").write_text(f"id: v{i}\nglyph_pin: {p}\n")
+    for n in manifests:
+        d = ws / "config" / "glyph-pack" / f"g{n}"
+        d.mkdir(parents=True)
+        (d / "manifest.json").write_text('{"digest": "x"}')
+    return ws
+
+
+def _patch_pins(monkeypatch, tmp_path, pins_by_ws):
+    """pins_in_use 不开 cv 引擎：按工作区查表；manifest 按文件在不在。"""
+    from open_guji_cv.ops import glyph_snapshot as GS
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    monkeypatch.setattr(GS, "pins_in_use", lambda ws: {n: ["b"] for n in pins_by_ws[Path(ws)]})
+
+
+from pathlib import Path  # noqa: E402
+
+
+def test_prune_keeps_pinned_deletes_rebuildable_old(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path, "wsrepo", [3], manifests=(1, 2, 3))
+    for n in (1, 2, 3):
+        (ws / "output" / f"glyph-g{n}.db").write_bytes(b"x" * 1000)
+    (ws / "output" / "glyph.db").write_bytes(b"live")
+    _patch_pins(monkeypatch, tmp_path, {ws: [3]})
+    freed = R._prune_glyph_dbs(say=lambda *_: None)
+    assert freed == 2000
+    assert not (ws / "output" / "glyph-g1.db").exists()
+    assert not (ws / "output" / "glyph-g2.db").exists()
+    assert (ws / "output" / "glyph-g3.db").exists()
+    assert (ws / "output" / "glyph.db").exists()
+
+
+def test_prune_keeps_old_db_without_manifest(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path, "wsrepo", [3], manifests=(3,))
+    (ws / "output" / "glyph-g1.db").write_bytes(b"x")
+    _patch_pins(monkeypatch, tmp_path, {ws: [3]})
+    assert R._prune_glyph_dbs(say=lambda *_: None) == 0
+    assert (ws / "output" / "glyph-g1.db").exists()
+
+
+def test_prune_keeps_everything_when_pins_unreadable(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path, "wsrepo", [], manifests=(1,))
+    (ws / "output" / "glyph-g1.db").write_bytes(b"x")
+    from open_guji_cv.ops import glyph_snapshot as GS
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path))
+    def boom(_):
+        raise RuntimeError("bad yaml")
+    monkeypatch.setattr(GS, "pins_in_use", boom)
+    assert R._prune_glyph_dbs(say=lambda *_: None) == 0
+    assert (ws / "output" / "glyph-g1.db").exists()
+
+
+def test_prune_finds_nested_book_workspaces(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path / "guji-workspace", "96mid-book", [18], manifests=(1, 18))
+    (ws / "output" / "glyph-g1.db").write_bytes(b"x" * 10)
+    (ws / "output" / "glyph-g18.db").write_bytes(b"y" * 10)
+    _patch_pins(monkeypatch, tmp_path, {ws: [18]})
+    assert R._prune_glyph_dbs(say=lambda *_: None) == 10
+    assert not (ws / "output" / "glyph-g1.db").exists()
+    assert (ws / "output" / "glyph-g18.db").exists()
+
+
+def test_disk_gate_prunes_old_glyph_dbs(tmp_path, monkeypatch):
+    ws = _mk_ws(tmp_path, "wsrepo", [2], manifests=(1, 2))
+    (ws / "output" / "glyph-g1.db").write_bytes(b"x")
+    _patch_pins(monkeypatch, tmp_path, {ws: [2]})
+    monkeypatch.setattr(R, "HOME", tmp_path)
+    monkeypatch.setattr(R, "MIN_FREE_GB", 0)
+    assert R._disk_gate(say=lambda *_: None) is None
+    assert not (ws / "output" / "glyph-g1.db").exists()

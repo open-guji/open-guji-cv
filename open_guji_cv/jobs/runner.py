@@ -568,9 +568,63 @@ def _clean_job_dirs() -> None:
             shutil.rmtree(d, ignore_errors=True)
 
 
+def _glyph_pin_dbs() -> list[tuple[Path, Path, int]]:
+    """本机所有工作区 output/ 下的钉版字形库 ``glyph-g<N>.db``：[(工作区根, 库文件, N)]。
+    工作区在 ~/<仓>（仓根即工作区）或 ~/<仓>/<书目录>（旧总仓）。"""
+    out = []
+    home = Path.home()
+    for pat in ("*/output/glyph-g*.db", "*/*/output/glyph-g*.db"):
+        for f in home.glob(pat):
+            m = re.fullmatch(r"glyph-g(\d+)\.db", f.name)
+            if m and f.is_file():
+                out.append((f.parent.parent, f, int(m.group(1))))
+    return out
+
+
+def _prune_glyph_dbs(say=print) -> int:
+    """删各工作区里没人用的旧钉版字形库，返回释放的字节数。可重建的缓存（总授权里的「清本地缓存」）。
+
+    只保留该工作区各册 yaml 当前钉住的版本；其余的，本机有那一版的清单（config/glyph-pack/g<N>/manifest.json）
+    才删——有清单就能按 ``ensure_pins`` / ``--glyph-diff`` 从中心库重新拼出来。
+    读不出在用号（工作区读 yaml 出错）、没有清单的一律不删。领单前才跑，本机同时只一个执行方，没有在跑的单。"""
+    from ..core.glyph_pin import load_manifest
+    from ..ops.glyph_snapshot import pins_in_use
+    keep_cache: dict[Path, set[int] | None] = {}
+    freed = 0
+    for ws, f, n in _glyph_pin_dbs():
+        if ws not in keep_cache:
+            try:
+                keep_cache[ws] = set(pins_in_use(ws))
+            except Exception:       # noqa: BLE001 —— 算不出来就当都在用
+                keep_cache[ws] = None
+        keep = keep_cache[ws]
+        if keep is None or n in keep:
+            continue
+        try:
+            if load_manifest(ws, n) is None:
+                continue
+        except Exception:           # noqa: BLE001
+            continue
+        size = 0
+        for g in (f, f.with_name(f.name + "-wal"), f.with_name(f.name + "-shm")):
+            try:
+                size += g.stat().st_size
+                g.unlink()
+            except OSError:
+                pass
+        if size:
+            say(f"清旧字形库 {f}（{size / 2**20:.0f} MB，册 yaml 没钉 g{n}，可从中心库重建）")
+        freed += size
+    return freed
+
+
 def _disk_gate(say=print) -> str | None:
-    """领单前查剩余空间：先清旧的 job 目录；还不够依次清 uv、guji-data 缓存；都清了还不够就返回原因（不领单）。"""
+    """领单前查剩余空间：先清旧的 job 目录和没人钉的旧字形库；还不够依次清 uv、guji-data 缓存；都清了还不够就返回原因（不领单）。"""
     _clean_job_dirs()
+    try:
+        _prune_glyph_dbs(say)
+    except Exception as e:      # noqa: BLE001 —— 清缓存失败不碍领单
+        say(f"清旧字形库出错（忽略）：{e}")
     for cache in _CACHES:
         if _free_gb() >= MIN_FREE_GB:
             return None
