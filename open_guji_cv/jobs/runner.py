@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
 import threading
@@ -388,6 +389,7 @@ class Job:
         self.env_failed = bool(err and err.startswith("环境："))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
+        shutil.rmtree(self.dir, ignore_errors=True)      # 结果（含日志尾巴）已落库、产物已推完：本单目录不留
         return outcome
 
 
@@ -464,7 +466,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
                 (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
                 return done
-            bad = _preflight()
+            bad = _preflight() or _disk_gate()
             if bad:
                 # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
                 if bad != warned:
@@ -521,6 +523,29 @@ ENV_PAUSE_MIN = 30
 WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
 LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
 _preflight_ok_at = 0.0
+
+
+#: 领单前至少要有这么多剩余空间（GB）：准备要克隆工作区、取原图、跑 pipeline
+MIN_FREE_GB = float(os.environ.get("GUJI_JOBS_MIN_FREE_GB") or 10)
+
+
+def _clean_job_dirs() -> float:
+    """删本机所有 job 工作目录（每台机同时只一个执行方，不在跑的都是旧的）。返回释放的 GB。"""
+    before = shutil.disk_usage(HOME).free
+    for d in HOME.glob("job*-a*"):
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+    return max(0, shutil.disk_usage(HOME).free - before) / 2**30
+
+
+def _disk_gate() -> str | None:
+    """领单前查剩余空间：先清旧的 job 目录，还不够就返回原因（不领单）。缓存不自动删，要人定。"""
+    freed = _clean_job_dirs()
+    free = shutil.disk_usage(HOME).free / 2**30
+    if free >= MIN_FREE_GB:
+        return None
+    return (f"磁盘剩余 {free:.1f} GB，低于 {MIN_FREE_GB:g} GB（已清旧的 job 目录，释放 {freed:.1f} GB，仍不够），"
+            "不领单；请清 ~/.cache 或扩盘")
 
 
 def _preflight() -> str | None:
