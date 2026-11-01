@@ -523,6 +523,17 @@ def ry_shape(inp: MethodInput, img) -> GroupVerdict:
                         via="ry_shape", extra={"ratio": None if ratio is None else round(float(ratio), 3)})
 
 
+def zy_strokes(inp: MethodInput, img) -> GroupVerdict:
+    """于千子干拆笔画（`strokes.judge`）：竖钩分 于子／千干，两横之间直竖／斜撇分 于／子，首笔斜率＋右端凸起分 千／干。量不清弃权。"""
+    from . import strokes
+    if inp.ref not in inp.members:      # 整理本缺位或是组外字（予、下、癸）：予 也有钩有斜撇，笔画判法没见过，不判
+        return GroupVerdict(None, why="abstain:ref", via="zy_strokes")
+    ch, why, f = strokes.judge(img)
+    ok = ch in inp.members
+    return GroupVerdict(ch if ok else None, conf=1.0 if ok else 0.0, why="agree" if ok else why if ch is None else "abstain:out",
+                        via="zy_strokes", extra={"strokes": f})
+
+
 # —— 常用方法与数组（registry 用） ——
 
 FREQ = Freq()
@@ -536,6 +547,7 @@ BARS = Custom("bars", fn=bars, patch=True)
 RR_IMG = Custom("rr_img", fn=rr_img, patch=True)
 RY_SHAPE = Custom("ry_shape", fn=ry_shape, patch=True)
 YR_BARS = Custom("yr_bars", fn=yr_bars, patch=True)
+ZY_STROKES = Custom("zy_strokes", fn=zy_strokes, patch=True)
 IDS = Ids()
 HOG = HogRidge()
 CODEPOINT = Codepoint()

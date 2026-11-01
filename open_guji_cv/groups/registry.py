@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -413,10 +413,13 @@ GROUPS: dict[str, GroupSpec] = {
     # 于千子干（2026-10-24，A24「强化于千子干等形近判别」）：子于 zy 与 千干 qg 并成一组。vol04–20 送审里这四个字常三四个一起紧咬
     #   （「禘【于】太廟」库排 子于干千），哪一组都装不下。不同义，按文意定（L1 规则＋L2 表）；原子于整字 HOG 留作第二路，
     #   只在分差内候选与整理本字都落在 子于干 时跑、只给 子于（`Only`：它没见过 千，干 在库里只当陪衬），两路给字须一致。复核只跑文意（L1；表里没有的格不动）。
+    # 2026-11-01（A24「区分于千子干的笔画判法」，sheldon 定）：最前加拆笔画（`strokes.judge`：竖钩、两横之间直竖／斜撇、千干首笔斜率＋右端凸起），
+    #   只在分差内候选与整理本字都落在 于千子干 时跑（予 也有钩有斜撇）；量不清弃权交文意，文意也定不了送人审；笔画与文意给字不一致也送审。
     "zy": GroupSpec(
         id="zy", name="于千子干", members=frozenset("于千子干"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3", "ids"), config_dir="config/groups/zy",
-        flow=FlowSpec((CTX, Only("ids", inner=_img("zy"), chars=frozenset("子于干"), give=frozenset("子于"))), review=True, review_methods=(CTX,),
+        flow=FlowSpec((Only("zy_strokes", inner=ZY_STROKES, chars=frozenset("于千子干"), give=frozenset("于千子干")),
+                       CTX, Only("ids", inner=_img("zy"), chars=frozenset("子于干"), give=frozenset("子于"))), review=True, review_methods=(CTX,),
                       tolerate=frozenset("干亍"), tolerate_ref_agree=True, ref_enter=True), overlaps=("yz",),
         note="形近不同义，按文意定（L1 规则，弃权查 L2 表）；子于整字 HOG 当第二路（只在分差内全是 子于干 时跑），给字须一致；"
              "补放，也复核（只跑文意，只降审不改字）。与 予子 yz 共用「子」。千干 qg 已并入（册配置里的 qg 读作 zy）。"),
