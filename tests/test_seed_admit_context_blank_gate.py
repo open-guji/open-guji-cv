@@ -85,6 +85,24 @@ def test_missing_char_index_does_not_block(tmp_path, monkeypatch):
     assert r.admit and r.channel == "context"
 
 
+def test_tall_cell_is_not_admitted_via_context(tmp_path, monkeypatch):
+    """`vol39:176:3:1` 型（A32 报）：印文碎块字块高宽比 3.3，字形库只因「十」太容易匹配给了 unsure，
+    context 定「十」就放行成错字；高宽比 > context_max_aspect(2.5) 的正文字块不走 context 通道。"""
+    case = {**_BLANK_CASE, "char_recs": [dict(slot=1, ink_ratio=0.3, width=33.0, height=108.0)]}
+    r = _all(_run(_ctx(tmp_path, monkeypatch), **case))[0]
+    assert not r.admit and "context_tall_cell" in r.doubts, f"{r.channel}/{r.doubts}"
+
+
+def test_normal_aspect_cell_still_admitted_via_context(tmp_path, monkeypatch):
+    """两侧都验：高宽比 1.2 的正常字块照旧放行；闸关了（0）高字块也退回放行。"""
+    case = {**_BLANK_CASE, "char_recs": [dict(slot=1, ink_ratio=0.3, width=90.0, height=108.0)]}
+    r = _all(_run(_ctx(tmp_path, monkeypatch), **case))[0]
+    assert r.admit and r.channel == "context", r.doubts
+    tall = {**_BLANK_CASE, "char_recs": [dict(slot=1, ink_ratio=0.3, width=33.0, height=108.0)]}
+    r = _all(_run(_ctx(tmp_path, monkeypatch, params=SeedAdmitParams(context_max_aspect=0)), **tall))[0]
+    assert r.admit and r.channel == "context", r.doubts
+
+
 def test_default_min_ink_leaves_room_for_real_low_ink_chars():
     """闸值本身量出来的口径：见 `SeedAdmitParams.context_min_ink` 文档字符串——
     vol03 全书 `channel=context` 逐格看图定的界，压在「确认空白」（0.0493）与
