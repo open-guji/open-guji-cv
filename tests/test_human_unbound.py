@@ -77,6 +77,35 @@ def test_switch_off_ignores_lost(tmp_path, monkeypatch):
     assert r[2].admit and "human_unbound" not in (r[2].evidence or {})
 
 
+def test_shift_ok_off_by_default_demotes(tmp_path, monkeypatch):
+    # 旧人裁「山」＝整理本上一格的字，像是旧编号顺移；开关缺省关 → 照旧降级
+    lost = {_key(2): {"char": "山", "status": "unanchored", "event": "e1"}}
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), lost)
+    assert not r[2].admit and "human_unbound" in r[2].doubts
+
+
+def test_shift_ok_keeps_admit_when_ruling_matches_neighbour(tmp_path, monkeypatch):
+    lost = {_key(2): {"char": "山", "status": "unanchored", "event": "e1"}}
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_shift_ok=True), lost)
+    assert r[2].admit and r[2].char == "水"
+    assert r[2].evidence["human_unbound"]["shift_ok"] == -1
+
+
+def test_shift_ok_needs_unanchored_and_neighbour(tmp_path, monkeypatch):
+    p = SeedAdmitParams(human_unbound_shift_ok=True)
+    # 有几何却对不上（review）→ 不豁免
+    r, _ = _run(tmp_path, monkeypatch, p, {_key(2): {"char": "山", "status": "review", "event": "e1"}})
+    assert not r[2].admit
+    # 旧字在 ±2 格整理本里都没有 → 不豁免
+    r, _ = _run(tmp_path, monkeypatch, p, {_key(2): {"char": "火", "status": "unanchored", "event": "e1"}})
+    assert not r[2].admit
+
+
+def test_shift_ok_not_in_params_dump():
+    assert "human_unbound_shift_ok" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(human_unbound_shift_ok=True).model_dump()["human_unbound_shift_ok"] is True
+
+
 def test_human_chars_reports_lost(tmp_path, monkeypatch):
     """`human_chars(lost=…)`：绑定不可用的裁决按原编号记下；同一格之后又有可用裁决的不记。"""
     import open_guji_cv.feedback.bindings as bindings
