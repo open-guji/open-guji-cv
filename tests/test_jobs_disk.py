@@ -53,3 +53,13 @@ def test_succeeded_job_dir_is_removed_entirely(tmp_path, monkeypatch):
     R._retire_dir(d, "succeeded", 9, 1)
     assert not d.exists()
     assert not (tmp_path / "failed-logs").exists()
+
+
+def test_disk_gate_clears_caches_before_refusing(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "HOME", tmp_path)
+    uv = tmp_path / "uv"; uv.mkdir(); (uv / "x").write_text("x")
+    monkeypatch.setattr(R, "_CACHES", (uv,))
+    monkeypatch.setattr(R, "MIN_FREE_GB", 10 ** 9)
+    msg = R._disk_gate(say=lambda *_: None)
+    assert msg and "不领单" in msg
+    assert not uv.exists()

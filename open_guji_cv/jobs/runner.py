@@ -466,7 +466,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
                 (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
                 return done
-            bad = _preflight() or _disk_gate()
+            bad = _preflight() or _disk_gate(say)
             if bad:
                 # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
                 if bad != warned:
@@ -544,23 +544,34 @@ def _retire_dir(d: Path, outcome: str, job_id: int, n: int) -> None:
     shutil.rmtree(d, ignore_errors=True)
 
 
-def _clean_job_dirs() -> float:
-    """删本机所有 job 工作目录（每台机同时只一个执行方，不在跑的都是旧的）。返回释放的 GB。"""
-    before = shutil.disk_usage(HOME).free
+#: 空间不够时依次清的本地缓存（可重建，总授权里的「清本地缓存」）：先 uv，还不够再 guji-data
+_CACHES = (Path.home() / ".cache" / "uv", Path.home() / ".cache" / "guji-data")
+
+
+def _free_gb() -> float:
+    return shutil.disk_usage(HOME).free / 2**30
+
+
+def _clean_job_dirs() -> None:
+    """删本机所有 job 工作目录（每台机同时只一个执行方，不在跑的都是旧的）。"""
     for d in HOME.glob("job*-a*"):
         if d.is_dir():
             shutil.rmtree(d, ignore_errors=True)
-    return max(0, shutil.disk_usage(HOME).free - before) / 2**30
 
 
-def _disk_gate() -> str | None:
-    """领单前查剩余空间：先清旧的 job 目录，还不够就返回原因（不领单）。缓存不自动删，要人定。"""
-    freed = _clean_job_dirs()
-    free = shutil.disk_usage(HOME).free / 2**30
+def _disk_gate(say=print) -> str | None:
+    """领单前查剩余空间：先清旧的 job 目录；还不够依次清 uv、guji-data 缓存；都清了还不够就返回原因（不领单）。"""
+    _clean_job_dirs()
+    for cache in _CACHES:
+        if _free_gb() >= MIN_FREE_GB:
+            return None
+        if cache.exists():
+            say(f"磁盘剩余 {_free_gb():.1f} GB，低于 {MIN_FREE_GB:g} GB，清缓存 {cache}")
+            shutil.rmtree(cache, ignore_errors=True)
+    free = _free_gb()
     if free >= MIN_FREE_GB:
         return None
-    return (f"磁盘剩余 {free:.1f} GB，低于 {MIN_FREE_GB:g} GB（已清旧的 job 目录，释放 {freed:.1f} GB，仍不够），"
-            "不领单；请清 ~/.cache 或扩盘")
+    return f"磁盘剩余 {free:.1f} GB，低于 {MIN_FREE_GB:g} GB（已清 job 目录和缓存，仍不够），不领单；请扩盘"
 
 
 def _preflight() -> str | None:
