@@ -80,6 +80,7 @@ class FlowConfig:
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
     l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
+    tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
@@ -152,6 +153,12 @@ def _same(g: str, a: str | None, b: str | None, canon: Callable[[str], str]) -> 
     return bool(GROUPS[g].flow.ref_canon and a and b and not (a in mem and b in mem) and canon(a) == canon(b))
 
 
+def _tol(g: str, cfg: FlowConfig) -> frozenset:
+    """组 g 的陪衬字：注册表 `FlowSpec.tolerate` ＋ 书级追加（`FlowConfig.tolerate_extra`）。"""
+    extra = cfg.tolerate_extra.get(g)
+    return GROUPS[g].flow.tolerate | frozenset(extra) if extra else GROUPS[g].flow.tolerate
+
+
 def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c: c,
           coord_ref: str | None = None) -> tuple[str, str] | None:
     """→ (组 id, "lift"|"review") 或 None。`r` 是放行记录（id/char/admit/channel/provenance）；硬护栏由调用方先筛。
@@ -177,14 +184,15 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     rr = ref or coord_ref
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
+        tol = _tol(g, cfg)
         if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon)
-                and (top in f.tolerate or (f.ref_enter_member and top in mem and rr != top))):
+                and (top in tol or (f.ref_enter_member and top in mem and rr != top))):
             continue
-        if all(c in mem or c in f.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
+        if all(c in mem or c in tol for c, v in cands[1:] if c1 - v < cfg.delta):
             return g, "lift"
     for g in groups_in(top, cfg.groups):
         mem = GROUPS[g].members
-        if not all(c in mem or c in GROUPS[g].flow.tolerate for c, v in cands[1:] if c1 - v < cfg.delta):
+        if not all(c in mem or c in _tol(g, cfg) for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
         if not GROUPS[g].ref_free and ref and not _member(g, ref, canon):
             continue
@@ -198,7 +206,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
             if not parts:
                 continue
             mem = GROUPS[g].members.union(*(GROUPS[h].members for h in parts))
-            tol = GROUPS[g].flow.tolerate
+            tol = _tol(g, cfg)
             if not all(c in mem or c in tol for c, v in cands[1:] if c1 - v < cfg.delta):
                 continue
             if ref and ref not in mem and canon(ref) not in mem:
@@ -390,7 +398,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             entries[i] = (cands, ref, e)
             f = GROUPS[e[0]].flow
             if e[1] in ("lift", "joint") and f.tolerate_ref_agree and cands and any(
-                    c in f.tolerate and c not in GROUPS[e[0]].members for c, v in cands if cands[0][1] - v < cfg.delta):
+                    c in _tol(e[0], cfg) and c not in GROUPS[e[0]].members for c, v in cands if cands[0][1] - v < cfg.delta):
                 tol_hit.add(r.id)
     plans = []
     for i, (cands, ref, (g, mode)) in entries.items():

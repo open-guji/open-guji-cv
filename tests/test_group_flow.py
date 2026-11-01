@@ -103,6 +103,24 @@ def test_entry_ref_enter_member_xuan():
     assert entry(r, [("選", 0.96), ("指", 0.95)], None, cfg, coord_ref="指") is None
 
 
+def test_entry_book_level_tolerate_extra():
+    """书级追加陪衬（史記文淵閣本 2026-11-01）：曰 与借来库形 田 紧咬，追加后进日曰组；没追加的书照旧挡。"""
+    r = Rec("a")
+    cands = [("日", 0.977), ("曰", 0.971), ("田", 0.964)]
+    assert entry(r, cands, "曰", FlowConfig(groups=("ry", "rm"))) is None
+    cfg = FlowConfig(groups=("ry", "rm"), tolerate_extra={"ry": "田四囬臼"})
+    assert entry(r, cands, "曰", cfg) == ("ry", "lift")
+    assert entry(r, [("日", 0.977), ("指", 0.97)], "曰", cfg) is None              # 别的组外字照挡
+    assert entry(r, [("田", 0.98), ("曰", 0.975)], "曰", cfg) == ("ry", "lift")     # 库首位是陪衬、整理本在组里（ref_enter）
+    assert "田" not in GROUPS["ry"].flow.tolerate                                   # 注册表不变
+
+
+def test_tolerate_extra_not_in_params_dump():
+    assert "group_flow_tolerate_extra" not in SeedAdmitParams().model_dump()
+    d = SeedAdmitParams(group_flow=("ry",), group_flow_tolerate_extra={"ry": "田"}).model_dump()
+    assert d["group_flow_tolerate_extra"] == {"ry": "田"}
+
+
 def test_entry_jys_tolerates_ba():
     cfg = _cfg()
     assert entry(Rec("a"), [("己", 0.99), ("巴", 0.985)], None, cfg) == ("jys", "lift")
