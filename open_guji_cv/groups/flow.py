@@ -82,6 +82,7 @@ class FlowConfig:
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
     abstain_ref_ok: frozenset = frozenset()  # 书级「按整理本走」：复核时解法全弃权、已放行字＝整理本字 → 不降审；补放时族内刻形拆不开、整理本是同族一形 → 取整理本形
+    shape_ref_ok: frozenset = frozenset()    # 书级「按整理本走」：复核时只有字形路（ids）给出别的字、已放行字＝整理本字 → 不降审（史記 2026-11-01，廣賔、還遺 等）
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -538,6 +539,14 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 解法只是弃权、没人反对，已放行字与整理本同字：照整理本留放（史記 2026-11-01，用户定「按整理本走」）
                 code = None
                 trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "abstain_ref_agree"}]
+            if (code == "group_flow_disagree" and g in cfg.shape_ref_ok and r.char
+                    and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(r.char)
+                    and (dis := [t for t in trail if t["char"] and norm(t["char"]) != norm(r.char)])
+                    and all(t["solver"] == "ids" for t in dis)):
+                # 只有字形路 ids 给了别的字（文意没有异议）、已放行字与整理本同字：照整理本留放（史記 2026-11-01，
+                # 廣→賔、還→遺 等看图全是整理本对，ids 模板库对写本形不准）
+                code, other = None, False
+                trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "shape_dissent_ref_agree"}]
             if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
