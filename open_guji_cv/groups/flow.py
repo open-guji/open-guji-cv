@@ -89,6 +89,8 @@ class FlowConfig:
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
     codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
     provisional: bool = True                           # 同义组暂归一兜底（`registry.PROVISIONAL`，seed_admit `group_flow_provisional`）
+    vis_model: str | None = None                       # 字块图像＋文意 L4（`vis_llm`）用的模型；None＝不问（A24 2026-11-01）
+    vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
 
 
@@ -423,6 +425,43 @@ def _ref_lowmargin(g: str, ch, why: str, trail: list, ref: str, canon: Callable[
     return ch, why, trail
 
 
+def _vis_try(g: str, r, trail: list, cr: str | None, cfg: FlowConfig, canon, patch_fn, left, right):
+    """字块图像＋文意 L4（`groups.vis_llm`）：一格 → (字｜None, trail 项)。高置信、是（本组＋共字组）组员，
+    且有别的证人（整理本字／坐标对位字、文意 L3 或 L1、字形 ids）同字才给字。`None` 项不留痕。"""
+    f = GROUPS[g].flow
+    if not (f.vis and cfg.vis_model and patch_fn is not None and left is not None):
+        return None, None
+    mem = set(GROUPS[g].members)
+    for h in partners(g, cfg.groups):
+        mem |= set(GROUPS[h].members)
+    patch = patch_fn(r.id)
+    if patch is None:
+        return None, None
+    from . import vis_llm
+    ans = vis_llm.judge(g, mem, patch, left, right, model=cfg.vis_model, cache=cfg.vis_cache, cell=r.id)
+    if ans is None:
+        return None, None
+    ch, conf = ans["char"], ans["conf"]
+    item = {"solver": "vis", "char": None, "why": f"{conf}:{ch}", "vis_conf": conf, "vis_why": ans.get("why"), "cached": ans["cached"]}
+    if conf != "high" or ch not in mem:
+        return None, item
+    if cr and cr != GAP and canon(cr) != canon(ch) and canon(cr) in {canon(m) for m in mem}:
+        # 整理本（含坐标对位）说是组里另一个字：不越过它改字。留出看图：图像＋文意 L3 都说「于」而整理本、刻形是「干」
+        # （vol35:152:2:4 干文傳），两个大模型共用一套先验会一起错；整理本是组外字（悶 之类）才让图像＋证人改
+        item["why"] = f"ref_dissent:{ch}"
+        return None, item
+    sup = []
+    if cr and cr != GAP and canon(cr) == canon(ch):
+        sup.append("ref")
+    for t in trail:
+        if t.get("char") == ch and t["solver"].split(":")[-1] in ("ctx", "ids"):
+            sup.append(t["solver"])
+    if not sup:
+        item["why"] = f"nosupport:{ch}"
+        return None, item
+    return ch, {**item, "char": ch, "why": "agree", "support": sup}
+
+
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
@@ -464,6 +503,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             return True
         return False
 
+    wins = {}
     for i, (cands, ref, (g, mode)) in entries.items():
         r = seq[i]
         pos = _pair_pos(entries, i, g)
@@ -473,9 +513,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             continue
         need_ctx = ctx_fn is not None and any("ctx" in GROUPS[x].flow.solvers
                                               for x in (g, *(partners(g, cfg.groups) if mode == "joint" else ())))
+        need_ctx = need_ctx or bool(ctx_fn is not None and cfg.vis_model and GROUPS[g].flow.vis)
         left, right = (ctx_fn(seq, i, -1), ctx_fn(seq, i, 1)) if need_ctx else (None, None)
         if need_ctx:
             lr[r.id] = (cands, left, right)
+        wins[r.id] = (left, right)
         if mode == "joint":
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
@@ -554,6 +596,12 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 坐标对位说是组里另一个字、给字的只有单遍文意表：不补放（vol13 63:5:18、vol17 161:8:8、vol19 27:7:9
                 # 单遍 haiku 读反，A24 10-24）；文意 strong、两遍以上同字、L1 规则或别的方法同字时照放
                 ch, why = None, "coord_dissent"
+            if ch is None and why not in ("weak",):
+                vch, vitem = _vis_try(g, r, trail, ref or (veto_refs or {}).get(r.id), cfg, norm, patch_fn, *wins.get(r.id, (None, None)))
+                if vitem is not None:
+                    trail = trail + [vitem]
+                if vch is not None:
+                    ch, why = vch, "vis"
             pv = None if ch is not None else _provisional(g, mode, r, cands_of(r.id) or [], ref, (veto_refs or {}).get(r.id), cfg, norm)
             if pv is not None:
                 # 暂归一兜底：字认得准、写法拆不开 → 放成这组最常见的字形，留痕记原来没放的原因与证人
@@ -598,6 +646,15 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
+            if code and not (other and fix) and code != "group_flow_ref_dissent":
+                vch, vitem = _vis_try(g, r, trail, ref or (veto_refs or {}).get(r.id), cfg, norm, patch_fn, *wins.get(r.id, (None, None)))
+                if vitem is not None:
+                    trail = trail + [vitem]
+                if vch is not None and _same(g, vch, r.char, norm):
+                    code, other = None, False            # 图像＋文意 L4 高置信、与放行字同字且有证人：不降审
+                elif vch is not None:
+                    fix, other, code = True, True, None  # 同上、给了别的字：改字
+                    ch = vch
             pv = _provisional(g, mode, r, [], ref, None, cfg, norm) if code and not (other and fix) else None
             if pv is not None:
                 # 暂归一兜底：别的通道认了字、组里拆不开写法（判出另一形、弃权、与整理本不一） → 不降审，放成这组最常见的字形
