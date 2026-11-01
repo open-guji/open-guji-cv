@@ -257,6 +257,7 @@ SPECS: dict[str, IdsSpec] = {
     #   按册留出 派𣲖 歲嵗 0.5 起 0 错；奇竒 陪衬 苛 判成 竒 最高 0.91 → 1.0（放行格每字 ≤160）。见 doc/字组/ 同名卡。
     "xuan": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.35, min_class=8, whole="hog", region=(0.25, 1.0, 0.0, 0.8), lam=1.0,
                     size=48, clean=True),
+    "fu": IdsSpec(frame="", orient="h", prior=0.5, min_margin=1.2, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "pai": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "qi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=2.0, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
     "sui": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=1.0, size=48, clean=True),
