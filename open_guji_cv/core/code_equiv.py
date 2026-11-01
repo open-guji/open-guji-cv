@@ -378,6 +378,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="046fe1adaff78f4900fe665134a4b945883934c73988cf79716e74ed569407d2",
           old="1d2277f983f07f18c18c79bab84350a867cc5b141e8d6bdb34f32d4dac239e60",
           evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199，含日曰组与小注格）上与 origin/dev 产物逐字节相同"),
+    # 书级按参校本取异体 follow_ref_variants（缺省关）：2026-11-01 史記 02
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="e3d42c945641454ad426932469235703d009750163b6115cc8d7136abedcbc77",
+          old="df2d8a69fe3bbf80b5ecfc97540aff3634a536d20cdd442c8998472bfdf5019b",
+          evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199，含异体与小注格）上与 origin/dev 产物逐字节相同"),
 )
 
 
