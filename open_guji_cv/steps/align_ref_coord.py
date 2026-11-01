@@ -281,6 +281,12 @@ class PageMap:
     runner_up: int = 0
     col_line: dict[int, int] = field(default_factory=dict)
     note: str = ""
+    past_leaf: list[int] = field(default_factory=list)  # 按半叶头定位时，整理本这半叶已经没有行的列
+
+
+#: 坐标对位退回原因：按半叶头（邻页定位／页钉位）定位，这一列已过了整理本这半叶的最后一行——
+#: 整理本说这一列没有字（卷末页「…皆附存目」之后、印「乾隆御覽之寶」压着的空栏）。seed_admit 认这句。
+COORD_PAST_LEAF = "整理本这半叶没有这一列"
 
 
 def map_columns(carriers: list[tuple[int, str]], lines: list[RefLine],

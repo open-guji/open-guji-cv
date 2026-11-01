@@ -70,6 +70,7 @@ def test_pin_map_columns_follow_leaf_head_and_stay_inside_leaf(tmp_path):
     carriers = [(c, body[8 + c - 1]) for c in range(1, 10)]   # 第 9 列已出本半叶
     pm = A._pin_map(carriers, lines, 8)
     assert pm.base == 8 and pm.col_line == {c: 8 + c - 1 for c in range(1, 9)}
+    assert pm.past_leaf == [9]                                 # 过了本半叶末行的列单记（align_ref 2.5）
     # 整页载体乱码：不靠载体定位，列照样按半叶头对上
     pm = A._pin_map([(c, "龘龘龘龘") for c in range(1, 9)], lines, 16)
     assert pm.col_line == {c: 16 + c - 1 for c in range(1, 9)}
