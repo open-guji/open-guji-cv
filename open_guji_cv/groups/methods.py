@@ -55,6 +55,8 @@ class MethodInput:
     left: str | None = None            # 文意窗口（读序前文／后文）；只有组里有文意方法时才取
     right: str | None = None
     patch_fn: Callable[[str], Any] | None = None   # 格 id → 灰度字块（缺图 → None）
+    cur: str | None = None             # 复核时格现放行的字（补放为 None）
+    force_panel: bool = False          # 文意字不 strong 时一律交 L3 二审小组确认（`flow.decide` 在文意与字形冲突时重判用）
 
     def patch(self):
         return self.patch_fn(self.cell_id) if self.patch_fn is not None else None
@@ -146,7 +148,7 @@ def _spec(g: str):
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:
     """文意类方法的留痕口径（沿用旧 `ctx` 解法）：via 记 `ctx:<后端>`，extra 只留命中的规则。"""
     keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong", "runs", "p", "gap", "top",
-                                     "llm_model", "llm_conf", "cached", "tok", "l2_top")
+                                     "llm_model", "llm_conf", "cached", "tok", "l2_top", "panel")
             if v.extra.get(k) not in (None, [], "")}
     return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx", extra=keep)
 
@@ -216,6 +218,11 @@ class CtxModel(Method):
         return _ctx_out(ctx_l2.judge(_HEADS[path], inp.left or "", inp.right or "", inp.members))
 
 
+def _panel_of(cfg, group: str) -> tuple:
+    """本组用的 L3 二审小组（`FlowConfig.l3_panel`，只对 `l3_panel_groups` 里的组开）。"""
+    return tuple(getattr(cfg, "l3_panel", ()) or ()) if group in (getattr(cfg, "l3_panel_groups", ()) or ()) else ()
+
+
 @dataclass(frozen=True)
 class CtxOnline(Method):
     """文意 L3 在线：管线里直接问大模型（`ctx_llm`，`FlowConfig.l3_online[组]` 给了提示词才适用）。
@@ -243,7 +250,8 @@ class CtxOnline(Method):
                 _L3C[path] = ctx_llm.AnswerCache(path or None)
             cache = _L3C[path]
         v = ctx_llm.judge(inp.group, o["system"], o["ver"], inp.left or "", inp.right or "", inp.members,
-                          model=cfg.l3_model, effort=cfg.l3_effort, cache=cache, cell=inp.cell_id)
+                          model=cfg.l3_model, effort=cfg.l3_effort, cache=cache, cell=inp.cell_id,
+                          panel=_panel_of(cfg, inp.group), ref=inp.ref)
         top = prev.extra.get("top")
         if top:
             v.extra["l2_top"] = top
@@ -280,7 +288,45 @@ class Chain(Method):
                 elif isinstance(s, CtxRule) and f.strong_over_ref:
                     v = self._confirm(v, inp)
                 break
+        if any(isinstance(s, CtxOnline) for s in self.steps):
+            v = self._panel(v, inp)
         return v
+
+    def _panel(self, v: GroupVerdict, inp) -> GroupVerdict:
+        """L3 二审小组收尾（A24 2026-11-01，`ctx_llm.panel_verdict`）：前面各层的结论没有确认、又碰到分歧时，让几个强模型高 effort 独立读一遍。
+        - 没给字（弃权）：小组全部同字 → 给字（strong）；全部说「其他」→ `abstain:other`（共字组接手）；其余照原样；
+        - 给了字、还不 strong、与整理本或现放行字不同：小组同字 → strong；小组给了别的字 → 弃权 `disagree:panel`；其余照原样。
+        己已巳 `after_pair`（干支第二字）、没密钥、已经问过小组的不再问。"""
+        from . import ctx_llm
+        cfg = inp.cfg
+        panel = _panel_of(cfg, inp.group)
+        o = (getattr(cfg, "l3_online", {}) or {}).get(inp.group)
+        if (not panel or not o or v.extra.get("panel") or (v.extra.get("strong") and not inp.force_panel)
+                or v.why in ("abstain:pair", "abstain:no_api_key")):
+            return v
+        norm = getattr(cfg, "canon", None) or (lambda c: c)
+        if v.char is not None and not inp.force_panel:
+            ref, cur = inp.ref, inp.cur
+            if (not ref or norm(ref) == v.char) and (not cur or norm(cur) == v.char) or (not ref and not cur):
+                return v
+        cache = o.get("rulings")
+        if cache is None:
+            path = o.get("cache") or ""
+            if path not in _L3C:
+                _L3C[path] = ctx_llm.AnswerCache(path or None)
+            cache = _L3C[path]
+        pv = ctx_llm.panel_verdict(inp.group, o["system"], o["ver"], inp.left or "", inp.right or "", inp.members, panel,
+                                    cache=cache, cell=inp.cell_id)
+        pv2 = ctx_llm.panel_to_verdict(pv, {})
+        if pv2 is None:
+            return v if v.char is None else GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via,
+                                                         extra={**v.extra, "panel": ctx_llm.panel_extra(pv, {})["panel"]})
+        out = _ctx_out(pv2)
+        if v.char is None:
+            return out
+        if out.char == v.char:
+            return GroupVerdict(v.char, conf=v.conf, why=v.why, via=v.via, extra={**v.extra, "strong": True, "panel": out.extra["panel"]})
+        return GroupVerdict(None, why="disagree:panel", via=v.via, extra={**v.extra, "panel": out.extra["panel"]})
 
     def _confirm(self, v: GroupVerdict, inp) -> GroupVerdict:
         """L1 规则给了字：组声明了 `strong_over_ref` 时再查 L2 表，表里同字且 strong → L1 的答案也记 strong（可改字）。

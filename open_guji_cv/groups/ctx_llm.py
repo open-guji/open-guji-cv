@@ -169,31 +169,119 @@ def user_message(left: str, right: str) -> str:
             + "\n\n本条单独问：不要数组，只输出一个 JSON 对象 {\"char\", \"conf\", \"why\"}。")
 
 
-def judge(group: str, system: str, prompt_ver: str, left: str, right: str, members, *, model: str = DEFAULT_MODEL,
-          effort: str = DEFAULT_EFFORT, cache=None, client=None, cell: str | None = None) -> GroupVerdict:
-    """一格 → `GroupVerdict`（via `ctx_llm`）。extra：`llm_model`、`llm_conf`（大模型自报）、`cached`、`tok`（这一格真问时的用量）。"""
-    left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
-    e = cache.lookup(group, prompt_ver, model, left, right) if cache else None
-    extra: dict = {"llm_model": model}
+RANK = {"high": 3, "mid": 2, "low": 1}
+
+
+def _entry(group, system, ver, left, right, members, model, effort, cache, client, cell):
+    """问一次（先查缓存）→ (缓存条目 dict｜None, 是不是读的缓存, 本次真问的 token｜{}, 出错码｜None)。"""
+    e = cache.lookup(group, ver, model, left, right) if cache else None
     if e is not None:
         _bump(hits=1)
-        extra["cached"] = True
+        return e, True, {}, None
+    c = client if client is not None else _client()
+    if c is None:
+        return None, False, {}, "no_api_key"
+    ans, tok, err = c.ask(system, user_message(left, right), members, model, effort)
+    _bump(calls=1, errors=1 if err else 0, input_tokens=tok.get("in"), output_tokens=tok.get("out"),
+          cache_read_tokens=tok.get("cache_read"), cache_write_tokens=tok.get("cache_write"))
+    t = {k2: tok[k2] for k2 in ("in", "out", "cache_read") if tok.get(k2)}
+    if err:
+        return None, False, t, err
+    e = {"char": ans.get("char"), "conf": ans.get("conf"), "why": str(ans.get("why") or "")[:60],
+         "model": tok.get("model") or model, "tok": t}
+    if cache:
+        cache.store(group, ver, model, left, right, e, cell)
+    return e, False, t, None
+
+
+def split_spec(spec: str) -> tuple[str, str]:
+    """面板成员 `"模型:effort"` → (模型, effort)；没写 effort 取 high。"""
+    m, _, ef = spec.partition(":")
+    return m, ef or "high"
+
+
+def panel_verdict(group, system, prompt_ver, left, right, members, specs, *, cache=None, client=None, cell=None) -> dict:
+    """二审小组（A24 2026-11-01）：几个强模型各以高 effort 独立读同一格，**全部同字、置信都不低于 mid、且至少一家 high** 才算数。
+
+    殿本 414 格（日曰／日目／己已巳 的待审）上，Opus high＋Fable high 的同字结论：己已巳金标 215 格 0 错、日曰金标 108 格 3 错（3 格都疑金标错）；
+    与整理本不同的 138 格逐格读过，基本全对。单模型 low effort 只收 high 太保守，单模型 high effort 也有 0.5–1% 读反。
+    缓存按「提示词版本＋模型＋effort」分键存进同一个裁定库，成员换了不会串。
+    → {"kind": "char"|"other"|"split"|"fail", "char", "members": [{model, effort, char, conf, why, cached}], "tok": 本次真问的 token}"""
+    from concurrent.futures import ThreadPoolExecutor
+
+    def one(spec):
+        model, effort = split_spec(spec)
+        e, cached, tok, err = _entry(group, system, f"{prompt_ver}#{model}:{effort}", left, right, members, model, effort,
+                                     cache, client, cell)
+        return {"model": model, "effort": effort, "err": err, "cached": cached, "tok": tok,
+                **({"char": e.get("char"), "conf": e.get("conf"), "why": e.get("why")} if e else {})}
+    with ThreadPoolExecutor(max_workers=max(1, len(specs))) as ex:
+        res = list(ex.map(one, specs))
+    tok = {}
+    for r in res:
+        for k2, v in r["tok"].items():
+            tok[k2] = tok.get(k2, 0) + v
+    # 都不低于 mid、且至少一家 high（两家都只有 mid 的 36 格里多是真难判的，宁可送审）
+    if (not res or any(r["err"] or r.get("conf") not in RANK or RANK[r["conf"]] < RANK["mid"] for r in res)
+            or not any(r["conf"] == "high" for r in res)):
+        kind, ch = "fail" if any(r["err"] for r in res) else "split", None
+    elif len({r["char"] for r in res}) != 1:
+        kind, ch = "split", None
+    elif res[0]["char"] == OTHER:
+        kind, ch = "other", None
+    elif res[0]["char"] in members:
+        kind, ch = "char", res[0]["char"]
     else:
-        c = client if client is not None else _client()
-        if c is None:
-            return GroupVerdict(None, why="abstain:no_api_key", via="ctx_llm", extra=extra)
-        ans, tok, err = c.ask(system, user_message(left, right), members, model, effort)
-        _bump(calls=1, errors=1 if err else 0, input_tokens=tok.get("in"), output_tokens=tok.get("out"),
-              cache_read_tokens=tok.get("cache_read"), cache_write_tokens=tok.get("cache_write"))
-        extra["tok"] = {k2: tok[k2] for k2 in ("in", "out", "cache_read") if tok.get(k2)}
-        if err:
-            return GroupVerdict(None, why=f"abstain:llm_{err}", via="ctx_llm", extra=extra)
-        e = {"char": ans.get("char"), "conf": ans.get("conf"), "why": str(ans.get("why") or "")[:60],
-             "model": tok.get("model") or model, "tok": extra["tok"]}
-        if cache:
-            cache.store(group, prompt_ver, model, left, right, e, cell)
+        kind, ch = "split", None
+    return {"kind": kind, "char": ch, "tok": tok,
+            "members": [{k2: r.get(k2) for k2 in ("model", "effort", "char", "conf", "cached")} for r in res]}
+
+
+def panel_extra(pv: dict, extra: dict) -> dict:
+    """小组结论记进 extra：`panel`（"char:曰h曰m"＝结论:各家字＋置信首字母）、本次真问的 token 并入 `tok`。"""
+    out = dict(extra)
+    if pv["tok"]:
+        out["tok"] = {k2: extra.get("tok", {}).get(k2, 0) + v for k2, v in pv["tok"].items()}
+    out["panel"] = pv["kind"] + ":" + "".join(f"{m.get('char') or '-'}{(m.get('conf') or '-')[0]}" for m in pv["members"])
+    return out
+
+
+def panel_to_verdict(pv: dict, extra: dict) -> GroupVerdict | None:
+    """小组全部同字 → 给字（strong）；全部说「其他」→ `abstain:other`（other_conf high）；其余 None（调用方照原结论走）。"""
+    ex = panel_extra(pv, extra)
+    if pv["kind"] == "char":
+        return GroupVerdict(pv["char"], conf=1.0, why="agree", via="ctx_llm", extra={**ex, "strong": True})
+    if pv["kind"] == "other":
+        return GroupVerdict(None, why="abstain:other", via="ctx_llm", extra={**ex, "other_conf": "high"})
+    return None
+
+
+def judge(group: str, system: str, prompt_ver: str, left: str, right: str, members, *, model: str = DEFAULT_MODEL,
+          effort: str = DEFAULT_EFFORT, cache=None, client=None, cell: str | None = None,
+          panel: tuple = (), ref: str | None = None) -> GroupVerdict:
+    """一格 → `GroupVerdict`（via `ctx_llm`）。extra：`llm_model`、`llm_conf`（大模型自报）、`cached`、`tok`（这一格真问时的用量）。
+
+    `panel`（`"模型:effort"` 列表，空＝不开）：首问不是「组内字、high」，或首问的字与整理本 `ref` 不同时，再交二审小组（`panel_verdict`）：
+    全部同字（置信 ≥ mid 且至少一家 high）→ 给字，记 `strong`（可越过整理本改字，见 flow 的 `strong_over_ref`／`review_fix_strong`）；
+    全部说「其他」→ `abstain:other`（`other_conf: high`，共字组联判认它）；其余照首问的结论走。"""
+    left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
+    extra: dict = {"llm_model": model}
+    e, cached, tok, err = _entry(group, system, prompt_ver, left, right, members, model, effort, cache, client, cell)
+    if cached:
+        extra["cached"] = True
+    if tok:
+        extra["tok"] = tok
+    if err:
+        return GroupVerdict(None, why="abstain:no_api_key" if err == "no_api_key" else f"abstain:llm_{err}", via="ctx_llm", extra=extra)
     ch, conf = e.get("char"), e.get("conf")
     extra["llm_conf"] = conf
+    solid = ch in members and conf == "high"
+    if panel and not (solid and (ref is None or ch == ref)) and not (ch == OTHER and conf == "high"):
+        pv = panel_verdict(group, system, prompt_ver, left, right, members, panel, cache=cache, client=client, cell=cell)
+        v = panel_to_verdict(pv, extra)
+        if v is not None:
+            return v
+        extra = panel_extra(pv, extra)
     if ch == OTHER:
         return GroupVerdict(None, why="abstain:other", via="ctx_llm",
                             extra={**extra, "other_conf": "high" if conf == "high" else "low"})
