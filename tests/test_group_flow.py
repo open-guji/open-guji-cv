@@ -824,3 +824,33 @@ def test_kgc_tsh_two_stage_form_pick_follows_codepoints():
     assert _pick_form("kgc", "冠", r, [("冠", 0.96)], cfg, None, [])[:2] == ("冠", "agree")
     assert _pick_form("tsh", "塡", r, [("愼", 0.96)], cfg, None, [])[:2] == ("塡", "agree")
     assert _pick_form("tsh", "愼", r, [("愼", 0.96)], cfg, None, [])[:2] == ("愼", "agree")
+
+
+def test_lift_shape_ref_book_level(monkeypatch):
+    """书级 `lift_shape_ref`（史記 2026-11-01）：日曰要文意给字才补放；文意弃权、字形路给的字＝整理本（或坐标对位）字时放行。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ctx": None, "ry_shape": "曰"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks.get(name), via=name))
+    cands = lambda cid: [("日", 0.98), ("曰", 0.975)]
+    on = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}))
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("曰", "equal")}, cands, lambda r: False, FlowConfig(groups=("ry",)))
+    assert not r.admit and "group_flow_weak" in r.doubts                       # 缺省照旧
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("曰", "equal")}, cands, lambda r: False, on)
+    assert r.admit and r.char == "曰"
+    r = Rec("x")                                                               # 现役对位缺格，坐标对位字
+    group_flow_pass([r], {}, cands, lambda r: False, on, veto_refs={"x": "曰"})
+    assert r.admit and r.char == "曰"
+    r = Rec("x")                                                               # 整理本是另一个字 → 不放
+    group_flow_pass([r], {"x": ("日", "equal")}, cands, lambda r: False, on)
+    assert not r.admit
+    r = Rec("x")                                                               # 没有整理本 → 不放
+    group_flow_pass([r], {}, cands, lambda r: False, on)
+    assert not r.admit
+
+
+def test_lift_shape_ref_not_in_params_dump():
+    assert "group_flow_lift_shape_ref" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ref=["ry"]).model_dump()["group_flow_lift_shape_ref"] == ["ry"]

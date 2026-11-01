@@ -80,6 +80,7 @@ class FlowConfig:
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
     l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
+    lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -434,7 +435,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
             needs = GROUPS[g].flow.lift_needs
-            if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail):
+            if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail) and not (
+                    g in cfg.lift_shape_ref and (sr := ref or (veto_refs or {}).get(r.id))
+                    and norm(sr) == norm(ch) and all(not t["char"] or t["char"] == ch for t in trail)):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not GROUPS[g].ref_free
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
