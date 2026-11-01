@@ -27,3 +27,29 @@ def test_disk_gate_refuses_when_short(tmp_path, monkeypatch):
     monkeypatch.setattr(R, "MIN_FREE_GB", 10 ** 9)
     msg = R._disk_gate()
     assert msg and "不领单" in msg
+
+
+def test_failed_job_keeps_only_run_log_and_prunes(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "HOME", tmp_path)
+    monkeypatch.setattr(R, "FAILED_LOGS", tmp_path / "failed-logs")
+    monkeypatch.setattr(R, "FAILED_LOGS_KEEP", 2)
+    for i in range(3):
+        d = tmp_path / f"job{i}-a1"
+        d.mkdir()
+        (d / "run.log").write_text("log")
+        (d / "big.bin").write_bytes(b"x" * 100)
+        R._retire_dir(d, "failed", i, 1)
+        assert not d.exists()
+    names = sorted(p.name for p in (tmp_path / "failed-logs").iterdir())
+    assert len(names) == 2
+
+
+def test_succeeded_job_dir_is_removed_entirely(tmp_path, monkeypatch):
+    monkeypatch.setattr(R, "HOME", tmp_path)
+    monkeypatch.setattr(R, "FAILED_LOGS", tmp_path / "failed-logs")
+    d = tmp_path / "job9-a1"
+    d.mkdir()
+    (d / "run.log").write_text("log")
+    R._retire_dir(d, "succeeded", 9, 1)
+    assert not d.exists()
+    assert not (tmp_path / "failed-logs").exists()
