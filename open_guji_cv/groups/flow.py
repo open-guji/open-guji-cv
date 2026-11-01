@@ -378,6 +378,19 @@ def _margin(t: dict) -> float | None:
     return min(float(x) for x in ms) if ms else None
 
 
+def _ref_lowmargin(g: str, ch, why: str, trail: list, ref: str, canon: Callable[[str], str]):
+    """整理本互证降门槛（`FlowSpec.ref_margin`，A24 2026-11-01）：整字 HOG 弃权只因 margin 不够（`abstain:low_margin`），第一名是
+    少见形（`ref_margin_forms`）、与整理本字（现役对位，缺位时坐标对位）同字、margin ≥ `ref_margin` → 放第一名。"""
+    f = GROUPS[g].flow
+    for t in trail:
+        form, m = t.get("form"), _margin(t)
+        if (t.get("solver") == "ids" and t.get("why") == "abstain:low_margin" and form and m is not None and m >= f.ref_margin
+                and form in (f.ref_margin_forms or "".join(GROUPS[g].members)) and canon(form) == canon(ref)):
+            return form, "agree", trail + [{"solver": "ref_lowmargin", "char": form, "why": "agree:ref_lowmargin",
+                                            "margin": m, "ref_margin": f.ref_margin, "witness": ref}]
+    return ch, why, trail
+
+
 def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], blocked: Callable[[object], bool],
                     cfg: FlowConfig, ctx_fn: Callable[[list, int, int], str] | None = None,
                     patch_fn: Callable[[str], object] | None = None,
@@ -426,6 +439,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     trail = trail + [{"solver": "handoff", "char": None, "why": f"other:{h}"}] + ht
                     g, ch, why = h, hc, hwhy
                     break
+        if mode == "lift" and ch is None and why == "abstain" and GROUPS[g].flow.ref_margin:
+            # 整理本字：现役对位，缺位时用坐标对位字（vol49 整页对位缺）；夹注半格只有坐标对位不认（列尾切残会对到上一格的字）
+            wit = ref or ("" if r.id[-1:] in ("a", "b") else (veto_refs or {}).get(r.id))
+            if wit and wit != GAP:
+                ch, why, trail = _ref_lowmargin(g, ch, why, trail, wit, cfg.canon or canon)
         if why == "conflict" and GROUPS[g].flow.ctx_over:
             ch, why, trail = _ctx_over(g, ch, why, trail)
         plans.append((r, g, mode, ch, why, trail, ref))
@@ -462,6 +480,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
                   and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
                   and not (cr == GAP and GROUPS[g].flow.solo_margin > 0)
+                  and not (g in PROVISIONAL and cr in PROVISIONAL[g].forms)    # 坐标对位是同字的另一写法（蒙𫎇 的 䝉），不算组外字（A24 11-01）
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "coord_dissent"   # 坐标对位说是组外另一个字：不补放（vol18 107:6:7 叔→叙）
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.solo_margin > 0 and not ref
