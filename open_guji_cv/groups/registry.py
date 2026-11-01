@@ -87,7 +87,12 @@ class FlowSpec:
       与整理本对不上、看图能定的段全是整理本记的码位不跟刻形，唯一字形错例（vol45:59:4:20 下段 大 读成 廾）margin 0.16 → 取 0.3。
     - `lift_ref_missing_ctx`：配 `lift_ref_agree` 用——整理本（含坐标对位）完全没有字时，只要文意（L3 在线 high、L1 规则、L2）给了字就放行，
       不再记 `ref_missing`；整理本有字的照旧须同字。门族、辶族（A24 2026-10-28 第 1 轮）：字形 HOG 在这两族里常「间 问 闻」紧咬弃权，
-      整理本又缺位（约六成），文意（人名、书名、词组）几乎总能定。"""
+      整理本又缺位（约六成），文意（人名、书名、词组）几乎总能定。
+    - `ref_margin`、`ref_margin_forms`：补放时整字 HOG 因 margin 不够弃权（`abstain:low_margin`），但它的第一名恰是整理本字（现役对位，缺位时坐标对位）、第一名在 `ref_margin_forms` 里、margin ≥ `ref_margin` → 放行第一名（留痕 `ref_lowmargin`，通道 `group_flow`）。
+      门槛本是对付紧咬的陪衬字定的（竒 常被判成 青音苛），整理本字是组员时陪衬不是问题，只剩两形之间的把握；
+      `ref_margin_forms` 只列**少见形**（现用：竒 𮅕 𣲖 尙 䘮）：整理本刻意录少见形是强证据，录常见形可能只是整理本没分（跋 䟦 不列）。
+      0＝不用。第 2 轮（A24 2026-11-01）：g18-r1 包里 G 类同义组 abstain:low_margin 且整理本＝字形第一名的格共 112，开了 5 组的 105 格
+      每组逐格看图（算 44、奇竒 40、派𣲖 9、尙尚 6、䘮喪 6）全是整理本说的那一形（撰𢰅 2、蒙𫎇 1 格看不清，没开）。"""
     methods: tuple
     combine: str = "agree"
     review: bool = False
@@ -117,6 +122,8 @@ class FlowSpec:
     review_ref_agree: bool = False
     solo_margin: float = 0.0
     lift_ref_missing_ctx: bool = False
+    ref_margin: float = 0.0
+    ref_margin_forms: str = ""
 
     @property
     def solvers(self) -> tuple:
@@ -191,19 +198,24 @@ _SHAPE_PAIR_NO_FIX = frozenset({"suo"})
 #: 陪衬也进模板库（判成它们＝弃权）；补放须与整理本同字。
 #: 整理本作 隠 的格与 𨼆 是同一刻形（建库并成 𨼆，`build_shape_pair.ALIAS`），码位待定前 隠 只作陪衬：已放行的 隠 不复核，整理本作 隠 不补放。
 _SHAPE_PAIR_FLOW = {
-    "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙翼𢑱筆隻篤"), lift_ref_agree=True, ref_enter=True),
+    "suan": dict(tolerate=frozenset("莫㝠箕集𡚁篇奧負簋窠纂𢑴簣冀其雙翼𢑱筆隻篤"), lift_ref_agree=True, ref_enter=True,
+                 ref_margin=0.1, ref_margin_forms="𮅕"),
     # 2026-10-31（A24 r5 未定码位异体对）：r5 这 12／6 格库首位是组外字（同會何問備…／表裘褒…），没进组；陪衬放进入口并进模板库（判成它们＝弃权），补放须与整理本同字
-    "shang": dict(tolerate=frozenset("同問會衛何間備傅偷倚簡借"), lift_ref_agree=True, ref_enter=True),
-    "sang": dict(tolerate=frozenset("表褒裘䙝棗𠐇"), lift_ref_agree=True, ref_enter=True),
+    "shang": dict(tolerate=frozenset("同問會衛何間備傅偷倚簡借"), lift_ref_agree=True, ref_enter=True,
+                  ref_margin=0.25, ref_margin_forms="尙"),
+    "sang": dict(tolerate=frozenset("表褒裘䙝棗𠐇"), lift_ref_agree=True, ref_enter=True, ref_margin=0.5, ref_margin_forms="䘮"),
     "guanm": dict(tolerate=frozenset("闡間閱閣聞闌閩開閑問闚闢"), lift_ref_agree=True, ref_enter=True),
     # vol51–99 首跑 V 类（2026-10-26）：字形库没有 𣲖，库排成 泒孤弧；竒 库常排成 青音；嵗 库排成 歲，也常排成 熾康
-    "pai": dict(tolerate=frozenset("泒孤弧滅渢"), lift_ref_agree=True, ref_enter=True),
-    "qi": dict(tolerate=frozenset("青音靑苛司可帝背"), lift_ref_agree=True, ref_enter=True),
+    "pai": dict(tolerate=frozenset("泒孤弧滅渢"), lift_ref_agree=True, ref_enter=True, ref_margin=0.15, ref_margin_forms="𣲖"),
+    "qi": dict(tolerate=frozenset("青音靑苛司可帝背"), lift_ref_agree=True, ref_enter=True, ref_margin=0.15, ref_margin_forms="竒"),
     "sui": dict(tolerate=frozenset("熾康嚴巖咸戌戲燬"), lift_ref_agree=True, ref_enter=True),
     # 隸𨽾（2026-10-26）：整理本 隸 有 44 格被别的通道放成 𨽾（码位放错），复核改回；库常把 棣練竦 排在分差内
     "li": dict(tolerate=frozenset("隷𨽻棣練竦款羔"), ref_canon=True, lift_ref_agree=True, review_ref_agree=True),
     # 蒙𫎇：整理本 蒙／𫎇 混用（整理本作 蒙、刻 〢丷 的常见），不要求与整理本同字；库常把 家 排在分差内
     "mn": dict(tolerate=frozenset("䝉家冡豪"), ref_canon=True),
+    # 勅敕（2026-11-01，A24 第 2 轮）：整理本缺字（坐标对位 〓）的格，库首位 勅／敕 cov ≥0.95、整字 HOG margin 0.86–1.07，
+    # 看图都是 勅 却因 〓 被当组外字拦（coord_dissent，8 格）。solo_margin 取 ids 自身门槛 0.5＝不加严，只是 〓 不再拦
+    "chi": dict(solo_margin=0.5),
     # 選𨕖（2026-10-26，A24 全册任务 03，sheldon 定按刻形照录）：字形库没有 𨕖，库排成 選；整理本两形混用（放行 選 里有丌形），
     # 补放须与整理本同字；整理本作 𨕖、库首位 選 的格先进本组（`ref_enter_member`，選 本是辶族 chuo 的成员）；
     # 复核（已放行 選）按刻形改码位，不看整理本（放行 選 里有 7 格丌形，整理本作 選）。
