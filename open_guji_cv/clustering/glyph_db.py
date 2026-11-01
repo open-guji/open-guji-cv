@@ -226,6 +226,10 @@ class DBHit:
     kind: str = "woodblock"   # 來源類別：woodblock / scan / font
 
 
+class MissingBookEdition(ValueError):
+    """字形库没声明 meta.book_edition 却要写刻本字形（edition 必须是书 ID，见 admit_instance）。"""
+
+
 class GlyphDB:
     def __init__(self, db_path: str | Path,
                  feature_backend: str = DEFAULT_FEATURE):
@@ -323,6 +327,10 @@ class GlyphDB:
 
     # ── 單實例準入（種子協議 §3.5）───────────────────────
 
+    #: 没声明 book_edition 且没点名 edition_tag 时拒写（2026-11-01）。测试夹具的小库普遍不声明，
+    #: tests/conftest.py 的 autouse 夹具把它关掉；专测见 tests/test_glyph_book_edition_required.py。
+    require_book_edition = True
+
     def admit_instance(self, instance_id: str, char: str, patch_png: bytes,
                        *, provenance: str,
                        evidence: dict | None = None,
@@ -376,7 +384,14 @@ class GlyphDB:
         # 本书 edition（meta.book_edition）时，新进的刻本字形一律归它。字体（font:*）与
         # 现代链播种域（modern:*，匹配器按它过滤）不动。
         if not edition.startswith(("font:", "modern:")):
-            edition = self.book_edition() or edition
+            own = self.book_edition()
+            if own is None and edition_tag is None and self.require_book_edition:
+                # 2026-11-01（Sheldon 定）：edition 一律是书 ID。没声明 book_edition、调用方也没点名
+                # edition，就只剩实例 id 前缀（v2 / volNN）可当 edition——那是坐标前缀不是版本，拒写。
+                raise MissingBookEdition(
+                    f"字形库没有 meta.book_edition，拒绝按实例 id 前缀 {source_id!r} 当 edition 写入 "
+                    f"（{instance_id}）。先 `guji glyph-db set-edition --edition <书ID> --apply`（或在 meta.jsonl 写 book_edition）。")
+            edition = own or edition
         cur.execute(
             "INSERT OR IGNORE INTO sources (source_id, edition_tag, created_at)"
             " VALUES (?,?,?)", (source_id, edition, _now()))
