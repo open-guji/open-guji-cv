@@ -102,3 +102,43 @@ def test_off_by_default_and_not_dumped():
     d = p.model_dump()
     assert "follow_ref" not in d and "follow_ref_cov" not in d
     assert "follow_ref" in SeedAdmitParams(db_path="x", follow_ref="㓜=幼").model_dump()
+
+
+class _VM:
+    """同义异体关系：隠隱𨼆 一族、傳𫝊 一族；其余字各自一族。"""
+    FAM = {"隱": "隱", "隠": "隱", "𨼆": "隱", "傳": "傳", "𫝊": "傳"}
+
+    def semantic(self, c):
+        return self.FAM.get(c, c)
+
+
+def _run_v(cells, lib, coord, vm=_VM(), **params):
+    p = SeedAdmitParams(db_path="x", follow_ref_variants=True, **params)
+    out = _page(cells)
+    n = _follow_ref_pass(p, out, _mm(lib), {}, {f"{B}:1:{s}": c for s, c in coord.items()}, {}, vm)
+    return n, {r.slot: r for r in out[0].chars}
+
+
+def test_variants_mode_follows_ref_without_table():
+    """`follow_ref_variants`（史記 2026-11-01，用户定「按参校本取字」）：不用登记表，同义异体照录整理本形。"""
+    n, r = _run_v({1: {}, 2: {}, 3: {"admit": True, "char": "隠", "channel": "group_flow"}, 4: {}},
+                  {1: ([("隠", 0.97), ("陽", 0.90)],), 2: ([("傳", 0.96)],), 4: ([("隠", 0.97)],)},
+                  coord={1: "𨼆", 2: "𫝊", 3: "隱", 4: "陽"})
+    assert n == 2
+    assert (r[1].admit, r[1].char, r[1].evidence["lane"]["via"]) == (True, "𨼆", "variants")
+    assert r[2].char == "𫝊"
+    assert r[3].char == "隱" and r[3].evidence["follow_ref"] == {"from": "隠", "ref": "隱", "via": "variants"}
+    assert not r[4].admit                                   # 整理本是别的字（不同义）：不碰
+
+
+def test_variants_mode_gates_still_apply():
+    n, r = _run_v({1: {}, 2: {"doubts": ["excluded"]}}, {1: ([("隠", 0.80)],), 2: ([("隠", 0.97)],)},
+                  coord={1: "𨼆", 2: "𨼆"})
+    assert n == 0 and not r[1].admit and not r[2].admit     # cov 不够、排除名单
+
+
+def test_variants_mode_off_by_default_and_not_dumped():
+    assert SeedAdmitParams(db_path="x").follow_ref_variants is False
+    assert "follow_ref_variants" not in SeedAdmitParams(db_path="x").model_dump()
+    d = SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
+    assert d["follow_ref_variants"] is True and "follow_ref_cov" in d
