@@ -81,6 +81,7 @@ class FlowConfig:
     l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
+    abstain_ref_ok: frozenset = frozenset()  # 书级「按整理本走」：复核时解法全弃权、已放行字＝整理本字 → 不降审；补放时族内刻形拆不开、整理本是同族一形 → 取整理本形
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
@@ -434,6 +435,14 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     norm = cfg.canon or canon
     for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
+            if (ch is None and why == "abstain" and mode == "lift" and g in cfg.abstain_ref_ok
+                    and (fr := ref or (veto_refs or {}).get(r.id))):
+                fam = next((x for x in GROUPS[g].flow.families if fr in x), None)
+                given = {t["char"] for t in trail if t["char"]}
+                if fam and given and given <= set(fam) and any(t["solver"].startswith("form:") for t in trail):
+                    # 文意（或字形）定了族、族内刻形拆不开（如 會㑹），整理本是族里一形、没人给族外的字：取整理本形（史記 2026-11-01）
+                    ch, why = fr, "agree"
+                    trail = trail + [{"solver": "form:ref", "char": fr, "why": "abstain_ref_agree"}]
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail) and not (
                     g in cfg.lift_shape_ref and (sr := ref or (veto_refs or {}).get(r.id))
@@ -523,6 +532,12 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
+            if (code == "group_flow_abstain" and g in cfg.abstain_ref_ok and r.char
+                    and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(r.char)
+                    and not any(t["char"] and norm(t["char"]) != norm(r.char) for t in trail)):
+                # 解法只是弃权、没人反对，已放行字与整理本同字：照整理本留放（史記 2026-11-01，用户定「按整理本走」）
+                code = None
+                trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "abstain_ref_agree"}]
             if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
