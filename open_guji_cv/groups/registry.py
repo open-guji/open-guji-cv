@@ -206,7 +206,7 @@ _SHAPE_PAIR_FLOW = {
     "sang": dict(tolerate=frozenset("表褒裘䙝棗𠐇"), lift_ref_agree=True, ref_enter=True, ref_margin=0.5, ref_margin_forms="䘮"),
     "guanm": dict(tolerate=frozenset("闡間閱閣聞闌閩開閑問闚闢"), lift_ref_agree=True, ref_enter=True),
     # vol51–99 首跑 V 类（2026-10-26）：字形库没有 𣲖，库排成 泒孤弧；竒 库常排成 青音；嵗 库排成 歲，也常排成 熾康
-    "pai": dict(tolerate=frozenset("泒孤弧滅渢"), lift_ref_agree=True, ref_enter=True, ref_margin=0.15, ref_margin_forms="𣲖"),
+    "pai": dict(tolerate=frozenset("泒孤弧滅渢胍濓"), lift_ref_agree=True, ref_enter=True, ref_margin=0.15, ref_margin_forms="𣲖"),
     "qi": dict(tolerate=frozenset("青音靑苛司可帝背"), lift_ref_agree=True, ref_enter=True, ref_margin=0.15, ref_margin_forms="竒"),
     "sui": dict(tolerate=frozenset("熾康嚴巖咸戌戲燬"), lift_ref_agree=True, ref_enter=True),
     # 隸𨽾（2026-10-26）：整理本 隸 有 44 格被别的通道放成 𨽾（码位放错），复核改回；库常把 棣練竦 排在分差内
@@ -462,17 +462,19 @@ _CP_REF_ENTER = frozenset({"cp_li2"}) | frozenset({
     "cp_bao3", "cp_ji4", "zheng", "cp_yan2", "kui", "cp_tai4", "cp_yi3", "cp_ye", "cp_ji2", "cek", "cp_zhen1", "cp_shu4",
     "cp_hui1", "lei", "cp_yin3", "cp_shu4b", "cp_ta4", "cp_jing1", "cp_xu1", "huo", "lang", "nei", "wan",
     "cp_sheng2", "cp_xie2", "cp_yuan4", "cp_xiao3", "cp_kuan1", "cp_zeng1", "cp_zao3", "cp_feng4b", "cp_mao4", "cp_gao1",
-    "cp_du2", "cp_li2b", "cp_yin3c"})
+    "cp_du2", "cp_li2b", "cp_yin3c", "cp_mo4", "cp_dou4", "cp_bu4", "cp_lu4", "cp_gao1b"})
 #: 陪衬字（库首位／分差内的组外形近字）：r5 产物里整理本作本组字、库在这些字间拿不准的 V 类格（逐格看图见 PR）。
 _CP_TOL_R5 = {
-    "cp_bao3": "實賓賁賢竇責賔賞買", "cp_ji4": "𤯝奇眚靑書竒宻需晉密音笥當傅博", "zheng": "微徹數", "cp_yan2": "頄頗頼頥贑頏頤類",
-    "cp_tai4": "奉奏恭秦忝春", "cp_yi3": "備傅何偶椅僣", "cp_ye": "郞朗郎則副", "cp_ji2": "卷", "cek": "東",
-    "cp_zhen1": "具異輿翼興典", "cp_shu4": "迹進連", "cp_hui1": "徴繳微徵教校", "lei": "遺遣頓頗領", "cp_yin3": "欽欲",
+    "cp_bao3": "實賓賁賢竇責賔賞買冑富", "cp_ji4": "𤯝奇眚靑書竒宻需晉密音笥當傅博嘗苛著", "zheng": "微徹數", "cp_yan2": "頄頗頼頥贑頏頤類",
+    "cp_tai4": "奉奏恭秦忝春", "cp_yi3": "備傅何偶椅僣僭", "cp_ye": "郞朗郎則副", "cp_ji2": "卷", "cek": "東",
+    "cp_zhen1": "具異輿翼興典㝠軍", "cp_shu4": "迹進連", "cp_hui1": "徴繳微徵教校穢", "lei": "遺遣頓頗領", "cp_yin3": "欽欲",
     "cp_shu4b": "備栢楷桐", "cp_ta4": "書舊譜萬香", "cp_jing1": "别刑拙", "cp_xu1": "盧", "lang": "目朗曰", "nei": "丙",
     "wan": "脫視鹽", "cp_sheng2": "綱總絕絶", "cp_xie2": "揣播捫揭", "cp_yuan4": "死在", "cp_xiao3": "嘵睦晚", "cp_kuan1": "竟",
     "cp_zeng1": "贈", "cp_zao3": "裏熹", "cp_mao4": "晚觀臲", "cp_gao1": "臬泉皋", "cp_du2": "竇續質須",
-    "cp_li2b": "棨栗菜棐黎架業", "cp_yin3c": "渠栗槩粟",
-    "kui": "衰䙝袠裴藻", "huo": "𮑮麓"}
+    "cp_li2b": "棨栗菜棐黎架業", "cp_yin3c": "渠栗槩粟", "cp_mo4": "㸃黜點然𭶑𪐴",
+    # 2026-11-01（A24 第 2 轮 V 类）：r1 main 包里整理本字在组里、库首位／分差内是形近组外字的单格（逐格看图，刻形与整理本字一致）
+    "cp_dou4": "刪副圍圖岡關闡", "cp_bu4": "未朱", "cp_lu4": "穜蠶釐", "cp_gao1b": "同局",
+    "kui": "衰䙝袠裴藻𧅺莫臺三", "huo": "𮑮麓"}
 CODEPOINT_GROUPS: dict[str, GroupSpec] = {
     gid: GroupSpec(id=gid, name=name, members=frozenset(name), backends=(), kind="variant", solvers=(),
                    flow=FlowSpec((CODEPOINT,), combine="first", tolerate=frozenset(tol) | frozenset(_CP_TOL_R5.get(gid, "")),
@@ -500,7 +502,7 @@ CODEPOINT_GROUPS: dict[str, GroupSpec] = {
                                # 但没建组的异体对。流水线 `lane_variant_guard`／`coord_fallback` 见「库首位与整理本是异体对」一律送审，
                                # 码位定了也不放（vol02–99 main 包里整理本与库首位码位后同字、cov≥0.91 的有 280 余格）。组名 `cp_<拼音声调>`。
                                ("cp_ji4", "寄𭔃", (), ""), ("cp_ji2", "急𢚩", (), ""), ("cp_ye", "耶𫆀", (), ""), 
-                               ("cp_xun2", "尋㝷", (), ""), ("cp_li2", "黎𥠖", (), "藜恭蕪黍蔡察"), ("cp_bao3", "寶寳", (), ""), 
+                               ("cp_xun2", "尋㝷", (), ""), ("cp_li2", "黎𥠖", (), "藜恭蕪黍蔡察棃然"), ("cp_bao3", "寶寳", (), ""), 
                                ("cp_tai4", "泰㤗", (), ""), ("cp_bu4", "步歩", (), ""), ("cp_xu1", "虛虚", (), ""), 
                                ("cp_zhen1", "眞真", (), ""), ("cp_heng2", "橫横", (), ""), ("cp_mei3", "每毎", (), ""), 
                                ("cp_jie2", "杰𤇍", (), ""), ("cp_yin3", "飮飲", (), ""), ("cp_bu3", "補𥙷", (), ""), 
