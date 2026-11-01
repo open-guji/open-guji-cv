@@ -223,6 +223,10 @@ class SeedAdmitParams(BaseModel):
     """书级追加的字组陪衬字（组 id → 字串，叠在注册表 `FlowSpec.tolerate` 上；2026-11-01 史記文淵閣本）：写本里
     曰 与借来的殿本库形 田／四／囬／臼 紧咬（分差内），格进不了日曰组、文意小头无从判，01–10 册约 900 格因此送审。
     只放宽进入，给字仍全凭解法；组声明了 `tolerate_ref_agree`（日曰有）时，陪衬带进的格还须与整理本同字。空＝不追加（不进参数 dump）。"""
+    group_flow_lift_shape_ref: list[str] = Field(default_factory=list)
+    """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
+    且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
+    字形宽高比路判 曰、坐标对位也是 曰，01–10 约 100 格因此送审）。空＝不放宽（不进参数 dump）。"""
     group_flow_joint: bool = True
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
@@ -728,6 +732,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("codepoint_semantic", None)
         if isinstance(d, dict) and not self.human_unbound_shift_ok:
             d.pop("human_unbound_shift_ok", None)
+        if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
+            d.pop("group_flow_lift_shape_ref", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.juan_rule:
@@ -2595,6 +2601,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
+                     lift_shape_ref=frozenset(p.group_flow_lift_shape_ref),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
                      l3_need_l2_agree=p.group_flow_llm_need_l2_agree,
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
@@ -2641,7 +2648,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=_coord_refs(ctx, page, {}) if (p.group_flow_lift_ref_guard and ctx is not None) else None)
+                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_lift_shape_ref)
+                                                                   and ctx is not None) else None)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
         if not r.admit:                       # 没放成：原样退回，免得字组的复核疑问（`_LANE_HARD`）拦掉后面的 R5
