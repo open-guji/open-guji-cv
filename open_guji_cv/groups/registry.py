@@ -115,6 +115,7 @@ class FlowSpec:
     tolerate_ref_agree: bool = False
     ref_top_enter: bool = False
     ctx_over: tuple = ()
+    ctx_over_panel: tuple = ()          # 同 `ctx_over`，但文意字须经 L3 二审小组确认才算硬（`flow._panel_firm`）
     lift_img_ref_veto: bool = False
     rule_strong: int = 0
     review_fix_ref_rule: bool = False
@@ -256,6 +257,10 @@ _MB_FLOW = FlowSpec((CTX, *_g2("mb")), review=True, review_fix_strong=True, stro
                     review_fix_ref_rule=True)
 
 
+#: 目自（2026-11-01，A24「压低日曰日目己已巳送审」）：与 rm 共字「目」；L3 二审小组（两个强模型高 effort 同字）给的字记 strong，
+#: 复核时可改字、补放时可越过整理本（`review_fix_strong`、`strong_over_ref`）。日目格里真字是「自」的（斷自陶唐、自序）靠它接手。
+_MZ_FLOW = FlowSpec((CTX, *_g2("mz")), review=True, review_fix_strong=True, strong_over_ref=True)
+
 #: 文意组与字形组共字（入口按分差内候选选组，点名靠前的先试）：會（zh／qin）、問間（wj／men）、遺還（yh／chuo）、圓圖（yt／kou）。
 _GLYPH_OVERLAPS = {"zh": ("qin",), "wj": ("men",), "yh": ("chuo",), "yt": ("kou",)}
 
@@ -272,7 +277,7 @@ GROUPS: dict[str, GroupSpec] = {
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/ry",
         flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, strong_over_ref=True, lift_needs=("ctx",),
-                     tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True), overlaps=("rm",),
+                     tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -326,14 +331,14 @@ GROUPS: dict[str, GroupSpec] = {
     "rm": GroupSpec(
         id="rm", name="日目", members=frozenset("日目"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/rm",
-        flow=FlowSpec((CTX,), review=True), overlaps=("ry", "mz"),
+        flow=FlowSpec((CTX,), review=True, review_fix_strong=True, strong_over_ref=True), overlaps=("ry", "mz"),
         note="按文意定；与 ry 共用「日」。目＝書目、總目、存目；日＝今日、是日、日月。"),
     # —— 第五批（2026-10-19）：目自、一二、十卜、甲申、而面、傅傳、木本。同前：L1 规则（整理本奇偶册交叉验证零冲突）＋逐册 L2 表。
     #    目自与 rm 共用「目」（互相声明 overlaps）。千干 qg 2026-10-24 并进 于千子干 zy（`RENAMED`）。
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir=f"config/groups/{gid}",
-        flow=_YR_FLOW if gid == "yr" else _MB_FLOW if gid == "mb" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
+        flow=_YR_FLOW if gid == "yr" else _MB_FLOW if gid == "mb" else _MZ_FLOW if gid == "mz" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（{'规则够硬时改字' if gid == 'mb' else '只降审不改字'}）。{note}")
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),

@@ -218,8 +218,12 @@ class SeedAdmitParams(BaseModel):
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
-    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "jys", "zy", "xz", "rr", "guan", "men", "chuo", "kgc", "tsh")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
+    group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "xz", "rr", "guan", "men", "chuo", "kgc", "tsh")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
     group_flow_llm_effort: str = "low"
+    group_flow_llm_panel: tuple[str, ...] = ("claude-opus-5-5:high", "claude-fable-5-1:high")
+    group_flow_llm_panel_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys")   # 用二审小组的组（别的组的 strong 语义没验过，先不开）
+    """L3 二审小组（A24 2026-11-01）：首问不是「组内字、high」、或首问的字与整理本不同时，再让这几个模型（`"模型:effort"`）各自高 effort 独立读：
+    全部同字（置信 ≥ mid）→ 给字且记 strong；全部说「其他」→ 共字组接手；其余照首问。空＝不开。见 `groups/ctx_llm.panel_verdict`。"""
     group_flow_llm_need_l2_agree: bool = False   # L3 在线的字须与 L2 模型弃权时的首选字相同
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
@@ -2577,7 +2581,7 @@ def _l3_online(p) -> dict:
 
 def _l3_fingerprint(p) -> str:
     import hashlib
-    h = hashlib.sha256(f"{p.group_flow_llm_model}|{p.group_flow_llm_effort}|{p.group_flow_llm_need_l2_agree}".encode())
+    h = hashlib.sha256(f"{p.group_flow_llm_model}|{p.group_flow_llm_effort}|{p.group_flow_llm_need_l2_agree}|{','.join(p.group_flow_llm_panel)}|{','.join(p.group_flow_llm_panel_groups)}".encode())
     for g, o in sorted(_l3_online(p).items()):
         h.update(f"|{g}|{o['ver']}|".encode() + o["system"].encode("utf-8"))
     return h.hexdigest()[:16]
@@ -2617,7 +2621,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=frozenset(p.group_flow_lift_shape_ref),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
-                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree,
+                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None

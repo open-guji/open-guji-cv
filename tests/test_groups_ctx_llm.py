@@ -146,3 +146,78 @@ def test_client_missing_anthropic_warns_once(monkeypatch, caplog):
         assert ctx_llm._client() is None
         assert ctx_llm._client() is None
     assert sum("anthropic" in r.getMessage() for r in caplog.records) == 1
+
+
+class ModelClient:
+    """按模型给答案的假客户端：{模型: (char, conf)}，记每次 (模型, effort)。"""
+
+    def __init__(self, by_model):
+        self.by, self.calls = by_model, []
+
+    def ask(self, system, user, members, model, effort):
+        self.calls.append((model, effort))
+        ch, conf = self.by[model]
+        return {"char": ch, "conf": conf, "why": "x"}, {"in": 100, "out": 20, "cache_read": 0, "model": model}, None
+
+
+PANEL = ("A:high", "B:high")
+
+
+def jp(client, cache=None, **kw):
+    return ctx_llm.judge("ry", "提示词", "ry-l2-2", "子", "學而時習之", frozenset("日曰"), model="M", effort="low",
+                         cache=cache, client=client, panel=PANEL, **kw)
+
+
+def test_panel_confirms_unsure_first_pass():
+    """首问 mid → 二审小组两家高 effort 同字（≥mid）→ 给字且 strong；首问的 token 与小组的合并记账。"""
+    fc = ModelClient({"M": ("曰", "mid"), "A": ("曰", "high"), "B": ("曰", "mid")})
+    v = jp(fc)
+    assert v.char == "曰" and v.extra["strong"] and v.extra["panel"] == "char:曰h曰m"
+    assert sorted(fc.calls) == sorted([("M", "low"), ("A", "high"), ("B", "high")])
+    assert v.extra["tok"]["in"] == 300
+
+
+def test_panel_split_or_low_keeps_first_pass():
+    v = jp(ModelClient({"M": ("曰", "mid"), "A": ("曰", "high"), "B": ("日", "high")}))
+    assert v.char is None and v.why == "abstain:low_conf" and v.extra["panel"].startswith("split")
+    v = jp(ModelClient({"M": ("曰", "mid"), "A": ("曰", "high"), "B": ("曰", "low")}))
+    assert v.char is None and v.extra["panel"].startswith("split")
+
+
+def test_panel_other_hands_over():
+    v = jp(ModelClient({"M": ("其他", "low"), "A": ("其他", "mid"), "B": ("其他", "high")}))
+    assert v.char is None and v.why == "abstain:other" and v.extra["other_conf"] == "high"
+
+
+def test_panel_skipped_when_first_pass_solid_and_agrees_with_ref():
+    fc = ModelClient({"M": ("曰", "high"), "A": ("日", "high"), "B": ("日", "high")})
+    v = jp(fc, ref="曰")
+    assert v.char == "曰" and not v.extra.get("strong") and fc.calls == [("M", "low")]
+    # 首问 high 但与整理本不同 → 小组复核；小组推翻首问（同说日）→ 给日，strong
+    v = jp(fc, ref="日")
+    assert v.char == "日" and v.extra["strong"]
+
+
+def test_panel_cached_per_member(tmp_path):
+    c = ctx_llm.AnswerCache(tmp_path / "ry.jsonl")
+    fc = ModelClient({"M": ("曰", "mid"), "A": ("曰", "high"), "B": ("曰", "high")})
+    jp(fc, cache=c)
+    n = len(fc.calls)
+    v = jp(fc, cache=ctx_llm.AnswerCache(tmp_path / "ry.jsonl"))       # 新进程：三条都从缓存取
+    assert v.char == "曰" and v.extra["strong"] and len(fc.calls) == n
+
+
+def test_panel_member_error_falls_back():
+    class Err(ModelClient):
+        def ask(self, system, user, members, model, effort):
+            if model == "B":
+                return None, {}, "refusal"
+            return super().ask(system, user, members, model, effort)
+    v = jp(Err({"M": ("曰", "mid"), "A": ("曰", "high")}))
+    assert v.char is None and v.why == "abstain:low_conf" and v.extra["panel"].startswith("fail")
+
+
+def test_panel_needs_one_high():
+    """两家都只有 mid → 不算数（宁可送审）。"""
+    v = jp(ModelClient({"M": ("曰", "low"), "A": ("曰", "mid"), "B": ("曰", "mid")}))
+    assert v.char is None and v.extra["panel"].startswith("split")

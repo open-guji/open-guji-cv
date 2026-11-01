@@ -515,6 +515,57 @@ def test_joint_needs_partner_to_confirm_or_rule_out(monkeypatch):
 
 
 
+def test_joint_skips_partner_when_panel_confirmed(monkeypatch):
+    """ry 的文意字经 L3 二审小组确认（strong＋panel char:…）且不是 rm 的成员（曰）：rm 弃权／说目也不拦（A24 11-01）；日仍须 rm 同意。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    out = {}
+
+    def solve(name, g, r, *a, **k):
+        ch, why, *extra = out[(g, name)]
+        return GroupVerdict(ch, why=why, via=name, extra=extra[0] if extra else {})
+    monkeypatch.setattr(flow, "_solve", solve)
+    cfg = FlowConfig(groups=("ry", "rm"), joint=True)
+    three = [("日", 0.98), ("曰", 0.975), ("目", 0.972)]
+    pn = {"strong": True, "panel": "char:曰h曰m"}
+
+    def run(ry, rm):
+        out.update({("ry", "ctx"): ry, ("ry", "ry_shape"): (None, "abstain:aspect"), ("rm", "ctx"): rm})
+        r = Rec("x")
+        group_flow_pass([r], {}, lambda cid: three, lambda r: False, cfg)
+        return r
+    for rm in ((None, "abstain:low_conf"), ("目", "agree"), (None, "abstain:other", {"other_conf": "low"})):
+        r = run(("曰", "agree", pn), rm)
+        assert r.admit and r.char == "曰", rm
+        assert r.evidence["group"]["solvers"][-1] == {"solver": "rm:skip", "char": None, "why": "panel_confirmed"}
+    r = run(("曰", "agree", {"strong": True}), (None, "abstain:low_conf"))            # strong 但没经小组：照旧要 rm 表态
+    assert not r.admit and "group_flow_joint" in r.doubts
+    r = run(("日", "agree", {"strong": True, "panel": "char:日h日h"}), ("目", "agree"))   # 日是 rm 的成员：rm 说目就不放
+    assert not r.admit and "group_flow_joint" in r.doubts
+
+
+def test_ry_panel_confirmed_ctx_overrules_shape(monkeypatch):
+    """日曰：文意字经二审小组确认时 ry_shape 只算弱票（`ctx_over_panel`），照文意给字；只 strong（表）不够，仍冲突降审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    ex = {"strong": True, "panel": "char:曰h曰h"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "曰" if name == "ctx" else "日", via=name, extra=ex if name == "ctx" else {}))
+    cfg = FlowConfig(groups=("ry",))
+    c = Rec("c", "日", True, "match_ref", "match")
+    group_flow_pass([c], {}, lambda cid: [], lambda r: False, cfg)
+    assert c.admit and c.char == "曰" and c.evidence["group"]["decision"] == "fix"
+    assert c.evidence["group"]["solvers"][-1]["solver"] == "ctx_over"
+
+
+def test_registry_panel_flags():
+    """rm、mz 与 ry 同口径：strong 的文意可复核改字、补放越过整理本；ry 对字形有二审小组压票。"""
+    for g in ("rm", "mz", "ry"):
+        f = GROUPS[g].flow
+        assert f.review_fix_strong and f.strong_over_ref, g
+    assert GROUPS["ry"].flow.ctx_over_panel == ("ry_shape",)
+
+
 def test_rm_other_hands_off_to_ry(monkeypatch):
     """库分差内只有日目（曰 cov 0）→ 格进 rm；rm 明说「其他」(high) 时交 ry 联判，ry 给曰才放（vol13 99:8:18「子女子曰」）。"""
     from open_guji_cv.groups import flow
