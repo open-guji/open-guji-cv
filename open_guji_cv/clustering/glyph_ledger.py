@@ -268,6 +268,37 @@ def fidelity_counts(c: sqlite3.Connection) -> dict:
     return dict(out)
 
 
+def edition_problems(c) -> list[str]:
+    """字形库 edition 体检（2026-11-01：edition 一律是书 ID，见 glyph_db.admit_instance）。
+
+    ``c`` 是已连上的只读 sqlite 连接。返回人话告警列表，空 = 干净：
+    - 没有 meta.book_edition；
+    - 刻本字形（非 font:/modern:）的 edition_tag 有不等于 book_edition 的。
+    借来的库（meta.borrowed_editions）的 edition 不算。"""
+    out: list[str] = []
+    if not _has_col(c, "meta", "key"):
+        return ["库里没有 meta 表，没有 book_edition"]
+    r = c.execute("SELECT value FROM meta WHERE key='book_edition'").fetchone()
+    be = r[0] if r and r[0] else None
+    if be is None:
+        out.append("meta.book_edition 缺失：edition 必须是书 ID（`guji glyph-db set-edition --edition <书ID> --apply`）")
+    borrowed: set[str] = set()
+    r = c.execute("SELECT value FROM meta WHERE key='borrowed_editions'").fetchone()
+    if r and r[0]:
+        try:
+            borrowed = set(json.loads(r[0]))
+        except ValueError:
+            pass
+    for tbl in ("glyphs", "sources"):
+        for ed, n in c.execute(
+                f"SELECT edition_tag, COUNT(*) FROM {tbl} WHERE edition_tag NOT LIKE 'font:%' "
+                "AND edition_tag NOT LIKE 'modern:%' GROUP BY edition_tag"):
+            if ed in borrowed or ed == be:
+                continue
+            out.append(f"{tbl}.edition_tag={ed!r} 共 {n} 行，不是本书 edition {be!r}")
+    return out
+
+
 def library_summary(db_path: str | Path, store_dir: str | Path | None = None) -> dict:
     """一本书字形库的总账（控制台字形库页 / `glyph-db stats` 共用）。"""
     c = connect_ro(db_path)
@@ -334,6 +365,7 @@ def library_summary(db_path: str | Path, store_dir: str | Path | None = None) ->
         return {
             "db": str(db_path),
             "book_edition": book_edition,
+            "edition_problems": edition_problems(c),
             "sources": sources,
             "editions": editions,
             "book": {
