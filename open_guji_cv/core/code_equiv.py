@@ -383,6 +383,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="e3d42c945641454ad426932469235703d009750163b6115cc8d7136abedcbc77",
           old="df2d8a69fe3bbf80b5ecfc97540aff3634a536d20cdd442c8998472bfdf5019b",
           evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199，含异体与小注格）上与 origin/dev 产物逐字节相同"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="dcb61485d6ae38bbfe9ae9646f763710290f55b84750d729447970c3009a1f49",
+          old="4451f904c4d519067d67e50d569fa7c9e25a77f73bccc219e7111b22c5f77886",
+          evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199）上与 origin/dev 产物逐字节相同（书级开关 group_flow_abstain_ref_ok 缺省空）"),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="abeefb2ca96f877eca465bc6f83fda42c09998d39a82fdbcaf05b55f508fc286",
+          old="697812c2bf65871d068c7d674c213ae6af9043b50baca08d1f937a96f0c2c105",
+          evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199）上与 origin/dev 产物逐字节相同（书级开关 group_flow_abstain_ref_ok 缺省空）"),
 )
 
 
