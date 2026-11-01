@@ -156,6 +156,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
     if ap.returncode and "book-text 这步失败" in out:
         # 本地检查没过（多半是标点／实体锚点在新切分里不存在）：线上单还没换（这步在推库之前）；清掉未提交的升版改动，交 A33
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
+        subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
         return {"verdict": "need-A33", "why": "book-text 本地检查不过（锚点落空等），线上单未换；交 A33 走 punct_redo／分支 PR",
                 "log": str(log)}
     if ap.returncode:
