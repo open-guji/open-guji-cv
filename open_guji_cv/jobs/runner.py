@@ -491,7 +491,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                         os.execv(sys.executable, sys.orig_argv)
                     say("执行方代码在 dev 上有更新，但拉不动（本地有改动或分叉），退出让执行方线程重新 start")
                     return done
-                bad = _preflight() or _disk_gate(say)
+                bad = _preflight() or _ml_env_gate(say) or _disk_gate(say)
                 if bad:
                     # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
                     if bad != warned:
@@ -704,6 +704,41 @@ def _preflight() -> str | None:
             _preflight_ok_at = time.time()
             return None
     return err or f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
+
+
+# 文意 L2/L3 要的重依赖和 SIKU-BERT 权重（pyproject 的 torch／llm extra）。缺了管线不报错、只会让 ctx_l2／ctx_llm 全部弃权
+# （abstain:no_encoder／no_api_key），待审单就偏多（2026-11-01 史記 02 册：835 条变 1181 条）。所以执行方领单前就查，缺了先补，补不上就不领单。
+CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
+_ML_PKGS = ("torch", "transformers", "anthropic")
+_ml_ok_at = 0.0
+
+
+def _ml_env_gate(say=print) -> str | None:
+    """领单前查管线 venv 里的 torch／transformers／anthropic 和 SIKU-BERT 权重；缺依赖就 uv pip install，权重就预拉进 HF 缓存。
+    返回缺什么（None 是都齐）；通过后 30 分钟内不再查。GUJI_JOBS_SKIP_ML_CHECK=1 可跳过（测试用）。"""
+    global _ml_ok_at
+    if os.environ.get("GUJI_JOBS_SKIP_ML_CHECK") or time.time() - _ml_ok_at < 1800:
+        return None
+    py = str(VENV / "bin" / "python")
+    probe = "import importlib.util as u;print(' '.join(m for m in %r if u.find_spec(m) is None))" % (_ML_PKGS,)
+    try:
+        miss = subprocess.run([py, "-c", probe], capture_output=True, text=True, timeout=60).stdout.split()
+        if miss:
+            say(f"管线环境缺 {' '.join(miss)}，补装中…")
+            idx = ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"] if "torch" in miss else []
+            r = subprocess.run(["uv", "pip", "install", "-q", "--python", py, *idx, *[("transformers>=4.40" if m == "transformers" else "anthropic>=2.3" if m == "anthropic" else "torch>=2.0") for m in miss]],
+                               capture_output=True, text=True, timeout=1500)
+            if r.returncode:
+                return f"管线环境缺 {' '.join(miss)} 且补装失败：{(r.stderr or r.stdout).strip()[-200:]}"
+        name, rev = CTX_ENCODER
+        dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
+        r = subprocess.run([py, "-c", dl], capture_output=True, text=True, timeout=1500)
+        if r.returncode:
+            return f"拉不到文意 L2 权重 {name}（查网络 huggingface.co）：{r.stderr.strip()[-200:]}"
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"管线环境自检出错：{e}"
+    _ml_ok_at = time.time()
+    return None
 
 
 def _last_book() -> str | None:

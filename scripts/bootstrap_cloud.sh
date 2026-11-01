@@ -22,6 +22,8 @@
 #   · 唯一会删 venv 的是 --force。
 # 自检：python -c "import torch, scipy, cv2"（CLAUDE.md 规定的那句；缺件不报错只会悄悄降级，所以必须真 import）
 #
+# 另：装完会顺手把文意 L2 权重 SIKU-BERT/sikuroberta（钉 revision）预拉进 HF 缓存；拉不到只告警不失败（执行方领单前还会再查）。
+#
 # 不做的事：不拉书的工作区（GUJI_WORKSPACE 另行挂 guji-workspace）、不装 paddle（CPU/GPU 轮子不同，见 install_gpu.sh）、
 #           不下模型 checkpoint、不碰任何产物目录。
 set -uo pipefail
@@ -94,6 +96,8 @@ if [ -n "$TORCH_INDEX" ]; then INST+=(--extra-index-url "$TORCH_INDEX" --index-s
 # —— 4. 自检，通过才写就绪戳 ——
 if selfcheck; then
   fingerprint > "$READY.tmp" && mv "$READY.tmp" "$READY"
+  "$VENV/bin/python" -c "from huggingface_hub import snapshot_download as d; d('SIKU-BERT/sikuroberta', revision='bb25260d5c321924fe4fb353c09191c0aaf5c5c6')" >/dev/null 2>&1 \
+    && log "文意 L2 权重已预拉" || log "⚠ 文意 L2 权重没拉到（huggingface.co 不通？）：ctx_l2 会弃权，执行方领单前会再试"
   log "自检通过：python -c \"import torch, scipy, cv2\" OK → $VENV/bin/python"
   log "用法：source $VENV/bin/activate 或直接 $VENV/bin/guji …；带 book 的命令别忘了 -w <工作区>"
   exit 0
