@@ -350,9 +350,9 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1cb1977e26c99263aee9fe5e4bbd211c8d644a2d3eaf5610ef5ea9ac47dafcdc",
           old="4fbb1535a764d403f566aa1ce7c00bdbf82a082a1c05dcaec03a379fa0facff7",
           evidence=_SJ_780),
-    # 书级陪衬字 group_flow_tolerate_extra（缺省空）：2026-11-01 史記 02
+    # 书级陪衬字 group_flow_tolerate_extra（缺省空）＋人裁顺移豁免 human_unbound_shift_ok（缺省关）：2026-11-01 史記 02
     Equiv(module="open_guji_cv.steps.seed_admit",
-          new="417b77b31bea2c12146cebeebb75f60ab925b63e69c6837bcf52736f2c4f70ec",
+          new="38b9d11ce4338c8bfa8b2c1ec4fb4ab8945e6b6d4cb2f3c91ed32e5fb8baffb0",
           old="df2d8a69fe3bbf80b5ecfc97540aff3634a536d20cdd442c8998472bfdf5019b",
           evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199，含日曰组与小注格）上与 origin/dev 产物逐字节相同"),
     Equiv(module="open_guji_cv.groups.flow",
