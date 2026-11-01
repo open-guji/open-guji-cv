@@ -978,3 +978,36 @@ def test_abstain_ref_ok_lift_takes_ref_form(monkeypatch):
     r = Rec("x")
     group_flow_pass([r], {"x": ("曾", "equal")}, cands, lambda r: False, on)
     assert not r.admit
+
+
+def test_shape_ref_ok_book_level(monkeypatch):
+    """书级 `shape_ref_ok`（史記 2026-11-01）：复核时只有字形路 ids 给别的字、已放行字＝整理本字 → 不降审；文意给别的字照降。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    picks = {"ids": "賔", "ctx": None}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        picks.get(name), why="agree" if picks.get(name) else "abstain:x", via=name))
+    cands = lambda cid: [("廣", 0.97), ("賔", 0.9)]
+    on = FlowConfig(groups=("guang",), shape_ref_ok=frozenset({"guang"}))
+    adm = lambda: Rec("x", "廣", True, "match_ref")
+    r = adm()
+    group_flow_pass([r], {"x": ("廣", "equal")}, cands, lambda r: False, FlowConfig(groups=("guang",)))
+    assert not r.admit and "group_flow_disagree" in r.doubts                    # 缺省照旧
+    r = adm()
+    group_flow_pass([r], {"x": ("廣", "equal")}, cands, lambda r: False, on)
+    assert r.admit and r.char == "廣" and r.evidence["group"]["solvers"][-1]["why"] == "shape_dissent_ref_agree"
+    r = adm()                                                                  # 现役对位缺格，坐标对位字
+    group_flow_pass([r], {}, cands, lambda r: False, on, veto_refs={"x": "廣"})
+    assert r.admit
+    r = adm()                                                                  # 整理本是另一个字 → 照降
+    group_flow_pass([r], {"x": ("賔", "equal")}, cands, lambda r: False, on)
+    assert not r.admit
+    r = adm()                                                                  # 没有整理本 → 照降
+    group_flow_pass([r], {}, cands, lambda r: False, on)
+    assert not r.admit
+
+
+def test_shape_ref_ok_not_in_params_dump():
+    assert "group_flow_shape_ref_ok" not in SeedAdmitParams().model_dump()
+    d = SeedAdmitParams(group_flow=("guang",), group_flow_shape_ref_ok=["guang"]).model_dump()
+    assert d["group_flow_shape_ref_ok"] == ["guang"]

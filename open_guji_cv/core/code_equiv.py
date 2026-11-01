@@ -391,6 +391,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="abeefb2ca96f877eca465bc6f83fda42c09998d39a82fdbcaf05b55f508fc286",
           old="697812c2bf65871d068c7d674c213ae6af9043b50baca08d1f937a96f0c2c105",
           evidence="seed_admit 在史記 02 8 页（4,9,19,24,41,86,141,199）上与 origin/dev 产物逐字节相同（书级开关 group_flow_abstain_ref_ok 缺省空）"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="616d05dc5f7b1d64c5095495439d68cec2d2722e3ecd0e8027f55b32ddd544eb",
+          old="dcb61485d6ae38bbfe9ae9646f763710290f55b84750d729447970c3009a1f49",
+          evidence="seed_admit 在史記 01／05／08 册共 363 页（任务库 #1835–1837，cv 083e788＝claude/shiji-run ba2b739＋本改动）上与 ba2b739 产物逐字节相同（书级开关 ref_lib_coord、group_flow_shape_ref_ok 缺省关）"),
+    Equiv(module="open_guji_cv.groups.flow",
+          new="5ad584eacd0e6461eeb7e5e39a226973f0c52ef32b92d24054e3a163b593b8ef",
+          old="abeefb2ca96f877eca465bc6f83fda42c09998d39a82fdbcaf05b55f508fc286",
+          evidence="seed_admit 在史記 01／05／08 册共 363 页（任务库 #1835–1837，cv 083e788＝claude/shiji-run ba2b739＋本改动）上与 ba2b739 产物逐字节相同（书级开关 ref_lib_coord、group_flow_shape_ref_ok 缺省关）"),
 )
 
 
