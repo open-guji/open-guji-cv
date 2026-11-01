@@ -711,33 +711,77 @@ def _preflight() -> str | None:
 CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
 _ML_PKGS = ("torch", "transformers", "anthropic")
 _ml_ok_at = 0.0
+_ml_fail: tuple[float, str] | None = None     # (时间, 原因)：失败后 10 分钟内不再重试，直接复用这条原因，免得每个轮询周期都重跑安装
+ML_INSTALL_TIMEOUT_S = 600
+ML_RETRY_S = 600
+
+
+def _run_bounded(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[int, str]:
+    """跑子进程，超时就连整个进程组一起杀（uv 会拉子进程），返回 (rc, 输出末尾)。超时 rc＝-9。"""
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             start_new_session=True, env={**os.environ, **(env or {})})
+    except OSError as e:
+        return 127, str(e)
+    try:
+        out, _ = p.communicate(timeout=timeout)
+        return p.returncode, (out or "").strip()[-300:]
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out, _ = p.communicate()
+        return -9, f"超过 {timeout} 秒被杀；" + (out or "").strip()[-200:]
+
+
+def _find_uv() -> str | None:
+    return shutil.which("uv") or next((str(x) for x in (Path.home() / ".local/bin/uv", Path("/usr/local/bin/uv")) if x.exists()), None)
 
 
 def _ml_env_gate(say=print) -> str | None:
     """领单前查管线 venv 里的 torch／transformers／anthropic 和 SIKU-BERT 权重；缺依赖就 uv pip install，权重就预拉进 HF 缓存。
-    返回缺什么（None 是都齐）；通过后 30 分钟内不再查。GUJI_JOBS_SKIP_ML_CHECK=1 可跳过（测试用）。"""
-    global _ml_ok_at
+    返回缺什么（None 是都齐）；通过后 30 分钟内不再查。失败不挂住：每步都有超时（超时杀整个进程组），
+    失败原因返回给调用方（写进 workers 的 note），10 分钟后再试。GUJI_JOBS_SKIP_ML_CHECK=1 可跳过（测试用）。"""
+    global _ml_ok_at, _ml_fail
     if os.environ.get("GUJI_JOBS_SKIP_ML_CHECK") or time.time() - _ml_ok_at < 1800:
         return None
+    if _ml_fail and time.time() - _ml_fail[0] < ML_RETRY_S:
+        return _ml_fail[1]
+
+    def fail(msg: str) -> str:
+        global _ml_fail
+        _ml_fail = (time.time(), msg)
+        say(f"ML 环境自检未过（{ML_RETRY_S // 60} 分钟后重试）：{msg}")
+        return msg
+
     py = str(VENV / "bin" / "python")
     probe = "import importlib.util as u;print(' '.join(m for m in %r if u.find_spec(m) is None))" % (_ML_PKGS,)
-    try:
-        miss = subprocess.run([py, "-c", probe], capture_output=True, text=True, timeout=60).stdout.split()
-        if miss:
-            say(f"管线环境缺 {' '.join(miss)}，补装中…")
-            idx = ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"] if "torch" in miss else []
-            r = subprocess.run(["uv", "pip", "install", "-q", "--python", py, *idx, *[("transformers>=4.40" if m == "transformers" else "anthropic>=2.3" if m == "anthropic" else "torch>=2.0") for m in miss]],
-                               capture_output=True, text=True, timeout=1500)
-            if r.returncode:
-                return f"管线环境缺 {' '.join(miss)} 且补装失败：{(r.stderr or r.stdout).strip()[-200:]}"
-        name, rev = CTX_ENCODER
-        dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
-        r = subprocess.run([py, "-c", dl], capture_output=True, text=True, timeout=1500)
-        if r.returncode:
-            return f"拉不到文意 L2 权重 {name}（查网络 huggingface.co）：{r.stderr.strip()[-200:]}"
-    except (OSError, subprocess.SubprocessError) as e:
-        return f"管线环境自检出错：{e}"
-    _ml_ok_at = time.time()
+    rc, out = _run_bounded([py, "-c", probe], 60)
+    if rc:
+        return fail(f"管线 venv 的 python 跑不了（{VENV}）：{out}")
+    miss = out.split()
+    if miss:
+        uv = _find_uv()
+        if not uv:
+            rc, out = _run_bounded([sys.executable, "-m", "pip", "install", "-q", "--user", "uv"], 300)
+            uv = _find_uv()
+            if not uv:
+                return fail(f"管线环境缺 {' '.join(miss)}，且找不到 uv、装 uv 也失败：{out}")
+        say(f"管线环境缺 {' '.join(miss)}，补装中（最长 {ML_INSTALL_TIMEOUT_S} 秒）…")
+        idx = ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"] if "torch" in miss else []
+        spec = {"transformers": "transformers>=4.40", "anthropic": "anthropic>=2.3", "torch": "torch>=2.0"}
+        rc, out = _run_bounded([uv, "pip", "install", "-q", "--no-progress", "--python", py, *idx, *[spec[m] for m in miss]],
+                               ML_INSTALL_TIMEOUT_S, {"UV_HTTP_TIMEOUT": "60"})
+        if rc:
+            return fail(f"管线环境缺 {' '.join(miss)}，补装失败（rc {rc}）：{out}")
+        say(f"补装完成：{' '.join(miss)}")
+    name, rev = CTX_ENCODER
+    dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
+    rc, out = _run_bounded([py, "-c", dl], ML_INSTALL_TIMEOUT_S, {"HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_ETAG_TIMEOUT": "30"})
+    if rc:
+        return fail(f"拉不到文意 L2 权重 {name}（rc {rc}，查网络 huggingface.co）：{out}")
+    _ml_ok_at, _ml_fail = time.time(), None
     return None
 
 
