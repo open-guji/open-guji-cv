@@ -26,7 +26,7 @@ def test_group_ids_match_dataset_registry():
                            "dian", "can", "chen", "shen", "zhi", "ji", "qing", "hui", "ly", "dt", "wj", "zh", "yh", "xz", "wyu", "yt", "rm",
                            "mz", "yr", "sb", "js", "em", "fc", "mb",
                            "kan", "jiw", "qx", "dx", "zx", "qy", "xu", "ce", "jiao",
-                           "qik", "lih", "jue", "wei", "shuo", "lv", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di"}
+                           "qik", "lih", "jue", "wei", "shuo", "lv", "zy", "sy", "sz", "gm", "xb", "weiw", "shan", "di", "ss"}
     assert all(g.id == k for k, g in GROUPS.items())
 
 

@@ -309,7 +309,7 @@ GROUPS: dict[str, GroupSpec] = {
         note="按文意定；文意弃权时按量横长短（groups/bars.py）。与 sz 共用「未」。"),
     "ts": GroupSpec(
         id="ts", name="土士", members=frozenset("土士"),
-        backends=(),
+        backends=(), overlaps=("ss",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3", "image"), config_dir="config/groups/ts",
         flow=FlowSpec((CTX, BARS, *_g2("ts"))),
         note="按文意定；文意弃权时按量横长短（groups/bars.py）与整字 HOG（左半），给字须一致。"),
@@ -351,7 +351,7 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
            ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
-           ("sb", "十卜", (), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
+           ("sb", "十卜", ("ss",), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
            ("js", "甲申", (), "干支：甲子、甲乙；申＝申明、申屠、庚申。"),
            ("em", "而面", (), "而＝虚词；面＝東面、南面、四面。"),
            ("fc", "傅傳", (), "傳＝傳注、經傳、傳記；傅＝傅會、傅寅、傅以漸、太傅。"),
