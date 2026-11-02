@@ -373,6 +373,25 @@ def _pair_pos(entries: dict, i: int, g: str) -> int | None:
     return 0 if i == lo else 1
 
 
+def _slot_family(pv, trail: list | None, w, canon: Callable[[str], str]) -> str | None:
+    """暂归一按 IDS 取块分族（`Provisional.slot_to`，參㕘叅）：返回兜底该放的字；族对不上、没有 IDS 取块 → None（不兜底）。
+    整理本字（`w`）在 forms 里就必须与 IDS 取块同族；整理本缺字（或没有）时取块分差要 ≥ `slot_min`。"""
+    sl = dict(pv.slot_to)
+    its = [t for t in (trail or []) if t.get("solver") == "ids" and t.get("scores")]
+    if not its:
+        return pv.to                      # 没有 IDS 取块分（复核只跑别的方法时）：照旧放最常见字形
+    sc = its[0]["scores"]
+    best = max(sc, key=sc.get)
+    t = sl.get(best)
+    if t is None:
+        return None
+    fam = lambda c: next((i for i, f in enumerate(pv.fams) if c in f or canon(c) in f), -1)  # noqa: E731
+    if w and w != GAP and (w in pv.forms or canon(w) in pv.forms):
+        return t if fam(w) == fam(t) else None
+    v = sorted(sc.values(), reverse=True)
+    return t if len(v) > 1 and v[0] - v[1] >= pv.slot_min else None
+
+
 def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
                  canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
     """同义组暂归一兜底（`registry.PROVISIONAL`，sheldon 2026-10-27「先 IDS 拆分，拆不开或置信度不够就暂归一到一个字形，
@@ -386,7 +405,12 @@ def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowC
         return None
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     if mode == "review":
-        return (pv.to, ref) if inn(r.char) and (not ref or ref == GAP or inn(ref)) else None
+        if not (inn(r.char) and (not ref or ref == GAP or inn(ref))):
+            return None
+        if pv.slot_to:
+            to = _slot_family(pv, trail, ref or coord, canon)
+            return (to, ref) if to else None
+        return pv.to, ref
     fam = GROUPS[g].flow.families
     if fam and trail is not None:
         # 混合组（文意定族、族内是同义异体：象彖𧰼、冠寇冦宼㓂，A24 11-01 sheldon「族内识别不了的暂归一到 象／寇」）：
@@ -409,6 +433,9 @@ def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowC
     if not ref and r.id[-1:] in ("a", "b"):
         return None    # 夹注半格只有坐标对位：列尾切残的半格会把上一格的字对过来（vol20:175:7:21a 坐标对位 𨽻、刻的不是 隸）
     if inn(w) or (w == GAP and pv.gap and c1 >= cfg.provisional_gap_cov):
+        if pv.slot_to:
+            to = _slot_family(pv, trail, w, canon)
+            return (to, w) if to else None
         return pv.to, w
     return None
 
@@ -692,7 +719,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 elif vch is not None:
                     fix, other, code = True, True, None  # 同上、给了别的字：改字
                     ch = vch
-            pv = _provisional(g, mode, r, [], ref, None, cfg, norm) if code and not (other and fix) else None
+            pv = _provisional(g, mode, r, [], ref, None, cfg, norm, trail) if code and not (other and fix) else None
             if pv is not None:
                 # 暂归一兜底：别的通道认了字、组里拆不开写法（判出另一形、弃权、与整理本不一） → 不降审，放成这组最常见的字形
                 decision = "provisional"

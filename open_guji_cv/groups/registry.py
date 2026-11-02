@@ -722,13 +722,20 @@ class Provisional:
     to: str
     forms: frozenset
     gap: bool = False
+    #: 按 IDS 取块分族（A24 2026-11-01，參㕘叅：最下块 彡＝參，小／𠇍＝叅㕘）：`slot_to` 是 取块→暂归一字，`fams` 是不许混归的族。
+    #: 兜底时 IDS 最近的取块定族，整理本字（缺位用坐标对位）必须同族才放；整理本缺字时 IDS 取块分差要够（`slot_min`）。族不一致不兜底。
+    slot_to: tuple = ()
+    fams: tuple = ()
+    slot_min: float = 0.07
 
 
 #: 暂归一兜底表（2026-10-27，A24「收尾同义形近字组送审」）：只收同义（`kind="variant"`）组，`to` 取 vol07–99 重落后放行最多的字形
 #: （已在书级 `codepoints` 暂归一的组取归到的字）。意思不同的字绝不进 `forms`：讖識䜟 的 識、
 #: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/字组/README.md` 第二节「暂归一兜底」。
 PROVISIONAL: dict[str, Provisional] = {
-    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"})
+    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"},
+                     **(dict(slot_to=(("彡", "參"), ("小", "叅"), ("𠇍", "叅")), fams=(frozenset("參"), frozenset("叅㕘")))
+                        if gid == "can" else {}))
     for gid, to, forms in (
         ("yi_560", "𢑱", "彝彛彜彞𢑱𢑴"), ("dian", "㸃", "點㸃"), ("chen", "䜟", "讖䜟"), ("shen", "愼", "慎愼"),
         ("zhi", "㫖", "旨㫖"), ("can", "參", "參㕘叅"), ("ji", "卽", "即卽"), ("qing", "卿", "卿𨜊"), ("hui", "彚", "彙彚"),

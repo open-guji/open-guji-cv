@@ -1011,3 +1011,17 @@ def test_shape_ref_ok_not_in_params_dump():
     assert "group_flow_shape_ref_ok" not in SeedAdmitParams().model_dump()
     d = SeedAdmitParams(group_flow=("guang",), group_flow_shape_ref_ok=["guang"]).model_dump()
     assert d["group_flow_shape_ref_ok"] == ["guang"]
+
+def test_provisional_can_splits_by_ids_slot():
+    """參㕘叅 暂归一兜底按 IDS 取块分族（A24 11-01）：彡＝參，小／𠇍＝叅；整理本字必须同族，缺位时取块分差要够；族不一致不兜底。"""
+    from open_guji_cv.groups.flow import _slot_family
+    from open_guji_cv.groups.registry import PROVISIONAL
+    pv = PROVISIONAL["can"]
+    tr = lambda a, b, c: [{"solver": "ids", "scores": {"小": a, "彡": b, "𠇍": c}}]  # noqa: E731
+    ident = lambda x: x  # noqa: E731
+    assert _slot_family(pv, tr(0.82, 0.55, 0.79), "叅", ident) == "叅"
+    assert _slot_family(pv, tr(0.82, 0.55, 0.79), "㕘", ident) == "叅"
+    assert _slot_family(pv, tr(0.5, 0.8, 0.4), "參", ident) == "參"
+    assert _slot_family(pv, tr(0.82, 0.55, 0.79), "參", ident) is None      # 整理本說參、取块說小：不兜底
+    assert _slot_family(pv, tr(0.82, 0.55, 0.79), None, ident) is None      # 整理本缺位：取块分差 0.03 < 0.07，不兜底
+    assert _slot_family(pv, tr(0.9, 0.5, 0.7), None, ident) == "叅"         # 分差 0.2 够
