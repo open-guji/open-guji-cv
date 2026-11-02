@@ -42,7 +42,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ..core.anchor import bbox_tl_to_tr
 from ..core.spec import StepSpec
@@ -77,6 +77,17 @@ class SealDetectParams(BaseModel):
     min_score: float = 0.25
     overrides: dict[int, list[dict]] = Field(default_factory=dict)
     """页号 → 人核的印列表 `[{"kind": "stain"|"crisp", "bbox": [x0, y0, x1, y1]}]`（规范空间）；空表＝无印。"""
+    stain_pages: list[int] | None = None
+    """大印只认这些页（2026-11-02，A32）。None＝每页都找（缺省，殿本）。写本扫描纸面噪点多，整页会被当成大印
+    （史記文渊阁 fgon 包：册01 p54、册02 p48–194 等 14 页没有印却判了大印，115 格误判遮挡；真印页与误判页的
+    密度峰值 22–63 互相重叠，调门槛分不开）。史記各册真印只在首叶，书级配 `[2]`。小印不受影响。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_default(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and self.stain_pages is None:
+            d.pop("stain_pages", None)          # 缺省不进参数哈希，殿本等书产物不过期
+        return d
 
 
 def stain_seals(gray: np.ndarray, *, min_peak: float) -> list[tuple[tuple[int, int, int, int], float]]:
@@ -273,4 +284,6 @@ class SealDetectStep(Step):
                      for s in p.overrides[page]]
         else:
             seals = detect_seals(gray, p, ctx.product("borders", page))
+            if p.stain_pages is not None and page not in p.stain_pages:
+                seals = [x for x in seals if x.kind != "stain"]
         return {"seals": PageSeals(page=page, width=W, height=H, seals=seals)}
