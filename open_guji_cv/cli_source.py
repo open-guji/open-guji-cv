@@ -435,3 +435,7 @@ def cmd_source(args) -> None:
         print("✗ replace 要 --why", file=sys.stderr)
         sys.exit(2)
     COMMANDS[a](args)
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"source": (add_parser, cmd_source)}

@@ -697,3 +697,7 @@ def cmd_opinions(args) -> None:
     if f is None:
         raise SystemExit("guji opinions <子命令>；见 guji opinions -h")
     f(args)
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"opinions": (add_parser, cmd_opinions)}

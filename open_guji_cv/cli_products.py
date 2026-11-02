@@ -370,3 +370,7 @@ def cmd_products_entry(args) -> None:
             sys.exit(2)
         args.pack_action, args.book = pos[0], (pos[1] if len(pos) > 1 else None)
     cmd_products(args)
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"products": (add_parser, cmd_products_entry)}

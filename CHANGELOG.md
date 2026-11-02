@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 拆分 P1a：cv 里 manager 一侧的 9 个命令模块（glyph-db、exp、db、products、source、opinions、cellvotes、freeze、job）各加 `COMMANDS` 表（同 guji-manager 插件接口），`cli_v2` 改按 `MANAGER_CLI_MODULES` 名单现 import 登记；57 个子命令及参数与改前逐一相同。以后搬走一个只删名单一项、登记 `MOVED_TO_MANAGER`。不碰任何 Step，`code_hash` 不变。
 - 拆分 P0：`cli_v2.MOVED_TO_MANAGER` 登记搬去 guji-manager 的子命令（现为空），本机没装 manager 时 `guji <它>` 给出装法、退出码 2；新增 `scripts/ensure_manager.sh`，`rerun_prep.sh`、`guji_jobs.sh` 开工时把 guji-manager 装好并跟到 main（每 10 分钟最多拉一次，失败只警告），取代原先只提示的 `manager_hint`。不碰任何 Step，`code_hash` 不变。
 - 拆分 P0：新增门面 `open_guji_cv/manager_api.py`（同 `console_api` 机制），guji-manager 过渡期用 cv 内部只经这里或 `api`；`test_facade_exports_resolve` 同时核两个门面的名字都取得到。只加文件，不碰任何 Step，`code_hash` 不变。
 - 中心库省流量（A31 11-02，Neon 出流量 10-31 一天 48 GB）：`db pull`／`sync` 取整文件表（files：线上单每份约 1.1 MB、字形库清单 3.4 MB）一律按路径、按字节分批（≤8 MB／≤100 个），不再整表 2000 行一页读挂重试；`db pull --exclude <前缀>`／`GUJI_PULL_EXCLUDE`（`run` = `feedback/lists/proofing/`）按需拉取，部分副本记进状态、push／sync 拒绝；`rerun_prep.sh` 缺省 `GUJI_PULL_EXCLUDE=run`；任务看板只取要用的列。不碰任何 Step，`code_hash` 不变（PATCH）。

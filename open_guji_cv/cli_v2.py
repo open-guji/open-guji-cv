@@ -2976,6 +2976,28 @@ def moved_command_hint(argv: list[str], registered) -> str | None:
             f"装好后命令不变。")
 
 
+#: cv 里还没搬走的 manager 一侧命令模块（拆分 P1）。每个模块有 `COMMANDS = {名: (add_parser, handler)}`，
+#: 与 guji-manager 的插件接口（入口点组 `guji.commands`）同形：搬走一个就从这里删、在 `MOVED_TO_MANAGER` 登记，
+#: 命令本身改由 guji_manager.commands 提供。按名字现 import（不在模块顶上），cv 不对它们留静态依赖。
+#:   glyph-db：2026-10-06 从 v1 入口搬来，自带 -w　　exp：A/B 实验（overview#457），自带 -w
+#:   db：中心库客户端（GUJI-606），自带 -w　　products：前后对比、产物包（受控重跑），自带 -w
+#:   source：原图源件、页图、页表（R2），自带 -w　　opinions：意见池（M11），不要 -w
+#:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
+#:   job：任务库（2026-10-25）
+MANAGER_CLI_MODULES: tuple[str, ...] = (
+    "cli_glyph_db", "cli_exp", "cli_db", "cli_products", "cli_source", "cli_opinions", "cli_cellvotes", "cli_freeze",
+    "jobs.cli",
+)
+
+
+def register_manager_cli(sub: argparse._SubParsersAction) -> None:
+    import importlib
+    for m in MANAGER_CLI_MODULES:
+        for name, (add_parser, handler) in importlib.import_module(f".{m}", __package__).COMMANDS.items():
+            add_parser(sub)
+            COMMANDS_V2[name] = handler
+
+
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
@@ -3585,42 +3607,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--pages", default="all", help="页表达式；默认全书")
     p.add_argument("--json", action="store_true", help="出 JSON（与控制台 /api/step9/progress 同形）")
 
-    # glyph-db（2026-10-06 从 v1 入口搬来，自带 -w，不走 install_workspace_option）
-    from .cli_glyph_db import add_parser as _add_glyph_db, cmd_glyph_db
-    _add_glyph_db(sub)
-    COMMANDS_V2["glyph-db"] = cmd_glyph_db
-    # exp（overview#457）：A/B 实验，自带 -w（没有 book 位置参数）
-    from .cli_exp import add_parser as _add_exp, cmd_exp
-    _add_exp(sub)
-    COMMANDS_V2["exp"] = cmd_exp
-    # db（GUJI-606）：中心库客户端，自带 -w
-    from .cli_db import add_parser as _add_db, cmd_db
-    _add_db(sub)
-    COMMANDS_V2["db"] = cmd_db
-    # products：前后对比、产物包（受控重跑，doc/受控重跑.md），自带 -w
-    from .cli_products import add_parser as _add_products, cmd_products_entry
-    _add_products(sub)
-    COMMANDS_V2["products"] = cmd_products_entry
-    # source：原图源件、页图、页表（R2），云会话取原图；自带 -w
-    from .cli_source import add_parser as _add_source, cmd_source
-    _add_source(sub)
-    COMMANDS_V2["source"] = cmd_source
-    # opinions（M11）：意见池、证据包、初判、修订 book-text 冻结册；不带 book 位置参数，不要 -w
-    from .cli_opinions import add_parser as _add_opinions, cmd_opinions
-    _add_opinions(sub)
-    COMMANDS_V2["opinions"] = cmd_opinions
-    # cellvotes（M10）：网站精校页投票 → 人裁事件草稿／写入；带 book，-w 由下面统一加
-    from .cli_cellvotes import add_parser as _add_cellvotes, cmd_cellvotes
-    _add_cellvotes(sub)
-    COMMANDS_V2["cellvotes"] = cmd_cellvotes
-    # freeze（GUJI-694）：冻结登记；带 book，-w 由下面统一加
-    from .cli_freeze import add_parser as _add_freeze, cmd_freeze
-    _add_freeze(sub)
-    COMMANDS_V2["freeze"] = cmd_freeze
-    # job（2026-10-25）：任务库（Neon jobs schema）——交重跑／评测任务、看谁在跑什么、执行方领单跑单
-    from .jobs.cli import add_parser as _add_job, cmd_job
-    _add_job(sub)
-    COMMANDS_V2["job"] = cmd_job
+    register_manager_cli(sub)
     load_plugin_commands(sub)
     install_workspace_option(sub)
 
