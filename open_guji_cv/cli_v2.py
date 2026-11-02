@@ -1675,13 +1675,14 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
         return added
     for ep in eps:
         try:
-            commands = ep.load().COMMANDS
+            module = ep.load()
+            commands = module.COMMANDS
         except Exception as e:  # noqa: BLE001
             print(f"  ⚠ 插件 {ep.name} 加载失败（{type(e).__name__}: {e}），略过", file=sys.stderr)
             continue
         called = set()    # 几条命令共用一个 add_parser 时只调一次；任一条 cv 自带就整个 add_parser 让给 cv
         for name, (add_parser, handler) in commands.items():
-            if name in COMMANDS_V2:
+            if name in COMMANDS_V2 or _plugin_too_old(module, name):
                 continue
             if add_parser not in called:
                 if any(n in sub.choices for n, (ap, _) in commands.items() if ap is add_parser):
@@ -1698,6 +1699,11 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
 MOVED_TO_MANAGER: dict[str, str] = {
     "opinions": "拆分 P2，2026-11-02；意见池 M11",
 }
+#: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
+#: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
+MIN_MANAGER_VERSION: dict[str, str] = {
+    "opinions": "0.1.0",
+}
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
                         "pip install --no-deps -e <目录>（云端：uv pip install --python /opt/guji-venv/bin/python …）")
@@ -1708,8 +1714,28 @@ def moved_command_hint(argv: list[str], registered) -> str | None:
     cmd = next((a for a in argv if not a.startswith("-")), None)
     if cmd is None or cmd in registered or cmd not in MOVED_TO_MANAGER:
         return None
-    return (f"`guji {cmd}` 已搬到 guji-manager（{MOVED_TO_MANAGER[cmd]}），本机没装。装法：{MANAGER_INSTALL_HINT}；"
-            f"装好后命令不变。")
+    need = MIN_MANAGER_VERSION.get(cmd)
+    return (f"`guji {cmd}` 已搬到 guji-manager（{MOVED_TO_MANAGER[cmd]}），本机没装"
+            + (f"或版本低于 {need}（已装的就在它的目录 git pull 到 main）" if need else "")
+            + f"。装法：{MANAGER_INSTALL_HINT}；装好后命令不变。")
+
+
+def _version_tuple(v: str) -> tuple[int, ...]:
+    import re
+    return tuple(int(x) for x in re.findall(r"\d+", v.split("+")[0])[:3])
+
+
+def _plugin_too_old(module, name: str) -> bool:
+    """插件提供的这条命令要求的 manager 版本（MIN_MANAGER_VERSION）够不够；不够就当没装。"""
+    need = MIN_MANAGER_VERSION.get(name)
+    if not need:
+        return False
+    import importlib
+    try:
+        have = getattr(importlib.import_module(module.__name__.split(".")[0]), "__version__", "0")
+    except Exception:  # noqa: BLE001
+        have = "0"
+    return _version_tuple(have) < _version_tuple(need)
 
 
 #: cv 里还没搬走的 manager 一侧命令模块（拆分 P1）。每个模块有 `COMMANDS = {名: (add_parser, handler)}`，

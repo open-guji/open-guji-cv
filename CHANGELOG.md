@@ -6,7 +6,7 @@
 ## [未发版]
 
 ### Changed
-- 拆分 P2 第一批：`guji opinions`（`opinions/`、`cli_opinions.py`、`config/opinions/rules.json` 与 `tests/opinions/`）搬去 guji-manager（同日合 guji-manager 对应 PR），cv 删除；`cli_v2.MOVED_TO_MANAGER` 登记，没装 manager 时给装法。`manager_api` 加 `data_home`、`central_data_dir`、`CentralError`。不碰任何 Step，`code_hash` 不变。
+- 拆分 P2 第一批：`guji opinions`（`opinions/`、`cli_opinions.py`、`config/opinions/rules.json` 与 `tests/opinions/`）搬去 guji-manager（同日合 guji-manager 对应 PR），cv 删除；`cli_v2.MOVED_TO_MANAGER` 登记，没装 manager 时给装法；新增 `MIN_MANAGER_VERSION`（opinions 要 ≥0.1.0），旧版 manager 里早先复制的过期副本（云端快照种子带着 10-27 的 opinions）不再被认，提示更新。`manager_api` 加 `data_home`、`central_data_dir`、`CentralError`。不碰任何 Step，`code_hash` 不变。
 - 拆分 P1b：`cli_v2` 里 24 条 manager 一侧命令原样拆到 5 个模块——`cli_ops`（snap、archive、release、deploy）、`cli_feedback`（events、gold、batch、label-batch）、`cli_eval`（eval、check、groups、cards、progress、collate）、`cli_glyph`（store、recheck、glyphlib、rekey-cells、promote、corpus）、`cli_close`（close-check、exit-check、audit、char-diff），经 `MANAGER_CLI_MODULES` 登记；`cli_v2` 从 3600 行减到约 2000 行。57 个子命令及参数与改前逐一相同。顺带修插件加载：一个模块几条命令共用一个 `add_parser` 时只调一次（原先第二条起 handler 登记不上）。不碰任何 Step，`code_hash` 不变。
 - 拆分 P1a：cv 里 manager 一侧的 9 个命令模块（glyph-db、exp、db、products、source、opinions、cellvotes、freeze、job）各加 `COMMANDS` 表（同 guji-manager 插件接口），`cli_v2` 改按 `MANAGER_CLI_MODULES` 名单现 import 登记；57 个子命令及参数与改前逐一相同。以后搬走一个只删名单一项、登记 `MOVED_TO_MANAGER`。不碰任何 Step，`code_hash` 不变。
 - 拆分 P0：`cli_v2.MOVED_TO_MANAGER` 登记搬去 guji-manager 的子命令（现为空），本机没装 manager 时 `guji <它>` 给出装法、退出码 2；新增 `scripts/ensure_manager.sh`，`rerun_prep.sh`、`guji_jobs.sh` 开工时把 guji-manager 装好并跟到 main（每 10 分钟最多拉一次，失败只警告），取代原先只提示的 `manager_hint`。不碰任何 Step，`code_hash` 不变。
