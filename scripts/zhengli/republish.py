@@ -63,17 +63,38 @@ def meta_file(book: str, out_dir: Path) -> Path | None:
     if f.exists():
         return f
     m = re.fullmatch(r"vol(\d+)", book)
-    if not m:
-        return None
-    n = int(m.group(1))
-    meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
-                         "volume": {"index": n, "cv_book": book},
-                         "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    if m:
+        n = int(m.group(1))
+        meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
+                             "volume": {"index": n, "cv_book": book},
+                             "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    else:
+        # 非殿本：按册配置（11-02 统一册号）——book_id、volume 必有；书名、版本取 book_title／book_edition
+        from open_guji_cv.core.volume_id import volume_of
+        v = volume_of(book)
+        if not (v.book_id and v.volume):
+            return None
+        d = _book_dict(book)
+        bk = {"id": v.book_id, "title": d.get("book_title") or d.get("title") or book}
+        if d.get("book_edition"):
+            bk["edition"] = d["book_edition"]
+        meta = {"defaults": {"book": bk, "volume": {"index": v.volume, "cv_book": book},
+                             "snapshot": f"{v.book_id} 本地产物（{book}）"}}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     g = out_dir / f"meta_{book}.json"
     g.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
     return g
+
+
+def _book_dict(book: str) -> dict:
+    """生效的册配置（册 yaml ∪ 基础配置），读不到给空。"""
+    try:
+        from open_guji_cv.core.book import _book_yaml_path
+        from open_guji_cv.core.book_config import effective_book_dict
+        return effective_book_dict(_book_yaml_path(book), apply_override=False)
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 def chapter_of(book: str) -> str:
