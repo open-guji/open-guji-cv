@@ -441,6 +441,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="49a9e0c6a90d8f43ea6d054c1f20531123534ae6f26e2798fcf2fee51e24ec74",
           old="7edd6f3d13885a5efd87a18c651533ac122168f8a3d89126e72ec394fc0e8758",
           evidence=_SJ_DP),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="646f9ed7015e564cfe119b3f705583296a70ddf75301da63864003519e5608dd",
+          old="23864ee71ac5a22aca46866c77114e56d5606627d62b359668ec1346f74d42ee",
+          evidence="书级开关 layout_slots_grow（缺省关，不进参数 dump）：row_segment 在史記文淵閣本 04 册 12 页（2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
 )
 
 
