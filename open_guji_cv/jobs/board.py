@@ -20,6 +20,7 @@ SECTION, KEY, WRITER = "jobs", "board", "任务库"
 RECENT = 40                 # 表里留最近结束的几条
 _MIN_GAP_S = 120            # 节流：本进程两次写之间至少隔这么久（force 不受限）
 _last = 0.0
+_central = None             # 看板写中心库 progress（Neon），与任务库分开连
 
 _STATUS = {"running": "在跑", "queued": "排队", "succeeded": "完成", "failed": "失败", "blocked": "拦下",
            "cancelled": "已取消"}
@@ -146,7 +147,12 @@ def publish(db, *, force: bool = False, dry: bool = False) -> dict | None:
         queued = sum(1 for r in table["rows"] if r["status"] == "排队")
         if dry:
             return table
-        db(_put, table, f"在跑 {running}、排队 {queued}")
+        # 看板写进中心库 progress（仍是 Neon），与任务库（jobs，可能已切到新机）分开连
+        global _central
+        if _central is None:
+            from . import store as S
+            _central = S.DB(S.connect_neon)
+        _central(_put, table, f"在跑 {running}、排队 {queued}")
         return table
     except Exception as e:      # noqa: BLE001 —— 看板写不上不能拖垮执行方；进展以任务库为准，但原因要留下来
         _report(db, f"看板写不上：{type(e).__name__}: {str(e)[:150]}")

@@ -7,7 +7,8 @@
 #
 # 跑的总是 cv dev 最新的 jobs 模块（单独检出在 /opt/guji-runner），与 /opt/guji-cv-seed 当前切到哪版无关：
 # 任务要的 cv 版本切的是 seed，执行方自己不会被切没。执行方在跑时不刷新 runner 检出。
-# 环境：Default 环境快照（/opt/guji-cv-seed、/opt/guji-venv）；连库要 NEON_DATABASE_URL，测试分支 GUJI_JOBS_BRANCH=ci。
+# 环境：Default 环境快照（/opt/guji-cv-seed、/opt/guji-venv）。任务库：设 JOBSDB_TOKEN＋JOBSDB_PASSWORD 就连新机（jobs/jobsdb.py，要 pip 装 websockets）；
+# 没设仍连 NEON_DATABASE_URL（过渡期）；测试分支 GUJI_JOBS_BRANCH=ci。中心库看板 progress 始终写 Neon。
 set -euo pipefail
 R=${GUJI_JOBS_RUNNER:-/opt/guji-runner}; SEED=${GUJI_JOBS_SEED:-/opt/guji-cv-seed}
 H=${GUJI_JOBS_HOME:-$HOME/.guji-jobs}; PY=${GUJI_JOBS_PY:-/opt/guji-venv/bin/python}

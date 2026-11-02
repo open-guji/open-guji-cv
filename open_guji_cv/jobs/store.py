@@ -19,7 +19,20 @@ RETRY_BACKOFF_MIN = int(os.environ.get("GUJI_JOBS_BACKOFF_MIN", "5"))   # 环境
 
 
 def connect():
-    """开一条 autocommit 连接（写操作各自包在 `conn.transaction()` 里，读不留悬着的事务）。"""
+    """开一条 autocommit 连接（写操作各自包在 `conn.transaction()` 里，读不留悬着的事务）。
+
+    设了 JOBSDB_TOKEN 就连新任务库（美国机，经 jobsdb 隧道）；没设仍连 Neon（过渡期，见 jobsdb.py）。
+    """
+    from . import jobsdb
+    if jobsdb.enabled():
+        c = jobsdb.connect()
+        c.autocommit = True
+        return c
+    return connect_neon()
+
+
+def connect_neon():
+    """连 Neon 中心库（旧路）。中心库的 progress 看板仍写这里，不随任务库切走。"""
     from ..datastore.connect import connect as _connect
     br = os.environ.get("GUJI_JOBS_BRANCH")
     if br and br != "main":
