@@ -34,6 +34,8 @@ ap.add_argument("--l3", default="", help="L3 在线（问 Claude）的组，逗�
 ap.add_argument("--l3-cache", default=None, help="L3 缓存目录（<组>.jsonl，按窗口内容存答案）")
 ap.add_argument("--l3-model", default="claude-opus-5-5"); ap.add_argument("--l3-effort", default="low")
 ap.add_argument("--l3-need-l2-agree", action="store_true")
+ap.add_argument("--panel", default="", help="L3 二审小组，逗号分隔 模型:effort（线上缺省 claude-opus-5-5:high,claude-fable-5-1:high）")
+ap.add_argument("--panel-groups", default="ry,rm,mz,jys", help="用二审小组的组")
 ap.add_argument("--pages", default=None, help="只回放这些页：json 列表，元素 \"册:页\"（或格 id \"册:页:列:格\"）；省钱用，L3 在线按格收费")
 ap.add_argument("--book-prompt", default=None, help="book_prompt.json（提示词里 {{book_desc}} 之类的变量），缺省殿本")
 ap.add_argument("--codepoints", default="", help="工作区 config/codepoints.yaml，或 `䝉=𫎇,𨽾=隷`：码位法组与补放互证按它归一（不给则码位法组只会弃权）")
@@ -68,7 +70,8 @@ if a.l3:
         meta, body = load_rendered_prompt(rules_path(g).with_name("prompt.md"), bv)
         l3[g] = {"system": body, "ver": meta.get("ver", ""), "cache": str(Path(a.l3_cache) / f"{g}.jsonl") if a.l3_cache else ""}
 cfg = FlowConfig(groups=groups, l2_tables=tables, l2_models=models, l2_drift=2, joint=True, canon=canon,
-                 l3_online=l3, l3_model=a.l3_model, l3_effort=a.l3_effort, l3_need_l2_agree=a.l3_need_l2_agree)
+                 l3_online=l3, l3_model=a.l3_model, l3_effort=a.l3_effort, l3_need_l2_agree=a.l3_need_l2_agree,
+                 l3_panel=tuple(x for x in a.panel.split(",") if x), l3_panel_groups=tuple(x for x in a.panel_groups.split(",") if x))
 FIELDS = ("id", "char", "admit", "channel", "provenance", "doubts", "evidence", "slot", "sub")
 
 

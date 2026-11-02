@@ -503,6 +503,14 @@ def yr_bars(inp: MethodInput, img) -> GroupVerdict:
     return GroupVerdict(ch if ok else None, conf=1.0 if ok else 0.0, why="agree" if ok else f"abstain:{why}", via="yr_bars")
 
 
+def ss_bars(inp: MethodInput, img) -> GroupVerdict:
+    """十士数横（`bars.ss_count`）：一横一竖给「十」，两横给「士」，边框线、残笔弃权。"""
+    from .bars import ss_count
+    ch, why = ss_count(img)
+    ok = ch in inp.members
+    return GroupVerdict(ch if ok else None, conf=1.0 if ok else 0.0, why="agree" if ok else f"abstain:{why}", via="ss_bars")
+
+
 def rr_img(inp: MethodInput, img) -> GroupVerdict:
     """入人八字形分类器（`utils.rr_clf`，随机森林）：只验证过降审，补放要靠 `lift_needs` 拦。"""
     from ..utils import rr_clf
@@ -547,6 +555,7 @@ BARS = Custom("bars", fn=bars, patch=True)
 RR_IMG = Custom("rr_img", fn=rr_img, patch=True)
 RY_SHAPE = Custom("ry_shape", fn=ry_shape, patch=True)
 YR_BARS = Custom("yr_bars", fn=yr_bars, patch=True)
+SS_BARS = Custom("ss_bars", fn=ss_bars, patch=True)
 ZY_STROKES = Custom("zy_strokes", fn=zy_strokes, patch=True)
 IDS = Ids()
 HOG = HogRidge()

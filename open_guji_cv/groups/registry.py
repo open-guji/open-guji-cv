@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -278,7 +278,7 @@ GROUPS: dict[str, GroupSpec] = {
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/ry",
         flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, strong_over_ref=True, lift_needs=("ctx",),
-                     tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
+                     tolerate=frozenset("師臼白自口"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
@@ -294,6 +294,13 @@ GROUPS: dict[str, GroupSpec] = {
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/wxs",
         flow=FlowSpec((CTX,), review=True),
         note="按文意定（只有 L1 规则）。"),
+    # 十士（2026-11-01，A24「压低剩余 V 与 N 类送审」）：第 1 轮 g18-r1 N 类 26 格，库 十士 cov 都是 0.999 以上互相咬住，护栏 conflict；
+    #   看图 26 格全是十，整理本也都作十。十＝一横一竖、士＝两横一竖，数横（`bars.ss_count`）；补放须整理本同字（整理本缺位送审）。
+    "ss": GroupSpec(
+        id="ss", name="十士", members=frozenset("十士"), backends=(),
+        kind="near_form", solvers=("image",), config_dir="config/groups/ss",
+        flow=FlowSpec((SS_BARS,), combine="first", lift_ref_agree=True), overlaps=("ts", "sb"),
+        note="形近不同义，按数横定（十一横一竖，士两横一竖）；补放须与整理本（缺位用坐标对位字）同字，只补放不复核。与 土士 ts、十卜 sb 共用「士」「十」。"),
     "wm": GroupSpec(
         id="wm", name="未末", members=frozenset("未末"),
         backends=(),
@@ -302,7 +309,7 @@ GROUPS: dict[str, GroupSpec] = {
         note="按文意定；文意弃权时按量横长短（groups/bars.py）。与 sz 共用「未」。"),
     "ts": GroupSpec(
         id="ts", name="土士", members=frozenset("土士"),
-        backends=(),
+        backends=(), overlaps=("ss",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3", "image"), config_dir="config/groups/ts",
         flow=FlowSpec((CTX, BARS, *_g2("ts"))),
         note="按文意定；文意弃权时按量横长短（groups/bars.py）与整字 HOG（左半），给字须一致。"),
@@ -344,7 +351,7 @@ GROUPS: dict[str, GroupSpec] = {
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),
            ("yr", "一二", (), "数词序列：卷一、第二、一二、二十一。"),
-           ("sb", "十卜", (), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
+           ("sb", "十卜", ("ss",), "十＝十二、十卷；卜＝占卜、卜筮、卜子。"),
            ("js", "甲申", (), "干支：甲子、甲乙；申＝申明、申屠、庚申。"),
            ("em", "而面", (), "而＝虚词；面＝東面、南面、四面。"),
            ("fc", "傅傳", (), "傳＝傳注、經傳、傳記；傅＝傅會、傅寅、傅以漸、太傅。"),
