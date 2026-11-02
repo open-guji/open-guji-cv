@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 书级「大印只认这些页」`seal_detect.stain_pages`（A32，GUJI-637，史記 D 类）：缺省 None＝照旧每页都找、不进参数 dump；殿本 20 页回放产物逐字节不变，已登记 `core/code_equiv.py`，不让各书过期。史記各册真印只在首叶，没印页的纸面底纹被认成大印（01–03 册 115 格误判遮挡），书级配 `[2]` 去掉。
 - 字形库 edition 一律是书 ID（Sheldon 11-01 定，QTW 转 A23）：`GlyphDB.admit_instance` 在库没声明 `meta.book_edition`、调用方也没点名 `edition_tag` 时抛 `MissingBookEdition`（原先静默按实例 id 前缀 v2／volNN 当 edition）；`glyph-db stats` 加 `edition_problems`，`close-check` 加 8b「字形库 edition 是书 ID」。不改产物指纹。
 - 待审成因表 `review/causes.py` 的「交给」标注：A1/A3/A4/A5/A6/A9 不再一律写「切分」，改为「对位（成片时查切分）」，A3 只差 1 格＝挤格才归切分（A22 11-1 反馈：第1轮 538 格里 489 格切分没问题）。只改文字，不改判定，不动产物指纹。
 - 卷末印页的空栏不再人审（A32，GUJI-637，vol20–99 r1 遮挡格 443）：`align_ref` 2.5、`seed_admit` 1.29，`code_hash` 变（从 align_ref 起重跑）。卷末页整理本只到「…皆附存目」，后面几列是「乾隆御覽之寶」压着的空栏；邻页／页钉位定位时这些列已过了整理本这半叶的末行，原先记「列行对应不成立」、印里的格 `via=none` 只能人审。
