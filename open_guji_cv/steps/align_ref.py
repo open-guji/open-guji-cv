@@ -523,6 +523,13 @@ class AlignRefParams(BaseModel):
     （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
     载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
 
+    coord_title_trust: bool = False
+    """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
+    （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
+    起因：卷端页大印把题列字形认成乱码，现役 difflib 在乱码载体里把「全／書」对到错的格，「欽定四庫全書」整列被退回、
+    六格没有默认字。题列整串合固定式、格数＝字数，位置不可能错。冲突格仍记进 `coord_conflict_ids`。
+    False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -541,6 +548,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_relaxed", None)
         if isinstance(d, dict) and not self.coord_dp:
             d.pop("coord_dp", None)
+        if isinstance(d, dict) and not self.coord_title_trust:
+            d.pop("coord_title_trust", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -681,7 +690,7 @@ class AlignRefStep(Step):
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
-                         relaxed=p.coord_relaxed, dp=p.coord_dp)
+                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1288,7 +1297,8 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
-                 pin_line: int | None = None, relaxed: bool = False, dp: bool = False) -> None:
+                 pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
+                 title_trust: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1377,8 +1387,9 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
             if not _take_dp(cc, _units, _ln, r.note):
                 res.coord_fallback[str(cc.col)] = r.note
             continue
-        why = _coord_conflict(r.recs, legacy, same, title=title_re is not None and bool(
-            title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs))))
+        is_title = title_re is not None and bool(
+            title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs)))
+        why = _coord_conflict(r.recs, legacy, same, title=is_title, trust=title_trust and is_title)
         if why:
             if not _take_dp(cc, _units, _ln, why):
                 res.coord_fallback[str(cc.col)] = why
@@ -1416,7 +1427,7 @@ COORD_WEAK_MAX = 1
 COORD_WEAK_MIN_AGREE = 5
 
 
-def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False) -> str:
+def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: bool = False) -> str:
     """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
 
     vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
@@ -1448,6 +1459,8 @@ def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False) -> str:
                 strong.append((i, ch, lg.align_char))
         if ch == "" and i in same:
             return f"空格位上库认出了字（{i} 库 same {same[i]}）"
+    if trust:                 # `coord_title_trust`：题列强冲突也不退回（格数＝字数，现役在印章乱码里对错了）
+        return ""
     if strong or len(weak) > COORD_WEAK_MAX or (weak and agree < COORD_WEAK_MIN_AGREE):
         i, ch, lc = strong[0] if strong else (weak[0], next(r[3] for r in recs if r[0] == weak[0]), legacy[weak[0]].align_char)
         return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lc}）"
