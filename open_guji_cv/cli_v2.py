@@ -2959,6 +2959,23 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
     return added
 
 
+#: 已搬去 guji-manager 的子命令（拆分 P2–P5，每批 cv 删除 PR 里登记）。没装 manager 时 `guji <它>` 给出装法，
+#: 而不是 argparse 的 invalid choice。只许增不许删（老脚本、老文档还会这么调）。
+MOVED_TO_MANAGER: dict[str, str] = {}
+
+MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
+                        "pip install --no-deps -e <目录>（云端：uv pip install --python /opt/guji-venv/bin/python …）")
+
+
+def moved_command_hint(argv: list[str], registered) -> str | None:
+    """`guji <已搬走的命令>` 而本机没装 manager（命令没登记上）→ 提示文字；否则 None。"""
+    cmd = next((a for a in argv if not a.startswith("-")), None)
+    if cmd is None or cmd in registered or cmd not in MOVED_TO_MANAGER:
+        return None
+    return (f"`guji {cmd}` 已搬到 guji-manager（{MOVED_TO_MANAGER[cmd]}），本机没装。装法：{MANAGER_INSTALL_HINT}；"
+            f"装好后命令不变。")
+
+
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
@@ -3616,6 +3633,10 @@ def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)
+    hint = moved_command_hint(sys.argv[1:] if argv is None else argv, sub.choices)
+    if hint:
+        print(hint, file=sys.stderr)
+        raise SystemExit(2)
     args = parser.parse_args(argv)
     if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
         os.environ["GUJI_BOOK_OVERRIDE"] = args.override
