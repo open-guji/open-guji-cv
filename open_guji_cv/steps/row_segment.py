@@ -394,6 +394,74 @@ def _page_seals(ctx, page: int) -> list[tuple]:
     return [(*s.bbox, stroke_mask(s, ps.height, ps.width)) for s in ps.seals]
 
 
+def _seal_rim_residue(items, img, mapper, seals, ink_threshold: int = 128,
+                      rim: float = 0.08, min_ink: float = 0.5) -> bool:
+    """列首格或列尾格的中心落在某方印上下边的边带里（离印的上边或下边不到 `rim`×印高），且墨少于全列格墨中位的
+    `min_ink`：这是印框残点切出的格。印框横贯各列，开运算留得下成团的残点；跨印边的真字墨足（02 册 p2 实测
+    残点格 0.27–0.45，真字 ≥0.58）。不认墨宽（残点格横向散满一列）。没有印或列图映射时 False。"""
+    import numpy as np
+    if mapper is None or not seals or not items:
+        return False
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink = [int((g[int(it.y0):int(it.y1), int(it.x0):int(it.x1)] < ink_threshold).sum()) for it in items]
+    mi = float(np.median(ink))
+    for k in {0, len(items) - 1}:
+        it = items[k]
+        x, y = mapper.to_page_tr((it.x0 + it.x1) / 2.0, (it.y0 + it.y1) / 2.0)
+        for s in seals:
+            x0, y0, x1, y1 = s[:4]
+            if x0 <= x <= x1 and y0 <= y <= y1 and min(y - y0, y1 - y) < rim * (y1 - y0) \
+                    and ink[k] < min_ink * mi:
+                return True
+    return False
+
+
+def _ref_count(line: str | None) -> int:
+    """整理本一列的字数（只认整列普通字：去空白、不带标记的行）；认不出 → -1（不会与格数相等）。"""
+    import re
+    if not line or "<" in line:
+        return -1
+    return len(re.sub(r"[\s　]", "", line))
+
+
+def _despeckled_ok(items, img, ink_threshold: int = 128) -> bool:
+    """去印点列切出的每格都像字：墨不少于全列格墨中位的 0.3，或墨横跨不窄于全列中位的 0.6（「一」墨少但宽）。
+    只框到印泥残点、印边残段的格两样都不够。"""
+    import numpy as np
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink, wid = [], []
+    for it in items:
+        m = g[int(it.y0):int(it.y1), int(it.x0):int(it.x1)] < ink_threshold
+        xs = np.nonzero(m.any(axis=0))[0]
+        ink.append(int(m.sum()))
+        wid.append(int(xs[-1] - xs[0] + 1) if len(xs) else 0)
+    if not ink:
+        return False
+    mi, mw = float(np.median(ink)), float(np.median(wid))
+    return mi > 0 and all(a >= 0.3 * mi or w >= 0.6 * mw for a, w in zip(ink, wid))
+
+
+def _despeckle(img, k: int, ink_threshold: int = 128):
+    """去印泥斑点（`roster_seal_despeckle`）：墨做 k×k 开运算；开剩的块里，面积 ≥10k² 的算字的主干，
+    离主干不到 0.15 列宽的块（字的零碎笔画）一并留，其余（印泥残点、印边残段）丢；再膨胀 k+2 回到笔画边，
+    盖住的墨照原图留，其余抹白（史記 07 册 p2 列图宽约 200 px，k＝6 字形完好、印泥与印边只剩极少细点）。"""
+    import cv2
+    import numpy as np
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink = (g < ink_threshold).astype(np.uint8)
+    o = cv2.morphologyEx(ink, cv2.MORPH_OPEN, np.ones((k, k), np.uint8))
+    n, lab, st, _ = cv2.connectedComponentsWithStats(o, connectivity=8)
+    seed = np.isin(lab, [i for i in range(1, n) if st[i, 4] >= 10 * k * k]).astype(np.uint8)
+    r = max(1, int(round(0.15 * g.shape[1])))
+    near = cv2.dilate(seed, np.ones((2 * r + 1, 2 * r + 1), np.uint8)) > 0
+    hit = set(np.unique(lab[near & (o > 0)]).tolist()) - {0}
+    body = np.isin(lab, sorted(hit)).astype(np.uint8)
+    keep = (cv2.dilate(body, np.ones((k + 2, k + 2), np.uint8)) > 0) & (ink > 0)
+    out = img.copy()
+    out[~keep] = 255
+    return out
+
+
 def _in_seal(seals, mapper, img=None, ink_threshold: int = 128):
     """格（列图坐标）落在某方印里的判定函数（量法见 SEAL_OVERLAP／SEAL_STROKE）；没有印或列图映射时为 None。
     `img` 是这一列的列图（界行、版框已清掉），量小印笔画时取格里的墨点映回原图去对掩码；不给就只按框量。"""
@@ -587,6 +655,11 @@ class RowSegmentParams(BaseModel):
     roster_ref_corpus: str = ""
     roster_ref_pins: str = ""
     roster_ref_fingerprint: str = ""     # 两个文件的内容指纹，开着时自动填
+    #: **大印下的卷端标题列去印点后照样按整理本字数切**（史記文淵閣本 2026-11-02）：卷首页大印压着卷题、撰者行，
+    #: 原先这些列整列不改（印泥斑点按字数重切会被切成字），格网乱切、机器给不出字，01–10 册约 220 格送审。
+    #: 印泥在二值图上是细碎墨点，字是成片笔画：列图墨先做 k×k 开运算（k＝本值，像素），留下的墨就是字，
+    #: 再走职名分支按整理本字数切，印里的块不再丢。0＝关（原样不改，产物逐字节不变）。只对 `header_cols` 认得的列生效。
+    roster_seal_despeckle: int = 0
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -705,6 +778,8 @@ class RowSegmentParams(BaseModel):
             if not (self.roster_ref_corpus and self.roster_ref_pins):
                 for k in ("roster_ref_corpus", "roster_ref_pins", "roster_ref_fingerprint"):
                     d.pop(k, None)
+            if not self.roster_seal_despeckle:
+                d.pop("roster_seal_despeckle", None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
                 d.pop("layout_fingerprint", None)
@@ -1160,14 +1235,24 @@ class RowSegmentStep(Step):
         cols = header_cols(refs or {})
         # 大印压着的列不改：印泥斑点和印文笔画在几何切里成串成块，按字数重切会把印切成字（卷首页的大印）
         seals = _page_seals(ctx, page)
+        sealed: set[int] = set()
         for cc in pc.columns:
             qs = [xy for c in cc.cells if c.quad_page for xy in c.quad_page]
             if cc.col in cols and qs and any(
                     s[0] < max(x for x, _ in qs) and min(x for x, _ in qs) < s[2] for s in seals):
-                cols.discard(cc.col)
+                sealed.add(cc.col)
+        if not p.roster_seal_despeckle:
+            cols -= sealed
+            sealed = set()
         if not cols:
             return pc
-        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols).columns if cc.ok}
+        got = {cc.col: cc for cc in self._run_roster(ctx, p, page, gate, wins, only=cols,
+                                                     despeckle=sealed).columns if cc.ok}
+        for c in sealed & set(got):
+            # 去印点后仍切不像字的列（格高超出 0.4–1.6 字身：印文粗笔留下来被并进字，02 册 p2「史記卷一」）退回原样
+            em, hs = got[c].em, [x.y1 - x.y0 for x in got[c].cells if x.kind != "blank"]
+            if not em or not hs or not all(0.4 * em <= h <= 1.6 * em for h in hs):
+                del got[c]
         out = []
         for cc in pc.columns:
             new = got.get(cc.col)
@@ -1205,7 +1290,8 @@ class RowSegmentStep(Step):
 
     # ── 职名页分支 ────────────────────────────────────────────────────
     def _run_roster(self, ctx: RunContext, p: RowSegmentParams, page: int,
-                    gate: GateManifest, wins: PageWindows, only: set[int] | None = None) -> PageCells:
+                    gate: GateManifest, wins: PageWindows, only: set[int] | None = None,
+                    despeckle: set[int] | None = None) -> PageCells:
         """职名页：每列字数不定，`n_body_slots` = 本列实际位数，`boundaries` 为空（没有格线）。
 
         雙行小字配对成同一物理位：右行第 i 字（jiazhu_a）与左行第 i 字（jiazhu_b）共用 pos，
@@ -1222,17 +1308,23 @@ class RowSegmentStep(Step):
         admitted = [gc for gc in gate.columns if (gc.admitted or not p.only_admitted)
                     and (only is None or gc.col in only)]
         imgs = [(ctx.image("column_image", column_key(page, gc.col)), gc.content_x) for gc in admitted]
+        despeckle = despeckle or set()
+        if despeckle:
+            imgs = [(_despeckle(im, p.roster_seal_despeckle, p.ink_threshold) if gc.col in despeckle else im, cx)
+                    for gc, (im, cx) in zip(admitted, imgs)]
         scorer = None
         if p.roster_glyph_refine:
             # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
             scorer = load_scorer(p.roster_glyph_db, p.roster_glyph_fingerprint)
         kw = {}
+        ref_of: dict[int, str | None] = {}
         ref_lines_of = getattr(_impl("roster_segment"), "page_ref_lines", None)
         if p.roster_ref_corpus and p.roster_ref_pins and ref_lines_of is not None:
             from ..core.workspace import corpus_path
             refs = ref_lines_of(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page)
             if refs is not None:
                 kw["refs"] = [refs.get(gc.col) for gc in admitted]
+                ref_of = {gc.col: refs.get(gc.col) for gc in admitted}
                 # 按整理本重切前先丢印里的块（同下面切完后的印过滤）：印文笔画会被数成字，字数就对不上
                 seals_pre = _page_seals(ctx, page)
                 drops = []
@@ -1241,7 +1333,7 @@ class RowSegmentStep(Step):
                     mp = (None if wrec is None else
                           ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                        wrec.top_y, wrec.bottom_y))
-                    drops.append(_in_seal(seals_pre, mp, im, p.ink_threshold))
+                    drops.append(None if gc.col in despeckle else _in_seal(seals_pre, mp, im, p.ink_threshold))
                 kw["drops"] = drops
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
@@ -1265,9 +1357,18 @@ class RowSegmentStep(Step):
                 mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                       wrec.top_y, wrec.bottom_y)
             # 落在印里的字丢掉（同正文列端表空格认印，读 seals 产物）：印文笔画会被当成一串字
-            in_seal = _in_seal(seals, mapper, col_img[gc.col], p.ink_threshold)
+            in_seal = None if gc.col in despeckle else _in_seal(seals, mapper, col_img[gc.col], p.ink_threshold)
             if in_seal is not None:
                 rc.items = [it for it in rc.items if not in_seal(it)]
+            if gc.col in despeckle and not (_despeckled_ok(rc.items, col_img[gc.col], p.ink_threshold)
+                                             and len(rc.items) == _ref_count(ref_of.get(gc.col))
+                                             and not _seal_rim_residue(rc.items, col_img[gc.col], mapper, seals,
+                                                                       p.ink_threshold)):
+                # 去印点后有格只框到印泥残点（`_despeckled_ok`）、列端有格是印上下边的残点（`_seal_rim_residue`），
+                # 或格数与整理本字数不等：这列不改，退回格网切
+                # （02 册 p2「宋」上一格是印上边的残点，整列配字错一位；「漢太史…」切成 12 格把「史」配给了「庫」）
+                out.append(ColumnCells(ok=False, n_body_slots=0, error="去印点后切出残点格", **base))
+                continue
             # 物理位：正文字各占一位；雙行按「右行第 i 字 ↔ 左行第 i 字」配对共占一位
             pos_of: list[int] = []
             gap_of: list[float | None] = []
