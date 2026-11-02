@@ -915,6 +915,108 @@ def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
     return out
 
 
+# ── 贯穿多格的界行／版框竖线（2026-11-02，A23 送审 166 格里 26 格「列端框线进格」）───────
+# `strip_rule_residue` 只剥短残段（连续竖游程 ≤0.5 格，贴边的 ≤0.85 格），为的是不砍「刂」「亅」这类
+# 0.7~0.9 格高的边竖；`strip_side_rule` 要竖条中心落在文字带外。版框竖线被文字带圈进来时，它在图块里
+# 是一整格高的连续竖线，两条都放过它：第 9 列整列贴着左版框（vol46 p78「取」「錄」），或者双边框的
+# 内框在列尾拐角处弯进来（vol77 p46「也」、vol44 p140「以」，只在列尾一两格里看得见）。
+# 分得开的是**图块之外**：线落在本列字缘以外（`column_ink_edges`，各格字身左／右缘的中位数），且字的竖笔到格界就停，线
+# 不停。图块最外侧那一窄段（≤RULE_W_RATIO 列宽、跟字身隔着 ≥RESIDUE_GAP 白列、整个落在字缘以外——
+# 「則」的刂、「陸」的阝、「引」的弓在字缘以内，它们跟上下字的竖笔常连成两三格长的线），在整列条带同一
+# x 段上的连续墨（断口 ≤LONG_RULE_GAP 行）若
+#   - 上下贯穿 RULE_H_RATIO 格高以上（整列贴框），或
+#   - 是列端格、在格里至少 LONG_RULE_MIN 格高、一直连到格的外沿（拐角的框线），
+# 就是线，整段抹白。
+LONG_RULE_GAP = 3          # 竖线断口容差（行）：版框磨出的小缺口不算断
+LONG_RULE_MIN = 0.5        # 列端拐角线在本格里至少这么多格高
+LONG_RULE_OUT = 0.05       # ……下端（列首格是上端）离格外沿不到这么多格高算连到了（框线到下框前常断一两行）
+
+
+def _run_around(rows: np.ndarray, lo: int, hi: int, gap: int) -> list[tuple[int, int]]:
+    """rows 里允许 ≤gap 行断口连起来的墨段中，与 [lo, hi) 相交的各段 (起, 止)。"""
+    out, start, last = [], None, None
+    for y in np.flatnonzero(rows):
+        y = int(y)
+        if start is None or y - last > gap + 1:
+            if start is not None and last + 1 > lo and start < hi:
+                out.append((start, last + 1))
+            start = y
+        last = y
+    if start is not None and last + 1 > lo and start < hi:
+        out.append((start, last + 1))
+    return out
+
+
+def _ink_spans(cols_ink: np.ndarray) -> list[tuple[int, int]]:
+    """有墨的 x 列按 ≥RESIDUE_GAP 的白列断开成段。"""
+    xs = np.flatnonzero(cols_ink)
+    if xs.size == 0:
+        return []
+    spans: list[tuple[int, int]] = []
+    a = prev = int(xs[0])
+    for x in xs[1:]:
+        if x - prev > RESIDUE_GAP:
+            spans.append((a, prev + 1))
+            a = int(x)
+        prev = int(x)
+    spans.append((a, prev + 1))
+    return spans
+
+
+def column_ink_edges(strip_ink: np.ndarray, rows: list[tuple[float, float]]) -> tuple[float, float] | None:
+    """本列字缘：各格（rows 是格界，条带坐标）字身最左、最右 x 的中位数。字身不算两侧最外那一窄段
+    （≤RULE_W_RATIO 列宽、跟别的墨隔着白列）：可能是竖线，也可能是刂、阝——都不定字缘。没有带墨的格返回 None。"""
+    w = strip_ink.shape[1]
+    lo, hi = [], []
+    for t, b in rows:
+        sp = _ink_spans(strip_ink[max(0, int(t)):max(0, int(b))].any(axis=0))
+        if len(sp) >= 2 and sp[0][1] - sp[0][0] <= RULE_W_RATIO * w:
+            sp = sp[1:]
+        if len(sp) >= 2 and sp[-1][1] - sp[-1][0] <= RULE_W_RATIO * w:
+            sp = sp[:-1]
+        if sp:
+            lo.append(sp[0][0])
+            hi.append(sp[-1][1])
+    return (float(np.median(lo)), float(np.median(hi))) if lo else None
+
+
+def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top: float, cell_bot: float,
+                    tail: bool = False, head: bool = False,
+                    ink_edges: tuple[float, float] | None = None) -> np.ndarray:
+    """抹掉图块左右最外侧的界行／版框竖线（判据见上方注释）。
+
+    strip_ink 是整列条带的墨（与图块同宽、同 x 原点）；y0 是图块顶在条带里的行，cell_top/cell_bot 是
+    格界（条带坐标）；tail/head：本格是列尾／列首格；ink_edges：本列字缘（`column_ink_edges`），列端
+    拐角线要用。双边框是粗框＋细线两道，每侧最多剥两层。"""
+    h, w = patch.shape[:2]
+    cell_h = cell_bot - cell_top
+    out = patch
+    for _ in range(2):
+        spans = _ink_spans((out < BINARY_THRESHOLD_PATCH).any(axis=0))
+        if len(spans) < 2:
+            break
+        hit = False
+        for a, b in {spans[0], spans[-1]}:
+            if b - a > RULE_W_RATIO * w or ink_edges is None or (b > ink_edges[0] and a < ink_edges[1]):
+                continue        # 太宽，或没整个落在本列字缘以外（「則」的刂、「陸」的阝跟上下字的竖笔连成长线）
+            runs = _run_around(strip_ink[:, a:b].any(axis=1), int(cell_top), int(np.ceil(cell_bot)),
+                               LONG_RULE_GAP)
+            line = any(r1 - r0 >= RULE_H_RATIO * cell_h for r0, r1 in runs)
+            if not line and (tail or head):
+                near = LONG_RULE_OUT * cell_h
+                line = any(min(r1, cell_bot) - max(r0, cell_top) >= LONG_RULE_MIN * cell_h
+                           and ((tail and r1 >= cell_bot - near) or (head and r0 <= cell_top + near))
+                           for r0, r1 in runs)
+            if line:
+                if out is patch:
+                    out = patch.copy()
+                out[:, a:b] = 255
+                hit = True
+        if not hit:
+            break
+    return out
+
+
 # ── 格界碎渣带剥离（2026-08-25 朱批第二轮回流）───────────
 # 磨损下框碎成**点状虚线**（行墨稀到过不了横条掩蔽的行判据），列尾格
 # 的字下方混进一排碎渣，裁紧时被框进图块（用户实审 15 例：上於均淵第
@@ -2810,6 +2912,7 @@ class CharExtractor:
                 (_edge(float(c["y_top"]), c.get("seam_top")), _edge(float(c["y_bottom"]), c.get("seam_bottom")),
                  bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells], cell_h_ref)
             ink_px = strip < BINARY_THRESHOLD_PATCH
+            ink_edges = column_ink_edges(ink_px, [(t, b) for _i, t, b in local])
             for ci, (cell, (idx, ltop, lbot)) in enumerate(zip(cells, local)):
                 cell_h = lbot - ltop
                 pad = cell_h * self.padding_ratio
@@ -2844,6 +2947,11 @@ class CharExtractor:
                                              line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys),
                                              frame_reach=None if not reach else
                                              (float(fy) - (sy0 + y0), float(reach) * cell_h_ref))
+                # 界行／版框竖线：放在剥列端横框线之后——横框线连着竖框和字，剥之前竖线跟字之间没有白列。
+                # 夹注格不剥：半格小字的偏旁（「所」的戶）本来就在整字的字缘以外
+                if cell.get("jiazhu_cx") is None:
+                    patch = strip_long_rule(patch, ink_px, y0, ltop, lbot, tail=idx == tail_cell,
+                                            head=idx == head_cell, ink_edges=ink_edges)
                 if idx in end_cand:
                     # 列端的雙行小注格（Step3 给了缝）可按两半各剥（`jiazhu_end_halves`，写本开）：
                     # 两个小字各是各的字身，整格只认最大连通体当字身，另一半小字与它分离的下半截
