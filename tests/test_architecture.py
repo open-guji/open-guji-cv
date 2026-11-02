@@ -19,6 +19,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
 PKG_ROOT = Path(__file__).resolve().parents[1] / "open_guji_cv"
 PKG = "open_guji_cv"
 
@@ -42,6 +44,8 @@ LAYER: dict[str, int] = {
     "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
     "api": 6,
+    # manager 过渡期用 cv 内部的门面（2026-11-02 拆分 P0）
+    "manager_api": 6,
     # L7 `python -m`
     "__main__": 7,
 }
@@ -259,10 +263,11 @@ def test_cv_does_not_import_console():
     assert not bad, "cv 不能依赖控制台（guji-console）：\n  " + "\n  ".join(bad)
 
 
-def test_facade_exports_resolve():
-    """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台运行时 500）。"""
+@pytest.mark.parametrize("facade_name", [FACADE, f"{PKG}.manager_api"])
+def test_facade_exports_resolve(facade_name):
+    """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台／manager 运行时才炸）。"""
     import importlib
-    facade = importlib.import_module(FACADE)
+    facade = importlib.import_module(facade_name)
     missing = []
     for name in facade.__all__:
         try:
