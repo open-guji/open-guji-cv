@@ -404,6 +404,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7ddbe7509a3c2de9a7ab94bb7a0c23c115c0abaffc766f211e08b0c1581e4a98",
           old="4451f904c4d519067d67e50d569fa7c9e25a77f73bccc219e7111b22c5f77886",
           evidence="seed_admit 在史記 02 8 页（2,90,167,168,208,209,210,211，含 ○ 圈号页与卷端页）上与 origin/dev 产物逐字节相同"),
+    Equiv(module="open_guji_cv.steps.seal_detect",
+          new="288648cf2643aedd2fab0e87a9567bf6c16e8a67f568c0a7fdeaebb9c004e100",
+          old="d2c3e0db3d45d75fa5fe5743492b84083f2e3e640baf44f2c5187766cd2cb8cc",
+          evidence="书级 stain_pages 开关（缺省 None 不进 dump）：seal_detect 在 vol44 15 页、vol30 3 页、vol82 2 页"
+                   "（首叶大印、卷末小印、普通页）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，A32 2026-11-02"),
 )
 
 
