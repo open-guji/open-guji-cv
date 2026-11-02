@@ -478,11 +478,11 @@ def cmd_close_check(args) -> None:
 
 def cmd_exit_check(args) -> None:
     """一册文本出 1.0 时的出口动作逐项核（只读；M10 G8，GUJI-685）。见 `ops/exit_check.py` 模块头。"""
-    import re
     from .ops import exit_check as EC
-    chapter = args.chapter or (f"{int(args.book[3:]):03d}" if re.fullmatch(r"vol\d+", args.book) else None)
+    from .core.volume_id import chapter_of
+    chapter = chapter_of(args.book, args.chapter)
     if not chapter:
-        sys.exit("册名不是 volNN 时要给 --chapter NNN")
+        sys.exit("推不出章号：册 yaml 写上 volume，或给 --chapter NNN")
     from .core.book import load_book
     b = load_book(args.book)
     frozen = None
@@ -523,7 +523,6 @@ def cmd_export(args) -> None:
     format → scripts/export_guji_format.py（章号、meta、拆页表按约定自动填）→ lines/pages/norm
     两者都只读产物。子进程跑原脚本，口径与直接调脚本完全一致。
     """
-    import re
     import subprocess
     from .core.workspace import products_root, reports_root
     repo = Path(__file__).resolve().parents[1]
@@ -546,10 +545,10 @@ def cmd_export(args) -> None:
         cmd = [sys.executable, str(scripts / "render_guji_markdown.py"), book, *map(str, pages),
                "--out", str(out_dir / f"{book}.md")]
     else:
-        m = re.fullmatch(r"vol(\d+)", book)
-        chapter = args.chapter or (f"{int(m.group(1)):03d}" if m else None)
+        from .core.volume_id import chapter_of
+        chapter = chapter_of(book, args.chapter)
         if not chapter:
-            print(f"✗ 册号 {book} 推不出章号，请给 --chapter NNN", file=sys.stderr); sys.exit(2)
+            print(f"✗ 册号 {book} 推不出章号：册 yaml 写上 volume，或给 --chapter NNN", file=sys.stderr); sys.exit(2)
         meta = Path(args.meta) if args.meta else repo / "doc/formats/samples/guji_format_v0.1" / f"meta_{book}.json"
         if not meta.exists():
             print(f"✗ 没有 meta：{meta}。照同目录 meta_vol03.json 改 volume 两项另存，或用 --meta 指定", file=sys.stderr)
