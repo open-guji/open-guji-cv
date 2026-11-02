@@ -617,12 +617,14 @@ def _glyph_refine(rc: RosterColumn, ink: np.ndarray, chen_row: float, scorer) ->
 def segment_roster_page(cols: list[tuple[np.ndarray, tuple[float, float] | None]],
                         ink_threshold: int = 128, scorer=None,
                         refs: list[str | None] | None = None,
-                        drops: list | None = None) -> list[RosterColumn]:
+                        drops: list | None = None,
+                        top_dash: bool = False) -> list[RosterColumn]:
     """整页：先量全页 em，再逐列切。cols = [(列图灰度, content_x)]。
+    `top_dash`：见 `_strip_rules`（缺省关，关时逐字节同旧）。
 
     给了 `scorer`（`roster_glyph.GlyphScorer`）就再把官衔区的连续密排段按本书字形库重切
     （overview#450：p90 类压扁粘连字，几何数不准字数）。"""
-    prepared = [(_strip_rules(ink), w) for ink, w in (prepare(g, cx, ink_threshold) for g, cx in cols)]
+    prepared = [(_strip_rules(ink, top_dash), w) for ink, w in (prepare(g, cx, ink_threshold) for g, cx in cols)]
     em_page = page_em(prepared)
     ems = [em_page or 0.65 * width for _ink, width in prepared]
     out = [segment_roster_column(ink, em) for (ink, _w), em in zip(prepared, ems)]
@@ -799,10 +801,14 @@ def _chen_bands(ink: np.ndarray, y0: int, y1: int, k: int, xl: int, xm: int, em:
     return None if any(it is None for it in out) else out  # type: ignore[return-value]
 
 
-def _strip_rules(ink: np.ndarray) -> np.ndarray:
+def _strip_rules(ink: np.ndarray, top_dash: bool = False) -> np.ndarray:
     """抹掉列图两端的横向框线：列底边框常被当成末字的一部分。`prepare` 去竖线后横线断成几截斜碎片，
     所以从列的两头往里，把上下被空行隔开、不过 8 行高、宽是高 6 倍以上的薄片抹掉，碰到第一块不是薄片的墨就停
-    （只抹两头，正文里的「一」不碰）。"""
+    （只抹两头，正文里的「一」不碰）。
+
+    `top_dash`（书级开关 `roster_top_dash`，2026-11-02）：目錄页题列顶上的上版框常只剩一小截断续的墨（实测 13×6、
+    宽不到高的 6 倍，上面的薄片判据抹不掉），与首字隔着一段空白，几何切会把它并进首字、整列格位上移。
+    开了以后，列图上端 EDGE_ZONE 内、高 ≤ 8 行、与下一块墨隔 ≥ 12 行的第一块墨也当框线残段抹掉。"""
     rows = ink.any(axis=1)
     runs, y, h = [], 0, len(ink)
     while y < h:
@@ -823,6 +829,14 @@ def _strip_rules(ink: np.ndarray) -> np.ndarray:
             if not thin(r):
                 break
             kill.append(r)
+    if top_dash:
+        left = [r for r in runs if r not in kill]
+        if left:
+            r0 = left[0]
+            nxt = left[1][0] if len(left) > 1 else None
+            if (r0 == runs[0] and r0[1] <= EDGE_ZONE * h and r0[1] - r0[0] <= 8
+                    and nxt is not None and nxt - r0[1] >= 12):
+                kill.append(r0)
     if not kill:
         return ink
     out = ink.copy()
