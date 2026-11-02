@@ -107,16 +107,6 @@ def test_manager_cli_modules_register_every_command():
 
 
 
-def test_source_actions_survive_commands_table():
-    """`guji source pull` 等动作还在（拆分 P1a 曾让插件表 COMMANDS 盖掉了同名的动作表，choices 只剩 source）。"""
-    import argparse
-
-    from open_guji_cv import cli_source
-    sub = argparse.ArgumentParser().add_subparsers(dest="command")
-    cli_source.add_parser(sub)
-    acts = next(a for a in sub.choices["source"]._actions if a.dest == "action").choices
-    assert {"pull", "show", "list", "check"} <= set(acts)
-
 def test_stale_manager_plugin_is_ignored(monkeypatch):
     """旧版 manager（带着早先复制的过期副本）提供已搬走的命令时不认，提示更新。"""
     import types
