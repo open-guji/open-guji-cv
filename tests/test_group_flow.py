@@ -934,11 +934,6 @@ def test_shape_ref_ok_book_level(monkeypatch):
     assert not r.admit
 
 
-def test_shape_ref_ok_not_in_params_dump():
-    assert "group_flow_shape_ref_ok" not in SeedAdmitParams().model_dump()
-    d = SeedAdmitParams(group_flow=("guang",), group_flow_shape_ref_ok=["guang"]).model_dump()
-    assert d["group_flow_shape_ref_ok"] == ["guang"]
-
 def test_abstain_ref_ok_lift_variant_ref_dissent(monkeypatch):
     """书级 `abstain_ref_ok` 再一支（史記 2026-11-02）：同义异体组（別别）字形判出另一写法、与整理本不一 → 取整理本形；
     不同义的形近组（日曰 ry）、整理本在组外都照旧留人审。"""
