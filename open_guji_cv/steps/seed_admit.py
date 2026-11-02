@@ -695,6 +695,12 @@ class SeedAdmitParams(BaseModel):
 
     这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
     旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
+    follow_ref_seen: str = ""
+    """看图核实过的字对（通道 `follow_ref`，证据 `via=seen`，A24 2026-11-02，全唐文 Z 弃权／N 形近护栏）。格式同 `follow_ref`：
+    逗号分隔的 `整理本形=库里另一形`（王=玉,天=大,永=氷 …）。这些对子在本书按字对抽样看图（每对 16 格）整理本形全对、机器读错，
+    所以**不限同义异体**：待审格的库首位是这一对里的一形、cov ≥ `follow_ref_cov`、库没判 diff、无硬疑问（遮挡、乱码、护栏冲突、
+    字组解法／文意给了别的字）时，放整理本形。与 `follow_ref` 的区别：不拦 `near_form`、`group_flow_abstain` 和文意不足的疑问码
+    （这类对子的库首位本来就是形近字护栏拦下的）；只升待审格，不改已放行格。每对要在本书逐对看图后才许写进来。空＝不启用（不进 dump）。"""
     follow_ref_cov: float = 0.92
     """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
     follow_ref_gap: float = 0.005
@@ -834,7 +840,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("pua_rule_cov", None)
         if isinstance(d, dict) and not self.follow_ref_variants:
             d.pop("follow_ref_variants", None)
-        if isinstance(d, dict) and not self.follow_ref and not self.follow_ref_variants:
+        if isinstance(d, dict) and not self.follow_ref_seen:
+            d.pop("follow_ref_seen", None)
+        if isinstance(d, dict) and not self.follow_ref and not self.follow_ref_variants and not self.follow_ref_seen:
             for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
                 d.pop(k, None)
         if isinstance(d, dict):
@@ -1643,7 +1651,7 @@ class SeedAdmitStep(Step):
             d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_pua
             n_review -= d_pua
-        if p.follow_ref or p._follow_variants():
+        if p.follow_ref or p.follow_ref_seen or p._follow_variants():
             # 5a' follow_ref（升＋改字）：照录整理本的异体对
             d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap,
                                     vmap if p._follow_variants() else None)
@@ -2406,12 +2414,51 @@ def follow_ref_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict
     return "admit"
 
 
+#: `follow_ref_seen` 仍然不碰的硬疑问：遮挡／排除、乱码、字组解法或文意明确给了别的字（不是弃权）、库判 diff 的 ref_lib 格
+_SEEN_HARD = frozenset({"excluded", "occluded"}) | _LANE_HARD | _LANE_GARBLE
+
+
+def _parse_follow_ref_seen(spec: str) -> dict[str, frozenset]:
+    """`follow_ref_seen` → {整理本形: {库里的另几形}}（同一整理本形可以对多个，如 永=氷,永=未）。"""
+    out: dict[str, set] = {}
+    for item in (spec or "").split(","):
+        a, _, b = item.strip().partition("=")
+        a, b = a.strip(), b.strip()
+        if len(a) == 1 and len(b) == 1 and a != b:
+            out.setdefault(a, set()).add(b)
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+def seen_pair_decide(*, admit: bool, channel, char, doubts, ref, cands, verdict, guard, rules: dict,
+                     cov_min: float, gap_min: float) -> str | None:
+    """`follow_ref_seen` 的判据，纯函数。→ "admit"｜None。只管待审格；与 `follow_ref_decide` 的区别是不拦 near_form、
+    group_flow_abstain、上下文 margin 不足、replace_align 这类「没有人给出别的字」的疑问。
+    `rules`：{整理本形: {库里的另几形}}；库首位须是整理本形或其中一形，领先对外（整理本形、核实过的另几形之外）最好候选 ≥ gap_min。"""
+    others = rules.get(ref) if ref else None
+    if not others or admit or channel == "human":
+        return None
+    ds = set(doubts or [])
+    if ds & _SEEN_HARD or any(isinstance(d, str) and d.startswith("护栏:") for d in ds) or guard in ("never_match", "conflict", "timeout"):
+        return None
+    if verdict == "diff" or not cands:
+        return None
+    pair = {ref} | set(others)
+    top, cov = cands[0][0], float(cands[0][1])
+    if top not in pair or cov < cov_min:
+        return None
+    rival = max((float(c) for ch, c in cands if ch not in pair), default=0.0)
+    if cov - rival < gap_min:
+        return None
+    return "admit"
+
+
 def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict,
                      vmap=None) -> int:
     """照录整理本的异体对（`follow_ref`）。→ 新放行格数（改字的格不计数）。判据见 `follow_ref_decide`。
     `vmap` 给了（`follow_ref_variants`）：表里没有的整理本字，与本格字（已放行字／库首位）同义异体的也按一对处理。"""
     rules = _parse_follow_ref(p.follow_ref) if p.follow_ref else {}
-    if not rules and vmap is None:
+    seen = _parse_follow_ref_seen(p.follow_ref_seen) if p.follow_ref_seen else {}
+    if not rules and not seen and vmap is None:
         return 0
     n = 0
     for col in out:
@@ -2421,6 +2468,20 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
             ref = coord.get(rec.id)
             if not ref:
                 ref = (amap.get(rec.id) or (None,))[0]
+            m = mmap.get(rec.id)
+            if ref in seen and not rec.admit and m is not None:
+                if seen_pair_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
+                                    cands=list(m.candidates or []), verdict=getattr(m, "verdict", None),
+                                    guard=getattr(m, "guard", None), rules=seen,
+                                    cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap) == "admit":
+                    top, cov = m.candidates[0][0], float(m.candidates[0][1])
+                    rec.admit, rec.channel, rec.provenance, rec.char = True, "follow_ref", "match", ref
+                    rec.evidence = {**(rec.evidence or {}),
+                                    "lane": {"lane": "follow_ref", "lib": top, "cov": round(cov, 4), "ref": ref, "via": "seen",
+                                             "prev_doubts": list(rec.doubts or [])}}
+                    rec.doubts = ["lane_follow_ref"]
+                    n += 1
+                    continue
             m = mmap.get(rec.id)
             here, via = rules, None
             if ref not in rules:
