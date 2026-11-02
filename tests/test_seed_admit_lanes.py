@@ -48,10 +48,10 @@ def _mm(lib: dict, guard: dict | None = None):
                              guard=(guard or {}).get(s)) for s, c in lib.items()}
 
 
-def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, **params):
+def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, lib_n=None, **params):
     p = SeedAdmitParams(db_path="x", **params)
     n = _review_lanes_pass(p, out, _mm(lib or {}, guard), amap or {}, coord or {}, _vm(),
-                           (lambda: list(wits)) if wits else None, canon=canon)
+                           (lambda: list(wits)) if wits else None, canon=canon, lib_n=lib_n)
     return n, {r.slot: r for r in out[0].chars}
 
 
@@ -312,6 +312,20 @@ def test_r5_lib_veto_spares_second_place():
     assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
     n, rs = _seal({3: ("水", "coord")}, coord={3: "水"}, lane_seal=True, lib={3: [("本", 0.98), ("木", 0.97)]})
     assert n == 0                     # 默认字不在库前二：照旧否决
+
+
+def test_r5_lib_veto_needs_default_char_in_lib():
+    """1.31：默认字在库里刻例 < lane_seal_lib_veto_min_n（2）→ 库认不得这个字，不否决；刻例够就照旧否决。"""
+    lib = {3: [("洞", 0.96), ("涵", 0.95)]}
+    n, rs = _seal({3: ("涓", "coord")}, coord={3: "涓"}, lane_seal=True, lib=lib, lib_n={"涓": 1, "洞": 40})
+    assert n == 1 and rs[3].char == "涓"
+    n, rs = _seal({3: ("涓", "coord")}, coord={3: "涓"}, lane_seal=True, lib=lib, lib_n={"涓": 2})
+    assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
+    n, rs = _seal({3: ("涓", "coord")}, coord={3: "涓"}, lane_seal=True, lib=lib, lib_n={},
+                  lane_seal_lib_veto_min_n=0)
+    assert n == 0                     # 关掉：旧行为
+    n, rs = _seal({3: ("涓", "coord")}, coord={3: "涓"}, lane_seal=True, lib=lib)
+    assert n == 0                     # 读不到库刻例数：不放宽
 
 
 def test_r5_codepoint_variant_admits_canonical():
