@@ -277,3 +277,43 @@ def test_neighbor_map_takes_previous_leaf_head_of_next_page(tmp_path, monkeypatc
 
 def test_coord_neighbor_in_params_dump():
     assert AlignRefParams(corpus="x").model_dump()["coord_neighbor"] is True
+
+
+# ── coord_relaxed（2026-10-31，史記文淵閣本）────────────────────────────────
+def _sym(slot, g):
+    return C.CellUnit("c", slot, g, {"": f"id{slot}"}, {"": "○"}, sym=True)
+
+
+def test_relaxed_circle_cell_takes_a_slot_but_no_ref_char():
+    """考證「簡公○事在」：刻本圈号占一格、整理本不录，其后字位顺移一格；不开就退回。"""
+    (ln,) = C.parse_lines("簡公事在")
+    units = [_cu(1, 1.0, "簡"), _cu(2, 2.0, "公"), _sym(3, 3.0), _cu(4, 4.0, "事"), _cu(5, 5.0, "在")]
+    assert not C.coord_column(units, ln).ok
+    r = C.coord_column(units, ln, relaxed=True)
+    assert r.ok
+    got = {t[0]: t[3] for t in r.recs}
+    assert [got[f"id{s}"] for s in range(1, 6)] == ["簡", "公", "", "事", "在"]
+
+
+def test_relaxed_maps_by_slot_when_geometry_is_uneven():
+    """目录页「范睢 … 蔡澤」：格号正好等于整理本格位，字距不匀几何拟不上 → 按格号配。"""
+    (ln,) = C.parse_lines("#@ h\n　　范睢　　　　　　　　蔡澤")
+    units = [_cu(3, 2.4, "范"), _cu(4, 3.1, "雅"), _cu(13, 11.2, "察"), _cu(14, 12.6, "澤")]
+    assert not C.coord_column(units, ln).ok
+    r = C.coord_column(units, ln, relaxed=True)
+    assert r.ok and [t[3] for t in r.recs] == list("范睢蔡澤")
+
+
+def test_relaxed_order_fit_only_for_roster_columns():
+    """职名列「翰　　林　　院…讀[臣|]周玉章」：格数等于字数才按次序配，且只限职名分支切的列。"""
+    (ln,) = C.parse_lines("#@ h\n　　翰　　林　　院　　侍　　讀<臣|>周玉章")
+    units = [_cu(i + 1, 1.0 + i * 0.6, ch) for i, ch in enumerate("翰林士侍讀臣周肇章")]
+    assert not C.coord_column(units, ln, relaxed=True).ok
+    r = C.coord_column(units, ln, relaxed=True, order_ok=True)
+    assert r.ok and [t[3] for t in r.recs] == list("翰林院侍讀臣周玉章")
+    assert not C.coord_column(units[:-1], ln, relaxed=True, order_ok=True).ok
+
+
+def test_coord_relaxed_off_not_in_params_dump():
+    assert "coord_relaxed" not in AlignRefParams(corpus="x").model_dump()
+    assert AlignRefParams(corpus="x", coord_relaxed=True).model_dump()["coord_relaxed"] is True

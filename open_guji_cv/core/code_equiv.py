@@ -116,6 +116,10 @@ _SJ_780 = ("史記文淵閣本前三册切分（#780）在 Step 壳加缺省关�
            "开关关着时 row_segment、cell_shrink 在殿本 vol01 43 页（每 6 页取 1，加职名页 87–130 每 3 页）与 vol06 37 页"
            "（每 4 页取 1）上与 origin/dev e2cb245 产物逐字节相同；scripts/code_equiv.py check，2026-10-31")
 
+_SJ_788 = ("史記文淵閣本册 01–03 坐标对位（#788）在 align_ref 壳加缺省关的开关 coord_relaxed（圈号「○」格不占字位、按 Step3 格号配、"
+           "职名列按次序配，逻辑在 align_ref_coord._coord_relaxed）；开关关着时 align_ref 在殿本 vol06 48 页（每 4 页取 1，加坐标退回页）"
+           "与 vol30 46 页（同法）上与 be17cce 产物逐字节相同；2026-11-02 合 dev 后重证：史記 04 册 10 页（coord_relaxed 关着）与 origin/dev 逐字节相同；scripts/code_equiv.py check")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -351,6 +355,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1cb1977e26c99263aee9fe5e4bbd211c8d644a2d3eaf5610ef5ea9ac47dafcdc",
           old="4fbb1535a764d403f566aa1ce7c00bdbf82a082a1c05dcaec03a379fa0facff7",
           evidence=_SJ_780),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="7c77e9ac98ac2476324a252c0151a0f61b52fb43c01c838ed2ba4f18b7c7b4b6",
+          old="50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b",
+          evidence=_SJ_788),
+    Equiv(module="open_guji_cv.steps.align_ref_coord",
+          new="7edd6f3d13885a5efd87a18c651533ac122168f8a3d89126e72ec394fc0e8758",
+          old="5d729e5b5398d287b315e0cf21386302fbf7b08ece15bd13774beafd2c07b96e",
+          evidence=_SJ_788),
     # 2026-10-31：Step3 自动配页加 pins 档（史記按逐页钉位出格位表）；缺省 off 与离线表路径不动。
     Equiv(module="open_guji_cv.steps.row_segment",
           new="18208a62542902ab2ca1d76f5deafcaf844c8eb74dbbd2de0a5a3f11e7be7f73",
