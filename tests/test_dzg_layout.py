@@ -407,3 +407,16 @@ def test_shift_occ_moves_body_slots_and_refuses_out_of_range():
     assert _shift_occ({20, 21}, 1, 21) is None           # 挪出列末
     assert _shift_occ({-1, 1, 2}, 1, 21) is None         # 有抬头格的不挪
     assert _shift_lay({"slots": [3, 4], "notes": [4], "half": []}, -1) == {"slots": [2, 3], "notes": [3], "half": []}
+
+
+def test_snap_to_gaps_prefers_staying_near_grid_line():
+    """等距格线擦着一两笔就不挪；不会被拉进 0.2 格外字内部的空当（vol98 p100 c3「字」的点与横之间）。"""
+    import numpy as np
+    from open_guji_cv.books.siku_zongmu.row_boundaries import snap_to_gaps
+    proj = np.full(300, 60.0)
+    proj[95:106] = 6.0          # 格线处只擦着一笔
+    proj[80:86] = 0.0           # 0.18 格外字内部的白缝
+    proj[200:212] = 0.0         # 真缝在 0.06 格外：照样挪进去
+    out = snap_to_gaps(proj, [100.0, 211.0], period=85.0)
+    assert abs(out[0] - 100) <= 3
+    assert 200 <= out[1] <= 211
