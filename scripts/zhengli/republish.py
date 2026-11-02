@@ -1305,6 +1305,8 @@ def main(argv=None) -> int:
                                            "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
             p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
     a = ap.parse_args(argv)
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,
