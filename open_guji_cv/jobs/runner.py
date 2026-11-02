@@ -21,6 +21,7 @@ import time
 from pathlib import Path
 
 from . import board as BOARD
+from . import exit_trace as XT
 from . import spec as SP
 from . import store as S
 
@@ -474,6 +475,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     env_streak = 0                       # 连续几单环境类失败：本会话自己的毛病（令牌、网络）会让它一路失败，到 3 就暂停
     db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True, note="")
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
+    XT.start(HOME, say)                  # 报上次存活／退出原因，装 SIGTERM/SIGHUP 处理，起存活时间戳
     try:
         while True:
             try:
@@ -541,6 +543,9 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 say(f"连库断了（{type(e).__name__}），{CONN_RETRY_S} 秒后再试：{str(e)[:200]}")
                 time.sleep(CONN_RETRY_S)
                 continue
+    except BaseException as e:
+        XT.mark_reason(f"异常退出 {type(e).__name__}: {str(e)[:200]}")
+        raise
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
