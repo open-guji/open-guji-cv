@@ -614,6 +614,10 @@ class SeedAdmitParams(BaseModel):
     lane_seal_lib_veto_second: bool = True
     """库否决放宽（2026-10-31，A32）：默认字正是字形库第二名时不否决（印泥压着，近形两字分差常不到 0.01）。
     vol20–99 r3 包里库否决 340 格，看图默认字错的约 10 格，全在「默认字不在库前二」那一档；默认字是第二名的 150 格看图未见错。"""
+    lane_seal_lib_veto_min_n: int = 2
+    """库否决只在库认得这个字时才算（2026-11-02，A32）：默认字在字形库里的刻例数 < 此值时不否决——库里没有（或只有
+    一例）这个字，首位必然是别的近形字，「库反对」不是证据。vol20–99 r1 包库否决 177 格里，默认字刻例 ≤1 的 83 格
+    看图 0 错；刻例 2 的 12 格有 1 错（母/毋），≥10 的 44 格有 6 错。0＝关（旧行为）。"""
     lane_seal_codepoint_variant: bool = True
     """R5 异体护栏放宽（2026-10-31，A32）：默认字与库候选是异体对、但两形在本书 `codepoints:` 里归一到同一码位
     （𩔖→類、巻→卷、别→別…，sheldon 定），或同在 `groups.registry.PROVISIONAL` 暂归一组里 → 不拦，放归一后的字
@@ -828,7 +832,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal):
             for k in ("lane_witness3", "lane_coord", "lane_seal", "lane_witnesses", "lane_seal_via",
                       "lane_seal_title_marks", "lane_seal_title_formula", "lane_seal_title_norm",
-                      "lane_seal_lib_veto", "lane_seal_shift_guard", "lane_seal_lib_veto_second",
+                      "lane_seal_lib_veto", "lane_seal_shift_guard", "lane_seal_lib_veto_second", "lane_seal_lib_veto_min_n",
                       "lane_seal_codepoint_variant",
                       "lane_witness_fingerprint", "lane_variant_guard",
                       "lane_variant_topk", "lane_variant_keep_rare"):
@@ -972,7 +976,7 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.30", unit="cell",   # 1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.31", unit="cell",   # 1.31：R5 库否决只在默认字库里刻例 ≥2 时才算 lane_seal_lib_veto_min_n（A32 11-02，r1 遮挡格）；1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
@@ -1643,7 +1647,9 @@ class SeedAdmitStep(Step):
             d_lane = _review_lanes_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap,
                                         (lambda: _lane_witnesses(ctx.book, p))
                                         if (p.lane_witness3 or p.lane_coord) else None,
-                                        canon=ctx.book.canonical_char if ctx.book.codepoints else None)
+                                        canon=ctx.book.canonical_char if ctx.book.codepoints else None,
+                                        lib_n=(_keben_counts(p.db_path) or None)
+                                        if p.lane_seal and p.lane_seal_lib_veto_min_n > 0 else None)
             n_auto += d_lane
             n_review -= d_lane
         if p.pua_rules:
@@ -2549,7 +2555,7 @@ def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coo
 
 
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
-                       vmap, witnesses_fn, canon=None) -> int:
+                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
@@ -2668,7 +2674,8 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                     second = (m.candidates[1][0] if m and len(m.candidates or []) > 1 else None)
                     if (top and top[1] >= p.lane_seal_lib_veto and top[0] != hit[1]
                             and not variant_pair(top[0], hit[1])
-                            and not (p.lane_seal_lib_veto_second and second == hit[1])):
+                            and not (p.lane_seal_lib_veto_second and second == hit[1])
+                            and not (lib_n is not None and lib_n.get(hit[1], 0) < p.lane_seal_lib_veto_min_n)):
                         rec.evidence = {**ev, "lane_skip": {"lane": "seal", "why": "lib_veto", "lib": top[0],
                                                             "cov": round(float(top[1]), 4)}}
                         continue
