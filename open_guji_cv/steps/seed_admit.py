@@ -282,6 +282,14 @@ class SeedAdmitParams(BaseModel):
     - 没放行的格，只要放行字／库 top1／5-b top1 有符号，`doubts` 记 `symbol`（网站原因「可能是符号」）。
     人裁位不动。"""
     symbol_min_human: int = 3
+    symbol_ref_blank: str = ""
+    """书级：这些符号（如 `○`，一串字符，每字一个符号）的字块，整理本（坐标对位）在这一位是**空格**、字形库首位就是这个符号
+    且 cov ≥ `symbol_ref_blank_cov` → 放行为该符号，通道 `symbol_ref_blank`。
+    起因（Sheldon 2026-11-01，史記文淵閣本）：写本篇末／段末的圈号 ○ 整理本不录，对位说这一位是空格、图上是清清楚楚的圆圈；
+    `symbol_review` 因本书库里没有 ≥ `symbol_min_human` 条人裁的 ○ 而一律送审（01–10 册约 480 格）。
+    只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
+    symbol_ref_blank_cov: float = 0.97
+    """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -741,6 +749,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
+        if isinstance(d, dict) and not self.symbol_ref_blank:
+            d.pop("symbol_ref_blank", None)
+            d.pop("symbol_ref_blank_cov", None)
         if isinstance(d, dict) and not self.group_flow:
             for k in [k for k in d if k.startswith("group_flow")]:
                 d.pop(k, None)
@@ -1644,6 +1655,10 @@ class SeedAdmitStep(Step):
             d_sym = _symbol_review_pass(ctx, page, p, out, mmap, human_shapes)
             n_auto -= d_sym
             n_review += d_sym
+        if p.symbol_ref_blank:
+            d_srb = _symbol_ref_blank_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_srb
+            n_review -= d_srb
         if human_lost:
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
                                        amap if p.human_unbound_shift_ok else None)
@@ -2021,6 +2036,40 @@ def _human_unbound_pass(ctx: RunContext, page: int, out: list, lost: dict,
 
 
 _LIB_CHANNELS = ("match_", "dual", "iron")
+
+
+def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict) -> int:
+    """符号字块遇整理本空格位（`symbol_ref_blank`）：库首位是册里点名的符号、cov 够、对位说此位是空格 → 放行为该符号（升）。
+    → 新放行格数。放在 `symbol_review` 之后，把它降下去的那批圈号接回来。"""
+    syms = frozenset(p.symbol_ref_blank)
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.provenance == "human" or rec.channel == "human":
+                continue
+            ds = {d for d in (rec.doubts or []) if isinstance(d, str)}
+            if "occluded" in ds or "excluded" in ds or (rec.evidence or {}).get("occluded"):
+                continue
+            if coord.get(rec.id) != "":
+                continue
+            if rec.char and rec.char not in syms:
+                continue
+            m = mmap.get(rec.id)
+            cands = list(getattr(m, "candidates", None) or [])
+            if not cands or cands[0][0] not in syms or float(cands[0][1]) < p.symbol_ref_blank_cov:
+                continue
+            sym, cov = cands[0][0], float(cands[0][1])
+            _demote(rec, "symbol_ref_blank")
+            ev = dict(rec.evidence or {})
+            ev["lane"] = {"lane": "symbol_ref_blank", "lib": sym, "cov": round(cov, 4),
+                          "prev_doubts": list(rec.doubts or [])}
+            ev.pop("symbol", None)
+            rec.evidence = ev
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "symbol_ref_blank", "match", sym
+            rec.doubts = ["lane_symbol_ref_blank"]
+            n += 1
+    return n
+
 
 
 def _symbol_review_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict,
