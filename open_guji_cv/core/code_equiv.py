@@ -449,6 +449,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new="a97bd62bf8710c31e9bec09ee1e51a960bc9ea6eca007ce7d5749dd781e0bd52",
           old="357436b41d433d33c194d84e2b114c2148266f9350fc9fd33a4771428c894550",
           evidence=_SJ_VLINE),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="646f9ed7015e564cfe119b3f705583296a70ddf75301da63864003519e5608dd",
+          old="23864ee71ac5a22aca46866c77114e56d5606627d62b359668ec1346f74d42ee",
+          evidence="书级开关 layout_slots_grow（缺省关，不进参数 dump）：row_segment 在史記文淵閣本 04 册 12 页（2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="5950f746efd6131f84d8886748d100b2cdf243bc339309d6dea9cf211328c096",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence="书级开关 roster_top_dash（缺省关，不进参数 dump）：row_segment 在史記文淵閣本 01 册目錄页 87,111,119,132,134 上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="85fa1a892f9e80cb72ebb620b43fc56e88b25744046abe3f814023f9c6588a04",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence="书级开关 header_ref_flag（缺省关，不进参数 dump）：row_segment 在史記文淵閣本 01 册目錄页 87,111,119,132,134 上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="7620888bd88f475e72b070135f5c46ac591a781f5048d81030fb947836efacab",
+          old="82930b01adb3c224cac7547d22dcc0a557a64ed7c0b6d8f7d072450e62081805",
+          evidence="书级开关 lane_header_formula（缺省关，不进参数 dump）：seed_admit 在史記文淵閣本 01 册目錄页 87,111,119,132,134 上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
 )
 
 

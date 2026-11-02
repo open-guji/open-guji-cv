@@ -351,3 +351,7 @@ def add_parser(sub) -> None:
     p.add_argument("--watch", type=int, default=None, metavar="秒", help="sync：每隔这么多秒做一轮，不退出")
     p.add_argument("--no-admit", action="store_true",
                    help="sync：不顺带把待落库的人裁落进字形库（缺省落；也可设 GUJI_AUTO_ADMIT=0）")
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"db": (add_parser, cmd_db)}

@@ -5,10 +5,21 @@
 
 ## [未发版]
 
+### Fixed
+- `guji source pull` 等动作在 dev 上报 invalid choice：拆分 P1a（#880）给 `cli_source` 加的插件表 `COMMANDS` 盖掉了同名的动作表；动作表改名 `ACTIONS`。只影响 dev，未发版。
+
 ### Changed
+- 拆分 P2 第二批：`guji source`、`guji cellvotes`、`guji freeze` 的命令层（`cli_source.py`、`cli_cellvotes.py`、`cli_freeze.py` 与它们的命令层测试）搬去 guji-manager（≥0.2.0，同日合），cv 删除并登记 `MOVED_TO_MANAGER`、`MIN_MANAGER_VERSION`；底下逻辑（`datastore.sources`、`feedback.web_votes`、`ops.freeze_register` 等）仍在 cv，`manager_api` 加 31 个名字。命令和参数不变。不碰任何 Step，`code_hash` 不变。
+- 拆分 P2 准备：整理脚本 auto_cycle、proof_cycle、republish 开工先调 `scripts/zhengli/ensure_manager.py`（云端复用 `ensure_manager.sh` 装／更新 guji-manager main；别的机器没装只提示），为下一批搬走 `guji source`／`cellvotes`／`freeze` 铺路。
+- 拆分 P2 第一批：`guji opinions`（`opinions/`、`cli_opinions.py`、`config/opinions/rules.json` 与 `tests/opinions/`）搬去 guji-manager（同日合 guji-manager 对应 PR），cv 删除；`cli_v2.MOVED_TO_MANAGER` 登记，没装 manager 时给装法；新增 `MIN_MANAGER_VERSION`（opinions 要 ≥0.1.0），旧版 manager 里早先复制的过期副本（云端快照种子带着 10-27 的 opinions）不再被认，提示更新。`manager_api` 加 `data_home`、`central_data_dir`、`CentralError`。不碰任何 Step，`code_hash` 不变。
+- 拆分 P1b：`cli_v2` 里 24 条 manager 一侧命令原样拆到 5 个模块——`cli_ops`（snap、archive、release、deploy）、`cli_feedback`（events、gold、batch、label-batch）、`cli_eval`（eval、check、groups、cards、progress、collate）、`cli_glyph`（store、recheck、glyphlib、rekey-cells、promote、corpus）、`cli_close`（close-check、exit-check、audit、char-diff），经 `MANAGER_CLI_MODULES` 登记；`cli_v2` 从 3600 行减到约 2000 行。57 个子命令及参数与改前逐一相同。顺带修插件加载：一个模块几条命令共用一个 `add_parser` 时只调一次（原先第二条起 handler 登记不上）。不碰任何 Step，`code_hash` 不变。
+- 拆分 P1a：cv 里 manager 一侧的 9 个命令模块（glyph-db、exp、db、products、source、opinions、cellvotes、freeze、job）各加 `COMMANDS` 表（同 guji-manager 插件接口），`cli_v2` 改按 `MANAGER_CLI_MODULES` 名单现 import 登记；57 个子命令及参数与改前逐一相同。以后搬走一个只删名单一项、登记 `MOVED_TO_MANAGER`。不碰任何 Step，`code_hash` 不变。
+- 拆分 P0：`cli_v2.MOVED_TO_MANAGER` 登记搬去 guji-manager 的子命令（现为空），本机没装 manager 时 `guji <它>` 给出装法、退出码 2；新增 `scripts/ensure_manager.sh`，`rerun_prep.sh`、`guji_jobs.sh` 开工时把 guji-manager 装好并跟到 main（每 10 分钟最多拉一次，失败只警告），取代原先只提示的 `manager_hint`。不碰任何 Step，`code_hash` 不变。
+- 拆分 P0：新增门面 `open_guji_cv/manager_api.py`（同 `console_api` 机制），guji-manager 过渡期用 cv 内部只经这里或 `api`；`test_facade_exports_resolve` 同时核两个门面的名字都取得到。只加文件，不碰任何 Step，`code_hash` 不变。
 - 中心库省流量（A31 11-02，Neon 出流量 10-31 一天 48 GB）：`db pull`／`sync` 取整文件表（files：线上单每份约 1.1 MB、字形库清单 3.4 MB）一律按路径、按字节分批（≤8 MB／≤100 个），不再整表 2000 行一页读挂重试；`db pull --exclude <前缀>`／`GUJI_PULL_EXCLUDE`（`run` = `feedback/lists/proofing/`）按需拉取，部分副本记进状态、push／sync 拒绝；`rerun_prep.sh` 缺省 `GUJI_PULL_EXCLUDE=run`；任务看板只取要用的列。不碰任何 Step，`code_hash` 不变（PATCH）。
 - 册配置点名表格页 `border_detect_gate.table_pages`（史記年表，Sheldon 11-02 定暂搁置）：点名的页页型记 `table`（新加进 `PAGE_TYPES`／`SKIP_TYPES`），整页 `page_type_skip` 跳过，不切分、不出待审、不进统计；优先于 `body_pages` 与 `grid_overrides_skip`。缺省空、不进参数 dump，各书产物不变。年表以后的做法见 ai-team `domain/CV/新书登记/史记文渊阁/年表方案.md`。
 - 书级「大印只认这些页」`seal_detect.stain_pages`（A32，GUJI-637，史記 D 类）：缺省 None＝照旧每页都找、不进参数 dump；殿本 20 页回放产物逐字节不变，已登记 `core/code_equiv.py`，不让各书过期。史記各册真印只在首叶，没印页的纸面底纹被认成大印（01–03 册 115 格误判遮挡），书级配 `[2]` 去掉。
+- R5 库否决只在库认得默认字时才算（A32，GUJI-637，vol20–99 r1 遮挡格）：`seed_admit` 1.31 `lane_seal_lib_veto_min_n`（缺省 2），`code_hash` 变（从 seed_admit 起重跑）。默认字在字形库里刻例不到 2 个时，库首位必然是别的近形字，「库反对」不算证据，不再否决。r1 包库否决 177 格里，刻例 ≤1 的 83 格看图 0 错（刻例 2 的 12 格有 1 错、≥10 的 44 格有 6 错，照旧否决）。113 页回放新放 88 格、0 格收回，逐格看图未见错。
 - 字形库 edition 一律是书 ID（Sheldon 11-01 定，QTW 转 A23）：`GlyphDB.admit_instance` 在库没声明 `meta.book_edition`、调用方也没点名 `edition_tag` 时抛 `MissingBookEdition`（原先静默按实例 id 前缀 v2／volNN 当 edition）；`glyph-db stats` 加 `edition_problems`，`close-check` 加 8b「字形库 edition 是书 ID」。不改产物指纹。
 - 待审成因表 `review/causes.py` 的「交给」标注：A1/A3/A4/A5/A6/A9 不再一律写「切分」，改为「对位（成片时查切分）」，A3 只差 1 格＝挤格才归切分（A22 11-1 反馈：第1轮 538 格里 489 格切分没问题）。只改文字，不改判定，不动产物指纹。
 - 卷末印页的空栏不再人审（A32，GUJI-637，vol20–99 r1 遮挡格 443）：`align_ref` 2.5、`seed_admit` 1.29，`code_hash` 变（从 align_ref 起重跑）。卷末页整理本只到「…皆附存目」，后面几列是「乾隆御覽之寶」压着的空栏；邻页／页钉位定位时这些列已过了整理本这半叶的末行，原先记「列行对应不成立」、印里的格 `via=none` 只能人审。

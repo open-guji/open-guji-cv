@@ -281,9 +281,9 @@ def _load(p: Path | None):
 
 
 def chapter_of(book: str) -> str | None:
-    """册号 → book-text 章号（vol04 → 004），同 `cli_v2.cmd_export`。"""
-    m = re.fullmatch(r"vol(\d+)", book)
-    return f"{int(m.group(1)):03d}" if m else None
+    """册号 → book-text 章号（vol04 → 004），按册配置（`core/volume_id`）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    return _chapter_of(book)
 
 
 def cv_commit() -> tuple[str | None, bool | None]:

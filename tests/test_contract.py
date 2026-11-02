@@ -2,6 +2,8 @@
 """pipeline / manager 契约（doc/契约.md）：版本信息、manifest 新字段不进指纹。"""
 import json
 
+import pytest
+
 from open_guji_cv import api
 from open_guji_cv.core import cv_version as cvv
 from open_guji_cv.core.contract import CONTRACT_VERSION, MANAGER_VERSION_ENV
@@ -75,3 +77,49 @@ def test_plugin_commands_merge_and_builtin_wins(monkeypatch):
         assert cli_v2.COMMANDS_V2["zz-plugin-cmd"] is not None
     finally:
         cli_v2.COMMANDS_V2.pop("zz-plugin-cmd", None)
+
+
+def test_moved_command_hint(monkeypatch):
+    """搬去 guji-manager 的命令：本机没装 manager 时给装法；装了（已登记）或不是搬走的命令时不拦。"""
+    from open_guji_cv import cli_v2
+    monkeypatch.setitem(cli_v2.MOVED_TO_MANAGER, "demo", "P2")
+    assert "guji-manager" in cli_v2.moved_command_hint(["demo", "-w", "x", "--a"], {"pipeline": 1})
+    assert cli_v2.moved_command_hint(["demo"], {"demo": 1}) is None
+    assert cli_v2.moved_command_hint(["pipeline"], {"pipeline": 1}) is None
+    assert cli_v2.moved_command_hint([], {}) is None
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main(["demo"])
+    assert e.value.code == 2
+
+
+def test_manager_cli_modules_register_every_command():
+    """cv 里 manager 一侧的命令模块（拆分 P1）：COMMANDS 表里每条都登记上、handler 对得上；共用 add_parser 只调一次。"""
+    import argparse
+    import importlib
+
+    from open_guji_cv import cli_v2
+    sub = argparse.ArgumentParser().add_subparsers(dest="command")
+    cli_v2.register_subcommands(sub)
+    for m in cli_v2.MANAGER_CLI_MODULES:
+        for name, (_, handler) in importlib.import_module(f"open_guji_cv.{m}").COMMANDS.items():
+            got = cli_v2.COMMANDS_V2[name]
+            assert name in sub.choices and getattr(got, "__wrapped__", got) is handler, (m, name)
+
+
+
+def test_stale_manager_plugin_is_ignored(monkeypatch):
+    """旧版 manager（带着早先复制的过期副本）提供已搬走的命令时不认，提示更新。"""
+    import types
+
+    from open_guji_cv import cli_v2
+    monkeypatch.setitem(cli_v2.MIN_MANAGER_VERSION, "demo", "0.2.0")
+    pkg = types.ModuleType("fake_mgr")
+    pkg.__version__ = "0.1.9"
+    monkeypatch.setitem(__import__("sys").modules, "fake_mgr", pkg)
+    mod = types.ModuleType("fake_mgr.commands")
+    assert cli_v2._plugin_too_old(mod, "demo")
+    pkg.__version__ = "0.2.0"
+    assert not cli_v2._plugin_too_old(mod, "demo")
+    assert not cli_v2._plugin_too_old(mod, "not-moved")
+    monkeypatch.setitem(cli_v2.MOVED_TO_MANAGER, "demo", "P2")
+    assert "版本低于 0.2.0" in cli_v2.moved_command_hint(["demo"], {})

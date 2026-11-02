@@ -66,6 +66,14 @@ def _is_conn_error(e: BaseException) -> bool:
     return any(c.__name__ in _CONN_ERRORS for c in type(e).__mro__)
 
 
+# 读超时（socket 超时，中心库回得慢）：urllib／http.client 报的是 TimeoutError「The read operation timed out」
+_TIMEOUT_RE = re.compile(r"read operation timed out|timed out|TimeoutError", re.I)
+
+
+def _is_transient_timeout(msg: str) -> bool:
+    return bool(_TIMEOUT_RE.search(msg or ""))
+
+
 class Cancelled(Exception):
     pass
 
@@ -377,7 +385,8 @@ class Job:
         except StageError as e:
             outcome, err, code = e.outcome, f"{self.stage}：{e}", e.code
             if e.env or (self.stage in ("base", "push") and e.outcome == "failed"):
-                err = "环境：" + err        # 取包、存包、拉库多是网络／库的毛病，换个会话再试
+                # 取包、存包、拉库多是网络／库的毛病，换个会话再试；读超时是中心库一时慢，另记瞬时，不计入连续环境失败
+                err = (S.TRANSIENT if _is_transient_timeout(str(e)) else "环境：") + err
         except Exception as e:          # noqa: BLE001 —— 执行方自己的错也要落库，不能让单永远挂着
             outcome, err = "failed", f"{self.stage}：执行方出错 {type(e).__name__}: {e}"
             if _is_conn_error(e):
@@ -389,6 +398,7 @@ class Job:
         self.log.close()
         tail = redact((self.dir / "run.log").read_text(encoding="utf-8", errors="replace")[-8000:])
         self.env_failed = bool(err and err.startswith("环境："))
+        self.transient = bool(err and err.startswith(S.TRANSIENT))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
         _retire_dir(self.dir, outcome, self.id, self.att["n"])     # 结果（含日志尾巴）已落库、产物已推完
@@ -520,7 +530,12 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 BOARD.publish(db, force=True)
                 jobrun = Job(job, att, db, dry=dry)
                 outcome = jobrun.run()
-                env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
+                if getattr(jobrun, "transient", False):
+                    pass                                # 瞬时超时：不计入、也不清零连续环境失败
+                elif getattr(jobrun, "env_failed", False):
+                    env_streak += 1
+                else:
+                    env_streak = 0
                 _remember_book(job["book"])
                 say(f"#{job['id']} → {outcome}")
                 done += 1

@@ -195,6 +195,8 @@ def main(argv=None) -> int:
     ap.add_argument("--max", type=int, default=0, help="最多重出几册（试跑用）")
     ap.add_argument("--no-publish", action="store_true", help="最后不统一发网站")
     a = ap.parse_args(argv)
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     ws = Path(a.workspace).resolve()
     day = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d")
     outdir = ws / "reports" / "_auto_cycle"

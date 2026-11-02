@@ -41,20 +41,40 @@ def _kind(j: dict) -> tuple:
     return (j["kind"], st.get("from"), st.get("to"), sp.get("pages") == "all")
 
 
+# 书的简称（只写作品名，不带版本）。没登记的退回进度表里的书名，再不行才显示 ID
+BOOK_NAMES = {"96mid1ogzk": "四库全书总目", "988g3f0wsu": "史记", "995ejelvk0": "全唐文",
+              "988g7gsqhd": "北行日录", "998a1ukohs": "幼学须知"}
+
+
+def _book_name(bid, titles: dict) -> str:
+    if not bid:
+        return "—"
+    return BOOK_NAMES.get(bid) or (titles.get(bid) or "")[:10] or bid
+
+
+def _short(v, n=14) -> str:
+    v = str(v)
+    return v if len(v) <= n else v[:n] + "…"
+
+
 def _config(j: dict) -> str:
+    """简略配置：cv 取前 7 位；起止步、页范围只写不是默认（头→尾、全册）的部分；长值截短。"""
     sp = j["spec"]
     if j["kind"] in ("command", "eval"):
-        return SP.summary(sp)
+        return _short(SP.summary(sp), 60)
     st = sp["steps"]
-    bits = [f"cv {sp['cv_ref']}", f"{st['from'] or '头'}→{st['to'] or '尾'}",
-            "全册" if sp["pages"] == "all" else f"页 {sp['pages']}"]
-    bits += [f"{k}={v}" for k, v in (sp.get("book_overrides") or {}).items()]
+    bits = [f"cv {str(sp['cv_ref'])[:7]}"]
+    if st["from"] or st["to"]:
+        bits.append(f"{st['from'] or '头'}→{st['to'] or '尾'}")
+    if sp["pages"] != "all":
+        bits.append(f"页 {_short(sp['pages'], 16)}")
+    bits += [f"{k}={_short(v)}" for k, v in (sp.get("book_overrides") or {}).items()]
     if sp.get("force"):
-        bits.append("force")
+        bits.append("强制")
     c = sp.get("compare_to")
     if c:
-        bits.append(f"比 {'#' + str(c['job']) if isinstance(c, dict) else c}")
-    return " ".join(bits)
+        bits.append(f"比 {'#' + str(c['job']) if isinstance(c, dict) else _short(c)}")
+    return " · ".join(bits)
 
 
 def build(conn) -> dict:
@@ -89,11 +109,16 @@ def build(conn) -> dict:
     for r in S._rows(conn.execute("SELECT job_id, name FROM jobs.result WHERE kind = 'pack' AND job_id = ANY(%s)"
                                   " ORDER BY id", ([j["id"] for j in jobs],))):   # 只取看板上这些任务的，不再整表读
         results.setdefault(r["job_id"], r["name"])
+    try:
+        titles = {r["book_id"]: r["t"] for r in S._rows(conn.execute(
+            "SELECT book_id, min(book_title) AS t FROM progress.volume WHERE book_title IS NOT NULL GROUP BY book_id"))}
+    except Exception:  # noqa: BLE001  读不到进度表就只用登记的简称
+        titles = {}
     ahead = 0
     rows = []
     for j in jobs:
         st = j["status"]
-        row = {"id": j["id"], "bookid": j.get("book_id") or "—", "book": j["book"] or "—", "kind": j["kind"], "status": _STATUS.get(st, st),
+        row = {"id": j["id"], "bookid": _book_name(j.get("book_id"), titles), "book": j["book"] or "—", "kind": j["kind"], "status": _STATUS.get(st, st),
                "config": _config(j), "who": j["submitted_by"], "worker": "—", "stage": "—",
                "submitted": _la(j["created_at"]), "started": "—", "elapsed": "—", "eta": "—",
                "result": results.get(j["id"]) or "—", "note": (j["why"] or "")[:80]}
@@ -125,9 +150,10 @@ def build(conn) -> dict:
             if st in ("failed", "blocked") and j.get("error"):
                 row["note"] = j["error"].splitlines()[0][:120]
         rows.append(row)
-    cols = [("id", "号"), ("bookid", "书 ID"), ("book", "册"), ("kind", "种类"), ("status", "状态"), ("config", "配置"),
-            ("stage", "阶段／排队"), ("worker", "执行方"), ("started", "开始（洛杉矶）"), ("elapsed", "已跑"),
-            ("eta", "预计完成／结束"), ("result", "结果包"), ("who", "提交人"), ("submitted", "提交时间"),
+    cols = [("id", "号"), ("bookid", "书"), ("book", "册"), ("status", "状态"), ("elapsed", "已跑"),
+            ("eta", "预计完成／结束"), ("kind", "种类"), ("config", "配置"),
+            ("stage", "阶段／排队"), ("worker", "执行方"), ("started", "开始（洛杉矶）"),
+            ("result", "结果包"), ("who", "提交人"), ("submitted", "提交时间"),
             ("note", "原因／说明")]
     return {"columns": [{"key": k, "label": lb} for k, lb in cols], "rows": rows,
             "note": "任务库（guji_jobs ls）的快照：在跑、排队、最近结束的 %d 条。预计完成按同类已成功任务的耗时中位数估，没有同类记录就不估；"

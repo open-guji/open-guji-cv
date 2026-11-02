@@ -660,6 +660,16 @@ class RowSegmentParams(BaseModel):
     #: 印泥在二值图上是细碎墨点，字是成片笔画：列图墨先做 k×k 开运算（k＝本值，像素），留下的墨就是字，
     #: 再走职名分支按整理本字数切，印里的块不再丢。0＝关（原样不改，产物逐字节不变）。只对 `header_cols` 认得的列生效。
     roster_seal_despeckle: int = 0
+    #: **题列顶上的断续版框残渣抹掉**（史記文淵閣本 2026-11-02，目錄页题列）：目錄页的上版框是双线、内线断续，
+    #: 列图顶端（y≈15–21）留一小截（实测 13×6），与首字隔 20 行空白，`header_cols` 走职名分支时被并进首字，
+    #: 整列格位上移（p87 c2「史記卷十一」首格 y0 落在残渣上，5 格全偏，机器读成「中禽蜚全一」）。
+    #: True＝职名分支准备墨时多抹列图上端 5% 内、高 ≤ 8 行、与下块墨隔 ≥ 12 行的第一块墨。只套书实现了 `top_dash` 的
+    #: 书（史記 books/shiji_wyg）用得上；False（缺省）＝不抹，产物逐字节不变，也不进参数 dump。
+    roster_top_dash: bool = False
+    #: **题列把整理本整行记进列旗**（史記文淵閣本 2026-11-02，目錄页题列）：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列（不论走格网切还是职名分支），
+    #: 列级 flags 追加 `header_ref:<整理本这一行>`，供 `seed_admit.lane_header_formula` 按整行套语放行。
+    #: False（缺省）＝不加，产物逐字节不变，也不进参数 dump。
+    header_ref_flag: bool = False
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -721,6 +731,11 @@ class RowSegmentParams(BaseModel):
     #: 要关：书 yaml `params: {row_segment: {layout_prior: ""}}`。
     layout_prior: str = DEFAULT_LAYOUT
     layout_fingerprint: str = ""         # 表内容 sha，开关开着时自动填（表一改 → Step3 判过期）
+    #: **格位表的格数大于版式行数时按表放宽**（2026-11-02，史記文淵閣本）：`n_body_slots` 取自 `chars_per_line`（21），
+    #: 但雙行小注的列常排 22–24 行（小字行距比大字小），逐列格位表（daizhige）按实际行数记 22–24 个格位；
+    #: 切分被卡在 21 格，最末几格被并成一个超高格，字整列少读（史記 01–10 册正文待审里约 140 格因此没有整理本字）。
+    #: 开着时命中表的列 `n_body_slots` 取 max(原值, 表里最大格位)。书级开关；False＝关（缺省，不进参数哈希）。
+    layout_slots_grow: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -780,9 +795,15 @@ class RowSegmentParams(BaseModel):
                     d.pop(k, None)
             if not self.roster_seal_despeckle:
                 d.pop("roster_seal_despeckle", None)
+            if not self.roster_top_dash:
+                d.pop("roster_top_dash", None)
+            if not self.header_ref_flag:
+                d.pop("header_ref_flag", None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
                 d.pop("layout_fingerprint", None)
+            if not self.layout_slots_grow:
+                d.pop("layout_slots_grow", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -960,6 +981,8 @@ class RowSegmentStep(Step):
                 if want != n_raised_col:
                     lay_alt = (n_raised_col, gc.top_slack, {s for s in occ if s > 0 or s >= -n_raised_col})
                 n_raised_col = want
+                if p.layout_slots_grow and occ and max(occ) > n_body_col:
+                    n_body_col = max(occ)
                 top_slack = gc.border_top if want else gc.top_slack
                 lay_kw, forced_jz, forced_main = _layout_kw(lay, occ, n_body_col, n_raised_col)
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
@@ -1215,6 +1238,7 @@ class RowSegmentStep(Step):
                                    **base))
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
+        pc = self._header_ref_flags(ctx, p, page, pc)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
 
     def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
@@ -1269,6 +1293,26 @@ class RowSegmentStep(Step):
                     cells=[c.model_copy(update=dict(slot=c.slot + off, pos=c.pos + off)) for c in new.cells]))
             out.append(new)
         return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
+
+    @staticmethod
+    def _header_ref_flags(ctx: RunContext, p: RowSegmentParams, page: int, pc: PageCells) -> PageCells:
+        """`header_ref_flag`：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列，列旗追加 `header_ref:<整理本行>`
+        （不论这一列走格网切还是职名分支）。只套书实现了 `page_ref_lines` 的书（史記）有效，别的书原样返回。"""
+        if not (p.header_ref_flag and p.roster_ref_corpus and p.roster_ref_pins):
+            return pc
+        import importlib
+        from ..core.seg_set import resolve
+        mod = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.roster_segment"))
+        page_ref_lines = getattr(mod, "page_ref_lines", None)
+        if page_ref_lines is None:
+            return pc
+        from ..core.workspace import corpus_path
+        refs = page_ref_lines(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page) or {}
+        import re as _re
+        title = _re.compile(r"史記卷[一二三四五六七八九十百]+(上|中|下)?|(本紀|世家|列傳|表|書)第[一二三四五六七八九十百]+(上|中|下)?\S{0,6}")
+        cols = [cc.model_copy(update=dict(flags=list(cc.flags) + [f"header_ref:{refs[cc.col]}"]))
+                if cc.ok and refs.get(cc.col) and title.fullmatch(refs[cc.col]) else cc for cc in pc.columns]
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
 
 
     @staticmethod
@@ -1335,6 +1379,8 @@ class RowSegmentStep(Step):
                                        wrec.top_y, wrec.bottom_y))
                     drops.append(None if gc.col in despeckle else _in_seal(seals_pre, mp, im, p.ink_threshold))
                 kw["drops"] = drops
+        if p.roster_top_dash:
+            kw["top_dash"] = True
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}

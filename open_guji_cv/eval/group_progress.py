@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from collections import Counter
 from pathlib import Path
 
@@ -51,8 +50,8 @@ VOL_COLS = [
 
 
 def _vol(book: str) -> str:
-    m = re.match(r"vol(\d+)$", book)
-    return m.group(1).zfill(3) if m else book
+    from ..core.volume_id import chapter_of
+    return chapter_of(book) or book
 
 
 def _rate(a: int, b: int):

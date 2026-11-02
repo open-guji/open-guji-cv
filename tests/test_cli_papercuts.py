@@ -105,13 +105,13 @@ def test_check_pages_default_is_all_and_reports_which_pageset(monkeypatch, capsy
     import open_guji_cv.eval.quality as quality_mod
     import open_guji_cv.eval.rulers as rulers_mod
     from open_guji_cv.core.book import BookSpec
-    from open_guji_cv import cli_v2
+    from open_guji_cv import cli_eval
 
     from pathlib import Path as _P
     fake = BookSpec(id="fakebook", title="t", raw_dir=_P("does-not-matter"),
                     pages=[1, 2, 3], dev_set=[1])   # 非空 dev_set：旧默认会悄悄只算这一页
     # cmd_check 是函数内局部 import（`from .core.book import load_book` 等），
-    # 每次调用都现从源模块取绑定，所以补丁要打在源模块上，不是 cli_v2 模块本身。
+    # 每次调用都现从源模块取绑定，所以补丁要打在源模块上，不是 cli_eval 模块本身。
     monkeypatch.setattr(book_mod, "load_book", lambda *_a, **_k: fake)
     monkeypatch.setattr(quality_mod, "quality",
                         lambda book, pages, store: {"book": book, "pages": len(fake.resolve_pages(pages))})
@@ -122,7 +122,7 @@ def test_check_pages_default_is_all_and_reports_which_pageset(monkeypatch, capsy
     args = argparse.Namespace(action="quality", book="fakebook", pages=None,
                               snapshot=False, note="", all_pages=False, full=False,
                               drift=False, out="")
-    cli_v2.cmd_check(args)
+    cli_eval.cmd_check(args)
     out, err = capsys.readouterr()
     assert json.loads(out)["pages"] == len(fake.all_pages())   # all，不是 dev_set 的 1 页
     assert "all" in err and "页" in err
@@ -130,7 +130,7 @@ def test_check_pages_default_is_all_and_reports_which_pageset(monkeypatch, capsy
     args2 = argparse.Namespace(action="rulers", book="fakebook", pages=None,
                                snapshot=False, note="", all_pages=False, full=False,
                                drift=False, out="")
-    cli_v2.cmd_check(args2)
+    cli_eval.cmd_check(args2)
     out2, err2 = capsys.readouterr()
     assert json.loads(out2)["n_pages"] == len(fake.all_pages())
     assert "all" in err2 and "页" in err2

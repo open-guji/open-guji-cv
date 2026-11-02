@@ -63,12 +63,23 @@ def meta_file(book: str, out_dir: Path) -> Path | None:
     if f.exists():
         return f
     m = re.fullmatch(r"vol(\d+)", book)
-    if not m:
-        return None
-    n = int(m.group(1))
-    meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
-                         "volume": {"index": n, "cv_book": book},
-                         "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    if m:
+        n = int(m.group(1))
+        meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
+                             "volume": {"index": n, "cv_book": book},
+                             "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    else:
+        # 非殿本：按册配置（11-02 统一册号）——book_id、volume 必有；书名、版本取 book_title／book_edition
+        from open_guji_cv.core.volume_id import volume_of
+        v = volume_of(book)
+        if not (v.book_id and v.volume):
+            return None
+        d = _book_dict(book)
+        bk = {"id": v.book_id, "title": d.get("book_title") or d.get("title") or book}
+        if d.get("book_edition"):
+            bk["edition"] = d["book_edition"]
+        meta = {"defaults": {"book": bk, "volume": {"index": v.volume, "cv_book": book},
+                             "snapshot": f"{v.book_id} 本地产物（{book}）"}}
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     g = out_dir / f"meta_{book}.json"
@@ -76,8 +87,23 @@ def meta_file(book: str, out_dir: Path) -> Path | None:
     return g
 
 
+def _book_dict(book: str) -> dict:
+    """生效的册配置（册 yaml ∪ 基础配置），读不到给空。"""
+    try:
+        from open_guji_cv.core.book import _book_yaml_path
+        from open_guji_cv.core.book_config import effective_book_dict
+        return effective_book_dict(_book_yaml_path(book), apply_override=False)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def chapter_of(book: str) -> str:
-    return re.sub(r"\D", "", book).zfill(3)
+    """册号 → book-text 章号，按册配置（`core/volume_id`）；认不出就停（以前推成 000）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    ch = _chapter_of(book)
+    if not ch:
+        sys.exit(f"✗ {book} 推不出章号：册 yaml 写上 volume（见 open_guji_cv/core/volume_id.py），或给 --chapter NNN")
+    return ch
 
 
 def text_id_of(ws: Path) -> str:
@@ -1279,6 +1305,8 @@ def main(argv=None) -> int:
                                            "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
             p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
     a = ap.parse_args(argv)
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,
