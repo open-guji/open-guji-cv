@@ -660,6 +660,12 @@ class RowSegmentParams(BaseModel):
     #: 印泥在二值图上是细碎墨点，字是成片笔画：列图墨先做 k×k 开运算（k＝本值，像素），留下的墨就是字，
     #: 再走职名分支按整理本字数切，印里的块不再丢。0＝关（原样不改，产物逐字节不变）。只对 `header_cols` 认得的列生效。
     roster_seal_despeckle: int = 0
+    #: **题列顶上的断续版框残渣抹掉**（史記文淵閣本 2026-11-02，目錄页题列）：目錄页的上版框是双线、内线断续，
+    #: 列图顶端（y≈15–21）留一小截（实测 13×6），与首字隔 20 行空白，`header_cols` 走职名分支时被并进首字，
+    #: 整列格位上移（p87 c2「史記卷十一」首格 y0 落在残渣上，5 格全偏，机器读成「中禽蜚全一」）。
+    #: True＝职名分支准备墨时多抹列图上端 5% 内、高 ≤ 8 行、与下块墨隔 ≥ 12 行的第一块墨。只套书实现了 `top_dash` 的
+    #: 书（史記 books/shiji_wyg）用得上；False（缺省）＝不抹，产物逐字节不变，也不进参数 dump。
+    roster_top_dash: bool = False
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -785,6 +791,8 @@ class RowSegmentParams(BaseModel):
                     d.pop(k, None)
             if not self.roster_seal_despeckle:
                 d.pop("roster_seal_despeckle", None)
+            if not self.roster_top_dash:
+                d.pop("roster_top_dash", None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
                 d.pop("layout_fingerprint", None)
@@ -1344,6 +1352,8 @@ class RowSegmentStep(Step):
                                        wrec.top_y, wrec.bottom_y))
                     drops.append(None if gc.col in despeckle else _in_seal(seals_pre, mp, im, p.ink_threshold))
                 kw["drops"] = drops
+        if p.roster_top_dash:
+            kw["top_dash"] = True
         results = dict(zip((gc.col for gc in admitted),
                            segment_roster_page(imgs, ink_threshold=p.ink_threshold, scorer=scorer, **kw)))
         col_img = {gc.col: im for gc, (im, _cx) in zip(admitted, imgs)}
