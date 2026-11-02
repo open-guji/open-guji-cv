@@ -119,6 +119,9 @@ _SJ_788 = ("史記文淵閣本册 01–03 坐标对位（#788）在 align_ref �
            "职名列按次序配，逻辑在 align_ref_coord._coord_relaxed）；开关关着时 align_ref 在殿本 vol06 48 页（每 4 页取 1，加坐标退回页）"
            "与 vol30 46 页（同法）上与 be17cce 产物逐字节相同；scripts/code_equiv.py check，2026-10-31")
 
+_SJ_DP = ("align_ref 在史記文淵閣本 04 册 10 页（--pages 2,10,34,41,43,47,120,122,124,138）上与 c3e1778（#788）产物逐字节相同；"
+          "coord_dp 关着（册 yaml coord_dp: false，缺省）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -362,6 +365,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="6d9b78bed6acfdb88f266b3576b60474e082c62a0e6be28bd1967ca9a41963ce",
           old="8d0b6d7592c92d3c374eae270d90fda54461930b3840c417fad802b518bcc816",
           evidence=_SJ_788),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="97a3c04b2f9ed1a67de4aa1c3ac80652b662df77beefb29205664856616f0384",
+          old="02d7dffc8a7ae5a8d67e20580ebf40f85ad6de71a5b6d4f92a6bb54b68c16a5f",
+          evidence=_SJ_DP),
+    Equiv(module="open_guji_cv.steps.align_ref_coord",
+          new="9e11b7a1fc5e7e47b7061729b8f88de8a1a09dbb74936791eae02c8f372e3082",
+          old="6d9b78bed6acfdb88f266b3576b60474e082c62a0e6be28bd1967ca9a41963ce",
+          evidence=_SJ_DP),
 )
 
 
