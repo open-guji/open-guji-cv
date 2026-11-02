@@ -666,6 +666,10 @@ class RowSegmentParams(BaseModel):
     #: True＝职名分支准备墨时多抹列图上端 5% 内、高 ≤ 8 行、与下块墨隔 ≥ 12 行的第一块墨。只套书实现了 `top_dash` 的
     #: 书（史記 books/shiji_wyg）用得上；False（缺省）＝不抹，产物逐字节不变，也不进参数 dump。
     roster_top_dash: bool = False
+    #: **题列把整理本整行记进列旗**（史記文淵閣本 2026-11-02，目錄页题列）：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列（不论走格网切还是职名分支），
+    #: 列级 flags 追加 `header_ref:<整理本这一行>`，供 `seed_admit.lane_header_formula` 按整行套语放行。
+    #: False（缺省）＝不加，产物逐字节不变，也不进参数 dump。
+    header_ref_flag: bool = False
     #: **逐列字数先验**（doc/design/19 块 C，2026-10-19）：工作区里的逐列字数金标表
     #: （`scripts/dzg_import.py colgold` 产出，相对工作区根，如 `corpus/daizhige/colgold.jsonl`）。
     #: 空 = 关，关时产物逐字节不变。开了以后：某列 DP 切出的字数与表里双源一致的字数不同，
@@ -793,6 +797,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("roster_seal_despeckle", None)
             if not self.roster_top_dash:
                 d.pop("roster_top_dash", None)
+            if not self.header_ref_flag:
+                d.pop("header_ref_flag", None)
             if not self.layout_prior:
                 d.pop("layout_prior", None)
                 d.pop("layout_fingerprint", None)
@@ -1232,6 +1238,7 @@ class RowSegmentStep(Step):
                                    **base))
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
+        pc = self._header_ref_flags(ctx, p, page, pc)
         return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
 
     def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
@@ -1286,6 +1293,26 @@ class RowSegmentStep(Step):
                     cells=[c.model_copy(update=dict(slot=c.slot + off, pos=c.pos + off)) for c in new.cells]))
             out.append(new)
         return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=out)
+
+    @staticmethod
+    def _header_ref_flags(ctx: RunContext, p: RowSegmentParams, page: int, pc: PageCells) -> PageCells:
+        """`header_ref_flag`：整理本这一列是题列套语（`史記卷N`、`X第N[篇名]`）的列，列旗追加 `header_ref:<整理本行>`
+        （不论这一列走格网切还是职名分支）。只套书实现了 `page_ref_lines` 的书（史記）有效，别的书原样返回。"""
+        if not (p.header_ref_flag and p.roster_ref_corpus and p.roster_ref_pins):
+            return pc
+        import importlib
+        from ..core.seg_set import resolve
+        mod = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.roster_segment"))
+        page_ref_lines = getattr(mod, "page_ref_lines", None)
+        if page_ref_lines is None:
+            return pc
+        from ..core.workspace import corpus_path
+        refs = page_ref_lines(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins), ctx.book.id, page) or {}
+        import re as _re
+        title = _re.compile(r"史記卷[一二三四五六七八九十百]+(上|中|下)?|(本紀|世家|列傳|表|書)第[一二三四五六七八九十百]+(上|中|下)?\S{0,6}")
+        cols = [cc.model_copy(update=dict(flags=list(cc.flags) + [f"header_ref:{refs[cc.col]}"]))
+                if cc.ok and refs.get(cc.col) and title.fullmatch(refs[cc.col]) else cc for cc in pc.columns]
+        return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
 
 
     @staticmethod

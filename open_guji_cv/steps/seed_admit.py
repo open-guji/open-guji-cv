@@ -621,6 +621,13 @@ class SeedAdmitParams(BaseModel):
     """库否决只在库认得这个字时才算（2026-11-02，A32）：默认字在字形库里的刻例数 < 此值时不否决——库里没有（或只有
     一例）这个字，首位必然是别的近形字，「库反对」不是证据。vol20–99 r1 包库否决 177 格里，默认字刻例 ≤1 的 83 格
     看图 0 错；刻例 2 的 12 格有 1 错（母/毋），≥10 的 44 格有 6 错。0＝关（旧行为）。"""
+    lane_header_formula: bool = False
+    """题列套语放行（史記文淵閣本 2026-11-02，目錄页题列；需同开 `row_segment.header_ref_flag`）：列级旗 `header_ref:<整理本行>`
+    整行匹配 `史記卷N` 或 `X第N[上中下][篇名]`（本紀／世家／列傳／表／書），且本列字格数＝整理本行字数 →
+    本列还没放行的格按整理本行逐字放行（`lane_header_formula`）；已放行但与整理本行不一致的格（个别近形放错，如一/二）改成整理本字，不一致超过三分之一视为整列错位、整列不动。同「欽定四庫全書總目卷N」套语（sheldon 10-26）：套语本身是第二证据，
+    不受字形库、形近护栏限制；字数对不上（切分错了）整列不动。关（缺省）时不进参数 dump。"""
+    lane_header_formula_re: str = (r"^(史記卷[一二三四五六七八九十百]+(上|中|下)?"
+                                   r"|(本紀|世家|列傳|表|書)第[一二三四五六七八九十百]+(上|中|下)?[^\d]{0,6})$")
     lane_seal_codepoint_variant: bool = True
     """R5 异体护栏放宽（2026-10-31，A32）：默认字与库候选是异体对、但两形在本书 `codepoints:` 里归一到同一码位
     （𩔖→類、巻→卷、别→別…，sheldon 定），或同在 `groups.registry.PROVISIONAL` 暂归一组里 → 不拦，放归一后的字
@@ -842,6 +849,9 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not (self.lane_witness3 or self.lane_coord or self.lane_seal or self.rare_ref):
             d.pop("lane_keep_ref_review", None)
+        if isinstance(d, dict) and not self.lane_header_formula:
+            d.pop("lane_header_formula", None)
+            d.pop("lane_header_formula_re", None)
         if isinstance(d, dict) and not self.pua_rules:
             d.pop("pua_rules", None)
             d.pop("pua_rule_cov", None)
@@ -1662,6 +1672,10 @@ class SeedAdmitStep(Step):
                                         if p.lane_seal and p.lane_seal_lib_veto_min_n > 0 else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.lane_header_formula:
+            d_hf = _header_formula_pass(ctx, page, p, out)
+            n_auto += d_hf
+            n_review -= d_hf
         if p.pua_rules:
             # 5a pua_rule（升）：整理本缺字（〓）按人定的刻形规则表录字
             d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
@@ -2561,6 +2575,52 @@ def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coo
                             "edge_pair": {"decision": "provisional", "pair": [ref, top], "to": to}}
             rec.doubts = ["lane_edge_pair"]
             n += 1
+    return n
+
+
+def _header_formula_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list) -> int:
+    """`lane_header_formula`：题列（列旗 `header_ref:<整理本行>`）整行是套语、字格数＝字数 → 未放行的格按整理本行逐字放行。→ 放行格数。"""
+    cells = _opt(ctx, "cells", page)
+    if cells is None:
+        return 0
+    formula = re.compile(p.lane_header_formula_re)
+    lines: dict[int, str] = {}
+    for cc in cells.columns:
+        # 列端有格被判成框线／碎墨记空（layout_frame_junk）＝这一列格位与字对不上，数字数靠不住
+        if any(fl.startswith("layout_frame_junk") for fl in cc.flags or []):
+            continue
+        for fl in cc.flags or []:
+            if fl.startswith("header_ref:") and formula.fullmatch(fl[len("header_ref:"):]):
+                lines[cc.col] = fl[len("header_ref:"):]
+    n = 0
+    for col in out:
+        line = lines.get(col.col)
+        if not line:
+            continue
+        recs = [r for r in (col.chars or []) if "excluded" not in (r.doubts or []) or r.char]
+        try:
+            recs.sort(key=lambda r: int(str(r.id).split(":")[3].rstrip("ab")))
+        except (IndexError, ValueError):
+            continue
+        if len(recs) != len(line):
+            continue
+        # 已放行的格与整理本行同位字不一致：个别格是机器放错（一/二、九/十 近形，目錄页题列常见），按整理本改；
+        # 超过三分之一不一致＝整列错位（字数碰巧相等），整列不动。人裁的格不碰。
+        conflicts = sum(1 for r, ch in zip(recs, line)
+                        if r.admit and r.char and r.char != ch and r.channel != "human" and r.provenance != "human")
+        if conflicts * 3 > len(recs):
+            continue
+        for rec, ch in zip(recs, line):
+            if rec.channel == "human" or rec.provenance == "human" or (rec.admit and rec.char == ch):
+                continue
+            ev = rec.evidence or {}
+            prev_char, prev_admit = rec.char, rec.admit
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "header_formula", "align", ch
+            rec.evidence = {**ev, "lane": {"lane": "header_formula", "line": line, "prev_admit": prev_admit,
+                                           "prev_doubts": list(rec.doubts or []), "prev_char": prev_char},
+                            "no_glyph_lib": True}
+            rec.doubts = ["lane_header_formula"]
+            n += 1 if not prev_admit else 0
     return n
 
 
