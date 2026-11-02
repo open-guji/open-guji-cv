@@ -21,7 +21,7 @@ from collections.abc import Iterator
 from pathlib import Path
 
 #: 不按页寻址、不受页表 rev 判据管的事件种类。
-GATE_EXEMPT_KINDS = frozenset({"glyph_audit"})
+GATE_EXEMPT_KINDS = frozenset({"glyph_audit", "ctx_ruling"})   # 裁定按窗口内容键，不按页号锚，换图源不影响它（2026-10-31）
 
 
 _REV_CACHE: dict[str, tuple[tuple[int, int], int | None]] = {}

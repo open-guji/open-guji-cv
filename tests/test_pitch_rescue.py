@@ -196,3 +196,32 @@ def test_snap_lines_to_faint_rule_and_blank():
     xs = line_xs(out)
     assert abs(xs[7] - 1597) <= 2 and abs(xs[8] - 1778) <= 10, xs
     assert pr.is_clean(xs)
+
+
+def _chars(ink_cols):
+    """规范空间 [x0, x1) 的列里铺一格一格的字块（不连成竖线，免得被当界行残段）。"""
+    g = np.full((H, W), 255, np.uint8)
+    for x0, x1 in ink_cols:
+        for y in range(400, 2600, 120):
+            g[y:y + 80, W - 1 - x1 + 30:W - 1 - x0 - 30:3] = 0
+    return g
+
+
+def test_pad_outer_blank_when_frame_not_printed():
+    """全唐文 07 p47 形态：右框没印出来，外框线挑在首列字中间（首列只剩半列宽），外侧是空白 → 外框按中位列距外推。"""
+    cut = [433, 524, 705, 886, 1069, 1250, 1434, 1617, 1796, 1983]     # 首列 91 ≈ 0.5 列宽
+    g = _chars([(343, 524)] + [(GOOD[i], GOOD[i + 1]) for i in range(1, 9)])
+    out = _res(cut)
+    assert pr.pad_outer_blank(out, g)        # 走到这一路时前几路都没成（真页如此；合成图上 snap 会先吸到空白中点）
+    xs = [round(x) for x in line_xs(out)]
+    assert abs(xs[0] - 343) <= 3 and xs[1:] == cut[1:]
+    assert out.vline_filled[0] is True and not any(out.vline_filled[1:])
+
+
+def test_pad_outer_blank_not_when_ink_outside():
+    """新外框外侧还有墨（版心、邻叶）不推。"""
+    cut = [433, 524, 705, 886, 1069, 1250, 1434, 1617, 1796, 1983]
+    g = _chars([(150, 524)] + [(GOOD[i], GOOD[i + 1]) for i in range(1, 9)])
+    out = _res(cut)
+    assert not pr.pad_outer_blank(out, g)
+    assert [round(x) for x in line_xs(out)] == cut

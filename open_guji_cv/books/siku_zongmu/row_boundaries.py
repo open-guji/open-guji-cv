@@ -1173,20 +1173,26 @@ def find_content_window(col_gray: np.ndarray, ink_threshold: int = 128,
 
 #: 等距格线就近落进字缝：每条格线只在 ±SNAP_FRAC 格高内挪，挪到行墨最少的那一行（平手取离原位近的）
 SNAP_FRAC = 0.2
+#: 格线挪满 SNAP_FRAC 格的代价，以满行墨（列内行墨的 90 分位）计（1.44）
+SNAP_DIST_W = 1.0
 
 
 def snap_to_gaps(row_proj: np.ndarray, bounds: Sequence[float], period: float) -> list[float]:
     """等距格网（`books/siku_zongmu/row_grid`）的格线各自就近挪进字缝，格数、格号不变。刻本字常伸出名义格，
-    直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。"""
+    直线格线会擦掉字头字脚；挪的范围 ±0.2 格，相邻两条之间至少还隔 0.6 格，不会交叉。
+    就近优先（1.44）：每行的代价＝行墨／满行墨＋SNAP_DIST_W×挪的距离／窗口半宽，殿本格高一致要强制（用户 2026-11-01）。"""
     h = len(row_proj)
     sm = np.convolve(row_proj, np.ones(5) / 5.0, mode="same")
     r = max(1, int(round(SNAP_FRAC * period)))
+    full = max(1.0, float(np.percentile(sm, 90))) if len(sm) else 1.0
     out = []
     for y in bounds:
         yi = int(round(min(max(y, 0.0), h - 1)))
         a, b = max(0, yi - r), min(h, yi + r + 1)
         win = sm[a:b]
-        best = min(range(len(win)), key=lambda i: (round(float(win[i]), 3), abs(a + i - yi)))
+        # 不求最白：离原位越远越贵（挪满 SNAP_FRAC 格的代价＝满行墨的 SNAP_DIST_W 倍）。只取最白的一行会把格线拉进
+        # 字内部的空当（「字」的点与横之间），一列格高忽大忽小（vol98 p100 c3）；格线擦着笔尖不要紧，Step4 归属图按墨归格。
+        best = min(range(len(win)), key=lambda i: (float(win[i]) / full + SNAP_DIST_W * abs(a + i - yi) / r, abs(a + i - yi)))
         out.append(float(a + best))
     return out
 

@@ -16,6 +16,11 @@
   不再是整张中心库表的 sha，别的册加表、改格不牵连本册。配页结果是这些输入与列窗口的确定函数；
   列窗口一变，那页本来就过期。
 
+- **`pins` 档**（2026-10-31，史記文淵閣本）：书已有逐页钉位表（`page_map_pins`，中心库 corpus 下，
+  一行 `{"book", "page", "head": "0243-0049 243-12b h1"}`），页与半叶确定对应，不做墨量配页、不读列窗口，
+  直接按钉位从 daizhige 源记录出本册格位表（半叶列数取 `PINS_NCOL`=8，`zm` 职名列不写），
+  与 `scripts/shiji_dzg_layout.py` 离线表逐行相同。指纹 ＝ daizhige 源文件＋本册钉位行＋算法版本。
+
 设计与评审：Claude Doc「格位表自动生成方案」（2026-10-25，Sheldon 定：不加步骤、放 Step3 产物、
 严格程度做书级设置）。
 """
@@ -38,6 +43,8 @@ STRICT_MAX_BAD = 0.03
 #: 卷四十五时是 0.93（各页都「配得上」，只是全是满页之间的将就）
 STRICT_MIN_MEAN = 0.95
 TEXT_MIN_CELLS = 10
+#: `pins` 档：史記文淵閣本一个半叶 8 列（daizhige `geom.ncol`），`no` 0–7 前半叶、8–15 后半叶
+PINS_NCOL = 8
 
 _HALVES: dict[tuple, tuple] = {}
 
@@ -77,6 +84,47 @@ def _halves():
     return _HALVES[key]
 
 
+_SRC_SHA: dict[tuple, str] = {}
+
+
+def _halves_sha() -> str:
+    """daizhige 源文件内容 sha（`pins` 档用，不建半叶占格矩阵）。"""
+    from ..utils.daizhige import source_files
+    files = source_files(_dz_dir())
+    key = _file_sig(files)
+    if key not in _SRC_SHA:
+        sha = hashlib.sha256()
+        for f in files:
+            sha.update(f.read_bytes())
+        _SRC_SHA.clear()
+        _SRC_SHA[key] = sha.hexdigest()[:16]
+    return _SRC_SHA[key]
+
+
+def build_from_pins(book: str, pins_path: str) -> list[dict]:
+    """`pins` 档：按钉位直接出本册格位表行（格式同 `layout_slots.jsonl`，与 `scripts/shiji_dzg_layout.py` 逐行相同）。"""
+    from ..utils.daizhige import column_layout, load_records, source_files
+    recs = {}
+    for f in source_files(_dz_dir()):
+        for r in load_records(f):
+            recs[r["id"]] = r
+    rows = []
+    for pin in _pin_lines(pins_path, book):
+        rid, _leaf, side = pin["head"].split()
+        side = int(side[1:])
+        rec = recs.get(rid)
+        if rec is None or not isinstance(rec.get("cols"), list):
+            continue
+        for c in rec["cols"]:
+            if c["no"] // PINS_NCOL != side or c.get("zm"):
+                continue
+            lay = column_layout(c)
+            if lay:
+                rows.append({"vol": book, "page": pin["page"], "col": c["no"] % PINS_NCOL + 1,
+                             "dzg": f"{rid}h{side}", **lay})
+    return rows
+
+
 def _book_lines(name: str, book: str) -> list[dict]:
     p = _dz_dir() / name
     if not p.exists():
@@ -90,10 +138,30 @@ def _book_lines(name: str, book: str) -> list[dict]:
     return out
 
 
-def fingerprint(book: str) -> str:
-    """Step3 参数指纹里代表「格位表」的那一项（见模块头）。"""
+def _pin_lines(pins_path: str, book: str) -> list[dict]:
+    """`pins` 档的本册钉位行（`{"book", "page", "head"}`），按文件顺序。"""
+    from ..core.workspace import corpus_path
+    p = Path(corpus_path(pins_path))
+    if not p.exists():
+        raise FileNotFoundError(f"page_map: pins 的钉位表不存在：{p}")
+    out = []
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        if ln.strip():
+            r = json.loads(ln)
+            if r.get("book") == book:
+                out.append(r)
+    return out
+
+
+def fingerprint(book: str, pins_path: str = "") -> str:
+    """Step3 参数指纹里代表「格位表」的那一项（见模块头）。`pins_path` 非空 ＝ `pins` 档。"""
     if not has_source():
         return ""
+    if pins_path:
+        sha = hashlib.sha256()
+        sha.update(f"pins-v{ALGO_VERSION}|{_halves_sha()}|".encode())
+        sha.update(json.dumps(_pin_lines(pins_path, book), ensure_ascii=False, sort_keys=True).encode())
+        return sha.hexdigest()[:16]
     sha = hashlib.sha256()
     sha.update(f"v{ALGO_VERSION}|{_halves()[4]}|".encode())
     for name in (PINS_NAME, OVERRIDES_NAME):
@@ -129,8 +197,10 @@ def _inputs(ctx) -> tuple[str, list[int], str]:
     return sid, pages, sha.hexdigest()[:16]
 
 
-def ensure(ctx, strategy: str) -> dict:
+def ensure(ctx, strategy: str, pins_path: str = "") -> dict:
     """本册配页结果（缓存里有且输入没变就直接读）。`strict` 时整册配不上抛 ValueError。"""
+    if strategy == "pins":
+        return _ensure_pins(ctx, pins_path)
     sid, pages, key = _inputs(ctx)
     path = _cache_path(ctx)
     d = None
@@ -153,6 +223,31 @@ def ensure(ctx, strategy: str) -> dict:
             f"卷 {s['rolls'][:1]}…{s['rolls'][-1:]}，漏配有字半叶 {len(s['missing_halves'])}，"
             f"重复扫描 {s['dup_pages']}（{path}）")
     _check(s, strategy, ctx.book.id)
+    return d
+
+
+def _ensure_pins(ctx, pins_path: str) -> dict:
+    """`pins` 档：缓存键只看指纹（daizhige＋本册钉位），不读列窗口。本册一行钉位都没有就拦下。"""
+    key = fingerprint(ctx.book.id, pins_path)
+    path = _cache_path(ctx)
+    if path.exists():
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            d = None
+        if d is not None and d.get("key") == key and d.get("how") == "pins":
+            return d
+    layout = build_from_pins(ctx.book.id, pins_path)
+    if not layout:
+        raise ValueError(f"{ctx.book.id} 在钉位表 {pins_path} 里没有一行（page_map: pins）：先补本册钉位")
+    pages = sorted({r["page"] for r in layout})
+    d = {"key": key, "version": ALGO_VERSION, "how": "pins",
+         "summary": {"pages_with_layout": len(pages), "columns": len(layout)}, "layout": layout}
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+    ctx.log(f"格位表 {ctx.book.id}（按钉位）：{len(pages)} 页 {len(layout)} 列（{path}）")
     return d
 
 
@@ -233,12 +328,12 @@ def build(ctx, sid: str, pages: list[int], key: str) -> dict:
 _LAYOUT_MEMO: dict[tuple, dict] = {}
 
 
-def layout_for(ctx, strategy: str) -> dict[tuple[int, int], dict]:
+def layout_for(ctx, strategy: str, pins_path: str = "") -> dict[tuple[int, int], dict]:
     """本册格位表 {(页, 列): 行}，同 `row_segment.load_layout`。逐页调用：缓存文件在就直接读
     （输入新不新由 `prepare` 起跑前查过一次），不在才现算。"""
     path = _cache_path(ctx)
     if not path.exists():
-        ensure(ctx, strategy)
+        ensure(ctx, strategy, pins_path)
     st = path.stat()
     mk = (str(path), st.st_mtime_ns, st.st_size)
     if mk not in _LAYOUT_MEMO:

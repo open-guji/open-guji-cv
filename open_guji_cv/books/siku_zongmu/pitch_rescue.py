@@ -21,6 +21,9 @@
    vol48 p121）：在网格网（再不成用自由网）上，把出带列两边的线逐轮吸到附近的淡界行细峰上，没有界行就吸到字间
    空白中点，列宽都进带才收（`snap_lines`）。网格模式线数比自由模式多（自由模式漏了一条线，vol45 p54）也照收。
 
+5. 最后一条（前面都不成才走，前几条能救的页结果不变）：外列偏窄、外侧既没有版框残段也没有字——那侧版框根本没印出来
+   或在图边外，外框线挑在首／末列的字中间（全唐文 07 p47 等）：外框线按中位列距外推、记成插值线（`pad_outer_blank`）。
+
 **接受条件**：新列网每条正文列都在列宽带内，且至少一半的线与原线重合（±`tol` px）
 ——防止网格模式在卷端大印页、书名页上挑出另一套网（vol20 p179）。不满足就原样返回。
 另外，外侧贴着版框（有界行残段）的旧外列不许被甩出新网（`drops_framed_col`）：1–3 条路在版心条那样的
@@ -377,6 +380,46 @@ def snap_outer_to_frame(res, gray: np.ndarray, *, leaf_layout: str = "single", i
     return True
 
 
+#: 外推外框（`pad_outer_blank`）：推出去的新外框线外侧这么宽（× 中位列宽）里得是空白
+PAD_MARGIN = 0.3
+
+
+def pad_outer_blank(res, gray: np.ndarray, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
+    """出带的外列偏窄、外侧既没有版框残段也没有字：那侧版框没印出来（或在图边外），外框线落进了首／末列的字里。
+    把外框线按中位列距往外推到「外列＝中位列宽」处、记成插值线。要求：推开的那条带子里有字（原外框确实劈了字），
+    新外框线外侧 `PAD_MARGIN` 列宽是空白（不吞版心、邻叶或另一列），新网干净。只动外框，内部界行不动。
+    全唐文 07 p47、13 p141、11 p74、05 p160：右框／左框没印出来，外框线挑在首列字中间，首列只剩半列宽（0.42–0.51）。"""
+    xs = line_xs(res)
+    med = statistics.median(_body_widths(xs, leaf_layout))
+    bad = out_of_band(xs, leaf_layout=leaf_layout) or set()
+    lo, hi = _frame_ridges(res, gray, xs, med, ink_threshold)
+    v, vs = list(res.verticals), list(res.verticals_straight)
+    filled = list(res.vline_filled) or [False] * len(v)
+    W = gray.shape[1]
+    moved = False
+    for idx, col, width, ridges, sign in ((0, 1, xs[1] - xs[0], lo, -1.0),
+                                          (len(xs) - 1, len(xs) - 1, xs[-1] - xs[-2], hi, 1.0)):
+        if col not in bad or width >= OUTER[0] * med or ridges:
+            continue
+        new = xs[idx] + sign * (med - width)
+        if not 0 <= new + sign * PAD_MARGIN * med <= W - 1:
+            continue
+        if _ink(res, gray, xs[idx], new, ink_threshold) < MIN_INK:
+            continue                    # 推开的带子里没字：外列本来就窄（空列），不推
+        if _ink(res, gray, new, new + sign * PAD_MARGIN * med, ink_threshold) >= BLANK:
+            continue                    # 新外框外侧还有墨：版心、邻叶或另一列，不推
+        d = new - xs[idx]
+        v[idx] = replace(v[idx], x_at_top=v[idx].x_at_top + d)
+        if len(vs) == len(v):
+            vs[idx] = replace(vs[idx], x_at_top=vs[idx].x_at_top + d)
+        filled[idx] = True
+        moved = True
+    if not moved or not is_clean(line_xs(replace(res, verticals=v)), leaf_layout=leaf_layout):
+        return False
+    res.verticals, res.verticals_straight, res.vline_filled = v, vs, filled
+    return True
+
+
 def drops_framed_col(res, gray, new_xs, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
     """新网把贴着版框的旧外列整列甩出去了？旧外列外侧 `FRAME_REACH` 列宽内有界行残段（版框）＝这列在框里、是真列。"""
     xs = line_xs(res)
@@ -388,7 +431,7 @@ def drops_framed_col(res, gray, new_xs, *, leaf_layout: str = "single", ink_thre
 def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
            ink_threshold: int = 128) -> tuple[object, str | None]:
     """`detect_grid(pitch)` 用网格模式重探（pitch＝本页中位列宽，书上有列距先验时调用方可以不用它）。
-    返回 (结果, 用了哪条路 'frame'|'grid'|'extend'|'fuse'|'snap'|None)。没触发或都不接受就原样返回、路为 None。"""
+    返回 (结果, 用了哪条路 'frame'|'grid'|'extend'|'fuse'|'snap'|'pad'|None)。没触发或都不接受就原样返回、路为 None。"""
     xs = line_xs(res)
     if not needs_rescue(xs, leaf_layout=leaf_layout):
         return res, None
@@ -426,4 +469,7 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single",
         keeps = all(any(abs(x - y) <= TOL for y in rx) for j, x in enumerate(xs) if j not in movable)
         if n_shared(rx, xs) * 2 >= len(xs) and keeps_frame(rx) and keeps:
             return r, "snap"
+    r = deepcopy(res)
+    if pad_outer_blank(r, gray, leaf_layout=leaf_layout, ink_threshold=ink_threshold):
+        return r, "pad"
     return res, None

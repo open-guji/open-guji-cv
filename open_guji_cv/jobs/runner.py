@@ -12,13 +12,16 @@ import json
 import os
 import re
 import shlex
+import shutil
 import signal
 import subprocess
+import sys
 import threading
 import time
 from pathlib import Path
 
 from . import board as BOARD
+from . import exit_trace as XT
 from . import spec as SP
 from . import store as S
 
@@ -30,6 +33,12 @@ HEARTBEAT_S = 60
 #: rerun_prep.sh 里失败多半是网络／库的段（失败了换个会话重试）；其余段（钉子账、建字形库、语料校验…）是配置问题
 _PREP_ENV_PARTS = {"cv", "克隆工作区", "db-pull", "取原图", "模板索引", "基线包"}
 _TOKEN_RE = re.compile(r"(TOKEN|SECRET|KEY|PASS|DSN)[A-Z_]*=\S+|postgres(ql)?://\S+|Bearer \S+", re.I)
+
+
+def resolve_ws_repo(sp: dict) -> str | None:
+    """这单的工作区仓：单子存的 ws_repo 优先；空的（提交时没映射上、或书 ID 后来才登记）就按册 ID 现查 WS_REPOS。
+    都没有返回 None，prep 退回 open-guji/guji-workspace 里 ws_glob 匹配的目录。"""
+    return sp.get("ws_repo") or SP.WS_REPOS.get(SP.book_id(sp) or "") or None
 
 
 class StageError(Exception):
@@ -187,8 +196,9 @@ class Job:
             return
         argv = ["bash", str(RUNNER_ROOT / "scripts" / "rerun_prep.sh"), sp["book"], "--cv", sp["cv"],
                 "--ws-glob", sp["ws_glob"]]
-        if sp.get("ws_repo"):
-            argv += ["--ws-repo", sp["ws_repo"]]
+        ws_repo = resolve_ws_repo(sp)
+        if ws_repo:
+            argv += ["--ws-repo", ws_repo]
         ov = sp.get("book_overrides") or {}
         if "corpus" in ov:
             argv += ["--corpus", str(ov["corpus"])]
@@ -381,6 +391,7 @@ class Job:
         self.env_failed = bool(err and err.startswith("环境："))
         self.db(S.finish, self.id, self.aid, outcome, error=err and redact(err)[:4000], exit_code=code,
                  log_tail=tail)
+        _retire_dir(self.dir, outcome, self.id, self.att["n"])     # 结果（含日志尾巴）已落库、产物已推完
         return outcome
 
 
@@ -416,6 +427,21 @@ def _runner_outdated() -> bool:
     return bool(new and cur and new != cur)
 
 
+def _refresh_runner() -> bool:
+    """把执行方自己的检出快进到 origin/dev。只有 HEAD 真的等于 origin/dev 才算成（否则 exec 完还会判定过期、来回折腾）。"""
+    env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+    try:
+        subprocess.run(["git", "-C", str(RUNNER_ROOT), "merge", "--ff-only", "-q", "origin/dev"], capture_output=True,
+                       text=True, timeout=120, env=env, check=True)
+        head = subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
+                              timeout=30).stdout.strip()
+        tip = subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "origin/dev"], capture_output=True, text=True,
+                             timeout=30).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return bool(head) and head == tip
+
+
 def _runner_commit() -> str | None:
     try:
         return subprocess.run(["git", "-C", str(RUNNER_ROOT), "rev-parse", "--short", "HEAD"], capture_output=True,
@@ -449,58 +475,77 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
     env_streak = 0                       # 连续几单环境类失败：本会话自己的毛病（令牌、网络）会让它一路失败，到 3 就暂停
     db(S.worker_seen, worker, state="idle", session=session, runner=rc, done=0, started=True, note="")
     say(f"执行方 {worker} 上线（runner {rc or '?'}，空闲 {idle_minutes or 0} 分钟后退出）")
+    XT.start(HOME, say)                  # 报上次存活／退出原因，装 SIGTERM/SIGHUP 处理，起存活时间戳
     try:
         while True:
-            for jid, st in db(S.reap):
-                say(f"收回 #{jid} → {st}")
-            if not (once or only or dry) and _runner_outdated():
-                say("执行方代码在 dev 上有更新，退出让执行方线程重新 start（start 会刷新检出）")
-                (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
-                return done
-            bad = _preflight()
-            if bad:
-                # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
-                if bad != warned:
-                    say(f"不领单：{bad}")
-                    warned = bad
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note=bad)
-                time.sleep(poll_s)
-                continue
-            if warned:
-                say("自检通过，开始领单")
-                warned = None
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
-            got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
-            if got is None:
-                if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
-                    say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
+            try:
+                for jid, st in db(S.reap):
+                    say(f"收回 #{jid} → {st}")
+                if not (once or only or dry) and _runner_outdated():
+                    # 走到这里手上没单（上一张单已收尾，这一张还没领）：可以换代码了。
+                    # 拉新代码后用原命令行自己 exec 一次，不退出等人重起；拉不动才照旧退出。
+                    (HOME / "runner_fresh").unlink(missing_ok=True)     # 让下一次 start 一定刷新，不受 10 分钟节流
+                    if _refresh_runner():
+                        say("执行方代码在 dev 上有更新，空闲中，已拉新代码，用原参数重新 exec 自己")
+                        db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                        lock.close()                                    # 释放本机锁，新进程自己拿
+                        sys.stdout.flush()
+                        os.execv(sys.executable, sys.orig_argv)
+                    say("执行方代码在 dev 上有更新，但拉不动（本地有改动或分叉），退出让执行方线程重新 start")
                     return done
+                bad = _preflight() or _ml_env_gate(say) or _disk_gate(say)
+                if bad:
+                    # 本会话缺东西（多半是没挂 guji-workspace 私仓）：不领单，免得把每条单的重试次数在几秒内耗光
+                    if bad != warned:
+                        say(f"不领单：{bad}")
+                        warned = bad
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note=bad)
+                    time.sleep(poll_s)
+                    continue
+                if warned:
+                    say("自检通过，开始领单")
+                    warned = None
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
+                if got is None:
+                    if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
+                        say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
+                        return done
+                    db(S.worker_seen, worker, state="idle", session=session, done=done)
+                    time.sleep(poll_s)
+                    continue
+                job, att = got
+                db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
+                say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
+                BOARD.publish(db, force=True)
+                jobrun = Job(job, att, db, dry=dry)
+                outcome = jobrun.run()
+                env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
+                _remember_book(job["book"])
+                say(f"#{job['id']} → {outcome}")
+                done += 1
                 db(S.worker_seen, worker, state="idle", session=session, done=done)
-                time.sleep(poll_s)
-                continue
-            job, att = got
-            db(S.worker_seen, worker, state="busy", session=session, job_id=job["id"], done=done)
-            say(f"领到 #{job['id']} {job['kind']} {job['book'] or ''}：{SP.summary(job['spec'])}")
-            BOARD.publish(db, force=True)
-            jobrun = Job(job, att, db, dry=dry)
-            outcome = jobrun.run()
-            env_streak = env_streak + 1 if getattr(jobrun, "env_failed", False) else 0
-            _remember_book(job["book"])
-            say(f"#{job['id']} → {outcome}")
-            done += 1
-            db(S.worker_seen, worker, state="idle", session=session, done=done)
-            BOARD.publish(db, force=True)
-            idle_since = time.time()
-            if once or only:
-                return done
-            if env_streak >= ENV_STREAK_PAUSE:
-                note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
-                say(note)
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
-                time.sleep(ENV_PAUSE_MIN * 60)
-                env_streak = 0
+                BOARD.publish(db, force=True)
                 idle_since = time.time()
-                db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+                if once or only:
+                    return done
+                if env_streak >= ENV_STREAK_PAUSE:
+                    note = f"连续 {env_streak} 单环境类失败，暂停领单 {ENV_PAUSE_MIN} 分钟，请检查本会话（数据令牌、网络、工作区仓）"
+                    say(note)
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note=note)
+                    time.sleep(ENV_PAUSE_MIN * 60)
+                    env_streak = 0
+                    idle_since = time.time()
+                    db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
+            except Exception as e:  # noqa: BLE001 —— 连库断了（DB 重试也耗尽）不能让执行方整个退出
+                if not _is_conn_error(e):
+                    raise
+                say(f"连库断了（{type(e).__name__}），{CONN_RETRY_S} 秒后再试：{str(e)[:200]}")
+                time.sleep(CONN_RETRY_S)
+                continue
+    except BaseException as e:
+        XT.mark_reason(f"异常退出 {type(e).__name__}: {str(e)[:200]}")
+        raise
     finally:
         try:
             db(S.worker_seen, worker, state="stopped", session=session, done=done)
@@ -510,10 +555,135 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
 
 
 ENV_STREAK_PAUSE = 3
+#: 连库全断时，执行方整体重试前等这么久（秒）
+CONN_RETRY_S = int(os.environ.get("GUJI_JOBS_CONN_RETRY_S") or 60)
 ENV_PAUSE_MIN = 30
 WORKSPACE_REPO = "https://github.com/" + SP.WS_REPOS[SP.book_id({})]      # 缺省书的工作区仓
 LEGACY_WORKSPACE_REPOS = ["https://github.com/open-guji/guji-workspace"]   # 迁仓过渡期：会话还没挂新仓时 rerun_prep 退回旧总仓
 _preflight_ok_at = 0.0
+
+
+#: 领单前至少要有这么多剩余空间（GB）：准备要克隆工作区、取原图、跑 pipeline
+MIN_FREE_GB = float(os.environ.get("GUJI_JOBS_MIN_FREE_GB") or 3)
+#: 失败单只留 run.log，在 failed-logs 里留最近这么多份
+FAILED_LOGS = HOME / "failed-logs"
+FAILED_LOGS_KEEP = 20
+
+
+def _retire_dir(d: Path, outcome: str, job_id: int, n: int) -> None:
+    """单子结束：失败的只留 run.log（移到 failed-logs，超过 20 份删最旧的），其余目录整个删。"""
+    log = d / "run.log"
+    if outcome == "failed" and log.is_file():
+        FAILED_LOGS.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(log), str(FAILED_LOGS / f"job{job_id}-a{n}.log"))
+        kept = sorted(FAILED_LOGS.glob("*.log"), key=lambda p: p.stat().st_mtime, reverse=True)
+        for old in kept[FAILED_LOGS_KEEP:]:
+            old.unlink(missing_ok=True)
+    shutil.rmtree(d, ignore_errors=True)
+
+
+#: 空间不够时依次清的本地缓存（可重建，总授权里的「清本地缓存」）：先 uv，还不够再 guji-data
+_CACHES = (Path.home() / ".cache" / "uv", Path.home() / ".cache" / "guji-data")
+
+
+def _free_gb() -> float:
+    return shutil.disk_usage(HOME).free / 2**30
+
+
+def _clean_job_dirs() -> None:
+    """删本机所有 job 工作目录（每台机同时只一个执行方，不在跑的都是旧的）。"""
+    for d in HOME.glob("job*-a*"):
+        if d.is_dir():
+            shutil.rmtree(d, ignore_errors=True)
+
+
+def _glyph_pin_dbs() -> list[tuple[Path, Path, int]]:
+    """本机所有工作区 output/ 下的钉版字形库 ``glyph-g<N>.db``：[(工作区根, 库文件, N)]。
+    工作区在 ~/<仓>（仓根即工作区）或 ~/<仓>/<书目录>（旧总仓）。"""
+    out = []
+    home = Path.home()
+    for pat in ("*/output/glyph-g*.db", "*/*/output/glyph-g*.db"):
+        for f in home.glob(pat):
+            m = re.fullmatch(r"glyph-g(\d+)\.db", f.name)
+            if m and f.is_file():
+                out.append((f.parent.parent, f, int(m.group(1))))
+    return out
+
+
+#: 空间不够、按册 yaml 清完还不够时，每个工作区只留最近修改的这几个钉版库
+GLYPH_DB_KEEP_RECENT = 3
+
+
+def _prune_glyph_dbs(say=print, keep_recent: int | None = None) -> int:
+    """删各工作区里没人用的旧钉版字形库，返回释放的字节数。可重建的缓存（总授权里的「清本地缓存」）。
+
+    缺省：只保留该工作区各册 yaml 当前钉住的版本；其余的，本机有 g<N> 清单（config/glyph-pack/g<N>/manifest.json）
+    才删。读不出在用号（读 yaml 出错）的工作区不删。
+    ``keep_recent=K``（空间不够时的第二档）：不看 yaml 和本机清单，每个工作区只留最近修改的 K 个。
+    钉版库是中心库快照（一个号只写一次）的本地建物，下一张单准备阶段 db pull 后 ``ensure_pins`` 会重建，
+    代价是重建的几分钟。领单前才跑，本机同时只一个执行方，没有在跑的单。"""
+    from ..core.glyph_pin import load_manifest
+    from ..ops.glyph_snapshot import pins_in_use
+    found = _glyph_pin_dbs()
+    doomed: list[tuple[Path, Path, int, str]] = []
+    if keep_recent is not None:
+        by_ws: dict[Path, list] = {}
+        for ws, f, n in found:
+            by_ws.setdefault(ws, []).append((f.stat().st_mtime, ws, f, n))
+        for items in by_ws.values():
+            items.sort(key=lambda t: t[0], reverse=True)
+            doomed += [(ws, f, n, f"只留最近 {keep_recent} 个") for _, ws, f, n in items[keep_recent:]]
+    else:
+        keep_cache: dict[Path, set[int] | None] = {}
+        for ws, f, n in found:
+            if ws not in keep_cache:
+                try:
+                    keep_cache[ws] = set(pins_in_use(ws))
+                except Exception:       # noqa: BLE001 —— 算不出来就当都在用
+                    keep_cache[ws] = None
+            keep = keep_cache[ws]
+            if keep is None or n in keep:
+                continue
+            try:
+                if load_manifest(ws, n) is None:
+                    continue
+            except Exception:           # noqa: BLE001
+                continue
+            doomed.append((ws, f, n, f"册 yaml 没钉 g{n}"))
+    freed = 0
+    for ws, f, n, why in doomed:
+        size = 0
+        for g in (f, f.with_name(f.name + "-wal"), f.with_name(f.name + "-shm")):
+            try:
+                size += g.stat().st_size
+                g.unlink()
+            except OSError:
+                pass
+        if size:
+            say(f"清旧字形库 {f}（{size / 2**20:.0f} MB，{why}，可从中心库重建）")
+        freed += size
+    return freed
+
+
+def _disk_gate(say=print) -> str | None:
+    """领单前查剩余空间：先清旧的 job 目录和没人钉的旧字形库；还不够依次清 uv、guji-data 缓存；都清了还不够就返回原因（不领单）。"""
+    _clean_job_dirs()
+    try:
+        _prune_glyph_dbs(say)
+        if _free_gb() < MIN_FREE_GB:        # 册 yaml 钉的版本多（殿本各册钉号不一），上面清不够：只留最近用的几个
+            _prune_glyph_dbs(say, keep_recent=GLYPH_DB_KEEP_RECENT)
+    except Exception as e:      # noqa: BLE001 —— 清缓存失败不碍领单
+        say(f"清旧字形库出错（忽略）：{e}")
+    for cache in _CACHES:
+        if _free_gb() >= MIN_FREE_GB:
+            return None
+        if cache.exists():
+            say(f"磁盘剩余 {_free_gb():.1f} GB，低于 {MIN_FREE_GB:g} GB，清缓存 {cache}")
+            shutil.rmtree(cache, ignore_errors=True)
+    free = _free_gb()
+    if free >= MIN_FREE_GB:
+        return None
+    return f"磁盘剩余 {free:.1f} GB，低于 {MIN_FREE_GB:g} GB（已清 job 目录和缓存，仍不够），不领单；请扩盘"
 
 
 def _preflight() -> str | None:
@@ -539,6 +709,85 @@ def _preflight() -> str | None:
             _preflight_ok_at = time.time()
             return None
     return err or f"本会话读不了 {WORKSPACE_REPO.split('github.com/')[-1]} 私仓（请在会话里 add_repo）"
+
+
+# 文意 L2/L3 要的重依赖和 SIKU-BERT 权重（pyproject 的 torch／llm extra）。缺了管线不报错、只会让 ctx_l2／ctx_llm 全部弃权
+# （abstain:no_encoder／no_api_key），待审单就偏多（2026-11-01 史記 02 册：835 条变 1181 条）。所以执行方领单前就查，缺了先补，补不上就不领单。
+CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
+_ML_PKGS = ("torch", "transformers", "anthropic")
+_ml_ok_at = 0.0
+_ml_fail: tuple[float, str] | None = None     # (时间, 原因)：失败后 10 分钟内不再重试，直接复用这条原因，免得每个轮询周期都重跑安装
+ML_INSTALL_TIMEOUT_S = 600
+ML_RETRY_S = 600
+
+
+def _run_bounded(cmd: list[str], timeout: int, env: dict | None = None) -> tuple[int, str]:
+    """跑子进程，超时就连整个进程组一起杀（uv 会拉子进程），返回 (rc, 输出末尾)。超时 rc＝-9。"""
+    try:
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                             start_new_session=True, env={**os.environ, **(env or {})})
+    except OSError as e:
+        return 127, str(e)
+    try:
+        out, _ = p.communicate(timeout=timeout)
+        return p.returncode, (out or "").strip()[-300:]
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except OSError:
+            pass
+        out, _ = p.communicate()
+        return -9, f"超过 {timeout} 秒被杀；" + (out or "").strip()[-200:]
+
+
+def _find_uv() -> str | None:
+    return shutil.which("uv") or next((str(x) for x in (Path.home() / ".local/bin/uv", Path("/usr/local/bin/uv")) if x.exists()), None)
+
+
+def _ml_env_gate(say=print) -> str | None:
+    """领单前查管线 venv 里的 torch／transformers／anthropic 和 SIKU-BERT 权重；缺依赖就 uv pip install，权重就预拉进 HF 缓存。
+    返回缺什么（None 是都齐）；通过后 30 分钟内不再查。失败不挂住：每步都有超时（超时杀整个进程组），
+    失败原因返回给调用方（写进 workers 的 note），10 分钟后再试。GUJI_JOBS_SKIP_ML_CHECK=1 可跳过（测试用）。"""
+    global _ml_ok_at, _ml_fail
+    if os.environ.get("GUJI_JOBS_SKIP_ML_CHECK") or time.time() - _ml_ok_at < 1800:
+        return None
+    if _ml_fail and time.time() - _ml_fail[0] < ML_RETRY_S:
+        return _ml_fail[1]
+
+    def fail(msg: str) -> str:
+        global _ml_fail
+        _ml_fail = (time.time(), msg)
+        say(f"ML 环境自检未过（{ML_RETRY_S // 60} 分钟后重试）：{msg}")
+        return msg
+
+    py = str(VENV / "bin" / "python")
+    probe = "import importlib.util as u;print(' '.join(m for m in %r if u.find_spec(m) is None))" % (_ML_PKGS,)
+    rc, out = _run_bounded([py, "-c", probe], 60)
+    if rc:
+        return fail(f"管线 venv 的 python 跑不了（{VENV}）：{out}")
+    miss = out.split()
+    if miss:
+        uv = _find_uv()
+        if not uv:
+            rc, out = _run_bounded([sys.executable, "-m", "pip", "install", "-q", "--user", "uv"], 300)
+            uv = _find_uv()
+            if not uv:
+                return fail(f"管线环境缺 {' '.join(miss)}，且找不到 uv、装 uv 也失败：{out}")
+        say(f"管线环境缺 {' '.join(miss)}，补装中（最长 {ML_INSTALL_TIMEOUT_S} 秒）…")
+        idx = ["--extra-index-url", "https://download.pytorch.org/whl/cpu", "--index-strategy", "unsafe-best-match"] if "torch" in miss else []
+        spec = {"transformers": "transformers>=4.40", "anthropic": "anthropic>=2.3", "torch": "torch>=2.0"}
+        rc, out = _run_bounded([uv, "pip", "install", "-q", "--no-progress", "--python", py, *idx, *[spec[m] for m in miss]],
+                               ML_INSTALL_TIMEOUT_S, {"UV_HTTP_TIMEOUT": "60"})
+        if rc:
+            return fail(f"管线环境缺 {' '.join(miss)}，补装失败（rc {rc}）：{out}")
+        say(f"补装完成：{' '.join(miss)}")
+    name, rev = CTX_ENCODER
+    dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
+    rc, out = _run_bounded([py, "-c", dl], ML_INSTALL_TIMEOUT_S, {"HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_ETAG_TIMEOUT": "30"})
+    if rc:
+        return fail(f"拉不到文意 L2 权重 {name}（rc {rc}，查网络 huggingface.co）：{out}")
+    _ml_ok_at, _ml_fail = time.time(), None
+    return None
 
 
 def _last_book() -> str | None:

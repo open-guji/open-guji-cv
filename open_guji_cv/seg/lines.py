@@ -742,12 +742,16 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
     primary_dist = abs(primary.position - center)
     wlo = max(lo, int(round(primary.position)) - secondary_window)
     whi = min(hi, int(round(primary.position)) + secondary_window)
-    positions, curve = sample_line_curve(mask, "h", wlo, whi, primary.slope)
+    # 下框：曲线多采一个窗宽再量峰。只在窗里量，贴窗边的峰被截断，半高宽量不全、分数虚高（同上面「搜索带边界锁死」）。
+    # vol84 p89 / vol85 p94：真下框 1740，窗上沿 1680 正落在末行字身里，截断峰压过真框，整页下框上移一格。
+    # 只对 bottom：抬头页的上版框主框恰在抬头框下一个窗宽处，靠这个截断分数才被选中（vol20 p156、vol32 p47/48），抬头另有专门链路
+    pad = secondary_window if side == "bottom" else 0
+    positions, curve = sample_line_curve(mask, "h", max(lo, wlo - pad), min(hi, whi + pad), primary.slope)
 
     best_secondary: dict | None = None
     for i in local_maxima(curve, radius=5):
         pos = float(positions[i])
-        if abs(pos - primary.position) < secondary_dead_zone:
+        if not wlo <= pos <= whi or abs(pos - primary.position) < secondary_dead_zone:
             continue
         if abs(pos - center) >= primary_dist:
             continue
