@@ -66,7 +66,7 @@ def test_clean_page_has_no_occlusion():
 
 
 # ── Step7 ────────────────────────────────────────────────────────────────
-def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None):
+def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None, fallback=None):
     img, cells = _page_and_cells()
     ctx = make_ctx(tmp_path, make_book(BOOK), raw={PAGE: img}, monkeypatch=monkeypatch)
     if params is not None:
@@ -86,7 +86,8 @@ def _run_seed(tmp_path, monkeypatch, *, params=None, coord=None):
         CoordRec(id=f"{BOOK}:{PAGE}:3:2", col=3, slot=2, ref_char=""),
         CoordRec(id=f"{BOOK}:{PAGE}:3:3", col=3, slot=3, ref_char="衡")]
     write_product(ctx, "align_ref", PAGE,
-                  align_ref=PageAlignRef(page=PAGE, anchored=False, coord=coord))
+                  align_ref=PageAlignRef(page=PAGE, anchored=False, coord=coord,
+                                         coord_fallback=fallback or {}))
     sa = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
     return {r.slot: r for cc in sa.columns for r in cc.chars}, sa
 
@@ -105,6 +106,20 @@ def test_occluded_cells_are_never_admitted_and_default_to_reference(tmp_path, mo
 def test_gate_off_restores_old_behaviour(tmp_path, monkeypatch):
     got, _ = _run_seed(tmp_path, monkeypatch, params=SeedAdmitParams(occluded_gate=False))
     assert got[3].admit and got[2].admit
+
+
+def test_past_leaf_column_defaults_to_blank(tmp_path, monkeypatch):
+    """1.29：列过了整理本这半叶末行（卷末印页）→ 无坐标字的遮挡格记 coord_blank，不再是 via=none。"""
+    from open_guji_cv.steps.align_ref_coord import COORD_PAST_LEAF
+    p = SeedAdmitParams(lane_seal=False)
+    got, _ = _run_seed(tmp_path, monkeypatch, params=p, coord=[], fallback={"3": COORD_PAST_LEAF})
+    assert got[3].char is None and got[3].evidence["occluded"]["via"] == "coord_blank"
+    assert got[3].evidence["occluded"]["ref_blank"]
+    got, _ = _run_seed(tmp_path / "b", monkeypatch, params=p, coord=[], fallback={"3": "列行对应不成立"})
+    assert got[3].evidence["occluded"]["via"] == "none"
+    got, _ = _run_seed(tmp_path / "c", monkeypatch, coord=[], fallback={"3": COORD_PAST_LEAF},
+                       params=SeedAdmitParams(lane_seal=False, occluded_past_leaf_blank=False))
+    assert got[3].evidence["occluded"]["via"] == "none"
 
 
 # ── 文本层 ────────────────────────────────────────────────────────────────

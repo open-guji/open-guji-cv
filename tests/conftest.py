@@ -63,6 +63,16 @@ GUJI_ENV_VARS = (
 )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _lenient_book_edition():
+    """夹具小库不声明 meta.book_edition：关掉 admit_instance 的「无书 ID 拒写」。真实行为见专测。
+    会话级（模块级夹具建库也在它之后）。"""
+    from open_guji_cv.clustering.glyph_db import GlyphDB
+    GlyphDB.require_book_edition = False
+    yield
+    GlyphDB.require_book_edition = True
+
+
 @pytest.fixture(autouse=True)
 def _isolated_env(monkeypatch, tmp_path):
     """每条测试都从「没有工作区、仓内默认根是空的」开始。

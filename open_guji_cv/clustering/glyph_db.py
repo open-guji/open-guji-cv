@@ -226,6 +226,10 @@ class DBHit:
     kind: str = "woodblock"   # 來源類別：woodblock / scan / font
 
 
+class MissingBookEdition(ValueError):
+    """字形库没声明 meta.book_edition 却要写刻本字形（edition 必须是书 ID，见 admit_instance）。"""
+
+
 class GlyphDB:
     def __init__(self, db_path: str | Path,
                  feature_backend: str = DEFAULT_FEATURE):
@@ -323,6 +327,10 @@ class GlyphDB:
 
     # ── 單實例準入（種子協議 §3.5）───────────────────────
 
+    #: 没声明 book_edition 且没点名 edition_tag 时拒写（2026-11-01）。测试夹具的小库普遍不声明，
+    #: tests/conftest.py 的 autouse 夹具把它关掉；专测见 tests/test_glyph_book_edition_required.py。
+    require_book_edition = True
+
     def admit_instance(self, instance_id: str, char: str, patch_png: bytes,
                        *, provenance: str,
                        evidence: dict | None = None,
@@ -376,7 +384,14 @@ class GlyphDB:
         # 本书 edition（meta.book_edition）时，新进的刻本字形一律归它。字体（font:*）与
         # 现代链播种域（modern:*，匹配器按它过滤）不动。
         if not edition.startswith(("font:", "modern:")):
-            edition = self.book_edition() or edition
+            own = self.book_edition()
+            if own is None and edition_tag is None and self.require_book_edition:
+                # 2026-11-01（Sheldon 定）：edition 一律是书 ID。没声明 book_edition、调用方也没点名
+                # edition，就只剩实例 id 前缀（v2 / volNN）可当 edition——那是坐标前缀不是版本，拒写。
+                raise MissingBookEdition(
+                    f"字形库没有 meta.book_edition，拒绝按实例 id 前缀 {source_id!r} 当 edition 写入 "
+                    f"（{instance_id}）。先 `guji glyph-db set-edition --edition <书ID> --apply`（或在 meta.jsonl 写 book_edition）。")
+            edition = own or edition
         cur.execute(
             "INSERT OR IGNORE INTO sources (source_id, edition_tag, created_at)"
             " VALUES (?,?,?)", (source_id, edition, _now()))
@@ -854,11 +869,13 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
     for (src,) in db.conn.execute(
             "SELECT source_id FROM sources WHERE COALESCE(kind,'woodblock') "
             "!= 'font' ORDER BY 1"):
-        if src in b_srcs:
-            continue
-        n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
-            "SELECT source_id, batch, seq, ts, op, payload FROM events "
-            "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
+        # 只属于借来库的 source：事件不导；实例照样逐条看（下面按 b_ids 剔借来的）——本书人裁入库的实例
+        # 也挂在通用 source（如 "v2"）下，冷启动时这个 source 只有借来的实例、被记成「只属于借来库」，
+        # 整个跳过就把本书自己的人裁刻例一起丢了（史記文淵閣本 2026-10-31：3,215 例没进真源）。
+        if src not in b_srcs:
+            n_ev += dump(out / "events" / f"{src}.jsonl", cur.execute(
+                "SELECT source_id, batch, seq, ts, op, payload FROM events "
+                "WHERE source_id=? ORDER BY COALESCE(seq, event_id)", (src,)))
         rows = cur.execute(
             """SELECT * FROM instances WHERE source_id=? AND (label IS NOT NULL
                  OR instance_id IN (SELECT instance_id FROM exemplars))
@@ -879,7 +896,8 @@ def export_store(db: "GlyphDB", out_dir: str | Path) -> dict:
             written.add(name)
             n_png += 1
             meta.append(d)
-        n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
+        if meta or src not in b_srcs:
+            n_inst += dump(out / "instances" / f"{src}.jsonl", meta)
     # 清孤兒：上輪導出遺留、已不被任何實例引用的 PNG（冪等覆寫的補全）
     n_orphan = 0
     for f in (out / "patches").glob("*.png"):

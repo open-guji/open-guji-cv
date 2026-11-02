@@ -44,13 +44,14 @@ def _page(chars, pending: dict):
 
 
 def _mm(lib: dict, guard: dict | None = None):
-    return {f"{B}:1:{s}": NS(char=None, candidates=[(c, 0.95)], guard=(guard or {}).get(s)) for s, c in lib.items()}
+    return {f"{B}:1:{s}": NS(char=None, candidates=list(c) if isinstance(c, list) else [(c, 0.95)],
+                             guard=(guard or {}).get(s)) for s, c in lib.items()}
 
 
-def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, **params):
+def _run(out, *, lib=None, amap=None, coord=None, wits=(), guard=None, canon=None, **params):
     p = SeedAdmitParams(db_path="x", **params)
     n = _review_lanes_pass(p, out, _mm(lib or {}, guard), amap or {}, coord or {}, _vm(),
-                           (lambda: list(wits)) if wits else None)
+                           (lambda: list(wits)) if wits else None, canon=canon)
     return n, {r.slot: r for r in out[0].chars}
 
 
@@ -302,6 +303,40 @@ def test_r5_lib_veto():
     assert n == 1                     # 覆盖度 0.95 < 0.99
 
 
+def test_r5_lib_veto_spares_second_place():
+    """默认字正是库第二名 → 不否决（印泥下近形两字分不开）；开关关掉照旧否决。"""
+    lib = {3: [("木", 0.97), ("本", 0.968)]}
+    n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib)
+    assert n == 1 and rs[3].char == "本"
+    n, rs = _seal({3: ("本", "coord")}, coord={3: "本"}, lane_seal=True, lib=lib, lane_seal_lib_veto_second=False)
+    assert n == 0 and rs[3].evidence["lane_skip"]["why"] == "lib_veto"
+    n, rs = _seal({3: ("水", "coord")}, coord={3: "水"}, lane_seal=True, lib={3: [("本", 0.98), ("木", 0.97)]})
+    assert n == 0                     # 默认字不在库前二：照旧否决
+
+
+def test_r5_codepoint_variant_admits_canonical():
+    """默认字与库候选是异体对、本书 codepoints 归一到同一码位 → 放归一后的字。"""
+    cp = {"𩔖": "類"}
+    canon = lambda c: cp.get(c, c)    # noqa: E731
+    lib = {3: [("類", 0.9)]}
+    n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib, canon=canon)
+    assert n == 1 and rs[3].char == "類"
+    assert rs[3].evidence["lane"]["variant_norm"] == "codepoint"
+    n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib)     # 本书没定码位：走暂归一组
+    assert n == 1 and rs[3].char == "類" and rs[3].evidence["lane"]["variant_norm"] == "provisional"
+    n, rs = _seal({3: ("𩔖", "coord")}, coord={3: "𩔖"}, lane_seal=True, lib=lib, canon=canon,
+                  lane_seal_codepoint_variant=False)
+    assert n == 0
+
+
+def test_r5_provisional_variant_admits_group_form():
+    """两形同在暂归一组（PROVISIONAL）→ 放组定的字，记 provisional。"""
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])       # 旨㫖 暂归一到 㫖
+    assert n == 1 and r.char == "㫖" and r.evidence["lane"]["variant_norm"] == "provisional"
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], lane_seal_codepoint_variant=False)
+    assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
+
+
 def test_r5_page_shift_guard():
     """默认字整体错一格（库读出的字都等于下一格的默认字）→ 本页印章格一律不放。"""
     text = "漢官舊儀一卷補遺一卷"
@@ -486,14 +521,15 @@ def test_seal_variant_first_admits_when_lib_top_is_default():
 
 
 def test_seal_variant_first_off_keeps_old_guard():
-    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)], occluded_variant_first=False)
+    n, r = _seal_variant([("旨", 0.97), ("㫖", 0.96)], occluded_variant_first=False, lane_seal_codepoint_variant=False)
     assert n == 0 and not r.admit and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 
 def test_seal_variant_first_needs_lib_top_equal_and_cov():
-    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)])        # 库首位是异体：形说不准，照旧送审
+    kw = dict(lane_seal_codepoint_variant=False)             # 暂归一放宽另测（test_r5_provisional_variant_admits_group_form）
+    n, r = _seal_variant([("㫖", 0.97), ("旨", 0.96)], **kw)  # 库首位是异体：形说不准，照旧送审
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
-    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)])        # 覆盖度 < seal_lib_cov
+    n, r = _seal_variant([("旨", 0.85), ("㫖", 0.84)], **kw)  # 覆盖度 < seal_lib_cov
     assert n == 0 and r.evidence["lane_skip"]["why"] == "cand_variant"
 
 

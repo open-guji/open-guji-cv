@@ -1504,12 +1504,22 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
             if not (above.size and (above <= FRAME_LINE_BLANK * (b - a)).all()
                     and ink[y1:nxt][~edge[y1:nxt]].sum() <= FRAME_LINE_TAIL * (b - a)):
                 continue
-        if gap and not bar and (ink[max(0, y0 - 2):y0].sum(axis=1) >= FRAME_LINE_SPECK * (b - a)).all():
+        # 线与字之间要有白行。写本的线是毛笔画的，线行段两边各拖着几行毛边（覆盖够、跨度不够满宽），
+        # 只看紧挨线行的 2 行会把毛边当成字连着线（史記列首「出」「曰」）——越过毛边再看
+        speck = FRAME_LINE_SPECK * (b - a)
+        if gap and not bar and (ink[max(0, y0 - FRAME_LINE_EDGE - 2):y0].sum(axis=1) >= speck).all():
             continue
-        if not (patch[:y0] < BINARY_THRESHOLD_PATCH).any():
+        # 剥到线行段以内的毛边：从线往字那边数，不过 FRAME_LINE_EDGE 行就碰到白行的，这几行是线的毛边、
+        # 不是字（字跟线之间隔着白行）；碰不到白行（字脚压线）就只剥到线行
+        cut = y0
+        while cut > 0 and y0 - cut < FRAME_LINE_EDGE and ink[cut - 1].sum() >= speck:
+            cut -= 1
+        if cut > 0 and ink[cut - 1].sum() >= speck:
+            cut = y0
+        if not (patch[:cut] < BINARY_THRESHOLD_PATCH).any():
             return patch
         out = patch.copy()
-        out[y0:] = 255
+        out[cut:] = 255
         return out
     return patch
 

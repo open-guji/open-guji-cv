@@ -5,10 +5,29 @@
 
 ## [未发版]
 
-## [0.6.0] - 测试中
+### Changed
+- 书级「大印只认这些页」`seal_detect.stain_pages`（A32，GUJI-637，史記 D 类）：缺省 None＝照旧每页都找、不进参数 dump；殿本 20 页回放产物逐字节不变，已登记 `core/code_equiv.py`，不让各书过期。史記各册真印只在首叶，没印页的纸面底纹被认成大印（01–03 册 115 格误判遮挡），书级配 `[2]` 去掉。
+- 字形库 edition 一律是书 ID（Sheldon 11-01 定，QTW 转 A23）：`GlyphDB.admit_instance` 在库没声明 `meta.book_edition`、调用方也没点名 `edition_tag` 时抛 `MissingBookEdition`（原先静默按实例 id 前缀 v2／volNN 当 edition）；`glyph-db stats` 加 `edition_problems`，`close-check` 加 8b「字形库 edition 是书 ID」。不改产物指纹。
+- 待审成因表 `review/causes.py` 的「交给」标注：A1/A3/A4/A5/A6/A9 不再一律写「切分」，改为「对位（成片时查切分）」，A3 只差 1 格＝挤格才归切分（A22 11-1 反馈：第1轮 538 格里 489 格切分没问题）。只改文字，不改判定，不动产物指纹。
+- 卷末印页的空栏不再人审（A32，GUJI-637，vol20–99 r1 遮挡格 443）：`align_ref` 2.5、`seed_admit` 1.29，`code_hash` 变（从 align_ref 起重跑）。卷末页整理本只到「…皆附存目」，后面几列是「乾隆御覽之寶」压着的空栏；邻页／页钉位定位时这些列已过了整理本这半叶的末行，原先记「列行对应不成立」、印里的格 `via=none` 只能人审。
+  - `align_ref`：这种列的退回原因改记 `COORD_PAST_LEAF`（「整理本这半叶没有这一列」），其他不变。
+  - `seed_admit.occluded_past_leaf_blank`（缺省开）：遮挡格所在列是 `COORD_PAST_LEAF`、且这一列没有现役对位字 → 默认字来源记 `coord_blank`，由 R5 判非字。r1 包 80 册只有 5 页命中（vol21 p225、vol30 p140、vol37 p71、vol39 p176、vol44 p65），回放放 55 格，逐页看图全是印文碎块；其余页逐格不变。
+- 异体边表自动暂归一 `seed_admit.edge_pair`（缺省开；A24 10-31，r5 重放 V 类「组外异体对」单格长尾约 360 对，`seed_admit` 1.28，`code_hash` 变）：整理本字与库首位互为「自动对」（`groups/edge_pairs.is_auto_pair`：边表 `edge_tier`=T1 纯异体且 ≥2 个异体来源、不在字组、不在 `config/variants/edge_pair_exclude.tsv`）、库首位 cov≥0.92 领先≥0.005、无护栏的待审格，放两形里已放行字频较高的一形（`config/variants/form_freq.tsv`）。通道 `edge_pair`，证据 `edge_pair.decision=provisional`（暂归一，将来筛出再拆）。只升不降、不碰人裁。r5 包 vol07–99 回放约放 94 格，看图全对；其余单格对多数不是异体（无边或只有 link／通假边），不碰。新增 `groups/edge_pairs.py`、两张表、`tests/test_seed_admit_edge_pair.py`。
+- 印章遮挡格再放宽两条（A32，GUJI-637，vol20–99 r3 遮挡 931 格）：`seed_admit` 1.27，`code_hash` 变。只在册开 `lane_seal` 时生效。
+  - `lane_seal_lib_veto_second`（缺省开）：默认字正是字形库第二名时库否决不生效。r3 包里库否决 340 格，看图默认字错的约 10 格全在「默认字不在库前二」那一档。
+  - `lane_seal_codepoint_variant`（缺省开）：异体护栏遇到本书 `codepoints:` 已归一的异体对（𩔖→類、巻→卷、别→別…）或同在暂归一组 `PROVISIONAL` 的两形，不再拦，放归一后的字。
+- `rerun_prep.sh`：迁仓过渡期的退回旧总仓没生效（`t` 包装总返回 0，克隆新仓失败也当成功），改成直接判克隆是否成功。
+
+- `seg_samples.py submit --base <带注释的 tag>` 把 tag 对象的 sha 当提交交单，执行方检出后对不上（「cv 没切对」），改成 `rev-parse <base>^{commit}`（v0.6.0 组合验收时发现）。
+- 下版框误取末行字身（border_detect 1.13，A22 查 A31「无整理本对位」10-31）：`seg/lines.find_horizontal_border` 下框次选峰原在 ±60 行窗里量，窗边的峰被截断、半高宽量不全分数虚高，末行字身横排一串时压过真框，整页下框上移一格、每列末字丢掉（vol84 p89、vol85 p94）。改为曲线多采一个窗宽再量；上框不动（抬头页主框靠那个截断分数才选中，另有链路）。vol20–99 共 13,320 页筛：54 页下框下移约一格，逐页看图全改对，其余逐位不变。`border_detect` 及下游判过期。PATCH。
+
+- 列首／列尾格剥框线漏剥写本框线（cell_shrink 1.22，A22 查 SJ 报的史記列首格顶线残留）：`extractor.strip_frame_line` 判「线与字之间隔着白行」原只看紧挨线行的 2 行，毛笔线两边拖着几行毛边，被当成字连着线、整条不剥；剥时也只剥到线行，毛边留在图块边上。改为越过 `FRAME_LINE_EDGE` 行毛边再找白行，碰到白行就连毛边一起剥（碰不到＝字脚压线，照旧只剥到线行）。史記 01／02 册 `patch_qc.has_edge_frame_line` 命中 170→145（列首 98→73）；殿本 vol06、vol30 各 48／52 格变，看图全是剥掉线残、字不受损。`cell_shrink` 及下游判过期。PATCH。
+
+## [0.6.0] - 2026-10-31
 
 MINOR（用户 10-31 定）。含切分模块化（共用原语库 `seg/`、各套书自管 `books/`，M2–M4）、控制台与 manager 拆出、任务库按书 ID 区分与殿本工作区独立成仓、keben_free 第八轮等（见下）。
 
+- 架构：`describe`（纯净性一句话）从 `ops/pack_purity` 下沉到 `datastore/packs.describe_purity`（标 main 要用，`datastore → ops` 的向上依赖让 `test_no_new_upward_imports` 红），`ops.pack_purity.describe` 保留为别名。rc/v0.6.0 上修，同改动合回 dev。
 - jobs：执行方连续 3 单环境类失败就暂停领单 30 分钟并在 `workers` 里写原因（10-30 worker-23 的数据令牌坏了，一小时内 23 次 db-pull 500，别的执行方都正常），免得一个坏会话把排队的单的重试次数耗光。
 - jobs：任务库加列后老连接报 `cached plan must not change result type` 会让执行方领单崩掉（10-30 加 book_id 时 #1153／#1156），`DB` 遇到这个错误自动重连重试。
 - 任务库按书 ID 区分、殿本工作区迁到自己的仓（Sheldon 10-30）：四库总目（96mid1ogzk）的工作区搬进 `guji-workspace/96mid1ogzk-si-ku-zong-mu`（仓根即工作区，3711 个文件与旧仓逐文件核对 0 差异），`spec.WS_REPOS` 登记「书 ID → 仓」，ws_glob 里的书 ID 查得到又没显式给 `ws_repo` 就走它，执行方自检也查这个仓。册号（vol01）每部书都有，`jobs.job` 加 `book_id`（旧行按 ws_glob 补），同册互斥锁改成（书 ID，册号）——不同书的 vol01 能并跑；`guji_jobs submit --book-id`、`ls --book-id`，`ls`／板子多一列书 ID；`ws_repo` 不进指纹。`rerun_prep.sh` 找册 yaml 改按工作区 `.central.json` 的 ws id（原先取数据目录里第一个，多书会话会取错）。迁仓过渡期：会话没挂新仓时，执行方自检放行旧总仓，`rerun_prep.sh` 克隆不了 `--ws-repo` 就退回旧总仓里同一本书的目录。
@@ -21,6 +40,7 @@ PATCH。含控制台拆成独立包 guji-console（C0–C3）、keben_free 第�
 - 自由版式 `keben_free` 第七轮切字（Sheldon 10-28「先实现十几页」「考虑识别软件辅助」）：新可选步 `line_ocr`（逐列送 PaddleOCR 读文本行，产物 `free_ocr_lines`）；`cell_cut` 1.4 有识别行时按行定区（大字行／并排小注行）、按读出的字数切，漏掉的段落与没有识别行的列走规则；混排栏（认出了大字、但大字行不到一半）按字形认大字（`segment_mixed`）。`.[cpu]`／`.[gpu]` 的 paddleocr 下限提到 3.2。只有 keben_free 管线用（yxat 一册）。
 - 倚𠋣 麓𪋤 邃𮟏 冥㝠𡨋 隱隠𨼆 码位组（A24 第 1 轮，sheldon 10-28 定 倚/麓/邃/㝠/隠）：新 cp_yi3 cp_lu4 cp_sui4 cp_yin3b，cp_ming2 成员加 𡨋 并改给 㝠；撤 yin 刻形组（隱𨼆 刻形差别暂不拆）。99 册回放补放 112 格看图 0 错。
 - 按刻形拆判的异体对组（shang ba sang xian yin … 共 31 个）与 dian 开 `ref_top_enter`（A24 压低组外异体对送审第 1 轮，10-28）：库首位与整理本同在组里就进，分差内的组外字不再挡入口；给字仍由整字 HOG 判。vol01–99 回放新进 100 格，逐格看图 0 错。只动 `registry`。
+- 字块图像＋文意 L4（A24 第 2 轮，2026-11-01，门辶于千子干）：新 `groups/vis_llm`、`FlowSpec.vis`（zy yz men wj guanm chuo yh xuan 开）、`seed_admit.group_flow_vis`（缺省开；用 group_flow_llm_model，没密钥不问）。字组流程没放成或要降审的格，把原图字块连同前后文问一次大模型；高置信、是组员且有证人（整理本／坐标对位、文意 L3／L1、字形 ids）同字才放或不降审，整理本在组里说了另一字时不越过。`group_flow_llm_groups` 缺省加 yz wj yh。殿本 vol20–99 的 276 格回放送审 276→173，逐格看图 0 明确错；留出 360 已放行格 high 307 格同放行字，不同的 4 格里 3 个是 間／閒。`seed_admit` 与 flow 代码变，开 `group_flow` 的册判过期。PATCH。
 - 第 1 轮压低字组送审（A24，2026-10-28）：men／chuo 加文意第二路（`FlowSpec.lift_ref_missing_ctx`，整理本与坐标对位都缺时 ctx 给字可补放，有参照不越过）并新增 `config/groups/{men,chuo}/{prompt.md,rules.yaml}`；`seed_admit.group_flow_llm_groups` 缺省加 zy xz rr guan men chuo。vol07–99 离线回放九组送审 815→约 391。`seed_admit` 与 flow 代码变，开 `group_flow` 的册判过期。PATCH。
 ## [0.5.31] - 2026-10-28
 
