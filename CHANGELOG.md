@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 中心库省流量（A31 11-02，Neon 出流量 10-31 一天 48 GB）：`db pull`／`sync` 取整文件表（files：线上单每份约 1.1 MB、字形库清单 3.4 MB）一律按路径、按字节分批（≤8 MB／≤100 个），不再整表 2000 行一页读挂重试；`db pull --exclude <前缀>`／`GUJI_PULL_EXCLUDE`（`run` = `feedback/lists/proofing/`）按需拉取，部分副本记进状态、push／sync 拒绝；`rerun_prep.sh` 缺省 `GUJI_PULL_EXCLUDE=run`；任务看板只取要用的列。不碰任何 Step，`code_hash` 不变（PATCH）。
 - 册配置点名表格页 `border_detect_gate.table_pages`（史記年表，Sheldon 11-02 定暂搁置）：点名的页页型记 `table`（新加进 `PAGE_TYPES`／`SKIP_TYPES`），整页 `page_type_skip` 跳过，不切分、不出待审、不进统计；优先于 `body_pages` 与 `grid_overrides_skip`。缺省空、不进参数 dump，各书产物不变。年表以后的做法见 ai-team `domain/CV/新书登记/史记文渊阁/年表方案.md`。
 - 书级「大印只认这些页」`seal_detect.stain_pages`（A32，GUJI-637，史記 D 类）：缺省 None＝照旧每页都找、不进参数 dump；殿本 20 页回放产物逐字节不变，已登记 `core/code_equiv.py`，不让各书过期。史記各册真印只在首叶，没印页的纸面底纹被认成大印（01–03 册 115 格误判遮挡），书级配 `[2]` 去掉。
 - 字形库 edition 一律是书 ID（Sheldon 11-01 定，QTW 转 A23）：`GlyphDB.admit_instance` 在库没声明 `meta.book_edition`、调用方也没点名 `edition_tag` 时抛 `MissingBookEdition`（原先静默按实例 id 前缀 v2／volNN 当 edition）；`glyph-db stats` 加 `edition_problems`，`close-check` 加 8b「字形库 edition 是书 ID」。不改产物指纹。
