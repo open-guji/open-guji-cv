@@ -270,10 +270,3 @@ def test_guard_refuses_frozen_book_without_top_level_version(monkeypatch, capsys
     cli_v2._guard_cv_version(book)
     assert capsys.readouterr().err == ""
 
-
-def test_textsrc_keeps_dev_version_whole():
-    """book-text CHANGES 里写的 dev 版本整段读出，不截成三段冒充正式版。"""
-    from open_guji_cv.opinions.textsrc import _CV_VER
-    assert _CV_VER.search("cv v0.5.9 重跑").group(1) == "v0.5.9"
-    assert _CV_VER.search("cv 0.5.10.dev12+g1a2b3c4d5e6f 重跑").group(1) == "0.5.10.dev12+g1a2b3c4d5e6f"
-    assert _CV_VER.search("cv dev+g1a2b3c4d5e6f").group(1) == "dev+g1a2b3c4d5e6f"

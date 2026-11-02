@@ -104,3 +104,21 @@ def test_manager_cli_modules_register_every_command():
         for name, (_, handler) in importlib.import_module(f"open_guji_cv.{m}").COMMANDS.items():
             got = cli_v2.COMMANDS_V2[name]
             assert name in sub.choices and getattr(got, "__wrapped__", got) is handler, (m, name)
+
+
+def test_stale_manager_plugin_is_ignored(monkeypatch):
+    """旧版 manager（带着早先复制的过期副本）提供已搬走的命令时不认，提示更新。"""
+    import types
+
+    from open_guji_cv import cli_v2
+    monkeypatch.setitem(cli_v2.MIN_MANAGER_VERSION, "demo", "0.2.0")
+    pkg = types.ModuleType("fake_mgr")
+    pkg.__version__ = "0.1.9"
+    monkeypatch.setitem(__import__("sys").modules, "fake_mgr", pkg)
+    mod = types.ModuleType("fake_mgr.commands")
+    assert cli_v2._plugin_too_old(mod, "demo")
+    pkg.__version__ = "0.2.0"
+    assert not cli_v2._plugin_too_old(mod, "demo")
+    assert not cli_v2._plugin_too_old(mod, "not-moved")
+    monkeypatch.setitem(cli_v2.MOVED_TO_MANAGER, "demo", "P2")
+    assert "版本低于 0.2.0" in cli_v2.moved_command_hint(["demo"], {})
