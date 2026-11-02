@@ -399,6 +399,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5ad584eacd0e6461eeb7e5e39a226973f0c52ef32b92d24054e3a163b593b8ef",
           old="abeefb2ca96f877eca465bc6f83fda42c09998d39a82fdbcaf05b55f508fc286",
           evidence="seed_admit 在史記 01／05／08 册共 363 页（任务库 #1835–1837，cv 083e788＝claude/shiji-run ba2b739＋本改动）上与 ba2b739 产物逐字节相同（书级开关 ref_lib_coord、group_flow_shape_ref_ok 缺省关）"),
+    # 圈号 ○ 遇整理本空格位 symbol_ref_blank（缺省关）：2026-11-02 史記 02
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="7ddbe7509a3c2de9a7ab94bb7a0c23c115c0abaffc766f211e08b0c1581e4a98",
+          old="4451f904c4d519067d67e50d569fa7c9e25a77f73bccc219e7111b22c5f77886",
+          evidence="seed_admit 在史記 02 8 页（2,90,167,168,208,209,210,211，含 ○ 圈号页与卷端页）上与 origin/dev 产物逐字节相同"),
 )
 
 
