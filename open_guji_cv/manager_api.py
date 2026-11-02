@@ -24,6 +24,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "WorkerSource": ("datastore.client", "WorkerSource"),
     # groups（pipeline）
     "groups_of": ("groups.registry", "groups_of"),
+    # opinions（P2 搬去 manager，2026-11-02）
+    "data_home": ("core.workspace", "data_home"),
+    "central_data_dir": ("core.workspace", "central_data_dir"),
+    "CentralError": ("datastore.client", "CentralError"),
     # 册号（core/volume_id，2026-11-02）：manager 的标 main 钩子按册配置取书 id 与章号
     "volume_of": ("core.volume_id", "volume_of"),
 }

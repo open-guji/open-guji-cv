@@ -1695,7 +1695,9 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
 
 #: 已搬去 guji-manager 的子命令（拆分 P2–P5，每批 cv 删除 PR 里登记）。没装 manager 时 `guji <它>` 给出装法，
 #: 而不是 argparse 的 invalid choice。只许增不许删（老脚本、老文档还会这么调）。
-MOVED_TO_MANAGER: dict[str, str] = {}
+MOVED_TO_MANAGER: dict[str, str] = {
+    "opinions": "拆分 P2，2026-11-02；意见池 M11",
+}
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
                         "pip install --no-deps -e <目录>（云端：uv pip install --python /opt/guji-venv/bin/python …）")
@@ -1715,11 +1717,11 @@ def moved_command_hint(argv: list[str], registered) -> str | None:
 #: 命令本身改由 guji_manager.commands 提供。按名字现 import（不在模块顶上），cv 不对它们留静态依赖。
 #:   glyph-db：2026-10-06 从 v1 入口搬来，自带 -w　　exp：A/B 实验（overview#457），自带 -w
 #:   db：中心库客户端（GUJI-606），自带 -w　　products：前后对比、产物包（受控重跑），自带 -w
-#:   source：原图源件、页图、页表（R2），自带 -w　　opinions：意见池（M11），不要 -w
+#:   source：原图源件、页图、页表（R2），自带 -w
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
 #:   job：任务库（2026-10-25）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
-    "cli_glyph_db", "cli_exp", "cli_db", "cli_products", "cli_source", "cli_opinions", "cli_cellvotes", "cli_freeze",
+    "cli_glyph_db", "cli_exp", "cli_db", "cli_products", "cli_source", "cli_cellvotes", "cli_freeze",
     "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close",
 )
 

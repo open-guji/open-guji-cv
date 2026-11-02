@@ -37,11 +37,11 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "opinions": 4, "jobs": 4,
+    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "jobs": 4,
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
     # L6 命令行入口
-    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_opinions": 6, "cli_cellvotes": 6, "cli_freeze": 6,
+    "cli_v2": 6, "cli_exp": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6, "cli_source": 6, "cli_cellvotes": 6, "cli_freeze": 6,
     "cli_ops": 6, "cli_feedback": 6, "cli_eval": 6, "cli_glyph": 6, "cli_close": 6,   # 拆分 P1 从 cli_v2 拆出
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
     "api": 6,
