@@ -1,5 +1,5 @@
 """`events list` 通配批次 + 按册过滤（GUJI-77：vol03-* 汇总不串 vol02 的 key）。"""
-from open_guji_cv.cli_v2 import _select_events
+from open_guji_cv.cli_feedback import _select_events
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 
 
