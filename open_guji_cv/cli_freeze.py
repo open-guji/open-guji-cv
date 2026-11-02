@@ -60,3 +60,7 @@ def add_parser(sub) -> None:
     p.add_argument("--tag-via", default=None, dest="tag_via", help="ai-team 仓目录：经中转站 process/tag.py 打 tag")
     p.add_argument("--execute", action="store_true", help="真的做（缺省只出计划）")
     p.add_argument("--json", action="store_true")
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"freeze": (add_parser, cmd_freeze)}

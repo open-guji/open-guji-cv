@@ -287,3 +287,7 @@ def cmd_cellvotes(args) -> None:
         if not args.dir or not args.batch or not args.reviewer:
             raise SystemExit("write 要 <目录> --batch --reviewer")
         cmd_write(args)
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"cellvotes": (add_parser, cmd_cellvotes)}
