@@ -351,13 +351,13 @@ def cmd_replace(args) -> None:
     _finish(src, args, new, blobs, args.why)
 
 
-COMMANDS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
+ACTIONS = {"pull": cmd_pull, "show": cmd_show, "list": cmd_list, "check": cmd_check,
             "ia": cmd_ia, "commons": cmd_commons, "commons-pack": cmd_commons_pack, "spreads": cmd_spreads, "register": cmd_register, "replace": cmd_replace}
 
 
 def add_parser(sub) -> None:
     p = sub.add_parser("source", help="[v2] 原图：源件存档、页图、页表（R2），云会话取原图")
-    p.add_argument("action", choices=sorted(COMMANDS))
+    p.add_argument("action", choices=sorted(ACTIONS))
     p.add_argument("pos", nargs="*", help="pull：<册>；spreads：<源件>；show/check/ia/commons/commons-pack/register：<书id> <册>；list：<书id>；replace：<书id> <册> <页序> <png>")
     p.add_argument("-w", "--workspace", default=None, help="pull：工作区（定册配置里的原图目录）")
     p.add_argument("--rev", type=int, default=None, help="页表版本，缺省最新")
@@ -434,7 +434,7 @@ def cmd_source(args) -> None:
     if a == "replace" and not args.why:
         print("✗ replace 要 --why", file=sys.stderr)
         sys.exit(2)
-    COMMANDS[a](args)
+    ACTIONS[a](args)
 
 
 #: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
