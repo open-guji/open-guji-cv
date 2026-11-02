@@ -646,6 +646,15 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 坐标对位说是组里另一个字、给字的只有单遍文意表：不补放（vol13 63:5:18、vol17 161:8:8、vol19 27:7:9
                 # 单遍 haiku 读反，A24 10-24）；文意 strong、两遍以上同字、L1 规则或别的方法同字时照放
                 ch, why = None, "coord_dissent"
+            if (ch is None and why == "ref_dissent" and mode == "lift" and g in cfg.abstain_ref_ok
+                    and GROUPS[g].kind == "variant" and (fr := ref or (veto_refs or {}).get(r.id))
+                    and fr in GROUPS[g].members):
+                given = {t["char"] for t in trail if t["char"]}
+                if given and given <= set(GROUPS[g].members):
+                    # 同义异体组：方法给的是组里另一种写法、与整理本不一，写法本就拆不开（別别 之类）：书级「按整理本走」，
+                    # 取整理本形，留痕 ref_dissent_follow 方便回查（史記 2026-11-02；不同义的形近组不适用）
+                    ch, why = fr, "agree"
+                    trail = trail + [{"solver": "form:ref", "char": fr, "why": "ref_dissent_follow"}]
             if ch is None and why not in ("weak",):
                 vch, vitem = _vis_try(g, r, trail, ref or (veto_refs or {}).get(r.id), cfg, norm, patch_fn, *wins.get(r.id, (None, None)))
                 if vitem is not None:

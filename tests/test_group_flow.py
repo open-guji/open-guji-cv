@@ -1025,3 +1025,23 @@ def test_provisional_can_splits_by_ids_slot():
     assert _slot_family(pv, tr(0.82, 0.55, 0.79), "參", ident) is None      # 整理本說參、取块說小：不兜底
     assert _slot_family(pv, tr(0.82, 0.55, 0.79), None, ident) is None      # 整理本缺位：取块分差 0.03 < 0.07，不兜底
     assert _slot_family(pv, tr(0.9, 0.5, 0.7), None, ident) == "叅"         # 分差 0.2 够
+
+
+def test_abstain_ref_ok_lift_variant_ref_dissent(monkeypatch):
+    """书级 `abstain_ref_ok` 再一支（史記 2026-11-02）：同义异体组（別别）字形判出另一写法、与整理本不一 → 取整理本形；
+    不同义的形近组（日曰 ry）、整理本在组外都照旧留人审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "別" if name == "ids" else None, why="agree" if name == "ids" else "abstain:x", via=name))
+    cands = lambda cid: [("別", 0.99), ("别", 0.975)]
+    on = FlowConfig(groups=("bie",), provisional=False, abstain_ref_ok=frozenset({"bie"}))
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("别", "equal")}, cands, lambda r: False, FlowConfig(groups=("bie",), provisional=False))
+    assert not r.admit                                                         # 缺省照旧
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("别", "equal")}, cands, lambda r: False, on)
+    assert r.admit and r.char == "别" and r.evidence["group"]["solvers"][-1]["why"] == "ref_dissent_follow"
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("刑", "equal")}, cands, lambda r: False, on)
+    assert not r.admit                                                         # 整理本在组外

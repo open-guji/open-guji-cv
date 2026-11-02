@@ -240,7 +240,9 @@ class SeedAdmitParams(BaseModel):
     group_flow_abstain_ref_ok: list[str] = Field(default_factory=list)
     """书级：这几组复核已放行格时，解法全弃权（`group_flow_abstain`）、没有任何解法给出别的字、已放行字＝整理本字
     （现役对位缺格时用坐标对位字）→ 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：己已巳文意 L2 首选同字但 low_p、
-    曾會㑹 L1 弃权，01–10 正文约 170 格因此送审）。空＝不放宽（不进参数 dump）。"""
+    曾會㑹 L1 弃权，01–10 正文约 170 格因此送审）。
+    同义异体组（`kind=variant`，如 別别）的补放一支：字组判出组内另一写法、与整理本字不一（`ref_dissent`）→ 取整理本形，
+    证据 `ref_dissent_follow`（2026-11-02）；不同义的形近组、整理本在组外都不适用。空＝不放宽（不进参数 dump）。"""
     group_flow_shape_ref_ok: list[str] = Field(default_factory=list)
     """书级：这几组复核已放行格时，只有字形路 `ids` 给出别的字（文意没有异议）、已放行字＝整理本字（现役对位缺格时用坐标对位字）
     → 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：廣→賔、還→遺 等 ids 模板库对写本形不准，看图 23／12 格全是整理本对）。
