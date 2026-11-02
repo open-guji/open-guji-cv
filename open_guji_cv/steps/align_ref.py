@@ -518,6 +518,11 @@ class AlignRefParams(BaseModel):
     180 列是目录、卷端题列、职名页字距不匀，几何行号拟不上；这些格因此没有整理本字，只能人审。
     配上的列照旧过 `_coord_conflict` 与错位闸。False＝关（缺省，不进参数哈希）。"""
 
+    coord_dp: bool = False
+    """坐标对位的载体字保底（2026-11-02，史記文淵閣本；见 `align_ref_coord.coord_dp`）：几何配不上
+    （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
+    载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -534,6 +539,8 @@ class AlignRefParams(BaseModel):
             d.pop("replace_max_len", None)
         if isinstance(d, dict) and not self.coord_relaxed:
             d.pop("coord_relaxed", None)
+        if isinstance(d, dict) and not self.coord_dp:
+            d.pop("coord_dp", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -674,7 +681,7 @@ class AlignRefStep(Step):
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
-                         relaxed=p.coord_relaxed)
+                         relaxed=p.coord_relaxed, dp=p.coord_dp)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1279,7 +1286,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
-                 pin_line: int | None = None, relaxed: bool = False) -> None:
+                 pin_line: int | None = None, relaxed: bool = False, dp: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1337,21 +1344,50 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page, relaxed=relaxed,
                                                           order_ok=cc.col in roster_cols))
                 for cc, u, ln, r in work]
+    dp_cols: list[int] = []
+    cand_top = ({r.id: tuple(c for c, _s in (r.candidates or [])[:C.COORD_DP_TOPK]) for cc_ in cols for r in cc_.chars}
+                if dp else {})
+
+    def _take_dp(cc, units, ln, why: str) -> bool:
+        """`coord_dp`：几何配法不成立／被冲突闸退回的列改走载体字单调对齐；成了就当坐标对位列收下。"""
+        if not dp or not units or "整理本行为空" in why:
+            return False
+        if "空格位上库认出了字" in why:
+            return False          # 整理本这一位是空而库认出了字：页与整理本对不上，不拿载体字硬配
+        d = C.coord_dp(units, ln.text_units())
+        if d is None:
+            return False
+        # 只收有字形证据的格：载体字＝整理本字，或整理本字在这一格库匹配的前 `COORD_DP_TOPK` 名候选里
+        # （没有字形证据的格，坐标字只是对齐的推论，不给整理本字，免得下游把它当独立证据放行）
+        recs = [r for r in d.recs if r[3] and (carrier(r[0]) == r[3] or r[3] in cand_top.get(r[0], ()))]
+        if not recs:
+            return False
+        res.coord_conflict_ids.extend(_coord_conflict_ids(recs, legacy))
+        res.coord_cols.append(cc.col)
+        res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
+                         for i, sl, sub, ch, g in recs)
+        dp_cols.append(cc.col)
+        return True
+
     for cc, _units, _ln, r in work:
         if not r.ok:
-            res.coord_fallback[str(cc.col)] = r.note
+            if not _take_dp(cc, _units, _ln, r.note):
+                res.coord_fallback[str(cc.col)] = r.note
             continue
         why = _coord_conflict(r.recs, legacy, same, title=title_re is not None and bool(
             title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs))))
         if why:
-            res.coord_fallback[str(cc.col)] = why
-            res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
+            if not _take_dp(cc, _units, _ln, why):
+                res.coord_fallback[str(cc.col)] = why
+                res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
             continue
         # 孤立弱冲突（见 `_coord_conflict`）：列照用，冲突格仍记进 coord_conflict_ids（seed_admit 不放 match_ref）。
         res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in r.recs)
+    if dp_cols:
+        res.coord_note = f"{res.coord_note}；dp 配列 {','.join(map(str, sorted(dp_cols)))}".lstrip("；")
 
 
 def _coord_conflict_ids(recs, legacy: dict) -> list[str]:
