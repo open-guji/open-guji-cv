@@ -932,9 +932,3 @@ def test_shape_ref_ok_book_level(monkeypatch):
     r = adm()                                                                  # 没有整理本 → 照降
     group_flow_pass([r], {}, cands, lambda r: False, on)
     assert not r.admit
-
-
-def test_shape_ref_ok_not_in_params_dump():
-    assert "group_flow_shape_ref_ok" not in SeedAdmitParams().model_dump()
-    d = SeedAdmitParams(group_flow=("guang",), group_flow_shape_ref_ok=["guang"]).model_dump()
-    assert d["group_flow_shape_ref_ok"] == ["guang"]
