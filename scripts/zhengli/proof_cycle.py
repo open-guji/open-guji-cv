@@ -482,6 +482,8 @@ def main(argv=None) -> int:
     p.add_argument("--idle-min", type=int, default=60, help="投过 --share 之后多少分钟没新票算投完（缺省 60）")
     p.add_argument("--share", type=float, default=0.8)
     a = ap.parse_args(argv)
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     return {"plan": cmd_plan, "apply": cmd_apply, "audit": cmd_audit, "status": cmd_status}[a.cmd](a)
 
 
