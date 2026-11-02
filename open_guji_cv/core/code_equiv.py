@@ -465,6 +465,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7620888bd88f475e72b070135f5c46ac591a781f5048d81030fb947836efacab",
           old="82930b01adb3c224cac7547d22dcc0a557a64ed7c0b6d8f7d072450e62081805",
           evidence="书级开关 lane_header_formula（缺省关，不进参数 dump）：seed_admit 在史記文淵閣本 01 册目錄页 87,111,119,132,134 上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-02"),
+    # 题列信坐标对位 coord_title_trust／遮挡格整理本空行判空 occluded_ref_empty_blank（缺省关）：2026-11-03 史記 03
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="2521b7de8e2d86fbca291d6107068b924c17684756b016db13d4b5a8899c3cb7",
+          old="50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b",
+          evidence="align_ref 在史記 03 第 2 页（卷端大印页）上与 origin/dev 产物逐字节相同"),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="68444a805f3eab2dc7544f02dce2174719f3ed8aebb6837e7829c2804564b713",
+          old="82930b01adb3c224cac7547d22dcc0a557a64ed7c0b6d8f7d072450e62081805",
+          evidence="seed_admit 在史記 03 第 2 页（卷端大印页）上与 origin/dev 产物逐字节相同"),
 )
 
 

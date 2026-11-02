@@ -112,6 +112,17 @@ def test_conflict_with_legacy_equal_rejects_column():
     assert _coord_conflict([("x2", 2, None, "", 2.0)], {}, {"x2": "據"})
 
 
+def test_title_trust_overrides_strong_conflict_but_not_blank_with_glyph():
+    """`coord_title_trust`：题列（整串合题式、格数＝字数）强冲突也不退回；「空格位上库认出了字」照旧退回。"""
+    legacy = {"x2": AlignRec(id="x2", col=1, slot=2, align_char="書", align_op="equal", ref_run=9)}
+    recs = [("x1", 1, None, "欽", 1.0), ("x2", 2, None, "定", 2.0)]
+    assert _coord_conflict(recs, legacy, {}, title=True)                  # 强冲突：照旧退回
+    assert _coord_conflict(recs, legacy, {}, title=True, trust=True) == ""
+    assert _coord_conflict([("x3", 3, None, "", 3.0)], {}, {"x3": "據"}, title=True, trust=True)
+    assert "coord_title_trust" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_title_trust=True).model_dump()["coord_title_trust"] is True
+
+
 def test_title_column_ignores_isolated_weak_conflicts():
     """vol27 p1 列 1（A31 10-28）：卷首题列坐标字整串对，现役在印章乱码里零星对上「庫」却落在「四」格。
     题列不会分行错位：孤立弱冲突（单字匹配）不退回；强冲突（长 equal 段）照旧退回。"""

@@ -122,6 +122,19 @@ def test_past_leaf_column_defaults_to_blank(tmp_path, monkeypatch):
     assert got[3].evidence["occluded"]["via"] == "none"
 
 
+def test_ref_empty_column_defaults_to_blank_only_when_switched_on(tmp_path, monkeypatch):
+    """`occluded_ref_empty_blank`（书级，缺省关）：整理本这一行是空的（`整理本行为空`）→ 印下无坐标字的遮挡格记 coord_blank。"""
+    fb = {"3": "整理本行为空"}
+    got, _ = _run_seed(tmp_path, monkeypatch, params=SeedAdmitParams(lane_seal=False), coord=[], fallback=fb)
+    assert got[3].evidence["occluded"]["via"] == "none"          # 缺省关：行为不变
+    p = SeedAdmitParams(lane_seal=False, occluded_ref_empty_blank=True)
+    got, _ = _run_seed(tmp_path / "b", monkeypatch, params=p, coord=[], fallback=fb)
+    assert got[3].char is None and got[3].evidence["occluded"]["via"] == "coord_blank"
+    got, _ = _run_seed(tmp_path / "c", monkeypatch, params=p, coord=[], fallback={"3": "列行对应不成立"})
+    assert got[3].evidence["occluded"]["via"] == "none"
+    assert "occluded_ref_empty_blank" not in SeedAdmitParams(db_path="x").model_dump()
+
+
 # ── 文本层 ────────────────────────────────────────────────────────────────
 def _cell(slot):
     return CellRec(slot=slot, pos=slot, y0=0, y1=0, x0=0, x1=0, kind="char", order=slot)

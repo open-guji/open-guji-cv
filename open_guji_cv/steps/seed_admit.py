@@ -474,6 +474,11 @@ class SeedAdmitParams(BaseModel):
     occluded_seal_min_noise: float = 4.0
     """大印框内的格，格内背景噪点密度（每万像素中等墨点数）< 此值且整格墨占比 < 0.5 的不算遮挡（sheldon 10-28 定「印章范围内＋
     背景有大量噪点」才算；20–99 册抽样约 14% 遮挡格背景干净）。0＝关。缺省开，进参数哈希。"""
+    occluded_ref_empty_blank: bool = False
+    """书级（缺省关，不进 dump）：遮挡格所在列整理本这一行是**空的**（坐标对位退回原因 `整理本行为空`，页已按页钉定位）、
+    且这一列没有现役对位字 → 默认字来源记 `coord_blank`，由 R5 判非字（同 `occluded_past_leaf_blank`）。
+    起因：卷首页小印盖在整理本空列上（史記 05:85、08:119 等，卷首只有题名、印下几列没有字），印下的格机器认成印纹，
+    默认字 None、`via=none`，只能人审。需配合 `seal_detect.overrides` 点名印位（模板按原扫描尺度，这几页的印小一圈没测出）。"""
     occluded_past_leaf_blank: bool = True
     """遮挡格所在列过了整理本这半叶的最后一行（align_ref 退回原因 `COORD_PAST_LEAF`，只在按半叶头定位的页上有），
     且这一列没有现役对位字 → 默认字来源记 `coord_blank`（整理本说这儿没字），由 R5 判非字（1.29，A32 11-01）。
@@ -789,6 +794,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
+        if isinstance(d, dict) and not self.occluded_ref_empty_blank:
+            d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
@@ -3447,6 +3454,8 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
     if p.occluded_past_leaf_blank and ref is not None:
         from .align_ref_coord import COORD_PAST_LEAF
         past = {int(k) for k, v in ref.coord_fallback.items() if v == COORD_PAST_LEAF}
+    if p.occluded_ref_empty_blank and ref is not None:
+        past |= {int(k) for k, v in ref.coord_fallback.items() if v == "整理本行为空"}
     out: dict[str, tuple[float, str | None, str]] = {}
     for cc in match.columns:
         # 整理本这半叶没有这一列、现役对位也没给这一列任何字 → 整理本说这儿没字
