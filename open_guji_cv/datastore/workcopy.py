@@ -464,7 +464,7 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
         out["snapshot_rev"] = seed_rev
     if exclude:
         out["exclude"] = list(exclude)
-    if stats.get("fetched") and _snapshots_on(src) and not exclude:   # 部分副本不存快照   # 这次向库要过文件：存一份新快照给下一台新机器
+    if stats.get("fetched") and _snapshots_on(src) and not exclude:   # 向库要过文件：存新快照给下一台新机器（部分副本不存）
         out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, base)
     return out
 
