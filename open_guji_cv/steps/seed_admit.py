@@ -218,6 +218,8 @@ class SeedAdmitParams(BaseModel):
     group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
+    group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
+                                             # 有模型的书：刻形说了算，可越过整理本补放、改字（全唐文 sheldon 2026-11-02 定）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
     group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "yz", "xz", "rr", "guan", "men", "wj", "chuo", "yh", "kgc", "tsh",
                                                "yr", "ly", "dt", "mb", "fc", "ts", "zh", "yt", "em", "wm", "sb", "feng", "liang", "wxs", "hou", "js")   # 哪些组问 L3 在线（要有 config/groups/<组>/prompt.md）
@@ -961,6 +963,9 @@ class SeedAdmitParams(BaseModel):
                     from ..groups import vis_llm as _vis
                     import hashlib as _hl
                     parts.append("v" + _hl.sha256((_vis.VER + _vis.SYSTEM + self.group_flow_llm_model).encode()).hexdigest()[:12])
+                if self.group_flow_rr_shape:         # 入人八 书级刻形判法（没有模型的书不加，旧指纹不变）
+                    from ..groups.rr_shape import fingerprint as _rs_fp
+                    parts.append("rs" + _rs_fp(self.group_flow_rr_shape))
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
                     parts.append(_rr_fp(None) or "missing")
                 from ..groups.ids_online import fingerprint as _ids_fp
@@ -994,7 +999,7 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
@@ -1021,7 +1026,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -1629,6 +1634,10 @@ class SeedAdmitStep(Step):
             d_gf = _group_flow_pass(p, out, amap, mmap, ctx, page, patch_missing)
             n_auto += d_gf
             n_review -= d_gf
+            if p.group_flow_rr_shape:
+                d_rs = _rr_shape_pass(p, out, amap, ctx, page, patch_missing)
+                n_auto += d_rs
+                n_review -= d_rs
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
@@ -2825,6 +2834,10 @@ def _resolve_group_flow_paths(p) -> None:
     object.__setattr__(p, "group_flow_freq", freq)
     object.__setattr__(p, "group_flow_tables", tables)
     object.__setattr__(p, "group_flow_models", models)
+    rs = _abs(p.group_flow_rr_shape) if p.group_flow_rr_shape else ""
+    if not rs and "rr" in p.group_flow and (cfg / "rr_shape.json").exists():
+        rs = str(cfg / "rr_shape.json")
+    object.__setattr__(p, "group_flow_rr_shape", rs)
 
 
 def _l3_groups(p) -> tuple:
@@ -2890,6 +2903,62 @@ _GROUP_FLOW_OWN_GUARDS = frozenset({"never_match", "conflict"})
 _GROUP_FLOW_OWN_DOUBTS = frozenset({"near_form"} | {f"护栏:{g}" for g in _GROUP_FLOW_OWN_GUARDS})
 _GROUP_FLOW_HARD = ((frozenset(_RARE_REF_HARD) | _LANE_HARD | _LANE_GARBLE | {"excluded", "glyph_timeout"})
                     - _GROUP_FLOW_OWN_DOUBTS)
+
+
+#: 入人八 刻形判法不碰的格：看不到字、排除、空格／瘦高格、开放字形、近似刻例、超时
+_RR_SHAPE_HARD = frozenset({"occluded", "excluded", "context_blank_cell", "context_tall_cell", "form_open",
+                            "approx_exemplar", "glyph_timeout"})
+_RR = frozenset("人入八")
+
+
+def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+    """入人八 书级刻形判法（`groups.rr_shape`，`SeedAdmitParams.group_flow_rr_shape`）。紧接 group_flow。→ 放行数净增。
+
+    - 待审格（字组 rr 的格，或库首位／整理本是 人入八）：刻形给字 → 放行成该字（channel `rr_shape`），不看整理本；
+    - 已放行的 人入八 格：刻形给了组里另一个字 → 改字（`evidence.fixed_from` 留原字）；刻形弃权 → 不动；
+    - 人裁格、硬护栏格不碰；刻形弃权（组外字、几何不明、分差小）的待审格照旧送审。
+    sheldon 2026-11-02 定「字形说了算，越过整理本」（全唐文；模型按册留出 对 2,445 错 0 弃 24）。"""
+    from ..groups import rr_shape
+    model = rr_shape.load(p.group_flow_rr_shape)
+    miss = patch_missing if patch_missing is not None else {}
+    delta = 0
+    for c in out:
+        for r in c.chars or []:
+            ev = r.evidence or {}
+            if r.provenance == "human" or r.channel == "human":
+                continue
+            ds = list(r.doubts or [])
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
+                continue
+            gid = (ev.get("group") or {}).get("id")
+            ref = (amap.get(r.id) or (None,))[0]
+            if r.admit:
+                if r.char not in _RR:
+                    continue
+            elif not (gid == "rr" or r.char in _RR or ref in _RR):
+                continue
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("rr_shape")
+                continue
+            v = rr_shape.judge(img, model)
+            trail = {k: v[k] for k in ("char", "why", "nn", "score", "geo") if k in v}
+            if v["char"] is None:
+                if not r.admit:
+                    r.evidence = {**ev, "rr_shape": trail}
+                continue
+            if r.admit:
+                if v["char"] != r.char:
+                    r.evidence = {**ev, "rr_shape": trail, "fixed_from": {"channel": r.channel, "char": r.char}}
+                    r.char, r.channel = v["char"], "rr_shape"
+                continue
+            r.evidence = {**ev, "rr_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "rr_shape", "match", []
+            delta += 1
+    return delta
 
 
 def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
