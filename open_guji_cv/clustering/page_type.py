@@ -57,8 +57,9 @@ BINARY_T = 128
 
 # 页型。分类的第一刀是「有没有界行栏格」，见模块头。
 PAGE_TYPES = ("cover", "label", "blank", "colophon",
-              "edict", "body", "roster", "toc", "uncertain")
-SKIP_TYPES = ("cover", "label", "colophon")
+              "edict", "body", "roster", "toc", "uncertain", "table")
+# `table`（表格页，如史記年表）不由本模块的规则判，只由册配置 `border_detect_gate.table_pages` 点名。
+SKIP_TYPES = ("cover", "label", "colophon", "table")
 CUSTOM_TYPES = ("edict",)
 # body 底下的子类：都有界行栏格、都套标准九列网格。`blank` 在这里而不在
 # SKIP_TYPES——空栏页界行是齐的，该正常切、产出空页（2026-09-13 用户定）。
