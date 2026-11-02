@@ -46,8 +46,10 @@ DEFAULT_TEXT = "96mid1ogzk"
 BOOK_TEXT_RAW = os.environ.get("BOOK_TEXT_RAW", "https://raw.githubusercontent.com/open-guji/book-text/dev")
 
 
-def chapter_of(book: str) -> str:
-    return re.sub(r"\D", "", book).zfill(3)
+def chapter_of(book: str) -> str | None:
+    """册号 → book-text 章号，按册配置（`core/volume_id`）；认不出 → None（以前推成 000，写出错行）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    return _chapter_of(book)
 
 
 def text_base(text_id: str) -> str:
@@ -200,6 +202,9 @@ def run(books: list[str], ws: str | None = None, text_id: str = DEFAULT_TEXT, no
             ws = row[0] if row else DEFAULT_WS
         for book in books:
             chapter = chapter_of(book)
+            if not chapter:
+                print(f"✗ {book}：推不出章号（册 yaml 没写 volume），跳过；见 open_guji_cv/core/volume_id.py")
+                continue
             sheet, evs, book_doc, extra = load_db(conn, ws, book, text_id, chapter)
             entry, char = load_book_text(text_id, chapter)
             manual = extra.get("a32_note") if note is None else (note or None)

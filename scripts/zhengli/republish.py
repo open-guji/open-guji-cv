@@ -77,7 +77,12 @@ def meta_file(book: str, out_dir: Path) -> Path | None:
 
 
 def chapter_of(book: str) -> str:
-    return re.sub(r"\D", "", book).zfill(3)
+    """册号 → book-text 章号，按册配置（`core/volume_id`）；认不出就停（以前推成 000）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    ch = _chapter_of(book)
+    if not ch:
+        sys.exit(f"✗ {book} 推不出章号：册 yaml 写上 volume（见 open_guji_cv/core/volume_id.py），或给 --chapter NNN")
+    return ch
 
 
 def text_id_of(ws: Path) -> str:

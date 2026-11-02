@@ -127,10 +127,8 @@ def proofing_path(book_text_id: str, chapter: str, root: Path | None = None) -> 
 
 def chapter_of(book: str, chapter: str | None = None) -> str | None:
     """章号：给了就用；`volNN` 册推成 `0NN`（与 `guji export format` 同一口径）；推不出 → None。"""
-    if chapter:
-        return chapter
-    m = _VOL.fullmatch(book or "")
-    return f"{int(m.group(1)):03d}" if m else None
+    from ..core.volume_id import chapter_of as _chapter_of
+    return _chapter_of(book, chapter)
 
 
 def book_text_id(book: str) -> str | None:
