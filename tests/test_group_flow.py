@@ -1005,3 +1005,32 @@ def test_shape_ref_ok_book_level(monkeypatch):
     r = adm()                                                                  # 没有整理本 → 照降
     group_flow_pass([r], {}, cands, lambda r: False, on)
     assert not r.admit
+
+
+def test_abstain_ref_ok_lift_variant_follows_ref(monkeypatch):
+    """书级 `abstain_ref_ok` 同义异体组补放（史記 2026-11-02）：別别 字形判出另一写法（ref_dissent）或没有方法给字（弃权）、
+    整理本字在组内 → 取整理本形，留痕；整理本在组外、不同义形近组、缺省关都照旧留人审。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    pick = {"v": "別"}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        pick["v"] if name == "ids" else None, why="agree" if (name == "ids" and pick["v"]) else "abstain:x", via=name))
+    cands = lambda cid: [("別", 0.99), ("别", 0.975)]
+    off = FlowConfig(groups=("bie",), provisional=False)
+    on = FlowConfig(groups=("bie",), provisional=False, abstain_ref_ok=frozenset({"bie"}))
+    for v, why in (("別", "ref_dissent_follow"), (None, "abstain_ref_follow")):
+        pick["v"] = v
+        r = Rec("x")
+        group_flow_pass([r], {"x": ("别", "equal")}, cands, lambda r: False, off)
+        assert not r.admit                                                     # 缺省照旧
+        r = Rec("x")
+        group_flow_pass([r], {"x": ("别", "equal")}, cands, lambda r: False, on)
+        assert r.admit and r.char == "别" and r.evidence["group"]["solvers"][-1]["why"] == why
+        r = Rec("x")
+        group_flow_pass([r], {"x": ("刑", "equal")}, cands, lambda r: False, on)
+        assert not r.admit                                                     # 整理本在组外
+    ry = FlowConfig(groups=("ry",), provisional=False, abstain_ref_ok=frozenset({"ry"}))
+    pick["v"] = None
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("曰", "equal")}, lambda cid: [("日", 0.99), ("曰", 0.97)], lambda r: False, ry)
+    assert not r.admit                                                         # 不同义形近组不适用
