@@ -476,7 +476,7 @@ def test_entry_joint_when_close_candidates_span_overlapping_groups():
     assert entry(r, three, None, cfg) == ("ry", "joint")
     assert entry(r, [("曰", 0.98), ("目", 0.975), ("日", 0.97)], "曰", cfg) == ("ry", "joint")
     assert entry(r, three, "白", cfg) is None                                   # 整理本字不在并集里
-    assert entry(r, three + [("白", 0.971)], None, cfg) is None                  # 组外字紧咬
+    assert entry(r, three + [("百", 0.971)], None, cfg) is None                  # 组外字紧咬
     assert entry(r, three, None, FlowConfig(groups=("ry",), joint=True)) is None  # 共字组没点名
     assert entry(r, [("日", 0.98), ("曰", 0.975)], None, cfg) == ("ry", "lift")  # 单组装得下照旧
 
