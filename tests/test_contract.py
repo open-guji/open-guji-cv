@@ -2,6 +2,8 @@
 """pipeline / manager 契约（doc/契约.md）：版本信息、manifest 新字段不进指纹。"""
 import json
 
+import pytest
+
 from open_guji_cv import api
 from open_guji_cv.core import cv_version as cvv
 from open_guji_cv.core.contract import CONTRACT_VERSION, MANAGER_VERSION_ENV
@@ -75,3 +77,16 @@ def test_plugin_commands_merge_and_builtin_wins(monkeypatch):
         assert cli_v2.COMMANDS_V2["zz-plugin-cmd"] is not None
     finally:
         cli_v2.COMMANDS_V2.pop("zz-plugin-cmd", None)
+
+
+def test_moved_command_hint(monkeypatch):
+    """搬去 guji-manager 的命令：本机没装 manager 时给装法；装了（已登记）或不是搬走的命令时不拦。"""
+    from open_guji_cv import cli_v2
+    monkeypatch.setitem(cli_v2.MOVED_TO_MANAGER, "demo", "P2")
+    assert "guji-manager" in cli_v2.moved_command_hint(["demo", "-w", "x", "--a"], {"pipeline": 1})
+    assert cli_v2.moved_command_hint(["demo"], {"demo": 1}) is None
+    assert cli_v2.moved_command_hint(["pipeline"], {"pipeline": 1}) is None
+    assert cli_v2.moved_command_hint([], {}) is None
+    with pytest.raises(SystemExit) as e:
+        cli_v2.main(["demo"])
+    assert e.value.code == 2
