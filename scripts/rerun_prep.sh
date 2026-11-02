@@ -60,6 +60,9 @@ fi
 echo "WS=$WS"
 # --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
+# 按需拉取（2026-11-02，中心库维护方案）：只跑 pipeline 用不着线上单（feedback/lists/proofing/，殿本 110 MB、常变），
+# 缺省不拉；这样拉的数据目录不能 push／sync。要整拉：GUJI_PULL_EXCLUDE=- 。旧版 cv 不认这个变量，照旧整拉。
+export GUJI_PULL_EXCLUDE=${GUJI_PULL_EXCLUDE-run}
 if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G db pull -w "$WS"; fi
 # 数据目录里的册配置（db pull 落的）。各书的册号会重名（vol01），按工作区自己的 .central.json 里的 ws id 找，不能取第一个
 WSID=$(sed -n 's/.*"ws": *"\([^"]*\)".*/\1/p' "$WS/.central.json" 2>/dev/null | head -n 1)

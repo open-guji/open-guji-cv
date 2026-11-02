@@ -250,12 +250,13 @@ def _read_only(src) -> bool:
 
 
 def _materialize(src, ws: str, tmp: Path, cache, bucket: str, retries: int = 3,
-                 prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None) -> tuple[int, dict]:
+                 prefixes: tuple[str, ...] = (WS_YAML,) + SCOPE, reuse=None,
+                 exclude: tuple[str, ...] = ()) -> tuple[int, dict]:
     from .materialize import MaterializeError, materialize
     for _ in range(retries):
         r0 = src.status()
         try:
-            stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse)
+            stats = materialize(src, ws, tmp, prefixes, cache=cache, bucket=bucket, reuse=reuse, exclude=exclude)
         except MaterializeError:
             # 先读 source_files、后读行：中间有人推了新行（如 admissions.jsonl 追加），行数对不上会报
             # 「超出 n_lines」或 sha 不符。读的过程中工作区有新写入就重读，否则是真不一致，照抛（10-23 A30 sync 撞上）
@@ -375,9 +376,44 @@ def refresh_corpus_base(src, ws_dir: Path, *, cache=None, bucket: str = "main", 
     return rev
 
 
+#: 按需拉取（2026-11-02）：``GUJI_PULL_EXCLUDE``（逗号分隔的路径前缀）或 ``guji db pull --exclude`` 给的前缀不拉。
+#: 只跑 pipeline 的执行方（任务库 rerun_prep）用它跳过用不着、又大又常变的文件（殿本线上单 100 份 110 MB）。
+#: 这样拉下来的数据目录是「部分副本」：状态文件记 ``exclude``，push／sync 一律拒绝，要写库先不带 exclude 整拉一次。
+PULL_EXCLUDE_ENV = "GUJI_PULL_EXCLUDE"
+#: 只跑 pipeline 用不着的前缀（rerun_prep 缺省用这一组）
+RUN_EXCLUDE = ("feedback/lists/proofing/",)
+
+
+def pull_exclude(extra=()) -> tuple[str, ...]:
+    """环境变量与命令行合起来的排除前缀（去重、保序）；``-`` 或空表示不排除。"""
+    raw = [x.strip() for x in (os.environ.get(PULL_EXCLUDE_ENV) or "").split(",")] + [str(x).strip() for x in extra]
+    out: list[str] = []
+    for x in raw:
+        if not x or x == "-":
+            continue
+        if x == "run":                       # 简写：只跑 pipeline 的那一组
+            out += [y for y in RUN_EXCLUDE if y not in out]
+            continue
+        if x == WS_YAML or ".." in x.split("/") or x.startswith("/"):
+            raise SystemExit(f"--exclude 不能是 {x!r}")
+        if x not in out:
+            out.append(x)
+    return tuple(out)
+
+
+def _partial_guard(st: dict | None, what: str) -> None:
+    ex = (st or {}).get("exclude") or []
+    if ex:
+        raise SystemExit(f"本机数据目录是按需拉的部分副本（没拉 {ex}），不能 {what}："
+                         f"先不带 --exclude／{PULL_EXCLUDE_ENV} 整拉一次（guji db pull），再{what}")
+
+
 def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = False,
-         glyph: GlyphHooks | None = None) -> dict:
-    """中心库 → 数据目录。本地有未推的改动就拒绝（``force`` 丢掉）。"""
+         glyph: GlyphHooks | None = None, exclude: tuple[str, ...] = ()) -> dict:
+    """中心库 → 数据目录。本地有未推的改动就拒绝（``force`` 丢掉）。
+
+    ``exclude``（路径前缀）下的文件不拉、本机已有的删掉，状态里记下，之后 push／sync 拒绝（见 ``RUN_EXCLUDE``）。"""
+    exclude = tuple(exclude)
     ws_dir = Path(ws_dir)
     m = central_marker(ws_dir) or {}
     data = data_dir(ws_dir)
@@ -400,11 +436,13 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
         here = reuse
         reuse = lambda rel: here(rel) or ((seed / rel) if (seed / rel).is_file() else None)  # noqa: E731
     try:
-        rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=reuse)
+        rev, stats = _materialize(src, ws, tmp, cache, bucket, reuse=reuse, exclude=exclude)
     finally:
         shutil.rmtree(seed, ignore_errors=True)
     written, removed = _install(tmp, ws_dir, data)
     base = _db_manifest(src, ws)
+    if exclude:
+        base = {k: v for k, v in base.items() if not any(k.startswith(x) for x in exclude)}
     store_changed = any(old_base.get(k) != base.get(k) for k in set(old_base) | set(base) if k.startswith(GS))
     out = {"ws": ws, "rev": rev, "data_dir": str(data), "written": written, "removed": removed,
            **{k: v for k, v in stats.items() if k != "ws"}}
@@ -421,10 +459,12 @@ def pull(src, ws_dir: Path, *, cache=None, bucket: str = "main", force: bool = F
             out["glyph_db"] = glyph.rebuild(ws_dir, data / GS.rstrip("/"), glyph.db_path, extras)
             fp = glyph.fingerprint(glyph.db_path)
     write_state(data, ws=ws, branch=str(m.get("branch") or "main"), rev=rev, base=base, glyph_db_fp=fp,
-                borrow=bsig)
+                borrow=bsig, **({"exclude": list(exclude)} if exclude else {}))
     if seed_rev is not None:
         out["snapshot_rev"] = seed_rev
-    if stats.get("fetched") and _snapshots_on(src):   # 这次向库要过文件：存一份新快照给下一台新机器
+    if exclude:
+        out["exclude"] = list(exclude)
+    if stats.get("fetched") and _snapshots_on(src) and not exclude:   # 部分副本不存快照   # 这次向库要过文件：存一份新快照给下一台新机器
         out["snapshot_bytes"] = _publish_snapshot(src, ws, rev, ws_dir, data, base)
     return out
 
@@ -481,6 +521,7 @@ def push(conn, ws_dir: Path, *, actor: str | None, dry_run: bool = False, allow_
         st = {"ws": str(m["ws"]), "branch": str(m.get("branch") or "main"), "rev": 0, "base": {}}
     if st is None:
         raise SystemExit(f"数据目录 {data} 没有 {STATE}：先 guji db pull -w {ws_dir}")
+    _partial_guard(st, "push")
     base = int(st["rev"])
     exported = _export_if_changed(glyph, data, st)
     sc = scan(ws_dir, data)
@@ -917,6 +958,7 @@ def sync(src, conn, ws_dir: Path, *, actor: str | None, cache=None, bucket: str 
     st = read_state(data)
     if st is None:
         raise SystemExit(f"数据目录 {data} 没有 {STATE}：先 guji db pull -w {ws_dir}")
+    _partial_guard(st, "sync")
     ws = str(st["ws"])
     exported = _export_if_changed(glyph, data, st)
     base = st["base"]

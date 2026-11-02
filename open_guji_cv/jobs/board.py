@@ -73,17 +73,21 @@ def build(conn) -> dict:
         "          CASE WHEN j.status = 'queued' THEN j.priority END, CASE WHEN j.status = 'queued' THEN j.created_at END,"
         "          j.finished_at DESC NULLS LAST, j.id DESC", (RECENT,)))
     # 同类已成功任务的耗时（该任务成功那次领单的起止）
-    done = S._rows(conn.execute(
-        "SELECT j.kind, j.spec, extract(epoch FROM a.finished_at - a.started_at) AS secs FROM jobs.job j"
-        " JOIN jobs.attempt a ON a.job_id = j.id AND a.outcome = 'succeeded'"
-        " WHERE j.status = 'succeeded' ORDER BY a.finished_at DESC LIMIT 200"))
+    # 只取 _kind 要的两项（整份 spec 每条约 0.7 KB，看板每次领单、心跳都重算，2026-11-02 中心库流量排查）
+    done = [{"kind": d["kind"], "spec": {"steps": d["steps"], "pages": d["pages"]}, "secs": d["secs"]}
+            for d in S._rows(conn.execute(
+                "SELECT j.kind, j.spec->'steps' AS steps, j.spec->>'pages' AS pages,"
+                " extract(epoch FROM a.finished_at - a.started_at) AS secs FROM jobs.job j"
+                " JOIN jobs.attempt a ON a.job_id = j.id AND a.outcome = 'succeeded'"
+                " WHERE j.status = 'succeeded' ORDER BY a.finished_at DESC LIMIT 200"))]
     hist: dict[tuple, list[float]] = {}
     for d in done:
         k = _kind(d)
         if len(hist.setdefault(k, [])) < 30 and d["secs"] and float(d["secs"]) > 30:
             hist[k].append(float(d["secs"]))
     results = {}
-    for r in S._rows(conn.execute("SELECT job_id, name, location FROM jobs.result WHERE kind = 'pack'")):
+    for r in S._rows(conn.execute("SELECT job_id, name FROM jobs.result WHERE kind = 'pack' AND job_id = ANY(%s)"
+                                  " ORDER BY id", ([j["id"] for j in jobs],))):   # 只取看板上这些任务的，不再整表读
         results.setdefault(r["job_id"], r["name"])
     ahead = 0
     rows = []
