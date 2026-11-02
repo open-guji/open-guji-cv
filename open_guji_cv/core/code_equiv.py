@@ -414,6 +414,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="5ad584eacd0e6461eeb7e5e39a226973f0c52ef32b92d24054e3a163b593b8ef",
           old="abeefb2ca96f877eca465bc6f83fda42c09998d39a82fdbcaf05b55f508fc286",
           evidence="seed_admit 在史記 01／05／08 册共 363 页（任务库 #1835–1837，cv 083e788＝claude/shiji-run ba2b739＋本改动）上与 ba2b739 产物逐字节相同（书级开关 ref_lib_coord、group_flow_shape_ref_ok 缺省关）"),
+    # 参校本可信度 reference_trust（缺省 none）收拢 ref_lib_coord／group_flow_shape_ref_ok 两个键：2026-11-02 史記 07／08
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="910bc3d0d07762625e136648a8853ea1337f9a5b5e4013bbc2e37f29e507e175",
+          old="05cee0edaa795b1cfffa39841012cce5f734c9f9ff02daa8fb5564d6451df7e6",
+          evidence="seed_admit 在史記 07／08 册共 224 页（任务库 #1929–1930 新码 reference_trust=none 对 #1933–1934 旧码 083e788 关掉旧键，同一批显式开关）上产物逐字节相同；reference_trust=very_high 单参数复现旧键全开的 230 格新放行"),
     # 圈号 ○ 遇整理本空格位 symbol_ref_blank（缺省关）：2026-11-02 史記 02
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="7ddbe7509a3c2de9a7ab94bb7a0c23c115c0abaffc766f211e08b0c1581e4a98",
