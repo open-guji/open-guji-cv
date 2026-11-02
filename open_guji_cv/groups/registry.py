@@ -278,7 +278,7 @@ GROUPS: dict[str, GroupSpec] = {
         backends=("table",),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/ry",
         flow=FlowSpec((CTX, RY_SHAPE), review=True, review_fix_strong=True, strong_over_ref=True, lift_needs=("ctx",),
-                     tolerate=frozenset("師"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
+                     tolerate=frozenset("師臼白自口"), tolerate_ref_agree=True, ref_enter=True, ctx_over_panel=("ry_shape",)), overlaps=("rm",),
         note="按文意定（L1 规则，弃权查 L2 表）＋字形宽高比（日窄曰宽，只当第二路：强烈指向另一个字就降审，不单独补放）；补放，也复核（只降审不改字）。与日目组 rm 共用「日」。"),
     "rr": GroupSpec(
         id="rr", name="入人八", members=frozenset("人入八"),
