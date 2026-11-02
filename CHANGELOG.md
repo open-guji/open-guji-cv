@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 册配置点名表格页 `border_detect_gate.table_pages`（史記年表，Sheldon 11-02 定暂搁置）：点名的页页型记 `table`（新加进 `PAGE_TYPES`／`SKIP_TYPES`），整页 `page_type_skip` 跳过，不切分、不出待审、不进统计；优先于 `body_pages` 与 `grid_overrides_skip`。缺省空、不进参数 dump，各书产物不变。年表以后的做法见 ai-team `domain/CV/新书登记/史记文渊阁/年表方案.md`。
 - 书级「大印只认这些页」`seal_detect.stain_pages`（A32，GUJI-637，史記 D 类）：缺省 None＝照旧每页都找、不进参数 dump；殿本 20 页回放产物逐字节不变，已登记 `core/code_equiv.py`，不让各书过期。史記各册真印只在首叶，没印页的纸面底纹被认成大印（01–03 册 115 格误判遮挡），书级配 `[2]` 去掉。
 - 字形库 edition 一律是书 ID（Sheldon 11-01 定，QTW 转 A23）：`GlyphDB.admit_instance` 在库没声明 `meta.book_edition`、调用方也没点名 `edition_tag` 时抛 `MissingBookEdition`（原先静默按实例 id 前缀 v2／volNN 当 edition）；`glyph-db stats` 加 `edition_problems`，`close-check` 加 8b「字形库 edition 是书 ID」。不改产物指纹。
 - 待审成因表 `review/causes.py` 的「交给」标注：A1/A3/A4/A5/A6/A9 不再一律写「切分」，改为「对位（成片时查切分）」，A3 只差 1 格＝挤格才归切分（A22 11-1 反馈：第1轮 538 格里 489 格切分没问题）。只改文字，不改判定，不动产物指纹。
