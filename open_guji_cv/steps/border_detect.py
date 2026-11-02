@@ -102,6 +102,24 @@ def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale:
     return done
 
 
+def _apply_vline_override(res, xs: list[float]) -> None:
+    """`vline_overrides`：用人核界行替换探到的竖线（按直线），`vline_filled` 全记人核（False）。"""
+    import dataclasses
+    from ..seg.frame_types import VLine
+    top_y = float(res.top.y_at(0.0)) if res.top is not None else 0.0
+    bot_y = float(res.bottom.y_at(0.0)) if res.bottom is not None else float(res.height - 1)
+    y_mid = (top_y + bot_y) / 2.0
+    old = [(float(v.x_at(y_mid)), float(v.slope)) for v in res.verticals]
+    new = []
+    for x in sorted(float(x) for x in xs):
+        sl = min(old, key=lambda t: abs(t[0] - x))[1] if old else 0.0
+        new.append(VLine(x_at_top=x - sl * y_mid, slope=sl))
+    res.verticals = new
+    res.verticals_straight = list(new)
+    res.vline_segments = 1
+    res.vline_filled = [False] * len(new)
+
+
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
@@ -137,6 +155,13 @@ class BorderDetectParams(BaseModel):
     （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
     `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
 
+    vline_overrides: dict[int, list[float]] = {}
+    """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
+    小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
+    **右上原点 x（与 `borders.verticals` 同一空间：离页右缘的距离，版框中高处，升序＝右→左）**整串替换探到的竖线；每条线的斜率取探到的最近一条（没有就 0），一律按直线。
+    写法 `params: {border_detect: {vline_overrides: {63: [0, 167, 363, 562, 775, 1055, 1274, 1484, 1735]}}}`。
+    缺省空，空时本字段不进参数 dump，产物与加字段前逐字节相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
@@ -150,6 +175,8 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
+        if isinstance(d, dict) and not self.vline_overrides:
+            d.pop("vline_overrides", None)
         return d
 
 
@@ -222,6 +249,8 @@ class BorderDetectStep(Step):
         if p.merge_narrow_pair:
             res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
                                                       leaf_layout=ctx.book.leaf_layout)
+        if page in p.vline_overrides:
+            _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
         from ..feedback.lookup import resolved_head_raise
         hr_verdicts = {c: n for (pg, c), n in resolved_head_raise(ctx.book.id).items() if pg == page}

@@ -120,6 +120,10 @@ _SJ_788 = ("史記文淵閣本册 01–03 坐标对位（#788）在 align_ref �
            "职名列按次序配，逻辑在 align_ref_coord._coord_relaxed）；开关关着时 align_ref 在殿本 vol06 48 页（每 4 页取 1，加坐标退回页）"
            "与 vol30 46 页（同法）上与 be17cce 产物逐字节相同；2026-11-02 合 dev 后重证：史記 04 册 10 页（coord_relaxed 关着）与 origin/dev 逐字节相同；scripts/code_equiv.py check")
 
+_SJ_VLINE = ("border_detect 加缺省关的页级人核界行 vline_overrides（史記 04 p120/p122、06 p63 右/左外框被扫描裁掉，界行整串错一位）："
+             "不配时 border_detect 在史記 04 册 10 页（--pages 2,10,34,47,80,100,120,122,138,141）上与 origin/dev eb68e864 产物逐字节相同；"
+             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-02")
+
 _SJ_DP = ("align_ref 在史記文淵閣本 04 册 10 页（--pages 2,10,34,41,43,47,120,122,124,138）上与 origin/dev（含 #788）产物逐字节相同；"
           "coord_dp 关着（册 yaml coord_dp: false，缺省）；scripts/code_equiv.py check，2026-11-02")
 
@@ -441,6 +445,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="49a9e0c6a90d8f43ea6d054c1f20531123534ae6f26e2798fcf2fee51e24ec74",
           old="7edd6f3d13885a5efd87a18c651533ac122168f8a3d89126e72ec394fc0e8758",
           evidence=_SJ_DP),
+    Equiv(module="open_guji_cv.steps.border_detect",
+          new="a97bd62bf8710c31e9bec09ee1e51a960bc9ea6eca007ce7d5749dd781e0bd52",
+          old="357436b41d433d33c194d84e2b114c2148266f9350fc9fd33a4771428c894550",
+          evidence=_SJ_VLINE),
 )
 
 
