@@ -708,6 +708,11 @@ class RowSegmentParams(BaseModel):
     #: 要关：书 yaml `params: {row_segment: {layout_prior: ""}}`。
     layout_prior: str = DEFAULT_LAYOUT
     layout_fingerprint: str = ""         # 表内容 sha，开关开着时自动填（表一改 → Step3 判过期）
+    #: **格位表的格数大于版式行数时按表放宽**（2026-11-02，史記文淵閣本）：`n_body_slots` 取自 `chars_per_line`（21），
+    #: 但雙行小注的列常排 22–24 行（小字行距比大字小），逐列格位表（daizhige）按实际行数记 22–24 个格位；
+    #: 切分被卡在 21 格，最末几格被并成一个超高格，字整列少读（史記 01–10 册正文待审里约 140 格因此没有整理本字）。
+    #: 开着时命中表的列 `n_body_slots` 取 max(原值, 表里最大格位)。书级开关；False＝关（缺省，不进参数哈希）。
+    layout_slots_grow: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -765,6 +770,8 @@ class RowSegmentParams(BaseModel):
             if not self.layout_prior:
                 d.pop("layout_prior", None)
                 d.pop("layout_fingerprint", None)
+            if not self.layout_slots_grow:
+                d.pop("layout_slots_grow", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -939,6 +946,8 @@ class RowSegmentStep(Step):
                 if want != n_raised_col:
                     lay_alt = (n_raised_col, gc.top_slack, {s for s in occ if s > 0 or s >= -n_raised_col})
                 n_raised_col = want
+                if p.layout_slots_grow and occ and max(occ) > n_body_col:
+                    n_body_col = max(occ)
                 top_slack = gc.border_top if want else gc.top_slack
                 lay_kw, forced_jz, forced_main = _layout_kw(lay, occ, n_body_col, n_raised_col)
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,

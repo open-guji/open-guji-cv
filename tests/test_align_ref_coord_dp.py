@@ -49,3 +49,10 @@ def test_dp_params_off_by_default_and_not_in_dump():
     p = AlignRefParams()
     assert p.coord_dp is False and "coord_dp" not in p.model_dump()
     assert AlignRefParams(coord_dp=True).model_dump()["coord_dp"] is True
+
+
+def test_layout_slots_grow_off_by_default_and_not_in_dump():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert RowSegmentParams().layout_slots_grow is False
+    assert "layout_slots_grow" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(layout_slots_grow=True).model_dump()["layout_slots_grow"] is True
