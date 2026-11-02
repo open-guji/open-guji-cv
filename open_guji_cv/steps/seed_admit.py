@@ -38,6 +38,7 @@ dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 7
 from __future__ import annotations
 
 import logging
+from typing import Literal
 import re
 from functools import lru_cache
 
@@ -244,10 +245,6 @@ class SeedAdmitParams(BaseModel):
     曾會㑹 L1 弃权，01–10 正文约 170 格因此送审）。
     同义异体组（`kind=variant`，如 別别）的补放一支：字组判出组内另一写法、与整理本字不一（`ref_dissent`）→ 取整理本形，
     证据 `ref_dissent_follow`（2026-11-02）；不同义的形近组、整理本在组外都不适用。空＝不放宽（不进参数 dump）。"""
-    group_flow_shape_ref_ok: list[str] = Field(default_factory=list)
-    """书级：这几组复核已放行格时，只有字形路 `ids` 给出别的字（文意没有异议）、已放行字＝整理本字（现役对位缺格时用坐标对位字）
-    → 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：廣→賔、還→遺 等 ids 模板库对写本形不准，看图 23／12 格全是整理本对）。
-    空＝不放宽（不进参数 dump）。"""
     group_flow_joint: bool = True
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
@@ -680,19 +677,24 @@ class SeedAdmitParams(BaseModel):
     万一参校本有错，我们还可以回过头来再次整理」——字组拆不开的写法、码位异体（隠𨼆隱、傳𫝊）落整理本码位，
     暂归一放行的格也改回整理本形；证据 `follow_ref.via=variants`／`lane.via=variants` 留痕，方便按参校本错误回查。
     没有参校本的书别开。False＝只认 `follow_ref` 表（不进 dump）。"""
-    ref_lib_coord: bool = False
-    """书级「按整理本走」（缺省关；2026-11-01 史記文淵閣本）：待审格字＝坐标对位的整理本字（`align_ref.coord`，对不上逐列本时
-    没有现役对位字，`relax_ref_agree` 的 `ref_lib` 碰不到）＝库首位，库首位 cov ≥ `ref_lib_coord_cov`、库没判 diff、无护栏、
-    库里没有语义不同的对手紧咬（差 < `ref_lib_coord_gap`）→ 放行整理本字（通道 `ref_lib_coord`，字形不进库）。
-    不碰：人裁格、排除、遮挡、`_LANE_HARD` 疑问、日曰目／己已巳／入人八／一二 这几个有专门解法的字；字组流程只弃权或只有字形路
-    （ids）／同义异体给了别的字的格照放，文意给了别的字的不放；人裁绑丢的格只在旧人裁字＝放行字时放。
-    史記 01–10 册 G 类（字＝参校、库或护栏不放）看图 89 格几乎全是整理本对。"""
-    ref_lib_coord_cov: float = 0.90
-    ref_lib_coord_gap: float = 0.005
-    ref_lib_coord_blind: bool = False
-    """`ref_lib_coord` 的补充（缺省关，需同开 `ref_lib_coord`）：格带 `ctx_guard_ref`（库首位不是整理本字——库不认得这个写法——
-    文意又与整理本不同）、库首位 cov < 0.975、且本列对位健康（列内已放行格字＝整理本字占比 ≥ 0.8、至少 3 格）→ 也按整理本放行，
-    evidence `lane.blind=true` 留痕。史記 01–10 册这类 66 格，看图 49 格全是整理本对（库对罕见字形没有刻例，文意模型读错）。"""
+    reference_trust: Literal["none", "high", "very_high"] = "none"
+    """书级「参校本可信度」（缺省 `none`＝不额外信任，不进参数 dump；史記文淵閣本 2026-11-02，用户定：把「按参校本走」收成一个有语义的参数）。
+
+    四库系书有一个置信度很高的参校本（同一底本的整理文本）。机器认的字与参校本一致、又没有强反证时，就按参校本走，
+    不再因为某个弱解法弃权或反对而送人审。档位逐级叠加：
+
+    - `high`：
+      ① 参校字＝库首位＝本格字（含只有坐标对位、没有现役对位的格）、库首位 cov ≥ 0.90、库没判 diff、无护栏、库里没有语义不同的
+        对手紧咬（差 < 0.005）→ 放行（通道 `ref_lib_coord`，字形不进库）；人裁绑丢的格只在旧人裁字＝放行字时放；
+        日曰目／己已巳／入人八／一二 有专门解法，不碰；
+      ② 字组复核：解法全弃权的己已巳、曾會㑹（`abstain_ref_ok`）、字组补放只有字形路给参校字的日曰（`lift_shape_ref`）、
+        只有字形路 ids 反对而字＝参校字的廣賔 還遺 衞衛 等（`REFERENCE_TRUST_SHAPE_GROUPS`）→ 不降审、不退人审；
+      ③ 异体拆不开的写法取参校本码位并留痕（`follow_ref_variants`）。
+    - `very_high`：另加「库认不出」的格——库首位不是参校字、但格带 `ctx_guard_ref`（文意与参校本不同）、库首位 cov < 0.975、
+      且本列对位健康（列内已放行格字＝参校字占比 ≥ 0.8、至少 3 格）→ 也按参校本放，evidence `lane.blind=true` 留痕。
+
+    这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
+    旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
     follow_ref_cov: float = 0.92
     """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
     follow_ref_gap: float = 0.005
@@ -737,6 +739,21 @@ class SeedAdmitParams(BaseModel):
 
     `glyph_match` 没有这个开关：本格没图就没法判，停页是对的。
     缺省值不进 dump，`params_hash` 与加字段前逐位相同。"""
+
+    def _rt_rank(self) -> int:
+        return {"none": 0, "high": 1, "very_high": 2}[self.reference_trust]
+
+    def _rt_shape_ref_ok(self) -> frozenset:
+        return frozenset(REFERENCE_TRUST_SHAPE_GROUPS) if self._rt_rank() >= 1 else frozenset()
+
+    def _rt_abstain_ref_ok(self) -> frozenset:
+        return frozenset(self.group_flow_abstain_ref_ok) | (frozenset(REFERENCE_TRUST_ABSTAIN_GROUPS) if self._rt_rank() >= 1 else frozenset())
+
+    def _rt_lift_shape_ref(self) -> frozenset:
+        return frozenset(self.group_flow_lift_shape_ref) | (frozenset(REFERENCE_TRUST_LIFT_SHAPE_GROUPS) if self._rt_rank() >= 1 else frozenset())
+
+    def _follow_variants(self) -> bool:
+        return self.follow_ref_variants or self._rt_rank() >= 1
 
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
@@ -791,11 +808,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("human_unbound_shift_ok", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
             d.pop("group_flow_lift_shape_ref", None)
-        if isinstance(d, dict) and not self.group_flow_shape_ref_ok:
-            d.pop("group_flow_shape_ref_ok", None)
-        if isinstance(d, dict) and not self.ref_lib_coord:
-            for k in ("ref_lib_coord", "ref_lib_coord_cov", "ref_lib_coord_gap", "ref_lib_coord_blind"):
-                d.pop(k, None)
+        if isinstance(d, dict) and self.reference_trust == "none":
+            d.pop("reference_trust", None)
         if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
@@ -1629,10 +1643,10 @@ class SeedAdmitStep(Step):
             d_pua = _pua_rule_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_pua
             n_review -= d_pua
-        if p.follow_ref or p.follow_ref_variants:
+        if p.follow_ref or p._follow_variants():
             # 5a' follow_ref（升＋改字）：照录整理本的异体对
             d_fr = _follow_ref_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap,
-                                    vmap if p.follow_ref_variants else None)
+                                    vmap if p._follow_variants() else None)
             n_auto += d_fr
             n_review -= d_fr
         if p.edge_pair:
@@ -1640,7 +1654,7 @@ class SeedAdmitStep(Step):
             d_ep = _edge_pair_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap)
             n_auto += d_ep
             n_review -= d_ep
-        if p.ref_lib_coord:
+        if p._rt_rank() >= 1:
             # 5a''' ref_lib_coord（升）：坐标对位的整理本字＝库首位，按整理本放（史記 2026-11-01）
             d_rlc = _ref_lib_coord_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap)
             n_auto += d_rlc
@@ -2258,7 +2272,14 @@ def _pua_rule_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
     return n
 
 
-#: `ref_lib_coord` 不碰的字：有专门解法（字组流程）的几族——日曰目、己已巳、入人八、一二。
+#: `reference_trust` 各项的书无关默认：字形路 ids 反对、字＝参校字时不降审的组（看图核对过的写本形错判与同义异体）；
+#: 解法全弃权时按参校本走的组；字组补放字形路给参校字就放的组；库首位放行的 cov 下限与对手差。
+REFERENCE_TRUST_SHAPE_GROUPS = ("guang", "yh", "fc", "em", "weiw", "lv", "qik", "lih", "jue", "jiao", "weim", "zh")
+REFERENCE_TRUST_ABSTAIN_GROUPS = ("jys", "zh")
+REFERENCE_TRUST_LIFT_SHAPE_GROUPS = ("ry",)
+REFERENCE_TRUST_COV = 0.90
+REFERENCE_TRUST_GAP = 0.005
+#: `reference_trust` 的库首位放行不碰的字：有专门解法（字组流程）的几族——日曰目、己已巳、入人八、一二。
 _REF_LIB_COORD_SKIP = frozenset("日曰目己已巳入人八一二")
 #: `ref_lib_coord` 认的疑问（白名单，别的一律不碰）：库不确定／上下文不足、整理本护栏、字组只弃权或只有分歧、人裁绑丢（另判）。
 _REF_LIB_COORD_DOUBTS = ("库 unsure", "库 same 但准入被拦", "上下文 margin 不足", "near_form", "ctx_guard_ref",
@@ -2304,10 +2325,10 @@ def ref_lib_coord_decide(*, char, ref, cands, verdict, guard, doubts, evidence, 
 def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, vmap) -> int:
     """按整理本放行：坐标对位字（没有时看现役对位字）＝库首位＝本格字（`ref_lib_coord`）。→ 放行格数。判据见 `ref_lib_coord_decide`。"""
     n = 0
-    ok_groups = frozenset(p.group_flow_shape_ref_ok)
+    ok_groups = p._rt_shape_ref_ok()
     for col in out:
         blind_ok = False
-        if p.ref_lib_coord_blind:
+        if p._rt_rank() >= 2:
             # 本列对位健康：列内已放行格里字＝整理本字的占比 ≥ 0.8（至少 3 格）——坐标对位没有整体错位
             hit = tot = 0
             for r in col.chars or []:
@@ -2332,7 +2353,7 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
             if not ref_lib_coord_decide(char=rec.char, ref=ref, cands=list(m.candidates or []),
                                         verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
                                         doubts=rec.doubts, evidence=rec.evidence, semantic=vmap.semantic,
-                                        cov_min=p.ref_lib_coord_cov, gap_min=p.ref_lib_coord_gap,
+                                        cov_min=REFERENCE_TRUST_COV, gap_min=REFERENCE_TRUST_GAP,
                                         shape_ok=ok_groups, blind_ok=blind_ok):
                 continue
             top, cov = m.candidates[0][0], float(m.candidates[0][1])
@@ -2828,9 +2849,9 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      freq_table=_load_freq(p.group_flow_freq) if p.group_flow_freq else {},
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
-                     lift_shape_ref=frozenset(p.group_flow_lift_shape_ref),
-                     abstain_ref_ok=frozenset(p.group_flow_abstain_ref_ok),
-                     shape_ref_ok=frozenset(p.group_flow_shape_ref_ok),
+                     lift_shape_ref=p._rt_lift_shape_ref(),
+                     abstain_ref_ok=p._rt_abstain_ref_ok(),
+                     shape_ref_ok=p._rt_shape_ref_ok(),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
                      l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
@@ -2879,7 +2900,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_lift_shape_ref or p.group_flow_abstain_ref_ok or p.group_flow_shape_ref_ok)
+                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p._rt_lift_shape_ref() or p._rt_abstain_ref_ok() or p._rt_shape_ref_ok())
                                                                    and ctx is not None) else None)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
