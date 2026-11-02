@@ -14,7 +14,7 @@
 
 **超时分两档**（GUJI-707）：国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手（GUJI-703），原先一律 120 秒，
 一次卡住就白等两分钟。现在小 JSON 请求（查表、签名、状态、whoami、分支、追加事件等：回 JSON、请求体不是大块字节）
-缺省 ``SMALL_TIMEOUT`` = 25 秒（``GUJI_DATA_TIMEOUT`` 可改），超时照常走退避重试，且网络错至少重试到
+缺省 ``SMALL_TIMEOUT`` = 45 秒（``GUJI_DATA_TIMEOUT`` 可改），超时照常走退避重试，且网络错至少重试到
 ``NET_TRIES`` 次；收发大块字节的（快照、备份、产物包、R2 直取图）维持 120 秒。超时是每次 socket 操作的上限，
 不是整次传输的上限，大页慢慢流也不会被掐断。
 """
@@ -44,7 +44,7 @@ PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页
 MAX_IN = 200            # 同列多值过滤一次最多几个值（Worker tables.ts 的 MAX_IN）
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 BIG_TIMEOUT = 120.0      # 大块字节（快照、备份、产物包、R2 图）每次 socket 操作的超时（秒）
-SMALL_TIMEOUT = 25.0     # 小 JSON 请求的缺省超时（秒），环境变量 GUJI_DATA_TIMEOUT 可改（GUJI-707）
+SMALL_TIMEOUT = 45.0     # 小 JSON 请求的缺省超时（秒），环境变量 GUJI_DATA_TIMEOUT 可改（GUJI-707；2026-11 由 25 放宽，几十台同时拉库时服务端偶尔慢过 25 秒）
 NET_TRIES = 4            # 小请求遇到网络错（含超时）至少试这么多次，不受调用方 tries=2 限（那是给 503 拆批留的）
 
 

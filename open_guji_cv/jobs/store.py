@@ -16,6 +16,9 @@ from .spec import book_id as _book_id
 
 LEASE_MIN = int(os.environ.get("GUJI_JOBS_LEASE_MIN", "10"))
 RETRY_BACKOFF_MIN = int(os.environ.get("GUJI_JOBS_BACKOFF_MIN", "5"))   # 环境类失败重排后隔几分钟（×次数）
+#: 瞬时超时（中心库一时慢、几十台同时拉库读超时）：仍是环境类、换个时间再试，但不计入连续环境失败暂停；重排时间随机错峰
+TRANSIENT = "环境（瞬时）："
+TRANSIENT_DELAY_S = (120, 600)          # 随机隔 2–10 分钟
 
 
 def connect():
@@ -324,14 +327,18 @@ def finish(conn, job_id: int, attempt_id: int, outcome: str, *, error: str | Non
                      " WHERE id=%s", (outcome, exit_code, (log_tail or "")[-8000:] or None, attempt_id))
         j = _one(conn.execute("SELECT attempts, max_attempts FROM jobs.job WHERE id=%s FOR UPDATE", (job_id,)))
         status = outcome
-        if outcome == "failed" and j and j["attempts"] < j["max_attempts"] and (error or "").startswith("环境："):
-            status = "queued"      # 环境类故障（断网、库连不上）换个会话再试；配置或代码错不重试
-        # 退回排队的隔 5×已领次数 分钟再领，且优先让别的执行方领（见 _CLAIM 排序）
+        if outcome == "failed" and j and j["attempts"] < j["max_attempts"] and (error or "").startswith(("环境：", TRANSIENT)):
+            status = "queued"      # 环境类故障（断网、库连不上、拉库超时）换个会话再试；配置或代码错不重试
+        transient = bool(error) and error.startswith(TRANSIENT)
+        # 退回排队的：普通环境类隔 5×已领次数 分钟再领；瞬时超时随机隔一段，错峰不一起撞回去。都优先让别的执行方领（见 _CLAIM 排序）
         conn.execute(
             "UPDATE jobs.job SET status=%s, error=%s, updated_at=now(), finished_at=CASE WHEN %s='queued'"
             " THEN NULL ELSE now() END, stage=CASE WHEN %s='queued' THEN NULL ELSE stage END,"
-            " run_after=CASE WHEN %s='queued' THEN now() + make_interval(mins => %s * attempts) END WHERE id=%s",
-            (status, error, status, status, status, RETRY_BACKOFF_MIN, job_id))
+            " run_after=CASE WHEN %s='queued' THEN now() + CASE WHEN %s"
+            " THEN make_interval(secs => %s + floor(random() * %s))"
+            " ELSE make_interval(mins => %s * attempts) END END WHERE id=%s",
+            (status, error, status, status, status, transient, TRANSIENT_DELAY_S[0],
+             TRANSIENT_DELAY_S[1] - TRANSIENT_DELAY_S[0], RETRY_BACKOFF_MIN, job_id))
         _event(conn, job_id, attempt_id, "finish", {"succeeded": "完成", "failed": "失败", "blocked": "拦下（检查没过）",
                                                      "cancelled": "已停", "queued": "失败，退回排队重试"}[status]
                + (f"：{error}" if error else ""), level="info" if status == "succeeded" else "warn")

@@ -25,7 +25,7 @@ def _no_sleep(monkeypatch):
 def test_small_timeout_env(monkeypatch):
     monkeypatch.delenv("GUJI_DATA_TIMEOUT", raising=False)
     assert C.default_small_timeout() == C.SMALL_TIMEOUT
-    assert 20 <= C.SMALL_TIMEOUT <= 30 and C.BIG_TIMEOUT == 120
+    assert 20 <= C.SMALL_TIMEOUT <= 60 and C.BIG_TIMEOUT == 120
     monkeypatch.setenv("GUJI_DATA_TIMEOUT", "7.5")
     assert C.default_small_timeout() == 7.5
     assert C.WorkerSource(url="http://x", token="t").small_timeout == 7.5
