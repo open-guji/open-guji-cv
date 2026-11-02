@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- `guji source pull` 等动作在 dev 上报 invalid choice：拆分 P1a（#880）给 `cli_source` 加的插件表 `COMMANDS` 盖掉了同名的动作表；动作表改名 `ACTIONS`。只影响 dev，未发版。
+
 ### Changed
 - 拆分 P2 准备：整理脚本 auto_cycle、proof_cycle、republish 开工先调 `scripts/zhengli/ensure_manager.py`（云端复用 `ensure_manager.sh` 装／更新 guji-manager main；别的机器没装只提示），为下一批搬走 `guji source`／`cellvotes`／`freeze` 铺路。
 - 拆分 P2 第一批：`guji opinions`（`opinions/`、`cli_opinions.py`、`config/opinions/rules.json` 与 `tests/opinions/`）搬去 guji-manager（同日合 guji-manager 对应 PR），cv 删除；`cli_v2.MOVED_TO_MANAGER` 登记，没装 manager 时给装法；新增 `MIN_MANAGER_VERSION`（opinions 要 ≥0.1.0），旧版 manager 里早先复制的过期副本（云端快照种子带着 10-27 的 opinions）不再被认，提示更新。`manager_api` 加 `data_home`、`central_data_dir`、`CentralError`。不碰任何 Step，`code_hash` 不变。
