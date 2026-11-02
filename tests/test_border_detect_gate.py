@@ -154,6 +154,36 @@ def test_body_pages_empty_not_in_params_dump():
     assert BorderDetectGateParams(body_pages=[88]).model_dump()["body_pages"] == [88]
 
 
+def test_table_pages_forces_skip_even_on_full_grid(tmp_path, monkeypatch):
+    """册配置 table_pages 点名的表格页（史記年表）：页型规则判正文、栏格完整也整页跳过，页型记 table。"""
+    m = _run_gate_params(tmp_path, monkeypatch, {"border_detect_gate": {"table_pages": ["1-3"]}},
+                         ("body", "standard"))
+    assert not m.admitted
+    assert (m.page_type, m.page_type_policy) == ("table", "skip")
+    assert any(r.startswith("page_type_skip") for r in m.reject)
+    assert any(f.startswith("page_type_table") for f in m.flags)
+
+
+def test_table_pages_wins_over_body_pages(tmp_path, monkeypatch):
+    m = _run_gate_params(tmp_path, monkeypatch,
+                         {"border_detect_gate": {"table_pages": [PAGE], "body_pages": [PAGE]}}, ("cover", "skip"))
+    assert not m.admitted and m.page_type == "table"
+    assert not any(f.startswith("page_type_forced") for f in m.flags)
+
+
+def test_table_pages_other_page_unchanged(tmp_path, monkeypatch):
+    m = _run_gate_params(tmp_path, monkeypatch, {"border_detect_gate": {"table_pages": [PAGE + 1]}},
+                         ("body", "standard"))
+    assert m.admitted, m.reject
+    assert m.page_type == "body"
+
+
+def test_table_pages_empty_not_in_params_dump():
+    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
+    assert "table_pages" not in BorderDetectGateParams().model_dump()
+    assert BorderDetectGateParams(table_pages=["8-163"]).model_dump()["table_pages"] == ["8-163"]
+
+
 def test_full_uniform_grid_overrides_page_type_skip(tmp_path, monkeypatch):
     """页型规则判 label/skip，但探出完整等宽的 9 列栏格：卷末少字页，按正文走并留 flag
     （殿本 vol13 p89、vol14 p174 整页没切，2026-10-25）。"""
