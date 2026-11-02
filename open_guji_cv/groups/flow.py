@@ -646,15 +646,18 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 坐标对位说是组里另一个字、给字的只有单遍文意表：不补放（vol13 63:5:18、vol17 161:8:8、vol19 27:7:9
                 # 单遍 haiku 读反，A24 10-24）；文意 strong、两遍以上同字、L1 规则或别的方法同字时照放
                 ch, why = None, "coord_dissent"
-            if (ch is None and why == "ref_dissent" and mode == "lift" and g in cfg.abstain_ref_ok
+            if (ch is None and why in ("ref_dissent", "abstain") and mode == "lift" and g in cfg.abstain_ref_ok
                     and GROUPS[g].kind == "variant" and (fr := ref or (veto_refs or {}).get(r.id))
                     and fr in GROUPS[g].members):
                 given = {t["char"] for t in trail if t["char"]}
-                if given and given <= set(GROUPS[g].members):
-                    # 同义异体组：方法给的是组里另一种写法、与整理本不一，写法本就拆不开（別别 之类）：书级「按整理本走」，
-                    # 取整理本形，留痕 ref_dissent_follow 方便回查（史記 2026-11-02；不同义的形近组不适用）
+                if given <= set(GROUPS[g].members) and (given or not any(
+                        str(t.get("why") or "").startswith("abstain:other") for t in trail)):
+                    # 同义异体组：写法本就拆不开（別别 隠隱 之类），书级「按整理本走」→ 取整理本形，留痕方便回查（史記 2026-11-02）。
+                    # ref_dissent：方法给了组里另一种写法、与整理本不一；abstain：没有方法给字、整理本字在组内（库首位可以不是它）。
+                    # 不同义的形近组不适用；文意明说「其他」的弃权不取。
                     ch, why = fr, "agree"
-                    trail = trail + [{"solver": "form:ref", "char": fr, "why": "ref_dissent_follow"}]
+                    trail = trail + [{"solver": "form:ref", "char": fr,
+                                      "why": "ref_dissent_follow" if given else "abstain_ref_follow"}]
             if ch is None and why not in ("weak",):
                 vch, vitem = _vis_try(g, r, trail, ref or (veto_refs or {}).get(r.id), cfg, norm, patch_fn, *wins.get(r.id, (None, None)))
                 if vitem is not None:
