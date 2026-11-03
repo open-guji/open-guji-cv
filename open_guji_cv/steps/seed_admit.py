@@ -715,6 +715,13 @@ class SeedAdmitParams(BaseModel):
 
     这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
     旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
+    ref_topk_follow: bool = False
+    """库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
+    第 2 轮 P 类「机器字≠整理本」90 + 「整理本改字层」71 格看图：161 格里整理本字对的 ≥ 95%，库首位是形近字抢先；
+    整理本字在库前 5 名的 59 格逐格看图全是整理本对，整理本字不在前 5 的 102 格里才出现机器对、整理本错的几例）。
+    要 `reference_trust: very_high`、本列对位健康（列内已放行格字＝整理本字占比 ≥ 0.8、至少 3 格）、
+    无护栏、库没判 diff、无字组解法反对，疑问码只限 `_REF_LIB_COORD_DOUBTS`；日曰目／己已巳／入人八／一二 不碰。
+    通道 `ref_lib_coord`，evidence `lane.topk_rank` 留痕，方便按参校本错误回查。False＝关（不进 dump）。"""
     follow_ref_seen: str = ""
     """看图核实过的字对（通道 `follow_ref`，证据 `via=seen`，A24 2026-11-02，全唐文 Z 弃权／N 形近护栏）。格式同 `follow_ref`：
     逗号分隔的 `整理本形=库里另一形`（王=玉,天=大,永=氷 …）。这些对子在本书按字对抽样看图（每对 16 格）整理本形全对、机器读错，
@@ -838,6 +845,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_lift_shape_ref", None)
         if isinstance(d, dict) and self.reference_trust == "none":
             d.pop("reference_trust", None)
+        if isinstance(d, dict) and not self.ref_topk_follow:
+            d.pop("ref_topk_follow", None)
         if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
@@ -1705,6 +1714,10 @@ class SeedAdmitStep(Step):
             d_rlc = _ref_lib_coord_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap)
             n_auto += d_rlc
             n_review -= d_rlc
+            if p.ref_topk_follow and p._rt_rank() >= 2:
+                d_tk = _ref_topk_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap)
+                n_auto += d_tk
+                n_review -= d_tk
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
@@ -2333,6 +2346,80 @@ _REF_LIB_COORD_SKIP = frozenset("日曰目己已巳入人八一二")
 _REF_LIB_COORD_DOUBTS = ("库 unsure", "库 same 但准入被拦", "上下文 margin 不足", "near_form", "ctx_guard_ref",
                          "context_variant_form", "group_flow_abstain", "group_flow_joint", "group_flow_ref_dissent",
                          "group_flow_coord_dissent", "human_unbound", "lane_coord_fallback")
+
+
+#: `ref_topk_follow`：整理本字在库前 5 名候选里、与首位 cov 差不超过这个数才按整理本放。
+REFERENCE_TRUST_TOPK_GAP = 0.05
+
+
+def ref_topk_decide(*, char, ref, cands, verdict, guard, doubts, evidence, semantic, shape_ok=frozenset(),
+                    gap_max: float = REFERENCE_TRUST_TOPK_GAP) -> int:
+    """`ref_topk_follow` 的判据，纯函数。待审格：库首位≠整理本字、整理本字在前 5 名且 cov 差 ≤ `gap_max` →
+    返回整理本字在候选里的名次（2–5），否则 0。"""
+    if not char or not ref or ref == "〓" or char == ref or char in _REF_LIB_COORD_SKIP or ref in _REF_LIB_COORD_SKIP:
+        return 0
+    if char in _JYS or ref in _JYS or guard is not None or verdict == "diff" or not cands:
+        return 0
+    ds = [d for d in (doubts or []) if isinstance(d, str)]
+    if any(not d.startswith(_REF_LIB_COORD_DOUBTS) for d in ds):
+        return 0
+    names = [c for c, _v in cands[:5]]
+    if ref not in names or names[0] == ref:
+        return 0
+    if float(cands[0][1]) - float(cands[names.index(ref)][1]) > gap_max:
+        return 0
+    ev = evidence or {}
+    h = ev.get("human_unbound")
+    if h and h.get("char") != ref:
+        return 0
+    g = ev.get("group") or {}
+    for t in g.get("solvers") or []:
+        c = t.get("char")
+        if c and c != ref and not (str(t.get("solver", "")) == "ids" and (semantic(c) == semantic(ref)
+                                                                         or g.get("id") in shape_ok)):
+            return 0
+    return names.index(ref) + 1
+
+
+def _ref_topk_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, vmap) -> int:
+    """`ref_topk_follow`：库首位是形近字、整理本字在前 5 名且 cov 接近 → 按整理本放。→ 放行格数。"""
+    n = 0
+    ok_groups = p._rt_shape_ref_ok()
+    for col in out:
+        hit = tot = 0
+        for r in col.chars or []:
+            if r.admit and r.char:
+                rf = coord.get(r.id) or (amap.get(r.id) or (None,))[0]
+                if rf and rf != "〓":
+                    tot += 1
+                    hit += r.char == rf
+        if not (tot >= 3 and hit / tot >= 0.8):
+            continue
+        for rec in col.chars or []:
+            if rec.admit or rec.channel == "human" or rec.provenance == "human":
+                continue
+            ds = set(rec.doubts or [])
+            if "excluded" in ds or "occluded" in ds:
+                continue
+            ref = coord.get(rec.id) or (amap.get(rec.id) or (None,))[0]
+            m = mmap.get(rec.id)
+            if not m or not ref:
+                continue
+            rank = ref_topk_decide(char=rec.char, ref=ref, cands=list(m.candidates or []),
+                                   verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
+                                   doubts=rec.doubts, evidence=rec.evidence, semantic=vmap.semantic,
+                                   shape_ok=ok_groups)
+            if not rank:
+                continue
+            top, cov = m.candidates[0][0], float(m.candidates[0][1])
+            rec.char = ref
+            rec.admit, rec.channel, rec.provenance = True, "ref_lib_coord", "match"
+            rec.evidence = {**(rec.evidence or {}),
+                            "lane": {"lane": "ref_lib_coord", "lib": top, "cov": round(cov, 4), "ref": ref,
+                                     "topk_rank": rank, "prev_doubts": list(rec.doubts or [])}}
+            rec.doubts = ["lane_ref_lib_coord"]
+            n += 1
+    return n
 
 
 def ref_lib_coord_decide(*, char, ref, cands, verdict, guard, doubts, evidence, semantic, cov_min: float,
