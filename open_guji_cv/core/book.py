@@ -92,8 +92,8 @@ class BookSpec:
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
-    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。不写 = 按 `edition` 选（`core/pipeline.default_pipeline_id`）。
-    #: 自由版式的坊刻本（yxat）写 `pipeline: keben_free`——edition 仍是 keben，字形库分域不变。
+    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-03 起写 `seg_set:` 就够了，管线由套书推
+    #: （`core/seg_set.SEG_SET_PIPELINE`）；都不写按 `edition` 选（`core/pipeline.default_pipeline_id`）。写了仍优先。
     pipeline: str | None = None
     #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
     seg_set: str | None = None
@@ -321,7 +321,7 @@ class BookSpec:
     #: 加书级参数又要新开一个顶层字段。跟管线 yaml 用同一个名字、同一种形状，
     #: 也省得两处各记一套写法。
     #:
-    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） <
+    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） < 套书缺省 `books/<套书>/defaults.yaml` <
     #: **这里**（基础配置 ∪ 册 yaml ∪ `--override`） < 调用方覆盖（CLI `--params` / 控制台表单）——
     #: 合并逻辑在 `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前按字段叠一层
     #: （2026-11-03 起在字典层面叠；以前管线 yaml 写过的字段册配置盖不住）。
