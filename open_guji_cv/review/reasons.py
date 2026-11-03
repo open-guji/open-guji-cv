@@ -251,14 +251,18 @@ def lib_counts(glyph_db) -> Callable[[str], int] | None:
     return lambda ch: n.get(ch, 0)
 
 
+def _default_are_variants():
+    try:
+        from ..variants import are_variants as _av
+        return _av
+    except Exception:  # noqa: BLE001 —— 异体表读不到就不判异体，落到后面的规则
+        return None
+
+
 def reasons_for_pending(doc: dict, products_dir, book: str, *, glyph_db=None, are_variants=None) -> dict[str, tuple[R, str]]:
     """待审单 `doc` 的每格 → (原因, 细节)。产物里找不到的格（如复审格）只用单上的字段判，判不出就 `unknown`。"""
     if are_variants is None:
-        try:
-            from ..variants import are_variants as _av
-            are_variants = _av
-        except Exception:  # noqa: BLE001 —— 异体表读不到就不判异体，落到后面的规则
-            are_variants = None
+        are_variants = _default_are_variants()
     prod = book_cells(products_dir, book)
     cells: list[Cell] = []
     for x in doc.get("cells", []):
@@ -287,3 +291,18 @@ def stamp(doc: dict, reasons: dict[str, tuple[R, str]]) -> Counter:
             x.pop("pending_reason_detail", None)
         n[r.value] += 1
     return n
+
+
+def stamp_cards(cards: list[dict], cells: list[Cell], *, glyph_db=None, are_variants=None) -> None:
+    """控制台待审卡（`review/cards.py`）每张带 `pending_reason`／`pending_reason_detail`，与出单同一套判法。
+
+    `cells` 与 `cards` 一一对应；整页／整列对不上按这批卡自己数（与待审单按整单数同口径）。"""
+    if are_variants is None:
+        are_variants = _default_are_variants()
+    ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants)
+    for card, c in zip(cards, cells):
+        r = classify(c, ctx)
+        card["pending_reason"] = r.value
+        d = detail_of(r, c)
+        if d:
+            card["pending_reason_detail"] = d

@@ -321,6 +321,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     from ..core.ledger_edition import edition_for
     ledger = BookLedger.load_or_empty(edition_for(book))    # 本书的账（别的书不拿殿本的惯刻形）
     out: list[dict] = []
+    _rcells: list = []              # 与 out 一一对应，判待审原因用（review/reasons.py）
+    from .reasons import Cell       # reasons 引 cards，这里只能晚引
     out_blocked: list[dict] = []
     blocked = cut_pending(book, pgs, st) if gate_cut else {}
     # 全书已裁字位（跨批次）。点名清单模式不去重——见 docstring。
@@ -466,12 +468,19 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
                     # 现行有效的人裁已有（只在不去重的模式下会出现在这里）；没有就不带这个键
                     **({"decided": True} if r.id in decided_mark and r.id not in decided else {}),
                 })
+                _rcells.append(Cell(id=r.id, char=r.char, ref=ref["char"] if ref else None,
+                                    ref_op=ref["op"] if ref else None,
+                                    cands=list(mr.candidates[:5]) if mr else [],
+                                    doubts=list(_doubts), evidence=dict(r.evidence or {}),
+                                    cls=_cls))
                 if len(out) >= _limit:
                     if not counting and csel is None:
+                        _stamp_reasons(out, _rcells)
                         return _finish(book, bk, st, {"book": book, "cards": out, "truncated": True,
                                                       "blocked": out_blocked,
                                                       "n_decided": len(decided)}, emb_out)
                     full = True             # 计数要数到页范围末尾，卡片不再装
+    _stamp_reasons(out, _rcells)
     if _sh_sort:
         out.sort(key=lambda c: (not (c.get("shadow") or {}).get("pre"),
                                 -(c["shadow"]["conf"] if c.get("shadow", {}).get("pre") else 0.0)))
@@ -493,6 +502,17 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
         res["class_subs"] = {"replace_align": [{"key": k, "label": lb, "hint": h}
                                                for k, lb, h in REPLACE_ALIGN_SUBS]}
     return _finish(book, bk, st, res, emb_out)
+
+
+def _stamp_reasons(out: list[dict], cells: list) -> None:
+    """每张卡带待审原因 `pending_reason`（sheldon 11-03 定，与待审单同一套判法；判不出 `unknown`）。"""
+    from ..core.workspace import glyph_db_path
+    from .reasons import stamp_cards
+    try:
+        gdb = glyph_db_path()
+    except Exception:  # noqa: BLE001 —— 没有工作区字形库就不判「刻例太少」
+        gdb = None
+    stamp_cards(out, cells, glyph_db=gdb)
 
 
 def _finish(book: str, bk, st: ProductStore, res: dict, emb_out: dict | None = None) -> dict:
@@ -782,7 +802,7 @@ def cut_pending(book: str, pgs: list[int], st: ProductStore) -> dict:
 # 命中与否只走响应头（`X-Cards-Cache`，路由层加），**不往响应体里加字段**——四庫、北行
 # 的审卡数据要与改前逐字节一致（#166 验收）。
 
-CARDS_CACHE_VERSION = "3"   # 2：整理本对位改读 align_ref 产物（#247）；3：卡片加 decided 标记（GUJI-525）
+CARDS_CACHE_VERSION = "4"   # 2：整理本对位改读 align_ref 产物（#247）；3：卡片加 decided 标记（GUJI-525）；4：卡片加 pending_reason
 _CARDS_MEM_MAX = 8
 _CARDS_DISK_KEEP = 16
 """每本书磁盘上留几份（按 mtime 留最新的），其余在写新份时顺手删。"""
@@ -838,6 +858,11 @@ def _inputs_sig(bk) -> dict:
         sig["book"] = repr(bk)
     from ..core.ledger_edition import edition_for
     sig["ledger"] = _stat_sig([ledger_path(edition_for(bk.id))])
+    try:                            # 待审原因「刻例太少」看字形库刻例数
+        from ..core.workspace import glyph_db_path
+        sig["glyph_db"] = _stat_sig([glyph_db_path()])
+    except Exception:               # noqa: BLE001
+        sig["glyph_db"] = None
     from .borrow_first import first_pick_mode, proto_sources, review_db_path
     if first_pick_mode(bk) is not None:
         from ..clustering import cnn_candidates as cc
