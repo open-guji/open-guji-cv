@@ -952,6 +952,7 @@ def strip_rule_residue(patch: np.ndarray, cell_h: float) -> np.ndarray:
 # 就是线，整段抹白。
 LONG_RULE_GAP = 3          # 竖线断口容差（行）：版框磨出的小缺口不算断
 LONG_RULE_MIN = 0.5        # 列端拐角线在本格里至少这么多格高
+LONG_RULE_EDGE = 3         # 夹注格（through）只抹线列时，两边连带抹掉的毛边列数上限
 LONG_RULE_OUT = 0.05       # ……下端（列首格是上端）离格外沿不到这么多格高算连到了（框线到下框前常断一两行）
 
 
@@ -1005,12 +1006,13 @@ def column_ink_edges(strip_ink: np.ndarray, rows: list[tuple[float, float]]) -> 
 
 def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top: float, cell_bot: float,
                     tail: bool = False, head: bool = False,
-                    ink_edges: tuple[float, float] | None = None) -> np.ndarray:
+                    ink_edges: tuple[float, float] | None = None, through: bool = False) -> np.ndarray:
     """抹掉图块左右最外侧的界行／版框竖线（判据见上方注释）。
 
     strip_ink 是整列条带的墨（与图块同宽、同 x 原点）；y0 是图块顶在条带里的行，cell_top/cell_bot 是
     格界（条带坐标）；tail/head：本格是列尾／列首格；ink_edges：本列字缘（`column_ink_edges`），列端
-    拐角线要用。双边框是粗框＋细线两道，每侧最多剥两层。"""
+    拐角线要用。双边框是粗框＋细线两道，每侧最多剥两层。through=True（夹注格）：不看字缘（半格小字贴着列缘，
+    字缘量不准），只认上下贯穿 RULE_H_RATIO 格高以上的线、不认列端拐角线。"""
     h, w = patch.shape[:2]
     cell_h = cell_bot - cell_top
     out = patch
@@ -1020,17 +1022,36 @@ def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top:
             break
         hit = False
         for a, b in {spans[0], spans[-1]}:
-            if b - a > RULE_W_RATIO * w or ink_edges is None or (b > ink_edges[0] and a < ink_edges[1]):
-                continue        # 太宽，或没整个落在本列字缘以外（「則」的刂、「陸」的阝跟上下字的竖笔连成长线）
+            if b - a > RULE_W_RATIO * w:
+                continue
+            if not through and (ink_edges is None or (b > ink_edges[0] and a < ink_edges[1])):
+                continue        # 没整个落在本列字缘以外（「則」的刂、「陸」的阝跟上下字的竖笔连成长线）
             runs = _run_around(strip_ink[:, a:b].any(axis=1), int(cell_top), int(np.ceil(cell_bot)),
                                LONG_RULE_GAP)
             line = any(r1 - r0 >= RULE_H_RATIO * cell_h for r0, r1 in runs)
-            if not line and (tail or head):
+            if not line and (tail or head) and not through:
                 near = LONG_RULE_OUT * cell_h
                 line = any(min(r1, cell_bot) - max(r0, cell_top) >= LONG_RULE_MIN * cell_h
                            and ((tail and r1 >= cell_bot - near) or (head and r0 <= cell_top + near))
                            for r0, r1 in runs)
-            if line:
+            if line and through:
+                # 只抹线本身那几列（本格里墨铺满一半以上格高的列）：线旁挨着的小字偏旁（「海」的氵）跟线
+                # 并成一段，整段抹会连字一起抹掉
+                r0, r1 = max(0, int(cell_top) - y0), max(0, int(np.ceil(cell_bot)) - y0)
+                cov = (out[r0:r1, a:b] < BINARY_THRESHOLD_PATCH).mean(axis=0) if r1 > r0 else np.zeros(b - a)
+                cols = np.flatnonzero(cov >= LONG_RULE_MIN)
+                if cols.size:
+                    c0, c1 = int(cols[0]), int(cols[-1]) + 1
+                    for _k in range(LONG_RULE_EDGE):      # 连上线两边的毛边（墨不满半格高的边列）
+                        if c0 > 0 and cov[c0 - 1] > 0:
+                            c0 -= 1
+                        if c1 < b - a and cov[c1] > 0:
+                            c1 += 1
+                    if out is patch:
+                        out = patch.copy()
+                    out[:, a + c0:a + c1] = 255
+                    hit = True
+            elif line:
                 if out is patch:
                     out = patch.copy()
                 out[:, a:b] = 255
@@ -1484,6 +1505,7 @@ FRAME_LINE_EDGE = 4        # 线行上下这么多行算线的毛边（数线外
 # 压在线位上的字底横（列尾「土」「士」）是一整笔，不能当淡线剥。
 FRAME_LINE_DASHES = 3
 FRAME_LINE_TOL = 0.04
+FRAME_LINE_JZ_REACH = 0.12  # 夹注格（cell_shrink.jiazhu_strip_rules）列端只认离版框这么多格高以内的线
 FRAME_LINE_FAINT_COV = 0.1
 FRAME_LINE_FAINT_SPAN = 0.6
 FRAME_LINE_PAGE_ZONE = 0.8   # 全页线位在版框往内这么多格高里找（双边框内框离版框可到半格，vol06 p112）
@@ -2953,28 +2975,40 @@ class CharExtractor:
 
                 patch = strip_rule_residue(patch, cell_h)
                 patch = strip_speckle_band(patch, ltop - y0, lbot - y0)
+                # 夹注格（`jiazhu_strip_rules`，写本开）：列端照剥框线、但只认贴着版框的；侧边竖条挪到剥完横框之后剥、长竖线照剥
+                # （列首拐角的竖框连着顶上横框，横框剥掉之前竖框不是细条）
+                jz_rules = bool(gmeta.get("jiazhu_rules")) and cell.get("jiazhu_cx") is not None
                 # 侧边界行残余：全列都会中招，不限列端（用户 r7）
-                patch = strip_side_rule(patch, float(sx0), left_x, right_x)
+                if not jz_rules:
+                    patch = strip_side_rule(patch, float(sx0), left_x, right_x)
                 # 列端格：剥掉与字身分离的版框碎渣（2026-08-25 用户定
                 # 口径——框渣算可后处理的污染，不算错误截取）。自检
                 # flags 与紧裁都在剥后的图块上算，口径统一为「去框后」。
-                # 贴着版框的列端格剥框线。夹注格不剥：两行小字的横画并排连成满宽，会被当成线。
+                # 贴着版框的列端格剥框线。夹注格（量得出两行之间的缝）缺省不剥：两行小字的横画并排连成满宽，会被当成线；
+                # 开了 jiazhu_strip_rules 就剥、但只认离版框 FRAME_LINE_JZ_REACH 格高以内的线。
                 near_frame = ((idx == tail_cell and frame_in_bot - (sy0 + lbot) < cell_h_ref)
                               or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
-                if near_frame and _jiazhu_gap_center(patch, jz_ref_w) is None:
+                paired = near_frame and _jiazhu_gap_center(patch, jz_ref_w) is not None
+                if near_frame and (jz_rules or not paired):
                     lys = gmeta.get("frame_lines_bottom" if idx == tail_cell else "frame_lines_top") or ()
                     reach = gmeta.get("frame_line_reach")
                     fy = frame_in_bot if idx == tail_cell else frame_in_top
+                    if paired:      # 夹注格只认贴着版框的线：两行小字并排的横画离框总有一段
+                        reach = min(float(reach or 1e9), FRAME_LINE_JZ_REACH)
                     patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
                                              bottom=idx == tail_cell,
                                              line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys),
                                              frame_reach=None if not reach else
                                              (float(fy) - (sy0 + y0), float(reach) * cell_h_ref))
+                if jz_rules:
+                    patch = strip_side_rule(patch, float(sx0), left_x, right_x)
                 # 界行／版框竖线：放在剥列端横框线之后——横框线连着竖框和字，剥之前竖线跟字之间没有白列。
-                # 夹注格不剥：半格小字的偏旁（「所」的戶）本来就在整字的字缘以外
-                if cell.get("jiazhu_cx") is None:
+                # 夹注格缺省不剥：半格小字的偏旁（「所」的戶）本来就在整字的字缘以外；开了 jiazhu_strip_rules 照剥
+                # （写本列首／列尾小注格外侧的版框、界行竖线整条留着，SJ r5 06:32:1:1a「云」）
+                if cell.get("jiazhu_cx") is None or jz_rules:
                     patch = strip_long_rule(patch, ink_px, y0, ltop, lbot, tail=idx == tail_cell,
-                                            head=idx == head_cell, ink_edges=ink_edges)
+                                            head=idx == head_cell, ink_edges=ink_edges,
+                                            **({"through": True} if jz_rules else {}))
                 if idx in end_cand:
                     # 列端的雙行小注格（Step3 给了缝）可按两半各剥（`jiazhu_end_halves`，写本开）：
                     # 两个小字各是各的字身，整格只认最大连通体当字身，另一半小字与它分离的下半截

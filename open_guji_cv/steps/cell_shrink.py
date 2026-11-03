@@ -48,6 +48,11 @@ class CellShrinkParams(BaseModel):
     jiazhu_end_halves: bool = False
     """列首／列尾的雙行小注格剥框渣、曲线切边时左右两半各算（extractor 同名开关）。缺省关＝整格算（刻本旧行为）。
     写本列尾小注两个小字各有字身，整格只认最大连通体，另一半字与之分离的下半截被当框渣抹掉。"""
+    jiazhu_strip_rules: bool = False
+    """列首／列尾的雙行小注格也剥版框横线（extractor `jiazhu_rules`）。缺省关＝旧行为（刻本）：量得出两行之间缝的
+    夹注格不剥横框线（两行小字横画并排连成满宽，会被当线）。开（写本）：照剥，但只认离版框 0.12 格高以内的线
+    （`FRAME_LINE_JZ_REACH`；并排的横画离框总有一段）；侧边竖条挪到剥完横框之后剥，列首拐角的竖框才剥得掉
+    （史記列首半格顶上框线、外侧竖框留着，SJ r5）。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
@@ -57,6 +62,8 @@ class CellShrinkParams(BaseModel):
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
+        if isinstance(d, dict) and not self.jiazhu_strip_rules:
+            d.pop("jiazhu_strip_rules", None)
         return d
 
 
@@ -220,6 +227,7 @@ class CellShrinkStep(Step):
                      **{k: v.get(cc.col, []) for k, v in (frame_lines or {}).items()},
                      **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {}),
                      **({"jiazhu_end_halves": True} if p.jiazhu_end_halves else {}),
+                     **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
