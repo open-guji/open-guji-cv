@@ -1609,6 +1609,51 @@ def find_bottom_frame_bar(col_gray: np.ndarray, x_lo: int, x_hi: int,
     return float(top)
 
 
+#: `jiazhu_free_split`：短的那行在自己墨的末行之下再留这么多行才是段底
+FREE_SPLIT_END_PAD = 3
+#: 行墨占比到这么多才算这一行有墨（找短行墨的末行）
+FREE_SPLIT_INK = 0.02
+#: 墨段起头比长的那行末格的这么深（格高的比例）还深，算段下正文字探上来的笔画、不是短行的字（02:13:7「置」）
+FREE_SPLIT_MAX_DEPTH = 0.5
+
+
+def _free_split(ink_col: np.ndarray, n: int, long_sub: str, cxi: int, top: int, bot: int,
+                anchor: list[float]) -> "dict[str, list[float]] | None":
+    """段尾单半的雙行小注段（`segment_column` 的 `jiazhu_free_split`）：长的那行（段尾格墨多的那半，旧口径）在
+    [top, bot) 切 n 格（拉向共用格线）；短的那行只切 n−1 格，切在 [top, 自己墨的末行＋几行) 里，末格下沿就停在那（不补到段底：段底常压着段下正文字探上来的笔画）。
+
+    旧做法两行都切 n 格，短的那行 n−1 个字被摊进 n 格，段中间起每格都是半个字＋半个字（史記 r5「两字并一格」）。
+    短行墨的末行：起头比长行末格的 `FREE_SPLIT_MAX_DEPTH` 还深的墨段不算（段下的正文字常探进段尾格）。排不下返回 None。"""
+    from ...seg.seam import fit_row_cuts
+    w = ink_col.shape[1]
+    spans = {"a": (cxi, w), "b": (0, cxi)}
+    rows = {sub: ink_col[:, xs:xe].sum(axis=1) / float(xe - xs) for sub, (xs, xe) in spans.items()}
+    short_sub = "b" if long_sub == "a" else "a"
+    long_cuts = fit_row_cuts(rows[long_sub], top, bot, n, anchor=anchor)
+    if long_cuts is None:
+        return None
+    # 短行墨的末行：从段底往上，起头比 limit 还深的墨段是段下正文字探上来的笔画，跳过；起头在 limit 之上的
+    # 墨段是短行末字，哪怕它写得低、伸过 limit 也整段算上
+    limit = long_cuts[-2] + FREE_SPLIT_MAX_DEPTH * (bot - long_cuts[-2])
+    ys = top + np.flatnonzero(rows[short_sub][top:bot] >= FREE_SPLIT_INK)
+    end = None
+    k = len(ys) - 1
+    while k >= 0:
+        j = k
+        while j > 0 and ys[j] - ys[j - 1] <= FREE_SPLIT_END_PAD + 1:
+            j -= 1                                    # 墨段 ys[j..k]
+        if ys[j] < limit:
+            end = min(bot, int(ys[k]) + 1 + FREE_SPLIT_END_PAD)
+            break
+        k = j - 1
+    if end is None:
+        return None
+    short_cuts = fit_row_cuts(rows[short_sub], top, end, n - 1)
+    if short_cuts is None:
+        return None
+    return {long_sub: long_cuts, short_sub: short_cuts}
+
+
 def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     n_raised: int = 0, *,
                     border_top: float = 0.0, border_bottom: float | None = None,
@@ -1628,6 +1673,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     detect_bottom_bar: bool = True,
                     grid_bounds: "Sequence[float] | None" = None,
                     jiazhu_rows: bool = False,
+                    jiazhu_free_split: bool = False,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1711,6 +1757,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       DP 的下界改用它的上沿，结果记在 `bottom_bar_y`（2026-09-28，overview#266）。
     - `grid_bounds`：等距格网（`books/siku_zongmu/row_grid`）给的 n_slots+1 条格线。给了就不跑 DP，格线各自
       就近挪进字缝（`snap_to_gaps`），也不找下版框线；之后的格类型、夹注、折线切分照旧。
+    - `jiazhu_free_split`（要 `jiazhu_rows`，写本书级）：段尾一格表说只有一半有字（字数为奇数）时，多出的那个字
+      归段尾格墨多的那行（图定，不照整理本 ⌈N/2⌉），短的那行在自己墨的范围里少切一格，格号照「本行第几字」
+      从段首数，段尾那格只发长的那行（设计稿方案 A，Sheldon 2026-11-03 定）。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1908,6 +1957,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     # （seg/seam.fit_row_cuts），段两端仍用共用格线。写本两行各写各的、会错开半格，共用格线时一行切准、
     # 另一行被拦腰切（史記 02:12:6「州上洛縣」）。格号不变，只是 a、b 的 y0/y1 可以不同。
     side_y: dict[tuple[int, str], tuple[float, float]] = {}
+    half_side: dict[int, str] = {}       # jiazhu_free_split：段尾单半格发哪一半
     if jiazhu_rows and runs:
         from ...seg.seam import fit_row_cuts
         ink_col = col_gray[:, x_lo:x_hi] < ink_threshold
@@ -1924,6 +1974,17 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
             top, bot = int(round(bounds[g[0] - 1])), int(round(bounds[g[-1]]))
             anchor = [float(bounds[p_ - 1]) for p_ in g] + [float(bounds[g[-1]])]
+            if jiazhu_free_split and g[-1] in one_half and not (one_half & set(g[:-1])) \
+                    and not (tail_a & set(g)) and cxi >= 4 and x_hi - x_lo - cxi >= 4:
+                tail = patches[g[-1]]
+                long_sub = "a" if int((tail[:, cxi:] < ink_threshold).sum()) >= int((tail[:, :cxi] < ink_threshold).sum()) else "b"
+                cuts_by = _free_split(ink_col, len(g), long_sub, cxi, top, bot, anchor)
+                if cuts_by is not None:
+                    half_side[g[-1]] = long_sub
+                    for sub, cuts in cuts_by.items():
+                        for i_ in range(len(cuts) - 1):
+                            side_y[(g[i_], sub)] = (cuts[i_], cuts[i_ + 1])
+                    continue
             for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
                 if xe - xs < 4:
                     continue
@@ -1961,7 +2022,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             # 半边无墨（段末单半）不发格子——生产同口径（`ty.size < 30`）。
             # a=右子列先读、b=左子列；单字尾（tail_a）的 b 侧只有邻字残渣。
             sides = (("jiazhu_a", cxi, x_hi - x_lo), ("jiazhu_b", 0, cxi))
-            if pos in one_half:
+            if pos in half_side:
+                sides = tuple(t for t in sides if t[0] == "jiazhu_" + half_side[pos])
+            elif pos in one_half:
                 sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
             for kind, xs, xe in sides:
                 if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
