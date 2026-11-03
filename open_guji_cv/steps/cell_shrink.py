@@ -178,6 +178,17 @@ class CellShrinkStep(Step):
             if c.kind in ("jiazhu_a", "jiazhu_b") and c.gap_center is not None:
                 d["jiazhu_cx"] = float(c.gap_center)
                 d.setdefault("jiazhu_subs", []).append(c.sub or ("a" if c.kind == "jiazhu_a" else "b"))
+                d.setdefault("jiazhu_y", {})[c.sub or ("a" if c.kind == "jiazhu_a" else "b")] = (c.y0, c.y1)
+        # 雙行小注两行各切（Step3 `jiazhu_rows`）：a、b 的 y 不同时，合成的满宽格取本格位的共用格线，
+        # 两半各自的 y 另传给 extractor 按半格裁（取并集会和邻格重叠）
+        for pos, d in by_pos.items():
+            jy = d.get("jiazhu_y") or {}
+            grid_y = ((float(cc.boundaries[pos - 1]), float(cc.boundaries[pos]))
+                      if 0 < pos < len(cc.boundaries) else None)
+            if grid_y is not None and any((float(a), float(b)) != grid_y for a, b in jy.values()):
+                d["y_top"], d["y_bottom"] = grid_y
+            else:
+                d.pop("jiazhu_y", None)
         # `is_punct` 透传给 extractor：格框高宽比（bad_seg）对标点格不成立，见下。
         # 类型仍记 "char"——extractor 只认这一种，标点也要出图块。
         # Step3 认下的雙行夹注：缝中心（列图坐标）+ 是否只有 a 半（段尾单字）。extractor 自己那套
@@ -188,7 +199,9 @@ class CellShrinkStep(Step):
                   **({"layout_char": True} if d["layout_char"] else {}),
                   **({"jiazhu_cx": d["jiazhu_cx"], "jiazhu_tail_a": "jiazhu_b" not in d["kinds"],
                       "jiazhu_subs": sorted(d["jiazhu_subs"])}
-                     if "jiazhu_cx" in d else {})}
+                     if "jiazhu_cx" in d else {}),
+                  **({"jiazhu_y": {k: [float(v[0]), float(v[1])] for k, v in d["jiazhu_y"].items()}}
+                     if d.get("jiazhu_y") else {})}
                  for _, d in sorted(by_pos.items())]
         x0, x1 = cc.content_x or (0.0, float(w))
         grid = {

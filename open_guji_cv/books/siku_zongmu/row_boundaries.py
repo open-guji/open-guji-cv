@@ -1627,6 +1627,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     dash_blank: "tuple[float, float] | None" = None,
                     detect_bottom_bar: bool = True,
                     grid_bounds: "Sequence[float] | None" = None,
+                    jiazhu_rows: bool = False,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1903,6 +1904,36 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     runs[pos] = solo.pop(pos)
                     one_half.add(pos)
 
+    # 雙行小注两行各切（`jiazhu_rows`，写本开）：连着的夹注段里，a、b 两行各在自己的墨投影上挑格线
+    # （seg/seam.fit_row_cuts），段两端仍用共用格线。写本两行各写各的、会错开半格，共用格线时一行切准、
+    # 另一行被拦腰切（史記 02:12:6「州上洛縣」）。格号不变，只是 a、b 的 y0/y1 可以不同。
+    side_y: dict[tuple[int, str], tuple[float, float]] = {}
+    if jiazhu_rows and runs:
+        from ...seg.seam import fit_row_cuts
+        ink_col = col_gray[:, x_lo:x_hi] < ink_threshold
+        run_ps = sorted(runs)
+        groups: list[list[int]] = []
+        for p_ in run_ps:
+            if groups and p_ == groups[-1][-1] + 1:
+                groups[-1].append(p_)
+            else:
+                groups.append([p_])
+        for g in groups:
+            if len(g) < 2:
+                continue
+            cxi = int(round(float(np.median([runs[p_] for p_ in g]))))
+            top, bot = int(round(bounds[g[0] - 1])), int(round(bounds[g[-1]]))
+            anchor = [float(bounds[p_ - 1]) for p_ in g] + [float(bounds[g[-1]])]
+            for sub, xs, xe in (("a", cxi, x_hi - x_lo), ("b", 0, cxi)):
+                if xe - xs < 4:
+                    continue
+                rows = ink_col[:, xs:xe].sum(axis=1) / float(xe - xs)
+                cuts = fit_row_cuts(rows, top, bot, len(g), anchor=anchor)
+                if cuts is None:
+                    continue
+                for i_, p_ in enumerate(g):
+                    side_y[(p_, sub)] = (cuts[i_], cuts[i_ + 1])
+
     cells: list[Cell] = []
     for k in range(n_slots):
         pos = k + 1
@@ -1935,10 +1966,14 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             for kind, xs, xe in sides:
                 if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue
-                half = patches[pos][:, xs:xe]
+                hy0, hy1 = side_y.get((pos, "a" if kind == "jiazhu_a" else "b"), (y0, y1))
+                if (hy0, hy1) == (y0, y1):
+                    half = patches[pos][:, xs:xe]
+                else:
+                    half = col_gray[int(round(hy0)):int(round(hy1)), x_lo + xs:x_lo + xe]
                 if int((half < ink_threshold).sum()) < jiazhu_split.HALF_MIN_INK:
                     continue
-                cells.append(Cell(slot=slot, y0=y0, y1=y1,
+                cells.append(Cell(slot=slot, y0=hy0, y1=hy1,
                                   x0=float(x_lo + xs), x1=float(x_lo + xe),
                                   kind=kind, gap_center=cx, raised=raised,
                                   ink_ratio=round(_ink_ratio(half, ink_threshold), 4),
