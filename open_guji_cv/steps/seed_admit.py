@@ -715,6 +715,15 @@ class SeedAdmitParams(BaseModel):
 
     这几项原先是 `group_flow_abstain_ref_ok`／`group_flow_lift_shape_ref`／`follow_ref_variants` 等分散开关，现在由本参数一并导出；
     旧开关仍可单独写（取并集），按书微调用它们。史記 01–10 册 F／G 类看图核对：廣 23、還 12、G 类 89 格几乎全是参校本对。"""
+    ref_lib_coord: bool = False
+    """只开 `reference_trust: high` 的第 ① 项（整理本字＝库首位＝本格字 → 放行，通道 `ref_lib_coord`），不带 ②③ 与书级其他放宽
+    （A24 2026-11-03，第 3 轮 N 类）。殿本整理本不是整本可信（不能开 `reference_trust`），但「整理本坐标对位字、库首位、
+    本格字三方一致」只被 `near_form`／上下文 margin 不足挡下的格，看图 28/28 读对（页错位的 vol56 p75 除外，那页带 never_match 护栏）。
+    判据同 `ref_lib_coord_decide`，门槛用 `ref_lib_coord_cov`／`ref_lib_coord_gap`（比 reference_trust 的 0.90／0.005 严）。
+    `reference_trust` 开着时本开关不起作用（以它的门槛为准）。False＝关（不进 dump）。"""
+    ref_lib_coord_cov: float = 0.96
+    ref_lib_coord_gap: float = 0.01
+    """只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。"""
     ref_topk_follow: bool = False
     """库前 5 名候选里有整理本字、且与首位 cov 差 ≤ `REFERENCE_TRUST_TOPK_GAP` 时按整理本放（史記文淵閣本 2026-11-03，
     第 2 轮 P 类「机器字≠整理本」90 + 「整理本改字层」71 格看图：161 格里整理本字对的 ≥ 95%，库首位是形近字抢先；
@@ -847,6 +856,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("reference_trust", None)
         if isinstance(d, dict) and not self.ref_topk_follow:
             d.pop("ref_topk_follow", None)
+        if isinstance(d, dict) and not self.ref_lib_coord:
+            for k in ("ref_lib_coord", "ref_lib_coord_cov", "ref_lib_coord_gap"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
@@ -1709,7 +1721,7 @@ class SeedAdmitStep(Step):
             d_ep = _edge_pair_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), dmap)
             n_auto += d_ep
             n_review -= d_ep
-        if p._rt_rank() >= 1:
+        if p._rt_rank() >= 1 or p.ref_lib_coord:
             # 5a''' ref_lib_coord（升）：坐标对位的整理本字＝库首位，按整理本放（史記 2026-11-01）
             d_rlc = _ref_lib_coord_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap)
             n_auto += d_rlc
@@ -2461,6 +2473,10 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
     """按整理本放行：坐标对位字（没有时看现役对位字）＝库首位＝本格字（`ref_lib_coord`）。→ 放行格数。判据见 `ref_lib_coord_decide`。"""
     n = 0
     ok_groups = p._rt_shape_ref_ok()
+    if p._rt_rank() >= 1:
+        cov_min, gap_min = REFERENCE_TRUST_COV, REFERENCE_TRUST_GAP
+    else:                                    # 只开 `ref_lib_coord`（殿本）：用它自己更严的门槛
+        cov_min, gap_min = p.ref_lib_coord_cov, p.ref_lib_coord_gap
     for col in out:
         blind_ok = False
         if p._rt_rank() >= 2:
@@ -2488,7 +2504,7 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
             if not ref_lib_coord_decide(char=rec.char, ref=ref, cands=list(m.candidates or []),
                                         verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
                                         doubts=rec.doubts, evidence=rec.evidence, semantic=vmap.semantic,
-                                        cov_min=REFERENCE_TRUST_COV, gap_min=REFERENCE_TRUST_GAP,
+                                        cov_min=cov_min, gap_min=gap_min,
                                         shape_ok=ok_groups, blind_ok=blind_ok):
                 continue
             top, cov = m.candidates[0][0], float(m.candidates[0][1])
