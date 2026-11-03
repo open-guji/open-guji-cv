@@ -117,3 +117,30 @@ def test_upload_refuses_stale(ws):
     (ws / "config" / "groups" / "l2model" / "jys.json").write_text("x", encoding="utf-8")
     with pytest.raises(ValueError):
         mb.upload(ws, 1)
+
+
+def test_repo_registry_matches_models_dir():
+    """cv 自带的模型表与 models/ 一致：在的文件 sha 要对得上，models/ 里登记了种类的文件都要在表里。
+    （models/ 搬出 git 后文件不在，只核在的那些。）改了模型文件忘了 guji model registry 就红。"""
+    reg = {i["path"]: i["sha256"] for i in mp.load_registry()}
+    assert reg, "config/model-registry.json 缺失或为空"
+    for it in mp.repo_items():
+        assert reg.get(it["path"]) == it["sha256"], f"{it['path']} 与模型表不符：跑 guji model registry"
+
+
+def test_fetch_registry_places_missing(monkeypatch, tmp_path):
+    from open_guji_cv.ops import model_blobs as mb
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    (repo / "models" / "rr_clf").mkdir(parents=True)
+    f = repo / "models" / "rr_clf" / "meta.json"
+    f.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(mp, "REPO_ROOT", repo)
+    mp.build_registry()
+    sha = mp._sha256(f)
+    f.unlink()
+    assert [i["path"] for i in mp.missing_repo_models()] == ["models/rr_clf/meta.json"]
+    monkeypatch.setattr(mb, "_place", lambda todo: (len([p.write_text("{}", encoding="utf-8") for s, p in todo
+                                                          if s == sha]), []))
+    r = mb.fetch_registry()
+    assert r["placed"] == 1 and f.exists() and not mp.missing_repo_models()
