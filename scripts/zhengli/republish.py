@@ -452,14 +452,18 @@ def recheck_md(doc: dict, missing_tsv: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def add_causes(pending: Path, products: Path, book: str) -> None:
-    """每格并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
+def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None = None) -> None:
+    """每格写待审原因 `pending_reason`（`review/reasons.py`，sheldon 11-03 定；判不出写 unknown），
+    过渡期照旧并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
     sys.path.insert(0, str(CV))
     from open_guji_cv.review.causes import book_causes
+    from open_guji_cv.review.reasons import reasons_for_pending, stamp
     if not pending.exists():
         return
     res = book_causes(products, book)
     doc = json.loads(pending.read_text(encoding="utf-8"))
+    cnt = stamp(doc, reasons_for_pending(doc, products, book, glyph_db=glyph_db))
+    print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
     for c in doc.get("cells", []):
         if c["cell"] in res:
             c["cause"] = res[c["cell"]]["cause"]
@@ -659,8 +663,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     if run(cmd, env=env).returncode:
         return 1
     public = routed / f"{chapter}.pending.json"
-    add_causes(public, products, book)
-    add_causes(routed / f"{chapter}.team.pending.json", products, book)
+    gdb = ws / "output" / "glyph.db"
+    add_causes(public, products, book, gdb)
+    add_causes(routed / f"{chapter}.team.pending.json", products, book, gdb)
     final = public
     rd = raw_dir(ws, book)
     if rd and not a.no_sprite:
