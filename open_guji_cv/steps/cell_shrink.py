@@ -54,12 +54,19 @@ class CellShrinkParams(BaseModel):
     （`FRAME_LINE_JZ_REACH`；并排的横画离框总有一段）；侧边竖条挪到剥完横框之后剥，列首拐角的竖框才剥得掉
     （史記列首半格顶上框线、外侧竖框留着，SJ r5）。"""
 
+    frame_line_grow: bool = False
+    """列端格剥版框横线时，线行段往上下连着长：覆盖够、跨度不够满宽的毛边行也算线（extractor.strip_frame_line
+    `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
+    第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
         d = handler(self)
         if isinstance(d, dict) and not self.frame_line_max_off:
             d.pop("frame_line_max_off", None)
+        if isinstance(d, dict) and not self.frame_line_grow:
+            d.pop("frame_line_grow", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
         if isinstance(d, dict) and not self.jiazhu_strip_rules:
@@ -228,7 +235,8 @@ class CellShrinkStep(Step):
                      **({"jiazhu_authority": "step3"} if p.jiazhu_from_step3 else {}),
                      **({"jiazhu_end_halves": True} if p.jiazhu_end_halves else {}),
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
-                     **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {})},
+                     **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
+                     **({"frame_line_grow": True} if p.frame_line_grow else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
