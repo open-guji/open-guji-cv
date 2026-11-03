@@ -265,3 +265,35 @@ def pinned_group_flow(tok: str, book) -> str:
         return tok
     from .workspace import workspace_root
     return f"{tok}+{model_token(workspace_root(), v)}"
+
+
+# ── cv 自带的模型表（二期 4.2 第 1 条）────────────────────────────────────────────
+#: cv 仓 ``models/`` 里每个模型文件的路径 → sha256。没钉 ``model:`` 的书靠它取模型：
+#: ``models/`` 搬出 git 以后，cv 只带这张表，文件按 sha 从 R2 取回、放回 ``models/<路径>``。
+REGISTRY = "config/model-registry.json"
+
+
+def repo_items() -> list[dict]:
+    """cv 仓 ``models/`` 里登记过种类的模型文件（root=repo 的卡）。"""
+    return [i for i in collect(REPO_ROOT) if i["root"] == "repo"]
+
+
+def build_registry() -> dict:
+    """按当前 ``models/`` 重写模型表（只在文件都在时跑；发版删文件前最后一次）。"""
+    items = [{k: i[k] for k in ("kind", "path", "size", "sha256", "level", "owner")} for i in repo_items()]
+    reg = {"schema": "model-registry/1", "items": items}
+    p = REPO_ROOT / REGISTRY
+    p.write_text(json.dumps(reg, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
+    return {"path": str(p), "items": len(items)}
+
+
+def load_registry() -> list[dict]:
+    p = REPO_ROOT / REGISTRY
+    if not p.is_file():
+        return []
+    return json.loads(p.read_text(encoding="utf-8")).get("items") or []
+
+
+def missing_repo_models() -> list[dict]:
+    """模型表里登记、本机 ``models/`` 下没有的文件。"""
+    return [i for i in load_registry() if not (REPO_ROOT / i["path"]).exists()]

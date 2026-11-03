@@ -225,6 +225,7 @@ def cmd_pipeline(args) -> None:
     pages = eng.book.resolve_pages(args.pages)
     if not getattr(args, "no_prep", False):
         prep.ensure_glyph_pin(eng.book)
+        prep.ensure_model_pin(eng.book)
     _preflight_deps(eng, steps, allow=getattr(args, "allow_missing_deps", False))
     if "rare_candidates" in steps and not getattr(args, "no_prep", False):
         prep.ensure_rare_index(eng.book.id, jobs=max(1, getattr(args, "jobs", 1) or 1))
