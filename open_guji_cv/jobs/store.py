@@ -31,6 +31,9 @@ def connect():
         c = jobsdb.connect()
         c.autocommit = True
         return c
+    if os.environ.get("GUJI_REQUIRE_JOBSDB", "").strip().lower() in ("1", "true", "yes"):
+        raise SystemExit("任务库要求连新机（GUJI_REQUIRE_JOBSDB=1），但没有 JOBSDB_TOKEN；不退回 Neon。"
+                         "请先按切换说明放好令牌再重起执行方。")
     return connect_neon()
 
 
