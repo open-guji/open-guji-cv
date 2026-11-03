@@ -444,3 +444,9 @@ def test_row_pitch_param_default_uniform_not_in_dump():
     free = RS.RowSegmentParams(row_pitch="free")
     assert free.model_dump()["row_pitch"] == "free"
     assert params_hash(free) != params_hash(RS.RowSegmentParams())
+
+
+def test_seal_gap_slots_empty_param_off_by_default():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "seal_gap_slots_empty" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(seal_gap_slots_empty=True).model_dump()["seal_gap_slots_empty"] is True

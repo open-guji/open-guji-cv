@@ -523,6 +523,12 @@ class AlignRefParams(BaseModel):
     （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
     载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
 
+    coord_dp_flat: bool = False
+    """载体字按逐字字序对齐（2026-11-03，史記文淵閣本；见 `align_ref_coord.coord_dp_flat`，要 `coord_dp` 开着）：
+    `coord_dp` 也配不上的列再试一次——夹注段拆成先右行后左行的逐字序列，可多跳几格（印泥假格、夹注右行多写一两字），
+    载体字相同够多才认，只给有字形证据的格。起因：卷首叶题署行（大印压着、字距拉开）与夹注右行字数与整理本「|」
+    不同的列整列没有整理本字（第 4 轮 S／D 类约 150 格）。False＝关（缺省，不进参数哈希）。"""
+
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -550,6 +556,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_dp", None)
         if isinstance(d, dict) and not self.coord_title_trust:
             d.pop("coord_title_trust", None)
+        if isinstance(d, dict) and not self.coord_dp_flat:
+            d.pop("coord_dp_flat", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -690,7 +698,8 @@ class AlignRefStep(Step):
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
-                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust)
+                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                         dp_flat=p.coord_dp_flat)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1298,7 +1307,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
-                 title_trust: bool = False) -> None:
+                 title_trust: bool = False, dp_flat: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1365,9 +1374,13 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         """`coord_dp`：几何配法不成立／被冲突闸退回的列改走载体字单调对齐；成了就当坐标对位列收下。"""
         if not dp or not units or "整理本行为空" in why:
             return False
-        if "空格位上库认出了字" in why:
+        empty_hit = "空格位上库认出了字" in why
+        if empty_hit and not dp_flat:
             return False          # 整理本这一位是空而库认出了字：页与整理本对不上，不拿载体字硬配
-        d = C.coord_dp(units, ln.text_units())
+        # `coord_dp_flat`：空格位上认出了字的列（字距拉开的题署行，空格位里是印泥）只走逐字字序对齐，那里门槛按字算
+        d = None if empty_hit else C.coord_dp(units, ln.text_units())
+        if d is None and dp_flat:
+            d = C.coord_dp_flat(units, ln.text_units(), cand_top)
         if d is None:
             return False
         # 只收有字形证据的格：载体字＝整理本字，或整理本字在这一格库匹配的前 `COORD_DP_TOPK` 名候选里

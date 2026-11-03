@@ -139,6 +139,10 @@ _SJ_PITCH = ("row_segment 加书级参数 row_pitch（uniform 缺省／free：�
              "缺省 uniform 时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 571313c0 产物逐字节相同；"
              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
 
+_SJ_R5 = ("row_segment 书级开关 seal_gap_slots_empty、align_ref 书级开关 coord_dp_flat（都缺省关，史記文淵閣本第 5 轮）："
+          "开关关着时 row_segment、align_ref 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 0c773642 产物逐字节相同；"
+          "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+
 _JZ_ROWS = ("雙行小注两行各切 jiazhu_rows（row_segment 书级开关，缺省关；seg.seam 加 fit_row_cuts；cell_shrink／extractor 半格自己的 y）："
              "开关关着时 row_segment、cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev d961e8c1 产物逐字节相同；"
              "scripts/code_equiv.py check，2026-11-03")
@@ -565,6 +569,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d412534edd496d6aea42320098e67c982a67859eb2f1df17657f255790a63b60",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence=_SJ_PITCH),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="278aa0c1fbb3db659dc7b5d0357c19e71dc32fe6d8f23ea186628f361c291b14",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_SJ_R5),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="c7921a8fefbab598b2a6e4ccdea360bf089dad67fbb1b33ec99aa93a43d8042e",
+          old="50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b",
+          evidence=_SJ_R5),
+    Equiv(module="open_guji_cv.steps.align_ref_coord",
+          new="3cd4fcf820c9b22301c8fdbc8990c0f822c44d879e55e5d55a0363ad801859a1",
+          old="5d729e5b5398d287b315e0cf21386302fbf7b08ece15bd13774beafd2c07b96e",
+          evidence=_SJ_R5),
 )
 
 

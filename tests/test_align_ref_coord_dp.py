@@ -56,3 +56,59 @@ def test_layout_slots_grow_off_by_default_and_not_in_dump():
     assert RowSegmentParams().layout_slots_grow is False
     assert "layout_slots_grow" not in RowSegmentParams().model_dump()
     assert RowSegmentParams(layout_slots_grow=True).model_dump()["layout_slots_grow"] is True
+
+
+# ── coord_dp_flat（2026-11-03）：逐字字序对齐 ──
+
+def _jz_units(right: str, left: str, start: int = 1):
+    """一段夹注：第 k 行 a＝right[k]、b＝left[k]（左行短时只有 a）。"""
+    us = []
+    for k in range(max(len(right), len(left))):
+        ids, car = {}, {}
+        if k < len(right):
+            ids["a"], car["a"] = f"p:1:{start + k}a", right[k]
+        if k < len(left):
+            ids["b"], car["b"] = f"p:1:{start + k}b", left[k]
+        us.append(C.CellUnit("n", start + k, float(start + k), ids, car))
+    return us
+
+
+def _jz_text(right: str, left: str):
+    return [(k, C.Unit("n", right[k] if k < len(right) else "", left[k] if k < len(left) else ""))
+            for k in range(max(len(right), len(left)))]
+
+
+def test_flat_jiazhu_split_point_differs():
+    """写本右行比整理本「|」多写一字：按行单元配整段错开，逐字字序仍一一对上。"""
+    txt = "古文曰盤庚自奄遷于北蒙曰殷虛南去鄴三十里"
+    units = _jz_units(txt[:11], txt[11:])            # 图上右行 11 字
+    text = _jz_text(txt[:10], txt[10:])              # 整理本右行 10 字
+    r = C.coord_dp_flat(units, text)
+    assert r is not None and r.note == "dp_flat"
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:11a"] == "蒙" and got["p:1:1b"] == "曰"
+
+
+def test_flat_many_fake_cells_skipped():
+    """题署行：印泥假格夹在字之间，多过 coord_dp 的两次跳过，逐字对齐仍认；假格不给字。"""
+    ref = "漢太史令司馬遷撰"
+    us, k = [], 0
+    for ch in "漢??太??史令司馬遷?撰":
+        k += 1
+        us.append(C.CellUnit("c", k, float(k), {"": f"p:1:{k}"}, {"": ch}))
+    assert C.coord_dp(us, _text(ref)) is None
+    r = C.coord_dp_flat(us, _text(ref))
+    assert r is not None
+    got = {i: ch for i, _sl, _sub, ch, _g in r.recs}
+    assert got["p:1:1"] == "漢" and got["p:1:13"] == "撰"
+    assert "p:1:2" not in got
+
+
+def test_flat_rejects_unrelated_column():
+    assert C.coord_dp_flat(_units("甲乙丙丁戊己庚辛壬癸子丑寅卯"), _text(REF)) is None
+
+
+def test_flat_param_off_by_default_and_not_in_dump():
+    from open_guji_cv.steps.align_ref import AlignRefParams
+    assert "coord_dp_flat" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_dp_flat=True).model_dump()["coord_dp_flat"] is True
