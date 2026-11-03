@@ -66,12 +66,14 @@ def _is_conn_error(e: BaseException) -> bool:
     return any(c.__name__ in _CONN_ERRORS for c in type(e).__mro__)
 
 
-# 读超时（socket 超时，中心库回得慢）：urllib／http.client 报的是 TimeoutError「The read operation timed out」
-_TIMEOUT_RE = re.compile(r"read operation timed out|timed out|TimeoutError", re.I)
+# 瞬时错误：读超时（socket 超时，中心库回得慢，urllib／http.client 报 TimeoutError「The read operation timed out」），
+# 以及中心库 5xx（500／502／503／504，服务端抖动，client.CentralError 带状态码）。4xx（403、404…）是配置或权限问题，不算瞬时。
+_TRANSIENT_RE = re.compile(r"read operation timed out|timed out|TimeoutError|CentralError: 5\d\d\b", re.I)
 
 
 def _is_transient_timeout(msg: str) -> bool:
-    return bool(_TIMEOUT_RE.search(msg or ""))
+    """名字沿用旧的（超时）；现在也认中心库 5xx。"""
+    return bool(_TRANSIENT_RE.search(msg or ""))
 
 
 class Cancelled(Exception):

@@ -12,9 +12,16 @@ def test_read_timeout_is_transient():
     assert R._is_transient_timeout("socket.timeout: timed out")
 
 
+def test_central_5xx_is_transient():
+    for code in ("500", "502", "503", "504"):
+        msg = f"准备「db-pull」段失败：bash rerun_prep.sh vol03 退出码 1：open_guji_cv.datastore.client.CentralError: {code} http: {{\"error\":\"internal\"}}"
+        assert R._is_transient_timeout(msg), code
+
+
 def test_other_env_errors_are_not_transient():
     assert not R._is_transient_timeout("准备「db-pull」段失败：HTTP 403 Forbidden（Cloudflare）")
     assert not R._is_transient_timeout("准备「db-pull」段失败：中心库 500")
+    assert not R._is_transient_timeout("准备「base」段失败：CentralError: 404 not_found: 包不存在")
     assert not R._is_transient_timeout("")
 
 
