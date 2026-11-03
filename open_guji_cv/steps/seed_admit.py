@@ -219,6 +219,7 @@ class SeedAdmitParams(BaseModel):
     group_flow_freq_min_vols: int = 2       # 主形人裁须来自至少这么多册（表里有册数才查；0＝不查）
     group_flow_tables: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L3 大模型答案表（ctx_ver 3；目录沿用旧名 l2/）
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
+    group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
                                              # 有模型的书：刻形说了算，可越过整理本补放、改字（全唐文 sheldon 2026-11-02 定）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
@@ -1013,6 +1014,9 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_rr_shape:         # 入人八 书级刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.rr_shape import fingerprint as _rs_fp
                     parts.append("rs" + _rs_fp(self.group_flow_rr_shape))
+                if self.group_flow_book_knn:         # 书级刻形近邻库（没有库的书不加，旧指纹不变）
+                    from ..groups.book_knn import fingerprint as _bk_fp
+                    parts.append("bk" + "".join(g + _bk_fp(self.group_flow_book_knn[g]) for g in sorted(self.group_flow_book_knn)))
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
                     parts.append(_rr_fp(None) or "missing")
                 from ..groups.ids_online import fingerprint as _ids_fp
@@ -1046,7 +1050,7 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
@@ -1073,7 +1077,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_book_knn"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -1685,6 +1689,10 @@ class SeedAdmitStep(Step):
                 d_rs = _rr_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_rs
                 n_review -= d_rs
+            if p.group_flow_book_knn:
+                d_bk = _book_knn_pass(p, out, amap, ctx, page, patch_missing)
+                n_auto += d_bk
+                n_review -= d_bk
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
@@ -3024,6 +3032,12 @@ def _resolve_group_flow_paths(p) -> None:
     if not rs and "rr" in p.group_flow and (cfg / "rr_shape.json").exists():
         rs = str(cfg / "rr_shape.json")
     object.__setattr__(p, "group_flow_rr_shape", rs)
+    bk = {g: _abs(v) for g, v in p.group_flow_book_knn.items()}
+    for g in p.group_flow:
+        t = cfg / "book_knn" / f"{g}.json"
+        if g not in bk and t.exists():
+            bk[g] = str(t)
+    object.__setattr__(p, "group_flow_book_knn", bk)
 
 
 def _l3_groups(p) -> tuple:
@@ -3182,6 +3196,44 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                 continue
             r.evidence = {**ev, "rr_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "rr_shape", "match", []
+            delta += 1
+    return delta
+
+
+def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+    """字组书级刻形近邻判法（`groups.book_knn`，`SeedAdmitParams.group_flow_book_knn`）。紧接 group_flow。→ 新放行格数。
+
+    只看有库的组里仍待审的格：A 档（近邻票多、距离比够小）给字放行；B 档（票、比稍松）须整理本对位字同字才放（两证）。
+    已放行格不动；人裁格、硬护栏格不碰（同 `_rr_shape_pass`）。通道 `book_knn`，`evidence.book_knn` 留票数、距离比与档。"""
+    from ..groups import book_knn
+    miss = patch_missing if patch_missing is not None else {}
+    delta = 0
+    for c in out:
+        for r in c.chars or []:
+            if r.admit or r.provenance == "human" or r.channel == "human":
+                continue
+            ev = r.evidence or {}
+            gid = (ev.get("group") or {}).get("id")
+            if gid not in p.group_flow_book_knn:
+                continue
+            ds = list(r.doubts or [])
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
+                continue
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("book_knn")
+                continue
+            ref = (amap.get(r.id) or (None,))[0]
+            v = book_knn.judge(img, book_knn.load(p.group_flow_book_knn[gid]), ref)
+            trail = {k: v[k] for k in ("char", "why", "tier", "pick", "votes", "ratio", "nn") if k in v}
+            if v["char"] is None:
+                r.evidence = {**ev, "book_knn": trail}
+                continue
+            r.evidence = {**ev, "book_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "book_knn", "match", []
             delta += 1
     return delta
 
