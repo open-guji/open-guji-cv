@@ -143,3 +143,11 @@ def test_override_forbids_volume_identity(ws, monkeypatch):
     monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"book_id": "x"}))
     with pytest.raises(bc.BookConfigError):
         bc.effective_book_dict(p)
+
+
+def test_iron_gate_default_on_when_unwritten(ws):
+    """10-23 定缺省开：册 yaml 与基础配置都没写 `iron_gate` 时，load_book 读出来是开（与 BookSpec 缺省一致）。"""
+    _w(ws, "v1.yaml", {"id": "v1", "title": "t", "raw_dir": "raw"})
+    assert load_book("v1", books_dir=ws / "books").iron_gate is True
+    _w(ws, "v2.yaml", {"id": "v2", "title": "t", "raw_dir": "raw", "iron_gate": False})
+    assert load_book("v2", books_dir=ws / "books").iron_gate is False
