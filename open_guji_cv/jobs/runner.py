@@ -193,16 +193,27 @@ class Job:
         self.ev("完成", secs=round(time.time() - t0, 1))
 
     # ── 各阶段 ──
+    def central_rev(self) -> int | None:
+        """中心库当前 rev（字形库重建、语料更新都会推进它）。取不到返回 None，此时不复用准备。"""
+        try:
+            from ..datastore.client import WorkerSource
+            return int(WorkerSource().status())
+        except Exception:               # noqa: BLE001
+            return None
+
     def prep(self) -> None:
         sp = self.spec
-        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
-                         sort_keys=True)
+        # 复用签名带上中心库 rev：同一 cv 换了新字形库（指纹变）后，旧工作区不能再拿来出包（QTW r6 册07 事件）
+        rev = self.central_rev() if sp.get("book") else None
+        sig = json.dumps({**{k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
+                          "central_rev": rev}, sort_keys=True)
         mark = HOME / "prepped.json"
         try:
             last = json.loads(mark.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             last = {}
-        if last.get("sig") == sig and last.get("ws") and Path(last["ws"]).is_dir():
+        if sp.get("book") and rev is not None and last.get("sig") == sig and last.get("ws") \
+                and Path(last["ws"]).is_dir():
             self.ws = last["ws"]
             self.prep_override = last.get("override") or {}
             self.ev(f"本会话已按同一配置备过（{sp['book']} cv {sp['cv'][:7]}），跳过准备")

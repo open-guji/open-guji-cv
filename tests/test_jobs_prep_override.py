@@ -18,7 +18,11 @@ def _runner(tmp_path, monkeypatch, spec):
     r.id, r.aid, r.dir = 1, 1, tmp_path
     r.ev = lambda *a, **k: None
     r.db = lambda *a, **k: None
+    r.central_rev = lambda: CENTRAL["rev"]          # 中心库 rev 由测试指定，不走网络
     return r
+
+
+CENTRAL = {"rev": 42}
 
 
 SPEC = {"book": "vol03", "cv": "abc1234", "ws_glob": "96mid1ogzk-*", "pipeline": "keben_body_v2", "pages": "all",
@@ -64,3 +68,33 @@ def test_cli_override_without_env(monkeypatch):
     assert json.loads(BC.merge_override_env('{"corpus": 5}')) == {"corpus": 5}
     with pytest.raises(BC.BookConfigError):
         BC.merge_override_env("[1]")
+
+
+def test_prep_reruns_when_central_rev_changes(tmp_path, monkeypatch):
+    """中心库 rev 变了（字形库换了）：同一 cv、同一册也要重新备，不能复用旧工作区。"""
+    r = _runner(tmp_path, monkeypatch, dict(SPEC))
+    calls = []
+    monkeypatch.setattr(r, "sh", lambda argv, **k: calls.append(argv) or f"WS={tmp_path}\n", raising=False)
+    r.prep()
+    assert len(calls) == 1
+    CENTRAL["rev"] = 43
+    r2 = _runner(tmp_path, monkeypatch, dict(SPEC))
+    calls2 = []
+    monkeypatch.setattr(r2, "sh", lambda argv, **k: calls2.append(argv) or f"WS={tmp_path}\n", raising=False)
+    r2.prep()
+    assert len(calls2) == 1                       # 没有跳过，重新备了一遍
+    CENTRAL["rev"] = 42
+
+
+def test_prep_does_not_reuse_when_central_unreachable(tmp_path, monkeypatch):
+    """取不到中心库 rev 时不复用准备（宁可多备一次）。"""
+    r = _runner(tmp_path, monkeypatch, dict(SPEC))
+    monkeypatch.setattr(r, "sh", lambda argv, **k: f"WS={tmp_path}\n", raising=False)
+    CENTRAL["rev"] = None
+    r.prep()
+    calls = []
+    r2 = _runner(tmp_path, monkeypatch, dict(SPEC))
+    monkeypatch.setattr(r2, "sh", lambda argv, **k: calls.append(argv) or f"WS={tmp_path}\n", raising=False)
+    r2.prep()
+    assert len(calls) == 1
+    CENTRAL["rev"] = 42
