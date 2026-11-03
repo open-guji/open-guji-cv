@@ -115,6 +115,12 @@ def ensure_glyph_pin(book) -> None:
     ensure_pins(ws, [book.glyph_pin])
 
 
+def ensure_model_pin(book) -> None:
+    """册钉了模型总号：本机缺的模型文件先从 R2 取回（`ops/model_blobs.py`）。"""
+    from .model_blobs import ensure_model_pin as _ensure
+    _ensure(book)
+
+
 def auto_pack(args, eng, steps: list[str], full_steps, book_versions) -> None:
     """整册从头跑到尾、没有失败页 → 顺手把产物打包存进 R2（sheldon 10-21：免得忘）。
 
