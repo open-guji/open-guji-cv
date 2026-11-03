@@ -106,6 +106,7 @@ class Job:
         self.proc: subprocess.Popen | None = None
         self.cancel = threading.Event()
         self.ws: str | None = None
+        self.prep_override: dict = {}     # 准备脚本记进运行覆盖的改值（corpus／glyph_pin／cv_version；旧 tag 改本机册 yaml 时为空）
         self._stop = threading.Event()
 
     # ── 心跳 ──
@@ -141,6 +142,8 @@ class Job:
             e["GUJI_DATA_TOKEN"] = tok
         if self.ws:
             e["GUJI_WORKSPACE"] = self.ws
+        if self.prep_override:            # 准备时的改值：本会话所有 guji 命令都按它读册配置（不改册 yaml）
+            e["GUJI_BOOK_OVERRIDE"] = json.dumps(self.prep_override, ensure_ascii=False)
         if self.spec.get("no_reuse"):
             e["GUJI_NO_REUSE"] = "1"
         e["GUJI_JOB_ID"] = str(self.id)       # 跑批耗时记录（core/perf.py）带上单号，guji perf 能按单查
@@ -200,6 +203,7 @@ class Job:
             last = {}
         if last.get("sig") == sig and last.get("ws") and Path(last["ws"]).is_dir():
             self.ws = last["ws"]
+            self.prep_override = last.get("override") or {}
             self.ev(f"本会话已按同一配置备过（{sp['book']} cv {sp['cv'][:7]}），跳过准备")
             return
         if not sp.get("book"):          # eval／command 不带册：只切 cv
@@ -231,12 +235,19 @@ class Job:
             raise StageError("failed", f"准备「{part}」段失败：{e}", e.code, env=part in _PREP_ENV_PARTS) from None
         m = re.search(r"^WS=(\S+)", out, re.M)
         self.ws = m.group(1) if m else self.ws
+        m = re.search(r"^OVERRIDE=(.*)$", out, re.M)
+        if m and m.group(1).strip():
+            try:
+                self.prep_override = json.loads(m.group(1))
+            except ValueError:
+                raise StageError("failed", f"准备脚本报的运行覆盖不是 JSON：{m.group(1)[:200]}") from None
         if not self.dry and not self.ws:
             raise StageError("failed", "准备脚本没报出工作区（WS=）")
         human = re.search(r"人裁 \S+：.*", out)
         if human:
             self.ev(human.group(0)[:500])
-        mark.write_text(json.dumps({"sig": sig, "ws": self.ws, "at": time.time()}), encoding="utf-8")
+        mark.write_text(json.dumps({"sig": sig, "ws": self.ws, "override": self.prep_override, "at": time.time()},
+                                   ensure_ascii=False), encoding="utf-8")
 
     def checkout(self) -> None:
         cv = self.spec["cv"]
@@ -300,8 +311,11 @@ class Job:
             args.append("--force")
         if sp.get("params"):
             args += ["--params", json.dumps(sp["params"], ensure_ascii=False)]
-        if sp.get("book_overrides"):      # 册级覆盖在内存里叠（corpus／glyph_pin 准备时另已改本机册 yaml，供钉子账用，值一致）
-            args += ["--override", json.dumps(sp["book_overrides"], ensure_ascii=False)]
+        # 册级覆盖在内存里叠：准备时的改值（cv_version 等）＋需求单的 book_overrides，合成一份给 --override
+        # （旧版 cv 的 --override 会顶掉环境变量里的，所以这里自己合，不靠 CLI 合）
+        ov = {**self.prep_override, **(sp.get("book_overrides") or {})}
+        if ov:
+            args += ["--override", json.dumps(ov, ensure_ascii=False)]
         out = self.guji(*args)
         lines = [ln for ln in out.strip().splitlines() if not re.match(r"^\s*\S+ p\d+: 完成", ln)]
         tail = "\n".join(lines[-20:])

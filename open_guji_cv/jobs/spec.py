@@ -10,7 +10,7 @@
     steps           {"from": 起步, "to": 止步}，缺省整条
     pages           缺省 all
     force           缺省 true（重跑就是要重算）；no_reuse 缺省跟 force
-    book_overrides  {"corpus": N, "glyph_pin": N}：只改执行会话本机的册配置，不推中心库
+    book_overrides  {"corpus": N, "glyph_pin": N}：执行会话里叠在册配置上的运行覆盖（GUJI_BOOK_OVERRIDE），不改册 yaml、不推中心库
     pin_args        guji corpus pin 的参数串（追加语料钉子账）
     base            先取哪个产物包铺底：main｜包标签｜null；从中间某步起跑缺省 main
     checks          {"human_chars": N}：开跑前人裁绑定后必须正好 N 格，不对就 blocked 不跑
