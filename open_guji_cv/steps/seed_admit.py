@@ -737,6 +737,21 @@ class SeedAdmitParams(BaseModel):
     要 `reference_trust: very_high`、本列对位健康（列内已放行格字＝整理本字占比 ≥ 0.8、至少 3 格）、
     无护栏、库没判 diff、无字组解法反对，疑问码只限 `_REF_LIB_COORD_DOUBTS`；日曰目／己已巳／入人八／一二 不碰。
     通道 `ref_lib_coord`，evidence `lane.topk_rank` 留痕，方便按参校本错误回查。False＝关（不进 dump）。"""
+    ref_garble_follow: bool = False
+    """乱码闸（`ctx_garble_shape`）拦下的格按参校本放（史記文淵閣本 2026-11-03，第 4 轮 L 类乱码闸 44 格看图：
+    参校字对 30、字块坏 11、疑似真异文 2；闸门口径没问题——机器字多半读错，这里放的是**参校字**，不是机器字）。
+    要 `reference_trust: very_high`；格只带 `库 unsure`＋`ctx_garble_shape` 这一类疑问（`_REF_LIB_COORD_DOUBTS` 白名单内）、
+    库首位 cov 在 [`ref_garble_cov_lo`, `context_garble_cov`)、无护栏、库没判 diff；整理本字非空、非 〓、不在
+    日曰目／己已巳／入人八／一二；本列对位**全健康**（列内已放行格字＝对位字 100%、至少 3 格）；
+    字块不坏（墨量相对本列已放行格中位数在 [`ref_garble_ink_lo`, `ref_garble_ink_hi`]、宽高比 ≤ `ref_garble_aspect_max`，
+    读不到字块信息时不放）。通道 `ref_garble`、provenance `ref_garble`（不进字形库），evidence `lane.ref_only=true`、
+    `lane.machine` 记机器字，汇总里能按它抽看「按参校放、机器未认可」。False＝关（不进 dump）。"""
+    ref_garble_cov_lo: float = 0.85
+    ref_garble_ink_lo: float = 0.5
+    ref_garble_ink_hi: float = 2.0
+    ref_garble_aspect_max: float = 1.6
+    """字块不坏的判据阈值（只在 `ref_garble_follow` 开着时进 dump）。**默认值未经看图标定**：SJ 看图的 11 个字块坏格
+    要离线回放（带 char_index 的产物）后再校，见 PR 说明。"""
     follow_ref_seen: str = ""
     """看图核实过的字对（通道 `follow_ref`，证据 `via=seen`，A24 2026-11-02，全唐文 Z 弃权／N 形近护栏）。格式同 `follow_ref`：
     逗号分隔的 `整理本形=库里另一形`（王=玉,天=大,永=氷 …）。这些对子在本书按字对抽样看图（每对 16 格）整理本形全对、机器读错，
@@ -864,6 +879,10 @@ class SeedAdmitParams(BaseModel):
             d.pop("reference_trust", None)
         if isinstance(d, dict) and not self.ref_topk_follow:
             d.pop("ref_topk_follow", None)
+        if isinstance(d, dict) and not self.ref_garble_follow:
+            for k in ("ref_garble_follow", "ref_garble_cov_lo", "ref_garble_ink_lo", "ref_garble_ink_hi",
+                      "ref_garble_aspect_max"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.ref_lib_coord:
             for k in ("ref_lib_coord", "ref_lib_coord_cov", "ref_lib_coord_gap"):
                 d.pop(k, None)
@@ -1745,6 +1764,10 @@ class SeedAdmitStep(Step):
                 d_tk = _ref_topk_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap)
                 n_auto += d_tk
                 n_review -= d_tk
+            if p.ref_garble_follow and p._rt_rank() >= 2:
+                d_gb = _ref_garble_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache), vmap, imap)
+                n_auto += d_gb
+                n_review -= d_gb
         if p.rare_ref and p.rare_ref_coord and amap:
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
@@ -2534,6 +2557,89 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
                                      **({"blind": True} if top != ref else {}),
                                      "prev_doubts": list(rec.doubts or [])}}
             rec.doubts = ["lane_ref_lib_coord"]
+            n += 1
+    return n
+
+
+def ref_garble_decide(*, char, ref, cands, verdict, guard, doubts, evidence, semantic, cov_lo: float,
+                      cov_hi: float, col_healthy: bool, block_ok: bool) -> bool:
+    """`ref_garble_follow` 的判据，纯函数。乱码闸拦下的待审格是否按整理本字放行。
+    条件见 `SeedAdmitParams.ref_garble_follow`：疑问码必须含 `ctx_garble_shape`、其余都在白名单内；库首位≠整理本字
+    （首位＝整理本字走 `ref_lib_coord`）；cov ∈ [cov_lo, cov_hi)；本列对位全健康；字块不坏。"""
+    if not char or not ref or ref == "〓" or ref in _REF_LIB_COORD_SKIP or ref in _JYS:
+        return False
+    if not (col_healthy and block_ok) or guard is not None or verdict == "diff" or not cands:
+        return False
+    ds = [d for d in (doubts or []) if isinstance(d, str)]
+    if "ctx_garble_shape" not in ds:
+        return False
+    if any(not d.startswith(_REF_LIB_COORD_DOUBTS + ("ctx_garble_shape",)) for d in ds):
+        return False
+    top_c, top = cands[0][0], float(cands[0][1])
+    if top_c == ref or not (cov_lo <= top < cov_hi):
+        return False
+    ev = evidence or {}
+    h = ev.get("human_unbound")
+    if h and h.get("char") != ref:
+        return False
+    g = ev.get("group") or {}
+    for t in g.get("solvers") or []:
+        c = t.get("char")
+        if c and c != ref and not (str(t.get("solver", "")) == "ids" and semantic(c) == semantic(ref)):
+            return False
+    return True
+
+
+def _ref_garble_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, vmap, imap: dict) -> int:
+    """`ref_garble_follow`：乱码闸拦下的格按参校本放（通道 `ref_garble`，字形不进库）。→ 放行格数。"""
+    import statistics
+    n = 0
+    for col in out:
+        hit = tot = 0
+        inks = []
+        for r in col.chars or []:
+            if r.admit and r.char:
+                rf = coord.get(r.id) or (amap.get(r.id) or (None,))[0]
+                if rf and rf != "〓":
+                    tot += 1
+                    hit += r.char == rf
+                ir = getattr(imap.get(r.id), "ink_ratio", 0.0)
+                if ir:
+                    inks.append(float(ir))
+        if not (tot >= 3 and hit == tot) or not inks:
+            continue
+        ink_med = statistics.median(inks)
+        for rec in col.chars or []:
+            if rec.admit or rec.channel == "human" or rec.provenance == "human":
+                continue
+            ds = set(rec.doubts or [])
+            if "excluded" in ds or "occluded" in ds or "ctx_garble_shape" not in ds:
+                continue
+            ref = coord.get(rec.id) or (amap.get(rec.id) or (None,))[0]
+            m = mmap.get(rec.id)
+            c = imap.get(rec.id)
+            if not m or not ref or c is None:
+                continue
+            h_, w_, ir = float(getattr(c, "height", 0) or 0), float(getattr(c, "width", 0) or 0), \
+                float(getattr(c, "ink_ratio", 0) or 0)
+            block_ok = (h_ > 0 and w_ > 0 and ir > 0
+                        and p.ref_garble_ink_lo <= ir / ink_med <= p.ref_garble_ink_hi
+                        and max(w_ / h_, h_ / w_) <= p.ref_garble_aspect_max)
+            if not ref_garble_decide(char=rec.char, ref=ref, cands=list(m.candidates or []),
+                                     verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
+                                     doubts=rec.doubts, evidence=rec.evidence, semantic=vmap.semantic,
+                                     cov_lo=p.ref_garble_cov_lo, cov_hi=p.context_garble_cov,
+                                     col_healthy=True, block_ok=block_ok):
+                continue
+            top, cov = m.candidates[0][0], float(m.candidates[0][1])
+            machine = rec.char
+            rec.char = ref
+            rec.admit, rec.channel, rec.provenance = True, "ref_garble", "ref_garble"
+            rec.evidence = {**(rec.evidence or {}),
+                            "lane": {"lane": "ref_garble", "lib": top, "cov": round(cov, 4), "ref": ref,
+                                     "machine": machine, "ref_only": True,
+                                     "prev_doubts": list(rec.doubts or [])}}
+            rec.doubts = ["lane_ref_garble"]
             n += 1
     return n
 
