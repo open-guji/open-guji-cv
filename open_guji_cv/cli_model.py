@@ -5,6 +5,8 @@
     guji model build  -w <工作区> [--note]   # 出新模型总号 m<N>（内容没变不出）；迁过的工作区接着 guji db push
     guji model verify -w <工作区> [--version N]   # 清单 vs 当前文件
     guji model list   -w <工作区>            # 已有的总号
+    guji model upload -w <工作区> [--version N] [--execute]   # 清单里的文件按 sha256 传进 R2（缺省演练）
+    guji model fetch  -w <工作区> [--version N]   # 本机缺的从 R2 取回、放到登记位置（pipeline 起跑前自动做）
 
 册 yaml 写 ``model: N`` 钉住。本命令不改册 yaml、不推中心库。
 """
@@ -68,6 +70,17 @@ def cmd_model(args) -> None:
             print(("✓" if not bad else "✗") + f" m{v}：改了 {len(r['changed'])}，缺 {len(r['missing'])}，"
                   f"新增 {len(r['extra'])}  {(bad + r['extra'])[:6]}")
         sys.exit(1 if bad else 0)
+    elif args.model_cmd in ("upload", "fetch"):
+        from .ops import model_blobs as mb
+        try:
+            r = (mb.upload(ws, args.version, execute=args.execute) if args.model_cmd == "upload"
+                 else mb.fetch(ws, args.version))
+        except (ValueError, FileNotFoundError) as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+        _out(r, True)
+        if args.model_cmd == "fetch" and (r["differ_not_overwritten"] or r["not_in_r2"]):
+            sys.exit(1)
     elif args.model_cmd == "list":
         vs = mp.versions(ws)
         rows = []
@@ -95,7 +108,12 @@ def add_parser(sub) -> None:
     v = ps.add_parser("verify", help="清单 vs 当前文件（退出码 1 = 有改动或缺失）")
     v.add_argument("--version", type=int, default=None, help="缺省最新")
     li = ps.add_parser("list", help="已有的模型总号")
-    for q in (ls_, b, v, li):
+    up = ps.add_parser("upload", help="清单里的文件按 sha256 传进 R2（已有跳过；缺省只演练）")
+    up.add_argument("--version", type=int, default=None, help="缺省最新")
+    up.add_argument("--execute", action="store_true", help="真传（要 GUJI_DATA_TOKEN 正式令牌）")
+    fe = ps.add_parser("fetch", help="本机缺的模型文件从 R2 取回（已有但内容不同的不覆盖）")
+    fe.add_argument("--version", type=int, default=None, help="缺省最新")
+    for q in (ls_, b, v, li, up, fe):
         q.add_argument("-w", "--workspace", default=None, help="工作区（清单落在数据目录 config/model-pack/m<N>/）")
         q.add_argument("--json", action="store_true")
 
