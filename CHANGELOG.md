@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- 模型系统：cv 自带模型表 `config/model-registry.json`（A20，11-04，为下一版把 `models/` 搬出 git 做准备）。`guji model registry` 重写表、`guji model fetch`（不给 -w）按表从 R2 补齐 `models/`，`guji pipeline` 起跑前自动补，`install_release.py` 装完也补；文件放回原位，代码与指纹不变。
 - 补现行待审单的 `pending_reason`（A31，sheldon 11-03：已有数据也改写，推不出写 unknown）：`scripts/zhengli/backfill_pending_reason.py`，每张单取出单那一版的产物包 `rev-<rev>`（没有退回 ★main）用 `review/reasons.py` 判，只加 `pending_reason`／`pending_reason_detail`，别的字段不动；缺省试跑出报告，`--write` 才写回数据目录。殿本 99 张单 18,429 格试跑：全部取到出单版包，unknown 0。不碰任何 Step。
 - 出单写待审原因 `pending_reason`（A31，sheldon 11-03 定）：新模块 `review/reasons.py` 按 `pending_reasons.yaml` 的 `priority` 逐条判一格为什么待审（判法搬自 A31 统计分类 v2：复审／改判、切坏、遮挡、整页整列对不上、极难形近、字组五种、整理本缺字／没字、库里没有、乱码闸、异体、形近护栏、刻例太少、改字层、库不认、与整理本不一致），都不中写 `unknown`；`republish.py` 出单时给公开单与团队单每格写 `pending_reason`（必有）与 `pending_reason_detail`，`cause`／`cls` 过渡期照旧双写。读 seed_admit／align_ref／glyph_match 产物、待审单字段与工作区 `output/glyph.db`（刻例数，库不在就不判刻例太少）。殿本 vol20、vol56 实测与 v2 统计分类逐格一致（差异只在改判复审优先、乱码闸先于刻例太少）。yaml 的 priority 按判定顺序重排。不碰任何 Step，`code_hash` 不变。
 - 模型系统二期第一步（A20，11-04；设计 `doc/design/模型系统.md` 4.1）：`guji model upload|fetch`，清单里的模型文件按 sha256 进出 R2（键同语料大文件），取回时放回登记位置，所以 Step 代码、`code_hash`、指纹都不变；`guji pipeline` 起跑前对钉了 `model:` 的册自动补取缺的文件（`ops/model_blobs.py`）。已传史記、殿本 m1。

@@ -7,6 +7,8 @@
     guji model list   -w <工作区>            # 已有的总号
     guji model upload -w <工作区> [--version N] [--execute]   # 清单里的文件按 sha256 传进 R2（缺省演练）
     guji model fetch  -w <工作区> [--version N]   # 本机缺的从 R2 取回、放到登记位置（pipeline 起跑前自动做）
+    guji model fetch                          # 不给 -w：按 cv 自带的模型表补齐 cv 的 models/
+    guji model registry                       # 按当前 models/ 重写 cv 自带的模型表（发版删文件前跑）
 
 册 yaml 写 ``model: N`` 钉住。本命令不改册 yaml、不推中心库。
 """
@@ -34,6 +36,14 @@ def _out(obj, as_json: bool) -> None:
 
 def cmd_model(args) -> None:
     from .core import model_pack as mp
+    if args.model_cmd == "registry":
+        _out(mp.build_registry(), True)
+        return
+    if args.model_cmd == "fetch" and not args.workspace:
+        from .ops import model_blobs as mb
+        r = mb.fetch_registry()
+        _out(r, True)
+        sys.exit(1 if r["not_in_r2"] or r["placed"] < r["missing"] else 0)
     ws = _ws(args)
     if args.model_cmd == "ls":
         items = mp.collect(ws)
@@ -111,8 +121,9 @@ def add_parser(sub) -> None:
     up = ps.add_parser("upload", help="清单里的文件按 sha256 传进 R2（已有跳过；缺省只演练）")
     up.add_argument("--version", type=int, default=None, help="缺省最新")
     up.add_argument("--execute", action="store_true", help="真传（要 GUJI_DATA_TOKEN 正式令牌）")
-    fe = ps.add_parser("fetch", help="本机缺的模型文件从 R2 取回（已有但内容不同的不覆盖）")
+    fe = ps.add_parser("fetch", help="本机缺的模型文件从 R2 取回（已有但内容不同的不覆盖；不给 -w 按 cv 的模型表补 models/）")
     fe.add_argument("--version", type=int, default=None, help="缺省最新")
+    ps.add_parser("registry", help="按当前 models/ 重写 cv 自带的模型表 config/model-registry.json")
     for q in (ls_, b, v, li, up, fe):
         q.add_argument("-w", "--workspace", default=None, help="工作区（清单落在数据目录 config/model-pack/m<N>/）")
         q.add_argument("--json", action="store_true")

@@ -117,7 +117,8 @@ def ensure_glyph_pin(book) -> None:
 
 def ensure_model_pin(book) -> None:
     """册钉了模型总号：本机缺的模型文件先从 R2 取回（`ops/model_blobs.py`）。"""
-    from .model_blobs import ensure_model_pin as _ensure
+    from .model_blobs import ensure_model_pin as _ensure, ensure_repo_models
+    ensure_repo_models()
     _ensure(book)
 
 

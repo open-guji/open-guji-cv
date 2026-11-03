@@ -64,21 +64,47 @@ def fetch(ws: Path, version: int | None = None) -> dict:
             ok += 1
         else:
             differ.append(f'{it["root"]}:{it["path"]}')
-    placed, absent = 0, []
-    if todo:
-        from ..datastore.client import BlobCache, WorkerSource
-        cache = BlobCache()
-        got = cache.ensure(WorkerSource(), sorted({it["sha256"] for it, _ in todo}), ext=EXT)
-        absent = got["missing"]
-        for it, p in todo:
-            if cache.has(it["sha256"]):
-                p.parent.mkdir(parents=True, exist_ok=True)
-                tmp = p.with_name(p.name + ".part")
-                shutil.copyfile(cache.path(it["sha256"]), tmp)
-                tmp.replace(p)
-                placed += 1
+    placed, absent = _place([(it["sha256"], p) for it, p in todo]) if todo else (0, [])
     return {"version": v, "already_ok": ok, "placed": placed, "differ_not_overwritten": differ,
             "not_in_r2": absent}
+
+
+def _place(todo: list[tuple[str, Path]]) -> tuple[int, list[str]]:
+    """``[(sha, 目标路径)]`` 从 R2 取进本机缓存再放到位，返回 (放了几个, R2 上没有的 sha)。"""
+    from ..datastore.client import BlobCache, WorkerSource
+    cache = BlobCache()
+    got = cache.ensure(WorkerSource(), sorted({sha for sha, _ in todo}), ext=EXT)
+    placed = 0
+    for sha, p in todo:
+        if cache.has(sha):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            tmp = p.with_name(p.name + ".part")
+            shutil.copyfile(cache.path(sha), tmp)
+            tmp.replace(p)
+            placed += 1
+    return placed, got["missing"]
+
+
+def fetch_registry() -> dict:
+    """cv 自带的模型表（`core/model_pack.REGISTRY`）里本机缺的文件，从 R2 取回放进 ``models/``。"""
+    from ..core import model_pack as mp
+    miss = mp.missing_repo_models()
+    placed, absent = _place([(i["sha256"], mp.REPO_ROOT / i["path"]) for i in miss]) if miss else (0, [])
+    return {"registry": len(mp.load_registry()), "missing": len(miss), "placed": placed, "not_in_r2": absent}
+
+
+def ensure_repo_models() -> None:
+    """``guji pipeline`` 起跑前：cv 的 ``models/`` 缺了模型表里的文件就先取回（各书都用，不看钉号）。"""
+    from ..core import model_pack as mp
+    if not mp.missing_repo_models():
+        return
+    try:
+        r = fetch_registry()
+        print(f"  模型：从 R2 取回 {r['placed']} 个文件到 cv 的 models/", flush=True)
+        if r["not_in_r2"]:
+            print(f"  ⚠️  R2 上没有 {len(r['not_in_r2'])} 个模型文件", file=sys.stderr)
+    except Exception as e:                     # noqa: BLE001 —— 没令牌、断网：照旧往下，缺权重的预检会拦
+        print(f"  ⚠️  cv 的 models/ 缺文件，自动取回失败：{e}", file=sys.stderr)
 
 
 def ensure_model_pin(book) -> None:

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import os
 import shutil
 import subprocess
 import sys
@@ -82,6 +83,14 @@ def main() -> int:
             if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config", "formats", "precleaned"):
                 raise ValueError(f"资源包里有不合规的路径：{m.name}")
         tf.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(out)
+    # 模型文件不随资源包走时（models/ 搬出 git 之后），按 cv 自带的模型表从 R2 取回（要 GUJI_DATA_TOKEN／_READ）
+    if (Path(out) / "config" / "model-registry.json").exists():
+        env = dict(os.environ)
+        if not env.get("GUJI_DATA_TOKEN") and env.get("GUJI_DATA_TOKEN_READ"):
+            env["GUJI_DATA_TOKEN"] = env["GUJI_DATA_TOKEN_READ"]
+        r = subprocess.run([sys.executable, "-m", "open_guji_cv", "model", "fetch"], env=env)
+        if r.returncode:
+            print("模型文件取回不全（见上）；补好令牌后跑 guji model fetch", file=sys.stderr)
     # 装后自检：关键资源缺了就拒绝（缺 checkpoint 等处代码是静默退化，不报错）
     must = ["models/glyph_cnn_r5/best.pt", "models/partition_unet_v2", "config/charset", "config/groups",
             "formats/guji_page_v0.2.schema.json", "precleaned"]
