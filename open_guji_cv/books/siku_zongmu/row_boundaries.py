@@ -62,6 +62,7 @@ DP 到有序匹配到最终版弹性 DP，中间十几版尝试及各自的失�
 from __future__ import annotations
 
 import functools
+import itertools
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -635,17 +636,18 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         lo, hi = max(0, a), min(n_cmax, b + 1)
         if lo >= hi:
             return True
-        # 手写短路循环，不切片：一旦见到 ≥ 阈值的行就能提前退出，不必扫完整段
-        # 再取 max——「是否空白」本来就是「有没有一行墨够多」，不需要真的求最大值。
-        for i in range(lo, hi):
-            if cmax_list[i] >= blank_thresh:
-                return False
-        return True
+        # 前缀计数（2026-11-03）：「是否空白」=「区间里有没有一行墨 ≥ 阈值」，O(1)。
+        # 原先逐行短路循环，全唐文 4296×6065 图上一页 76 万个不同区间、占 row_segment 5%。
+        return inked_cnt[hi] == inked_cnt[lo]
 
     def _is_blank(ya: float, yb: float) -> bool:
         return _is_blank_i(round(min(ya, yb)), round(max(ya, yb)))
 
     dense_thresh = blank_thresh * (0.5 / 0.08)   # blank_thresh = 0.08·列宽 → 0.5·列宽
+    # 前缀计数：cnt[i] = 前 i 行里满足条件的行数（与逐行判同一组比较，结果逐位相同）
+    inked_cnt = list(itertools.accumulate((v >= blank_thresh for v in cmax_list), initial=0))
+    dropped_cnt = list(itertools.accumulate(
+        (blank_thresh <= v < dense_thresh for v in cmax_list), initial=0))
 
     @functools.lru_cache(maxsize=None)
     def _dropped_rows_i(a: int, b: int) -> int:
@@ -654,7 +656,7 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         lo, hi = max(0, a), min(n_cmax, b)
         if lo >= hi:
             return 0
-        return sum(1 for i in range(lo, hi) if blank_thresh <= cmax_list[i] < dense_thresh)
+        return dropped_cnt[hi] - dropped_cnt[lo]
 
     def _dropped_rows(ya: float, yb: float) -> int:
         """[ya, yb) 里会被丢掉的字墨行数：有墨、且不是框线级密行。"""
