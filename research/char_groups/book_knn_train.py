@@ -37,6 +37,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("group"); ap.add_argument("cells"); ap.add_argument("patches"); ap.add_argument("out")
     ap.add_argument("--exclude", default="")
+    ap.add_argument("--bg", default="", help="背景刻例 cells.json（本书随机已放行格＋易混组外字；组员字自动剔除）")
     ap.add_argument("--min-n", type=int, default=5)
     ap.add_argument("--k", type=int, default=7)
     ap.add_argument("--votes-min", type=int, default=6)
@@ -51,6 +52,9 @@ def main():
              if c["admit"] and c["char"] in members and c["id"] not in ex]
     n = Counter(c["char"] for c in cells)
     cells = [c for c in cells if n[c["char"]] >= a.min_n]
+    if a.bg:
+        cells += [{**c, "char": book_knn.BACKGROUND, "bg_char": c["char"], "ref": None}
+                  for c in json.load(open(a.bg, encoding="utf-8")) if c["char"] not in members]
     F, keep = [], []
     for c in cells:
         g = cv2.imread(str(Path(a.patches) / (c["id"].replace(":", "_") + ".png")), cv2.IMREAD_GRAYSCALE)
@@ -68,6 +72,11 @@ def main():
     guard = float(np.percentile([r["nn"] for _, y, r in res if r["char"] == y], 99.5))
     st = Counter()
     for i, y, r in res:
+        if y == book_knn.BACKGROUND:              # 背景格：被判成组员＝组外字误放
+            if r["char"] is not None and r["nn"] <= guard:
+                st["组外误放"] += 1
+                print("  组外误放", i, "判", r["char"], r["tier"], r["votes"], r["ratio"])
+            continue
         if r["char"] is None or r["nn"] > guard:
             st["弃"] += 1
         else:
@@ -75,10 +84,10 @@ def main():
             if r["char"] != y:
                 print("  错", i, "标", y, "判", r["char"], r["tier"], r["votes"], r["ratio"])
     msg = (f"按册留出 {len(res)} 格：A 对{st[('A', '对')]} 错{st[('A', '错')]}；B 对{st[('B', '对')]} 错{st[('B', '错')]}；"
-           f"弃{st['弃']}（guard={guard:.3f}）")
+           f"弃{st['弃']}（guard={guard:.3f}）；背景 {int((lab == book_knn.BACKGROUND).sum())} 格 组外误放 {st['组外误放']}")
     print(msg)
     m = build(F, lab, np.arange(len(F)), a)
-    m.update(guard=guard, note=f"{a.group} 刻例 {len(F)}（{dict(Counter(lab.tolist()))}）；{msg}")
+    m.update(guard=guard, note=f"{a.group} 刻例 {len(F)}（{dict(Counter(lab.tolist()).most_common(12))}…）；{msg}")
     m = {k: (v.round(4).tolist() if isinstance(v, np.ndarray) and v.dtype.kind == "f" else
              v.tolist() if isinstance(v, np.ndarray) else v) for k, v in m.items()}
     Path(a.out).write_text(json.dumps(m, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
