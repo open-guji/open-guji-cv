@@ -118,19 +118,8 @@ def guided_seam_from_owner(owner: np.ndarray, y_line_local: int, band: int = GUI
     n = hi - lo + 1
     rows = np.arange(lo, hi + 1)
     tie = 1e-4 * np.abs(rows - y_line_local)
-    cost = mis[lo:hi + 1, 0] + tie
-    back = np.zeros((w, n), dtype=np.int16)
-    offsets = np.arange(-step, step + 1)
-    for x in range(1, w):
-        cand = np.full((len(offsets), n), np.inf)
-        for i, d in enumerate(offsets):
-            if d >= 0:
-                cand[i, d:] = cost[:n - d] + turn * d
-            else:
-                cand[i, :n + d] = cost[-d:] + turn * (-d)
-        best_i = np.argmin(cand, axis=0)
-        cost = cand[best_i, np.arange(n)] + mis[lo:hi + 1, x] + tie
-        back[x] = offsets[best_i]
+    from .seam import seam_dp
+    cost, back = seam_dp(mis[lo:hi + 1, :], tie, step, turn)
     j = int(np.argmin(cost))
     out = np.empty(w, dtype=int)
     for x in range(w - 1, -1, -1):
