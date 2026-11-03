@@ -3252,8 +3252,13 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
             if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") and d != "护栏:conflict" for d in ds) \
                     or ev.get("guard") in ("never_match", "timeout"):
                 continue
+            if "human_unbound" in ev or "human_unbound" in ds:      # 人裁绑丢的格不碰（人裁与对位的冲突交人审）
+                continue
             ref = (amap.get(r.id) or (None,))[0] or (coord or {}).get(r.id)     # 现役对位缺这一格时用坐标对位字
             if r.char not in pair and ref not in pair:
+                continue
+            gp = (ev.get("group") or {}).get("pick")                  # 字组流程已给了别的字（解算有分歧）：不越过
+            if gp and gp in pair:
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)

@@ -660,7 +660,7 @@ ENTRIES: tuple[Equiv, ...] = (
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence=_TAIL_EMPTY),
     Equiv(module="open_guji_cv.steps.seed_admit",
-          new="bc5ecb5d72216ba7a55430b542695f24135ef8a88c3bc453eb79f6e80f7a288b",
+          new="546e305a92ebe7ec03cb64f9dfd3397209780ea421941d82382e0f5970f984c7",
           old="097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455",
           evidence=_SJ_PAIR_SHAPE),
 )
