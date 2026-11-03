@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- 跑批耗时统计（A20，11-03，Sheldon 定；方案 Claude Doc《CV 管线性能统计方案》）：新模块 `core/perf.py`（`span`／`timed`／`count`，不在跑批里时是空操作），引擎 `Engine.run()` 自动给每步每页记计算、算指纹、清缓存、落盘与整步准备的耗时，并行时子进程的分段随结果带回；每次运行写一份 `<产物根>/../perf/<册>/<run_id>.jsonl`（机器规格、cv 版本、任务库单号 `GUJI_JOB_ID`、每步汇总与最慢 20 页），放在产物根外、不进 manifest 与产物包。新增 `guji perf top|show|pages` 读本机记录。`GUJI_PERF=0` 关掉，`GUJI_PERF_DIR` 换目录。`core/engine.py` 不在任何 `code_deps`，`code_hash` 与产物逐位不变（`tests/test_perf.py` 核开关两种跑法产物与指纹相同）。推到美国服务器 jobs 库 `perf` 表等 jobs 客户端切过去再加。
+
 ### Fixed
 - `guji source pull` 等动作在 dev 上报 invalid choice：拆分 P1a（#880）给 `cli_source` 加的插件表 `COMMANDS` 盖掉了同名的动作表；动作表改名 `ACTIONS`。只影响 dev，未发版。
 

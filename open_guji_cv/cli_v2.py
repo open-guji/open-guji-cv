@@ -1751,10 +1751,10 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   db：中心库客户端（GUJI-606），自带 -w　　products：前后对比、产物包（受控重跑），自带 -w
 #:   source：原图源件、页图、页表（R2），自带 -w
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
-#:   job：任务库（2026-10-25）
+#:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
     "cli_glyph_db", "cli_exp", "cli_db", "cli_products",
-    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close",
+    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf",
 )
 
 
