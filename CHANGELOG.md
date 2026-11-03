@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- 模型系统收尾（A20，11-04）：模型卡加出处 `source`（`config/model-provenance.json`：训练脚本、训练数据、联动门槛，不进清单哈希）；字组 IDS U-Net（`config/groups/*/unet.npz`）挪进模型系统（种类 `ids_unet`），`corpus_pin._not_corpus` 不再算它语料，老清单里的条目核对时跳过；影子闸按训练数据改归殿本；cv 模型表扩到 13 个文件；`guji model upload` 不给 -w 传模型表。史記、殿本出 m2 并改钉 `model: 2`。
 - 控制台待审卡带待审原因（A31，sheldon 11-03）：`review/cards.py` 出的每张卡加 `pending_reason`／`pending_reason_detail`，与出单同一套判法（`review/reasons.py::stamp_cards`，整页／整列对不上按这批卡自己数，刻例数取工作区 `glyph_db_path()`）；卡片缓存版本升 4、字形库进缓存键。不碰任何 Step。
 - 模型系统：cv 自带模型表 `config/model-registry.json`（A20，11-04，为下一版把 `models/` 搬出 git 做准备）。`guji model registry` 重写表、`guji model fetch`（不给 -w）按表从 R2 补齐 `models/`，`guji pipeline` 起跑前自动补，`install_release.py` 装完也补；文件放回原位，代码与指纹不变。
 - 补现行待审单的 `pending_reason`（A31，sheldon 11-03：已有数据也改写，推不出写 unknown）：`scripts/zhengli/backfill_pending_reason.py`，每张单取出单那一版的产物包 `rev-<rev>`（没有退回 ★main）用 `review/reasons.py` 判，只加 `pending_reason`／`pending_reason_detail`，别的字段不动；缺省试跑出报告，`--write` 才写回数据目录。殿本 99 张单 18,429 格试跑：全部取到出单版包，unknown 0。不碰任何 Step。
