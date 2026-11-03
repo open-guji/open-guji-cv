@@ -33,6 +33,11 @@ case "${1:-}" in
   start)
     shift; refresh; ensure_manager
     if busy; then echo "执行方已在跑（$H/worker.lock）"; exit 0; fi
+    # 执行方名字：给了 GUJI_JOBS_WHO 就记进 $H/who，之后保活重起没设也沿用；都没有就拒起（否则都登记成主机名 vm，互相顶替）
+    if [ -n "${GUJI_JOBS_WHO:-}" ]; then echo "$GUJI_JOBS_WHO" > "$H/who"
+    elif [ -s "$H/who" ]; then GUJI_JOBS_WHO=$(cat "$H/who")
+    else echo "✗ 没有执行方名字：首次请 GUJI_JOBS_WHO=worker-N guji_jobs start …（之后自动沿用）" >&2; exit 2; fi
+    export GUJI_JOBS_WHO
     GUJI_REQUIRE_JOBSDB=${GUJI_REQUIRE_JOBSDB:-1} PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
     echo "执行方已起（pid $!），日志 $H/worker.log；guji_jobs follow 跟着看";;
   follow)
