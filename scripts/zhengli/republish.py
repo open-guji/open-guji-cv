@@ -1109,6 +1109,23 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
     return doc, others
 
 
+def stamp_char_pending(char_json: Path, plan: dict) -> None:
+    """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
+    §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
+    from open_guji_cv.formats import guji_char_cord as cc
+    if not char_json.exists():
+        return
+    cells = []
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    char = json.loads(char_json.read_text(encoding="utf-8"))
+    n = cc.apply_pending(char, {"cells": cells})
+    char_json.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
+    print(f"char 待审原因：{n['stamped']} 格（去 lacuna {n['lacuna_dropped']}）；单上有、char 里没有 {n['missing']}")
+
+
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
 
@@ -1140,6 +1157,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
+    stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
         (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")
