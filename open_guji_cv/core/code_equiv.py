@@ -174,6 +174,10 @@ _JZ_FREE = ("雙行小注两行字数可不等 jiazhu_free_split（row_segment �
              "开关关着时 row_segment 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev 0a5ba0b7 产物逐字节相同；"
              "关着时只多一个空的 half_side 判断，全唐文等走同一 row_segment 的书同理；scripts/code_equiv.py check，2026-11-03")
 
+_JZ_HALF = ("夹注格半格框线、贴外沿竖框 jiazhu_strip_rules r6（cell_shrink 书级开关，缺省关；extractor 加 strip_jiazhu_half_line、"
+             "strip_long_rule through 认碰字的线、page_frame_line_offsets 加 span_frac）：开关关着时 cell_shrink 在殿本 vol12 新图 31 页"
+             "（每 5 页取 1）上与 origin/dev f48e3466 产物逐字节相同；scripts/code_equiv.py check，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -663,6 +667,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="546e305a92ebe7ec03cb64f9dfd3397209780ea421941d82382e0f5970f984c7",
           old="097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455",
           evidence=_SJ_PAIR_SHAPE),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="b14148bb32ee5dd5d205383ba03b39678c0c580ca69e901fbfcd559a2bb5889f",
+          old="641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2",
+          evidence=_JZ_HALF),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="4afb9c48f669b5d7de1c7f25bab044ef050b2c8307937b8cc9faf0ce8ab6cb99",
+          old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
+          evidence=_JZ_HALF),
 )
 
 
