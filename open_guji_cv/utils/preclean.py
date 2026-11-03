@@ -249,6 +249,18 @@ def rule_mask(gray: np.ndarray, rule: dict) -> np.ndarray:
     raise ValueError(f"不是反色规则: {kind}")
 
 
+def descreen(gray: np.ndarray, *, sigma: float = 0.8, thr: int = 200) -> np.ndarray:
+    """去网点（半色调／误差扩散扫描）：高斯低通后按 `thr` 重新二值，返回 {0,255} 的 uint8。
+
+    原图是 1-bit 网点时，缩小了看笔画清楚，原分辨率下直接二值化笔画碎成噪点。低通把网点合成灰度（纸 ≈255，墨 ≈60），
+    再按 `thr` 取墨。目前只给 `cell_shrink.patch_descreen_pages`（字块）用，不用于整页（整页会让切分变）。
+    """
+    import cv2
+    g = gray if gray.ndim == 2 else cv2.cvtColor(gray, cv2.COLOR_BGR2GRAY)
+    b = cv2.GaussianBlur(g, (0, 0), float(sigma))
+    return np.where(b > int(thr), 255, 0).astype(np.uint8)
+
+
 _OPS = {"inverted_band": invert_band, "inverted_rect": invert_rect, "inverted_poly": invert_poly}
 
 

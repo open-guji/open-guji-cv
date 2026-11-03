@@ -49,6 +49,14 @@ class CellShrinkParams(BaseModel):
     """列首／列尾的雙行小注格剥框渣、曲线切边时左右两半各算（extractor 同名开关）。缺省关＝整格算（刻本旧行为）。
     写本列尾小注两个小字各有字身，整格只认最大连通体，另一半字与之分离的下半截被当框渣抹掉。"""
 
+    patch_descreen_pages: list[int] | None = None
+    """半色调（网点）扫描页的页号。登记的页，存进 `char_patch` 的字块先做去网点（高斯低通后重新二值，
+    `utils.preclean.descreen`）；**只动字块像素，不动切分、框、格位**。缺省 None＝不动（不进 dump，产物逐字节不变）。
+    史記文淵閣本 02 册约 72 页、03 册 8 页等原图是 1-bit 误差扩散网点：缩小了看笔画清楚，原分辨率下字块碎成噪点，
+    字形库认不出（SJ 第 3 轮 L 类）。整页去网点（preclean `descreen`）会让切分跟着变，试过 02:106 放行字变 10～34 格，所以只改字块。"""
+    patch_descreen_sigma: float = 0.8
+    patch_descreen_thr: int = 200
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -57,7 +65,21 @@ class CellShrinkParams(BaseModel):
             d.pop("frame_line_max_off", None)
         if isinstance(d, dict) and not self.jiazhu_end_halves:
             d.pop("jiazhu_end_halves", None)
+        if isinstance(d, dict) and not self.patch_descreen_pages:
+            for k in ("patch_descreen_pages", "patch_descreen_sigma", "patch_descreen_thr"):
+                d.pop(k, None)
         return d
+
+
+def _descreen_patch(step, ctx: RunContext, page: int, patch):
+    """登记了 `patch_descreen_pages` 的页，字块去网点（见 CellShrinkParams）；其余页原样返回。"""
+    if patch is None or getattr(patch, "size", 0) == 0:
+        return patch
+    p: CellShrinkParams = ctx.params_for(step)  # type: ignore[assignment]
+    if not p.patch_descreen_pages or page not in p.patch_descreen_pages:
+        return patch
+    from ..utils.preclean import descreen
+    return descreen(patch, sigma=p.patch_descreen_sigma, thr=p.patch_descreen_thr)
 
 
 def _upright(ctx: RunContext, patch):
@@ -333,7 +355,7 @@ class CellShrinkStep(Step):
                         ctx, page, cc, img, inst, slot, seams.get(pos),
                         multi_above.get(pos), multi_below.get(pos))
                 if has_patch and cell_type == "char":
-                    ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
+                    ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, _descreen_patch(self, ctx, page, patch)))
                     patch_key = key
                 flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
                 if (cc.col, slot, inst.sub or "") in seal:
@@ -388,7 +410,7 @@ class CellShrinkStep(Step):
             if pos_to_slot.get(pos) == slot and (inst.sub or "") == sub and patch is not None:
                 if pos in seams and not sub:
                     patch, _ = _apply_seam(img, patch, tuple(float(v) for v in inst.bbox), *seams[pos])
-                return patch
+                return _descreen_patch(self, ctx, page, patch)
         raise KeyError(f"再生不出字块: {key}{sub}")
 
 
