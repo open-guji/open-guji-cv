@@ -143,6 +143,7 @@ class Job:
             e["GUJI_WORKSPACE"] = self.ws
         if self.spec.get("no_reuse"):
             e["GUJI_NO_REUSE"] = "1"
+        e["GUJI_JOB_ID"] = str(self.id)       # 跑批耗时记录（core/perf.py）带上单号，guji perf 能按单查
         e.update(self.spec.get("env") or {})
         return e
 

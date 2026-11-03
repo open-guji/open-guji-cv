@@ -110,6 +110,10 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     import subprocess
     ws = os.environ["GUJI_WORKSPACE"]
     env = {**os.environ, "GUJI_NO_RUN_LOCK": "1", "GUJI_NO_BATCH_SLICE": "1"}
+    if not env.get("GUJI_PERF_GROUP"):    # 每步一个子进程、各写一份耗时记录：用同一个组号串起来
+        import time
+        import uuid
+        env["GUJI_PERF_GROUP"] = time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
     cur: dict = {"p": None}
 
     def _forward(signum, _frame):
@@ -2046,11 +2050,23 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     install_workspace_option(sub)
 
 
+def _install_perf_sink() -> None:
+    """跑批耗时记录写完就推美国机任务库（只在设了 JOBSDB_TOKEN 时；不推 Neon）。见 doc/性能统计.md。"""
+    try:
+        from .jobs import perf_push
+        if perf_push.enabled():
+            from .core import perf
+            perf.add_sink(perf_push.sink)
+    except Exception:  # noqa: BLE001 —— 统计是附带的，装不上不影响命令
+        pass
+
+
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
         from .utils.batch_slice import enter_batch_slice
         enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
     prep.install_derived_fetcher()
+    _install_perf_sink()
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)

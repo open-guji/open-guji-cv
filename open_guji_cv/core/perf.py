@@ -35,6 +35,15 @@ SLOWEST_N = 20
 
 _cur: PageRec | None = None
 
+#: 一次运行写完（`RunPerf.close`）后调的回调，参数是 perf 文件路径。引擎在 L1、不认识任务库，
+#: 推到美国机 jobs 库的逻辑由命令行层（`cli_v2.main`）登记进来（`jobs/perf_push.py`）。
+_sinks: list = []
+
+
+def add_sink(fn) -> None:
+    if fn not in _sinks:
+        _sinks.append(fn)
+
 
 class PageRec:
     """一页一步的分段累加：spans = {名字: [次数, 墙钟秒, CPU 秒]}，counts = {名字: 数}。"""
@@ -141,7 +150,7 @@ def machine_info() -> dict:
         kind = "cloud" if os.environ.get("CLAUDE_CODE_REMOTE") else ("windows" if os.name == "nt" else "local")
     info["kind"] = kind
     if os.environ.get("CLAUDE_CODE_CONTAINER_ID"):   # 云端容器主机名都是 vm，靠容器号区分
-        info["container"] = os.environ["CLAUDE_CODE_CONTAINER_ID"][:16]
+        info["container"] = os.environ["CLAUDE_CODE_CONTAINER_ID"].removeprefix("container_")[:16]
     if "torch" in sys.modules:          # 只看已经 import 的，不为统计去加载 torch
         try:
             t = sys.modules["torch"]
@@ -245,6 +254,7 @@ class RunPerf:
         self._ok = True
         self.write({"t": "run", "run_id": self.run_id, "book": book, "started_at": time.time(),
                     "argv": sys.argv[1:], "job_id": os.environ.get("GUJI_JOB_ID"),
+                    "group": os.environ.get("GUJI_PERF_GROUP"),
                     "machine": machine_info(), **meta})
 
     def write(self, row: dict) -> None:
@@ -263,6 +273,13 @@ class RunPerf:
     def close(self, stopped: bool = False) -> None:
         self.write({"t": "end", "run_id": self.run_id, "finished_at": time.time(),
                     "wall_s": round(time.perf_counter() - self.t0, 3), "stopped": stopped})
+        if self._ok:
+            for fn in _sinks:
+                try:
+                    fn(self.path)
+                except Exception as e:  # noqa: BLE001 —— 统计推不上绝不拖垮跑批
+                    print(f"  ⚠ 耗时记录没推上（{type(e).__name__}: {str(e)[:120]}），之后 guji perf push 补",
+                          file=sys.stderr)
 
 
 def perf_dir(products_root: Path) -> Path:
