@@ -144,3 +144,27 @@ def test_fetch_registry_places_missing(monkeypatch, tmp_path):
                                                           if s == sha]), []))
     r = mb.fetch_registry()
     assert r["placed"] == 1 and f.exists() and not mp.missing_repo_models()
+
+
+def test_provenance_on_cards_not_in_digest(ws):
+    (mp.REPO_ROOT / "config").mkdir(exist_ok=True)
+    before = mp.items_digest(mp.collect(ws))
+    (mp.REPO_ROOT / mp.PROVENANCE).write_text(
+        '{"kinds": {"partition_unet": {"script": "train.py", "trained_on": "合成"}}}', encoding="utf-8")
+    mp._PROV.clear()
+    items = mp.collect(ws)
+    unet = next(i for i in items if i["kind"] == "partition_unet")
+    assert unet["source"] == {"script": "train.py", "trained_on": "合成"}
+    assert mp.items_digest(items) == before                    # 出处不进清单哈希
+
+
+def test_repo_provenance_covers_every_kind():
+    import json
+    kinds = json.loads((mp.REPO_ROOT / mp.PROVENANCE).read_text(encoding="utf-8"))["kinds"]
+    assert {k.kind for k in mp.KINDS} <= set(kinds), "新模型种类要在 config/model-provenance.json 记出处"
+
+
+def test_ids_unet_moved_out_of_corpus():
+    from open_guji_cv.core.corpus_pin import _not_corpus
+    assert _not_corpus("repo", "config/groups/jue/unet.npz")
+    assert not _not_corpus("repo", "config/groups/jue/ids_bank.json")

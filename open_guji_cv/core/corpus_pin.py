@@ -59,11 +59,12 @@ def _item(group: str, root: str, rel: str, p: Path, sha) -> dict:
 
 def _not_corpus(root: str, rel: str) -> bool:
     """不算语料的文件：说明文件；字组的 ``prompt.md``（只给离线 L2 批量拼消息用，Step 不读，
-    改它不该让钉了版本的册拒跑）。老清单里登记过的这类条目，核对时也跳过。"""
+    改它不该让钉了版本的册拒跑）；字组的 ``unet.npz``（模型，归模型系统管）。老清单里登记过的这类条目，核对时也跳过。"""
     name = rel.rsplit("/", 1)[-1]
     if name in _SKIP_NAMES:
         return True
-    return root == "repo" and name == "prompt.md" and rel.startswith("config/groups/")
+    # 字组 IDS U-Net 权重 11-04 挪进模型系统（core/model_pack.py 的 ids_unet），不再算语料
+    return root == "repo" and name in ("prompt.md", "unet.npz") and rel.startswith("config/groups/")
 
 
 def _sha256(p: Path) -> str:

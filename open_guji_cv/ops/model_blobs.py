@@ -93,6 +93,29 @@ def fetch_registry() -> dict:
     return {"registry": len(mp.load_registry()), "missing": len(miss), "placed": placed, "not_in_r2": absent}
 
 
+def upload_registry(execute: bool = False) -> dict:
+    """cv 自带模型表里的文件传进 R2（已有跳过）；本机文件 sha 与表不符拒传。"""
+    from ..core import model_pack as mp
+    have, missing, stale = {}, [], []
+    for i in mp.load_registry():
+        p = mp.REPO_ROOT / i["path"]
+        if not p.is_file():
+            missing.append(i["path"])
+        elif mp._sha256(p) != i["sha256"]:
+            stale.append(i["path"])
+        else:
+            have[i["sha256"]] = p
+    if stale:
+        raise ValueError(f"本机文件与模型表不符，不上传：{stale[:3]}（先 guji model registry）")
+    plan = {"registry": len(have) + len(missing), "local": len(have), "missing_local": missing,
+            "bytes": sum(p.stat().st_size for p in have.values()), "executed": False}
+    if execute:
+        from ..datastore.r2 import upload_files
+        plan["upload"] = upload_files(have, bucket="main", ext=EXT)
+        plan["executed"] = True
+    return plan
+
+
 def ensure_repo_models() -> None:
     """``guji pipeline`` 起跑前：cv 的 ``models/`` 缺了模型表里的文件就先取回（各书都用，不看钉号）。"""
     from ..core import model_pack as mp

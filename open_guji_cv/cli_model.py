@@ -9,6 +9,7 @@
     guji model fetch  -w <工作区> [--version N]   # 本机缺的从 R2 取回、放到登记位置（pipeline 起跑前自动做）
     guji model fetch                          # 不给 -w：按 cv 自带的模型表补齐 cv 的 models/
     guji model registry                       # 按当前 models/ 重写 cv 自带的模型表（发版删文件前跑）
+    guji model upload [--execute]             # 不给 -w：cv 模型表里的文件传进 R2
 
 册 yaml 写 ``model: N`` 钉住。本命令不改册 yaml、不推中心库。
 """
@@ -38,6 +39,14 @@ def cmd_model(args) -> None:
     from .core import model_pack as mp
     if args.model_cmd == "registry":
         _out(mp.build_registry(), True)
+        return
+    if args.model_cmd == "upload" and not args.workspace:
+        from .ops import model_blobs as mb
+        try:
+            _out(mb.upload_registry(execute=args.execute), True)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
         return
     if args.model_cmd == "fetch" and not args.workspace:
         from .ops import model_blobs as mb
@@ -118,7 +127,7 @@ def add_parser(sub) -> None:
     v = ps.add_parser("verify", help="清单 vs 当前文件（退出码 1 = 有改动或缺失）")
     v.add_argument("--version", type=int, default=None, help="缺省最新")
     li = ps.add_parser("list", help="已有的模型总号")
-    up = ps.add_parser("upload", help="清单里的文件按 sha256 传进 R2（已有跳过；缺省只演练）")
+    up = ps.add_parser("upload", help="清单里的文件按 sha256 传进 R2（已有跳过；缺省只演练；不给 -w 传 cv 模型表里的）")
     up.add_argument("--version", type=int, default=None, help="缺省最新")
     up.add_argument("--execute", action="store_true", help="真传（要 GUJI_DATA_TOKEN 正式令牌）")
     fe = ps.add_parser("fetch", help="本机缺的模型文件从 R2 取回（已有但内容不同的不覆盖；不给 -w 按 cv 的模型表补 models/）")

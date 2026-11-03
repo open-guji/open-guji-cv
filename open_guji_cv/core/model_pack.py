@@ -59,8 +59,11 @@ KINDS: tuple[Kind, ...] = (
          ("cut_select",), "合成对训练的切分判官"),
     Kind("pagetype", "repo", "models/pagetype/pagetype_v1.*", "book", DIANBEN,
          ("border_detect_gate",), "殿本页型标注训的页型分类"),
-    Kind("shadow_gate", "repo", "models/shadow_admit/shadow_gate_v*.*", "global", "global",
-         ("seed_admit",), "多书混合来源；记出处，归 global"),
+    Kind("shadow_gate", "repo", "models/shadow_admit/shadow_gate_v*.*", "book", DIANBEN,
+         ("seed_admit",), "殿本 vol02/03 人裁训的（见 shadow_gate_v2.json train_books）"),
+    # 字组 IDS 切分 U-Net：原先算在语料底库（config/groups/<组>/），11-04 挪进模型系统
+    Kind("ids_unet", "repo", "config/groups/*/unet.npz", "book", DIANBEN,
+         ("seed_admit",), "殿本本组人标切线训的三段切分 U-Net（纯 numpy）"),
     Kind("rr_clf", "repo", "models/rr_clf/*", "book", DIANBEN,
          ("seed_admit",), "入人八 字形分类（殿本刻形）"),
     # 数据目录 config/groups/（各书自己的，中心库同步）
@@ -131,11 +134,33 @@ def collect(ws: Path, cached: bool = False) -> list[dict]:
             rel = p.relative_to(base).as_posix()
             if (k.root, rel) in seen:
                 continue
-            seen[(k.root, rel)] = {
+            card = {
                 "schema": CARD_SCHEMA, "kind": k.kind, "root": k.root, "path": rel,
                 "size": p.stat().st_size, "sha256": sha(p), "level": k.level,
                 "owner": book if k.owner == "*" else k.owner, "consumers": list(k.consumers)}
+            src = provenance(k.kind, rel)
+            if src:
+                card["source"] = src
+            seen[(k.root, rel)] = card
     return [seen[x] for x in sorted(seen)]
+
+
+PROVENANCE = "config/model-provenance.json"
+_PROV: dict[str, dict] = {}
+
+
+def provenance(kind: str, rel: str = "") -> dict:
+    """模型卡的出处（训练脚本、训练数据、联动门槛；``config/model-provenance.json``）。不进清单哈希。"""
+    key = str(REPO_ROOT)
+    if key not in _PROV:
+        try:
+            _PROV[key] = json.loads((REPO_ROOT / PROVENANCE).read_text(encoding="utf-8")).get("kinds") or {}
+        except (OSError, ValueError):
+            _PROV[key] = {}
+    e = dict(_PROV[key].get(kind) or {})
+    if e.get("path") and e["path"] != rel:
+        return {}
+    return e
 
 
 def items_digest(items: list[dict], external: dict | None = None) -> str:
