@@ -15,7 +15,7 @@
 #   route       去向 enum（见 routes）
 #   owner       负责修算法／数据的人（成员名；人审格的「审」由 reviewer 决定）
 #   reviewer    最终谁看：human（人）／llm_then_human（大模型先过，只收 high，其余回人）／none（算法放行或留后，不出单）
-#   priority    判定顺序（小的先判）
+#   priority    判定顺序（小的先判；open_guji_cv/review/reasons.py 按它逐条试，第一条命中的就是这格的原因）
 #   label       网页、控制台显示的短名（大白话）
 #   hint        网页卡片上的一句说明：为什么在这里、人该看什么
 #   ui          网页卡片形态：pick（点选，整理本字预选）／choose3（三选一）／free（自由录字）／page（整页看）／confirm（看一眼确认）
@@ -214,7 +214,7 @@ reasons:
     route: llm
     owner: A24
     reviewer: llm_then_human
-    priority: 50
+    priority: 56
     label: 形近字
     hint: 有长得很像的字（十士、西酉…），要结合前后文看
     ui: pick
@@ -242,7 +242,7 @@ reasons:
     route: human
     owner: A24
     reviewer: human
-    priority: 60
+    priority: 51
     label: 少见的字
     hint: 字形库里还没有这个字，这一格就是它第一次进库，请确认图上是不是整理本的字
     ui: pick
@@ -254,7 +254,7 @@ reasons:
     route: llm
     owner: A23
     reviewer: llm_then_human
-    priority: 61
+    priority: 58
     label: 刻例太少·不一致
     hint: 库里这个字刻例很少，机器字和整理本不一致
     ui: pick
@@ -266,7 +266,7 @@ reasons:
     route: human
     owner: A23
     reviewer: human
-    priority: 62
+    priority: 57
     label: 刻例太少
     hint: 这个字库里只有一两个刻例，第一次正式进库，请确认
     ui: pick
@@ -278,7 +278,7 @@ reasons:
     route: algo
     owner: A23
     reviewer: llm_then_human
-    priority: 63
+    priority: 61
     label: 库认不出
     hint: 库里有这个字，但这一格认不出，多半是印淡或压了框线
     ui: pick
@@ -290,7 +290,7 @@ reasons:
     route: algo
     owner: A24
     reviewer: llm_then_human
-    priority: 64
+    priority: 52
     label: 像框线或墨点
     hint: 字形像框线或墨点，被乱码闸拦下，先看是不是误拦
     ui: free
@@ -304,7 +304,7 @@ reasons:
     route: algo
     owner: A24
     reviewer: llm_then_human
-    priority: 70
+    priority: 50
     label: 整理本缺字
     hint: 整理本这里写的是〓（没码位的生僻字），请从图上读
     ui: free
@@ -316,7 +316,7 @@ reasons:
     route: llm
     owner: A24
     reviewer: llm_then_human
-    priority: 71
+    priority: 53
     label: 整理本这里没字
     hint: 整理本这一位没有字（漏字或引文异文），请核对
     ui: pick
@@ -330,7 +330,7 @@ reasons:
     route: llm
     owner: A24
     reviewer: llm_then_human
-    priority: 80
+    priority: 60
     label: 整理本改过字
     hint: 整理本这一段改过字，位置可能差一两格
     ui: pick
@@ -342,7 +342,7 @@ reasons:
     route: llm
     owner: A24
     reviewer: llm_then_human
-    priority: 81
+    priority: 62
     label: 和整理本不一致
     hint: 机器的判断和整理本这里的字不一样，可能是真异文
     ui: pick
