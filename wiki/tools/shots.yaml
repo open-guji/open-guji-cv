@@ -61,6 +61,17 @@ shots:
     ids: ["vol04:65:4:14", "vol04:65:4:16", "vol04:65:4:20", "vol04:65:6:14", "vol04:65:6:15", "vol04:65:7:15", "vol04:65:7:16", "vol04:65:7:20", "vol04:65:7:21"]
   # ---- 字组
   - {id: groups-ri-yue, kind: glyphs, ws: 96mid1ogzk, chars: [日, 曰, 目], n: 10}
+  # ---- 殿本四庫總目专页
+  - id: siku-gallery
+    kind: panels
+    ws: 96mid1ogzk
+    book: vol01
+    per_row: 4
+    gap: 12
+    panels: [{page: 3}, {page: 87}, {book: vol04, page: 9}, {book: vol21, page: 225}]
+  - {id: siku-roster-v01p87, ws: 96mid1ogzk, book: vol01, page: 87, layers: [cells], width: 560}
+  - {id: siku-admit-v01p87, ws: 96mid1ogzk, book: vol01, page: 87, layers: [admit], width: 560}
+  - {id: siku-jiazhu-admit-v16p6, ws: 96mid1ogzk, book: vol16, page: 6, layers: [admit], width: 560}
   # ---- 史記文淵閣本（写本）
   - {id: shiji-body-p32, ws: 988g3f0wsu, book: "01", page: 32, layers: [cells], width: 640}
   - {id: shiji-roster-p40, ws: 988g3f0wsu, book: "01", page: 40, layers: [cells], width: 640}
@@ -68,7 +79,6 @@ shots:
   - {id: shiji-table-p20, ws: 988g3f0wsu, book: "09", page: 20, layers: [], width: 640}
   # ---- 北行日錄古本（网格模式）
   - {id: bxgb-grid-p20, ws: 988g7gsqhd, book: bxgb, page: 20, layers: [border], width: 800}
-  - {id: bxgb-cells-p41, ws: 988g7gsqhd, book: bxgb, page: 41, layers: [cells], crop: [0.5, 0.2, 0.92, 0.8], width: 560}
   # ---- 增廣幼學須知鰲頭雜字（自由版式 keben_free；第 9、10 页本地跑，没有产物包）
   - id: free-yxat-p9
     kind: panels
@@ -77,5 +87,6 @@ shots:
     page: 9
     panels: [{layers: []}, {layers: [free]}]
     width: 1000
-  - {id: free-yxat-p10-ocr, ws: 998a1ukohs, book: yxat, page: 10, layers: [ocr], width: 560}
-  - {id: free-yxat-p9-cells, ws: 998a1ukohs, book: yxat, page: 9, layers: [free], crop: [0.45, 0.0, 1.0, 0.62], width: 640}
+  # ---- 全唐文（CADAL 清華本，ws qtw-draft，书 ID 借 995ejelvk0；R2 无产物包，v006 第 20、40 页本地跑 Step1–4）
+  - {id: qtw-cells-v006p20, ws: 995ejelvk0, book: v006, page: 20, layers: [cells], width: 560}
+  - {id: qtw-border-v006p40, ws: 995ejelvk0, book: v006, page: 40, layers: [border], width: 560}
