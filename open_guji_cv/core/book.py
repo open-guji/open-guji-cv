@@ -239,6 +239,10 @@ class BookSpec:
     #: 网格模式用它过滤版框对。量法：版框宽 / 列数，逐页取中位。北行日錄刻本 119。
     #: ⚠️ 与 `pitch_prior` 不是一回事——那个是沿列方向的**字距**，给现代链 Step3 用。
     col_pitch: float | None = None
+    #: `columns`（yaml 同名，2026-11-03）：列宽均匀约束（`seg/columns.ColumnSpec`）。各书在 `book_defaults.yaml` 写，
+    #: 册 yaml 可覆盖：`columns: {uniform: strict|loose|off, inner_band: [0.9, 1.1], outer_band: [0.85, 1.3], pitch: null}`。
+    #: 不写＝strict＋殿本实测带（与 1.x 列距救援缺省开同义）。设计见 doc/design/列宽均匀约束.md。
+    columns: dict = field(default_factory=dict)
     #: `frame_height`（yaml 同名）：**框高**（下版框 y − 上版框 y）像素中位，册级统计。
     #: 网格模式用它把 `GRID_MIN_SCORE` 换算到本书的尺度——半高宽匹配分 =
     #: 沿线投影行数 / 半高宽，**跟框高成正比**，在 2801×2343 / 框高 1482 上标的
@@ -465,7 +469,7 @@ class BookSpec:
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
-            "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "column_grid": self.column_grid, "col_pitch": self.col_pitch, "columns": dict(self.columns),
             "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
@@ -698,6 +702,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
         binarized_input=bool(d.get("binarized_input", False)),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
+        columns=dict(d.get("columns") or {}),
         frame_height=(None if d.get("frame_height") is None
                       else float(d["frame_height"])),
         vline_polyline=bool(d.get("vline_polyline", True)),
