@@ -508,6 +508,12 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence="挑格网试切不跑折线与 U-Net 判官、挑定后只按原参数重切中选那遍（2026-11-03，全唐文 CPU 提速）：row_segment 在全唐文 06 43 页"
                    "（每 5 页取 1，加 27/100/101）与 05 36 页（每 7 页取 1，加 1/2/100/222）上与 origin/dev 4cf8260 产物逐字节相同，4 进程；"
                    "scripts/code_equiv.py check；同 24 页 row_segment 合计 747→259 s"),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="a338535870f9aa1b74d03180c48335dc81ec12fefd2557c3181de718e0c2961b",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence="弹性 DP 内部转移代价（含逐格先验罚分）与 find_valleys 按曲线内容跨调用记忆（2026-11-03，全唐文 CPU 提速）：row_segment 在全唐文 06 43 页"
+                   "（每 5 页取 1，加 27/100/101）与 05 36 页（每 7 页取 1，加 1/2/100/222）上与 origin/dev e074e9b 产物逐字节相同，4 进程；"
+                   "scripts/code_equiv.py check；p27 row_segment 21→11 s"),
 )
 
 
