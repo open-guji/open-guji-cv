@@ -490,6 +490,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4c7c9f6b62047e38a5a8d6da2df846b7d5c929063a95401026cae33842108b53",
           old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
           evidence="_is_blank_i／_dropped_rows_i 改前缀计数（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上与 origin/dev 8bf0cdf 产物逐字节相同"),
+    Equiv(module="open_guji_cv.seg.cut_select",
+          new="1cd807a6a9f306ddea55eb63802ea6c7ec0132011b18f0dd230a2a740d88fdae",
+          old="fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b",
+          evidence="#901 UNetJudge 窗口记忆 8→192 LRU（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上 882bd7a 与 e0c9acd 产物逐字节相同"),
+    Equiv(module="open_guji_cv.seg.cut_select",
+          new="6b20cef67dbadffa8576246fc195be70ca75dee5e9c5d713ca0256b7353c062b",
+          old="1cd807a6a9f306ddea55eb63802ea6c7ec0132011b18f0dd230a2a740d88fdae",
+          evidence="guided_seam_from_owner 改用 seam.seam_dp（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上与 origin/dev 13d33ea 产物逐字节相同；随机 3000 例逐位相同"),
+    Equiv(module="open_guji_cv.seg.seam",
+          new="8444b11b39dead8f114d6e09313b78d241a1de1a580202a7b7749efe6d9dbca7",
+          old="2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671",
+          evidence="走廊 DP 抽成 seam_dp、预分配 pad/cand（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上与 origin/dev 13d33ea 产物逐字节相同；随机 3000 例 find_seam 逐位相同、快 1.8 倍"),
 )
 
 
