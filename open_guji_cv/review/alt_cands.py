@@ -183,7 +183,8 @@ def alt_for_cards(book: str, cards: list[dict], *, k: int = ALT_K, zi=None, bank
     for i, c in enumerate(cards):
         img = rare_patch(book, int(c["page"]), int(c["col"]), int(c["slot"]), c.get("sub") or "", image_cache)
         if img is None and ctx is not None:
-            key = f"p{int(c['page']):04d}c{int(c['col']):02d}s{int(c['slot'])}{c.get('sub') or ''}"
+            from ..products.alt_view import resolve_patch_key
+            key = resolve_patch_key(book, f"p{int(c['page']):04d}c{int(c['col']):02d}s{int(c['slot'])}{c.get('sub') or ''}")
             try:
                 img = ctx.image("char_patch", key)
             except Exception:  # noqa: BLE001 — 切不出就当没图，与缓存缺图同口径
