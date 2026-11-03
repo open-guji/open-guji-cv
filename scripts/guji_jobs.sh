@@ -29,7 +29,7 @@ case "${1:-}" in
   start)
     shift; refresh; ensure_manager
     if busy; then echo "执行方已在跑（$H/worker.lock）"; exit 0; fi
-    PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
+    GUJI_REQUIRE_JOBSDB=${GUJI_REQUIRE_JOBSDB:-1} PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
     echo "执行方已起（pid $!），日志 $H/worker.log；guji_jobs follow 跟着看";;
   follow)
     end=$((SECONDS + ${2:-6600})); touch "$H/worker.log"
