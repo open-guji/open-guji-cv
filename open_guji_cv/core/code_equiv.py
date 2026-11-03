@@ -716,6 +716,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8c874ab19a2ef0dfb4ce745a9f4e2a05bc45b99aa6a10a0f678bb3caad69fa69',
           old='097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455',
           evidence=_ALT_CUT),
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='dd7163ec5679d9c67819d8d4235370127a41811f710db595d806490414f71777',
+          old='641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2',
+          evidence='alt_cut 合进 #966 之后的 cell_shrink：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
+                   '与 ba4dd1c 产物逐字节相同；scripts/code_equiv.py check，2026-11-03'),
 )
 
 
