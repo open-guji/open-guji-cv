@@ -294,6 +294,11 @@ class SeedAdmitParams(BaseModel):
     只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
     symbol_ref_blank_cov: float = 0.97
     """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
+    vis_rulings: bool = True
+    """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
+    （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
+    只收 A24 名下的子类（A68 库有样本机器字≠整理本、B99 整理本漏字、D130 补判）；整理本对位字须与裁定记的一致；
+    人裁、遮挡、排除、超时格不动。缓存里没有就什么也不做（不调大模型）。关着（False）才进参数 dump。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
@@ -804,6 +809,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
+        if isinstance(d, dict) and self.vis_rulings:
+            d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
@@ -1727,6 +1734,11 @@ class SeedAdmitStep(Step):
                                       if p.rare_ref_nf else None))
             n_auto += d_rc
             n_review -= d_rc
+        if p.vis_rulings:
+            # 5c vis_ruling（升）：待审格的窗口命中看图判裁定 → 放行（无组入口，裁定库缓存；放在降审遍之前）
+            d_vr = _vis_ruling_pass(p, out, amap)
+            n_auto += d_vr
+            n_review -= d_vr
         if p.symbol_review:
             d_sym = _symbol_review_pass(ctx, page, p, out, mmap, human_shapes)
             n_auto -= d_sym
@@ -3067,6 +3079,45 @@ _GROUP_FLOW_HARD = ((frozenset(_RARE_REF_HARD) | _LANE_HARD | _LANE_GARBLE | {"e
 _RR_SHAPE_HARD = frozenset({"occluded", "excluded", "context_blank_cell", "context_tall_cell", "form_open",
                             "approx_exemplar", "glyph_timeout"})
 _RR = frozenset("人入八")
+
+
+#: 看图判裁定（`feedback/rulings`，group=O）：提示词版本、A24 名下的子类、不碰的疑问
+_VIS_RULING_GROUP, _VIS_RULING_VER = "O", "vis-o1"
+_VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130"})
+_VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
+
+
+def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
+    """无组格的看图判裁定（`SeedAdmitParams.vis_rulings`）：待审格按前后文窗口（与 `ctx_hash` 同口径，宽 20）查裁定库，
+    命中高把握可放的裁定 → 放行成裁定的字（通道 `vis_ruling`，provenance `match`，`evidence.vis_ruling` 留裁定摘要）。
+    → 新放行格数。窗口先整页算好再改格（相邻漏字格互为上下文，边改边算会让窗口变样、键对不上）。"""
+    from ..groups.context import WIDTH
+    from ..utils.jiazhu_order import sort_by_reading
+    store = store if store is not None else _vis_cache().store_
+    seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+           if not (r.doubts and "excluded" in r.doubts)]
+    todo = []
+    for i, r in enumerate(seq):
+        if r.admit or r.provenance == "human" or r.channel == "human":
+            continue
+        if _VIS_RULING_HARD & {d for d in (r.doubts or []) if isinstance(d, str)} or (r.evidence or {}).get("occluded"):
+            continue
+        todo.append((r, _clf_ctx(seq, amap, i, -1, WIDTH), _clf_ctx(seq, amap, i, 1, WIDTH)))
+    n = 0
+    for r, left, right in todo:
+        v = store.get(_VIS_RULING_GROUP, _VIS_RULING_VER, left, right)
+        if not v or not v.get("admit_ok") or v.get("conf") != "high" or not v.get("char") or v.get("other"):
+            continue
+        if v.get("subclass") not in _VIS_RULING_SUBCLASSES:
+            continue
+        if (v.get("ref") or "") != ((amap.get(r.id) or (None,))[0] or ""):
+            continue                                 # 整理本对位字变了：不是当初看的那一格
+        ds = list(r.doubts or [])
+        r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass")},
+                      "lifted_from": {"char": r.char, "doubts": ds}}
+        r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
+        n += 1
+    return n
 
 
 def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
