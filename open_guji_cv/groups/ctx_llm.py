@@ -102,6 +102,18 @@ def _schema(members) -> dict:
                            "why": {"type": "string"}}}
 
 
+def api_error_code(status, message: str) -> str:
+    """API 报错 → 留痕码。额度用完（400「credit balance is too low」）单独记 `api_credit` 并大声报一次：
+    2026-11-02 第 2 轮统一重跑整套都是 `abstain:llm_api_400`，看起来像请求写错，其实是账户没额度。"""
+    if "credit balance" in (message or "").lower():
+        if "credit" not in _IMPORT_WARNED:
+            _IMPORT_WARNED.add("credit")
+            _log.warning("Anthropic API 额度用完（credit balance is too low）：L3／二审小组／图像＋文意全部弃权，"
+                         "裁定库没命中的格都按 abstain:llm_api_credit 送审；充值后重放 seed_admit")
+        return "api_credit"
+    return f"api_{status}"
+
+
 class Client:
     """`anthropic` 的薄包装：`ask(system, user, members, model, effort)` → (答案 dict｜None, usage dict, 错误码｜None)。"""
 
@@ -120,7 +132,7 @@ class Client:
                 messages=[{"role": "user", "content": user}],
                 output_config={"effort": effort, "format": {"type": "json_schema", "schema": _schema(members)}})
         except (a.BadRequestError, a.AuthenticationError, a.PermissionDeniedError, a.NotFoundError) as e:
-            return None, {}, f"api_{getattr(e, 'status_code', 'err')}"
+            return None, {}, api_error_code(getattr(e, "status_code", "err"), str(e))
         except (a.RateLimitError, a.APIStatusError, a.APIConnectionError) as e:
             return None, {}, f"api_{getattr(e, 'status_code', 'conn')}"
         u = r.usage

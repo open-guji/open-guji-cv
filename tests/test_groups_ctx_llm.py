@@ -221,3 +221,11 @@ def test_panel_needs_one_high():
     """两家都只有 mid → 不算数（宁可送审）。"""
     v = jp(ModelClient({"M": ("曰", "low"), "A": ("曰", "mid"), "B": ("曰", "mid")}))
     assert v.char is None and v.extra["panel"].startswith("split")
+
+
+def test_credit_exhausted_gets_own_error_code():
+    """额度用完的 400 单独记 api_credit（2026-11-02 r2 整套 llm_api_400 实为没额度）；别的 400 照旧。"""
+    from open_guji_cv.groups import ctx_llm
+    assert ctx_llm.api_error_code(400, "Error code: 400 - {'message': 'Your credit balance is too low to access the Anthropic API.'}") == "api_credit"
+    assert ctx_llm.api_error_code(400, "invalid model") == "api_400"
+    assert ctx_llm.api_error_code(401, "") == "api_401"
