@@ -50,6 +50,12 @@ AUDITED: dict[str, ParallelAudit] = {
         mem_gb=0.5,
         note="闸1：run_page 只读本页原图（判页型）、borders／line_index／page_survey 产物，不写缓存；"
              "页型模型（pagetype_model，缺省关）按参数缓存在 step 上，只读。vol06 150 页串行／4 进程产物 sha 逐页相同（2026-10-21）。"),
+    "seal_detect": ParallelAudit(
+        mem_gb=0.5,
+        note="run_page 只读本页原图与 borders 产物、册参数（overrides／stain_pages），不写缓存、不写别的产物；"
+             "模板与模板笔画是读 config/seal_templates 的 lru_cache（只读，每个 worker 各读一份，几十 KB）；"
+             "无别的模块级可变状态。耗时统计（2026-11-03）查出它串行、并行效率 0.25、每单约 4 分钟。"
+             "全唐文 05 12 页（6065×4296）、殿本 05／06／30 卷首卷末 24 页（含 5 方印）串行／4 进程产物 sha 逐页相同，并行效率 0.94；单进程峰值 0.27 GB（2026-11-03）。"),
     "column_warp": ParallelAudit(
         mem_gb=0.5,
         note="run_page 只读本页原图、borders、闸1 manifest 与册配置（frame_layers／outer_gap），"

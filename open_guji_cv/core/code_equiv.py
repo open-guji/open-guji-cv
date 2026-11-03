@@ -560,6 +560,13 @@ ENTRIES: tuple[Equiv, ...] = (
           old="44eae13696f440a061b44550dad45df52bd72f27e9253c5717e2d50973a81161",
           evidence="page_features 竖线开运算只算一次（2026-11-03，全唐文 CPU 提速）：row_segment_gate 的 code_dep；全唐文 05/06 原图 106 页（每 4 页取 1）"
                    "上新旧 page_features 返回值逐项相同；改动是同一数组复用，不改任何运算"),
+    Equiv(module="open_guji_cv.clustering.page_type",
+          new="24c9957349c35ffdb742af95b2dc9f82b66d70549ccbeac976ccff3bdfee3dbe",
+          old="1e597b8c3f1ab98f92eca79e50529c6940189d49de6b901e920c384638e2aa70",
+          evidence="page_features 的长线形核开运算换成 boxFilter 计数 line_open（2026-11-03，耗时统计查出 border_detect_gate 单线程每页 3.5–6 s 大半在此）："
+                   "border_detect_gate／row_segment_gate 的 code_dep；随机 0/1 图 14,400 例（奇偶 k、k 超过边长）与 cv2 原式逐位相同；"
+                   "真图全唐文 05（12 页，每 15 页取 1）、殿本 05、史記 01、北行日錄 01（各 8 页）上新旧 page_features 返回值逐项相同；"
+                   "border_detect_gate 在全唐文 05 那 12 页上与 origin/dev 产物逐字节相同"),
     Equiv(module="open_guji_cv.steps.row_segment",
           new="7daa5c74ec9dca3460bc74936d44c3ca01b104b33bf217390ce3a90e7fe8694e",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
