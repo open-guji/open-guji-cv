@@ -34,11 +34,13 @@ def run(v):
         for c in pa.columns:
             for r in c.chars:
                 if r.id in want:
-                    res.append((r.id, before[r.id][0], r.channel == "vis_ruling", r.char if r.channel == "vis_ruling" else "", want[r.id]))
+                    res.append((r.id, before[r.id][0], r.channel == "vis_ruling", r.char if r.channel == "vis_ruling" else "", want[r.id], (not r.admit) and "src_code_conflict" in (r.doubts or [])))
     shutil.rmtree(tmp, ignore_errors=True)
     return res
 with ThreadPoolExecutor(5) as ex: R = [x for L in ex.map(run, sorted(byvol)) for x in L]
 with open(out, "w") as f:
-    f.write("格号\t回放前已放行\t本通道放行\t放出的字\t裁定字\n")
+    f.write("格号\t回放前已放行\t本通道放行\t放出的字\t裁定字\t被降审\n")
     for r in R: f.write("\t".join(map(str, r)) + "\n")
 print(len(R), "cells; lifted", sum(1 for r in R if r[2]), "; wrong char", sum(1 for r in R if r[2] and r[3] != r[4]), "; already admitted", sum(1 for r in R if r[1]))
+
+print("demoted", sum(1 for r in R if r[5]))

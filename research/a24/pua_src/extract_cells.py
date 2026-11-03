@@ -7,15 +7,20 @@ GUJI='/home/user/open-guji/open-guji-cv/.venv/bin/guji'
 env=dict(os.environ,GUJI_DATA_TOKEN=os.environ['GUJI_DATA_TOKEN_READ'],GUJI_CORPUS_DRIFT='warn')
 pm=json.load(gzip.open('/home/user/ai-team/domain/CV/图源迁移/siku-qiefen-v2/results/pagemap_all.json.gz','rt'))
 Z=zipfile.ZipFile('/home/user/qdl/q.zip')
-rows=[x for x in csv.DictReader(open('/home/user/ai-team/domain/CV/质检/待审清单-2026-11-02-r2/分类v2-明细.tsv'),delimiter='\t') if x['子类'].startswith('整理本缺字')]
+OUTDIR=os.environ.get('OUTDIR','/home/user/a24r/out')
+os.makedirs(OUTDIR,exist_ok=True)
+if os.environ.get('CELLS'):   # 一列格号的 tsv（首行表头，首列格号）：只抽这些格
+    ids=[l.split('\t')[0] for l in open(os.environ['CELLS'])][1:]
+else:
+    ids=[x['格号'] for x in csv.DictReader(open('/home/user/ai-team/domain/CV/质检/待审清单-2026-11-02-r2/分类v2-明细.tsv'),delimiter='\t') if x['子类'].startswith('整理本缺字')]
 byvol=collections.defaultdict(list)
-for x in rows: byvol[x['格号'].split(':')[0]].append(x['格号'])
+for i in ids: byvol[i.split(':')[0]].append(i)
 def tdata(book):
     n=f'96mid1ogzk/{book}/text.jsonl.gz'
     import io
     return {json.loads(l)['p']:json.loads(l) for l in gzip.open(io.BytesIO(Z.read(n)),'rt')}
 def run(v):
-    out=f'/home/user/a24r/out/{v}.jsonl'
+    out=f'{OUTDIR}/{v}.jsonl'
     if os.path.exists(out): return
     lab=subprocess.run([GUJI,'products','pack','list',v,'-w',WS],capture_output=True,text=True,env=env).stdout
     l=[x for x in lab.splitlines() if x.startswith('★')][0].split('\t')[0].split('/')[-1]
