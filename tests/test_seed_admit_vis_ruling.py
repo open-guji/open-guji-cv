@@ -71,3 +71,19 @@ def test_src_text_ruling_lifts_and_subclass_isolated(tmp_path):
 def test_dump_default_clean():
     assert "vis_rulings" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", vis_rulings=False).model_dump()["vis_rulings"] is False
+
+
+def test_code_conflict_demotes_admitted_not_human(tmp_path):
+    st = _store(tmp_path, "甲", "乙", char="垂", ref="", admit_ok=False, subclass="PUA")
+    st.put("O", "src-1", "甲", "乙", char="垂", conf="high", why="码表", model="m", cell=f"{B}:1:2")
+    p = st.put("O", "src-1", "甲", "乙", char="垂", conf="high", why="码表", model="m", cell=f"{B}:1:2")
+    p.update({"admit_ok": False, "subclass": "PUA", "ref": "", "route": "code_conflict", "src": "x"})
+    cells = {1: {"admit": True, "char": "甲"}, 2: {"admit": True, "char": "埀", "channel": "match_solo", "provenance": "match"},
+             3: {"admit": True, "char": "乙"}}
+    n, r = _run(cells, {1: "甲", 2: "", 3: "乙"}, st)
+    assert n == 0 and not r[2].admit and r[2].channel is None and "src_code_conflict" in r[2].doubts
+    assert r[2].evidence["demoted_from"]["channel"] == "match_solo" and r[2].evidence["src_code_conflict"]["char"] == "垂"
+    cells[2].update(provenance="human", channel="human")                                 # 人裁格不碰
+    assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit
+    cells[2].update(provenance="match", channel="match_solo", char="垂")                  # 字已一致不降
+    assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit

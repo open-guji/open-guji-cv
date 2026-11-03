@@ -13,3 +13,7 @@ r2 的 425 格「整理本缺字」里，新图源（siku-qiefen-v2）每页 `te
 
 不进事件的格：源文本字是私用码但码不在表里、源文本是〓/□/？/缅甸字母、对齐锚点不足。图形字（篆文、古文）按图片格规则，不走这里。
 推库（`guji db sync`）等标注核对后再做。
+
+## 降审：已放行但与码表不一致的 25 格（A31 11-03 定）
+`build_demote_events.py`：对 `extract_cells.py`（`CELLS=` 清单）的输出，码表字≠现放行字的格出 `route=code_conflict`、`admit_ok=False` 的 src-1 裁定；`seed_admit` 的 vis_rulings 遍把**非人裁**的已放行格降回待审（doubt `src_code_conflict`，`demoted_from.by=src_code_conflict`）。
+回放（`replay_pass-conflict.tsv`）：25 格里 16 格降审，9 格是人裁（provenance human）不碰——人裁与码表冲突要人来改，已单列报 A31。seed_admit 版本 1.32。
