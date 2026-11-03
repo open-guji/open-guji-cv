@@ -131,6 +131,10 @@ _SJ_TOPK = ("seed_admit 加缺省关的书级开关 ref_topk_follow（库前 5 �
 _SJ_DP = ("align_ref 在史記文淵閣本 04 册 10 页（--pages 2,10,34,41,43,47,120,122,124,138）上与 origin/dev（含 #788）产物逐字节相同；"
           "coord_dp 关着（册 yaml coord_dp: false，缺省）；scripts/code_equiv.py check，2026-11-02")
 
+_SJ_GAP = ("row_segment 加缺省关的书级开关 layout_gap_cols_empty（本页两列表行之间缺的列当整列空，史記卷末叶大印压着的空列）："
+           "不配时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 531f241f 产物逐字节相同；"
+           "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -520,6 +524,10 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence="render 再生字块时整列抽字与全页框线按页记忆（2026-11-03，全唐文 CPU 提速）：cell_shrink 在全唐文 06 42 页（每 5 页取 1，加 27/100）"
                    "与 05 34 页（每 7 页取 1，加 1/222）上与 origin/dev 59a8dbe 产物逐字节相同；再生路径：glyph_match 06 6 页（2,27,60,100,140,181）"
                    "空缓存起跑，产物与 853 个缓存文件逐字节相同，每页 60–85 s→12–20 s；scripts/code_equiv.py check，4 进程"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="7daa5c74ec9dca3460bc74936d44c3ca01b104b33bf217390ce3a90e7fe8694e",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_SJ_GAP),
 )
 
 

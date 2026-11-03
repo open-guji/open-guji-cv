@@ -299,6 +299,20 @@ def test_layout_row_fills_trailing_empty_columns():
     assert _layout_row(layout, 6, 1) is None
 
 
+def test_layout_row_gap_cols_empty_switch():
+    """书级 `layout_gap_cols_empty`：本页两列表行之间缺的列也当整列空（史記卷末叶：卷尾题占末列，中间空列压着大印）；
+    关着（缺省）照旧不猜；本页第一列表行之前的列开着也不猜；开关缺省不进参数 dump。"""
+    from open_guji_cv.steps import row_segment as RS
+    layout = {(5, 2): {"slots": [1, 2]}, (5, 4): {"slots": [1]}}
+    assert RS._layout_row(layout, 5, 3) is None
+    assert RS._layout_row(layout, 5, 3, True)["slots"] == []
+    assert RS._layout_row(layout, 5, 1, True) is None
+    assert RS._layout_row(layout, 5, 2, True) == {"slots": [1, 2]}
+    assert RS._layout_row(layout, 6, 3, True) is None
+    assert "layout_gap_cols_empty" not in RS.RowSegmentParams().model_dump()
+    assert RS.RowSegmentParams(layout_gap_cols_empty=True).model_dump()["layout_gap_cols_empty"] is True
+
+
 def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
     """印框记空：印框里、表说该空的列端格（字格、單行小注格）记空，哪怕墨连成笔画像字；
     印框里表说有字的格、印框外的格都不动。"""
