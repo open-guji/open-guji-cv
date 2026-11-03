@@ -677,7 +677,7 @@ def dumps(obj: Any) -> str:
 def apply_pending(char: dict, pending: dict) -> dict:
     """按同版待审单给 char 的格写待审原因（guji-format char v0.4 §4.8，sheldon 11-03 定），原地改，返回计数。
 
-    单上的格：加 `pending_reason`（单上没写的记 `unknown`），去掉 `lacuna`／`guess_c`（`lacuna` 只给审过定阙的格）；
+    单上的格：加 `pending_reason`（单上没写的记 `unknown`），去掉 `lacuna`／`guess_c`（标了阙文的格 `c` 一律写 □）（`lacuna` 只给审过定阙的格）；
     图片格（`fig`）不动。不在单上的格原样（含已有的 `pending_reason`：去掉，单是现行口径）。
     用到了就把 `$schema` 升到 v0.4。分行稿不变（待审 □ 与阙文同写 `[[]]`）。"""
     want = {x["cell"]: (x.get("pending_reason") or "unknown") for x in pending.get("cells", [])}
@@ -696,6 +696,8 @@ def apply_pending(char: dict, pending: dict) -> dict:
                     continue
                 if c.pop("lacuna", None):
                     n["lacuna_dropped"] += 1
+                    if c.get("c") != LACUNA_CHAR:     # 标了阙文却留着机器字（旧数据）：读者看到的是阙文，照旧出 □
+                        c["c"] = LACUNA_CHAR
                 c.pop("guess_c", None)
                 c["pending_reason"] = r
                 n["stamped"] += 1

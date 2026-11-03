@@ -6,7 +6,7 @@
 ## [未发版]
 
 ### Added
-- book-text 的 char 写待审原因（A31，sheldon 11-03 定；guji-format char v0.4 §4.8）：`guji_char_cord.apply_pending` 给待审单上的格写 `pending_reason`、去掉待审格的 `lacuna`／`guess_c`（`lacuna` 只给审过定阙的格），用到就把 `$schema` 升 v0.4；`_tok` 把待审 □ 与阙文同写 `[[]]`，分行稿逐字节不变。`republish.py` 升 book-text 时按同版公众单＋团队单写；`export_guji_format.py --pending` 可在导出时写。不改 Step9，指纹不变。
+- book-text 的 char 写待审原因（A31，sheldon 11-03 定；guji-format char v0.4 §4.8）：`guji_char_cord.apply_pending` 给待审单上的格写 `pending_reason`、去掉待审格的 `lacuna`／`guess_c`（`lacuna` 只给审过定阙的格；标了阙文却留着机器字的旧数据 `c` 写回 □，读者看到的不变），用到就把 `$schema` 升 v0.4；`_tok` 把待审 □ 与阙文同写 `[[]]`，分行稿逐字节不变。`republish.py` 升 book-text 时按同版公众单＋团队单写；`export_guji_format.py --pending` 可在导出时写。不改 Step9，指纹不变。
 - 语料底库文件搬出 cv 的准备（A20，11-04；`doc/design/语料库分层版本.md` 末节）：`guji corpus upload --all` 改传钉的清单里引擎仓的全部文件，不论大小，仓里改过的按底库 `repo_commit` 从 git 取当时那一版；`guji corpus fetch` 连引擎仓小文件一起取回原位；`guji pipeline` 起跑前对钉了语料的册自动补取缺的文件。不删文件、不碰 Step，指纹不变。已传殿本、史記钉的两版底库（131 个文件）。
 - 模型系统收尾（A20，11-04）：模型卡加出处 `source`（`config/model-provenance.json`：训练脚本、训练数据、联动门槛，不进清单哈希）；字组 IDS U-Net（`config/groups/*/unet.npz`）挪进模型系统（种类 `ids_unet`），`corpus_pin._not_corpus` 不再算它语料，老清单里的条目核对时跳过；影子闸按训练数据改归殿本；cv 模型表扩到 13 个文件；`guji model upload` 不给 -w 传模型表。史記、殿本出 m2 并改钉 `model: 2`。
 - 控制台待审卡带待审原因（A31，sheldon 11-03）：`review/cards.py` 出的每张卡加 `pending_reason`／`pending_reason_detail`，与出单同一套判法（`review/reasons.py::stamp_cards`，整页／整列对不上按这批卡自己数，刻例数取工作区 `glyph_db_path()`）；卡片缓存版本升 4、字形库进缓存键。不碰任何 Step。
