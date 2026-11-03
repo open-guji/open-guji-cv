@@ -158,6 +158,10 @@ _FRAME_GROW = ("列端剥框线认粗框线与毛边 frame_line_grow（cell_shri
                "开关关着时 cell_shrink 在全唐文 vol06 40 页（每 5 页取 1）上与 origin/dev 6c11060 产物逐字节相同；"
                "scripts/code_equiv.py check，2026-11-03")
 
+_TAIL_EMPTY = ("表外末列不当整列空 layout_tail_empty（row_segment 书级开关，缺省开取原行为；_layout_row 加 tail_empty）："
+               "开关缺省时 row_segment 在全唐文 vol09 有表外末列的 28 页（全部）上与 origin/dev 产物逐字节相同；"
+               "scripts/code_equiv.py check，2026-11-03")
+
 _TIGHT_BAND = ("写本界行判带收紧 tight_rule_band（column_warp 书级开关，缺省关；seg.profile column_text_band 加 first_valley、"
                "siku_zongmu.column clean_column 透传）：开关关着时 column_warp 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev "
                "af1fa3c4 产物逐字节相同，279 张清理后列图逐字节相同；scripts/code_equiv.py check，2026-11-03")
@@ -647,6 +651,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="e6a77a310d20bfdd0ed22db0cca681490ff78885f65b4277e9030ccd979cbbf8",
           old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
           evidence=_FRAME_GROW),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="39c00c4a48fb1e079cb786228b8f2a0d44fd7708dabf24542f1d07e599d3487e",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_TAIL_EMPTY),
 )
 
 

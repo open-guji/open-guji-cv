@@ -313,6 +313,19 @@ def test_layout_row_gap_cols_empty_switch():
     assert RS.RowSegmentParams(layout_gap_cols_empty=True).model_dump()["layout_gap_cols_empty"] is True
 
 
+def test_layout_row_tail_empty_switch():
+    """书级 `layout_tail_empty`（缺省开）：关掉时本页最后一列表行之后的列不当整列空、照「无表」切（全唐文表明写空列，
+    字数配不上的满列只是不出行，15p123 c8）；表里明写的行照旧；开着（缺省）不进参数 dump。"""
+    from open_guji_cv.steps import row_segment as RS
+    layout = {(5, 1): {"slots": [1, 2]}, (5, 3): {"slots": []}}
+    assert RS._layout_row(layout, 5, 4)["slots"] == []
+    assert RS._layout_row(layout, 5, 4, tail_empty=False) is None
+    assert RS._layout_row(layout, 5, 3, tail_empty=False) == {"slots": []}
+    assert RS._layout_row(layout, 5, 1, tail_empty=False) == {"slots": [1, 2]}
+    assert "layout_tail_empty" not in RS.RowSegmentParams().model_dump()
+    assert RS.RowSegmentParams(layout_tail_empty=False).model_dump()["layout_tail_empty"] is False
+
+
 def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
     """印框记空：印框里、表说该空的列端格（字格、單行小注格）记空，哪怕墨连成笔画像字；
     印框里表说有字的格、印框外的格都不动。"""
