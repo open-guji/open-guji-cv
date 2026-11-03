@@ -762,6 +762,11 @@ class RowSegmentParams(BaseModel):
     #: 第 3 轮待审 34 格）。开着时这种列给「整列空」表行，列端记空（`_blank_frame_junk`）按越界墨／印框记空。
     #: 只在表确是逐页按整理本全列生成（缺列＝整理本这列没字）的书开。书级开关；False＝关（缺省，不进参数哈希）。
     layout_gap_cols_empty: bool = False
+    #: **雙行小注两行各切**（2026-11-03，史記文淵閣本写本）：连着的夹注段里 a、b 两行各在自己的墨投影上挑格线
+    #: （`seg/seam.fit_row_cuts`），段两端仍是共用格线。写本两行各写各的、会错开半格，共用格线时一行被拦腰切
+    #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
+    #: 不影响挑格网。殿本两行逐字对齐，不开。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_rows: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -834,6 +839,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_slots_grow", None)
             if not self.layout_gap_cols_empty:
                 d.pop("layout_gap_cols_empty", None)
+            if not self.jiazhu_rows:
+                d.pop("jiazhu_rows", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1051,6 +1058,7 @@ class RowSegmentStep(Step):
                     detect_bottom_bar=p.detect_bottom_bar,
                     grid_bounds=bounds if bounds is not None else grids[gc.col].bounds(n_body, n_r) if grid else None, **l_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
+                    **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

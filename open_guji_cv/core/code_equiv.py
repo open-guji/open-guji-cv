@@ -135,6 +135,10 @@ _SJ_GAP = ("row_segment 加缺省关的书级开关 layout_gap_cols_empty（本�
            "不配时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 531f241f 产物逐字节相同；"
            "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
 
+_JZ_ROWS = ("雙行小注两行各切 jiazhu_rows（row_segment 书级开关，缺省关；seg.seam 加 fit_row_cuts；cell_shrink／extractor 半格自己的 y）："
+             "开关关着时 row_segment、cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev d961e8c1 产物逐字节相同；"
+             "scripts/code_equiv.py check，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -533,6 +537,26 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7daa5c74ec9dca3460bc74936d44c3ca01b104b33bf217390ce3a90e7fe8694e",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence=_SJ_GAP),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="a68db00813c3919bdd36f5cc929e016141fa37897dee44efb9339d4e495eaf4c",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_JZ_ROWS),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="195bd90aef2b566b2482c5d45bff24c3f8493340cb59d9803128de33b1504b7f",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence=_JZ_ROWS),
+    Equiv(module="open_guji_cv.seg.seam",
+          new="41fefe234ed8c27c17084a58f70d92813ae2b5c4826de5cfc418308af4511d86",
+          old="2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671",
+          evidence=_JZ_ROWS),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="e0e0df18af41d28953d29972cb167f2364c1d179e862821032dc310ae65dbfd5",
+          old="641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2",
+          evidence=_JZ_ROWS),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="7fd29111e69a2b7572df5603ba7aca0e38cc5bb744195b1e4bf600a8edcd6036",
+          old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
+          evidence=_JZ_ROWS),
 )
 
 

@@ -454,6 +454,19 @@ def _jiazhu_sides(pre: np.ndarray, cx: int) -> np.ndarray:
     return right
 
 
+def _paste_patches(items) -> tuple[np.ndarray, tuple[float, float]]:
+    """各格清理后的图块 (patch, x0, y0) 按坐标拼回一张整列图（重叠处取深），返回 (图, (x0, y0))。"""
+    items = [(p, int(round(x)), int(round(y))) for p, x, y in items]
+    X0, Y0 = min(x for _p, x, _y in items), min(y for _p, _x, y in items)
+    X1 = max(x + p.shape[1] for p, x, _y in items)
+    Y1 = max(y + p.shape[0] for p, _x, y in items)
+    out = np.full((Y1 - Y0, X1 - X0), 255, dtype=np.uint8)
+    for p, x, y in items:
+        sl = out[y - Y0:y - Y0 + p.shape[0], x - X0:x - X0 + p.shape[1]]
+        np.minimum(sl, p, out=sl)
+    return out, (float(X0), float(Y0))
+
+
 def flag_jiazhu_runs(
         entries: list[tuple[int, tuple[float, float] | None]]
         ) -> dict[int, float]:
@@ -3189,6 +3202,8 @@ class CharExtractor:
             # 的那几半（`jiazhu_subs`）。缝位仍按原规矩：两边都认的格用这里自己量的，只 Step3 认的用
             # Step3 的。不给就是旧行为（v1 链 / 老调用方）。
             jz_subs: dict[int, set[str]] = {}
+            jz_own_y = {int(c["index"]): c["jiazhu_y"] for c in cells if c.get("jiazhu_y")}
+            jz_canvas = None
             if gmeta.get("jiazhu_authority") == "step3":
                 s3_cells = {int(c["index"]): c for c in cells if c.get("jiazhu_cx") is not None}
                 for i in [i for i in jz_runs if i not in s3_cells]:
@@ -3213,6 +3228,7 @@ class CharExtractor:
                 pre, ax0, ay0 = jz_pre[i]
                 cx = jz_runs[i]
                 right = _jiazhu_sides(pre, int(round(cx)))
+                own_y = jz_own_y.get(i) or {}
                 halves = []
                 for sub in ("a", "b"):
                     if i in jz_subs:
@@ -3220,8 +3236,24 @@ class CharExtractor:
                             continue  # Step3 没发这一半（段尾单字 / 半边墨不够）
                     elif sub == "b" and i in jz_tail_a:
                         continue      # 单字尾：b 侧只有残渣，不发实例
-                    hp = pre.copy()
-                    hp[~right if sub == "a" else right] = 255
+                    hy0 = ay0
+                    if sub in own_y:
+                        # 两行各切（Step3 `jiazhu_rows`）：这一半按自己的 y 从整列拼回的图上取，再按中缝分边
+                        if jz_canvas is None:
+                            jz_canvas = _paste_patches(jz_pre.values())
+                        cv_, (cx0_, cy0_) = jz_canvas
+                        r0 = max(0, int(round(own_y[sub][0] - cy0_)))
+                        r1 = min(cv_.shape[0], int(round(own_y[sub][1] - cy0_)))
+                        c0 = int(round(ax0 - cx0_))
+                        hp = cv_[r0:r1, c0:c0 + pre.shape[1]].copy()
+                        hy0 = cy0_ + r0
+                        if hp.size == 0:
+                            continue
+                        r_side = _jiazhu_sides(hp, int(round(cx)))
+                        hp[~r_side if sub == "a" else r_side] = 255
+                    else:
+                        hp = pre.copy()
+                        hp[~right if sub == "a" else right] = 255
                     ty, tx = np.nonzero(hp < BINARY_THRESHOLD_PATCH)
                     if ty.size < 30:
                         continue
@@ -3234,8 +3266,8 @@ class CharExtractor:
                         id=inst.id + sub,
                         book=inst.book, page=inst.page, col=inst.col,
                         idx=inst.idx,
-                        bbox=(ax0 + tx0, ay0 + ty0,
-                              ax0 + tx1, ay0 + ty1),
+                        bbox=(ax0 + tx0, hy0 + ty0,
+                              ax0 + tx1, hy0 + ty1),
                         cell_type="char",
                         ocr_text=None, ocr_confidence=0.0,
                         patch_path=f"patches/{page}/{col_no}_{i}{sub}.png",
