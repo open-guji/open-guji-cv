@@ -90,6 +90,7 @@ def main(argv=None) -> int:
     ap.add_argument("--only", choices=("pages",), default=None, help="只对 legacy")
     ap.add_argument("--format", choices=("legacy", "char-cord"), default="legacy",
                     help="legacy = lines.md＋pages/proof/norm/zi.json；char-cord = char.json＋cord.json＋norm.json")
+    ap.add_argument("--pending", help="char-cord：同版待审单 pending.json；单上的格写 pending_reason、去 lacuna（char v0.4）")
     ap.add_argument("--keys", choices=cc.KEYS, default="cv", help="char-cord 的格位口径")
     ap.add_argument("--text-version", default=None,
                     help="char-cord 必填：char 的 version（首次 0.1.0；已有的册写 book-text 现行版本）")
@@ -140,6 +141,13 @@ def main(argv=None) -> int:
         conv = dict(zi=files[f"{a.chapter}.zi.json"], norm=files[f"{a.chapter}.norm.json"],
                     version=a.text_version, keys=a.keys, chapter=a.chapter)
         new, rep = cc.from_pages_json(pj, **conv, figure_regions=regions, prev_fig=load(a.prev_fig))
+        pre = None
+        if a.pending:
+            import copy
+            pre = copy.deepcopy(new[f"{a.chapter}.char.json"])    # 核往返用改前的：9.1 的 lines.md 不知道待审原因
+            pn = cc.apply_pending(new[f"{a.chapter}.char.json"], load(a.pending))
+            print(f"   待审原因：写 {pn['stamped']} 格（去 lacuna {pn['lacuna_dropped']}），图片格不动 {pn['fig_skipped']}，"
+                  f"单上有、char 里没有 {pn['missing']}")
         fig = new.get(f"{a.chapter}.fig.json")
         if fig is not None:
             for e in cc.crop_figures(fig, new[f"{a.chapter}.cord.json"], _image_loader(a), a.out):
@@ -152,7 +160,7 @@ def main(argv=None) -> int:
         if fig is not None:
             print(f"   图：图片格 {fr['inline']}、插图块 {fr['block']}（占掉的格 {len(fr['dropped_cells'])}）、"
                   f"保留重绘 {fr['kept']} → {a.out}/fig/{a.chapter}/")
-        base = cc.from_pages_json(pj, **conv)[0][f"{a.chapter}.char.json"] if regions else None
+        base = cc.from_pages_json(pj, **conv)[0][f"{a.chapter}.char.json"] if regions else pre
         bad += char_cord_report(new, md, roundtrip_char=base)
         return 1 if bad else 0
     if a.only == "pages":

@@ -60,6 +60,7 @@ from typing import Any
 CHAR_SCHEMA_URL = "https://open-guji.org/schema/char/v0.1.json"
 CHAR_SCHEMA_URL_V02 = "https://open-guji.org/schema/char/v0.2.json"     # 有 guess_c（阙文带推测字）才写这一版
 CHAR_SCHEMA_URL_V03 = "https://open-guji.org/schema/char/v0.3.json"     # 有图片格或图列才写这一版
+CHAR_SCHEMA_URL_V04 = "https://open-guji.org/schema/char/v0.4.json"     # 有待审格（pending_reason）才写这一版
 CORD_SCHEMA_URL = "https://open-guji.org/schema/cord/v0.1.json"
 CORD_SCHEMA_URL_V02 = "https://open-guji.org/schema/cord/v0.2.json"     # 有插图块（marks.figure）才写这一版
 FIG_SCHEMA_URL = "https://open-guji.org/schema/fig/v0.1.json"
@@ -72,7 +73,8 @@ SCHEMA_PATHS = {"char": _FORMATS / "guji_char_v0.1.schema.json",
                 "cord": _FORMATS / "guji_cord_v0.1.schema.json",
                 "fig": _FORMATS / "guji_fig_v0.1.schema.json"}
 CHAR_SCHEMA_FILES = {CHAR_SCHEMA_URL: SCHEMA_PATHS["char"], CHAR_SCHEMA_URL_V02: _FORMATS / "guji_char_v0.2.schema.json",
-                     CHAR_SCHEMA_URL_V03: _FORMATS / "guji_char_v0.3.schema.json"}
+                     CHAR_SCHEMA_URL_V03: _FORMATS / "guji_char_v0.3.schema.json",
+                     CHAR_SCHEMA_URL_V04: _FORMATS / "guji_char_v0.4.schema.json"}
 CORD_SCHEMA_FILES = {CORD_SCHEMA_URL: SCHEMA_PATHS["cord"], CORD_SCHEMA_URL_V02: _FORMATS / "guji_cord_v0.2.schema.json"}
 KEYS = ("cv", "lines")
 
@@ -115,7 +117,8 @@ def _tok(cell: dict, *, in_solo: bool = False, guess_c_as_qz: bool = False, alts
         if guess_c_as_qz or alts is None:
             return cell["c"]
         return f":tu[{alts.get(cell['fig']) or FIG_DEFAULT_ALT}]{{id={cell['fig']}}}"
-    if cell.get("lacuna"):
+    if cell.get("lacuna") or (cell.get("pending_reason") is not None and cell.get("c") == LACUNA_CHAR):
+        # 待审 □（char v0.4 §4.8：机器没给字、带 pending_reason、不带 lacuna）与阙文同写，分行稿逐字节不变
         if guess_c_as_qz and cell.get("guess_c"):
             return f"□{{guess={cell['guess_c']}}}"   # 9.1 的写法（原刻残＋人给的最像字），只用于核往返
         return LACUNA_CHAR if in_solo else "[[]]"   # Step9 在 :jz[…] 里把阙文写成「□」（guji_page_v0.2 §10.1 已知例外）
@@ -671,6 +674,37 @@ def dumps(obj: Any) -> str:
     return enc(obj, 0) + "\n"
 
 
+def apply_pending(char: dict, pending: dict) -> dict:
+    """按同版待审单给 char 的格写待审原因（guji-format char v0.4 §4.8，sheldon 11-03 定），原地改，返回计数。
+
+    单上的格：加 `pending_reason`（单上没写的记 `unknown`），去掉 `lacuna`／`guess_c`（`lacuna` 只给审过定阙的格）；
+    图片格（`fig`）不动。不在单上的格原样（含已有的 `pending_reason`：去掉，单是现行口径）。
+    用到了就把 `$schema` 升到 v0.4。分行稿不变（待审 □ 与阙文同写 `[[]]`）。"""
+    want = {x["cell"]: (x.get("pending_reason") or "unknown") for x in pending.get("cells", [])}
+    n = {"stamped": 0, "lacuna_dropped": 0, "fig_skipped": 0, "missing": 0}
+    seen = set()
+    for p in char["pages"]:
+        for col in p["columns"]:
+            for c in col["cells"]:
+                r = want.get(c["a"])
+                if r is None:
+                    c.pop("pending_reason", None)
+                    continue
+                seen.add(c["a"])
+                if c.get("fig") is not None:
+                    n["fig_skipped"] += 1
+                    continue
+                if c.pop("lacuna", None):
+                    n["lacuna_dropped"] += 1
+                c.pop("guess_c", None)
+                c["pending_reason"] = r
+                n["stamped"] += 1
+    n["missing"] = len(set(want) - seen)
+    if n["stamped"]:
+        char["$schema"] = CHAR_SCHEMA_URL_V04
+    return n
+
+
 def write_files(files: dict[str, Any], out_dir: Path | str) -> list[Path]:
     out = Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -745,7 +779,7 @@ def check(char: dict, cord: dict | None = None, norm: dict | None = None) -> lis
 
 def validate(obj: dict, kind: str) -> list[str]:
     """按 guji-format 的 JSON Schema 校验（`kind` = char / cord / fig）。char、cord 按它自己的 `$schema` 取版本
-    （char v0.1／v0.2／v0.3，cord v0.1／v0.2），认不出的按 v0.1。"""
+    （char v0.1–v0.4，cord v0.1／v0.2），认不出的按 v0.1。"""
     import jsonschema
     files = {"char": CHAR_SCHEMA_FILES, "cord": CORD_SCHEMA_FILES}.get(kind, {})
     path = files.get(obj.get("$schema"), SCHEMA_PATHS[kind])
