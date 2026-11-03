@@ -15,7 +15,7 @@ BOOK, PAGE, COL = "tbook", 1, 1
 CHARS = ["山", "水", "木"]
 
 
-def _run(tmp_path, monkeypatch, params, lost):
+def _run(tmp_path, monkeypatch, params, lost, coord_only=False):
     products, cache = tmp_path / "products", tmp_path / "cache"
     monkeypatch.setenv("GUJI_PRODUCTS_DIR", str(products))
     monkeypatch.setenv("GUJI_CACHE_DIR", str(cache))
@@ -32,8 +32,14 @@ def _run(tmp_path, monkeypatch, params, lost):
     recs = [dict(slot=i + 1, verdict="same", cov=1.0, wmax=0.0, char=c, candidates=[(c, 1.0)])
             for i, c in enumerate(CHARS)]
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(PAGE, BOOK, recs=recs, col=COL))
-    write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
-        PAGE, BOOK, recs=[dict(slot=i + 1, align_char=c) for i, c in enumerate(CHARS)], col=COL))
+    if coord_only:      # coord_fallback 放行的格：没有现役对位，只有坐标对位
+        from open_guji_cv.products.kinds.recog import CoordRec
+        ar = page_align_ref(PAGE, BOOK, recs=[], col=COL)
+        ar.coord = [CoordRec(id=f"{BOOK}:{PAGE}:{COL}:{i + 1}", col=COL, slot=i + 1, ref_char=c) for i, c in enumerate(CHARS)]
+        write_product(ctx, "align_ref", PAGE, align_ref=ar)
+    else:
+        write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
+            PAGE, BOOK, recs=[dict(slot=i + 1, align_char=c) for i, c in enumerate(CHARS)], col=COL))
     page = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"]
     monkeypatch.setattr(lookup, "human_chars", real)
     return {r.slot: r for cc in page.columns for r in cc.chars}, page
@@ -129,3 +135,13 @@ def test_human_chars_reports_lost(tmp_path, monkeypatch):
 
 import pytest  # noqa: E402
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest
+
+
+def test_shift_ok_uses_coord_ref_when_no_active_alignment(tmp_path, monkeypatch):
+    """现役对位缺格、只有坐标对位字（coord_fallback 放行的格）：旧人裁＝坐标对位邻格字 → 同样豁免（史記 2026-11-03）。"""
+    lost = {_key(2): {"char": "山", "status": "unanchored", "event": "e1"}}
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(human_unbound_shift_ok=True), lost, coord_only=True)
+    assert r[2].admit and r[2].char == "水"
+    assert r[2].evidence["human_unbound"]["shift_ok"] == -1
+    r, _ = _run(tmp_path, monkeypatch, SeedAdmitParams(), lost, coord_only=True)        # 开关缺省关 → 照旧降级
+    assert not r[2].admit and "human_unbound" in r[2].doubts
