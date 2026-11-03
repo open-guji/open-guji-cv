@@ -127,6 +127,9 @@ _SJ_VLINE = ("border_detect 加缺省关的页级人核界行 vline_overrides（
 _SJ_TOPK = ("seed_admit 加缺省关的书级开关 ref_topk_follow（库前 5 名候选里有整理本字且 cov 接近首位时按整理本放，要 reference_trust very_high）："
             "不配时 seed_admit 在史記 04 册 8 页（--pages 2,10,34,47,120,122,135,138）上与 origin/dev e1c28387 产物逐字节相同；"
             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+_SJ_INKCUT = ("row_segment 书级开关 seal_inkcut（缺省关，史記文淵閣本第 5 轮，大印下抹印泥再切）："
+              "开关关着时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 0883ff37 产物逐字节相同；"
+              "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
 
 _SJ_DP = ("align_ref 在史記文淵閣本 04 册 10 页（--pages 2,10,34,41,43,47,120,122,124,138）上与 origin/dev（含 #788）产物逐字节相同；"
           "coord_dp 关着（册 yaml coord_dp: false，缺省）；scripts/code_equiv.py check，2026-11-02")
@@ -609,6 +612,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="003fe27cfbe7c06de891e6d23ae081db1f5d4d4bf66359b1467b2f2a17ae6789",
           old="4465ac6dfe85c0eaba56e06d75c260285f7fd5a02cef69cc5787ba8e0caae3dd",
           evidence=_TIGHT_BAND),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="bd5d50e99caa7b100e9067347416e36209b92672f1c95f4ab0b8db2a88c8ba3e",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_SJ_INKCUT),
 )
 
 

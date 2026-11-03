@@ -539,6 +539,47 @@ def _in_seal(seals, mapper, img=None, ink_threshold: int = 128):
 
 
 
+#: `seal_inkcut`：开运算核（像素）与开运算后保留的最小连通块（像素）。印泥在二值图里是多孔的碎点，开运算剩不下；
+#: 刻字笔画实心，开运算后留下骨干，再在原墨里膨胀回去
+SEAL_OPEN_K, SEAL_OPEN_MIN_AREA = 7, 150
+#: 表里有雙行小注的列：小字笔画细，核换小的，不然小字跟印泥一起被抹掉（史記 03 p2 第 8 列）
+SEAL_OPEN_K_NOTES, SEAL_OPEN_MIN_AREA_NOTES = 5, 60
+
+
+def _seal_rows(seals, mapper, content_x, h: int) -> tuple[int, int] | None:
+    """大印（无笔画掩码的印）在这一列列图里压着的行段 [y0, y1)；不压着就是 None。"""
+    if mapper is None or not seals:
+        return None
+    cx = (float(content_x[0]) + float(content_x[1])) / 2.0
+    ys = []
+    for y in range(0, h, 4):
+        x, yy = mapper.to_page_tr(cx, float(y))
+        if any(m is None and bx0 <= x <= bx1 and by0 <= yy <= by1 for bx0, by0, bx1, by1, m in seals):
+            ys.append(y)
+    return (ys[0], min(h, ys[-1] + 4)) if ys else None
+
+
+def _seal_inkcut(img, rows: tuple[int, int], ink_threshold: int, notes: bool = False):
+    """把列图 `rows` 行段里的印泥抹白：开运算（SEAL_OPEN_K）去掉多孔碎点，丢掉小块，剩下的笔画骨干在原墨里膨胀回去。"""
+    import cv2
+    import numpy as np
+    a, b = rows
+    g = img if img.ndim == 2 else img.mean(axis=2).astype(img.dtype)
+    out = g.copy()
+    ink = (g[a:b] < ink_threshold).astype(np.uint8)
+    kk, min_area = (SEAL_OPEN_K_NOTES, SEAL_OPEN_MIN_AREA_NOTES) if notes else (SEAL_OPEN_K, SEAL_OPEN_MIN_AREA)
+    k = np.ones((kk, kk), np.uint8)
+    op = cv2.morphologyEx(ink, cv2.MORPH_OPEN, k)
+    n, lab, st, _c = cv2.connectedComponentsWithStats(op, connectivity=8)
+    small = st[:, cv2.CC_STAT_AREA] < min_area
+    small[0] = False
+    op[small[lab]] = 0
+    keep = (cv2.dilate(op, k) > 0) & (ink > 0)
+    band = out[a:b]
+    band[(ink > 0) & ~keep] = 255
+    return out
+
+
 def _under_stain(seals, mapper, content_x, border_top: float, period: float) -> bool:
     """这一列的首格（版框顶下一格）一半以上压在大印（`seals` 里没有笔画掩码的那种）下。"""
     q = mapper.quad_tr(float(content_x[0]), float(border_top), float(content_x[1]), float(border_top) + period)
@@ -787,6 +828,11 @@ class RowSegmentParams(BaseModel):
     #: 列端的表空格，中间的空格位里的印泥被切成字，格数对不上整理本、整列对位落空（01–10 册 p2 约 97 格）。开着时
     #: 表首字与末字之间、表说空的格位落在印框里（`_in_seal`）也记空。书级开关；False＝关（缺省，不进参数哈希）。
     seal_gap_slots_empty: bool = False
+    #: **大印下按墨缝切、剔印泥**（2026-11-03，史記文淵閣本）：大印压着的列（`_under_stain`），先把印框行段里的印泥从列图里
+    #: 抹掉（`_seal_inkcut`：印泥在二值图里是多孔碎点，开运算剩不下；刻字笔画实心留得下），再按平常的候选格网打分挑格，
+    #: 不再硬取等距格网。卷首叶题署行（「宋中郎外兵曹　參　軍裴　駰集解」）字大、字距随手拉开，等距格网劈字、并字、
+    #: 印泥空格成假格（01–10 册 p2 约 80 格）。只改切分用的列图，Step4 裁字仍用原列图。书级开关；False＝关（缺省，不进参数哈希）。
+    seal_inkcut: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -863,6 +909,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_rows", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
+            if not self.seal_inkcut:
+                d.pop("seal_inkcut", None)
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
             if self.page_map == "off":
@@ -1057,6 +1105,17 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
+            inkcut = False
+            if p.seal_inkcut and seals and lay is not None:
+                wrec0 = wins.column(gc.col)
+                if wrec0 is not None:
+                    mapper0 = ColumnMapper(page_w, wrec0.left_line.to_vline(), wrec0.right_line.to_vline(),
+                                           wrec0.top_y, wrec0.bottom_y)
+                    if _under_stain(seals, mapper0, gc.content_x or (0, img.shape[1]), gc.border_top, gate.period):
+                        rows_ = _seal_rows(seals, mapper0, gc.content_x or (0, img.shape[1]), img.shape[0])
+                        if rows_ is not None:
+                            img = _seal_inkcut(img, rows_, p.ink_threshold, notes=bool(lay.get("notes")))
+                            inkcut = True
             # 先粗后精（2026-11-03，全唐文 CPU 提速）：下面挑格网要把一列切十几遍（表／闸抬头／挪一格／等距格网／挤格逐条去线），
             # 每遍都跑折线候选（find_seam）和 U-Net 判官——全唐文册06 p27 一页 339 次前向，落进产物的切点只有 15 个。
             # 挑格网的打分（_split_chars／_mask_misses／_uneven／_cut_rows／_merged_cuts／_blank_frame_junk）和
@@ -1180,7 +1239,12 @@ class RowSegmentStep(Step):
                         for c in cands]
                 scores = [_score(c) for c in cands]
                 # 大印压着列首：格网直接取表的等距格网，不比坏格（见上「大印下的列」）
-                stained = in_seal is not None and _under_stain(
+                # `seal_inkcut`：印泥已从列图里抹掉，照常按打分挑格网（不再硬取等距格网）；但带小注的列不认「表挪一格」——
+                # 抹过的印下空白让挪一格的格网少劈一个字就胜出，大字整列错一格、印上多出空格（01:54 c3）
+                if inkcut and lay.get("notes"):
+                    big = (1 << 30,) * 4
+                    scores = [big if "layout_shift" in c[4] else scores[i_] for i_, c in enumerate(cands)]
+                stained = not inkcut and in_seal is not None and _under_stain(
                     seals, mapper, gc.content_x or (0, img.shape[1]), gc.border_top, gate.period)
                 best = next((i for i, c in enumerate(cands) if c[4] == "uniform_grid"), None) if stained else None
                 if best is not None:
