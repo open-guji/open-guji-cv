@@ -1307,7 +1307,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
     return None
 
 
-ALT_MIN_GAIN = 3          # 备选切法拿到坐标字的格数至少多这么多格才换
+ALT_MIN_GAIN = 4          # 备选切法拿到坐标字的格数，至少比现役「坐标字格数、8-gram 对位 equal 格数」两者的大者多这么多格才换
 ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数的这么多
 # 分母取备选切法自己切出的字格数、不取整理本这一行的字数（2026-11-03 定，A22 评审问）：
 # 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
@@ -1334,7 +1334,9 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
 
     备选列在一份草稿上重做坐标对位（`with_alt` 视图，草稿去掉这些列的现役对位字，免得
     现役对位按旧切法的格号去比）。换列要三条都成立：备选切法拿到坐标字的格数 ≥ 现役 +
-    `ALT_MIN_GAIN`（几何配法配得上整列，现役只能退 dp 逐字配的列，就是格网切错的列）；
+    `ALT_MIN_GAIN`，也比现役 8-gram 对位（`chars`）equal 的格数多这么多（现役对位已经和整理本逐字对上
+    的列不是切错的列；第 7 轮 125 页 A/B：只比坐标字格数时换的 20 列里 3 列变差，04:10:3、02:185:8、
+    03:90:3 都是现役 equal 格数远高于坐标字格数）；
     ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。换了的列：坐标字、退回原因、冲突格都换成备选那份，
     现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
     （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
@@ -1359,7 +1361,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
     for col in cols:
         ca, cm = _covered(draft, col), _covered(res, col)
         a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
-        if ca >= cm + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
+        eq = sum(1 for c in res.chars if c.col == col and c.align_op == "equal")
+        if ca >= max(cm, eq) + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
             chosen.append(col)
     if not chosen:
         return

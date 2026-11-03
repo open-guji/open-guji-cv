@@ -113,7 +113,14 @@ def page_state(book: str, page: int, store) -> tuple[str | None, str | None]:
     from ..core.spec import page_key
     from ..report.slots import cells_step
     key = page_key(page)
-    return store.sha(book, cells_step(book), key), store.sha(book, PATCH_STEP, key)
+    cells = store.sha(book, cells_step(book), key)
+    # row_segment `alt_cut`：换没换备选切法不改 Step3 产物的 sha，但现行格网（`_cells_versions`）跟着变——
+    # 换列记进第一份键里，换了／换回都让缓存失效（2026-11-03 史记 03:144:2 换回主切法后人裁仍按备选格号挂错一格）
+    from ..products.alt_view import alt_cols_of
+    alt = alt_cols_of(book, page, store)
+    if alt and cells:
+        cells = f"{cells}@alt{','.join(map(str, sorted(alt)))}"
+    return cells, store.sha(book, PATCH_STEP, key)
 
 
 def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float, object]]:
