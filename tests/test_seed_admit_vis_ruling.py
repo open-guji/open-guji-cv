@@ -57,6 +57,17 @@ def test_adjacent_blank_cells_use_pre_pass_windows(tmp_path):
     assert n == 2 and (r[2].char, r[3].char) == ("靑", "時")
 
 
+def test_src_text_ruling_lifts_and_subclass_isolated(tmp_path):
+    """新图源文本层／码表裁定（prompt_ver=src-1，子类 PUA）：整理本此位无字（ref 空）也放行；子类串到别的版本不放。"""
+    st = RulingStore(tmp_path)
+    p = st.put("O", "src-1", "甲", "乙", char="洶", conf="high", why="x", model="src-text-text_layer", cell=f"{B}:1:2")
+    p.update({"admit_ok": True, "subclass": "PUA", "ref": "", "route": "text_layer"})
+    n, r = _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)
+    assert n == 1 and (r[2].char, r[2].channel) == ("洶", "vis_ruling") and r[2].evidence["vis_ruling"]["route"] == "text_layer"
+    p["subclass"] = "A68"                                     # src-1 只收 PUA
+    assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 0
+
+
 def test_dump_default_clean():
     assert "vis_rulings" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", vis_rulings=False).model_dump()["vis_rulings"] is False
