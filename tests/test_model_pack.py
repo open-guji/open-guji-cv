@@ -168,3 +168,32 @@ def test_ids_unet_moved_out_of_corpus():
     from open_guji_cv.core.corpus_pin import _not_corpus
     assert _not_corpus("repo", "config/groups/jue/unet.npz")
     assert not _not_corpus("repo", "config/groups/jue/ids_bank.json")
+
+
+def test_font_registry_matches_and_skips_commercial():
+    """cv 自带字体表与 fonts/ 一致（在的文件 sha 对得上）；商业字体 kangxi 不进表（R2 公开）。"""
+    from open_guji_cv.core import font_files as fp
+    reg = {i["path"]: i["sha256"] for i in fp.load_registry()}
+    assert reg and not any(p.startswith("fonts/kangxi/") for p in reg)
+    for it in fp.repo_items():
+        assert reg.get(it["path"]) == it["sha256"], f"{it['path']} 与字体表不符：跑 guji font registry"
+
+
+def test_font_fetch_uses_font_registry(monkeypatch, tmp_path):
+    from open_guji_cv.core import font_files as fp
+    from open_guji_cv.ops import model_blobs as mb
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    (repo / "fonts" / "a").mkdir(parents=True)
+    (repo / "fonts" / "kangxi").mkdir(parents=True)
+    f = repo / "fonts" / "a" / "x.ttf"
+    f.write_bytes(b"font")
+    (repo / "fonts" / "kangxi" / "k.otf").write_bytes(b"commercial")
+    monkeypatch.setattr(mp, "REPO_ROOT", repo)
+    assert fp.build_registry()["items"] == 1
+    sha = mp._sha256(f)
+    f.unlink()
+    got = {}
+    monkeypatch.setattr(mb, "_place", lambda todo: (got.update(todo), (len(todo), []))[1])
+    r = mb.fetch_registry("font")
+    assert r["missing"] == 1 and got == {sha: f}

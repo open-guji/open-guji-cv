@@ -88,9 +88,10 @@ def main() -> int:
         env = dict(os.environ)
         if not env.get("GUJI_DATA_TOKEN") and env.get("GUJI_DATA_TOKEN_READ"):
             env["GUJI_DATA_TOKEN"] = env["GUJI_DATA_TOKEN_READ"]
-        r = subprocess.run([sys.executable, "-m", "open_guji_cv", "model", "fetch"], env=env)
-        if r.returncode:
-            print("模型文件取回不全（见上）；补好令牌后跑 guji model fetch", file=sys.stderr)
+        for what in ("model", "font"):
+            r = subprocess.run([sys.executable, "-m", "open_guji_cv", what, "fetch"], env=env)
+            if r.returncode:
+                print(f"{what} 文件取回不全（见上）；补好令牌后跑 guji {what} fetch", file=sys.stderr)
     # 装后自检：关键资源缺了就拒绝（缺 checkpoint 等处代码是静默退化，不报错）
     must = ["models/glyph_cnn_r5/best.pt", "models/partition_unet_v2", "config/charset", "config/groups",
             "formats/guji_page_v0.2.schema.json", "precleaned"]
