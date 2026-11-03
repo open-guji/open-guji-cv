@@ -31,10 +31,12 @@ def connect():
         c = jobsdb.connect()
         c.autocommit = True
         return c
-    if os.environ.get("GUJI_REQUIRE_JOBSDB", "").strip().lower() in ("1", "true", "yes"):
-        raise SystemExit("任务库要求连新机（GUJI_REQUIRE_JOBSDB=1），但没有 JOBSDB_TOKEN；不退回 Neon。"
-                         "请先按切换说明放好令牌再重起执行方。")
-    return connect_neon()
+    # 11-03 已切到新机：Neon 任务库只留给测试分支（GUJI_JOBS_BRANCH）或显式 GUJI_REQUIRE_JOBSDB=0
+    br = os.environ.get("GUJI_JOBS_BRANCH")
+    if (br and br != "main") or os.environ.get("GUJI_REQUIRE_JOBSDB", "").strip().lower() in ("0", "false", "no"):
+        return connect_neon()
+    raise SystemExit("任务库已切到新机，但本 shell 没有 JOBSDB_TOKEN；不退回 Neon。"
+                     "请用 guji_jobs（会自动载入 secret），或先 . /etc/guji_secrets.sh。")
 
 
 def connect_neon():

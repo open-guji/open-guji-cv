@@ -14,8 +14,10 @@ def test_enabled_with_token(monkeypatch):
     assert jobsdb.enabled() is True
 
 
-def test_connect_falls_back_to_neon(monkeypatch):
+def test_connect_falls_back_to_neon_only_when_asked(monkeypatch):
     monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_JOBS_BRANCH", raising=False)
+    monkeypatch.setenv("GUJI_REQUIRE_JOBSDB", "0")
     called = []
     monkeypatch.setattr(store, "connect_neon", lambda: called.append("neon") or "NEON")
     assert store.connect() == "NEON"
@@ -49,3 +51,20 @@ def test_require_jobsdb_fails_loudly_without_token(monkeypatch):
     monkeypatch.setattr(store, "connect_neon", lambda: pytest.fail("不该退回 Neon"))
     with pytest.raises(SystemExit):
         store.connect()
+
+
+def test_default_refuses_neon_without_token(monkeypatch):
+    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_JOBS_BRANCH", raising=False)
+    monkeypatch.delenv("GUJI_REQUIRE_JOBSDB", raising=False)
+    monkeypatch.setattr(store, "connect_neon", lambda: pytest.fail("不该退回 Neon"))
+    with pytest.raises(SystemExit):
+        store.connect()
+
+
+def test_ci_branch_still_uses_neon(monkeypatch):
+    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_REQUIRE_JOBSDB", raising=False)
+    monkeypatch.setenv("GUJI_JOBS_BRANCH", "ci")
+    monkeypatch.setattr(store, "connect_neon", lambda: "NEON")
+    assert store.connect() == "NEON"
