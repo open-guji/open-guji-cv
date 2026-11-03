@@ -817,6 +817,10 @@ class RowSegmentParams(BaseModel):
     #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
     #: 不影响挑格网。殿本两行逐字对齐，不开。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_rows: bool = False
+    #: **雙行小注两行字数可不等**（2026-11-03，史記文淵閣本，设计稿方案 A，Sheldon 定）：要 `jiazhu_rows`。格位表说段尾
+    #: 一格只有一半有字（段字数为奇数）时，多出的那个字归 a 还是 b 由图定（两种分法各切、取切线压墨少的），短的那行
+    #: 格号照「本行第几字」从段首数。缺省按「右行多一字」（光盘版整理本口径）。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_free_split: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -907,6 +911,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_gap_cols_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
+            if not self.jiazhu_free_split:
+                d.pop("jiazhu_free_split", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -1142,6 +1148,7 @@ class RowSegmentStep(Step):
                     grid_bounds=bounds if bounds is not None else grids[gc.col].bounds(n_body, n_r) if grid else None, **l_kw,
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
+                    **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
