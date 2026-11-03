@@ -416,6 +416,10 @@ def run_selfcheck(db_path: str | Path,
             best_font_count[k] = best_font_count.get(k, 0) + 1
 
     flagged = [f for f in findings if f.flags]
+    # 极形近字组（己已巳、日曰、一二…，`groups.registry.GROUPS`）内互撞的卡不出：字组流程专管，
+    # 人在体检页看形也分不出（Sheldon 2026-11-03）。只砍「对手全在同一字组」且没有离群旗的卡。
+    n_group_pair = sum(1 for f in flagged if group_pair_only(f))
+    flagged = [f for f in flagged if not group_pair_only(f)]
     flagged.sort(key=lambda f: -f.score)
     counts: dict[str, int] = {}
     for f in flagged:
@@ -432,6 +436,7 @@ def run_selfcheck(db_path: str | Path,
         "n_flagged": len(flagged),
         "flag_counts": counts,
         "human_conflict": sum(f.human_conflict for f in flagged),
+        "n_group_pair": n_group_pair,
         "singletons_no_peer": sum(1 for f in findings if f.n_same_self == 0),
         "fonts": {k: {"n": len(v), "median": round(float(np.median(v)), 4),
                       "p10": round(float(np.percentile(v, 10)), 4),
@@ -449,6 +454,26 @@ def run_selfcheck(db_path: str | Path,
         "findings": flagged,
         "all": findings,
     }
+
+
+def _same_group(a: str | None, b: str | None) -> bool:
+    if not a or not b or a == b:
+        return False
+    from ..groups.registry import GROUPS
+    return any(a in g.members and b in g.members for g in GROUPS.values())
+
+
+def group_pair_only(f) -> bool:
+    """这张卡的对手（本书他字 / 他书他字 / 字体）是不是全和本字同在一个极形近字组里，且没有离群旗。
+
+    `f` 是 `Finding` 或 findings.jsonl 的一行（dict）。是 → 不出卡（见 `run_selfcheck`）。"""
+    g = f.get if isinstance(f, dict) else lambda k, d=None: getattr(f, k, d)
+    flags = set(g("flags") or [])
+    if not flags or "outlier" in flags:
+        return False
+    rivals = [g(c) for fl, c in (("rival", "rival_char"), ("rival_xbook", "xrival_char"),
+                                 ("font_rival", "font_char")) if fl in flags]
+    return bool(rivals) and all(_same_group(g("char"), r) for r in rivals)
 
 
 # ── 落盘与白名单 ─────────────────────────────────────────
