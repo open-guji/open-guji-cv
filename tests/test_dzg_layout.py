@@ -434,3 +434,13 @@ def test_snap_to_gaps_prefers_staying_near_grid_line():
     out = snap_to_gaps(proj, [100.0, 211.0], period=85.0)
     assert abs(out[0] - 100) <= 3
     assert 200 <= out[1] <= 211
+
+
+def test_row_pitch_param_default_uniform_not_in_dump():
+    """书级 `row_pitch`：缺省 uniform（殿本等距格网优先）不进参数 dump；写本设 free 时进 dump、改参数哈希。"""
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.steps import row_segment as RS
+    assert "row_pitch" not in RS.RowSegmentParams().model_dump()
+    free = RS.RowSegmentParams(row_pitch="free")
+    assert free.model_dump()["row_pitch"] == "free"
+    assert params_hash(free) != params_hash(RS.RowSegmentParams())
