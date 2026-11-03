@@ -1,0 +1,40 @@
+# 把主仓 wiki/ 同步到 GitHub Wiki（open-guji-cv.wiki.git），wiki/tools/（出图脚本）不同步。
+# Wiki 以主仓为准：改 Wiki 走 PR 改 wiki/，别在网页上直接改（会被下次同步覆盖）。
+# 平时随发版合进 main 时同步；要提前同步（如首版）可在 Actions 页对 dev 手动 Run workflow。
+# 照抄 guji-manager 的 wiki-sync（guji-manager PR #44 已跑通）。
+name: wiki-sync
+
+on:
+  push:
+    branches: [main]
+    paths: ["wiki/**", ".github/workflows/wiki-sync.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: wiki
+      - name: 取 Wiki 仓
+        run: |
+          git clone "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git" _wiki
+      - name: 覆盖并推送
+        run: |
+          rsync -a --delete --exclude .git --exclude tools/ wiki/ _wiki/
+          cd _wiki
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Wiki 无变化"; exit 0; fi
+          git commit -m "同步自 ${{ github.repository }}@${GITHUB_SHA::7}"
+          git push origin HEAD

@@ -1,0 +1,81 @@
+# Wiki 截图清单。改了这里重跑 make_shots.py；id 就是 wiki/images/<id>.png 的文件名。
+# ws：书 ID（出图时用 --ws 书ID=工作区 指到本机工作区）；crop：按页宽高的比例裁 [x0, y0, x1, y1]。
+# kind：page（一页叠若干图层）、panels（并排几幅）、column（一列拉直前后）、cells（几格的 Step3 格与 Step4 紧框）、
+#       glyphs（字形库里某字的刻例，要 --data）。图层：border columns cells shrink seal admit。
+# 首版基线：v0.6.0 前后的 main 产物包（殿本 vol04 是 cv0.5.26 那包，vol16/21/40/46/84 是 0.6.1.dev 实验包）。
+width: 1000
+shots:
+  # ---- 首页、管线全景
+  - id: home-overview
+    kind: panels
+    ws: 96mid1ogzk
+    book: vol04
+    page: 9
+    crop: [0.42, 0.0, 1.0, 0.55]
+    panels: [{layers: []}, {layers: [cells]}, {layers: [admit]}]
+  - id: pipeline-strip
+    kind: panels
+    ws: 96mid1ogzk
+    book: vol04
+    page: 9
+    crop: [0.5, 0.03, 1.0, 0.42]
+    per_row: 3
+    gap: 16
+    panels: [{layers: []}, {layers: [border]}, {layers: [columns]}, {layers: [cells]}, {layers: [shrink]}, {layers: [admit]}]
+  # ---- 坐标、Step1
+  - {id: coords-columns, ws: 96mid1ogzk, book: vol04, page: 9, layers: [columns], width: 640}
+  - {id: step1-border, ws: 96mid1ogzk, book: vol04, page: 9, layers: [border], width: 640}
+  - {id: step1-headraise, ws: 96mid1ogzk, book: vol04, page: 9, layers: [border], crop: [0.3, 0.0, 0.85, 0.2], width: 700}
+  - {id: step1-bottom-v84p89, ws: 96mid1ogzk, book: vol84, page: 89, layers: [border], crop: [0.0, 0.72, 1.0, 1.0], width: 900}
+  - {id: step1-faint-v40p34, ws: 96mid1ogzk, book: vol40, page: 34, layers: [border], width: 640}
+  # ---- 印章
+  - {id: seal-v04p1, ws: 96mid1ogzk, book: vol04, page: 1, layers: [seal], width: 560}
+  - {id: seal-v46p106, ws: 96mid1ogzk, book: vol46, page: 106, layers: [seal, cells], width: 640}
+  - {id: seal-v21p225, ws: 96mid1ogzk, book: vol21, page: 225, layers: [seal, admit], crop: [0.0, 0.0, 1.0, 0.5], width: 640}
+  # ---- Step2
+  - {id: step2-column-c3, kind: column, ws: 96mid1ogzk, book: vol04, page: 9, col: 3, width: 420}
+  # ---- Step3
+  - {id: step3-cells, ws: 96mid1ogzk, book: vol04, page: 9, layers: [cells], width: 640}
+  - {id: step3-jiazhu-v16p6, ws: 96mid1ogzk, book: vol16, page: 6, layers: [cells], crop: [0.0, 0.1, 0.62, 0.6], width: 800}
+  - {id: step3-crowd-v46p106, ws: 96mid1ogzk, book: vol46, page: 106, layers: [cells], crop: [0.3, 0.03, 0.62, 0.6], width: 420}
+  # ---- Step4
+  - {id: step4-shrink, ws: 96mid1ogzk, book: vol04, page: 9, layers: [shrink], crop: [0.45, 0.05, 1.0, 0.5], width: 700}
+  - id: step4-pairs
+    kind: cells
+    ws: 96mid1ogzk
+    book: vol04
+    horizontal: true
+    h: 170
+    ids: ["vol04:9:1:1", "vol04:9:3:2", "vol04:9:6:4", "vol04:2:4:21", "vol04:33:4:6"]
+  # ---- Step5
+  - {id: step5-glyphs, kind: glyphs, ws: 96mid1ogzk, chars: [御, 卷, 傳, 書], n: 10}
+  # ---- Step6–7
+  - {id: step7-admit-v04p65, ws: 96mid1ogzk, book: vol04, page: 65, layers: [admit], width: 640}
+  - id: step7-review-cells
+    kind: cells
+    ws: 96mid1ogzk
+    book: vol04
+    steps: [cell_shrink]
+    horizontal: true
+    h: 120
+    ids: ["vol04:65:4:14", "vol04:65:4:16", "vol04:65:4:20", "vol04:65:6:14", "vol04:65:6:15", "vol04:65:7:15", "vol04:65:7:16", "vol04:65:7:20", "vol04:65:7:21"]
+  # ---- 字组
+  - {id: groups-ri-yue, kind: glyphs, ws: 96mid1ogzk, chars: [日, 曰, 目], n: 10}
+  # ---- 史記文淵閣本（写本）
+  - {id: shiji-body-p32, ws: 988g3f0wsu, book: "01", page: 32, layers: [cells], width: 640}
+  - {id: shiji-roster-p40, ws: 988g3f0wsu, book: "01", page: 40, layers: [cells], width: 640}
+  - {id: shiji-seal-p139, ws: 988g3f0wsu, book: "01", page: 139, layers: [seal, cells], width: 640}
+  - {id: shiji-table-p20, ws: 988g3f0wsu, book: "09", page: 20, layers: [], width: 640}
+  # ---- 北行日錄古本（网格模式）
+  - {id: bxgb-grid-p20, ws: 988g7gsqhd, book: bxgb, page: 20, layers: [border], width: 800}
+  - {id: bxgb-cells-p41, ws: 988g7gsqhd, book: bxgb, page: 41, layers: [cells], crop: [0.5, 0.2, 0.92, 0.8], width: 560}
+  # ---- 增廣幼學須知鰲頭雜字（自由版式 keben_free；第 9、10 页本地跑，没有产物包）
+  - id: free-yxat-p9
+    kind: panels
+    ws: 998a1ukohs
+    book: yxat
+    page: 9
+    panels: [{layers: []}, {layers: [free]}]
+    width: 1000
+  - {id: free-yxat-p10-ocr, ws: 998a1ukohs, book: yxat, page: 10, layers: [ocr], width: 560}
+  - {id: free-yxat-p9-cells, ws: 998a1ukohs, book: yxat, page: 9, layers: [free], crop: [0.45, 0.0, 1.0, 0.62], width: 640}
