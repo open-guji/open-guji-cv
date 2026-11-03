@@ -210,7 +210,8 @@ def cmd_corpus(args) -> None:
             v = rows[-1]["n"] if rows else None
         v = v or (cp.versions(ws) or [0])[-1]
         try:
-            res = (cp.upload_blobs(ws, v, args.vol, execute=args.execute) if args.action == "upload"
+            res = (cp.upload_blobs(ws, v, args.vol, execute=args.execute, all_items=args.all)
+                   if args.action == "upload"
                    else cp.fetch_blobs(ws, v, args.vol))
         except (ValueError, FileNotFoundError) as e:
             print(f"✗ {e}", file=sys.stderr)
@@ -388,6 +389,8 @@ def add_parser(sub) -> None:
     p.add_argument("--vol", default=None, help="册 id：build 出册层清单／pin 追加这册的钉子账／verify 按这册的总号对")
     p.add_argument("--dev", action="store_true", help="pin：开发中的总号（各层版本可以指向还没出的清单；发版用 release）")
     p.add_argument("--execute", action="store_true", help="upload：真传 R2（缺省只演练；要 GUJI_DATA_TOKEN）")
+    p.add_argument("--all", action="store_true",
+                   help="upload：改传引擎仓（cv）的全部底库文件，不论大小（缺省只传 ≥1MB 的大文件）；后来改过的按底库 repo_commit 从 git 取当时那版；之后 cv 不带底库文件时 fetch 也能取回")
     p.add_argument("--from-n", type=int, default=None, help="pin：这册还没有钉子账时，册 yaml 现在的 corpus: 号")
     p.add_argument("--global-ver", type=int, default=None, help="pin：全局层（底库）版本；不给沿用最新一行")
     p.add_argument("--book-ver", type=int, default=None, help="pin：整套书层（书库）版本")
