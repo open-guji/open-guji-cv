@@ -96,7 +96,13 @@ if [ -n "$TORCH_INDEX" ]; then INST+=(--extra-index-url "$TORCH_INDEX" --index-s
 # —— 4. 自检，通过才写就绪戳 ——
 if selfcheck; then
   fingerprint > "$READY.tmp" && mv "$READY.tmp" "$READY"
-  "$VENV/bin/python" -c "from huggingface_hub import snapshot_download as d; d('SIKU-BERT/sikuroberta', revision='bb25260d5c321924fe4fb353c09191c0aaf5c5c6')" >/dev/null 2>&1 \
+  # 先从 R2 镜像取（执行机常拉不到 huggingface.co；要 GUJI_DATA_TOKEN 或 _READ），取不到再走 HF
+  GUJI_DATA_TOKEN="${GUJI_DATA_TOKEN:-${GUJI_DATA_TOKEN_READ:-}}" PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" -c "
+import sys
+from open_guji_cv.datastore.packs import CTX_ENCODER, fetch_hf_model
+if not fetch_hf_model(*CTX_ENCODER):
+    from huggingface_hub import snapshot_download as d
+    d(CTX_ENCODER[0], revision=CTX_ENCODER[1])" >/dev/null 2>&1 \
     && log "文意 L2 权重已预拉" || log "⚠ 文意 L2 权重没拉到（huggingface.co 不通？）：ctx_l2 会弃权，执行方领单前会再试"
   log "自检通过：python -c \"import torch, scipy, cv2\" OK → $VENV/bin/python"
   log "用法：source $VENV/bin/activate 或直接 $VENV/bin/guji …；带 book 的命令别忘了 -w <工作区>"

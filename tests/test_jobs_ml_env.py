@@ -9,6 +9,8 @@ def _setup(monkeypatch, results):
     calls = []
     it = iter(results)
     monkeypatch.delenv("GUJI_JOBS_SKIP_ML_CHECK", raising=False)
+    monkeypatch.delenv("GUJI_DATA_TOKEN", raising=False)       # 缺省不走 R2 镜像，R2 路径单独测
+    monkeypatch.delenv("GUJI_DATA_TOKEN_READ", raising=False)
     monkeypatch.setattr(R, "_ml_ok_at", 0.0)
     monkeypatch.setattr(R, "_ml_fail", None)
     monkeypatch.setattr(R, "_find_uv", lambda: "uv")
@@ -40,6 +42,20 @@ def test_install_fail_blocks_and_backs_off(monkeypatch):
 def test_weights_fail_blocks(monkeypatch):
     _setup(monkeypatch, [(0, ""), (1, "offline")])
     assert "权重" in R._ml_env_gate(lambda *_: None)
+
+
+def test_r2_mirror_first(monkeypatch):
+    calls = _setup(monkeypatch, [(0, ""), (0, "")])
+    monkeypatch.setenv("GUJI_DATA_TOKEN_READ", "t")
+    assert R._ml_env_gate(lambda *_: None) is None
+    assert "fetch_hf_model" in calls[-1][-1] and len(calls) == 2     # R2 取到就不再走 huggingface.co
+
+
+def test_r2_miss_falls_back_to_hf(monkeypatch):
+    calls = _setup(monkeypatch, [(0, ""), (1, "no"), (0, "/x")])
+    monkeypatch.setenv("GUJI_DATA_TOKEN_READ", "t")
+    assert R._ml_env_gate(lambda *_: None) is None
+    assert "snapshot_download" in calls[-1][-1]
 
 
 def test_bounded_kills_on_timeout():
