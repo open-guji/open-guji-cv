@@ -86,7 +86,8 @@ def _place(todo: list[tuple[str, Path]]) -> tuple[int, list[str]]:
 
 
 def fetch_registry(kind: str = "model") -> dict:
-    """cv 自带的路径 → sha 表（``model``：`core/model_pack.REGISTRY`；``font``：`core/font_files.REGISTRY`）里
+    """cv 自带的路径 → sha 表（``model``：`core/model_pack.REGISTRY`；``font``：`core/font_files.REGISTRY`；
+    ``corpus``：`core/corpus_files.REGISTRY`）里
     本机缺的文件，从 R2 取回放回原位。"""
     reg, miss = _registry(kind)
     root = _repo_root()
@@ -103,6 +104,9 @@ def _registry(kind: str) -> tuple[list[dict], list[dict]]:
     if kind == "font":
         from ..core import font_files as fp
         return fp.load_registry(), fp.missing()
+    if kind == "corpus":
+        from ..core import corpus_files as cf
+        return cf.load_registry(), cf.missing()
     from ..core import model_pack as mp
     return mp.load_registry(), mp.missing_repo_models()
 
@@ -132,8 +136,8 @@ def upload_registry(execute: bool = False, kind: str = "model") -> dict:
 
 
 def ensure_repo_models() -> None:
-    """``guji pipeline`` 起跑前：cv 的 ``models/``、``fonts/`` 缺了表里的文件就先取回（各书都用，不看钉号）。"""
-    for kind in ("model", "font"):
+    """``guji pipeline`` 起跑前：cv 的 ``models/``、``fonts/``、底库语料表缺了表里的文件就先取回（各书都用，不看钉号）。"""
+    for kind in ("model", "font", "corpus"):
         if not _registry(kind)[1]:
             continue
         try:

@@ -179,6 +179,24 @@ def cmd_corpus(args) -> None:
         with _pg_conn() as conn:
             cli_v2._out(cp.publish_base(WorkerSource(), conn, note=args.note, actor=actor, dry_run=args.dry_run))
         return
+    if args.action == "registry" or (args.action in ("upload", "fetch") and not args.workspace):
+        # cv 自带的底库语料表（路径 → sha，`core/corpus_files.py`）：重写／传 R2／缺的取回原位
+        from .ops import model_blobs as mb
+        if args.action == "registry":
+            from .core import corpus_files as cf
+            cli_v2._out(cf.build_registry())
+        elif args.action == "upload":
+            try:
+                cli_v2._out(mb.upload_registry(execute=args.execute, kind="corpus"))
+            except ValueError as e:
+                print(f"✗ {e}", file=sys.stderr)
+                sys.exit(1)
+        else:
+            r = mb.fetch_registry("corpus")
+            cli_v2._out(r)
+            if r["not_in_r2"]:
+                sys.exit(1)
+        return
     if not args.workspace:
         print("✗ 要给 -w 工作区", file=sys.stderr)
         sys.exit(2)
@@ -380,7 +398,8 @@ def add_parser(sub) -> None:
     p.add_argument("--dry-run", action="store_true", help="只数不写")
     p = sub.add_parser("corpus", help="[v2] 语料库清单：build 出新版／verify 对当前文件／list／"
                                       "build-base 出底库／init 新书钉最新底库／pin 追加册的钉子账（分层版本）")
-    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release", "upload", "fetch"])
+    p.add_argument("action", choices=["build", "verify", "list", "build-base", "init", "pin", "release", "upload", "fetch",
+                                      "registry"])
     p.add_argument("--version", type=int, default=None, help="build：指定版本号（缺省最大号+1）；verify：缺省最新")
     p.add_argument("--note", default="", help="build／build-base：写进清单的备注")
     p.add_argument("--base", default=None,

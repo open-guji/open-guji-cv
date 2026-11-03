@@ -30,6 +30,11 @@
 fixture 的测试会落到空目录，而不是悄悄读到本机跑批的真产物**。这正是老测试
 在开发机上绿、在云端红（或反过来）的根源。
 
+**例外：按 sha 钉死的 R2 文件**（用户 2026-11-04 定）。cv 仓的模型、字体、底库语料表搬出 git 以后，
+cv 只带路径 → sha 表（`config/model-registry.json`、`font-registry.json`、`corpus-registry.json`），
+`pytest_sessionstart` 发现缺文件就先从 R2 取回原位（要 `GUJI_DATA_TOKEN` 或 `_READ`）。内容按 sha 钉死，
+和冻结数据一样不会变；取不到的测试照常失败，不悄悄跳过。
+
 `ws` 给一个隔离的工作区（fixture 册配置 + 冻结原图 + 小语料，可写），
 `keben_book` / `fixture_page` / `gold_root` 是它上面的常用便利层。
 """
@@ -61,6 +66,24 @@ GUJI_ENV_VARS = (
     "GUJI_VERDICTS_DIR", "GUJI_REPORTS_DIR", "GUJI_RAW_ROOT", "GUJI_REPO_ROOT",
     "GUJI_ALLOW_SAMPLE_DB", "GUJI_FONT_DIR", "GUJI_DATASET",
 )
+
+
+def pytest_sessionstart(session):
+    """缺了表里的模型／字体／底库语料文件就先从 R2 取回（只在主进程做一次，xdist 的 worker 不重复取）。"""
+    if hasattr(session.config, "workerinput"):
+        return
+    import os
+    from open_guji_cv.ops import model_blobs as mb
+    for kind in ("model", "font", "corpus"):
+        if not mb._registry(kind)[1]:
+            continue
+        if not os.environ.get("GUJI_DATA_TOKEN") and os.environ.get("GUJI_DATA_TOKEN_READ"):
+            os.environ["GUJI_DATA_TOKEN"] = os.environ["GUJI_DATA_TOKEN_READ"]
+        try:
+            r = mb.fetch_registry(kind)
+            print(f"\n[conftest] {kind}：从 R2 取回 {r['placed']} 个文件", flush=True)
+        except Exception as e:  # noqa: BLE001 —— 取不到：用到它的测试照常失败
+            print(f"\n[conftest] ⚠️ 缺 {kind} 文件，从 R2 取回失败：{e}", flush=True)
 
 
 @pytest.fixture(scope="session", autouse=True)

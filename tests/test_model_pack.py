@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import json
+
 import pytest
 
 from open_guji_cv.core import model_pack as mp
@@ -197,3 +199,27 @@ def test_font_fetch_uses_font_registry(monkeypatch, tmp_path):
     monkeypatch.setattr(mb, "_place", lambda todo: (got.update(todo), (len(todo), []))[1])
     r = mb.fetch_registry("font")
     assert r["missing"] == 1 and got == {sha: f}
+
+
+def test_corpus_registry_matches_repo():
+    """cv 自带底库语料表与仓里文件一致（在的文件 sha 对得上、仓里的都登记了）；跑 guji corpus registry 重写。"""
+    from open_guji_cv.core import corpus_files as cf
+    reg = {i["path"]: i["sha256"] for i in cf.load_registry()}
+    now = cf.repo_items()
+    assert reg and not any(p.endswith(("unet.npz", "prompt.md")) for p in reg)
+    for it in now:
+        assert reg.get(it["path"]) == it["sha256"], f"{it['path']} 与语料表不符：跑 guji corpus registry"
+
+
+def test_corpus_fetch_uses_corpus_registry(monkeypatch, tmp_path):
+    from open_guji_cv.core import corpus_files as cf
+    from open_guji_cv.ops import model_blobs as mb
+    repo = tmp_path / "repo"
+    (repo / "config").mkdir(parents=True)
+    (repo / cf.REGISTRY).write_text(json.dumps({"items": [{"path": "config/ids/x.tsv", "sha256": "ab" * 32}]}),
+                                    encoding="utf-8")
+    monkeypatch.setattr(mp, "REPO_ROOT", repo)
+    got = {}
+    monkeypatch.setattr(mb, "_place", lambda todo: (got.update(todo), (len(todo), []))[1])
+    r = mb.fetch_registry("corpus")
+    assert r["missing"] == 1 and got == {"ab" * 32: repo / "config/ids/x.tsv"}
