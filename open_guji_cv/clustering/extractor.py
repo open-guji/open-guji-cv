@@ -1558,7 +1558,8 @@ def _line_rows(ink: np.ndarray, y_from: int, cov: float = FRAME_LINE_COV,
 
 
 def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]], cell_h: float,
-                            bottom: bool = True, span_frac: float = FRAME_LINE_SPAN) -> list[tuple[float, float]]:
+                            bottom: bool = True, span_frac: float = FRAME_LINE_SPAN,
+                            min_cols: int = FRAME_LINE_PAGE_MIN) -> list[tuple[float, float]]:
     """全页的框线线位：(离版框的距离, 线厚)（列图坐标，距离向内为正），双边框内外两道各一个。
 
     columns：每列 (列图, 内容窗左, 内容窗右, 版框 y)。每列在版框往内 FRAME_LINE_PAGE_ZONE 格高里找实线
@@ -1592,7 +1593,7 @@ def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]
     i = 0
     while i < len(ds):
         win = [d for d in ds[i:] if d[0] - ds[i][0] <= 2 * tol]
-        if len({k for _, k, _ in win}) >= FRAME_LINE_PAGE_MIN:
+        if len({k for _, k, _ in win}) >= min_cols:
             out.append((float(np.median([d for d, _, _ in win])), float(np.median([t for _, _, t in win]))))
             i += len(win)
         else:
@@ -1731,6 +1732,8 @@ JZ_HALF_LINE_REACH = 0.3
 JZ_HALF_LINE_THICK = 0.06
 JZ_HALF_LINE_WIDER = 1.1
 JZ_HALF_LINE_SPAN = 0.45
+#: 半格线位至少这么多列对上：写本内框细线淡、歪，一页里常只有两列量得出整段（06:79 列 1、5）
+JZ_HALF_LINE_PAGE_MIN = 2
 
 
 def strip_jiazhu_half_line(patch: np.ndarray, frame_y: float, cell_h: float, bottom: bool,

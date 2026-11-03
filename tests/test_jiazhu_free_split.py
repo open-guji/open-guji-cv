@@ -45,3 +45,9 @@ def test_stroke_poking_up_from_below_does_not_stretch_short_row():
 def test_switches_default_off_and_out_of_hash():
     assert "jiazhu_free_split" not in RowSegmentParams().model_dump()
     assert RowSegmentParams(jiazhu_rows=True, jiazhu_free_split=True).model_dump()["jiazhu_free_split"] is True
+
+
+def test_rows_two_apart_fall_back():
+    """两行差 2 字（右行 1 字、左行 3 字）：短行切 2 格仍空一格 → 不按本法切（SJ r6 02:58:8 段中间剩单半格）。"""
+    ink = _col(a_rows=[(10, 90)], b_rows=[(10, 90), (110, 190), (210, 290)])
+    assert _cuts(ink, "b") is None

@@ -178,6 +178,10 @@ _JZ_HALF = ("夹注格半格框线、贴外沿竖框 jiazhu_strip_rules r6（cel
              "strip_long_rule through 认碰字的线、page_frame_line_offsets 加 span_frac）：开关关着时 cell_shrink 在殿本 vol12 新图 31 页"
              "（每 5 页取 1）上与 origin/dev f48e3466 产物逐字节相同；scripts/code_equiv.py check，2026-11-03")
 
+_JZ_GUARD = ("夹注两行差 2 字兜底、写本内框细线一页 2 列即认（row_segment jiazhu_free_split、cell_shrink jiazhu_strip_rules 书级开关，缺省关）："
+             "开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）、row_segment 在 9 页上与 origin/dev c651c8d2 产物逐字节相同；"
+             "scripts/code_equiv.py check，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -675,6 +679,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4afb9c48f669b5d7de1c7f25bab044ef050b2c8307937b8cc9faf0ce8ab6cb99",
           old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
           evidence=_JZ_HALF),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="020d3d4972ef4855ad97822255eab36c8ccd913a81277b0db4f39b7b967189a8",
+          old="641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2",
+          evidence=_JZ_GUARD),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="df88163370f34458e8c71bf19e2464ac2cd566ccf67304125f27e6f5ec404df6",
+          old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
+          evidence=_JZ_GUARD),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="2061620748ae6bef98a3325256b1ec6495887c14e083b748f41665d7134321c6",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence=_JZ_GUARD),
 )
 
 
