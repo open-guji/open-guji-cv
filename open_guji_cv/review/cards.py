@@ -318,7 +318,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     # 整理本对应字：用户 2026-09-06「审阅时没看到整理本用的是什么，应该放第一位」。
     # 读 `align_ref` 产物（`ref` = 整理本在这一位印的字），锚不上的页没有；逐页取，见 `_align_ref_maps`。
     # 忠于刻本字形：整理本印 即、本书惯刻 卽 时，账本的 preferred 也一并给，卡片并排列出。
-    ledger = BookLedger.load_or_empty()
+    from ..core.ledger_edition import edition_for
+    ledger = BookLedger.load_or_empty(edition_for(book))    # 本书的账（别的书不拿殿本的惯刻形）
     out: list[dict] = []
     out_blocked: list[dict] = []
     blocked = cut_pending(book, pgs, st) if gate_cut else {}
@@ -835,7 +836,8 @@ def _inputs_sig(bk) -> dict:
                                  default=str)
     except TypeError:
         sig["book"] = repr(bk)
-    sig["ledger"] = _stat_sig([ledger_path()])
+    from ..core.ledger_edition import edition_for
+    sig["ledger"] = _stat_sig([ledger_path(edition_for(bk.id))])
     from .borrow_first import first_pick_mode, proto_sources, review_db_path
     if first_pick_mode(bk) is not None:
         from ..clustering import cnn_candidates as cc

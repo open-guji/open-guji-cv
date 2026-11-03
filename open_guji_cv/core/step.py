@@ -285,6 +285,21 @@ def _with_book_gw(p: BaseModel, ctx: "RunContext") -> BaseModel:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
+def _with_book_ledger(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`SeedAdmitParams.edition`（本书用字账的键）还是缺省值（殿本的 `wuyingdian_zongmu`）时按这册的书换键
+    （2026-11-03，见 `core/ledger_edition.py`）：别的书读自己的账，没有就是空账，不再拿殿本的惯刻形当先验。
+    殿本、认不出书的册原样返回，参数与指纹逐字节不变。重新构造，`model_post_init` 按新键重算 `ledger_fingerprint`。"""
+    if not (hasattr(p, "edition") and hasattr(p, "ledger_fingerprint")):
+        return p
+    from .ledger_edition import ZONGMU_EDITION, edition_for
+    if p.edition != ZONGMU_EDITION:
+        return p                        # 显式写了别的键
+    ed = edition_for(ctx.book.id, ZONGMU_EDITION)
+    if ed == p.edition:
+        return p
+    return type(p)(**{**p.model_dump(), "edition": ed, "ledger_fingerprint": ""})
+
+
 def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """`ContextDecideParams.ai_evidence` 缺省时按书级配置 `step6_ai:` 填（2026-09-27，
     D-Step6 导回管线）。同 `_with_book_corpus` 一个道理：要在 `params_for` 里填，
@@ -389,6 +404,7 @@ class RunContext:
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
+        p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
