@@ -326,6 +326,8 @@ class Engine:
                  log: Callable[[str], None] | None = None):
         self.book = book
         self.pipeline = pipeline
+        from . import model_override        # 钉了 model: 且仓里模型内容不同：读模型的缺省路径改指本册缓存
+        model_override.activate(book)
         self.store = store or ProductStore()
         self.cache = cache or ImageCache()
         self.log = log or (lambda s: print(s, flush=True))
@@ -1094,6 +1096,8 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
         _pin_threads(threads, forked)
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
+    from . import model_override            # spawn 起的 worker 不继承主进程换过的模块属性
+    model_override.activate(book)
     _worker_step = STEPS[step_id]
     _worker_ctx = RunContext(book, ProductStore(store_root), ImageCache(cache_root, cache_limit),
                              params, log=lambda s: None, pipeline=pipeline)
