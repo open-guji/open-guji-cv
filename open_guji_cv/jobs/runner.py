@@ -745,7 +745,7 @@ def _preflight() -> str | None:
 
 # 文意 L2/L3 要的重依赖和 SIKU-BERT 权重（pyproject 的 torch／llm extra）。缺了管线不报错、只会让 ctx_l2／ctx_llm 全部弃权
 # （abstain:no_encoder／no_api_key），待审单就偏多（2026-11-01 史記 02 册：835 条变 1181 条）。所以执行方领单前就查，缺了先补，补不上就不领单。
-CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
+from ..datastore.packs import CTX_ENCODER   # (模型名, 钉住的 revision)；R2 镜像见 packs.fetch_hf_model
 _ML_PKGS = ("torch", "transformers", "anthropic")
 _ml_ok_at = 0.0
 _ml_fail: tuple[float, str] | None = None     # (时间, 原因)：失败后 10 分钟内不再重试，直接复用这条原因，免得每个轮询周期都重跑安装
@@ -814,6 +814,15 @@ def _ml_env_gate(say=print) -> str | None:
             return fail(f"管线环境缺 {' '.join(miss)}，补装失败（rc {rc}）：{out}")
         say(f"补装完成：{' '.join(miss)}")
     name, rev = CTX_ENCODER
+    # 执行机常拉不到 huggingface.co（2026-11-03），先从 R2（经 guji-data Worker，443 通）取权重镜像解进 HF 缓存；取不到再走 HF
+    tok = os.environ.get("GUJI_DATA_TOKEN") or os.environ.get("GUJI_DATA_TOKEN_READ")
+    if tok:
+        r2 = "from open_guji_cv.datastore.packs import fetch_hf_model as f;raise SystemExit(0 if f(%r, %r) else 1)" % (name, rev)
+        rc, out = _run_bounded([py, "-c", r2], ML_INSTALL_TIMEOUT_S, {"GUJI_DATA_TOKEN": tok, "PYTHONPATH": str(Path(__file__).resolve().parents[2])})
+        if not rc:
+            _ml_ok_at, _ml_fail = time.time(), None
+            return None
+        say(f"R2 上没取到 {name} 权重镜像（rc {rc}）{out}，改走 huggingface.co")
     dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
     rc, out = _run_bounded([py, "-c", dl], ML_INSTALL_TIMEOUT_S, {"HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_ETAG_TIMEOUT": "30"})
     if rc:
