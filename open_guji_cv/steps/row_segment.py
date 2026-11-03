@@ -52,7 +52,7 @@ def load_layout(rel: str, book: str) -> dict[tuple[int, int], dict]:
     return _LAYOUT_CACHE[key]
 
 
-def _layout_row(layout: dict, page: int, col: int, gap_empty: bool = False) -> dict | None:
+def _layout_row(layout: dict, page: int, col: int, gap_empty: bool = False, tail_empty: bool = True) -> dict | None:
     """本列的格位表行。表里有这一页、但列号在这一页最后一列表行之后的，是卷末整列空的列（表只记有字的列），
     给一行「整列空」——印章、墨污落在这种列里也按表空格记空（殿本 vol04 p220、vol05 p188、vol06 p149）。
     `gap_empty`（书级 `layout_gap_cols_empty`）：夹在本页两列表行之间、表里没有的列也当整列空——史記文淵閣本
@@ -62,7 +62,7 @@ def _layout_row(layout: dict, page: int, col: int, gap_empty: bool = False) -> d
     if row is not None:
         return row
     cols = [c for (pg, c) in layout if pg == page]
-    if cols and (col > max(cols) or (gap_empty and min(cols) < col)):
+    if cols and ((tail_empty and col > max(cols)) or (gap_empty and min(cols) < col)):
         return {"slots": [], "notes": [], "half": [], "raised": 0}
     return None
 
@@ -812,6 +812,12 @@ class RowSegmentParams(BaseModel):
     #: 第 3 轮待审 34 格）。开着时这种列给「整列空」表行，列端记空（`_blank_frame_junk`）按越界墨／印框记空。
     #: 只在表确是逐页按整理本全列生成（缺列＝整理本这列没字）的书开。书级开关；False＝关（缺省，不进参数哈希）。
     layout_gap_cols_empty: bool = False
+    #: **表外的末几列不当整列空**（2026-11-03，全唐文）：缺省把本页最后一列表行之后的列当卷末整列空。全唐文的表
+    #: （guji-manager make_qtw_layout.py）由现切分＋参照字数生成，空列已明写 `slots: []`；字数配不上的列只是不出行，
+    #: 落在页末就被当整列空，满列 22 字全按「违表」打分、DP 被掩码推着走，格高忽高忽矮（15p123 c8 一格 314、
+    #: 上下两格 143/139；r6 全书 143 列、2,283 字）。关掉时这种列照「无表」切。只在表明写空列的书关。
+    #: 书级开关；True＝开（缺省，不进参数哈希）。
+    layout_tail_empty: bool = True
     #: **雙行小注两行各切**（2026-11-03，史記文淵閣本写本）：连着的夹注段里 a、b 两行各在自己的墨投影上挑格线
     #: （`seg/seam.fit_row_cuts`），段两端仍是共用格线。写本两行各写各的、会错开半格，共用格线时一行被拦腰切
     #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
@@ -909,6 +915,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_slots_grow", None)
             if not self.layout_gap_cols_empty:
                 d.pop("layout_gap_cols_empty", None)
+            if self.layout_tail_empty:
+                d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
             if not self.jiazhu_free_split:
@@ -1080,7 +1088,7 @@ class RowSegmentStep(Step):
                          or (page, gc.col) in book_forced_main)
             # 逐列格位先验（layout_prior）：抬头级数按表定（不只往上补——闸给书名列多加的那格
             # 抬头余量会让书名首字编成 -1、整列格号差一格），DP 加逐格掩码，夹注 / 正文格强制
-            lay = _layout_row(layout, page, gc.col, p.layout_gap_cols_empty) if not human_col else None
+            lay = _layout_row(layout, page, gc.col, p.layout_gap_cols_empty, p.layout_tail_empty) if not human_col else None
             in_table = lay is not None
             top_slack = gc.top_slack
             lay_kw: dict = {}
