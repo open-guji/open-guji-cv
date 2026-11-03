@@ -90,8 +90,14 @@ def _data_root(ws: Path) -> Path:
     return data_root(ws) or Path(ws)
 
 
-def _base(root: str, ws: Path) -> Path:
-    return REPO_ROOT if root == "repo" else _data_root(ws)
+#: 本册改用的 cv 仓模型根（`core/model_override`：两本书钉同一模型的不同版本）；``[None]``＝仓本身
+REPO_OVERRIDE: list = [None]
+
+
+def _base(root: str, ws: Path, real: bool = False) -> Path:
+    if root == "repo":
+        return REPO_ROOT if real or REPO_OVERRIDE[0] is None else REPO_OVERRIDE[0]
+    return _data_root(ws)
 
 
 def _sha256(p: Path) -> str:
@@ -121,13 +127,14 @@ def _book_id(ws: Path) -> str:
     return str(m.get("ws") or Path(ws).name)
 
 
-def collect(ws: Path, cached: bool = False) -> list[dict]:
-    """这本书现在用的模型，每个文件一张卡；按 (root, path) 排序。"""
+def collect(ws: Path, cached: bool = False, real: bool = False) -> list[dict]:
+    """这本书现在用的模型，每个文件一张卡；按 (root, path) 排序。``real``：cv 仓模型一律看仓本身（出新号用），
+    不看本册改用的缓存根。"""
     sha = _sha_cached if cached else _sha256
     book = _book_id(ws)
     seen: dict[tuple[str, str], dict] = {}
     for k in KINDS:
-        base = _base(k.root, ws)
+        base = _base(k.root, ws, real)
         for p in sorted(base.glob(k.pat)):
             if not p.is_file() or p.name in _SKIP:
                 continue
@@ -197,7 +204,7 @@ def load_manifest(ws: Path, version: int) -> dict:
 
 def build(ws: Path, version: int | None = None, note: str = "", dry_run: bool = False) -> dict:
     """出新的模型总号清单；内容和最新一版一样就不出（返回 ``{"unchanged": N}``）。清单只写一次。"""
-    items = collect(ws)
+    items = collect(ws, real=True)
     have = versions(ws)
     if have and version is None:
         last = load_manifest(ws, have[-1])
@@ -300,7 +307,7 @@ REGISTRY = "config/model-registry.json"
 
 def repo_items() -> list[dict]:
     """cv 仓 ``models/`` 里登记过种类的模型文件（root=repo 的卡）。"""
-    return [i for i in collect(REPO_ROOT) if i["root"] == "repo"]
+    return [i for i in collect(REPO_ROOT, real=True) if i["root"] == "repo"]
 
 
 def build_registry() -> dict:

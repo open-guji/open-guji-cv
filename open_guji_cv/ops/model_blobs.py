@@ -22,7 +22,7 @@ EXT = "txt"          # R2 键后缀（Worker 按它定 content-type；与语料�
 
 def _paths(ws: Path, man: dict) -> list[tuple[dict, Path]]:
     from ..core.model_pack import _base
-    return [(it, _base(it["root"], ws) / it["path"]) for it in man.get("items") or []]
+    return [(it, _base(it["root"], ws, real=True) / it["path"]) for it in man.get("items") or []]
 
 
 def upload(ws: Path, version: int | None = None, execute: bool = False) -> dict:

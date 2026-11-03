@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import sys
+
 
 def rare_index_missing(book: str):
     """→ `(inst, [(名, 字表, key, 路径)…])`：Step5-b 两档 embedding 模板表里盘上缺的；算不出来 → `(None, [])`。"""
@@ -120,6 +122,15 @@ def ensure_model_pin(book) -> None:
     from .model_blobs import ensure_model_pin as _ensure, ensure_repo_models
     ensure_repo_models()
     _ensure(book)
+    if getattr(book, "model", None):             # 仓里那份和钉的版本内容不同：本册改用缓存里的（`core/model_override`）
+        from ..core import model_override
+        from .model_blobs import _place
+        try:
+            root = model_override.activate(book, _place)
+            if root is not None:
+                print(f"  模型 m{book.model}：cv 仓里有模型与这版不同，本册改用 {root}", flush=True)
+        except Exception as e:                   # noqa: BLE001 —— 摆不齐交给起跑前校验拒跑
+            print(f"  ⚠️  模型 m{book.model} 按册切换失败：{e}", file=sys.stderr)
 
 
 def ensure_corpus_files(book) -> None:

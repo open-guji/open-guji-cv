@@ -55,7 +55,7 @@ def cmd_model(args) -> None:
         sys.exit(1 if r["not_in_r2"] or r["placed"] < r["missing"] else 0)
     ws = _ws(args)
     if args.model_cmd == "ls":
-        items = mp.collect(ws)
+        items = mp.collect(ws, real=True)
         if args.json:
             _out({"items": items, "external": mp.EXTERNAL}, True)
             return
