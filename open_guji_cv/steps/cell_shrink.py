@@ -368,6 +368,32 @@ class CellShrinkStep(Step):
             out.append(ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs))
         return {"char_index": PageChars(page=page, columns=out)}
 
+    def _extracted(self, ctx: RunContext, page: int, col: int, cc: ColumnCells, img: np.ndarray, cells: PageCells):
+        """`render` 用：整列抽字的结果按列记忆（2026-11-03，全唐文 CPU 提速）。
+
+        缓存丢了、下游（glyph_match 等）逐格再生字块时，每一格都要把全页框线线位（读 9 列列图）和整列抽字
+        重算一遍——全唐文册06 p27 冷缓存 glyph_match 78 s，其中 59 s 在这里（一页 209 格再生 149 次整列抽字、
+        1788 次读列图）。抽字只依赖本页的 cells、列图、本步参数：按 cells 产物 sha、列图页戳、参数记忆，
+        戳取不到就不记。返回的字块是副本，调用方改了也不污染缓存。结果逐字节不变。"""
+        stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
+        try:
+            ent = ctx.store.manifest(ctx.book.id, ctx.producer("cells").spec.id).get(f"p{page:04d}")
+            stamp_cells = ent.sha256 if ent is not None and ent.status == "ok" else None
+        except Exception:  # noqa: BLE001 —— 取不到戳就不记忆
+            stamp_cells = None
+        if not stamp_img or not stamp_cells:
+            return self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells))
+        pkey = (ctx.book.id, page, stamp_img, stamp_cells, repr(ctx.params_for(self)))
+        memo = _RENDER_MEMO.get(pkey)
+        if memo is None:
+            while len(_RENDER_MEMO) >= _RENDER_MEMO_MAX:
+                _RENDER_MEMO.pop(next(iter(_RENDER_MEMO)))
+            memo = _RENDER_MEMO[pkey] = {"frame": self._page_frame_lines(ctx, page, cells), "cols": {}}
+        got = memo["cols"].get(col)
+        if got is None:
+            got = memo["cols"][col] = self._extract_column(ctx, page, cc, img, memo["frame"])
+        return [(inst, None if patch is None else patch.copy()) for inst, patch in got]
+
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
         sub = ""
         if key[-1] in "ab":
@@ -383,13 +409,17 @@ class CellShrinkStep(Step):
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
-        for inst, patch in self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells)):
+        for inst, patch in self._extracted(ctx, page, col, cc, img, cells):
             pos = int(inst.idx) + 1
             if pos_to_slot.get(pos) == slot and (inst.sub or "") == sub and patch is not None:
                 if pos in seams and not sub:
                     patch, _ = _apply_seam(img, patch, tuple(float(v) for v in inst.bbox), *seams[pos])
                 return patch
         raise KeyError(f"再生不出字块: {key}{sub}")
+
+
+_RENDER_MEMO: dict = {}
+_RENDER_MEMO_MAX = 4      # 页数；一页 9 列字块合计几 MB，再生基本按页顺序来
 
 
 def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_bottom, cell_x0: float):
