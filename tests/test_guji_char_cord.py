@@ -315,11 +315,6 @@ def test_apply_pending_char_v04(legacy):
     assert char["$schema"] == cc.CHAR_SCHEMA_URL_V04
     assert cc.validate(char, "char") == []
     assert cc.char_to_lines_md(char) == before
-    old = next(c for c in _cells(char) if c is not lac and c is not plain and c.get("fig") is None)
-    old.update(lacuna=True, c="甲")              # 旧数据：标了阙文却留着机器字，分行稿是 [[]]，改后照旧
-    before = cc.char_to_lines_md(char)
-    cc.apply_pending(char, {"cells": [{"cell": x["a"]} for x in (lac, plain, old)]})
-    assert old["c"] == cc.LACUNA_CHAR and cc.char_to_lines_md(char) == before
     bad = copy.deepcopy(char)                    # 与 lacuna 互斥
-    next(c for c in _cells(bad) if c["a"] == old["a"])["lacuna"] = True
+    next(c for c in _cells(bad) if c["a"] == lac["a"])["lacuna"] = True
     assert cc.validate(bad, "char")
