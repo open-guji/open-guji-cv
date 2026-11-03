@@ -30,6 +30,7 @@ VENV = Path(os.environ.get("GUJI_JOBS_VENV", "/opt/guji-venv"))
 HOME = Path(os.environ.get("GUJI_JOBS_HOME", str(Path.home() / ".guji-jobs")))
 RUNNER_ROOT = Path(__file__).resolve().parents[2]       # 执行方自己的 cv 检出（rerun_prep.sh 取这里的，跟 dev）
 HEARTBEAT_S = 60
+IDLE_BOARD_S = 300           # 空闲执行方刷新看板的节流（秒）
 #: rerun_prep.sh 里失败多半是网络／库的段（失败了换个会话重试）；其余段（钉子账、建字形库、语料校验…）是配置问题
 _PREP_ENV_PARTS = {"cv", "克隆工作区", "db-pull", "取原图", "模板索引", "基线包"}
 _TOKEN_RE = re.compile(r"(TOKEN|SECRET|KEY|PASS|DSN)[A-Z_]*=\S+|postgres(ql)?://\S+|Bearer \S+", re.I)
@@ -535,6 +536,8 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                     db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
                 got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
                 if got is None:
+                    # 空闲时也定期刷新看板：排队中的新单（别人刚交的）要在几分钟内出现在表里，不等有人收尾
+                    BOARD.publish(db, min_gap=IDLE_BOARD_S)
                     if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
                         say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
                         return done
