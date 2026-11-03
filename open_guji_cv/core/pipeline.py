@@ -182,14 +182,51 @@ class Pipeline:
 _EXTERNAL_KINDS = {"raw_page"}
 
 
+SKELETON_ID = "_skeleton"
+
+
+def expand_slots(chain: dict, skeleton: dict, pid: str = "?") -> list[str]:
+    """骨架 + 链 yaml 的 `slots:` → 完整的步骤顺序（2026-11-03 管线重组方案 B 第二期）。
+
+    骨架 `steps:` 里写步骤 id 原样保留，写 `{slot: 名}` 的换成链里这个槽位的步骤表（链没写就用骨架 `slots:` 的缺省，
+    都没有且在 `required` 里就报错）。链 yaml 里点了骨架没有的槽位也报错——拼错槽位名不能悄悄不生效。"""
+    given = chain.get("slots") or {}
+    defaults = skeleton.get("slots") or {}
+    names = [x["slot"] for x in skeleton.get("steps", []) if isinstance(x, dict)]
+    unknown = [k for k in given if k not in names]
+    if unknown:
+        raise ValueError(f"pipeline {pid}: slots: 里有骨架没有的槽位 {unknown}，骨架槽位是 {names}")
+    missing = [k for k in (skeleton.get("required") or []) if k not in given]
+    if missing:
+        raise ValueError(f"pipeline {pid}: slots: 缺必填槽位 {missing}")
+    out: list[str] = []
+    for x in skeleton.get("steps", []):
+        if isinstance(x, dict):
+            lst = given[x["slot"]] if x["slot"] in given else defaults.get(x["slot"], [])
+            if not isinstance(lst, list):
+                raise ValueError(f"pipeline {pid}: 槽位 {x['slot']} 要写成步骤 id 的列表")
+            out.extend(str(i) for i in lst)
+        else:
+            out.append(str(x))
+    return out
+
+
 def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
     import open_guji_cv.steps  # noqa: F401  —— 触发 Step 注册
 
-    path = (pipelines_dir or PIPELINES_DIR) / f"{pid}.yaml"
+    pdir = pipelines_dir or PIPELINES_DIR
+    path = pdir / f"{pid}.yaml"
     if not path.exists():
         raise FileNotFoundError(f"没有这条 pipeline: {path}")
     from .yaml_cache import load_yaml_cached
     d = load_yaml_cached(path)
+    if "slots" in d:                  # 链 yaml 只写槽位，步骤顺序由骨架展开
+        if "steps" in d:
+            raise ValueError(f"pipeline {pid}: slots: 和 steps: 不能同时写")
+        sk_path = pdir / f"{SKELETON_ID}.yaml"
+        if not sk_path.exists():
+            raise FileNotFoundError(f"pipeline {pid} 用了 slots:，但没有骨架 {sk_path}")
+        d["steps"] = expand_slots(d, load_yaml_cached(sk_path), pid)
     params_raw = d.get("params") or {}
     if not isinstance(params_raw, dict) or any(not isinstance(v, dict) for v in params_raw.values()):
         raise ValueError(f"pipeline {pid} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
@@ -209,7 +246,7 @@ def load_pipeline(pid: str, pipelines_dir: Path | None = None) -> Pipeline:
 
 def list_pipelines(pipelines_dir: Path | None = None) -> list[str]:
     d = pipelines_dir or PIPELINES_DIR
-    return sorted(p.stem for p in d.glob("*.yaml")) if d.exists() else []
+    return sorted(p.stem for p in d.glob("*.yaml") if not p.stem.startswith("_")) if d.exists() else []
 
 
 DEFAULT_PIPELINE_ID = "keben_body_v2"

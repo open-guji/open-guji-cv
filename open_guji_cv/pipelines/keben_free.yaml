@@ -7,16 +7,15 @@
 #   line_ocr       Step2-b 逐列送识别软件（PaddleOCR）读文本行，给 Step3 定区、定字数（要装 `.[cpu]`；没有它 Step3 只用规则）
 #   cell_cut       Step3 列内切字：大字 / 双行小注 / 单行小注分区，各自切字
 # Step4 以后（字框收缩、识别）暂未接：本书还没有语料、字形库，先把切分做对。
-# 选管线：册 yaml 写 `pipeline: keben_free`（edition 仍是 keben）。
+# 选管线：册 yaml 写 `seg_set: zengguang_youxue`（edition 仍是 keben；旧写法 `pipeline: keben_free` 仍认）。
 id: keben_free
 title: 自由版式刻本（坊刻）切分
 selector:
   edition: keben_free
   page_type: [body]
-steps:
-  - page_survey          # Step0 页面预检（全书共用，2026-11-03 方案 B 第一期补进本链）：只标异常页，下游不读
-  - invert_detect        # Step0 反色带候选（全书共用）：只送审不自动修
-  - block_detect
-  - column_trace
-  - line_ocr
-  - cell_cut
+# 骨架 pipelines/_skeleton.yaml；本链 Step4 以后还没接（free_cells 不是 cells），recognition 槽写空。
+slots:
+  layout: [block_detect]
+  columns: [column_trace, line_ocr]
+  cells: [cell_cut]
+  recognition: []
