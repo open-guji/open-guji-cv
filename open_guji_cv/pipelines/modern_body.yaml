@@ -11,18 +11,12 @@ title: 现代印刷正文（竖排）
 selector:
   edition: modern
   page_type: [body]
-steps:
-  - page_survey          # Step0 页面预检（全书共用，2026-11-03 方案 B 第一期补进本链）：只标异常页，line_detect_gate 不读它
-  - invert_detect        # Step0 反色带候选（全书共用）：只送审不自动修
-  - line_detect          # Step1 行探测：原图 → 正文列虚拟界行 + line_index（列类型）
-  - column_crop          # Step2 裁列 + 去噪：→ column_windows / 列图；出口闸 column_gate
-  - row_segment_runs     # Step3 墨段切分：→ cells（char / punct / blank）
-  - cell_shrink          # Step4 字框收缩（复用）
-  - glyph_match          # Step5-a 库匹配（复用；库域 edition=modern:<book>）
-  - rare_candidates      # Step5-b 生僻字候选（复用）
-  - align_ref            # Step5-d 整理本对齐（复用）
-  - context_decide       # Step6 上下文裁决（复用）
-  - seed_admit           # Step7 进库准入（复用）
+# 骨架 pipelines/_skeleton.yaml；这里只写本链在每个槽位里放哪几步。没有 seals 槽：现代页没有印章定位
+# （cell_shrink 的可选上游 seals 在这条链里永远缺席，见 Pipeline.provides）。Step4–7 用骨架缺省。
+slots:
+  layout: [line_detect]          # Step1 行探测：原图 → 正文列虚拟界行 + line_index（列类型）
+  columns: [column_crop]         # Step2 裁列 + 去噪：→ column_windows / 列图；出口闸 column_gate
+  cells: [row_segment_runs]      # Step3 墨段切分：→ cells（char / punct / blank）
 # 本链各 Step 的缺省参数（column_gate、cell_shrink、glyph_match 等）2026-11-03 起写在套书
 # `books/beixing/defaults.yaml`（管线重组方案 B 第一期）：参数跟套书走，不跟管线走。
 notes: |

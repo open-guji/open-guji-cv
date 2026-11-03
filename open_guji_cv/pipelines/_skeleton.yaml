@@ -1,0 +1,27 @@
+# 管线骨架（2026-11-03，管线重组方案 B 第二期）：所有书共用的一条步骤顺序，`slot:` 是各套书自己换实现的位置。
+# 三条链（keben_body_v2、modern_body、keben_free）的 yaml 只写「这套书在每个槽位里放哪几步」，
+# 加载时（core/pipeline.load_pipeline）按这里的顺序展开成完整的 steps——共用的步骤只在这里写一遍，
+# 新增一个共用 Step 不用再改三个 yaml，也不会再出现某条链漏掉 Step0 这样的偏差。
+#
+# 顺序必须是合法拓扑序（上游在前），展开后由 Pipeline.validate() 校验。边由各步 consumes / produces 推出。
+# 下划线开头的文件不是管线（list_pipelines 不列）。
+id: _skeleton
+steps:
+  - page_survey          # Step0 页面预检：原图尺寸 → 按册中位数标异常页；闸在 border_detect_gate（任务卡 #54 第22条）
+  - invert_detect        # Step0 反色带候选：原图 → 疑似反色带（界行翻白）；只送审不自动修，人点头后进 preclean（2026-10-22）
+  - slot: layout         # Step1 版面：边框＋界行（殿本）／虚拟界行（现代）／分块（自由版式）
+  - slot: seals          # 印章定位：原图＋版框 → 每方印的类别与外框；只有刻本链有（后面各步认印只读它）
+  - slot: columns        # Step2 单列：射影拉直（殿本）／裁列（现代）／块内找列（自由版式）
+  - slot: cells          # Step3 单列文字切分：→ 带类型字格 + 读序
+  - slot: recognition    # Step4–7：字框收缩、字形库匹配、生僻字、整理本对齐、上下文、放行（各套书同一份代码）
+# 槽位缺省：没在链 yaml 里写的槽位用这里的值；`required` 里的槽位链 yaml 必须写。
+slots:
+  seals: []
+  recognition:
+    - cell_shrink        # Step4 字框收缩：沿用 CharExtractor；→ 紧框 + flags；字块走缓存
+    - glyph_match        # Step5-a 库匹配：字块 → GlyphDB 三档判决 + 逐实例证据（指纹带库指纹）
+    - rare_candidates    # Step5-b 生僻字候选：字体模板 + CNN 分类/embedding 的 RRF 融合（needs=model）
+    - align_ref          # Step5-d 整理本对齐：文本证据一路，四路互相独立，排在 context_decide 之前（needs=corpus）
+    - context_decide     # Step6 上下文裁决：库候选 + 上下文 → 门槛化定字（needs=corpus）
+    - seed_admit         # Step7 进库准入：十条通道 → 自动进库 / 落回人审（needs=db；进库本身走 Event）
+required: [layout, columns, cells]

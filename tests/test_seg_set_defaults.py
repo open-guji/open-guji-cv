@@ -83,3 +83,54 @@ def test_optional_upstream_in_wrong_order_still_rejected():
     steps.insert(steps.index("cell_shrink") + 1, "seal_detect")
     with pytest.raises(ValueError, match="seals"):
         Pipeline(id="t_order", title="t", steps=steps).validate()
+
+
+# ── 方案 B 第二期：骨架 + 槽位 ──────────────────────────────────────────
+
+import yaml
+
+from open_guji_cv.core.pipeline import PIPELINES_DIR, SKELETON_ID, expand_slots
+
+# 展开前写死在三个 yaml 里的步骤表（2026-11-03 之前）：展开结果必须逐项相同，各书产物目录与指纹才不动。
+_COMMON_TAIL = ["cell_shrink", "glyph_match", "rare_candidates", "align_ref", "context_decide", "seed_admit"]
+_EXPECT = {
+    "keben_body_v2": ["page_survey", "invert_detect", "border_detect", "seal_detect", "column_warp", "row_segment", *_COMMON_TAIL],
+    "modern_body": ["page_survey", "invert_detect", "line_detect", "column_crop", "row_segment_runs", *_COMMON_TAIL],
+    "keben_free": ["page_survey", "invert_detect", "block_detect", "column_trace", "line_ocr", "cell_cut"],
+}
+
+
+@pytest.mark.parametrize("pid", sorted(_EXPECT))
+def test_slot_expansion_keeps_step_lists(pid):
+    assert load_pipeline(pid).steps == _EXPECT[pid]
+
+
+def test_skeleton_is_not_a_pipeline():
+    assert SKELETON_ID not in list_pipelines()
+    assert sorted(list_pipelines()) == sorted(_EXPECT)
+
+
+def _skeleton():
+    return yaml.safe_load((PIPELINES_DIR / f"{SKELETON_ID}.yaml").read_text(encoding="utf-8"))
+
+
+def test_expand_slots_errors():
+    sk = _skeleton()
+    with pytest.raises(ValueError, match="缺必填槽位"):
+        expand_slots({"slots": {"layout": ["border_detect"]}}, sk)
+    with pytest.raises(ValueError, match="没有的槽位"):
+        expand_slots({"slots": {"layout": [], "columns": [], "cells": [], "layuot": []}}, sk)
+    with pytest.raises(ValueError, match="列表"):
+        expand_slots({"slots": {"layout": "border_detect", "columns": [], "cells": []}}, sk)
+
+
+def test_chain_cannot_mix_steps_and_slots(tmp_path):
+    (tmp_path / "_skeleton.yaml").write_text((PIPELINES_DIR / "_skeleton.yaml").read_text(encoding="utf-8"), encoding="utf-8")
+    (tmp_path / "t_mix.yaml").write_text("id: t_mix\nsteps: [page_survey]\nslots: {layout: [], columns: [], cells: []}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="不能同时写"):
+        load_pipeline("t_mix", tmp_path)
+
+
+def test_every_chain_has_a_seg_set():
+    """每条链至少被一套书的 SEG_SET_PIPELINE 指到，没有悬空的链 yaml。"""
+    assert set(list_pipelines()) == set(S.SEG_SET_PIPELINE.values())
