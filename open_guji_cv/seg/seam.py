@@ -43,26 +43,38 @@ def find_seam(ink: np.ndarray, y_c: int, band: int = SEAM_BAND, step: int = SEAM
     rows = np.arange(lo, hi + 1)
     tie = 1e-4 * np.abs(rows - y_c)                      # 平局：靠近直线
     col = ink[lo:hi + 1, :].astype(np.float64)
-    cost = col[:, 0] + tie
-    back = np.zeros((w, n), dtype=np.int16)
-    offsets = np.arange(-step, step + 1)
-    for x in range(1, w):
-        # 对每个偏移 d，把上一列的代价平移 d 行；越界填 inf
-        cand = np.full((len(offsets), n), np.inf)
-        for i, d in enumerate(offsets):
-            if d >= 0:
-                cand[i, d:] = cost[:n - d] + turn * d
-            else:
-                cand[i, :n + d] = cost[-d:] + turn * (-d)
-        best_i = np.argmin(cand, axis=0)
-        cost = cand[best_i, np.arange(n)] + col[:, x] + tie
-        back[x] = offsets[best_i]
+    cost, back = seam_dp(col, tie, step, turn)
     j = int(np.argmin(cost))
     seam = np.empty(w, dtype=int)
     for x in range(w - 1, -1, -1):
         seam[x] = j + lo
         j -= int(back[x, j])
     return seam
+
+
+def seam_dp(col: np.ndarray, tie: np.ndarray, step: int, turn: float):
+    """走廊 DP 的前向一遍：col 为 (n, w) 每行每列的代价，返回 (末列累计代价, 回溯表 back[x, j])。
+
+    提速（2026-11-03，全唐文册06 一页 1,100 余次）：原先每列 `np.full` 新开 (2·step+1, n) 数组、
+    再逐偏移赋值；现在预分配两边垫 inf 的 pad 与 cand，逐偏移只做一次切片加法。加法顺序、
+    argmin 的平局次序（偏移 -step..+step）都与原写法相同，结果逐位相同。"""
+    n, w = col.shape
+    offsets = np.arange(-step, step + 1)
+    pens = [turn * d if d >= 0 else turn * (-d) for d in offsets]
+    cost = col[:, 0] + tie
+    back = np.zeros((w, n), dtype=np.int16)
+    pad = np.full(n + 2 * step, np.inf)
+    cand = np.empty((len(offsets), n))
+    ar = np.arange(n)
+    for x in range(1, w):
+        pad[step:step + n] = cost
+        for i, d in enumerate(offsets):
+            # cand[i, j] = cost[j - d] + turn·|d|，越界处 pad 为 inf
+            np.add(pad[step - d:step - d + n], pens[i], out=cand[i])
+        best_i = np.argmin(cand, axis=0)
+        cost = cand[best_i, ar] + col[:, x] + tie
+        back[x] = offsets[best_i]
+    return cost, back
 
 
 def seam_ink(ink: np.ndarray, seam: np.ndarray) -> int:
