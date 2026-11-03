@@ -221,6 +221,9 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
+    group_flow_pair_shape: str = ""          # 书级「两字」刻形二选一模型（`groups.pair_shape`，史记之矣；2026-11-03）。空＝不跑，行为不变。
+                                              # 只补放：待审格库首位或整理本是这两字之一，模型给的字＝整理本字或库首位才放（不引入第三个字），
+                                              # 人裁格、硬护栏格不碰；图上证据（HOG＋逻辑回归，按册留出 对1899 错0（4 个错放格剔除后）），整理本只作第二证据。
                                              # 有模型的书：刻形说了算，可越过整理本补放、改字（全唐文 sheldon 2026-11-02 定）
     group_flow_llm_model: str = "claude-opus-5-5"   # 文意 L3 在线（`groups/ctx_llm`）用的模型；空＝不问。密钥只从环境变量 GUJI_ANTHROPIC_API_KEY 读，没有就弃权
     group_flow_llm_groups: tuple[str, ...] = ("ry", "rm", "mz", "jys", "zy", "yz", "xz", "rr", "guan", "men", "wj", "chuo", "yh", "kgc", "tsh",
@@ -871,6 +874,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
+        if isinstance(d, dict) and not self.group_flow_pair_shape:
+            d.pop("group_flow_pair_shape", None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
@@ -1014,6 +1019,9 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_rr_shape:         # 入人八 书级刻形判法（没有模型的书不加，旧指纹不变）
                     from ..groups.rr_shape import fingerprint as _rs_fp
                     parts.append("rs" + _rs_fp(self.group_flow_rr_shape))
+                if self.group_flow_pair_shape:       # 书级两字刻形二选一（没有模型的书不加，旧指纹不变）
+                    from ..groups.pair_shape import fingerprint as _ps_fp
+                    parts.append("ps" + _ps_fp(self.group_flow_pair_shape))
                 if self.group_flow_book_knn:         # 书级刻形近邻库（没有库的书不加，旧指纹不变）
                     from ..groups.book_knn import fingerprint as _bk_fp
                     parts.append("bk" + "".join(g + _bk_fp(self.group_flow_book_knn[g]) for g in sorted(self.group_flow_book_knn)))
@@ -1077,7 +1085,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_book_knn"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_book_knn"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -1689,6 +1697,10 @@ class SeedAdmitStep(Step):
                 d_rs = _rr_shape_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_rs
                 n_review -= d_rs
+            if p.group_flow_pair_shape:
+                d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache))
+                n_auto += d_ps
+                n_review -= d_ps
             if p.group_flow_book_knn:
                 d_bk = _book_knn_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_bk
@@ -3032,6 +3044,8 @@ def _resolve_group_flow_paths(p) -> None:
     if not rs and "rr" in p.group_flow and (cfg / "rr_shape.json").exists():
         rs = str(cfg / "rr_shape.json")
     object.__setattr__(p, "group_flow_rr_shape", rs)
+    if p.group_flow_pair_shape:
+        object.__setattr__(p, "group_flow_pair_shape", _abs(p.group_flow_pair_shape))
     bk = {g: _abs(v) for g, v in p.group_flow_book_knn.items()}
     for g in p.group_flow:
         t = cfg / "book_knn" / f"{g}.json"
@@ -3212,6 +3226,54 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                 continue
             r.evidence = {**ev, "rr_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "rr_shape", "match", []
+            delta += 1
+    return delta
+
+
+def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None,
+                     coord: dict | None = None) -> int:
+    """书级两字刻形二选一（`groups.pair_shape`，`SeedAdmitParams.group_flow_pair_shape`）。紧接 rr_shape。→ 放行数净增。
+
+    只补放待审格：库首位或整理本字是模型两个字之一；模型给的字必须＝整理本字或＝库首位（不引入第三个字、不单凭整理本）。
+    已放行格不动，人裁格、硬护栏格不碰；模型弃权（组外、字块怪、分值低）的格照旧送审。通道 `pair_shape`，
+    `evidence.pair_shape` 留 nn／score。"""
+    from ..groups import pair_shape
+    model = pair_shape.load(p.group_flow_pair_shape)
+    pair = frozenset(model["chars"])
+    miss = patch_missing if patch_missing is not None else {}
+    delta = 0
+    for c in out:
+        for r in c.chars or []:
+            if r.admit or r.provenance == "human" or r.channel == "human":
+                continue
+            ev = r.evidence or {}
+            ds = list(r.doubts or [])
+            # 形近护栏 conflict（库首位与整理本两字相冲）正是本解法要判的格，放开；never_match／timeout 及其他硬疑问不碰
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") and d != "护栏:conflict" for d in ds) \
+                    or ev.get("guard") in ("never_match", "timeout"):
+                continue
+            if "human_unbound" in ev or "human_unbound" in ds:      # 人裁绑丢的格不碰（人裁与对位的冲突交人审）
+                continue
+            ref = (amap.get(r.id) or (None,))[0] or (coord or {}).get(r.id)     # 现役对位缺这一格时用坐标对位字
+            if r.char not in pair and ref not in pair:
+                continue
+            gp = (ev.get("group") or {}).get("pick")                  # 字组流程已给了别的字（解算有分歧）：不越过
+            if gp and gp in pair:
+                continue
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("pair_shape")
+                continue
+            v = pair_shape.judge(img, model)
+            trail = {k: v[k] for k in ("char", "why", "nn", "score") if k in v}
+            if v["char"] is None or v["char"] not in (ref, r.char):
+                r.evidence = {**ev, "pair_shape": trail}
+                continue
+            r.evidence = {**ev, "pair_shape": trail, "lifted_from": {"char": r.char, "doubts": ds}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "pair_shape", "match", []
             delta += 1
     return delta
 

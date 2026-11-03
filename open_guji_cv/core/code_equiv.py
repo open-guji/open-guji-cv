@@ -162,6 +162,10 @@ _TAIL_EMPTY = ("表外末列不当整列空 layout_tail_empty（row_segment 书�
                "开关缺省时 row_segment 在全唐文 vol09 有表外末列的 28 页（全部）上与 origin/dev 产物逐字节相同；"
                "scripts/code_equiv.py check，2026-11-03")
 
+_SJ_PAIR_SHAPE = ("seed_admit 加缺省关的书级开关 group_flow_pair_shape（史记之矣刻形二选一，groups.pair_shape；缺省空时参数 dump 不含该键）："
+                  "开关缺省时 seed_admit 在史記 03 册 25 页（--pages 100-124，产物包 job65 cv 0a5ba0b）上与 origin/dev 产物逐字节相同；"
+                  "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+
 _TIGHT_BAND = ("写本界行判带收紧 tight_rule_band（column_warp 书级开关，缺省关；seg.profile column_text_band 加 first_valley、"
                "siku_zongmu.column clean_column 透传）：开关关着时 column_warp 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev "
                "af1fa3c4 产物逐字节相同，279 张清理后列图逐字节相同；scripts/code_equiv.py check，2026-11-03")
@@ -655,6 +659,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="39c00c4a48fb1e079cb786228b8f2a0d44fd7708dabf24542f1d07e599d3487e",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence=_TAIL_EMPTY),
+    Equiv(module="open_guji_cv.steps.seed_admit",
+          new="546e305a92ebe7ec03cb64f9dfd3397209780ea421941d82382e0f5970f984c7",
+          old="097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455",
+          evidence=_SJ_PAIR_SHAPE),
 )
 
 
