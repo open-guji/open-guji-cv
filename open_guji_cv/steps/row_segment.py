@@ -767,6 +767,12 @@ class RowSegmentParams(BaseModel):
     #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
     #: 不影响挑格网。殿本两行逐字对齐，不开。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_rows: bool = False
+    #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
+    #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
+    #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
+    #: 下一格的字块带着上字的笔画碎片（用户 2026-11-03 人审表）。大印下的列仍取等距格网（`_under_stain`，与本开关无关）。
+    #: 书级；`uniform`＝缺省，不进参数哈希。
+    row_pitch: Literal["uniform", "free"] = "uniform"
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -841,6 +847,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_gap_cols_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
+            if self.row_pitch == "uniform":
+                d.pop("row_pitch", None)
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
@@ -1186,7 +1194,10 @@ class RowSegmentStep(Step):
                     best = min(plain, key=key_)
                     # 等距格网优先（用户 2026-11-01：殿本格高一致要强制）：别的格网坏格数严格更少才不用它。
                     # 劈字、格高、穿字打平或更好都不算——DP 格网能为躲一个劈字把格线挪出半格、把两格空白切成三格。
-                    ug = [i for i in plain if cands[i][4].startswith("uniform_grid")]
+                    # 写本（`row_pitch: free`，史記文淵閣本）：字距随手写、大字小字高矮不一，等距格网不优先，只按打分跟别的格网比
+                    # （等距格线会切进高字的下半截、把它的笔画送给下一格）。
+                    ug = ([i for i in plain if cands[i][4].startswith("uniform_grid")]
+                          if p.row_pitch == "uniform" else [])
                     if ug and scores[min(ug, key=key_)][0] <= scores[best][0]:
                         best = min(ug, key=key_)
                     # 挪一格也只在等距格网之间比（1.45）：DP 格网挪一格时能把列首两格空白压成一格、字整列提前一格，
