@@ -474,6 +474,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="68444a805f3eab2dc7544f02dce2174719f3ed8aebb6837e7829c2804564b713",
           old="82930b01adb3c224cac7547d22dcc0a557a64ed7c0b6d8f7d072450e62081805",
           evidence="seed_admit 在史記 03 第 2 页（卷端大印页）上与 origin/dev 产物逐字节相同"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="adb1eaabeef2dad69975a887e258937b1f5e8dd9cee55095456f335992cc7ff6",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence="书级开关 roster_seal_trim_extra（缺省 0，不进参数 dump）：史記 02 8 页（2,4,9,19,24,41,86,141）产物逐字节相同"),
 )
 
 
