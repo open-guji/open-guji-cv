@@ -3114,6 +3114,8 @@ _RR = frozenset("人入八")
 #: 看图判裁定（`feedback/rulings`，group=O）：提示词版本、A24 名下的子类、不碰的疑问
 _VIS_RULING_GROUP, _VIS_RULING_VER = "O", "vis-o1"
 _VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130"})
+#: 整理本缺字（〓）按新图源文本层取字／私用码「一码一字」表（`research/a24/pua_src`，A24 2026-11-03），提示词版本 → 收的子类
+_VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozenset({"PUA"})))
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
 
 
@@ -3135,15 +3137,16 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         todo.append((r, _clf_ctx(seq, amap, i, -1, WIDTH), _clf_ctx(seq, amap, i, 1, WIDTH)))
     n = 0
     for r, left, right in todo:
-        v = store.get(_VIS_RULING_GROUP, _VIS_RULING_VER, left, right)
-        if not v or not v.get("admit_ok") or v.get("conf") != "high" or not v.get("char") or v.get("other"):
-            continue
-        if v.get("subclass") not in _VIS_RULING_SUBCLASSES:
+        v = next((x for ver, subs in _VIS_RULING_SPECS
+                  for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
+                  if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
+                  and x.get("subclass") in subs), None)
+        if not v:
             continue
         if (v.get("ref") or "") != ((amap.get(r.id) or (None,))[0] or ""):
             continue                                 # 整理本对位字变了：不是当初看的那一格
         ds = list(r.doubts or [])
-        r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass")},
+        r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")},
                       "lifted_from": {"char": r.char, "doubts": ds}}
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
