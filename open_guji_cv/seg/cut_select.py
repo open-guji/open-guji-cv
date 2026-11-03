@@ -231,6 +231,11 @@ def _make_input(img: np.ndarray):
     return torch.from_numpy(np.stack([ink, yy], 0))
 
 
+# 2026-11-03：8→192。全唐文册06 p27 实测 339 次前向只有 175 个不同窗口（重复 48%），
+# 重复隔得远，8 个装不下。纯函数记忆，结果逐字节不变。
+_OWNER_CACHE_MAX = 192
+
+
 class UNetJudge:
     """进程内持有一份网络。`owner()` 出归属图，`scores()` 给候选打分。任何异常都返回 None，不抛。"""
 
@@ -253,9 +258,10 @@ class UNetJudge:
         cache = self.__dict__.setdefault("_owner_cache", {})
         hit = cache.get(key)
         if hit is not None:
+            cache[key] = cache.pop(key)  # LRU：命中移到最新
             return hit
         out = self._owner(win_gray, ink_threshold, cc_max)
-        if len(cache) >= 8:
+        if len(cache) >= _OWNER_CACHE_MAX:
             cache.pop(next(iter(cache)))
         cache[key] = out
         return out
