@@ -954,6 +954,7 @@ LONG_RULE_GAP = 3          # 竖线断口容差（行）：版框磨出的小缺
 LONG_RULE_MIN = 0.5        # 列端拐角线在本格里至少这么多格高
 LONG_RULE_EDGE = 3         # 夹注格（through）只抹线列时，两边连带抹掉的毛边列数上限
 LONG_RULE_OUT = 0.05       # ……下端（列首格是上端）离格外沿不到这么多格高算连到了（框线到下框前常断一两行）
+LONG_RULE_OUT_GROW = 0.15  # strip_long_rule(grow=True) 的放宽值
 
 
 def _run_around(rows: np.ndarray, lo: int, hi: int, gap: int) -> list[tuple[int, int]]:
@@ -1006,13 +1007,16 @@ def column_ink_edges(strip_ink: np.ndarray, rows: list[tuple[float, float]]) -> 
 
 def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top: float, cell_bot: float,
                     tail: bool = False, head: bool = False,
-                    ink_edges: tuple[float, float] | None = None, through: bool = False) -> np.ndarray:
+                    ink_edges: tuple[float, float] | None = None, through: bool = False,
+                    grow: bool = False) -> np.ndarray:
     """抹掉图块左右最外侧的界行／版框竖线（判据见上方注释）。
 
     strip_ink 是整列条带的墨（与图块同宽、同 x 原点）；y0 是图块顶在条带里的行，cell_top/cell_bot 是
     格界（条带坐标）；tail/head：本格是列尾／列首格；ink_edges：本列字缘（`column_ink_edges`），列端
     拐角线要用。双边框是粗框＋细线两道，每侧最多剥两层。through=True（夹注格）：不看字缘（半格小字贴着列缘，
-    字缘量不准），只认上下贯穿 RULE_H_RATIO 格高以上的线、不认列端拐角线。"""
+    字缘量不准），只认上下贯穿 RULE_H_RATIO 格高以上的线、不认列端拐角线。grow=True（书级开关
+    cell_shrink.frame_line_grow）：列端拐角线离格外沿放宽到 LONG_RULE_OUT_GROW（全唐文嘉慶本第 1 列外侧竖框
+    在上框下面断开约 0.08 格高才起，11p109「此」）。"""
     h, w = patch.shape[:2]
     cell_h = cell_bot - cell_top
     out = patch
@@ -1030,7 +1034,7 @@ def strip_long_rule(patch: np.ndarray, strip_ink: np.ndarray, y0: int, cell_top:
                                LONG_RULE_GAP)
             line = any(r1 - r0 >= RULE_H_RATIO * cell_h for r0, r1 in runs)
             if not line and (tail or head) and not through:
-                near = LONG_RULE_OUT * cell_h
+                near = (LONG_RULE_OUT_GROW if grow else LONG_RULE_OUT) * cell_h
                 line = any(min(r1, cell_bot) - max(r0, cell_top) >= LONG_RULE_MIN * cell_h
                            and ((tail and r1 >= cell_bot - near) or (head and r0 <= cell_top + near))
                            for r0, r1 in runs)
@@ -1498,6 +1502,7 @@ FRAME_LINE_SPECK = 0.1     # 墨不到这么多窗宽的行算白
 FRAME_LINE_BLANK = 0.03    # 「线跟字之间隔着白行」的白：墨不到这么多窗宽（字的竖笔压到线上就不算白）
 FRAME_BAR_COV = 0.8        # 厚过 FRAME_LINE_THICK 的线行段，平均墨覆盖到这么多才算粗版框
 FRAME_LINE_EDGE = 4        # 线行上下这么多行算线的毛边（数线外有没有字时不计）
+FRAME_LINE_FRINGE = 0.06   # strip_frame_line(grow=True)：粗框毛边最多这么多格高（全唐文嘉慶本上框毛边 6–8 行、格高约 230）
 # 全页线位（page_frame_line_offset）：同一页各列的框线离版框的距离一样。认出线位后，线位上下
 # FRAME_LINE_TOL 格高内的行，覆盖到 FRAME_LINE_FAINT_COV、跨度到 FRAME_LINE_FAINT_SPAN 就算线行——
 # 印得淡、断成虚点的框线单看一格认不出（vol05 实测覆盖 0.1–0.6、跨度 0.7–0.8，两头的点常缺），
@@ -1572,7 +1577,7 @@ def page_frame_line_offsets(columns: list[tuple[np.ndarray, float, float, float]
 def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
                      win_x0: float, win_x1: float, bottom: bool = True,
                      gap: bool = False, line_ys: tuple[tuple[float, float], ...] = (),
-                     frame_reach: tuple[float, float] | None = None) -> np.ndarray:
+                     frame_reach: tuple[float, float] | None = None, grow: bool = False) -> np.ndarray:
     """列尾格（bottom=True）／列首格的版框细线连同线外一并抹白。
 
     cell_top/cell_bot 为格界、win_x0/win_x1 为列内容窗口，都在图块坐标系里。线内侧（字那边）
@@ -1582,13 +1587,17 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
     （图块坐标）和线厚（见 page_frame_line_offsets）：线位上放宽覆盖认淡线；不满 FRAME_LINE_SPAN 的实线，
     位置、厚度都跟全页那道线对上也认（字脚压着的双边框内框）。
     frame_reach=(版框 y, 距离)（图块坐标）：只认离版框这么近的线（写本开：列尾字的满宽横画离框一格多，
-    也会被认成线、连同线外的字脚抹掉——史記 02 册 100 页 7 列「冀」）；None＝不限。"""
+    也会被认成线、连同线外的字脚抹掉——史記 02 册 100 页 7 列「冀」）；None＝不限。
+    grow=True（书级开关 cell_shrink.frame_line_grow）：认出的线行段往上下连着长，覆盖到 FRAME_LINE_COV 的行
+    不看跨度也算线行。粗版框（全唐文嘉慶本 20 行厚）只有中间几行跨度够满宽，上下毛边各十来行覆盖够、跨度不够，
+    原来只认中间几行，毛边被当「线外有墨」整条不剥（全唐文 06p11「時」、05p126「功」头顶的上框）。"""
     if not bottom:      # 列首格上下翻转同解
         h = patch.shape[0]
         flip = patch[::-1]
         out = strip_frame_line(flip, h - cell_bot, h - cell_top, win_x0, win_x1, gap=True,
                                line_ys=tuple((h - ly, th) for ly, th in line_ys),
-                               frame_reach=None if frame_reach is None else (h - frame_reach[0], frame_reach[1]))
+                               frame_reach=None if frame_reach is None else (h - frame_reach[0], frame_reach[1]),
+                               grow=grow)
         return patch if out is flip else np.ascontiguousarray(out[::-1])
     h, w = patch.shape[:2]
     a = int(round(win_x0 + FRAME_LINE_INNER * (win_x1 - win_x0)))
@@ -1621,6 +1630,19 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
                    for ly, th in line_ys):
                 line[y:y1] = True
             y = y1
+    if grow and line.any():
+        cov_ok = ink.mean(axis=1) >= FRAME_LINE_COV
+        cov_ok[:max(0, zone)] = False
+        seed = line.copy()
+        for y in np.flatnonzero(seed):
+            u = y - 1
+            while u >= 0 and cov_ok[u] and not line[u]:
+                line[u] = True
+                u -= 1
+            d = y + 1
+            while d < h and cov_ok[d] and not line[d]:
+                line[d] = True
+                d += 1
     if frame_reach is not None:
         line[:max(0, int(np.floor(frame_reach[0] - frame_reach[1])))] = False
     runs: list[tuple[int, int]] = []
@@ -1654,12 +1676,14 @@ def strip_frame_line(patch: np.ndarray, cell_top: float, cell_bot: float,
         # 线与字之间要有白行。写本的线是毛笔画的，线行段两边各拖着几行毛边（覆盖够、跨度不够满宽），
         # 只看紧挨线行的 2 行会把毛边当成字连着线（史記列首「出」「曰」）——越过毛边再看
         speck = FRAME_LINE_SPECK * (b - a)
-        if gap and not bar and (ink[max(0, y0 - FRAME_LINE_EDGE - 2):y0].sum(axis=1) >= speck).all():
+        # grow：粗框的毛边可厚到十几行（覆盖不到 FRAME_LINE_COV），线与字之间的白行就在毛边外，按格高放宽
+        edge_n = max(FRAME_LINE_EDGE, int(round(FRAME_LINE_FRINGE * (cell_bot - cell_top)))) if grow else FRAME_LINE_EDGE
+        if gap and not bar and (ink[max(0, y0 - edge_n - 2):y0].sum(axis=1) >= speck).all():
             continue
         # 剥到线行段以内的毛边：从线往字那边数，不过 FRAME_LINE_EDGE 行就碰到白行的，这几行是线的毛边、
         # 不是字（字跟线之间隔着白行）；碰不到白行（字脚压线）就只剥到线行
         cut = y0
-        while cut > 0 and y0 - cut < FRAME_LINE_EDGE and ink[cut - 1].sum() >= speck:
+        while cut > 0 and y0 - cut < edge_n and ink[cut - 1].sum() >= speck:
             cut -= 1
         if cut > 0 and ink[cut - 1].sum() >= speck:
             cut = y0
@@ -2999,7 +3023,8 @@ class CharExtractor:
                                              bottom=idx == tail_cell,
                                              line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys),
                                              frame_reach=None if not reach else
-                                             (float(fy) - (sy0 + y0), float(reach) * cell_h_ref))
+                                             (float(fy) - (sy0 + y0), float(reach) * cell_h_ref),
+                                             grow=bool(gmeta.get("frame_line_grow")))
                 if jz_rules:
                     patch = strip_side_rule(patch, float(sx0), left_x, right_x)
                 # 界行／版框竖线：放在剥列端横框线之后——横框线连着竖框和字，剥之前竖线跟字之间没有白列。
@@ -3008,7 +3033,8 @@ class CharExtractor:
                 if cell.get("jiazhu_cx") is None or jz_rules:
                     patch = strip_long_rule(patch, ink_px, y0, ltop, lbot, tail=idx == tail_cell,
                                             head=idx == head_cell, ink_edges=ink_edges,
-                                            **({"through": True} if jz_rules else {}))
+                                            **({"through": True} if jz_rules else {}),
+                                            **({"grow": True} if gmeta.get("frame_line_grow") else {}))
                 if idx in end_cand:
                     # 列端的雙行小注格（Step3 给了缝）可按两半各剥（`jiazhu_end_halves`，写本开）：
                     # 两个小字各是各的字身，整格只认最大连通体当字身，另一半小字与它分离的下半截

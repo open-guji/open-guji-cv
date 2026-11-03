@@ -154,6 +154,10 @@ _JZ_STRIP = ("夹注格列端剥框线、长竖线 jiazhu_strip_rules（cell_shr
              "开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev 0c773642 产物逐字节相同；"
              "scripts/code_equiv.py check，2026-11-03")
 
+_FRAME_GROW = ("列端剥框线认粗框线与毛边 frame_line_grow（cell_shrink 书级开关，缺省关；extractor strip_frame_line、strip_long_rule 加 grow）："
+               "开关关着时 cell_shrink 在全唐文 vol06 40 页（每 5 页取 1）上与 origin/dev 6c11060 产物逐字节相同；"
+               "scripts/code_equiv.py check，2026-11-03")
+
 _TIGHT_BAND = ("写本界行判带收紧 tight_rule_band（column_warp 书级开关，缺省关；seg.profile column_text_band 加 first_valley、"
                "siku_zongmu.column clean_column 透传）：开关关着时 column_warp 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev "
                "af1fa3c4 产物逐字节相同，279 张清理后列图逐字节相同；scripts/code_equiv.py check，2026-11-03")
@@ -628,6 +632,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="fb520ff1c2b13c680fe4ace5c9ed1e5426e32a9a935a27343f2dcf62300d21b8",
           old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
           evidence=_JZ_FREE),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="db9134b389edee9b8ff051d2bb4328b14ee7bd6fbbb515239ff7136f20223467",
+          old="641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2",
+          evidence=_FRAME_GROW),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="e6a77a310d20bfdd0ed22db0cca681490ff78885f65b4277e9030ccd979cbbf8",
+          old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
+          evidence=_FRAME_GROW),
 )
 
 

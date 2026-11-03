@@ -145,3 +145,49 @@ def test_short_solid_line_matching_page_line_removed():
     out = strip_frame_line(p, 10, 130, 0, W, line_ys=((113.5, 4.0),))
     assert (out[112:] == 255).all()
     assert (out[20:100, 80:90] == 0).all()
+
+
+
+H2 = 260     # 粗框用的高图块：格界 [10, 250)（格高 240，跟全唐文嘉慶本差不多）
+
+
+def _thick_frame_patch():
+    """粗版框（全唐文嘉慶本）：中间 4 行满宽，上毛边 4 行、下毛边 10 行覆盖一半多、跨度不满；毛边与字之间隔 8 行白。"""
+    p = np.full((H2, W), 255, np.uint8)
+    p[20:200, 80:90] = 0             # 字：一竖
+    p[100:106, 40:130] = 0           # 一横
+    p[216:220, 30:120] = 0           # 上毛边
+    p[220:224, 4:176] = 0            # 线芯：满宽
+    p[224:234, 50:150] = 0           # 下毛边（墨量超过 FRAME_LINE_TAIL）
+    return p
+
+
+def test_thick_frame_fringe_kept_without_grow():
+    """缺省（grow 关）：毛边当「线外有墨」，整条不剥（旧行为，别的书产物不变）。"""
+    p = _thick_frame_patch()
+    out = strip_frame_line(p, 10, 250, 0, W)
+    assert (out == p).all()
+
+
+def test_thick_frame_with_grow_is_removed_char_kept():
+    p = _thick_frame_patch()
+    out = strip_frame_line(p, 10, 250, 0, W, grow=True)
+    assert (out[208:] == 255).all()
+    assert (out[20:200, 80:90] == 0).all()
+    assert (out[100:106, 40:130] == 0).all()
+
+
+def test_thick_top_frame_with_grow_for_head_cell():
+    p = _thick_frame_patch()[::-1].copy()
+    out = strip_frame_line(p, 10, 250, 0, W, bottom=False, grow=True)
+    assert (out[:H2 - 208] == 255).all()
+    assert (out[H2 - 200:H2 - 20, 80:90] == 0).all()
+
+
+def test_grow_does_not_strip_char_touching_frame():
+    """字脚连着毛边、中间没有白行：列首格不剥（宁留框渣不吞字）。"""
+    p = _thick_frame_patch()
+    p[196:216, 30:120] = 0           # 字的底部墨铺满，一直连到毛边
+    q = p[::-1].copy()
+    out = strip_frame_line(q, 10, 250, 0, W, bottom=False, grow=True)
+    assert (out == q).all()
