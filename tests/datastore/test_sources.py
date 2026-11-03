@@ -163,6 +163,9 @@ def test_register_local_keeps_bytes(tmp_path):
 
 def test_keys_and_ids():
     assert S.norm_vol("vol3") == "03" and S.norm_vol(11) == "11"
+    assert S.norm_vol("001") == "001" and S.norm_vol("01") == "01" and S.norm_vol("248") == "248"
+    assert S.norm_vol(1, width=3) == "001" and S.norm_vol("vol04", width=2) == "04"
+    assert S.norm_vol("vol011") == "11"           # 殿本老写法仍是 2 位
     assert S.table_key("96mid1ogzk", "11", 7) == "source/pages/96mid1ogzk/11/r007.json"
     assert S.orig_key("96mid1ogzk", "11", "a_tif.zip") == "source/orig/96mid1ogzk/11/a_tif.zip"
     with pytest.raises(ValueError):
