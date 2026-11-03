@@ -85,20 +85,35 @@ def _place(todo: list[tuple[str, Path]]) -> tuple[int, list[str]]:
     return placed, got["missing"]
 
 
-def fetch_registry() -> dict:
-    """cv 自带的模型表（`core/model_pack.REGISTRY`）里本机缺的文件，从 R2 取回放进 ``models/``。"""
-    from ..core import model_pack as mp
-    miss = mp.missing_repo_models()
-    placed, absent = _place([(i["sha256"], mp.REPO_ROOT / i["path"]) for i in miss]) if miss else (0, [])
-    return {"registry": len(mp.load_registry()), "missing": len(miss), "placed": placed, "not_in_r2": absent}
+def fetch_registry(kind: str = "model") -> dict:
+    """cv 自带的路径 → sha 表（``model``：`core/model_pack.REGISTRY`；``font``：`core/font_files.REGISTRY`）里
+    本机缺的文件，从 R2 取回放回原位。"""
+    reg, miss = _registry(kind)
+    root = _repo_root()
+    placed, absent = _place([(i["sha256"], root / i["path"]) for i in miss]) if miss else (0, [])
+    return {"kind": kind, "registry": len(reg), "missing": len(miss), "placed": placed, "not_in_r2": absent}
 
 
-def upload_registry(execute: bool = False) -> dict:
-    """cv 自带模型表里的文件传进 R2（已有跳过）；本机文件 sha 与表不符拒传。"""
+def _repo_root() -> Path:
     from ..core import model_pack as mp
+    return mp.REPO_ROOT
+
+
+def _registry(kind: str) -> tuple[list[dict], list[dict]]:
+    if kind == "font":
+        from ..core import font_files as fp
+        return fp.load_registry(), fp.missing()
+    from ..core import model_pack as mp
+    return mp.load_registry(), mp.missing_repo_models()
+
+
+def upload_registry(execute: bool = False, kind: str = "model") -> dict:
+    """cv 自带表里的文件传进 R2（已有跳过）；本机文件 sha 与表不符拒传。"""
+    from ..core import model_pack as mp
+    reg, _ = _registry(kind)
     have, missing, stale = {}, [], []
-    for i in mp.load_registry():
-        p = mp.REPO_ROOT / i["path"]
+    for i in reg:
+        p = _repo_root() / i["path"]
         if not p.is_file():
             missing.append(i["path"])
         elif mp._sha256(p) != i["sha256"]:
@@ -106,8 +121,8 @@ def upload_registry(execute: bool = False) -> dict:
         else:
             have[i["sha256"]] = p
     if stale:
-        raise ValueError(f"本机文件与模型表不符，不上传：{stale[:3]}（先 guji model registry）")
-    plan = {"registry": len(have) + len(missing), "local": len(have), "missing_local": missing,
+        raise ValueError(f"本机文件与{kind}表不符，不上传：{stale[:3]}（先 guji {kind} registry）")
+    plan = {"kind": kind, "registry": len(reg), "local": len(have), "missing_local": missing,
             "bytes": sum(p.stat().st_size for p in have.values()), "executed": False}
     if execute:
         from ..datastore.r2 import upload_files
@@ -117,17 +132,17 @@ def upload_registry(execute: bool = False) -> dict:
 
 
 def ensure_repo_models() -> None:
-    """``guji pipeline`` 起跑前：cv 的 ``models/`` 缺了模型表里的文件就先取回（各书都用，不看钉号）。"""
-    from ..core import model_pack as mp
-    if not mp.missing_repo_models():
-        return
-    try:
-        r = fetch_registry()
-        print(f"  模型：从 R2 取回 {r['placed']} 个文件到 cv 的 models/", flush=True)
-        if r["not_in_r2"]:
-            print(f"  ⚠️  R2 上没有 {len(r['not_in_r2'])} 个模型文件", file=sys.stderr)
-    except Exception as e:                     # noqa: BLE001 —— 没令牌、断网：照旧往下，缺权重的预检会拦
-        print(f"  ⚠️  cv 的 models/ 缺文件，自动取回失败：{e}", file=sys.stderr)
+    """``guji pipeline`` 起跑前：cv 的 ``models/``、``fonts/`` 缺了表里的文件就先取回（各书都用，不看钉号）。"""
+    for kind in ("model", "font"):
+        if not _registry(kind)[1]:
+            continue
+        try:
+            r = fetch_registry(kind)
+            print(f"  {kind}：从 R2 取回 {r['placed']} 个文件到 cv 仓", flush=True)
+            if r["not_in_r2"]:
+                print(f"  ⚠️  R2 上没有 {len(r['not_in_r2'])} 个 {kind} 文件", file=sys.stderr)
+        except Exception as e:                 # noqa: BLE001 —— 没令牌、断网：照旧往下，缺件的预检会拦
+            print(f"  ⚠️  cv 仓缺 {kind} 文件，自动取回失败：{e}", file=sys.stderr)
 
 
 def ensure_model_pin(book) -> None:

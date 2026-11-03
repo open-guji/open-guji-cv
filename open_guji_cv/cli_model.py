@@ -138,4 +138,31 @@ def add_parser(sub) -> None:
         q.add_argument("--json", action="store_true")
 
 
-COMMANDS = {"model": (add_parser, cmd_model)}
+def cmd_font(args) -> None:
+    """``guji font registry|upload|fetch``：cv 的 ``fonts/`` 按 sha 进出 R2（`core/font_files.py`）。"""
+    from .core import font_files as fp
+    from .ops import model_blobs as mb
+    if args.font_cmd == "registry":
+        _out(fp.build_registry(), True)
+    elif args.font_cmd == "upload":
+        try:
+            _out(mb.upload_registry(execute=args.execute, kind="font"), True)
+        except ValueError as e:
+            print(f"✗ {e}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        r = mb.fetch_registry("font")
+        _out(r, True)
+        sys.exit(1 if r["not_in_r2"] or r["placed"] < r["missing"] else 0)
+
+
+def add_font_parser(sub) -> None:
+    p = sub.add_parser("font", help="[v2] 字体档按 sha 进出 R2：registry 重写表／upload 传／fetch 补齐 fonts/（商业字体不上 R2）")
+    ps = p.add_subparsers(dest="font_cmd", required=True)
+    ps.add_parser("registry", help="按当前 fonts/ 重写 config/font-registry.json")
+    up = ps.add_parser("upload", help="表里的字体传进 R2（缺省演练）")
+    up.add_argument("--execute", action="store_true")
+    ps.add_parser("fetch", help="本机缺的字体从 R2 取回 fonts/")
+
+
+COMMANDS = {"model": (add_parser, cmd_model), "font": (add_font_parser, cmd_font)}

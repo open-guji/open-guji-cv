@@ -35,3 +35,12 @@ Jigmo 三档按 Unicode 区段分工，对本项目字表的独家贡献分别�
 61,494 / 9,131 字，缺一不可。
 
 字形匹配力实测见 `doc/research/glyph_db_expansion_research.md` §6。
+
+## 进 R2、按 sha 取回（2026-11-04 起）
+
+三系统设计（字形／语料／模型从 cv 剥离）的字形第三步：cv 带一张字体表 `config/font-registry.json`（路径 → sha256），
+字体文件按 sha 存在 R2（键 `sha256/xx/<sha>.txt`）。`guji font fetch` 把本机缺的取回到 `fonts/<路径>`，
+`guji pipeline` 起跑前、`install_release.py` 装完都会自动补；读字体的代码与指纹不变。
+换字体或加字体后跑 `guji font registry` 重写表、`guji font upload --execute` 上传。
+
+**`kangxi/`（商业字体）不进表、不上 R2**（R2 公开只读），仍随仓走。以后从 git 删字体文件时它要留下或另找私有存放。
