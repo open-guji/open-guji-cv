@@ -131,7 +131,8 @@ class SeedAdmitParams(BaseModel):
 
     开着时，绑丢的人裁只在下面三条**同时**成立时不降级（evidence 照挂 `human_unbound`，另挂 `shift_ok`）：
     绑定状态是 `unanchored`（没有几何，只是编号对不上）；本格放行的字＝整理本在本格的字；
-    旧人裁的字＝整理本在同列同半行 ±2 格内某一格的字（即旧编号顺移到了邻格）。只免降级，不改字、不放行。"""
+    旧人裁的字＝整理本在同列同半行 ±2 格内某一格的字（即旧编号顺移到了邻格）。只免降级，不改字、不放行。
+    「整理本在本格／邻格的字」先看现役对位，缺格的用坐标对位字补（`coord_fallback` 放行的格没有现役对位；2026-11-03，史記第 2 轮 49 格里 32 格因此没被豁免）。"""
     db_path: str = ""    # 读人裁记录用；与 glyph_match 同一个库。留空 = 按 workspace 解析
     human_fingerprint: str = ""         # 自动填：人裁进库了本步要重跑
     iron_config_fingerprint: str = ""
@@ -1735,8 +1736,10 @@ class SeedAdmitStep(Step):
             n_auto += d_srb
             n_review -= d_srb
         if human_lost:
+            # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
-                                       amap if p.human_unbound_shift_ok else None)
+                                       ({**{k: (v,) for k, v in _coord_refs(ctx, page, coord_cache).items() if v}, **(amap or {})}
+                                        if p.human_unbound_shift_ok else None))
             n_auto -= d_hu
             n_review += d_hu
         if p.codepoint_semantic and ctx.book.codepoints:

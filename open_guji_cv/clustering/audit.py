@@ -170,10 +170,11 @@ def evict_instance(db, instance_id: str, reason: str | None = None) -> str | Non
     没报错，只是默默不干活：撤库一轮下来库里攒了 34 个零刻例的空壳字头，
     `n_confirmed` 也还停在 1。改成只按 exemplars 判，并同步 n_confirmed。
     """
-    row = db.conn.execute(
+    rows = db.conn.execute(
         """SELECT g.glyph_id, g.char FROM exemplars e
            JOIN glyphs g ON g.glyph_id=e.glyph_id WHERE e.instance_id=?""",
-        (instance_id,)).fetchone()
+        (instance_id,)).fetchall()
+    row = rows[0] if rows else None      # 同一实例可能挂在几个字头下（旧播种遗留），n_confirmed 要逐个修
     existed = db.conn.execute("SELECT 1 FROM instances WHERE instance_id=?",
                               (instance_id,)).fetchone()
     for t in ("admissions", "exemplars", "derived", "instances"):
@@ -189,8 +190,7 @@ def evict_instance(db, instance_id: str, reason: str | None = None) -> str | Non
             "INSERT OR IGNORE INTO evictions (instance_id, char, reason, at) VALUES (?,?,?,?)",
             (instance_id, row[1] if row else None, reason,
              datetime.now(timezone.utc).isoformat(timespec="seconds")))
-    if row:
-        gid = row[0]
+    for gid, _ch in rows:
         left = db.conn.execute(
             "SELECT count(*) FROM exemplars WHERE glyph_id=?", (gid,)).fetchone()[0]
         if left:
