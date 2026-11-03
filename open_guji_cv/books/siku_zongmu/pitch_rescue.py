@@ -150,20 +150,24 @@ def drop_and_extend(res, gray: np.ndarray, *, leaf_layout: str = "single",
         pad = (b - a) // 6     # 不量贴着界行的那几 px
         return float((gray[top:bot, a + pad:b - pad] < ink_threshold).mean())
 
-    lo_ink = ink(keep[0] - med, keep[0])
-    hi_ink = ink(keep[-1], keep[-1] + med)
+    # 外推出图边就截到图边（列在图边被裁、外框在图外：vol86 p151 末列贴着左图边，外推差 3px 出图），
+    # 截完外列宽仍得进带（`is_clean` 把关）
+    lo_d = min(med, keep[0])
+    hi_d = min(med, W - 1 - keep[-1])
+    lo_ink = ink(keep[0] - lo_d, keep[0])
+    hi_ink = ink(keep[-1], keep[-1] + hi_d)
     if max(lo_ink, hi_ink) < MIN_INK:
         return False
     if lo_ink >= hi_ink:
-        v.insert(0, replace(v[0], x_at_top=v[0].x_at_top - med))
+        v.insert(0, replace(v[0], x_at_top=v[0].x_at_top - lo_d))
         filled.insert(0, True)
         if vs is not None:
-            vs.insert(0, replace(vs[0], x_at_top=vs[0].x_at_top - med))
+            vs.insert(0, replace(vs[0], x_at_top=vs[0].x_at_top - lo_d))
     else:
-        v.append(replace(v[-1], x_at_top=v[-1].x_at_top + med))
+        v.append(replace(v[-1], x_at_top=v[-1].x_at_top + hi_d))
         filled.append(True)
         if vs is not None:
-            vs.append(replace(vs[-1], x_at_top=vs[-1].x_at_top + med))
+            vs.append(replace(vs[-1], x_at_top=vs[-1].x_at_top + hi_d))
     new_xs = line_xs(replace(res, verticals=v))
     if not is_clean(new_xs, leaf_layout=leaf_layout):
         return False
@@ -320,6 +324,18 @@ def _snap_target(res, gray, x, med, ink_threshold):
     return float(min(mids, key=lambda m: abs(m - x))) if mids else None
 
 
+def _pitch_guess(xs, i, bad, med):
+    """线 i 附近吸不到东西（或吸回原地：字的竖笔也像淡界行细峰）时，按列距从合格的邻列推它该在哪：左邻列 i 出带、再左一列 i−1 合格 → xs[i−1]＋列宽；
+    右邻同理。都不合返回 None。vol44 p108：字心里挑了一条假线，真界行在 45px 外（吸线窗口外）、印得断断续续，
+    按列距从合格列推过去正落在字间空白上。"""
+    n = len(xs)
+    if i >= 2 and i in bad and (i - 1) not in bad:
+        return xs[i - 1] + med
+    if i + 2 <= n - 1 and (i + 1) in bad and (i + 2) not in bad:
+        return xs[i + 1] - med
+    return None
+
+
 def snap_lines(base, res, gray, *, leaf_layout: str = "single", ink_threshold: int = 128, rounds: int = 3):
     """在 `base`（网格或自由模式的网）上，把出带列两边的线逐轮吸到淡界行或字间空白中点上，直到列宽都进带。
     成了返回 (新网（`base` 的副本）, 吸过的线号)，不成返回 None。"""
@@ -335,6 +351,10 @@ def snap_lines(base, res, gray, *, leaf_layout: str = "single", ink_threshold: i
         moved = False
         for i in sorted({i for c in bad for i in (c - 1, c) if 0 <= i < len(xs)}):
             t = _snap_target(res, gray, xs[i], med, ink_threshold)
+            if t is None or abs(t - xs[i]) < 2:
+                p = _pitch_guess(xs, i, bad, med)
+                if p is not None:
+                    t = _snap_target(res, gray, p, med, ink_threshold) or t
             if t is None or abs(t - xs[i]) < 2:
                 continue
             d = t - xs[i]
@@ -357,18 +377,28 @@ def _frame_ridges(res, gray, xs, med, ink_threshold):
 
 
 def snap_outer_to_frame(res, gray: np.ndarray, *, leaf_layout: str = "single", ink_threshold: int = 128) -> bool:
-    """出带的外列偏窄、外侧有版框残段：外框线平移到最近那条残段上。新网干净才改 `res` 返回 True。"""
+    """出带的外列偏窄、外侧有版框残段：外框线平移到最近那条「吸过去外列宽进带」的残段上。新网干净才改 `res` 返回 True。
+
+    残段搜到外列宽 `OUTER[1]` 为止（不止 `FRAME_REACH`）：外框线挑在外列字中间时，外列只剩半列宽，真版框离它
+    0.6–0.7 列宽（vol73 p110、vol94 p123：版框界行在、自由模式却挑了字心线）。离得近、吸过去外列仍偏窄的残段跳过。"""
     xs = line_xs(res)
     med = statistics.median(_body_widths(xs, leaf_layout))
     bad = out_of_band(xs, leaf_layout=leaf_layout) or set()
-    lo, hi = _frame_ridges(res, gray, xs, med, ink_threshold)
+    reach = max(FRAME_REACH, OUTER[1] - min(xs[1] - xs[0], xs[-1] - xs[-2]) / med)
+    rs = _rule_ridges(res, gray, xs[0] - reach * med, xs[-1] + reach * med, RULE_RUN * med, ink_threshold)
+    lo = sorted((r for r in rs if r < xs[0] - TOL), reverse=True)
+    hi = sorted(r for r in rs if r > xs[-1] + TOL)
     v, vs = list(res.verticals), list(res.verticals_straight)
     filled = list(res.vline_filled) or [False] * len(v)
     moved = False
-    for idx, col, width, ridges in ((0, 1, xs[1] - xs[0], lo), (len(xs) - 1, len(xs) - 1, xs[-1] - xs[-2], hi)):
-        if col not in bad or width >= OUTER[0] * med or not ridges:
+    for idx, col, inner, width, ridges in ((0, 1, xs[1], xs[1] - xs[0], lo),
+                                           (len(xs) - 1, len(xs) - 1, xs[-2], xs[-1] - xs[-2], hi)):
+        if col not in bad or width >= OUTER[0] * med:
             continue
-        d = ridges[0] - xs[idx]
+        ok = [r for r in ridges if OUTER[0] * med <= abs(inner - r) <= OUTER[1] * med]
+        if not ok:
+            continue
+        d = ok[0] - xs[idx]
         v[idx] = replace(v[idx], x_at_top=v[idx].x_at_top + d)
         if len(vs) == len(v):
             vs[idx] = replace(vs[idx], x_at_top=vs[idx].x_at_top + d)
