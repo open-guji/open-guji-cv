@@ -147,6 +147,10 @@ _JZ_ROWS = ("雙行小注两行各切 jiazhu_rows（row_segment 书级开关，�
              "开关关着时 row_segment、cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev d961e8c1 产物逐字节相同；"
              "scripts/code_equiv.py check，2026-11-03")
 
+_JZ_STRIP = ("夹注格列端剥框线、长竖线 jiazhu_strip_rules（cell_shrink 书级开关，缺省关；extractor strip_long_rule 加 through）："
+             "开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）上与 origin/dev 0c773642 产物逐字节相同；"
+             "scripts/code_equiv.py check，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -581,6 +585,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="3cd4fcf820c9b22301c8fdbc8990c0f822c44d879e55e5d55a0363ad801859a1",
           old="5d729e5b5398d287b315e0cf21386302fbf7b08ece15bd13774beafd2c07b96e",
           evidence=_SJ_R5),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="3cf74689b1995b8d8baeeb50d8fc33862af5eb9f32b93e5e55e922d9cfcd2db2",
+          old="641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2",
+          evidence=_JZ_STRIP),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="8c698218deb28060a4af17d3bde17d0788c225b417b1cdf435bd3c59ee67b801",
+          old="a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b",
+          evidence=_JZ_STRIP),
 )
 
 
