@@ -122,6 +122,12 @@ def ensure_model_pin(book) -> None:
     _ensure(book)
 
 
+def ensure_corpus_files(book) -> None:
+    """册钉了语料：清单里本机缺的文件先从 R2 取回（`ops/corpus_pack.ensure_corpus_files`）。"""
+    from .corpus_pack import ensure_corpus_files as _ensure
+    _ensure(book)
+
+
 def auto_pack(args, eng, steps: list[str], full_steps, book_versions) -> None:
     """整册从头跑到尾、没有失败页 → 顺手把产物打包存进 R2（sheldon 10-21：免得忘）。
 
