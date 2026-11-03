@@ -1696,7 +1696,7 @@ class SeedAdmitStep(Step):
                 n_auto += d_rs
                 n_review -= d_rs
             if p.group_flow_pair_shape:
-                d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing)
+                d_ps = _pair_shape_pass(p, out, amap, ctx, page, patch_missing, _coord_refs(ctx, page, coord_cache))
                 n_auto += d_ps
                 n_review -= d_ps
             if p.group_flow_book_knn:
@@ -3228,7 +3228,8 @@ def _rr_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
     return delta
 
 
-def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None) -> int:
+def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_missing: dict | None = None,
+                     coord: dict | None = None) -> int:
     """书级两字刻形二选一（`groups.pair_shape`，`SeedAdmitParams.group_flow_pair_shape`）。紧接 rr_shape。→ 放行数净增。
 
     只补放待审格：库首位或整理本字是模型两个字之一；模型给的字必须＝整理本字或＝库首位（不引入第三个字、不单凭整理本）。
@@ -3245,9 +3246,11 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
                 continue
             ev = r.evidence or {}
             ds = list(r.doubts or [])
-            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") for d in ds) or ev.get("guard") in ("never_match", "conflict", "timeout"):
+            # 形近护栏 conflict（库首位与整理本两字相冲）正是本解法要判的格，放开；never_match／timeout 及其他硬疑问不碰
+            if any(d in _RR_SHAPE_HARD or d.startswith("护栏:") and d != "护栏:conflict" for d in ds) \
+                    or ev.get("guard") in ("never_match", "timeout"):
                 continue
-            ref = (amap.get(r.id) or (None,))[0]
+            ref = (amap.get(r.id) or (None,))[0] or (coord or {}).get(r.id)     # 现役对位缺这一格时用坐标对位字
             if r.char not in pair and ref not in pair:
                 continue
             try:
