@@ -874,6 +874,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
+        if isinstance(d, dict) and not self.group_flow_pair_shape:
+            d.pop("group_flow_pair_shape", None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
