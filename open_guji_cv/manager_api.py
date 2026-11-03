@@ -24,6 +24,8 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "WorkerSource": ("datastore.client", "WorkerSource"),
     # groups（pipeline）
     "groups_of": ("groups.registry", "groups_of"),
+    # 待审原因码表（manager pending-stats，2026-11-03）
+    "pending_reason_specs": ("review.pending_reason", "specs"),
     # opinions（P2 搬去 manager，2026-11-02）
     "data_home": ("core.workspace", "data_home"),
     "central_data_dir": ("core.workspace", "central_data_dir"),
