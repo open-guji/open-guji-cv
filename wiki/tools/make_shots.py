@@ -11,6 +11,9 @@
     guji products pack fetch vol04 -w <殿本工作区>
     # 2. 出图（--ws 书ID=工作区，可多个；--only 只出某几张）
     python wiki/tools/make_shots.py --ws 96mid1ogzk=<殿本工作区> [--only step1-border]
+    # 带 yolo 图层的图（Step3「和 YOLO 对比」）还要 yolo-tool 的模型：
+    #   git clone --depth 1 https://github.com/open-guji/yolo_tool ../yolo_tool
+    #   python wiki/tools/make_shots.py ... --yolo ../yolo_tool/model
 
 出图只读产物，不改工作区；字块、列图缺缓存时会按 cv 的规则现场重建（写进工作区 cache/）。
 图里不写中文字（图注写在 Wiki 正文里），只有列号这类 ASCII 标记。
@@ -46,6 +49,8 @@ C = {
     "auto": (40, 160, 40),       # 自动放行：绿
     "human": (200, 120, 30),     # 人裁过：蓝
     "review": (40, 40, 220),     # 落人审：红
+    "chord": (210, 180, 0),      # 界行两端连成的直线（对照折线）：青
+    "yolo": (200, 90, 20),       # yolo-tool 原生单字框：蓝
 }
 COL_TINTS = [(255, 220, 180), (180, 230, 255)]  # 列带交替底色（浅蓝 / 浅橙）
 
@@ -131,6 +136,39 @@ def layer_border(bk, page, img, th):
         cv2.line(img, (0, y), (W - 1, y), C["head"], th)
 
 
+def layer_chord(bk, page, img, th):
+    """每条界行只取上下两端连一条直线：和折线对照，看中段弯了多少。"""
+    H, W = img.shape[:2]
+    bd = bk.prod("border_detect", page)["borders"]
+    ys = (bd["top"]["y_at_right"], bd["bottom"]["y_at_right"])
+    for v in bd["verticals"]:
+        p0, p1 = [(tl(line_x(v, y), W), int(round(y))) for y in ys]
+        cv2.line(img, p0, p1, C["chord"], max(1, th - 1), cv2.LINE_AA)
+
+
+YOLO_MODEL: str | None = None
+_YOLO = {}
+
+
+def yolo_chars(bk, page):
+    """yolo-tool 原生两段模型（版面 → 单字）在原图上的单字框，左上原点；要 --yolo 给模型目录。"""
+    key = (str(bk.ws), bk.book, page)
+    if key not in _YOLO:
+        if not YOLO_MODEL:
+            raise SystemExit("yolo 图层要 --yolo <yolo_tool 的 model/ 目录>")
+        from open_guji_cv.books.siku_zongmu.yolo_tool_infer import YoloTool
+        if "tool" not in _YOLO:
+            _YOLO["tool"] = YoloTool(YOLO_MODEL)
+        _, chars = _YOLO["tool"].infer(bk.raw(page))
+        _YOLO[key] = [b for b in chars if b.cls != "ear"]
+    return _YOLO[key]
+
+
+def layer_yolo(bk, page, img, th):
+    for b in yolo_chars(bk, page):
+        cv2.rectangle(img, (int(b.x0), int(b.y0)), (int(b.x1), int(b.y1)), C["yolo"], th)
+
+
 def layer_columns(bk, page, img, th):
     H, W = img.shape[:2]
     cols = bk.prod("column_warp", page)["column_windows"]["columns"]
@@ -183,6 +221,14 @@ def layer_shrink(bk, page, img, th):
     for c in _chars(bk, page):
         p0, p1 = _rect(c, W)
         cv2.rectangle(img, p0, p1, C["flag"] if c["flags"] else C["char"], th)
+
+
+def layer_tight(bk, page, img, th):
+    """Step4 紧框，一律绿色（和 YOLO 字框对照时用，不按 flag 标红）。"""
+    W = img.shape[1]
+    for c in _chars(bk, page):
+        p0, p1 = _rect(c, W)
+        cv2.rectangle(img, p0, p1, C["char"], th)
 
 
 def layer_seal(bk, page, img, th):
@@ -247,7 +293,8 @@ def layer_ocr(bk, page, img, th):
 
 LAYERS = {"border": layer_border, "columns": layer_columns, "cells": layer_cells,
           "shrink": layer_shrink, "seal": layer_seal, "admit": layer_admit,
-          "free": layer_free, "ocr": layer_ocr}
+          "free": layer_free, "ocr": layer_ocr, "chord": layer_chord, "yolo": layer_yolo,
+          "tight": layer_tight}
 
 
 # ---------------------------------------------------------------- 组图
@@ -362,8 +409,32 @@ def cell_with_tight(bk, page, cid, pad=6):
     return img
 
 
-def glyph_examples(ws_data: Path, char: str, n: int):
-    """字形库里某字的刻例图块（数据目录 output/glyph_store/patches）。"""
+def _patch_stats(im):
+    """图块的墨迹统计：外接框高宽、墨占比、贴边墨（被邻字、界行、印压进来的迹象）、碎块数。"""
+    g = cv2.cvtColor(im, cv2.COLOR_BGR2GRAY) if im.ndim == 3 else im
+    m = (g < 128).astype(np.uint8)
+    if not m.any():
+        return None
+    ys, xs = np.nonzero(m)
+    edge = np.concatenate([m[:3].ravel(), m[-3:].ravel(), m[:, :3].ravel(), m[:, -3:].ravel()]).mean()
+    n, _, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    specks = int((st[1:, cv2.CC_STAT_AREA] < 6).sum()) if n > 1 else 0
+    # 界行、框线残段：横向或竖向贯穿过半个图块的长直墨线
+    H, W = m.shape
+    rows = max((np.max(np.diff(np.flatnonzero(np.diff(np.r_[0, r, 0])))[::2], initial=0)
+                for r in m if r.any()), default=0)
+    cols = max((np.max(np.diff(np.flatnonzero(np.diff(np.r_[0, c, 0])))[::2], initial=0)
+                for c in m.T if c.any()), default=0)
+    line = float(rows > 0.6 * W) + float(cols > 0.85 * H)
+    return dict(h=ys.max() - ys.min() + 1, w=xs.max() - xs.min() + 1, ink=m.mean(), edge=edge,
+                specks=specks, line=line)
+
+
+def glyph_examples(ws_data: Path, char: str, n: int, clean: bool = True):
+    """字形库里某字的刻例图块（数据目录 output/glyph_store/patches）。
+
+    `clean`：挑干净的——不贴边（没被邻字、界行、印压进来）、碎点少、墨迹高宽和墨量都接近本字中位，
+    再按册页均匀取 n 个，免得 Wiki 上看着像切坏了。不挑就按库里顺序取前 n 个。"""
     gs = ws_data / "output" / "glyph_store"
     ids = []
     with open(gs / "exemplars.jsonl", encoding="utf-8") as f:
@@ -371,18 +442,34 @@ def glyph_examples(ws_data: Path, char: str, n: int):
             r = json.loads(line)
             if r["char"] == char:
                 ids.append(r["instance_id"])
-    out = []
+    cands = []
     for iid in ids:
         # 图块文件名两种写法都有：冒号换成 _（多数）或 ~（bare~ 那批）
         p = next((q for q in (gs / "patches" / (iid.replace(":", s) + ".png") for s in ("_", "~"))
                   if q.exists()), None)
-        if p is not None:
-            im = cv2.imread(str(p))
-            if im is not None:
-                out.append(im)
-        if len(out) >= n:
+        if p is None:
+            continue
+        im = cv2.imread(str(p))
+        if im is None:
+            continue
+        cands.append((iid, im))
+        if not clean and len(cands) >= n:
             break
-    return out
+    if not clean:
+        return [im for _, im in cands]
+    st = [(iid, im, _patch_stats(im)) for iid, im in cands]
+    st = [t for t in st if t[2]]
+    if not st:
+        return []
+    med = {k: float(np.median([t[2][k] for t in st])) for k in ("h", "w", "ink")}
+
+    def bad(s):
+        return (s["edge"] * 50 + s["specks"] * 0.3 + s["line"] * 5
+                + sum(abs(s[k] / med[k] - 1) for k in ("h", "w", "ink")))
+    good = sorted(st, key=lambda t: bad(t[2]))[:max(n * 3, n)]
+    good.sort(key=lambda t: t[0])                      # 按册页排，均匀抽 n 个
+    step = len(good) / n if len(good) > n else 1
+    return [good[int(i * step)][1] for i in range(min(n, len(good)))]
 
 
 def frame(img, color=(200, 200, 200), t=2):
@@ -412,6 +499,21 @@ def render(shot: dict, books: dict, data_dirs: dict) -> np.ndarray:
         return vstack([hstack(views[i:i + n], gap=gap) for i in range(0, len(views), n)], gap=gap)
     if kind == "column":
         return column_pair(bk(), shot["page"], shot["col"])
+    if kind == "vline":        # 一条界行附近的竖条，横向放大 xscale 倍看弯：每幅一组图层
+        b, page = bk(), shot["page"]
+        W = b.raw(page).shape[1]
+        bd = b.prod("border_detect", page)["borders"]
+        v = bd["verticals"][shot["line"]]
+        ys = range(int(bd["top"]["y_at_right"]) - 30, int(bd["bottom"]["y_at_right"]) + 30)
+        xs = [tl(line_x(v, y), W) for y in ys]
+        hw = shot.get("half", 40)
+        x0, x1 = max(0, min(xs) - hw), min(W, max(xs) + hw)
+        sx = shot.get("xscale", 3)
+        views = []
+        for p in shot["panels"]:
+            img = page_view(b, page, p.get("layers", []), th=shot.get("th", 1))[ys[0]:ys[-1], x0:x1]
+            views.append(cv2.resize(img, (img.shape[1] * sx, img.shape[0]), interpolation=cv2.INTER_NEAREST))
+        return hstack(views, gap=shot.get("gap", 24))
     if kind == "cells":        # 几格：每格「Step3 格 | Step4 紧框」或单一种
         b = bk()
         rows = []
@@ -452,7 +554,10 @@ def main(argv=None) -> int:
                     help="书ID=中心库数据目录（$GUJI_DATA_HOME/<分支>/<ws id>），glyphs 类图要")
     ap.add_argument("--only", action="append", default=[], help="只出这几张（id 前缀）")
     ap.add_argument("--spec", default=str(HERE / "shots.yaml"))
+    ap.add_argument("--yolo", help="yolo-tool 仓的 model/ 目录（内含 type/、slide/ 的 best.onnx），yolo 图层要；装 .[yolo]")
     a = ap.parse_args(argv)
+    global YOLO_MODEL
+    YOLO_MODEL = a.yolo
     for kv in a.ws:
         k, v = kv.split("=", 1); WS[k] = v
     data_dirs = dict(kv.split("=", 1) for kv in a.data)
