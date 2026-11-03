@@ -520,6 +520,11 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence="render 再生字块时整列抽字与全页框线按页记忆（2026-11-03，全唐文 CPU 提速）：cell_shrink 在全唐文 06 42 页（每 5 页取 1，加 27/100）"
                    "与 05 34 页（每 7 页取 1，加 1/222）上与 origin/dev 59a8dbe 产物逐字节相同；再生路径：glyph_match 06 6 页（2,27,60,100,140,181）"
                    "空缓存起跑，产物与 853 个缓存文件逐字节相同，每页 60–85 s→12–20 s；scripts/code_equiv.py check，4 进程"),
+    Equiv(module="open_guji_cv.clustering.page_type",
+          new="1e597b8c3f1ab98f92eca79e50529c6940189d49de6b901e920c384638e2aa70",
+          old="44eae13696f440a061b44550dad45df52bd72f27e9253c5717e2d50973a81161",
+          evidence="page_features 竖线开运算只算一次（2026-11-03，全唐文 CPU 提速）：row_segment_gate 的 code_dep；全唐文 05/06 原图 106 页（每 4 页取 1）"
+                   "上新旧 page_features 返回值逐项相同；改动是同一数组复用，不改任何运算"),
 )
 
 
