@@ -30,7 +30,7 @@ shots:
   - {id: step1-faint-v40p34, ws: 96mid1ogzk, book: vol40, page: 34, layers: [border], width: 640}
   # ---- 印章
   - {id: seal-v04p1, ws: 96mid1ogzk, book: vol04, page: 1, layers: [seal], width: 560}
-  - {id: seal-v46p106, ws: 96mid1ogzk, book: vol46, page: 106, layers: [seal, cells], width: 640}
+  - {id: seal-v46p101, ws: 96mid1ogzk, book: vol46, page: 101, layers: [seal, cells], width: 640}
   - {id: seal-v21p225, ws: 96mid1ogzk, book: vol21, page: 225, layers: [seal, admit], crop: [0.0, 0.0, 1.0, 0.5], width: 640}
   # ---- Step2
   - {id: step2-column-c3, kind: column, ws: 96mid1ogzk, book: vol04, page: 9, col: 3, width: 420}
