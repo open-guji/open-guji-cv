@@ -1308,7 +1308,9 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
 
 
 ALT_MIN_GAIN = 3          # 备选切法拿到坐标字的格数至少多这么多格才换
-ALT_MIN_FRAC = 0.5        # 且至少占这一列格数的这么多
+ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数的这么多
+# 分母取备选切法自己切出的字格数、不取整理本这一行的字数（2026-11-03 定，A22 评审问）：
+# 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
 
 
 def _covered(res: PageAlignRef, col: int) -> int:
