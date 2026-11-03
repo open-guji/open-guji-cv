@@ -73,6 +73,33 @@ def _line_ink(binm: np.ndarray, xfn, y0: int, y1: int, w: int) -> float:
     return tot / len(ys)
 
 
+def _hit_frac(binm: np.ndarray, xfn, y0: int, y1: int, w: int) -> float:
+    """沿线逐行（步长 BEND_Y_STEP）「线心 ±1px 压着一段细墨」的行占比——线压在界行上的比例。
+    细墨＝这一行连着线心的墨段宽 ≤ BEND_INK_W_MAX（界行 3–6px）；压在字的横画、字块上的行不算。
+    真界行（哪怕淡、断）直的就直线高，弯的就折线高；折线比直线还低，说明折点追的是字。"""
+    ys = np.arange(max(0, int(y0)), min(binm.shape[0], int(y1)), BEND_Y_STEP)
+    if len(ys) == 0:
+        return 0.0
+    xo = (w - 1) - np.rint(xfn(ys.astype(np.float64))).astype(int)
+    half = BEND_INK_W_MAX + 1
+    hits = 0
+    for y, x in zip(ys, xo):
+        a, b = max(0, x - half), min(w, x + half + 1)
+        row = binm[y, a:b] > 0
+        c = x - a
+        js = [j for j in (c - 1, c, c + 1) if 0 <= j < len(row) and row[j]]
+        if not js:
+            continue
+        lo = hi = js[0]
+        while lo > 0 and row[lo - 1]:
+            lo -= 1
+        while hi < len(row) - 1 and row[hi + 1]:
+            hi += 1
+        if hi - lo + 1 <= BEND_INK_W_MAX and lo > 0 and hi < len(row) - 1:
+            hits += 1
+    return hits / len(ys)
+
+
 BEND_COHERE_WIN = 9       # 局部一致性：跟相邻这么多个有效行的 x 中位比
 BEND_COHERE_TOL = 3.0     # 偏离超过这么多 px 的行剔掉——碎片是跳的，线是连的
 
@@ -415,4 +442,5 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
                 KNOT_GUARD_HITS.append((k, round(float(_pair_var(i)), 3)))
                 _revert(k)
                 done.add(k)
+
     return out, 3, w80_med, w80_max
