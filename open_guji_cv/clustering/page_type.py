@@ -117,6 +117,29 @@ def load_labels(path: str | Path) -> list[PageTypeLabel]:
 
 # ── 结构特征 ──────────────────────────────────────────────
 
+def line_open(b: np.ndarray, k: int, axis: int) -> np.ndarray:
+    """0/1 二值图沿 `axis` 用长 `k` 的线形核做开运算，与 `cv2.dilate(cv2.erode(b, K), K)`
+    （K 为 `MORPH_RECT` 的 1×k（axis=0）或 k×1（axis=1），锚点缺省居中）**逐位相同**，换成两次计数。
+
+    为什么（2026-11-03，耗时统计查出）：OpenCV 对长线形核的腐蚀／膨胀每像素 O(k)，
+    单线程时（页级并行的 worker 里 OpenCV 只开 1 线程）全唐文 6065×4296 原图、k≈1820 的竖线
+    开运算一次 3.5 s，border_detect_gate 每页 3.5–6 s 大半花在这里。`boxFilter` 不归一化是滑窗计数，
+    每像素 O(1)，同一张图竖横两次合计约 0.2 s。
+
+    为什么逐位相同：二值图上，腐蚀＝「窗口里没有 0」，膨胀＝「窗口里有 1」。OpenCV 腐蚀的
+    边界值是最大值、膨胀的是最小值（`morphologyDefaultBorderValue`），即图外不算；计数时
+    `BORDER_CONSTANT` 补 0，数「0 的个数」与「1 的个数」，图外同样不算。锚点两者都缺省 k//2。
+    `tests/test_line_open.py` 拿 cv2 原式在随机图（奇偶 k、k 超过边长）上逐位比。"""
+    if b.ndim != 2:
+        raise ValueError("line_open 只收二维 0/1 图")
+    ks = (1, k) if axis == 0 else (k, 1)
+    depth = cv2.CV_16U if b.shape[axis] < 65535 else cv2.CV_32S   # 窗口计数不超过边长，16 位不溢出
+    zeros = cv2.boxFilter(1 - b, depth, ks, normalize=False, borderType=cv2.BORDER_CONSTANT)
+    eroded = (zeros == 0).view(np.uint8)
+    ones = cv2.boxFilter(eroded, depth, ks, normalize=False, borderType=cv2.BORDER_CONSTANT)
+    return (ones > 0).view(np.uint8)
+
+
 def page_features(gray: np.ndarray) -> dict:
     """页面结构特征。全部与文字内容无关，只看墨的几何分布。"""
     if gray.ndim == 3:
@@ -126,8 +149,8 @@ def page_features(gray: np.ndarray) -> dict:
     ink = float(b.mean())
 
     # 界行/版框竖线：够长的竖直连续段
-    kv = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(3, int(h * 0.3))))
-    vopen = cv2.dilate(cv2.erode(b, kv), kv)     # 下面「去长线」再用一次，不重算（2026-11-03，逐位相同）
+    # 下面「去长线」再用一次，不重算（2026-11-03，逐位相同）；line_open ≡ cv2 开运算，单线程快十几倍
+    vopen = line_open(b, max(3, int(h * 0.3)), axis=0)
     vcov = vopen.sum(axis=0) / h
     xs = np.where(vcov > 0.5)[0]
     n_vline = 0
@@ -151,8 +174,7 @@ def page_features(gray: np.ndarray) -> dict:
             glyph_w = float(np.median(g[:, 2]) / w)
 
     # 字墨（去掉长线之后）的空间占用：书签/牌记页的字挤在一角
-    kh = cv2.getStructuringElement(cv2.MORPH_RECT, (max(3, int(w * 0.3)), 1))
-    lines = vopen | cv2.dilate(cv2.erode(b, kh), kh)
+    lines = vopen | line_open(b, max(3, int(w * 0.3)), axis=1)
     txt = b & (1 - lines)
     txt_ink = float(txt.mean())
     cx, cy = txt.sum(axis=0).astype(float), txt.sum(axis=1).astype(float)
