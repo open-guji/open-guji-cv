@@ -127,7 +127,8 @@ def page_features(gray: np.ndarray) -> dict:
 
     # 界行/版框竖线：够长的竖直连续段
     kv = cv2.getStructuringElement(cv2.MORPH_RECT, (1, max(3, int(h * 0.3))))
-    vcov = cv2.dilate(cv2.erode(b, kv), kv).sum(axis=0) / h
+    vopen = cv2.dilate(cv2.erode(b, kv), kv)     # 下面「去长线」再用一次，不重算（2026-11-03，逐位相同）
+    vcov = vopen.sum(axis=0) / h
     xs = np.where(vcov > 0.5)[0]
     n_vline = 0
     if len(xs):
@@ -151,7 +152,7 @@ def page_features(gray: np.ndarray) -> dict:
 
     # 字墨（去掉长线之后）的空间占用：书签/牌记页的字挤在一角
     kh = cv2.getStructuringElement(cv2.MORPH_RECT, (max(3, int(w * 0.3)), 1))
-    lines = cv2.dilate(cv2.erode(b, kv), kv) | cv2.dilate(cv2.erode(b, kh), kh)
+    lines = vopen | cv2.dilate(cv2.erode(b, kh), kh)
     txt = b & (1 - lines)
     txt_ink = float(txt.mean())
     cx, cy = txt.sum(axis=0).astype(float), txt.sum(axis=1).astype(float)
