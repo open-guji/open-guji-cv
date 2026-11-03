@@ -149,6 +149,10 @@ mkdir -p books corpus source data_full output products cache \
 git init
 ```
 
+册名与册号（2026-11-02 统一）：册号位数按全书册数定、全书统一、最少 2 位（99 册以内 `01`，100 册起 `001`），
+新书册名就用这个纯数字号；基础配置 `config/book_defaults.yaml` 写 `book_id`、`book_title`、`book_edition`、`volume_width`，
+R2 页表、book-text 章号、进度表都由 `core/volume_id.py` 从这些字段生成。规矩全文见 guji-manager `doc/参考/册配置.md`「册号」。
+
 然后写 `books/<book>.yaml`（字段见 `core/book.py` 的 `BookSpec`；
 现代印刷链的新字段见 `modern_print_pipeline.md` §二），
 `guji import-pdf` 把 PDF 抽成 `data_full/<book>_scan/`，
