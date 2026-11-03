@@ -1615,6 +1615,8 @@ FREE_SPLIT_END_PAD = 3
 FREE_SPLIT_INK = 0.02
 #: 墨段起头比长的那行末格的这么深（格高的比例）还深，算段下正文字探上来的笔画、不是短行的字（02:13:7「置」）
 FREE_SPLIT_MAX_DEPTH = 0.5
+#: 短行切线处（±1 行里最白的一行）墨占比到这么多算横穿字：两行差 2 字以上，退回旧做法
+FREE_SPLIT_CUT_INK = 0.15
 
 
 def _free_split(ink_col: np.ndarray, n: int, long_sub: str, cxi: int, top: int, bot: int,
@@ -1650,6 +1652,17 @@ def _free_split(ink_col: np.ndarray, n: int, long_sub: str, cxi: int, top: int, 
         return None
     short_cuts = fit_row_cuts(rows[short_sub], top, end, n - 1)
     if short_cuts is None:
+        return None
+    # 每格都得有字：哪一格墨不够 HALF_MIN_INK（两行差 2 字以上，短行切 n−1 格仍多出空格），这一段不按本法切、
+    # 退回旧做法——空的半格不发，段中间就剩单半格，Step4 不拆它、整格发成满宽字，坐标对位整列「缺几何」（SJ r6 02:58:8）
+    # 短行的切线也不许横穿字（墨占比到 FREE_SPLIT_CUT_INK）：字数对不上时 DP 只能把字劈开
+    for sub, cuts in ((long_sub, long_cuts), (short_sub, short_cuts)):
+        xs, xe = spans[sub]
+        for y0_, y1_ in zip(cuts[:-1], cuts[1:]):
+            if int(ink_col[int(round(y0_)):int(round(y1_)), xs:xe].sum()) < jiazhu_split.HALF_MIN_INK:
+                return None
+    r = rows[short_sub]
+    if any(float(r[max(0, int(round(c)) - 1):int(round(c)) + 2].min()) >= FREE_SPLIT_CUT_INK for c in short_cuts[1:-1]):
         return None
     return {long_sub: long_cuts, short_sub: short_cuts}
 
