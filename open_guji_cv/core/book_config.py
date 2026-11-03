@@ -83,6 +83,25 @@ def run_override() -> dict:
     return d
 
 
+def merge_override_env(raw: str) -> str:
+    """把 `--override` 的 JSON 叠在本进程已有的 `GUJI_BOOK_OVERRIDE` 上（同键后者胜，`params` 按步骤再叠一层），
+    返回合并后的 JSON。已有的覆盖多半是准备脚本记的改值（rerun_prep.sh：corpus／glyph_pin／cv_version）。"""
+    try:
+        new = json.loads(raw)
+    except ValueError as e:
+        raise BookConfigError(f"--override 不是合法 JSON：{e}") from None
+    if not isinstance(new, dict):
+        raise BookConfigError("--override 要是 JSON 对象，如 {\"corpus\": 23}")
+    old = run_override()
+    out = {**old, **new}
+    if isinstance(old.get("params"), dict) and isinstance(new.get("params"), dict):
+        ps = {sid: dict(kv) for sid, kv in old["params"].items()}
+        for sid, kv in new["params"].items():
+            ps[sid] = {**ps.get(sid, {}), **kv} if isinstance(kv, dict) and isinstance(ps.get(sid), dict) else kv
+        out["params"] = ps
+    return json.dumps(out, ensure_ascii=False)
+
+
 def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, dict]]:
     """各层的原样内容，低 → 高：[(层名, 字典)…]；没有的层不列。"""
     from .yaml_cache import load_yaml_cached

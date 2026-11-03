@@ -390,6 +390,9 @@ def test_push_refuses_dev_pinned_book(two_level):
     book, data, _ = two_level
     (data / "books").mkdir()
     (data / "books" / "vol01.yaml").write_text("id: vol01\ncorpus: 3\n", encoding="utf-8")
+    pp = corpus_pin.pins_path(book, "vol01")          # 总号 3 要在这册账里查得到，否则推库前也拦（11-03 unresolved_pins）
+    pp.parent.mkdir(parents=True, exist_ok=True)
+    pp.write_text('{"rows": [{"n": 3, "global": 1, "book": 1, "vol": null}]}', encoding="utf-8")
     assert corpus_pin.push_problems(book) == []
     (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: 4\ncorpus_dev: true\n", encoding="utf-8")
     msg = corpus_pin.push_problems(book)

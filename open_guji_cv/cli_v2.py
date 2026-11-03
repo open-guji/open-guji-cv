@@ -391,9 +391,16 @@ def cmd_book(args) -> None:
     except Exception:
         pl_id, pl_params = None, {}
     psrc = params_provenance(path, pl_params)
+    try:                                # 字形库来源：借库钉在 workspace.yaml（五层之外），这里一并列出
+        from .core.book import load_book as _lb
+        from .core.glyph_pin import glyph_sources
+        gsrc = glyph_sources(_lb(args.book))
+    except Exception as e:              # noqa: BLE001 —— 只是展示，读不了不挡 show
+        gsrc = {"error": str(e)}
     if args.json:
         print(json.dumps({"book": args.book, "effective": d, "source": src, "pipeline": pl_id,
-                          "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()}},
+                          "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()},
+                          "glyph_sources": gsrc},
                          ensure_ascii=False, indent=1, default=str))
         return
     print(f"# 册 {args.book} 生效配置（{path}）")
@@ -405,6 +412,23 @@ def cmd_book(args) -> None:
     for k, (v, ly) in psrc.items():
         vs = json.dumps(v, ensure_ascii=False, default=str)
         print(f"params.{k}: {vs if len(vs) <= 120 else vs[:117] + '…'}    # {ly}")
+    print("\n# 字形库来源（借库写在 workspace.yaml 的 glyph_lib.borrow，不在册配置五层里，整个工作区共用）")
+    if gsrc.get("error"):
+        print(f"  读不了：{gsrc['error']}")
+        return
+    ps = gsrc.get("pin")
+    if gsrc.get("effective") == "pinned":
+        pb = "、".join(f"{k}（{n} 个文件）" for k, n in gsrc["pinned_borrow"].items()) or "无"
+        print(f"  钉 g{ps['n']}（快照 {ps['digest']}）：本书库与借库都按快照内容；快照里的借库：{pb}")
+    elif ps:
+        print(f"  钉 g{ps['n']} 但没有快照（旧做法）：读当前 glyph.db，借库是本机拉到的那一版")
+    else:
+        print("  没钉 glyph_pin：读当前 glyph.db，借库是本机 db pull 时拉到的那一版")
+    for b in gsrc.get("borrow") or []:
+        rev = f"本机副本 rev {b['local_rev']}" if b.get("local_rev") is not None else "本机没有拉过（或是路径条目）"
+        print(f"  借 {b['entry']}：{rev}    # {b['path']}")
+    if not gsrc.get("borrow"):
+        print("  不借库")
 
 
 def cmd_status(args) -> None:
@@ -2092,7 +2116,8 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(2)
     args = parser.parse_args(argv)
     if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
-        os.environ["GUJI_BOOK_OVERRIDE"] = args.override
+        from .core.book_config import merge_override_env
+        os.environ["GUJI_BOOK_OVERRIDE"] = merge_override_env(args.override)   # 叠在已有的覆盖上（准备脚本记的改值），同键 --override 胜
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()
