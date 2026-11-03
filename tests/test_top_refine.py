@@ -462,3 +462,21 @@ def test_undeclared_keeps_old_behaviour():
     b = detect_outer_borders(mask, top, bot, _verts(), 1000, 400,
                              book_gap={"bottom": 27.0}, frame_layers={})
     assert a == b
+
+
+def test_hit_frac_counts_thin_rule_not_text_blocks():
+    """`_hit_frac`：线心压着细墨（界行）的行才算；压在字块（宽墨）上不算；偏离界行的折线比直线低
+    （A20 11-03 vol84 p101：真界行直，单条线被重定位弯 25px 斜穿字，靠这个退回直线）。"""
+    from open_guji_cv.seg.polyline import _hit_frac
+    from open_guji_cv.seg.polyline import _from_knots
+    W, H = 400, 1000
+    binm = np.zeros((H, W), np.uint8)
+    binm[:, 198:203] = 1                          # 一条 5px 宽的直界行（原图 x=198–202）
+    binm[600:900, 230:300] = 1                    # 旁边一块字
+    xr = float((W - 1) - 200)                     # 新坐标
+    straight = VLine(x_at_top=xr, slope=0.0)
+    bent = _from_knots([xr, xr, xr, xr - 60.0], [0.0, 333.0, 666.0, 999.0])   # 下段弯进字里
+    hs, hb = _hit_frac(binm, straight.x_at, 0, H, W), _hit_frac(binm, bent.x_at, 0, H, W)
+    assert hs > 0.99 and hb < hs
+    block = VLine(x_at_top=float((W - 1) - 265), slope=0.0)          # 压在字块中间
+    assert _hit_frac(binm, block.x_at, 600, 900, W) == 0.0

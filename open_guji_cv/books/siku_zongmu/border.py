@@ -32,7 +32,7 @@ from ...seg.lines import (
     local_maxima,
 )
 from ...seg.grid import find_vertical_lines_grid, grid_thresholds
-from ...seg.polyline import _bridge_row, _fit_knots, _from_knots, _longest_true_run, fit_vlines_polyline
+from ...seg.polyline import _bridge_row, _fit_knots, _from_knots, _hit_frac, _longest_true_run, fit_vlines_polyline
 
 
 def _hline_to_new(m: LineMatch, w: int, kind: str) -> HLine:
@@ -917,6 +917,12 @@ def snap_verticals_to_evidence(binm: np.ndarray, top: HLine, bottom: HLine,
             continue
         change = max(abs(cand.x_at(float(yc)) - v.x_at(float(yc))) for (_, _, yc, _) in bands)
         if change < SNAP_MIN_CHANGE:
+            continue
+        # 重定位后的线压在界行上的行不许比直线少（`seg/polyline._hit_frac`）：真界行是直的、看得见的页上，
+        # 某一带被判成「压字」挪去字缝，整条线跟着弯 20–70px 斜穿字（A20 11-03 报 vol84 p101/112、
+        # vol21 p68、vol40 p173；11 册沙箱 956 条重定位线里 54 条如此，看图全是斜穿）
+        base = straight[vi] if straight and vi < len(straight) else v
+        if _hit_frac(binm, cand.x_at, int(yt), int(yb), width) < _hit_frac(binm, base.x_at, int(yt), int(yb), width):
             continue
         cands[vi] = cand
     # 邻线间距护栏：按邻线的候选量（邻线没候选就按旧线）。整页一起偏的页（p177）
