@@ -127,6 +127,10 @@ _SJ_VLINE = ("border_detect 加缺省关的页级人核界行 vline_overrides（
 _SJ_TOPK = ("seed_admit 加缺省关的书级开关 ref_topk_follow（库前 5 名候选里有整理本字且 cov 接近首位时按整理本放，要 reference_trust very_high）："
             "不配时 seed_admit 在史記 04 册 8 页（--pages 2,10,34,47,120,122,135,138）上与 origin/dev e1c28387 产物逐字节相同；"
             "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+_ALT_CUT = ("备选切法 alt_cut（row_segment 书级开关，缺省关；Step4/5a 另存 alt_columns、align_ref 按列挑、seed_admit 读挑中那份）："
+            "开关关着时 row_segment、cell_shrink、glyph_match、align_ref、seed_admit 在殿本 vol12 新图 31 页（每 5 页取 1）上"
+            "与 6154bc1f 产物逐字节相同，cell_shrink 字块 5089 张同（A22）；史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）"
+            "五步亦逐字节相同；scripts/code_equiv.py check，2026-11-03")
 _SJ_INKCUT = ("row_segment 书级开关 seal_inkcut（缺省关，史記文淵閣本第 5 轮，大印下抹印泥再切）："
               "开关关着时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 0883ff37 产物逐字节相同；"
               "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
@@ -691,6 +695,27 @@ ENTRIES: tuple[Equiv, ...] = (
           new="2061620748ae6bef98a3325256b1ec6495887c14e083b748f41665d7134321c6",
           old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
           evidence=_JZ_GUARD),
+    # row_segment alt_cut（PR #965）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='8c808c47a30147c6139522bc59f9a927838416860393f7e51da37ab98b422f4c',
+          old='427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28',
+          evidence=_ALT_CUT),
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='ef4c41f5ae699fe71d8d82c872fdaa8c83625662e5b29fae46b335b3d5ddae13',
+          old='641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2',
+          evidence=_ALT_CUT),
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='f4009831c773fe19c5a5251e0f9e7b31b003f1f4a264c29bf8a3dc762b2a04a7',
+          old='3f8dbeeed4cd82d298bcc6f6f0cb0b40aeee46cdd71283c3bf58fff3ec5cfcbd',
+          evidence=_ALT_CUT),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='e89727bbca19f814ed15946600f0ad8134032b80456101bcb5d2c6dafed263f6',
+          old='50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b',
+          evidence=_ALT_CUT),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='8c874ab19a2ef0dfb4ce745a9f4e2a05bc45b99aa6a10a0f678bb3caad69fa69',
+          old='097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455',
+          evidence=_ALT_CUT),
 )
 
 
