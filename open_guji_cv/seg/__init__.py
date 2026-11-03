@@ -19,5 +19,6 @@
 - `grid`：网格模式，列数已知、列距均匀时逐槽验线、缺槽插值（原 `utils/peak_line_search` 的后半，北行日錄与殿本都用）；
 - `polyline`：界行按弯度拟直线或三段折线（原 `utils/border_geometry` 的一段）；
 - `warp`：单列射影矫正与列窗口；`profile`：列图投影、去噪、找文字带（原 `utils/column_projection` 的两段）；
-- `locate_gutter`：找书口（命令行用）。
+- `locate_gutter`：找书口（命令行用）；
+- `columns`：列宽均匀约束——`ColumnSpec`（各书 `columns:` 配置）、`check_columns`（出带检查）、`fit_columns`（候选线里 DP 挑一串列宽全在带里的线）与墨投影／界行残段／细峰／空白中点证据（2026-11-03，见 doc/design/列宽均匀约束.md）。
 """
