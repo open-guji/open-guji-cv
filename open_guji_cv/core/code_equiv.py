@@ -486,6 +486,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="adb1eaabeef2dad69975a887e258937b1f5e8dd9cee55095456f335992cc7ff6",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence="书级开关 roster_seal_trim_extra（缺省 0，不进参数 dump）：史記 02 8 页（2,4,9,19,24,41,86,141）产物逐字节相同"),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="4c7c9f6b62047e38a5a8d6da2df846b7d5c929063a95401026cae33842108b53",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence="_is_blank_i／_dropped_rows_i 改前缀计数（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上与 origin/dev 8bf0cdf 产物逐字节相同"),
 )
 
 
