@@ -16,7 +16,7 @@
 #   owner       负责修算法／数据的人（成员名；人审格的「审」由 reviewer 决定）
 #   reviewer    最终谁看：human（人）／llm_then_human（大模型先过，只收 high，其余回人）／none（算法放行或留后，不出单）
 #   priority    判定顺序（小的先判；open_guji_cv/review/reasons.py 按它逐条试，第一条命中的就是这格的原因）
-#   label       网页、控制台显示的短名（大白话）
+#   label       网页、控制台显示的短名（大白话；对外一律说「参校本」，不说「整理本」）
 #   hint        网页卡片上的一句说明：为什么在这里、人该看什么
 #   ui          网页卡片形态：pick（点选，整理本字预选）／choose3（三选一）／free（自由录字）／page（整页看）／confirm（看一眼确认）
 #   detect      判定依据（给实现者看）
@@ -52,7 +52,7 @@ reasons:
     reviewer: human
     priority: 20
     label: 整页对不上
-    hint: 这一页很多格都对不上整理本，多半是切分或对位错了，请看整页
+    hint: 这一页很多格都对不上参校本，多半是切分或对位错了，请看整页
     ui: page
     detect: 本格无整理本对位，且同页无对位格 ≥10（或弱证据格 ≥10）；已钉页直接人审
     legacy: {cause: [A1, A3, A4, A5, A9], taxonomy: [S2, S3, S4, S5, S6], v2: "S 成片页"}
@@ -102,7 +102,7 @@ reasons:
     reviewer: llm_then_human
     priority: 11
     label: 有遮挡
-    hint: 被印章或污渍遮住，下面的小字是整理本的字，看图上像不像
+    hint: 被印章或污渍遮住，下面的小字是参校本的字，看图上像不像
     ui: confirm
     detect: 成因 D（印章框内＋噪点≥4），整理本有字
     legacy: {cause: [D], cls: [occluded], taxonomy: [O1, O2, O0], v2: "D 遮挡·整理本有字"}
@@ -113,8 +113,8 @@ reasons:
     owner: A32
     reviewer: human
     priority: 12
-    label: 有遮挡且整理本缺
-    hint: 被盖住了，整理本这里也没有字，请尽量从图上读
+    label: 有遮挡且参校本缺
+    hint: 被盖住了，参校本这里也没有字，请尽量从图上读
     ui: free
     detect: 成因 D，整理本这位空或〓（occ.ref_blank=true）
     legacy: {cause: [D], cls: [occluded], taxonomy: [O3], v2: "D 遮挡·整理本缺字"}
@@ -177,8 +177,8 @@ reasons:
     owner: A24
     reviewer: llm_then_human
     priority: 43
-    label: 形近字·与整理本不同
-    hint: 判法给的字和整理本这里的字不一样
+    label: 形近字·与参校本不同
+    hint: 判法给的字和参校本这里的字不一样
     ui: pick
     detect: 字组 why=ref_dissent 或 coord_dissent
     legacy: {cause: [C], cls: [ref_conflict], taxonomy: [Z2], v2: "Z 解法给的字与整理本(坐标)对位不同"}
@@ -244,7 +244,7 @@ reasons:
     reviewer: human
     priority: 51
     label: 少见的字
-    hint: 字形库里还没有这个字，这一格就是它第一次进库，请确认图上是不是整理本的字
+    hint: 字形库里还没有这个字，这一格就是它第一次进库，请确认图上是不是参校本的字
     ui: pick
     detect: 整理本字不在字形库（why 含 lib_miss / 「库里没有」）
     legacy: {cause: [F], cls: [lib_miss], taxonomy: [L1], v2: "L 库里没有这个字"}
@@ -256,7 +256,7 @@ reasons:
     reviewer: llm_then_human
     priority: 58
     label: 刻例太少·不一致
-    hint: 库里这个字刻例很少，机器字和整理本不一致
+    hint: 库里这个字刻例很少，机器字和参校本不一致
     ui: pick
     detect: 整理本字库样本 ≤2，机器字≠整理本；大模型选中的若是这个少样本字 → 回人审
     legacy: {cause: [I], taxonomy: [L4], v2: "L 库样本过少·机器字≠整理本"}
@@ -305,8 +305,8 @@ reasons:
     owner: A24
     reviewer: llm_then_human
     priority: 50
-    label: 整理本缺字
-    hint: 整理本这里写的是〓（没码位的生僻字），请从图上读
+    label: 参校本缺字
+    hint: 参校本这里写的是〓（没码位的生僻字），请从图上读
     ui: free
     detect: 整理本这位是〓或私用码；先走新图源文本层与私用码表（cv#932），再大模型，读不准的人审
     legacy: {cause: [A2], taxonomy: [P1], v2: "R 整理本缺字(〓/缅甸)"}
@@ -317,8 +317,8 @@ reasons:
     owner: A24
     reviewer: llm_then_human
     priority: 53
-    label: 整理本这里没字
-    hint: 整理本这一位没有字（漏字或引文异文），请核对
+    label: 参校本这里没字
+    hint: 参校本这一位没有字（漏字或引文异文），请核对
     ui: pick
     detect: 整理本这位没字，且不成片（不属 S01/S02）
     legacy: {cause: [A9, A1], v2: "R 整理本这位没字·上下文不足"}
@@ -331,8 +331,8 @@ reasons:
     owner: A24
     reviewer: llm_then_human
     priority: 60
-    label: 整理本改过字
-    hint: 整理本这一段改过字，位置可能差一两格
+    label: 参校本改过字
+    hint: 参校本这一段改过字，位置可能差一两格
     ui: pick
     detect: 对位来自 replace 段（align_op=replace / why=replace_align）
     legacy: {cause: [G], cls: [replace_align], taxonomy: [R2], v2: "P 整理本改字层"}
@@ -343,8 +343,8 @@ reasons:
     owner: A24
     reviewer: llm_then_human
     priority: 62
-    label: 和整理本不一致
-    hint: 机器的判断和整理本这里的字不一样，可能是真异文
+    label: 和参校本不一致
+    hint: 机器的判断和参校本这里的字不一样，可能是真异文
     ui: pick
     detect: 其余机器字≠整理本（context_vs_ref / iron_vs_ref / signal_conflict 等）
     legacy: {cause: [E, I], cls: [ref_conflict, other], taxonomy: [R1], v2: "P 机器字≠整理本"}
