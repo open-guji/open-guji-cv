@@ -62,3 +62,19 @@ def test_seal_rim_residue_only_end_cell_at_seal_edge_with_little_ink():
     assert _seal_rim_residue(items, img, _Id(), [seal])
     assert not _seal_rim_residue(items, img, None, [seal])
     assert not _seal_rim_residue(items, img, _Id(), [])
+
+
+def test_trim_low_ink_drops_only_faint_extras():
+    from open_guji_cv.steps.row_segment import _trim_low_ink
+    img = np.full((600, 60), 255, np.uint8)
+    items = []
+    for k, y in enumerate(range(0, 600, 100)):
+        if k == 2:
+            img[y + 40:y + 44, 28:32] = 0          # 残点格
+        else:
+            img[y + 20:y + 80, 15:45] = 0
+        items.append(_it(0, y, 60, y + 100))
+    out = _trim_low_ink(items, img, 1)
+    assert out is not None and len(out) == 5 and items[2] not in out
+    assert _trim_low_ink(items, img, 2) is None   # 第二少的格墨足，不动
+    assert "roster_seal_trim_extra" not in RowSegmentParams().model_dump()

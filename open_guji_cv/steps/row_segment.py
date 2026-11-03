@@ -416,6 +416,19 @@ def _seal_rim_residue(items, img, mapper, seals, ink_threshold: int = 128,
     return False
 
 
+def _trim_low_ink(items, img, n_drop: int, ink_threshold: int = 128, max_ratio: float = 0.5):
+    """去掉墨最少的 `n_drop` 格，且这几格的墨都不到全列格墨中位的 `max_ratio`；墨足的格不够数 → None（不动）。"""
+    import numpy as np
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink = [int((g[int(it.y0):int(it.y1), int(it.x0):int(it.x1)] < ink_threshold).sum()) for it in items]
+    mi = float(np.median(ink))
+    order = sorted(range(len(items)), key=lambda i: ink[i])[:n_drop]
+    if mi <= 0 or any(ink[i] >= max_ratio * mi for i in order):
+        return None
+    drop = set(order)
+    return [it for i, it in enumerate(items) if i not in drop]
+
+
 def _ref_count(line: str | None) -> int:
     """整理本一列的字数（只认整列普通字：去空白、不带标记的行）；认不出 → -1（不会与格数相等）。"""
     import re
@@ -660,6 +673,10 @@ class RowSegmentParams(BaseModel):
     #: 印泥在二值图上是细碎墨点，字是成片笔画：列图墨先做 k×k 开运算（k＝本值，像素），留下的墨就是字，
     #: 再走职名分支按整理本字数切，印里的块不再丢。0＝关（原样不改，产物逐字节不变）。只对 `header_cols` 认得的列生效。
     roster_seal_despeckle: int = 0
+    #: **去印点列多切的残点格先去掉**（史記文淵閣本 2026-11-03）：格数比整理本字数多、多出不超过本值时，去掉墨最少的
+    #: 那几格（须都不到全列格墨中位的一半，否则不动）再过闸；02/04/06 册 p2「漢太史令司馬遷撰」8 字切成 9–12 格。
+    #: 0（缺省）＝不去，产物逐字节不变、不进参数 dump。只在 `roster_seal_despeckle` 开着时有用。
+    roster_seal_trim_extra: int = 0
     #: **题列顶上的断续版框残渣抹掉**（史記文淵閣本 2026-11-02，目錄页题列）：目錄页的上版框是双线、内线断续，
     #: 列图顶端（y≈15–21）留一小截（实测 13×6），与首字隔 20 行空白，`header_cols` 走职名分支时被并进首字，
     #: 整列格位上移（p87 c2「史記卷十一」首格 y0 落在残渣上，5 格全偏，机器读成「中禽蜚全一」）。
@@ -795,6 +812,8 @@ class RowSegmentParams(BaseModel):
                     d.pop(k, None)
             if not self.roster_seal_despeckle:
                 d.pop("roster_seal_despeckle", None)
+            if not self.roster_seal_trim_extra:
+                d.pop("roster_seal_trim_extra", None)
             if not self.roster_top_dash:
                 d.pop("roster_top_dash", None)
             if not self.header_ref_flag:
@@ -1406,6 +1425,12 @@ class RowSegmentStep(Step):
             in_seal = None if gc.col in despeckle else _in_seal(seals, mapper, col_img[gc.col], p.ink_threshold)
             if in_seal is not None:
                 rc.items = [it for it in rc.items if not in_seal(it)]
+            if gc.col in despeckle and p.roster_seal_trim_extra:
+                # 去印点后多切出的残点格（墨不到全列中位一半）先去掉，凑到整理本字数再过下面的闸
+                # （02/04/06 册 p2「漢太史令司馬遷撰」8 字切成 9–12 格，多的都是印泥残点）
+                extra = len(rc.items) - _ref_count(ref_of.get(gc.col))
+                if 0 < extra <= p.roster_seal_trim_extra and _ref_count(ref_of.get(gc.col)) > 0:
+                    rc.items = _trim_low_ink(rc.items, col_img[gc.col], extra, p.ink_threshold) or rc.items
             if gc.col in despeckle and not (_despeckled_ok(rc.items, col_img[gc.col], p.ink_threshold)
                                              and len(rc.items) == _ref_count(ref_of.get(gc.col))
                                              and not _seal_rim_residue(rc.items, col_img[gc.col], mapper, seals,
