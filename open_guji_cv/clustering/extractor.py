@@ -423,12 +423,15 @@ def _jiazhu_gap_center(gray: np.ndarray,
 
 
 JIAZHU_SIDE_MINOR = 0.3   # 跨中缝的连通体，少的一侧不到这么多才整块归多的一侧（两字粘连各占一半的照中缝切）
+JIAZHU_SIDE_DEPTH = 0.25  # 且少的一侧伸过中缝不超过那侧半宽的这么多（再深就是对侧一行的字，照中缝切）
 
 
 def _jiazhu_sides(pre: np.ndarray, cx: int) -> np.ndarray:
     """夹注格拆 a/b：每个像素归右行（True）还是左行。先按中缝 cx 一刀切；跨缝的连通体墨大半在一侧
-    （少的一侧 < JIAZHU_SIDE_MINOR）就整块归那侧——右行字偏左、笔画越过中缝（GUJI-748 新图 12、15 册
-    右行字被切半），同 cell_shrink 1.18 跨格界部件整块归墨多的那格。"""
+    （少的一侧 < JIAZHU_SIDE_MINOR）、且少的一侧离中缝浅（伸过中缝 ≤ JIAZHU_SIDE_DEPTH × 那侧半宽）
+    就整块归那侧——右行字偏左、笔画越过中缝（GUJI-748 新图 12、15 册右行字被切半），同 cell_shrink
+    1.18 跨格界部件整块归墨多的那格。少的一侧伸得深，是两行字笔画相碰连成一块、那侧是另一行的整个
+    小字（史記 02:5:3:13「魏人」），整块归边会把它吞进对侧，照中缝切（cell_shrink 1.24）。"""
     h, w = pre.shape[:2]
     right = np.zeros((h, w), dtype=bool)
     right[:, max(0, cx):] = True
@@ -439,7 +442,14 @@ def _jiazhu_sides(pre: np.ndarray, cx: int) -> np.ndarray:
     for k in set(np.unique(lab[:, cx - 1:cx + 1]).tolist()) - {0}:
         m = lab == k
         r, tot = int((m & right).sum()), int(m.sum())
-        if min(r, tot - r) < JIAZHU_SIDE_MINOR * tot:
+        if min(r, tot - r) >= JIAZHU_SIDE_MINOR * tot:
+            continue
+        xs = np.nonzero(m.any(axis=0))[0]
+        if r * 2 >= tot:   # 少的一侧在左
+            deep = cx - int(xs[0]) > JIAZHU_SIDE_DEPTH * cx
+        else:
+            deep = int(xs[-1]) + 1 - cx > JIAZHU_SIDE_DEPTH * (w - cx)
+        if not deep:
             right[m] = r * 2 >= tot
     return right
 

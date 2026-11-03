@@ -9,6 +9,10 @@
 # 任务要的 cv 版本切的是 seed，执行方自己不会被切没。执行方在跑时不刷新 runner 检出。
 # 环境：Default 环境快照（/opt/guji-cv-seed、/opt/guji-venv）。任务库：设 JOBSDB_TOKEN＋JOBSDB_PASSWORD 就连新机（jobs/jobsdb.py，要 pip 装 websockets）；
 # 没设仍连 NEON_DATABASE_URL（过渡期）；测试分支 GUJI_JOBS_BRANCH=ci。中心库看板 progress 始终写 Neon。
+# secret（11-03 用户定：都走 guji-dev-secret 加密仓）：环境 setup 装好的钩子在这里载入，执行方和保活重起都能拿到
+# JOBSDB_TOKEN／JOBSDB_PASSWORD。没有钩子或没有 SECRETS_AGE_KEY 就跳过（start 会因 GUJI_REQUIRE_JOBSDB 报错，不退回 Neon）。
+H_SECRETS=${GUJI_SECRETS_HOOK:-/etc/guji_secrets.sh}
+[ -f "$H_SECRETS" ] && . "$H_SECRETS"
 set -euo pipefail
 R=${GUJI_JOBS_RUNNER:-/opt/guji-runner}; SEED=${GUJI_JOBS_SEED:-/opt/guji-cv-seed}
 H=${GUJI_JOBS_HOME:-$HOME/.guji-jobs}; PY=${GUJI_JOBS_PY:-/opt/guji-venv/bin/python}
@@ -29,7 +33,12 @@ case "${1:-}" in
   start)
     shift; refresh; ensure_manager
     if busy; then echo "执行方已在跑（$H/worker.lock）"; exit 0; fi
-    PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
+    # 执行方名字：给了 GUJI_JOBS_WHO 就记进 $H/who，之后保活重起没设也沿用；都没有就拒起（否则都登记成主机名 vm，互相顶替）
+    if [ -n "${GUJI_JOBS_WHO:-}" ]; then echo "$GUJI_JOBS_WHO" > "$H/who"
+    elif [ -s "$H/who" ]; then GUJI_JOBS_WHO=$(cat "$H/who")
+    else echo "✗ 没有执行方名字：首次请 GUJI_JOBS_WHO=worker-N guji_jobs start …（之后自动沿用）" >&2; exit 2; fi
+    export GUJI_JOBS_WHO
+    GUJI_REQUIRE_JOBSDB=${GUJI_REQUIRE_JOBSDB:-1} PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
     echo "执行方已起（pid $!），日志 $H/worker.log；guji_jobs follow 跟着看";;
   follow)
     end=$((SECONDS + ${2:-6600})); touch "$H/worker.log"

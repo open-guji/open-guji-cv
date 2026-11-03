@@ -14,8 +14,10 @@ def test_enabled_with_token(monkeypatch):
     assert jobsdb.enabled() is True
 
 
-def test_connect_falls_back_to_neon(monkeypatch):
+def test_connect_falls_back_to_neon_only_when_asked(monkeypatch):
     monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_JOBS_BRANCH", raising=False)
+    monkeypatch.setenv("GUJI_REQUIRE_JOBSDB", "0")
     called = []
     monkeypatch.setattr(store, "connect_neon", lambda: called.append("neon") or "NEON")
     assert store.connect() == "NEON"
@@ -32,7 +34,37 @@ def test_connect_uses_jobsdb_when_token(monkeypatch):
     assert c.autocommit is True
 
 
-def test_pin_is_sha256_hex_after_normalise(monkeypatch):
+def test_pin_only_for_bare_ip(monkeypatch):
     monkeypatch.delenv("JOBSDB_CERT_SHA256", raising=False)
+    monkeypatch.delenv("JOBSDB_URL", raising=False)
+    assert jobsdb._pin() is None                     # 域名：系统 CA
+    monkeypatch.setenv("JOBSDB_URL", "wss://170.106.66.156/jobsdb")
     p = jobsdb._pin()
     assert len(p) == 64 and all(ch in "0123456789abcdef" for ch in p)
+    monkeypatch.setenv("JOBSDB_CERT_SHA256", "none")
+    assert jobsdb._pin() is None
+
+
+def test_require_jobsdb_fails_loudly_without_token(monkeypatch):
+    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.setenv("GUJI_REQUIRE_JOBSDB", "1")
+    monkeypatch.setattr(store, "connect_neon", lambda: pytest.fail("不该退回 Neon"))
+    with pytest.raises(SystemExit):
+        store.connect()
+
+
+def test_default_refuses_neon_without_token(monkeypatch):
+    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_JOBS_BRANCH", raising=False)
+    monkeypatch.delenv("GUJI_REQUIRE_JOBSDB", raising=False)
+    monkeypatch.setattr(store, "connect_neon", lambda: pytest.fail("不该退回 Neon"))
+    with pytest.raises(SystemExit):
+        store.connect()
+
+
+def test_ci_branch_still_uses_neon(monkeypatch):
+    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
+    monkeypatch.delenv("GUJI_REQUIRE_JOBSDB", raising=False)
+    monkeypatch.setenv("GUJI_JOBS_BRANCH", "ci")
+    monkeypatch.setattr(store, "connect_neon", lambda: "NEON")
+    assert store.connect() == "NEON"

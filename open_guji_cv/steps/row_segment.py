@@ -1015,16 +1015,23 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="页级 period 缺失", **base))
                 continue
             img = ctx.image("column_image", column_key(page, gc.col))
-            def _seg(n_body: int, alt: tuple | None = None, grid: bool = False, bounds: list[float] | None = None):
+            # 先粗后精（2026-11-03，全唐文 CPU 提速）：下面挑格网要把一列切十几遍（表／闸抬头／挪一格／等距格网／挤格逐条去线），
+            # 每遍都跑折线候选（find_seam）和 U-Net 判官——全唐文册06 p27 一页 339 次前向，落进产物的切点只有 15 个。
+            # 挑格网的打分（_split_chars／_mask_misses／_uneven／_cut_rows／_merged_cuts／_blank_frame_junk）和
+            # C/D 字数先验只看格的 y0/y1/kind/slot；折线与判官只写 seam_top/seam_bottom 和 cut_candidates，不动格的 y0/y1/kind。
+            # 所以试切一律 seam_band=0、不叫判官，挑定之后对中选的那一遍按原参数重切一次，再补上列端记空（_blank_frame_junk
+            # 原地改 kind，重切出来的是新对象）。产物逐字节不变（code_equiv 验证）。
+            def _seg(n_body: int, alt: tuple | None = None, grid: bool = False, bounds: list[float] | None = None,
+                     final: bool = False):
                 n_r, t_s, l_kw, f_jz, f_main = (alt if alt is not None else
                                                 (n_raised_col, top_slack, lay_kw, forced_jz, forced_main))
-                return segment_column(
+                res = segment_column(
                     img, period=gate.period, n_body_slots=n_body, n_raised=n_r,
                     border_top=gc.border_top, border_bottom=gc.border_bottom, ref_w=gate.ref_w,
                     top_slack=t_s, content_x=gc.content_x,
                     ink_threshold=p.ink_threshold, min_ink_ratio=p.min_ink_ratio,
-                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band,
-                    resolved_cuts=col_resolved or None, cut_judge=judge,
+                    raise_tol=p.raise_tol, detect_jiazhu=p.detect_jiazhu, seam_band=p.seam_band if final else 0,
+                    resolved_cuts=col_resolved or None, cut_judge=judge if final else None,
                     pinned_cuts={s_: y_ for (pg_, c_, s_), y_ in book_pins.items()
                                  if pg_ == page and c_ == gc.col} or None,
                     forced_solo=book_solo.get((page, gc.col)),
@@ -1035,6 +1042,25 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
+                if res is not None and not final:
+                    res._explore = (n_body, alt, grid, bounds)     # 试切的参数，_finalize 照着重切
+                return res
+
+            def _junk(res, *args) -> int:
+                res._junk = args                                    # 列端记空的参数，重切后照样补
+                return _blank_frame_junk(img, res.cells, *args)
+
+            def _finalize(res):
+                """试切结果 → 按同样参数带折线与判官重切（再补列端记空）；不是试切出来的原样返回。"""
+                a = getattr(res, "_explore", None)
+                if a is None:
+                    return res
+                n_body, alt, grid, bounds = a
+                out_ = _seg(n_body, alt, grid=grid, bounds=bounds, final=True)
+                j = getattr(res, "_junk", None)
+                if j is not None:
+                    _blank_frame_junk(img, out_.cells, *j)
+                return out_
             r = _seg(n_body_col)
             prior_flags: list[str] = []
             # 逐列格位先验命中的列，候选格网按图挑：
@@ -1106,7 +1132,7 @@ class RowSegmentStep(Step):
                 mapper = None if wrec is None else ColumnMapper(
                     page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y)
                 in_seal = _in_seal(seals, mapper, img, p.ink_threshold)
-                junk = [_blank_frame_junk(img, c[0].cells, c[3], gc.content_x, p.ink_threshold, gate.period, in_seal)
+                junk = [_junk(c[0], c[3], gc.content_x, p.ink_threshold, gate.period, in_seal)
                         for c in cands]
                 scores = [_score(c) for c in cands]
                 # 大印压着列首：格网直接取表的等距格网，不比坏格（见上「大印下的列」）
@@ -1165,7 +1191,7 @@ class RowSegmentStep(Step):
                             ri = _seg(n_body_col, alt, bounds=lines[:i] + lines[i + 1:])
                             if ri is None:
                                 continue
-                            ji = _blank_frame_junk(img, ri.cells, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal)
+                            ji = _junk(ri, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal)
                             if len(_merged_cuts(img, ri.cells, gate.period, p.ink_threshold)) < len(cuts):
                                 ci = (ri, n_rb, t_sb, occ_b, "layout_unmerge" + (f"（{why_b}）" if why_b else ""))
                                 trial.append((_score(ci), i, ci, ji))
@@ -1210,6 +1236,7 @@ class RowSegmentStep(Step):
             if r is None:
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
+            r = _finalize(r)
             wrec = wins.column(gc.col)
             mapper = None
             if wrec is not None:

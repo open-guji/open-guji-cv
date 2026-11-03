@@ -109,7 +109,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.23", unit="cell",   # 1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.24", unit="cell",   # 1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals",),
         produces=("char_index", "char_patch"),
         params=CellShrinkParams,
@@ -368,6 +368,32 @@ class CellShrinkStep(Step):
             out.append(ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs))
         return {"char_index": PageChars(page=page, columns=out)}
 
+    def _extracted(self, ctx: RunContext, page: int, col: int, cc: ColumnCells, img: np.ndarray, cells: PageCells):
+        """`render` 用：整列抽字的结果按列记忆（2026-11-03，全唐文 CPU 提速）。
+
+        缓存丢了、下游（glyph_match 等）逐格再生字块时，每一格都要把全页框线线位（读 9 列列图）和整列抽字
+        重算一遍——全唐文册06 p27 冷缓存 glyph_match 78 s，其中 59 s 在这里（一页 209 格再生 149 次整列抽字、
+        1788 次读列图）。抽字只依赖本页的 cells、列图、本步参数：按 cells 产物 sha、列图页戳、参数记忆，
+        戳取不到就不记。返回的字块是副本，调用方改了也不污染缓存。结果逐字节不变。"""
+        stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
+        try:
+            ent = ctx.store.manifest(ctx.book.id, ctx.producer("cells").spec.id).get(f"p{page:04d}")
+            stamp_cells = ent.sha256 if ent is not None and ent.status == "ok" else None
+        except Exception:  # noqa: BLE001 —— 取不到戳就不记忆
+            stamp_cells = None
+        if not stamp_img or not stamp_cells:
+            return self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells))
+        pkey = (ctx.book.id, page, stamp_img, stamp_cells, repr(ctx.params_for(self)))
+        memo = _RENDER_MEMO.get(pkey)
+        if memo is None:
+            while len(_RENDER_MEMO) >= _RENDER_MEMO_MAX:
+                _RENDER_MEMO.pop(next(iter(_RENDER_MEMO)))
+            memo = _RENDER_MEMO[pkey] = {"frame": self._page_frame_lines(ctx, page, cells), "cols": {}}
+        got = memo["cols"].get(col)
+        if got is None:
+            got = memo["cols"][col] = self._extract_column(ctx, page, cc, img, memo["frame"])
+        return [(inst, None if patch is None else patch.copy()) for inst, patch in got]
+
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
         sub = ""
         if key[-1] in "ab":
@@ -383,13 +409,17 @@ class CellShrinkStep(Step):
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
-        for inst, patch in self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells)):
+        for inst, patch in self._extracted(ctx, page, col, cc, img, cells):
             pos = int(inst.idx) + 1
             if pos_to_slot.get(pos) == slot and (inst.sub or "") == sub and patch is not None:
                 if pos in seams and not sub:
                     patch, _ = _apply_seam(img, patch, tuple(float(v) for v in inst.bbox), *seams[pos])
                 return patch
         raise KeyError(f"再生不出字块: {key}{sub}")
+
+
+_RENDER_MEMO: dict = {}
+_RENDER_MEMO_MAX = 4      # 页数；一页 9 列字块合计几 MB，再生基本按页顺序来
 
 
 def _apply_seam(img: np.ndarray, patch: np.ndarray, bbox: tuple, seam_top, seam_bottom, cell_x0: float):
