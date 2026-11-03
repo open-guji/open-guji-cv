@@ -15,7 +15,7 @@ from __future__ import annotations
 import numpy as np
 from pydantic import BaseModel, model_serializer
 
-from ..core.spec import StepSpec, cell_key, column_key, parse_key
+from ..core.spec import StepSpec, alt_cell_key, cell_key, column_key, parse_key, split_alt_key
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.cells import ColumnCells, CutPointCandidates, PageCells
 from ..products.kinds.chars import CandidatePatch, CharRec, ColumnChars, PageChars
@@ -319,96 +319,105 @@ class CellShrinkStep(Step):
             from .seed_admit import SeedAdmitParams
             seal = page_occluded(ctx, page, SeedAdmitParams())
         frame_lines = self._page_frame_lines(ctx, page, cells)
-        out: list[ColumnChars] = []
-        for cc in cells.columns:
-            if not cc.ok:
-                out.append(ColumnChars(col=cc.col, ok=False, error=cc.error))
-                continue
-            img = ctx.image("column_image", column_key(page, cc.col))
-            wrec = wins.column(cc.col)
-            mapper = (ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                   wrec.top_y, wrec.bottom_y) if wrec else None)
-            step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
-            pos_to_slot = {c.pos: c.slot for c in cc.cells}
-            slot_to_pos = {c.slot: c.pos for c in cc.cells}
-            seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
-                     if c.kind == "char" and (c.seam_top or c.seam_bottom)}
-            # 多候选切点，只收 candidates ≥2 的（单一候选＝算法有把握，见
-            # review/cards.py::blocking_cutline_cases 同一判据，两处必须
-            # 一致，否则 Step7 展示的候选跟这里切出来的对不上）。
-            # 命名是**格位视角**：`multi_above[pos]` = pos 这一格**往上方向**
-            # 的那条切点——它就是 `cp.slot_below == pos` 的那条切点（这一格
-            # 是切点的"下格"，切点在它上面）；`multi_below[pos]` 反之，是
-            # `cp.slot_above == pos` 的切点。别与切点自身的 slot_above/
-            # slot_below（**切点视角**：那一格是这个切点的上/下格）弄混——
-            # 两套命名视角相反，是这块代码唯一容易踩的坑。
-            multi_above: dict[int, CutPointCandidates] = {}   # 这一格往上那条切点
-            multi_below: dict[int, CutPointCandidates] = {}   # 这一格往下那条切点
-            for cp in cc.cut_candidates:
-                if len(cp.candidates) < 2:
-                    continue
-                pa, pb = slot_to_pos.get(cp.slot_above), slot_to_pos.get(cp.slot_below)
-                if pa is not None:
-                    multi_below[pa] = cp    # pa 是切点的上格 → 切点在 pa 下方
-                if pb is not None:
-                    multi_above[pb] = cp    # pb 是切点的下格 → 切点在 pb 上方
-            recs: list[CharRec] = []
-            for inst, patch in self._extract_column(ctx, page, cc, img, frame_lines):
-                pos = int(inst.idx) + 1
-                slot = pos_to_slot.get(pos, pos)
-                key = cell_key(page, cc.col, slot) + (inst.sub or "")
-                patch_key = None
-                bbox = tuple(float(v) for v in inst.bbox)
-                has_patch = patch is not None and getattr(patch, "size", 0) > 0
-                if pos in seams and not inst.sub and has_patch:
-                    patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
-                cell_type = inst.cell_type
-                # 职名列的框屑 Step3 已剥掉（books/siku_zongmu/roster_segment._denoise），首格就是字，不再猜框条
-                frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
-                if frame_bar:
-                    cell_type, has_patch = "empty", False
-                cand_variants: list[CandidatePatch] = []
-                if not inst.sub and has_patch and cell_type == "char":
-                    cand_variants = self._cand_variants(
-                        ctx, page, cc, img, inst, slot, seams.get(pos),
-                        multi_above.get(pos), multi_below.get(pos))
-                if has_patch and cell_type == "char":
-                    ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
-                    patch_key = key
-                flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
-                if (cc.col, slot, inst.sub or "") in seal:
-                    flags.append("seal_region")
-                s3_kind = step3_kind.get(pos, "char")
-                # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
-                # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——
-                # 无论是列端渣格闸误杀（tail_junk）、`patch.size == 0`
-                # 的极端情况，还是以后任何新引入的路径——下游（Step5-c
-                # OCR、glyph_match、人裁审查页）一律按 pos 遍历 char_index，
-                # patch_key=None 会被默默跳过，字就凭空消失在产物里、
-                # 不报错也不留痕（旧行为——本卡起点的那 63 个丢字就是
-                # 这样被发现的）。这里补一个确定性 flag：只要满足
-                # 「Step3 说有字」+「Step4 没给出可用图块」，就打
-                # `lost_patch`，下游/人审能靠这个 flag 筛出「Step4 认为
-                # 这里没有可交付的图块，但 Step3 认为这里应该有字」的
-                # 格位，而不是永远无声无息。
-                if (patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags
-                        and not frame_bar):
-                    flags.append("lost_patch")
-                recs.append(CharRec(
-                    id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
-                    slot=slot, pos=pos, idx=int(inst.idx), sub=inst.sub,
-                    cell_type=cell_type, step3_kind=s3_kind,
-                    bbox_col=bbox,
-                    bbox_page=(None if mapper is None else
-                               tuple(round(v, 2) for v in mapper.bbox_tr(*bbox))),
-                    ink_ratio=float(inst.ink_ratio), height=float(bbox[3] - bbox[1]), width=float(bbox[2] - bbox[0]),
-                    flags=flags, patch_key=patch_key,
-                    cand_variants=cand_variants,
-                ))
-            out.append(ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs))
+        out: list[ColumnChars] = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal)
+                                  for cc in cells.columns]
+        alt = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, alt=True)
+               for cc in cells.alt_columns]
+        if alt:
+            return {"char_index": PageChars(page=page, columns=out, alt_columns=alt)}
         return {"char_index": PageChars(page=page, columns=out)}
 
-    def _extracted(self, ctx: RunContext, page: int, col: int, cc: ColumnCells, img: np.ndarray, cells: PageCells):
+    def _column_chars(self, ctx: RunContext, page: int, cc: ColumnCells, wins: PageWindows, page_w,
+                      frame_lines: dict, seal: dict, alt: bool = False) -> ColumnChars:
+        """一列字格 → ColumnChars。`alt`：row_segment `alt_cut` 的备选切法，字块键用 `alt_cell_key`、不做试切候选。"""
+        if not cc.ok:
+            return ColumnChars(col=cc.col, ok=False, error=cc.error)
+        img = ctx.image("column_image", column_key(page, cc.col))
+        wrec = wins.column(cc.col)
+        mapper = (ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                               wrec.top_y, wrec.bottom_y) if wrec else None)
+        step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
+        pos_to_slot = {c.pos: c.slot for c in cc.cells}
+        slot_to_pos = {c.slot: c.pos for c in cc.cells}
+        seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
+                 if c.kind == "char" and (c.seam_top or c.seam_bottom)}
+        # 多候选切点，只收 candidates ≥2 的（单一候选＝算法有把握，见
+        # review/cards.py::blocking_cutline_cases 同一判据，两处必须
+        # 一致，否则 Step7 展示的候选跟这里切出来的对不上）。
+        # 命名是**格位视角**：`multi_above[pos]` = pos 这一格**往上方向**
+        # 的那条切点——它就是 `cp.slot_below == pos` 的那条切点（这一格
+        # 是切点的"下格"，切点在它上面）；`multi_below[pos]` 反之，是
+        # `cp.slot_above == pos` 的切点。别与切点自身的 slot_above/
+        # slot_below（**切点视角**：那一格是这个切点的上/下格）弄混——
+        # 两套命名视角相反，是这块代码唯一容易踩的坑。
+        multi_above: dict[int, CutPointCandidates] = {}   # 这一格往上那条切点
+        multi_below: dict[int, CutPointCandidates] = {}   # 这一格往下那条切点
+        for cp in cc.cut_candidates:
+            if len(cp.candidates) < 2:
+                continue
+            pa, pb = slot_to_pos.get(cp.slot_above), slot_to_pos.get(cp.slot_below)
+            if pa is not None:
+                multi_below[pa] = cp    # pa 是切点的上格 → 切点在 pa 下方
+            if pb is not None:
+                multi_above[pb] = cp    # pb 是切点的下格 → 切点在 pb 上方
+        recs: list[CharRec] = []
+        for inst, patch in self._extract_column(ctx, page, cc, img, frame_lines):
+            pos = int(inst.idx) + 1
+            slot = pos_to_slot.get(pos, pos)
+            key = (alt_cell_key if alt else cell_key)(page, cc.col, slot) + (inst.sub or "")
+            patch_key = None
+            bbox = tuple(float(v) for v in inst.bbox)
+            has_patch = patch is not None and getattr(patch, "size", 0) > 0
+            if pos in seams and not inst.sub and has_patch:
+                patch, bbox = _apply_seam(img, patch, bbox, *seams[pos])
+            cell_type = inst.cell_type
+            # 职名列的框屑 Step3 已剥掉（books/siku_zongmu/roster_segment._denoise），首格就是字，不再猜框条
+            frame_bar = "roster" not in cc.flags and _is_raised_frame_bar(slot, cell_type, bbox, cc)
+            if frame_bar:
+                cell_type, has_patch = "empty", False
+            cand_variants: list[CandidatePatch] = []
+            if not alt and not inst.sub and has_patch and cell_type == "char":
+                cand_variants = self._cand_variants(
+                    ctx, page, cc, img, inst, slot, seams.get(pos),
+                    multi_above.get(pos), multi_below.get(pos))
+            if has_patch and cell_type == "char":
+                ctx.cache.put(ctx.book.id, "char_patch", key, _upright(ctx, patch))
+                patch_key = key
+            flags = list(inst.flags) + (["frame_bar"] if frame_bar else [])
+            if (cc.col, slot, inst.sub or "") in seal:
+                flags.append("seal_region")
+            s3_kind = step3_kind.get(pos, "char")
+            # 静默丢字兜底（2026-09-16）：Step3 判定这一格有内容（char /
+            # jiazhu，不是 blank），但走到这里 patch_key 仍是 None——
+            # 无论是列端渣格闸误杀（tail_junk）、`patch.size == 0`
+            # 的极端情况，还是以后任何新引入的路径——下游（Step5-c
+            # OCR、glyph_match、人裁审查页）一律按 pos 遍历 char_index，
+            # patch_key=None 会被默默跳过，字就凭空消失在产物里、
+            # 不报错也不留痕（旧行为——本卡起点的那 63 个丢字就是
+            # 这样被发现的）。这里补一个确定性 flag：只要满足
+            # 「Step3 说有字」+「Step4 没给出可用图块」，就打
+            # `lost_patch`，下游/人审能靠这个 flag 筛出「Step4 认为
+            # 这里没有可交付的图块，但 Step3 认为这里应该有字」的
+            # 格位，而不是永远无声无息。
+            if (patch_key is None and s3_kind in ("char", "jiazhu") and "lost_patch" not in flags
+                    and not frame_bar):
+                flags.append("lost_patch")
+            recs.append(CharRec(
+                id=f"{ctx.book.id}:{page}:{cc.col}:{slot}{inst.sub or ''}",
+                slot=slot, pos=pos, idx=int(inst.idx), sub=inst.sub,
+                cell_type=cell_type, step3_kind=s3_kind,
+                bbox_col=bbox,
+                bbox_page=(None if mapper is None else
+                           tuple(round(v, 2) for v in mapper.bbox_tr(*bbox))),
+                ink_ratio=float(inst.ink_ratio), height=float(bbox[3] - bbox[1]), width=float(bbox[2] - bbox[0]),
+                flags=flags, patch_key=patch_key,
+                cand_variants=cand_variants,
+            ))
+        return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
+
+
+    def _extracted(self, ctx: RunContext, page: int, col: int, cc: ColumnCells, img: np.ndarray, cells: PageCells,
+                   alt: bool = False):
         """`render` 用：整列抽字的结果按列记忆（2026-11-03，全唐文 CPU 提速）。
 
         缓存丢了、下游（glyph_match 等）逐格再生字块时，每一格都要把全页框线线位（读 9 列列图）和整列抽字
@@ -429,33 +438,31 @@ class CellShrinkStep(Step):
             while len(_RENDER_MEMO) >= _RENDER_MEMO_MAX:
                 _RENDER_MEMO.pop(next(iter(_RENDER_MEMO)))
             memo = _RENDER_MEMO[pkey] = {"frame": self._page_frame_lines(ctx, page, cells), "cols": {}}
-        got = memo["cols"].get(col)
+        got = memo["cols"].get((col, alt))
         if got is None:
-            got = memo["cols"][col] = self._extract_column(ctx, page, cc, img, memo["frame"])
+            got = memo["cols"][(col, alt)] = self._extract_column(ctx, page, cc, img, memo["frame"])
         return [(inst, None if patch is None else patch.copy()) for inst, patch in got]
 
     def render(self, ctx: RunContext, kind_id: str, key: str) -> np.ndarray:
-        sub = ""
-        if key[-1] in "ab":
-            key, sub = key[:-1], key[-1]
+        key, alt, sub = split_alt_key(key)
         page, col, slot = parse_key(key)
         if col is None or slot is None:
             raise ValueError(f"char_patch 的键必须带列号与 slot: {key}")
         cells: PageCells = ctx.product("cells", page)
-        cc = cells.column(col)
+        cc = (next((c for c in cells.alt_columns if c.col == col), None) if alt else cells.column(col))
         if cc is None or not cc.ok:
             raise KeyError(f"第 {page} 页第 {col} 列没有可用的字格")
         img = ctx.image("column_image", column_key(page, col))
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
-        for inst, patch in self._extracted(ctx, page, col, cc, img, cells):
+        for inst, patch in self._extracted(ctx, page, col, cc, img, cells, alt):
             pos = int(inst.idx) + 1
             if pos_to_slot.get(pos) == slot and (inst.sub or "") == sub and patch is not None:
                 if pos in seams and not sub:
                     patch, _ = _apply_seam(img, patch, tuple(float(v) for v in inst.bbox), *seams[pos])
                 return patch
-        raise KeyError(f"再生不出字块: {key}{sub}")
+        raise KeyError(f"再生不出字块: {key}{'alt' if alt else ''}{sub}")
 
 
 _RENDER_MEMO: dict = {}

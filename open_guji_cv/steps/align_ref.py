@@ -700,6 +700,9 @@ class AlignRefStep(Step):
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
                          relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                          dp_flat=p.coord_dp_flat)
+            cells = _opt(ctx, "cells", page)
+            if match.alt_columns and cells is not None and cells.alt_columns:
+                _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1302,6 +1305,84 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
             out.col_line[col] = li
         return out
     return None
+
+
+ALT_MIN_GAIN = 3          # 备选切法拿到坐标字的格数至少多这么多格才换
+ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数的这么多
+# 分母取备选切法自己切出的字格数、不取整理本这一行的字数（2026-11-03 定，A22 评审问）：
+# 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
+
+
+def _covered(res: PageAlignRef, col: int) -> int:
+    """一列里拿到坐标字（整理本非空）的格数。"""
+    return sum(1 for r in res.coord if r.col == col and r.ref_char)
+
+
+def _agree(res: PageAlignRef, carrier, match, col: int) -> int:
+    """一列里有字形证据的坐标字格数：坐标字＝机器载体字（`carrier_fn`），或在这一格库匹配
+    前 `COORD_DP_TOPK` 名候选里（与 `coord_dp` 收格同一口径）。"""
+    from .align_ref_coord import COORD_DP_TOPK
+    top = {r.id: {c for c, _s in (r.candidates or [])[:COORD_DP_TOPK]}
+           for cc in match.columns if cc.col == col for r in cc.chars}
+    return sum(1 for r in res.coord if r.col == col and r.ref_char
+               and (carrier(r.id) == r.ref_char or r.ref_char in top.get(r.id, ())))
+
+
+def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells, p) -> None:
+    """row_segment `alt_cut` 的备选切法：两种切法都裁过、都过了库匹配，这里按列挑一种
+    （第 7 轮设计，见 doc/design 与 open-guji-cv PR 说明）。
+
+    备选列在一份草稿上重做坐标对位（`with_alt` 视图，草稿去掉这些列的现役对位字，免得
+    现役对位按旧切法的格号去比）。换列要三条都成立：备选切法拿到坐标字的格数 ≥ 现役 +
+    `ALT_MIN_GAIN`（几何配法配得上整列，现役只能退 dp 逐字配的列，就是格网切错的列）；
+    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。换了的列：坐标字、退回原因、冲突格都换成备选那份，
+    现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
+    （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
+    cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
+    if not cols:
+        return
+    cset = set(cols)
+    draft = res.model_copy(deep=True, update={
+        "chars": [c for c in res.chars if c.col not in cset],
+        "coord": [], "coord_cols": [], "coord_fallback": {}, "coord_note": "",
+        "coord_conflict_ids": []})
+    rare_alt = ({k: v for k, v in rare.items() if _id_col(k) not in cset} if rare else rare)
+    attach_coord(draft, book, page, match.with_alt(cols), ocr, rare_alt, cells.with_alt(cols),
+                 p.corpus, title_formula=p.coord_title_formula,
+                 pin_line=(page_pin(p, book, page) or (None, None))[1],
+                 relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                 dp_flat=p.coord_dp_flat)
+    alt_match = match.with_alt(cols)
+    car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
+    n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
+    chosen = []
+    for col in cols:
+        ca, cm = _covered(draft, col), _covered(res, col)
+        a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
+        if ca >= cm + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
+            chosen.append(col)
+    if not chosen:
+        return
+    ch = set(chosen)
+    res.chars = [c for c in res.chars if c.col not in ch]
+    res.coord = sorted([r for r in res.coord if r.col not in ch] + [r for r in draft.coord if r.col in ch],
+                       key=lambda r: (r.col, r.slot, r.sub or ""))
+    res.coord_cols = sorted({c for c in res.coord_cols if c not in ch} | {c for c in draft.coord_cols if c in ch})
+    for col in ch:
+        res.coord_fallback.pop(str(col), None)
+        if str(col) in draft.coord_fallback:
+            res.coord_fallback[str(col)] = draft.coord_fallback[str(col)]
+    res.coord_conflict_ids = ([i for i in res.coord_conflict_ids if _id_col(i) not in ch]
+                              + [i for i in draft.coord_conflict_ids if _id_col(i) in ch])
+    res.alt_cols = sorted(ch)
+
+
+def _id_col(rid: str) -> int | None:
+    parts = rid.split(":")
+    try:
+        return int(parts[2])
+    except (IndexError, ValueError):
+        return None
 
 
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,

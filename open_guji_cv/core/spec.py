@@ -239,6 +239,25 @@ def cell_key(page: int, col: int, slot: int) -> str:
     return f"p{page:04d}c{col:02d}s{slot}"
 
 
+ALT_TAG = "alt"
+
+
+def alt_cell_key(page: int, col: int, slot: int) -> str:
+    """备选切法（row_segment `alt_cut`）字块的缓存键：主切法的键后接 `alt`（p0012c03s5alt、半格再接 a/b）。
+    与主切法的键不撞；`parse_key`／`_KEY_RE` 不认它，解析走 `split_alt_key`。"""
+    return cell_key(page, col, slot) + ALT_TAG
+
+
+def split_alt_key(key: str) -> tuple[str, bool, str]:
+    """字块键拆成（主切法单位键, 是否备选, 半格 sub）：p0012c03s5alta → ("p0012c03s5", True, "a")。"""
+    sub = ""
+    if key and key[-1] in "ab" and not key.endswith(ALT_TAG):
+        key, sub = key[:-1], key[-1]
+    if key.endswith(ALT_TAG):
+        return key[: -len(ALT_TAG)], True, sub
+    return key, False, sub
+
+
 def parse_key(key: str) -> tuple[int, int | None, int | None]:
     m = _KEY_RE.match(key)
     if not m:

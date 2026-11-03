@@ -505,7 +505,8 @@ def cnn_ranks_for_patches(norm_patches: list, db_path: str | None, cnn=None, k: 
 def _card_patch(ctx, card: dict):
     from ..clustering.normalize import normalize_patch
     from ..core.spec import cell_key
-    key = cell_key(card["page"], card["col"], card["slot"]) + (card.get("sub") or "")
+    from ..products.alt_view import resolve_patch_key
+    key = resolve_patch_key(ctx.book.id, cell_key(card["page"], card["col"], card["slot"]) + (card.get("sub") or ""))
     try:
         img = ctx.image("char_patch", key)
     except Exception:           # noqa: BLE001 — 缺图就这张卡没有 CNN 那一路

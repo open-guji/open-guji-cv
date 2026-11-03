@@ -21,6 +21,7 @@ v0.2「记录先行」（用户 10-02 裁定 #361·10）：每个字框补 `cand
 | `ref` | Step5-d `align_ref` | 过闸对齐的 `align_char`，没有则坐标对位的 `ref_char`（非空） |
 """
 from __future__ import annotations
+from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
 
 import json
 from pathlib import Path
@@ -45,12 +46,12 @@ def _candidates(store: ProductStore, book: str, key: str) -> dict[str, dict[str,
         if ch:
             out.setdefault(cid, {})[k] = ch
 
-    gm = store.read(book, "glyph_match", key, "glyph_match")
+    gm = _read_view(store, book, "glyph_match", key, "glyph_match")
     for col in (gm.columns if gm else []):
         for r in col.chars:
             put(r.id, "lib", r.char if r.verdict == "same" and r.char else
                 (r.candidates[0][0] if r.candidates else None))
-    rare = store.read(book, "rare_candidates", key, "rare_candidates")
+    rare = _read_view(store, book, "rare_candidates", key, "rare_candidates")
     for col in (rare.columns if rare else []):
         for r in col.chars:
             put(r.id, "rare", r.candidates[0].char if r.candidates else None)
@@ -123,8 +124,8 @@ def from_cv_products(store: ProductStore, book: str, page: int, meta: dict,
     lines = (bd.get("line_index") or {}).get("lines") or []
 
     cstep = cells_step(book)
-    cells = store.read(book, cstep, key, "cells")
-    chars = store.read(book, "cell_shrink", key, "char_index")
+    cells = _read_view(store, book, cstep, key, "cells")
+    chars = _read_view(store, book, "cell_shrink", key, "char_index")
     if cells is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {cstep} 产物")
     stale: list[str] = []

@@ -40,6 +40,7 @@ from __future__ import annotations
 import logging
 from typing import Literal
 import re
+from contextvars import ContextVar
 from functools import lru_cache
 
 from pydantic import BaseModel, Field, field_validator, model_serializer
@@ -1098,6 +1099,17 @@ class SeedAdmitStep(Step):
             _iron_context(p.db_path, getattr(ctx.book, "norm_stroke", None))
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
+        # row_segment `alt_cut`：align_ref 挑中备选切法的列，这一页读 Step3/4/5a 一律读备选那份、
+        # 字块换备选键，5b/6 丢掉这些列（见 `products.alt_view`）。没换列就原样，产物逐字节不变。
+        from ..products.alt_view import AltView
+        av = AltView(ctx)
+        token = _ALT_SCOPE.set((ctx.book.id, av))
+        try:
+            return self._run_page(av if av.alt_cols(page) else ctx, page)
+        finally:
+            _ALT_SCOPE.reset(token)
+
+    def _run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids
         from ..clustering.note_lexicon import load_lexicon, match_segment
         from ..clustering.seeding import (MATCH_SOLO_OCR_COV, NEAR_FORM_CHARS,
@@ -3490,6 +3502,10 @@ def _iron_context(db_path: str, norm_stroke: int | None):
     return matcher, human_chars_set, partners_map, human_ids
 
 
+#: seed_admit 跑一页时（且这一页有换备选切法的列）：(册 id, AltView)；`_page_patch` 按册 id 取图时用
+_ALT_SCOPE: "ContextVar[tuple[str, object] | None]" = ContextVar("seed_admit_alt_scope", default=None)
+
+
 class PatchUnavailable(RuntimeError):
     """本页字块读不到也再生不出来——这一页停下，不降级（overview#407）。"""
 
@@ -3505,6 +3521,15 @@ def _page_patch(src, page: int, col: int, slot, sub):
     import cv2
 
     key = f"p{page:04d}c{col:02d}s{slot}{sub or ''}"
+    if not hasattr(src, "image"):
+        # 按册 id 取图（组内检索、铁证尺度等）：本页换过备选切法的列要换键（`products.alt_view`）
+        scope = _ALT_SCOPE.get()
+        if scope is not None and scope[0] == src:
+            from ..products.alt_view import alt_patch_key
+            key = alt_patch_key(key, scope[1].alt_cols(page))
+        elif scope is None:                 # 离线审计脚本：读产物仓里的 align_ref
+            from ..products.alt_view import resolve_patch_key
+            key = resolve_patch_key(src, key)
     try:
         if hasattr(src, "image"):
             return src.image("char_patch", key)

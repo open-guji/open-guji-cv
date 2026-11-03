@@ -516,7 +516,8 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of,
             res.errors.append(f"{e.target.key}: 键解析不了（{exc}）")
             res.skipped += 1
             continue
-        path = cache.get(book, "char_patch", ckey)
+        from ..products.alt_view import resolve_patch_key
+        path = cache.get(book, "char_patch", resolve_patch_key(book, ckey))   # alt_cut 换列
         db_id0 = e.target.key if e.target.key.startswith("v2:") else f"v2:{e.target.key}"
         lib_png = None
         if path is None:

@@ -45,6 +45,7 @@ join（Step3 `cells` × Step7 `seed_admit`、`sort_by_reading` 读序、blank/ex
    确认对方用的是哪个版本。
 """
 from __future__ import annotations
+from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
 
 from ..core.spec import page_key
 from ..errors import ProductMissing
@@ -163,7 +164,7 @@ def render_page(store: ProductStore, book: str, page: int, stale: list[str],
     slots = page_slots(store, book, page, stale)
 
     step = cells_step(book)
-    cells: PageCells | None = store.read(book, step, page_key(page), CELLS_KIND)  # type: ignore[assignment]
+    cells: PageCells | None = _read_view(store, book, step, page_key(page), CELLS_KIND)  # type: ignore[assignment]
     if cells is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {step} 产物（先跑到 Step3）")
     n_raised_by_col = {c.col: c.n_raised for c in cells.columns}

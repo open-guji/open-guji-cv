@@ -144,6 +144,9 @@ def _cells_versions(book: str, page: int, store) -> list[tuple[str, float, float
             continue
     out.sort(key=lambda t: t[2])
     if cur is not None:
+        from ..products.alt_view import alt_cols_of
+        if hasattr(cur, "with_alt"):
+            cur = cur.with_alt(alt_cols_of(book, page, store))   # alt_cut 换列：现行格网读备选那份
         out.append(("current", cur_ts, float("inf"), cur))
     return out
 
@@ -351,8 +354,11 @@ def compute_page(book: str, page: int, events: list, store=None, cache=None, gly
     versions = _cells_versions(book, page, store)
     # 字块图要验戳（`patch_stamp` = 现在这版字块产物的 sha，`page_bindings` 传进来）：缓存里记的
     # 不是这一版 → 当作没有图（退回几何规则），不拿旧字块比指纹。不传 = 不验（与 v7 之前一致）。
+    from ..products.alt_view import alt_cols_of, alt_patch_key
+    alt_cols = alt_cols_of(book, page, store)
+
     def _patch(c, s_, sb):
-        k = patch_key(page, c, s_, sb)
+        k = alt_patch_key(patch_key(page, c, s_, sb), alt_cols)   # alt_cut 换列：现行字块是备选那份
         p = cache.get(book, "char_patch", k, stamp=patch_stamp)
         if p is None and render is not None:
             p = render(k)                     # 缓存没有就现切（见 `_patch_renderer`）

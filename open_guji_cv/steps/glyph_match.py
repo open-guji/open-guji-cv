@@ -437,20 +437,21 @@ class GlyphMatchStep(Step):
             matcher = _FontTier(full, sub, tier)
         elif p.batch_knn:
             matcher = _PageBatch(matcher, _page_queries(ctx, page, chars, reuse, normalize_patch))
-        n_reused = n_total = n_timeout = 0
-        out: list[ColumnMatch] = []
-        for cc in chars.columns:
+        cnt = {"reused": 0, "total": 0, "timeout": 0}
+
+        def _match_column(cc, alt: bool = False) -> ColumnMatch:
+            # `alt`：row_segment `alt_cut` 备选切法的列（chars.alt_columns）——不走格级复用（id 与主切法同号，
+            # 复用记录是主切法的），在主切法之后单独逐格判，不进 _PageBatch 的分块（主切法的浮点结果不受影响）
             if not cc.ok:
-                out.append(ColumnMatch(col=cc.col, ok=False, error=cc.error))
-                continue
+                return ColumnMatch(col=cc.col, ok=False, error=cc.error)
             recs: list[MatchRec] = []
             for r in cc.chars:
                 if r.cell_type != "char" or not r.patch_key:
                     continue
-                n_total += 1
-                if r.id in reuse:
+                cnt["total"] += 1
+                if not alt and r.id in reuse:
                     recs.append(reuse[r.id])
-                    n_reused += 1
+                    cnt["reused"] += 1
                     continue
                 # 图块读不到 / 再生不出来 → 整页失败（引擎记 failed、旧产物不动），不降级。
                 # 2026-10-05 前这里吞异常记成 diff+`no_patch`，接着往下放行，读图出问题时
@@ -465,7 +466,7 @@ class GlyphMatchStep(Step):
                                       exclude_id=(r.id if p.exclude_self else None), **dl)
                 except MatchTimeout:
                     recs.append(_timeout_rec(r, p.cell_budget_s))
-                    n_timeout += 1
+                    cnt["timeout"] += 1
                     continue
                 cand_variants: list[CandidateMatch] = []
                 timed_out = False
@@ -491,7 +492,7 @@ class GlyphMatchStep(Step):
                                     for cc, vv in cm.candidates[:p.max_candidates]]))
                 if timed_out:
                     recs.append(_timeout_rec(r, p.cell_budget_s))
-                    n_timeout += 1
+                    cnt["timeout"] += 1
                     continue
                 verdict, char, matched_id, cov, wmax, lent = demote_borrowed(m, borrowed)
                 via = f"borrowed:{lent}" if lent else None
@@ -515,7 +516,11 @@ class GlyphMatchStep(Step):
                                 for c, v in m.candidates[:p.max_candidates]],
                     guard=m.guard, n_verified=int(m.n_verified), via=via,
                     cand_variants=cand_variants, near_shape=m.near_shape))
-            out.append(ColumnMatch(col=cc.col, ok=True, chars=recs))
+            return ColumnMatch(col=cc.col, ok=True, chars=recs)
+
+        out: list[ColumnMatch] = [_match_column(cc) for cc in chars.columns]
+        alt_out: list[ColumnMatch] = [_match_column(cc, alt=True) for cc in chars.alt_columns]
+        n_reused, n_total, n_timeout = cnt["reused"], cnt["total"], cnt["timeout"]
         log_reuse(ctx, self, page, n_reused, n_total)
         if tier is not None:
             log.info("glyph_match p%s: 分级查库 %d 次查询里 %d 次查了整库", page, matcher.n_query, matcher.n_full)
@@ -523,7 +528,8 @@ class GlyphMatchStep(Step):
             log.warning("glyph_match p%s: %d/%d 格超过 %gs 预算，记 timeout 转人审",
                         page, n_timeout, n_total, p.cell_budget_s)
         return {"glyph_match": PageMatch(
-            page=page, db_fingerprint=p.db_fingerprint, columns=out)}
+            page=page, db_fingerprint=p.db_fingerprint, columns=out,
+            **({"alt_columns": alt_out} if alt_out else {}))}
 
 
 def _page_queries(ctx: RunContext, page: int, chars: "PageChars", reuse: dict,

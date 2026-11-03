@@ -12,6 +12,7 @@
 CLI 只看 `id`/`char`/`doubts` 那几列就行；换成别的形状会动到前端，不在本轮。
 """
 from __future__ import annotations
+from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
 
 import json
 import re
@@ -343,8 +344,8 @@ def cards(book: str, pages: str = "dev_set", limit: int = 400,
     vflags = vision_flags(book)
     for pg in pgs:
         a = st.read(book, "seed_admit", page_key(pg), "seed_admit")
-        m = st.read(book, "glyph_match", page_key(pg), "glyph_match")
-        d = st.read(book, "context_decide", page_key(pg), "context_decision")
+        m = _read_view(st, book, "glyph_match", page_key(pg), "glyph_match")
+        d = _read_view(st, book, "context_decide", page_key(pg), "context_decision")
         if a is None:
             continue
         # 坐标对位（align_ref `coord`，overview#195）：现役对位没给字的格用它补「整理本」一栏
@@ -608,7 +609,7 @@ def blocking_cutline_cases(book: str, pgs: list[int], st: ProductStore,
     multi: dict = {}
     where: dict = {}        # 同键 → (切点序号, 下格格位)，兜底阻塞拼用例要
     for pg in pgs:
-        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        cells = _read_view(st, book, "row_segment", page_key(pg), "cells")
         if cells is None:
             continue
         for cc in cells.columns:
@@ -718,7 +719,7 @@ def _warm_column_images(book: str, pgs: list[int], st: ProductStore) -> set[tupl
     bad: set[tuple[int, int]] = set()
     ctx = None
     for pg in pgs:
-        cells = st.read(book, "row_segment", page_key(pg), "cells")
+        cells = _read_view(st, book, "row_segment", page_key(pg), "cells")
         if cells is None:
             continue
         for cc in cells.columns:

@@ -843,6 +843,11 @@ class RowSegmentParams(BaseModel):
     #: 不再硬取等距格网。卷首叶题署行（「宋中郎外兵曹　參　軍裴　駰集解」）字大、字距随手拉开，等距格网劈字、并字、
     #: 印泥空格成假格（01–10 册 p2 约 80 格）。只改切分用的列图，Step4 裁字仍用原列图。书级开关；False＝关（缺省，不进参数哈希）。
     seal_inkcut: bool = False
+    #: **备选切法**（2026-11-03，史記文淵閣本第 7 轮，设计稿 https://claude.ai/artifact/NVqgK8BS2GietVShFnoqUU）：
+    #: 按格位表切的列，另切一份不带先验的格网，和主切法不同时放进产物 `alt_columns`；Step4/5 照样裁、认，
+    #: align_ref 坐标对位挑和整理本吻合多的那份（写本有些列字不在格网上：题署、篇题大字、夹注行数与表不合）。
+    #: 书级开关；False＝关（缺省，不进参数哈希，产物逐字节不变）。
+    alt_cut: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -925,6 +930,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
                 d.pop("seal_inkcut", None)
+            if not self.alt_cut:
+                d.pop("alt_cut", None)
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
             if self.page_map == "off":
@@ -1062,6 +1069,7 @@ class RowSegmentStep(Step):
                                       n_raised=max(p.n_raised, getattr(gc, "n_raised_hint", 0) or 0)))
             grids = fit_page_grids(grid_cols, gate.period, p.ink_threshold)
         out: list[ColumnCells] = []
+        alt_out: list[ColumnCells] = []
         for gc in gate.columns:
             # 逐列格数：页级参数与闸给的 hint 取大者。hint 是「这一列墨跨度
             # 装得下几个字」（见 GateColumn.n_raised_hint）——同一页上有的抬头列
@@ -1096,6 +1104,7 @@ class RowSegmentStep(Step):
             forced_main = book_forced_main.get((page, gc.col))
             lay_alt = None     # 闸版格网（抬头级数听闸、表只管格的有无），见下
             gate_raised = n_raised_col
+            occ: set = set()   # 版式先验占了的格位（lay 为 None 时不用）
             if lay is not None:
                 if hr_verdict is not None:
                     lay = _reraise(lay, hr_verdict)
@@ -1364,55 +1373,76 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
             r = _finalize(r)
-            wrec = wins.column(gc.col)
-            mapper = None
-            if wrec is not None:
-                mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                      wrec.top_y, wrec.bottom_y)
-            n_total = n_body_col + n_raised_col
-            cells = []
-            for c in r.cells:
-                pos = _slot_to_pos(c.slot, n_raised_col)
-                if not 1 <= pos <= n_total:
-                    raise ValueError(f"slot {c.slot} 换算出的物理位置 {pos} 越界（总格数 {n_total}）")
-                cells.append(CellRec(
-                    slot=c.slot, pos=pos, y0=float(c.y0), y1=float(c.y1),
-                    x0=float(c.x0), x1=float(c.x1), kind=c.kind, sub=c.sub, order=int(c.order),
-                    gap_center=None if c.gap_center is None else float(c.gap_center),
-                    ink_ratio=float(c.ink_ratio), raised=bool(c.raised),
-                    suspect_jiazhu_body=bool(getattr(c, "suspect_jiazhu_body", False)),
-                    seam_top=c.seam_top, seam_bottom=c.seam_bottom,
-                    quad_page=(None if mapper is None else
-                               [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
-                    # 表认下的字格：Step4 的列端渣格闸不再拿图像判据把它判空（「一」「二」在列端形同框线）
-                    flags=["layout_char"] if lay is not None and c.kind != "blank" and c.slot in occ else [],
-                ))
-            flags: list[str] = list(prior_flags)
-            if r.bottom_bar_y is not None:
-                # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
-                # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——
-                # 还给 Step2 的值，Step4 就在框下白纸上找框，找不到，框墨进图块。
-                flags.append(f"bottom_bar：下版框线在列图 y={r.bottom_bar_y:.0f}，"
-                             f"高出 border_bottom {base['border_bottom'] - r.bottom_bar_y:.0f} 行")
-                base = dict(base, border_bottom=float(r.bottom_bar_y))
-            out.append(ColumnCells(ok=True, boundaries=[float(b) for b in r.boundaries], flags=flags,
-                                   cells=cells, cut_candidates=[
-                                       CutPointCandidates(
-                                           k=cp.k, y=cp.y, slot_above=cp.slot_above,
-                                           slot_below=cp.slot_below, chosen=cp.chosen,
-                                           chosen_by=cp.chosen_by,
-                                           escalate=cp.escalate, escalate_reason=cp.escalate_reason,
-                                           origin=cp.origin,
-                                           candidates=[SeamCandidate(
-                                               kind=c.kind, y=c.y, seam_ink=c.seam_ink,
-                                               dev_max=c.dev_max, agree=c.agree, dis_unet=c.dis_unet)
-                                               for c in cp.candidates],
-                                       ) for cp in r.cut_candidates],
-                                   **base))
+
+            def _emit(r, base, prior_flags, lay, occ, n_raised_col):
+                """挑定的格网 → ColumnCells（主切法和 `alt_cut` 的备选切法共用）。"""
+                wrec = wins.column(gc.col)
+                mapper = None
+                if wrec is not None:
+                    mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                          wrec.top_y, wrec.bottom_y)
+                n_total = n_body_col + n_raised_col
+                cells = []
+                for c in r.cells:
+                    pos = _slot_to_pos(c.slot, n_raised_col)
+                    if not 1 <= pos <= n_total:
+                        raise ValueError(f"slot {c.slot} 换算出的物理位置 {pos} 越界（总格数 {n_total}）")
+                    cells.append(CellRec(
+                        slot=c.slot, pos=pos, y0=float(c.y0), y1=float(c.y1),
+                        x0=float(c.x0), x1=float(c.x1), kind=c.kind, sub=c.sub, order=int(c.order),
+                        gap_center=None if c.gap_center is None else float(c.gap_center),
+                        ink_ratio=float(c.ink_ratio), raised=bool(c.raised),
+                        suspect_jiazhu_body=bool(getattr(c, "suspect_jiazhu_body", False)),
+                        seam_top=c.seam_top, seam_bottom=c.seam_bottom,
+                        quad_page=(None if mapper is None else
+                                   [(round(x, 2), round(y, 2)) for x, y in mapper.quad_tr(c.x0, c.y0, c.x1, c.y1)]),
+                        # 表认下的字格：Step4 的列端渣格闸不再拿图像判据把它判空（「一」「二」在列端形同框线）
+                        flags=["layout_char"] if lay is not None and c.kind != "blank" and c.slot in occ else [],
+                    ))
+                flags: list[str] = list(prior_flags)
+                if r.bottom_bar_y is not None:
+                    # 下界换成了列里认出的下版框线（2026-09-28，overview#266）。border_bottom
+                    # 一并改写：Step4 拿它当 frame_bottom 提示，把条带开到这里、在它附近找框——
+                    # 还给 Step2 的值，Step4 就在框下白纸上找框，找不到，框墨进图块。
+                    flags.append(f"bottom_bar：下版框线在列图 y={r.bottom_bar_y:.0f}，"
+                                 f"高出 border_bottom {base['border_bottom'] - r.bottom_bar_y:.0f} 行")
+                    base = dict(base, border_bottom=float(r.bottom_bar_y))
+                return (ColumnCells(ok=True, boundaries=[float(b) for b in r.boundaries], flags=flags,
+                                       cells=cells, cut_candidates=[
+                                           CutPointCandidates(
+                                               k=cp.k, y=cp.y, slot_above=cp.slot_above,
+                                               slot_below=cp.slot_below, chosen=cp.chosen,
+                                               chosen_by=cp.chosen_by,
+                                               escalate=cp.escalate, escalate_reason=cp.escalate_reason,
+                                               origin=cp.origin,
+                                               candidates=[SeamCandidate(
+                                                   kind=c.kind, y=c.y, seam_ink=c.seam_ink,
+                                                   dev_max=c.dev_max, agree=c.agree, dis_unet=c.dis_unet)
+                                                   for c in cp.candidates],
+                                           ) for cp in r.cut_candidates],
+                                       **base))
+            out.append(_emit(r, base, prior_flags, lay, occ, n_raised_col))
+            if p.alt_cut and in_table and lay is not None:
+                ra = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
+                if ra is not None:
+                    ra = _finalize(ra)
+                    ca = _emit(ra, dict(base, n_raised=gate_raised, top_slack=gc.top_slack),
+                               ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"], None, occ, gate_raised)
+                    if [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in ca.cells] != \
+                            [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in out[-1].cells]:
+                        alt_out.append(ca)
         pc = PageCells(page=page, period=gate.period, ref_w=gate.ref_w, columns=out)
         pc = self._header_columns(ctx, p, page, gate, wins, pc)
         pc = self._header_ref_flags(ctx, p, page, pc)
-        return {"cells": _apply_manual_cells(pc, manual, gate, wins)}
+        pc = _apply_manual_cells(pc, manual, gate, wins)
+        if alt_out:
+            # 卷端标题列、人工指定的列已换掉主切法，备选不再有意义：只留主切法仍是本步切出来那份的列
+            mains = {id(c.cells) for c in out}
+            keep = {c.col for c in pc.columns if id(c.cells) in mains}
+            alt_out = [c for c in alt_out if c.col in keep]
+            if alt_out:
+                pc = pc.model_copy(update={"alt_columns": alt_out})
+        return {"cells": pc}
 
     def _header_columns(self, ctx: RunContext, p: RowSegmentParams, page: int,
                         gate: GateManifest, wins: PageWindows, pc: PageCells) -> PageCells:
