@@ -6,7 +6,9 @@
 
 - **A 档**：k 个近邻里同字 ≥ `votes_min`，且该字最近一格的距离 < `ratio_max` × 别字最近一格的距离 → 给字，不看整理本；
 - **B 档**：同字 ≥ `ref_votes_min`、距离比 < `ref_ratio_max`，**且整理本对位字就是这个字** → 给字（两证）；
-- 离训练格最近 5 个的平均距离 > `guard` → 组外字，弃权。
+- 离训练格最近 5 个的平均距离 > `guard` → 组外字，弃权；
+- **背景刻例**（标签 `~`）：本书随机已放行格＋易混的组外字（金、準、剛…）也进库，近邻投给 `~` → 组外字，弃权
+  （只靠距离护栏挡不住长得像组员的组外字：xjz 的「金」被判成「全」、chuo 的「準」被判成「進」）。
 
 模型是书级数据（中心库数据目录 `config/groups/book_knn/<组>.json`，`schema: book_knn/1`），由
 `research/char_groups/book_knn_train.py` 训练导出（按册留出定门槛）；没有这个文件的组本解法不出现，行为不变。
@@ -23,6 +25,7 @@ from pathlib import Path
 import numpy as np
 
 SCHEMA = "book_knn/1"
+BACKGROUND = "~"                      # 背景刻例（组外字）的标签
 
 
 @lru_cache(maxsize=16)
@@ -58,6 +61,8 @@ def judge_feat(f: np.ndarray | None, model: dict, ref: str | None = None) -> dic
     out = {"pick": top, "votes": int(votes), "ratio": round(ratio, 3), "nn": round(nn, 3)}
     if nn > model["guard"]:
         return {**out, "char": None, "why": "abstain:out_of_group", "tier": None}
+    if top == BACKGROUND:
+        return {**out, "char": None, "why": "abstain:background", "tier": None}
     if votes >= model["votes_min"] and ratio < model["ratio_max"]:
         return {**out, "char": top, "why": "agree", "tier": "A"}
     if ref == top and votes >= model["ref_votes_min"] and ratio < model["ref_ratio_max"]:

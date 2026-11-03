@@ -55,3 +55,12 @@ def test_tier_b_needs_ref():
 def test_guard_and_blank():
     assert book_knn.judge(box(1), _model(guard=0.0))["why"] == "abstain:out_of_group"
     assert book_knn.judge(_canvas(), _model())["char"] is None
+
+
+def test_background_abstains():
+    """近邻投给背景刻例 `~`（长得像组员的组外字）→ 弃权。"""
+    m = _model()
+    m["labels"] = np.array(list("口口口口口") + [book_knn.BACKGROUND] * 5)
+    v = book_knn.judge(cross(1), m)
+    assert (v["char"], v["why"]) == (None, "abstain:background")
+    assert book_knn.judge(box(1), m)["char"] == "口"
