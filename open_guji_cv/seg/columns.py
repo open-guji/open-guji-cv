@@ -175,17 +175,35 @@ def thin_peaks(xs: np.ndarray, prof: np.ndarray, *, min_peak: float = 0.02, half
     return out
 
 
-def flank_ink(xs: np.ndarray, prof: np.ndarray, x: float, *, near: int = 6, far: int = 16) -> float:
-    """线 x 两侧 [near, far) px 的平均墨占比（取两侧均值）。界行两侧是字间空白（≈0），字心里的假线两侧都是字（高）。"""
+def flank_ink(xs: np.ndarray, prof: np.ndarray, x: float, *, near: int = 6, far: int = 16,
+              run: float = 0.6) -> float:
+    """线 x 两侧 [near, far) px 的平均墨占比，取空的那一侧。字心里的假线两侧都是字（高）；界行至少一侧是字间空白
+    （外框线外侧可能贴着版心条、邻页，内界行在密排页上可能一侧贴字）。
+    x 落在一段墨占比 ≥ `run` 的实墨上（粗外框、笔画）时，从这段墨的两边起量，粗框自己的墨不算两侧墨。"""
     if len(xs) == 0:
         return 0.0
     base = int(xs[0])
+    i = min(max(int(round(x)) - base, 0), len(prof) - 1)
+    a = b = i
+    if prof[i] >= run:
+        while a > 0 and prof[a - 1] >= run:
+            a -= 1
+        while b < len(prof) - 1 and prof[b + 1] >= run:
+            b += 1
 
-    def side(a, b):
-        i0, i1 = int(round(a)) - base, int(round(b)) - base
+    def side(i0, i1):
         i0, i1 = max(i0, 0), min(i1, len(prof))
         return float(prof[i0:i1].mean()) if i1 > i0 else 0.0
-    return (side(x - far, x - near) + side(x + near + 1, x + far + 1)) / 2.0
+    return min(side(a - far, a - near), side(b + near + 1, b + far + 1))
+
+
+def core_ink(xs: np.ndarray, prof: np.ndarray, x: float, *, half: int = 3) -> float:
+    """线 x 本身 ±`half` px 的平均墨占比。真界行是墨（细峰），没印出的界行落在字缝里是空白；字心假线压在笔画上。"""
+    if len(xs) == 0:
+        return 0.0
+    i = int(round(x)) - int(xs[0])
+    i0, i1 = max(i - half, 0), min(i + half + 1, len(prof))
+    return float(prof[i0:i1].mean()) if i1 > i0 else 0.0
 
 
 # ── 拟合 ─────────────────────────────────────────────────────────────
@@ -202,7 +220,7 @@ def fit_columns(cands: list[Cand], n_lines: int, pitch: float, spec: ColumnSpec,
                 first_max: float | None = None, last_min: float | None = None,
                 even_w: float = 1.0) -> list[Cand] | None:
     """从候选里挑恰好 `n_lines` 条线（x 升序），相邻间距都在带里（首末列外列带、其余内列带，× `pitch`），
-    目标＝证据分之和 − `even_w` × Σ|列宽/列距 − 1|，取最大。`first_max`／`last_min`：第一条线不许大于、最后一条
+    目标＝证据分之和 − `even_w` × Σ|内列宽/列距 − 1|，取最大（首末列量到外框、本来偏宽，不计匀度）。`first_max`／`last_min`：第一条线不许大于、最后一条
     不许小于（调用方用来护住贴版框的外列，不许整网平移把它甩出去）。挑不出返回 None。"""
     pool = sorted(cands, key=lambda c: c.x)
     m, n = len(pool), n_lines
@@ -225,7 +243,8 @@ def fit_columns(cands: list[Cand], n_lines: int, pitch: float, spec: ColumnSpec,
                 r = (xi - pool[j].x) / pitch
                 if not lo <= r <= hi:
                     continue
-                v = best[j][k - 1] + pool[i].score - even_w * abs(r - 1.0)
+                even = 0.0 if k - 1 in (0, n - 2) else even_w * abs(r - 1.0)
+                v = best[j][k - 1] + pool[i].score - even
                 if v > bi:
                     bi, bj = v, j
             best[i][k], prev[i][k] = bi, bj

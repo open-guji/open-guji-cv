@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from open_guji_cv.seg.columns import (Cand, ColumnSpec, blank_mids, check_columns, fit_columns, flank_ink,
+from open_guji_cv.seg.columns import (core_ink, Cand, ColumnSpec, blank_mids, check_columns, fit_columns, flank_ink,
                                       thin_peaks)
 
 
@@ -51,4 +51,9 @@ def test_profile_helpers():
     prof[80:95] = 0.3
     assert blank_mids(xs, prof) == [49.5, 70.0]          # 40–59、61–79 两段
     assert thin_peaks(xs, prof) == [60.0]
-    assert flank_ink(xs, prof, 30) > 0.1 and flank_ink(xs, prof, 60) == 0.0
+    assert flank_ink(xs, prof, 30) > 0.05 and flank_ink(xs, prof, 60) == 0.0
+    assert flank_ink(xs, prof, 40) == 0.0                # 字列边上：一侧空就算空
+    thick = np.zeros(100)
+    thick[50:62] = 0.95          # 粗外框：从实墨两边起量，框自己的墨不算
+    assert flank_ink(xs, thick, 55) == 0.0
+    assert core_ink(xs, thick, 55) > 0.9 and core_ink(xs, prof, 50) == 0.0

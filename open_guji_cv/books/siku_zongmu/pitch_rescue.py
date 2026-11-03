@@ -10,16 +10,19 @@
 | 网格模式的线（自由线范围内；网格与自由线重合过半时外侧也收） | 1.5／1 | grid、fuse |
 | 界行残段（竖墨线连续 ≥ 0.8 列宽，含外侧 1.3 列宽内的版框） | 1 | frame、fuse（vol16 p8 天头残段） |
 | 淡界行细峰、字间空白中点 | 0.5 | snap（vol48 p121 淡界行、vol44 p108 字心假线） |
+| 原线按列距推一列、落在附近最空处（±`STEP_REACH` 列距） | 0.5 | snap 的 `_pitch_guess`（vol16 p6 界行淡到投影里没峰） |
 | 有字一侧按列距外推的外框线（出图边截到图边） | 0 | extend、fuse（vol14 p186、vol86 p151） |
 | 外列补到一个列距、外侧空白（版框没印出来） | 0 | pad（全唐文 07 p47） |
 
-每条候选再扣「两侧墨」（`flank_ink`×`INK_W`）：字心里的假线两侧都是字，扣到负分就不进池。DP 求总分最高的一串，
+每条候选再扣墨（`INK_W`×min(两侧墨 `flank_ink`, 线上墨 `core_ink`)）：字心里的假线线上压着笔画、两侧都是字，
+扣到负分就不进池；真界行（线上有墨、两侧空）和没印出的界行（落在字缝、线上空）都不扣。DP 求总分最高的一串，
 另减 Σ|列宽/列距−1| 作平手判据（列宽越匀越好）。
 
 **护栏**（原样保留，都是真页教训）：
 - 新网至少一半的线与原线重合（±TOL），防在卷端大印页、书名页上挑出另一套网（vol20 p179）；
 - 列宽合格的列两边、附近有界行残段的旧线不许动（vol13 p46：网格把三条真界行各挪 9px）；
-- 外侧贴版框（外侧半列宽内有残段）的旧外列不许甩出网（vol40 p14、vol46 p118/p148：外推进版心条、整网平移一列）。
+- 外侧贴版框（外侧半列宽内有残段）的旧外列不许甩出网（vol40 p14、vol46 p118/p148：外推进版心条、整网平移一列）；
+  外列偏宽、旧外框线本身压在残段上就不许往里挪（vol13 p46：外列偏宽是版框本来就宽，不是线错）。
 
 正常页（列宽都在带里）不走这里，产物逐字节不变。纯几何，不改 `border_geometry`。
 """
@@ -30,7 +33,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from ...seg.columns import (Cand, ColumnSpec, blank_mids, check_columns, fit_columns, flank_ink,
+from ...seg.columns import (Cand, ColumnSpec, blank_mids, check_columns, core_ink, fit_columns, flank_ink,
                             ink_profile, rule_ridges, thin_peaks)
 from .column_pair_merge import line_xs
 from .column_types import classify_columns
@@ -52,9 +55,12 @@ INK_W = 8.0
 #: 借形状的自由线斜率与本页中位斜率之差上限
 SLOPE_TOL = 0.01
 
+#: 按列距推线：推到的位置两侧这么宽（× 列距）里找投影最空处
+STEP_REACH = 0.1
+
 SCORE_FREE, SCORE_FREE_RULE = 2.0, 3.0
 SCORE_GRID, SCORE_GRID_RULE = 1.0, 1.5
-SCORE_RIDGE, SCORE_BLANK, SCORE_EXTRAP = 1.0, 0.5, 0.0
+SCORE_RIDGE, SCORE_BLANK, SCORE_STEP, SCORE_EXTRAP = 1.0, 0.5, 0.5, 0.0
 
 
 def _skip(xs, leaf_layout):
@@ -108,7 +114,9 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", i
         return float(prof[sel].mean()) if sel.any() else 0.0
 
     def penalty(x):
-        return INK_W * flank_ink(px, prof, x)
+        # 字心假线：线上压着笔画、两侧也是字，两样都高才扣。真界行线上有墨但两侧空；没印出的界行落在字缝，
+        # 线上空、两侧却可能贴着字（密排小字页 vol16 p6）——取两者小的
+        return INK_W * min(flank_ink(px, prof, x), core_ink(px, prof, x))
 
     def near_rule(x):
         return any(abs(x - r) <= TOL for r in ridges)
@@ -142,6 +150,12 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", i
         add(m, SCORE_BLANK - penalty(m), shifted(m, False))
     for m in blank_mids(px, prof, blank=BLANK):
         add(m, SCORE_BLANK - penalty(m), shifted(m, False))
+    for x in xs:                                                      # 按列距推一列，落到附近最空处
+        for t in (x - pitch, x + pitch):
+            sel = (px >= t - STEP_REACH * pitch) & (px <= t + STEP_REACH * pitch)
+            if xs[0] < t < xs[-1] and sel.any():
+                m = float(px[sel][np.argmin(prof[sel])])
+                add(m, SCORE_STEP - penalty(m), shifted(m, False))
     for sign, outer, inner in ((-1, xs[0], xs[1]), (1, xs[-1], xs[-2])):
         edge = 0.0 if sign < 0 else float(W - 1)
         ext = outer + sign * min(pitch, abs(edge - outer))           # 有字一侧外推一列（出图边截到图边）
@@ -153,13 +167,17 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", i
                 and ink(pad, pad + sign * PAD_MARGIN * pitch) < BLANK):
             add(pad, SCORE_EXTRAP, shifted(pad, True))
 
-    # 外侧贴版框的旧外列不许甩出网
-    lo_frame = [r for r in ridges if xs[0] - FRAME_REACH * pitch <= r < xs[0] - TOL]
-    hi_frame = [r for r in ridges if xs[-1] + TOL < r <= xs[-1] + FRAME_REACH * pitch]
+    # 外侧贴版框的旧外列不许甩出网；外列偏宽、旧外框线本身压在版框残段上，就不许往里挪（偏窄的不护：
+    # 双栏版框内外两道线之间被当成一列，vol94 p159）
+    def bound(outer, inner, sign):
+        if near_rule(outer) and abs(outer - inner) > pitch:
+            return outer - sign * TOL
+        if any(TOL < sign * (r - outer) <= FRAME_REACH * pitch for r in ridges):
+            return (outer + inner) / 2.0
+        return None
     n = max(len(xs), len(gx))
     chain = fit_columns(cands, n, pitch, spec,
-                        first_max=(xs[0] + xs[1]) / 2.0 if lo_frame else None,
-                        last_min=(xs[-2] + xs[-1]) / 2.0 if hi_frame else None)
+                        first_max=bound(xs[0], xs[1], -1), last_min=bound(xs[-1], xs[-2], 1))
     if chain is None:
         return res, None
     new_xs = [c.x for c in chain]
