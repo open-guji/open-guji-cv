@@ -565,7 +565,13 @@ def _admit_events(res, admits, db, cache, occ_of, occ_memo, binarize, bind_of,
         if _lib_newer(db, db_id, e, ts_of):
             res.superseded += 1
             continue
-        if prev is not None and (prev[2] != shape or prev[1] != shape):
+        # 机器播种的刻例只有 exemplars、没有 admissions 行（库里 9 成刻例如此），`prev` 以 admissions 起头看不见它：
+        # 人裁改判成别的字时，旧字头下的刻例留着，同一张图同时算两个字的刻例（史記 70 例：史／經、告／竣 等 cov 并列、
+        # 上下文 margin = 0，放行全卡住，2026-11-03）。所以另按 exemplars 查一遍字头不同的旧刻例。
+        stale = db.conn.execute(
+            "SELECT 1 FROM exemplars e JOIN glyphs g ON g.glyph_id = e.glyph_id "
+            " WHERE e.instance_id = ? AND g.char != ?", (db_id, shape)).fetchone()
+        if stale or (prev is not None and (prev[2] != shape or prev[1] != shape)):
             from ..clustering.audit import evict_instance
             evict_instance(db, db_id)
             res.updated += 1
