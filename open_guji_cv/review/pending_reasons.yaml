@@ -32,8 +32,8 @@ categories:
   near_form:    {code: N, label: 形近护栏}
   variant:      {code: V, label: 异体}
   glyph_lib:    {code: L, label: 字形库}
-  reference:    {code: R, label: 整理本缺位}
-  mismatch:     {code: P, label: 与整理本不一致}
+  reference:    {code: R, label: 参校本缺位}
+  mismatch:     {code: P, label: 与参校本不一致}
   review:       {code: X, label: 复审与其他}
 
 routes:
