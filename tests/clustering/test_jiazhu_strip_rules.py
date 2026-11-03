@@ -52,3 +52,55 @@ def test_long_rule_through_ignores_ink_edges_and_spares_radical_beside_line():
     assert (out[:, 5:9] == 255).all()
     assert (out[20:30, 10:16] == 0).all() and (out[45:55, 10:16] == 0).all()
     assert (out[10:70, 40:100] == 0).all()
+
+
+# ── 半格框线（SJ r6，2026-11-03）：内框细线离框约 0.2 格、在两行之间断开 ─────────────
+def _half(line_y=None, top_stroke=False):
+    p = np.full((140, 80), 255, np.uint8)
+    p[50:110, 30:44] = 0                      # 小字
+    if line_y is not None:
+        p[line_y:line_y + 4, 2:78] = 0        # 框线横贯半格
+    if top_stroke:
+        p[30:34, 4:76] = 0                    # 小字的长顶横，跟字隔着白
+    return p
+
+
+def test_half_line_on_page_line_position_is_stripped():
+    from open_guji_cv.clustering.extractor import strip_jiazhu_half_line
+    p = _half(line_y=24)
+    out = strip_jiazhu_half_line(p, 0.0, CELL_H, bottom=False, line_ys=((26.0, 4.0),))
+    assert (out[:30] == 255).all() and (out[50:110] == p[50:110]).all()
+    flip = strip_jiazhu_half_line(p[::-1], 140.0, CELL_H, bottom=True, line_ys=((140 - 26.0, 4.0),))
+    assert (flip[::-1][:30] == 255).all()
+
+
+def test_half_line_needs_page_line_position():
+    """并排小字的长顶横离框也这么近：不在全页线位上（或这页没有线位）不剥。"""
+    from open_guji_cv.clustering.extractor import strip_jiazhu_half_line
+    p = _half(top_stroke=True)
+    assert (strip_jiazhu_half_line(p, 0.0, CELL_H, bottom=False) == p).all()
+    assert (strip_jiazhu_half_line(p, 0.0, CELL_H, bottom=False, line_ys=((12.0, 4.0),)) == p).all()
+
+
+def test_half_line_keeps_lone_stroke_char():
+    """线下没字（只有一横的「一」）不剥。"""
+    from open_guji_cv.clustering.extractor import strip_jiazhu_half_line
+    p = np.full((140, 80), 255, np.uint8)
+    p[24:28, 2:78] = 0
+    assert (strip_jiazhu_half_line(p, 0.0, CELL_H, bottom=False, line_ys=((26.0, 4.0),)) == p).all()
+
+
+def test_long_rule_through_strips_frame_touching_stroke():
+    """外侧竖框跟字的捺脚碰上、连成一段太宽（02:32:1:3a「誕」）：只抹贴外沿的线列。"""
+    from open_guji_cv.clustering.extractor import strip_long_rule
+    p = np.full((120, 100), 255, np.uint8)
+    p[20:100, 4:12] = 0                      # 字的左偏旁（言）
+    p[20:100, 20:30] = 0                     # 字的右半
+    p[90:94, 20:96] = 0                      # 捺脚一直伸到线上
+    strip = np.zeros((400, 100), dtype=bool)
+    strip[:, 94:97] = True                   # 竖框贯穿整列
+    p[:, 94:97] = 0
+    strip[140:220] |= p[20:100] < 128
+    out = strip_long_rule(p, strip, 120, 140.0, 240.0, through=True)
+    assert (out[:, 94:97] == 255).all()
+    assert (out[20:100, 20:30] == 0).all()

@@ -157,6 +157,16 @@ class CellShrinkStep(Step):
                 offs = [(d, th) for d, th in offs if d <= lim and (bottom or any(edge[cc.col] > 0.5 for cc in cols))]
             out[key] = {cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in offs]
                         for cc in cols if edge[cc.col] is not None}
+            if ctx.params_for(self).jiazhu_strip_rules:  # type: ignore[attr-defined]
+                # 夹注半格的框线线位（`extractor.strip_jiazhu_half_line`）：写本内框细线在两行之间断开，按半格宽认；
+                # 列图不含上框（border_top=0）也认——只收离版框 JZ_HALF_LINE_REACH 格高以内的，字头不会全页对齐在那么近
+                from ..clustering.extractor import JZ_HALF_LINE_REACH, JZ_HALF_LINE_SPAN
+                half = [(d, th) for d, th in page_frame_line_offsets(
+                    [(imgs[cc.col], *cc.content_x, edge[cc.col]) for cc in cols if edge[cc.col] is not None],
+                    cell_h, bottom=bottom, span_frac=JZ_HALF_LINE_SPAN) if d <= JZ_HALF_LINE_REACH * cell_h]
+                out[key.replace("frame_lines", "frame_half_lines")] = {
+                    cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in half]
+                    for cc in cols if edge[cc.col] is not None}
         return out
 
     def _extract_column(self, ctx: RunContext, page: int, cc: ColumnCells,
