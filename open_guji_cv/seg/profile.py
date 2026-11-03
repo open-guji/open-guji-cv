@@ -84,6 +84,8 @@ ROWS_KEEP_MIN = 0.5
 #: 0.40（当时是按 p73c1 峰 1.00 的样本标定的，没覆盖这么淡的）；全书按 0.10 扫，
 #: 命中的都还是页边列（col 1/9），没有一条落在正文腹地列（2026-09-27）。
 BAR_AFTER_MIN_PEAK = 0.10
+#: `first_valley`：界行衰减到这一格以后，墨又回升超过这么多，这一格就是界行与字之间的谷
+FIRST_VALLEY_RISE = 0.02
 
 
 def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
@@ -91,6 +93,7 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
                       max_rule_frac: float = 0.15, bar_min_peak: float = 0.40,
                       bar_max_width: int = 22, inset_look_frac: float = 0.28,
                       bar_after_min_peak: float = BAR_AFTER_MIN_PEAK,
+                      first_valley: bool = False,
                       ) -> tuple[int, int]:
     """找矫正图里**文字带的左右边界** `(x_left, x_right)`（半开区间，右端不含）。
 
@@ -109,6 +112,10 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
       —— 实测那些条落在离边 24~35px，贴边档的 15% 窗口（约 28px）够不着；
       放宽是安全的，因为只有真找到"孤立窄条"才动手。
     * 两档都不满足就收手，一个像素也不啃。
+
+    `first_valley=True`（写本书级，`column_warp.tight_rule_band`）：贴边档的边界取界行衰减后的**第一个谷**
+    （之后墨回升超过 `FIRST_VALLEY_RISE`），不取窗口最低点——写本字贴着界行写，「以」的左竖落在窗口里、
+    跟右半「人」之间那道缝比界行与字之间的缝还白，取最低点就连这一竖一起抹掉（史記 02:27:1:4b）。
 
     "扫到窗口最低点"这个写法是拿人裁金标标定出来的
     （`char-segmentation/column-warp`）。**上一版是"先吃墨占比 >= 0.35 的界行
@@ -160,6 +167,13 @@ def column_text_band(warped_gray: np.ndarray, ink_threshold: int = 128,
         if window[0] > edge_ink_eps:                 # 贴边档
             floor = float(window.min())
             b = int(np.argmax(window <= floor + plateau_tol))
+            if first_valley:      # 顺着界行的衰减往里走，墨一回升就停：停下那格是第一个谷
+                v = int(np.argmax(window[:max(2, len(window) // 3)])) + 1     # 从界行的墨峰起走
+                while v < len(window) and window[v] > floor + plateau_tol \
+                        and window[v] <= window[v - 1] + FIRST_VALLEY_RISE:
+                    v += 1
+                if v < len(window) and window[v] > floor + plateau_tol:
+                    b = min(b, v - 1)
             # 贴边的界行之内还有一条孤立窄竖线（页边列的双线：外框贴边、内框探进来，
             # vol02 p73c1 实测 x=189~195、峰 1.00、两侧 0.00）：一并算在带外
             inner = bar_after(order, b)

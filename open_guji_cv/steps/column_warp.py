@@ -8,7 +8,7 @@ clean_column。numeric 产物存复现所需的全部量；两种列图（矫正
 from __future__ import annotations
 
 import numpy as np
-from pydantic import BaseModel
+from pydantic import BaseModel, model_serializer
 
 from ..core.spec import StepSpec, column_key, parse_key
 from ..core.step import RunContext, Step, register_step
@@ -21,6 +21,10 @@ from ..seg.profile import column_profile, denoise_column, stamp_noise_density
 from ..seg.warp import ColumnWindow, page_column_windows, warp_column
 
 
+#: `tight_rule_band`：内侧孤立窄条峰到这么高才当第二道线（写本「以」的左竖一条 240 行里峰 0.16~0.33）
+TIGHT_INNER_BAR_PEAK = 0.5
+
+
 class ColumnWarpParams(BaseModel):
     body_pad: float = 0.0
     bottom_pad: float = 40.0          # 下界额外开的余量，见 column_projection.BOTTOM_PAD
@@ -28,6 +32,19 @@ class ColumnWarpParams(BaseModel):
     ink_threshold: int = 128
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
+    tight_rule_band: bool = False
+    """两侧界行判带收紧（写本开，史記）：贴边界行取衰减后的第一个谷（`column_text_band` first_valley），
+    内侧孤立窄条峰到 TIGHT_INNER_BAR_PEAK 才当第二道线抹（缺省 0.10，殿本页边列内框淡到 0.12）。缺省关＝殿本旧行为。
+    起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
+    判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_off_switches(self, handler):
+        """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
+        d = handler(self)
+        if isinstance(d, dict) and not self.tight_rule_band:
+            d.pop("tight_rule_band", None)
+        return d
 
 
 def side_floor(raw: np.ndarray, look: float = 0.25, ink_threshold: int = 128) -> float:
@@ -132,7 +149,8 @@ class ColumnWarpStep(Step):
             raw, ink_threshold=p.ink_threshold,
             layers=(int(fl.get("top", 1)), int(fl.get("bottom", 1))),
             layer_gap=(og.get("top"), og.get("bottom")),
-            inner_bottom=win.border_bottom_in_column)
+            inner_bottom=win.border_bottom_in_column,
+            **({"bar_after_min_peak": TIGHT_INNER_BAR_PEAK, "first_valley": True} if p.tight_rule_band else {}))
         return raw, cleaned, diag, warped
 
     # ── Step 接口 ─────────────────────────────────────────────────────
