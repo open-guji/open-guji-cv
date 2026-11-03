@@ -22,7 +22,7 @@ from pydantic import BaseModel
 
 from . import perf as _perf
 from .book import BookSpec
-from .pipeline import Pipeline, _produces
+from .pipeline import Pipeline, _produces, base_params
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
 from .spec import gated_optional_on, live_optional_consumes, page_key
 from .step import STEPS, RunContext, Step, kind_of
@@ -329,14 +329,15 @@ class Engine:
         self.store = store or ProductStore()
         self.cache = cache or ImageCache()
         self.log = log or (lambda s: print(s, flush=True))
-        # 参数四层：Step 默认值 < 管线 yaml 的 `params:`（这条链的默认） < 册配置的 `params:`
+        # 参数五层：Step 默认值 < 管线 yaml 的 `params:` < 套书缺省 `books/<套书>/defaults.yaml`
+        # （2026-11-03 方案 B 第一期，`core/pipeline.base_param_layers`） < 册配置的 `params:`
         # （工作区基础配置 ∪ 册 yaml ∪ `--override`，`BookSpec.params`） < 调用方覆盖（CLI `--params` /
         # 控制台表单）。同一 Step 几层都有时按字段合并，上层优先。册配置里写 `null` 的字段 = 去掉下层
         # （管线 yaml）的值、回到 Step 默认（doc/design/册配置分层与运行覆盖.md 3.2）。
         # 2026-11-03 起册配置在字典层面叠在管线 yaml 之上：以前册配置靠 `_with_book_params` 事后补，
         # 管线 yaml 写过的字段算「显式」被跳过，管线反倒压过册配置（与文档顺序相反）。
         resolved: dict[str, BaseModel] = {}
-        merged: dict[str, dict] = {sid: dict(v) for sid, v in (pipeline.params or {}).items()}
+        merged: dict[str, dict] = base_params(pipeline, book)
         for sid, kv in (getattr(book, "params", None) or {}).items():
             if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
                 continue
@@ -435,6 +436,8 @@ class Engine:
             if not p.exists():
                 return None
             return self.store.raw_sha(self.book.id, p)
+        if not self.pipeline.provides(kind):     # 这条管线里没有生产者的可选上游：永远缺席
+            return None
         prod = self.pipeline.producer_of(kind)
         entry = self.store.manifest(self.book.id, prod.spec.id).get(page_key(page))
         # 上游这一页最近一次跑失败了：盘上那份是更早一轮的旧产物（换源 vol23 p10 新图拿旧图版框切了 74 格），

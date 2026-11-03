@@ -385,14 +385,15 @@ def cmd_book(args) -> None:
     path = _book_yaml_path(args.book)
     d = effective_book_dict(path)
     src = provenance(path)
-    try:                                # 管线 yaml 的 params 也列出来（它在册配置之下）；选不出管线就只列册配置各层
+    try:                                # 管线 yaml、套书缺省的 params 也列出来（都在册配置之下）；选不出管线就只列册配置各层
         from .core.book import load_book
-        from .core.pipeline import load_pipeline
-        pl = load_pipeline(load_book(args.book).default_pipeline_id())
-        pl_id, pl_params = pl.id, (pl.params or {})
+        from .core.pipeline import base_param_layers, load_pipeline
+        _bk = load_book(args.book)
+        pl = load_pipeline(_bk.default_pipeline_id())
+        pl_id, base_layers = pl.id, base_param_layers(pl, _bk)
     except Exception:
-        pl_id, pl_params = None, {}
-    psrc = params_provenance(path, pl_params)
+        pl_id, base_layers = None, []
+    psrc = params_provenance(path, base_layers=base_layers)
     try:                                # 字形库来源：借库钉在 workspace.yaml（五层之外），这里一并列出
         from .core.book import load_book as _lb
         from .core.glyph_pin import glyph_sources
@@ -409,7 +410,7 @@ def cmd_book(args) -> None:
     for k in sorted(d):
         v = json.dumps(d[k], ensure_ascii=False, default=str)
         print(f"{k}: {v if len(v) <= 160 else v[:157] + '…'}    # {src.get(k, '?')}")
-    print(f"\n# Step 参数逐字段（管线 {pl_id or '?'}；优先级 Step 默认 < 管线 yaml < 基础配置 < 册 yaml < 运行覆盖；"
+    print(f"\n# Step 参数逐字段（管线 {pl_id or '?'}；优先级 Step 默认 < 管线 yaml < 套书缺省 < 基础配置 < 册 yaml < 运行覆盖；"
           f"--params 另在最上层；没列出的字段 = Step 默认）")
     for k, (v, ly) in psrc.items():
         vs = json.dumps(v, ensure_ascii=False, default=str)

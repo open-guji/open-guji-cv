@@ -136,13 +136,16 @@ def run_override_params() -> dict[str, dict]:
     return p
 
 
-def params_provenance(book_yaml: Path, pipeline_params: dict | None = None) -> dict[str, tuple[object, str]]:
+def params_provenance(book_yaml: Path, pipeline_params: dict | None = None,
+                      base_layers: list[tuple[str, dict]] | None = None) -> dict[str, tuple[object, str]]:
     """`params:` 逐字段的生效值与来源层：`{"<step>.<字段>": (值, 层名)}`，给 `guji book show --effective` 用。
 
-    层从低到高：管线 yaml（`pipeline_params`）< 基础配置 < 册 yaml < 运行覆盖，与 `Engine.__init__` 的合并一致；
+    层从低到高：管线 yaml < 套书缺省（`base_layers`，`core/pipeline.base_param_layers` 给；不给就只算
+    `pipeline_params` 一层）< 基础配置 < 册 yaml < 运行覆盖，与 `Engine.__init__` 的合并一致；
     某层写 `null` = 去掉下层的值（回 Step 默认，不列出）。不含 Step 默认值（没列出的字段就是默认）。"""
     out: dict[str, tuple[object, str]] = {}
-    ls = [("管线 yaml", {"params": pipeline_params or {}})] + layers(book_yaml)
+    base = base_layers if base_layers is not None else [("管线 yaml", pipeline_params or {})]
+    ls = [(name, {"params": pp or {}}) for name, pp in base] + layers(book_yaml)
     for name, layer in ls:
         for sid, kv in (layer.get("params") or {}).items():
             if not isinstance(kv, dict):

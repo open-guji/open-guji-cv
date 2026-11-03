@@ -154,13 +154,20 @@ class Pipeline:
                 raise ValueError(f"pipeline {self.id}: 未注册的 Step {sid!r}")
             s = STEPS[sid]
             provided = {k for p in seen for k in _produces(STEPS[p])}
-            # 可选上游也要有生产者排在前面——"可选"是指**运行时**可以缺席（书级开关
-            # 关掉），不是指 pipeline 里可以没有它。
             wants = (*s.spec.consumes, *s.spec.optional_consumes)
             missing = [k for k in wants if k not in provided and k not in _EXTERNAL_KINDS]
-            if missing:
-                raise ValueError(f"pipeline {self.id}: {sid} 需要 {missing}，但前面没有步骤产出它")
+            # 可选上游的生产者**在这条管线里**就必须排在前面（写反了顺序要报）；整条管线都没有它的生产者，
+            # 就当这条链里这一路永远缺席（`provides()` 为假，读不到、不进指纹）。
+            # 2026-11-03 改：以前一律要求有生产者，cell_shrink 10-22 加可选上游 seals 后 modern_body
+            # 整条加载不了，默认选管线时被 `except` 吞掉、现代书悄悄退回刻本链。
+            hard = [k for k in missing if k in s.spec.consumes or self.provides(k)]
+            if hard:
+                raise ValueError(f"pipeline {self.id}: {sid} 需要 {hard}，但前面没有步骤产出它")
             seen.add(sid)
+
+    def provides(self, kind_id: str) -> bool:
+        """这条管线里有没有步骤（含出口挂的闸）产出 `kind_id`；`raw_page` 等外部种类算有。"""
+        return kind_id in _EXTERNAL_KINDS or any(kind_id in _produces(STEPS[s]) for s in self.steps)
 
     def to_dict(self) -> dict:
         return {
@@ -209,13 +216,19 @@ DEFAULT_PIPELINE_ID = "keben_body_v2"
 
 
 def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
-    """这册书默认走哪条管线：`selector.edition` 与 `Book.edition` 相同的那条
-    （唯一时）；找不到或多于一条都退回 `keben_body_v2`——刻本链是历史默认，
-    不能因为多了一条现代链就变。`selector` 在此之前只是文档，没人校验。
-    册 yaml 显式写了 `pipeline:` 的，照它（自由版式的坊刻本 edition 仍是 keben）。"""
+    """这册书默认走哪条管线（2026-11-03 管线重组方案 B 第一期起以套书为准）：
+
+    1. 册 yaml 显式写了 `pipeline:` 的照它（旧写法，兼容留着）；
+    2. 写了 `seg_set:` 的按套书推（`core/seg_set.SEG_SET_PIPELINE`）；
+    3. 都没写，按 `edition` 找 `selector.edition` 相同的那条（唯一时）；找不到或多于一条都退回
+       `keben_body_v2`——刻本链是历史默认，不能因为多了一条现代链就变。"""
     explicit = getattr(book, "pipeline", None)
     if explicit:
         return explicit
+    from .seg_set import SEG_SET_PIPELINE
+    ss = getattr(book, "seg_set", None)
+    if ss and ss in SEG_SET_PIPELINE:
+        return SEG_SET_PIPELINE[ss]
     edition = getattr(book, "edition", None)
     hits = []
     for pid in list_pipelines(pipelines_dir):
@@ -228,3 +241,31 @@ def default_pipeline_id(book, pipelines_dir: Path | None = None) -> str:
     if edition == "keben" or len(hits) != 1:
         return DEFAULT_PIPELINE_ID
     return hits[0]
+
+
+def base_param_layers(pipeline: Pipeline, book) -> list[tuple[str, dict[str, dict]]]:
+    """册配置之下的参数层，低 → 高：管线 yaml `params:`、套书缺省 `books/<套书>/defaults.yaml`。
+
+    2026-11-03 管线重组方案 B 第一期：同一份 Step 代码在不同套书下的缺省参数写在套书目录里，
+    不再写在管线 yaml（现有三条管线的 `params:` 已搬空，这一层只为兼容留着）。"""
+    from .seg_set import seg_set_for_run, seg_set_params
+    ss = seg_set_for_run(book, pipeline.id)
+    sp = seg_set_params(ss)
+    for sid in sp:
+        if sid not in STEPS:
+            raise ValueError(f"套书 {ss} 的 defaults.yaml params: 里有未注册的 Step {sid!r}")
+    return [("管线 yaml", dict(pipeline.params or {})), (f"套书缺省（{ss}）", sp)]
+
+
+def base_params(pipeline: Pipeline, book) -> dict[str, dict]:
+    """`base_param_layers` 按字段合并（上层优先；写 `null` = 去掉下层的值）。"""
+    merged: dict[str, dict] = {}
+    for _, layer in base_param_layers(pipeline, book):
+        for sid, kv in layer.items():
+            tgt = merged.setdefault(sid, {})
+            for k, v in kv.items():
+                if v is None:
+                    tgt.pop(k, None)
+                else:
+                    tgt[k] = v
+    return merged

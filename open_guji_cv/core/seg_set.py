@@ -14,6 +14,8 @@ shiji_wyg（史記文淵閣本，写本）从殿本分叉，必须在册 yaml �
 
 from __future__ import annotations
 
+from pathlib import Path
+
 SEG_SETS: tuple[str, ...] = ("siku_zongmu", "shiji_wyg", "zengguang_youxue", "beixing")
 
 PIPELINE_SEG_SET: dict[str, str] = {
@@ -21,6 +23,19 @@ PIPELINE_SEG_SET: dict[str, str] = {
     "keben_free": "zengguang_youxue",
     "modern_body": "beixing",
 }
+
+#: 套书 → 缺省走的管线（册 yaml 只写 `seg_set:` 时按它选管线，见 `core/pipeline.default_pipeline_id`）。
+#: 2026-11-03 管线重组方案 B 第一期：选管线以套书为准，`pipeline:` 只为兼容旧册 yaml 留着。
+SEG_SET_PIPELINE: dict[str, str] = {
+    "siku_zongmu": "keben_body_v2",
+    "shiji_wyg": "keben_body_v2",
+    "zengguang_youxue": "keben_free",
+    "beixing": "modern_body",
+}
+
+#: 各套书自己的缺省参数文件：`books/<套书>/defaults.yaml` 的 `params:`（形状同册配置 `params:`）。
+#: 只读数据文件、不 import books（守卫 `tests/test_architecture.py`）。
+BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
 
 _SIKU = "open_guji_cv.books.siku_zongmu."
 _SJ = "open_guji_cv.books.shiji_wyg."
@@ -51,6 +66,35 @@ def seg_set_of(book) -> str:
         f = getattr(book, "default_pipeline_id", None)
         pid = f() if callable(f) else None
     return PIPELINE_SEG_SET.get(pid, "siku_zongmu")
+
+
+def seg_set_for_run(book, pipeline_id: str | None) -> str:
+    """跑这一趟用哪套书的缺省参数：册 yaml 显式写的 `seg_set:` 优先；否则按**这趟跑的管线**推
+    （CLI `--pipeline` 换了管线就跟着换），推不出再按册本身（`seg_set_of`）。"""
+    explicit = getattr(book, "seg_set", None)
+    if explicit:
+        return explicit
+    if pipeline_id and pipeline_id in PIPELINE_SEG_SET:
+        return PIPELINE_SEG_SET[pipeline_id]
+    return seg_set_of(book)
+
+
+def seg_set_params(name: str | None, books_dir: Path | None = None) -> dict[str, dict]:
+    """套书缺省参数 `{step_id: {字段: 值}}`；没有 defaults.yaml 或没写 `params:` 返回空。
+
+    参数层（低 → 高）：Step 默认 < 管线 yaml `params:` < **套书缺省** < 册配置 `params:` < 运行覆盖
+    （`core/pipeline.base_param_layers`、`Engine.__init__`）。"""
+    if not name:
+        return {}
+    path = (books_dir or BOOKS_DIR) / name / "defaults.yaml"
+    if not path.is_file():
+        return {}
+    from .yaml_cache import load_yaml_cached
+    d = load_yaml_cached(path) or {}
+    raw = d.get("params") or {}
+    if not isinstance(raw, dict) or any(not isinstance(v, dict) for v in raw.values()):
+        raise ValueError(f"{path} 的 params: 必须是 {{step_id: {{字段: 值}}}}")
+    return {str(k): dict(v) for k, v in raw.items()}
 
 
 def resolve(book, default_module: str) -> str:

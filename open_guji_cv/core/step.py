@@ -491,6 +491,10 @@ class RunContext:
         return obj
 
     def has_product(self, kind_id: str, page: int) -> bool:
+        # 这条管线里根本没有生产者的可选上游（如 modern_body 的 seals）一律当缺席，
+        # 不去读全局生产者目录里也许残留的旧产物（`Pipeline.provides`）
+        if self._pipeline is not None and not self._pipeline.provides(kind_id):
+            return False
         step = self.producer(kind_id)
         return self.store.exists(self.book.id, step.spec.id, page_key(page))
 
