@@ -121,6 +121,22 @@ def find_valleys(curve: np.ndarray, dst_w: int, min_sep: int = 20,
     `prom_frac` 是凸出度阈值相对列宽的比例——列宽即墨量的理论上限（整行黑），
     用它归一化比用绝对像素数更能跨列宽度不同的列复用。
     """
+    # 同一列挑格网要切十几遍、曲线不变（2026-11-03）：按曲线内容记忆，返回副本。纯函数，结果逐位不变。
+    import hashlib
+    arr = np.ascontiguousarray(curve)
+    key = (hashlib.blake2b(arr.tobytes(), digest_size=16).digest(), arr.shape, str(arr.dtype), dst_w, min_sep, prom_frac)
+    hit = _VALLEY_MEMO.get(key)
+    if hit is None:
+        if len(_VALLEY_MEMO) >= _PAIR_MEMO_MAX:
+            _VALLEY_MEMO.pop(next(iter(_VALLEY_MEMO)))
+        hit = _VALLEY_MEMO[key] = _find_valleys(curve, dst_w, min_sep, prom_frac)
+    return list(hit)
+
+
+_VALLEY_MEMO: "dict[tuple, list[int]]" = {}
+
+
+def _find_valleys(curve: np.ndarray, dst_w: int, min_sep: int, prom_frac: float) -> list[int]:
     n = len(curve)
     prom_thresh = prom_frac * dst_w
     raw: list[int] = []
@@ -499,6 +515,27 @@ class RowBoundaryResult:
     认出来了 DP 的下界就是它，没认出来为 None（下界照旧用 `border_bottom`）。"""
 
 
+_PAIR_MEMO: "dict[tuple, dict]" = {}
+_PAIR_MEMO_MAX = 32
+"""跨调用的内部转移代价记忆（2026-11-03，全唐文 CPU 提速）。row_segment 挑格网时同一列要切十几遍，
+每遍都重算一张 (m×m) 的 `step_cost` 矩阵——全唐文册06 p27 一页 113 万次调用、占 DP 时间大半。
+内部转移 `step_cost(ya, yb)`（interior=True、last=False）只依赖曲线与下面 key 里的这些标量，
+与格数、首末锚点、top_slack、逐格先验都无关，所以按「曲线内容 + 标量」存逐对结果。
+存的就是同一个函数的返回值，DP 逐位不变。只留最近 `_PAIR_MEMO_MAX` 条曲线（一列一条）。"""
+_MISS = object()
+
+
+def _pair_memo(cmax: np.ndarray, scalars: tuple) -> dict:
+    import hashlib
+    key = (hashlib.blake2b(np.ascontiguousarray(cmax).tobytes(), digest_size=16).digest(), cmax.shape, scalars)
+    d = _PAIR_MEMO.get(key)
+    if d is None:
+        if len(_PAIR_MEMO) >= _PAIR_MEMO_MAX:
+            _PAIR_MEMO.pop(next(iter(_PAIR_MEMO)))
+        d = _PAIR_MEMO[key] = {}
+    return d
+
+
 def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: np.ndarray,
                          period: float, eps: float, lo_ratio: float, hi_ratio: float,
                          y1_max_frac: float, y2_max_frac: float, lam: float,
@@ -806,10 +843,17 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
     mid_y = [y for y, _ in mid]
     mid_ink = ink_lam * np.array([ink for _, ink in mid], dtype=np.float64)
     C = np.full((m_count, m_count), np.inf)
+    memo = ({} if cmax is None else
+            _pair_memo(cmax, (period, blank_min_gap, blank_thresh, blank_cost, blank_full_ratio, blank_cost_full,
+                              blank_lam_frac, blank_min_ratio, lam, lo_ratio, hi_ratio, mass_lam, mass_h, mass_min,
+                              cell_w, lam4, drop_lam, slot_mask_pen, slot_mask_rows)))
     for m in range(m_count):
         y = mid_y[m]
         for mp in range(m):
-            c = step_cost(mid_y[mp], y)
+            k_ = (mid_y[mp], y)
+            c = memo.get(k_, _MISS)
+            if c is _MISS:
+                c = memo[k_] = step_cost(mid_y[mp], y)
             if c is not None:
                 C[mp, m] = c
     col_idx = np.arange(m_count)
@@ -833,8 +877,12 @@ def _bounded_elastic_dp(x1: float, x2: float, valleys: np.ndarray, valley_ink: n
         for m in range(m_count):
             for mp in range(m):
                 if np.isfinite(C[mp, m]):
-                    pen_blank[mp, m] = slot_mask_pen * _charlike(mid_y[mp], mid_y[m])
-                    pen_char[mp, m] = slot_mask_pen * float(_is_blank(mid_y[mp], mid_y[m]))
+                    k_ = ("pen", mid_y[mp], mid_y[m])
+                    pp = memo.get(k_)
+                    if pp is None:
+                        pp = memo[k_] = (slot_mask_pen * _charlike(mid_y[mp], mid_y[m]),
+                                         slot_mask_pen * float(_is_blank(mid_y[mp], mid_y[m])))
+                    pen_blank[mp, m], pen_char[mp, m] = pp
         PK = [None if k == 0 or mask[k] is None else (pen_blank if mask[k] else pen_char)
               for k in range(n_interior)]
     for v0, _ink0 in cand0:
