@@ -734,13 +734,19 @@ class Provisional:
     slot_to: tuple = ()
     fams: tuple = ()
     slot_min: float = 0.07
+    #: 兜底归成整理本（sheldon 2026-11-03，參㕘叅、䟦跋、點㸃𭶑）：库首位与整理本（缺位用坐标对位字）都在 `forms` 里、cov 够，
+    #: 就放成整理本字，不看分差内别的候选（叅 常紧咬 恭未）；有 `fams` 的组两者须同族。
+    follow_ref: bool = False
+    #: `follow_ref` 时整理本字也认这些（不进 `forms`，免得改动别处的组外字判断）：點㸃 的 𭶑（黠 的写法，库里几乎没刻例）。
+    ref_forms: frozenset = frozenset()
 
 
 #: 暂归一兜底表（2026-10-27，A24「收尾同义形近字组送审」）：只收同义（`kind="variant"`）组，`to` 取 vol07–99 重落后放行最多的字形
 #: （已在书级 `codepoints` 暂归一的组取归到的字）。意思不同的字绝不进 `forms`：讖識䜟 的 識、
 #: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/字组/README.md` 第二节「暂归一兜底」。
 PROVISIONAL: dict[str, Provisional] = {
-    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"},
+    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"}, follow_ref=gid in {"can", "ba", "dian"},
+                     ref_forms=frozenset("𭶑") if gid == "dian" else frozenset(),
                      **(dict(slot_to=(("彡", "參"), ("小", "叅"), ("𠇍", "叅")), fams=(frozenset("參"), frozenset("叅㕘")))
                         if gid == "can" else {}))
     for gid, to, forms in (
