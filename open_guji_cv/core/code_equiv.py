@@ -479,7 +479,7 @@ ENTRIES: tuple[Equiv, ...] = (
           old="82930b01adb3c224cac7547d22dcc0a557a64ed7c0b6d8f7d072450e62081805",
           evidence="seed_admit 在史記 03 第 2 页（卷端大印页）上与 origin/dev 产物逐字节相同"),
     Equiv(module="open_guji_cv.steps.seed_admit",
-          new="91dd31b09e72dfe4699c3908f27590a23f8e0af7a2fc520186c67a135eec016b",
+          new="771b230474a7a43506bbb566b8d7692b82edda475908c1d1b17bbc0c05836de2",
           old="4b459486cbea651f8723c1438ba0b45f392edbadf3693848cc3c892d4dcada7d",
           evidence=_SJ_TOPK),
 )
