@@ -131,6 +131,10 @@ _SJ_TOPK = ("seed_admit 加缺省关的书级开关 ref_topk_follow（库前 5 �
 _SJ_DP = ("align_ref 在史記文淵閣本 04 册 10 页（--pages 2,10,34,41,43,47,120,122,124,138）上与 origin/dev（含 #788）产物逐字节相同；"
           "coord_dp 关着（册 yaml coord_dp: false，缺省）；scripts/code_equiv.py check，2026-11-02")
 
+_SJ_GAP = ("row_segment 加缺省关的书级开关 layout_gap_cols_empty（本页两列表行之间缺的列当整列空，史記卷末叶大印压着的空列）："
+           "不配时 row_segment 在史記 04 册 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 531f241f 产物逐字节相同；"
+           "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -525,6 +529,10 @@ ENTRIES: tuple[Equiv, ...] = (
           old="44eae13696f440a061b44550dad45df52bd72f27e9253c5717e2d50973a81161",
           evidence="page_features 竖线开运算只算一次（2026-11-03，全唐文 CPU 提速）：row_segment_gate 的 code_dep；全唐文 05/06 原图 106 页（每 4 页取 1）"
                    "上新旧 page_features 返回值逐项相同；改动是同一数组复用，不改任何运算"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="7daa5c74ec9dca3460bc74936d44c3ca01b104b33bf217390ce3a90e7fe8694e",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_SJ_GAP),
 )
 
 
