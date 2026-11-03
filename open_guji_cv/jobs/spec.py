@@ -65,7 +65,7 @@ _STEP = re.compile(r"^[a-z][a-z0-9_]*$")
 _BOOK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
-_OVERRIDES = {"corpus": int, "glyph_pin": int}     # 有类型要求的两个；其余册级字段不限类型（执行方 `--override` 原样叠上去）
+_OVERRIDES = {"corpus": int, "glyph_pin": int, "model": int}     # 有类型要求的几个；其余册级字段不限类型（执行方 `--override` 原样叠上去）
 
 
 def _override_keys() -> set[str]:

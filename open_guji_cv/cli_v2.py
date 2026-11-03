@@ -1798,7 +1798,7 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
     "cli_glyph_db", "cli_exp", "cli_db", "cli_products",
-    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf",
+    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf", "cli_model",
 )
 
 

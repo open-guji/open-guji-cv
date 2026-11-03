@@ -678,6 +678,12 @@ class Engine:
             # 册钉了语料库、这步读语料：起跑前硬校验（corpus_dev 开发中的总号跳过）
             from .workspace import workspace_root
             require_pin_clean(workspace_root(), self.book.corpus, vol=self.book.id)
+        if getattr(self.book, "model", None):
+            # 册钉了模型总号、这步读模型：清单里的模型文件必须没动过（core/model_pack.py）
+            from .model_pack import MODEL_STEPS, require_model_clean
+            if step.spec.id in MODEL_STEPS:
+                from .workspace import workspace_root
+                require_model_clean(workspace_root(), self.book.model)
         if getattr(self.book, "glyph_pin", None):
             # 册钉了有快照的字形库、这步读它：库文件必须是那一版建的（guji pipeline 起跑前会自动建）
             from .glyph_pin import reads_pinned_db, require_pinned_db

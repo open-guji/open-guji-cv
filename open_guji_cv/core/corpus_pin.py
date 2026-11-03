@@ -613,4 +613,8 @@ def with_corpus_pin(p, book):
     if not dev:
         _check_pin_once(workspace_root(), v, getattr(book, "id", None))
     tok = corpus_token(workspace_root(), v, getattr(book, "id", None), dev)
-    return type(p)(**{**p.model_dump(), **{f: tok for f in fields}})
+    rep = {f: tok for f in fields}
+    if "group_flow_fingerprint" in rep:                # 也钉了 model: → 并上模型内容（core/model_pack.py）
+        from .model_pack import pinned_group_flow
+        rep["group_flow_fingerprint"] = pinned_group_flow(tok, book)
+    return type(p)(**{**p.model_dump(), **rep})
