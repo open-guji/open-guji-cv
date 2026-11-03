@@ -20,6 +20,7 @@ from typing import Callable
 
 from pydantic import BaseModel
 
+from . import perf as _perf
 from .book import BookSpec
 from .pipeline import Pipeline, _produces
 from .parallel import effective_jobs, is_parallel_safe, warm_first, worker_threads
@@ -635,13 +636,20 @@ class Engine:
         同一个表）。参数构造时要对 glyph.db 算人裁、库指纹（seed_admit 每次约 0.1–0.3 s），原来逐页在
         指纹、落盘、run_page 里各现算一遍，vol06 seed_admit 一步主进程 600 多次（GUJI-647）。一步之内库不变，
         跑完就清，下一步照样现算。"""
-        if getattr(self, "_pcache", None) is not None:   # 已在 status() 之类的缓存范围里
-            return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
-        self._pcache = self.ctx._params_memo = {}
+        run_perf = getattr(self, "_perf", None)
+        self._sp = run_perf.step(step.spec.id, len(pages), jobs) if run_perf is not None else None
         try:
-            return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
+            if getattr(self, "_pcache", None) is not None:   # 已在 status() 之类的缓存范围里
+                return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
+            self._pcache = self.ctx._params_memo = {}
+            try:
+                return self._run_one_step_pages(step, pages, report, force, stop_on_error, total, done, jobs)
+            finally:
+                self._pcache = self.ctx._params_memo = None
         finally:
-            self._pcache = self.ctx._params_memo = None
+            if self._sp is not None:
+                self._sp.finish()
+            self._sp = None
 
     def _run_one_step_pages(self, step: Step, pages: list[int], report: RunReport,
                             force: bool, stop_on_error: bool, total: int, done: int,
@@ -668,10 +676,14 @@ class Engine:
                      f"{len(g['missing'])}/{len(pages)} 页（{_page_list(g['missing'])}）——"
                      f"这些页 {'/'.join(g['switches'])} 通道未生效。先跑 "
                      f"`--from {g['producer']} --to {g['producer']}`，本步随后会判过期重算")
+        sp = getattr(self, "_sp", None)
         prepare = getattr(step, "prepare", None)
         if prepare is not None and pages:
             # 整步开跑前的整册准备（如 row_segment 自动配页），在主进程做一次，并行 worker 读它的结果
+            t_prep = time.perf_counter()
             prepare(self.ctx, pages)
+            if sp is not None:
+                sp.add_overhead("prepare", time.perf_counter() - t_prep)
         if jobs > 1 and is_parallel_safe(step, self.ctx.params_for(step)):
             return self._run_one_step_parallel(step, pages, report, force, stop_on_error,
                                                total, done, jobs)
@@ -681,11 +693,14 @@ class Engine:
         for pg in pages:
             done += 1
             key = page_key(pg)
+            t_chk = time.perf_counter()
             fp, ups, ph = self.fingerprint(step, pg)
             pct = int(done * 100 / max(total, 1))
             if fp is None:
                 msg = f"上游缺失: {self.missing_upstream(step, pg)}"
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
+                if sp is not None:
+                    sp.page(pg, "failed", overhead={"check": time.perf_counter() - t_chk})
                 report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
                 manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
                                            upstream={}, code_rev=self._rev, **self._cv,
@@ -697,9 +712,13 @@ class Engine:
             if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
                     and not entry.invalidated and self.store.exists(self.book.id, sid, key)):
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
+                if sp is not None:
+                    sp.page(pg, "skipped", overhead={"check": time.perf_counter() - t_chk})
                 report.outcomes.append(PageOutcome(sid, pg, "skipped"))
                 continue
             t0 = time.time()
+            ov = {"check": time.perf_counter() - t_chk}
+            rec = _perf.PageRec()
             try:
                 # 重跑前先把**这一页、这一步产出的图像类产物**的缓存删掉（2026-09-17）。
                 # `ImageCache.materialize` 是「有就返回」，从不比对新旧：产物 JSON 重写了，
@@ -708,10 +727,16 @@ class Engine:
                 # 59×61（少了上横那 9 行）——用户对着旧图裁了一整批「顶横被切」。
                 # run_page 里的 cache.put 只覆盖它这次产出的键，被合并/删除的格位与
                 # 惰性 render 的键都不会被覆盖，所以必须在跑之前按页前缀整体清掉。
+                t_inv = time.perf_counter()
                 for k in step.spec.produces:
                     if kind_of(k).storage == "image_cache":
                         self.ctx.cache.invalidate(self.book.id, k, key_prefix=key)
-                products = step.run_page(self.ctx, pg)
+                ov["cache_invalidate"] = time.perf_counter() - t_inv
+                t_run = time.perf_counter()
+                with _perf.page_scope(rec):
+                    products = step.run_page(self.ctx, pg)
+                t_run = time.perf_counter() - t_run
+                t_land = time.perf_counter()
                 for k in products:
                     if k not in step.spec.produces:
                         raise ValueError(f"{sid} 产出了未声明的种类 {k!r}")
@@ -729,10 +754,15 @@ class Engine:
                                                                    step.spec.path_params),
                                            book=book_dep_values(step, self.book)))
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 完成 {elapsed:.2f}s")
+                if sp is not None:
+                    ov["land"] = time.perf_counter() - t_land
+                    sp.page(pg, "ok", t_run, rec.to_dict(), ov)
                 report.outcomes.append(PageOutcome(sid, pg, "ok", elapsed))
             except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整轮
                 elapsed = time.time() - t0
                 err = f"{type(e).__name__}: {e}"
+                if sp is not None:
+                    sp.page(pg, "failed", elapsed, rec.to_dict(), ov)
                 manifest.put(ManifestEntry(key=key, fingerprint=fp, params_hash=ph,
                                            upstream=ups or {}, code_rev=self._rev, **self._cv,
                                            elapsed=round(elapsed, 3), status="failed", error=err))
@@ -764,14 +794,18 @@ class Engine:
 
         todo: list[int] = []
         fps: dict[int, tuple[str, dict, str]] = {}
+        sp = getattr(self, "_sp", None)
         for pg in pages:
             done += 1
             key = page_key(pg)
+            t_chk = time.perf_counter()
             fp, ups, ph = self.fingerprint(step, pg)
             pct = int(done * 100 / max(total, 1))
             if fp is None:
                 msg = f"上游缺失: {self.missing_upstream(step, pg)}"
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 阻塞（{msg}）")
+                if sp is not None:
+                    sp.page(pg, "failed", overhead={"check": time.perf_counter() - t_chk})
                 report.outcomes.append(PageOutcome(sid, pg, "failed", error=msg))
                 manifest.put(ManifestEntry(key=key, fingerprint="", params_hash=ph,
                                            upstream={}, code_rev=self._rev, **self._cv,
@@ -783,11 +817,17 @@ class Engine:
             if (not force and entry and entry.status == "ok" and entry.fingerprint == fp
                     and not entry.invalidated and self.store.exists(self.book.id, sid, key)):
                 self.log(f"[{done}/{total}] {pct}% {sid} p{pg}: 新鲜，跳过")
+                if sp is not None:
+                    sp.page(pg, "skipped", overhead={"check": time.perf_counter() - t_chk})
                 report.outcomes.append(PageOutcome(sid, pg, "skipped"))
                 continue
+            t_inv = time.perf_counter()
             for k in step.spec.produces:
                 if kind_of(k).storage == "image_cache":
                     self.ctx.cache.invalidate(self.book.id, k, key_prefix=key)
+            if sp is not None:
+                sp.add_overhead("check", t_inv - t_chk)
+                sp.add_overhead("cache_invalidate", time.perf_counter() - t_inv)
             fps[pg] = (fp, ups, ph)
             todo.append(pg)
 
@@ -812,8 +852,16 @@ class Engine:
         # 主进程按完成先后落盘，manifest 按页键存。
         todo = _longest_first(todo, manifest)
 
-        def land(pg: int, products, err, elapsed: float) -> bool:
+        def land(pg: int, products, err, elapsed: float, detail: dict | None = None) -> bool:
             """一页结果落盘（主进程串行），返回是否失败。与 `_run_one_step` 落盘逐行同形。"""
+            t_land = time.perf_counter()
+            failed = _land(pg, products, err, elapsed)
+            if sp is not None:
+                sp.page(pg, "failed" if failed else "ok", elapsed, detail,
+                        {"land": time.perf_counter() - t_land})
+            return failed
+
+        def _land(pg: int, products, err, elapsed: float) -> bool:
             fp, ups, ph = fps[pg]
             key = page_key(pg)
             if err is not None:
@@ -858,11 +906,15 @@ class Engine:
         if warm_first(step) and len(todo) > 1:
             first, todo = todo[0], todo[1:]
             t0 = time.time()
+            rec = _perf.PageRec()
             try:
-                prods, err = step.run_page(self.ctx, first), None
+                with _perf.page_scope(rec):
+                    prods, err = step.run_page(self.ctx, first), None
             except Exception as e:  # noqa: BLE001
                 prods, err = None, f"{type(e).__name__}: {e}"
-            any_failed |= land(first, prods, err, time.time() - t0)
+            detail = rec.to_dict()
+            detail["warm_first"] = True
+            any_failed |= land(first, prods, err, time.time() - t0, detail)
             from .parallel import warm
             warm(step, self.ctx)
             import gc
@@ -900,6 +952,25 @@ class Engine:
         """
         steps, _ = self._default_steps(steps)
         pages = pages if pages is not None else self.book.resolve_pages("dev_set")
+        self._perf = None
+        if _perf.enabled():
+            self._perf = _perf.RunPerf(self.store.root, self.book.id, {
+                "pipeline": self.pipeline.id, "steps": list(steps), "n_pages": len(pages),
+                "force": force, "jobs": jobs, "code_rev": self._rev,
+                **{k: self._cv.get(k) for k in ("cv_version", "cv_commit", "cv_override")}})
+        stopped = True
+        try:
+            report = self._run(steps, pages, force, stop_on_error, jobs)
+            stopped = False
+            return report
+        finally:
+            if self._perf is not None:
+                self._perf.close(stopped=stopped)
+                self.log(f"耗时记录：{self._perf.path}")
+            self._perf = None
+
+    def _run(self, steps: list[str], pages: list[int], force: bool, stop_on_error: bool,
+             jobs: int) -> RunReport:
         report = RunReport(self.book.id, self.pipeline.id, list(steps), list(pages))
         gated_extra = [STEPS[s].spec.gate.id for s in steps
                        if STEPS[s].spec.gate and STEPS[s].spec.gate.id not in steps]
@@ -1007,13 +1078,15 @@ def _parallel_worker_init(book: "BookSpec", pipeline: "Pipeline", step_id: str,
     _worker_ctx._params_memo = {}         # worker 只跑这一步：参数每进程构造一次（同 `Engine._run_one_step`）
 
 
-def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float]:
+def _parallel_worker(page: int) -> tuple[int, dict | None, str | None, float, dict]:
     """`_run_one_step_parallel` 的子进程体：用 `_parallel_worker_init` 建好的
     进程级 ctx/step，只算不写盘。模块级函数（不是方法）——`ProcessPoolExecutor`
     要能 pickle 它；实际状态在 `_worker_ctx`/`_worker_step`，不在参数里。"""
     t0 = time.time()
+    rec = _perf.PageRec()                 # 子进程里的分段随结果带回主进程，由主进程写 perf 文件
     try:
-        products = _worker_step.run_page(_worker_ctx, page)
-        return page, products, None, time.time() - t0
+        with _perf.page_scope(rec):
+            products = _worker_step.run_page(_worker_ctx, page)
+        return page, products, None, time.time() - t0, rec.to_dict()
     except Exception as e:  # noqa: BLE001 —— 一页失败不拖垮整批
-        return page, None, f"{type(e).__name__}: {e}", time.time() - t0
+        return page, None, f"{type(e).__name__}: {e}", time.time() - t0, rec.to_dict()
