@@ -502,6 +502,12 @@ ENTRIES: tuple[Equiv, ...] = (
           new="8444b11b39dead8f114d6e09313b78d241a1de1a580202a7b7749efe6d9dbca7",
           old="2d3f4c680d5a1aabb68c5773ce6a2b67afe20ccbd9fe561b64c29131e1e0b671",
           evidence="走廊 DP 抽成 seam_dp、预分配 pad/cand（2026-11-03）：row_segment 在全唐文 06 8 页（27,60,100,140,180,15,45,120）上与 origin/dev 13d33ea 产物逐字节相同；随机 3000 例 find_seam 逐位相同、快 1.8 倍"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="54c5e31759f53c8d91c5a0d8bc3ebd513243b65f7b7644a2655962e50d724c69",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence="挑格网试切不跑折线与 U-Net 判官、挑定后只按原参数重切中选那遍（2026-11-03，全唐文 CPU 提速）：row_segment 在全唐文 06 43 页"
+                   "（每 5 页取 1，加 27/100/101）与 05 36 页（每 7 页取 1，加 1/2/100/222）上与 origin/dev 4cf8260 产物逐字节相同，4 进程；"
+                   "scripts/code_equiv.py check；同 24 页 row_segment 合计 747→259 s"),
 )
 
 
