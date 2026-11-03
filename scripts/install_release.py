@@ -83,12 +83,12 @@ def main() -> int:
             if m.name.startswith("/") or ".." in Path(m.name).parts or m.name.split("/")[0] not in ("models", "config", "formats", "precleaned"):
                 raise ValueError(f"资源包里有不合规的路径：{m.name}")
         tf.extractall(out, filter="data") if hasattr(tarfile, "data_filter") else tf.extractall(out)
-    # 模型文件不随资源包走时（models/ 搬出 git 之后），按 cv 自带的模型表从 R2 取回（要 GUJI_DATA_TOKEN／_READ）
+    # 模型、字体、底库语料表不随资源包走时（搬出 git 之后），按 cv 自带的路径 → sha 表从 R2 取回（要 GUJI_DATA_TOKEN／_READ）
     if (Path(out) / "config" / "model-registry.json").exists():
         env = dict(os.environ)
         if not env.get("GUJI_DATA_TOKEN") and env.get("GUJI_DATA_TOKEN_READ"):
             env["GUJI_DATA_TOKEN"] = env["GUJI_DATA_TOKEN_READ"]
-        for what in ("model", "font"):
+        for what in ("model", "font", "corpus"):
             r = subprocess.run([sys.executable, "-m", "open_guji_cv", what, "fetch"], env=env)
             if r.returncode:
                 print(f"{what} 文件取回不全（见上）；补好令牌后跑 guji {what} fetch", file=sys.stderr)
