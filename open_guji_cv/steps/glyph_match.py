@@ -219,6 +219,18 @@ class GlyphMatchParams(BaseModel):
     部分，`params_hash` 才会把它算进 Step 指纹，库一变产物就自动 stale。
     显式传值只在一种场合有用：想按某个历史库的判决重放。"""
     knn_k: int = 10
+    knn_per_char_cap: int = 0
+    """近邻名单按字封顶（2026-11-03，全唐文 r6）：>0 时 `knn_k` 个近邻里同一个字最多占这么多个名额，
+    名单仍凑满 `knn_k` 个。0 = 不限（缺省；不进参数 dump，产物与参数指纹不变）。
+    样本悬殊的近形字（請 34 例对 諸 3 例）前 k 近邻会被多的那个字占满，少的那个字根本不被验证。
+    书级 yaml `params: {glyph_match: {knn_per_char_cap: 3}}` 可开。**会改产物**。"""
+    knn_supplement: int = 0
+    """近邻补位（2026-11-03，全唐文 r6）：前 `knn_k` 名不动，再在前 `knn_supplement_window` 名里给没进前 k 的
+    每个字补它最近的这么多个刻例去验证。0 = 不补（缺省；三个字段都不进参数 dump，产物与参数指纹不变）。
+    `knn_supplement_mode`：`merge` 补进来的与前 k 名一起判；`append` 判决与首选照旧，只把补进来的字按 cov
+    排在原候选后面（见 `GlyphMatcher._match` 的 ``supplement``）。**会改产物**。"""
+    knn_supplement_window: int = 50
+    knn_supplement_mode: str = "merge"
     edition: str | None = None    # 只用某一版本的字形当库；None 且 Book.edition=modern 时 = modern:<book>
     max_candidates: int = 5       # unsure 档往产物里存几个候选
     norm_stroke: int | None = None
@@ -290,6 +302,11 @@ class GlyphMatchParams(BaseModel):
                 d.pop("near_shape", None)
             if not d.get("cell_budget_s"):
                 d.pop("cell_budget_s", None)
+            if not d.get("knn_per_char_cap"):
+                d.pop("knn_per_char_cap", None)
+            if not d.get("knn_supplement"):
+                for f in ("knn_supplement", "knn_supplement_window", "knn_supplement_mode"):
+                    d.pop(f, None)
             if not d.get("borrow_fingerprint"):
                 d.pop("borrow_fingerprint", None)
             if not d.get("batch_knn"):
@@ -460,6 +477,10 @@ class GlyphMatchStep(Step):
                 # 预算关着就不传 deadline 关键字（老接口的匹配器替身不认它）
                 dl = ({"deadline": time.monotonic() + p.cell_budget_s}
                       if p.cell_budget_s > 0 else {})
+                if p.knn_per_char_cap > 0:          # 同上：关着不传，老匹配器替身不认它
+                    dl["per_char_cap"] = p.knn_per_char_cap
+                if p.knn_supplement > 0:
+                    dl["supplement"] = (p.knn_supplement, p.knn_supplement_window, p.knn_supplement_mode)
                 try:
                     m = matcher.match(normalize_patch(img, is_punct),
                                       exclude_id=(r.id if p.exclude_self else None), **dl)
