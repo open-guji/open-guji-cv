@@ -124,3 +124,22 @@ def test_split_roundtrip(ws):
     assert yaml.safe_load(res["books"]["v1"])["params"]["seed_admit"] == {"x": 1}
     with pytest.raises(SplitError):
         split(ws / "books", ["v1"])
+
+
+def test_params_provenance_layers(ws, monkeypatch):
+    p = _w(ws, "v1.yaml", {"id": "v1", "title": "t", "raw_dir": "raw",
+                           "params": {"seed_admit": {"a": 2}, "column_gate": {"width_tol": None}}})
+    _w(ws, "book_defaults.yaml", {"params": {"seed_admit": {"a": 1, "b": 1}}}, sub="config")
+    monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"params": {"seed_admit": {"b": 3}}}))
+    src = bc.params_provenance(p, {"column_gate": {"count_mode": "detected", "width_tol": 0.5}})
+    assert src["seed_admit.a"] == (2, "册 yaml")
+    assert src["seed_admit.b"] == (3, "运行覆盖")
+    assert src["column_gate.count_mode"] == ("detected", "管线 yaml")
+    assert "column_gate.width_tol" not in src          # 册 yaml 写 null = 回 Step 默认
+
+
+def test_override_forbids_volume_identity(ws, monkeypatch):
+    p = _w(ws, "v1.yaml", BOOK)
+    monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"book_id": "x"}))
+    with pytest.raises(bc.BookConfigError):
+        bc.effective_book_dict(p)

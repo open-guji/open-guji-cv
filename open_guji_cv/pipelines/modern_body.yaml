@@ -27,11 +27,10 @@ params:
     width_tol: 0.5           # L1c 防的是「界行圈进列窗」，现代页没有界行；卷题页列位不在等距网格上
                              # （北行日錄 p53 实测列距 2.5 / 2 / 1.08 个 pitch），窗口宽窄不一是正常的
   # row_segment_runs 的 `interior_blank`（项内空格位）**故意不在这里设默认**：
-  # 两本现代书要的值相反，而参数只有三层（Step 默认 < 管线 yaml < CLI），
-  # 没有册级那一层。写成管线默认就会连带改北行日錄（dev_set 141 列里有 1 列
+  # 两本现代书要的值相反。写成管线默认就会连带改北行日錄（dev_set 141 列里有 1 列
   # 项数变了），那本书的 82.2% / 99.77% 是挂在现有切分上的基线，不该被顺带动。
-  # 方格排版的书跑的时候显式传：
-  #   --params '{"row_segment_runs": {"interior_blank": true}}'
+  # 方格排版的书在册配置里写（参数优先级：Step 默认 < 管线 yaml < 册配置 params: < CLI）：
+  #   params: {row_segment_runs: {interior_blank: true}}
   # 实测（考補萃編 sswz 五页 137 列）：漏切 2 → 0、格心离网格 6.85 → 5.50px、
   # 多出 58 个空格位（「著者 ∥ 書名」的分隔符）。
   cell_shrink:

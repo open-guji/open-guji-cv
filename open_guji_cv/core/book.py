@@ -31,6 +31,9 @@ class BookSpec:
     expected_cols: int | None = 9
     #: Step3 的正文格数先验。同上，现代链是 None（由块宽 ÷ pitch 推）。
     chars_per_line: int | None = 21
+    #: 版式大类（`keben`／`modern`）：选缺省管线（`core/pipeline.default_pipeline_id`），现代书的字形库分域
+    #: `modern:<册>`。**不是**书 ID、也不是版本名——书 ID 是 `book_id`（字形库里记作 `meta.book_edition`），
+    #: 导出用的版本名是 `book_edition`，本书用字账的键是 `params.seed_admit.edition`。
     edition: str = "keben"
     dev_set: list[int] = field(default_factory=list)
     #: 命名页集（yaml 的 `sets:`）：`{名字: [页号…]}`，用 `--pages <名字>` 选。
@@ -287,6 +290,8 @@ class BookSpec:
     font: dict = field(default_factory=dict)
     #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。2026-10-24 起先取工作区级
     #: `config/codepoints.yaml`（与 `books/` 同级，同一字形库的各册共用），册 yaml 里写的逐条覆盖（`_ws_codepoints`）。
+    #: 逐条优先级（低 → 高）：`config/codepoints.yaml` < 基础配置 `book_defaults.yaml` 的 `codepoints:` < 册 yaml < 运行覆盖。
+    #: 书级码位只写一处：放 `config/codepoints.yaml`（它是这套书字形库的归一表），基础配置里别再写 `codepoints:`。
     #: `{另一码位: 本书指定码位}`——如 `{别: 別}` 表示这本书里「别」这个码位一律
     #: 按「別」统一（库、人裁、用字账都算作「別」，评测认它们是同一字、不算错）。
     #:
@@ -313,8 +318,9 @@ class BookSpec:
     #: 也省得两处各记一套写法。
     #:
     #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） <
-    #: **这里** < 调用方覆盖（CLI `--params` / 控制台表单）——合并逻辑在
-    #: `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前叠一层。
+    #: **这里**（基础配置 ∪ 册 yaml ∪ `--override`） < 调用方覆盖（CLI `--params` / 控制台表单）——
+    #: 合并逻辑在 `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前按字段叠一层
+    #: （2026-11-03 起在字典层面叠；以前管线 yaml 写过的字段册配置盖不住）。
     #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
     #: 已有 Step 的参数取值）。
     params: dict[str, dict] = field(default_factory=dict)

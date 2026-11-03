@@ -329,10 +329,23 @@ class Engine:
         self.store = store or ProductStore()
         self.cache = cache or ImageCache()
         self.log = log or (lambda s: print(s, flush=True))
-        # 参数三层：Step 默认值 < 管线 yaml 的 `params:`（这条链的默认） < 调用方覆盖
-        # （CLI `--params` / 控制台表单）。同一 Step 两层都有时按字段合并，调用方优先。
+        # 参数四层：Step 默认值 < 管线 yaml 的 `params:`（这条链的默认） < 册配置的 `params:`
+        # （工作区基础配置 ∪ 册 yaml ∪ `--override`，`BookSpec.params`） < 调用方覆盖（CLI `--params` /
+        # 控制台表单）。同一 Step 几层都有时按字段合并，上层优先。册配置里写 `null` 的字段 = 去掉下层
+        # （管线 yaml）的值、回到 Step 默认（doc/design/册配置分层与运行覆盖.md 3.2）。
+        # 2026-11-03 起册配置在字典层面叠在管线 yaml 之上：以前册配置靠 `_with_book_params` 事后补，
+        # 管线 yaml 写过的字段算「显式」被跳过，管线反倒压过册配置（与文档顺序相反）。
         resolved: dict[str, BaseModel] = {}
         merged: dict[str, dict] = {sid: dict(v) for sid, v in (pipeline.params or {}).items()}
+        for sid, kv in (getattr(book, "params", None) or {}).items():
+            if sid not in STEPS:        # 册配置点名了没注册的 Step：同以前 `_with_book_params`，不报错、不生效
+                continue
+            tgt = merged.setdefault(sid, {})
+            for k, v in kv.items():
+                if v is None:
+                    tgt.pop(k, None)
+                else:
+                    tgt[k] = v
         for sid, override in (params or {}).items():
             merged.setdefault(sid, {}).update(override)
         for sid, kv in merged.items():

@@ -110,15 +110,9 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     的错放行，漏带一次这个参数这一整轮就白挡——书级 yaml 能把这个决定钉死，
     不必每次跑批都记得带命令行参数。
 
-    只把**仍是 Step 构造默认值**的字段替换成书里配的值，跟 `_with_book_corpus`
-    走同一个限制：显式传了 CLI `--params` 的字段已经不等于默认值，这里不碰；
-    管线 yaml 若也配了同一个字段，效果上跟 CLI 一样「已经不是默认值」，也会被
-    这里放过、书 yaml 那份对该字段不生效——**这一点与任务书写的「管线 yaml <
-    书 yaml」字面顺序不完全一致**，是与另外四个 `_with_book_*` 函数共享的同一个
-    近似（它们全都只能补「仍是默认值」的字段，分不清「从没设过」与「设成了
-    跟默认值一样的值」，也分不清是管线 yaml 设的还是 CLI 设的）。目前没有任何
-    管线 yaml 给 `seed_admit` 配过参数，这条边界情形不会真的发生；真出现那天，
-    应该跟这几个既有函数一起换一套更精确的机制，不在这一个函数里单独精确到位。
+    **经 Engine 跑时**册配置已在 `Engine.__init__` 里按字典叠在管线 yaml 之上、调用方覆盖之下
+    （2026-11-03），这里看到的字段都已「显式」，原样返回。这个函数只对**不经 Engine 直接建的
+    RunContext**（控制台、审字卡、报告等）起作用：按「写没写」判断，调用方显式传过的字段不碰。
 
     `ctx.book.params` 没有这个 Step 的条目、或条目是空字典时原样返回，逐字节
     行为不变——书 yaml 没写 `params:` 这一段的册，加这个函数前后产物指纹相同。
@@ -132,10 +126,10 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
-    # 调用方（CLI `--params`／`--override`／管线 yaml）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
+    # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
     # 否则册 yaml 开了的开关，命令行显式传 false（恰是默认值）会被册 yaml 静默改回去。
     explicit = getattr(p, "model_fields_set", set())
-    overrides = {k: v for k, v in book_kv.items() if k not in explicit}
+    overrides = {k: v for k, v in book_kv.items() if k not in explicit and v is not None}   # null = 回 Step 默认
     if not overrides:
         return p
     return type(p)(**{**p.model_dump(), **overrides})

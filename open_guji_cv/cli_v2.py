@@ -379,16 +379,32 @@ def cmd_book(args) -> None:
         print("✗ show 要册号", file=sys.stderr); sys.exit(2)
     from .core.book import _book_yaml_path
     from .core.book_config import effective_book_dict, provenance
+    from .core.book_config import params_provenance
     path = _book_yaml_path(args.book)
     d = effective_book_dict(path)
     src = provenance(path)
+    try:                                # 管线 yaml 的 params 也列出来（它在册配置之下）；选不出管线就只列册配置各层
+        from .core.book import load_book
+        from .core.pipeline import load_pipeline
+        pl = load_pipeline(load_book(args.book).default_pipeline_id())
+        pl_id, pl_params = pl.id, (pl.params or {})
+    except Exception:
+        pl_id, pl_params = None, {}
+    psrc = params_provenance(path, pl_params)
     if args.json:
-        print(json.dumps({"book": args.book, "effective": d, "source": src}, ensure_ascii=False, indent=1, default=str))
+        print(json.dumps({"book": args.book, "effective": d, "source": src, "pipeline": pl_id,
+                          "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()}},
+                         ensure_ascii=False, indent=1, default=str))
         return
     print(f"# 册 {args.book} 生效配置（{path}）")
     for k in sorted(d):
         v = json.dumps(d[k], ensure_ascii=False, default=str)
         print(f"{k}: {v if len(v) <= 160 else v[:157] + '…'}    # {src.get(k, '?')}")
+    print(f"\n# Step 参数逐字段（管线 {pl_id or '?'}；优先级 Step 默认 < 管线 yaml < 基础配置 < 册 yaml < 运行覆盖；"
+          f"--params 另在最上层；没列出的字段 = Step 默认）")
+    for k, (v, ly) in psrc.items():
+        vs = json.dumps(v, ensure_ascii=False, default=str)
+        print(f"params.{k}: {vs if len(vs) <= 120 else vs[:117] + '…'}    # {ly}")
 
 
 def cmd_status(args) -> None:
