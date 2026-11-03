@@ -335,11 +335,15 @@ def _stroke_mask(ink):
     return big[lab]
 
 
-def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float, in_seal=None) -> int:
+def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, period: float, in_seal=None,
+                      seal_gaps: bool = False) -> int:
     """表说该空、又在表的首字之前或末字之后（列端那一段表空格；表说整列空就是整列）的非空格（字、單行小注、雙行小注的半格都算），
     里面的墨不像字就改成 blank，返回改了几格。不像字 = 只有框线／零星碎点，或者墨越过了界行（印章、墨污，见
     EDGE_ROWS），或者墨大多是碎点、连不成笔画（印章，见 STROKE_FRAC），或者墨只是一两道竖线（见 VLINE_COLS），或者格一半以上落在印框里（`in_seal(cell)`，
-    印来自印章定位 `seals`，见 `_in_seal`）。"""
+    印来自印章定位 `seals`，见 `_in_seal`）。
+
+    `seal_gaps`（书级 `seal_gap_slots_empty`）：表首字与末字之间、表说空的格位（字距拉开的题署行）落在印框里的也记空，
+    只认 `in_seal`，不跑上面那些墨像不像字的判据。"""
     import numpy as np
     body = sorted(occ)
     lo, hi = (body[0], body[-1]) if body else (1, 0)
@@ -360,7 +364,12 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     order = sorted(cells, key=lambda c: c.y0)
     n = 0
     for c in order:
-        if c.kind == "blank" or lo <= c.slot <= hi or c.slot in occ:
+        if c.kind == "blank" or c.slot in occ:
+            continue
+        if lo <= c.slot <= hi:
+            if seal_gaps and in_seal is not None and in_seal(c):
+                c.kind = "blank"
+                n += 1
             continue
         a, b = max(0, int(c.y0)), min(h, int(c.y1))
         if b <= a:
@@ -773,6 +782,11 @@ class RowSegmentParams(BaseModel):
     #: 下一格的字块带着上字的笔画碎片（用户 2026-11-03 人审表）。大印下的列仍取等距格网（`_under_stain`，与本开关无关）。
     #: 书级；`uniform`＝缺省，不进参数哈希。
     row_pitch: Literal["uniform", "free"] = "uniform"
+    #: **大印下表中间的空格位记空**（2026-11-03，史記文淵閣本）：卷首叶题署行（「漢　　太　　史　　令司馬遷　撰」
+    #: 「宋中郎外兵曹　參　軍裴　駰集解」）字距拉开，表里是跳着的格位；「文淵閣寶」大印压在这些空格位上，缺省只记空
+    #: 列端的表空格，中间的空格位里的印泥被切成字，格数对不上整理本、整列对位落空（01–10 册 p2 约 97 格）。开着时
+    #: 表首字与末字之间、表说空的格位落在印框里（`_in_seal`）也记空。书级开关；False＝关（缺省，不进参数哈希）。
+    seal_gap_slots_empty: bool = False
     #: **自动配页**（2026-10-25，`steps/row_segment_pagemap.py`）：不读离线表，Step3 开跑前按全册列窗口与原图
     #: 和 daizhige 逐列本对齐、边跑边生成本册格位表（存 Step3 产物目录复用）。书级设置，三档：
     #: `off`（缺省，用上面 `layout_prior` 的离线表）／`loose`（配不准的页不带先验照切）／
@@ -847,6 +861,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_gap_cols_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
+            if not self.seal_gap_slots_empty:
+                d.pop("seal_gap_slots_empty", None)
             if self.row_pitch == "uniform":
                 d.pop("row_pitch", None)
             if self.page_map == "off":
@@ -1159,7 +1175,8 @@ class RowSegmentStep(Step):
                 mapper = None if wrec is None else ColumnMapper(
                     page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y)
                 in_seal = _in_seal(seals, mapper, img, p.ink_threshold)
-                junk = [_junk(c[0], c[3], gc.content_x, p.ink_threshold, gate.period, in_seal)
+                junk = [_junk(c[0], c[3], gc.content_x, p.ink_threshold, gate.period, in_seal,
+                              p.seal_gap_slots_empty)
                         for c in cands]
                 scores = [_score(c) for c in cands]
                 # 大印压着列首：格网直接取表的等距格网，不比坏格（见上「大印下的列」）
@@ -1221,7 +1238,8 @@ class RowSegmentStep(Step):
                             ri = _seg(n_body_col, alt, bounds=lines[:i] + lines[i + 1:])
                             if ri is None:
                                 continue
-                            ji = _junk(ri, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal)
+                            ji = _junk(ri, occ_b, gc.content_x, p.ink_threshold, gate.period, in_seal,
+                                      p.seal_gap_slots_empty)
                             if len(_merged_cuts(img, ri.cells, gate.period, p.ink_threshold)) < len(cuts):
                                 ci = (ri, n_rb, t_sb, occ_b, "layout_unmerge" + (f"（{why_b}）" if why_b else ""))
                                 trial.append((_score(ci), i, ci, ji))

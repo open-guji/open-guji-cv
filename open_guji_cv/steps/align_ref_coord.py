@@ -730,6 +730,124 @@ def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord
     return ColumnCoord(True, note="dp", recs=recs, agree=agree)
 
 
+#: `coord_dp_flat`（2026-11-03，史記文淵閣本）：按字序单调对齐的下限与跳过上限
+COORD_FLAT_MIN_AGREE = 4      # 载体字与整理本字相同的最少格数
+COORD_FLAT_MIN_FRAC = 0.5     # 载体字相同格数 / 整理本字数 的下限
+COORD_FLAT_SKIP_FRAC = 0.4    # 格或整理本字跳过的合计上限：两边字数较大者的这个比例（至少 2）
+COORD_FLAT_GAP = 0.05         # 每跳过一个格或字的代价（只为在打平时少跳）
+
+
+def _flat_cells(units: list[CellUnit]) -> list[tuple[str, int, str | None, str]]:
+    """格单元 → 阅读顺序的逐字格 [(id, slot, sub, 载体字)]：连着的夹注段先右行（a）自上而下、再左行（b）。"""
+    out: list[tuple[str, int, str | None, str]] = []
+    seg: list[CellUnit] = []
+
+    def flush():
+        for sub in ("a", "b"):
+            out.extend((u.ids[sub], u.slot, sub, u.carrier.get(sub, "")) for u in seg if sub in u.ids)
+        seg.clear()
+    for u in units:
+        if u.kind == "c":
+            flush()
+            out.append((u.ids[""], u.slot, None, u.carrier.get("", "")))
+        else:
+            seg.append(u)
+    flush()
+    return out
+
+
+def _flat_text(text: list[tuple[int, Unit]]) -> list[str]:
+    """整理本单元 → 阅读顺序的逐字表：连着的夹注段先右行全部、再左行全部（与 `_flat_cells` 同序）。"""
+    out: list[str] = []
+    seg: list[Unit] = []
+
+    def flush():
+        out.extend(u.a for u in seg if u.a)
+        out.extend(u.b for u in seg if u.b)
+        seg.clear()
+    for _p, u in text:
+        if u.kind == "c":
+            flush()
+            out.append(u.a)
+        elif u.kind == "n":
+            seg.append(u)
+    flush()
+    return out
+
+
+def coord_dp_flat(units: list[CellUnit], text: list[tuple[int, Unit]],
+                  cand_top: dict[str, tuple[str, ...]] | None = None) -> ColumnCoord | None:
+    """`coord_dp_flat`（2026-11-03，史記文淵閣本）：`coord_dp` 也配不上的列，按**逐字字序**单调对齐。
+
+    起因（第 4 轮待审 S／D 类）：①卷首叶题署行字距拉开、大印压在空格位上，印泥切出的假格多过 `coord_dp`
+    的两次跳过（02:2:3 十六格对八字）；②写本夹注右行比整理本「|」多写或少写一两字，按「一行一单元」配
+    a/b 整段错开（05:30:3）。这里把一列拆成逐字序列（夹注段先右行、再左行，两边同序），格与字同序对齐，
+    可跳过两边字数较大者 `COORD_FLAT_SKIP_FRAC` 以内的格或字；分＝载体字相同记 1、整理本字在这一格库匹配前几名
+    （`cand_top`）记 0.5，每跳一步扣 `COORD_FLAT_GAP`。载体字相同的格 ≥ `COORD_FLAT_MIN_AGREE` 且 ≥ 整理本字数的
+    `COORD_FLAT_MIN_FRAC` 才认；只给有字形证据的格（载体字相同或在前几名），其余格不进 `recs`。"""
+    cells = _flat_cells(units)
+    chars = _flat_text(text)
+    n, m = len(cells), len(chars)
+    if not n or not m:
+        return None
+    top = cand_top or {}
+    K = max(2, int(COORD_FLAT_SKIP_FRAC * max(n, m)))
+    if abs(n - m) > K:
+        return None
+
+    def score(i: int, j: int) -> float:
+        cid, _sl, _sub, car = cells[i]
+        if car and car == chars[j]:
+            return 1.0
+        return 0.5 if chars[j] in top.get(cid, ()) else 0.0
+    NEG = -1e9
+    # f[i][j]：cells[i:]、chars[j:] 的最大分；跳过数另记（g），超过 K 的路不走
+    f = [[NEG] * (m + 1) for _ in range(n + 1)]
+    g = [[0] * (m + 1) for _ in range(n + 1)]
+    act: dict[tuple[int, int], str] = {}
+    for i in range(n, -1, -1):
+        for j in range(m, -1, -1):
+            if i == n or j == m:
+                rem = (n - i) + (m - j)
+                if rem <= K:
+                    f[i][j], g[i][j] = -COORD_FLAT_GAP * rem, rem
+                    act[(i, j)] = "end"
+                continue
+            best, bg, a = NEG, 0, ""
+            if f[i + 1][j + 1] > NEG:
+                best, bg, a = f[i + 1][j + 1] + score(i, j), g[i + 1][j + 1], "pair"
+            for di, dj, nm in ((1, 0, "skip_u"), (0, 1, "skip_t")):
+                v, k = f[i + di][j + dj], g[i + di][j + dj] + 1
+                if v > NEG and k <= K and v - COORD_FLAT_GAP > best:
+                    best, bg, a = v - COORD_FLAT_GAP, k, nm
+            f[i][j], g[i][j] = best, bg
+            if a:
+                act[(i, j)] = a
+    if f[0][0] <= NEG / 2:
+        return None
+    pairs: list[tuple[int, int]] = []
+    i = j = 0
+    while (i, j) in act and act[(i, j)] != "end":
+        a = act[(i, j)]
+        if a == "pair":
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif a == "skip_u":
+            i += 1
+        else:
+            j += 1
+    strict = sum(1 for i, j in pairs if cells[i][3] and cells[i][3] == chars[j])
+    if strict < COORD_FLAT_MIN_AGREE or strict < COORD_FLAT_MIN_FRAC * m:
+        return None
+    # 给几何行号：取 units 里同 id 的 g
+    gmap = {iid: u.g for u in units for iid in u.ids.values()}
+    recs = [(cells[i][0], cells[i][1], cells[i][2], chars[j], gmap.get(cells[i][0], 0.0))
+            for i, j in pairs if score(i, j) > 0]
+    if not recs:
+        return None
+    return ColumnCoord(True, note="dp_flat", recs=recs, agree=strict)
+
+
 def column_units(book: str, page: int, col: int, match_col, cells_col,
                  carrier_of, symbols: bool = False) -> list[CellUnit]:
     """`glyph_match` 的一列（字格）+ `cells` 的一列（几何）→ 阅读顺序的格单元。
