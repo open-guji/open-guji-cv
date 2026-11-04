@@ -763,6 +763,7 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
             from ..products.cache import ImageCache
             from ..utils.binarized import binarize_page
             from ..utils.image_io import imread
+            from ..products.alt_view import resolve_patch_key
             cache = ImageCache()
             drift_missing = 0
             for iid, ch, sem, prov, at in lib:
@@ -774,7 +775,7 @@ def crosscheck(db_path: str | Path, *, book: str | None = None, drift: bool = Fa
                 b, pg, col, slot = cell.split(":")
                 sub = slot[-1] if slot[-1:] in ("a", "b") else ""
                 s = slot[:-1] if sub else slot
-                key = f"p{int(pg):04d}c{int(col):02d}s{int(s)}{sub}"
+                key = resolve_patch_key(b, f"p{int(pg):04d}c{int(col):02d}s{int(s)}{sub}")   # alt_cut 换列
                 path = cache.get(b, "char_patch", key)
                 if path is None:
                     drift_missing += 1

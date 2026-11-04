@@ -24,12 +24,14 @@ from . import board as BOARD
 from . import exit_trace as XT
 from . import spec as SP
 from . import store as S
+from .notify import notify_submitters
 
 SEED = Path(os.environ.get("GUJI_JOBS_SEED", "/opt/guji-cv-seed"))
 VENV = Path(os.environ.get("GUJI_JOBS_VENV", "/opt/guji-venv"))
 HOME = Path(os.environ.get("GUJI_JOBS_HOME", str(Path.home() / ".guji-jobs")))
 RUNNER_ROOT = Path(__file__).resolve().parents[2]       # 执行方自己的 cv 检出（rerun_prep.sh 取这里的，跟 dev）
 HEARTBEAT_S = 60
+IDLE_BOARD_S = 300           # 空闲执行方刷新看板的节流（秒）
 #: rerun_prep.sh 里失败多半是网络／库的段（失败了换个会话重试）；其余段（钉子账、建字形库、语料校验…）是配置问题
 _PREP_ENV_PARTS = {"cv", "克隆工作区", "db-pull", "取原图", "模板索引", "基线包"}
 _TOKEN_RE = re.compile(r"(TOKEN|SECRET|KEY|PASS|DSN)[A-Z_]*=\S+|postgres(ql)?://\S+|Bearer \S+", re.I)
@@ -66,12 +68,14 @@ def _is_conn_error(e: BaseException) -> bool:
     return any(c.__name__ in _CONN_ERRORS for c in type(e).__mro__)
 
 
-# 读超时（socket 超时，中心库回得慢）：urllib／http.client 报的是 TimeoutError「The read operation timed out」
-_TIMEOUT_RE = re.compile(r"read operation timed out|timed out|TimeoutError", re.I)
+# 瞬时错误：读超时（socket 超时，中心库回得慢，urllib／http.client 报 TimeoutError「The read operation timed out」），
+# 以及中心库 5xx（500／502／503／504，服务端抖动，client.CentralError 带状态码）。4xx（403、404…）是配置或权限问题，不算瞬时。
+_TRANSIENT_RE = re.compile(r"read operation timed out|timed out|TimeoutError|CentralError: 5\d\d\b", re.I)
 
 
 def _is_transient_timeout(msg: str) -> bool:
-    return bool(_TIMEOUT_RE.search(msg or ""))
+    """名字沿用旧的（超时）；现在也认中心库 5xx。"""
+    return bool(_TRANSIENT_RE.search(msg or ""))
 
 
 class Cancelled(Exception):
@@ -104,6 +108,7 @@ class Job:
         self.proc: subprocess.Popen | None = None
         self.cancel = threading.Event()
         self.ws: str | None = None
+        self.prep_override: dict = {}     # 准备脚本记进运行覆盖的改值（corpus／glyph_pin／cv_version；旧 tag 改本机册 yaml 时为空）
         self._stop = threading.Event()
 
     # ── 心跳 ──
@@ -139,9 +144,15 @@ class Job:
             e["GUJI_DATA_TOKEN"] = tok
         if self.ws:
             e["GUJI_WORKSPACE"] = self.ws
+        if self.prep_override:            # 准备时的改值：本会话所有 guji 命令都按它读册配置（不改册 yaml）
+            e["GUJI_BOOK_OVERRIDE"] = json.dumps(self.prep_override, ensure_ascii=False)
         if self.spec.get("no_reuse"):
             e["GUJI_NO_REUSE"] = "1"
+        e["GUJI_JOB_ID"] = str(self.id)       # 跑批耗时记录（core/perf.py）带上单号，guji perf 能按单查
         e.update(self.spec.get("env") or {})
+        # 推库操作人：单上带了 GUJI_ACTOR（如 A31）就照旧；没带就缺省填执行方名字（GUJI_JOBS_WHO）
+        if not e.get("GUJI_ACTOR") and os.environ.get("GUJI_JOBS_WHO"):
+            e["GUJI_ACTOR"] = os.environ["GUJI_JOBS_WHO"]
         return e
 
     def sh(self, argv: list[str], *, write: bool = False, ok=(0,), outcome: str = "failed") -> str:
@@ -186,17 +197,29 @@ class Job:
         self.ev("完成", secs=round(time.time() - t0, 1))
 
     # ── 各阶段 ──
+    def central_rev(self) -> int | None:
+        """中心库当前 rev（字形库重建、语料更新都会推进它）。取不到返回 None，此时不复用准备。"""
+        try:
+            from ..datastore.client import WorkerSource
+            return int(WorkerSource().status())
+        except Exception:               # noqa: BLE001
+            return None
+
     def prep(self) -> None:
         sp = self.spec
-        sig = json.dumps({k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
-                         sort_keys=True)
+        # 复用签名带上中心库 rev：同一 cv 换了新字形库（指纹变）后，旧工作区不能再拿来出包（QTW r6 册07 事件）
+        rev = self.central_rev() if sp.get("book") else None
+        sig = json.dumps({**{k: sp.get(k) for k in ("book", "cv", "book_overrides", "pin_args", "ws_glob", "ws_repo")},
+                          "central_rev": rev}, sort_keys=True)
         mark = HOME / "prepped.json"
         try:
             last = json.loads(mark.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             last = {}
-        if last.get("sig") == sig and last.get("ws") and Path(last["ws"]).is_dir():
+        if sp.get("book") and rev is not None and last.get("sig") == sig and last.get("ws") \
+                and Path(last["ws"]).is_dir():
             self.ws = last["ws"]
+            self.prep_override = last.get("override") or {}
             self.ev(f"本会话已按同一配置备过（{sp['book']} cv {sp['cv'][:7]}），跳过准备")
             return
         if not sp.get("book"):          # eval／command 不带册：只切 cv
@@ -228,12 +251,19 @@ class Job:
             raise StageError("failed", f"准备「{part}」段失败：{e}", e.code, env=part in _PREP_ENV_PARTS) from None
         m = re.search(r"^WS=(\S+)", out, re.M)
         self.ws = m.group(1) if m else self.ws
+        m = re.search(r"^OVERRIDE=(.*)$", out, re.M)
+        if m and m.group(1).strip():
+            try:
+                self.prep_override = json.loads(m.group(1))
+            except ValueError:
+                raise StageError("failed", f"准备脚本报的运行覆盖不是 JSON：{m.group(1)[:200]}") from None
         if not self.dry and not self.ws:
             raise StageError("failed", "准备脚本没报出工作区（WS=）")
         human = re.search(r"人裁 \S+：.*", out)
         if human:
             self.ev(human.group(0)[:500])
-        mark.write_text(json.dumps({"sig": sig, "ws": self.ws, "at": time.time()}), encoding="utf-8")
+        mark.write_text(json.dumps({"sig": sig, "ws": self.ws, "override": self.prep_override, "at": time.time()},
+                                   ensure_ascii=False), encoding="utf-8")
 
     def checkout(self) -> None:
         cv = self.spec["cv"]
@@ -268,6 +298,13 @@ class Job:
         want = (self.spec.get("checks") or {}).get("human_chars")
         if want is None:
             return
+        if not self.spec.get("base"):
+            # 从头跑（没有铺底包）：开跑前还没有 Step3 切分产物，人裁绑定必然是 0，比了只会误拦（QTW r8，11-03）。
+            # 绑定能不能对上要等 Step3 之后才看得出，这里只记一条结果、不拦。
+            self.db(S.add_result, self.id, self.aid, "check", "human_chars",
+                    data={"want": want, "got": None, "skipped": "no_base"})
+            self.ev(f"人裁绑定检查跳过：从头跑、没有铺底包（单上写应为 {want}）")
+            return
         code = ("import sys;from open_guji_cv.feedback.lookup import human_chars;"
                 "print(len(human_chars(sys.argv[1])))")
         out = self.sh([str(VENV / "bin" / "python"), "-c", code, self.spec["book"]], outcome="blocked")
@@ -297,8 +334,11 @@ class Job:
             args.append("--force")
         if sp.get("params"):
             args += ["--params", json.dumps(sp["params"], ensure_ascii=False)]
-        if sp.get("book_overrides"):      # 册级覆盖在内存里叠（corpus／glyph_pin 准备时另已改本机册 yaml，供钉子账用，值一致）
-            args += ["--override", json.dumps(sp["book_overrides"], ensure_ascii=False)]
+        # 册级覆盖在内存里叠：准备时的改值（cv_version 等）＋需求单的 book_overrides，合成一份给 --override
+        # （旧版 cv 的 --override 会顶掉环境变量里的，所以这里自己合，不靠 CLI 合）
+        ov = {**self.prep_override, **(sp.get("book_overrides") or {})}
+        if ov:
+            args += ["--override", json.dumps(ov, ensure_ascii=False)]
         out = self.guji(*args)
         lines = [ln for ln in out.strip().splitlines() if not re.match(r"^\s*\S+ p\d+: 完成", ln)]
         tail = "\n".join(lines[-20:])
@@ -518,6 +558,9 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                     db(S.worker_seen, worker, state="idle", session=session, done=done, note="")
                 got = db(S.claim, worker, session=session, affinity=_last_book(), kinds=kinds, only=only)
                 if got is None:
+                    # 空闲时也定期刷新看板：排队中的新单（别人刚交的）要在几分钟内出现在表里，不等有人收尾
+                    BOARD.publish(db, min_gap=IDLE_BOARD_S)
+                    notify_submitters(db, say)      # 最后一条是被依赖拦下的（reap 标的），没有执行方收尾，在这里补发
                     if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
                         say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
                         return done
@@ -538,6 +581,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                     env_streak = 0
                 _remember_book(job["book"])
                 say(f"#{job['id']} → {outcome}")
+                notify_submitters(db, say)
                 done += 1
                 db(S.worker_seen, worker, state="idle", session=session, done=done)
                 BOARD.publish(db, force=True)
@@ -728,7 +772,7 @@ def _preflight() -> str | None:
 
 # 文意 L2/L3 要的重依赖和 SIKU-BERT 权重（pyproject 的 torch／llm extra）。缺了管线不报错、只会让 ctx_l2／ctx_llm 全部弃权
 # （abstain:no_encoder／no_api_key），待审单就偏多（2026-11-01 史記 02 册：835 条变 1181 条）。所以执行方领单前就查，缺了先补，补不上就不领单。
-CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
+from ..datastore.packs import CTX_ENCODER   # (模型名, 钉住的 revision)；R2 镜像见 packs.fetch_hf_model
 _ML_PKGS = ("torch", "transformers", "anthropic")
 _ml_ok_at = 0.0
 _ml_fail: tuple[float, str] | None = None     # (时间, 原因)：失败后 10 分钟内不再重试，直接复用这条原因，免得每个轮询周期都重跑安装
@@ -797,6 +841,15 @@ def _ml_env_gate(say=print) -> str | None:
             return fail(f"管线环境缺 {' '.join(miss)}，补装失败（rc {rc}）：{out}")
         say(f"补装完成：{' '.join(miss)}")
     name, rev = CTX_ENCODER
+    # 执行机常拉不到 huggingface.co（2026-11-03），先从 R2（经 guji-data Worker，443 通）取权重镜像解进 HF 缓存；取不到再走 HF
+    tok = os.environ.get("GUJI_DATA_TOKEN") or os.environ.get("GUJI_DATA_TOKEN_READ")
+    if tok:
+        r2 = "from open_guji_cv.datastore.packs import fetch_hf_model as f;raise SystemExit(0 if f(%r, %r) else 1)" % (name, rev)
+        rc, out = _run_bounded([py, "-c", r2], ML_INSTALL_TIMEOUT_S, {"GUJI_DATA_TOKEN": tok, "PYTHONPATH": str(Path(__file__).resolve().parents[2])})
+        if not rc:
+            _ml_ok_at, _ml_fail = time.time(), None
+            return None
+        say(f"R2 上没取到 {name} 权重镜像（rc {rc}）{out}，改走 huggingface.co")
     dl = "from huggingface_hub import snapshot_download as d;print(d(%r, revision=%r))" % (name, rev)
     rc, out = _run_bounded([py, "-c", dl], ML_INSTALL_TIMEOUT_S, {"HF_HUB_DOWNLOAD_TIMEOUT": "60", "HF_HUB_ETAG_TIMEOUT": "30"})
     if rc:

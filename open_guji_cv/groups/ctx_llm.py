@@ -102,6 +102,18 @@ def _schema(members) -> dict:
                            "why": {"type": "string"}}}
 
 
+def api_error_code(status, message: str) -> str:
+    """API 报错 → 留痕码。额度用完（400「credit balance is too low」）单独记 `api_credit` 并大声报一次：
+    2026-11-02 第 2 轮统一重跑整套都是 `abstain:llm_api_400`，看起来像请求写错，其实是账户没额度。"""
+    if "credit balance" in (message or "").lower():
+        if "credit" not in _IMPORT_WARNED:
+            _IMPORT_WARNED.add("credit")
+            _log.warning("Anthropic API 额度用完（credit balance is too low）：L3／二审小组／图像＋文意全部弃权，"
+                         "裁定库没命中的格都按 abstain:llm_api_credit 送审；充值后重放 seed_admit")
+        return "api_credit"
+    return f"api_{status}"
+
+
 class Client:
     """`anthropic` 的薄包装：`ask(system, user, members, model, effort)` → (答案 dict｜None, usage dict, 错误码｜None)。"""
 
@@ -120,7 +132,7 @@ class Client:
                 messages=[{"role": "user", "content": user}],
                 output_config={"effort": effort, "format": {"type": "json_schema", "schema": _schema(members)}})
         except (a.BadRequestError, a.AuthenticationError, a.PermissionDeniedError, a.NotFoundError) as e:
-            return None, {}, f"api_{getattr(e, 'status_code', 'err')}"
+            return None, {}, api_error_code(getattr(e, "status_code", "err"), str(e))
         except (a.RateLimitError, a.APIStatusError, a.APIConnectionError) as e:
             return None, {}, f"api_{getattr(e, 'status_code', 'conn')}"
         u = r.usage
@@ -172,7 +184,7 @@ def user_message(left: str, right: str) -> str:
 RANK = {"high": 3, "mid": 2, "low": 1}
 
 
-def _entry(group, system, ver, left, right, members, model, effort, cache, client, cell):
+def _entry(group, system, ver, left, right, members, model, effort, cache, client, cell, pending_reason="group_abstain"):
     """问一次（先查缓存）→ (缓存条目 dict｜None, 是不是读的缓存, 本次真问的 token｜{}, 出错码｜None)。"""
     e = cache.lookup(group, ver, model, left, right) if cache else None
     if e is not None:
@@ -188,7 +200,8 @@ def _entry(group, system, ver, left, right, members, model, effort, cache, clien
     if err:
         return None, False, t, err
     e = {"char": ans.get("char"), "conf": ans.get("conf"), "why": str(ans.get("why") or "")[:60],
-         "model": tok.get("model") or model, "tok": t}
+         "model": tok.get("model") or model, "tok": t,
+         "pending_reason": pending_reason}   # 问的时候这格的待审原因（字组问大模型＝形近字没把握；doc/design/待审原因PendingReason.md）
     if cache:
         cache.store(group, ver, model, left, right, e, cell)
     return e, False, t, None
@@ -200,7 +213,8 @@ def split_spec(spec: str) -> tuple[str, str]:
     return m, ef or "high"
 
 
-def panel_verdict(group, system, prompt_ver, left, right, members, specs, *, cache=None, client=None, cell=None) -> dict:
+def panel_verdict(group, system, prompt_ver, left, right, members, specs, *, cache=None, client=None, cell=None,
+                  pending_reason="group_abstain") -> dict:
     """二审小组（A24 2026-11-01）：几个强模型各以高 effort 独立读同一格，**全部同字、置信都不低于 mid、且至少一家 high** 才算数。
 
     殿本 414 格（日曰／日目／己已巳 的待审）上，Opus high＋Fable high 的同字结论：己已巳金标 215 格 0 错、日曰金标 108 格 3 错（3 格都疑金标错）；
@@ -212,7 +226,7 @@ def panel_verdict(group, system, prompt_ver, left, right, members, specs, *, cac
     def one(spec):
         model, effort = split_spec(spec)
         e, cached, tok, err = _entry(group, system, f"{prompt_ver}#{model}:{effort}", left, right, members, model, effort,
-                                     cache, client, cell)
+                                     cache, client, cell, pending_reason)
         return {"model": model, "effort": effort, "err": err, "cached": cached, "tok": tok,
                 **({"char": e.get("char"), "conf": e.get("conf"), "why": e.get("why")} if e else {})}
     with ThreadPoolExecutor(max_workers=max(1, len(specs))) as ex:
@@ -258,7 +272,7 @@ def panel_to_verdict(pv: dict, extra: dict) -> GroupVerdict | None:
 
 def judge(group: str, system: str, prompt_ver: str, left: str, right: str, members, *, model: str = DEFAULT_MODEL,
           effort: str = DEFAULT_EFFORT, cache=None, client=None, cell: str | None = None,
-          panel: tuple = (), ref: str | None = None) -> GroupVerdict:
+          panel: tuple = (), ref: str | None = None, pending_reason: str = "group_abstain") -> GroupVerdict:
     """一格 → `GroupVerdict`（via `ctx_llm`）。extra：`llm_model`、`llm_conf`（大模型自报）、`cached`、`tok`（这一格真问时的用量）。
 
     `panel`（`"模型:effort"` 列表，空＝不开）：首问不是「组内字、high」，或首问的字与整理本 `ref` 不同时，再交二审小组（`panel_verdict`）：
@@ -266,7 +280,7 @@ def judge(group: str, system: str, prompt_ver: str, left: str, right: str, membe
     全部说「其他」→ `abstain:other`（`other_conf: high`，共字组联判认它）；其余照首问的结论走。"""
     left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
     extra: dict = {"llm_model": model}
-    e, cached, tok, err = _entry(group, system, prompt_ver, left, right, members, model, effort, cache, client, cell)
+    e, cached, tok, err = _entry(group, system, prompt_ver, left, right, members, model, effort, cache, client, cell, pending_reason)
     if cached:
         extra["cached"] = True
     if tok:
@@ -277,7 +291,8 @@ def judge(group: str, system: str, prompt_ver: str, left: str, right: str, membe
     extra["llm_conf"] = conf
     solid = ch in members and conf == "high"
     if panel and not (solid and (ref is None or ch == ref)) and not (ch == OTHER and conf == "high"):
-        pv = panel_verdict(group, system, prompt_ver, left, right, members, panel, cache=cache, client=client, cell=cell)
+        pv = panel_verdict(group, system, prompt_ver, left, right, members, panel, cache=cache, client=client, cell=cell,
+                           pending_reason=pending_reason)
         v = panel_to_verdict(pv, extra)
         if v is not None:
             return v

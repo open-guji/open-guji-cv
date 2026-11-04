@@ -5,7 +5,65 @@
 
 ## [未发版]
 
+### Added
+- S 类待审成因归因（A22-3，11-04）：`python -m open_guji_cv.review.seg_causes <册…> --products <产物根> [--pending …] [--known …] [--out 目录]`，只读产物包，把 S01–S04 待审格按包里的事实（钉页、页型、整理本∅、格位对得上、假大印／印章、反色带、页／列未过闸、列网、格少于整理本、错位、格数／格高离群、对位冲突）拆开，出汇总.md／逐页.tsv／逐格.tsv，各书自跑。统计口径仍是 `pending_reason`，不写单、不新增原因；不在任何 Step 的 `code_deps` 里。
+
+### Changed
+- 页型表 `page_kinds`（A20 11-04，管线重组方案 B 第四期，PATCH）：册 yaml 顶层 `page_kinds: {body|table|roster: […]}` 取代散在 `border_detect_gate.body_pages`／`table_pages`、`row_segment.roster_pages` 里的页号，读配置时逐层翻回这三个参数，**值不变、Step 参数指纹不动**（`core/page_kinds.py`；不改任何 Step、不动 `code_hash`，契约只增可选字段）。`page_kinds` 属实测版式，不许写进基础配置；`guji book show --effective` 来源标「（page_kinds）」。新增只读命令 `guji pagekinds <册>`（点名／页型规则判／最后处理三栏对账，疑似误判的跳过页单列）与迁移脚本 `scripts/migrate_page_kinds.py`（干跑，每册核逐步 params_hash 不变，不推库）。老写法读配置时发 `FutureWarning`，**0.7.0 起报错**。
+- 分段计时第二轮（A20 11-04）：`cli_perf.PERF_HOOKS` 加匹配器里面（`verify._elastic_align`／`_prepare`／`_elastic_miss`、`HogFeature.extract`）、seed_admit 铁证闸 `_iron_decide`、字组流程 `groups.flow` 各段与影子闸 `ShadowGate.judge`。只改名单，不改 Step 源码，`code_hash` 与产物不变。
+- seed_admit 每页读人裁提速（A20 11-04，耗时统计查出 `rebind_library_shapes`＋`human_chars` 每页约 0.6 s）：殿本 vol04 每页 0.95 s → 0.2 s。大头是 `bindings.page_state` 逐页调 `cells_step()`、每次 `load_book` 重读册 yaml，`book_bindings` 一次对全书有人裁的页各调一遍，现在算一次传进去；事件读口记住过闸结果（`EventLog._gate_cached`：问过的各册 `source_rev` 都没变才复用，换图源切 yaml 立刻重判），`book_bindings` 两种分组共用一遍排序。绑定缓存键照旧含备选切法列（`page_state`），没加新的缓存层。改的模块都不在任何 Step 的 `code_deps` 里，`code_hash` 不变；vol04 全册 218 页新旧代码 seed_admit 产物逐字节相同（4 进程，整步墙钟 200 s → 157 s）。
+
+## [0.6.2] - 2026-11-04
+
+第4轮统一重跑用的版本（A31，用户 11-04 定「重跑尽量发新 cv 版本」）。比 v0.6.1 `code_hash` 变了的 Step：**border_detect**（#1010）、**seed_admit**（#999、#1007、#1009 动了它或它的 code_deps）。
+
 ### Fixed
+- border_detect 1.19：列宽重拟合拟不出时减本页底色重拟，修 vol43 p1 满页霉点漏两条界行、整页未过 L1（A22，#1010）。
+- db push/sync：本地字形账本被清空时拒推，防本机空壳清中心库（#1013，11-04 殿本账本被清事故后）。
+- feedback：knn_infer 来源（字形近邻推断事件）不当人裁（#1006）。
+
+### Added
+- datastore/source_xform：换图源后旧页坐标→新页坐标（#1008）。
+
+### Changed
+- 第4轮字组（A24，#999）：于千子干笔画下限放宽、kgc 冦宼㓂按整理本定寇、can/ba 影子闸挑中整理本字时改放、终审上下文抽成 utils/final_ctx.py。
+- 文意裁定事件带 `pending_reason`（缺省 unknown；字组问大模型缺省 group_abstain，PUA/GB/降审脚本显式传）（#1007、#1009）。`feedback.rulings` 在 seed_admit 的 code_deps 里。
+- 待审原因：史記夹注分法不均 `jiazhu_uneven` 归 seg_defect，细分 jiazhu_uneven（#1012，review 层，不动指纹）。
+- 步内分段计时（A20 11-04，Sheldon 选「大头两步加分段计时」）：`cli_perf.PERF_HOOKS` 点名 glyph_match、seed_admit 的各道关与匹配器 `GlyphMatcher._match` 等，`guji step`／`pipeline` 起跑时换成计时薄壳，分段记进 perf 记录并推任务库。不改 Step 源码，`code_hash` 与产物逐字节不变（`tests/test_perf_hooks.py` 拿真匹配器核开壳与不开壳产物相同）。`GUJI_PERF=0` 关。
+- `invert_detect`（Step0 反色带）审过登记进 `core/parallel.AUDITED`，`--jobs N` 按页并行（A20 11-04，耗时统计查出串行、并行效率 0.25）。`core/parallel.py` 不进指纹，产物不变：殿本、全唐文、史記、北行共 130 页（含 4 页反色带）串行与 4 进程产物 sha 逐页相同。
+
+## [0.6.1] - 2026-11-03
+
+### Added
+- 任务库：一批单全部跑完，自动通知提交人（11-04，sheldon 定）。某人名下没有排队／在跑的单、且有终态单没通知过时，执行方收尾（或空闲时）给 `submitted_by` 发一条汇总（成功／失败／被拦，附单号与简短原因），走中转站 send-to-roster；`jobs.job` 加列 `notified_at`（加列时历史单补成已通知），发送失败不影响单、退回下次再发。新 `jobs/notify.py`。不碰 Step，指纹不变。
+- 待审原因规范文档 `doc/design/待审原因PendingReason.md`（A31，11-04）：是什么、真源与取法、29 个取值表、各处数据怎么写（单、卡、事件、裁定、看图、网站、看板、manager、book-text char v0.4）、各仓副本、加改弃用流程、迁移记录。只加文档。
+- 语料：cv 自带底库语料表 `config/corpus-registry.json`（`core/corpus_files.py`）＋`guji corpus registry`，`corpus upload|fetch` 不给 `-w` 时按表进出 R2；`guji pipeline` 起跑前、`install_release.py`、测试开跑前缺了自动从 R2 取回原位（为 rc 时语料表搬出 git 做准备，L0）。
+- 模型系统：一个环境里两本书钉同一模型的不同版本（`core/model_override.py`，设计 `doc/design/模型系统.md` 4.2 第 4 条）。钉了 `model:` 且 cv 仓里的模型与清单内容不同时，按 sha 摆进 `$GUJI_DATA_HOME/model-cache/…`，运行时把读模型模块的缺省路径改指那里；模块源码不动、`code_hash` 不变，仓里一致的册逐位同前（L0）。
+- 历史事件补待审原因（A31，sheldon 11-03 定「回写，推不出写 unknown」）：`scripts/zhengli/backfill_event_reason.py` 给 `feedback/{events,rulings,vision}` 里的 `confirm`、`ctx_ruling`、`vision_check` 加 `pending_reason`（按 group／route／subclass／via／来源推，推不出 `unknown`），按原行写法重写、别的字段不动；缺省试跑，`--write` 在人裁写入锁内写。殿本试跑 65,617 条。不碰任何 Step。
+- book-text 的 char 写待审原因（A31，sheldon 11-03 定；guji-format char v0.4 §4.8）：`guji_char_cord.apply_pending` 给待审单上的格写 `pending_reason`、去掉待审格的 `lacuna`／`guess_c`（`lacuna` 只给审过定阙的格），用到就把 `$schema` 升 v0.4；`_tok` 把待审 □ 与阙文同写 `[[]]`，分行稿逐字节不变。`republish.py` 升 book-text 时按同版公众单＋团队单写；`export_guji_format.py --pending` 可在导出时写。不改 Step9，指纹不变。
+- 字形第三步：字体档进 R2（A20，11-04）。cv 带字体表 `config/font-registry.json`（11 个文件约 145 MB，已传 R2），新命令 `guji font registry|upload|fetch`，`guji pipeline` 起跑前与 `install_release.py` 装完自动补齐 `fonts/`；商业字体 `fonts/kangxi/` 不进表、不上公开的 R2。文件放回原位，代码与指纹不变。
+- 语料底库文件搬出 cv 的准备（A20，11-04；`doc/design/语料库分层版本.md` 末节）：`guji corpus upload --all` 改传钉的清单里引擎仓的全部文件，不论大小，仓里改过的按底库 `repo_commit` 从 git 取当时那一版；`guji corpus fetch` 连引擎仓小文件一起取回原位；`guji pipeline` 起跑前对钉了语料的册自动补取缺的文件。不删文件、不碰 Step，指纹不变。已传殿本、史記钉的两版底库（131 个文件）。
+- 模型系统收尾（A20，11-04）：模型卡加出处 `source`（`config/model-provenance.json`：训练脚本、训练数据、联动门槛，不进清单哈希）；字组 IDS U-Net（`config/groups/*/unet.npz`）挪进模型系统（种类 `ids_unet`），`corpus_pin._not_corpus` 不再算它语料，老清单里的条目核对时跳过；影子闸按训练数据改归殿本；cv 模型表扩到 13 个文件；`guji model upload` 不给 -w 传模型表。史記、殿本出 m2 并改钉 `model: 2`。
+- 控制台待审卡带待审原因（A31，sheldon 11-03）：`review/cards.py` 出的每张卡加 `pending_reason`／`pending_reason_detail`，与出单同一套判法（`review/reasons.py::stamp_cards`，整页／整列对不上按这批卡自己数，刻例数取工作区 `glyph_db_path()`）；卡片缓存版本升 4、字形库进缓存键。不碰任何 Step。
+- 模型系统：cv 自带模型表 `config/model-registry.json`（A20，11-04，为下一版把 `models/` 搬出 git 做准备）。`guji model registry` 重写表、`guji model fetch`（不给 -w）按表从 R2 补齐 `models/`，`guji pipeline` 起跑前自动补，`install_release.py` 装完也补；文件放回原位，代码与指纹不变。
+- 补现行待审单的 `pending_reason`（A31，sheldon 11-03：已有数据也改写，推不出写 unknown）：`scripts/zhengli/backfill_pending_reason.py`，每张单取出单那一版的产物包 `rev-<rev>`（没有退回 ★main）用 `review/reasons.py` 判，只加 `pending_reason`／`pending_reason_detail`，别的字段不动；缺省试跑出报告，`--write` 才写回数据目录。殿本 99 张单 18,429 格试跑：全部取到出单版包，unknown 0。不碰任何 Step。
+- 出单写待审原因 `pending_reason`（A31，sheldon 11-03 定）：新模块 `review/reasons.py` 按 `pending_reasons.yaml` 的 `priority` 逐条判一格为什么待审（判法搬自 A31 统计分类 v2：复审／改判、切坏、遮挡、整页整列对不上、极难形近、字组五种、整理本缺字／没字、库里没有、乱码闸、异体、形近护栏、刻例太少、改字层、库不认、与整理本不一致），都不中写 `unknown`；`republish.py` 出单时给公开单与团队单每格写 `pending_reason`（必有）与 `pending_reason_detail`，`cause`／`cls` 过渡期照旧双写。读 seed_admit／align_ref／glyph_match 产物、待审单字段与工作区 `output/glyph.db`（刻例数，库不在就不判刻例太少）。殿本 vol20、vol56 实测与 v2 统计分类逐格一致（差异只在改判复审优先、乱码闸先于刻例太少）。yaml 的 priority 按判定顺序重排。不碰任何 Step，`code_hash` 不变。
+- 模型系统二期第一步（A20，11-04；设计 `doc/design/模型系统.md` 4.1）：`guji model upload|fetch`，清单里的模型文件按 sha256 进出 R2（键同语料大文件），取回时放回登记位置，所以 Step 代码、`code_hash`、指纹都不变；`guji pipeline` 起跑前对钉了 `model:` 的册自动补取缺的文件（`ops/model_blobs.py`）。已传史記、殿本 m1。
+- 待审原因 `PendingReason`（A31，sheldon 11-03 定）：新模块 `review/pending_reason.py`＋配置 `review/pending_reasons.yaml`，全项目唯一真源。一格「为什么还在待审」只写字段 `pending_reason`，值为 29 个英文 enum 名之一（码如 `Z01` 只作分类值）；不确定一律 `unknown`。每个原因配大类、去向（human／llm／algo／deferred）、负责人、网页短名与说明、卡片形态、判定说明、旧码对应。`parse()` 对空值、认不出的给 `UNKNOWN`，`legacy_candidates()` 供迁移旧 `cause`／`cls`，`python -m open_guji_cv.review.pending_reason --json` 导出给别的仓。这是待审原因，不是判定依据（依据仍是 `why[]`）。本 PR 只加定义与守卫，出单写字段在下一个 PR；不碰任何 Step，`code_hash` 不变。
+- 模型系统第一期（A20，11-04，Sheldon 定三系统构想；设计 `doc/design/模型系统.md`）：新模块 `core/model_pack.py`＋`guji model ls|build|verify|list`。每个模型文件一张卡（`model/1`：种类、sha256、层、归谁按从哪里来），本书模型总号清单 `config/model-pack/m<N>/manifest.json`（数据目录，随 db push 进中心库）；册 yaml `model: N` 钉住后，读模型的步起跑前校验清单（`GUJI_MODEL_DRIFT=warn` 放行），同时钉了 `corpus:` 的册 `group_flow_fingerprint` 并上模型内容，补上「钉语料的册换 L2 小头／rr_clf／rr_shape／book_knn 不过期」的缺口。opt-in：不写 `model:` 的册指纹逐位不变。任务单 `book_overrides` 认 `model`。
+- 提速两处（A20 11-03，耗时统计查出；产物逐字节不变、各册不过期）：①页型判定 `clustering.page_type.page_features` 的长线形核开运算（竖线核长 0.3 页高）换成 `boxFilter` 滑窗计数 `line_open`，与 cv2 原式逐位相同；页级并行的 worker 里 OpenCV 单线程，全唐文原图上这一处每页 3.5 s，`border_detect_gate` 每页约 4.2 s → 0.4 s（殿本小图约 2 倍）。登记 `core/code_equiv.py`。②`seal_detect` 审过登记进 `core/parallel.AUDITED`，`--jobs N` 按页并行（原先串行、并行效率 0.25）；`core/parallel.py` 不进指纹。证据：随机图 14,400 例＋全唐文、殿本、史記、北行 36 页真图 page_features 逐项相同；全唐文 12 页、殿本卷首卷末 24 页（含 5 方印）`border_detect_gate`／`seal_detect` 与 origin/dev、串行与 4 进程产物 sha 逐页相同。
+- Wiki 调整（Sheldon 11-03：重点四库总目，捎带全唐文、史記）：加「殿本四庫總目」专页（页型图组、职名页放行、各册落审率），各书一览补全唐文（v006 本地跑 Step1–4 出图），幼學鰲頭压成一小段、删「自由版式」页。只动 `wiki/`。
+- 跑批耗时统计（A20，11-03，Sheldon 定；方案 Claude Doc《CV 管线性能统计方案》）：新模块 `core/perf.py`（`span`／`timed`／`count`，不在跑批里时是空操作），引擎 `Engine.run()` 自动给每步每页记计算、算指纹、清缓存、落盘与整步准备的耗时，并行时子进程的分段随结果带回；每次运行写一份 `<产物根>/../perf/<册>/<run_id>.jsonl`（机器规格、cv 版本、任务库单号 `GUJI_JOB_ID`、每步汇总与最慢 20 页），放在产物根外、不进 manifest 与产物包。新增 `guji perf top|show|pages` 读本机记录。`GUJI_PERF=0` 关掉，`GUJI_PERF_DIR` 换目录。`core/engine.py` 不在任何 `code_deps`，`code_hash` 与产物逐位不变（`tests/test_perf.py` 核开关两种跑法产物与指纹相同）。推到美国服务器 jobs 库 `perf` 表等 jobs 客户端切过去再加。
+- 跑批耗时推到美国机任务库（A20，11-03）：设了 `JOBSDB_TOKEN` 时每次运行写完自动推 run 一行＋每步一行（含最慢 20 页，约 15 KB）到 `jobs.perf_run`／`jobs.perf_step`（`jobs/perf_push.py`，表幂等自建）；**只推美国机，不推 Neon**。新增 `guji perf top --remote [--by host|cv_version|book]`、`guji perf job <单号>`、`guji perf push`；执行方给子进程带 `GUJI_JOB_ID`，`--isolate-steps` 的各步记录用 `GUJI_PERF_GROUP` 串起来。不碰任何 Step，`code_hash` 不变。
+- GitHub Wiki（Sheldon 11-03）：源文件在 `wiki/`（17 页＋侧边栏，以 v0.6.0 为基线，配殿本、史記、北行古本、幼學的真页面截图），出图脚本 `wiki/tools/make_shots.py`＋清单 `shots.yaml`（从产物包画版框、列带、字格、夹注、印章、放行等叠图）；`.github/workflows/wiki-sync.yml` 合进 main 时同步到 Wiki。`doc/版本号规矩.md` 加第八节：每升 MINOR 整体重改 Wiki，算在发版清单里。只加文件，不碰任何 Step，`code_hash` 不变。
+
+### Fixed
+- 任务库通知：`notify_submitters` 在库层返回 None 时当「没有到期的」，不再抛 TypeError 让执行循环退出（`test_jobs_runner_refresh`、`test_jobs_worker_conn` 因此挂，rc 修复，A31）。
+- seed_admit 指纹补漏：#951 新加的 `groups.pair_shape` 补进 `code_deps`（seed_admit `code_hash` 随之变，本版 seed_admit 本来就改了，不额外多一次重跑），`path_params` 登记表补 `group_flow_pair_shape`（rc 修复，A31）。
+- 用字账按书选（A20 11-03，配置分层清理第 5 条）：`seed_admit.edition` 还是缺省（殿本的 `wuyingdian_zongmu`）时按书换键（`core/ledger_edition.py`、`core/step.py::_with_book_ledger`；书 ID 取生效 `book_id`，没写取中心库工作区名），别的书没有自己的账（`config/variants/books/<书 ID>.json`）就是空账；审字卡、组视图同样按书取。**影响**：殿本与认不出书的册参数逐字节不变；史記、全唐文等能认出书 ID 的非殿本册 `seed_admit` 判过期（参数 `edition` 变了），自动放行不再拿殿本的惯刻形、殿本人裁过的转换对当先验。L2：从 seed_admit 起重跑（可与 #911 iron_gate 的重跑并一次）。不碰任何 Step 模块与 `code_deps`，`code_hash` 不变。
+- 配置分层清理第二批（A20 11-03，Sheldon「剩下几条都做完」）：①任务库准备（`rerun_prep.sh`）改值走运行覆盖 `GUJI_BOOK_OVERRIDE`，不再 sed 本机册 yaml（旧 tag 不认才退回），执行方把它与 `book_overrides` 合成 `--override` 带进 pipeline；`guji … --override` 叠在环境里已有的覆盖上，不再顶掉。②`guji book show --effective` 列出借来的字形库（`workspace.yaml` 的 `glyph_lib.borrow`）及本机副本 rev、钉版快照里的借库。③推中心库前拦下「生效 `corpus` 在那册钉子账里查不到」的册（多见于写在基础配置里），`resolve_pin` 的报错说清总号每册各编各的。④新增 `scripts/check_base_corpus.py`，`doc/版本号规矩.md` 第三节第 5 条加「底库文件变了要配新底库」。只动工具与推库检查，不碰任何 Step 模块与 `code_deps`，`code_hash` 与产物指纹不变。
+- `iron_gate` 缺省值两处对齐（Sheldon 10-23 定缺省开，11-03 确认）：`load_book` 读册配置时没写 `iron_gate` 的按**开**算（原先按关，与 `BookSpec` 缺省 True 不一致）。**影响**：册 yaml 与基础配置都没写的册 `seed_admit` 判过期（`iron_gate` 在 `book_deps`）——11-03 中心库实查：史記 988g3f0wsu 42 册、全唐文 995ejelvk0 236 册（另 12 册已显式开）、qtw-draft 5 册、幼學 yxat 1 册；殿本（基础配置已写 true）、北行（册里已写 true）不受影响。L2：从 seed_admit 起重跑。`code_hash` 不变。
+- Step 参数优先级与文档对齐（A20 11-03 配置分层清理）：册配置 `params:`（基础配置 ∪ 册 yaml ∪ `--override`）在 `Engine.__init__` 按字段叠在管线 yaml `params:` 之上、`--params` 之下；以前管线 yaml 写过的字段册配置盖不住（只涉及 `modern_body` 的 `column_gate`、`cell_shrink`、`glyph_match` 三项）。册配置 `params` 里写 `null` 也能去掉管线 yaml 的值。刻本链管线没有 `params:`，殿本、史記等参数指纹逐位不变；现代链只有册配置写了这几项的书会变。`guji book show --effective` 新增 Step 参数逐字段来源（含管线 yaml 层）；`--override` 不许改 `book_id`、`volume`、`volume_width`、`chapter_width`。不碰任何 Step 的 `code_deps`，`code_hash` 不变。
 - `guji source pull` 等动作在 dev 上报 invalid choice：拆分 P1a（#880）给 `cli_source` 加的插件表 `COMMANDS` 盖掉了同名的动作表；动作表改名 `ACTIONS`。只影响 dev，未发版。
 
 ### Changed

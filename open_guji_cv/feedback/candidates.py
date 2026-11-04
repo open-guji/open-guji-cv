@@ -13,6 +13,10 @@ instance_id）。H 道扫出的「还没进库、但有双证的候选格」没�
      "evidence": {"source": "H#62", "align_char": "仕", "ctx_top": "仕", "margin": 1.0},
      "ref_instances": ["v2:vol01:55:3:7"]}          # 可选：点名的对照刻例
 
+可选 `pending_reason`（待审原因，`review/pending_reason.py`；2026-11-04 起）：行上写的优先，
+其次 `_meta.pending_reason`（整份清单同一个原因），都没有记 `unknown`；写法不对的值也记 `unknown`（值在不在表里由读的一方 `parse` 判）。
+规范见 `doc/design/待审原因PendingReason.md`。
+
 `cell_id` 与定字裁决同口径（`书:页:列:格[ab]`，格从 1 数，v2 口径）。
 以 `{"_meta": {...}}` 开头的行是清单说明（标题、来源），不算格。`#` 开头的行跳过。
 
@@ -36,6 +40,7 @@ STEP = "glyph_candidate"
 VERDICTS = ("admit", "reject", "unclear")
 BATCH_PREFIX = "candidates-"
 
+_REASON = re.compile(r"^[a-z][a-z0-9_]*$")   # 只查写法；值在不在表里由读的一方 review.pending_reason.parse 判（feedback 不许 import review）
 _LIST_ID = re.compile(r"^[A-Za-z0-9_-][A-Za-z0-9_.-]*$")
 _CELL = re.compile(r"^(?P<book>[A-Za-z][A-Za-z0-9_-]*):(?P<page>\d+):(?P<col>\d+):(?P<slot>-?\d+)(?P<sub>[ab]?)$")
 
@@ -72,6 +77,7 @@ def load_list(path: Path) -> tuple[dict, list[dict], list[str]]:
     rows: list[dict] = []
     problems: list[str] = []
     seen: set[str] = set()
+    raw: list[tuple[int, dict]] = []
     for n, line in enumerate(Path(path).read_text(encoding="utf-8").splitlines(), 1):
         s = line.strip()
         if not s or s.startswith("#"):
@@ -98,10 +104,18 @@ def load_list(path: Path) -> tuple[dict, list[dict], list[str]]:
             problems.append(f"第 {n} 行 {cid} 重复，只留第一行")
             continue
         seen.add(cid)
+        raw.append((n, d))
+    default = meta.get("pending_reason")
+    for n, d in raw:                               # _meta 可以写在任何位置，读完再定缺省原因
         ev = d.get("evidence")
-        rows.append({"cell_id": cid, "char": ch,
+        given = d.get("pending_reason", default)
+        reason = given if isinstance(given, str) and _REASON.match(given) else "unknown"
+        if given not in (None, "") and reason != given:
+            problems.append(f"第 {n} 行 pending_reason 认不出：{given!r}，记 unknown")
+        rows.append({"cell_id": d["cell_id"], "char": d["char"],
                      "evidence": ev if isinstance(ev, dict) else ({"note": ev} if ev else {}),
-                     "ref_instances": [str(x) for x in (d.get("ref_instances") or [])]})
+                     "ref_instances": [str(x) for x in (d.get("ref_instances") or [])],
+                     "pending_reason": reason})
     return meta, rows, problems
 
 

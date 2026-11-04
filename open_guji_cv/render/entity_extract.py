@@ -56,7 +56,8 @@ class EntityAnnotation:
             d["target"]["entity_id"] = self.target_id
         if self.target_name:
             d["target"]["canonical_name"] = self.target_name
-        if self.target_href:
+        # book-index 站内链接不写 href（由 entity_id 推出，guji-format spec/05，2026-11 第 11 组）；只有外链写
+        if self.target_href and not self.target_href.startswith("book-index://"):
             d["target"]["href"] = self.target_href
         if self.note:
             d["target"]["note"] = self.note
@@ -547,13 +548,6 @@ def build_entity_json(book_id: str, title: str, volume: int,
                       entities: list[EntityAnnotation],
                       creator: str = "qwen-plus:ner_v1") -> dict[str, Any]:
     """生成符合 guji-entity v0.1 规范的完整 JSON 对象。"""
-    matched = sum(1 for e in entities if e.target_status == "matched")
-    new_cand = sum(1 for e in entities if e.target_status == "new_candidate")
-    works = sum(1 for e in entities if e.type == "work")
-    people = sum(1 for e in entities if e.type == "people")
-    places = sum(1 for e in entities if e.type == "place")
-    offices = sum(1 for e in entities if e.type == "office")
-
     return {
         "$schema": "https://open-guji.org/schema/entity/v0.1.json",
         "version": "0.1.0",
@@ -563,15 +557,6 @@ def build_entity_json(book_id: str, title: str, volume: int,
             "title": title,
             "creator": creator,
             "base_edition": "original"
-        },
-        "stats": {
-            "total_entities": len(entities),
-            "matched": matched,
-            "new_candidates": new_cand,
-            "works": works,
-            "people": people,
-            "places": places,
-            "offices": offices
         },
         "entities": [e.to_dict() for e in entities]
     }

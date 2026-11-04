@@ -110,7 +110,8 @@ def _cv_head(repo: Path) -> str | None:
 
 
 def _pipeline_params(book: str, ws_dir: Path, steps: list[str]) -> tuple[dict, str | None]:
-    """管线 yaml 的 `params:`（这条链对各步的覆盖）+ 书 yaml 的 sha256。读不到就空着——
+    """册配置之下的参数层（管线 yaml `params:`＋套书缺省，`core/pipeline.base_params`）叠上书 yaml 的
+    `params:` ＋ 书 yaml 的 sha256。读不到就空着——
     打包不该因为 manifest 少一栏信息失败。"""
     from .manifest import sha256_file as _sha
     from ..core.workspace import books_dir
@@ -118,10 +119,10 @@ def _pipeline_params(book: str, ws_dir: Path, steps: list[str]) -> tuple[dict, s
     book_sha = _sha(yml) if yml.is_file() else None
     try:
         from ..core.book import load_book
-        from ..core.pipeline import default_pipeline_id, load_pipeline
+        from ..core.pipeline import base_params, default_pipeline_id, load_pipeline
         bk = load_book(book, books_dir(ws_dir))
         pl = load_pipeline(default_pipeline_id(bk))
-        pp = getattr(pl, "params", None) or {}
+        pp = base_params(pl, bk)
         out = {s: dict(pp[s]) for s in steps if s in pp}
         bp = getattr(bk, "params", None) or {}
         for s in steps:

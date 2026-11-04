@@ -31,6 +31,9 @@ class BookSpec:
     expected_cols: int | None = 9
     #: Step3 的正文格数先验。同上，现代链是 None（由块宽 ÷ pitch 推）。
     chars_per_line: int | None = 21
+    #: 版式大类（`keben`／`modern`）：选缺省管线（`core/pipeline.default_pipeline_id`），现代书的字形库分域
+    #: `modern:<册>`。**不是**书 ID、也不是版本名——书 ID 是 `book_id`（字形库里记作 `meta.book_edition`），
+    #: 导出用的版本名是 `book_edition`，本书用字账的键是 `params.seed_admit.edition`。
     edition: str = "keben"
     dev_set: list[int] = field(default_factory=list)
     #: 命名页集（yaml 的 `sets:`）：`{名字: [页号…]}`，用 `--pages <名字>` 选。
@@ -89,14 +92,17 @@ class BookSpec:
     # Step0 预清理：{页号: [规则, ...]}。默认空 = 不做任何处理。
     # 只对手工登记过的页生效，不改磁盘原图，见 utils/preclean.py。
     preclean: dict[int, list[dict]] = field(default_factory=dict)
-    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。不写 = 按 `edition` 选（`core/pipeline.default_pipeline_id`）。
-    #: 自由版式的坊刻本（yxat）写 `pipeline: keben_free`——edition 仍是 keben，字形库分域不变。
+    #: 显式指定这册走哪条管线（yaml 的 `pipeline:`）。**旧写法**：2026-11-03 起写 `seg_set:` 就够了，管线由套书推
+    #: （`core/seg_set.SEG_SET_PIPELINE`）；都不写按 `edition` 选（`core/pipeline.default_pipeline_id`）。写了仍优先。
     pipeline: str | None = None
     #: 切分代码归哪一套书（yaml 的 `seg_set:`，`core/seg_set.py` 登记）。不写 = 按管线推。
     seg_set: str | None = None
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
     #: 存 yaml 原样（键转成字符串），读配置时用 `utils/layout_hints.parse_layout_hints` 校验形状。
     layout_hints: dict = field(default_factory=dict)
+    #: 页型表（yaml 的 `page_kinds:`，2026-11-04）：`{body|table|roster: [页号…]}`，一张表说清哪些页是什么页。
+    #: 读配置时翻成 `params` 里原有的三个 Step 参数（`core/page_kinds.py`），值不变、指纹不变；老写法照旧能用。
+    page_kinds: dict = field(default_factory=dict)
     notes: str = ""
     #: 已删：Step5-c `ocr_candidates` 与 Step6b `group_decide` 两步连同书级开关
     #: `ocr_candidates:` / `group_decide:`（2026-10-18，sheldon 定）。老 yaml 里还写着
@@ -236,6 +242,10 @@ class BookSpec:
     #: 网格模式用它过滤版框对。量法：版框宽 / 列数，逐页取中位。北行日錄刻本 119。
     #: ⚠️ 与 `pitch_prior` 不是一回事——那个是沿列方向的**字距**，给现代链 Step3 用。
     col_pitch: float | None = None
+    #: `columns`（yaml 同名，2026-11-03）：列宽均匀约束（`seg/columns.ColumnSpec`）。各书在 `book_defaults.yaml` 写，
+    #: 册 yaml 可覆盖：`columns: {uniform: strict|loose|off, inner_band: [0.9, 1.1], outer_band: [0.85, 1.3], pitch: null}`。
+    #: 不写＝strict＋殿本实测带（与 1.x 列距救援缺省开同义）。设计见 doc/design/列宽均匀约束.md。
+    columns: dict = field(default_factory=dict)
     #: `frame_height`（yaml 同名）：**框高**（下版框 y − 上版框 y）像素中位，册级统计。
     #: 网格模式用它把 `GRID_MIN_SCORE` 换算到本书的尺度——半高宽匹配分 =
     #: 沿线投影行数 / 半高宽，**跟框高成正比**，在 2801×2343 / 框高 1482 上标的
@@ -287,6 +297,8 @@ class BookSpec:
     font: dict = field(default_factory=dict)
     #: 书级码位配置（yaml 的 `codepoints:`，字形库 11 §〇，2026-09-27 加）。2026-10-24 起先取工作区级
     #: `config/codepoints.yaml`（与 `books/` 同级，同一字形库的各册共用），册 yaml 里写的逐条覆盖（`_ws_codepoints`）。
+    #: 逐条优先级（低 → 高）：`config/codepoints.yaml` < 基础配置 `book_defaults.yaml` 的 `codepoints:` < 册 yaml < 运行覆盖。
+    #: 书级码位只写一处：放 `config/codepoints.yaml`（它是这套书字形库的归一表），基础配置里别再写 `codepoints:`。
     #: `{另一码位: 本书指定码位}`——如 `{别: 別}` 表示这本书里「别」这个码位一律
     #: 按「別」统一（库、人裁、用字账都算作「別」，评测认它们是同一字、不算错）。
     #:
@@ -312,9 +324,10 @@ class BookSpec:
     #: 加书级参数又要新开一个顶层字段。跟管线 yaml 用同一个名字、同一种形状，
     #: 也省得两处各记一套写法。
     #:
-    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） <
-    #: **这里** < 调用方覆盖（CLI `--params` / 控制台表单）——合并逻辑在
-    #: `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前叠一层。
+    #: **优先级**：Step 默认 < 管线 yaml `params:`（`Pipeline.params`） < 套书缺省 `books/<套书>/defaults.yaml` <
+    #: **这里**（基础配置 ∪ 册 yaml ∪ `--override`） < 调用方覆盖（CLI `--params` / 控制台表单）——
+    #: 合并逻辑在 `core/engine.py::Engine.__init__`，跟在管线层之后、调用方覆盖之前按字段叠一层
+    #: （2026-11-03 起在字典层面叠；以前管线 yaml 写过的字段册配置盖不住）。
     #: 空 = 不启用，指纹与产物逐字节同加这个字段之前（合并时空字典不改变任何
     #: 已有 Step 的参数取值）。
     params: dict[str, dict] = field(default_factory=dict)
@@ -333,6 +346,10 @@ class BookSpec:
     #: seed_admit 的人裁、近似字指纹在 `params_for` 里换成 `glyph-gN`，别处人裁进库不让本册过期；
     #: 不写 = 照旧按库内容哈希，行为与加这个字段之前逐位相同。
     glyph_pin: int | None = None
+    #: 本册钉住的模型总号（yaml 的 `model: 1` 或 `m1`；见 `core/model_pack.py`）。钉了之后读模型的步
+    #: 起跑前校验清单；同时钉了 `corpus:` 的册，`group_flow_fingerprint` 并上模型内容（补缺口）。
+    #: 不写 = 行为与加这个字段之前逐位相同。
+    model: int | None = None
     #: 冻结基线（yaml 的 `freeze:`；ai-team `domain/CV/规范/冻结基线与重跑分级.md`，GUJI-601）。
     #: 到 0.1.0／1.0.0 的册登记：`{at: "0.1.0", cv_version: "0.2.0", snapshot: <ws 里快照分支>}`
     #: 或 `manifest: <快照 manifest.json 路径，相对工作区>`。登记后 `close-check` 1a 改比快照
@@ -441,6 +458,11 @@ class BookSpec:
         except ValueError as e:
             raise BadRequest(f"页号表达式错误：{e}") from e
 
+    def __post_init__(self) -> None:
+        if self.page_kinds:
+            from .page_kinds import merge_into_params
+            self.params = merge_into_params(self.params, self.page_kinds)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id, "title": self.title, "raw_dir": str(self.raw_dir),
@@ -459,7 +481,7 @@ class BookSpec:
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
-            "column_grid": self.column_grid, "col_pitch": self.col_pitch,
+            "column_grid": self.column_grid, "col_pitch": self.col_pitch, "columns": dict(self.columns),
             "norm_stroke": self.norm_stroke,
             "frame_height": self.frame_height,
             "vline_polyline": self.vline_polyline,
@@ -570,6 +592,12 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
     return out
 
 
+def _page_kinds_of(params) -> dict:
+    """`BookSpec.page_kinds`：从合并好的 `params` 里读（新老写法殊途同归，`effective_book_dict` 已把各层 page_kinds 翻进 params）。"""
+    from .page_kinds import kinds_from_params
+    return kinds_from_params(params if isinstance(params, dict) else None)
+
+
 def _load_book_params(raw) -> dict[str, dict]:
     """yaml 的顶层 `params:` 段 → `{step_id: {字段: 值}}`。跟
     `core/pipeline.py::load_pipeline` 里对管线 yaml `params:` 的校验同一个理由：
@@ -675,8 +703,9 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
         seg_set=_load_seg_set(d.get("seg_set")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
+        page_kinds=_page_kinds_of(d.get("params")),
         notes=d.get("notes", ""),
-        iron_gate=bool(d.get("iron_gate", False)),
+        iron_gate=bool(d.get("iron_gate", True)),      # 缺省开（sheldon 10-23 定；11-03 起 load_book 与 dataclass 缺省一致）
         references=[dict(r) for r in (d.get("references") or [])],
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
         frame=str(d.get("frame", "ruled")),
@@ -692,6 +721,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         frame_bar_strategy=str(d.get("frame_bar_strategy") or "side_gap"),
         binarized_input=bool(d.get("binarized_input", False)),
         col_pitch=(None if d.get("col_pitch") is None else float(d["col_pitch"])),
+        columns=dict(d.get("columns") or {}),
         frame_height=(None if d.get("frame_height") is None
                       else float(d["frame_height"])),
         vline_polyline=bool(d.get("vline_polyline", True)),
@@ -703,6 +733,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         corpus=_parse_corpus_pin(d.get("corpus")),
         corpus_dev=bool(d.get("corpus_dev", False)),
         glyph_pin=_parse_glyph_pin(d.get("glyph_pin")),
+        model=_parse_model_pin(d.get("model")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
 
@@ -720,6 +751,11 @@ def _ws_codepoints(book_yaml: Path) -> dict[str, str]:
     if not isinstance(m, dict):
         raise ValueError(f"{p} 的 codepoints: 应是映射（另一码位: 指定码位），现在是 {type(m).__name__}")
     return {str(k): str(v) for k, v in m.items()}
+
+
+def _parse_model_pin(v) -> int | None:
+    from .model_pack import parse_pin
+    return parse_pin(v)
 
 
 def _parse_corpus_pin(v) -> int | None:

@@ -137,9 +137,9 @@ def cmd_pack(args) -> None:
     if args.pack_action in ("push-index", "fetch-index"):
         if args.pack_action == "push-index":
             # 生僻字 embedding 索引 + 训好的语言模型（2026-10-20；LM 取是自动的，见 packs.fetch_derived）
-            done = PK.push_rare_indexes() + PK.push_derived()
+            done = PK.push_rare_indexes() + PK.push_derived() + [k for k in [PK.push_hf_model()] if k]
         else:
-            done = PK.fetch_rare_indexes()
+            done = PK.fetch_rare_indexes() + (["hf:" + PK.CTX_ENCODER[0]] if not PK.hf_model_cached(*PK.CTX_ENCODER) and PK.fetch_hf_model() else [])
         print(("已存：" if args.pack_action == "push-index" else "已取：") + ("、".join(done) or "无（都已有）"))
         return
     if args.pack_action == "list":

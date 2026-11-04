@@ -60,6 +60,7 @@ ctx/库/OCR 猜测）。同一页在「最终文本」里和「被比对的文�
 不少，白费一轮。
 """
 from __future__ import annotations
+from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
 
 from dataclasses import dataclass, field
 
@@ -137,7 +138,7 @@ def page_slots(store: ProductStore, book: str, page: int,
         stale = []
     key = page_key(page)
     step = cells_step(book)
-    cells: PageCells | None = store.read(book, step, key, CELLS_KIND)  # type: ignore[assignment]
+    cells: PageCells | None = _read_view(store, book, step, key, CELLS_KIND)  # type: ignore[assignment]
     admit: PageAdmit | None = store.read(book, ADMIT_STEP, key, ADMIT_KIND)  # type: ignore[assignment]
     if admit is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {ADMIT_STEP} 产物（先跑到 Step7）")
@@ -263,7 +264,7 @@ def blank_lead_count(store: ProductStore, book: str, page: int, col: int) -> int
     seed_admit 里最小的 slot 直接是 3），想在字位流里「顺便」数出来是死代码。
     所以这个量单开一个函数回查 Step3，不塞进 `SlotRec`。
     """
-    cells: PageCells | None = store.read(book, CELLS_STEP, page_key(page), CELLS_KIND)  # type: ignore[assignment]
+    cells: PageCells | None = _read_view(store, book, CELLS_STEP, page_key(page), CELLS_KIND)  # type: ignore[assignment]
     if cells is None:
         return 0
     col_cells = next((c for c in cells.columns if c.col == col), None)

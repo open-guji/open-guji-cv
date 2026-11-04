@@ -12,6 +12,8 @@ DP 决定"哪两个字之间"，缝决定"这两个字之间怎么绕"。
 """
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import numpy as np
 
 SEAM_BAND = 20      # 走廊半宽（px）。2026-09-05 折线金标 19 条：人的折线离直线最远 21px，
@@ -43,26 +45,38 @@ def find_seam(ink: np.ndarray, y_c: int, band: int = SEAM_BAND, step: int = SEAM
     rows = np.arange(lo, hi + 1)
     tie = 1e-4 * np.abs(rows - y_c)                      # 平局：靠近直线
     col = ink[lo:hi + 1, :].astype(np.float64)
-    cost = col[:, 0] + tie
-    back = np.zeros((w, n), dtype=np.int16)
-    offsets = np.arange(-step, step + 1)
-    for x in range(1, w):
-        # 对每个偏移 d，把上一列的代价平移 d 行；越界填 inf
-        cand = np.full((len(offsets), n), np.inf)
-        for i, d in enumerate(offsets):
-            if d >= 0:
-                cand[i, d:] = cost[:n - d] + turn * d
-            else:
-                cand[i, :n + d] = cost[-d:] + turn * (-d)
-        best_i = np.argmin(cand, axis=0)
-        cost = cand[best_i, np.arange(n)] + col[:, x] + tie
-        back[x] = offsets[best_i]
+    cost, back = seam_dp(col, tie, step, turn)
     j = int(np.argmin(cost))
     seam = np.empty(w, dtype=int)
     for x in range(w - 1, -1, -1):
         seam[x] = j + lo
         j -= int(back[x, j])
     return seam
+
+
+def seam_dp(col: np.ndarray, tie: np.ndarray, step: int, turn: float):
+    """走廊 DP 的前向一遍：col 为 (n, w) 每行每列的代价，返回 (末列累计代价, 回溯表 back[x, j])。
+
+    提速（2026-11-03，全唐文册06 一页 1,100 余次）：原先每列 `np.full` 新开 (2·step+1, n) 数组、
+    再逐偏移赋值；现在预分配两边垫 inf 的 pad 与 cand，逐偏移只做一次切片加法。加法顺序、
+    argmin 的平局次序（偏移 -step..+step）都与原写法相同，结果逐位相同。"""
+    n, w = col.shape
+    offsets = np.arange(-step, step + 1)
+    pens = [turn * d if d >= 0 else turn * (-d) for d in offsets]
+    cost = col[:, 0] + tie
+    back = np.zeros((w, n), dtype=np.int16)
+    pad = np.full(n + 2 * step, np.inf)
+    cand = np.empty((len(offsets), n))
+    ar = np.arange(n)
+    for x in range(1, w):
+        pad[step:step + n] = cost
+        for i, d in enumerate(offsets):
+            # cand[i, j] = cost[j - d] + turn·|d|，越界处 pad 为 inf
+            np.add(pad[step - d:step - d + n], pens[i], out=cand[i])
+        best_i = np.argmin(cand, axis=0)
+        cost = cand[best_i, ar] + col[:, x] + tie
+        back[x] = offsets[best_i]
+    return cost, back
 
 
 def seam_ink(ink: np.ndarray, seam: np.ndarray) -> int:
@@ -94,3 +108,66 @@ def mask_outside(patch: np.ndarray, seam_top: np.ndarray | None, seam_bottom: np
             if k < h:
                 out[max(0, k):, x] = fill
     return out
+
+
+# ── 一行字自己的格线（2026-11-03）────────────────────────────────────
+# 给定一段的上下端和格数，在这一行的墨投影上挑 n−1 条横切线。用途：史記文淵閣本写本雙行小注左右两行
+# 各写各的、字距不同、会错开半格，两行共用一套格线时总有一行被拦腰切（02:12:6「州上洛縣」、08:11:8「邑侯」），
+# 两行各在自己的墨投影上挑切线就分开了（books/siku_zongmu/row_boundaries `jiazhu_rows`）。殿本刻本两行逐字对齐，用不上。
+# 挑法是一次 DP：切线落在墨少的行，格高贴近段均高；`anchor` 给了时再轻轻拉向原来的格线（没墨的地方不乱挪）。
+def fit_row_cuts(ink_rows: np.ndarray, top: int, bottom: int, n: int, *,
+                 anchor: Sequence[float] | None = None,
+                 pitch_w: float = 0.3, anchor_w: float = 0.02,
+                 min_h: float = 0.4, max_h: float = 1.8, band: int = 0) -> list[float] | None:
+    """在 `[top, bottom)` 里挑 n−1 条切线，返回含两端的 n+1 个 y（升序）。
+
+    - `ink_rows`：这一行每个 y 的墨占比（0..1，按行宽归一）；
+    - 代价 = Σ 切线处墨占比（`band`>0 时取切线 ±band 行里最小）
+      + `pitch_w`·Σ(格高/均高 − 1)² + `anchor_w`·Σ|切线 − anchor|/均高；
+    - 格高限在 [`min_h`, `max_h`]×均高；`anchor` 是 n+1 个原格线（只用中间 n−1 条）。
+    排不下（段太矮、n<1）返回 None。"""
+    top, bottom = int(round(top)), int(round(bottom))
+    L = bottom - top
+    if n < 1 or L < n * 2:
+        return None
+    if n == 1:
+        return [float(top), float(bottom)]
+    P = L / n
+    lo, hi = max(1, int(np.floor(min_h * P))), int(np.ceil(max_h * P))
+    seg = np.asarray(ink_rows[top:bottom], dtype=np.float64)
+    k = 2 * band + 1
+    pad = np.pad(seg, band, mode="edge")
+    cost = np.lib.stride_tricks.sliding_window_view(pad, k).min(axis=1) if band > 0 else seg.copy()
+    INF = np.inf
+    # dp[y]：已放到第 j 条切线、它落在 y（相对 top）时的最小代价；y=0 是段顶
+    dp = np.full(L + 1, INF)
+    dp[0] = 0.0
+    back: list[np.ndarray] = []
+    for j in range(1, n + 1):
+        nd = np.full(L + 1, INF)
+        arg = np.zeros(L + 1, dtype=np.int64)
+        for h in range(lo, hi + 1):
+            prev = dp[:L + 1 - h]
+            c = prev + pitch_w * (h / P - 1.0) ** 2
+            better = c < nd[h:]
+            nd[h:][better] = c[better]
+            arg[h:][better] = h
+        if j < n:
+            ys = np.arange(L + 1)
+            nd[:L] += cost[:L]
+            nd[L] = INF                       # 中间的切线不能落在段底
+            if anchor is not None:
+                nd += anchor_w * np.abs(ys + top - float(anchor[j])) / P
+        back.append(arg)
+        dp = nd
+    if not np.isfinite(dp[L]):
+        return None
+    ys_out = [L]
+    y = L
+    for j in range(n, 0, -1):
+        h = int(back[j - 1][y])
+        y -= h
+        ys_out.append(y)
+    if y != 0:
+        return None
+    return [float(top + v) for v in reversed(ys_out)]

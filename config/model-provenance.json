@@ -1,0 +1,21 @@
+{
+ "schema": "model-provenance/1",
+ "doc": "模型卡的出处（core/model_pack.py 并进卡的 source 字段，不进清单哈希）。键＝kind；path 给了就只管那个文件。训练数据从哪来决定 level／owner（用户 11-04：按从哪里来）。",
+ "kinds": {
+  "glyph_cnn": {"script": "scripts/train_glyph_cnn.py", "trained_on": "殿本人裁字形＋字体字形（r5 与 r4 同配方，160→60 轮）",
+                "coupled": ["clustering/variant_form.py FORM_EMB_GAP（r5 0.03）", "books/<id>.yaml font.charset.escalate_threshold（r5 0.95）"],
+                "note": "换 checkpoint 要连着重标上面两个值，沿用旧值闸会静默关死（models/README.md）"},
+  "partition_unet": {"script": "research/touch_resolve/train_partition_unet_v2.py", "trained_on": "合成粘连对（synth_pairs.py），零人工标注"},
+  "pagetype": {"script": "scripts/pagetype_model_train.py", "trained_on": "殿本 vol01、vol02 页型金标", "meta": "models/pagetype/pagetype_v1.json"},
+  "shadow_gate": {"script": "scripts/shadow_gate_train.py", "trained_on": "殿本 vol02、vol03 人裁（v2：1,737 格）",
+                  "meta": "models/shadow_admit/shadow_gate_v2.json"},
+  "rr_clf": {"script": "research/char_groups/rr/export_forest.py", "trained_on": "殿本 vol02–03、05–10 入人八格（不含 vol04、强真值格）",
+             "meta": "models/rr_clf/meta.json"},
+  "ids_unet": {"script": "research/m7/train_split.py", "trained_on": "殿本本组人标切线（jue 39 格等），按册 5 折留出"},
+  "ids_model": {"script": "research/m7/train_split.py", "trained_on": "本书在线 IDS 模板库与判法（如史記 ids/rr.json）"},
+  "l2_head": {"script": "research/m7/ctx/l2model_train.py", "trained_on": "殿本 L3 答案（l2m-2）；史記等书现为复制件", "base": "sikuroberta"},
+  "rr_shape": {"script": "research/char_groups/rr/qtw_shape_train.py", "trained_on": "本书入人八格"},
+  "pair_shape": {"script": "research/char_groups/pair_shape/train.py", "trained_on": "本书两字刻形对"},
+  "book_knn": {"script": "research/char_groups/book_knn_train.py", "trained_on": "本书人裁刻形"}
+ }
+}

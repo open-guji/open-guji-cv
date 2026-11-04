@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, KGC_CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -571,7 +571,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     "kgc": GroupSpec(
         id="kgc", name="冠寇冦宼㓂", members=frozenset("冠寇冦宼㓂"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/kgc", overlaps=("cp_kou4",),
-        flow=FlowSpec((CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
+        flow=FlowSpec((KGC_CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
         note="冠／寇：按文意定族（冠＝衣冠、弱冠；寇＝盜寇、流寇），寇族内按书级码位归一；须与整理本同字才补放；与 cp_kou4 共用 宼寇冦；只补放。"),
     # 塡／愼（2026-10-28，sheldon 定「用塡，另外要和慎区分开」）：整理本作 塡 填、库首位常是 愼 慎（右半都是 眞）。
     # 按文意定族（塡＝填補、填詞；愼＝謹慎、慎重），族内各写法按书级码位归一；须与整理本同字才补放；只补放。
@@ -696,7 +696,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
        for gid, name, fam, ov, note in (
            ("yz", "予子", (), ("zy",), "予＝賜予、予奪、我；子＝孔子、國子、君子。與 于千子干 zy 共用「子」，分差内有 予 的格归本组。"),
            ("guan", "官宫宮", ("官", "宫宮"), (), "官＝官至、職官、天官；宫＝宫室、殯宫、宫調。宮是宫的异体：先定 官／宫族，族内按库形最近。"),
-           ("hou", "侯候𠉀俟", ("侯", "候𠉀", "俟"), (), "侯＝諸侯、夏侯、某國侯；候＝氣候、七十二候、候補；俟＝等待。𠉀是候的异体。"),
+           ("hou", "侯候𠉀𠋫俟", ("侯", "候𠉀𠋫", "俟"), (), "侯＝諸侯、夏侯、某國侯；候＝氣候、七十二候、候補；俟＝等待。𠉀、𠋫是候的异体（𠋫：全唐文刻形，sheldon 11-03 定另立字头）。"),
            ("liang", "兩雨", (), (), "兩＝兩江、兩淮、兩家；雨＝風雨、雨水。"))},
     # 逄逢（2026-10-26，A24「组外异体对未定码位」）：殿本 逢 的刻形与库里的 逄 一样（库形 逄 多是 逢 的刻例），整理本也有把「遭逢」
     # 录成 逄 的（vol93:12:2:7）。按文意定：逄 只作姓（逄蒙、逄萌、辨逄逢的字书条）；文意 strong 才改已放行的字、才不跟整理本。
@@ -734,13 +734,19 @@ class Provisional:
     slot_to: tuple = ()
     fams: tuple = ()
     slot_min: float = 0.07
+    #: 兜底归成整理本（sheldon 2026-11-03，參㕘叅、䟦跋、點㸃𭶑）：库首位与整理本（缺位用坐标对位字）都在 `forms` 里、cov 够，
+    #: 就放成整理本字，不看分差内别的候选（叅 常紧咬 恭未）；有 `fams` 的组两者须同族。
+    follow_ref: bool = False
+    #: `follow_ref` 时整理本字也认这些（不进 `forms`，免得改动别处的组外字判断）：點㸃 的 𭶑（黠 的写法，库里几乎没刻例）。
+    ref_forms: frozenset = frozenset()
 
 
 #: 暂归一兜底表（2026-10-27，A24「收尾同义形近字组送审」）：只收同义（`kind="variant"`）组，`to` 取 vol07–99 重落后放行最多的字形
 #: （已在书级 `codepoints` 暂归一的组取归到的字）。意思不同的字绝不进 `forms`：讖識䜟 的 識、
 #: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/字组/README.md` 第二节「暂归一兜底」。
 PROVISIONAL: dict[str, Provisional] = {
-    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"},
+    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"}, follow_ref=gid in {"can", "ba", "dian"},
+                     ref_forms=frozenset("𭶑") if gid == "dian" else frozenset(),
                      **(dict(slot_to=(("彡", "參"), ("小", "叅"), ("𠇍", "叅")), fams=(frozenset("參"), frozenset("叅㕘")))
                         if gid == "can" else {}))
     for gid, to, forms in (

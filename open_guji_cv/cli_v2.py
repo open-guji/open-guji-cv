@@ -110,6 +110,10 @@ def _run_steps_isolated(args, steps: list[str]) -> int:
     import subprocess
     ws = os.environ["GUJI_WORKSPACE"]
     env = {**os.environ, "GUJI_NO_RUN_LOCK": "1", "GUJI_NO_BATCH_SLICE": "1"}
+    if not env.get("GUJI_PERF_GROUP"):    # 每步一个子进程、各写一份耗时记录：用同一个组号串起来
+        import time
+        import uuid
+        env["GUJI_PERF_GROUP"] = time.strftime("%Y%m%dT%H%M%S") + "-" + uuid.uuid4().hex[:6]
     cur: dict = {"p": None}
 
     def _forward(signum, _frame):
@@ -221,6 +225,8 @@ def cmd_pipeline(args) -> None:
     pages = eng.book.resolve_pages(args.pages)
     if not getattr(args, "no_prep", False):
         prep.ensure_glyph_pin(eng.book)
+        prep.ensure_model_pin(eng.book)
+        prep.ensure_corpus_files(eng.book)
     _preflight_deps(eng, steps, allow=getattr(args, "allow_missing_deps", False))
     if "rare_candidates" in steps and not getattr(args, "no_prep", False):
         prep.ensure_rare_index(eng.book.id, jobs=max(1, getattr(args, "jobs", 1) or 1))
@@ -368,6 +374,18 @@ def _cmd_book_split(args) -> None:
     print("已写本机数据目录。推库：guji db push -w <工作区>")
 
 
+def cmd_pagekinds(args) -> None:
+    """页型对账（只读）：册配置点名的 / 页型规则判的 / 最后怎么处理的，对不上的列出来。见 `ops/page_kinds_report.py`。"""
+    from .ops import page_kinds_report as PKR
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    res = PKR.build(eng.book, eng.store, pages)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        PKR.print_report(res)
+
+
 def cmd_book(args) -> None:
     if args.action == "split":
         return _cmd_book_split(args)
@@ -375,16 +393,57 @@ def cmd_book(args) -> None:
         print("✗ show 要册号", file=sys.stderr); sys.exit(2)
     from .core.book import _book_yaml_path
     from .core.book_config import effective_book_dict, provenance
+    from .core.book_config import params_provenance
     path = _book_yaml_path(args.book)
     d = effective_book_dict(path)
     src = provenance(path)
+    try:                                # 管线 yaml、套书缺省的 params 也列出来（都在册配置之下）；选不出管线就只列册配置各层
+        from .core.book import load_book
+        from .core.pipeline import base_param_layers, load_pipeline
+        _bk = load_book(args.book)
+        pl = load_pipeline(_bk.default_pipeline_id())
+        pl_id, base_layers = pl.id, base_param_layers(pl, _bk)
+    except Exception:
+        pl_id, base_layers = None, []
+    psrc = params_provenance(path, base_layers=base_layers)
+    try:                                # 字形库来源：借库钉在 workspace.yaml（五层之外），这里一并列出
+        from .core.book import load_book as _lb
+        from .core.glyph_pin import glyph_sources
+        gsrc = glyph_sources(_lb(args.book))
+    except Exception as e:              # noqa: BLE001 —— 只是展示，读不了不挡 show
+        gsrc = {"error": str(e)}
     if args.json:
-        print(json.dumps({"book": args.book, "effective": d, "source": src}, ensure_ascii=False, indent=1, default=str))
+        print(json.dumps({"book": args.book, "effective": d, "source": src, "pipeline": pl_id,
+                          "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()},
+                          "glyph_sources": gsrc},
+                         ensure_ascii=False, indent=1, default=str))
         return
     print(f"# 册 {args.book} 生效配置（{path}）")
     for k in sorted(d):
         v = json.dumps(d[k], ensure_ascii=False, default=str)
         print(f"{k}: {v if len(v) <= 160 else v[:157] + '…'}    # {src.get(k, '?')}")
+    print(f"\n# Step 参数逐字段（管线 {pl_id or '?'}；优先级 Step 默认 < 管线 yaml < 套书缺省 < 基础配置 < 册 yaml < 运行覆盖；"
+          f"--params 另在最上层；没列出的字段 = Step 默认）")
+    for k, (v, ly) in psrc.items():
+        vs = json.dumps(v, ensure_ascii=False, default=str)
+        print(f"params.{k}: {vs if len(vs) <= 120 else vs[:117] + '…'}    # {ly}")
+    print("\n# 字形库来源（借库写在 workspace.yaml 的 glyph_lib.borrow，不在册配置五层里，整个工作区共用）")
+    if gsrc.get("error"):
+        print(f"  读不了：{gsrc['error']}")
+        return
+    ps = gsrc.get("pin")
+    if gsrc.get("effective") == "pinned":
+        pb = "、".join(f"{k}（{n} 个文件）" for k, n in gsrc["pinned_borrow"].items()) or "无"
+        print(f"  钉 g{ps['n']}（快照 {ps['digest']}）：本书库与借库都按快照内容；快照里的借库：{pb}")
+    elif ps:
+        print(f"  钉 g{ps['n']} 但没有快照（旧做法）：读当前 glyph.db，借库是本机拉到的那一版")
+    else:
+        print("  没钉 glyph_pin：读当前 glyph.db，借库是本机 db pull 时拉到的那一版")
+    for b in gsrc.get("borrow") or []:
+        rev = f"本机副本 rev {b['local_rev']}" if b.get("local_rev") is not None else "本机没有拉过（或是路径条目）"
+        print(f"  借 {b['entry']}：{rev}    # {b['path']}")
+    if not gsrc.get("borrow"):
+        print("  不借库")
 
 
 def cmd_status(args) -> None:
@@ -1516,6 +1575,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "book": cmd_book,
+    "pagekinds": cmd_pagekinds,
     "export": cmd_export,
     "fp-migrate": cmd_fp_migrate,
     "cache": cmd_cache,
@@ -1539,7 +1599,7 @@ def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
 #: `status`／`collate` 只读、不写产物——认 `GUJI_WORKSPACE` 兜底顶多让人看错报告，
 #: 不会像 `pipeline`/`step` 那样把真产物静默写进错的工作区，所以任务卡 #54 第10条
 #: 单给这两条开例外，其余命令仍照 2026-09-19 定的规矩必须显式 `-w`。
-ENV_FALLBACK_COMMANDS = {"status", "collate"}
+ENV_FALLBACK_COMMANDS = {"status", "collate", "pagekinds"}
 
 
 def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") -> Path | None:
@@ -1751,10 +1811,10 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   db：中心库客户端（GUJI-606），自带 -w　　products：前后对比、产物包（受控重跑），自带 -w
 #:   source：原图源件、页图、页表（R2），自带 -w
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
-#:   job：任务库（2026-10-25）
+#:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
     "cli_glyph_db", "cli_exp", "cli_db", "cli_products",
-    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close",
+    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf", "cli_model",
 )
 
 
@@ -1948,6 +2008,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     _add_override(p)
 
 
+    p = sub.add_parser("pagekinds", help="[v2] 页型对账（只读）：册配置点名的页型 / 页型规则判的 / 最后怎么处理的，对不上的列出来")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all", help="页范围，缺省整册")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
     p.add_argument("action", choices=["md", "format"])
     p.add_argument("book")
@@ -2046,11 +2114,23 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     install_workspace_option(sub)
 
 
+def _install_perf_sink() -> None:
+    """跑批耗时记录写完就推美国机任务库（只在设了 JOBSDB_TOKEN 时；不推 Neon）。见 doc/性能统计.md。"""
+    try:
+        from .jobs import perf_push
+        if perf_push.enabled():
+            from .core import perf
+            perf.add_sink(perf_push.sink)
+    except Exception:  # noqa: BLE001 —— 统计是附带的，装不上不影响命令
+        pass
+
+
 def main(argv: list[str] | None = None) -> None:
     if argv is None:
         from .utils.batch_slice import enter_batch_slice
         enter_batch_slice(sys.argv[1:])   # 服务器上跑批自动进内存额度切片
     prep.install_derived_fetcher()
+    _install_perf_sink()
     parser = argparse.ArgumentParser(prog="guji", description="open-guji-cv 四个抽象的 CLI")
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     register_subcommands(sub)
@@ -2060,7 +2140,14 @@ def main(argv: list[str] | None = None) -> None:
         raise SystemExit(2)
     args = parser.parse_args(argv)
     if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
-        os.environ["GUJI_BOOK_OVERRIDE"] = args.override
+        from .core.book_config import merge_override_env
+        os.environ["GUJI_BOOK_OVERRIDE"] = merge_override_env(args.override)   # 叠在已有的覆盖上（准备脚本记的改值），同键 --override 胜
+    if args.command in ("step", "pipeline"):   # 步内分段计时（不改 Step 源码、不动指纹，见 cli_perf.PERF_HOOKS）
+        try:
+            from .cli_perf import install_hooks
+            install_hooks()
+        except Exception:  # noqa: BLE001 —— 统计是附带的
+            pass
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()

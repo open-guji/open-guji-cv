@@ -1,0 +1,22 @@
+# 套书 beixing（北行日錄现代排印本；考補萃編等走 modern_body 的书没写 seg_set: 时也归这套）的缺省参数。
+# 2026-11-03 从 pipelines/modern_body.yaml 的 params: 原样搬来（管线重组方案 B 第一期），值一个没改，产物指纹不变。
+# 参数层（低 → 高）：Step 默认 < 管线 yaml params: < 本文件 < 册配置 params:（book_defaults.yaml ∪ 册 yaml）< 运行覆盖。
+# 只放「这套书的切分/识别代码在缺省情况下该用什么值」；某一本书、某一册的值照旧写册配置。
+params:
+  column_gate:
+    count_mode: detected     # 列数由 line_detect 探出，不与版式常量比
+    width_tol: 0.5           # L1c 防的是「界行圈进列窗」，现代页没有界行；卷题页列位不在等距网格上
+                             # （北行日錄 p53 实测列距 2.5 / 2 / 1.08 个 pitch），窗口宽窄不一是正常的
+  # row_segment_runs 的 `interior_blank`（项内空格位）**故意不在这里设默认**：
+  # 两本现代书要的值相反。写成套书默认就会连带改北行日錄（dev_set 141 列里有 1 列
+  # 项数变了），那本书的 82.2% / 99.77% 是挂在现有切分上的基线，不该被顺带动。
+  # 方格排版的书在册配置里写（册配置压过本文件）：
+  #   params: {row_segment_runs: {interior_blank: true}}
+  # 实测（考補萃編 sswz 五页 137 列）：漏切 2 → 0、格心离网格 6.85 → 5.50px、
+  # 多出 58 个空格位（「著者 ∥ 書名」的分隔符）。
+  cell_shrink:
+    frame_guard: false       # 没有版框；开着会把列末字的底横当版框线抹掉（宣/亘/血/皿…，北行日錄 102 个 boundary_ink）
+  glyph_match:
+    norm_stroke: 3           # 两边骨架化细到 3px 再比：粗笔画 1-bit 扫描下软覆盖饱和（北行日錄留一法
+                             # 不归一错误命中最高 0.9996；细到 3px 后 0.922、591 对 0 错）
+    exclude_self: true       # 库就是这本书自己播种的字位，不摘自己就是自证

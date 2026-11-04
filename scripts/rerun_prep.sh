@@ -70,10 +70,22 @@ else echo "⚠️ 自检 anthropic：装不上（llm 依赖缺）；有密钥时
 fi
 echo "自检 GUJI_ANTHROPIC_API_KEY：$([ -n "${GUJI_ANTHROPIC_API_KEY:-}" ] && echo 已设 || echo 未设)"
 echo "自检 l2model（数据目录 config/groups/l2model）：$(ls /root/.guji-data/main/${WSID:-*}/config/groups/l2model/ 2>/dev/null | tr '\n' ' ' || true)"
-# 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里：
-# 改值 = 册 yaml 里有就替换、没有就追加（册 yaml 压过基础配置）；读值 = 读合并后的生效值，不能再 grep 册 yaml
-eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]),apply_override=False);v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
-setkey() { grep -q "^$1:" "$Y" && sed -i "s/^$1: .*/$1: $2/" "$Y" || echo "$1: $2" >> "$Y"; }
+# 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里。
+eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]));v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
+# 改值（2026-11-03）：装的 cv 认运行覆盖（core/book_config.py）就不动册 yaml，改值记进 GUJI_BOOK_OVERRIDE（JSON，
+# 叠在原有覆盖上），本脚本后面的步骤和开跑的 pipeline 都读它；旧 tag 不认，才退回改本机册 yaml（册 yaml 里有就替换、没有就追加）。
+# 读值 = 读合并后的生效值（含运行覆盖），不能再 grep 册 yaml
+# 从空覆盖起：上一册 source ~/.guji_env 留下的覆盖不能带进这一册（别的覆盖项开跑时用 pipeline --override 给）
+unset GUJI_BOOK_OVERRIDE
+if /opt/guji-venv/bin/python -c "from open_guji_cv.core.book_config import OVERRIDE_ENV" 2>/dev/null; then OVMODE=env; else OVMODE=sed; fi
+setkey() {
+  if [ $OVMODE = env ]; then
+    GUJI_BOOK_OVERRIDE=$(/opt/guji-venv/bin/python -c "import json,os,sys;d=json.loads(os.environ.get('GUJI_BOOK_OVERRIDE') or '{}');d[sys.argv[1]]=json.loads(sys.argv[2]);print(json.dumps(d,ensure_ascii=False))" "$1" "$2")
+    export GUJI_BOOK_OVERRIDE
+  else
+    grep -q "^$1:" "$Y" && sed -i "s/^$1: .*/$1: $2/" "$Y" || echo "$1: $2" >> "$Y"
+  fi
+}
 [ -n "$CORPUS" ] && setkey corpus "$CORPUS"
 [ -n "$GPIN" ] && setkey glyph_pin "$GPIN"
 # 册 yaml 钉了 cv_version、装的又不是它，pipeline 会拒跑（要 --allow-cv-mismatch）。给了 --cv 就是需求单点名的版本：
@@ -82,11 +94,13 @@ CVV=$(/opt/guji-venv/bin/python -c "from open_guji_cv.core.cv_version import des
 OLD=$(eff cv_version)
 if [ -n "$CV" ] && [ -n "$CVV" ] && [ "$OLD" != "$CVV" ]; then
   setkey cv_version "\"$CVV\""
-  echo "册 yaml cv_version ${OLD:-（未钉）} → $CVV（跟 --cv）"
+  echo "cv_version ${OLD:-（未钉）} → $CVV（跟 --cv；$([ $OVMODE = env ] && echo 记进运行覆盖 || echo 改本机册 yaml)）"
 elif [ -n "$OLD" ] && [ "$OLD" != "$CVV" ]; then
   echo "⚠️ 册 yaml 钉 cv_version=$OLD，装的是 $CVV：用 --cv v$OLD 重跑本脚本，或按需求单给 --cv"
 fi
 echo "册配置 $Y（生效值）：corpus=$(eff corpus) glyph_pin=$(eff glyph_pin) cv_version=$(eff cv_version)"
+# 任务库执行方从这一行取覆盖，开跑 pipeline 时原样带上（--override）
+if [ $OVMODE = env ]; then echo "OVERRIDE=${GUJI_BOOK_OVERRIDE:-}"; fi
 [ -n "$PIN_ARGS" ] && t 钉子账 $G corpus pin --vol "$VOL" $PIN_ARGS -w "$WS"
 GP=$(eff glyph_pin)
 if [ -n "$GP" ]; then
@@ -178,7 +192,9 @@ if why.get("no_patch") or why.get("unanchored", 0) > 3:
     print("⚠️ 有人裁因 cache/ 里没有字块图认不了格。旧版 cv（v0.5.15 及以前）先跑 "
           "ai-team domain/CV/脚本/warm_human_patches.py 再自检；dev（#540 起）会自己现切")
 PY
-{ echo "export GUJI_WORKSPACE='$WS'"; } > "$HOME/.guji_env"
+{ echo "export GUJI_WORKSPACE='$WS'"
+  if [ $OVMODE = env ] && [ -n "${GUJI_BOOK_OVERRIDE:-}" ]; then echo "export GUJI_BOOK_OVERRIDE='$GUJI_BOOK_OVERRIDE'"; fi
+} > "$HOME/.guji_env"
 echo; echo "== 准备耗时"; printf '%s\n' "${SUM[@]}"
-echo "之后的命令先 source ~/.guji_env（设 GUJI_WORKSPACE；人裁事件只认它）"
+echo "之后的命令先 source ~/.guji_env（设 GUJI_WORKSPACE，人裁事件只认它；有改值时还设 GUJI_BOOK_OVERRIDE）"
 echo "开跑：guard_run $VOL -- $G pipeline keben_body_v2 $VOL -w \"$WS\" --pages all --no-pack"

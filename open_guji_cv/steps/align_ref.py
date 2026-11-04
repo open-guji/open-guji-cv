@@ -153,7 +153,7 @@ from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
-from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
+from ..products.kinds.recog import AltDraft, AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 `core.workspace.corpus_path`，不要再写死 "corpus/xxx.txt" 这种相对
@@ -523,6 +523,17 @@ class AlignRefParams(BaseModel):
     （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
     载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
 
+    coord_dp_flat: bool = False
+    """载体字按逐字字序对齐（2026-11-03，史記文淵閣本；见 `align_ref_coord.coord_dp_flat`，要 `coord_dp` 开着）：
+    `coord_dp` 也配不上的列再试一次——夹注段拆成先右行后左行的逐字序列，可多跳几格（印泥假格、夹注右行多写一两字），
+    载体字相同够多才认，只给有字形证据的格。起因：卷首叶题署行（大印压着、字距拉开）与夹注右行字数与整理本「|」
+    不同的列整列没有整理本字（第 4 轮 S／D 类约 150 格）。False＝关（缺省，不进参数哈希）。"""
+
+    alt_select: str = "align"
+    """row_segment `alt_cut` 的备选列在哪一步定（2026-11-04，史记第 9 轮，A22 评审过）：
+    "align"＝本步按坐标对位吻合数挑（现行，缺省，不进参数哈希）；"admit"＝本步只出候选列（`alt_cand`）与
+    备选那份坐标对位（`alt_draft`），seed_admit 两套都准入后按列定（见 `products.alt_view`）。"""
+
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -550,6 +561,10 @@ class AlignRefParams(BaseModel):
             d.pop("coord_dp", None)
         if isinstance(d, dict) and not self.coord_title_trust:
             d.pop("coord_title_trust", None)
+        if isinstance(d, dict) and not self.coord_dp_flat:
+            d.pop("coord_dp_flat", None)
+        if isinstance(d, dict) and self.alt_select == "align":
+            d.pop("alt_select", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -649,10 +664,48 @@ def page_pin(p: "AlignRefParams", book: str, page: int) -> tuple[str, int, int] 
     return head, line_of[head], off_of[head]
 
 
+def dzg_null_pinned(book: str, page: int) -> bool:
+    """这一页在 `corpus/daizhige/page_pins.jsonl` 里钉成 `dzg: null`（整理本里没有这一页，如错收的他书页）。
+
+    2026-11-04（A22 第4轮，殿本 vol56 p75–78）：row_segment 配页认这个钉页、不带先验，但坐标对位
+    原先照样按格位把整理本那一段（错收的《揮麈錄》）配上来，`ref_lib_coord` 一开机器字也跟着错。
+    钉成 null 的页不做坐标对位。不另进参数哈希：钉页改动会让本册 row_segment 的
+    `page_map_fingerprint` 变，下游一路过期，本步随之重跑。"""
+    return (book, int(page)) in _dzg_null_pins(_dzg_pins_sig())
+
+
+def _dzg_pins_sig() -> tuple:
+    f = Path(corpus_path("daizhige")) / "page_pins.jsonl"
+    try:
+        st = f.stat()
+        return (str(f), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (str(f), 0, 0)
+
+
+@lru_cache(maxsize=4)
+def _dzg_null_pins(sig: tuple) -> frozenset:
+    f = Path(sig[0])
+    if not sig[2]:
+        return frozenset()
+    out = set()
+    for ln in f.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(ln) if ln.strip() else None
+        except ValueError:
+            continue
+        if isinstance(r, dict) and "dzg" in r and r["dzg"] is None and r.get("vol") and r.get("page") is not None:
+            try:
+                out.add((str(r["vol"]), int(r["page"])))
+            except (TypeError, ValueError):
+                continue
+    return frozenset(out)
+
+
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.5", unit="cell",   # 2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.6", unit="cell",   # 2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -678,7 +731,10 @@ class AlignRefStep(Step):
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
-        if _coord_enabled(p, ctx.book) and match is not None:
+        if _coord_enabled(p, ctx.book) and match is not None and dzg_null_pinned(ctx.book.id, page):
+            ar = out["align_ref"]
+            ar.note = ((ar.note + "；") if ar.note else "") + "钉页 dzg:null（整理本无此页），不做坐标对位"
+        elif _coord_enabled(p, ctx.book) and match is not None:
             def neighbors():
                 for nb in (page + 1, page - 1):
                     m = _opt(ctx, "glyph_match", nb)
@@ -690,7 +746,11 @@ class AlignRefStep(Step):
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
-                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust)
+                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                         dp_flat=p.coord_dp_flat)
+            cells = _opt(ctx, "cells", page)
+            if match.alt_columns and cells is not None and cells.alt_columns:
+                _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1295,10 +1355,116 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
     return None
 
 
+ALT_MIN_GAIN = 4          # 备选切法拿到坐标字的格数，至少比现役「坐标字格数、8-gram 对位 equal 格数」两者的大者多这么多格才换
+ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数的这么多
+# 分母取备选切法自己切出的字格数、不取整理本这一行的字数（2026-11-03 定，A22 评审问）：
+# 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
+
+
+ALT_MAX_SHIFT = 3         # 备选切法里「机器载体字＝参校本同行邻格的字」有这么多格就不换（格网错了一格）
+
+
+def _shifted(res: PageAlignRef, carrier, col: int) -> int:
+    """一列里机器载体字 ≠ 本格坐标字、却等于同一行（a／b／整行）上一格或下一格坐标字的格数。
+
+    备选格网（不带先验）在夹注短行多切一格、把一字劈成两格时，后面整段错一格：坐标对位照样
+    配满（覆盖数好看），机器认出的字却整段等于参校本的邻格字。第 7 轮 06:45:8、02:12:6
+    各 10 格这样，换列后待审各 +12、+14；125 页 A/B 里挑中的 15 列全是 0。"""
+    ref = {(r.slot, r.sub): r.ref_char for r in res.coord if r.col == col and r.ref_char}
+    n = 0
+    for r in res.coord:
+        if r.col != col or not r.ref_char:
+            continue
+        t = carrier(r.id)
+        if t and t != r.ref_char and t in (ref.get((r.slot - 1, r.sub)), ref.get((r.slot + 1, r.sub))):
+            n += 1
+    return n
+
+
+def _covered(res: PageAlignRef, col: int) -> int:
+    """一列里拿到坐标字（整理本非空）的格数。"""
+    return sum(1 for r in res.coord if r.col == col and r.ref_char)
+
+
+def _agree(res: PageAlignRef, carrier, match, col: int) -> int:
+    """一列里有字形证据的坐标字格数：坐标字＝机器载体字（`carrier_fn`），或在这一格库匹配
+    前 `COORD_DP_TOPK` 名候选里（与 `coord_dp` 收格同一口径）。"""
+    from .align_ref_coord import COORD_DP_TOPK
+    top = {r.id: {c for c, _s in (r.candidates or [])[:COORD_DP_TOPK]}
+           for cc in match.columns if cc.col == col for r in cc.chars}
+    return sum(1 for r in res.coord if r.col == col and r.ref_char
+               and (carrier(r.id) == r.ref_char or r.ref_char in top.get(r.id, ())))
+
+
+def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells, p) -> None:
+    """row_segment `alt_cut` 的备选切法：两种切法都裁过、都过了库匹配，这里按列挑一种
+    （第 7 轮设计，见 doc/design 与 open-guji-cv PR 说明）。
+
+    备选列在一份草稿上重做坐标对位（`with_alt` 视图，草稿去掉这些列的现役对位字，免得
+    现役对位按旧切法的格号去比）。换列要三条都成立：备选切法拿到坐标字的格数 ≥ 现役 +
+    `ALT_MIN_GAIN`，也比现役 8-gram 对位（`chars`）equal 的格数多这么多（现役对位已经和整理本逐字对上
+    的列不是切错的列；第 7 轮 125 页 A/B：只比坐标字格数时换的 20 列里 3 列变差，04:10:3、02:185:8、
+    03:90:3 都是现役 equal 格数远高于坐标字格数）；
+    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。另外，备选切法里整段错一格的
+    （`_shifted` ≥ `ALT_MAX_SHIFT`）一律不换。换了的列：坐标字、退回原因、冲突格都换成备选那份，
+    现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
+    （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
+    cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
+    if not cols:
+        return
+    cset = set(cols)
+    draft = res.model_copy(deep=True, update={
+        "chars": [c for c in res.chars if c.col not in cset],
+        "coord": [], "coord_cols": [], "coord_fallback": {}, "coord_note": "",
+        "coord_conflict_ids": []})
+    rare_alt = ({k: v for k, v in rare.items() if _id_col(k) not in cset} if rare else rare)
+    attach_coord(draft, book, page, match.with_alt(cols), ocr, rare_alt, cells.with_alt(cols),
+                 p.corpus, title_formula=p.coord_title_formula,
+                 pin_line=(page_pin(p, book, page) or (None, None))[1],
+                 relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                 dp_flat=p.coord_dp_flat)
+    alt_match = match.with_alt(cols)
+    car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
+    n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
+    if getattr(p, "alt_select", "align") == "admit":
+        # 不在这里挑：错格的列先剔掉，其余都当候选，交 seed_admit 两套都准入后定（`products.alt_view`）
+        cand = [col for col in cols if _shifted(draft, car_alt, col) < ALT_MAX_SHIFT]
+        if cand:
+            cs = set(cand)
+            res.alt_cand = cand
+            res.alt_draft = AltDraft(
+                coord=[r for r in draft.coord if r.col in cs],
+                coord_cols=[c for c in draft.coord_cols if c in cs],
+                coord_fallback={k: v for k, v in draft.coord_fallback.items() if int(k) in cs},
+                coord_conflict_ids=[i for i in draft.coord_conflict_ids if _id_col(i) in cs])
+        return
+    chosen = []
+    for col in cols:
+        ca, cm = _covered(draft, col), _covered(res, col)
+        a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
+        eq = sum(1 for c in res.chars if c.col == col and c.align_op == "equal")
+        if _shifted(draft, car_alt, col) >= ALT_MAX_SHIFT:
+            continue
+        if ca >= max(cm, eq) + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
+            chosen.append(col)
+    if not chosen:
+        return
+    from ..products.alt_view import merge_alt
+    merge_alt(res, draft, chosen)
+
+
+def _id_col(rid: str) -> int | None:
+    parts = rid.split(":")
+    try:
+        return int(parts[2])
+    except (IndexError, ValueError):
+        return None
+
+
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
-                 title_trust: bool = False) -> None:
+                 title_trust: bool = False, dp_flat: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1365,9 +1531,13 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         """`coord_dp`：几何配法不成立／被冲突闸退回的列改走载体字单调对齐；成了就当坐标对位列收下。"""
         if not dp or not units or "整理本行为空" in why:
             return False
-        if "空格位上库认出了字" in why:
+        empty_hit = "空格位上库认出了字" in why
+        if empty_hit and not dp_flat:
             return False          # 整理本这一位是空而库认出了字：页与整理本对不上，不拿载体字硬配
-        d = C.coord_dp(units, ln.text_units())
+        # `coord_dp_flat`：空格位上认出了字的列（字距拉开的题署行，空格位里是印泥）只走逐字字序对齐，那里门槛按字算
+        d = None if empty_hit else C.coord_dp(units, ln.text_units())
+        if d is None and dp_flat:
+            d = C.coord_dp_flat(units, ln.text_units(), cand_top)
         if d is None:
             return False
         # 只收有字形证据的格：载体字＝整理本字，或整理本字在这一格库匹配的前 `COORD_DP_TOPK` 名候选里

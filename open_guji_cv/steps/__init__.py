@@ -5,7 +5,7 @@
 1. 在 products/kinds/ 里声明它的产物种类（numeric 给 pydantic 模型，图像给 ProductKindSpec）；
 2. 新建 steps/<id>.py：定义 params 模型、`StepSpec`（consumes / produces / version / code_deps），
    继承 `core.step.Step`，实现 `run_page`；产图像的再实现 `render`；
-3. 在下面 import 它；把 id 写进 pipelines/*.yaml 的合法拓扑位置。
+3. 在下面 import 它；共用的 Step 写进 pipelines/_skeleton.yaml，某套书专用的写进它那条链 yaml 的 `slots:`（合法拓扑位置）。
 
 三条铁律：
 - **不改算法只包壳**：run_page 里只调现有函数，参数从 `ctx.params_for(self)` 与 `ctx.book` 拿；

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
-"""列距救援（Step1 后处理，`books/siku_zongmu/pitch_rescue`）：列网里多挑一条假竖线、外侧整列落到网外时按列距重定。
+"""列宽均匀拟合（Step1 后处理，`books/siku_zongmu/pitch_rescue` 2.0＝`seg/columns.fit_columns`）：列网里多挑一条假竖线、
+外侧整列落到网外、外框挑进字心时，在候选线里一次挑出一串列宽全在带里的线。各测试是 1.x 时代各路救援当年救的页型。
 
 纯内存构造：竖线位置取殿本 vol14 p186、vol20 p68 的真页形态（数是形态，不是 fixture 文件）。"""
 from __future__ import annotations
@@ -32,7 +33,7 @@ def _gray(ink_cols):
 
 
 def test_normal_page_not_triggered():
-    assert not pr.needs_rescue(GOOD)
+    assert pr.check(GOOD).ok
     res = _res(GOOD)
     out, how = pr.rescue(res, _gray([]), lambda pitch: (_ for _ in ()).throw(AssertionError("不该重探")))
     assert how is None and out is res
@@ -43,7 +44,7 @@ def test_drop_and_extend_on_ink_side():
     res = _res(P186)
     bad_grid = _res(P186)                         # 网格模式选不出版框对：原样
     out, how = pr.rescue(res, g, lambda pitch: bad_grid)
-    assert how == "extend"
+    assert how == "fit"
     assert [round(x) for x in line_xs(out)] == GOOD
     assert out.vline_filled[0] is True and not any(out.vline_filled[1:])
 
@@ -57,7 +58,7 @@ def test_grid_accepted_only_if_clean_and_overlapping():
     p68 = [368, 550, 625, 730, 912, 1094, 1279, 1457, 1640, 1819]
     fixed = [368, 550, 730, 912, 1094, 1279, 1457, 1640, 1819, 2005]
     out, how = pr.rescue(_res(p68), _gray([]), lambda pitch: _res(fixed))
-    assert how == "grid" and [round(x) for x in line_xs(out)] == fixed
+    assert how == "fit" and [round(x) for x in line_xs(out)] == fixed
     # 网格挑出另一套网（vol20 p179 那样，跟原线几乎不重合）不接受
     far = [1871 + 170 * k for k in range(10)]
     out, how = pr.rescue(_res(p68), _gray([]), lambda pitch: _res(far))
@@ -66,16 +67,16 @@ def test_grid_accepted_only_if_clean_and_overlapping():
 
 def test_band_from_distribution():
     """内列 ±10%、外列 0.85–1.3（殿本 2,969 页实测 99.9% 分位）；轻微不匀不算病。"""
-    assert pr.in_band([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1680])        # 外列 1.23 照收
-    assert pr.out_of_band([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1700]) == {9}
+    assert pr.check([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1680]).ok        # 外列 1.23 照收
+    assert pr.check([0, 182, 360, 545, 727, 908, 1090, 1272, 1455, 1700]).bad == [9]
 
 
 def test_grid_may_not_move_good_rules():
     """vol13 p46：只有最外一列偏宽（1.3+），网格却把内部三条真界行各挪 9px → 不接受。"""
     old = [343, 523, 700, 876, 1066, 1249, 1440, 1624, 1802, 2040]
     grid = [343, 523, 700, 876, 1066, 1258, 1447, 1635, 1832, 2040]
-    bad = pr.out_of_band(old)
-    assert bad == {9}
+    bad = pr.check(old).bad
+    assert bad == [9]
     assert not pr.keeps_good_lines(old, grid, bad)
     out, how = pr.rescue(_res(old), _rules(old), lambda pitch: _res(grid))
     assert how is None
@@ -94,12 +95,12 @@ def test_lines_without_rule_evidence_may_move():
     这几条线附近没有界行残段，不算真界行，网格探对的网照收。有残段的线照旧护着（上一条测试）。"""
     old = [111, 266, 396, 525, 653, 778, 973, 1099, 1217, 1298]
     grid = [111, 265, 393, 525, 653, 778, 908, 1038, 1168, 1298]
-    bad = pr.out_of_band(old)
+    bad = pr.check(old).bad
     assert not pr.keeps_good_lines(old, grid, bad)
     g = _rules(grid[:-1])                        # 真界行在网格线上，自由线 973/1099/1217 处没有
     assert pr.keeps_good_lines(old, grid, bad, ridges=[float(x) for x in grid[:-1]])
     out, how = pr.rescue(_res(old), g, lambda pitch: _res(grid))
-    assert how == "grid" and [round(x) for x in line_xs(out)] == grid
+    assert how == "fit" and all(abs(a - b) <= 3 for a, b in zip(line_xs(out), grid))
 
 
 def test_fuse_free_grid_and_extrapolated_lines():
@@ -109,12 +110,12 @@ def test_fuse_free_grid_and_extrapolated_lines():
     grid = [342, 534, 722, 917, 1092, 1284, 1463, 1656, 1888, 2071]
     g = _gray([(1830, 2011)])                     # 网外那列有字
     out, how = pr.rescue(_res(p113), g, lambda pitch: _res(grid))
-    assert how == "fuse"
+    assert how == "fit"
     xs = [round(x) for x in line_xs(out)]
     assert xs[:2] == [342, 534] and xs[2:4] == [722, 917] and xs[4:9] == [1092, 1279, 1460, 1634, 1830]
     assert 2000 <= xs[9] <= 2030
     assert out.vline_filled == [False] * 9 + [True]
-    assert pr.is_clean(xs)
+    assert pr.check(xs).ok
 
 
 def test_fuse_needs_ink_outside_to_extrapolate():
@@ -132,8 +133,9 @@ def test_fuse_takes_rule_stubs_in_head_band():
     g = _gray([(353, 539)])                       # 网外那列有字
     for x in true:
         g[300:540, W - 1 - x - 1:W - 1 - x + 2] = 0     # 天头的界行残段（240px，> 0.8 列宽）
-    out, how = pr.rescue(_res(free), g, lambda pitch: _res(free))
-    assert how == "fuse"
+    grid = GOOD[:7] + [1617 + 45, 1796 + 45] + GOOD[9:]  # 网格线数对，但两条挑进字里
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
+    assert how == "fit"
     xs = [round(x) for x in line_xs(out)]
     assert all(abs(a - b) <= pr.TOL for a, b in zip(xs, true)), xs     # 自由线对得上的照用自由线
     assert not any(out.vline_filled)
@@ -144,7 +146,8 @@ def test_rule_stubs_ignore_char_strokes():
     g = np.full((H, W), 255, np.uint8)
     g[400:510, W - 1 - 1000] = 0                  # 110px 竖笔
     g[800:1100, W - 1 - 1200] = 0                 # 300px 界行残段
-    assert pr._rule_ridges(_res(GOOD), g, 900, 1300, 0.8 * 180, 128) == [1200.0]
+    from open_guji_cv.seg.columns import rule_ridges
+    assert rule_ridges(g, 300.0, 2700.0, 0.0, 900, 1300, 0.8 * 180) == [1200.0]
 
 
 #: vol40 p14（v0.5.17 首跑）：版心条印在版框外（规范空间 x 大的一侧），自由模式的右外框线落在框里首列字边上（343，
@@ -162,8 +165,8 @@ def _p14_gray():
 
 def test_snap_narrow_outer_col_to_frame():
     """外列偏窄、外侧半列宽内有版框残段：外框线吸到版框上，别的路都不走。"""
-    out, how = pr.rescue(_res(P14), _p14_gray(), lambda pitch: (_ for _ in ()).throw(AssertionError("不该重探")))
-    assert how == "frame"
+    out, how = pr.rescue(_res(P14), _p14_gray(), lambda pitch: _res(P14))
+    assert how == "fit"
     assert all(abs(a - b) <= 2 for a, b in zip(line_xs(out), P14_FIXED))
     assert not any(out.vline_filled)
 
@@ -172,9 +175,9 @@ def test_rescue_may_not_drop_framed_col():
     """吸版框不成时，fuse 外推进版心条、把整网平移一列（首列甩出网外）也不接受（vol46 p118/p148 原病）。"""
     g = _p14_gray()
     shifted = [497, 679, 866, 1051, 1237, 1421, 1606, 1787, 1973, 2157]
-    assert pr.drops_framed_col(_res(P14), g, shifted)
-    assert not pr.drops_framed_col(_res(P14), g, P14_FIXED)
-    assert not pr.drops_framed_col(_res(GOOD), _gray([]), GOOD)
+    out, how = pr.rescue(_res(P14), g, lambda pitch: _res(shifted))
+    assert how == "fit"
+    assert all(abs(a - b) <= 2 for a, b in zip(line_xs(out), P14_FIXED)), line_xs(out)
 
 
 def test_snap_lines_to_faint_rule_and_blank():
@@ -192,10 +195,10 @@ def test_snap_lines_to_faint_rule_and_blank():
     for y in range(300, 2700, 40):
         g[y:y + 12, W - 1 - 1597 - 1:W - 1 - 1597 + 2] = 0  # 淡界行：断成一截截，够不上残段
     out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
-    assert how == "snap"
+    assert how == "fit"
     xs = line_xs(out)
     assert abs(xs[7] - 1597) <= 2 and abs(xs[8] - 1778) <= 10, xs
-    assert pr.is_clean(xs)
+    assert pr.check(xs).ok
 
 
 def _chars(ink_cols):
@@ -211,8 +214,8 @@ def test_pad_outer_blank_when_frame_not_printed():
     """全唐文 07 p47 形态：右框没印出来，外框线挑在首列字中间（首列只剩半列宽），外侧是空白 → 外框按中位列距外推。"""
     cut = [433, 524, 705, 886, 1069, 1250, 1434, 1617, 1796, 1983]     # 首列 91 ≈ 0.5 列宽
     g = _chars([(343, 524)] + [(GOOD[i], GOOD[i + 1]) for i in range(1, 9)])
-    out = _res(cut)
-    assert pr.pad_outer_blank(out, g)        # 走到这一路时前几路都没成（真页如此；合成图上 snap 会先吸到空白中点）
+    out, how = pr.rescue(_res(cut), g, lambda pitch: _res(cut))
+    assert how == "fit"
     xs = [round(x) for x in line_xs(out)]
     assert abs(xs[0] - 343) <= 3 and xs[1:] == cut[1:]
     assert out.vline_filled[0] is True and not any(out.vline_filled[1:])
@@ -222,6 +225,21 @@ def test_pad_outer_blank_not_when_ink_outside():
     """新外框外侧还有墨（版心、邻叶）不推。"""
     cut = [433, 524, 705, 886, 1069, 1250, 1434, 1617, 1796, 1983]
     g = _chars([(150, 524)] + [(GOOD[i], GOOD[i + 1]) for i in range(1, 9)])
-    out = _res(cut)
-    assert not pr.pad_outer_blank(out, g)
-    assert [round(x) for x in line_xs(out)] == cut
+    out, how = pr.rescue(_res(cut), g, lambda pitch: _res(cut))
+    assert how is None and [round(x) for x in line_xs(out)] == cut
+
+
+def test_stained_page_floor():
+    """vol43 p1（第 3 轮）：满页霉点，字缝里也有墨，不减底色时真线全被扣成负分、DP 无解，漏两条界行只剩 8 列。"""
+    g = _gray([(GOOD[k], GOOD[k + 1]) for k in range(9)])
+    rng = np.random.default_rng(0)
+    speck = rng.random((H, W)) < 0.12
+    speck[:300] = speck[2700:] = False
+    g[speck] = 0
+    free = GOOD[:6] + [1340] + GOOD[9:]                  # 1617、1796 漏了，字心多挑 1340：c6 c7 出带
+    assert pr.check(free).bad
+    grid = GOOD[:7] + [1617 + 45, 1796 + 45] + GOOD[9:]  # 网格线数对，但两条挑进字里
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
+    assert how == "fit"
+    got = [round(x) for x in line_xs(out)]
+    assert len(got) == len(GOOD) and all(abs(a - b) <= 2 * pr.TOL for a, b in zip(got, GOOD)), got

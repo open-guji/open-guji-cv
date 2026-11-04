@@ -74,11 +74,23 @@ def _bucket(branch: str) -> str:
     return "main" if branch == "main" else "exp"
 
 
+def require_actor(dry_run: bool = False) -> str | None:
+    """推库的操作人：``GUJI_ACTOR``，没有就用 ``USER``（``root`` 不算）。都没有就拒推——
+    imports.actor 为空查不出谁推的（2026-11-04 殿本账本被清空，近 3 天 91 次推库 actor 为空）。
+    干跑不要求。"""
+    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    if actor == "root":
+        actor = None
+    if not actor and not dry_run:
+        raise SystemExit("推中心库要有操作人：设 GUJI_ACTOR=<你的 Project／会话名>（imports.actor 为空，出事查不到是谁推的）")
+    return actor
+
+
 def push_workspace(ws_dir: Path, *, dry_run: bool = False, allow_delete: bool = False) -> dict:
     """``guji db push`` 的实现（``guji store commit`` 在已迁移的工作区上也走这里）。"""
     from .datastore.r2 import upload_files
     from .datastore.workcopy import push
-    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    actor = require_actor(dry_run)
     branch = _branch()
     _check_write_branch(branch)
     with _pg_conn(branch) as conn:
@@ -108,7 +120,7 @@ def sync_workspace(ws_dir: Path, *, dry_run: bool = False, src=None, admit: bool
     from .datastore.r2 import upload_files
     from .datastore.workcopy import sync
     from .feedback import auto_admit
-    actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
+    actor = require_actor(dry_run)
     branch = _branch()
     _check_write_branch(branch)
     src = src or WorkerSource(branch=branch)

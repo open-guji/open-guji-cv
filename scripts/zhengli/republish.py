@@ -411,7 +411,7 @@ def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: 
                   else "排除名单（非字）" if st == "excluded" else "格号没了（多半重切）")
     return {"old_rev": (old or {}).get("rev"), "new_rev": new.get("rev"), "old": len(o), "new": len(n),
             "kept": len(set(o) & set(n)), "removed": [{"cell": c, "why": why[c]} for c in removed],
-            "added": [{"cell": c, "cls": n[c].get("cause") or n[c].get("cls")} for c in sorted(set(n) - set(o), key=_key)],
+            "added": [{"cell": c, "cls": n[c].get("pending_reason_cause") or n[c].get("cause") or n[c].get("pending_reason")} for c in sorted(set(n) - set(o), key=_key)],
             "removed_by": dict(Counter(v.split("「")[0] for v in why.values())),
             "votes_on_old": sum(votes.values()), "voted_cells_kept": sorted(set(votes) & set(n), key=_key)}
 
@@ -452,19 +452,26 @@ def recheck_md(doc: dict, missing_tsv: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def add_causes(pending: Path, products: Path, book: str) -> None:
-    """每格并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
+def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None = None) -> None:
+    """每格写待审原因 `pending_reason`（`review/reasons.py`，sheldon 11-03 定；判不出写 unknown），
+    并写成因码细分 `pending_reason_cause`／`pending_reason_cause_detail`（`review/causes.py` 的 A1…I，GUJI-668；
+    用户 11-04 定：留作 pending_reason 下的细项，派单按它细分；旧名 `cause`／`cause_detail` 不再写，老单上的读的一方回退）。"""
     sys.path.insert(0, str(CV))
     from open_guji_cv.review.causes import book_causes
+    from open_guji_cv.review.reasons import reasons_for_pending, stamp
     if not pending.exists():
         return
     res = book_causes(products, book)
     doc = json.loads(pending.read_text(encoding="utf-8"))
+    cnt = stamp(doc, reasons_for_pending(doc, products, book, glyph_db=glyph_db))
+    print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
     for c in doc.get("cells", []):
         if c["cell"] in res:
-            c["cause"] = res[c["cell"]]["cause"]
+            c.pop("cause", None)
+            c.pop("cause_detail", None)
+            c["pending_reason_cause"] = res[c["cell"]]["cause"]
             if res[c["cell"]]["detail"]:
-                c["cause_detail"] = res[c["cell"]]["detail"]
+                c["pending_reason_cause_detail"] = res[c["cell"]]["detail"]
             for k in ("grp", "refc"):                 # 待审分类统计（guji-manager 的 taxonomy）要的事实，只查库就能分到字组
                 if res[c["cell"]].get(k):
                     c[k] = res[c["cell"]][k]
@@ -659,8 +666,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     if run(cmd, env=env).returncode:
         return 1
     public = routed / f"{chapter}.pending.json"
-    add_causes(public, products, book)
-    add_causes(routed / f"{chapter}.team.pending.json", products, book)
+    gdb = ws / "output" / "glyph.db"
+    add_causes(public, products, book, gdb)
+    add_causes(routed / f"{chapter}.team.pending.json", products, book, gdb)
     final = public
     rd = raw_dir(ws, book)
     if rd and not a.no_sprite:
@@ -1104,6 +1112,23 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
     return doc, others
 
 
+def stamp_char_pending(char_json: Path, plan: dict) -> None:
+    """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
+    §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
+    from open_guji_cv.formats import guji_char_cord as cc
+    if not char_json.exists():
+        return
+    cells = []
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    char = json.loads(char_json.read_text(encoding="utf-8"))
+    n = cc.apply_pending(char, {"cells": cells})
+    char_json.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
+    print(f"char 待审原因：{n['stamped']} 格（去 lacuna {n['lacuna_dropped']}）；单上有、char 里没有 {n['missing']}")
+
+
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
 
@@ -1135,6 +1160,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
+    stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
         (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")

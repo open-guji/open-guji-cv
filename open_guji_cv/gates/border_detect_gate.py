@@ -37,6 +37,7 @@ from ..core.spec import GateLevel, GateSpec, StepSpec
 from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders
+from ..seg.columns import COL_WIDTH_FLAG
 from ..seg.polyline import BEND_W80_MAX
 from ..books.siku_zongmu.column_pair_merge import (PAIR_MERGED_FLAG, PAIR_MERGED_INCONSISTENT_FLAG,
                                        has_pair_merged)
@@ -151,13 +152,13 @@ def _pagetype_gate(p: "BorderDetectGateParams"):
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.2", unit="page",
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.3", unit="page",   # 1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
         path_params=("pagetype_model_path",),
         code_deps=("open_guji_cv.books.siku_zongmu.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.clustering.page_type",
-                   "open_guji_cv.books.siku_zongmu.column_pair_merge"),
+                   "open_guji_cv.books.siku_zongmu.column_pair_merge", "open_guji_cv.seg.columns"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -253,6 +254,13 @@ class BorderDetectGateStep(Step):
             flags.append(f"page_type_custom：页型判定为「{page_type}」，列数预期与正文不同，未核验")
         if policy is None:
             flags.append("page_type_custom：页型判不准（uncertain），按 body/standard 兜底处理")
+        # 列宽均匀（doc/design/列宽均匀约束.md）：Step1 拟合后仍出带的列，整页标出来（只标不拦——拦了整页不切、字会丢），
+        # 待审分类直接据此归「切分 Step1 列宽出带」，不必等认字出错再回推
+        if li is not None and policy != "skip":
+            bad = [ln for ln in li.lines if any(f.startswith(COL_WIDTH_FLAG) for f in ln.flags)]
+            if bad:
+                flags.append(f"{COL_WIDTH_FLAG}：Step1 列宽出带 " + "、".join(
+                    f"c{ln.col}" for ln in bad) + "（列宽均匀约束拟合不出，供人核）")
         if b.bend_w80_max is not None and b.bend_w80_max >= p.bend_w80_max_gate:
             flags.append(f"vline_wander：单条界行 w80 达 {b.bend_w80_max:.1f}px "
                         f"（>= {p.bend_w80_max_gate}），这条线可能跑飞了")

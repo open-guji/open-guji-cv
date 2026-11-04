@@ -2,7 +2,7 @@
 
 网站后台「文本整理 → 重跑任务」读的就是这一条（`detail.table` 画成可排序的表，见 kaiyuanguji-web
 `docs/text-progress.md` 2.2）；网站同步任务把 `progress` 搬进后台，所以这里只管写，不碰网站。
-执行方领单、收尾、每隔几分钟心跳时顺手写一次（`publish(db, force=False)` 带节流）；`guji job board` 手动写或只看。
+执行方领单、收尾、心跳，空闲时每 5 分钟也写一次（节流）（`publish(db, force=False)` 带节流）；`guji job board` 手动写或只看。
 
 预计完成＝这一条的本次开跑时间＋「同类已成功任务（同种类、同起止步、同页范围类别）最近 30 条的耗时中位数」；
 没有同类样本就不估（显示 —），超出中位数的显示「已超预估」。排队的显示前面还有几条。
@@ -20,6 +20,7 @@ SECTION, KEY, WRITER = "jobs", "board", "任务库"
 RECENT = 40                 # 表里留最近结束的几条
 _MIN_GAP_S = 120            # 节流：本进程两次写之间至少隔这么久（force 不受限）
 _last = 0.0
+_central = None             # 看板写中心库 progress（Neon），与任务库分开连
 
 _STATUS = {"running": "在跑", "queued": "排队", "succeeded": "完成", "failed": "失败", "blocked": "拦下",
            "cancelled": "已取消"}
@@ -160,10 +161,11 @@ def build(conn) -> dict:
                     "已结束的任务这一列显示结束时间。每次领单、收尾和执行方心跳时更新，网站再按同步节奏搬过来。" % RECENT}
 
 
-def publish(db, *, force: bool = False, dry: bool = False) -> dict | None:
-    """整理并写进 progress.metric。`db` 是 `store.DB`；失败只返回 None，不影响跑单。"""
+def publish(db, *, force: bool = False, dry: bool = False, min_gap: float | None = None) -> dict | None:
+    """整理并写进 progress.metric。`db` 是 `store.DB`；失败只返回 None，不影响跑单。
+    `min_gap` 覆盖节流秒数（空闲执行方用长一点，省中心库流量）。"""
     global _last
-    if not force and time.time() - _last < _MIN_GAP_S:
+    if not force and time.time() - _last < (_MIN_GAP_S if min_gap is None else min_gap):
         return None
     _last = time.time()
     try:
@@ -172,7 +174,12 @@ def publish(db, *, force: bool = False, dry: bool = False) -> dict | None:
         queued = sum(1 for r in table["rows"] if r["status"] == "排队")
         if dry:
             return table
-        db(_put, table, f"在跑 {running}、排队 {queued}")
+        # 看板写进中心库 progress（仍是 Neon），与任务库（jobs，可能已切到新机）分开连
+        global _central
+        if _central is None:
+            from . import store as S
+            _central = S.DB(S.connect_neon)
+        _central(_put, table, f"在跑 {running}、排队 {queued}")
         return table
     except Exception as e:      # noqa: BLE001 —— 看板写不上不能拖垮执行方；进展以任务库为准，但原因要留下来
         _report(db, f"看板写不上：{type(e).__name__}: {str(e)[:150]}")

@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import sys
+
 
 def rare_index_missing(book: str):
     """→ `(inst, [(名, 字表, key, 路径)…])`：Step5-b 两档 embedding 模板表里盘上缺的；算不出来 → `(None, [])`。"""
@@ -113,6 +115,28 @@ def ensure_glyph_pin(book) -> None:
         return
     from ..ops.glyph_snapshot import ensure_pins
     ensure_pins(ws, [book.glyph_pin])
+
+
+def ensure_model_pin(book) -> None:
+    """册钉了模型总号：本机缺的模型文件先从 R2 取回（`ops/model_blobs.py`）。"""
+    from .model_blobs import ensure_model_pin as _ensure, ensure_repo_models
+    ensure_repo_models()
+    _ensure(book)
+    if getattr(book, "model", None):             # 仓里那份和钉的版本内容不同：本册改用缓存里的（`core/model_override`）
+        from ..core import model_override
+        from .model_blobs import _place
+        try:
+            root = model_override.activate(book, _place)
+            if root is not None:
+                print(f"  模型 m{book.model}：cv 仓里有模型与这版不同，本册改用 {root}", flush=True)
+        except Exception as e:                   # noqa: BLE001 —— 摆不齐交给起跑前校验拒跑
+            print(f"  ⚠️  模型 m{book.model} 按册切换失败：{e}", file=sys.stderr)
+
+
+def ensure_corpus_files(book) -> None:
+    """册钉了语料：清单里本机缺的文件先从 R2 取回（`ops/corpus_pack.ensure_corpus_files`）。"""
+    from .corpus_pack import ensure_corpus_files as _ensure
+    _ensure(book)
 
 
 def auto_pack(args, eng, steps: list[str], full_steps, book_versions) -> None:

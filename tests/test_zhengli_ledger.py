@@ -40,14 +40,14 @@ def make_pages_json(p6_type: str | None = "roster") -> dict:
 
 def make_pending() -> dict:
     return {"rev": "vol04-r1", "cv_version": None, "cv_commit": "abcd1234", "cells": [
-        {"cell": "5:1:2", "review": "pending", "why": ["near_form"], "cls": "near_form"},   # 标题槽
-        {"cell": "5:2:1", "review": "pending", "why": ["near_form"], "cls": "near_form"},
-        {"cell": "5:2:1", "review": "pending", "why": ["near_form"], "cls": "near_form"},   # 重复，去重
-        {"cell": "5:2:3", "review": "human", "why": ["lib_unsure", "ctx_margin"], "cls": "other"},
-        {"cell": "5:2:6", "review": "pending", "why": ["occluded"], "cls": "occluded"},     # 非字格
-        {"cell": "6:1:1", "review": "pending", "why": ["lib_miss"], "cls": "lib_miss"},     # 非正文页
-        {"cell": "7:1:2a", "review": "pending"},                                            # 没写 why/cls
-        {"cell": "9:1:1", "review": "pending", "cls": "other"},                             # pages.json 里没有
+        {"cell": "5:1:2", "review": "pending", "why": ["near_form"], "pending_reason": "group_abstain"},   # 标题槽
+        {"cell": "5:2:1", "review": "pending", "why": ["near_form"], "pending_reason": "group_abstain"},
+        {"cell": "5:2:1", "review": "pending", "why": ["near_form"], "pending_reason": "group_abstain"},   # 重复，去重
+        {"cell": "5:2:3", "review": "human", "why": ["lib_unsure", "ctx_margin"], "pending_reason": "unknown"},
+        {"cell": "5:2:6", "review": "pending", "why": ["occluded"], "pending_reason": "occluded_with_ref"},     # 非字格
+        {"cell": "6:1:1", "review": "pending", "why": ["lib_miss"], "pending_reason": "lib_missing"},     # 非正文页
+        {"cell": "7:1:2a", "review": "pending"},                                            # 没写 why/pending_reason
+        {"cell": "9:1:1", "review": "pending", "pending_reason": "unknown"},                             # pages.json 里没有
     ]}
 
 
@@ -108,7 +108,7 @@ def test_all_pages_mode_includes_nonbody():
 
 def test_reasons_and_status_counts():
     r = ledger.review_rate(make_pages_json(), make_pending(), page_types={7: "body"}, punct=PUNCT)
-    assert r["reasons"]["cls"] == {"near_form": 1, "none": 1, "other": 1}
+    assert r["reasons"]["pending_reason"] == {"group_abstain": 1, "none": 1, "unknown": 1}
     assert r["reasons"]["why"] == {"ctx_margin": 1, "lib_unsure": 1, "near_form": 1, "none": 1}
     assert r["review_status"] == {"pending": 2, "human": 1}
 

@@ -59,11 +59,12 @@ def _item(group: str, root: str, rel: str, p: Path, sha) -> dict:
 
 def _not_corpus(root: str, rel: str) -> bool:
     """不算语料的文件：说明文件；字组的 ``prompt.md``（只给离线 L2 批量拼消息用，Step 不读，
-    改它不该让钉了版本的册拒跑）。老清单里登记过的这类条目，核对时也跳过。"""
+    改它不该让钉了版本的册拒跑）；字组的 ``unet.npz``（模型，归模型系统管）。老清单里登记过的这类条目，核对时也跳过。"""
     name = rel.rsplit("/", 1)[-1]
     if name in _SKIP_NAMES:
         return True
-    return root == "repo" and name == "prompt.md" and rel.startswith("config/groups/")
+    # 字组 IDS U-Net 权重 11-04 挪进模型系统（core/model_pack.py 的 ids_unet），不再算语料
+    return root == "repo" and name in ("prompt.md", "unet.npz") and rel.startswith("config/groups/")
 
 
 def _sha256(p: Path) -> str:
@@ -301,7 +302,10 @@ def resolve_pin(ws: Path, vol: str, n: int) -> dict:
         if r["n"] == n:
             return {"n": n, "global": r.get("global"), "book": r["book"], "vol": r.get("vol")}
     if rows:
-        raise FileNotFoundError(f"册 {vol} 的钉子账里没有总号 {n}（有 {[r['n'] for r in rows]}）：{pins_path(ws, vol)}")
+        raise FileNotFoundError(
+            f"册 {vol} 的钉子账里没有总号 {n}（有 {[r['n'] for r in rows]}）：{pins_path(ws, vol)}。"
+            f"总号是每册钉子账各编各的：corpus 写在基础配置（config/book_defaults.yaml）时，每册账里都得有这个号——"
+            f"给这册 guji corpus pin --vol {vol} 登上，或在册 yaml 里写这册自己的 corpus 覆盖基础配置")
     mp = manifest_path(ws, n)
     if not mp.exists():
         raise FileNotFoundError(f"没有语料库 v{n} 的清单：{mp}")
@@ -389,6 +393,31 @@ def dev_pins(ws: Path) -> list[str]:
     return out
 
 
+def unresolved_pins(ws: Path) -> list[str]:
+    """册配置的生效 ``corpus:``（基础配置 ∪ 册 yaml，不含运行覆盖）在这册钉子账里查不到的册（2026-11-03）。
+
+    总号是每册钉子账各编各的，``corpus`` 写在基础配置（``config/book_defaults.yaml``）就是「每册账里都有这个号」的
+    断言；有一册没登，那册一起跑就在 ``resolve_pin`` 报错。推库前拦下，免得把跑不起来的配置推进中心库。"""
+    d = data_root_books(ws)
+    out = []
+    for f in sorted(d.glob("*.yaml")) if d is not None and d.is_dir() else []:
+        n = None
+        try:
+            from .book_config import effective_book_dict, layers
+            eff = effective_book_dict(f, apply_override=False)
+            n = parse_pin(eff.get("corpus"))
+            if not n or eff.get("corpus_dev"):     # 开发中的总号由 dev_pins 报
+                continue
+            src = "册 yaml" if "corpus" in (dict(layers(f, apply_override=False)).get("册 yaml") or {}) else "基础配置"
+            resolve_pin(ws, f.stem, n)
+        except FileNotFoundError as e:
+            out.append(f"册 {f.stem} 的 corpus: {n}（写在{src}）解析不了：{str(e).split('。')[0]}；"
+                       f"先 guji corpus pin --vol {f.stem} 登上这个号，或在册 yaml 里给这册写自己的 corpus")
+        except Exception:                          # noqa: BLE001 —— 读不了的册配置、写错的号不归这里管
+            continue
+    return out
+
+
 def data_root_books(ws: Path) -> Path | None:
     from .workspace import books_dir
     return books_dir(ws)
@@ -398,9 +427,10 @@ def push_problems(ws: Path) -> list[str]:
     """推进中心库前的保护（用户 10-20：语料库里任何内容变了，都要改版本号）。
 
     ① 最新一版清单登记的工作区文件被改了、缺了，或清单之外多了新语料文件：先 ``guji corpus build`` 出新版本一起推；
-    ② 本机已有的某一版清单和库里不一样：旧版本不可改。
+    ② 本机已有的某一版清单和库里不一样：旧版本不可改；
+    ③ 册配置的 corpus 总号在那册钉子账里查不到（``unresolved_pins``，多见于写在基础配置里）。
     只看工作区里的文件（root=ws）；引擎仓里的表随 cv 版本走，由起跑前硬校验管。"""
-    out: list[str] = dev_pins(ws)
+    out: list[str] = dev_pins(ws) + unresolved_pins(ws)
     vs = versions(ws)
     if not vs:
         return out
@@ -584,4 +614,8 @@ def with_corpus_pin(p, book):
     if not dev:
         _check_pin_once(workspace_root(), v, getattr(book, "id", None))
     tok = corpus_token(workspace_root(), v, getattr(book, "id", None), dev)
-    return type(p)(**{**p.model_dump(), **{f: tok for f in fields}})
+    rep = {f: tok for f in fields}
+    if "group_flow_fingerprint" in rep:                # 也钉了 model: → 并上模型内容（core/model_pack.py）
+        from .model_pack import pinned_group_flow
+        rep["group_flow_fingerprint"] = pinned_group_flow(tok, book)
+    return type(p)(**{**p.model_dump(), **rep})

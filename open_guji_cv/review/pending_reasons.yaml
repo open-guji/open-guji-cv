@@ -1,0 +1,412 @@
+# PendingReason：待审原因 enum 与配置（全项目唯一真源，A31 2026-11-03；读取接口 open_guji_cv/review/pending_reason.py）
+#
+# 真源位置（sheldon 11-03 定）：open-guji-cv（pipeline 生成这个原因），enum 类名 PendingReason，字段名一律 pending_reason。
+# 本 enum 只回答「这一格为什么还在待审」，不是判定依据。判定依据（证据）是另一回事：现在是 why[] 疑问码，将来可另立 enum，不并进这里。
+# 不确定的一律写 unknown（含历史数据回填、以后新增的数据），保证每一处都有值、口径一致。
+#
+# 规则（sheldon 11-03）：
+#   - 所有事件、待审单、裁决、待选里只写英文 enum 名（下面每条的键），不写中文、不写码。
+#   - code 只是配置里的一个值，方便按大类排序、分组统计；改 enum 名要走弃用流程（deprecated_by），code 永不复用。
+#   - 一格只有一个主原因（reason），按 priority 从小到大取第一个命中的；原始疑问码照旧放 why[] 当证据。
+#
+# 字段：
+#   code        分类码（大类字母 + 两位数）
+#   category    大类 enum（见 categories）
+#   route       去向 enum（见 routes）
+#   owner       负责修算法／数据的人（成员名；人审格的「审」由 reviewer 决定）
+#   reviewer    最终谁看：human（人）／llm_then_human（大模型先过，只收 high，其余回人）／none（算法放行或留后，不出单）
+#   priority    判定顺序（小的先判；open_guji_cv/review/reasons.py 按它逐条试，第一条命中的就是这格的原因）
+#   label       网页、控制台显示的短名（大白话；对外一律说「参校本」，不说「整理本」）
+#   hint        网页卡片上的一句说明：为什么在这里、人该看什么
+#   ui          网页卡片形态：pick（点选，整理本字预选）／choose3（三选一）／free（自由录字）／page（整页看）／confirm（看一眼确认）
+#   detect      判定依据（给实现者看）
+#   legacy      旧字段对应：cause（cv 成因码）／cls（卡片类别）／taxonomy（manager 小类）／v2（A31 统计子类）
+
+version: 1
+
+categories:
+  segmentation: {code: S, label: 切分位置}
+  occlusion:    {code: D, label: 遮挡}
+  group:        {code: Z, label: 形近字组}
+  hard_pair:    {code: H, label: 极难形近}
+  near_form:    {code: N, label: 形近护栏}
+  variant:      {code: V, label: 异体}
+  glyph_lib:    {code: L, label: 字形库}
+  reference:    {code: R, label: 参校本缺位}
+  mismatch:     {code: P, label: 与参校本不一致}
+  review:       {code: X, label: 复审与其他}
+
+routes:
+  human:    {label: 一定人审}
+  llm:      {label: 大模型统一过一遍（只收 high，其余回人审）}
+  algo:     {label: 先改算法，改完剩下的并入 llm}
+  deferred: {label: 留到标点、专名阶段}
+
+reasons:
+  # ── S 切分 ─────────────────────────────────────────────
+  seg_page_unaligned:
+    code: S01
+    category: segmentation
+    route: algo
+    owner: A22
+    reviewer: human
+    priority: 20
+    label: 整页对不上
+    hint: 这一页很多格都对不上参校本，多半是切分或对位错了，请看整页
+    ui: page
+    detect: 本格无整理本对位，且同页无对位格 ≥10（或弱证据格 ≥10）；已钉页直接人审
+    legacy: {cause: [A1, A3, A4, A5, A9], taxonomy: [S2, S3, S4, S5, S6], v2: "S 成片页"}
+  seg_col_unaligned:
+    code: S02
+    category: segmentation
+    route: algo
+    owner: A22
+    reviewer: human
+    priority: 21
+    label: 整列对不上
+    hint: 这一列可能挤格或整列错位
+    ui: page
+    detect: 本格无对位、整理本有字，且同列无对位格 ≥5
+    legacy: {cause: [A3, A4], taxonomy: [S2, S4], v2: "S 成片列"}
+  col_width_out_of_band:
+    code: S03
+    category: segmentation
+    route: algo
+    owner: A22
+    reviewer: human
+    priority: 22
+    label: 列宽异常
+    hint: 本页列宽不均，版框可能量错，先看整页
+    ui: page
+    detect: 页打 flag col_width_out_of_band（cv#929 border_detect_gate 1.3，送审不拦）
+    legacy: {}
+  seg_defect:
+    code: S04
+    category: segmentation
+    route: human
+    owner: A22
+    reviewer: human
+    priority: 10
+    label: 切坏格
+    hint: 这一格切得不完整，机器认不出字；请看书影，把字直接写进框里
+    ui: free
+    detect: 人或闸标了切坏格（confirm v=seg_defect，或单上 cls=seg_defect）；史記夹注两行分法不均、按整理本切的格（doubt 码 jiazhu_uneven，cv#1011）也归这里，细分 jiazhu_uneven
+    legacy: {cls: [seg_defect]}
+
+  # ── D 遮挡 ─────────────────────────────────────────────
+  occluded_with_ref:
+    code: D01
+    category: occlusion
+    route: algo
+    owner: A32
+    reviewer: llm_then_human
+    priority: 11
+    label: 有遮挡
+    hint: 被印章或污渍遮住，下面的小字是参校本的字，看图上像不像
+    ui: confirm
+    detect: 成因 D（印章框内＋噪点≥4），整理本有字
+    legacy: {cause: [D], cls: [occluded], taxonomy: [O1, O2, O0], v2: "D 遮挡·整理本有字"}
+  occluded_no_ref:
+    code: D02
+    category: occlusion
+    route: human
+    owner: A32
+    reviewer: human
+    priority: 12
+    label: 有遮挡且参校本缺
+    hint: 被盖住了，参校本这里也没有字，请尽量从图上读
+    ui: free
+    detect: 成因 D，整理本这位空或〓（occ.ref_blank=true）
+    legacy: {cause: [D], cls: [occluded], taxonomy: [O3], v2: "D 遮挡·整理本缺字"}
+
+  # ── H 极难形近（先于 Z/N 判）─────────────────────────────
+  hard_pair:
+    code: H01
+    category: hard_pair
+    route: deferred
+    owner: A24
+    reviewer: none
+    priority: 30
+    label: 极难形近
+    hint: 日曰、己已巳这类刻法几乎不分的字，留到加标点、识专名时一起按文意定
+    ui: choose3
+    detect: 本格机器字、整理本字、库首选里出现的字全在 {日 曰 己 已 巳} 内，且至少两个不同
+    legacy: {cls: [ji_yi_si], cause: [C], v2: "H 极难形近"}
+
+  # ── Z 形近字组 ─────────────────────────────────────────
+  group_abstain:
+    code: Z01
+    category: group
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 40
+    label: 形近字·没把握
+    hint: 形近字，几种判法都没给出字，请按前后文选
+    ui: pick
+    detect: 有字组证据，solvers 都没给字（不同义组）
+    legacy: {cause: [C], cls: [near_form], taxonomy: [Z1], v2: "Z 没有解法给字(弃权)"}
+  group_conflict:
+    code: Z02
+    category: group
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 41
+    label: 形近字·判法打架
+    hint: 几种判法给了不同的字，请按前后文选
+    ui: pick
+    detect: solvers 给了 ≥2 个不同字，或 why=conflict/joint
+    legacy: {cause: [C], taxonomy: [Z2], v2: "Z 解法之间冲突"}
+  group_demoted:
+    code: Z03
+    category: group
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 42
+    label: 形近字·复核推翻
+    hint: 复核给了与放行字不同的字
+    ui: pick
+    detect: 字组 decision=demote
+    legacy: {cause: [C], taxonomy: [Z2], v2: "Z 复核给了不同于放行字的字(降审)"}
+  group_ref_dissent:
+    code: Z04
+    category: group
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 43
+    label: 形近字·与参校本不同
+    hint: 判法给的字和参校本这里的字不一样
+    ui: pick
+    detect: 字组 why=ref_dissent 或 coord_dissent
+    legacy: {cause: [C], cls: [ref_conflict], taxonomy: [Z2], v2: "Z 解法给的字与整理本(坐标)对位不同"}
+  group_weak:
+    code: Z05
+    category: group
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 44
+    label: 形近字·证据弱
+    hint: 判法给了字，但证据不够强
+    ui: pick
+    detect: 字组其余情况（why=joint/weak）
+    legacy: {cause: [C], taxonomy: [Z3], v2: "Z 证据偏弱"}
+  group_form_open:
+    code: Z06
+    category: group
+    route: algo
+    owner: A24
+    reviewer: human
+    priority: 45
+    label: 写法待定
+    hint: 知道是哪个字，但不确定本书刻的是哪种写法，只在组内写法里挑
+    ui: pick
+    detect: 字组是同义（写法）组：暂归一、按参校本取字、码位组能解；或 why=form_open
+    legacy: {cls: [form_open], cause: [C], v2: "Z 同义组"}
+
+  # ── N 形近护栏 ─────────────────────────────────────────
+  near_form_guard:
+    code: N01
+    category: near_form
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 56
+    label: 形近字
+    hint: 有长得很像的字（十士、西酉…），要结合前后文看
+    ui: pick
+    detect: guard=conflict/never_match，或 why 含 near_form/solo_confusable/iron_confusable_ref，且不在字组
+    legacy: {cls: [near_form], cause: [C], taxonomy: [Z4], v2: "N 形近护栏拦下"}
+
+  # ── V 异体 ────────────────────────────────────────────
+  variant_pair:
+    code: V01
+    category: variant
+    route: human        # 待定：A24 说留人审；分流稿说算法后并 llm
+    owner: A24
+    reviewer: human
+    priority: 55
+    label: 异体字
+    hint: 两个字是异体，要确认本书刻的是哪个
+    ui: pick
+    detect: 整理本字与库首选（或前五）是异体对，但不在字组里；或 why 含 ref_lib_variant/variant_indirect/replace_form/channel_off
+    legacy: {cause: [B], cls: [variant], taxonomy: [M1, M2], v2: "V 组外异体对"}
+
+  # ── L 字形库 ──────────────────────────────────────────
+  lib_missing:
+    code: L01
+    category: glyph_lib
+    route: human
+    owner: A24
+    reviewer: human
+    priority: 51
+    label: 少见的字
+    hint: 字形库里还没有这个字，这一格就是它第一次进库，请确认图上是不是参校本的字
+    ui: pick
+    detect: 整理本字不在字形库（why 含 lib_miss / 「库里没有」）
+    legacy: {cause: [F], cls: [lib_miss], taxonomy: [L1], v2: "L 库里没有这个字"}
+  lib_sparse_dissent:
+    code: L02
+    category: glyph_lib
+    route: llm
+    owner: A23
+    reviewer: llm_then_human
+    priority: 58
+    label: 刻例太少·不一致
+    hint: 库里这个字刻例很少，机器字和参校本不一致
+    ui: pick
+    detect: 整理本字库样本 ≤2，机器字≠整理本；大模型选中的若是这个少样本字 → 回人审
+    legacy: {cause: [I], taxonomy: [L4], v2: "L 库样本过少·机器字≠整理本"}
+  lib_sparse_agree:
+    code: L03
+    category: glyph_lib
+    route: human
+    owner: A23
+    reviewer: human
+    priority: 57
+    label: 刻例太少
+    hint: 这个字库里只有一两个刻例，第一次正式进库，请确认
+    ui: pick
+    detect: 整理本字库样本 ≤2，上下文＝整理本
+    legacy: {cause: [I], taxonomy: [L4], v2: "L 库样本过少·上下文=整理本"}
+  lib_unrecognized:
+    code: L04
+    category: glyph_lib
+    route: algo
+    owner: A23
+    reviewer: llm_then_human
+    priority: 61
+    label: 库认不出
+    hint: 库里有这个字，但这一格认不出，多半是印淡或压了框线
+    ui: pick
+    detect: 库样本 >2，上下文＝整理本，库不认（成因 H）
+    legacy: {cause: [H, I], taxonomy: [L2, L3], v2: "L 库样本够·上下文=整理本·库不认"}
+  garble_gate:
+    code: L05
+    category: glyph_lib
+    route: algo
+    owner: A24
+    reviewer: llm_then_human
+    priority: 52
+    label: 像框线或墨点
+    hint: 字形像框线或墨点，被乱码闸拦下，先看是不是误拦
+    ui: free
+    detect: why 含 ctx_garble_shape / shadow_veto / ctx_garble_rare
+    legacy: {cause: [A6], taxonomy: [S1], v2: "L 乱码闸／影子闸拦下"}
+
+  # ── R 整理本缺位 ──────────────────────────────────────
+  ref_lacuna:
+    code: R01
+    category: reference
+    route: algo
+    owner: A24
+    reviewer: llm_then_human
+    priority: 50
+    label: 参校本缺字
+    hint: 参校本这里写的是〓（没码位的生僻字），请从图上读
+    ui: free
+    detect: 整理本这位是〓或私用码；先走新图源文本层与私用码表（cv#932），再大模型，读不准的人审
+    legacy: {cause: [A2], taxonomy: [P1], v2: "R 整理本缺字(〓/缅甸)"}
+  ref_gap:
+    code: R02
+    category: reference
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 53
+    label: 参校本这里没字
+    hint: 参校本这一位没有字（漏字或引文异文），请核对
+    ui: pick
+    detect: 整理本这位没字，且不成片（不属 S01/S02）
+    legacy: {cause: [A9, A1], v2: "R 整理本这位没字·上下文不足"}
+
+  # ── P 与整理本不一致 ──────────────────────────────────
+  ref_replaced:
+    code: P01
+    category: mismatch
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 60
+    label: 参校本改过字
+    hint: 参校本这一段改过字，位置可能差一两格
+    ui: pick
+    detect: 对位来自 replace 段（align_op=replace / why=replace_align）
+    legacy: {cause: [G], cls: [replace_align], taxonomy: [R2], v2: "P 整理本改字层"}
+  ref_mismatch:
+    code: P02
+    category: mismatch
+    route: llm
+    owner: A24
+    reviewer: llm_then_human
+    priority: 62
+    label: 和参校本不一致
+    hint: 机器的判断和参校本这里的字不一样，可能是真异文
+    ui: pick
+    detect: 其余机器字≠整理本（context_vs_ref / iron_vs_ref / signal_conflict 等）
+    legacy: {cause: [E, I], cls: [ref_conflict, other], taxonomy: [R1], v2: "P 机器字≠整理本"}
+
+  # ── X 复审与其他 ──────────────────────────────────────
+  ruling_conflict:
+    code: X01
+    category: review
+    route: human
+    owner: A31
+    reviewer: human
+    priority: 5
+    label: 裁定有冲突
+    hint: 之前的裁定和码表（或新证据）不一致，请看图再定
+    ui: pick
+    detect: doubt=src_code_conflict（cv#938）；人裁的机器不能降，单列出卡
+    legacy: {}
+  vision_flagged:
+    code: X02
+    category: review
+    route: human
+    owner: A31
+    reviewer: human
+    priority: 6
+    label: 看图觉得不对
+    hint: 模型看图认为放行的字可能不对，请确认
+    ui: pick
+    detect: vision_check v=wrong 捞回（doubt vision_flag）
+    legacy: {}
+  machine_changed:
+    code: X03
+    category: review
+    route: human
+    owner: A32
+    reviewer: human
+    priority: 7
+    label: 机器改了字
+    hint: 这一轮机器把这个字改了（和已发布的文本不同），请确认
+    ui: pick
+    detect: 未冻结册机器改判（相对 book-text 现文变字）进复审；单上 recheck=true 且 note 为改判
+    legacy: {}
+  recheck:
+    code: X04
+    category: review
+    route: human
+    owner: A32
+    reviewer: human
+    priority: 8
+    label: 复审
+    hint: 上一单留下的格，请照书影核定
+    ui: pick
+    detect: recheck=true（其余复审原因，含旧裁与新票不一致）
+    legacy: {taxonomy: [P2]}
+  unknown:
+    code: X99
+    category: review
+    route: human
+    owner: A31
+    reviewer: human
+    priority: 999
+    label: 原因不明
+    hint: 系统没能确定这一格为什么待审，请照书影核定
+    ui: pick
+    detect: 以上都不中，或历史数据推不出原因；新数据出现即报警、补规则
+    legacy: {cls: [other], taxonomy: [U0]}

@@ -293,3 +293,28 @@ def test_exporter_char_cord(tmp_path):
     old = sorted(p.name for p in (tmp_path / "old").iterdir())               # 旧形态照出、不受影响
     assert old == [f"002.{k}" for k in ("lines.md", "norm.json", "pages.json", "proof.json", "zi.json")]
     assert cc.char_to_lines_md(char) == (tmp_path / "old" / "002.lines.md").read_text(encoding="utf-8")
+
+
+def test_apply_pending_char_v04(legacy):
+    """待审单上的格写 pending_reason、去 lacuna，`$schema` 升 v0.4、过 schema；分行稿逐字节不变（待审 □ 与阙文同写）。"""
+    files, _ = cc.from_pages_json(legacy["002.pages.json"], zi=legacy["002.zi.json"], norm=legacy["002.norm.json"])
+    char = files["002.char.json"]
+    before = cc.char_to_lines_md(char)
+    cells = [c for c in _cells(char) if c.get("fig") is None]
+    lac = next((c for c in cells if c.get("lacuna")), None)
+    if lac is None:                              # 夹具没有阙文就造一格
+        lac = cells[0]
+        lac.update(c=cc.LACUNA_CHAR, lacuna=True)
+        before = cc.char_to_lines_md(char)
+    plain = next(c for c in cells if not c.get("lacuna") and c["c"] != cc.LACUNA_CHAR and c is not lac)
+    n = cc.apply_pending(char, {"cells": [{"cell": lac["a"], "pending_reason": "group_abstain"},
+                                          {"cell": plain["a"]}, {"cell": "999:1:1"}]})
+    assert n == {"stamped": 2, "lacuna_dropped": 1, "fig_skipped": 0, "missing": 1}
+    assert lac["pending_reason"] == "group_abstain" and "lacuna" not in lac
+    assert plain["pending_reason"] == "unknown"
+    assert char["$schema"] == cc.CHAR_SCHEMA_URL_V04
+    assert cc.validate(char, "char") == []
+    assert cc.char_to_lines_md(char) == before
+    bad = copy.deepcopy(char)                    # 与 lacuna 互斥
+    next(c for c in _cells(bad) if c["a"] == lac["a"])["lacuna"] = True
+    assert cc.validate(bad, "char")

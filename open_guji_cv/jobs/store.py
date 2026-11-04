@@ -22,7 +22,25 @@ TRANSIENT_DELAY_S = (120, 600)          # 随机隔 2–10 分钟
 
 
 def connect():
-    """开一条 autocommit 连接（写操作各自包在 `conn.transaction()` 里，读不留悬着的事务）。"""
+    """开一条 autocommit 连接（写操作各自包在 `conn.transaction()` 里，读不留悬着的事务）。
+
+    设了 JOBSDB_TOKEN 就连新任务库（美国机，经 jobsdb 隧道）；没设仍连 Neon（过渡期，见 jobsdb.py）。
+    """
+    from . import jobsdb
+    if jobsdb.enabled():
+        c = jobsdb.connect()
+        c.autocommit = True
+        return c
+    # 11-03 已切到新机：Neon 任务库只留给测试分支（GUJI_JOBS_BRANCH）或显式 GUJI_REQUIRE_JOBSDB=0
+    br = os.environ.get("GUJI_JOBS_BRANCH")
+    if (br and br != "main") or os.environ.get("GUJI_REQUIRE_JOBSDB", "").strip().lower() in ("0", "false", "no"):
+        return connect_neon()
+    raise SystemExit("任务库已切到新机，但本 shell 没有 JOBSDB_TOKEN；不退回 Neon。"
+                     "请用 guji_jobs（会自动载入 secret），或先 . /etc/guji_secrets.sh。")
+
+
+def connect_neon():
+    """连 Neon 中心库（旧路）。中心库的 progress 看板仍写这里，不随任务库切走。"""
     from ..datastore.connect import connect as _connect
     br = os.environ.get("GUJI_JOBS_BRANCH")
     if br and br != "main":
@@ -342,6 +360,33 @@ def finish(conn, job_id: int, attempt_id: int, outcome: str, *, error: str | Non
         _event(conn, job_id, attempt_id, "finish", {"succeeded": "完成", "failed": "失败", "blocked": "拦下（检查没过）",
                                                      "cancelled": "已停", "queued": "失败，退回排队重试"}[status]
                + (f"：{error}" if error else ""), level="info" if status == "succeeded" else "warn")
+
+
+_TERMINAL = ("succeeded", "failed", "blocked", "cancelled")
+
+
+def notify_due(conn) -> list[dict]:
+    """认领「该通知」的提交人：某人名下已没有排队／在跑的单，且有终态单还没通知过。
+    一批单全跑完才通知一次（按人归并）；认领即标 notified_at，并发的执行方只有一个拿得到。
+    返回 [{by, jobs:[{id, kind, book, status, error}...]}]。"""
+    with conn.transaction():
+        rows = _rows(conn.execute(
+            "WITH due AS (SELECT submitted_by FROM jobs.job GROUP BY submitted_by"
+            " HAVING bool_or(status = ANY(%s) AND notified_at IS NULL)"
+            " AND NOT bool_or(status IN ('queued', 'running')))"
+            " UPDATE jobs.job j SET notified_at = now() FROM due"
+            " WHERE j.submitted_by = due.submitted_by AND j.status = ANY(%s) AND j.notified_at IS NULL"
+            " RETURNING j.id, j.kind, j.book, j.status, j.error, j.submitted_by, j.spec->>'why' AS why",
+            (list(_TERMINAL), list(_TERMINAL))))
+    by: dict[str, list[dict]] = {}
+    for r in sorted(rows, key=lambda r: r["id"]):
+        by.setdefault(r["submitted_by"], []).append(r)
+    return [{"by": k, "jobs": v} for k, v in by.items()]
+
+
+def notify_undo(conn, job_ids: list[int]) -> None:
+    """发送失败：把认领退回去，下一次有单收尾时再试。"""
+    conn.execute("UPDATE jobs.job SET notified_at = NULL WHERE id = ANY(%s)", (job_ids,))
 
 
 def worker_seen(conn, name: str, *, state: str, session: str | None = None, job_id: int | None = None,

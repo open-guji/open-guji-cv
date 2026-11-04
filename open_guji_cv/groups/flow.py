@@ -246,16 +246,21 @@ def _method(g: str, name: str, form: bool = False, review: bool = False):
 
 
 def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, right: str | None,
-           patch_fn, members=None, form: bool = False, review: bool = False, force_panel: bool = False) -> GroupVerdict:
+           patch_fn, members=None, form: bool = False, review: bool = False, force_panel: bool = False,
+           coord: str | None = None) -> GroupVerdict:
     """跑组 `g` 方法数组里名叫 `name` 的方法（`groups.methods`）。`members` 给了就只在这些字里选（两段判第二段＝族）。"""
     inp = MethodInput(group=g, members=frozenset(members if members is not None else GROUPS[g].members),
                       cell_id=r.id, cands=cands, ref=ref, cfg=cfg, left=left, right=right, patch_fn=patch_fn,
-                      cur=r.char if review else None, force_panel=force_panel)
+                      cur=r.char if review else None, force_panel=force_panel, coord=coord)
     return _method(g, name, form, review).run(inp)
 
 
+#: 清晰几何量先于其他字形路与整理本：组 → (方法名, |比值−1| 门槛)。土士：量横比 ≥1.12 判土、≤0.88 判士（A24 2026-11-03）。
+CLEAR_OVER = {"ts": ("bars", 0.12)}
+
+
 def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None,
-           review: bool = False) -> tuple[str | None, str, list]:
+           review: bool = False, coord: str | None = None) -> tuple[str | None, str, list]:
     """依次跑组的方法数组 → (字或 None, 原因 "agree"|"abstain"|"conflict", 每个方法的留痕)。
     `review` 且组声明了 `review_methods`：改跑复核数组，第一个给字的说了算。"""
     f = GROUPS[g].flow
@@ -263,7 +268,7 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     trail: list[dict] = []
     picks: list[str] = []
     for name in (f.review_solvers if alt else f.solvers):
-        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt)
+        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt, coord=coord)
         trail.append({"solver": name, "char": v.char, "why": v.why, **({"via": v.via} if v.via != name else {}),
                       **v.extra})
         if v.char is not None:
@@ -278,6 +283,15 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
             if v.extra.get("panel"):
                 trail[ci] = {"solver": "ctx", "char": v.char, "why": v.why, **({"via": v.via} if v.via != "ctx" else {}), **v.extra}
                 picks = [t["char"] for t in trail if t["char"] is not None]
+    if not alt and g in CLEAR_OVER and len(set(picks)) != 1:
+        # 量横清晰：几何量够清楚（|比值−1| ≥ 门槛）时先于 ids、整理本；文意给了另一个字则照旧（A24 11-03，sheldon 定：
+        # 「量横首先越过整理本，但必须是清晰横线，不确定的按文意」；土士 admitted 5 格里 士 其实刻作 土，比值 1.06–1.22）
+        sol, gap = CLEAR_OVER[g]
+        t = next((t for t in trail if t["solver"] == sol and t["char"] and t.get("ratio") is not None
+                  and abs(t["ratio"] - 1) >= gap), None)
+        if t is not None and not any(x["solver"] == "ctx" and x["char"] and x["char"] != t["char"] for x in trail):
+            trail.append({"solver": "clear_over", "char": t["char"], "why": "agree", "ratio": t["ratio"]})
+            return t["char"], "agree", trail
     if not picks:
         return None, "abstain", trail
     if len(set(picks)) > 1:
@@ -394,6 +408,24 @@ def _slot_family(pv, trail: list | None, w, canon: Callable[[str], str]) -> str 
 
 def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
                  canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
+    out = _provisional_base(g, mode, r, cands, ref, coord, cfg, canon, trail)
+    pv = PROVISIONAL.get(g)
+    if out is not None or pv is None or not pv.follow_ref or not cfg.provisional or mode != "lift" or not cands:
+        return out
+    # 兜底归成整理本（A24 11-03，sheldon 定 參㕘叅、䟦跋、點㸃𭶑）：库首位与整理本（缺位用坐标对位字）都认是这一族、cov 够，
+    # 分差内别的候选不管（叅 常紧咬 恭未）；有分族的组（參／叅㕘）两者须同族。
+    inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
+    top, c1 = cands[0]
+    w0 = ref or coord
+    if (inn(top) and c1 >= cfg.min_cov and w0 and w0 != GAP and (inn(w0) or w0 in pv.ref_forms)
+            and (ref or r.id[-1:] not in ("a", "b"))):
+        if not pv.fams or any((top in f_ or canon(top) in f_) and (w0 in f_ or canon(w0) in f_) for f_ in pv.fams):
+            return w0, w0
+    return None
+
+
+def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
+                      canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
     """同义组暂归一兜底（`registry.PROVISIONAL`，sheldon 2026-10-27「先 IDS 拆分，拆不开或置信度不够就暂归一到一个字形，
     记下是暂归一定的」）：方法没定下来（弃权、冲突、被整理本拦、复核要降）的格，「是这个字」两路都认 → (暂归一的字, 证人)，否则 None。
     - 复核：放行字在 `forms` 里（别的通道已认了字），整理本没有字、是 〓 或也在 `forms` 里；
@@ -564,7 +596,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
             ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
-                                    review=mode == "review")
+                                    review=mode == "review",
+                                    coord=None if r.id[-1:] in ("a", "b") else (veto_refs or {}).get(r.id))
         if mode == "lift" and ch is None and cfg.joint and any(
                 t.get("why") == "abstain:other" and t.get("other_conf") == "high" for t in trail):
             # 本组文意明说「其他」（各遍都 high）：库里分差内没有共字组的字（曰 cov 0、只剩日目），格才进了 rm；

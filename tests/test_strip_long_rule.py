@@ -68,3 +68,15 @@ def test_short_edge_mark_not_reaching_cell_edge_is_kept():
     edges = column_ink_edges(ink, _rows(5))
     patch = _patch(ink, 4)
     assert strip_long_rule(patch, ink, 4 * CELL, 4 * CELL, 5 * CELL, tail=True, ink_edges=edges) is patch
+
+
+def test_head_corner_line_starting_below_frame_needs_grow():
+    """全唐文第 1 列外侧竖框在上框下面断开约 0.08 格高才起：缺省不认，grow（书级开关）认。"""
+    ink = _strip()
+    ink[8:CELL, 5:10] = True                       # 列首格：离格外沿 8 行（0.1 格高）起
+    edges = column_ink_edges(ink, _rows(5))
+    patch = _patch(ink, 0)
+    assert strip_long_rule(patch, ink, 0, 0, CELL, head=True, ink_edges=edges) is patch
+    out = strip_long_rule(patch, ink, 0, 0, CELL, head=True, ink_edges=edges, grow=True)
+    assert (out[:, 5:10] == 255).all()
+    assert (out[10:70, 35:95] == 0).all()

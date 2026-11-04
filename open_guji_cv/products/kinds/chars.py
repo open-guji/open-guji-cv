@@ -13,7 +13,7 @@
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ...core.spec import COLUMN_PX, ProductKindSpec
 from ...core.step import register_kind
@@ -73,6 +73,27 @@ class ColumnChars(BaseModel):
 class PageChars(BaseModel):
     page: int
     columns: list[ColumnChars]
+
+    alt_columns: list[ColumnChars] = Field(default_factory=list)
+    """备选切法（row_segment `alt_cut`，2026-11-03）：格位表与图不合的列另切一份不带先验的格网，Step4/5 照样裁、认，
+    由 align_ref 坐标对位挑和整理本吻合多的那份（`PageAlignRef.alt_cols`）。不和 `columns` 混放——`.column(col)`
+    只取第一个同号列。空表**不落盘**（见下），没开 `alt_cut` 的产物逐字节不变。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_alt(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("alt_columns"):
+            d.pop("alt_columns", None)
+        return d
+
+    def with_alt(self, cols):
+        """把 `cols` 里列号的列换成备选那份的副本（align_ref 试算、seed_admit 取选中份共用）；`cols` 空就原样返回。"""
+        cols = set(cols or ())
+        if not cols:
+            return self
+        alt = {c.col: c for c in self.alt_columns}
+        return self.model_copy(update={"columns": [alt.get(c.col, c) if c.col in cols else c for c in self.columns],
+                                        "alt_columns": []})
 
     def column(self, col: int) -> ColumnChars | None:
         return next((c for c in self.columns if c.col == col), None)
