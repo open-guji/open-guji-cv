@@ -22,6 +22,8 @@ def _setup(monkeypatch, tmp_path, *, claims, outdated_seq, refresh_ok):
     monkeypatch.setattr(R, "_runner_commit", lambda: None)
     monkeypatch.setattr(R, "_preflight", lambda: None)
     monkeypatch.setattr(R, "_disk_gate", lambda say=print: None)
+    # #828 起领单前还查管线 venv（/opt/guji-venv）的 ML 依赖；测试机没有这个 venv，不替掉就一直不领单
+    monkeypatch.setattr(R, "_ml_env_gate", lambda say=print: None)
     monkeypatch.setattr(R, "_last_book", lambda: None)
     monkeypatch.setattr(R, "_remember_book", lambda book: None)
     monkeypatch.setattr(R.SP, "summary", lambda spec: "")
