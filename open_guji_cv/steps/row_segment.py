@@ -19,7 +19,7 @@ from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..books.siku_zongmu.row_grid import fit_page_grids
-from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
+from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots, reading_order,
                                     segment_column, slot_mask_from_occupied)
 from ._warpmap import ColumnMapper
 
@@ -827,6 +827,11 @@ class RowSegmentParams(BaseModel):
     #: 一格只有一半有字（段字数为奇数）时，多出的那个字归 a 还是 b 由图定（两种分法各切、取切线压墨少的），短的那行
     #: 格号照「本行第几字」从段首数。缺省按「右行多一字」（光盘版整理本口径）。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_free_split: bool = False
+    #: **雙行小注逐步切**（2026-11-04，史記文淵閣本，A22 评审过，见 `books/shiji_wyg/jiazhu_step`）：要 `jiazhu_rows`、
+    #: `roster_ref_corpus`／`roster_ref_pins`（整理本）。挑定格网后，整理本认得出 `<右|左>` 分法的夹注段两行各按自己的字数、
+    #: 在自己墨的范围里切，段下正文格按表重切（小字行距比格网小，长行被压进短行的格数，并字后一路错下去）。
+    #: 核不上整列退回原切法；有列级人裁的列不动。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_step_split: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -926,6 +931,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_rows", None)
             if not self.jiazhu_free_split:
                 d.pop("jiazhu_free_split", None)
+            if not self.jiazhu_step_split:
+                d.pop("jiazhu_step_split", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -969,7 +976,8 @@ class RowSegmentStep(Step):
                    "open_guji_cv.seg.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
                    "open_guji_cv.books.siku_zongmu.roster_glyph", "open_guji_cv.books.siku_zongmu.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
-                   "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),
+                   "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
+                   "open_guji_cv.books.siku_zongmu.jiazhu_step"),
         soft_params=("roster_glyph_fingerprint",),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins"),
     )
@@ -1054,6 +1062,15 @@ class RowSegmentStep(Step):
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
+        # 雙行小注逐步切（`jiazhu_step_split`，史記）：本页各列整理本的夹注段分法
+        step_notes = None
+        if p.jiazhu_step_split and p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
+            import importlib
+            from ..core.seg_set import resolve
+            from ..core.workspace import corpus_path
+            _step_impl = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.jiazhu_step"))
+            step_notes = _step_impl.page_note_runs(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins),
+                                                   ctx.book.id, page) or {}
         # 等距格网（books/siku_zongmu/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
         grids = {}
         # 印框（列端表空格记空的判据之一）：同样只给格位先验命中的页用
@@ -1373,6 +1390,10 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
             r = _finalize(r)
+            if step_notes is not None and lay is not None and not human_col and step_notes.get(gc.col):
+                r, fl_ = _step_impl.apply(r, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
+                                          step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
+                prior_flags = list(prior_flags) + fl_
 
             def _emit(r, base, prior_flags, lay, occ, n_raised_col):
                 """挑定的格网 → ColumnCells（主切法和 `alt_cut` 的备选切法共用）。"""
