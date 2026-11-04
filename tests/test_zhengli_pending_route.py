@@ -69,10 +69,10 @@ def test_route_vol01_like(tmp_path):
 
 
 def test_reflow_groups_and_hold(tmp_path):
-    cells = [{"cell": f"5:1:{i}", "review": "pending", "cls": "occluded", "why": ["occluded"]} for i in range(1, 4)]
-    cells += [{"cell": f"6:1:{i}", "review": "pending", "cls": "other", "why": ["none"]} for i in range(1, 5)]
+    cells = [{"cell": f"5:1:{i}", "review": "pending", "pending_reason": "occluded_with_ref", "why": ["occluded"]} for i in range(1, 4)]
+    cells += [{"cell": f"6:1:{i}", "review": "pending", "pending_reason": "unknown", "why": ["none"]} for i in range(1, 5)]
     res = pr.route({"cells": cells}, {}, set(), reflow_min=3, reflow_hold=False)
-    assert [c["cell"] for c in res["reflow"]] == ["5:1:1", "5:1:2", "5:1:3"]     # other/none 不算一个原因
+    assert [c["cell"] for c in res["reflow"]] == ["5:1:1", "5:1:2", "5:1:3"]     # unknown/none 不算一个原因
     assert res["stats"]["public"] == 7
     held = pr.route({"cells": cells}, {}, set(), reflow_min=3, reflow_hold=True)
     assert held["stats"]["public"] == 4 and held["stats"]["reflow"] == 3
