@@ -15,3 +15,18 @@ def test_missing_pending_reason_is_unknown(tmp_path):
     st = RulingStore(tmp_path, persist=False)
     RulingCache(st).store("日曰", "v1", "m", "子", "學而", {"char": "曰", "conf": "high", "why": ""})
     assert st.get("日曰", "v1", "子", "學而")["pending_reason"] == "unknown"
+
+
+def test_judge_writes_group_abstain_by_default(tmp_path):
+    from open_guji_cv.groups import ctx_llm
+
+    class C:
+        def ask(self, system, user, members, model, effort):
+            return {"char": "曰", "conf": "high", "why": "x"}, {}, None
+
+    st = RulingStore(tmp_path, persist=False)
+    ctx_llm.judge("日曰", "sys", "v1", "子", "學而", frozenset("日曰"), cache=RulingCache(st), client=C(), cell="vol01:1:1:1")
+    assert st.get("日曰", "v1", "子", "學而")["pending_reason"] == "group_abstain"
+    ctx_llm.judge("日曰", "sys", "v2", "子", "學而", frozenset("日曰"), cache=RulingCache(st), client=C(),
+                  cell="vol01:1:1:1", pending_reason="ref_gap")
+    assert st.get("日曰", "v2", "子", "學而")["pending_reason"] == "ref_gap"
