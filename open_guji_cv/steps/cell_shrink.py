@@ -59,6 +59,12 @@ class CellShrinkParams(BaseModel):
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
 
+    inner_frame_cut: bool = False
+    """整页拟合双边版框的内框细线，线上和线外的像素在列图上统一抹白，再切字块（seg.frame_line；Sheldon 11-04 定）。
+    缺省关＝旧行为。开（殿本新图源）：内框细线磨成虚线、紧贴列首列尾的字脚，逐格判「像不像线」认不出碰着字的那一截，
+    字块挂着一小截框线（所、祖、八、父的撇脚）。整页外粗框拟得稳，内线与它平行，几十段虚线一起投票定线位和线厚。
+    抬头列不抹上框（字本来就写在框外）。本页拟不出可信的线就不动。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -71,6 +77,8 @@ class CellShrinkParams(BaseModel):
             d.pop("jiazhu_end_halves", None)
         if isinstance(d, dict) and not self.jiazhu_strip_rules:
             d.pop("jiazhu_strip_rules", None)
+        if isinstance(d, dict) and not self.inner_frame_cut:
+            d.pop("inner_frame_cut", None)
         return d
 
 
@@ -107,6 +115,52 @@ FRAME_BAR_TOP = 0.15
 居中，不贴顶。四册全书按这三条筛只中 vol02 这 2 格，全是框线。"""
 
 
+INNER_INK_THRESHOLD = 128
+"""拟内框线用的墨阈值（同 extractor.BINARY_THRESHOLD_PATCH）。"""
+INNER_CUT_MARGIN = 1
+"""内框线朝字那边的边沿再往里多抹这么多行（线心、线厚是整页中位数，单列差一两像素）。"""
+
+
+def _col_y_for_page_y(mapper: ColumnMapper, x: float, y_guess: float, line) -> float:
+    """列图第 x 列上，原图 y 正好落在内框线字侧边沿的那个列图 y（射影近似线性，牛顿三步）。"""
+    y = float(y_guess)
+    for _ in range(3):
+        xt, yp = mapper.to_page_tl(x, y)          # 原图左上原点
+        _xt2, yp2 = mapper.to_page_tl(x, y + 1.0)
+        dy = yp2 - yp
+        if abs(dy) < 1e-6:
+            break
+        target = float(line.text_edge(xt))
+        y += (target - yp) / dy
+    return y
+
+
+def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: bool = False) -> np.ndarray:
+    """列图上把内框细线（`inner` 里的整页拟合）连同线外抹白：下框线字侧边沿往下、上框线字侧边沿往上。
+    抬头列（`raised`）不动上框：抬头字本来就写在框外。"""
+    h, w = img.shape[:2]
+    out = None
+    xs = np.array([0.0, (w - 1) / 2.0, w - 1.0])
+    for side, line in inner.items():
+        if side == "top" and raised:
+            continue
+        guess = h - 1.0 if side == "bottom" else 0.0
+        ys = np.array([_col_y_for_page_y(mapper, float(x), guess, line) for x in xs])
+        yc = np.interp(np.arange(w), xs, ys)
+        if out is None:
+            out = img.copy()
+        for x in range(w):
+            if side == "bottom":
+                y0 = int(np.ceil(yc[x])) - INNER_CUT_MARGIN
+                if y0 < h:
+                    out[max(0, y0):, x] = 255
+            else:
+                y1 = int(np.floor(yc[x])) + INNER_CUT_MARGIN + 1
+                if y1 > 0:
+                    out[:min(h, y1), x] = 255
+    return img if out is None else out
+
+
 def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
     if cell_type != "char" or slot is None or slot > 1 or not cc.period or not cc.content_x:
         return False
@@ -123,19 +177,43 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.24", unit="cell",   # 1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
-        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals",),
+        id="cell_shrink", title="Step4 字框收缩", version="1.25", unit="cell",   # 1.25：书级开关 inner_frame_cut——整页拟双边版框内框细线（seg.frame_line），列图上线和线外统一抹白再切字块（殿本新图源列首列尾挂着的一截框线，Sheldon 11-04）；1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page"),
+        optional_consumes_when=(("raw_page", "inner_frame_cut"),),
         produces=("char_index", "char_patch"),
         params=CellShrinkParams,
         # ⚠️ 读了 `ctx.book.frame_bar_strategy` 就必须在这里声明，否则换了策略
         # 产物还报「新鲜、跳过」，改了等于没改（feedback_fingerprint_book_deps）。
         book_deps=("frame_bar_strategy",),
         code_deps=("open_guji_cv.clustering.extractor", "open_guji_cv.clustering.crop_quality",
-                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam",
+                   "open_guji_cv.clustering.frame_bar_strategy", "open_guji_cv.seg.seam", "open_guji_cv.seg.frame_line",
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect"),
     )
 
     # ── 一列 ──────────────────────────────────────────────────────────
+    def _inner_frame_lines(self, ctx: RunContext, page: int, cells: PageCells, wins: PageWindows) -> dict:
+        """整页拟上下两道内框细线（原图坐标，seg.frame_line）：{"bottom": InnerFrameLine, "top": …}，拟不出的那边不给。"""
+        from ..seg.frame_line import fit_inner_frame_line
+        cols = [w for w in wins.columns if not (w.raised or w.head_raise_inner_y)]
+        periods = [cc.period for cc in cells.columns if cc.ok and cc.period]
+        if len(cols) < 3 or not periods:
+            return {}
+        gray = ctx.raw_page(page)
+        if gray.ndim == 3:
+            gray = gray[..., 0] if gray.shape[2] == 1 else np.asarray(gray.mean(axis=2), dtype=gray.dtype)
+        page_w = gray.shape[1]
+        ink = gray < INNER_INK_THRESHOLD
+        xs = [page_w - 1 - v for w in wins.columns for v in (w.left_line.x_at_top, w.right_line.x_at_top)]   # 右上原点 → 左上
+        x0, x1 = int(max(0, min(xs))), int(min(page_w, max(xs)))
+        cell_h = float(np.median(periods))
+        out = {}
+        for side, key in (("bottom", "border_bottom_y"), ("top", "border_top_y")):
+            hint = float(np.median([getattr(w, key) for w in cols]))
+            line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side)
+            if line is not None:
+                out[side] = line
+        return out
+
     def _page_frame_lines(self, ctx: RunContext, page: int, cells: PageCells) -> dict:
         """全页的框线线位（列图坐标）和线厚：各列框线离版框一样远，拿全页的实线定线位，淡线按线位认
         （extractor.page_frame_line_offsets）。"""
@@ -319,16 +397,17 @@ class CellShrinkStep(Step):
             from .seed_admit import SeedAdmitParams
             seal = page_occluded(ctx, page, SeedAdmitParams())
         frame_lines = self._page_frame_lines(ctx, page, cells)
-        out: list[ColumnChars] = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal)
+        inner = self._inner_frame_lines(ctx, page, cells, wins) if ctx.params_for(self).inner_frame_cut else {}  # type: ignore[attr-defined]
+        out: list[ColumnChars] = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, inner=inner)
                                   for cc in cells.columns]
-        alt = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, alt=True)
+        alt = [self._column_chars(ctx, page, cc, wins, page_w, frame_lines, seal, alt=True, inner=inner)
                for cc in cells.alt_columns]
         if alt:
             return {"char_index": PageChars(page=page, columns=out, alt_columns=alt)}
         return {"char_index": PageChars(page=page, columns=out)}
 
     def _column_chars(self, ctx: RunContext, page: int, cc: ColumnCells, wins: PageWindows, page_w,
-                      frame_lines: dict, seal: dict, alt: bool = False) -> ColumnChars:
+                      frame_lines: dict, seal: dict, alt: bool = False, inner: dict | None = None) -> ColumnChars:
         """一列字格 → ColumnChars。`alt`：row_segment `alt_cut` 的备选切法，字块键用 `alt_cell_key`、不做试切候选。"""
         if not cc.ok:
             return ColumnChars(col=cc.col, ok=False, error=cc.error)
@@ -336,6 +415,8 @@ class CellShrinkStep(Step):
         wrec = wins.column(cc.col)
         mapper = (ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
                                wrec.top_y, wrec.bottom_y) if wrec else None)
+        if inner and mapper is not None:
+            img = cut_inner_frame(img, mapper, inner, raised=bool(wrec.raised or wrec.head_raise_inner_y))
         step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         slot_to_pos = {c.slot: c.pos for c in cc.cells}
@@ -453,6 +534,20 @@ class CellShrinkStep(Step):
         if cc is None or not cc.ok:
             raise KeyError(f"第 {page} 页第 {col} 列没有可用的字格")
         img = ctx.image("column_image", column_key(page, col))
+        if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
+            wins: PageWindows = ctx.product("column_windows", page)
+            wrec = wins.column(col)
+            mkey = (ctx.book.id, page)
+            if mkey not in _INNER_MEMO:
+                while len(_INNER_MEMO) >= _RENDER_MEMO_MAX:
+                    _INNER_MEMO.pop(next(iter(_INNER_MEMO)))
+                _INNER_MEMO[mkey] = self._inner_frame_lines(ctx, page, cells, wins)
+            inner = _INNER_MEMO[mkey]
+            if inner and wrec is not None:
+                mapper = ColumnMapper(wins.page_size[0], wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                      wrec.top_y, wrec.bottom_y)
+                img = cut_inner_frame(img, mapper, inner,
+                                      raised=bool(wrec.raised or wrec.head_raise_inner_y))
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
@@ -466,6 +561,7 @@ class CellShrinkStep(Step):
 
 
 _RENDER_MEMO: dict = {}
+_INNER_MEMO: dict = {}     # (书, 页) → 整页内框线（render 逐格再生时不必每格重拟）
 _RENDER_MEMO_MAX = 4      # 页数；一页 9 列字块合计几 MB，再生基本按页顺序来
 
 
