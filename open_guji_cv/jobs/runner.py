@@ -24,6 +24,7 @@ from . import board as BOARD
 from . import exit_trace as XT
 from . import spec as SP
 from . import store as S
+from .notify import notify_submitters
 
 SEED = Path(os.environ.get("GUJI_JOBS_SEED", "/opt/guji-cv-seed"))
 VENV = Path(os.environ.get("GUJI_JOBS_VENV", "/opt/guji-venv"))
@@ -149,6 +150,9 @@ class Job:
             e["GUJI_NO_REUSE"] = "1"
         e["GUJI_JOB_ID"] = str(self.id)       # 跑批耗时记录（core/perf.py）带上单号，guji perf 能按单查
         e.update(self.spec.get("env") or {})
+        # 推库操作人：单上带了 GUJI_ACTOR（如 A31）就照旧；没带就缺省填执行方名字（GUJI_JOBS_WHO）
+        if not e.get("GUJI_ACTOR") and os.environ.get("GUJI_JOBS_WHO"):
+            e["GUJI_ACTOR"] = os.environ["GUJI_JOBS_WHO"]
         return e
 
     def sh(self, argv: list[str], *, write: bool = False, ok=(0,), outcome: str = "failed") -> str:
@@ -293,6 +297,13 @@ class Job:
     def checks(self) -> None:
         want = (self.spec.get("checks") or {}).get("human_chars")
         if want is None:
+            return
+        if not self.spec.get("base"):
+            # 从头跑（没有铺底包）：开跑前还没有 Step3 切分产物，人裁绑定必然是 0，比了只会误拦（QTW r8，11-03）。
+            # 绑定能不能对上要等 Step3 之后才看得出，这里只记一条结果、不拦。
+            self.db(S.add_result, self.id, self.aid, "check", "human_chars",
+                    data={"want": want, "got": None, "skipped": "no_base"})
+            self.ev(f"人裁绑定检查跳过：从头跑、没有铺底包（单上写应为 {want}）")
             return
         code = ("import sys;from open_guji_cv.feedback.lookup import human_chars;"
                 "print(len(human_chars(sys.argv[1])))")
@@ -549,6 +560,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                 if got is None:
                     # 空闲时也定期刷新看板：排队中的新单（别人刚交的）要在几分钟内出现在表里，不等有人收尾
                     BOARD.publish(db, min_gap=IDLE_BOARD_S)
+                    notify_submitters(db, say)      # 最后一条是被依赖拦下的（reap 标的），没有执行方收尾，在这里补发
                     if (until_empty and not idle_minutes) or time.time() - idle_since > idle_minutes * 60:
                         say(f"没有可跑的单，退出（本轮跑了 {done} 条）")
                         return done
@@ -569,6 +581,7 @@ def work(*, once: bool = False, until_empty: bool = True, idle_minutes: float = 
                     env_streak = 0
                 _remember_book(job["book"])
                 say(f"#{job['id']} → {outcome}")
+                notify_submitters(db, say)
                 done += 1
                 db(S.worker_seen, worker, state="idle", session=session, done=done)
                 BOARD.publish(db, force=True)

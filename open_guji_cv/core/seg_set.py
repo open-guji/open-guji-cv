@@ -2,7 +2,7 @@
 
 一套书 = `open_guji_cv/books/<套书>/` 下自管的切分代码。册 yaml 写 `seg_set:` 指定；不写按管线推：
 keben_body_v2 → siku_zongmu，keben_free → zengguang_youxue，modern_body → beixing。
-shiji_wyg（史記文淵閣本，写本）从殿本分叉，必须在册 yaml 里显式写。
+shiji_wyg（史記文淵閣本，写本）、quantangwen（全唐文）从殿本分叉，必须在册 yaml（或工作区基础配置）里显式写。
 
 ## 套书各自的实现
 
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-SEG_SETS: tuple[str, ...] = ("siku_zongmu", "shiji_wyg", "zengguang_youxue", "beixing")
+SEG_SETS: tuple[str, ...] = ("siku_zongmu", "shiji_wyg", "zengguang_youxue", "beixing", "quantangwen")
 
 PIPELINE_SEG_SET: dict[str, str] = {
     "keben_body_v2": "siku_zongmu",
@@ -29,6 +29,7 @@ PIPELINE_SEG_SET: dict[str, str] = {
 SEG_SET_PIPELINE: dict[str, str] = {
     "siku_zongmu": "keben_body_v2",
     "shiji_wyg": "keben_body_v2",
+    "quantangwen": "keben_body_v2",
     "zengguang_youxue": "keben_free",
     "beixing": "modern_body",
 }
@@ -39,6 +40,7 @@ BOOKS_DIR = Path(__file__).resolve().parent.parent / "books"
 
 _SIKU = "open_guji_cv.books.siku_zongmu."
 _SJ = "open_guji_cv.books.shiji_wyg."
+_QTW = "open_guji_cv.books.quantangwen."
 
 #: 套书 → {缺省实现模块: 这套书自己的模块}。史記是从殿本分叉出来的写本：先只分叉职名页（臣行拆分等写本专用逻辑），
 #: 别的步骤仍走缺省实现；以后哪一步要为写本改，就把那个模块复制进 books/shiji_wyg/ 再登记在这里。
@@ -46,6 +48,13 @@ OVERRIDES: dict[str, dict[str, str]] = {
     "shiji_wyg": {
         _SIKU + "roster_segment": _SJ + "roster_segment",
         _SIKU + "roster_glyph": _SJ + "roster_glyph",
+        _SIKU + "jiazhu_step": _SJ + "jiazhu_step",
+    },
+    # 全唐文（嘉慶內府本）：2026-11-04 从殿本分叉 Step3 行切分（row_boundaries＋jiazhu_split），
+    # 放全唐文专用的「一行就完的雙行小注」等；别的步骤仍走殿本的。册配置写 `seg_set: quantangwen`。
+    "quantangwen": {
+        _SIKU + "row_boundaries": _QTW + "row_boundaries",
+        _SIKU + "jiazhu_split": _QTW + "jiazhu_split",
     },
 }
 

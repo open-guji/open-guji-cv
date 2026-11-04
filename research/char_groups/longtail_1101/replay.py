@@ -55,9 +55,9 @@ if a.answers and os.path.exists(a.answers):
         e = json.loads(l); ANS[e["key"]] = e
 _CUR = [None]
 _e0 = _cl._entry
-def _entry2(group, system, ver, left, right, members, model, effort, cache, client, cell):
+def _entry2(group, system, ver, left, right, members, model, effort, cache, client, cell, *rest):
     _CUR[0] = cell
-    return _e0(group, system, ver, left, right, members, model, effort, cache, client, cell)
+    return _e0(group, system, ver, left, right, members, model, effort, cache, client, cell, *rest)   # rest＝pending_reason，原样透传进裁定事件
 _cl._entry = _entry2
 class _SessionClient:
     def ask(self, system, user, members, model, effort):

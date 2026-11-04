@@ -374,6 +374,18 @@ def _cmd_book_split(args) -> None:
     print("已写本机数据目录。推库：guji db push -w <工作区>")
 
 
+def cmd_pagekinds(args) -> None:
+    """页型对账（只读）：册配置点名的 / 页型规则判的 / 最后怎么处理的，对不上的列出来。见 `ops/page_kinds_report.py`。"""
+    from .ops import page_kinds_report as PKR
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    res = PKR.build(eng.book, eng.store, pages)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        PKR.print_report(res)
+
+
 def cmd_book(args) -> None:
     if args.action == "split":
         return _cmd_book_split(args)
@@ -1563,6 +1575,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "book": cmd_book,
+    "pagekinds": cmd_pagekinds,
     "export": cmd_export,
     "fp-migrate": cmd_fp_migrate,
     "cache": cmd_cache,
@@ -1586,7 +1599,7 @@ def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
 #: `status`／`collate` 只读、不写产物——认 `GUJI_WORKSPACE` 兜底顶多让人看错报告，
 #: 不会像 `pipeline`/`step` 那样把真产物静默写进错的工作区，所以任务卡 #54 第10条
 #: 单给这两条开例外，其余命令仍照 2026-09-19 定的规矩必须显式 `-w`。
-ENV_FALLBACK_COMMANDS = {"status", "collate"}
+ENV_FALLBACK_COMMANDS = {"status", "collate", "pagekinds"}
 
 
 def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") -> Path | None:
@@ -1708,6 +1721,10 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
 PLUGIN_GROUP = "guji.commands"
 
 
+#: 由插件（而非 cv 自带）登记进 COMMANDS_V2 的命令名
+_PLUGIN_ADDED: set[str] = set()
+
+
 def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
     """装了 guji-manager（或别的插件）时，把它提供的子命令并进 `guji`（拆分 M4，doc/design/拆分-pipeline与manager.md）。
 
@@ -1729,7 +1746,8 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
             continue
         called = set()    # 几条命令共用一个 add_parser 时只调一次；任一条 cv 自带就整个 add_parser 让给 cv
         for name, (add_parser, handler) in commands.items():
-            if name in COMMANDS_V2 or _plugin_too_old(module, name):
+            # COMMANDS_V2 里上回由插件登记的不算 cv 自带（同一进程多次建 parser 时，如测试、控制台）
+            if (name in COMMANDS_V2 and name not in _PLUGIN_ADDED) or _plugin_too_old(module, name):
                 continue
             if add_parser not in called:
                 if any(n in sub.choices for n, (ap, _) in commands.items() if ap is add_parser):
@@ -1737,6 +1755,7 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
                 add_parser(sub)
                 called.add(add_parser)
             COMMANDS_V2[name] = handler
+            _PLUGIN_ADDED.add(name)
             added.append(name)
     return added
 
@@ -1748,6 +1767,21 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "source": "拆分 P2 第二批，2026-11-02；原图 R2",
     "cellvotes": "拆分 P2 第二批，2026-11-02；网站格级投票",
     "freeze": "拆分 P2 第二批，2026-11-02；冻结登记",
+    "exp": "拆分 P2 第三批，2026-11-04",
+    "snap": "拆分 P2 第三批，2026-11-04",
+    "archive": "拆分 P2 第三批，2026-11-04",
+    "release": "拆分 P2 第三批，2026-11-04",
+    "deploy": "拆分 P2 第三批，2026-11-04",
+    "events": "拆分 P2 第三批，2026-11-04",
+    "gold": "拆分 P2 第三批，2026-11-04",
+    "batch": "拆分 P2 第三批，2026-11-04",
+    "label-batch": "拆分 P2 第三批，2026-11-04",
+    "eval": "拆分 P2 第三批，2026-11-04",
+    "check": "拆分 P2 第三批，2026-11-04",
+    "groups": "拆分 P2 第三批，2026-11-04",
+    "cards": "拆分 P2 第三批，2026-11-04",
+    "progress": "拆分 P2 第三批，2026-11-04",
+    "collate": "拆分 P2 第三批，2026-11-04",
 }
 #: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
 #: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
@@ -1756,6 +1790,21 @@ MIN_MANAGER_VERSION: dict[str, str] = {
     "source": "0.2.0",
     "cellvotes": "0.2.0",
     "freeze": "0.2.0",
+    "exp": "0.3.0",
+    "snap": "0.3.0",
+    "archive": "0.3.0",
+    "release": "0.3.0",
+    "deploy": "0.3.0",
+    "events": "0.3.0",
+    "gold": "0.3.0",
+    "batch": "0.3.0",
+    "label-batch": "0.3.0",
+    "eval": "0.3.0",
+    "check": "0.3.0",
+    "groups": "0.3.0",
+    "cards": "0.3.0",
+    "progress": "0.3.0",
+    "collate": "0.3.0",
 }
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
@@ -1800,8 +1849,8 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
 #:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
-    "cli_glyph_db", "cli_exp", "cli_db", "cli_products",
-    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf", "cli_model",
+    "cli_glyph_db", "cli_db", "cli_products",
+    "jobs.cli", "cli_glyph", "cli_close", "cli_perf", "cli_model",
 )
 
 
@@ -1995,6 +2044,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     _add_override(p)
 
 
+    p = sub.add_parser("pagekinds", help="[v2] 页型对账（只读）：册配置点名的页型 / 页型规则判的 / 最后怎么处理的，对不上的列出来")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all", help="页范围，缺省整册")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+
     p = sub.add_parser("export", help="[v2] 导出：md = Step9 文本；format = lines.md/pages.json/norm.json（只读产物）")
     p.add_argument("action", choices=["md", "format"])
     p.add_argument("book")
@@ -2121,6 +2178,12 @@ def main(argv: list[str] | None = None) -> None:
     if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
         from .core.book_config import merge_override_env
         os.environ["GUJI_BOOK_OVERRIDE"] = merge_override_env(args.override)   # 叠在已有的覆盖上（准备脚本记的改值），同键 --override 胜
+    if args.command in ("step", "pipeline"):   # 步内分段计时（不改 Step 源码、不动指纹，见 cli_perf.PERF_HOOKS）
+        try:
+            from .cli_perf import install_hooks
+            install_hooks()
+        except Exception:  # noqa: BLE001 —— 统计是附带的
+            pass
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()

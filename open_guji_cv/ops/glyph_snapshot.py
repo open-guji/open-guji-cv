@@ -300,8 +300,11 @@ def _dump(man: dict) -> str:
     return json.dumps(head, ensure_ascii=False, indent=1)[:-2] + ',\n "items": [\n' + body + "\n ]\n}\n"
 
 
-def snapshot(ws: Path, *, note: str = "", require_clean: bool = True, build: bool = True) -> dict:
-    """出新号 g<N>（N = 已有最大号 + 1）。只写本机：清单在数据目录，推中心库走 ``guji db push``。"""
+def snapshot(ws: Path, *, note: str = "", require_clean: bool = True, build: bool = True, gate_waive: str = "") -> dict:
+    """出新号 g<N>（N = 已有最大号 + 1）。只写本机：清单在数据目录，推中心库走 ``guji db push``。
+
+    出号前过出版护栏（`ops/glyph_release_gate`：多字头实例、人裁×人裁冲突），不过就拒出；``gate_waive`` 给理由可照出，
+    理由记进清单 ``gate``。``build`` 时查新建的钉版库，否则查当前 ``glyph.db``。"""
     from ..core.workspace import central_marker
     ws = Path(ws)
     m = central_marker(ws)
@@ -335,16 +338,29 @@ def snapshot(ws: Path, *, note: str = "", require_clean: bool = True, build: boo
     out = {"pin": n, "digest": digest, "rev": rev, "items": len(items),
            "txt": sum(1 for i in items if i["type"] == "txt"), "png": sum(1 for i in items if i["type"] == "png"),
            "borrow": borrow, "manifest": str(mp)}
+    from .glyph_release_gate import enforce
     if build:
         try:
             out["db"] = build_pinned_db(ws, n, force=True)
             with _ws(ws):
+                man["gate"] = enforce(pinned_db_path(n), waive=gate_waive, what=f"出 g{n}")
                 man["fingerprints"] = _fingerprints(pinned_db_path(n))
         except BaseException:
-            mp.unlink(missing_ok=True)                  # 建不出库的快照不算数
+            mp.unlink(missing_ok=True)                  # 建不出库、没过护栏的快照不算数
+            with _ws(ws):
+                pinned_db_path(n).unlink(missing_ok=True)
             raise
-        mp.write_text(_dump(man), encoding="utf-8")
         out["fingerprints"] = man["fingerprints"]
+    else:
+        try:
+            with _ws(ws):
+                from ..core.workspace import glyph_db_path
+                man["gate"] = enforce(glyph_db_path(), waive=gate_waive, what=f"出 g{n}")
+        except BaseException:
+            mp.unlink(missing_ok=True)
+            raise
+    mp.write_text(_dump(man), encoding="utf-8")
+    out["gate"] = man["gate"]
     return out
 
 

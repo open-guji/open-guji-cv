@@ -1786,6 +1786,71 @@ def strip_jiazhu_half_line(patch: np.ndarray, frame_y: float, cell_h: float, bot
     return out
 
 
+#: 写本内框细线（`cell_shrink.jiazhu_strip_rules`）：一列一列画、常断成几截，也不水平，满宽、半格的线行判据都认不出
+#: （SJ r8：首格多一横，怨→惡、一→二、曰→白）。本页要量得出半格线位（`page_frame_line_offsets`，说明这页有内框细线），
+#: 本格在线位 ±INNER_BAND_REACH 格高里找扁的连通体（整个落在这范围里、不厚过 INNER_BAND_THICK 格高，字头压线的不动），
+#: 以最宽一截的中线为准、中线离它 INNER_BAND_ALIGN 格高以内的几截算一道线：合起来铺到 INNER_BAND_COV 窗宽、
+#: 最宽一截够 INNER_BAND_SEG 窗宽、线下还有字，才抹白
+INNER_BAND_REACH = 0.12
+INNER_BAND_THICK = 0.09
+INNER_BAND_ALIGN = 0.04
+INNER_BAND_COV = 0.3
+INNER_BAND_SEG = 0.2
+
+
+def inner_frame_band_mask(patch: np.ndarray, cell_h: float, bottom: bool,
+                          line_ys: tuple[tuple[float, float], ...] = ()) -> np.ndarray | None:
+    """列端格（图块坐标）里认作内框细线的墨（布尔图，同图块大小）；认不出返回 None。只判不改，
+    切坏检测（`frame_residue`）与 `strip_inner_frame_band` 共用这一个定义。"""
+    if not line_ys:
+        return None
+    if bottom:
+        h0 = patch.shape[0]
+        m = inner_frame_band_mask(patch[::-1], cell_h, False, tuple((h0 - ly, th) for ly, th in line_ys))
+        return None if m is None else np.ascontiguousarray(m[::-1])
+    h, w = patch.shape[:2]
+    if w < 10 or h < 10:
+        return None
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(binary, 8)
+    reach, thick, align = INNER_BAND_REACH * cell_h, INNER_BAND_THICK * cell_h, INNER_BAND_ALIGN * cell_h
+    hit = None
+    for ly, _th in line_ys:
+        lo, hi = ly - reach, ly + reach
+        segs = [i for i in range(1, n)
+                if stats[i, cv2.CC_STAT_TOP] >= lo and stats[i, cv2.CC_STAT_TOP] + stats[i, cv2.CC_STAT_HEIGHT] - 1 <= hi
+                and stats[i, cv2.CC_STAT_HEIGHT] <= thick and stats[i, cv2.CC_STAT_WIDTH] >= stats[i, cv2.CC_STAT_HEIGHT]]
+        if not segs:
+            continue
+        mid = {i: stats[i, cv2.CC_STAT_TOP] + (stats[i, cv2.CC_STAT_HEIGHT] - 1) / 2 for i in segs}
+        widest = max(segs, key=lambda i: stats[i, cv2.CC_STAT_WIDTH])
+        if stats[widest, cv2.CC_STAT_WIDTH] < INNER_BAND_SEG * w:
+            continue
+        keep = [i for i in segs if abs(mid[i] - mid[widest]) <= align]
+        cover = np.zeros(w, dtype=bool)
+        for i in keep:
+            cover[stats[i, cv2.CC_STAT_LEFT]:stats[i, cv2.CC_STAT_LEFT] + stats[i, cv2.CC_STAT_WIDTH]] = True
+        if cover.sum() < INNER_BAND_COV * w:
+            continue
+        low = max(stats[i, cv2.CC_STAT_TOP] + stats[i, cv2.CC_STAT_HEIGHT] for i in keep)
+        mask = np.isin(lab, keep)
+        if not (binary[low:].astype(bool) & ~mask[low:]).any():
+            continue                                  # 线下没字：只有一横的字（「一」）
+        hit = mask if hit is None else hit | mask
+    return hit
+
+
+def strip_inner_frame_band(patch: np.ndarray, cell_h: float, bottom: bool,
+                           line_ys: tuple[tuple[float, float], ...] = ()) -> np.ndarray:
+    """列端格全页半格线位附近的内框细线抹白：断成几截、略斜的也认（判据见 `inner_frame_band_mask`）。认不出就原样返回。"""
+    m = inner_frame_band_mask(patch, cell_h, bottom, line_ys)
+    if m is None:
+        return patch
+    out = patch.copy()
+    out[m] = 255
+    return out
+
+
 def carve_end_edge(patch: np.ndarray, bottom: bool = True) -> np.ndarray:
     """列端图块的曲线边：沿紧贴字身外沿、绕开版框的路径切，路径外抹白。
 
@@ -3126,6 +3191,16 @@ class CharExtractor:
                             patch = np.hstack([strip_jiazhu_half_line(np.ascontiguousarray(patch[:, a_:b_]), fy_p,
                                                                       cell_h_ref, bottom=idx == tail_cell, line_ys=hys)
                                                for a_, b_ in ((0, k), (k, patch.shape[1]))])
+                if near_frame and gmeta.get("jiazhu_rules"):
+                    # 写本内框细线断成几截的（满宽、半格线行都认不出），按全页半格线位认线带；夹注格每半格各认
+                    hys = tuple((float(v) - (sy0 + y0), float(th)) for v, th in gmeta.get(
+                        "frame_half_lines_bottom" if idx == tail_cell else "frame_half_lines_top") or ())
+                    k = int(round(float(cell["jiazhu_cx"]) - sx0)) if jz_rules and paired else None
+                    parts = [(0, patch.shape[1])] if k is None or not 8 <= k <= patch.shape[1] - 8 \
+                        else [(0, k), (k, patch.shape[1])]
+                    patch = np.hstack([strip_inner_frame_band(np.ascontiguousarray(patch[:, a_:b_]), cell_h_ref,
+                                                              bottom=idx == tail_cell, line_ys=hys)
+                                       for a_, b_ in parts])
                 if jz_rules:
                     patch = strip_side_rule(patch, float(sx0), left_x, right_x)
                 # 界行／版框竖线：放在剥列端横框线之后——横框线连着竖框和字，剥之前竖线跟字之间没有白列。

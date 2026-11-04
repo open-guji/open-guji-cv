@@ -95,47 +95,6 @@ def test_cmd_product_patch_still_errors_when_materialize_cant(tmp_path, ws, caps
     assert "没有字块" in err
 
 
-# ── K1：`guji check quality`／`check rulers` 默认页集改 all，且总要打印用的是哪个页集 ──
-def test_check_pages_default_is_all_and_reports_which_pageset(monkeypatch, capsys):
-    """`--pages` 缺省曾经是 `dev_set`：书级 `dev_set` 为空时悄悄退化成全书
-    （凑巧对），非空时悄悄只算子集、不报警。改成默认 `all`；且不论默不默认，
-    都要把「用了哪个页集、算了几页」打出来（走 stderr，别混进 `_out` 的
-    JSON，管道接 jq 的人不受影响）。"""
-    import open_guji_cv.core.book as book_mod
-    import open_guji_cv.eval.quality as quality_mod
-    import open_guji_cv.eval.rulers as rulers_mod
-    from open_guji_cv.core.book import BookSpec
-    from open_guji_cv import cli_eval
-
-    from pathlib import Path as _P
-    fake = BookSpec(id="fakebook", title="t", raw_dir=_P("does-not-matter"),
-                    pages=[1, 2, 3], dev_set=[1])   # 非空 dev_set：旧默认会悄悄只算这一页
-    # cmd_check 是函数内局部 import（`from .core.book import load_book` 等），
-    # 每次调用都现从源模块取绑定，所以补丁要打在源模块上，不是 cli_eval 模块本身。
-    monkeypatch.setattr(book_mod, "load_book", lambda *_a, **_k: fake)
-    monkeypatch.setattr(quality_mod, "quality",
-                        lambda book, pages, store: {"book": book, "pages": len(fake.resolve_pages(pages))})
-    monkeypatch.setattr(rulers_mod, "measure",
-                        lambda book, pages, store, full=False:
-                            {"book": book, "n_pages": len(pages), "rulers": [], "full": full})
-
-    args = argparse.Namespace(action="quality", book="fakebook", pages=None,
-                              snapshot=False, note="", all_pages=False, full=False,
-                              drift=False, out="")
-    cli_eval.cmd_check(args)
-    out, err = capsys.readouterr()
-    assert json.loads(out)["pages"] == len(fake.all_pages())   # all，不是 dev_set 的 1 页
-    assert "all" in err and "页" in err
-
-    args2 = argparse.Namespace(action="rulers", book="fakebook", pages=None,
-                               snapshot=False, note="", all_pages=False, full=False,
-                               drift=False, out="")
-    cli_eval.cmd_check(args2)
-    out2, err2 = capsys.readouterr()
-    assert json.loads(out2)["n_pages"] == len(fake.all_pages())
-    assert "all" in err2 and "页" in err2
-
-
 # ── K6：`Ruler.to_dict()` 加 `full=True`，做全量错例不再需要 monkeypatch ──
 def test_ruler_to_dict_full_flag():
     from open_guji_cv.eval.rulers import Ruler

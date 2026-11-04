@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, KGC_CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -571,7 +571,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     "kgc": GroupSpec(
         id="kgc", name="冠寇冦宼㓂", members=frozenset("冠寇冦宼㓂"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/kgc", overlaps=("cp_kou4",),
-        flow=FlowSpec((CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
+        flow=FlowSpec((KGC_CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
         note="冠／寇：按文意定族（冠＝衣冠、弱冠；寇＝盜寇、流寇），寇族内按书级码位归一；须与整理本同字才补放；与 cp_kou4 共用 宼寇冦；只补放。"),
     # 塡／愼（2026-10-28，sheldon 定「用塡，另外要和慎区分开」）：整理本作 塡 填、库首位常是 愼 慎（右半都是 眞）。
     # 按文意定族（塡＝填補、填詞；愼＝謹慎、慎重），族内各写法按书级码位归一；须与整理本同字才补放；只补放。
@@ -805,6 +805,12 @@ for _g in VIS_GROUPS:
 
 #: 并掉或改名的组：旧 id → 新 id。册配置 `group_flow` 里还写着旧 id 的照新 id 读（`flow_names`），等成批上线改册配置时再换掉。
 RENAMED: dict[str, str] = {"qg": "zy"}
+
+
+def generic_flow_names() -> tuple:
+    """新书缺省跑的字组：不含码位组 ``cp_*``。码位组是殿本逐对看图定的码位结论（书级事实，多书设计 A3，sheldon 11-04 定），
+    别的书要用得在本书重新核过、显式写进 `group_flow`；殿本的基础配置本来就显式写了全集。"""
+    return tuple(g for g in FLOW_GROUPS if not g.startswith("cp_"))
 
 
 def flow_names(names) -> tuple:

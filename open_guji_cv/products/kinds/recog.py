@@ -303,6 +303,14 @@ class PageAdmit(BaseModel):
     n_review: int = 0
     n_excluded: int = 0        # 命中排除名单（图块切坏/非字）：不进库也不出审查卡
     columns: list[ColumnAdmit] = Field(default_factory=list)
+    alt_cols: list[int] = Field(default_factory=list)   # alt_select="admit"：准入后定下改用备选切法的列；空不落盘
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_alt(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("alt_cols"):
+            d.pop("alt_cols", None)
+        return d
 
     def column(self, col: int) -> ColumnAdmit | None:
         return next((c for c in self.columns if c.col == col), None)
@@ -361,13 +369,30 @@ class PageAlignRef(BaseModel):
     coord_note: str = ""                                        # 整页没走坐标对位时的原因
     coord_conflict_ids: list[str] = Field(default_factory=list)  # 因「与现役对位冲突」退回的列里，坐标字≠现役 equal 字的格（全记，不止第一格；坐标判空的不计）
     alt_cols: list[int] = Field(default_factory=list)  # row_segment `alt_cut`：改用备选切法的列（下游读这些列一律读 alt_columns）；空不落盘
+    # `AlignRefParams.alt_select="admit"`（第 9 轮，史记）：align_ref 不挑列，只出候选列与备选那份坐标对位，
+    # 由 seed_admit 两套都准入后按列定（见 `products.alt_view`）。空不落盘。
+    alt_cand: list[int] = Field(default_factory=list)
+    alt_draft: "AltDraft | None" = None
 
     @model_serializer(mode="wrap")
     def _drop_empty_alt(self, handler):
         d = handler(self)
-        if isinstance(d, dict) and not d.get("alt_cols"):
-            d.pop("alt_cols", None)
+        if isinstance(d, dict):
+            for k in ("alt_cols", "alt_cand", "alt_draft"):
+                if not d.get(k):
+                    d.pop(k, None)
         return d
+
+
+class AltDraft(BaseModel):
+    """候选列按备选切法重做的坐标对位（只含候选列）：合并方式见 `products.alt_view.merge_alt`。"""
+    coord: list[CoordRec] = Field(default_factory=list)
+    coord_cols: list[int] = Field(default_factory=list)
+    coord_fallback: dict[str, str] = Field(default_factory=dict)
+    coord_conflict_ids: list[str] = Field(default_factory=list)
+
+
+PageAlignRef.model_rebuild()
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(

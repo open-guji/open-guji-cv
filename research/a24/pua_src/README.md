@@ -17,3 +17,10 @@ r2 的 425 格「整理本缺字」里，新图源（siku-qiefen-v2）每页 `te
 ## 降审：已放行但与码表不一致的 25 格（A31 11-03 定）
 `build_demote_events.py`：对 `extract_cells.py`（`CELLS=` 清单）的输出，码表字≠现放行字的格出 `route=code_conflict`、`admit_ok=False` 的 src-1 裁定；`seed_admit` 的 vis_rulings 遍把**非人裁**的已放行格降回待审（doubt `src_code_conflict`，`demoted_from.by=src_code_conflict`）。
 回放（`replay_pass-conflict.tsv`）：25 格里 16 格降审，9 格是人裁（provenance human）不碰——人裁与码表冲突要人来改，已单列报 A31。seed_admit 版本 1.32。
+
+## 乱码闸／影子闸（r3，A24 11-04）
+`build_gb_events.py`：r3 的 95 格里，新图源文本层与整理本同字（锚点≥1、页匹配≥0.85）的 62 格按整理本放行，整理本无字取文本层（載、△）2 格，共 64 条 src-1、subclass=GB 裁定。拼图目检：图上是页边／格线残字，机器读错，整理本全对。回放（`replay_pass-gb.tsv`）64/64 放行、0 错字。seed_admit 1.33。
+其余 31 格不动：对位失败 18（夹注子格 a/b、页缘）、文本层≠整理本 8、私用码 1（F109D，等码表）、△ 等见 `report-gb-r3.tsv`。
+
+## 「这位没字」按文本层取字（r3/r4，A24 11-04）
+`build_blank_events.py`：文本层有真字（锚点≥3、页匹配≥0.85）；字＝库首位 → strict（放行）；≠库首位 → ext（拼图目检全对，是否放行等 sheldon 定）。r4：strict 4、ext 28，回放 0 错字。`extract_cells.py` 新增 `CELLS=`/`OUTDIR=` 环境变量，可对任意格号清单取文本层。

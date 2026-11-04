@@ -588,3 +588,42 @@ def test_group_flow_occluded_admits_only_when_char_is_default(monkeypatch):
 def test_group_flow_occluded_still_blocked_when_off(monkeypatch):
     net, r = _flow_occluded(monkeypatch, "黃", occluded_variant_first=False)
     assert r.admit      # 关着时 blocked() 为真（fake 里断言过），这里的放行是 fake 硬放的，不退回
+
+
+# ── R4 本书 codepoints 已归一的异体对（lane_coord_codepoint_variant）──────────────
+
+def _r4cp(cands, coord_char, **params):
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.94)", "上下文 margin 不足(0.08)"], char=cands[0][0])})
+    cp = {"清": "淸"}
+    canon = lambda c: cp.get(c, c)    # noqa: E731
+    return _run(out, lib={5: cands}, coord=_ids({5: coord_char}), canon=canon, lane_coord=True, **params)
+
+
+def test_r4_codepoint_variant_off_by_default_stays():
+    n, rs = _r4cp([("淸", 0.94), ("精", 0.80)], "清")
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "lib_variant"
+
+
+def test_r4_codepoint_variant_admits_book_codepoint():
+    n, rs = _r4cp([("淸", 0.94), ("清", 0.93), ("精", 0.80)], "清", lane_coord_codepoint_variant=True)
+    assert n == 1 and rs[5].char == "淸" and rs[5].channel == "coord_fallback"
+    assert rs[5].evidence["lane"]["via"] == "lib_coord_codepoint"
+    assert rs[5].evidence["lane"]["variant_norm"] == "codepoint"
+
+
+def test_r4_codepoint_variant_needs_gap_over_other_chars():
+    n, rs = _r4cp([("淸", 0.94), ("精", 0.938)], "清", lane_coord_codepoint_variant=True)
+    assert n == 0 and not rs[5].admit
+
+
+def test_r4_codepoint_variant_skip_list():
+    n, rs = _r4cp([("淸", 0.94), ("精", 0.80)], "清", lane_coord_codepoint_variant=True,
+                  lane_coord_codepoint_skip="淸")
+    assert n == 0 and not rs[5].admit
+
+
+def test_r4_codepoint_variant_params_out_of_fingerprint_when_off():
+    """缺省关时三个参数不进指纹（别的书不因此重跑）。"""
+    d = SeedAdmitParams(db_path="x").model_dump(mode="json")
+    assert not {"lane_coord_codepoint_variant", "lane_coord_codepoint_gap", "lane_coord_codepoint_skip"} & set(d)

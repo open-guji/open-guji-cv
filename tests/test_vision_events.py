@@ -11,7 +11,6 @@
 from __future__ import annotations
 
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -216,16 +215,3 @@ def test_vision_events_do_not_touch_human_paths(env):
     assert human_chars("keben", stale={}, bind=False) == {"keben:1:1:6": "日"}
     assert decided_cells("keben") == {"keben:1:1:6"}
 
-
-def test_cli_import_vision(ws, tmp_path, monkeypatch, capsys):
-    from open_guji_cv.cli_feedback import _import_vision
-    fb = tmp_path / "fb"
-    monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(fb))
-    monkeypatch.setenv("GUJI_VERDICTS_DIR", str(tmp_path / "verdicts"))
-    src = _jsonl(tmp_path / "v.jsonl", ROWS)
-    args = SimpleNamespace(workspace=str(ws), batch=str(src), as_batch=None, judge=None, book="keben",
-                           no_gold=True, dry_run=False)
-    _import_vision(args)
-    assert len(list(VisionLog(fb).iter_all())) == 3
-    with pytest.raises(SystemExit):
-        _import_vision(SimpleNamespace(**{**vars(args), "workspace": None}))

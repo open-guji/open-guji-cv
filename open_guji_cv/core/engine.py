@@ -70,10 +70,15 @@ def _module_raw_hash(mod_name: str) -> str:
 
 def _fingerprint_name(mod_name: str) -> str:
     """进指纹的模块名。搬过家的模块（`code_equiv.MOVED`）、代码仍等价于搬家时登记的那一版时，
-    用搬家前的名字，产物不过期；之后真改了代码，等价不再成立，用新名字，照常判过期。"""
-    from .code_equiv import MOVED
+    用搬家前的名字，产物不过期；之后真改了代码，等价不再成立，用新名字，照常判过期。
+    套书分叉出来的复制（`code_equiv.FORKED`，原模块还在）同理：复制还没改过时用原模块的名字。"""
+    from .code_equiv import FORKED, MOVED
+    h = _module_source_hash(mod_name)
+    fk = FORKED.get(mod_name)
+    if fk and h == fk[1]:
+        mod_name = fk[0]            # 分叉复制没改过：按原模块记，原模块自己搬过家的再往下换（同哈希）
     mv = MOVED.get(mod_name)
-    if mv and _module_source_hash(mod_name) == mv[1]:
+    if mv and h == mv[1]:
         return mv[0]
     return mod_name
 

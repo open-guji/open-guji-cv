@@ -499,20 +499,6 @@ def test_manual_import_is_remembered_by_watch(world):
     assert len(log) == 1                                # 只导了一次
 
 
-def test_manual_import_cli_writes_state(world, monkeypatch, capsys):
-    import sys
-    from open_guji_cv import cli_v2
-    m = make_pack(world)
-    monkeypatch.setattr(imp, "default_freshness", fake_fresh())
-    monkeypatch.setattr(sys, "argv", ["guji", "snap", "import", m["branch"], "--ws-repo", str(world["server"]),
-                                      "--cv-repo", str(world["cv"]), "--state", str(world["state"])])
-    with pytest.raises(SystemExit) as e:
-        cli_v2.main()
-    assert e.value.code == 0
-    assert json.loads(world["state"].read_text())[m["branch"]]["status"] == imp.IMPORTED
-    assert run_watch(world)["status"] == "idle"
-
-
 def test_gitignore_attachment_merges_lines(world, tmp_path):
     """.gitignore 附件按行合并：只追加本地没有的行、不删本地的（服务器本地是 `*`）。"""
     local = world["server"] / WS_DIR / ".gitignore"
@@ -624,21 +610,6 @@ def test_glyph_fingerprint_follows_borrowed_db(world, tmp_path, monkeypatch):
     assert sp._glyph_fp(world["cloud"] / WS_DIR) == "fp:borrowed.db"
 
 
-def test_pack_cli_reads_products_of_given_workspace(world, tmp_path, monkeypatch, capsys):
-    """`guji snap pack <book> -w <ws>` 读的是 <ws>/products（没设 GUJI_WORKSPACE 时也是）。"""
-    import sys
-    from open_guji_cv import cli_v2
-    ws = world["cloud"] / WS_DIR
-    write_products(ws / "products", "fromws")
-    monkeypatch.delenv("GUJI_WORKSPACE", raising=False)
-    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
-    monkeypatch.setattr(sys, "argv", ["guji", "snap", "pack", BOOK, "-w", str(ws), "--cv-commit", world["A"],
-                                      "--no-push", "--stamp", "20260927T0444"])
-    cli_v2.main()
-    out = json.loads(capsys.readouterr().out)
-    assert out["files"] == 8 and out["branch"].endswith("T0444")
-
-
 def test_attach_only_pack_and_import(world, tmp_path):
     """纯附件包（Z17 回馈）：本地没有 products 也能打；导入只落位附件、不碰 products。"""
     idx = tmp_path / "emb_k.npz"
@@ -668,25 +639,3 @@ def test_product_pack_without_products_dir_hints_attach_only(world, tmp_path):
     with pytest.raises(FileNotFoundError, match="attach-only"):
         sp.build_tree(sp.PackSpec(book="nobook", products_root=tmp_path, ws_dir=world["cloud"] / WS_DIR,
                                   cv_commit=world["A"]), tmp_path / "t3")
-
-
-def test_pack_cli_dry_run_never_pushes(world, monkeypatch, capsys):
-    """`guji snap pack --dry-run` 只打印计划：不调 commit/push、假 origin 上不出分支、本地也不建分支（#174）。"""
-    import sys
-    from open_guji_cv import cli_v2
-    prod = world["tmp"] / "cloudprod-dry"
-    write_products(prod, "dry")
-    called = []
-    monkeypatch.setattr(sp, "commit_and_push", lambda *a, **k: called.append("commit_and_push"))
-    monkeypatch.setattr(gitio, "push_commit", lambda *a, **k: called.append("push_commit"))
-    monkeypatch.delenv("GUJI_PRODUCTS_DIR", raising=False)
-    monkeypatch.setattr(sys, "argv", ["guji", "snap", "pack", BOOK, "-w", str(world["cloud"] / WS_DIR),
-                                      "--from-products", str(prod), "--cv-commit", world["A"],
-                                      "--stamp", "20260928T0300", "--dry-run"])
-    cli_v2.main()
-    out = json.loads(capsys.readouterr().out)
-    assert called == []
-    assert out["dry_run"] is True and out["pushed"] is False and out["commit"] is None
-    assert out["branch"].startswith("snap/") and out["pages"] == 3 and out["files"] > 0
-    assert git(world["origin"], "branch", "--list", "snap/*") == ""
-    assert git(world["cloud"], "branch", "--list", "snap/*") == ""

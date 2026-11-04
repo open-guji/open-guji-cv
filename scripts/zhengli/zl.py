@@ -1134,6 +1134,9 @@ def main(argv=None):
             p.add_argument("--why", required=True)
             p.add_argument("--waited-min", type=float, default=0)
     a = ap.parse_args(argv)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     return a.fn(a) or 0
 
 

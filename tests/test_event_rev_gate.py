@@ -191,3 +191,40 @@ def test_db_status_counts_dropped(tmp_path):
     d = _data(tmp_path, {"vol11": 3})
     _write_raw(d, "a", [_ev(1, rev=2, batch="a"), _ev(2, batch="a"), _ev(3, rev=3, batch="a")])
     assert _rev_gate_dropped(d) == {"vol11": 2}
+
+
+# ── 过闸结果缓存（`EventLog._gate_cached`，2026-11-04）──────────────────
+
+def test_cached_gate_follows_yaml_rev_change(tmp_path):
+    """记住的过闸结果只在问过的各册 rev 都没变时复用；册 yaml 换了 rev 立刻按新 rev 重判，丢弃条数跟着变。"""
+    import os
+    d = _data(tmp_path, {"vol11": None})
+    log = EventLog(d / "feedback")
+    log.append([_ev(1, rev=3), _ev(2, rev=2), _ev(3, book="vol01", rev=None)])   # 写时还没切图源
+    (d / "books" / "vol11.yaml").write_text("id: vol11\nsource_rev: 3\n", encoding="utf-8")
+    keys = lambda: [e.target.key for e in log.iter_all_cached()]
+    assert keys() == ["vol11:3:1:1", "vol01:3:1:3"]
+    assert log.dropped == {"b": {"vol11": 1}}
+    first = list(log.iter_all_cached())
+    assert list(log.iter_all_cached())[0] is first[0]                    # 命中
+    y = d / "books" / "vol11.yaml"
+    y.write_text("id: vol11\nsource_rev: 2\n", encoding="utf-8")
+    os.utime(y, ns=(y.stat().st_atime_ns, y.stat().st_mtime_ns + 10**9))
+    assert keys() == ["vol11:3:1:2", "vol01:3:1:3"]                       # 按新 rev 重判
+    assert log.dropped == {"b": {"vol11": 1}}
+    (d / "books" / "vol01.yaml").write_text("id: vol01\nsource_rev: 5\n", encoding="utf-8")
+    assert keys() == ["vol11:3:1:2"]                                     # 上回没设判据的册新设了 rev 也重判
+    assert log.dropped == {"b": {"vol01": 1, "vol11": 1}}
+    for b in ("vol01", "vol11"):
+        (d / "books" / f"{b}.yaml").write_text(f"id: {b}\n", encoding="utf-8")
+    assert len(keys()) == 3 and "b" not in log.dropped                  # 都撤了判据：全采信、不记丢弃
+    assert [e.model_dump() for e in log.iter_all_cached()] == [e.model_dump() for e in log.iter_all()]
+
+
+def test_read_cached_returns_fresh_list(tmp_path):
+    d = _data(tmp_path, {"vol11": 3})
+    log = EventLog(d / "feedback")
+    log.append([_ev(1, rev=3)])
+    a = log.read_cached("b")
+    a.clear()                                                            # 调用方改列表不串到缓存
+    assert [e.target.key for e in log.read_cached("b")] == ["vol11:3:1:1"]

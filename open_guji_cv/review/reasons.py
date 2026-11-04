@@ -51,7 +51,8 @@ class Cell:
     evidence: dict = field(default_factory=dict)
     recheck: bool = False
     note: str = ""
-    cls: str | None = None                             # 待审单上的旧卡片类别（seg_defect 只有这里有）
+    cls: str | None = None                             # 待审单上的旧卡片类别（老单的 seg_defect 只有这里有；11-04 起不出单）
+    seg_kind: str | None = None                        # 切坏细分（单上同名字段；产物里在 evidence.seg_kind），见 SEG_KINDS
 
     @property
     def codes(self) -> set[str]:
@@ -82,6 +83,7 @@ class Context:
     col_noref: Counter = field(default_factory=Counter)
     lib_n: Callable[[str], int] | None = None
     are_variants: Callable[[str, str], bool] | None = None
+    lib_split: Callable[[str], tuple[int, int]] | None = None   # 字 → (本书刻例数, 借来刻例数)，给 lib_missing 细分
 
 
 def _page(cid: str) -> str:
@@ -92,8 +94,8 @@ def _col(cid: str) -> str:
     return ":".join(cid.split(":")[:-1])
 
 
-def build_context(cells: list[Cell], lib_n=None, are_variants=None) -> Context:
-    ctx = Context(lib_n=lib_n, are_variants=are_variants)
+def build_context(cells: list[Cell], lib_n=None, are_variants=None, lib_split=None) -> Context:
+    ctx = Context(lib_n=lib_n, are_variants=are_variants, lib_split=lib_split)
     for c in cells:
         if not c.has_ref:
             ctx.page_noref[_page(c.id)] += 1
@@ -141,7 +143,7 @@ RULES: dict[R, Callable[[Cell, Context], bool]] = {
     R.VISION_FLAGGED: lambda c, x: "vision_flag" in c.codes,
     R.MACHINE_CHANGED: lambda c, x: c.recheck and c.note.startswith(MACHINE_CHANGED_NOTE),
     R.RECHECK: lambda c, x: c.recheck,
-    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or "seg_defect" in c.codes,
+    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or bool(c.codes & {"seg_defect", JIAZHU_UNEVEN}),
     R.OCCLUDED_WITH_REF: lambda c, x: ("occluded" in c.codes or bool(c.evidence.get("occluded"))) and c.has_ref,
     R.OCCLUDED_NO_REF: lambda c, x: "occluded" in c.codes or bool(c.evidence.get("occluded")),
     R.SEG_PAGE_UNALIGNED: lambda c, x: (not c.has_ref and x.page_noref[_page(c.id)] >= PAGE_MIN)
@@ -172,8 +174,49 @@ def _ordered() -> list[R]:
     return sorted((r for r in R if r is not R.UNKNOWN), key=lambda r: specs()[r].priority)
 
 
-def detail_of(reason: R, c: Cell) -> str:
+#: 切坏格细分（SJ 史記第 8 轮切坏检测，11-04 定）：作 seg_defect 的 pending_reason_detail，不新增取值。
+#: merged 两字并一格；clipped 字被切掉一边或半截；bleed 邻格笔画溢入；frame_residue 框线残笔当成笔画。
+#: jiazhu_uneven（史記雙行小注逐步切 cv#1011，11-04 A31 定）：夹注两行分法不是 ⌈N/2⌉／⌊N/2⌋、按整理本切的格，要人核；
+#: 格上带 doubt 码 `jiazhu_uneven`（或 seg_kind=jiazhu_uneven）即归 seg_defect，细分记 jiazhu_uneven。
+JIAZHU_UNEVEN = "jiazhu_uneven"
+SEG_KINDS = ("merged", "clipped", "bleed", "frame_residue", JIAZHU_UNEVEN)
+
+
+def seg_kind_of(c: Cell) -> str:
+    """切坏细分：单上的 `seg_kind` 优先，其次产物 evidence.seg_kind，再次 doubt 码 jiazhu_uneven；不在 SEG_KINDS 里的不认。"""
+    k = c.seg_kind or (c.evidence or {}).get("seg_kind")
+    if k in SEG_KINDS:
+        return k
+    return JIAZHU_UNEVEN if JIAZHU_UNEVEN in c.codes else ""
+
+
+#: 「少见的字」细分（A23，sheldon 11-04 定本书字样标注归书 Project）：作 lib_missing 的 pending_reason_detail，
+#: 写成 ``<细分>:<整理本字>``，不新增取值。lib_missing 的意思是「库里没有像这一格的刻例」（glyph_match verdict=diff），
+#: 不等于库里没有这个字；按整理本字在本书库、借来库里各有几例分开派单：
+#:   ref_blank           整理本这一位没字（语料漏字／对位问题，不是字形库的事，转 A24／书 Project）
+#:   all_zero            本书、借来库都没有这个字（真缺字：首例人裁入库）
+#:   own_zero_borrow_has 本书没有、借来库有（借来的字样不像这本：本书字样标注，归书 Project）
+#:   own_has             本书已有这个字的刻例，这一格仍不像（多半淡印、切坏或形近：看图）
+LIB_MISSING_KINDS = ("ref_blank", "all_zero", "own_zero_borrow_has", "own_has")
+
+
+def lib_missing_kind(c: Cell, ctx: Context | None) -> str:
+    """lib_missing 细分；没给库（``ctx.lib_split``）就不分（空串）。"""
+    if not c.has_ref:
+        return "ref_blank" if not c.ref else ""
+    if ctx is None or ctx.lib_split is None:
+        return ""
+    own, borrowed = ctx.lib_split(c.ref)
+    return "own_has" if own else ("own_zero_borrow_has" if borrowed else "all_zero")
+
+
+def detail_of(reason: R, c: Cell, ctx: Context | None = None) -> str:
     """给人看的一点细节（字对、组 id、页号），不是判定依据。"""
+    if reason is R.SEG_DEFECT:
+        return seg_kind_of(c)
+    if reason is R.LIB_MISSING:
+        k = lib_missing_kind(c, ctx)
+        return f"{k}:{c.ref or ''}" if k else (c.ref or "")
     if reason in (R.SEG_PAGE_UNALIGNED,):
         return _page(c.id)
     if reason in (R.SEG_COL_UNALIGNED,):
@@ -184,7 +227,7 @@ def detail_of(reason: R, c: Cell) -> str:
         return "/".join(sorted({v for v in (c.ref, c.char, c.top) if v}))
     if reason in (R.REF_REPLACED, R.REF_MISMATCH, R.LIB_SPARSE_DISSENT):
         return f"{c.ref or ''}>{c.char or ''}"
-    if reason in (R.LIB_SPARSE_AGREE, R.LIB_UNRECOGNIZED, R.LIB_MISSING):
+    if reason in (R.LIB_SPARSE_AGREE, R.LIB_UNRECOGNIZED):
         return c.ref or ""
     return ""
 
@@ -251,6 +294,31 @@ def lib_counts(glyph_db) -> Callable[[str], int] | None:
     return lambda ch: n.get(ch, 0)
 
 
+def lib_split_counts(glyph_db) -> Callable[[str], tuple[int, int]] | None:
+    """字形库 SQLite → 字 → (本书刻例数, 借来刻例数)。按 exemplars 数，借来的看 ``borrowed`` 表，字体域不算。
+    库不在或读不了返回 None（不猜）。"""
+    import sqlite3
+    p = Path(glyph_db)
+    if not p.exists() or p.stat().st_size == 0:
+        return None
+    own: Counter = Counter()
+    bor: Counter = Counter()
+    con = sqlite3.connect(f"file:{p}?mode=ro", uri=True)
+    try:
+        has_b = con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='borrowed'").fetchone()
+        flag = ("e.instance_id IN (SELECT instance_id FROM borrowed)" if has_b else "0")
+        for ch, b, k in con.execute(
+                f"""SELECT g.char, {flag} AS b, count(*) FROM exemplars e JOIN glyphs g USING(glyph_id)
+                    JOIN instances i USING(instance_id) JOIN sources s USING(source_id)
+                    WHERE s.kind != 'font' GROUP BY g.char, b"""):
+            (bor if b else own)[ch] += k
+    except sqlite3.Error:
+        return None
+    finally:
+        con.close()
+    return lambda ch: (own.get(ch, 0), bor.get(ch, 0))
+
+
 def _default_are_variants():
     try:
         from ..variants import are_variants as _av
@@ -270,12 +338,15 @@ def reasons_for_pending(doc: dict, products_dir, book: str, *, glyph_db=None, ar
         c = prod.get(key) or Cell(id=f"{book}:{key}", char=None, ref=((x.get("ref") or {}).get("c") or x.get("refc")),
                                   doubts=list(x.get("why") or []))
         c.recheck, c.note, c.cls = bool(x.get("recheck")), str(x.get("note") or ""), x.get("cls")
+        if x.get("seg_kind"):
+            c.seg_kind = str(x["seg_kind"])
         cells.append(c)
-    ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants)
+    ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants,
+                        lib_split=lib_split_counts(glyph_db) if glyph_db else None)
     out = {}
     for x, c in zip(doc.get("cells", []), cells):
         r = classify(c, ctx)
-        out[x["cell"]] = (r, detail_of(r, c))
+        out[x["cell"]] = (r, detail_of(r, c, ctx))
     return out
 
 
@@ -299,10 +370,11 @@ def stamp_cards(cards: list[dict], cells: list[Cell], *, glyph_db=None, are_vari
     `cells` 与 `cards` 一一对应；整页／整列对不上按这批卡自己数（与待审单按整单数同口径）。"""
     if are_variants is None:
         are_variants = _default_are_variants()
-    ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants)
+    ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants,
+                        lib_split=lib_split_counts(glyph_db) if glyph_db else None)
     for card, c in zip(cards, cells):
         r = classify(c, ctx)
         card["pending_reason"] = r.value
-        d = detail_of(r, c)
+        d = detail_of(r, c, ctx)
         if d:
             card["pending_reason_detail"] = d

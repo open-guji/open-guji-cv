@@ -99,7 +99,7 @@ def test_cards_merge_proof_fields_with_default_cv_root(tmp_path):
     cells = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))["cells"]
     a, b = cells
     assert a["cell"] == "1:1:2" and a["review"] == "pending"
-    assert a["cls"] == "lib_miss" and a["why"] == ["none"]
+    assert "cls" not in a and a["why"] == ["none"]              # 11-04 起卡片类别不出单
     assert a["lib_top"] == [{"c": "之", "s": 0.9123}, {"c": "乏", "s": 0.5}]
     assert a["ref"] == {"c": "之", "op": "equal"}
     assert b["alt"] == [{"c": "乎", "s": 0.7, "p": "之", "src": "v"}]

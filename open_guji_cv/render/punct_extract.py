@@ -218,10 +218,6 @@ def build_punct_json(book_id: str, title: str,
                      annotations: list[PunctAnnotation],
                      creator: str = "qwen-plus") -> dict[str, Any]:
     """生成符合 guji-punct v0.1 规范的完整 JSON 对象。"""
-    points = sum(1 for a in annotations if a.kind == "point")
-    breaks = sum(1 for a in annotations if a.kind == "break")
-    periods = sum(1 for a in annotations if a.mark == "。")
-    commas = sum(1 for a in annotations if a.mark == "，")
 
     return {
         "$schema": "https://open-guji.org/schema/punct/v0.1.json",
@@ -232,13 +228,6 @@ def build_punct_json(book_id: str, title: str,
             "creator": creator,
             "base_edition": "original",
             "description": "基于 original 底本自动生成独立外挂标点与分段，正文字符保持严格解耦。"
-        },
-        "stats": {
-            "total_annotations": len(annotations),
-            "points": points,
-            "paragraph_breaks": breaks,
-            "periods": periods,
-            "commas": commas
         },
         "punctuations": [a.to_dict() for a in annotations]
     }

@@ -121,6 +121,8 @@ def _isolated_env(monkeypatch, tmp_path):
     # 隔离环境里没有人裁事件目录：`lookup.human_chars` 缺目录会报错（生产防静默丢人裁），测试里放行；
     # 测报错本身的用例自己 delenv（tests/test_human_chars_lookup.py）
     monkeypatch.setenv("GUJI_ALLOW_NO_EVENTS", "1")
+    # 推库必须有操作人（cli_db.require_actor）；本机设没设 GUJI_ACTOR／USER 都不能影响测试。测拒推的用例自己 delenv
+    monkeypatch.setenv("GUJI_ACTOR", "pytest")
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)

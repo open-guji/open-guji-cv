@@ -189,4 +189,120 @@ def cmd_perf(args) -> None:
     {"top": cmd_top, "show": cmd_show, "pages": cmd_pages, "push": cmd_push, "job": cmd_job}[args.perf_cmd](args)
 
 
+# ── 步内分段计时（第三期，2026-11-04）──────────────────────────────
+# 不改 Step 源码（改了要动指纹、登记代码等价），在跑批进程里把下面这些函数／方法换成计时的薄壳：
+# 壳只调原函数、原样返回，产物逐字节不变（`tests/test_perf_hooks.py` 核开关两种跑法产物相同）。
+# 只换「按名字在模块全局或类上查」的调用点：Step 里 `foo()` 查的是模块全局，换模块属性就生效；
+# 别的模块 `from x import foo` 早拿走的引用不受影响（那些调用不计，不出错）。
+# 不换拿函数身份做判断的东西（如 `GlyphMatcher._verify is verify_pair_elastic`），所以 verify 不单独计。
+PERF_HOOKS: dict[str, dict] = {
+    "open_guji_cv.steps.glyph_match": {
+        "funcs": ("_patch", "_page_queries", "_keben_subset", "human_confirmed_counts", "borrowed_ids",
+                  "demote_borrowed", "consensus_same"),
+        "methods": {"GlyphMatchStep": ("_matcher",)},
+    },
+    "open_guji_cv.clustering.match": {
+        "methods": {"GlyphMatcher": ("_match", "extract", "_same_cell_rows", "_apply_near_shape",
+                                     "_apply_shape_rerank")},
+    },
+    # 匹配器里面（11-04 第二轮）：verify_pair_elastic 本身不换（`_match` 拿它做身份判断），换它按全局名调的几段；
+    # 矩阵乘与排序＝`_match` 减去这些
+    "open_guji_cv.clustering.verify": {"funcs": ("_elastic_align", "_prepare", "_elastic_miss", "verify_pair_cov")},
+    "open_guji_cv.clustering.features": {"methods": {"HogFeature": ("extract",)}},
+    "open_guji_cv.clustering.normalize": {"funcs": ("normalize_patch",)},
+    "open_guji_cv.core.reuse": {"funcs": ("cell_reuse",)},
+    "open_guji_cv.steps.seed_admit": {
+        # `_run_page` 里直接调的各道关（静态扫出来的，按调用次数挑掉了逐格的小工具）
+        "funcs": ("_opt", "_align", "_human_shapes", "_iron_context", "_iron_page_scale", "_occluded",
+                  "_approx_index", "_approx_hit", "_book_knn_pass", "_context_guard", "_context_lib_dissent",
+                  "_context_variant_tie", "_coord_refs", "_edge_pair_pass", "_follow_ref_pass", "_garble_guard",
+                  "_group_flow_pass", "_header_formula_pass", "_human_unbound_pass", "_iron_confusable_witness",
+                  "_iron_coord_dissent", "_iron_ctx_dissent", "_lane_witnesses", "_lib_near_tie", "_near_knn_pass",
+                  "_pair_shape_pass", "_pick_char", "_pua_rule_pass", "_rare_ref_pass", "_rare_run_ids",
+                  "_ref_lib_coord_pass", "_ref_topk_pass", "_review_lanes_pass", "_rr_shape_pass",
+                  "_seal_blank_flip", "_shadow_veto_pass", "_solo_ctx_vetoed", "_symbol_ref_blank_pass",
+                  "_symbol_review_pass", "_vis_ruling_pass", "_keben_counts", "_doubts",
+                  # 第二轮：铁证闸逐格再匹配、字组流程与影子闸里面
+                  "_iron_decide", "_page_patch", "_clf_ctx", "_hard_blocked", "_shadow_gate"),
+    },
+    "open_guji_cv.groups.flow": {"funcs": ("entry", "decide", "decide_joint", "_solve", "_pick_form",
+                                           "_provisional", "_vis_try")},
+    "open_guji_cv.shadow.gate": {"methods": {"ShadowGate": ("judge",)}},
+    # seed_admit 在函数里现 import 的（调用时才按模块属性取，换模块属性就生效）
+    "open_guji_cv.clustering.exclusions": {"funcs": ("excluded_ids",)},
+    "open_guji_cv.clustering.note_lexicon": {"funcs": ("load_lexicon", "match_segment")},
+    "open_guji_cv.feedback.bindings": {"funcs": ("rebind_library_shapes",)},
+    "open_guji_cv.feedback.lookup": {"funcs": ("human_chars",)},
+    "open_guji_cv.steps.align_ref": {"funcs": ("rare_topk_map",)},
+}
+_HOOKED = False
+
+
+def _wrap(label: str, fn):
+    from .core import perf
+    w = perf.timed(label)(fn)
+    for attr in ("cache_clear", "cache_info", "cache_parameters"):   # lru_cache 的接口照旧能用
+        if hasattr(fn, attr):
+            setattr(w, attr, getattr(fn, attr))
+    w.__perf_hook__ = fn
+    return w
+
+
+def install_hooks(hooks: dict | None = None) -> list[str]:
+    """把 `PERF_HOOKS` 里的函数换成计时薄壳；关了统计（`GUJI_PERF=0`）不换。返回换上的名字。
+    同一进程只换一次；找不到的名字跳过（代码改名后不报错，只是少一段）。"""
+    global _HOOKED
+    import importlib
+    from .core import perf
+    if (_HOOKED and hooks is None) or not perf.enabled():
+        return []
+    done: list[str] = []
+    for modname, spec in (hooks or PERF_HOOKS).items():
+        try:
+            mod = importlib.import_module(modname)
+        except Exception:  # noqa: BLE001 —— 统计是附带的
+            continue
+        short = modname.rsplit(".", 1)[-1]
+        for name in spec.get("funcs", ()):
+            fn = getattr(mod, name, None)
+            if callable(fn) and not hasattr(fn, "__perf_hook__") and not isinstance(fn, type):
+                setattr(mod, name, _wrap(f"{short}.{name}", fn))
+                done.append(f"{short}.{name}")
+        for cname, meths in spec.get("methods", {}).items():
+            cls = getattr(mod, cname, None)
+            if cls is None:
+                continue
+            for name in meths:
+                fn = cls.__dict__.get(name)
+                if callable(fn) and not hasattr(fn, "__perf_hook__"):
+                    setattr(cls, name, _wrap(f"{cname}.{name}", fn))
+                    done.append(f"{cname}.{name}")
+    if hooks is None:
+        _HOOKED = True
+    return done
+
+
+def uninstall_hooks(hooks: dict | None = None) -> None:
+    """换回原函数（测试用）。"""
+    global _HOOKED
+    import importlib
+    for modname, spec in (hooks or PERF_HOOKS).items():
+        try:
+            mod = importlib.import_module(modname)
+        except Exception:  # noqa: BLE001
+            continue
+        for name in spec.get("funcs", ()):
+            fn = getattr(mod, name, None)
+            if hasattr(fn, "__perf_hook__"):
+                setattr(mod, name, fn.__perf_hook__)
+        for cname, meths in spec.get("methods", {}).items():
+            cls = getattr(mod, cname, None)
+            for name in meths if cls is not None else ():
+                fn = cls.__dict__.get(name)
+                if hasattr(fn, "__perf_hook__"):
+                    setattr(cls, name, fn.__perf_hook__)
+    if hooks is None:
+        _HOOKED = False
+
+
 COMMANDS = {"perf": (add_parser, cmd_perf)}

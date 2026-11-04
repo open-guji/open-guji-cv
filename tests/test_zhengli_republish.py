@@ -25,12 +25,12 @@ def test_next_rev_and_ids(tmp_path):
 
 def test_diff_explains_each_removed_cell():
     old = {"rev": "006-r2", "cells": [{"cell": c} for c in ("1:1:1", "1:1:2", "1:1:3", "1:1:4", "1:1:5")]}
-    new = {"rev": "006-r3", "cells": [{"cell": "1:1:4"}, {"cell": "2:1:1", "cls": "near_form"}]}
+    new = {"rev": "006-r3", "cells": [{"cell": "1:1:4"}, {"cell": "2:1:1", "pending_reason_cause": "B"}]}
     d = rp.diff(old, new, dropped=[{"cell": "1:1:1"}], states={"1:1:2": ("admit", "己"), "1:1:5": ("excluded", None)}, votes=Counter({"1:1:4": 2}))
     assert (d["old"], d["new"], d["kept"]) == (5, 2, 1)
     assert [(x["cell"], x["why"]) for x in d["removed"]] == [
         ("1:1:1", "人裁过"), ("1:1:2", "机器放行「己」"), ("1:1:3", "格号没了（多半重切）"), ("1:1:5", "排除名单（非字）")]
-    assert d["added"] == [{"cell": "2:1:1", "cls": "near_form"}]
+    assert d["added"] == [{"cell": "2:1:1", "cls": "B"}]
     assert d["votes_on_old"] == 2 and d["voted_cells_kept"] == ["1:1:4"]
     md = rp.diff_md("vol06", d, team=0, reflow=0)
     assert "006-r2 → 006-r3" in md and "精校票 2 张" in md
