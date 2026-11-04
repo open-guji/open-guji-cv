@@ -3,7 +3,7 @@
 用法：python scripts/migrate_page_kinds.py <工作区>/books [--apply] [--only vol01,vol02] [--diff]
 
 缺省干跑：只列哪些册用了老写法、改后每步 params_hash 是否逐一不变。--apply 才写 books/ 下的文件；
-**不推中心库**（推库要用户点头）。逻辑见 open_guji_cv/ops/page_kinds_migrate.py。
+**不推中心库**（推库要用户点头）。逻辑在 guji-manager 的 guji_manager/ops/page_kinds_migrate.py（要装 guji-manager ≥0.3.1）。
 """
 import argparse
 import sys

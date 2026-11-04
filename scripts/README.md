@@ -128,7 +128,7 @@
 - `migrate_column_warp_gold.py`：上游改了 Step1 之后，把 column-warp 金标**能迁的自动迁、不能迁的挑出来**。
 - `migrate_font_fingerprint_keys.py`：把用「字体 mtime」算出来的旧 `emb_*.npz` 按新 key（字体内容）改名，不重建。
 - `migrate_labels_after_resegment.py`：重切分之后把旧裁决平移到新字位，避免重复校对。
-- `migrate_page_kinds.py`：册 yaml 老的页型参数（body_pages／table_pages／roster_pages）改写成 `page_kinds`，缺省干跑、每册核逐步 params_hash 不变、不推库（2026-11-04，ops/page_kinds_migrate.py）。
+- `migrate_page_kinds.py`：册 yaml 老的页型参数（body_pages／table_pages／roster_pages）改写成 `page_kinds`，缺省干跑、每册核逐步 params_hash 不变、不推库（2026-11-04；逻辑在 guji-manager 的 guji_manager/ops/page_kinds_migrate.py，要装 manager）。
 - `migrate_manifest_eol.py`：把「只因行尾翻转而过期」的产物记录迁到行尾归一后的指纹（一次性，2026-09-20）。
 
 ## 审计（一次性核查）（5）
