@@ -110,7 +110,7 @@ def main(argv=None) -> int:
     products = Path(a.products) if a.products else None
     pages, bad = [], 0
     plist = _pages(a.pages, products, a.book)
-    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    from guji_manager.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
     pend = vision_pending_ids(a.book, plist, a.products)
     figure_alts, regions = {}, {}
     if a.format == "char-cord" and not a.no_figures:

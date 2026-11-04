@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ 拿不到底库清单：{e}", file=sys.stderr)
         return 2
     try:
-        from open_guji_cv.ops.corpus_pack import _never_match_hash
+        from guji_manager.ops.corpus_pack import _never_match_hash
         nm = _never_match_hash()
     except Exception:                            # noqa: BLE001 —— 缺依赖时只比文件
         nm = None

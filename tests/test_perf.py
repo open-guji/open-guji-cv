@@ -131,22 +131,3 @@ def test_perf_does_not_change_products(world, monkeypatch):
     assert not (tmp / "p0" / "perf").exists()
 
 
-def test_push_rows_and_never_neon(world, monkeypatch):
-    """推送只走美国机任务库：没设 JOBSDB_TOKEN 时 push_file 什么也不做、不连库；行的转换对得上。"""
-    from open_guji_cv.jobs import perf_push, store
-    book, pl, tmp = world
-    monkeypatch.setenv("GUJI_JOB_ID", "77")
-    eng = Engine(book, pl, store=ProductStore(tmp / "products"), cache=ImageCache(tmp / "cache"), log=lambda s: None)
-    eng.run(pages=[1, 2, 3])
-    (f,) = (tmp / "perf" / "tperf").glob("*.jsonl")
-    head, steps = perf_push.rows(f)
-    assert head["job_id"] == 77 and head["book"] == "tperf" and head["wall_s"] is not None
-    assert [s["step"] for s in steps] == ["t_step_perf"] and steps[0]["ok"] == 3
-
-    monkeypatch.delenv("JOBSDB_TOKEN", raising=False)
-    monkeypatch.setattr(store, "connect", lambda: pytest.fail("没开美国机任务库时不许连库（会连到 Neon）"))
-    assert perf_push.push_file(f) is False
-    assert not f.with_suffix(".pushed").exists()
-    assert perf_push.pending(tmp / "perf") == [f]
-    with pytest.raises(SystemExit):
-        perf_push.push_pending(tmp / "perf")

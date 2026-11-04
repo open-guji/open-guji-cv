@@ -10,7 +10,6 @@ from __future__ import annotations
 from open_guji_cv.feedback.consumers import _expected_of, crop_exclude, gold_add
 from open_guji_cv.feedback.events import Event, EventTarget, make_event
 from open_guji_cv.feedback.routes import Destination, RouteTable
-from open_guji_cv.review.verdict_view import review_verdicts
 
 SHARD = "char-segmentation/instances"
 
@@ -72,15 +71,6 @@ def test_crop_exclude_takes_damaged(tmp_path):
     res = crop_exclude([(_ev({"v": "damaged", "guess": "塊"}), None)], list_path=str(out))
     assert res.added == 1, "破损图块要进排除名单，下轮不再出卡"
     assert "bxgb:27:8:6" in out.read_text(encoding="utf-8")
-
-
-def test_verdict_readback_restores_guess(tmp_path):
-    """刷新页面要能把 `guess` 读回来，否则人以为没填过、又填一遍。"""
-    from open_guji_cv.feedback import EventLog
-    log = EventLog(tmp_path)
-    log.append([_ev({"v": "damaged", "guess": "塊"})])
-    out = review_verdicts("b", log)["verdicts"]["bxgb:27:8:6"]
-    assert out["done"] == "damaged" and out["guess"] == "塊"
 
 
 def test_damaged_is_distinct_from_skip():

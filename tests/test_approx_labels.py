@@ -25,7 +25,6 @@ from open_guji_cv.clustering.audit import evict_instance
 from open_guji_cv.clustering.glyph_db import GlyphDB
 from open_guji_cv.feedback.consumers import glyphdb_admit
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
-from open_guji_cv.review.verdict_view import review_verdicts
 
 BOOK = "abook"
 
@@ -76,18 +75,6 @@ def _dump(p: Path) -> dict:
 
 
 # ── 1. 读回 ──────────────────────────────────────────────────────────────
-
-def test_verdict_view_old_event_unchanged_and_approx_read_back(tmp_path):
-    log = EventLog(tmp_path)
-    log.append([_ev(f"{BOOK}:1:1:1", {"v": "confirm", "shape": "之", "no_glyph_lib": False}, 1)])
-    log.append([_ev(f"{BOOK}:1:1:2", {"v": "confirm", "shape": "乃", "approx": True,
-                                      "ids": "⿱丿乃", "note": "多一撇"}, 2)])
-    log.append([_ev(f"{BOOK}:1:1:3", {"v": "confirm", "shape": "乃", "approx": True}, 3)])
-    got = review_verdicts("b", log)["verdicts"]
-    assert got[f"{BOOK}:1:1:1"] == {"shape": "之", "done": "1", "noGlyphLib": False}, "老事件形状逐键不变"
-    assert got[f"{BOOK}:1:1:2"] == {"shape": "乃", "done": "1", "noGlyphLib": False, "approx": True,
-                                    "approxIds": "⿱丿乃", "approxNote": "多一撇"}
-    assert got[f"{BOOK}:1:1:3"]["approx"] is True and got[f"{BOOK}:1:1:3"]["approxIds"] == ""
 
 
 # ── 2. 进库 ──────────────────────────────────────────────────────────────
@@ -159,30 +146,6 @@ def test_no_glyph_lib_approx_not_in_db(db):
 
 
 # ── 3. 指纹 ──────────────────────────────────────────────────────────────
-
-def test_fingerprints_ignore_approx_tables(tmp_path):
-    """老库（没有这两张表）→ 打开建空表 → 记一条近似：`db_fingerprint` 三次相同；同步签名空表不变。"""
-    from open_guji_cv.steps.glyph_match import db_fingerprint, human_verdicts_fingerprint
-    p = tmp_path / "old.db"
-    g = GlyphDB(p)
-    g.admit_instance(f"v2:{BOOK}:1:1:1", "之", _png(1), provenance="human", page="1", col=1, idx=1)
-    g.conn.commit()
-    g.conn.execute("DROP TABLE approx_labels")
-    g.conn.execute("DROP TABLE approx_clears")
-    g.conn.commit()
-    g.close()
-    from open_guji_cv.ops.central_glyph import export_signature
-    fp0, h0, sig0 = db_fingerprint(p), human_verdicts_fingerprint(p), export_signature(p)
-    g = GlyphDB(p)                       # 建空表
-    g.close()
-    assert (db_fingerprint(p), human_verdicts_fingerprint(p), export_signature(p)) == (fp0, h0, sig0)
-    g = GlyphDB(p)
-    assert g.set_approx(f"v2:{BOOK}:1:1:1", "之", ids="⿰丶之")
-    assert not g.set_approx("v2:nope:1:1:1", "之"), "库里没有的实例不写"
-    g.close()
-    assert db_fingerprint(p) == fp0, "近似标记不改变匹配器看到的东西，库指纹不变"
-    assert human_verdicts_fingerprint(p) == h0
-    assert export_signature(p) != sig0, "同步签名要变：只标了近似也得导出"
 
 
 # ── 4. 查询 ──────────────────────────────────────────────────────────────
