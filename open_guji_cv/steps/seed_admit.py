@@ -282,6 +282,12 @@ class SeedAdmitParams(BaseModel):
     `evidence.lane_skip = {lane: witness3, why: lib_diff}`。`mmap` 缺该格或没有 verdict 时按「非 diff」处理，保持旧放行（fail-open：库没给判定不收紧）。
     三证人一致压过库「不是这个字」的那 31 格里
     Lucian 看图约 4 格放错（含半字红线 vol02:15:9:20）。θ 档（`witness3_min_cov`）不做。只影响 witness3 通道。"""
+    witness3_knn_veto: bool = False
+    """witness3 本书刻例近邻否决（缺省关；关时不进 dump，`params_hash` 不变；全唐文形近字线 2026-11-04）：`lane_witness3`
+    本要放行的格，用 `group_flow_near_knn` 那份本书刻例库在 {库首位, 整理本字} 里判，近邻 ≥ votes_min−1 票指向**库首位**、
+    全库近邻多数也是库首位、离库不远 → **不放**，留待审并记 `doubts: witness3_knn_veto`、`evidence.lane_skip = {lane: witness3,
+    why: knn_veto}`。异体对（已由 lib_variant 跳过）、模型 `skip_chars`、两字同在 `skip_groups` 某组里（王玉、大太…）不否决；
+    没有模型、取不到字块时照旧放（fail-open）。全唐文 r9b：witness3 3,395 格，约 37 格退回，挡掉约 20 格错放（洽→治、有→月…）。"""
     symbol_review: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04–20 原本逐册开着）
     """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，2026-10-24 起缺省开；关时 `symbol_review`／`symbol_min_human`
     不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。
@@ -851,6 +857,8 @@ class SeedAdmitParams(BaseModel):
                     d.pop(k)
         if isinstance(d, dict) and not self.witness3_no_diff:
             d.pop("witness3_no_diff", None)
+        if isinstance(d, dict) and not self.witness3_knn_veto:
+            d.pop("witness3_knn_veto", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
@@ -1783,6 +1791,8 @@ class SeedAdmitStep(Step):
                                         (lambda: _lane_witnesses(ctx.book, p))
                                         if (p.lane_witness3 or p.lane_coord) else None,
                                         canon=ctx.book.canonical_char if ctx.book.codepoints else None,
+                                        knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
+                                                  if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
                                         if p.lane_seal and p.lane_seal_lib_veto_min_n > 0 else None)
             n_auto += d_lane
@@ -2854,8 +2864,32 @@ def _header_formula_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: 
     return n
 
 
+def _witness3_knn_veto_fn(p, ctx, page: int):
+    """`witness3_knn_veto` 的判官：(栏, 格, 库首位, 整理本字) → 否决证据 dict 或 None（不否决）。见该参数说明。"""
+    from ..groups import near_knn
+    from ..groups.registry import FLOW_GROUPS
+    model = near_knn.load(p.group_flow_near_knn)
+    skip_sets = [frozenset(FLOW_GROUPS[g].members) for g in model["skip_groups"] if g in FLOW_GROUPS]
+
+    def veto(col, rec, lib, ref):
+        if not lib or not ref or lib == ref or {lib, ref} & model["skip_chars"]:
+            return None
+        if any(lib in m and ref in m for m in skip_sets):
+            return None
+        try:
+            img = _page_patch(ctx, page, col, rec.slot, rec.sub)
+        except PatchUnavailable:
+            return None
+        v = near_knn.judge(img, model, [lib, ref])
+        if (v.get("pick") == lib and v["votes"] >= model["votes_min"] - 1 and v["full"] == lib
+                and v["full_votes"] >= model["full_votes_min"] and v["nn"] <= model["guard"]):
+            return {k: v[k] for k in ("pick", "votes", "ratio", "full", "full_votes", "nn")}
+        return None
+    return veto
+
+
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
-                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None) -> int:
+                       vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
 
     只升不降：只碰 admit=False、非人裁、不在排除名单上的格；己/已/巳 一族一律跳过。
@@ -2992,6 +3026,9 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                         elif p.witness3_no_diff and getattr(mmap.get(rec.id), "verdict", None) == "diff":
                             rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "lib_diff", "lib": lib}}
                             rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["witness3_diff"]))
+                        elif knn_veto is not None and (kv := knn_veto(col.col, rec, lib, ref)):
+                            rec.evidence = {**ev, "lane_skip": {"lane": "witness3", "why": "knn_veto", "lib": lib, **kv}}
+                            rec.doubts = list(dict.fromkeys(list(rec.doubts or []) + ["witness3_knn_veto"]))
                         else:
                             hit = ("witness3", ref, {"cls": cls, "ref": ref, "coord": co, "lib": lib,
                                                      "guard": guard_of(rec.id), "witnesses": wc})
