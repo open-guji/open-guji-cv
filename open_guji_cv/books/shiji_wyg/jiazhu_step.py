@@ -178,6 +178,11 @@ def restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], pe
     slots = sorted(by_slot)
     if not slots or not specs:
         return None, []
+    # 原切法每段两行的格数已和整理本分法一致的列不动（只改切错的列，免得误伤切对的）
+    def _n(sub, s0, L):
+        return sum(1 for s in range(s0, s0 + L) for c in by_slot.get(s, ()) if c.kind == "jiazhu_" + sub)
+    if all(_n("a", s0, max(ma, mb)) == ma and _n("b", s0, max(ma, mb)) == mb for s0, ma, mb in specs):
+        return None, []
     last_slot = slots[-1]
     col_bot = int(round(max(c.y1 for c in cells)))
     flags: list[str] = []
