@@ -10,7 +10,10 @@ seed_admit／align_ref 产物与字块缓存，把疑似切坏的格列成表，
   且竖向投影中段有低谷（墨 < `MERGED_VALLEY` 峰值、长 ≥ `MERGED_GAP` 格高），低谷上下两团各高 ≥ `MERGED_PART` 格高
   （防「三」「二」这种字中间本来就有空行）。
 - `clipped` 字被切掉一截：Step3 选中的切线穿墨（`cut_candidates` 里选中那条的 `seam_ink` ≥ `CLIP_SEAM_INK`），
-  线两侧的格都标；或 cell_shrink 已打 `boundary_ink` 旗（A22：05:15:8:1a 字头被切到格外）。
+  线两侧的格都标，有大印（`seals` 里的 stain）的页和打了 `seal_region` 旗的格不判（印泥满纸噪点）；
+  或 cell_shrink 打了 `boundary_ink` 旗、且不是列尾格、本格没放行（列尾字脚贴版框就打旗；列首格留着）（A22：05:15:8:1a 字头被切到格外）。
+  殿本 vol12 152 页（A22 11-04）：原口径 clipped 370 条几乎全是误报——boundary_ink 364 条多在列尾格，字脚贴版框
+  就打旗；seam_ink 12–20 的 6 条有 4 条在卷首大印页。所以 boundary_ink 不单独算、阈值从 12 提到 30。
 - `bleed`   邻格笔画溢入：cell_shrink 的 `edge_blob` 旗（上下带里与主体隔开的一块墨，`extractor._shape_features`）。
   A22 建议改用 `partition_strip` 的归属图，第一期先用现成旗，抽样不准再换。
 - `frame_residue` 框线残笔：列首／列尾格（贴着版框一格高以内）的最终字块上，按全页半格线位
@@ -35,7 +38,7 @@ MERGED_H = 1.6
 MERGED_VALLEY = 0.10
 MERGED_GAP = 0.08
 MERGED_PART = 0.30
-CLIP_SEAM_INK = 12
+CLIP_SEAM_INK = 30   # 殿本 vol12：12–20 全误报（A22 11-04）
 
 FIELDS = ("格号", "seg_kind", "特征", "放行", "通道", "机器字", "整理本字", "字块键")
 
@@ -98,7 +101,7 @@ def _frame_residue(patch, r, cc_cells, lines: dict) -> str | None:
     cell_h = float(cc_cells.period or 0)
     if cell_h <= 0:
         return None
-    x0, y0 = r.bbox_col[0], r.bbox_col[1]
+    y0 = r.bbox_col[1]
     out = []
     for bottom, key, edge in ((False, "frame_half_lines_top", cc_cells.border_top),
                               (True, "frame_half_lines_bottom", cc_cells.border_bottom)):
@@ -124,6 +127,11 @@ def scan_page(book: str, page: int, store, cache, frame_line_max_off: float = 0.
     chars = read_view(store, book, "cell_shrink", pk, "char_index")
     adm = store.read(book, "seed_admit", pk, "seed_admit")
     ref = store.read(book, "align_ref", pk, "align_ref")
+    try:
+        seals = store.read(book, "seal_detect", pk, "seals")
+    except Exception:                          # noqa: BLE001
+        seals = None
+    stain_page = any(x.kind == "stain" for x in (seals.seals if seals else []))
     if chars is None:
         return []
     arec = {r.id: r for c in (adm.columns if adm else []) for r in c.chars}
@@ -156,6 +164,8 @@ def scan_page(book: str, page: int, store, cache, frame_line_max_off: float = 0.
         jz = [r.height for r in cc.chars if r.sub and r.patch_key and r.height]
         jz_med = statistics.median(jz) if jz else 0.0
         ph = period.get(cc.col) or 0.0
+        body = [r.slot for r in cc.chars if r.patch_key and r.cell_type != "empty"]
+        hi = max(body) if body else 0
         for r in cc.chars:
             if not r.patch_key or r.cell_type == "empty":
                 continue
@@ -165,10 +175,11 @@ def scan_page(book: str, page: int, store, cache, frame_line_max_off: float = 0.
                 v = _valley_split(_patch(cache, book, resolve_patch_key(book, r.patch_key, store)), base)
                 if v:
                     hits.append(("merged", f"h={r.height:.0f}/{base:.0f} {v}"))
-            si = seam.get((cc.col, r.slot))
+            a = arec.get(r.id)
+            si = None if stain_page or "seal_region" in r.flags else seam.get((cc.col, r.slot))
             if si:
                 hits.append(("clipped", f"seam_ink={si}"))
-            elif "boundary_ink" in r.flags:
+            elif "boundary_ink" in r.flags and r.slot < hi and not (a is not None and a.admit):
                 hits.append(("clipped", "boundary_ink"))
             if "edge_blob" in r.flags:
                 hits.append(("bleed", "edge_blob"))
@@ -177,7 +188,6 @@ def scan_page(book: str, page: int, store, cache, frame_line_max_off: float = 0.
                                     r, by_col.get(cc.col), lines)
                 if fr:
                     hits.append(("frame_residue", fr))
-            a = arec.get(r.id)
             for kind, feat in hits:
                 out.append({"格号": r.id.split(":", 1)[1] if r.id.count(":") >= 4 else r.id,
                             "seg_kind": kind, "特征": feat,
@@ -206,12 +216,11 @@ def main(argv=None) -> int:
     else:
         pages = sorted(int(p.stem[1:]) for p in store.step_dir(a.book, "cell_shrink").glob("p*.json"))
     rows = [r for p in pages for r in scan_page(a.book, p, store, cache, a.frame_line_max_off)]
-    f = open(a.out, "w", encoding="utf-8", newline="") if a.out else sys.stdout
-    w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\t")
-    w.writeheader()
-    w.writerows(rows)
-    if a.out:
-        f.close()
+    import contextlib
+    with (open(a.out, "w", encoding="utf-8", newline="") if a.out else contextlib.nullcontext(sys.stdout)) as f:
+        w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\t")
+        w.writeheader()
+        w.writerows(rows)
     by = {k: sum(1 for r in rows if r["seg_kind"] == k) for k in SEG_KINDS}
     print(f"{a.book}: {len(pages)} 页，{len(rows)} 条 {by}", file=sys.stderr)
     return 0
