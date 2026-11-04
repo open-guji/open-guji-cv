@@ -374,6 +374,18 @@ def _cmd_book_split(args) -> None:
     print("已写本机数据目录。推库：guji db push -w <工作区>")
 
 
+def cmd_pagekinds(args) -> None:
+    """页型对账（只读）：册配置点名的 / 页型规则判的 / 最后怎么处理的，对不上的列出来。见 `ops/page_kinds_report.py`。"""
+    from .ops import page_kinds_report as PKR
+    eng = _engine(args.book, args.pipeline, quiet=True)
+    pages = eng.book.resolve_pages(args.pages)
+    res = PKR.build(eng.book, eng.store, pages)
+    if args.json:
+        print(json.dumps(res, ensure_ascii=False))
+    else:
+        PKR.print_report(res)
+
+
 def cmd_book(args) -> None:
     if args.action == "split":
         return _cmd_book_split(args)
@@ -1563,6 +1575,7 @@ COMMANDS_V2 = {
     "step": cmd_step,
     "status": cmd_status,
     "book": cmd_book,
+    "pagekinds": cmd_pagekinds,
     "export": cmd_export,
     "fp-migrate": cmd_fp_migrate,
     "cache": cmd_cache,
@@ -1586,7 +1599,7 @@ def _needs_workspace(sp: argparse.ArgumentParser) -> bool:
 #: `status`／`collate` 只读、不写产物——认 `GUJI_WORKSPACE` 兜底顶多让人看错报告，
 #: 不会像 `pipeline`/`step` 那样把真产物静默写进错的工作区，所以任务卡 #54 第10条
 #: 单给这两条开例外，其余命令仍照 2026-09-19 定的规矩必须显式 `-w`。
-ENV_FALLBACK_COMMANDS = {"status", "collate"}
+ENV_FALLBACK_COMMANDS = {"status", "collate", "pagekinds"}
 
 
 def resolve_workspace(args, parser: argparse.ArgumentParser, command: str = "") -> Path | None:
@@ -1991,6 +2004,14 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--books", default=None, help="split：册号清单，逗号分隔或 vol51-vol99 区间")
     p.add_argument("--apply", action="store_true", help="split：真写（缺省只干跑，列计划）")
     p.add_argument("--effective", action="store_true", help="show：打印合并后的完整配置并标注来源层")
+    p.add_argument("--json", action="store_true")
+    _add_override(p)
+
+
+    p = sub.add_parser("pagekinds", help="[v2] 页型对账（只读）：册配置点名的页型 / 页型规则判的 / 最后怎么处理的，对不上的列出来")
+    p.add_argument("book")
+    p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--pages", default="all", help="页范围，缺省整册")
     p.add_argument("--json", action="store_true")
     _add_override(p)
 
