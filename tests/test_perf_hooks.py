@@ -100,3 +100,4 @@ def test_glyph_match_same_products_with_hooks(tmp_path, monkeypatch, ws, fixture
     spans = rec.to_dict()["spans"]
     assert "GlyphMatcher._match" in spans and spans["GlyphMatcher._match"][0] >= 10
     assert "normalize.normalize_patch" in spans
+    assert "GlyphMatcher._match/verify._elastic_align" in spans, sorted(spans)
