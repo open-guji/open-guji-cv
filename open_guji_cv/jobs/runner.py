@@ -294,6 +294,13 @@ class Job:
         want = (self.spec.get("checks") or {}).get("human_chars")
         if want is None:
             return
+        if not self.spec.get("base"):
+            # 从头跑（没有铺底包）：开跑前还没有 Step3 切分产物，人裁绑定必然是 0，比了只会误拦（QTW r8，11-03）。
+            # 绑定能不能对上要等 Step3 之后才看得出，这里只记一条结果、不拦。
+            self.db(S.add_result, self.id, self.aid, "check", "human_chars",
+                    data={"want": want, "got": None, "skipped": "no_base"})
+            self.ev(f"人裁绑定检查跳过：从头跑、没有铺底包（单上写应为 {want}）")
+            return
         code = ("import sys;from open_guji_cv.feedback.lookup import human_chars;"
                 "print(len(human_chars(sys.argv[1])))")
         out = self.sh([str(VENV / "bin" / "python"), "-c", code, self.spec["book"]], outcome="blocked")
