@@ -108,4 +108,5 @@ book-text 待审格的字：机器没给字的 `c` 为 □，分行稿照阙文�
 ## 八、过渡期与待办
 
 - 待审单上旧的 `cause`（cv 成因码）、`cls`（卡片类别）还在双写，等各处都只读 `pending_reason` 后删。新代码一律读 `pending_reason`，别再新造 `cause`／`cls` 类分类。
-- 网站阅读页悬停显示原因、候选（`feedback/candidates`）补字段：进行中。
+- 网站阅读页悬停显示原因：book-index-ui 0.65.0（book-index-manager #299）。
+- 候选清单（`feedback/candidates`）：行上或 `_meta` 写 `pending_reason`，`load_list` 每行带出，缺省 `unknown`（11-04）。
