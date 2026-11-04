@@ -815,6 +815,14 @@ ENTRIES: tuple[Equiv, ...] = (
           old='e1fe837a2910c67f9a89b6ffd35a28b7f893d7d38db00cb3ef92bfa41b1cc449',
           evidence='witness3 本书刻例近邻否决 witness3_knn_veto（缺省关，全唐文形近字线 11-04）：开关关着时全唐文 012 册 13 页'
                    '（p5,20,35,…,185 每 15 页取 1，含 near_knn 与 witness3 放行页）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='5dfbfb77159e21d4d7efd4dcf66f28bb74b41827c839acfb306adab63a9a8ebc',
+          old='2e51b3736a1acfa6c726232d813654ba7a1a2912a1c58a96db81396e11135837',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关，#980）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.groups.flow',
+          new='080e42ba4cb39f84cfa5fe4c31b5de6f5779acd2c14a6dc83487c8365c0759e8',
+          old='d81b0f7d3c661095d34fe1baa4886501672c2f85bf44224d29cc4c6eb5335f4e',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关，#980）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
 )
 
 
