@@ -104,8 +104,12 @@ def _bindings_dir(book: str) -> Path:
     return feedback_root() / "bindings" / book
 
 
-def page_state(book: str, page: int, store) -> tuple[str | None, str | None]:
+def page_state(book: str, page: int, store, cells_from: str | None = None) -> tuple[str | None, str | None]:
     """这一页绑定依赖的两份产物 sha：Step3 切分（`cells`）、字块那一步（`char_patch` 的戳）。
+
+    `cells_from`：`report.slots.cells_step(book)` 的值，逐页调用时由调用方算一次传进来（2026-11-04）——
+    它每次都 `load_book` 读一遍册 yaml＋基础配置，`book_bindings` 一次要对全书有人裁的每一页调它，
+    seed_admit 每页又调两次，殿本 vol04 每页约 0.4 s 花在这里。不传就照旧现算。
 
     2026-10-19 加第二个（D 在云端重跑 vol01 踩到）：缓存键原来只认 Step3 的 sha，可指纹比对
     （`_fp_diff`）、图块比对（`_similar`）读的是字块图——Step3 没变、字块重切了，缓存照样采信，
@@ -113,7 +117,7 @@ def page_state(book: str, page: int, store) -> tuple[str | None, str | None]:
     from ..core.spec import page_key
     from ..report.slots import cells_step
     key = page_key(page)
-    cells = store.sha(book, cells_step(book), key)
+    cells = store.sha(book, cells_from or cells_step(book), key)
     # row_segment `alt_cut`：换没换备选切法不改 Step3 产物的 sha，但现行格网（`_cells_versions`）跟着变——
     # 换列记进第一份键里，换了／换回都让缓存失效（2026-11-03 史记 03:144:2 换回主切法后人裁仍按备选格号挂错一格）
     from ..products.alt_view import alt_cols_of
@@ -269,11 +273,16 @@ def _fp_diff(evidence: dict | None, cur_patch: Path | None) -> float | None:
         return None
 
 
-def _verdict_events(book: str, log) -> dict[int, list]:
-    """本书逐格裁决事件（confirm 类），按页分组、按时间排序。"""
+def _sorted_events(log) -> list:
+    """全部事件（过页表 rev 闸）按 (ts, 批, seq) 排好。"""
     from .events import iter_events_readonly
+    return sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq))
+
+
+def _verdict_events(book: str, log, evs: list | None = None) -> dict[int, list]:
+    """本书逐格裁决事件（confirm 类），按页分组、按时间排序。`evs`：已排好的 `_sorted_events(log)`。"""
     out: dict[int, list] = {}
-    for e in sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq)):
+    for e in (evs if evs is not None else _sorted_events(log)):
         if e.kind != "confirm" or e.target.unit != "cell" or not counts_as_human(e):
             continue                  # 看图结论不进绑定表（overview#428）：绑定表只给人裁找回格
         pk = parse_cell_key(e.target.key)
@@ -283,13 +292,12 @@ def _verdict_events(book: str, log) -> dict[int, list]:
     return out
 
 
-def _return_trigger_events(book: str, log) -> dict[int, list]:
+def _return_trigger_events(book: str, log, evs: list | None = None) -> dict[int, list]:
     """本书 `cutline`／`n_body_slots`／`return_resolve` 事件，按页分组、按时间排序——
     `_verdict_events` 只收 `confirm`+`unit=cell`，收不到这几种列级/结案事件（见
-    `feedback/returns.py`、`compute_page` 的 `return_events` 参数）。"""
-    from .events import iter_events_readonly
+    `feedback/returns.py`、`compute_page` 的 `return_events` 参数）。`evs` 同 `_verdict_events`。"""
     out: dict[int, list] = {}
-    for e in sorted(iter_events_readonly(log), key=lambda e: (e.ts, e.batch, e.seq)):
+    for e in (evs if evs is not None else _sorted_events(log)):
         if e.kind not in ("cutline", "n_body_slots", "return_resolve"):
             continue
         if e.target.book != book or e.target.page is None:
@@ -582,14 +590,17 @@ def book_bindings(book: str, log=None, store=None, refresh: bool = False,
     store = store or ProductStore()
     log = log or EventLog()
     from .anchor_backfill import load_backfill
-    by_page = _verdict_events(book, log)
-    by_page_returns = _return_trigger_events(book, log)
+    evs_all = _sorted_events(log)       # 两种分组共用一遍读与排序
+    by_page = _verdict_events(book, log, evs_all)
+    by_page_returns = _return_trigger_events(book, log, evs_all)
     backfill = load_backfill(book)
     # 同一次跑批里 Step7 每页都要读一遍全书绑定：事件与 Step3、字块产物都没变时直接用上一份（2 分钟内）
     all_pages = sorted(set(by_page) | set(by_page_returns))
     want = [pg for pg in all_pages if pages is None or pg in pages]
+    from ..report.slots import cells_step
+    step3 = cells_step(book)            # 全书一样，算一次（逐页现算占了这里的大头，见 page_state）
     page_sig = {pg: (_sig(by_page.get(pg, []), by_page_returns.get(pg), backfill),
-                     "+".join(x or "" for x in page_state(book, pg, store))) for pg in want}
+                     "+".join(x or "" for x in page_state(book, pg, store, step3))) for pg in want}
     sig = (book, str(store.root), tuple((pg, *page_sig[pg]) for pg in want),
            tuple(pages) if pages is not None else None)
     hit = _MEMO.get(sig)
