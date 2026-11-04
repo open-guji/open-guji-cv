@@ -3455,7 +3455,7 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
     库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
     或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。"""
     from ..groups import near_knn
-    from ..variants import are_variants
+    from ..groups.edge_pairs import _exclude as _edge_exclude
     model = near_knn.load(p.group_flow_near_knn)
     miss = patch_missing if patch_missing is not None else {}
     delta = 0
@@ -3480,7 +3480,8 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             cands = [x for x in dict.fromkeys((r.char, ref, getattr(m, "char", None))) if x]
             if len(cands) < 2 or model["skip_chars"] & set(cands):
                 continue
-            if any(are_variants(a, b) for i, a in enumerate(cands) for b in cands[i + 1:]):
+            if any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
+                   for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)
