@@ -733,6 +733,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new='0dc068e912694af013b3e036d1f802649a09adfd5526595385ff71f2874c77c0',
           old='8c808c47a30147c6139522bc59f9a927838416860393f7e51da37ab98b422f4c',
           evidence='row_segment 在 04 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 3bb2e40 产物逐字节相同（开关关）'),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='68c22796571ede8c6ff3f0bd203c0d9aefc436f50a5cefe94f5bbbcfb7cabb5b',
+          old='e6baa41f1a77c69b4ccb62bc239670f0f72dbb57c9a728ba5218255e34aaecd7',
+          evidence='合入 dev（#1022、#1025）后 row_segment 在 04 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 343bc4a 产物逐字节相同（开关关）；殿本 vol12 31 页同（A22 11-04）'),
     # seed_admit 雙行小注分法不均闸 _jiazhu_uneven_pass（只认 row_segment 的 jiazhu_uneven 列旗，没有列旗不动）
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='b4b8fa809954527737aed7433a7be73ca8a5914242b2e4dc59cd556e9ef3a879',
