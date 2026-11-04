@@ -40,7 +40,7 @@ from dataclasses import asdict, dataclass, field, replace
 from ..clustering.align_eval import WINDOW_PAD, anchor_page
 from ..clustering.align_label import is_han
 from ..clustering.variants import VariantMap
-from ..eval.round_check import _same_char
+from .same_char import _same_char
 from ..products.store import ProductStore
 from .absent import absent_runs
 from .slots import SlotRec, page_slots
