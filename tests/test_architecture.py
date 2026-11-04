@@ -29,7 +29,7 @@ LAYER: dict[str, int] = {
     # L0 基础：无内部依赖的小模块
     "errors": 0, "variants": 0, "variant_ledger": 0, "gloss": 0, "detectors": 0, "ocr": 0, "hanzi": 0,
     # L1 设施：Step 引擎、产物 schema、通用工具、格式
-    "core": 1, "products": 1, "utils": 1, "formats": 1, "datastore": 1,
+    "core": 1, "products": 1, "utils": 1, "datastore": 1,
     # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
     "seg": 1, "books": 2,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
@@ -37,12 +37,12 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "review": 4, "snap": 4, "ops": 4, "exp": 4, "jobs": 4,
+    "eval": 4, "review": 4, "ops": 4, "exp": 4, "jobs": 4,
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
     # L6 命令行入口
-    "cli_v2": 6, "cli_glyph_db": 6, "cli_db": 6, "cli_products": 6,
-    "cli_glyph": 6, "cli_close": 6, "cli_perf": 6, "cli_model": 6,   # 拆分 P1 从 cli_v2 拆出
+    "cli_v2": 6, "cli_products": 6,
+    "cli_perf": 6,   # 拆分 P1 从 cli_v2 拆出
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
     "api": 6,
     # manager 过渡期用 cv 内部的门面（2026-11-02 拆分 P0）
@@ -62,23 +62,15 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "core.step -> steps.rare_candidates",
     "feedback.lookup -> eval.colgeom",
     "feedback.vision -> review.verdict_view",
-    "formats.guji_page_cv -> report.slots",
     "gates.row_segment_gate -> eval.rulers",
     "gold.store -> feedback.lock",
-    "gold.transfer -> feedback.consumers",
-    "gold.transfer -> feedback.routes",
     "gold.v2_align -> steps.align_ref",
     "gold.v2_align -> steps.context_decide",
     "products.fp_migrate -> clustering",
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",
-    "render.approx -> feedback.events",
     "render.overlay -> gates.query",
     "report.collate -> eval.round_check",
-    "report.progress -> feedback.bindings",
-    "report.progress -> feedback.lookup",
-    "report.progress -> review.cards",
-    "report.progress -> review.verdict_view",
     "report.tiers -> eval.round_check",
     "utils.binarized -> clustering.normalize",
     "books.siku_zongmu.calibrate -> steps",
@@ -268,9 +260,13 @@ def test_cv_does_not_import_console():
 def test_facade_exports_resolve(facade_name):
     """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台／manager 运行时才炸）。"""
     import importlib
+    import importlib.util
     facade = importlib.import_module(facade_name)
+    have_manager = importlib.util.find_spec("guji_manager") is not None
     missing = []
     for name in facade.__all__:
+        if not have_manager and facade._EXPORTS[name][0].startswith("guji_manager."):
+            continue        # 已搬去 guji-manager 的（拆分 P2 第四批起）：没装 manager 时不查
         try:
             getattr(facade, name)
         except Exception as e:   # noqa: BLE001

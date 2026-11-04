@@ -40,7 +40,7 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 import open_guji_cv.steps  # noqa: E402,F401
-from open_guji_cv.eval.rate_history import (HIST, SEED, _hist, body_pages,  # noqa: E402,F401
+from guji_manager.eval.rate_history import (HIST, SEED, _hist, body_pages,  # noqa: E402,F401
                                             measure)
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 

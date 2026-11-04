@@ -9,7 +9,7 @@ import hashlib
 import sys
 from pathlib import Path
 
-import open_guji_cv.snap.importer as imp
+import guji_manager.snap.importer as imp
 
 _orig = imp.sha256_file
 

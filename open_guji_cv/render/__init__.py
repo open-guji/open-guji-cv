@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""产物的**画法**：把某一步的数值产物画回原图上。
+"""（拆分 P2 第四批，2026-11-04：本包的 approx, entity_extract, guji_markdown, punct_extract, punct_llm, reading_layout, reflow_text, siku_extract, wikisource 已搬去 guji-manager `guji_manager.render`。）
+
+产物的**画法**：把某一步的数值产物画回原图上。
 
 叠图是产物语义的一部分（「border_detect 的竖线画成红色折线」是这一步的定义之一），
 不是 HTTP 层的事。原先五个 Step 的画法全长在 `console/app.py` 的

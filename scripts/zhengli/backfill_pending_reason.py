@@ -24,8 +24,8 @@ from pathlib import Path
 CV = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CV))
 
-from open_guji_cv.review.pending_reason import PendingReason, specs  # noqa: E402
-from open_guji_cv.review.reasons import reasons_for_pending, stamp  # noqa: E402
+from guji_manager.review.pending_reason import PendingReason, specs  # noqa: E402
+from guji_manager.review.reasons import reasons_for_pending, stamp  # noqa: E402
 
 
 def guji(*args, **kw) -> subprocess.CompletedProcess:

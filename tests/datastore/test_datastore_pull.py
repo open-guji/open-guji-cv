@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from test_datastore_pg import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
+from pg_fixtures import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
 
 psycopg = pytest.importorskip("psycopg")
 needs_pg = pytest.mark.skipif(not DSN, reason="没有 GUJI_TEST_PG_DSN（测试用 Postgres）")

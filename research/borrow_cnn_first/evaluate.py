@@ -47,7 +47,7 @@ def pct(a, b):
 
 
 def main():
-    from open_guji_cv.review.borrow_first import cnn_ranks_for_patches, first_view
+    from guji_manager.review.borrow_first import cnn_ranks_for_patches, first_view
     db = os.environ["GUJI_GLYPH_DB"]
     report = {}
     for path in sys.argv[1:]:
@@ -102,7 +102,7 @@ def own_sim(human_pkl, corpus_pkl, db, seed=0):
     import random
     import numpy as np
     from open_guji_cv.clustering import cnn_candidates as cc
-    from open_guji_cv.review.borrow_first import (ProtoIndex, build_protos,
+    from guji_manager.review.borrow_first import (ProtoIndex, build_protos,
                                                   cnn_ranks_for_patches, merge_protos)
     cnn = cc.shared()
     borrow = ProtoIndex.get(db, cnn)

@@ -9,7 +9,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from open_guji_cv.ops.page_kinds_migrate import run
+from guji_manager.ops.page_kinds_migrate import run
 
 
 def main() -> int:

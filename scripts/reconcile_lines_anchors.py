@@ -35,9 +35,9 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.formats import guji_format as gf  # noqa: E402
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
-from open_guji_cv.formats.guji_page_cv import export_page  # noqa: E402
+from guji_manager.formats import guji_format as gf  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats.guji_page_cv import export_page  # noqa: E402
 
 
 def _legacy_builder():

@@ -216,43 +216,6 @@ def test_import_vision_needs_explicit_source_rev(tmp_path):
 
 # ── 3. gold rebuild ─────────────────────────────────────────────────
 
-def test_rebuild_does_not_revive_pre_switch_verdicts(tmp_path):
-    from open_guji_cv.feedback.routes import RouteTable
-    from open_guji_cv.gold.store import GoldStore
-    from open_guji_cv.gold.transfer import rebuild_verdicts
-    _yaml(tmp_path / "books", "vol01", 3)
-    log = EventLog(tmp_path / "feedback")
-    log.events_dir.mkdir(parents=True)
-    old = [_cell_ev("vol01:5:3:4", 1, payload={"v": "seg_defect", "quality": "truncated"}, step="cell_shrink"),
-           _cell_ev("vol01:9:1:1", 2, payload={"v": "seg_defect", "quality": "truncated"}, step="cell_shrink")]
-    (log.events_dir / "old.jsonl").write_text("".join(e.model_dump_json() + "\n" for e in old), encoding="utf-8")
-    store = GoldStore(tmp_path / "verdicts")
-    table = RouteTable.load(log.root / "routes.yaml")
-    shard = table.plan(old)["gold_add"][0][1].shard
-    # 换源前重放出来、后来标了 stale 的两条（同 10-27 apply.py）
-    from open_guji_cv.gold.item import Anchor, GoldItem
-    store.upsert(shard, [GoldItem(id=e.target.key, anchor=Anchor(book="vol01", page=e.target.page, col=e.target.col,
-                                                                   slot=e.target.slot),
-                                  expected={"quality": "truncated", "note": "旧图"}, source_events=[e.id])
-                         for e in old], "旧")
-    store.mark_stale(shard, [e.target.key for e in old], "GUJI-748 换源")
-    # 换源后：迁移事件落在新格 vol01:5:3:4（与旧格同号）
-    new = _cell_ev("vol01:5:3:4", 3, rev="3", migrated_from="vol01:7:3:4", batch="m~q",
-                   payload={"v": "seg_defect", "quality": "clean"}, step="cell_shrink")
-    log.append([new])
-    out = rebuild_verdicts(log, store, table)
-    assert out["events"] == 1 and out["dropped_by_source_rev"] == {"vol01": 2}
-    items = {i.id: i for i in store.list(shard)}
-    assert items["vol01:9:1:1"].status == "stale"                                  # 旧裁决不复活
-    it = items["vol01:5:3:4"]
-    assert it.status == "active" and it.expected == {"quality": "clean"}           # 不拿旧条目打底（note 不漏进来）
-    assert it.source_events == [new.id] and it.anchor.source_rev == 3
-    assert any("换源" in h.why or "页表" in h.change for h in it.history)
-    # 再重放一遍：幂等
-    rebuild_verdicts(log, store, table)
-    again = {i.id: i for i in store.list(shard)}
-    assert again["vol01:5:3:4"].expected == {"quality": "clean"} and again["vol01:9:1:1"].status == "stale"
-
 
 def test_source_gate(tmp_path, capsys):
     """图源门（A32 精校前移 A3）：册 yaml 钉了 source_rev 的，单子要出自那一版；没钉的只提示。"""

@@ -22,7 +22,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.render.wikisource import convert  # noqa: E402
+from guji_manager.render.wikisource import convert  # noqa: E402
 
 # 扫描页 → 维基文库 Page 名。
 BOOKS = {
@@ -37,7 +37,7 @@ BOOKS = {
 def _render_md(book: str, pages: list[int]) -> tuple[str, list[str]]:
     """产物 → 9.1 md（与 `render_guji_markdown.py` 同一份逻辑），顺带列出待人裁/阙文字位。"""
     from open_guji_cv.products.store import ProductStore
-    from open_guji_cv.render.guji_markdown import render_page
+    from guji_manager.render.guji_markdown import render_page
     from open_guji_cv.report.slots import page_slots
 
     store = ProductStore()

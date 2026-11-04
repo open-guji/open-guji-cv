@@ -343,13 +343,13 @@ def main() -> int:
         by_col[(it.anchor.page, it.anchor.col)].append(it)
     pages = sorted({pg for pg, _ in by_col})
     if a.all_body:
-        from open_guji_cv.eval.touching import body_pages
+        from guji_manager.eval.touching import body_pages
         pages = sorted(set(pages) | set(body_pages(book)))
 
     errs, errs_base = [], []
     err_ids: list[str] = []
     poly_new, poly_base = [], []
-    from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation
+    from guji_manager.eval.touching import polyline_to_seam, seam_deviation
     gold_poly = [i for i in GoldStore().list(SHARD) if i.anchor.book == book and i.status == "active"
                  and i.expected.get("polyline") and len(i.expected["polyline"]) >= 2 and not i.expected.get("tags")]
     by_col_poly: dict[tuple[int, int], list] = defaultdict(list)

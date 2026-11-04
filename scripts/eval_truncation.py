@@ -110,7 +110,7 @@ def col_runs_v2(im: np.ndarray, cx: tuple[float, float], cell_h: float) -> list[
 
 
 def page_depths_v2(book: str, page: int) -> list[float]:
-    from open_guji_cv.eval.v2cols import iter_columns
+    from guji_manager.eval.v2cols import iter_columns
     depths: list[float] = []
     for cc, im in iter_columns(book, page):
         if len(cc.cells) < 2:
@@ -129,7 +129,7 @@ def page_depths_v2(book: str, page: int) -> list[float]:
 
 
 def scan(dataset: str, out: str = "output", v1: bool = False) -> dict:
-    from open_guji_cv.eval.v2cols import body_pages
+    from guji_manager.eval.v2cols import body_pages
     body = body_pages(dataset)
     allv: list[float] = []
     rates: list[tuple] = []

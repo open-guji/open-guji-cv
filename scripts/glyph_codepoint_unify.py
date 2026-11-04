@@ -144,7 +144,7 @@ def apply(book: str, mapping: dict[str, str], db_path: Path) -> dict:
     """真落地：改库＋改事件日志。走人裁写锁，与体检/控制台裁决互斥。"""
     from open_guji_cv.core.workspace import feedback_root
     from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
-    from open_guji_cv.feedback.harvest import parse_card_id
+    from guji_manager.feedback.harvest import parse_card_id
     from open_guji_cv.feedback.lock import feedback_write_lock
 
     result = {"book": book, "pairs": {}}

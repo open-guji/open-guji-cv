@@ -199,7 +199,7 @@ def main(argv: list[str] | None = None) -> None:
         note += f"；复审 {len(recheck) - len(rc_missing)} 格（现行切分里没有的 {len(rc_missing)} 格不放）"
     if a.cards:
         sys.path.insert(0, str(a.cv_root))
-        from open_guji_cv.review.proof_fields import pending_fields
+        from guji_manager.review.proof_fields import pending_fields
         by_id = {c["id"]: c for c in json.loads(a.cards.read_text(encoding="utf-8"))}
         lost = [c[KEY_CELL] for c in cells if f"{a.book}:{c[KEY_CELL]}" not in by_id and c[KEY_CELL] not in recheck]
         if lost:

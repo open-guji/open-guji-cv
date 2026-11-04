@@ -20,15 +20,15 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.render.punct_llm import PunctClient
-from open_guji_cv.render.punct_extract import PunctAnnotation, PUNCT_CHARS, tokenize
-from open_guji_cv.render.entity_extract import (
+from guji_manager.render.punct_llm import PunctClient
+from guji_manager.render.punct_extract import PunctAnnotation, PUNCT_CHARS, tokenize
+from guji_manager.render.entity_extract import (
     EntityAnnotation,
     BookIndexMatcher,
     apply_entities_and_punctuations_to_markdown,
     build_entity_json,
 )
-from open_guji_cv.render.reflow_text import reflow, Line
+from guji_manager.render.reflow_text import reflow, Line
 
 _PREFIX = re.compile(r"^(\^*)(\.*)")
 _PAGE = re.compile(r"^<!--\s*p(\d+)\s*-->$")

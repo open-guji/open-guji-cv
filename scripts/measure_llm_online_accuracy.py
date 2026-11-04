@@ -1,4 +1,4 @@
-"""CLI 封装：`open_guji_cv.eval.llm_online_accuracy.compute_report` 的
+"""CLI 封装：`guji_manager.eval.llm_online_accuracy.compute_report` 的
 命令行入口。核心聚合逻辑在包里（供控制台 `/api/llm_online_stats` 复用），
 这里只管解析参数、打印、落报告文件。见 `eval/llm_online_accuracy.py` 模块头。
 
@@ -28,7 +28,7 @@ def main() -> None:
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
 
-    from open_guji_cv.eval.llm_online_accuracy import compute_report
+    from guji_manager.eval.llm_online_accuracy import compute_report
 
     log_dir = Path(args.log_dir)
     if not log_dir.exists() or not any(log_dir.glob("*.jsonl")):

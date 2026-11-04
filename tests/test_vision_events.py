@@ -160,7 +160,6 @@ def env(ws, tmp_path, monkeypatch):
     from open_guji_cv.core.spec import page_key
     from open_guji_cv.products.kinds.recog import ColumnAdmit, PageAdmit
     from open_guji_cv.products.store import ProductStore
-    from open_guji_cv.review import cards as C
     fb = tmp_path / "fb"
     (fb / "events").mkdir(parents=True)
     monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(fb))
@@ -184,28 +183,7 @@ def env(ws, tmp_path, monkeypatch):
     from open_guji_cv.gold.store import GoldStore
     assert import_vision(tmp_path / "v.jsonl", gold_store=GoldStore(tmp_path / "verdicts"))["written"] == 4
     EventLog().append([_ev("keben:1:1:6", {"v": "confirm", "shape": "日"}, 1)])
-    C.clear_cards_cache()
     yield st
-    C.clear_cards_cache()
-
-
-def test_vision_wrong_cell_enters_review_queue(env):
-    from open_guji_cv.review.cards import cards
-    d = cards("keben", "1", 30, "review", env, gate_cut=False, skip_decided=True, doubt="*")
-    by = {c["id"]: c for c in d["cards"]}
-    assert set(by) == {"keben:1:1:3"}
-    c = by["keben:1:1:3"]
-    assert VISION_DOUBT in c["doubts"] and c["char"] == "日" and c["admit"] is True   # 不改字
-    assert c["vision"]["char"] == "曰" and c["vision"]["judge"] == "m1"
-    assert d["doubt_counts"].get(VISION_DOUBT) == 1
-    d2 = cards("keben", "1", 30, "review", env, gate_cut=False, skip_decided=True, doubt=VISION_DOUBT)
-    assert [c["id"] for c in d2["cards"]] == ["keben:1:1:3"]
-
-
-def test_vision_pending_report(env):
-    rows = vision_pending("keben", [1], env)
-    assert [(r["id"], r["char"], r["vision"]) for r in rows] == [("keben:1:1:3", "日", "曰")]
-    assert set(vision_checks("keben")) == {"keben:1:1:3", "keben:1:1:4", "keben:1:1:5", "keben:1:1:6"}
 
 
 def test_vision_events_do_not_touch_human_paths(env):

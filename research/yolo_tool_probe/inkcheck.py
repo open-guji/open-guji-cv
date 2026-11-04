@@ -13,7 +13,7 @@ import json, os, random, sys
 from collections import Counter
 import cv2, numpy as np
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
-from open_guji_cv.formats import guji_page as gp
+from guji_manager.formats import guji_page as gp
 from sheets import tile, sheet, cv_boxes_near, yo_boxes_near, im, imgs, pages  # noqa
 
 RAW, IMG, GPD, OUT = sys.argv[1:5]

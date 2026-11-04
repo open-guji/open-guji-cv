@@ -10,7 +10,7 @@ import shutil
 from pathlib import Path
 
 import pytest
-from test_datastore_pg import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
+from pg_fixtures import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
 from test_datastore_pull import _Cache, _tables, _workspace
 
 psycopg = pytest.importorskip("psycopg")
@@ -87,24 +87,6 @@ def test_migrate_moves_data_out_of_workspace(repo, conn, tmp_path):  # noqa: F81
     assert local_changes(ws, glyph_hooks(ws)) == []
     with pytest.raises(SystemExit, match="已经迁过"):
         migrate(src, ws, cache=cache)
-
-
-def test_migrate_refuses_differences_unless_keep_local(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.cli_db import _pg_conn  # noqa: F401  （入口能导入）
-    from open_guji_cv.datastore.workcopy import local_changes, migrate, push
-    src, files, cache, _ = _setup(repo, conn, tmp_path)
-    ws = _checkout(files, tmp_path / "ws")
-    ev = ws / "feedback" / "events" / "b.jsonl"
-    ev.write_bytes(ev.read_bytes() + (_line(id="evt_b_2", batch="b", seq=2) + "\n").encode())
-    with pytest.raises(SystemExit, match="不一致"):
-        migrate(src, ws, cache=cache)
-    assert ev.exists() and not (ws / ".central.json").exists()          # 拒绝时什么都没动
-    rep = migrate(src, ws, cache=cache, keep_local=True)
-    assert rep["pending"] == 1 and not ev.exists()
-    assert local_changes(ws) == ["feedback/events/b.jsonl"]
-    out = push(conn, ws, actor="t")
-    assert out["rev_to"] > out["rev_from"] and local_changes(ws) == []
-    assert any(r["id"] == "evt_b_2" for r in src.rows("events", "tws"))
 
 
 def test_pull_push_between_two_machines(repo, conn, tmp_path, monkeypatch):  # noqa: F811
@@ -751,26 +733,6 @@ def test_corpus_base_published_and_pulled_with_book(repo, conn, tmp_path, monkey
     assert (data_dir(fresh) / "config/corpus-pack/v1/manifest.json").exists()
     assert sorted(p.name for p in (borrowed_root(BASE_WS) / BASE_DIR).iterdir()) == ["b1", "b2"]
     assert cp.verify(fresh, 1)["base"] == 1
-
-
-def test_glyphlib_publish_creates_once(repo, conn, tmp_path):  # noqa: F811
-    """共享刻例库：升级脚本第一次推新开工作区、图按 png 进 R2；同一版再推拒绝（版本不可改）。"""
-    from open_guji_cv.core.workspace import central_data_dir
-    from open_guji_cv.datastore.client import PgSource
-    from open_guji_cv.datastore.importer import apply_schema
-    from open_guji_cv.ops.glyphlib import publish
-    apply_schema(conn)                                                  # 空库（真库早有表）
-    data = central_data_dir("glyphlib-t-v1")
-    for rel, b in _lib_store(tmp_path).items():
-        p = data / rel
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(b)
-    calls = []
-    out = publish(conn, "glyphlib-t-v1", actor="t", uploader=lambda imgs, ext="png": calls.append(ext) or {})
-    assert out["rev_to"] > out["rev_from"] and calls == ["png"]
-    assert PgSource(conn).rows("glyph_instances", "glyphlib-t-v1")
-    with pytest.raises(SystemExit, match="已经发布过"):
-        publish(conn, "glyphlib-t-v1", actor="t")
 
 
 # ---- 省流量：只向库要变了的文件、只取要用的列（Neon 免费档每月 5 GiB 公网流量）----

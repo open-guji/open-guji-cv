@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
-"""A/B 实验框架（overview#457，E1）：两份配置各跑各的输出目录，再统一比较。
+"""（拆分 P2 第四批，2026-11-04：本包的 charts, config, flips, report, report_md, rough_bench, runner, sample, tracking 已搬去 guji-manager `guji_manager.exp`。）
+
+A/B 实验框架（overview#457，E1）：两份配置各跑各的输出目录，再统一比较。
 
 一个实验 = 一份 yaml，只写与基线不同的参数（覆盖层），不改代码、不改书的正式 `books/*.yaml`。
 框架是**外挂**：只用 `Engine(params=…)` 的调用方覆盖层和可改指的产物根，**不碰任何 Step 模块
