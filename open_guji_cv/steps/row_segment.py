@@ -1447,8 +1447,13 @@ class RowSegmentStep(Step):
                 ra = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                 if ra is not None:
                     ra = _finalize(ra)
+                    alt_fl = ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"]
+                    if step_notes is not None and not human_col and step_notes.get(gc.col):
+                        ra, fl_ = _step_impl.apply(ra, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
+                                                   step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
+                        alt_fl += fl_
                     ca = _emit(ra, dict(base, n_raised=gate_raised, top_slack=gc.top_slack),
-                               ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"], None, occ, gate_raised)
+                               alt_fl, None, occ, gate_raised)
                     if [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in ca.cells] != \
                             [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in out[-1].cells]:
                         alt_out.append(ca)

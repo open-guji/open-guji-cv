@@ -704,6 +704,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8c808c47a30147c6139522bc59f9a927838416860393f7e51da37ab98b422f4c',
           old='427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28',
           evidence=_ALT_CUT),
+    # row_segment 雙行小注逐步切 jiazhu_step_split（缺省关；史記专用实现在 books/shiji_wyg，空实现进 SPLITS）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='0dc068e912694af013b3e036d1f802649a09adfd5526595385ff71f2874c77c0',
+          old='8c808c47a30147c6139522bc59f9a927838416860393f7e51da37ab98b422f4c',
+          evidence='row_segment 在 04 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 3bb2e40 产物逐字节相同（开关关）'),
     Equiv(module='open_guji_cv.steps.cell_shrink',
           new='ef4c41f5ae699fe71d8d82c872fdaa8c83625662e5b29fae46b335b3d5ddae13',
           old='641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2',
@@ -797,6 +802,10 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
         ("open_guji_cv.seg.warp", "5e750f4a8781a7ca6ea8a6916d330d7a27719a91fafb4814aa2e62a8bc5af353"),
         ("open_guji_cv.seg.profile", "508270c9484b07c734e3c671f123093ecdd2405c0851340e5d0deb3437cd6609"),
         ("open_guji_cv.books.siku_zongmu.column", "4465ac6dfe85c0eaba56e06d75c260285f7fd5a02cef69cc5787ba8e0caae3dd"))),
+    # 不是拆分、是 row_segment 新加了一个 code_dep（jiazhu_step 空实现）：两块都还是这一版时合回 row_segment 一项
+    "open_guji_cv.steps.row_segment": ("427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28", (
+        ("open_guji_cv.steps.row_segment", "427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28"),
+        ("open_guji_cv.books.siku_zongmu.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"))),
 }
 
 

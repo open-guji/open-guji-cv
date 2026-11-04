@@ -38,15 +38,17 @@ def _module_path(mod: str) -> str:
     return mod.replace(".", "/") + ".py"
 
 
-def code_hash_at(mod: str, rev: str | None) -> str:
-    """模块在 `rev`（None = 工作区）的「只认代码」哈希，未经等价登记换算。"""
+def code_hash_at(mod: str, rev: str | None) -> str | None:
+    """模块在 `rev`（None = 工作区）的「只认代码」哈希，未经等价登记换算；`rev` 里没有这个文件给 None。"""
     from open_guji_cv.core.engine import code_only_text
     rel = _module_path(mod)
     if rev is None:
         src = (ROOT / rel).read_text(encoding="utf-8")
     else:
-        src = subprocess.run(["git", "-C", str(ROOT), "show", f"{rev}:{rel}"], check=True,
-                             capture_output=True).stdout.decode("utf-8")
+        r = subprocess.run(["git", "-C", str(ROOT), "show", f"{rev}:{rel}"], capture_output=True)
+        if r.returncode:
+            return None                    # 基线里还没有这个模块（新加的 code_dep，走 SPLITS 登记）
+        src = r.stdout.decode("utf-8")
     return hashlib.sha256(code_only_text(src).encode("utf-8")).hexdigest()
 
 
@@ -80,6 +82,9 @@ def cmd_check(args) -> int:
     changed = []
     for m in mods:
         old, new = code_hash_at(m, args.base), code_hash_at(m, None)
+        if old is None:
+            print(f"新加的模块 {m}（{args.base} 里没有）：不进 ENTRIES，在 SPLITS 里登记 {new}")
+            continue
         if old != new:
             changed.append((m, new, canonical(m, old)))
     if not changed and not args.always:
