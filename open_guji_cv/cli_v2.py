@@ -1721,6 +1721,10 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
 PLUGIN_GROUP = "guji.commands"
 
 
+#: 由插件（而非 cv 自带）登记进 COMMANDS_V2 的命令名
+_PLUGIN_ADDED: set[str] = set()
+
+
 def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
     """装了 guji-manager（或别的插件）时，把它提供的子命令并进 `guji`（拆分 M4，doc/design/拆分-pipeline与manager.md）。
 
@@ -1742,7 +1746,8 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
             continue
         called = set()    # 几条命令共用一个 add_parser 时只调一次；任一条 cv 自带就整个 add_parser 让给 cv
         for name, (add_parser, handler) in commands.items():
-            if name in COMMANDS_V2 or _plugin_too_old(module, name):
+            # COMMANDS_V2 里上回由插件登记的不算 cv 自带（同一进程多次建 parser 时，如测试、控制台）
+            if (name in COMMANDS_V2 and name not in _PLUGIN_ADDED) or _plugin_too_old(module, name):
                 continue
             if add_parser not in called:
                 if any(n in sub.choices for n, (ap, _) in commands.items() if ap is add_parser):
@@ -1750,6 +1755,7 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
                 add_parser(sub)
                 called.add(add_parser)
             COMMANDS_V2[name] = handler
+            _PLUGIN_ADDED.add(name)
             added.append(name)
     return added
 
