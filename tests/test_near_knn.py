@@ -83,3 +83,24 @@ def test_pack_roundtrip():
     a = np.random.default_rng(0).normal(size=(5, 3)).astype(np.float32)
     assert np.allclose(near_knn.unpack(near_knn.pack(a)), a, atol=1e-2)
     assert near_knn.unpack([[1, 2]]).shape == (1, 2)
+
+
+def test_witness3_knn_veto(tmp_path, monkeypatch):
+    """witness3 否决：刻例近邻指向库首位才否决；指向整理本字、skip_chars、取不到字块都照旧放（返回 None）。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps import seed_admit as sa
+    path = tmp_path / "near_knn.json"
+    path.write_text(json.dumps(_model(skip_chars=["一"]), ensure_ascii=False), encoding="utf-8")
+    near_knn.load.cache_clear()
+    p = SimpleNamespace(group_flow_near_knn=str(path))
+    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
+    veto = sa._witness3_knn_veto_fn(p, None, 1)
+    rec = SimpleNamespace(slot=1, sub=None)
+    v = veto(1, rec, "口", "十")                      # 图是 口＝库首位，整理本说 十 → 否决
+    assert v and v["pick"] == "口"
+    assert veto(1, rec, "十", "口") is None           # 图是 口＝整理本字 → 照旧放
+    assert veto(1, rec, "口", "一") is None           # skip_chars
+    def boom(*a):
+        raise sa.PatchUnavailable("x")
+    monkeypatch.setattr(sa, "_page_patch", boom)
+    assert veto(1, rec, "口", "十") is None           # 取不到字块 fail-open
