@@ -70,8 +70,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "products.fp_migrate -> clustering",
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",
-    "report.collate -> eval.round_check",
-    "report.tiers -> eval.round_check",
     "utils.binarized -> clustering.normalize",
     "books.siku_zongmu.calibrate -> steps",
     "utils.font_calibrate -> clustering.canonical",
@@ -105,6 +103,9 @@ SIDE_OVERRIDE: dict[str, str] = {
     "feedback.anchor": SIDE_PIPELINE, "feedback.returns": SIDE_PIPELINE,   # bindings 要用
     "feedback.rulings": SIDE_PIPELINE,   # 大模型裁定：L3 在线读、问完写回（2026-10-28）
     "gold.item": SIDE_PIPELINE, "gold.drift": SIDE_PIPELINE,             # lookup / bindings 要用的金标信封与漂移判定
+    # 拆分 P5（2026-11-04）：Step 读人裁的一侧归 pipeline——裁决表（gold.store 及其分片读法 adapters，
+    # verdict_store 从 consumers 挪来）、补锚档（anchor_backfill，bindings 读）
+    "gold.store": SIDE_PIPELINE, "gold.adapters": SIDE_PIPELINE, "feedback.anchor_backfill": SIDE_PIPELINE,
     # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
     "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,
     "report": SIDE_PIPELINE, "report.progress": SIDE_MANAGER, "report.html": SIDE_MANAGER, "report.run": SIDE_MANAGER,
@@ -215,10 +216,6 @@ def _p2m_edges() -> set[str]:
 
 ALLOWED_PIPELINE_TO_MANAGER: frozenset[str] = frozenset({
     "__main__ -> cli_v2",  # 入口：M2/M4 拆出 guji-cv 后消失
-    "feedback.bindings -> feedback.anchor_backfill",  # 灰区：同上
-    "feedback.lookup -> feedback.consumers",  # 灰区：consumers 归属待核（设计 2.3）
-    "report.collate -> eval.round_check",
-    "report.tiers -> eval.round_check",
 })
 
 

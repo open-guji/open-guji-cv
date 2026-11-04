@@ -45,6 +45,8 @@ def test_resolved_manual_cells_skips_bad_line_loudly(tmp_path, monkeypatch, caps
     path.write_text(json.dumps(item(89, 7), ensure_ascii=False) + "\n" + json.dumps(bad, ensure_ascii=False) + "\n",
                     encoding="utf-8")
     monkeypatch.setattr(consumers, "verdict_store", lambda: store)
+    import open_guji_cv.gold.store as _gs            # Step 读人裁走 gold.store.verdict_store（拆分 P5）
+    monkeypatch.setattr(_gs, "verdict_store", lambda: store)
     out = lookup.resolved_manual_cells("vol01")
     assert list(out) == [(89, 7)]                                            # 好的那列照样生效
     assert "第 2 行格式不对" in capsys.readouterr().err

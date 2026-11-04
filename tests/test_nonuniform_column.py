@@ -53,6 +53,8 @@ def test_resolved_slots_reads_uniform(tmp_path, monkeypatch):
                  expected={"n_slots": 22}),
     ])
     monkeypatch.setattr(consumers, "verdict_store", lambda: store)
+    import open_guji_cv.gold.store as _gs            # Step 读人裁走 gold.store.verdict_store（拆分 P5）
+    monkeypatch.setattr(_gs, "verdict_store", lambda: store)
     got = resolved_slots("bxgb")
     assert got[(33, 19)] == ResolvedColumn(22, False)
     assert got[(33, 18)] == ResolvedColumn(22, True), "没写 uniform 的旧裁决要当均匀"
