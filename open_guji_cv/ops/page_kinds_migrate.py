@@ -34,6 +34,7 @@ def _rt():
     y.preserve_quotes = True
     y.width = 4096
     y.allow_unicode = True
+    y.indent(mapping=2, sequence=4, offset=2)      # 册 yaml 的写法：`  - file:`（序列缩进 2、短横后 2）
     return y
 
 
@@ -97,13 +98,16 @@ def migrate_text(text: str) -> tuple[str | None, dict]:
 
 def step_fingerprints(book_id: str, books_dir: Path) -> dict[str, str]:
     """缺省管线逐步的 `params_hash`（册配置里新老写法的唯一差别只能在这里体现）。"""
+    import warnings
     from ..core.book import load_book
     from ..core.engine import Engine, params_hash
     from ..core.pipeline import default_pipeline_id, load_pipeline
     from ..core.step import STEPS
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
-    book = load_book(book_id, books_dir)
+    with warnings.catch_warnings():                 # 迁移前的册本来就带老写法，别刷屏
+        warnings.simplefilter("ignore", FutureWarning)
+        book = load_book(book_id, books_dir)
     pl = load_pipeline(default_pipeline_id(book))
     with tempfile.TemporaryDirectory() as t:
         eng = Engine(book, pl, store=ProductStore(Path(t) / "p"), cache=ImageCache(Path(t) / "c"), log=lambda s: None)
@@ -139,8 +143,10 @@ def run(books_dir: Path, *, apply: bool = False, only: list[str] | None = None) 
             tb = Path(t) / "books"
             shutil.copytree(books_dir, tb)
             cfg = books_dir.parent / "config"
-            if cfg.is_dir():
-                shutil.copytree(cfg, Path(t) / "config")
+            if cfg.is_dir():                    # 只拷顶层 yaml（基础配置在这）；语料包、字形包动辄上百 MB，指纹用不着
+                (Path(t) / "config").mkdir()
+                for y in cfg.glob("*.yaml"):
+                    shutil.copy2(y, Path(t) / "config" / y.name)
             try:
                 before = step_fingerprints(f.stem, tb)
                 (tb / f.name).write_text(new, encoding="utf-8")

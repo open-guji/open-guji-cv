@@ -1855,7 +1855,7 @@ Step 3 的输入契约就是「一列」。
 逐列字数全对 21/97）。
 
 - **开关**：`RowSegmentParams.roster_pages`（默认空 = 关）。册配置点名开：
-  `params: {row_segment: {roster_pages: ["89-132"]}}`。不自动判页型（闸1 判不出职名页）。
+  `page_kinds: {roster: ["89-132"]}`（2026-11-04 起的写法，翻成 `row_segment.roster_pages`；老写法 `params: {row_segment: {roster_pages: …}}` 仍可用但 0.7.0 起报错）。不自动判页型（闸1 判不出职名页）。
 - **算法**：`utils/roster_segment.py`（模块头有全文）——墨带 → 压扁密排段保护 → 并碎块 →
   左右分栏（连通体按质心分，雙行右→左读、「臣」按 y）→ 粘连段谷点 DP。不定字数，
   `n_body_slots` = 实际位数，`boundaries` 为空。雙行按「右行第 i 字 ↔ 左行第 i 字」
