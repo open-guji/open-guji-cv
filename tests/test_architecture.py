@@ -38,11 +38,13 @@ LAYER: dict[str, int] = {
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
     "eval": 4, "review": 4, "ops": 4, "exp": 4, "jobs": 4,
+    "preflight": 4,   # 开跑前依赖自检（拆分 P4 从 ops 移出，归 pipeline）
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
     # L6 命令行入口
     "cli_v2": 6, "cli_products": 6,
     "cli_perf": 6,   # 拆分 P1 从 cli_v2 拆出
+    "cli_runs": 6,   # 拆分 P4 从 cli_v2 拆出（rerun、pagekinds、cache、product）
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
     "api": 6,
     # manager 过渡期用 cv 内部的门面（2026-11-02 拆分 P0）
@@ -94,7 +96,7 @@ SIDE_MANAGER = "manager"
 PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
     "core", "products", "utils", "seg", "books", "clustering", "pagetype_model", "groups",
-    "gates", "steps", "shadow", "api", "__main__",
+    "gates", "steps", "shadow", "api", "__main__", "preflight",
 })
 #: 整包归 manager 的例外之外，按模块前缀改判（最长前缀优先）
 SIDE_OVERRIDE: dict[str, str] = {
