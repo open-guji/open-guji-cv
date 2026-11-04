@@ -71,10 +71,11 @@ def _patch(cache, book: str, key: str | None):
     if not key:
         return None
     import cv2
+    from ..utils.image_io import imread as cv_imread
     p = cache.path(book, "char_patch", key)
     if not p.exists():
         return None
-    return cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
+    return cv_imread(str(p), cv2.IMREAD_GRAYSCALE)
 
 
 class _LineCtx:
@@ -87,7 +88,11 @@ class _LineCtx:
 
     def image(self, kind: str, key: str):
         import cv2
-        return cv2.imread(str(self._cache.path(self._book, kind, key)), cv2.IMREAD_GRAYSCALE)
+        from ..utils.image_io import imread as cv_imread
+        try:
+            return cv_imread(str(self._cache.path(self._book, kind, key)), cv2.IMREAD_GRAYSCALE)
+        except FileNotFoundError:   # 与 cv2.imread 同口径：缺图给 None
+            return None
 
     def params_for(self, _step):
         return self._p
