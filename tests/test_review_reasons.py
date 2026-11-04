@@ -127,3 +127,13 @@ def test_seg_kind_from_pending_list(tmp_path):
     doc = {"cells": [{"cell": "1:1:1", "why": ["seg_defect"], "seg_kind": "clipped"}]}
     res = reasons_for_pending(doc, tmp_path, "vol9", are_variants=lambda a, b: False)
     assert res["1:1:1"] == (R.SEG_DEFECT, "clipped")
+
+
+def test_jiazhu_uneven_is_seg_defect():
+    """史記夹注两行分法不均（doubt 码 jiazhu_uneven，cv#1011）归 seg_defect，细分 jiazhu_uneven。"""
+    from open_guji_cv.review.reasons import detail_of
+    c = Cell(id="v:1:2:3a", char="甲", ref="甲", doubts=["jiazhu_uneven"])
+    assert _cls([c]) == [R.SEG_DEFECT]
+    assert detail_of(R.SEG_DEFECT, c) == "jiazhu_uneven"
+    c2 = Cell(id="v:1:2:4", char="甲", ref="甲", evidence={"seg_kind": "jiazhu_uneven"}, doubts=["seg_defect"])
+    assert detail_of(R.SEG_DEFECT, c2) == "jiazhu_uneven"

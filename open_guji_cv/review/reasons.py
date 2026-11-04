@@ -142,7 +142,7 @@ RULES: dict[R, Callable[[Cell, Context], bool]] = {
     R.VISION_FLAGGED: lambda c, x: "vision_flag" in c.codes,
     R.MACHINE_CHANGED: lambda c, x: c.recheck and c.note.startswith(MACHINE_CHANGED_NOTE),
     R.RECHECK: lambda c, x: c.recheck,
-    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or "seg_defect" in c.codes,
+    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or bool(c.codes & {"seg_defect", JIAZHU_UNEVEN}),
     R.OCCLUDED_WITH_REF: lambda c, x: ("occluded" in c.codes or bool(c.evidence.get("occluded"))) and c.has_ref,
     R.OCCLUDED_NO_REF: lambda c, x: "occluded" in c.codes or bool(c.evidence.get("occluded")),
     R.SEG_PAGE_UNALIGNED: lambda c, x: (not c.has_ref and x.page_noref[_page(c.id)] >= PAGE_MIN)
@@ -175,13 +175,18 @@ def _ordered() -> list[R]:
 
 #: 切坏格细分（SJ 史記第 8 轮切坏检测，11-04 定）：作 seg_defect 的 pending_reason_detail，不新增取值。
 #: merged 两字并一格；clipped 字被切掉一边或半截；bleed 邻格笔画溢入；frame_residue 框线残笔当成笔画。
-SEG_KINDS = ("merged", "clipped", "bleed", "frame_residue")
+#: jiazhu_uneven（史記雙行小注逐步切 cv#1011，11-04 A31 定）：夹注两行分法不是 ⌈N/2⌉／⌊N/2⌋、按整理本切的格，要人核；
+#: 格上带 doubt 码 `jiazhu_uneven`（或 seg_kind=jiazhu_uneven）即归 seg_defect，细分记 jiazhu_uneven。
+JIAZHU_UNEVEN = "jiazhu_uneven"
+SEG_KINDS = ("merged", "clipped", "bleed", "frame_residue", JIAZHU_UNEVEN)
 
 
 def seg_kind_of(c: Cell) -> str:
-    """切坏细分：单上的 `seg_kind` 优先，其次产物 evidence.seg_kind；不在 SEG_KINDS 里的不认。"""
+    """切坏细分：单上的 `seg_kind` 优先，其次产物 evidence.seg_kind，再次 doubt 码 jiazhu_uneven；不在 SEG_KINDS 里的不认。"""
     k = c.seg_kind or (c.evidence or {}).get("seg_kind")
-    return k if k in SEG_KINDS else ""
+    if k in SEG_KINDS:
+        return k
+    return JIAZHU_UNEVEN if JIAZHU_UNEVEN in c.codes else ""
 
 
 def detail_of(reason: R, c: Cell) -> str:
