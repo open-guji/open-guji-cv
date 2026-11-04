@@ -40,6 +40,8 @@ def main() -> None:
     ap.add_argument("dataset", help="glyph-match/triplets 目录")
     ap.add_argument("--report", action="store_true",
                     help="逐条输出（排查用）")
+    ap.add_argument("--out", default=None,
+                    help="结果 JSON 写到这里（评测注册表用；stdout 照印）")
     ap.add_argument("--include-excluded", action="store_true",
                     help="连排除名单里的坏图块一起量（默认跳过）")
     ap.add_argument("--method", default="elastic",
@@ -86,10 +88,13 @@ def main() -> None:
         a = norm_of(t["anchor"])
         cs = float(verify(a, norm_of(t["same"])).f1)
         co = float(verify(a, norm_of(t["other"])).f1)
-        s = stats.setdefault(t["subset"], {"n": 0, "correct": 0, "margins": []})
-        s["n"] += 1
-        s["correct"] += int(cs > co)
-        s["margins"].append(cs - co)
+        # 子集按来源批次再分一层：hard 子集 09-17 以后陆续并进挖出来的难例，
+        # 总数从 36 涨到 141，只看合计会把「加了难题」误读成「算法退步」。
+        for key in (t["subset"], f'{t["subset"]}/{t.get("seed") or "orig"}'):
+            s = stats.setdefault(key, {"n": 0, "correct": 0, "margins": []})
+            s["n"] += 1
+            s["correct"] += int(cs > co)
+            s["margins"].append(cs - co)
         if args.report:
             mark = "✓" if cs > co else "✗"
             print(f'{mark} {t["subset"]:<8} {t["anchor"]:<15} '
@@ -97,13 +102,24 @@ def main() -> None:
                   f'「{t["other_char"]}」other {co:.3f}')
 
     out = {"method": args.method}
+    by_seed = {}
     for sub, s in sorted(stats.items()):
-        out[sub] = {
+        row = {
             "n": s["n"],
             "rank_acc": round(s["correct"] / s["n"], 4),
             "mean_margin": round(float(np.mean(s["margins"])), 4),
         }
+        (by_seed if "/" in sub else out)[sub] = row
+    # 子集各批只在一层以上才单列（control 只有一批，不重复）
+    out["by_seed"] = {k: v for k, v in by_seed.items()
+                      if sum(1 for x in by_seed if x.split("/")[0] == k.split("/")[0]) > 1}
     print(json.dumps(out, ensure_ascii=False, indent=1))
+    if args.out:
+        # 平铺一份给注册表的 JSON 解析（它只认顶层数字键）
+        flat = {f"{sub}_{k}": v for sub, row in out.items()
+                if isinstance(row, dict) and sub != "by_seed" for k, v in row.items()}
+        Path(args.out).write_text(json.dumps({**flat, **out}, ensure_ascii=False, indent=1),
+                                  encoding="utf-8")
 
 
 if __name__ == "__main__":
