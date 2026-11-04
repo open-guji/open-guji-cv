@@ -7,6 +7,9 @@
 
 ## [0.6.1] - 测试中
 
+### Fixed
+- seed_admit 指纹补漏：#951 新加的 `groups.pair_shape` 补进 `code_deps`（seed_admit `code_hash` 随之变，本版 seed_admit 本来就改了，不额外多一次重跑），`path_params` 登记表补 `group_flow_pair_shape`（rc 修复，A31）。
+
 ### Added
 - 任务库：一批单全部跑完，自动通知提交人（11-04，sheldon 定）。某人名下没有排队／在跑的单、且有终态单没通知过时，执行方收尾（或空闲时）给 `submitted_by` 发一条汇总（成功／失败／被拦，附单号与简短原因），走中转站 send-to-roster；`jobs.job` 加列 `notified_at`（加列时历史单补成已通知），发送失败不影响单、退回下次再发。新 `jobs/notify.py`。不碰 Step，指纹不变。
 - 待审原因规范文档 `doc/design/待审原因PendingReason.md`（A31，11-04）：是什么、真源与取法、29 个取值表、各处数据怎么写（单、卡、事件、裁定、看图、网站、看板、manager、book-text char v0.4）、各仓副本、加改弃用流程、迁移记录。只加文档。
