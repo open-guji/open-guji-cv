@@ -11,22 +11,47 @@ books:
   - book: "006"
     ws_glob: "995ejelvk0-*"
     pages:
-      20: 卷首题下帝名列字距大（格位表单列 pitch free，cv#1022）
+      20: 普通正文页（建套书时按帝名列列入；帝名列实在 p61 等卷首页，本页留作正文对照）
+      61: 卷首题下帝名列「高宗 二」字距大（格位表单列 pitch free，cv#1022；列上有印，打分仍取等距格网）
+      116: 格位表自带假抬头 raised:1、整列切 23 格（corpus 8 格位表去假抬头）
+      124: 列闸假抬头、22 字列切成 23 格（column_gate.max_raised_hint 0）
       27: CPU 提速基准页（row_segment 先粗后精、step_cost 记忆）
       153: 右版框没印出来、列网整页左移（册 yaml vline_overrides）
   - book: "007"
     ws_glob: "995ejelvk0-*"
     pages:
-      47: 外框没印出来（cv#862）
+      47: 外框没印出来（cv#862）；右版框没印、列网左移（册 yaml vline_overrides）；列中「闕」小注一串
+      51: 「字闕」並排小注一行就完（jiazhu_single_head，cv#1025）
   - book: "009"
     ws_glob: "995ejelvk0-*"
     pages:
+      14: 列闸假抬头、整列切 23 格（max_raised_hint 0）
+      30: 列闸假抬头、首字「論」重切（max_raised_hint 0）
       180: 列尾藏书印压字（seal_detect overrides）
   - book: "011"
     ws_glob: "995ejelvk0-*"
     pages:
       74: 外框没印出来（cv#862）
+  - book: "008"
+    ws_glob: "995ejelvk0-*"
+    pages:
+      7: 卷首帝名列（pitch free）；列尾大印（删表行时印泥被切成字，留表行）
+  - book: "010"
+    ws_glob: "995ejelvk0-*"
+    pages:
+      143: 卷首帝名列「元宗 十一」（pitch free）
   - book: "013"
     ws_glob: "995ejelvk0-*"
     pages:
+      25: 右版框没印出来、列网整页左移（vline_overrides）
       141: 外框没印出来（cv#862）
+      146: 「字闕」＋「一」三字小注 3 处（jiazhu_single_head）
+  - book: "014"
+    ws_glob: "995ejelvk0-*"
+    pages:
+      24: 格位表自带假抬头、整列切 23 格（corpus 8）
+      164: 右版框没印出来、列网整页左移（vline_overrides）
+  - book: "015"
+    ws_glob: "995ejelvk0-*"
+    pages:
+      129: 列闸假抬头、「之」劈成两格（max_raised_hint 0）
