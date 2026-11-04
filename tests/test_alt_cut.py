@@ -128,3 +128,16 @@ def test_resolve_patch_key_reads_align_ref(tmp_path):
     assert resolve_patch_key("b", "p0003c02s4a", st) == "p0003c02s4alta"
     assert resolve_patch_key("b", "p0003c01s4a", st) == "p0003c01s4a"
     assert read_view(st, "b", "align_ref", "p0003", "align_ref").alt_cols == [2]
+
+
+def test_shifted_counts_neighbour_slot_matches():
+    """备选格网错一格：机器字整段等于参校本邻格字 → `_shifted` 数得出来；对齐的列数 0。"""
+    from open_guji_cv.products.kinds.recog import CoordRec, PageAlignRef
+    from open_guji_cv.steps.align_ref import _shifted
+    ref = "邑括地志云杜陵"
+    recs = [CoordRec(id=f"b:1:8:{i + 1}a", col=8, slot=i + 1, sub="a", ref_char=ch) for i, ch in enumerate(ref)]
+    res = PageAlignRef(page=1, coord=recs)
+    ok = {f"b:1:8:{i + 1}a": ch for i, ch in enumerate(ref)}
+    shifted = {f"b:1:8:{i + 2}a": ch for i, ch in enumerate(ref[:-1])}   # 机器第 n 格＝参校本第 n−1 格
+    assert _shifted(res, ok.get, 8) == 0
+    assert _shifted(res, shifted.get, 8) == len(ref) - 1
