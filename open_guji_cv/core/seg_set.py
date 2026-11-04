@@ -46,6 +46,7 @@ OVERRIDES: dict[str, dict[str, str]] = {
     "shiji_wyg": {
         _SIKU + "roster_segment": _SJ + "roster_segment",
         _SIKU + "roster_glyph": _SJ + "roster_glyph",
+        _SIKU + "jiazhu_step": _SJ + "jiazhu_step",
     },
 }
 

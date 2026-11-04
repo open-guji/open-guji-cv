@@ -1845,6 +1845,9 @@ class SeedAdmitStep(Step):
                                         if p.human_unbound_shift_ok else None))
             n_auto -= d_hu
             n_review += d_hu
+        d_ju = _jiazhu_uneven_pass(ctx, page, out)
+        n_auto -= d_ju
+        n_review += d_ju
         if p.codepoint_semantic and ctx.book.codepoints:
             # 放行字落到册指定码位。放在所有后处理遍之后：`group_flow` 的文意 L2 表键是按整理本原字
             # 建的（`_clf_ctx` 取邻格放行字），提前改邻格字会让键对不上、组内格被误降。
@@ -2190,6 +2193,47 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             rec.doubts = _doubts(m, None) + list(rec.doubts) + ["shadow_veto"]
             rec.evidence = {**rec.evidence, "shadow_veto": v.evidence(gate.model, gate.conf, gate.low_conf)}
             n += 1
+    return n
+
+
+_JIAZHU_UNEVEN_RE = re.compile(r"jiazhu_uneven:(\d+)-(\d+)")
+
+
+def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list) -> int:
+    """雙行小注分法不均闸（只降级）。→ 降级格数。
+
+    Step3 雙行小注逐步切（`row_segment.jiazhu_step_split`，史記）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
+    列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）一律送审，doubt 码 `jiazhu_uneven`、
+    `evidence.seg_kind=jiazhu_uneven`（待审归 seg_defect，细分 jiazhu_uneven，review/reasons.py，A31 11-04 定）。
+    没有这面列旗（开关关、别的书）时什么都不做。备选格网（alt_columns）的列旗一并认：换了列的格也送审。人裁不动。"""
+    cells = _opt(ctx, "cells", page)
+    if cells is None:
+        return 0
+    spans: dict[int, list[tuple[int, int]]] = {}
+    for cc in list(cells.columns) + list(getattr(cells, "alt_columns", None) or []):
+        for fl in cc.flags or []:
+            m = _JIAZHU_UNEVEN_RE.match(fl)
+            if m:
+                spans.setdefault(cc.col, []).append((int(m.group(1)), int(m.group(2))))
+    if not spans:
+        return 0
+    n = 0
+    for col in out:
+        sp = spans.get(col.col)
+        if not sp:
+            continue
+        for rec in col.chars or []:
+            if rec.sub not in ("a", "b") or not any(a <= rec.slot <= b for a, b in sp):
+                continue
+            if rec.provenance == "human" or rec.channel == "human":
+                continue
+            if "jiazhu_uneven" not in (rec.doubts or []):
+                rec.doubts = list(rec.doubts or []) + ["jiazhu_uneven"]
+            rec.evidence = {**(rec.evidence or {}), "seg_kind": "jiazhu_uneven"}
+            if rec.admit:
+                _demote(rec, "jiazhu_uneven")
+                rec.admit, rec.channel, rec.provenance = False, None, ""
+                n += 1
     return n
 
 
