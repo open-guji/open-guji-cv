@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 步内分段计时（A20 11-04，Sheldon 选「大头两步加分段计时」）：`cli_perf.PERF_HOOKS` 点名 glyph_match、seed_admit 的各道关与匹配器 `GlyphMatcher._match` 等，`guji step`／`pipeline` 起跑时换成计时薄壳，分段记进 perf 记录并推任务库。不改 Step 源码，`code_hash` 与产物逐字节不变（`tests/test_perf_hooks.py` 拿真匹配器核开壳与不开壳产物相同）。`GUJI_PERF=0` 关。
 - `invert_detect`（Step0 反色带）审过登记进 `core/parallel.AUDITED`，`--jobs N` 按页并行（A20 11-04，耗时统计查出串行、并行效率 0.25）。`core/parallel.py` 不进指纹，产物不变：殿本、全唐文、史記、北行共 130 页（含 4 页反色带）串行与 4 进程产物 sha 逐页相同。
 
 ## [0.6.1] - 2026-11-03
