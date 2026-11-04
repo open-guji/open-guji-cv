@@ -868,7 +868,9 @@ def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
     if len(spec) == 1:                          # 整列普通字：全列等分
         if len(rc.items) == spec[0] and all_char:
             return False
-        got = _resplit(ink, top, bottom, spec[0])
+        got = _fit_geo(ink, rc.items, spec[0], em) if all_char else None
+        if got is None:
+            got = _resplit(ink, top, bottom, spec[0])
         if got is None:
             return False
         rc.items = got
@@ -903,6 +905,24 @@ def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
     rc.items = new
     _mark_refit(rc)
     return True
+
+
+EDGE_JUNK_TOP = 0.1    # 列顶这么多字高以内起头的块
+EDGE_JUNK_GAP = 0.8    # 且与下一块隔着这么多字高：印边、版框残段，不是字
+
+
+def _fit_geo(ink: np.ndarray, items: list[RosterItem], n: int, em: float | None) -> list[RosterItem] | None:
+    """整列普通字、几何块全是字的列：先丢列顶的印边残块，再按几何块凑字数（`_fit_count`），不整列等分
+    （2026-11-04，史記各册第 2 页题署三行：大印下字距不匀，等分会在印下多切一格、把末两字挤成一格）。
+    凑不出（块太少要劈、劈不动）返回 None，退回等分。"""
+    seg = sorted(items, key=lambda it: it.y0)
+    if em and len(seg) > n and len(seg) >= 2 and seg[0].y0 <= EDGE_JUNK_TOP * em \
+            and seg[1].y0 - seg[0].y1 >= EDGE_JUNK_GAP * em:
+        seg = seg[1:]
+    seg = [t for t in (_tight_item(ink, it.y0, it.y1) for it in seg) if t is not None]
+    if not seg:
+        return None
+    return _fit_count(ink, seg, n)
 
 
 def _fit_count(ink: np.ndarray, seg: list[RosterItem], n: int) -> list[RosterItem] | None:
