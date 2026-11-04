@@ -1855,7 +1855,7 @@ class SeedAdmitStep(Step):
                                         if p.human_unbound_shift_ok else None))
             n_auto -= d_hu
             n_review += d_hu
-        d_ju = _jiazhu_uneven_pass(ctx, page, out)
+        d_ju = _jiazhu_uneven_pass(ctx, page, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
         n_auto -= d_ju
         n_review += d_ju
         if p.codepoint_semantic and ctx.book.codepoints:
@@ -2209,12 +2209,14 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
 _JIAZHU_UNEVEN_RE = re.compile(r"jiazhu_uneven:(\d+)-(\d+)")
 
 
-def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list) -> int:
+def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list, mmap: dict | None = None,
+                        amap: dict | None = None, coord: dict | None = None) -> int:
     """雙行小注分法不均闸（只降级）。→ 降级格数。
 
     Step3 雙行小注逐步切（`row_segment.jiazhu_step_split`，史記）按整理本分法切、两行分法不是 ⌈N/2⌉／⌊N/2⌋ 的段，
-    列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）一律送审，doubt 码 `jiazhu_uneven`、
+    列旗记 `jiazhu_uneven:<首格>-<末格>`；段内的夹注格（sub a／b）送审，doubt 码 `jiazhu_uneven`、
     `evidence.seg_kind=jiazhu_uneven`（待审归 seg_defect，细分 jiazhu_uneven，review/reasons.py，A31 11-04 定）。
+    已放行、且放行字＝字形库首选＝整理本字（三者一致，图上有字形证据）的格不降（第 10 轮整列送审 8 列 276 格、其中 210 格三者一致，11-04 收窄）。
     没有这面列旗（开关关、别的书）时什么都不做。备选格网（alt_columns）的列旗一并认：换了列的格也送审。人裁不动。"""
     cells = _opt(ctx, "cells", page)
     if cells is None:
@@ -2237,6 +2239,8 @@ def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list) -> int:
                 continue
             if rec.provenance == "human" or rec.channel == "human":
                 continue
+            if rec.admit and _jiazhu_three_agree(rec, (mmap or {}).get(rec.id), amap or {}, coord or {}):
+                continue                      # 放行字＝库首选＝整理本字：图上有字形证据说这格切对了，不降（第 10 轮 8 列 210 格，11-04）
             if "jiazhu_uneven" not in (rec.doubts or []):
                 rec.doubts = list(rec.doubts or []) + ["jiazhu_uneven"]
             rec.evidence = {**(rec.evidence or {}), "seg_kind": "jiazhu_uneven"}
@@ -2245,6 +2249,13 @@ def _jiazhu_uneven_pass(ctx: RunContext, page: int, out: list) -> int:
                 rec.admit, rec.channel, rec.provenance = False, None, ""
                 n += 1
     return n
+
+
+def _jiazhu_three_agree(rec, m, amap: dict, coord: dict) -> bool:
+    """放行字、字形库首选、整理本字（现役对位，没有就坐标对位）三者相同。"""
+    top = (m.candidates[0][0] if m is not None and m.candidates else None)
+    ref = (amap.get(rec.id) or (None, None))[0] or coord.get(rec.id)
+    return bool(rec.char) and top == rec.char and ref == rec.char
 
 
 def _unbound_shifted(rec, h: dict, amap: dict) -> int | None:

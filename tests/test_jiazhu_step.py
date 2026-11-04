@@ -72,13 +72,16 @@ def test_seed_admit_sends_uneven_segment_to_review(monkeypatch):
     def rec(slot, sub, channel="lib"):
         return NS(id=f"08:5:4:{slot}{sub}", slot=slot, sub=sub, char="甲", admit=True, channel=channel,
                   provenance="", doubts=[], evidence={})
-    recs = [rec(3, "a"), rec(7, "b"), rec(5, "a", channel="human"), rec(8, ""), rec(2, "")]
-    n = sa._jiazhu_uneven_pass(None, 5, [NS(col=4, chars=recs)])
+    recs = [rec(3, "a"), rec(7, "b"), rec(5, "a", channel="human"), rec(8, ""), rec(2, ""), rec(6, "a")]
+    # 6a：放行字＝库首选＝整理本字，图上有证据，不降
+    mmap = {"08:5:4:6a": NS(candidates=[("甲", 0.9)]), "08:5:4:3a": NS(candidates=[("乙", 0.9)])}
+    amap = {"08:5:4:6a": ("甲", "equal"), "08:5:4:3a": ("甲", "equal")}
+    n = sa._jiazhu_uneven_pass(None, 5, [NS(col=4, chars=recs)], mmap, amap, {})
     assert n == 2
     for r in recs[:2]:
         assert not r.admit and r.doubts == ["jiazhu_uneven"] and r.evidence["seg_kind"] == "jiazhu_uneven"
         assert r.evidence["demoted_from"] == {"channel": "lib", "by": "jiazhu_uneven"}
-    assert all(r.admit for r in recs[2:])
+    assert all(r.admit for r in recs[2:]) and recs[5].doubts == []
     # 没有这面列旗：什么都不做
     cells.columns[0].flags = ["alt_cut：x"]
     assert sa._jiazhu_uneven_pass(None, 5, [NS(col=4, chars=[rec(3, "a")])]) == 0
