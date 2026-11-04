@@ -108,5 +108,11 @@ book-text 待审格的字：机器没给字的 `c` 为 □，分行稿照阙文�
 ## 八、过渡期与待办
 
 - 待审单上旧的 `cause`（cv 成因码）、`cls`（卡片类别）还在双写，等各处都只读 `pending_reason` 后删。新代码一律读 `pending_reason`，别再新造 `cause`／`cls` 类分类。
+  11-04 盘点，还在读旧字段的（删双写前要先改完）：
+  - guji-manager `pending_stats.py`（`cause == "D"`、出表带 cause）、`taxonomy.py`；
+  - cv `ops/close_check.py`（按 cls 计数）、`review/causes.py`／`cli_close.py`（成因统计）、`review/proof_fields.py`（线上单写 cls）；
+  - cv `scripts/zhengli/ledger.py`、`republish.py`（差异报告）、`pending_route.py`。
+  网站校对页已改成先读 `pending_reason`、老单才退回 `cls`（kaiyuanguji-web #667）。
+  另外，按成因码 `cause` 派单（11-01 起）比 29 个原因更细，删 `cause` 前要先定派单改按什么。
 - 网站阅读页悬停显示原因：book-index-ui 0.65.0（book-index-manager #299）。
 - 候选清单（`feedback/candidates`）：行上或 `_meta` 写 `pending_reason`，`load_list` 每行带出，缺省 `unknown`（11-04）。
