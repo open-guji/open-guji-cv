@@ -657,10 +657,48 @@ def page_pin(p: "AlignRefParams", book: str, page: int) -> tuple[str, int, int] 
     return head, line_of[head], off_of[head]
 
 
+def dzg_null_pinned(book: str, page: int) -> bool:
+    """这一页在 `corpus/daizhige/page_pins.jsonl` 里钉成 `dzg: null`（整理本里没有这一页，如错收的他书页）。
+
+    2026-11-04（A22 第4轮，殿本 vol56 p75–78）：row_segment 配页认这个钉页、不带先验，但坐标对位
+    原先照样按格位把整理本那一段（错收的《揮麈錄》）配上来，`ref_lib_coord` 一开机器字也跟着错。
+    钉成 null 的页不做坐标对位。不另进参数哈希：钉页改动会让本册 row_segment 的
+    `page_map_fingerprint` 变，下游一路过期，本步随之重跑。"""
+    return (book, int(page)) in _dzg_null_pins(_dzg_pins_sig())
+
+
+def _dzg_pins_sig() -> tuple:
+    f = Path(corpus_path("daizhige")) / "page_pins.jsonl"
+    try:
+        st = f.stat()
+        return (str(f), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (str(f), 0, 0)
+
+
+@lru_cache(maxsize=4)
+def _dzg_null_pins(sig: tuple) -> frozenset:
+    f = Path(sig[0])
+    if not sig[2]:
+        return frozenset()
+    out = set()
+    for ln in f.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(ln) if ln.strip() else None
+        except ValueError:
+            continue
+        if isinstance(r, dict) and "dzg" in r and r["dzg"] is None and r.get("vol") and r.get("page") is not None:
+            try:
+                out.add((str(r["vol"]), int(r["page"])))
+            except (TypeError, ValueError):
+                continue
+    return frozenset(out)
+
+
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.5", unit="cell",   # 2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.6", unit="cell",   # 2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -686,7 +724,10 @@ class AlignRefStep(Step):
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
-        if _coord_enabled(p, ctx.book) and match is not None:
+        if _coord_enabled(p, ctx.book) and match is not None and dzg_null_pinned(ctx.book.id, page):
+            ar = out["align_ref"]
+            ar.note = ((ar.note + "；") if ar.note else "") + "钉页 dzg:null（整理本无此页），不做坐标对位"
+        elif _coord_enabled(p, ctx.book) and match is not None:
             def neighbors():
                 for nb in (page + 1, page - 1):
                     m = _opt(ctx, "glyph_match", nb)
