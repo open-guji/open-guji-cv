@@ -21,3 +21,17 @@ def test_send_without_token_is_gone(monkeypatch, tmp_path):
     monkeypatch.delenv("CLAUDE_RELAY_TOKEN", raising=False)
     monkeypatch.setenv("HOME", str(tmp_path))
     assert N._send("A30", "x") == "gone"
+
+
+def test_missing_column_disables_quietly(monkeypatch):
+    monkeypatch.setattr(N, "_disabled", False)
+    calls = []
+
+    def db(fn, *a, **k):
+        calls.append(1)
+        raise RuntimeError('column "notified_at" does not exist')
+
+    msgs = []
+    assert N.notify_submitters(db, msgs.append) == 0
+    assert N.notify_submitters(db, msgs.append) == 0
+    assert len(calls) == 1 and len(msgs) == 1       # 第二次不再碰库

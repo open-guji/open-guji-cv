@@ -15,6 +15,7 @@ import urllib.request
 from . import store as S
 
 DEFAULT_URL = "https://relay.open-guji.com/send/send-to-roster"
+_disabled = False      # 库里还没有 notified_at 列（没跑 guji_jobs init）：本进程不再试，领单照常
 _ICON = {"succeeded": "✓", "failed": "✗", "blocked": "拦", "cancelled": "停"}
 
 
@@ -66,11 +67,18 @@ def _send(to: str, text: str) -> str:
 
 def notify_submitters(db, say=print) -> int:
     """执行方每收尾一条单后调用。返回发出的通知数。任何错都吞掉，只打日志。"""
+    global _disabled
+    if _disabled:
+        return 0
     sent = 0
     try:
         due = db(S.notify_due)
     except Exception as e:  # noqa: BLE001
-        say(f"通知：认领失败 {type(e).__name__}: {str(e)[:120]}")
+        if "notified_at" in str(e) or type(e).__name__ == "UndefinedColumn":
+            _disabled = True
+            say("通知：任务库还没有 notified_at 列（需跑一次 guji_jobs init），本进程暂不发通知，领单不受影响")
+        else:
+            say(f"通知：认领失败 {type(e).__name__}: {str(e)[:120]}")
         return 0
     for g in due:
         ids = [j["id"] for j in g["jobs"]]
