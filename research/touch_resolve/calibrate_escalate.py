@@ -28,7 +28,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import OUT_ROOT, jdump  # noqa: E402
 from open_guji_cv.core.step import page_key  # noqa: E402
 from guji_manager.eval.touching import SHARD  # noqa: E402
-from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
+from guji_manager.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 

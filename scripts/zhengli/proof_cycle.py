@@ -108,7 +108,7 @@ def pack_info(ws: Path, book: str, label: str) -> dict | None:
     """包的 manifest（cv_version、cv_commit）；没有这个包返回 None。"""
     sys.path.insert(0, str(CV))
     try:
-        from open_guji_cv.datastore import packs as PK
+        from guji_manager.datastore import packs as PK
         src = PK._client()
         name = f"{PK._prefix(PK._ws_name(), book)}/{label}"
         return json.loads(PK._call(src, "GET", f"{name}/manifest.json", raw=True))

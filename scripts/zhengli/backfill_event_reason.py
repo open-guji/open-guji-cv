@@ -101,7 +101,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     root = Path(a.ws)
     if not (root / "feedback").is_dir():
-        from open_guji_cv.datastore.workcopy import data_dir   # 工作区 → 本机数据目录
+        from guji_manager.datastore.workcopy import data_dir   # 工作区 → 本机数据目录
         root = data_dir(root)
     fb = root / "feedback"
     files = [f for d in DIRS for f in sorted((fb / d).glob("*.jsonl"))]

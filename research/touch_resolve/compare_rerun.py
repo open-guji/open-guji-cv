@@ -28,7 +28,7 @@ from exp3_partition_eval import err_stats  # noqa: E402
 from open_guji_cv.core.spec import column_key  # noqa: E402
 from open_guji_cv.core.workspace import products_root  # noqa: E402
 from guji_manager.eval.touching import SHARD, polyline_to_seam  # noqa: E402
-from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
+from guji_manager.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.seg.cut_select import owner_from_seam  # noqa: E402

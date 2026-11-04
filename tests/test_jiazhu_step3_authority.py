@@ -188,14 +188,6 @@ def test_resolved_forced_main_takes_sub_keys_and_latest_wins(tmp_path):
     assert resolved_forced_main("vol01", log) == {}
 
 
-def test_route_invalidates_row_segment_for_main_marks():
-    from open_guji_cv.feedback.routes import RouteTable
-    table = RouteTable.load(None)
-    steps = sorted((d.extra or {}).get("step") or d.consumer
-                   for d in table.destinations(_ev(1, "vol02:100:4:17a", MAIN, "2026-10-06T00:00:01Z")))
-    assert "row_segment" in steps
-
-
 def test_returns_classify_main_as_jiazhu_split():
     from open_guji_cv.feedback.returns import classify_return
     assert classify_return(_ev(1, "vol02:100:4:17a", MAIN, "2026-10-06T00:00:01Z")) == \

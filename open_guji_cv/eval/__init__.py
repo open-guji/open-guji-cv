@@ -1,4 +1,6 @@
-"""（拆分 P2 第四批，2026-11-04：本包的 group_progress, group_status, groups, llm_online_accuracy, quality, rate_history, registry, report, review_breakdown, runner, throughput, touching, v2cols 已搬去 guji-manager `guji_manager.eval`。）
+"""（拆分 P5，2026-11-04：本包的 round_check 已搬去 guji-manager `guji_manager.eval`。）
+
+（拆分 P2 第四批，2026-11-04：本包的 group_progress, group_status, groups, llm_online_accuracy, quality, rate_history, registry, report, review_breakdown, runner, throughput, touching, v2cols 已搬去 guji-manager `guji_manager.eval`。）
 
 Eval 层：把 `scripts/eval_*.py` 统一包进控制台。
 

@@ -142,28 +142,3 @@ def test_big_request_keeps_old_retry_count(monkeypatch):
     assert n == [C.BIG_TIMEOUT, C.BIG_TIMEOUT]
 
 
-def test_r2_upload_signs_with_small_timeout(monkeypatch):
-    from open_guji_cv.datastore import r2
-    from open_guji_cv.datastore.scope import r2_key
-
-    data = b"img"
-    sha = hashlib.sha256(data).hexdigest()
-    seen = []
-
-    def urlopen(req, context=None, timeout=None):
-        path = req.full_url.split("://", 1)[1].split("/", 1)[1]
-        seen.append((req.get_method(), path, timeout))
-        if path == "v1/assets/sign-batch":
-            if len(seen) == 1:
-                raise socket.timeout("handshake")      # 第一次签名超时：重试
-            return _Resp(json.dumps({"items": [{"sha256": sha, "key": r2_key(sha), "url": "https://r2/put"}]}).encode())
-        return _Resp(b"")
-
-    monkeypatch.setattr("urllib.request.urlopen", urlopen)
-    monkeypatch.setattr("time.sleep", lambda s: None)
-    monkeypatch.setenv("GUJI_DATA_TOKEN", "t")
-    monkeypatch.setenv("GUJI_DATA_TIMEOUT", "21")
-    out = r2.upload_via_worker(None, {sha: r2.Obj(sha, len(data), "x")}, read=lambda o: data, workers=1)
-    assert out == {"uploaded": 1}
-    assert seen == [("POST", "v1/assets/sign-batch", 21.0), ("POST", "v1/assets/sign-batch", 21.0),
-                    ("PUT", "put", 60)]

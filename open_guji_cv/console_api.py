@@ -128,7 +128,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "EVALS": ("guji_manager.eval.registry", 'EVALS'),
     "runnable": ("guji_manager.eval.registry", 'runnable'),
     # eval.round_check
-    "round_check": ("eval.round_check", None),
+    "round_check": ("guji_manager.eval.round_check", None),
     # eval.rulers
     "measure": ("eval.rulers", 'measure'),
     # eval.throughput
@@ -142,9 +142,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # feedback.cell_review
     "cell_review": ("guji_manager.feedback.cell_review", None),
     # feedback.collate_consumers
-    "DENY_REL": ("feedback.collate_consumers", 'DENY_REL'),
-    "collate_repo_path": ("feedback.collate_consumers", '_repo_path'),
-    "jiajie_rows": ("feedback.collate_consumers", 'jiajie_rows'),
+    "DENY_REL": ("guji_manager.feedback.collate_consumers", 'DENY_REL'),
+    "collate_repo_path": ("guji_manager.feedback.collate_consumers", '_repo_path'),
+    "jiajie_rows": ("guji_manager.feedback.collate_consumers", 'jiajie_rows'),
     # feedback.collate_state
     "CATS": ("guji_manager.feedback.collate_state", 'CATS'),
     "CONV_KIND_CAT": ("guji_manager.feedback.collate_state", 'CONV_KIND_CAT'),
@@ -159,7 +159,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "seg_flags": ("guji_manager.feedback.collate_state", 'seg_flags'),
     "seg_payload": ("guji_manager.feedback.collate_state", 'seg_payload'),
     # feedback.consumers
-    "route_and_consume": ("feedback.consumers", 'route_and_consume'),
+    "route_and_consume": ("guji_manager.feedback.consumers", 'route_and_consume'),
     # feedback.events
     "EventLog": ("feedback.events", 'EventLog'),
     "EventTarget": ("feedback.events", 'EventTarget'),
@@ -171,7 +171,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "harvest_text": ("guji_manager.feedback.harvest", 'harvest_text'),
     "parse_card_id": ("guji_manager.feedback.harvest", 'parse_card_id'),
     # feedback.routes
-    "RouteTable": ("feedback.routes", 'RouteTable'),
+    "RouteTable": ("guji_manager.feedback.routes", 'RouteTable'),
     # gates.query
     "GATES": ("gates.query", 'GATES'),
     "gate_summary": ("gates.query", 'gate_summary'),

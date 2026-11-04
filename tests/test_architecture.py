@@ -37,7 +37,7 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "ops": 4, "jobs": 4,
+    "eval": 4, "ops": 4,
     "preflight": 4,   # 开跑前依赖自检（拆分 P4 从 ops 移出，归 pipeline）
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
@@ -65,8 +65,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "feedback.lookup -> eval.colgeom",
     "gates.row_segment_gate -> eval.rulers",
     "gold.store -> feedback.lock",
-    "gold.v2_align -> steps.align_ref",
-    "gold.v2_align -> steps.context_decide",
     "products.fp_migrate -> clustering",
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",

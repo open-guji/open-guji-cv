@@ -140,16 +140,6 @@ def test_resolved_forced_jiazhu_latest_wins(tmp_path):
     assert resolved_forced_jiazhu("vol02", log) == {}
 
 
-def test_route_invalidates_row_segment_for_jiazhu_marks():
-    from open_guji_cv.feedback.routes import RouteTable
-    table = RouteTable.load(None)
-    jzp = {"v": "seg_defect", "quality": "truncated", "reason": "jiazhu_as_main"}
-    steps = lambda p: sorted((d.extra or {}).get("step") or d.consumer
-                             for d in table.destinations(_ev("b", 1, "vol01:12:7:9", p, "2026-10-01T00:00:01Z")))
-    assert "row_segment" in steps(jzp)
-    assert "row_segment" not in steps({"v": "seg_defect", "quality": "truncated"})
-
-
 def test_half_note_solo_cell_without_runs_is_emitted_as_a_half():
     """列里没有雙行段、表说只有一半有字的格，判据认成單行小注（小字靠右）→ 按半格发 jiazhu_a；表不说就仍是單行小注。"""
     img = _column(tail_slots=(15,))

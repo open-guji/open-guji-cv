@@ -62,7 +62,7 @@ def latest_central_manifest() -> tuple[int, dict]:
         os.environ["GUJI_DATA_TOKEN"] = os.environ["GUJI_DATA_TOKEN_READ"]
     from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
     from open_guji_cv.datastore.client import WorkerSource
-    from open_guji_cv.datastore.materialize import materialize
+    from guji_manager.datastore.materialize import materialize
     with tempfile.TemporaryDirectory() as td:
         materialize(WorkerSource(), BASE_WS, Path(td), (BASE_DIR + "/",), cache=None, bucket="main")
         d = Path(td) / BASE_DIR

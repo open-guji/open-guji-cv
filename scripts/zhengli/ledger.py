@@ -317,7 +317,7 @@ def gather_page_types(book: str, pages: list[int]) -> tuple[dict[int, str], dict
     types: dict[int, str] = {}
     src: dict[int, str] = {}
     try:
-        from open_guji_cv.feedback.consumers import verdict_store
+        from guji_manager.feedback.consumers import verdict_store
         for it in verdict_store().list("page-type", legacy=False):
             if str(it.anchor.book) == book and it.anchor.page is not None:
                 t = (it.expected or {}).get("page_type")
