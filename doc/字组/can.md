@@ -31,3 +31,8 @@
 
 ## 第 3 轮（2026-11-03）：兜底归成整理本
 sheldon 11-03 定：这组拆不开的格，兜底放成整理本字。`Provisional.follow_ref`：库首位与整理本（缺位用坐标对位字）同属这一族、cov 够，就放成整理本字，不看分差内别的候选；`can` 须同族（參／叅㕘）。原有的 IDS 分族兜底先试，不成再走这条。r2 包回放：can 补放 19（叅），ba 补放 7（跋，含 2 格看图像 䟦，按 sheldon 归整理本），dian 补放 10（𭶑 8、點 1、𭶑 1）。证据 decision=provisional，可筛出再拆。
+
+## 2026-11-04 第 4 轮：影子闸不再降 follow_ref 组（A24）
+r3 待审 can 15＋ba 7 格里 20 格是同一个套路：库首位（㕘／䟦）经 ref_lib 放行，字组复核只回 keep，影子闸（`shadow_gate_v1`）挑的正是整理本字（叅／跋）→ 降审。sheldon 11-03 定「拆不开兜底放成整理本字」，而 follow_ref 只在补放（lift）里生效，复核格没走到。
+改在影子闸里：挑的字＝现役对位整理本字、放行字在同一族（can 參／叅㕘 分族）、组在 `Provisional.follow_ref`（can ba dian）→ 改成整理本字，证据 `group.decision=provisional`、`follow_ref_veto`，不降审（`seed_admit._follow_ref_veto`）。
+回放 22 格：20 格改放（can 叅 13、ba 跋 7），余 2 格不变；产物里可按 `evidence.follow_ref_veto` 筛出再拆。

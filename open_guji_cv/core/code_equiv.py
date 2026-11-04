@@ -186,6 +186,10 @@ _JZ_GUARD = ("夹注两行差 2 字兜底、写本内框细线一页 2 列即认
              "开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）、row_segment 在 9 页上与 origin/dev c651c8d2 产物逐字节相同；"
              "scripts/code_equiv.py check，2026-11-03")
 
+_JZ_BAND = ("写本内框细线断成几截（cell_shrink jiazhu_strip_rules 书级开关，缺省关；extractor 加 inner_frame_band_mask／"
+             "strip_inner_frame_band，列端格按全页半格线位认线带）：开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）"
+             "上与 origin/dev 61332c2 产物逐字节相同，另 5 页 907 张字块 PNG 同；scripts/code_equiv.py check，2026-11-04（A22）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -726,6 +730,26 @@ ENTRIES: tuple[Equiv, ...] = (
           old='50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b',
           evidence='alt_cut 挑列收紧（只改备选分支）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
                    '与 dev 6c3705d9 产物逐字节相同；scripts/code_equiv.py check，2026-11-03'),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='0a56f1ecc1a7c72fb119209e8f4bd0f810aec17b5797b43af32e2b304c162c2c',
+          old='30515d5d225a5c157dd5dff9d476d2c4f3ede0ec5d5e99f19e5e4bec42b77642',
+          evidence='alt_cut 错格闸（只改备选分支）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
+                   '与 dev 62b64e2f 产物逐字节相同；殿本 vol12 31 页同（A22 11-04）；scripts/code_equiv.py check，2026-11-04。'
+                   '史记开着 alt_cut，换列结果会变，第 8 轮须从 align_ref 起强制重跑'),
+    Equiv(module='open_guji_cv.clustering.extractor',
+          new='6db213006a8b7471cd4cd9c8191e06fd14ad0a3dcf2270a36b1453a4aa296207',
+          old='a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b',
+          evidence=_JZ_BAND),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='2ae95f04104d150000d9c4f70112be0c017e0daf867f43d8fba234f812e03836',
+          old='30515d5d225a5c157dd5dff9d476d2c4f3ede0ec5d5e99f19e5e4bec42b77642',
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；殿本 vol12 31 页同（A22 11-04）；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='56240fd3e22c0046c506b1870f0fb72fa268003edc2f01543ce115ab0e2f778a',
+          old='e1fe837a2910c67f9a89b6ffd35a28b7f893d7d38db00cb3ef92bfa41b1cc449',
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align；换列要求字形背书，用户 11-04 定 B；首格切坏守卫）：'
+                   '开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev 86ca2fc5 产物逐字节相同；'
+                   '殿本 vol12 31 页同（A22 11-04，对 f6055e10 上的同一改动）；scripts/code_equiv.py check，2026-11-04'),
 )
 
 

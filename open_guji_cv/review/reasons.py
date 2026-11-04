@@ -51,7 +51,8 @@ class Cell:
     evidence: dict = field(default_factory=dict)
     recheck: bool = False
     note: str = ""
-    cls: str | None = None                             # 待审单上的旧卡片类别（seg_defect 只有这里有）
+    cls: str | None = None                             # 待审单上的旧卡片类别（老单的 seg_defect 只有这里有；11-04 起不出单）
+    seg_kind: str | None = None                        # 切坏细分（单上同名字段；产物里在 evidence.seg_kind），见 SEG_KINDS
 
     @property
     def codes(self) -> set[str]:
@@ -141,7 +142,7 @@ RULES: dict[R, Callable[[Cell, Context], bool]] = {
     R.VISION_FLAGGED: lambda c, x: "vision_flag" in c.codes,
     R.MACHINE_CHANGED: lambda c, x: c.recheck and c.note.startswith(MACHINE_CHANGED_NOTE),
     R.RECHECK: lambda c, x: c.recheck,
-    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or "seg_defect" in c.codes,
+    R.SEG_DEFECT: lambda c, x: c.cls == "seg_defect" or bool(c.codes & {"seg_defect", JIAZHU_UNEVEN}),
     R.OCCLUDED_WITH_REF: lambda c, x: ("occluded" in c.codes or bool(c.evidence.get("occluded"))) and c.has_ref,
     R.OCCLUDED_NO_REF: lambda c, x: "occluded" in c.codes or bool(c.evidence.get("occluded")),
     R.SEG_PAGE_UNALIGNED: lambda c, x: (not c.has_ref and x.page_noref[_page(c.id)] >= PAGE_MIN)
@@ -172,8 +173,26 @@ def _ordered() -> list[R]:
     return sorted((r for r in R if r is not R.UNKNOWN), key=lambda r: specs()[r].priority)
 
 
+#: 切坏格细分（SJ 史記第 8 轮切坏检测，11-04 定）：作 seg_defect 的 pending_reason_detail，不新增取值。
+#: merged 两字并一格；clipped 字被切掉一边或半截；bleed 邻格笔画溢入；frame_residue 框线残笔当成笔画。
+#: jiazhu_uneven（史記雙行小注逐步切 cv#1011，11-04 A31 定）：夹注两行分法不是 ⌈N/2⌉／⌊N/2⌋、按整理本切的格，要人核；
+#: 格上带 doubt 码 `jiazhu_uneven`（或 seg_kind=jiazhu_uneven）即归 seg_defect，细分记 jiazhu_uneven。
+JIAZHU_UNEVEN = "jiazhu_uneven"
+SEG_KINDS = ("merged", "clipped", "bleed", "frame_residue", JIAZHU_UNEVEN)
+
+
+def seg_kind_of(c: Cell) -> str:
+    """切坏细分：单上的 `seg_kind` 优先，其次产物 evidence.seg_kind，再次 doubt 码 jiazhu_uneven；不在 SEG_KINDS 里的不认。"""
+    k = c.seg_kind or (c.evidence or {}).get("seg_kind")
+    if k in SEG_KINDS:
+        return k
+    return JIAZHU_UNEVEN if JIAZHU_UNEVEN in c.codes else ""
+
+
 def detail_of(reason: R, c: Cell) -> str:
     """给人看的一点细节（字对、组 id、页号），不是判定依据。"""
+    if reason is R.SEG_DEFECT:
+        return seg_kind_of(c)
     if reason in (R.SEG_PAGE_UNALIGNED,):
         return _page(c.id)
     if reason in (R.SEG_COL_UNALIGNED,):
@@ -270,6 +289,8 @@ def reasons_for_pending(doc: dict, products_dir, book: str, *, glyph_db=None, ar
         c = prod.get(key) or Cell(id=f"{book}:{key}", char=None, ref=((x.get("ref") or {}).get("c") or x.get("refc")),
                                   doubts=list(x.get("why") or []))
         c.recheck, c.note, c.cls = bool(x.get("recheck")), str(x.get("note") or ""), x.get("cls")
+        if x.get("seg_kind"):
+            c.seg_kind = str(x["seg_kind"])
         cells.append(c)
     ctx = build_context(cells, lib_n=lib_counts(glyph_db) if glyph_db else None, are_variants=are_variants)
     out = {}

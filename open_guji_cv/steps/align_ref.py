@@ -153,7 +153,7 @@ from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
-from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
+from ..products.kinds.recog import AltDraft, AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 `core.workspace.corpus_path`，不要再写死 "corpus/xxx.txt" 这种相对
@@ -529,6 +529,11 @@ class AlignRefParams(BaseModel):
     载体字相同够多才认，只给有字形证据的格。起因：卷首叶题署行（大印压着、字距拉开）与夹注右行字数与整理本「|」
     不同的列整列没有整理本字（第 4 轮 S／D 类约 150 格）。False＝关（缺省，不进参数哈希）。"""
 
+    alt_select: str = "align"
+    """row_segment `alt_cut` 的备选列在哪一步定（2026-11-04，史记第 9 轮，A22 评审过）：
+    "align"＝本步按坐标对位吻合数挑（现行，缺省，不进参数哈希）；"admit"＝本步只出候选列（`alt_cand`）与
+    备选那份坐标对位（`alt_draft`），seed_admit 两套都准入后按列定（见 `products.alt_view`）。"""
+
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -558,6 +563,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_title_trust", None)
         if isinstance(d, dict) and not self.coord_dp_flat:
             d.pop("coord_dp_flat", None)
+        if isinstance(d, dict) and self.alt_select == "align":
+            d.pop("alt_select", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -1354,6 +1361,26 @@ ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数�
 # 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
 
 
+ALT_MAX_SHIFT = 3         # 备选切法里「机器载体字＝参校本同行邻格的字」有这么多格就不换（格网错了一格）
+
+
+def _shifted(res: PageAlignRef, carrier, col: int) -> int:
+    """一列里机器载体字 ≠ 本格坐标字、却等于同一行（a／b／整行）上一格或下一格坐标字的格数。
+
+    备选格网（不带先验）在夹注短行多切一格、把一字劈成两格时，后面整段错一格：坐标对位照样
+    配满（覆盖数好看），机器认出的字却整段等于参校本的邻格字。第 7 轮 06:45:8、02:12:6
+    各 10 格这样，换列后待审各 +12、+14；125 页 A/B 里挑中的 15 列全是 0。"""
+    ref = {(r.slot, r.sub): r.ref_char for r in res.coord if r.col == col and r.ref_char}
+    n = 0
+    for r in res.coord:
+        if r.col != col or not r.ref_char:
+            continue
+        t = carrier(r.id)
+        if t and t != r.ref_char and t in (ref.get((r.slot - 1, r.sub)), ref.get((r.slot + 1, r.sub))):
+            n += 1
+    return n
+
+
 def _covered(res: PageAlignRef, col: int) -> int:
     """一列里拿到坐标字（整理本非空）的格数。"""
     return sum(1 for r in res.coord if r.col == col and r.ref_char)
@@ -1378,7 +1405,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
     `ALT_MIN_GAIN`，也比现役 8-gram 对位（`chars`）equal 的格数多这么多（现役对位已经和整理本逐字对上
     的列不是切错的列；第 7 轮 125 页 A/B：只比坐标字格数时换的 20 列里 3 列变差，04:10:3、02:185:8、
     03:90:3 都是现役 equal 格数远高于坐标字格数）；
-    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。换了的列：坐标字、退回原因、冲突格都换成备选那份，
+    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。另外，备选切法里整段错一格的
+    （`_shifted` ≥ `ALT_MAX_SHIFT`）一律不换。换了的列：坐标字、退回原因、冲突格都换成备选那份，
     现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
     （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
     cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
@@ -1398,27 +1426,31 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
+    if getattr(p, "alt_select", "align") == "admit":
+        # 不在这里挑：错格的列先剔掉，其余都当候选，交 seed_admit 两套都准入后定（`products.alt_view`）
+        cand = [col for col in cols if _shifted(draft, car_alt, col) < ALT_MAX_SHIFT]
+        if cand:
+            cs = set(cand)
+            res.alt_cand = cand
+            res.alt_draft = AltDraft(
+                coord=[r for r in draft.coord if r.col in cs],
+                coord_cols=[c for c in draft.coord_cols if c in cs],
+                coord_fallback={k: v for k, v in draft.coord_fallback.items() if int(k) in cs},
+                coord_conflict_ids=[i for i in draft.coord_conflict_ids if _id_col(i) in cs])
+        return
     chosen = []
     for col in cols:
         ca, cm = _covered(draft, col), _covered(res, col)
         a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
         eq = sum(1 for c in res.chars if c.col == col and c.align_op == "equal")
+        if _shifted(draft, car_alt, col) >= ALT_MAX_SHIFT:
+            continue
         if ca >= max(cm, eq) + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
             chosen.append(col)
     if not chosen:
         return
-    ch = set(chosen)
-    res.chars = [c for c in res.chars if c.col not in ch]
-    res.coord = sorted([r for r in res.coord if r.col not in ch] + [r for r in draft.coord if r.col in ch],
-                       key=lambda r: (r.col, r.slot, r.sub or ""))
-    res.coord_cols = sorted({c for c in res.coord_cols if c not in ch} | {c for c in draft.coord_cols if c in ch})
-    for col in ch:
-        res.coord_fallback.pop(str(col), None)
-        if str(col) in draft.coord_fallback:
-            res.coord_fallback[str(col)] = draft.coord_fallback[str(col)]
-    res.coord_conflict_ids = ([i for i in res.coord_conflict_ids if _id_col(i) not in ch]
-                              + [i for i in draft.coord_conflict_ids if _id_col(i) in ch])
-    res.alt_cols = sorted(ch)
+    from ..products.alt_view import merge_alt
+    merge_alt(res, draft, chosen)
 
 
 def _id_col(rid: str) -> int | None:

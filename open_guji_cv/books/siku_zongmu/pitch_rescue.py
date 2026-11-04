@@ -1,5 +1,8 @@
 """列宽均匀拟合（Step1 后处理）：自由模式探出的列网里有列宽出了带，就在候选线里一次挑出一串列宽全在带里的线。
 
+**2.1（2026-11-04，border_detect 1.19）**：第一遍拟不出时，投影减本页底色（`FLOOR_PCT` 分位）再扣墨、找空白，
+重拟一次（满页霉点的 vol43 p1：真线都被扣成负分，DP 无解，只剩 8 列）。第一遍拟得出的页不变。
+
 **2.0（2026-11-03，border_detect 1.16）**：原来的 7 路救援（frame／grid／extend／fuse／snap／pad 及 1.15 的放宽）
 并成一路——`seg/columns.fit_columns` 的 DP。各路当年救的页型都还在测试里（`tests/test_pitch_rescue.py`），
 现在它们只是候选和打分的不同：
@@ -57,6 +60,9 @@ SLOPE_TOL = 0.01
 
 #: 按列距推线：推到的位置两侧这么宽（× 列距）里找投影最空处
 STEP_REACH = 0.1
+#: 本页底色：第一遍拟不出时，投影先减去这一分位再扣墨、找空白，重拟一次。满页霉点／污渍的页字缝里也有
+#: 0.05–0.1 的墨，不减的话每条真线都被扣成负分、进不了池，DP 无解（vol43 p1 卷首页，2.1）
+FLOOR_PCT = 20
 
 SCORE_FREE, SCORE_FREE_RULE = 2.0, 3.0
 SCORE_GRID, SCORE_GRID_RULE = 1.0, 1.5
@@ -92,13 +98,29 @@ def _straight(r):
 def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", ink_threshold: int = 128,
            spec: ColumnSpec = ColumnSpec()) -> tuple[object, str | None]:
     """`detect_grid(pitch)` 用网格模式重探。返回 (结果, 'fit'|None)。列宽都在带里、正文列太少不判、或拟合不出／
-    不过护栏时原样返回、None。"""
+    不过护栏时原样返回、None。
+
+    先按原投影拟合；拟不出再减本页底色（`FLOOR_PCT` 分位）重拟一次。第一遍拟得出的页结果与 2.0 逐位相同。"""
     if spec.uniform != "strict":
         return res, None
     xs = line_xs(res)
     chk = check(xs, spec, leaf_layout=leaf_layout)
     if chk.ok:
         return res, None
+    grids: dict = {}
+
+    def grid_once(p):
+        if p not in grids:
+            grids[p] = detect_grid(p)
+        return grids[p]
+    for floor in (None, FLOOR_PCT):
+        out, how = _fit(res, gray, grid_once, xs, chk, spec, ink_threshold, floor)
+        if how:
+            return out, how
+    return res, None
+
+
+def _fit(res, gray, detect_grid, xs, chk, spec: ColumnSpec, ink_threshold: int, floor_pct):
     pitch = chk.pitch
     H, W = gray.shape[:2]
     top = float(res.top.y_at(0.0)) if res.top is not None else 0.0
@@ -106,6 +128,8 @@ def rescue(res, gray: np.ndarray, detect_grid, *, leaf_layout: str = "single", i
     slope = statistics.median(v.slope for v in res.verticals)
     wx0, wx1 = max(xs[0] - REACH * pitch, 0.0), min(xs[-1] + REACH * pitch, float(W))
     px, prof = ink_profile(gray, top, bot, slope, wx0, wx1, ink_threshold=ink_threshold)
+    if floor_pct is not None and len(prof):
+        prof = np.clip(prof - np.percentile(prof, floor_pct), 0.0, None)
     ridges = rule_ridges(gray, top, bot, slope, wx0, wx1, RULE_RUN * pitch, ink_threshold=ink_threshold)
 
     def ink(a, b):

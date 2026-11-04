@@ -128,3 +128,75 @@ def test_resolve_patch_key_reads_align_ref(tmp_path):
     assert resolve_patch_key("b", "p0003c02s4a", st) == "p0003c02s4alta"
     assert resolve_patch_key("b", "p0003c01s4a", st) == "p0003c01s4a"
     assert read_view(st, "b", "align_ref", "p0003", "align_ref").alt_cols == [2]
+
+
+def test_shifted_counts_neighbour_slot_matches():
+    """备选格网错一格：机器字整段等于参校本邻格字 → `_shifted` 数得出来；对齐的列数 0。"""
+    from open_guji_cv.products.kinds.recog import CoordRec, PageAlignRef
+    from open_guji_cv.steps.align_ref import _shifted
+    ref = "邑括地志云杜陵"
+    recs = [CoordRec(id=f"b:1:8:{i + 1}a", col=8, slot=i + 1, sub="a", ref_char=ch) for i, ch in enumerate(ref)]
+    res = PageAlignRef(page=1, coord=recs)
+    ok = {f"b:1:8:{i + 1}a": ch for i, ch in enumerate(ref)}
+    shifted = {f"b:1:8:{i + 2}a": ch for i, ch in enumerate(ref[:-1])}   # 机器第 n 格＝参校本第 n−1 格
+    assert _shifted(res, ok.get, 8) == 0
+    assert _shifted(res, shifted.get, 8) == len(ref) - 1
+
+
+def test_admit_mode_pick_and_merge():
+    """alt_select="admit"：两遍准入逐列比，只换待审少 ≥2、背书不少、冲突不多的列；页计数按列差补。"""
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, CoordRec, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import _merge_admit, _pick_alt_cols
+
+    def col(c, n_ok, n_rev, ch="甲"):
+        recs = [AdmitRec(id=f"b:1:{c}:{i + 1}", slot=i + 1, admit=True, channel="match_ref", char=ch) for i in range(n_ok)]
+        recs += [AdmitRec(id=f"b:1:{c}:{n_ok + i + 1}", slot=n_ok + i + 1) for i in range(n_rev)]
+        return ColumnAdmit(col=c, chars=recs)
+    main = PageAdmit(page=1, n_auto=8, n_review=12, columns=[col(1, 4, 6), col(2, 4, 6)])
+    alt = PageAdmit(page=1, n_auto=13, n_review=7, columns=[col(1, 9, 1), col(2, 5, 5)])
+    ref = PageAlignRef(page=1, coord=[CoordRec(id="b:1:1:1", col=1, slot=1, ref_char="甲")])
+    chosen = _pick_alt_cols([1, 2], main, alt, ref, ref, None, None)
+    assert chosen == [1]                          # 第 2 列只少 1 格，不换
+    m = _merge_admit(main, alt, chosen)
+    assert (m.n_auto, m.n_review, m.alt_cols) == (13, 7, [1])
+    assert m.column(1).chars[8].admit and len(m.column(2).chars) == 10
+    assert "alt_cols" not in PageAdmit(page=1).model_dump()
+    # 备选那遍冲突多了（放行字≠坐标字）：不换
+    alt_bad = PageAdmit(page=1, columns=[col(1, 9, 1, ch="乙"), col(2, 5, 5)])
+    assert _pick_alt_cols([1], main, alt_bad, ref, ref, None, None) == []
+    # 备选那遍放行全靠整理本（witnesses_coord），背书格变少：不换（用户 11-04 定 B）
+    weak = col(1, 9, 1)
+    for r in weak.chars[:9]:
+        r.channel = "witnesses_coord"
+    assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
+
+
+def test_admit_mode_first_cell_guard():
+    """备选首个正文整字格墨高超过其余中位数 1.6 倍：不换（只拦）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.seed_admit import _first_cell_tall
+
+    def chars(h0):
+        hs = [h0] + [40] * 6
+        rs = [NS(sub=None, slot=i + 1, patch_key=f"k{i}", bbox_page=[0, 0, 30, h]) for i, h in enumerate(hs)]
+        return NS(columns=[NS(col=1, chars=rs)])
+    assert _first_cell_tall(chars(70), 1) and not _first_cell_tall(chars(60), 1)
+    assert not _first_cell_tall(chars(70), 2) and not _first_cell_tall(None, 1)
+
+
+def test_admit_mode_views_and_offline_cols(tmp_path):
+    from open_guji_cv.products.alt_view import alt_cols_of, alt_override, with_alt_ref
+    from open_guji_cv.products.kinds.recog import AltDraft, CoordRec, PageAdmit, PageAlignRef
+    from open_guji_cv.products.store import ProductStore
+    ref = PageAlignRef(page=3, coord=[CoordRec(id="b:3:2:1", col=2, slot=1, ref_char="甲")], alt_cand=[2],
+                       alt_draft=AltDraft(coord=[CoordRec(id="b:3:2:1", col=2, slot=1, ref_char="乙")], coord_cols=[2]))
+    v = with_alt_ref(ref, {2})
+    assert [r.ref_char for r in v.coord] == ["乙"] and v.alt_cols == [2] and ref.alt_cols == []
+    assert with_alt_ref(ref, set()) is ref
+    st = ProductStore(tmp_path / "products")
+    st.write("b", "align_ref", "p0003", {"align_ref": ref})
+    assert alt_cols_of("b", 3, st) == frozenset()          # 候选不算换列
+    st.write("b", "seed_admit", "p0003", {"seed_admit": PageAdmit(page=3, alt_cols=[2])})
+    assert alt_cols_of("b", 3, st) == frozenset({2})       # 先读 seed_admit
+    with alt_override("b", 3, ()):
+        assert alt_cols_of("b", 3, st) == frozenset()      # 准入时钉住的列优先

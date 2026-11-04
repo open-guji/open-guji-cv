@@ -56,6 +56,7 @@ class MethodInput:
     right: str | None = None
     patch_fn: Callable[[str], Any] | None = None   # 格 id → 灰度字块（缺图 → None）
     cur: str | None = None             # 复核时格现放行的字（补放为 None）
+    coord: str | None = None           # 坐标对位字（现役对位缺这一格时才有；夹注半格不给）。只有明说用它的方法（`RefRare`）才读
     force_panel: bool = False          # 文意字不 strong 时一律交 L3 二审小组确认（`flow.decide` 在文意与字形冲突时重判用）
 
     def patch(self):
@@ -169,6 +170,22 @@ class CtxRule(Method):
         if v.char is not None:
             v.conf = 1.0
         return _ctx_out(v)
+
+
+@dataclass(frozen=True)
+class RefRare(Method):
+    """整理本字本身就定了族：整理本作的是只属于某一族的罕用写法（冦 宼 㓂 只会是 寇 的异体，不会是 冠），
+    且 L1 规则没说别的 → 给整理本字（族内再按书级码位归一）。免调大模型（A24 第 4 轮，sheldon 11-03「冦寇冦族识别到寇族即可，暂归一到寇」）。
+    证据：vol20–99 ★main 里整理本作 冦宼 的已放行格 94 格全是 寇 族，0 例放成 冠；整理本缺位或是族外字不判。"""
+    name: str = "ref_rare"
+    kind = "ctx_rule"
+    rare: frozenset = frozenset()
+
+    def _run(self, inp):
+        r = inp.ref or inp.coord
+        if r and r in self.rare and r in inp.members:
+            return GroupVerdict(r, conf=1.0, why="agree", via="ctx:ref_rare", extra={"strong": False, **({"coord": True} if not inp.ref else {})})
+        return GroupVerdict(None, why="abstain:no_rare_ref", via="ctx:ref_rare")
 
 
 @dataclass(frozen=True)
@@ -545,6 +562,7 @@ def zy_strokes(inp: MethodInput, img) -> GroupVerdict:
 # —— 常用方法与数组（registry 用） ——
 
 FREQ = Freq()
+KGC_CTX = Chain("ctx", steps=(CtxRule(), RefRare(rare=frozenset("冦宼㓂")), Llm(), CtxModel(), CtxOnline()))
 CTX = Chain("ctx", steps=(CtxRule(), Llm(), CtxModel(), CtxOnline()))
 #: 己已巳的文意：两个族字相连（干支「己巳」）时第二字不查表，规则判不了就待定（vol06:125:6:8「嘉定己巳書成」表里是「已」）
 JYS_CTX = Chain("ctx", steps=(CtxRule(), Llm(after_pair=frozenset("己已巳")), CtxModel(after_pair=frozenset("己已巳")),

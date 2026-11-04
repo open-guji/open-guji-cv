@@ -116,7 +116,7 @@ Actor = Literal["user", "model", "align"]
 
 
 #: 「模型的判断」类来源：`payload.source` 取这些值的事件**不当人裁用**（overview#428）。
-MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm"})
+MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer"})
 
 
 def counts_as_human(e) -> bool:

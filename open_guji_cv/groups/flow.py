@@ -246,11 +246,12 @@ def _method(g: str, name: str, form: bool = False, review: bool = False):
 
 
 def _solve(name: str, g: str, r, cands, ref, cfg: FlowConfig, left: str | None, right: str | None,
-           patch_fn, members=None, form: bool = False, review: bool = False, force_panel: bool = False) -> GroupVerdict:
+           patch_fn, members=None, form: bool = False, review: bool = False, force_panel: bool = False,
+           coord: str | None = None) -> GroupVerdict:
     """跑组 `g` 方法数组里名叫 `name` 的方法（`groups.methods`）。`members` 给了就只在这些字里选（两段判第二段＝族）。"""
     inp = MethodInput(group=g, members=frozenset(members if members is not None else GROUPS[g].members),
                       cell_id=r.id, cands=cands, ref=ref, cfg=cfg, left=left, right=right, patch_fn=patch_fn,
-                      cur=r.char if review else None, force_panel=force_panel)
+                      cur=r.char if review else None, force_panel=force_panel, coord=coord)
     return _method(g, name, form, review).run(inp)
 
 
@@ -259,7 +260,7 @@ CLEAR_OVER = {"ts": ("bars", 0.12)}
 
 
 def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_fn=None,
-           review: bool = False) -> tuple[str | None, str, list]:
+           review: bool = False, coord: str | None = None) -> tuple[str | None, str, list]:
     """依次跑组的方法数组 → (字或 None, 原因 "agree"|"abstain"|"conflict", 每个方法的留痕)。
     `review` 且组声明了 `review_methods`：改跑复核数组，第一个给字的说了算。"""
     f = GROUPS[g].flow
@@ -267,7 +268,7 @@ def decide(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, patch_
     trail: list[dict] = []
     picks: list[str] = []
     for name in (f.review_solvers if alt else f.solvers):
-        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt)
+        v = _solve(name, g, r, cands, ref, cfg, left, right, patch_fn, review=alt, coord=coord)
         trail.append({"solver": name, "char": v.char, "why": v.why, **({"via": v.via} if v.via != name else {}),
                       **v.extra})
         if v.char is not None:
@@ -595,7 +596,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
             ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
-                                    review=mode == "review")
+                                    review=mode == "review",
+                                    coord=None if r.id[-1:] in ("a", "b") else (veto_refs or {}).get(r.id))
         if mode == "lift" and ch is None and cfg.joint and any(
                 t.get("why") == "abstain:other" and t.get("other_conf") == "high" for t in trail):
             # 本组文意明说「其他」（各遍都 high）：库里分差内没有共字组的字（曰 cov 0、只剩日目），格才进了 rm；
