@@ -105,6 +105,8 @@ book-text 待审格的字：机器没给字的 `c` 为 □，分行稿照阙文�
 | book-text 殿本 99 册、北行 | 按现行单给 char 写 `pending_reason`、去待审格的 `lacuna`，文本线升 patch（dev） | 殿本 18,427 格、北行 351 格 |
 | 史记、全唐文 | 还没进 book-text；下次出单自动带原因 | — |
 
+- **切坏格细分（11-04，SJ 史記第 8 轮）**：`seg_defect` 不新增取值，细分写进 `pending_reason_detail`：`merged`（两字并一格）、`clipped`（字被切掉一边或半截）、`bleed`（邻格笔画溢入）、`frame_residue`（框线残笔当成笔画）。来源是格上的 `seg_kind` 字段：第二期由 seed_admit 写进 `evidence.seg_kind`，release_gates 写单时抄到单上同名字段；why 码照旧只写 `seg_defect`（带冒号的条目会被 `doubt_codes` 当说明丢掉）。判法见 `review/reasons.py` 的 `SEG_KINDS`／`seg_kind_of`。
+
 ## 八、过渡期与待办
 
 - **旧字段（用户 11-04 定）**：`cls`（卡片类别）不再写进待审单和章 `proof.json`，控制台按类别审仍用卡上的 `cls`（控制台自己的筛选，不出单）；

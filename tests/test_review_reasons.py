@@ -109,3 +109,21 @@ def test_reasons_for_pending_and_stamp(tmp_path):
     assert got == {"1:1:1": "occluded_with_ref", "7:7:7": "machine_changed", "8:8:8": "ref_gap"}
     assert sum(n.values()) == 3
     assert all("pending_reason" in c for c in doc["cells"])
+
+
+def test_seg_kind_detail():
+    """切坏细分作 seg_defect 的 detail（SJ 第 8 轮，11-04）：单上 seg_kind 优先，其次 evidence；不认的值不带。"""
+    from open_guji_cv.review.reasons import detail_of
+    ctx = build_context([])
+    a = Cell(id="v:1:1:1", char="甲", doubts=["seg_defect"], seg_kind="merged")
+    b = Cell(id="v:1:1:2", char="乙", doubts=["seg_defect"], evidence={"seg_kind": "frame_residue"})
+    c = Cell(id="v:1:1:3", char="丙", doubts=["seg_defect"], seg_kind="bogus")
+    for x in (a, b, c):
+        assert classify(x, ctx) is R.SEG_DEFECT
+    assert [detail_of(R.SEG_DEFECT, x) for x in (a, b, c)] == ["merged", "frame_residue", ""]
+
+
+def test_seg_kind_from_pending_list(tmp_path):
+    doc = {"cells": [{"cell": "1:1:1", "why": ["seg_defect"], "seg_kind": "clipped"}]}
+    res = reasons_for_pending(doc, tmp_path, "vol9", are_variants=lambda a, b: False)
+    assert res["1:1:1"] == (R.SEG_DEFECT, "clipped")
