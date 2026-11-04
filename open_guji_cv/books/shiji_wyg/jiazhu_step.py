@@ -233,7 +233,7 @@ def restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], pe
                                                            ink_threshold), 4)))
         n = (m_a + m_b)
         if not (m_a == (n + 1) // 2 and m_b == n // 2):
-            flags.append(f"jiazhu_uneven：段 {s0} 右 {m_a} 左 {m_b}（整理本分法），送审")
+            flags.append(f"jiazhu_uneven:{s0}-{s0 + L - 1}：右 {m_a} 左 {m_b}（整理本分法），送审")
         # 段下到下一段（或列尾）的正文格
         nxt = plan[i + 1] if i + 1 < len(plan) else None
         lo_s, hi_s = s0 + L, (nxt[0] - 1) if nxt else last_slot

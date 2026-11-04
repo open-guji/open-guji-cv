@@ -709,6 +709,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='0dc068e912694af013b3e036d1f802649a09adfd5526595385ff71f2874c77c0',
           old='8c808c47a30147c6139522bc59f9a927838416860393f7e51da37ab98b422f4c',
           evidence='row_segment 在 04 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 3bb2e40 产物逐字节相同（开关关）'),
+    # seed_admit 雙行小注分法不均闸 _jiazhu_uneven_pass（只认 row_segment 的 jiazhu_uneven 列旗，没有列旗不动）
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='b4b8fa809954527737aed7433a7be73ca8a5914242b2e4dc59cd556e9ef3a879',
+          old='e1fe837a2910c67f9a89b6ffd35a28b7f893d7d38db00cb3ef92bfa41b1cc449',
+          evidence='seed_admit 在 04 12 页（--pages 2,10,34,41,43,47,105,119,120,122,124,138）上与 origin/dev 3bb2e40 产物逐字节相同'),
     Equiv(module='open_guji_cv.steps.cell_shrink',
           new='ef4c41f5ae699fe71d8d82c872fdaa8c83625662e5b29fae46b335b3d5ddae13',
           old='641b7ace4349757a18a2d8eb1f7a3ec81381f815da766227d20ffd5e00e553a2',
@@ -790,6 +795,8 @@ MOVED: dict[str, tuple[str, str]] = {
 #: 拆分时那一版，就合回一项（旧名＋旧哈希，见 engine._collapse_splits），产物不过期。之后任何一块真改了就不合并，
 #: 照常过期。用到旧模块的 Step 要在 code_deps 里列齐全部几块。纪律同 ENTRIES：只增不删；拆出来的块又拆或又搬时，
 #: 把那一项的块表换成最新的几块（旧哈希不动，块表里的旧块已不存在，留着也合不上）。
+#: 也用来登 Step 新加的 code_dep（不是拆分）：旧模块名就是 Step 模块自己，块表＝它自己＋新加的那个模块；
+#: 两块都还是登记时那一版就合回原来一项，指纹不变（row_segment＋jiazhu_step 空实现，cv#1011）。这种项不是错登，别删。
 SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.utils.border_geometry": ("20c5f6fde41a30ad2e22200be0a97a793ceef3492e283b0fff92cb657bb896fb", (
         ("open_guji_cv.books.siku_zongmu.border", "f4989571d81cbb4d988c77cf5e4622dd57634df0ad8dbe31ee9ec432c563d0c1"),

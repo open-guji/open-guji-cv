@@ -44,7 +44,7 @@ def test_restep_long_left_line():
         assert c.y0 <= 205 + 75 * i and c.y1 >= 205 + 75 * i + 55
     main = [c for c in out if c.slot == 8]
     assert main and main[0].kind == "char" and main[0].y0 <= 590 and main[0].y1 >= 680
-    assert any("jiazhu_uneven" in f for f in flags)          # 左行比右行多：分法与 ⌈N/2⌉ 不同，送审
+    assert any(f.startswith("jiazhu_uneven:3-7") for f in flags)        # 左行比右行多：分法与 ⌈N/2⌉ 不同，送审
     assert [c.order for c in reading_order(out)] == sorted(c.order for c in out)
 
 
@@ -59,3 +59,26 @@ def test_default_impl_is_noop():
     assert D.page_note_runs("x", "y", "b", 1) is None
     res = object()
     assert D.apply(res, None, (0, 1), 1.0, [(1, 1, 1)]) == (res, [])
+
+
+def test_seed_admit_sends_uneven_segment_to_review(monkeypatch):
+    """列旗 jiazhu_uneven:<首>-<末> → 段内夹注格降审、带 doubt 码与 seg_kind；段外、正文、人裁格不动。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.steps import seed_admit as sa
+    cells = NS(columns=[NS(col=4, flags=["jiazhu_uneven:3-7：右 4 左 5（整理本分法），送审"])], alt_columns=[])
+    monkeypatch.setattr(sa, "_opt", lambda ctx, kind, page: cells)
+
+    def rec(slot, sub, channel="lib"):
+        return NS(id=f"08:5:4:{slot}{sub}", slot=slot, sub=sub, char="甲", admit=True, channel=channel,
+                  provenance="", doubts=[], evidence={})
+    recs = [rec(3, "a"), rec(7, "b"), rec(5, "a", channel="human"), rec(8, ""), rec(2, "")]
+    n = sa._jiazhu_uneven_pass(None, 5, [NS(col=4, chars=recs)])
+    assert n == 2
+    for r in recs[:2]:
+        assert not r.admit and r.doubts == ["jiazhu_uneven"] and r.evidence["seg_kind"] == "jiazhu_uneven"
+        assert r.evidence["demoted_from"] == {"channel": "lib", "by": "jiazhu_uneven"}
+    assert all(r.admit for r in recs[2:])
+    # 没有这面列旗：什么都不做
+    cells.columns[0].flags = ["alt_cut：x"]
+    assert sa._jiazhu_uneven_pass(None, 5, [NS(col=4, chars=[rec(3, "a")])]) == 0

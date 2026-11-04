@@ -1448,6 +1448,7 @@ class RowSegmentStep(Step):
                 if ra is not None:
                     ra = _finalize(ra)
                     alt_fl = ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"]
+                    # 有意不要求 lay：备选格网本就不带版式先验，夹注段分法取自整理本页钉，与先验无关，照样逐步切
                     if step_notes is not None and not human_col and step_notes.get(gc.col):
                         ra, fl_ = _step_impl.apply(ra, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
                                                    step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
