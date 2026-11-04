@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- 拆分 P4 中层（2026-11-04，用户「继续 都做完」）：`guji pipeline`／`status`／启动时的 manager 行为改成钩子（`core/hooks.py`，入口点组 `guji.hooks`，由 guji-manager ≥0.3.3 登记）：开跑前备钉版字形库／模型／语料与 Step5-b 模板索引（prepare）、整册跑完自动存包与没存包提醒（finished）、status 的收尾闸／裁放不一致／看图待审（status）、派生缓存取件器与耗时记录（startup）。没装 manager 时照跑；只有册钉了字形库、模型或语料时 `guji pipeline` 拒跑（退出码 2，`--no-prep` 放行）。`guji rerun`／`pagekinds`／`cache`／`product`／`products`／`perf` 搬去 guji-manager（老版本 manager 给装法、退出码 2）。`ops` 剩下的（除 model_blobs，测试开跑取模型要用）、`render`、`review`、`exp`、`feedback.vision`、`jobs.perf_push`、`cli_products`、`cli_perf` 删除；`ops/preflight.py` 改放 `open_guji_cv/preflight.py`（归 pipeline）。cv 里已不再有 manager 一侧的命令模块（`MANAGER_CLI_MODULES` 为空）。各步指纹不变。
+
 ### Fixed
 - 插件命令在同一进程第二次建 parser 时（测试、控制台）被当成 cv 自带而漏登：`load_plugin_commands` 记下哪些是插件登记的（`_PLUGIN_ADDED`）。拆分 P2 第三批前置。
 

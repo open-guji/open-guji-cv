@@ -1344,6 +1344,12 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "model": "拆分 P2 第四批，2026-11-04",
     "font": "拆分 P2 第四批，2026-11-04",
     "job": "拆分 P3 jobs，2026-11-04",
+    "rerun": "拆分 P4 第六批，2026-11-04",
+    "pagekinds": "拆分 P4 第六批，2026-11-04",
+    "cache": "拆分 P4 第六批，2026-11-04",
+    "product": "拆分 P4 第六批，2026-11-04",
+    "products": "拆分 P4 第六批，2026-11-04",
+    "perf": "拆分 P4 第六批，2026-11-04",
 }
 #: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
 #: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
@@ -1382,6 +1388,12 @@ MIN_MANAGER_VERSION: dict[str, str] = {
     "model": "0.3.1",
     "font": "0.3.1",
     "job": "0.3.2",
+    "rerun": "0.3.3",
+    "pagekinds": "0.3.3",
+    "cache": "0.3.3",
+    "product": "0.3.3",
+    "products": "0.3.3",
+    "perf": "0.3.3",
 }
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
@@ -1425,9 +1437,7 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   source：原图源件、页图、页表（R2），自带 -w
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
 #:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
-MANAGER_CLI_MODULES: tuple[str, ...] = (
-    "cli_products", "cli_perf", "cli_runs",
-)
+MANAGER_CLI_MODULES: tuple[str, ...] = ()
 
 
 def register_manager_cli(sub: argparse._SubParsersAction) -> None:

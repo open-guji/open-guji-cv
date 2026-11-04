@@ -21,8 +21,8 @@ def _have(mod: str) -> bool:
 
 def check(eng, steps: list[str]) -> list[str]:
     """返回缺的东西，一条一句人话；空表＝齐了。"""
-    from ..clustering import cnn_candidates as CNN
-    from ..seg.cut_select import DEFAULT_CKPT as JUDGE_CKPT
+    from .clustering import cnn_candidates as CNN
+    from .seg.cut_select import DEFAULT_CKPT as JUDGE_CKPT
     out: list[str] = []
     if "row_segment" in steps and _params(eng, "row_segment", "cut_judge") == "unet":
         if not _have("torch"):
@@ -54,11 +54,11 @@ def _human_events_missing(db_path) -> str | None:
     只在事件里的人裁（H-M7-ctx-label-1022 等）88／68 格改由 match_ref 等放行，产物照出、没有报错。"""
     if not db_path or not Path(db_path).is_file():
         return None
-    from ..feedback.events import EventLog
+    from .feedback.events import EventLog
     ev = EventLog().events_dir
     if ev.is_dir():
         return None
-    from ..steps.seed_admit import _human_shapes
+    from .steps.seed_admit import _human_shapes
     n = len(_human_shapes(db_path))
     if not n:
         return None
@@ -68,8 +68,8 @@ def _human_events_missing(db_path) -> str | None:
 
 def _params(eng, step_id: str, field: str):
     """某一步解析后的参数值（册 yaml、管线 yaml、`--params` 都算进去）；这一步不在管线里返回 None。"""
-    from .. import steps as _s  # noqa: F401 —— 确保 Step 已注册
-    from ..core.step import STEPS
+    from . import steps as _s  # noqa: F401 —— 确保 Step 已注册
+    from .core.step import STEPS
     step = STEPS.get(step_id)
     if step is None:
         return None

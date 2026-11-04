@@ -196,7 +196,7 @@ def validate(book: str, rows: list[dict], judge: str, ts: str, wenyi: set[str] |
     with tempfile.TemporaryDirectory() as td:
         p = Path(td) / "t.jsonl"
         p.write_text("\n".join(json.dumps(d, ensure_ascii=False) for d in to_jsonl_rows(todo, judge, ts)), encoding="utf-8")
-        from open_guji_cv.feedback.vision import parse_jsonl
+        from guji_manager.feedback.vision import parse_jsonl
         res = parse_jsonl(p, "check", judge, book=book)
     for e in res.errors:  # parse_jsonl 报的是 todo 内的行号，换回简表行号
         m = re.match(r"第 (\d+) 行", e)

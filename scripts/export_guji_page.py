@@ -62,7 +62,7 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     bad = 0
     plist = [int(x) for x in a.pages.split(",") if x.strip()]
-    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    from guji_manager.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
     pend = vision_pending_ids(a.book, plist, a.products)
     for p in plist:
         m = page_meta(meta, p)

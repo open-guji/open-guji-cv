@@ -33,18 +33,18 @@ LAYER: dict[str, int] = {
     # 切分共用原语（seg）与每套书自管的切分代码（books）；books 只许用 seg，套书之间不互相 import（见下面两条守卫）
     "seg": 1, "books": 2,
     # L2 算法与产出：聚类/匹配、金标、报告、渲染
-    "clustering": 2, "gold": 2, "report": 2, "render": 2, "pagetype_model": 2, "groups": 2,
+    "clustering": 2, "gold": 2, "report": 2, "pagetype_model": 2, "groups": 2,
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "review": 4, "ops": 4, "exp": 4, "jobs": 4,
+    "eval": 4, "ops": 4, "jobs": 4,
     "preflight": 4,   # 开跑前依赖自检（拆分 P4 从 ops 移出，归 pipeline）
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
     # L6 命令行入口
-    "cli_v2": 6, "cli_products": 6,
-    "cli_perf": 6,   # 拆分 P1 从 cli_v2 拆出
-    "cli_runs": 6,   # 拆分 P4 从 cli_v2 拆出（rerun、pagekinds、cache、product）
+    "cli_v2": 6,
+      # 拆分 P1 从 cli_v2 拆出
+      # 拆分 P4 从 cli_v2 拆出（rerun、pagekinds、cache、product）
     # pipeline 公开面（manager 只许 import 它；2026-10-27 拆分 M1）
     "api": 6,
     # manager 过渡期用 cv 内部的门面（2026-11-02 拆分 P0）
@@ -63,7 +63,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "core.step -> steps.context_decide",
     "core.step -> steps.rare_candidates",
     "feedback.lookup -> eval.colgeom",
-    "feedback.vision -> review.verdict_view",
     "gates.row_segment_gate -> eval.rulers",
     "gold.store -> feedback.lock",
     "gold.v2_align -> steps.align_ref",
@@ -71,7 +70,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "products.fp_migrate -> clustering",
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",
-    "render.overlay -> gates.query",
     "report.collate -> eval.round_check",
     "report.tiers -> eval.round_check",
     "utils.binarized -> clustering.normalize",

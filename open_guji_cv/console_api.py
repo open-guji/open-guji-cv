@@ -189,10 +189,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # render.guji_markdown
     "render_page": ("guji_manager.render.guji_markdown", 'render_page'),
     # render.overlay
-    "encode_png": ("render.overlay", 'encode_png'),
-    "overlay": ("render.overlay", 'overlay'),
-    "preclean_overlay": ("render.overlay", 'preclean_overlay'),
-    "preclean_report": ("render.overlay", 'preclean_report'),
+    "encode_png": ("guji_manager.render.overlay", 'encode_png'),
+    "overlay": ("guji_manager.render.overlay", 'overlay'),
+    "preclean_overlay": ("guji_manager.render.overlay", 'preclean_overlay'),
+    "preclean_report": ("guji_manager.render.overlay", 'preclean_report'),
     # render.reading_layout
     "DEFAULT_BASELINE_KG": ("guji_manager.render.reading_layout", 'DEFAULT_BASELINE_KG'),
     "reflow_page_structured": ("guji_manager.render.reading_layout", 'reflow_page_structured'),
@@ -241,9 +241,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "render_slot_count_img": ("guji_manager.review.slot_count_cards", 'render_slot_count_img'),
     "slot_count_cards": ("guji_manager.review.slot_count_cards", 'slot_count_cards'),
     # review.verdict_view
-    "cutline_verdicts": ("review.verdict_view", 'cutline_verdicts'),
-    "review_verdicts": ("review.verdict_view", 'review_verdicts'),
-    "verdicts_by_question": ("review.verdict_view", 'verdicts_by_question'),
+    "cutline_verdicts": ("guji_manager.review.verdict_view", 'cutline_verdicts'),
+    "review_verdicts": ("guji_manager.review.verdict_view", 'review_verdicts'),
+    "verdicts_by_question": ("guji_manager.review.verdict_view", 'verdicts_by_question'),
     # steps._warpmap
     "ColumnMapper": ("steps._warpmap", 'ColumnMapper'),
     # steps.align_ref

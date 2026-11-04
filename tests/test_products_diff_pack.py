@@ -3,7 +3,6 @@ import json
 
 import pytest
 
-from open_guji_cv.ops import products_diff as PD
 
 
 def _cell(page, col, pos, y, ch, state="admit", h=90):
@@ -24,29 +23,6 @@ def _write(root, page, cols):
         d = root / "b" / step
         d.mkdir(parents=True, exist_ok=True)
         (d / f"p{page:04d}.json").write_text(json.dumps({kind: {"page": page, "columns": data}}), encoding="utf-8")
-
-
-def test_diff_classifies_and_counts(tmp_path):
-    a, b = tmp_path / "a", tmp_path / "b"
-    # 第 1 列：没变；第 2 列：一格切成两格（cells）；第 3 列：送审→放行（state）；第 4 列：放行字变（text）
-    _write(a, 1, {1: [_cell(1, 1, 1, 0, "甲"), _cell(1, 1, 2, 100, "乙")],
-                  2: [_cell(1, 2, 1, 0, "丙", h=190)],
-                  3: [_cell(1, 3, 1, 0, "", "review")],
-                  4: [_cell(1, 4, 1, 0, "己")]})
-    _write(b, 1, {1: [_cell(1, 1, 1, 0, "甲"), _cell(1, 1, 2, 100, "乙")],
-                  2: [_cell(1, 2, 1, 0, "丙"), _cell(1, 2, 2, 100, "丁", "review")],
-                  3: [_cell(1, 3, 1, 0, "戊")],
-                  4: [_cell(1, 4, 1, 0, "已")]})
-    res = PD.diff_book(a, b, "b", [1, 2])
-    s = res["summary"]
-    assert s["columns"] == {"same": 1, "cells": 1, "state": 1, "text": 1}
-    assert s["a"]["review"] == 1 and s["b"]["review"] == 1
-    assert s["flips"]["review→admit"] == 1 and s["flips"]["放行字变"] == 1
-    assert res["missing"] == {"a": [2], "b": [2]}
-    rep = PD.write_report(res, tmp_path / "out", "A", "B")
-    assert "人审率" in rep.read_text(encoding="utf-8")
-    tsv = (tmp_path / "out" / "columns.tsv").read_text(encoding="utf-8").splitlines()
-    assert tsv[1].startswith("1\t2\tcells")            # 切分变了的列排最前
 
 
 class FakeSrc:
@@ -190,53 +166,6 @@ def test_unpacked_note(tmp_path, monkeypatch):
     assert PK.unpacked_note(tmp_path / "got", "vol04") is None
 
 
-def test_exp_record(tmp_path):
-    from open_guji_cv.ops import exp_record as ER
-    rep = tmp_path / "diff"
-    rep.mkdir()
-    (rep / "report.md").write_text("# 前后对比 vol04\n\n| | 格 |\n\n## 小节\n")
-    man = {"label": "cv0.4.7-c1-g2-x", "name": "products/ws/vol04/cv0.4.7-c1-g2-x", "created": "2026-10-20T01:00:00Z",
-           "note": "测", "files": 3, "bytes": 2e6,
-           "versions": {"cv": "0.4.7", "cv_commit": "23df9921abcdef", "corpus": 1, "glyph_pin": 2,
-                        "db_revs": {"siku@main:9916": 200, "未记": 21}}}
-    p = ER.write_record(tmp_path / "ws", "vol04", man, base_label="v0.4.6-cujiao", book_yaml="id: vol04\n",
-                        report_dir=rep)
-    assert p == tmp_path / "ws" / "experiments" / "vol04" / "cv0.4.7-c1-g2-x.md"
-    t = p.read_text()
-    assert "`v0.4.6-cujiao`" in t and "siku@main:9916（200 页）" in t and "id: vol04" in t
-    assert "### 小节" in t and "前后对比 vol04" not in t
-    assert (tmp_path / "ws" / "experiments" / "README.md").exists()
-    assert ER.note_main(tmp_path / "ws", "vol04", "cv0.4.7-c1-g2-x", "验收过") == p
-    assert "★ 标为 main：验收过" in p.read_text()
-    assert ER.note_main(tmp_path / "ws", "vol04", "nope") is None
-
-
-def test_exp_record_summary_and_runs(tmp_path):
-    """摘要（人写）＋结果一行（diff summary.json）＋各步运行表（产物 manifest）进实验记录开头。"""
-    from open_guji_cv.ops import exp_record as ER
-    rep = tmp_path / "diff"
-    rep.mkdir()
-    (rep / "summary.json").write_text(json.dumps({
-        "a": {"review": 273, "review_rate": 0.00789}, "b": {"review": 256, "review_rate": 0.00741},
-        "columns": {"cells": 51, "same": 1886, "text": 4}, "flips": {"放行字变": 2, "admit→review": 44}}))
-    root = tmp_path / "prod"
-    for step, ts, el in (("row_segment", 1792461600.0, 4.0), ("seed_admit", 1792465200.0, 3.5)):
-        d = root / "vol04" / step
-        d.mkdir(parents=True)
-        d.joinpath("_manifest.jsonl").write_text("".join(
-            json.dumps({"key": f"p{i:04d}", "status": "ok", "ts": ts + i, "elapsed": el, "cv_version": "0.4.7"}) + "\n"
-            for i in range(1, 3)) + json.dumps({"key": "p0003", "status": "error", "ts": ts}) + "\n")
-    man = {"label": "x", "versions": {}}
-    t = ER.write_record(tmp_path / "ws", "vol04", man, report_dir=rep, summary="目的：试先验。", products_root=root).read_text()
-    assert t.index("## 摘要") < t.index("目的：试先验。") < t.index("## 基本信息")
-    assert "送审 273 → 256（人审率 0.79% → 0.74%）" in t and "cells 51、text 4" in t and "same" not in t.split("## 基本信息")[0]
-    assert "| row_segment | 2 | 0.4.7 |" in t and t.index("| row_segment") < t.index("| seed_admit")
-    assert "0.1 分" in t                                   # 2 页 × 3.5 秒
-    assert "10-19 18:59 → 10-19 19:00" in t               # 1792461600 = 10-20 02:00Z = 洛杉矶 10-19 19:00（夏令时）
-    t2 = ER.write_record(tmp_path / "ws", "vol04", man).read_text()
-    assert "没给 `--summary`" in t2 and "各步运行" not in t2
-
-
 def test_central_rev(tmp_path, monkeypatch):
     from open_guji_cv.core import workspace as W
     monkeypatch.setattr(W, "data_root", lambda ws=None: tmp_path)
@@ -245,50 +174,6 @@ def test_central_rev(tmp_path, monkeypatch):
     assert W.central_rev() == "siku@main:9916"
 
 
-def test_exclusion_rebind(tmp_path):
-    """名单按框跟着重切走：框没动不改，顺移改号，切没了撤下，改号撞上已有的撤掉。"""
-    from open_guji_cv.ops import exclusion_rebind as XR
-
-    def cells(root, boxes):
-        d = root / "b" / "cell_shrink"
-        d.mkdir(parents=True, exist_ok=True)
-        chars = [{"id": k, "bbox_page": v, "cell_type": "char"} for k, v in boxes.items()]
-        (d / "p0001.json").write_text(json.dumps({"char_index": {"page": 1, "columns": [{"col": 1, "chars": chars}]}}))
-    old, new = tmp_path / "old", tmp_path / "new"
-    box = lambda y: [0, y, 90, y + 90]                                  # noqa: E731
-    cells(old, {"b:1:1:1": box(0), "b:1:1:2": box(100), "b:1:1:3": box(200), "b:1:1:4": box(300)})
-    # 重切：格 1 没动；格 2 那块现在编 3（前面多切了一格）；格 3 的框切成两半；格 4 的框编成 5、而 5 已在名单里
-    cells(new, {"b:1:1:1": box(0), "b:1:1:2": [0, 90, 90, 100], "b:1:1:3": box(100),
-                "b:1:1:4": [0, 200, 90, 245], "b:1:1:5": box(300), "b:1:1:6": [0, 245, 90, 290]})
-    ex = tmp_path / "crop_exclusions.jsonl"
-    lines = [{"instance_id": i, "reason": "not_a_char", "origin": "human"}
-             for i in ("b:1:1:1", "b:1:1:2", "b:1:1:3", "b:1:1:4", "b:1:1:5", "b:9:1:1", "c:1:1:1")]
-    ex.write_text("".join(json.dumps(r) + "\n" for r in lines))
-    rows = XR.plan("b", old, new, ex)
-    st = {p["iid"]: (p["status"], p["new"]) for p in rows}
-    assert st == {"b:1:1:1": ("same", "b:1:1:1"), "b:1:1:2": ("moved", "b:1:1:3"), "b:1:1:3": ("gone", None),
-                  "b:1:1:4": ("dup", "b:1:1:5"), "b:1:1:5": ("no_old", None), "b:9:1:1": ("no_old", None)}
-    XR.apply(rows, ex, today="2026-10-20")
-    kept = [json.loads(x) for x in ex.read_text().splitlines()]
-    assert [r["instance_id"] for r in kept] == ["b:1:1:1", "b:1:1:3", "b:1:1:5", "b:9:1:1", "c:1:1:1"]
-    assert kept[1]["rekey_from"] == "b:1:1:2"
-    ret = [json.loads(x) for x in (tmp_path / "crop_exclusions_retired.jsonl").read_text().splitlines()]
-    assert {(r["instance_id"], r["retired_by"]) for r in ret} == {("b:1:1:3", "rebind:gone"), ("b:1:1:4", "rebind:dup")}
-
-
-def test_render_images_uses_top_right_frame(tmp_path):
-    """bbox_page 是右上原点：看图页要先翻成左上原点再裁，否则裁到镜像位置的另一列。"""
-    import cv2
-    import numpy as np
-    from open_guji_cv.ops import products_diff as PD
-    img = np.full((200, 400), 255, np.uint8)
-    img[20:80, 300:360] = 0                                          # 墨在右边（左上原点 x 300–360）
-    c = PD.Cell("b:1:1:1", (40.0, 20.0, 99.0, 80.0), 0, "admit", "字")   # 右上原点：x = 399-360 … 399-300
-    cd = PD.ColDiff(1, 1, "text", [c], [PD.Cell("b:1:1:1", c.bbox, 0, "admit", "子")], [(0, 0)])
-    n = PD.render_images({"columns": [cd]}, tmp_path, lambda pg: img, 5, "a", "b")
-    assert n == 1
-    out = cv2.imread(str(tmp_path / "cols" / "p0001c01.png"), cv2.IMREAD_GRAYSCALE)
-    assert (out < 128).mean() > 0.3                                  # 裁到的是那块墨，不是空白
 def test_ws_name_marker_then_yaml_then_error(tmp_path, monkeypatch):
     """包键的工作区名：标记优先，其次 workspace.yaml 的 id；都没有就报错，不回退成目录名或 ws（GUJI-671）。"""
     from open_guji_cv.datastore import packs as PK
