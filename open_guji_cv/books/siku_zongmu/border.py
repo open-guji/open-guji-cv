@@ -1118,7 +1118,9 @@ def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyli
     漏掉真线时，护栏在错的一串线上退回／借形状，真线也被拗弯。重拟合只换了线的位置，旧折线形状
     原样跟着走（`shifted` 借最近线的形状），殿本 vol46 p78 左三条线下半段斜进字里 20–40px。
     在新的直线上重跑一遍同一套折线＋重定位，形状由新的相邻线决定。上下版框、抬头、外框不动。"""
-    if res.top is None or res.bottom is None:
+    if res.top is None or res.bottom is None or res.vline_segments != 3:
+        # 直线页不重拟合：线位本来就是直线，重拟合只会把网格线的三段格式（k2=k1）改成直线格式，
+        # 几何不变、Step2 分带却变了（vol40 p1 卷首大印页题列首字丢格）
         return res
     h, w = gray.shape[:2]
     mask = (gray < ink_threshold).astype(np.float64)
