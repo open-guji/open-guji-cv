@@ -151,6 +151,8 @@ def page_facts(root: Path, page: int, known: str | None = None) -> PageFacts:
         key = "slot_short" if why.startswith("格数少于整理本字数") else "slot_shift" if why.startswith("错位") else "coord_other"
         cols[int(k)][key] = why[:30]
     rs = (_layer(root, "row_segment", page, "cells") or {}).get("columns") or []
+    if "page_kind" not in f and any("roster" in (c.get("flags") or []) for c in rs):
+        f["page_kind"] = "roster/职名页分支"   # 职名页走 row_segment.roster_pages（page_kinds.roster），不在 border_detect_gate 的 page_type 里
     mode = Counter(c.get("n_body_slots") for c in rs if c.get("n_body_slots")).most_common(1)
     for c in rs:
         col = int(c["col"])
