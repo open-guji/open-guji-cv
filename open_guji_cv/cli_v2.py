@@ -8,7 +8,7 @@
     guji cache build-rare-index --book <book> [--jobs 4]   # 云端预建 Step5-b embedding 索引，供服务器分发命中
     guji cache warm --book <book> [--pages all] [--jobs 4]  # 多进程预渲字块缓存（快照导入后用）
     guji cache build-font-index [--book <book>]            # 云端预建控制台 HOG 字体模板索引，供服务器分发命中
-    guji cache pull-rare-index [--book <book>]             # 从全字表向量包（R2，按版本）落成 Step5-b 索引，不用现建
+    guji cache pull-rare-index [--book <book>] [--charset unicode-cjk-ab]  # 从全字表向量包（R2，按版本）落成 Step5-b 索引，不用现建
     guji cache build-emb-pack [--jobs 4]                   # 建一版全字表向量包（清单进 config/hanzi/emb/）
 
 旧 `python -m open_guji_cv run …`（v1 一键管线）名字不动，这里的「跑一条 pipeline」叫 `pipeline`。
@@ -769,11 +769,20 @@ def _cmd_cache_pull_rare_index(args) -> None:
         print(f"向量包 {m['version']} 没有 {prec} 精度（有 {m.get('precisions', ['fp32'])}）")
         sys.exit(1)
     print(f"向量包 {pk.version}（{prec}）：{len(pk.chars)} 字（模型 {m['ckpt']} {m['ckpt_fp']}）")
-    if not args.book:
+    charset = getattr(args, "charset", "") or ""
+    if not args.book and not charset:
         return
-    from .clustering.rare_panel import book_charsets
-    from .steps.align_ref import book_corpus
-    cs_base, cs_esc, _spec = book_charsets(args.book, book_corpus(args.book))
+    tables: list[tuple[str, tuple]] = []
+    if args.book:
+        from .clustering.rare_panel import book_charsets
+        from .steps.align_ref import book_corpus
+        cs_base, cs_esc, _spec = book_charsets(args.book, book_corpus(args.book))
+        tables += [("base", cs_base), ("escalate", cs_esc)]
+    if charset:
+        # 评测用（eval_oov / degradation / zero_shot_fusion 缺省 unicode-cjk-ab 全表 70,304 字）：
+        # 现建 4 核要几小时，用向量包落成同 key 的表（2026-11-04 修 5b 评测链时补）
+        from .clustering.charset_spec import base_charset
+        tables.append((f"charset:{charset}", tuple(base_charset(charset))))
     inst = cc.CnnCandidates(ckpt=cc.DEFAULT_CKPT)
 
     def compute(chars):
@@ -782,7 +791,7 @@ def _cmd_cache_pull_rare_index(args) -> None:
         from .clustering.synth import render_char
         return cc.build_emb_matrix(inst._net, inst._dev, tuple(chars), {}, render_char)
 
-    for name, cs in (("base", cs_base), ("escalate", cs_esc)):
+    for name, cs in tables:
         if not cs:
             continue
         key, f, _extra = inst.emb_index_key(cs)
@@ -2129,6 +2138,8 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--jobs", type=int, default=1,
                    help="build-rare-index：分片多进程建（逐位相同；云端 4 核给 4，约快 4 倍）；"
                         "warm：预渲字块的进程数")
+    p.add_argument("--charset", default="",
+                   help="pull-rare-index：另落一张按字表规格的表（如 unicode-cjk-ab，评测 oov / degradation 用）")
     p.add_argument("--precision", choices=["int8", "fp16", "fp32"], default=None,
                    help="pull-rare-index：向量包精度，缺省 int8（真刻本评测与 fp32 持平，见总设计 B2 续）")
     p.add_argument("--kind", default="char_patch", help="get：产物种类")
