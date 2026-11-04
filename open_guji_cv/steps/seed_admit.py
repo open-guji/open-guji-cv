@@ -222,6 +222,8 @@ class SeedAdmitParams(BaseModel):
     group_flow_models: dict[str, str] = Field(default_factory=dict)   # 组 id → 文意 L2 模型小头（`ctx_model/1`，缺省找 config/groups/l2model/<组>.json）
     group_flow_book_knn: dict[str, str] = Field(default_factory=dict)   # 组 id → 书级刻形近邻库（`groups.book_knn`，缺省找 config/groups/book_knn/<组>.json；没有＝不跑，行为不变）
     group_flow_rr_shape: str = ""            # 入人八 书级刻形判法模型（`groups.rr_shape`，缺省找 config/groups/rr_shape.json；没有＝不跑，行为不变）。
+    group_flow_near_knn: str = ""            # 形近护栏格书级刻形近邻库（`groups.near_knn`，缺省找 config/groups/near_knn.json；没有＝不跑，行为不变）。
+                                              # 只补放待审格，候选限 本格字／整理本／库首位，全书刻例近邻也须同意（全唐文形近字线 2026-11-04）
     group_flow_pair_shape: str = ""          # 书级「两字」刻形二选一模型（`groups.pair_shape`，史记之矣；2026-11-03）。空＝不跑，行为不变。
                                               # 只补放：待审格库首位或整理本是这两字之一，模型给的字＝整理本字或库首位才放（不引入第三个字），
                                               # 人裁格、硬护栏格不碰；图上证据（HOG＋逻辑回归，按册留出 对1899 错0（4 个错放格剔除后）），整理本只作第二证据。
@@ -877,6 +879,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.group_flow_pair_shape:
             d.pop("group_flow_pair_shape", None)
+        if isinstance(d, dict) and not self.group_flow_near_knn:
+            d.pop("group_flow_near_knn", None)
         if isinstance(d, dict) and not self.juan_rule:
             d.pop("juan_rule", None)
             d.pop("juan_cov", None)
@@ -1026,6 +1030,9 @@ class SeedAdmitParams(BaseModel):
                 if self.group_flow_book_knn:         # 书级刻形近邻库（没有库的书不加，旧指纹不变）
                     from ..groups.book_knn import fingerprint as _bk_fp
                     parts.append("bk" + "".join(g + _bk_fp(self.group_flow_book_knn[g]) for g in sorted(self.group_flow_book_knn)))
+                if self.group_flow_near_knn:         # 形近护栏格书级刻形近邻（没有库的书不加，旧指纹不变）
+                    from ..groups.near_knn import fingerprint as _nk_fp
+                    parts.append("nk" + _nk_fp(self.group_flow_near_knn))
                 if any("rr_img" in _G[g].flow.solvers for g in self.group_flow):
                     parts.append(_rr_fp(None) or "missing")
                 from ..groups.ids_online import fingerprint as _ids_fp
@@ -1059,7 +1066,7 @@ class SeedAdmitStep(Step):
                    # L2 答案表、量横、入人八字形分类器、字频
                    "open_guji_cv.groups.flow", "open_guji_cv.groups.freq", "open_guji_cv.groups.registry", "open_guji_cv.groups.edge_pairs",
                    "open_guji_cv.groups.methods",
-                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
+                   "open_guji_cv.groups.ctx_l1", "open_guji_cv.groups.ctx_l2", "open_guji_cv.groups.rr_shape", "open_guji_cv.groups.pair_shape", "open_guji_cv.groups.book_knn", "open_guji_cv.groups.near_knn", "open_guji_cv.groups.ctx_l3", "open_guji_cv.groups.ctx_llm", "open_guji_cv.groups.vis_llm",
                    "open_guji_cv.groups.prompt_template", "open_guji_cv.feedback.rulings",
                    "open_guji_cv.groups.context",
                    "open_guji_cv.groups.bars", "open_guji_cv.groups.aspect", "open_guji_cv.utils.ji_yi_si_clf", "open_guji_cv.utils.rr_clf",
@@ -1086,7 +1093,7 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_book_knn"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_book_knn", "group_flow_near_knn"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -1717,6 +1724,10 @@ class SeedAdmitStep(Step):
                 d_bk = _book_knn_pass(p, out, amap, ctx, page, patch_missing)
                 n_auto += d_bk
                 n_review -= d_bk
+            if p.group_flow_near_knn:
+                d_nk = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing)
+                n_auto += d_nk
+                n_review -= d_nk
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
@@ -3064,6 +3075,10 @@ def _resolve_group_flow_paths(p) -> None:
         if g not in bk and t.exists():
             bk[g] = str(t)
     object.__setattr__(p, "group_flow_book_knn", bk)
+    nk = _abs(p.group_flow_near_knn) if p.group_flow_near_knn else ""
+    if not nk and (cfg / "near_knn.json").exists():
+        nk = str(cfg / "near_knn.json")
+    object.__setattr__(p, "group_flow_near_knn", nk)
 
 
 def _l3_groups(p) -> tuple:
@@ -3324,6 +3339,62 @@ def _book_knn_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_miss
                 continue
             r.evidence = {**ev, "book_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "book_knn", "match", []
+            delta += 1
+    return delta
+
+
+_NEAR_CODES = frozenset({"near_form", "solo_confusable", "iron_confusable_ref"})
+
+
+def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
+                   patch_missing: dict | None = None) -> int:
+    """形近护栏格的书级刻形近邻（`groups.near_knn`，`SeedAdmitParams.group_flow_near_knn`）。紧接 book_knn。→ 新放行格数。
+
+    只补放待审格：形近护栏（guard conflict／never_match、疑问 near_form 等）或字组未定的格。候选＝本格字、整理本对位字、
+    库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
+    或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。"""
+    from ..groups import near_knn
+    from ..variants import are_variants
+    model = near_knn.load(p.group_flow_near_knn)
+    miss = patch_missing if patch_missing is not None else {}
+    delta = 0
+    for c in out:
+        for r in c.chars or []:
+            if r.admit or r.provenance == "human" or r.channel == "human":
+                continue
+            ev = r.evidence or {}
+            ds = list(r.doubts or [])
+            if "human_unbound" in ev or "human_unbound" in ds:
+                continue
+            if any(d in _RR_SHAPE_HARD for d in ds) or ev.get("guard") == "timeout":
+                continue
+            grp = ev.get("group") or {}
+            near = ev.get("guard") in ("conflict", "never_match") or bool(_NEAR_CODES & set(ds))
+            if not (near or grp.get("id")):
+                continue
+            if grp.get("id") in model["skip_groups"] or grp.get("pick"):
+                continue
+            ref = (amap.get(r.id) or (None,))[0]
+            m = mmap.get(r.id)
+            cands = [x for x in dict.fromkeys((r.char, ref, getattr(m, "char", None))) if x]
+            if len(cands) < 2 or model["skip_chars"] & set(cands):
+                continue
+            if any(are_variants(a, b) for i, a in enumerate(cands) for b in cands[i + 1:]):
+                continue
+            try:
+                img = _page_patch(ctx, page, c.col, r.slot, r.sub)
+            except PatchUnavailable:
+                if p.patch_missing != "skip":
+                    raise
+                miss.setdefault(r.id, []).append("near_knn")
+                continue
+            v = near_knn.judge(img, model, cands)
+            trail = {k: v[k] for k in ("char", "why", "pick", "votes", "ratio", "full", "full_votes", "nn") if k in v}
+            if v["char"] is None:
+                r.evidence = {**ev, "near_knn": trail}
+                continue
+            r.evidence = {**ev, "near_knn": trail, "lifted_from": {"char": r.char, "doubts": ds}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "near_knn", "match", []
             delta += 1
     return delta
 
