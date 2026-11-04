@@ -150,6 +150,9 @@ class Job:
             e["GUJI_NO_REUSE"] = "1"
         e["GUJI_JOB_ID"] = str(self.id)       # 跑批耗时记录（core/perf.py）带上单号，guji perf 能按单查
         e.update(self.spec.get("env") or {})
+        # 推库操作人：单上带了 GUJI_ACTOR（如 A31）就照旧；没带就缺省填执行方名字（GUJI_JOBS_WHO）
+        if not e.get("GUJI_ACTOR") and os.environ.get("GUJI_JOBS_WHO"):
+            e["GUJI_ACTOR"] = os.environ["GUJI_JOBS_WHO"]
         return e
 
     def sh(self, argv: list[str], *, write: bool = False, ok=(0,), outcome: str = "failed") -> str:
