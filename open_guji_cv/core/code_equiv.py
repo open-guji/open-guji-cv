@@ -726,6 +726,14 @@ ENTRIES: tuple[Equiv, ...] = (
           old='50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b',
           evidence='alt_cut 挑列收紧（只改备选分支）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
                    '与 dev 6c3705d9 产物逐字节相同；scripts/code_equiv.py check，2026-11-03'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='4c9e0f4dfbe9d2b8f2d07866e0348e9cce458e3b5a0cc70213c40a4440a4edbc',
+          old='8c874ab19a2ef0dfb4ce745a9f4e2a05bc45b99aa6a10a0f678bb3caad69fa69',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.groups.flow',
+          new='fba77cfb89665a5357b985d2acc8f0c5b3ac4e34cdb04d3d9caeb3bb37ff200e',
+          old='9eaa031aac0f27e833505a4cf508593e0b2f543ddffde3d8772beab4dc72f1de',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
 )
 
 
