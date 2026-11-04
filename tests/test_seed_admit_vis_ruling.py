@@ -87,3 +87,11 @@ def test_code_conflict_demotes_admitted_not_human(tmp_path):
     assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit
     cells[2].update(provenance="match", channel="match_solo", char="垂")                  # 字已一致不降
     assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit
+
+
+def test_src_gb_subclass_lifts(tmp_path):
+    st = RulingStore(tmp_path)
+    p = st.put("O", "src-1", "甲", "乙", char="說", conf="high", why="文本层同", model="m", cell=f"{B}:1:2")
+    p.update({"admit_ok": True, "subclass": "GB", "ref": "說", "route": "text_ref"})
+    n, r = _run({**CELLS, 2: {"char": "誤", "doubts": ["ctx_garble_shape"]}}, AMAP, st)
+    assert n == 1 and r[2].char == "說" and r[2].channel == "vis_ruling" and not r[2].doubts
