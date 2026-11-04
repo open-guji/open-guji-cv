@@ -922,7 +922,17 @@ def _fit_geo(ink: np.ndarray, items: list[RosterItem], n: int, em: float | None)
     seg = [t for t in (_tight_item(ink, it.y0, it.y1) for it in seg) if t is not None]
     if not seg:
         return None
-    return _fit_count(ink, seg, n)
+    got = _fit_count(ink, seg, n)
+    if got is None:
+        return None
+    # 每块都要像字（同 row_segment 去印点列的 `_despeckled_ok`：墨 ≥ 全列中位 0.3，或墨宽 ≥ 中位 0.6），
+    # 有块只框到印泥残点就退回等分（05、02 册 p2 去印点列）
+    am = [int(ink[it.y0:it.y1, it.x0:it.x1].sum()) for it in got]
+    wm = [it.x1 - it.x0 for it in got]
+    mi, mw = float(np.median(am)), float(np.median(wm))
+    if not (mi > 0 and all(a >= 0.3 * mi or w >= 0.6 * mw for a, w in zip(am, wm))):
+        return None
+    return got
 
 
 def _fit_count(ink: np.ndarray, seg: list[RosterItem], n: int) -> list[RosterItem] | None:
