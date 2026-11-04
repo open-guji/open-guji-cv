@@ -421,6 +421,36 @@ def suspect_full_width_cells(runs: dict[int, float], patches: dict[int, np.ndarr
             and _straddles_seam(patch, int(round(cx)), ink_threshold)}
 
 
+def single_row_heads(entries: list[tuple[int, tuple[float, float] | None]], runs: dict[int, float],
+                     patches: dict[int, np.ndarray], eligible: set[int] | None = None,
+                     ink_threshold: int = INK_THRESHOLD) -> dict[int, float]:
+    """一行就完的雙行小注段头（`segment_column` 的 `jiazhu_single_head`，2026-11-04 全唐文）：
+
+    「闕一字」这类三字小注排成两行：头一行「字｜闕」两字并排，第二行只有右半一个「一」。`link_runs` 要
+    连着两行量得出缝（`MIN_RUN`），只有一行量得出时整段落空：头一行当整宽正文字、两字挤一格，第二行成了
+    單行小注。这里补认：量得出缝（strength ≥ `CC_MIN`）、不在段里的一格，下一格墨 ≥`TAIL_A_FRAC` 落在
+    这条缝右边（单字尾的口径）→ 这一格记成段（只一行），段尾交给 `adopt_run_tails` 照常收成 `jiazhu_a`。
+    返回补进来的 `{格号: 缝中心}`，不改输入。"""
+    out: dict[int, float] = {}
+    measured = {i: c for i, c in entries if c is not None}
+    for i, (cx, strength) in sorted(measured.items()):
+        if i in runs or i - 1 in runs or i + 1 in runs or strength < CC_MIN:
+            continue
+        if eligible is not None and (i not in eligible or i + 1 not in eligible):
+            continue
+        nxt = patches.get(i + 1)
+        if nxt is None or (i + 1) in measured:
+            continue
+        cxi = int(round(cx))
+        if cxi <= 0 or cxi >= nxt.shape[1]:
+            continue
+        ys, xs = np.nonzero(_binary(nxt, ink_threshold))
+        if xs.size < TAIL_MIN_INK or float((xs >= cxi).mean()) < TAIL_A_FRAC:
+            continue
+        out[i] = cx
+    return out
+
+
 def adopt_run_tails(runs: dict[int, float], patches: dict[int, np.ndarray],
                     eligible: set[int] | None = None,
                     ink_threshold: int = INK_THRESHOLD

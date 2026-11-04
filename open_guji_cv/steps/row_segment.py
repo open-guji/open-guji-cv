@@ -827,6 +827,10 @@ class RowSegmentParams(BaseModel):
     #: 一格只有一半有字（段字数为奇数）时，多出的那个字归 a 还是 b 由图定（两种分法各切、取切线压墨少的），短的那行
     #: 格号照「本行第几字」从段首数。缺省按「右行多一字」（光盘版整理本口径）。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_free_split: bool = False
+    #: **一行就完的雙行小注**（2026-11-04，全唐文）：「闕一字」这类小注头一行「字｜闕」并排、第二行只有右半「一」，
+    #: 夹注判据要连着两行量得出缝，整段落空，两字挤进一个整宽正文格（r9b 字形线退回 8 格）。开了就补认这种段
+    #: （`jiazhu_split.single_row_heads`）。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_single_head: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -926,6 +930,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_rows", None)
             if not self.jiazhu_free_split:
                 d.pop("jiazhu_free_split", None)
+            if not self.jiazhu_single_head:
+                d.pop("jiazhu_single_head", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -1166,6 +1172,7 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
+                    **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
