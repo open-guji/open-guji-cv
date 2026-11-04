@@ -304,7 +304,7 @@ def cmd_glyphlib(args) -> None:
         print("✗ 要给 -w 来源书的工作区", file=sys.stderr)
         sys.exit(2)
     res = gl.build(Path(args.workspace).expanduser().resolve(), args.name, min_batches=args.min_confirm,
-                   per_char=args.per_char, actor=actor, note=args.note)
+                   per_char=args.per_char, actor=actor, note=args.note, gate_waive=args.gate_waive or "")
     if args.push:
         from .cli_db import _pg_conn
         from .datastore.r2 import upload_files
@@ -423,6 +423,8 @@ def add_parser(sub) -> None:
     p.add_argument("--per-char", type=int, default=3, help="每字最多几张（缺省 3）")
     p.add_argument("--note", default="", help="写进升格记录的备注")
     p.add_argument("--push", action="store_true", help="出完推进中心库（升级脚本身份，要写库权限）")
+    p.add_argument("--gate-waive", default=None, metavar="理由",
+                   help="出版护栏（多字头实例、人裁×人裁冲突）没过也照出，理由记进结果 gate.waived")
     p = sub.add_parser("rekey-cells", help="[v2] 换图源后按格级对照表改键：字形库、L2 表、金标/回放集、模板库出处（GUJI-748）")
     p.add_argument("action", choices=["glyph-db", "verify", "json", "jsonl", "ids-bank"],
                    help="glyph-db 改 glyph.db 实例 id；verify 核对改键后的库；json L2 表等按格当键的 JSON；"
