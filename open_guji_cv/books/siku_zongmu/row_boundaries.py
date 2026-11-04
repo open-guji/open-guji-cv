@@ -1687,6 +1687,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     grid_bounds: "Sequence[float] | None" = None,
                     jiazhu_rows: bool = False,
                     jiazhu_free_split: bool = False,
+                    jiazhu_single_head: bool = False,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1773,6 +1774,8 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
     - `jiazhu_free_split`（要 `jiazhu_rows`，写本书级）：段尾一格表说只有一半有字（字数为奇数）时，多出的那个字
       归段尾格墨多的那行（图定，不照整理本 ⌈N/2⌉），短的那行在自己墨的范围里少切一格，格号照「本行第几字」
       从段首数，段尾那格只发长的那行（设计稿方案 A，Sheldon 2026-11-03 定）。
+    - `jiazhu_single_head`（书级，全唐文）：只有一行量得出缝、下一格是右半单字的雙行小注（「字｜闕」＋「一」）
+      也认成段（`jiazhu_split.single_row_heads`），不再把并排两字切成一个整宽正文格。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -1927,6 +1930,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
         # 列中间立着一条细竖线（界行墨）= 两列正文被当成了一列（Step1 列切错，vol03 p49c3 / p107c4），
         # 不是夹注列：段端收编不做，免得把两列正文的一行行收成「小注」（用户 09-29 实审点出 49:3:15–16）。
         # 只是护栏，不改 link_runs 自己认下的段；Step1 切对之后这道闸自然不触发。
+        if jiazhu_single_head and not _mid_rule_line(col_ink):
+            runs.update(jiazhu_split.single_row_heads(entries, runs, patches, eligible=nonblank,
+                                                      ink_threshold=ink_threshold))
         if not _mid_rule_line(col_ink):
             runs, tail_a = jiazhu_split.adopt_run_tails(
                 runs, patches, eligible=nonblank, ink_threshold=ink_threshold)
