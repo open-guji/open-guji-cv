@@ -156,7 +156,9 @@ def test_outputs_and_candidates_tsv(tmp_path):
     pj = json.loads(paths["punct"].read_text(encoding="utf-8"))
     assert pj["volume"] == 2 and all("anchor" in p for p in pj["punctuations"])
     ej = json.loads(paths["entity"].read_text(encoding="utf-8"))
-    assert ej["stats"]["matched"] == 3
+    assert "stats" not in ej  # 统计不写进文件（guji-format 第 11 组）
+    assert sum(e["target"]["status"] == "matched" for e in ej["entities"]) == 3
+    assert all("href" not in e["target"] for e in ej["entities"])  # 站内链接由 entity_id 推
     rows = paths["candidates"].read_text(encoding="utf-8").splitlines()
     assert rows[0].split("\t")[:5] == ["类型", "名称", "出处坐标", "上下文", "建议"]
     cand = {r.split("\t")[1]: r.split("\t") for r in rows[1:]}
