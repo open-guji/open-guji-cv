@@ -116,7 +116,7 @@ Actor = Literal["user", "model", "align"]
 
 
 #: 「模型的判断」类来源：`payload.source` 取这些值的事件**不当人裁用**（overview#428）。
-MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm"})
+MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer"})
 
 
 def counts_as_human(e) -> bool:
@@ -224,8 +224,12 @@ def _same_content(a: Event, b: Event) -> bool:
             and a.payload == b.payload and a.reviewer == b.reviewer)
 
 
-#: `EventLog.read_cached` 的解析结果：批次文件路径 → ((大小, mtime_ns), 事件列表)。
-_READ_CACHE: dict[str, tuple[tuple[int, int], list]] = {}
+#: `EventLog.read_cached` 的解析结果：批次文件路径 → [(大小, mtime_ns), 事件列表, 过闸结果]。
+#: 过闸结果 `(册 yaml 目录, {册: 当时的 source_rev}, 采信的事件, 丢掉的条数)`，见 `_gate_cached`。
+_READ_CACHE: dict[str, list] = {}
+
+
+_UNSET = object()
 
 
 def _target_dict(t: EventTarget) -> dict:
@@ -390,10 +394,11 @@ class EventLog:
         out.sort(key=lambda e: e.order)
         return out if raw else self._gate(batch, out)
 
-    def _rev_gate(self):
-        """册 yaml 优先取和这份日志同一数据目录的 `books/`，没有再用工作区的。"""
+    def _rev_gate(self, books_dir=_UNSET):
+        """册 yaml 优先取和这份日志同一数据目录的 `books/`，没有再用工作区的。
+        `books_dir` 调用方已找过（`sibling_books_dir`）就传进来，逐批读时不必每批再找一遍。"""
         from ..core.event_files import RevGate, sibling_books_dir
-        return RevGate(sibling_books_dir(self.root / "events"))
+        return RevGate(sibling_books_dir(self.root / "events") if books_dir is _UNSET else books_dir)
 
     def _gate(self, batch: str, evs: list[Event]) -> list[Event]:
         """换图源的页表 rev 判据（`core.event_files.RevGate`）。丢掉的条数按批记在 `self.dropped`，
@@ -423,6 +428,9 @@ class EventLog:
 
         ⚠️ 返回的是**共享对象**，调用方只许读、不许改（改了会串到别的调用方）。所以只给审过的
         只读热点用，别的地方照旧 `read()`／`iter_all()`。"""
+        return list(self._read_cached(batch, _UNSET))   # 给调用方一份新列表（事件对象仍共享、只读）
+
+    def _read_cached(self, batch: str, books_dir) -> list[Event]:
         path = self.batch_path(batch)
         try:
             st = path.stat()
@@ -431,14 +439,37 @@ class EventLog:
         key, sig = str(path), (st.st_size, st.st_mtime_ns)
         hit = _READ_CACHE.get(key)
         if hit is None or hit[0] != sig:
-            hit = (sig, self.read(batch, raw=True))      # 缓存原样解析结果；判据每次现判（册 yaml 可能刚切）
+            hit = [sig, self.read(batch, raw=True), None]   # 缓存原样解析结果；判据每次现判（册 yaml 可能刚切）
             _READ_CACHE[key] = hit
-        return self._gate(batch, hit[1])
+        return self._gate_cached(batch, hit, books_dir)
+
+    def _gate_cached(self, batch: str, hit: list, books_dir) -> list[Event]:
+        """同 `_gate`，但记住上一次的过闸结果（2026-11-04，seed_admit 每页把全部事件过五遍闸，殿本每页约 0.2 s）。
+
+        一条事件采不采信只看它自己（种类、锚）和它那一册 yaml 的 `source_rev`（`RevGate.admits`）。所以记下
+        上一次问过的每一册当时的 rev：这回同一个 yaml 目录、问过的每一册 rev 都没变，结果必然逐条相同，直接用；
+        有一册变了（换图源刚切了 yaml）就整批重判。rev 本身按 yaml 的 (mtime, 大小) 缓存，问一遍只 stat。"""
+        gate = self._rev_gate(books_dir)
+        memo = hit[2]
+        if (memo is not None and memo[0] == gate.books_dir
+                and all(gate.rev(b) == r for b, r in memo[1].items())):
+            out, dropped = memo[2], memo[3]
+        else:
+            out = [e for e in hit[1] if gate.admits(e.kind, _target_dict(e.target))]
+            dropped = dict(gate.dropped)
+            hit[2] = (gate.books_dir, dict(gate._rev), out, dropped)
+        if dropped:
+            self.dropped[batch] = dict(dropped)
+        else:
+            self.dropped.pop(batch, None)
+        return out
 
     def iter_all_cached(self) -> Iterator[Event]:
         """`iter_all()` 的缓存版，规矩同 `read_cached()`：只读。"""
+        from ..core.event_files import sibling_books_dir
+        books_dir = sibling_books_dir(self.events_dir)      # 一遍只找一次（每批都一样）
         for b in self.batches():
-            yield from self.read_cached(b)
+            yield from self._read_cached(b, books_dir)
 
     def latest_seq(self, batch: str) -> int:
         evs = self.read(batch, raw=True)

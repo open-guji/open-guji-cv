@@ -832,6 +832,10 @@ class RowSegmentParams(BaseModel):
     #: 在自己墨的范围里切，段下正文格按表重切（小字行距比格网小，长行被压进短行的格数，并字后一路错下去）。
     #: 核不上整列退回原切法；有列级人裁的列不动。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_step_split: bool = False
+    #: **一行就完的雙行小注**（2026-11-04，全唐文）：「闕一字」这类小注头一行「字｜闕」并排、第二行只有右半「一」，
+    #: 夹注判据要连着两行量得出缝，整段落空，两字挤进一个整宽正文格（r9b 字形线退回 8 格）。开了就补认这种段
+    #: （`jiazhu_split.single_row_heads`）。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_single_head: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -933,6 +937,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_free_split", None)
             if not self.jiazhu_step_split:
                 d.pop("jiazhu_step_split", None)
+            if not self.jiazhu_single_head:
+                d.pop("jiazhu_single_head", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -1183,6 +1189,7 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
+                    **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1318,8 +1325,11 @@ class RowSegmentStep(Step):
                     # 劈字、格高、穿字打平或更好都不算——DP 格网能为躲一个劈字把格线挪出半格、把两格空白切成三格。
                     # 写本（`row_pitch: free`，史記文淵閣本）：字距随手写、大字小字高矮不一，等距格网不优先，只按打分跟别的格网比
                     # （等距格线会切进高字的下半截、把它的笔画送给下一格）。
+                    # 表里单列可写 `"pitch": "free"`（2026-11-04 全唐文切分线）：卷首题下的帝名列（「中宗 二」「元宗 十」）
+                    # 字距比正文大、不落正文格网，等距格网把「宗」「二」切偏；这一列照写本那样只按打分挑，
+                    # 表的格有无、列端记空（印章、框线）照旧。表里没写这个键的列产物不变。
                     ug = ([i for i in plain if cands[i][4].startswith("uniform_grid")]
-                          if p.row_pitch == "uniform" else [])
+                          if p.row_pitch == "uniform" and lay.get("pitch") != "free" else [])
                     if ug and scores[min(ug, key=key_)][0] <= scores[best][0]:
                         best = min(ug, key=key_)
                     # 挪一格也只在等距格网之间比（1.45）：DP 格网挪一格时能把列首两格空白压成一格、字整列提前一格，

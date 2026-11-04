@@ -205,6 +205,10 @@ PERF_HOOKS: dict[str, dict] = {
         "methods": {"GlyphMatcher": ("_match", "extract", "_same_cell_rows", "_apply_near_shape",
                                      "_apply_shape_rerank")},
     },
+    # 匹配器里面（11-04 第二轮）：verify_pair_elastic 本身不换（`_match` 拿它做身份判断），换它按全局名调的几段；
+    # 矩阵乘与排序＝`_match` 减去这些
+    "open_guji_cv.clustering.verify": {"funcs": ("_elastic_align", "_prepare", "_elastic_miss", "verify_pair_cov")},
+    "open_guji_cv.clustering.features": {"methods": {"HogFeature": ("extract",)}},
     "open_guji_cv.clustering.normalize": {"funcs": ("normalize_patch",)},
     "open_guji_cv.core.reuse": {"funcs": ("cell_reuse",)},
     "open_guji_cv.steps.seed_admit": {
@@ -217,8 +221,13 @@ PERF_HOOKS: dict[str, dict] = {
                   "_pair_shape_pass", "_pick_char", "_pua_rule_pass", "_rare_ref_pass", "_rare_run_ids",
                   "_ref_lib_coord_pass", "_ref_topk_pass", "_review_lanes_pass", "_rr_shape_pass",
                   "_seal_blank_flip", "_shadow_veto_pass", "_solo_ctx_vetoed", "_symbol_ref_blank_pass",
-                  "_symbol_review_pass", "_vis_ruling_pass", "_keben_counts", "_doubts"),
+                  "_symbol_review_pass", "_vis_ruling_pass", "_keben_counts", "_doubts",
+                  # 第二轮：铁证闸逐格再匹配、字组流程与影子闸里面
+                  "_iron_decide", "_page_patch", "_clf_ctx", "_hard_blocked", "_shadow_gate"),
     },
+    "open_guji_cv.groups.flow": {"funcs": ("entry", "decide", "decide_joint", "_solve", "_pick_form",
+                                           "_provisional", "_vis_try")},
+    "open_guji_cv.shadow.gate": {"methods": {"ShadowGate": ("judge",)}},
     # seed_admit 在函数里现 import 的（调用时才按模块属性取，换模块属性就生效）
     "open_guji_cv.clustering.exclusions": {"funcs": ("excluded_ids",)},
     "open_guji_cv.clustering.note_lexicon": {"funcs": ("load_lexicon", "match_segment")},

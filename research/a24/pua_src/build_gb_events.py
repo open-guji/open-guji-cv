@@ -21,7 +21,7 @@ def main(indir, detail_tsv, outdir):
             if s == ref and x["anch"] >= 1: route, why = "text_ref", "新图源文本层与整理本同为 %s（锚点 %d/4），机器读 %s 为边缘残字" % (s, x["anch"], x["cur"])
             elif ref == "∅" and x["anch"] >= 3: route, why = "text_layer", "整理本无字，新图源文本层为 %s（锚点 %d/4）" % (s, x["anch"])
             else: rep.append((x["id"], "skip", "文本层 %s≠整理本 %s" % (s, ref))); continue
-            p = st.put("O", "src-1", x["left"], x["right"], char=s, conf="high", why=why, model="src-text-" + route, cell=x["id"])
+            p = st.put("O", "src-1", x["left"], x["right"], char=s, conf="high", why=why, model="src-text-" + route, cell=x["id"], pending_reason="garble_gate")
             p.update({"admit_ok": True, "subclass": "GB", "ref": x["ref"], "route": route, "src": s, "machine": x["cur"], "pending_reason": "garble_gate"})
             evs.append(make_event("src-1-20261104-gb", len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model"))
             rep.append((x["id"], route, s))

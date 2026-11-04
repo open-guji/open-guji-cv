@@ -100,6 +100,9 @@ class BookSpec:
     #: 人标的版面提示（yaml 的 `layout_hints:`，自由版式管线用）：哪页不切、分几块、每块几列。
     #: 存 yaml 原样（键转成字符串），读配置时用 `utils/layout_hints.parse_layout_hints` 校验形状。
     layout_hints: dict = field(default_factory=dict)
+    #: 页型表（yaml 的 `page_kinds:`，2026-11-04）：`{body|table|roster: [页号…]}`，一张表说清哪些页是什么页。
+    #: 读配置时翻成 `params` 里原有的三个 Step 参数（`core/page_kinds.py`），值不变、指纹不变；老写法照旧能用。
+    page_kinds: dict = field(default_factory=dict)
     notes: str = ""
     #: 已删：Step5-c `ocr_candidates` 与 Step6b `group_decide` 两步连同书级开关
     #: `ocr_candidates:` / `group_decide:`（2026-10-18，sheldon 定）。老 yaml 里还写着
@@ -455,6 +458,11 @@ class BookSpec:
         except ValueError as e:
             raise BadRequest(f"页号表达式错误：{e}") from e
 
+    def __post_init__(self) -> None:
+        if self.page_kinds:
+            from .page_kinds import merge_into_params
+            self.params = merge_into_params(self.params, self.page_kinds)
+
     def to_dict(self) -> dict:
         return {
             "id": self.id, "title": self.title, "raw_dir": str(self.raw_dir),
@@ -584,6 +592,12 @@ def _load_preclean(raw) -> dict[int, list[dict]]:
     return out
 
 
+def _page_kinds_of(params) -> dict:
+    """`BookSpec.page_kinds`：从合并好的 `params` 里读（新老写法殊途同归，`effective_book_dict` 已把各层 page_kinds 翻进 params）。"""
+    from .page_kinds import kinds_from_params
+    return kinds_from_params(params if isinstance(params, dict) else None)
+
+
 def _load_book_params(raw) -> dict[str, dict]:
     """yaml 的顶层 `params:` 段 → `{step_id: {字段: 值}}`。跟
     `core/pipeline.py::load_pipeline` 里对管线 yaml `params:` 的校验同一个理由：
@@ -689,6 +703,7 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         pipeline=(None if d.get("pipeline") is None else str(d["pipeline"])),
         seg_set=_load_seg_set(d.get("seg_set")),
         layout_hints=_load_layout_hints(d.get("layout_hints")),
+        page_kinds=_page_kinds_of(d.get("params")),
         notes=d.get("notes", ""),
         iron_gate=bool(d.get("iron_gate", True)),      # 缺省开（sheldon 10-23 定；11-03 起 load_book 与 dataclass 缺省一致）
         references=[dict(r) for r in (d.get("references") or [])],

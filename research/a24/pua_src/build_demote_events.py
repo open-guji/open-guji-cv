@@ -14,7 +14,7 @@ def main(indir, out):
             if "err" in x or x["anch"] < 3 or not x.get("src"): continue
             c = "%X" % ord(x["src"])
             if c not in tab or tab[c] == x["cur"]: continue
-            p = st.put("O", "src-1", x["left"], x["right"], char=tab[c], conf="high", why="码 U+%s 表定 %s，现放行 %s" % (c, tab[c], x["cur"]), model="src-text-code_conflict", cell=x["id"])
+            p = st.put("O", "src-1", x["left"], x["right"], char=tab[c], conf="high", why="码 U+%s 表定 %s，现放行 %s" % (c, tab[c], x["cur"]), model="src-text-code_conflict", cell=x["id"], pending_reason="ruling_conflict")
             p.update({"admit_ok": False, "subclass": "PUA", "ref": x["ref"], "route": "code_conflict", "src": x["src"], "machine": x["cur"], "pending_reason": "ruling_conflict"})
             evs.append(make_event("src-1-20261103-conflict", len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model"))
     with open(out, "w") as f:

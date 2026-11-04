@@ -24,7 +24,7 @@ IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "se
 VOLUME_ID_KEYS = frozenset({"book_id", "volume", "volume_width", "chapter_width"})
 #: 实测的版式先验：换书必须重标，不许写进基础配置（运行覆盖可以，做实验用）
 MEASURED_KEYS = frozenset({"bottom_gap", "period_prior", "frame_height", "col_pitch", "outer_shift",
-                           "outer_gap", "preclean", "page_split", "dev_set", "layout_hints"})
+                           "outer_gap", "preclean", "page_split", "dev_set", "layout_hints", "page_kinds"})
 FORBIDDEN_IN_DEFAULTS = IDENTITY_KEYS | MEASURED_KEYS
 FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS | VOLUME_ID_KEYS
 
@@ -119,7 +119,8 @@ def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, d
 
 def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict:
     """册 yaml 合上基础配置与运行覆盖后的生效字典（`load_book` 的入口）。"""
-    ls = layers(book_yaml, apply_override=apply_override)
+    from .page_kinds import fold_layer
+    ls = [(n, fold_layer(n, ly)) for n, ly in layers(book_yaml, apply_override=apply_override)]
     if len(ls) == 1:
         return copy.deepcopy(ls[0][1])
     d: dict = {}
@@ -146,8 +147,17 @@ def params_provenance(book_yaml: Path, pipeline_params: dict | None = None,
     out: dict[str, tuple[object, str]] = {}
     base = base_layers if base_layers is not None else [("管线 yaml", pipeline_params or {})]
     ls = [(name, {"params": pp or {}}) for name, pp in base] + layers(book_yaml)
+    from .page_kinds import load_page_kinds, to_params
     for name, layer in ls:
-        for sid, kv in (layer.get("params") or {}).items():
+        # 页型表 `page_kinds` 翻成的三个参数记在同一层，来源标「（page_kinds）」；同层写了老写法的在它之上
+        pk = to_params(load_page_kinds(layer.get("page_kinds")))
+        explicit = layer.get("params") or {}
+        for sid, kv in pk.items():
+            for k, v in kv.items():
+                key = f"{sid}.{k}"
+                if (explicit.get(sid) or {}).get(k) in (None, [], ()):
+                    out[key] = (v, f"{name}（page_kinds）")
+        for sid, kv in explicit.items():
             if not isinstance(kv, dict):
                 continue
             for k, v in kv.items():

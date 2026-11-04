@@ -166,6 +166,14 @@ _TAIL_EMPTY = ("表外末列不当整列空 layout_tail_empty（row_segment 书�
                "开关缺省时 row_segment 在全唐文 vol09 有表外末列的 28 页（全部）上与 origin/dev 产物逐字节相同；"
                "scripts/code_equiv.py check，2026-11-03")
 
+_ROW_FREE_PITCH = ("格位表单列 pitch: free（row_segment：表里写了这个键的列不优先等距格网；全唐文卷首帝名列）："
+                   "表里没这个键时 row_segment 在全唐文 vol06 p20–29（产物包 r9b）上与 origin/dev 产物逐字节相同；"
+                   "scripts/code_equiv.py check，2026-11-04")
+
+_JZ_SINGLE_HEAD = ("一行就完的雙行小注段头 jiazhu_single_head（row_segment 书级开关，缺省关；jiazhu_split.single_row_heads、"
+                   "row_boundaries.segment_column 加参数）：开关关着时 row_segment 在全唐文 vol06 p20–29（产物包 r9b）上"
+                   "与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04")
+
 _SJ_PAIR_SHAPE = ("seed_admit 加缺省关的书级开关 group_flow_pair_shape（史记之矣刻形二选一，groups.pair_shape；缺省空时参数 dump 不含该键）："
                   "开关缺省时 seed_admit 在史記 03 册 25 页（--pages 100-124，产物包 job65 cv 0a5ba0b）上与 origin/dev 产物逐字节相同；"
                   "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
@@ -675,6 +683,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new="39c00c4a48fb1e079cb786228b8f2a0d44fd7708dabf24542f1d07e599d3487e",
           old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
           evidence=_TAIL_EMPTY),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="9b6efd259dedb6c517def3be1ed6204c6ed645647b987bf5227b6191438d9ab6",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_ROW_FREE_PITCH),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="e6baa41f1a77c69b4ccb62bc239670f0f72dbb57c9a728ba5218255e34aaecd7",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_JZ_SINGLE_HEAD),
+    Equiv(module="open_guji_cv.books.siku_zongmu.row_boundaries",
+          new="b5c2b5fb08fc415f3f8e21dffcbfe8f6c57ef7f68d3a3b931b8c0a1e6622a9b7",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence=_JZ_SINGLE_HEAD),
+    Equiv(module="open_guji_cv.books.siku_zongmu.jiazhu_split",
+          new="7ca934262db39eecbcca59f61ebf44b90224c8b20849c75692382c586d26cced",
+          old="e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b",
+          evidence=_JZ_SINGLE_HEAD),
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="546e305a92ebe7ec03cb64f9dfd3397209780ea421941d82382e0f5970f984c7",
           old="097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455",

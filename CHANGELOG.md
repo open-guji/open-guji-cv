@@ -6,6 +6,25 @@
 ## [未发版]
 
 ### Changed
+- 分段计时第二轮（A20 11-04）：`cli_perf.PERF_HOOKS` 加匹配器里面（`verify._elastic_align`／`_prepare`／`_elastic_miss`、`HogFeature.extract`）、seed_admit 铁证闸 `_iron_decide`、字组流程 `groups.flow` 各段与影子闸 `ShadowGate.judge`。只改名单，不改 Step 源码，`code_hash` 与产物不变。
+- seed_admit 每页读人裁提速（A20 11-04，耗时统计查出 `rebind_library_shapes`＋`human_chars` 每页约 0.6 s）：殿本 vol04 每页 0.95 s → 0.2 s。大头是 `bindings.page_state` 逐页调 `cells_step()`、每次 `load_book` 重读册 yaml，`book_bindings` 一次对全书有人裁的页各调一遍，现在算一次传进去；事件读口记住过闸结果（`EventLog._gate_cached`：问过的各册 `source_rev` 都没变才复用，换图源切 yaml 立刻重判），`book_bindings` 两种分组共用一遍排序。绑定缓存键照旧含备选切法列（`page_state`），没加新的缓存层。改的模块都不在任何 Step 的 `code_deps` 里，`code_hash` 不变；vol04 全册 218 页新旧代码 seed_admit 产物逐字节相同（4 进程，整步墙钟 200 s → 157 s）。
+
+## [0.6.2] - 2026-11-04
+
+第4轮统一重跑用的版本（A31，用户 11-04 定「重跑尽量发新 cv 版本」）。比 v0.6.1 `code_hash` 变了的 Step：**border_detect**（#1010）、**seed_admit**（#999、#1007、#1009 动了它或它的 code_deps）。
+
+### Fixed
+- border_detect 1.19：列宽重拟合拟不出时减本页底色重拟，修 vol43 p1 满页霉点漏两条界行、整页未过 L1（A22，#1010）。
+- db push/sync：本地字形账本被清空时拒推，防本机空壳清中心库（#1013，11-04 殿本账本被清事故后）。
+- feedback：knn_infer 来源（字形近邻推断事件）不当人裁（#1006）。
+
+### Added
+- datastore/source_xform：换图源后旧页坐标→新页坐标（#1008）。
+
+### Changed
+- 第4轮字组（A24，#999）：于千子干笔画下限放宽、kgc 冦宼㓂按整理本定寇、can/ba 影子闸挑中整理本字时改放、终审上下文抽成 utils/final_ctx.py。
+- 文意裁定事件带 `pending_reason`（缺省 unknown；字组问大模型缺省 group_abstain，PUA/GB/降审脚本显式传）（#1007、#1009）。`feedback.rulings` 在 seed_admit 的 code_deps 里。
+- 待审原因：史記夹注分法不均 `jiazhu_uneven` 归 seg_defect，细分 jiazhu_uneven（#1012，review 层，不动指纹）。
 - 步内分段计时（A20 11-04，Sheldon 选「大头两步加分段计时」）：`cli_perf.PERF_HOOKS` 点名 glyph_match、seed_admit 的各道关与匹配器 `GlyphMatcher._match` 等，`guji step`／`pipeline` 起跑时换成计时薄壳，分段记进 perf 记录并推任务库。不改 Step 源码，`code_hash` 与产物逐字节不变（`tests/test_perf_hooks.py` 拿真匹配器核开壳与不开壳产物相同）。`GUJI_PERF=0` 关。
 - `invert_detect`（Step0 反色带）审过登记进 `core/parallel.AUDITED`，`--jobs N` 按页并行（A20 11-04，耗时统计查出串行、并行效率 0.25）。`core/parallel.py` 不进指纹，产物不变：殿本、全唐文、史記、北行共 130 页（含 4 页反色带）串行与 4 进程产物 sha 逐页相同。
 
