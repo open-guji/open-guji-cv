@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Changed
+- 页型表 `page_kinds`（A20 11-04，管线重组方案 B 第四期，PATCH）：册 yaml 顶层 `page_kinds: {body|table|roster: […]}` 取代散在 `border_detect_gate.body_pages`／`table_pages`、`row_segment.roster_pages` 里的页号，读配置时逐层翻回这三个参数，**值不变、Step 参数指纹不动**（`core/page_kinds.py`；不改任何 Step、不动 `code_hash`，契约只增可选字段）。`page_kinds` 属实测版式，不许写进基础配置；`guji book show --effective` 来源标「（page_kinds）」。新增只读命令 `guji pagekinds <册>`（点名／页型规则判／最后处理三栏对账，疑似误判的跳过页单列）与迁移脚本 `scripts/migrate_page_kinds.py`（干跑，每册核逐步 params_hash 不变，不推库）。老写法读配置时发 `FutureWarning`，**0.7.0 起报错**。
 - 分段计时第二轮（A20 11-04）：`cli_perf.PERF_HOOKS` 加匹配器里面（`verify._elastic_align`／`_prepare`／`_elastic_miss`、`HogFeature.extract`）、seed_admit 铁证闸 `_iron_decide`、字组流程 `groups.flow` 各段与影子闸 `ShadowGate.judge`。只改名单，不改 Step 源码，`code_hash` 与产物不变。
 - seed_admit 每页读人裁提速（A20 11-04，耗时统计查出 `rebind_library_shapes`＋`human_chars` 每页约 0.6 s）：殿本 vol04 每页 0.95 s → 0.2 s。大头是 `bindings.page_state` 逐页调 `cells_step()`、每次 `load_book` 重读册 yaml，`book_bindings` 一次对全书有人裁的页各调一遍，现在算一次传进去；事件读口记住过闸结果（`EventLog._gate_cached`：问过的各册 `source_rev` 都没变才复用，换图源切 yaml 立刻重判），`book_bindings` 两种分组共用一遍排序。绑定缓存键照旧含备选切法列（`page_state`），没加新的缓存层。改的模块都不在任何 Step 的 `code_deps` 里，`code_hash` 不变；vol04 全册 218 页新旧代码 seed_admit 产物逐字节相同（4 进程，整步墙钟 200 s → 157 s）。
 

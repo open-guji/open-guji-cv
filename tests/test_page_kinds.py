@@ -109,3 +109,17 @@ def test_params_provenance_labels_page_kinds(ws):
     assert src["border_detect_gate.table_pages"] == (["8-163"], "册 yaml（page_kinds）")
     p2 = _w(ws, "v2.yaml", {**BOOK, "id": "v2", "params": OLD})
     assert bc.params_provenance(p2, {})["border_detect_gate.table_pages"][1] == "册 yaml"
+
+
+def test_old_syntax_warns_but_override_does_not(ws, monkeypatch):
+    p = _w(ws, "v1.yaml", {**BOOK, "params": OLD})
+    with pytest.warns(FutureWarning, match="page_kinds.body"):
+        bc.effective_book_dict(p)
+    import warnings
+    p2 = _w(ws, "v2.yaml", {**BOOK, "id": "v2", "page_kinds": NEW})
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        bc.effective_book_dict(p2)                               # 新写法不警告
+        monkeypatch.setenv(bc.OVERRIDE_ENV, json.dumps({"params": {"border_detect_gate": {"body_pages": [3]}}}))
+        bc.effective_book_dict(p2)                               # 运行覆盖里的老字段不警告（实验的正当用法）
+    assert PK.old_syntax_in({"params": {"border_detect_gate": {"body_pages": []}}}) == []
