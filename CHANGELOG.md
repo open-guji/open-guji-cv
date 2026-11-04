@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Fixed
+- 插件命令在同一进程第二次建 parser 时（测试、控制台）被当成 cv 自带而漏登：`load_plugin_commands` 记下哪些是插件登记的（`_PLUGIN_ADDED`）。拆分 P2 第三批前置。
+
 ### Added
 - S 类待审成因归因（A22-3，11-04）：`python -m open_guji_cv.review.seg_causes <册…> --products <产物根> [--pending …] [--known …] [--out 目录]`，只读产物包，把 S01–S04 待审格按包里的事实（钉页、页型、整理本∅、格位对得上、假大印／印章、反色带、页／列未过闸、列网、格少于整理本、错位、格数／格高离群、对位冲突）拆开，出汇总.md／逐页.tsv／逐格.tsv，各书自跑。统计口径仍是 `pending_reason`，不写单、不新增原因；不在任何 Step 的 `code_deps` 里。
 
