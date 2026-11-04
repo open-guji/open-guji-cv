@@ -202,11 +202,3 @@ def test_returns_classify_main_as_jiazhu_split():
         ("row_segment", "jiazhu_split")
 
 
-def test_step8_main_flag_payload_and_readback():
-    from open_guji_cv.feedback.collate_state import seg_flags, seg_payload
-    p = seg_payload(["main"])
-    assert p["reason"] == "main_as_jiazhu" and p["quality"] == "truncated" and p["defect"] == "main"
-    both = seg_payload(["jiazhu", "main"])
-    assert both["reason"] == "main_as_jiazhu"                              # 两个都勾以「正文当小注」为准
-    e = _ev(1, "vol02:100:4:17a", p, "2026-10-06T00:00:01Z")
-    assert seg_flags([e], "vol02") == {"vol02:100:4:17a": ["main"]}       # quality=truncated 不读成「字形不完整」

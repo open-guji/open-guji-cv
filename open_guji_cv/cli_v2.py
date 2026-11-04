@@ -1782,6 +1782,20 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "cards": "拆分 P2 第三批，2026-11-04",
     "progress": "拆分 P2 第三批，2026-11-04",
     "collate": "拆分 P2 第三批，2026-11-04",
+    "close-check": "拆分 P2 第四批，2026-11-04",
+    "exit-check": "拆分 P2 第四批，2026-11-04",
+    "audit": "拆分 P2 第四批，2026-11-04",
+    "char-diff": "拆分 P2 第四批，2026-11-04",
+    "db": "拆分 P2 第四批，2026-11-04",
+    "store": "拆分 P2 第四批，2026-11-04",
+    "recheck": "拆分 P2 第四批，2026-11-04",
+    "glyphlib": "拆分 P2 第四批，2026-11-04",
+    "rekey-cells": "拆分 P2 第四批，2026-11-04",
+    "promote": "拆分 P2 第四批，2026-11-04",
+    "corpus": "拆分 P2 第四批，2026-11-04",
+    "glyph-db": "拆分 P2 第四批，2026-11-04",
+    "model": "拆分 P2 第四批，2026-11-04",
+    "font": "拆分 P2 第四批，2026-11-04",
 }
 #: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
 #: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
@@ -1805,6 +1819,20 @@ MIN_MANAGER_VERSION: dict[str, str] = {
     "cards": "0.3.0",
     "progress": "0.3.0",
     "collate": "0.3.0",
+    "close-check": "0.3.1",
+    "exit-check": "0.3.1",
+    "audit": "0.3.1",
+    "char-diff": "0.3.1",
+    "db": "0.3.1",
+    "store": "0.3.1",
+    "recheck": "0.3.1",
+    "glyphlib": "0.3.1",
+    "rekey-cells": "0.3.1",
+    "promote": "0.3.1",
+    "corpus": "0.3.1",
+    "glyph-db": "0.3.1",
+    "model": "0.3.1",
+    "font": "0.3.1",
 }
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
@@ -1849,8 +1877,7 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
 #:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
-    "cli_glyph_db", "cli_db", "cli_products",
-    "jobs.cli", "cli_glyph", "cli_close", "cli_perf", "cli_model",
+    "cli_products", "jobs.cli", "cli_perf",
 )
 
 

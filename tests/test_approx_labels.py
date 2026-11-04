@@ -281,55 +281,8 @@ def test_seed_admit_marks_or_blocks_approx_exemplar(tmp_path, monkeypatch):
 
 # ── 6. 文本 ──────────────────────────────────────────────────────────────
 
-def test_text_sidecar_default_and_inline_option(tmp_path):
-    from open_guji_cv.render.approx import approx_marks, inline_ids_map, sidecar_rows, sidecar_tsv
-    from open_guji_cv.render.guji_markdown import _char_text
-    from open_guji_cv.report.slots import SlotRec
-    log = EventLog(tmp_path)
-    log.append([_ev(f"{BOOK}:3:2:5", {"v": "confirm", "shape": "乃", "approx": True, "ids": "⿱丿乃",
-                                      "note": "多一撇"}, 1, ts="2026-09-29T01:00:00Z")])
-    log.append([_ev(f"{BOOK}:3:2:6", {"v": "confirm", "shape": "之", "approx": True}, 2,
-                    ts="2026-09-29T01:00:00Z")])
-    log.append([_ev(f"{BOOK}:3:2:6", {"v": "confirm", "shape": "之"}, 3, ts="2026-09-29T02:00:00Z")])
-    log.append([_ev(f"{BOOK}:4:1:1", {"v": "confirm", "shape": "乎", "approx": True}, 4,
-                    ts="2026-09-29T01:00:00Z")])
-    marks = approx_marks(BOOK, log)
-    assert set(marks) == {f"{BOOK}:3:2:5", f"{BOOK}:4:1:1"}, "改口的那格撤掉"
-    rows = sidecar_rows(marks, [3])
-    assert [(r["pos"], r["ids"], r["note"], r["source"]) for r in rows] == [("3:2:5", "⿱丿乃", "多一撇", "human")]
-    assert sidecar_tsv(rows) == "pos\tshape\tids\tnote\tsource\n3:2:5\t乃\t⿱丿乃\t多一撇\thuman\n"
-
-    def slot(key, ch):
-        _b, pg, col, s = key.split(":")
-        return SlotRec(id=key, page=int(pg), col=int(col), slot=int(s), sub=None, kind="char",
-                       char=ch, admit=True, channel="human", excluded=False, unreadable=False, human=True)
-    rec = slot(f"{BOOK}:3:2:5", "乃")
-    assert _char_text(rec) == "乃", "缺省：正文照填"
-    inline = inline_ids_map(marks)
-    assert _char_text(rec, inline) == "乃{ids=⿱丿乃}"
-    assert _char_text(slot(f"{BOOK}:4:1:1", "乎"), inline) == "乎", "没填 IDS 的不括注"
-    assert _char_text(slot(f"{BOOK}:3:2:5", "及"), inline) == "及", "正文已不是那个字就不括注"
-
 
 # ── 7. 前端事件行 ─────────────────────────────────────────────────────────
-
-
-def test_text_sidecar_includes_matched_cells(tmp_path, monkeypatch):
-    """Step7 靠近似例放行的格进侧表（来源 matched）；没放行的不进；人裁同格覆盖。"""
-    from helpers import make_book, make_ctx, write_product
-    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit
-    from open_guji_cv.render.approx import book_marks, sidecar_rows
-    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
-    apx = {"source": "matched", "via": "matched_id", "exemplar": "v2:lib:1:1:1", "ids": "⿰亻衡", "note": None}
-    recs = [AdmitRec(id=f"{BOOK}:3:1:{s}", slot=s, admit=adm, channel="match_solo" if adm else None,
-                     char="衡", evidence={"approx": apx}) for s, adm in ((1, True), (2, False), (3, True))]
-    write_product(ctx, "seed_admit", 3,
-                  seed_admit=PageAdmit(page=3, columns=[ColumnAdmit(col=1, ok=True, chars=recs)]))
-    log = EventLog(tmp_path / "ev")
-    log.append([_ev(f"{BOOK}:3:1:3", {"v": "confirm", "shape": "衡", "approx": True, "note": "人看过"}, 1)])
-    rows = sidecar_rows(book_marks(ctx.store, BOOK, [3], log))
-    assert [(r["pos"], r["source"], r["ids"], r["note"]) for r in rows] == [
-        ("3:1:1", "matched", "⿰亻衡", ""), ("3:1:3", "human", "", "人看过")]
 
 
 pytestmark = pytest.mark.usefixtures("seed_admit_switches_off")   # 老测试按「放行开关缺省全关」造的数据，见 conftest

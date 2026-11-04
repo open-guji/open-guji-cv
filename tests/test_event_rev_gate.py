@@ -186,13 +186,6 @@ def test_json_roundtrip_of_anchor_rev(tmp_path):
     assert len(EventLog(d / "feedback").read("b")) == 1
 
 
-def test_db_status_counts_dropped(tmp_path):
-    from open_guji_cv.cli_db import _rev_gate_dropped
-    d = _data(tmp_path, {"vol11": 3})
-    _write_raw(d, "a", [_ev(1, rev=2, batch="a"), _ev(2, batch="a"), _ev(3, rev=3, batch="a")])
-    assert _rev_gate_dropped(d) == {"vol11": 2}
-
-
 # ── 过闸结果缓存（`EventLog._gate_cached`，2026-11-04）──────────────────
 
 def test_cached_gate_follows_yaml_rev_change(tmp_path):

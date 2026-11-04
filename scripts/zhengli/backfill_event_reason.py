@@ -26,8 +26,8 @@ CV = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CV))
 
 from open_guji_cv.feedback.lock import feedback_write_lock  # noqa: E402
-from open_guji_cv.feedback.migrate_v1 import dumps  # noqa: E402
-from open_guji_cv.review.pending_reason import PendingReason as R  # noqa: E402
+from guji_manager.feedback.migrate_v1 import dumps  # noqa: E402
+from guji_manager.review.pending_reason import PendingReason as R  # noqa: E402
 
 KINDS = ("ctx_ruling", "confirm", "vision_check")
 DIRS = ("events", "rulings", "vision")

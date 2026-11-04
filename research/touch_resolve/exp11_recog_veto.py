@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from common import INK_TH, Loader, OUT_ROOT, Recognizer, half_patch, jdump, normalize, window  # noqa: E402
 from open_guji_cv.core.spec import column_key  # noqa: E402
 from open_guji_cv.core.step import page_key  # noqa: E402
-from open_guji_cv.eval.touching import SHARD  # noqa: E402
+from guji_manager.eval.touching import SHARD  # noqa: E402
 from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402

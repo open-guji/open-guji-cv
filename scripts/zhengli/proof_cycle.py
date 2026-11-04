@@ -416,7 +416,7 @@ def sheet_status(ws: Path, book: str, idle_min: int = 60, share: float = 0.8) ->
     cells = {c["cell"] for c in doc.get("cells") or [] if c.get("review") != "human"}
     votes, src = rp.old_rev_votes(ws, text_id, rev)
     sys.path.insert(0, str(CV))
-    from open_guji_cv.feedback.web_votes import latest_votes
+    from guji_manager.feedback.web_votes import latest_votes
     latest, _ = latest_votes(votes, text_id, rev)
     voted = {v["a"] for v in latest} & cells
     last = max(((float(v.get("ts") or 0) / (1000 if float(v.get("ts") or 0) > 1e11 else 1)) for v in latest), default=0.0)

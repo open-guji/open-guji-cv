@@ -40,7 +40,7 @@ def main() -> None:
         out = Path(a.out)
     else:
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-        from open_guji_cv.review.shadow import shadow_path
+        from guji_manager.review.shadow import shadow_path
         out = shadow_path(a.book)
     out.parent.mkdir(parents=True, exist_ok=True)
     tmp = out.with_suffix(f".{os.getpid()}.tmp")

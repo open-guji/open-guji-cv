@@ -118,46 +118,46 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # eval.colgeom
     "current_geom": ("eval.colgeom", 'current_geom'),
     # eval.llm_online_accuracy
-    "compute_report": ("eval.llm_online_accuracy", 'compute_report'),
-    "load_online_calls": ("eval.llm_online_accuracy", 'load_online_calls'),
+    "compute_report": ("guji_manager.eval.llm_online_accuracy", 'compute_report'),
+    "load_online_calls": ("guji_manager.eval.llm_online_accuracy", 'load_online_calls'),
     # eval.quality
-    "quality": ("eval.quality", 'quality'),
+    "quality": ("guji_manager.eval.quality", 'quality'),
     # eval.rate_history
-    "rate_history": ("eval.rate_history", None),
+    "rate_history": ("guji_manager.eval.rate_history", None),
     # eval.registry
-    "EVALS": ("eval.registry", 'EVALS'),
-    "runnable": ("eval.registry", 'runnable'),
+    "EVALS": ("guji_manager.eval.registry", 'EVALS'),
+    "runnable": ("guji_manager.eval.registry", 'runnable'),
     # eval.round_check
     "round_check": ("eval.round_check", None),
     # eval.rulers
     "measure": ("eval.rulers", 'measure'),
     # eval.throughput
-    "throughput": ("eval.throughput", None),
+    "throughput": ("guji_manager.eval.throughput", None),
     # eval.touching
-    "touching": ("eval.touching", None),
+    "touching": ("guji_manager.eval.touching", None),
     # feedback.anchor
     "enrich_events": ("feedback.anchor", 'enrich_events'),
     # feedback.candidates
-    "candidates": ("feedback.candidates", None),
+    "candidates": ("guji_manager.feedback.candidates", None),
     # feedback.cell_review
-    "cell_review": ("feedback.cell_review", None),
+    "cell_review": ("guji_manager.feedback.cell_review", None),
     # feedback.collate_consumers
     "DENY_REL": ("feedback.collate_consumers", 'DENY_REL'),
     "collate_repo_path": ("feedback.collate_consumers", '_repo_path'),
     "jiajie_rows": ("feedback.collate_consumers", 'jiajie_rows'),
     # feedback.collate_state
-    "CATS": ("feedback.collate_state", 'CATS'),
-    "CONV_KIND_CAT": ("feedback.collate_state", 'CONV_KIND_CAT'),
-    "SEG_FLAGS": ("feedback.collate_state", 'SEG_FLAGS'),
-    "VIA": ("feedback.collate_state", 'VIA'),
-    "WHO": ("feedback.collate_state", 'WHO'),
-    "build_items": ("feedback.collate_state", 'build_items'),
-    "counts": ("feedback.collate_state", 'counts'),
-    "final_char": ("feedback.collate_state", 'final_char'),
-    "group_items": ("feedback.collate_state", 'group_items'),
-    "human_verdicts": ("feedback.collate_state", 'human_verdicts'),
-    "seg_flags": ("feedback.collate_state", 'seg_flags'),
-    "seg_payload": ("feedback.collate_state", 'seg_payload'),
+    "CATS": ("guji_manager.feedback.collate_state", 'CATS'),
+    "CONV_KIND_CAT": ("guji_manager.feedback.collate_state", 'CONV_KIND_CAT'),
+    "SEG_FLAGS": ("guji_manager.feedback.collate_state", 'SEG_FLAGS'),
+    "VIA": ("guji_manager.feedback.collate_state", 'VIA'),
+    "WHO": ("guji_manager.feedback.collate_state", 'WHO'),
+    "build_items": ("guji_manager.feedback.collate_state", 'build_items'),
+    "counts": ("guji_manager.feedback.collate_state", 'counts'),
+    "final_char": ("guji_manager.feedback.collate_state", 'final_char'),
+    "group_items": ("guji_manager.feedback.collate_state", 'group_items'),
+    "human_verdicts": ("guji_manager.feedback.collate_state", 'human_verdicts'),
+    "seg_flags": ("guji_manager.feedback.collate_state", 'seg_flags'),
+    "seg_payload": ("guji_manager.feedback.collate_state", 'seg_payload'),
     # feedback.consumers
     "route_and_consume": ("feedback.consumers", 'route_and_consume'),
     # feedback.events
@@ -166,10 +166,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "make_event": ("feedback.events", 'make_event'),
     "replay_key": ("feedback.events", 'replay_key'),
     # feedback.figures
-    "figures": ("feedback.figures", None),
+    "figures": ("guji_manager.feedback.figures", None),
     # feedback.harvest
-    "harvest_text": ("feedback.harvest", 'harvest_text'),
-    "parse_card_id": ("feedback.harvest", 'parse_card_id'),
+    "harvest_text": ("guji_manager.feedback.harvest", 'harvest_text'),
+    "parse_card_id": ("guji_manager.feedback.harvest", 'parse_card_id'),
     # feedback.routes
     "RouteTable": ("feedback.routes", 'RouteTable'),
     # gates.query
@@ -182,64 +182,64 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # products.store
     "ProductStore": ("products.store", 'ProductStore'),
     # render.approx
-    "APPROX_MODES": ("render.approx", 'APPROX_MODES'),
-    "book_marks": ("render.approx", 'book_marks'),
-    "inline_ids_map": ("render.approx", 'inline_ids_map'),
-    "sidecar_rows": ("render.approx", 'sidecar_rows'),
+    "APPROX_MODES": ("guji_manager.render.approx", 'APPROX_MODES'),
+    "book_marks": ("guji_manager.render.approx", 'book_marks'),
+    "inline_ids_map": ("guji_manager.render.approx", 'inline_ids_map'),
+    "sidecar_rows": ("guji_manager.render.approx", 'sidecar_rows'),
     # render.guji_markdown
-    "render_page": ("render.guji_markdown", 'render_page'),
+    "render_page": ("guji_manager.render.guji_markdown", 'render_page'),
     # render.overlay
     "encode_png": ("render.overlay", 'encode_png'),
     "overlay": ("render.overlay", 'overlay'),
     "preclean_overlay": ("render.overlay", 'preclean_overlay'),
     "preclean_report": ("render.overlay", 'preclean_report'),
     # render.reading_layout
-    "DEFAULT_BASELINE_KG": ("render.reading_layout", 'DEFAULT_BASELINE_KG'),
-    "reflow_page_structured": ("render.reading_layout", 'reflow_page_structured'),
+    "DEFAULT_BASELINE_KG": ("guji_manager.render.reading_layout", 'DEFAULT_BASELINE_KG'),
+    "reflow_page_structured": ("guji_manager.render.reading_layout", 'reflow_page_structured'),
     # report.progress
-    "page_progress": ("report.progress", 'page_progress'),
+    "page_progress": ("guji_manager.report.progress", 'page_progress'),
     # report.tiers
     "JIAJIE_REL": ("report.tiers", 'JIAJIE_REL'),
     "tier_of": ("report.tiers", 'tier_of'),
     "tier_pairs": ("report.tiers", 'load_pairs'),
     # review.alt_cands
-    "alt_for_image": ("review.alt_cands", 'alt_for_image'),
-    "pivots_of": ("review.alt_cands", 'pivots_of'),
+    "alt_for_image": ("guji_manager.review.alt_cands", 'alt_for_image'),
+    "pivots_of": ("guji_manager.review.alt_cands", 'pivots_of'),
     # review.batches
-    "Batch": ("review.batches", 'Batch'),
-    "BatchStore": ("review.batches", 'BatchStore'),
-    "render_registry_markdown": ("review.batches", 'render_registry_markdown'),
+    "Batch": ("guji_manager.review.batches", 'Batch'),
+    "BatchStore": ("guji_manager.review.batches", 'BatchStore'),
+    "render_registry_markdown": ("guji_manager.review.batches", 'render_registry_markdown'),
     # review.border_cards
-    "border_cards": ("review.border_cards", None),
+    "border_cards": ("guji_manager.review.border_cards", None),
     # review.borrow_first
-    "first_pick_mode": ("review.borrow_first", 'first_pick_mode'),
+    "first_pick_mode": ("guji_manager.review.borrow_first", 'first_pick_mode'),
     # review.cards
-    "REPLACE_ALIGN_SUB_KEYS": ("review.cards", 'REPLACE_ALIGN_SUB_KEYS'),
-    "align_ref_maps": ("review.cards", '_align_ref_maps'),
-    "blocking_cutline_cases": ("review.cards", 'blocking_cutline_cases'),
-    "cached_cards": ("review.cards", 'cached_cards'),
-    "cards": ("review.cards", 'cards'),
-    "parse_cells_spec": ("review.cards", 'parse_cells_spec'),
-    "parse_class_filter": ("review.cards", 'parse_class_filter'),
-    "parse_doubt_filter": ("review.cards", 'parse_doubt_filter'),
+    "REPLACE_ALIGN_SUB_KEYS": ("guji_manager.review.cards", 'REPLACE_ALIGN_SUB_KEYS'),
+    "align_ref_maps": ("guji_manager.review.cards", '_align_ref_maps'),
+    "blocking_cutline_cases": ("guji_manager.review.cards", 'blocking_cutline_cases'),
+    "cached_cards": ("guji_manager.review.cards", 'cached_cards'),
+    "cards": ("guji_manager.review.cards", 'cards'),
+    "parse_cells_spec": ("guji_manager.review.cards", 'parse_cells_spec'),
+    "parse_class_filter": ("guji_manager.review.cards", 'parse_class_filter'),
+    "parse_doubt_filter": ("guji_manager.review.cards", 'parse_doubt_filter'),
     # review.cell_shrink_rand
-    "rand_sample": ("review.cell_shrink_rand", 'rand_sample'),
+    "rand_sample": ("guji_manager.review.cell_shrink_rand", 'rand_sample'),
     # review.cutline_default
-    "attach_default_pick": ("review.cutline_default", 'attach_default_pick'),
-    "cutline_default_mode": ("review.cutline_default", 'cutline_default_mode'),
+    "attach_default_pick": ("guji_manager.review.cutline_default", 'attach_default_pick'),
+    "cutline_default_mode": ("guji_manager.review.cutline_default", 'cutline_default_mode'),
     # review.event_write
-    "write_events": ("review.event_write", 'write_events'),
+    "write_events": ("guji_manager.review.event_write", 'write_events'),
     # review.group_view
-    "group_view": ("review.group_view", 'group_view'),
+    "group_view": ("guji_manager.review.group_view", 'group_view'),
     # review.invert_cards
-    "invert_cards": ("review.invert_cards", None),
+    "invert_cards": ("guji_manager.review.invert_cards", None),
     # review.jiazhu_cards
-    "jiazhu_segments": ("review.jiazhu_cards", 'jiazhu_segments'),
+    "jiazhu_segments": ("guji_manager.review.jiazhu_cards", 'jiazhu_segments'),
     # review.shadow
-    "shadow_sig": ("review.shadow", 'shadow_sig'),
+    "shadow_sig": ("guji_manager.review.shadow", 'shadow_sig'),
     # review.slot_count_cards
-    "render_slot_count_img": ("review.slot_count_cards", 'render_slot_count_img'),
-    "slot_count_cards": ("review.slot_count_cards", 'slot_count_cards'),
+    "render_slot_count_img": ("guji_manager.review.slot_count_cards", 'render_slot_count_img'),
+    "slot_count_cards": ("guji_manager.review.slot_count_cards", 'slot_count_cards'),
     # review.verdict_view
     "cutline_verdicts": ("review.verdict_view", 'cutline_verdicts'),
     "review_verdicts": ("review.verdict_view", 'review_verdicts'),
@@ -287,8 +287,20 @@ def __getattr__(name: str) -> Any:
     except KeyError:
         raise AttributeError(f"open_guji_cv.console_api 没有导出 {name!r}"
                              f"（控制台只许用门面里登记过的名字，见模块头）") from None
-    m = importlib.import_module(f"{_PKG}.{mod}")
+    m = _resolve_module(mod)
     return m if attr is None else getattr(m, attr)
+
+
+def _resolve_module(mod: str):
+    """`guji_manager.` 开头的是已搬去 guji-manager 的（拆分 P2 第四批起），其余是 cv 内模块。"""
+    if mod.startswith("guji_manager."):
+        try:
+            return importlib.import_module(mod)
+        except ModuleNotFoundError as e:
+            if e.name and e.name.startswith("guji_manager"):
+                raise ImportError(f"{mod} 已搬去 guji-manager，本机没装或版本太旧（装法见 cv scripts/ensure_manager.sh）") from e
+            raise
+    return importlib.import_module(f"{_PKG}.{mod}")
 
 
 def __dir__() -> list[str]:
@@ -299,3 +311,7 @@ def register_all() -> None:
     """import 即注册：全部 Step 与产物种类（`steps`）、事件路由与消费者（`feedback`）。"""
     importlib.import_module(f"{_PKG}.steps")
     importlib.import_module(f"{_PKG}.feedback")
+    try:                                     # Step8（落库反馈）已搬去 guji-manager（拆分 P2 第四批）
+        importlib.import_module("guji_manager.feedback")
+    except ImportError:
+        pass

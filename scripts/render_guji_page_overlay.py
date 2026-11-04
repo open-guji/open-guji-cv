@@ -24,7 +24,7 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
 
 LANE_COLOR = {"main": (30, 90, 220), "jz_r": (0, 150, 70), "jz_l": (200, 120, 0), "solo": (150, 60, 170)}
 MARK_COLOR = {"seal": (230, 0, 0), "blank": (170, 170, 170), "excluded": (190, 0, 190)}

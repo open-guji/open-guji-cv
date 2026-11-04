@@ -82,7 +82,7 @@ def prepare(ws: Path, from_n: int, note: str) -> dict:
 
 
 def push(ws: Path, yes: bool) -> None:
-    from open_guji_cv.cli_db import _pg_conn
+    from guji_manager.cli_db import _pg_conn
     from open_guji_cv.datastore.workcopy import push as wpush
     from open_guji_cv.ops import corpus_pack as cp
 

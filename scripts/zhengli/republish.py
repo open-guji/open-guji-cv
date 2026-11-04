@@ -266,7 +266,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
       3. 没给对照表：除第 1 条外一律未落（判不出能不能对位，不放）。"""
     import datetime as dt
     sys.path.insert(0, str(CV))
-    from open_guji_cv.feedback.web_votes import latest_votes
+    from guji_manager.feedback.web_votes import latest_votes
     from pending_route import cell_of, deciding
     latest, dropped = latest_votes(votes, text_id, rev)
     held = set(held or ())
@@ -290,7 +290,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
     look = None
     tab = _cells_table(cells, book) if predates else None
     if tab is not None:
-        from open_guji_cv.feedback import cell_migrate as M
+        from guji_manager.feedback import cell_migrate as M
         look = M.lookup(M.load_table(tab), book)
     rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
     if predates:
@@ -457,8 +457,8 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
     并写成因码细分 `pending_reason_cause`／`pending_reason_cause_detail`（`review/causes.py` 的 A1…I，GUJI-668；
     用户 11-04 定：留作 pending_reason 下的细项，派单按它细分；旧名 `cause`／`cause_detail` 不再写，老单上的读的一方回退）。"""
     sys.path.insert(0, str(CV))
-    from open_guji_cv.review.causes import book_causes
-    from open_guji_cv.review.reasons import reasons_for_pending, stamp
+    from guji_manager.review.causes import book_causes
+    from guji_manager.review.reasons import reasons_for_pending, stamp
     if not pending.exists():
         return
     res = book_causes(products, book)
@@ -877,7 +877,7 @@ def bind_check(products: Path, book: str) -> dict:
     sys.path.insert(0, str(CV))
     import datetime as dt
     from collections import defaultdict
-    from open_guji_cv.exp.rough_bench import _NoCache, _split_key
+    from guji_manager.exp.rough_bench import _NoCache, _split_key
     from open_guji_cv.feedback.bindings import compute_page
     from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
@@ -1012,7 +1012,7 @@ def cmd_add_alt(a) -> int:
     必须是出这张单的那个产物包算的（格号要对得上）；对不上的格不补，打出来。
     相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。"""
     sys.path.insert(0, str(CV))
-    from open_guji_cv.review.proof_fields import pending_fields
+    from guji_manager.review.proof_fields import pending_fields
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
     online = proofing_path(ws, text_id, chapter)
@@ -1115,7 +1115,7 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
 def stamp_char_pending(char_json: Path, plan: dict) -> None:
     """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
     §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
-    from open_guji_cv.formats import guji_char_cord as cc
+    from guji_manager.formats import guji_char_cord as cc
     if not char_json.exists():
         return
     cells = []

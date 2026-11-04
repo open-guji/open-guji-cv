@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
-from test_datastore_pg import DSN, conn, repo  # noqa: F401  (fixtures)
+from pg_fixtures import DSN, conn, repo  # noqa: F401  (fixtures)
 
 # 用到 Postgres 的用例跟 test_datastore_pg 同口径：没给测试库就跳过（装了 psycopg 也一样）
 _needs_pg = pytest.mark.skipif(not DSN, reason="没有 GUJI_TEST_PG_DSN（测试用 Postgres）")
@@ -51,31 +51,6 @@ def test_branch_env_moves_data_dir_glyph_db_and_products(tmp_path, monkeypatch):
     assert W.products_root() == tmp_path / "p"
     # 标记文件不动
     assert json.loads((ws / ".central.json").read_text())["branch"] == "main"
-
-
-def test_write_branch_rules_and_endpoint_lookup(monkeypatch):
-    from open_guji_cv import cli_db
-    from open_guji_cv.datastore import connect, neonapi
-    with pytest.raises(SystemExit, match="不能写 ci"):
-        cli_db._check_write_branch("ci")
-    with pytest.raises(SystemExit, match="不能写"):
-        cli_db._check_write_branch("exp/foo")
-    cli_db._check_write_branch(EXP)
-    assert cli_db._bucket("main") == "main" and cli_db._bucket(EXP) == "exp"
-
-    calls = []
-    monkeypatch.setattr(neonapi, "_get", lambda path: {
-        "branches": [{"name": "main", "id": "br-m"}, {"name": EXP, "id": "br-x"}],
-        "endpoints": [{"id": "ep-m", "branch_id": "br-m", "type": "read_write"},
-                      {"id": "ep-x", "branch_id": "br-x", "type": "read_write"}],
-    })
-    monkeypatch.setattr(connect, "connect", lambda endpoint=None: calls.append(endpoint) or "conn")
-    assert cli_db._pg_conn(EXP) == "conn" and calls == ["ep-x"]
-    monkeypatch.setenv("GUJI_DATA_BRANCH", EXP)
-    cli_db._pg_conn()
-    assert calls[-1] == "ep-x"
-    with pytest.raises(SystemExit, match="没有分支"):
-        neonapi.branch_endpoint("exp/GUJI-1-none")
 
 
 class _Src:
@@ -147,23 +122,6 @@ def test_exp_branch_fetch_falls_back_to_exp_bucket():
             dict(WorkerSource(url=url, token="t", branch="main").fetch_blobs([old, new], workers=2))
     finally:
         srv.shutdown()
-
-
-def test_cli_branch_flag_sets_env(tmp_path, monkeypatch):
-    import argparse
-
-    from open_guji_cv import cli_db
-    ws = _ws(tmp_path)
-    seen = {}
-    monkeypatch.setattr(cli_db, "push_workspace", lambda d, **kw: seen.update(
-        branch=__import__("os").environ.get("GUJI_DATA_BRANCH")) or {})
-    sub = argparse.ArgumentParser().add_subparsers(dest="cmd")
-    cli_db.add_parser(sub)
-    args = sub.choices["db"].parse_args(["push", "-w", str(ws), "--branch", EXP])
-    monkeypatch.setenv("GUJI_DATA_TOKEN", "t")
-    monkeypatch.setenv("GUJI_DATA_BRANCH", "")              # cmd_db 会改它；让 monkeypatch 收尾时还原
-    cli_db.cmd_db(args)
-    assert seen["branch"] == EXP
 
 
 @_needs_pg

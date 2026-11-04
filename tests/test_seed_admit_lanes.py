@@ -13,7 +13,6 @@ from open_guji_cv.clustering.align_eval import build_ngram_index
 from open_guji_cv.clustering.variants import VariantMap
 from open_guji_cv.clustering.witness_cells import witness_readings
 from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
-from open_guji_cv.review.cards import card_class
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _lane_class, _review_lanes_pass
 
 pytestmark = pytest.mark.usefixtures("no_cnn")   # CNN 通道开不开随环境变，钉成关（overview#407）
@@ -78,20 +77,6 @@ def test_witness_readings_unanchored_is_empty():
 
 
 # ── 类别镜像 ──────────────────────────────────────────────────────────
-
-@pytest.mark.parametrize("doubts,ev,char,ref,lib", [
-    (["replace_align"], {}, "天", "天", "大"),
-    (["context_vs_ref", "replace_align"], {}, "天", "天", "大"),
-    (["near_form", "库里没有这个字"], {}, "天", "天", "夭"),
-    (["库里没有这个字", "replace_align"], {}, "天", "天", None),
-    (["variant_indirect"], {}, "天", "天", "天"),
-    (["occluded"], {"occluded": {"via": "coord"}}, "天", None, None),
-    (["form_open"], {}, None, "天", "天"),
-    (["库 unsure(cov=0.9)"], {}, "已", "已", "巳"),
-    (["库 unsure(cov=0.9)", "shadow_veto"], {}, "天", None, "天"),
-])
-def test_lane_class_mirrors_card_class(doubts, ev, char, ref, lib):
-    assert _lane_class(doubts, ev, char, ref, lib) == card_class(doubts, ev, char=char, ref_char=ref, lib_top=lib)
 
 
 # ── R1 三证人一致 ──────────────────────────────────────────────────────
@@ -462,7 +447,6 @@ def test_lane_variant_guard_off_restores_old_behaviour():
     mm = {f"{B}:1:5": NS(char=None, candidates=[("旨", 0.95), ("㫖", 0.94)], guard=None)}
     n = _review_lanes_pass(p, out, mm, {}, _ids({5: "旨"}), _vm(), lambda: wits)
     assert n == 1 and out[0].chars[4].char == "旨"
-
 
 
 # ── lane_variant_keep_rare（A24 10-24，vol11–20：整理本照录刻本异体、库首位同形，却被异体护栏拦）──────

@@ -32,7 +32,7 @@ from common import INK_TH, OUT_ROOT  # noqa: E402
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import column_key  # noqa: E402
 from open_guji_cv.core.step import page_key  # noqa: E402
-from open_guji_cv.eval.touching import SHARD  # noqa: E402
+from guji_manager.eval.touching import SHARD  # noqa: E402
 from open_guji_cv.feedback.consumers import verdict_store  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402

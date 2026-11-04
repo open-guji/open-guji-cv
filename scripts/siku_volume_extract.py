@@ -34,8 +34,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.render.entity_extract import BookIndexMatcher  # noqa: E402
-from open_guji_cv.render import siku_extract as sx  # noqa: E402
+from guji_manager.render.entity_extract import BookIndexMatcher  # noqa: E402
+from guji_manager.render import siku_extract as sx  # noqa: E402
 
 BOOK_ID = "96mid1ogzk"
 TITLE = "欽定四庫全書總目"
@@ -59,7 +59,7 @@ def select_pages(text: str, spec: str | None) -> str:
 
 
 def make_client(args):
-    from open_guji_cv.render.punct_llm import ENDPOINTS, PunctClient
+    from guji_manager.render.punct_llm import ENDPOINTS, PunctClient
     env = ENDPOINTS[args.provider][0]
     if args.provider == "glm" and not os.environ.get(env):
         os.environ[env] = "proxy-injected"

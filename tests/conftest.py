@@ -123,6 +123,7 @@ def _isolated_env(monkeypatch, tmp_path):
     monkeypatch.setenv("GUJI_ALLOW_NO_EVENTS", "1")
     # 推库必须有操作人（cli_db.require_actor）；本机设没设 GUJI_ACTOR／USER 都不能影响测试。测拒推的用例自己 delenv
     monkeypatch.setenv("GUJI_ACTOR", "pytest")
+    monkeypatch.setenv("GUJI_NO_ENSURE_MANAGER", "1")   # 整理脚本开工的 ensure_manager 别在测试里拉 main、重装本机的 guji-manager
     fake_repo = tmp_path / "_repo_default"
     fake_repo.mkdir(exist_ok=True)
     monkeypatch.setattr(W, "REPO_ROOT", fake_repo)

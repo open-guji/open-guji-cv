@@ -113,28 +113,6 @@ def test_load_checks_sha_and_download_flag(tmp_path):
     assert E.EmbPack.load(m, blob_dir=blobs, download=False).precision == "int8"
 
 
-def test_template_bank_takes_rows_from_pack(tmp_path, monkeypatch):
-    from open_guji_cv.clustering import cnn_candidates as cc
-    from open_guji_cv.review.alt_cands import TemplateBank
-    m, mat, blobs, _ = _publish(tmp_path)
-    pk = E.EmbPack.load(m, blob_dir=blobs, precision="fp32")
-
-    class FakeCnn:
-        ckpt = tmp_path / "other.pt"                                        # 不是现役模型：不挂包
-        _net = _dev = None
-
-    bank = TemplateBank(FakeCnn())
-    assert bank._pack is None
-    bank._pack = pk
-    built = []
-    monkeypatch.setattr(cc, "build_emb_matrix",
-                        lambda net, dev, cs, extra, render: (built.append(cs) or
-                                                             (np.zeros((len(cs), 4), np.float32), list(cs))))
-    got = bank.vectors(["一", "丂", "万"])
-    assert np.array_equal(got["一"], mat[0]) and "丂" not in got           # 失败的字不现算
-    assert built == [("万",)]                                              # 只有包外的字现场渲染
-
-
 def test_pull_rare_index_writes_source_and_replaces_foreign_table(tmp_path, monkeypatch):
     """`guji cache pull-rare-index --book`：落表旁写来源；来源不同（本地现建、无记录）的旧表被替换，同来源跳过。"""
     import argparse
