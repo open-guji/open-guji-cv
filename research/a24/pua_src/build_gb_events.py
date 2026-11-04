@@ -22,7 +22,7 @@ def main(indir, detail_tsv, outdir):
             elif ref == "∅" and x["anch"] >= 3: route, why = "text_layer", "整理本无字，新图源文本层为 %s（锚点 %d/4）" % (s, x["anch"])
             else: rep.append((x["id"], "skip", "文本层 %s≠整理本 %s" % (s, ref))); continue
             p = st.put("O", "src-1", x["left"], x["right"], char=s, conf="high", why=why, model="src-text-" + route, cell=x["id"])
-            p.update({"admit_ok": True, "subclass": "GB", "ref": x["ref"], "route": route, "src": s, "machine": x["cur"]})
+            p.update({"admit_ok": True, "subclass": "GB", "ref": x["ref"], "route": route, "src": s, "machine": x["cur"], "pending_reason": "garble_gate"})
             evs.append(make_event("src-1-20261104-gb", len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model"))
             rep.append((x["id"], route, s))
     os.makedirs(outdir, exist_ok=True)

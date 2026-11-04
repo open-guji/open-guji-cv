@@ -36,7 +36,7 @@ def main(indir, outdir, table="code_table.json"):
         if not ch:
             rep.append((x["id"], k, s or "", "skip:anch=%s" % x.get("anch"))); continue
         p = st.put("O", "src-1", x["left"], x["right"], char=ch, conf="high", why=why, model="src-text-" + route, cell=x["id"])
-        p.update({"admit_ok": True, "subclass": "PUA", "ref": x["ref"], "route": route, "src": s, "machine": x.get("cur")})
+        p.update({"admit_ok": True, "subclass": "PUA", "ref": x["ref"], "route": route, "src": s, "machine": x.get("cur"), "pending_reason": "ref_lacuna"})
         ev = make_event("src-1-20261103", len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model")
         evs.append(ev); rep.append((x["id"], k, s, route + ":" + ch))
     os.makedirs(outdir, exist_ok=True)
