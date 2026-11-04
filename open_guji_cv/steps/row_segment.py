@@ -1301,8 +1301,11 @@ class RowSegmentStep(Step):
                     # 劈字、格高、穿字打平或更好都不算——DP 格网能为躲一个劈字把格线挪出半格、把两格空白切成三格。
                     # 写本（`row_pitch: free`，史記文淵閣本）：字距随手写、大字小字高矮不一，等距格网不优先，只按打分跟别的格网比
                     # （等距格线会切进高字的下半截、把它的笔画送给下一格）。
+                    # 表里单列可写 `"pitch": "free"`（2026-11-04 全唐文切分线）：卷首题下的帝名列（「中宗 二」「元宗 十」）
+                    # 字距比正文大、不落正文格网，等距格网把「宗」「二」切偏；这一列照写本那样只按打分挑，
+                    # 表的格有无、列端记空（印章、框线）照旧。表里没写这个键的列产物不变。
                     ug = ([i for i in plain if cands[i][4].startswith("uniform_grid")]
-                          if p.row_pitch == "uniform" else [])
+                          if p.row_pitch == "uniform" and lay.get("pitch") != "free" else [])
                     if ug and scores[min(ug, key=key_)][0] <= scores[best][0]:
                         best = min(ug, key=key_)
                     # 挪一格也只在等距格网之间比（1.45）：DP 格网挪一格时能把列首两格空白压成一格、字整列提前一格，
