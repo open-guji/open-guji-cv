@@ -105,11 +105,19 @@ def test_real_page_tight_boxes_do_not_clip_char_tops(tmp_path, monkeypatch, ws,
                          cv2.IMREAD_GRAYSCALE)
         assert img is not None, f"c{col} 列图没落缓存"
         by_slot = {x.slot: x for x in cells[col].cells}
+        ink = img < 128
         for ch in cic.chars:
             cell = by_slot.get(getattr(ch, "slot", None))
             if cell is None:
                 continue
-            above = (img < 128)[int(cell.y0):int(ch.bbox_col[1])]
+            # 上一字的长笔伸过格线、已经算进它自己紧框的墨，不是本字被切掉的字顶：抠掉再查。
+            # （装了 torch 时 Step4 把「晰」的竖笔正确归给上一格，c5s17 上方剩下的正是这段，2026-11-04）
+            own = ink.copy()
+            for other in cic.chars:
+                if other is not ch:
+                    ox0, oy0, ox1, oy1 = (int(v) for v in other.bbox_col)
+                    own[max(oy0, 0):oy1 + 1, max(ox0, 0):ox1 + 1] = False
+            above = own[int(cell.y0):int(ch.bbox_col[1])]
             if above.size == 0:
                 continue
             checked += 1
