@@ -174,6 +174,11 @@ _JZ_SINGLE_HEAD = ("一行就完的雙行小注段头 jiazhu_single_head（row_s
                    "row_boundaries.segment_column 加参数）：开关关着时 row_segment 在全唐文 vol06 p20–29（产物包 r9b）上"
                    "与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04")
 
+_QTW_FORK = ("全唐文套书 books/quantangwen 分叉（2026-11-04，A22）：row_boundaries、jiazhu_split 从殿本原样复制（含 #1025 "
+             "jiazhu_single_head），殿本两份退回 #1025 之前；row_segment 壳按册套书取 row_boundaries（core/seg_set.resolve）。"
+             "复制与殿本 #1025 之后那一版逐字相同，#1025 已证开关关着时等价（_JZ_SINGLE_HEAD）；全唐文册的指纹按 FORKED 记原模块名，不过期。"
+             "殿本 vol12 31 页 row_segment 与 origin/dev bc219f2 逐字节相同（scripts/code_equiv.py check）")
+
 _SJ_PAIR_SHAPE = ("seed_admit 加缺省关的书级开关 group_flow_pair_shape（史记之矣刻形二选一，groups.pair_shape；缺省空时参数 dump 不含该键）："
                   "开关缺省时 seed_admit 在史記 03 册 25 页（--pages 100-124，产物包 job65 cv 0a5ba0b）上与 origin/dev 产物逐字节相同；"
                   "scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-03")
@@ -699,6 +704,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7ca934262db39eecbcca59f61ebf44b90224c8b20849c75692382c586d26cced",
           old="e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b",
           evidence=_JZ_SINGLE_HEAD),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="35599c861269dd09c094e824b219ef8cd6c83b33fbac91f9a99d584d8836dad9",
+          old="427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28",
+          evidence=_QTW_FORK),
+    Equiv(module="open_guji_cv.books.quantangwen.row_boundaries",
+          new="b5c2b5fb08fc415f3f8e21dffcbfe8f6c57ef7f68d3a3b931b8c0a1e6622a9b7",
+          old="4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c",
+          evidence=_QTW_FORK),
+    Equiv(module="open_guji_cv.books.quantangwen.jiazhu_split",
+          new="7ca934262db39eecbcca59f61ebf44b90224c8b20849c75692382c586d26cced",
+          old="e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b",
+          evidence=_QTW_FORK),
     Equiv(module="open_guji_cv.steps.seed_admit",
           new="546e305a92ebe7ec03cb64f9dfd3397209780ea421941d82382e0f5970f984c7",
           old="097c1ec750580fdb59dac552c7969b9604a5749b286bc53865912cd37405e455",
@@ -822,6 +839,14 @@ MOVED: dict[str, tuple[str, str]] = {
     "open_guji_cv.books.zengguang_youxue.free_ocr": ("open_guji_cv.utils.free_ocr", "d913668cfa50b267394c24ae0193d1d9ae859d5510179f74e40499dd477ebf41"),
 }
 
+
+#: 套书分叉的复制：复制出来的模块 → (原模块名, 分叉时的代码哈希，经 ENTRIES 换算后)。与 MOVED 的区别是原模块还在
+#: （别的套书照用）。复制还是分叉时那一版，这套书的指纹就记原模块名，产物不过期；之后这套书改了自己那份，照常过期。
+#: 纪律同 ENTRIES：只增不删（2026-11-04，全唐文分叉 Step3 行切分）。
+FORKED: dict[str, tuple[str, str]] = {
+    "open_guji_cv.books.quantangwen.row_boundaries": ("open_guji_cv.books.siku_zongmu.row_boundaries", "4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c"),
+    "open_guji_cv.books.quantangwen.jiazhu_split": ("open_guji_cv.books.siku_zongmu.jiazhu_split", "e7c605b8247e14f4aae7c90c1e05be0a8b01cb32dbdbf2a9e6cb5e7086fcc82b"),
+}
 
 #: 拆过的模块：旧模块名 → (拆分前的代码哈希, [(拆出来的新模块, 拆分时的代码哈希), …])。
 #: 一个模块拆成几块，Step 的模块表从一项变几项，指纹公式就变了；这里登记了，算指纹时几块都在、代码都还是
