@@ -5,10 +5,17 @@
 
 ## [未发版]
 
+### Fixed
+- 插件命令在同一进程第二次建 parser 时（测试、控制台）被当成 cv 自带而漏登：`load_plugin_commands` 记下哪些是插件登记的（`_PLUGIN_ADDED`）。拆分 P2 第三批前置。
+
 ### Added
 - S 类待审成因归因（A22-3，11-04）：`python -m open_guji_cv.review.seg_causes <册…> --products <产物根> [--pending …] [--known …] [--out 目录]`，只读产物包，把 S01–S04 待审格按包里的事实（钉页、页型、整理本∅、格位对得上、假大印／印章、反色带、页／列未过闸、列网、格少于整理本、错位、格数／格高离群、对位冲突）拆开，出汇总.md／逐页.tsv／逐格.tsv，各书自跑。统计口径仍是 `pending_reason`，不写单、不新增原因；不在任何 Step 的 `code_deps` 里。
 
 ### Changed
+- 拆分 P2 第三批：15 条命令的命令层搬去 guji-manager（≥0.3.0），cv 删除 `cli_exp.py`、`cli_ops.py`、`cli_feedback.py`、`cli_eval.py` 与它们的命令层测试（9 条，含 `guji snap` 4 条），登记 `MOVED_TO_MANAGER`、`MIN_MANAGER_VERSION`。搬走的命令：exp、snap、archive、release、deploy、events、gold、batch、label-batch、eval、check、groups、cards、progress、collate。底下逻辑仍在 cv，`manager_api` 加 73 个名字。命令和参数不变；不碰任何 Step，`code_hash` 不变。
+- IDS 模板库挪进模型系统（A24 11-04，Sheldon 同意；PATCH）：`config/groups/*/ids_bank.json`（73 个）和 `can/whole_bank.json` 是从殿本人裁挖出来的，按「从哪里来」归殿本 book 层——`model_pack.KINDS` 加 `ids_bank`、`ids_whole_bank`（含出处），`corpus_pin._not_corpus` 不再把它们算语料（老清单登记过的核对时跳过，钉着语料的册不受影响），`core/model_override` 的运行时换路径加上 `bank_path`、`whole_bank_path`（册钉旧模型号时模板库也走缓存根）。cv 自带的模型表 13→87 项、语料表 136→62 项（重写 `guji model registry`／`corpus registry`，87 个文件早已在 R2）。文件内容不动，`ids_online.fingerprint` 按内容哈希，**seed_admit 指纹不变**；`ids_override.tsv`、`ids_fine.tsv` 是手写规则，仍算语料。**注意**：已钉 `model: 2` 的殿本、史記在 `guji model build` 出 m3 之前，模板库改了不会被起跑校验发现（原先由语料钉号盖着），出新号时一起钉。不碰任何 Step 的 `code_deps`，`code_hash` 不变。
+- `seed_admit.group_flow` 缺省改成通用字组，不含码位组 `cp_*`（A24 11-04，多书设计 A3，Sheldon 同意；**不要在下一轮统一重跑之前合**）：`cp_*` 是殿本逐对看图定的码位结论，新书缺省不该带上。新增 `groups.registry.generic_flow_names()`。殿本基础配置显式写了全集（含 `cp_*`），不受影响；但**史記 988g3f0wsu（42 册）、全唐文 995ejelvk0（248 册）的册配置和基础配置都没写 `group_flow`**，一直吃缺省全集——合之前要先把旧缺省全集显式写进它们的 `book_defaults.yaml`（`params.seed_admit.group_flow`，名单见 /mnt/project-files/a24/设计/group_flow-旧缺省全集-2026-11-04.txt），参数 dump 才与旧缺省逐字相同。改了 `steps/seed_admit.py`、`groups/registry.py`，两者都在 seed_admit 的 `code_deps` 里，**所有书 seed_admit 的 code_hash 变**，所以放在一次本来就从 seed_admit 起重跑的轮次里合；其他书（幼學、qtw-draft、北行、增廣等）有没有显式 `group_flow` 还没逐一核。
+- 拆分 P2 准备：`scripts/zhengli/zl.py` 开工也先调 `ensure_manager.py`（下一批 `snap`、`events`、`collate` 等命令要搬去 guji-manager）。
 - 页型表 `page_kinds`（A20 11-04，管线重组方案 B 第四期，PATCH）：册 yaml 顶层 `page_kinds: {body|table|roster: […]}` 取代散在 `border_detect_gate.body_pages`／`table_pages`、`row_segment.roster_pages` 里的页号，读配置时逐层翻回这三个参数，**值不变、Step 参数指纹不动**（`core/page_kinds.py`；不改任何 Step、不动 `code_hash`，契约只增可选字段）。`page_kinds` 属实测版式，不许写进基础配置；`guji book show --effective` 来源标「（page_kinds）」。新增只读命令 `guji pagekinds <册>`（点名／页型规则判／最后处理三栏对账，疑似误判的跳过页单列）与迁移脚本 `scripts/migrate_page_kinds.py`（干跑，每册核逐步 params_hash 不变，不推库）。老写法读配置时发 `FutureWarning`，**0.7.0 起报错**。
 - 分段计时第二轮（A20 11-04）：`cli_perf.PERF_HOOKS` 加匹配器里面（`verify._elastic_align`／`_prepare`／`_elastic_miss`、`HogFeature.extract`）、seed_admit 铁证闸 `_iron_decide`、字组流程 `groups.flow` 各段与影子闸 `ShadowGate.judge`。只改名单，不改 Step 源码，`code_hash` 与产物不变。
 - seed_admit 每页读人裁提速（A20 11-04，耗时统计查出 `rebind_library_shapes`＋`human_chars` 每页约 0.6 s）：殿本 vol04 每页 0.95 s → 0.2 s。大头是 `bindings.page_state` 逐页调 `cells_step()`、每次 `load_book` 重读册 yaml，`book_bindings` 一次对全书有人裁的页各调一遍，现在算一次传进去；事件读口记住过闸结果（`EventLog._gate_cached`：问过的各册 `source_rev` 都没变才复用，换图源切 yaml 立刻重判），`book_bindings` 两种分组共用一遍排序。绑定缓存键照旧含备选切法列（`page_state`），没加新的缓存层。改的模块都不在任何 Step 的 `code_deps` 里，`code_hash` 不变；vol04 全册 218 页新旧代码 seed_admit 产物逐字节相同（4 进程，整步墙钟 200 s → 157 s）。

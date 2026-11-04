@@ -167,5 +167,14 @@ def apply(root: Path | None) -> None:
         ids.unet_path = orig_unet
     else:
         ids.unet_path = lambda g, _f=orig_unet, _r=root: _remap(_f(g), _r)
+    for fn in ("bank_path", "whole_bank_path"):          # 模板库也是模型（ids_bank／ids_whole_bank）：同 unet_path 的换法
+        key = (_IDS, fn)
+        if key not in _ORIG:
+            _ORIG[key] = getattr(ids, fn)
+        orig_fn = _ORIG[key]
+        if root is None:
+            setattr(ids, fn, orig_fn)
+        else:
+            setattr(ids, fn, lambda g, _f=orig_fn, _r=root: _remap(_f(g), _r))
     _ACTIVE[0] = root
     mp.REPO_OVERRIDE[0] = root

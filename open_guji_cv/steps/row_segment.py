@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Literal
 
 from pydantic import BaseModel, model_serializer, model_validator
@@ -19,8 +20,18 @@ from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..books.siku_zongmu.row_grid import fit_page_grids
-from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots, reading_order,
-                                    segment_column, slot_mask_from_occupied)
+from ..books.siku_zongmu.row_boundaries import slot_mask_from_occupied
+
+#: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
+#: 登记覆盖（全唐文 books/quantangwen，2026-11-04）；`run_page` 按册取（`_row_boundaries`）。
+_RB_DEFAULT = "open_guji_cv.books.siku_zongmu.row_boundaries"
+
+
+def _row_boundaries(book):
+    """这册书的行切分模块：套书有自己的 row_boundaries 用它的，否则用殿本的（同一个模块对象，行为不变）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return importlib.import_module(resolve(book, _RB_DEFAULT))
 from ._warpmap import ColumnMapper
 
 _LAYOUT_CACHE: dict[tuple, dict[tuple[int, int], dict]] = {}
@@ -1006,6 +1017,12 @@ class RowSegmentStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
         n_body = p.n_body_slots or ctx.book.chars_per_line
+        RB = _row_boundaries(ctx.book)
+        segment_column, effective_body_slots = RB.segment_column, RB.effective_body_slots
+        reading_order, NONUNIFORM_LAM = RB.reading_order, RB.NONUNIFORM_LAM
+        if p.jiazhu_single_head and "jiazhu_single_head" not in inspect.signature(segment_column).parameters:
+            raise ValueError("row_segment.jiazhu_single_head 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
+                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]

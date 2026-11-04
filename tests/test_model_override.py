@@ -55,7 +55,7 @@ def test_switch_and_restore(setup):
     from open_guji_cv.utils import rr_clf
     cc = setup.cc
     orig = (ptm.DEFAULT_MODEL, cc.DEFAULT_CKPT, cc.fingerprint.__defaults__, rr_clf.MODEL_DIR,
-            shm.DEFAULT_MODEL, ids_online.unet_path)
+            shm.DEFAULT_MODEL, ids_online.unet_path, ids_online.bank_path, ids_online.whole_bank_path)
     root = mo.activate(SimpleNamespace(model=2), mb_place())
     assert root == mo.cache_root(setup.man) and mo.active_root() == root
     assert Path(ptm.DEFAULT_MODEL) == root / setup.pt_rel
@@ -64,6 +64,7 @@ def test_switch_and_restore(setup):
     assert Path(cc.fingerprint.__defaults__[0]) == root / setup.cnn_rel  # 函数缺省参数一起换
     assert Path(rr_clf.MODEL_DIR) == root / "models/rr_clf"
     assert shm.DEFAULT_MODEL == orig[4]                                  # 清单里没有的不换
+    assert ids_online.bank_path is not orig[6] and ids_online.whole_bank_path is not orig[7]   # 模板库路径也走缓存根（ids_bank／ids_whole_bank）
     assert [p.name for p in setup.placed] == ["pagetype_v1.joblib"]
     assert mp._base("repo", Path(".")) == root and mp._base("repo", Path("."), real=True) == mp.REPO_ROOT
     # 起跑前校验按缓存根核对：清单里 repo 项都对得上
@@ -72,7 +73,7 @@ def test_switch_and_restore(setup):
     # 换回没钉的册：全部还原
     assert mo.activate(SimpleNamespace(model=None)) is None
     assert (ptm.DEFAULT_MODEL, cc.DEFAULT_CKPT, cc.fingerprint.__defaults__, rr_clf.MODEL_DIR,
-            shm.DEFAULT_MODEL, ids_online.unet_path) == orig
+            shm.DEFAULT_MODEL, ids_online.unet_path, ids_online.bank_path, ids_online.whole_bank_path) == orig
     assert mp.REPO_OVERRIDE[0] is None
 
 

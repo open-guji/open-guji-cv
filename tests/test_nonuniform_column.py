@@ -70,14 +70,15 @@ def test_nonuniform_lam_is_well_below_default():
 
 def test_only_flagged_columns_relax(monkeypatch):
     """非均匀开关**只对勾了的列**生效，其余列一字不动。"""
-    import open_guji_cv.steps.row_segment as rs
     seen: list[dict] = []
 
     def fake_segment(img, **kw):
         seen.append(kw)
         return None
 
-    monkeypatch.setattr(rs, "segment_column", fake_segment)
+    # row_segment 按册套书取 row_boundaries（2026-11-04 起），殿本册取到的是这个模块
+    from open_guji_cv.books.siku_zongmu import row_boundaries as RB
+    monkeypatch.setattr(RB, "segment_column", fake_segment)
     # 直接验判据本身：row_segment 里那一行的逻辑
     for override, want in ((None, {}),
                            (ResolvedColumn(22, True), {}),

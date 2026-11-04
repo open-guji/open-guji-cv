@@ -2,6 +2,198 @@
  "schema": "model-registry/1",
  "items": [
   {
+   "kind": "ids_bank",
+   "path": "config/groups/ba/ids_bank.json",
+   "size": 282625,
+   "sha256": "d4bd739eda55058ff0acdafe808ce164e09a3dcfa4358b11ff35ae0a9efb8ea8",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/bi/ids_bank.json",
+   "size": 322944,
+   "sha256": "fb1be9121d4944c1a2cbc78a87c70289efdebb0248bbf47b3e32361f6283e1de",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/bian/ids_bank.json",
+   "size": 1070574,
+   "sha256": "06295e97867b9593666998039042503d096253ea7477241fd01544ec6b5bcc03",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/bie/ids_bank.json",
+   "size": 1359144,
+   "sha256": "4deebcbb3aedede229bc8f6f05d18e2b20e4cd21ac8de3058f2be1fbe8edbded",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/can/ids_bank.json",
+   "size": 963488,
+   "sha256": "38105f5d6866eece1fc6cdc642c7ba86d5cd63a0345bc3a5d7b4f06de9e77847",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_whole_bank",
+   "path": "config/groups/can/whole_bank.json",
+   "size": 981766,
+   "sha256": "cff12f159057bead54f6d2640c2289663c22edfa3f2287458b5bf9d841ba8153",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/ce/ids_bank.json",
+   "size": 22268,
+   "sha256": "52a564d72e44649d26a18c33c585ca6a82784fc36caa3f30b6382b0c1f8e41cf",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/chi/ids_bank.json",
+   "size": 267087,
+   "sha256": "4dbddbccdb77483b00f8ee6480ed3f40fb82f59d9f08f5d8d36b14067ebe001f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/chuo/ids_bank.json",
+   "size": 2700333,
+   "sha256": "7d63e4da5b291c42d7db0c322cfcd75b7e425ec3cfd5c569ca8342151c1df21d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/di/ids_bank.json",
+   "size": 549694,
+   "sha256": "e88b5ad9ea06ddc0ea14ad08bc09020d8364b160d1bcf8a2a14aa78feeb3fc2b",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/em/ids_bank.json",
+   "size": 252022,
+   "sha256": "598bd77304d08ea7f1757743d9e2eabcbf78aff0bcb34b5aef5db4dafea8bf00",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/fa/ids_bank.json",
+   "size": 2047761,
+   "sha256": "c5abad567c34e86e1198b0413b37231f0a71864cd014ea6dc090eeadf8bde4ce",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/fc/ids_bank.json",
+   "size": 527738,
+   "sha256": "47122f52644447e58fbe4ed11da180b623c0d13f9ff58bde5896cad7956c4e8d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/fu/ids_bank.json",
+   "size": 732602,
+   "sha256": "cb633bc033d18e6681a6213d3d04f8c56122a23758e6e0198b8b1efe5b12cc1e",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/gai/ids_bank.json",
+   "size": 524595,
+   "sha256": "8b2fcdfef54b2311892c10f66ee186a358b31d8cbf1a4a47e8daa3f7a4a820de",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/gm/ids_bank.json",
+   "size": 866714,
+   "sha256": "b5156cac7c70805394bb3461ad03d82ccb7eb4d1e62be4a29f2b196af1f97ff5",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/guang/ids_bank.json",
+   "size": 951559,
+   "sha256": "4b44aecda3cea604ffe174dc2815b7294f80e8c67dcb1b419d205d2ac2f982d6",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/guanm/ids_bank.json",
+   "size": 5441459,
+   "sha256": "7b4511c245754a82de417ad89a8c3d7710beb76b2ba3529017bfbb1aad12b49d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/huiq/ids_bank.json",
+   "size": 319829,
+   "sha256": "a57dbd29a738bc12fe582fe5bd9300631d2d63882b0fefe713df5c7c5fd43de8",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/jian/ids_bank.json",
+   "size": 214356,
+   "sha256": "fbe2dfe834ea6961214568c65022aa01e80b815bb275fdc1c5f3bf44094f30df",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/jiao/ids_bank.json",
+   "size": 128437,
+   "sha256": "3781406414771b2cbcb5b304201ad8fb254ddcf7b2b98e956aafc35759c057ec",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/jim/ids_bank.json",
+   "size": 124407,
+   "sha256": "e78772285bc43ede076bdadda7b69ad825360dbf11ac73ab628822e737e51bee",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/js/ids_bank.json",
+   "size": 205896,
+   "sha256": "dacf5ce1d189ba40d3bff7909d5e751fe4023206be63398c7cee5b9dc1bf700a",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/jue/ids_bank.json",
+   "size": 54342,
+   "sha256": "86cd44e3227d1e1a3f4e7cc26d01407b2c5caf7893ddfff948d129a4ebd77fc9",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
    "kind": "ids_unet",
    "path": "config/groups/jue/unet.npz",
    "size": 1034124,
@@ -10,10 +202,410 @@
    "owner": "96mid1ogzk"
   },
   {
+   "kind": "ids_bank",
+   "path": "config/groups/kou/ids_bank.json",
+   "size": 1505913,
+   "sha256": "8106468356e9f21ee5f819f624c6b453a07c35a081701f25b1f748f0c40175a8",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/li/ids_bank.json",
+   "size": 682827,
+   "sha256": "a9539e791694b98e4893b22a39f2be7b26d1592508d5522653944d16804993f9",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/lih/ids_bank.json",
+   "size": 378728,
+   "sha256": "3a92aa3cd8387a2cb4d0cb3c445182042fe48fc08d75d62c9f30ca6e9c8e9ded",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/lv/ids_bank.json",
+   "size": 98141,
+   "sha256": "11be3c79a955fc5d44bb4d64dea0abfca342907c834c85e70ff2eaef7b9e24ef",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/ly/ids_bank.json",
+   "size": 251995,
+   "sha256": "96dd91020f4f4734edbf377a9183b04a9a8261171c6411566d4e4387abc6c16b",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/men/ids_bank.json",
+   "size": 2241077,
+   "sha256": "d679c2237b8e282770114ff9937a351124824904e20c81f44f577b790e303fd1",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/mi/ids_bank.json",
+   "size": 329153,
+   "sha256": "9a6b3c6fb088a5f1dd376e67cdcfd0eda8501b22546bc86da98ec5e177a19579",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/mn/ids_bank.json",
+   "size": 769644,
+   "sha256": "59a6cfcfd3c09841694ae5b3e6b5b3a4525f3bf5f2381832ad864c40977687f1",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/ning/ids_bank.json",
+   "size": 350861,
+   "sha256": "6e8c1d3988b949797d40ee27b3691da0930d82da3ef858c95c4e97c7acada12a",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/pai/ids_bank.json",
+   "size": 903003,
+   "sha256": "eac1b4ecdc219513ed40aa1bb97ee1b07d95c4d1e99ba4c2214c2fd0e778c26e",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/qi/ids_bank.json",
+   "size": 2413812,
+   "sha256": "36d50837b5fc17e03f8287768a1794e1e5b606ce5f1f739d20451f180680ed9d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/qik/ids_bank.json",
+   "size": 137282,
+   "sha256": "9492bc06d7967092f06f68659ca2a7ba67be54e88f4d283a2f462790f903ec77",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/qin/ids_bank.json",
+   "size": 912465,
+   "sha256": "e0bff9196829436f084ce04b86dbee072236d3d98c7ff308721b3421ce3a261f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/rr/ids_bank.json",
+   "size": 1430442,
+   "sha256": "c4b30bae727707ea4389bf56df0f686beadc58e06b44a404eb46959ef3e387c5",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/sang/ids_bank.json",
+   "size": 1266143,
+   "sha256": "794760687d7ba47bcd3fa6b7b5990a22d4d256ef66bde3c902a064ede4ce3f04",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/shan/ids_bank.json",
+   "size": 360122,
+   "sha256": "cf2e600fcda30807a0961c7f43c31ea4f426520ab07a39b2ae259c3664851b81",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/shang/ids_bank.json",
+   "size": 863238,
+   "sha256": "bc461f4fa5bdb43897f92cd2381b1d459c5e2075c12e173d2ec2bb714ac83220",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/shi/ids_bank.json",
+   "size": 961961,
+   "sha256": "aa111903c479d29ad5936294979697471978a56b44396210085746ef446dcf22",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/shu/ids_bank.json",
+   "size": 291900,
+   "sha256": "c8c0014d6a44c8087c719179201c0d6546a3432865c75c64e58a8f18e8653232",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/suan/ids_bank.json",
+   "size": 1709750,
+   "sha256": "b80e85b5955a255a5cc1872073bd3ad86b5af49525abfe706756d5d5ae9c9801",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/sui/ids_bank.json",
+   "size": 2661893,
+   "sha256": "17d25c8ca42058978eeaa668f3b8b3fc12e342b0e7dfb2a9c60e5826fed409e0",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/suo/ids_bank.json",
+   "size": 71674,
+   "sha256": "efff7049dfe1fdc24e326376ebf9582d170683093c9e1bcee2e541ae65313982",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/sy/ids_bank.json",
+   "size": 970707,
+   "sha256": "98223762eef86c694e1d4f070bd62d3e7b9936012ec7a1d90caf2c72a9615518",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/sz/ids_bank.json",
+   "size": 866752,
+   "sha256": "c768da32925319ef41ad438bcf512107d9824923121ccfd78931c41423bcc0d9",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/ts/ids_bank.json",
+   "size": 228269,
+   "sha256": "9ca3d4e86f3e2aba54399af4a6bdfae164fb6dbbca92a6b4dadf0245ece39347",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/weim/ids_bank.json",
+   "size": 1107789,
+   "sha256": "8a3ed52ea081d7abf678bb42bb87fdf68cbc4f3c2b496ab81c4eaa27185c635d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/weiw/ids_bank.json",
+   "size": 170901,
+   "sha256": "c0badca2f1144e1316dd8943b17e15ff1dccae787729cf0c1e5b8c820461f285",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/wj/ids_bank.json",
+   "size": 679707,
+   "sha256": "545a458d565392a27f075d36669080a8fd2c2db4decb51af7e9f2acd6a8f35a5",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xb/ids_bank.json",
+   "size": 544095,
+   "sha256": "7a146d5ee3ae95c731c82958b8b496a3e2f95972b443c496cfa70cb18028677f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xian/ids_bank.json",
+   "size": 245382,
+   "sha256": "e8f44d8b8442334d70d42a9d770d402a50b72833cb0b3a5b5e78cb3e8df8a60a",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xiang/ids_bank.json",
+   "size": 1303329,
+   "sha256": "6c98e32bfdab4f20b625465937809aacbfcaa0d9b2a18811a81ed6905e20ab7d",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xjz/ids_bank.json",
+   "size": 3238645,
+   "sha256": "335e5b164b62f81b7404c958f9d8fa044367f27084fc0ee30c5f36b499159050",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xu/ids_bank.json",
+   "size": 41995,
+   "sha256": "b46fadbc7c1da5c313adb0bd2b4a2f5f6d7963db04c4d6e142e61e9c5cae46cb",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xuan/ids_bank.json",
+   "size": 1051883,
+   "sha256": "ae179bd5ac3e5b92183cae2f0ccf58125e4c0099cbf74c0fe822096727b25d9e",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xun/ids_bank.json",
+   "size": 323015,
+   "sha256": "d3647eb15436b3f4ca06c232b5fedf6c91d8fb2f9689994641089288ac5d5bf1",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/xz/ids_bank.json",
+   "size": 1687059,
+   "sha256": "680c4c292ec7bcef4e9cb2f8e2b93de4519aa832c6abf261ad0daa5451eda8d9",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yao/ids_bank.json",
+   "size": 177144,
+   "sha256": "3ce941856fa078179a6f3532f1d9ff9adec45696f03628832c446a69b8812dad",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yh/ids_bank.json",
+   "size": 131796,
+   "sha256": "253f05b026846fd7586bbb4422ab2ec42a4cc71eacdfad7a1d6c6772e7071a3f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yi_560/ids_bank.json",
+   "size": 450354,
+   "sha256": "53790ebc22dfc23761a8d57c7159d432e237ceb072ecb66f14e4846665f53bc1",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
    "kind": "ids_unet",
    "path": "config/groups/yi_560/unet.npz",
    "size": 1034352,
    "sha256": "d2c32a4b87ca2e86c726ba25d9569e44d0a09261bafa264239f0d45b949fd7c7",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yin/ids_bank.json",
+   "size": 2137728,
+   "sha256": "4623a0ef6f7cf8291ab685b85e58cde8255ac8ab524fc5fe043e59cdf1ef3d20",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yinv/ids_bank.json",
+   "size": 267119,
+   "sha256": "a651d329720aefc78b821e770f8dc09d70c46706f0901cfb572cf2f8f52983c6",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yr/ids_bank.json",
+   "size": 421152,
+   "sha256": "00c8b98192355da163d0675e80d25a034e028e9613a697fe386d6318b139c21f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/yt/ids_bank.json",
+   "size": 256218,
+   "sha256": "7f9f4801cbbea23c7cc36b749379b35275da29a08e46913d6162c21b527fa40e",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zh/ids_bank.json",
+   "size": 253411,
+   "sha256": "57a79dc26d4de7b7c7f557f7daa791b259f6c942bcdb288d4459c2f7340ca3f8",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zhen/ids_bank.json",
+   "size": 2764676,
+   "sha256": "9af676b174748545137fe6dd205f1dd4f3df77b4115c4ed98cb77a15d91292ba",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zheng/ids_bank.json",
+   "size": 642728,
+   "sha256": "86c77a76845814b35ec7e2a875360bfcb8b675898960690e78ce1cbfdf9e3e98",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zhi/ids_bank.json",
+   "size": 493727,
+   "sha256": "79933c85020bc964714f0064a3531bf640b83f9f76894e375041a03b01ba57a5",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zhuan/ids_bank.json",
+   "size": 781936,
+   "sha256": "28c0374fac636f135830dc7949555a108fecc0573c66b24890a7f7dbf7d92eb2",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zhun/ids_bank.json",
+   "size": 149226,
+   "sha256": "01b86405a627a7a2ec288a13c8ead225f495b28ec9dcb24ea466beee1d5140d3",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_bank",
+   "path": "config/groups/zy/ids_bank.json",
+   "size": 506420,
+   "sha256": "122c98a710d784cc1249110ee70e5de0da9ae913d587e0141e590403aa3124e4",
    "level": "book",
    "owner": "96mid1ogzk"
   },

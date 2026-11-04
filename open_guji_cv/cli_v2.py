@@ -1721,6 +1721,10 @@ def _add_pages(p: argparse.ArgumentParser) -> None:
 PLUGIN_GROUP = "guji.commands"
 
 
+#: 由插件（而非 cv 自带）登记进 COMMANDS_V2 的命令名
+_PLUGIN_ADDED: set[str] = set()
+
+
 def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
     """装了 guji-manager（或别的插件）时，把它提供的子命令并进 `guji`（拆分 M4，doc/design/拆分-pipeline与manager.md）。
 
@@ -1742,7 +1746,8 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
             continue
         called = set()    # 几条命令共用一个 add_parser 时只调一次；任一条 cv 自带就整个 add_parser 让给 cv
         for name, (add_parser, handler) in commands.items():
-            if name in COMMANDS_V2 or _plugin_too_old(module, name):
+            # COMMANDS_V2 里上回由插件登记的不算 cv 自带（同一进程多次建 parser 时，如测试、控制台）
+            if (name in COMMANDS_V2 and name not in _PLUGIN_ADDED) or _plugin_too_old(module, name):
                 continue
             if add_parser not in called:
                 if any(n in sub.choices for n, (ap, _) in commands.items() if ap is add_parser):
@@ -1750,6 +1755,7 @@ def load_plugin_commands(sub: argparse._SubParsersAction) -> list[str]:
                 add_parser(sub)
                 called.add(add_parser)
             COMMANDS_V2[name] = handler
+            _PLUGIN_ADDED.add(name)
             added.append(name)
     return added
 
@@ -1761,6 +1767,21 @@ MOVED_TO_MANAGER: dict[str, str] = {
     "source": "拆分 P2 第二批，2026-11-02；原图 R2",
     "cellvotes": "拆分 P2 第二批，2026-11-02；网站格级投票",
     "freeze": "拆分 P2 第二批，2026-11-02；冻结登记",
+    "exp": "拆分 P2 第三批，2026-11-04",
+    "snap": "拆分 P2 第三批，2026-11-04",
+    "archive": "拆分 P2 第三批，2026-11-04",
+    "release": "拆分 P2 第三批，2026-11-04",
+    "deploy": "拆分 P2 第三批，2026-11-04",
+    "events": "拆分 P2 第三批，2026-11-04",
+    "gold": "拆分 P2 第三批，2026-11-04",
+    "batch": "拆分 P2 第三批，2026-11-04",
+    "label-batch": "拆分 P2 第三批，2026-11-04",
+    "eval": "拆分 P2 第三批，2026-11-04",
+    "check": "拆分 P2 第三批，2026-11-04",
+    "groups": "拆分 P2 第三批，2026-11-04",
+    "cards": "拆分 P2 第三批，2026-11-04",
+    "progress": "拆分 P2 第三批，2026-11-04",
+    "collate": "拆分 P2 第三批，2026-11-04",
 }
 #: 搬走的命令要 guji-manager 至少哪一版（`guji_manager.__version__`）。旧版 manager 里可能留着早先复制的过期副本
 #: （如云端快照 10-27 的种子带着当时的 opinions），版本不够就不认它的这条命令、提示更新，免得悄悄跑旧逻辑。
@@ -1769,6 +1790,21 @@ MIN_MANAGER_VERSION: dict[str, str] = {
     "source": "0.2.0",
     "cellvotes": "0.2.0",
     "freeze": "0.2.0",
+    "exp": "0.3.0",
+    "snap": "0.3.0",
+    "archive": "0.3.0",
+    "release": "0.3.0",
+    "deploy": "0.3.0",
+    "events": "0.3.0",
+    "gold": "0.3.0",
+    "batch": "0.3.0",
+    "label-batch": "0.3.0",
+    "eval": "0.3.0",
+    "check": "0.3.0",
+    "groups": "0.3.0",
+    "cards": "0.3.0",
+    "progress": "0.3.0",
+    "collate": "0.3.0",
 }
 
 MANAGER_INSTALL_HINT = ("git clone --depth 1 https://github.com/open-guji/guji-manager <目录> && "
@@ -1813,8 +1849,8 @@ def _plugin_too_old(module, name: str) -> bool:
 #:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
 #:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
 MANAGER_CLI_MODULES: tuple[str, ...] = (
-    "cli_glyph_db", "cli_exp", "cli_db", "cli_products",
-    "jobs.cli", "cli_ops", "cli_feedback", "cli_eval", "cli_glyph", "cli_close", "cli_perf", "cli_model",
+    "cli_glyph_db", "cli_db", "cli_products",
+    "jobs.cli", "cli_glyph", "cli_close", "cli_perf", "cli_model",
 )
 
 

@@ -1,7 +1,7 @@
 """jiazhu_split.single_row_heads：一行就完的雙行小注段头（全唐文「字｜闕」＋「一」，2026-11-04）。"""
 import numpy as np
 
-from open_guji_cv.books.siku_zongmu import jiazhu_split as J
+from open_guji_cv.books.quantangwen import jiazhu_split as J
 
 
 def _patch(right: bool, left: bool, w: int = 40, h: int = 40) -> np.ndarray:

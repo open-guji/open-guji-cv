@@ -191,8 +191,10 @@ def edition_of(name: str) -> str:
 
 
 def build(src_ws_dir: Path, name: str, *, min_batches: int = 2, per_char: int = 3, actor: str | None = None,
-          note: str = "", branch: str = "main") -> dict:
-    """出共享刻例库 ``name`` 到本机（``$GUJI_DATA_HOME/<分支>/<name>/``），不推。"""
+          note: str = "", branch: str = "main", gate_waive: str = "") -> dict:
+    """出共享刻例库 ``name`` 到本机（``$GUJI_DATA_HOME/<分支>/<name>/``），不推。
+
+    装好的库先过出版护栏（`ops/glyph_release_gate`），不过就拒出；``gate_waive`` 给理由可照出。"""
     from ..clustering.glyph_db import GlyphDB, export_store, rebuild_from_store
     from ..core.workspace import central_data_dir, central_marker, data_root
     src_ws_dir = Path(src_ws_dir)
@@ -213,6 +215,8 @@ def build(src_ws_dir: Path, name: str, *, min_batches: int = 2, per_char: int = 
     info = write_store(root / GS, picked, tmp / "raw", src_ws=src_ws, edition=edition)
     dbp = tmp / "check.sqlite"
     rebuild_from_store(tmp / "raw", dbp)                       # 装得进去才算数
+    from .glyph_release_gate import enforce
+    gate = enforce(dbp, waive=gate_waive, what=f"出 {name}")
     db = GlyphDB(dbp)
     try:
         export_store(db, data / GS)
@@ -227,7 +231,7 @@ def build(src_ws_dir: Path, name: str, *, min_batches: int = 2, per_char: int = 
                                                   thresholds=thresholds)), encoding="utf-8")
     shutil.rmtree(tmp, ignore_errors=True)
     return {"lib": name, "edition": edition, "from": src_ws, "data_dir": str(data), "workspace_dir": str(ws),
-            "thresholds": thresholds, "select": stats, **info}
+            "thresholds": thresholds, "select": stats, "gate": gate, **info}
 
 
 def publish(conn, name: str, *, actor: str | None = None, uploader=None, branch: str = "main",
