@@ -14,7 +14,7 @@
 要重问请换提示词版本或删事件。
 
 事件 payload：`source="llm"`、`group`、`char`（组内字，或 None）、`other`（大模型认为组内字都不是）、`conf`(high/mid/low)、`why`（≤60 字）、
-`model`、`prompt_ver`、`ctx{left,right,hash}`、`cell`、`tok{in,out,cache_read}`。弃权（低把握、其他）也记，免得反复问。
+`model`、`prompt_ver`、`ctx{left,right,hash}`、`cell`、`tok{in,out,cache_read}`、`pending_reason`（问时这格的待审原因，缺省 unknown）。弃权（低把握、其他）也记，免得反复问。
 """
 from __future__ import annotations
 
@@ -76,12 +76,13 @@ class RulingStore:
         return self._load().get((group, ctx_hash(left, right), prompt_ver))
 
     def put(self, group: str, prompt_ver: str, left: str, right: str, *, char, conf, why: str, model: str,
-            cell: str | None = None, tok: dict | None = None) -> dict:
+            cell: str | None = None, tok: dict | None = None, pending_reason: str | None = None) -> dict:
         left, right = (left or "")[-WIDTH:], (right or "")[:WIDTH]
         other = char == OTHER                      # “组内字都不是”：char 留空、other=True（字形字段只收单字）
         payload = {"source": SOURCE, "group": group, "char": None if other else char, "other": other, "conf": conf, "why": (why or "")[:60],
                    "model": model, "prompt_ver": prompt_ver, "cell": cell, "tok": tok or {},
-                   "ctx": {"left": left, "right": right, "hash": ctx_hash(left, right)}}
+                   "ctx": {"left": left, "right": right, "hash": ctx_hash(left, right)},
+                   "pending_reason": pending_reason or "unknown"}   # 问的时候这格的待审原因（doc/design/待审原因PendingReason.md），不知道记 unknown
         self._load()[(group, payload["ctx"]["hash"], prompt_ver)] = payload
         if self.persist:
             seq = max((e.seq for e in self.log.read(self._batch, raw=True)), default=0) + 1
@@ -107,4 +108,4 @@ class RulingCache:
 
     def store(self, group, prompt_ver, model, left, right, e: dict, cell=None) -> None:
         self.store_.put(group, prompt_ver, left, right, char=e.get("char"), conf=e.get("conf"), why=e.get("why") or "",
-                        model=e.get("model") or model, cell=cell, tok=e.get("tok"))
+                        model=e.get("model") or model, cell=cell, tok=e.get("tok"), pending_reason=e.get("pending_reason"))
