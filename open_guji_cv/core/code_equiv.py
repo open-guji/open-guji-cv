@@ -821,6 +821,14 @@ ENTRIES: tuple[Equiv, ...] = (
           evidence='页型 cover 点名 cover_pages（A20 11-04，SJ 建议；缺省空，空时参数 dump 不含该键，新分支只在点名页才走）：不点名封面时'
                    '测试册 keben 三页（tests/fixtures/workspace）border_detect＋border_detect_gate 产物与 origin/dev 逐字节相同'
                    '（新旧代码各跑一遍，gate 不能单独跑 step，所以按 border_detect 一起比）；2026-11-04'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='453c40fd35939660856a7e183ea219db58f23e24241417399e68e79de6aa1939',
+          old='f6dfb7618ec03ac0ff0c92c39bc6c70c6b13964888c826fc530f0d813bf05cae',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关，#980）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.groups.flow',
+          new='080e42ba4cb39f84cfa5fe4c31b5de6f5779acd2c14a6dc83487c8365c0759e8',
+          old='d81b0f7d3c661095d34fe1baa4886501672c2f85bf44224d29cc4c6eb5335f4e',
+          evidence='group_flow_lift_ref_veto 书级开关（缺省关，#980）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
 )
 
 
