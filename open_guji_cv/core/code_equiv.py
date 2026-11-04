@@ -726,6 +726,12 @@ ENTRIES: tuple[Equiv, ...] = (
           old='50e9558e7654335537f0dca09d5d7cedc56d7ad75ff7e17e6fee6c10c23f519b',
           evidence='alt_cut 挑列收紧（只改备选分支）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
                    '与 dev 6c3705d9 产物逐字节相同；scripts/code_equiv.py check，2026-11-03'),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='0a56f1ecc1a7c72fb119209e8f4bd0f810aec17b5797b43af32e2b304c162c2c',
+          old='30515d5d225a5c157dd5dff9d476d2c4f3ede0ec5d5e99f19e5e4bec42b77642',
+          evidence='alt_cut 错格闸（只改备选分支）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）'
+                   '与 dev 62b64e2f 产物逐字节相同；scripts/code_equiv.py check，2026-11-04。'
+                   '史记开着 alt_cut，换列结果会变，第 8 轮须从 align_ref 起强制重跑'),
 )
 
 
