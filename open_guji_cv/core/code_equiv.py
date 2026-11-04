@@ -740,6 +740,16 @@ ENTRIES: tuple[Equiv, ...] = (
           new='6db213006a8b7471cd4cd9c8191e06fd14ad0a3dcf2270a36b1453a4aa296207',
           old='a9f232fc7111165f419c0257a6ba08a4ad5dc1fcb9dd9f3b358652cc5a9c029b',
           evidence=_JZ_BAND),
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='2ae95f04104d150000d9c4f70112be0c017e0daf867f43d8fba234f812e03836',
+          old='30515d5d225a5c157dd5dff9d476d2c4f3ede0ec5d5e99f19e5e4bec42b77642',
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；殿本 vol12 31 页同（A22 11-04）；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='56240fd3e22c0046c506b1870f0fb72fa268003edc2f01543ce115ab0e2f778a',
+          old='e1fe837a2910c67f9a89b6ffd35a28b7f893d7d38db00cb3ef92bfa41b1cc449',
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align；换列要求字形背书，用户 11-04 定 B；首格切坏守卫）：'
+                   '开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev 86ca2fc5 产物逐字节相同；'
+                   '殿本 vol12 31 页同（A22 11-04，对 f6055e10 上的同一改动）；scripts/code_equiv.py check，2026-11-04'),
 )
 
 

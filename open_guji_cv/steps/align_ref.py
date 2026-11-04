@@ -153,7 +153,7 @@ from ..clustering.align_eval import GRAM, WINDOW_PAD
 from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..core.workspace import corpus_path
-from ..products.kinds.recog import AlignRec, PageAlignRef, PageMatch, PageOcr
+from ..products.kinds.recog import AltDraft, AlignRec, PageAlignRef, PageMatch, PageOcr
 from ..utils.jiazhu_order import sort_by_reading
 
 # ⚠️ 走 `core.workspace.corpus_path`，不要再写死 "corpus/xxx.txt" 这种相对
@@ -529,6 +529,11 @@ class AlignRefParams(BaseModel):
     载体字相同够多才认，只给有字形证据的格。起因：卷首叶题署行（大印压着、字距拉开）与夹注右行字数与整理本「|」
     不同的列整列没有整理本字（第 4 轮 S／D 类约 150 格）。False＝关（缺省，不进参数哈希）。"""
 
+    alt_select: str = "align"
+    """row_segment `alt_cut` 的备选列在哪一步定（2026-11-04，史记第 9 轮，A22 评审过）：
+    "align"＝本步按坐标对位吻合数挑（现行，缺省，不进参数哈希）；"admit"＝本步只出候选列（`alt_cand`）与
+    备选那份坐标对位（`alt_draft`），seed_admit 两套都准入后按列定（见 `products.alt_view`）。"""
+
     coord_title_trust: bool = False
     """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
     （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
@@ -558,6 +563,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_title_trust", None)
         if isinstance(d, dict) and not self.coord_dp_flat:
             d.pop("coord_dp_flat", None)
+        if isinstance(d, dict) and self.alt_select == "align":
+            d.pop("alt_select", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -1419,6 +1426,18 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
+    if getattr(p, "alt_select", "align") == "admit":
+        # 不在这里挑：错格的列先剔掉，其余都当候选，交 seed_admit 两套都准入后定（`products.alt_view`）
+        cand = [col for col in cols if _shifted(draft, car_alt, col) < ALT_MAX_SHIFT]
+        if cand:
+            cs = set(cand)
+            res.alt_cand = cand
+            res.alt_draft = AltDraft(
+                coord=[r for r in draft.coord if r.col in cs],
+                coord_cols=[c for c in draft.coord_cols if c in cs],
+                coord_fallback={k: v for k, v in draft.coord_fallback.items() if int(k) in cs},
+                coord_conflict_ids=[i for i in draft.coord_conflict_ids if _id_col(i) in cs])
+        return
     chosen = []
     for col in cols:
         ca, cm = _covered(draft, col), _covered(res, col)
@@ -1430,18 +1449,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
             chosen.append(col)
     if not chosen:
         return
-    ch = set(chosen)
-    res.chars = [c for c in res.chars if c.col not in ch]
-    res.coord = sorted([r for r in res.coord if r.col not in ch] + [r for r in draft.coord if r.col in ch],
-                       key=lambda r: (r.col, r.slot, r.sub or ""))
-    res.coord_cols = sorted({c for c in res.coord_cols if c not in ch} | {c for c in draft.coord_cols if c in ch})
-    for col in ch:
-        res.coord_fallback.pop(str(col), None)
-        if str(col) in draft.coord_fallback:
-            res.coord_fallback[str(col)] = draft.coord_fallback[str(col)]
-    res.coord_conflict_ids = ([i for i in res.coord_conflict_ids if _id_col(i) not in ch]
-                              + [i for i in draft.coord_conflict_ids if _id_col(i) in ch])
-    res.alt_cols = sorted(ch)
+    from ..products.alt_view import merge_alt
+    merge_alt(res, draft, chosen)
 
 
 def _id_col(rid: str) -> int | None:
