@@ -133,7 +133,8 @@ def test_fuse_takes_rule_stubs_in_head_band():
     g = _gray([(353, 539)])                       # 网外那列有字
     for x in true:
         g[300:540, W - 1 - x - 1:W - 1 - x + 2] = 0     # 天头的界行残段（240px，> 0.8 列宽）
-    out, how = pr.rescue(_res(free), g, lambda pitch: _res(free))
+    grid = GOOD[:7] + [1617 + 45, 1796 + 45] + GOOD[9:]  # 网格线数对，但两条挑进字里
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
     assert how == "fit"
     xs = [round(x) for x in line_xs(out)]
     assert all(abs(a - b) <= pr.TOL for a, b in zip(xs, true)), xs     # 自由线对得上的照用自由线
@@ -226,3 +227,19 @@ def test_pad_outer_blank_not_when_ink_outside():
     g = _chars([(150, 524)] + [(GOOD[i], GOOD[i + 1]) for i in range(1, 9)])
     out, how = pr.rescue(_res(cut), g, lambda pitch: _res(cut))
     assert how is None and [round(x) for x in line_xs(out)] == cut
+
+
+def test_stained_page_floor():
+    """vol43 p1（第 3 轮）：满页霉点，字缝里也有墨，不减底色时真线全被扣成负分、DP 无解，漏两条界行只剩 8 列。"""
+    g = _gray([(GOOD[k], GOOD[k + 1]) for k in range(9)])
+    rng = np.random.default_rng(0)
+    speck = rng.random((H, W)) < 0.12
+    speck[:300] = speck[2700:] = False
+    g[speck] = 0
+    free = GOOD[:6] + [1340] + GOOD[9:]                  # 1617、1796 漏了，字心多挑 1340：c6 c7 出带
+    assert pr.check(free).bad
+    grid = GOOD[:7] + [1617 + 45, 1796 + 45] + GOOD[9:]  # 网格线数对，但两条挑进字里
+    out, how = pr.rescue(_res(free), g, lambda pitch: _res(grid))
+    assert how == "fit"
+    got = [round(x) for x in line_xs(out)]
+    assert len(got) == len(GOOD) and all(abs(a - b) <= 2 * pr.TOL for a, b in zip(got, GOOD)), got
