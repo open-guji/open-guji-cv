@@ -72,7 +72,7 @@ def notify_submitters(db, say=print) -> int:
         return 0
     sent = 0
     try:
-        due = db(S.notify_due)
+        due = db(S.notify_due) or []          # 库层返回 None（空、测试替身）当没有到期的
     except Exception as e:  # noqa: BLE001
         if "notified_at" in str(e) or type(e).__name__ == "UndefinedColumn":
             _disabled = True
