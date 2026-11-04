@@ -250,6 +250,10 @@ class SeedAdmitParams(BaseModel):
     """书级追加的字组陪衬字（组 id → 字串，叠在注册表 `FlowSpec.tolerate` 上；2026-11-01 史記文淵閣本）：写本里
     曰 与借来的殿本库形 田／四／囬／臼 紧咬（分差内），格进不了日曰组、文意小头无从判，01–10 册约 900 格因此送审。
     只放宽进入，给字仍全凭解法；组声明了 `tolerate_ref_agree`（日曰有）时，陪衬带进的格还须与整理本同字。空＝不追加（不进参数 dump）。"""
+    group_flow_lift_ref_veto: list[str] = Field(default_factory=list)
+    """书级：这几组补放（lift）时，整理本对位字（现役对位缺格时用坐标对位字）是组里另一个字、与组给的字不同 → 不放，留人审
+    （`group_flow_ref_dissent`；只降不放）。起因（2026-11-03 史記文淵閣本）：山由出 sy 整字 HOG 的模板来自殿本，史記写本山常被判成出
+    （标签山的格里判出 143、判山 27），第 6 轮 06:93:4:1a、alt_cut 02:20:6:2b 山被放成出。空＝不启用（不进参数 dump）。"""
     group_flow_lift_shape_ref: list[str] = Field(default_factory=list)
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
@@ -888,6 +892,8 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.human_unbound_shift_ok:
             d.pop("human_unbound_shift_ok", None)
+        if isinstance(d, dict) and not self.group_flow_lift_ref_veto:
+            d.pop("group_flow_lift_ref_veto", None)
         if isinstance(d, dict) and not self.group_flow_lift_shape_ref:
             d.pop("group_flow_lift_shape_ref", None)
         if isinstance(d, dict) and self.reference_trust == "none":
@@ -3612,6 +3618,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=p._rt_lift_shape_ref(),
+                     lift_ref_veto=frozenset(p.group_flow_lift_ref_veto),
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
