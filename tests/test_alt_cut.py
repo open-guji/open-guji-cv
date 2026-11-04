@@ -164,6 +164,24 @@ def test_admit_mode_pick_and_merge():
     # 备选那遍冲突多了（放行字≠坐标字）：不换
     alt_bad = PageAdmit(page=1, columns=[col(1, 9, 1, ch="乙"), col(2, 5, 5)])
     assert _pick_alt_cols([1], main, alt_bad, ref, ref, None, None) == []
+    # 备选那遍放行全靠整理本（witnesses_coord），背书格变少：不换（用户 11-04 定 B）
+    weak = col(1, 9, 1)
+    for r in weak.chars[:9]:
+        r.channel = "witnesses_coord"
+    assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
+
+
+def test_admit_mode_first_cell_guard():
+    """备选首个正文整字格墨高超过其余中位数 1.6 倍：不换（只拦）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.seed_admit import _first_cell_tall
+
+    def chars(h0):
+        hs = [h0] + [40] * 6
+        rs = [NS(sub=None, slot=i + 1, patch_key=f"k{i}", bbox_page=[0, 0, 30, h]) for i, h in enumerate(hs)]
+        return NS(columns=[NS(col=1, chars=rs)])
+    assert _first_cell_tall(chars(70), 1) and not _first_cell_tall(chars(60), 1)
+    assert not _first_cell_tall(chars(70), 2) and not _first_cell_tall(None, 1)
 
 
 def test_admit_mode_views_and_offline_cols(tmp_path):

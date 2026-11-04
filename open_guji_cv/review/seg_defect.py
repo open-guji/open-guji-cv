@@ -13,8 +13,9 @@ seed_admit／align_ref 产物与字块缓存，把疑似切坏的格列成表，
   线两侧的格都标；或 cell_shrink 已打 `boundary_ink` 旗（A22：05:15:8:1a 字头被切到格外）。
 - `bleed`   邻格笔画溢入：cell_shrink 的 `edge_blob` 旗（上下带里与主体隔开的一块墨，`extractor._shape_features`）。
   A22 建议改用 `partition_strip` 的归属图，第一期先用现成旗，抽样不准再换。
-- `frame_residue` 框线残笔：用 `extractor.inner_frame_band_mask`（与 cell_shrink 剥线同一个定义）。cv #1001 合进来
-  之前这一类不出。
+- `frame_residue` 框线残笔：列首／列尾格（贴着版框一格高以内）的最终字块上，按全页半格线位
+  （`CellShrinkStep._page_frame_lines` 同一算法，夹注半格线位）用 `extractor.inner_frame_band_mask` 还认得出线的
+  （与 cell_shrink 剥线同一个定义；剥过还在＝没剥干净）。夹注 a/b 各自一块图块，各判。
 
 用法：`python -m open_guji_cv.review.seg_defect <册> --pages 2,10 -w <工作区> [--out x.tsv]`；不给 --pages 跑整册。
 """
@@ -73,7 +74,48 @@ def _patch(cache, book: str, key: str | None):
     return cv2.imread(str(p), cv2.IMREAD_GRAYSCALE)
 
 
-def scan_page(book: str, page: int, store, cache) -> list[dict]:
+class _LineCtx:
+    """给 `CellShrinkStep._page_frame_lines` 用的最小上下文：只读列图、参数取 cell_shrink 缺省＋半格线位开。"""
+
+    def __init__(self, cache, book: str, frame_line_max_off: float):
+        from ..steps.cell_shrink import CellShrinkParams
+        self._cache, self._book = cache, book
+        self._p = CellShrinkParams(frame_line_max_off=frame_line_max_off, jiazhu_strip_rules=True)
+
+    def image(self, kind: str, key: str):
+        import cv2
+        return cv2.imread(str(self._cache.path(self._book, kind, key)), cv2.IMREAD_GRAYSCALE)
+
+    def params_for(self, _step):
+        return self._p
+
+
+def _frame_residue(patch, r, cc_cells, lines: dict) -> str | None:
+    """列端格最终字块上还认得出的内框细线：返回特征说明，没有就 None。"""
+    from ..clustering.extractor import inner_frame_band_mask
+    if patch is None or cc_cells is None:
+        return None
+    cell_h = float(cc_cells.period or 0)
+    if cell_h <= 0:
+        return None
+    x0, y0 = r.bbox_col[0], r.bbox_col[1]
+    out = []
+    for bottom, key, edge in ((False, "frame_half_lines_top", cc_cells.border_top),
+                              (True, "frame_half_lines_bottom", cc_cells.border_bottom)):
+        lys = (lines.get(key) or {}).get(cc_cells.col) or []
+        if edge is None or not lys:
+            continue
+        near = (r.bbox_col[3] >= edge - cell_h) if bottom else (r.bbox_col[1] <= edge + cell_h)
+        if not near:
+            continue
+        ly = tuple((float(v) - y0, float(th)) for v, th in lys)
+        m = inner_frame_band_mask(np.ascontiguousarray(patch), cell_h, bottom, ly)
+        if m is not None and m.any():
+            out.append(("下" if bottom else "上") + f"线 {int(m.sum())}px")
+    return " ".join(out) or None
+
+
+def scan_page(book: str, page: int, store, cache, frame_line_max_off: float = 0.35) -> list[dict]:
     from .. import steps  # noqa: F401  —— 注册产物种类
     from ..core.spec import page_key
     from ..products.alt_view import read_view, resolve_patch_key
@@ -101,6 +143,14 @@ def scan_page(book: str, page: int, store, cache) -> list[dict]:
                 for s in (cut.get("slot_above"), cut.get("slot_below")):
                     if s is not None:
                         seam[(cc.col, int(s))] = max(seam.get((cc.col, int(s)), 0), si)
+    lines: dict = {}
+    if cells is not None:
+        from ..steps.cell_shrink import CellShrinkStep
+        try:
+            lines = CellShrinkStep._page_frame_lines(None, _LineCtx(cache, book, frame_line_max_off), page, cells)
+        except Exception:                      # noqa: BLE001 —— 缺列图就不判这一类
+            lines = {}
+    by_col = {cc.col: cc for cc in (cells.columns if cells else [])}
     out: list[dict] = []
     for cc in chars.columns:
         jz = [r.height for r in cc.chars if r.sub and r.patch_key and r.height]
@@ -122,6 +172,11 @@ def scan_page(book: str, page: int, store, cache) -> list[dict]:
                 hits.append(("clipped", "boundary_ink"))
             if "edge_blob" in r.flags:
                 hits.append(("bleed", "edge_blob"))
+            if lines:
+                fr = _frame_residue(_patch(cache, book, resolve_patch_key(book, r.patch_key, store)),
+                                    r, by_col.get(cc.col), lines)
+                if fr:
+                    hits.append(("frame_residue", fr))
             a = arec.get(r.id)
             for kind, feat in hits:
                 out.append({"格号": r.id.split(":", 1)[1] if r.id.count(":") >= 4 else r.id,
@@ -140,6 +195,7 @@ def main(argv=None) -> int:
     ap.add_argument("--pages", default="")
     ap.add_argument("-w", "--workspace", required=True)
     ap.add_argument("--out", default="")
+    ap.add_argument("--frame-line-max-off", type=float, default=0.35, help="同册配置 cell_shrink.frame_line_max_off")
     a = ap.parse_args(argv)
     from ..products.cache import ImageCache
     from ..products.store import ProductStore
@@ -149,7 +205,7 @@ def main(argv=None) -> int:
         pages = [int(x) for x in a.pages.split(",") if x.strip()]
     else:
         pages = sorted(int(p.stem[1:]) for p in store.step_dir(a.book, "cell_shrink").glob("p*.json"))
-    rows = [r for p in pages for r in scan_page(a.book, p, store, cache)]
+    rows = [r for p in pages for r in scan_page(a.book, p, store, cache, a.frame_line_max_off)]
     f = open(a.out, "w", encoding="utf-8", newline="") if a.out else sys.stdout
     w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\t")
     w.writeheader()

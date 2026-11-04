@@ -3667,8 +3667,11 @@ ALT_CV_MIN_CELLS = 6          # 正文整字格不到这么多的列不比墨高
 ALT_CV_RATIO = 1.2            # 备选那份墨高变异系数 ≤ 主切法 × 这个
 ALT_CV_MAX = 0.35             # 且 ≤ 这个
 #: 换列要不要求「有字形背书的放行格不比主切法少」。125 页 A/B（11-04）：要求时待审 740→734，不要求 740→695；
-#: 不要求时多放的 55 格看图 51 对（多走 coord_fallback/witnesses_coord，半色调、褪色页为主）。用户 11-04 定：不要求（放宽）。
-ALT_REQUIRE_BACKED = False
+#: 不要求时多放的 55 格看图 51 对（多走 coord_fallback/witnesses_coord，半色调、褪色页为主）。
+#: 用户 11-04 定要求（B）：换列不让整理本当主证据。
+ALT_REQUIRE_BACKED = True
+#: 首格切坏守卫（只拦、不放）：备选那份首个正文整字格墨高 > 本列其余正文整字格墨高中位数 × 这个，就不换（03:65:7 一类）
+ALT_FIRST_CELL_MAX = 1.6
 #: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
 _BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "iron", "seal", "group_flow", "ref_lib_coord"})
 
@@ -3711,9 +3714,24 @@ def _ink_cv(chars, col: int) -> tuple[float | None, int]:
     return (statistics.pstdev(hs) / m if m else None), len(hs)
 
 
+def _first_cell_tall(chars, col: int) -> bool:
+    """备选那份这一列首个正文整字格墨高是否超过其余正文整字格中位数的 `ALT_FIRST_CELL_MAX` 倍（其余不到 3 格不判）。"""
+    import statistics
+    cc = next((c for c in (getattr(chars, "columns", None) or []) if c.col == col), None)
+    rs = sorted((r for r in (cc.chars if cc else [])
+                 if not getattr(r, "sub", None) and getattr(r, "slot", 0) >= 1 and getattr(r, "patch_key", None)
+                 and getattr(r, "bbox_page", None)), key=lambda r: r.slot)
+    if len(rs) < 4:
+        return False
+    hs = [r.bbox_page[3] - r.bbox_page[1] for r in rs]
+    med = statistics.median(hs[1:])
+    return med > 0 and hs[0] > ALT_FIRST_CELL_MAX * med
+
+
 def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt) -> list[int]:
     """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
-    正文整字格墨高一致（够 `ALT_CV_MIN_CELLS` 格才比）；`ALT_REQUIRE_BACKED` 时有字形背书的放行格也不能少。"""
+    正文整字格墨高一致（够 `ALT_CV_MIN_CELLS` 格才比）；`ALT_REQUIRE_BACKED` 时有字形背书的放行格也不能少；
+    备选首格不能过高（`ALT_FIRST_CELL_MAX`）。"""
     out = []
     for col in cand:
         rm, bm, km = _col_stats(main, col, ref_main)
@@ -3723,6 +3741,8 @@ def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, cha
         if not (ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
             continue
         if cv_a is not None and cv_m is not None and (cv_a > cv_m * ALT_CV_RATIO or cv_a > ALT_CV_MAX):
+            continue
+        if _first_cell_tall(chars_alt, col):
             continue
         out.append(col)
     return out
