@@ -64,6 +64,11 @@ KINDS: tuple[Kind, ...] = (
     # 字组 IDS 切分 U-Net：原先算在语料底库（config/groups/<组>/），11-04 挪进模型系统
     Kind("ids_unet", "repo", "config/groups/*/unet.npz", "book", DIANBEN,
          ("seed_admit",), "殿本本组人标切线训的三段切分 U-Net（纯 numpy）"),
+    # 字组 IDS 模板库：从殿本人裁字块挖出来的（source.labels），按「从哪里来」归殿本；11-04 起不再算 global 语料
+    Kind("ids_bank", "repo", "config/groups/*/ids_bank.json", "book", DIANBEN,
+         ("seed_admit",), "殿本人裁挖的部件模板库（在线 IDS 判法）"),
+    Kind("ids_whole_bank", "repo", "config/groups/*/whole_bank.json", "book", DIANBEN,
+         ("seed_admit",), "殿本人裁挖的整字模板库（两路一致的整字 HOG）"),
     Kind("rr_clf", "repo", "models/rr_clf/*", "book", DIANBEN,
          ("seed_admit",), "入人八 字形分类（殿本刻形）"),
     # 数据目录 config/groups/（各书自己的，中心库同步）
