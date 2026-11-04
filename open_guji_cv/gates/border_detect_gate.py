@@ -74,6 +74,13 @@ class BorderDetectGateParams(BaseModel):
     `params: {border_detect_gate: {table_pages: ["8-163"]}}`。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。
     年表以后怎么切、怎么对位见 ai-team `domain/CV/新书登记/史记文渊阁/年表方案.md`。"""
 
+    cover_pages: list[int | str] = []
+    """册配置点名的书衣／封面页（SJ 建议，2026-11-04）：不论页型规则判成什么，一律记页型 `cover`、整页跳过
+    （reject `page_type_skip`），manifest 记 flag `page_type_cover`；网站按页型 `cover` 出占位（同自动判出的封面）。
+    点名优先于 `body_pages` 与 `grid_overrides_skip`；与 `table_pages` 同页时表格优先（册配置层 `page_kinds` 不许同页写两类）。
+    写法同 `body_pages`：`params: {border_detect_gate: {cover_pages: [1]}}`，册配置里用 `page_kinds: {cover: [1]}`。
+    缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
+
     grid_overrides_skip: bool = True
     """页型规则判 skip（题签／封面），但 Step1 探出完整的正文栏格 → 按正文走，manifest 记 flag `page_type_grid`。
     完整栏格（`_full_grid`）＝列数＝版式列数、每列宽都在中位 ±``grid_width_tol`` 内、每条竖线都是真探到的
@@ -94,6 +101,8 @@ class BorderDetectGateParams(BaseModel):
             d.pop("body_pages", None)
         if isinstance(d, dict) and not self.table_pages:
             d.pop("table_pages", None)
+        if isinstance(d, dict) and not self.cover_pages:
+            d.pop("cover_pages", None)
         return d
 
     def model_post_init(self, __context) -> None:
@@ -175,9 +184,13 @@ class BorderDetectGateStep(Step):
         page_type, policy = classify_page_type(raw)
         forced_from = None
         table_from = None
+        cover_from = None
         if p.table_pages and page in set(_expand_pages(p.table_pages)):
             table_from = f"{page_type}/{policy}"
             page_type, policy = "table", "skip"
+        elif p.cover_pages and page in set(_expand_pages(p.cover_pages)):
+            cover_from = f"{page_type}/{policy}"
+            page_type, policy = "cover", "skip"
         elif p.body_pages and page in set(_expand_pages(p.body_pages)) and \
                 (page_type, policy) != ("body", "standard"):
             forced_from = f"{page_type}/{policy}"
@@ -185,7 +198,7 @@ class BorderDetectGateStep(Step):
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
         grid_from = None
-        if p.grid_overrides_skip and policy == "skip" and table_from is None and n_cols == expected and \
+        if p.grid_overrides_skip and policy == "skip" and table_from is None and cover_from is None and n_cols == expected and \
                 _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
             grid_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
@@ -214,6 +227,8 @@ class BorderDetectGateStep(Step):
             flags_forced = []
         if table_from:
             flags_forced.append(f"page_type_table：页型规则判「{table_from}」，册配置 table_pages 点名为表格页，整页暂不整理")
+        if cover_from:
+            flags_forced.append(f"page_type_cover：页型规则判「{cover_from}」，册配置 cover_pages 点名为书衣／封面页，整页跳过")
         if grid_from:
             flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":

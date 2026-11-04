@@ -35,6 +35,12 @@ def test_judge_handling_and_auto():
     assert j["handling"] == "自动跳过"
 
 
+def test_judge_cover():
+    j = R.judge({"page_type": "cover", "page_type_policy": "skip", "reject": ["page_type_skip：页型判定为「cover」"],
+                 "flags": ["page_type_cover：页型规则判「body/standard」，册配置 cover_pages 点名为书衣／封面页，整页跳过"]})
+    assert (j["handling"], j["auto"]) == ("点名封面", "body/standard")
+
+
 def test_build_issues(tmp_path):
     store = ProductStore(tmp_path)
     book = make_book("t1", page_kinds={"body": [2, 3], "table": [4, 5]})

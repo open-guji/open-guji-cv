@@ -33,6 +33,16 @@ def _w(ws, name, doc, sub="books"):
     return p
 
 
+def test_cover_kind_maps_to_cover_pages_and_exclusive():
+    assert PK.to_params(PK.load_page_kinds({"cover": [1]})) == {"border_detect_gate": {"cover_pages": [1]}}
+    assert make_book(page_kinds={"cover": [1], "body": [5]}).params["border_detect_gate"] == {"cover_pages": [1], "body_pages": [5]}
+    with pytest.raises(ValueError, match="一页只能是一种页型"):
+        PK.load_page_kinds({"cover": ["1-3"], "table": [2]})
+    with pytest.raises(ValueError, match="一页只能是一种页型"):
+        PK.load_page_kinds({"cover": [1], "body": [1]})
+    PK.load_page_kinds({"roster": ["1-5"], "body": [2]})          # 职名页是正文管线里的分支，可与 body 重叠
+
+
 def test_load_page_kinds_validates():
     assert PK.load_page_kinds(None) == {} and PK.load_page_kinds({}) == {}
     assert PK.load_page_kinds({"body": [], "table": None, "roster": 5}) == {"roster": [5]}

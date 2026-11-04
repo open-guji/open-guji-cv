@@ -81,7 +81,7 @@ def test_code_conflict_demotes_admitted_not_human(tmp_path):
     cells = {1: {"admit": True, "char": "甲"}, 2: {"admit": True, "char": "埀", "channel": "match_solo", "provenance": "match"},
              3: {"admit": True, "char": "乙"}}
     n, r = _run(cells, {1: "甲", 2: "", 3: "乙"}, st)
-    assert n == 0 and not r[2].admit and r[2].channel is None and "src_code_conflict" in r[2].doubts
+    assert n == -1 and not r[2].admit and r[2].channel is None and "src_code_conflict" in r[2].doubts
     assert r[2].evidence["demoted_from"]["channel"] == "match_solo" and r[2].evidence["src_code_conflict"]["char"] == "垂"
     cells[2].update(provenance="human", channel="human")                                 # 人裁格不碰
     assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit

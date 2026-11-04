@@ -5,6 +5,7 @@
     page_kinds:
       body:   [88, 90]       # 页型规则判错、强制按正文切
       table:  ["8-163"]      # 表格页，整页跳过
+    cover:  [1]            # 书衣／封面页，整页跳过（页型记 cover）
       roster: ["89-132"]     # 职名页，走职名页分支
 
 读配置时（`BookSpec.__post_init__`）把它翻成原来就有的三个 Step 参数，**值一字不改**，所以 Step 参数指纹、
@@ -12,6 +13,7 @@
 
     body   → params.border_detect_gate.body_pages
     table  → params.border_detect_gate.table_pages
+    cover  → params.border_detect_gate.cover_pages   （2026-11-04 加：书衣／封面，整页跳过，网站出占位）
     roster → params.row_segment.roster_pages
 
 老写法照旧能用。同一类页不许新老两处同时写不同的值（报错，不猜谁生效）；两处写的值一样不算冲突，所以
@@ -26,6 +28,7 @@ from __future__ import annotations
 KIND_PARAM: dict[str, tuple[str, str]] = {
     "body": ("border_detect_gate", "body_pages"),
     "table": ("border_detect_gate", "table_pages"),
+    "cover": ("border_detect_gate", "cover_pages"),
     "roster": ("row_segment", "roster_pages"),
 }
 PAGE_KINDS = tuple(KIND_PARAM)
@@ -56,6 +59,13 @@ def load_page_kinds(raw) -> dict[str, list]:
             raise ValueError(f"page_kinds.{kind}: 页号写错了：{e}") from None
         if pages:
             out[kind] = list(pages)
+    # 封面页不许同时点名成别的页型（新页型，没有历史包袱；body 与 table 同页的老配置照旧放行，闸里表格优先）
+    if "cover" in out:
+        cov = set(_expand_pages(out["cover"]))
+        for kind in ("body", "table"):
+            both = sorted(cov & set(_expand_pages(out.get(kind) or [])))
+            if both:
+                raise ValueError(f"page_kinds: 第 {both[0]} 页同时写在 cover 和 {kind} 里，一页只能是一种页型")
     return out
 
 
