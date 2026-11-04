@@ -19,6 +19,10 @@ def test_registry_is_not_a_code_dep():
 def test_entries_are_well_formed():
     mods = {m for st in STEPS.values() for m in (type(st).__module__, *st.spec.code_deps)}
     mods |= set(code_equiv.SPLITS)   # 拆没了的旧模块：登记留着当历史（只增不删），指纹靠 SPLITS 里的旧哈希
+    # 套书覆盖的模块（core/seg_set.OVERRIDES，如全唐文 books/quantangwen 的分叉）：不写在 code_deps 里，
+    # 算这套书的册的指纹时由 replace_deps 换进去（engine.code_hash），所以也在指纹里
+    from open_guji_cv.core.seg_set import OVERRIDES
+    mods |= {mine for ov in OVERRIDES.values() for default, mine in ov.items() if default in mods}
     seen = set()
     for e in code_equiv.ENTRIES:
         assert e.module in mods, f"{e.module} 不在任何 Step 的指纹里，登记它没用"

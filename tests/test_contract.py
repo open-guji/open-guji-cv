@@ -107,6 +107,27 @@ def test_manager_cli_modules_register_every_command():
 
 
 
+
+def test_plugin_commands_survive_second_parser_build(monkeypatch):
+    """同一进程第二次建 parser（测试、控制台）时，上回由插件登记的命令照样登记，不被当成 cv 自带而略过。"""
+    import argparse
+    import types
+
+    from open_guji_cv import cli_v2
+
+    def add(sub):
+        sub.add_parser("demo-plugin-cmd")
+    mod = types.ModuleType("fake_plugin_commands")
+    mod.COMMANDS = {"demo-plugin-cmd": (add, lambda a: None)}
+    ep = types.SimpleNamespace(name="fake", load=lambda: mod)
+    monkeypatch.setattr("importlib.metadata.entry_points", lambda group: [ep])
+    monkeypatch.setattr(cli_v2, "_PLUGIN_ADDED", set())
+    monkeypatch.setattr(cli_v2, "COMMANDS_V2", dict(cli_v2.COMMANDS_V2))
+    for _ in range(2):
+        sub = argparse.ArgumentParser().add_subparsers(dest="command")
+        assert cli_v2.load_plugin_commands(sub) == ["demo-plugin-cmd"]
+        assert "demo-plugin-cmd" in sub.choices
+
 def test_stale_manager_plugin_is_ignored(monkeypatch):
     """旧版 manager（带着早先复制的过期副本）提供已搬走的命令时不认，提示更新。"""
     import types
