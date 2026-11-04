@@ -1088,6 +1088,49 @@ def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
     return float(np.median(vals)) if vals else None
 
 
+def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
+                    straight: list[VLine], w: int, h: int, vline_polyline: bool):
+    """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
+    （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
+    返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
+    `refit_bends` 共用。"""
+    verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom, list(straight), w, h,
+                                                            fit=vline_polyline)
+    verticals, snapped = snap_verticals_to_evidence(binm, top, bottom, verticals, w, h,
+                                                    straight=list(straight))
+    if snapped and vseg == 1:
+        conv = []
+        for v in verticals:
+            if v.segments == 3:
+                conv.append(v); continue
+            xc = v.x_at(h / 2.0)
+            yt_, yb_ = float(top.y_at(xc)), float(bottom.y_at(xc))
+            conv.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
+                              yt_ + (yb_ - yt_) / 3.0, yt_ + 2.0 * (yb_ - yt_) / 3.0))
+        verticals, vseg = conv, 3
+    return verticals, vseg, w80_med, w80_max, snapped
+
+
+def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyline: bool = True):
+    """列宽重拟合（`pitch_rescue`）换了线之后，按新的一串直线**重新拟合折线**。
+
+    折线拟合的护栏（相邻对列宽沿高度的变化率、拟合失败的线借邻线位移）看的是相邻线；自由模式探出假线、
+    漏掉真线时，护栏在错的一串线上退回／借形状，真线也被拗弯。重拟合只换了线的位置，旧折线形状
+    原样跟着走（`shifted` 借最近线的形状），殿本 vol46 p78 左三条线下半段斜进字里 20–40px。
+    在新的直线上重跑一遍同一套折线＋重定位，形状由新的相邻线决定。上下版框、抬头、外框不动。"""
+    if res.top is None or res.bottom is None:
+        return res
+    h, w = gray.shape[:2]
+    mask = (gray < ink_threshold).astype(np.float64)
+    binm = (mask > 0).astype(np.uint8)
+    straight = list(res.verticals_straight) or list(res.verticals)
+    verticals, vseg, w80_med, w80_max, snapped = _bend_verticals(
+        mask, binm, res.top, res.bottom, straight, w, h, vline_polyline)
+    from dataclasses import replace
+    return replace(res, verticals=verticals, vline_segments=vseg, bend_w80_med=w80_med,
+                   bend_w80_max=w80_max, vlines_snapped=int(snapped))
+
+
 def detect_borders(gray: np.ndarray, expected_cols: int,
                     ink_threshold: int = 128,
                     book_bottom_gap: float | None = None,
@@ -1184,25 +1227,9 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     # 下版框塌到最后一行字底边、真框条在下面十几到几十 px 的页：推到条上（见 BPUSH_*）。
     # 要在折线拟合之前——折点 y 取自线跟上下版框的交点。
     bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
-    # 弯页整页换三段折线（先量 w80 再决定，直线页原样通过）——要在 top/bottom
-    # 之后，折点 y 取自这条线跟上下版框的交点
     verticals_straight = list(verticals)
-    verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom,
-                                                            verticals, w, h,
-                                                            fit=vline_polyline)
-    # 界行淡到看不见的横带按文字缝重定位（见 SNAP_*）。换了线的页统一成三段格式。
-    verticals, vlines_snapped = snap_verticals_to_evidence(binm_new, top, bottom, verticals, w, h,
-                                                           straight=verticals_straight)
-    if vlines_snapped and vseg == 1:
-        conv = []
-        for v in verticals:
-            if v.segments == 3:
-                conv.append(v); continue
-            xc = v.x_at(h / 2.0)
-            yt_, yb_ = float(top.y_at(xc)), float(bottom.y_at(xc))
-            conv.append(VLine(v.x_at_top, v.slope, v.slope, v.slope,
-                              yt_ + (yb_ - yt_) / 3.0, yt_ + 2.0 * (yb_ - yt_) / 3.0))
-        verticals, vseg = conv, 3
+    verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
+        mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline)
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,
