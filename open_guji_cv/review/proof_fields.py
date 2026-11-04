@@ -46,10 +46,8 @@ def _stale(sv: dict) -> dict | None:
 def pending_fields(card: dict) -> dict:
     """卡 → 0.2 新增字段（键序固定；值为空的键不出）。不含 `img`／`ex`。"""
     out: dict = {"why": why_codes(card)}
-    if card.get("cls") is not None:
-        out["cls"] = card["cls"]
-        if card.get("cls_sub") is not None:
-            out["cls_sub"] = card["cls_sub"]
+    # 卡片类别 `cls`／`cls_sub` 不再写进待审单（用户 11-04 定，单上的原因只看 `pending_reason`）；
+    # 控制台按类别审仍用卡上的 `cls`，那是控制台自己的筛选，不出单。
     db = card.get("db")
     if db:
         out["lib_top"] = _lib_top(db)
@@ -82,6 +80,6 @@ def pending_fields(card: dict) -> dict:
 
 
 def slim_fields(card: dict) -> dict:
-    """章 `proof.json` 瘦身形态：只加 `cls`／`why`／`conf`。"""
+    """章 `proof.json` 瘦身形态：只加 `why`／`conf`（`cls` 11-04 起不出）。"""
     full = pending_fields(card)
-    return {k: full[k] for k in ("cls", "why", "conf") if k in full}
+    return {k: full[k] for k in ("why", "conf") if k in full}

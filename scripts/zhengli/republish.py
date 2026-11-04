@@ -411,7 +411,7 @@ def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: 
                   else "排除名单（非字）" if st == "excluded" else "格号没了（多半重切）")
     return {"old_rev": (old or {}).get("rev"), "new_rev": new.get("rev"), "old": len(o), "new": len(n),
             "kept": len(set(o) & set(n)), "removed": [{"cell": c, "why": why[c]} for c in removed],
-            "added": [{"cell": c, "cls": n[c].get("cause") or n[c].get("cls")} for c in sorted(set(n) - set(o), key=_key)],
+            "added": [{"cell": c, "cls": n[c].get("pending_reason_cause") or n[c].get("cause") or n[c].get("pending_reason")} for c in sorted(set(n) - set(o), key=_key)],
             "removed_by": dict(Counter(v.split("「")[0] for v in why.values())),
             "votes_on_old": sum(votes.values()), "voted_cells_kept": sorted(set(votes) & set(n), key=_key)}
 
@@ -454,7 +454,8 @@ def recheck_md(doc: dict, missing_tsv: Path) -> str:
 
 def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None = None) -> None:
     """每格写待审原因 `pending_reason`（`review/reasons.py`，sheldon 11-03 定；判不出写 unknown），
-    过渡期照旧并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
+    并写成因码细分 `pending_reason_cause`／`pending_reason_cause_detail`（`review/causes.py` 的 A1…I，GUJI-668；
+    用户 11-04 定：留作 pending_reason 下的细项，派单按它细分；旧名 `cause`／`cause_detail` 不再写，老单上的读的一方回退）。"""
     sys.path.insert(0, str(CV))
     from open_guji_cv.review.causes import book_causes
     from open_guji_cv.review.reasons import reasons_for_pending, stamp
@@ -466,9 +467,11 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
     print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
     for c in doc.get("cells", []):
         if c["cell"] in res:
-            c["cause"] = res[c["cell"]]["cause"]
+            c.pop("cause", None)
+            c.pop("cause_detail", None)
+            c["pending_reason_cause"] = res[c["cell"]]["cause"]
             if res[c["cell"]]["detail"]:
-                c["cause_detail"] = res[c["cell"]]["detail"]
+                c["pending_reason_cause_detail"] = res[c["cell"]]["detail"]
             for k in ("grp", "refc"):                 # 待审分类统计（guji-manager 的 taxonomy）要的事实，只查库就能分到字组
                 if res[c["cell"]].get(k):
                     c[k] = res[c["cell"]][k]

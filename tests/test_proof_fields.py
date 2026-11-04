@@ -17,7 +17,7 @@ CARD = {
 def test_full_card():
     f = pending_fields(CARD)
     assert f["why"] == ["near_form", "ref_conflict"]            # 中文说明与带冒号的不是码
-    assert f["cls"] == "near_form" and "cls_sub" not in f
+    assert "cls" not in f and "cls_sub" not in f                # 11-04 起卡片类别不出单
     assert f["lib_top"] == [{"c": "曰", "s": 0.9972}, {"c": "日", "s": 0.9869}, {"c": "目", "s": 0.9386},
                             {"c": "白", "s": 0.9}, {"c": "自", "s": 0.8}]   # ≤5、4 位小数
     assert f["lib"] == {"verdict": "unsure", "cov": 0.9972, "wmax": 10.8}
@@ -40,14 +40,14 @@ def test_stale_and_occluded():
              occluded={"char": "聖", "via": "coord", "ref_blank": True})
     f = pending_fields(c)
     assert f["stale"] == {"c": "日", "ts": "2026-10-01T10:00:00", "state": "rebound"}
-    assert f["occ"] == {"c": "聖", "ref_blank": True} and f["cls_sub"] == "grid"
+    assert f["occ"] == {"c": "聖", "ref_blank": True} and "cls_sub" not in f
     w = pending_fields(dict(c, stale_verdict={"verdict": {"shape": "日"}, "ts": "t", "status": None, "withdrawn": True}))
     assert w["stale"]["state"] == "withdrawn"
     assert "stale" not in pending_fields(dict(c, stale_verdict={"verdict": {"shape": ""}, "ts": "t"}))   # 旧裁决=非字不预勾
 
 
-def test_slim_only_three_keys():
-    assert list(slim_fields(CARD)) == ["cls", "why", "conf"]
+def test_slim_only_two_keys():
+    assert list(slim_fields(CARD)) == ["why", "conf"]
     assert slim_fields({"doubts": []}) == {"why": ["none"]}
 
 

@@ -13,8 +13,8 @@
   不扣   带 `recheck: true` 的格（pending_list --recheck 放回来的复审格，本来就是要人推翻或重定的）；
          --keep 名单上的格照旧留在单上（republish.py from-pack 传：人裁按锚框绑到了别的格或绑不上，
          原格号上的人裁不能算这一格定了字）。
-  回流单 同一 (cls, why) 的格 ≥ --reflow-min（缺省 20）：成片的问题先交 M7／M9／CV 修，不逐格审（设计 GUJI-543 §4.2）。
-         cls=other、why=none（机器没把握的兜底）不算同一个原因，不进回流单。
+  回流单 同一 (pending_reason, why) 的格 ≥ --reflow-min（缺省 20）：成片的问题先交 M7／M9／CV 修，不逐格审（设计 GUJI-543 §4.2）。
+         pending_reason=unknown、why=none（机器没把握的兜底）不算同一个原因，不进回流单（11-04 起不再按 cls 分）。
          只列出来；加 --reflow-hold 才把它们从两张单里拿掉。
 
 用法：
@@ -35,7 +35,7 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 DECIDING_V = {"not_a_char", "damaged"}
-NOT_A_CAUSE_CLS = {"", "other"}
+NOT_A_CAUSE_REASON = {"", "unknown"}
 NOT_A_CAUSE_WHY = {(), ("none",)}
 
 
@@ -109,6 +109,11 @@ def parse_pages(spec: str | None) -> set[int]:
     return pages
 
 
+def _reason(c: dict) -> str:
+    """待审原因（`pending_reason`）；没写的老单记空串，不进回流单。"""
+    return str(c.get("pending_reason") or "")
+
+
 def page_of(cell: str) -> int:
     return int(cell.split(":", 1)[0])
 
@@ -120,10 +125,10 @@ def route(pending: dict, decided: dict, team_pages: set[int], reflow_min: int, r
         stale_ts = str((c.get("stale") or {}).get("ts") or "")
         hits = [] if c.get("recheck") else [h for h in decided.get(c["cell"], []) if h[0] > stale_ts]
         (dropped if hits else kept).append(c)
-    groups = Counter((c.get("cls") or "", tuple(c.get("why") or ())) for c in kept)
+    groups = Counter((_reason(c), tuple(c.get("why") or ())) for c in kept)
     # 「other／none」是「机器没把握」的兜底，不是同一个原因，不进回流单
-    big = {g for g, n in groups.items() if n >= reflow_min and g[0] not in NOT_A_CAUSE_CLS and g[1] not in NOT_A_CAUSE_WHY}
-    reflow = [c for c in kept if (c.get("cls") or "", tuple(c.get("why") or ())) in big]
+    big = {g for g, n in groups.items() if n >= reflow_min and g[0] not in NOT_A_CAUSE_REASON and g[1] not in NOT_A_CAUSE_WHY}
+    reflow = [c for c in kept if (_reason(c), tuple(c.get("why") or ())) in big]
     if reflow_hold:
         kept = [c for c in kept if c not in reflow]
     public, team = [], []
@@ -170,9 +175,9 @@ def main(argv=None) -> int:
         doc = {**head, **meta, "cells": [{**c, "audience": aud} for c in cells]}
         (a.out / name).write_text(json.dumps(doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     with (a.out / f"{stem}.reflow.tsv").open("w", encoding="utf-8") as f:
-        f.write("cell\tcls\twhy\n")
+        f.write("cell\tpending_reason\twhy\n")
         for c in res["reflow"]:
-            f.write(f"{c['cell']}\t{c.get('cls') or ''}\t{','.join(c.get('why') or [])}\n")
+            f.write(f"{c['cell']}\t{_reason(c)}\t{','.join(c.get('why') or [])}\n")
     s = res["stats"]
     print(f"总待审 {s['total']}／扣已裁 {s['decided']}／团队 {s['team']}／公众 {s['public']}／回流 {s['reflow']}"
           f"{'（已拿出）' if s['reflow_held'] else '（只列出）'}｜截止 {as_of}")
