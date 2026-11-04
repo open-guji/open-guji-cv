@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # guji_jobs — 任务库命令（2026-10-25）：交任务、看进展、执行方领单跑单。
 #
-#   guji_jobs submit …｜ls｜show <号>｜wait <号>｜cancel｜bump｜retry   # 同 guji job …，见 open_guji_cv/jobs/cli.py
+#   guji_jobs submit …｜ls｜show <号>｜wait <号>｜cancel｜bump｜retry   # 同 guji job …，见 guji-manager guji_manager/jobs/cli.py（2026-11-04 起）
 #   guji_jobs start [work 的参数]     # 执行方：后台起 work（脱离本 shell，日志 ~/.guji-jobs/worker.log）
 #   guji_jobs follow [秒]             # 跟着看执行方日志，执行方退出或到时就返回（缺省 6600 秒）
 #
@@ -38,7 +38,7 @@ case "${1:-}" in
     elif [ -s "$H/who" ]; then GUJI_JOBS_WHO=$(cat "$H/who")
     else echo "✗ 没有执行方名字：首次请 GUJI_JOBS_WHO=worker-N guji_jobs start …（之后自动沿用）" >&2; exit 2; fi
     export GUJI_JOBS_WHO
-    GUJI_REQUIRE_JOBSDB=${GUJI_REQUIRE_JOBSDB:-1} PYTHONPATH="$R" setsid nohup "$PY" -m open_guji_cv.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
+    GUJI_REQUIRE_JOBSDB=${GUJI_REQUIRE_JOBSDB:-1} PYTHONPATH="$R" setsid nohup "$PY" -m guji_manager.jobs work "$@" >> "$H/worker.log" 2>&1 < /dev/null &
     echo "执行方已起（pid $!），日志 $H/worker.log；guji_jobs follow 跟着看";;
   follow)
     end=$((SECONDS + ${2:-6600})); touch "$H/worker.log"
@@ -47,6 +47,6 @@ case "${1:-}" in
     kill $T 2>/dev/null || true
     busy && echo "（到时返回，执行方还在跑）" || echo "（执行方已退出）";;
   *)
-    refresh
-    PYTHONPATH="$R" exec "$PY" -m open_guji_cv.jobs "$@";;
+    refresh; ensure_manager >/dev/null       # 任务库命令在 guji-manager（拆分 P3）
+    PYTHONPATH="$R" exec "$PY" -m guji_manager.jobs "$@";;
 esac
