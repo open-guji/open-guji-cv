@@ -1119,13 +1119,38 @@ class SeedAdmitStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         # row_segment `alt_cut`：align_ref 挑中备选切法的列，这一页读 Step3/4/5a 一律读备选那份、
         # 字块换备选键，5b/6 丢掉这些列（见 `products.alt_view`）。没换列就原样，产物逐字节不变。
-        from ..products.alt_view import AltView
-        av = AltView(ctx)
-        token = _ALT_SCOPE.set((ctx.book.id, av))
+        from ..products.alt_view import AltView, alt_override
         try:
-            return self._run_page(av if av.alt_cols(page) else ctx, page)
-        finally:
-            _ALT_SCOPE.reset(token)
+            cand = list(getattr(ctx.product("align_ref", page), "alt_cand", None) or ())
+        except Exception:                      # noqa: BLE001 —— 没有 align_ref 就没有候选
+            cand = []
+        if not cand:
+            av = AltView(ctx)
+            token = _ALT_SCOPE.set((ctx.book.id, av))
+            try:
+                return self._run_page(av if av.alt_cols(page) else ctx, page)
+            finally:
+                _ALT_SCOPE.reset(token)
+        # align_ref `alt_select="admit"`：准入两遍——主切法一遍、候选列全换成备选一遍，逐列比后定列
+        # （A22 11-04 评审：只跑两遍，不一列一遍；别的列一律主切法，定列后不重算）。
+        runs = []
+        for cols in (frozenset(), frozenset(cand)):
+            av = AltView(ctx)
+            token = _ALT_SCOPE.set((ctx.book.id, av))
+            try:
+                with alt_override(ctx.book.id, page, cols):
+                    runs.append(self._run_page(av if cols else ctx, page)["seed_admit"])
+            finally:
+                _ALT_SCOPE.reset(token)
+        main, alt = runs
+        with alt_override(ctx.book.id, page, frozenset(cand)):
+            ref_alt = AltView(ctx).product("align_ref", page)
+            chars_alt = AltView(ctx).product("char_index", page)
+        chosen = _pick_alt_cols(cand, main, alt, ctx.product("align_ref", page), ref_alt,
+                                _opt_product(ctx, "char_index", page), chars_alt)
+        if chosen:
+            ctx.log(f"seed_admit p{page}: alt_cut 候选 {cand} → 换 {chosen}")
+        return {"seed_admit": _merge_admit(main, alt, chosen)}
 
     def _run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         from ..clustering.exclusions import excluded_ids
@@ -3634,6 +3659,97 @@ def _iron_context(db_path: str, norm_stroke: int | None):
                JOIN instances i ON i.instance_id=e.instance_id WHERE i.label_status='human'"""):
         human_ids.setdefault(ch, []).append(iid.replace("v2:", ""))
     return matcher, human_chars_set, partners_map, human_ids
+
+
+#: alt_cut 准入后定列（`AlignRefParams.alt_select="admit"`，2026-11-04，A22 评审过）
+ALT_ADMIT_MIN_GAIN = 2        # 备选那遍这一列待审格至少少这么多
+ALT_CV_MIN_CELLS = 6          # 正文整字格不到这么多的列不比墨高一致性
+ALT_CV_RATIO = 1.2            # 备选那份墨高变异系数 ≤ 主切法 × 这个
+ALT_CV_MAX = 0.35             # 且 ≤ 这个
+#: 换列要不要求「有字形背书的放行格不比主切法少」。125 页 A/B（11-04）：要求时待审 740→734，不要求 740→695；
+#: 不要求时多放的 55 格看图 51 对（多走 coord_fallback/witnesses_coord，半色调、褪色页为主）。用户 11-04 定：不要求（放宽）。
+ALT_REQUIRE_BACKED = False
+#: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
+_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "iron", "seal", "group_flow", "ref_lib_coord"})
+
+
+def _opt_product(ctx, kind: str, page: int):
+    try:
+        return ctx.product(kind, page)
+    except Exception:                          # noqa: BLE001
+        return None
+
+
+def _col_stats(adm: PageAdmit, col: int, ref) -> tuple[int, int, int]:
+    """一列的（待审格数、有字形背书的放行格数、与坐标字冲突的放行格数）。"""
+    c = adm.column(col)
+    coord = {(r.slot, r.sub or ""): r.ref_char for r in (getattr(ref, "coord", None) or []) if r.col == col}
+    review = backed = conflict = 0
+    for r in (c.chars if c else []):
+        if r.admit:
+            via = (r.evidence.get("lane") or {}).get("via") if isinstance(r.evidence.get("lane"), dict) else None
+            if r.channel in _BACKED or (r.channel == "coord_fallback" and via == "lib_coord_primary"):
+                backed += 1
+            rc = coord.get((r.slot, r.sub or ""))
+            if rc and r.char and r.char != rc:
+                conflict += 1
+        elif "excluded" not in r.evidence:
+            review += 1
+    return review, backed, conflict
+
+
+def _ink_cv(chars, col: int) -> tuple[float | None, int]:
+    """一列正文整字格（不含夹注半格、抬头格、空格）的墨高变异系数与格数。"""
+    import statistics
+    cc = next((c for c in (getattr(chars, "columns", None) or []) if c.col == col), None)
+    hs = [r.bbox_page[3] - r.bbox_page[1] for r in (cc.chars if cc else [])
+          if not getattr(r, "sub", None) and getattr(r, "slot", 0) >= 1 and getattr(r, "patch_key", None)
+          and getattr(r, "bbox_page", None)]
+    if len(hs) < ALT_CV_MIN_CELLS:
+        return None, len(hs)
+    m = statistics.fmean(hs)
+    return (statistics.pstdev(hs) / m if m else None), len(hs)
+
+
+def _pick_alt_cols(cand, main: PageAdmit, alt: PageAdmit, ref_main, ref_alt, chars_main, chars_alt) -> list[int]:
+    """逐列比两遍准入（错格闸已在 align_ref 剔过候选）：待审少 ≥ `ALT_ADMIT_MIN_GAIN`；与坐标字冲突的放行格不多；
+    正文整字格墨高一致（够 `ALT_CV_MIN_CELLS` 格才比）；`ALT_REQUIRE_BACKED` 时有字形背书的放行格也不能少。"""
+    out = []
+    for col in cand:
+        rm, bm, km = _col_stats(main, col, ref_main)
+        ra, ba, ka = _col_stats(alt, col, ref_alt)
+        cv_a, _ = _ink_cv(chars_alt, col)
+        cv_m, _ = _ink_cv(chars_main, col)
+        if not (ra <= rm - ALT_ADMIT_MIN_GAIN and (ba >= bm or not ALT_REQUIRE_BACKED) and ka <= km):
+            continue
+        if cv_a is not None and cv_m is not None and (cv_a > cv_m * ALT_CV_RATIO or cv_a > ALT_CV_MAX):
+            continue
+        out.append(col)
+    return out
+
+
+def _merge_admit(main: PageAdmit, alt: PageAdmit, chosen) -> PageAdmit:
+    """主切法那遍为底，`chosen` 列换成备选那遍的；页计数按列差补。"""
+    if not chosen:
+        return main
+    ch = set(chosen)
+
+    def cnt(adm, col):
+        c = adm.column(col)
+        rs = c.chars if c else []
+        ex = sum(1 for r in rs if "excluded" in r.evidence)
+        au = sum(1 for r in rs if r.admit)
+        return au, len(rs) - au - ex, ex
+    n_auto, n_review, n_ex = main.n_auto, main.n_review, main.n_excluded
+    for col in ch:
+        a1, r1, e1 = cnt(main, col)
+        a2, r2, e2 = cnt(alt, col)
+        n_auto += a2 - a1
+        n_review += r2 - r1
+        n_ex += e2 - e1
+    cols = [alt.column(c.col) if c.col in ch and alt.column(c.col) is not None else c for c in main.columns]
+    return PageAdmit(page=main.page, n_auto=n_auto, n_review=n_review, n_excluded=n_ex,
+                     columns=cols, alt_cols=sorted(ch))
 
 
 #: seed_admit 跑一页时（且这一页有换备选切法的列）：(册 id, AltView)；`_page_patch` 按册 id 取图时用
