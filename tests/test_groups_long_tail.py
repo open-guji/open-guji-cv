@@ -199,3 +199,27 @@ def test_guang_flow_only_gives_only_bin_variants():
             assert set(got) <= {f, None} and got.count(f) >= 0.8 * len(got), (f, got.count(f), len(got))
         else:
             assert set(got) == {None}, f
+
+
+def test_zy_strokes_yu_with_top_stroke_slightly_left():
+    """第 4 轮：vol28:170:5:7「于」竖顶偏左 -0.229 竖宽，原下限 -0.15 弃权；放宽到 -0.25 判 于（殿本 2,995 格留出：只多放 2 格，0 新错）。"""
+    from pathlib import Path
+
+    import cv2
+
+    from open_guji_cv.groups import strokes
+    img = cv2.imread(str(Path(__file__).parent / "fixtures" / "zy" / "vol28_170_5_7_yu.png"), cv2.IMREAD_GRAYSCALE)
+    assert strokes.judge(img)[0] == "于"
+
+
+def test_kgc_ref_rare_gives_kou_family_without_llm():
+    """第 4 轮：整理本（或坐标对位）作 冦宼㓂 就定 寇 族，免调大模型；整理本是 冠／寇 不判。"""
+    from open_guji_cv.groups.methods import KGC_CTX, MethodInput
+    mem = frozenset("冠寇冦宼㓂")
+
+    def run(ref, coord=None):
+        inp = MethodInput(group="kgc", members=mem, cell_id="t", cands=[("冠", 0.97)], ref=ref, cfg=None, coord=coord)
+        return next(s for s in KGC_CTX.steps if s.name == "ref_rare").run(inp)
+
+    assert run("㓂").char == "㓂" and run(None, "冦").char == "冦"
+    assert run("冠").char is None and run("寇").char is None and run(None).char is None
