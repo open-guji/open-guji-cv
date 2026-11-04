@@ -362,6 +362,33 @@ def finish(conn, job_id: int, attempt_id: int, outcome: str, *, error: str | Non
                + (f"：{error}" if error else ""), level="info" if status == "succeeded" else "warn")
 
 
+_TERMINAL = ("succeeded", "failed", "blocked", "cancelled")
+
+
+def notify_due(conn) -> list[dict]:
+    """认领「该通知」的提交人：某人名下已没有排队／在跑的单，且有终态单还没通知过。
+    一批单全跑完才通知一次（按人归并）；认领即标 notified_at，并发的执行方只有一个拿得到。
+    返回 [{by, jobs:[{id, kind, book, status, error}...]}]。"""
+    with conn.transaction():
+        rows = _rows(conn.execute(
+            "WITH due AS (SELECT submitted_by FROM jobs.job GROUP BY submitted_by"
+            " HAVING bool_or(status = ANY(%s) AND notified_at IS NULL)"
+            " AND NOT bool_or(status IN ('queued', 'running')))"
+            " UPDATE jobs.job j SET notified_at = now() FROM due"
+            " WHERE j.submitted_by = due.submitted_by AND j.status = ANY(%s) AND j.notified_at IS NULL"
+            " RETURNING j.id, j.kind, j.book, j.status, j.error, j.submitted_by, j.spec->>'why' AS why",
+            (list(_TERMINAL), list(_TERMINAL))))
+    by: dict[str, list[dict]] = {}
+    for r in sorted(rows, key=lambda r: r["id"]):
+        by.setdefault(r["submitted_by"], []).append(r)
+    return [{"by": k, "jobs": v} for k, v in by.items()]
+
+
+def notify_undo(conn, job_ids: list[int]) -> None:
+    """发送失败：把认领退回去，下一次有单收尾时再试。"""
+    conn.execute("UPDATE jobs.job SET notified_at = NULL WHERE id = ANY(%s)", (job_ids,))
+
+
 def worker_seen(conn, name: str, *, state: str, session: str | None = None, job_id: int | None = None,
                 runner: str | None = None, done: int | None = None, started: bool = False,
                 note: str | None = None) -> None:
