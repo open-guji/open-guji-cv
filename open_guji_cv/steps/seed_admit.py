@@ -2054,6 +2054,29 @@ def _provisional_forms(gid) -> frozenset:
     return pv.forms if pv is not None else frozenset()
 
 
+def _follow_ref_veto(rec, pick, ref, g: dict) -> bool:
+    """影子闸挑的字＝整理本字、放行字与它同属一个「兜底归整理本」同义组（`Provisional.follow_ref`：can 參㕘叅、ba 䟦跋、dian 點㸃𭶑）：
+    sheldon 11-03 定「拆不开的格兜底放成整理本字」，而放行字是库首位（ref_lib 通道，不经字组补放，组流程复核只回 keep），
+    影子一否决就降审。这里直接改成整理本字、不降审，证据记 `group.decision=provisional`、`follow_ref_veto`。
+    整理本须是现役对位（缺位的坐标对位不算）；有分族的组（can 參／叅㕘）放行字与整理本须同族。→ 改了字 True。"""
+    from ..groups.registry import PROVISIONAL
+    gid = g.get("id") if g else None
+    pv = PROVISIONAL.get(gid) if gid else None
+    if pv is None or not pv.follow_ref or not pick or not ref or pick != ref or rec.char == ref:
+        return False
+    if rec.char not in pv.forms or ref not in (pv.forms | pv.ref_forms):
+        return False
+    if pv.fams and not any(rec.char in f and ref in f for f in pv.fams):
+        return False
+    old = rec.char
+    rec.char = ref
+    ev = dict(rec.evidence or {})
+    ev["group"] = {**g, "decision": "provisional", "pick": ref, "why": "follow_ref_veto"}
+    ev["follow_ref_veto"] = {"from": old, "to": ref}
+    rec.evidence = ev
+    return True
+
+
 def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: list, mmap: dict, amap: dict) -> int:
     """影子放行闸（只降级）：把现行规则已放行、影子有把握说不对的格降回待审。→ 降级格数。
 
@@ -2105,6 +2128,9 @@ def _shadow_veto_pass(ctx: RunContext, page: int, p: "SeedAdmitParams", out: lis
             if (v.pick and g.get("decision") == "provisional" and g.get("pick") == rec.char
                     and v.pick in _provisional_forms(g.get("id"))):
                 continue                      # 暂归一兜底定的字，影子挑同字的另一写法：写法本来就没拆（A24 10-27）
+            if _follow_ref_veto(rec, v.pick, (amap.get(rec.id) or (None, None))[0], g):
+                # 兜底归整理本字（sheldon 11-03，參㕘叅、䟦跋、點㸃𭶑）：影子挑的正是整理本字，改成它，不降审（第 4 轮）
+                continue
             if (cbook is not None and v.pick and rec.char and v.pick != rec.char
                     and cbook.canonical_char(v.pick) == cbook.canonical_char(rec.char)):
                 continue                      # 册 `codepoints:` 归一后同字（別别、晚晩、出岀）：影子比字没按册归一，不是认错

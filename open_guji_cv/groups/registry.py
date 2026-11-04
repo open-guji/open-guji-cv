@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .methods import BARS, CODEPOINT, CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
+from .methods import BARS, CODEPOINT, CTX, KGC_CTX, FORM_TOP1, JYS_CTX, FREQ, IDS, RR_IMG, RY_SHAPE, TOP1, YR_BARS, SS_BARS, ZY_STROKES, Method, Only, describe, hog_or_crop
 
 
 @dataclass(frozen=True)
@@ -571,7 +571,7 @@ SHAPE_GROUPS: dict[str, GroupSpec] = {
     "kgc": GroupSpec(
         id="kgc", name="冠寇冦宼㓂", members=frozenset("冠寇冦宼㓂"), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir="config/groups/kgc", overlaps=("cp_kou4",),
-        flow=FlowSpec((CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
+        flow=FlowSpec((KGC_CTX,), families=("冠", "寇冦宼㓂"), form_methods=(FREQ, FORM_TOP1), lift_ref_agree=True, ref_top_enter=True),
         note="冠／寇：按文意定族（冠＝衣冠、弱冠；寇＝盜寇、流寇），寇族内按书级码位归一；须与整理本同字才补放；与 cp_kou4 共用 宼寇冦；只补放。"),
     # 塡／愼（2026-10-28，sheldon 定「用塡，另外要和慎区分开」）：整理本作 塡 填、库首位常是 愼 慎（右半都是 眞）。
     # 按文意定族（塡＝填補、填詞；愼＝謹慎、慎重），族内各写法按书级码位归一；须与整理本同字才补放；只补放。
