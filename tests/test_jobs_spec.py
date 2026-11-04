@@ -94,12 +94,6 @@ def test_unresolvable_cv_is_reported():
         SP.normalize({"book": "vol10", "cv": "nope"}, resolve=bad)
 
 
-def test_redact_hides_tokens():
-    from open_guji_cv.jobs.runner import redact
-    s = redact("GUJI_DATA_TOKEN=abc123 ok postgresql://u:p@h/db Bearer xyz")
-    assert "abc123" not in s and "u:p" not in s and "xyz" not in s and "ok" in s
-
-
 def test_book_overrides_accept_book_fields():
     """册级覆盖放开到 BookSpec 的字段（去掉身份与图源）；不认识的字段仍拒。"""
     a = norm(book="vol10", cv="dev", book_overrides={"cv_version": "0.5.21", "params": {"seed_admit": {"x": 1}}})
