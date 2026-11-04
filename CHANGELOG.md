@@ -7,9 +7,6 @@
 
 ## [0.6.1] - 测试中
 
-### Fixed
-- seed_admit 指纹补漏：#951 新加的 `groups.pair_shape` 补进 `code_deps`（seed_admit `code_hash` 随之变，本版 seed_admit 本来就改了，不额外多一次重跑），`path_params` 登记表补 `group_flow_pair_shape`（rc 修复，A31）。
-
 ### Added
 - 任务库：一批单全部跑完，自动通知提交人（11-04，sheldon 定）。某人名下没有排队／在跑的单、且有终态单没通知过时，执行方收尾（或空闲时）给 `submitted_by` 发一条汇总（成功／失败／被拦，附单号与简短原因），走中转站 send-to-roster；`jobs.job` 加列 `notified_at`（加列时历史单补成已通知），发送失败不影响单、退回下次再发。新 `jobs/notify.py`。不碰 Step，指纹不变。
 - 待审原因规范文档 `doc/design/待审原因PendingReason.md`（A31，11-04）：是什么、真源与取法、29 个取值表、各处数据怎么写（单、卡、事件、裁定、看图、网站、看板、manager、book-text char v0.4）、各仓副本、加改弃用流程、迁移记录。只加文档。
@@ -34,6 +31,7 @@
 - GitHub Wiki（Sheldon 11-03）：源文件在 `wiki/`（17 页＋侧边栏，以 v0.6.0 为基线，配殿本、史記、北行古本、幼學的真页面截图），出图脚本 `wiki/tools/make_shots.py`＋清单 `shots.yaml`（从产物包画版框、列带、字格、夹注、印章、放行等叠图）；`.github/workflows/wiki-sync.yml` 合进 main 时同步到 Wiki。`doc/版本号规矩.md` 加第八节：每升 MINOR 整体重改 Wiki，算在发版清单里。只加文件，不碰任何 Step，`code_hash` 不变。
 
 ### Fixed
+- seed_admit 指纹补漏：#951 新加的 `groups.pair_shape` 补进 `code_deps`（seed_admit `code_hash` 随之变，本版 seed_admit 本来就改了，不额外多一次重跑），`path_params` 登记表补 `group_flow_pair_shape`（rc 修复，A31）。
 - 用字账按书选（A20 11-03，配置分层清理第 5 条）：`seed_admit.edition` 还是缺省（殿本的 `wuyingdian_zongmu`）时按书换键（`core/ledger_edition.py`、`core/step.py::_with_book_ledger`；书 ID 取生效 `book_id`，没写取中心库工作区名），别的书没有自己的账（`config/variants/books/<书 ID>.json`）就是空账；审字卡、组视图同样按书取。**影响**：殿本与认不出书的册参数逐字节不变；史記、全唐文等能认出书 ID 的非殿本册 `seed_admit` 判过期（参数 `edition` 变了），自动放行不再拿殿本的惯刻形、殿本人裁过的转换对当先验。L2：从 seed_admit 起重跑（可与 #911 iron_gate 的重跑并一次）。不碰任何 Step 模块与 `code_deps`，`code_hash` 不变。
 - 配置分层清理第二批（A20 11-03，Sheldon「剩下几条都做完」）：①任务库准备（`rerun_prep.sh`）改值走运行覆盖 `GUJI_BOOK_OVERRIDE`，不再 sed 本机册 yaml（旧 tag 不认才退回），执行方把它与 `book_overrides` 合成 `--override` 带进 pipeline；`guji … --override` 叠在环境里已有的覆盖上，不再顶掉。②`guji book show --effective` 列出借来的字形库（`workspace.yaml` 的 `glyph_lib.borrow`）及本机副本 rev、钉版快照里的借库。③推中心库前拦下「生效 `corpus` 在那册钉子账里查不到」的册（多见于写在基础配置里），`resolve_pin` 的报错说清总号每册各编各的。④新增 `scripts/check_base_corpus.py`，`doc/版本号规矩.md` 第三节第 5 条加「底库文件变了要配新底库」。只动工具与推库检查，不碰任何 Step 模块与 `code_deps`，`code_hash` 与产物指纹不变。
 - `iron_gate` 缺省值两处对齐（Sheldon 10-23 定缺省开，11-03 确认）：`load_book` 读册配置时没写 `iron_gate` 的按**开**算（原先按关，与 `BookSpec` 缺省 True 不一致）。**影响**：册 yaml 与基础配置都没写的册 `seed_admit` 判过期（`iron_gate` 在 `book_deps`）——11-03 中心库实查：史記 988g3f0wsu 42 册、全唐文 995ejelvk0 236 册（另 12 册已显式开）、qtw-draft 5 册、幼學 yxat 1 册；殿本（基础配置已写 true）、北行（册里已写 true）不受影响。L2：从 seed_admit 起重跑。`code_hash` 不变。
