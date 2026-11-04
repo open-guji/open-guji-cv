@@ -78,3 +78,14 @@ def test_known_file(tmp_path):
     k = tmp_path / "k.tsv"
     k.write_text("# 注释\nvol44:236\t图源断烂\n212\t\n", encoding="utf-8")
     assert S.load_known(k, ["vol44"]) == {("vol44", 236): "图源断烂", ("vol44", 212): "已答复"}
+
+
+def test_roster_page_is_page_kind(tmp_path):
+    """职名页（row_segment 列 flags 带 roster）归特殊页型，不当格数离群（史記 01 册职名页，11-04）。"""
+    _page(tmp_path, 7, fallback={"2": "x"}, n_slots=(21, 30))
+    p = tmp_path / "row_segment" / "p0007.json"
+    d = json.loads(p.read_text(encoding="utf-8"))
+    for c in d["cells"]["columns"]:
+        c["flags"] = ["roster"]
+    p.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+    assert _cause(tmp_path, 7, col=2) == "page_kind"
