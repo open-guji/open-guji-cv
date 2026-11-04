@@ -743,11 +743,11 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv(module='open_guji_cv.steps.align_ref',
           new='2ae95f04104d150000d9c4f70112be0c017e0daf867f43d8fba234f812e03836',
           old='30515d5d225a5c157dd5dff9d476d2c4f3ede0ec5d5e99f19e5e4bec42b77642',
-          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；殿本 vol12 31 页同（A22 11-04）；scripts/code_equiv.py check，2026-11-04'),
     Equiv(module='open_guji_cv.steps.seed_admit',
           new='ece64d98b4a717ee6f447e19d2161301971dc3fdda806455f198e94b12c318ab',
           old='1b3bf522586a523f6dae7f924828a8a3fe4d232dfcb192da82bb2752c552ab76',
-          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+          evidence='alt_cut 挑列挪到准入之后（align_ref.alt_select=admit，缺省 align）：开关关着时史記 04 册 12 页（p2,10,34,41,43,47,105,119,120,122,124,138）与 dev f6055e10 产物逐字节相同；殿本 vol12 31 页同（A22 11-04）；scripts/code_equiv.py check，2026-11-04'),
 )
 
 
