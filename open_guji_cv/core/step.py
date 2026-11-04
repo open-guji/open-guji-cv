@@ -110,15 +110,9 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     的错放行，漏带一次这个参数这一整轮就白挡——书级 yaml 能把这个决定钉死，
     不必每次跑批都记得带命令行参数。
 
-    只把**仍是 Step 构造默认值**的字段替换成书里配的值，跟 `_with_book_corpus`
-    走同一个限制：显式传了 CLI `--params` 的字段已经不等于默认值，这里不碰；
-    管线 yaml 若也配了同一个字段，效果上跟 CLI 一样「已经不是默认值」，也会被
-    这里放过、书 yaml 那份对该字段不生效——**这一点与任务书写的「管线 yaml <
-    书 yaml」字面顺序不完全一致**，是与另外四个 `_with_book_*` 函数共享的同一个
-    近似（它们全都只能补「仍是默认值」的字段，分不清「从没设过」与「设成了
-    跟默认值一样的值」，也分不清是管线 yaml 设的还是 CLI 设的）。目前没有任何
-    管线 yaml 给 `seed_admit` 配过参数，这条边界情形不会真的发生；真出现那天，
-    应该跟这几个既有函数一起换一套更精确的机制，不在这一个函数里单独精确到位。
+    **经 Engine 跑时**册配置已在 `Engine.__init__` 里按字典叠在管线 yaml 之上、调用方覆盖之下
+    （2026-11-03），这里看到的字段都已「显式」，原样返回。这个函数只对**不经 Engine 直接建的
+    RunContext**（控制台、审字卡、报告等）起作用：按「写没写」判断，调用方显式传过的字段不碰。
 
     `ctx.book.params` 没有这个 Step 的条目、或条目是空字典时原样返回，逐字节
     行为不变——书 yaml 没写 `params:` 这一段的册，加这个函数前后产物指纹相同。
@@ -132,10 +126,10 @@ def _with_book_params(p: BaseModel, step: "Step", ctx: "RunContext") -> BaseMode
     book_kv = (getattr(ctx.book, "params", None) or {}).get(step.spec.id)
     if not book_kv:
         return p
-    # 调用方（CLI `--params`／`--override`／管线 yaml）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
+    # 调用方（CLI `--params`／`--override`／管线 yaml／Engine 已叠好的册配置）显式传过的字段不碰——按「写没写」判，不按「等不等于默认值」判：
     # 否则册 yaml 开了的开关，命令行显式传 false（恰是默认值）会被册 yaml 静默改回去。
     explicit = getattr(p, "model_fields_set", set())
-    overrides = {k: v for k, v in book_kv.items() if k not in explicit}
+    overrides = {k: v for k, v in book_kv.items() if k not in explicit and v is not None}   # null = 回 Step 默认
     if not overrides:
         return p
     return type(p)(**{**p.model_dump(), **overrides})
@@ -291,6 +285,21 @@ def _with_book_gw(p: BaseModel, ctx: "RunContext") -> BaseModel:
         return p
     return type(p)(**{**p.model_dump(), "model_fingerprint": fp})
 
+def _with_book_ledger(p: BaseModel, ctx: "RunContext") -> BaseModel:
+    """`SeedAdmitParams.edition`（本书用字账的键）还是缺省值（殿本的 `wuyingdian_zongmu`）时按这册的书换键
+    （2026-11-03，见 `core/ledger_edition.py`）：别的书读自己的账，没有就是空账，不再拿殿本的惯刻形当先验。
+    殿本、认不出书的册原样返回，参数与指纹逐字节不变。重新构造，`model_post_init` 按新键重算 `ledger_fingerprint`。"""
+    if not (hasattr(p, "edition") and hasattr(p, "ledger_fingerprint")):
+        return p
+    from .ledger_edition import ZONGMU_EDITION, edition_for
+    if p.edition != ZONGMU_EDITION:
+        return p                        # 显式写了别的键
+    ed = edition_for(ctx.book.id, ZONGMU_EDITION)
+    if ed == p.edition:
+        return p
+    return type(p)(**{**p.model_dump(), "edition": ed, "ledger_fingerprint": ""})
+
+
 def _with_book_step6_ai(p: BaseModel, ctx: "RunContext") -> BaseModel:
     """`ContextDecideParams.ai_evidence` 缺省时按书级配置 `step6_ai:` 填（2026-09-27，
     D-Step6 导回管线）。同 `_with_book_corpus` 一个道理：要在 `params_for` 里填，
@@ -395,6 +404,7 @@ class RunContext:
         p = _with_witness_fingerprint(p, self)
         p = _with_book_gw(p, self)
         p = _with_book_step6_ai(p, self)
+        p = _with_book_ledger(p, self)  # 用字账按书选（缺省键是殿本的账）
         p = _with_glyph_pin(p, self)    # 册钉了字形库：人裁、近似字指纹换成钉号
         p = _with_corpus_pin(p, self)   # 必须最后：册钉了语料库版本，内容指纹整体换成版本号
         if memo is not None:
@@ -481,6 +491,10 @@ class RunContext:
         return obj
 
     def has_product(self, kind_id: str, page: int) -> bool:
+        # 这条管线里根本没有生产者的可选上游（如 modern_body 的 seals）一律当缺席，
+        # 不去读全局生产者目录里也许残留的旧产物（`Pipeline.provides`）
+        if self._pipeline is not None and not self._pipeline.provides(kind_id):
+            return False
         step = self.producer(kind_id)
         return self.store.exists(self.book.id, step.spec.id, page_key(page))
 

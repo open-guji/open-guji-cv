@@ -22,6 +22,10 @@
    碎墨也成一块密度区，但只有 600–900px 宽，原来也套了整页正方形，把大半页正文判成遮挡（vol35 p173 42 格）。
    窄区（≤ `SMALL_FRAC`）落在版框里、页上又没认出小印时，在这块里找模板最像的位置，分数 ≥ `SMALL_SCORE`
    就按小印记，否则不算印。
+   印既然紧贴版框上边，版框上边往下一条（高 `GRID`）里就该满是印泥墨点：这条的墨点密度（每 `GRID`² 的个数）
+   ≥ `TOP_BAND` 才按大印记（1.4，A20 11-03 报）。换图源 siku-qiefen-v2（缩到约 0.7 倍）后，普通正文页的字也碎成
+   中等墨点，整页密度峰到 20–28，过了 `min_peak`，殿本 vol04–99 有 37 册 130 页正文页被套了整版大印、整页格判成「被印遮挡」；
+   这些页顶条只有 0–14（顶格字以下多是空白），真大印页 19.7–124。
 2. **小印 `crisp`**（卷末「乾隆御覽之寶」）：模板（`config/seal_templates/`）在 1/4 降采样图上
    整页搜。分数不用 NCC——印压在正文上时印里有字，NCC 掉到 0.3（vol09 p265 原来认不出）——
    而用「模板笔画处有墨的比例 − 模板空白处有墨的比例」：印下压字只会抬高第二项一点，
@@ -42,7 +46,7 @@ from functools import lru_cache
 from pathlib import Path
 
 import numpy as np
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 from ..core.anchor import bbox_tl_to_tr
 from ..core.spec import StepSpec
@@ -69,6 +73,9 @@ SMALL_SCORE = 0.2
 #: vol28 新 p192、vol40 新 p173）。大印的墨点密度不跟着缩放：试过整页缩放回原尺度，卷端大印（vol28 新 p103）反而测不出
 FRAME_W_REF = 1650.0
 SCALE_TOL = 0.15
+#: 版框上边往下一条（高 GRID）的墨点密度（每 GRID² 个数）≥ 这个数才是大印。殿本 vol04–99 新图源普查：真大印 19.7–124
+#: （最淡的是 vol75 p1、vol74 p1 卷首印 19.7、24.3），正文页误判的 0–13.9（vol29 p158 顶格抬头字）
+TOP_BAND = 16.0
 
 
 class SealDetectParams(BaseModel):
@@ -77,19 +84,38 @@ class SealDetectParams(BaseModel):
     min_score: float = 0.25
     overrides: dict[int, list[dict]] = Field(default_factory=dict)
     """页号 → 人核的印列表 `[{"kind": "stain"|"crisp", "bbox": [x0, y0, x1, y1]}]`（规范空间）；空表＝无印。"""
+    stain_pages: list[int] | None = None
+    """大印只认这些页（2026-11-02，A32）。None＝每页都找（缺省，殿本）。写本扫描纸面噪点多，整页会被当成大印
+    （史記文渊阁 fgon 包：册01 p54、册02 p48–194 等 14 页没有印却判了大印，115 格误判遮挡；真印页与误判页的
+    密度峰值 22–63 互相重叠，调门槛分不开）。史記各册真印只在首叶，书级配 `[2]`。小印不受影响。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_default(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and self.stain_pages is None:
+            d.pop("stain_pages", None)          # 缺省不进参数哈希，殿本等书产物不过期
+        return d
 
 
-def stain_seals(gray: np.ndarray, *, min_peak: float) -> list[tuple[tuple[int, int, int, int], float]]:
-    """大印：[(左上原点 bbox [x0, y0, x1, y1], 峰值密度)]。"""
+def ink_dots(gray: np.ndarray) -> np.ndarray:
+    """中等墨点（面积在 `DOT_AREA` 内的连通块）的质心 [(x, y)]，左上原点。"""
     import cv2
     ink = (gray < 128).astype(np.uint8)
     _n, _lab, st, cen = cv2.connectedComponentsWithStats(ink, connectivity=8)
     area = st[:, 4]
     dot = (area >= DOT_AREA[0]) & (area <= DOT_AREA[1])
     dot[0] = False
+    return cen[dot]
+
+
+def stain_seals(gray: np.ndarray, *, min_peak: float, dots: np.ndarray | None = None
+                ) -> list[tuple[tuple[int, int, int, int], float]]:
+    """大印：[(左上原点 bbox [x0, y0, x1, y1], 峰值密度)]。"""
+    import cv2
+    dots = ink_dots(gray) if dots is None else dots
     H, W = gray.shape[:2]
     grid = np.zeros((H // GRID + 1, W // GRID + 1), np.float32)
-    for x, y in cen[dot]:
+    for x, y in dots:
         grid[int(y) // GRID, int(x) // GRID] += 1
     dens = cv2.blur(grid, (3, 3), borderType=cv2.BORDER_CONSTANT)
     hot = (dens >= HOT).astype(np.uint8)
@@ -161,6 +187,16 @@ def frame_scale(square) -> float:
     return k if abs(k - 1) > SCALE_TOL else 1.0
 
 
+def top_band_density(dots: np.ndarray, square, width: int) -> float:
+    """版框上边往下一条（高 `GRID`、宽＝大印正方形 `square`，右上原点）里的墨点密度，每 `GRID`² 的个数。"""
+    xr, ty, xl, _ = square
+    if xl <= xr or len(dots) == 0:
+        return 0.0
+    x = width - 1 - dots[:, 0]                  # 左上原点 → 右上原点
+    n = int(((x >= xr) & (x < xl) & (dots[:, 1] >= ty) & (dots[:, 1] < ty + GRID)).sum())
+    return n * GRID / (xl - xr)
+
+
 def stain_square(borders) -> tuple[float, float, float, float] | None:
     """大印外框（右上原点）：版框右上角起、边长＝版框宽的正方形。量在上框处；读不到上框或竖线返回 None。"""
     if borders is None or borders.top is None or len(borders.verticals) < 2:
@@ -228,7 +264,8 @@ def _crisp_in(gray: np.ndarray, b, k: float = 1.0) -> tuple[tuple[int, int, int,
 
 def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Seal]:
     W = gray.shape[1]
-    stains = stain_seals(gray, min_peak=p.min_peak)
+    dots = ink_dots(gray)
+    stains = stain_seals(gray, min_peak=p.min_peak, dots=dots)
     full = stain_square(borders)
     k = frame_scale(full)
     crisp = crisp_seals(gray, min_cover=p.min_cover, min_score=p.min_score, k=k)
@@ -239,7 +276,7 @@ def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Se
     else:
         fw = square[2] - square[0]
         big = [s for b, s in stains if b[2] - b[0] >= BIG_FRAC * fw]
-        if big:                     # 一页只有一方大印，位置按版框定
+        if big and top_band_density(dots, square, W) >= TOP_BAND:   # 一页只有一方大印，位置按版框定、紧贴上边
             out.append(Seal(kind="stain", bbox=square, score=max(big), source="frame"))
         bottom = getattr(getattr(borders, "bottom", None), "y_at_right", None)
         frame = (square[0], square[1], square[2], float(bottom) if bottom is not None else float(gray.shape[0]))
@@ -260,7 +297,7 @@ def detect_seals(gray: np.ndarray, p: SealDetectParams, borders=None) -> list[Se
 @register_step
 class SealDetectStep(Step):
     spec = StepSpec(
-        id="seal_detect", title="印章定位", version="1.3", unit="page",   # 1.3：版框宽偏离原扫描尺度 15% 以上的页（换图源 siku-qiefen-v2），小印模板按比例匹配、笔画覆盖区按印框大小缩放；1.2：只有够宽的密度区才按大印套版框正方形，窄的按小印取模板位置；小印覆盖门槛 0.6→0.5（vol21–50 卷末印淡）；1.1：大印外框按版框定（正方形）
+        id="seal_detect", title="印章定位", version="1.4", unit="page",   # 1.4：大印要紧贴版框上边——上边往下一条的墨点密度 ≥ TOP_BAND，新图源正文页不再误判大印；1.3：版框宽偏离原扫描尺度 15% 以上的页（换图源 siku-qiefen-v2），小印模板按比例匹配、笔画覆盖区按印框大小缩放；1.2：只有够宽的密度区才按大印套版框正方形，窄的按小印取模板位置；小印覆盖门槛 0.6→0.5（vol21–50 卷末印淡）；1.1：大印外框按版框定（正方形）
         consumes=("raw_page", "borders"), produces=("seals",), params=SealDetectParams,
     )
 
@@ -273,4 +310,6 @@ class SealDetectStep(Step):
                      for s in p.overrides[page]]
         else:
             seals = detect_seals(gray, p, ctx.product("borders", page))
+            if p.stain_pages is not None and page not in p.stain_pages:
+                seals = [x for x in seals if x.kind != "stain"]
         return {"seals": PageSeals(page=page, width=W, height=H, seals=seals)}

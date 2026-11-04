@@ -215,3 +215,15 @@ def test_cutline_cases_memo(env, monkeypatch):
     _cases, unavailable, _f = C._cutline_cases("keben", [1, 2], env)
     C._cutline_cases("keben", [1, 2], env)
     assert unavailable == {(1, 1)} and len(calls) == 4
+
+
+def test_cards_carry_pending_reason(env):
+    """每张卡都带待审原因 pending_reason（sheldon 11-03 定，与待审单同一套判法），不论带不带 cls。"""
+    from open_guji_cv.review.cards import cards
+    from open_guji_cv.review.pending_reason import PendingReason
+    for kw in ({}, {"cls": "*"}):
+        d = cards("keben", "1-2", 30, "review", env, gate_cut=False, skip_decided=False, **kw)
+        by = {c["id"]: c["pending_reason"] for c in d["cards"]}
+        assert len(by) == 7 and all(PendingReason(v) for v in by.values())
+        assert by["keben:1:1:4"] == "occluded_no_ref"           # 这格没有整理本对位
+        assert by["keben:1:1:2"] == "ref_replaced"            # 整理本这位来自 replace 段

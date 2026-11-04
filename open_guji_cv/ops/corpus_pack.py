@@ -241,31 +241,46 @@ def publish_base(src, conn, *, note: str = "", actor: str | None = None, repo: P
 
 # ── 大文件进 R2（分层版本 P2）────────────────────────────────────────────────────
 
-def _blob_files(ws: Path, man: dict) -> dict[str, Path]:
-    """清单里标了 ``store: r2`` 的条目 → {sha256: 本机文件路径}（文件不在本机就缺席）。"""
-    from ..core.corpus_pin import _base
+def _blob_files(ws: Path, man: dict, all_items: bool = False) -> dict[str, Path]:
+    """清单里标了 ``store: r2`` 的条目（``all_items``：改成引擎仓的全部文件，不论大小；工作区文件本来就在中心库）→ {sha256: 本机文件路径}（文件不在本机就缺席）。"""
+    from ..core.corpus_pin import _base, _not_corpus
     out = {}
     for it in man["items"]:
-        if it.get("store") == "r2":
+        if (it["root"] == "repo" and not _not_corpus(it["root"], it["path"])) if all_items else it.get("store") == "r2":
             p = _base(it["root"], it["path"], ws) / it["path"]
             if p.is_file():
                 out[it["sha256"]] = p
     return out
 
 
-def upload_blobs(ws: Path, version: int, vol: str | None = None, execute: bool = False) -> dict:
+def upload_blobs(ws: Path, version: int, vol: str | None = None, execute: bool = False,
+                 all_items: bool = False) -> dict:
     """``guji corpus upload``：把这版清单里的大文件传进 R2（按 sha256 内容寻址，已有跳过）。
     缺省只演练（列要传的文件和字节数）；``--execute`` 才真传，要 ``GUJI_DATA_TOKEN``。
     本机文件的 sha 和清单不符的拒绝上传（先 verify）。"""
     man = load_manifest(ws, version, vol)
-    want = {it["sha256"]: it for it in man["items"] if it.get("store") == "r2"}
-    have = _blob_files(ws, man)
+    from ..core.corpus_pin import _not_corpus
+    want = {it["sha256"]: it for it in man["items"]
+            if ((it["root"] == "repo" and not _not_corpus(it["root"], it["path"])) if all_items
+                else it.get("store") == "r2")}
+    have = _blob_files(ws, man, all_items)
     stale = [sha for sha, p in have.items() if _sha256_file(p) != sha]
+    from_git = 0
+    if stale and all_items:                    # 引擎仓文件后来改过：从底库登记的 repo_commit 取当时那一版
+        commit = (man.get("base_manifest") or {}).get("repo_commit") or man.get("repo_commit")
+        for sha in list(stale):
+            it = want.get(sha)
+            if it and it["root"] == "repo" and commit:
+                q = _git_blob(commit, it["path"], sha)
+                if q is not None:
+                    have[sha] = q
+                    stale.remove(sha)
+                    from_git += 1
     if stale:
         raise ValueError(f"本机文件内容与清单不符，不上传：{[str(have[s]) for s in stale][:3]}（先 guji corpus verify）")
     plan = {"version": version, "blobs": len(want), "bytes": sum(it["size"] for it in want.values()),
-            "local": len(have), "missing_local": sorted(want[s]["path"] for s in want if s not in have),
-            "executed": False}
+            "local": len(have), "from_git": from_git,
+            "missing_local": sorted(want[s]["path"] for s in want if s not in have), "executed": False}
     if execute:
         from ..datastore.r2 import upload_files
         plan["upload"] = upload_files(have, bucket="main", ext="txt")
@@ -273,8 +288,28 @@ def upload_blobs(ws: Path, version: int, vol: str | None = None, execute: bool =
     return plan
 
 
+def _git_blob(commit: str, rel: str, sha: str) -> Path | None:
+    """引擎仓 ``commit`` 时的 ``rel``（内容 sha256 要等于 ``sha``）写到临时缓存，返回路径；取不到 None。"""
+    import hashlib
+    import subprocess
+    import tempfile
+    try:
+        data = subprocess.run(["git", "-C", str(REPO_ROOT), "show", f"{commit}:{rel}"],
+                              capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    if hashlib.sha256(data).hexdigest() != sha:
+        return None
+    d = Path(tempfile.gettempdir()) / "guji-corpus-git"
+    d.mkdir(exist_ok=True)
+    q = d / sha
+    q.write_bytes(data)
+    return q
+
+
 def fetch_blobs(ws: Path, version: int, vol: str | None = None) -> dict:
-    """``guji corpus fetch``：把这版清单里本机缺的大文件从 R2 取回、放到清单登记的位置。
+    """``guji corpus fetch``：把这版清单里本机缺的文件从 R2 取回、放到清单登记的位置
+    （大文件一向在 R2；小文件要先 ``guji corpus upload --all`` 传过）。
     本机已有且内容一致的跳过；已有但内容不同的**不覆盖**，报出来。"""
     import shutil
 
@@ -282,13 +317,18 @@ def fetch_blobs(ws: Path, version: int, vol: str | None = None) -> dict:
     from ..datastore.client import BlobCache, WorkerSource
     man = load_manifest(ws, version, vol)
     todo, differ, ok = [], [], 0
+    from ..core.corpus_pin import _not_corpus
     for it in man["items"]:
-        if it.get("store") != "r2":
+        if _not_corpus(it["root"], it["path"]):
             continue
         p = _base(it["root"], it["path"], ws) / it["path"]
         if not p.exists():
-            todo.append((it, p))
-        elif _sha256_file(p) == it["sha256"]:
+            if it.get("store") == "r2" or it["root"] == "repo":   # 引擎仓小文件：upload --all 传过就有
+                todo.append((it, p))
+            continue
+        if it.get("store") != "r2":
+            continue
+        if _sha256_file(p) == it["sha256"]:
             ok += 1
         else:
             differ.append(it["path"])
@@ -302,6 +342,35 @@ def fetch_blobs(ws: Path, version: int, vol: str | None = None) -> dict:
             placed += 1
     return {"version": version, "already_ok": ok, "placed": placed, "differ_not_overwritten": differ,
             "not_in_r2": got["missing"]}
+
+
+def ensure_corpus_files(book) -> None:
+    """``guji pipeline`` 起跑前：册钉了语料、清单里有本机缺的文件（如 cv 不再带的底库文件）就先从 R2 取回。
+    取不到只提醒，起跑前的硬校验（``require_pin_clean``）会拒跑并说明。"""
+    import sys
+    v = getattr(book, "corpus", None)
+    if not v or getattr(book, "corpus_dev", False):
+        return
+    from ..core.corpus_pin import _base, _not_corpus
+    from ..core.workspace import workspace_root
+    ws = workspace_root()
+    if ws is None:
+        return
+    try:
+        man = load_manifest(ws, v, book.id)
+    except (FileNotFoundError, ValueError):
+        return
+    if all((_base(i["root"], i["path"], ws) / i["path"]).exists() for i in man["items"]
+           if not _not_corpus(i["root"], i["path"])):
+        return
+    try:
+        r = fetch_blobs(ws, v, book.id)
+        print(f"  语料 corpus {v}：从 R2 取回 {r['placed']} 个文件", flush=True)
+        if r["not_in_r2"]:
+            print(f"  ⚠️  R2 上没有 {len(r['not_in_r2'])} 个语料文件（先 guji corpus upload --all --execute）",
+                  file=sys.stderr)
+    except Exception as e:                     # noqa: BLE001
+        print(f"  ⚠️  语料 corpus {v} 缺文件，自动取回失败：{e}", file=sys.stderr)
 
 
 def _sha256_file(p: Path) -> str:

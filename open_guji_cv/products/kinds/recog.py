@@ -101,6 +101,27 @@ class PageMatch(BaseModel):
     db_fingerprint: str = ""                 # 判决是对**哪个库**做的，见模块头
     columns: list[ColumnMatch] = Field(default_factory=list)
 
+    alt_columns: list[ColumnMatch] = Field(default_factory=list)
+    """备选切法（row_segment `alt_cut`，2026-11-03）：格位表与图不合的列另切一份不带先验的格网，Step4/5 照样裁、认，
+    由 align_ref 坐标对位挑和整理本吻合多的那份（`PageAlignRef.alt_cols`）。不和 `columns` 混放——`.column(col)`
+    只取第一个同号列。空表**不落盘**（见下），没开 `alt_cut` 的产物逐字节不变。"""
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_alt(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("alt_columns"):
+            d.pop("alt_columns", None)
+        return d
+
+    def with_alt(self, cols):
+        """把 `cols` 里列号的列换成备选那份的副本（align_ref 试算、seed_admit 取选中份共用）；`cols` 空就原样返回。"""
+        cols = set(cols or ())
+        if not cols:
+            return self
+        alt = {c.col: c for c in self.alt_columns}
+        return self.model_copy(update={"columns": [alt.get(c.col, c) if c.col in cols else c for c in self.columns],
+                                        "alt_columns": []})
+
     def column(self, col: int) -> ColumnMatch | None:
         return next((c for c in self.columns if c.col == col), None)
 
@@ -339,6 +360,14 @@ class PageAlignRef(BaseModel):
     coord_fallback: dict[str, str] = Field(default_factory=dict)   # 退回的列 → 原因（键是列号字符串）
     coord_note: str = ""                                        # 整页没走坐标对位时的原因
     coord_conflict_ids: list[str] = Field(default_factory=list)  # 因「与现役对位冲突」退回的列里，坐标字≠现役 equal 字的格（全记，不止第一格；坐标判空的不计）
+    alt_cols: list[int] = Field(default_factory=list)  # row_segment `alt_cut`：改用备选切法的列（下游读这些列一律读 alt_columns）；空不落盘
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_alt(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not d.get("alt_cols"):
+            d.pop("alt_cols", None)
+        return d
 
 
 GLYPH_MATCH = register_kind(ProductKindSpec(

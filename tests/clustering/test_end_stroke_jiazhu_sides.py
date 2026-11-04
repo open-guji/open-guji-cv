@@ -38,3 +38,14 @@ def test_jiazhu_sides_keeps_straight_cut_for_glued_pair():
     pre[5:15, 10:50] = 0        # 两字粘连、两边各半：照中缝切
     right = _jiazhu_sides(pre, 30)
     assert right[10, 30:50].all() and not right[10, 10:30].any()
+
+
+def test_jiazhu_sides_cuts_at_seam_when_minor_side_is_deep():
+    """两行字笔画相碰连成一块：少的一侧是另一行的整个小字（伸过中缝深），照中缝切、不吞进对侧（cell_shrink 1.24）。"""
+    from open_guji_cv.clustering.extractor import _jiazhu_sides
+    pre = np.full((40, 60), 255, np.uint8)
+    pre[5:30, 32:58] = 0        # 右行大字（墨多）
+    pre[12:16, 12:32] = 0       # 左行小字的横，一端碰到右行字：伸进左侧 18/30
+    right = _jiazhu_sides(pre, 30)
+    assert not right[14, 12:30].any()       # 左行那段留在左行
+    assert right[20, 32:58].all()

@@ -118,3 +118,14 @@ ALTER TABLE jobs.job ADD COLUMN IF NOT EXISTS run_after timestamptz;
 
 INSERT INTO jobs.meta (key, value) VALUES ('schema_version', '3')
   ON CONFLICT (key) DO UPDATE SET value = GREATEST(jobs.meta.value::int, 3)::text;
+
+-- v4（11-04）：跑完主动通知提交人。notified_at 非空＝这条终态单已算进通知。
+-- 加列那一刻把已有的终态单补成已通知，免得一上线就把历史单子全发一遍。
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'jobs'
+                 AND table_name = 'job' AND column_name = 'notified_at') THEN
+    ALTER TABLE jobs.job ADD COLUMN notified_at timestamptz;
+    UPDATE jobs.job SET notified_at = now() WHERE status IN ('succeeded', 'failed', 'blocked', 'cancelled');
+  END IF;
+END $$;

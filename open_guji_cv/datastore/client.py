@@ -14,7 +14,7 @@
 
 **超时分两档**（GUJI-707）：国内节点连 data.open-guji.com 约 15% 卡在 TLS 握手（GUJI-703），原先一律 120 秒，
 一次卡住就白等两分钟。现在小 JSON 请求（查表、签名、状态、whoami、分支、追加事件等：回 JSON、请求体不是大块字节）
-缺省 ``SMALL_TIMEOUT`` = 25 秒（``GUJI_DATA_TIMEOUT`` 可改），超时照常走退避重试，且网络错至少重试到
+缺省 ``SMALL_TIMEOUT`` = 45 秒（``GUJI_DATA_TIMEOUT`` 可改），超时照常走退避重试，且网络错至少重试到
 ``NET_TRIES`` 次；收发大块字节的（快照、备份、产物包、R2 直取图）维持 120 秒。超时是每次 socket 操作的上限，
 不是整次传输的上限，大页慢慢流也不会被掐断。
 """
@@ -44,7 +44,7 @@ PAGE = 2000              # /v1/tables 每页条数（Worker 上限 5000；整页
 MAX_IN = 200            # 同列多值过滤一次最多几个值（Worker tables.ts 的 MAX_IN）
 SIGN_BATCH = 250         # /v1/assets/sign-batch 下载每批张数（Worker 上限 1000；批大了偶尔超 CPU 回 503/1102）
 BIG_TIMEOUT = 120.0      # 大块字节（快照、备份、产物包、R2 图）每次 socket 操作的超时（秒）
-SMALL_TIMEOUT = 25.0     # 小 JSON 请求的缺省超时（秒），环境变量 GUJI_DATA_TIMEOUT 可改（GUJI-707）
+SMALL_TIMEOUT = 45.0     # 小 JSON 请求的缺省超时（秒），环境变量 GUJI_DATA_TIMEOUT 可改（GUJI-707；2026-11 由 25 放宽，几十台同时拉库时服务端偶尔慢过 25 秒）
 NET_TRIES = 4            # 小请求遇到网络错（含超时）至少试这么多次，不受调用方 tries=2 限（那是给 503 拆批留的）
 
 
@@ -195,14 +195,19 @@ class WorkerSource:
             try:
                 page = self._call("GET", f"/v1/tables/{table}", query=q, tries=2)
             except CentralError as e:
-                if e.status != 503 or q["limit"] <= 100:
+                if e.status not in (500, 503) or q["limit"] <= 1:
                     raise
-                q["limit"] //= 2                   # Worker 超资源（1102）：页减半再试
+                # Worker 超资源（1102 回 503）、整页太大读挂（files 表整文件行，史記 988g3f0wsu 2000 行一页回 500，
+                # 2026-10-31 任务库执行方 db-pull 全挂）：页减半再试。减到 1 行为止：siku-zongmu 的 glyph-pack 清单
+                # 每份 3.4 MB、十几份挨着，31 行一页仍回 500（2026-11-01 控制台服务器取库清单）
+                q["limit"] //= 2
                 continue
             yield from page["rows"]
             if not page.get("next"):
                 return
             q["after"] = page["next"]
+            if q["limit"] < PAGE:                     # 过了大行再慢慢放回去，不让整表都按小页走
+                q["limit"] = min(PAGE, q["limit"] * 2)
 
     def changes_since(self, ws: str, rev: int, limit: int = 1) -> int:
         page = self._call("GET", "/v1/tables/changes",

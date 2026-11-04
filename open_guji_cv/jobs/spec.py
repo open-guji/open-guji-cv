@@ -10,7 +10,7 @@
     steps           {"from": 起步, "to": 止步}，缺省整条
     pages           缺省 all
     force           缺省 true（重跑就是要重算）；no_reuse 缺省跟 force
-    book_overrides  {"corpus": N, "glyph_pin": N}：只改执行会话本机的册配置，不推中心库
+    book_overrides  {"corpus": N, "glyph_pin": N}：执行会话里叠在册配置上的运行覆盖（GUJI_BOOK_OVERRIDE），不改册 yaml、不推中心库
     pin_args        guji corpus pin 的参数串（追加语料钉子账）
     base            先取哪个产物包铺底：main｜包标签｜null；从中间某步起跑缺省 main
     checks          {"human_chars": N}：开跑前人裁绑定后必须正好 N 格，不对就 blocked 不跑
@@ -42,7 +42,8 @@ CV_REPO = "https://github.com/open-guji/open-guji-cv"
 DEFAULT_PIPELINE = "keben_body_v2"
 DEFAULT_WS_GLOB = "96mid1ogzk-*"
 # 册 ID → 这部书自己的工作区仓（仓根即工作区）。ws_glob 的册 ID 在表里、又没显式给 ws_repo 时用它（2026-10-30 起）。
-WS_REPOS = {"96mid1ogzk": "guji-workspace/96mid1ogzk-si-ku-zong-mu"}
+WS_REPOS = {"96mid1ogzk": "guji-workspace/96mid1ogzk-si-ku-zong-mu",
+            "988g3f0wsu": "guji-workspace/988g3f0wsu-shi-ji-wen-yuan-ge"}   # 史記文淵閣本（2026-10-31）
 
 
 def book_id(spec: dict) -> str | None:
@@ -64,7 +65,7 @@ _STEP = re.compile(r"^[a-z][a-z0-9_]*$")
 _BOOK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _LABEL = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
-_OVERRIDES = {"corpus": int, "glyph_pin": int}     # 有类型要求的两个；其余册级字段不限类型（执行方 `--override` 原样叠上去）
+_OVERRIDES = {"corpus": int, "glyph_pin": int, "model": int}     # 有类型要求的几个；其余册级字段不限类型（执行方 `--override` 原样叠上去）
 
 
 def _override_keys() -> set[str]:

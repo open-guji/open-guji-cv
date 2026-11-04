@@ -43,7 +43,7 @@ figure 同格几票只是说明不同，算同一意见：取最新一票的说�
 重切过——格号还在，字已经不是那个字。出单那一版的格框留在 book-text 的 `<册>.cord.json` 里，拿它和现行
 `cell_shrink` 的框逐格比（目标格与同列各格框差都 ≤ tol，且同列格位集合相同）才放行。
 
-本模块只读，不写事件；写入在 `cli_cellvotes.py`（走控制台同一条写入路径，锚按现行产物算）。
+本模块只读，不写事件；写入在 guji-manager `cli_cellvotes.py`（2026-11-02 搬走）（走控制台同一条写入路径，锚按现行产物算）。
 """
 from __future__ import annotations
 

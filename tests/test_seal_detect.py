@@ -75,6 +75,17 @@ def test_stain_seal_is_the_square_at_the_frame_top_right():
     assert detect_seals(_page(), SealDetectParams(), borders) == []
 
 
+def test_dot_field_not_touching_frame_top_is_not_a_stain():
+    """新图源正文页（vol46 p94 等）：字碎成墨点、整页密度过了门槛，但版框上边往下一条是空的——不是大印。"""
+    from types import SimpleNamespace as NS
+    borders = NS(top=NS(y_at_right=330.0),
+                 verticals=[NS(x_at_top=x, slope=0.0) for x in (340.0, 525.0, 2000.0)])
+    img = _page()
+    _dots(img, 300, 500, 1800, 2000, 6000)
+    assert stain_seals(img, min_peak=20)
+    assert detect_seals(img, SealDetectParams(min_cover=2.0), borders) == []
+
+
 def test_narrow_dot_field_is_not_the_frame_wide_stain():
     """卷末淡印（vol35 p173）：窄密度区不按大印套整个版框宽的正方形；模板又不像，就不算印。"""
     from types import SimpleNamespace as NS
@@ -173,3 +184,24 @@ def test_clean_background_cells_inside_big_seal_are_not_occluded():
     ctx = _seal_ctx(cells, seals, gray)
     assert set(page_occluded(ctx, 3, SeedAdmitParams())) == {(1, 1, ""), (1, 3, "")}   # 2 格干净，放出
     assert set(page_occluded(ctx, 3, SeedAdmitParams(occluded_seal_min_noise=0))) == {(1, 1, ""), (1, 2, ""), (1, 3, "")}
+
+
+def test_stain_pages_keeps_big_seal_only_on_listed_pages(monkeypatch):
+    """书级 `stain_pages`：不在名单里的页去掉大印、小印照留；缺省 None 不进 dump（殿本参数哈希不变）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.products.kinds.seals import Seal
+    from open_guji_cv.steps import seal_detect as sd
+    found = [Seal(kind="stain", bbox=(0, 0, 10, 10), score=40.0, source="frame"),
+             Seal(kind="crisp", bbox=(0, 0, 5, 5), score=0.6, source="template", template="x.png")]
+    monkeypatch.setattr(sd, "detect_seals", lambda gray, p, borders: list(found))
+
+    def run(page, **kw):
+        ctx = NS(params_for=lambda step: SealDetectParams(**kw), raw_page=lambda pg: _page(),
+                 product=lambda kind, pg: None)
+        return [s.kind for s in sd.SealDetectStep().run_page(ctx, page)["seals"].seals]
+
+    assert run(48) == ["stain", "crisp"]
+    assert run(48, stain_pages=[2]) == ["crisp"]
+    assert run(2, stain_pages=[2]) == ["stain", "crisp"]
+    assert "stain_pages" not in SealDetectParams().model_dump()
+    assert SealDetectParams(stain_pages=[2]).model_dump()["stain_pages"] == [2]

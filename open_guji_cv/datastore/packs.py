@@ -488,6 +488,79 @@ def push_derived(src=None) -> list[str]:
     return done
 
 
+# ---- HuggingFace 模型权重镜像（2026-11-03）----
+# 新执行机拉不到 huggingface.co（网络），文意 L2 的 SIKU-BERT/sikuroberta 加载失败 → 全部弃权。
+# 把 HF 缓存里该模型的目录（models--<组织>--<名>，含钉住 revision 的快照）打成一个 tgz，存 R2：
+# `derived/hf/<组织>--<名>/<revision>.tgz/{part-000…, manifest.json}`。取回解到 HF 缓存里，
+# `from_pretrained(name, revision=…)` 就直接命中，不再联网。
+
+CTX_ENCODER = ("SIKU-BERT/sikuroberta", "bb25260d5c321924fe4fb353c09191c0aaf5c5c6")
+
+
+def hf_model_key(name: str, revision: str) -> str:
+    return f"derived/hf/{name.replace('/', '--')}/{revision}.v2.tgz"
+
+
+def _hf_hub_cache() -> Path:
+    import os
+    try:
+        from huggingface_hub import constants
+        return Path(constants.HF_HUB_CACHE)
+    except ImportError:
+        home = os.environ.get("HF_HOME") or str(Path.home() / ".cache" / "huggingface")
+        return Path(os.environ.get("HF_HUB_CACHE") or Path(home) / "hub")
+
+
+def hf_model_cached(name: str, revision: str) -> bool:
+    """HF 缓存里钉住 revision 的快照目录在、且有权重文件。"""
+    snap = _hf_hub_cache() / ("models--" + name.replace("/", "--")) / "snapshots" / revision
+    return snap.is_dir() and (any(snap.glob("*.safetensors")) or any(snap.glob("*.bin")))
+
+
+def push_hf_model(name: str = CTX_ENCODER[0], revision: str = CTX_ENCODER[1], src=None, force: bool = False) -> str | None:
+    """把本机 HF 缓存里的该模型存进 R2（要正式令牌）。R2 已有就跳过（返回 None）。本机缓存没有就先 snapshot_download。"""
+    import tempfile
+    src = src or _client()
+    key = hf_model_key(name, revision)
+    have = {r["key"] for r in src._call("GET", "/v1/packs", query={"bucket": _bucket(src), "prefix": key + "/"})["packs"]}
+    if f"{key}/manifest.json" in have and not force:
+        return None
+    if not hf_model_cached(name, revision):
+        from huggingface_hub import snapshot_download
+        snapshot_download(name, revision=revision)
+    mname = "models--" + name.replace("/", "--")
+    snap = _hf_hub_cache() / mname / "snapshots" / revision
+    with tempfile.TemporaryDirectory() as td:
+        tgz = Path(td) / "m.tgz"
+        # 只打钉住 revision 的快照，并把软链解成真文件（新版 HF 缓存的 blobs 可能再软链到缓存外的 xet 目录，直接打会丢权重）
+        with tarfile.open(tgz, "w:gz", dereference=True) as tf:
+            tf.add(snap, arcname=f"{mname}/snapshots/{revision}")
+        push_file(key, tgz, src=src)
+    return key
+
+
+def fetch_hf_model(name: str = CTX_ENCODER[0], revision: str = CTX_ENCODER[1], src=None) -> bool:
+    """HF 缓存里没有该模型就从 R2 取（核 sha256、解到 HF 缓存）。已有直接 True；没令牌／R2 没有／网络错返回 False。"""
+    import os
+    import tempfile
+    if hf_model_cached(name, revision):
+        return True
+    if not (os.environ.get("GUJI_DATA_TOKEN") or src):
+        return False
+    key = hf_model_key(name, revision)
+    cache = _hf_hub_cache()
+    try:
+        with tempfile.TemporaryDirectory() as td:
+            tgz = Path(td) / "m.tgz"
+            fetch_file(key, tgz, src=src)
+            cache.mkdir(parents=True, exist_ok=True)
+            with tarfile.open(tgz, "r:gz") as tf:
+                tf.extractall(cache, filter="data")
+    except Exception:  # noqa: BLE001 —— 取不到由调用方退回 huggingface.co
+        return False
+    return hf_model_cached(name, revision)
+
+
 def describe_purity(purity: dict | None) -> str:
     """一句中文：给 promote 的拒绝理由、存包时的打印用。"""
     if not purity:

@@ -511,6 +511,31 @@ class AlignRefParams(BaseModel):
     同书异版、整理本整段录入的书可按册放宽（北行 bxgb 取 12）：两头仍要被 equal 夹住。
     只多给整理本字，放行照旧要 `lib_gate`／seed_admit 的库证据。"""
 
+    coord_relaxed: bool = False
+    """坐标对位的三条补路（2026-10-31，史記文淵閣本册 01–03；见 `align_ref_coord._coord_relaxed`）：
+    圈号「○」格不占整理本字位、几何拟不上时按 Step3 格号配、职名分支切的列格数等于字数时按次序配。
+    起因：册 01–03 坐标对位退回的 411 列里，158 列是考證／注文的「○」把其后字位挤错一格（与现役对位冲突），
+    180 列是目录、卷端题列、职名页字距不匀，几何行号拟不上；这些格因此没有整理本字，只能人审。
+    配上的列照旧过 `_coord_conflict` 与错位闸。False＝关（缺省，不进参数哈希）。"""
+
+    coord_dp: bool = False
+    """坐标对位的载体字保底（2026-11-02，史記文淵閣本；见 `align_ref_coord.coord_dp`）：几何配不上
+    （格数对不上／有歧义／错位）或被「与现役对位冲突」整列退回的列，改用格序列与整理本单元序列的单调对齐，
+    载体字吻合够多才认，只给配上的格字。False＝关（缺省，不进参数哈希）。"""
+
+    coord_dp_flat: bool = False
+    """载体字按逐字字序对齐（2026-11-03，史記文淵閣本；见 `align_ref_coord.coord_dp_flat`，要 `coord_dp` 开着）：
+    `coord_dp` 也配不上的列再试一次——夹注段拆成先右行后左行的逐字序列，可多跳几格（印泥假格、夹注右行多写一两字），
+    载体字相同够多才认，只给有字形证据的格。起因：卷首叶题署行（大印压着、字距拉开）与夹注右行字数与整理本「|」
+    不同的列整列没有整理本字（第 4 轮 S／D 类约 150 格）。False＝关（缺省，不进参数哈希）。"""
+
+    coord_title_trust: bool = False
+    """题列信坐标对位（2026-11-03，史記文淵閣本第 2 页）：本列坐标字整串合 `coord_title_formula`，且坐标对位几何上一格对一字
+    （格数相等才会到这里）→ 不因「与现役对位冲突」退回整列，强冲突也不退（仍拦「空格位上库认出了字」）。
+    起因：卷端页大印把题列字形认成乱码，现役 difflib 在乱码载体里把「全／書」对到错的格，「欽定四庫全書」整列被退回、
+    六格没有默认字。题列整串合固定式、格数＝字数，位置不可能错。冲突格仍记进 `coord_conflict_ids`。
+    False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -525,6 +550,14 @@ class AlignRefParams(BaseModel):
             d.pop("anchor_merge_gap", None)
         if isinstance(d, dict) and self.replace_max_len == 3:
             d.pop("replace_max_len", None)
+        if isinstance(d, dict) and not self.coord_relaxed:
+            d.pop("coord_relaxed", None)
+        if isinstance(d, dict) and not self.coord_dp:
+            d.pop("coord_dp", None)
+        if isinstance(d, dict) and not self.coord_title_trust:
+            d.pop("coord_title_trust", None)
+        if isinstance(d, dict) and not self.coord_dp_flat:
+            d.pop("coord_dp_flat", None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -624,10 +657,48 @@ def page_pin(p: "AlignRefParams", book: str, page: int) -> tuple[str, int, int] 
     return head, line_of[head], off_of[head]
 
 
+def dzg_null_pinned(book: str, page: int) -> bool:
+    """这一页在 `corpus/daizhige/page_pins.jsonl` 里钉成 `dzg: null`（整理本里没有这一页，如错收的他书页）。
+
+    2026-11-04（A22 第4轮，殿本 vol56 p75–78）：row_segment 配页认这个钉页、不带先验，但坐标对位
+    原先照样按格位把整理本那一段（错收的《揮麈錄》）配上来，`ref_lib_coord` 一开机器字也跟着错。
+    钉成 null 的页不做坐标对位。不另进参数哈希：钉页改动会让本册 row_segment 的
+    `page_map_fingerprint` 变，下游一路过期，本步随之重跑。"""
+    return (book, int(page)) in _dzg_null_pins(_dzg_pins_sig())
+
+
+def _dzg_pins_sig() -> tuple:
+    f = Path(corpus_path("daizhige")) / "page_pins.jsonl"
+    try:
+        st = f.stat()
+        return (str(f), st.st_mtime_ns, st.st_size)
+    except OSError:
+        return (str(f), 0, 0)
+
+
+@lru_cache(maxsize=4)
+def _dzg_null_pins(sig: tuple) -> frozenset:
+    f = Path(sig[0])
+    if not sig[2]:
+        return frozenset()
+    out = set()
+    for ln in f.read_text(encoding="utf-8").splitlines():
+        try:
+            r = json.loads(ln) if ln.strip() else None
+        except ValueError:
+            continue
+        if isinstance(r, dict) and "dzg" in r and r["dzg"] is None and r.get("vol") and r.get("page") is not None:
+            try:
+                out.add((str(r["vol"]), int(r["page"])))
+            except (TypeError, ValueError):
+                continue
+    return frozenset(out)
+
+
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.4", unit="cell",   # 2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.6", unit="cell",   # 2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -653,7 +724,10 @@ class AlignRefStep(Step):
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
-        if _coord_enabled(p, ctx.book) and match is not None:
+        if _coord_enabled(p, ctx.book) and match is not None and dzg_null_pinned(ctx.book.id, page):
+            ar = out["align_ref"]
+            ar.note = ((ar.note + "；") if ar.note else "") + "钉页 dzg:null（整理本无此页），不做坐标对位"
+        elif _coord_enabled(p, ctx.book) and match is not None:
             def neighbors():
                 for nb in (page + 1, page - 1):
                     m = _opt(ctx, "glyph_match", nb)
@@ -664,7 +738,12 @@ class AlignRefStep(Step):
                          _opt(ctx, "cells", page), p.corpus,
                          neighbors=neighbors if p.coord_neighbor else None,
                          title_formula=p.coord_title_formula,
-                         pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1])
+                         pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
+                         relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                         dp_flat=p.coord_dp_flat)
+            cells = _opt(ctx, "cells", page)
+            if match.alt_columns and cells is not None and cells.alt_columns:
+                _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
         return out
 
     def _run_legacy(self, ctx: RunContext, p: "AlignRefParams", page: int,
@@ -1226,6 +1305,7 @@ def _pin_map(carriers, lines, base: int):
     for col, c in carriers:
         li = base + col - 1
         if li >= nxt:
+            out.past_leaf.append(col)
             continue
         own = C.line_sim(c, lines[li])
         other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
@@ -1256,6 +1336,7 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
         for col, c in carriers:
             li = base + col - 1
             if li >= len(lines) or (k + 1 < len(heads) and li >= heads[k + 1]):
+                out.past_leaf.append(col)
                 continue
             own = C.line_sim(c, lines[li])
             other = max((C.line_sim(c, lines[l2]) for l2 in range(max(0, base - 9), min(len(lines), base + 18))
@@ -1267,9 +1348,91 @@ def _neighbor_map(carriers, lines, starts, text: str, corpus: str, neighbors):
     return None
 
 
+ALT_MIN_GAIN = 4          # 备选切法拿到坐标字的格数，至少比现役「坐标字格数、8-gram 对位 equal 格数」两者的大者多这么多格才换
+ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数的这么多
+# 分母取备选切法自己切出的字格数、不取整理本这一行的字数（2026-11-03 定，A22 评审问）：
+# 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
+
+
+def _covered(res: PageAlignRef, col: int) -> int:
+    """一列里拿到坐标字（整理本非空）的格数。"""
+    return sum(1 for r in res.coord if r.col == col and r.ref_char)
+
+
+def _agree(res: PageAlignRef, carrier, match, col: int) -> int:
+    """一列里有字形证据的坐标字格数：坐标字＝机器载体字（`carrier_fn`），或在这一格库匹配
+    前 `COORD_DP_TOPK` 名候选里（与 `coord_dp` 收格同一口径）。"""
+    from .align_ref_coord import COORD_DP_TOPK
+    top = {r.id: {c for c, _s in (r.candidates or [])[:COORD_DP_TOPK]}
+           for cc in match.columns if cc.col == col for r in cc.chars}
+    return sum(1 for r in res.coord if r.col == col and r.ref_char
+               and (carrier(r.id) == r.ref_char or r.ref_char in top.get(r.id, ())))
+
+
+def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells, p) -> None:
+    """row_segment `alt_cut` 的备选切法：两种切法都裁过、都过了库匹配，这里按列挑一种
+    （第 7 轮设计，见 doc/design 与 open-guji-cv PR 说明）。
+
+    备选列在一份草稿上重做坐标对位（`with_alt` 视图，草稿去掉这些列的现役对位字，免得
+    现役对位按旧切法的格号去比）。换列要三条都成立：备选切法拿到坐标字的格数 ≥ 现役 +
+    `ALT_MIN_GAIN`，也比现役 8-gram 对位（`chars`）equal 的格数多这么多（现役对位已经和整理本逐字对上
+    的列不是切错的列；第 7 轮 125 页 A/B：只比坐标字格数时换的 20 列里 3 列变差，04:10:3、02:185:8、
+    03:90:3 都是现役 equal 格数远高于坐标字格数）；
+    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。换了的列：坐标字、退回原因、冲突格都换成备选那份，
+    现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
+    （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
+    cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
+    if not cols:
+        return
+    cset = set(cols)
+    draft = res.model_copy(deep=True, update={
+        "chars": [c for c in res.chars if c.col not in cset],
+        "coord": [], "coord_cols": [], "coord_fallback": {}, "coord_note": "",
+        "coord_conflict_ids": []})
+    rare_alt = ({k: v for k, v in rare.items() if _id_col(k) not in cset} if rare else rare)
+    attach_coord(draft, book, page, match.with_alt(cols), ocr, rare_alt, cells.with_alt(cols),
+                 p.corpus, title_formula=p.coord_title_formula,
+                 pin_line=(page_pin(p, book, page) or (None, None))[1],
+                 relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
+                 dp_flat=p.coord_dp_flat)
+    alt_match = match.with_alt(cols)
+    car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
+    n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
+    chosen = []
+    for col in cols:
+        ca, cm = _covered(draft, col), _covered(res, col)
+        a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
+        eq = sum(1 for c in res.chars if c.col == col and c.align_op == "equal")
+        if ca >= max(cm, eq) + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
+            chosen.append(col)
+    if not chosen:
+        return
+    ch = set(chosen)
+    res.chars = [c for c in res.chars if c.col not in ch]
+    res.coord = sorted([r for r in res.coord if r.col not in ch] + [r for r in draft.coord if r.col in ch],
+                       key=lambda r: (r.col, r.slot, r.sub or ""))
+    res.coord_cols = sorted({c for c in res.coord_cols if c not in ch} | {c for c in draft.coord_cols if c in ch})
+    for col in ch:
+        res.coord_fallback.pop(str(col), None)
+        if str(col) in draft.coord_fallback:
+            res.coord_fallback[str(col)] = draft.coord_fallback[str(col)]
+    res.coord_conflict_ids = ([i for i in res.coord_conflict_ids if _id_col(i) not in ch]
+                              + [i for i in draft.coord_conflict_ids if _id_col(i) in ch])
+    res.alt_cols = sorted(ch)
+
+
+def _id_col(rid: str) -> int | None:
+    parts = rid.split(":")
+    try:
+        return int(parts[2])
+    except (IndexError, ValueError):
+        return None
+
+
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
-                 pin_line: int | None = None) -> None:
+                 pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
+                 title_trust: bool = False, dp_flat: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1303,39 +1466,80 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
     legacy = {c.id: c for c in res.chars} if res.anchored else {}
     same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
     work = []
+    roster_cols: set[int] = set()
     for cc in cols:
         li = pm.col_line.get(cc.col)
         if li is None:
-            res.coord_fallback[str(cc.col)] = "列行对应不成立"
+            res.coord_fallback[str(cc.col)] = (C.COORD_PAST_LEAF if cc.col in pm.past_leaf
+                                               else "列行对应不成立")
             continue
-        units = C.column_units(book, page, cc.col, cc, cells.column(cc.col), carrier)
+        ccells = cells.column(cc.col)
+        units = C.column_units(book, page, cc.col, cc, ccells, carrier, symbols=relaxed)
         if not units:
             res.coord_fallback[str(cc.col)] = "缺几何（cells 查不到这一列的格）"
             continue
-        work.append((cc, units, lines[li], C.coord_column(units, lines[li])))
+        if relaxed and ccells is not None and "roster" in ccells.flags:
+            roster_cols.add(cc.col)          # 职名分支切的列：`coord_relaxed` 可按次序配
+        work.append((cc, units, lines[li], C.coord_column(units, lines[li], relaxed=relaxed,
+                                                          order_ok=cc.col in roster_cols)))
     # 逐列本的格位是绝对值：几何上只有一种配法的列量出页级「格位 → 行号」偏移，
     # 拿它去分有歧义的列（印章假格与字格混在一起时常见）。光盘版没有格位，不做。
     title_re = re.compile(title_formula) if title_formula else None
     bs = sorted(r.b for _cc, _u, _ln, r in work if r.ok and r.unique and r.b is not None)
     if grid and bs:
         b_page = bs[len(bs) // 2]
-        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page))
+        work = [(cc, u, ln, r if r.ok else C.coord_column(u, ln, b_hint=b_page, relaxed=relaxed,
+                                                          order_ok=cc.col in roster_cols))
                 for cc, u, ln, r in work]
+    dp_cols: list[int] = []
+    cand_top = ({r.id: tuple(c for c, _s in (r.candidates or [])[:C.COORD_DP_TOPK]) for cc_ in cols for r in cc_.chars}
+                if dp else {})
+
+    def _take_dp(cc, units, ln, why: str) -> bool:
+        """`coord_dp`：几何配法不成立／被冲突闸退回的列改走载体字单调对齐；成了就当坐标对位列收下。"""
+        if not dp or not units or "整理本行为空" in why:
+            return False
+        empty_hit = "空格位上库认出了字" in why
+        if empty_hit and not dp_flat:
+            return False          # 整理本这一位是空而库认出了字：页与整理本对不上，不拿载体字硬配
+        # `coord_dp_flat`：空格位上认出了字的列（字距拉开的题署行，空格位里是印泥）只走逐字字序对齐，那里门槛按字算
+        d = None if empty_hit else C.coord_dp(units, ln.text_units())
+        if d is None and dp_flat:
+            d = C.coord_dp_flat(units, ln.text_units(), cand_top)
+        if d is None:
+            return False
+        # 只收有字形证据的格：载体字＝整理本字，或整理本字在这一格库匹配的前 `COORD_DP_TOPK` 名候选里
+        # （没有字形证据的格，坐标字只是对齐的推论，不给整理本字，免得下游把它当独立证据放行）
+        recs = [r for r in d.recs if r[3] and (carrier(r[0]) == r[3] or r[3] in cand_top.get(r[0], ()))]
+        if not recs:
+            return False
+        res.coord_conflict_ids.extend(_coord_conflict_ids(recs, legacy))
+        res.coord_cols.append(cc.col)
+        res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
+                         for i, sl, sub, ch, g in recs)
+        dp_cols.append(cc.col)
+        return True
+
     for cc, _units, _ln, r in work:
         if not r.ok:
-            res.coord_fallback[str(cc.col)] = r.note
+            if not _take_dp(cc, _units, _ln, r.note):
+                res.coord_fallback[str(cc.col)] = r.note
             continue
-        why = _coord_conflict(r.recs, legacy, same, title=title_re is not None and bool(
-            title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs))))
+        is_title = title_re is not None and bool(
+            title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs)))
+        why = _coord_conflict(r.recs, legacy, same, title=is_title, trust=title_trust and is_title)
         if why:
-            res.coord_fallback[str(cc.col)] = why
-            res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
+            if not _take_dp(cc, _units, _ln, why):
+                res.coord_fallback[str(cc.col)] = why
+                res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
             continue
         # 孤立弱冲突（见 `_coord_conflict`）：列照用，冲突格仍记进 coord_conflict_ids（seed_admit 不放 match_ref）。
         res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in r.recs)
+    if dp_cols:
+        res.coord_note = f"{res.coord_note}；dp 配列 {','.join(map(str, sorted(dp_cols)))}".lstrip("；")
 
 
 def _coord_conflict_ids(recs, legacy: dict) -> list[str]:
@@ -1361,7 +1565,7 @@ COORD_WEAK_MAX = 1
 COORD_WEAK_MIN_AGREE = 5
 
 
-def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False) -> str:
+def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: bool = False) -> str:
     """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
 
     vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
@@ -1393,6 +1597,8 @@ def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False) -> str:
                 strong.append((i, ch, lg.align_char))
         if ch == "" and i in same:
             return f"空格位上库认出了字（{i} 库 same {same[i]}）"
+    if trust:                 # `coord_title_trust`：题列强冲突也不退回（格数＝字数，现役在印章乱码里对错了）
+        return ""
     if strong or len(weak) > COORD_WEAK_MAX or (weak and agree < COORD_WEAK_MIN_AGREE):
         i, ch, lc = strong[0] if strong else (weak[0], next(r[3] for r in recs if r[0] == weak[0]), legacy[weak[0]].align_char)
         return f"与现役对位冲突（{i} 坐标 {ch or '空'} / 现役 {lc}）"

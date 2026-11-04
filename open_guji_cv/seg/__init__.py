@@ -11,7 +11,7 @@
 设计见《切分模块化：共用原语库＋每套书自管切分》（Claude Doc）。
 
 ## 已有的原语（第 3 步逐组抽进来，一组一个 PR）
-- `seam`：最省墨走缝、缝上墨量、缝外抹白；
+- `seam`：最省墨走缝、缝上墨量、缝外抹白；一行字自己的横格线 `fit_row_cuts`（写本雙行小注两行各切）；
 - `cut_select`：U-Net 切点裁判与引导缝（自带权重指纹，缺 torch 时退回旧规则）；
 - `frame_types`：边框结果的数据类型（右上原点的横线、竖线、抬头框、整页结果）；
 - `lines`：投影找峰（半高宽匹配度）、位置＋角度联合搜一条直线、整页找竖线与上下框线（原 `utils/peak_line_search`
@@ -19,5 +19,6 @@
 - `grid`：网格模式，列数已知、列距均匀时逐槽验线、缺槽插值（原 `utils/peak_line_search` 的后半，北行日錄与殿本都用）；
 - `polyline`：界行按弯度拟直线或三段折线（原 `utils/border_geometry` 的一段）；
 - `warp`：单列射影矫正与列窗口；`profile`：列图投影、去噪、找文字带（原 `utils/column_projection` 的两段）；
-- `locate_gutter`：找书口（命令行用）。
+- `locate_gutter`：找书口（命令行用）；
+- `columns`：列宽均匀约束——`ColumnSpec`（各书 `columns:` 配置）、`check_columns`（出带检查）、`fit_columns`（候选线里 DP 挑一串列宽全在带里的线）与墨投影／界行残段／细峰／空白中点证据（2026-11-03，见 doc/design/列宽均匀约束.md）。
 """

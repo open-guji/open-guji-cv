@@ -1,0 +1,109 @@
+{
+ "schema": "model-registry/1",
+ "items": [
+  {
+   "kind": "ids_unet",
+   "path": "config/groups/jue/unet.npz",
+   "size": 1034124,
+   "sha256": "ec9e2983c8ffb3f1ab5040fb5481fafeb5fe00cfb058f89284be808274829a19",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "ids_unet",
+   "path": "config/groups/yi_560/unet.npz",
+   "size": 1034352,
+   "sha256": "d2c32a4b87ca2e86c726ba25d9569e44d0a09261bafa264239f0d45b949fd7c7",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_cnn",
+   "path": "models/glyph_cnn_r4/best.pt",
+   "size": 19677074,
+   "sha256": "266ad5286dffe2f9becc49e5f9f81ccbe3fd572bb66fdeaa311d91b7409fd8ec",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "glyph_cnn",
+   "path": "models/glyph_cnn_r5/best.pt",
+   "size": 19674706,
+   "sha256": "d2ce8bab0fd0e6a7c599ce49937d6050e5e24ce8fcc4ed9204c577f8d3cc883f",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "pagetype",
+   "path": "models/pagetype/pagetype_v1.joblib",
+   "size": 57633,
+   "sha256": "f44043ef255116c8675cca3ca63fee745d79b4686569eaf07587df72f6c3e752",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "pagetype",
+   "path": "models/pagetype/pagetype_v1.json",
+   "size": 1273,
+   "sha256": "bb57d4206db450c3f89d67c2aaf0f19f8f9bc5b84191dbf28785027e51093e4b",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "partition_unet",
+   "path": "models/partition_unet_v2/model.pt",
+   "size": 11099098,
+   "sha256": "938f2e20f7cb3e4485dda82f58b71021e4ddc9427de34c99972a1ffcc54ca48f",
+   "level": "global",
+   "owner": "global"
+  },
+  {
+   "kind": "rr_clf",
+   "path": "models/rr_clf/forest.npz",
+   "size": 324006,
+   "sha256": "6c5c7916884efa72e741ebfc7e15fc072b5a561610a96ec6760a7d778cab3c4b",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "rr_clf",
+   "path": "models/rr_clf/meta.json",
+   "size": 418,
+   "sha256": "f38471bac67b591e6030183efac89a261a07eac750967f93055693d3cc202382",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "shadow_gate",
+   "path": "models/shadow_admit/shadow_gate_v1.joblib",
+   "size": 116320,
+   "sha256": "7278137141d108520db4a542c2bf51a4a99887945394132e4e2d5a9aa569c881",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "shadow_gate",
+   "path": "models/shadow_admit/shadow_gate_v1.json",
+   "size": 954,
+   "sha256": "4fa64cf4dd7c4833ec64f6008d814fc645ff568c63ecbbc8dc8972720c80c61e",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "shadow_gate",
+   "path": "models/shadow_admit/shadow_gate_v2.joblib",
+   "size": 188775,
+   "sha256": "f4c6f41e528c06e6a79c8d2c7ce67c24bcbeb9ad73db3ccb9196bf779fc3d1bd",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  },
+  {
+   "kind": "shadow_gate",
+   "path": "models/shadow_admit/shadow_gate_v2.json",
+   "size": 917,
+   "sha256": "aca920f9d644240d03b4cae4f359bd73fadba43ab0fed8caad36d15fa4b15077",
+   "level": "book",
+   "owner": "96mid1ogzk"
+  }
+ ]
+}

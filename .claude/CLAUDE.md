@@ -35,7 +35,7 @@
 - **分支**（2026-10-20 起，`doc/版本号规矩.md` 第三节）：PR 一律投 **`dev`**；发版时从 dev 切 `rc/vX.Y.Z` 测试，rc 只收本版修复（修复合回 dev），测完 rc 用 merge commit 合进 main，**在 main 的合并提交上打 `vX.Y.Z` 才算发完**，打完跑 `python scripts/check_release_tags.py` 核对。main 不直接收 PR。合之前跑 `python scripts/check_rc_target.py <目标分支>`。
 - **产物指纹**：Step 模块和它的 `code_deps` 一改，各书产物就判过期。动这些文件前想清楚是否值得让各书重算。
   纯提速、产物逐字节不变的改动，用 `scripts/code_equiv.py check` 证明后登记进 `core/code_equiv.py`，不让各书过期（见该模块头）。
-- **测试只依赖本仓库、只依赖 `tests/` 下冻结的数据**；单元测试自己造数据（`tests/helpers.py`），对真书数据的质量断言归评测（`guji eval run`），不进测试。细则见 `tests/conftest.py` 模块头、`tests/fixtures/README.md`；`tests/test_suite_hygiene.py` 是守卫。
+- **测试只依赖本仓库、只依赖 `tests/` 下冻结的数据**（例外：cv 表里按 sha 钉死的 R2 文件，模型／字体／底库语料，测试开跑前缺了自动取回，用户 11-04 定）；单元测试自己造数据（`tests/helpers.py`），对真书数据的质量断言归评测（`guji eval run`），不进测试。细则见 `tests/conftest.py` 模块头、`tests/fixtures/README.md`；`tests/test_suite_hygiene.py` 是守卫。
 - 跑全量：`.venv/Scripts/python -m pytest tests/ -s -p no:cacheprovider -n auto`（`-s` 必须带；`-n auto` 用 pytest-xdist 按核数并行，随 `[dev]` 装；Windows 下要结果就加 `--junitxml=…` 再解析）。2026-10-25 实测（装 torch、4 核）：原先串行 11 分钟，Step1–4 复用后串行 6 分钟，并行 2 分 23 秒。单跑几个文件不用 `-n`，起 worker 反而慢。
 - 新测试要能并行：不往模块级 `os.environ` 写东西不还原、不写进程外的共享路径；要从原图跑 Step1–4 用 `helpers.run_keben_from_raw`（同进程同输入只真跑一次）。
 - 装了 torch 才跑的约 7 条，装了 `rapidocr-onnxruntime` 才跑的 3 条，缺件是跳过不是失败。

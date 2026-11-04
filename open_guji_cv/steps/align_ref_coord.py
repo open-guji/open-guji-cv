@@ -281,6 +281,12 @@ class PageMap:
     runner_up: int = 0
     col_line: dict[int, int] = field(default_factory=dict)
     note: str = ""
+    past_leaf: list[int] = field(default_factory=list)  # 按半叶头定位时，整理本这半叶已经没有行的列
+
+
+#: 坐标对位退回原因：按半叶头（邻页定位／页钉位）定位，这一列已过了整理本这半叶的最后一行——
+#: 整理本说这一列没有字（卷末页「…皆附存目」之后、印「乾隆御覽之寶」压着的空栏）。seed_admit 认这句。
+COORD_PAST_LEAF = "整理本这半叶没有这一列"
 
 
 def map_columns(carriers: list[tuple[int, str]], lines: list[RefLine],
@@ -327,6 +333,16 @@ def map_columns(carriers: list[tuple[int, str]], lines: list[RefLine],
     return pm
 
 
+#: 圈号格（`coord_relaxed`）：字形库首位是这几个、且相似度过这条线
+CIRCLE_CHARS = "○◯〇"
+CIRCLE_MIN_COV = 0.9
+
+
+def _is_circle(r) -> bool:
+    c = r.candidates[0] if r.candidates else None
+    return bool(c) and c[0] in CIRCLE_CHARS and float(c[1]) >= CIRCLE_MIN_COV
+
+
 # ── 列内按坐标配字 ──────────────────────────────────────────────────────
 @dataclass
 class CellUnit:
@@ -336,6 +352,7 @@ class CellUnit:
     g: float                  # 几何行号（1 起）
     ids: dict[str, str]       # {"": id} 或 {"a": id, "b": id}
     carrier: dict[str, str]   # 同上，载体字
+    sym: bool = False         # 圈号「○」格（`coord_relaxed`）：刻本有、整理本不录，占格位不占字位
 
 
 @dataclass
@@ -354,6 +371,91 @@ def _agree(u: CellUnit, ref: Unit) -> int:
     if u.kind == "c":
         return int(u.carrier.get("", "") == ref.a)
     return int(u.carrier.get("a", "") == ref.a) + int(bool(ref.b) and u.carrier.get("b", "") == ref.b)
+
+
+def _recs(units: list[CellUnit], pairs: dict[int, Unit]) -> list[tuple[str, int, str | None, str, float]]:
+    """格单元 + {单元下标: 整理本单元} → `ColumnCoord.recs`（没配上的格记空格位）。"""
+    recs: list[tuple[str, int, str | None, str, float]] = []
+    for i, u in enumerate(units):
+        ref = pairs.get(i)
+        if u.kind == "c":
+            recs.append((u.ids[""], u.slot, None, ref.a if ref else "", u.g))
+        else:
+            for sub in ("a", "b"):
+                if sub in u.ids:
+                    ch = (ref.a if sub == "a" else ref.b) if ref else ""
+                    recs.append((u.ids[sub], u.slot, sub, ch, u.g))
+    return recs
+
+
+def _kind_ok(u: CellUnit, ref: Unit) -> bool:
+    """`coord_relaxed` 按次序配时的类型对应：同类，或整理本只有右行的夹注（`[臣|]`）配正文格。"""
+    return u.kind == ref.kind or (u.kind == "c" and ref.kind == "n" and not ref.b)
+
+
+def _coord_relaxed(units: list[CellUnit], text: list[tuple[int, Unit]],
+                   b_hint: float | None, order_ok: bool) -> ColumnCoord | None:
+    """`coord_relaxed`（2026-10-31，史記文淵閣本）：几何配法之外的三条补路，返回 None＝照走原配法。
+
+    1. **圈号格**：考證、注文里的「○」刻本占一格，daizhige 不录（03:220 列 1「簡公○事在」），
+       其后字位整体错一格。圈号格（`CellUnit.sym`）不配字，其后的字位格位各加一，再按几何配；
+    2. **按格号配**：几何行号拟不上（目录页、卷端题列字距不匀，period 估偏）而 Step3 的格号
+       正好等于整理本格位（差一个常数，含 0）时，按格号配——格号本来就是网格量化后的行号；
+    3. **按次序配**（只限职名分支切的列，`order_ok`）：职名页按整理本字数重切，格数与整理本字数
+       相等、类型逐个对得上，就按次序配；字距是排版疏密，不是格位。
+    配上的列照旧过 `_coord_conflict` 与错位闸。"""
+    syms = [u for u in units if u.sym]
+    body = [u for u in units if not u.sym]
+    L = len(text)
+    if syms and len(body) >= L:
+        pos = [p for p, _u in text]
+        kinds = [u.kind for _p, u in text]
+        cands = []
+        for j in range(0, len(body) - L + 1):
+            run = body[j:j + L]
+            if [u.kind for u in run] != kinds:
+                continue
+            shp = [p + sum(1 for s in syms if s.g < u.g) for p, u in zip(pos, run)]
+            a, b = _fit(shp, [u.g for u in run])
+            if a is None or max(abs(u.g - (a * p + b)) for u, p in zip(run, shp)) > COORD_MAX_RESID:
+                continue
+            extras = body[:j] + body[j + L:]
+            if any(min(abs(u.g - (a * p + b)) for p in shp) <= COORD_OUTSIDE_MARGIN * a for u in extras):
+                continue
+            cands.append((sum(_agree(u, r) for u, (_p, r) in zip(run, text)), j, b))
+        if len(cands) == 1 or (len(cands) > 1 and sorted(c[0] for c in cands)[-1] > sorted(c[0] for c in cands)[-2]):
+            agree, j, b = max(cands, key=lambda c: c[0])
+            idx = {id(u): k for k, u in enumerate(units)}
+            pairs = {idx[id(body[j + k])]: r for k, (_p, r) in enumerate(text)}
+            return ColumnCoord(True, recs=_recs(units, pairs), agree=agree, b=b, unique=len(cands) == 1)
+    if syms:
+        return None
+    # 按格号配：整理本格位 + 常数 ＝ Step3 格号，逐个类型对得上
+    if len(units) >= L:
+        pos = [p for p, _u in text]
+        kinds = [u.kind for _p, u in text]
+        hits = []
+        for j in range(0, len(units) - L + 1):
+            run = units[j:j + L]
+            if [u.kind for u in run] != kinds:
+                continue
+            d = {u.slot - p for u, p in zip(run, pos)}
+            if len(d) != 1:
+                continue
+            k = d.pop()
+            span = {p + k for p in pos}
+            extras = units[:j] + units[j + L:]
+            if any(min(abs(u.slot - s) for s in span) < 1 for u in extras):
+                continue
+            hits.append((sum(_agree(u, r) for u, (_p, r) in zip(run, text)), j, k))
+        if len(hits) == 1:
+            agree, j, _k = hits[0]
+            return ColumnCoord(True, recs=_recs(units, {j + i: r for i, (_p, r) in enumerate(text)}),
+                               agree=agree, unique=True)
+    if order_ok and len(units) == L and all(_kind_ok(u, r) for u, (_p, r) in zip(units, text)):
+        agree = sum(_agree(u, r) for u, (_p, r) in zip(units, text))
+        return ColumnCoord(True, recs=_recs(units, {i: r for i, (_p, r) in enumerate(text)}), agree=agree)
+    return None
 
 
 COORD_SLOPE = (0.9, 1.1)      # 列内几何行距 / period 的允许范围
@@ -478,7 +580,8 @@ def _fit_f(pos: list[float], g: list[float]) -> tuple[float | None, float]:
 
 
 def coord_column(units: list[CellUnit], line: RefLine,
-                 b_hint: float | None = None) -> ColumnCoord:
+                 b_hint: float | None = None, relaxed: bool = False,
+                 order_ok: bool = False) -> ColumnCoord:
     """列内按坐标配字。整理本字位的**相对格位**（光盘版＝连续序号；逐列本＝daizhige
     格位，run 之间的空格位也算）决定每个字该落在哪一行；格按几何行号 `g` 排好，取一段
     与整理本字位数相同、类型逐个对得上的连续格，要求 `g − 格位` 近似常数（残差 ≤
@@ -491,6 +594,10 @@ def coord_column(units: list[CellUnit], line: RefLine,
     L = len(text)
     if L == 0:
         return ColumnCoord(False, "整理本行为空")
+    if relaxed:
+        r = _coord_relaxed(units, text, b_hint, order_ok)
+        if r is not None:
+            return r
     if len(units) < L:
         return ColumnCoord(False, f"格数少于整理本字数（{len(units)} < {L}）")
     kinds = [u.kind for _p, u in text]
@@ -544,8 +651,205 @@ def coord_column(units: list[CellUnit], line: RefLine,
     return ColumnCoord(True, recs=recs, agree=agree, b=b, unique=len(cands) == 1)
 
 
+COORD_DP_MIN_AGREE = 6        # `coord_dp`：载体字与整理本字吻合的最低数
+COORD_DP_MIN_FRAC = 0.5       # `coord_dp`：吻合数 / 整理本字数 的下限
+COORD_DP_TOPK = 5             # `coord_dp`：整理本字要在这一格库匹配前几名候选里（或载体字相同）才给
+COORD_DP_MAX_SKIP = 2         # `coord_dp`：格或整理本单元最多各跳过几个（合计）
+
+
+def coord_dp(units: list[CellUnit], text: list[tuple[int, Unit]]) -> ColumnCoord | None:
+    """`coord_dp`（2026-11-02，史記文淵閣本 B 类「对位缺格」）：几何配法不成立时的**载体字**保底配法。
+
+    起因：史記 01–10 册待审里 886 格没有整理本字，归因后 55% 是整列配不上——格数比整理本字数少一
+    （并格/漏切）、多出几格（印章假格）、夹注右/左行分法与整理本差一个单元、或被「与现役对位冲突」整列
+    退回（载体字其实与坐标字大面积吻合，是现役 difflib 在个别格上错）。这一列的格序列与整理本单元序列
+    做**单调对齐**（格对单元要同类，可跳过至多 `COORD_DP_MAX_SKIP` 个格或单元），分数＝载体字与整理本字
+    的吻合数；吻合 ≥ `COORD_DP_MIN_AGREE` 且 ≥ 整理本字数的 `COORD_DP_MIN_FRAC` 才认。
+    只给配上的格字，没配上的格不进 `recs`（不记空格位：它们的字在邻列，不是刻本空格）。
+    载体字是独立证据，所以不再过「与现役对位冲突」闸（冲突格仍由调用方记进 `coord_conflict_ids`）。"""
+    n, m = len(units), len(text)
+    if not n or not m:
+        return None
+    K = COORD_DP_MAX_SKIP
+    NEG = -10 ** 6
+    # f[i][j][k]：units[i:]、text[j:] 已用 k 次跳过时的最大吻合数；(分数, 动作) 回溯
+    f = [[[NEG] * (K + 1) for _ in range(m + 1)] for _ in range(n + 1)]
+    act: dict[tuple[int, int, int], str] = {}
+    for i in range(n, -1, -1):
+        for j in range(m, -1, -1):
+            for k in range(K, -1, -1):
+                if i == n or j == m:
+                    rem = (n - i) + (m - j)
+                    if k + rem <= K:
+                        f[i][j][k] = 0
+                        act[(i, j, k)] = "end"
+                    continue
+                best, a = NEG, ""
+                if _kind_ok(units[i], text[j][1]):
+                    v = f[i + 1][j + 1][k]
+                    if v > NEG:
+                        v += _agree(units[i], text[j][1])
+                        if v > best:
+                            best, a = v, "pair"
+                if k < K:
+                    for da, db, nm in ((1, 0, "skip_u"), (0, 1, "skip_t")):
+                        v = f[i + da][j + db][k + 1]
+                        if v > best:
+                            best, a = v, nm
+                f[i][j][k] = best
+                if a:
+                    act[(i, j, k)] = a
+    agree = f[0][0][0]
+    nref = sum(2 if u.b else 1 for _p, u in text)
+    if agree < COORD_DP_MIN_AGREE or agree < COORD_DP_MIN_FRAC * nref:
+        return None
+    pairs: dict[int, Unit] = {}
+    i = j = k = 0
+    while (i, j, k) in act and act[(i, j, k)] != "end":
+        a = act[(i, j, k)]
+        if a == "pair":
+            pairs[i] = text[j][1]
+            i, j = i + 1, j + 1
+        elif a == "skip_u":
+            i, k = i + 1, k + 1
+        else:
+            j, k = j + 1, k + 1
+    recs: list[tuple[str, int, str | None, str, float]] = []
+    for idx, u in enumerate(units):
+        ref = pairs.get(idx)
+        if ref is None:
+            continue
+        if u.kind == "c":
+            recs.append((u.ids[""], u.slot, None, ref.a, u.g))
+        else:
+            for sub in ("a", "b"):
+                if sub in u.ids:
+                    recs.append((u.ids[sub], u.slot, sub, ref.a if sub == "a" else ref.b, u.g))
+    if not recs:
+        return None
+    return ColumnCoord(True, note="dp", recs=recs, agree=agree)
+
+
+#: `coord_dp_flat`（2026-11-03，史記文淵閣本）：按字序单调对齐的下限与跳过上限
+COORD_FLAT_MIN_AGREE = 4      # 载体字与整理本字相同的最少格数
+COORD_FLAT_MIN_FRAC = 0.5     # 载体字相同格数 / 整理本字数 的下限
+COORD_FLAT_SKIP_FRAC = 0.4    # 格或整理本字跳过的合计上限：两边字数较大者的这个比例（至少 2）
+COORD_FLAT_GAP = 0.05         # 每跳过一个格或字的代价（只为在打平时少跳）
+
+
+def _flat_cells(units: list[CellUnit]) -> list[tuple[str, int, str | None, str]]:
+    """格单元 → 阅读顺序的逐字格 [(id, slot, sub, 载体字)]：连着的夹注段先右行（a）自上而下、再左行（b）。"""
+    out: list[tuple[str, int, str | None, str]] = []
+    seg: list[CellUnit] = []
+
+    def flush():
+        for sub in ("a", "b"):
+            out.extend((u.ids[sub], u.slot, sub, u.carrier.get(sub, "")) for u in seg if sub in u.ids)
+        seg.clear()
+    for u in units:
+        if u.kind == "c":
+            flush()
+            out.append((u.ids[""], u.slot, None, u.carrier.get("", "")))
+        else:
+            seg.append(u)
+    flush()
+    return out
+
+
+def _flat_text(text: list[tuple[int, Unit]]) -> list[str]:
+    """整理本单元 → 阅读顺序的逐字表：连着的夹注段先右行全部、再左行全部（与 `_flat_cells` 同序）。"""
+    out: list[str] = []
+    seg: list[Unit] = []
+
+    def flush():
+        out.extend(u.a for u in seg if u.a)
+        out.extend(u.b for u in seg if u.b)
+        seg.clear()
+    for _p, u in text:
+        if u.kind == "c":
+            flush()
+            out.append(u.a)
+        elif u.kind == "n":
+            seg.append(u)
+    flush()
+    return out
+
+
+def coord_dp_flat(units: list[CellUnit], text: list[tuple[int, Unit]],
+                  cand_top: dict[str, tuple[str, ...]] | None = None) -> ColumnCoord | None:
+    """`coord_dp_flat`（2026-11-03，史記文淵閣本）：`coord_dp` 也配不上的列，按**逐字字序**单调对齐。
+
+    起因（第 4 轮待审 S／D 类）：①卷首叶题署行字距拉开、大印压在空格位上，印泥切出的假格多过 `coord_dp`
+    的两次跳过（02:2:3 十六格对八字）；②写本夹注右行比整理本「|」多写或少写一两字，按「一行一单元」配
+    a/b 整段错开（05:30:3）。这里把一列拆成逐字序列（夹注段先右行、再左行，两边同序），格与字同序对齐，
+    可跳过两边字数较大者 `COORD_FLAT_SKIP_FRAC` 以内的格或字；分＝载体字相同记 1、整理本字在这一格库匹配前几名
+    （`cand_top`）记 0.5，每跳一步扣 `COORD_FLAT_GAP`。载体字相同的格 ≥ `COORD_FLAT_MIN_AGREE` 且 ≥ 整理本字数的
+    `COORD_FLAT_MIN_FRAC` 才认；只给有字形证据的格（载体字相同或在前几名），其余格不进 `recs`。"""
+    cells = _flat_cells(units)
+    chars = _flat_text(text)
+    n, m = len(cells), len(chars)
+    if not n or not m:
+        return None
+    top = cand_top or {}
+    K = max(2, int(COORD_FLAT_SKIP_FRAC * max(n, m)))
+    if abs(n - m) > K:
+        return None
+
+    def score(i: int, j: int) -> float:
+        cid, _sl, _sub, car = cells[i]
+        if car and car == chars[j]:
+            return 1.0
+        return 0.5 if chars[j] in top.get(cid, ()) else 0.0
+    NEG = -1e9
+    # f[i][j]：cells[i:]、chars[j:] 的最大分；跳过数另记（g），超过 K 的路不走
+    f = [[NEG] * (m + 1) for _ in range(n + 1)]
+    g = [[0] * (m + 1) for _ in range(n + 1)]
+    act: dict[tuple[int, int], str] = {}
+    for i in range(n, -1, -1):
+        for j in range(m, -1, -1):
+            if i == n or j == m:
+                rem = (n - i) + (m - j)
+                if rem <= K:
+                    f[i][j], g[i][j] = -COORD_FLAT_GAP * rem, rem
+                    act[(i, j)] = "end"
+                continue
+            best, bg, a = NEG, 0, ""
+            if f[i + 1][j + 1] > NEG:
+                best, bg, a = f[i + 1][j + 1] + score(i, j), g[i + 1][j + 1], "pair"
+            for di, dj, nm in ((1, 0, "skip_u"), (0, 1, "skip_t")):
+                v, k = f[i + di][j + dj], g[i + di][j + dj] + 1
+                if v > NEG and k <= K and v - COORD_FLAT_GAP > best:
+                    best, bg, a = v - COORD_FLAT_GAP, k, nm
+            f[i][j], g[i][j] = best, bg
+            if a:
+                act[(i, j)] = a
+    if f[0][0] <= NEG / 2:
+        return None
+    pairs: list[tuple[int, int]] = []
+    i = j = 0
+    while (i, j) in act and act[(i, j)] != "end":
+        a = act[(i, j)]
+        if a == "pair":
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif a == "skip_u":
+            i += 1
+        else:
+            j += 1
+    strict = sum(1 for i, j in pairs if cells[i][3] and cells[i][3] == chars[j])
+    if strict < COORD_FLAT_MIN_AGREE or strict < COORD_FLAT_MIN_FRAC * m:
+        return None
+    # 给几何行号：取 units 里同 id 的 g
+    gmap = {iid: u.g for u in units for iid in u.ids.values()}
+    recs = [(cells[i][0], cells[i][1], cells[i][2], chars[j], gmap.get(cells[i][0], 0.0))
+            for i, j in pairs if score(i, j) > 0]
+    if not recs:
+        return None
+    return ColumnCoord(True, note="dp_flat", recs=recs, agree=strict)
+
+
 def column_units(book: str, page: int, col: int, match_col, cells_col,
-                 carrier_of) -> list[CellUnit]:
+                 carrier_of, symbols: bool = False) -> list[CellUnit]:
     """`glyph_match` 的一列（字格）+ `cells` 的一列（几何）→ 阅读顺序的格单元。
 
     只收 `glyph_match` 里有的格（Step3 判 blank 的格不在里面）；几何取 `cells`
@@ -572,7 +876,8 @@ def column_units(book: str, page: int, col: int, match_col, cells_col,
             u.ids[sub] = r.id
             u.carrier[sub] = carrier_of(r.id) or ""
         else:
-            by_slot[r.slot] = CellUnit("c", r.slot, g, {"": r.id}, {"": carrier_of(r.id) or ""})
+            by_slot[r.slot] = CellUnit("c", r.slot, g, {"": r.id}, {"": carrier_of(r.id) or ""},
+                                       sym=symbols and _is_circle(r))
             order.append(r.slot)
     units = [by_slot[s] for s in order]
     units.sort(key=lambda u: u.g)

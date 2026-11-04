@@ -65,6 +65,7 @@
    情况语气弱，是"已按规则处理，标注供检查"。
 """
 from __future__ import annotations
+from ..products.alt_view import read_view as _read_view   # alt_cut：读挑中的那套切法
 
 import re
 from dataclasses import dataclass
@@ -149,7 +150,7 @@ def _column_last_slot(store: ProductStore, book: str, page: int, col: int) -> in
 
 def _column_body_slots(store: ProductStore, book: str, page: int, col: int) -> int | None:
     """这一列的正文格总数（`ColumnCells.n_body_slots`）。"""
-    cells: PageCells | None = store.read(book, CELLS_STEP, page_key(page), CELLS_KIND)  # type: ignore[assignment]
+    cells: PageCells | None = _read_view(store, book, CELLS_STEP, page_key(page), CELLS_KIND)  # type: ignore[assignment]
     if cells is None:
         raise ProductMissing(f"{book} 第 {page} 页没有 {CELLS_STEP} 产物（先跑到 Step3）")
     col_cells = next((c for c in cells.columns if c.col == col), None)

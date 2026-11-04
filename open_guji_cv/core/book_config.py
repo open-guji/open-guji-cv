@@ -20,11 +20,13 @@ OVERRIDE_ENV = "GUJI_BOOK_OVERRIDE"
 
 #: 身份与图源：只能写在册 yaml 里，基础配置、运行覆盖都不许写
 IDENTITY_KEYS = frozenset({"id", "title", "raw_dir", "raw_pattern", "pages", "sets", "freeze"})
+#: 书 id、册序（`core/volume_id.py`）：书 id 写在基础配置、册序写在册 yaml，但都是身份，运行覆盖不许改
+VOLUME_ID_KEYS = frozenset({"book_id", "volume", "volume_width", "chapter_width"})
 #: 实测的版式先验：换书必须重标，不许写进基础配置（运行覆盖可以，做实验用）
 MEASURED_KEYS = frozenset({"bottom_gap", "period_prior", "frame_height", "col_pitch", "outer_shift",
                            "outer_gap", "preclean", "page_split", "dev_set", "layout_hints"})
 FORBIDDEN_IN_DEFAULTS = IDENTITY_KEYS | MEASURED_KEYS
-FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS
+FORBIDDEN_IN_OVERRIDE = IDENTITY_KEYS | VOLUME_ID_KEYS
 
 
 class BookConfigError(ValueError):
@@ -77,8 +79,27 @@ def run_override() -> dict:
         raise BookConfigError("--override 要是 JSON 对象，如 {\"corpus\": 23}")
     bad = sorted(set(d) & FORBIDDEN_IN_OVERRIDE)
     if bad:
-        raise BookConfigError(f"--override 不许改 {', '.join(bad)}（身份与图源只能改册 yaml）")
+        raise BookConfigError(f"--override 不许改 {', '.join(bad)}（身份、图源、书 id 与册序只能改册配置）")
     return d
+
+
+def merge_override_env(raw: str) -> str:
+    """把 `--override` 的 JSON 叠在本进程已有的 `GUJI_BOOK_OVERRIDE` 上（同键后者胜，`params` 按步骤再叠一层），
+    返回合并后的 JSON。已有的覆盖多半是准备脚本记的改值（rerun_prep.sh：corpus／glyph_pin／cv_version）。"""
+    try:
+        new = json.loads(raw)
+    except ValueError as e:
+        raise BookConfigError(f"--override 不是合法 JSON：{e}") from None
+    if not isinstance(new, dict):
+        raise BookConfigError("--override 要是 JSON 对象，如 {\"corpus\": 23}")
+    old = run_override()
+    out = {**old, **new}
+    if isinstance(old.get("params"), dict) and isinstance(new.get("params"), dict):
+        ps = {sid: dict(kv) for sid, kv in old["params"].items()}
+        for sid, kv in new["params"].items():
+            ps[sid] = {**ps.get(sid, {}), **kv} if isinstance(kv, dict) and isinstance(ps.get(sid), dict) else kv
+        out["params"] = ps
+    return json.dumps(out, ensure_ascii=False)
 
 
 def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, dict]]:
@@ -113,6 +134,29 @@ def run_override_params() -> dict[str, dict]:
     if not isinstance(p, dict) or any(not isinstance(v, dict) for v in p.values()):
         raise BookConfigError("--override 的 params 要是 {step_id: {字段: 值}}")
     return p
+
+
+def params_provenance(book_yaml: Path, pipeline_params: dict | None = None,
+                      base_layers: list[tuple[str, dict]] | None = None) -> dict[str, tuple[object, str]]:
+    """`params:` 逐字段的生效值与来源层：`{"<step>.<字段>": (值, 层名)}`，给 `guji book show --effective` 用。
+
+    层从低到高：管线 yaml < 套书缺省（`base_layers`，`core/pipeline.base_param_layers` 给；不给就只算
+    `pipeline_params` 一层）< 基础配置 < 册 yaml < 运行覆盖，与 `Engine.__init__` 的合并一致；
+    某层写 `null` = 去掉下层的值（回 Step 默认，不列出）。不含 Step 默认值（没列出的字段就是默认）。"""
+    out: dict[str, tuple[object, str]] = {}
+    base = base_layers if base_layers is not None else [("管线 yaml", pipeline_params or {})]
+    ls = [(name, {"params": pp or {}}) for name, pp in base] + layers(book_yaml)
+    for name, layer in ls:
+        for sid, kv in (layer.get("params") or {}).items():
+            if not isinstance(kv, dict):
+                continue
+            for k, v in kv.items():
+                key = f"{sid}.{k}"
+                if v is None:
+                    out.pop(key, None)
+                else:
+                    out[key] = (v, name)
+    return dict(sorted(out.items()))
 
 
 def provenance(book_yaml: Path) -> dict[str, str]:

@@ -390,6 +390,9 @@ def test_push_refuses_dev_pinned_book(two_level):
     book, data, _ = two_level
     (data / "books").mkdir()
     (data / "books" / "vol01.yaml").write_text("id: vol01\ncorpus: 3\n", encoding="utf-8")
+    pp = corpus_pin.pins_path(book, "vol01")          # 总号 3 要在这册账里查得到，否则推库前也拦（11-03 unresolved_pins）
+    pp.parent.mkdir(parents=True, exist_ok=True)
+    pp.write_text('{"rows": [{"n": 3, "global": 1, "book": 1, "vol": null}]}', encoding="utf-8")
     assert corpus_pin.push_problems(book) == []
     (data / "books" / "vol02.yaml").write_text("id: vol02\ncorpus: 4\ncorpus_dev: true\n", encoding="utf-8")
     msg = corpus_pin.push_problems(book)
@@ -472,3 +475,46 @@ def test_migration_row_keeps_legacy_token_new_rows_use_content_hash(two_level):
     assert corpus_pin.corpus_token(book, 1, "vol01") == "corpus-v1"
     t2 = corpus_pin.corpus_token(book, 2, "vol01")
     assert t2.startswith("corpus-") and t2 != "corpus-v2"
+
+
+def test_upload_all_and_fetch_places_small_missing(tmp_path, monkeypatch):
+    """语料 global 层搬出 cv 的准备：upload --all 连小文件一起传；fetch 把本机缺的（不论大小）按 sha 取回原位。"""
+    from open_guji_cv.core import corpus_pin
+    from open_guji_cv.ops import corpus_pack as cp
+    repo = tmp_path / "repo"
+    (repo / "config" / "ids").mkdir(parents=True)
+    small = repo / "config" / "ids" / "ids.txt"
+    small.write_text("一\t一\n", encoding="utf-8")
+    monkeypatch.setattr(corpus_pin, "REPO_ROOT", repo)
+    ws = tmp_path / "ws"
+    ws.mkdir()
+    cp.build(ws)
+    assert cp.upload_blobs(ws, 1)["blobs"] == 0                       # 缺省只传大文件
+    plan = cp.upload_blobs(ws, 1, all_items=True)
+    assert plan["blobs"] == 1 and plan["local"] == 1
+    data = small.read_bytes()
+    sha = corpus_pin._sha256(small)
+    small.unlink()
+
+    class FakeCache:
+        def __init__(self):
+            self.root = tmp_path / "cache"
+
+        def path(self, s):
+            return self.root / s
+
+        def has(self, s):
+            return self.path(s).exists()
+
+        def ensure(self, src, shas, ext="png"):
+            self.root.mkdir(exist_ok=True)
+            for s in shas:
+                if s == sha:
+                    self.path(s).write_bytes(data)
+            return {"missing": [s for s in shas if s != sha]}
+
+    import open_guji_cv.datastore.client as dc
+    monkeypatch.setattr(dc, "BlobCache", FakeCache)
+    monkeypatch.setattr(dc, "WorkerSource", lambda: None)
+    r = cp.fetch_blobs(ws, 1)
+    assert r["placed"] == 1 and small.read_bytes() == data and r["not_in_r2"] == []

@@ -51,6 +51,12 @@ def patch_key(page: int, col: int, slot: int, sub: str = "") -> str:
     return f"p{page:04d}c{col:02d}s{slot}{sub}"
 
 
+def _resolved(book: str, key: str) -> str:
+    """row_segment `alt_cut` 换了备选切法的列，字块换备选键（`products.alt_view`）。"""
+    from ..products.alt_view import resolve_patch_key
+    return resolve_patch_key(book, key)
+
+
 def quad_bbox(quad) -> list[float] | None:
     if not quad:
         return None
@@ -107,7 +113,7 @@ def cell_anchor(key: str, store=None, cache=None, with_ctx: bool = True) -> dict
     rev = store.source_rev(book)          # 产物自己的页表来历，不取册 yaml（换图源 GUJI-748 §六）
     if rev is not None:
         a["source_rev"] = rev
-    path = (cache or ImageCache()).get(book, "char_patch", patch_key(page, col, slot, sub))
+    path = (cache or ImageCache()).get(book, "char_patch", _resolved(book, patch_key(page, col, slot, sub)))
     if path is not None:
         try:
             a["content_sha"] = store_patch(book, path)
@@ -173,7 +179,7 @@ def evidence_for(event, store=None, cache=None) -> dict | None:
         from ..report.slots import cells_step
         store = store or ProductStore()
         ev = _manifest_evidence(store, book, cells_step(book), page_key(page))
-        path = (cache or ImageCache()).get(book, "char_patch", patch_key(page, col, slot, sub))
+        path = (cache or ImageCache()).get(book, "char_patch", _resolved(book, patch_key(page, col, slot, sub)))
         if path is not None:
             fp = _gray_fp(path, FP_SIZE)
             if fp:

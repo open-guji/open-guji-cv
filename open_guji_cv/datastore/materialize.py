@@ -62,15 +62,17 @@ def _rows(src, tbl: str, ws: str, cols, **filters):
 
 def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,),
                 cache=None, bucket: str = "main", with_images: bool = True,
-                reuse: Callable[[str], Path | None] | None = None) -> dict:
+                reuse: Callable[[str], Path | None] | None = None, exclude: tuple[str, ...] = ()) -> dict:
     """把工作区 ``ws`` 里路径以 ``prefixes`` 之一开头的文件还原到 ``dest``（目录结构同工作区）。
+
+    ``exclude``：这些前缀下的文件不取（按需拉取，见 ``workcopy.pull`` 的 ``exclude``）。
 
     ``dest`` 下原有的同前缀目录先清空，保证不残留库里已经没有的文件。返回统计（``reused``＝用本机字节的文件数，
     ``fetched``＝向库要的文件数）。``reuse(相对路径)`` 给出本机现有的同路径文件（没有给 None）；
     只有整文件 sha256 与库里登记的相同才用，所以本机改过的文件照样从库里取。
     """
     dest = Path(dest)
-    sel = lambda p: any(p.startswith(x) for x in prefixes)
+    sel = lambda p: any(p.startswith(x) for x in prefixes) and not any(p.startswith(x) for x in exclude)
     files = {r["src_path"]: r for r in src.rows("source_files", ws) if sel(r["src_path"])}
     blobs = {tbl: {r["src_path"]: r["sha256"] for r in blob_rows(src, tbl, ws) if sel(r["src_path"])}
              for tbl in BLOB_TABLES} if with_images else {}
@@ -155,6 +157,43 @@ def materialize(src, ws: str, dest: str | Path, prefixes: tuple[str, ...] = (GS,
             "image_cache": img_stats, "missing_images": skipped, "bytes": sum(len(b) for b in texts.values())}
 
 
+#: 整文件表（files 等）按路径分批取，每批原文合计不超过这么多字节、不超过这么多个文件（2026-11-02）。
+#: files 表一行就是一整个文件：殿本线上单每份约 1.1 MB、字形库清单每份 3.4 MB，整表 512 行 180 MB。原先要的文件
+#: 超过 BY_PATH_MAX 就整表按 2000 行一页取，Worker 读挂（500）再减半重试——每试一次 Neon 都要把整页送一遍，
+#: 10-31 起一天出流量 48 GB 的大头就在这里。按路径、按字节分批，只取要的，也不会读挂。
+WHOLE_BATCH_BYTES = 8 * 1024 * 1024
+WHOLE_BATCH_FILES = 100
+
+
+def _whole_batches(need: list[str], files: dict) -> list[list[str]]:
+    out: list[list[str]] = []
+    cur: list[str] = []
+    size = 0
+    for p in sorted(need):
+        b = int(files[p].get("bytes") or 0)
+        if cur and (size + b > WHOLE_BATCH_BYTES or len(cur) >= WHOLE_BATCH_FILES):
+            out.append(cur)
+            cur, size = [], 0
+        cur.append(p)
+        size += b
+    if cur:
+        out.append(cur)
+    return out
+
+
+def _whole_rows(src, tbl: str, ws: str, cols, need: list[str], files: dict):
+    """整文件表只按路径取（分批，见 ``WHOLE_BATCH_BYTES``）；数据源不认按路径过滤（测试里的简易源）才整表取。"""
+    batches = _whole_batches(need, files)
+    try:
+        first = list(src.rows(tbl, ws, cols=cols, src_path=batches[0]))
+    except TypeError:
+        yield from _rows(src, tbl, ws, cols)
+        return
+    yield from first
+    for b in batches[1:]:
+        yield from src.rows(tbl, ws, cols=cols, src_path=b)
+
+
 def _texts(src, ws: str, files: dict, reuse) -> tuple[dict[str, bytes], int, int]:
     """``source_files`` 登记的文本文件逐个还原（本机同 sha 的直接用），整文件核 sha。返回 (文本, 复用数, 向库要的数)。"""
     by_tbl: dict[str, list[str]] = defaultdict(list)
@@ -184,8 +223,11 @@ def _texts(src, ws: str, files: dict, reuse) -> tuple[dict[str, bytes], int, int
         fetched += len(need)
         want = set(need)
         cols = WHOLE_COLS if tbl in WHOLE_TABLES else LINE_COLS
-        rows = (_rows(src, tbl, ws, cols, src_path=sorted(want)) if reuse is not None and len(want) <= BY_PATH_MAX
-                else _rows(src, tbl, ws, cols))
+        if tbl in WHOLE_TABLES:
+            rows = _whole_rows(src, tbl, ws, cols, need, files)
+        else:
+            rows = (_rows(src, tbl, ws, cols, src_path=sorted(want)) if reuse is not None and len(want) <= BY_PATH_MAX
+                    else _rows(src, tbl, ws, cols))
         if tbl in WHOLE_TABLES:
             for r in rows:
                 if r["src_path"] in want:

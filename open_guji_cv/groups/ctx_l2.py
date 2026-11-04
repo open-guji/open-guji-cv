@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 from functools import lru_cache
 from pathlib import Path
@@ -78,6 +79,10 @@ class Encoder:
         return res
 
 
+_ENC_WARNED: set = set()
+_log = logging.getLogger(__name__)
+
+
 @lru_cache(maxsize=4)
 def _encoder(name: str, revision: str | None) -> Encoder | None:
     try:
@@ -106,6 +111,12 @@ def judge(head: dict, left: str, right: str, members, encoder=None) -> GroupVerd
     `other_conf: high`（与 L3 表的「其他」同一口径，共字组联判认它）。"""
     enc = encoder if encoder is not None else _encoder(head["encoder"]["name"], head["encoder"].get("revision"))
     if enc is None:
+        # 2026-10-31：编码器加载失败时 CtxModel 弃权为 no_encoder，但后面的 CtxOnline 会覆盖掉这条理由，产物里看不出来。
+        # 这里大声报一次（模型名、进程），方便在日志里找。
+        name = head["encoder"]["name"]
+        if name not in _ENC_WARNED:
+            _ENC_WARNED.add(name)
+            _log.warning("文意 L2 编码器加载失败（%s）：本进程 ctx_l2 全部弃权 abstain:no_encoder；查网络（huggingface.co）或本地缓存", name)
         return GroupVerdict(None, why="abstain:no_encoder", via="ctx_l2")
     oth = (head.get("other") or {}).get("chars", "")
     chars = "".join(dict.fromkeys(head["feat_chars"] + oth + "".join(c for c in head["classes"] if len(c) == 1)))

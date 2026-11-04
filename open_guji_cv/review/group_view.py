@@ -28,7 +28,8 @@ def group_view(book: str, pages: str = "dev_set", edition: str = "",
     （落人审、`evidence.form.state == open`；首例确认用）。人裁过的格带 `human`。
     组按待审数、再按格数排。裁决走既有的 confirm 事件协议，这里只出数据。
     """
-    led = BookLedger.load_or_empty(edition or DEFAULT_EDITION)
+    from ..core.ledger_edition import edition_for
+    led = BookLedger.load_or_empty(edition or edition_for(book, DEFAULT_EDITION))
     if not len(led):
         raise NotFound("没有用字账——先跑 python scripts/build_book_variants.py")
     st = store or ProductStore()

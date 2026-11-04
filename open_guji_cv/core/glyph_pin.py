@@ -145,6 +145,51 @@ def pin_state(book, ws: Path | None = None) -> dict | None:
             "db_ok": bool(meta and meta.get("digest") == man["digest"])}
 
 
+def glyph_sources(book, ws: Path | None = None) -> dict:
+    """这册读的字形库从哪来（``guji book show --effective`` 报，2026-11-03）。
+
+    字形库分三份：字体字形（cv 仓 ``fonts/`` 重建）、本书字形库（中心库真源）、借来的字形库（``workspace.yaml``
+    的 ``glyph_lib.borrow``，在册配置五层之外、整个工作区共用）。借库本身没有版本号：没钉 ``glyph_pin`` 时用的是
+    本机 ``db pull`` 时拉到的那一版（只读副本旁 ``.borrowed-state.json`` 记 rev）；钉了且有快照时以快照为准，
+    快照清单里按 ``borrow:<名字>`` 登记了借库每个文件。返回::
+
+        {"borrow": [{"entry", "path", "local_rev"}], "pin": pin_state(...) 或 None,
+         "pinned_borrow": {名字: 文件数}（钉了有快照时）, "effective": "pinned"／"local"}
+    """
+    import json
+    if ws is None:
+        from .workspace import workspace_root
+        ws = workspace_root()
+    out: dict = {"borrow": [], "pin": None, "pinned_borrow": {}, "effective": "local"}
+    if ws is None:
+        return out
+    import yaml
+    from .workspace import resolve_borrow
+    y = Path(ws) / "workspace.yaml"                  # 同 datastore.workcopy.borrow_entries（pipeline 一侧不 import manager 一侧）
+    cfg = (yaml.safe_load(y.read_text(encoding="utf-8")) or {}) if y.exists() else {}
+    for e in [str(x) for x in ((cfg.get("glyph_lib") or {}).get("borrow") or [])]:
+        d = resolve_borrow(e, ws)
+        st = d.parent.parent / ".borrowed-state.json"   # 只读副本根（<root>/output/glyph_store 上两级），见 workcopy.BORROW_STATE
+        rev = None
+        try:
+            rev = json.loads(st.read_text(encoding="utf-8")).get("rev")
+        except (OSError, ValueError):
+            pass
+        out["borrow"].append({"entry": e, "path": str(d), "local_rev": rev})
+    ps = pin_state(book, ws)
+    out["pin"] = ps
+    if ps and ps.get("snapshot"):
+        out["effective"] = "pinned"
+        man = load_manifest(ws, ps["n"]) or {}
+        cnt: dict[str, int] = {}
+        for it in man.get("items") or []:
+            r = str(it.get("root") or "")
+            if r.startswith(BORROW_ROOT):
+                cnt[r[len(BORROW_ROOT):]] = cnt.get(r[len(BORROW_ROOT):], 0) + 1
+        out["pinned_borrow"] = cnt
+    return out
+
+
 class GlyphPinMissing(RuntimeError):
     """册钉了有快照的字形库版本，但本机没有那一版的库文件（或不是那个快照建的）：拒跑。"""
 

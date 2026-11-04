@@ -13,6 +13,7 @@
      `feedback/lists/proofing/<书>/<章>.pending.json`（数据目录里，`--pending` 可改，见 `release_gates.resolve_pending`）
   2d 整理本对不上的列（align_ref `coord_fallback`）逐列有交代（列交代单或重切清单）
      ——2c、2d 是用户 10-19 定的放行硬项（GUJI-624），粗校档、终校档都计，见 `ops/release_gates.py`
+  8b 字形库 edition 是书 ID（meta.book_edition 在，刻本字形 edition_tag 都等于它）
   8 字形库真源已提交（工作区 git 里 feedback/、output/glyph_store/ 没有未提交改动）
   10/11 lines.md 与 pages.json 自洽（给了 --export-dir 才查）
   12 Step9 产物在（reports/<册>/<册>.md 与对勘 html）
@@ -284,6 +285,21 @@ def _store_committed(ws: Path) -> dict:
                  f"工作区还没迁进中心库（`guji db migrate -w {ws}`）；字形库与人裁不再提交进工作区 git")
 
 
+def _glyph_edition(ws: Path) -> dict:
+    """8b 字形库 edition 是书 ID：有 meta.book_edition，刻本字形的 edition_tag 都等于它（2026-11-01 Sheldon 定）。"""
+    from ..clustering.glyph_ledger import connect_ro, edition_problems
+    db = Path(ws) / "output" / "glyph.db"
+    if not db.is_file():
+        return _item("8b", "字形库 edition 是书 ID", SKIP, "工作区没有 output/glyph.db")
+    c = connect_ro(db)
+    try:
+        bad = edition_problems(c)
+    finally:
+        c.close()
+    return _item("8b", "字形库 edition 是书 ID", FAIL if bad else PASS,
+                 "；".join(bad[:3]) if bad else "book_edition 已声明，刻本字形 edition 一致", bad[:20] or None)
+
+
 def _export(export_dir: Path, chapter: str | None) -> list[dict]:
     from ..formats.guji_format import _plain_chars
     ld = sorted(export_dir.glob("*.lines.md"))
@@ -355,6 +371,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
          [_item("2c", "□ 有去向", SKIP, "没给 --export-dir")]),
         ("2d", "整理本对不上的列有交代", lambda: [_fallback(book, pages, eng.store)]),
         ("8", "字形库与人裁已推进中心库", lambda: [_store_committed(ws)]),
+        ("8b", "字形库 edition 是书 ID", lambda: [_glyph_edition(ws)]),
         ("10", "lines.md／pages.json", lambda: _export(export_dir, chapter) if export_dir else
          [_item("10", "lines.md", SKIP, "没给 --export-dir"), _item("11", "pages.json", SKIP, "没给 --export-dir")]),
         ("12", "Step9 产物", lambda: [_step9(reports or ws / "reports", book)]),
@@ -367,7 +384,7 @@ def run(eng, ws: Path, pages, export_dir: Path | None = None, chapter: str | Non
         except Exception as e:  # noqa: BLE001 —— 一项算不出来不拖垮整张体检表
             items.append(_item(no, name, ERROR, f"{type(e).__name__}: {e}"))
     items.extend(_item(no, txt, MANUAL) for no, txt in MANUAL_ITEMS)
-    order = {s: i for i, s in enumerate(["1a", "1b", "1c", "2", "2b", "2c", "2d", "3", "4", "5", "6", "7", "8", "9",
+    order = {s: i for i, s in enumerate(["1a", "1b", "1c", "2", "2b", "2c", "2d", "3", "4", "5", "6", "7", "8", "8b", "9",
                                          "10", "11", "12", "13", "14"])}
     items.sort(key=lambda it: order.get(it["no"], 99))
     machine = [it for it in items if it["status"] not in (MANUAL, SKIP)]

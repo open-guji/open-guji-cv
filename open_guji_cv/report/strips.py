@@ -38,7 +38,8 @@ STRIP_KINDS = ("sub.confusable", "sub.other", "unreadable")
 def _load_cell(ctx: RunContext, page: int, col: int, slot: int, sub: str | None, h: int
               ) -> np.ndarray | None:
     """一个字位的图，缩到高 `h`。缓存没有就走 `ctx.materialize` 现算；两边都没有 → None。"""
-    key = cell_key(page, col, slot) + (sub or "")
+    from ..products.alt_view import resolve_patch_key
+    key = resolve_patch_key(ctx.book.id, cell_key(page, col, slot) + (sub or ""))   # alt_cut 换列
     try:
         path = ctx.materialize("char_patch", key)
     except Exception:

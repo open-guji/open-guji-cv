@@ -267,9 +267,9 @@ def cmd_db(args) -> None:
         return
 
     if args.action == "pull":
-        from .datastore.workcopy import pull
+        from .datastore.workcopy import pull, pull_exclude
         res = pull(src, ws_dir, cache=BlobCache(), bucket=args.bucket, force=args.force,
-                   glyph=None if args.no_rebuild else glyph_hooks(ws_dir))
+                   glyph=None if args.no_rebuild else glyph_hooks(ws_dir), exclude=pull_exclude(args.exclude or ()))
         res["worker_requests"] = src.requests
         if not args.no_rebuild:
             _ensure_glyph_pins(ws_dir, res)
@@ -332,6 +332,10 @@ def add_parser(sub) -> None:
     p.add_argument("--show", type=int, default=20, help="diff：每类最多列几个路径")
     p.add_argument("--no-rebuild", action="store_true", help="pull：不重建 glyph.db")
     p.add_argument("--force", action="store_true", help="pull：丢掉本地没推的改动")
+    p.add_argument("--exclude", action="append", default=None, metavar="前缀",
+                   help="pull：这个路径前缀下的文件不拉（可多次；`run` = 只跑 pipeline 用不着的那组，"
+                        "现为 feedback/lists/proofing/）。也读 GUJI_PULL_EXCLUDE（逗号分隔）。"
+                        "这样拉的是部分副本，之后 push／sync 拒绝")
     p.add_argument("--bucket", choices=["main", "exp"], default="main", help="pull/migrate：图从哪个桶拉")
     p.add_argument("--keep-local", action="store_true",
                    help="migrate：工作区里与库不一致的文件以本地为准，迁完成为待推改动")
@@ -347,3 +351,7 @@ def add_parser(sub) -> None:
     p.add_argument("--watch", type=int, default=None, metavar="秒", help="sync：每隔这么多秒做一轮，不退出")
     p.add_argument("--no-admit", action="store_true",
                    help="sync：不顺带把待落库的人裁落进字形库（缺省落；也可设 GUJI_AUTO_ADMIT=0）")
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"db": (add_parser, cmd_db)}

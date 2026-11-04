@@ -72,3 +72,21 @@ def test_order_and_verdict_chars():
     assert nc.verdict_to_char(card, "pick:姑") == "姑"
     assert nc.verdict_to_char(card, "pick:") is None
     assert all(nc.verdict_to_char(card, v) is None for v in ("seg", "unclear", "other"))
+
+
+def test_only_cells_keeps_cells_without_ref_and_groups_by_5b(tmp_path):
+    """按格清单出卡：整理本缺字（align_char 为空）的格也收，没有整理本字，按 5b 首选字分组。"""
+    _seed(tmp_path)
+    cards = nc.collect_book("b1", tmp_path, Counter(), 3, set(), Counter(), only={"b1:1:1:2", "b1:1:1:5"})
+    by = {c["id"]: c for c in cards}
+    assert by["b1:1:1:2"]["kind"] == "ref" and by["b1:1:1:2"]["grp"] == "㚲"
+    assert by["b1:1:1:5"]["kind"] == "cand" and by["b1:1:1:5"]["ref"] == ""
+    assert by["b1:1:1:5"]["ctx"].count("【") == 1
+
+
+def test_grouped_page_renders(tmp_path):
+    html = nc.build_html_grouped(
+        [{"id": "b1:1:1:2", "book": "b1", "page": 1, "ref": "㚲", "ref_n_lib": 0, "grp": "㚲", "kind": "ref",
+          "lib_top": "庫", "lib_cov": 0.9, "r5": ["㚲"], "ctx": "甲【㚲】乙", "doubts": [], "warn": False}],
+        {}, {})
+    assert "g-card" in html and "整组都对" in html

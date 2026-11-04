@@ -24,24 +24,20 @@ G=/opt/guji-venv/bin/guji; SEED=/opt/guji-cv-seed; GW=$HOME/guji-workspace; SUM=
 case "${GUJI_DATA_TOKEN:-}" in \$*) r=${GUJI_DATA_TOKEN#\$}; r=${r#\{}; r=${r%\}}
   if [ -n "${!r:-}" ]; then export GUJI_DATA_TOKEN=${!r}; else unset GUJI_DATA_TOKEN; fi;; esac
 [ -n "${GUJI_DATA_TOKEN:-}" ] || export GUJI_DATA_TOKEN=${GUJI_DATA_TOKEN_READ:?缺读令牌}
-# guji-manager（cv 拆出来的 manager，私有仓，快照里没有）：这个会话还没装就提示怎么装，不拦（目前 cv 自带的命令都还在；
-# cv 删掉已搬走的包之后会真的缺命令）。装法：add_repo open-guji/guji-manager → git clone --depth 1 → uv pip install --no-deps -e
-manager_hint() {
-  /opt/guji-venv/bin/python -c "import importlib.metadata as m; m.version('guji-manager')" >/dev/null 2>&1 && return 0
-  echo "ⓘ 本会话没装 guji-manager：add_repo open-guji/guji-manager，git clone --depth 1 https://github.com/open-guji/guji-manager ~/guji-manager，" >&2
-  echo "  uv pip install --python /opt/guji-venv/bin/python --no-deps -e ~/guji-manager（详见 ai-team 通用/经验-云端装guji-manager.md）" >&2
-}
+EM="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/ensure_manager.sh"   # guji-manager：开工装好并跟到 main
+if [ -f "$EM" ]; then . "$EM"; else ensure_manager() { :; }; fi
 t() { local s=$SECONDS n=$1; shift; echo "== $n"; "$@"; SUM+=("$(printf '%-14s %4ss' "$n" $((SECONDS-s)))"); }
 
 if [ -n "$CV" ]; then
   t cv git -C $SEED fetch -q --tags origin "$CV"
   git -C $SEED checkout -q "$CV" 2>/dev/null || git -C $SEED checkout -q FETCH_HEAD
 fi
-manager_hint
+ensure_manager
 echo "cv $(git -C $SEED rev-parse --short HEAD) $(git -C $SEED describe --tags 2>/dev/null || true)"
 if [ -n "$WSREPO" ]; then
   GW1=$HOME/${WSREPO##*/}
-  if [ -d $GW1/.git ] || t 克隆工作区 git clone -q --depth 1 https://github.com/$WSREPO $GW1; then
+  # 不能用 t 包：t 末尾记耗时的赋值总返回 0，克隆失败也当成功，退不回旧仓（10-31 #1203 起的验收单就这样失败）
+  if [ -d $GW1/.git ] || { echo "== 克隆工作区"; git clone -q --depth 1 https://github.com/$WSREPO $GW1; }; then
     GW=$GW1
     git -C $GW pull -q --ff-only origin main || true
     WS=$GW; export GUJI_WORKSPACE=$WS
@@ -59,14 +55,37 @@ fi
 echo "WS=$WS"
 # --reset 也要重建 glyph.db：上一次准备若在拉库前就失败（如克隆工作区失败），本机 glyph.db 还没建过，
 # --no-rebuild 会留下空库，建钉版库时报 no such table: sources（10-25 #3–#6）
+# 按需拉取（2026-11-02，中心库维护方案）：只跑 pipeline 用不着线上单（feedback/lists/proofing/，殿本 110 MB、常变），
+# 缺省不拉；这样拉的数据目录不能 push／sync。要整拉：GUJI_PULL_EXCLUDE=- 。旧版 cv 不认这个变量，照旧整拉。
+export GUJI_PULL_EXCLUDE=${GUJI_PULL_EXCLUDE-run}
 if [ $RESET = 1 ]; then t db-pull $G db pull -w "$WS" --force; else t db-pull $G db pull -w "$WS"; fi
 # 数据目录里的册配置（db pull 落的）。各书的册号会重名（vol01），按工作区自己的 .central.json 里的 ws id 找，不能取第一个
 WSID=$(sed -n 's/.*"ws": *"\([^"]*\)".*/\1/p' "$WS/.central.json" 2>/dev/null | head -n 1)
 Y=$(ls /root/.guji-data/main/${WSID:-*}/books/"$VOL".yaml | head -n 1)
-# 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里：
-# 改值 = 册 yaml 里有就替换、没有就追加（册 yaml 压过基础配置）；读值 = 读合并后的生效值，不能再 grep 册 yaml
-eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]),apply_override=False);v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
-setkey() { grep -q "^$1:" "$Y" && sed -i "s/^$1: .*/$1: $2/" "$Y" || echo "$1: $2" >> "$Y"; }
+# 文意 L2／L3 自检（2026-10-31，A24 查「ctx_l2 没挂上、裁定 no_api_key」）：venv 有没有 anthropic，密钥有没有，L2 小头落没落
+if /opt/guji-venv/bin/python -c "import anthropic" 2>/dev/null; then echo "自检 anthropic：可导入"
+else echo "⚠️ 自检 anthropic：装不上（llm 依赖缺）；有密钥时 L3 会按无密钥弃权，试着补装"
+  if command -v uv >/dev/null && uv pip install -q --python /opt/guji-venv/bin/python 'anthropic>=2.3'; then echo "  已补装 anthropic"
+  else echo "  补装失败，请看环境" >&2; fi
+fi
+echo "自检 GUJI_ANTHROPIC_API_KEY：$([ -n "${GUJI_ANTHROPIC_API_KEY:-}" ] && echo 已设 || echo 未设)"
+echo "自检 l2model（数据目录 config/groups/l2model）：$(ls /root/.guji-data/main/${WSID:-*}/config/groups/l2model/ 2>/dev/null | tr '\n' ' ' || true)"
+# 册配置分层后（config/book_defaults.yaml），corpus／glyph_pin／cv_version 可能不在册 yaml 里而在基础配置里。
+eff() { /opt/guji-venv/bin/python -c "import sys;from pathlib import Path;from open_guji_cv.core.book_config import effective_book_dict;d=effective_book_dict(Path(sys.argv[1]));v=d.get(sys.argv[2]);print('' if v is None else v)" "$Y" "$1"; }
+# 改值（2026-11-03）：装的 cv 认运行覆盖（core/book_config.py）就不动册 yaml，改值记进 GUJI_BOOK_OVERRIDE（JSON，
+# 叠在原有覆盖上），本脚本后面的步骤和开跑的 pipeline 都读它；旧 tag 不认，才退回改本机册 yaml（册 yaml 里有就替换、没有就追加）。
+# 读值 = 读合并后的生效值（含运行覆盖），不能再 grep 册 yaml
+# 从空覆盖起：上一册 source ~/.guji_env 留下的覆盖不能带进这一册（别的覆盖项开跑时用 pipeline --override 给）
+unset GUJI_BOOK_OVERRIDE
+if /opt/guji-venv/bin/python -c "from open_guji_cv.core.book_config import OVERRIDE_ENV" 2>/dev/null; then OVMODE=env; else OVMODE=sed; fi
+setkey() {
+  if [ $OVMODE = env ]; then
+    GUJI_BOOK_OVERRIDE=$(/opt/guji-venv/bin/python -c "import json,os,sys;d=json.loads(os.environ.get('GUJI_BOOK_OVERRIDE') or '{}');d[sys.argv[1]]=json.loads(sys.argv[2]);print(json.dumps(d,ensure_ascii=False))" "$1" "$2")
+    export GUJI_BOOK_OVERRIDE
+  else
+    grep -q "^$1:" "$Y" && sed -i "s/^$1: .*/$1: $2/" "$Y" || echo "$1: $2" >> "$Y"
+  fi
+}
 [ -n "$CORPUS" ] && setkey corpus "$CORPUS"
 [ -n "$GPIN" ] && setkey glyph_pin "$GPIN"
 # 册 yaml 钉了 cv_version、装的又不是它，pipeline 会拒跑（要 --allow-cv-mismatch）。给了 --cv 就是需求单点名的版本：
@@ -75,11 +94,13 @@ CVV=$(/opt/guji-venv/bin/python -c "from open_guji_cv.core.cv_version import des
 OLD=$(eff cv_version)
 if [ -n "$CV" ] && [ -n "$CVV" ] && [ "$OLD" != "$CVV" ]; then
   setkey cv_version "\"$CVV\""
-  echo "册 yaml cv_version ${OLD:-（未钉）} → $CVV（跟 --cv）"
+  echo "cv_version ${OLD:-（未钉）} → $CVV（跟 --cv；$([ $OVMODE = env ] && echo 记进运行覆盖 || echo 改本机册 yaml)）"
 elif [ -n "$OLD" ] && [ "$OLD" != "$CVV" ]; then
   echo "⚠️ 册 yaml 钉 cv_version=$OLD，装的是 $CVV：用 --cv v$OLD 重跑本脚本，或按需求单给 --cv"
 fi
 echo "册配置 $Y（生效值）：corpus=$(eff corpus) glyph_pin=$(eff glyph_pin) cv_version=$(eff cv_version)"
+# 任务库执行方从这一行取覆盖，开跑 pipeline 时原样带上（--override）
+if [ $OVMODE = env ]; then echo "OVERRIDE=${GUJI_BOOK_OVERRIDE:-}"; fi
 [ -n "$PIN_ARGS" ] && t 钉子账 $G corpus pin --vol "$VOL" $PIN_ARGS -w "$WS"
 GP=$(eff glyph_pin)
 if [ -n "$GP" ]; then
@@ -171,7 +192,9 @@ if why.get("no_patch") or why.get("unanchored", 0) > 3:
     print("⚠️ 有人裁因 cache/ 里没有字块图认不了格。旧版 cv（v0.5.15 及以前）先跑 "
           "ai-team domain/CV/脚本/warm_human_patches.py 再自检；dev（#540 起）会自己现切")
 PY
-{ echo "export GUJI_WORKSPACE='$WS'"; } > "$HOME/.guji_env"
+{ echo "export GUJI_WORKSPACE='$WS'"
+  if [ $OVMODE = env ] && [ -n "${GUJI_BOOK_OVERRIDE:-}" ]; then echo "export GUJI_BOOK_OVERRIDE='$GUJI_BOOK_OVERRIDE'"; fi
+} > "$HOME/.guji_env"
 echo; echo "== 准备耗时"; printf '%s\n' "${SUM[@]}"
-echo "之后的命令先 source ~/.guji_env（设 GUJI_WORKSPACE；人裁事件只认它）"
+echo "之后的命令先 source ~/.guji_env（设 GUJI_WORKSPACE，人裁事件只认它；有改值时还设 GUJI_BOOK_OVERRIDE）"
 echo "开跑：guard_run $VOL -- $G pipeline keben_body_v2 $VOL -w \"$WS\" --pages all --no-pack"

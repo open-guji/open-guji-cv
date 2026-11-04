@@ -206,6 +206,18 @@ def test_uneven_counts_char_cells_far_from_period():
     assert _uneven([mk(0, 100), mk(100, 175), mk(175, 320), mk(320, 360, "blank"), mk(360, 400, "jiazhu_a")], 100.0) == 1
 
 
+
+def test_uneven_counts_blank_run_cut_into_too_many_cells():
+    """空白也按格高算：两格高的列首空白切成三个矮格，多出的一格算不匀；整格高的空白不算。"""
+    from types import SimpleNamespace as C
+    from open_guji_cv.steps.row_segment import _uneven
+    mk = lambda y0, y1, kind="char": C(y0=y0, y1=y1, kind=kind)
+    squeezed = [mk(0, 70, "blank"), mk(70, 140, "blank"), mk(140, 210, "blank"), mk(210, 310), mk(310, 410)]
+    even = [mk(0, 100, "blank"), mk(100, 200, "blank"), mk(200, 300), mk(300, 400), mk(400, 500, "blank")]
+    assert _uneven(squeezed, 100.0) == 1
+    assert _uneven(even, 100.0) == 0
+
+
 def test_mask_misses_counts_both_directions():
     from types import SimpleNamespace as C
     from open_guji_cv.steps.row_segment import _mask_misses
@@ -285,6 +297,33 @@ def test_layout_row_fills_trailing_empty_columns():
     assert _layout_row(layout, 5, 2) is None
     assert _layout_row(layout, 5, 4)["slots"] == []
     assert _layout_row(layout, 6, 1) is None
+
+
+def test_layout_row_gap_cols_empty_switch():
+    """书级 `layout_gap_cols_empty`：本页两列表行之间缺的列也当整列空（史記卷末叶：卷尾题占末列，中间空列压着大印）；
+    关着（缺省）照旧不猜；本页第一列表行之前的列开着也不猜；开关缺省不进参数 dump。"""
+    from open_guji_cv.steps import row_segment as RS
+    layout = {(5, 2): {"slots": [1, 2]}, (5, 4): {"slots": [1]}}
+    assert RS._layout_row(layout, 5, 3) is None
+    assert RS._layout_row(layout, 5, 3, True)["slots"] == []
+    assert RS._layout_row(layout, 5, 1, True) is None
+    assert RS._layout_row(layout, 5, 2, True) == {"slots": [1, 2]}
+    assert RS._layout_row(layout, 6, 3, True) is None
+    assert "layout_gap_cols_empty" not in RS.RowSegmentParams().model_dump()
+    assert RS.RowSegmentParams(layout_gap_cols_empty=True).model_dump()["layout_gap_cols_empty"] is True
+
+
+def test_layout_row_tail_empty_switch():
+    """书级 `layout_tail_empty`（缺省开）：关掉时本页最后一列表行之后的列不当整列空、照「无表」切（全唐文表明写空列，
+    字数配不上的满列只是不出行，15p123 c8）；表里明写的行照旧；开着（缺省）不进参数 dump。"""
+    from open_guji_cv.steps import row_segment as RS
+    layout = {(5, 1): {"slots": [1, 2]}, (5, 3): {"slots": []}}
+    assert RS._layout_row(layout, 5, 4)["slots"] == []
+    assert RS._layout_row(layout, 5, 4, tail_empty=False) is None
+    assert RS._layout_row(layout, 5, 3, tail_empty=False) == {"slots": []}
+    assert RS._layout_row(layout, 5, 1, tail_empty=False) == {"slots": [1, 2]}
+    assert "layout_tail_empty" not in RS.RowSegmentParams().model_dump()
+    assert RS.RowSegmentParams(layout_tail_empty=False).model_dump()["layout_tail_empty"] is False
 
 
 def test_blank_frame_junk_blanks_table_empty_cells_in_the_seal_box():
@@ -395,3 +434,51 @@ def test_shift_occ_moves_body_slots_and_refuses_out_of_range():
     assert _shift_occ({20, 21}, 1, 21) is None           # 挪出列末
     assert _shift_occ({-1, 1, 2}, 1, 21) is None         # 有抬头格的不挪
     assert _shift_lay({"slots": [3, 4], "notes": [4], "half": []}, -1) == {"slots": [2, 3], "notes": [3], "half": []}
+
+
+def test_snap_to_gaps_prefers_staying_near_grid_line():
+    """等距格线擦着一两笔就不挪；不会被拉进 0.2 格外字内部的空当（vol98 p100 c3「字」的点与横之间）。"""
+    import numpy as np
+    from open_guji_cv.books.siku_zongmu.row_boundaries import snap_to_gaps
+    proj = np.full(300, 60.0)
+    proj[95:106] = 6.0          # 格线处只擦着一笔
+    proj[80:86] = 0.0           # 0.18 格外字内部的白缝
+    proj[200:212] = 0.0         # 真缝在 0.06 格外：照样挪进去
+    out = snap_to_gaps(proj, [100.0, 211.0], period=85.0)
+    assert abs(out[0] - 100) <= 3
+    assert 200 <= out[1] <= 211
+
+
+def test_row_pitch_param_default_uniform_not_in_dump():
+    """书级 `row_pitch`：缺省 uniform（殿本等距格网优先）不进参数 dump；写本设 free 时进 dump、改参数哈希。"""
+    from open_guji_cv.core.engine import params_hash
+    from open_guji_cv.steps import row_segment as RS
+    assert "row_pitch" not in RS.RowSegmentParams().model_dump()
+    free = RS.RowSegmentParams(row_pitch="free")
+    assert free.model_dump()["row_pitch"] == "free"
+    assert params_hash(free) != params_hash(RS.RowSegmentParams())
+
+
+def test_seal_gap_slots_empty_param_off_by_default():
+    from open_guji_cv.steps.row_segment import RowSegmentParams
+    assert "seal_gap_slots_empty" not in RowSegmentParams().model_dump()
+    assert RowSegmentParams(seal_gap_slots_empty=True).model_dump()["seal_gap_slots_empty"] is True
+
+
+def test_seal_inkcut_removes_speckle_keeps_strokes():
+    """大印下剔印泥：多孔碎点（印泥）抹白，实心笔画留下。"""
+    import numpy as np
+    from open_guji_cv.steps.row_segment import RowSegmentParams, _seal_inkcut
+    rng = np.random.default_rng(0)
+    img = np.full((300, 120), 255, np.uint8)
+    dots = rng.random((300, 120)) < 0.25
+    img[:150][dots[:150]] = 0                      # 上半：印泥碎点
+    img[180:260, 50:62] = 0                        # 下半：一道实心竖笔
+    img[60:120, 30:90] = 255
+    img[80:92, 30:90] = 0                          # 印里一道实心横笔（印下的字）
+    out = _seal_inkcut(img, (0, 300), 128)
+    assert (out[180:260, 50:62] == 0).all()
+    assert (out[80:92, 35:85] == 0).mean() > 0.9
+    speck = (img[:60] == 0).sum()
+    assert (out[:60] == 0).sum() < 0.1 * speck
+    assert "seal_inkcut" not in RowSegmentParams().model_dump()

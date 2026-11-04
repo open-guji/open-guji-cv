@@ -161,7 +161,7 @@ def test_r2c_detail_covers_every_counted_line(tmp_path, monkeypatch, ws, fixture
 
 
 def test_check_rulers_detail_flag_prints_rows(monkeypatch, capsys):
-    from open_guji_cv import cli_v2
+    from open_guji_cv import cli_eval
     from open_guji_cv.eval import rulers
     fake = {"book": "b", "n_pages": 1, "rulers": [
         {"key": "R2c", "title": "缝后仍穿墨", "num": 2, "den": 9, "value": 22.2, "unit": "%",
@@ -177,7 +177,7 @@ def test_check_rulers_detail_flag_prints_rows(monkeypatch, capsys):
     monkeypatch.setattr("open_guji_cv.core.book.load_book",
                         lambda b: type("B", (), {"resolve_pages": lambda self, s: [149]})())
     args = type("A", (), {"action": "rulers", "book": "b", "pages": None, "full": False, "detail": "r2c"})()
-    cli_v2.cmd_check(args)
+    cli_eval.cmd_check(args)
     out = capsys.readouterr().out
     assert seen["full"] is True
     assert "p149    2 条  列 3,7" in out

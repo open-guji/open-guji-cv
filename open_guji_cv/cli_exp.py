@@ -201,3 +201,7 @@ def add_parser(sub) -> None:
     p.add_argument("--no-mlflow", action="store_true", help="run/report：不记进 MLflow")
     p.add_argument("--cap", type=int, default=None, help="sample cards：影子不同意的每层最多出几题，超出就层内随机抽")
     p.add_argument("--port", type=int, default=5000, help="ui：端口")
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"exp": (add_parser, cmd_exp)}

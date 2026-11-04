@@ -37,6 +37,7 @@ from ..core.spec import GateLevel, GateSpec, StepSpec
 from ..core.step import RunContext, Step, attach_gate, register_step
 from ..products.kinds.border_detect_gate import BorderDetectGateManifest
 from ..products.kinds.borders import Borders
+from ..seg.columns import COL_WIDTH_FLAG
 from ..seg.polyline import BEND_W80_MAX
 from ..books.siku_zongmu.column_pair_merge import (PAIR_MERGED_FLAG, PAIR_MERGED_INCONSISTENT_FLAG,
                                        has_pair_merged)
@@ -66,6 +67,13 @@ class BorderDetectGateParams(BaseModel):
     `column_gate.period_prior_pages`：`params: {border_detect_gate: {body_pages: [88]}}`。
     缺省空，空时不进参数 dump，产物与加字段前逐字节相同。"""
 
+    table_pages: list[int | str] = []
+    """册配置点名的表格页（史記年表等，2026-11-02 Sheldon 定暂搁置）：不论页型规则判成什么，一律记页型 `table`、
+    整页跳过（reject `page_type_skip`），于是不切分、不出待审、不进统计。点名优先于 `body_pages` 与
+    `grid_overrides_skip`（年表网格常被当成完整栏格）。写法同 `body_pages`：
+    `params: {border_detect_gate: {table_pages: ["8-163"]}}`。缺省空，空时不进参数 dump，产物与加字段前逐字节相同。
+    年表以后怎么切、怎么对位见 ai-team `domain/CV/新书登记/史记文渊阁/年表方案.md`。"""
+
     grid_overrides_skip: bool = True
     """页型规则判 skip（题签／封面），但 Step1 探出完整的正文栏格 → 按正文走，manifest 记 flag `page_type_grid`。
     完整栏格（`_full_grid`）＝列数＝版式列数、每列宽都在中位 ±``grid_width_tol`` 内、每条竖线都是真探到的
@@ -84,6 +92,8 @@ class BorderDetectGateParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.body_pages:
             d.pop("body_pages", None)
+        if isinstance(d, dict) and not self.table_pages:
+            d.pop("table_pages", None)
         return d
 
     def model_post_init(self, __context) -> None:
@@ -142,13 +152,13 @@ def _pagetype_gate(p: "BorderDetectGateParams"):
 @register_step
 class BorderDetectGateStep(Step):
     spec = StepSpec(
-        id="border_detect_gate", title="Step1→2 交接闸", version="1.2", unit="page",
+        id="border_detect_gate", title="Step1→2 交接闸", version="1.3", unit="page",   # 1.3：Step1 列宽出带的页标 col_width_out_of_band（只标不拦）
         consumes=("borders",), optional_consumes=("page_survey", "line_index"),
         produces=("border_detect_gate_manifest",),
         params=BorderDetectGateParams,
         path_params=("pagetype_model_path",),
         code_deps=("open_guji_cv.books.siku_zongmu.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.clustering.page_type",
-                   "open_guji_cv.books.siku_zongmu.column_pair_merge"),
+                   "open_guji_cv.books.siku_zongmu.column_pair_merge", "open_guji_cv.seg.columns"),
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -164,14 +174,18 @@ class BorderDetectGateStep(Step):
         raw = ctx.raw_page(page)
         page_type, policy = classify_page_type(raw)
         forced_from = None
-        if p.body_pages and page in set(_expand_pages(p.body_pages)) and \
+        table_from = None
+        if p.table_pages and page in set(_expand_pages(p.table_pages)):
+            table_from = f"{page_type}/{policy}"
+            page_type, policy = "table", "skip"
+        elif p.body_pages and page in set(_expand_pages(p.body_pages)) and \
                 (page_type, policy) != ("body", "standard"):
             forced_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
         b: Borders = ctx.product("borders", page)
         n_cols = max(0, len(b.verticals) - 1)   # verticals 是 N+1 条外边框线
         grid_from = None
-        if p.grid_overrides_skip and policy == "skip" and n_cols == expected and \
+        if p.grid_overrides_skip and policy == "skip" and table_from is None and n_cols == expected and \
                 _full_grid(b, raw, p.grid_width_tol, p.grid_line_cover):
             grid_from = f"{page_type}/{policy}"
             page_type, policy = "body", "standard"
@@ -198,6 +212,8 @@ class BorderDetectGateStep(Step):
             flags_forced = [f"page_type_forced：页型规则判「{forced_from}」，册配置 body_pages 点名按正文走"]
         else:
             flags_forced = []
+        if table_from:
+            flags_forced.append(f"page_type_table：页型规则判「{table_from}」，册配置 table_pages 点名为表格页，整页暂不整理")
         if grid_from:
             flags_forced.append(f"page_type_grid：页型规则判「{grid_from}」，但探出完整等宽的 {n_cols} 列栏格，按正文走")
         if policy == "skip":
@@ -238,6 +254,13 @@ class BorderDetectGateStep(Step):
             flags.append(f"page_type_custom：页型判定为「{page_type}」，列数预期与正文不同，未核验")
         if policy is None:
             flags.append("page_type_custom：页型判不准（uncertain），按 body/standard 兜底处理")
+        # 列宽均匀（doc/design/列宽均匀约束.md）：Step1 拟合后仍出带的列，整页标出来（只标不拦——拦了整页不切、字会丢），
+        # 待审分类直接据此归「切分 Step1 列宽出带」，不必等认字出错再回推
+        if li is not None and policy != "skip":
+            bad = [ln for ln in li.lines if any(f.startswith(COL_WIDTH_FLAG) for f in ln.flags)]
+            if bad:
+                flags.append(f"{COL_WIDTH_FLAG}：Step1 列宽出带 " + "、".join(
+                    f"c{ln.col}" for ln in bad) + "（列宽均匀约束拟合不出，供人核）")
         if b.bend_w80_max is not None and b.bend_w80_max >= p.bend_w80_max_gate:
             flags.append(f"vline_wander：单条界行 w80 达 {b.bend_w80_max:.1f}px "
                         f"（>= {p.bend_w80_max_gate}），这条线可能跑飞了")

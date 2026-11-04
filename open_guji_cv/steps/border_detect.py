@@ -25,10 +25,11 @@ from ..core.spec import StepSpec
 from ..core.step import RunContext, Step, register_step
 from ..products.kinds.borders import Borders
 from ..products.kinds.line_index import LineIndex, LineRec
-from ..books.siku_zongmu.border import detect_borders
+from ..books.siku_zongmu.border import detect_borders, refit_bends
 from ..books.siku_zongmu.column_pair_merge import PAIR_MERGED_FLAG, merge_narrow_pair
 from ..books.siku_zongmu.column_types import classify_columns
 from ..books.siku_zongmu.pitch_rescue import rescue as pitch_rescue
+from ..seg.columns import COL_WIDTH_FLAG, ColumnSpec, check_columns
 
 #: 页级网格页上，最外一列比内列中位窄到这个比例以下，就把外框线按中位列距往外推。
 OUTER_NARROW_FRAC = 0.8
@@ -102,6 +103,24 @@ def apply_head_raise_verdicts(res, verdicts: dict[int, int], n_rows: int, scale:
     return done
 
 
+def _apply_vline_override(res, xs: list[float]) -> None:
+    """`vline_overrides`：用人核界行替换探到的竖线（按直线），`vline_filled` 全记人核（False）。"""
+    import dataclasses
+    from ..seg.frame_types import VLine
+    top_y = float(res.top.y_at(0.0)) if res.top is not None else 0.0
+    bot_y = float(res.bottom.y_at(0.0)) if res.bottom is not None else float(res.height - 1)
+    y_mid = (top_y + bot_y) / 2.0
+    old = [(float(v.x_at(y_mid)), float(v.slope)) for v in res.verticals]
+    new = []
+    for x in sorted(float(x) for x in xs):
+        sl = min(old, key=lambda t: abs(t[0] - x))[1] if old else 0.0
+        new.append(VLine(x_at_top=x - sl * y_mid, slope=sl))
+    res.verticals = new
+    res.verticals_straight = list(new)
+    res.vline_segments = 1
+    res.vline_filled = [False] * len(new)
+
+
 class BorderDetectParams(BaseModel):
     expected_cols: int | None = Field(default=None, description="列数先验；None = 用 Book 的 expected_cols")
     ink_threshold: int = 128
@@ -137,6 +156,13 @@ class BorderDetectParams(BaseModel):
     （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
     `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
 
+    vline_overrides: dict[int, list[float]] = {}
+    """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
+    小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
+    **右上原点 x（与 `borders.verticals` 同一空间：离页右缘的距离，版框中高处，升序＝右→左）**整串替换探到的竖线；每条线的斜率取探到的最近一条（没有就 0），一律按直线。
+    写法 `params: {border_detect: {vline_overrides: {63: [0, 167, 363, 562, 775, 1055, 1274, 1484, 1735]}}}`。
+    缺省空，空时本字段不进参数 dump，产物与加字段前逐字节相同。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
         """缺省关时不进 dump：没开的书 `params_hash` 与加这个字段之前逐位相同。"""
@@ -150,17 +176,19 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
+        if isinstance(d, dict) and not self.vline_overrides:
+            d.pop("vline_overrides", None)
         return d
 
 
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.12", unit="page",   # 1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，books/siku_zongmu/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.18", unit="page",   # 1.18：列宽重拟合换了线后，在新的一串直线上重拟合三段折线（`border.refit_bends`）；旧折线形状是在自由模式错的线网上拟的、护栏借形状把真线拗弯，殿本 r3 vol46 p78 左三条线下半段斜进字里；1.17：「横带按文字缝重定位」后的线，沿线压着细墨（界行）的行不许比直线少，少了不重定位（A20 11-03 报 vol84 p101/112、vol21 p68、vol40 p173：真界行直、单条线弯 20–30px 斜穿字；seg/polyline._hit_frac）；1.16：列宽均匀约束（doc/design/列宽均匀约束.md，Sheldon 11-03 定为强约束）：列距救援 7 路并成一路 `seg/columns.fit_columns`（候选：自由线、网格线、界行残段、淡界行细峰、字间空白中点、外推／补宽外框线，扣两侧墨后 DP 挑一串列宽全在带里的线）；带与 strict/loose/off 由册配置 `columns:` 定；出带的列打 flag `col_width_out_of_band`；1.15：列距救援三处放宽（殿本 r2 待审 S 类 4 页、90 格）：frame 路残段搜到外列宽进带为止（vol73 p110、vol94 p123 外框线挑在外列字心）；extend 路外推出图边截到图边（vol86 p151 折痕劈列、末列贴图边）；snap 路吸不动时按合格邻列列距推线再吸（vol44 p108 假线在字心、真界行断续）；1.14：列距救援加最后一路 pad：外列偏窄、外侧既没版框残段也没字（版框没印出来），外框线按中位列距外推（全唐文 07 p47、13 p141、11 p74、05 p160 首／末列被劈半）；前几路救得了的页结果不变；1.13：下版框次选峰在加宽的曲线上量（seg/lines.find_horizontal_border），不再取窗边截断峰；末行字身被当下框、整页丢末行的页（vol84 p89、vol85 p94 等 vol20–99 共 54 页）改对；1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，books/siku_zongmu/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.books.siku_zongmu.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.seg.grid", "open_guji_cv.seg.lines",
                    "open_guji_cv.books.siku_zongmu.column_types", "open_guji_cv.books.siku_zongmu.column_pair_merge",
-                   "open_guji_cv.books.siku_zongmu.pitch_rescue"),
+                   "open_guji_cv.books.siku_zongmu.pitch_rescue", "open_guji_cv.seg.columns"),
         # `leaf_layout` 决定要不要标版心（`margin`），改册配置必须让产物过期；
         # `column_grid` / `col_pitch` / `frame_height` / `vline_polyline` 决定竖线
         # 走哪条路、用哪组阈值，同理。
@@ -171,7 +199,7 @@ class BorderDetectStep(Step):
         book_deps=("leaf_layout", "expected_cols", "bottom_gap",
                    "top_band_frac", "bottom_band_frac", "column_grid", "col_pitch",
                    "frame_height", "vline_polyline", "outer_shift", "outer_gap",
-                   "frame_layers"),
+                   "frame_layers", "columns"),
         # 纯函数：读原图算完直接返回，无实例级缓存、无数据库/模型一次性初始化，
         # `scripts/parallel_border_detect.py` 已验证页级并行与串行 sha256 逐位一致
         # （2026-09-17，见 doc/segmentation_v2_pipeline.md「Step 1 性能」）。
@@ -212,16 +240,24 @@ class BorderDetectStep(Step):
         if grid_page:
             pad_outer_columns(res)
         rescued = None
+        col_spec = ColumnSpec.from_dict(ctx.book.columns)
         if p.pitch_rescue and not grid:
             # 网格模式必须带列距先验（见 border_geometry.detect_borders）；书上没写就取本页自由模式的中位列距
             res, rescued = pitch_rescue(res, gray, lambda pitch: _detect(cols, True, col_pitch or pitch),
-                                        leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold)
+                                        leaf_layout=ctx.book.leaf_layout, ink_threshold=p.ink_threshold,
+                                        spec=col_spec)
+            if rescued:
+                # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
+                res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
+                                  vline_polyline=ctx.book.vline_polyline)
         # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
         # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
         merged_col = None
         if p.merge_narrow_pair:
             res, cols, merged_col = merge_narrow_pair(res, cols, _detect,
                                                       leaf_layout=ctx.book.leaf_layout)
+        if page in p.vline_overrides:
+            _apply_vline_override(res, p.vline_overrides[page])
         # 人裁逐列抬头（`lookup.resolved_head_raise`）：补 Step1 漏认的抬头框／去掉认错的。本页没有裁决时不动
         from ..feedback.lookup import resolved_head_raise
         hr_verdicts = {c: n for (pg, c), n in resolved_head_raise(ctx.book.id).items() if pg == page}
@@ -240,6 +276,10 @@ class BorderDetectStep(Step):
         y_mid = (top_y + bot_y) / 2.0
         xs = [float(v.x_at(y_mid)) for v in res.verticals]      # VLine（记录 VLineRec 没有 x_at）
         filled = list(res.vline_filled) or [False] * len(xs)
+        # 列宽检查（strict／loose 都做，同交接闸口径）：出带的列打 flag，交接闸据此标页
+        col_chk = (check_columns(xs, col_spec, skip={c.col for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout)
+                                                     if c.kind != "body"})
+                   if col_spec.uniform != "off" else None)
         lines = []
         for c in classify_columns(xs, leaf_layout=ctx.book.leaf_layout):
             flags = [c.reason] if c.reason else []
@@ -253,7 +293,9 @@ class BorderDetectStep(Step):
                 flags.append(f"head_raise_verdict：人裁抬头 {hr_done[c.col]} 格，Step1 的抬头框已按裁决"
                              + ("补上" if hr_done[c.col] else "去掉"))
             if rescued:
-                flags.append(f"pitch_rescued：页上有窄列（多挑假竖线、外侧整列落在网外），已按列距重定（{rescued}）")
+                flags.append(f"pitch_rescued：页上有列宽出带（假竖线、外列落在网外或被劈半），已按列宽均匀重拟合（{rescued}）")
+            if col_chk is not None and col_chk.judged and c.col in col_chk.bad:
+                flags.append(f"{COL_WIDTH_FLAG}：列宽 {col_chk.ratios[c.col - 1]:.2f} 倍列距，出了带")
             lines.append(LineRec(col=c.col, kind=c.kind, x0=c.x0, x1=c.x1, y0=top_y, y1=bot_y,
                                  width=c.width, flags=flags))
         n_body = sum(1 for ln in lines if ln.kind == "body")

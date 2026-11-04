@@ -50,11 +50,14 @@ def sample_path(seg_set: str) -> Path:
 def load_samples(seg_set: str) -> dict:
     """读一套书的样页单并校验。返回 {pipeline, steps: {from, to}, local_only, books: [{book, ws_glob, pages: {页: 理由}}]}。"""
     import yaml
-    from open_guji_cv.core.pipeline import PIPELINES_DIR
+    from open_guji_cv.core.pipeline import PIPELINES_DIR, SKELETON_ID, expand_slots
     d = yaml.safe_load(sample_path(seg_set).read_text(encoding="utf-8")) or {}
     # 只读管线 yaml 的步骤表，不走 load_pipeline 的上下游校验：管线本身坏了也要能列出样页、算牵动
-    pl = SimpleNamespace(id=d["pipeline"], steps=[str(x) for x in yaml.safe_load(
-        (PIPELINES_DIR / f"{d['pipeline']}.yaml").read_text(encoding="utf-8"))["steps"]])
+    chain = yaml.safe_load((PIPELINES_DIR / f"{d['pipeline']}.yaml").read_text(encoding="utf-8"))
+    if "slots" in chain:        # 链 yaml 只写槽位（方案 B 第二期），步骤顺序由骨架展开；仍只读 yaml，不校验上下游
+        skel = yaml.safe_load((PIPELINES_DIR / f"{SKELETON_ID}.yaml").read_text(encoding="utf-8"))
+        chain["steps"] = expand_slots(chain, skel, d["pipeline"])
+    pl = SimpleNamespace(id=d["pipeline"], steps=[str(x) for x in chain["steps"]])
     st = d.get("steps") or {}
     lo, hi = st.get("from"), st.get("to")
     if lo not in pl.steps or hi not in pl.steps or pl.steps.index(lo) > pl.steps.index(hi):
@@ -347,7 +350,7 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(fn=cmd_local)
     a = ap.parse_args(argv)
     if a.cmd == "submit" and a.base_cv is None:      # 改前那版钉成 --base 当前指着的提交（要已推到 GitHub）
-        a.base_cv = subprocess.run(["git", "-C", str(ROOT), "rev-parse", a.base], capture_output=True, text=True,
+        a.base_cv = subprocess.run(["git", "-C", str(ROOT), "rev-parse", a.base + "^{commit}"], capture_output=True, text=True,
                                    check=True).stdout.strip()
     return a.fn(a)
 

@@ -91,3 +91,20 @@ def test_confirm_event_with_v_not_a_char_withdraws(db):
     glyphdb_admit([(_ev({"v": "confirm", "shape": "奉"}, "2026-10-01T00:00:00Z", "a"), None)], db_path=str(db))
     glyphdb_admit([(_ev({"v": "not_a_char"}, "2026-10-02T00:00:00Z", "b"), None)], db_path=str(db))
     assert _lib(db) is None
+
+
+def test_relabel_evicts_machine_seeded_exemplar_without_admission(db):
+    """机器播种的刻例没有 admissions 行：人裁改判成别的字时，旧字头下的刻例也要撤（史記 70 例 史／經 并列，2026-11-03）。"""
+    c = sqlite3.connect(db)
+    c.execute("DELETE FROM admissions WHERE instance_id=?", (f"v2:{KEY}",))
+    c.commit()
+    c.close()
+    glyphdb_admit([(_ev({"v": "confirm", "shape": "由"}, "2026-10-31T00:00:00Z", "a"), None)], db_path=str(db))
+    c = sqlite3.connect(db)
+    try:
+        rows = c.execute("SELECT g.char FROM exemplars e JOIN glyphs g USING(glyph_id) WHERE e.instance_id=?",
+                         (f"v2:{KEY}",)).fetchall()
+        assert rows == [("由",)]
+        assert c.execute("SELECT count(*) FROM glyphs WHERE char='之'").fetchone()[0] == 0
+    finally:
+        c.close()

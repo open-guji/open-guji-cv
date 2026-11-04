@@ -70,7 +70,7 @@ RATE_DEF = "D6-1：正文页 pending 格 ÷ 正文页字格（去标题槽、非
 #: 正文页型。`blank`（空栏页）是 body 的子类（`clustering.page_type` 2026-09-13 用户定），一并算正文；
 #: 职名 roster、目录 toc 虽同套九列网格，按用户口径是非正文。
 BODY_TYPES = frozenset({"body", "blank"})
-NONE_KEY = "none"                     # 待审格没写 cls／why 时计在这个键下（同 proof_fields.NO_DOUBT）
+NONE_KEY = "none"                     # 待审格没写 pending_reason／why 时计在这个键下（同 proof_fields.NO_DOUBT）
 
 
 # ---------------------------------------------------------------- 纯函数
@@ -170,7 +170,7 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
       unmatched_review     待审格在 pages.json 里找不到（页没导出／产物过期），不进 rate；`unmatched_sample` 前 10 个
       recut_cells          分母口径的字格里被重切清单覆盖的数（另报，不扣）
       review_on_recut      分子里同时在重切清单上的数
-      reasons              分子各格的 `cls`／`why` 计数（why 一格多码各计一次）
+      reasons              分子各格的 `pending_reason`／`why` 计数（11-04 起不再计 cls）（why 一格多码各计一次）
       review_status        分子各格 `review` 状态计数
       body_pages / nonbody_pages / pages_untyped
     """
@@ -229,9 +229,10 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
             continue
         review += 1
         on_recut += bool(recut is not None and recut.covers_cell(a))
-        cls_c[c.get("cls") or NONE_KEY] += 1
-        if c.get("cause"):
-            cause_c[c["cause"]] += 1
+        cls_c[c.get("pending_reason") or NONE_KEY] += 1
+        cause = c.get("pending_reason_cause") or c.get("cause")      # 老单是 cause
+        if cause:
+            cause_c[cause] += 1
         for w in (c.get("why") or [NONE_KEY]):
             why_c[w] += 1
         status_c[str(c.get("review") or NONE_KEY)] += 1
@@ -256,7 +257,7 @@ def review_rate(pages_json: dict, pending_json: dict, *, body_only: bool = True,
         "unmatched_sample": unmatched[:10],
         "recut_cells": recut_n,
         "review_on_recut": on_recut,
-        "reasons": {"cls": _sorted(cls_c), "why": _sorted(why_c), **({"cause": _sorted(cause_c)} if cause_c else {})},
+        "reasons": {"pending_reason": _sorted(cls_c), "why": _sorted(why_c), **({"cause": _sorted(cause_c)} if cause_c else {})},
         "review_status": _sorted(status_c),
         "pending_cells": len(pending),
         "body_only": body_only,
@@ -281,9 +282,9 @@ def _load(p: Path | None):
 
 
 def chapter_of(book: str) -> str | None:
-    """册号 → book-text 章号（vol04 → 004），同 `cli_v2.cmd_export`。"""
-    m = re.fullmatch(r"vol(\d+)", book)
-    return f"{int(m.group(1)):03d}" if m else None
+    """册号 → book-text 章号（vol04 → 004），按册配置（`core/volume_id`）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    return _chapter_of(book)
 
 
 def cv_commit() -> tuple[str | None, bool | None]:

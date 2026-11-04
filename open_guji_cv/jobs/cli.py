@@ -313,3 +313,7 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="guji_jobs", description=__doc__, formatter_class=argparse.RawTextHelpFormatter)
     fill(p)
     cmd_job(p.parse_args(argv))
+
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"job": (add_parser, cmd_job)}

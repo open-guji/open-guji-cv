@@ -52,7 +52,7 @@ def _check_ids(book_id: str, vol: str) -> None:
     if not BOOK_ID_RE.match(book_id or ""):
         raise ValueError(f"书 id 不合法：{book_id!r}（book-index id，如 96mid1ogzk）")
     if not VOL_RE.match(vol or ""):
-        raise ValueError(f"册号不合法：{vol!r}（两位数字，如 11）")
+        raise ValueError(f"册号不合法：{vol!r}（按全书册数补位的 2–3 位数字，如 11、001）")
 
 
 def orig_key(book_id: str, vol: str, filename: str) -> str:
@@ -73,11 +73,19 @@ def pointer_key(ws: str, book: str) -> str:
     return f"{ROOT}/by-ws/{ws}/{book}.json"
 
 
-def norm_vol(vol) -> str:
-    """`11`、`vol11`、11 → `11`。"""
-    m = re.search(r"(\d+)$", str(vol))
+def norm_vol(vol, width: int | None = None) -> str:
+    """R2 册号。`11`、`vol11`、11 → `11`；`3`、`vol3` → `03`。
+
+    册号位数按全书册数定（2026-11-02，`core/volume_id.py`）：给了 `width` 就补到这个位数；
+    没给时，纯数字串已经补过零的（`001`、`01`）原样保留，别的补到 2 位。全唐文 248 册用 `001`–`248`。"""
+    s = str(vol)
+    m = re.search(r"(\d+)$", s)
     if not m:
         raise ValueError(f"认不出册号：{vol!r}")
+    if width:
+        return f"{int(m.group(1)):0{max(2, int(width))}d}"
+    if re.fullmatch(r"\d{2,3}", s):
+        return s
     return f"{int(m.group(1)):02d}"
 
 

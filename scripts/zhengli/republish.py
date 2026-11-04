@@ -56,8 +56,54 @@ sys.path.insert(0, str(HERE))
 import sprite_pub
 
 
+def meta_file(book: str, out_dir: Path) -> Path | None:
+    """导出用的 meta：仓里有 meta_<册>.json 就用它；没有（vol11 之后多数册没备）按四庫總目殿本的固定模板现生成，
+    只填册序号（与 meta_vol15.json 逐字段一致）。生成到 out_dir，不进仓。"""
+    f = CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"
+    if f.exists():
+        return f
+    m = re.fullmatch(r"vol(\d+)", book)
+    if m:
+        n = int(m.group(1))
+        meta = {"defaults": {"book": {"id": "96mid1ogzk", "edition": "siku-zongmu", "title": "欽定四庫全書總目（武英殿刻本）"},
+                             "volume": {"index": n, "cv_book": book},
+                             "snapshot": f"guji-workspace 96mid1ogzk-欽定四庫全書總目武英殿刻本 本地产物（{book}）"}}
+    else:
+        # 非殿本：按册配置（11-02 统一册号）——book_id、volume 必有；书名、版本取 book_title／book_edition
+        from open_guji_cv.core.volume_id import volume_of
+        v = volume_of(book)
+        if not (v.book_id and v.volume):
+            return None
+        d = _book_dict(book)
+        bk = {"id": v.book_id, "title": d.get("book_title") or d.get("title") or book}
+        if d.get("book_edition"):
+            bk["edition"] = d["book_edition"]
+        meta = {"defaults": {"book": bk, "volume": {"index": v.volume, "cv_book": book},
+                             "snapshot": f"{v.book_id} 本地产物（{book}）"}}
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    g = out_dir / f"meta_{book}.json"
+    g.write_text(json.dumps(meta, ensure_ascii=False) + "\n", encoding="utf-8")
+    return g
+
+
+def _book_dict(book: str) -> dict:
+    """生效的册配置（册 yaml ∪ 基础配置），读不到给空。"""
+    try:
+        from open_guji_cv.core.book import _book_yaml_path
+        from open_guji_cv.core.book_config import effective_book_dict
+        return effective_book_dict(_book_yaml_path(book), apply_override=False)
+    except Exception:  # noqa: BLE001
+        return {}
+
+
 def chapter_of(book: str) -> str:
-    return re.sub(r"\D", "", book).zfill(3)
+    """册号 → book-text 章号，按册配置（`core/volume_id`）；认不出就停（以前推成 000）。"""
+    from open_guji_cv.core.volume_id import chapter_of as _chapter_of
+    ch = _chapter_of(book)
+    if not ch:
+        sys.exit(f"✗ {book} 推不出章号：册 yaml 写上 volume（见 open_guji_cv/core/volume_id.py），或给 --chapter NNN")
+    return ch
 
 
 def text_id_of(ws: Path) -> str:
@@ -365,7 +411,7 @@ def diff(old: dict | None, new: dict, dropped: list[dict], states: dict, votes: 
                   else "排除名单（非字）" if st == "excluded" else "格号没了（多半重切）")
     return {"old_rev": (old or {}).get("rev"), "new_rev": new.get("rev"), "old": len(o), "new": len(n),
             "kept": len(set(o) & set(n)), "removed": [{"cell": c, "why": why[c]} for c in removed],
-            "added": [{"cell": c, "cls": n[c].get("cause") or n[c].get("cls")} for c in sorted(set(n) - set(o), key=_key)],
+            "added": [{"cell": c, "cls": n[c].get("pending_reason_cause") or n[c].get("cause") or n[c].get("pending_reason")} for c in sorted(set(n) - set(o), key=_key)],
             "removed_by": dict(Counter(v.split("「")[0] for v in why.values())),
             "votes_on_old": sum(votes.values()), "voted_cells_kept": sorted(set(votes) & set(n), key=_key)}
 
@@ -406,19 +452,26 @@ def recheck_md(doc: dict, missing_tsv: Path) -> str:
     return "\n".join(lines) + "\n"
 
 
-def add_causes(pending: Path, products: Path, book: str) -> None:
-    """每格并入主成因码 `cause`／`cause_detail`（`review/causes.py`，GUJI-668）；`cls` 照旧不动（M10 还在用）。"""
+def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None = None) -> None:
+    """每格写待审原因 `pending_reason`（`review/reasons.py`，sheldon 11-03 定；判不出写 unknown），
+    并写成因码细分 `pending_reason_cause`／`pending_reason_cause_detail`（`review/causes.py` 的 A1…I，GUJI-668；
+    用户 11-04 定：留作 pending_reason 下的细项，派单按它细分；旧名 `cause`／`cause_detail` 不再写，老单上的读的一方回退）。"""
     sys.path.insert(0, str(CV))
     from open_guji_cv.review.causes import book_causes
+    from open_guji_cv.review.reasons import reasons_for_pending, stamp
     if not pending.exists():
         return
     res = book_causes(products, book)
     doc = json.loads(pending.read_text(encoding="utf-8"))
+    cnt = stamp(doc, reasons_for_pending(doc, products, book, glyph_db=glyph_db))
+    print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
     for c in doc.get("cells", []):
         if c["cell"] in res:
-            c["cause"] = res[c["cell"]]["cause"]
+            c.pop("cause", None)
+            c.pop("cause_detail", None)
+            c["pending_reason_cause"] = res[c["cell"]]["cause"]
             if res[c["cell"]]["detail"]:
-                c["cause_detail"] = res[c["cell"]]["detail"]
+                c["pending_reason_cause_detail"] = res[c["cell"]]["detail"]
             for k in ("grp", "refc"):                 # 待审分类统计（guji-manager 的 taxonomy）要的事实，只查库就能分到字组
                 if res[c["cell"]].get(k):
                     c[k] = res[c["cell"]][k]
@@ -518,7 +571,8 @@ def pack_rev(a, ws: Path, book: str, rev: str) -> str | None:
         return None
     label = pack_label(rev)
     args = ["products", "pack", "push", book, "--label", label,
-            "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"]
+            "--root", products_root(ws), "--no-record", "--note", f"待审单 {rev} 出单版（republish push）"
+            + (f"；基于 main 包 {os.environ['GUJI_ISSUE_SRC_PACK']}" if os.environ.get("GUJI_ISSUE_SRC_PACK") else "")]
     env = {**os.environ, "GUJI_WORKSPACE": str(ws)}
     engine = getattr(a, "engine", None)
     if engine and Path(engine).resolve() != CV.resolve():
@@ -612,8 +666,9 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     if run(cmd, env=env).returncode:
         return 1
     public = routed / f"{chapter}.pending.json"
-    add_causes(public, products, book)
-    add_causes(routed / f"{chapter}.team.pending.json", products, book)
+    gdb = ws / "output" / "glyph.db"
+    add_causes(public, products, book, gdb)
+    add_causes(routed / f"{chapter}.team.pending.json", products, book, gdb)
     final = public
     rd = raw_dir(ws, book)
     if rd and not a.no_sprite:
@@ -932,9 +987,9 @@ def cmd_from_pack(a) -> int:
     export = (Path(a.out_root) if a.out_root else ws / "reports" / book / "_publish") / f"export-{a.label}"
     cmd = [py, CV / "scripts/export_guji_format.py", "--products", products, "--book", book, "--chapter", chapter,
            "--out", export, "--format", "char-cord", "--keys", "cv", "--text-version", tv]
-    for flag, f in (("--meta", CV / f"doc/formats/samples/guji_format_v0.1/meta_{book}.json"),
+    for flag, f in (("--meta", meta_file(book, export.parent)),
                     ("--split-table", CV / "doc/formats/samples/guji_page_v0.2/split_table_siku.json")):
-        if f.exists():
+        if f and Path(f).exists():
             cmd += [flag, f]
     if run(cmd, cwd=CV, env=env).returncode:
         return 1
@@ -1057,6 +1112,23 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
     return doc, others
 
 
+def stamp_char_pending(char_json: Path, plan: dict) -> None:
+    """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
+    §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
+    from open_guji_cv.formats import guji_char_cord as cc
+    if not char_json.exists():
+        return
+    cells = []
+    for k in ("pending", "team"):
+        f = plan.get(k)
+        if f and Path(f).exists():
+            cells += json.loads(Path(f).read_text(encoding="utf-8")).get("cells", [])
+    char = json.loads(char_json.read_text(encoding="utf-8"))
+    n = cc.apply_pending(char, {"cells": cells})
+    char_json.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
+    print(f"char 待审原因：{n['stamped']} 格（去 lacuna {n['lacuna_dropped']}）；单上有、char 里没有 {n['missing']}")
+
+
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
     """同一次导出的 char／cord／norm 拷进 book-text 的 dev、文本线升 minor、本地校验（--dev），提交并推 dev。
 
@@ -1088,6 +1160,7 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
         if src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
+    stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
         (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
         print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")
@@ -1258,6 +1331,8 @@ def main(argv=None) -> int:
                                            "或放各册表的目录）把旧格号的票对到新格；对不上的列清单、不拦")
             p.add_argument("--old-source-rev", type=int, help="换单门：线上旧单是在哪一版页表上出的（缺省看单子的 source_rev／出单时刻）")
     a = ap.parse_args(argv)
+    from ensure_manager import ensure as _ensure_manager  # 搬去 manager 的命令要它（拆分 P2）
+    _ensure_manager()
     if a.cmd == "issue" and not a.label and not a.export_dir:
         ap.error("issue 要 --label（产物包）或 --export-dir（已导出的 char／cord）")
     return {"prep": cmd_prep, "push": cmd_push, "from-pack": cmd_from_pack, "issue": cmd_issue,

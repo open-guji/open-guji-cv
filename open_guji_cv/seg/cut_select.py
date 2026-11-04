@@ -118,19 +118,8 @@ def guided_seam_from_owner(owner: np.ndarray, y_line_local: int, band: int = GUI
     n = hi - lo + 1
     rows = np.arange(lo, hi + 1)
     tie = 1e-4 * np.abs(rows - y_line_local)
-    cost = mis[lo:hi + 1, 0] + tie
-    back = np.zeros((w, n), dtype=np.int16)
-    offsets = np.arange(-step, step + 1)
-    for x in range(1, w):
-        cand = np.full((len(offsets), n), np.inf)
-        for i, d in enumerate(offsets):
-            if d >= 0:
-                cand[i, d:] = cost[:n - d] + turn * d
-            else:
-                cand[i, :n + d] = cost[-d:] + turn * (-d)
-        best_i = np.argmin(cand, axis=0)
-        cost = cand[best_i, np.arange(n)] + mis[lo:hi + 1, x] + tie
-        back[x] = offsets[best_i]
+    from .seam import seam_dp
+    cost, back = seam_dp(mis[lo:hi + 1, :], tie, step, turn)
     j = int(np.argmin(cost))
     out = np.empty(w, dtype=int)
     for x in range(w - 1, -1, -1):
@@ -231,6 +220,11 @@ def _make_input(img: np.ndarray):
     return torch.from_numpy(np.stack([ink, yy], 0))
 
 
+# 2026-11-03：8→192。全唐文册06 p27 实测 339 次前向只有 175 个不同窗口（重复 48%），
+# 重复隔得远，8 个装不下。纯函数记忆，结果逐字节不变。
+_OWNER_CACHE_MAX = 192
+
+
 class UNetJudge:
     """进程内持有一份网络。`owner()` 出归属图，`scores()` 给候选打分。任何异常都返回 None，不抛。"""
 
@@ -253,9 +247,10 @@ class UNetJudge:
         cache = self.__dict__.setdefault("_owner_cache", {})
         hit = cache.get(key)
         if hit is not None:
+            cache[key] = cache.pop(key)  # LRU：命中移到最新
             return hit
         out = self._owner(win_gray, ink_threshold, cc_max)
-        if len(cache) >= 8:
+        if len(cache) >= _OWNER_CACHE_MAX:
             cache.pop(next(iter(cache)))
         cache[key] = out
         return out

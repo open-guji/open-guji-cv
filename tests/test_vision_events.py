@@ -218,7 +218,7 @@ def test_vision_events_do_not_touch_human_paths(env):
 
 
 def test_cli_import_vision(ws, tmp_path, monkeypatch, capsys):
-    from open_guji_cv.cli_v2 import _import_vision
+    from open_guji_cv.cli_feedback import _import_vision
     fb = tmp_path / "fb"
     monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(fb))
     monkeypatch.setenv("GUJI_VERDICTS_DIR", str(tmp_path / "verdicts"))

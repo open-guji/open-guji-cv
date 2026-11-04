@@ -267,3 +267,6 @@ def add_parser(sub) -> None:
     p.add_argument("--allow-dirty", action="store_true",
                    help="snapshot 用：数据目录有没推的改动也出（快照就对不上中心库的 rev，只供试验）")
 
+
+#: 并进 `guji` 的子命令（同插件接口 `guji.commands`；cv 侧由 `cli_v2.MANAGER_CLI_MODULES` 登记，拆分 P1）
+COMMANDS = {"glyph-db": (add_parser, cmd_glyph_db)}

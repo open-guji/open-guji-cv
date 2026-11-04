@@ -8,6 +8,8 @@
 - 我们的页与半叶的对应不靠配页，直接读页钉位表（`{book, page, head}`，head 形如 `0243-0049 243-12b h1`）。
 
 职名列（daizhige 记 `zm: true`）不写：职名页走 roster 分支，密排段在 daizhige 里按一字一格记，不是几何格位。
+2026-10-31 起 Step3 自动配页 `page_map: pins` 边跑边按钉位出同一张表（`steps/row_segment_pagemap.build_from_pins`，
+逐行相同），书 yaml 改用 pins 档后就不必再跑本脚本；留作离线核对。
 输出（写进 --dz 目录）：`layout_slots.jsonl`（vol＝册 id）、`page_map.jsonl`（vol、page、dzg_id、side）。
 """
 from __future__ import annotations
