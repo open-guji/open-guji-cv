@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Changed
+- `invert_detect`（Step0 反色带）审过登记进 `core/parallel.AUDITED`，`--jobs N` 按页并行（A20 11-04，耗时统计查出串行、并行效率 0.25）。`core/parallel.py` 不进指纹，产物不变：殿本、全唐文、史記、北行共 130 页（含 4 页反色带）串行与 4 进程产物 sha 逐页相同。
+
 ## [0.6.1] - 2026-11-03
 
 ### Added
