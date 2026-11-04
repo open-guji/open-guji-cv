@@ -49,3 +49,15 @@ def test_single_head_only_in_quantangwen():
     assert "jiazhu_single_head" not in inspect.signature(siku.segment_column).parameters
     assert seg_set.resolve(_Book("quantangwen"), "open_guji_cv.books.siku_zongmu.row_boundaries") == qtw.__name__
     assert seg_set.resolve(_Book(None), "open_guji_cv.books.siku_zongmu.row_boundaries") == siku.__name__
+
+
+def test_editing_quantangwen_copy_expires_only_quantangwen(monkeypatch):
+    """全唐文改自己那份 row_boundaries：全唐文册 row_segment 指纹变（产物判过期），殿本、史記册不变。"""
+    from open_guji_cv.core import engine
+    st = STEPS["row_segment"]
+    before = {ss: code_hash(st, book=_Book(ss)) for ss in (None, "shiji_wyg", "quantangwen")}
+    mod = "open_guji_cv.books.quantangwen.row_boundaries"
+    monkeypatch.setitem(engine._code_hash_cache, mod, "0" * 64)
+    after = {ss: code_hash(st, book=_Book(ss)) for ss in (None, "shiji_wyg", "quantangwen")}
+    assert after["quantangwen"] != before["quantangwen"]
+    assert after[None] == before[None] and after["shiji_wyg"] == before["shiji_wyg"]
