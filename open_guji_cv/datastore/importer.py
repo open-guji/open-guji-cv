@@ -25,6 +25,19 @@ class DeleteRefused(RuntimeError):
     pass
 
 
+#: 字形库账本表：本地一整张表突然是空的、库里却有一大批，多半是本机 glyph.db／glyph_store 被删后重建成了空壳
+#: （2026-11-04 殿本账本被清空，GUJI-事故）。这类删除即使是「整表缺」也不放行，除非 ``allow_delete``。
+GLYPH_LEDGER_TABLES = frozenset({"glyphs", "glyph_exemplars", "glyph_admissions"})
+LEDGER_EMPTIED_MIN = 50
+
+
+def emptied_ledger(tbl: str, n_existing: int, n_local: int, n_deletes: int) -> bool:
+    """库里 ``n_existing`` 行、本地只剩 ``n_local`` 行、要删 ``n_deletes`` 行：是不是「账本被清空」。
+    改键重写（删得多但插得也多）不算：本地行数不到库里一半、且删了一半以上才算。"""
+    return (tbl in GLYPH_LEDGER_TABLES and n_existing >= LEDGER_EMPTIED_MIN
+            and n_deletes * 2 >= n_existing and n_local * 2 < n_existing)
+
+
 def apply_schema(conn) -> None:
     from importlib.resources import files
     sql = files(__package__).joinpath(SCHEMA_FILE).read_text(encoding="utf-8")
@@ -238,7 +251,12 @@ def import_scans(conn, scans: list[ScanResult], *, label: str, allow_delete: boo
             rep.problems[sc.ws] = sc.problems
             rep.skipped[sc.ws] = dict(Counter(_top(p) for p in sc.skipped))
             for tbl in TABLES:
-                plan = diff(by_tbl[tbl], load_existing(cur, tbl, sc.ws, only_paths))
+                existing = load_existing(cur, tbl, sc.ws, only_paths)
+                plan = diff(by_tbl[tbl], existing)
+                if (plan.deletes and not allow_delete
+                        and emptied_ledger(tbl, len(existing), len(by_tbl[tbl]), len(plan.deletes))):
+                    refused.append(f"{sc.ws}/{tbl}: 本地只有 {len(by_tbl[tbl])} 行、库里有 {len(existing)} 行，"
+                                   f"要删 {len(plan.deletes)} 行——像是本机字形库被清空后推上来的")
                 if plan.deletes and TABLES[tbl].append_only and not allow_delete:
                     refused.append(f"{sc.ws}/{tbl}: 要删 {len(plan.deletes)} 行"
                                    f"（如 {plan.deletes[0]}）")
