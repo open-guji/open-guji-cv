@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- 待审原因规范文档 `doc/design/待审原因PendingReason.md`（A31，11-04）：是什么、真源与取法、29 个取值表、各处数据怎么写（单、卡、事件、裁定、看图、网站、看板、manager、book-text char v0.4）、各仓副本、加改弃用流程、迁移记录。只加文档。
 - 语料：cv 自带底库语料表 `config/corpus-registry.json`（`core/corpus_files.py`）＋`guji corpus registry`，`corpus upload|fetch` 不给 `-w` 时按表进出 R2；`guji pipeline` 起跑前、`install_release.py`、测试开跑前缺了自动从 R2 取回原位（为 rc 时语料表搬出 git 做准备，L0）。
 - 模型系统：一个环境里两本书钉同一模型的不同版本（`core/model_override.py`，设计 `doc/design/模型系统.md` 4.2 第 4 条）。钉了 `model:` 且 cv 仓里的模型与清单内容不同时，按 sha 摆进 `$GUJI_DATA_HOME/model-cache/…`，运行时把读模型模块的缺省路径改指那里；模块源码不动、`code_hash` 不变，仓里一致的册逐位同前（L0）。
 - 历史事件补待审原因（A31，sheldon 11-03 定「回写，推不出写 unknown」）：`scripts/zhengli/backfill_event_reason.py` 给 `feedback/{events,rulings,vision}` 里的 `confirm`、`ctx_ruling`、`vision_check` 加 `pending_reason`（按 group／route／subclass／via／来源推，推不出 `unknown`），按原行写法重写、别的字段不动；缺省试跑，`--write` 在人裁写入锁内写。殿本试跑 65,617 条。不碰任何 Step。

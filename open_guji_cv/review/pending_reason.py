@@ -1,4 +1,5 @@
-"""待审原因 `PendingReason`：一格**为什么还在待审**（sheldon 2026-11-03 定）。
+"""待审原因 `PendingReason`：一格**为什么还在待审**（sheldon 2026-11-03 定）。完整规范（各处怎么写、各仓副本、迁移记录）
+见 `doc/design/待审原因PendingReason.md`。
 
 全项目唯一真源：本模块的 enum ＋ 同目录 `pending_reasons.yaml` 的配置。待审单、人裁事件、文意裁定、看图结论、
 网站票、book-text 里一律写字段 `pending_reason`，值是本 enum 的英文名（如 `"group_abstain"`），不写中文、不写码。
