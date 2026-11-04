@@ -297,6 +297,12 @@ class SeedAdmitParams(BaseModel):
     全库近邻多数也是库首位、离库不远 → **不放**，留待审并记 `doubts: witness3_knn_veto`、`evidence.lane_skip = {lane: witness3,
     why: knn_veto}`。异体对（已由 lib_variant 跳过）、模型 `skip_chars`、两字同在 `skip_groups` 某组里（王玉、大太…）不否决；
     没有模型、取不到字块时照旧放（fail-open）。全唐文 r9b：witness3 3,395 格，约 37 格退回，挡掉约 20 格错放（洽→治、有→月…）。"""
+    near_knn_gap: bool = False
+    """near_knn 入口放宽（缺省关；关时不进 dump，`params_hash` 不变；全唐文形近字线 2026-11-04，A24 审过）：`group_flow_near_knn`
+    除形近护栏格、字组未定格外，也收「库没把握、库首位≠整理本」的待审格（不在形近护栏、不在字组里；全唐文 r9b 多归 variant_pair）。
+    候选＝本格字、整理本、库前三（`glyph_match` candidates）；不因候选互为异体跳过，改为**出口闸**：给出的字须等于整理本字，
+    或与整理本字同属本书码位表／异体表一组，否则留审。判法、门槛、`skip_chars`／`skip_groups` 不变；`evidence.near_knn.via = near_gap`。
+    全唐文 r9b variant_pair 164 格：给字 63，看图错 2（元←无、尸←戶，都被出口闸拦下），放 61 错 0。"""
     symbol_review: bool = True    # 2026-10-24 sheldon 定缺省开（殿本 vol04–20 原本逐册开着）
     """特殊符号送审（`doc/design/特殊符号进字符候选集-设计.md` S3，2026-10-24 起缺省开；关时 `symbol_review`／`symbol_min_human`
     不进 dump，`params_hash` 不变）。与册配置 `font.charset.symbols`（5-b 字表收符号）配套开。
@@ -878,6 +884,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("witness3_no_diff", None)
         if isinstance(d, dict) and not self.witness3_knn_veto:
             d.pop("witness3_knn_veto", None)
+        if isinstance(d, dict) and not self.near_knn_gap:
+            d.pop("near_knn_gap", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
@@ -3558,11 +3566,14 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
 
     只补放待审格：形近护栏（guard conflict／never_match、疑问 near_form 等）或字组未定的格。候选＝本格字、整理本对位字、
     库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
-    或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。"""
+    或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。
+    `near_knn_gap` 开时另收「库没把握、库首位≠整理本」的格（见该参数说明，出口闸＝等于整理本或同码位／异体组）。"""
     from ..groups import near_knn
     from ..groups.edge_pairs import _exclude as _edge_exclude
     model = near_knn.load(p.group_flow_near_knn)
     miss = patch_missing if patch_missing is not None else {}
+    canon = ctx.book.canonical_char if (p.near_knn_gap and ctx is not None and ctx.book.codepoints) else None
+    top3: list = []
     delta = 0
     for c in out:
         for r in c.chars or []:
@@ -3576,17 +3587,21 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
                 continue
             grp = ev.get("group") or {}
             near = ev.get("guard") in ("conflict", "never_match") or bool(_NEAR_CODES & set(ds))
-            if not (near or grp.get("id")):
-                continue
-            if grp.get("id") in model["skip_groups"] or grp.get("pick"):
-                continue
             ref = (amap.get(r.id) or (None,))[0]
             m = mmap.get(r.id)
-            cands = [x for x in dict.fromkeys((r.char, ref, getattr(m, "char", None))) if x]
+            gap = False
+            if not (near or grp.get("id")):
+                top3 = [c for c, _ in (getattr(m, "candidates", None) or [])[:3]] if p.near_knn_gap else []
+                if not (ref and top3 and top3[0] != ref):
+                    continue
+                gap = True
+            if grp.get("id") in model["skip_groups"] or grp.get("pick"):
+                continue
+            cands = [x for x in dict.fromkeys((r.char, ref, *(top3 if gap else (getattr(m, "char", None),)))) if x]
             if len(cands) < 2 or model["skip_chars"] & set(cands):
                 continue
-            if any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
-                   for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
+            if not gap and any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
+                               for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)
@@ -3597,6 +3612,13 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
                 continue
             v = near_knn.judge(img, model, cands)
             trail = {k: v[k] for k in ("char", "why", "pick", "votes", "ratio", "full", "full_votes", "nn") if k in v}
+            if gap:
+                trail["via"] = "near_gap"
+                if v["char"] is not None and not (v["char"] == ref
+                                                  or (_direct_variant_edge(v["char"], ref) and frozenset((v["char"], ref)) not in _edge_exclude())
+                                                  or (canon is not None and canon(v["char"]) == canon(ref))):
+                    trail["why"], v = "abstain:ref_gate", {**v, "char": None}
+                    trail["char"] = None
             if v["char"] is None:
                 r.evidence = {**ev, "near_knn": trail}
                 continue
