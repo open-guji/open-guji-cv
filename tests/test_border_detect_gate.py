@@ -235,3 +235,24 @@ def test_few_vertical_lines_still_skipped(tmp_path, monkeypatch):
     m = _run_grid_case(tmp_path, monkeypatch, borders=make_borders(n_cols=3))
     assert not m.admitted and m.page_type == "label"
     assert not any(f.startswith("page_type_grid") for f in m.flags)
+
+
+def test_cover_pages_forces_cover_skip(tmp_path, monkeypatch):
+    """册配置 cover_pages 点名的书衣／封面页：页型规则判正文也整页跳过，页型记 cover（同自动判的封面，网站出占位）。"""
+    m = _run_gate_params(tmp_path, monkeypatch, {"border_detect_gate": {"cover_pages": [PAGE]}}, ("body", "standard"))
+    assert not m.admitted
+    assert (m.page_type, m.page_type_policy) == ("cover", "skip")
+    assert any(r.startswith("page_type_skip") for r in m.reject)
+    assert any(f.startswith("page_type_cover") and "body/standard" in f for f in m.flags)
+
+
+def test_cover_pages_wins_over_body_and_grid(tmp_path, monkeypatch):
+    m = _run_gate_params(tmp_path, monkeypatch,
+                         {"border_detect_gate": {"cover_pages": [PAGE], "body_pages": [PAGE]}}, ("cover", "skip"))
+    assert not m.admitted and m.page_type == "cover"
+
+
+def test_cover_pages_empty_not_in_params_dump():
+    from open_guji_cv.gates.border_detect_gate import BorderDetectGateParams
+    assert "cover_pages" not in BorderDetectGateParams().model_dump()
+    assert BorderDetectGateParams(cover_pages=[1]).model_dump()["cover_pages"] == [1]

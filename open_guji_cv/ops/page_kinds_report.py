@@ -23,7 +23,7 @@ from collections import Counter
 _FROM = re.compile(r"页型规则判「([^」]+)」")
 
 #: 最后处理方式的显示顺序
-HANDLING = ("正文", "点名正文", "点名表格", "栏格救回正文", "自动跳过", "其他页型", "无产物")
+HANDLING = ("正文", "点名正文", "点名表格", "点名封面", "栏格救回正文", "自动跳过", "其他页型", "无产物")
 
 
 def fmt_pages(pages) -> str:
@@ -52,7 +52,7 @@ def judge(m: dict | None) -> dict:
     reject = [str(r) for r in (m.get("reject") or [])]
     here = f"{m.get('page_type')}/{m.get('page_type_policy') or 'standard'}"
     auto, handling = here, None
-    for name, h in (("page_type_forced", "点名正文"), ("page_type_table", "点名表格"), ("page_type_grid", "栏格救回正文")):
+    for name, h in (("page_type_forced", "点名正文"), ("page_type_table", "点名表格"), ("page_type_cover", "点名封面"), ("page_type_grid", "栏格救回正文")):
         f = _flag(flags, name)
         if f:
             mm = _FROM.search(f)
@@ -83,7 +83,7 @@ def build(book, store, pages: list[int]) -> dict:
     out_of_scope = {k: v for k, v in out_of_scope.items() if v}
     kind_pages = {k: set(v) for k, v in cfg.items()}
     issues: dict[str, list] = {"not_reflected": [], "redundant_body": [], "auto_skip": [], "auto_skip_suspect": []}
-    want = {"body": "点名正文", "table": "点名表格"}
+    want = {"body": "点名正文", "table": "点名表格", "cover": "点名封面"}
     for kind, ps in kind_pages.items():
         for p in sorted(ps & in_scope):
             r = rows[p]
@@ -92,7 +92,7 @@ def build(book, store, pages: list[int]) -> dict:
                     issues["redundant_body"].append(p)
                 else:
                     issues["not_reflected"].append({"page": p, "kind": kind, "handling": r["handling"]})
-    named = kind_pages.get("body", set()) | kind_pages.get("table", set())
+    named = kind_pages.get("body", set()) | kind_pages.get("table", set()) | kind_pages.get("cover", set())
     for p in pages:
         r = rows[p]
         if r["handling"] == "自动跳过" and p not in named:
