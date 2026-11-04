@@ -1354,6 +1354,26 @@ ALT_MIN_FRAC = 0.5        # 且至少占备选切法这一列有字块的格数�
 # 覆盖数是在这些格上量的；整理本一行可能跨半叶、带缺字，用它做分母会把「切得对但行长」的列判成覆盖不足。
 
 
+ALT_MAX_SHIFT = 3         # 备选切法里「机器载体字＝参校本同行邻格的字」有这么多格就不换（格网错了一格）
+
+
+def _shifted(res: PageAlignRef, carrier, col: int) -> int:
+    """一列里机器载体字 ≠ 本格坐标字、却等于同一行（a／b／整行）上一格或下一格坐标字的格数。
+
+    备选格网（不带先验）在夹注短行多切一格、把一字劈成两格时，后面整段错一格：坐标对位照样
+    配满（覆盖数好看），机器认出的字却整段等于参校本的邻格字。第 7 轮 06:45:8、02:12:6
+    各 10 格这样，换列后待审各 +12、+14；125 页 A/B 里挑中的 15 列全是 0。"""
+    ref = {(r.slot, r.sub): r.ref_char for r in res.coord if r.col == col and r.ref_char}
+    n = 0
+    for r in res.coord:
+        if r.col != col or not r.ref_char:
+            continue
+        t = carrier(r.id)
+        if t and t != r.ref_char and t in (ref.get((r.slot - 1, r.sub)), ref.get((r.slot + 1, r.sub))):
+            n += 1
+    return n
+
+
 def _covered(res: PageAlignRef, col: int) -> int:
     """一列里拿到坐标字（整理本非空）的格数。"""
     return sum(1 for r in res.coord if r.col == col and r.ref_char)
@@ -1378,7 +1398,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
     `ALT_MIN_GAIN`，也比现役 8-gram 对位（`chars`）equal 的格数多这么多（现役对位已经和整理本逐字对上
     的列不是切错的列；第 7 轮 125 页 A/B：只比坐标字格数时换的 20 列里 3 列变差，04:10:3、02:185:8、
     03:90:3 都是现役 equal 格数远高于坐标字格数）；
-    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。换了的列：坐标字、退回原因、冲突格都换成备选那份，
+    ≥ 这一列字数 × `ALT_MIN_FRAC`；有字形证据的坐标字格数（`_agree`）不比现役少。另外，备选切法里整段错一格的
+    （`_shifted` ≥ `ALT_MAX_SHIFT`）一律不换。换了的列：坐标字、退回原因、冲突格都换成备选那份，
     现役 `chars` 里这一列的字删掉（格号已不对应），列号记进 `alt_cols`，下游
     （seed_admit 等）读这一列一律改读 `alt_columns`。没换的备选列不进任何下游。"""
     cols = sorted({c.col for c in match.alt_columns} & {c.col for c in cells.alt_columns})
@@ -1403,6 +1424,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
         ca, cm = _covered(draft, col), _covered(res, col)
         a, m = _agree(draft, car_alt, alt_match, col), _agree(res, car_main, match, col)
         eq = sum(1 for c in res.chars if c.col == col and c.align_op == "equal")
+        if _shifted(draft, car_alt, col) >= ALT_MAX_SHIFT:
+            continue
         if ca >= max(cm, eq) + ALT_MIN_GAIN and ca >= ALT_MIN_FRAC * n_cells.get(col, 0) and a >= m:
             chosen.append(col)
     if not chosen:
