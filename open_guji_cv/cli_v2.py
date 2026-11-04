@@ -2121,6 +2121,12 @@ def main(argv: list[str] | None = None) -> None:
     if getattr(args, "override", None):         # 运行覆盖：环境变量传，子进程（隔离步骤）自动继承
         from .core.book_config import merge_override_env
         os.environ["GUJI_BOOK_OVERRIDE"] = merge_override_env(args.override)   # 叠在已有的覆盖上（准备脚本记的改值），同键 --override 胜
+    if args.command in ("step", "pipeline"):   # 步内分段计时（不改 Step 源码、不动指纹，见 cli_perf.PERF_HOOKS）
+        try:
+            from .cli_perf import install_hooks
+            install_hooks()
+        except Exception:  # noqa: BLE001 —— 统计是附带的
+            pass
     handler = COMMANDS_V2.get(args.command)
     if handler is None:
         parser.print_help()
