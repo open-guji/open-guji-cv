@@ -2,7 +2,7 @@
 
 overview#457（E1）。回答「这个开关开不开、对哪本书有效、会不会让别处回归」：两份（或几份）配置各跑各的输出目录，再统一比较，出一份能据以决定开关的报告。决定记进 [开关登记表.md](开关登记表.md)。
 
-代码在 `open_guji_cv/exp/`，命令在 `open_guji_cv/cli_exp.py`。框架是**外挂**，只用 `Engine(params=…)` 的调用方覆盖层和可改指的产物根，**不动任何 Step 模块和它的 `code_deps`**，不会让各书产物判过期。
+代码在 `open_guji_cv/exp/`，命令在 guji-manager 的 `guji_manager/cli_exp.py`（2026-11-04 搬走）。框架是**外挂**，只用 `Engine(params=…)` 的调用方覆盖层和可改指的产物根，**不动任何 Step 模块和它的 `code_deps`**，不会让各书产物判过期。
 
 ## 一、怎么跑
 

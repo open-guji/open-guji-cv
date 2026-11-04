@@ -159,26 +159,3 @@ def test_r2c_detail_covers_every_counted_line(tmp_path, monkeypatch, ws, fixture
     assert sum(e["n"] for e in r["by_page"].values()) == r["num"]
     assert all(d["why"] in ("无缝", "缝上有墨") for d in r["detail"])
 
-
-def test_check_rulers_detail_flag_prints_rows(monkeypatch, capsys):
-    from open_guji_cv import cli_eval
-    from open_guji_cv.eval import rulers
-    fake = {"book": "b", "n_pages": 1, "rulers": [
-        {"key": "R2c", "title": "缝后仍穿墨", "num": 2, "den": 9, "value": 22.2, "unit": "%",
-         "detail": [{"page": 149, "col": 3, "y": 400, "why": "无缝"},
-                    {"page": 149, "col": 7, "y": 88, "why": "缝上有墨", "px": 4}],
-         "by_page": {"149": {"n": 2, "cols": [3, 7]}}}]}
-    seen = {}
-
-    def fake_measure(book, pages, st, full=False):
-        seen["full"] = full
-        return fake
-    monkeypatch.setattr(rulers, "measure", fake_measure)
-    monkeypatch.setattr("open_guji_cv.core.book.load_book",
-                        lambda b: type("B", (), {"resolve_pages": lambda self, s: [149]})())
-    args = type("A", (), {"action": "rulers", "book": "b", "pages": None, "full": False, "detail": "r2c"})()
-    cli_eval.cmd_check(args)
-    out = capsys.readouterr().out
-    assert seen["full"] is True
-    assert "p149    2 条  列 3,7" in out
-    assert "p149\tc7\ty=88  why=缝上有墨  px=4" in out
