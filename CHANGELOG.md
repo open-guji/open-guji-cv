@@ -6,7 +6,7 @@
 ## [未发版]
 
 ### Added
-- cell_shrink `inner_frame_only`（缺省关）补列端切笔：列首条带开到内框线，首末格地盘伸到条带头尾（只认像笔画的墨块），贴线碎块只剥薄片；关着时逐字节不变（code_equiv 已登记）。
+- cell_shrink `inner_frame_only`（缺省关）补列端切笔：Step2 当框条削掉的字顶字脚从 column_raw 补回，挨线的首末格条带开到内框线、地盘外伸 0.35 格（只认像笔画的墨块），贴线碎块只剥薄片；关着时逐字节不变（code_equiv 已登记）。
 - row_segment 书级开关 `layout_raise_box`（2026-11-05，A22，缺省关）：闸认出抬头框而逐列格位表记不抬头（首字顶格）时，加一张表按闸级数重编格号的候选格网，坏格严格更少才选；抬头框要比本页不抬头列高半格。殿本 164 列沙箱 84 列改对。关着时逐字节不变（code_equiv 已登记）。
 - 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
 

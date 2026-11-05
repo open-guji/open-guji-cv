@@ -131,3 +131,26 @@ def test_drop_end_ext_specks_keeps_strokes_only():
     assert (owner[0:28, 96:99] == -1).all()
     assert (owner[16:20, 0:8] == -1).all()
     assert (owner[30:90, 20:80] == 0).all()
+
+
+def test_restore_trimmed_ends_below_line_only():
+    """inner_frame_only：Step2 削掉的列首行从 column_raw 补回，只补本列线以下、文字带以内；d 档不补。"""
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.columns import BorderTrim
+    from open_guji_cv.steps.cell_shrink import restore_trimmed_ends
+    raw = np.full((200, 60), 255, np.uint8)
+    raw[0:3, 5:55] = 0                    # 本列的线：满带
+    raw[6:9, 15:40] = 0                   # 字顶横：被 Step2 当框条削掉
+    raw[2:20, 0:2] = 0                    # 文字带外的界行
+    img = raw.copy()
+    img[:20] = 255
+    line = SimpleNamespace(text_edge=lambda x: 0.5)
+    mapper = SimpleNamespace(to_page_tl=lambda x, y: (x, y))     # 列图即原图
+    wrec = SimpleNamespace(band=(4, 56), raised=False, head_raise_inner_y=None,
+                           trim_top=BorderTrim(px=20, case="e"), trim_bottom=BorderTrim(px=0, case="c"))
+    out = restore_trimmed_ends(img, raw, wrec, {"top": line}, mapper)
+    assert (out[6:9, 15:40] == 0).all()   # 字顶横补回
+    assert (out[0:3] == 255).all()        # 线不补
+    assert (out[:, 0:2] == 255).all()     # 文字带外不补
+    wrec.trim_top = BorderTrim(px=20, case="d")
+    assert restore_trimmed_ends(img, raw, wrec, {"top": line}, mapper) is img

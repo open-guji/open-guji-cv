@@ -843,6 +843,9 @@ def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray
     return owner
 
 
+END_EXT_NEAR = 1.0       # inner_frame_only：首（末）格离内框线字侧边沿不到这么多格高，才把条带开到线、地盘往格外伸
+END_EXT_MAX_H = 0.35     # 同上：伸出去那段里整块高过这么多格高的是邻字（挤格的第 22 字、抬头字），不认
+END_EXT_REACH = 0.35      # inner_frame_only：首末格地盘往格外伸至多这么多格高（× 格高）
 END_EXT_MIN_AREA = 0.008   # inner_frame_only：落在首末格原地盘外的墨块至少这么大（× 格高²，殿本约 40 像素）才认作本字笔画
 END_EXT_THIN = 0.05        # 同上：最窄边不过这么多 × 格高、长宽比 ≥5 的细条是界行／框线残段，不认
 
@@ -867,7 +870,7 @@ def drop_end_ext_specks(owner: np.ndarray, binary: np.ndarray, ci: int, edge: np
             continue
         thin = min(w, h) <= END_EXT_THIN * cell_h and max(w, h) >= 5 * min(w, h)
         edge_hit = x == 0 or x + w >= owner.shape[1]     # 贴着条带左右缘的是界行与框线的拐角（vol88 p154「武」左下）
-        if area < END_EXT_MIN_AREA * cell_h * cell_h or thin or edge_hit:
+        if area < END_EXT_MIN_AREA * cell_h * cell_h or thin or edge_hit or h > END_EXT_MAX_H * cell_h:
             owner[y:y + h, x:x + w][comp] = -1
 
 
@@ -3087,7 +3090,10 @@ class CharExtractor:
             # 整页内框细线已抹掉的列首（inner_frame_only）：条带开到线的内缘。线和线外已经白了，开上去只多进字墨；
             # 按首格顶−pad 截，Step3 首格比字偏里时字顶（「三」的上横、「考」「四」的顶）根本不在条带里
             ie_col = gmeta.get("inner_edges") or {}
-            in_sides = set(gmeta.get("inner_sides") or ())
+            # 只管挨着线的首末格（首字在 1 号格、末字在末格）：低格列、短列的首末格离线远，格外的墨是界行断头与邻字
+            in_sides = {s_ for s_ in (gmeta.get("inner_sides") or ()) if s_ in ie_col and (
+                (s_ == "top" and min(_cell_top(c) for c in cells) - float(ie_col["top"]) < END_EXT_NEAR * cell_h_ref)
+                or (s_ == "bottom" and float(ie_col["bottom"]) - max(_cell_bottom(c) for c in cells) < END_EXT_NEAR * cell_h_ref))}
             if "top" in in_sides and "top" in ie_col:
                 sy0 = max(0, min(sy0, int(np.floor(float(ie_col["top"])))))
             if sx1 <= sx0 or sy1 <= sy0:
@@ -3187,11 +3193,12 @@ class CharExtractor:
             if part_bounds and "top" in in_sides and "top" in ie_col:
                 ext_edges.append((0, part_bounds[0][0].copy(), True))
                 # 首格地盘伸到条带顶、末格伸到条带底：线外已白，格外的墨只能是本字越出格界的笔画（灬、上横）
-                part_bounds[0] = (np.minimum(part_bounds[0][0], 0),) + part_bounds[0][1:]
+                # 只伸 END_EXT_REACH 格高：首字不在 1 号格时（低格列首字在 3 号格），伸到条带顶会把上头框线的残段收进来
+                part_bounds[0] = (np.maximum(part_bounds[0][0] - END_EXT_REACH * cell_h_ref, 0),) + part_bounds[0][1:]
             if part_bounds and "bottom" in in_sides and "bottom" in ie_col:
                 t_, b_, st_, sb_ = part_bounds[-1]
                 ext_edges.append((len(part_bounds) - 1, b_.copy(), False))
-                part_bounds[-1] = (t_, np.maximum(b_, strip.shape[0]), st_, sb_)
+                part_bounds[-1] = (t_, np.minimum(b_ + END_EXT_REACH * cell_h_ref, strip.shape[0]), st_, sb_)
             owner = partition_strip(strip, part_bounds, cell_h_ref)
             for ci_, edge_, top_ in ext_edges:
                 drop_end_ext_specks(owner, strip < BINARY_THRESHOLD_PATCH, ci_, edge_, top_, cell_h_ref)
