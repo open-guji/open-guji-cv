@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `row_segment` `jiazhu_half_a`（全唐文套书，书级，缺省关，关时逐字节不变、登记 code_equiv）：格位表 `half`（只有右半有字）的夹注格一律发 `jiazhu_a`，左缘与缝放宽到压着右半的连通块最左；段尾奇数字居中跨缝时不再被缝劈开或发成左半（012:186:9:11「篇」、013:147:8:21「二」、013:147:9:2a「一」、8a「二」）。全唐文 005–015 有 half 的 34 页 138 格开前后只变这 6 格，无变坏。
+
 ## [0.6.8] - 2026-11-05
 
 - `seed_admit` 折叠组改按文意（#1124，A24，缺省关）：新书级键 `fold_ref_char`（false＝不取整理本字，只用本组裁定 via=ruling）、`fold_aspect: [lo, hi]`（日曰按字块宽高比落字，via=aspect）；两样都没有的格留审，记 `evidence.fold_pending`。ref_free 组（己已巳）忽略 `group_flow_abstain_ref_ok`。`scripts/fold_aspect_dist.py` 标定阈值（#1127）。

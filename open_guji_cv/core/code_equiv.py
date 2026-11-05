@@ -220,6 +220,10 @@ _IF_ONLY = ("内框细线已抹的一端不再逐格剥框线、框渣只剥贴�
             "76b7431 产物逐字节相同；inner_frame_cut＋inner_frame_profile 开、本开关关时 vol05、vol30 全册 char_index 与字块 PNG 与 dev 逐字节相同；"
             "scripts/code_equiv.py check，2026-11-05（A22）")
 
+_JZ_HALF_A = ("只有右半的夹注格整字发右半 jiazhu_half_a（row_segment 书级开关，全唐文套书，缺省关；quantangwen.row_boundaries 加 "
+              "_half_a_left）：开关关着时 row_segment 在全唐文 013 p146–151（6 页，含格位表 half 39 格；基底产物包 r12）上与 origin/dev "
+              "9ce806a 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -913,6 +917,14 @@ ENTRIES: tuple[Equiv, ...] = (
           old="504321227060b83062dbe45680a9df9c29b214a629b1a310124a36cf78c7e0fd",
           evidence="待收字：僻字码原码位（daizhige:U+XXXX）旁路带到 run 的 pua／pua_r／pua_l（新增函数 pua_codes，文本仍写〓，A24 11-05）："
                    "row_segment 在殿本 vol04 7 页（--pages 5,12,30,60,90,120,150）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="00a6f2b28da6d1e20bea27bf4bdd2af2cc3df98def3258e14be15238c2389cf2",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence=_JZ_HALF_A),
+    Equiv(module="open_guji_cv.books.quantangwen.row_boundaries",
+          new="230be14bfebcd19130c40e9479e2b73d0fcb46378007b91c9340e2cc257aff84",
+          old="b5c2b5fb08fc415f3f8e21dffcbfe8f6c57ef7f68d3a3b931b8c0a1e6622a9b7",
+          evidence=_JZ_HALF_A),
 )
 
 
