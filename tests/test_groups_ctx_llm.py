@@ -251,3 +251,17 @@ def test_credit_exhausted_gets_own_error_code():
     assert ctx_llm.api_error_code(400, "Error code: 400 - {'message': 'Your credit balance is too low to access the Anthropic API.'}") == "api_credit"
     assert ctx_llm.api_error_code(400, "invalid model") == "api_400"
     assert ctx_llm.api_error_code(401, "") == "api_401"
+
+
+def test_skip_half_cells_bypass_l3_steps():
+    """group_flow_llm_skip_half：夹注 a/b 半格不走 Llm／CtxOnline／二审小组；整格照常。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.groups import methods as M
+    inp = lambda cid, on: NS(cfg=NS(l3_skip_half=on), cell_id=cid)           # noqa: E731
+    assert M._skip_half(inp("vol06:12:5:12a", True)) and M._skip_half(inp("vol06:12:5:12b", True))
+    assert not M._skip_half(inp("vol06:12:5:12", True))
+    assert not M._skip_half(inp("vol06:12:5:12a", False))
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    assert "group_flow_llm_skip_half" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True).model_dump()["group_flow_llm_skip_half"] is True

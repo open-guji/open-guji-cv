@@ -240,6 +240,11 @@ def _panel_of(cfg, group: str) -> tuple:
     return tuple(getattr(cfg, "l3_panel", ()) or ()) if group in (getattr(cfg, "l3_panel_groups", ()) or ()) else ()
 
 
+def _skip_half(inp) -> bool:
+    """`FlowConfig.l3_skip_half` 开着时，夹注 a/b 半格（格号末位 a／b）不走 L3（答案表、在线、二审小组）。"""
+    return bool(getattr(inp.cfg, "l3_skip_half", False)) and (inp.cell_id or "")[-1:] in ("a", "b")
+
+
 @dataclass(frozen=True)
 class CtxOnline(Method):
     """文意 L3 在线：管线里直接问大模型（`ctx_llm`，`FlowConfig.l3_online[组]` 给了提示词才适用）。
@@ -297,6 +302,8 @@ class Chain(Method):
                 continue
             if isinstance(s, (CtxModel, CtxOnline)) and v.why not in type(s).FILLS:
                 continue
+            if isinstance(s, (Llm, CtxOnline)) and _skip_half(inp):
+                continue
             v = _out(s.run_after(inp, v)) if isinstance(s, CtxOnline) else s.run(inp)
             if v.char is not None:
                 f = _spec(inp.group).flow
@@ -305,7 +312,7 @@ class Chain(Method):
                 elif isinstance(s, CtxRule) and f.strong_over_ref:
                     v = self._confirm(v, inp)
                 break
-        if any(isinstance(s, CtxOnline) for s in self.steps):
+        if any(isinstance(s, CtxOnline) for s in self.steps) and not _skip_half(inp):
             v = self._panel(v, inp)
         return v
 
