@@ -829,6 +829,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='080e42ba4cb39f84cfa5fe4c31b5de6f5779acd2c14a6dc83487c8365c0759e8',
           old='d81b0f7d3c661095d34fe1baa4886501672c2f85bf44224d29cc4c6eb5335f4e',
           evidence='group_flow_lift_ref_veto 书级开关（缺省关，#980）：开关关着时史記 03 册 25 页（--pages 100-124）与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='361801066a8830d81e48f32212e1b3c4aec287d6b7b483947fa5bf4c92f94be1',
+          old='3041eb1d51519f9af60f81a1be0ce44ee1e4850b7897ee6e32c76136798e202c',
+          evidence='near_knn 入口放宽 near_knn_gap（缺省关，全唐文形近字线 11-05，A24 审过）：开关关着时全唐文 012 册 13 页'
+                   '（p5,20,35,…,185 每 15 页取 1）与 origin/dev 391d83b 产物逐字节相同；scripts/code_equiv.py check，2026-11-05'),
 )
 
 
