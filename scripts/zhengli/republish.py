@@ -472,7 +472,7 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
     cnt = stamp(doc, reasons)
     print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
     if cnt.get("glyph_pending"):          # 待收字不派人审，按窗口回查判错会把格悄悄藏起来：单列这个数，首次上线抽 20 格看图
-        print(f"  ⚠ 待收字 {cnt['glyph_pending']} 格，其中按窗口回查判成的 {stats['glyph_pending_by_window']} 格"
+        print(f"  ⚠ 待收字 {cnt['glyph_pending']} 格，其中按窗口回查判成的最多 {stats['glyph_pending_by_window']} 格"
               "（首次上线抽 20 格看图核对）")
     for c in doc.get("cells", []):
         if c["cell"] in res:
