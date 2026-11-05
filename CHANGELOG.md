@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `seed_admit` `fold_by_meaning`／`fold_aspect`（A24，缺省关；sheldon 11-05 定，经 SJ 转述）：折叠组（己已巳 jys、日曰 ry）先归组、再按文意定字，不参考整理本。开 `fold_by_meaning` 后 `fold_groups` 不再放整理本字：字取本组文意裁定（高／中），没有就留审（`evidence.fold_pending`）；`fold_groups` 里的组同时从 `group_flow_abstain_ref_ok` 去掉；`fold_aspect=(0.85, 1.0)` 给 ry 字形一路（宽/高≤0.85 日、≥1.0 曰，中间归组按文意）。关时逐字节不变。
+
 ## [0.6.7] - 2026-11-05
 
 - `seed_admit` `iron_ex_from_store` 改缺省开（#1114，用户 11-05 定）。

@@ -99,3 +99,50 @@ def test_fold_coord_ref():
     assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
     assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_coord_ref=True).model_dump()
     assert on.model_dump()["fold_coord_ref"] is True
+
+
+def test_fold_by_meaning(tmp_path, monkeypatch):
+    """新语义（sheldon 11-05）：归组后按文意定字，不看整理本；没有裁定就留审；jys 从 abstain_ref_ok 里去掉。"""
+    from types import SimpleNamespace as NS
+
+    import numpy as np
+
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    m = sorted(FLOW_GROUPS["ry"].members)
+    a, b = m[0], m[1]
+    rid = f"{B}:1:1"
+    rec = lambda: AdmitRec(id=rid, slot=1, admit=False, char=a, doubts=[], channel=None, provenance="",  # noqa: E731
+                           evidence={"group": {"id": "ry"}})
+    on = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_by_meaning=True)
+    amap = {rid: (b, None)}                                          # 整理本字 b：新语义下不得被取用
+    # 没有裁定、没开字形 → 留审，记归组
+    r = rec(); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], amap, None, store=RulingStore(tmp_path / "e")) == 0
+    assert not r.admit and r.evidence["fold_pending"]["group"] == "ry"
+    # 有文意裁定 → 放裁定字（可以与整理本不同）
+    st = RulingStore(tmp_path)
+    sa._L3_ONLINE.clear()
+    monkeypatch.setattr(sa, "_l3_online", lambda p: {"ry": {"system": "s", "ver": "v1"}})
+    monkeypatch.setattr(sa, "_clf_ctx", lambda *a_, **k: "w")
+    st.put("ry", "v1", "w", "w", char=a, conf="high", why="x", model="m", cell=rid)
+    r = rec(); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], amap, None, store=st) == 1
+    assert r.char == a and r.channel == "fold" and r.evidence["fold"]["via"] == "ruling" and r.evidence["fold"]["ref"] is None
+    # 字形一路：宽高比 ≤0.85 日、≥1.0 曰、中间留审
+    import open_guji_cv.groups.aspect as asp
+    asp_on = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_by_meaning=True, fold_aspect=(0.85, 1.0))
+    monkeypatch.setattr(sa, "_page_patch", lambda *a_, **k: np.zeros((4, 4), np.uint8))
+    for ratio, want in ((0.7, "日"), (1.1, "曰"), (0.9, None)):
+        monkeypatch.setattr(asp, "aspect", lambda g, ratio=ratio: ratio)
+        r = rec(); n = sa._fold_pass(asp_on, [ColumnAdmit(col=1, chars=[r])], amap, None, store=RulingStore(tmp_path / "e2"),
+                                     ctx=NS(), page=1)
+        assert (n == 1) == (want is not None) and (want is None or (r.char == want and r.evidence["fold"]["via"] == "aspect"))
+    # 库首位在组内但字组流程没入组的格也归组
+    r = AdmitRec(id=rid, slot=1, admit=False, char="外", doubts=[], channel=None, provenance="", evidence={})
+    assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], amap, {rid: NS(candidates=[(a, 0.9)])}, store=st) == 1
+    # jys 从 abstain_ref_ok 里去掉；默认不进 dump
+    q = SeedAdmitParams(db_path="x", group_flow_abstain_ref_ok=["jys", "xx"], fold_groups=("jys",), fold_by_meaning=True)
+    assert q._rt_abstain_ref_ok() == frozenset({"xx"})
+    assert SeedAdmitParams(db_path="x", group_flow_abstain_ref_ok=["jys"], fold_groups=("jys",))._rt_abstain_ref_ok() == frozenset({"jys"})
+    d = SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    assert "fold_by_meaning" not in d and "fold_aspect" not in d
+    assert on.model_dump()["fold_by_meaning"] is True and "fold_aspect" not in on.model_dump()
