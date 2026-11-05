@@ -340,3 +340,20 @@ def test_relaxed_order_fit_only_for_roster_columns():
 def test_coord_relaxed_off_not_in_params_dump():
     assert "coord_relaxed" not in AlignRefParams(corpus="x").model_dump()
     assert AlignRefParams(corpus="x", coord_relaxed=True).model_dump()["coord_relaxed"] is True
+
+
+def test_shift_needs_pair_lets_one_sided_neighbor_match_pass():
+    """`coord_shift_needs_pair`（全唐文 r10 册 006 p81 列 3）：现役把格 6「紛」单字对成邻格的坐标字「綸」，
+    邻格 7 却没有现役 equal——不是整列错一位，只是形近字孤立认错。开关关：照旧退回；开：按孤立弱冲突放行。
+    邻格自己的现役 equal 也错开（真错一位）时，开了照样退回。"""
+    text = "理沿革二塗紛綸相半朕商搉羣"
+    recs = [(f"x{k}", k, None, ch, float(k)) for k, ch in enumerate(text, start=1)]
+    legacy = {f"x{k}": AlignRec(id=f"x{k}", col=3, slot=k, align_char=ch, align_op="equal", ref_run=3)
+              for k, ch in enumerate(text, start=1) if k not in (6, 7, 8, 9)}
+    legacy["x6"] = AlignRec(id="x6", col=3, slot=6, align_char="綸", align_op="equal", ref_run=1)
+    assert _coord_conflict(recs, legacy, {})                                   # 关：邻格错位特征，退回
+    assert _coord_conflict(recs, legacy, {}, shift_needs_pair=True) == ""      # 开：单边对上，放行
+    shifted = dict(legacy, x7=AlignRec(id="x7", col=3, slot=7, align_char="相", align_op="equal", ref_run=1))
+    assert _coord_conflict(recs, shifted, {}, shift_needs_pair=True)            # 邻格也错开：真错一位，退回
+    assert "coord_shift_needs_pair" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_shift_needs_pair=True).model_dump()["coord_shift_needs_pair"] is True
