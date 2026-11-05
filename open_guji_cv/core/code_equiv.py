@@ -851,6 +851,11 @@ ENTRIES: tuple[Equiv, ...] = (
                    '（tests/clustering/test_verify_elastic.py），合成字形 57,600 次 verify_pair_elastic（64/96/48 边长、6 套参数）结果逐位相同；'
                    '任务库 #459（dev 081d48a）对 #460（本改动 f5a5052）史記 01 册全册 143 页 glyph_match＋seed_admit：glyph_match 143 页逐字节相同，'
                    'seed_admit 135 页相同，另 8 页只差 evidence.iron_ex_missing（执行机上刻例原图读不到，两边各有缺，与本改动无关），放行与待审逐格相同；2026-11-05'),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="762b1b7c217f5546e2e865f473054ff483839e73bc895acb1c6ad72f0bd5539a",
+          old="35599c861269dd09c094e824b219ef8cd6c83b33fbac91f9a99d584d8836dad9",
+          evidence="书级开关 layout_raise_box（缺省关，不进参数 dump；A22 11-05 殿本抬头框重编）：row_segment 关着时在殿本 34 册 76 页"
+                   "（有抬头框而切分没抬的 164 列所在页，含 vol01/07/09 旧图源页与 vol28/45/56/73/82/88 整页框认错页）上与 origin/dev 产物逐字节相同；2026-11-05"),
 )
 
 

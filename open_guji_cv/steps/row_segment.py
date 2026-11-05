@@ -823,6 +823,13 @@ class RowSegmentParams(BaseModel):
     #: 第 3 轮待审 34 格）。开着时这种列给「整列空」表行，列端记空（`_blank_frame_junk`）按越界墨／印框记空。
     #: 只在表确是逐页按整理本全列生成（缺列＝整理本这列没字）的书开。书级开关；False＝关（缺省，不进参数哈希）。
     layout_gap_cols_empty: bool = False
+    #: **闸认出抬头框而表记得更低时，加一张「表按闸级数重编格号」的候选格网**（2026-11-05，殿本 A22）：daizhige 逐列本有的抬头列
+    #: 首字记在 0 号起格（不抬头），border_detect 却在版框上沿认出了这一列的抬头框（`head_raise_inner_y`）。原有的「闸抬头」候选
+    #: 只改抬头级数、表的格号不动，抬头字落在表说空的 -1 号格、列末表说有字的格是空的，违表 2 格，输给不抬头的表格网——首字整个
+    #: 落在列窗上沿外丢掉（vol45 p18 c4「聖」、vol56 p146 c5「特」），或格网整体上移一格（vol28 p14 c4、vol40 p48 c7）。
+    #: 开着时再出一张候选：表的字按先后不动、整体挪到闸的级数（同人裁抬头 `_reraise`），照样打分，坏格严格更少才选上。
+    #: 书级开关；False＝关（缺省，不进参数哈希）。
+    layout_raise_box: bool = False
     #: **表外的末几列不当整列空**（2026-11-03，全唐文）：缺省把本页最后一列表行之后的列当卷末整列空。全唐文的表
     #: （guji-manager make_qtw_layout.py）由现切分＋参照字数生成，空列已明写 `slots: []`；字数配不上的列只是不出行，
     #: 落在页末就被当整列空，满列 22 字全按「违表」打分、DP 被掩码推着走，格高忽高忽矮（15p123 c8 一格 314、
@@ -940,6 +947,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_slots_grow", None)
             if not self.layout_gap_cols_empty:
                 d.pop("layout_gap_cols_empty", None)
+            if not self.layout_raise_box:
+                d.pop("layout_raise_box", None)
             if self.layout_tail_empty:
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
@@ -1264,12 +1273,28 @@ class RowSegmentStep(Step):
             # 1.23 从物理首／末格放宽到表空格这一段；1.24 加越界墨（列首大印 vol09 p68/p70/p164、vol10 p175，
             # 卷末印章 vol09 p162）与整列空的列。
             if lay is not None and r is not None:
+                lay_rr = None    # `layout_raise_box` 那张候选用的重编表
+
+                def _lay_of(why: str, _base=lay):
+                    """候选格网配的表：重编过抬头的候选（及它挪一格、等距格网的派生）配重编表，其余配原表。"""
+                    return lay_rr if lay_rr is not None and "layout_reraise_box" in why else _base
                 cands = [(r, n_raised_col, top_slack, occ, "")]
                 if lay_alt is not None:
                     n_r2, t_s2, occ2 = lay_alt
                     r2 = _seg(n_body_col, (n_r2, t_s2) + _layout_kw(lay, occ2, n_body_col, n_r2))
                     if r2 is not None:
                         cands.append((r2, n_r2, t_s2, occ2, f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格）"))
+                # 闸认出了抬头框、表记得更低：表的字整体挪到闸的级数再切一张（见 `layout_raise_box`）
+                # 只认表的首字顶格（1 号格）的列：抬头列的首字一定在抬头格上，表首字前还空着格的是低起列，重编只会把空格挪进抬头位
+                # （vol82 p217 c5–c7：上版框认错、本页框判反了，表首字在 3 号格）
+                if (p.layout_raise_box and hr_verdict is None and gate_raised > int(lay.get("raised", 0))
+                        and min(lay.get("slots") or [0]) == 1 and _raise_box_real(wins, gc.col, gate.period)):
+                    lay_rr = _reraise(lay, gate_raised)
+                    occ_rr = set(lay_rr["slots"])
+                    r_rr = _seg(n_body_col, (gate_raised, gc.top_slack) + _layout_kw(lay_rr, occ_rr, n_body_col, gate_raised))
+                    if r_rr is not None:
+                        cands.append((r_rr, gate_raised, gc.top_slack, occ_rr,
+                                      f"layout_reraise_box：表按闸抬头框重编到 {gate_raised} 格（表 {int(lay.get('raised', 0))} 格）"))
                 # 表整列挪一格（表的字按先后不动、格号整体 ±1）：整理本的起格偶有差一格的（vol68 p31 c7–c9「右釋家類」
                 # 首字在 2 号格、表记 3 号起；vol45 p17 c2、p24 c4 列末多一个空字格），格线不变、只是列端一头多一字一头少一字。照样打分，
                 # 违表格数严格更少才选上（同分按原表）。
@@ -1278,14 +1303,14 @@ class RowSegmentStep(Step):
                         occ_s = _shift_occ(c_[3], d_, n_body_col)
                         if occ_s is None:
                             continue
-                        lay_s = _shift_lay(lay, d_)
+                        lay_s = _shift_lay(_lay_of(c_[4]), d_)
                         rs_ = _seg(n_body_col, (c_[1], c_[2]) + _layout_kw(lay_s, occ_s, n_body_col, c_[1]))
                         if rs_ is not None:
                             cands.append((rs_, c_[1], c_[2], occ_s, f"layout_shift{d_:+d}" + (f"（{c_[4]}）" if c_[4] else "")))
                 if gc.col in grids:
                     for c_ in list(cands):
                         # 挪一格的候选要配挪过的表（夹注、半格按表的格号认，1.45 前等距格网配的是没挪的表）
-                        lay_g = _shift_lay(lay, int(c_[4][12:14])) if c_[4].startswith("layout_shift") else lay
+                        lay_g = _shift_lay(_lay_of(c_[4]), int(c_[4][12:14])) if c_[4].startswith("layout_shift") else _lay_of(c_[4])
                         rg = _seg(n_body_col, (c_[1], c_[2]) + _layout_kw(lay_g, c_[3], n_body_col, c_[1]), grid=True)
                         if rg is not None:
                             cands.append((rg, c_[1], c_[2], c_[3], "uniform_grid" + (f"（{c_[4]}）" if c_[4] else "")))
@@ -1364,7 +1389,7 @@ class RowSegmentStep(Step):
                             break
                         rb, n_rb, t_sb, occ_b, why_b = cands[best]
                         lines = sorted(rb.boundaries + cuts[:1])
-                        alt = (n_rb, t_sb) + _layout_kw(lay, occ_b, n_body_col, n_rb)
+                        alt = (n_rb, t_sb) + _layout_kw(_lay_of(why_b), occ_b, n_body_col, n_rb)
                         trial = []
                         for i in range(len(lines)):            # 去掉第 i 条；去端线 = 丢掉列端那一格
                             ri = _seg(n_body_col, alt, bounds=lines[:i] + lines[i + 1:])
@@ -1389,6 +1414,8 @@ class RowSegmentStep(Step):
                                        + "→".join("/".join(map(str, scores[i])) for i in (0, best)))
                     if why == "layout_off":
                         lay = None
+                    elif "layout_reraise_box" in why:
+                        lay = _lay_of(why)
                 if junk[best]:
                     prior_flags.append(f"layout_frame_junk：列端 {junk[best]} 格的墨不像字（框线／碎墨／越界墨／印框），记空")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
@@ -1778,6 +1805,21 @@ def _shift_occ(occ: set, d: int, n_body: int) -> set | None:
 
 def _shift_lay(lay: dict, d: int) -> dict:
     return dict(lay, **{k: [s + d for s in lay.get(k, ())] for k in ("slots", "notes", "half")})
+
+
+def _raise_box_real(wins, col: int, period: float) -> bool:
+    """这一列 Step1 认的抬头框是不是真高出版框：列窗上沿比本页不抬头各列的列窗上沿（中位）高出半格以上。
+
+    `layout_raise_box` 用。上版框没认准的页（框线断续、`top_frame_kind` none），Step1 会把里层的线当上框、真上框当成
+    「抬头框」，一页每列都带框（vol56 p43、vol88 p69），或只有一两列不带框、而那几列的列窗上沿和「抬头框」一样高
+    （vol73 p73）——这些列并没有抬头，表按抬头重编格号会把首字错编成 -1。本页没有不抬头的列也不算。"""
+    rec = wins.column(col) if wins is not None else None
+    if rec is None or not rec.raised:
+        return False
+    tops = sorted(w.top_y for w in wins.columns if not w.raised)
+    if not tops:
+        return False
+    return tops[len(tops) // 2] - rec.top_y >= 0.5 * float(period)
 
 
 def _reraise(lay: dict, n_raised: int) -> dict:
