@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `column_warp.det_warp`、`row_segment.cut_judge: unet_f64`（书级，缺省关，关时逐字节不变、登记 code_equiv）：列射影与切点判官改 numpy／torch 双精度，跨 CPU 指令集逐位一致（S9：执行机与本机 012:99:1 切点不一致，根因是 OpenCV 5 warpPerspective 浮点 SIMD 与 fp32 判官）。全唐文 006/010 各 20 页四种 CPU 设置下产物逐字节相同；与不开比格框变 3 列、看图都切在字缝；整段慢约 35%。
+
 ## [0.6.10] - 2026-11-05
 
 - cell_shrink 书级开关 `inner_frame_keep_cross`（缺省关，A22）：抹内框细线时，穿过线的笔画留着（写本字脚压线，史記 05 册「義」「軍」「何」「將」）。殿本试开竖画下多挂线头，不开。关着时逐字节不变（code_equiv 已登记）。
