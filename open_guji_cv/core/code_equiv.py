@@ -925,6 +925,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="230be14bfebcd19130c40e9479e2b73d0fcb46378007b91c9340e2cc257aff84",
           old="b5c2b5fb08fc415f3f8e21dffcbfe8f6c57ef7f68d3a3b931b8c0a1e6622a9b7",
           evidence=_JZ_HALF_A),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="fab2ca38c755cf3a0389d0dbcf95af9468acc527f6b9e890700c80d8a41af3e5",
+          old="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
+          evidence="书级开关 inner_frame_keep_cross（缺省关，A22 11-05，史記列尾字脚压线）：开关关着时殿本 vol30 新图 28 页（每 5 页取 1；"
+                   "三个内框开关开、全关两种配置）与史記 05 册全册 95 页（册配置原样），cell_shrink 产物与字块 PNG 与 origin/dev 逐字节相同（只差 _manifest）；2026-11-05"),
 )
 
 
