@@ -1980,10 +1980,22 @@ TAIL_JUNK_ONE_H = 0.13     #   与高度下限（× 格高）——仅 frame_gua
 TAIL_JUNK_ONE_FRAC = 0.03
 TAIL_JUNK_ONE_H_REL = 0.10 # 相对路的高度下限（× 格高）：北行「一」连通体高 7~14px
 TAIL_JUNK_ONE_EDGE = 8     # 连通体上下沿离图块两端至少这么远（px）
+# 孤「一」绝对量逃生口（`one_abs`，书级 cell_shrink.tail_one_abs，缺省关；2026-11-05 全唐文切分线）：上面两道
+# 逃生口的高度门槛都按格高算（0.13／0.10×格高）。全唐文嘉慶本列端格高 205–240px，列尾「一」一横只高 25–32px
+# （0.11–0.13 格高），墨量 2000 上下也够不着相对路的 3%×墙距×格高，005–015 册列尾、列首的「一」
+# 每列 22 字只剩 21 格（006:135:5:22、009:103:9:22、012:31:3:1…，Sheldon 审页标「切分有问题」）。
+# 这道口不看格高：一块墨、宽在 TAIL_JUNK_ONE_W～TAIL_ONE_ABS_MAXW 墙距之间（满宽的照旧算条渣）、实心（面积 ≥
+# TAIL_ONE_ABS_FILL×外接框）、横着（宽 ≥ TAIL_ONE_ABS_ASPECT×高）、高 ≥ TAIL_ONE_ABS_H px、左右居中、
+# 上下都离图块端 TAIL_JUNK_ONE_EDGE 以上——框线残渣贴着端行、断框线偏在一侧，都过不了。
+TAIL_ONE_ABS_H = 14
+TAIL_ONE_ABS_FILL = 0.25
+TAIL_ONE_ABS_ASPECT = 3.0
+TAIL_ONE_ABS_CENTER = 0.1  # 连通体中心离图块中线不超过这么多 × 墙距（真「一」≤0.04；双边框内线残段偏 0.19）
+TAIL_ONE_ABS_MAXW = 0.8    # 连通体宽不超过这么多 × 墙距（真「一」0.54–0.62；贴着下框的内框线 0.90）
 
 
 def is_end_cell_junk(patch: np.ndarray, cell_h: float,
-                      frame_guard: bool = True) -> bool:
+                      frame_guard: bool = True, one_abs: bool = False) -> bool:
     """列首/列尾格：清理后只剩条痕残渣（非字）则 True。只应对端格调用。
 
     `frame_guard`：本书有没有物理版框（同 `CharExtractor.frame_guard`）。
@@ -2030,6 +2042,12 @@ def is_end_cell_junk(patch: np.ndarray, cell_h: float,
                 and y >= TAIL_JUNK_ONE_EDGE
                 and y + h <= patch.shape[0] - TAIL_JUNK_ONE_EDGE):
             return False                  # 孤「一」（相对量）：宽、不贴端、墨量够本册的一横
+        if (one_abs and TAIL_JUNK_ONE_W * W <= w <= TAIL_ONE_ABS_MAXW * W and h >= TAIL_ONE_ABS_H
+                and area >= TAIL_ONE_ABS_FILL * w * h and w >= TAIL_ONE_ABS_ASPECT * h
+                and abs(x + w / 2.0 - W / 2.0) <= TAIL_ONE_ABS_CENTER * W
+                and y >= TAIL_JUNK_ONE_EDGE
+                and y + h <= patch.shape[0] - TAIL_JUNK_ONE_EDGE):
+            return False                  # 孤「一」（绝对量，one_abs）：见 TAIL_ONE_ABS_* 说明
         top = y if top is None else min(top, y)
         bot = y + h if bot is None else max(bot, y + h)
     if top is not None and (bot - top) >= TAIL_JUNK_SPAN * cell_h:
@@ -3413,13 +3431,18 @@ class CharExtractor:
             # tail_junk 旗，遇到第一格真字停。判据在裁紧前的格框图块上算。
             by_idx = {i: inst for i, _c, inst in col_entries}
             for seq in (order[:2], order[::-1][:2]):
-                for i in seq:
+                full = order if seq[0] == order[0] else order[::-1]
+                for j, i in enumerate(seq):
                     info, inst = end_patches.get(i), by_idx.get(i)
                     if info is None or inst is None:
                         break
                     if "tail_junk" in inst.flags:
                         continue
-                    if (i in table_char and has_stroke(info[0])) or not is_end_cell_junk(*info, frame_guard=self.frame_guard):
+                    # tail_one_abs：只在往里一格是字时放「一」（列尾空着、只剩框线的短列，框线不算「一」，010:123:2:22）
+                    nxt = by_idx.get(full[j + 1]) if j + 1 < len(full) and abs(full[j + 1] - i) == 1 else None
+                    one_abs = bool(gmeta.get("tail_one_abs")) and nxt is not None and nxt.cell_type == "char"
+                    if (i in table_char and has_stroke(info[0])) or not is_end_cell_junk(*info, frame_guard=self.frame_guard,
+                                                                                   **({"one_abs": True} if one_abs else {})):
                         break
                     inst.cell_type = "empty"
                     inst.flags.append("tail_junk")

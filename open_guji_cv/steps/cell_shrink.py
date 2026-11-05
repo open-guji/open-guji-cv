@@ -78,6 +78,11 @@ class CellShrinkParams(BaseModel):
     磨成点线拟不出，列尾字块整页挂着框线（列端评测集 frame-end-crop 剩下 16 格列尾带框里 10 格是这类）。
     缺省关＝旧行为；小段法拟得出的页不变。"""
 
+    tail_one_abs: bool = False
+    """列端渣格闸的孤「一」逃生口加一道不看格高的绝对量判据（extractor `is_end_cell_junk(one_abs=True)`，
+    见 `TAIL_ONE_ABS_*`）。缺省关＝旧行为。开（全唐文嘉慶本）：列端格高 205–240px，列尾、列首的「一」只高
+    25–32px，过不了按格高算的两道逃生口，被当框渣记空，整列少一字（切分线，2026-11-05）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -96,6 +101,8 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_profile", None)
         if isinstance(d, dict) and not self.inner_frame_only:
             d.pop("inner_frame_only", None)
+        if isinstance(d, dict) and not self.tail_one_abs:
+            d.pop("tail_one_abs", None)
         return d
 
 
@@ -415,7 +422,8 @@ class CellShrinkStep(Step):
                      **({"jiazhu_end_halves": True} if p.jiazhu_end_halves else {}),
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
-                     **({"frame_line_grow": True} if p.frame_line_grow else {})},
+                     **({"frame_line_grow": True} if p.frame_line_grow else {}),
+                     **({"tail_one_abs": True} if p.tail_one_abs else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }
