@@ -225,17 +225,43 @@ def _make_input(img: np.ndarray):
 _OWNER_CACHE_MAX = 192
 
 
+def _resize_linear_f64(a: np.ndarray, h: int, w: int) -> np.ndarray:
+    """双精度双线性缩放，坐标口径同 cv2.INTER_LINEAR（像素中心对齐、越界夹到边）。
+
+    给 `f64` 判官用（2026-11-03 S9）：cv2 的浮点缩放走 SIMD，换 CPU 指令集末位就变（实测关掉优化差 1.5e-5），
+    这里只用逐元素乘加，与 CPU 无关。"""
+    a = np.asarray(a, dtype=np.float64)
+    def _axis(n_src: int, n_dst: int):
+        f = (np.arange(n_dst, dtype=np.float64) + 0.5) * (n_src / n_dst) - 0.5
+        i0 = np.floor(f)
+        t = f - i0
+        i0 = i0.astype(np.int64)
+        lo = i0 < 0
+        t[lo], i0[lo] = 0.0, 0
+        hi = i0 >= n_src - 1
+        t[hi], i0[hi] = 0.0, n_src - 1
+        i1 = np.minimum(i0 + 1, n_src - 1)
+        return i0, i1, t
+    y0, y1, ty = _axis(a.shape[0], h)
+    x0, x1, tx = _axis(a.shape[1], w)
+    r = a[y0] * (1.0 - ty)[:, None] + a[y1] * ty[:, None]
+    return r[:, x0] * (1.0 - tx)[None, :] + r[:, x1] * tx[None, :]
+
+
 class UNetJudge:
     """进程内持有一份网络。`owner()` 出归属图，`scores()` 给候选打分。任何异常都返回 None，不抛。"""
 
-    def __init__(self, ckpt: str | Path | None = None, device: str | None = None):
+    def __init__(self, ckpt: str | Path | None = None, device: str | None = None, f64: bool = False):
         import torch
         self.ckpt = Path(ckpt) if ckpt else DEFAULT_CKPT
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.net = _build_model().to(self.device)
         self.net.load_state_dict(torch.load(self.ckpt, map_location=self.device)["state"])
+        self.f64 = f64
+        if f64:
+            self.net = self.net.double()
         self.net.eval()
-        self.fingerprint = ckpt_fingerprint(self.ckpt)
+        self.fingerprint = ckpt_fingerprint(self.ckpt) + (":f64" if f64 else "")
 
     def owner(self, win_gray: np.ndarray, ink_threshold: int = INK_TH, cc_max: int | None = CC_MAX):
         """双格窗口灰度 → (墨掩膜 W, owner 1/2/0, 置信 |pA−pB|)。
@@ -262,13 +288,19 @@ class UNetJudge:
         cimg, s = _to_canvas(win_gray)
         x = _make_input(cimg)[None].to(self.device)
         with torch.no_grad():
-            prob = torch.softmax(self.net(x)[0], 0).cpu().numpy()
+            if self.f64:
+                prob = torch.softmax(self.net(x.double())[0], 0).cpu().numpy()
+            else:
+                prob = torch.softmax(self.net(x)[0], 0).cpu().numpy()
         prob = prob[:, CANVAS_TOP:]
         h, w = win_gray.shape
         if s < 1.0:
             ph, pw = int(h * s), int(w * s)
-            prob = np.stack([cv2.resize(prob[k][:ph, :pw], (w, h), interpolation=cv2.INTER_LINEAR)
-                             for k in range(prob.shape[0])])
+            if self.f64:
+                prob = np.stack([_resize_linear_f64(prob[k][:ph, :pw], h, w) for k in range(prob.shape[0])])
+            else:
+                prob = np.stack([cv2.resize(prob[k][:ph, :pw], (w, h), interpolation=cv2.INTER_LINEAR)
+                                 for k in range(prob.shape[0])])
         else:
             prob = prob[:, :h, :w]
         pA, pB = prob[1], prob[2]
@@ -352,15 +384,19 @@ class UNetJudge:
 _JUDGE: dict[str, "UNetJudge | None"] = {}
 
 
-def get_judge(ckpt: str | Path | None = None) -> "UNetJudge | None":
-    """进程内单例。没有 torch、权重缺失或加载失败 → None（只警告一次）。"""
-    key = str(Path(ckpt) if ckpt else DEFAULT_CKPT)
+def get_judge(ckpt: str | Path | None = None, f64: bool = False) -> "UNetJudge | None":
+    """进程内单例（按权重×精度）。没有 torch、权重缺失或加载失败 → None（只警告一次）。
+
+    `f64`：双精度前向＋双精度缩放（S9，2026-11-05）。fp32 前向随 CPU 指令集（AMX/AVX512/AVX2）末位不同、
+    OpenCV 浮点缩放随 SIMD 不同，执行机与本机切点分歧块差几个像素；双精度在本机四种指令集下逐位相同。慢约 4 倍。"""
+    path = str(Path(ckpt) if ckpt else DEFAULT_CKPT)
+    key = path + ("#f64" if f64 else "")
     if key in _JUDGE:
         return _JUDGE[key]
     judge = None
     try:
-        if Path(key).exists():
-            judge = UNetJudge(key)
+        if Path(path).exists():
+            judge = UNetJudge(path, f64=f64)
         else:
             log.warning("cut judge 权重不存在：%s（Step3 按旧规则选切法）", key)
     except Exception as e:

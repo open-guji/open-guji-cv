@@ -106,13 +106,14 @@ def _char(tmp_path, name, cells):
 
 
 def test_split_changes_human_vs_machine_and_revert(tmp_path):
-    """变了的格：最新人裁就是新字＝人裁改字；其余机器改判，文本退回旧字。"""
-    old = _char(tmp_path, "old.json", [("3:1:1", "宫"), ("3:1:2", ""), ("3:1:3", "象"), ("3:1:4", "甲")])
-    new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲")])
+    """变了的格：最新人裁就是新字＝人裁改字；旧字是人裁、机器改了＝推翻人裁，退回；其余机器改字按新结果（用户 11-05）。"""
+    old = _char(tmp_path, "old.json", [("3:1:1", "宫"), ("3:1:2", ""), ("3:1:3", "象"), ("3:1:4", "甲"), ("3:1:5", "")])
+    new = _char(tmp_path, "new.json", [("3:1:1", "官"), ("3:1:2", "論"), ("3:1:3", "彖"), ("3:1:4", "甲"), ("3:1:5", "已")])
     sp = pc.split_changes(old, new, {"3:1:2": "論", "3:1:3": "象"})
-    assert sp == {"human": [("3:1:2", "", "論")], "machine": [("3:1:1", "宫", "官"), ("3:1:3", "象", "彖")]}
-    pc.revert_cells(new, {a: o for a, o, _ in sp["machine"]})
-    assert pc._cells(new) == {"3:1:1": "宫", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲"}
+    assert sp == {"human": [("3:1:2", "", "論")], "overrule": [("3:1:3", "象", "彖")],
+                  "machine": [("3:1:1", "宫", "官"), ("3:1:5", "", "已")]}
+    pc.revert_cells(new, {a: o for a, o, _ in sp["overrule"]})
+    assert pc._cells(new) == {"3:1:1": "官", "3:1:2": "論", "3:1:3": "象", "3:1:4": "甲", "3:1:5": "已"}
 
 
 def test_status_done_when_all_voted_or_idle(tmp_path, monkeypatch):

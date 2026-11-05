@@ -68,8 +68,14 @@ class InnerFrameLine:
     support: float               # 内线有支持的小段比例
     x_range: tuple[int, int]
     via: str = "chunks"          # "chunks" 小段投票 | "profile" 整宽行墨（profile_fallback）
+    knots: tuple[tuple[float, float], ...] | None = None
+    """逐段贴线后的线心折线 ((x, y), …)，有就按它插值、不再用 center（`localize_inner_line`）。"""
 
     def y(self, x) -> np.ndarray:
+        if self.knots:
+            kx = np.array([k[0] for k in self.knots], float)
+            ky = np.array([k[1] for k in self.knots], float)
+            return np.interp(np.asarray(x, float), kx, ky)
         return np.polyval(np.asarray(self.center, float), np.asarray(x, float))
 
     def text_edge(self, x) -> np.ndarray:
@@ -113,12 +119,15 @@ def _ransac_poly(x: np.ndarray, y: np.ndarray, deg: int, tol: float, rng: np.ran
 
 
 def fit_inner_frame_line(ink: np.ndarray, x0: int, x1: int, y_hint: float, cell_h: float,
-                         side: str = "bottom", seed: int = 0, profile_fallback: bool = False) -> InnerFrameLine | None:
+                         side: str = "bottom", seed: int = 0, profile_fallback: bool = False,
+                         max_thick: float = INNER_MAX_THICK, seed_fallback: bool = False) -> InnerFrameLine | None:
     """在二值墨图 `ink`（True＝墨）上拟一道内框细线。
 
     x0/x1：文字块左右（只在这段里量）；y_hint：版框大致的 y（Step1/2 给的，内线或外框都行）；
     cell_h：格高（定搜索带与距离上限）；side：下框 "bottom" / 上框 "top"。拟不出可信的线返回 None。
-    profile_fallback：外框拟出来了、小段投票拟不出内线时，改按外框拉直的整宽行墨找内线（`_profile_inner`）。"""
+    profile_fallback：外框拟出来了、小段投票拟不出内线时，改按外框拉直的整宽行墨找内线（`_profile_inner`）。
+    seed_fallback：两法都拟不出时，按「薄段＋白缝＋外框」三件套量出的中位距离从外框平移出一道种子线（via="seed"），
+    只给 `localize_inner_line` 当起点——它贴不上（返回原线、没有 knots）就不能用。"""
     h, w = ink.shape
     x0, x1 = max(0, int(x0)), min(w, int(x1))
     if side == "bottom":
@@ -148,14 +157,42 @@ def fit_inner_frame_line(ink: np.ndarray, x0: int, x1: int, y_hint: float, cell_
     if inl is None or inl.sum() < MIN_OUTER_INLIER * len(chunks):
         return None
     outer = np.polyfit(ox_a[inl], oy_a[inl], 2)
-    line = _chunk_inner(ink, chunks, outer, float(inl.mean()), x0, x1, cell_h, side, rng)
+    line = _chunk_inner(ink, chunks, outer, float(inl.mean()), x0, x1, cell_h, side, rng, max_thick=max_thick)
     if line is None and profile_fallback:
         line = _profile_inner(ink, outer, float(inl.mean()), x0, x1, cell_h, side)
+    if line is None and seed_fallback:
+        line = _seed_inner(chunks, outer, float(inl.mean()), x0, x1, cell_h, side, max_thick)
     return line
 
 
+def _seed_inner(chunks: list, outer: np.ndarray, outer_inlier: float, x0: int, x1: int, cell_h: float,
+                side: str, max_thick: float) -> InnerFrameLine | None:
+    """种子线：各小段里紧挨外框（朝页心、隔着 ≥ GAP_MIN_ROWS 行白缝）的那道薄段，量线心离外框的距离，取中位数。
+    内线断续、空段验线过不了的页（全唐文 010 p74 下框）用；字底横后面跟的是内线不是外框，量不进来。"""
+    sign = 1.0 if side == "bottom" else -1.0
+    ds, ts = [], []
+    for cx, rr in chunks:
+        o = float(np.polyval(outer, cx))
+        if side == "bottom":
+            above = [(s, t) for s, t in rr if t <= o - GAP_MIN_ROWS and o - t <= INNER_MAX_GAP * cell_h]
+            r = max(above, key=lambda v: v[1]) if above else None
+        else:
+            below = [(s, t) for s, t in rr if s >= o + GAP_MIN_ROWS and s - o <= INNER_MAX_GAP * cell_h]
+            r = min(below, key=lambda v: v[0]) if below else None
+        if r is not None and 1 <= r[1] - r[0] <= max_thick:
+            ds.append(sign * (o - (r[0] + r[1]) / 2.0))
+            ts.append(r[1] - r[0])
+    if len(ds) < LOCAL_MIN_OBS * len(chunks):
+        return None
+    center = np.asarray(outer, float).copy()
+    center[2] -= sign * float(np.median(ds))
+    return InnerFrameLine(side=side, center=tuple(float(v) for v in center), thick=float(np.median(ts)),
+                          outer_inlier=outer_inlier, support=len(ds) / len(chunks), x_range=(x0, x1), via="seed")
+
+
 def _chunk_inner(ink: np.ndarray, chunks: list, outer: np.ndarray, outer_inlier: float, x0: int, x1: int,
-                 cell_h: float, side: str, rng: np.random.Generator) -> InnerFrameLine | None:
+                 cell_h: float, side: str, rng: np.random.Generator,
+                 max_thick: float = INNER_MAX_THICK) -> InnerFrameLine | None:
     """小段投票拟内线（上面第 3、4 步）：各小段的薄行段量离外框的距离，RANSAC 拟一次式；加白缝、空段两道护栏。"""
     h = ink.shape[0]
     sign = 1.0 if side == "bottom" else -1.0         # 距离朝页心为正
@@ -164,7 +201,7 @@ def _chunk_inner(ink: np.ndarray, chunks: list, outer: np.ndarray, outer_inlier:
         o = float(np.polyval(outer, cx))
         for s, t in rr:
             d = (o - t) if side == "bottom" else (s - o)
-            if 1 <= d <= INNER_MAX_GAP * cell_h and 1 <= t - s <= INNER_MAX_THICK:
+            if 1 <= d <= INNER_MAX_GAP * cell_h and 1 <= t - s <= max_thick:
                 cx_l.append(cx)
                 d_l.append(sign * (o - (s + t) / 2.0))      # 线心离外框的距离（朝页心为正）
                 t_l.append(t - s)
@@ -322,3 +359,105 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
         return None
     return InnerFrameLine(side=side, center=tuple(float(v) for v in center), thick=thick,
                           outer_inlier=outer_inlier, support=pres, x_range=(x0, x1), via="profile")
+
+
+INNER_THICK_PER_CELL = 0.065
+"""内线厚上限随格高放大（`inner_thick_limit`）：INNER_MAX_THICK 是按殿本新图（格高约 83）定的，全唐文格高约 205、
+内线厚 5–12 行，固定 7 行时一半小段的内线被当成「太厚」不认，空段验线不过、整页拟不出（012 p58 上框、010 p166 下框）。"""
+
+
+def inner_thick_limit(cell_h: float) -> float:
+    """内线厚上限：max(INNER_MAX_THICK, INNER_THICK_PER_CELL × 格高)。"""
+    return max(float(INNER_MAX_THICK), INNER_THICK_PER_CELL * float(cell_h))
+
+
+LOCAL_REACH = 0.5        # 逐段贴线：离整页拟合线心这么多格高以内找本段的内线
+LOCAL_WIN = 3            # 逐段贴线：残差取左右各这么多小段的中位数
+LOCAL_TOL = 3.0          # ……离中位数超过这么多行的观测丢掉
+LOCAL_GAP_TOL = 4.0      # ……缝宽离附近中位数超过这么多行的候选不认
+LOCAL_GAP_WIN = 15       # ……附近＝左右这么多小段
+LOCAL_GAP_DRIFT = 8.0    # ……附近中位数离全页中位数超过这么多行就不信、用全页的
+LOCAL_MIN_OBS = 0.3      # 观测到的小段不到这么多就不贴、原样返回
+
+
+def localize_inner_line(ink: np.ndarray, line: InnerFrameLine, cell_h: float,
+                        max_thick: float = INNER_MAX_THICK) -> InnerFrameLine:
+    """整页拟合的内线逐小段贴到本段真线上（cell_shrink `inner_frame_local`，2026-11-05 全唐文 S4）。
+
+    整页拟合是「外框二次曲线 − 一次式距离」。外框在页边拐弯（全唐文 006 p121 右端外框上翘 40 行）、内线本身
+    波浪起伏时，二次曲线跟不上，线心在页的一端落到外框上沿，内线整段漏抹，列尾字块挂着线（006:121:1:22「上」）。
+
+    每个小段在拟合线心 ±LOCAL_REACH 格高里找：厚 1–max_thick 行的薄段，朝框外隔着白缝紧跟一道 ≥ OUTER_MIN_THICK
+    行、且厚过 max_thick 的粗段（外框）。内线离外框的距离在页内很稳、只慢慢变（006 p121 左中右都是 31–32 行），所以先取
+    各段候选里离拟合线最近那个的缝宽，按附近 ±LOCAL_GAP_WIN 段取中位数，只认缝宽与它差 LOCAL_GAP_TOL 行以内的——字的底横离外框远得多，认不成。观测线心减拟合线心得残差，
+    左右 LOCAL_WIN 段取中位数、离群的丢掉，再按 x 线性插值成折线（两端取最近观测）。观测太少原样返回。"""
+    h, w = ink.shape
+    x0, x1 = line.x_range
+    reach = LOCAL_REACH * cell_h
+    gap_max = INNER_MAX_GAP * cell_h
+    cands: list[tuple[float, float, list[tuple[float, float]]]] = []    # (cx, pred, [(线心, 缝宽)…])
+    for x in range(x0, x1 - CHUNK + 1, CHUNK):
+        cx = x + CHUNK / 2.0
+        pred = float(line.y(cx))
+        if line.side == "bottom":
+            lo, hi = int(pred - reach), int(pred + reach + gap_max + 4 * OUTER_MIN_THICK)
+        else:
+            lo, hi = int(pred - reach - gap_max - 4 * OUTER_MIN_THICK), int(pred + reach)
+        lo, hi = max(0, lo), min(h, hi)
+        got: list[tuple[float, float]] = []
+        if hi - lo >= 8:
+            rr = [(s + lo, t + lo) for s, t in _runs(ink[lo:hi, x:x + CHUNK].mean(axis=1) >= RUN_COV)]
+            for i, (s, t) in enumerate(rr):
+                if not 1 <= t - s <= max_thick:
+                    continue
+                c = (s + t) / 2.0
+                if abs(c - pred) > reach:
+                    continue
+                if line.side == "bottom":
+                    nb = rr[i + 1] if i + 1 < len(rr) else None
+                else:
+                    nb = rr[i - 1] if i > 0 else None
+                # 外框比内线厚得多；内线本身厚过 OUTER_MIN_THICK 时，「字横＋白缝＋内线」会冒充「内线＋白缝＋外框」（006:75:1:1 觀）
+                if nb is None or nb[1] - nb[0] < max(OUTER_MIN_THICK, max_thick + 1):
+                    continue
+                g = (nb[0] - t) if line.side == "bottom" else (s - nb[1])
+                if GAP_MIN_ROWS <= g <= gap_max:
+                    got.append((c, float(g)))
+        cands.append((cx, pred, got))
+    n = len(cands)
+    near = [min(got, key=lambda v: abs(v[0] - pred))[1] for _cx, pred, got in cands if got]
+    if not n or len(near) < LOCAL_MIN_OBS * n:
+        return line
+    near_x = np.array([cx for cx, _pred, got in cands if got], float)
+    near_g = np.array(near, float)
+    gap_all = float(np.median(near_g))
+    obs_x, obs_r = [], []
+    for cx, pred, got in cands:
+        # 缝宽在页内会慢慢变（006 p75 左 39 行、右 34 行）：取附近 ±LOCAL_GAP_WIN 段的中位数
+        # 内线整段断掉的地方附近只剩字底横当候选，局部中位数会被带偏（010 p166 x≈1700–1950 内线缺、字底横离外框 70 行），
+        # 局部值离全页中位数超过 LOCAL_GAP_DRIFT 行就用全页的
+        m = np.abs(near_x - cx) <= LOCAL_GAP_WIN * CHUNK
+        gap0 = float(np.median(near_g[m])) if m.any() else gap_all
+        if abs(gap0 - gap_all) > LOCAL_GAP_DRIFT:
+            gap0 = gap_all
+        ok = [c for c, g in got if abs(g - gap0) <= LOCAL_GAP_TOL]
+        if ok:
+            obs_x.append(cx)
+            obs_r.append(min(ok, key=lambda c: abs(c - pred)) - pred)
+    if len(obs_x) < LOCAL_MIN_OBS * n:
+        return line
+    ox, orr = np.asarray(obs_x), np.asarray(obs_r)
+    keep = np.zeros(len(ox), bool)
+    med = np.zeros(len(ox))
+    for i in range(len(ox)):
+        a, b = max(0, i - LOCAL_WIN), min(len(ox), i + LOCAL_WIN + 1)
+        med[i] = float(np.median(orr[a:b]))
+        keep[i] = abs(orr[i] - med[i]) <= LOCAL_TOL
+    if keep.sum() < LOCAL_MIN_OBS * n:
+        return line
+    kx = ox[keep]
+    xs = np.arange(x0, x1 + CHUNK, CHUNK, dtype=float)
+    ys = line.y(xs) + np.interp(xs, kx, med[keep])
+    return InnerFrameLine(side=line.side, center=line.center, thick=line.thick, outer_inlier=line.outer_inlier,
+                          support=line.support, x_range=line.x_range, via=line.via + "+local",
+                          knots=tuple((float(a), float(b)) for a, b in zip(xs, ys)))

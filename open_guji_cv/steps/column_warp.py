@@ -32,6 +32,10 @@ class ColumnWarpParams(BaseModel):
     ink_threshold: int = 128
     min_blob_area: int = 6            # denoise_column
     side_floor_look: float = 0.25     # 交接闸 L2 用：两侧各看进去多少比例的宽度
+    det_warp: bool = False
+    """列射影改用跨 CPU 逐位确定的 numpy 双精度实现（`seg.warp._warp_perspective_det`，S9 2026-11-05）。
+    cv2.warpPerspective 在 OpenCV 5 走浮点 SIMD，执行机与本机列图差 1 级灰度（册12 p99 每列 100+ 像素），
+    下游切点跟着翻（012:99:1 dis_unet 151/154）。开了与 cv2 版也只在取整边上差 1 级，但仍改产物。缺省关。"""
     tight_rule_band: bool = False
     """两侧界行判带收紧（写本开，史記）：贴边界行取衰减后的第一个谷（`column_text_band` first_valley），
     内侧孤立窄条峰到 TIGHT_INNER_BAR_PEAK 才当第二道线抹（缺省 0.10，殿本页边列内框淡到 0.12）。缺省关＝殿本旧行为。
@@ -44,6 +48,8 @@ class ColumnWarpParams(BaseModel):
         d = handler(self)
         if isinstance(d, dict) and not self.tight_rule_band:
             d.pop("tight_rule_band", None)
+        if isinstance(d, dict) and not self.det_warp:
+            d.pop("det_warp", None)
         return d
 
 
@@ -135,13 +141,13 @@ class ColumnWarpStep(Step):
         # refine 是给单线框、Step1 线落在首字顶边的册（bxgb p48/p54）准备的。
         if int((ctx.book.frame_layers or {}).get("top", 1)) < 2:
             for win in wins:
-                refine_top_by_frame(gray, win)
+                refine_top_by_frame(gray, win, det=p.det_warp)
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow
                 ) -> tuple[np.ndarray, np.ndarray, dict, np.ndarray]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
-        warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y)
+        warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y, det=p.det_warp)
         raw = denoise_column(warped, ink_threshold=p.ink_threshold, min_blob_area=p.min_blob_area)
         # 双线版框剥第二道（column_projection.LAYER2_* 注）：层数与层距来自册配置
         fl, og = ctx.book.frame_layers or {}, ctx.book.outer_gap or {}

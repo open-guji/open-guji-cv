@@ -224,6 +224,13 @@ _JZ_HALF_A = ("只有右半的夹注格整字发右半 jiazhu_half_a（row_segme
               "_half_a_left）：开关关着时 row_segment 在全唐文 013 p146–151（6 页，含格位表 half 39 格；基底产物包 r12）上与 origin/dev "
               "9ce806a 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
 
+_TAIL_ONE_ABS = ("列端孤「一」绝对量逃生口 tail_one_abs（cell_shrink 书级开关，缺省关；extractor is_end_cell_junk 加 one_abs、"
+                 "列端渣格闸按往里一格是字才放）：开关关着时 cell_shrink 在全唐文 012 p20/31/33/80/89/146（基底产物包 r13）上与 origin/dev "
+                 "产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
+
+_LAYOUT_CUTS = ("格位表人定格线 cuts（row_segment，表行写了 cuts／col_h 才照线切，没写的列不变）：row_segment 在全唐文 012 p20/31/33/80/89/146、"
+                 "013 p140/147（本机 dev 从 border_detect 起出上游）上与 origin/dev b148b2c 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -930,6 +937,58 @@ ENTRIES: tuple[Equiv, ...] = (
           old="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
           evidence="书级开关 inner_frame_keep_cross（缺省关，A22 11-05，史記列尾字脚压线）：开关关着时殿本 vol30 新图 28 页（每 5 页取 1；"
                    "三个内框开关开、全关两种配置）与史記 05 册全册 95 页（册配置原样），cell_shrink 产物与字块 PNG 与 origin/dev 逐字节相同（只差 _manifest）；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.column_warp",
+          new="12a0d170a3843f32b76c18eedad8d313f83e0596e9d19d0f4a2cc1e4e85c6463",
+          old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
+          evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="1abd6033efc1138cd6e4a63f0795f5a78b298f0c2362bb3d2932329e6608f2e8",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.warp",
+          new="114369950bbde51b6e4dca56d9471f08046385d30f942d905abeb19a8cbb568f",
+          old="5e750f4a8781a7ca6ea8a6916d330d7a27719a91fafb4814aa2e62a8bc5af353",
+          evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.books.siku_zongmu.column",
+          new="9684c4f568ecbbdb3fe54de8572d9def5fd0a01ee64797c089cce416b7bba2c6",
+          old="57eac44b46c0ce8126d45774bcf309f6a628aec75259f3692568ff7456a8e54b",
+          evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.cut_select",
+          new="dd00ea8f3e0ef148d1a0422c8ebdf63ae7995491737509826ef86905f57cfde1",
+          old="fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b",
+          evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="2ce1199fb028fcdab7b83f31e7d78421a03047f5635c2e8d5680d02d21abdb7f",
+          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
+          evidence="S4 内框细线逐段贴线 cell_shrink.inner_frame_local（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,72，书级 inner_frame_cut 开）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.frame_line",
+          new="58657ca853fe63e8fea1ba6a7e37d463338a69da12fc311454f782000bbad3fe",
+          old="0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b",
+          evidence="S4 内框细线逐段贴线 cell_shrink.inner_frame_local（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,72，书级 inner_frame_cut 开）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="403b83c2b6accbbd21f1f6f80272fe569b310f9881325341c0f1a77df42b170c",
+          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
+          evidence=_TAIL_ONE_ABS),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="7fc8b038633f8c23a0421251004cbc13ccbf6a875a44bb370258e7c91abb11d0",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence=_TAIL_ONE_ABS),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="54dc154cfba6db8cfd8010a1747b6e6f647d16959ff49818f1500b40e0670514",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence=_LAYOUT_CUTS),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="18517e310d5a4af1946c39c28c2fcb32427ae5fc28c5eb84037c9cf3ec2c53e3",
+          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="c658979461e3be53fda935c0705d1bd4a8dfc48073eaf4c7b7f680a6b98da988",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.frame_line",
+          new="d7447bb3945fbdb008e46048d9571b7022b7910bf9509b54691f3d25fca9b238",
+          old="0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
 )
 
 
