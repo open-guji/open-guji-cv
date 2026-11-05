@@ -172,14 +172,14 @@ class SeedAdmitParams(BaseModel):
     开着：铁证本要放行、但判别时有刻例原图缺失（缓存里没有），**不放行**，转待审并记 doubt
     `iron_ex_missing`，`evidence.iron_ex_missing` 记缺的例数。只会收紧，缓存齐全时与关着逐格一致。
     v1 旧坐标等「本来就认不出的形状」不算缺（与缓存无关，各环境一样）。"""
-    iron_ex_from_store: bool = False
+    iron_ex_from_store: bool = True
     """铁证判别器的人裁刻例原图改从**字形库**取（A20 2026-11-05，用户「可以修」）：缺省（关）从缓存里
     别册别页的 `char_patch` 取，执行机缓存里有哪些册全看它跑过什么——同代码同输入，`iron_ex_missing`
     随机器变（史記 01 任务库 #459/#460：8 页只差这一项，两边各缺各的）。开着：刻例图取字形库
     `instances.patch_png`（与人裁匹配器同一份，册钉了字形库就各机一样），裁到 canonical 图里原裁切
     那一块（canonical 只平移不放大，字的像素尺寸不变），缓存一概不读。字形库里人裁实例都有图，
     `iron_ex_missing` 基本不再出现。会改放行（多出原先缺图转待审的格、刻例图与缓存版本不同的格判别距离变），
-    要 A/B 后再定缺省。"""
+    2026-11-05 用户定缺省开（史記 01 A/B 见 doc/开关登记表.md）；关着就是老口径（读缓存）。"""
 
     context_single_stroke_review: bool = False
     """N1（Esme 规则面，默认关）：context 通道要放行的字是单笔画字（`_SINGLE_STROKES`：一 丨 亅 丶 丿 乀 乁 乚 乛）
@@ -921,8 +921,6 @@ class SeedAdmitParams(BaseModel):
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
-        if isinstance(d, dict) and not self.iron_ex_from_store:
-            d.pop("iron_ex_from_store", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
