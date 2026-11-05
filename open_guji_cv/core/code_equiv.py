@@ -224,6 +224,10 @@ _JZ_HALF_A = ("只有右半的夹注格整字发右半 jiazhu_half_a（row_segme
               "_half_a_left）：开关关着时 row_segment 在全唐文 013 p146–151（6 页，含格位表 half 39 格；基底产物包 r12）上与 origin/dev "
               "9ce806a 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
 
+_TAIL_ONE_ABS = ("列端孤「一」绝对量逃生口 tail_one_abs（cell_shrink 书级开关，缺省关；extractor is_end_cell_junk 加 one_abs、"
+                 "列端渣格闸按往里一格是字才放）：开关关着时 cell_shrink 在全唐文 012 p20/31/33/80/89/146（基底产物包 r13）上与 origin/dev "
+                 "产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -958,6 +962,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="58657ca853fe63e8fea1ba6a7e37d463338a69da12fc311454f782000bbad3fe",
           old="0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b",
           evidence="S4 内框细线逐段贴线 cell_shrink.inner_frame_local（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,72，书级 inner_frame_cut 开）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="403b83c2b6accbbd21f1f6f80272fe569b310f9881325341c0f1a77df42b170c",
+          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
+          evidence=_TAIL_ONE_ABS),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="7fc8b038633f8c23a0421251004cbc13ccbf6a875a44bb370258e7c91abb11d0",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence=_TAIL_ONE_ABS),
 )
 
 
