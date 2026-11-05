@@ -5,6 +5,11 @@
 
 ## [未发版]
 
+## [0.6.4] - 2026-11-05
+
+### Fixed
+- 文意留痕 `methods._ctx_out` 只留白名单键，把 #1071 记的待裁问题 `extra.ask` 丢了，`llm_queue export` 恒为 0 问：保留 `ask`（#1080，SJ）。seed_admit 指纹随之变，第5轮殿本从 seed_admit 起重放。
+
 ## [0.6.3] - 2026-11-05
 
 ### Changed
