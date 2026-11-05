@@ -1,4 +1,6 @@
-"""（拆分 P2 第四批，2026-11-04：本包的 transfer 已搬去 guji-manager `guji_manager.gold`。）
+"""（拆分 P5，2026-11-04：本包的 atomic, v2_align 已搬去 guji-manager `guji_manager.gold`。）
+
+（拆分 P2 第四批，2026-11-04：本包的 transfer 已搬去 guji-manager `guji_manager.gold`。）
 
 Gold 层：统一金标信封 + 分片仓 + 旧格式适配器。
 

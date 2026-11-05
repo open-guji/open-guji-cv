@@ -1,4 +1,6 @@
-"""（拆分 P4 第六批，2026-11-04：本包的 vision 已搬去 guji-manager `guji_manager.feedback`。）
+"""（拆分 P5，2026-11-04：本包的 collate_consumers, consumers, glyph_audit, routes 已搬去 guji-manager `guji_manager.feedback`。）
+
+（拆分 P4 第六批，2026-11-04：本包的 vision 已搬去 guji-manager `guji_manager.feedback`。）
 
 （拆分 P2 第四批，2026-11-04：本包的 auto_admit, border_class_route, candidates, cell_migrate, cell_review, collate_state, exclusion_check, figures, harvest, lint, migrate_dedupe, migrate_v1, questions, replay, step8, web_votes 已搬去 guji-manager `guji_manager.feedback`。）
 
@@ -14,5 +16,3 @@ Feedback 层：统一反馈事件（EventLog）+ 路由（routes）+ 收割（ha
 """
 
 from .events import Event, EventLog, EventTarget  # noqa: F401
-from .consumers import CONSUMERS, route_and_consume  # noqa: F401,E402  原经 step8 带起（Step8 已搬去 guji-manager）
-from .routes import RouteTable  # noqa: F401,E402

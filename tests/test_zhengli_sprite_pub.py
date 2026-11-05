@@ -49,15 +49,6 @@ def test_attach_renames_by_hash_and_rewrites_refs(tmp_path):
     assert (d / "pub" / n_img).read_bytes() == raw and doc["cells"][0]["img"]["s"] == "p0003.webp"   # 原 doc 不动
 
 
-def test_upload_fails_loudly_when_a_sheet_is_missing(tmp_path, monkeypatch):
-    import open_guji_cv.datastore.r2 as r2
-    monkeypatch.setattr(r2, "upload_files", lambda imgs, bucket, ext: {"uploaded": 1, "put_403": 1})
-    with pytest.raises(RuntimeError, match="没传完"):
-        sp.upload([{"name": "a.webp", "sha256": "0" * 64}], tmp_path)
-    monkeypatch.setattr(r2, "upload_files", lambda imgs, bucket, ext: {"uploaded": 1, "exists": 1})
-    assert sp.upload([{"name": "a.webp", "sha256": "0" * 64}], tmp_path)["exists"] == 1
-
-
 def _ws(tmp_path, monkeypatch):
     ws = tmp_path / "abc123-书"
     raw = tmp_path / "raw-vol06"

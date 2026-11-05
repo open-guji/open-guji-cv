@@ -31,7 +31,7 @@ def main() -> int:
     ap.add_argument("--tag", default="")
     a = ap.parse_args()
 
-    from open_guji_cv.eval.round_check import load_verdicts
+    from guji_manager.eval.round_check import load_verdicts
 
     gold = load_verdicts(a.book, WS)
     print(f"{a.tag} 裁决金标 {len(gold)} 条")

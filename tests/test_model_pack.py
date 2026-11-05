@@ -111,16 +111,6 @@ def test_fetch_places_missing_files(ws, monkeypatch, tmp_path):
     assert head.read_text(encoding="utf-8") == '{"w": 3}'
 
 
-def test_upload_refuses_stale(ws):
-    from open_guji_cv.ops import model_blobs as mb
-    mp.build(ws)
-    plan = mb.upload(ws, 1)
-    assert plan["local"] == 2 and not plan["executed"]
-    (ws / "config" / "groups" / "l2model" / "jys.json").write_text("x", encoding="utf-8")
-    with pytest.raises(ValueError):
-        mb.upload(ws, 1)
-
-
 def test_repo_registry_matches_models_dir():
     """cv 自带的模型表与 models/ 一致：在的文件 sha 要对得上，models/ 里登记了种类的文件都要在表里。
     （models/ 搬出 git 后文件不在，只核在的那些。）改了模型文件忘了 guji model registry 就红。"""

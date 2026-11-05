@@ -104,46 +104,6 @@ def test_unanchorable_page_says_so_instead_of_aligning_to_noise(tmp_path, monkey
     assert ar.note, "没锚上却不说为什么"
 
 
-def test_gold_derivation_matches_between_cached_and_live_recompute(tmp_path,
-                                                                   monkeypatch, ws):
-    """核心保证：读 `align_ref` 缓存 与 不经缓存现算一遍，`GoldChar` 必须逐条相同。
-
-    `gold.v2_align.align_page` 两条路都会走到（默认语料走缓存，脚本传
-    自定义语料走现算兜底，见该模块 `_aligned_chars` 的模块头），这条钉住
-    两条路径算法完全一致，不是"看着都能跑"那种巧合。
-
-    2026-09-20 改：原先要工作区的 vol01/24 产物 ＋ 8.2 MB 真语料，两样缺一
-    就 skip，**而且本机跑的时候还踩过一次 fixture 抄错文件名**（复制的是另
-    一部参考本，于是"现算"那一侧实际换了语料，op_run 从 63 变 139 —— 那不是
-    算法分叉，是测试自己给错了输入）。现在两侧用的是**同一份内容、只是落盘到
-    两个路径**的自备小语料，这才是这条真正要测的东西：语料给的信息完全一致时
-    必须逐条相同（包括 op_run）。
-    """
-    from helpers import page_decision
-    from open_guji_cv.gold.v2_align import align_book
-
-    ctx, corpus = _ctx_with_corpus(tmp_path, monkeypatch)
-    ar = STEPS["align_ref"].run_page(ctx, PAGE)["align_ref"]
-    assert ar.anchored, f"锚不上：{ar.note}"
-    ctx.store.write(BOOK, "align_ref", f"p{PAGE:04d}", {"align_ref": ar})
-    # `align_page` 的载体是**定字产物**（金标要挂在已定的字位上），对齐结果
-    # 只是给它配字，所以这里也得把 Step6 的产物摆上。
-    write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
-        PAGE, BOOK, col=COL, recs=[
-            dict(slot=i + 1, char=ch, margin=1.0, source="db_same")
-            for i, ch in enumerate(COLUMN_CHARS)]))
-
-    cached = align_book(BOOK, [PAGE], ctx.store, corpus_path=corpus)
-    # 内容相同、路径不同的副本：指纹（按路径 mtime/size 算）必然对不上缓存的
-    # corpus_fingerprint，于是强制走现算兜底路径。
-    copy = tmp_path / "corpus_copy.txt"
-    copy.write_text(corpus.read_text(encoding="utf-8"), encoding="utf-8")
-    live = align_book(BOOK, [PAGE], ctx.store, corpus_path=copy)
-
-    assert cached[0].anchored and live[0].anchored
-    assert [asdict(c) for c in cached[0].chars] == [asdict(c) for c in live[0].chars]
-
-
 def test_lib_gate_drops_confident_non_variant_replace_but_keeps_variants(tmp_path, monkeypatch, ws):
     """库证据闸（align_ref 模块头 2026-09-22）：
 

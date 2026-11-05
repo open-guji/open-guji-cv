@@ -93,7 +93,7 @@ def cmd_events(d: Path, dry: bool):
 
 def cmd_lib(d: Path, mixed: str | None):
     from open_guji_cv.clustering.glyph_db import GlyphDB, export_store, rebuild_from_store
-    from open_guji_cv.feedback.consumers import glyphdb_admit
+    from guji_manager.feedback.consumers import glyphdb_admit
     from open_guji_cv.feedback.events import EventLog
     db_path = QTW_WS / "output" / "glyph.db"
     store = QTW_WS / "output" / "glyph_store"

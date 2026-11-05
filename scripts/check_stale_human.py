@@ -57,7 +57,7 @@ def find(book: str, store: ProductStore | None = None) -> list[dict]:
     if not dup:
         return []
     # 第二道：整理本怎么说
-    from open_guji_cv.gold.v2_align import align_book
+    from guji_manager.gold.v2_align import align_book
     refs: dict[str, str] = {}
     for g in align_book(book, sorted({d["page"] for d in dup}), st):
         if g.anchored:

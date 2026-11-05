@@ -2,6 +2,8 @@
 """影子放行闸（overview#305 第一阶段）：信号口径、只降不升、弃权、模型文件与参数指纹。全部自造数据。"""
 from __future__ import annotations
 
+import cv2
+import numpy as np
 import pytest
 
 from open_guji_cv.shadow import signals as S
@@ -150,11 +152,42 @@ def test_seed_admit_params_off_is_invisible(tmp_path):
     assert h(SeedAdmitParams(db_path=str(db), shadow_veto=True, shadow_model=str(m2))) != h(on1)
 
 
+# 原借 test_approx_labels 的两个造数据件（那个文件拆分 P5 随 consumers 搬去 guji-manager）
+def _png(k: int = 0) -> bytes:
+    img = np.full((80, 80), 255, np.uint8)
+    cv2.rectangle(img, (6 + k % 20, 10), (70, 70 - k % 15), 0, 4)
+    cv2.line(img, (10, 10 + k % 30), (70, 40), 0, 3)
+    return cv2.imencode(".png", img)[1].tobytes()
+
+
+def _run_seed(tmp_path, monkeypatch, db_path, recs, **params):
+    from helpers import make_book, make_ctx, page_decision, write_product
+    from open_guji_cv.core.step import STEPS, RunContext
+    from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
+    from open_guji_cv.products.kinds.recog import ColumnMatch, PageAlignRef, PageMatch
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    monkeypatch.setenv("GUJI_FEEDBACK_DIR", str(tmp_path / "fb"))
+    img = np.full((600, 600), 255, np.uint8)
+    ctx = make_ctx(tmp_path, make_book("tbook"), raw={1: img}, monkeypatch=monkeypatch)
+    ctx = RunContext(ctx.book, ctx.store, ctx.cache,
+                     params={"seed_admit": SeedAdmitParams(db_path=str(db_path), **params)},
+                     log=lambda s: None)
+    ctx._raw[1] = img
+    cells = [CellRec(slot=s, pos=s, y0=0, y1=10, x0=0, x1=10, kind="char", order=s) for s in (1, 2, 3)]
+    write_product(ctx, "glyph_match", 1,
+                  glyph_match=PageMatch(page=1, columns=[ColumnMatch(col=3, ok=True, chars=recs)]))
+    write_product(ctx, "context_decide", 1, context_decision=page_decision(1, "tbook", recs=[], col=3))
+    write_product(ctx, "row_segment", 1,
+                  cells=PageCells(page=1, period=10.0, ref_w=10.0,
+                                  columns=[ColumnCells(col=3, ok=True, n_body_slots=3, period=10.0,
+                                                       border_top=0.0, cells=cells)]))
+    write_product(ctx, "align_ref", 1, align_ref=PageAlignRef(page=1, anchored=False, coord=[]))
+    sa = STEPS["seed_admit"].run_page(ctx, 1)["seed_admit"]
+    return {r.slot: r for cc in sa.columns for r in cc.chars}
+
+
 def test_seed_admit_shadow_veto_only_demotes(tmp_path, monkeypatch):
     """端到端（造数据）：开关关 = 与不带该参数逐字一致；开 = 只把放行格降回待审，evidence 留痕，人裁格不动。"""
-    import sys
-    sys.path.insert(0, str(__import__("pathlib").Path(__file__).parent))
-    from test_approx_labels import _png, _run_seed
     from open_guji_cv.clustering.glyph_db import GlyphDB
     from open_guji_cv.products.kinds.recog import MatchRec
     from open_guji_cv.steps import seed_admit as sa

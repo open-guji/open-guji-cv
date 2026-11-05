@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO))
 
 from open_guji_cv.clustering.audit import evict_instance  # noqa: E402
 from open_guji_cv.clustering.glyph_db import GlyphDB  # noqa: E402
-from open_guji_cv.feedback.consumers import glyphdb_admit  # noqa: E402
+from guji_manager.feedback.consumers import glyphdb_admit  # noqa: E402
 from open_guji_cv.feedback.events import EventLog  # noqa: E402
 
 SPLIT = frozenset("己已巳")

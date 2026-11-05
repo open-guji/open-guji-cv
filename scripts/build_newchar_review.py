@@ -760,7 +760,7 @@ def cmd_apply(a) -> None:
     n = log.append(events)
     print(f"已追加 {n} 条（补锚 {enriched}）→ {log.batch_path(batch)}")
     if a.admit:
-        from open_guji_cv.feedback.consumers import route_and_consume
+        from guji_manager.feedback.consumers import route_and_consume
         res = route_and_consume(log, batch, dry_run=False)
         for r in res["results"]:
             print(f"  {r['consumer']}: added={r['added']} skipped={r['skipped']} errors={r['errors']}")

@@ -21,7 +21,7 @@ res = json.load(open(a.result, encoding="utf-8"))
 if not os.environ.get("GUJI_WORKSPACE"):
     sys.exit("先设 GUJI_WORKSPACE")
 
-from open_guji_cv.feedback.consumers import route_and_consume
+from guji_manager.feedback.consumers import route_and_consume
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 
 book = res["book"]

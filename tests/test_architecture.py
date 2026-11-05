@@ -37,7 +37,7 @@ LAYER: dict[str, int] = {
     # L3 管线：Step、门、影子模型、反馈事件
     "gates": 3, "steps": 3, "shadow": 3, "feedback": 3,
     # L4 应用：评测、审阅、快照、运维、实验
-    "eval": 4, "ops": 4, "jobs": 4,
+    "eval": 4, "ops": 4,
     "preflight": 4,   # 开跑前依赖自检（拆分 P4 从 ops 移出，归 pipeline）
     # L5 控制台的门面（控制台本体 2026-10-28 拆成独立包 guji-console，C3）
     "console_api": 5,
@@ -65,8 +65,6 @@ ALLOWED_UPWARD: frozenset[str] = frozenset({
     "feedback.lookup -> eval.colgeom",
     "gates.row_segment_gate -> eval.rulers",
     "gold.store -> feedback.lock",
-    "gold.v2_align -> steps.align_ref",
-    "gold.v2_align -> steps.context_decide",
     "products.fp_migrate -> clustering",
     "products.fp_migrate -> clustering.cnn_candidates",
     "products.fp_migrate -> clustering.font_candidates",
@@ -106,6 +104,8 @@ SIDE_OVERRIDE: dict[str, str] = {
     # 拆分 P5（2026-11-04）：Step 读人裁的一侧归 pipeline——裁决表（gold.store 及其分片读法 adapters，
     # verdict_store 从 consumers 挪来）、补锚档（anchor_backfill，bindings 读）
     "gold.store": SIDE_PIPELINE, "gold.adapters": SIDE_PIPELINE, "feedback.anchor_backfill": SIDE_PIPELINE,
+    # 取钉版输入（模型、字体、底库语料按 sha 从 R2 取回）：起跑前与测试开跑都要，归 pipeline；上传在 manager
+    "ops.model_blobs": SIDE_PIPELINE, "datastore.client": SIDE_PIPELINE,
     # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
     "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,
     "report": SIDE_PIPELINE, "report.progress": SIDE_MANAGER, "report.html": SIDE_MANAGER, "report.run": SIDE_MANAGER,
