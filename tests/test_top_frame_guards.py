@@ -58,3 +58,17 @@ def test_weak_top_floor_skips_near_lines():
     assert 90 <= r.position <= 95
     r0 = _weak_top_guard(m, _match(152.0), 0, 400, 0.3, 1.0, 2)   # 殿本档：选中线够强，不动
     assert r0.position == 152.0
+
+
+def test_weak_top_wild_slope_measured_on_page_level():
+    """选中线倾角搜飞（vol93 p18 约 1.1°）：在它自己的倾角上量，真框被斜着摊薄、护栏不触发；
+    改在带里横墨最强那一档倾角上量，就能挪回真框。"""
+    m = np.zeros((1920, 1000))
+    m[60:66, :] = 1.0
+    xs = np.arange(0, 1000, 2)
+    ys = np.round(300 + 0.02 * (xs - 500)).astype(int)
+    m[ys, xs] = 1.0
+    m[ys + 1, xs] = 1.0
+    r = _weak_top_guard(m, LineMatch(position=300.0, slope=0.02, score=1.0, width=2.0, proj=1.0),
+                        0, 288 + 60, TOP_WEAK_RATIO, 1.0, 2)
+    assert 56 <= r.position <= 70 and abs(r.slope) < 0.01

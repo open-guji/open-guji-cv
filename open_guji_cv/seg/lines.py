@@ -805,11 +805,25 @@ TOP_WEAK_RATIO = 0.3
 TOP_WEAK_MIN_JUMP_FRAC = 0.021
 
 
+#: 量横墨的倾角：选中线自己的倾角，再加这几档近水平的；取带里横墨峰最高的那一档，整条护栏都在这一档上量。
+#: 选中线的倾角可能搜飞（vol93 p18 取到 -0.0196，约 1.1°）：在它的倾角上量，斜线自己拿满分、真框被斜着摊薄，
+#: 护栏不触发，整页上框落在第三行字顶、列里只切出 20 格。真框横跨全宽，哪一档上峰最高，哪一档就是本页的水平。
+#: 只换一档、不逐位置取各档最大：逐位置取最大会把抬头框顶线、双边框外线也抬高，殿本扫出十几页误挪。
+TOP_WEAK_SLOPES = (-0.006, -0.003, 0.0, 0.003, 0.006)
+
+
 def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio: float,
                     alpha: float, hyst: int, floor: float | None = None) -> LineMatch:
-    positions, curve = sample_line_curve(mask, "h", lo, hi, result.slope)
-    if not len(curve):
-        return result
+    slopes = (result.slope,) + tuple(s for s in TOP_WEAK_SLOPES if abs(s - result.slope) > 1e-9)
+    best = None
+    for s in slopes:
+        positions, c = sample_line_curve(mask, "h", lo, hi, float(s))
+        if not len(c):
+            return result
+        pk = max((float(c[i]) for i in local_maxima(c, radius=5)), default=0.0)
+        if best is None or pk > best[0] * (1 + 1e-9):
+            best = (pk, float(s), positions, c)
+    _, slope, positions, curve = best
     peaks = [i for i in local_maxima(curve, radius=5)]
     if not peaks:
         return result
@@ -829,7 +843,7 @@ def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio
     if result.position - float(positions[i]) < jump:
         return result
     wd, sc = half_height_score_at(curve, i, alpha, hyst)
-    return LineMatch(position=float(positions[i]), slope=result.slope, score=sc, width=wd,
+    return LineMatch(position=float(positions[i]), slope=slope, score=sc, width=wd,
                      proj=float(curve[i]))
 
 
