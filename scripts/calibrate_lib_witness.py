@@ -25,7 +25,9 @@
 **局限**：重放用的是本机 glyph.db（没导字体域）；生产 font_tier 命中弱的格会再查字体域，
 候选会多出 `font:` 来的字。殿本另用导了字体域的副本复跑过一次对照。
 
-hard_pair 字（日曰己已巳等 `NEVER_MATCH_FAMILIES` 成员）与体检标过的实例（`selfcheck_flag`）
+己已巳、日曰（图上分不开，Sheldon 11-05）折叠成同类：金标与候选都按组算，候选里同组的字合并取最高分、
+不当彼此的竞争者。其余 hard_pair 字（`NEVER_MATCH_FAMILIES` 里剩下的成员，如千/干、十/士）仍要分开，
+与体检标过的实例（`selfcheck_flag`）
 各自分开报，头条数不含它们。
 
     python scripts/calibrate_lib_witness.py \
@@ -46,12 +48,14 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from eval_fold import FOLD, fold as fold_char  # noqa: E402  己已巳、日曰图上分不开，按组折叠（2026-11-05）
 from open_guji_cv.clustering.confusable import NEVER_MATCH_FAMILIES  # noqa: E402
 from open_guji_cv.steps.glyph_match import (GlyphMatchParams, GlyphMatchStep,  # noqa: E402
                                             _FontTier, _keben_subset)
 
 THRESHOLDS = (0.85, 0.90, 0.93, 0.95, 0.96, 0.97, 0.98, 0.99, 0.996)
-HARD_CHARS = frozenset(c for fam in NEVER_MATCH_FAMILIES for c in fam)
+# 其余形近护栏字（己已巳、日曰已折叠成同类，不在这里）：这些字照旧要分开，单独报
+HARD_CHARS = frozenset(c for fam in NEVER_MATCH_FAMILIES for c in fam if c not in FOLD)
 
 
 def replay(shard_dir: Path, db: str, limit: int | None) -> list[dict]:
@@ -75,6 +79,16 @@ def replay(shard_dir: Path, db: str, limit: int | None) -> list[dict]:
         if (i + 1) % 500 == 0:
             print(f"  {i + 1}/{len(inst)}  {time.time() - t0:.0f}s", flush=True)
     return out
+
+
+def fold_row(r: dict) -> dict:
+    """金标与候选都折叠到组代表字；同组候选合并取最高分（同组的字不是彼此的竞争者）。"""
+    best: dict[str, float] = {}
+    for c, v in r["cand"]:
+        k = fold_char(c)
+        best[k] = max(best.get(k, 0.0), v)
+    cand = sorted(best.items(), key=lambda kv: -kv[1])
+    return {**r, "gold": fold_char(r["gold"]), "cand": cand}
 
 
 def score_of(cand, ch):
@@ -156,6 +170,7 @@ def main() -> int:
     ap.add_argument("--dataset", default="../open-guji-dataset/char-clustering")
     ap.add_argument("--limit", type=int, default=None, help="只跑前 N 个实例（试跑）")
     ap.add_argument("--rows", default=None, help="逐格前五写到这个 jsonl（复核用）")
+    ap.add_argument("--no-fold", action="store_true", help="不折叠己已巳、日曰（旧口径）")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     samples = Path(a.dataset) / "samples"
@@ -163,6 +178,8 @@ def main() -> int:
     for spec in a.book:
         shard, db = spec.split(":", 1)
         rows = replay(samples / shard, db, a.limit)
+        if not a.no_fold:
+            rows = [fold_row(r) for r in rows]
         if a.rows:
             with open(f"{a.rows}.{shard}.jsonl", "w", encoding="utf-8") as f:
                 for r in rows:
