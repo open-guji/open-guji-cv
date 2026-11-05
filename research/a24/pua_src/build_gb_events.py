@@ -14,6 +14,7 @@ def main(indir, detail_tsv, outdir):
             x = json.loads(l)
             if "err" in x or not x.get("src"):
                 rep.append((x["id"], "skip", x.get("err", "无文本层对位")[:30])); continue
+            if x["id"] not in R: rep.append((x["id"], "skip", "明细里没有整理本字（新格）")); continue
             ref = re.match(r"整理本(\S+)", R[x["id"]]["事实"]).group(1)
             s = x["src"]; o = ord(s)
             if 0xE000 <= o <= 0xF8FF or o >= 0xF0000 or s in "〓□？?" or x["pagematch"] < 0.85:

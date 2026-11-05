@@ -8,7 +8,8 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams, _vis_ruling_pass
 
 fb, ws, out = sys.argv[1:4]
 GUJI = os.environ.get("GUJI", "guji")
-env = dict(os.environ, GUJI_DATA_TOKEN=os.environ["GUJI_DATA_TOKEN_READ"], GUJI_CORPUS_DRIFT="warn")
+env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}   # guji 子进程用已装的版本（PYTHONPATH 指向 dev 工作树时列包输出格式可能不同）
+env.update(GUJI_DATA_TOKEN=os.environ["GUJI_DATA_TOKEN_READ"], GUJI_CORPUS_DRIFT="warn")
 store = RulingStore(fb)
 want = {}
 for e in store.log.iter_all(raw=True):
@@ -17,7 +18,12 @@ byvol = collections.defaultdict(set)
 for c in want: byvol[c.split(":")[0]].add(int(c.split(":")[1]))
 
 def run(v):
-    lab = [x for x in subprocess.run([GUJI, "products", "pack", "list", v, "-w", ws], capture_output=True, text=True, env=env).stdout.splitlines() if x.startswith("★")][0].split("\t")[0].split("/")[-1]
+    import time
+    for _ in range(6):                     # 列包偶尔空（限流），重试
+        L = [x for x in subprocess.run([GUJI, "products", "pack", "list", v, "-w", ws], capture_output=True, text=True, env=env).stdout.splitlines() if x.startswith("★")]
+        if L: break
+        time.sleep(5)
+    lab = L[0].split("\t")[0].split("/")[-1]
     tmp = f"/home/user/prod2/r_{v}"
     subprocess.run([GUJI, "products", "pack", "fetch", v, "-w", ws, "--label", lab, "--to", tmp], capture_output=True, env=env)
     P = f"{tmp}/{v}" if os.path.isdir(f"{tmp}/{v}") else tmp
