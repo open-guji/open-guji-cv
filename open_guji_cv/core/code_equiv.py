@@ -174,6 +174,10 @@ _JZ_SINGLE_HEAD = ("一行就完的雙行小注段头 jiazhu_single_head（row_s
                    "row_boundaries.segment_column 加参数）：开关关着时 row_segment 在全唐文 vol06 p20–29（产物包 r9b）上"
                    "与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04")
 
+_COORD_PAIR = ("align_ref 加缺省关的书级开关 coord_shift_needs_pair（坐标对位「邻格错位」要邻格现役也错开才算整列错一位；全唐文 r10 "
+                "006 p81 列 3 紛／綸）：开关关着时 align_ref 在全唐文 vol06 p75–89（产物包 r10）上与 origin/dev 产物逐字节相同；"
+                "scripts/code_equiv.py check，2026-11-04")
+
 _QTW_FORK = ("全唐文套书 books/quantangwen 分叉（2026-11-04，A22）：row_boundaries、jiazhu_split 从殿本原样复制（含 #1025 "
              "jiazhu_single_head），殿本两份退回 #1025 之前；row_segment 壳按册套书取 row_boundaries（core/seg_set.resolve）。"
              "复制与殿本 #1025 之后那一版逐字相同，#1025 已证开关关着时等价（_JZ_SINGLE_HEAD）；全唐文册的指纹按 FORKED 记原模块名，不过期。"
@@ -866,6 +870,10 @@ ENTRIES: tuple[Equiv, ...] = (
           old='14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43',
           evidence='再生字块按页记忆 cells 产物与列图（A20 11-05，只动 render，run_page 不变）：tests/test_cell_shrink_render_memo.py 清缓存再生 100+ 格与 Step4 写入的逐像素相同（记忆开／关）；'
                    '任务库 #477（bb9eb76）冷缓存执行机从 glyph_match 起跑史記 01 册全册 143 页，glyph_match 与 #460 逐字节相同；2026-11-05'),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1b101b4d25356f55302577544712fe1c19ae1959754f0ee87ca124bacafce16e",
+          old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
+          evidence=_COORD_PAIR),
 )
 
 
