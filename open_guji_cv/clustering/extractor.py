@@ -2063,6 +2063,37 @@ def has_stroke(patch: np.ndarray) -> bool:
     return any(int(st[k, 4]) >= TAIL_JUNK_MIN_INK and int(st[k, 3]) >= 4 for k in range(1, n))
 
 
+# 墨团闸（`ink_blob`，书级 cell_shrink.ink_blob_empty，缺省关；2026-11-05 全唐文 S6）：纸上滴的墨、污渍是一整团
+# 实心墨，夹在空格之间，列端渣格闸够不着（只走列两端各 2 格），被当字（011:68:1:14，格高 210、墨团 92×92，
+# 内切圆半径 28px）。字是笔画搭的，最粗的笔也只有字高的一小截：006/010 p40–99 共 18,469 张字块，
+# 「主连通体内切圆半径 / 外接框长边」最大 0.198（「忝」「心」的点），墨团 0.30。
+# 判据：闭运算（7×7）后最大连通体占全格墨 ≥ INK_BLOB_SHARE、内切圆半径 ≥ INK_BLOB_R × 外接框长边、
+# 长短边比 ≤ INK_BLOB_ASPECT、长边 ≤ INK_BLOB_MAX × 格高（整字大小的实心块交给别的闸，不在这儿判）。
+INK_BLOB_SHARE = 0.9
+INK_BLOB_R = 0.25
+INK_BLOB_ASPECT = 2.0
+INK_BLOB_MAX = 0.6
+
+
+def is_ink_blob(patch: np.ndarray, cell_h: float) -> bool:
+    """裁紧后的字块是不是一整团实心墨（墨点、污渍），见 INK_BLOB_* 说明。"""
+    binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
+    tot = int(binary.sum())
+    if tot < TAIL_JUNK_MIN_INK:
+        return False
+    cl = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8))
+    n, lab, st, _c = cv2.connectedComponentsWithStats(cl, 8)
+    if n < 2:
+        return False
+    k = 1 + int(np.argmax(st[1:, 4]))
+    w, h = int(st[k, 2]), int(st[k, 3])
+    big, small = max(w, h), max(1, min(w, h))
+    if st[k, 4] < INK_BLOB_SHARE * cl.sum() or big > INK_BLOB_MAX * cell_h or big > INK_BLOB_ASPECT * small:
+        return False
+    r = float(cv2.distanceTransform((lab == k).astype(np.uint8), cv2.DIST_L2, 5).max())
+    return r >= INK_BLOB_R * big
+
+
 HEAD_CELL_MIN_H = 0.5      # 抬头位的字必须有这么高的连通体（× 格高）
 
 
@@ -3433,6 +3464,12 @@ class CharExtractor:
                     inst.cell_type = "empty"
                     if "sliver" not in inst.flags:
                         inst.flags.append("sliver")
+            # 墨团闸（书级 ink_blob_empty，缺省关）：一整团实心墨不是字，见 is_ink_blob
+            if gmeta.get("ink_blob_empty"):
+                for inst, pt in results[len(results) - len(col_entries):]:
+                    if inst.cell_type == "char" and is_ink_blob(pt, cell_h_ref):
+                        inst.cell_type = "empty"
+                        inst.flags.append("ink_blob")
             # 列端渣格闸：从两端向内走（各最多 2 格），渣格转 empty +
             # tail_junk 旗，遇到第一格真字停。判据在裁紧前的格框图块上算。
             by_idx = {i: inst for i, _c, inst in col_entries}

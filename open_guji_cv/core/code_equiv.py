@@ -995,6 +995,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="d7447bb3945fbdb008e46048d9571b7022b7910bf9509b54691f3d25fca9b238",
           old="0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b",
           evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="04d065eef7987103b93c7cd1fd1c7b54558e44372a939fb5a2e6a305e231b6d4",
+          old="94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e",
+          evidence="S6 墨团闸 cell_shrink.ink_blob_empty（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74）上与 origin/dev（835325b）产物逐字节相同；2026-11-06"),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="4bab89e01a18b859e43c608800010e7e951dc0843b36588f11b91a1ed7b90eaf",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence="S6 墨团闸 cell_shrink.ink_blob_empty（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74）上与 origin/dev（835325b）产物逐字节相同；2026-11-06"),
 )
 
 
