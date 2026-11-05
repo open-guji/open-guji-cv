@@ -152,3 +152,22 @@ def test_compare_roll_counts_boundaries_and_missing_notes():
     cols, diffs, *_ = dzg.compare_roll(a, b, None)
     assert cols["columns"] == 2 and cols["start_hit"] == 2 and cols["both_hit"] == 1
     assert [d["cat"] for d in diffs] == ["光盘缺小注"] and diffs[0]["dzg"] == "兩江總督採進本"
+
+
+def test_pua_codes_carry_original_code_for_unmapped_only(tmp_path):
+    """映不上的僻字码把原码位（带来源）带到 run 上；映上的、以图代字占位码都不带。"""
+    s = "甲乙丙ဂ"
+    gl = {"U+1002": ["img/glyphs/0001-2.png", 0, 0, 64, 64]}
+    from open_guji_cv.utils.daizhige import pua_codes
+    assert pua_codes(s, {"U+EF33": "𩔖"}, gl) == [[1, "daizhige:U+EA96"]]
+    cols = [_col(0, {"t": "text", "start": 0, "s": "甲乙"},
+                 {"t": "note", "start": 4, "r": [[0, "丙"]], "l": [[0, "丁"]]})]
+    r = _rec("0001-0001", "1-1a", cols)
+    p = tmp_path / "0001.jsonl"
+    p.write_text(json.dumps(r, ensure_ascii=False) + "\n", encoding="utf-8")
+    h = dzg.build_halves([p])[0]
+    runs = h.cols[0]["runs"]
+    assert runs[0]["pua"] == [[1, "daizhige:U+EA96"]]
+    assert runs[1]["pua_r"] == [[0, 1, "daizhige:U+EB10"]] and "pua_l" not in runs[1]
+    assert "〓" in dzg.column_line(h.cols[0])       # 文本仍是〓，码位只走旁路
+    assert h.unmapped == 2
