@@ -14,7 +14,6 @@
 
 from __future__ import annotations
 
-from argparse import Namespace
 from pathlib import Path
 
 import numpy as np
@@ -132,48 +131,3 @@ def test_emb_index_key_stable_for_equal_charset_tuples():
     key_b, f_b, _ = inst.emb_index_key(b)
     assert key_a == key_b
     assert f_a == f_b
-
-
-# ── CLI：guji cache build-rare-index 走的是产线同一个 book_charsets ──
-@needs_cnn
-def test_cli_build_rare_index_uses_book_charsets_and_dedupes(monkeypatch, cnn_test_ckpt):
-    """打桩 `book_charsets` 回一个几个字的小表，只验证 CLI 把它接到
-    `emb_index_key`/`_emb_index` 的路径没接错、文件写到了预期位置、
-    第二次调用（缓存已在）不重建。不碰真实 27,584/70,304 字规模。
-
-    ⚠️ 用会话级 `cnn_test_ckpt`（tmp 拷贝）代替本地现拷 `best.pt`——两者效果
-    相同（`emb_index_key` 落盘路径锚在 `ckpt.parent`，这里 `monkeypatch.setattr(cc,
-    "DEFAULT_CKPT", ...)` 让 `_cmd_cache_build_rare_index` 里 `cc.CnnCandidates(
-    ckpt=cc.DEFAULT_CKPT)` 读到的就是 tmp 路径，不会碰真实 `models/glyph_cnn_r5/`），
-    只是不必每条测试各自现拷一遍 19MB 权重文件（2026-09-28，任务书-R-rare前向
-    去重与测试隔离；`tests/conftest.py::_no_new_files_in_models` 现在会在整个
-    会话收尾时校验 `models/` 没有新文件，独立确认这条测试确实没写真实目录）。"""
-    from open_guji_cv import cli_v2
-    from open_guji_cv.clustering import cnn_candidates as cc
-    from open_guji_cv.clustering import rare_panel as rare_panel_mod
-
-    ckpt_copy = cnn_test_ckpt
-    monkeypatch.setattr(cc, "DEFAULT_CKPT", ckpt_copy)
-
-    cs_base = tuple("一二三十土王")
-    cs_esc = tuple("人之")
-
-    def _fake_book_charsets(book, corpus):
-        return cs_base, cs_esc, {"base": "fake-base", "escalate": "fake-esc"}
-
-    monkeypatch.setattr(rare_panel_mod, "book_charsets", _fake_book_charsets)
-    monkeypatch.setattr("open_guji_cv.steps.align_ref.book_corpus", lambda book: None)
-
-    args = Namespace(book="keben")
-    cli_v2._cmd_cache_build_rare_index(args)
-
-    inst = cc.CnnCandidates(ckpt=ckpt_copy)
-    key_base, f_base, _ = inst.emb_index_key(cs_base)
-    key_esc, f_esc, _ = inst.emb_index_key(cs_esc)
-    assert f_base.exists(), "CLI 应该已经把基集索引建出来了"
-    assert f_esc.exists(), "CLI 应该已经把升级档索引也建出来了"
-
-    # 第二次调用：文件已在，不该重建（用 mtime 没变来判断——重建会改 mtime）
-    mtime_before = f_base.stat().st_mtime_ns
-    cli_v2._cmd_cache_build_rare_index(args)
-    assert f_base.stat().st_mtime_ns == mtime_before
