@@ -124,6 +124,15 @@ def test_ruling_glyph_params_default_off_and_in_dump_when_set():
     assert d1["ruling_glyph_min_score"] == 0.98 and d1["ruling_glyph_min_margin"] == 0.02
 
 
+def test_ruling_ref_lead_params_default_off_and_in_dump_when_set():
+    d0 = SeedAdmitParams(db_path="x").model_dump()
+    assert "ruling_ref_lead_min_unseen" not in d0 and "ruling_ref_lead_min_oov" not in d0
+    d1 = SeedAdmitParams(db_path="x", ruling_ref_lead_min_unseen=0.01, ruling_ref_lead_min_oov=0.02).model_dump()
+    assert d1["ruling_ref_lead_min_unseen"] == 0.01 and d1["ruling_ref_lead_min_oov"] == 0.02
+    d2 = SeedAdmitParams(db_path="x", ruling_ref_lead_min_oov=0.02).model_dump()
+    assert "ruling_ref_lead_min_unseen" not in d2 and d2["ruling_ref_lead_min_oov"] == 0.02
+
+
 def test_skip_half_blocks_ruling_on_half_cells(tmp_path):
     st = _store(tmp_path, "甲", "乙")
     recs = [AdmitRec(id=f"{B}:1:{s}", slot=1, admit=a, char=c, doubts=[], channel=None, provenance="match" if a else "", evidence={})
