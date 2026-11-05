@@ -31,8 +31,10 @@ M10 复盘第 4 项（10-23，册006 起）：
     用本仓（dev）。核的是 engine 的 HEAD 等于包的 cv_commit，不再要求本仓就是那个提交。
   - 线上单没有 rev-<rev> 包时 `plan --pack <标签>` 指定出单用的包（如 main 包）。
   - **人裁改字与机器改字分开**：导出后和 book-text 现文逐格比，变了的格里，最新人裁就是新字的算人裁改字，进文本；
-    其余是机器改判（无票变字），文本里退回旧字，格放进下一张单的复审清单（「机器改判 A→B，无人裁，请核」）。
-    未冻结册的变字一律进待审（用户 10-20 定），不自行放行。
+    机器改字（无票变字）**默认按最新结果进文本，不再复审**（用户 11-05 定，取代 10-20「变字一律进待审」：
+    每轮迭代本来就是把认不出的字认出来、把错字改对；殿本 r5 换单曾因此多出 8,019 格复审，六成是 □→字）。
+    只有旧字正是最新人裁、机器却改了的格（机器推翻人裁），文本留人裁的字，格进下一张单的复审清单
+    （「机器改判 A→B，推翻人裁，请核」）。
   - 出单换成 `republish.py issue`：挂起里能回网站的（cellvotes 的 recheck.tsv）和机器改判一起作复审格，
     只发这一章、等发布、冒烟。
   - `status`：线上单有几格、投了几格、最后一票多久以前；全投完，或投过八成且一小时没新票，就算投完。
@@ -295,21 +297,21 @@ def cmd_apply(a) -> int:
     if not log.step("导出 char／cord", cmd, cwd=CV, env=env_sb):
         return 1
 
-    # 4b. 人裁改字进文本，机器改判退回旧字、进复审
+    # 4b. 人裁改字、机器改字都按最新结果进文本；只有机器推翻人裁的格退回人裁的字、进复审（用户 11-05）
     recheck = out / "recheck.tsv"
     rows = []
     if not a.dry_run:
         old_char = rp.book_text_dir(Path(a.book_text), plan["text_id"]) / f"{plan['chapter']}.char.json"
         new_char = export / f"{plan['chapter']}.char.json"
         sp = split_changes(old_char, new_char, human_chars_of(ws, book))
-        if sp["machine"]:
-            revert_cells(new_char, {a_: o for a_, o, _ in sp["machine"]})
-        log.note(f"文本改动 {len(sp['human']) + len(sp['machine'])} 格：人裁 {len(sp['human'])} 格进文本；"
-                 f"机器改判 {len(sp['machine'])} 格退回旧字、进复审"
-                 + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['machine'][:10])}）" if sp["machine"] else ""))
+        if sp["overrule"]:
+            revert_cells(new_char, {a_: o for a_, o, _ in sp["overrule"]})
+        log.note(f"文本改动 {len(sp['human']) + len(sp['machine']) + len(sp['overrule'])} 格：人裁 {len(sp['human'])} 格、"
+                 f"机器改字 {len(sp['machine'])} 格进文本；机器推翻人裁 {len(sp['overrule'])} 格留人裁的字、进复审"
+                 + (f"（{'、'.join(f'{x}:{o}→{n}' for x, o, n in sp['overrule'][:10])}）" if sp["overrule"] else ""))
         dr = Path(plan["draft_dir"]) / "recheck.tsv"
         rows = [ln for ln in dr.read_text(encoding="utf-8").splitlines()[1:] if ln.strip()] if dr.exists() else []
-        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，无人裁，请核\t\t\t" for x, o, n in sp["machine"]]
+        rows += [f"{x}\t机器改判「{o or '□'}」→「{n or '□'}」，推翻人裁，请核\t\t\t" for x, o, n in sp["overrule"]]
         recheck.write_text("格位\t说明\t旧人裁\t旧人裁的字\t旧人裁时间\n" + "".join(r + "\n" for r in rows), encoding="utf-8")
 
     # 5. 一条命令出单：过出单门、换单门，传图、存包、升 book-text、推库、只发这一章、等发布、冒烟
@@ -382,19 +384,22 @@ def human_chars_of(ws: Path, book: str) -> dict[str, str]:
 
 
 def split_changes(old_char: Path, new_char: Path, human: dict[str, str]) -> dict:
-    """新导出对 book-text 现文逐格比：变了的格里，最新人裁就是新字的＝人裁改字，其余＝机器改判（无票变字）。
+    """新导出对 book-text 现文逐格比，变了的格分三种：最新人裁就是新字＝human（人裁改字）；
+    旧字正是最新人裁、机器改成别的＝overrule（机器推翻人裁，留人裁的字、复审）；其余＝machine（机器改字，按新结果）。
     格号两边对不上的（重切）不在这里管，交 republish 的差异单。"""
     o, n = _cells(old_char), _cells(new_char)
-    human_ch, machine = [], []
+    out = {"human": [], "machine": [], "overrule": []}
     for a_ in sorted(set(o) & set(n), key=rp._key):
         if o[a_] == n[a_]:
             continue
-        (human_ch if human.get(a_) and human[a_] == n[a_] else machine).append((a_, o[a_], n[a_]))
-    return {"human": human_ch, "machine": machine}
+        h = human.get(a_)
+        k = "human" if h and h == n[a_] else ("overrule" if h and h == o[a_] else "machine")
+        out[k].append((a_, o[a_], n[a_]))
+    return out
 
 
 def revert_cells(char_json: Path, old: dict[str, str]) -> None:
-    """机器改判的格在导出里退回旧字（未冻结册的变字一律进待审，不自行放进文本）。"""
+    """机器推翻人裁的格在导出里退回人裁的字（旧字）。"""
     d = json.loads(Path(char_json).read_text(encoding="utf-8"))
     for p in d.get("pages") or []:
         for col in p.get("columns") or []:
