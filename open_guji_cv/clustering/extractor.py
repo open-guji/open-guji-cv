@@ -843,6 +843,34 @@ def partition_strip(strip: np.ndarray, bounds: list[tuple[np.ndarray, np.ndarray
     return owner
 
 
+END_EXT_MIN_AREA = 0.008   # inner_frame_only：落在首末格原地盘外的墨块至少这么大（× 格高²，殿本约 40 像素）才认作本字笔画
+END_EXT_THIN = 0.05        # 同上：最窄边不过这么多 × 格高、长宽比 ≥5 的细条是界行／框线残段，不认
+
+
+def drop_end_ext_specks(owner: np.ndarray, binary: np.ndarray, ci: int, edge: np.ndarray,
+                        top: bool, cell_h: float) -> None:
+    """首末格地盘伸到条带头尾之后（inner_frame_only），伸出去那段里只认像笔画的墨块。
+
+    整块落在原地盘外（`top` 时在 `edge` 之上，否则在 `edge` 及其下）的连通体，太小（零星墨点）或是细长条
+    （界行、框线断头）或贴着条带左右缘（界行拐角）就退回不归谁：线外已白，剩下的多是本字越出格界的笔画（「三」的上横、「典」的脚），
+    但贴着拐角也会留下几点框墨，原来不在地盘里就被丢掉，这里照旧丢。就地改 `owner`。"""
+    rows = np.arange(owner.shape[0])[:, None]
+    outside = (rows < edge[None, :]) if top else (rows >= edge[None, :])
+    mine = (owner == ci) & binary
+    if not (mine & outside).any():
+        return
+    n, lab, st, _ = cv2.connectedComponentsWithStats(mine.astype(np.uint8), 8)
+    for k in range(1, n):
+        x, y, w, h, area = (int(v) for v in st[k])
+        comp = lab[y:y + h, x:x + w] == k
+        if (comp & ~outside[y:y + h, x:x + w]).any():
+            continue
+        thin = min(w, h) <= END_EXT_THIN * cell_h and max(w, h) >= 5 * min(w, h)
+        edge_hit = x == 0 or x + w >= owner.shape[1]     # 贴着条带左右缘的是界行与框线的拐角（vol88 p154「武」左下）
+        if area < END_EXT_MIN_AREA * cell_h * cell_h or thin or edge_hit:
+            owner[y:y + h, x:x + w][comp] = -1
+
+
 def _nearest_cell(binary: np.ndarray, terr: np.ndarray, comp: np.ndarray, box: tuple[int, int, int, int],
                   cs: list[int], cell_h: float) -> int:
     """小部件离哪格的（别的）墨近就归哪格；一样近归墨多的那格。"""
@@ -1147,6 +1175,7 @@ DEBRIS_GAP = 0.025         # 与字身主体的最小间隙（× 格高，~3px@1
 DEBRIS_AREA = 120          # 残渣墨量上限（px）
 DEBRIS_H = 0.05            # 或高度上限（× 格高）
 DEBRIS_LINE_REACH = 0.06   # inner_frame_only：碎块要伸到离内框线字侧边沿这么近（× 格高，殿本约 5 行）才剥
+DEBRIS_LINE_MAX_H = 0.10   # inner_frame_only：离线近的碎块高不过这么多（× 格高）才算线渣。实测殿本 10 册线渣高 ≤0.09，灬的点 0.17–0.20
 
 
 def strip_frame_debris(patch: np.ndarray, cell_top: float,
@@ -1157,7 +1186,7 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
     cell_top/cell_bot 为格界在图块坐标系里的位置。只应对列首/列尾格
     调用——中段格没有版框，那里的边缘墨是邻字残余，归切分层管。
     line_bot/line_top（图块坐标，cell_shrink inner_frame_only）：整页拟出的内框细线字侧边沿。给了就只剥
-    伸到离线 DEBRIS_LINE_REACH 格高以内的碎块——线已经抹掉，离线远的「碎块」是字的部件（灬、八的脚、三的上横）。
+    伸到离线 DEBRIS_LINE_REACH 格高以内、又薄（高不过 DEBRIS_LINE_MAX_H 格高）的碎块——线已经抹掉，离线远的「碎块」是字的部件（灬、八的脚、三的上横）。
     """
     binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
     n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
@@ -1187,6 +1216,8 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
             near = ((line_bot is not None and y1 >= line_bot - reach)
                     or (line_top is not None and y <= line_top + reach))
             if not near:                      # 离抹掉的内框线远 → 字的部件
+                continue
+            if ch >= DEBRIS_LINE_MAX_H * cell_h:   # 线抹掉后剩的是薄片；高过这么多的是字的点画（灬、覽的脚、三的上横）
                 continue
         if area > DEBRIS_AREA and ch > h_max:
             continue                          # 又大又高 → 不是碎渣，留着送审
@@ -3053,6 +3084,12 @@ class CharExtractor:
             if not _has_char_ink(page_img, sx0, sx1, frame_in_bot, sy1,
                                  trust_frame=frame_bottom_hint is not None):
                 sy1 = min(sy1, frame_in_bot)
+            # 整页内框细线已抹掉的列首（inner_frame_only）：条带开到线的内缘。线和线外已经白了，开上去只多进字墨；
+            # 按首格顶−pad 截，Step3 首格比字偏里时字顶（「三」的上横、「考」「四」的顶）根本不在条带里
+            ie_col = gmeta.get("inner_edges") or {}
+            in_sides = set(gmeta.get("inner_sides") or ())
+            if "top" in in_sides and "top" in ie_col:
+                sy0 = max(0, min(sy0, int(np.floor(float(ie_col["top"])))))
             if sx1 <= sx0 or sy1 <= sy0:
                 continue
             strip = page_img[sy0:sy1, sx0:sx1]
@@ -3146,7 +3183,18 @@ class CharExtractor:
             part_bounds = [
                 (_edge(float(c["y_top"]), c.get("seam_top")), _edge(float(c["y_bottom"]), c.get("seam_bottom")),
                  bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells]
+            ext_edges = []
+            if part_bounds and "top" in in_sides and "top" in ie_col:
+                ext_edges.append((0, part_bounds[0][0].copy(), True))
+                # 首格地盘伸到条带顶、末格伸到条带底：线外已白，格外的墨只能是本字越出格界的笔画（灬、上横）
+                part_bounds[0] = (np.minimum(part_bounds[0][0], 0),) + part_bounds[0][1:]
+            if part_bounds and "bottom" in in_sides and "bottom" in ie_col:
+                t_, b_, st_, sb_ = part_bounds[-1]
+                ext_edges.append((len(part_bounds) - 1, b_.copy(), False))
+                part_bounds[-1] = (t_, np.maximum(b_, strip.shape[0]), st_, sb_)
             owner = partition_strip(strip, part_bounds, cell_h_ref)
+            for ci_, edge_, top_ in ext_edges:
+                drop_end_ext_specks(owner, strip < BINARY_THRESHOLD_PATCH, ci_, edge_, top_, cell_h_ref)
             ink_px = strip < BINARY_THRESHOLD_PATCH
             ink_edges = column_ink_edges(ink_px, [(t, b) for _i, t, b in local])
             for ci, (cell, (idx, ltop, lbot)) in enumerate(zip(cells, local)):

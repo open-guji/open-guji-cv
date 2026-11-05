@@ -99,3 +99,35 @@ def test_strip_frame_debris_line_aware_keeps_parts_far_from_line():
     new = strip_frame_debris(patch, 0, 98, 100, line_bot=97)
     assert (new[82:87, 22:28] == 0).all()
     assert (new[93:96, 50:56] == 255).all()
+
+
+def test_strip_frame_debris_line_aware_keeps_tall_dots_near_line():
+    """贴着线的也只剥薄片：灬 的点高过 DEBRIS_LINE_MAX_H 格高，贴线也留着。"""
+    from open_guji_cv.clustering.extractor import strip_frame_debris
+    patch = np.full((100, 80), 255, np.uint8)
+    patch[10:60, 20:60] = 0              # 字身
+    patch[82:96, 22:30] = 0              # 灬 的一点：高 14 行、贴着线
+    patch[93:96, 50:60] = 0              # 线渣：高 3 行
+    new = strip_frame_debris(patch, 0, 98, 100, line_bot=97)
+    assert (new[82:96, 22:30] == 0).all()
+    assert (new[93:96, 50:60] == 255).all()
+
+
+def test_drop_end_ext_specks_keeps_strokes_only():
+    """首格地盘伸到条带顶后，伸出去那段只认像笔画的墨块：零星墨点、细竖条、贴条带边的丢掉。"""
+    from open_guji_cv.clustering.extractor import drop_end_ext_specks
+    binary = np.zeros((120, 100), bool)
+    binary[5:15, 20:80] = True           # 「三」的上横：在原地盘外
+    binary[8:10, 90:92] = True           # 零星墨点
+    binary[2:30, 40:42] = False
+    binary[0:28, 96:99] = True           # 细竖条（界行断头）
+    binary[16:20, 0:8] = True            # 贴条带左缘的拐角
+    binary[30:90, 20:80] = True          # 字身：在原地盘内
+    owner = np.where(binary, 0, -1).astype(np.int16)
+    edge = np.full(100, 30.0)
+    drop_end_ext_specks(owner, binary, 0, edge, True, 80.0)
+    assert (owner[5:15, 20:40] == 0).all() and (owner[5:15, 42:80] == 0).all()
+    assert (owner[8:10, 90:92] == -1).all()
+    assert (owner[0:28, 96:99] == -1).all()
+    assert (owner[16:20, 0:8] == -1).all()
+    assert (owner[30:90, 20:80] == 0).all()

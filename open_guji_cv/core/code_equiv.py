@@ -856,6 +856,12 @@ ENTRIES: tuple[Equiv, ...] = (
           old="35599c861269dd09c094e824b219ef8cd6c83b33fbac91f9a99d584d8836dad9",
           evidence="书级开关 layout_raise_box（缺省关，不进参数 dump；A22 11-05 殿本抬头框重编）：row_segment 关着时在殿本 34 册 76 页"
                    "（有抬头框而切分没抬的 164 列所在页，含 vol01/07/09 旧图源页与 vol28/45/56/73/82/88 整页框认错页）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="9def1159ee0cc94b43eef3897a439bb885c850a99bc90a540f557493cc7cc1ba",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence="inner_frame_only 列端补救（缺省关；列首条带开到内框线、首末格地盘伸到条带头尾、贴线碎块只剥薄片，A22 11-05）："
+                   "三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，"
+                   "cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；2026-11-05"),
 )
 
 
