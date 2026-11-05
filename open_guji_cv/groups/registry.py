@@ -318,7 +318,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ()),
+        flow=FlowSpec((CTX, *_g2(gid), *((IDS,) if gid == "dt" else ())), review=True, families=FAMILIES.get(gid, ()),
                       **({"form_methods": (FREQ, FORM_TOP1)} if gid == "zh" else {})), overlaps=_GLYPH_OVERLAPS.get(gid, ()),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("ly", "論諭", "論＝議論；諭＝詔諭、上諭。"), ("dt", "大太", "太只收官名帝号类；大史／太史等两可词弃权。"),
@@ -330,7 +330,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir=f"config/groups/{gid}",
-        flow=FlowSpec((CTX, *_g2(gid)), review=True, families=FAMILIES.get(gid, ()),
+        flow=FlowSpec((CTX, *_g2(gid), *((IDS,) if gid == "wyu" else ())), review=True, families=FAMILIES.get(gid, ()),
                       **({"lift_ref_agree": True} if gid == "xz" else {})), overlaps=_GLYPH_OVERLAPS.get(gid, ()),
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（只降审不改字）。{note}")
        for gid, name, note in (("xz", "象彖𧰼", "彖傳＝释卦辞；象傳＝释卦象；象數、取象为象。𧰼是象的异体：先按文意定彖／象族，象𧰼再按刻形（字频→IDS→库形最近）定哪一形。"), ("wyu", "王玉", "王＝王弼等人名、帝王；玉＝玉器、玉海。"),
@@ -346,7 +346,7 @@ GROUPS: dict[str, GroupSpec] = {
     **{gid: GroupSpec(
         id=gid, name=name, members=frozenset(name), backends=(),
         kind="near_form", solvers=("ctx_l1", "ctx_l3"), config_dir=f"config/groups/{gid}",
-        flow=_YR_FLOW if gid == "yr" else _MB_FLOW if gid == "mb" else _MZ_FLOW if gid == "mz" else FlowSpec((CTX, *_g2(gid)), review=True), overlaps=ov,
+        flow=_YR_FLOW if gid == "yr" else _MB_FLOW if gid == "mb" else _MZ_FLOW if gid == "mz" else FlowSpec((CTX, *_g2(gid), *((IDS,) if gid == "sb" else ())), review=True), overlaps=ov,
         note=f"按文意定（L1 规则，弃权查 L2 表）；补放，也复核（{'规则够硬时改字' if gid == 'mb' else '只降审不改字'}）。{note}")
        for gid, name, ov, note in (
            ("mz", "目自", ("rm",), "目＝總目、書目、存目；自＝自序、所自、自某代以來。"),

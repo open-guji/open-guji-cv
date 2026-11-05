@@ -265,3 +265,18 @@ def test_skip_half_cells_bypass_l3_steps():
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     assert "group_flow_llm_skip_half" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True).model_dump()["group_flow_llm_skip_half"] is True
+
+
+def test_dt_wyu_sb_have_ids_method_that_abstains_without_bank():
+    """大太、王玉、十卜（QTW 全唐文 11-05）声明了 IDS 解法；没有本书模板库时 abstain:no_bank，不改变输出。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.groups import ids_online
+    from open_guji_cv.groups.flow import check_groups
+    from open_guji_cv.groups.methods import IDS
+    from open_guji_cv.groups.registry import FLOW_GROUPS
+    check_groups(["dt", "wyu", "sb"])
+    for g in ("dt", "wyu", "sb"):
+        assert "ids" in FLOW_GROUPS[g].flow.solvers and g in ids_online.SPECS
+    v = IDS._run(NS(group="dt_no_such_bank", patch=lambda: None))
+    assert v.char is None and v.why == "abstain:no_bank"
