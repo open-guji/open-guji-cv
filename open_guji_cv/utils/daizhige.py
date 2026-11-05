@@ -93,17 +93,22 @@ PUA_SOURCE = "daizhige"
 
 
 def pua_codes(s: str, pua_map: dict | None, glyphs: dict | None = None) -> list[list]:
-    """`fix_pua` 记成 `〓` 的那些私用码的原码位：`[[串内下标, "daizhige:U+EB10"], …]`（待收字永久编号，A24 11-05）。
+    """`fix_pua` 记成 `〓` 的那些私用码的原码位：`[[输出串内下标, "daizhige:U+EB10"], …]`（下标按 `fix_pua` 的输出串算）（待收字永久编号，A24 11-05）。
 
     只收映不上的私用码（僻字码）；`glyphs` 登记的缺字图占位码（U+1001 等，以图代字）属真图，不收；
     `pua_map` 映上的已经是真字，也不收。带来源前缀，是因为图源文本层（siku-qiefen-v2）另有一套 U+F1xxx，两套码不一一对应。"""
     pm = pua_map or {}
     gl = glyphs if isinstance(glyphs, dict) else {}
-    out = []
-    for i, ch in enumerate(s or ""):
+    out, pos = [], 0
+    for ch in s or "":
         key = f"U+{ord(ch):04X}"
-        if key not in gl and _is_pua(ch) and not pm.get(key):
-            out.append([i, f"{PUA_SOURCE}:{key}"])
+        if key not in gl and _is_pua(ch):
+            real = pm.get(key)
+            if real:
+                pos += len(real)        # 映上的换成真字（现网全是单字；多字也按输出串算下标）
+                continue
+            out.append([pos, f"{PUA_SOURCE}:{key}"])
+        pos += 1
     return out
 
 
