@@ -154,3 +154,17 @@ def test_restore_trimmed_ends_below_line_only():
     assert (out[:, 0:2] == 255).all()     # 文字带外不补
     wrec.trim_top = BorderTrim(px=20, case="d")
     assert restore_trimmed_ends(img, raw, wrec, {"top": line}, mapper) is img
+
+
+def test_strip_frame_debris_thin_only_keeps_dots_without_line():
+    """没拟出内线的一端（thin_only）：框渣也只剥薄片，「心」的点留着。"""
+    from open_guji_cv.clustering.extractor import strip_frame_debris
+    patch = np.full((100, 80), 255, np.uint8)
+    patch[10:60, 20:60] = 0              # 字身
+    patch[80:94, 22:30] = 0              # 心 的一点：高 14 行
+    patch[93:96, 50:60] = 0              # 框渣：高 3 行
+    old = strip_frame_debris(patch, 0, 98, 100)
+    assert (old[80:94, 22:30] == 255).all()
+    new = strip_frame_debris(patch, 0, 98, 100, thin_only=True)
+    assert (new[80:94, 22:30] == 0).all()
+    assert (new[93:96, 50:60] == 255).all()

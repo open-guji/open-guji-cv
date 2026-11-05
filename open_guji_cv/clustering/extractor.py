@@ -1183,13 +1183,16 @@ DEBRIS_LINE_MAX_H = 0.10   # inner_frame_only：离线近的碎块高不过这�
 
 def strip_frame_debris(patch: np.ndarray, cell_top: float,
                        cell_bot: float, cell_h: float,
-                       line_bot: float | None = None, line_top: float | None = None) -> np.ndarray:
+                       line_bot: float | None = None, line_top: float | None = None,
+                       thin_only: bool = False) -> np.ndarray:
     """剥掉列端格上下边缘带里与字身分离的框线碎渣。
 
     cell_top/cell_bot 为格界在图块坐标系里的位置。只应对列首/列尾格
     调用——中段格没有版框，那里的边缘墨是邻字残余，归切分层管。
     line_bot/line_top（图块坐标，cell_shrink inner_frame_only）：整页拟出的内框细线字侧边沿。给了就只剥
-    伸到离线 DEBRIS_LINE_REACH 格高以内、又薄（高不过 DEBRIS_LINE_MAX_H 格高）的碎块——线已经抹掉，离线远的「碎块」是字的部件（灬、八的脚、三的上横）。
+    伸到离线 DEBRIS_LINE_REACH 格高以内、又薄（高不过 DEBRIS_LINE_MAX_H 格高）的碎块——
+    线已经抹掉，离线远的「碎块」是字的部件（灬、八的脚、三的上横）。
+    thin_only（inner_frame_only 开、这一端没拟出内线）：不看离线远近，只剥薄的（单线版框的页，「悉」的心、「照」的灬）。
     """
     binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
     n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
@@ -1220,8 +1223,8 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
                     or (line_top is not None and y <= line_top + reach))
             if not near:                      # 离抹掉的内框线远 → 字的部件
                 continue
-            if ch >= DEBRIS_LINE_MAX_H * cell_h:   # 线抹掉后剩的是薄片；高过这么多的是字的点画（灬、覽的脚、三的上横）
-                continue
+        if (line_bot is not None or line_top is not None or thin_only) and ch >= DEBRIS_LINE_MAX_H * cell_h:
+            continue                          # 框渣是薄片；高过这么多的是字的点画（灬、覽的脚、三的上横、心的点）
         if area > DEBRIS_AREA and ch > h_max:
             continue                          # 又大又高 → 不是碎渣，留着送审
         hits.append(k)
@@ -3305,7 +3308,8 @@ class CharExtractor:
                                 line_top=None if "top" not in end_sides or "top" not in ie
                                 else float(ie["top"]) - (sy0 + y0))
                         else:
-                            sub_p = strip_frame_debris(sub_p, ltop - y0, lbot - y0, cell_h)
+                            sub_p = strip_frame_debris(sub_p, ltop - y0, lbot - y0, cell_h,
+                                                       thin_only=bool(gmeta.get("debris_thin_only")))
                         if len(parts) == 1:
                             # 框线断段：判据在图块之外（列外墨率），必须传整页
                             sub_p = strip_frame_stub(sub_p, page_img, int(sx0), int(sx1), int(sy0 + y0))

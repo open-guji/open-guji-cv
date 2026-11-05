@@ -313,6 +313,7 @@ class CellShrinkStep(Step):
             # 整页拟出内框细线的边（cut_inner_frame 已抹白）：extractor 列端不再逐格剥框线行；抬头列不抹上框，上框照旧
             wins: PageWindows = ctx.product("column_windows", page)
             inner = self._inner_frame_lines(ctx, page, cells, wins)
+            out["debris_thin_only"] = {cc.col: True for cc in cells.columns}    # 没拟出内线的一端：框渣也只剥薄片
             if inner:
                 out["inner_sides"], out["inner_edges"] = {}, {}
                 for cc in cells.columns:
