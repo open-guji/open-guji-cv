@@ -11,9 +11,6 @@
 ### Changed
 - 图形评测折叠己已巳、日曰（2026-11-05，Sheldon：这两组图上分不开，匹配到组内任一个都算对，不单独统计正确率）：新增 `scripts/eval_fold.py`；`eval_db_match.py`／`eval_match_pairs.py`（缺省折叠，`--no-fold` 回旧口径）／`eval_oov.py`（同）／`calibrate_lib_witness.py` 按组折叠金标与候选。只动 scripts/，各步指纹不变。
 
-### Added
-- 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
-
 ### Changed
 - cell_shrink 书级开关 `inner_frame_profile`（缺省关，要 `inner_frame_cut` 一起开；A22-2，2026-11-05）：小段投票拟不出内框细线的页（殿本新图约两成页，内线磨成点线），按外框拉直的整宽行墨再找（`seg.frame_line._profile_inner`）。列端评测集 frame-end-crop 带框 17→8、切笔不变；开关关着各步指纹不变（code_equiv 登记）。
 - 弹性对齐提速（2026-11-05，A20 性能子任务）：`clustering/verify._elastic_align` 的 query 侧取数表按条记忆（库匹配一个 query 连打约 10 个候选），块内位移最优从花式取数改成滑窗最大值。结果逐位不变，已登记代码等价，各书产物不过期。同机微测单次对齐快 10–18%；任务库史記 01 册两单（不同执行机）对齐 2.1 → 1.0 ms／次。
