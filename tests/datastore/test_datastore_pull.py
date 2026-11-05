@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from test_datastore_pg import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
+from pg_fixtures import DSN, _commit, _git, _line, conn, repo  # noqa: F401  (fixtures)
 
 psycopg = pytest.importorskip("psycopg")
 needs_pg = pytest.mark.skipif(not DSN, reason="没有 GUJI_TEST_PG_DSN（测试用 Postgres）")
@@ -77,21 +77,6 @@ def _tables(db_path: Path) -> dict[str, list]:
         c.close()
 
 
-@needs_pg
-def test_materialize_refuses_tampered_db(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.datastore.client import PgSource
-    from open_guji_cv.datastore.importer import import_commit
-    from open_guji_cv.datastore.materialize import MaterializeError, materialize
-
-    files = _workspace(tmp_path)
-    import_commit(conn, repo, _commit(repo, files, "c1"))
-    conn.execute("UPDATE glyphs SET raw = raw || ' '")
-    out = tmp_path / "out"
-    with pytest.raises(MaterializeError, match="sha 不符"):
-        materialize(PgSource(conn), "tws", out, cache=_Cache(tmp_path / "cache", files))
-    assert not (out / "output").exists()            # 不留半成品
-
-
 class _FakeDst:
     branch = "main"
 
@@ -104,27 +89,6 @@ class _FakeDst:
     def append_events(self, ws, src_path, lines, branch=None):
         self.calls.append((ws, src_path, lines, branch))
         return {"inserted": [json.loads(x)["id"] for x in lines], "duplicates": [], "import_id": 9, "rev_to": 99}
-
-
-@needs_pg
-def test_import_events_from_exp_branch(repo, conn, tmp_path):  # noqa: F811
-    from open_guji_cv.datastore.client import PgSource
-    from open_guji_cv.datastore.importer import import_commit
-    from open_guji_cv.datastore.pull import import_events
-
-    files = _workspace(tmp_path)
-    files["W/feedback/events/b.jsonl"] += (_line(id="evt_b_2", batch="b", seq=2) + "\n").encode()
-    import_commit(conn, repo, _commit(repo, files, "c1"))
-    exp = PgSource(conn, branch="exp/GUJI-606-t")
-
-    dst = _FakeDst(have={"evt_b_1"})
-    plan = import_events(exp, dst, "tws", None, dst_branch="main", dry_run=True)
-    assert plan["plan"] == {"feedback/events/b.jsonl": 1} and not dst.calls
-    res = import_events(exp, dst, "tws", None, dst_branch="main")
-    assert res["results"][0]["inserted"] == 1
-    assert json.loads(dst.calls[0][2][0])["id"] == "evt_b_2" and dst.calls[0][3] == "main"
-    with pytest.raises(SystemExit, match="找不到"):
-        import_events(exp, _FakeDst(set()), "tws", {"evt_nope"}, dst_branch="main")
 
 
 # ---- 经 Worker 读：假 Worker，验证分页、批量签名、旧版 Worker 退回逐张签 ----

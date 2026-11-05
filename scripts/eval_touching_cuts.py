@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from open_guji_cv.core.step import page_key  # noqa: E402
 from open_guji_cv.eval.rulers import _col_profile  # noqa: E402
-from open_guji_cv.eval.touching import polyline_to_seam, seam_deviation  # noqa: E402
+from guji_manager.eval.touching import polyline_to_seam, seam_deviation  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.store import ProductStore  # noqa: E402
@@ -111,7 +111,7 @@ def main() -> int:
             # col_h 对不上只是「可能漂移」；再按原格线锚点复核（eval.touching.gold_anchor_ok）。
             # 2026-09-16：vol01 重跑后 706 条 col_h 不一致，其中 666 条格线坐标其实没动（列只是底部变长），
             # 老判据把它们全跳过，评测样本从 ~900 掉到 239。
-            from open_guji_cv.eval.touching import gold_anchor_ok
+            from guji_manager.eval.touching import gold_anchor_ok
             if not gold_anchor_ok(cc, ex):
                 drift += 1
                 continue

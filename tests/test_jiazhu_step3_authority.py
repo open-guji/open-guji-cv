@@ -188,25 +188,9 @@ def test_resolved_forced_main_takes_sub_keys_and_latest_wins(tmp_path):
     assert resolved_forced_main("vol01", log) == {}
 
 
-def test_route_invalidates_row_segment_for_main_marks():
-    from open_guji_cv.feedback.routes import RouteTable
-    table = RouteTable.load(None)
-    steps = sorted((d.extra or {}).get("step") or d.consumer
-                   for d in table.destinations(_ev(1, "vol02:100:4:17a", MAIN, "2026-10-06T00:00:01Z")))
-    assert "row_segment" in steps
-
-
 def test_returns_classify_main_as_jiazhu_split():
     from open_guji_cv.feedback.returns import classify_return
     assert classify_return(_ev(1, "vol02:100:4:17a", MAIN, "2026-10-06T00:00:01Z")) == \
         ("row_segment", "jiazhu_split")
 
 
-def test_step8_main_flag_payload_and_readback():
-    from open_guji_cv.feedback.collate_state import seg_flags, seg_payload
-    p = seg_payload(["main"])
-    assert p["reason"] == "main_as_jiazhu" and p["quality"] == "truncated" and p["defect"] == "main"
-    both = seg_payload(["jiazhu", "main"])
-    assert both["reason"] == "main_as_jiazhu"                              # 两个都勾以「正文当小注」为准
-    e = _ev(1, "vol02:100:4:17a", p, "2026-10-06T00:00:01Z")
-    assert seg_flags([e], "vol02") == {"vol02:100:4:17a": ["main"]}       # quality=truncated 不读成「字形不完整」

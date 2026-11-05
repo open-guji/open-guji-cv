@@ -40,7 +40,7 @@ import open_guji_cv.steps  # noqa: E402,F401
 from open_guji_cv.clustering import variant_form as vf  # noqa: E402
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import page_key  # noqa: E402
-from open_guji_cv.eval.round_check import load_verdicts  # noqa: E402
+from guji_manager.eval.round_check import load_verdicts  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 
 

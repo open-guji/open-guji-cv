@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import pytest
 
-from open_guji_cv.eval.round_check import _same_char
+from open_guji_cv.report.same_char import _same_char
 
 #: 用户 2026-09-22 在 bxgb 报告里逐条指出的四组，后一个字是对的。
 USER_REPORTED = [("治", "冶", False), ("瘗", "瘞", True),

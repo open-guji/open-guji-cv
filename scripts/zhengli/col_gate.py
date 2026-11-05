@@ -19,7 +19,7 @@ def main(argv=None) -> int:
     ap.add_argument("--pages", default=None, help="逗号分隔；缺省 = 产物里有的全部页")
     ap.add_argument("--out", default=None)
     a = ap.parse_args(argv)
-    from open_guji_cv.ops.col_gate import scan_book
+    from guji_manager.ops.col_gate import scan_book
     res, n = scan_book(a.book, [int(x) for x in a.pages.split(",")] if a.pages else None)
     text = json.dumps(res, ensure_ascii=False, indent=1)
     if a.out:

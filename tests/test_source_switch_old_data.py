@@ -170,88 +170,8 @@ def test_pending_list_stamps_source_rev(tmp_path):
 
 # ── 2. 看图结论 ──────────────────────────────────────────────────────
 
-def _vision_ev(key, seq, v="wrong", rev=None):
-    from open_guji_cv.feedback.vision import _STEP
-    book, pg, col, slot = key.split(":")
-    return make_event("vision-x", seq, "vision_check",
-                      EventTarget(step=_STEP, unit="cell", key=key, book=book, page=int(pg), col=int(col),
-                                  slot=int(slot), anchor=None if rev is None else {"source_rev": rev}),
-                      {"source": "vision", "judge": "m", "v": v, "char": "曰", "shown": "日"}, actor="model")
-
-
-def test_pre_switch_vision_checks_ignored(tmp_path):
-    """换源前的看图判错（锚里没有 source_rev，旧格号）不再让新格号进请审单。"""
-    from open_guji_cv.feedback.vision import VisionLog, vision_checks, vision_flags
-    _yaml(tmp_path / "books", "vol04", 3)
-    _yaml(tmp_path / "books", "vol09", None)
-    fb = tmp_path / "feedback"
-    (fb / "vision").mkdir(parents=True)
-    old = [_vision_ev("vol04:12:3:5", 1), _vision_ev("vol04:12:3:6", 2, v="unsure"), _vision_ev("vol09:1:1:1", 3)]
-    (fb / "vision" / "vision-x.jsonl").write_text(
-        "".join(e.model_dump_json() + "\n" for e in old), encoding="utf-8")       # 换源前写下的（写入口现在会拒）
-    log = VisionLog(fb)
-    assert vision_checks("vol04", log) == {} and vision_flags("vol04", log) == {}
-    assert log.dropped == {"vision-x": {"vol04": 2}}                                # 不静默：丢了几条有数
-    assert set(vision_flags("vol09", log)) == {"vol09:1:1:1"}                       # 没换源的册照旧
-    log.append([_vision_ev("vol04:12:3:5", 4, rev=3)])                              # 换源后（带新 rev）照常生效
-    assert set(vision_flags("vol04", log)) == {"vol04:12:3:5"}
-
-
-def test_import_vision_needs_explicit_source_rev(tmp_path):
-    """换过源的册：不给 --source-rev 整批报错（不抛异常、不写）；给了与册 yaml 相同的才写，读口照常认。
-    不自动按产物盖 rev——旧格号的老文件重导一遍会被当成新图上的结论。"""
-    from open_guji_cv.feedback.vision import VisionLog, import_vision, vision_flags
-    _yaml(tmp_path / "books", "vol04", 3)
-    src = tmp_path / "看图结论.jsonl"
-    src.write_text(json.dumps({"cell": "vol04:1:1:3", "v": "wrong", "char": "曰", "shown": "日", "judge": "m"})
-                   + "\n", encoding="utf-8")
-    log = VisionLog(tmp_path / "feedback")
-    res = import_vision(src, log, gold=False)
-    assert res["written"] == 0 and "--source-rev" in res["errors"][0]
-    assert import_vision(src, log, gold=False, source_rev=2)["written"] == 0           # 旧 rev 也不收
-    res = import_vision(src, log, gold=False, source_rev=3)
-    assert res["errors"] == [] and res["written"] == 1
-    assert set(vision_flags("vol04", log)) == {"vol04:1:1:3"}
-
 
 # ── 3. gold rebuild ─────────────────────────────────────────────────
-
-def test_rebuild_does_not_revive_pre_switch_verdicts(tmp_path):
-    from open_guji_cv.feedback.routes import RouteTable
-    from open_guji_cv.gold.store import GoldStore
-    from open_guji_cv.gold.transfer import rebuild_verdicts
-    _yaml(tmp_path / "books", "vol01", 3)
-    log = EventLog(tmp_path / "feedback")
-    log.events_dir.mkdir(parents=True)
-    old = [_cell_ev("vol01:5:3:4", 1, payload={"v": "seg_defect", "quality": "truncated"}, step="cell_shrink"),
-           _cell_ev("vol01:9:1:1", 2, payload={"v": "seg_defect", "quality": "truncated"}, step="cell_shrink")]
-    (log.events_dir / "old.jsonl").write_text("".join(e.model_dump_json() + "\n" for e in old), encoding="utf-8")
-    store = GoldStore(tmp_path / "verdicts")
-    table = RouteTable.load(log.root / "routes.yaml")
-    shard = table.plan(old)["gold_add"][0][1].shard
-    # 换源前重放出来、后来标了 stale 的两条（同 10-27 apply.py）
-    from open_guji_cv.gold.item import Anchor, GoldItem
-    store.upsert(shard, [GoldItem(id=e.target.key, anchor=Anchor(book="vol01", page=e.target.page, col=e.target.col,
-                                                                   slot=e.target.slot),
-                                  expected={"quality": "truncated", "note": "旧图"}, source_events=[e.id])
-                         for e in old], "旧")
-    store.mark_stale(shard, [e.target.key for e in old], "GUJI-748 换源")
-    # 换源后：迁移事件落在新格 vol01:5:3:4（与旧格同号）
-    new = _cell_ev("vol01:5:3:4", 3, rev="3", migrated_from="vol01:7:3:4", batch="m~q",
-                   payload={"v": "seg_defect", "quality": "clean"}, step="cell_shrink")
-    log.append([new])
-    out = rebuild_verdicts(log, store, table)
-    assert out["events"] == 1 and out["dropped_by_source_rev"] == {"vol01": 2}
-    items = {i.id: i for i in store.list(shard)}
-    assert items["vol01:9:1:1"].status == "stale"                                  # 旧裁决不复活
-    it = items["vol01:5:3:4"]
-    assert it.status == "active" and it.expected == {"quality": "clean"}           # 不拿旧条目打底（note 不漏进来）
-    assert it.source_events == [new.id] and it.anchor.source_rev == 3
-    assert any("换源" in h.why or "页表" in h.change for h in it.history)
-    # 再重放一遍：幂等
-    rebuild_verdicts(log, store, table)
-    again = {i.id: i for i in store.list(shard)}
-    assert again["vol01:5:3:4"].expected == {"quality": "clean"} and again["vol01:9:1:1"].status == "stale"
 
 
 def test_source_gate(tmp_path, capsys):

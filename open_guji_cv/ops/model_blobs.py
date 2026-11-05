@@ -6,7 +6,7 @@
 ``config/groups/…``），所以各 Step 读模型的路径、代码、指纹一概不变——cv 仓以后不带 ``models/``，
 起跑前按册钉的总号把文件取回即可。
 
-- ``upload(ws, n, execute)``：把清单里的文件传进 R2（已有跳过）；缺省只演练。本机文件 sha 与清单不符拒传。
+- 上传（`upload`、`upload_registry`，`guji model push`）拆分 P5 起在 guji-manager `guji_manager/ops/model_upload.py`；本模块只管取（pipeline 一侧）。
 - ``fetch(ws, n)``：本机缺的文件从 R2 取回、放到登记位置；已有但内容不同的**不覆盖**，报出来
   （之后 `require_model_clean` 会拒跑）。
 - ``ensure_model_pin(book)``：``guji pipeline``／``step`` 起跑前调，册钉了 ``model:`` 且有缺文件时自动取。
@@ -23,31 +23,6 @@ EXT = "txt"          # R2 键后缀（Worker 按它定 content-type；与语料�
 def _paths(ws: Path, man: dict) -> list[tuple[dict, Path]]:
     from ..core.model_pack import _base
     return [(it, _base(it["root"], ws, real=True) / it["path"]) for it in man.get("items") or []]
-
-
-def upload(ws: Path, version: int | None = None, execute: bool = False) -> dict:
-    from ..core import model_pack as mp
-    v = version or (mp.versions(ws) or [None])[-1]
-    if not v:
-        raise FileNotFoundError("还没有模型清单（先 guji model build）")
-    man = mp.load_manifest(ws, v)
-    have, missing, stale = {}, [], []
-    for it, p in _paths(ws, man):
-        if not p.is_file():
-            missing.append(it["path"])
-        elif mp._sha256(p) != it["sha256"]:
-            stale.append(it["path"])
-        else:
-            have[it["sha256"]] = p
-    if stale:
-        raise ValueError(f"本机文件内容与 m{v} 清单不符，不上传：{stale[:3]}（先 guji model verify）")
-    plan = {"version": v, "files": len(man.get("items") or []), "local": len(have),
-            "bytes": sum(p.stat().st_size for p in have.values()), "missing_local": missing, "executed": False}
-    if execute:
-        from ..datastore.r2 import upload_files
-        plan["upload"] = upload_files(have, bucket="main", ext=EXT)
-        plan["executed"] = True
-    return plan
 
 
 def fetch(ws: Path, version: int | None = None) -> dict:
@@ -109,30 +84,6 @@ def _registry(kind: str) -> tuple[list[dict], list[dict]]:
         return cf.load_registry(), cf.missing()
     from ..core import model_pack as mp
     return mp.load_registry(), mp.missing_repo_models()
-
-
-def upload_registry(execute: bool = False, kind: str = "model") -> dict:
-    """cv 自带表里的文件传进 R2（已有跳过）；本机文件 sha 与表不符拒传。"""
-    from ..core import model_pack as mp
-    reg, _ = _registry(kind)
-    have, missing, stale = {}, [], []
-    for i in reg:
-        p = _repo_root() / i["path"]
-        if not p.is_file():
-            missing.append(i["path"])
-        elif mp._sha256(p) != i["sha256"]:
-            stale.append(i["path"])
-        else:
-            have[i["sha256"]] = p
-    if stale:
-        raise ValueError(f"本机文件与{kind}表不符，不上传：{stale[:3]}（先 guji {kind} registry）")
-    plan = {"kind": kind, "registry": len(reg), "local": len(have), "missing_local": missing,
-            "bytes": sum(p.stat().st_size for p in have.values()), "executed": False}
-    if execute:
-        from ..datastore.r2 import upload_files
-        plan["upload"] = upload_files(have, bucket="main", ext=EXT)
-        plan["executed"] = True
-    return plan
 
 
 def ensure_repo_models() -> None:

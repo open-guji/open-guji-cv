@@ -28,7 +28,7 @@ from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import page_key
 from open_guji_cv.clustering.align_label import build_ngram_index, label_page
 from open_guji_cv.clustering.confusable import NEVER_MATCH_FAMILIES
-from open_guji_cv.gold.v2_align import DEFAULT_CORPUS, align_book
+from guji_manager.gold.v2_align import DEFAULT_CORPUS, align_book
 
 FAM = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 

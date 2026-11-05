@@ -69,19 +69,6 @@ def test_feedback_root_no_longer_points_at_dataset(monkeypatch, tmp_path):
     assert EventLog().root == tmp_path / "feedback"
 
 
-def test_default_stores_resolve_workspace_at_call_time(monkeypatch, tmp_path):
-    """默认根在**调用时**解析，不在导入时定死——GUJI_WORKSPACE 常在模块导入之后才设。"""
-    from open_guji_cv.products.cache import ImageCache
-    from open_guji_cv.products.store import ProductStore
-    from open_guji_cv.review.batches import default_batches_root
-    from open_guji_cv.clustering.exclusions import default_path
-    monkeypatch.setenv("GUJI_WORKSPACE", str(tmp_path))
-    assert ProductStore().root == tmp_path / "products"
-    assert ImageCache().root == tmp_path / "cache"
-    assert default_batches_root() == tmp_path / "review" / "batches"
-    assert default_path() == tmp_path / "config" / "crop_exclusions.jsonl"
-
-
 def test_using_sample_db_true_when_nothing_set():
     assert using_sample_db() is True
 

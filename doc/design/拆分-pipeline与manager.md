@@ -1,5 +1,12 @@
 # 把 cv 拆成 pipeline 和 pipeline manager（设计，2026-10-27）
 
+> **现状（2026-11-04，拆分完成）**：manager 一侧已全部搬进 [guji-manager](https://github.com/open-guji/guji-manager)（包 `guji_manager`，v0.4.0 起）。
+> 本仓只剩 pipeline：Step、引擎、产物契约、Step 读人裁（`feedback.lookup/bindings…`、`gold.store`）、取钉版输入（`ops.model_blobs`、`datastore.client`）、Step9 汇总，以及 `guji` 命令行入口（`cli_v2`，pipeline／step／status 等）。
+> 其余命令（db、store、close-check、cache、job…）由 guji-manager 经入口点 `guji.commands` 并进 `guji`；`guji pipeline` 的开跑准备、自动存包、status 报告经 `core/hooks.py` 的钩子（入口点 `guji.hooks`）由 manager 提供。
+> 控制台门面在 `guji_manager.console_api`，本仓 `console_api.py` 只留转发，控制台换完 import 后删。
+> 守卫：`tests/test_architecture.py`（pipeline 不许 import manager，存量 0 条）。搬迁经过：P0 安全网 → P1 拆 cli_v2 → P2 冷的顶层（四批）→ P3 任务库 → P4 中层、钩子 → P5 底层（datastore、消费者、任务库存储）→ P6 收尾，manager 0.1.0–0.4.0、cv #880–#1056；每批 manager 先发版、cv 删除同日合，各册指纹始终不变。
+> 下文是当初的设计稿，数字是 10-27 的，保留备查。
+
 > 起因：sheldon 2026-10-26——cv 包太大。拆成两部分：**pipeline**（图像处理、切分、文字识别）和**pipeline manager**（调用 pipeline，并管工作区、原图取图、打包上传中心库、R2、任务库等一切对外交互）。
 > 目的：改 manager 的功能时，**pipeline 不用发新版本**。分界线：**凡会影响最终识别产物的，一律在 pipeline；其余大部分在 manager。**
 > 本文只是设计与迁移方案，**没有任何代码改动**。数字来自对 `dev`（v0.5.26 之后）的静态 import 分析，脚本思路见第九节。

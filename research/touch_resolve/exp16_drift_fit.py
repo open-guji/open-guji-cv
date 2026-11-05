@@ -21,8 +21,8 @@ import numpy as np
 
 from open_guji_cv.core.spec import column_key
 from open_guji_cv.core.step import page_key
-from open_guji_cv.eval.touching import SHARD
-from open_guji_cv.feedback.consumers import verdict_store
+from guji_manager.eval.touching import SHARD
+from guji_manager.feedback.consumers import verdict_store
 from open_guji_cv.products import kinds as _k  # noqa: F401
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore

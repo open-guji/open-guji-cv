@@ -1,4 +1,8 @@
-"""Gold 层：统一金标信封 + 分片仓 + 旧格式适配器。
+"""（拆分 P5，2026-11-04：本包的 atomic, v2_align 已搬去 guji-manager `guji_manager.gold`。）
+
+（拆分 P2 第四批，2026-11-04：本包的 transfer 已搬去 guji-manager `guji_manager.gold`。）
+
+Gold 层：统一金标信封 + 分片仓 + 旧格式适配器。
 
 P1 只落到「事件能自动进 items.jsonl」这一步；完整的 GoldStore（采样器、重键、
 四个适配器读全部旧分片）是 P2。

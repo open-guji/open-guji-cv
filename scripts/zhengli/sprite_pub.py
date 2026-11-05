@@ -78,7 +78,7 @@ def missing(doc: dict) -> list[str]:
 
 def upload(entries: list[dict], pub_dir: Path, bucket: str = "main") -> dict:
     """传进 R2。任何一张没传成（也不是已有）就抛 RuntimeError，不让单子在图缺着的情况下上线。"""
-    from open_guji_cv.datastore.r2 import upload_files
+    from guji_manager.datastore.r2 import upload_files
     stats = upload_files({e["sha256"]: pub_dir / e["name"] for e in entries}, bucket=bucket, ext="webp")
     bad = {k: v for k, v in stats.items() if k not in ("uploaded", "exists")}
     if bad:

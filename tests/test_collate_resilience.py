@@ -17,7 +17,6 @@ from dataclasses import replace
 
 from open_guji_cv.clustering.align_eval import build_ngram_index
 from open_guji_cv.report.collate import PLACEHOLDER, _sanitize_slots, diff_page
-from open_guji_cv.report.run import collate_book
 from open_guji_cv.report.slots import SlotRec
 from open_guji_cv.report.witness import Witness
 
@@ -37,37 +36,6 @@ def _witness(text: str = TRUTH) -> Witness:
 
 
 # ── 1. collate_book 单页崩溃不拖垮整册 ──────────────────────────────
-
-def test_collate_book_skips_the_crashing_page_and_keeps_the_rest(monkeypatch):
-    from open_guji_cv.report.collate import PageResult
-
-    def fake_collate_page(store, book, page, witnesses, stale):
-        if page == 2:
-            raise IndexError("list index out of range")
-        return {w.label: PageResult(page=page, anchored=True, n_equal=3) for w in witnesses}
-
-    monkeypatch.setattr("open_guji_cv.report.run.collate_page", fake_collate_page)
-    w = _witness()
-    doc = collate_book("tbook", [1, 2, 3], [w])
-
-    assert [pe["page"] for pe in doc["page_errors"]] == [2]
-    assert doc["page_errors"][0]["error_type"] == "IndexError"
-    assert "list index out of range" in doc["page_errors"][0]["message"]
-    assert [rec["page"] for rec in doc["page_stats"]] == [1, 3], "崩溃页跳过，其余页照样出结果"
-    assert doc["summary"]["n_page_errors"] == 1
-
-
-def test_collate_book_with_no_crashes_reports_zero_page_errors(monkeypatch):
-    from open_guji_cv.report.collate import PageResult
-
-    def fake_collate_page(store, book, page, witnesses, stale):
-        return {w.label: PageResult(page=page, anchored=True, n_equal=1) for w in witnesses}
-
-    monkeypatch.setattr("open_guji_cv.report.run.collate_page", fake_collate_page)
-    w = _witness()
-    doc = collate_book("tbook", [1, 2], [w])
-    assert doc["page_errors"] == []
-    assert doc["summary"]["n_page_errors"] == 0
 
 
 # ── 2. diff_page 挡坏数据（长度≠1 的假字） ──────────────────────────

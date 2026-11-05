@@ -909,6 +909,32 @@ def test_lift_shape_ref_not_in_params_dump():
     assert SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ref=["ry"]).model_dump()["group_flow_lift_shape_ref"] == ["ry"]
 
 
+def test_lift_ref_veto_book_level(monkeypatch):
+    """书级 `lift_ref_veto`（史記 2026-11-03）：山由出 sy 字形路给出、整理本（或坐标对位）字是组里另一个字 → 不补放；缺省照旧。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict("出" if name == "ids" else None, via=name))
+    cands = lambda cid: [("出", 0.98), ("山", 0.975)]
+    on = FlowConfig(groups=("sy",), lift_ref_veto=frozenset({"sy"}))
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("山", "equal")}, cands, lambda r: False, FlowConfig(groups=("sy",)))
+    assert r.admit and r.char == "出"                                          # 缺省：照旧放（错放）
+    r = Rec("x")
+    group_flow_pass([r], {"x": ("山", "equal")}, cands, lambda r: False, on)
+    assert not r.admit and "group_flow_ref_dissent" in r.doubts
+    r = Rec("x")                                                               # 现役对位缺格、坐标对位字是山
+    group_flow_pass([r], {}, cands, lambda r: False, on, veto_refs={"x": "山"})
+    assert not r.admit
+    r = Rec("x")                                                               # 整理本也是出 → 放
+    group_flow_pass([r], {"x": ("出", "equal")}, cands, lambda r: False, on)
+    assert r.admit and r.char == "出"
+
+
+def test_lift_ref_veto_not_in_params_dump():
+    assert "group_flow_lift_ref_veto" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(group_flow=("sy",), group_flow_lift_ref_veto=["sy"]).model_dump()["group_flow_lift_ref_veto"] == ["sy"]
+
+
 def test_provisional_family_fallback_xz_kgc(monkeypatch):
     """混合组（A24 11-01）：文意定族（象𧰼／寇族）、族内字形判不出或与整理本不一 → 暂归一到 象／寇；文意给 彖、整理本在族外照旧留人审。"""
     from open_guji_cv.groups import flow

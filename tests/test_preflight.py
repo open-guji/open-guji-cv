@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from open_guji_cv import cli_v2
-from open_guji_cv.ops import preflight
+from open_guji_cv import preflight
 
 
 def _eng(cut_judge="unet", shadow_veto=False):

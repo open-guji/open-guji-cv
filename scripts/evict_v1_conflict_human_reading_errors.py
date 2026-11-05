@@ -119,7 +119,7 @@ def main() -> int:
         print(f"\n（这是预览：不碰 glyph.db，也没写 feedback 事件。确认无误后加 --apply 真的撤库。）")
         return 0
 
-    from open_guji_cv.feedback.consumers import route_and_consume
+    from guji_manager.feedback.consumers import route_and_consume
     from open_guji_cv.feedback.events import EventLog, EventTarget, make_event
 
     batch = f"{BATCH_PREFIX}-{targets[0]['v1'].split(':')[0]}"

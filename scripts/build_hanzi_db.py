@@ -112,7 +112,7 @@ def bench(db: HanziDB, chars: list[str]) -> dict:
 
 def upload(src: Path) -> dict:
     """清单里的全部文件（核心包、部件包、形近对表）与原始资料 → R2 正式桶（txt 后缀，按 sha，已有跳过）。"""
-    from open_guji_cv.datastore.r2 import upload_files
+    from guji_manager.datastore.r2 import upload_files
     from open_guji_cv.hanzi.build import sha256_file
     from open_guji_cv.hanzi.pack import Pack
     pk = Pack()
@@ -132,7 +132,7 @@ def upload_emb() -> dict:
     向量文件是二进制（`.npy`），Worker 目前只签 png／txt 两种后缀，按用户 10-19 定先一律走 txt 后缀；
     内容按 sha 核，后缀只决定 content-type，下载方（`hanzi.pack.get_blob`）按字节读、核 sha。"""
     from open_guji_cv.clustering.emb_pack import manifests
-    from open_guji_cv.datastore.r2 import upload_files
+    from guji_manager.datastore.r2 import upload_files
     from open_guji_cv.hanzi.pack import blob_cache_path
     files = {}
     for m in manifests():

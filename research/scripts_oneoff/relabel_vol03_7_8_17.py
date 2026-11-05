@@ -34,7 +34,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.feedback.consumers import route_and_consume  # noqa: E402
+from guji_manager.feedback.consumers import route_and_consume  # noqa: E402
 from open_guji_cv.feedback.events import EventLog, EventTarget, make_event  # noqa: E402
 
 TARGET_IID = "v2:vol03:7:8:17"

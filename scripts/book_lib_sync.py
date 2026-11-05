@@ -181,7 +181,7 @@ def main(argv=None) -> int:
     if a.apply:
         from open_guji_cv.core.book import load_book as _lb  # noqa: F401
         from open_guji_cv.core.step import RunContext
-        from open_guji_cv.feedback.consumers import glyphdb_admit
+        from guji_manager.feedback.consumers import glyphdb_admit
         from open_guji_cv.products.cache import ImageCache
         from open_guji_cv.products.store import ProductStore
         cache = ImageCache()

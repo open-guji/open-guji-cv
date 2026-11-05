@@ -222,14 +222,14 @@ def job_specs(seg_set: str, base_cv: str, new_cv: str, why: str) -> list[tuple[d
 
 
 def cmd_submit(a) -> int:
-    from open_guji_cv.jobs import spec as SP
+    from guji_manager.jobs import spec as SP
     sets = _resolve_sets(a.set, a.base)
     if not sets:
         print("没有要比的套书")
         return 0
     db = S = None
     if not a.dry_run:
-        from open_guji_cv.jobs import store as S
+        from guji_manager.jobs import store as S
         db = S.DB()
     rows = []
     for s in sets:

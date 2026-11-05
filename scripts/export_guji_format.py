@@ -40,10 +40,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from convert_pages_to_char_cord import report as char_cord_report  # noqa: E402
 from export_guji_page import page_meta  # noqa: E402
 
-from open_guji_cv.formats import guji_char_cord as cc  # noqa: E402
-from open_guji_cv.formats import guji_format as gf  # noqa: E402
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
-from open_guji_cv.formats.guji_page_cv import export_page  # noqa: E402
+from guji_manager.formats import guji_char_cord as cc  # noqa: E402
+from guji_manager.formats import guji_format as gf  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats.guji_page_cv import export_page  # noqa: E402
 
 
 def _pages(spec: str | None, products: Path | None, book: str) -> list[int]:
@@ -110,11 +110,11 @@ def main(argv=None) -> int:
     products = Path(a.products) if a.products else None
     pages, bad = [], 0
     plist = _pages(a.pages, products, a.book)
-    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    from guji_manager.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
     pend = vision_pending_ids(a.book, plist, a.products)
     figure_alts, regions = {}, {}
     if a.format == "char-cord" and not a.no_figures:
-        from open_guji_cv.feedback.figures import figure_cells, resolved_figure_regions
+        from guji_manager.feedback.figures import figure_cells, resolved_figure_regions
         figure_alts = figure_cells(a.book)
         regions = {pg: r for pg, r in resolved_figure_regions(a.book).items() if pg in set(plist)}
     for p in plist:

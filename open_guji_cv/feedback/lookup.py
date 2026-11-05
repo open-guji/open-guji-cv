@@ -84,7 +84,7 @@ def resolved_slots(book: str) -> dict[tuple[int, int], ResolvedColumn]:
     `parse_card_id` 走的是既有 `bxgb:3:1` 模式（Step2 列清理同一条正则，
     2026-09-17 加），anchor 里没有 `slot` 字段——这里不需要它。
     """
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     out: dict[tuple[int, int], int] = {}
     try:
         items = verdict_store().list(SLOT_COUNT_SHARD, legacy=False)
@@ -116,7 +116,7 @@ def resolved_head_raise(book: str) -> dict[tuple[int, int], int]:
     `idk` 和非 active（换图源作废的旧页号裁决是 stale）不生效。裁决不进指纹，靠该页显式重跑
     （`--from border_detect --pages …`）生效，同 `resolved_manual_cells`。
     """
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     out: dict[tuple[int, int], int] = {}
     try:
         items = verdict_store().list(HEAD_RAISE_SHARD, legacy=False)
@@ -146,7 +146,7 @@ def resolved_manual_cells(book: str) -> dict[tuple[int, int], list[dict]]:
     采用，不再跑切分；裁决不进指纹，靠该页显式重跑生效（同 `resolved_slots`）。
     卡片 id `book:page:col`，`expected.cells` 是上面那张表，`kind` 取 char / jiazhu_a / jiazhu_b。
     """
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     out: dict[tuple[int, int], list[dict]] = {}
     store = verdict_store()
     try:
@@ -266,7 +266,7 @@ def resolved_solo_notes(book: str) -> dict[tuple[int, int], set[int]]:
     判据不会为它举手，只能人指出来。卡片 id `book:page:col:slot`，`expected.kind`
     只认 `jiazhu_solo`；生效时机同 `resolved_cuts`（裁决不进指纹，该页重跑才生效）。
     """
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     out: dict[tuple[int, int], set[int]] = {}
     try:
         items = verdict_store().list(SOLO_NOTE_SHARD, legacy=False)
@@ -372,7 +372,7 @@ def resolved_cuts(book: str) -> dict[tuple[int, int, int], ResolvedCut]:
     消费时把该页 `row_segment` 显式失效（`consumers.product_invalidate`），下次跑批
     只重算裁过的页。Step7 顺序闸另按事件日志即时放行（`review/cards.py`）。
     """
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     out: dict[tuple[int, int, int], ResolvedCut] = {}
     try:
         items = verdict_store().list(TOUCHING_CUTS_SHARD, legacy=False)
@@ -404,7 +404,7 @@ def resolved_pins(book: str, store=None) -> dict[tuple[int, int, int], float]:
     """
     from ..eval.colgeom import current_geom
     from ..products.store import ProductStore
-    from .consumers import verdict_store
+    from ..gold.store import verdict_store
     st = store or ProductStore()
     out: dict[tuple[int, int, int], float] = {}
     try:

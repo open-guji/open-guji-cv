@@ -23,6 +23,8 @@ def _installed() -> bool:
 
 
 def ensure() -> None:
+    if os.environ.get("GUJI_NO_ENSURE_MANAGER"):     # 测试里不许动本机装的包（tests/conftest.py 设）
+        return
     cloud = os.environ.get("GUJI_MANAGER_DIR") or Path("/opt/guji-venv").is_dir()
     bash = shutil.which("bash")
     if cloud and bash and SH.is_file():

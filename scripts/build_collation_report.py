@@ -78,7 +78,7 @@ from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
 from open_guji_cv.core.workspace import corpus_path  # noqa: E402
-from open_guji_cv.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
+from guji_manager.eval.round_check import DATASET, _same_char, load_verdicts  # noqa: E402
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
 from open_guji_cv.report.collation_grade import (GRADE_LABEL, misanchored_pages,  # noqa: E402

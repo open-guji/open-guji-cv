@@ -40,7 +40,7 @@ from pathlib import Path
 from open_guji_cv.products import kinds as _kinds  # noqa: F401  注册产物种类
 from open_guji_cv.core.book import load_book
 from open_guji_cv.core.step import page_key
-from open_guji_cv.gold.v2_align import DEFAULT_CORPUS, align_book
+from guji_manager.gold.v2_align import DEFAULT_CORPUS, align_book
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
 

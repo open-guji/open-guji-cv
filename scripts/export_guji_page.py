@@ -23,8 +23,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
-from open_guji_cv.formats.guji_page_cv import export_page  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats.guji_page_cv import export_page  # noqa: E402
 
 
 def page_meta(meta: dict, page: int) -> dict:
@@ -62,7 +62,7 @@ def main(argv=None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     bad = 0
     plist = [int(x) for x in a.pages.split(",") if x.strip()]
-    from open_guji_cv.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
+    from guji_manager.feedback.vision import vision_pending_ids     # 看图判错待人审：导出记 review=pending
     pend = vision_pending_ids(a.book, plist, a.products)
     for p in plist:
         m = page_meta(meta, p)

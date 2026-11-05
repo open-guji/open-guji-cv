@@ -334,7 +334,7 @@ def _r6(book, rows) -> dict:
     """R6 整页整列不丢字不错位（GUJI-661）：`ops/col_gate` 扫 Step3，报出的每一列要么异常表有结论，要么别报。"""
     cmd = "python scripts/zhengli/col_gate.py --book <册>（open_guji_cv/ops/col_gate.py）"
     try:
-        from open_guji_cv.ops.col_gate import scan_book
+        from guji_manager.ops.col_gate import scan_book
         found, n = scan_book(book)
     except Exception as e:  # noqa: BLE001
         return _fail(cmd, f"扫描出错：{type(e).__name__}: {e}")

@@ -87,7 +87,7 @@ def page_seams(book: str, page: str, out: str = "output") -> list[float]:
 
 def page_seams_v2(book: str, page: int) -> list[float]:
     """v2：row_segment 格线 + Step2 列图；公式同 page_seams。"""
-    from open_guji_cv.eval.v2cols import iter_columns
+    from guji_manager.eval.v2cols import iter_columns
     vals: list[float] = []
     for cc, im in iter_columns(book, page):
         cells = [c for c in cc.cells if c.kind == "char"]
@@ -123,7 +123,7 @@ def page_seams_v2(book: str, page: int) -> list[float]:
 
 
 def scan(dataset: str, out: str = "output", v1: bool = False) -> dict:
-    from open_guji_cv.eval.v2cols import body_pages
+    from guji_manager.eval.v2cols import body_pages
     body = body_pages(dataset)
     pages: dict[str, int] = {}
     allv: list[float] = []

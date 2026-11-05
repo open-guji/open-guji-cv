@@ -122,7 +122,7 @@ def main(argv=None, occluded_of=None) -> int:
 
     from open_guji_cv.core.workspace import feedback_root, glyph_db_path
     from open_guji_cv.feedback.events import EventLog
-    from open_guji_cv.feedback.consumers import _occluded_lookup
+    from guji_manager.feedback.consumers import _occluded_lookup
 
     log = EventLog()
     events = [e for b in log.batches() if b.startswith(f"{a.book}-") for e in log.read(b)]

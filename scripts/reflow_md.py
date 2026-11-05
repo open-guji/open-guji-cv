@@ -28,7 +28,7 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
-from open_guji_cv.render.reflow_text import PAGE_MARK, PROFILES, Para, reflow  # noqa: E402
+from guji_manager.render.reflow_text import PAGE_MARK, PROFILES, Para, reflow  # noqa: E402
 
 _MARK = re.compile(r"\x00p(\d+)\x00")
 
@@ -83,7 +83,7 @@ def main() -> None:
 
     client = None
     if args.punct != "none":
-        from open_guji_cv.render.punct_llm import PunctClient
+        from guji_manager.render.punct_llm import PunctClient
         client = PunctClient(args.punct, args.model, cache_dir=out / ".punct_cache")
 
     report: dict = {"profile": args.profile, "punct": args.punct,
@@ -95,7 +95,7 @@ def main() -> None:
         notes = [f"{x}" for p in paras for x in p.notes]
         fail_notes: list[str] = []
         if client:
-            from open_guji_cv.render.punct_llm import punctuate_all
+            from guji_manager.render.punct_llm import punctuate_all
             res = punctuate_all([p.text for p in paras], client, workers=args.workers,
                                 genre=args.genre, hint=args.hint)
             texts = [r.text for r in res]
