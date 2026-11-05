@@ -16,6 +16,13 @@
 5. 段下到下一段（或列尾）的正文格按格位表的格数在墨投影上重切。
 6. 任一段核不上（墨与字数对不上、半格墨不够、切线横穿字、段在图上比 L 格还长〔Δ<0〕），整列退回原切法并打旗。
 7. 两行分法不是「a＝⌈N/2⌉、b＝⌊N/2⌋」的段打 `jiazhu_uneven` 旗送审（规则九）。
+   v1.2（11-05，SJ）：图上能证明分法的段不送审，旗改记 `jiazhu_uneven_img`（见 `_split_proven`）：整理本分法两行
+   切出来的格高都匀（格高 ÷ 中位在 [1−UNEVEN_Q, 1+UNEVEN_Q] 内），且总字数不变、往一边挪 1～2 字的分法要么切不通、
+   要么格高明显更不匀（差 ≥ UNEVEN_MARGIN）。第 11 轮结构批 8 列 62 格看图：6 列分法对、2 列（03:90:3、08:11:8）
+   该送审，这条判据正好分开。
+8. 段下沿（v1.2）：缝中带判据找出的下沿比 L 格长出 SEG_GAP_TRY 倍以上时，再找一次「整行白 ≥ GAP_WHITE 格高、
+   紧接着缝中带有墨」的地方当下沿（`_seg_end_gap`）：段下正文字中间是空的（皆、白、比）时缝中带断开，原判据会一直找到下面的字。
+9. v1.2：原切法格数已对上的列，夹注格压过图上段下沿（`_orig_placed_ok`）也重切；第二段起的段首也按段间正文字数从墨上找。
 
 有列级人裁的列（pins、resolved_cuts、强制單行／夹注／正文、human_col）不走这里（规则七），由调用方判。
 跨列的段（整理本这一列只有段的一部分）照本列那部分的字数算，Δ 只影响本列。
@@ -46,6 +53,26 @@ END_PAD = 3
 END_MAX_DEPTH = 0.5
 #: 切线处（±1 行最白的一行）墨占比到这么多算横穿字
 CUT_INK = 0.15
+#: 分法证明（v1.2）：整理本分法格高的最大偏离（格高 ÷ 本行中位 − 1 的绝对值）不过这个
+UNEVEN_Q = 0.25
+#: 挪 1～2 字的分法格高偏离至少比整理本分法大这么多，才算图上只有整理本这一种分法
+UNEVEN_MARGIN = 0.1
+#: 段下沿再找（v1.2）：原下沿比 L 格高长出这么多倍才再找；新下沿至少在 L 格高的这么多倍以下
+SEG_GAP_TRY = 1.05
+SEG_GAP_MIN = 0.8
+#: 格数对上的原切法，夹注格下沿超出图上段下沿这么多格高算位置不对，照样重切（v1.2）
+ORIG_OVER = 0.3
+#: 格数对上的原切法，一行里最高的格超过本行格高中位这么多倍（多半两字并一格）也重切（v1.2）
+ORIG_HMAX = 1.5
+#: 末段到列尾：列尾起头深的墨段有这么多格高才算末字（v1.2）
+TAIL_KEEP_H = 0.3
+#: 这类列新切法格高偏离至少小这么多才换（毛病格一样多时）
+BETTER_Q = 0.15
+#: 整行白至少这么多格高
+GAP_WHITE = 0.12
+#: 白行之后这么多格高里缝中带有墨的行占比到 GAP_BAND_FRAC 算正文字起头
+GAP_BAND_RUN = 0.25
+GAP_BAND_FRAC = 0.6
 #: v1.1 段首从墨上找（第 11 轮，03:144:2「竹」被劈进夹注第一格）：格网段顶上下找的范围、缝要连续空多高、挪多少才认
 HEAD_UP, HEAD_DOWN, HEAD_MERGE, HEAD_MIN_H, HEAD_MIN_H2, HEAD_AGREE, HEAD_MIN_MOVE = 0.6, 1.3, 0.04, 0.3, 0.12, 0.2, 0.2
 
@@ -132,6 +159,48 @@ def _seg_end(ink: np.ndarray, top: int, bot: int, cx: int, period: float) -> int
     return bot
 
 
+def _seg_end_gap(ink: np.ndarray, lo: int, hi: int, cx: int, period: float) -> int | None:
+    """[lo, hi) 里第一处「整行白 ≥ GAP_WHITE 格高、紧接着 GAP_BAND_RUN 格高里缝中带有墨的行占 GAP_BAND_FRAC」→ 白段下沿。"""
+    w = ink.shape[1]
+    half = max(2, int(round(MID_BAND * w)))
+    on = ink[:, max(0, cx - half):min(w, cx + half + 1)].mean(axis=1) >= MID_INK
+    white = ink.sum(axis=1) <= max(1, int(0.005 * w))
+    g = max(3, int(round(GAP_WHITE * period)))
+    r = max(3, int(round(GAP_BAND_RUN * period)))
+    run = 0
+    for y in range(max(0, lo), min(hi, ink.shape[0] - r)):
+        run = run + 1 if white[y] else 0
+        if run >= g and not white[y + 1] and on[y + 1:y + 1 + r].mean() >= GAP_BAND_FRAC:
+            return y + 1
+    return None
+
+
+def _seg_end_white(ink: np.ndarray, top: int, L: int, period: float) -> int | None:
+    """末一招（v1.2）：段顶下 [SEG_GAP_MIN, MAX_SEG_RATIO]×L 格高里整行白 ≥ GAP_WHITE 格高的白段，取下沿离 L 格高最近的。
+    段下正文字缝中带也没墨（浮：氵＋孚）时用（02:104:2 段 1 只有两行小字）。"""
+    w = ink.shape[1]
+    white = ink.sum(axis=1) <= max(1, int(0.005 * w))
+    g = max(3, int(round(GAP_WHITE * period)))
+    lo, hi = int(round(top + SEG_GAP_MIN * L * period)), min(ink.shape[0] - 1, int(round(top + MAX_SEG_RATIO * L * period)))
+    want = top + L * period
+    best, run = None, 0
+    for y in range(max(top, lo - g), hi + 1):
+        run = run + 1 if white[y] else 0
+        if run >= g and y + 1 >= lo and not white[min(y + 1, len(white) - 1)]:
+            if best is None or abs(y + 1 - want) < abs(best - want):
+                best = y + 1
+    return best
+
+
+def _seg_end_fallback(ink: np.ndarray, top: int, end: int, cx: int, L: int, period: float) -> int | None:
+    """缝中带判据的下沿太深时再找（v1.2）：先白行＋缝中带（只在 MAX_SEG_RATIO×L 格高以内找），再整行白段。"""
+    hi = min(end, int(round(top + MAX_SEG_RATIO * L * period)) + 1)
+    e2 = _seg_end_gap(ink, int(round(top + SEG_GAP_MIN * L * period)), hi, cx, period)
+    if e2 is None and end - top > MAX_SEG_RATIO * L * period:
+        e2 = _seg_end_white(ink, top, L, period)
+    return e2
+
+
 def _char_runs(full: np.ndarray, y_top: int, merge: float, min_h: float) -> list[list[int]]:
     """整列横向投影从 y_top 往下的一段段墨：间隔短于 merge 的并起来，矮于 min_h 的扔掉（单位：行）。"""
     runs: list[list[int]] = []
@@ -171,15 +240,16 @@ def _seg_head(ink: np.ndarray, y_top: int, n_pre: int, top: int, period: float) 
     return head
 
 
-def _line_end(rows: np.ndarray, top: int, end: int, limit: float) -> int | None:
-    """一行墨的末行（同 _free_split：起头比 limit 还深的墨段算段下正文字探上来的笔画，跳过）。"""
+def _line_end(rows: np.ndarray, top: int, end: int, limit: float, keep_h: float | None = None) -> int | None:
+    """一行墨的末行（同 _free_split：起头比 limit 还深的墨段算段下正文字探上来的笔画，跳过）。
+    keep_h（v1.2，末段到列尾）：下面没有正文字，起头深但有 keep_h 高的墨段是本行末字，不跳（框线残渣矮，照跳）。"""
     ys = top + np.flatnonzero(rows[top:end] >= END_INK)
     k = len(ys) - 1
     while k >= 0:
         j = k
         while j > 0 and ys[j] - ys[j - 1] <= END_PAD + 1:
             j -= 1
-        if ys[j] < limit:
+        if ys[j] < limit or (keep_h is not None and ys[k] - ys[j] >= keep_h):
             return min(end, int(ys[k]) + 1 + END_PAD)
         k = j - 1
     return None
@@ -192,6 +262,119 @@ def _cuts_ok(ink: np.ndarray, rows: np.ndarray, cuts: list[float], xs: int, xe: 
     if any(a < MIN_INK or a < MIN_INK_REL * med for a in am):
         return False
     return not any(float(rows[max(0, int(round(c)) - 1):int(round(c)) + 2].min()) >= CUT_INK for c in cuts[1:-1])
+
+
+def _raised_is_note(ink: np.ndarray, y0: int, y1: int, cx: int, period: float) -> bool:
+    """[y0, y1) 的墨像两行小注的一行（v1.2）：缝两边各有墨（≥ MIN_INK），缝中带没有连续 MAIN_RUN 格高的墨（不是正文大字）。"""
+    if y1 - y0 < 0.3 * period:
+        return False
+    w = ink.shape[1]
+    if int(ink[y0:y1, :cx].sum()) < MIN_INK or int(ink[y0:y1, cx:].sum()) < MIN_INK:
+        return False
+    half = max(2, int(round(MID_BAND * w)))
+    on = ink[y0:y1, max(0, cx - half):min(w, cx + half + 1)].mean(axis=1) >= MID_INK
+    run = max(3, int(round(MAIN_RUN * period)))
+    best = cur = 0
+    for v in on:
+        cur = cur + 1 if v else 0
+        best = max(best, cur)
+    return best < run
+
+
+def _orig_placed_ok(ink: np.ndarray, by_slot: dict, specs, x_lo: int, w: int, period: float) -> bool:
+    """格数已对上的原切法，位置也对吗（v1.2）：每段原夹注格的下沿不超过图上段下沿 ORIG_OVER 格高
+    （05:48:8：格数对，但段只占了 3 行、第 4 行压进段下正文字「功」），每行原格都有字、最高的格不过 ORIG_HMAX 倍中位
+    （02:104:8：段首两字并一格、末格空），段的第一行也没被抬成列首空格（见 `_raised_is_note`）。
+    认不出缝的段不判（当对）。"""
+    for s0, m_a, m_b in specs:
+        L = max(m_a, m_b)
+        cs = [c for s in range(s0, s0 + L) for c in by_slot.get(s, ()) if c.kind.startswith("jiazhu")]
+        gcs = [c.gap_center for c in cs if c.gap_center is not None]
+        if not cs or not gcs:
+            continue
+        top = int(round(min(c.y0 for c in cs)))
+        cx = int(round(float(np.median(gcs)))) - x_lo
+        if not 4 <= cx <= w - 4:
+            continue
+        # 每行原格：都有字、格高不过分不匀（02:104:8 段首两字并一格、末格空；02:104:7 两字一格）
+        for sub in ("a", "b"):
+            row = sorted((c for c in cs if c.kind == "jiazhu_" + sub), key=lambda c: c.y0)
+            if len(row) < 2:
+                continue
+            xs, xe = (cx, w) if sub == "a" else (0, cx)
+            am = [int(ink[int(round(c.y0)):int(round(c.y1)), xs:xe].sum()) for c in row]
+            med_a = float(np.median(am))
+            hs = np.asarray([c.y1 - c.y0 for c in row], dtype=float)
+            med_h = float(np.median(hs))
+            if any(a < MIN_INK or a < MIN_INK_REL * med_a for a in am) or (med_h > 0 and hs.max() > ORIG_HMAX * med_h):
+                return False
+        raised = [c for s, cl in by_slot.items() if s <= 0 for c in cl]
+        if s0 == 1 and raised and _raised_is_note(ink, int(round(min(c.y0 for c in raised))), top, cx, period):
+            return False                      # 段的第一行被格网抬成了列首空格
+        bot = ink.shape[0]
+        end = _seg_end(ink, top, bot, cx, period)
+        if end - top > SEG_GAP_TRY * L * period:
+            end = _seg_end_fallback(ink, top, end, cx, L, period) or end
+        if end >= bot:
+            continue
+        if max(c.y1 for c in cs) > end + ORIG_OVER * period:
+            return False
+    return True
+
+
+def _seg_score(ink: np.ndarray, x_lo: int, cells: list, specs) -> tuple[int, float]:
+    """各段夹注格的图上毛病（v1.2）：(空格＋切线横穿字的格数, 各行格高最大偏离)。"""
+    bad, q = 0, 0.0
+    for s0, m_a, m_b in specs:
+        L = max(m_a, m_b)
+        for sub in ("a", "b"):
+            row = sorted((c for c in cells if c.kind == "jiazhu_" + sub and s0 <= c.slot < s0 + L), key=lambda c: c.y0)
+            hs = []
+            for c in row:
+                xs, xe = int(round(c.x0)) - x_lo, int(round(c.x1)) - x_lo
+                y0, y1 = int(round(c.y0)), int(round(c.y1))
+                hs.append(y1 - y0)
+                if int(ink[y0:y1, xs:xe].sum()) < MIN_INK:
+                    bad += 1
+                    continue
+                for y in (y0, y1):
+                    if 1 <= y < ink.shape[0] - 1 and float(ink[y - 1:y + 2, xs:xe].mean(axis=1).min()) >= CUT_INK:
+                        bad += 1
+                        break
+            if len(hs) >= 2:
+                med = float(np.median(hs))
+                if med > 0:
+                    q = max(q, float(np.abs(np.asarray(hs) / med - 1.0).max()))
+    return bad, q
+
+
+def _better(ink: np.ndarray, x_lo: int, old: list, new: list, specs) -> bool:
+    """新切法比原切法好：毛病格少，或一样多而格高明显更匀（差 ≥ BETTER_Q）。"""
+    bo, qo = _seg_score(ink, x_lo, old, specs)
+    bn, qn = _seg_score(ink, x_lo, new, specs)
+    return bn < bo or (bn == bo and qn + BETTER_Q <= qo)
+
+
+def _row_q(ink: np.ndarray, rows: np.ndarray, top: int, e: int, m: int, xs: int, xe: int) -> float:
+    """一行在 [top, e) 里切 m 字：格高最大偏离（|格高 ÷ 中位 − 1| 的最大值）；切不通返回 inf。"""
+    from ...seg.seam import fit_row_cuts
+    if m < 1:
+        return float("inf")
+    cuts = fit_row_cuts(rows, top, e, m)
+    if cuts is None or not _cuts_ok(ink, rows, cuts, xs, xe):
+        return float("inf")
+    hs = np.diff(np.asarray(cuts, dtype=float))
+    med = float(np.median(hs))
+    return float(np.abs(hs / med - 1.0).max()) if med > 0 else float("inf")
+
+
+def _split_proven(ink, rows: dict, spans: dict, top: int, ends: dict, m_a: int, m_b: int) -> tuple[float, float]:
+    """分法证明（v1.2）→ (整理本分法两行格高偏离的较大者, 挪 ±1、±2 字各分法里偏离最小的)。"""
+    def q(ma, mb):
+        return max(_row_q(ink, rows["a"], top, ends["a"], ma, *spans["a"]),
+                   _row_q(ink, rows["b"], top, ends["b"], mb, *spans["b"]))
+    alts = [q(m_a + d, m_b - d) for d in (1, -1, 2, -2) if m_a + d >= 1 and m_b - d >= 1]
+    return q(m_a, m_b), (min(alts) if alts else float("inf"))
 
 
 def _ink_ratio(patch: np.ndarray, ink_threshold: int) -> float:
@@ -231,7 +414,8 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
     # 原切法每段两行的格数已和整理本分法一致的列不动（只改切错的列，免得误伤切对的）
     def _n(sub, s0, L):
         return sum(1 for s in range(s0, s0 + L) for c in by_slot.get(s, ()) if c.kind == "jiazhu_" + sub)
-    if all(_n("a", s0, max(ma, mb)) == ma and _n("b", s0, max(ma, mb)) == mb for s0, ma, mb in specs):
+    counts_ok = all(_n("a", s0, max(ma, mb)) == ma and _n("b", s0, max(ma, mb)) == mb for s0, ma, mb in specs)
+    if counts_ok and _orig_placed_ok(ink, by_slot, specs, x_lo, w, period):
         return None, []
     last_slot = slots[-1]
     col_bot = int(round(max(c.y1 for c in cells)))
@@ -249,13 +433,27 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
         top = int(round(min(c.y0 for c in head)))
         if prev_end is not None:
             top = max(top, prev_end)
+            # v1.2：后面的段的段首也从墨上找（段间正文字数是格位表定的）：格网把段间正文的末字并进下一段时（05:6:1「曰」）
+            n_main = len([s for s in range(plan[-1][0] + plan[-1][1], s0) if s != 0])
+            ht = _seg_head(ink, prev_end, n_main, top, period) if (use_head and n_main >= 1) else None
+            if ht is not None and abs(ht - top) >= HEAD_MIN_MOVE * period \
+                    and ht - prev_end >= 0.5 * period * n_main:
+                flags.append(f"jiazhu_head：段 {s0} 段首按墨挪到 y={ht}（原 {top}）")
+                top = ht
         gcs = [c.gap_center for s in range(s0, s0 + L) for c in by_slot.get(s, ()) if c.gap_center is not None]
         if not gcs:
             return None, [f"jiazhu_step：段 {s0} 认不出缝，退回"]
         cx = int(round(float(np.median(gcs)))) - x_lo
         if not 4 <= cx <= w - 4:
             return None, [f"jiazhu_step：段 {s0} 缝贴边，退回"]
-        if prev_end is None and use_head:
+        if prev_end is None and use_head and s0 == 1 and out and all(c.slot <= 0 for c in out) \
+                and _raised_is_note(ink, int(round(min(c.y0 for c in out))), top, cx, period):
+            # v1.2：段从正文第 1 格起，格网却在上面多抬了一格（抬头格，常被列端判据记空）、那里的墨是两行小字：
+            # 那是段的第一行，收回段里（02:58:8「臣｜令」）
+            top = int(round(min(c.y0 for c in out)))
+            out = []
+            flags.append(f"jiazhu_head：段 1 收回列首抬头格（y={top}）")
+        elif prev_end is None and use_head:
             pre = sorted((c for c in out if c.kind != "blank"), key=lambda c: c.y0)
             ht = (_seg_head(ink, int(round(pre[0].y0)), len({c.slot for c in pre}), top, period)
                   if pre and len(pre) == len(out) else None)
@@ -264,6 +462,13 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
                 top = ht
                 head_moved = True
         end = _seg_end(ink, top, col_bot, cx, period)
+        if (s0, m_a, m_b) == tuple(specs[-1]) and s0 + L - 1 >= last_slot:
+            end = col_bot                     # v1.2：最后一段一直到列尾、下面没有正文格：段下沿就是列尾（02:17:3）
+        elif end - top > SEG_GAP_TRY * L * period:
+            e2 = _seg_end_fallback(ink, top, end, cx, L, period)
+            if e2 is not None:
+                flags.append(f"jiazhu_end_gap：段 {s0} 下沿按白行改到 y={e2}（原 {end}）")
+                end = e2
         if end - top > MAX_SEG_RATIO * L * period:
             return None, [f"jiazhu_step：段 {s0} 图上比 {L} 格长（Δ<0），退回"]
         plan.append((s0, L, top, end, cx, m_a, m_b))
@@ -290,15 +495,20 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
         rows = {"a": _row_frac(ink, cx, w), "b": _row_frac(ink, 0, cx)}
         spans = {"a": (cx, w), "b": (0, cx)}
         cuts_by: dict[str, list[float]] = {}
+        ends: dict[str, int] = {}
         for sub, m in (("a", m_a), ("b", m_b)):
             # 每行墨的末行：段下正文字起头 end 往上 END_MAX_DEPTH 格高以内起头的墨段是正文字探上来的笔画，跳过
-            e = _line_end(rows[sub], top, end, end - END_MAX_DEPTH * period)
+            # 末段到列尾（v1.2）：下面没有正文字，不跳列尾的墨（02:134:8「火」）
+            tail = i == len(plan) - 1 and s0 + L - 1 >= last_slot
+            e = _line_end(rows[sub], top, end, end - END_MAX_DEPTH * period,
+                          keep_h=TAIL_KEEP_H * period if tail else None)
             if e is None:
                 return None, [f"jiazhu_step：段 {s0} {sub} 行找不到墨的末行，退回"]
             cuts = fit_row_cuts(rows[sub], top, e, m)
             if cuts is None or not _cuts_ok(ink, rows[sub], cuts, *spans[sub]):
                 return None, [f"jiazhu_step：段 {s0} {sub} 行切不出 {m} 字，退回"]
             cuts_by[sub] = cuts
+            ends[sub] = e
         for sub, cuts in cuts_by.items():
             xs, xe = spans[sub]
             for k in range(len(cuts) - 1):
@@ -309,7 +519,15 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
                                                            ink_threshold), 4)))
         n = (m_a + m_b)
         if not (m_a == (n + 1) // 2 and m_b == n // 2):
-            flags.append(f"jiazhu_uneven:{s0}-{s0 + L - 1}：右 {m_a} 左 {m_b}（整理本分法），送审")
+            q_ref, q_alt = _split_proven(ink, rows, spans, top, ends, m_a, m_b)
+            # 段顶紧挨着格网别的夹注格（抬头 −1 格等）：段可能是从更上面起的，字数对不上段，格高匀也证明不了（03:90:3 备选格网）
+            above = any(c.kind.startswith("jiazhu") and c.slot < s0 and c.y1 >= top - 0.2 * period
+                        for c in cells if c.slot not in range(s0, s0 + L))
+            if not above and q_ref <= UNEVEN_Q and q_alt >= q_ref + UNEVEN_MARGIN:
+                flags.append(f"jiazhu_uneven_img:{s0}-{s0 + L - 1}：右 {m_a} 左 {m_b}（整理本分法），"
+                             f"图上只有这种分法切得匀（{q_ref:.2f}，挪字 {q_alt:.2f}），不送审")
+            else:
+                flags.append(f"jiazhu_uneven:{s0}-{s0 + L - 1}：右 {m_a} 左 {m_b}（整理本分法），送审")
         # 段下到下一段（或列尾）的正文格
         nxt = plan[i + 1] if i + 1 < len(plan) else None
         lo_s, hi_s = s0 + L, (nxt[0] - 1) if nxt else last_slot
@@ -328,6 +546,8 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
                                                   or old.kind.startswith("jiazhu") else old.kind)
                 new.append(Cell(slot=s, y0=float(y0), y1=float(y1), x0=float(x_lo), x1=float(x_hi),
                                 kind=kind, ink_ratio=round(r, 4)))
+    if counts_ok and not _better(ink, x_lo, cells, new, specs):
+        return None, []                       # v1.2：格数本来对、只因位置核不过才重切的列，新切法图上要更好才换（02:76:3）
     out += new
     for i, c in enumerate(reading_order(out) if reading_order else sorted(out, key=lambda c: c.slot), start=1):
         c.order = i
