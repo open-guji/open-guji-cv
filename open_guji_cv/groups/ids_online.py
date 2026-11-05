@@ -919,7 +919,19 @@ def judge(g: str, gray) -> GroupVerdict:
         return GroupVerdict(None, why="abstain:no_bank", via="ids")
     if gray is None:
         return GroupVerdict(None, why="abstain:no_patch", via="ids")
-    return judge_with(g, gray, load_bank(p))
+    return judge_with(g, gray, load_bank(p), _spec_for(g, p))
+
+
+@lru_cache(maxsize=64)
+def _spec_digest(path: str, digest: str) -> dict:
+    return dict(json.loads(Path(path).read_text(encoding="utf-8")).get("spec") or {})
+
+
+def _spec_for(g: str, p: Path) -> IdsSpec | None:
+    """模板库文件里的 `spec`（本书重训的门槛，`ids_retrain`）覆盖 `SPECS[g]` 的同名字段；没有 → None（用 `SPECS`）。"""
+    from dataclasses import replace
+    ov = _spec_digest(str(p), hashlib.sha256(p.read_bytes()).hexdigest())
+    return replace(SPECS[g], **ov) if ov else None
 
 
 # —— 离线：建库与留一评测 ——
