@@ -132,7 +132,7 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
   借来的东西不算本地改动、不会被 push。`guji glyph-db rebuild` 也认工作区名（没 pull 过就报错让先 pull）。
   写路径的条目（旧布局）照旧当本地目录；借自己报错。借来的人裁记成 `borrowed_human`（S3 修法），不当铁证。
   **借法（2026-11-05，借库参照方案缺口 1、2）**：条目除了写名字，也可写对象 `{from: <名>, scope: human, pin: <N>}`。
-  `scope: human` 只借被借库 `admissions.provenance='human'` 的刻例（缺省 `all`＝全部，旧行为；被借库没有准入台账就拒借，不静默借成空库）；
+  `scope: human` 只借被借库 `admissions.provenance='human'` 的刻例，`scope: human+auto` 再加 `provenance='auto'` 且 `evidence.confirmed='claude_vision'`（机器放行后逐张看图确认过）的自动刻例（缺省 `all`＝全部，旧行为；被借库没有准入台账就拒借，不静默借成空库）；
   `pin: N` 钉被借库的字形库快照 g<N>（出处见 manager `glyph-db snapshot`），读那一版的内容而不是最新。
   cv 一侧：`clustering.glyph_db.borrowed_store(路径, scope, tag)` 给 `rebuild_from_store(extra_stores=…)`；非缺省借法把记号写进
   `borrowed.store` 的库名（`名#human~<快照摘要>`），`glyph_match.borrow_fingerprint` 取库名，所以**不改 `glyph_match` 一行**，

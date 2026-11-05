@@ -1019,13 +1019,18 @@ def _derived_many(raws: list[bytes], feature_backend: str, jobs: int) -> list[tu
     return [got[k] for k in keys]
 
 
+#: 借库范围：all 全借；human 只借人裁；human+auto 人裁加「机器放行、逐张看图确认」的自动刻例
+#: （`admissions.provenance='auto'` 且 `evidence.confirmed='claude_vision'`，全唐文 11-05 的补样本批次），没确认过的机器入库不借。
+BORROW_SCOPES = ("all", "human", "human+auto")
+
+
 class BorrowedStore(type(Path())):
     """借来的字形库目录，外加借法（2026-11-05，借库参照方案缺口 1、2）。
 
     就是一个 ``Path``（旧调用方照常当路径用），多两个属性：
 
-    - ``scope``：``"all"``（缺省，借被借库的全部刻例，旧行为）或 ``"human"``（只借被借库
-      ``admissions.provenance='human'`` 的实例，机器入库的不借）；
+    - ``scope``：``"all"``（缺省，借被借库的全部刻例，旧行为）、``"human"``（只借被借库
+      ``admissions.provenance='human'`` 的实例，机器入库的不借）或 ``"human+auto"``（再加看图确认过的自动刻例，见 ``BORROW_SCOPES``）；
     - ``tag``：被借库的钉号摘要（如被借库快照的 ``digest``），空串＝没钉。只用来进 ``borrow_fingerprint``。
 
     借法记在 ``borrowed.store`` 那一列的「库名」里（见 ``borrowed_label``）：非缺省借法在库名后带 ``#human``／``~<摘要>``，
@@ -1037,11 +1042,21 @@ class BorrowedStore(type(Path())):
 
 
 def borrowed_store(path: "str | Path", scope: str = "all", tag: str = "") -> BorrowedStore:
-    if scope not in ("all", "human"):
-        raise ValueError(f"借库 scope 只能是 all 或 human，不是 {scope!r}")
+    if scope not in BORROW_SCOPES:
+        raise ValueError(f"借库 scope 只能是 {'、'.join(BORROW_SCOPES)}，不是 {scope!r}")
     b = BorrowedStore(path)
     b.scope, b.tag = scope, tag or ""
     return b
+
+
+def _vision_confirmed(evidence) -> bool:
+    """准入证据里 ``confirmed == 'claude_vision'``（逐张看图确认过）。证据是 JSON 字符串或已解开的字典；读不了当没确认。"""
+    if isinstance(evidence, str):
+        try:
+            evidence = json.loads(evidence)
+        except ValueError:
+            return False
+    return isinstance(evidence, dict) and evidence.get("confirmed") == "claude_vision"
 
 
 def borrowed_label(st: "str | Path", scope: str = "all", tag: str = "") -> str:
@@ -1090,12 +1105,16 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
 
     def load(st: Path, borrowed: bool, scope: str = "all", tag: str = "") -> tuple[int, int, int]:
         verb = "INSERT OR IGNORE" if borrowed else "INSERT OR REPLACE"
-        human_ids: set[str] | None = None
-        if borrowed and scope == "human":
+        lend_ids: set[str] | None = None
+        if borrowed and scope in ("human", "human+auto"):
             if not (st / "admissions.jsonl").exists():
-                raise ValueError(f"借库 {st} 要求 scope=human，但没有 admissions.jsonl，分不出人裁")
-            human_ids = {r["instance_id"] for r in read(st / "admissions.jsonl")
-                         if r.get("provenance") == "human"}
+                raise ValueError(f"借库 {st} 要求 scope={scope}，但没有 admissions.jsonl，分不出人裁")
+            lend_ids = set()
+            for r in read(st / "admissions.jsonl"):
+                if r.get("provenance") == "human":
+                    lend_ids.add(r["instance_id"])
+                elif scope == "human+auto" and r.get("provenance") == "auto" and _vision_confirmed(r.get("evidence")):
+                    lend_ids.add(r["instance_id"])
         new_src: list[str] = []
         for r in read(st / "sources.jsonl"):
             cols = ",".join(r)
@@ -1107,7 +1126,7 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         recs = []
         for meta_file in sorted((st / "instances").glob("*.jsonl")):
             for r in read(meta_file):
-                if human_ids is not None and r["instance_id"] not in human_ids:
+                if lend_ids is not None and r["instance_id"] not in lend_ids:
                     continue        # scope=human：机器入库的借不进来
                 png = st / "patches" / f"{_safe(r['instance_id'])}.png"
                 if png.exists():
