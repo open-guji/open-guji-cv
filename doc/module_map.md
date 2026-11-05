@@ -69,7 +69,7 @@
 
 ## 六、后续
 
-- **pipeline / manager 拆分（2026-10-27 起）**：每个包／模块归哪一侧见 `tests/test_architecture.py` 的 `PIPELINE_PKGS`／`SIDE_OVERRIDE`，设计见 [design/拆分-pipeline与manager.md](design/拆分-pipeline与manager.md)。守卫：pipeline 一侧不许 import manager 一侧，存量（M3a 后 6 条）在 `ALLOWED_PIPELINE_TO_MANAGER`，只许减不许增。
+- **pipeline / manager 拆分（2026-10-27 起，2026-11-04 完成）**：本仓只剩 pipeline，manager 一侧（工作区、中心库、R2、任务库、审阅、评测、整理命令等）都在 [guji-manager](https://github.com/open-guji/guji-manager)。归属见 `tests/test_architecture.py` 的 `PIPELINE_PKGS`，设计与经过见 [design/拆分-pipeline与manager.md](design/拆分-pipeline与manager.md)。守卫：pipeline 不许 import manager（存量 0 条）；manager 要用 cv 的名字一律经 `manager_api`，控制台经 `guji_manager.console_api`。
 
 - 剩余的包级向上依赖怎么分批清理：[design/模块化后续计划（待Mila定）.md](design/模块化后续计划（待Mila定）.md)（**待 Mila 定，未执行**）。
 - 形近字／异体字组：规范、总表与各组卡在 [字组/](字组/README.md)。
