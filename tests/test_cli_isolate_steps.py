@@ -46,6 +46,7 @@ def test_argv_translates_one_step_to_guji_step():
     assert {"--force", "--stop-on-error", "--allow-sample-db"} <= set(argv)
     assert "--json" not in argv and "--wait" not in argv
     assert "--no-isolate-steps" in argv           # 子进程只跑一步，不能再隔离（否则自己起自己）
+    assert "--no-prep" in argv                    # 父进程已备过输入（或 --no-prep 跳过），子进程不再备
 
 
 def test_argv_omits_flags_that_are_off():

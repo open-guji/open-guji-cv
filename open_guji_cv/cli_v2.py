@@ -70,7 +70,7 @@ def isolated_step_argv(args, sid: str, workspace: str) -> list[str]:
     不透传 `--json`／`--wait`（锁由父进程持有，见 `_run_steps_isolated`）。"""
     argv = [sys.executable, "-m", "open_guji_cv", "step", sid, args.book,
             "--pipeline", args.pipeline, "--pages", str(args.pages), "-w", workspace,
-            "--no-isolate-steps"]
+            "--no-isolate-steps", "--no-prep"]   # 备输入由父进程在起子进程前做过（或 --no-prep 跳过），子进程不再备
     if args.force:
         argv.append("--force")
     if args.stop_on_error:
@@ -1445,6 +1445,7 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("step", help="步骤 id")
     p.add_argument("book")
     p.add_argument("--pipeline", default=DEFAULT_PIPELINE)
+    p.add_argument("--no-prep", action="store_true", help="不在开跑前备输入（同 pipeline 的 --no-prep）")
     _add_pages(p)
 
 
