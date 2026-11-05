@@ -91,24 +91,15 @@ PIPELINE_PKGS: frozenset[str] = frozenset({
     "errors", "variants", "variant_ledger", "gloss", "detectors", "ocr", "hanzi",
     "core", "products", "utils", "seg", "books", "clustering", "pagetype_model", "groups",
     "gates", "steps", "shadow", "api", "__main__", "preflight",
+    # 拆分 P6（2026-11-04）：manager 一侧已全部搬去 guji-manager，下面这些包里留下的都是 pipeline——
+    # 命令行入口 cli_v2、给 manager 的名字表 manager_api、Step 读人裁（feedback 的 lookup/bindings…、
+    # gold 的 store/item…）、闸与 Step 用的小库（eval.rulers/colgeom）、Step9 汇总（report）、
+    # 取钉版输入（ops.model_blobs、datastore.client）
+    "cli_v2", "manager_api", "feedback", "gold", "eval", "report", "ops", "datastore",
 })
-#: 整包归 manager 的例外之外，按模块前缀改判（最长前缀优先）
+#: 按模块前缀改判（最长前缀优先）。拆分完只剩控制台门面的转发：门面本身在 guji-manager，cv 这份等控制台换完 import 就删。
 SIDE_OVERRIDE: dict[str, str] = {
-    # feedback：Step 读人裁结果的一侧归 pipeline，生产一侧归 manager
-    "feedback": SIDE_MANAGER,
-    "feedback.lookup": SIDE_PIPELINE, "feedback.bindings": SIDE_PIPELINE, "feedback.keys": SIDE_PIPELINE,
-    "feedback.mojibake": SIDE_PIPELINE, "feedback.events": SIDE_PIPELINE, "feedback.lock": SIDE_PIPELINE,
-    "feedback.anchor": SIDE_PIPELINE, "feedback.returns": SIDE_PIPELINE,   # bindings 要用
-    "feedback.rulings": SIDE_PIPELINE,   # 大模型裁定：L3 在线读、问完写回（2026-10-28）
-    "gold.item": SIDE_PIPELINE, "gold.drift": SIDE_PIPELINE,             # lookup / bindings 要用的金标信封与漂移判定
-    # 拆分 P5（2026-11-04）：Step 读人裁的一侧归 pipeline——裁决表（gold.store 及其分片读法 adapters，
-    # verdict_store 从 consumers 挪来）、补锚档（anchor_backfill，bindings 读）
-    "gold.store": SIDE_PIPELINE, "gold.adapters": SIDE_PIPELINE, "feedback.anchor_backfill": SIDE_PIPELINE,
-    # 取钉版输入（模型、字体、底库语料按 sha 从 R2 取回）：起跑前与测试开跑都要，归 pipeline；上传在 manager
-    "ops.model_blobs": SIDE_PIPELINE, "datastore.client": SIDE_PIPELINE,
-    # eval / report：被闸与 Step 直接用的小库归 pipeline；Step9 汇总（slots/tiers/…）也归 pipeline（用户 10-27 定）
-    "eval.rulers": SIDE_PIPELINE, "eval.colgeom": SIDE_PIPELINE,
-    "report": SIDE_PIPELINE, "report.progress": SIDE_MANAGER, "report.html": SIDE_MANAGER, "report.run": SIDE_MANAGER,
+    "console_api": SIDE_MANAGER,
 }
 
 
@@ -215,7 +206,6 @@ def _p2m_edges() -> set[str]:
 
 
 ALLOWED_PIPELINE_TO_MANAGER: frozenset[str] = frozenset({
-    "__main__ -> cli_v2",  # 入口：M2/M4 拆出 guji-cv 后消失
 })
 
 
@@ -253,7 +243,17 @@ def test_cv_does_not_import_console():
     assert not bad, "cv 不能依赖控制台（guji-console）：\n  " + "\n  ".join(bad)
 
 
-@pytest.mark.parametrize("facade_name", [FACADE, f"{PKG}.manager_api"])
+def test_console_facade_forwards_to_manager():
+    """拆分 P6：控制台门面在 guji-manager，cv 这份只转发（装了 manager 时取得到同一个对象）。"""
+    import importlib
+    import importlib.util
+    if importlib.util.find_spec("guji_manager.console_api") is None:
+        pytest.skip("没装 guji-manager ≥0.4.0")
+    cv, mg = importlib.import_module(FACADE), importlib.import_module("guji_manager.console_api")
+    assert cv.GlyphDB is mg.GlyphDB and sorted(cv.__all__) == sorted(mg.__all__)
+
+
+@pytest.mark.parametrize("facade_name", [f"{PKG}.manager_api"])
 def test_facade_exports_resolve(facade_name):
     """门面登记的每个名字都取得到（模块改名、函数删了会在这里红，而不是控制台／manager 运行时才炸）。"""
     import importlib

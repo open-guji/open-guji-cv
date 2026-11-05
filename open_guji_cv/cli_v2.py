@@ -1429,28 +1429,6 @@ def _plugin_too_old(module, name: str) -> bool:
     return _version_tuple(have) < _version_tuple(need)
 
 
-#: cv 里还没搬走的 manager 一侧命令模块（拆分 P1）。每个模块有 `COMMANDS = {名: (add_parser, handler)}`，
-#: 与 guji-manager 的插件接口（入口点组 `guji.commands`）同形：搬走一个就从这里删、在 `MOVED_TO_MANAGER` 登记，
-#: 命令本身改由 guji_manager.commands 提供。按名字现 import（不在模块顶上），cv 不对它们留静态依赖。
-#:   glyph-db：2026-10-06 从 v1 入口搬来，自带 -w　　exp：A/B 实验（overview#457），自带 -w
-#:   db：中心库客户端（GUJI-606），自带 -w　　products：前后对比、产物包（受控重跑），自带 -w
-#:   source：原图源件、页图、页表（R2），自带 -w
-#:   cellvotes：网站精校页投票（M10），-w 统一加　　freeze：冻结登记（GUJI-694），-w 统一加
-#:   job：任务库（2026-10-25）　　perf：跑批耗时（2026-11-03）
-MANAGER_CLI_MODULES: tuple[str, ...] = ()
-
-
-def register_manager_cli(sub: argparse._SubParsersAction) -> None:
-    import importlib
-    for m in MANAGER_CLI_MODULES:
-        added = set()     # 一个模块的几条命令常共用一个 add_parser：只调一次
-        for name, (add_parser, handler) in importlib.import_module(f".{m}", __package__).COMMANDS.items():
-            if add_parser not in added:
-                add_parser(sub)
-                added.add(add_parser)
-            COMMANDS_V2[name] = handler
-
-
 def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser("pipeline", help="[v2] 跑一条 pipeline（或其中一段）")
     p.add_argument("pipeline", help=f"pipeline id，如 {DEFAULT_PIPELINE}")
@@ -1670,7 +1648,6 @@ def register_subcommands(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--edition", default="")
 
 
-    register_manager_cli(sub)
     load_plugin_commands(sub)
     install_workspace_option(sub)
 
