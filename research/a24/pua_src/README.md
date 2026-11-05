@@ -24,3 +24,8 @@ r2 的 425 格「整理本缺字」里，新图源（siku-qiefen-v2）每页 `te
 
 ## 「这位没字」按文本层取字（r3/r4，A24 11-04）
 `build_blank_events.py`：文本层有真字（锚点≥3、页匹配≥0.85）；字＝库首位 → strict（放行）；≠库首位 → ext（拼图目检全对，是否放行等 sheldon 定）。r4：strict 4、ext 28，回放 0 错字。`extract_cells.py` 新增 `CELLS=`/`OUTDIR=` 环境变量，可对任意格号清单取文本层。
+
+## 11-05 点选结果：码表加字、待收字登记（A24）
+sheldon 点选页（guji-manager review_pages char_card，131 项）结果：9 格人裁／码表冲突定 F1001埀、F1004勅、F1015㸃、F1007𤬄（`code_table.json` 改 F1001、F1007）；另 9 个码选了字（F1036㽔 F102E𣢾 F105B脈 F1032鳯 F1049忍 F103B應 F1045派 F106E纏 F1055乖）并入码表（共 68 码）。
+其余认不出的码一律归**待收字**：`glyph_pending_codes.json`（114 码、173 格，永久编号写「siku-qiefen-v2:U+F1xxx」），暂时留图不留字，将来找到字按码位统一回填；与真图／小篆的留图不留字分开。登记表给 manager 的 `glyph_pending` 参数（PendingReason R03，guji-manager#192）。
+注意：码表改动会让 F1001 等码下已放行的字与码表冲突（F1001 约 68 格按垂放行），要不要降回待审等 sheldon 定；事件重新生成并回放核对后再推库。
