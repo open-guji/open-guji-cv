@@ -65,6 +65,13 @@ class CellShrinkParams(BaseModel):
     字块挂着一小截框线（所、祖、八、父的撇脚）。整页外粗框拟得稳，内线与它平行，几十段虚线一起投票定线位和线厚。
     抬头列不抹上框（字本来就写在框外）。本页拟不出可信的线就不动。"""
 
+    inner_frame_only: bool = False
+    """（跟 inner_frame_cut 一起开）整页拟出内框细线的那一边，列端格不再逐格找框线行剥（extractor strip_frame_line），
+    框渣剥离（strip_frame_debris）只剥贴着线（字侧边沿 DEBRIS_LINE_REACH 格高以内）的碎块：线已经抹掉了，
+    再按「与字身分离」猜框渣，猜中的多是字的部件。殿本列端评测集 frame-end-crop 切笔 41 格里一半是这类
+    （列尾「無」的灬、「李」「本」「講」的脚，列首「三」的上横；开 inner_frame_cut 前后都有）。
+    缺省关＝旧行为。A22，2026-11-05。"""
+
     inner_frame_profile: bool = False
     """（跟 inner_frame_cut 一起开才有用）小段投票拟不出内线的页，按外框拉直的整宽行墨再找一次
     （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
@@ -87,6 +94,8 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_cut", None)
         if isinstance(d, dict) and not self.inner_frame_profile:
             d.pop("inner_frame_profile", None)
+        if isinstance(d, dict) and not self.inner_frame_only:
+            d.pop("inner_frame_only", None)
         return d
 
 
@@ -255,6 +264,33 @@ class CellShrinkStep(Step):
                 out[key.replace("frame_lines", "frame_half_lines")] = {
                     cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in half]
                     for cc in cols if edge[cc.col] is not None}
+        p = ctx.params_for(self)
+        if p.inner_frame_cut and p.inner_frame_only:  # type: ignore[attr-defined]
+            # 整页拟出内框细线的边（cut_inner_frame 已抹白）：extractor 列端不再逐格剥框线行；抬头列不抹上框，上框照旧
+            wins: PageWindows = ctx.product("column_windows", page)
+            inner = self._inner_frame_lines(ctx, page, cells, wins)
+            if inner:
+                out["inner_sides"], out["inner_edges"] = {}, {}
+                for cc in cells.columns:
+                    wrec = wins.column(cc.col)
+                    if wrec is None:        # 没有列窗就没抹线（_column_chars 同条件）
+                        continue
+                    raised = bool(wrec.raised or wrec.head_raise_inner_y)
+                    sides = [s for s in inner if not (s == "top" and raised)]
+                    out["inner_sides"][cc.col] = sides
+                    # 线字侧边沿在列图里的 y（列宽上取最靠字的那端）：extractor 列端剥框渣只剥贴着它的
+                    img = imgs.get(cc.col)
+                    if img is None:
+                        img = ctx.image("column_image", column_key(page, cc.col))
+                    mapper = ColumnMapper(wins.page_size[0], wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                          wrec.top_y, wrec.bottom_y)
+                    w = img.shape[1]
+                    edges = {}
+                    for side in sides:
+                        guess = img.shape[0] - 1.0 if side == "bottom" else 0.0
+                        ys = [_col_y_for_page_y(mapper, float(x), guess, inner[side]) for x in (0.0, (w - 1) / 2.0, w - 1.0)]
+                        edges[side] = float(min(ys) if side == "bottom" else max(ys))
+                    out["inner_edges"][cc.col] = edges
         return out
 
     def _extract_column(self, ctx: RunContext, page: int, cc: ColumnCells,

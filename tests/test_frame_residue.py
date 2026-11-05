@@ -84,3 +84,18 @@ def test_degenerate_band_returns_zero():
     assert frame_residue(_blank(), (50, 50)) == (0, 0)
     assert frame_residue(_blank(), (90, 10)) == (0, 0)
     assert frame_residue(np.zeros((0, 0), dtype=np.uint8), BAND) == (0, 0)
+
+
+def test_strip_frame_debris_line_aware_keeps_parts_far_from_line():
+    """inner_frame_only：给了内框线位，只剥贴着线的碎块；离线远的（「無」的灬）留着。"""
+    import numpy as np
+    from open_guji_cv.clustering.extractor import strip_frame_debris
+    patch = np.full((100, 80), 255, np.uint8)
+    patch[10:60, 20:60] = 0              # 字身
+    patch[82:87, 22:28] = 0              # 灬 的一点：在列端剥渣带里、离线 10 行
+    patch[93:96, 50:56] = 0              # 贴着线的框渣
+    old = strip_frame_debris(patch, 0, 98, 100)
+    assert (old[82:87, 22:28] == 255).all() and (old[93:96, 50:56] == 255).all()
+    new = strip_frame_debris(patch, 0, 98, 100, line_bot=97)
+    assert (new[82:87, 22:28] == 0).all()
+    assert (new[93:96, 50:56] == 255).all()

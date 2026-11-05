@@ -208,6 +208,11 @@ _IF_PROFILE = ("内框细线整宽行墨补拟 inner_frame_profile（cell_shrink
                "另 inner_frame_cut 开、inner_frame_profile 关时 vol05（186 页）、vol30（140 页）全册 char_index 与 55417 张字块 PNG 与 dev 逐字节相同；"
                "scripts/code_equiv.py check，2026-11-05（A22）")
 
+_IF_ONLY = ("内框细线已抹的一端不再逐格剥框线、框渣只剥贴线的 inner_frame_only（cell_shrink 书级开关，缺省关；extractor "
+            "strip_frame_debris 加 line_bot/line_top）：开关关着时 cell_shrink 在殿本 vol30 新图 28 页（每 5 页取 1）上与 origin/dev "
+            "76b7431 产物逐字节相同；inner_frame_cut＋inner_frame_profile 开、本开关关时 vol05、vol30 全册 char_index 与字块 PNG 与 dev 逐字节相同；"
+            "scripts/code_equiv.py check，2026-11-05（A22）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",

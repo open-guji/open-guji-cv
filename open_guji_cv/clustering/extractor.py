@@ -1146,14 +1146,18 @@ DEBRIS_ZONE = 0.18         # 只在格界外侧此比例（× 格高）的带内
 DEBRIS_GAP = 0.025         # 与字身主体的最小间隙（× 格高，~3px@120px 格）
 DEBRIS_AREA = 120          # 残渣墨量上限（px）
 DEBRIS_H = 0.05            # 或高度上限（× 格高）
+DEBRIS_LINE_REACH = 0.06   # inner_frame_only：碎块要伸到离内框线字侧边沿这么近（× 格高，殿本约 5 行）才剥
 
 
 def strip_frame_debris(patch: np.ndarray, cell_top: float,
-                       cell_bot: float, cell_h: float) -> np.ndarray:
+                       cell_bot: float, cell_h: float,
+                       line_bot: float | None = None, line_top: float | None = None) -> np.ndarray:
     """剥掉列端格上下边缘带里与字身分离的框线碎渣。
 
     cell_top/cell_bot 为格界在图块坐标系里的位置。只应对列首/列尾格
     调用——中段格没有版框，那里的边缘墨是邻字残余，归切分层管。
+    line_bot/line_top（图块坐标，cell_shrink inner_frame_only）：整页拟出的内框细线字侧边沿。给了就只剥
+    伸到离线 DEBRIS_LINE_REACH 格高以内的碎块——线已经抹掉，离线远的「碎块」是字的部件（灬、八的脚、三的上横）。
     """
     binary = (patch < BINARY_THRESHOLD_PATCH).astype(np.uint8)
     n, lab, st, _ = cv2.connectedComponentsWithStats(binary, 8)
@@ -1178,6 +1182,12 @@ def strip_frame_debris(patch: np.ndarray, cell_top: float,
         gap = (y - m_y1) if y >= m_y1 else (m_y0 - y1)
         if gap < gap_min:                     # 紧贴字身 → 是字的部件
             continue
+        if line_bot is not None or line_top is not None:
+            reach = DEBRIS_LINE_REACH * cell_h
+            near = ((line_bot is not None and y1 >= line_bot - reach)
+                    or (line_top is not None and y <= line_top + reach))
+            if not near:                      # 离抹掉的内框线远 → 字的部件
+                continue
         if area > DEBRIS_AREA and ch > h_max:
             continue                          # 又大又高 → 不是碎渣，留着送审
         hits.append(k)
@@ -3133,9 +3143,10 @@ class CharExtractor:
                     e = np.where(np.isnan(v), e, v)
                 return e
 
-            owner = partition_strip(strip, [
+            part_bounds = [
                 (_edge(float(c["y_top"]), c.get("seam_top")), _edge(float(c["y_bottom"]), c.get("seam_bottom")),
-                 bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells], cell_h_ref)
+                 bool(c.get("seam_top")), bool(c.get("seam_bottom"))) for c in cells]
+            owner = partition_strip(strip, part_bounds, cell_h_ref)
             ink_px = strip < BINARY_THRESHOLD_PATCH
             ink_edges = column_ink_edges(ink_px, [(t, b) for _i, t, b in local])
             for ci, (cell, (idx, ltop, lbot)) in enumerate(zip(cells, local)):
@@ -3169,7 +3180,10 @@ class CharExtractor:
                 near_frame = ((idx == tail_cell and frame_in_bot - (sy0 + lbot) < cell_h_ref)
                               or (idx == head_cell and (sy0 + ltop) - frame_in_top < cell_h_ref))
                 paired = near_frame and _jiazhu_gap_center(patch, jz_ref_w) is not None
-                if near_frame and (jz_rules or not paired):
+                # 整页内框细线已经抹掉的那一端（cell_shrink inner_frame_cut＋inner_frame_only）不再逐格找框线行：
+                # 线已经没了，再找只会把贴着线的笔画（列尾「無」「照」的灬、「典」的脚，列首「三」的上横）当成线剥掉
+                inner_done = near_frame and ("bottom" if idx == tail_cell else "top") in (gmeta.get("inner_sides") or ())
+                if near_frame and (jz_rules or not paired) and not inner_done:
                     lys = gmeta.get("frame_lines_bottom" if idx == tail_cell else "frame_lines_top") or ()
                     reach = gmeta.get("frame_line_reach")
                     fy = frame_in_bot if idx == tail_cell else frame_in_top
@@ -3211,6 +3225,11 @@ class CharExtractor:
                                             head=idx == head_cell, ink_edges=ink_edges,
                                             **({"through": True} if jz_rules else {}),
                                             **({"grow": True} if gmeta.get("frame_line_grow") else {}))
+                # 整页内框细线已抹掉的一端（inner_frame_only）：框渣剥离、断段、曲线切边都不做——框线连同线外已经白了，
+                # 这几道按「与字身分离」「贴着字身」猜框渣，猜中的多是字的部件（灬、心的点、八的脚、三的上横）
+                end_sides = {s_ for s_, grp in (("top", order[:2 + n_head_rows]), ("bottom", order[-2:])) if idx in grp}
+                inner_sides = set(gmeta.get("inner_sides") or ())
+                inner_end = bool(end_sides) and end_sides <= inner_sides
                 if idx in end_cand:
                     # 列端的雙行小注格（Step3 给了缝）可按两半各剥（`jiazhu_end_halves`，写本开）：
                     # 两个小字各是各的字身，整格只认最大连通体当字身，另一半小字与它分离的下半截
@@ -3222,7 +3241,16 @@ class CharExtractor:
                     out_p = patch.copy()
                     for a, b in parts:
                         sub_p = np.ascontiguousarray(patch[:, a:b])
-                        sub_p = strip_frame_debris(sub_p, ltop - y0, lbot - y0, cell_h)
+                        if inner_end:
+                            ie = gmeta.get("inner_edges") or {}
+                            sub_p = strip_frame_debris(
+                                sub_p, ltop - y0, lbot - y0, cell_h,
+                                line_bot=None if "bottom" not in end_sides or "bottom" not in ie
+                                else float(ie["bottom"]) - (sy0 + y0),
+                                line_top=None if "top" not in end_sides or "top" not in ie
+                                else float(ie["top"]) - (sy0 + y0))
+                        else:
+                            sub_p = strip_frame_debris(sub_p, ltop - y0, lbot - y0, cell_h)
                         if len(parts) == 1:
                             # 框线断段：判据在图块之外（列外墨率），必须传整页
                             sub_p = strip_frame_stub(sub_p, page_img, int(sx0), int(sx1), int(sy0 + y0))
