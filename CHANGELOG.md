@@ -5,8 +5,11 @@
 
 ## [未发版]
 
+- `scripts/eval_font_family.py`：字体族实测，三书人裁刻例互为查询与库，量借库能借多少（只动 `scripts/`，不改指纹，A23）。
 ### Added
 - cell_shrink `inner_frame_only`（缺省关）补列端切笔：Step2 当框条削掉的字顶字脚从 column_raw 补回，挨线的首末格条带开到内框线、地盘外伸 0.35 格（只认像笔画的墨块），贴线碎块只剥薄片（没拟出内线的一端也只剥薄片）；关着时逐字节不变（code_equiv 已登记）。
+- `seed_admit` 三个缺省关开关（关时逐字节不变，登记 code_equiv）：`group_flow_provisional_to`（书级暂归一字形，组 id→字，须在该组 forms 内；全唐文彝组 yi_560 兜底落 𢑱 → 彝）、`ref_lib_coord_dissent`（坐标对位给实字且与现役对位语义不同时不走 `ref_lib`，硬疑问落审；全唐文 r11 麒→麟、褚→諸、俘→俾）、`replace_form_edge_exclude`（`replace_form: lib` 不换成假边表 `edge_pair_exclude.tsv` 里的另一半，往→住）（形近字线 11-05）。
+- `scripts/zhengli/pending_list.py --seg-flags`：读 guji-manager `review/seg_defect --gate` 出的同字对照自检旗表，已放行的切笔格（clipped）改送人审（why `seg_defect`、`src: seg_selfcheck`），已在单上的只加 `seg_kind` 证据；`.meta.json` 指纹对不上现行产物就停。`republish prep` 在跑 pending_list 前按书级表现算旗表（`--no-seg-selfcheck` 关；书没开、manager 太旧都不跑）。只动 `scripts/`，不改指纹，缺省输出不变（两部书都登记为关）（A22 B1③）。
 - `scripts/eval_ref_verify.py`：5b「验证整理本字」评测，在三书人裁 5b 冻结集上量 emb 首位且领先 ≥ m 作为证据的放行率与错放率（只动 `scripts/`，不改指纹，A23）。
 
 ## [0.6.4] - 2026-11-05
