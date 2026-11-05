@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.6.7] - 2026-11-05
+
+- `seed_admit` `iron_ex_from_store` 改缺省开（#1114，用户 11-05 定）。
+- 待收字（#1115，A24）：`utils/daizhige` 把僻字码原码位带到 `columns.jsonl`（`daizhige:U+XXXX`，文本照旧 〓，row_segment 产物逐字节不变、已登记 code_equiv）；新增 `utils/pua_lookup.resolve_pua_code`（按整理本前后 20 字窗口回查码位，窗口唯一才认）；文档补 R03 `glyph_pending`。
+- 私用码点选结果入码表、待收字登记表、F→E 码对照（#1116、#1117，研究数据）。
+
 ## [0.6.6] - 2026-11-05
 
 - `seed_admit` `fold_groups`（#1104，A24，缺省关，书级）：折叠组（己已巳 jys、日曰 ry）内待审格整理本字在组里就放整理本字，`channel=fold`，`evidence.fold={group,ref}`。护栏 `fold_ruling_first`、`fold_lib_top_in_group`（#1107，缺省关）。
