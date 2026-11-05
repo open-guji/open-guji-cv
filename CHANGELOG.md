@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `cell_shrink.inner_frame_local`（书级，缺省关，关时逐字节不变、登记 code_equiv）：整页拟出的内框细线逐小段贴到真线上，内线厚上限随格高放大（`seg.frame_line.localize_inner_line`、`inner_thick_limit`）。全唐文 S4：外框在页边拐弯、内线 5–12 行厚时整页拟合跟不上，列首列尾字块挂线（006:29:2:22、006:121:1:22、010:23:1:22、010:166:9:22、012:58:1:1，与 `inner_frame_profile` 同开全修）；006/010 各 60 页改 69 张字块，全是去掉线头。
 - `column_warp.det_warp`、`row_segment.cut_judge: unet_f64`（书级，缺省关，关时逐字节不变、登记 code_equiv）：列射影与切点判官改 numpy／torch 双精度，跨 CPU 指令集逐位一致（S9：执行机与本机 012:99:1 切点不一致，根因是 OpenCV 5 warpPerspective 浮点 SIMD 与 fp32 判官）。全唐文 006/010 各 20 页四种 CPU 设置下产物逐字节相同；与不开比格框变 3 列、看图都切在字缝；整段慢约 35%。
 
 ## [0.6.10] - 2026-11-05
