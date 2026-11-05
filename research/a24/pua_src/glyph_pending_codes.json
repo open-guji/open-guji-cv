@@ -1,5 +1,5 @@
 {
- "_note": "私用码表「已判定待收」登记（A24 11-05：sheldon 看过点选页，选了字的进 code_table.json，其余认不出的归待收字；暂时留图不留字，将来找到字按码位统一回填）。编号带来源（siku-qiefen-v2 的 U+F1xxx 与殆知阁 U+Exxx 不一一对应）。占位码属真图，不在此表。 同时列殆知阁源文件的原码位（daizhige:U+Exxx）：出单时按窗口回查得到的是这套码；由 F→E 对照（r2–r5 的 294 个私用码格窗口回查，95 个 F 码各对应唯一一个 E 码、无一对多）得到，只收能确定对应的 37 个（其余 F 码没有格样本，待有格再补）。登记表放语料目录 daizhige/glyph_pending_codes.json 供 manager 出单读。",
+ "_note": "私用码表「已判定待收」登记（A24 11-05：sheldon 看过点选页，选了字的进 code_table.json，其余认不出的归待收字；暂时留图不留字，将来找到字按码位统一回填）。编号带来源（siku-qiefen-v2 的 U+F1xxx 与殆知阁 U+Exxx 不一一对应）。占位码属真图，不在此表。 同时列殆知阁源文件的原码位（daizhige:U+Exxx）：出单时按窗口回查得到的是这套码；由 F→E 对照（r2–r5 的 294 个私用码格窗口回查，95 个 F 码各对应唯一一个 E 码、无一对多）得到，只收能确定对应的 37 个（其余 F 码没有格样本，待有格再补）。登记表放中心库数据目录 config/pua/glyph_pending_codes.json 供 manager 出单读（A31 定，不放语料版本以免动 corpus 指纹）。",
  "codes": [
   "siku-qiefen-v2:U+F1009",
   "siku-qiefen-v2:U+F101A",
