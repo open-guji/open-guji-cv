@@ -122,3 +122,13 @@ def test_ruling_glyph_params_default_off_and_in_dump_when_set():
     assert "ruling_glyph_min_score" not in d0 and "ruling_glyph_min_margin" not in d0
     d1 = SeedAdmitParams(db_path="x", ruling_glyph_min_score=0.98, ruling_glyph_min_margin=0.02).model_dump()
     assert d1["ruling_glyph_min_score"] == 0.98 and d1["ruling_glyph_min_margin"] == 0.02
+
+
+def test_skip_half_blocks_ruling_on_half_cells(tmp_path):
+    st = _store(tmp_path, "甲", "乙")
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=1, admit=a, char=c, doubts=[], channel=None, provenance="match" if a else "", evidence={})
+            for s, a, c in (("1", True, "甲"), ("2a", False, "誤"), ("3", True, "乙"))]
+    amap = {f"{B}:1:{s}": (c, None) for s, c in (("1", "甲"), ("2a", "說"), ("3", "乙"))}
+    run = lambda on: _vis_ruling_pass(SeedAdmitParams(db_path="x", group_flow_llm_skip_half=on), [ColumnAdmit(col=1, chars=recs)], amap, st)  # noqa: E731
+    assert run(True) == 0 and not recs[1].admit
+    assert run(False) == 1 and recs[1].admit

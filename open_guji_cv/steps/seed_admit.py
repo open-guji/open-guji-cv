@@ -251,6 +251,10 @@ class SeedAdmitParams(BaseModel):
     全部同字（置信 ≥ mid）→ 给字且记 strong；全部说「其他」→ 共字组接手；其余照首问。空＝不开。见 `groups/ctx_llm.panel_verdict`。"""
     group_flow_vis: bool = True             # 字块图像＋文意 L4（`groups/vis_llm`，FlowSpec.vis 的组才问；用 group_flow_llm_model；没密钥＝不问）
     group_flow_llm_need_l2_agree: bool = False   # L3 在线的字须与 L2 模型弃权时的首选字相同
+    group_flow_llm_skip_half: bool = False
+    """夹注 a/b 半格不走 L3（`Llm` 答案表、`CtxOnline` 在线、二审小组；A24 第 5 轮，SJ 史記 L3 放行核对 14 格错 1 格是 men 组 06:12:5:12a）。
+    半格窄、字块切分不稳，文意读出的字常错；A31 11-04 定殿本半格归 S 档不由终审判。缺省关（不进 dump，`params_hash` 不变）。
+    只管 L3 与终审裁定放行（`vis_ruling` 通道）；规则层（`CtxRule`）、L2 模型、字形解法不受影响。"""
     group_flow_delta: float = 0.03
     group_flow_min_cov: float = 0.85
     group_flow_top1_cov: float = 0.97
@@ -897,6 +901,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
             d.pop("vis_rulings", None)
+        if isinstance(d, dict) and not self.group_flow_llm_skip_half:
+            d.pop("group_flow_llm_skip_half", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
@@ -3470,7 +3476,10 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["src_code_conflict"]))
         n -= 1
     ovr = p.ruling_override_groups
+    skip_half = getattr(p, "group_flow_llm_skip_half", False)
     for r, left, right in todo:
+        if skip_half and (r.id or "")[-1:] in ("a", "b"):
+            continue                                 # 夹注半格不靠终审裁定放行（等金标证据再开）
         v = next((x for ver, subs in _VIS_RULING_SPECS
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
@@ -3731,7 +3740,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
                      l3_online=_l3_online(p), l3_model=p.group_flow_llm_model, l3_effort=p.group_flow_llm_effort,
-                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
+                     l3_need_l2_agree=p.group_flow_llm_need_l2_agree, l3_skip_half=p.group_flow_llm_skip_half, l3_panel=tuple(p.group_flow_llm_panel), l3_panel_groups=tuple(p.group_flow_llm_panel_groups),
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
