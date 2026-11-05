@@ -22,7 +22,8 @@
    该送审，这条判据正好分开。
 8. 段下沿（v1.2）：缝中带判据找出的下沿比 L 格长出 SEG_GAP_TRY 倍以上时，再找一次「整行白 ≥ GAP_WHITE 格高、
    紧接着缝中带有墨」的地方当下沿（`_seg_end_gap`）：段下正文字中间是空的（皆、白、比）时缝中带断开，原判据会一直找到下面的字。
-9. v1.2：原切法格数已对上的列，夹注格压过图上段下沿（`_orig_placed_ok`）也重切；第二段起的段首也按段间正文字数从墨上找。
+9. v1.2：原切法格数已对上的列，原格有空格或两字一格（`_orig_placed_ok`）也重切；第二段起的段首也按段间正文字数从墨上找。
+   v1.3（11-05，第 13 轮验收）：这类格数本来对的列不挪段首、不按段下沿判，新切法毛病格要少、格高不能更不匀才换。
 
 有列级人裁的列（pins、resolved_cuts、强制單行／夹注／正文、human_col）不走这里（规则七），由调用方判。
 跨列的段（整理本这一列只有段的一部分）照本列那部分的字数算，Δ 只影响本列。
@@ -60,14 +61,12 @@ UNEVEN_MARGIN = 0.1
 #: 段下沿再找（v1.2）：原下沿比 L 格高长出这么多倍才再找；新下沿至少在 L 格高的这么多倍以下
 SEG_GAP_TRY = 1.05
 SEG_GAP_MIN = 0.8
-#: 格数对上的原切法，夹注格下沿超出图上段下沿这么多格高算位置不对，照样重切（v1.2）
-ORIG_OVER = 0.3
 #: 格数对上的原切法，一行里最高的格超过本行格高中位这么多倍（多半两字并一格）也重切（v1.2）
 ORIG_HMAX = 1.5
 #: 末段到列尾：列尾起头深的墨段有这么多格高才算末字（v1.2）
 TAIL_KEEP_H = 0.3
-#: 这类列新切法格高偏离至少小这么多才换（毛病格一样多时）
-BETTER_Q = 0.15
+#: 这类列新切法格高偏离最多可以比原来大这么多（v1.3）
+BETTER_Q_WORSE = 0.05
 #: 整行白至少这么多格高
 GAP_WHITE = 0.12
 #: 白行之后这么多格高里缝中带有墨的行占比到 GAP_BAND_FRAC 算正文字起头
@@ -282,9 +281,8 @@ def _raised_is_note(ink: np.ndarray, y0: int, y1: int, cx: int, period: float) -
 
 
 def _orig_placed_ok(ink: np.ndarray, by_slot: dict, specs, x_lo: int, w: int, period: float) -> bool:
-    """格数已对上的原切法，位置也对吗（v1.2）：每段原夹注格的下沿不超过图上段下沿 ORIG_OVER 格高
-    （05:48:8：格数对，但段只占了 3 行、第 4 行压进段下正文字「功」），每行原格都有字、最高的格不过 ORIG_HMAX 倍中位
-    （02:104:8：段首两字并一格、末格空），段的第一行也没被抬成列首空格（见 `_raised_is_note`）。
+    """格数已对上的原切法，位置也对吗（v1.2，v1.3 收窄）：每行原格都有字、最高的格不过 ORIG_HMAX 倍中位
+    （02:104:8：段首两字并一格、末格空；05:48:8：两字一格），段的第一行也没被抬成列首空格（见 `_raised_is_note`）。
     认不出缝的段不判（当对）。"""
     for s0, m_a, m_b in specs:
         L = max(m_a, m_b)
@@ -311,14 +309,8 @@ def _orig_placed_ok(ink: np.ndarray, by_slot: dict, specs, x_lo: int, w: int, pe
         raised = [c for s, cl in by_slot.items() if s <= 0 for c in cl]
         if s0 == 1 and raised and _raised_is_note(ink, int(round(min(c.y0 for c in raised))), top, cx, period):
             return False                      # 段的第一行被格网抬成了列首空格
-        bot = ink.shape[0]
-        end = _seg_end(ink, top, bot, cx, period)
-        if end - top > SEG_GAP_TRY * L * period:
-            end = _seg_end_fallback(ink, top, end, cx, L, period) or end
-        if end >= bot:
-            continue
-        if max(c.y1 for c in cs) > end + ORIG_OVER * period:
-            return False
+        # v1.3：不再按「原格压过图上段下沿」判（缝中带判据会把横跨缝的小字「舜」「也」当成段下正文字，
+        # 第 13 轮 02:37:1、02:56:4、02:56:5 因此把切对的列改坏）
     return True
 
 
@@ -349,10 +341,11 @@ def _seg_score(ink: np.ndarray, x_lo: int, cells: list, specs) -> tuple[int, flo
 
 
 def _better(ink: np.ndarray, x_lo: int, old: list, new: list, specs) -> bool:
-    """新切法比原切法好：毛病格少，或一样多而格高明显更匀（差 ≥ BETTER_Q）。"""
+    """新切法比原切法好（v1.3）：毛病格少，格高偏离也不比原来大过 BETTER_Q_WORSE。"""
     bo, qo = _seg_score(ink, x_lo, old, specs)
     bn, qn = _seg_score(ink, x_lo, new, specs)
-    return bn < bo or (bn == bo and qn + BETTER_Q <= qo)
+    # v1.3：只在毛病格确实少了、格高也没更不匀时才换（第 13 轮 01:60:8、02:56:5 毛病格少了、格却切错）
+    return bn < bo and qn <= qo + BETTER_Q_WORSE
 
 
 def _row_q(ink: np.ndarray, rows: np.ndarray, top: int, e: int, m: int, xs: int, xe: int) -> float:
@@ -435,7 +428,8 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
             top = max(top, prev_end)
             # v1.2：后面的段的段首也从墨上找（段间正文字数是格位表定的）：格网把段间正文的末字并进下一段时（05:6:1「曰」）
             n_main = len([s for s in range(plan[-1][0] + plan[-1][1], s0) if s != 0])
-            ht = _seg_head(ink, prev_end, n_main, top, period) if (use_head and n_main >= 1) else None
+            ht = (_seg_head(ink, prev_end, n_main, top, period)
+                  if (use_head and not counts_ok and n_main >= 1) else None)
             if ht is not None and abs(ht - top) >= HEAD_MIN_MOVE * period \
                     and ht - prev_end >= 0.5 * period * n_main:
                 flags.append(f"jiazhu_head：段 {s0} 段首按墨挪到 y={ht}（原 {top}）")
@@ -453,7 +447,7 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
             top = int(round(min(c.y0 for c in out)))
             out = []
             flags.append(f"jiazhu_head：段 1 收回列首抬头格（y={top}）")
-        elif prev_end is None and use_head:
+        elif prev_end is None and use_head and not counts_ok:
             pre = sorted((c for c in out if c.kind != "blank"), key=lambda c: c.y0)
             ht = (_seg_head(ink, int(round(pre[0].y0)), len({c.slot for c in pre}), top, period)
                   if pre and len(pre) == len(out) else None)

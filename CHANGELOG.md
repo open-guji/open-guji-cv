@@ -13,6 +13,7 @@
 - `cell_shrink.inner_frame_local` 补（全唐文 S5，只在开关开时生效，关时逐字节不变、登记 code_equiv）：贴线搜索放宽到 ±0.5 格高、整页内线拟不出时种子线兜底（`fit_inner_frame_line(seed_fallback=)`）、列端剥框线只认贴着整页内线的线行（`extractor.INNER_REACH`）。修 009:107 業 腿被截、006:118:9:22 人 尾被剥、010:74 底线漏抹。
 - `cell_shrink.inner_frame_local`（书级，缺省关，关时逐字节不变、登记 code_equiv）：整页拟出的内框细线逐小段贴到真线上，内线厚上限随格高放大（`seg.frame_line.localize_inner_line`、`inner_thick_limit`）。全唐文 S4：外框在页边拐弯、内线 5–12 行厚时整页拟合跟不上，列首列尾字块挂线（006:29:2:22、006:121:1:22、010:23:1:22、010:166:9:22、012:58:1:1，与 `inner_frame_profile` 同开全修）；006/010 各 60 页改 69 张字块，全是去掉线头。
 - `column_warp.det_warp`、`row_segment.cut_judge: unet_f64`（书级，缺省关，关时逐字节不变、登记 code_equiv）：列射影与切点判官改 numpy／torch 双精度，跨 CPU 指令集逐位一致（S9：执行机与本机 012:99:1 切点不一致，根因是 OpenCV 5 warpPerspective 浮点 SIMD 与 fp32 判官）。全唐文 006/010 各 20 页四种 CPU 设置下产物逐字节相同；与不开比格框变 3 列、看图都切在字缝；整段慢约 35%。
+- 史記夹注逐步 v1.3（books/shiji_wyg/jiazhu_step，SJ）：修 v1.2 在格数对的列上误挪的回归（01:60:8、02:37:1、02:56:4/5）。格数对时只按逐行空格判是否重切，不挪段首；新切法须格数更好且匀度不差过 0.05。只影响史記 row_segment 及下游。
 
 ## [0.6.10] - 2026-11-05
 
