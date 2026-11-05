@@ -159,3 +159,20 @@ def test_ref_lead_via_kept_and_fail_recorded(tmp_path):
     assert "ref_lead_fail" not in r[2].evidence
     n, r = _run(CELLS, AMAP, _store(tmp_path / "plain", "甲", "乙"))                       # 普通裁定不带 via
     assert "via" not in r[2].evidence["vis_ruling"]
+
+
+def test_non_han_ruling_char_not_admitted(tmp_path):
+    """裁定字须是汉字：超出汉字区的码位、私用码、符号一律不放（A31 11-05）；扩展区（含 Ext J，U+32BC1 等）汉字照放。"""
+    for bad in ("\U00033480", "\ue123", "〓", "○", "ခ"):
+        st = RulingStore(tmp_path / ("b" + str(ord(bad))))
+        p = st.put("O", "src-1", "甲", "乙", char=bad, conf="high", why="x", model="src-text-text_layer", cell=f"{B}:1:2")
+        p.update({"admit_ok": True, "subclass": "PUA", "ref": "", "route": "text_layer"})
+        assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 0, bad
+    st = RulingStore(tmp_path / "ok")
+    p = st.put("O", "src-1", "甲", "乙", char="\U00020000", conf="high", why="x", model="src-text-text_layer", cell=f"{B}:1:2")
+    p.update({"admit_ok": True, "subclass": "PUA", "ref": "", "route": "text_layer"})
+    assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 1
+    st = RulingStore(tmp_path / "extj")                      # Unicode 17 的 Ext J（U+323B0–3347F）是真汉字，py3.12 的 unicodedata 还不认
+    p = st.put("O", "src-1", "甲", "乙", char="\U00032BC1", conf="high", why="x", model="src-text-text_layer", cell=f"{B}:1:2")
+    p.update({"admit_ok": True, "subclass": "PUA", "ref": "", "route": "text_layer"})
+    assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 1
