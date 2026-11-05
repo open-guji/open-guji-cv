@@ -356,6 +356,10 @@ class SeedAdmitParams(BaseModel):
     `domain/CV/字形领域/L2图一致证人标定-2026-11-05.md`）：该字是 `candidates` **首位**、得分 ≥ `ruling_glyph_min_score`、
     比次优的异体字高 ≥ `ruling_glyph_min_margin`。两项都 `None`＝旧口径（该字在前五且 ≥ 0.95）。
     只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它；殿本 0.98／0.02，史記、全唐文 0.95／0.02。"""
+    fold_groups: tuple[str, ...] = ()
+    """折叠组（书级；A24 第 6 轮，用户 11-05 定「己已巳、日曰折叠，组内任一字算对」，A31 同意管线侧同口径）：字组在名单里、
+    字组流程没放行的待审格，整理本对位字就在这个组里 → 直接放整理本字（通道 `fold`，`evidence.fold = {group, ref}`），不再送审。
+    整理本字在组外（真异文）、没有整理本对位、遮挡／排除／人裁格、夹注 a/b 半格不动。空＝关（缺省，不进 dump）。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -903,6 +907,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.group_flow_llm_skip_half:
             d.pop("group_flow_llm_skip_half", None)
+        if isinstance(d, dict) and not self.fold_groups:
+            d.pop("fold_groups", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
@@ -1859,6 +1865,10 @@ class SeedAdmitStep(Step):
                 d_nk = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing)
                 n_auto += d_nk
                 n_review -= d_nk
+            if p.fold_groups:
+                d_fd = _fold_pass(p, out, amap)
+                n_auto += d_fd
+                n_review -= d_fd
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
@@ -3496,6 +3506,30 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                       "lifted_from": {"char": r.char, "doubts": ds}}
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
+    return n
+
+
+def _fold_pass(p, out: list, amap: dict) -> int:
+    """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。"""
+    from ..groups.registry import FLOW_GROUPS
+    n = 0
+    for c in out:
+        for r in c.chars or []:
+            if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+                continue
+            ds = {d for d in (r.doubts or []) if isinstance(d, str)}
+            if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
+                continue
+            gid = ((r.evidence or {}).get("group") or {}).get("id")
+            if gid not in p.fold_groups or gid not in FLOW_GROUPS:
+                continue
+            ref = (amap.get(r.id) or (None,))[0]
+            if not ref or ref not in FLOW_GROUPS[gid].members:
+                continue
+            r.evidence = {**(r.evidence or {}), "fold": {"group": gid, "ref": ref},
+                          "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = ref, True, "fold", "match", []
+            n += 1
     return n
 
 
