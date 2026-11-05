@@ -26,7 +26,7 @@ import numpy as np
 from ...seg.frame_types import BorderDetectionResult, HeadRaiseBorder, HLine, VLine
 from ...seg.lines import (
     LineMatch,
-    find_horizontal_border,
+    find_horizontal_border, TOP_WEAK_RATIO,
     find_vertical_lines,
     half_height_score_at,
     local_maxima,
@@ -1211,7 +1211,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     # 线程开销反而更大——跟窗口级线程池一起撤了，理由见 peak_line_search.py 顶部。
     top_kw = {} if top_band_frac is None else {"band_frac": float(top_band_frac)}
     bot_kw = {} if bottom_band_frac is None else {"band_frac": float(bottom_band_frac)}
-    top_old = find_horizontal_border(mask, "top", **top_kw)
+    top_old = find_horizontal_border(mask, "top", weak_top_ratio=TOP_WEAK_RATIO, **top_kw)
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
                                         book_gap=book_bottom_gap, **bot_kw)
 

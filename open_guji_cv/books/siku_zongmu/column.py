@@ -472,6 +472,34 @@ TOP_REFINE_MIN_GAP = 3
 #: vol02 实测被上移的列里 47% 属于这种（Step1 本来就是对的）。越过下界多看几行，
 #: 真框就能完整成段、被认出来，`_frame_covers_top` 据此否决这次上移。
 TOP_REFINE_BELOW = 6
+#: 「top_y 已在框上」否决的例外（2026-11-05，SJ 查史記 02:5）：top_y 附近的满宽段可能是首字的顶横（「姓」）或夹注两字
+#: 顶齐（「岳時」）。上面另有一道满宽段、两段之间夹着连续这么多行的字墨，就说明 top_y 落在字里，照常提到上面那道框下沿。
+#: 真框压在 top_y 上、上面是外框／上欄線时两者之间是白的，否决照旧。
+TOP_REFINE_VETO_INK_ROWS = 20
+#: 行墨占比到这个就算「有字墨」（字的横笔、竖笔都够得着，纸面噪点够不着）。
+TOP_REFINE_VETO_INK_COV = 0.04
+#: 上面那道满宽段与字墨之间要先有这么多行白（行墨 < TOP_REFINE_VETO_BLANK_COV），见 `_ink_between`。
+TOP_REFINE_VETO_GAP_ROWS = 3
+TOP_REFINE_VETO_BLANK_COV = 0.02
+
+
+def _ink_between(rows: np.ndarray, a: int, b: int) -> bool:
+    """`rows[a:b]` 里先有一段白（≥ TOP_REFINE_VETO_GAP_ROWS 行、行墨 < TOP_REFINE_VETO_BLANK_COV）、白之后有连续
+    ≥ TOP_REFINE_VETO_INK_ROWS 行的字墨（行墨占比 ≥ TOP_REFINE_VETO_INK_COV）。
+    要先见白：粗框条的下沿是一片渐淡的墨（殿本 vol20 p179、vol40 p143 双线框，框条下 20 多行 0.6→0.05 一路连着里层细线），
+    紧贴着上面那道满宽段，不是字。框和首字之间总隔着白。"""
+    k, blank = a, 0
+    while k < b and blank < TOP_REFINE_VETO_GAP_ROWS:
+        blank = blank + 1 if rows[k] < TOP_REFINE_VETO_BLANK_COV else 0
+        k += 1
+    if blank < TOP_REFINE_VETO_GAP_ROWS:
+        return False
+    run = 0
+    for v in rows[k:b]:
+        run = run + 1 if v >= TOP_REFINE_VETO_INK_COV else 0
+        if run >= TOP_REFINE_VETO_INK_ROWS:
+            return True
+    return False
 
 
 def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
@@ -508,9 +536,10 @@ def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
         return 0.0
     rows = (strip[:, 6:-6] < 128).mean(axis=1)
     full = rows >= cov
-    # `top_y` 已经落在框上（或框刚好在它下面一点）——Step1 是对的，别动。
-    if bool(full[max(0, probe - min_run):].any()):
-        return 0.0
+    # `top_y` 已经落在框上（或框刚好在它下面一点）——Step1 是对的，别动；
+    # 除非上面另有一道满宽段、中间夹着字墨（top_y 附近那道是首字顶横，见 TOP_REFINE_VETO_INK_ROWS）。
+    near = max(0, probe - min_run)
+    veto = bool(full[near:].any())
     runs: list[tuple[int, int]] = []
     a = None
     for i, v in enumerate(list(full) + [False]):
@@ -522,6 +551,15 @@ def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
             a = None
     if not runs:
         return 0.0
+    if veto:
+        # 上面那道满宽段：完全落在 top_y 附近那道之上（中间至少隔一行非满宽）
+        first_near = near + int(np.argmax(full[near:]))
+        while first_near > 0 and full[first_near - 1]:
+            first_near -= 1
+        above = [r for r in runs if r[1] < first_near - 1]
+        if not above or not _ink_between(rows, above[-1][1] + 1, first_near):
+            return 0.0
+        runs = above
     # 只认 top_y 之上的段（下面那几行是为了看清真框才多取的，不能当搬迁目标）。
     runs = [r for r in runs if r[1] < probe]
     if not runs:
