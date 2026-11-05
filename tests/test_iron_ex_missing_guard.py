@@ -25,7 +25,7 @@ def _run(tmp_path, monkeypatch, params, n_missing):
     write_product(ctx, "align_ref", PAGE, align_ref=page_align_ref(
         PAGE, BOOK, recs=[dict(slot=1, align_char="水")], col=COL))
 
-    def fake_decide(book, page, col, r, iron_ctx, scale, ns, missing=None):
+    def fake_decide(book, page, col, r, iron_ctx, scale, ns, missing=None, store_db=None):
         if missing is not None:
             missing.extend(f"vol02:1:1:{i}" for i in range(n_missing))
         return "山"
