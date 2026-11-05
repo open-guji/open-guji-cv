@@ -329,6 +329,11 @@ class SeedAdmitParams(BaseModel):
     遮挡、人裁、排除名单照旧不动；证据 lane 记 `via=gap`。缺省关（不进 dump）。"""
     symbol_ref_gap_cov: float = 0.97
     symbol_ref_gap_min_col: int = 3
+    ruling_override_groups: tuple[str, ...] | None = None
+    """越过参校本的白名单（书级；A20 对照表第 4 条，A24 第 5 轮）：`ctx-m1` 终审裁定的字≠整理本对位字时，管线再核一遍——
+    这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
+    判读脚本写 `admit_ok` 时已按组判过；这里把白名单放进书级配置（进 `params_hash`、可查），金标证据附在册 yaml 注释。
+    `None`＝不核（旧行为，不进 dump）；`()`＝一律不许越过整理本。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -863,6 +868,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
             d.pop("vis_rulings", None)
+        if isinstance(d, dict) and self.ruling_override_groups is None:
+            d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
@@ -3373,6 +3380,12 @@ _VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozen
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
 
 
+def _override_ok(groups, a: str, b: str) -> bool:
+    """a、b 同属 `groups` 里的某个字组（成员含两字）。"""
+    from ..groups.registry import FLOW_GROUPS
+    return any(g in FLOW_GROUPS and a in FLOW_GROUPS[g].members and b in FLOW_GROUPS[g].members for g in groups)
+
+
 def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
     """无组格的看图判裁定（`SeedAdmitParams.vis_rulings`）：待审格按前后文窗口（与 `ctx_hash` 同口径，宽 20）查裁定库，
     命中高把握可放的裁定 → 放行成裁定的字（通道 `vis_ruling`，provenance `match`，`evidence.vis_ruling` 留裁定摘要）。
@@ -3404,6 +3417,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         r.admit, r.channel, r.provenance = False, None, ""
         r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["src_code_conflict"]))
         n -= 1
+    ovr = p.ruling_override_groups
     for r, left, right in todo:
         v = next((x for ver, subs in _VIS_RULING_SPECS
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
@@ -3411,8 +3425,11 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                   and x.get("subclass") in subs), None)
         if not v:
             continue
-        if (v.get("ref") or "") != ((amap.get(r.id) or (None,))[0] or ""):
+        ref_ = (amap.get(r.id) or (None,))[0]
+        if (v.get("ref") or "") != (ref_ or ""):
             continue                                 # 整理本对位字变了：不是当初看的那一格
+        if ovr is not None and v.get("prompt_ver") == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
+            continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
         r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")},
                       "lifted_from": {"char": r.char, "doubts": ds}}
