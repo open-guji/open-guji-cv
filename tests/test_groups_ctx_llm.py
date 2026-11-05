@@ -62,6 +62,15 @@ def test_default_offline_records_ask(monkeypatch):
     assert not ctx_llm._CLIENT
 
 
+def test_ctx_out_keeps_ask():
+    """留痕口径 `_ctx_out` 要把 extra.ask 带进 seed_admit 产物，否则 llm_queue 导出恒为空（2026-11-05 史記重放发现）。"""
+    from open_guji_cv.groups.methods import _ctx_out
+    from open_guji_cv.groups.protocol import GroupVerdict
+    ask = {"ver": "ry-l2-2", "l": "子", "r": "學而"}
+    out = _ctx_out(GroupVerdict(None, why="abstain:llm_pending", via="ctx_llm", extra={"ask": ask, "llm_model": "m"}))
+    assert out.extra["ask"] == ask
+
+
 def test_key_without_anthropic_abstains(monkeypatch):
     """机器有密钥却没装 anthropic：弃权（不抛 ImportError 拖垮整页）。"""
     import builtins

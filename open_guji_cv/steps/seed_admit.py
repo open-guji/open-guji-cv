@@ -172,6 +172,14 @@ class SeedAdmitParams(BaseModel):
     开着：铁证本要放行、但判别时有刻例原图缺失（缓存里没有），**不放行**，转待审并记 doubt
     `iron_ex_missing`，`evidence.iron_ex_missing` 记缺的例数。只会收紧，缓存齐全时与关着逐格一致。
     v1 旧坐标等「本来就认不出的形状」不算缺（与缓存无关，各环境一样）。"""
+    iron_ex_from_store: bool = False
+    """铁证判别器的人裁刻例原图改从**字形库**取（A20 2026-11-05，用户「可以修」）：缺省（关）从缓存里
+    别册别页的 `char_patch` 取，执行机缓存里有哪些册全看它跑过什么——同代码同输入，`iron_ex_missing`
+    随机器变（史記 01 任务库 #459/#460：8 页只差这一项，两边各缺各的）。开着：刻例图取字形库
+    `instances.patch_png`（与人裁匹配器同一份，册钉了字形库就各机一样），裁到 canonical 图里原裁切
+    那一块（canonical 只平移不放大，字的像素尺寸不变），缓存一概不读。字形库里人裁实例都有图，
+    `iron_ex_missing` 基本不再出现。会改放行（多出原先缺图转待审的格、刻例图与缓存版本不同的格判别距离变），
+    要 A/B 后再定缺省。"""
 
     context_single_stroke_review: bool = False
     """N1（Esme 规则面，默认关）：context 通道要放行的字是单笔画字（`_SINGLE_STROKES`：一 丨 亅 丶 丿 乀 乁 乚 乛）
@@ -277,6 +285,10 @@ class SeedAdmitParams(BaseModel):
     现役对位没有这一格、只有坐标对位（`align_ref.coord`）时，坐标对位字不是本组成员且与补放字不同 → 同样不补放
     （`group_flow_coord_dissent`；vol18 107:6:7 叔→叙、vol16 109:6:21 樊→彝。坐标对位字只用来拦，不参与组内判字）。"""
     group_flow_provisional: bool = True
+    group_flow_provisional_to: dict[str, str] = Field(default_factory=dict)
+    """书级暂归一字形：组 id → 字（须是 `registry.PROVISIONAL` 该组 forms 里的字，否则不理），压过表里的 `to`（缺省关；空时不进 dump，
+    `params_hash` 不变）。全唐文 彝组 yi_560：表里 `to`＝𢑱（殿本放行最多的形），本书刻的是 彝（Sheldon 11-05 同轮人裁 3 格），
+    r11 复核时 ids 读出 彝（彑米糸廾）而上段 margin 不够改字，兜底就放成了 𢑱（8 格）。"""
     """同义字组暂归一兜底（sheldon 2026-10-27，见 `groups.flow._provisional`、`groups.registry.PROVISIONAL`）：字组方法拆不开写法、
     与整理本说法不一而留人审／降审的格，只要库形、整理本（或已放行字）都认是这个字，就放成这组最常见的字形，
     `evidence.group.decision` 记 `provisional`。False＝照旧留人审（2026-10-27 前的行为）。"""
@@ -447,6 +459,15 @@ class SeedAdmitParams(BaseModel):
     - `review`：字面不同就不放行，记 doubt `replace_form`、落人审。
     起因：全唐文 v006 `match_replace` 放行「嚐」，图上是「嘗」——整理本（维基）用了
     异体，码位跟着整理本走了。只在 variant_form（本书用字账组内定形）没接手时生效。"""
+    replace_form_edge_exclude: bool = False
+    """`replace_form: lib` 换库形时，若库首位与整理本字这一对在本书假边表 `config/variants/edge_pair_exclude.tsv`
+    里（不是异体，只是语义表连上了），不换、照整理本字（全唐文码位线 11-05：r12 试 `lib` 估约 11 格把「往」记成
+    「住」等，往/住 早已在假边表）。缺省关（关时逐字节不变，不进 dump）。"""
+    ref_lib_coord_dissent: bool = False
+    """`ref_lib` 放行前看坐标对位：坐标对位给了实字、与现役对位字语义不同时，不放行，记 doubt
+    `ref_lib_coord_dissent`（硬疑问，补放通道不再按现役字放回）、落人审（全唐文 r11 11-05：去借库后本书库缺
+    麒／褚／俘 刻例，库首位落到 麟／諸／俾，现役对位跟着错位成 equal，ref_lib 照放；坐标对位是对的。r11 ref_lib
+    226 格里有坐标对位的 14 格、两边不一致 9 格，看图 7 格坐标对、2 格现役对）。缺省关（关时逐字节不变，不进 dump）。"""
     ledger_fingerprint: str = ""        # 自动填：账本变了产物过期
     variants_fingerprint: str = ""      # 自动填：语义表（auto + 手工）变了产物过期
     variant_graph_fingerprint: str = ""
@@ -870,6 +891,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
+        if isinstance(d, dict) and not self.iron_ex_from_store:
+            d.pop("iron_ex_from_store", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
@@ -902,6 +925,10 @@ class SeedAdmitParams(BaseModel):
             d.pop("witness3_knn_veto", None)
         if isinstance(d, dict) and not self.near_knn_gap:
             d.pop("near_knn_gap", None)
+        if isinstance(d, dict) and not self.replace_form_edge_exclude:
+            d.pop("replace_form_edge_exclude", None)
+        if isinstance(d, dict) and not self.ref_lib_coord_dissent:
+            d.pop("ref_lib_coord_dissent", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
@@ -941,6 +968,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
+        if isinstance(d, dict) and not self.group_flow_provisional_to:
+            d.pop("group_flow_provisional_to", None)
         if isinstance(d, dict) and not self.group_flow_pair_shape:
             d.pop("group_flow_pair_shape", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
@@ -1609,7 +1638,8 @@ class SeedAdmitStep(Step):
                     if align_char and _top != align_char \
                             and vm_here.semantic(_top) == vm_here.semantic(align_char):
                         if p.replace_form == "lib":
-                            char = _top
+                            if not (p.replace_form_edge_exclude and _edge_pair_excluded(_top, align_char)):
+                                char = _top
                         else:
                             ok, channel, prov, char = False, None, "", None
                             doubts = doubts + ["replace_form"]
@@ -1681,6 +1711,11 @@ class SeedAdmitStep(Step):
                     if _top and _top not in always and p.ref_lib_diff_guard and r.verdict == "diff" \
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         doubts.append("ref_lib_diff")
+                    elif _top and _top not in always and p.ref_lib_coord_dissent \
+                            and vmap.semantic(_top) == vmap.semantic(align_char) \
+                            and (_cr := _coord_refs(ctx, page, coord_cache).get(r.id)) not in (None, "", "〓") \
+                            and vmap.semantic(_cr) != vmap.semantic(align_char):
+                        doubts.append("ref_lib_coord_dissent")
                     elif _top and _top not in always \
                             and vmap.semantic(_top) == vmap.semantic(align_char):
                         # 字面相同不受加闸影响，照放（任务书「字面相同的放行照旧」）。
@@ -1731,7 +1766,8 @@ class SeedAdmitStep(Step):
                     ex_miss: list[str] = []
                     iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
                                            iron_ctx, iron_scale, iron_ns,
-                                           ex_miss if p.iron_ex_missing_guard else None)
+                                           ex_miss if p.iron_ex_missing_guard else None,
+                                           *((p.db_path,) if p.iron_ex_from_store else ()))
                     if iron_char is not None and ex_miss:
                         # 对照刻例原图缺（缓存里没有）：结果随缓存内容变，不放，转待审（overview#554）
                         doubts.append("iron_ex_missing")
@@ -1893,6 +1929,11 @@ class SeedAdmitStep(Step):
             d_srb = _symbol_ref_blank_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_srb
             n_review -= d_srb
+        if p.near_knn_gap and p.group_flow and p.group_flow_near_knn:
+            # near_knn 入口放宽：排在各补放通道之后，只收它们都没放的格（见 `_near_knn_pass` 的 stage）
+            d_ng = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing, stage="gap")
+            n_auto += d_ng
+            n_review -= d_ng
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -2446,7 +2487,9 @@ _LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", 
                         # 补放时文意给了与整理本不同的字、没放成的格（`flow.group_flow_pass`）：同理不许按整理本字放回
                         "group_flow_ctx_contra",
                         # 库判 diff 拦下的 ref_lib 格：整理本字正是被库否掉的那个，补放通道不按它放回
-                        "ref_lib_diff"})
+                        "ref_lib_diff",
+                        # 坐标对位与现役对位不一致拦下的 ref_lib 格（`ref_lib_coord_dissent`）：同理
+                        "ref_lib_coord_dissent"})
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
 #: 笔画残边，证人字再齐也对不上图——vol04 p217c3 只有 2 格带这个码，同列其余 4 格看图同样是乱码）。
 _LANE_GARBLE = frozenset({"ctx_garble_shape", "ctx_garble_rare", "ctx_garble_run"})
@@ -3587,13 +3630,15 @@ _NEAR_CODES = frozenset({"near_form", "solo_confusable", "iron_confusable_ref"})
 
 
 def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
-                   patch_missing: dict | None = None) -> int:
+                   patch_missing: dict | None = None, stage: str = "near") -> int:
     """形近护栏格的书级刻形近邻（`groups.near_knn`，`SeedAdmitParams.group_flow_near_knn`）。紧接 book_knn。→ 新放行格数。
 
     只补放待审格：形近护栏（guard conflict／never_match、疑问 near_form 等）或字组未定的格。候选＝本格字、整理本对位字、
     库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
     或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。
-    `near_knn_gap` 开时另收「库没把握、库首位≠整理本」的格（见该参数说明，出口闸＝等于整理本或同码位／异体组）。"""
+    `near_knn_gap` 开时另收「库没把握、库首位≠整理本」的格（见该参数说明，出口闸＝等于整理本或同码位／异体组）。
+    `stage`：`near`（紧接 book_knn，只判护栏格／字组格）；`gap`（各补放通道之后，只判 near_knn_gap 的格——
+    排在前面会把 rare_ref／witness3 等本就会放、字也相同的两万多格抢成 near_knn 通道，全唐文 r10，11-05 挪后）。"""
     from ..groups import near_knn
     from ..groups.edge_pairs import _exclude as _edge_exclude
     model = near_knn.load(p.group_flow_near_knn)
@@ -3617,10 +3662,12 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             m = mmap.get(r.id)
             gap = False
             if not (near or grp.get("id")):
-                top3 = [c for c, _ in (getattr(m, "candidates", None) or [])[:3]] if p.near_knn_gap else []
+                top3 = [c for c, _ in (getattr(m, "candidates", None) or [])[:3]] if stage == "gap" else []
                 if not (ref and top3 and top3[0] != ref):
                     continue
                 gap = True
+            elif stage == "gap":
+                continue
             if grp.get("id") in model["skip_groups"] or grp.get("pick"):
                 continue
             cands = [x for x in dict.fromkeys((r.char, ref, *(top3 if gap else (getattr(m, "char", None),)))) if x]
@@ -3688,6 +3735,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
+                     provisional_to=dict(p.group_flow_provisional_to),
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
                                                         and ctx.book.codepoints) else None))
@@ -4000,11 +4048,38 @@ def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> floa
     return book_scale_from_patches(patches)
 
 
+@lru_cache(maxsize=4)
+def _store_conn(db_path: str):
+    import sqlite3
+    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
+
+
+def _store_ex_raw(db_path: str, cid: str):
+    """`iron_ex_from_store`：人裁刻例 `cid`（`_iron_context.human_ids` 里去了 `v2:` 前缀的 id）在字形库里的图，
+    裁回 canonical 图里原裁切那一块（背景是纯 255，原裁切区域里不全是 255）。库里没有 → None。"""
+    import cv2
+    import numpy as np
+    row = _store_conn(db_path).execute(
+        "SELECT patch_png FROM instances WHERE instance_id IN (?, ?) ORDER BY instance_id = ? DESC LIMIT 1",
+        (f"v2:{cid}", cid, f"v2:{cid}")).fetchone()
+    if row is None or row[0] is None:
+        return None
+    img = cv2.imdecode(np.frombuffer(row[0], np.uint8), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise PatchUnavailable(f"字形库刻例图解不出来: {cid}")
+    ys, xs = np.nonzero(img != 255)
+    if len(ys) == 0:
+        return None
+    return img[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+
 def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
-                 norm_stroke: int | None, missing: list | None = None) -> str | None:
+                 norm_stroke: int | None, missing: list | None = None,
+                 store_db: str | None = None) -> str | None:
     """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
     （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
-    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
+    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。
+    `store_db`（`iron_ex_from_store`）：刻例图从这个字形库取，不读缓存。"""
     import cv2
 
     from ..clustering.iron_evidence import iron_with_disc
@@ -4022,6 +4097,10 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
     raw_cache: dict[str, object] = {}
 
     def raw_of(cid: str):
+        if cid not in raw_cache and store_db is not None:
+            raw_cache[cid] = x = _store_ex_raw(store_db, cid)
+            if x is None and missing is not None:
+                missing.append(cid)
         if cid not in raw_cache:
             parts = cid.split(":")
             if parts and parts[0] == "v2":      # 人裁重键后的格号坐标，去前缀即可
@@ -4227,6 +4306,12 @@ def _occluded(ctx: RunContext, page: int, match: PageMatch, p: "SeedAdmitParams"
             else:
                 out[r.id] = (dens, None, "none")
     return out
+
+
+def _edge_pair_excluded(a: str, b: str) -> bool:
+    """`a`／`b` 这一对在本书假边表 `edge_pair_exclude.tsv` 里（`replace_form_edge_exclude`）。"""
+    from ..groups.edge_pairs import _exclude
+    return frozenset((a, b)) in _exclude()
 
 
 def _coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:

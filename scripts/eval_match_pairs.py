@@ -36,6 +36,7 @@ import cv2  # noqa: E402
 import numpy as np  # noqa: E402
 
 from open_guji_cv.clustering.exclusions import excluded_ids  # noqa: E402
+from eval_fold import same as _fold_same  # noqa: E402  己已巳、日曰图上分不开，算同字（2026-11-05）
 from open_guji_cv.clustering.verify import (COV_LOW, ELASTIC_COV_HIGH,  # noqa: E402
                                             MISS_WMAX, verify_pair,
                                             verify_pair_cov,
@@ -119,6 +120,8 @@ def main() -> None:
     ap.add_argument("--out", default=None, help="报告 JSON")
     ap.add_argument("--include-excluded", action="store_true",
                     help="连排除名单里的坏图块一起量（默认跳过）")
+    ap.add_argument("--no-fold", action="store_true",
+                    help="不折叠己已巳、日曰（旧口径；缺省折叠，这两组在图上分不开，Sheldon 2026-11-05）")
     args = ap.parse_args()
     root = Path(args.dataset)
     gate = args.cov_high if args.cov_high is not None else ELASTIC_COV_HIGH
@@ -136,6 +139,18 @@ def main() -> None:
             np.savez_compressed(args.dump, pairs=np.array(pairs, dtype=object),
                                 cov=cov, wmax=wmax)
             print(f"→ 分数已存 {args.dump}")
+
+    if not args.no_fold:
+        # 己已巳、日曰组内的对按同字算（两个都落在同组 = 「匹配到任一个都对」）。
+        # 先于数据集老标签：pairs 里存的 label 是严格同字，折叠只会把 diff 改成 same
+        meta = {r["instance_id"]: r["char"] for r in
+                json.loads((root / "expected.json").read_text(encoding="utf-8"))["instances"]}
+        n_fold = 0
+        for p in pairs:
+            if p["label"] == "diff" and _fold_same(meta[p["a"]], meta[p["b"]]):
+                p["label"] = "same"
+                n_fold += 1
+        print(f"折叠己已巳、日曰：{n_fold} 对 diff 改按 same 算")
 
     report: dict = {"method": args.method, "cov_high": gate,
                     "miss_wmax": args.miss_wmax, "n_pairs": len(pairs)}

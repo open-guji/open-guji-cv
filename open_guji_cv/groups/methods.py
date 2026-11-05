@@ -149,7 +149,7 @@ def _spec(g: str):
 def _ctx_out(v: GroupVerdict) -> GroupVerdict:
     """文意类方法的留痕口径（沿用旧 `ctx` 解法）：via 记 `ctx:<后端>`，extra 只留命中的规则。"""
     keep = {k: v.extra[k] for k in ("rules", "ctx_drift", "other_conf", "strong", "runs", "p", "gap", "top",
-                                     "llm_model", "llm_conf", "cached", "tok", "l2_top", "panel")
+                                     "llm_model", "llm_conf", "cached", "tok", "l2_top", "panel", "ask")
             if v.extra.get(k) not in (None, [], "")}
     return GroupVerdict(v.char, conf=v.conf, why=v.why, via=f"ctx:{v.via}" if v.via else "ctx", extra=keep)
 

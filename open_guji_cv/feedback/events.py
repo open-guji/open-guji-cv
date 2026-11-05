@@ -116,7 +116,7 @@ Actor = Literal["user", "model", "align"]
 
 
 #: 「模型的判断」类来源：`payload.source` 取这些值的事件**不当人裁用**（overview#428）。
-MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer"})
+MODEL_JUDGMENT_SOURCES = frozenset({"vision", "llm", "knn_infer", "auto"})
 
 
 def counts_as_human(e) -> bool:
@@ -128,8 +128,9 @@ def counts_as_human(e) -> bool:
     ⚠️ **不按 `actor="model"` 一刀切**：`events/` 里早有两类 `actor="model"` 的 confirm，语义各有
     来路，不能跟着改：①人裁的**机械更正**（`scripts/glyph_codepoint_unify.py` 码位统一、
     `scripts/mojibake_census.py` 乱码还原）——它们压的就是人裁本身，不认的话旧码位／乱码那条人裁
-    会原样复活；②`scripts/book_lib_auto.py` 的机器高可信刻例（`source="auto"`），有自己的口径
-    （replay 已跳过）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
+    会原样复活；②`source="auto"`（`scripts/book_lib_auto.py` 的机器高可信刻例）2026-11-05 起也不算人裁：它们只是
+    刻例来源记账，刻例由 admit_instance 直接进库、replay 本就跳过；当人裁的话会进绑定表，按格号绑，
+    重切后挪格就把别处的字压上去（全唐文 r11 约 45 格）。新的「模型判断」来源要排除时加进 `MODEL_JUDGMENT_SOURCES`。"""
     if getattr(e, "kind", None) in ("vision_check", "ctx_ruling"):
         return False
     return (getattr(e, "payload", None) or {}).get("source") not in MODEL_JUDGMENT_SOURCES

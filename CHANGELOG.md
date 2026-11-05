@@ -5,9 +5,22 @@
 
 ## [未发版]
 
+- `scripts/eval_font_family.py`：字体族实测，三书人裁刻例互为查询与库，量借库能借多少（只动 `scripts/`，不改指纹，A23）。
+### Added
+- `seed_admit` 三个缺省关开关（关时逐字节不变，登记 code_equiv）：`group_flow_provisional_to`（书级暂归一字形，组 id→字，须在该组 forms 内；全唐文彝组 yi_560 兜底落 𢑱 → 彝）、`ref_lib_coord_dissent`（坐标对位给实字且与现役对位语义不同时不走 `ref_lib`，硬疑问落审；全唐文 r11 麒→麟、褚→諸、俘→俾）、`replace_form_edge_exclude`（`replace_form: lib` 不换成假边表 `edge_pair_exclude.tsv` 里的另一半，往→住）（形近字线 11-05）。
+- `scripts/zhengli/pending_list.py --seg-flags`：读 guji-manager `review/seg_defect --gate` 出的同字对照自检旗表，已放行的切笔格（clipped）改送人审（why `seg_defect`、`src: seg_selfcheck`），已在单上的只加 `seg_kind` 证据；`.meta.json` 指纹对不上现行产物就停。`republish prep` 在跑 pending_list 前按书级表现算旗表（`--no-seg-selfcheck` 关；书没开、manager 太旧都不跑）。只动 `scripts/`，不改指纹，缺省输出不变（两部书都登记为关）（A22 B1③）。
+- `scripts/eval_ref_verify.py`：5b「验证整理本字」评测，在三书人裁 5b 冻结集上量 emb 首位且领先 ≥ m 作为证据的放行率与错放率（只动 `scripts/`，不改指纹，A23）。
+
+## [0.6.4] - 2026-11-05
+
+### Fixed
+- 文意留痕 `methods._ctx_out` 只留白名单键，把 #1071 记的待裁问题 `extra.ask` 丢了，`llm_queue export` 恒为 0 问：保留 `ask`（#1080，SJ）。seed_admit 指纹随之变，第5轮殿本从 seed_admit 起重放。
+
 ## [0.6.3] - 2026-11-05
 
 ### Changed
+- cell_shrink 再生字块提速（2026-11-05，A20）：执行机缓存是空的时下游逐格再生字块，本页 cells 产物与列图改按页记一次（原先每格重读 JSON、重解整列 PNG）。样页每格 7.5 → 3.8 ms，逐像素不变，已登记代码等价。
+- seed_admit 加 `iron_ex_from_store`（2026-11-05，A20，缺省关）：铁证判别器的人裁刻例图从字形库取，不读缓存，产物不再随执行机缓存变；开不开待用户看 A/B（`doc/开关登记表.md`）。缺省关时已登记代码等价。
 - 管线缺省不调 Anthropic API（2026-11-05，用户定；#1071、#1072）：文意 L3／二审小组／看图判只读裁定库，没命中弃权 `abstain:llm_pending` 并在产物留下问题；`python -m open_guji_cv.feedback.llm_queue export/import` 导出待裁清单、把对话统一审的答案写回裁定库。`GUJI_LLM_ONLINE=1` 才在线问。
 - seed_admit 页头计数：src_code_conflict 降审计入 n_auto/n_review（#1046）。
 
@@ -15,6 +28,9 @@
 - 抬头漏认收尾（2026-11-05，A22）：row_segment 1.46 `layout_raise_box` 改缺省开、重编候选同分优先；border_detect 1.20 上版框弱线护栏（选中线墨量不到最强横线 0.3、上方 ≥0.021 页高另有强线就改取，殿本 16516 页只动 12 页）；column_warp 1.6 `refine_top_by_frame` 否决加例外（上面另有满宽段、中间先白后字墨就照常上提，SJ 史記 02:5）。三步指纹都变，各书 Step1 起过期。border_detect 新参数 `top_weak_ratio`（缺省 0.3）、`top_weak_floor`（缺省不用）：写本（史記）册配置写 0.45／0.25，框条下细虚线、首行字顶齐平的页（SJ 02:5 等 7 页）上框改落到细虚线。
 - row_segment 书级开关 `layout_raise_box`（2026-11-05，A22，缺省关）：闸认出抬头框而逐列格位表记不抬头（首字顶格）时，加一张表按闸级数重编格号的候选格网，坏格严格更少才选；抬头框要比本页不抬头列高半格。殿本 164 列沙箱 84 列改对。关着时逐字节不变（code_equiv 已登记）。
 - 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
+
+### Changed
+- 图形评测折叠己已巳、日曰（2026-11-05，Sheldon：这两组图上分不开，匹配到组内任一个都算对，不单独统计正确率）：新增 `scripts/eval_fold.py`；`eval_db_match.py`／`eval_match_pairs.py`（缺省折叠，`--no-fold` 回旧口径）／`eval_oov.py`（同）／`calibrate_lib_witness.py` 按组折叠金标与候选。只动 scripts/，各步指纹不变。
 
 ### Changed
 - cell_shrink 书级开关 `inner_frame_profile`（缺省关，要 `inner_frame_cut` 一起开；A22-2，2026-11-05）：小段投票拟不出内框细线的页（殿本新图约两成页，内线磨成点线），按外框拉直的整宽行墨再找（`seg.frame_line._profile_inner`）。列端评测集 frame-end-crop 带框 17→8、切笔不变；开关关着各步指纹不变（code_equiv 登记）。
