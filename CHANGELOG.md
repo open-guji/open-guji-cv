@@ -6,6 +6,7 @@
 ## [未发版]
 
 ### Added
+- `seed_admit` 三个缺省关开关（关时逐字节不变，登记 code_equiv）：`group_flow_provisional_to`（书级暂归一字形，组 id→字，须在该组 forms 内；全唐文彝组 yi_560 兜底落 𢑱 → 彝）、`ref_lib_coord_dissent`（坐标对位给实字且与现役对位语义不同时不走 `ref_lib`，硬疑问落审；全唐文 r11 麒→麟、褚→諸、俘→俾）、`replace_form_edge_exclude`（`replace_form: lib` 不换成假边表 `edge_pair_exclude.tsv` 里的另一半，往→住）（形近字线 11-05）。
 - `scripts/zhengli/pending_list.py --seg-flags`：读 guji-manager `review/seg_defect --gate` 出的同字对照自检旗表，已放行的切笔格（clipped）改送人审（why `seg_defect`、`src: seg_selfcheck`），已在单上的只加 `seg_kind` 证据；`.meta.json` 指纹对不上现行产物就停。`republish prep` 在跑 pending_list 前按书级表现算旗表（`--no-seg-selfcheck` 关；书没开、manager 太旧都不跑）。只动 `scripts/`，不改指纹，缺省输出不变（两部书都登记为关）（A22 B1③）。
 - `scripts/eval_ref_verify.py`：5b「验证整理本字」评测，在三书人裁 5b 冻结集上量 emb 首位且领先 ≥ m 作为证据的放行率与错放率（只动 `scripts/`，不改指纹，A23）。
 

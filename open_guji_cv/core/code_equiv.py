@@ -886,6 +886,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new="b8ed17ca3942912b94848ae4d0eb8d19243b2b475d67ba946a10b5d412489480",
           old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
           evidence=_COORD_PAIR_SUB),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='fc1c19db605f42f8d442f68b8b8cc66a4df4ce454c85a1ab2e6154c6221d772e',
+          old='de749a131133f682da5f64a4c1f18ea5e19af7dc75e7e108a0a685abde0b54dd',
+          evidence='seed_admit 在 012 13 页（--pages 5,20,35,50,65,80,95,110,125,140,155,170,185）上与 origin/dev 产物逐字节相同（group_flow_provisional_to／ref_lib_coord_dissent／replace_form_edge_exclude 缺省关）'),
+    Equiv(module='open_guji_cv.groups.flow',
+          new='e59ec85463defe2b1e0b731685b98d73c71bfae3c0818544291f571682d4cb21',
+          old='623f6703f114d2fea9fc297804ded071f066aacc552895ca114f3d8a20145fdb',
+          evidence='seed_admit 在 012 13 页（--pages 5,20,35,50,65,80,95,110,125,140,155,170,185）上与 origin/dev 产物逐字节相同（group_flow_provisional_to／ref_lib_coord_dissent／replace_form_edge_exclude 缺省关）'),
 )
 
 
