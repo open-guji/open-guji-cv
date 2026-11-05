@@ -168,3 +168,19 @@ def test_strip_frame_debris_thin_only_keeps_dots_without_line():
     new = strip_frame_debris(patch, 0, 98, 100, thin_only=True)
     assert (new[80:94, 22:30] == 0).all()
     assert (new[93:96, 50:60] == 255).all()
+
+
+def test_cut_inner_frame_keep_cross_keeps_stroke_through_line():
+    """inner_frame_keep_cross：从字那边连下来、穿过下框细线的竖画留着；别处照旧抹掉线和线外。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps.cell_shrink import cut_inner_frame
+    img = np.full((100, 40), 255, np.uint8)
+    img[90:94, :] = 0                     # 下框细线：90–93 行
+    img[60:96, 18:22] = 0                 # 竖画压线、伸出线外两行
+    line = SimpleNamespace(text_edge=lambda x: 90.0)
+    mapper = SimpleNamespace(to_page_tl=lambda x, y: (x, y))
+    old = cut_inner_frame(img, mapper, {"bottom": line})
+    assert (old[89:, :] == 255).all()
+    new = cut_inner_frame(img, mapper, {"bottom": line}, keep_cross=True)
+    assert (new[60:96, 18:22] == 0).all()
+    assert (new[89:, :10] == 255).all() and (new[89:, 30:] == 255).all()

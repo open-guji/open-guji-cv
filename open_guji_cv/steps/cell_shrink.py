@@ -72,6 +72,11 @@ class CellShrinkParams(BaseModel):
     （列尾「無」的灬、「李」「本」「講」的脚，列首「三」的上横；开 inner_frame_cut 前后都有）。
     缺省关＝旧行为。A22，2026-11-05。"""
 
+    inner_frame_keep_cross: bool = False
+    """（跟 inner_frame_cut 一起开）抹内框细线时，从字那边连下来、穿过线的笔画留着：线带里某一列上方
+    INNER_CROSS_RUN 行起就是成段的墨（笔画压线而来），这一列的墨一直留到这段墨断开为止，不抹。写本字脚常压在内框细线上，
+    整条抹掉会切掉字脚一两像素（史記 05:23:7:21「義」、05:35:2:21「軍」、05:83:6:21「何」、05:83:8:21「將」，SJ 11-05）。
+    缺省关＝旧行为。"""
     inner_frame_profile: bool = False
     """（跟 inner_frame_cut 一起开才有用）小段投票拟不出内线的页，按外框拉直的整宽行墨再找一次
     （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
@@ -96,6 +101,8 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_profile", None)
         if isinstance(d, dict) and not self.inner_frame_only:
             d.pop("inner_frame_only", None)
+        if isinstance(d, dict) and not self.inner_frame_keep_cross:
+            d.pop("inner_frame_keep_cross", None)
         return d
 
 
@@ -152,9 +159,16 @@ def _col_y_for_page_y(mapper: ColumnMapper, x: float, y_guess: float, line) -> f
     return y
 
 
-def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: bool = False) -> np.ndarray:
+INNER_CROSS_RUN = 3
+"""inner_frame_keep_cross：线带字侧边沿外（字那边）连着这么多行都是墨，才算笔画压线而来。线本身的毛边在拟合边沿外至多一两行。"""
+
+
+def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: bool = False,
+                    keep_cross: bool = False) -> np.ndarray:
     """列图上把内框细线（`inner` 里的整页拟合）连同线外抹白：下框线字侧边沿往下、上框线字侧边沿往上。
-    抬头列（`raised`）不动上框：抬头字本来就写在框外。"""
+    抬头列（`raised`）不动上框：抬头字本来就写在框外。
+    `keep_cross`（inner_frame_keep_cross）：穿过线的笔画留着——字侧边沿外连着 INNER_CROSS_RUN 行墨的那一列，
+    从抹白起点往线外留到这段墨断开为止（笔画连同它压着的那一截线）。"""
     h, w = img.shape[:2]
     out = None
     xs = np.array([0.0, (w - 1) / 2.0, w - 1.0])
@@ -166,15 +180,24 @@ def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: 
         yc = np.interp(np.arange(w), xs, ys)
         if out is None:
             out = img.copy()
+        ink = img < INNER_INK_THRESHOLD
         for x in range(w):
             if side == "bottom":
                 y0 = int(np.ceil(yc[x])) - INNER_CUT_MARGIN
                 if y0 < h:
-                    out[max(0, y0):, x] = 255
+                    y0 = max(0, y0)
+                    if keep_cross and y0 >= INNER_CROSS_RUN and ink[y0 - INNER_CROSS_RUN:y0, x].all():
+                        while y0 < h and ink[y0, x]:
+                            y0 += 1
+                    out[y0:, x] = 255
             else:
                 y1 = int(np.floor(yc[x])) + INNER_CUT_MARGIN + 1
                 if y1 > 0:
-                    out[:min(h, y1), x] = 255
+                    y1 = min(h, y1)
+                    if keep_cross and y1 + INNER_CROSS_RUN <= h and ink[y1:y1 + INNER_CROSS_RUN, x].all():
+                        while y1 > 0 and ink[y1 - 1, x]:
+                            y1 -= 1
+                    out[:y1, x] = 255
     return img if out is None else out
 
 
@@ -508,7 +531,8 @@ class CellShrinkStep(Step):
         if inner and mapper is not None:
             if ctx.params_for(self).inner_frame_only:  # type: ignore[attr-defined]
                 img = restore_trimmed_ends(img, ctx.image("column_raw", column_key(page, cc.col)), wrec, inner, mapper)
-            img = cut_inner_frame(img, mapper, inner, raised=bool(wrec.raised or wrec.head_raise_inner_y))
+            img = cut_inner_frame(img, mapper, inner, raised=bool(wrec.raised or wrec.head_raise_inner_y),
+                                  keep_cross=bool(ctx.params_for(self).inner_frame_keep_cross))  # type: ignore[attr-defined]
         step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         slot_to_pos = {c.slot: c.pos for c in cc.cells}
@@ -663,7 +687,8 @@ class CellShrinkStep(Step):
                 if ctx.params_for(self).inner_frame_only:  # type: ignore[attr-defined]
                     img = restore_trimmed_ends(img, ctx.image("column_raw", column_key(page, col)), wrec, inner, mapper)
                 img = cut_inner_frame(img, mapper, inner,
-                                      raised=bool(wrec.raised or wrec.head_raise_inner_y))
+                                      raised=bool(wrec.raised or wrec.head_raise_inner_y),
+                                      keep_cross=bool(ctx.params_for(self).inner_frame_keep_cross))  # type: ignore[attr-defined]
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}
