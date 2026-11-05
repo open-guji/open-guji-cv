@@ -78,6 +78,32 @@ def _layout_row(layout: dict, page: int, col: int, gap_empty: bool = False, tail
     return None
 
 
+#: 格位表 `cuts`（人定格线）要求列图高与表里记的 `col_h` 相差不超过这么多像素，否则当作上游几何变了、不套
+LAYOUT_CUTS_H_TOL = 4
+
+
+def _layout_cuts(lay: dict, col_h: int, n_raised: int) -> "list[float] | None":
+    """格位表行里人定的整列格线（`cuts`：列图 y，自上而下，格数＋1 条），校验不过返回 None。
+
+    全唐文切分线 2026-11-05：几列细笔字（「導」的寸、「一甲」、列首「大」）DP 与等距格网都切错、slots／pitch 钉不住，
+    看图定好每条格线写进表。格数就是 `len(cuts)-1`（含抬头格），盖过闸给的正文格数（表说 22 字、闸只给 21 格的列）。
+    格线记的是列图坐标，表里同时记 `col_h`（定线时的列图高）：列图高变了（上游界行、上下框改了）就不套——旧线套在
+    新列图上会切进字里。线要严格自上而下，表的格号要装得下。"""
+    cuts = lay.get("cuts")
+    if not isinstance(cuts, (list, tuple)) or len(cuts) < 2:
+        return None
+    try:
+        ys = [float(y) for y in cuts]
+        h0 = int(lay["col_h"])
+    except (KeyError, TypeError, ValueError):
+        return None
+    n_body = len(ys) - 1 - n_raised
+    if (abs(h0 - int(col_h)) > LAYOUT_CUTS_H_TOL or any(b <= a for a, b in zip(ys, ys[1:]))
+            or n_body < max([s for s in lay.get("slots") or [] if s > 0] or [0])):
+        return None
+    return ys
+
+
 #: 逐列字数先验一次最多改几个字（差得更多多半是列错位或页对错，硬改会把整列切乱）
 COLGOLD_MAX_DIFF = 2
 _COLGOLD_CACHE: dict[tuple, dict] = {}
@@ -1166,6 +1192,7 @@ class RowSegmentStep(Step):
             lay_alt = None     # 闸版格网（抬头级数听闸、表只管格的有无），见下
             gate_raised = n_raised_col
             occ: set = set()   # 版式先验占了的格位（lay 为 None 时不用）
+            lay_cuts: "list[float] | None" = None
             if lay is not None:
                 if hr_verdict is not None:
                     lay = _reraise(lay, hr_verdict)
@@ -1176,6 +1203,11 @@ class RowSegmentStep(Step):
                 n_raised_col = want
                 if p.layout_slots_grow and occ and max(occ) > n_body_col:
                     n_body_col = max(occ)
+                # 格位表人定格线（`cuts`，见 `_layout_cuts`）：格数照线；表里没写这个键的列产物不变
+                if lay.get("cuts") is not None:
+                    lay_cuts = _layout_cuts(lay, ctx.image("column_image", column_key(page, gc.col)).shape[0], want)
+                    if lay_cuts is not None:
+                        n_body_col = len(lay_cuts) - 1 - want
                 top_slack = gc.border_top if want else gc.top_slack
                 lay_kw, forced_jz, forced_main = _layout_kw(lay, occ, n_body_col, n_raised_col)
             base = dict(col=gc.col, n_body_slots=n_body_col, n_raised=n_raised_col,
@@ -1250,8 +1282,21 @@ class RowSegmentStep(Step):
                 if j is not None:
                     _blank_frame_junk(img, out_.cells, *j)
                 return out_
-            r = _seg(n_body_col)
+            # 人定格线：照线切，不跑 DP、不比候选格网（下面整段候选挑选跳过）
+            r = _seg(n_body_col) if lay_cuts is None else _seg(n_body_col, bounds=lay_cuts)
             prior_flags: list[str] = []
+            if lay is not None and lay.get("cuts") is not None:
+                prior_flags.append("layout_cuts：格线按表" if lay_cuts is not None
+                                   else "layout_cuts_stale：表的格线与列图高或格号对不上，没套")
+            if lay_cuts is not None and r is not None:
+                # 列端记空照旧（表空格里的框线、碎墨、透背墨）：同下面候选格网的 `_junk`
+                wrec_c = wins.column(gc.col)
+                mapper_c = None if wrec_c is None else ColumnMapper(
+                    page_w, wrec_c.left_line.to_vline(), wrec_c.right_line.to_vline(), wrec_c.top_y, wrec_c.bottom_y)
+                nj = _junk(r, occ, gc.content_x, p.ink_threshold, gate.period,
+                           _in_seal(seals, mapper_c, img, p.ink_threshold), p.seal_gap_slots_empty)
+                if nj:
+                    prior_flags.append(f"layout_frame_junk：列端 {nj} 格的墨不像字（框线／碎墨／越界墨／印框），记空")
             # 逐列格位先验命中的列，候选格网按图挑：
             #   表格网（抬头级数、格的有无都按表）；
             #   闸抬头格网（表与闸的抬头级数不一致时：抬头听闸，表只管格的有无）；
@@ -1285,7 +1330,7 @@ class RowSegmentStep(Step):
             # 人审率分析的教训：破损页的空位不能批量判非字。1.21 实测改空 647 格（逐格看图都是框线、竖线、碎点）；
             # 1.23 从物理首／末格放宽到表空格这一段；1.24 加越界墨（列首大印 vol09 p68/p70/p164、vol10 p175，
             # 卷末印章 vol09 p162）与整列空的列。
-            if lay is not None and r is not None:
+            if lay is not None and r is not None and lay_cuts is None:
                 lay_rr = None    # `layout_raise_box` 那张候选用的重编表
 
                 def _lay_of(why: str, _base=lay):
