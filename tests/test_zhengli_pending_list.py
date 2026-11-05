@@ -154,3 +154,72 @@ def test_recheck_puts_cells_back_with_note_and_prior(tmp_path):
     assert by["1:1:2"]["recheck"] is True and by["1:1:2"]["note"] == "几票不一致" and "prior" not in by["1:1:2"]
     assert "recheck" not in by["1:2:1a"]
     assert (out / "recheck_missing.tsv").read_text(encoding="utf-8").splitlines()[1:] == ["9:9:9\t切字改过"]
+
+
+#: 自造产物没有 cell_shrink 目录：manager meta_fresh 看到的现行页集是空的，meta 记空才算新鲜
+_FRESH = {"seed_admit": {}, "cell_shrink": {}}
+
+
+def _flags(tmp_path: Path, rows: list[tuple], meta: dict | None = None) -> Path:
+    f = tmp_path / "seg_selfcheck.tsv"
+    head = "格号\tseg_kind\t特征\t放行\t通道\t机器字\t整理本字\t字块键\n"
+    f.write_text(head + "".join("\t".join(r) + "\n" for r in rows), encoding="utf-8")
+    if meta is not None:
+        f.with_name(f.name + ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return f
+
+
+def test_seg_flags_adds_admitted_clipped_and_tags_pending(tmp_path):
+    """同字对照自检（B1③）：已放行、clipped 的格加进单子（why seg_defect、src seg_selfcheck）；已在单上的只加旗；
+    frame_residue 不在送审类别里、只记旗；人裁通道的格不动。"""
+    prod = make_products(tmp_path)
+    seed = prod / "vol01" / "seed_admit" / "p0001.json"
+    doc = json.loads(seed.read_text(encoding="utf-8"))
+    doc["seed_admit"]["columns"][0]["chars"] += [{"id": "vol01:1:1:4", "admit": True}, {"id": "vol01:1:1:5", "admit": True}]
+    seed.write_text(json.dumps(doc), encoding="utf-8")
+    f = _flags(tmp_path, [
+        ("vol01:1:1:1", "clipped", "同字墨高 0.70 宽 1.00（参照 9 个） 边线压墨 0.00", "是", "match_ref", "甲", "甲", "p0001c01s1"),
+        ("1:1:2", "frame_residue", "同字墨宽 1.2", "否", "", "", "", "p0001c01s2"),
+        ("1:1:4", "frame_residue", "同字墨宽 1.2", "是", "match_ref", "乙", "乙", "p0001c01s4"),
+        ("1:1:5", "clipped", "同字墨高 0.7", "是", "human", "丙", "丙", "p0001c01s5"),
+    ], meta={"review_kinds": ["clipped"], "products": _FRESH})
+    out = tmp_path / "out"
+    pl.main(base_args(prod, out) + ["--seg-flags", str(f)])
+    cells = {c["cell"]: c for c in json.loads((out / "001.pending.json").read_text(encoding="utf-8"))["cells"]}
+    assert sorted(cells) == ["1:1:1", "1:1:2", "1:2:1a"]
+    assert cells["1:1:1"]["src"] == "seg_selfcheck" and cells["1:1:1"]["why"] == ["seg_defect"]
+    assert cells["1:1:1"]["seg_kind"] == "clipped" and cells["1:1:1"]["seg_feature"].startswith("同字")
+    assert cells["1:1:2"]["selfcheck_kind"] == "frame_residue" and "seg_kind" not in cells["1:1:2"]
+    assert "src" not in cells["1:1:2"] and "why" not in cells["1:1:2"]
+
+
+def test_seg_flags_stale_or_missing_meta_exits(tmp_path):
+    """旗表过期（meta 记的页和指纹对不上现行产物）或没有 .meta.json：退出，不悄悄照收。"""
+    prod = make_products(tmp_path)
+    f = _flags(tmp_path, [], meta={"products": {"seed_admit": {"p0001": "0" * 64}, "cell_shrink": {}}})
+    with pytest.raises(SystemExit, match="过期"):
+        pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])
+    f = _flags(tmp_path, [], meta={"review_kinds": ["clipped"]})          # 没记指纹
+    with pytest.raises(SystemExit, match="过期"):
+        pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])
+    f.with_name(f.name + ".meta.json").unlink()
+    with pytest.raises(SystemExit, match="meta"):
+        pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])
+    f = _flags(tmp_path, [], meta={"products": _FRESH})
+    pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])
+
+
+def test_seg_flags_keep_existing_seg_kind_detail(tmp_path):
+    """已在单上、原因 seg_defect／jiazhu_uneven 的格被同字对照标了 clipped：只加 selfcheck_kind，detail 不变（A20 审 #1089）。"""
+    from guji_manager.review.pending_reason import PendingReason as R
+    from guji_manager.review.reasons import reasons_for_pending
+    prod = make_products(tmp_path)
+    f = _flags(tmp_path, [("1:1:2", "clipped", "同字墨高 0.7", "否", "", "", "", "p0001c01s2")], meta={"products": _FRESH})
+    out = tmp_path / "out"
+    pl.main(base_args(prod, out) + ["--seg-flags", str(f)])
+    doc = json.loads((out / "001.pending.json").read_text(encoding="utf-8"))
+    c = next(x for x in doc["cells"] if x["cell"] == "1:1:2")
+    assert c["selfcheck_kind"] == "clipped" and "seg_kind" not in c
+    c["why"] = ["jiazhu_uneven"]                       # 原来就是夹注两行分法不均
+    res = reasons_for_pending(doc, tmp_path / "noprod", "vol01", are_variants=lambda a, b: False)
+    assert res["1:1:2"] == (R.SEG_DEFECT, "jiazhu_uneven")

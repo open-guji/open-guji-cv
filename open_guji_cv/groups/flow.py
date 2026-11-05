@@ -46,7 +46,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
@@ -96,6 +96,7 @@ class FlowConfig:
     vis_model: str | None = None                       # 字块图像＋文意 L4（`vis_llm`）用的模型；None＝不问（A24 2026-11-01）
     vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
+    provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
 
 
 @dataclass
@@ -437,6 +438,8 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
     pv = PROVISIONAL.get(g)
     if pv is None or not cfg.provisional or mode == "joint":
         return None
+    if cfg.provisional_to.get(g) in pv.forms:
+        pv = replace(pv, to=cfg.provisional_to[g])     # 书级暂归一字形（全唐文 彝组 刻的是 彝，不归殿本的 𢑱；11-05）
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     if mode == "review":
         if not (inn(r.char) and (not ref or ref == GAP or inn(ref))):
