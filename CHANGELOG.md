@@ -5,6 +5,13 @@
 
 ## [未发版]
 
+## [0.6.8] - 2026-11-05
+
+- `seed_admit` 折叠组改按文意（#1124，A24，缺省关）：新书级键 `fold_ref_char`（false＝不取整理本字，只用本组裁定 via=ruling）、`fold_aspect: [lo, hi]`（日曰按字块宽高比落字，via=aspect）；两样都没有的格留审，记 `evidence.fold_pending`。ref_free 组（己已巳）忽略 `group_flow_abstain_ref_ok`。`scripts/fold_aspect_dist.py` 标定阈值（#1127）。
+- republish 出单报告单列待收字（含窗口回查判成的格数，写「最多 N 格」），读不到登记表时提示（#1121、#1122、#1123）；待收字登记表修重复前缀并加格式守卫（#1120）。
+- `manager_api` 登记 `PuaIndex`、`resolve_pua_code`（#1126）。
+- #1115 的 row_segment code_equiv 由 A22 复核成立（殿本 vol58 34 页、史記 05 32 页逐字节相同）。
+
 ## [0.6.7] - 2026-11-05
 
 - `seed_admit` `iron_ex_from_store` 改缺省开（#1114，用户 11-05 定）。
