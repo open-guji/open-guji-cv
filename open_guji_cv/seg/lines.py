@@ -645,7 +645,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             secondary_ratio_thresh: float = 0.2,
                             boundary_slack: int = 3,
                             verticals: list[LineMatch] | None = None,
-                            book_gap: float | None = None) -> LineMatch:
+                            book_gap: float | None = None,
+                            weak_top_ratio: float = 0.0,
+                            weak_top_floor: float | None = None) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -768,6 +770,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                            score=best_secondary["score"], width=best_secondary["width"],
                            proj=best_secondary["proj"])
 
+    if side == "top" and weak_top_ratio > 0:
+        result = _weak_top_guard(mask, result, lo, hi, weak_top_ratio, alpha, hyst, floor=weak_top_floor)
+
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
         # 先按页把线挪到墨条下沿（详见 `_descend_to_ink_bottom` 上方说明），
@@ -785,6 +790,61 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                            slope=result.slope, score=result.score,
                            width=result.width, proj=result.proj)
     return result
+
+
+# ── 上版框弱线护栏（2026-11-05，殿本 A22）──────────────────────────
+# 半高宽评分偏爱细线：双边框、粗框条的页，真框墨条宽、分数反而低，带里一条细淡的横墨（第一行字头、虚线界行头）
+# 分数更高，或被「次选更靠中心」那条换过去——上版框落到真框下面一格（vol56 p43、vol73 p73、vol88 p69、vol82 p217、
+# vol63 p8）。下游把真框当「抬头框」、整页每列都抬头，抬头列反倒判不出。
+# 判据只看横向墨量（投影）：选中的线投影不到带里最强横线的 `ratio`，就改取它**上方**投影达标的峰里最靠页心的一条（双边框取内框；
+# 只往上找：弱线落在真框下面，下方够强的横墨是第一行字；
+# 抬头页的抬头框顶线只跨几列、主框跨全宽，主框总是更靠页心，不受影响）。选中的线本来就够强时一字不动。
+TOP_WEAK_RATIO = 0.3
+#: 只认往上挪得够远的：认错的线落在真框下面约一行字（殿本 1920 高的页挪 41–117 px）；挪得近的是粗框条／双边框里内外线之争
+#: （全殿本扫 16516 页：挪 ≤38 px 的 1086 页旧线都在框条内沿或里层细线上，是现行约定，不该动）
+TOP_WEAK_MIN_JUMP_FRAC = 0.021
+
+
+#: 量横墨的倾角：选中线自己的倾角，再加这几档近水平的；取带里横墨峰最高的那一档，整条护栏都在这一档上量。
+#: 选中线的倾角可能搜飞（vol93 p18 取到 -0.0196，约 1.1°）：在它的倾角上量，斜线自己拿满分、真框被斜着摊薄，
+#: 护栏不触发，整页上框落在第三行字顶、列里只切出 20 格。真框横跨全宽，哪一档上峰最高，哪一档就是本页的水平。
+#: 只换一档、不逐位置取各档最大：逐位置取最大会把抬头框顶线、双边框外线也抬高，殿本扫出十几页误挪。
+TOP_WEAK_SLOPES = (-0.006, -0.003, 0.0, 0.003, 0.006)
+
+
+def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio: float,
+                    alpha: float, hyst: int, floor: float | None = None) -> LineMatch:
+    slopes = (result.slope,) + tuple(s for s in TOP_WEAK_SLOPES if abs(s - result.slope) > 1e-9)
+    best = None
+    for s in slopes:
+        positions, c = sample_line_curve(mask, "h", lo, hi, float(s))
+        if not len(c):
+            return result
+        pk = max((float(c[i]) for i in local_maxima(c, radius=5)), default=0.0)
+        if best is None or pk > best[0] * (1 + 1e-9):
+            best = (pk, float(s), positions, c)
+    _, slope, positions, curve = best
+    peaks = [i for i in local_maxima(curve, radius=5)]
+    if not peaks:
+        return result
+    pmax = max(float(curve[i]) for i in peaks)
+    j = int(np.argmin(np.abs(positions - result.position)))
+    k0, k1 = max(0, j - 3), min(len(curve), j + 4)
+    if pmax <= 0 or float(curve[k0:k1].max()) >= ratio * pmax:
+        return result
+    jump = TOP_WEAK_MIN_JUMP_FRAC * mask.shape[0]
+    if floor is None:
+        strong = [i for i in peaks if float(curve[i]) >= ratio * pmax and positions[i] < result.position - 5]
+    else:   # 写本：先按挪动量筛、再按 floor 认线（见 border_detect.top_weak_floor）
+        strong = [i for i in peaks if float(curve[i]) >= floor * pmax and positions[i] <= result.position - jump]
+    if not strong:
+        return result
+    i = max(strong, key=lambda t: float(positions[t]))
+    if result.position - float(positions[i]) < jump:
+        return result
+    wd, sc = half_height_score_at(curve, i, alpha, hyst)
+    return LineMatch(position=float(positions[i]), slope=slope, score=sc, width=wd,
+                     proj=float(curve[i]))
 
 
 # ── 角度失控护栏：版框该大致垂直于界行 ──────────────────────────

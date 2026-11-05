@@ -111,7 +111,7 @@ def frame_residue(cleaned: np.ndarray, band: tuple[int, int],
 @register_step
 class ColumnWarpStep(Step):
     spec = StepSpec(
-        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.5", unit="column",
+        id="column_warp", title="Step2 单列射影 + 去噪 + 清理", version="1.6", unit="column",   # 1.6：refine_top_by_frame 的「top_y 已在框上」否决加例外：上面另有满宽段、中间先白后连续 ≥20 行字墨（top_y 那道满宽段是首字顶横／夹注两字顶齐，SJ 查史記 02:5「姓」「岳時」），照常提到上面框下沿；殿本全 99 册只动 vol82 p147 c6
         consumes=("raw_page", "borders", "border_detect_gate_manifest"),
         produces=("column_windows", "column_raw", "column_image"),
         params=ColumnWarpParams,
