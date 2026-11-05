@@ -347,6 +347,7 @@ LOCAL_WIN = 3            # 逐段贴线：残差取左右各这么多小段的�
 LOCAL_TOL = 3.0          # ……离中位数超过这么多行的观测丢掉
 LOCAL_GAP_TOL = 4.0      # ……缝宽离附近中位数超过这么多行的候选不认
 LOCAL_GAP_WIN = 15       # ……附近＝左右这么多小段
+LOCAL_GAP_DRIFT = 8.0    # ……附近中位数离全页中位数超过这么多行就不信、用全页的
 LOCAL_MIN_OBS = 0.3      # 观测到的小段不到这么多就不贴、原样返回
 
 
@@ -400,11 +401,16 @@ def localize_inner_line(ink: np.ndarray, line: InnerFrameLine, cell_h: float,
         return line
     near_x = np.array([cx for cx, _pred, got in cands if got], float)
     near_g = np.array(near, float)
+    gap_all = float(np.median(near_g))
     obs_x, obs_r = [], []
     for cx, pred, got in cands:
         # 缝宽在页内会慢慢变（006 p75 左 39 行、右 34 行）：取附近 ±LOCAL_GAP_WIN 段的中位数
+        # 内线整段断掉的地方附近只剩字底横当候选，局部中位数会被带偏（010 p166 x≈1700–1950 内线缺、字底横离外框 70 行），
+        # 局部值离全页中位数超过 LOCAL_GAP_DRIFT 行就用全页的
         m = np.abs(near_x - cx) <= LOCAL_GAP_WIN * CHUNK
-        gap0 = float(np.median(near_g[m])) if m.any() else float(np.median(near_g))
+        gap0 = float(np.median(near_g[m])) if m.any() else gap_all
+        if abs(gap0 - gap_all) > LOCAL_GAP_DRIFT:
+            gap0 = gap_all
         ok = [c for c, g in got if abs(g - gap0) <= LOCAL_GAP_TOL]
         if ok:
             obs_x.append(cx)
