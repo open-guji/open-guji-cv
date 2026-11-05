@@ -365,6 +365,11 @@ class SeedAdmitParams(BaseModel):
     两字都不在任何字组里（字组自己判）、不是夹注 a/b 半格、没有遮挡／排除／硬疑问、不是人裁格，且同列相邻格（slot±1）不也是这类格
     （成片＝切分错位的征兆，归 S）→ 放整理本字（通道 `p_ref`，`evidence.p_ref`）。
     依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。"""
+    fold_ruling_first: bool = False
+    """`fold_groups` 的护栏一（缺省关；全唐文 QTW 要求）：裁定库里有这格本组的文意裁定（高／中把握、字在组内，键＝本组 L3 提示词版本＋前后文窗口）时，
+    先用裁定字，不放整理本字；没有裁定才放整理本字。"""
+    fold_lib_top_in_group: bool = False
+    """`fold_groups` 的护栏二（缺省关）：库首位字（`glyph_match` candidates[0]）也必须在本组里才放；首位在组外或没有候选的格留审。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -915,7 +920,12 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.p_ref_admit:
             d.pop("p_ref_admit", None)
         if isinstance(d, dict) and not self.fold_groups:
-            d.pop("fold_groups", None)
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group"):
+                d.pop(k, None)
+        if isinstance(d, dict) and self.fold_groups:
+            for k in ("fold_ruling_first", "fold_lib_top_in_group"):
+                if not getattr(self, k):
+                    d.pop(k, None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
@@ -1877,7 +1887,7 @@ class SeedAdmitStep(Step):
                 n_auto += d_pr
                 n_review -= d_pr
             if p.fold_groups:
-                d_fd = _fold_pass(p, out, amap)
+                d_fd = _fold_pass(p, out, amap, mmap)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -3551,9 +3561,19 @@ def _p_ref_pass(p, out: list, amap: dict) -> int:
     return n
 
 
-def _fold_pass(p, out: list, amap: dict) -> int:
-    """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。"""
+def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None) -> int:
+    """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
+    护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内。"""
     from ..groups.registry import FLOW_GROUPS
+    wins: dict = {}
+    if p.fold_ruling_first:
+        from ..groups.context import WIDTH
+        from ..utils.jiazhu_order import sort_by_reading
+        seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+               if not (r.doubts and "excluded" in r.doubts)]
+        wins = {r.id: (_clf_ctx(seq, amap, i, -1, WIDTH), _clf_ctx(seq, amap, i, 1, WIDTH)) for i, r in enumerate(seq)}
+        store = store if store is not None else _vis_cache().store_
+        l3 = _l3_online(p)
     n = 0
     for c in out:
         for r in c.chars or []:
@@ -3565,12 +3585,22 @@ def _fold_pass(p, out: list, amap: dict) -> int:
             gid = ((r.evidence or {}).get("group") or {}).get("id")
             if gid not in p.fold_groups or gid not in FLOW_GROUPS:
                 continue
+            mem = FLOW_GROUPS[gid].members
             ref = (amap.get(r.id) or (None,))[0]
-            if not ref or ref not in FLOW_GROUPS[gid].members:
+            if not ref or ref not in mem:
                 continue
-            r.evidence = {**(r.evidence or {}), "fold": {"group": gid, "ref": ref},
+            if p.fold_lib_top_in_group:
+                cands = list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [])
+                if not cands or cands[0][0] not in mem:
+                    continue
+            ch, via = ref, "ref"
+            if p.fold_ruling_first and r.id in wins and gid in l3:
+                v = store.get(gid, l3[gid]["ver"], *wins[r.id])
+                if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
+                    ch, via = v["char"], "ruling"
+            r.evidence = {**(r.evidence or {}), "fold": {"group": gid, "ref": ref, "via": via},
                           "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
-            r.char, r.admit, r.channel, r.provenance, r.doubts = ref, True, "fold", "match", []
+            r.char, r.admit, r.channel, r.provenance, r.doubts = ch, True, "fold", "match", []
             n += 1
     return n
 
