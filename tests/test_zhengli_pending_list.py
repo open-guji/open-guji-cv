@@ -154,3 +154,47 @@ def test_recheck_puts_cells_back_with_note_and_prior(tmp_path):
     assert by["1:1:2"]["recheck"] is True and by["1:1:2"]["note"] == "几票不一致" and "prior" not in by["1:1:2"]
     assert "recheck" not in by["1:2:1a"]
     assert (out / "recheck_missing.tsv").read_text(encoding="utf-8").splitlines()[1:] == ["9:9:9\t切字改过"]
+
+
+def _flags(tmp_path: Path, rows: list[tuple], meta: dict | None = None) -> Path:
+    f = tmp_path / "seg_selfcheck.tsv"
+    head = "格号\tseg_kind\t特征\t放行\t通道\t机器字\t整理本字\t字块键\n"
+    f.write_text(head + "".join("\t".join(r) + "\n" for r in rows), encoding="utf-8")
+    if meta is not None:
+        f.with_name(f.name + ".meta.json").write_text(json.dumps(meta), encoding="utf-8")
+    return f
+
+
+def test_seg_flags_adds_admitted_clipped_and_tags_pending(tmp_path):
+    """同字对照自检（B1③）：已放行、clipped 的格加进单子（why seg_defect、src seg_selfcheck）；已在单上的只加旗；
+    frame_residue 不在送审类别里、只记旗；人裁通道的格不动。"""
+    prod = make_products(tmp_path)
+    seed = prod / "vol01" / "seed_admit" / "p0001.json"
+    doc = json.loads(seed.read_text(encoding="utf-8"))
+    doc["seed_admit"]["columns"][0]["chars"] += [{"id": "vol01:1:1:4", "admit": True}, {"id": "vol01:1:1:5", "admit": True}]
+    seed.write_text(json.dumps(doc), encoding="utf-8")
+    f = _flags(tmp_path, [
+        ("vol01:1:1:1", "clipped", "同字墨高 0.70 宽 1.00（参照 9 个） 边线压墨 0.00", "是", "match_ref", "甲", "甲", "p0001c01s1"),
+        ("1:1:2", "frame_residue", "同字墨宽 1.2", "否", "", "", "", "p0001c01s2"),
+        ("1:1:4", "frame_residue", "同字墨宽 1.2", "是", "match_ref", "乙", "乙", "p0001c01s4"),
+        ("1:1:5", "clipped", "同字墨高 0.7", "是", "human", "丙", "丙", "p0001c01s5"),
+    ], meta={"review_kinds": ["clipped"], "products": {}})
+    out = tmp_path / "out"
+    pl.main(base_args(prod, out) + ["--seg-flags", str(f)])
+    cells = {c["cell"]: c for c in json.loads((out / "001.pending.json").read_text(encoding="utf-8"))["cells"]}
+    assert sorted(cells) == ["1:1:1", "1:1:2", "1:2:1a"]
+    assert cells["1:1:1"]["src"] == "seg_selfcheck" and cells["1:1:1"]["why"] == ["seg_defect"]
+    assert cells["1:1:1"]["seg_kind"] == "clipped" and cells["1:1:1"]["seg_feature"].startswith("同字")
+    assert cells["1:1:2"]["seg_kind"] == "frame_residue" and "src" not in cells["1:1:2"] and "why" not in cells["1:1:2"]
+
+
+def test_seg_flags_stale_meta_exits(tmp_path):
+    """旗表 meta 记的产物指纹和现行产物对不上：过期，退出。"""
+    prod = make_products(tmp_path)
+    from open_guji_cv.products.store import ProductStore
+    have = ProductStore(prod).sha("vol01", "seed_admit", "p0001")
+    f = _flags(tmp_path, [], meta={"products": {"seed_admit": {"p0001": "0" * 64}}})
+    with pytest.raises(SystemExit, match="过期"):
+        pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])
+    f = _flags(tmp_path, [], meta={"products": {"seed_admit": {"p0001": have}}})
+    pl.main(base_args(prod, tmp_path / "out") + ["--seg-flags", str(f)])

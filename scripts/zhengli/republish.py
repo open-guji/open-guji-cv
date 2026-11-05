@@ -613,6 +613,19 @@ def raw_dir(ws: Path, book: str) -> Path | None:
     return next((p for p in sorted((ws / "data_full").glob(f"*/{book}")) if p.is_dir()), None)
 
 
+def seg_selfcheck_on(ws: Path) -> bool:
+    """这部书开没开出单同字对照自检（guji-manager `review/seg_defect.SELFCHECK_BOOKS`，按 book-text 条目 id）。
+    装的 manager 还没有这个入口（< 带 book_flags 的版本）就当没开，打一行提示。"""
+    try:
+        from guji_manager.review import seg_defect as sd
+    except ImportError:
+        return False
+    if not hasattr(sd, "book_opts"):
+        print("ⓘ 装的 guji-manager 没有同字对照自检（review/seg_defect.book_flags），这次不跑；要用先升级 manager")
+        return False
+    return bool((sd.book_opts(text_id_of(ws)) or {}).get("enabled"))
+
+
 def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
@@ -636,6 +649,13 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
                cwd=CV, env=env).returncode:
             # 10-21 殿本重发时这步静默出了 0 格相似字，单子照发，网站卡片上相似字全没了；现在出不来就停
             sys.exit("✗ guji audit alt 没出相似字（见上面的原因）；确实要出没有相似字的单子加 --no-alt")
+    seg_flags = out / "seg_selfcheck.tsv"
+    seg_flags.unlink(missing_ok=True)             # 每次出单现算，不复用旧表（格号会变）
+    if not getattr(a, "no_seg_selfcheck", False) and seg_selfcheck_on(ws):
+        # 同字对照自检（B1③，A20／A31 11-05）：书级开关在 guji-manager seg_defect.SELFCHECK_BOOKS，没开就不出表
+        if run([py, "-m", "guji_manager.review.seg_defect", book, "-w", ws, "--products", products, "--gate",
+                "--out", seg_flags], cwd=CV, env=env).returncode:
+            sys.exit("✗ 同字对照自检没跑通（见上面的原因）；确实要不带自检出单加 --no-seg-selfcheck")
     raw = out / "raw"
     cmd = [py, HERE / "pending_list.py", "--products", products, "--book", book, "--chapter", chapter, "--rev", rev,
            "--cv-commit", a.cv_commit or git_head(), "--out", raw]
@@ -645,6 +665,8 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
         cmd += ["--cards", cards]
     if getattr(a, "recheck", None):
         cmd += ["--recheck", a.recheck]
+    if seg_flags.exists():
+        cmd += ["--seg-flags", seg_flags]
     if run(cmd, env=env).returncode:
         return 1
     events = data_dir(ws) / "feedback" / "events"
@@ -1375,6 +1397,8 @@ def main(argv=None) -> int:
             p.add_argument("--no-alt", action="store_true", help="不跑 guji audit alt（单子上没有相似字）")
             p.add_argument("--fetch-zi", action="store_true", help="audit alt 去字统网补缓存（首次慢）")
             p.add_argument("--no-sprite", action="store_true")
+            p.add_argument("--no-seg-selfcheck", action="store_true",
+                           help="不跑同字对照自检（guji-manager seg_defect --gate；书没在它的 SELFCHECK_BOOKS 里开也不跑）")
             p.add_argument("--recheck", help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行、"
                                              "人裁过没有都放回单上，网站卡片头上显示说明；cellvotes draft 的 recheck.tsv 可直接给")
         if name == "issue":

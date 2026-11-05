@@ -32,6 +32,12 @@ GUJI-557：给了 --cards（cards(book, pages="all", only="all", skip_decided=Fa
 pending_route 不扣它们。格号在现行产物里没有的（多半重切过）不硬放，记进 `<out>/recheck_missing.tsv`。
 复审格可能已放行、卡片里不一定有字段，找不到卡片就只带格号和说明，不退出。
 
+同字对照自检（B1③，A20／A31 11-05 定）：`--seg-flags <tsv>` 读 guji-manager `review/seg_defect --gate` 出的旗表
+（同名 `.meta.json` 记送审类别 `review_kinds` 与各页 seed_admit／cell_shrink 产物指纹，对不上现行产物就判过期、退出）。
+已放行、通道不是 human、类别在 `review_kinds` 里的命中格加进单子：`why` 加 `seg_defect`，带 `seg_kind`、`seg_feature`、
+`src: "seg_selfcheck"`（不带 recheck，pending_route 照常扣掉已有人裁的格）；格数另记进 note，卡片里没有也放过。
+已在单上的格命中只加 `seg_kind`／`seg_feature` 当证据，不加 why、不改原因。
+
 字段名集中在下面常量。cv_version 为字符串（cv-vX.Y.Z）或 null；rev 须形如 <册>-r<n>。
 """
 from __future__ import annotations
@@ -112,6 +118,57 @@ def read_recheck(path: Path, book: str) -> dict[str, dict]:
     return out
 
 
+#: 同字对照自检放上单的格的来源标记（guji-manager `review/reasons.SELFCHECK_SRC`）
+SELFCHECK_SRC = "seg_selfcheck"
+
+
+def read_seg_flags(path: Path, products: Path, book: str) -> tuple[list[dict], list[str]]:
+    """旗表 → (行, 送审类别)。旁边有 `.meta.json` 就核产物指纹：meta 记了指纹、现行产物也有、两者不同＝过期，退出。"""
+    import csv
+    rows = list(csv.DictReader(path.open(encoding="utf-8"), delimiter="\t"))
+    for r in rows:                       # seg_defect 的格号带不带「册:」前缀都收（格号 = 页:列:格序[sub]）
+        r["格号"] = r["格号"].removeprefix(f"{book}:")
+    meta_p = path.with_name(path.name + ".meta.json")
+    kinds = ["clipped"]
+    if meta_p.exists():
+        meta = json.loads(meta_p.read_text(encoding="utf-8"))
+        kinds = list(meta.get("review_kinds") or kinds)
+        want = meta.get("products") or {}
+        if want:
+            from open_guji_cv.products.store import ProductStore
+            st = ProductStore(products)
+            for step, pages in want.items():
+                stale = [k for k, sha in pages.items() if sha and (st.sha(book, step, k) or sha) != sha]
+                if stale:
+                    sys.exit(f"旗表 {path} 过期：{step} {len(stale)} 页产物指纹对不上（如 {stale[:3]}），重跑 seg_defect --gate")
+    return rows, kinds
+
+
+def apply_seg_flags(cells: list[dict], rows: list[dict], kinds: list[str]) -> tuple[set[str], int]:
+    """把旗表并进单子（就地改 `cells`）。返回 (新放上单的格号, 已在单上加旗的格数)。"""
+    by_cell = {c[KEY_CELL]: c for c in cells}
+    added: set[str] = set()
+    tagged = 0
+    for r in rows:
+        cell, kind, feat = r["格号"], r["seg_kind"], r.get("特征") or ""
+        if cell in by_cell:
+            c = by_cell[cell]
+            if cell not in added and not c.get("seg_kind"):
+                c.update({"seg_kind": kind, "seg_feature": feat})
+                tagged += 1
+            continue
+        if r.get("放行") != "是" or r.get("通道") == "human" or kind not in kinds:
+            continue
+        by_cell[cell] = {KEY_CELL: cell, KEY_STATUS: STATUS_PENDING}
+        cells.append(by_cell[cell])
+        added.add(cell)
+    return added, tagged
+
+
+def selfcheck_fields(row: dict) -> dict:
+    return {"seg_kind": row["seg_kind"], "seg_feature": row.get("特征") or "", "src": SELFCHECK_SRC}
+
+
 def read_queue(path: Path, book: str) -> list[str]:
     """读审卡队列格号（去 <册>: 前缀、空行与 # 注释，去重保序）。"""
     out: list[str] = []
@@ -143,6 +200,8 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--cards", type=Path, default=None, help="cards(cls='*') 的卡片列表 JSON；给了就并入 0.2 字段")
     ap.add_argument("--recheck", type=Path, default=None,
                     help="复审清单（格号<TAB>说明<TAB>旧人裁 id<TAB>旧人裁的字）：这些格不论放没放行都放回单上")
+    ap.add_argument("--seg-flags", type=Path, default=None,
+                    help="同字对照自检旗表（guji-manager review/seg_defect --gate 出的 tsv）：已放行的命中格改送人审")
     ap.add_argument("--cv-root", type=Path, default=None, help="open-guji-cv 根目录（--cards 时用来 import proof_fields；缺省本仓根）")
     ap.add_argument("--out", type=Path, default=None)
     ap.add_argument("--ws", default=None, help="中心库工作区 id（如 siku-zongmu）；与 --text-id 一起代替 --out")
@@ -197,11 +256,20 @@ def main(argv: list[str] | None = None) -> None:
                 cells.append(by_cell[cell])
         cells.sort(key=lambda c: cell_key(c[KEY_CELL]))
         note += f"；复审 {len(recheck) - len(rc_missing)} 格（现行切分里没有的 {len(rc_missing)} 格不放）"
+    seg_rows: dict[str, dict] = {}
+    seg_added: set[str] = set()
+    if a.seg_flags:
+        rows, kinds = read_seg_flags(a.seg_flags, a.products, a.book)
+        seg_added, tagged = apply_seg_flags(cells, rows, kinds)
+        seg_rows = {r["格号"]: r for r in rows if r["格号"] in seg_added}
+        cells.sort(key=lambda c: cell_key(c[KEY_CELL]))
+        note += f"；同字对照自检 {len(seg_added)} 格（已在单上加旗 {tagged} 格）"
     if a.cards:
         sys.path.insert(0, str(a.cv_root))
         from guji_manager.review.proof_fields import pending_fields
         by_id = {c["id"]: c for c in json.loads(a.cards.read_text(encoding="utf-8"))}
-        lost = [c[KEY_CELL] for c in cells if f"{a.book}:{c[KEY_CELL]}" not in by_id and c[KEY_CELL] not in recheck]
+        lost = [c[KEY_CELL] for c in cells if f"{a.book}:{c[KEY_CELL]}" not in by_id and c[KEY_CELL] not in recheck
+                and c[KEY_CELL] not in seg_added]
         if lost:
             sys.exit(f"{len(lost)} 个待审格在卡片文件里找不到（如 {lost[:5]}）：卡片口径不对？")
         for c in cells:
@@ -210,6 +278,10 @@ def main(argv: list[str] | None = None) -> None:
     for c in cells:                      # 复审字段最后写：卡片里的同名字段不能盖掉它
         if c[KEY_CELL] in recheck:
             c.update({"recheck": True, **recheck[c[KEY_CELL]]})
+        if c[KEY_CELL] in seg_added:     # 自检字段同理；why 并上 seg_defect
+            c.update(selfcheck_fields(seg_rows[c[KEY_CELL]]))
+            why = list(c.get("why") or [])
+            c["why"] = why + ["seg_defect"] if "seg_defect" not in why else why
     src_rev = products_source_rev(a.products, a.book)
     doc = {
         KEY_REV: a.rev,
