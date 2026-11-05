@@ -228,6 +228,9 @@ _TAIL_ONE_ABS = ("列端孤「一」绝对量逃生口 tail_one_abs（cell_shrin
                  "列端渣格闸按往里一格是字才放）：开关关着时 cell_shrink 在全唐文 012 p20/31/33/80/89/146（基底产物包 r13）上与 origin/dev "
                  "产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
 
+_LAYOUT_CUTS = ("格位表人定格线 cuts（row_segment，表行写了 cuts／col_h 才照线切，没写的列不变）：row_segment 在全唐文 012 p20/31/33/80/89/146、"
+                 "013 p140/147（本机 dev 从 border_detect 起出上游）上与 origin/dev b148b2c 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -970,6 +973,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7fc8b038633f8c23a0421251004cbc13ccbf6a875a44bb370258e7c91abb11d0",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
           evidence=_TAIL_ONE_ABS),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="54dc154cfba6db8cfd8010a1747b6e6f647d16959ff49818f1500b40e0670514",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence=_LAYOUT_CUTS),
 )
 
 
