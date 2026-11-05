@@ -183,7 +183,7 @@ def test_resolve_pua_code_by_window(tmp_path):
     idx = PuaIndex.from_source([p])
     assert resolve_pua_code(idx, "天地玄黄宇宙", "日月盈昃辰宿") == "daizhige:U+EA96"
     assert resolve_pua_code(idx, "寒来暑往秋收", "冬藏閏餘成歲") == "daizhige:U+EB10"
-    assert resolve_pua_code(idx, "天地玄黄宇宙", "日月盈昃辰宿".replace("日月盈昃", "山水木石")) == "daizhige:U+EA96"  # 容差
+    assert resolve_pua_code(idx, "天地玄黄宇宙", "日月盈昃辰宿".replace("日月", "山水")) == "daizhige:U+EA96"  # 容差
     assert resolve_pua_code(idx, "甲乙丙丁戊己", "庚辛壬癸子丑") is None     # 对不上
     assert resolve_pua_code(idx, "宇", "日") is None                       # 窗口太短
     cols2 = [_col(0, {"t": "text", "start": 0, "s": "天地玄黄宇宙日月盈昃辰宿天地玄黄宇宙日月盈昃辰宿"})]
