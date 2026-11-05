@@ -255,3 +255,28 @@ def test_borrowed_label_without_standard_layout(tmp_path):
     from open_guji_cv.clustering.glyph_db import borrowed_label
     assert borrowed_label(tmp_path / "some_store") == str(tmp_path / "some_store")
     assert borrowed_label(tmp_path / "some_store", "human").endswith("some_store#human")
+
+
+def test_scope_human_plus_auto_takes_vision_confirmed_auto(two, tmp_path):
+    """human+auto（全唐文 11-05 提）：人裁加「看图确认过」的自动刻例；没确认的机器入库、证据坏掉的不借。"""
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    _, qtw = two
+    db = GlyphDB(tmp_path / "lend2.db")
+    db.set_book_edition("book-l2")
+    db.admit_instance("v2:v009:1:1:1", "以", _png(0), provenance="human")
+    db.admit_instance("v2:v009:1:1:2", "取", _png(1), provenance="auto",
+                      evidence={"batch": "b1", "confirmed": "claude_vision"})
+    db.admit_instance("v2:v009:1:1:3", "令", _png(2), provenance="auto", evidence={"batch": "b2"})
+    db.admit_instance("v2:v009:1:1:4", "今", _png(3), provenance="match", evidence={"confirmed": "claude_vision"})
+    out = tmp_path / "lend2"
+    export_store(db, out)
+    db.close()
+    for scope, want in (("human", {"v2:v009:1:1:1"}),
+                        ("human+auto", {"v2:v009:1:1:1", "v2:v009:1:1:2"})):
+        rebuild_from_store(qtw, tmp_path / f"{scope}.db", extra_stores=[borrowed_store(out, scope)])
+        d = GlyphDB(tmp_path / f"{scope}.db")
+        assert {r[0] for r in d.conn.execute("SELECT instance_id FROM borrowed")} == want
+        d.close()
+    from open_guji_cv.steps.glyph_match import borrow_fingerprint
+    assert borrow_fingerprint(tmp_path / "human+auto.db") == "lend2#human+auto"
+    assert borrowed_store(out, "human+auto").scope == "human+auto"
