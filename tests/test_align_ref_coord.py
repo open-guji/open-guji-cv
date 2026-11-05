@@ -81,6 +81,18 @@ def test_jiazhu_rows_map_a_and_b():
     assert [got[f"id{s}b"] for s in range(3, 7)] == ["採", "進", "本", ""]
 
 
+def test_grid_note_blank_keeps_slot():
+    """逐列本小注里的全角空格占一个字位：两条小注并成一段（「無卷數」＋「江西廵撫採進本」），
+    右行第 4 位空、「江西」在第 5、6 位（殿本 vol87 p61 c7，A22 11-05）。"""
+    (ln,) = C.parse_lines("#@ x\n楊端潔集<無卷數\u3000江西|廵撫採進本>")
+    notes = [(u.a, u.b) for u in ln.units if u.kind == "n"]
+    assert notes == [("無", "廵"), ("卷", "撫"), ("數", "採"), ("", "進"), ("江", "本"), ("西", "")]
+    assert ln.text == "楊端潔集無卷數江西廵撫採進本"
+    # 光盤版（沒有 #@）照舊：小注裡的空白不算字位
+    (old,) = C.parse_lines("楊端潔集<無卷數\u3000江西|廵撫採進本>")
+    assert [(u.a, u.b) for u in old.units if u.kind == "n"][3] == ("江", "進")
+
+
 def test_fallback_when_extra_cell_falls_inside_text_span():
     """多出来的格落在文字范围里（切多了一格）——不是假格，是格数对不上，退回。"""
     (ln,) = C.parse_lines("元許衡撰")
