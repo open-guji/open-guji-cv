@@ -894,6 +894,16 @@ ENTRIES: tuple[Equiv, ...] = (
           new='e59ec85463defe2b1e0b731685b98d73c71bfae3c0818544291f571682d4cb21',
           old='623f6703f114d2fea9fc297804ded071f066aacc552895ca114f3d8a20145fdb',
           evidence='seed_admit 在 012 13 页（--pages 5,20,35,50,65,80,95,110,125,140,155,170,185）上与 origin/dev 产物逐字节相同（group_flow_provisional_to／ref_lib_coord_dissent／replace_form_edge_exclude 缺省关）'),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="484efb123a713cd8ce1e1da85c97e486e5aab4f3e619f6ede43c18bd1bafda9f",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence="inner_frame_only 列端补救（缺省关；列首条带开到内框线、挨线的首末格地盘外伸、贴线碎块只剥薄片（没拟出内线的一端框渣也只剥薄片）、Step2 削掉的列端行在线字侧从 column_raw 补回，A22 11-05）："
+                   "三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，"
+                   "cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
+          old="1b7b7a91ec05c6fe447c6dbbea470af9817cf3e9bfaac2e50fd2547aedc2f74d",
+          evidence="inner_frame_only 列端补救（缺省关；同上一条，A22 11-05）：三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；合入 dev（含 A20 再生字块记忆）后 vol30 28 页两种配置再核一遍同样逐字节相同；2026-11-05"),
 )
 
 
