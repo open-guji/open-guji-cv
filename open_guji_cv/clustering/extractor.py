@@ -1582,6 +1582,7 @@ FRAME_LINE_FRINGE = 0.06   # strip_frame_line(grow=True)：粗框毛边最多这
 # 压在线位上的字底横（列尾「土」「士」）是一整笔，不能当淡线剥。
 FRAME_LINE_DASHES = 3
 FRAME_LINE_TOL = 0.04
+INNER_REACH = 0.04          # inner_reach_edges：列端剥框线只认离整页内线字侧边沿这么多格高以内的线行
 FRAME_LINE_JZ_REACH = 0.12  # 夹注格（cell_shrink.jiazhu_strip_rules）列端只认离版框这么多格高以内的线
 FRAME_LINE_FAINT_COV = 0.1
 FRAME_LINE_FAINT_SPAN = 0.6
@@ -3265,11 +3266,16 @@ class CharExtractor:
                     fy = frame_in_bot if idx == tail_cell else frame_in_top
                     if paired:      # 夹注格只认贴着版框的线：两行小字并排的横画离框总有一段
                         reach = min(float(reach or 1e9), FRAME_LINE_JZ_REACH)
+                    f_reach = None if not reach else (float(fy) - (sy0 + y0), float(reach) * cell_h_ref)
+                    # 整页拟出了内框细线（cell_shrink inner_frame_local）：只认线字侧边沿 INNER_REACH 格高以内的线行。
+                    # 线早已抹白，再往上认出来的「线」是字脚——列尾「人」的右捺尾平平一长条，被当框线剥掉（006:118:9:22）
+                    ire = (gmeta.get("inner_reach_edges") or {}).get("bottom" if idx == tail_cell else "top")
+                    if ire is not None:
+                        f_reach = (float(ire) - (sy0 + y0), INNER_REACH * cell_h_ref)
                     patch = strip_frame_line(patch, ltop - y0, lbot - y0, left_x - sx0, right_x - sx0,
                                              bottom=idx == tail_cell,
                                              line_ys=tuple((float(v) - (sy0 + y0), float(th)) for v, th in lys),
-                                             frame_reach=None if not reach else
-                                             (float(fy) - (sy0 + y0), float(reach) * cell_h_ref),
+                                             frame_reach=f_reach,
                                              grow=bool(gmeta.get("frame_line_grow")))
                     if jz_rules and paired:
                         # 每半格各认一道框线（写本内框细线在两行之间断开，整格判不出）

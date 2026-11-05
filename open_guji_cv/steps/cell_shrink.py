@@ -311,9 +311,11 @@ class CellShrinkStep(Step):
             kw = {"max_thick": inner_thick_limit(cell_h)} if local else {}
             line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side,
                                         profile_fallback=bool(ctx.params_for(self).inner_frame_profile),  # type: ignore[attr-defined]
-                                        **kw)
+                                        **({**kw, "seed_fallback": True} if local else {}))
             if line is not None and local:
                 line = localize_inner_line(ink, line, cell_h, **kw)
+                if line.via == "seed":      # 种子线没贴上真线，不用
+                    line = None
             if line is not None:
                 out[side] = line
         return out
@@ -351,20 +353,27 @@ class CellShrinkStep(Step):
                     cc.col: [(edge[cc.col] - d if bottom else edge[cc.col] + d, th) for d, th in half]
                     for cc in cols if edge[cc.col] is not None}
         p = ctx.params_for(self)
-        if p.inner_frame_cut and p.inner_frame_only:  # type: ignore[attr-defined]
+        only = bool(p.inner_frame_cut and p.inner_frame_only)  # type: ignore[attr-defined]
+        if p.inner_frame_cut and (p.inner_frame_only or p.inner_frame_local):  # type: ignore[attr-defined]
             # 整页拟出内框细线的边（cut_inner_frame 已抹白）：extractor 列端不再逐格剥框线行；抬头列不抹上框，上框照旧
             wins: PageWindows = ctx.product("column_windows", page)
             inner = self._inner_frame_lines(ctx, page, cells, wins)
-            out["debris_thin_only"] = {cc.col: True for cc in cells.columns}    # 没拟出内线的一端：框渣也只剥薄片
+            if only:
+                out["debris_thin_only"] = {cc.col: True for cc in cells.columns}    # 没拟出内线的一端：框渣也只剥薄片
+            # inner_frame_local（不开 inner_frame_only）：列端照旧逐格剥框线，但只认贴着整页内线的线行（inner_reach_edges）
+            ekey = "inner_edges" if only else "inner_reach_edges"
             if inner:
-                out["inner_sides"], out["inner_edges"] = {}, {}
+                out[ekey] = {}
+                if only:
+                    out["inner_sides"] = {}
                 for cc in cells.columns:
                     wrec = wins.column(cc.col)
                     if wrec is None:        # 没有列窗就没抹线（_column_chars 同条件）
                         continue
                     raised = bool(wrec.raised or wrec.head_raise_inner_y)
                     sides = [s for s in inner if not (s == "top" and raised)]
-                    out["inner_sides"][cc.col] = sides
+                    if only:
+                        out["inner_sides"][cc.col] = sides
                     # 线字侧边沿在列图里的 y（列宽上取最靠字的那端）：extractor 列端剥框渣只剥贴着它的
                     img = imgs.get(cc.col)
                     if img is None:
@@ -377,7 +386,7 @@ class CellShrinkStep(Step):
                         guess = img.shape[0] - 1.0 if side == "bottom" else 0.0
                         ys = [_col_y_for_page_y(mapper, float(x), guess, inner[side]) for x in (0.0, (w - 1) / 2.0, w - 1.0)]
                         edges[side] = float(min(ys) if side == "bottom" else max(ys))
-                    out["inner_edges"][cc.col] = edges
+                    out[ekey][cc.col] = edges
         return out
 
     def _extract_column(self, ctx: RunContext, page: int, cc: ColumnCells,
