@@ -131,6 +131,12 @@ guji db import --from exp/GUJI-606-try -w <工作区> --dry-run   # 实验结论
   带上它重建 glyph.db；副本旁 `.borrowed-state.json` 记拉到的 rev，被借工作区没新写入就不重拉、不重建。
   借来的东西不算本地改动、不会被 push。`guji glyph-db rebuild` 也认工作区名（没 pull 过就报错让先 pull）。
   写路径的条目（旧布局）照旧当本地目录；借自己报错。借来的人裁记成 `borrowed_human`（S3 修法），不当铁证。
+  **借法（2026-11-05，借库参照方案缺口 1、2）**：条目除了写名字，也可写对象 `{from: <名>, scope: human, pin: <N>}`。
+  `scope: human` 只借被借库 `admissions.provenance='human'` 的刻例，`scope: human+auto` 再加 `provenance='auto'` 且 `evidence.confirmed='claude_vision'`（机器放行后逐张看图确认过）的自动刻例（缺省 `all`＝全部，旧行为；被借库没有准入台账就拒借，不静默借成空库）；
+  `pin: N` 钉被借库的字形库快照 g<N>（出处见 manager `glyph-db snapshot`），读那一版的内容而不是最新。
+  cv 一侧：`clustering.glyph_db.borrowed_store(路径, scope, tag)` 给 `rebuild_from_store(extra_stores=…)`；非缺省借法把记号写进
+  `borrowed.store` 的库名（`名#human~<快照摘要>`），`glyph_match.borrow_fingerprint` 取库名，所以**不改 `glyph_match` 一行**，
+  23 步 `code_hash` 逐位不变，缺省借法的库、指纹、产物都不变；换借法或换钉的摘要才判 `glyph_match` 过期。
 - **共享层只读**：`corpus-base` 和 `glyphlib-*` 工作区，普通 `db push`／`db sync` 一律拒绝；只有升级脚本
   （`push(..., shared_writer=True)`）能写，`glyphlib-*` 还只能写一次（发布过就不可改，出新版开新工作区）。
 - 直连 Postgres 的 `PgSource`（服务器、测试用）能读表，拿不到 R2 的图，要配合预先填好的缓存。

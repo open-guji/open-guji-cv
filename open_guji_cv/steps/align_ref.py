@@ -541,6 +541,19 @@ class AlignRefParams(BaseModel):
     六格没有默认字。题列整串合固定式、格数＝字数，位置不可能错。冲突格仍记进 `coord_conflict_ids`。
     False＝关（缺省，不进参数哈希）。"""
 
+    coord_shift_needs_pair: bool = False
+    """邻格错位要两格互证（2026-11-04，全唐文 r10 册 006 p81 列 3）：孤立弱冲突的「非邻格错位」一条，原来只要现役字等于
+    邻格的坐标字就算整列错一位、判强冲突、整列退回。真的整列错一位，邻格本身的现役 equal 也会跟着错开；邻格没有现役
+    equal（或现役 equal 与它自己的坐标字相同）时，这一格只是现役 difflib 把形近字（紛／綸）单字孤立对错了。开了这条，
+    这种单边「邻格错位」照孤立弱冲突算（仍要整列只此一格、同列至少 `COORD_WEAK_MIN_AGREE` 格全同）。
+    False＝关（缺省，不进参数哈希）。"""
+
+    coord_pair_no_sub: bool = False
+    """`coord_shift_needs_pair` 不管夹注半格（2026-11-05，全唐文 r11 册 007 p47 列 3）：冲突格或那个邻格是夹注半格
+    （sub a／b）时不走两格互证，照原「邻格错位」判。夹注右行／左行的格序与整理本单元序可以差一格（「其闕／六」坐标按行序给成
+    其／闕／六），现役在半格上又多半没有 equal，两格互证在这里会把真错位当孤立认错放过。只在 `coord_shift_needs_pair` 开时起作用。
+    False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -561,6 +574,10 @@ class AlignRefParams(BaseModel):
             d.pop("coord_dp", None)
         if isinstance(d, dict) and not self.coord_title_trust:
             d.pop("coord_title_trust", None)
+        if isinstance(d, dict) and not self.coord_shift_needs_pair:
+            d.pop("coord_shift_needs_pair", None)
+        if isinstance(d, dict) and not self.coord_pair_no_sub:
+            d.pop("coord_pair_no_sub", None)
         if isinstance(d, dict) and not self.coord_dp_flat:
             d.pop("coord_dp_flat", None)
         if isinstance(d, dict) and self.alt_select == "align":
@@ -747,7 +764,9 @@ class AlignRefStep(Step):
                          title_formula=p.coord_title_formula,
                          pin_line=(page_pin(p, ctx.book.id, page) or (None, None))[1],
                          relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
-                         dp_flat=p.coord_dp_flat)
+                         dp_flat=p.coord_dp_flat,
+                         **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
+                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}))
             cells = _opt(ctx, "cells", page)
             if match.alt_columns and cells is not None and cells.alt_columns:
                 _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
@@ -1422,7 +1441,9 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  p.corpus, title_formula=p.coord_title_formula,
                  pin_line=(page_pin(p, book, page) or (None, None))[1],
                  relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
-                 dp_flat=p.coord_dp_flat)
+                 dp_flat=p.coord_dp_flat,
+                 **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
+                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}))
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
@@ -1464,7 +1485,8 @@ def _id_col(rid: str) -> int | None:
 def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
-                 title_trust: bool = False, dp_flat: bool = False) -> None:
+                 title_trust: bool = False, dp_flat: bool = False,
+                 shift_needs_pair: bool = False, pair_no_sub: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1559,7 +1581,9 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
             continue
         is_title = title_re is not None and bool(
             title_re.fullmatch("".join(ch for _i, _sl, _sub, ch, _g in r.recs)))
-        why = _coord_conflict(r.recs, legacy, same, title=is_title, trust=title_trust and is_title)
+        why = _coord_conflict(r.recs, legacy, same, title=is_title, trust=title_trust and is_title,
+                              **({"shift_needs_pair": True} if shift_needs_pair else {}),
+                              **({"pair_no_sub": True} if pair_no_sub else {}))
         if why:
             if not _take_dp(cc, _units, _ln, why):
                 res.coord_fallback[str(cc.col)] = why
@@ -1597,7 +1621,8 @@ COORD_WEAK_MAX = 1
 COORD_WEAK_MIN_AGREE = 5
 
 
-def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: bool = False) -> str:
+def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: bool = False,
+                    shift_needs_pair: bool = False, pair_no_sub: bool = False) -> str:
     """坐标对位这一列与别的强证据打架 → 整列退回，返回原因；不打架返回空串。
 
     vol03 全册实测（未加这道闸时）：坐标对位与现役对位不一致的 83 格落在 15 列上，
@@ -1613,6 +1638,20 @@ def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: 
     `title`（本列坐标字整串合卷首题式，`coord_title_formula`）：孤立弱冲突不计数、不看邻格，
     多少格都不退回——题列不会分行错位，现役在印章乱码里零星对上的单字才是错的。强冲突照旧退回。"""
     chs = [r[3] for r in recs]
+    ids = [r[0] for r in recs]
+
+    def _nb_shift(k: int, j: int, lc: str) -> bool:
+        """现役字 `lc` 等于邻格 j 的坐标字：算不算整列错一位的证据。`shift_needs_pair` 关时只看这一条；
+        开时还要邻格 j 自己的现役 equal 也错开（与它的坐标字不同）——单边对上的只是孤立认错。"""
+        if not (0 <= j < len(chs)) or chs[j] != lc:
+            return False
+        if not shift_needs_pair:
+            return True
+        if pair_no_sub and (recs[k][2] or recs[j][2]):   # `coord_pair_no_sub`：夹注半格照原判
+            return True
+        lj = legacy.get(ids[j])
+        return lj is not None and lj.align_op == "equal" and lj.align_char != chs[j]
+
     agree, weak, strong = 0, [], []
     for k, (i, _sl, _sub, ch, _g) in enumerate(recs):
         lg = legacy.get(i)
@@ -1622,8 +1661,8 @@ def _coord_conflict(recs, legacy: dict, same: dict, title: bool = False, trust: 
             elif ch and lg.ref_run <= COORD_WEAK_RUN and title:
                 continue
             elif (ch and lg.ref_run <= COORD_WEAK_RUN
-                  and not (k > 0 and chs[k - 1] == lg.align_char)
-                  and not (k + 1 < len(chs) and chs[k + 1] == lg.align_char)):
+                  and not _nb_shift(k, k - 1, lg.align_char)
+                  and not _nb_shift(k, k + 1, lg.align_char)):
                 weak.append(i)
             else:
                 strong.append((i, ch, lg.align_char))

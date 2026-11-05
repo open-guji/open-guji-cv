@@ -156,6 +156,16 @@ class BorderDetectParams(BaseModel):
     （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
     `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
 
+    top_weak_ratio: float = 0.3
+    """上版框弱线护栏的门槛（1.20，`seg/lines._weak_top_guard`）：选中的上框线横向墨量不到带里最强横线的这个比例才动。
+    缺省 0.3 是殿本定的（16516 页只动 15 页；再高会把抬头页主框换成抬头框顶线）。写本（史記文淵閣本）框条下有一道细虚线、
+    首行字顶齐平，线落在字顶时墨量是最强线的 0.30–0.42，册配置写 `params: {border_detect: {top_weak_ratio: 0.45,
+    top_weak_floor: 0.25}}`。缺省值不进参数 dump。"""
+
+    top_weak_floor: float | None = None
+    """弱线护栏改取哪条线（1.20）：None＝取投影 ≥ `top_weak_ratio`、在选中线之上最靠页心的一条，挪不够 0.021 页高就不动（殿本）；
+    给了值＝先只留离选中线 ≥0.021 页高、投影 ≥ 这个比例的线，再取最靠页心的一条（写本：要越过字顶附近的碎横、落到框条下那道细虚线）。"""
+
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -176,6 +186,10 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
+        if isinstance(d, dict) and self.top_weak_ratio == 0.3:
+            d.pop("top_weak_ratio", None)
+        if isinstance(d, dict) and self.top_weak_floor is None:
+            d.pop("top_weak_floor", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         return d
@@ -184,7 +198,7 @@ class BorderDetectParams(BaseModel):
 @register_step
 class BorderDetectStep(Step):
     spec = StepSpec(
-        id="border_detect", title="Step1 边框探测", version="1.19", unit="page",   # 1.19：列宽重拟合第一遍拟不出时，墨投影减本页底色（20 分位）再扣墨、找空白，重拟一次（第一遍拟得出的页不变）：满页霉点／污渍的页字缝里也有墨，真线全被扣成负分、DP 无解（第 3 轮 vol43 p1 卷首页漏两条界行、只剩 8 列；pitch_rescue 2.1）；1.18：列宽重拟合换了线后，在新的一串直线上重拟合三段折线（`border.refit_bends`）；旧折线形状是在自由模式错的线网上拟的、护栏借形状把真线拗弯，殿本 r3 vol46 p78 左三条线下半段斜进字里；1.17：「横带按文字缝重定位」后的线，沿线压着细墨（界行）的行不许比直线少，少了不重定位（A20 11-03 报 vol84 p101/112、vol21 p68、vol40 p173：真界行直、单条线弯 20–30px 斜穿字；seg/polyline._hit_frac）；1.16：列宽均匀约束（doc/design/列宽均匀约束.md，Sheldon 11-03 定为强约束）：列距救援 7 路并成一路 `seg/columns.fit_columns`（候选：自由线、网格线、界行残段、淡界行细峰、字间空白中点、外推／补宽外框线，扣两侧墨后 DP 挑一串列宽全在带里的线）；带与 strict/loose/off 由册配置 `columns:` 定；出带的列打 flag `col_width_out_of_band`；1.15：列距救援三处放宽（殿本 r2 待审 S 类 4 页、90 格）：frame 路残段搜到外列宽进带为止（vol73 p110、vol94 p123 外框线挑在外列字心）；extend 路外推出图边截到图边（vol86 p151 折痕劈列、末列贴图边）；snap 路吸不动时按合格邻列列距推线再吸（vol44 p108 假线在字心、真界行断续）；1.14：列距救援加最后一路 pad：外列偏窄、外侧既没版框残段也没字（版框没印出来），外框线按中位列距外推（全唐文 07 p47、13 p141、11 p74、05 p160 首／末列被劈半）；前几路救得了的页结果不变；1.13：下版框次选峰在加宽的曲线上量（seg/lines.find_horizontal_border），不再取窗边截断峰；末行字身被当下框、整页丢末行的页（vol84 p89、vol85 p94 等 vol20–99 共 54 页）改对；1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，books/siku_zongmu/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
+        id="border_detect", title="Step1 边框探测", version="1.20", unit="page",   # 1.20：上版框弱线护栏（seg/lines._weak_top_guard）：选中的线横向墨量不到带里最强横线的 0.3、上方 ≥0.021 页高处另有够强的横线，改取那条；横墨在带里峰最高的那档倾角上量（选中线倾角搜飞时不被它带偏，vol93 p18）（粗框条／双边框页上版框落到首行字顶，殿本全 99 册 16516 页只动 15 页：vol56 p43、vol63 p8、vol82 p217、vol93 p18、vol15 p151、vol38 p161 等，下游整页假抬头框、真抬头列判不出，或整列少切一格）；1.19：列宽重拟合第一遍拟不出时，墨投影减本页底色（20 分位）再扣墨、找空白，重拟一次（第一遍拟得出的页不变）：满页霉点／污渍的页字缝里也有墨，真线全被扣成负分、DP 无解（第 3 轮 vol43 p1 卷首页漏两条界行、只剩 8 列；pitch_rescue 2.1）；1.18：列宽重拟合换了线后，在新的一串直线上重拟合三段折线（`border.refit_bends`）；旧折线形状是在自由模式错的线网上拟的、护栏借形状把真线拗弯，殿本 r3 vol46 p78 左三条线下半段斜进字里；1.17：「横带按文字缝重定位」后的线，沿线压着细墨（界行）的行不许比直线少，少了不重定位（A20 11-03 报 vol84 p101/112、vol21 p68、vol40 p173：真界行直、单条线弯 20–30px 斜穿字；seg/polyline._hit_frac）；1.16：列宽均匀约束（doc/design/列宽均匀约束.md，Sheldon 11-03 定为强约束）：列距救援 7 路并成一路 `seg/columns.fit_columns`（候选：自由线、网格线、界行残段、淡界行细峰、字间空白中点、外推／补宽外框线，扣两侧墨后 DP 挑一串列宽全在带里的线）；带与 strict/loose/off 由册配置 `columns:` 定；出带的列打 flag `col_width_out_of_band`；1.15：列距救援三处放宽（殿本 r2 待审 S 类 4 页、90 格）：frame 路残段搜到外列宽进带为止（vol73 p110、vol94 p123 外框线挑在外列字心）；extend 路外推出图边截到图边（vol86 p151 折痕劈列、末列贴图边）；snap 路吸不动时按合格邻列列距推线再吸（vol44 p108 假线在字心、真界行断续）；1.14：列距救援加最后一路 pad：外列偏窄、外侧既没版框残段也没字（版框没印出来），外框线按中位列距外推（全唐文 07 p47、13 p141、11 p74、05 p160 首／末列被劈半）；前几路救得了的页结果不变；1.13：下版框次选峰在加宽的曲线上量（seg/lines.find_horizontal_border），不再取窗边截断峰；末行字身被当下框、整页丢末行的页（vol84 p89、vol85 p94 等 vol20–99 共 54 页）改对；1.12：三段折线加验收「折线沿线墨不许比直线多 0.08」，否则这条线退回直线（新图源界行淡，折点被字竖笔勾走、整页线中段平移进字里：vol70 p77、vol59 p58、vol24 p67、vol40 p34）；1.11：列距救援的网格路只护附近有界行残段的旧线（换图源 vol40 新 p1 卷首大印页，印泥里自由模式连挑三条字心线）；1.10：列距救援加第 4 路 snap：出带列两边的线吸到淡界行细峰／字间空白中点（vol24 p69、vol29 p28、vol37 p76、vol48 p121），网格线数比自由模式多也照收（vol45 p54）；1.9：列距救援加第 0 路「窄外列吸到外侧版框」，并不许任何一路把贴版框的旧外列甩出网（v0.5.17 首跑 vol40 p14、vol46 p118/p148：fuse 外推进版心条、整网平移一列丢真列）；1.8：fuse 的候选池加界行残段（竖墨线连续 ≥ 0.8 列宽，vol16 p8 全页小字雙行、界行只在天头那一截），外推外框线就近吸到残段上；1.7：列距救援第三条路 fuse（自由线＋网格线＋外推外框线拼一串等宽列，vol20 p113）；1.6：列距救援 pitch_rescue（缺省开，books/siku_zongmu/pitch_rescue）； 1.5：外框线也按横带证据回直线（border_geometry.snap_verticals_to_evidence）；1.4：抬头框字凸出判据（border_geometry._raised_text_top）；1.3：抬头块向邻列延伸（border_geometry._extend_head_raise）
         consumes=("raw_page",), produces=("borders", "line_index"), params=BorderDetectParams,
         code_deps=("open_guji_cv.books.siku_zongmu.border", "open_guji_cv.seg.polyline", "open_guji_cv.seg.frame_types", "open_guji_cv.seg.grid", "open_guji_cv.seg.lines",
                    "open_guji_cv.books.siku_zongmu.column_types", "open_guji_cv.books.siku_zongmu.column_pair_merge",
@@ -234,6 +248,7 @@ class BorderDetectStep(Step):
                                   frame_layers=ctx.book.frame_layers,
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
+                                  top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
                                   **lattice_kw)
 
         res = _detect(cols)

@@ -59,6 +59,7 @@ from open_guji_cv.clustering.match import GlyphMatcher  # noqa: E402
 from open_guji_cv.clustering.near_shape import NearShapeConfig  # noqa: E402
 from open_guji_cv.clustering.variants import VariantMap  # noqa: E402
 from open_guji_cv.core.workspace import corpus_path  # noqa: E402
+from eval_fold import same as _fold_same  # noqa: E402  己已巳、日曰图上分不开，算同字（2026-11-05）
 
 
 # 已记账的金标标签问题（与 normalize 回归门的 known_defect 同思路：不进
@@ -170,10 +171,10 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
             # --near-shape：近形决胜升档，与 Step5-a 同口径（金标库全当人裁）
             r = dataclasses.replace(r, verdict="same", char=ns["winner"], matched_id="near_shape")
             n_near += 1
-            n_near_ok += ns["winner"] == x["char"]
+            n_near_ok += _fold_same(ns["winner"], x["char"])
         if r.verdict == "same":
             matched += 1
-            ok = r.char == x["char"]
+            ok = _fold_same(r.char, x["char"])
             correct += ok
             sem_ok = ok or vmap.semantic(r.char) == vmap.semantic(x["char"])
             sem_correct += sem_ok
@@ -204,7 +205,7 @@ def run(matcher: GlyphMatcher, inst, patches, feats, tag: str,
                     cc.record(pg, col, idx, d.char)   # 阈下也当前最优字
                 if d.char is not None and d.margin >= branches.threshold:
                     ctx_n += 1
-                    c_ok = d.char == x["char"]
+                    c_ok = _fold_same(d.char, x["char"])
                     ctx_ok += c_ok
                     c_sem = c_ok or vmap.semantic(d.char) == vmap.semantic(x["char"])
                     ctx_sem_ok += c_sem

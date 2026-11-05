@@ -158,3 +158,125 @@ def test_export_keeps_own_instances_under_borrowed_only_source(two, tmp_path):
     assert not (out / "events" / "v2.jsonl").exists()        # 借来 source 的事件照旧不导
     r = rebuild_from_store(out, tmp_path / "own.db")          # 导出再重建：本书刻例在
     assert r["instances"] == 1
+
+
+# ---- 借法：scope=human 与钉号记号（借库参照方案缺口 1、2，2026-11-05）----
+
+def _mixed_store(tmp_path):
+    """被借库里有人裁和机器入库两种来源。"""
+    db = GlyphDB(tmp_path / "mix.db")
+    db.set_book_edition("book-m")
+    db.admit_instance("v2:v009:1:1:1", "以", _png(0), provenance="human")
+    db.admit_instance("v2:v009:1:1:2", "取", _png(1), provenance="match")
+    db.admit_instance("v2:v009:1:1:3", "令", _png(2), provenance="align")
+    out = tmp_path / "mix"
+    export_store(db, out)
+    db.close()
+    return out
+
+
+def test_scope_human_borrows_only_human_instances(two, tmp_path):
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    _, qtw = two
+    mix = _mixed_store(tmp_path)
+    full = rebuild_from_store(qtw, tmp_path / "all.db", extra_stores=[mix])
+    assert full["borrowed_instances"] == 3
+    only = rebuild_from_store(qtw, tmp_path / "h.db", extra_stores=[borrowed_store(mix, "human")])
+    assert only["borrowed_instances"] == 1
+    db = GlyphDB(tmp_path / "h.db")
+    ids = {r[0] for r in db.conn.execute("SELECT instance_id FROM borrowed")}
+    assert ids == {"v2:v009:1:1:1"}
+    # 借来的刻例跟着实例走：机器入库的字没有刻例
+    ex = {r[0] for r in db.conn.execute("SELECT instance_id FROM exemplars")}
+    assert "v2:v009:1:1:2" not in ex and "v2:v009:1:1:1" in ex
+    assert db.conn.execute("SELECT count(*) FROM derived WHERE instance_id='v2:v009:1:1:2'").fetchone()[0] == 0
+    db.close()
+
+
+def test_scope_human_without_admissions_refused(two, tmp_path):
+    """被借库没有准入台账就分不出人裁：报错，不静默借成空库。"""
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    _, qtw = two
+    mix = _mixed_store(tmp_path)
+    (mix / "admissions.jsonl").unlink()
+    with pytest.raises(ValueError, match="admissions"):
+        rebuild_from_store(qtw, tmp_path / "x.db", extra_stores=[borrowed_store(mix, "human")])
+
+
+def test_borrowed_store_rejects_bad_scope(tmp_path):
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    with pytest.raises(ValueError, match="scope"):
+        borrowed_store(tmp_path, "some")
+
+
+def _stores(db_path):
+    db = GlyphDB(db_path)
+    try:
+        return {r[0] for r in db.conn.execute("SELECT DISTINCT store FROM borrowed")}
+    finally:
+        db.close()
+
+
+def test_default_borrow_keeps_store_string(two, tmp_path):
+    """缺省借法（借全部、不钉）：borrowed.store 与此前逐字相同，glyph_match 的 borrow_fingerprint 不变。"""
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    siku, qtw = two
+    rebuild_from_store(qtw, tmp_path / "a.db", extra_stores=[siku])
+    rebuild_from_store(qtw, tmp_path / "b.db", extra_stores=[borrowed_store(siku)])
+    assert _stores(tmp_path / "a.db") == _stores(tmp_path / "b.db") == {str(siku)}
+
+
+def test_borrow_fingerprint_follows_scope_and_pin(tmp_path):
+    """借法记号进库名（借库参照方案缺口 1、2）：`glyph_match.borrow_fingerprint` 不改代码就跟着变；
+    钉的摘要变了指纹就变，缺省借法只有库名。"""
+    import shutil
+
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    from open_guji_cv.steps.glyph_match import _borrow_name, borrow_fingerprint
+    root = tmp_path / ".borrowed" / "lib-b@g3" / "output" / "glyph_store"
+    lender = _mixed_store(tmp_path)
+    shutil.copytree(lender, root)
+    own = _store(tmp_path, "own", "book-o", [("v2:v001:1:1:1", "以")])
+    names = {}
+    for tag, spec in {"plain": borrowed_store(root), "human": borrowed_store(root, "human"),
+                      "pin": borrowed_store(root, "human", "glyph-1a2b"),
+                      "pin2": borrowed_store(root, "human", "glyph-9999")}.items():
+        db = tmp_path / f"{tag}.db"
+        rebuild_from_store(own, db, extra_stores=[spec])
+        names[tag] = borrow_fingerprint(db)
+    assert names["plain"] == "lib-b@g3"
+    assert names["human"] == "lib-b@g3#human"
+    assert names["pin"] == "lib-b@g3#human~glyph-1a2b"
+    assert len(set(names.values())) == 4
+    assert _borrow_name(next(iter(_stores(tmp_path / "pin.db")))) == "lib-b@g3#human~glyph-1a2b"
+
+
+def test_borrowed_label_without_standard_layout(tmp_path):
+    from open_guji_cv.clustering.glyph_db import borrowed_label
+    assert borrowed_label(tmp_path / "some_store") == str(tmp_path / "some_store")
+    assert borrowed_label(tmp_path / "some_store", "human").endswith("some_store#human")
+
+
+def test_scope_human_plus_auto_takes_vision_confirmed_auto(two, tmp_path):
+    """human+auto（全唐文 11-05 提）：人裁加「看图确认过」的自动刻例；没确认的机器入库、证据坏掉的不借。"""
+    from open_guji_cv.clustering.glyph_db import borrowed_store
+    _, qtw = two
+    db = GlyphDB(tmp_path / "lend2.db")
+    db.set_book_edition("book-l2")
+    db.admit_instance("v2:v009:1:1:1", "以", _png(0), provenance="human")
+    db.admit_instance("v2:v009:1:1:2", "取", _png(1), provenance="auto",
+                      evidence={"batch": "b1", "confirmed": "claude_vision"})
+    db.admit_instance("v2:v009:1:1:3", "令", _png(2), provenance="auto", evidence={"batch": "b2"})
+    db.admit_instance("v2:v009:1:1:4", "今", _png(3), provenance="match", evidence={"confirmed": "claude_vision"})
+    out = tmp_path / "lend2"
+    export_store(db, out)
+    db.close()
+    for scope, want in (("human", {"v2:v009:1:1:1"}),
+                        ("human+auto", {"v2:v009:1:1:1", "v2:v009:1:1:2"})):
+        rebuild_from_store(qtw, tmp_path / f"{scope}.db", extra_stores=[borrowed_store(out, scope)])
+        d = GlyphDB(tmp_path / f"{scope}.db")
+        assert {r[0] for r in d.conn.execute("SELECT instance_id FROM borrowed")} == want
+        d.close()
+    from open_guji_cv.steps.glyph_match import borrow_fingerprint
+    assert borrow_fingerprint(tmp_path / "human+auto.db") == "lend2#human+auto"
+    assert borrowed_store(out, "human+auto").scope == "human+auto"

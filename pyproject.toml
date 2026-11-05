@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "open-guji-cv"
-version = "0.6.4"
+version = "0.6.5"
 description = "古籍图像 OCR 分析工具包：逐字识别、版面检测、字符网格"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -23,7 +23,9 @@ classifiers = [
 # ── 核心依赖（不含 paddle，因为 GPU/CPU 版本不同）──────────────────────
 dependencies = [
     "numpy>=1.24",
-    "opencv-python-headless>=4.8",
+    # 钉 5.0（cv#1098）：4.10 与 5.0 同 commit 同列图，row_segment 的 UNet 距离分量有细小差，挤格判断会翻
+    # （全唐文 012:99:1 列首漏字）；执行机与 uv.lock 都是 5.0.0.93，本机按这个装才能复核执行机产物
+    "opencv-python-headless>=5.0,<5.1",
     "Pillow>=10.0",
     # 四个抽象（core / products）：产物契约用 pydantic，pipeline / book 定义用 yaml
     "pydantic>=2.0",

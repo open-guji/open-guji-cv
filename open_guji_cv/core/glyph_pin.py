@@ -167,15 +167,29 @@ def glyph_sources(book, ws: Path | None = None) -> dict:
     from .workspace import resolve_borrow
     y = Path(ws) / "workspace.yaml"                  # 同 datastore.workcopy.borrow_entries（pipeline 一侧不 import manager 一侧）
     cfg = (yaml.safe_load(y.read_text(encoding="utf-8")) or {}) if y.exists() else {}
-    for e in [str(x) for x in ((cfg.get("glyph_lib") or {}).get("borrow") or [])]:
-        d = resolve_borrow(e, ws)
-        st = d.parent.parent / ".borrowed-state.json"   # 只读副本根（<root>/output/glyph_store 上两级），见 workcopy.BORROW_STATE
+    for x in ((cfg.get("glyph_lib") or {}).get("borrow") or []):
+        # 条目可写对象 {from, scope, pin}（2026-11-05，借库参照方案；解析在 manager `workcopy.parse_borrow`）
+        e = str(x["from"]) if isinstance(x, dict) and "from" in x else str(x)
+        scope = str(x.get("scope") or "all") if isinstance(x, dict) else "all"
+        pin = x.get("pin") if isinstance(x, dict) else None
+        if pin:
+            from .workspace import borrowed_root, central_marker
+            br = str((central_marker(ws) or {}).get("branch") or "main")
+            d = borrowed_root(f"{e}@g{pin}", br) / "output" / "glyph_store"
+        else:
+            d = resolve_borrow(e, ws)
+        st = d.parent.parent / (".pinned-lender.json" if pin else ".borrowed-state.json")   # 只读副本根（<root>/output/glyph_store 上两级），见 workcopy.BORROW_STATE
         rev = None
         try:
-            rev = json.loads(st.read_text(encoding="utf-8")).get("rev")
+            rev = json.loads(st.read_text(encoding="utf-8")).get("digest" if pin else "rev")
         except (OSError, ValueError):
             pass
-        out["borrow"].append({"entry": e, "path": str(d), "local_rev": rev})
+        row = {"entry": e, "path": str(d), "local_rev": rev}
+        if scope != "all":
+            row["scope"] = scope
+        if pin:
+            row["pin"] = int(pin)
+        out["borrow"].append(row)
     ps = pin_state(book, ws)
     out["pin"] = ps
     if ps and ps.get("snapshot"):

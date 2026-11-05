@@ -5,6 +5,21 @@
 
 ## [未发版]
 
+## [0.6.5] - 2026-11-05
+
+- 抬头漏认收尾（2026-11-05，A22）：row_segment 1.46 `layout_raise_box` 改缺省开、重编候选同分优先；border_detect 1.20 上版框弱线护栏（选中线墨量不到最强横线 0.3、上方 ≥0.021 页高另有强线就改取，殿本 16516 页只动 12 页）；column_warp 1.6 `refine_top_by_frame` 否决加例外（上面另有满宽段、中间先白后字墨就照常上提，SJ 史記 02:5）。三步指纹都变，各书 Step1 起过期。border_detect 新参数 `top_weak_ratio`（缺省 0.3）、`top_weak_floor`（缺省不用）：写本（史記）册配置写 0.45／0.25，框条下细虚线、首行字顶齐平的页（SJ 02:5 等 7 页）上框改落到细虚线。
+- 依赖：`opencv-python-headless` 由 `>=4.8` 钉到 `>=5.0,<5.1`（cv#1098：4.10 与 5.0 的 row_segment 产物不同，执行机与 uv.lock 已是 5.0.0.93；不改代码与指纹，执行机产物不变；本机装着 4.x 或 `opencv-contrib-python` 4.x 的要重装）（全唐文切分线）。
+- `scripts/eval_font_family.py`：字体族实测，三书人裁刻例互为查询与库，量借库能借多少（只动 `scripts/`，不改指纹，A23）。
+### Added
+- cell_shrink `inner_frame_only`（缺省关）补列端切笔：Step2 当框条削掉的字顶字脚从 column_raw 补回，挨线的首末格条带开到内框线、地盘外伸 0.35 格（只认像笔画的墨块），贴线碎块只剥薄片（没拟出内线的一端也只剥薄片）；关着时逐字节不变（code_equiv 已登记）。
+- `seed_admit` 三个缺省关开关（关时逐字节不变，登记 code_equiv）：`group_flow_provisional_to`（书级暂归一字形，组 id→字，须在该组 forms 内；全唐文彝组 yi_560 兜底落 𢑱 → 彝）、`ref_lib_coord_dissent`（坐标对位给实字且与现役对位语义不同时不走 `ref_lib`，硬疑问落审；全唐文 r11 麒→麟、褚→諸、俘→俾）、`replace_form_edge_exclude`（`replace_form: lib` 不换成假边表 `edge_pair_exclude.tsv` 里的另一半，往→住）（形近字线 11-05）。
+- `scripts/zhengli/pending_list.py --seg-flags`：读 guji-manager `review/seg_defect --gate` 出的同字对照自检旗表，已放行的切笔格（clipped）改送人审（why `seg_defect`、`src: seg_selfcheck`），已在单上的只加 `seg_kind` 证据；`.meta.json` 指纹对不上现行产物就停。`republish prep` 在跑 pending_list 前按书级表现算旗表（`--no-seg-selfcheck` 关；书没开、manager 太旧都不跑）。只动 `scripts/`，不改指纹，缺省输出不变（两部书都登记为关）（A22 B1③）。
+- `scripts/eval_ref_verify.py`：5b「验证整理本字」评测，在三书人裁 5b 冻结集上量 emb 首位且领先 ≥ m 作为证据的放行率与错放率（只动 `scripts/`，不改指纹，A23）。
+### Changed（原误记在 0.6.3 下，实为 0.6.3 发版后合入）
+- cell_shrink 再生字块提速（2026-11-05，A20）：执行机缓存是空的时下游逐格再生字块，本页 cells 产物与列图改按页记一次（原先每格重读 JSON、重解整列 PNG）。样页每格 7.5 → 3.8 ms，逐像素不变，已登记代码等价。
+- seed_admit 加 `iron_ex_from_store`（2026-11-05，A20，缺省关）：铁证判别器的人裁刻例图从字形库取，不读缓存，产物不再随执行机缓存变；开不开待用户看 A/B（`doc/开关登记表.md`）。缺省关时已登记代码等价。
+- 图形评测折叠己已巳、日曰（2026-11-05，Sheldon：这两组图上分不开，匹配到组内任一个都算对，不单独统计正确率）：新增 `scripts/eval_fold.py`；`eval_db_match.py`／`eval_match_pairs.py`（缺省折叠，`--no-fold` 回旧口径）／`eval_oov.py`（同）／`calibrate_lib_witness.py` 按组折叠金标与候选。只动 scripts/，各步指纹不变。
+
 ## [0.6.4] - 2026-11-05
 
 ### Fixed

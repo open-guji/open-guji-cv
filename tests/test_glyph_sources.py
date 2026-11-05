@@ -45,3 +45,19 @@ def test_no_borrow(tmp_path):
     ws = tmp_path / "ws"
     ws.mkdir()
     assert glyph_sources(SimpleNamespace(glyph_pin=None), ws)["borrow"] == []
+
+
+def test_object_entries_show_scope_and_pin(tmp_path, monkeypatch):
+    """条目写对象 {from, scope, pin}（借库参照方案，2026-11-05）：显示借法，钉号的指向 `<名>@g<N>` 副本与快照摘要。"""
+    monkeypatch.setenv("GUJI_DATA_HOME", str(tmp_path / "home"))
+    ws = _ws(tmp_path, ["{from: ../lib/output/glyph_store, scope: human}", "{from: qtw, scope: human, pin: 4}"])
+    (ws / ".central.json").write_text(json.dumps({"ws": "own", "branch": "main"}), encoding="utf-8")
+    from open_guji_cv.core.workspace import borrowed_root
+    root = borrowed_root("qtw@g4", "main")
+    (root / "output" / "glyph_store").mkdir(parents=True)
+    (root / ".pinned-lender.json").write_text(json.dumps({"name": "qtw", "n": 4, "digest": "glyph-abc"}), encoding="utf-8")
+    g = glyph_sources(SimpleNamespace(glyph_pin=None), ws)
+    a, b = g["borrow"]
+    assert a["entry"] == "../lib/output/glyph_store" and a["scope"] == "human" and "pin" not in a
+    assert b["entry"] == "qtw" and b["scope"] == "human" and b["pin"] == 4
+    assert b["local_rev"] == "glyph-abc" and b["path"] == str(root / "output" / "glyph_store")

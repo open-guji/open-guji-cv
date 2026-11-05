@@ -86,3 +86,11 @@ def test_written_events_pass_the_json_schema(tmp_path):
     bad = json.loads(json.dumps(_confirm("b", 2, "2026-10-01T00:00:00Z", "之").model_dump(mode="json")))
     del bad["payload"]["v"]
     assert list(v.iter_errors(bad))                      # confirm 必带 payload.v
+
+
+def test_auto_source_not_human():
+    """book_lib_auto 的机器刻例确认（source=auto）不当人裁，不进绑定表（全唐文 r11 挪格误绑）。"""
+    from open_guji_cv.feedback.events import EventTarget, counts_as_human, make_event
+    t = EventTarget(step="seed_admit", unit="cell", key="005:1:1:2")
+    assert not counts_as_human(make_event("b", 1, "confirm", t, {"v": "confirm", "shape": "宫", "source": "auto"}, actor="model"))
+    assert counts_as_human(make_event("b", 2, "confirm", t, {"v": "confirm", "char": "宫"}))

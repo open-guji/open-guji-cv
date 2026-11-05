@@ -396,8 +396,10 @@ def cmd_book(args) -> None:
     else:
         print("  没钉 glyph_pin：读当前 glyph.db，借库是本机 db pull 时拉到的那一版")
     for b in gsrc.get("borrow") or []:
-        rev = f"本机副本 rev {b['local_rev']}" if b.get("local_rev") is not None else "本机没有拉过（或是路径条目）"
-        print(f"  借 {b['entry']}：{rev}    # {b['path']}")
+        what = "快照摘要" if b.get("pin") else "rev"
+        rev = f"本机副本 {what} {b['local_rev']}" if b.get("local_rev") is not None else "本机没有拉过（或是路径条目）"
+        how = ("，只借人裁" if b.get("scope") == "human" else "") + (f"，钉被借库 g{b['pin']}" if b.get("pin") else "")
+        print(f"  借 {b['entry']}{how}：{rev}    # {b['path']}")
     if not gsrc.get("borrow"):
         print("  不借库")
 

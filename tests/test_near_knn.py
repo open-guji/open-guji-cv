@@ -120,7 +120,7 @@ def test_near_knn_gap(tmp_path, monkeypatch):
                slot=1, sub=None)
         p = NS(group_flow_near_knn=str(path), near_knn_gap=gap, patch_missing="skip")
         m = NS(char=None, candidates=[("十", 0.9), ("口", 0.8), ("一", 0.5)])
-        n = sa._near_knn_pass(p, [NS(col=1, chars=[r])], {"c1": (ref,)}, {"c1": m})
+        n = sa._near_knn_pass(p, [NS(col=1, chars=[r])], {"c1": (ref,)}, {"c1": m}, stage="gap" if gap else "near")
         return n, r
     assert run(False, "口")[0] == 0                       # 关：不在护栏／字组的格不碰
     n, r = run(True, "口")

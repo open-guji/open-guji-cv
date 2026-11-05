@@ -3694,7 +3694,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24" },
     { name = "onnxruntime", marker = "extra == 'yolo'", specifier = ">=1.16" },
     { name = "opencc-python-reimplemented", specifier = ">=0.1.7" },
-    { name = "opencv-python-headless", specifier = ">=4.8" },
+    { name = "opencv-python-headless", specifier = ">=5.0,<5.1" },
     { name = "paddleocr", marker = "extra == 'cpu'", specifier = ">=2.8.0" },
     { name = "paddleocr", marker = "extra == 'gpu'", specifier = ">=2.8.0" },
     { name = "paddlepaddle", marker = "extra == 'cpu'", specifier = ">=3.0.0b2" },

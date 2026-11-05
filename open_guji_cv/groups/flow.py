@@ -46,7 +46,7 @@
 from __future__ import annotations
 
 import hashlib
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Callable
 
@@ -77,6 +77,7 @@ class FlowConfig:
     l3_model: str = "claude-opus-5-5"
     l3_effort: str = "low"
     l3_need_l2_agree: bool = False                     # L3 在线给的字须与 L2 模型弃权时的首选字相同
+    l3_skip_half: bool = False                         # 夹注 a/b 半格不走 L3（答案表、在线、二审小组都不碰；SJ 史記 06:12:5:12a 错放，A31 11-04 定半格归 S）
     l3_panel: tuple = ()                               # L3 二审小组 ("模型:effort", …)：首问不稳时全部同字才给字，记 strong（`ctx_llm.panel_verdict`）；空＝不开
     l3_panel_groups: tuple = ()                        # 哪些组用二审小组（其余组不问）
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
@@ -95,6 +96,7 @@ class FlowConfig:
     vis_model: str | None = None                       # 字块图像＋文意 L4（`vis_llm`）用的模型；None＝不问（A24 2026-11-01）
     vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
+    provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
 
 
 @dataclass
@@ -436,6 +438,8 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
     pv = PROVISIONAL.get(g)
     if pv is None or not cfg.provisional or mode == "joint":
         return None
+    if cfg.provisional_to.get(g) in pv.forms:
+        pv = replace(pv, to=cfg.provisional_to[g])     # 书级暂归一字形（全唐文 彝组 刻的是 彝，不归殿本的 𢑱；11-05）
     inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
     if mode == "review":
         if not (inn(r.char) and (not ref or ref == GAP or inn(ref))):

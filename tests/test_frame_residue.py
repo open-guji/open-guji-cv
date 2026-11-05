@@ -99,3 +99,72 @@ def test_strip_frame_debris_line_aware_keeps_parts_far_from_line():
     new = strip_frame_debris(patch, 0, 98, 100, line_bot=97)
     assert (new[82:87, 22:28] == 0).all()
     assert (new[93:96, 50:56] == 255).all()
+
+
+def test_strip_frame_debris_line_aware_keeps_tall_dots_near_line():
+    """贴着线的也只剥薄片：灬 的点高过 DEBRIS_LINE_MAX_H 格高，贴线也留着。"""
+    from open_guji_cv.clustering.extractor import strip_frame_debris
+    patch = np.full((100, 80), 255, np.uint8)
+    patch[10:60, 20:60] = 0              # 字身
+    patch[82:96, 22:30] = 0              # 灬 的一点：高 14 行、贴着线
+    patch[93:96, 50:60] = 0              # 线渣：高 3 行
+    new = strip_frame_debris(patch, 0, 98, 100, line_bot=97)
+    assert (new[82:96, 22:30] == 0).all()
+    assert (new[93:96, 50:60] == 255).all()
+
+
+def test_drop_end_ext_specks_keeps_strokes_only():
+    """首格地盘伸到条带顶后，伸出去那段只认像笔画的墨块：零星墨点、细竖条、贴条带边的丢掉。"""
+    from open_guji_cv.clustering.extractor import drop_end_ext_specks
+    binary = np.zeros((120, 100), bool)
+    binary[5:15, 20:80] = True           # 「三」的上横：在原地盘外
+    binary[8:10, 90:92] = True           # 零星墨点
+    binary[2:30, 40:42] = False
+    binary[0:28, 96:99] = True           # 细竖条（界行断头）
+    binary[16:20, 0:8] = True            # 贴条带左缘的拐角
+    binary[30:90, 20:80] = True          # 字身：在原地盘内
+    owner = np.where(binary, 0, -1).astype(np.int16)
+    edge = np.full(100, 30.0)
+    drop_end_ext_specks(owner, binary, 0, edge, True, 80.0)
+    assert (owner[5:15, 20:40] == 0).all() and (owner[5:15, 42:80] == 0).all()
+    assert (owner[8:10, 90:92] == -1).all()
+    assert (owner[0:28, 96:99] == -1).all()
+    assert (owner[16:20, 0:8] == -1).all()
+    assert (owner[30:90, 20:80] == 0).all()
+
+
+def test_restore_trimmed_ends_below_line_only():
+    """inner_frame_only：Step2 削掉的列首行从 column_raw 补回，只补本列线以下、文字带以内；d 档不补。"""
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.columns import BorderTrim
+    from open_guji_cv.steps.cell_shrink import restore_trimmed_ends
+    raw = np.full((200, 60), 255, np.uint8)
+    raw[0:3, 5:55] = 0                    # 本列的线：满带
+    raw[6:9, 15:40] = 0                   # 字顶横：被 Step2 当框条削掉
+    raw[2:20, 0:2] = 0                    # 文字带外的界行
+    img = raw.copy()
+    img[:20] = 255
+    line = SimpleNamespace(text_edge=lambda x: 0.5)
+    mapper = SimpleNamespace(to_page_tl=lambda x, y: (x, y))     # 列图即原图
+    wrec = SimpleNamespace(band=(4, 56), raised=False, head_raise_inner_y=None,
+                           trim_top=BorderTrim(px=20, case="e"), trim_bottom=BorderTrim(px=0, case="c"))
+    out = restore_trimmed_ends(img, raw, wrec, {"top": line}, mapper)
+    assert (out[6:9, 15:40] == 0).all()   # 字顶横补回
+    assert (out[0:3] == 255).all()        # 线不补
+    assert (out[:, 0:2] == 255).all()     # 文字带外不补
+    wrec.trim_top = BorderTrim(px=20, case="d")
+    assert restore_trimmed_ends(img, raw, wrec, {"top": line}, mapper) is img
+
+
+def test_strip_frame_debris_thin_only_keeps_dots_without_line():
+    """没拟出内线的一端（thin_only）：框渣也只剥薄片，「心」的点留着。"""
+    from open_guji_cv.clustering.extractor import strip_frame_debris
+    patch = np.full((100, 80), 255, np.uint8)
+    patch[10:60, 20:60] = 0              # 字身
+    patch[80:94, 22:30] = 0              # 心 的一点：高 14 行
+    patch[93:96, 50:60] = 0              # 框渣：高 3 行
+    old = strip_frame_debris(patch, 0, 98, 100)
+    assert (old[80:94, 22:30] == 255).all()
+    new = strip_frame_debris(patch, 0, 98, 100, thin_only=True)
+    assert (new[80:94, 22:30] == 0).all()
+    assert (new[93:96, 50:60] == 255).all()
