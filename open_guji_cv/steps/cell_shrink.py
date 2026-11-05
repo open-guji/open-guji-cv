@@ -77,6 +77,11 @@ class CellShrinkParams(BaseModel):
     INNER_CROSS_RUN 行起就是成段的墨（笔画压线而来），这一列的墨一直留到这段墨断开为止，不抹。写本字脚常压在内框细线上，
     整条抹掉会切掉字脚一两像素（史記 05:23:7:21「義」、05:35:2:21「軍」、05:83:6:21「何」、05:83:8:21「將」，SJ 11-05）。
     缺省关＝旧行为。"""
+    inner_frame_local: bool = False
+    """（跟 inner_frame_cut 一起开）整页拟出的内线再逐小段贴到本段的真线上（seg.frame_line.localize_inner_line）：
+    外框在页边拐弯、内线波浪起伏时二次曲线跟不上，线心落到外框上沿、内线整段漏抹（全唐文 006:121:1:22「上」挂线，S4）。
+    同时内线厚上限随格高放大（seg.frame_line.inner_thick_limit）：高分辨率图源（全唐文格高约 205）内线厚 5–12 行，
+    按殿本定的 7 行一半认不出，整页拟不出内线（012:58:1:1「固」、010:166:9:22「歲」）。"""
     inner_frame_profile: bool = False
     """（跟 inner_frame_cut 一起开才有用）小段投票拟不出内线的页，按外框拉直的整宽行墨再找一次
     （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
@@ -97,6 +102,8 @@ class CellShrinkParams(BaseModel):
             d.pop("jiazhu_strip_rules", None)
         if isinstance(d, dict) and not self.inner_frame_cut:
             d.pop("inner_frame_cut", None)
+        if isinstance(d, dict) and not self.inner_frame_local:
+            d.pop("inner_frame_local", None)
         if isinstance(d, dict) and not self.inner_frame_profile:
             d.pop("inner_frame_profile", None)
         if isinstance(d, dict) and not self.inner_frame_only:
@@ -277,7 +284,7 @@ class CellShrinkStep(Step):
     # ── 一列 ──────────────────────────────────────────────────────────
     def _inner_frame_lines(self, ctx: RunContext, page: int, cells: PageCells, wins: PageWindows) -> dict:
         """整页拟上下两道内框细线（原图坐标，seg.frame_line）：{"bottom": InnerFrameLine, "top": …}，拟不出的那边不给。"""
-        from ..seg.frame_line import fit_inner_frame_line
+        from ..seg.frame_line import fit_inner_frame_line, inner_thick_limit, localize_inner_line
         cols = [w for w in wins.columns if not (w.raised or w.head_raise_inner_y)]
         periods = [cc.period for cc in cells.columns if cc.ok and cc.period]
         if len(cols) < 3 or not periods:
@@ -293,8 +300,13 @@ class CellShrinkStep(Step):
         out = {}
         for side, key in (("bottom", "border_bottom_y"), ("top", "border_top_y")):
             hint = float(np.median([getattr(w, key) for w in cols]))
+            local = bool(ctx.params_for(self).inner_frame_local)  # type: ignore[attr-defined]
+            kw = {"max_thick": inner_thick_limit(cell_h)} if local else {}
             line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side,
-                                        profile_fallback=bool(ctx.params_for(self).inner_frame_profile))  # type: ignore[attr-defined]
+                                        profile_fallback=bool(ctx.params_for(self).inner_frame_profile),  # type: ignore[attr-defined]
+                                        **kw)
+            if line is not None and local:
+                line = localize_inner_line(ink, line, cell_h, **kw)
             if line is not None:
                 out[side] = line
         return out
