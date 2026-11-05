@@ -856,6 +856,16 @@ ENTRIES: tuple[Equiv, ...] = (
           old="35599c861269dd09c094e824b219ef8cd6c83b33fbac91f9a99d584d8836dad9",
           evidence="书级开关 layout_raise_box（缺省关，不进参数 dump；A22 11-05 殿本抬头框重编）：row_segment 关着时在殿本 34 册 76 页"
                    "（有抬头框而切分没抬的 164 列所在页，含 vol01/07/09 旧图源页与 vol28/45/56/73/82/88 整页框认错页）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='c7c1f46d042d5c1b6237ca00f755c5b83c8827f45ff7b9b541fb6be667675fdb',
+          old='de749a131133f682da5f64a4c1f18ea5e19af7dc75e7e108a0a685abde0b54dd',
+          evidence='iron_ex_from_store（缺省关，A20 11-05）：开关关着时任务库 #472（dev aad5ae8）对 #473（3929d51）史記 01 册全册 143 页 seed_admit '
+                   '137 页逐字节相同，另 6 页只差 iron_ex_missing（#473 的执行机缓存缺别册刻例图，#472 不缺；正是本开关要消掉的机器差异），放行与待审逐格相同；2026-11-05'),
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='1b7b7a91ec05c6fe447c6dbbea470af9817cf3e9bfaac2e50fd2547aedc2f74d',
+          old='14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43',
+          evidence='再生字块按页记忆 cells 产物与列图（A20 11-05，只动 render，run_page 不变）：tests/test_cell_shrink_render_memo.py 清缓存再生 100+ 格与 Step4 写入的逐像素相同（记忆开／关）；'
+                   '任务库 #477（bb9eb76）冷缓存执行机从 glyph_match 起跑史記 01 册全册 143 页，glyph_match 与 #460 逐字节相同；2026-11-05'),
 )
 
 
