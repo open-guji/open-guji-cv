@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `seed_admit` 终审裁定证据（A31，配 manager #184）：ctx-m1 裁定放行的格，`evidence.vis_ruling` 带上裁定的 `via`（`ref_lead`）与 `ref_lead`（层、领先量）；裁定 `gate=ref_lead_fail` 的格留审，证据记 `ref_lead_fail`，供按包统计分放行来源。只动证据，放行结果不变。
 - `seed_admit` `fold_coord_ref`（缺省关，只在 `fold_groups` 非空且开时进 dump；关时逐字节不变，登记 code_equiv）：折叠组扩展，现役对位缺时用坐标对位字，没进字组流程的格（如 曰 旁有组外字 田 挡了入口）库首位与整理本字同在某折叠组就按该组折，`evidence.fold.coord`。配 #1107 两道护栏用；全唐文 r13b 估多放日曰 14 格（形近字线 11-05）。
 
 ## [0.6.5] - 2026-11-05

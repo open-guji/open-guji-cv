@@ -3532,15 +3532,20 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                   and x.get("subclass") in subs), None)
-        if not v:
-            continue
         ref_ = (amap.get(r.id) or (None,))[0]
+        if not v:
+            f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
+            if f and f.get("gate") == "ref_lead_fail" and (f.get("ref") or "") == (ref_ or ""):
+                r.evidence = {**(r.evidence or {}), "ref_lead_fail": f.get("ref_lead") or {}}   # 终审 ref_lead 证人没过：留审，记下供统计
+            continue
         if (v.get("ref") or "") != (ref_ or ""):
             continue                                 # 整理本对位字变了：不是当初看的那一格
         if ovr is not None and v.get("prompt_ver") == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
             continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
-        r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")},
+        vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
+        vr.update({k: v[k] for k in ("via", "ref_lead") if v.get(k)})   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
+        r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
