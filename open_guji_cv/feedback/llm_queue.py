@@ -62,6 +62,9 @@ def collect(page_files) -> list[dict]:
                 row = rows[k] = {"group": q["group"], "ver": q["ver"], "l": q["l"], "r": q["r"],
                                  "members": sorted(spec.members) if spec else [],
                                  "prompt": f"config/groups/{q['group']}/prompt.md", "cells": []}
+                if str(q["ver"] or "").startswith("vis"):       # 看图判（groups/vis_llm）：提示词在代码里，要对着字块图判
+                    row.update({"vis": True, "prompt": "open_guji_cv/groups/vis_llm.py:SYSTEM",
+                                "image": "按 cells 的格号取字块图（research/a24/r4/dump_patches.py）；答案 ver 原样带回"})
             row["cells"].append(q["cell"])
     return sorted(rows.values(), key=lambda x: (x["group"] or "", x["cells"][0] or ""))
 
