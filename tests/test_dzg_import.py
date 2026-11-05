@@ -152,3 +152,40 @@ def test_compare_roll_counts_boundaries_and_missing_notes():
     cols, diffs, *_ = dzg.compare_roll(a, b, None)
     assert cols["columns"] == 2 and cols["start_hit"] == 2 and cols["both_hit"] == 1
     assert [d["cat"] for d in diffs] == ["光盘缺小注"] and diffs[0]["dzg"] == "兩江總督採進本"
+
+
+def test_pua_codes_carry_original_code_for_unmapped_only(tmp_path):
+    """映不上的僻字码把原码位（带来源）带到 run 上；映上的、以图代字占位码都不带。"""
+    s = "甲乙丙ဂ"
+    gl = {"U+1002": ["img/glyphs/0001-2.png", 0, 0, 64, 64]}
+    from open_guji_cv.utils.daizhige import pua_codes
+    assert pua_codes(s, {"U+EF33": "𩔖"}, gl) == [[1, "daizhige:U+EA96"]]
+    cols = [_col(0, {"t": "text", "start": 0, "s": "甲乙"},
+                 {"t": "note", "start": 4, "r": [[0, "丙"]], "l": [[0, "丁"]]})]
+    r = _rec("0001-0001", "1-1a", cols)
+    p = tmp_path / "0001.jsonl"
+    p.write_text(json.dumps(r, ensure_ascii=False) + "\n", encoding="utf-8")
+    h = dzg.build_halves([p])[0]
+    runs = h.cols[0]["runs"]
+    assert runs[0]["pua"] == [[1, "daizhige:U+EA96"]]
+    assert runs[1]["pua_r"] == [[0, 1, "daizhige:U+EB10"]] and "pua_l" not in runs[1]
+    assert "〓" in dzg.column_line(h.cols[0])       # 文本仍是〓，码位只走旁路
+    assert h.unmapped == 2
+
+def test_resolve_pua_code_by_window(tmp_path):
+    """窗口回查原码位：对得上且唯一才认；同窗口两个不同码、对不上、窗口太短都给 None。"""
+    from open_guji_cv.utils.pua_lookup import PuaIndex, resolve_pua_code
+    cols = [_col(0, {"t": "text", "start": 0, "s": "天地玄黄宇宙日月盈昃辰宿"}),
+            _col(1, {"t": "text", "start": 0, "s": "寒来暑往秋收冬藏閏餘成歲"})]
+    r = _rec("0001-0001", "1-1a", cols)
+    p = tmp_path / "0001.jsonl"
+    p.write_text(json.dumps(r, ensure_ascii=False) + "\n", encoding="utf-8")
+    idx = PuaIndex.from_source([p])
+    assert resolve_pua_code(idx, "天地玄黄宇宙", "日月盈昃辰宿") == "daizhige:U+EA96"
+    assert resolve_pua_code(idx, "寒来暑往秋收", "冬藏閏餘成歲") == "daizhige:U+EB10"
+    assert resolve_pua_code(idx, "天地玄黄宇宙", "日月盈昃辰宿".replace("日月", "山水")) == "daizhige:U+EA96"  # 容差
+    assert resolve_pua_code(idx, "甲乙丙丁戊己", "庚辛壬癸子丑") is None     # 对不上
+    assert resolve_pua_code(idx, "宇", "日") is None                       # 窗口太短
+    cols2 = [_col(0, {"t": "text", "start": 0, "s": "天地玄黄宇宙日月盈昃辰宿天地玄黄宇宙日月盈昃辰宿"})]
+    p.write_text(json.dumps(_rec("0001-0001", "1-1a", cols2), ensure_ascii=False) + "\n", encoding="utf-8")
+    assert resolve_pua_code(PuaIndex.from_source([p]), "天地玄黄宇宙", "日月盈昃辰宿") is None   # 同窗口不同码：不认

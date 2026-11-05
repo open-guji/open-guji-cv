@@ -89,6 +89,29 @@ def fix_pua(s: str, pua_map: dict | None, glyphs: dict | None = None) -> tuple[s
     return "".join(out), miss
 
 
+PUA_SOURCE = "daizhige"
+
+
+def pua_codes(s: str, pua_map: dict | None, glyphs: dict | None = None) -> list[list]:
+    """`fix_pua` 记成 `〓` 的那些私用码的原码位：`[[输出串内下标, "daizhige:U+EB10"], …]`（下标按 `fix_pua` 的输出串算）（待收字永久编号，A24 11-05）。
+
+    只收映不上的私用码（僻字码）；`glyphs` 登记的缺字图占位码（U+1001 等，以图代字）属真图，不收；
+    `pua_map` 映上的已经是真字，也不收。带来源前缀，是因为图源文本层（siku-qiefen-v2）另有一套 U+F1xxx，两套码不一一对应。"""
+    pm = pua_map or {}
+    gl = glyphs if isinstance(glyphs, dict) else {}
+    out, pos = [], 0
+    for ch in s or "":
+        key = f"U+{ord(ch):04X}"
+        if key not in gl and _is_pua(ch):
+            real = pm.get(key)
+            if real:
+                pos += len(real)        # 映上的换成真字（现网全是单字；多字也按输出串算下标）
+                continue
+            out.append([pos, f"{PUA_SOURCE}:{key}"])
+        pos += 1
+    return out
+
+
 def column_plain(col: dict) -> str:
     """读序串：正文照录，小注先右行后左行，不带空格。用于检索与比对。"""
     out = []
@@ -136,16 +159,23 @@ def _fix_col(col: dict, pua_map, glyphs=None) -> tuple[dict, int]:
     for run in col.get("runs", []):
         run = dict(run)
         if run.get("t") == "text":
+            codes = pua_codes(run.get("s", ""), pua_map, glyphs)
             run["s"], m = fix_pua(run.get("s", ""), pua_map, glyphs)
             miss += m
+            if codes:
+                run["pua"] = codes
         elif run.get("t") == "note":
             for side in ("r", "l"):
                 segs = []
-                for off, s in run.get(side, []):
+                codes = []
+                for k, (off, s) in enumerate(run.get(side, [])):
+                    codes += [[k, i, c] for i, c in pua_codes(s, pua_map, glyphs)]
                     s, m = fix_pua(s, pua_map, glyphs)
                     miss += m
                     segs.append([off, s])
                 run[side] = segs
+                if codes:
+                    run["pua_" + side] = codes   # [[段号, 段内下标, 码]]
         runs.append(run)
     return {"no": col["no"], "runs": runs}, miss
 

@@ -908,6 +908,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
           old="1b7b7a91ec05c6fe447c6dbbea470af9817cf3e9bfaac2e50fd2547aedc2f74d",
           evidence="inner_frame_only 列端补救（缺省关；同上一条，A22 11-05）：三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；合入 dev（含 A20 再生字块记忆）后 vol30 28 页两种配置再核一遍同样逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.utils.daizhige",
+          new="2a3573600390796020b55915e3c58ce7d06af1215ec9af79ecc940c5baba41be",
+          old="504321227060b83062dbe45680a9df9c29b214a629b1a310124a36cf78c7e0fd",
+          evidence="待收字：僻字码原码位（daizhige:U+XXXX）旁路带到 run 的 pua／pua_r／pua_l（新增函数 pua_codes，文本仍写〓，A24 11-05）："
+                   "row_segment 在殿本 vol04 7 页（--pages 5,12,30,60,90,120,150）上与 origin/dev 产物逐字节相同；2026-11-05"),
 )
 
 
