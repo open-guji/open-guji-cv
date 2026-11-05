@@ -874,6 +874,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="1b101b4d25356f55302577544712fe1c19ae1959754f0ee87ca124bacafce16e",
           old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
           evidence=_COORD_PAIR),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='9205734c66442a43ee349ac45fbe6465d7c071a47388f71444a90193a50f5bcb',
+          old='de749a131133f682da5f64a4c1f18ea5e19af7dc75e7e108a0a685abde0b54dd',
+          evidence='near_knn_gap 挪到各补放通道之后（缺省关，全唐文形近字线 11-05）：开关关着时全唐文 012 册 13 页'
+                   '（p5,20,35,…,185）与 origin/dev 73f189b 产物逐字节相同；scripts/code_equiv.py check，2026-11-05'),
 )
 
 
