@@ -5,6 +5,9 @@
 
 ## [未发版]
 
+### Added
+- 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
+
 ### Changed
 - 拆分 P4 中层（2026-11-04，用户「继续 都做完」）：`guji pipeline`／`status`／启动时的 manager 行为改成钩子（`core/hooks.py`，入口点组 `guji.hooks`，由 guji-manager ≥0.3.3 登记）：开跑前备钉版字形库／模型／语料与 Step5-b 模板索引（prepare）、整册跑完自动存包与没存包提醒（finished）、status 的收尾闸／裁放不一致／看图待审（status）、派生缓存取件器与耗时记录（startup）。没装 manager 时照跑；只有册钉了字形库、模型或语料时 `guji pipeline` 拒跑（退出码 2，`--no-prep` 放行）。`guji rerun`／`pagekinds`／`cache`／`product`／`products`／`perf` 搬去 guji-manager（老版本 manager 给装法、退出码 2）。`ops` 剩下的（除 model_blobs，测试开跑取模型要用）、`render`、`review`、`exp`、`feedback.vision`、`jobs.perf_push`、`cli_products`、`cli_perf` 删除；`ops/preflight.py` 改放 `open_guji_cv/preflight.py`（归 pipeline）。cv 里已不再有 manager 一侧的命令模块（`MANAGER_CLI_MODULES` 为空）。各步指纹不变。
 
