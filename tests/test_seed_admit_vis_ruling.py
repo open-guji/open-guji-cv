@@ -115,3 +115,10 @@ def test_ruling_override_groups_gate(tmp_path):
     assert run(("nonexistent",)) == 0
     assert run((), ch="曰", ref="曰") == 1      # 字＝整理本，不算越过
     assert "ruling_override_groups" not in SeedAdmitParams(db_path="x").model_dump()
+
+
+def test_ruling_glyph_params_default_off_and_in_dump_when_set():
+    d0 = SeedAdmitParams(db_path="x").model_dump()
+    assert "ruling_glyph_min_score" not in d0 and "ruling_glyph_min_margin" not in d0
+    d1 = SeedAdmitParams(db_path="x", ruling_glyph_min_score=0.98, ruling_glyph_min_margin=0.02).model_dump()
+    assert d1["ruling_glyph_min_score"] == 0.98 and d1["ruling_glyph_min_margin"] == 0.02

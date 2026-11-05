@@ -516,6 +516,8 @@ def _vis_try(g: str, r, trail: list, cr: str | None, cfg: FlowConfig, canon, pat
     ans = vis_llm.judge(g, mem, patch, left, right, model=cfg.vis_model, cache=cfg.vis_cache, cell=r.id)
     if ans is None:
         return None, None
+    if ans.get("ask"):                       # 管线不在线问：留痕记下这一问，导出待裁清单见 feedback/llm_queue
+        return None, {"solver": "vis", "char": None, "why": ans["why"], "ask": ans["ask"]}
     ch, conf = ans["char"], ans["conf"]
     item = {"solver": "vis", "char": None, "why": f"{conf}:{ch}", "vis_conf": conf, "vis_why": ans.get("why"), "cached": ans["cached"]}
     if conf != "high" or ch not in mem:

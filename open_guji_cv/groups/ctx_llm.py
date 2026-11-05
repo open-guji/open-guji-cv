@@ -163,6 +163,10 @@ def online() -> bool:
     return os.environ.get(ENV_ONLINE) == "1"
 
 
+#: 没命中裁定库、管线不在线问时的弃权码（`feedback/llm_queue.PENDING` 同值）
+PENDING_WHY = "abstain:llm_pending"
+
+
 def _client():
     if not online():
         return None

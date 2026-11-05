@@ -334,6 +334,12 @@ class SeedAdmitParams(BaseModel):
     这个字与整理本字须同属白名单里的某个字组（`groups.registry.FLOW_GROUPS` 成员），否则不放行、留审。
     判读脚本写 `admit_ok` 时已按组判过；这里把白名单放进书级配置（进 `params_hash`、可查），金标证据附在册 yaml 注释。
     `None`＝不核（旧行为，不进 dump）；`()`＝一律不许越过整理本。"""
+    ruling_glyph_min_score: float | None = None
+    ruling_glyph_min_margin: float | None = None
+    """终审（`final-review`／`finalize`，guji-manager）判「字形证人」的书级口径（A31 11-05，A23 标定见 ai-team
+    `domain/CV/字形领域/L2图一致证人标定-2026-11-05.md`）：该字是 `candidates` **首位**、得分 ≥ `ruling_glyph_min_score`、
+    比次优的异体字高 ≥ `ruling_glyph_min_margin`。两项都 `None`＝旧口径（该字在前五且 ≥ 0.95）。
+    只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它；殿本 0.98／0.02，史記、全唐文 0.95／0.02。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -870,6 +876,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
+        if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
+            d.pop("ruling_glyph_min_score", None)
+            d.pop("ruling_glyph_min_margin", None)
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)

@@ -55,7 +55,8 @@ def judge(group: str, members, patch, left: str, right: str, *, model: str = ctx
         return {"char": e.get("char"), "conf": e.get("conf"), "why": e.get("why"), "cached": True}
     c = client if client is not None else ctx_llm._client()
     if c is None:
-        return None
+        # 管线不在线问（sheldon 2026-11-05）：没命中缓存 → 记下这一问（版本含字块哈希），导出见 feedback/llm_queue.py，对话看图审
+        return {"char": None, "conf": None, "why": ctx_llm.PENDING_WHY, "cached": False, "ask": {"ver": ver, "l": left, "r": right}}
     cands = sorted(set(members))
     txt = f"候选字：{'、'.join(cands)}、其他\n前文：{left}\n后文：{right}\n（目标位在前后文之间）"
     try:
