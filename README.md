@@ -68,6 +68,19 @@ pip install paddlepaddle-gpu -i https://www.paddlepaddle.org.cn/packages/stable/
 pip install -e ".[gpu]"
 ```
 
+### 2c. 核对 opencv 版本（必须 5.0.x）
+
+切分结果依赖 opencv 版本：4.10 和 5.0 跑出的 row_segment 产物不同（cv#1098）。执行机与 `uv.lock` 都用 `opencv-python-headless` 5.0.0.93，`pyproject.toml` 钉在 `>=5.0,<5.1`。
+装了 paddle（`.[cpu]`／`.[gpu]`）的环境会顺带装上 `opencv-contrib-python` 4.x，把 headless 盖掉。装完一定核对：
+
+```bash
+python -c "import cv2; print(cv2.__version__)"   # 要 5.0.x
+# 不是 5.0.x：卸掉 opencv-contrib-python / opencv-python，再装 opencv-python-headless
+pip uninstall -y opencv-contrib-python opencv-python && pip install --force-reinstall "opencv-python-headless>=5.0,<5.1"
+```
+
+版本不对时本机切分结果和执行机对不上，本机干跑的对比不能作数。
+
 ### 3. 设置环境变量（推荐）
 
 ```bash
