@@ -141,3 +141,21 @@ def test_skip_half_blocks_ruling_on_half_cells(tmp_path):
     run = lambda on: _vis_ruling_pass(SeedAdmitParams(db_path="x", group_flow_llm_skip_half=on), [ColumnAdmit(col=1, chars=recs)], amap, st)  # noqa: E731
     assert run(True) == 0 and not recs[1].admit
     assert run(False) == 1 and recs[1].admit
+
+
+def test_ref_lead_via_kept_and_fail_recorded(tmp_path):
+    """终审 ref_lead：放行格证据带 via=ref_lead；没过的格（gate=ref_lead_fail）留审，证据记 ref_lead_fail。"""
+    st = RulingStore(tmp_path / "ok")
+    p = st.put("O", "ctx-m1", "甲", "乙", char="說", conf="high", why="x", model="m", cell=f"{B}:1:2")
+    p.update({"admit_ok": True, "subclass": "N", "ref": "說", "gate": "ok", "via": "ref_lead", "ref_lead": {"layer": "unseen", "lead": 0.03}})
+    n, r = _run(CELLS, AMAP, st)
+    assert n == 1 and r[2].evidence["vis_ruling"]["via"] == "ref_lead" and r[2].evidence["vis_ruling"]["ref_lead"]["layer"] == "unseen"
+    st2 = RulingStore(tmp_path / "fail")
+    p = st2.put("O", "ctx-m1", "甲", "乙", char="說", conf="high", why="x", model="m", cell=f"{B}:1:2")
+    p.update({"admit_ok": False, "subclass": "N", "ref": "說", "gate": "ref_lead_fail", "ref_lead": {"layer": "oov", "lead": 0.005}})
+    n, r = _run(CELLS, AMAP, st2)
+    assert n == 0 and not r[2].admit and r[2].evidence["ref_lead_fail"]["layer"] == "oov"
+    n, r = _run(CELLS, {**AMAP, 2: "他"}, st2)                                            # 整理本字变了不记
+    assert "ref_lead_fail" not in r[2].evidence
+    n, r = _run(CELLS, AMAP, _store(tmp_path / "plain", "甲", "乙"))                       # 普通裁定不带 via
+    assert "via" not in r[2].evidence["vis_ruling"]
