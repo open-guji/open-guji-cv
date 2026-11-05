@@ -203,6 +203,11 @@ _JZ_BAND = ("写本内框细线断成几截（cell_shrink jiazhu_strip_rules 书
              "strip_inner_frame_band，列端格按全页半格线位认线带）：开关关着时 cell_shrink 在殿本 vol12 新图 31 页（每 5 页取 1）"
              "上与 origin/dev 61332c2 产物逐字节相同，另 5 页 907 张字块 PNG 同；scripts/code_equiv.py check，2026-11-04（A22）")
 
+_IF_PROFILE = ("内框细线整宽行墨补拟 inner_frame_profile（cell_shrink 书级开关，缺省关；seg.frame_line 小段投票抽成 _chunk_inner、"
+               "加 _profile_inner）：开关关着时 cell_shrink 在殿本 vol30 新图 28 页（每 5 页取 1）上与 origin/dev 4a47fbe 产物逐字节相同；"
+               "另 inner_frame_cut 开、inner_frame_profile 关时 vol05（186 页）、vol30（140 页）全册 char_index 与 55417 张字块 PNG 与 dev 逐字节相同；"
+               "scripts/code_equiv.py check，2026-11-05（A22）")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",

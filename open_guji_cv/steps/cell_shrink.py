@@ -65,6 +65,12 @@ class CellShrinkParams(BaseModel):
     字块挂着一小截框线（所、祖、八、父的撇脚）。整页外粗框拟得稳，内线与它平行，几十段虚线一起投票定线位和线厚。
     抬头列不抹上框（字本来就写在框外）。本页拟不出可信的线就不动。"""
 
+    inner_frame_profile: bool = False
+    """（跟 inner_frame_cut 一起开才有用）小段投票拟不出内线的页，按外框拉直的整宽行墨再找一次
+    （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
+    磨成点线拟不出，列尾字块整页挂着框线（列端评测集 frame-end-crop 剩下 16 格列尾带框里 10 格是这类）。
+    缺省关＝旧行为；小段法拟得出的页不变。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -79,6 +85,8 @@ class CellShrinkParams(BaseModel):
             d.pop("jiazhu_strip_rules", None)
         if isinstance(d, dict) and not self.inner_frame_cut:
             d.pop("inner_frame_cut", None)
+        if isinstance(d, dict) and not self.inner_frame_profile:
+            d.pop("inner_frame_profile", None)
         return d
 
 
@@ -209,7 +217,8 @@ class CellShrinkStep(Step):
         out = {}
         for side, key in (("bottom", "border_bottom_y"), ("top", "border_top_y")):
             hint = float(np.median([getattr(w, key) for w in cols]))
-            line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side)
+            line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side,
+                                        profile_fallback=bool(ctx.params_for(self).inner_frame_profile))  # type: ignore[attr-defined]
             if line is not None:
                 out[side] = line
         return out
