@@ -708,6 +708,7 @@ class RowSegmentParams(BaseModel):
     only_admitted: bool = True           # 只切过闸的列
     seam_band: int = 20                  # 折线切分走廊半宽；0 = 关（seg/seam.py）
     cut_judge: str = "unet"              # 候选池裁判：unet（seg/cut_select.py，2026-09-14 起现役）| rule（只用旧规则）
+    #                                      | unet_f64：同一判官双精度前向＋双精度缩放，跨 CPU 逐位一致（S9，慢约 4 倍，改产物）
     judge_fingerprint: str = ""          # 裁判权重指纹，自动填（进 Step 指纹：换权重 → Step3 产物自动 stale）
     detect_bottom_bar: bool = True       # 列里还躺着下版框线时下界改用它（row_boundaries.find_bottom_frame_bar）
     #: **职名页分支**（overview#450，S4，2026-10-06）：列在这里的页不走固定格数 DP，改走
@@ -985,8 +986,9 @@ class RowSegmentParams(BaseModel):
     def _fill_judge_fingerprint(self):
         # 与 glyph_match.GlyphMatchParams.db_fingerprint 同一套路：模型是外部可变状态，
         # 不进指纹的话换了权重产物还显示 fresh。权重缺失时为空串 → 与裁判可用时指纹不同。
-        if self.cut_judge == "unet" and not self.judge_fingerprint:
-            object.__setattr__(self, "judge_fingerprint", ckpt_fingerprint())
+        if self.cut_judge in ("unet", "unet_f64") and not self.judge_fingerprint:
+            fp = ckpt_fingerprint()
+            object.__setattr__(self, "judge_fingerprint", fp + (":f64" if fp and self.cut_judge == "unet_f64" else ""))
         # 字形库精修：只在开关开着时解析库路径、填指纹——关着时参数逐字段不变（同 seed_admit.human_fingerprint）
         if self.roster_glyph_refine:
             if not self.roster_glyph_db:
@@ -1081,7 +1083,7 @@ class RowSegmentStep(Step):
         from ..feedback.lookup import resolved_head_raise as _resolved_head_raise
         book_head_raise = _resolved_head_raise(ctx.book.id)
         # 候选池裁判（U-Net，进程内单例）；权重/torch 不可用时为 None → segment_column 按旧规则走
-        judge = get_judge() if p.cut_judge == "unet" else None
+        judge = get_judge(f64=p.cut_judge == "unet_f64") if p.cut_judge in ("unet", "unet_f64") else None
         # 人拖过的切线钉住（lookup.resolved_pins，只收带页面坐标的裁决；生效时机同 resolved_cuts）
         from ..feedback.lookup import resolved_pins as _resolved_pins
         book_pins = _resolved_pins(ctx.book.id, ctx.store)
