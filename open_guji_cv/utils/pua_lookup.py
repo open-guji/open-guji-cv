@@ -26,7 +26,7 @@ class PuaIndex:
     def from_source(cls, files: list[Path]) -> "PuaIndex":
         """从源 jsonl（`corpus/daizhige/NNNN.jsonl`）建；用 `build_halves`，与 dzg_import convert 同一套读法。"""
         out, codes = [], {}
-        for h in build_halves(list(files)):
+        for h in build_halves([Path(f) for f in files]):
             for col in h.cols:
                 for run in col.get("runs", []):
                     if run.get("t") == "note":
