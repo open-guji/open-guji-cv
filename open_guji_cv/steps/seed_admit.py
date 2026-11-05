@@ -360,6 +360,11 @@ class SeedAdmitParams(BaseModel):
     """折叠组（书级；A24 第 6 轮，用户 11-05 定「己已巳、日曰折叠，组内任一字算对」，A31 同意管线侧同口径）：字组在名单里、
     字组流程没放行的待审格，整理本对位字就在这个组里 → 直接放整理本字（通道 `fold`，`evidence.fold = {group, ref}`），不再送审。
     整理本字在组外（真异文）、没有整理本对位、遮挡／排除／人裁格、夹注 a/b 半格不动。空＝关（缺省，不进 dump）。"""
+    p_ref_admit: bool = False
+    """P 类「机器字≠整理本」取整理本字放行（书级，缺省关；A24 第 6 轮，轮次主线转 R/P 小试点结论 11-04）：待审格的机器字≠整理本对位字，
+    两字都不在任何字组里（字组自己判）、不是夹注 a/b 半格、没有遮挡／排除／硬疑问、不是人裁格，且同列相邻格（slot±1）不也是这类格
+    （成片＝切分错位的征兆，归 S）→ 放整理本字（通道 `p_ref`，`evidence.p_ref`）。
+    依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -907,6 +912,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.group_flow_llm_skip_half:
             d.pop("group_flow_llm_skip_half", None)
+        if isinstance(d, dict) and not self.p_ref_admit:
+            d.pop("p_ref_admit", None)
         if isinstance(d, dict) and not self.fold_groups:
             d.pop("fold_groups", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
@@ -1865,6 +1872,10 @@ class SeedAdmitStep(Step):
                 d_nk = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing)
                 n_auto += d_nk
                 n_review -= d_nk
+            if p.p_ref_admit:
+                d_pr = _p_ref_pass(p, out, amap)
+                n_auto += d_pr
+                n_review -= d_pr
             if p.fold_groups:
                 d_fd = _fold_pass(p, out, amap)
                 n_auto += d_fd
@@ -3506,6 +3517,37 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                       "lifted_from": {"char": r.char, "doubts": ds}}
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
+    return n
+
+
+def _p_ref_pass(p, out: list, amap: dict) -> int:
+    """P 类取整理本字（`SeedAdmitParams.p_ref_admit`）。→ 放行数净增。"""
+    from ..groups.registry import FLOW_GROUPS
+    in_group = {c for g in FLOW_GROUPS.values() for c in g.members}
+
+    def cand(r) -> bool:
+        if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+            return False
+        ds = {d for d in (r.doubts or []) if isinstance(d, str)}
+        if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
+            return False
+        if ((r.evidence or {}).get("group") or {}).get("id"):
+            return False
+        ref = (amap.get(r.id) or (None,))[0]
+        return bool(ref and r.char and r.char != ref and r.char not in in_group and ref not in in_group)
+
+    n = 0
+    for c in out:
+        rs = sorted(c.chars or [], key=lambda r: (r.slot, r.sub or ""))
+        flags = [cand(r) for r in rs]
+        for i, r in enumerate(rs):
+            if not flags[i] or (i > 0 and flags[i - 1]) or (i + 1 < len(rs) and flags[i + 1]):
+                continue
+            ref = amap[r.id][0]
+            r.evidence = {**(r.evidence or {}), "p_ref": {"ref": ref, "machine": r.char},
+                          "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = ref, True, "p_ref", "match", []
+            n += 1
     return n
 
 
