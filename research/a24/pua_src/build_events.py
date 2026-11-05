@@ -16,6 +16,8 @@ def kind(s):
     o = ord(s)
     if 0xE000 <= o <= 0xF8FF or o >= 0xF0000: return "pua"
     if s in "〓□?？" or 0x1000 <= o <= 0x109F: return "blank"
+    import unicodedata   # 文本层取字必须是已分配的汉字（11-05：曾取到未分配码位 U+32BC1 等放行 4 格，已撤回）
+    if not (unicodedata.name(s, "").startswith("CJK UNIFIED IDEOGRAPH") or unicodedata.name(s, "").startswith("CJK COMPATIBILITY IDEOGRAPH")): return "nonhan"
     return "real"
 
 def main(indir, outdir, table="code_table.json"):
