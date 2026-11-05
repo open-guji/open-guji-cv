@@ -93,6 +93,7 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "export_store": ("clustering.glyph_db", "export_store"),
     "assert_db_not_silently_empty": ("clustering.glyph_db", "assert_db_not_silently_empty"),
     "rebuild_from_store": ("clustering.glyph_db", "rebuild_from_store"),
+    "borrowed_store": ("clustering.glyph_db", "borrowed_store"),
     "REPO_ROOT": ("core.workspace", "REPO_ROOT"),
     "resolve_borrow": ("core.workspace", "resolve_borrow"),
     "import_fonts_from_manifest": ("clustering.font_glyphs", "import_fonts_from_manifest"),

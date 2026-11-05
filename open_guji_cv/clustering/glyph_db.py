@@ -1019,6 +1019,43 @@ def _derived_many(raws: list[bytes], feature_backend: str, jobs: int) -> list[tu
     return [got[k] for k in keys]
 
 
+class BorrowedStore(type(Path())):
+    """借来的字形库目录，外加借法（2026-11-05，借库参照方案缺口 1、2）。
+
+    就是一个 ``Path``（旧调用方照常当路径用），多两个属性：
+
+    - ``scope``：``"all"``（缺省，借被借库的全部刻例，旧行为）或 ``"human"``（只借被借库
+      ``admissions.provenance='human'`` 的实例，机器入库的不借）；
+    - ``tag``：被借库的钉号摘要（如被借库快照的 ``digest``），空串＝没钉。只用来进 ``borrow_fingerprint``。
+
+    借法记在 ``borrowed.store`` 那一列的「库名」里（见 ``borrowed_label``）：非缺省借法在库名后带 ``#human``／``~<摘要>``，
+    于是 ``glyph_match.borrow_fingerprint``（取库名排序连起来）不改一行代码就跟着变；缺省借法的库名与旧版逐位相同，
+    各册 `glyph_match` 的代码指纹与产物指纹都不动。
+    """
+    scope: str = "all"
+    tag: str = ""
+
+
+def borrowed_store(path: "str | Path", scope: str = "all", tag: str = "") -> BorrowedStore:
+    if scope not in ("all", "human"):
+        raise ValueError(f"借库 scope 只能是 all 或 human，不是 {scope!r}")
+    b = BorrowedStore(path)
+    b.scope, b.tag = scope, tag or ""
+    return b
+
+
+def borrowed_label(st: "str | Path", scope: str = "all", tag: str = "") -> str:
+    """写进 ``borrowed.store`` 的字符串。缺省借法原样是被借库路径；非缺省借法在库名那一级后加记号
+    （``.../.borrowed/<名>#human~<摘要>/output/glyph_store``），``glyph_match._borrow_name`` 取库名时连记号一起取。"""
+    suffix = ("#" + scope if scope != "all" else "") + ("~" + tag if tag else "")
+    p = Path(st)
+    if not suffix:
+        return str(p)
+    if p.parts[-2:] == ("output", "glyph_store") and len(p.parts) >= 3:
+        return str(p.parent.parent.with_name(p.parent.parent.name + suffix) / "output" / "glyph_store")
+    return str(p) + suffix
+
+
 def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                        feature_backend: str = DEFAULT_FEATURE,
                        extra_stores: "tuple | list" = (), jobs: int = 1) -> dict:
@@ -1051,8 +1088,14 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         with open(path, encoding="utf-8") as f:
             return [json.loads(l) for l in f if l.strip()]
 
-    def load(st: Path, borrowed: bool) -> tuple[int, int, int]:
+    def load(st: Path, borrowed: bool, scope: str = "all", tag: str = "") -> tuple[int, int, int]:
         verb = "INSERT OR IGNORE" if borrowed else "INSERT OR REPLACE"
+        human_ids: set[str] | None = None
+        if borrowed and scope == "human":
+            if not (st / "admissions.jsonl").exists():
+                raise ValueError(f"借库 {st} 要求 scope=human，但没有 admissions.jsonl，分不出人裁")
+            human_ids = {r["instance_id"] for r in read(st / "admissions.jsonl")
+                         if r.get("provenance") == "human"}
         new_src: list[str] = []
         for r in read(st / "sources.jsonl"):
             cols = ",".join(r)
@@ -1064,6 +1107,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
         recs = []
         for meta_file in sorted((st / "instances").glob("*.jsonl")):
             for r in read(meta_file):
+                if human_ids is not None and r["instance_id"] not in human_ids:
+                    continue        # scope=human：机器入库的借不进来
                 png = st / "patches" / f"{_safe(r['instance_id'])}.png"
                 if png.exists():
                     recs.append({**r, "patch_png": png.read_bytes()})
@@ -1079,7 +1124,7 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
                 if not cur.rowcount:
                     continue          # 本书已有同 id 实例：本书优先
                 cur.execute("INSERT OR IGNORE INTO borrowed VALUES (?,?)",
-                            (r["instance_id"], str(st)))
+                            (r["instance_id"], borrowed_label(st, scope, tag)))
             n_inst += 1
             # 派生表示重算（原始圖 → 歸一化 → 骨架 / 特徵）：上面已（多进程）算好，按原顺序写
             db._insert_derived(cur, r["instance_id"], payload)
@@ -1159,7 +1204,8 @@ def rebuild_from_store(store_dir: str | Path, db_path: str | Path,
     if extra_stores:
         cur.execute(BORROWED_TABLE)
         for extra in extra_stores:
-            n_borrowed += load(Path(extra), borrowed=True)[0]
+            scope, tag = getattr(extra, "scope", "all"), getattr(extra, "tag", "")
+            n_borrowed += load(Path(extra), borrowed=True, scope=scope, tag=tag)[0]
     db.conn.commit()
     stats = db.stats()
     db.close()
