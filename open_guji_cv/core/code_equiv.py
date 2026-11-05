@@ -844,6 +844,13 @@ ENTRIES: tuple[Equiv, ...] = (
           old='3041eb1d51519f9af60f81a1be0ce44ee1e4850b7897ee6e32c76136798e202c',
           evidence='near_knn 入口放宽 near_knn_gap（缺省关，全唐文形近字线 11-05，A24 审过）：开关关着时全唐文 012 册 13 页'
                    '（p5,20,35,…,185 每 15 页取 1）与 origin/dev 391d83b 产物逐字节相同；scripts/code_equiv.py check，2026-11-05'),
+    Equiv(module='open_guji_cv.clustering.verify',
+          new='4f9c2196e83e86414a9f0799ac7c25cc611fce807b931d59f066cfdc3c91ef62',
+          old='78f15462e72b050a027f3e201d3bb45cee56ac0376c73e35e437e98713021e2e',
+          evidence='弹性对齐提速（query 侧取数表按条记忆、块内位移最优改滑窗最大值，A20 11-05）：取数与滑窗最大值逐元素相同'
+                   '（tests/clustering/test_verify_elastic.py），合成字形 57,600 次 verify_pair_elastic（64/96/48 边长、6 套参数）结果逐位相同；'
+                   '任务库 #459（dev 081d48a）对 #460（本改动 f5a5052）史記 01 册全册 143 页 glyph_match＋seed_admit：glyph_match 143 页逐字节相同，'
+                   'seed_admit 135 页相同，另 8 页只差 evidence.iron_ex_missing（执行机上刻例原图读不到，两边各有缺，与本改动无关），放行与待审逐格相同；2026-11-05'),
 )
 
 
