@@ -47,8 +47,19 @@ def test_errors_not_cached(tmp_path):
 
 
 def test_no_api_key(monkeypatch):
+    monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
     monkeypatch.delenv(ctx_llm.ENV_KEY, raising=False)
     assert j(None, None).why == "abstain:no_api_key"
+
+
+def test_default_offline_records_ask(monkeypatch):
+    """缺省不调 API（2026-11-05）：有密钥也不问，弃权 llm_pending 并记下这一问给对话统一审。"""
+    monkeypatch.delenv(ctx_llm.ENV_ONLINE, raising=False)
+    monkeypatch.setenv(ctx_llm.ENV_KEY, "k")
+    ctx_llm._CLIENT.clear()
+    v = j(None, None)
+    assert v.why == "abstain:llm_pending" and v.extra["ask"] == {"ver": "ry-l2-2", "l": "子", "r": "學而時習之"}
+    assert not ctx_llm._CLIENT
 
 
 def test_key_without_anthropic_abstains(monkeypatch):
@@ -61,6 +72,7 @@ def test_key_without_anthropic_abstains(monkeypatch):
             raise ImportError(name)
         return real(name, *a, **k)
     monkeypatch.setenv(ctx_llm.ENV_KEY, "k")
+    monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
     monkeypatch.setattr(builtins, "__import__", no_anthropic)
     ctx_llm._CLIENT.clear()
     assert j(None, None).why == "abstain:no_api_key"
@@ -137,6 +149,7 @@ def test_client_missing_anthropic_warns_once(monkeypatch, caplog):
     import logging
     from open_guji_cv.groups import ctx_llm
     monkeypatch.setenv(ctx_llm.ENV_KEY, "k-test-missing-pkg")
+    monkeypatch.setenv(ctx_llm.ENV_ONLINE, "1")
 
     def no_pkg(*a, **k):
         raise ImportError("No module named 'anthropic'")

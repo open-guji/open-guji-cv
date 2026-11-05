@@ -8,8 +8,10 @@
   也可以给本地 jsonl（`AnswerCache`，脚本用）；出错、拒答不进缓存；
 - 只收 conf=high、组内字；「其他」→ `abstain:other`（high 时 `other_conf: high`，共字组联判认它）。
 
-密钥只从环境变量 `GUJI_ANTHROPIC_API_KEY` 读（不进仓、不进配置）；没有密钥 → 先查缓存，缓存没有就弃权 `abstain:no_api_key`，
-与没开本层一样留人审。用量：每格的 token 记进证据（`tok`），本进程累计在 `USAGE`（`usage_summary()`），seed_admit 写进页结果。
+**管线缺省不调 API（sheldon 2026-11-05「以后不用这个 API」）**：只查缓存（裁定库），没命中就弃权 `abstain:llm_pending`，
+并在留痕里记下这一问（`extra.ask`：前后文窗口、提示词版本），由 `feedback/llm_queue.py` 导出成待裁清单，在对话里统一审一遍，
+裁定写回裁定库，再重放 seed_admit 读缓存。要恢复在线问须显式设 `GUJI_LLM_ONLINE=1`（另需 `GUJI_ANTHROPIC_API_KEY`，
+密钥不进仓、不进配置）；设了在线但没密钥 → `abstain:no_api_key`。用量：每格的 token 记进证据（`tok`），本进程累计在 `USAGE`（`usage_summary()`），seed_admit 写进页结果。
 本模块只在用到时惰性 import `anthropic`。
 """
 from __future__ import annotations
@@ -25,6 +27,7 @@ from .context import WIDTH
 from .protocol import GroupVerdict
 
 ENV_KEY = "GUJI_ANTHROPIC_API_KEY"
+ENV_ONLINE = "GUJI_LLM_ONLINE"      # =1 才在管线里真调 API；缺省只读缓存（2026-11-05）
 ENV_BASE = "GUJI_ANTHROPIC_BASE_URL"
 DEFAULT_MODEL = "claude-opus-5-5"
 DEFAULT_EFFORT = "low"
@@ -156,7 +159,13 @@ _IMPORT_WARNED: set = set()
 _log = logging.getLogger(__name__)
 
 
+def online() -> bool:
+    return os.environ.get(ENV_ONLINE) == "1"
+
+
 def _client():
+    if not online():
+        return None
     key = os.environ.get(ENV_KEY, "")
     if not key:
         return None
@@ -192,7 +201,7 @@ def _entry(group, system, ver, left, right, members, model, effort, cache, clien
         return e, True, {}, None
     c = client if client is not None else _client()
     if c is None:
-        return None, False, {}, "no_api_key"
+        return None, False, {}, ("no_api_key" if online() else "pending")
     ans, tok, err = c.ask(system, user_message(left, right), members, model, effort)
     _bump(calls=1, errors=1 if err else 0, input_tokens=tok.get("in"), output_tokens=tok.get("out"),
           cache_read_tokens=tok.get("cache_read"), cache_write_tokens=tok.get("cache_write"))
@@ -286,6 +295,8 @@ def judge(group: str, system: str, prompt_ver: str, left: str, right: str, membe
     if tok:
         extra["tok"] = tok
     if err:
+        if err == "pending":                  # 待对话统一审：记下这一问，导出见 feedback/llm_queue.py
+            extra["ask"] = {"ver": prompt_ver, "l": left, "r": right}
         return GroupVerdict(None, why="abstain:no_api_key" if err == "no_api_key" else f"abstain:llm_{err}", via="ctx_llm", extra=extra)
     ch, conf = e.get("char"), e.get("conf")
     extra["llm_conf"] = conf
