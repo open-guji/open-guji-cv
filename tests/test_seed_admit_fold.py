@@ -99,3 +99,42 @@ def test_fold_coord_ref():
     assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
     assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_coord_ref=True).model_dump()
     assert on.model_dump()["fold_coord_ref"] is True
+
+
+def test_fold_no_ref_char_aspect_and_pending(tmp_path):
+    """fold_ref_char=False：不取整理本字；日曰按宽高比（≥1.0 曰、≤0.85 日），居中留审并记 fold_pending；有裁定用裁定。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0))
+    d = p.model_dump()
+    assert d["fold_ref_char"] is False and d["fold_aspect"] == (0.85, 1.0)
+    d0 = SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    assert "fold_ref_char" not in d0 and "fold_aspect" not in d0
+
+    WH = {}
+
+    def rec(s, wh):
+        r = AdmitRec(id=f"{B}:1:{s}", slot=int(s), admit=False, char="乙", doubts=[], channel=None, provenance="",
+                     evidence={"group": {"id": "ry"}})
+        WH[r.id] = (wh * 100, 100)
+        return r
+    amap = lambda rs: {r.id: ("日", None) for r in rs}   # noqa: E731  整理本一律给「日」：不许被取
+    rs = [rec("1", 1.1), rec("2", 0.7), rec("3", 0.92)]
+    n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], amap(rs), None, store=RulingStore(tmp_path / "e"), wh=WH)
+    assert n == 2 and (rs[0].char, rs[0].evidence["fold"]["via"]) == ("曰", "aspect")
+    assert rs[1].char == "日" and rs[1].evidence["fold"]["aspect"] == 0.7
+    assert not rs[2].admit and rs[2].evidence["fold_pending"] == {"group": "ry"} and rs[2].char == "乙"
+    # 居中格有本组裁定：放裁定字（不是整理本字）
+    st = RulingStore(tmp_path / "s")
+    orig, sa._l3_online = sa._l3_online, (lambda p_: {"ry": {"system": "s", "ver": "v1"}})
+    try:
+        st.put("ry", "v1", "", "", char="曰", conf="high", why="x", model="m", cell=f"{B}:1:3")
+        rs = [rec("3", 0.92)]
+        rs[0].slot = 1
+        seq_amap = {rs[0].id: ("日", None)}
+        n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], seq_amap, None, store=st, wh=WH)
+        assert n == 1 and rs[0].char == "曰" and rs[0].evidence["fold"]["via"] == "ruling"   # 无邻格，窗口键为空串
+    finally:
+        sa._l3_online = orig

@@ -968,29 +968,18 @@ def test_provisional_family_fallback_xz_kgc(monkeypatch):
 
 
 def test_abstain_ref_ok_book_level(monkeypatch):
-    """书级 `abstain_ref_ok`（史記 2026-11-01）：复核时文意全弃权、已放行字＝整理本字 → 不降审；有解法给别的字照降。"""
+    """书级 `abstain_ref_ok` 对 `ref_free` 组（己已巳）不起作用（sheldon 2026-11-05：归组后按文意定，完全不能参考整理本，
+    史記原先把 jys 放进 abstain_ref_ok 的「弃权按整理本放行」作废）：缺省与写了都一样降审。"""
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
-    picks = {"ctx": None}
-    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(picks.get(name), via=name))
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(None, via=name))
     cands = lambda cid: [("已", 0.99), ("己", 0.95)]
     on = FlowConfig(groups=("jys",), abstain_ref_ok=frozenset({"jys"}))
-    adm = lambda: Rec("x", "已", True, "split_ref")
-    r = adm()
-    group_flow_pass([r], {"x": ("已", "equal")}, cands, lambda r: False, FlowConfig(groups=("jys",)))
-    assert not r.admit and "group_flow_abstain" in r.doubts                     # 缺省照旧
-    r = adm()
-    group_flow_pass([r], {"x": ("已", "equal")}, cands, lambda r: False, on)
-    assert r.admit and r.char == "已" and r.evidence["group"]["solvers"][-1]["why"] == "abstain_ref_agree"
-    r = adm()                                                                  # 现役对位缺格，坐标对位字
-    group_flow_pass([r], {}, cands, lambda r: False, on, veto_refs={"x": "已"})
-    assert r.admit
-    r = adm()                                                                  # 整理本是另一个字 → 照降
-    group_flow_pass([r], {"x": ("己", "equal")}, cands, lambda r: False, on)
-    assert not r.admit
-    r = adm()                                                                  # 没有整理本 → 照降
-    group_flow_pass([r], {}, cands, lambda r: False, on)
-    assert not r.admit
+    for cfg, amap, veto in ((FlowConfig(groups=("jys",)), {"x": ("已", "equal")}, None), (on, {"x": ("已", "equal")}, None),
+                            (on, {}, {"x": "已"}), (on, {"x": ("己", "equal")}, None), (on, {}, None)):
+        r = Rec("x", "已", True, "split_ref")
+        group_flow_pass([r], amap, cands, lambda r: False, cfg, **({"veto_refs": veto} if veto else {}))
+        assert not r.admit and "group_flow_abstain" in r.doubts
 
 
 def test_abstain_ref_ok_not_in_params_dump():
