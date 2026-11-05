@@ -182,8 +182,10 @@ def parse_lines(raw: str) -> list[RefLine]:
                 k = math.ceil(len(note) / 2)
                 a, b = note[:k], note[k:]
             for i in range(max(len(a), len(b))):
-                units.append(_unit("n", a[i] if i < len(a) else "", b[i] if i < len(b) else ""))
-            text.extend(ch for ch in note if ch != "|")
+                ca = a[i] if i < len(a) and a[i] != _BLANK else ""
+                cb = b[i] if i < len(b) and b[i] != _BLANK else ""
+                units.append(_unit("n", ca, cb) if ca or cb else _unit("b", ""))
+            text.extend(ch for ch in note if ch not in ("|", _BLANK))
             note.clear()
 
         for ch in line:
@@ -195,6 +197,11 @@ def parse_lines(raw: str) -> list[RefLine]:
                 in_note = False
                 continue
             if in_note and ch == "|":
+                note.append(ch)
+                continue
+            if grid and in_note and ch == _BLANK:
+                # 逐列本小注里的全角空格＝这一行空一个字位（两条小注并成一段时中间空一格，
+                # 如「<無卷數　江西|廵撫採進本>」：右行第 4 位空，「江西」在第 5、6 位）
                 note.append(ch)
                 continue
             if grid and ch == _BLANK and not in_note:
