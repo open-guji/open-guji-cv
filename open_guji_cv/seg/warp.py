@@ -51,8 +51,49 @@ def column_warp_matrix(page_width: int, left: VLine, right: VLine,
     return cv2.getPerspectiveTransform(src, dst), out_w, out_h
 
 
+def _warp_perspective_det(gray: np.ndarray, m: np.ndarray, size: tuple[int, int]) -> np.ndarray:
+    """`cv2.warpPerspective(INTER_LINEAR, BORDER_REPLICATE)` 的跨 CPU 确定版（S9，2026-11-05）。
+
+    OpenCV 5 的 warpPerspective 用浮点坐标、浮点权重做双线性，走 SIMD（AVX2/FMA 与标量路径末位不同）：
+    册12 p99 一列 100～150 像素差 1 级灰度，执行机和本机 CPU 不同，列图就不同、切点跟着翻。
+    这里全用 numpy float64 逐元素乘加（不融合，IEEE 逐位确定）：源坐标、双线性、半偶取整，越界夹到边。
+    与 cv2 原版只在取整边上差 1 级（实测见 PR），所以仍是改产物的开关。只收单通道。"""
+    w, h = size
+    src = np.asarray(gray)
+    if src.ndim != 2:
+        return np.dstack([_warp_perspective_det(src[..., k], m, size) for k in range(src.shape[2])])
+    mi = np.linalg.inv(np.asarray(m, dtype=np.float64))
+    ys, xs = np.mgrid[0:h, 0:w].astype(np.float64)
+    den = mi[2, 0] * xs + mi[2, 1] * ys + mi[2, 2]
+    den = np.where(den != 0, 1.0 / np.where(den != 0, den, 1.0), 0.0)
+    fx = (mi[0, 0] * xs + mi[0, 1] * ys + mi[0, 2]) * den
+    fy = (mi[1, 0] * xs + mi[1, 1] * ys + mi[1, 2]) * den
+    sh, sw = src.shape
+    fx = np.clip(fx, -1.0, float(sw))
+    fy = np.clip(fy, -1.0, float(sh))
+    x0 = np.floor(fx)
+    y0 = np.floor(fy)
+    tx = fx - x0
+    ty = fy - y0
+    x0 = x0.astype(np.int64)
+    y0 = y0.astype(np.int64)
+    xa, xb = np.clip(x0, 0, sw - 1), np.clip(x0 + 1, 0, sw - 1)
+    ya, yb = np.clip(y0, 0, sh - 1), np.clip(y0 + 1, 0, sh - 1)
+    f = src.astype(np.float64)
+    top = f[ya, xa] * (1.0 - tx) + f[ya, xb] * tx
+    bot = f[yb, xa] * (1.0 - tx) + f[yb, xb] * tx
+    v = top * (1.0 - ty) + bot * ty
+    return np.clip(np.rint(v), 0, 255).astype(np.uint8)
+
+
+def _warp(gray: np.ndarray, m: np.ndarray, size: tuple[int, int], det: bool) -> np.ndarray:
+    if det:
+        return _warp_perspective_det(gray, m, size)
+    return cv2.warpPerspective(gray, m, size, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+
+
 def warp_column(gray: np.ndarray, left: VLine, right: VLine,
-                 top_y: float = 0.0, bottom_y: float | None = None) -> np.ndarray:
+                top_y: float = 0.0, bottom_y: float | None = None, det: bool = False) -> np.ndarray:
     """把 `left`/`right` 两条竖直边线之间的列矫正成竖直矩形灰度图。
 
     `left`/`right` 是新坐标系（右上角原点）下的 `VLine`；`top_y`/`bottom_y`
@@ -69,14 +110,15 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     逐行缩放 1.0010（顶）→ 1.1269（底），每行映射后都精确落在 0..out_w。
     所以 max/min/mean 只决定输出的整体分辨率、不改变顶底之间的相对形变，
     取 max 保证没有任何一行被下采样。
+
+    `det=True`：跨 CPU 逐位确定的射影（见 `_warp_perspective_det`，column_warp 书级开关 `det_warp`）。
     """
     h, w = gray.shape[:2]
     if bottom_y is None:
         bottom_y = float(h - 1)
     if left.segments == 1 and right.segments == 1:
         m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
-        return cv2.warpPerspective(gray, m, (out_w, out_h),
-                                    flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
+        return _warp(gray, m, (out_w, out_h), det)
     # 三段折线：一个单应变换表示不了折线，按折点把列切成横带各自射影、竖向拼接。
     # 相邻带共享同一组源角点，拼缝天然对齐；out_w 三带取同一个（最大者），否则
     # 拼不起来。左右两条线的折点 y 差几 px（版框有斜率），取均值当带界——那几
@@ -87,8 +129,7 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     parts = []
     for (a, b), (_, _, out_h) in zip(strips, mats):
         m, _, _ = column_warp_matrix(w, left, right, a, b, out_w=out_w)
-        parts.append(cv2.warpPerspective(gray, m, (out_w, out_h), flags=cv2.INTER_LINEAR,
-                                         borderMode=cv2.BORDER_REPLICATE))
+        parts.append(_warp(gray, m, (out_w, out_h), det))
     return np.vstack(parts)
 
 
