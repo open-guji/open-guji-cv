@@ -211,23 +211,26 @@ def main() -> None:
     for r in instances:
         by_char[r["char"]].append(r["instance_id"])
     multi = [c for c, v in by_char.items() if len(v) > 1]
-    n_same = 0
-    while n_same < N_RANDOM_SAME and multi:
+    # 尝试次数封顶：小书可取的同字对可能不足 N_RANDOM_SAME（去重后加不进），不封顶会死循环
+    n_same, tries = 0, 0
+    while n_same < N_RANDOM_SAME and multi and tries < 50 * N_RANDOM_SAME:
+        tries += 1
         c = rng.choice(multi)
         a, b = rng.sample(by_char[c], 2)
         before = len(pairs)
         add(a, b, "random")
         n_same += len(pairs) - before
     all_ids = [r["instance_id"] for r in instances]
-    n_diff = 0
-    while n_diff < N_RANDOM_DIFF:
+    n_diff, tries = 0, 0
+    while n_diff < N_RANDOM_DIFF and tries < 50 * N_RANDOM_DIFF:
+        tries += 1
         a, b = rng.sample(all_ids, 2)
         if char_of[a] == char_of[b]:
             continue
         before = len(pairs)
         add(a, b, "random")
         n_diff += len(pairs) - before
-    print(f"随机对后累计 {len(pairs)}", flush=True)
+    print(f"随机对后累计 {len(pairs)}（random same {n_same} / diff {n_diff}）", flush=True)
 
     # ---- 4. 形近族：人裁来源的硬负例 ----
     for x, y in NEVER_MATCH_FAMILIES:
