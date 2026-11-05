@@ -60,3 +60,16 @@ def test_blind_needs_ctx_guard_ref_and_healthy_column():
     assert dec(**kw, blind_ok=True)
     assert not dec(**{**kw, "doubts": ["库 unsure(cov=0.940)"]}, blind_ok=True)    # 没有 ctx_guard_ref
     assert not dec(**{**kw, "cands": [("者", 0.99), ("省", 0.9)]}, blind_ok=True)  # 库强烈说是别的字
+
+
+def test_non_han_ref_and_few_stroke_guards():
+    """史記 r12：参校字不是汉字（ခ）不放；少笔画字名单里库首位≠参校字的盲放不放。"""
+    assert not dec(char="ခ", ref="ခ", cands=[("ခ", 0.99)])                         # 参校字缅文
+    assert dec(char="𫝊", ref="𫝊")                                                  # 汉字照放
+    assert dec(char="", ref="", cands=[("", 0.99)])               # 私用码造字仍算字
+    blind = dict(char="下", ref="下", cands=[("十", 0.95), ("下", 0.9)], doubts=["ctx_guard_ref"], blind_ok=True)
+    assert dec(**blind)                                                            # 无名单：盲放照旧
+    assert not dec(**blind, few_stroke=frozenset("下十"))
+    assert dec(**blind, few_stroke=frozenset("一二三"))                             # 不涉及的字不受影响
+    assert "lane_coord_few_stroke" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(lane_coord_few_stroke=("一", "二")).model_dump()["lane_coord_few_stroke"] == ("一", "二")
