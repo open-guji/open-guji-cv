@@ -613,7 +613,7 @@ def raw_dir(ws: Path, book: str) -> Path | None:
     return next((p for p in sorted((ws / "data_full").glob(f"*/{book}")) if p.is_dir()), None)
 
 
-def seg_selfcheck_on(ws: Path) -> bool:
+def seg_selfcheck_on(text_id: str) -> bool:
     """这部书开没开出单同字对照自检（guji-manager `review/seg_defect.SELFCHECK_BOOKS`，按 book-text 条目 id）。
     装的 manager 还没有这个入口（< 带 book_flags 的版本）就当没开，打一行提示。"""
     try:
@@ -623,7 +623,7 @@ def seg_selfcheck_on(ws: Path) -> bool:
     if not hasattr(sd, "book_opts"):
         print("ⓘ 装的 guji-manager 没有同字对照自检（review/seg_defect.book_flags），这次不跑；要用先升级 manager")
         return False
-    return bool((sd.book_opts(text_id_of(ws)) or {}).get("enabled"))
+    return bool((sd.book_opts(text_id) or {}).get("enabled"))
 
 
 def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
@@ -651,11 +651,12 @@ def cmd_prep(a, bind: dict | None = None, pack: str | None = None) -> int:
             sys.exit("✗ guji audit alt 没出相似字（见上面的原因）；确实要出没有相似字的单子加 --no-alt")
     seg_flags = out / "seg_selfcheck.tsv"
     seg_flags.unlink(missing_ok=True)             # 每次出单现算，不复用旧表（格号会变）
-    if not getattr(a, "no_seg_selfcheck", False) and seg_selfcheck_on(ws):
-        # 同字对照自检（B1③，A20／A31 11-05）：书级开关在 guji-manager seg_defect.SELFCHECK_BOOKS，没开就不出表
+    if not getattr(a, "no_seg_selfcheck", False) and seg_selfcheck_on(text_id):
+        # 同字对照自检（B1③，A20／A31 11-05）：书级开关在 guji-manager seg_defect.SELFCHECK_BOOKS，按本次出单的
+        # text_id 判（可被 --text-id 盖掉），判了开就 --force 跑，免得 seg_defect 从目录名推出别的 id 而悄悄不出表
         if run([py, "-m", "guji_manager.review.seg_defect", book, "-w", ws, "--products", products, "--gate",
-                "--out", seg_flags], cwd=CV, env=env).returncode:
-            sys.exit("✗ 同字对照自检没跑通（见上面的原因）；确实要不带自检出单加 --no-seg-selfcheck")
+                "--force", "--out", seg_flags], cwd=CV, env=env).returncode or not seg_flags.exists():
+            sys.exit("✗ 同字对照自检没跑通或没出表（见上面的原因）；确实要不带自检出单加 --no-seg-selfcheck")
     raw = out / "raw"
     cmd = [py, HERE / "pending_list.py", "--products", products, "--book", book, "--chapter", chapter, "--rev", rev,
            "--cv-commit", a.cv_commit or git_head(), "--out", raw]

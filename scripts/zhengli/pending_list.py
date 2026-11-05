@@ -36,7 +36,8 @@ pending_route 不扣它们。格号在现行产物里没有的（多半重切过
 （同名 `.meta.json` 记送审类别 `review_kinds` 与各页 seed_admit／cell_shrink 产物指纹，对不上现行产物就判过期、退出）。
 已放行、通道不是 human、类别在 `review_kinds` 里的命中格加进单子：`why` 加 `seg_defect`，带 `seg_kind`、`seg_feature`、
 `src: "seg_selfcheck"`（不带 recheck，pending_route 照常扣掉已有人裁的格）；格数另记进 note，卡片里没有也放过。
-已在单上的格命中只加 `seg_kind`／`seg_feature` 当证据，不加 why、不改原因。
+已在单上的格命中只加 `selfcheck_kind`／`seg_feature` 当证据，不加 why、不写 `seg_kind`（那会顶掉原有的切坏细分，
+如 jiazhu_uneven）、不改原因。只有 `republish.py prep` 这条路带自检；`zl.py` 出的草稿单不带。
 
 字段名集中在下面常量。cv_version 为字符串（cv-vX.Y.Z）或 null；rev 须形如 <册>-r<n>。
 """
@@ -123,25 +124,24 @@ SELFCHECK_SRC = "seg_selfcheck"
 
 
 def read_seg_flags(path: Path, products: Path, book: str) -> tuple[list[dict], list[str]]:
-    """旗表 → (行, 送审类别)。旁边有 `.meta.json` 就核产物指纹：meta 记了指纹、现行产物也有、两者不同＝过期，退出。"""
+    """旗表 → (行, 送审类别)。必须有同名 `.meta.json`，并按 guji-manager `seg_defect.meta_fresh` 核产物指纹
+    （缺 meta、现行产物缺页或多页、指纹不同都算过期），过期就退出。"""
     import csv
+    meta_p = path.with_name(path.name + ".meta.json")
+    if not meta_p.exists():
+        sys.exit(f"旗表 {path} 旁边没有 {meta_p.name}：核不了产物指纹，重跑 seg_defect --gate")
+    meta = json.loads(meta_p.read_text(encoding="utf-8"))
+    try:
+        from guji_manager.review.seg_defect import meta_fresh
+    except ImportError:
+        sys.exit("装的 guji-manager 没有 seg_defect.meta_fresh（同字对照自检要 manager ≥ 带 book_flags 的版本）")
+    from open_guji_cv.products.store import ProductStore
+    if not meta_fresh(meta, ProductStore(products), book):
+        sys.exit(f"旗表 {path} 过期：meta 里的 seed_admit／cell_shrink 产物指纹和现行产物对不上，重跑 seg_defect --gate")
     rows = list(csv.DictReader(path.open(encoding="utf-8"), delimiter="\t"))
     for r in rows:                       # seg_defect 的格号带不带「册:」前缀都收（格号 = 页:列:格序[sub]）
         r["格号"] = r["格号"].removeprefix(f"{book}:")
-    meta_p = path.with_name(path.name + ".meta.json")
-    kinds = ["clipped"]
-    if meta_p.exists():
-        meta = json.loads(meta_p.read_text(encoding="utf-8"))
-        kinds = list(meta.get("review_kinds") or kinds)
-        want = meta.get("products") or {}
-        if want:
-            from open_guji_cv.products.store import ProductStore
-            st = ProductStore(products)
-            for step, pages in want.items():
-                stale = [k for k, sha in pages.items() if sha and (st.sha(book, step, k) or sha) != sha]
-                if stale:
-                    sys.exit(f"旗表 {path} 过期：{step} {len(stale)} 页产物指纹对不上（如 {stale[:3]}），重跑 seg_defect --gate")
-    return rows, kinds
+    return rows, list(meta.get("review_kinds") or ["clipped"])
 
 
 def apply_seg_flags(cells: list[dict], rows: list[dict], kinds: list[str]) -> tuple[set[str], int]:
@@ -153,8 +153,8 @@ def apply_seg_flags(cells: list[dict], rows: list[dict], kinds: list[str]) -> tu
         cell, kind, feat = r["格号"], r["seg_kind"], r.get("特征") or ""
         if cell in by_cell:
             c = by_cell[cell]
-            if cell not in added and not c.get("seg_kind"):
-                c.update({"seg_kind": kind, "seg_feature": feat})
+            if cell not in added and not c.get("selfcheck_kind"):
+                c.update({"selfcheck_kind": kind, "seg_feature": feat})
                 tagged += 1
             continue
         if r.get("放行") != "是" or r.get("通道") == "human" or kind not in kinds:
