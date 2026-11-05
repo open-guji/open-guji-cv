@@ -3523,6 +3523,16 @@ _VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozen
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
 
 
+def _ruling_han(c) -> bool:
+    """裁定字须是汉字（统一表意文字各区＋兼容表意）：汉字区以外的码位、私用码、符号、占位一律不放（Ext J 的 U+323B0–3347F 是 Unicode 17 的真汉字，算）
+    （A31 11-05：不能让非汉字经 vis_ruling 通道放行；比 `_is_han` 严，后者连私用码也算）。"""
+    if not c or len(c) != 1:
+        return False
+    o = ord(c)
+    return (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x323AF
+            or 0x323B0 <= o <= 0x3347F or 0x2F800 <= o <= 0x2FA1F)
+
+
 def _override_ok(groups, a: str, b: str) -> bool:
     """a、b 同属 `groups` 里的某个字组（成员含两字）。"""
     from ..groups.registry import FLOW_GROUPS
@@ -3568,7 +3578,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         v = next((x for ver, subs in _VIS_RULING_SPECS
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
-                  and x.get("subclass") in subs), None)
+                  and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
         ref_ = (amap.get(r.id) or (None,))[0]
         if not v:
             f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
