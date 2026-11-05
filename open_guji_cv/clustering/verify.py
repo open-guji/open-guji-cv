@@ -236,6 +236,12 @@ ELASTIC_PREP_CACHE = 512        # 图块预处理缓存条目上限（每条 ~70
 
 _GRID_CACHE: dict[tuple, tuple] = {}
 _PREP_CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
+# 本条 query 的取数表（2026-11-05，提速）：库匹配一个 query 连打约 10 个候选、每个最多 3 档，
+# 两次花式取数里 query 那一侧每次都重建同一张下标表（offsets × 墨点，约 50 µs）。
+# 只记最近一条 query：(键, query 权重场按位移展开的 W, query 墨点的取数下标)。
+# 取出来的数与原先 `wa[base_b + offsets]`、`wb[base_a - offsets]` 逐元素相同，后面的
+# reduceat 吃的是同一个数组，结果逐位不变。
+_QUERY_CACHE: list = [None, None, None]
 
 
 def _grids(size: int, block: int, local: int, max_shift: int) -> tuple:
@@ -278,6 +284,45 @@ def _prepare(patch: np.ndarray, scale: float, tau: float, block: int,
     if len(_PREP_CACHE) > ELASTIC_PREP_CACHE:
         _PREP_CACHE.popitem(last=False)
     return out
+
+
+def _query_tables(a: np.ndarray, wa: np.ndarray, base_a: np.ndarray, offsets: np.ndarray,
+                  tau: float, block: int, span: int, stride: int) -> tuple[np.ndarray, np.ndarray]:
+    """(W, idx_a)：``W[o, i] == wa[i + offsets[o]]``（凡 ``i + offsets[o]`` 落在 wa 里的位置），
+    ``idx_a == base_a[None, :] - offsets[:, None]``。
+
+    于是 ``np.take(W, base_b, axis=1) == wa[base_b[None, :] + offsets[:, None]]``（权重场四周垫了
+    span 圈零，墨点加任一位移都不出界，W 越界补的 0 永远取不到），
+    ``np.take(wb, idx_a) == wb[base_a[None, :] - offsets[:, None]]``。按 query 内容记最近一条。"""
+    key = (a.tobytes(), tau, block, span, stride)
+    if _QUERY_CACHE[0] != key:
+        n = wa.size
+        W = np.zeros((offsets.size, n), dtype=wa.dtype)
+        for o, off in enumerate(offsets.tolist()):
+            if off >= 0:
+                W[o, :n - off] = wa[off:]
+            else:
+                W[o, -off:] = wa[:n + off]
+        _QUERY_CACHE[:] = [key, W, base_a[None, :] - offsets[:, None]]
+    return _QUERY_CACHE[1], _QUERY_CACHE[2]
+
+
+def _window_max(t: np.ndarray, span: int, local: int) -> np.ndarray:
+    """``t[pick].max(axis=1)`` 的等价算法（`_grids` 的 pick）：t 的行是 (2span+1)² 个合成位移，
+    pick 的第 dy·(2m+1)+dx 行是以 (dy, dx) 为左上角、边长 2local+1 的方窗。先沿 y 再沿 x 取
+    滑窗最大值——max 与顺序无关，逐元素相同；结果按行连续，与原先 `.max(axis=1)` 的布局一样，
+    后面 `.sum(axis=1)` 加的是同一串数。"""
+    side = 2 * span + 1
+    w = 2 * local + 1
+    out_side = side - w + 1
+    g = t.reshape(side, side, -1)
+    m = g[0:out_side]
+    for i in range(1, w):
+        m = np.maximum(m, g[i:i + out_side])
+    r = m[:, 0:out_side]
+    for i in range(1, w):
+        r = np.maximum(r, m[:, i:i + out_side])
+    return r.reshape(out_side * out_side, -1)
 
 
 def _weight_field(binary: np.ndarray, tau: float, pad: int) -> np.ndarray:
@@ -326,6 +371,7 @@ def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
     offsets, pick, radius, span, stride, n_side = _grids(size, block, local,
                                                          max_shift)
     _, _, wa, base_a, sa = _prepare(a, 1.0, tau, block, span, stride, n_side)
+    W, idx_a = _query_tables(a, wa, base_a, offsets, tau, block, span, stride)
 
     # 全局位移 (dy,dx) × 块内位移 (ly,lx) 合成后仍是一个平移，所以先把所有
     # 合成位移的块和一次算完，再按 (dy,dx) 取各块在 9 个块内位移里的最优。
@@ -340,10 +386,10 @@ def _elastic_align(a: np.ndarray, b: np.ndarray, max_shift: int,
                                            n_side)
         if nb == 0:
             continue
-        t_b = np.add.reduceat(wa[base_b[None, :] + offsets[:, None]], sb, axis=1)
-        t_a = np.add.reduceat(wb[base_a[None, :] - offsets[:, None]], sa, axis=1)
-        cov = (t_b[pick].max(axis=1).sum(axis=1)
-               + t_a[pick].max(axis=1).sum(axis=1)) / (na + nb)
+        t_b = np.add.reduceat(np.take(W, base_b, axis=1), sb, axis=1)
+        t_a = np.add.reduceat(np.take(wb, idx_a), sa, axis=1)
+        cov = (_window_max(t_b, span, local).sum(axis=1)
+               + _window_max(t_a, span, local).sum(axis=1)) / (na + nb)
         top = float(cov.max())
         k = int(np.lexsort((radius, -cov))[0])
         key = (-top, radius[k], abs(scale - 1.0))

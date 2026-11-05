@@ -137,3 +137,32 @@ def test_prep_cache_is_bounded():
     finally:
         V.ELASTIC_PREP_CACHE = cap
         V._PREP_CACHE.clear()
+
+
+def test_gather_and_window_max_match_fancy_indexing():
+    """2026-11-05 提速：`_query_tables` 的取数与 `_window_max` 必须与原先的花式取数
+    `wa[base_b + offsets]`、`wb[base_a - offsets]`、`t[pick].max(axis=1)` 逐元素相同
+    （后面的 reduceat／sum 吃同一个数组，产物才逐字节不变）。多套 (block, local, max_shift)。"""
+    from open_guji_cv.clustering import verify as V
+    for size, block, local, max_shift in ((64, 16, 1, 3), (64, 8, 2, 2), (48, 16, 1, 1)):
+        a, b = _glyph(11), _glyph(12)
+        if a.shape[0] != size:
+            import cv2
+            a = (cv2.resize(a, (size, size), interpolation=cv2.INTER_NEAREST) > 0).astype(np.uint8)
+            b = (cv2.resize(b, (size, size), interpolation=cv2.INTER_NEAREST) > 0).astype(np.uint8)
+        offsets, pick, _r, span, stride, n_side = V._grids(size, block, local, max_shift)
+        _, _, wa, base_a, sa = V._prepare(a, 1.0, V.ELASTIC_TAU, block, span, stride, n_side)
+        for scale in (0.95, 1.0, 1.05):
+            _, nb, wb, base_b, sb = V._prepare(b, scale, V.ELASTIC_TAU, block, span, stride, n_side)
+            W, idx_a = V._query_tables(a, wa, base_a, offsets, V.ELASTIC_TAU, block, span, stride)
+            g_b = np.take(W, base_b, axis=1)
+            g_a = np.take(wb, idx_a)
+            assert np.array_equal(g_b, wa[base_b[None, :] + offsets[:, None]])
+            assert np.array_equal(g_a, wb[base_a[None, :] - offsets[:, None]])
+            for g, s in ((g_b, sb), (g_a, sa)):
+                t = np.add.reduceat(g, s, axis=1)
+                new = V._window_max(t, span, local)
+                old = t[pick].max(axis=1)
+                assert new.flags.c_contiguous and new.shape == old.shape
+                assert np.array_equal(new, old)
+                assert np.array_equal(new.sum(axis=1), old.sum(axis=1))
