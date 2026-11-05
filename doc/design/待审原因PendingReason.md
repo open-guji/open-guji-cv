@@ -13,9 +13,9 @@
 
 | 东西 | 位置 |
 |---|---|
-| enum 定义 | `open_guji_cv/review/pending_reason.py`（`PendingReason`，字段名常量 `FIELD = "pending_reason"`） |
-| 配置（码、显示名、去向、负责人、卡片形态、判法说明、旧字段对应） | `open_guji_cv/review/pending_reasons.yaml` |
-| 判一格的原因 | `open_guji_cv/review/reasons.py`：`classify(cell, ctx)`；整张单 `reasons_for_pending()` ＋ `stamp()`；控制台卡 `stamp_cards()` |
+| enum 定义 | `guji_manager/review/pending_reason.py`（guji-manager 仓；2026-11-04 拆分时从 cv 搬去）（`PendingReason`，字段名常量 `FIELD = "pending_reason"`） |
+| 配置（码、显示名、去向、负责人、卡片形态、判法说明、旧字段对应） | `guji_manager/review/pending_reasons.yaml` |
+| 判一格的原因 | `guji_manager/review/reasons.py`：`classify(cell, ctx)`；整张单 `reasons_for_pending()` ＋ `stamp()`；控制台卡 `stamp_cards()` |
 | 导出给别的仓 | `python -m guji_manager.review.pending_reason --json`（键 version／field／categories／routes／reasons） |
 | manager 里取 | `guji_manager._cv.pending_reason_specs`（经 cv `manager_api`，不直接 import cv 内部） |
 
