@@ -68,6 +68,10 @@ class IdsSpec:
                                 # 给了 `unet` 改用 U-Net；模板与在线格同一切法切，最近邻；frame/orient/prior/which/by_form 不用（2026-10-22）
     sub_prior: float | None = None  # 两段版：给了数＝第二刀（`ids_two.part_of`）：切下的段再在墨迹框内按这个先验找缝，只比缝后一小块
                                 # （參㕘叅 去掉「人」只比 彡／小／𠇍，2026-10-26）；模板库须同样取法
+    refine: str = ""            # 整字版：非空＝二次细判（2026-11-05，全唐文 xjz：滎 只有 7 例被 榮 的 100 例压住，一起判只会弃权）：一起判的结果（给字或因低分差／
+                                # 模板少弃权）里最像的字落在细判库的类里，就用细判库（工作区 `config/groups/ids/<refine>.json`，如两类 榮／滎）再整字判一次，
+                                # 以它的结论为准（它弃权就整格弃权 `abstain:refine_*`）；细判库的 `spec` 同样覆盖门槛（如 min_class 7）。
+                                # 缺省关；按书开启＝本书 xjz 模板库的 `spec` 里写 `"refine": "xjz_rx"`。无细判库＝照旧一起判
     dual: float = 0.0           # 两段版：>0＝两路一致才给字（2026-10-26，參㕘叅）：IDS 给了字，还要整字 HOG 岭回归（模板库 `whole_bank.json`，
                                 # 与 ids_bank.json 同目录，参数用本行的 size/region/lam/clean）判成同一字、判别值 ≥ 这个数，否则弃权
 
@@ -405,10 +409,13 @@ def fingerprint(groups) -> str:
             d.pop("sub_prior")
         if not d["dual"]:
             d.pop("dual")
+        if not d["refine"]:
+            d.pop("refine")
         spec = hashlib.sha256(json.dumps(d, sort_keys=True, ensure_ascii=False).encode()).hexdigest()[:8]
         fine = _ROOT / (sp.config_dir or f"config/groups/{g}") / "ids_fine.tsv"
         parts.append(f"{g}={spec}.{_sha(bank_path(g))}.{_sha(ov)}" + (f".u{_sha(unet_path(g))}" if SPECS[g].unet else "")
-                     + (f".f{_sha(fine)}" if SPECS[g].generic else "") + (f".w{_sha(whole_bank_path(g))}" if SPECS[g].dual else ""))
+                     + (f".f{_sha(fine)}" if SPECS[g].generic else "") + (f".w{_sha(whole_bank_path(g))}" if SPECS[g].dual else "")
+                     + (f".r{_sha(_refine_path(SPECS[g].refine))}" if SPECS[g].refine else ""))
     if not parts:
         return ""
     return "ids:" + ",".join(parts) + f",lv1={_sha(IDS_TABLE)}"
@@ -925,7 +932,43 @@ def judge(g: str, gray) -> GroupVerdict:
         return GroupVerdict(None, why="abstain:no_bank", via="ids")
     if gray is None:
         return GroupVerdict(None, why="abstain:no_patch", via="ids")
-    return judge_with(g, gray, load_bank(p), _spec_for(g, p))
+    spec = _spec_for(g, p)
+    v = judge_with(g, gray, load_bank(p), spec)
+    return _refine_verdict(g, gray, v, spec or SPECS[g])
+
+
+def _refine_path(name: str) -> Path | None:
+    """细判库（`IdsSpec.refine`）：只认工作区 `config/groups/ids/<name>.json`（本书训的）。"""
+    from ..core.workspace import ws_config_dir
+    cfg = ws_config_dir()
+    if cfg is not None and name and (cfg / "groups" / "ids" / f"{name}.json").exists():
+        return cfg / "groups" / "ids" / f"{name}.json"
+    return None
+
+
+def _refine_verdict(g: str, gray, v: GroupVerdict, spec: IdsSpec) -> GroupVerdict:
+    """`spec.refine` 二次细判（整字版）。一起判的最像字（给字，或低分差／模板少弃权时 `extra.form`）在细判库的类里才触发；
+    细判库缺失、一起判的最像字在库外 → 原结论不动。"""
+    if not spec.refine or not spec.whole:
+        return v
+    p2 = _refine_path(spec.refine)
+    if p2 is None:
+        return v
+    top = v.char or (v.extra or {}).get("form")
+    if not top or (v.char is None and v.why not in ("abstain:low_margin", "abstain:few_templates")):
+        return v
+    from dataclasses import replace
+    bank2 = load_bank(p2)
+    cls = {k for k, t in bank2.items() if isinstance(t, (list, tuple, dict)) and len(t)}
+    if top not in cls:
+        return v
+    ov = _spec_digest(str(p2), hashlib.sha256(p2.read_bytes()).hexdigest())
+    spec2 = replace(spec, refine="", give="", **ov)
+    v2 = _judge_whole(gray, bank2, spec2, cls)
+    extra = {**(v2.extra or {}), "refine": spec.refine, "first": {"char": v.char, "why": v.why, "form": top}}
+    if v2.char is None:
+        return GroupVerdict(None, conf=v2.conf, why="abstain:refine_" + str(v2.why).removeprefix("abstain:"), via="ids", extra=extra)
+    return GroupVerdict(v2.char, conf=v2.conf, why="agree", via="ids", extra=extra)
 
 
 @lru_cache(maxsize=64)
