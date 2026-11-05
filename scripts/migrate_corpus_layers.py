@@ -39,8 +39,8 @@ def _vols(ws: Path) -> list[str]:
 def prepare(ws: Path, from_n: int, note: str) -> dict:
     from open_guji_cv.core import corpus_pin as cpn
     from open_guji_cv.datastore.client import BlobCache, WorkerSource
-    from open_guji_cv.datastore.workcopy import _db_manifest, pull
-    from open_guji_cv.ops import corpus_pack as cp
+    from guji_manager.datastore.workcopy import _db_manifest, pull
+    from guji_manager.ops import corpus_pack as cp
 
     src = WorkerSource()
     print("1/7 拉殿本最新（只读）…")
@@ -82,9 +82,9 @@ def prepare(ws: Path, from_n: int, note: str) -> dict:
 
 
 def push(ws: Path, yes: bool) -> None:
-    from open_guji_cv.cli_db import _pg_conn
-    from open_guji_cv.datastore.workcopy import push as wpush
-    from open_guji_cv.ops import corpus_pack as cp
+    from guji_manager.cli_db import _pg_conn
+    from guji_manager.datastore.workcopy import push as wpush
+    from guji_manager.ops import corpus_pack as cp
 
     actor = os.environ.get("GUJI_ACTOR") or os.environ.get("USER") or None
     base_ws = cp.base_workdir("main")

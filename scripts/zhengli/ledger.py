@@ -317,7 +317,7 @@ def gather_page_types(book: str, pages: list[int]) -> tuple[dict[int, str], dict
     types: dict[int, str] = {}
     src: dict[int, str] = {}
     try:
-        from open_guji_cv.feedback.consumers import verdict_store
+        from guji_manager.feedback.consumers import verdict_store
         for it in verdict_store().list("page-type", legacy=False):
             if str(it.anchor.book) == book and it.anchor.page is not None:
                 t = (it.expected or {}).get("page_type")
@@ -341,7 +341,7 @@ def gather_page_types(book: str, pages: list[int]) -> tuple[dict[int, str], dict
 
 
 def _default_pending(book: str) -> Path:
-    from open_guji_cv.ops.release_gates import lists_dir
+    from guji_manager.ops.release_gates import lists_dir
     nnn = chapter_of(book)
     hits = sorted((lists_dir() / "proofing").glob(f"*/{nnn}.pending.json")) if nnn else []
     if len(hits) != 1:
@@ -365,7 +365,7 @@ def _default_pages_json(book: str) -> Path:
 
 def build_row(book: str, pages_json: Path, pending: Path, recut: Path | None, punct: Path | None,
               body_only: bool = True, now: datetime | None = None) -> dict:
-    from open_guji_cv.ops.release_gates import RecutList, _rows
+    from guji_manager.ops.release_gates import RecutList, _rows
     pj, pd = _load(pages_json), _load(pending)
     rl = RecutList(_rows(recut)) if recut else None
     order_pages = sorted({_anchor_page(a) for a, _ in index_pages(pj)["glyphs"]})
@@ -403,7 +403,7 @@ def main(argv=None) -> int:
     ap.add_argument("--out", help="台账 jsonl（追加一行）；缺省数据目录 feedback/lists/ledger/<册>.jsonl")
     a = ap.parse_args(argv)
     os.environ["GUJI_WORKSPACE"] = str(Path(a.ws).expanduser().resolve())
-    from open_guji_cv.ops.release_gates import lists_dir, recut_path
+    from guji_manager.ops.release_gates import lists_dir, recut_path
 
     pages_json = Path(a.pages_json) if a.pages_json else _default_pages_json(a.book)
     pending = Path(a.pending) if a.pending else _default_pending(a.book)

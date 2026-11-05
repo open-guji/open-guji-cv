@@ -329,3 +329,65 @@ def test_pack_rev_uses_engine(tmp_path, monkeypatch):
     assert str(cmd[1]).endswith("engine_run.py") and kw["cwd"] == str(eng) and kw["env"]["PYTHONPATH"] == str(eng)
     rp.pack_rev(argparse.Namespace(engine=None), tmp_path, "vol06", "006-r6")
     assert calls[-1][0][1:3] == ["-m", "open_guji_cv.cli_v2"]
+
+
+def _rebase_table(H=((2, 0, 10), (0, 2, 20), (0, 0, 1))):
+    return {"rev": 4, "status": "staged", "pages": [
+        {"seq": "0001", "page": 1, "w": 500, "h": 700, "sha256": "new1",
+         "from_rev": {"rev": 3, "sha256": "old1", "w": 200, "h": 300, "H": [list(r) for r in H]}},
+        {"seq": "0002", "page": 2, "w": 500, "h": 700, "sha256": "new2",
+         "from_rev": {"rev": 3, "sha256": "old2", "w": 200, "h": 300, "H": [list(r) for r in H]}}]}
+
+
+def _rebase_cord():
+    return {"book_id": "96mid1ogzk", "volume": 5, "pages": [
+        {"page": 1, "image": {"width": 200, "height": 300, "sha256": "old1"},
+         "canvas": {"id": "c1", "seq": 1, "width": 200, "height": 300},
+         "regions": [{"box": [0, 0, 100, 150], "rules": [[[0, 0], [100, 0]]]}],
+         "columns": [{"box": [50, 0, 10, 100]}], "cells": [{"a": "1:1:1", "box": [50, 5, 10, 10]}]},
+        {"page": 2, "image": {"width": 500, "height": 700, "sha256": "new2"},   # 已换过的页不再换
+         "canvas": {"id": "c2", "seq": 2, "width": 500, "height": 700}, "cells": [{"a": "2:1:1", "box": [1, 2, 3, 4]}]}]}
+
+
+def test_rebase_cord_to_site_pages():
+    """拷进 book-text 的 cord 换到网站新页（页表 from_rev.H）：旧页换、已换的页不动，导出原件不归它管。"""
+    pytest.importorskip("guji_manager")
+    cord = _rebase_cord()
+    assert rp.rebase_cord(cord, _rebase_table()) == 1
+    p1, p2 = cord["pages"]
+    assert p1["image"] == {"width": 500, "height": 700, "sha256": "new1"}
+    assert (p1["canvas"]["id"], p1["canvas"]["width"], p1["canvas"]["height"]) == ("c1", 500, 700)
+    assert p1["cells"][0]["box"] == [110, 30, 20, 20]
+    assert p1["columns"][0]["box"] == [110, 20, 20, 200]
+    assert p1["regions"][0]["box"] == [10, 20, 200, 300]
+    assert p1["regions"][0]["rules"] == [[[10, 20], [210, 20]]]
+    assert p1["producers"]["rebase"]["from_source_rev"] == 3 and p1["producers"]["rebase"]["to_source_rev"] == 4
+    assert p2["cells"][0]["box"] == [1, 2, 3, 4] and "producers" not in p2
+    assert rp.rebase_cord(cord, _rebase_table()) == 0                       # 再跑一遍不动
+
+
+def test_rebase_cord_noop_and_mismatch():
+    pytest.importorskip("guji_manager")
+    cord = _rebase_cord()
+    assert rp.rebase_cord(cord, None) == 0                                  # R2 没页表的书
+    assert rp.rebase_cord(cord, {"rev": 2, "pages": [{"seq": "0001", "page": 1, "w": 1, "h": 1, "sha256": "x"}]}) == 0
+    cord["pages"][0]["image"]["sha256"] = "other"
+    with pytest.raises(ValueError, match="1"):
+        rp.rebase_cord(cord, _rebase_table())
+
+
+def test_copy_cord_for_site_keeps_export(tmp_path, monkeypatch):
+    pytest.importorskip("guji_manager")
+    src, dst = tmp_path / "005.cord.json", tmp_path / "bt" / "005.cord.json"
+    dst.parent.mkdir()
+    src.write_text(json.dumps(_rebase_cord()), encoding="utf-8")
+    before = src.read_bytes()
+    monkeypatch.setattr(rp, "site_page_table", lambda book, vol: _rebase_table())
+    assert rp.copy_cord_for_site(src, dst) == 1
+    assert src.read_bytes() == before
+    assert json.loads(dst.read_text(encoding="utf-8"))["pages"][0]["image"]["sha256"] == "new1"
+    bad = _rebase_cord()
+    bad["pages"][0]["image"]["sha256"] = "other"
+    src.write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        rp.copy_cord_for_site(src, dst)

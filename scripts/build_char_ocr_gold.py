@@ -31,10 +31,10 @@ import open_guji_cv.steps  # noqa: E402,F401
 from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import cell_key, page_key  # noqa: E402
 from open_guji_cv.core.workspace import corpus_path  # noqa: E402
-from open_guji_cv.eval.round_check import load_verdicts  # noqa: E402
+from guji_manager.eval.round_check import load_verdicts  # noqa: E402
 from open_guji_cv.gold.item import Anchor, GoldItem  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
-from open_guji_cv.gold.v2_align import align_book  # noqa: E402
+from guji_manager.gold.v2_align import align_book  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 from open_guji_cv.products.cache import ImageCache  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402

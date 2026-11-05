@@ -81,7 +81,7 @@ def test_code_conflict_demotes_admitted_not_human(tmp_path):
     cells = {1: {"admit": True, "char": "甲"}, 2: {"admit": True, "char": "埀", "channel": "match_solo", "provenance": "match"},
              3: {"admit": True, "char": "乙"}}
     n, r = _run(cells, {1: "甲", 2: "", 3: "乙"}, st)
-    assert n == 0 and not r[2].admit and r[2].channel is None and "src_code_conflict" in r[2].doubts
+    assert n == -1 and not r[2].admit and r[2].channel is None and "src_code_conflict" in r[2].doubts
     assert r[2].evidence["demoted_from"]["channel"] == "match_solo" and r[2].evidence["src_code_conflict"]["char"] == "垂"
     cells[2].update(provenance="human", channel="human")                                 # 人裁格不碰
     assert _run(cells, {1: "甲", 2: "", 3: "乙"}, st)[1][2].admit
@@ -95,3 +95,30 @@ def test_src_gb_subclass_lifts(tmp_path):
     p.update({"admit_ok": True, "subclass": "GB", "ref": "說", "route": "text_ref"})
     n, r = _run({**CELLS, 2: {"char": "誤", "doubts": ["ctx_garble_shape"]}}, AMAP, st)
     assert n == 1 and r[2].char == "說" and r[2].channel == "vis_ruling" and not r[2].doubts
+
+
+def test_ruling_override_groups_gate(tmp_path):
+    """ctx-m1 裁定越过整理本（字≠整理本）：书级白名单核同属字组；None 不核；src-1 等不受影响。"""
+    def run(groups, ch="日", ref="曰"):
+        st = RulingStore(tmp_path / str(groups))
+        p = st.put("O", "ctx-m1", "甲", "乙", char=ch, conf="high", why="x", model="m", cell=f"{B}:1:2")
+        p.update({"admit_ok": True, "subclass": "Z", "ref": ref})
+        recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=s != 2, char={1: "甲", 2: "誤", 3: "乙"}[s], doubts=[], channel=None, provenance="match" if s != 2 else "", evidence={}) for s in (1, 2, 3)]
+        n = _vis_ruling_pass(SeedAdmitParams(db_path="x", ruling_override_groups=groups), [ColumnAdmit(col=1, chars=recs)],
+                             {f"{B}:1:{s}": (c, None) for s, c in {1: "甲", 2: ref, 3: "乙"}.items()}, st)
+        return n
+    from open_guji_cv.groups.registry import FLOW_GROUPS
+    gid = next(g for g, s in FLOW_GROUPS.items() if "日" in s.members and "曰" in s.members)
+    assert run(None) == 1                       # 缺省不核
+    assert run((gid,)) == 1                     # 同属白名单组
+    assert run(()) == 0                         # 空名单＝不许越过
+    assert run(("nonexistent",)) == 0
+    assert run((), ch="曰", ref="曰") == 1      # 字＝整理本，不算越过
+    assert "ruling_override_groups" not in SeedAdmitParams(db_path="x").model_dump()
+
+
+def test_ruling_glyph_params_default_off_and_in_dump_when_set():
+    d0 = SeedAdmitParams(db_path="x").model_dump()
+    assert "ruling_glyph_min_score" not in d0 and "ruling_glyph_min_margin" not in d0
+    d1 = SeedAdmitParams(db_path="x", ruling_glyph_min_score=0.98, ruling_glyph_min_margin=0.02).model_dump()
+    assert d1["ruling_glyph_min_score"] == 0.98 and d1["ruling_glyph_min_margin"] == 0.02

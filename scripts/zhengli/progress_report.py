@@ -194,7 +194,7 @@ def write(conn, text_id: str, chapter: str, res: dict) -> None:
 
 def run(books: list[str], ws: str | None = None, text_id: str = DEFAULT_TEXT, note: str | None = None,
         dry_run: bool = False) -> int:
-    from open_guji_cv.datastore.connect import connect
+    from guji_manager.datastore.connect import connect
     with connect() as conn:
         if not ws:
             row = conn.execute("SELECT ws FROM workspaces WHERE dir = %s OR dir LIKE %s ORDER BY ws LIMIT 1",

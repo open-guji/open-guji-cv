@@ -40,7 +40,7 @@ def main() -> int:
     from open_guji_cv.clustering.cnn_candidates import CnnCandidates
     from open_guji_cv.clustering.normalize import normalize_patch
     from open_guji_cv.clustering.rare_panel import _book_norm_stroke, book_charsets, rare_patch
-    from open_guji_cv.eval.round_check import load_verdicts
+    from guji_manager.eval.round_check import load_verdicts
     from open_guji_cv.steps.align_ref import book_corpus
 
     cc = CnnCandidates(a.ckpt)

@@ -22,7 +22,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from open_guji_cv.exp import rough_bench as RB  # noqa: E402
+from guji_manager.exp import rough_bench as RB  # noqa: E402
 
 REVIEW_TOL = 0.002          # 只跑基线时：送审率比记的基线高出这么多才算回归
 

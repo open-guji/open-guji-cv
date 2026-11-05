@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Literal
 
 from pydantic import BaseModel, model_serializer, model_validator
@@ -19,8 +20,18 @@ from ..products.kinds.columns import PageWindows
 from ..products.kinds.gate import GateManifest
 from ..seg.cut_select import ckpt_fingerprint, get_judge
 from ..books.siku_zongmu.row_grid import fit_page_grids
-from ..books.siku_zongmu.row_boundaries import (NONUNIFORM_LAM, effective_body_slots,
-                                    segment_column, slot_mask_from_occupied)
+from ..books.siku_zongmu.row_boundaries import slot_mask_from_occupied
+
+#: 行切分正门（`segment_column` 等）所在的缺省模块。套书可复制一份到 books/<套书>/ 并在 `core/seg_set.OVERRIDES`
+#: 登记覆盖（全唐文 books/quantangwen，2026-11-04）；`run_page` 按册取（`_row_boundaries`）。
+_RB_DEFAULT = "open_guji_cv.books.siku_zongmu.row_boundaries"
+
+
+def _row_boundaries(book):
+    """这册书的行切分模块：套书有自己的 row_boundaries 用它的，否则用殿本的（同一个模块对象，行为不变）。"""
+    import importlib
+    from ..core.seg_set import resolve
+    return importlib.import_module(resolve(book, _RB_DEFAULT))
 from ._warpmap import ColumnMapper
 
 _LAYOUT_CACHE: dict[tuple, dict[tuple[int, int], dict]] = {}
@@ -812,6 +823,13 @@ class RowSegmentParams(BaseModel):
     #: 第 3 轮待审 34 格）。开着时这种列给「整列空」表行，列端记空（`_blank_frame_junk`）按越界墨／印框记空。
     #: 只在表确是逐页按整理本全列生成（缺列＝整理本这列没字）的书开。书级开关；False＝关（缺省，不进参数哈希）。
     layout_gap_cols_empty: bool = False
+    #: **闸认出抬头框而表记得更低时，加一张「表按闸级数重编格号」的候选格网**（2026-11-05，殿本 A22）：daizhige 逐列本有的抬头列
+    #: 首字记在 0 号起格（不抬头），border_detect 却在版框上沿认出了这一列的抬头框（`head_raise_inner_y`）。原有的「闸抬头」候选
+    #: 只改抬头级数、表的格号不动，抬头字落在表说空的 -1 号格、列末表说有字的格是空的，违表 2 格，输给不抬头的表格网——首字整个
+    #: 落在列窗上沿外丢掉（vol45 p18 c4「聖」、vol56 p146 c5「特」），或格网整体上移一格（vol28 p14 c4、vol40 p48 c7）。
+    #: 开着时再出一张候选：表的字按先后不动、整体挪到闸的级数（同人裁抬头 `_reraise`），照样打分，坏格严格更少才选上。
+    #: 书级开关；False＝关（缺省，不进参数哈希）。
+    layout_raise_box: bool = False
     #: **表外的末几列不当整列空**（2026-11-03，全唐文）：缺省把本页最后一列表行之后的列当卷末整列空。全唐文的表
     #: （guji-manager make_qtw_layout.py）由现切分＋参照字数生成，空列已明写 `slots: []`；字数配不上的列只是不出行，
     #: 落在页末就被当整列空，满列 22 字全按「违表」打分、DP 被掩码推着走，格高忽高忽矮（15p123 c8 一格 314、
@@ -827,6 +845,15 @@ class RowSegmentParams(BaseModel):
     #: 一格只有一半有字（段字数为奇数）时，多出的那个字归 a 还是 b 由图定（两种分法各切、取切线压墨少的），短的那行
     #: 格号照「本行第几字」从段首数。缺省按「右行多一字」（光盘版整理本口径）。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_free_split: bool = False
+    #: **雙行小注逐步切**（2026-11-04，史記文淵閣本，A22 评审过，见 `books/shiji_wyg/jiazhu_step`）：要 `jiazhu_rows`、
+    #: `roster_ref_corpus`／`roster_ref_pins`（整理本）。挑定格网后，整理本认得出 `<右|左>` 分法的夹注段两行各按自己的字数、
+    #: 在自己墨的范围里切，段下正文格按表重切（小字行距比格网小，长行被压进短行的格数，并字后一路错下去）。
+    #: 核不上整列退回原切法；有列级人裁的列不动。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_step_split: bool = False
+    #: **一行就完的雙行小注**（2026-11-04，全唐文）：「闕一字」这类小注头一行「字｜闕」并排、第二行只有右半「一」，
+    #: 夹注判据要连着两行量得出缝，整段落空，两字挤进一个整宽正文格（r9b 字形线退回 8 格）。开了就补认这种段
+    #: （`jiazhu_split.single_row_heads`）。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_single_head: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -920,12 +947,18 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_slots_grow", None)
             if not self.layout_gap_cols_empty:
                 d.pop("layout_gap_cols_empty", None)
+            if not self.layout_raise_box:
+                d.pop("layout_raise_box", None)
             if self.layout_tail_empty:
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
                 d.pop("jiazhu_rows", None)
             if not self.jiazhu_free_split:
                 d.pop("jiazhu_free_split", None)
+            if not self.jiazhu_step_split:
+                d.pop("jiazhu_step_split", None)
+            if not self.jiazhu_single_head:
+                d.pop("jiazhu_single_head", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -969,7 +1002,8 @@ class RowSegmentStep(Step):
                    "open_guji_cv.seg.cut_select", "open_guji_cv.books.siku_zongmu.roster_segment",
                    "open_guji_cv.books.siku_zongmu.roster_glyph", "open_guji_cv.books.siku_zongmu.yolo_tool_infer", "open_guji_cv.steps.occlusion",
                    "open_guji_cv.steps.seal_detect", "open_guji_cv.steps.row_segment_pagemap",
-                   "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige"),
+                   "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
+                   "open_guji_cv.books.siku_zongmu.jiazhu_step"),
         soft_params=("roster_glyph_fingerprint",),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins"),
     )
@@ -992,6 +1026,12 @@ class RowSegmentStep(Step):
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
         n_body = p.n_body_slots or ctx.book.chars_per_line
+        RB = _row_boundaries(ctx.book)
+        segment_column, effective_body_slots = RB.segment_column, RB.effective_body_slots
+        reading_order, NONUNIFORM_LAM = RB.reading_order, RB.NONUNIFORM_LAM
+        if p.jiazhu_single_head and "jiazhu_single_head" not in inspect.signature(segment_column).parameters:
+            raise ValueError("row_segment.jiazhu_single_head 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
+                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
         page_w = wins.page_size[0]
@@ -1054,6 +1094,15 @@ class RowSegmentStep(Step):
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
+        # 雙行小注逐步切（`jiazhu_step_split`，史記）：本页各列整理本的夹注段分法
+        step_notes = None
+        if p.jiazhu_step_split and p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
+            import importlib
+            from ..core.seg_set import resolve
+            from ..core.workspace import corpus_path
+            _step_impl = importlib.import_module(resolve(ctx.book, "open_guji_cv.books.siku_zongmu.jiazhu_step"))
+            step_notes = _step_impl.page_note_runs(corpus_path(p.roster_ref_corpus), corpus_path(p.roster_ref_pins),
+                                                   ctx.book.id, page) or {}
         # 等距格网（books/siku_zongmu/row_grid）：只给逐列格位先验命中的页算，是那里的候选格网之一
         grids = {}
         # 印框（列端表空格记空的判据之一）：同样只给格位先验命中的页用
@@ -1166,6 +1215,7 @@ class RowSegmentStep(Step):
                     **({"dash_blank": (p.dash_h_frac, p.dash_w_frac)} if p.dash_blank else {}),
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
+                    **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:
@@ -1223,12 +1273,28 @@ class RowSegmentStep(Step):
             # 1.23 从物理首／末格放宽到表空格这一段；1.24 加越界墨（列首大印 vol09 p68/p70/p164、vol10 p175，
             # 卷末印章 vol09 p162）与整列空的列。
             if lay is not None and r is not None:
+                lay_rr = None    # `layout_raise_box` 那张候选用的重编表
+
+                def _lay_of(why: str, _base=lay):
+                    """候选格网配的表：重编过抬头的候选（及它挪一格、等距格网的派生）配重编表，其余配原表。"""
+                    return lay_rr if lay_rr is not None and "layout_reraise_box" in why else _base
                 cands = [(r, n_raised_col, top_slack, occ, "")]
                 if lay_alt is not None:
                     n_r2, t_s2, occ2 = lay_alt
                     r2 = _seg(n_body_col, (n_r2, t_s2) + _layout_kw(lay, occ2, n_body_col, n_r2))
                     if r2 is not None:
                         cands.append((r2, n_r2, t_s2, occ2, f"layout_raise_gate：抬头按闸 {n_r2} 格（表 {int(lay.get('raised', 0))} 格）"))
+                # 闸认出了抬头框、表记得更低：表的字整体挪到闸的级数再切一张（见 `layout_raise_box`）
+                # 只认表的首字顶格（1 号格）的列：抬头列的首字一定在抬头格上，表首字前还空着格的是低起列，重编只会把空格挪进抬头位
+                # （vol82 p217 c5–c7：上版框认错、本页框判反了，表首字在 3 号格）
+                if (p.layout_raise_box and hr_verdict is None and gate_raised > int(lay.get("raised", 0))
+                        and min(lay.get("slots") or [0]) == 1 and _raise_box_real(wins, gc.col, gate.period)):
+                    lay_rr = _reraise(lay, gate_raised)
+                    occ_rr = set(lay_rr["slots"])
+                    r_rr = _seg(n_body_col, (gate_raised, gc.top_slack) + _layout_kw(lay_rr, occ_rr, n_body_col, gate_raised))
+                    if r_rr is not None:
+                        cands.append((r_rr, gate_raised, gc.top_slack, occ_rr,
+                                      f"layout_reraise_box：表按闸抬头框重编到 {gate_raised} 格（表 {int(lay.get('raised', 0))} 格）"))
                 # 表整列挪一格（表的字按先后不动、格号整体 ±1）：整理本的起格偶有差一格的（vol68 p31 c7–c9「右釋家類」
                 # 首字在 2 号格、表记 3 号起；vol45 p17 c2、p24 c4 列末多一个空字格），格线不变、只是列端一头多一字一头少一字。照样打分，
                 # 违表格数严格更少才选上（同分按原表）。
@@ -1237,14 +1303,14 @@ class RowSegmentStep(Step):
                         occ_s = _shift_occ(c_[3], d_, n_body_col)
                         if occ_s is None:
                             continue
-                        lay_s = _shift_lay(lay, d_)
+                        lay_s = _shift_lay(_lay_of(c_[4]), d_)
                         rs_ = _seg(n_body_col, (c_[1], c_[2]) + _layout_kw(lay_s, occ_s, n_body_col, c_[1]))
                         if rs_ is not None:
                             cands.append((rs_, c_[1], c_[2], occ_s, f"layout_shift{d_:+d}" + (f"（{c_[4]}）" if c_[4] else "")))
                 if gc.col in grids:
                     for c_ in list(cands):
                         # 挪一格的候选要配挪过的表（夹注、半格按表的格号认，1.45 前等距格网配的是没挪的表）
-                        lay_g = _shift_lay(lay, int(c_[4][12:14])) if c_[4].startswith("layout_shift") else lay
+                        lay_g = _shift_lay(_lay_of(c_[4]), int(c_[4][12:14])) if c_[4].startswith("layout_shift") else _lay_of(c_[4])
                         rg = _seg(n_body_col, (c_[1], c_[2]) + _layout_kw(lay_g, c_[3], n_body_col, c_[1]), grid=True)
                         if rg is not None:
                             cands.append((rg, c_[1], c_[2], c_[3], "uniform_grid" + (f"（{c_[4]}）" if c_[4] else "")))
@@ -1301,8 +1367,11 @@ class RowSegmentStep(Step):
                     # 劈字、格高、穿字打平或更好都不算——DP 格网能为躲一个劈字把格线挪出半格、把两格空白切成三格。
                     # 写本（`row_pitch: free`，史記文淵閣本）：字距随手写、大字小字高矮不一，等距格网不优先，只按打分跟别的格网比
                     # （等距格线会切进高字的下半截、把它的笔画送给下一格）。
+                    # 表里单列可写 `"pitch": "free"`（2026-11-04 全唐文切分线）：卷首题下的帝名列（「中宗 二」「元宗 十」）
+                    # 字距比正文大、不落正文格网，等距格网把「宗」「二」切偏；这一列照写本那样只按打分挑，
+                    # 表的格有无、列端记空（印章、框线）照旧。表里没写这个键的列产物不变。
                     ug = ([i for i in plain if cands[i][4].startswith("uniform_grid")]
-                          if p.row_pitch == "uniform" else [])
+                          if p.row_pitch == "uniform" and lay.get("pitch") != "free" else [])
                     if ug and scores[min(ug, key=key_)][0] <= scores[best][0]:
                         best = min(ug, key=key_)
                     # 挪一格也只在等距格网之间比（1.45）：DP 格网挪一格时能把列首两格空白压成一格、字整列提前一格，
@@ -1320,7 +1389,7 @@ class RowSegmentStep(Step):
                             break
                         rb, n_rb, t_sb, occ_b, why_b = cands[best]
                         lines = sorted(rb.boundaries + cuts[:1])
-                        alt = (n_rb, t_sb) + _layout_kw(lay, occ_b, n_body_col, n_rb)
+                        alt = (n_rb, t_sb) + _layout_kw(_lay_of(why_b), occ_b, n_body_col, n_rb)
                         trial = []
                         for i in range(len(lines)):            # 去掉第 i 条；去端线 = 丢掉列端那一格
                             ri = _seg(n_body_col, alt, bounds=lines[:i] + lines[i + 1:])
@@ -1345,6 +1414,8 @@ class RowSegmentStep(Step):
                                        + "→".join("/".join(map(str, scores[i])) for i in (0, best)))
                     if why == "layout_off":
                         lay = None
+                    elif "layout_reraise_box" in why:
+                        lay = _lay_of(why)
                 if junk[best]:
                     prior_flags.append(f"layout_frame_junk：列端 {junk[best]} 格的墨不像字（框线／碎墨／越界墨／印框），记空")
             # C、D 会改格数重切：人裁列不动（见上）；逐列格位先验命中的列已按格位切，也不再叠
@@ -1373,6 +1444,10 @@ class RowSegmentStep(Step):
                 out.append(ColumnCells(ok=False, error="弹性 DP 无解", **base))
                 continue
             r = _finalize(r)
+            if step_notes is not None and lay is not None and not human_col and step_notes.get(gc.col):
+                r, fl_ = _step_impl.apply(r, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
+                                          step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
+                prior_flags = list(prior_flags) + fl_
 
             def _emit(r, base, prior_flags, lay, occ, n_raised_col):
                 """挑定的格网 → ColumnCells（主切法和 `alt_cut` 的备选切法共用）。"""
@@ -1426,8 +1501,14 @@ class RowSegmentStep(Step):
                 ra = _seg(n_body_col, (gate_raised, gc.top_slack, {}, None, None))
                 if ra is not None:
                     ra = _finalize(ra)
+                    alt_fl = ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"]
+                    # 有意不要求 lay：备选格网本就不带版式先验，夹注段分法取自整理本页钉，与先验无关，照样逐步切
+                    if step_notes is not None and not human_col and step_notes.get(gc.col):
+                        ra, fl_ = _step_impl.apply(ra, img, gc.content_x or (0.0, float(img.shape[1])), gate.period,
+                                                   step_notes[gc.col], p.ink_threshold, reading_order=reading_order)
+                        alt_fl += fl_
                     ca = _emit(ra, dict(base, n_raised=gate_raised, top_slack=gc.top_slack),
-                               ["alt_cut：不带先验的备选格网（align_ref 坐标对位按吻合数挑）"], None, occ, gate_raised)
+                               alt_fl, None, occ, gate_raised)
                     if [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in ca.cells] != \
                             [(c.y0, c.y1, c.x0, c.x1, c.kind, c.sub) for c in out[-1].cells]:
                         alt_out.append(ca)
@@ -1724,6 +1805,21 @@ def _shift_occ(occ: set, d: int, n_body: int) -> set | None:
 
 def _shift_lay(lay: dict, d: int) -> dict:
     return dict(lay, **{k: [s + d for s in lay.get(k, ())] for k in ("slots", "notes", "half")})
+
+
+def _raise_box_real(wins, col: int, period: float) -> bool:
+    """这一列 Step1 认的抬头框是不是真高出版框：列窗上沿比本页不抬头各列的列窗上沿（中位）高出半格以上。
+
+    `layout_raise_box` 用。上版框没认准的页（框线断续、`top_frame_kind` none），Step1 会把里层的线当上框、真上框当成
+    「抬头框」，一页每列都带框（vol56 p43、vol88 p69），或只有一两列不带框、而那几列的列窗上沿和「抬头框」一样高
+    （vol73 p73）——这些列并没有抬头，表按抬头重编格号会把首字错编成 -1。本页没有不抬头的列也不算。"""
+    rec = wins.column(col) if wins is not None else None
+    if rec is None or not rec.raised:
+        return False
+    tops = sorted(w.top_y for w in wins.columns if not w.raised)
+    if not tops:
+        return False
+    return tops[len(tops) // 2] - rec.top_y >= 0.5 * float(period)
 
 
 def _reraise(lay: dict, n_raised: int) -> dict:

@@ -46,6 +46,7 @@ def test_argv_translates_one_step_to_guji_step():
     assert {"--force", "--stop-on-error", "--allow-sample-db"} <= set(argv)
     assert "--json" not in argv and "--wait" not in argv
     assert "--no-isolate-steps" in argv           # 子进程只跑一步，不能再隔离（否则自己起自己）
+    assert "--no-prep" in argv                    # 父进程已备过输入（或 --no-prep 跳过），子进程不再备
 
 
 def test_argv_omits_flags_that_are_off():
@@ -120,7 +121,10 @@ def test_isolated_run_with_failed_pages_does_not_auto_pack(monkeypatch, ws, caps
     from open_guji_cv.products.store import ProductStore
     pid = default_pipeline_id(load_book("keben"))
     packed: list = []
-    monkeypatch.setattr(cli_v2, "_auto_pack", lambda args, eng, steps: packed.append(1))
+    from open_guji_cv.core import hooks          # 自动存包由 manager 经钩子 finished 做（拆分 P4）：这里只看 ok 标志
+    monkeypatch.setattr(hooks, "_HOOKS", {p: [] for p in hooks.POINTS})
+    monkeypatch.setattr(hooks, "_LOADED", True)
+    hooks.add("finished", lambda args, eng, steps, ok: packed.append(1) if ok else None)
     argv = ["pipeline", pid, "keben", "-w", str(ws), "--pages", "1", "--to", "column_warp"]
     monkeypatch.setattr(cli_v2, "_run_steps_isolated", lambda args, steps: 0)
     with pytest.raises(SystemExit) as e:

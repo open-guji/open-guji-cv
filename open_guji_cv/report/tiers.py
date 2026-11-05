@@ -78,7 +78,7 @@ def _same_char(a: str, b: str) -> bool:
     就是接口挂住——加 `lru_cache` 后降到毫秒级。字对是有限的，缓存不会涨。
     """
     try:
-        from ..eval.round_check import _same_char as sc
+        from .same_char import _same_char as sc
         return bool(sc(a, b))
     except Exception:
         return False

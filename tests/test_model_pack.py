@@ -111,16 +111,6 @@ def test_fetch_places_missing_files(ws, monkeypatch, tmp_path):
     assert head.read_text(encoding="utf-8") == '{"w": 3}'
 
 
-def test_upload_refuses_stale(ws):
-    from open_guji_cv.ops import model_blobs as mb
-    mp.build(ws)
-    plan = mb.upload(ws, 1)
-    assert plan["local"] == 2 and not plan["executed"]
-    (ws / "config" / "groups" / "l2model" / "jys.json").write_text("x", encoding="utf-8")
-    with pytest.raises(ValueError):
-        mb.upload(ws, 1)
-
-
 def test_repo_registry_matches_models_dir():
     """cv 自带的模型表与 models/ 一致：在的文件 sha 要对得上，models/ 里登记了种类的文件都要在表里。
     （models/ 搬出 git 后文件不在，只核在的那些。）改了模型文件忘了 guji model registry 就红。"""
@@ -169,7 +159,7 @@ def test_repo_provenance_covers_every_kind():
 def test_ids_unet_moved_out_of_corpus():
     from open_guji_cv.core.corpus_pin import _not_corpus
     assert _not_corpus("repo", "config/groups/jue/unet.npz")
-    assert not _not_corpus("repo", "config/groups/jue/ids_bank.json")
+    assert not _not_corpus("repo", "config/groups/jue/ids_fine.tsv")
 
 
 def test_font_registry_matches_and_skips_commercial():
@@ -206,7 +196,7 @@ def test_corpus_registry_matches_repo():
     from open_guji_cv.core import corpus_files as cf
     reg = {i["path"]: i["sha256"] for i in cf.load_registry()}
     now = cf.repo_items()
-    assert reg and not any(p.endswith(("unet.npz", "prompt.md")) for p in reg)
+    assert reg and not any(p.endswith(("unet.npz", "ids_bank.json", "whole_bank.json", "prompt.md")) for p in reg)
     for it in now:
         assert reg.get(it["path"]) == it["sha256"], f"{it['path']} 与语料表不符：跑 guji corpus registry"
 
@@ -223,3 +213,13 @@ def test_corpus_fetch_uses_corpus_registry(monkeypatch, tmp_path):
     monkeypatch.setattr(mb, "_place", lambda todo: (got.update(todo), (len(todo), []))[1])
     r = mb.fetch_registry("corpus")
     assert r["missing"] == 1 and got == {"ab" * 32: repo / "config/ids/x.tsv"}
+
+
+def test_ids_bank_moved_out_of_corpus():
+    """殿本人裁挖的 IDS 模板库归模型系统（ids_bank／ids_whole_bank），不再算 global 语料；IDS 覆盖表仍是语料。"""
+    from open_guji_cv.core.corpus_pin import _not_corpus
+    assert _not_corpus("repo", "config/groups/jue/ids_bank.json")
+    assert _not_corpus("repo", "config/groups/can/whole_bank.json")
+    assert not _not_corpus("repo", "config/groups/can/ids_override.tsv")
+    assert not _not_corpus("repo", "config/groups/rr/rules.yaml")
+    assert {"ids_bank", "ids_whole_bank"} <= {k.kind for k in mp.KINDS}

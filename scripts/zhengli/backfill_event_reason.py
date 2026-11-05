@@ -26,8 +26,8 @@ CV = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(CV))
 
 from open_guji_cv.feedback.lock import feedback_write_lock  # noqa: E402
-from open_guji_cv.feedback.migrate_v1 import dumps  # noqa: E402
-from open_guji_cv.review.pending_reason import PendingReason as R  # noqa: E402
+from guji_manager.feedback.migrate_v1 import dumps  # noqa: E402
+from guji_manager.review.pending_reason import PendingReason as R  # noqa: E402
 
 KINDS = ("ctx_ruling", "confirm", "vision_check")
 DIRS = ("events", "rulings", "vision")
@@ -101,7 +101,7 @@ def main(argv=None) -> int:
     a = ap.parse_args(argv)
     root = Path(a.ws)
     if not (root / "feedback").is_dir():
-        from open_guji_cv.datastore.workcopy import data_dir   # 工作区 → 本机数据目录
+        from guji_manager.datastore.workcopy import data_dir   # 工作区 → 本机数据目录
         root = data_dir(root)
     fb = root / "feedback"
     files = [f for d in DIRS for f in sorted((fb / d).glob("*.jsonl"))]

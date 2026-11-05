@@ -6,7 +6,6 @@ from pathlib import Path
 import pytest
 
 from open_guji_cv.core.seg_set import SEG_SETS
-from open_guji_cv.jobs import spec as SP
 
 _spec = importlib.util.spec_from_file_location(
     "seg_samples", Path(__file__).resolve().parents[1] / "scripts" / "seg_samples.py")
@@ -36,11 +35,3 @@ def test_modules_are_split_by_seg_set():
     assert not any(m.startswith(P + "books.zengguang_youxue") for m in siku | shiji)
 
 
-def test_job_specs_normalize():
-    for seg_set in SEG_SETS:
-        for old, new in S.job_specs(seg_set, "a" * 40, "b" * 40, "单测"):
-            o = SP.normalize(old, resolve=lambda r: r)
-            n = SP.normalize({**new, "compare_to": {"job": 1}}, resolve=lambda r: r)
-            assert o["kind"] == "rerun" and o["output"]["pack"] and o["force"]
-            assert n["kind"] == "ab" and n["pages"] == o["pages"] and n["steps"] == o["steps"]
-            assert SP.spec_hash(o) != SP.spec_hash(n)

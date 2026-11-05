@@ -12,6 +12,8 @@
   "rr_clf": {"script": "research/char_groups/rr/export_forest.py", "trained_on": "殿本 vol02–03、05–10 入人八格（不含 vol04、强真值格）",
              "meta": "models/rr_clf/meta.json"},
   "ids_unet": {"script": "research/m7/train_split.py", "trained_on": "殿本本组人标切线（jue 39 格等），按册 5 折留出"},
+  "ids_bank": {"script": "research/m7/train_split.py", "trained_on": "殿本人裁字块挖出的部件模板（各库 source.labels 写明标签来源与去掉的格）"},
+  "ids_whole_bank": {"script": "research/m7/train_split.py", "trained_on": "殿本人裁字块的整字模板（两路一致用）"},
   "ids_model": {"script": "research/m7/train_split.py", "trained_on": "本书在线 IDS 模板库与判法（如史記 ids/rr.json）"},
   "l2_head": {"script": "research/m7/ctx/l2model_train.py", "trained_on": "殿本 L3 答案（l2m-2）；史記等书现为复制件", "base": "sikuroberta"},
   "rr_shape": {"script": "research/char_groups/rr/qtw_shape_train.py", "trained_on": "本书入人八格"},

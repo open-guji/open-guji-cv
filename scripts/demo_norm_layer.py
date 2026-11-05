@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
 
 
 def apply_table(page: dict, table: dict, overrides: list[dict] | None = None) -> dict:

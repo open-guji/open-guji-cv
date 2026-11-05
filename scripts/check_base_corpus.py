@@ -62,7 +62,7 @@ def latest_central_manifest() -> tuple[int, dict]:
         os.environ["GUJI_DATA_TOKEN"] = os.environ["GUJI_DATA_TOKEN_READ"]
     from open_guji_cv.core.corpus_pin import BASE_DIR, BASE_WS
     from open_guji_cv.datastore.client import WorkerSource
-    from open_guji_cv.datastore.materialize import materialize
+    from guji_manager.datastore.materialize import materialize
     with tempfile.TemporaryDirectory() as td:
         materialize(WorkerSource(), BASE_WS, Path(td), (BASE_DIR + "/",), cache=None, bucket="main")
         d = Path(td) / BASE_DIR
@@ -88,7 +88,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✗ 拿不到底库清单：{e}", file=sys.stderr)
         return 2
     try:
-        from open_guji_cv.ops.corpus_pack import _never_match_hash
+        from guji_manager.ops.corpus_pack import _never_match_hash
         nm = _never_match_hash()
     except Exception:                            # noqa: BLE001 —— 缺依赖时只比文件
         nm = None

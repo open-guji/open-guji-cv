@@ -37,7 +37,7 @@ def collect(args) -> list[str]:
     if args.file:
         put(Path(args.file).read_text(encoding="utf-8"))
     if args.cards:
-        from open_guji_cv.review.alt_cands import pivots_of
+        from guji_manager.review.alt_cands import pivots_of
         doc = json.loads(Path(args.cards).read_text(encoding="utf-8"))
         for c in doc["cards"] if isinstance(doc, dict) else doc:
             put("".join(pivots_of(c)))

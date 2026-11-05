@@ -82,6 +82,7 @@ class FlowConfig:
     canon: Callable[[str], str] | None = None          # 书级码位归一（L2 表键按它归一再比；None＝逐字比）
     l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
+    lift_ref_veto: frozenset = frozenset()    # 书级：这几组补放（lift）时，整理本（或坐标对位）字是组里另一个字、与给的字不同 → 不放，留人审（只降不放；史記 sy 山→出 2026-11-03）
     lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
     abstain_ref_ok: frozenset = frozenset()  # 书级「按整理本走」：复核时解法全弃权、已放行字＝整理本字 → 不降审；补放时族内刻形拆不开、整理本是同族一形 → 取整理本形
     shape_ref_ok: frozenset = frozenset()    # 书级「按整理本走」：复核时只有字形路（ids）给出别的字、已放行字＝整理本字 → 不降审（史記 2026-11-01，廣賔、還遺 等）
@@ -515,6 +516,8 @@ def _vis_try(g: str, r, trail: list, cr: str | None, cfg: FlowConfig, canon, pat
     ans = vis_llm.judge(g, mem, patch, left, right, model=cfg.vis_model, cache=cfg.vis_cache, cell=r.id)
     if ans is None:
         return None, None
+    if ans.get("ask"):                       # 管线不在线问：留痕记下这一问，导出待裁清单见 feedback/llm_queue
+        return None, {"solver": "vis", "char": None, "why": ans["why"], "ask": ans["ask"]}
     ch, conf = ans["char"], ans["conf"]
     item = {"solver": "vis", "char": None, "why": f"{conf}:{ch}", "vis_conf": conf, "vis_why": ans.get("why"), "cached": ans["cached"]}
     if conf != "high" or ch not in mem:
@@ -640,8 +643,9 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 只有文意给字、整理本说是组里另一个字：不补放（vol15 118:4:15 面→而）；`strong_over_ref` 的组文意 strong
                 # 时照放（日曰：sheldon 10-22「文意置信度特别高可以改掉整理本」，vol22:9:5:19「日者列傳」整理本作曰，A24 10-26）
                 ch, why = None, "ref_dissent"
-            elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_ref_veto and ref and norm(ref) != norm(ch)
-                  and norm(ref) in {norm(m) for m in GROUPS[g].members}):
+            elif (ch is not None and mode == "lift" and (GROUPS[g].flow.lift_ref_veto or g in cfg.lift_ref_veto)
+                  and (vr := (ref or ((veto_refs or {}).get(r.id) if g in cfg.lift_ref_veto else None)))
+                  and norm(vr) != norm(ch) and norm(vr) in {norm(m) for m in GROUPS[g].members}):
                 ch, why = None, "ref_dissent"   # 一二：整理本说是组里另一个字，字形怎么判都不补放（vol19:116:9:8）
             elif (ch is not None and mode == "lift" and GROUPS[g].flow.lift_img_ref_veto
                   and (ir := ref or (veto_refs or {}).get(r.id)) and norm(ir) != norm(ch)

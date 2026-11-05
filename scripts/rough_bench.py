@@ -17,7 +17,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from open_guji_cv.exp import rough_bench as RB  # noqa: E402
+from guji_manager.exp import rough_bench as RB  # noqa: E402
 
 
 def main(argv=None) -> int:

@@ -35,7 +35,7 @@ from open_guji_cv.core.book import load_book  # noqa: E402
 from open_guji_cv.core.spec import cell_key, column_key, page_key  # noqa: E402
 from open_guji_cv.core.step import RunContext  # noqa: E402
 from open_guji_cv.core.workspace import glyph_db_path  # noqa: E402
-from open_guji_cv.eval.touching import polyline_to_seam  # noqa: E402
+from guji_manager.eval.touching import polyline_to_seam  # noqa: E402
 from open_guji_cv.gold.store import GoldStore  # noqa: E402
 from open_guji_cv.products import kinds as _k  # noqa: E402,F401
 import open_guji_cv.steps  # noqa: E402,F401  (注册 Step，materialize 需要)

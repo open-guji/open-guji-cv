@@ -10,7 +10,7 @@ CV 一侧取 doc/formats/samples/guji_page_v0/ 的两张 guji-page 样张（列�
 import json, sys, os
 import numpy as np, cv2, onnxruntime as ort
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-from open_guji_cv.formats import guji_page as gp
+from guji_manager.formats import guji_page as gp
 YOLO, R, OUT = sys.argv[1], sys.argv[2], sys.argv[3]
 D = os.path.join(os.path.dirname(__file__), '..', '..', '..', 'doc', 'formats', 'samples', 'guji_page_v0')
 sess = {m: ort.InferenceSession(f'{YOLO}/model/{m}/best.onnx', providers=['CPUExecutionProvider']) for m in ('type', 'slide')}

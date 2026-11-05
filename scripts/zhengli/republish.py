@@ -266,7 +266,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
       3. 没给对照表：除第 1 条外一律未落（判不出能不能对位，不放）。"""
     import datetime as dt
     sys.path.insert(0, str(CV))
-    from open_guji_cv.feedback.web_votes import latest_votes
+    from guji_manager.feedback.web_votes import latest_votes
     from pending_route import cell_of, deciding
     latest, dropped = latest_votes(votes, text_id, rev)
     held = set(held or ())
@@ -290,7 +290,7 @@ def ticket_ledger(ws: Path, book: str, text_id: str, rev: str, votes: list[dict]
     look = None
     tab = _cells_table(cells, book) if predates else None
     if tab is not None:
-        from open_guji_cv.feedback import cell_migrate as M
+        from guji_manager.feedback import cell_migrate as M
         look = M.lookup(M.load_table(tab), book)
     rows = {"写入": [], "与已有人裁一致": [], "看不出": [], "挂起": [], "未落": []}
     if predates:
@@ -457,8 +457,8 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
     并写成因码细分 `pending_reason_cause`／`pending_reason_cause_detail`（`review/causes.py` 的 A1…I，GUJI-668；
     用户 11-04 定：留作 pending_reason 下的细项，派单按它细分；旧名 `cause`／`cause_detail` 不再写，老单上的读的一方回退）。"""
     sys.path.insert(0, str(CV))
-    from open_guji_cv.review.causes import book_causes
-    from open_guji_cv.review.reasons import reasons_for_pending, stamp
+    from guji_manager.review.causes import book_causes
+    from guji_manager.review.reasons import reasons_for_pending, stamp
     if not pending.exists():
         return
     res = book_causes(products, book)
@@ -877,7 +877,7 @@ def bind_check(products: Path, book: str) -> dict:
     sys.path.insert(0, str(CV))
     import datetime as dt
     from collections import defaultdict
-    from open_guji_cv.exp.rough_bench import _NoCache, _split_key
+    from guji_manager.exp.rough_bench import _NoCache, _split_key
     from open_guji_cv.feedback.bindings import compute_page
     from open_guji_cv.feedback.events import EventLog, counts_as_human, iter_events_readonly
     from open_guji_cv.products.store import ProductStore
@@ -1012,7 +1012,7 @@ def cmd_add_alt(a) -> int:
     必须是出这张单的那个产物包算的（格号要对得上）；对不上的格不补，打出来。
     相似字字形图（`alt[].g`）不补：网站没有字形图时直接显示文字。"""
     sys.path.insert(0, str(CV))
-    from open_guji_cv.review.proof_fields import pending_fields
+    from guji_manager.review.proof_fields import pending_fields
     ws, book = Path(a.workspace).resolve(), a.book
     chapter, text_id = a.chapter or chapter_of(book), a.text_id or text_id_of(ws)
     online = proofing_path(ws, text_id, chapter)
@@ -1115,7 +1115,7 @@ def punct_stale_update(stale: dict | None, old: dict[str, str], new: dict[str, s
 def stamp_char_pending(char_json: Path, plan: dict) -> None:
     """book-text 的 char 按同版待审单（公众单＋团队单）写 `pending_reason`、去待审格的 `lacuna`（guji-format char v0.4
     §4.8，sheldon 11-03 定：`lacuna` 只给审过定阙的格）。不改 Step9，只在入库这步做；分行稿逐字节不变。"""
-    from open_guji_cv.formats import guji_char_cord as cc
+    from guji_manager.formats import guji_char_cord as cc
     if not char_json.exists():
         return
     cells = []
@@ -1127,6 +1127,79 @@ def stamp_char_pending(char_json: Path, plan: dict) -> None:
     n = cc.apply_pending(char, {"cells": cells})
     char_json.write_text(cc.dumps(char), encoding="utf-8", newline="\n")
     print(f"char 待审原因：{n['stamped']} 格（去 lacuna {n['lacuna_dropped']}）；单上有、char 里没有 {n['missing']}")
+
+
+def rebase_cord(cord: dict, table: dict | None, tool: str = "open-guji-cv scripts/zhengli/republish.py") -> int:
+    """就地把导出的 cord 从 cv 出产物用的旧页图换到页表 `table` 那版的新页图（页表 `from_rev.H`），返回换了几页。
+
+    2026-11-04 殿本四庫總目图源切到文淵閣本：网站书影和 book-text 的坐标已按新页表换算（book-text#397），
+    cv 还在旧页图上出产物（换源要等整册重跑）。所以导出的 cord（sprite 用它在旧页上裁图，不能动）拷进 book-text
+    前要换一次。逐页：图 sha 已是新页 → 不动；是 `from_rev.sha256` → 换；都不是 → 报错（cord 和页表对不上）。
+    页表里没有 `from_rev`（不是换源出来的版）就原样不动。框取变换后外接矩形取整，`regions.rules` 逐点换。"""
+    from guji_manager.datastore import source_xform as X
+    if not table:
+        return 0
+    xf = X.by_page(table)
+    if not xf:
+        return 0
+    rows = {int(p["page"]): p for p in table.get("pages", [])}
+    frm = X.from_rev(table)
+
+    def ibox(x, b):
+        return [int(round(v)) for v in x.xywh(*b)]
+
+    n, bad = 0, []
+    for pg in cord.get("pages", []):
+        x, row = xf.get(pg.get("page")), rows.get(pg.get("page"))
+        img = pg.get("image") or {}
+        if row is not None and img.get("sha256") == row.get("sha256"):
+            continue                                   # 已是新页坐标
+        if x is None or img.get("sha256") != row["from_rev"]["sha256"] \
+                or (img.get("width"), img.get("height")) != (x.old_w, x.old_h):
+            bad.append(str(pg.get("page")))
+            continue
+        pg["image"] = {**img, "width": x.new_w, "height": x.new_h, "sha256": row["sha256"]}
+        if isinstance(pg.get("canvas"), dict):
+            pg["canvas"].update(width=x.new_w, height=x.new_h)
+        for key in ("cells", "columns", "marks", "regions"):
+            for it in pg.get(key) or []:
+                if it.get("box"):
+                    it["box"] = ibox(x, it["box"])
+        for r in pg.get("regions") or []:
+            if r.get("rules"):
+                r["rules"] = [[[int(round(a)), int(round(b))] for a, b in x.points(line)] for line in r["rules"]]
+        pg.setdefault("producers", {})["rebase"] = {
+            "tool": tool, "from_source_rev": frm, "to_source_rev": table.get("rev"),
+            "why": "图源换版，按页表 from_rev.H 从 cv 产物用的旧页图换到网站用的新页图"}
+        n += 1
+    if bad:
+        raise ValueError(f"cord 有 {len(bad)} 页的图既不是页表 r{table.get('rev')} 的新页、也不是它的 from_rev 旧页："
+                         + "、".join(bad[:20]))
+    return n
+
+
+def site_page_table(book_id: str, volume) -> dict | None:
+    """网站书影用的页表：R2 上最新一版（含预发 staged，四庫總目文淵閣本就是 staged 版先上线的）；R2 没有页表 → None。"""
+    from guji_manager.datastore import sources as S
+    src = S._client()
+    vol = S.norm_vol(str(volume))
+    revs = S.revisions(src, book_id, vol)
+    return S.read_table(src, book_id, vol, revs[-1]) if revs else None
+
+
+def copy_cord_for_site(src: Path, dst: Path) -> int:
+    """导出的 cord 换到网站页图坐标后写进 book-text（导出目录里的原件不动，sprite 还要用）。返回换了几页。"""
+    from guji_manager.formats import guji_char_cord as cc
+    cord = json.loads(src.read_text(encoding="utf-8"))
+    try:
+        table = site_page_table(cord["book_id"], cord["volume"])
+        n = rebase_cord(cord, table)
+    except ValueError as e:
+        sys.exit(f"✗ cord 换不到网站页图坐标，不推：{e}")
+    if n:
+        print(f"cord 换到网站页图坐标：{n} 页（页表 r{table['rev']:03d}）")
+    dst.write_text(cc.dumps(cord), encoding="utf-8", newline="\n")
+    return n
 
 
 def bump_book_text(repo: Path, plan: dict, note: str) -> None:
@@ -1158,7 +1231,9 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
                      + "\n  把改字推到分支 a32-<册号>-<主题>，通知 A33 在分支上重标，不要推 dev")
     for t in ("char", "cord", "norm"):
         src = Path(plan["export_dir"]) / f"{ch}.{t}.json"
-        if src.exists():
+        if src.exists() and t == "cord":
+            copy_cord_for_site(src, d / f"{ch}.{t}.json")   # 图源换过版的书要换坐标（网站和 book-text 跟新页走）
+        elif src.exists():
             shutil.copyfile(src, d / f"{ch}.{t}.json")
     stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:

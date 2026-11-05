@@ -319,7 +319,7 @@ class Chain(Method):
         panel = _panel_of(cfg, inp.group)
         o = (getattr(cfg, "l3_online", {}) or {}).get(inp.group)
         if (not panel or not o or v.extra.get("panel") or (v.extra.get("strong") and not inp.force_panel)
-                or v.why in ("abstain:pair", "abstain:no_api_key")):
+                or v.why in ("abstain:pair", "abstain:no_api_key", "abstain:llm_pending")):
             return v
         norm = getattr(cfg, "canon", None) or (lambda c: c)
         if v.char is not None and not inp.force_panel:

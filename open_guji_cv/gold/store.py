@@ -226,3 +226,12 @@ class GoldStore:
                 by_stratum[i.stratum] = by_stratum.get(i.stratum, 0) + 1
         return {"shard": shard, "n": len(items), "status": by_status,
                 "label_origin": by_origin, "stratum": by_stratum}
+
+
+def verdict_store() -> GoldStore:
+    """`gold_add` 的默认落点：**workspace 的裁决表**（`core.workspace.verdicts_root()`），
+    不是 open-guji-dataset。2026-09-13 用户裁定：运行时不写测试集仓；人裁先落
+    workspace，`guji gold import` 显式挑一批进 dataset。Step 读人裁（`feedback.lookup`）
+    与写人裁（`feedback.consumers.gold_add`）都从这里取（拆分 P5 2026-11-04 从 consumers 挪来，归 pipeline）。"""
+    from ..core.workspace import verdicts_root
+    return GoldStore(verdicts_root())

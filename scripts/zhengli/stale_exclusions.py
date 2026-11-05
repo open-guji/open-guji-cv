@@ -18,7 +18,7 @@ def main(argv=None) -> int:
     ap.add_argument("--book", required=True)
     ap.add_argument("--out", default=None, help="写成 json；不给就打印")
     a = ap.parse_args(argv)
-    from open_guji_cv.feedback.exclusion_check import stale_by_binding
+    from guji_manager.feedback.exclusion_check import stale_by_binding
     from open_guji_cv.feedback.bindings import book_bindings
     rows = stale_by_binding(a.book, book_bindings(a.book))
     text = json.dumps(rows, ensure_ascii=False, indent=1)

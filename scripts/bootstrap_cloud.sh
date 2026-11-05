@@ -99,7 +99,7 @@ if selfcheck; then
   # 先从 R2 镜像取（执行机常拉不到 huggingface.co；要 GUJI_DATA_TOKEN 或 _READ），取不到再走 HF
   GUJI_DATA_TOKEN="${GUJI_DATA_TOKEN:-${GUJI_DATA_TOKEN_READ:-}}" PYTHONPATH="$ROOT${PYTHONPATH:+:$PYTHONPATH}" "$VENV/bin/python" -c "
 import sys
-from open_guji_cv.datastore.packs import CTX_ENCODER, fetch_hf_model
+from guji_manager.datastore.packs import CTX_ENCODER, fetch_hf_model
 if not fetch_hf_model(*CTX_ENCODER):
     from huggingface_hub import snapshot_download as d
     d(CTX_ENCODER[0], revision=CTX_ENCODER[1])" >/dev/null 2>&1 \

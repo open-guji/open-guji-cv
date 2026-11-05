@@ -118,12 +118,12 @@ t 取原图 $G source pull "$VOL" -w "$WS"
 GUJI_WORKSPACE="$WS" /opt/guji-venv/bin/python - "$VOL" <<'PY'
 import sys
 from open_guji_cv.core.book import load_book
-from open_guji_cv.datastore import sources as S
+from guji_manager.datastore import sources as S
 b = load_book(sys.argv[1])
 if getattr(b, "source_rev", None) is None:
     sys.exit(0)
 from open_guji_cv.datastore.client import WorkerSource
-from open_guji_cv.datastore.packs import _ws_name
+from guji_manager.datastore.packs import _ws_name
 src = WorkerSource()
 book_id, vol = S.resolve(src, _ws_name(), b.id)
 want = {int(p["page"]) for p in S.read_table(src, book_id, vol, b.source_rev)["pages"]}

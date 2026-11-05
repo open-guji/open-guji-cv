@@ -25,7 +25,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from open_guji_cv.review.causes import CAUSES, book_causes  # noqa: E402
+from guji_manager.review.causes import CAUSES, book_causes  # noqa: E402
 
 DEFAULT_BOOKS = tuple(f"vol{i:02d}" for i in range(4, 11))
 TOP = 10

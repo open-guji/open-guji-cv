@@ -21,9 +21,9 @@ sys.path.insert(0, str(REPO))
 
 from open_guji_cv.errors import ProductMissing  # noqa: E402
 from open_guji_cv.products.store import ProductStore  # noqa: E402
-from open_guji_cv.render.approx import (APPROX_MODES, DEFAULT_APPROX_MODE,  # noqa: E402
+from guji_manager.render.approx import (APPROX_MODES, DEFAULT_APPROX_MODE,  # noqa: E402
                                        book_marks, inline_ids_map, sidecar_rows, sidecar_tsv)
-from open_guji_cv.render.guji_markdown import render_page  # noqa: E402
+from guji_manager.render.guji_markdown import render_page  # noqa: E402
 
 
 def main() -> None:

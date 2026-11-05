@@ -9,7 +9,7 @@ import sys
 
 from open_guji_cv.console.routers.review import cards_by_char, cards_by_shape
 from open_guji_cv.products.store import ProductStore
-from open_guji_cv.review.cards import cards
+from guji_manager.review.cards import cards
 
 book, pages, out = sys.argv[1:4]
 st = ProductStore()

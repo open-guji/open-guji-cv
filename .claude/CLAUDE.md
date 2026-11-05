@@ -5,6 +5,7 @@
 
 ## 项目概述
 古籍刻本图像 → 逐字转写的引擎：切分（Step1–4）、识别与定字（Step5–7）、人裁回流（Step8）、导出（Step9）。
+**2026-11-04 起本仓只是 pipeline**（凡影响识别产物的）；工作区、中心库、R2、任务库、审阅、评测、整理命令都在 [guji-manager](https://github.com/open-guji/guji-manager)（`guji_manager`，经入口点并进 `guji` 命令）。改 manager 不用给 pipeline 发版。分界见 `doc/design/拆分-pipeline与manager.md`。
 数据集与评测在隔壁仓 `open-guji-dataset`；原图在 `guji-workspace`（git，2026-10-19 起只存原图）；册配置、人裁、台账、字形库在**中心库**（`guji db sync`，见 `doc/datastore.md` 第六节）；产物在各机本地。
 
 ## 先看哪份
@@ -26,7 +27,7 @@
 | 已退役与过期的文档 | [doc/archive/](../doc/archive/)（含旧 CLAUDE.md 的长索引原文） |
 
 ## 怎么干活
-- **前台用控制台，后台用 `guji` 命令**：`pipeline` / `step` / `status` / `close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` …
+- **前台用控制台，后台用 `guji` 命令**：`pipeline` / `step` / `status` 在本仓；`close-check` / `recheck` / `cache` / `collate` / `gold` / `eval` / `db` …由 guji-manager 提供（装上就并进 `guji`，没装会提示装法）。
   别直接调 `scripts/` 下的散脚本做书的整理，runbook 里点名的除外。
 - 当前只优化**正文页**；目录、职名、序跋、牌记先不管，指标按正文与非正文分开报。
 - 旧的 v1 命令（`python -m open_guji_cv run/extract/preprocess`）已退役，不要在上面加东西。
@@ -41,7 +42,7 @@
 - 装了 torch 才跑的约 7 条，装了 `rapidocr-onnxruntime` 才跑的 3 条，缺件是跳过不是失败。
 
 ## 环境
-- Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[torch,dev]"`；要控制台再装 `uv pip install -e ../guji-console`（2026-10-28 拆成独立包，`guji console` 由它提供）。仓里旧的 `venv/` 是死的。
+- Python 3.12，用 uv 建 `.venv`：`uv venv .venv --python 3.12 && uv pip install -e ".[torch,dev]"`；整理一册书还要装 manager：`uv pip install -e ../guji-manager`（册钉了字形库／模型／语料时 `guji pipeline` 没 manager 会拒跑）；要控制台再装 `uv pip install -e ../guji-console`（2026-10-28 拆成独立包，`guji console` 由它提供）。仓里旧的 `venv/` 是死的。
 - **装完自检** `python -c "import torch, scipy, cv2"`：缺件不报错，只会悄悄降级。`guji pipeline`／`step` 起跑前会查这次要跑的步骤缺不缺 torch／权重／joblib，缺了拒跑（`--allow-missing-deps` 放行）。
 - 环境变量：`PYTHONIOENCODING=utf-8`（Windows 必设）、`PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK=True`、`GUJI_WORKSPACE=<书的工作区>`。
 - 带 book 的命令都要 `-w <工作区>`。

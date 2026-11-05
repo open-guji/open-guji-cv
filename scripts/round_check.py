@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from open_guji_cv.eval import round_check as rc
+from guji_manager.eval import round_check as rc
 
 MARK = {"green": "✓ 绿", "yellow": "~ 黄", "red": "✗ 红", "none": "— 无数据"}
 

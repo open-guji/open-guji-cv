@@ -16,7 +16,7 @@ from pathlib import Path
 
 from common import REPO  # noqa: F401  (保证从仓根跑)
 from open_guji_cv.core.workspace import workspace_root
-from open_guji_cv.feedback.consumers import verdict_store
+from guji_manager.feedback.consumers import verdict_store
 
 SHARD = "char-segmentation/touching-cuts"
 

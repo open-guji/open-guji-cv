@@ -807,6 +807,12 @@ for _g in VIS_GROUPS:
 RENAMED: dict[str, str] = {"qg": "zy"}
 
 
+def generic_flow_names() -> tuple:
+    """新书缺省跑的字组：不含码位组 ``cp_*``。码位组是殿本逐对看图定的码位结论（书级事实，多书设计 A3，sheldon 11-04 定），
+    别的书要用得在本书重新核过、显式写进 `group_flow`；殿本的基础配置本来就显式写了全集。"""
+    return tuple(g for g in FLOW_GROUPS if not g.startswith("cp_"))
+
+
 def flow_names(names) -> tuple:
     """册配置点名的组 id → 现行 id（按 `RENAMED` 换，去重，保持先后）。"""
     return tuple(dict.fromkeys(RENAMED.get(g, g) for g in names))

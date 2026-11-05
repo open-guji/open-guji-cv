@@ -41,7 +41,7 @@ def main() -> int:
     import torch
     from open_guji_cv.clustering import cnn_candidates as cnn_mod
     from open_guji_cv.clustering.rare_panel import rare_batch
-    from open_guji_cv.eval.round_check import load_verdicts
+    from guji_manager.eval.round_check import load_verdicts
 
     gold = load_verdicts(a.book, WS)
     print(f"裁决金标 {len(gold)} 条", flush=True)

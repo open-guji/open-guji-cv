@@ -26,7 +26,7 @@ import numpy as np
 import onnxruntime as ort
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", ".."))
-from open_guji_cv.formats import guji_page as gp  # noqa: E402
+from guji_manager.formats import guji_page as gp  # noqa: E402
 
 YOLO, RAW, GPD, PROD, OUT = sys.argv[1:6]
 BOOK = sys.argv[6] if len(sys.argv) > 6 else "vol03"

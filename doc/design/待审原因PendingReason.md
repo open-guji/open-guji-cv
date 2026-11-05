@@ -13,10 +13,10 @@
 
 | 东西 | 位置 |
 |---|---|
-| enum 定义 | `open_guji_cv/review/pending_reason.py`（`PendingReason`，字段名常量 `FIELD = "pending_reason"`） |
-| 配置（码、显示名、去向、负责人、卡片形态、判法说明、旧字段对应） | `open_guji_cv/review/pending_reasons.yaml` |
-| 判一格的原因 | `open_guji_cv/review/reasons.py`：`classify(cell, ctx)`；整张单 `reasons_for_pending()` ＋ `stamp()`；控制台卡 `stamp_cards()` |
-| 导出给别的仓 | `python -m open_guji_cv.review.pending_reason --json`（键 version／field／categories／routes／reasons） |
+| enum 定义 | `guji_manager/review/pending_reason.py`（guji-manager 仓；2026-11-04 拆分时从 cv 搬去）（`PendingReason`，字段名常量 `FIELD = "pending_reason"`） |
+| 配置（码、显示名、去向、负责人、卡片形态、判法说明、旧字段对应） | `guji_manager/review/pending_reasons.yaml` |
+| 判一格的原因 | `guji_manager/review/reasons.py`：`classify(cell, ctx)`；整张单 `reasons_for_pending()` ＋ `stamp()`；控制台卡 `stamp_cards()` |
+| 导出给别的仓 | `python -m guji_manager.review.pending_reason --json`（键 version／field／categories／routes／reasons） |
 | manager 里取 | `guji_manager._cv.pending_reason_specs`（经 cv `manager_api`，不直接 import cv 内部） |
 
 常用接口：`parse(value)`（空值、认不出的都给 `UNKNOWN`）、`specs()`、`by_code("Z01")`、`legacy_candidates(cause=…, cls=…)`。
@@ -106,6 +106,8 @@ book-text 待审格的字：机器没给字的 `c` 为 □，分行稿照阙文�
 | 史记、全唐文 | 还没进 book-text；下次出单自动带原因 | — |
 
 - **切坏格细分（11-04，SJ 史記第 8 轮）**：`seg_defect` 不新增取值，细分写进 `pending_reason_detail`：`merged`（两字并一格）、`clipped`（字被切掉一边或半截）、`bleed`（邻格笔画溢入）、`frame_residue`（框线残笔当成笔画）。来源是格上的 `seg_kind` 字段：第二期由 seed_admit 写进 `evidence.seg_kind`，release_gates 写单时抄到单上同名字段；why 码照旧只写 `seg_defect`（带冒号的条目会被 `doubt_codes` 当说明丢掉）。判法见 `review/reasons.py` 的 `SEG_KINDS`／`seg_kind_of`。
+
+- **少见的字细分（11-04，A23）**：`lib_missing` 不新增取值，细分写进 `pending_reason_detail`，写成 `<细分>:<整理本字>`：`ref_blank`（整理本这位没字，不是字形库的事）、`all_zero`（本书和借来库都没有这个字，真缺字）、`own_zero_borrow_has`（借来库有、本书没有：借来的字样不像这本，本书字样标注归书 Project，sheldon 11-04 定）、`own_has`（本书已有刻例仍不像：看图）。出单／出卡时给了字形库才分（`reasons.lib_split_counts`，按 exemplars 数、借来看 `borrowed` 表、字体域不算），没给库照旧只写整理本字。判法见 `review/reasons.py` 的 `LIB_MISSING_KINDS`。
 
 ## 八、过渡期与待办
 

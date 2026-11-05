@@ -92,20 +92,25 @@ def test_moved_command_hint(monkeypatch):
     assert e.value.code == 2
 
 
-def test_manager_cli_modules_register_every_command():
-    """cv 里 manager 一侧的命令模块（拆分 P1）：COMMANDS 表里每条都登记上、handler 对得上；共用 add_parser 只调一次。"""
+def test_plugin_commands_survive_second_parser_build(monkeypatch):
+    """同一进程第二次建 parser（测试、控制台）时，上回由插件登记的命令照样登记，不被当成 cv 自带而略过。"""
     import argparse
-    import importlib
+    import types
 
     from open_guji_cv import cli_v2
-    sub = argparse.ArgumentParser().add_subparsers(dest="command")
-    cli_v2.register_subcommands(sub)
-    for m in cli_v2.MANAGER_CLI_MODULES:
-        for name, (_, handler) in importlib.import_module(f"open_guji_cv.{m}").COMMANDS.items():
-            got = cli_v2.COMMANDS_V2[name]
-            assert name in sub.choices and getattr(got, "__wrapped__", got) is handler, (m, name)
 
-
+    def add(sub):
+        sub.add_parser("demo-plugin-cmd")
+    mod = types.ModuleType("fake_plugin_commands")
+    mod.COMMANDS = {"demo-plugin-cmd": (add, lambda a: None)}
+    ep = types.SimpleNamespace(name="fake", load=lambda: mod)
+    monkeypatch.setattr("importlib.metadata.entry_points", lambda group: [ep])
+    monkeypatch.setattr(cli_v2, "_PLUGIN_ADDED", set())
+    monkeypatch.setattr(cli_v2, "COMMANDS_V2", dict(cli_v2.COMMANDS_V2))
+    for _ in range(2):
+        sub = argparse.ArgumentParser().add_subparsers(dest="command")
+        assert cli_v2.load_plugin_commands(sub) == ["demo-plugin-cmd"]
+        assert "demo-plugin-cmd" in sub.choices
 
 def test_stale_manager_plugin_is_ignored(monkeypatch):
     """旧版 manager（带着早先复制的过期副本）提供已搬走的命令时不认，提示更新。"""
