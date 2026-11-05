@@ -13,6 +13,8 @@
 ## [0.6.3] - 2026-11-05
 
 ### Changed
+- cell_shrink 再生字块提速（2026-11-05，A20）：执行机缓存是空的时下游逐格再生字块，本页 cells 产物与列图改按页记一次（原先每格重读 JSON、重解整列 PNG）。样页每格 7.5 → 3.8 ms，逐像素不变，已登记代码等价。
+- seed_admit 加 `iron_ex_from_store`（2026-11-05，A20，缺省关）：铁证判别器的人裁刻例图从字形库取，不读缓存，产物不再随执行机缓存变；开不开待用户看 A/B（`doc/开关登记表.md`）。缺省关时已登记代码等价。
 - 管线缺省不调 Anthropic API（2026-11-05，用户定；#1071、#1072）：文意 L3／二审小组／看图判只读裁定库，没命中弃权 `abstain:llm_pending` 并在产物留下问题；`python -m open_guji_cv.feedback.llm_queue export/import` 导出待裁清单、把对话统一审的答案写回裁定库。`GUJI_LLM_ONLINE=1` 才在线问。
 - seed_admit 页头计数：src_code_conflict 降审计入 n_auto/n_review（#1046）。
 

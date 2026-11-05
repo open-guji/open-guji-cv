@@ -542,6 +542,24 @@ class CellShrinkStep(Step):
         return ColumnChars(col=cc.col, ok=True, n_instances=len(recs), chars=recs)
 
 
+    def _page_memo(self, ctx: RunContext, page: int, col: int) -> dict | None:
+        """`render` 的按页记忆（键：cells 产物 sha、列图页戳、本步参数）；戳取不到返回 None（不记）。"""
+        stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
+        try:
+            ent = ctx.store.manifest(ctx.book.id, ctx.producer("cells").spec.id).get(f"p{page:04d}")
+            stamp_cells = ent.sha256 if ent is not None and ent.status == "ok" else None
+        except Exception:  # noqa: BLE001 —— 取不到戳就不记忆
+            stamp_cells = None
+        if not stamp_img or not stamp_cells:
+            return None
+        pkey = (ctx.book.id, page, stamp_img, stamp_cells, repr(ctx.params_for(self)))
+        memo = _RENDER_MEMO.get(pkey)
+        if memo is None:
+            while len(_RENDER_MEMO) >= _RENDER_MEMO_MAX:
+                _RENDER_MEMO.pop(next(iter(_RENDER_MEMO)))
+            memo = _RENDER_MEMO[pkey] = {"cols": {}, "imgs": {}}
+        return memo
+
     def _extracted(self, ctx: RunContext, page: int, col: int, cc: ColumnCells, img: np.ndarray, cells: PageCells,
                    alt: bool = False):
         """`render` 用：整列抽字的结果按列记忆（2026-11-03，全唐文 CPU 提速）。
@@ -550,20 +568,11 @@ class CellShrinkStep(Step):
         重算一遍——全唐文册06 p27 冷缓存 glyph_match 78 s，其中 59 s 在这里（一页 209 格再生 149 次整列抽字、
         1788 次读列图）。抽字只依赖本页的 cells、列图、本步参数：按 cells 产物 sha、列图页戳、参数记忆，
         戳取不到就不记。返回的字块是副本，调用方改了也不污染缓存。结果逐字节不变。"""
-        stamp_img = ctx.cache_stamp("column_image", column_key(page, col))
-        try:
-            ent = ctx.store.manifest(ctx.book.id, ctx.producer("cells").spec.id).get(f"p{page:04d}")
-            stamp_cells = ent.sha256 if ent is not None and ent.status == "ok" else None
-        except Exception:  # noqa: BLE001 —— 取不到戳就不记忆
-            stamp_cells = None
-        if not stamp_img or not stamp_cells:
-            return self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells))
-        pkey = (ctx.book.id, page, stamp_img, stamp_cells, repr(ctx.params_for(self)))
-        memo = _RENDER_MEMO.get(pkey)
+        memo = self._page_memo(ctx, page, col)
         if memo is None:
-            while len(_RENDER_MEMO) >= _RENDER_MEMO_MAX:
-                _RENDER_MEMO.pop(next(iter(_RENDER_MEMO)))
-            memo = _RENDER_MEMO[pkey] = {"frame": self._page_frame_lines(ctx, page, cells), "cols": {}}
+            return self._extract_column(ctx, page, cc, img, self._page_frame_lines(ctx, page, cells))
+        if "frame" not in memo:
+            memo["frame"] = self._page_frame_lines(ctx, page, cells)
         got = memo["cols"].get((col, alt))
         if got is None:
             got = memo["cols"][(col, alt)] = self._extract_column(ctx, page, cc, img, memo["frame"])
@@ -574,11 +583,24 @@ class CellShrinkStep(Step):
         page, col, slot = parse_key(key)
         if col is None or slot is None:
             raise ValueError(f"char_patch 的键必须带列号与 slot: {key}")
-        cells: PageCells = ctx.product("cells", page)
+        # 本页 cells 产物与列图按页记忆（2026-11-05，A20）：执行机缓存是空的时候下游逐格再生字块，原先每一格都
+        # 重读一遍 cells 产物（JSON）、重解一遍整列列图（PNG），一页两百格就是两百遍；史記冷缓存每格 12–20 ms。
+        # 记忆键同 `_extracted`（cells 产物 sha、列图页戳、本步参数），戳取不到就不记；列图给副本。结果逐字节不变。
+        memo = self._page_memo(ctx, page, col)
+        cells: PageCells = memo.get("cells") if memo is not None else None
+        if cells is None:
+            cells = ctx.product("cells", page)
+            if memo is not None:
+                memo["cells"] = cells
         cc = (next((c for c in cells.alt_columns if c.col == col), None) if alt else cells.column(col))
         if cc is None or not cc.ok:
             raise KeyError(f"第 {page} 页第 {col} 列没有可用的字格")
-        img = ctx.image("column_image", column_key(page, col))
+        cimg = memo["imgs"].get(col) if memo is not None else None
+        if cimg is None:
+            cimg = ctx.image("column_image", column_key(page, col))
+            if memo is not None:
+                memo["imgs"][col] = cimg
+        img = cimg.copy()
         if ctx.params_for(self).inner_frame_cut:  # type: ignore[attr-defined]
             wins: PageWindows = ctx.product("column_windows", page)
             wrec = wins.column(col)

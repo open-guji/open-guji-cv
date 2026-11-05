@@ -172,6 +172,14 @@ class SeedAdmitParams(BaseModel):
     开着：铁证本要放行、但判别时有刻例原图缺失（缓存里没有），**不放行**，转待审并记 doubt
     `iron_ex_missing`，`evidence.iron_ex_missing` 记缺的例数。只会收紧，缓存齐全时与关着逐格一致。
     v1 旧坐标等「本来就认不出的形状」不算缺（与缓存无关，各环境一样）。"""
+    iron_ex_from_store: bool = False
+    """铁证判别器的人裁刻例原图改从**字形库**取（A20 2026-11-05，用户「可以修」）：缺省（关）从缓存里
+    别册别页的 `char_patch` 取，执行机缓存里有哪些册全看它跑过什么——同代码同输入，`iron_ex_missing`
+    随机器变（史記 01 任务库 #459/#460：8 页只差这一项，两边各缺各的）。开着：刻例图取字形库
+    `instances.patch_png`（与人裁匹配器同一份，册钉了字形库就各机一样），裁到 canonical 图里原裁切
+    那一块（canonical 只平移不放大，字的像素尺寸不变），缓存一概不读。字形库里人裁实例都有图，
+    `iron_ex_missing` 基本不再出现。会改放行（多出原先缺图转待审的格、刻例图与缓存版本不同的格判别距离变），
+    要 A/B 后再定缺省。"""
 
     context_single_stroke_review: bool = False
     """N1（Esme 规则面，默认关）：context 通道要放行的字是单笔画字（`_SINGLE_STROKES`：一 丨 亅 丶 丿 乀 乁 乚 乛）
@@ -870,6 +878,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("symbol_min_human", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
+        if isinstance(d, dict) and not self.iron_ex_from_store:
+            d.pop("iron_ex_from_store", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
@@ -1731,7 +1741,8 @@ class SeedAdmitStep(Step):
                     ex_miss: list[str] = []
                     iron_char = soft_patch(r.id, "iron", _iron_decide, ctx, page, cc.col, r,
                                            iron_ctx, iron_scale, iron_ns,
-                                           ex_miss if p.iron_ex_missing_guard else None)
+                                           ex_miss if p.iron_ex_missing_guard else None,
+                                           *((p.db_path,) if p.iron_ex_from_store else ()))
                     if iron_char is not None and ex_miss:
                         # 对照刻例原图缺（缓存里没有）：结果随缓存内容变，不放，转待审（overview#554）
                         doubts.append("iron_ex_missing")
@@ -4000,11 +4011,38 @@ def _iron_page_scale(book, page: int, match: PageMatch, on_missing=None) -> floa
     return book_scale_from_patches(patches)
 
 
+@lru_cache(maxsize=4)
+def _store_conn(db_path: str):
+    import sqlite3
+    return sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, check_same_thread=False)
+
+
+def _store_ex_raw(db_path: str, cid: str):
+    """`iron_ex_from_store`：人裁刻例 `cid`（`_iron_context.human_ids` 里去了 `v2:` 前缀的 id）在字形库里的图，
+    裁回 canonical 图里原裁切那一块（背景是纯 255，原裁切区域里不全是 255）。库里没有 → None。"""
+    import cv2
+    import numpy as np
+    row = _store_conn(db_path).execute(
+        "SELECT patch_png FROM instances WHERE instance_id IN (?, ?) ORDER BY instance_id = ? DESC LIMIT 1",
+        (f"v2:{cid}", cid, f"v2:{cid}")).fetchone()
+    if row is None or row[0] is None:
+        return None
+    img = cv2.imdecode(np.frombuffer(row[0], np.uint8), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise PatchUnavailable(f"字形库刻例图解不出来: {cid}")
+    ys, xs = np.nonzero(img != 255)
+    if len(ys) == 0:
+        return None
+    return img[ys.min():ys.max() + 1, xs.min():xs.max() + 1]
+
+
 def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
-                 norm_stroke: int | None, missing: list | None = None) -> str | None:
+                 norm_stroke: int | None, missing: list | None = None,
+                 store_db: str | None = None) -> str | None:
     """这一格铁证放行的字，放不了返回 None。`r` 是 `glyph_match` 产物里的逐格记录
     （`.id/.slot/.sub/.candidates/.verdict/.char/.cov`），候选集重算方式与
-    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。"""
+    `iron_shadow.py` 的批处理壳完全一致——两边现在都读同一个 `iron_with_disc`。
+    `store_db`（`iron_ex_from_store`）：刻例图从这个字形库取，不读缓存。"""
     import cv2
 
     from ..clustering.iron_evidence import iron_with_disc
@@ -4022,6 +4060,10 @@ def _iron_decide(book, page: int, col: int, r, iron_ctx, scale: float,
     raw_cache: dict[str, object] = {}
 
     def raw_of(cid: str):
+        if cid not in raw_cache and store_db is not None:
+            raw_cache[cid] = x = _store_ex_raw(store_db, cid)
+            if x is None and missing is not None:
+                missing.append(cid)
         if cid not in raw_cache:
             parts = cid.split(":")
             if parts and parts[0] == "v2":      # 人裁重键后的格号坐标，去前缀即可
