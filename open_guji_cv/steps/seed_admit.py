@@ -372,6 +372,15 @@ class SeedAdmitParams(BaseModel):
     两字都不在任何字组里（字组自己判）、不是夹注 a/b 半格、没有遮挡／排除／硬疑问、不是人裁格，且同列相邻格（slot±1）不也是这类格
     （成片＝切分错位的征兆，归 S）→ 放整理本字（通道 `p_ref`，`evidence.p_ref`）。
     依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。"""
+    fold_ref_char: bool = True
+    """`fold_groups` 的落字来源（sheldon 11-05 澄清：己已巳「匹配到其中任一个就归入这组，之后按文意定是哪一个，完全不能参考整理本」）：
+    `True`＝旧行为（整理本字在组内就放整理本字，`fold.via=ref`；裁定优先护栏另算）；`False`＝**不取整理本字**，只放文意裁定（`fold.via=ruling`，
+    需本组 L3 提示词的裁定）或字形宽高判据（`fold_aspect`，`via=aspect`），都没有就留审，`evidence.fold_pending={group}` 记「已归组、字待文意」。
+    缺省 True（不进 dump）。"""
+    fold_aspect: tuple[float, float] | None = None
+    """日曰组（`ry`）的字形宽高判据（sheldon 11-05：长宽差别大时直接按字形判，居中归组按文意）：字块外框宽/高 ≥ hi 判曰、≤ lo 判日、中间不判。
+    写 `(0.85, 1.0)`＝宽高比 ≥1.0 曰、≤0.85 日。只对 `fold_groups` 里的 ry 格、且无人裁无遮挡无半格的待审格；量的是切分后字块框的宽高（`char_index` 的 `width`／`height`），不是字形主体。
+    `None`＝关（缺省，不进 dump）。证据 `fold = {group, via: aspect, aspect: 宽高比}`。"""
     fold_ruling_first: bool = False
     """`fold_groups` 的护栏一（缺省关；全唐文 QTW 要求）：裁定库里有这格本组的文意裁定（高／中把握、字在组内，键＝本组 L3 提示词版本＋前后文窗口）时，
     先用裁定字，不放整理本字；没有裁定才放整理本字。"""
@@ -930,12 +939,16 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.p_ref_admit:
             d.pop("p_ref_admit", None)
         if isinstance(d, dict) and not self.fold_groups:
-            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.fold_groups:
             for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
                 if not getattr(self, k):
                     d.pop(k, None)
+            if self.fold_ref_char:
+                d.pop("fold_ref_char", None)
+            if self.fold_aspect is None:
+                d.pop("fold_aspect", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and self.ruling_ref_lead_min_unseen is None:
@@ -1901,8 +1914,11 @@ class SeedAdmitStep(Step):
                 n_auto += d_pr
                 n_review -= d_pr
             if p.fold_groups:
+                _ci = _opt(ctx, "char_index", page) if p.fold_aspect else None
                 d_fd = _fold_pass(p, out, amap, mmap,
-                                  coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None)
+                                  coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None,
+                                  wh={c.id: (c.width, c.height) for col in (_ci.columns if _ci else []) for c in col.chars}
+                                  if _ci else None)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -3581,13 +3597,15 @@ def _p_ref_pass(p, out: list, amap: dict) -> int:
     return n
 
 
-def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None) -> int:
+def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None,
+               wh: dict | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
     护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
     扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。"""
     from ..groups.registry import FLOW_GROUPS
     wins: dict = {}
-    if p.fold_ruling_first:
+    no_ref = not p.fold_ref_char
+    if p.fold_ruling_first or no_ref:
         from ..groups.context import WIDTH
         from ..utils.jiazhu_order import sort_by_reading
         seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
@@ -3616,18 +3634,31 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
             if gid not in p.fold_groups or gid not in FLOW_GROUPS:
                 continue
             mem = FLOW_GROUPS[gid].members
-            if not ref or ref not in mem:
+            if not no_ref and (not ref or ref not in mem):
                 continue
             if p.fold_lib_top_in_group:
                 cands = list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [])
                 if not cands or cands[0][0] not in mem:
                     continue
-            ch, via = ref, "ref"
-            if p.fold_ruling_first and r.id in wins and gid in l3:
+            ch, via, extra = None, None, {}
+            if p.fold_aspect and gid == "ry" and wh and r.id in wh:
+                w, h = wh[r.id]
+                if h and h > 0 and w:
+                    ar = w / h
+                    if ar >= p.fold_aspect[1] and "曰" in mem:
+                        ch, via, extra = "曰", "aspect", {"aspect": round(ar, 3)}
+                    elif ar <= p.fold_aspect[0] and "日" in mem:
+                        ch, via, extra = "日", "aspect", {"aspect": round(ar, 3)}
+            if ch is None and (p.fold_ruling_first or no_ref) and r.id in wins and gid in l3:
                 v = store.get(gid, l3[gid]["ver"], *wins[r.id])
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
-            fold = {"group": gid, "ref": ref, "via": via}
+            if ch is None:
+                if no_ref:
+                    r.evidence = {**(r.evidence or {}), "fold_pending": {"group": gid}}   # 已归组、字待文意
+                    continue
+                ch, via = ref, "ref"
+            fold = {"group": gid, "ref": ref, "via": via, **extra}
             if via_coord:
                 fold["coord"] = True
             r.evidence = {**(r.evidence or {}), "fold": fold,
