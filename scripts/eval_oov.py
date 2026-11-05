@@ -26,6 +26,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from eval_fold import fold as _fold  # noqa: E402  己已巳、日曰图上分不开，算同字（2026-11-05）
 
 BENCH = Path("cache/oov_bench")
 
@@ -50,6 +51,8 @@ def main() -> int:
                     help="集目录（缺省 cache/oov_bench）；三书人裁 5b 集给 char-clustering 分片目录，"
                          "配 --items rare.jsonl（scripts/build_book_human_shards.py 建）")
     ap.add_argument("--items", default="items.jsonl", help="集目录下的条目文件")
+    ap.add_argument("--no-fold", action="store_true",
+                    help="不折叠己已巳、日曰（旧口径；缺省折叠，这两组图上分不开，Sheldon 2026-11-05）")
     ap.add_argument("--no-flagged", action="store_true",
                     help="跳过带 selfcheck_flag 的条目（体检标过的人裁，噪声高）")
     a = ap.parse_args()
@@ -108,14 +111,18 @@ def main() -> int:
         from open_guji_cv.clustering.font_candidates import candidates_batch
         rows["hog"] = [[h.char for h in r] for r in candidates_batch(imgs, cs, k=a.k)]
 
+    _f = (lambda c: c) if a.no_fold else _fold
+    _hit1 = lambda r, g: bool(r) and _f(r[0]) == _f(g)          # noqa: E731
+    _hitk = lambda r, g, k: any(_f(c) == _f(g) for c in r[:k])  # noqa: E731
+
     n = len(G)
     print(f"检索 {dt:.1f}s\n")
     print(f'{"源":<6} {"top-1":>8} {"top-5":>8} {"top-10":>8}')
     res = {}
     for name, L in rows.items():
-        t1 = sum(1 for r, g in zip(L, G) if r and r[0] == g)
-        t5 = sum(1 for r, g in zip(L, G) if g in r[:5])
-        t10 = sum(1 for r, g in zip(L, G) if g in r[:a.k])
+        t1 = sum(1 for r, g in zip(L, G) if _hit1(r, g))
+        t5 = sum(1 for r, g in zip(L, G) if _hitk(r, g, 5))
+        t10 = sum(1 for r, g in zip(L, G) if _hitk(r, g, a.k))
         res[name] = {"top1": t1 / n * 100, "top5": t5 / n * 100, "top10": t10 / n * 100}
         print(f'{name:<6} {t1/n*100:7.1f}% {t5/n*100:7.1f}% {t10/n*100:7.1f}%')
 
@@ -124,8 +131,8 @@ def main() -> int:
     print()
     for s in sorted(set(srcs)):
         idx = [i for i, x in enumerate(srcs) if x == s]
-        t1 = sum(1 for i in idx if emb[i] and emb[i][0] == G[i])
-        t10 = sum(1 for i in idx if G[i] in emb[i][:a.k])
+        t1 = sum(1 for i in idx if _hit1(emb[i], G[i]))
+        t10 = sum(1 for i in idx if _hitk(emb[i], G[i], a.k))
         print(f'  emb / src={s:<8} n={len(idx):4d}  top1={t1/len(idx)*100:5.1f}%  '
               f'top10={t10/len(idx)*100:5.1f}%')
     # 三书人裁集带 strata（unseen：本书人裁 ≤2 例；oov：不在 CNN 类表），分层报
@@ -134,8 +141,8 @@ def main() -> int:
         for st in it.get("strata", []):
             strata.setdefault(st, []).append(i)
     for st, idx in sorted(strata.items()):
-        t1 = sum(1 for i in idx if emb[i] and emb[i][0] == G[i])
-        t10 = sum(1 for i in idx if G[i] in emb[i][:a.k])
+        t1 = sum(1 for i in idx if _hit1(emb[i], G[i]))
+        t10 = sum(1 for i in idx if _hitk(emb[i], G[i], a.k))
         res[f"emb_{st}"] = {"n": len(idx), "top1": t1 / len(idx) * 100, "top10": t10 / len(idx) * 100}
         print(f'  emb / {st:<12} n={len(idx):4d}  top1={t1/len(idx)*100:5.1f}%  '
               f'top10={t10/len(idx)*100:5.1f}%')

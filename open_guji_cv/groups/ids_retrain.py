@@ -30,6 +30,16 @@ import json
 import random
 from pathlib import Path
 
+
+def _imread_gray(path):
+    """灰度读图（走 utils.image_io，Windows 非 ASCII 路径也能读）；没有文件 → None。"""
+    import cv2
+    from ..utils.image_io import imread
+    try:
+        return imread(str(path), cv2.IMREAD_GRAYSCALE)
+    except FileNotFoundError:
+        return None
+
 import numpy as np
 
 OK_CHANNELS = ("human", "match_ref", "ref_lib", "book_knn", "near_knn", "match_replace", "match_solo")
@@ -64,7 +74,7 @@ def gather(prod: Path, imgs: Path, g: str, per_vol: int = 10, cap: int = 100, ch
     cells = []
     for (book, page), rs in sorted(pages.items()):
         sh = prod / book / "cell_shrink" / f"p{page:04d}.json"
-        img = cv2.imread(str(imgs / book / f"{page}.png"), cv2.IMREAD_GRAYSCALE)
+        img = _imread_gray(imgs / book / f"{page}.png")
         if img is None or not sh.exists():
             continue
         box = {c["id"]: c["bbox_page"] for col in json.load(open(sh, encoding="utf-8"))["char_index"]["columns"] for c in col["chars"]}
@@ -94,7 +104,7 @@ def audit_cells(prod: Path, imgs: Path, g: str, n: int = 700):
     for book, r in rows[:n]:
         page = int(r["id"].split(":")[1])
         sh = prod / book / "cell_shrink" / f"p{page:04d}.json"
-        img = cv2.imread(str(imgs / book / f"{page}.png"), cv2.IMREAD_GRAYSCALE)
+        img = _imread_gray(imgs / book / f"{page}.png")
         if img is None or not sh.exists():
             continue
         box = {c["id"]: c["bbox_page"] for col in json.load(open(sh, encoding="utf-8"))["char_index"]["columns"] for c in col["chars"]}

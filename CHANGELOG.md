@@ -7,8 +7,27 @@
 
 ### Added
 - cell_shrink `inner_frame_only`（缺省关）补列端切笔：Step2 当框条削掉的字顶字脚从 column_raw 补回，挨线的首末格条带开到内框线、地盘外伸 0.35 格（只认像笔画的墨块），贴线碎块只剥薄片（没拟出内线的一端也只剥薄片）；关着时逐字节不变（code_equiv 已登记）。
+- `scripts/eval_ref_verify.py`：5b「验证整理本字」评测，在三书人裁 5b 冻结集上量 emb 首位且领先 ≥ m 作为证据的放行率与错放率（只动 `scripts/`，不改指纹，A23）。
+
+## [0.6.4] - 2026-11-05
+
+### Fixed
+- 文意留痕 `methods._ctx_out` 只留白名单键，把 #1071 记的待裁问题 `extra.ask` 丢了，`llm_queue export` 恒为 0 问：保留 `ask`（#1080，SJ）。seed_admit 指纹随之变，第5轮殿本从 seed_admit 起重放。
+
+## [0.6.3] - 2026-11-05
+
+### Changed
+- cell_shrink 再生字块提速（2026-11-05，A20）：执行机缓存是空的时下游逐格再生字块，本页 cells 产物与列图改按页记一次（原先每格重读 JSON、重解整列 PNG）。样页每格 7.5 → 3.8 ms，逐像素不变，已登记代码等价。
+- seed_admit 加 `iron_ex_from_store`（2026-11-05，A20，缺省关）：铁证判别器的人裁刻例图从字形库取，不读缓存，产物不再随执行机缓存变；开不开待用户看 A/B（`doc/开关登记表.md`）。缺省关时已登记代码等价。
+- 管线缺省不调 Anthropic API（2026-11-05，用户定；#1071、#1072）：文意 L3／二审小组／看图判只读裁定库，没命中弃权 `abstain:llm_pending` 并在产物留下问题；`python -m open_guji_cv.feedback.llm_queue export/import` 导出待裁清单、把对话统一审的答案写回裁定库。`GUJI_LLM_ONLINE=1` 才在线问。
+- seed_admit 页头计数：src_code_conflict 降审计入 n_auto/n_review（#1046）。
+
+### Added
 - row_segment 书级开关 `layout_raise_box`（2026-11-05，A22，缺省关）：闸认出抬头框而逐列格位表记不抬头（首字顶格）时，加一张表按闸级数重编格号的候选格网，坏格严格更少才选；抬头框要比本页不抬头列高半格。殿本 164 列沙箱 84 列改对。关着时逐字节不变（code_equiv 已登记）。
 - 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
+
+### Changed
+- 图形评测折叠己已巳、日曰（2026-11-05，Sheldon：这两组图上分不开，匹配到组内任一个都算对，不单独统计正确率）：新增 `scripts/eval_fold.py`；`eval_db_match.py`／`eval_match_pairs.py`（缺省折叠，`--no-fold` 回旧口径）／`eval_oov.py`（同）／`calibrate_lib_witness.py` 按组折叠金标与候选。只动 scripts/，各步指纹不变。
 
 ### Changed
 - cell_shrink 书级开关 `inner_frame_profile`（缺省关，要 `inner_frame_cut` 一起开；A22-2，2026-11-05）：小段投票拟不出内框细线的页（殿本新图约两成页，内线磨成点线），按外框拉直的整宽行墨再找（`seg.frame_line._profile_inner`）。列端评测集 frame-end-crop 带框 17→8、切笔不变；开关关着各步指纹不变（code_equiv 登记）。

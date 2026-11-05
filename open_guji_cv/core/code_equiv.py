@@ -174,6 +174,10 @@ _JZ_SINGLE_HEAD = ("一行就完的雙行小注段头 jiazhu_single_head（row_s
                    "row_boundaries.segment_column 加参数）：开关关着时 row_segment 在全唐文 vol06 p20–29（产物包 r9b）上"
                    "与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-04")
 
+_COORD_PAIR = ("align_ref 加缺省关的书级开关 coord_shift_needs_pair（坐标对位「邻格错位」要邻格现役也错开才算整列错一位；全唐文 r10 "
+                "006 p81 列 3 紛／綸）：开关关着时 align_ref 在全唐文 vol06 p75–89（产物包 r10）上与 origin/dev 产物逐字节相同；"
+                "scripts/code_equiv.py check，2026-11-04")
+
 _QTW_FORK = ("全唐文套书 books/quantangwen 分叉（2026-11-04，A22）：row_boundaries、jiazhu_split 从殿本原样复制（含 #1025 "
              "jiazhu_single_head），殿本两份退回 #1025 之前；row_segment 壳按册套书取 row_boundaries（core/seg_set.resolve）。"
              "复制与殿本 #1025 之后那一版逐字相同，#1025 已证开关关着时等价（_JZ_SINGLE_HEAD）；全唐文册的指纹按 FORKED 记原模块名，不过期。"
@@ -856,6 +860,25 @@ ENTRIES: tuple[Equiv, ...] = (
           old="35599c861269dd09c094e824b219ef8cd6c83b33fbac91f9a99d584d8836dad9",
           evidence="书级开关 layout_raise_box（缺省关，不进参数 dump；A22 11-05 殿本抬头框重编）：row_segment 关着时在殿本 34 册 76 页"
                    "（有抬头框而切分没抬的 164 列所在页，含 vol01/07/09 旧图源页与 vol28/45/56/73/82/88 整页框认错页）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='c7c1f46d042d5c1b6237ca00f755c5b83c8827f45ff7b9b541fb6be667675fdb',
+          old='de749a131133f682da5f64a4c1f18ea5e19af7dc75e7e108a0a685abde0b54dd',
+          evidence='iron_ex_from_store（缺省关，A20 11-05）：开关关着时任务库 #472（dev aad5ae8）对 #473（3929d51）史記 01 册全册 143 页 seed_admit '
+                   '137 页逐字节相同，另 6 页只差 iron_ex_missing（#473 的执行机缓存缺别册刻例图，#472 不缺；正是本开关要消掉的机器差异），放行与待审逐格相同；2026-11-05'),
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='1b7b7a91ec05c6fe447c6dbbea470af9817cf3e9bfaac2e50fd2547aedc2f74d',
+          old='14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43',
+          evidence='再生字块按页记忆 cells 产物与列图（A20 11-05，只动 render，run_page 不变）：tests/test_cell_shrink_render_memo.py 清缓存再生 100+ 格与 Step4 写入的逐像素相同（记忆开／关）；'
+                   '任务库 #477（bb9eb76）冷缓存执行机从 glyph_match 起跑史記 01 册全册 143 页，glyph_match 与 #460 逐字节相同；2026-11-05'),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="1b101b4d25356f55302577544712fe1c19ae1959754f0ee87ca124bacafce16e",
+          old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
+          evidence=_COORD_PAIR),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='9205734c66442a43ee349ac45fbe6465d7c071a47388f71444a90193a50f5bcb',
+          old='de749a131133f682da5f64a4c1f18ea5e19af7dc75e7e108a0a685abde0b54dd',
+          evidence='near_knn_gap 挪到各补放通道之后（缺省关，全唐文形近字线 11-05）：开关关着时全唐文 012 册 13 页'
+                   '（p5,20,35,…,185）与 origin/dev 73f189b 产物逐字节相同；scripts/code_equiv.py check，2026-11-05'),
     Equiv(module="open_guji_cv.clustering.extractor",
           new="484efb123a713cd8ce1e1da85c97e486e5aab4f3e619f6ede43c18bd1bafda9f",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
@@ -863,9 +886,9 @@ ENTRIES: tuple[Equiv, ...] = (
                    "三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，"
                    "cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；2026-11-05"),
     Equiv(module="open_guji_cv.steps.cell_shrink",
-          new="56de5aa94054d4b09e36421fa135d293ba0988a37b18e5f21584c13e5f9df487",
-          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
-          evidence="inner_frame_only 列端补救（缺省关；同上一条，A22 11-05）：三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；2026-11-05"),
+          new="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
+          old="1b7b7a91ec05c6fe447c6dbbea470af9817cf3e9bfaac2e50fd2547aedc2f74d",
+          evidence="inner_frame_only 列端补救（缺省关；同上一条，A22 11-05）：三个内框开关都关时殿本 vol30 新图 28 页（每 5 页取 1）、inner_frame_cut＋inner_frame_profile 开而 inner_frame_only 关时 vol05 全册 186 页，cell_shrink 产物与字块 PNG 与 origin/dev aad5ae8 逐字节相同（只差 _manifest）；合入 dev（含 A20 再生字块记忆）后 vol30 28 页两种配置再核一遍同样逐字节相同；2026-11-05"),
 )
 
 
