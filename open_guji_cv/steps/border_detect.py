@@ -156,6 +156,16 @@ class BorderDetectParams(BaseModel):
     （vol07 新 p43 五列抬头全丢）。换源的册与 `bottom_gap`、`period_prior` 乘同一个缩放比，如
     `params: {border_detect: {head_raise_scale: 0.7021}}`。缺省 1.0 不进参数 dump，产物与加字段前逐字节相同。"""
 
+    top_weak_ratio: float = 0.3
+    """上版框弱线护栏的门槛（1.20，`seg/lines._weak_top_guard`）：选中的上框线横向墨量不到带里最强横线的这个比例才动。
+    缺省 0.3 是殿本定的（16516 页只动 12 页；再高会把抬头页主框换成抬头框顶线）。写本（史記文淵閣本）框条下有一道细虚线、
+    首行字顶齐平，线落在字顶时墨量是最强线的 0.30–0.42，册配置写 `params: {border_detect: {top_weak_ratio: 0.45,
+    top_weak_floor: 0.25}}`。缺省值不进参数 dump。"""
+
+    top_weak_floor: float | None = None
+    """弱线护栏改取哪条线（1.20）：None＝取投影 ≥ `top_weak_ratio`、在选中线之上最靠页心的一条，挪不够 0.021 页高就不动（殿本）；
+    给了值＝先只留离选中线 ≥0.021 页高、投影 ≥ 这个比例的线，再取最靠页心的一条（写本：要越过字顶附近的碎横、落到框条下那道细虚线）。"""
+
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -176,6 +186,10 @@ class BorderDetectParams(BaseModel):
             d.pop("grid_lattice_fallback", None)
         if isinstance(d, dict) and self.head_raise_scale == 1.0:
             d.pop("head_raise_scale", None)
+        if isinstance(d, dict) and self.top_weak_ratio == 0.3:
+            d.pop("top_weak_ratio", None)
+        if isinstance(d, dict) and self.top_weak_floor is None:
+            d.pop("top_weak_floor", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         return d
@@ -234,6 +248,7 @@ class BorderDetectStep(Step):
                                   frame_layers=ctx.book.frame_layers,
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
+                                  top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
                                   **lattice_kw)
 
         res = _detect(cols)

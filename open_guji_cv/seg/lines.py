@@ -646,7 +646,8 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             boundary_slack: int = 3,
                             verticals: list[LineMatch] | None = None,
                             book_gap: float | None = None,
-                            weak_top_ratio: float = 0.0) -> LineMatch:
+                            weak_top_ratio: float = 0.0,
+                            weak_top_floor: float | None = None) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -770,7 +771,7 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                            proj=best_secondary["proj"])
 
     if side == "top" and weak_top_ratio > 0:
-        result = _weak_top_guard(mask, result, lo, hi, weak_top_ratio, alpha, hyst)
+        result = _weak_top_guard(mask, result, lo, hi, weak_top_ratio, alpha, hyst, floor=weak_top_floor)
 
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
@@ -805,7 +806,7 @@ TOP_WEAK_MIN_JUMP_FRAC = 0.021
 
 
 def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio: float,
-                    alpha: float, hyst: int) -> LineMatch:
+                    alpha: float, hyst: int, floor: float | None = None) -> LineMatch:
     positions, curve = sample_line_curve(mask, "h", lo, hi, result.slope)
     if not len(curve):
         return result
@@ -817,11 +818,15 @@ def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio
     k0, k1 = max(0, j - 3), min(len(curve), j + 4)
     if pmax <= 0 or float(curve[k0:k1].max()) >= ratio * pmax:
         return result
-    strong = [i for i in peaks if float(curve[i]) >= ratio * pmax and positions[i] < result.position - 5]
+    jump = TOP_WEAK_MIN_JUMP_FRAC * mask.shape[0]
+    if floor is None:
+        strong = [i for i in peaks if float(curve[i]) >= ratio * pmax and positions[i] < result.position - 5]
+    else:   # 写本：先按挪动量筛、再按 floor 认线（见 border_detect.top_weak_floor）
+        strong = [i for i in peaks if float(curve[i]) >= floor * pmax and positions[i] <= result.position - jump]
     if not strong:
         return result
     i = max(strong, key=lambda t: float(positions[t]))
-    if result.position - float(positions[i]) < TOP_WEAK_MIN_JUMP_FRAC * mask.shape[0]:
+    if result.position - float(positions[i]) < jump:
         return result
     wd, sc = half_height_score_at(curve, i, alpha, hyst)
     return LineMatch(position=float(positions[i]), slope=result.slope, score=sc, width=wd,

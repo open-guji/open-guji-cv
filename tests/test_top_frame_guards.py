@@ -45,3 +45,16 @@ def test_ink_between_needs_blank_then_ink():
     assert not _ink_between(np.array(tail), 0, 30)
     # 先白、墨太短（里层细线）
     assert not _ink_between(np.array(blank + [0.9] * 3 + [0.0] * 22), 0, 30)
+
+
+def test_weak_top_floor_skips_near_lines():
+    """写本档（floor 给值）：先按挪动量筛（字顶附近的碎横不算），再取投影 ≥ floor 的最靠页心的一条（框条下的细虚线）。"""
+    m = np.zeros((2684, 1000))
+    m[40:60, :] = 1.0                      # 粗框条
+    m[92:94, ::3] = 1.0                    # 框条下细虚线（约 0.33）
+    m[140:142, ::4] = 1.0                  # 字顶附近碎横（约 0.25），离选中线不到 0.021 页高
+    m[152:154, ::2] = 1.0                  # 首行字顶（选中线，约 0.5：门槛给 0.6 时算弱）
+    r = _weak_top_guard(m, _match(152.0), 0, 400, 0.6, 1.0, 2, floor=0.25)
+    assert 90 <= r.position <= 95
+    r0 = _weak_top_guard(m, _match(152.0), 0, 400, 0.3, 1.0, 2)   # 殿本档：选中线够强，不动
+    assert r0.position == 152.0

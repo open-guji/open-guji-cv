@@ -12,7 +12,7 @@
 - seed_admit 页头计数：src_code_conflict 降审计入 n_auto/n_review（#1046）。
 
 ### Added
-- 抬头漏认收尾（2026-11-05，A22）：row_segment 1.46 `layout_raise_box` 改缺省开、重编候选同分优先；border_detect 1.20 上版框弱线护栏（选中线墨量不到最强横线 0.3、上方 ≥0.021 页高另有强线就改取，殿本 16516 页只动 12 页）；column_warp 1.6 `refine_top_by_frame` 否决加例外（上面另有满宽段、中间先白后字墨就照常上提，SJ 史記 02:5）。三步指纹都变，各书 Step1 起过期。
+- 抬头漏认收尾（2026-11-05，A22）：row_segment 1.46 `layout_raise_box` 改缺省开、重编候选同分优先；border_detect 1.20 上版框弱线护栏（选中线墨量不到最强横线 0.3、上方 ≥0.021 页高另有强线就改取，殿本 16516 页只动 12 页）；column_warp 1.6 `refine_top_by_frame` 否决加例外（上面另有满宽段、中间先白后字墨就照常上提，SJ 史記 02:5）。三步指纹都变，各书 Step1 起过期。border_detect 新参数 `top_weak_ratio`（缺省 0.3）、`top_weak_floor`（缺省不用）：写本（史記）册配置写 0.45／0.25，框条下细虚线、首行字顶齐平的页（SJ 02:5 等 7 页）上框改落到细虚线。
 - row_segment 书级开关 `layout_raise_box`（2026-11-05，A22，缺省关）：闸认出抬头框而逐列格位表记不抬头（首字顶格）时，加一张表按闸级数重编格号的候选格网，坏格严格更少才选；抬头框要比本页不抬头列高半格。殿本 164 列沙箱 84 列改对。关着时逐字节不变（code_equiv 已登记）。
 - 三书人裁金标与 L2 证人标定脚本（2026-11-05，A23 字形领域中期第二项）：`scripts/build_book_human_shards.py` 从中心库人裁冻结 char-clustering 5a 分片＋5b `rare.jsonl`；`scripts/calibrate_lib_witness.py` 按生产口径重放 Step5-a、标定「库前五 ≥ t」证人；`eval_oov.py` 加 `--bench/--items/--no-flagged` 与分层报数。`build_match_pairs_dataset.py` 随机对循环加尝试上限（小书同字对不足时死循环）。只动 scripts/，各步指纹不变。
 
