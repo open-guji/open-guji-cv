@@ -16,6 +16,8 @@ def kind(s):
     o = ord(s)
     if 0xE000 <= o <= 0xF8FF or o >= 0xF0000: return "pua"
     if s in "〓□?？" or 0x1000 <= o <= 0x109F: return "blank"
+    # 文本层取字必须是汉字区的字（含 Ext J U+323B0–3347F，Unicode 17 真汉字，py3.12 的 unicodedata 不认，不能用字名判）
+    if not (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x3347F or 0x2F800 <= o <= 0x2FA1F): return "nonhan"
     return "real"
 
 def main(indir, outdir, table="code_table.json"):

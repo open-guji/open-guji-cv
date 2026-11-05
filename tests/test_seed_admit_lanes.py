@@ -179,6 +179,18 @@ def test_r4_all_witnesses_and_coord_agree_without_lib():
     assert n == 1 and rs[5].char == "天" and rs[5].evidence["lane"]["via"] == "witnesses_coord"
 
 
+def test_r4_non_han_ref_and_few_stroke_not_taken():
+    """史記 r12：坐标对位字非汉字、库首位是别的字 → 不取参校字；少笔画名单（库首位／参校字在内且不同）→ 不取，留审。开关缺省关。"""
+    n, rs = _r4("夫", "ခ", "ခခခ", lane_coord=True)
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "ref_non_han"
+    n, rs = _r4("三", "一", "一一一", lane_coord=True)                       # 缺省：照旧取参校字
+    assert n == 1 and rs[5].char == "一"
+    n, rs = _r4("三", "一", "一一一", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "few_stroke"
+    n, rs = _r4("夫", "天", "天天天", lane_coord=True, lane_coord_few_stroke=("一", "二", "三"))   # 不涉及少笔画字：照放
+    assert n == 1 and rs[5].char == "天"
+
+
 @pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
 def test_r4_keeps_ref_review_cells(doubt):
     """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""

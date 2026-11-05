@@ -92,3 +92,43 @@ def test_profile_fallback_keeps_chunk_result():
 def test_profile_fallback_no_inner_line():
     ink = _dotted_page(inner=False)
     assert fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True) is None
+
+
+def _bent_page():
+    """高分辨率页（格高 200）：外框 40 行厚、右端 300px 上翘 40 行；内线 9 行厚、离外框 30 行，跟着外框翘；
+    字的底横离外框 70 行。整页二次曲线跟不上右端的翘，线心落到外框上沿。"""
+    h, w = 1200, 2400
+    ink = np.zeros((h, w), bool)
+    for x in range(100, 2300):
+        o = 1000 - (max(0, x - 2000) * 40 / 300.0)
+        o = int(round(o))
+        ink[o:o + 40, x] = True
+        ink[o - 39:o - 30, x] = True          # 内线 9 行：[o-39, o-30)
+    for cx in range(150, 2300, 210):        # 字底横
+        ink[920:927, cx:cx + 120] = True
+        ink[700:927, cx + 55:cx + 63] = True
+    return ink
+
+
+def test_localize_follows_bent_frame_and_thick_line():
+    from open_guji_cv.seg.frame_line import inner_thick_limit, localize_inner_line
+    ink = _bent_page()
+    mt = inner_thick_limit(200)
+    assert mt > 9
+    line = fit_inner_frame_line(ink, 100, 2300, y_hint=1000, cell_h=200, side="bottom", max_thick=mt)
+    assert line is not None
+    loc = localize_inner_line(ink, line, 200, max_thick=mt)
+    assert loc.knots
+    for x in (300, 1200, 1900, 2150, 2280):
+        o = 1000 - (max(0, x - 2000) * 40 / 300.0)
+        assert abs(float(loc.y(x)) - (round(o) - 34.5)) <= 2.0, x
+    # 字底横（离外框 70 行）不能被认成内线
+    assert all(abs(float(loc.y(x)) - 923) > 20 for x in range(150, 2000, 210))
+
+
+def test_localize_no_frame_keeps_line():
+    from open_guji_cv.seg.frame_line import localize_inner_line
+    ink = _page("bottom")
+    line = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom")
+    ink2 = np.zeros_like(ink)
+    assert localize_inner_line(ink2, line, 80) is line

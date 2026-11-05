@@ -438,3 +438,16 @@ def test_pending_blob_threshold_is_calibrated_and_ordered():
     assert PENDING_BLOB == 60 and ESCALATE_BLOB == 100
     assert PENDING_BLOB < ESCALATE_BLOB
 
+
+
+def test_resize_linear_f64_matches_cv2():
+    """f64 判官的双精度缩放与 cv2.INTER_LINEAR 同口径（差在 fp32 舍入量级）。"""
+    import cv2
+    from open_guji_cv.seg.cut_select import _resize_linear_f64
+    rng = np.random.default_rng(0)
+    for (sh, sw, h, w) in [(37, 21, 80, 45), (288, 192, 400, 260), (5, 7, 13, 9)]:
+        a = rng.random((sh, sw)).astype(np.float32)
+        ref = cv2.resize(a, (w, h), interpolation=cv2.INTER_LINEAR)
+        got = _resize_linear_f64(a, h, w)
+        assert got.shape == (h, w)
+        assert np.abs(got - ref).max() < 1e-4

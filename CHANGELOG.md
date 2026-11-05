@@ -5,6 +5,21 @@
 
 ## [未发版]
 
+- `cell_shrink.inner_frame_local`（书级，缺省关，关时逐字节不变、登记 code_equiv）：整页拟出的内框细线逐小段贴到真线上，内线厚上限随格高放大（`seg.frame_line.localize_inner_line`、`inner_thick_limit`）。全唐文 S4：外框在页边拐弯、内线 5–12 行厚时整页拟合跟不上，列首列尾字块挂线（006:29:2:22、006:121:1:22、010:23:1:22、010:166:9:22、012:58:1:1，与 `inner_frame_profile` 同开全修）；006/010 各 60 页改 69 张字块，全是去掉线头。
+- `column_warp.det_warp`、`row_segment.cut_judge: unet_f64`（书级，缺省关，关时逐字节不变、登记 code_equiv）：列射影与切点判官改 numpy／torch 双精度，跨 CPU 指令集逐位一致（S9：执行机与本机 012:99:1 切点不一致，根因是 OpenCV 5 warpPerspective 浮点 SIMD 与 fp32 判官）。全唐文 006/010 各 20 页四种 CPU 设置下产物逐字节相同；与不开比格框变 3 列、看图都切在字缝；整段慢约 35%。
+
+## [0.6.10] - 2026-11-05
+
+- cell_shrink 书级开关 `inner_frame_keep_cross`（缺省关，A22）：抹内框细线时，穿过线的笔画留着（写本字脚压线，史記 05 册「義」「軍」「何」「將」）。殿本试开竖画下多挂线头，不开。关着时逐字节不变（code_equiv 已登记）。
+- 史記夹注逐步 v1.2（books/shiji_wyg/jiazhu_step，SJ）：分法不均的段图上能证明分法就不送审（旗 `jiazhu_uneven_img`）；段下沿、后段段首、列首抬头格、格数对但位置错、末段到列尾各补判据。只影响史記 row_segment 及下游。
+
+## [0.6.9] - 2026-11-05
+
+- `seed_admit` vis_ruling：裁定字须是汉字（#1135，A24，缺省开，只影响非汉字；汉字区含 Unicode 17 Ext J）；`build_events` 文本层取字只取已分配汉字（#1134）。
+- `seed_admit`：参校字非汉字一律不取；`lane_coord_few_stroke` 少笔画名单（#1132，SJ 史記 r12，缺省关）。
+- `ids_online` `IdsSpec.refine` 二次细判（#1128，缺省关）。
+- `row_segment` `jiazhu_half_a`（全唐文套书，书级，缺省关，关时逐字节不变、登记 code_equiv）：格位表 `half`（只有右半有字）的夹注格一律发 `jiazhu_a`，左缘与缝放宽到压着右半的连通块最左；段尾奇数字居中跨缝时不再被缝劈开或发成左半（012:186:9:11「篇」、013:147:8:21「二」、013:147:9:2a「一」、8a「二」）。全唐文 005–015 有 half 的 34 页 138 格开前后只变这 6 格，无变坏。
+
 ## [0.6.8] - 2026-11-05
 
 - `seed_admit` 折叠组改按文意（#1124，A24，缺省关）：新书级键 `fold_ref_char`（false＝不取整理本字，只用本组裁定 via=ruling）、`fold_aspect: [lo, hi]`（日曰按字块宽高比落字，via=aspect）；两样都没有的格留审，记 `evidence.fold_pending`。ref_free 组（己已巳）忽略 `group_flow_abstain_ref_ok`。`scripts/fold_aspect_dist.py` 标定阈值（#1127）。

@@ -24,7 +24,7 @@ def check(eng, steps: list[str]) -> list[str]:
     from .clustering import cnn_candidates as CNN
     from .seg.cut_select import DEFAULT_CKPT as JUDGE_CKPT
     out: list[str] = []
-    if "row_segment" in steps and _params(eng, "row_segment", "cut_judge") == "unet":
+    if "row_segment" in steps and _params(eng, "row_segment", "cut_judge") in ("unet", "unet_f64"):
         if not _have("torch"):
             out.append("没装 torch：Step3 row_segment 的切点裁判（cut_judge=unet）会悄悄退回旧规则，产物和装了 torch 的不一样")
         elif not Path(JUDGE_CKPT).is_file():
