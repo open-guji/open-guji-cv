@@ -1904,6 +1904,11 @@ class SeedAdmitStep(Step):
             d_srb = _symbol_ref_blank_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache))
             n_auto += d_srb
             n_review -= d_srb
+        if p.near_knn_gap and p.group_flow and p.group_flow_near_knn:
+            # near_knn 入口放宽：排在各补放通道之后，只收它们都没放的格（见 `_near_knn_pass` 的 stage）
+            d_ng = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing, stage="gap")
+            n_auto += d_ng
+            n_review -= d_ng
         if human_lost:
             # 顺移豁免对位表：现役对位为主，缺格的补坐标对位字（coord_fallback 放行的格没有现役对位；史記 2026-11-03）
             d_hu = _human_unbound_pass(ctx, page, out, human_lost,
@@ -3598,13 +3603,15 @@ _NEAR_CODES = frozenset({"near_form", "solo_confusable", "iron_confusable_ref"})
 
 
 def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0,
-                   patch_missing: dict | None = None) -> int:
+                   patch_missing: dict | None = None, stage: str = "near") -> int:
     """形近护栏格的书级刻形近邻（`groups.near_knn`，`SeedAdmitParams.group_flow_near_knn`）。紧接 book_knn。→ 新放行格数。
 
     只补放待审格：形近护栏（guard conflict／never_match、疑问 near_form 等）或字组未定的格。候选＝本格字、整理本对位字、
     库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
     或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。
-    `near_knn_gap` 开时另收「库没把握、库首位≠整理本」的格（见该参数说明，出口闸＝等于整理本或同码位／异体组）。"""
+    `near_knn_gap` 开时另收「库没把握、库首位≠整理本」的格（见该参数说明，出口闸＝等于整理本或同码位／异体组）。
+    `stage`：`near`（紧接 book_knn，只判护栏格／字组格）；`gap`（各补放通道之后，只判 near_knn_gap 的格——
+    排在前面会把 rare_ref／witness3 等本就会放、字也相同的两万多格抢成 near_knn 通道，全唐文 r10，11-05 挪后）。"""
     from ..groups import near_knn
     from ..groups.edge_pairs import _exclude as _edge_exclude
     model = near_knn.load(p.group_flow_near_knn)
@@ -3628,10 +3635,12 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             m = mmap.get(r.id)
             gap = False
             if not (near or grp.get("id")):
-                top3 = [c for c, _ in (getattr(m, "candidates", None) or [])[:3]] if p.near_knn_gap else []
+                top3 = [c for c, _ in (getattr(m, "candidates", None) or [])[:3]] if stage == "gap" else []
                 if not (ref and top3 and top3[0] != ref):
                     continue
                 gap = True
+            elif stage == "gap":
+                continue
             if grp.get("id") in model["skip_groups"] or grp.get("pick"):
                 continue
             cands = [x for x in dict.fromkeys((r.char, ref, *(top3 if gap else (getattr(m, "char", None),)))) if x]
