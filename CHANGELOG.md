@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- 依赖：`opencv-python-headless` 由 `>=4.8` 钉到 `>=5.0,<5.1`（cv#1098：4.10 与 5.0 的 row_segment 产物不同，执行机与 uv.lock 已是 5.0.0.93；不改代码与指纹，执行机产物不变；本机装着 4.x 或 `opencv-contrib-python` 4.x 的要重装）（全唐文切分线）。
 - `scripts/eval_font_family.py`：字体族实测，三书人裁刻例互为查询与库，量借库能借多少（只动 `scripts/`，不改指纹，A23）。
 ### Added
 - cell_shrink `inner_frame_only`（缺省关）补列端切笔：Step2 当框条削掉的字顶字脚从 column_raw 补回，挨线的首末格条带开到内框线、地盘外伸 0.35 格（只认像笔画的墨块），贴线碎块只剥薄片（没拟出内线的一端也只剥薄片）；关着时逐字节不变（code_equiv 已登记）。
