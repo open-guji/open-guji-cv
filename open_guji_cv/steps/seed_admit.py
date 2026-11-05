@@ -356,6 +356,13 @@ class SeedAdmitParams(BaseModel):
     `domain/CV/字形领域/L2图一致证人标定-2026-11-05.md`）：该字是 `candidates` **首位**、得分 ≥ `ruling_glyph_min_score`、
     比次优的异体字高 ≥ `ruling_glyph_min_margin`。两项都 `None`＝旧口径（该字在前五且 ≥ 0.95）。
     只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它；殿本 0.98／0.02，史記、全唐文 0.95／0.02。"""
+    ruling_ref_lead_min_unseen: float | None = None
+    ruling_ref_lead_min_oov: float | None = None
+    """5b「验证整理本字」证人的书级阈值（A31／A23 11-05，评测见 ai-team `domain/CV/字形领域/5b验证整理本字评测-2026-11-05.md`）：
+    整理本字 X 是 emb **首位**，且领先次优异字（不同折叠组）≥ 阈值。`unseen`＝本书人裁 ≤2 例的字，`oov`＝不在 CNN 类表里的字，
+    两层各一个阈值（建议 unseen 0.01、oov 0.02）。**只与 L2 图一致证人（`ruling_glyph_min_*`）同时成立才放行，绝不单独放行。**
+    只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它，由终审（guji-manager）判；证据记 `via=ref_lead`（带层与领先量）。
+    `None`＝关（缺省，不进 dump）。"""
     fold_groups: tuple[str, ...] = ()
     """折叠组（书级；A24 第 6 轮，用户 11-05 定「己已巳、日曰折叠，组内任一字算对」，A31 同意管线侧同口径）：字组在名单里、
     字组流程没放行的待审格，整理本对位字就在这个组里 → 直接放整理本字（通道 `fold`，`evidence.fold = {group, ref}`），不再送审。
@@ -933,6 +940,10 @@ class SeedAdmitParams(BaseModel):
                     d.pop(k, None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
+        if isinstance(d, dict) and self.ruling_ref_lead_min_unseen is None:
+            d.pop("ruling_ref_lead_min_unseen", None)
+        if isinstance(d, dict) and self.ruling_ref_lead_min_oov is None:
+            d.pop("ruling_ref_lead_min_oov", None)
         if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
             d.pop("ruling_glyph_min_score", None)
             d.pop("ruling_glyph_min_margin", None)
