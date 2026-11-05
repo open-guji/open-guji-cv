@@ -5,6 +5,13 @@
 
 ## [未发版]
 
+## [0.6.6] - 2026-11-05
+
+- `seed_admit` `fold_groups`（#1104，A24，缺省关，书级）：折叠组（己已巳 jys、日曰 ry）内待审格整理本字在组里就放整理本字，`channel=fold`，`evidence.fold={group,ref}`。护栏 `fold_ruling_first`、`fold_lib_top_in_group`（#1107，缺省关）。
+- `seed_admit` `p_ref_admit`（#1105，A24，缺省关）：P 类机器字≠整理本时取整理本字（孤立格、非半格、非字组），`channel=p_ref`。
+- yh 字组 L1：贖還 定為還（#1106，A24）。
+- 大太 dt、王玉 wyu、十卜 sb 加 IDS 字形解法声明（#1108，整字 HOG，模板由各书重训；没模板弃权）。
+- `seed_admit` `ruling_ref_lead_min_unseen`／`ruling_ref_lead_min_oov`（#1110，缺省关，只进 params_hash）：5b 验证整理本字证人的书级阈值，由 manager final-review（v0.4.6）读。
 - `seed_admit` 终审裁定证据（A31，配 manager #184）：ctx-m1 裁定放行的格，`evidence.vis_ruling` 带上裁定的 `via`（`ref_lead`）与 `ref_lead`（层、领先量）；裁定 `gate=ref_lead_fail` 的格留审，证据记 `ref_lead_fail`，供按包统计分放行来源。只动证据，放行结果不变。
 - `seed_admit` `fold_coord_ref`（缺省关，只在 `fold_groups` 非空且开时进 dump；关时逐字节不变，登记 code_equiv）：折叠组扩展，现役对位缺时用坐标对位字，没进字组流程的格（如 曰 旁有组外字 田 挡了入口）库首位与整理本字同在某折叠组就按该组折，`evidence.fold.coord`。配 #1107 两道护栏用；全唐文 r13b 估多放日曰 14 格（形近字线 11-05）。
 
