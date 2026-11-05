@@ -370,6 +370,11 @@ class SeedAdmitParams(BaseModel):
     先用裁定字，不放整理本字；没有裁定才放整理本字。"""
     fold_lib_top_in_group: bool = False
     """`fold_groups` 的护栏二（缺省关）：库首位字（`glyph_match` candidates[0]）也必须在本组里才放；首位在组外或没有候选的格留审。"""
+    fold_coord_ref: bool = False
+    """`fold_groups` 的扩展（缺省关，只在 fold_groups 非空且开时进 dump；全唐文形近字线 11-05）：
+    ① 现役对位缺这一格时用坐标对位字（不取空、〓）当整理本字，`evidence.fold.coord = true`（全唐文日曰格现役对位全空、坐标对位都在）；
+    ② 没进字组流程的格（没有 `evidence.group`，如库候选分差内有组外字 田 挡了 曰 的入口），库首位与整理本字同在某个折叠组里，
+       就按那个组折。②要求库首位在组内，所以开它最好同开 `fold_lib_top_in_group`（①对已入组的格也生效）。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -920,10 +925,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.p_ref_admit:
             d.pop("p_ref_admit", None)
         if isinstance(d, dict) and not self.fold_groups:
-            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group"):
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.fold_groups:
-            for k in ("fold_ruling_first", "fold_lib_top_in_group"):
+            for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
                 if not getattr(self, k):
                     d.pop(k, None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
@@ -1887,7 +1892,8 @@ class SeedAdmitStep(Step):
                 n_auto += d_pr
                 n_review -= d_pr
             if p.fold_groups:
-                d_fd = _fold_pass(p, out, amap, mmap)
+                d_fd = _fold_pass(p, out, amap, mmap,
+                                  coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -3561,9 +3567,10 @@ def _p_ref_pass(p, out: list, amap: dict) -> int:
     return n
 
 
-def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None) -> int:
+def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
-    护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内。"""
+    护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
+    扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。"""
     from ..groups.registry import FLOW_GROUPS
     wins: dict = {}
     if p.fold_ruling_first:
@@ -3583,10 +3590,18 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None) -
             if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
                 continue
             gid = ((r.evidence or {}).get("group") or {}).get("id")
+            ref = (amap.get(r.id) or (None,))[0]
+            via_coord = False
+            if p.fold_coord_ref:
+                if not ref and coord and coord.get(r.id) not in (None, "", "〓"):
+                    ref, via_coord = coord[r.id], True
+                if gid is None and ref:
+                    top = (list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [(None,)]))[0][0]
+                    gid = next((g for g in p.fold_groups if g in FLOW_GROUPS and top in FLOW_GROUPS[g].members
+                                and ref in FLOW_GROUPS[g].members), None)
             if gid not in p.fold_groups or gid not in FLOW_GROUPS:
                 continue
             mem = FLOW_GROUPS[gid].members
-            ref = (amap.get(r.id) or (None,))[0]
             if not ref or ref not in mem:
                 continue
             if p.fold_lib_top_in_group:
@@ -3598,7 +3613,10 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None) -
                 v = store.get(gid, l3[gid]["ver"], *wins[r.id])
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
-            r.evidence = {**(r.evidence or {}), "fold": {"group": gid, "ref": ref, "via": via},
+            fold = {"group": gid, "ref": ref, "via": via}
+            if via_coord:
+                fold["coord"] = True
+            r.evidence = {**(r.evidence or {}), "fold": fold,
                           "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = ch, True, "fold", "match", []
             n += 1

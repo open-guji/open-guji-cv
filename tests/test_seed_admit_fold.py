@@ -69,3 +69,33 @@ def test_fold_guards(tmp_path):
     finally:
         sa._l3_online = orig
     assert "fold_lib_top_in_group" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+
+
+def test_fold_coord_ref():
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.steps import seed_admit as sa
+    m = sorted(FLOW_GROUPS["ry"].members)
+    a, b = m[0], m[1]
+    rid = f"{B}:1:1"
+
+    def rec(group=True):
+        return AdmitRec(id=rid, slot=1, admit=False, char=a, doubts=[], channel=None, provenance="",
+                        evidence={"group": {"id": "ry"}} if group else {})
+    on = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_coord_ref=True, fold_lib_top_in_group=True)
+    mm = lambda top: {rid: NS(candidates=[(top, 0.9)])}                      # noqa: E731
+    # ① 现役对位缺 → 用坐标对位
+    r = rec(); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], {}, mm(a), coord={rid: b}) == 1
+    assert r.char == b and r.evidence["fold"] == {"group": "ry", "ref": b, "via": "ref", "coord": True}
+    r = rec(); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], {}, mm(a), coord={rid: "〓"}) == 0
+    # 关时不用坐标对位
+    off = SeedAdmitParams(db_path="x", fold_groups=("ry",))
+    r = rec(); assert sa._fold_pass(off, [ColumnAdmit(col=1, chars=[r])], {}, mm(a), coord={rid: b}) == 0
+    # ② 未入组格：库首位与整理本同组 → 折；库首位在组外 → 不折
+    r = rec(False); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], {}, mm(a), coord={rid: b}) == 1
+    assert r.evidence["fold"]["group"] == "ry"
+    r = rec(False); assert sa._fold_pass(on, [ColumnAdmit(col=1, chars=[r])], {}, mm("外"), coord={rid: b}) == 0
+    r = rec(False); assert sa._fold_pass(off, [ColumnAdmit(col=1, chars=[r])], {rid: (b, None)}, mm(a)) == 0
+    assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    assert "fold_coord_ref" not in SeedAdmitParams(db_path="x", fold_coord_ref=True).model_dump()
+    assert on.model_dump()["fold_coord_ref"] is True
