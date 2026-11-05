@@ -356,6 +356,32 @@ class SeedAdmitParams(BaseModel):
     `domain/CV/字形领域/L2图一致证人标定-2026-11-05.md`）：该字是 `candidates` **首位**、得分 ≥ `ruling_glyph_min_score`、
     比次优的异体字高 ≥ `ruling_glyph_min_margin`。两项都 `None`＝旧口径（该字在前五且 ≥ 0.95）。
     只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它；殿本 0.98／0.02，史記、全唐文 0.95／0.02。"""
+    ruling_ref_lead_min_unseen: float | None = None
+    ruling_ref_lead_min_oov: float | None = None
+    """5b「验证整理本字」证人的书级阈值（A31／A23 11-05，评测见 ai-team `domain/CV/字形领域/5b验证整理本字评测-2026-11-05.md`）：
+    整理本字 X 是 emb **首位**，且领先次优异字（不同折叠组）≥ 阈值。`unseen`＝本书人裁 ≤2 例的字，`oov`＝不在 CNN 类表里的字，
+    两层各一个阈值（建议 unseen 0.01、oov 0.02）。**只与 L2 图一致证人（`ruling_glyph_min_*`）同时成立才放行，绝不单独放行。**
+    只放进 `params_hash`（册 yaml 可查），本步放行逻辑不读它，由终审（guji-manager）判；证据记 `via=ref_lead`（带层与领先量）。
+    `None`＝关（缺省，不进 dump）。"""
+    fold_groups: tuple[str, ...] = ()
+    """折叠组（书级；A24 第 6 轮，用户 11-05 定「己已巳、日曰折叠，组内任一字算对」，A31 同意管线侧同口径）：字组在名单里、
+    字组流程没放行的待审格，整理本对位字就在这个组里 → 直接放整理本字（通道 `fold`，`evidence.fold = {group, ref}`），不再送审。
+    整理本字在组外（真异文）、没有整理本对位、遮挡／排除／人裁格、夹注 a/b 半格不动。空＝关（缺省，不进 dump）。"""
+    p_ref_admit: bool = False
+    """P 类「机器字≠整理本」取整理本字放行（书级，缺省关；A24 第 6 轮，轮次主线转 R/P 小试点结论 11-04）：待审格的机器字≠整理本对位字，
+    两字都不在任何字组里（字组自己判）、不是夹注 a/b 半格、没有遮挡／排除／硬疑问、不是人裁格，且同列相邻格（slot±1）不也是这类格
+    （成片＝切分错位的征兆，归 S）→ 放整理本字（通道 `p_ref`，`evidence.p_ref`）。
+    依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。"""
+    fold_ruling_first: bool = False
+    """`fold_groups` 的护栏一（缺省关；全唐文 QTW 要求）：裁定库里有这格本组的文意裁定（高／中把握、字在组内，键＝本组 L3 提示词版本＋前后文窗口）时，
+    先用裁定字，不放整理本字；没有裁定才放整理本字。"""
+    fold_lib_top_in_group: bool = False
+    """`fold_groups` 的护栏二（缺省关）：库首位字（`glyph_match` candidates[0]）也必须在本组里才放；首位在组外或没有候选的格留审。"""
+    fold_coord_ref: bool = False
+    """`fold_groups` 的扩展（缺省关，只在 fold_groups 非空且开时进 dump；全唐文形近字线 11-05）：
+    ① 现役对位缺这一格时用坐标对位字（不取空、〓）当整理本字，`evidence.fold.coord = true`（全唐文日曰格现役对位全空、坐标对位都在）；
+    ② 没进字组流程的格（没有 `evidence.group`，如库候选分差内有组外字 田 挡了 曰 的入口），库首位与整理本字同在某个折叠组里，
+       就按那个组折。②要求库首位在组内，所以开它最好同开 `fold_lib_top_in_group`（①对已入组的格也生效）。"""
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -903,8 +929,21 @@ class SeedAdmitParams(BaseModel):
             d.pop("vis_rulings", None)
         if isinstance(d, dict) and not self.group_flow_llm_skip_half:
             d.pop("group_flow_llm_skip_half", None)
+        if isinstance(d, dict) and not self.p_ref_admit:
+            d.pop("p_ref_admit", None)
+        if isinstance(d, dict) and not self.fold_groups:
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
+                d.pop(k, None)
+        if isinstance(d, dict) and self.fold_groups:
+            for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
+                if not getattr(self, k):
+                    d.pop(k, None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
+        if isinstance(d, dict) and self.ruling_ref_lead_min_unseen is None:
+            d.pop("ruling_ref_lead_min_unseen", None)
+        if isinstance(d, dict) and self.ruling_ref_lead_min_oov is None:
+            d.pop("ruling_ref_lead_min_oov", None)
         if isinstance(d, dict) and self.ruling_glyph_min_score is None and self.ruling_glyph_min_margin is None:
             d.pop("ruling_glyph_min_score", None)
             d.pop("ruling_glyph_min_margin", None)
@@ -1859,6 +1898,15 @@ class SeedAdmitStep(Step):
                 d_nk = _near_knn_pass(p, out, amap, mmap, ctx, page, patch_missing)
                 n_auto += d_nk
                 n_review -= d_nk
+            if p.p_ref_admit:
+                d_pr = _p_ref_pass(p, out, amap)
+                n_auto += d_pr
+                n_review -= d_pr
+            if p.fold_groups:
+                d_fd = _fold_pass(p, out, amap, mmap,
+                                  coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None)
+                n_auto += d_fd
+                n_review -= d_fd
         if p.rare_ref:
             d_rr = _rare_ref_pass(out, mmap, amap, rtop, keep_ref_review=p.lane_keep_ref_review)
             n_auto += d_rr
@@ -3484,18 +3532,110 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
                   and x.get("subclass") in subs), None)
-        if not v:
-            continue
         ref_ = (amap.get(r.id) or (None,))[0]
+        if not v:
+            f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
+            if f and f.get("gate") == "ref_lead_fail" and (f.get("ref") or "") == (ref_ or ""):
+                r.evidence = {**(r.evidence or {}), "ref_lead_fail": f.get("ref_lead") or {}}   # 终审 ref_lead 证人没过：留审，记下供统计
+            continue
         if (v.get("ref") or "") != (ref_ or ""):
             continue                                 # 整理本对位字变了：不是当初看的那一格
         if ovr is not None and v.get("prompt_ver") == "ctx-m1" and ref_ and v["char"] != ref_ and not _override_ok(ovr, v["char"], ref_):
             continue                                 # 越过整理本：字与整理本字不同属白名单字组 → 留审
         ds = list(r.doubts or [])
-        r.evidence = {**(r.evidence or {}), "vis_ruling": {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")},
+        vr = {k: v.get(k) for k in ("char", "conf", "why", "model", "prompt_ver", "cell", "subclass", "route")}
+        vr.update({k: v[k] for k in ("via", "ref_lead") if v.get(k)})   # 终审 ref_lead 证人放行：via=ref_lead（层、领先量）
+        r.evidence = {**(r.evidence or {}), "vis_ruling": vr,
                       "lifted_from": {"char": r.char, "doubts": ds}}
         r.char, r.admit, r.channel, r.provenance, r.doubts = v["char"], True, "vis_ruling", "match", []
         n += 1
+    return n
+
+
+def _p_ref_pass(p, out: list, amap: dict) -> int:
+    """P 类取整理本字（`SeedAdmitParams.p_ref_admit`）。→ 放行数净增。"""
+    from ..groups.registry import FLOW_GROUPS
+    in_group = {c for g in FLOW_GROUPS.values() for c in g.members}
+
+    def cand(r) -> bool:
+        if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+            return False
+        ds = {d for d in (r.doubts or []) if isinstance(d, str)}
+        if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
+            return False
+        if ((r.evidence or {}).get("group") or {}).get("id"):
+            return False
+        ref = (amap.get(r.id) or (None,))[0]
+        return bool(ref and r.char and r.char != ref and r.char not in in_group and ref not in in_group)
+
+    n = 0
+    for c in out:
+        rs = sorted(c.chars or [], key=lambda r: (r.slot, r.sub or ""))
+        flags = [cand(r) for r in rs]
+        for i, r in enumerate(rs):
+            if not flags[i] or (i > 0 and flags[i - 1]) or (i + 1 < len(rs) and flags[i + 1]):
+                continue
+            ref = amap[r.id][0]
+            r.evidence = {**(r.evidence or {}), "p_ref": {"ref": ref, "machine": r.char},
+                          "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = ref, True, "p_ref", "match", []
+            n += 1
+    return n
+
+
+def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None) -> int:
+    """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
+    护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
+    扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。"""
+    from ..groups.registry import FLOW_GROUPS
+    wins: dict = {}
+    if p.fold_ruling_first:
+        from ..groups.context import WIDTH
+        from ..utils.jiazhu_order import sort_by_reading
+        seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
+               if not (r.doubts and "excluded" in r.doubts)]
+        wins = {r.id: (_clf_ctx(seq, amap, i, -1, WIDTH), _clf_ctx(seq, amap, i, 1, WIDTH)) for i, r in enumerate(seq)}
+        store = store if store is not None else _vis_cache().store_
+        l3 = _l3_online(p)
+    n = 0
+    for c in out:
+        for r in c.chars or []:
+            if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+                continue
+            ds = {d for d in (r.doubts or []) if isinstance(d, str)}
+            if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
+                continue
+            gid = ((r.evidence or {}).get("group") or {}).get("id")
+            ref = (amap.get(r.id) or (None,))[0]
+            via_coord = False
+            if p.fold_coord_ref:
+                if not ref and coord and coord.get(r.id) not in (None, "", "〓"):
+                    ref, via_coord = coord[r.id], True
+                if gid is None and ref:
+                    top = (list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [(None,)]))[0][0]
+                    gid = next((g for g in p.fold_groups if g in FLOW_GROUPS and top in FLOW_GROUPS[g].members
+                                and ref in FLOW_GROUPS[g].members), None)
+            if gid not in p.fold_groups or gid not in FLOW_GROUPS:
+                continue
+            mem = FLOW_GROUPS[gid].members
+            if not ref or ref not in mem:
+                continue
+            if p.fold_lib_top_in_group:
+                cands = list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [])
+                if not cands or cands[0][0] not in mem:
+                    continue
+            ch, via = ref, "ref"
+            if p.fold_ruling_first and r.id in wins and gid in l3:
+                v = store.get(gid, l3[gid]["ver"], *wins[r.id])
+                if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
+                    ch, via = v["char"], "ruling"
+            fold = {"group": gid, "ref": ref, "via": via}
+            if via_coord:
+                fold["coord"] = True
+            r.evidence = {**(r.evidence or {}), "fold": fold,
+                          "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
+            r.char, r.admit, r.channel, r.provenance, r.doubts = ch, True, "fold", "match", []
+            n += 1
     return n
 
 

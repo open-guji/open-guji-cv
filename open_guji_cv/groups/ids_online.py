@@ -93,6 +93,12 @@ SPECS: dict[str, IdsSpec] = {
     "jiao": IdsSpec(frame="", orient="v", prior=0.5, min_margin=0.03, min_class=8, generic=True),
     # 旨㫖（2026-10-22）：整字 HOG＋岭回归。模板取自 R2 整册产物（殿本 vol01、04–10）的对位文字，其中 18 个标成旨的被 sheldon 更正为㫖（对位文字旨/㫖有错），
     #   裁坏的 3 格已去掉。dataset `zhi/labels.jsonl` 353 格（㫖 283／旨 70）按册 5 折留出 353 对／0 错。
+    # 大太、王玉、十卜（2026-11-05，全唐文 QTW：r13b 审页上一批格被文意判反、现字看图都对）：差别是一点／一画，整字 HOG＋岭回归，
+    #   模板在各书数据目录 config/groups/ids/<组>.json（`python -m open_guji_cv.groups.ids_retrain dt wyu sb --ws <工作区>` 本书重训，门槛写进模板
+    #   `spec.min_margin` 覆盖这里的值）。没有模板库的书这三组的 IDS 解法一律 `abstain:no_bank`，行为不变；有了模板，复核时字形与文意不一致就降审。
+    "dt": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=32),
+    "wyu": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=32),
+    "sb": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=32),
     "zhi": IdsSpec(frame="", orient="h", prior=0.5, min_margin=0.5, min_class=8, whole="hog", lam=0.3, size=32),
     # 叙敘（2026-10-21，sheldon 指出旧窗口法不对）：真正的差别在右部（又／攵），旧规格取的是「上 40%」。改成 **U-Net 切左右、取右部**（by_form）：
     #   dataset `xu/labels.jsonl` 30 格人标切线（叙 11／敘 19）；U-Net 用叙敘＋教敎＋絕絶 共 106 格左右切线一起训（同是「两部件之间一刀」，
