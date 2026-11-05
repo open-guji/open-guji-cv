@@ -463,8 +463,18 @@ def add_causes(pending: Path, products: Path, book: str, glyph_db: Path | None =
         return
     res = book_causes(products, book)
     doc = json.loads(pending.read_text(encoding="utf-8"))
-    cnt = stamp(doc, reasons_for_pending(doc, products, book, glyph_db=glyph_db))
+    from collections import Counter
+    stats = Counter()
+    import inspect                        # manager 新版才有 stats（A24 11-05 待收字）；看签名，不吞函数里真出的 TypeError
+    kw = {"stats": stats} if "stats" in inspect.signature(reasons_for_pending).parameters else {}
+    reasons = reasons_for_pending(doc, products, book, glyph_db=glyph_db, **kw)
+    cnt = stamp(doc, reasons)
+    if stats.get("glyph_pending_registry_missing"):   # manager 新版：登记表没读到，待收字全走 ref_lacuna
+        print("  ⚠ 待收字登记表未读到（数据目录 config/pua/glyph_pending_codes.json），待收字判不出，全按缺字参考处理")
     print(f"  待审原因（{pending.name}）：" + "、".join(f"{k} {v}" for k, v in cnt.most_common()))
+    if cnt.get("glyph_pending"):          # 待收字不派人审，按窗口回查判错会把格悄悄藏起来：单列这个数，首次上线抽 20 格看图
+        print(f"  ⚠ 待收字 {cnt['glyph_pending']} 格，其中按窗口回查判成的最多 {stats['glyph_pending_by_window']} 格"
+              "（首次上线抽 20 格看图核对）")
     for c in doc.get("cells", []):
         if c["cell"] in res:
             c.pop("cause", None)

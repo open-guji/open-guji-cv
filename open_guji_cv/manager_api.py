@@ -47,6 +47,9 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     # exp、snap、events、eval 等命令层（P2 第三批搬去 manager，2026-11-04）：底下逻辑仍在 cv
     "BadRequest": ("errors", "BadRequest"),
     "workspace_root": ("core.workspace", "workspace_root"),
+    # 待收字（manager reasons.py 窗口回查私用码，2026-11-05）
+    "PuaIndex": ("utils.pua_lookup", "PuaIndex"),
+    "resolve_pua_code": ("utils.pua_lookup", "resolve_pua_code"),
     "books_dir": ("core.workspace", "books_dir"),
     "imread": ("utils.image_io", "imread"),
     "steps": ("steps", None),

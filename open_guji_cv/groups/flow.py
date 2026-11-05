@@ -627,7 +627,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     norm = cfg.canon or canon
     for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
-            if (ch is None and why == "abstain" and mode == "lift" and g in cfg.abstain_ref_ok
+            if (ch is None and why == "abstain" and mode == "lift" and g in cfg.abstain_ref_ok and not GROUPS[g].ref_free
                     and (fr := ref or (veto_refs or {}).get(r.id))):
                 fam = next((x for x in GROUPS[g].flow.families if fr in x), None)
                 given = {t["char"] for t in trail if t["char"]}
@@ -746,7 +746,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
-            if (code == "group_flow_abstain" and g in cfg.abstain_ref_ok and r.char
+            if (code == "group_flow_abstain" and g in cfg.abstain_ref_ok and not GROUPS[g].ref_free and r.char
                     and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(r.char)
                     and not any(t["char"] and norm(t["char"]) != norm(r.char) for t in trail)):
                 # 解法只是弃权、没人反对，已放行字与整理本同字：照整理本留放（史記 2026-11-01，用户定「按整理本走」）
