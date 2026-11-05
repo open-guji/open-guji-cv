@@ -785,11 +785,12 @@ def test_mb_rule_strong_and_ref_rule_fix():
 
 # —— 暂归一兜底（sheldon 2026-10-27）——
 
-def _pv_run(monkeypatch, recs, amap, cands, g="can", coord=None, **kw):
+def _pv_run(monkeypatch, recs, amap, cands, g="can", coord=None, provisional_to=None, **kw):
     from open_guji_cv.groups import flow
     from open_guji_cv.groups.protocol import GroupVerdict
     monkeypatch.setattr(flow, "_solve", lambda name, gg, r, *a, **k: GroupVerdict(kw.get("pick", {}).get(r.id), via=name))
-    group_flow_pass(recs, amap, lambda cid: cands[cid], lambda r: False, FlowConfig(groups=(g,)), veto_refs=coord or {})
+    group_flow_pass(recs, amap, lambda cid: cands[cid], lambda r: False,
+                    FlowConfig(groups=(g,), provisional_to=provisional_to or {}), veto_refs=coord or {})
     return recs
 
 
@@ -835,6 +836,17 @@ def test_provisional_review_instead_of_demote(monkeypatch):
     assert x.admit and x.char == "絶" and x.evidence["group"]["decision"] == "provisional"
     assert x.evidence["fixed_from"] == {"channel": "match_ref", "char": "絕"}
     assert y.admit and y.char == "絶"
+
+
+def test_provisional_to_book_override(monkeypatch):
+    """书级暂归一字形（seed_admit `group_flow_provisional_to`，全唐文 彝组 11-05）：复核兜底放成书级指定的字形；不在 forms 里的字不理。"""
+    x, y, z = (Rec(k, "絕", True, "match_ref") for k in "xyz")
+    _pv_run(monkeypatch, [x], {"x": ("絕", "equal")}, {"x": []}, g="jue", pick={"x": "絶"}, provisional_to={"jue": "絕"})
+    assert x.admit and x.char == "絕" and x.evidence["group"]["decision"] == "provisional"
+    _pv_run(monkeypatch, [y], {"y": ("絕", "equal")}, {"y": []}, g="jue", pick={"y": "絶"}, provisional_to={"jue": "絲"})
+    assert y.char == "絶"                                               # 不在 forms：照表里的 to
+    _pv_run(monkeypatch, [z], {"z": ("絕", "equal")}, {"z": []}, g="jue", pick={"z": "絶"})
+    assert z.char == "絶"
 
 
 def test_provisional_off_and_near_form_groups(monkeypatch):

@@ -285,6 +285,10 @@ class SeedAdmitParams(BaseModel):
     现役对位没有这一格、只有坐标对位（`align_ref.coord`）时，坐标对位字不是本组成员且与补放字不同 → 同样不补放
     （`group_flow_coord_dissent`；vol18 107:6:7 叔→叙、vol16 109:6:21 樊→彝。坐标对位字只用来拦，不参与组内判字）。"""
     group_flow_provisional: bool = True
+    group_flow_provisional_to: dict[str, str] = Field(default_factory=dict)
+    """书级暂归一字形：组 id → 字（须是 `registry.PROVISIONAL` 该组 forms 里的字，否则不理），压过表里的 `to`（缺省关；空时不进 dump，
+    `params_hash` 不变）。全唐文 彝组 yi_560：表里 `to`＝𢑱（殿本放行最多的形），本书刻的是 彝（Sheldon 11-05 同轮人裁 3 格），
+    r11 复核时 ids 读出 彝（彑米糸廾）而上段 margin 不够改字，兜底就放成了 𢑱（8 格）。"""
     """同义字组暂归一兜底（sheldon 2026-10-27，见 `groups.flow._provisional`、`groups.registry.PROVISIONAL`）：字组方法拆不开写法、
     与整理本说法不一而留人审／降审的格，只要库形、整理本（或已放行字）都认是这个字，就放成这组最常见的字形，
     `evidence.group.decision` 记 `provisional`。False＝照旧留人审（2026-10-27 前的行为）。"""
@@ -951,6 +955,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_abstain_ref_ok", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
+        if isinstance(d, dict) and not self.group_flow_provisional_to:
+            d.pop("group_flow_provisional_to", None)
         if isinstance(d, dict) and not self.group_flow_pair_shape:
             d.pop("group_flow_pair_shape", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
@@ -3708,6 +3714,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
+                     provisional_to=dict(p.group_flow_provisional_to),
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
                                                         and ctx.book.codepoints) else None))
