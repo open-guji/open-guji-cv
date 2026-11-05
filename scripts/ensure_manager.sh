@@ -15,7 +15,12 @@ ensure_manager() {
       || echo "ⓘ guji-manager 没拉成新的，用 $d 现有的" >&2
   fi
   touch "$stamp"
-  if ! "$py" -c "import guji_manager, os, sys; sys.exit(os.path.realpath(guji_manager.__file__).startswith(os.path.realpath('$d')) is False)" 2>/dev/null; then
+  # 已 editable 装在 $d 也要核版本：git 拉新代码不会更新 dist-info，新加的入口点（如 guji.hooks 的 prepare）认不到，
+  # pipeline 会报「manager 没装或太旧」（11-05 SJ r11、殿本 #447 在已拉到 v0.4.1 的执行方上退出码 2）。版本对不上就重装。
+  if ! "$py" -c "import guji_manager, os, re, sys; from importlib.metadata import version
+d = os.path.realpath('$d'); ok = os.path.realpath(guji_manager.__file__).startswith(d)
+want = re.search(r'^version *= *\"([^\"]+)\"', open(os.path.join(d, 'pyproject.toml'), encoding='utf-8').read(), re.M)
+sys.exit(0 if ok and (not want or version('guji-manager') == want.group(1)) else 1)" 2>/dev/null; then
     { command -v uv >/dev/null && uv pip install -q --python "$py" --no-deps -e "$d"; } \
       || "$py" -m pip install -q --no-deps -e "$d" 2>/dev/null \
       || { echo "ⓘ guji-manager 没装上（$d），先用 cv 自带的命令" >&2; return 0; }
