@@ -2,6 +2,8 @@
 # guji_jobs — 任务库命令（2026-10-25）：交任务、看进展、执行方领单跑单。
 #
 #   guji_jobs submit …｜ls｜show <号>｜wait <号>｜cancel｜bump｜retry   # 同 guji job …，见 guji-manager guji_manager/jobs/cli.py（2026-11-04 起）
+#   入口一律是 `python -m guji_manager.jobs`。旧的 `open_guji_cv.jobs` 已随拆分 P5（#1055）搬走；
+#   /usr/local/bin 里还是旧包装脚本的执行机，重新装一份：git -C /opt/guji-cv-seed show origin/dev:scripts/guji_jobs.sh > /usr/local/bin/guji_jobs
 #   guji_jobs start [work 的参数]     # 执行方：后台起 work（脱离本 shell，日志 ~/.guji-jobs/worker.log）
 #   guji_jobs follow [秒]             # 跟着看执行方日志，执行方退出或到时就返回（缺省 6600 秒）
 #
@@ -24,7 +26,8 @@ refresh() {
   if [ ! -d "$R/open_guji_cv" ]; then
     git -C "$SEED" fetch -q origin dev && git -C "$SEED" worktree add -f --detach "$R" origin/dev >/dev/null 2>&1
     touch "$H/runner_fresh"
-  elif ! busy && [ -z "$(find "$H/runner_fresh" -mmin -10 2>/dev/null)" ]; then
+  elif ! busy && { [ -e "$R/open_guji_cv/jobs/__main__.py" ] || [ -z "$(find "$H/runner_fresh" -mmin -10 2>/dev/null)" ]; }; then
+    # 老检出里还有已搬走的 open_guji_cv/jobs（拆分 P5 前）：有就立刻刷新，不等 10 分钟，免得老 runner 再 exec 老入口
     git -C "$SEED" fetch -q origin dev && git -C "$R" checkout -q --detach origin/dev || echo "（runner 没刷新成，用旧的）" >&2
     touch "$H/runner_fresh"
   fi
