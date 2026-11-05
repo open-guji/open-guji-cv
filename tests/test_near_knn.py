@@ -104,3 +104,28 @@ def test_witness3_knn_veto(tmp_path, monkeypatch):
         raise sa.PatchUnavailable("x")
     monkeypatch.setattr(sa, "_page_patch", boom)
     assert veto(1, rec, "口", "十") is None           # 取不到字块 fail-open
+
+
+def test_near_knn_gap(tmp_path, monkeypatch):
+    """near_knn_gap：库没把握、库首位≠整理本的格也收，候选＝本格字＋整理本＋库前三；给的字须等于整理本（或同组异体）才放。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps import seed_admit as sa
+    path = tmp_path / "near_knn.json"
+    path.write_text(json.dumps(_model(), ensure_ascii=False), encoding="utf-8")
+    near_knn.load.cache_clear()
+    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: box(0))
+
+    def run(gap, ref):
+        r = NS(id="c1", char="十", admit=False, provenance="match", channel=None, evidence={}, doubts=["lib_unsure"],
+               slot=1, sub=None)
+        p = NS(group_flow_near_knn=str(path), near_knn_gap=gap, patch_missing="skip")
+        m = NS(char=None, candidates=[("十", 0.9), ("口", 0.8), ("一", 0.5)])
+        n = sa._near_knn_pass(p, [NS(col=1, chars=[r])], {"c1": (ref,)}, {"c1": m})
+        return n, r
+    assert run(False, "口")[0] == 0                       # 关：不在护栏／字组的格不碰
+    n, r = run(True, "口")
+    assert n == 1 and r.char == "口" and r.channel == "near_knn" and r.evidence["near_knn"]["via"] == "near_gap"
+    n, r = run(True, "十")                                 # 库首位＝整理本：不进
+    assert n == 0 and "near_knn" not in r.evidence
+    n, r = run(True, "一")                                 # 给 口 ≠ 整理本 一、也非异体 → 出口闸留审
+    assert n == 0 and r.evidence["near_knn"]["why"] == "abstain:ref_gate"
