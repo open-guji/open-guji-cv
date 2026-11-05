@@ -54,3 +54,41 @@ def test_no_frame_returns_none():
     ink = _page("bottom")
     ink[440:, :] = False            # 没有版框
     assert fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom") is None
+
+
+def _dotted_page(dot_every: int = 9, tilt: float = 0.004, inner: bool = True):
+    """内线磨成点线（每 dot_every px 一个 2px 点），小段里墨占比到不了 RUN_COV，小段投票拟不出。"""
+    h, w = 600, 1200
+    ink = np.zeros((h, w), bool)
+    for x in range(50, 1150):
+        o = int(round(500 + tilt * (x - 600)))
+        ink[o:o + 8, x] = True
+        if inner and x % dot_every < 2:
+            c = int(round(500 + 1.6 * tilt * (x - 600))) - 14    # 内线比外框多斜一点
+            ink[c:c + 3, x] = True
+    for cx in range(80, 1150, 110):                                  # 字竖笔离线一段
+        ink[380:470, cx:cx + 6] = True
+    return ink
+
+
+def test_dotted_inner_line_needs_profile_fallback():
+    ink = _dotted_page()
+    assert fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom") is None
+    line = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True)
+    assert line is not None and line.via == "profile"
+    for x in (150, 600, 1050):
+        want = round(500 + 1.6 * 0.004 * (x - 600)) - 14 + 1
+        assert abs(float(line.y(x)) - want) <= 1.0
+    assert 2 <= line.thick <= 4
+
+
+def test_profile_fallback_keeps_chunk_result():
+    ink = _page("bottom")
+    a = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom")
+    b = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True)
+    assert a == b and a.via == "chunks"
+
+
+def test_profile_fallback_no_inner_line():
+    ink = _dotted_page(inner=False)
+    assert fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True) is None
