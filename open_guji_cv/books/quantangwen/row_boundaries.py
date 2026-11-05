@@ -1297,6 +1297,27 @@ def reading_order(cells: list[Cell]) -> list[Cell]:
     return out
 
 
+def _half_a_left(patch: np.ndarray, cxi: int, ink_threshold: int) -> int | None:
+    """`jiazhu_half_a`：只有右半有字的夹注格，右半格的左缘（格内 x）。压着右半（x ≥ 缝）的连通块
+    （面积 ≥ `HALF_A_MIN_AREA`，滤掉噪点）里最靠左的一个像素，不超过缝；右半连同这些块墨不到
+    `jiazhu_split.HALF_MIN_INK` 时返回 None（字整个偏在左半，交回按墨多的一半发）。"""
+    import cv2
+    ink = (patch < ink_threshold).astype(np.uint8)
+    if ink.size == 0 or cxi >= ink.shape[1]:
+        return None
+    n, lab, stats, _ = cv2.connectedComponentsWithStats(ink, connectivity=8)
+    x0 = cxi
+    for i in set(np.unique(lab[:, max(cxi, 0):])) - {0}:
+        if stats[i, cv2.CC_STAT_AREA] >= HALF_A_MIN_AREA:
+            x0 = min(x0, int(stats[i, cv2.CC_STAT_LEFT]))
+    if int(ink[:, x0:].sum()) < jiazhu_split.HALF_MIN_INK:
+        return None
+    return x0
+
+
+HALF_A_MIN_AREA = 20
+
+
 def _ink_ratio(patch: np.ndarray, ink_threshold: int) -> float:
     if patch.size == 0:
         return 0.0
@@ -1690,6 +1711,7 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
                     jiazhu_rows: bool = False,
                     jiazhu_free_split: bool = False,
                     jiazhu_single_head: bool = False,
+                    jiazhu_half_a: bool = False,
                     **dp_kwargs) -> RowBoundaryResult | None:
     """**Step 3 的正门**：Step 2 的单列矩形图 → 带类型的字格列表。
 
@@ -1778,6 +1800,9 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
       从段首数，段尾那格只发长的那行（设计稿方案 A，Sheldon 2026-11-03 定）。
     - `jiazhu_single_head`（书级，全唐文）：只有一行量得出缝、下一格是右半单字的雙行小注（「字｜闕」＋「一」）
       也认成段（`jiazhu_split.single_row_heads`），不再把并排两字切成一个整宽正文格。
+    - `jiazhu_half_a`（书级，全唐文）：表说只有一半有字的夹注格（`half_notes`，格位表 `half`＝只有右半）一律发
+      `jiazhu_a`，左缘放宽到压着右半的连通块的最左（`_half_a_left`）。段尾奇数字常居中、跨过段缝，原先按墨多的一半发，
+      字被缝劈开（012:186:9:11「篇」、013:147:8:21「二」）。右半连同跨缝块都量不到墨时照旧发墨多的一半。
     - `dp_kwargs`：透传给 `fit_row_boundaries`（`lam`/`lo_ratio`/`hi_ratio`/
       `y1_max_frac`/`y2_max_frac`/`blank_thresh_frac`/`synth_step`/`eps`）。
 
@@ -2046,7 +2071,12 @@ def segment_column(col_gray: np.ndarray, period: float, n_body_slots: int = 21,
             if pos in half_side:
                 sides = tuple(t for t in sides if t[0] == "jiazhu_" + half_side[pos])
             elif pos in one_half:
-                sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
+                x0a = _half_a_left(patches[pos], cxi, ink_threshold) if jiazhu_half_a else None
+                if x0a is not None:
+                    # 缝也挪到放宽后的左缘：下游（cell_shrink 的 jiazhu_cx）按缝裁右半
+                    sides, cx = (("jiazhu_a", x0a, x_hi - x_lo),), float(x_lo + x0a)
+                else:
+                    sides = (max(sides, key=lambda t: int((patches[pos][:, t[1]:t[2]] < ink_threshold).sum())),)
             for kind, xs, xe in sides:
                 if kind == "jiazhu_b" and pos in tail_a and pos not in one_half:
                     continue

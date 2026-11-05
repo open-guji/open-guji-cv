@@ -855,6 +855,10 @@ class RowSegmentParams(BaseModel):
     #: 夹注判据要连着两行量得出缝，整段落空，两字挤进一个整宽正文格（r9b 字形线退回 8 格）。开了就补认这种段
     #: （`jiazhu_split.single_row_heads`）。书级开关；False＝关（缺省，不进参数哈希）。
     jiazhu_single_head: bool = False
+    #: **只有右半的夹注格整字发右半**（2026-11-05，全唐文 S3）：格位表 `half`（只有右半有字）的格一律发 `jiazhu_a`，
+    #: 左缘放宽到压着右半的连通块最左；段尾奇数字居中跨缝时不再被缝劈开、也不再按墨多发成左半（012:186:9:11「篇」、
+    #: 013:147:8:21「二」）。书级开关；False＝关（缺省，不进参数哈希）。
+    jiazhu_half_a: bool = False
     #: **行距是否按等距格网强制**（2026-11-03，史記文淵閣本）：`uniform`（缺省，殿本：格高一致强制，等距格网坏格不多于
     #: 别的格网就取它，1.44 #852）／`free`（写本：字距随手写，等距格网只作候选之一、与表格网／闸格网／无先验格网按
     #: 坏格、劈字、格高不匀、穿字一起比，不优先）。史記开 uniform 时，高字（「者」「陽」）下半截被等距格线切给下一格，
@@ -960,6 +964,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("jiazhu_step_split", None)
             if not self.jiazhu_single_head:
                 d.pop("jiazhu_single_head", None)
+            if not self.jiazhu_half_a:
+                d.pop("jiazhu_half_a", None)
             if not self.seal_gap_slots_empty:
                 d.pop("seal_gap_slots_empty", None)
             if not self.seal_inkcut:
@@ -1032,6 +1038,9 @@ class RowSegmentStep(Step):
         reading_order, NONUNIFORM_LAM = RB.reading_order, RB.NONUNIFORM_LAM
         if p.jiazhu_single_head and "jiazhu_single_head" not in inspect.signature(segment_column).parameters:
             raise ValueError("row_segment.jiazhu_single_head 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
+                             f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
+        if p.jiazhu_half_a and "jiazhu_half_a" not in inspect.signature(segment_column).parameters:
+            raise ValueError("row_segment.jiazhu_half_a 是全唐文套书的开关：册配置要写 seg_set: quantangwen"
                              f"（本册套书的 {RB.__name__}.segment_column 没有这个参数）")
         gate: GateManifest = ctx.product("gate_manifest", page)
         wins: PageWindows = ctx.product("column_windows", page)
@@ -1217,6 +1226,7 @@ class RowSegmentStep(Step):
                     **({"jiazhu_rows": True} if p.jiazhu_rows and final else {}),
                     **({"jiazhu_free_split": True} if p.jiazhu_rows and p.jiazhu_free_split and final else {}),
                     **({"jiazhu_single_head": True} if p.jiazhu_single_head else {}),
+                    **({"jiazhu_half_a": True} if p.jiazhu_half_a else {}),
                     **({} if slot_override is None or slot_override.uniform
                        else {"lam": NONUNIFORM_LAM}))
                 if res is not None and not final:

@@ -840,6 +840,10 @@ class SeedAdmitParams(BaseModel):
     本格字三方一致」只被 `near_form`／上下文 margin 不足挡下的格，看图 28/28 读对（页错位的 vol56 p75 除外，那页带 never_match 护栏）。
     判据同 `ref_lib_coord_decide`，门槛用 `ref_lib_coord_cov`／`ref_lib_coord_gap`（比 reference_trust 的 0.90／0.005 严）。
     `reference_trust` 开着时本开关不起作用（以它的门槛为准）。False＝关（不进 dump）。"""
+    lane_coord_few_stroke: tuple[str, ...] = ()
+    """少笔画字名单（书级，史記 r12：二→一、二→三、子→予、下→十 走参校字兜底错放）：`coord_fallback` 的「库首位≠参校字、靠证人同意参校字」一支，
+    以及 `ref_lib_coord` 的盲放（库首位≠参校字）一支，凡库首位或参校字落在名单里、且两者不同 → 不放，留审（`lane_skip.why=few_stroke`）。
+    建议 `一二三下十子予`。空＝关（缺省，不进 dump）。参校字不是汉字时的兜底／放行已一律不取（无开关，对位错位）。"""
     ref_lib_coord_cov: float = 0.96
     ref_lib_coord_gap: float = 0.01
     """只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。"""
@@ -985,6 +989,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("replace_form_edge_exclude", None)
         if isinstance(d, dict) and not self.ref_lib_coord_dissent:
             d.pop("ref_lib_coord_dissent", None)
+        if isinstance(d, dict) and not self.lane_coord_few_stroke:
+            d.pop("lane_coord_few_stroke", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
@@ -2694,6 +2700,16 @@ REFERENCE_TRUST_LIFT_SHAPE_GROUPS = ("ry",)
 REFERENCE_TRUST_COV = 0.90
 REFERENCE_TRUST_GAP = 0.005
 #: `reference_trust` 的库首位放行不碰的字：有专门解法（字组流程）的几族——日曰目、己已巳、入人八、一二。
+def _is_han(c) -> bool:
+    """整理本字是不是汉字（CJK 各区、兼容区、私用区——私用码是整理本里的造字，仍算字）。缅文、拉丁、符号等 → False：
+    这类对位多半是对位错位或版面符号，不能拿来当「整理本字」放行（史記 r12，03:114:2:20 参校字 ခ、库首位 六）。"""
+    if not c or len(c) != 1:
+        return False
+    o = ord(c)
+    return (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x3FFFF
+            or 0xE000 <= o <= 0xF8FF or 0xF0000 <= o <= 0x10FFFF or 0x2E80 <= o <= 0x2FDF)
+
+
 _REF_LIB_COORD_SKIP = frozenset("日曰目己已巳入人八一二")
 #: `ref_lib_coord` 认的疑问（白名单，别的一律不碰）：库不确定／上下文不足、整理本护栏、字组只弃权或只有分歧、人裁绑丢（另判）。
 _REF_LIB_COORD_DOUBTS = ("库 unsure", "库 same 但准入被拦", "上下文 margin 不足", "near_form", "ctx_guard_ref",
@@ -2777,11 +2793,11 @@ def _ref_topk_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
 
 def ref_lib_coord_decide(*, char, ref, cands, verdict, guard, doubts, evidence, semantic, cov_min: float,
                          gap_min: float, shape_ok=frozenset(), blind_ok: bool = False,
-                         blind_cov_max: float = 0.975) -> bool:
+                         blind_cov_max: float = 0.975, few_stroke=frozenset()) -> bool:
     """`ref_lib_coord` 的判据，纯函数（离线回放与线上共用）。待审格是否按整理本字放行。
     `blind_ok`（调用方已验过本列对位健康）：库首位不是整理本字、但格带 `ctx_guard_ref`（库认不出、文意又与整理本不同）、
     库首位 cov < `blind_cov_max`（库没有强烈说是别的字）→ 也按整理本放。"""
-    if not char or not ref or ref == "〓" or char != ref or char in _REF_LIB_COORD_SKIP or char in _JYS:
+    if not char or not ref or ref == "〓" or char != ref or char in _REF_LIB_COORD_SKIP or char in _JYS or not _is_han(ref):
         return False
     ds = [d for d in (doubts or []) if isinstance(d, str)]
     if any(not d.startswith(_REF_LIB_COORD_DOUBTS) for d in ds):
@@ -2790,7 +2806,8 @@ def ref_lib_coord_decide(*, char, ref, cands, verdict, guard, doubts, evidence, 
         return False
     top = float(cands[0][1])
     if cands[0][0] != ref:
-        if not (blind_ok and "ctx_guard_ref" in ds and top < blind_cov_max):
+        if not (blind_ok and "ctx_guard_ref" in ds and top < blind_cov_max) or (
+                few_stroke and (ref in few_stroke or cands[0][0] in few_stroke)):
             return False
     else:
         if top < cov_min:
@@ -2846,7 +2863,7 @@ def _ref_lib_coord_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict,
                                         verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
                                         doubts=rec.doubts, evidence=rec.evidence, semantic=vmap.semantic,
                                         cov_min=cov_min, gap_min=gap_min,
-                                        shape_ok=ok_groups, blind_ok=blind_ok):
+                                        shape_ok=ok_groups, blind_ok=blind_ok, few_stroke=frozenset(p.lane_coord_few_stroke)):
                 continue
             top, cov = m.candidates[0][0], float(m.candidates[0][1])
             rec.admit, rec.channel, rec.provenance = True, "ref_lib_coord", "match"
@@ -3264,6 +3281,12 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                     elif same(lib, co, d):
                         hit = ("coord_fallback", lib, {"via": "lib_coord_primary", "coord": co, "lib": lib,
                                                        "witnesses": wc})
+                    elif not _is_han(co) and lib != co:
+                        # 坐标对位字不是汉字（ခ 之类对位错位／符号）、库首位是别的字：不取参校字，留审（史記 r12 03:114:2:20）
+                        rec.evidence = {**ev, "lane_skip": {"lane": "coord_fallback", "why": "ref_non_han", "lib": lib, "coord": co}}
+                    elif p.lane_coord_few_stroke and lib != co and (co in p.lane_coord_few_stroke or lib in p.lane_coord_few_stroke):
+                        # 少笔画字（一二三下十子予）：库首位与参校字不同、又都在少笔画名单里，参校字兜底曾二→一、子→予（史記 r12 01:34:1:5），留审
+                        rec.evidence = {**ev, "lane_skip": {"lane": "coord_fallback", "why": "few_stroke", "lib": lib, "coord": co}}
                     elif (rs and same(co, *wc.values()) and not variant_pair(lib, co)
                           and guard_of(rec.id) is None):
                         # 这一支没有字形背书（库首位是别的字），库再带护栏（never_match／conflict：
@@ -3500,6 +3523,16 @@ _VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozen
 _VIS_RULING_HARD = frozenset({"occluded", "excluded", "glyph_timeout"})
 
 
+def _ruling_han(c) -> bool:
+    """裁定字须是汉字（统一表意文字各区＋兼容表意）：汉字区以外的码位、私用码、符号、占位一律不放（Ext J 的 U+323B0–3347F 是 Unicode 17 的真汉字，算）
+    （A31 11-05：不能让非汉字经 vis_ruling 通道放行；比 `_is_han` 严，后者连私用码也算）。"""
+    if not c or len(c) != 1:
+        return False
+    o = ord(c)
+    return (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x323AF
+            or 0x323B0 <= o <= 0x3347F or 0x2F800 <= o <= 0x2FA1F)
+
+
 def _override_ok(groups, a: str, b: str) -> bool:
     """a、b 同属 `groups` 里的某个字组（成员含两字）。"""
     from ..groups.registry import FLOW_GROUPS
@@ -3545,7 +3578,7 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
         v = next((x for ver, subs in _VIS_RULING_SPECS
                   for x in [store.get(_VIS_RULING_GROUP, ver, left, right)]
                   if x and x.get("admit_ok") and x.get("conf") == "high" and x.get("char") and not x.get("other")
-                  and x.get("subclass") in subs), None)
+                  and _ruling_han(x["char"]) and x.get("subclass") in subs), None)
         ref_ = (amap.get(r.id) or (None,))[0]
         if not v:
             f = store.get(_VIS_RULING_GROUP, "ctx-m1", left, right)
