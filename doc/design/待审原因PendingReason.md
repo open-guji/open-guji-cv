@@ -21,7 +21,7 @@
 
 常用接口：`parse(value)`（空值、认不出的都给 `UNKNOWN`）、`specs()`、`by_code("Z01")`、`legacy_candidates(cause=…, cls=…)`。
 
-## 三、全部取值（29 个）
+## 三、全部取值（30 个）
 
 去向：`human` 一定人审；`llm` 大模型统一过一遍，只收 high，其余回人审；`algo` 先改算法，改完剩下的并入 llm；`deferred` 留到标点、专名阶段。
 
@@ -38,6 +38,7 @@
 | N01 | `near_form_guard` | 形近字 | 形近护栏 | llm | llm_then_human | A24 |
 | P01 | `ref_replaced` | 参校本改过字 | 与参校本不一致 | llm | llm_then_human | A24 |
 | P02 | `ref_mismatch` | 和参校本不一致 | 与参校本不一致 | llm | llm_then_human | A24 |
+| R03 | `glyph_pending` | 待收字 | 参校本缺位 | deferred | none | A24 |
 | R01 | `ref_lacuna` | 参校本缺字 | 参校本缺位 | algo | llm_then_human | A24 |
 | R02 | `ref_gap` | 参校本这里没字 | 参校本缺位 | llm | llm_then_human | A24 |
 | S01 | `seg_page_unaligned` | 整页对不上 | 切分位置 | algo | human | A22 |
@@ -58,6 +59,8 @@
 | Z06 | `group_form_open` | 写法待定 | 形近字组 | algo | human | A24 |
 
 显示名、卡片说明（`hint`）、卡片形态（`ui`）、判法（`detect`）见 yaml。对外一律说「参校本」，不说「整理本」。
+
+**R03 待收字**（sheldon 11-05 定，A20 审）：整理本这位是没收进 Unicode 的私用码，且码位在私用码表里登记为「已判定待收」。已判过没字，暂时「留图不留字」（页面显示字图，将来找到字按码位统一回填），与真图／小篆的留图不留字分开。仍上单；不派人审、不进大模型，靠下游按 `reviewer: none` 跳过。detail 只写永久编号「来源:码位」：`daizhige:U+E123`（殆知阁僻字码，`utils/daizhige.pua_codes` 带到 columns.jsonl 的 run 上）、`siku-qiefen-v2:U+F1001`（图源文本层），两套码不一一对应，必须带来源。占位码（以图代字，U+1001 等）属真图，不进待收字。没登记的私用码仍记 `ref_lacuna`。
 
 ## 四、各处数据怎么写
 
