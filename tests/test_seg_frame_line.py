@@ -104,7 +104,7 @@ def _bent_page():
         o = int(round(o))
         ink[o:o + 40, x] = True
         ink[o - 39:o - 30, x] = True          # 内线 9 行：[o-39, o-30)
-    for cx in range(150, 2300, 210):        # 字底横
+    for cx in range(150, 2000, 210):        # 字底横（不伸进右端翘起段：翘到 x≈2280 时内线会和字底横叠在一起，真页上不会有）
         ink[920:927, cx:cx + 120] = True
         ink[700:927, cx + 55:cx + 63] = True
     return ink
@@ -132,3 +132,21 @@ def test_localize_no_frame_keeps_line():
     line = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom")
     ink2 = np.zeros_like(ink)
     assert localize_inner_line(ink2, line, 80) is line
+
+
+def test_seed_fallback_for_broken_inner_line():
+    """内线断续（只剩四成小段看得见）、空段验线过不了时，种子线＋逐段贴线仍贴得上。"""
+    from open_guji_cv.seg.frame_line import inner_thick_limit, localize_inner_line
+    ink = _bent_page()
+    for x in range(100, 2300):
+        if (x // 60) % 5 >= 2:              # 每 300px 只留 120px 内线
+            ink[1000 - int(max(0, x - 2000) * 40 / 300.0) - 39:1000 - int(max(0, x - 2000) * 40 / 300.0) - 30, x] = False
+    mt = inner_thick_limit(200)
+    line = fit_inner_frame_line(ink, 100, 2300, y_hint=1000, cell_h=200, side="bottom", max_thick=mt,
+                                seed_fallback=True)
+    assert line is not None
+    loc = localize_inner_line(ink, line, 200, max_thick=mt)
+    assert loc.knots
+    for x in (300, 1200, 2150):
+        o = 1000 - (max(0, x - 2000) * 40 / 300.0)
+        assert abs(float(loc.y(x)) - (round(o) - 34.5)) <= 3.0, x

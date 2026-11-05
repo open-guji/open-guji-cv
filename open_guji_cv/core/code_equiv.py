@@ -977,6 +977,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="54dc154cfba6db8cfd8010a1747b6e6f647d16959ff49818f1500b40e0670514",
           old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
           evidence=_LAYOUT_CUTS),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="18517e310d5a4af1946c39c28c2fcb32427ae5fc28c5eb84037c9cf3ec2c53e3",
+          old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.clustering.extractor",
+          new="c658979461e3be53fda935c0705d1bd4a8dfc48073eaf4c7b7f680a6b98da988",
+          old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.frame_line",
+          new="d7447bb3945fbdb008e46048d9571b7022b7910bf9509b54691f3d25fca9b238",
+          old="0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b",
+          evidence="S5 内框贴线放宽到半格、种子线兜底、列端剥框线只认贴着整页内线的线行（只在 cell_shrink.inner_frame_local 开时生效）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74，书级 inner_frame_cut 开、inner_frame_local 关）上与 origin/dev（b148b2c）产物逐字节相同；2026-11-05"),
 )
 
 
