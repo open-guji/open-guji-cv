@@ -316,6 +316,13 @@ class SeedAdmitParams(BaseModel):
     只收符号；遮挡（印章）格、排除名单格、人裁格不动；对位没说空格（整理本这一位有字）的不放。空＝关（不进 dump）。"""
     symbol_ref_blank_cov: float = 0.97
     """`symbol_ref_blank` 的库 cov 下限（库对这个符号的匹配度；本书圈号实测 0.977–0.999）。"""
+    symbol_ref_gap: bool = False
+    """`symbol_ref_blank` 放宽到「整理本这里没字」（坐标对位没有这一位的条目，`coord.get(id) is None`，不是空格 `""`；
+    A24 第 5 轮，长期计划线程转 SJ 史記 r9：ref_gap 里 17 格库首位是 ○、cov 0.92–0.999）。需 `symbol_ref_blank` 非空才生效。
+    护栏：同一列里至少 `symbol_ref_gap_min_col` 个字位有坐标对位条目（防整页没对位、切分错）；cov 用 `symbol_ref_gap_cov`；
+    遮挡、人裁、排除名单照旧不动；证据 lane 记 `via=gap`。缺省关（不进 dump）。"""
+    symbol_ref_gap_cov: float = 0.97
+    symbol_ref_gap_min_col: int = 3
     vis_rulings: bool = True
     """看图判裁定（无组入口，A24 2026-11-03）：待审格的前后文窗口命中裁定库里「看图＋文意」的 `ctx_ruling`
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
@@ -853,6 +860,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.symbol_ref_blank:
             d.pop("symbol_ref_blank", None)
             d.pop("symbol_ref_blank_cov", None)
+        if isinstance(d, dict) and not (self.symbol_ref_blank and self.symbol_ref_gap):
+            for k in ("symbol_ref_gap", "symbol_ref_gap_cov", "symbol_ref_gap_min_col"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.group_flow:
             for k in [k for k in d if k.startswith("group_flow")]:
                 d.pop(k, None)
@@ -2327,25 +2337,28 @@ def _symbol_ref_blank_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: d
     syms = frozenset(p.symbol_ref_blank)
     n = 0
     for col in out:
+        col_cov = sum(1 for r in col.chars or [] if coord.get(r.id) is not None) if p.symbol_ref_gap else 0
         for rec in col.chars or []:
             if rec.provenance == "human" or rec.channel == "human":
                 continue
             ds = {d for d in (rec.doubts or []) if isinstance(d, str)}
             if "occluded" in ds or "excluded" in ds or (rec.evidence or {}).get("occluded"):
                 continue
-            if coord.get(rec.id) != "":
+            c0 = coord.get(rec.id)
+            gap = c0 is None and p.symbol_ref_gap and col_cov >= p.symbol_ref_gap_min_col
+            if c0 != "" and not gap:
                 continue
             if rec.char and rec.char not in syms:
                 continue
             m = mmap.get(rec.id)
             cands = list(getattr(m, "candidates", None) or [])
-            if not cands or cands[0][0] not in syms or float(cands[0][1]) < p.symbol_ref_blank_cov:
+            if not cands or cands[0][0] not in syms or float(cands[0][1]) < (p.symbol_ref_gap_cov if gap else p.symbol_ref_blank_cov):
                 continue
             sym, cov = cands[0][0], float(cands[0][1])
             _demote(rec, "symbol_ref_blank")
             ev = dict(rec.evidence or {})
             ev["lane"] = {"lane": "symbol_ref_blank", "lib": sym, "cov": round(cov, 4),
-                          "prev_doubts": list(rec.doubts or [])}
+                          "prev_doubts": list(rec.doubts or []), **({"via": "gap"} if gap else {})}
             ev.pop("symbol", None)
             rec.evidence = ev
             rec.admit, rec.channel, rec.provenance, rec.char = True, "symbol_ref_blank", "match", sym
@@ -3547,7 +3560,7 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
     库首位（不引入第三个字）；候选里有模型 `skip_chars`（己已巳）、或两候选互为异体（码位线管）、或字组在 `skip_groups`、
     或字组已给了别的字 → 不碰。人裁格、硬疑问格不碰。通道 `near_knn`，`evidence.near_knn` 留票数、距离比、全库近邻。"""
     from ..groups import near_knn
-    from ..variants import are_variants
+    from ..groups.edge_pairs import _exclude as _edge_exclude
     model = near_knn.load(p.group_flow_near_knn)
     miss = patch_missing if patch_missing is not None else {}
     delta = 0
@@ -3572,7 +3585,8 @@ def _near_knn_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int = 0
             cands = [x for x in dict.fromkeys((r.char, ref, getattr(m, "char", None))) if x]
             if len(cands) < 2 or model["skip_chars"] & set(cands):
                 continue
-            if any(are_variants(a, b) for i, a in enumerate(cands) for b in cands[i + 1:]):
+            if any(_direct_variant_edge(a, b) and frozenset((a, b)) not in _edge_exclude()
+                   for i, a in enumerate(cands) for b in cands[i + 1:]):   # 只认真异体边：只当形近／通假的边（NEVER_SOURCES，如 寵/龍）不挡字形判
                 continue
             try:
                 img = _page_patch(ctx, page, c.col, r.slot, r.sub)
