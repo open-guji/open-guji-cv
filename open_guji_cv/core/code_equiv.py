@@ -937,6 +937,12 @@ ENTRIES: tuple[Equiv, ...] = (
           old="bdd65c9c87a39526fda83499bcbb7c4c1b62716ed936273aaf1f522fe612ad39",
           evidence="书级开关 inner_frame_keep_cross（缺省关，A22 11-05，史記列尾字脚压线）：开关关着时殿本 vol30 新图 28 页（每 5 页取 1；"
                    "三个内框开关开、全关两种配置）与史記 05 册全册 95 页（册配置原样），cell_shrink 产物与字块 PNG 与 origin/dev 逐字节相同（只差 _manifest）；2026-11-05"),
+    Equiv(module="open_guji_cv.steps.cell_shrink",
+          new="cd57bb1b1bd865fe7f5f217ba1e84abbaef44f44f20da070d4e897b121cff605",
+          old="18517e310d5a4af1946c39c28c2fcb32427ae5fc28c5eb84037c9cf3ec2c53e3",
+          evidence="inner_frame_keep_cross 收窄（新参数 inner_frame_cross_max_w 只在 keep_cross 开时进 dump，A22 11-06，SJ 第 13 轮列尾框下伸）："
+                   "keep_cross 关时殿本 vol30 新图 28 页（每 5 页取 1，三个内框开关开）与史記 05 册全册 95 页，cell_shrink 产物与字块 PNG 与 origin/dev c73b6f8 逐字节相同（只差 _manifest）；"
+                   "开 keep_cross 的书（史記）params_hash 变、照常过期；2026-11-06"),
     Equiv(module="open_guji_cv.steps.column_warp",
           new="12a0d170a3843f32b76c18eedad8d313f83e0596e9d19d0f4a2cc1e4e85c6463",
           old="991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65",
