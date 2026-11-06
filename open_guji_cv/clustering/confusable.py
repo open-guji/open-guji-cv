@@ -10,6 +10,12 @@
 只有 0.196；把形近对从「误判」里摘出去（系统对它们不下断言，交给 OCR/语言
 模型），闸能降到 0.986，recall 涨到 0.40。
 
+## 「形近护栏」三处同名（A24 2026-11-06 理清）
+
+①匹配层护栏 `guard=never_match／conflict`（`match.py`，用下面三表并集 `_PARTNER`）；②`near_form` 疑问
+（`seeding.NEAR_FORM_CHARS`，只认手工表）；③待审原因 N01（guji-manager `reasons._near_form`，参校字与候选成手工表对）。
+三者口径不同，别互相当同义词。全流程见 guji-manager doc/01-粗校/待审原因/near_form_guard/流程.md。
+
 ## 两张表，别混
 
 - `NEVER_MATCH_FAMILIES` —— **手工核过的**，每一对都有实审案底（见各行注释）。

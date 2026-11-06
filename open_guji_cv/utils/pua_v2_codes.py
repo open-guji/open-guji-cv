@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPO_FILE = Path(__file__).resolve().parents[2] / "config" / "pua" / "siku_qiefen_v2_codes.json"
 _PREFIX = "siku-qiefen-v2:U+"
+_MULTI = {"multi", "多字"}   # pua_table.verdict：一码多字（私用码线程 sheldon 逐格看图）
 
 
 def norm_code(code: str) -> str:
@@ -41,16 +42,22 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
                 r = json.loads(line)
             except ValueError:
                 continue
-            ks = []        # 这一行管哪几个 v2 码：自己（siku-qiefen-v2: 行）和 same_as 里的 v2 码（daizhige 行，审核页按殆知阁码审的）
-            if str(r.get("code", "")).startswith(_PREFIX):
-                ks.append(norm_code(r["code"]))
-            ks += [norm_code(s) for s in r.get("same_as") or [] if str(s).startswith(_PREFIX)]
-            if r.get("verdict") == "char" and r.get("char"):
-                for k in ks:
+            code = str(r.get("code", ""))
+            keys = [norm_code(code)] if code.startswith(_PREFIX) else []
+            keys += [norm_code(c) for c in (r.get("same_as") or []) if str(c).startswith(_PREFIX)]   # 殆知阁码指到的新图源码
+            if not keys:
+                continue
+            fam = r.get("family") or r.get("chars")          # 一码多字：族内字（字符串或列表）
+            fam = frozenset("".join(fam) if not isinstance(fam, str) else fam) if fam else frozenset()
+            if r.get("verdict") in _MULTI:                    # 多字码：只登族，不登单字（按码放字时族内都认、族外降审）
+                for k in keys:
+                    codes.pop(k, None)
+                    if fam:
+                        fams[k] = fam
+                continue
+            if r.get("verdict") == "char" and r.get("char"):     # 殆知阁行（审核页）的 char 也落到它 same_as 的 v2 码
+                for k in keys:
                     codes[k] = r["char"]
-                    if r.get("family"):
-                        fams[k] = frozenset(r["family"])
-            elif r.get("verdict") == "multi" and r.get("chars"):      # 一码多字：族内字都认，不按码改字
-                for k in ks:
-                    fams[k] = frozenset("".join(r["chars"]))
+                    if fam:
+                        fams[k] = fam
     return codes, fams
