@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.45 `rare_ref_coord_group_top`（书级，缺省关、关时不进参数 dump；A24 L05 深挖 11-06）：rare_ref 坐标对位那支，库首位是字组成员、坐标对位字不在任何字组时也放（坐标对位字在组里仍不放）。L05 格里糊墨的库首位多是 刪／冊／衛／王 这类字组成员（吸引子），整理本字与 5-b 首位一致、不在组里。殿本、史記 ★main 离线回放：配 `rare_ref_coord_min_cov` 0.85，L05 238 格放 91（缺省只调 min_cov 放 79），看图全是整理本字；缺省关，行为不变。
+
 - seed_admit 1.44 `follow_ref_variants_gap`／`follow_ref_variants_cov`（书级，缺省 None 行为不变、不进 dump；A24 V01 深挖 11-06）：按参校本取异体（`follow_ref_variants`）的待审格单独放宽领先下限，只对关系层同词异体（`variant_edge(...).is_variant`）、库首位 cov ≥0.93 生效。史記 V01 夹注半格 10 格领先 0.002–0.004，看图字都对；开不开、设多少由书项目定（建议史記 0.002）。
 
 - seed_admit 1.43 `edge_pair_group_seam`（缺省开，A24 V01 深挖 11-06，第 7 轮）：edge_pair 补字组缝——纯异体强边但有一字是字组成员、这一格字组没接的待审格也按 edge_pair 判（形近组领先 ≥0.03，`replace_form: review` 不越过）。三书 ★main 包约 9 格，看图字都对。

@@ -327,3 +327,26 @@ def test_rare_ref_nf_not_in_dump_when_off():
     on = SeedAdmitParams(rare_ref=True, rare_ref_coord=True, lane_witness3=False, lane_coord=False, lane_seal=False)
     off = SeedAdmitParams(rare_ref=True, rare_ref_nf=False, lane_witness3=False, lane_coord=False, lane_seal=False)
     assert "rare_ref_nf" in on.model_dump() and "rare_ref_nf" not in off.model_dump()
+
+
+# ── 坐标对位那支：库首位在字组里（rare_ref_coord_group_top，2026-11-06，A24 L05 深挖）─────────────
+def test_coord_group_top_releases_only_when_ref_not_in_group(tmp_path, monkeypatch):
+    kw = dict(rare=[REF], coord=REF, cands=(("日", 0.95),), align=None)       # 库首位 日 在字组里，整理本字 REF 不在
+    off = _run(tmp_path, monkeypatch, params=ON, **kw)
+    on = _run(tmp_path, monkeypatch, params={**ON, "rare_ref_coord_group_top": True}, **kw)
+    assert not off.admit and "rare_ref" not in off.evidence                    # 缺省关：行为不变
+    assert on.admit and on.channel == "rare_ref" and on.char == REF
+    # 坐标对位字本身在字组里：开了也不放
+    r = _run(tmp_path, monkeypatch, params={**ON, "rare_ref_coord_group_top": True},
+             rare=["曰"], coord="曰", cands=(("日", 0.95),), align=None)
+    assert not r.admit and "rare_ref" not in r.evidence
+
+
+def test_coord_group_top_not_in_dump_when_off(tmp_path):
+    db = str(tmp_path / "g.db")
+    off = SeedAdmitParams(db_path=db, rare_ref=True)
+    on = SeedAdmitParams(db_path=db, rare_ref=True, rare_ref_coord_group_top=True)
+    assert "rare_ref_coord_group_top" not in off.model_dump()
+    assert on.model_dump()["rare_ref_coord_group_top"] is True
+    sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
+    assert params_hash(on, sp, pt) != params_hash(off, sp, pt)
