@@ -745,7 +745,9 @@ class AlignRefStep(Step):
                    # 提供归一表。改了它们，`align_ref` 的非 legacy 产物也该判过期。
                    "open_guji_cv.report.witness",
                    "open_guji_cv.clustering.variants",
-                   "open_guji_cv.steps.align_ref_coord"),
+                   "open_guji_cv.steps.align_ref_coord",
+                   # 2026-11-06 补登记（2.8 起 import，当时漏列）：对位字流留哪些汉字。指纹靠 code_equiv.SPLITS 不变
+                   "open_guji_cv.utils.han_ranges"),
         # `corpus` 缺省是仓内绝对路径（2026-09-29 K238），内容由 `corpus_fingerprint` 把关。
         path_params=("corpus",),
     )

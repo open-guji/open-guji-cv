@@ -1122,6 +1122,15 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.glyph_match": ("fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32", (
         ("open_guji_cv.steps.glyph_match", "fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32"),
         ("open_guji_cv.steps.glyph_rules", "968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9"))),
+    # 不是拆分、是补登记漏列的 code_dep（2026-11-06，manager test_code_deps_coverage 红）：align_ref 2.8 起 import
+    # utils.han_ranges、seed_admit 1.37 起 import utils.pua_v2_codes，当时没列进 code_deps。代码早已在跑，现有产物
+    # 就是这版算的，补登记不改行为：Step 模块与新加的块都还是这一版时合回原来一项，指纹不变；之后哪块真改了照常过期。
+    "open_guji_cv.steps.align_ref": ("0daed94e68cea57b475ea01e5239cfdc2095bc5fab8a3acc3dbab09f2368995b", (
+        ("open_guji_cv.steps.align_ref", "358cef6c7b2ab6251654ec64ed6d8a465c2ecc9060c8427a8957535b3025395d"),
+        ("open_guji_cv.utils.han_ranges", "2feaa83bebcaffcb71ccdba148cc77183f402f45fbf1b116da4cddaff77aef8e"))),
+    "open_guji_cv.steps.seed_admit": ("af762775452247be49c6f539663ecbf516a16ba29fb11f09d0fc7e11a5296fc1", (
+        ("open_guji_cv.steps.seed_admit", "9fab395141161db5735b2e423fd924813f4a318a5bddd364992606fbd533bdeb"),
+        ("open_guji_cv.utils.pua_v2_codes", "b19257019711a01c30b17a41303c24aac9e45b6f25718bae738e179545cd8d3f"))),
 }
 
 

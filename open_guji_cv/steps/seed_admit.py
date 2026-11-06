@@ -1295,7 +1295,9 @@ class SeedAdmitStep(Step):
                    # 间接进了指纹，原图不变，所以不必加进 consumes。2026-10-22 起读印章定位 `seals`。
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
                    # 待审补放三通道（overview#433）的证人逐格读法
-                   "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness"),
+                   "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness",
+                   # 2026-11-06 补登记（1.37 pua_code_table 起 import，当时漏列）：私用码表读法。指纹靠 code_equiv.SPLITS 不变
+                   "open_guji_cv.utils.pua_v2_codes"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
