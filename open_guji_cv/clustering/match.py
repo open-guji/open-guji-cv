@@ -226,6 +226,40 @@ class GlyphMatcher:
         self.near_shape = near_shape
         self.trusted_ids = trusted_ids
 
+    per_char: int = 0
+    """kNN 每个字（码位）最多取几个刻例进精验（2026-11-06，Sheldon）。0 = 不限（缺省，行为逐位不变）。
+    不限时相似度前 k 名常常全是同一个字的刻例，形近的别的字进不了精验，候选与分差都失真；限了以后
+    按相似度从高往低取，同字满额就跳过，直到凑满 k 个（在前 `per_char_pool` 名里找）。"""
+    per_char_pool: int = 400
+    per_char_top: int = 0
+    """相似度第一名那个字的限额（0＝同 `per_char`）。设大一些＝首选字多验几个刻例（same 档要的是同字里最像的那一个），
+    其余字各验 `per_char` 个当对手。"""
+
+    def _diverse_top(self, sims: np.ndarray, excl: set[int]) -> list[int]:
+        """相似度从高到低取 k 个刻例，每字至多 `per_char` 个（见 `per_char`）。"""
+        n = len(sims)
+        pool = min(n, max(self.per_char_pool, self.k))
+        cand = np.argpartition(-sims, pool - 1)[:pool] if pool < n else np.arange(n)
+        cand = cand[np.argsort(-sims[cand], kind="stable")]
+        cnt: dict[str, int] = {}
+        out: list[int] = []
+        first: str | None = None
+        for j in cand:
+            j = int(j)
+            if j in excl:
+                continue
+            c = self._chars[j]
+            if first is None:
+                first = c
+            cap = (self.per_char_top or self.per_char) if c == first else self.per_char
+            if cnt.get(c, 0) >= cap:
+                continue
+            cnt[c] = cnt.get(c, 0) + 1
+            out.append(j)
+            if len(out) >= self.k:
+                break
+        return out
+
     def __len__(self) -> int:
         return len(self._ids)
 
@@ -435,11 +469,16 @@ class GlyphMatcher:
             if excl:
                 sims = sims.copy()
                 sims[list(excl)] = -np.inf
-        top = np.argsort(-sims)[: self.k]
-        if excl:
-            top = [j for j in top if int(j) not in excl]
+        if getattr(self, "per_char", 0) > 0:
+            top = self._diverse_top(sims, excl)
             if not top:
                 return MatchResult("diff", None, None, 0.0, 0.0)
+        else:
+            top = np.argsort(-sims)[: self.k]
+            if excl:
+                top = [j for j in top if int(j) not in excl]
+                if not top:
+                    return MatchResult("diff", None, None, 0.0, 0.0)
 
         same_hits: list[tuple[float, float, str, str]] = []   # cov,wmax,char,id
         unsure_best: dict[str, float] = {}                    # char -> max cov

@@ -325,8 +325,8 @@ def mark_answerable(matcher, qs: list[dict]) -> None:
         q["answerable"] = q["lib_n"] > 0
 
 
-def build_matcher(db: str):
-    p = GlyphMatchParams(db_path=db)
+def build_matcher(db: str, knn_k: int = 10, per_char: int = 0, per_char_top: int = 0):
+    p = GlyphMatchParams(db_path=db, knn_k=knn_k, knn_per_char=per_char, knn_per_char_top=per_char_top)
     build_matcher.params = p
     full = GlyphMatchStep()._matcher(p)
     tier = _FontTier.rule(p.font_tier)
@@ -398,13 +398,16 @@ def main() -> int:
                     help="评测再折叠同形异码（SAME_SHAPE）与语义异体表；头条另给「严格口径」不变")
     ap.add_argument("--dump-tiers", default=None, help="分档标注写到这个目录：tiers-<分片>.jsonl")
     ap.add_argument("--rows", default=None, help="逐查询结果写到 <前缀>.<分片>.jsonl")
+    ap.add_argument("--knn-k", type=int, default=10, help="kNN 取几个刻例进精验（生产缺省 10）")
+    ap.add_argument("--per-char", type=int, default=0, help="kNN 每字最多几个刻例（0＝不限，生产缺省）")
+    ap.add_argument("--per-char-top", type=int, default=0, help="首选字的限额（0＝同 --per-char）")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     global _FOLD_VARIANTS
     _FOLD_VARIANTS = a.fold_variants
     samples = Path(a.dataset) / "samples"
     kinds = a.perturb_only.split(",") if a.perturb_only else list(PERTURB)
-    report: dict = {"protocol": {"fold": not a.no_fold, "perturb": kinds if a.perturb else [],
+    report: dict = {"protocol": {"knn_k": a.knn_k, "per_char": a.per_char, "per_char_top": a.per_char_top, "fold": not a.no_fold, "perturb": kinds if a.perturb else [],
                                  "perturb_n": a.perturb_n}}
     for spec in a.book:
         shard, _, db = spec.partition(":")   # 缺 db = 留空，按 GUJI_GLYPH_DB / GUJI_WORKSPACE 解析（登记表用这个）
@@ -414,7 +417,7 @@ def main() -> int:
             with open(Path(a.dump_tiers) / f"tiers-{shard}.jsonl", "w", encoding="utf-8") as f:
                 for q in qs:
                     f.write(json.dumps({"id": q["id"], "flags": q["flags"], **q["feat"]}, ensure_ascii=False) + "\n")
-        matcher, nlib = build_matcher(db)
+        matcher, nlib = build_matcher(db, a.knn_k, a.per_char, a.per_char_top)
         p = build_matcher.params
         counts = human_confirmed_counts(p.db_path) if p.consensus_min_confirmed > 0 else None
         cons = (p.consensus_cov, p.consensus_margin, p.consensus_min_confirmed)
