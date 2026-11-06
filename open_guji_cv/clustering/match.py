@@ -386,21 +386,78 @@ class GlyphMatcher:
             cands = [w] + [t for t in cands if t[0] != d.winner]
         return dataclasses.replace(result, candidates=cands, near_shape=d.to_dict())
 
+    def _top_per_char(self, sims: np.ndarray, excl: set[int], cap: int) -> list[int]:
+        """按相似度从高到低取 k 个刻例，同一个字最多 ``cap`` 个，跳过 ``excl``（见 `_match` 的 ``per_char_cap``）。
+
+        先在前 max(8k, 64) 名里挑，凑不满再把窗口放大四倍，直到整库；同分按行号先后（稳定排序）。"""
+        n = len(sims)
+        w = min(n, max(8 * self.k, 64))
+        while True:
+            if w < n:
+                idx = np.argpartition(-sims, w - 1)[:w]
+                idx = idx[np.argsort(-sims[idx], kind="stable")]
+            else:
+                idx = np.argsort(-sims, kind="stable")
+            picked: list[int] = []
+            used: dict[str, int] = {}
+            for j in idx:
+                j = int(j)
+                if j in excl or not np.isfinite(sims[j]):
+                    continue
+                c = self._chars[j]
+                if used.get(c, 0) >= cap:
+                    continue
+                used[c] = used.get(c, 0) + 1
+                picked.append(j)
+                if len(picked) >= self.k:
+                    return picked
+            if w >= n:
+                return picked
+            w = min(n, w * 4)
+
+    def _supplement_rows(self, sims: np.ndarray, excl: set[int], top, n: int, window: int) -> list[int]:
+        """前 ``window`` 名里没进 ``top`` 的字，每字取最近 ``n`` 个刻例（按相似度先后，见 `_match` 的 ``supplement``）。"""
+        N = len(sims)
+        w = min(N, window)
+        if w <= 0:
+            return []
+        idx = np.argpartition(-sims, w - 1)[:w] if w < N else np.arange(N)
+        idx = idx[np.argsort(-sims[idx], kind="stable")]
+        in_top = {self._chars[int(j)] for j in top}
+        topset = {int(j) for j in top}
+        used: dict[str, int] = {}
+        out: list[int] = []
+        for j in idx:
+            j = int(j)
+            if j in excl or j in topset or not np.isfinite(sims[j]):
+                continue
+            c = self._chars[j]
+            if c in in_top or used.get(c, 0) >= n:
+                continue
+            used[c] = used.get(c, 0) + 1
+            out.append(j)
+        return out
+
     def match(self, norm: np.ndarray,
               feat: np.ndarray | None = None,
               exclude_id: str | None = None,
               deadline: float | None = None,
-              sims: np.ndarray | None = None) -> MatchResult:
+              sims: np.ndarray | None = None,
+              per_char_cap: int = 0,
+              supplement: tuple | None = None) -> MatchResult:
         """见 `_match`；开了近形决胜（`near_shape`）时在其结果上再走一道 `_apply_near_shape`。
 
         ``deadline``：`time.monotonic()` 的绝对时刻，None = 不设限。逐个库刻例验证之间检查，
         到点抛 `MatchTimeout`（由 Step5-a 的每格预算接住，记 timeout 转人审）。
         ``sims``：调用方已算好的「整库特征 · 本格特征」（Step5-a 整页合批，`batch_knn`）；None 照旧逐格算。"""
+        cap = {"per_char_cap": per_char_cap} if per_char_cap > 0 else {}
+        if supplement:
+            cap["supplement"] = supplement
         if getattr(self, "near_shape", None) is None or not self._ids:
-            return self._match(norm, feat, exclude_id, deadline, sims)
+            return self._match(norm, feat, exclude_id, deadline, sims, **cap)
         if feat is None:
             feat = self._feature.extract(norm[None, ...])[0]
-        r = self._match(norm, feat, exclude_id, deadline, sims)
+        r = self._match(norm, feat, exclude_id, deadline, sims, **cap)
         excl = self._same_cell_rows(exclude_id) if exclude_id is not None else set()
         return self._apply_near_shape(r, norm, feat, excl)
 
@@ -408,8 +465,20 @@ class GlyphMatcher:
                feat: np.ndarray | None = None,
                exclude_id: str | None = None,
                deadline: float | None = None,
-               sims: np.ndarray | None = None) -> MatchResult:
+               sims: np.ndarray | None = None,
+               per_char_cap: int = 0,
+               supplement: tuple | None = None) -> MatchResult:
         """``exclude_id`` 把该实例自己从库里摘掉再比（2026-08-25 加）。
+
+        ``per_char_cap``（2026-11-03，全唐文 r6）：>0 时近邻名单里同一个字最多占这么多个名额，
+        名单照样凑满 k 个（按相似度往下取，跳过已满额的字和被摘掉的自身）。0 = 不限（缺省，行为逐位不变）。
+        为什么：只按单个刻例取前 k，样本多的字会把名额吃光——全唐文补了 qd0927 人裁后 請 34 例、諸 3 例，
+        諸 格的前 10 近邻全是 請，諸 一次都没被验证，候选里根本没有它（册05 r5→r6 24 格首选被抢）。
+
+        ``supplement``＝``(n, window, mode)``（2026-11-03）：前 k 名照旧不动；再在前 ``window`` 名里给没进前 k 的
+        每个字补它最近的 ``n`` 个刻例去验证。``mode="merge"``：补进来的和前 k 名一起判（可能换首选）；
+        ``mode="append"``：判决、首选、cov 全按前 k 名（与不补逐位相同），补进来的字只按 cov 排在原候选**后面**，
+        给下游多一个看得见的候选。None = 不补。
 
         字位一旦进过库，重跑 seed / 复裁时它自己就在 matcher 里，于是
         「库匹配」这一路拿到的是**自证**：cov 1.00、matched_id 就是它
@@ -435,11 +504,41 @@ class GlyphMatcher:
             if excl:
                 sims = sims.copy()
                 sims[list(excl)] = -np.inf
-        top = np.argsort(-sims)[: self.k]
-        if excl:
-            top = [j for j in top if int(j) not in excl]
+        if supplement and supplement[2] == "append":
+            r = self._match(norm, feat, exclude_id, deadline, sims, per_char_cap)
+            if not r.candidates and r.verdict == "diff" and not r.cov:
+                return r
+            base = (self._top_per_char(sims, excl, per_char_cap) if per_char_cap > 0
+                    else [int(j) for j in np.argsort(-sims)[: self.k] if int(j) not in excl])
+            extra = self._supplement_rows(sims, excl, base, supplement[0], supplement[1])
+            have = {c for c, _ in r.candidates}
+            add: dict[str, float] = {}
+            for j in extra:
+                if deadline is not None and time.monotonic() > deadline:
+                    raise MatchTimeout(f"补位验证超时（{len(add)}/{len(extra)}）")
+                c = self._chars[j]
+                if c in have:
+                    continue
+                v = self._verify(norm, self._patches[j], cov_high=self.cov_high, miss_wmax=self.miss_wmax)
+                add[c] = max(add.get(c, 0.0), v.f1)
+            if not add:
+                return r
+            tail = sorted(add.items(), key=lambda t: -t[1])
+            return dataclasses.replace(r, candidates=list(r.candidates) + tail,
+                                       n_verified=r.n_verified + len(extra))
+        if per_char_cap > 0:
+            top = self._top_per_char(sims, excl, per_char_cap)
             if not top:
                 return MatchResult("diff", None, None, 0.0, 0.0)
+        else:
+            top = np.argsort(-sims)[: self.k]
+            if excl:
+                top = [j for j in top if int(j) not in excl]
+                if not top:
+                    return MatchResult("diff", None, None, 0.0, 0.0)
+        if supplement and supplement[2] == "merge":
+            top = [int(j) for j in top]
+            top = top + self._supplement_rows(sims, excl, top, supplement[0], supplement[1])
 
         same_hits: list[tuple[float, float, str, str]] = []   # cov,wmax,char,id
         unsure_best: dict[str, float] = {}                    # char -> max cov
