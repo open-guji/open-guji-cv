@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPO_FILE = Path(__file__).resolve().parents[2] / "config" / "pua" / "siku_qiefen_v2_codes.json"
 _PREFIX = "siku-qiefen-v2:U+"
+_MULTI = {"multi", "多字"}   # pua_table.verdict：一码多字（私用码线程 sheldon 逐格看图）
 
 
 def norm_code(code: str) -> str:
@@ -41,10 +42,22 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
                 r = json.loads(line)
             except ValueError:
                 continue
-            if not str(r.get("code", "")).startswith(_PREFIX) or r.get("verdict") != "char" or not r.get("char"):
+            code = str(r.get("code", ""))
+            keys = [norm_code(code)] if code.startswith(_PREFIX) else []
+            keys += [norm_code(c) for c in (r.get("same_as") or []) if str(c).startswith(_PREFIX)]   # 殆知阁码指到的新图源码
+            if not keys:
                 continue
-            k = norm_code(r["code"])
-            codes[k] = r["char"]
-            if r.get("family"):
-                fams[k] = frozenset(r["family"])
+            fam = r.get("family") or r.get("chars")          # 一码多字：族内字（字符串或列表）
+            fam = frozenset("".join(fam) if not isinstance(fam, str) else fam) if fam else frozenset()
+            if r.get("verdict") in _MULTI:                    # 多字码：只登族，不登单字（按码放字时族内都认、族外降审）
+                for k in keys:
+                    codes.pop(k, None)
+                    if fam:
+                        fams[k] = fam
+                continue
+            if code.startswith(_PREFIX) and r.get("verdict") == "char" and r.get("char"):
+                k = keys[0]
+                codes[k] = r["char"]
+                if fam:
+                    fams[k] = fam
     return codes, fams
