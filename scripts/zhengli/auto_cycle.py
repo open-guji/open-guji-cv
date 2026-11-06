@@ -153,6 +153,7 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
              "--reuse-products", str(sandbox), "--no-web"], cwd=CV, env=env)
     log = plan_path.parent / "执行记录.md"
     out = ap.stdout + ap.stderr
+    (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
     if ap.returncode and "book-text 这步失败" in out:
         # 本地检查没过（多半是标点／实体锚点在新切分里不存在）：线上单还没换（这步在推库之前）；清掉未提交的升版改动，交 A33
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
