@@ -27,6 +27,7 @@
 - `novelFS`：novel 里判 same 的占比（越低越好）；
 - 阈值无关：以首位候选分为置信度，`R@P.999`、`R@P.99`（精度达标时最大召回）与 `auroc`
   （首位字对 / 错的可分性）；
+- `verdict` 为生产最终口径：匹配器 same ＋ 共识升档（缺省 0.99/0.03/≥3 例人裁，按留一）；
 - 资源：每查询毫秒（中位 / p95）、平均精验对数 `n_verified`。
 
 用法（云端沙箱，不碰正式 products）::
@@ -55,7 +56,8 @@ from eval_fold import FOLD  # noqa: E402  己已巳、日曰图上分不开，�
 from eval_fold import fold as fold_char  # noqa: E402
 from open_guji_cv.clustering.confusable import NEVER_MATCH_FAMILIES  # noqa: E402
 from open_guji_cv.steps.glyph_match import (GlyphMatchParams, GlyphMatchStep,  # noqa: E402
-                                            _FontTier, _keben_subset)
+                                            _FontTier, _keben_subset, consensus_same,
+                                            human_confirmed_counts)
 
 HARD_CHARS = frozenset(c for fam in NEVER_MATCH_FAMILIES for c in fam if c not in FOLD)
 FLAGS = ("clean", "offset", "edge", "stain", "heavy", "thin")
@@ -279,16 +281,28 @@ def load_queries(shard: Path, limit: int | None) -> list[dict]:
     return out
 
 
-def run_matcher(matcher, q: dict, norm: np.ndarray, variant: str) -> dict:
+def run_matcher(matcher, q: dict, norm: np.ndarray, variant: str, counts: dict | None = None,
+                cons: tuple | None = None) -> dict:
+    """counts/cons 给了就按生产口径再做一层共识升档（unsure、没护栏、首位字 cov/分差/人裁例数够 → same）；
+    人裁例数按留一：查询自己是库里一例人裁，首位字 == 金标时减 1。"""
     t0 = time.perf_counter()
     m = matcher.match(norm, exclude_id=q["id"])
     ms = (time.perf_counter() - t0) * 1000
     cand = [(c, round(float(v), 4)) for c, v in m.candidates[:5]]
-    if m.verdict == "same" and m.char and not any(c == m.char for c, _ in cand):
-        cand = [(m.char, round(float(m.cov), 4))] + cand
+    verdict, char, via = m.verdict, m.char, None
+    if counts is not None and cons is not None and verdict == "unsure" and m.guard is None and cand:
+        c1 = cand[0][0]
+        have = int(counts.get(c1, 0)) - (1 if c1 == q["gold"] else 0)
+        hit = consensus_same(list(m.candidates), lambda c, h=have: h, *cons)
+        if hit:
+            verdict, char, via = "same", hit[0], "consensus"
+    if verdict == "same" and char and not any(c == char for c, _ in cand):
+        cand = [(char, round(float(m.cov), 4))] + cand
+    m = type("M", (), {"verdict": verdict, "char": char, "guard": m.guard, "cov": m.cov,
+                       "n_verified": m.n_verified, "via": via})()
     return {"id": q["id"], "variant": variant, "gold": q["gold"], "flags": q["flags"],
             "answerable": q["answerable"], "hard": q["hard"], "sc_flag": q["sc_flag"],
-            "verdict": m.verdict, "char": m.char, "guard": m.guard, "cov": round(float(m.cov), 4),
+            "verdict": m.verdict, "char": m.char, "guard": m.guard, "via": m.via, "cov": round(float(m.cov), 4),
             "n_verified": m.n_verified, "ms": round(ms, 2), "cand": cand}
 
 
@@ -313,6 +327,7 @@ def mark_answerable(matcher, qs: list[dict]) -> None:
 
 def build_matcher(db: str):
     p = GlyphMatchParams(db_path=db)
+    build_matcher.params = p
     full = GlyphMatchStep()._matcher(p)
     tier = _FontTier.rule(p.font_tier)
     return (_FontTier(full, _keben_subset(full), tier) if tier is not None else full), len(full)
@@ -400,11 +415,14 @@ def main() -> int:
                 for q in qs:
                     f.write(json.dumps({"id": q["id"], "flags": q["flags"], **q["feat"]}, ensure_ascii=False) + "\n")
         matcher, nlib = build_matcher(db)
+        p = build_matcher.params
+        counts = human_confirmed_counts(p.db_path) if p.consensus_min_confirmed > 0 else None
+        cons = (p.consensus_cov, p.consensus_margin, p.consensus_min_confirmed)
         mark_answerable(matcher, qs)
         print(f"[{shard}] 库 {nlib} 条，查询 {len(qs)}（answerable {sum(q['answerable'] for q in qs)}）", flush=True)
         rows, t0 = [], time.time()
         for i, q in enumerate(qs):
-            rows.append(run_matcher(matcher, q, q["norm"], "orig"))
+            rows.append(run_matcher(matcher, q, q["norm"], "orig", counts, cons))
             if (i + 1) % 500 == 0:
                 print(f"  {i + 1}/{len(qs)}  {time.time() - t0:.0f}s", flush=True)
         if a.perturb:
@@ -414,7 +432,7 @@ def main() -> int:
             for k, name in enumerate(kinds):
                 rng = np.random.default_rng(11 + k)
                 for q in sub:
-                    rows.append(run_matcher(matcher, q, PERTURB[name](q["norm"], rng), name))
+                    rows.append(run_matcher(matcher, q, PERTURB[name](q["norm"], rng), name, counts, cons))
                 print(f"  扰动 {name}: {len(sub)} 条  {time.time() - t0:.0f}s", flush=True)
         if a.rows:
             with open(f"{a.rows}.{shard}.jsonl", "w", encoding="utf-8") as f:
