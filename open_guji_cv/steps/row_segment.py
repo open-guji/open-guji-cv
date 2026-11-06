@@ -524,6 +524,41 @@ def _despeckle(img, k: int, ink_threshold: int = 128):
     return out
 
 
+def _clear_seal_top_residue(img, mapper, seals, ink_threshold: int = 128, rim: float = 0.08,
+                            gap_w: float = 0.3, narrow_w: float = 0.25, narrow_frac: float = 0.85):
+    """去印点后列顶的印边残块抹白（`roster_seal_despeckle` 的列）。列图墨按行分段（空白 ≥ 8 行算断），
+    第一段的上端落在某方印上边的边带里（离印上边不到 `rim`×印高）、且它不像字：
+    高不过一列宽、与下一段隔开 ≥ `gap_w`×列宽空白（印上边框的印泥块，02 册 p2 c4–c6、04 册 p2 c4），
+    或 `narrow_frac` 以上的墨挤在 `narrow_w`×列宽的一条竖带里（贴列边的界行残线，10 册 p2 c6；
+    字的墨横向散开，01–10 册卷首页列首段实测 ≤0.67）。开运算去不掉这些成团、成线的墨，
+    职名分支按整理本字数切会把它算成首字，整列错一格、末两字并成一格。题列首字（「欽」「史」）贴着下一字、墨宽，不动。"""
+    import numpy as np
+    if mapper is None or not seals:
+        return img
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    ink = g < ink_threshold
+    h, w = ink.shape
+    rows = np.flatnonzero(ink.sum(axis=1) >= 2)
+    if not len(rows):
+        return img
+    cut = np.flatnonzero(np.diff(rows) > 8)
+    starts = np.r_[rows[0], rows[cut + 1]]
+    ends = np.r_[rows[cut], rows[-1]] + 1
+    y0, y1 = int(starts[0]), int(ends[0])
+    px, py = mapper.to_page_tr(w / 2.0, float(y0))
+    if not any(s[0] <= px <= s[2] and abs(py - s[1]) < rim * (s[3] - s[1]) for s in seals):
+        return img
+    colsum = ink[y0:y1].sum(axis=0).astype(float)
+    k = max(1, int(narrow_w * w))
+    strip = float(np.convolve(colsum, np.ones(k), "valid").max()) / max(1.0, float(colsum.sum()))
+    gap = float(starts[1] - y1) if len(starts) > 1 else float(h)
+    if not ((y1 - y0 <= w and gap >= gap_w * w) or strip >= narrow_frac):
+        return img
+    out = img.copy()
+    out[y0:y1] = 255
+    return out
+
+
 def _in_seal(seals, mapper, img=None, ink_threshold: int = 128):
     """格（列图坐标）落在某方印里的判定函数（量法见 SEAL_OVERLAP／SEAL_STROKE）；没有印或列图映射时为 None。
     `img` 是这一列的列图（界行、版框已清掉），量小印笔画时取格里的墨点映回原图去对掩码；不给就只按框量。"""
@@ -1653,6 +1688,11 @@ class RowSegmentStep(Step):
             # 职名分支自己从 1 数，下游按格号对整理本会错位
             first = [c.slot for c in cc.cells if c.kind != "blank" and c.slot >= 1]
             off = min(first) - 1 if cc.ok and first else 0
+            if cc.col in sealed and cc.ok and new.cells:
+                # 大印下格网的有墨格可能整格落在首字之上（印泥残块，04 册 p2 c4），不算起格
+                y = (new.cells[0].y0 + new.cells[0].y1) / 2.0
+                first = [c.slot for c in cc.cells if c.kind != "blank" and c.slot >= 1 and c.y1 > y]
+                off = min(first) - 1 if first else off
             if off:
                 new = new.model_copy(update=dict(
                     n_body_slots=new.n_body_slots + off,
@@ -1722,6 +1762,13 @@ class RowSegmentStep(Step):
         if despeckle:
             imgs = [(_despeckle(im, p.roster_seal_despeckle, p.ink_threshold) if gc.col in despeckle else im, cx)
                     for gc, (im, cx) in zip(admitted, imgs)]
+            seals_d = _page_seals(ctx, page)
+            for i, gc in enumerate(admitted):
+                wrec = wins.column(gc.col)
+                if gc.col in despeckle and wrec is not None:
+                    mp = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
+                                      wrec.top_y, wrec.bottom_y)
+                    imgs[i] = (_clear_seal_top_residue(imgs[i][0], mp, seals_d, p.ink_threshold), imgs[i][1])
         scorer = None
         if p.roster_glyph_refine:
             # 库缺失/为空时 scorer 为 None → 只走几何切分，不报错（职名页本来就有人核兜底）
