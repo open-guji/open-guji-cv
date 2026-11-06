@@ -36,8 +36,8 @@
 | L04 | `lib_unrecognized` | 库认不出 | 字形库 | algo | llm_then_human | A23 |
 | L05 | `garble_gate` | 像框线或墨点 | 字形库 | algo | llm_then_human | A24 |
 | N01 | `near_form_guard` | 形近字 | 形近护栏 | llm | llm_then_human | A24 |
-| P01 | `ref_replaced` | 参校本改过字 | 与参校本不一致 | llm | llm_then_human | A24 |
-| P02 | `ref_mismatch` | 和参校本不一致 | 与参校本不一致 | llm | llm_then_human | A24 |
+| P01 | `ref_ocr_diff`（旧名 `ref_replaced`） | 识别字与参校本不同：Step6 对位时识别字就≠参校字（replace 段） | 与参校本不一致 | llm | llm_then_human | A24 |
+| P02 | `ref_final_diff`（旧名 `ref_mismatch`） | 定字与参校本不同：对位相同或坐标对位，最后定字≠参校字 | 与参校本不一致 | llm | llm_then_human | A24 |
 | R03 | `glyph_pending` | 待收字 | 参校本缺位 | deferred | none | A24 |
 | R01 | `ref_lacuna` | 参校本缺字 | 参校本缺位 | algo | llm_then_human | A24 |
 | R02 | `ref_gap` | 参校本这里没字 | 参校本缺位 | llm | llm_then_human | A24 |
