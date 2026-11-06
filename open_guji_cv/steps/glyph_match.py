@@ -242,10 +242,12 @@ class GlyphMatchParams(BaseModel):
     - `all`：库里全部准入（含没确认过的机器入库与未知来源），只做对照，bxgb 实测会大量误升（见
       `human_confirmed_counts`）。
     书级 yaml `params: {glyph_match: {consensus_count: human+auto}}` 可开。"""
-    consensus_family_guard: bool = False
-    """共识升档的形近护栏（2026-11-06）。缺省关（不进参数 dump，逐字节不变）。开了以后：首位字与候选里任一
-    **异字**同在一个字组（`groups.registry.GROUPS`）或互为形近对手（`clustering.match._PARTNER`）时
-    不升档——这类字（千/干、己/已/巳…）靠字组流程与上下文判，刻例多也不能光凭整字相似度定。"""
+    consensus_family_guard: Literal["", "rival", "top"] = ""
+    """共识升档的形近护栏（2026-11-06）。缺省 `""` 关（不进参数 dump，逐字节不变）。
+    - `rival`：首位字与候选里任一**异字**同在一个字组（`groups.registry.GROUPS`）或互为形近对手
+      （`clustering.match._PARTNER`）时不升（千/干、己/已/巳…）；
+    - `top`：更严，首位字本身是字组成员或在形近护栏表里有对手（同 `font_tier.family` 的字表）就不升，
+      不看候选里有没有对手——留一法里 殿本 入→人、千→十、一→二 这类错，候选里常常只剩首位一个字。"""
     same_cov: float | None = None
     """same 档单对门槛 cov（缺省 None＝`verify.ELASTIC_COV_HIGH` 0.996，不进参数 dump）。"""
     same_wmax: float | None = None
@@ -346,7 +348,7 @@ def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float
     （次优同字不算——同一字的多个刻例挨着很正常）；top 字已有 ≥ min_confirmed 例人裁。
     没有异字候选时，差距按 0.85（unsure 档下界）算。
     `blocked(首位字, 异字) -> bool`（可选，`consensus_family_guard`）：候选里任一异字与首位字被它判为形近
-    （同字组或互为形近对手）就不升。
+    （同字组或互为形近对手）就不升；先以 `blocked(首位字, None)` 问一次首位字本身挡不挡（`top` 档用）。
     """
     if min_confirmed <= 0 or not candidates:
         return None
@@ -359,7 +361,8 @@ def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float
     n = int(n_confirmed_of(top) or 0)
     if n < min_confirmed:
         return None
-    if blocked is not None and any(c != top and blocked(top, c) for c, _ in candidates[1:]):
+    if blocked is not None and (blocked(top, None)
+                                or any(c != top and blocked(top, c) for c, _ in candidates[1:])):
         return None
     return top, n
 
@@ -367,13 +370,23 @@ def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float
 CONSENSUS_COUNTS = ("human", "human+auto", "all")
 
 
-def family_blocked(a: str, b: str) -> bool:
-    """`consensus_family_guard` 用：两字同在一个字组，或在形近护栏表里互为对手。"""
+def family_blocked(a: str, b: str | None) -> bool:
+    """`consensus_family_guard: rival` 用：两字同在一个字组，或在形近护栏表里互为对手。"""
+    if b is None:
+        return False
     from ..clustering.match import _PARTNER
     if b in _PARTNER.get(a, ()) or a in _PARTNER.get(b, ()):
         return True
     from ..groups.registry import GROUPS
     return any(a in g.members and b in g.members for g in GROUPS.values())
+
+
+def family_top_blocked(a: str, b: str | None) -> bool:
+    """`consensus_family_guard: top`：首位字本身在字组或形近护栏表里就挡（`b` 不看）。"""
+    return a in _family_chars()
+
+
+_GUARDS = {"rival": family_blocked, "top": family_top_blocked}
 
 
 def human_confirmed_counts(db_path: str, scope: str = "human") -> dict[str, int]:
@@ -565,7 +578,7 @@ class GlyphMatchStep(Step):
                     hit = consensus_same(list(m.candidates), confirmed.get,
                                          p.consensus_cov, p.consensus_margin,
                                          p.consensus_min_confirmed,
-                                         blocked=family_blocked if p.consensus_family_guard else None)
+                                         blocked=_GUARDS.get(p.consensus_family_guard))
                     if hit:
                         verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
                 ns = m.near_shape

@@ -60,6 +60,15 @@ def test_family_guard_blocks_near_form_rival():
     assert consensus_same([("𠊓", 0.995), ("僃", 0.95)], _n, 0.99, 0.03, 3, blocked=family_blocked) == ("𠊓", 18)
 
 
+def test_family_guard_top_blocks_without_rival():
+    """`top` 档：首位字本身在形近表里就挡，候选里只剩它一个也挡（殿本留一法 千→十）。"""
+    from open_guji_cv.steps.glyph_match import family_blocked, family_top_blocked
+    lib = {"千": 50}.get
+    assert consensus_same([("千", 0.995)], lib, 0.99, 0.03, 3, blocked=family_blocked) == ("千", 50)
+    assert consensus_same([("千", 0.995)], lib, 0.99, 0.03, 3, blocked=family_top_blocked) is None
+    assert consensus_same([("𠊓", 0.995)], _n, 0.99, 0.03, 3, blocked=family_top_blocked) == ("𠊓", 18)
+
+
 def test_defaults_not_in_param_dump():
     """新参数取缺省时不进参数 dump（参数指纹与此前相同）；改了才进。"""
     from open_guji_cv.steps.glyph_match import GlyphMatchParams
@@ -68,9 +77,9 @@ def test_defaults_not_in_param_dump():
     for k in ("consensus_count", "consensus_family_guard", "same_cov", "same_wmax"):
         assert k not in d
     on = GlyphMatchParams(db_path="/nonexistent.db", db_fingerprint="x", consensus_count="human+auto",
-                          consensus_family_guard=True, same_cov=0.995, same_wmax=12)
+                          consensus_family_guard="rival", same_cov=0.995, same_wmax=12)
     d = on.model_dump()
-    assert d["consensus_count"] == "human+auto" and d["consensus_family_guard"] is True
+    assert d["consensus_count"] == "human+auto" and d["consensus_family_guard"] == "rival"
     assert d["same_cov"] == 0.995 and d["same_wmax"] == 12
 
 
