@@ -554,6 +554,13 @@ class AlignRefParams(BaseModel):
     其／闕／六），现役在半格上又多半没有 equal，两格互证在这里会把真错位当孤立认错放过。只在 `coord_shift_needs_pair` 开时起作用。
     False＝关（缺省，不进参数哈希）。"""
 
+    coord_conflict_pair_only: bool = False
+    """坐标对位与现役对位冲突只退冲突的那一格（2026-11-06，A32 D02 深挖，A31 裁定）：原来整列退回（vol01 p1 列 9、
+    vol16 p1 列 9、vol35 p67 列 8 等 20 格，大印遮住的格因此没有整理本字、落 D02）。开了以后，「与现役对位冲突」的列若
+    冲突格不多于 `COORD_PAIR_MAX`（2）、两个冲突格不相邻、冲突格的现役字不是邻格的坐标字（没有整列错一位的迹象）、
+    同列现役 equal 与坐标全同的格至少 `COORD_PAIR_MIN_AGREE`（3），列照用，冲突格不给整理本字（仍记进 coord_conflict_ids，
+    seed_admit 不放 match_ref）。「空格位上库认出了字」那条不在此列。False＝关（缺省，不进参数哈希）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -580,6 +587,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_pair_no_sub", None)
         if isinstance(d, dict) and not self.coord_dp_flat:
             d.pop("coord_dp_flat", None)
+        if isinstance(d, dict) and not self.coord_conflict_pair_only:
+            d.pop("coord_conflict_pair_only", None)
         if isinstance(d, dict) and self.alt_select == "align":
             d.pop("alt_select", None)
         return d
@@ -766,7 +775,8 @@ class AlignRefStep(Step):
                          relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                          dp_flat=p.coord_dp_flat,
                          **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
-                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}))
+                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
+                         **({"pair_only": True} if p.coord_conflict_pair_only else {}))
             cells = _opt(ctx, "cells", page)
             if match.alt_columns and cells is not None and cells.alt_columns:
                 _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
@@ -1443,7 +1453,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  relaxed=p.coord_relaxed, dp=p.coord_dp, title_trust=p.coord_title_trust,
                  dp_flat=p.coord_dp_flat,
                  **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
-                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}))
+                         **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
+                         **({"pair_only": True} if p.coord_conflict_pair_only else {}))
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
@@ -1486,7 +1497,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  cells, corpus: str, neighbors=None, title_formula: str = "",
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
                  title_trust: bool = False, dp_flat: bool = False,
-                 shift_needs_pair: bool = False, pair_no_sub: bool = False) -> None:
+                 shift_needs_pair: bool = False, pair_no_sub: bool = False,
+                 pair_only: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1546,6 +1558,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                                                           order_ok=cc.col in roster_cols))
                 for cc, u, ln, r in work]
     dp_cols: list[int] = []
+    pair_cols: list[int] = []
     cand_top = ({r.id: tuple(c for c, _s in (r.candidates or [])[:C.COORD_DP_TOPK]) for cc_ in cols for r in cc_.chars}
                 if dp else {})
 
@@ -1585,6 +1598,15 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                               **({"shift_needs_pair": True} if shift_needs_pair else {}),
                               **({"pair_no_sub": True} if pair_no_sub else {}))
         if why:
+            if pair_only and why.startswith("与现役对位冲突"):
+                kept = _pair_only_recs(r.recs, legacy)
+                if kept is not None:      # `coord_conflict_pair_only`：只退冲突的那一两格，列照用
+                    res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
+                    res.coord_cols.append(cc.col)
+                    res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
+                                     for i, sl, sub, ch, g in kept)
+                    pair_cols.append(cc.col)
+                    continue
             if not _take_dp(cc, _units, _ln, why):
                 res.coord_fallback[str(cc.col)] = why
                 res.coord_conflict_ids.extend(_coord_conflict_ids(r.recs, legacy))
@@ -1594,8 +1616,42 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         res.coord_cols.append(cc.col)
         res.coord.extend(CoordRec(id=i, col=cc.col, slot=sl, sub=sub, ref_char=ch, row=round(g, 2))
                          for i, sl, sub, ch, g in r.recs)
+    if pair_cols:
+        res.coord_note = f"{res.coord_note}；pair 退冲突格 {','.join(map(str, sorted(pair_cols)))}".lstrip("；")
     if dp_cols:
         res.coord_note = f"{res.coord_note}；dp 配列 {','.join(map(str, sorted(dp_cols)))}".lstrip("；")
+
+
+COORD_PAIR_MAX = 2
+COORD_PAIR_MIN_AGREE = 3
+
+
+def _pair_only_recs(recs, legacy: dict):
+    """`coord_conflict_pair_only`：整列因「与现役对位冲突」要退回时，看能不能只退冲突格。能 → 返回去掉冲突格的 recs；
+    不能（冲突多于 `COORD_PAIR_MAX`、冲突格相邻、冲突格的现役字恰是邻格的坐标字＝整列错位迹象、
+    现役与坐标全同的格少于 `COORD_PAIR_MIN_AGREE`）→ None，照旧整列退回。"""
+    chs = [r[3] for r in recs]
+    bad, agree = [], 0
+    for k, (i, _sl, _sub, ch, _g) in enumerate(recs):
+        lg = legacy.get(i)
+        if lg is None or lg.align_op != "equal":
+            continue
+        if lg.align_char == ch:
+            agree += 1
+        elif ch:
+            bad.append(k)
+        else:
+            return None
+    if not bad or len(bad) > COORD_PAIR_MAX or agree < COORD_PAIR_MIN_AGREE:
+        return None
+    if any(b - a == 1 for a, b in zip(bad, bad[1:])):
+        return None
+    for k in bad:
+        lc = legacy[recs[k][0]].align_char
+        if any(0 <= j < len(chs) and chs[j] == lc for j in (k - 1, k + 1)):
+            return None
+    drop = {recs[k][0] for k in bad}
+    return [r for r in recs if r[0] not in drop]
 
 
 def _coord_conflict_ids(recs, legacy: dict) -> list[str]:
