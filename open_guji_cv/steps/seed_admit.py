@@ -586,6 +586,10 @@ class SeedAdmitParams(BaseModel):
     坐标对位字或库首位落在任一字组（`groups.registry`）里不放（归字组流程判）；库前
     `lane_variant_topk` 名候选里有坐标对位字的异体不放（同 `lane_variant_guard`，免得把刻本异体改成通用字）。
     整页没锚上（现役对位整页为空）时不用坐标对位。关着（或 `rare_ref` 关着）时不进参数哈希。"""
+    rare_ref_coord_min_cov: float = 0.90
+    """`rare_ref_coord` 那支的库首位覆盖度下限（原模块常量 `_RARE_REF_COORD_MIN_COV`，2026-11-06 A24 改书级参数）。
+    缺省 0.90＝老行为，不进 dump，产物指纹不变；各书自己试（L01 深挖：殿本 5b 首位命中的格里 cov 0.85–0.90 的约 18 格被它挡下，
+    放低前先做金标、留出 0 错）。"""
     rare_ref_nf: bool = True
     """规则 A 坐标对位那支放宽 `near_form` 疑问（2026-10-28，A24「复盘形近护栏 N 类」，缺省开；只在 `rare_ref_coord` 开着时起作用）。
 
@@ -1003,6 +1007,8 @@ class SeedAdmitParams(BaseModel):
         # 留在 dump 里（显式 False），只去掉附属字段——否则 dump 再读回来会变回缺省的开
         if isinstance(d, dict) and not self.symbol_review:
             d.pop("symbol_min_human", None)
+        if isinstance(d, dict) and self.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV:
+            d.pop("rare_ref_coord_min_cov", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
@@ -1079,6 +1085,7 @@ class SeedAdmitParams(BaseModel):
             d.pop("lane_coord_few_stroke", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
+            d.pop("rare_ref_coord_min_cov", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
             for k in ("rare_ref_nf", "rare_ref_nf_max_n", "rare_ref_nf_cov"):
                 d.pop(k, None)
@@ -2090,6 +2097,7 @@ class SeedAdmitStep(Step):
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
                                   keep_ref_review=p.lane_keep_ref_review,
+                                  coord_min_cov=p.rare_ref_coord_min_cov,
                                   nf=((_keben_counts(p.db_path), p.rare_ref_nf_max_n, p.rare_ref_nf_cov,
                                        frozenset(k for kv in (ctx.book.codepoints or {}).items() for k in kv))
                                       if p.rare_ref_nf else None))
@@ -2239,11 +2247,12 @@ _RARE_REF_COORD_MIN_COV = 0.90
 
 
 def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk: int,
-                       are_variants, group_chars: frozenset[str], cov: float = 1.0) -> bool:
+                       are_variants, group_chars: frozenset[str], cov: float = 1.0,
+                       min_cov: float = _RARE_REF_COORD_MIN_COV) -> bool:
     """规则 A 坐标对位那支（`SeedAdmitParams.rare_ref_coord`）比现役对位多的护栏。纯函数。"""
     if not ref or ref == "〓":                  # 空格位／逐列本生僻字占位：不知道是哪个字
         return False
-    if cov < _RARE_REF_COORD_MIN_COV:
+    if cov < min_cov:
         return False
     if ref in group_chars or (lib_top and lib_top in group_chars):
         return False                            # 字组里的字归 group_flow 判
@@ -2295,7 +2304,8 @@ def _rare_ref_nf_ok(ref: str, cands: list, n_lib: int, max_n: int, strong_cov: f
 
 def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                    coord: dict[str, str] | None = None, variant_topk: int = 3,
-                   keep_ref_review: bool = False, nf: tuple | None = None) -> int:
+                   keep_ref_review: bool = False, nf: tuple | None = None,
+                   coord_min_cov: float = _RARE_REF_COORD_MIN_COV) -> int:
     """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。
 
     `coord` 不给：只看现役对位（`amap`）里的格。`coord` 给了（`rare_ref_coord`，排在审路之后另跑一遍）：
@@ -2327,7 +2337,7 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                     continue
                 co = coord.get(rec.id)
                 if not co or not _rare_ref_coord_ok(co, lib_top, list(m.candidates or []), rec.doubts,
-                                                    variant_topk, are_variants, group_chars, m.cov):
+                                                    variant_topk, are_variants, group_chars, m.cov, coord_min_cov):
                     continue
                 al, via = (co, "replace"), "coord"      # 坐标对位字与库首位不同才有意义，按 replace 段判
             elif al is None:
