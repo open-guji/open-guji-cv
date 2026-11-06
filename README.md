@@ -1,3 +1,5 @@
+> **2026-10-23 说明**：本 README 保留的是早期的安装与功能概述。现行入口：`.claude/CLAUDE.md`（先看哪份文档、改代码规矩）、`doc/runbook/整理一册书.md`（整理一册书）、`doc/datastore.md`（中心库）、`doc/版本号规矩.md`（分支与发版）。环境用 uv 建 `.venv`，见 `.claude/CLAUDE.md`「环境」。
+
 # Open Guji CV
 
 古籍图像 OCR 分析工具包：对古籍扫描图片进行逐字识别、版面检测与字符网格定位。
