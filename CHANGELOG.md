@@ -5,6 +5,15 @@
 
 ## [未发版]
 
+## [0.6.12] - 2026-11-06
+
+- 史記套书缺省 `books/shiji_wyg/defaults.yaml`：01–10 册逐册同值的 23 个切分开关收到套书一层，`seg_set: shiji_wyg` 的册自动带上（01–10 册生效参数逐项核过不变，指纹不变）。
+
+- `cell_shrink` 1.26：`inner_frame_cut`、`inner_frame_profile` 缺省开（殿本新图源 vol20–99、史記、全唐文全都开着，Sheldon 11-06 定）。没写这两个开关的册 cell_shrink 起结果会变（殿本 vol01–19 钉旧版、换新版前要写 false；北行现代本套书缺省写了 false）；写 false 的册参数 dump 与以前相同。cell_shrink 代码指纹变，各书 cell_shrink 起判过期。
+
+- 切分共用（三套书盘点 11-06）：`scripts/seg_fork_drift.py` 查套书分叉副本是否漏跟原模块的修改；基础配置 `row_segment.layout_prior` 可写 `{book}` 占位、按册展开（展开后与逐册写死相同，指纹不变）。
+- `inner_frame_keep_cross` 收窄（A22，SJ 第 13 轮）：压线段宽过列宽 0.12（字底一横）不留，还要往上连 10 行墨才算笔画（线的毛边不算）；新参数 `cell_shrink.inner_frame_cross_max_w`（缺省 0.12，只在 keep_cross 开时进 dump，0＝旧判据）。修列尾字块往下伸到内框线（史記 03:215:8:21「曰」读成「里」）。keep_cross 关的书逐字节不变（code_equiv 已登记）。
+
 ## [0.6.11] - 2026-11-05
 
 - 精校换单 `proof_cycle`：机器改字默认按最新结果进文本，不再进复审（sheldon 11-05 定，取代 10-20「未冻结册变字一律进待审」；殿本 r5 换单因此多出 8,019 格复审，六成是 □→字）。只有机器推翻最新人裁的格留人裁的字、进复审。只动脚本，不改指纹。
