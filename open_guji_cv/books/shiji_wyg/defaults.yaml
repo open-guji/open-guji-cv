@@ -1,0 +1,33 @@
+# 套书 shiji_wyg（史記文淵閣本，写本）的缺省参数。
+# 2026-11-06 三套书切分可共用盘点：这些开关原先在 01–10 册 yaml 里逐册各写一遍、值全同，11–42 册一个都没有。
+# 收到这里以后，凡是 `seg_set: shiji_wyg` 的册自动带上；01–10 册 yaml 里同值的行留着也不冲突（册配置压过本文件、值相同），
+# 生效参数与指纹都不变，SJ 可以随手删掉。
+# 参数层（低 → 高）：Step 默认 < 管线 yaml params: < 本文件 < 册配置 params:（book_defaults.yaml ∪ 册 yaml）< 运行覆盖。
+# 只放「写本切分代码在缺省情况下该用什么值」；数据文件路径（roster_ref_corpus／roster_ref_pins、page_pins）、
+# 逐册不同的（印章页、vline_overrides）照旧写册配置。各开关的来历见 doc/开关登记表.md。
+params:
+  border_detect:
+    top_weak_ratio: 0.45       # 框条下细虚线、首行字顶齐平：上框弱线护栏门槛（殿本 0.3）
+    top_weak_floor: 0.25
+  column_warp:
+    tight_rule_band: true      # 字贴界行写，判带收紧，不连左偏旁一起抹
+  cell_shrink:
+    frame_line_max_off: 0.35   # 全页框线线位只认贴着版框的（列尾字脚齐平会被当第二、三道框线）
+    jiazhu_end_halves: true    # 列端雙行小注格两半各剥框渣
+    jiazhu_strip_rules: true   # 列端夹注格也剥框线、长竖线
+    inner_frame_only: true     # 与 inner_frame_cut 同开：拟出内框线那一边不再逐格剥框线
+    inner_frame_keep_cross: true   # 字脚压内框线，穿线笔画留着
+  row_segment:
+    row_pitch: free
+    layout_slots_grow: true    # 双行小注列 22–24 行时按实际行数放格（cv #870）
+    layout_gap_cols_empty: true
+    jiazhu_rows: true
+    jiazhu_free_split: true
+    jiazhu_step_split: true
+    seal_gap_slots_empty: true
+    seal_inkcut: true
+    alt_cut: true
+    header_ref_flag: true
+    roster_top_dash: true
+    roster_seal_despeckle: 6   # 大印压着的卷端标题列去印点（cv #864）
+    roster_seal_trim_extra: 4
