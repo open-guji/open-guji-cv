@@ -46,9 +46,9 @@ BLANK_INK = 0.05                   # 近空格位判据（见 clean_labels）
 
 def is_han(ch: str) -> bool:
     """金标字必须是汉字。语料自带换行，对齐窗口会把 `\\n` 当成一个字发出来。"""
-    cp = ord(ch)
-    return (0x4E00 <= cp <= 0x9FFF or 0x3400 <= cp <= 0x4DBF
-            or 0xF900 <= cp <= 0xFAFF or 0x20000 <= cp <= 0x2A6DF)
+    # 2026-11-06：原先只到扩展 B（2A6DF），C–J 的字（𮅕 等）即便进了对位也被当非汉字删掉；口径改同 `utils/han_ranges`
+    from ..utils.han_ranges import is_han_cp
+    return len(ch) == 1 and is_han_cp(ord(ch))
 
 
 def clean_labels(labels, index: dict) -> tuple[list, dict]:

@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `align_ref` 2.8：对位字流（`_corpus_text`）、坐标对位行偏移、金标清洗 `align_label.is_han`、`witness-align-stream` 统一按 `utils/han_ranges.py` 认汉字，**收扩展 A、B–J**（原先对位字流只留 U+4E00–9FFF，`is_han` 只到扩展 B）。整理本里的 㣲 𮅕 𮪍 这类扩展区字以前被删掉，整理本少一个字，difflib 在那里断段（A23 诊断 ai-team `domain/CV/质检/待审原因深挖/Z01-对位缺位诊断.md`：殿本 Z01 现役对位缺位 394 格里 109 格因此而起；殿本语料扩展区字约 1.26 万个）。97 册抽 4068 页现役对位 +3653 格，既有标签变 4 格，看图都不是退步（见 PR）。所有书 align_ref 及下游过期，**不进 v0.6.16，排第 7 轮随换图源全套重跑**（A31 11-06 定）。
 - `seed_admit` 1.39：书级新开关 `match_ref_diff_guard`（**缺省关**，关时不进参数 dump、产物不过期）。打开后 match_ref（整理本 equal 段与库首选同字）在库判 diff 时不放行，记 doubt `match_ref_diff` 退回人审（并入 `_LANE_HARD`，待审补放不放回）。缘起殿本 vol05 66:9:15：图是「不」，对位滑格给「字」，库首选也是「字」但判 diff，原先 match_ref 没有 cov／verdict 下限照放。70 册 ★main 包里这类放行 177 格（殿本 155、史記 19、全唐文 3）。殿本开不开等 sheldon 点头（A24 11-06）。
 - `seed_admit` 1.38：字组入口新开关 `group_flow_coord_outside_skip`（缺省开）。现役对位缺这一格、坐标对位字既不是组员也不是陪衬字（〓、空格位、暂归一写法除外）时不拉进组：组只会在组员里挑字，这类格进组必弃权（Z01）。A24 Z01 深挖（11-06）：殿本第5轮 Z01 527 格里 394 格现役对位缺位；按 ★main 包回放 Z01 −106（多为門辶囗族少见字，原因落回 L01／P02），已放行格不受影响（70 册包里命中 7 格，都是 𭶑，已按暂归一写法排除）。只改原因、不放行。seed_admit 指纹变，随第 6 轮重跑。
 - `seed_admit` 1.37 `pua_code_table`（缺省关，殿本开；A24，A31 X01 派单）：按私用码表改放字——格→码对应离线算好存裁定库 `src-2`（按格号取，带整理本对位字核对，`RulingStore.cell_codes`／`put_cell_code`），非人裁放行字≠码表字 → 改放码表字（通道 `code_table`），一码多字（F1001／F1055）标族豁免、族外降审，人裁不动；每页统计 `PageAdmit.n_code_fix`／`n_code_mismatch`（0 不落盘）。新增 `utils/pua_v2_codes`、`config/pua/siku_qiefen_v2_codes.json`、`research/a24/pua_src/build_cell_codes.py`。开关关着时产物逐位不变（参数不进 dump）。
