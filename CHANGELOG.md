@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `seed_admit` 1.36：R5 题列套语容错 `lane_seal_title_tolerance`（书级，缺省 0＝关，关时不进参数 dump；殿本开 1）与 `lane_seal_title_prefix`。整列坐标字前 8 字与「欽定四庫全書總目」至多差 N 字、尾部（卷＋数字）完全符合时仍按套语放，不一致的字位记 `lane_skip.why=title_mismatch` 留人审。殿本 D01 深挖（A32 11-06，A31 定第 6 轮做）：vol77 p119 c1 整理本「錠」误字，其余 10 格可放，錠格留审。seed_admit 代码指纹变，各册 seed_admit 起判过期，随第 6 轮重跑。
 - `row_segment` 切点判官（U-Net）结果落盘复用（`seg/cut_select`）：按窗口灰度内容＋墨阈＋判官指纹存执行机本地 `cache/_judge/`（每页约 4 MB），同机重跑同一页不再前向。史記（`cut_judge: unet_f64`）8 页首跑 108 秒、重跑 7 秒；产物逐字节不变、登记 code_equiv，不判过期。`GUJI_JUDGE_CACHE=0` 关。
 
 ## [0.6.14] - 2026-11-06

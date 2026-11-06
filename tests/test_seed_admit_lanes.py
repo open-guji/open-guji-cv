@@ -284,6 +284,29 @@ def test_r5_title_formula_needs_whole_column_match():
     assert n == 0
 
 
+def test_r5_title_formula_tolerance():
+    """整理本把「欽」误作「錠」（vol77 p119）：开容错时其余字位放、错字位留审；缺省关＝整列照旧不放。"""
+    text = "錠定四庫全書總目卷一百"
+    cells = {i: ch for i, ch in enumerate(text, 1)}
+    n, rs = _title_col(text, cells)
+    assert n == 0
+    n, rs = _title_col(text, cells, lane_seal_title_tolerance=1)
+    assert n == len(text) - 1 and not rs[1].admit
+    assert rs[1].evidence["lane_skip"]["why"] == "title_mismatch"
+    assert rs[2].admit and rs[2].char == "定"
+    n, rs = _title_col("錠定四庫全書總目卷一百", cells, lane_seal_title_tolerance=0)
+    assert n == 0
+    bad = "錠定四庫全書總目巻一百"
+    n, rs = _title_col(bad, {i: c for i, c in enumerate(bad, 1)}, lane_seal_title_tolerance=1)
+    assert rs[9].char == "卷" and not rs[1].admit
+    two = "錠定四庫全書總曰卷一百"
+    n, _ = _title_col(two, {i: c for i, c in enumerate(two, 1)}, lane_seal_title_tolerance=1)
+    assert n == 0                      # 差 2 字超容错
+    tail = "欽定四庫全書總目卷一百"[:9] + "X"
+    n, _ = _title_col("錠定四庫全書總目卷X", {1: "錠"}, lane_seal_title_tolerance=1)
+    assert n == 0                      # 尾部不符套语
+
+
 def test_r5_body_column_with_zongmu_not_title():
     """正文里的「崇文總目」不再让整列不走 R5。"""
     n, rs = _title_col("所註存崇文總目稱其", {4: "崇", 5: "文"})
