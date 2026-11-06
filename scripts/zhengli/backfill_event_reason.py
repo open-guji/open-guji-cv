@@ -7,8 +7,8 @@
 | 事件 | 怎么推 |
 |---|---|
 | `ctx_ruling` 字组（group≠O） | `group_abstain`：文意裁定问的是字组判不了的格 |
-| `ctx_ruling` 整理本（group=O） | route=code_conflict → `ruling_conflict`；subclass=PUA（整理本私用码缺字）→ `ref_lacuna`；整理本这格空 → `ref_gap`；整理本字≠机器字 → `ref_mismatch`；其余 `unknown` |
-| `confirm` | via=newchar_review → `lib_missing`；via=seg_flag → `seg_defect`；via=collate_verdict → `ref_mismatch`；来源写着异体合审／异体对 → `variant_pair`；文意组刻形补标 → `group_abstain`；库无／缺字确认、补库确认 → `lib_missing`；其余（含遮挡怀疑，分不出整理本在不在）`unknown` |
+| `ctx_ruling` 整理本（group=O） | route=code_conflict → `ruling_conflict`；subclass=PUA（整理本私用码缺字）→ `ref_lacuna`；整理本这格空 → `ref_gap`；整理本字≠机器字 → `ref_final_diff`；其余 `unknown` |
+| `confirm` | via=newchar_review → `lib_missing`；via=seg_flag → `seg_defect`；via=collate_verdict → `ref_final_diff`；来源写着异体合审／异体对 → `variant_pair`；文意组刻形补标 → `group_abstain`；库无／缺字确认、补库确认 → `lib_missing`；其余（含遮挡怀疑，分不出整理本在不在）`unknown` |
 | `vision_check` | 带 group → `group_abstain`，其余 `unknown`（看图是抽样核，不按待审原因挑格） |
 
 别的字段一字不动；每行按原行的写法重写（EventLog 的 `sort_keys`，或 `~q` 迁移副本、模型裁定的插入序），认不出写法的文件整个不动并报出来。
@@ -46,7 +46,7 @@ def reason_of(e: dict) -> str:
         if ref == "":
             return R.REF_GAP.value
         if ref and mach and ref != mach:
-            return R.REF_MISMATCH.value
+            return R.REF_FINAL_DIFF.value
         return R.UNKNOWN.value
     if k == "confirm":
         via, src = p.get("via") or "", p.get("source") or ""
@@ -55,7 +55,7 @@ def reason_of(e: dict) -> str:
         if via == "seg_flag":
             return R.SEG_DEFECT.value
         if via == "collate_verdict":
-            return R.REF_MISMATCH.value
+            return R.REF_FINAL_DIFF.value
         if "异体" in src:
             return R.VARIANT_PAIR.value
         if "文意组刻形" in src:
