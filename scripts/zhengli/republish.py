@@ -1270,10 +1270,18 @@ def bump_book_text(repo: Path, plan: dict, note: str) -> None:
             shutil.copyfile(src, d / f"{ch}.{t}.json")
     stamp_char_pending(d / f"{ch}.char.json", plan)
     if stale_doc:
-        (d / f"{ch}.punct-stale.json").write_text(json.dumps(stale_doc, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
-        print(f"待重标清单 {ch}.punct-stale.json：{len(stale_doc['items'])} 格单字替换（commit 提交后补）")
+        # book-text 校验器认的是改字清单 NNN.char-edits.json（scripts/book-text/char_edits.py），不是 punct-stale：
+        # 登记单格改字并机械同步 punct／entity 的校验字（A32 11-06 本地改）
+        for cmd in ([sys.executable, "scripts/book-text/char_edits.py", "record", d, "--chapter", ch,
+                     "--old-char", "git:HEAD", "--ref", note, "--by", "A32"],
+                    [sys.executable, "scripts/book-text/char_edits.py", "sync", d, "--chapter", ch]):
+            if run(cmd, cwd=repo).returncode:
+                sys.exit(f"✗ book-text 改字清单这步失败：{' '.join(map(str, cmd))}")
+        stale_doc = None
     for cmd in ([sys.executable, "scripts/book-text/bump_original.py", d, "--line", "text", "--level", "minor",
                  "--chapter", ch, "--note", note, "--pr", "TBD"],
+                [sys.executable, "-c", "import sys; sys.path.insert(0, 'scripts'); import original_version as OV; "
+                 "OV.sync_headings(sys.argv[1])", d],      # 标点有变，目录缓存 headings 跟着重算（F-OV-12）
                 [sys.executable, "scripts/local_check.py", "--dev"],
                 ["git", "add", "-A", str(d)],
                 ["git", "commit", "-qm", f"{note}"]):
