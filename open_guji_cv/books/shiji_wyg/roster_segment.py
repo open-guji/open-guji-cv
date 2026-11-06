@@ -869,6 +869,14 @@ def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
         if len(rc.items) == spec[0] and all_char:
             return False
         got = _resplit(ink, top, bottom, spec[0])
+        if all_char and abs(len(rc.items) - spec[0]) == 1:
+            # 几何块只差整理本一字（题署列 07:2:5、10:2:6：两字粘成一块或一字劈成两块）：再按块凑一版，
+            # 切线压在几何块腰上的条数（`_cuts_in_blocks`）比等分少 FIT_MARGIN 条以上才用，否则照旧等分。题署列中间有大段空白（「學」与「士」之间）时
+            # 等分会把后面每条线都切偏；字距匀的列（07:2:7，按块凑会劈错块，两版只差 1 条）等分本来就对（2026-11-06，A22 转来）
+            seg = [t for t in (_tight_item(ink, it.y0, it.y1) for it in rc.items) if t is not None]
+            fit = _fit_count(ink, seg, spec[0]) if len(seg) == len(rc.items) else None
+            if fit is not None and (got is None or _cuts_in_blocks(fit, seg) + FIT_MARGIN <= _cuts_in_blocks(got, seg)):
+                got = fit
         if got is None:
             return False
         rc.items = got
@@ -903,6 +911,21 @@ def refit_column(rc: RosterColumn, ink: np.ndarray, ref_line: str,
     rc.items = new
     _mark_refit(rc)
     return True
+
+
+#: 单段列按块凑数要比等分少压这么多条块腰才用（07:2:5 1 对 5 用；07:2:7 1 对 2、10:2:6 1 对 2 不用）
+FIT_MARGIN = 2
+
+
+def _cuts_in_blocks(items: list[RosterItem], blocks: list[RosterItem]) -> int:
+    """切线落在几何块中段（上下各留 20%）的条数：相邻两框中线压在某块字的腰上，就是把那块字切开了。"""
+    its = sorted(items, key=lambda it: it.y0)
+    n = 0
+    for a, b in zip(its, its[1:]):
+        y = (a.y1 + b.y0) / 2
+        if any(bl.y0 + 0.2 * (bl.y1 - bl.y0) < y < bl.y1 - 0.2 * (bl.y1 - bl.y0) for bl in blocks):
+            n += 1
+    return n
 
 
 def _fit_count(ink: np.ndarray, seg: list[RosterItem], n: int) -> list[RosterItem] | None:

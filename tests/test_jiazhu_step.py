@@ -161,3 +161,25 @@ def test_better_accepts_equal_bad_much_more_even():
     assert J._seg_score(ink, 0, old, specs)[0] == J._seg_score(ink, 0, new, specs)[0]
     assert J._better(ink, 0, old, new, specs)
     assert not J._better(ink, 0, new, old, specs)
+
+
+def test_step_boundaries_follow_restepped_rows():
+    """逐步切过的夹注行格线贴新两半（v1.5）：列尾行的格线不能留在字下的白里（第 16 轮 02:104:8 第 21 行丢字）。"""
+    bounds = [0.0, 100.0, 200.0, 300.0, 400.0, 500.0]          # 5 格等分
+    cells = [Cell(slot=1, y0=0, y1=100, x0=0, x1=100, kind="char")]
+    rows = [(150, 240, 145, 238), (240, 330, 238, 335), (330, 420, 335, 430)]   # 段 2–4，比格网整体上移
+    for s, (a0, a1, b0, b1) in zip((2, 3, 4), rows):
+        cells += [Cell(slot=s, y0=a0, y1=a1, x0=50, x1=100, kind="jiazhu_a", gap_center=50.0),
+                  Cell(slot=s, y0=b0, y1=b1, x0=0, x1=50, kind="jiazhu_b", gap_center=50.0)]
+    cells.append(Cell(slot=5, y0=430, y1=500, x0=0, x1=100, kind="blank"))
+    b = J._step_boundaries(bounds, cells, [(2, 3, 3)])
+    assert b[0] == 0.0 and b[1] == 145.0                          # 段首行上沿取两半上沿
+    assert b[2] == (240 + 238) / 2 and b[3] == (335 + 330) / 2    # 相接行取上行下沿与本行上沿的中点
+    assert b[4] == 430.0                                           # 段末行下沿取两半下沿
+    assert b[5] == 500.0 and all(x <= y for x, y in zip(b, b[1:]))
+    # 段外的夹注行（不在 specs 里）不动；有抬头格时 pos 按抬头格数平移
+    assert J._step_boundaries(bounds, cells, [(9, 1, 1)]) == bounds
+    raised = [Cell(slot=-1, y0=0, y1=100, x0=0, x1=100, kind="blank")] + [
+        Cell(slot=c.slot - 1, y0=c.y0, y1=c.y1, x0=c.x0, x1=c.x1, kind=c.kind, gap_center=c.gap_center)
+        for c in cells if c.slot >= 2]
+    assert J._step_boundaries(bounds, raised, [(1, 3, 3)], n_raised=1) == b
