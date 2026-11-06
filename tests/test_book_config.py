@@ -151,3 +151,19 @@ def test_iron_gate_default_on_when_unwritten(ws):
     assert load_book("v1", books_dir=ws / "books").iron_gate is True
     _w(ws, "v2.yaml", {"id": "v2", "title": "t", "raw_dir": "raw", "iron_gate": False})
     assert load_book("v2", books_dir=ws / "books").iron_gate is False
+
+
+def test_book_placeholder_layout_prior(ws):
+    """基础配置写 `{book}` 占位，按册展开；与逐册写死的生效值相同（2026-11-06 三套书配置归并）。"""
+    _w(ws, "book_defaults.yaml",
+       {"params": {"row_segment": {"layout_prior": "corpus/daizhige/layout_slots_qiefen_{book}.jsonl"}}}, sub="config")
+    p = _w(ws, "vol50.yaml", {**BOOK, "id": "vol50"})
+    d = bc.effective_book_dict(p)
+    assert d["params"]["row_segment"]["layout_prior"] == "corpus/daizhige/layout_slots_qiefen_vol50.jsonl"
+    # 缓存里的基础配置没被改掉：另一册展开成自己的
+    q = _w(ws, "vol51.yaml", {**BOOK, "id": "vol51"})
+    assert bc.effective_book_dict(q)["params"]["row_segment"]["layout_prior"].endswith("_vol51.jsonl")
+    assert bc.load_defaults(p)["params"]["row_segment"]["layout_prior"].endswith("_{book}.jsonl")
+    # 册 yaml 写死的照旧压过基础配置
+    r = _w(ws, "vol52.yaml", {**BOOK, "id": "vol52", "params": {"row_segment": {"layout_prior": "x.jsonl"}}})
+    assert bc.effective_book_dict(r)["params"]["row_segment"]["layout_prior"] == "x.jsonl"

@@ -126,10 +126,33 @@ def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict
             warn_old_syntax(Path(book_yaml).stem, n, ly)
     ls = [(n, fold_layer(n, ly)) for n, ly in raw_ls]
     if len(ls) == 1:
-        return copy.deepcopy(ls[0][1])
-    d: dict = {}
-    for _, layer in ls:
-        d = merge(d, layer)
+        d = copy.deepcopy(ls[0][1])
+    else:
+        d = {}
+        for _, layer in ls:
+            d = merge(d, layer)
+    return expand_book_placeholders(d, str(d.get("id") or Path(book_yaml).stem))
+
+
+#: 册配置里可以写 `{book}` 占位的参数（2026-11-06，三套书配置归并）：基础配置写一行，按册展开。
+#: 展开在合层之后、建 Step 参数之前做，进参数 dump 的是展开后的路径，与逐册写死逐字节相同，指纹不变。
+BOOK_PLACEHOLDER_FIELDS: tuple[tuple[str, str], ...] = (
+    ("row_segment", "layout_prior"),
+)
+
+
+def expand_book_placeholders(d: dict, book_id: str) -> dict:
+    """把 `BOOK_PLACEHOLDER_FIELDS` 里字符串值的 `{book}` 换成册 id（如殿本基础配置
+    `layout_prior: corpus/daizhige/layout_slots_qiefen_{book}.jsonl` → vol50 的 `…_vol50.jsonl`）。
+    改到的那几层字典先浅拷贝（合层结果可能与 yaml 缓存共用子字典），返回 `d`。"""
+    ps = d.get("params")
+    if not isinstance(ps, dict):
+        return d
+    for sid, field in BOOK_PLACEHOLDER_FIELDS:
+        kv = ps.get(sid)
+        if isinstance(kv, dict) and isinstance(kv.get(field), str) and "{book}" in kv[field]:
+            ps = d["params"] = dict(ps)
+            ps[sid] = {**kv, field: kv[field].replace("{book}", book_id)}
     return d
 
 
