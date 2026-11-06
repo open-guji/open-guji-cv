@@ -99,3 +99,15 @@ def test_load_table_repo_and_data_override(tmp_path):
     codes, _ = load_table(tmp_path)
     assert codes["F100A"] == "炫" and "F1099" not in codes and "EA96" not in codes
     assert norm_code("siku-qiefen-v2:U+f100a") == "F100A"
+
+
+def test_load_table_derived_from_daizhige_rows_and_multi(tmp_path):
+    """审核页按殆知阁码审：daizhige 行 verdict=char → 它 same_as 的 v2 码取这个字；verdict=multi（一码多字）→ 族，不再按码改字。"""
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "daizhige:U+EA96", "verdict": "char", "char": "直", "same_as": ["siku-qiefen-v2:U+F1099"]},
+            {"code": "daizhige:U+EB09", "verdict": "multi", "char": None, "chars": ["瓠", "𤬄"], "same_as": ["siku-qiefen-v2:U+F1007"]},
+            {"code": "daizhige:U+EA7B", "verdict": "pending", "char": None, "same_as": ["siku-qiefen-v2:U+F10A0"]}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, fams = load_table(tmp_path)
+    assert codes["F1099"] == "直" and "F10A0" not in codes
+    assert fams["F1007"] == frozenset("瓠𤬄")

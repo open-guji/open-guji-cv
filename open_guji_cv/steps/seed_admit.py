@@ -3749,10 +3749,10 @@ def _pua_code_pass(out: list, amap: dict, store=None, table=None) -> tuple[int, 
             info = cc.get(r.id)
             if not info or not r.admit or (r.doubts and "excluded" in r.doubts):
                 continue
-            T = codes.get(info["code"])
+            fam = fams.get(info["code"])
+            T = codes.get(info["code"]) or (min(fam) if fam else None)     # 一码多字的码没有单一码表字：族内取任一作代表（只用于记录，不改字）
             if not T or not _ruling_han(T) or (info.get("ref") or "") != ((amap.get(r.id) or (None,))[0] or ""):
                 continue
-            fam = fams.get(info["code"])
             if r.char == T or (fam and r.char in fam):
                 continue
             if r.provenance == "human" or r.channel == "human":

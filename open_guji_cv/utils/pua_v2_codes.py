@@ -2,7 +2,7 @@
 
 两处来源，后者盖前者（数据目录由调用方传 `config_dir=ws_config_dir()`）：
 1. 仓内 `config/pua/siku_qiefen_v2_codes.json`：`codes`＝码→字（只收人裁一致的码），`families`＝一码多字的码→族内字（如 F1001 乖垂埀）；
-2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）里 `code` 以 `siku-qiefen-v2:U+` 起头、`verdict=char` 的行（可带 `family` 字符串）。
+2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）：`siku-qiefen-v2:U+` 起头的行、以及 daizhige 行 `same_as` 里的 v2 码；`verdict=char` → 码→字，`verdict=multi`（一码多字，字在 `chars`）→ 族。
 
 码写法统一成 `F1001`（U+ 之后的十六进制，大写）。
 """
@@ -41,10 +41,16 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
                 r = json.loads(line)
             except ValueError:
                 continue
-            if not str(r.get("code", "")).startswith(_PREFIX) or r.get("verdict") != "char" or not r.get("char"):
-                continue
-            k = norm_code(r["code"])
-            codes[k] = r["char"]
-            if r.get("family"):
-                fams[k] = frozenset(r["family"])
+            ks = []        # 这一行管哪几个 v2 码：自己（siku-qiefen-v2: 行）和 same_as 里的 v2 码（daizhige 行，审核页按殆知阁码审的）
+            if str(r.get("code", "")).startswith(_PREFIX):
+                ks.append(norm_code(r["code"]))
+            ks += [norm_code(s) for s in r.get("same_as") or [] if str(s).startswith(_PREFIX)]
+            if r.get("verdict") == "char" and r.get("char"):
+                for k in ks:
+                    codes[k] = r["char"]
+                    if r.get("family"):
+                        fams[k] = frozenset(r["family"])
+            elif r.get("verdict") == "multi" and r.get("chars"):      # 一码多字：族内字都认，不按码改字
+                for k in ks:
+                    fams[k] = frozenset("".join(r["chars"]))
     return codes, fams
