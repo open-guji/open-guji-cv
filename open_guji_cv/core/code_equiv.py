@@ -231,6 +231,11 @@ _TAIL_ONE_ABS = ("列端孤「一」绝对量逃生口 tail_one_abs（cell_shrin
 _LAYOUT_CUTS = ("格位表人定格线 cuts（row_segment，表行写了 cuts／col_h 才照线切，没写的列不变）：row_segment 在全唐文 012 p20/31/33/80/89/146、"
                  "013 p140/147（本机 dev 从 border_detect 起出上游）上与 origin/dev b148b2c 产物逐字节相同；scripts/code_equiv.py check，2026-11-05（切分线）")
 
+_COLTEXT = ("自动配页加参照类型 page_map_ref（缺省 column_slots，原路径；column_text 的算法在 steps/row_segment_coltext.py、"
+            "不在 code_deps、指纹走 page_map_fingerprint）；page_align 抽出 align_scores（align 改为调用它，加 reorder/swap 开关缺省开）："
+            "row_segment 在殿本 vol60 22 页（page_map: strict，--pages 1,6,…,126 每 6 页取 1）与全唐文 006 7 页"
+            "（离线 layout_prior，--pages 20,40,61,100,120,150,182）上与 origin/dev cbb1917 产物逐字节相同；scripts/code_equiv.py check，2026-11-06")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1003,6 +1008,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new="4bab89e01a18b859e43c608800010e7e951dc0843b36588f11b91a1ed7b90eaf",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
           evidence="S6 墨团闸 cell_shrink.ink_blob_empty（缺省关）：cell_shrink 在全唐文 010 4 页（--pages 41,50,64,74）上与 origin/dev（835325b）产物逐字节相同；2026-11-06"),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="d8775d706a25f56c2bd538252dc33057a8da6478d5752891426d4839beb8298c",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence=_COLTEXT),
+    Equiv(module="open_guji_cv.steps.row_segment_pagemap",
+          new="80c25b7688c53da3e0fbfc17f3fd92abfd808ce05adc5d38f1d9a7ef208e360a",
+          old="3ef375f764f67717152ebd4e11b234ca338bbb02091dc6d07a3de50bfc52c9f0",
+          evidence=_COLTEXT),
+    Equiv(module="open_guji_cv.utils.page_align",
+          new="596abeebaefa4d07c048e8a3bd31e0f1dea46b48f5ad80a6be91248d396cba19",
+          old="9be05ea88089263da8421b3e71dcce436f26bf8be989a68c6cf6a4c2356774f2",
+          evidence=_COLTEXT),
 )
 
 
