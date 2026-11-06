@@ -84,6 +84,7 @@ class FlowConfig:
     l2_drift: int = 0                                  # L2 表键容许远处差几个字位（`ctx_l3.ctx_drift`；0＝逐字比）
     joint: bool = False                                # 共字组联合补放（`entry` 的 "joint"，见 `decide_joint`）
     lift_ref_veto: frozenset = frozenset()    # 书级：这几组补放（lift）时，整理本（或坐标对位）字是组里另一个字、与给的字不同 → 不放，留人审（只降不放；史記 sy 山→出 2026-11-03）
+    ref_free_groups: frozenset = frozenset()  # 书级：这几组也按 `ref_free` 走（完全不看整理本字：入口、判法、补放、复核都不用；sheldon 2026-11-06 日曰同己已巳）
     lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
     abstain_ref_ok: frozenset = frozenset()  # 书级「按整理本走」：复核时解法全弃权、已放行字＝整理本字 → 不降审；补放时族内刻形拆不开、整理本是同族一形 → 取整理本形
     shape_ref_ok: frozenset = frozenset()    # 书级「按整理本走」：复核时只有字形路（ids）给出别的字、已放行字＝整理本字 → 不降审（史記 2026-11-01，廣賔、還遺 等）
@@ -106,6 +107,11 @@ class FlowResult:
     demoted: int = 0
     entered: int = 0
 
+
+
+def _rf(g: str, cfg) -> bool:
+    """组 `g` 在这次流程里是否完全不看整理本字：注册表的 `ref_free`，或书级 `FlowConfig.ref_free_groups`。"""
+    return GROUPS[g].ref_free or g in cfg.ref_free_groups
 
 def check_groups(groups) -> None:
     """点名的组必须已登记且声明了 `flow`，方法须是 `groups.methods` 认得的类、名字不重复。"""
@@ -184,7 +190,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         gs = [g for g in cfg.groups if GROUPS[g].flow.review and (r.char in GROUPS[g].members
                                                                  or (GROUPS[g].flow.ref_canon and _member(g, r.char, canon)))]
         for g in gs:
-            if GROUPS[g].ref_free or not ref or _member(g, ref, canon):
+            if _rf(g, cfg) or not ref or _member(g, ref, canon):
                 return g, "review"
         return None
     if not cands:
@@ -199,13 +205,13 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
 
     def _coord_out(g: str, mem) -> bool:
         pv = PROVISIONAL.get(g)                    # 暂归一的另一写法／整理本写法（點㸃 的 𭶑）算组内
-        return (bool(co) and not GROUPS[g].ref_free and co not in mem and canon(co) not in mem and co not in _tol(g, cfg)
+        return (bool(co) and not _rf(g, cfg) and co not in mem and canon(co) not in mem and co not in _tol(g, cfg)
                 and not (pv and (co in pv.forms or co in pv.ref_forms)))
 
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
         tol = _tol(g, cfg)
-        if not (f.ref_enter and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon)
+        if not (f.ref_enter and not _rf(g, cfg) and (f.lift_ref_agree or f.tolerate_ref_agree) and rr and _member(g, rr, canon)
                 and (top in tol or (f.ref_enter_member and top in mem and rr != top))):
             continue
         if all(c in mem or c in tol for c, v in cands[1:] if c1 - v < cfg.delta):
@@ -214,7 +220,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         mem = GROUPS[g].members
         if not all(c in mem or c in _tol(g, cfg) for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
-        if not GROUPS[g].ref_free and ref and not _member(g, ref, canon):
+        if not _rf(g, cfg) and ref and not _member(g, ref, canon):
             continue
         if _coord_out(g, mem) and not _member(g, co, canon):
             continue
@@ -351,7 +357,7 @@ def decide_joint(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, 
     先由组 `g` 定字 X，再问每个共字组 h——X 是 h 的成员：h 也须给 X；X 不是 h 的成员：h 须明确说「其他」
     （文意 L2 表 `abstain:other` 且各遍都是 high，即「h 的字放进去都不通」）。任一共字组弃权、给了别的字 → 待定（"joint"）。
     例：ry 说曰、rm 说其他 → 曰；ry 说日、rm 说日 → 日；rm 没表态 → 留人审。共字组的留痕名前加「组 id:」。"""
-    ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn)
+    ch, why, trail = decide(g, r, cands, None if _rf(g, cfg) else ref, cfg, left, right, patch_fn)
     if ch is None:
         return None, why, trail
     for h in partners(g, cfg.groups):
@@ -360,7 +366,7 @@ def decide_joint(g: str, r, cands, ref, cfg: FlowConfig, left=None, right=None, 
             # （日曰 ry 说曰、日目 rm 的小组常各说各的「其他／目」而联判卡住，A24 11-01）
             trail = trail + [{"solver": f"{h}:skip", "char": None, "why": "panel_confirmed"}]
             continue
-        hc, _, ht = decide(h, r, cands, None if GROUPS[h].ref_free else ref, cfg, left, right, patch_fn)
+        hc, _, ht = decide(h, r, cands, None if _rf(h, cfg) else ref, cfg, left, right, patch_fn)
         trail = trail + [{**t, "solver": f"{h}:{t['solver']}"} for t in ht]
         ok = hc == ch if ch in GROUPS[h].members else (
             hc is None and any(t.get("why") == "abstain:other" and t.get("other_conf") == "high" for t in ht))
@@ -576,7 +582,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         if e is not None:
             entries[i] = (cands, ref, e)
             f = GROUPS[e[0]].flow
-            if e[1] in ("lift", "joint") and f.tolerate_ref_agree and cands and any(
+            if e[1] in ("lift", "joint") and f.tolerate_ref_agree and not _rf(e[0], cfg) and cands and any(
                     c in _tol(e[0], cfg) and c not in GROUPS[e[0]].members for c, v in cands if cands[0][1] - v < cfg.delta):
                 tol_hit.add(r.id)
     plans = []
@@ -616,7 +622,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
         if mode == "joint":
             ch, why, trail = decide_joint(g, r, cands, ref, cfg, left, right, patch_fn)
         else:
-            ch, why, trail = decide(g, r, cands, None if GROUPS[g].ref_free else ref, cfg, left, right, patch_fn,
+            ch, why, trail = decide(g, r, cands, None if _rf(g, cfg) else ref, cfg, left, right, patch_fn,
                                     review=mode == "review",
                                     coord=None if r.id[-1:] in ("a", "b") else (veto_refs or {}).get(r.id))
         if mode == "lift" and ch is None and cfg.joint and any(
@@ -641,7 +647,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
     norm = cfg.canon or canon
     for r, g, mode, ch, why, trail, ref in plans:
         if mode in ("lift", "joint"):
-            if (ch is None and why == "abstain" and mode == "lift" and g in cfg.abstain_ref_ok and not GROUPS[g].ref_free
+            if (ch is None and why == "abstain" and mode == "lift" and g in cfg.abstain_ref_ok and not _rf(g, cfg)
                     and (fr := ref or (veto_refs or {}).get(r.id))):
                 fam = next((x for x in GROUPS[g].flow.families if fr in x), None)
                 given = {t["char"] for t in trail if t["char"]}
@@ -651,10 +657,10 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                     trail = trail + [{"solver": "form:ref", "char": fr, "why": "abstain_ref_agree"}]
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail) and not (
-                    g in cfg.lift_shape_ref and (sr := ref or (veto_refs or {}).get(r.id))
+                    g in cfg.lift_shape_ref and not _rf(g, cfg) and (sr := ref or (veto_refs or {}).get(r.id))
                     and norm(sr) == norm(ch) and all(not t["char"] or t["char"] == ch for t in trail)):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
-            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not GROUPS[g].ref_free
+            elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not _rf(g, cfg)
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
                   and not any(t["solver"] != "ctx" and t["char"] == ch for t in trail)
                   and not (GROUPS[g].flow.strong_over_ref and _ctx_strong(trail, ch))):
@@ -672,14 +678,14 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 入人八：文意没给字、只有字形给了整理本（现役对位缺格时用坐标对位字）以外的组员，不补放
                 # （vol12:147:2:17 入→八、vol28:20:5:4「國家八旗」八→入，A24 10-26）
                 ch, why = None, "ref_dissent"
-            elif ch is not None and ((mode == "lift" and GROUPS[g].flow.lift_ref_agree) or r.id in tol_hit) and norm(
+            elif ch is not None and not _rf(g, cfg) and ((mode == "lift" and GROUPS[g].flow.lift_ref_agree) or r.id in tol_hit) and norm(
                     rr := ref or (veto_refs or {}).get(r.id) or "") != norm(ch) and not (
                     not rr and mode == "lift" and GROUPS[g].flow.lift_ref_missing_ctx and r.id not in tol_hit
                     and any(t["solver"] == "ctx" and t["char"] == ch for t in trail)):
                 ch, why = None, "ref_dissent" if rr else "ref_missing"   # 部首族／陪衬字挡门：字形与整理本两路一致才补放
                 # `lift_ref_missing_ctx`：整理本完全缺位时文意给的字照放（门族辶族，A24 10-28）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
-                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and not _rf(g, cfg) and (cr := veto_refs.get(r.id))
                   and not (cr == GAP and GROUPS[g].flow.solo_margin > 0)
                   and not (g in PROVISIONAL and cr in PROVISIONAL[g].forms)    # 坐标对位是同字的另一写法（蒙𫎇 的 䝉），不算组外字（A24 11-01）
                   and norm(cr) != norm(ch) and norm(cr) not in {norm(m) for m in GROUPS[g].members}
@@ -692,7 +698,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 整理本缺字（〓）或无对位：只凭字形，给字方法每段 margin 都够才补放（彝，A24 10-26）
                 ch, why = None, "solo_weak"
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and not ref and veto_refs
-                  and not GROUPS[g].ref_free and (cr := veto_refs.get(r.id))
+                  and not _rf(g, cfg) and (cr := veto_refs.get(r.id))
                   and norm(cr) != norm(ch) and norm(cr) in {norm(m) for m in GROUPS[g].members}
                   and not any(t["char"] == ch and (t["solver"] != "ctx" or t.get("strong") or t.get("via") == "ctx:ctx_l1"
                                                    or t.get("runs", 1) >= 2)
@@ -760,7 +766,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
-            if (code == "group_flow_abstain" and g in cfg.abstain_ref_ok and not GROUPS[g].ref_free and r.char
+            if (code == "group_flow_abstain" and g in cfg.abstain_ref_ok and not _rf(g, cfg) and r.char
                     and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(r.char)
                     and not any(t["char"] and norm(t["char"]) != norm(r.char) for t in trail)):
                 # 解法只是弃权、没人反对，已放行字与整理本同字：照整理本留放（史記 2026-11-01，用户定「按整理本走」）
@@ -774,7 +780,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 廣→賔、還→遺 等看图全是整理本对，ids 模板库对写本形不准）
                 code, other = None, False
                 trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "shape_dissent_ref_agree"}]
-            if (f.review_ref_agree and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
+            if (f.review_ref_agree and not _rf(g, cfg) and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）
             if code and not (other and fix) and code != "group_flow_ref_dissent":
