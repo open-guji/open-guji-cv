@@ -71,12 +71,10 @@ def is_auto_pair(a: str, b: str) -> bool:
         return False
     if a in _group_chars() or b in _group_chars() or frozenset((a, b)) in _exclude():
         return False
-    from .. import variants
-    g = _graph()
-    if g.edge_tier(a, b) != "T1":
+    e = _graph().variant_edge(a, b)
+    if e.tier != "T1":
         return False
-    s = set(g.sources_of(a, b))
-    return len(s & variants.BRIDGE_SOURCES) >= MIN_SOURCES or "local:keben" in s
+    return e.n_bridge >= MIN_SOURCES or "local:keben" in e.sources
 
 
 def pair_to(a: str, b: str, *, lib_top: str | None = None) -> str:

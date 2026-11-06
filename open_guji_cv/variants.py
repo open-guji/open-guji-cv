@@ -28,6 +28,7 @@ twedu 既收 㕔~廳，也收古文 上~二、人~几；kSemanticVariant 既给 
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_VARIANTS_JSON = (Path(__file__).resolve().parents[1]
@@ -65,6 +66,35 @@ SIMPLIFIED_SOURCES = frozenset({
 })
 #: 永不当异体：形近易混（防钓鱼域名用的）、通假（不同的词）。
 NEVER_SOURCES = frozenset({"unihan:kSpoofingVariant", "hydzd-borrowed"})
+
+
+@dataclass(frozen=True)
+class VariantEdge:
+    """一对字在关系层的「是不是异体」事实，**放行与归因共用这一个口径**（A24 V01 深挖 11-06，第 7 轮）。
+
+    ``tier``：T1 纯异体／T2 互通·一对多／T3 通假·形近·简繁；``None`` 无边。
+    ``sources``：边的来源标签；``n_bridge``：其中异体来源（``BRIDGE_SOURCES``）个数；
+    ``never_only``：只有 ``NEVER_SOURCES``（形近易混、通假）来源。
+    """
+    tier: str | None
+    sources: tuple[str, ...] = ()
+    n_bridge: int = 0
+    never_only: bool = False
+
+    @property
+    def has_edge(self) -> bool:
+        """有边（任一来源收录，含通假形近）——等价 ``are_variants``，护栏类判法（宁多拦）用它。"""
+        return self.tier is not None
+
+    @property
+    def is_variant(self) -> bool:
+        """算同词异体：T1 或 T2；T3（通假、形近、简繁）不算。**归因（V01）与放行都认这条**。"""
+        return self.tier in ("T1", "T2")
+
+    @property
+    def is_pure(self) -> bool:
+        """纯异体且来源够（T1 且 ≥2 个异体来源）——只有 ``edge_pair`` 暂归一要这条更严的口径（放行比归因严，有意的）。"""
+        return self.tier == "T1" and self.n_bridge >= 2
 
 
 class VariantGraph:
@@ -197,6 +227,14 @@ class VariantGraph:
             return tw[0]
         return None
 
+    def variant_edge(self, a: str, b: str) -> VariantEdge:
+        """a、b 的 :class:`VariantEdge`（无边时 ``tier=None``）。"""
+        tags = self.sources_of(a, b)
+        if not tags:
+            return VariantEdge(None)
+        return VariantEdge(self.edge_tier(a, b), tags, len(set(tags) & BRIDGE_SOURCES),
+                           not (set(tags) - NEVER_SOURCES))
+
     def edge_tier(self, a: str, b: str) -> str | None:
         """a、b 这条边的分型**先验**：``"T1"`` 纯异体 / ``"T2"`` 互通·一对多 /
         ``"T3"`` 形近·通假·仅简繁 / ``None`` 无边。
@@ -280,3 +318,8 @@ def canonical_of(char: str,
 def edge_tier(a: str, b: str) -> str | None:
     """见 :meth:`VariantGraph.edge_tier`。"""
     return _graph().edge_tier(a, b)
+
+
+def variant_edge(a: str, b: str) -> VariantEdge:
+    """见 :meth:`VariantGraph.variant_edge`。"""
+    return _graph().variant_edge(a, b)

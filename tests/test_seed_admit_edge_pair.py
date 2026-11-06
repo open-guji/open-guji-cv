@@ -96,3 +96,15 @@ def test_human_and_admitted_untouched():
 def test_switch_off_param():
     assert SeedAdmitParams(db_path="x").edge_pair is True
     d = SeedAdmitParams(db_path="x").model_dump() if hasattr(SeedAdmitParams, "model_dump") else None
+
+
+def test_variant_edge_single_caliber():
+    """放行与归因共用的异体口径（A24 V01 深挖 11-06）：T3 有边但不算异体；is_pure 才是 edge_pair 要的严口径。"""
+    from open_guji_cv.variants import are_variants, variant_edge
+    e = variant_edge("鼔", "鼓")
+    assert e.tier == "T1" and e.is_variant and e.is_pure and e.has_edge
+    t3 = variant_edge("籍", "藉")                       # 只有通假来源
+    assert t3.has_edge and t3.never_only and not t3.is_variant and not t3.is_pure
+    assert variant_edge("甲", "乙").tier is None
+    for a, b in (("鼔", "鼓"), ("籍", "藉"), ("兩", "雨")):
+        assert variant_edge(a, b).has_edge == are_variants(a, b)
