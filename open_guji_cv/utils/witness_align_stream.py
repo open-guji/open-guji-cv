@@ -47,7 +47,7 @@ from pathlib import Path
 #: 8 与 `align_label` 的 8-gram 锚定同一个量级。实测块长分布见 CLI 打印的直方图。
 MIN_BLOCK = 8
 
-HAN_RE = re.compile(r"[一-鿿]")
+from .han_ranges import HAN_RE  # noqa: E402  （2026-11-06 起含扩展区，同 align_ref）
 FOOTNOTE_RE = re.compile(r"^[①②③④⑤⑥⑦⑧⑨⑩]")
 PAGE_MARK_RE = re.compile(r"^\d{4}$")
 

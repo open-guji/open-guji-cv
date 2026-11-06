@@ -609,7 +609,8 @@ class AlignRefParams(BaseModel):
 #: `……行者。真定在春秋時屬鮮虞國，爲晉所滅。` 中间夹着句读。
 #: 四庫總目那份语料标点密度 0.000（几乎没有标点），所以这条一直没暴露；
 #: 北行日錄校對本是 0.215，7/7 页全部锚定失败（"语料里一个 n-gram 都没命中"）。
-_NON_HAN_RE = re.compile(r"[^一-鿿]")
+#: 2026-11-06 起连扩展 A、B–J 一起留（`utils/han_ranges.py`；原先只留 [一-鿿]，扩展区字被删、对位丢段）。
+from ..utils.han_ranges import NON_HAN_RE as _NON_HAN_RE  # noqa: E402
 
 
 @lru_cache(maxsize=4)
@@ -661,7 +662,7 @@ def _page_pin_heads(name: str) -> dict[tuple[str, int], str]:
 def _head_index(corpus: str) -> tuple[dict[str, int], dict[str, int]]:
     """整理本逐列本的半叶头 → (行表下标, `_corpus_text` 里的字偏移)。
 
-    偏移按 `_corpus_text` 同一把尺子（折兼容汉字、只留 [一-鿿]）逐行累计，不借
+    偏移按 `_corpus_text` 同一把尺子（折兼容汉字、只留 `utils/han_ranges` 的汉字）逐行累计，不借
     `RefLine.han_start`（后者不折兼容汉字，遇到兼容汉字会和 `_corpus_text` 错开）。"""
     from ..utils.cjk_compat import fold_compat
     from .align_ref_coord import GRID_HEADER, ref_lines
@@ -731,7 +732,7 @@ def _dzg_null_pins(sig: tuple) -> frozenset:
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.7", unit="cell",   # 2.7：逐列本小注里的全角空格占一个字位（两条小注并成一段时中间空一格，「無卷數　江西|廵撫採進本」此前右行后半整体上移一位，配不上退回旧对位、a/b 配错；A22 11-05）；2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.8", unit="cell",   # 2.8：对位字流与坐标偏移保留扩展 A、B–J 汉字（原先只留 U+4E00–9FFF，㣲 𮅕 𮪍 被删、对位断段；A23 诊断、A24 11-06）；2.7：逐列本小注里的全角空格占一个字位（两条小注并成一段时中间空一格，「無卷數　江西|廵撫採進本」此前右行后半整体上移一位，配不上退回旧对位、a/b 配错；A22 11-05）；2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),

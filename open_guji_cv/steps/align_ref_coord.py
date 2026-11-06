@@ -83,7 +83,7 @@ from pathlib import Path
 
 #: 与 `align_ref._NON_HAN_RE` 同一口径：8-gram 索引/`_corpus_text` 只留这一段汉字，
 #: 偏移 → 行号的换算必须按同一把尺子数。
-_HAN_RE = re.compile(r"[一-鿿]")
+from ..utils.han_ranges import HAN_RE as _HAN_RE  # noqa: E402  （2026-11-06 起含扩展区）
 _NOTE_OPEN, _NOTE_CLOSE = "<", ">"
 
 COORD_MIN_PAGE_VOTES = 6       # 页级列→行投票的最低票数（字对重合总数）
@@ -118,7 +118,7 @@ class Unit:
 class RefLine:
     idx: int                 # 在非空行表里的序号
     units: list[Unit]
-    han_start: int           # 本行在 `_corpus_text`（只留 [一-鿿]）里的起始偏移
+    han_start: int           # 本行在 `_corpus_text`（只留 `utils/han_ranges` 的汉字）里的起始偏移
     text: str = ""           # 本行全部字（正文 + 夹注 a + 夹注 b，阅读顺序），算重合用
     leaf_start: bool = False # 逐列本（带 `#@` 半叶头）里半叶的第一列
     head: str = ""           # 逐列本半叶头 `#@` 之后的文字（`leaf_start` 行才有），页钉位按它找半叶
