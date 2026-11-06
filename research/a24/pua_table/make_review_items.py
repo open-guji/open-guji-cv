@@ -50,13 +50,23 @@ def main():
     from PIL import Image
     ap = argparse.ArgumentParser()
     ap.add_argument("--cand", required=True); ap.add_argument("--v2zip", required=True); ap.add_argument("--out", required=True)
-    ap.add_argument("--only", default="open", choices=["open", "all"]); ap.add_argument("--n", type=int, default=2)
+    ap.add_argument("--only", default="open", choices=["open", "all", "plan"]); ap.add_argument("--n", type=int, default=2)
     ap.add_argument("--no-wiki", action="store_true")
     a = ap.parse_args()
     out = Path(a.out); (out / "crops").mkdir(parents=True, exist_ok=True); (out / "wiki").mkdir(exist_ok=True)
     rows = [json.loads(l) for l in open(a.cand, encoding="utf-8")]
     if a.only == "open":
         rows = [r for r in rows if r["verdict"] == "open"]
+    elif a.only == "plan":
+        # 11-06 审核顺序：未定（候选不一致/无候选在前，其余按处数）→ 待复核的已定字 → 已判待收
+        g1 = [r for r in rows if r["verdict"] == "open" and (r["conflict"] or not r["cands"])]
+        g2 = sorted([r for r in rows if r["verdict"] == "open" and not (r["conflict"] or not r["cands"])], key=lambda r: -r["count"])
+        g3 = [r for r in rows if r["verdict"] == "char" and "复核" in r["note"]]
+        g4 = [r for r in rows if r["verdict"] == "pending"]
+        for g, k in ((g1, "1 未定·先看（候选不一致/无候选）"), (g2, "2 未定"), (g3, "3 复核已定字"), (g4, "4 已判待收")):
+            for r in g:
+                r["_kind"] = k
+        rows = g1 + g2 + g3 + g4
     Z = zipfile.ZipFile(a.v2zip)
     txt = {}
     def text_rows(ch):
@@ -70,7 +80,9 @@ def main():
         for c in r["cands"]:
             if c["char"] not in [x[0] for x in cands]:
                 cands.append([c["char"], "、".join(sorted({y["src"] for y in r["cands"] if y["char"] == c["char"]}))])
-        pre = cands[0][0] if cands else "？"
+        pre = (r["char"] if r["verdict"] == "char" and r["char"] else (cands[0][0] if cands and r["verdict"] == "open" else "？"))
+        if r["verdict"] == "char" and r["char"] and r["char"] not in [x[0] for x in cands]:
+            cands = [[r["char"], "现定"]] + cands
         shown = 0
         for k, (ch, p, idx) in enumerate(r["v2_locs"]):
             if shown >= a.n:
@@ -91,8 +103,9 @@ def main():
             it = {"id": f"{r['code']}#{ch}-{int(p)}-{idx}", "pre": pre, "img": str(cp), "ctx": ctx,
                   "cands": cands,
                   "note": f"{r['code']} 共{r['count']}处 · 维基SKQS_{r['sk_no']:04d}"
-                          + (f" · 维基描述：{r['wiki_desc']}" if r["wiki_desc"] else "") + ("；候选不一致，请看图" if r["conflict"] else ""),
-                  "kind": "码位候选不一致" if r["conflict"] else ("无候选" if not cands else "有候选")}
+                          + (f" · 维基描述：{r['wiki_desc']}" if r["wiki_desc"] else "") + ("；候选不一致，请看图" if r["conflict"] else "")
+                          + {"char": f" · 现定「{r['char']}」", "pending": " · 已判待收（点「页上字对」无意义，认不出点「认不出」保持待收，认得出就填字）", "open": ""}[r["verdict"]],
+                  "kind": r.get("_kind") or ("码位候选不一致" if r["conflict"] else ("无候选" if not cands else "有候选"))}
             wi = wk.get(r["wiki_img"])
             if wi:
                 it["ref_img"] = str(wi); it["ref_label"] = f"维基 SKQS_{r['sk_no']:04d}"
@@ -100,7 +113,7 @@ def main():
         if shown == 0:  # 没有本书切图的码：也出一格，只带维基图和上下文
             sm = r["samples"][0] if r["samples"] else ""
             it = {"id": f"{r['code']}#none", "pre": pre, "img": "", "ctx": sm, "cands": cands,
-                  "note": f"{r['code']} 共{r['count']}处 · 没有对上 v2 的切图 · 维基SKQS_{r['sk_no']:04d}", "kind": "无切图"}
+                  "note": f"{r['code']} 共{r['count']}处 · 没有对上 v2 的切图 · 维基SKQS_{r['sk_no']:04d}", "kind": r.get("_kind") or "无切图"}
             wi = wk.get(r["wiki_img"])
             if wi:
                 it["ref_img"] = str(wi); it["ref_label"] = f"维基 SKQS_{r['sk_no']:04d}"
