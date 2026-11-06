@@ -16,17 +16,16 @@
 不参与任何自动判断；库匹配按 cov 分档采信，0.99 是拐点；凑双信号要挑**误差
 独立**的两路——文本 × 形状可以，OCR × 形状不行（那 4 条错例正是两者同错）。
 
-## 这一步现在能走哪几条通道
+## 通道一览（2026-11-06 重写；旧版只写了 match_solo 两条，早已过时）
 
-`admission_decision` 最强的几条（常规 / match_ref / match_replace）都要
-**整理本对齐字**，那来自 `align_label` 的页面锚定，还没进 v2 产物（B2 之后
-才有）。所以现在只走**纯字形**那两条：
+主循环里有 match_ref／match_replace／context／iron 等；主循环之后是后处理各遍（升＝补放，降＝挪回待审），
+次序写在 `_run_page` 的「后处理遍的次序」注释里，**改次序＝改产物**。一格放不放，看三件事：
+①库匹配（`glyph_match`）给的 verdict／候选／guard；②整理本对位（`align_ref`，现役 chars 与坐标 coord 两路）；
+③疑问码 `doubts`（`near_form`、`护栏:*`、`iron_*`、`ctx_guard_*` 等，会拦一批通道，见 `_hard_blocked`）。
 
-- `match_solo`：无整理本参照 + 库内 cov ≥ 0.99；
-- `match_solo_ocr`：cov 0.95~0.99 + OCR 字符背书（语义同字）。
-
-dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 73%**，
-人审 27%。接上整理本之后自动率会更高（v1 上实测 61% → 77%）。
+各通道的条件、缺省参数、哪本书开了哪个，对形近格（待审原因 N01）已整理成表：
+guji-manager `doc/01-粗校/待审原因/near_form_guard/流程.md` 第二节；逐书生效值用 `guji book show --effective`。
+常规与 match_ref／match_replace 的设计依据见 `clustering/seeding.admission_decision`（v1 十条通道的原始实现，v2 沿用其裁决）。
 
 ## 进库不在这一步做
 
@@ -1615,6 +1614,10 @@ class SeedAdmitStep(Step):
                 cand_chars = {c for c, _v in r.candidates[:3]}
                 if r.char:
                     cand_chars.add(r.char)
+                # 注意口径：`near_form` ＝ 候选前三＋本格字里**任一**个属**手工形近表**（NEVER_MATCH_FAMILIES，20 对）。
+                # 它不要求那个字是真字、也不要求与整理本字成对，所以「家族字碰巧排进候选」也会记；
+                # 与匹配层 `guard=never_match`（三表并集）、待审原因 N01（参校字与候选成表内对）是三个不同口径，
+                # 见 guji-manager doc/01-粗校/待审原因/near_form_guard/流程.md 第一节。
                 doubts = (["near_form"] if cand_chars & NEAR_FORM_CHARS else [])
                 # 整理本这一路（2026-09-04 接上）。v1 标定过 match_ref 144/144、
                 # match_replace 70/70、match_margin 102/102，靠的就是「文本证据 ×
