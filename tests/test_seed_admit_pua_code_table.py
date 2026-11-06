@@ -1,0 +1,101 @@
+# -*- coding: utf-8 -*-
+"""seed_admit `pua_code_table`：按私用码表改放字（通道 `code_table`）、一码多字族豁免、人裁不动、每页统计。直接测 `_pua_code_pass`，数据自造。"""
+from __future__ import annotations
+
+import json
+
+from open_guji_cv.feedback.rulings import RulingStore
+from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit
+from open_guji_cv.steps.seed_admit import SeedAdmitParams, _pua_code_pass
+from open_guji_cv.utils.pua_v2_codes import load_table, norm_code
+
+B = "tbook:1"
+TABLE = ({"F100A": "眩", "F1016": "炫", "F1001": "埀", "F1091": "○"}, {"F1001": frozenset("乖垂埀")})
+
+
+def _st(tmp_path, **cell_code):
+    st = RulingStore(tmp_path)
+    for slot, (code, ref) in cell_code.items():
+        st.put_cell_code(f"{B}:1:{slot}", code, ref=ref, anch=4, page_match=0.97)
+    return st
+
+
+def _run(cells, amap, st):
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=c.get("admit", True), char=c.get("char"), doubts=list(c.get("doubts", [])),
+                     channel=c.get("channel", "pua_rule"), provenance=c.get("provenance", "match"), evidence={})
+            for s, c in cells.items()]
+    amap = {f"{B}:1:{s}": (c, None) for s, c in amap.items()}
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=recs)], amap, st, TABLE)
+    return out, {r.slot: r for r in recs}
+
+
+def test_wrong_char_fixed_not_demoted(tmp_path):
+    (fix, mism, dem), r = _run({1: {"char": "炫"}}, {1: "炫"}, _st(tmp_path, **{"1": ("F100A", "炫")}))
+    assert (fix, mism, dem) == (1, 0, 0)
+    assert (r[1].char, r[1].admit, r[1].channel, r[1].provenance) == ("眩", True, "code_table", "match")
+    assert r[1].evidence["code_table"] == {"code": "F100A", "char": "眩", "was": "炫", "was_channel": "pua_rule"}
+
+
+def test_same_char_and_no_code_untouched(tmp_path):
+    (fix, mism, dem), r = _run({1: {"char": "眩"}, 2: {"char": "炫"}}, {1: "眩", 2: "炫"}, _st(tmp_path, **{"1": ("F100A", "眩")}))
+    assert (fix, mism, dem) == (0, 0, 0) and r[2].char == "炫" and r[1].channel == "pua_rule"
+
+
+def test_ref_changed_not_trusted(tmp_path):
+    """整理本对位字变了（重切后格号可能挪了）：不认这条格→码记录。"""
+    assert _run({1: {"char": "炫"}}, {1: "弦"}, _st(tmp_path, **{"1": ("F100A", "炫")}))[0] == (0, 0, 0)
+
+
+def test_human_cell_untouched_but_counted(tmp_path):
+    (fix, mism, dem), r = _run({1: {"char": "炫", "provenance": "human", "channel": "human"}}, {1: "炫"}, _st(tmp_path, **{"1": ("F100A", "炫")}))
+    assert (fix, mism, dem) == (0, 1, 0) and r[1].char == "炫" and r[1].channel == "human"
+
+
+def test_pending_cell_untouched(tmp_path):
+    assert _run({1: {"char": "炫", "admit": False, "channel": None}}, {1: "炫"}, _st(tmp_path, **{"1": ("F100A", "炫")}))[0] == (0, 0, 0)
+
+
+def test_family_in_family_ok_outside_demoted(tmp_path):
+    """F1001 一码多字：放行乖（族内）不动、不降审；放行成族外字 → 降审，不按码改字。"""
+    st = _st(tmp_path, **{"1": ("F1001", "乖"), "2": ("F1001", "乖")})
+    (fix, mism, dem), r = _run({1: {"char": "乖"}, 2: {"char": "乘"}}, {1: "乖", 2: "乖"}, st)
+    assert (fix, mism, dem) == (0, 0, 1)
+    assert r[1].admit and r[1].char == "乖" and r[1].channel == "pua_rule"
+    assert not r[2].admit and "src_code_conflict" in r[2].doubts and r[2].char == "乘" and r[2].evidence["demoted_from"]["channel"] == "pua_rule"
+
+
+def test_non_han_table_char_skipped(tmp_path):
+    assert _run({1: {"char": "甲"}}, {1: "甲"}, _st(tmp_path, **{"1": ("F1091", "甲")}))[0] == (0, 0, 0)
+
+
+def test_no_cell_codes_is_noop(tmp_path):
+    assert _run({1: {"char": "炫"}}, {1: "炫"}, RulingStore(tmp_path))[0] == (0, 0, 0)
+
+
+def test_cell_codes_roundtrip_persist(tmp_path):
+    _st(tmp_path, **{"1": ("F100A", "炫")})
+    cc = RulingStore(tmp_path).cell_codes()
+    assert cc[f"{B}:1:1"]["code"] == "F100A" and cc[f"{B}:1:1"]["ref"] == "炫"
+    # 窗口键裁定读口不受影响（src-2 条目没有窗口）
+    assert RulingStore(tmp_path).get("O", "vis-o1", "甲", "乙") is None
+
+
+def test_params_dump_and_page_stats_clean():
+    d = SeedAdmitParams(db_path="x").model_dump()
+    assert "pua_code_table" not in d
+    assert SeedAdmitParams(db_path="x", pua_code_table=True).model_dump()["pua_code_table"] is True
+    assert "n_code_fix" not in PageAdmit(page=1).model_dump() and "n_code_mismatch" not in PageAdmit(page=1).model_dump()
+    assert PageAdmit(page=1, n_code_fix=2, n_code_mismatch=1).model_dump()["n_code_fix"] == 2
+
+
+def test_load_table_repo_and_data_override(tmp_path):
+    codes, fams = load_table(None)
+    assert codes["F1001"] == "埀" and fams["F1001"] == frozenset("乖垂埀") and codes["F100A"] == "眩"
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "siku-qiefen-v2:U+F100A", "verdict": "char", "char": "炫"},
+            {"code": "siku-qiefen-v2:U+F1099", "verdict": "pending", "char": None},
+            {"code": "daizhige:U+EA96", "verdict": "char", "char": "乙"}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, _ = load_table(tmp_path)
+    assert codes["F100A"] == "炫" and "F1099" not in codes and "EA96" not in codes
+    assert norm_code("siku-qiefen-v2:U+f100a") == "F100A"

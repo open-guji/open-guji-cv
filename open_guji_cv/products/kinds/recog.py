@@ -304,12 +304,17 @@ class PageAdmit(BaseModel):
     n_excluded: int = 0        # 命中排除名单（图块切坏/非字）：不进库也不出审查卡
     columns: list[ColumnAdmit] = Field(default_factory=list)
     alt_cols: list[int] = Field(default_factory=list)   # alt_select="admit"：准入后定下改用备选切法的列；空不落盘
+    n_code_fix: int = 0        # pua_code_table：按私用码表改了字的格数；0 不落盘
+    n_code_mismatch: int = 0   # pua_code_table：这一遍之后放行字仍≠码表字的格数（人裁与码表冲突等）；0 不落盘
 
     @model_serializer(mode="wrap")
     def _drop_empty_alt(self, handler):
         d = handler(self)
         if isinstance(d, dict) and not d.get("alt_cols"):
             d.pop("alt_cols", None)
+        for k in ("n_code_fix", "n_code_mismatch"):
+            if isinstance(d, dict) and not d.get(k):
+                d.pop(k, None)
         return d
 
     def column(self, col: int) -> ColumnAdmit | None:
