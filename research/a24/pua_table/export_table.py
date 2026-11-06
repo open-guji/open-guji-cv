@@ -9,7 +9,7 @@ import json, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-KEEP = ["code", "verdict", "char", "orig", "variant", "nearest", "cands", "same_as", "by", "at", "note", "count", "sk_no"]
+KEEP = ["code", "verdict", "char", "chars", "orig", "variant", "nearest", "cands", "same_as", "by", "at", "note", "count", "sk_no"]
 
 
 def main(cand, out):

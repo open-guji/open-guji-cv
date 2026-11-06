@@ -2,7 +2,7 @@
 
 两处来源，后者盖前者（数据目录由调用方传 `config_dir=ws_config_dir()`）：
 1. 仓内 `config/pua/siku_qiefen_v2_codes.json`：`codes`＝码→字（只收人裁一致的码），`families`＝一码多字的码→族内字（如 F1001 乖垂埀）；
-2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）里 `code` 以 `siku-qiefen-v2:U+` 起头、`verdict=char` 的行（可带 `family` 字符串）。
+2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）：`siku-qiefen-v2:U+` 起头的行、以及 daizhige 行 `same_as` 里的 v2 码；`verdict=char` → 码→字，`verdict=multi`（一码多字，字在 `chars`）→ 族。
 
 码写法统一成 `F1001`（U+ 之后的十六进制，大写）。
 """
@@ -55,9 +55,9 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
                     if fam:
                         fams[k] = fam
                 continue
-            if code.startswith(_PREFIX) and r.get("verdict") == "char" and r.get("char"):
-                k = keys[0]
-                codes[k] = r["char"]
-                if fam:
-                    fams[k] = fam
+            if r.get("verdict") == "char" and r.get("char"):     # 殆知阁行（审核页）的 char 也落到它 same_as 的 v2 码
+                for k in keys:
+                    codes[k] = r["char"]
+                    if fam:
+                        fams[k] = fam
     return codes, fams
