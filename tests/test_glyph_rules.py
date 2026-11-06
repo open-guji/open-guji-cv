@@ -3,8 +3,8 @@
 from types import SimpleNamespace
 
 from open_guji_cv.steps.glyph_match import GlyphMatchParams
-from open_guji_cv.steps.glyph_rules import (RULES, STEP_RULES, Decision, StepState, decide,
-                                            decide_variant, rules_markdown)
+from open_guji_cv.steps.glyph_rules import (RULE_LABELS, RULES, STEP_RULES, Decision, Rule, Stage, StepState,
+                                            Via, decide, decide_variant, rules_markdown)
 
 
 def _params(**kw):
@@ -23,7 +23,7 @@ def test_ids_unique_and_orders_increasing():
     orders = [r.order for r in RULES]
     assert orders == sorted(orders) and len(set(orders)) == len(orders)
     assert all(r.apply is not None for r in STEP_RULES)
-    assert all(r.apply is None for r in RULES if r.stage == "matcher")
+    assert all(r.apply is None for r in RULES if r.stage is Stage.MATCHER)
 
 
 def test_registered_params_exist():
@@ -35,7 +35,7 @@ def test_registered_params_exist():
 def test_markdown_lists_every_rule():
     md = rules_markdown()
     for r in RULES:
-        assert f"`{r.id}`" in md
+        assert f"`{r.id.value}`" in md and r.id.label in md
 
 
 def test_decide_consensus_then_near_shape():
@@ -70,3 +70,16 @@ def test_same_passthrough():
     st = StepState(params=_params(), confirmed={"甲": 9})
     d = decide(_m(verdict="same", char="甲", matched_id="v2:1:2:3:4", cov=0.998), st)
     assert d == Decision("same", "甲", "v2:1:2:3:4", 0.998, 3.0)
+
+
+def test_every_rule_enum_registered_once_with_short_label():
+    assert sorted(r.id for r in RULES) == sorted(Rule)
+    assert set(RULE_LABELS) == set(Rule)
+    for rule, label in RULE_LABELS.items():
+        assert label and len(label.split()) <= 2, (rule, label)
+        assert label.isascii()
+
+
+def test_via_prefixes_are_frozen_strings():
+    # 落盘字符串，改了下游按通道归因就断
+    assert [v.value for v in Via] == ["borrowed", "consensus", "near_shape"]

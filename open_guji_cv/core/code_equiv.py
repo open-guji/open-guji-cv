@@ -1037,7 +1037,7 @@ ENTRIES: tuple[Equiv, ...] = (
     Equiv(module='open_guji_cv.steps.glyph_match',
           new='87cae8c868d07adc21efad96f764289ca54be50968e6b9b3f5ae69dbebbd4681',
           old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
-          evidence='glyph_match 判决规则抽成规则表 steps.glyph_rules（RULES＋decide，含 #1174 缺省关的三组参数）：测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；另把殿本 1500 格、史記 800 格（含真借库）真匹配结果喂给改前内联逻辑与 decide()，18 组参数×2 种借库×近形开关共 24.8 万次判决 0 差（共识、借库、近形三通道都有命中）；scripts/code_equiv.py check，2026-11-06'),
+          evidence='glyph_match 判决规则抽成规则表 steps.glyph_rules（Rule 枚举＋RULES＋decide，含 #1174 缺省关的三组参数）：测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；另把殿本 1500 格、史記 800 格（含真借库）真匹配结果喂给改前内联逻辑与 decide()，18 组参数×2 种借库×近形开关共 24.8 万次判决 0 差（共识、借库、近形三通道都有命中）；scripts/code_equiv.py check，2026-11-06'),
 )
 
 
@@ -1102,7 +1102,7 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     # 不是拆分、是 glyph_match 新加了一个 code_dep（判决规则表 glyph_rules）：两块都还是这一版时合回 glyph_match 一项
     "open_guji_cv.steps.glyph_match": ("fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32", (
         ("open_guji_cv.steps.glyph_match", "fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32"),
-        ("open_guji_cv.steps.glyph_rules", "e1321c554ab6ce61c5dce78b61a927c6f219bfe80a28fb671580d5010c8c3324"))),
+        ("open_guji_cv.steps.glyph_rules", "968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9"))),
 }
 
 
