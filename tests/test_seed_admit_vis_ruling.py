@@ -176,3 +176,10 @@ def test_non_han_ruling_char_not_admitted(tmp_path):
     p = st.put("O", "src-1", "甲", "乙", char="\U00032BC1", conf="high", why="x", model="src-text-text_layer", cell=f"{B}:1:2")
     p.update({"admit_ok": True, "subclass": "PUA", "ref": "", "route": "text_layer"})
     assert _run(CELLS, {1: "甲", 2: "", 3: "乙"}, st)[0] == 1
+
+
+def test_l04_subclass_admitted(tmp_path):
+    """L04（A23 11-06，库认不出的高把握看图裁定）收进 vis-o1 无组入口。"""
+    n, r = _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="L04"))
+    assert n == 1 and r[2].char == "說" and r[2].channel == "vis_ruling" and r[2].evidence["vis_ruling"]["subclass"] == "L04"
+    assert _run(CELLS, AMAP, _store(tmp_path, "甲", "乙", subclass="XXX"))[0] == 0
