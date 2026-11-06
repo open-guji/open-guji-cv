@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `variants.variant_edge()`／`VariantEdge`（PATCH，A24；V01 深挖 11-06，算进第 7 轮）：放行与归因共用的异体口径（tier、来源、异体来源数、只有通假形近），`edge_pairs.is_auto_pair` 改用它，行为不变（全图 94,392 条边新旧逐条一致）；护栏类仍用 `are_variants`（宁多拦），`edge_pair` 要 ≥2 个异体来源是有意比归因严。manager `reasons.py` 之后改调它。
+
 - 补登记漏列的 `code_deps`：`align_ref` 加 `utils.han_ranges`（2.8 起 import）、`seed_admit` 加 `utils.pua_v2_codes`（1.37 起 import），以后改这两个模块对应步会判过期。代码早已在跑，补登记不改行为；`core/code_equiv.SPLITS` 登记合回原来一项，**两步 `code_hash` 不变、不过期**（全部 23 步改前改后实算逐位相同）。缘起 manager CI `test_code_deps_coverage` 在 dev 上红（A23 报）。
 - `seed_admit` 1.40：规则 A（rare_ref）加少刻例支 `rare_ref_sparse`（书级，**缺省关**，关时 `rare_ref_sparse*` 不进参数 dump）。参校字（现役对位，缺了用坐标对位字）在本书库里刻例 ≤ `rare_ref_sparse_max_n`（2）、5-b 首位是参校字（参校字是扩展区码位时也认它的异体，`rare_ref_sparse_variant`）、领先同来源组外最好候选 ≥ `rare_ref_sparse_lead`（0.02）时放行，通道 `rare_ref`，evidence `rare_ref.via=sparse／sparse_coord`、`lead`、`n_lib`。硬护栏、字组、group_flow／shadow_veto 疑问、库明确认成别的字一律不放。补的是原 rare_ref 两支漏掉的格（替换段要求、整页没锚、cov<0.90）。缘起 A23 L02 深挖（ai-team `domain/CV/质检/待审原因深挖/L02-刻例太少不一致.md`）：殿本线上单 L02 286 格里 274 格图就是参校字；★main 回放 cv 自己的 5-b 能放约 46 格（领先 0.02）。sheldon 11-06 同意，开不开按书定，随下一轮统一重跑。seed_admit 版本变，各册 seed_admit 过期。
 - `align_ref` 2.8：对位字流（`_corpus_text`）、坐标对位行偏移、金标清洗 `align_label.is_han`、`witness-align-stream` 统一按 `utils/han_ranges.py` 认汉字，**收扩展 A、B–J**（原先对位字流只留 U+4E00–9FFF，`is_han` 只到扩展 B）。整理本里的 㣲 𮅕 𮪍 这类扩展区字以前被删掉，整理本少一个字，difflib 在那里断段（A23 诊断 ai-team `domain/CV/质检/待审原因深挖/Z01-对位缺位诊断.md`：殿本 Z01 现役对位缺位 394 格里 109 格因此而起；殿本语料扩展区字约 1.26 万个）。97 册抽 4068 页现役对位 +3653 格，既有标签变 4 格，看图都不是退步（见 PR）。所有书 align_ref 及下游过期，**不进 v0.6.16，排第 7 轮随换图源全套重跑**（A31 11-06 定）。
