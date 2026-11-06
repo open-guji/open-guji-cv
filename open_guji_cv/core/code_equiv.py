@@ -236,6 +236,11 @@ _COLTEXT = ("自动配页加参照类型 page_map_ref（缺省 column_slots，�
             "row_segment 在殿本 vol60 22 页（page_map: strict，--pages 1,6,…,126 每 6 页取 1）与全唐文 006 7 页"
             "（离线 layout_prior，--pages 20,40,61,100,120,150,182）上与 origin/dev cbb1917 产物逐字节相同；scripts/code_equiv.py check，2026-11-06")
 
+_SEAL_TOP = ("卷端标题列去印点后抹列顶印边残块＋起格跳过整格在首字之上的印泥格（row_segment._clear_seal_top_residue，"
+             "只在 roster_seal_despeckle 开着、header_cols 认得的大印列生效，殿本不走）：row_segment 在殿本 vol12 152 页（--pages all）"
+             "上与 origin/dev 6a2aca8 产物逐字节相同；史記 02/04/07/10 册全册重跑只 02 p2 c4–c6、04 p2 c4、10 p2 c6 变（有意改动），"
+             "scripts/code_equiv.py check，2026-11-06")
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -968,6 +973,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="dd00ea8f3e0ef148d1a0422c8ebdf63ae7995491737509826ef86905f57cfde1",
           old="fad2da0e7322c7d0da354c2d1b246346060609fc616f53a33d4f46dfe5c4b13b",
           evidence="S9 跨 CPU 确定开关 column_warp.det_warp、row_segment cut_judge=unet_f64（缺省关）：column_warp 与 row_segment 在全唐文 010 4 页（--pages 20,23,27,34）上与 origin/dev 产物逐字节相同；2026-11-05"),
+    Equiv(module="open_guji_cv.seg.cut_select",
+          new="d49c22c5d713e5da83827c42dc0cf2c74fe482761b47c96816a133bc42e151f7",
+          old="dd00ea8f3e0ef148d1a0422c8ebdf63ae7995491737509826ef86905f57cfde1",
+          evidence="切点判官结果落盘复用（UNetJudge.owner 按窗口内容＋阈值＋判官指纹存 cache/_judge，GUJI_JUDGE_CACHE=0 关）：史記 01 8 页（--pages 18,20,24,28,29,69,73,138，cut_judge=unet_f64）row_segment 旧代码、新代码冷缓存、新代码热缓存三次产物逐字节相同，热缓存 108→7 秒；2026-11-06"),
     Equiv(module="open_guji_cv.steps.cell_shrink",
           new="2ce1199fb028fcdab7b83f31e7d78421a03047f5635c2e8d5680d02d21abdb7f",
           old="14de10e4ff7c3c0e663a71052e68e416213f6f107838b293160416e47bc34e43",
@@ -1020,6 +1029,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="596abeebaefa4d07c048e8a3bd31e0f1dea46b48f5ad80a6be91248d396cba19",
           old="9be05ea88089263da8421b3e71dcce436f26bf8be989a68c6cf6a4c2356774f2",
           evidence=_COLTEXT),
+    Equiv(module="open_guji_cv.steps.row_segment",
+          new="7f810225612f4ea526dab7d258174282bc4270a4454c72a94c011371381b71f6",
+          old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
+          evidence=_SEAL_TOP),
 )
 
 

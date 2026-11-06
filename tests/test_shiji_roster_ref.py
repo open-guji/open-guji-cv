@@ -140,3 +140,19 @@ def test_header_cols():
             8: "集解裴駰曰凡是徐氏義稱徐姓名以别之餘者悉是駰註解并集衆家義"}
     assert SJ.header_cols(refs) == {1, 2, 3, 4, 5, 6, 7}
     assert SJ.header_cols({1: "總纂官<臣|>紀昀", 2: ""}) == set()
+
+
+def test_plain_column_one_off_fits_blocks_not_equal_split():
+    """单段列几何块只比整理本多一字：只并劈开的那一对，其余字的框不动（不整列等分；题署列 07:2:5、10:2:6 那类）。"""
+    g = np.full((H, 180), 255, np.uint8)
+    _stack(g, 150, 1, 0)
+    _stack(g, 420, 2, 60)                                  # 一字被几何切成上下两块（这里用两块相粘的字代）
+    _stack(g, 760, 1, 0)
+    ink, _w = SJ.prepare(g, (10.0, 170.0))
+    rc = SJ.segment_roster_column(ink, EM)
+    before = [(it.y0, it.y1) for it in rc.items]
+    assert len(before) == 4
+    assert SJ.refit_column(rc, ink, "甲乙丙")
+    after = [(it.y0, it.y1) for it in rc.items]
+    assert len(after) == 3 and after[1] == (before[1][0], before[2][1])
+    assert after[0] == before[0] and after[-1] == before[-1]   # 首字、末字原样
