@@ -190,13 +190,40 @@ def _recall_at_p(conf: list[tuple[float, bool]], total: int, p_min: float) -> di
     return best
 
 
+# 同形异码（库里同一个形标成两个码位，图上看是同一个字）。来源：A23 11-05 L2 证人标定看图确认的殿本例
+# （ai-team 字形领域/L2图一致证人标定 第四节）。徃/往、閒/間、捜/搜 只在基准高置信错例里见过，没看图确认，
+# 先不收，等 A24 确认再加。
+SAME_SHAPE = {"删": "刪", "槪": "概", "歩": "步", "黙": "默", "徳": "德", "黄": "黃", "苖": "苗"}
+_FOLD_VARIANTS = False   # --fold-variants：评测时同形异码与语义异体表（VariantMap）也折叠
+
+
+def _fold_all(c: str) -> str:
+    c = fold_char(c)
+    if _FOLD_VARIANTS:
+        from open_guji_cv.clustering.variants import VariantMap
+        c = SAME_SHAPE.get(c, c)
+        c = _variant_map().semantic(c)
+    return c
+
+
+_VM = None
+
+
+def _variant_map():
+    global _VM
+    if _VM is None:
+        from open_guji_cv.clustering.variants import VariantMap
+        _VM = VariantMap.load()
+    return _VM
+
+
 def fold_row(r: dict) -> dict:
     best: dict[str, float] = {}
     for c, v in r["cand"]:
-        k = fold_char(c)
+        k = _fold_all(c)
         best[k] = max(best.get(k, 0.0), v)
-    return {**r, "gold": fold_char(r["gold"]),
-            "char": fold_char(r["char"]) if r["char"] else None,
+    return {**r, "gold": _fold_all(r["gold"]),
+            "char": _fold_all(r["char"]) if r["char"] else None,
             "cand": sorted(best.items(), key=lambda kv: -kv[1])}
 
 
@@ -352,10 +379,14 @@ def main() -> int:
     ap.add_argument("--perturb-n", type=int, default=300, help="每书扰动子样本数（answerable，抽样）")
     ap.add_argument("--perturb-only", default=None, help="逗号分隔，只跑这几种扰动")
     ap.add_argument("--no-fold", action="store_true")
+    ap.add_argument("--fold-variants", action="store_true",
+                    help="评测再折叠同形异码（SAME_SHAPE）与语义异体表；头条另给「严格口径」不变")
     ap.add_argument("--dump-tiers", default=None, help="分档标注写到这个目录：tiers-<分片>.jsonl")
     ap.add_argument("--rows", default=None, help="逐查询结果写到 <前缀>.<分片>.jsonl")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
+    global _FOLD_VARIANTS
+    _FOLD_VARIANTS = a.fold_variants
     samples = Path(a.dataset) / "samples"
     kinds = a.perturb_only.split(",") if a.perturb_only else list(PERTURB)
     report: dict = {"protocol": {"fold": not a.no_fold, "perturb": kinds if a.perturb else [],
