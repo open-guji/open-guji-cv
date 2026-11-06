@@ -2358,6 +2358,8 @@ def _rare_ref_sparse_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dic
         for rec in col.chars or []:
             if rec.admit or rec.provenance == "human" or rec.channel == "human":
                 continue
+            if p.lane_keep_ref_review and set(rec.doubts or []) & _LANE_REF_REVIEW:
+                continue                  # 同规则 A：护栏拿整理本字拦下的格不按整理本字放回
             m = mmap.get(rec.id)
             cands = rmap.get(rec.id)
             if m is None or not cands:

@@ -68,3 +68,16 @@ def test_pass_coord_unanchored_low_cov(tmp_path, monkeypatch):
     monkeypatch.setattr(sa, "_keben_counts", lambda _p: {"奴": 5})
     many = _run(tmp_path / "c", monkeypatch, params={"rare_ref_sparse": True, "rare_ref_sparse_lead": 0.005, "patch_missing": "skip"}, **kw)
     assert not many.admit
+
+
+def test_pass_respects_keep_ref_review(monkeypatch):
+    """护栏拿整理本字拦下的格（ctx_guard_ref 等）不放回，同规则 A 的 lane_keep_ref_review。"""
+    from types import SimpleNamespace as NS
+    rec = NS(id="x:1:1:1", admit=False, provenance=None, channel=None, doubts=["ctx_guard_ref"], evidence={}, char="叙")
+    m = NS(verdict="unsure", char=None, candidates=[("努", .88)], guard=None, cov=.88)
+    rare = NS(columns=[NS(chars=[NS(id=rec.id, candidates=[NS(char="奴", score=.9, font="emb"), NS(char="姒", score=.85, font="emb")])])])
+    out = [NS(chars=[rec])]
+    p = sa.SeedAdmitParams(rare_ref_sparse=True)
+    assert sa._rare_ref_sparse_pass(p, out, {rec.id: m}, {}, rare, {rec.id: "奴"}, {}) == 0
+    rec.doubts = []
+    assert sa._rare_ref_sparse_pass(p, out, {rec.id: m}, {}, rare, {rec.id: "奴"}, {}) == 1 and rec.char == "奴"
