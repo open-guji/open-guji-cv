@@ -165,3 +165,52 @@ def test_fold_occluded_needs_switch_and_ref_lib_both_in_group(tmp_path):
     assert not rr[0].admit and rr[0].evidence["fold_pending"] == {"group": "ry"}                # 不取整理本字，留审
     assert "fold_occluded" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
     assert SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_occluded=True).model_dump()["fold_occluded"] is True
+
+
+def test_fold_params_framework(tmp_path):
+    """书级参数化（A24 H01 深挖 11-06）：fold_aspect_pairs 定哪组按宽高判、哪个字窄哪个字宽；fold_jiazhu＋fold_aspect_jiazhu 处理夹注半格
+    （半格不取整理本字）；fold_aspect_ctx_veto 让上下文首选否决宽高结论。缺省全关、不进 dump。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    d0 = SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    for k in ("fold_aspect_pairs", "fold_jiazhu", "fold_aspect_jiazhu", "fold_aspect_ctx_veto"):
+        assert k not in d0
+        assert k not in SeedAdmitParams(db_path="x").model_dump()
+    WH = {}
+
+    def rec(s, wh, gid="ry"):
+        r = AdmitRec(id=f"{B}:1:{s}", slot=1, admit=False, char="乙", doubts=[], channel=None, provenance="",
+                     evidence={"group": {"id": gid}})
+        WH[r.id] = (wh * 100, 100)
+        return r
+    st = RulingStore(tmp_path / "e")
+    # ① fold_aspect_pairs：给空表＝哪个组都不按宽高判
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0), fold_aspect_pairs={})
+    rs = [rec("1", 1.2)]
+    assert sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=st, wh=WH) == 0
+    assert p.model_dump()["fold_aspect_pairs"] == {}
+    # 组员不全的配对不生效
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0), fold_aspect_pairs={"ry": ("日", "外")})
+    rs = [rec("1", 1.2)]
+    assert sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=st, wh=WH) == 0
+    # ② 夹注半格：关时不碰；开了按半格阈值判，整理本字不取
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_aspect=(0.85, 1.0))
+    rs = [rec("1a", 1.2)]
+    assert sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {rs[0].id: ("日", None)}, None, store=st, wh=WH) == 0
+    pj = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_aspect=(0.85, 1.0), fold_jiazhu=True, fold_aspect_jiazhu=(0.8, 1.1))
+    rs = [rec("1a", 1.2), rec("2b", 1.05)]
+    amap = {r.id: ("日", None) for r in rs}
+    n = sa._fold_pass(pj, [ColumnAdmit(col=1, chars=rs)], amap, None, store=st, wh=WH)
+    assert n == 1 and rs[0].char == "曰" and rs[0].evidence["fold"]["via"] == "aspect"
+    assert not rs[1].admit and rs[1].evidence["fold_pending"] == {"group": "ry"}     # 半格居中：不取整理本字「日」，留审
+    assert pj.model_dump()["fold_jiazhu"] is True and pj.model_dump()["fold_aspect_jiazhu"] == (0.8, 1.1)
+    # ③ 上下文否决：宽高判曰，上下文首选给「日」≥ 阈值 → 作废，留审并记 ctx_veto
+    pv = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0.85, 1.0), fold_aspect_ctx_veto=0.5)
+    rs = [rec("1", 1.2), rec("2", 1.2)]
+    dmap = {rs[0].id: NS(ranked=[("日", 0.8), ("曰", 0.1)]), rs[1].id: NS(ranked=[("曰", 0.9), ("日", 0.05)])}
+    n = sa._fold_pass(pv, [ColumnAdmit(col=1, chars=rs)], {}, None, store=st, wh=WH, dmap=dmap)
+    assert n == 1 and rs[1].char == "曰"
+    assert not rs[0].admit and rs[0].evidence["fold_pending"]["ctx_veto"] == {"aspect": 1.2, "char": "曰", "ctx": "日", "prob": 0.8}
+    assert pv.model_dump()["fold_aspect_ctx_veto"] == 0.5
