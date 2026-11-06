@@ -184,3 +184,20 @@ def test_cut_inner_frame_keep_cross_keeps_stroke_through_line():
     new = cut_inner_frame(img, mapper, {"bottom": line}, keep_cross=True)
     assert (new[60:96, 18:22] == 0).all()
     assert (new[89:, :10] == 255).all() and (new[89:, 30:] == 255).all()
+
+
+def test_cut_inner_frame_keep_cross_skips_flat_stroke():
+    """inner_frame_cross_max_w：字底一横平躺在线上（连成的压线段宽过列宽 0.12）不留，照旧抹线；窄竖画照留。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps.cell_shrink import cut_inner_frame
+    img = np.full((100, 40), 255, np.uint8)
+    img[90:94, :] = 0                     # 下框细线：90–93 行
+    img[84:90, 8:32] = 0                  # 字底一横贴在线上（24 列宽）
+    img[60:94, 35:37] = 0                 # 窄竖画压线
+    line = SimpleNamespace(text_edge=lambda x: 90.0)
+    mapper = SimpleNamespace(to_page_tl=lambda x, y: (x, y))
+    wide = cut_inner_frame(img, mapper, {"bottom": line}, keep_cross=True, cross_max_w=0.0)
+    assert (wide[90:94, 8:32] == 0).all()                     # 旧行为：一截线跟着留
+    new = cut_inner_frame(img, mapper, {"bottom": line}, keep_cross=True, cross_max_w=0.12)
+    assert (new[89:, :34] == 255).all()
+    assert (new[60:94, 35:37] == 0).all()

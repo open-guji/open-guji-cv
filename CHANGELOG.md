@@ -22,6 +22,7 @@
 - `cell_shrink.inner_frame_local`（书级，缺省关，关时逐字节不变、登记 code_equiv）：整页拟出的内框细线逐小段贴到真线上，内线厚上限随格高放大（`seg.frame_line.localize_inner_line`、`inner_thick_limit`）。全唐文 S4：外框在页边拐弯、内线 5–12 行厚时整页拟合跟不上，列首列尾字块挂线（006:29:2:22、006:121:1:22、010:23:1:22、010:166:9:22、012:58:1:1，与 `inner_frame_profile` 同开全修）；006/010 各 60 页改 69 张字块，全是去掉线头。
 - `column_warp.det_warp`、`row_segment.cut_judge: unet_f64`（书级，缺省关，关时逐字节不变、登记 code_equiv）：列射影与切点判官改 numpy／torch 双精度，跨 CPU 指令集逐位一致（S9：执行机与本机 012:99:1 切点不一致，根因是 OpenCV 5 warpPerspective 浮点 SIMD 与 fp32 判官）。全唐文 006/010 各 20 页四种 CPU 设置下产物逐字节相同；与不开比格框变 3 列、看图都切在字缝；整段慢约 35%。
 - 史記夹注逐步 v1.3（books/shiji_wyg/jiazhu_step，SJ）：修 v1.2 在格数对的列上误挪的回归（01:60:8、02:37:1、02:56:4/5）。格数对时只按逐行空格判是否重切，不挪段首；新切法须格数更好且匀度不差过 0.05。只影响史記 row_segment 及下游。
+- `inner_frame_keep_cross` 收窄（A22，SJ 第 13 轮）：压线段宽过列宽 0.12（字底一横）不留，还要往上连 10 行墨才算笔画（线的毛边不算）；新参数 `cell_shrink.inner_frame_cross_max_w`（缺省 0.12，只在 keep_cross 开时进 dump，0＝旧判据）。修列尾字块往下伸到内框线（史記 03:215:8:21「曰」读成「里」）。keep_cross 关的书逐字节不变（code_equiv 已登记）。
 
 ## [0.6.10] - 2026-11-05
 
