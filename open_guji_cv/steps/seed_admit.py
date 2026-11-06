@@ -381,6 +381,11 @@ class SeedAdmitParams(BaseModel):
     """日曰组（`ry`）的字形宽高判据（sheldon 11-05：长宽差别大时直接按字形判，居中归组按文意）：字块外框宽/高 ≥ hi 判曰、≤ lo 判日、中间不判。
     写 `(0.85, 1.0)`＝宽高比 ≥1.0 曰、≤0.85 日。只对 `fold_groups` 里的 ry 格、且无人裁无遮挡无半格的待审格；量的是切分后字块框的宽高（`char_index` 的 `width`／`height`），不是字形主体。
     `None`＝关（缺省，不进 dump）。证据 `fold = {group, via: aspect, aspect: 宽高比}`。"""
+    fold_occluded: bool = False
+    """`fold_groups` 对遮挡格也折叠（缺省关，不进 dump；A32 D01 深挖：殿本 28 格己已巳在遮挡格上没折叠）：遮挡格（`occluded` 疑问／证据）平时不碰，
+    开了之后只在**整理本字与库首位（`glyph_match` candidates[0]）都在同一折叠组里**时才归组、再按 `fold_ref_char` 的口径落字——
+    `fold_ref_char: false` 时整理本字只用来判归组，字仍由文意裁定／字形判据定，没有就留审（记 `fold_pending`）；
+    `fold_ref_char: true`（旧口径）才会放整理本字，己已巳不要这样开。排除、glyph_timeout 格照旧不碰。"""
     fold_ruling_first: bool = False
     """`fold_groups` 的护栏一（缺省关；全唐文 QTW 要求）：裁定库里有这格本组的文意裁定（高／中把握、字在组内，键＝本组 L3 提示词版本＋前后文窗口）时，
     先用裁定字，不放整理本字；没有裁定才放整理本字。"""
@@ -943,10 +948,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.p_ref_admit:
             d.pop("p_ref_admit", None)
         if isinstance(d, dict) and not self.fold_groups:
-            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect"):
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect", "fold_occluded"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.fold_groups:
-            for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref"):
+            for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_occluded"):
                 if not getattr(self, k):
                     d.pop(k, None)
             if self.fold_ref_char:
@@ -3652,11 +3657,19 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
             if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
                 continue
             ds = {d for d in (r.doubts or []) if isinstance(d, str)}
-            if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
+            occ = "occluded" in ds or bool((r.evidence or {}).get("occluded"))
+            if (_VIS_RULING_HARD - {"occluded"}) & ds or "excluded" in ds or (occ and not p.fold_occluded):
                 continue
             gid = ((r.evidence or {}).get("group") or {}).get("id")
             ref = (amap.get(r.id) or (None,))[0]
             via_coord = False
+            if occ:
+                # 遮挡格：整理本字与库首位须同在一个折叠组里才归组（整理本字只判归组，不定字，见 `fold_occluded`）
+                top = (list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [(None,)]))[0][0]
+                gid = next((g for g in p.fold_groups if g in FLOW_GROUPS and ref in FLOW_GROUPS[g].members
+                            and top in FLOW_GROUPS[g].members), None)
+                if gid is None:
+                    continue
             if p.fold_coord_ref:
                 if not ref and coord and coord.get(r.id) not in (None, "", "〓"):
                     ref, via_coord = coord[r.id], True
