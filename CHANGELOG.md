@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.44 `follow_ref_variants_gap`／`follow_ref_variants_cov`（书级，缺省 None 行为不变、不进 dump；A24 V01 深挖 11-06）：按参校本取异体（`follow_ref_variants`）的待审格单独放宽领先下限，只对关系层同词异体（`variant_edge(...).is_variant`）、库首位 cov ≥0.93 生效。史記 V01 夹注半格 10 格领先 0.002–0.004，看图字都对；开不开、设多少由书项目定（建议史記 0.002）。
+
 - seed_admit 1.43 `edge_pair_group_seam`（缺省开，A24 V01 深挖 11-06，第 7 轮）：edge_pair 补字组缝——纯异体强边但有一字是字组成员、这一格字组没接的待审格也按 edge_pair 判（形近组领先 ≥0.03，`replace_form: review` 不越过）。三书 ★main 包约 9 格，看图字都对。
 - `variants.variant_edge()`／`VariantEdge`（PATCH，A24；V01 深挖 11-06，算进第 7 轮）：放行与归因共用的异体口径（tier、来源、异体来源数、只有通假形近），`edge_pairs.is_auto_pair` 改用它，行为不变（全图 94,392 条边新旧逐条一致）；护栏类仍用 `are_variants`（宁多拦），`edge_pair` 要 ≥2 个异体来源是有意比归因严。manager `reasons.py` 之后改调它。
 - 注释（A24 N01 流程梳理，sheldon 11-06）：`seed_admit` 模块头的通道说明重写（旧版只写 match_solo 两条）、`near_form` 疑问在 seed_admit／seeding／confusable 三处写清口径（手工表 20 对；与匹配层护栏 `_PARTNER` 三表并集、待审原因 N01 是三个口径），指向 guji-manager `near_form_guard/流程.md`。只改注释和 docstring，**不改逻辑**；`code_hash` 只认代码，各步指纹不变。
