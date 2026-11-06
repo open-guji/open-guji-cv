@@ -1061,3 +1061,28 @@ def test_abstain_ref_ok_lift_variant_follows_ref(monkeypatch):
     r = Rec("x")
     group_flow_pass([r], {"x": ("曰", "equal")}, lambda cid: [("日", 0.99), ("曰", 0.97)], lambda r: False, ry)
     assert not r.admit                                                         # 不同义形近组不适用
+
+
+def test_entry_coord_outside_skip():
+    """`coord_outside_skip`（A24 Z01 深挖 2026-11-06）：现役对位缺、坐标对位字是组外字 → 不进组（原因落回 L01／P02）；
+    坐标对位是组员、陪衬字、〓、空格位，或现役对位在时照旧。缺省关（FlowConfig），seed_admit 书级缺省开。"""
+    r = Rec("a")
+    near = [("目", 0.999), ("曰", 0.95)]
+    assert entry(r, near, None, FlowConfig(groups=("rm",)), coord_ref="自") == ("rm", "lift")     # 缺省关：旧行为
+    cfg = FlowConfig(groups=("rm", "mz"), coord_outside_skip=True)
+    assert entry(r, near, None, cfg, coord_ref="自") == ("mz", "lift")    # rm 装不下 自，mz 装得下
+    assert entry(r, near, None, FlowConfig(groups=("rm",), coord_outside_skip=True), coord_ref="自") is None
+    assert entry(r, near, None, cfg, coord_ref="目") == ("rm", "lift")    # 坐标对位是组员
+    assert entry(r, near, None, cfg, coord_ref="〓") == ("rm", "lift")    # 〓 不算组外字
+    assert entry(r, near, None, cfg, coord_ref="") == ("rm", "lift")      # 空格位不算
+    assert entry(r, near, "目", cfg, coord_ref="自") == ("rm", "lift")    # 现役对位在：只看现役对位
+    tri = [("日", 0.98), ("曰", 0.975), ("目", 0.972)]
+    jc = FlowConfig(groups=("ry", "rm"), joint=True, coord_outside_skip=True)
+    assert entry(r, tri, None, jc, coord_ref="百") is None                 # joint 同样挡
+    assert entry(r, tri, None, jc, coord_ref="白") == ("ry", "joint")    # 白 是 ry 的陪衬字：不挡
+    assert entry(r, tri, None, jc, coord_ref="曰") == ("ry", "joint")
+    sc = FlowConfig(groups=("chuo", "xuan"), coord_outside_skip=True)
+    assert entry(r, [("選", 0.96), ("遺", 0.95), ("遵", 0.95)], None, sc, coord_ref="𨕖") == ("xuan", "lift")   # ref_enter 不受影响
+    assert entry(r, [("道", 0.976), ("遺", 0.959)], None, sc, coord_ref="遒") is None   # 殿本 vol79 9:1:3 遒>道
+    dc = FlowConfig(groups=("dian",), coord_outside_skip=True)
+    assert entry(r, [("點", 0.97)], None, dc, coord_ref="𭶑") == ("dian", "lift")   # 暂归一的整理本写法算组内（vol20 197:9:21）

@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- `seed_admit` 1.38：字组入口新开关 `group_flow_coord_outside_skip`（缺省开）。现役对位缺这一格、坐标对位字既不是组员也不是陪衬字（〓、空格位、暂归一写法除外）时不拉进组：组只会在组员里挑字，这类格进组必弃权（Z01）。A24 Z01 深挖（11-06）：殿本第5轮 Z01 527 格里 394 格现役对位缺位；按 ★main 包回放 Z01 −106（多为門辶囗族少见字，原因落回 L01／P02），已放行格不受影响（70 册包里命中 7 格，都是 𭶑，已按暂归一写法排除）。只改原因、不放行。seed_admit 指纹变，随第 6 轮重跑。
 - `seed_admit` 1.37 `pua_code_table`（缺省关，殿本开；A24，A31 X01 派单）：按私用码表改放字——格→码对应离线算好存裁定库 `src-2`（按格号取，带整理本对位字核对，`RulingStore.cell_codes`／`put_cell_code`），非人裁放行字≠码表字 → 改放码表字（通道 `code_table`），一码多字（F1001／F1055）标族豁免、族外降审，人裁不动；每页统计 `PageAdmit.n_code_fix`／`n_code_mismatch`（0 不落盘）。新增 `utils/pua_v2_codes`、`config/pua/siku_qiefen_v2_codes.json`、`research/a24/pua_src/build_cell_codes.py`。开关关着时产物逐位不变（参数不进 dump）。
 
 ## [0.6.15] - 2026-11-06
