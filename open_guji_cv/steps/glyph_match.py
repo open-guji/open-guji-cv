@@ -9,8 +9,8 @@
 
 | 档 | 条件 | 下游怎么用 |
 |---|---|---|
-| same | cov ≥ 0.996 且 wmax ≤ 12 | 直接继承库里的字，记 (库条目 id, cov, wmax) 为证据 |
-| same（共识升档） | unsure 档里 top 字 cov ≥ 0.99、比次优**异字**高 ≥ 0.03、且该字已有 ≥ 3 例人裁 | 同上，`via="consensus:<n>"`，无 matched_id |
+| same | cov ≥ 0.996 且 wmax ≤ 12（`same_cov`／`same_wmax` 可调） | 直接继承库里的字，记 (库条目 id, cov, wmax) 为证据 |
+| same（共识升档） | unsure 档里 top 字 cov ≥ 0.99、比次优**异字**高 ≥ 0.03、且该字已有 ≥ 3 例人裁（`consensus_count` 可改口径，`consensus_family_guard` 可加形近护栏） | 同上，`via="consensus:<n>"`，无 matched_id |
 | unsure | 0.85 ≤ cov < 0.996 | 命中的字进候选集（带 cov 当先验），与 OCR 合并交上下文裁决 |
 | diff | 对全部 kNN 候选都 < 0.85 | 库里多半没有这个字，纯 OCR + 上下文 |
 
@@ -85,6 +85,7 @@ import hashlib
 import logging
 import time
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 from pydantic import BaseModel, model_serializer
@@ -233,6 +234,24 @@ class GlyphMatchParams(BaseModel):
     consensus_cov: float = 0.99          # 共识升档三条件，见模块头；min_confirmed = 0 关掉
     consensus_margin: float = 0.03
     consensus_min_confirmed: int = 3
+    consensus_count: Literal["human", "human+auto", "all"] = "human"
+    """共识升档「该字已有 N 例」按哪些刻例数（2026-11-06，Sheldon 定全唐文「≥3 例，auto 也算」）：
+    - `human`（缺省）：只数 `admissions.provenance='human'`，与此前逐字节相同，不进参数 dump；
+    - `human+auto`：再加 `provenance='auto'` 且准入证据 `confirmed='claude_vision'`（机器放行、逐张看图
+      确认过）的刻例，口径同借库的 `human+auto`（`clustering.glyph_db.BORROW_SCOPES`）；
+    - `all`：库里全部准入（含没确认过的机器入库与未知来源），只做对照，bxgb 实测会大量误升（见
+      `human_confirmed_counts`）。
+    书级 yaml `params: {glyph_match: {consensus_count: human+auto}}` 可开。"""
+    consensus_family_guard: Literal["", "rival", "top"] = ""
+    """共识升档的形近护栏（2026-11-06）。缺省 `""` 关（不进参数 dump，逐字节不变）。
+    - `rival`：首位字与候选里任一**异字**同在一个字组（`groups.registry.GROUPS`）或互为形近对手
+      （`clustering.match._PARTNER`）时不升（千/干、己/已/巳…）；
+    - `top`：更严，首位字本身是字组成员或在形近护栏表里有对手（同 `font_tier.family` 的字表）就不升，
+      不看候选里有没有对手——留一法里 殿本 入→人、千→十、一→二 这类错，候选里常常只剩首位一个字。"""
+    same_cov: float | None = None
+    """same 档单对门槛 cov（缺省 None＝`verify.ELASTIC_COV_HIGH` 0.996，不进参数 dump）。"""
+    same_wmax: float | None = None
+    """same 档单对门槛 wmax 上限（缺省 None＝`verify.MISS_WMAX` 12，不进参数 dump）。"""
     shape_pair_rerank: bool = False
     """按形区分四对（强/強、却/卻、回/囘、并/幷，字形库 11 §〇用户裁定）局部
     部件决胜，见 `clustering.match.GlyphMatcher.local_shape_rerank`。缺省关，
@@ -296,6 +315,13 @@ class GlyphMatchParams(BaseModel):
                 d.pop("batch_knn", None)
             if d.get("font_tier") in (None, False):
                 d.pop("font_tier", None)
+            if d.get("consensus_count") == "human":
+                d.pop("consensus_count", None)
+            if not d.get("consensus_family_guard"):
+                d.pop("consensus_family_guard", None)
+            for k in ("same_cov", "same_wmax"):
+                if d.get(k) is None:
+                    d.pop(k, None)
         return d
 
     def model_post_init(self, _ctx) -> None:
@@ -315,12 +341,14 @@ class GlyphMatchParams(BaseModel):
 
 
 def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
-                   min_confirmed: int) -> tuple[str, int] | None:
+                   min_confirmed: int, blocked=None) -> tuple[str, int] | None:
     """unsure 档能不能按「共识」升成 same：返回 (字, 该字人裁例数) 或 None。
 
     三条件缺一不可（标定见模块头）：top 候选 cov ≥ cov_min；比次优**异字**高 ≥ margin_min
     （次优同字不算——同一字的多个刻例挨着很正常）；top 字已有 ≥ min_confirmed 例人裁。
     没有异字候选时，差距按 0.85（unsure 档下界）算。
+    `blocked(首位字, 异字) -> bool`（可选，`consensus_family_guard`）：候选里任一异字与首位字被它判为形近
+    （同字组或互为形近对手）就不升；先以 `blocked(首位字, None)` 问一次首位字本身挡不挡（`top` 档用）。
     """
     if min_confirmed <= 0 or not candidates:
         return None
@@ -333,18 +361,60 @@ def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float
     n = int(n_confirmed_of(top) or 0)
     if n < min_confirmed:
         return None
+    if blocked is not None and (blocked(top, None)
+                                or any(c != top and blocked(top, c) for c, _ in candidates[1:])):
+        return None
     return top, n
 
 
-def human_confirmed_counts(db_path: str) -> dict[str, int]:
+CONSENSUS_COUNTS = ("human", "human+auto", "all")
+
+
+def family_blocked(a: str, b: str | None) -> bool:
+    """`consensus_family_guard: rival` 用：两字同在一个字组，或在形近护栏表里互为对手。"""
+    if b is None:
+        return False
+    from ..clustering.match import _PARTNER
+    if b in _PARTNER.get(a, ()) or a in _PARTNER.get(b, ()):
+        return True
+    from ..groups.registry import GROUPS
+    return any(a in g.members and b in g.members for g in GROUPS.values())
+
+
+def family_top_blocked(a: str, b: str | None) -> bool:
+    """`consensus_family_guard: top`：首位字本身在字组或形近护栏表里就挡（`b` 不看）。"""
+    return a in _family_chars()
+
+
+_GUARDS = {"rival": family_blocked, "top": family_top_blocked}
+
+
+def human_confirmed_counts(db_path: str, scope: str = "human") -> dict[str, int]:
     """每个字的**人裁**例数：`admissions.provenance = 'human'` 的条目按 `instances.label` 计数。
+
+    `scope`（`GlyphMatchParams.consensus_count`）：`human`（缺省，下面这段 SQL 原样）；`human+auto` 再加
+    `provenance='auto'` 且证据 `confirmed='claude_vision'` 的；`all` 数全部准入。
 
     不能用 `glyphs.n_confirmed`：那一列机器准入也累加——bxgb 库里 v1 的 3748 条全是
     `align` 通道（整理本对齐）进的、字体模板版每字都是 1。按它数，bxgb 现役产物上会升档
     2349 格（真值只覆盖 29 格）；只数人裁是 126 格、真值 20/20。共识的前提是「人看过
     这个字的刻例」，机器自证不算。"""
     import sqlite3
+    if scope not in CONSENSUS_COUNTS:
+        raise ValueError(f"consensus_count 只认 {CONSENSUS_COUNTS}，收到 {scope!r}")
     out: dict[str, int] = {}
+    if scope != "human":
+        from ..clustering.glyph_db import _vision_confirmed
+        try:
+            with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+                for ch, prov, ev in c.execute(
+                        "SELECT i.label, a.provenance, a.evidence FROM admissions a "
+                        "JOIN instances i ON i.instance_id = a.instance_id WHERE i.label IS NOT NULL"):
+                    if scope == "all" or prov == "human" or (prov == "auto" and _vision_confirmed(ev)):
+                        out[str(ch)] = out.get(str(ch), 0) + 1
+        except Exception:
+            return {}
+        return out
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
             for ch, n in c.execute(
@@ -391,6 +461,8 @@ class GlyphMatchStep(Step):
             p.db_path, p.db_fingerprint, edition=p.edition, knn_k=p.knn_k,
             norm_stroke=p.norm_stroke, local_shape_rerank=p.shape_pair_rerank,
             near_shape=NearShapeConfig.from_any(p.near_shape))
+        if p.same_cov is not None or p.same_wmax is not None:
+            matcher = _with_same_gate(matcher, p.same_cov, p.same_wmax)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -408,9 +480,14 @@ class GlyphMatchStep(Step):
         matcher = self._matcher(p)
         ns_cfg = NearShapeConfig.from_any(p.near_shape)
         # 共识升档要的人裁例数：一次 run 里几十页共用，按库指纹缓存在 step 实例上
-        key = (p.db_path, p.db_fingerprint)
+        key = (p.db_path, p.db_fingerprint, p.consensus_count)
         if getattr(self, "_confirmed_key", None) != key:
-            self._confirmed = human_confirmed_counts(p.db_path) if p.consensus_min_confirmed > 0 else {}
+            if p.consensus_min_confirmed <= 0:
+                self._confirmed = {}
+            elif p.consensus_count == "human":
+                self._confirmed = human_confirmed_counts(p.db_path)
+            else:
+                self._confirmed = human_confirmed_counts(p.db_path, p.consensus_count)
             self._borrowed = borrowed_ids(p.db_path) if p.borrow_fingerprint else frozenset()
             self._confirmed_key = key
         confirmed = self._confirmed
@@ -500,7 +577,8 @@ class GlyphMatchStep(Step):
                     # 共识升档（见模块头）。匹配器判了护栏（never_match / conflict）的不动。
                     hit = consensus_same(list(m.candidates), confirmed.get,
                                          p.consensus_cov, p.consensus_margin,
-                                         p.consensus_min_confirmed)
+                                         p.consensus_min_confirmed,
+                                         blocked=_GUARDS.get(p.consensus_family_guard))
                     if hit:
                         verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
                 ns = m.near_shape
@@ -605,6 +683,27 @@ class _PageBatch:
 
 FONT_PREFIX = "font:"
 _SUBSETS: dict[int, tuple] = {}
+
+
+_GATED: dict = {}
+
+
+def _with_same_gate(matcher, cov: float | None, wmax: float | None):
+    """`same_cov`／`same_wmax`：缓存匹配器的浅拷贝，只换 same 档单对门槛（库表共用，不复制）。
+    不改缓存里那份——控制台单点查询共用它。按 (原匹配器, 门槛) 缓存，只留最近一份。"""
+    import copy
+    k = (id(matcher), cov, wmax)
+    hit = _GATED.get(k)
+    if hit is not None and hit[0] is matcher:
+        return hit[1]
+    g = copy.copy(matcher)
+    if cov is not None:
+        g.cov_high = float(cov)
+    if wmax is not None:
+        g.miss_wmax = float(wmax)
+    _GATED.clear()
+    _GATED[k] = (matcher, g)
+    return g
 
 
 def _keben_subset(matcher):
