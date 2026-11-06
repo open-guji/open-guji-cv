@@ -99,6 +99,10 @@ class FlowConfig:
     vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
     provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
+    dissent_keep: frozenset = frozenset()              # 书级：这几组复核时「整理本＝放行字、只有弱图像票反对」不降审（`_dissent_keep`；seed_admit `group_flow_dissent_keep`，A24 Z02 深挖 2026-11-06）
+    dissent_margin: float = 1.0                        # `dissent_keep` 里 ids 反对票算弱票的 margin 上限（seed_admit `group_flow_dissent_margin`）
+    ref_pair: frozenset = frozenset()                  # 书级：这几组补放／联合判卡住时「整理本字＝本组解法给的字、反对的只有图像路」取整理本字（`_ref_pair_pick`；seed_admit `group_flow_ref_pair`）
+    ref_pair_margin: float = 1.5                       # `ref_pair` 里图像路反对票的 margin 上限（seed_admit `group_flow_ref_pair_margin`）
 
 
 @dataclass
@@ -524,6 +528,65 @@ def _ref_lowmargin(g: str, ch, why: str, trail: list, ref: str, canon: Callable[
     return ch, why, trail
 
 
+#: 只看图像的解法名（`ref_pair`、`dissent_keep` 里算「图像路」；文意 `ctx`、码位 `codepoint`、整理本类都不在内）。
+IMG_SOLVERS = frozenset({"ids", "rr_img", "yr_bars", "bars", "ss_bars", "ry_shape", "zy_strokes"})
+
+
+def _sname(t: dict) -> str:
+    return t["solver"].split(":")[-1]
+
+
+def _ref_pair_pick(g: str, trail: list, ref: str | None, canon: Callable[[str], str], img_margin: float) -> str | None:
+    """整理本＋本组解法两路互证（`FlowConfig.ref_pair`，A24 Z02 深挖 2026-11-06）：补放卡在「字形与文意冲突」（`conflict`）
+    或「共字组搭档没裁定」（`joint`）时，若整理本对位字（现役对位，不用坐标对位）是组员 X，且 ①本组至少一路解法给了 X；
+    ②所有给了别字的解法（含共字组搭档，名字带「组:」前缀）都是图像路（`IMG_SOLVERS`）、margin < `img_margin`——
+    文意、码位、搭档的文意给了别字就不取；③没有文意支持 X 时，反对的图像路须比支持 X 的 ids 弱（margin 更小）。
+    取支持它的解法给的字形。看图核对见 ai-team 待审原因深挖/Z02-判法打架.md（殿本 112 格目视：整理本×文意一致的 13 格全对）。"""
+    if not ref or ref == GAP or not _member(g, ref, canon):
+        return None
+    x = canon(ref)
+    sup = [t for t in trail if ":" not in t["solver"] and t.get("char") and canon(t["char"]) == x]
+    if not sup:
+        return None
+    ctx_sup = any(_sname(t) == "ctx" for t in sup)
+    sup_m = max((_margin(t) or 0.0 for t in sup if _sname(t) == "ids"), default=0.0)
+    for t in trail:
+        c = t.get("char")
+        if not c or canon(c) == x:
+            continue
+        if _sname(t) not in IMG_SOLVERS:
+            return None
+        m = _margin(t)
+        if m is not None and m >= img_margin:
+            return None
+        if not ctx_sup and (m is None or m >= sup_m):
+            return None
+    return next((t["char"] for t in sup if _sname(t) == "ctx"), sup[0]["char"])   # 取支持它的解法给的字形（与整理本字只差码位归一时不改写法）
+
+
+def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon: Callable[[str], str],
+                  weak_margin: float) -> bool:
+    """复核弱票不降审（`FlowConfig.dissent_keep`，A24 Z02 深挖 2026-11-06）：已放行字＝整理本字（现役对位，不用坐标对位），
+    ①至少一路解法给了放行字；②给了别字的解法全是图像路、且是弱票（`ids` 等记了 margin 的 < `weak_margin`；`yr_bars`、`bars`
+    这类量笔画的不记 margin 也算弱票——数一二的横在切残的格上必错）。有文意、码位给了别字就照旧降审。
+    殿本目视 36 格（遺還、圓圖、面而、傳傅、諭論、甲申、間問、曾會、一二）放行字全对。"""
+    if not char or not ref or ref == GAP or canon(ref) != canon(char):
+        return False
+    x = canon(char)
+    if not any(t.get("char") and canon(t["char"]) == x for t in trail):
+        return False
+    for t in trail:
+        c = t.get("char")
+        if not c or canon(c) == x:
+            continue
+        if _sname(t) not in IMG_SOLVERS:
+            return False
+        m = _margin(t)
+        if m is not None and m >= weak_margin:
+            return False
+    return True
+
+
 def _vis_try(g: str, r, trail: list, cr: str | None, cfg: FlowConfig, canon, patch_fn, left, right):
     """字块图像＋文意 L4（`groups.vis_llm`）：一格 → (字｜None, trail 项)。高置信、是（本组＋共字组）组员，
     且有别的证人（整理本字／坐标对位字、文意 L3 或 L1、字形 ids）同字才给字。`None` 项不留痕。"""
@@ -642,6 +705,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 ch, why, trail = _ref_lowmargin(g, ch, why, trail, wit, cfg.canon or canon)
         if why == "conflict" and (GROUPS[g].flow.ctx_over or GROUPS[g].flow.ctx_over_panel):
             ch, why, trail = _ctx_over(g, ch, why, trail)
+        if ch is None and why in ("conflict", "joint") and mode in ("lift", "joint") and g in cfg.ref_pair and not _rf(g, cfg):
+            xp = _ref_pair_pick(g, trail, ref, cfg.canon or canon, cfg.ref_pair_margin)
+            if xp is not None:
+                # 整理本字＝本组解法给的字、反对的只有图像路：取整理本字（留痕 `ref_pair`，A24 Z02）
+                ch, why, trail = xp, "agree", trail + [{"solver": "ref_pair", "char": xp, "why": "agree:ref_pair", "witness": ref}]
         plans.append((r, g, mode, ch, why, trail, ref))
     res = FlowResult(entered=len(plans))
     norm = cfg.canon or canon
@@ -780,6 +848,11 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 廣→賔、還→遺 等看图全是整理本对，ids 模板库对写本形不准）
                 code, other = None, False
                 trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "shape_dissent_ref_agree"}]
+            if (code == "group_flow_disagree" and g in cfg.dissent_keep and not _rf(g, cfg)
+                    and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin)):
+                # 整理本＝放行字、只有弱图像票反对：不降（A24 Z02 深挖 2026-11-06）
+                code, other = None, False
+                trail = trail + [{"solver": "dissent_keep", "char": r.char, "why": "weak_dissent_ref_agree"}]
             if (f.review_ref_agree and not _rf(g, cfg) and not code and ref and _member(g, ref, norm) and not _same(g, ref, r.char, norm)
                     and not (ch is not None and _same(g, ch, ref, norm))):
                 other, code = False, "group_flow_ref_dissent"   # 整理本说是组里另一形、方法没跟上：降审（隸𨽾）

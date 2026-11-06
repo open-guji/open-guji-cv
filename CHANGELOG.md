@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.45 字组复核／补放两个书级旋钮（**缺省全关**，关时不进参数 dump、逻辑与改前相同；A24 Z02 判法打架深挖 11-06，框架见 `doc/字组/判法打架.md`）：`group_flow_dissent_keep`（＋`group_flow_dissent_margin`）——复核时已放行字＝整理本字、只有弱图像票（ids margin<1.0、yr_bars）反对不降审；`group_flow_ref_pair`（＋`group_flow_ref_pair_margin`）——补放／联合判卡在字形×文意冲突或共字组搭档没裁定时，整理本字＝本组解法给的字、反对只有图像路则取它。同批收窄 7 条 L1 规则（全册 39.5 万个字组格审计，与整理本冲突 1187→1119，好命中只少 7 个）：`zh-曾經`（前接 附理誤以體統融意 不算）、`yh-遺文`（前接 往旋返召放赦送賜贖 不算）、`yh-還朝`（前接 無補拾所不 不算、往往◎不算）、`yt-圓`（去 形）、`yt-圖`（后接 篇卽即地、前接崔 不算）、`rm-日`（去 每）、`js-申-l1`（后接 月聲子帳午 不算）；`config/corpus-registry.json` 重写。规则文件哈希变了，用到这几组的册 seed_admit 过期一次（第 7 轮重跑时生效）。
+
 - seed_admit 1.44 `follow_ref_variants_gap`／`follow_ref_variants_cov`（书级，缺省 None 行为不变、不进 dump；A24 V01 深挖 11-06）：按参校本取异体（`follow_ref_variants`）的待审格单独放宽领先下限，只对关系层同词异体（`variant_edge(...).is_variant`）、库首位 cov ≥0.93 生效。史記 V01 夹注半格 10 格领先 0.002–0.004，看图字都对；开不开、设多少由书项目定（建议史記 0.002）。
 
 - seed_admit 1.43 `edge_pair_group_seam`（缺省开，A24 V01 深挖 11-06，第 7 轮）：edge_pair 补字组缝——纯异体强边但有一字是字组成员、这一格字组没接的待审格也按 edge_pair 判（形近组领先 ≥0.03，`replace_form: review` 不越过）。三书 ★main 包约 9 格，看图字都对。
