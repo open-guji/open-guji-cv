@@ -2728,7 +2728,7 @@ _REF_LIB_COORD_SKIP = frozenset("日曰目己已巳入人八一二")
 #: `ref_lib_coord` 认的疑问（白名单，别的一律不碰）：库不确定／上下文不足、整理本护栏、字组只弃权或只有分歧、人裁绑丢（另判）。
 _REF_LIB_COORD_DOUBTS = ("库 unsure", "库 same 但准入被拦", "上下文 margin 不足", "near_form", "ctx_guard_ref",
                          "context_variant_form", "group_flow_abstain", "group_flow_joint", "group_flow_ref_dissent",
-                         "group_flow_coord_dissent", "human_unbound", "lane_coord_fallback")
+                         "group_flow_coord_dissent", "human_unbound", "lane_coord_fallback", "context_page_end")
 
 
 #: `ref_topk_follow`：整理本字在库前 5 名候选里、与首位 cov 差不超过这个数才按整理本放。

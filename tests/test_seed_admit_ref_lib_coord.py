@@ -73,3 +73,10 @@ def test_non_han_ref_and_few_stroke_guards():
     assert dec(**blind, few_stroke=frozenset("一二三"))                             # 不涉及的字不受影响
     assert "lane_coord_few_stroke" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(lane_coord_few_stroke=("一", "二")).model_dump()["lane_coord_few_stroke"] == ("一", "二")
+
+
+def test_context_page_end_doubt_allowed():
+    """L04（A23）：页尾格带 `context_page_end` 疑问，库首位＝整理本字时也可按整理本放（史記 3 格，殿本 0）。"""
+    assert dec(doubts=["context_page_end"])
+    assert dec(doubts=["库 unsure(cov=0.959)", "context_page_end"])
+    assert not dec(doubts=["context_page_end", "别的疑问"])
