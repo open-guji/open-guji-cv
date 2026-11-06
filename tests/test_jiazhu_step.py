@@ -143,3 +143,21 @@ def test_raised_is_note_rejects_main_char():
     assert J._raised_is_note(ink, 0, 100, 50, 100.0)
     ink[10:80, 15:85] = True                  # 横贯缝中的大字
     assert not J._raised_is_note(ink, 0, 100, 50, 100.0)
+
+
+def test_better_accepts_equal_bad_much_more_even():
+    """v1.4：毛病格一样多（都 0）、格高明显更匀的新切法要换（第 14 轮 02:104:7「云密」两字并一格）。"""
+    import numpy as np
+    from types import SimpleNamespace as C
+    ink = np.zeros((200, 20), dtype=bool)
+    for y0 in (5, 55, 105):
+        ink[y0:y0 + 35, 12:18] = True          # 右行小字，各一段墨
+    ink[155:170, 12:18] = True                 # 末字上下两截（「二」），中间白行
+    ink[180:192, 12:18] = True
+    specs = [(1, 4, 0)]
+    mk = lambda ys: [C(kind="jiazhu_a", slot=1 + i, x0=10, x1=20, y0=a, y1=b) for i, (a, b) in enumerate(ys)]
+    old = mk([(0, 100), (100, 150), (150, 175), (175, 200)])   # 第一格吞两字、下面挤着切
+    new = mk([(0, 50), (50, 100), (100, 150), (150, 200)])
+    assert J._seg_score(ink, 0, old, specs)[0] == J._seg_score(ink, 0, new, specs)[0]
+    assert J._better(ink, 0, old, new, specs)
+    assert not J._better(ink, 0, new, old, specs)
