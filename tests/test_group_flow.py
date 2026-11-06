@@ -1086,3 +1086,23 @@ def test_entry_coord_outside_skip():
     assert entry(r, [("道", 0.976), ("遺", 0.959)], None, sc, coord_ref="遒") is None   # 殿本 vol79 9:1:3 遒>道
     dc = FlowConfig(groups=("dian",), coord_outside_skip=True)
     assert entry(r, [("點", 0.97)], None, dc, coord_ref="𭶑") == ("dian", "lift")   # 暂归一的整理本写法算组内（vol20 197:9:21）
+
+
+def test_book_level_ref_free_groups(monkeypatch):
+    """书级 `ref_free_groups`（sheldon 2026-11-06：日曰同己已巳）：这组走 decide 时拿不到整理本字；补放／复核的整理本兜底与证人全部失效；缺省不变。"""
+    from open_guji_cv.groups import flow
+    seen = []
+    real = flow.decide
+
+    def spy(g, r, cands, ref, *a, **k):
+        seen.append(ref)
+        return real(g, r, cands, ref, *a, **k)
+    monkeypatch.setattr(flow, "decide", spy)
+    cands = lambda cid: [("日", 0.99), ("曰", 0.985)]
+    for cfg, want in ((FlowConfig(groups=("ry",)), "曰"), (FlowConfig(groups=("ry",), ref_free_groups=frozenset({"ry"})), None)):
+        seen.clear()
+        group_flow_pass([Rec("x", "日", False)], {"x": ("曰", "equal")}, cands, lambda r: False, cfg)
+        assert seen and all(s == want for s in seen), (cfg.ref_free_groups, seen)
+    assert flow._rf("jys", FlowConfig(groups=("jys",))) and not flow._rf("ry", FlowConfig(groups=("ry",)))
+    assert "group_flow_ref_free" not in SeedAdmitParams().model_dump()
+    assert SeedAdmitParams(group_flow=("ry",), group_flow_ref_free=["ry"]).model_dump()["group_flow_ref_free"] == ["ry"]

@@ -269,6 +269,10 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
     字形宽高比路判 曰、坐标对位也是 曰，01–10 约 100 格因此送审）。空＝不放宽（不进参数 dump）。"""
+    group_flow_ref_free: list[str] = Field(default_factory=list)
+    """书级「完全不看整理本」的字组（sheldon 2026-11-06：日曰同己已巳，殿本数据：整理本约 7% 错、文意约 90% 读得定）：这几组按 `ref_free` 走——
+    入口不看整理本、判法拿不到它、补放与复核都不拿它当证人／兜底（`ref_enter`、`lift_ref_agree`、`tolerate_ref_agree`、`review_ref_agree`、
+    `lift_shape_ref`、`abstain_ref_ok`、`lift_ref_guard` 全部失效）。写法 `[ry]`。空＝照注册表（缺省，不进 dump）。"""
     group_flow_abstain_ref_ok: list[str] = Field(default_factory=list)
     """书级：这几组复核已放行格时，解法全弃权（`group_flow_abstain`）、没有任何解法给出别的字、已放行字＝整理本字
     （现役对位缺格时用坐标对位字）→ 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：己已巳文意 L2 首选同字但 low_p、
@@ -1121,6 +1125,8 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
             d.pop("group_flow_abstain_ref_ok", None)
+        if isinstance(d, dict) and not self.group_flow_ref_free:
+            d.pop("group_flow_ref_free", None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.group_flow_provisional_to:
@@ -4245,6 +4251,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=p._rt_lift_shape_ref(),
+                     ref_free_groups=frozenset(p.group_flow_ref_free),
                      lift_ref_veto=frozenset(p.group_flow_lift_ref_veto),
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
