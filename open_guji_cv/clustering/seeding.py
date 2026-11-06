@@ -64,7 +64,9 @@ from ..utils.image_io import imread as cv_imread
 # 当前 0.85 只是保守起点：book9 金标上 top1 88.75%，低置信段错误集中。
 DEFAULT_PROB_THRESHOLD = 0.85
 
-# 形近否决家族的全部成员（near_form 疑问用；单一事实源在 match.py）
+# 形近否决家族的全部成员（near_form 疑问用；只认手工表 NEVER_MATCH_FAMILIES，不含字体表／人裁表；
+# 这和匹配层护栏 `_PARTNER`（三表并集）不是一个口径，见 confusable.py 模块头与
+# guji-manager doc/01-粗校/待审原因/near_form_guard/流程.md 第一节）
 NEAR_FORM_CHARS = frozenset(c for pair in NEVER_MATCH_FAMILIES for c in pair)
 
 # 「同词异写」而非「认错字」的易混字组（考据见 charset_and_lm.md §四）。
@@ -490,6 +492,9 @@ def admission_decision(ocr: dict | None, align_char: str | None,
                        solo_cov: float = MATCH_SOLO_COV,
                        ) -> tuple[bool, str | None]:
     """进库裁决：返回 (可自动进库, 通道名 None|"match_ref"|"match_solo")。
+
+    【v1 实现】v2 的 `steps/seed_admit` 沿用本函数的裁决，另有后处理各遍与书级通道；现行通道一览见
+    guji-manager `doc/01-粗校/待审原因/near_form_guard/流程.md` 第二节。
 
     五轮实审定型（此前的 OCR prob 强信号/三重通道已废）：**OCR 不参与
     自动判断**——实测置信度校准不可靠（100% 也照样认错形近字），它只

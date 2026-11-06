@@ -99,3 +99,55 @@ def test_load_table_repo_and_data_override(tmp_path):
     codes, _ = load_table(tmp_path)
     assert codes["F100A"] == "炫" and "F1099" not in codes and "EA96" not in codes
     assert norm_code("siku-qiefen-v2:U+f100a") == "F100A"
+
+
+def test_load_table_derived_from_daizhige_rows_and_multi(tmp_path):
+    """审核页按殆知阁码审：daizhige 行 verdict=char → 它 same_as 的 v2 码取这个字；verdict=multi（一码多字）→ 族，不再按码改字。"""
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "daizhige:U+EA96", "verdict": "char", "char": "直", "same_as": ["siku-qiefen-v2:U+F1099"]},
+            {"code": "daizhige:U+EB09", "verdict": "multi", "char": None, "chars": ["瓠", "𤬄"], "same_as": ["siku-qiefen-v2:U+F1007"]},
+            {"code": "daizhige:U+EA7B", "verdict": "pending", "char": None, "same_as": ["siku-qiefen-v2:U+F10A0"]}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, fams = load_table(tmp_path)
+    assert codes["F1099"] == "直" and "F10A0" not in codes
+    assert fams["F1007"] == frozenset("瓠𤬄")
+
+
+def test_keep_channels_not_overwritten(tmp_path):
+    """书级旋钮 pua_code_keep_channels：保留的通道不按码改，计入仍不一致。"""
+    st = _st(tmp_path, **{"1": ("F100A", "炫"), "2": ("F100A", "炫")})
+    cells = {1: {"char": "炫", "channel": "group_flow"}, 2: {"char": "炫", "channel": "pua_rule"}}
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=True, char=c["char"], doubts=[], channel=c["channel"], provenance="match", evidence={}) for s, c in cells.items()]
+    amap = {f"{B}:1:{s}": ("炫", None) for s in cells}
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=recs)], amap, st, TABLE, p=SeedAdmitParams(pua_code_keep_channels="group_flow"))
+    assert out == (1, 1, 0) and recs[0].char == "炫" and recs[1].char == "眩"
+
+
+def test_family_demote_off_only_counts(tmp_path):
+    st = _st(tmp_path, **{"1": ("F1001", "乖")})
+    rec = AdmitRec(id=f"{B}:1:1", slot=1, admit=True, char="乘", doubts=[], channel="context", provenance="match", evidence={})
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=[rec])], {f"{B}:1:1": ("乖", None)}, st, TABLE, p=SeedAdmitParams(pua_code_family_demote=False))
+    assert out == (0, 1, 0) and rec.admit and rec.char == "乘"
+
+
+def test_new_knobs_not_in_default_dump():
+    d = SeedAdmitParams().model_dump()
+    assert "pua_code_keep_channels" not in d and "pua_code_family_demote" not in d
+
+
+def test_multi_code_family_only(tmp_path):
+    """纯多字码（只登族、无单字）：族内字认，族外降审，不改字。"""
+    tab = ({}, {"F1111": frozenset("甲乙")})
+    st = _st(tmp_path, **{"1": ("F1111", "甲"), "2": ("F1111", "甲")})
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=True, char=c, doubts=[], channel="context", provenance="match", evidence={}) for s, c in ((1, "乙"), (2, "丙"))]
+    out = _pua_code_pass([ColumnAdmit(col=1, chars=recs)], {f"{B}:1:{s}": ("甲", None) for s in (1, 2)}, st, tab)
+    assert out == (0, 0, 1) and recs[0].admit and not recs[1].admit and recs[1].char == "丙"
+
+
+def test_load_table_multi_verdict(tmp_path):
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "daizhige:U+EA7A", "verdict": "multi", "family": "最撮", "same_as": ["siku-qiefen-v2:U+F1028"]},
+            {"code": "siku-qiefen-v2:U+F2000", "verdict": "char", "char": "甲"}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, fams = load_table(tmp_path)
+    assert fams["F1028"] == frozenset("最撮") and "F1028" not in codes and codes["F2000"] == "甲"
