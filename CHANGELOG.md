@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `seed_admit` 1.37 `pua_code_table`（缺省关，殿本开；A24，A31 X01 派单）：按私用码表改放字——格→码对应离线算好存裁定库 `src-2`（按格号取，带整理本对位字核对，`RulingStore.cell_codes`／`put_cell_code`），非人裁放行字≠码表字 → 改放码表字（通道 `code_table`），一码多字（F1001／F1055）标族豁免、族外降审，人裁不动；每页统计 `PageAdmit.n_code_fix`／`n_code_mismatch`（0 不落盘）。新增 `utils/pua_v2_codes`、`config/pua/siku_qiefen_v2_codes.json`、`research/a24/pua_src/build_cell_codes.py`。开关关着时产物逐位不变（参数不进 dump）。
+
 ## [0.6.15] - 2026-11-06
 
 - `seed_admit` 折叠组 `fold_occluded`（书级，缺省关）：遮挡格只在整理本字与库首位同在折叠组内时归组；须同写 `fold_ref_char: false`（#1178，A24，D01 深挖）。
