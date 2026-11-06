@@ -77,6 +77,33 @@ def is_auto_pair(a: str, b: str) -> bool:
     return e.n_bridge >= MIN_SOURCES or "local:keben" in e.sources
 
 
+@lru_cache(maxsize=1)
+def _group_kinds() -> dict:
+    """字 → 它所在字组的 kind 集合（variant／near_form…）。"""
+    from .registry import FLOW_GROUPS
+    out: dict[str, set] = {}
+    for g in FLOW_GROUPS.values():
+        for c in g.members:
+            out.setdefault(c, set()).add(getattr(g, "kind", None) or "")
+    return {k: frozenset(v) for k, v in out.items()}
+
+
+@lru_cache(maxsize=65536)
+def seam_pair(a: str, b: str) -> str | None:
+    """字组缝（A24 V01 深挖 11-06，第 7 轮）：a、b 是纯异体强边（T1、≥2 来源或本书刻例边）、不在排除表，
+    但至少一字是字组成员，所以 `is_auto_pair` 不认；而这一格字组入口又没接（库分差内有组外字、或另一形不是组员）。
+    → 涉及的字组里只要有形近组就返回 ``"near_form"``（调用方要更大的领先），否则 ``"variant"``；不是这种对返回 None。"""
+    if not a or not b or a == b or len(a) != 1 or len(b) != 1 or frozenset((a, b)) in _exclude():
+        return None
+    kinds = _group_kinds().get(a, frozenset()) | _group_kinds().get(b, frozenset())
+    if not kinds:
+        return None                     # 两字都不在字组：归 is_auto_pair 管
+    e = _graph().variant_edge(a, b)
+    if e.tier != "T1" or not (e.n_bridge >= MIN_SOURCES or "local:keben" in e.sources):
+        return None
+    return "variant" if kinds <= {"variant"} else "near_form"
+
+
 def pair_to(a: str, b: str, *, lib_top: str | None = None) -> str:
     """暂归一放哪一形：已放行字频较高的一形；都罕见（<FREQ_MIN）时放 `lib_top`（缺省 a）。"""
     f = _freq()
