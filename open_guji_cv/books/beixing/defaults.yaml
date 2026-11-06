@@ -16,6 +16,8 @@ params:
   # 多出 58 个空格位（「著者 ∥ 書名」的分隔符）。
   cell_shrink:
     frame_guard: false       # 没有版框；开着会把列末字的底横当版框线抹掉（宣/亘/血/皿…，北行日錄 102 个 boundary_ink）
+    inner_frame_cut: false   # 2026-11-06 Step 缺省改开；现代排印本没有双边版框，保持旧行为
+    inner_frame_profile: false
   glyph_match:
     norm_stroke: 3           # 两边骨架化细到 3px 再比：粗笔画 1-bit 扫描下软覆盖饱和（北行日錄留一法
                              # 不归一错误命中最高 0.9996；细到 3px 后 0.922、591 对 0 错）

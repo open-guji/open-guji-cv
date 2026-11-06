@@ -59,9 +59,10 @@ class CellShrinkParams(BaseModel):
     `grow`）。缺省关＝旧行为。开（全唐文嘉慶本）：版框粗到 20 行，只有中间几行跨度满宽，毛边当「线外有墨」，
     第 1 列、列首、列尾格的字块整条带着框线，库首选认歪（功→可、明→所；Sheldon 11-03 标 9 格）。"""
 
-    inner_frame_cut: bool = False
+    inner_frame_cut: bool = True
     """整页拟合双边版框的内框细线，线上和线外的像素在列图上统一抹白，再切字块（seg.frame_line；Sheldon 11-04 定）。
-    缺省关＝旧行为。开（殿本新图源）：内框细线磨成虚线、紧贴列首列尾的字脚，逐格判「像不像线」认不出碰着字的那一截，
+    **2026-11-06 起缺省开**（三套书盘点，Sheldon 定：殿本新图源 vol20–99、史記、全唐文全都开着）；没有双边版框的书写 false
+    （北行现代本已在套书缺省里关）。关＝旧行为。开（殿本新图源）：内框细线磨成虚线、紧贴列首列尾的字脚，逐格判「像不像线」认不出碰着字的那一截，
     字块挂着一小截框线（所、祖、八、父的撇脚）。整页外粗框拟得稳，内线与它平行，几十段虚线一起投票定线位和线厚。
     抬头列不抹上框（字本来就写在框外）。本页拟不出可信的线就不动。"""
 
@@ -82,11 +83,11 @@ class CellShrinkParams(BaseModel):
     外框在页边拐弯、内线波浪起伏时二次曲线跟不上，线心落到外框上沿、内线整段漏抹（全唐文 006:121:1:22「上」挂线，S4）。
     同时内线厚上限随格高放大（seg.frame_line.inner_thick_limit）：高分辨率图源（全唐文格高约 205）内线厚 5–12 行，
     按殿本定的 7 行一半认不出，整页拟不出内线（012:58:1:1「固」、010:166:9:22「歲」）。"""
-    inner_frame_profile: bool = False
+    inner_frame_profile: bool = True
     """（跟 inner_frame_cut 一起开才有用）小段投票拟不出内线的页，按外框拉直的整宽行墨再找一次
     （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
     磨成点线拟不出，列尾字块整页挂着框线（列端评测集 frame-end-crop 剩下 16 格列尾带框里 10 格是这类）。
-    缺省关＝旧行为；小段法拟得出的页不变。"""
+    2026-11-06 起与 inner_frame_cut 一起缺省开；关＝旧行为；小段法拟得出的页不变。"""
 
     tail_one_abs: bool = False
     """列端渣格闸的孤「一」逃生口加一道不看格高的绝对量判据（extractor `is_end_cell_junk(one_abs=True)`，
@@ -275,7 +276,7 @@ def _is_raised_frame_bar(slot, cell_type: str, bbox, cc) -> bool:
 @register_step
 class CellShrinkStep(Step):
     spec = StepSpec(
-        id="cell_shrink", title="Step4 字框收缩", version="1.25", unit="cell",   # 1.25：书级开关 inner_frame_cut——整页拟双边版框内框细线（seg.frame_line），列图上线和线外统一抹白再切字块（殿本新图源列首列尾挂着的一截框线，Sheldon 11-04）；1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
+        id="cell_shrink", title="Step4 字框收缩", version="1.26", unit="cell",   # 1.26：inner_frame_cut、inner_frame_profile 缺省开（三套书都开着，Sheldon 11-06 定；写 false 的书参数 dump 与以前相同）；1.25：书级开关 inner_frame_cut——整页拟双边版框内框细线（seg.frame_line），列图上线和线外统一抹白再切字块（殿本新图源列首列尾挂着的一截框线，Sheldon 11-04）；1.24：夹注拆 a/b 跨中缝的连通体，少的一侧伸过中缝超过那侧半宽 1/4 的不整块归边、照中缝切（两行字笔画相碰连成一块，整块归边把另一行整个小字吞进对侧；史記 02:5:3:13a「魏人」，SJ 报，extractor.JIAZHU_SIDE_DEPTH）；1.23：图块最外侧落在本列字缘以外的窄段，在整列条带里上下贯穿 1.6 格以上、或在列端格里连到格外沿（版框拐角）的，是界行／版框竖线，抹白；夹注格不剥（extractor.strip_long_rule；第 9 列列尾「取」「錄」「也」，A23 送审 26 格）；1.22：列端剥框线越过写本框线的毛边判字与线之间的白行，并连毛边一起剥（史記列首格顶线残留，SJ 经 #805 检查器报）；1.21：列端条带按版框提示找框线，容差按格高算、提示以内连着上面笔画的横不当下框（新图 0.69 倍，死 40 行够到半格，「士」「王」「二」底横被当框截掉）；夹注拆 a/b 跨中缝的连通体墨大半在一侧就整块归那侧（右行字越线被切半）（GUJI-748）；1.20：全页框线线位找到版框往内 0.8 格并记线厚，跨度不满 0.85 的实线位置、厚度对上线位也剥（双边框内框贴字脚，vol06 p112「而」）；1.19：列端剥框线认双边框之间的连墨与又厚又满的粗版框（「乾」「者」「尚」）；1.18：归属图里跨格界、不算小部件的连通体整块归墨多的那格（原按伸得深的那格，「上」的底横左段被分给「下」）；1.17：整列先分好每个墨像素归哪格（extractor.partition_strip），图块只留本格的墨，替掉 pad 裁块后的逐块清理；1.16：两字粘成一块、跨格界两边都伸得深的连通体按格界切开（extractor.clip_unions_at_line）；1.15：跨格界部件伸进本格超过 0.1 格就不挪（NEIGHBOR_PART_DEPTH）；1.14：小印压着的字也打 seal_region 旗（occlusion.page_occluded 第 4 期）；1.13：跨格界、墨大半在格界外的邻字部件从本格抹掉（extractor.drop_neighbor_parts）；1.12：seal_region 旗改按印章定位 `seals` 的大印框（occlusion.page_occluded）；1.11：全页框线线位上认淡框线（page_frame_line_offsets）；1.10：列首／列尾格里横贯内容窗口的版框细线（双边框内框）连同线外抹白（extractor.strip_frame_line）；1.9：逐列格位表认下的字格（Step3 layout_char）不进列端渣格闸，列尾「一」不再判渣；1.8：职名列按 Step3 字框各自裁（overview#450）；1.7：夹注拆法一律照 Step3（jiazhu_from_step3，overview#436）
         consumes=("cells", "column_windows", "column_image"), optional_consumes=("seals", "raw_page", "column_raw"),
         optional_consumes_when=(("raw_page", "inner_frame_cut"), ("column_raw", "inner_frame_only")),
         produces=("char_index", "char_patch"),

@@ -39,7 +39,7 @@ def test_seg_set_defaults_replace_pipeline_params():
     assert pl.params == {}                          # 搬到 books/beixing/defaults.yaml
     bp = base_params(pl, make_book(edition="modern"))
     assert bp["column_gate"] == {"count_mode": "detected", "width_tol": 0.5}
-    assert bp["cell_shrink"] == {"frame_guard": False}
+    assert bp["cell_shrink"] == {"frame_guard": False, "inner_frame_cut": False, "inner_frame_profile": False}
     assert bp["glyph_match"] == {"norm_stroke": 3, "exclude_self": True}
     names = [n for n, _ in base_param_layers(pl, make_book(edition="modern"))]
     assert names == ["管线 yaml", "套书缺省（beixing）"]
