@@ -5,7 +5,15 @@
 
 ## [未发版]
 
-- `seed_admit` 1.37：字组入口新开关 `group_flow_coord_outside_skip`（缺省开）。现役对位缺这一格、坐标对位字既不是组员也不是陪衬字（〓、空格位、暂归一写法除外）时不拉进组：组只会在组员里挑字，这类格进组必弃权（Z01）。A24 Z01 深挖（11-06）：殿本第5轮 Z01 527 格里 394 格现役对位缺位；按 ★main 包回放 Z01 −106（多为門辶囗族少见字，原因落回 L01／P02），已放行格不受影响（70 册包里命中 7 格，都是 𭶑，已按暂归一写法排除）。只改原因、不放行。seed_admit 指纹变，随第 6 轮重跑。
+- `seed_admit` 1.38：字组入口新开关 `group_flow_coord_outside_skip`（缺省开）。现役对位缺这一格、坐标对位字既不是组员也不是陪衬字（〓、空格位、暂归一写法除外）时不拉进组：组只会在组员里挑字，这类格进组必弃权（Z01）。A24 Z01 深挖（11-06）：殿本第5轮 Z01 527 格里 394 格现役对位缺位；按 ★main 包回放 Z01 −106（多为門辶囗族少见字，原因落回 L01／P02），已放行格不受影响（70 册包里命中 7 格，都是 𭶑，已按暂归一写法排除）。只改原因、不放行。seed_admit 指纹变，随第 6 轮重跑。
+- `seed_admit` 1.37 `pua_code_table`（缺省关，殿本开；A24，A31 X01 派单）：按私用码表改放字——格→码对应离线算好存裁定库 `src-2`（按格号取，带整理本对位字核对，`RulingStore.cell_codes`／`put_cell_code`），非人裁放行字≠码表字 → 改放码表字（通道 `code_table`），一码多字（F1001／F1055）标族豁免、族外降审，人裁不动；每页统计 `PageAdmit.n_code_fix`／`n_code_mismatch`（0 不落盘）。新增 `utils/pua_v2_codes`、`config/pua/siku_qiefen_v2_codes.json`、`research/a24/pua_src/build_cell_codes.py`。开关关着时产物逐位不变（参数不进 dump）。
+
+## [0.6.15] - 2026-11-06
+
+- `seed_admit` 折叠组 `fold_occluded`（书级，缺省关）：遮挡格只在整理本字与库首位同在折叠组内时归组；须同写 `fold_ref_char: false`（#1178，A24，D01 深挖）。
+- `ref_lib_coord` 疑问白名单加 `context_page_end`（#1179，A23 L04 深挖；殿本 0 命中、史記 3 格）。开了 ref_lib_coord 的书 seed_admit 过期一次。
+- `glyph_match` 共识升档口径、形近护栏、same 门槛做成参数（#1174，缺省关、关时逐字节不变）。
+- 待审原因 P01/P02 跟 guji-manager #239 改名 `ref_ocr_diff`／`ref_final_diff`（#1175，文档与补标脚本）。
 - `seed_admit` 1.36：R5 题列套语容错 `lane_seal_title_tolerance`（书级，缺省 0＝关，关时不进参数 dump；殿本开 1）与 `lane_seal_title_prefix`。整列坐标字前 8 字与「欽定四庫全書總目」至多差 N 字、尾部（卷＋数字）完全符合时仍按套语放，不一致的字位记 `lane_skip.why=title_mismatch` 留人审。殿本 D01 深挖（A32 11-06，A31 定第 6 轮做）：vol77 p119 c1 整理本「錠」误字，其余 10 格可放，錠格留审。seed_admit 代码指纹变，各册 seed_admit 起判过期，随第 6 轮重跑。
 - `row_segment` 切点判官（U-Net）结果落盘复用（`seg/cut_select`）：按窗口灰度内容＋墨阈＋判官指纹存执行机本地 `cache/_judge/`（每页约 4 MB），同机重跑同一页不再前向。史記（`cut_judge: unet_f64`）8 页首跑 108 秒、重跑 7 秒；产物逐字节不变、登记 code_equiv，不判过期。`GUJI_JUDGE_CACHE=0` 关。
 

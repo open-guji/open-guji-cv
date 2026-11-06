@@ -53,11 +53,12 @@ def main():
             conflicts.append((code, sorted(real)))
             continue
         verdict, ch = next(iter(real))
+        r.setdefault("nearest", True if r["verdict"] == "char" else None)
         t = max(t for _, t in cells.values())
         at = datetime.datetime.fromtimestamp(t / 1000 if t > 1e11 else t, datetime.timezone.utc).strftime("%Y-%m-%d") if t else None
         if (r["verdict"], r.get("char")) != (verdict, ch):
             changed.append((code, r["verdict"], r.get("char"), verdict, ch))
-            r.update(verdict=verdict, char=ch if verdict == "char" else None, by=a.by, at=at)
+            r.update(verdict=verdict, char=ch if verdict == "char" else None, by=a.by, at=at, nearest=True if verdict == "char" else None)
             if verdict != "char":
                 r["orig"] = None; r["variant"] = None
     print(f"已点 {len(ans)} 码；改动 {len(changed)}；不一致 {len(conflicts)}；只点了看不清/切分 {len(untouched)}")

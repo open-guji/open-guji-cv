@@ -370,3 +370,28 @@ def test_pair_no_sub_keeps_neighbor_shift_on_jiazhu_half_cells():
     assert _coord_conflict(recs, legacy, {}, shift_needs_pair=True, pair_no_sub=True)          # 半格照原判：退回
     assert "coord_pair_no_sub" not in AlignRefParams().model_dump()
     assert AlignRefParams(coord_pair_no_sub=True).model_dump()["coord_pair_no_sub"] is True
+
+
+def test_pair_only_drops_only_conflicting_cell():
+    """`coord_conflict_pair_only`（A32 D02：vol01 p1 列 9 一格坐标二／现役一，整列退回 6 格没有整理本字）：
+    单个孤立冲突、同列有足够全同格、没有整列错位迹象 → 只去冲突格；多格冲突／相邻冲突／邻格错位 → 照旧整列退回。"""
+    from open_guji_cv.steps.align_ref import _pair_only_recs
+    chars = "校勘記發明可爲正書"
+    recs = [(f"x{k}", k, None, ch, float(k)) for k, ch in enumerate(chars, start=1)]
+
+    def leg(over):
+        d = {}
+        for r in recs:
+            ch = over.get(r[0], r[3])
+            d[r[0]] = AlignRec(id=r[0], col=3, slot=r[1], align_char=ch, align_op="equal", ref_run=1)
+        return d
+
+    kept = _pair_only_recs(recs, leg({"x5": "一"}))
+    assert kept is not None and [r[0] for r in kept] == [r[0] for r in recs if r[0] != "x5"]
+    assert _pair_only_recs(recs, leg({"x4": "一", "x5": "二"})) is None            # 相邻冲突
+    assert _pair_only_recs(recs, leg({"x2": "一", "x4": "二", "x6": "三"})) is None  # 超过 2 格
+    assert _pair_only_recs(recs, leg({"x5": recs[5][3]})) is None                  # 现役字是邻格坐标字：整列错位迹象
+    assert _pair_only_recs(recs[:3], leg({"x3": "一"})) is None                    # 全同格不足 3
+    assert _pair_only_recs(recs, leg({})) is None                                  # 没有冲突
+    assert "coord_conflict_pair_only" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_conflict_pair_only=True).model_dump()["coord_conflict_pair_only"] is True

@@ -181,6 +181,8 @@ _COORD_PAIR = ("align_ref 加缺省关的书级开关 coord_shift_needs_pair（�
 _COORD_PAIR_SUB = ("align_ref 加缺省关的书级开关 coord_pair_no_sub（coord_shift_needs_pair 不管夹注半格；全唐文 r11 007 p47 列 3）："
                     "开关关着时 align_ref 在全唐文 vol06 p75–89（产物包 r11）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-05")
 
+_COORD_PAIR_ONLY = ('align_ref 加缺省关的书级开关 coord_conflict_pair_only（与现役对位冲突只退冲突格；A32 D02 深挖）：开关关着时 align_ref 在殿本 vol82 45 页（每 6 页取 1 加 p2/p3/p147，★main 包 cv0.6.4-c30-g19-r5-a2）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（语料清单 yh/rules.yaml 与钉不符，新旧两边同样），2026-11-06')
+
 _QTW_FORK = ("全唐文套书 books/quantangwen 分叉（2026-11-04，A22）：row_boundaries、jiazhu_split 从殿本原样复制（含 #1025 "
              "jiazhu_single_head），殿本两份退回 #1025 之前；row_segment 壳按册套书取 row_boundaries（core/seg_set.resolve）。"
              "复制与殿本 #1025 之后那一版逐字相同，#1025 已证开关关着时等价（_JZ_SINGLE_HEAD）；全唐文册的指纹按 FORKED 记原模块名，不过期。"
@@ -1033,6 +1035,10 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7f810225612f4ea526dab7d258174282bc4270a4454c72a94c011371381b71f6",
           old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
           evidence=_SEAL_TOP),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="0f26855c8f378bf028927ac328f602061769bb46f48a736f0d56b2e439aef9e3",
+          old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
+          evidence=_COORD_PAIR_ONLY),
 )
 
 
