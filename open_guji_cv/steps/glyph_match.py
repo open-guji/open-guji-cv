@@ -250,6 +250,12 @@ class GlyphMatchParams(BaseModel):
     """same 档单对门槛 cov（缺省 None＝`verify.ELASTIC_COV_HIGH` 0.996，不进参数 dump）。"""
     same_wmax: float | None = None
     """same 档单对门槛 wmax 上限（缺省 None＝`verify.MISS_WMAX` 12，不进参数 dump）。"""
+    knn_per_char: int = 0
+    """kNN 每个字（码位）最多取几个刻例进精验（2026-11-06，Sheldon）。0＝不限（缺省，不进参数 dump，逐字节不变）。
+    不限时前 k 名常常全是同一个字，形近的别的字进不了精验；限了以后候选更多样、分差是真对手给的。
+    见 `clustering.match.GlyphMatcher.per_char`。开了要按书重标共识升档参数（分差变诚实，现行 0.03 会偏严）。"""
+    knn_per_char_top: int = 0
+    """首选字的限额（0＝同 `knn_per_char`）。比对基准上 `knn_per_char: 2, knn_per_char_top: 5` 最好。"""
     shape_pair_rerank: bool = False
     """按形区分四对（强/強、却/卻、回/囘、并/幷，字形库 11 §〇用户裁定）局部
     部件决胜，见 `clustering.match.GlyphMatcher.local_shape_rerank`。缺省关，
@@ -317,6 +323,9 @@ class GlyphMatchParams(BaseModel):
                 d.pop("consensus_count", None)
             if not d.get("consensus_family_guard"):
                 d.pop("consensus_family_guard", None)
+            for k in ("knn_per_char", "knn_per_char_top"):
+                if not d.get(k):
+                    d.pop(k, None)
             for k in ("same_cov", "same_wmax"):
                 if d.get(k) is None:
                     d.pop(k, None)
@@ -416,6 +425,8 @@ class GlyphMatchStep(Step):
             near_shape=NearShapeConfig.from_any(p.near_shape))
         if p.same_cov is not None or p.same_wmax is not None:
             matcher = _with_same_gate(matcher, p.same_cov, p.same_wmax)
+        if p.knn_per_char > 0:
+            matcher = _with_knn_cap(matcher, p.knn_per_char, p.knn_per_char_top)
         return matcher
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
@@ -645,6 +656,24 @@ def _with_same_gate(matcher, cov: float | None, wmax: float | None):
         g.miss_wmax = float(wmax)
     _GATED.clear()
     _GATED[k] = (matcher, g)
+    return g
+
+
+_CAPPED: dict = {}
+
+
+def _with_knn_cap(matcher, per_char: int, per_char_top: int):
+    """`knn_per_char`：缓存匹配器的浅拷贝，只设 kNN 每字限额（同 `_with_same_gate`，不改缓存里那份）。"""
+    import copy
+    k = (id(matcher), per_char, per_char_top)
+    hit = _CAPPED.get(k)
+    if hit is not None and hit[0] is matcher:
+        return hit[1]
+    g = copy.copy(matcher)
+    g.per_char = int(per_char)
+    g.per_char_top = int(per_char_top)
+    _CAPPED.clear()
+    _CAPPED[k] = (matcher, g)
     return g
 
 

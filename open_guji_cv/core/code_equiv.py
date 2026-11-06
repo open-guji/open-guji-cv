@@ -1044,6 +1044,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='87cae8c868d07adc21efad96f764289ca54be50968e6b9b3f5ae69dbebbd4681',
           old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
           evidence='glyph_match 判决规则抽成规则表 steps.glyph_rules（Rule 枚举＋RULES＋decide，含 #1174 缺省关的三组参数）：测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；另把殿本 1500 格、史記 800 格（含真借库）真匹配结果喂给改前内联逻辑与 decide()，18 组参数×2 种借库×近形开关共 24.8 万次判决 0 差（共识、借库、近形三通道都有命中）；scripts/code_equiv.py check，2026-11-06'),
+    # kNN 每字限额（Sheldon 11-06，缺省关）
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='977387eac7b8c04527f60688ec4a30f75bf41a0f030935bd6a250df161987ce7',
+          old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
+    Equiv(module='open_guji_cv.clustering.match',
+          new='f686765a1e1905deba28398fefe7de4ca6083bd5e3a9525c09ffb82f25753afd',
+          old='7fa5464da6ca4c45382394b0ecc847e8b8495c806609e2505da4ef9b0c762ab5',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
+    Equiv(module='open_guji_cv.steps.glyph_rules',
+          new='8f1789da3ea7c9b45d005d34b2f3f4230f6cfc4b912e33de120dff6da7e7cc84',
+          old='968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
 )
 
 
