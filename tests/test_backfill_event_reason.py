@@ -19,7 +19,7 @@ def test_reason_of():
     assert b.reason_of(_e("ctx_ruling", group="O", route="code_conflict", subclass="PUA")) == "ruling_conflict"
     assert b.reason_of(_e("ctx_ruling", group="O", subclass="PUA", ref="")) == "ref_lacuna"
     assert b.reason_of(_e("ctx_ruling", group="O", ref="", machine="甲")) == "ref_gap"
-    assert b.reason_of(_e("ctx_ruling", group="O", ref="乙", machine="甲")) == "ref_mismatch"
+    assert b.reason_of(_e("ctx_ruling", group="O", ref="乙", machine="甲")) == "ref_final_diff"
     assert b.reason_of(_e("ctx_ruling", group="O", ref="甲", machine="甲")) == "unknown"
     assert b.reason_of(_e("confirm", via="newchar_review")) == "lib_missing"
     assert b.reason_of(_e("confirm", source="sheldon 异体对第二批")) == "variant_pair"

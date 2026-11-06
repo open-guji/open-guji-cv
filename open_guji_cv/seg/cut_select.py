@@ -248,6 +248,71 @@ def _resize_linear_f64(a: np.ndarray, h: int, w: int) -> np.ndarray:
     return r[:, x0] * (1.0 - tx)[None, :] + r[:, x1] * tx[None, :]
 
 
+# ── 判官结果落盘复用（2026-11-05，A20）─────────────────────────────────────────────
+# `unet_f64` 一次前向单线程 0.6 s，史記一页约 106 个不同窗口、row_segment 一页 65 s，九成在这里。`owner()` 是
+# 窗口内容（+阈值、权重指纹、精度）的纯函数，「从 row_segment 起重跑」一轮接一轮、列图没变的页窗口全一样。
+# 所以按内容存到缓存根下 `_judge/<权重指纹>/`，命中直接取，与现算逐字节相同（只存墨像素上的归属与置信——
+# 调用方只读墨像素上的值，墨掩膜由窗口与阈值重算）。随图像缓存一起按 LRU 清。`GUJI_JUDGE_CACHE=0` 关掉。
+
+def _disk_dir(fingerprint: str) -> Path | None:
+    if os.environ.get("GUJI_JUDGE_CACHE", "1") == "0":
+        return None
+    try:
+        from ..products.cache import default_cache_root
+        return default_cache_root() / "_judge" / fingerprint.replace(":", "_")
+    except Exception:  # noqa: BLE001 —— 缓存只是提速，取不到根就不落盘
+        return None
+
+
+def _disk_key(fingerprint: str, key: tuple) -> Path | None:
+    d = _disk_dir(fingerprint)
+    if d is None:
+        return None
+    shape, th, cc_max, digest = key
+    h = hashlib.blake2b(repr((shape, th, cc_max)).encode() + digest, digest_size=16).hexdigest()
+    return d / h[:2] / f"{h}.npz"
+
+
+def _disk_load(path: Path | None, win_gray: np.ndarray, ink_threshold: int):
+    if path is None or not path.exists():
+        return None
+    try:
+        with np.load(path) as z:
+            bits, conf_ink, n = z["owner1"], z["conf"], int(z["n"])
+        W = (win_gray < ink_threshold).astype(np.uint8)
+        ink = W > 0
+        if int(ink.sum()) != n or conf_ink.shape[0] != n:
+            return None
+        owner = np.zeros(W.shape, np.uint8)
+        owner[ink] = np.where(np.unpackbits(bits, count=n).astype(bool), 1, 2)
+        conf = np.zeros(W.shape, conf_ink.dtype)
+        conf[ink] = conf_ink
+        try:
+            os.utime(path, None)
+        except OSError:
+            pass
+        return W, owner, conf
+    except Exception:  # noqa: BLE001 —— 坏文件当没有，现算覆盖
+        return None
+
+
+def _disk_save(path: Path | None, out) -> None:
+    if path is None:
+        return
+    W, owner, conf = out
+    ink = W > 0
+    v = owner[ink]
+    if not np.isin(v, (1, 2)).all():     # 墨像素上只该是 1/2；不是就不存（存了读回不等）
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(f".{path.stem}.{os.getpid()}.tmp.npz")
+        np.savez_compressed(tmp, owner1=np.packbits(v == 1), conf=conf[ink], n=np.int64(v.size))
+        os.replace(tmp, path)
+    except Exception:  # noqa: BLE001
+        pass
+
+
 class UNetJudge:
     """进程内持有一份网络。`owner()` 出归属图，`scores()` 给候选打分。任何异常都返回 None，不抛。"""
 
@@ -275,7 +340,11 @@ class UNetJudge:
         if hit is not None:
             cache[key] = cache.pop(key)  # LRU：命中移到最新
             return hit
-        out = self._owner(win_gray, ink_threshold, cc_max)
+        dk = _disk_key(self.fingerprint, key)
+        out = _disk_load(dk, win_gray, ink_threshold)
+        if out is None:
+            out = self._owner(win_gray, ink_threshold, cc_max)
+            _disk_save(dk, out)
         if len(cache) >= _OWNER_CACHE_MAX:
             cache.pop(next(iter(cache)))
         cache[key] = out

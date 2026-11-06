@@ -138,3 +138,30 @@ def test_fold_no_ref_char_aspect_and_pending(tmp_path):
         assert n == 1 and rs[0].char == "曰" and rs[0].evidence["fold"]["via"] == "ruling"   # 无邻格，窗口键为空串
     finally:
         sa._l3_online = orig
+
+
+def test_fold_occluded_needs_switch_and_ref_lib_both_in_group(tmp_path):
+    """fold_occluded：遮挡格默认不碰；开了之后整理本字与库首位同在折叠组才归组，不取整理本字（fold_ref_char=false 时只放文意裁定／宽高判据）。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.steps import seed_admit as sa
+    m = sorted(FLOW_GROUPS["ry"].members)
+    a, b = m[0], m[1]
+
+    def rec():
+        return [AdmitRec(id=f"{B}:1:1", slot=1, admit=False, char="乙", doubts=["occluded"], channel=None, provenance="",
+                         evidence={"occluded": True})]
+    amap = {f"{B}:1:1": (b, None)}
+    mm = lambda top: {f"{B}:1:1": NS(candidates=[(top, 0.9)])}                  # noqa: E731
+    p0 = SeedAdmitParams(db_path="x", fold_groups=("ry",))                      # 旧口径：放整理本字
+    rr = rec(); assert sa._fold_pass(p0, [ColumnAdmit(col=1, chars=rr)], amap, mm(a)) == 0      # 默认不碰遮挡格
+    p1 = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_occluded=True)
+    rr = rec(); assert sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], amap, mm("外")) == 0   # 库首位在组外
+    rr = rec(); assert sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], {f"{B}:1:1": ("外", None)}, mm(a)) == 0   # 整理本字在组外
+    rr = rec(); assert sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], amap, mm(a)) == 1 and rr[0].char == b   # 旧口径才放整理本字
+    p2 = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_occluded=True, fold_ref_char=False)
+    rr = rec()
+    assert sa._fold_pass(p2, [ColumnAdmit(col=1, chars=rr)], amap, mm(a), store=__import__("open_guji_cv.feedback.rulings", fromlist=["RulingStore"]).RulingStore(tmp_path)) == 0
+    assert not rr[0].admit and rr[0].evidence["fold_pending"] == {"group": "ry"}                # 不取整理本字，留审
+    assert "fold_occluded" not in SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    assert SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_occluded=True).model_dump()["fold_occluded"] is True

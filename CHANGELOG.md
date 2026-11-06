@@ -5,6 +5,15 @@
 
 ## [未发版]
 
+## [0.6.15] - 2026-11-06
+
+- `seed_admit` 折叠组 `fold_occluded`（书级，缺省关）：遮挡格只在整理本字与库首位同在折叠组内时归组；须同写 `fold_ref_char: false`（#1178，A24，D01 深挖）。
+- `ref_lib_coord` 疑问白名单加 `context_page_end`（#1179，A23 L04 深挖；殿本 0 命中、史記 3 格）。开了 ref_lib_coord 的书 seed_admit 过期一次。
+- `glyph_match` 共识升档口径、形近护栏、same 门槛做成参数（#1174，缺省关、关时逐字节不变）。
+- 待审原因 P01/P02 跟 guji-manager #239 改名 `ref_ocr_diff`／`ref_final_diff`（#1175，文档与补标脚本）。
+- `seed_admit` 1.36：R5 题列套语容错 `lane_seal_title_tolerance`（书级，缺省 0＝关，关时不进参数 dump；殿本开 1）与 `lane_seal_title_prefix`。整列坐标字前 8 字与「欽定四庫全書總目」至多差 N 字、尾部（卷＋数字）完全符合时仍按套语放，不一致的字位记 `lane_skip.why=title_mismatch` 留人审。殿本 D01 深挖（A32 11-06，A31 定第 6 轮做）：vol77 p119 c1 整理本「錠」误字，其余 10 格可放，錠格留审。seed_admit 代码指纹变，各册 seed_admit 起判过期，随第 6 轮重跑。
+- `row_segment` 切点判官（U-Net）结果落盘复用（`seg/cut_select`）：按窗口灰度内容＋墨阈＋判官指纹存执行机本地 `cache/_judge/`（每页约 4 MB），同机重跑同一页不再前向。史記（`cut_judge: unet_f64`）8 页首跑 108 秒、重跑 7 秒；产物逐字节不变、登记 code_equiv，不判过期。`GUJI_JUDGE_CACHE=0` 关。
+
 ## [0.6.14] - 2026-11-06
 
 - 史記夹注逐步切 v1.5（`books/shiji_wyg/jiazhu_step`）：逐步切过的夹注行，格线（`boundaries`）跟着贴新切的 a/b 两半（`_step_boundaries`）。此前只换格不动格线，cell_shrink 合成满宽格取旧格线，v1.4 切满到列尾的段第 21 行格线落在字下白里、被列端渣格闸判空，两半的字悄悄丢掉（第 16 轮 6 列 12 字，另有旧有 8 格同因）。全书 738 页重跑到 cell_shrink：丢的 20 格回来，其余格框持平或变好。史記职名页单段列（`roster_segment.refit_column`）几何块只比整理本差 1 字时另按块凑一版，切线压块腰的条数比整列等分少 2 条以上才用（07:2:5 题署列修好；10:2:6、07:2:7 不变；职名页 100 页另有 5 列密排官衔变好）。新增验收脚本 `scripts/check_layout_drop.py`：格位表说有字、Step4 没了或判空的格逐格列出。
