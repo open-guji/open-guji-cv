@@ -46,6 +46,17 @@ def wiki_thumbs(names: list[str], out: Path, width: int = 250) -> dict[str, Path
     return got
 
 
+# 候选表窗口对位没对上、但按松散上下文（忽略标点、PUA 当通配）在 v2 页文字里找到的位置：(章, 页, 下标)。
+# 2026-11-06 补：EB36/EBDA/EC2F/EADF/EA79；EA84 的两处出自 v2 没收的篇目，找不到，保留无切图。
+EXTRA_LOCS = {
+    "daizhige:U+EB36": [("24", 48, 39), ("24", 48, 40)],
+    "daizhige:U+EBDA": [("1", 54, 167)],
+    "daizhige:U+EC2F": [("16", 79, 55)],
+    "daizhige:U+EADF": [("16", 79, 57)],
+    "daizhige:U+EA79": [("7", 66, 2)],
+}
+
+
 def main():
     from PIL import Image
     ap = argparse.ArgumentParser()
@@ -84,7 +95,8 @@ def main():
         if r["verdict"] == "char" and r["char"] and r["char"] not in [x[0] for x in cands]:
             cands = [[r["char"], "现定"]] + cands
         shown = 0
-        for k, (ch, p, idx) in enumerate(r["v2_locs"]):
+        locs = list(r["v2_locs"]) or EXTRA_LOCS.get(r["code"], [])
+        for k, (ch, p, idx) in enumerate(locs):
             if shown >= a.n:
                 break
             pr = text_rows(str(ch)).get(str(p))
