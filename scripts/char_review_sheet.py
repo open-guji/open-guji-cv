@@ -68,12 +68,14 @@ def pick(ids: list[str], k: int) -> list[str]:
     return [ids[round(i * (len(ids) - 1) / (k - 1))] for i in range(k)]
 
 
-def grid_mode(a, groups, gm, patches) -> None:
+def grid_mode(a, groups, gm, patches, have=None) -> None:
+    have = have or {}
     """一页 N 格、一图一字：每字挑像素匹配度（glyph_match 首位 cov）最高的 `--per-char` 格，
     污渍、半截字块 cov 低，自然排在外面。按字频排，同字相邻。"""
     tiles = []
     for ch, ids in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
-        best = sorted(ids, key=lambda i: -float(gm[i].get("cov") or 0))[:a.per_char]
+        need = a.per_char - have.get(ch, 0) if a.skip_have else a.per_char
+        best = sorted(ids, key=lambda i: -float(gm[i].get("cov") or 0))[:max(0, need)]
         for i in sorted(best, key=lambda i: tuple(int(x) for x in re.findall(r"\d+", i))):
             p = patches / patch_name(i)
             if p.exists():
@@ -93,6 +95,8 @@ def main() -> None:
     ap.add_argument("--per-char", type=int, default=14)
     ap.add_argument("--grid", type=int, default=0,
                     help="每页 N 格、一图一字、默认全对（只点不对的）；每字挑 --per-char 个像素匹配度最高的格")
+    ap.add_argument("--skip-have", action="store_true",
+                    help="已在本书字形库里有人审入库实例的字：每字只补到 --per-char 个，已够的不再出；已入库的格不出")
     ap.add_argument("--unadmitted", action="store_true",
                     help="只出还没放行、但整理本有对应字的格（按整理本的字分组），用于第二轮")
     a = ap.parse_args()
@@ -107,8 +111,20 @@ def main() -> None:
         elif top and ar.get(i) == top:
             groups[top].append(i)
     patches = ws / "cache" / a.book / "char_patch"
+    have: dict[str, int] = {}
+    if a.skip_have:
+        import sqlite3
+        db = sqlite3.connect(str(ws / "output" / "glyph.db"))
+        done = set()
+        for iid, ch in db.execute("select instance_id, char from admissions where provenance='human'"):
+            have[ch] = have.get(ch, 0) + 1
+            done.add(iid.split(":", 1)[-1])
+        for ch in list(groups):
+            groups[ch] = [i for i in groups[ch] if i not in done]
+            if not groups[ch]:
+                del groups[ch]
     if a.grid:
-        return grid_mode(a, groups, gm, patches)
+        return grid_mode(a, groups, gm, patches, have)
     rows = []
     for ch, ids in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
         shown = []
