@@ -39,14 +39,13 @@ def main():
         out = f"{a.out}/cell_codes-{v}.jsonl"
         if os.path.exists(out):
             continue
-        if a.pack_root and os.path.isdir(f"{a.pack_root}/{v}"):
-            P = f"{a.pack_root}/{v}"; tmp = None
-        else:
+        tmp = None if a.pack_root else f"{a.out}/_tmp_{v}"        # 给了 --pack-root 就把包留在那里（回放要复用）
+        dest = f"{a.pack_root}/{v}" if a.pack_root else tmp
+        if not os.path.isdir(dest):
             lab = subprocess.run([GUJI, "products", "pack", "list", v, "-w", WS], capture_output=True, text=True, env=env).stdout
             l = [x for x in lab.splitlines() if x.startswith("★")][0].split("\t")[0].split("/")[-1]
-            tmp = f"{a.out}/_tmp_{v}"
-            subprocess.run([GUJI, "products", "pack", "fetch", v, "-w", WS, "--label", l, "--to", tmp], capture_output=True, env=env)
-            P = f"{tmp}/{v}" if os.path.isdir(f"{tmp}/{v}") else tmp
+            subprocess.run([GUJI, "products", "pack", "fetch", v, "-w", WS, "--label", l, "--to", dest], capture_output=True, env=env)
+        P = f"{dest}/{v}" if os.path.isdir(f"{dest}/{v}") else dest
         L = lambda k, p: json.load(open(f"{P}/{k}/p{p:04d}.json"))
         T, res = {}, []
         for pg in pm[v]:
