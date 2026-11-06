@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.46 `p_ref_max_cov`／`p_ref_adjacent`／`p_ref_jiazhu`（书级，缺省全关、关时不进参数 dump；A24 P01 深挖 11-06）：P 类取整理本字（`p_ref_admit`）加三个旋钮——机器字库覆盖率须低于上限、放开同列相邻成片、放开夹注半格。殿本线上 P01 单开 `p_ref_admit` 放 126 格、看图 13 格机器字本来对（cov 都 ≥0.94）；加 cov<0.93 放 31 格零错，再放开相邻＋夹注放 52 格。
+
 - seed_admit 1.45 `rare_ref_coord_group_top`（书级，缺省关、关时不进参数 dump；A24 L05 深挖 11-06）：rare_ref 坐标对位那支，库首位是字组成员、坐标对位字不在任何字组时也放（坐标对位字在组里仍不放）。L05 格里糊墨的库首位多是 刪／冊／衛／王 这类字组成员（吸引子），整理本字与 5-b 首位一致、不在组里。殿本、史記 ★main 离线回放：配 `rare_ref_coord_min_cov` 0.85，L05 238 格放 91（缺省只调 min_cov 放 79），看图全是整理本字；缺省关，行为不变。
 
 - seed_admit 1.44 `follow_ref_variants_gap`／`follow_ref_variants_cov`（书级，缺省 None 行为不变、不进 dump；A24 V01 深挖 11-06）：按参校本取异体（`follow_ref_variants`）的待审格单独放宽领先下限，只对关系层同词异体（`variant_edge(...).is_variant`）、库首位 cov ≥0.93 生效。史記 V01 夹注半格 10 格领先 0.002–0.004，看图字都对；开不开、设多少由书项目定（建议史記 0.002）。
