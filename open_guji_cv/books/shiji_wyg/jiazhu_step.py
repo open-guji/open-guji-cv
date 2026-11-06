@@ -554,10 +554,40 @@ def _restep(cells: list, col_gray: np.ndarray, content_x: tuple[float, float], p
 
 
 def apply(res, col_gray, content_x, period, specs, ink_threshold: int = 128, reading_order=None):
-    """`RowBoundaryResult` 上做逐步切：成了换 cells（boundaries 不动），去掉动过的格的折线候选。返回 (res, 旗)。"""
+    """`RowBoundaryResult` 上做逐步切：成了换 cells、动过的夹注行格线跟着改（`_step_boundaries`），去掉动过的格的折线候选。返回 (res, 旗)。"""
     cells, flags = restep(res.cells, col_gray, content_x, period, specs, ink_threshold, reading_order)
     if cells is None:
         return res, flags
     s_min = min(s for s, _a, _b in specs)
     cands = [cp for cp in res.cut_candidates if cp.slot_below < s_min]
-    return replace(res, cells=cells, cut_candidates=cands), flags + ["jiazhu_step：按整理本分法逐步切"]
+    n_raised = len({c.slot for c in res.cells if c.slot < 0})
+    bounds = _step_boundaries(res.boundaries, cells, specs, n_raised)
+    return (replace(res, cells=cells, cut_candidates=cands, boundaries=bounds),
+            flags + ["jiazhu_step：按整理本分法逐步切"])
+
+
+def _step_boundaries(bounds, cells, specs, n_raised: int = 0):
+    """逐步切过的夹注行，格线（`boundaries`）改贴新切的 a/b 两半（v1.5，2026-11-06）。
+
+    cell_shrink 把同 pos 的 a/b 合成满宽格时，两半 y 不同就取本格位的格线
+    （`boundaries[pos-1]..boundaries[pos]`）当满宽格的上下沿，列端渣格闸也在这个框上判。
+    逐步切只换 cells 不动格线，切满到列尾的段（第 16 轮 02:104:8 等六列第 21 行）格线落在字下的白里，
+    满宽格判空、两半的字丢了。这里每行取两半的并（上沿取小、下沿取大），和上下邻行重叠的取中点；
+    正文格（单格，cell_shrink 用它自己的 y）和没动的行不受影响。格位 pos = slot + 抬头格数（正文 slot 从 1 起）。
+    """
+    b = [float(x) for x in bounds]
+    rows: dict[int, list[float]] = {}
+    for c in cells:
+        pos = c.slot + n_raised
+        if (c.kind in ("jiazhu_a", "jiazhu_b") and c.slot > 0 and 0 < pos < len(b)
+                and any(s0 <= c.slot < s0 + max(na, nb) for s0, na, nb in specs)):
+            r = rows.setdefault(pos, [c.y0, c.y1])
+            r[0], r[1] = min(r[0], c.y0), max(r[1], c.y1)
+    for pos in sorted(rows):
+        # 上沿：上一行也是逐步切的取两行之间的中点（不重叠），否则取本行两半的上沿；下沿留给下一行或取本行下沿
+        b[pos - 1] = (rows[pos - 1][1] + rows[pos][0]) / 2.0 if pos - 1 in rows else rows[pos][0]
+        if pos + 1 not in rows:
+            b[pos] = rows[pos][1]
+    for i in range(1, len(b)):  # 保单调
+        b[i] = max(b[i], b[i - 1])
+    return b
