@@ -98,6 +98,10 @@ class CellShrinkParams(BaseModel):
     见 `TAIL_ONE_ABS_*`）。缺省关＝旧行为。开（全唐文嘉慶本）：列端格高 205–240px，列尾、列首的「一」只高
     25–32px，过不了按格高算的两道逃生口，被当框渣记空，整列少一字（切分线，2026-11-05）。"""
 
+    ink_blob_empty: bool = False
+    """一整团实心墨（墨点、污渍）的格记空，旗 `ink_blob`（extractor `is_ink_blob`，见 `INK_BLOB_*`）。缺省关＝旧行为。
+    开（全唐文 S6）：011:68:1:14 是夹在空格里的一团墨，列端渣格闸够不着，被当字（2026-11-05）。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
@@ -122,6 +126,8 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_only", None)
         if isinstance(d, dict) and not self.tail_one_abs:
             d.pop("tail_one_abs", None)
+        if isinstance(d, dict) and not self.ink_blob_empty:
+            d.pop("ink_blob_empty", None)
         if isinstance(d, dict) and not self.inner_frame_keep_cross:
             d.pop("inner_frame_keep_cross", None)
         return d
@@ -511,7 +517,8 @@ class CellShrinkStep(Step):
                      **({"jiazhu_rules": True} if p.jiazhu_strip_rules else {}),
                      **({"frame_line_reach": p.frame_line_max_off} if p.frame_line_max_off else {}),
                      **({"frame_line_grow": True} if p.frame_line_grow else {}),
-                     **({"tail_one_abs": True} if p.tail_one_abs else {})},
+                     **({"tail_one_abs": True} if p.tail_one_abs else {}),
+                     **({"ink_blob_empty": True} if p.ink_blob_empty else {})},
             "columns": [{"index": cc.col, "left_x": float(x0), "right_x": float(x1),
                          "cell_left_x": float(x0), "cell_right_x": float(x1), "cells": cells}],
         }

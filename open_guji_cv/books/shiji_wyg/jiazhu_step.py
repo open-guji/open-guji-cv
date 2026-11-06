@@ -24,6 +24,7 @@
    紧接着缝中带有墨」的地方当下沿（`_seg_end_gap`）：段下正文字中间是空的（皆、白、比）时缝中带断开，原判据会一直找到下面的字。
 9. v1.2：原切法格数已对上的列，原格有空格或两字一格（`_orig_placed_ok`）也重切；第二段起的段首也按段间正文字数从墨上找。
    v1.3（11-05，第 13 轮验收）：这类格数本来对的列不挪段首、不按段下沿判，新切法毛病格要少、格高不能更不匀才换。
+   v1.4（11-06，第 14 轮验收）：毛病格一样多、格高明显更匀（偏离小 BETTER_Q 以上）也换，补回 v1.3 丢掉的两字并一格的列。
 
 有列级人裁的列（pins、resolved_cuts、强制單行／夹注／正文、human_col）不走这里（规则七），由调用方判。
 跨列的段（整理本这一列只有段的一部分）照本列那部分的字数算，Δ 只影响本列。
@@ -67,6 +68,8 @@ ORIG_HMAX = 1.5
 TAIL_KEEP_H = 0.3
 #: 这类列新切法格高偏离最多可以比原来大这么多（v1.3）
 BETTER_Q_WORSE = 0.05
+#: 毛病格一样多时，新切法格高偏离要比原来小这么多才换（v1.4）
+BETTER_Q = 0.15
 #: 整行白至少这么多格高
 GAP_WHITE = 0.12
 #: 白行之后这么多格高里缝中带有墨的行占比到 GAP_BAND_FRAC 算正文字起头
@@ -341,11 +344,13 @@ def _seg_score(ink: np.ndarray, x_lo: int, cells: list, specs) -> tuple[int, flo
 
 
 def _better(ink: np.ndarray, x_lo: int, old: list, new: list, specs) -> bool:
-    """新切法比原切法好（v1.3）：毛病格少，格高偏离也不比原来大过 BETTER_Q_WORSE。"""
+    """新切法比原切法好（v1.4）：毛病格少且格高偏离不比原来大过 BETTER_Q_WORSE；或毛病格一样多、格高偏离小 BETTER_Q 以上。"""
     bo, qo = _seg_score(ink, x_lo, old, specs)
     bn, qn = _seg_score(ink, x_lo, new, specs)
     # v1.3：只在毛病格确实少了、格高也没更不匀时才换（第 13 轮 01:60:8、02:56:5 毛病格少了、格却切错）
-    return bn < bo and qn <= qo + BETTER_Q_WORSE
+    # v1.4：毛病格一样多、格高明显更匀（差 ≥ BETTER_Q）也换（第 14 轮 02:104:7「云密」、02:12:6「上洛」、05:48:8「集解」两字并一格，
+    # 新切法毛病格同为 0、格高偏离从 0.4–0.6 降到 0.1 上下，v1.3 因只认「毛病格少了」没换）
+    return (bn < bo and qn <= qo + BETTER_Q_WORSE) or (bn == bo and qn + BETTER_Q <= qo)
 
 
 def _row_q(ink: np.ndarray, rows: np.ndarray, top: int, e: int, m: int, xs: int, xe: int) -> float:

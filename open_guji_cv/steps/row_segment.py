@@ -915,12 +915,22 @@ class RowSegmentParams(BaseModel):
     #: 格位表、不做墨量配页（史記文淵閣本；见 row_segment_pagemap 模块头）。
     page_map: Literal["off", "loose", "strict", "pins"] = "off"
     page_map_pins: str = ""
+    #: 自动配页的**参照类型**（2026-11-06，Sheldon 定按文本类型、不按书）：`column_slots`（缺省，逐列带格位：
+    #: daizhige 逐列本，表全由参照定）／`column_text`（逐列无格位：`#@ 半叶头`＋一行一列的逐列文本，corpus 下
+    #: `page_map_ref_file`；配页比各列字数、格位用本页图像量，见 `row_segment_coltext.py`）。column_text 的钉位表
+    #: （`page_map_pins`，一行 `{"book","page","head"}`）在 strict/loose 档当硬约束、`pins` 档只按它出表；
+    #: 人核改格写 `page_map_overrides`（corpus 下 jsonl，`{"vol","page","col",字段…}`，`"drop": true` 删列）。
+    page_map_ref: Literal["column_slots", "column_text"] = "column_slots"
+    page_map_ref_file: str = ""
+    page_map_overrides: str = ""
     page_map_fingerprint: str = ""       # daizhige＋本册钉页、改格＋算法版本，`RowSegmentStep.book_params` 填
 
     @model_validator(mode="after")
     def _fill_layout_fingerprint(self):
         if self.page_map == "pins" and not self.page_map_pins:
             raise ValueError("page_map: pins 要配 page_map_pins（corpus 下的逐页钉位表）")
+        if self.page_map_ref == "column_text" and not self.page_map_ref_file:
+            raise ValueError("page_map_ref: column_text 要配 page_map_ref_file（corpus 下的逐列文本）")
         if self.page_map != "off":
             object.__setattr__(self, "layout_prior", "")
             return self
@@ -1004,8 +1014,13 @@ class RowSegmentParams(BaseModel):
             if self.page_map == "off":
                 d.pop("page_map", None)
                 d.pop("page_map_fingerprint", None)
-            if self.page_map != "pins":
+            if self.page_map != "pins" and self.page_map_ref != "column_text":
                 d.pop("page_map_pins", None)
+            if self.page_map_ref == "column_slots":
+                d.pop("page_map_ref", None)
+                d.pop("page_map_ref_file", None)
+            if not self.page_map_overrides:
+                d.pop("page_map_overrides", None)
         return d
 
     @model_validator(mode="after")
@@ -1040,7 +1055,8 @@ class RowSegmentStep(Step):
                    "open_guji_cv.utils.page_align", "open_guji_cv.utils.daizhige",
                    "open_guji_cv.books.siku_zongmu.jiazhu_step"),
         soft_params=("roster_glyph_fingerprint",),
-        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins"),
+        path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
+                     "page_map_ref_file", "page_map_overrides"),
     )
 
     def book_params(self, p: "RowSegmentParams", ctx: RunContext) -> "RowSegmentParams":
@@ -1048,7 +1064,7 @@ class RowSegmentStep(Step):
         if p.page_map == "off" or p.page_map_fingerprint:
             return p
         from .row_segment_pagemap import fingerprint
-        fp = fingerprint(ctx.book.id, p.page_map_pins if p.page_map == "pins" else "")
+        fp = fingerprint(ctx.book.id, _pm_pins(p), _pm_ref(p))
         return type(p)(**{**p.model_dump(), "page_map_fingerprint": fp})
 
     def prepare(self, ctx: RunContext, pages: list[int]) -> None:
@@ -1056,7 +1072,7 @@ class RowSegmentStep(Step):
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
         if p.page_map != "off":
             from .row_segment_pagemap import ensure
-            ensure(ctx, p.page_map, p.page_map_pins)
+            ensure(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
@@ -1123,7 +1139,7 @@ class RowSegmentStep(Step):
             yolo_boxes = [(b.x0, b.y0, b.x1, b.y1) for b in ych if b.conf >= p.yolo_conf]
         if p.page_map != "off":
             from .row_segment_pagemap import layout_for
-            layout = layout_for(ctx, p.page_map, p.page_map_pins)
+            layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
         else:
             layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
         if p.layout_prior and not layout:
@@ -1859,6 +1875,18 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
             ref_w=gate.ref_w, content_x=gc.content_x, border_top=gc.border_top,
             border_bottom=gc.border_bottom, top_slack=0.0))
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
+
+
+def _pm_pins(p: "RowSegmentParams") -> str:
+    """自动配页用的钉位表：逐列带格位只有 `pins` 档读；逐列无格位各档都读（已钉的页当硬约束）。"""
+    return p.page_map_pins if p.page_map == "pins" or p.page_map_ref == "column_text" else ""
+
+
+def _pm_ref(p: "RowSegmentParams") -> dict | None:
+    """自动配页的参照类型（`row_segment_pagemap` 按它分派）；缺省 `column_slots` 给 None，走原路径。"""
+    if p.page_map_ref == "column_text":
+        return {"kind": "column_text", "file": p.page_map_ref_file, "overrides": p.page_map_overrides}
+    return None
 
 
 def _shift_occ(occ: set, d: int, n_body: int) -> set | None:

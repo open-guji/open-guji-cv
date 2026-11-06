@@ -21,6 +21,11 @@
   直接按钉位从 daizhige 源记录出本册格位表（半叶列数取 `PINS_NCOL`=8，`zm` 职名列不写），
   与 `scripts/shiji_dzg_layout.py` 离线表逐行相同。指纹 ＝ daizhige 源文件＋本册钉位行＋算法版本。
 
+- **参照类型**（`page_map_ref`，2026-11-06）：上面说的是缺省的「逐列带格位」（`column_slots`，daizhige）。
+  「逐列无格位」（`column_text`：`#@ 半叶头`＋一行一列的逐列文本，只知每列字数，如全唐文 Kanripo）配页比各列字数、
+  格位用本页图像量，见 `row_segment_coltext.py`；钉位表一行 `{"book", "page", "head"}`（同 align_ref 的 page_pins），
+  `pins` 档只按钉位出表，`strict`／`loose` 档本册已钉的页按钉位、其余自动配。指纹另算（`_coltext_fingerprint`）。
+
 设计与评审：Claude Doc「格位表自动生成方案」（2026-10-25，Sheldon 定：不加步骤、放 Step3 产物、
 严格程度做书级设置）。
 """
@@ -153,8 +158,11 @@ def _pin_lines(pins_path: str, book: str) -> list[dict]:
     return out
 
 
-def fingerprint(book: str, pins_path: str = "") -> str:
-    """Step3 参数指纹里代表「格位表」的那一项（见模块头）。`pins_path` 非空 ＝ `pins` 档。"""
+def fingerprint(book: str, pins_path: str = "", ref: dict | None = None) -> str:
+    """Step3 参数指纹里代表「格位表」的那一项（见模块头）。`pins_path` 非空 ＝ `pins` 档。
+    `ref`（`_ref_of` 给的参照类型）是 `column_text` 时按逐列无格位算。"""
+    if ref and ref.get("kind") == "column_text":
+        return _coltext_fingerprint(book, pins_path, ref)
     if not has_source():
         return ""
     if pins_path:
@@ -197,8 +205,10 @@ def _inputs(ctx) -> tuple[str, list[int], str]:
     return sid, pages, sha.hexdigest()[:16]
 
 
-def ensure(ctx, strategy: str, pins_path: str = "") -> dict:
+def ensure(ctx, strategy: str, pins_path: str = "", ref: dict | None = None) -> dict:
     """本册配页结果（缓存里有且输入没变就直接读）。`strict` 时整册配不上抛 ValueError。"""
+    if ref and ref.get("kind") == "column_text":
+        return _ensure_coltext(ctx, strategy, pins_path, ref)
     if strategy == "pins":
         return _ensure_pins(ctx, pins_path)
     sid, pages, key = _inputs(ctx)
@@ -260,7 +270,8 @@ def _check(summary: dict, strategy: str, book: str) -> None:
         raise ValueError(
             f"{book} 自动配页没配上（page_map: strict）：正文页没配准 {len(bad)}/{n_text}（{bad[:20]}），"
             f"有字页平均得分 {mean:.3f}（要 ≥ {STRICT_MIN_MEAN}）。"
-            f"看 Step3 产物目录的 {CACHE_NAME}；配错的页在中心库 corpus/daizhige/{PINS_NAME} 钉上，"
+            f"看 Step3 产物目录的 {CACHE_NAME}；配错的页在中心库 "
+            f"{'page_map_pins 指的钉位表' if summary.get('ref') == 'column_text' else 'corpus/daizhige/' + PINS_NAME} 钉上，"
             "或书 yaml 改 params.row_segment.page_map: loose（配不准的页不带先验照切）")
 
 
@@ -328,12 +339,12 @@ def build(ctx, sid: str, pages: list[int], key: str) -> dict:
 _LAYOUT_MEMO: dict[tuple, dict] = {}
 
 
-def layout_for(ctx, strategy: str, pins_path: str = "") -> dict[tuple[int, int], dict]:
+def layout_for(ctx, strategy: str, pins_path: str = "", ref: dict | None = None) -> dict[tuple[int, int], dict]:
     """本册格位表 {(页, 列): 行}，同 `row_segment.load_layout`。逐页调用：缓存文件在就直接读
     （输入新不新由 `prepare` 起跑前查过一次），不在才现算。"""
     path = _cache_path(ctx)
     if not path.exists():
-        ensure(ctx, strategy, pins_path)
+        ensure(ctx, strategy, pins_path, ref)
     st = path.stat()
     mk = (str(path), st.st_mtime_ns, st.st_size)
     if mk not in _LAYOUT_MEMO:
@@ -341,3 +352,90 @@ def layout_for(ctx, strategy: str, pins_path: str = "") -> dict[tuple[int, int],
         _LAYOUT_MEMO.clear()
         _LAYOUT_MEMO[mk] = {(int(r["page"]), int(r["col"])): r for r in d["layout"]}
     return _LAYOUT_MEMO[mk]
+
+
+# ---- 逐列无格位（column_text） ------------------------------------------------------------------
+
+def _ref_path(ref: dict) -> Path:
+    from ..core.workspace import corpus_path
+    p = Path(corpus_path(ref["file"]))
+    if not p.exists():
+        raise FileNotFoundError(f"page_map_ref_file 指的逐列文本不存在：{p}")
+    return p
+
+
+def _corpus_lines(rel: str, key: str, book: str) -> list[dict]:
+    """corpus 下一份 jsonl 里本册的行（`key` 是册号字段名）。`rel` 空或文件不在给空表。"""
+    if not rel:
+        return []
+    from ..core.workspace import corpus_path
+    p = Path(corpus_path(rel))
+    if not p.exists():
+        return []
+    out = []
+    for ln in p.read_text(encoding="utf-8").splitlines():
+        if ln.strip():
+            r = json.loads(ln)
+            if r.get(key) == book:
+                out.append(r)
+    return out
+
+
+def _coltext_fingerprint(book: str, pins_path: str, ref: dict) -> str:
+    """逐列文本内容＋本册钉位行＋本册改格行＋本模块与 `row_segment_coltext` 的算法版本与代码。"""
+    from ..core.engine import code_hash_of_module
+    from . import row_segment_coltext as CT
+    sha = hashlib.sha256()
+    sha.update(f"coltext-v{ALGO_VERSION}.{CT.ALGO_VERSION}|{code_hash_of_module(CT.__name__)}|"
+               f"{CT.file_sha(_ref_path(ref))}|".encode())
+    sha.update(json.dumps(_corpus_lines(pins_path, "book", book), ensure_ascii=False, sort_keys=True).encode())
+    sha.update(json.dumps(_corpus_lines(ref.get("overrides", ""), "vol", book), ensure_ascii=False,
+                          sort_keys=True).encode())
+    return sha.hexdigest()[:16]
+
+
+def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict) -> dict:
+    """逐列无格位：缓存键 ＝ 指纹＋全册列窗口 sha＋格数列数；不在或过期就量全册格墨、配页、出表。"""
+    from ..core.spec import page_key
+    from . import row_segment_coltext as CT
+    n_slots, ncol = int(ctx.book.chars_per_line), int(ctx.book.expected_cols or 0)
+    sid = ctx.producer("column_windows").spec.id
+    pages = sorted(int(k[1:]) for k in ctx.store.keys(ctx.book.id, sid))
+    sha = hashlib.sha256()
+    sha.update(f"{_coltext_fingerprint(ctx.book.id, pins_path, ref)}|{strategy}|{n_slots}|{ncol}|".encode())
+    for p in pages:
+        sha.update(f"{p}:{ctx.store.sha(ctx.book.id, sid, page_key(p))}|".encode())
+    key = sha.hexdigest()[:16]
+    path = _cache_path(ctx)
+    if path.exists():
+        try:
+            d = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            d = None
+        if d is not None and d.get("key") == key and d.get("how") == "column_text":
+            _check(d["summary"], strategy, ctx.book.id)
+            return d
+    grids = []
+    for p in pages:
+        win = ctx.store.read(ctx.book.id, sid, page_key(p), "column_windows")
+        if win is None or (ncol and len(win.columns) != ncol):
+            grids.append(None)
+            continue
+        gray = ctx.raw_page(p)
+        grids.append(CT.ink_grid(gray, _page_columns(win, gray.shape[1]), n_slots))
+    pins = {int(r["page"]): r.get("head") for r in _corpus_lines(pins_path, "book", ctx.book.id)}
+    if strategy == "pins" and not pins:
+        raise ValueError(f"{ctx.book.id} 在钉位表 {pins_path} 里没有一行（page_map: pins）：先补本册钉位")
+    d = CT.build(ctx.book.id, pages, grids, _ref_path(ref), pins, strategy, n_slots, ncol)
+    d["layout"] = CT.apply_overrides(d["layout"], _corpus_lines(ref.get("overrides", ""), "vol", ctx.book.id))
+    d.update(key=key, version=ALGO_VERSION, how="column_text")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(d, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    tmp.replace(path)
+    s = d["summary"]
+    ctx.log(f"配页 {ctx.book.id}（逐列无格位 {ref['file']}，{strategy}）：{s['pages']} 页配上 {s['mapped']}，"
+            f"平均得分 {s['mean_score']}，不确定 {len(s['unsure_pages'])}，没配准的有字页 {len(s['bad_text_pages'])}，"
+            f"参照里没有的有字页 {len(s['no_ref_pages'])}，格位表 {s['pages_with_layout']} 页 {s['columns']} 列（{path}）")
+    _check(s, strategy, ctx.book.id)
+    return d

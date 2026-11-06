@@ -153,9 +153,17 @@ def align(pages: list[int], grids: list[np.ndarray | None], inks: list[float],
     """`pages` 本册页号（升序），`grids` 各页二值指纹（没框为 None），`inks` 各页整页墨量；
     `O` 全书半叶占格 (m, 列, 格)，`empty` 空半叶，`cover` 牌记半叶；`pins` 人工钉页 {页: 半叶或 None}；
     `raw` 各页原始墨量指纹（认重复扫描用）。"""
+    return align_scores(pages, _scores(grids, O, empty, inks), empty, cover, pins=pins, raw=raw)
+
+
+def align_scores(pages: list[int], S_all: np.ndarray, empty: np.ndarray, cover: np.ndarray,
+                 pins: dict[int, int | None] | None = None, raw: list[np.ndarray | None] | None = None,
+                 reorder: bool = True, swap: bool = True) -> AlignResult:
+    """同 `align`，得分矩阵 `S_all`（页数, 半叶数）由调用方给：不同参照类型各自打分（逐列带格位比占格，
+    逐列无格位比各列字数，见 `steps/row_segment_coltext.py`），配页 DP 共用。`reorder`／`swap` 关掉局部重排与
+    前后半叶对调：参照只给字数时满页彼此分不开，重排、对调只会把次序正常的满页挪乱。"""
     pins = pins or {}
     n = len(pages)
-    S_all = _scores(grids, O, empty, inks)
     pinned = [h for h in pins.values() if h is not None]
     dup = [False] * n
     if raw is not None:
@@ -167,14 +175,14 @@ def align(pages: list[int], grids: list[np.ndarray | None], inks: list[float],
     best = None
     for d0 in starts:
         lo = max(0, min([d0] + pinned) - MARGIN)
-        hi = min(O.shape[0], max([d0 + n] + [h + 1 for h in pinned]) + MARGIN)
-        total, res = _align_window(pages, S_all, lo, hi, empty, cover, pins, dup)
+        hi = min(S_all.shape[1], max([d0 + n] + [h + 1 for h in pinned]) + MARGIN)
+        total, res = _align_window(pages, S_all, lo, hi, empty, cover, pins, dup, reorder, swap)
         if best is None or total < best[0]:
             best = (total, res)
     return best[1]
 
 
-def _align_window(pages, S_all, lo, hi, empty, cover, pins, dup) -> tuple[float, AlignResult]:
+def _align_window(pages, S_all, lo, hi, empty, cover, pins, dup, reorder=True, swap=True) -> tuple[float, AlignResult]:
     """在半叶 [lo, hi) 里做单调 DP（见模块头），返回（总代价，结果）。"""
     n = len(pages)
     S = S_all[:, lo:hi]
@@ -199,7 +207,7 @@ def _align_window(pages, S_all, lo, hi, empty, cover, pins, dup) -> tuple[float,
             if i < n and j < m and d + cost[i, j] < D[i + 1, j + 1]:
                 D[i + 1, j + 1] = d + cost[i, j]
                 B[i + 1, j + 1] = (i, j, "pair")
-            if i + 1 < n and j + 1 < m:
+            if swap and i + 1 < n and j + 1 < m:
                 c = d + cost[i, j + 1] + cost[i + 1, j] + SWAP
                 if c < D[i + 2, j + 2]:
                     D[i + 2, j + 2] = c
@@ -225,7 +233,8 @@ def _align_window(pages, S_all, lo, hi, empty, cover, pins, dup) -> tuple[float,
             res.matches[pages[pi]] = PageMatch(pages[pi], lo + pj + 1, float(S[pi, pj + 1]), "swap")
             res.matches[pages[pi + 1]] = PageMatch(pages[pi + 1], lo + pj, float(S[pi + 1, pj]), "swap")
         i, j = pi, pj
-    _reorder(res, pages, S_all, empty, cover, pins, dup)
+    if reorder:
+        _reorder(res, pages, S_all, empty, cover, pins, dup)
     # 回填：两个已配页之间只剩一个未用的有字半叶、中间恰好一页没配上
     used = {mt.half for mt in res.matches.values()}
     for k in range(1, n - 1):
