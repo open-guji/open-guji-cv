@@ -90,6 +90,7 @@ class FlowConfig:
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
     rr_model: str | None = None
     rr_p: float = 0.5
+    coord_outside_skip: bool = False                   # 现役对位缺这一格、坐标对位字是组外字（非组员、非陪衬、非〓）时不补放入组（A24 Z01 深挖 2026-11-06；seed_admit `group_flow_coord_outside_skip`）
     lift_ref_guard: bool = True                        # 补放与整理本互证（`group_flow_pass`，seed_admit `group_flow_lift_ref_guard`）
     codepoint_min_cov: float = 0.91                    # 码位法（`methods.Codepoint`）给字要库首位 cov 到这个数：更低的多是褪墨页（vol44:213:9:12 郞 0.90 看不清）
     provisional: bool = True                           # 同义组暂归一兜底（`registry.PROVISIONAL`，seed_admit `group_flow_provisional`）
@@ -192,6 +193,15 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
     if c1 < cfg.min_cov:
         return None
     rr = ref or coord_ref
+    # 现役对位缺这一格、坐标对位说是另一个字（`coord_outside_skip`）：组只会在组员里挑字，这格进组必弃权（Z01），
+    # 原因该落回 L01／P02（殿本 Z01 527 格里 394 格是这样，A24 2026-11-06）。〓／空格位不算（彝 solo_margin 要进）。
+    co = coord_ref if (cfg.coord_outside_skip and not ref and coord_ref and coord_ref != GAP) else None
+
+    def _coord_out(g: str, mem) -> bool:
+        pv = PROVISIONAL.get(g)                    # 暂归一的另一写法／整理本写法（點㸃 的 𭶑）算组内
+        return (bool(co) and not GROUPS[g].ref_free and co not in mem and canon(co) not in mem and co not in _tol(g, cfg)
+                and not (pv and (co in pv.forms or co in pv.ref_forms)))
+
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
         tol = _tol(g, cfg)
@@ -205,6 +215,8 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         if not all(c in mem or c in _tol(g, cfg) for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
         if not GROUPS[g].ref_free and ref and not _member(g, ref, canon):
+            continue
+        if _coord_out(g, mem) and not _member(g, co, canon):
             continue
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
@@ -220,6 +232,8 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
             if not all(c in mem or c in tol for c, v in cands[1:] if c1 - v < cfg.delta):
                 continue
             if ref and ref not in mem and canon(ref) not in mem:
+                continue
+            if _coord_out(g, mem):
                 continue
             return g, "joint"
     return None

@@ -281,6 +281,11 @@ class SeedAdmitParams(BaseModel):
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
     见 `groups.flow.decide_joint`。False＝这类格不进流程（2026-10-22 前的行为）。"""
+    group_flow_coord_outside_skip: bool = True
+    """字组补放入口（A24 2026-11-06，Z01 深挖）：现役对位缺这一格、坐标对位的整理本字既不是该组成员也不是陪衬字
+    （〓、空格位除外）→ 不进该组。组只会在组员里挑字，这类格进组只会弃权（`group_flow_abstain`，原因码 Z01），
+    不进组后原因落回 L01／P02。殿本第5轮 Z01 527 格里 394 格现役对位缺位。只改原因、不放行；已放行格不受影响
+    （放行侧本有 `coord_dissent` 闸）。False＝旧行为。"""
     group_flow_lift_ref_guard: bool = True
     """字组补放（lift）与整理本互证（A24 2026-10-23，vol15 118:4:15 面→而：文意 L1 规则 em-而-l1 给 而，整理本对位 面，
     字形第二路倾向 面 但分差 0.33 不到 0.4 弃权，lift 仍放 而；图是 面）：整理本字是本组成员、与组给的字不同，且组里
@@ -3980,6 +3985,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
+                     coord_outside_skip=p.group_flow_coord_outside_skip,
                      provisional_to=dict(p.group_flow_provisional_to),
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
@@ -4024,7 +4030,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p._rt_lift_shape_ref() or p._rt_abstain_ref_ok() or p._rt_shape_ref_ok())
+                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_coord_outside_skip or p._rt_lift_shape_ref() or p._rt_abstain_ref_ok() or p._rt_shape_ref_ok())
                                                                    and ctx is not None) else None)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
