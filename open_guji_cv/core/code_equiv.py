@@ -1033,6 +1033,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7f810225612f4ea526dab7d258174282bc4270a4454c72a94c011371381b71f6",
           old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
           evidence=_SEAL_TOP),
+    # glyph_match 判决层抽成 glyph_rules（5a 规则框架，2026-11-06）
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='87cae8c868d07adc21efad96f764289ca54be50968e6b9b3f5ae69dbebbd4681',
+          old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
+          evidence='glyph_match 判决规则抽成规则表 steps.glyph_rules（RULES＋decide，含 #1174 缺省关的三组参数）：测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；另把殿本 1500 格、史記 800 格（含真借库）真匹配结果喂给改前内联逻辑与 decide()，18 组参数×2 种借库×近形开关共 24.8 万次判决 0 差（共识、借库、近形三通道都有命中）；scripts/code_equiv.py check，2026-11-06'),
 )
 
 
@@ -1094,6 +1099,10 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.row_segment": ("427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28", (
         ("open_guji_cv.steps.row_segment", "427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28"),
         ("open_guji_cv.books.siku_zongmu.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"))),
+    # 不是拆分、是 glyph_match 新加了一个 code_dep（判决规则表 glyph_rules）：两块都还是这一版时合回 glyph_match 一项
+    "open_guji_cv.steps.glyph_match": ("fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32", (
+        ("open_guji_cv.steps.glyph_match", "fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32"),
+        ("open_guji_cv.steps.glyph_rules", "e1321c554ab6ce61c5dce78b61a927c6f219bfe80a28fb671580d5010c8c3324"))),
 }
 
 

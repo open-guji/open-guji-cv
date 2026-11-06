@@ -5,6 +5,11 @@
 金标和一串负结果记录（提分辨率、密度自适应半径、骨架失配都实测否掉了），
 重写是浪费。这一步只负责：喂图、带上库指纹、把证据落成 numeric 产物。
 
+**规则的顺序与参数**（2026-11-06 起）：从查库到落判决要过的每一条规则——匹配器层（归一、分级查库、kNN、
+摘自身、弹性验证、两道护栏、形区分四对、近形决胜）与判决层（借库降档、共识升档、近形升档）——按执行顺序
+登记在 `steps.glyph_rules.RULES`，每条写明管它的参数与写死的常数；判决层由 `glyph_rules.decide()` 按序执行。
+加规则、改参数先看那里与 `doc/design/5a规则框架.md`。
+
 ## 三档语义（沿用设计 §2）
 
 | 档 | 条件 | 下游怎么用 |
@@ -96,6 +101,10 @@ from ..products.kinds.chars import PageChars
 from ..clustering.match import MatchTimeout
 from ..clustering.near_shape import NearShapeConfig
 from ..products.kinds.recog import CandidateMatch, ColumnMatch, MatchRec, PageMatch
+# 判决规则（顺序、参数、判决层实现）在 glyph_rules；这几个名字在此再导出，老的 import 路径照旧能用
+from .glyph_rules import (CONSENSUS_GUARDS as _GUARDS, StepState, _family_chars,  # noqa: F401
+                          consensus_same, decide, decide_variant, demote_borrowed,
+                          family_blocked, family_top_blocked)
 
 log = logging.getLogger(__name__)
 
@@ -197,17 +206,6 @@ def borrow_fingerprint(db_path: str | Path | None = None) -> str:
     except sqlite3.Error:
         return ""
     return ",".join(sorted(n for n in names if n))
-
-
-def demote_borrowed(m, borrowed: frozenset[str]):
-    """借来的条目判的 same 降一档（见模块头）。返回 (verdict, char, matched_id, cov, wmax, borrowed_id)：
-    `borrowed_id` 非空＝降了档。不是 same、没借库、命中的是本书条目时原样返回。"""
-    if m.verdict != "same" or not borrowed or m.matched_id not in borrowed:
-        return m.verdict, m.char, m.matched_id, m.cov, m.wmax, None
-    for iid, cov, wmax in getattr(m, "same_hits", ()) or ():
-        if iid not in borrowed:                     # 本书也有条目判 same：本书优先
-            return "same", m.char, iid, cov, wmax, None
-    return "unsure", None, None, m.cov, m.wmax, m.matched_id
 
 
 class GlyphMatchParams(BaseModel):
@@ -340,53 +338,7 @@ class GlyphMatchParams(BaseModel):
                                                    "family_fp": fp})
 
 
-def consensus_same(candidates, n_confirmed_of, cov_min: float, margin_min: float,
-                   min_confirmed: int, blocked=None) -> tuple[str, int] | None:
-    """unsure 档能不能按「共识」升成 same：返回 (字, 该字人裁例数) 或 None。
-
-    三条件缺一不可（标定见模块头）：top 候选 cov ≥ cov_min；比次优**异字**高 ≥ margin_min
-    （次优同字不算——同一字的多个刻例挨着很正常）；top 字已有 ≥ min_confirmed 例人裁。
-    没有异字候选时，差距按 0.85（unsure 档下界）算。
-    `blocked(首位字, 异字) -> bool`（可选，`consensus_family_guard`）：候选里任一异字与首位字被它判为形近
-    （同字组或互为形近对手）就不升；先以 `blocked(首位字, None)` 问一次首位字本身挡不挡（`top` 档用）。
-    """
-    if min_confirmed <= 0 or not candidates:
-        return None
-    top, cov = candidates[0]
-    if cov < cov_min:
-        return None
-    nxt = next((v for c, v in candidates[1:] if c != top), None)
-    if cov - (nxt if nxt is not None else 0.85) < margin_min:
-        return None
-    n = int(n_confirmed_of(top) or 0)
-    if n < min_confirmed:
-        return None
-    if blocked is not None and (blocked(top, None)
-                                or any(c != top and blocked(top, c) for c, _ in candidates[1:])):
-        return None
-    return top, n
-
-
 CONSENSUS_COUNTS = ("human", "human+auto", "all")
-
-
-def family_blocked(a: str, b: str | None) -> bool:
-    """`consensus_family_guard: rival` 用：两字同在一个字组，或在形近护栏表里互为对手。"""
-    if b is None:
-        return False
-    from ..clustering.match import _PARTNER
-    if b in _PARTNER.get(a, ()) or a in _PARTNER.get(b, ()):
-        return True
-    from ..groups.registry import GROUPS
-    return any(a in g.members and b in g.members for g in GROUPS.values())
-
-
-def family_top_blocked(a: str, b: str | None) -> bool:
-    """`consensus_family_guard: top`：首位字本身在字组或形近护栏表里就挡（`b` 不看）。"""
-    return a in _family_chars()
-
-
-_GUARDS = {"rival": family_blocked, "top": family_top_blocked}
 
 
 def human_confirmed_counts(db_path: str, scope: str = "human") -> dict[str, int]:
@@ -434,7 +386,8 @@ class GlyphMatchStep(Step):
         consumes=("char_index", "char_patch"), produces=("glyph_match",),
         params=GlyphMatchParams,
         code_deps=("open_guji_cv.clustering.match", "open_guji_cv.clustering.verify",
-                   "open_guji_cv.clustering.normalize", "open_guji_cv.clustering.features"),
+                   "open_guji_cv.clustering.normalize", "open_guji_cv.clustering.features",
+                   "open_guji_cv.steps.glyph_rules"),
         # `norm_stroke` 来自册配置且直接改归一结果——不进指纹的话改了 yaml
         # 产物还报「新鲜」（与 leaf_layout 当初同一个坑）
         book_deps=("norm_stroke",),
@@ -490,8 +443,8 @@ class GlyphMatchStep(Step):
                 self._confirmed = human_confirmed_counts(p.db_path, p.consensus_count)
             self._borrowed = borrowed_ids(p.db_path) if p.borrow_fingerprint else frozenset()
             self._confirmed_key = key
-        confirmed = self._confirmed
-        borrowed = getattr(self, "_borrowed", frozenset())
+        state = StepState(params=p, confirmed=self._confirmed,
+                          borrowed=getattr(self, "_borrowed", frozenset()), near_shape_cfg=ns_cfg)
 
         def normalize_patch(img, punct: bool = False):
             # 标点走等比归一（见 seed_witness 与 normalize.normalize_patch 的 isotropic 说明）：
@@ -561,7 +514,8 @@ class GlyphMatchStep(Step):
                     except MatchTimeout:
                         timed_out = True
                         break
-                    cv_verdict, cv_char, _, _, _, _ = demote_borrowed(cm, borrowed)
+                    cvd = decide_variant(cm, state)
+                    cv_verdict, cv_char = cvd.verdict, cvd.char
                     cand_variants.append(CandidateMatch(
                         side=cv.side, cand_idx=cv.cand_idx, verdict=cv_verdict, char=cv_char,
                         cov=round(float(cm.cov), 4), wmax=round(float(cm.wmax), 2),
@@ -571,21 +525,9 @@ class GlyphMatchStep(Step):
                     recs.append(_timeout_rec(r, p.cell_budget_s))
                     cnt["timeout"] += 1
                     continue
-                verdict, char, matched_id, cov, wmax, lent = demote_borrowed(m, borrowed)
-                via = f"borrowed:{lent}" if lent else None
-                if verdict == "unsure" and m.guard is None and not lent:
-                    # 共识升档（见模块头）。匹配器判了护栏（never_match / conflict）的不动。
-                    hit = consensus_same(list(m.candidates), confirmed.get,
-                                         p.consensus_cov, p.consensus_margin,
-                                         p.consensus_min_confirmed,
-                                         blocked=_GUARDS.get(p.consensus_family_guard))
-                    if hit:
-                        verdict, char, via = "same", hit[0], f"consensus:{hit[1]}"
-                ns = m.near_shape
-                if (ns_cfg is not None and verdict == "unsure" and ns and ns.get("winner") and not lent
-                        and m.guard is None):
-                    # 近形决胜升档（与共识升档同层、互不重叠：触发要求差距 < 0.03，共识要求 ≥ 0.03）
-                    verdict, char, via = "same", ns["winner"], f"near_shape:{ns['score']:+.2f}"
+                # 判决层规则（借库降档 → 共识升档 → 近形升档），顺序与参数见 glyph_rules.RULES
+                d = decide(m, state)
+                verdict, char, matched_id, cov, wmax, via = d.verdict, d.char, d.matched_id, d.cov, d.wmax, d.via
                 recs.append(MatchRec(
                     id=r.id, slot=r.slot, sub=r.sub,
                     verdict=verdict, char=char, matched_id=matched_id,
@@ -733,19 +675,6 @@ def _keben_subset(matcher):
     _SUBSETS.clear()                       # 只留最近一个库状态（同 seeding._MATCHER_CACHE）
     _SUBSETS[id(matcher)] = (matcher, sub)
     return sub
-
-
-_FAMILY: list = []
-
-
-def _family_chars() -> frozenset[str]:
-    """`font_tier.family` 拦的字：字组成员 ∪ 形近护栏表里有对手的字。"""
-    if not _FAMILY:
-        from ..clustering.match import _PARTNER
-        from ..groups.registry import GROUPS
-        _FAMILY.append(frozenset().union(*(g.members for g in GROUPS.values()))
-                       | frozenset(c for c, v in _PARTNER.items() if v))
-    return _FAMILY[0]
 
 
 class _FontTier:
