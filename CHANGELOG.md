@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- `row_segment` 切点判官（U-Net）结果落盘复用（`seg/cut_select`）：按窗口灰度内容＋墨阈＋判官指纹存执行机本地 `cache/_judge/`（每页约 4 MB），同机重跑同一页不再前向。史記（`cut_judge: unet_f64`）8 页首跑 108 秒、重跑 7 秒；产物逐字节不变、登记 code_equiv，不判过期。`GUJI_JUDGE_CACHE=0` 关。
+
 ## [0.6.14] - 2026-11-06
 
 - 史記夹注逐步切 v1.5（`books/shiji_wyg/jiazhu_step`）：逐步切过的夹注行，格线（`boundaries`）跟着贴新切的 a/b 两半（`_step_boundaries`）。此前只换格不动格线，cell_shrink 合成满宽格取旧格线，v1.4 切满到列尾的段第 21 行格线落在字下白里、被列端渣格闸判空，两半的字悄悄丢掉（第 16 轮 6 列 12 字，另有旧有 8 格同因）。全书 738 页重跑到 cell_shrink：丢的 20 格回来，其余格框持平或变好。史記职名页单段列（`roster_segment.refit_column`）几何块只比整理本差 1 字时另按块凑一版，切线压块腰的条数比整列等分少 2 条以上才用（07:2:5 题署列修好；10:2:6、07:2:7 不变；职名页 100 页另有 5 列密排官衔变好）。新增验收脚本 `scripts/check_layout_drop.py`：格位表说有字、Step4 没了或判空的格逐格列出。
