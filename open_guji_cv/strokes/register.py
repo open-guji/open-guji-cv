@@ -19,7 +19,7 @@ import cv2
 import numpy as np
 from scipy.spatial import cKDTree
 
-from ._ink import arclen, binarize, extend_tip, ink_bbox, out_dir, prune_spurs, resample, stroke_width, thin
+from ._ink import arclen, binarize, clean_cell, extend_tip, ink_bbox, out_dir, prune_spurs, resample, stroke_width, thin
 from .template import StrokeTemplate
 
 
@@ -38,9 +38,13 @@ class RegParams:
     pin: tuple = ()                # 这几笔（下标）不做逐笔配准、不自己找墨，信模板位置。差一笔验的那一笔用这个：
                                    # 按长短钉不稳（玉 的点贴完约 0.15 字身，正卡在阈值上，研究移植时翻过 3 格）
     pin_search: float = 0.1        # 钉住的笔在墨框里就近找「别的笔解释不了的残墨」，最多平移这么远（字身倍数）；0＝纹丝不动
+    pin_dark: float = 0.0          # >0：钉住的笔只认够黑的墨（灰度 ≤ 墨中位＋pin_dark×(纸中位−墨中位)）；浅灰噪点、透字不算
+    pin_min_area: float = 0.5      # 残墨至少这么多（笔宽²）才让钉住的笔去找；太小是噪点
+    pin_min_frac: float = 0.4      # 找到的残墨块至少要有这一笔应有墨量（笔长×笔宽）的这么多；噪点、碎屑不够
     pin_blob: float = 0.3          # 残墨团块长边超过字身这么多（切图带进来的框线、漏掉的整笔）不让钉住的笔去找
     snap_radius: float = 2.0       # 非刚性贴合半径（笔宽倍数）
     tip_extend: float = 3.0        # 两头外推上限（笔宽倍数）
+    clean: bool = True             # 先去贴边碎墨与界栏线（clean_cell）；按页裁的字块要开
     excl_gap: float = 1.2          # 独占：离别的笔多远才算这笔自己的墨（笔宽倍数）
 
     def to_json(self) -> dict:
@@ -91,22 +95,25 @@ def _fit_similarity(src, dst):
     return s, R, mu_d - s * R @ mu_s
 
 
-def _compact(pts: np.ndarray, shape, max_side: float) -> np.ndarray:
-    """只留长边不超过 max_side 的残墨连通块。"""
+def _blobs(pts: np.ndarray, shape, max_side: float) -> list:
+    """残墨按连通块分开，只留长边不超过 max_side 的块（框线、漏掉的整笔不要）。"""
     if not len(pts):
-        return pts
+        return []
     m = np.zeros(shape, np.uint8)
-    m[pts[:, 0].astype(int), pts[:, 1].astype(int)] = 1
+    iy, ix = pts[:, 0].astype(int), pts[:, 1].astype(int)
+    m[iy, ix] = 1
     n, lab, st, _ = cv2.connectedComponentsWithStats(m, 8)
-    ok = np.zeros(n, bool)
-    ok[1:] = np.maximum(st[1:, cv2.CC_STAT_WIDTH], st[1:, cv2.CC_STAT_HEIGHT]) <= max_side
-    return pts[ok[lab[pts[:, 0].astype(int), pts[:, 1].astype(int)]]]
+    li = lab[iy, ix]
+    return [pts[li == i] for i in range(1, n)
+            if max(st[i, cv2.CC_STAT_WIDTH], st[i, cv2.CC_STAT_HEIGHT]) <= max_side]
 
 
 def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = None) -> Fit:
     p = params or RegParams()
     # ---- 字图（小图放大）
     ink0 = binarize(gray)
+    if p.clean:
+        ink0 = clean_cell(ink0)
     if not ink0.any():
         return Fit(strokes=[FitStroke(s.name, s.pts * 0) for s in tpl.strokes], bbox=ink_bbox(ink0))
     ys, xs = np.nonzero(ink0)
@@ -114,6 +121,8 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
     f = 1.0 if size0 >= p.upscale_below else p.upscale_to / max(size0, 1)
     g = gray if f == 1.0 else cv2.resize(gray, None, fx=f, fy=f, interpolation=cv2.INTER_CUBIC)
     ink = binarize(g)
+    if p.clean:
+        ink = clean_cell(ink)
     ys, xs = np.nonzero(ink)
     size = float(max(np.ptp(ys), np.ptp(xs)))
     sk = thin(ink)
@@ -204,10 +213,10 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
     # ---- 落墨率、独占率、起止点
     H, W = ink.shape
 
-    def on_ink(q):
+    def on_ink(q, dt=dt_out):
         iy = np.clip(np.round(q[:, 0]).astype(int), 0, H - 1)
         ix = np.clip(np.round(q[:, 1]).astype(int), 0, W - 1)
-        return dt_out[iy, ix] <= 0.6 * w
+        return dt[iy, ix] <= 0.6 * w
 
     tips, ext = [], []
     for q in fitted:
@@ -216,8 +225,12 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
         tips.append((s0, e0))
         ext.append(resample(np.vstack([np.array(s0), q, np.array(e0)]), 1.0))
     # ---- 钉住的笔：只在模板位置附近平移去找别的笔解释不了的残墨（横末上翘三角贴着横，不算残墨）
+    dark = ink
+    if p.pin_dark > 0 and ink.any() and (ink == 0).any():
+        im, bg = float(np.median(g[ink > 0])), float(np.median(g[ink == 0]))
+        dark = (ink > 0) & (g <= im + p.pin_dark * (bg - im))
     if p.pin_search > 0 and any(short):
-        inkp = np.argwhere(ink > 0).astype(float)
+        inkp = np.argwhere(dark > 0).astype(float)
         R = p.pin_search * size
         for k in [k for k in range(len(fitted)) if short[k]]:
             others = [ext[j] for j in range(len(ext)) if j != k]
@@ -225,11 +238,14 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
                 continue
             od, _ = cKDTree(np.vstack(others)).query(inkp)
             resid = inkp[od > p.excl_gap * w]
-            resid = _compact(resid, ink.shape, p.pin_blob * size)
+            blobs = _blobs(resid, ink.shape, p.pin_blob * size)
             c = fitted[k].mean(0)
-            near = resid[np.linalg.norm(resid - c, axis=1) < R + arclen(fitted[k]) / 2]
-            if len(near) < max(3, 0.5 * w * w):
+            L = arclen(fitted[k])
+            need = max(3.0, p.pin_min_area * w * w, p.pin_min_frac * L * w)
+            cand = [b for b in blobs if len(b) >= need and np.linalg.norm(b.mean(0) - c) < R + L / 2]
+            if not cand:
                 continue
+            near = max(cand, key=len)
             shift = near.mean(0) - c
             n = np.linalg.norm(shift)
             if n > R:
@@ -240,9 +256,10 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
             e0 = extend_tip(ink, q[-1], -out_dir(q[::-1], w), p.tip_extend * w)
             tips[k] = (s0, e0)
             ext[k] = resample(np.vstack([np.array(s0), q, np.array(e0)]), 1.0)
+    dt_dark = cv2.distanceTransform((1 - dark.astype(np.uint8)), cv2.DIST_L2, 5) if dark is not ink else dt_out
     out = []
     for k, ((nm, _), q) in enumerate(zip(T, fitted)):
-        oi = on_ink(q)
+        oi = on_ink(q, dt_dark if short[k] else dt_out)
         others = [ext[j] for j in range(len(ext)) if j != k]
         if others:
             od, _ = cKDTree(np.vstack(others)).query(q)

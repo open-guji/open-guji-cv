@@ -70,11 +70,15 @@ class ClassStats:
                    sd=np.asarray(d["sd"], float), n=d["n"])
 
 
-def verify_extra(fit: Fit, stroke: int, hi: float = 0.5, lo: float = 0.2, min_cover: float = 0.0):
+def verify_extra(fit: Fit, stroke: int, hi: float = 0.5, lo: float = 0.2, min_cover: float = 0.85,
+                 min_on_ink: float = 0.7):
     """差一笔：fit 用笔多的字的模板贴。返回 ("more" | "less" | None, 独占率)。
-    独占率 ≥ hi → more；≤ lo → less；中间或整体贴得太差（cover < min_cover）弃权。"""
+    独占率 ≥ hi → more；≤ lo → less；中间弃权。
+    整体贴坏了也弃权：骨架被解释得少（cover < min_cover），或别的笔有一笔落墨率 < min_on_ink
+    （模板被邻字碎墨、坏切拉走；全唐文留出 4,536 格里 7 个异判有 3 个是这种）。"""
     e = fit.strokes[stroke].excl
-    if fit.cover < min_cover:
+    others = [s.on_ink for j, s in enumerate(fit.strokes) if j != stroke]
+    if fit.cover < min_cover or (others and min(others) < min_on_ink):
         return None, e
     if e >= hi:
         return "more", e

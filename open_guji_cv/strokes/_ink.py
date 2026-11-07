@@ -25,6 +25,29 @@ def binarize(gray: np.ndarray) -> np.ndarray:
     return b
 
 
+def clean_cell(ink: np.ndarray, edge_frac: float = 0.15, line_aspect: float = 8.0) -> np.ndarray:
+    """去掉字块里不属于本字的墨：贴着字块边、墨量不到全字 edge_frac 的连通块（邻字伸进来的笔头、切进来的碎墨），
+    以及贴边的细长直线（界栏、框线）。字块按页裁、外扩几像素时常带这些。"""
+    H, W = ink.shape
+    n, lab, st, _ = cv2.connectedComponentsWithStats(ink.astype(np.uint8), 8)
+    if n <= 2:
+        return ink
+    total = st[1:, cv2.CC_STAT_AREA].sum()
+    keep = np.ones(n, bool)
+    keep[0] = False
+    for i in range(1, n):
+        x, y, w, h, a = st[i]
+        edge = x <= 1 or y <= 1 or x + w >= W - 1 or y + h >= H - 1
+        if not edge:
+            continue
+        thin_line = max(w, h) >= line_aspect * min(w, h) and max(w / W, h / H) >= 0.5
+        if a < edge_frac * total or thin_line:
+            keep[i] = False
+    if not keep.any():
+        return ink
+    return keep[lab].astype(np.uint8)
+
+
 def stroke_width(ink: np.ndarray, skel: np.ndarray) -> float:
     dt = cv2.distanceTransform(ink, cv2.DIST_L2, 5)
     v = dt[skel > 0]

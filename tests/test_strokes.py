@@ -129,3 +129,24 @@ def test_skeleton_extract_san():
     san = [("横", [(20, 25), (20, 75)]), ("横", [(50, 30), (50, 70)]), ("横", [(82, 12), (82, 88)])]
     sts, _ = extract(draw(san, size=200, width=12))
     assert [s.name for s in sts] == ["横", "横", "横"]
+
+
+def test_verify_extra_abstains_on_bad_fit():
+    """整体贴坏了（别的笔不落墨、骨架没被解释）就弃权，不管验的那一笔独占率多高。"""
+    from open_guji_cv.strokes import Fit, FitStroke
+    ok = [FitStroke("横", np.zeros((2, 2)), on_ink=1.0, excl=0.9) for _ in range(3)]
+    dot = FitStroke("点", np.zeros((2, 2)), on_ink=1.0, excl=0.9)
+    assert verify_extra(Fit(strokes=ok + [dot], cover=0.95), 3)[0] == "more"
+    off = ok[:2] + [FitStroke("捺", np.zeros((2, 2)), on_ink=0.4, excl=0.0)]
+    assert verify_extra(Fit(strokes=off + [dot], cover=0.95), 3)[0] is None
+    assert verify_extra(Fit(strokes=ok + [dot], cover=0.6), 3)[0] is None
+
+
+def test_clean_cell_drops_edge_fragments():
+    from open_guji_cv.strokes._ink import binarize, clean_cell
+    im = draw(DA)
+    im[118:128, 40:60] = 0                       # 邻字伸进来的笔头，贴底边
+    im[:, 0:2] = 0                               # 界栏线，贴左边
+    ink = clean_cell(binarize(im))
+    assert ink[120:128, 40:60].sum() == 0 and ink[:, 0:2].sum() == 0
+    assert ink.sum() > 0.8 * binarize(draw(DA)).sum()
