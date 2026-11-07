@@ -946,6 +946,45 @@ def test_lift_shape_ref_book_level(monkeypatch):
     assert not r.admit
 
 
+def test_lift_shape_ratio_gate(monkeypatch):
+    """`lift_shape_ratio`（SJ 史記 r18，A24 11-07）：lift_shape_ref 只在字形路 ratio 落在书级区间时放；半格可单设。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    ratio = {"v": 1.3}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "曰" if name == "ry_shape" else None, via=name, extra={"ratio": ratio["v"]} if name == "ry_shape" else {}))
+    cands = lambda cid: [("日", 0.98), ("曰", 0.975)]
+    gate = {"ry": {"曰": (1.15, 9.0)}}
+    cfg = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio=gate)
+
+    def run(cid, c=cfg):
+        r = Rec(cid)
+        group_flow_pass([r], {cid: ("曰", "equal")}, cands, lambda r: False, c)
+        return r
+    assert run("x").admit                                                      # 1.3 明显扁宽 → 放
+    ratio["v"] = 1.05
+    r = run("x")
+    assert not r.admit and "group_flow_weak" in r.doubts                       # 居中 → 留审
+    assert not run("x", FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio={"ry": {"日": (0, 0.68)}})).admit  # 表里没有曰
+    assert run("x", FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}))).admit                  # 没设门照旧
+    half = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio=gate, lift_shape_ratio_half={"ry": {"曰": (1.0, 9.0)}})
+    assert run("x1a", half).admit and not run("x1", half).admit              # 半格用半格门
+
+
+def test_lift_shape_ratio_and_rt_skip_params():
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    d = SeedAdmitParams().model_dump()
+    assert not {"group_flow_lift_shape_ratio", "group_flow_lift_shape_ratio_jiazhu", "reference_trust_skip"} & set(d)
+    p = SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ratio={"ry": {"曰": [1.15, 9]}}, reference_trust="high",
+                        reference_trust_skip=["lift_shape_ref"])
+    d = p.model_dump()
+    assert d["group_flow_lift_shape_ratio"] == {"ry": {"曰": (1.15, 9.0)}} and d["reference_trust_skip"] == ["lift_shape_ref"]
+    assert "ry" not in p._rt_lift_shape_ref() and p._rt_abstain_ref_ok() and p._follow_variants()   # 只关这一项
+    assert "ry" in SeedAdmitParams(reference_trust="high")._rt_lift_shape_ref()
+    assert "ry" in SeedAdmitParams(reference_trust="high", reference_trust_skip=["lift_shape_ref"],
+                                   group_flow_lift_shape_ref=["ry"])._rt_lift_shape_ref()          # 单独开关仍生效
+
+
 def test_lift_shape_ref_not_in_params_dump():
     assert "group_flow_lift_shape_ref" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ref=["ry"]).model_dump()["group_flow_lift_shape_ref"] == ["ry"]
