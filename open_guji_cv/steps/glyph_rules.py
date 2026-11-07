@@ -210,8 +210,6 @@ def rule_consensus(m, d: Decision, s: StepState) -> Decision:
     p = s.params
     hit = consensus_same(list(m.candidates), s.confirmed.get, p.consensus_cov, p.consensus_margin,
                          p.consensus_min_confirmed, blocked=CONSENSUS_GUARDS.get(p.consensus_family_guard))
-    if hit and getattr(p, "consensus_skip_chars", "") and hit[0] in p.consensus_skip_chars:
-        return d
     return replace(d, verdict="same", char=hit[0], via=f"{Via.CONSENSUS.value}:{hit[1]}") if hit else d
 
 
@@ -273,9 +271,9 @@ RULES: tuple[RuleSpec, ...] = (
              params=("borrow_fingerprint",), via="borrowed:<条目 id>", apply=rule_borrowed_demote,
              cand_variants=True),
     RuleSpec(Rule.CONSENSUS, Stage.STEP, 120,
-             "unsure 且无护栏：首位 cov ≥ consensus_cov、比次优异字高 ≥ consensus_margin、该字已有 ≥ consensus_min_confirmed 例、首位不在 consensus_skip_chars → same",
+             "unsure 且无护栏：首位 cov ≥ consensus_cov、比次优异字高 ≥ consensus_margin、该字已有 ≥ consensus_min_confirmed 例 → same",
              params=("consensus_cov", "consensus_margin", "consensus_min_confirmed", "consensus_count",
-                     "consensus_family_guard", "consensus_skip_chars"),
+                     "consensus_family_guard"),
              constants=("无异字候选时分差按 0.85 算",), via="consensus:<例数>", apply=rule_consensus),
     RuleSpec(Rule.NEAR_SHAPE_PROMOTE, Stage.STEP, 130, "unsure 且无护栏、近形决胜决出了胜者 → same",
              params=("near_shape",), via="near_shape:<分>", apply=rule_near_shape),

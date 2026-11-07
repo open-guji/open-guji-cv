@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """共识升档的 same 退回原档（A23，全唐文 r15 回退 46 格，QTW 看图 11-06）：
-5a `consensus_skip_chars`、Step6 `consensus_as_unsure`、准入 `consensus_fallback`。自造数据。"""
+Step6 `consensus_as_unsure`、准入 `consensus_fallback`、对位 `coord_consensus_not_same`。自造数据。"""
 from __future__ import annotations
 
 import open_guji_cv.feedback.lookup as lookup
@@ -10,8 +10,6 @@ from open_guji_cv.core.step import STEPS, RunContext
 from open_guji_cv.products.cache import ImageCache
 from open_guji_cv.products.store import ProductStore
 from open_guji_cv.steps.context_decide import ContextDecideParams
-from open_guji_cv.steps.glyph_match import GlyphMatchParams
-from open_guji_cv.steps.glyph_rules import StepState, decide
 from open_guji_cv.steps.seed_admit import SeedAdmitParams, _consensus_fallback
 
 BOOK, PAGE, COL = "tbook", 1, 1
@@ -21,22 +19,7 @@ def _key(slot):
     return f"{BOOK}:{PAGE}:{COL}:{slot}"
 
 
-# ── 5a：consensus_skip_chars ─────────────────────────────
-
-def test_skip_chars_blocks_promotion():
-    from types import SimpleNamespace
-    m = SimpleNamespace(verdict="unsure", char=None, matched_id=None, cov=0.995, wmax=3.0,
-                        candidates=[("夭", 0.995), ("夫", 0.90)], guard=None, near_shape=None, same_hits=())
-    on = StepState(params=GlyphMatchParams(db_path="x.db", db_fingerprint="fp"), confirmed={"夭": 9})
-    assert decide(m, on).verdict == "same"
-    off = StepState(params=GlyphMatchParams(db_path="x.db", db_fingerprint="fp", consensus_skip_chars="夭天"),
-                    confirmed={"夭": 9})
-    d = decide(m, off)
-    assert (d.verdict, d.char, d.via) == ("unsure", None, None)
-
-
 def test_params_dump_hidden_when_off():
-    assert "consensus_skip_chars" not in GlyphMatchParams(db_path="x.db", db_fingerprint="fp").model_dump()
     assert "consensus_as_unsure" not in ContextDecideParams(corpus_fingerprint="x").model_dump()
     assert "consensus_fallback" not in SeedAdmitParams().model_dump()
     assert SeedAdmitParams(consensus_fallback=True).model_dump()["consensus_fallback"] is True
@@ -137,3 +120,19 @@ def test_admit_fallback_end_to_end(tmp_path, monkeypatch):
     assert on[1].admit and on[3].admit and (on[1].channel, on[3].channel) == (off[1].channel, off[3].channel)
     half = _admit(tmp_path / "c", monkeypatch, True, False)          # 只开准入：没有上下文裁决，照旧留审
     assert not half[2].admit
+
+
+# ── align_ref：coord_consensus_not_same ─────────────────────────────
+
+def test_align_ref_flag_hidden_when_off():
+    from open_guji_cv.steps.align_ref import AlignRefParams
+    assert "coord_consensus_not_same" not in AlignRefParams().model_dump()
+    assert AlignRefParams(coord_consensus_not_same=True).model_dump()["coord_consensus_not_same"] is True
+
+
+def test_coord_conflict_ignores_consensus_same_on_blank():
+    """史記 r18 09:183：空格位上的「○」被共识升成 same，坐标冲突闸整列退回。共识 same 不算库 same 时不退。"""
+    from open_guji_cv.steps.align_ref import _coord_conflict
+    recs = [(_key(1), 1, "", "山", 0.0), (_key(2), 2, "", "", 1.0), (_key(3), 3, "", "水", 2.0)]
+    assert _coord_conflict(recs, {}, {_key(2): "○"}).startswith("空格位上库认出了字")
+    assert not _coord_conflict(recs, {}, {})

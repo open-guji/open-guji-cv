@@ -569,6 +569,12 @@ class AlignRefParams(BaseModel):
     由 seed_admit `blank_ink_nonchar` 判非字或留审。起因：vol19 p155–158 满文页整列退回（S02 11 格＋S01 31 格）、
     vol10 p86 大印漏认的印文格。False＝关（缺省，不进参数哈希）。"""
 
+    coord_consensus_not_same: bool = False
+    """坐标对位的冲突闸不把 5a 共识升档的 same（`via="consensus:<n>"`）当库 same（2026-11-07，A23；缺省关、关时不进参数 dump）。
+    共识只看库、不看版面，「○」这类空格位上的圈点也会被升成 same，触发「空格位上库认出了字」整列退回——史記 r18
+    09:183（`consensus:2`）、04:139 对位丢字。开了以后这类格按升档前的 unsure 看；真 same 照旧。配 context_decide
+    `consensus_as_unsure`、seed_admit `consensus_fallback`。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_rare(self, handler):
         """`rare_topk == 0` 时不进 dump：没开的书 `params_hash` 与加字段前逐位相同。
@@ -597,6 +603,8 @@ class AlignRefParams(BaseModel):
             d.pop("coord_dp_flat", None)
         if isinstance(d, dict) and not self.coord_conflict_pair_only:
             d.pop("coord_conflict_pair_only", None)
+        if isinstance(d, dict) and not self.coord_consensus_not_same:
+            d.pop("coord_consensus_not_same", None)
         if isinstance(d, dict) and not self.coord_blank_ink:
             d.pop("coord_blank_ink", None)
         if isinstance(d, dict) and self.alt_select == "align":
@@ -790,7 +798,8 @@ class AlignRefStep(Step):
                          **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
-                         **({"blank_ink": True} if p.coord_blank_ink else {}))
+                         **({"blank_ink": True} if p.coord_blank_ink else {}),
+                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}))
             cells = _opt(ctx, "cells", page)
             if match.alt_columns and cells is not None and cells.alt_columns:
                 _choose_alt(out["align_ref"], ctx.book.id, page, match, ocr, rare, cells, p)
@@ -1469,7 +1478,8 @@ def _choose_alt(res: PageAlignRef, book: str, page: int, match, ocr, rare, cells
                  **({"shift_needs_pair": True} if p.coord_shift_needs_pair else {}),
                          **({"pair_no_sub": True} if p.coord_pair_no_sub else {}),
                          **({"pair_only": True} if p.coord_conflict_pair_only else {}),
-                         **({"blank_ink": True} if p.coord_blank_ink else {}))
+                         **({"blank_ink": True} if p.coord_blank_ink else {}),
+                         **({"consensus_not_same": True} if p.coord_consensus_not_same else {}))
     alt_match = match.with_alt(cols)
     car_main, car_alt = carrier_fn(match, ocr, rare), carrier_fn(alt_match, ocr, rare_alt)
     n_cells = {c.col: len(c.chars) for c in alt_match.columns if c.col in cset}
@@ -1513,7 +1523,7 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
                  pin_line: int | None = None, relaxed: bool = False, dp: bool = False,
                  title_trust: bool = False, dp_flat: bool = False,
                  shift_needs_pair: bool = False, pair_no_sub: bool = False,
-                 pair_only: bool = False, blank_ink: bool = False) -> None:
+                 pair_only: bool = False, blank_ink: bool = False, consensus_not_same: bool = False) -> None:
     """在 `res`（现役对位的产物）上补坐标对位：`coord` / `coord_cols` /
     `coord_fallback` / `coord_note`。现役 `chars` 一个字不动。
 
@@ -1545,7 +1555,8 @@ def attach_coord(res: PageAlignRef, book: str, page: int, match, ocr, rare,
         return
     from ..products.kinds.recog import CoordRec
     legacy = {c.id: c for c in res.chars} if res.anchored else {}
-    same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char}
+    same = {r.id: r.char for cc in cols for r in cc.chars if r.verdict == "same" and r.char
+            and not (consensus_not_same and str(getattr(r, "via", None) or "").startswith("consensus"))}
     work = []
     roster_cols: set[int] = set()
     for cc in cols:

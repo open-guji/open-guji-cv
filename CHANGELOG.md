@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-- 共识升档 same 退回原档（A23，全唐文 r15 待审 125→208）：`context_decide.consensus_as_unsure`、`seed_admit.consensus_fallback`（1.53）、`glyph_match.consensus_skip_chars`，书级、缺省关、不进参数 dump；glyph_match／context_decide 代码等价登记。
+- 共识升档 same 退回原档（A23，全唐文 r15 待审 125→208）：`context_decide.consensus_as_unsure`、`seed_admit.consensus_fallback`（1.53）、`align_ref.coord_consensus_not_same`（史記 r18 对位丢字），书级、缺省关、不进参数 dump；context_decide／align_ref 代码等价登记。
 
 ## [0.6.16] - 2026-11-07
 

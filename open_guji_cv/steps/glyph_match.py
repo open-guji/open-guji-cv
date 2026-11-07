@@ -246,10 +246,6 @@ class GlyphMatchParams(BaseModel):
       （`clustering.match._PARTNER`）时不升（千/干、己/已/巳…）；
     - `top`：更严，首位字本身是字组成员或在形近护栏表里有对手（同 `font_tier.family` 的字表）就不升，
       不看候选里有没有对手——留一法里 殿本 入→人、千→十、一→二 这类错，候选里常常只剩首位一个字。"""
-    consensus_skip_chars: str = ""
-    """不参与共识升档的字（首位是其中之一就不升，2026-11-07，A23；缺省空、空时不进参数 dump）。
-    给 `consensus_family_guard` 管不到的形近对用：字组和形近护栏表里都没有、候选里又常常不带对手的。
-    全唐文 r15 共识把 11 格「天」升成「夭」（QTW 看图），书级 `consensus_skip_chars: 夭天` 挡。"""
     same_cov: float | None = None
     """same 档单对门槛 cov（缺省 None＝`verify.ELASTIC_COV_HIGH` 0.996，不进参数 dump）。"""
     same_wmax: float | None = None
@@ -327,8 +323,6 @@ class GlyphMatchParams(BaseModel):
                 d.pop("consensus_count", None)
             if not d.get("consensus_family_guard"):
                 d.pop("consensus_family_guard", None)
-            if not d.get("consensus_skip_chars"):
-                d.pop("consensus_skip_chars", None)
             for k in ("knn_per_char", "knn_per_char_top"):
                 if not d.get(k):
                     d.pop(k, None)
