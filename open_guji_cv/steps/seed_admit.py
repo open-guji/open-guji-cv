@@ -3832,8 +3832,15 @@ def _resolve_group_flow_paths(p) -> None:
     object.__setattr__(p, "group_flow_rr_shape", rs)
     if p.group_flow_pair_shape:
         object.__setattr__(p, "group_flow_pair_shape", _abs(p.group_flow_pair_shape))
-    if p.group_flow_pair_shapes:
-        object.__setattr__(p, "group_flow_pair_shapes", {k: _abs(v) for k, v in p.group_flow_pair_shapes.items()})
+    if p.group_flow_pair_shapes:                 # 相对路径先找数据目录（模型随中心库走：config/groups/pair_shape_<组>.json），再找工作区
+        droot = data_root()
+
+        def _abs_data(v: str) -> str:
+            q = Path(v).expanduser()
+            if not q.is_absolute() and droot is not None and (droot / q).exists():
+                return str(droot / q)
+            return _abs(v)
+        object.__setattr__(p, "group_flow_pair_shapes", {k: _abs_data(v) for k, v in p.group_flow_pair_shapes.items()})
     bk = {g: _abs(v) for g, v in p.group_flow_book_knn.items()}
     for g in p.group_flow:
         t = cfg / "book_knn" / f"{g}.json"
