@@ -20,7 +20,9 @@ def kind(s):
     if not (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x3347F or 0x2F800 <= o <= 0x2FA1F): return "nonhan"
     return "real"
 
-def main(indir, outdir, table="code_table.json"):
+def main(indir, outdir, batch, table="code_table.json"):
+    # batch 决定事件 id（evt_<batch>_NNNNNN），每次出新文件都要用新的批名；11-05 r5 重出时沿用了写死的
+    # src-1-20261103，76 个 id 与原文件撞号（11-07 已在中心库改名为 src-1-20261105-r5）。
     tab = json.load(open(os.path.join(os.path.dirname(__file__), table)))
     st = RulingStore(persist=False)
     rows = [json.loads(l) for f in sorted(glob.glob(indir + "/*.jsonl")) for l in open(f)]
@@ -39,7 +41,7 @@ def main(indir, outdir, table="code_table.json"):
             rep.append((x["id"], k, s or "", "skip:anch=%s" % x.get("anch"))); continue
         p = st.put("O", "src-1", x["left"], x["right"], char=ch, conf="high", why=why, model="src-text-" + route, cell=x["id"], pending_reason="ref_lacuna")
         p.update({"admit_ok": True, "subclass": "PUA", "ref": x["ref"], "route": route, "src": s, "machine": x.get("cur"), "pending_reason": "ref_lacuna"})
-        ev = make_event("src-1-20261103", len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model")
+        ev = make_event(batch, len(evs) + 1, "ctx_ruling", EventTarget(step="seed_admit", unit="cell", key=x["id"], book=x["id"].split(":")[0]), p, actor="model")
         evs.append(ev); rep.append((x["id"], k, s, route + ":" + ch))
     os.makedirs(outdir, exist_ok=True)
     with open(outdir + "/events.jsonl", "w") as f:
@@ -50,4 +52,6 @@ def main(indir, outdir, table="code_table.json"):
     print(len(rows), "cells;", len(evs), "events;", collections.Counter(e.payload["route"] for e in evs))
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    if len(sys.argv) < 4:
+        sys.exit("用法：build_events.py <输入目录> <输出目录> <批名，如 src-1-20261107-r6；不可与已有批重名>")
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

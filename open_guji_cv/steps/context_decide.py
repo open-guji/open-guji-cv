@@ -216,6 +216,12 @@ class ContextDecideParams(BaseModel):
     一路同权（`OCR_WEIGHT`=1.5，库一路是 3.0×cov）：只扩池、不喧宾夺主。只在
     `rare_topk > 0` 时进参数哈希。"""
 
+    consensus_as_unsure: bool = False
+    """5a 共识升档的 same（`via="consensus:<n>"`）按升档前的 unsure 裁决，不当 db_same 直接继承
+    （A23，全唐文 r15 回退，第 7 轮；缺省关、关时不进参数 dump）。共识升档用的是同一份候选，
+    开了以后这些格的裁决与没开共识时逐字节相同；配 seed_admit `consensus_fallback` 一起开——准入那边
+    库字≠整理本字的共识 same 退回 unsure 走 context 等原通道，要的就是这里的上下文裁决。"""
+
     @model_serializer(mode="wrap")
     def _drop_empty_ai(self, handler):
         """两个 ai_* 字段为空时不进 dump：没接 AI 的书 `params_hash` 与加字段前逐位
@@ -225,6 +231,8 @@ class ContextDecideParams(BaseModel):
         if isinstance(d, dict) and not self.ai_evidence:
             d.pop("ai_evidence", None)
             d.pop("ai_evidence_fingerprint", None)
+        if isinstance(d, dict) and not self.consensus_as_unsure:
+            d.pop("consensus_as_unsure", None)
         if isinstance(d, dict) and not self.rare_topk:
             d.pop("rare_topk", None)
             d.pop("rare_weight", None)
@@ -425,7 +433,8 @@ class ContextDecideStep(Step):
             for i, r in enumerate(ordered):
                 # same 档直接继承——库匹配的 precision 是 1.0000 硬约束，
                 # 让 LM 去重排它只会净亏（context_step 铁律 2）。
-                if r.verdict == "same" and r.char:
+                if r.verdict == "same" and r.char and not (
+                        p.consensus_as_unsure and str(getattr(r, "via", None) or "").startswith("consensus")):
                     recs.append(DecisionRec(id=r.id, slot=r.slot, sub=r.sub,
                                             char=r.char, margin=1.0, source="db_same",
                                             ranked=[(r.char, 1.0)]))

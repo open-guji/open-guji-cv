@@ -742,7 +742,8 @@ def test_ref_canon_entry_and_review_by_codepoints():
     r = Rec("a")
     # 整理本 隷／𨽻 不是组员，按书级码位归一后与 𨽾 同字：进组
     assert entry(r, [("𨽾", 0.98)], "𨽻", cfg, _canon) == ("li", "lift")
-    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) is None                    # 不给码位照旧拦
+    assert entry(r, [("𨽾", 0.98)], "𨽻", FlowConfig(groups=("li", "mn"), provisional=False)) is None   # 不给码位、关暂归一照旧拦
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) == ("li", "lift")         # 𨽻 是 li 暂归一的写法：开暂归一（缺省）也进组（1.58）
     assert entry(r, [("𫎇", 0.98)], "䝉", cfg, _canon) == ("mn", "lift")
     # 已放行 隷（别的通道）也复核
     assert entry(Rec("b", "隷", True, "match_ref"), [], "隷", cfg, _canon) == ("li", "review")
@@ -792,6 +793,35 @@ def _pv_run(monkeypatch, recs, amap, cands, g="can", coord=None, provisional_to=
     group_flow_pass(recs, amap, lambda cid: cands[cid], lambda r: False,
                     FlowConfig(groups=(g,), provisional_to=provisional_to or {}), veto_refs=coord or {})
     return recs
+
+
+def test_provisional_qing_gap_coord(monkeypatch):
+    """卿𨜊：殿本整理本把这一刻形录成〓（坐标对位〓），字频给卿却被坐标对位闸当「组外字」拦下（Z04 245 格里 235 格）。
+    qing 开 `gap`：整理本缺字、库首位 cov 够 → 暂归一放成卿（A24 Z 类梳理 11-07，殿本抽 30 格看图全是卿）。"""
+    ids = ["v:1:1:1", "v:1:1:2"]
+    recs = [Rec(i) for i in ids]
+    cands = {"v:1:1:1": [("卿", 0.98), ("鄉", 0.94)], "v:1:1:2": [("卿", 0.93), ("鄉", 0.90)]}
+    _pv_run(monkeypatch, recs, {}, cands, g="qing", coord={i: "〓" for i in ids}, pick={i: "卿" for i in ids})
+    assert recs[0].admit and recs[0].char == "卿" and recs[0].evidence["group"]["decision"] == "provisional"
+    assert not recs[1].admit                       # cov 不到 provisional_gap_cov（0.95）照旧留审
+
+
+def test_provisional_ref_form_enters_group(monkeypatch):
+    """整理本字是暂归一的另一写法（li 的 𨽻、sui 的 𡻕，不是组员只是陪衬／同字码位）：入口照样接，解法与整理本不一时
+    暂归一兜底放成 `to`（第 5 轮缺位按坐标对位这样放；第 6 轮对上了整理本字反倒不进组，殿本 V01 多 225 格，A24 11-07）。
+    整理本是组外字照旧不进。"""
+    ids = ["v:1:1:1", "v:1:1:2", "v:1:1:3"]
+    recs = [Rec(i) for i in ids]
+    cands = {"v:1:1:1": [("𨽾", 0.98), ("隸", 0.956), ("謙", 0.90)], "v:1:1:2": [("𨽾", 0.98)], "v:1:1:3": [("𨽾", 0.98)]}
+    _pv_run(monkeypatch, recs, {ids[0]: ("𨽻", "replace"), ids[1]: ("𨽻", "replace"), ids[2]: ("謙", "replace")}, cands,
+            g="li", pick={i: "𨽾" for i in ids})
+    a, b, c = recs
+    assert a.admit and a.char == "𨽾" and a.evidence["group"]["decision"] == "provisional"
+    assert b.admit and b.char == "𨽾"
+    assert not c.admit and "group" not in (c.evidence or {})            # 整理本是组外字：不进组
+    recs = [Rec("v:1:1:4")]
+    _pv_run(monkeypatch, recs, {"v:1:1:4": ("𡻕", "replace")}, {"v:1:1:4": [("嵗", 0.97)]}, g="sui", pick={"v:1:1:4": "嵗"})
+    assert recs[0].admit and recs[0].char == "歲" and recs[0].evidence["group"]["decision"] == "provisional"
 
 
 def test_provisional_lift_needs_both_witnesses(monkeypatch):
@@ -914,6 +944,45 @@ def test_lift_shape_ref_book_level(monkeypatch):
     r = Rec("x")                                                               # 没有整理本 → 不放
     group_flow_pass([r], {}, cands, lambda r: False, on)
     assert not r.admit
+
+
+def test_lift_shape_ratio_gate(monkeypatch):
+    """`lift_shape_ratio`（SJ 史記 r18，A24 11-07）：lift_shape_ref 只在字形路 ratio 落在书级区间时放；半格可单设。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    ratio = {"v": 1.3}
+    monkeypatch.setattr(flow, "_solve", lambda name, g, r, *a, **k: GroupVerdict(
+        "曰" if name == "ry_shape" else None, via=name, extra={"ratio": ratio["v"]} if name == "ry_shape" else {}))
+    cands = lambda cid: [("日", 0.98), ("曰", 0.975)]
+    gate = {"ry": {"曰": (1.15, 9.0)}}
+    cfg = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio=gate)
+
+    def run(cid, c=cfg):
+        r = Rec(cid)
+        group_flow_pass([r], {cid: ("曰", "equal")}, cands, lambda r: False, c)
+        return r
+    assert run("x").admit                                                      # 1.3 明显扁宽 → 放
+    ratio["v"] = 1.05
+    r = run("x")
+    assert not r.admit and "group_flow_weak" in r.doubts                       # 居中 → 留审
+    assert not run("x", FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio={"ry": {"日": (0, 0.68)}})).admit  # 表里没有曰
+    assert run("x", FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}))).admit                  # 没设门照旧
+    half = FlowConfig(groups=("ry",), lift_shape_ref=frozenset({"ry"}), lift_shape_ratio=gate, lift_shape_ratio_half={"ry": {"曰": (1.0, 9.0)}})
+    assert run("x1a", half).admit and not run("x1", half).admit              # 半格用半格门
+
+
+def test_lift_shape_ratio_and_rt_skip_params():
+    from open_guji_cv.steps.seed_admit import SeedAdmitParams
+    d = SeedAdmitParams().model_dump()
+    assert not {"group_flow_lift_shape_ratio", "group_flow_lift_shape_ratio_jiazhu", "reference_trust_skip"} & set(d)
+    p = SeedAdmitParams(group_flow=("ry",), group_flow_lift_shape_ratio={"ry": {"曰": [1.15, 9]}}, reference_trust="high",
+                        reference_trust_skip=["lift_shape_ref"])
+    d = p.model_dump()
+    assert d["group_flow_lift_shape_ratio"] == {"ry": {"曰": (1.15, 9.0)}} and d["reference_trust_skip"] == ["lift_shape_ref"]
+    assert "ry" not in p._rt_lift_shape_ref() and p._rt_abstain_ref_ok() and p._follow_variants()   # 只关这一项
+    assert "ry" in SeedAdmitParams(reference_trust="high")._rt_lift_shape_ref()
+    assert "ry" in SeedAdmitParams(reference_trust="high", reference_trust_skip=["lift_shape_ref"],
+                                   group_flow_lift_shape_ref=["ry"])._rt_lift_shape_ref()          # 单独开关仍生效
 
 
 def test_lift_shape_ref_not_in_params_dump():
