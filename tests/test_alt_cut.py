@@ -200,3 +200,24 @@ def test_admit_mode_views_and_offline_cols(tmp_path):
     assert alt_cols_of("b", 3, st) == frozenset({2})       # 先读 seed_admit
     with alt_override("b", 3, ()):
         assert alt_cols_of("b", 3, st) == frozenset()      # 准入时钉住的列优先
+
+
+def test_admit_mode_require_matched():
+    """alt_require_matched：备选格网多出没有坐标字的格（02:106:7 的多切大字格）→ 不换；关时照旧换；备选没坐标字的格更少 → 照换。"""
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, CoordRec, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import _pick_alt_cols
+
+    def col(n_ok, n_rev):
+        recs = [AdmitRec(id=f"b:1:7:{i + 1}", slot=i + 1, admit=True, channel="match_ref", char="甲") for i in range(n_ok)]
+        recs += [AdmitRec(id=f"b:1:7:{n_ok + i + 1}", slot=n_ok + i + 1) for i in range(n_rev)]
+        return ColumnAdmit(col=7, chars=recs)
+
+    def coord(n):
+        return PageAlignRef(page=1, coord=[CoordRec(id=f"b:1:7:{i + 1}", col=7, slot=i + 1, ref_char="甲") for i in range(n)])
+    main = PageAdmit(page=1, columns=[col(8, 3)])      # 11 格全有坐标字
+    alt = PageAdmit(page=1, columns=[col(8, 1)])       # 9 格，坐标字只给 8 格 → 多 1 格没有
+    assert _pick_alt_cols([7], main, alt, coord(11), coord(8), None, None) == [7]
+    assert _pick_alt_cols([7], main, alt, coord(11), coord(8), None, None, require_matched=True) == []
+    # 主切法反而有 4 格没坐标字、备选更少：照换
+    assert _pick_alt_cols([7], main, alt, coord(7), coord(8), None, None, require_matched=True) == [7]
+
