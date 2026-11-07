@@ -1057,6 +1057,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8f1789da3ea7c9b45d005d34b2f3f4230f6cfc4b912e33de120dff6da7e7cc84',
           old='968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9',
           evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
+    # 共识升档退回原档（A23，全唐文 r15 回退，2026-11-07；第 7 轮）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='61e396b487119919fc0c14e7455248f7e838c47ce314e4853efd17a952074f77',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='坐标对位冲突闸 coord_consensus_not_same（缺省关、不进参数 dump；A23，史記 r18 09:183 空格位「○」共识 same 整列退回）：align_ref 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 表与改前同值；scripts/code_equiv.py check，2026-11-07'),
+    Equiv(module='open_guji_cv.steps.context_decide',
+          new='05eac4afb853e7c3530c9103430ba0267286ff5d3b45fe3cf3b1d48f8114fe40',
+          old='442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a',
+          evidence='Step6 consensus_as_unsure（缺省关、不进参数 dump；A23，全唐文 r15 共识 same 被准入拦 46 格）：context_decide 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 档判断与改前同值；scripts/code_equiv.py check，2026-11-07'),
 )
 
 
