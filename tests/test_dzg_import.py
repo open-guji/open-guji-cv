@@ -189,3 +189,18 @@ def test_resolve_pua_code_by_window(tmp_path):
     cols2 = [_col(0, {"t": "text", "start": 0, "s": "天地玄黄宇宙日月盈昃辰宿天地玄黄宇宙日月盈昃辰宿"})]
     p.write_text(json.dumps(_rec("0001-0001", "1-1a", cols2), ensure_ascii=False) + "\n", encoding="utf-8")
     assert resolve_pua_code(PuaIndex.from_source([p]), "天地玄黄宇宙", "日月盈昃辰宿") is None   # 同窗口不同码：不认
+
+
+def test_resolve_pua_code_note_interleaved(tmp_path):
+    """双行小注：源里右行读完再读左行，产物常是右一字、左一字交错读；主串对不上时查交错串（A24 R01 E 类）。"""
+    from open_guji_cv.utils.pua_lookup import PuaIndex, resolve_pua_code
+    cols = [_col(0, {"t": "text", "start": 0, "s": "提要一卷"},
+                 {"t": "note", "start": 4, "r": [[0, "兩淮鹽政"]], "l": [[0, "採進本"]]},
+                 {"t": "text", "start": 8, "s": "明李某撰其書"})]
+    p = tmp_path / "0001.jsonl"
+    p.write_text(json.dumps(_rec("0001-0001", "1-1a", cols), ensure_ascii=False) + "\n", encoding="utf-8")
+    idx = PuaIndex.from_source([p])
+    # 源读序：…兩淮鹽政採進〓本明李…  产物交错：…兩採淮進鹽〓政本明李…
+    assert resolve_pua_code(idx, "一卷兩淮鹽政採進", "本明李某撰") == "daizhige:U+EA96"
+    assert resolve_pua_code(idx, "一卷兩採淮進鹽", "政本明李某撰") == "daizhige:U+EA96"
+    assert idx.alt is not None and idx.alt.stream.startswith("提要一卷兩採淮進鹽〓政本")
