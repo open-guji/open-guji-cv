@@ -609,6 +609,33 @@ def test_group_flow_occluded_still_blocked_when_off(monkeypatch):
     assert r.admit      # 关着时 blocked() 为真（fake 里断言过），这里的放行是 fake 硬放的，不退回
 
 
+def _flow_form_open(monkeypatch, **params):
+    """写法待定格（`form_open`）在 `_group_flow_pass` 里是不是硬护栏（`group_flow_form_open`，A24 Z06 深挖 2026-11-06）。"""
+    from types import SimpleNamespace as _NS
+    import open_guji_cv.groups.flow as flow
+    from open_guji_cv.steps.seed_admit import _group_flow_pass
+    out = _page(BODY[:10], {3: dict(doubts=["form_open"], char=None)})
+    seen = {}
+
+    def fake(seq, amap, cands_of, blocked, cfg, **kw):
+        seen["blocked"] = blocked(next(r for r in seq if r.slot == 3))
+        return _NS(lifted=0, demoted=0)
+    monkeypatch.setattr(flow, "group_flow_pass", fake)
+    _group_flow_pass(SeedAdmitParams(db_path="x", **params), out, {}, {}, None, 1, {})
+    return seen["blocked"]
+
+
+def test_group_flow_form_open_blocked_by_default(monkeypatch):
+    assert _flow_form_open(monkeypatch) is True
+    assert _flow_form_open(monkeypatch, group_flow_form_open=True) is False
+
+
+def test_group_flow_form_open_default_not_in_dump():
+    gf = {"group_flow": ("jys",)}            # group_flow 为空时整个 group_flow* 前缀都不进 dump
+    assert "group_flow_form_open" not in SeedAdmitParams(db_path="x", **gf).model_dump()
+    assert SeedAdmitParams(db_path="x", group_flow_form_open=True, **gf).model_dump()["group_flow_form_open"] is True
+
+
 # ── R4 本书 codepoints 已归一的异体对（lane_coord_codepoint_variant）──────────────
 
 def _r4cp(cands, coord_char, **params):
