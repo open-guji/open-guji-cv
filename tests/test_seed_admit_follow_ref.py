@@ -142,3 +142,24 @@ def test_variants_mode_off_by_default_and_not_dumped():
     assert "follow_ref_variants" not in SeedAdmitParams(db_path="x").model_dump()
     d = SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
     assert d["follow_ref_variants"] is True and "follow_ref_cov" in d
+
+
+def test_variants_gap_relaxed_only_when_set_and_true_variant():
+    """`follow_ref_variants_gap`（A24 V01 深挖 11-06）：设了才放宽；只对关系层同词异体（T1／T2）、cov ≥0.93 生效。"""
+    lib = {1: ([("隱", 0.952), ("陽", 0.950)],)}                 # 领先 0.002
+    n, r = _run_v({1: {}}, lib, coord={1: "𨼆"})
+    assert n == 0                                                 # 缺省：同 follow_ref_gap 0.005
+    n, r = _run_v({1: {}}, lib, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 1 and r[1].char == "𨼆"
+    # 关系层没有边的一对（𨼆—隠）不放宽
+    n, r = _run_v({1: {}}, {1: ([("隠", 0.952), ("陽", 0.950)],)}, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 0
+    n, r = _run_v({1: {}}, {1: ([("隱", 0.925), ("陽", 0.923)],)}, coord={1: "𨼆"}, follow_ref_variants_gap=0.002)
+    assert n == 0                                                 # cov 不到 0.93
+
+
+def test_variants_gap_not_dumped_by_default():
+    d = SeedAdmitParams(db_path="x", follow_ref_variants=True).model_dump()
+    assert "follow_ref_variants_gap" not in d and "follow_ref_variants_cov" not in d
+    d = SeedAdmitParams(db_path="x", follow_ref_variants=True, follow_ref_variants_gap=0.002).model_dump()
+    assert d["follow_ref_variants_gap"] == 0.002

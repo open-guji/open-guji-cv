@@ -41,7 +41,8 @@ def test_configured_pair_admitted_as_target(tmp_path, monkeypatch, top, variant)
 
 @pytest.mark.parametrize("top,variant", PAIRS)
 def test_unconfigured_book_unchanged(tmp_path, monkeypatch, top, variant):
-    r = _run(tmp_path, monkeypatch, top=top, align=variant, codepoints={})
+    # 只看 codepoint_semantic 本身：晚晩 是 wan 组的纯异体强边，本测试没跑字组，edge_pair 补字组缝会另外放它（A24 V01 11-06）
+    r = _run(tmp_path, monkeypatch, top=top, align=variant, codepoints={}, params={"edge_pair_group_seam": False})
     assert not r.admit and "context_vs_ref" in r.doubts
 
 

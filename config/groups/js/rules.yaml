@@ -2,7 +2,7 @@ schema: ctx_l1/1
 group: js
 # A24 2026-10-24：下线 js-甲-r1——整理本挖出的搭配规则，拿 vol11–20 整理本回测（规则没见过的册）有冲突，不满足「零冲突」；产物里它们造成的都是误降审（看图核过）。明细见 A24 项目文件 a24/yiti/。
 rules:
-  - {id: js-申-l1, char: 申, src: corpus-pure, re: '[庚甲壬又篇傳引丙]◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
+  - {id: js-申-l1, char: 申, src: corpus-pure, re: '[庚甲壬又篇傳引丙]◎(?![月聲子帳午])', note: 整理本奇偶册交叉验证零冲突；n≥2；A24 Z02 11-06 全册审计：又甲聲、所引甲帳、又甲子、左傳甲午 误判，后接 月聲子帳午 不算}
   - {id: js-申-l2, char: 申, src: corpus-pure, re: '(?:詩傳|隆壬)◎', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: js-申-r1, char: 申, src: corpus-pure, re: '◎[培明以序王]', note: 整理本奇偶册交叉验证零冲突；n≥2}
   - {id: js-申-r2, char: 申, src: corpus-pure, re: '◎(?:培詩|自序)', note: 整理本奇偶册交叉验证零冲突；n≥2}

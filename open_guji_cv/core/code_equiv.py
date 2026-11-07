@@ -181,6 +181,8 @@ _COORD_PAIR = ("align_ref 加缺省关的书级开关 coord_shift_needs_pair（�
 _COORD_PAIR_SUB = ("align_ref 加缺省关的书级开关 coord_pair_no_sub（coord_shift_needs_pair 不管夹注半格；全唐文 r11 007 p47 列 3）："
                     "开关关着时 align_ref 在全唐文 vol06 p75–89（产物包 r11）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-05")
 
+_COORD_PAIR_ONLY = ('align_ref 加缺省关的书级开关 coord_conflict_pair_only（与现役对位冲突只退冲突格；A32 D02 深挖）：开关关着时 align_ref 在殿本 vol82 45 页（每 6 页取 1 加 p2/p3/p147，★main 包 cv0.6.4-c30-g19-r5-a2）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn（语料清单 yh/rules.yaml 与钉不符，新旧两边同样），2026-11-06')
+
 _QTW_FORK = ("全唐文套书 books/quantangwen 分叉（2026-11-04，A22）：row_boundaries、jiazhu_split 从殿本原样复制（含 #1025 "
              "jiazhu_single_head），殿本两份退回 #1025 之前；row_segment 壳按册套书取 row_boundaries（core/seg_set.resolve）。"
              "复制与殿本 #1025 之后那一版逐字相同，#1025 已证开关关着时等价（_JZ_SINGLE_HEAD）；全唐文册的指纹按 FORKED 记原模块名，不过期。"
@@ -1033,6 +1035,28 @@ ENTRIES: tuple[Equiv, ...] = (
           new="7f810225612f4ea526dab7d258174282bc4270a4454c72a94c011371381b71f6",
           old="589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f",
           evidence=_SEAL_TOP),
+    Equiv(module="open_guji_cv.steps.align_ref",
+          new="0f26855c8f378bf028927ac328f602061769bb46f48a736f0d56b2e439aef9e3",
+          old="b8519c1fb383d8e7fbf8fad5f5705a5a8d9a8456d66154663a68574d68d4fb2e",
+          evidence=_COORD_PAIR_ONLY),
+    # glyph_match 判决层抽成 glyph_rules（5a 规则框架，2026-11-06）
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='87cae8c868d07adc21efad96f764289ca54be50968e6b9b3f5ae69dbebbd4681',
+          old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
+          evidence='glyph_match 判决规则抽成规则表 steps.glyph_rules（Rule 枚举＋RULES＋decide，含 #1174 缺省关的三组参数）：测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；另把殿本 1500 格、史記 800 格（含真借库）真匹配结果喂给改前内联逻辑与 decide()，18 组参数×2 种借库×近形开关共 24.8 万次判决 0 差（共识、借库、近形三通道都有命中）；scripts/code_equiv.py check，2026-11-06'),
+    # kNN 每字限额（Sheldon 11-06，缺省关）
+    Equiv(module='open_guji_cv.steps.glyph_match',
+          new='977387eac7b8c04527f60688ec4a30f75bf41a0f030935bd6a250df161987ce7',
+          old='fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
+    Equiv(module='open_guji_cv.clustering.match',
+          new='f686765a1e1905deba28398fefe7de4ca6083bd5e3a9525c09ffb82f25753afd',
+          old='7fa5464da6ca4c45382394b0ecc847e8b8495c806609e2505da4ef9b0c762ab5',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
+    Equiv(module='open_guji_cv.steps.glyph_rules',
+          new='8f1789da3ea7c9b45d005d34b2f3f4230f6cfc4b912e33de120dff6da7e7cc84',
+          old='968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9',
+          evidence='kNN 每字限额 knn_per_char／knn_per_char_top（缺省 0 关，GlyphMatcher.per_char）：glyph_match 在测试样页 keben 3 页（--pages 1,2,3，库用殿本 glyph.db）与 origin/dev 产物逐字节相同；关着时匹配器只多一次属性判断，选 top 的代码路径与改前一字不差（seed_admit 等用 clustering.match 的步同理）；scripts/code_equiv.py check，2026-11-06'),
 )
 
 
@@ -1094,6 +1118,19 @@ SPLITS: dict[str, tuple[str, tuple[tuple[str, str], ...]]] = {
     "open_guji_cv.steps.row_segment": ("427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28", (
         ("open_guji_cv.steps.row_segment", "427c437a8ce5a034b069c6b95f3cebffa496bbf42babffad1098d7a981301d28"),
         ("open_guji_cv.books.siku_zongmu.jiazhu_step", "095bb58deee8dcb0f81c030c1f8037b39dd193000f95baa14205588939810c67"))),
+    # 不是拆分、是 glyph_match 新加了一个 code_dep（判决规则表 glyph_rules）：两块都还是这一版时合回 glyph_match 一项
+    "open_guji_cv.steps.glyph_match": ("fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32", (
+        ("open_guji_cv.steps.glyph_match", "fe823292dd35a88d6d8394f814c215819c784bb1d6fa87f905d12d88171edb32"),
+        ("open_guji_cv.steps.glyph_rules", "968766dcb15536599efeb17b95608c3864f82bce0bd6f89014ec01d2407d3ae9"))),
+    # 不是拆分、是补登记漏列的 code_dep（2026-11-06，manager test_code_deps_coverage 红）：align_ref 2.8 起 import
+    # utils.han_ranges、seed_admit 1.37 起 import utils.pua_v2_codes，当时没列进 code_deps。代码早已在跑，现有产物
+    # 就是这版算的，补登记不改行为：Step 模块与新加的块都还是这一版时合回原来一项，指纹不变；之后哪块真改了照常过期。
+    "open_guji_cv.steps.align_ref": ("0daed94e68cea57b475ea01e5239cfdc2095bc5fab8a3acc3dbab09f2368995b", (
+        ("open_guji_cv.steps.align_ref", "358cef6c7b2ab6251654ec64ed6d8a465c2ecc9060c8427a8957535b3025395d"),
+        ("open_guji_cv.utils.han_ranges", "2feaa83bebcaffcb71ccdba148cc77183f402f45fbf1b116da4cddaff77aef8e"))),
+    "open_guji_cv.steps.seed_admit": ("af762775452247be49c6f539663ecbf516a16ba29fb11f09d0fc7e11a5296fc1", (
+        ("open_guji_cv.steps.seed_admit", "9fab395141161db5735b2e423fd924813f4a318a5bddd364992606fbd533bdeb"),
+        ("open_guji_cv.utils.pua_v2_codes", "b19257019711a01c30b17a41303c24aac9e45b6f25718bae738e179545cd8d3f"))),
 }
 
 

@@ -35,6 +35,7 @@
 |---|---|
 | [glyph_db_first_design.md](glyph_db_first_design.md) | 字形库优先的增量识别（取代先聚簇再定字） |
 | [glyph_match_stack.md](glyph_match_stack.md) | 字形相似度匹配栈：四层链条、算法、测试集 |
+| [5a规则框架.md](5a规则框架.md) | Step5-a 判决规则表：顺序、参数、常数、加规则的步骤（`steps/glyph_rules.py`） |
 | [glyph_canonical_format.md](glyph_canonical_format.md) | 字形图块统一存储格式（256×256） |
 | [glyph_cnn_explained.md](glyph_cnn_explained.md) | 拆字识别（CNN 候选）给非机器学习读者的说明 |
 | [glyph_set_roadmap.md](glyph_set_roadmap.md) | 字形套：共享度量网络＋可插拔原型库 |

@@ -28,6 +28,7 @@ KIND = "ctx_ruling"
 SOURCE = "llm"
 OTHER = "其他"
 WIDTH = 20
+CELL_CODE_VER = "src-2"      # 格→私用码记录（按格号取，不是窗口键）
 
 
 class RulingLog(EventLog):
@@ -74,6 +75,35 @@ class RulingStore:
     def get(self, group: str, prompt_ver: str, left: str, right: str) -> dict | None:
         """→ 裁定 payload（含 char/conf/why/model/tok），没有 → None。"""
         return self._load().get((group, ctx_hash(left, right), prompt_ver))
+
+    def cell_codes(self) -> dict[str, dict]:
+        """格号 → 这一格在新图源文本层里的私用码记录（`prompt_ver="src-2"`，`put_cell_code` 写的）。
+
+        和窗口键的裁定不同，这里**按格号取**：「码表字对不对」要按码判，而格→码的对应靠离线对页文本一次算好（管线里没有文本层），
+        不能再绕窗口。格号换图源重切后会变，所以每条带 `ref`（当时这格的整理本对位字），用的时候要核对 `ref` 没变才算数。
+        后到覆盖（`replay_key`）。"""
+        if getattr(self, "_cc", None) is None:
+            cc: dict[str, dict] = {}
+            if self.log.events_dir.exists():
+                evs = [e for e in self.log.iter_all(raw=True) if e.kind == KIND and (e.payload or {}).get("prompt_ver") == CELL_CODE_VER]
+                for e in sorted(evs, key=replay_key):
+                    p = e.payload
+                    if p.get("cell") and p.get("code"):
+                        cc[p["cell"]] = p
+            self._cc = cc
+        return self._cc
+
+    def put_cell_code(self, cell: str, code: str, *, ref: str = "", anch: int = 0, page_match: float = 0.0, src: str = "") -> dict:
+        """记一格的私用码（离线对页文本算出，见 research/a24/pua_src/build_cell_codes.py）。`code` 写 `F1001`（U+F1001 去掉前缀）。"""
+        payload = {"source": "src_text", "group": "O", "prompt_ver": CELL_CODE_VER, "cell": cell, "code": code, "ref": ref or "",
+                   "anch": int(anch), "page_match": round(float(page_match), 3), "src": src}
+        self.cell_codes()[cell] = payload
+        if self.persist:
+            seq = max((e.seq for e in self.log.read(self._batch + "-cellcode", raw=True)), default=0) + 1
+            ev = make_event(self._batch + "-cellcode", seq, KIND, EventTarget(step="seed_admit", unit="cell", key=cell, book=_book(cell)),
+                            payload, actor="model")
+            self.log.append([ev])
+        return payload
 
     def put(self, group: str, prompt_ver: str, left: str, right: str, *, char, conf, why: str, model: str,
             cell: str | None = None, tok: dict | None = None, pending_reason: str | None = None) -> dict:

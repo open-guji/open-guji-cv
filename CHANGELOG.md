@@ -5,6 +5,37 @@
 
 ## [未发版]
 
+## [0.6.16] - 2026-11-07
+
+- 第 6 轮冻结版：从 dev d215e7b 切，回退 #1186（variants 补 14 对异体边，要配底库 b20，随第 7 轮再进）。
+
+- seed_admit 1.51 `group_flow_form_open`（缺省开，缺省值不进参数 dump；A24 Z06 深挖 11-06，sheldon 11-07 定）：字组流程不再把 `form_open`（写法待定，原因码 Z06）当硬护栏，由组的刻形解法（li 隸𨽾、sui 歲嵗、yi_560 彝彛彞）定形；解法给字且与整理本字互证才补放，弃权或与整理本不一的仍留 `form_open`。殿本 ★main 99 册现算 Z06 共 5 格，离线试判 5 格全给字、4 格会放行、目视可判 3 格全对；史記、全唐文 0 格。报告 ai-team `domain/CV/质检/待审原因深挖/Z06-写法待定.md`。
+
+- seed_admit 1.50 `p_ref_coord_max_cov`／`p_ref_coord_adjacent`（书级，缺省 `None`／关、关时不进参数 dump；A24 P02）：`p_ref_coord` 放的坐标对位格有自己的 cov 上限（`None`＝沿用 `p_ref_max_cov`）和相邻开关（只看 `p_ref_coord_adjacent`，不随 `p_ref_adjacent`）。原因：殿本 P01 要 `p_ref_adjacent`＋cov 0.95，P02 的切分错位格（vol29 p31 6:17–19，cov<0.95、相邻成片）一开相邻就会被放进去；史記 P01 要 0.97，P02 机器字对的格 cov 低到 0.9458，要 0.94。文本对位格的行为不变。
+
+- seed_admit 1.49 `p_ref_skip_variant`（书级，缺省关、关时不进参数 dump；A24 P01 深挖 11-06）：`p_ref_admit` 不取与机器字有直接异体边的整理本字，留给异体对按刻形定。殿本放开相邻／夹注、cov<0.95 后 p_ref 会碰 L01 格，抽 30 格 14 格是异体对（羨羡、諫諌、緣縁…），其余 16 格整理本对 15。
+
+- seed_admit 1.48 `p_ref_coord`（书级，缺省关、关时不进参数 dump；A24 P02 深挖 11-06）：`p_ref_admit` 对 P02（`ref_final_diff`）也生效——这类格在文本对位 `align_ref.chars` 里没标签（所在段被长度闸／不等长段丢掉），整理本字只在坐标对位里；开后退到坐标对位字（去掉冲突格、〓、空格位），cov 上限／相邻／夹注三个旋钮同样管。殿本线上 P02 看图 61 格：整理本对 53、机器字对 1（cov 0.96）、切分错位 3（相邻成片，被相邻规则拦）、看不清 4。
+
+- seed_admit 1.47 字组复核／补放两个书级旋钮（**缺省全关**，关时不进参数 dump、逻辑与改前相同；A24 Z02 判法打架深挖 11-06，框架见 `doc/字组/判法打架.md`）：`group_flow_dissent_keep`（＋`group_flow_dissent_margin`）——复核时已放行字＝整理本字、只有弱图像票（ids margin<1.0、yr_bars）反对不降审；`group_flow_ref_pair`（＋`group_flow_ref_pair_margin`）——补放／联合判卡在字形×文意冲突或共字组搭档没裁定时，整理本字＝本组解法给的字、反对只有图像路则取它。同批收窄 7 条 L1 规则（全册 39.5 万个字组格审计，与整理本冲突 1187→1119，好命中只少 7 个）：`zh-曾經`（前接 附理誤以體統融意 不算）、`yh-遺文`（前接 往旋返召放赦送賜贖 不算）、`yh-還朝`（前接 無補拾所不 不算、往往◎不算）、`yt-圓`（去 形）、`yt-圖`（后接 篇卽即地、前接崔 不算）、`rm-日`（去 每）、`js-申-l1`（后接 月聲子帳午 不算）；`config/corpus-registry.json` 重写。规则文件哈希变了，用到这几组的册 seed_admit 过期一次（第 7 轮重跑时生效）。
+
+- seed_admit 1.46 `p_ref_max_cov`／`p_ref_adjacent`／`p_ref_jiazhu`（书级，缺省全关、关时不进参数 dump；A24 P01 深挖 11-06）：P 类取整理本字（`p_ref_admit`）加三个旋钮——机器字库覆盖率须低于上限、放开同列相邻成片、放开夹注半格。殿本线上 P01 单开 `p_ref_admit` 放 126 格、看图 13 格机器字本来对（cov 都 ≥0.94）；加 cov<0.93 放 31 格零错，再放开相邻＋夹注放 52 格。
+
+- seed_admit 1.45 `rare_ref_coord_group_top`（书级，缺省关、关时不进参数 dump；A24 L05 深挖 11-06）：rare_ref 坐标对位那支，库首位是字组成员、坐标对位字不在任何字组时也放（坐标对位字在组里仍不放）。L05 格里糊墨的库首位多是 刪／冊／衛／王 这类字组成员（吸引子），整理本字与 5-b 首位一致、不在组里。殿本、史記 ★main 离线回放：配 `rare_ref_coord_min_cov` 0.85，L05 238 格放 91（缺省只调 min_cov 放 79），看图全是整理本字；缺省关，行为不变。
+
+- seed_admit 1.44 `follow_ref_variants_gap`／`follow_ref_variants_cov`（书级，缺省 None 行为不变、不进 dump；A24 V01 深挖 11-06）：按参校本取异体（`follow_ref_variants`）的待审格单独放宽领先下限，只对关系层同词异体（`variant_edge(...).is_variant`）、库首位 cov ≥0.93 生效。史記 V01 夹注半格 10 格领先 0.002–0.004，看图字都对；开不开、设多少由书项目定（建议史記 0.002）。
+
+- seed_admit 1.43 `edge_pair_group_seam`（缺省开，A24 V01 深挖 11-06，第 7 轮）：edge_pair 补字组缝——纯异体强边但有一字是字组成员、这一格字组没接的待审格也按 edge_pair 判（形近组领先 ≥0.03，`replace_form: review` 不越过）。三书 ★main 包约 9 格，看图字都对。
+- `variants.variant_edge()`／`VariantEdge`（PATCH，A24；V01 深挖 11-06，算进第 7 轮）：放行与归因共用的异体口径（tier、来源、异体来源数、只有通假形近），`edge_pairs.is_auto_pair` 改用它，行为不变（全图 94,392 条边新旧逐条一致）；护栏类仍用 `are_variants`（宁多拦），`edge_pair` 要 ≥2 个异体来源是有意比归因严。manager `reasons.py` 之后改调它。
+- 注释（A24 N01 流程梳理，sheldon 11-06）：`seed_admit` 模块头的通道说明重写（旧版只写 match_solo 两条）、`near_form` 疑问在 seed_admit／seeding／confusable 三处写清口径（手工表 20 对；与匹配层护栏 `_PARTNER` 三表并集、待审原因 N01 是三个口径），指向 guji-manager `near_form_guard/流程.md`。只改注释和 docstring，**不改逻辑**；`code_hash` 只认代码，各步指纹不变。
+- `seed_admit` 1.41：折叠组（日曰、己已巳）书级参数化（A24 H01 深挖，sheldon 11-06「框架参数化，每本书自己试参数」；**全部缺省关**，关时不进参数 dump、逻辑与改前相同）。`fold_aspect_pairs`（哪组按宽高判、哪个字窄哪个字宽，缺省 `{ry: [日, 曰]}`）；`fold_jiazhu`（夹注 a/b 半格也折叠，半格只按宽高或文意裁定落字、绝不取整理本字；史記 H01 117 格里 94 格是夹注「某某曰」，原先半格一律跳过）；`fold_aspect_jiazhu`（半格单独阈值）；`fold_aspect_ctx_veto`（context_decide 给组内另一个字的概率 ≥ 阈值时宽高结论作废，记进 `fold_pending.ctx_veto`；防切分框不准，如史記 03:43:2:19b「孔安國曰」宽高比 0.68）。`scripts/fold_aspect_dist.py` 改为多册合并、正文／夹注分开、真值取已放行且机器字＝整理本字、按精度推荐阈值、一侧不可分就明说。新文档 `doc/字组/折叠组.md`：流程、参数表、每本书怎么标定、三书现状（殿本不开宽高；史記只判曰；全唐文只判日）。seed_admit 版本变，各册 seed_admit 过期，随下一轮统一重跑。
+- 补登记漏列的 `code_deps`：`align_ref` 加 `utils.han_ranges`（2.8 起 import）、`seed_admit` 加 `utils.pua_v2_codes`（1.37 起 import），以后改这两个模块对应步会判过期。代码早已在跑，补登记不改行为；`core/code_equiv.SPLITS` 登记合回原来一项，**两步 `code_hash` 不变、不过期**（全部 23 步改前改后实算逐位相同）。缘起 manager CI `test_code_deps_coverage` 在 dev 上红（A23 报）。
+- `seed_admit` 1.40：规则 A（rare_ref）加少刻例支 `rare_ref_sparse`（书级，**缺省关**，关时 `rare_ref_sparse*` 不进参数 dump）。参校字（现役对位，缺了用坐标对位字）在本书库里刻例 ≤ `rare_ref_sparse_max_n`（2）、5-b 首位是参校字（参校字是扩展区码位时也认它的异体，`rare_ref_sparse_variant`）、领先同来源组外最好候选 ≥ `rare_ref_sparse_lead`（0.02）时放行，通道 `rare_ref`，evidence `rare_ref.via=sparse／sparse_coord`、`lead`、`n_lib`。硬护栏、字组、group_flow／shadow_veto 疑问、库明确认成别的字一律不放。补的是原 rare_ref 两支漏掉的格（替换段要求、整页没锚、cov<0.90）。缘起 A23 L02 深挖（ai-team `domain/CV/质检/待审原因深挖/L02-刻例太少不一致.md`）：殿本线上单 L02 286 格里 274 格图就是参校字；★main 回放 cv 自己的 5-b 能放约 46 格（领先 0.02）。sheldon 11-06 同意，开不开按书定，随下一轮统一重跑。seed_admit 版本变，各册 seed_admit 过期。
+- `align_ref` 2.8：对位字流（`_corpus_text`）、坐标对位行偏移、金标清洗 `align_label.is_han`、`witness-align-stream` 统一按 `utils/han_ranges.py` 认汉字，**收扩展 A、B–J**（原先对位字流只留 U+4E00–9FFF，`is_han` 只到扩展 B）。整理本里的 㣲 𮅕 𮪍 这类扩展区字以前被删掉，整理本少一个字，difflib 在那里断段（A23 诊断 ai-team `domain/CV/质检/待审原因深挖/Z01-对位缺位诊断.md`：殿本 Z01 现役对位缺位 394 格里 109 格因此而起；殿本语料扩展区字约 1.26 万个）。97 册抽 4068 页现役对位 +3653 格，既有标签变 4 格，看图都不是退步（见 PR）。所有书 align_ref 及下游过期，**不进 v0.6.16，排第 7 轮随换图源全套重跑**（A31 11-06 定）。
+- `seed_admit` 1.39：书级新开关 `match_ref_diff_guard`（**缺省关**，关时不进参数 dump、产物不过期）。打开后 match_ref（整理本 equal 段与库首选同字）在库判 diff 时不放行，记 doubt `match_ref_diff` 退回人审（并入 `_LANE_HARD`，待审补放不放回）。缘起殿本 vol05 66:9:15：图是「不」，对位滑格给「字」，库首选也是「字」但判 diff，原先 match_ref 没有 cov／verdict 下限照放。70 册 ★main 包里这类放行 177 格（殿本 155、史記 19、全唐文 3）。殿本开不开等 sheldon 点头（A24 11-06）。
+- `seed_admit` 1.38：字组入口新开关 `group_flow_coord_outside_skip`（缺省开）。现役对位缺这一格、坐标对位字既不是组员也不是陪衬字（〓、空格位、暂归一写法除外）时不拉进组：组只会在组员里挑字，这类格进组必弃权（Z01）。A24 Z01 深挖（11-06）：殿本第5轮 Z01 527 格里 394 格现役对位缺位；按 ★main 包回放 Z01 −106（多为門辶囗族少见字，原因落回 L01／P02），已放行格不受影响（70 册包里命中 7 格，都是 𭶑，已按暂归一写法排除）。只改原因、不放行。seed_admit 指纹变，随第 6 轮重跑。
+- `seed_admit` 1.37 `pua_code_table`（缺省关，殿本开；A24，A31 X01 派单）：按私用码表改放字——格→码对应离线算好存裁定库 `src-2`（按格号取，带整理本对位字核对，`RulingStore.cell_codes`／`put_cell_code`），非人裁放行字≠码表字 → 改放码表字（通道 `code_table`），一码多字（F1001／F1055）标族豁免、族外降审，人裁不动；每页统计 `PageAdmit.n_code_fix`／`n_code_mismatch`（0 不落盘）。新增 `utils/pua_v2_codes`、`config/pua/siku_qiefen_v2_codes.json`、`research/a24/pua_src/build_cell_codes.py`。开关关着时产物逐位不变（参数不进 dump）。
+
 ## [0.6.15] - 2026-11-06
 
 - `seed_admit` 折叠组 `fold_occluded`（书级，缺省关）：遮挡格只在整理本字与库首位同在折叠组内时归组；须同写 `fold_ref_char: false`（#1178，A24，D01 深挖）。

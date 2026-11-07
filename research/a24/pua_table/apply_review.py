@@ -21,6 +21,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("table"); ap.add_argument("docs"); ap.add_argument("--by", required=True)
     ap.add_argument("--write", action="store_true")
+    ap.add_argument("--multi", action="store_true", help="同码各格点了不同字 → 记成 verdict=multi（一码多字），不当冲突")
+    ap.add_argument("--cell-picks", help="另存逐格结果 jsonl（格号→字），入字形库按格用")
     a = ap.parse_args()
     rows = [json.loads(l) for l in open(a.table, encoding="utf-8")]
     by_code = {r["code"]: r for r in rows}
@@ -50,14 +52,22 @@ def main():
             untouched.append((code, sorted({k[1] for k in kinds.values()})))
             continue
         if len(real) > 1:
+            chars = sorted({k[1] for k in real if k[0] == "char"})
+            if a.multi and len(chars) == len(real):      # 一码多字：sheldon 11-06「都是看图仔细定的」，各格各按所点，码表记 multi
+                t = max(t for _, t in cells.values())
+                at = datetime.datetime.fromtimestamp(t / 1000 if t > 1e11 else t, datetime.timezone.utc).strftime("%Y-%m-%d") if t else None
+                changed.append((code, r["verdict"], r.get("char"), "multi", "".join(chars)))
+                r.update(verdict="multi", char=None, chars=chars, by=a.by, at=at, nearest=True)
+                continue
             conflicts.append((code, sorted(real)))
             continue
         verdict, ch = next(iter(real))
+        r.setdefault("nearest", True if r["verdict"] == "char" else None)
         t = max(t for _, t in cells.values())
         at = datetime.datetime.fromtimestamp(t / 1000 if t > 1e11 else t, datetime.timezone.utc).strftime("%Y-%m-%d") if t else None
         if (r["verdict"], r.get("char")) != (verdict, ch):
             changed.append((code, r["verdict"], r.get("char"), verdict, ch))
-            r.update(verdict=verdict, char=ch if verdict == "char" else None, by=a.by, at=at)
+            r.update(verdict=verdict, char=ch if verdict == "char" else None, by=a.by, at=at, nearest=True if verdict == "char" else None)
             if verdict != "char":
                 r["orig"] = None; r["variant"] = None
     print(f"已点 {len(ans)} 码；改动 {len(changed)}；不一致 {len(conflicts)}；只点了看不清/切分 {len(untouched)}")
@@ -67,6 +77,13 @@ def main():
         print("不一致（不改）", *c)
     for c in untouched:
         print("未改（看不清/切分）", *c)
+    if a.cell_picks:
+        with open(a.cell_picks, "w", encoding="utf-8") as f:
+            for code, cells in sorted(ans.items()):
+                for cid, (v, t) in sorted(cells.items()):
+                    if v.startswith("pick:"):
+                        f.write(json.dumps({"cell": cid, "code": code, "char": v[5:], "by": a.by, "nearest": True}, ensure_ascii=False) + "\n")
+        print("逐格结果写到", a.cell_picks)
     if a.write:
         with open(a.table, "w", encoding="utf-8") as f:
             for r in rows:

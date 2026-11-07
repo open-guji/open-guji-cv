@@ -2,14 +2,14 @@
 """候选表 → 码表 config/pua/pua_table.jsonl（一码一行），并核对与待收字登记 glyph_pending_codes.json 一致。
 
 字段：code（带来源前缀，如 daizhige:U+EA96）、verdict（char|not_char|pending|open）、char（归一后的字）、orig（变体归一前的原形，没归一为空）、
-variant（true=char 是变体的归一字；null=未标）、cands[{char,src[,note]}]、same_as[…]、by、at、note；另带 count、sk_no（维基 SKchar 号）。
+variant（true=char 是变体的归一字；null=未标）、nearest（true=char 是最相近的异体字、不保证与原字形同字；verdict=char 的行一律 true，入字形库时必须带这个标注，sheldon 11-06）、cands[{char,src[,note]}]、same_as[…]、by、at、note；另带 count、sk_no（维基 SKchar 号）。
 用法：python3 export_table.py CAND.jsonl OUT.jsonl
 """
 import json, sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
-KEEP = ["code", "verdict", "char", "orig", "variant", "cands", "same_as", "by", "at", "note", "count", "sk_no"]
+KEEP = ["code", "verdict", "char", "chars", "orig", "variant", "nearest", "cands", "same_as", "by", "at", "note", "count", "sk_no"]
 
 
 def main(cand, out):
@@ -20,6 +20,8 @@ def main(cand, out):
             r = dict(r)
             if r["verdict"] in ("char", "pending") and not r.get("by"):
                 r["by"] = "sheldon"
+            if r["verdict"] == "char":
+                r["nearest"] = True        # sheldon 11-06：码表字是「最相近的异体字」（不一定与原字形同字），入字形库必须注明
             if r["verdict"] in ("char", "pending") and not r.get("at"):
                 r["at"] = "2026-11-05"
             f.write(json.dumps({k: r.get(k) for k in KEEP}, ensure_ascii=False) + "\n")

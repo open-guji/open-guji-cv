@@ -16,17 +16,16 @@
 不参与任何自动判断；库匹配按 cov 分档采信，0.99 是拐点；凑双信号要挑**误差
 独立**的两路——文本 × 形状可以，OCR × 形状不行（那 4 条错例正是两者同错）。
 
-## 这一步现在能走哪几条通道
+## 通道一览（2026-11-06 重写；旧版只写了 match_solo 两条，早已过时）
 
-`admission_decision` 最强的几条（常规 / match_ref / match_replace）都要
-**整理本对齐字**，那来自 `align_label` 的页面锚定，还没进 v2 产物（B2 之后
-才有）。所以现在只走**纯字形**那两条：
+主循环里有 match_ref／match_replace／context／iron 等；主循环之后是后处理各遍（升＝补放，降＝挪回待审），
+次序写在 `_run_page` 的「后处理遍的次序」注释里，**改次序＝改产物**。一格放不放，看三件事：
+①库匹配（`glyph_match`）给的 verdict／候选／guard；②整理本对位（`align_ref`，现役 chars 与坐标 coord 两路）；
+③疑问码 `doubts`（`near_form`、`护栏:*`、`iron_*`、`ctx_guard_*` 等，会拦一批通道，见 `_hard_blocked`）。
 
-- `match_solo`：无整理本参照 + 库内 cov ≥ 0.99；
-- `match_solo_ocr`：cov 0.95~0.99 + OCR 字符背书（语义同字）。
-
-dev_set 3624 字位实测：match_solo 55.8% + match_solo_ocr 17.2% = **自动 73%**，
-人审 27%。接上整理本之后自动率会更高（v1 上实测 61% → 77%）。
+各通道的条件、缺省参数、哪本书开了哪个，对形近格（待审原因 N01）已整理成表：
+guji-manager `doc/01-粗校/待审原因/near_form_guard/流程.md` 第二节；逐书生效值用 `guji book show --effective`。
+常规与 match_ref／match_replace 的设计依据见 `clustering/seeding.admission_decision`（v1 十条通道的原始实现，v2 沿用其裁决）。
 
 ## 进库不在这一步做
 
@@ -270,6 +269,24 @@ class SeedAdmitParams(BaseModel):
     """书级：这几组补放时，`lift_needs`（如日曰要文意给字）没满足、但字形路给的字＝整理本字（现役对位缺格时用坐标对位字），
     且没有任何解法给出别的字（文意只是弃权）→ 照样补放（2026-11-01 史記文淵閣本：写本 曰 在小注里文意 L2 常 low_p 弃权，
     字形宽高比路判 曰、坐标对位也是 曰，01–10 约 100 格因此送审）。空＝不放宽（不进参数 dump）。"""
+    group_flow_ref_free: list[str] = Field(default_factory=list)
+    """书级「完全不看整理本」的字组（sheldon 2026-11-06：日曰同己已巳，殿本数据：整理本约 7% 错、文意约 90% 读得定）：这几组按 `ref_free` 走——
+    入口不看整理本、判法拿不到它、补放与复核都不拿它当证人／兜底（`ref_enter`、`lift_ref_agree`、`tolerate_ref_agree`、`review_ref_agree`、
+    `lift_shape_ref`、`abstain_ref_ok`、`lift_ref_guard` 全部失效）。写法 `[ry]`。空＝照注册表（缺省，不进 dump）。"""
+    group_flow_dissent_keep: list[str] = Field(default_factory=list)
+    """书级（A24 Z02 深挖 2026-11-06，缺省空＝关、不进参数 dump）：这几组复核已放行格时，**已放行字＝整理本字**（现役对位）、至少一路解法给了放行字、
+    给别字的解法**全是弱图像票**（`ids` 等记了 margin 的 < `group_flow_dissent_margin`；`yr_bars`、`bars` 这类量笔画的算弱票）→ 不降审（`flow._dissent_keep`，
+    留痕 `dissent_keep`）。文意或码位给了别字照旧降审。殿本目视 36 格（遺還、圓圖、面而、傳傅、諭論、甲申、間問、曾會、一二）放行字全对。
+    写法 `[em, fc, ly, wj, yh, yt, js, zh, yr]`；入人八 rr 与 日曰 ry 文意不独立，别开（见 doc/字组/判法打架.md）。"""
+    group_flow_dissent_margin: float = 1.0
+    """`group_flow_dissent_keep` 里 `ids` 反对票算弱票的 margin 上限（缺省 1.0；仅 `group_flow_dissent_keep` 非空时进参数 dump）。"""
+    group_flow_ref_pair: list[str] = Field(default_factory=list)
+    """书级（A24 Z02 深挖 2026-11-06，缺省空＝关、不进参数 dump）：这几组补放／联合判卡在「字形与文意冲突」或「共字组搭档没裁定」时，若**整理本字（现役对位）＝
+    本组解法给的字**、反对的全是图像路（margin < `group_flow_ref_pair_margin`；没有文意支持时须比支持的 ids 弱）→ 取这个字（`flow._ref_pair_pick`，留痕 `ref_pair`）。
+    文意、码位、搭档文意给了别字不取。殿本 ★main 全册 309 格已被别的通道放行的，字全与它一致（0 异）；目视 Z02 待审 32 格全对。
+    写法 `[men, chuo, zy, yr, wm, zh, ts, sy, rr, rm]`。"""
+    group_flow_ref_pair_margin: float = 1.5
+    """`group_flow_ref_pair` 里图像路反对票的 margin 上限（缺省 1.5；仅 `group_flow_ref_pair` 非空时进参数 dump）。"""
     group_flow_abstain_ref_ok: list[str] = Field(default_factory=list)
     """书级：这几组复核已放行格时，解法全弃权（`group_flow_abstain`）、没有任何解法给出别的字、已放行字＝整理本字
     （现役对位缺格时用坐标对位字）→ 不降审（2026-11-01 史記文淵閣本，用户定「按整理本走」：己已巳文意 L2 首选同字但 low_p、
@@ -281,6 +298,16 @@ class SeedAdmitParams(BaseModel):
     """共字组联合补放（2026-10-22）：分差内候选哪一组都装不下、但装得下「组＋它在点名里的共字组」（日曰目三字紧咬：ry＋rm）时也进流程，
     先由该组定字，共字组须同意（字也是它的成员）或明说「其他」（L2 表 abstain:other 且 high），否则留人审（`group_flow_joint`）。
     见 `groups.flow.decide_joint`。False＝这类格不进流程（2026-10-22 前的行为）。"""
+    group_flow_form_open: bool = True
+    """字组流程接「写法待定」格（A24 2026-11-06，Z06 深挖，sheldon 11-07 定缺省开；缺省值不进参数 dump）：准入时用字账里 ≥2 个写法的组、形定不了（`form_open`，
+    原因码 Z06）的格，过去一律被字组流程当硬护栏挡在门外，哪怕这组本来就有按刻形拆判的解法（li 隸𨽾、sui 歲嵗、yi_560 彝彛彞 整字 HOG／三段 IDS）。
+    开：`form_open` 不再算字组流程的硬护栏，由组的解法定形：给字且与整理本字互证才补放（放行后 doubts 清空）；弃权、与整理本不一的仍留 `form_open`（Z06）。
+    殿本 ★main 99 册现算 Z06 共 5 格（彛 1、隸 2、歲／嵗 2），离线用组解法试判全部给字、4 格会放行、目视可判 3 格全对。"""
+    group_flow_coord_outside_skip: bool = True
+    """字组补放入口（A24 2026-11-06，Z01 深挖）：现役对位缺这一格、坐标对位的整理本字既不是该组成员也不是陪衬字
+    （〓、空格位除外）→ 不进该组。组只会在组员里挑字，这类格进组只会弃权（`group_flow_abstain`，原因码 Z01），
+    不进组后原因落回 L01／P02。殿本第5轮 Z01 527 格里 394 格现役对位缺位。只改原因、不放行；已放行格不受影响
+    （放行侧本有 `coord_dissent` 闸）。False＝旧行为。"""
     group_flow_lift_ref_guard: bool = True
     """字组补放（lift）与整理本互证（A24 2026-10-23，vol15 118:4:15 面→而：文意 L1 规则 em-而-l1 给 而，整理本对位 面，
     字形第二路倾向 面 但分差 0.33 不到 0.4 弃权，lift 仍放 而；图是 面）：整理本字是本组成员、与组给的字不同，且组里
@@ -371,7 +398,40 @@ class SeedAdmitParams(BaseModel):
     """P 类「机器字≠整理本」取整理本字放行（书级，缺省关；A24 第 6 轮，轮次主线转 R/P 小试点结论 11-04）：待审格的机器字≠整理本对位字，
     两字都不在任何字组里（字组自己判）、不是夹注 a/b 半格、没有遮挡／排除／硬疑问、不是人裁格，且同列相邻格（slot±1）不也是这类格
     （成片＝切分错位的征兆，归 S）→ 放整理本字（通道 `p_ref`，`evidence.p_ref`）。
-    依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。"""
+    依据（r3 小试点，Sheldon 标）：这类格整理本字对 6/6（去掉成片格后），机器字 0 次对；样本小，上线前要抽检未标格。
+    **三个书级旋钮（A24 P01 深挖 11-06，缺省全关、关时不进参数 dump；框架与 benchmark 见 guji-manager `待审原因/ref_ocr_diff/`）**：
+    `p_ref_max_cov`（机器字的库覆盖率 `evidence.cov` 须**低于**它才放；缺 cov 的格不放；`None`＝不核）、`p_ref_adjacent`（放开「同列相邻格也是
+    这类格就不放」）、`p_ref_jiazhu`（放开夹注 a/b 半格）。依据：殿本线上 P01 里只开 `p_ref_admit`（旧口径）放 126 格，看图其中机器字对的 13 格全是库覆盖率
+    ≥0.94 的格（库认得机器字、整理本是别的版本）；加 `p_ref_max_cov=0.93` 后放 31 格零错，再放开相邻＋夹注放 52 格（看图 48 对 0 错 4 看不清）。史記 `p_ref_max_cov=0.97`＋
+    相邻＋夹注放 87／142 格（看图 62 对、24 图糊按文意、0 错）。全唐文整理本是 Kanripo 另一底本，机器字对的多（20/29），**不要开**。"""
+    p_ref_max_cov: float | None = None
+    p_ref_adjacent: bool = False
+    p_ref_jiazhu: bool = False
+    p_ref_skip_variant: bool = False
+    """`p_ref_admit` 的旋钮（A24 P01 深挖 11-06，缺省关、关时不进参数 dump；要同时开 `p_ref_admit`）：机器字与整理本字在关系层有**直接异体边**（`_direct_variant_edge`）的格不取整理本字，
+    留给异体对流程按刻形定（殿本不按参校本取异体，`follow_ref_variants` 不适用）。依据：放开相邻／夹注、cov<0.95 后 p_ref 也会碰 L01（库认不出）格，殿本这类格抽 30 格 14 格
+    是异体对（羨羡、諫諌、緣縁、奥奧、舟丹…），整理本字都对但会盖掉刻形；其余 16 格整理本对 15（1 格黑条）。"""
+    p_ref_coord: bool = False
+    """`p_ref_admit` 的第四个书级旋钮（A24 P02 深挖 11-06，缺省关、关时不进参数 dump；要同时开 `p_ref_admit`）：P02（`ref_final_diff`，定字与参校本不同）的格
+    **在文本对位 `align_ref.chars` 里没有标签**（所在段被长度闸／不等长段丢掉），整理本字只从坐标对位 `align_ref.coord` 来；开了以后这类格也按
+    p_ref 口径取坐标对位的整理本字（`evidence.p_ref.via = "coord"`）。坐标冲突格（`coord_conflict_ids`）、〓、空格位不取。
+    夹注旋钮同样管这类格；cov 上限和相邻有各自的旋钮 `p_ref_coord_max_cov`／`p_ref_coord_adjacent`（1.50，见下，与 P01 的 `p_ref_max_cov`／`p_ref_adjacent` 互不影响）；殿本线上 P02 看图 61 格里整理本对 53、机器字对 1（cov 0.96）、切分错位 3（相邻成片）。"""
+    p_ref_coord_max_cov: float | None = None
+    p_ref_coord_adjacent: bool = False
+    """`p_ref_coord` 的两个独立旋钮（A24 P02 深挖 11-06，1.50，缺省 `None`／关、关时不进参数 dump）：坐标对位来源的格（`evidence.p_ref.via=coord`）
+    用 `p_ref_coord_max_cov` 当 cov 上限（`None`＝沿用 `p_ref_max_cov`），**相邻成片只看 `p_ref_coord_adjacent`，不随 `p_ref_adjacent`**。
+    原因：P01 与 P02 共用一个 `p_ref_max_cov`／`p_ref_adjacent` 对不上——殿本 P01 要 cov 0.95＋相邻，P02 的切分错位格（vol29 p31 6:17–19，cov 0.896／0.8965／0.949）
+    恰好是相邻成片、cov<0.95，一开相邻就会放进去；史記 P01 要 0.97，P02 的机器字对格 cov 低到 0.9458，要 0.94。"""
+    blank_ink_nonchar: bool = False
+    """整理本空格位上有墨、库又认不出的格判非字放行（A22 S02 深挖 11-06，Sheldon 定「这几列没有必要完全挡住」；
+    缺省关、关时不进参数 dump；配 align_ref `coord_blank_ink`）。条件：坐标对位说这一位是空格（`ref_char=""`）、
+    不是坐标冲突格、库不是 same 且首位 cov < `blank_ink_max_cov`、同列有整理本字的格里库首位与整理本字一致的
+    至少 `blank_ink_col_min_agree` 格且占比 ≥ `blank_ink_col_min_frac`（这一列的格位对得上）。放法同印章空栏
+    （`admit=True`、`char=None`、通道 `blank_ink`）——随整理本不出字。库有把握是汉字（same 或 cov 够高）的留审：
+    可能是整理本漏字。起因：vol19 满文字母、vol10 p86 大印漏认的印文、碎笔格。遮挡格（`occluded`）归 R5，不碰。"""
+    blank_ink_max_cov: float = 0.9
+    blank_ink_col_min_agree: int = 3
+    blank_ink_col_min_frac: float = 0.5
     fold_ref_char: bool = True
     """`fold_groups` 的落字来源（sheldon 11-05 澄清：己已巳「匹配到其中任一个就归入这组，之后按文意定是哪一个，完全不能参考整理本」）：
     `True`＝旧行为（整理本字在组内就放整理本字，`fold.via=ref`；裁定优先护栏另算）；`False`＝**不取整理本字**，只放文意裁定（`fold.via=ruling`，
@@ -381,6 +441,20 @@ class SeedAdmitParams(BaseModel):
     """日曰组（`ry`）的字形宽高判据（sheldon 11-05：长宽差别大时直接按字形判，居中归组按文意）：字块外框宽/高 ≥ hi 判曰、≤ lo 判日、中间不判。
     写 `(0.85, 1.0)`＝宽高比 ≥1.0 曰、≤0.85 日。只对 `fold_groups` 里的 ry 格、且无人裁无遮挡无半格的待审格；量的是切分后字块框的宽高（`char_index` 的 `width`／`height`），不是字形主体。
     `None`＝关（缺省，不进 dump）。证据 `fold = {group, via: aspect, aspect: 宽高比}`。"""
+    fold_aspect_pairs: dict[str, tuple[str, str]] | None = None
+    """`fold_aspect` 用在哪些折叠组、哪个字窄哪个字宽（书级；A24 H01 深挖 11-06，sheldon「框架参数化，每本书自己试参数」）：
+    `{组: [窄字, 宽字]}`，宽高比 ≤ lo 判窄字、≥ hi 判宽字。`None`＝缺省 `{ry: [日, 曰]}`（同改前）。两个字都必须是该组成员，否则该组不按宽高判。
+    缺省不进 dump。"""
+    fold_jiazhu: bool = False
+    """`fold_groups` 也处理夹注 a/b 半格（书级，缺省关，不进 dump；A24 H01 深挖 11-06：史記 H01 117 格里 94 格是夹注「某某曰」）。
+    半格的整理本对位不稳，所以**半格只按字形宽高（`fold_aspect_jiazhu`）或文意裁定落字，绝不放整理本字**（不管 `fold_ref_char`）；都没有就记 `fold_pending` 留审。"""
+    fold_aspect_jiazhu: tuple[float, float] | None = None
+    """夹注半格的宽高阈值 `(lo, hi)`（书级，缺省关，不进 dump）：夹注字块比正文扁，正文阈值不一定合用，按本书已放行格单独标定
+    （`scripts/fold_aspect_dist.py --jiazhu`）。`None`＝半格不按宽高判（只等文意裁定）。只在 `fold_jiazhu` 开时起作用。"""
+    fold_aspect_ctx_veto: float | None = None
+    """宽高判据的文意否决（书级，缺省关，不进 dump；A24 H01 深挖 11-06：史記 03:43:2:19b「孔安國曰」切分框不准，宽高比 0.68，单靠宽高会判成日）：
+    `context_decide` 的 ranked 里组内**另一个字**的概率 ≥ 这个数时，宽高结论作废，改等文意裁定／留审。证据记 `fold.ctx_veto`（只在作废时写进 `fold_pending`）。
+    建议 0.5。"""
     fold_occluded: bool = False
     """`fold_groups` 对遮挡格也折叠（缺省关，不进 dump；A32 D01 深挖：殿本 28 格己已巳在遮挡格上没折叠）：遮挡格（`occluded` 疑问／证据）平时不碰，
     开了之后只在**整理本字与库首位（`glyph_match` candidates[0]）都在同一折叠组里**时才归组、再按 `fold_ref_char` 的口径落字——
@@ -401,12 +475,31 @@ class SeedAdmitParams(BaseModel):
     （`group=O`、`prompt_ver=vis-o1`，payload.admit_ok、conf=high、有字）→ 放行成那个字，通道 `vis_ruling`。
     只收 A24 名下的子类（A68 库有样本机器字≠整理本、B99 整理本漏字、D130 补判）；整理本对位字须与裁定记的一致；
     人裁、遮挡、排除、超时格不动。缓存里没有就什么也不做（不调大模型）。关着（False）才进参数 dump。"""
+    pua_code_table: bool = False
+    """按私用码表放字（缺省关，殿本开；A24 2026-11-06，A31 X01 派单）：格在新图源文本层里有私用码（离线算好，裁定库 `src-2` 按**格号**取，
+    `RulingStore.cell_codes`；每条带当时的整理本对位字 `ref`，对位字变了不认）、码表（`utils/pua_v2_codes`）定了字、
+    **非人裁**放行的字≠码表字 → **改放码表字**（通道 `code_table`，`evidence.code_table` 记原字与原通道），不降审。
+    一码多字的码（`families`，如 F1001 乖垂埀）：放行字在族内就认，不按码改；落到族外 → 降审 `src_code_conflict`。
+    人裁格不动。这一遍在 `vis_rulings` 之前，所以旧的窗口键降审（src-1 code_conflict）对已改字的格不再触发，也不靠窗口命中。
+    每页统计：`PageAdmit.n_code_fix`（改字格数）、`n_code_mismatch`（这一遍之后放行字仍≠码表字的格数，如人裁与码表冲突；族内字不算）。"""
+    pua_code_keep_channels: str = ""
+    """`pua_code_table` 的书级旋钮（缺省空、空时不进参数 dump；A24 11-06 X01 参数化）：逗号分隔的放行通道，这些通道放行的字**不按码改**
+    （如某本书想保留 `group_flow` 选的异体、只纠 `pua_rule`／`context`），仍计入 `n_code_mismatch`。人裁格本来就不改。"""
+    pua_code_family_demote: bool = True
+    """`pua_code_table` 的书级旋钮（缺省开、开时不进参数 dump）：一码多字的码、放行字落到族外 → 降审 `src_code_conflict`；
+    关则只计入 `n_code_mismatch`、不动格。"""
     relax_ref_agree: bool = True
     """整理本字 ≡ 库 top1（语义同字）或 == 上下文定字 时直接放行（用户 2026-09-06：
     「很多都是在整理本存在时非常明显的选择，能不能放松要求」）。形取库 top1（刻本形），
     文意取整理本。两册人审位实测 整理本≡库top1 10/10、==上下文 4/4，全部 1,1xx 条
     人裁真值上反例 0。同时让「义定形未定」的位在库 top1 属组内形时直接取它当形
     （evidence.form.state=guess，判据 E 会把它算进抽审分母）。"""
+    match_ref_diff_guard: bool = False
+    """match_ref 通道不放库判 diff 的格（A24 2026-11-06，书级开关，缺省关；sheldon 点头后殿本开）。match_ref 的 equal 层
+    只要「现役对位字＝库首位候选」就放，不看库分与 verdict；对位滑格时库只拿整理本字去比、判了 diff 也照放
+    （vol05:66:9:15 冻结包：列格数 18＜整理本 19 走 coord_fallback，现役对位给「字」，库 字 0.73 diff，图上是「不」）。
+    开了：match_ref 遇库 verdict=diff 不放，doubt `match_ref_diff`（进 `_LANE_HARD`，补放通道不按整理本字放回）。
+    70 册 ★main 包里这类放行 177 格（殿本 155、史記 19、全唐文 3），看图 60 格大多是断笔、字对，开了约每册多 2 格人审。"""
     ref_lib_diff_guard: bool = True
     """`relax_ref_agree` 的 `ref_lib` 分支在库判 `diff` 时不放行（A24 2026-10-24，殿本 vol06 v0.5.12 重跑）：
     149:3:3 图是「也」，框带版框竖线，整理本对位与库 top1 都给「十」，库判 diff（cov 0.83），照旧被
@@ -549,6 +642,15 @@ class SeedAdmitParams(BaseModel):
     坐标对位字或库首位落在任一字组（`groups.registry`）里不放（归字组流程判）；库前
     `lane_variant_topk` 名候选里有坐标对位字的异体不放（同 `lane_variant_guard`，免得把刻本异体改成通用字）。
     整页没锚上（现役对位整页为空）时不用坐标对位。关着（或 `rare_ref` 关着）时不进参数哈希。"""
+    rare_ref_coord_min_cov: float = 0.90
+    """`rare_ref_coord` 那支的库首位覆盖度下限（原模块常量 `_RARE_REF_COORD_MIN_COV`，2026-11-06 A24 改书级参数）。
+    缺省 0.90＝老行为，不进 dump，产物指纹不变；各书自己试（L01 深挖：殿本 5b 首位命中的格里 cov 0.85–0.90 的约 18 格被它挡下，
+    放低前先做金标、留出 0 错）。"""
+    rare_ref_coord_group_top: bool = False
+    """规则 A 坐标对位那支：库首位是字组成员、坐标对位字**不在**任何字组时也放（2026-11-06 A24 L05 深挖，书级，缺省关、关时不进参数 dump）。
+    缺省行为「坐标对位字或库首位落在任一字组里都不放」把一类格一起拦了：糊墨格库首位是 刪／冊／衛／王… 这类吸引子字
+    （它们是字组成员），而整理本字（坐标对位字）与 5-b 首位一致、不在组里。组里的字之间要分的是组员，这时整理本字不是组员，
+    字组流程没有可判的事。开了只放宽库首位在组里这一条，**坐标对位字在组里仍不放**。放前先做金标、留出 0 错（殿本 L05 17 格里 15 格库首位在组、整理本字不在，看图全对）。"""
     rare_ref_nf: bool = True
     """规则 A 坐标对位那支放宽 `near_form` 疑问（2026-10-28，A24「复盘形近护栏 N 类」，缺省开；只在 `rare_ref_coord` 开着时起作用）。
 
@@ -561,6 +663,23 @@ class SeedAdmitParams(BaseModel):
     坐标对位×BMP 字×本规则 83 格 0 错。关着时不进参数哈希。"""
     rare_ref_nf_max_n: int = 2
     rare_ref_nf_cov: float = 0.96
+    rare_ref_sparse: bool = False
+    """规则 A 少刻例支「5-b 当证人」（2026-11-06，A23 L02 深挖，sheldon 11-06 同意；缺省关，关时逐字节不变、不进 dump）。
+
+    待审单 L02「刻例太少·不一致」的格几乎都是整理本字对、机器字错：整理本字在本书库里只有 0～2 个刻例，库首位只能在
+    库里有的字里乱挑（殿本 11-06 ★main 361 格，线上单 286 格逐格看图 274 格整理本字与图一致；ai-team
+    `domain/CV/质检/待审原因深挖/L02-刻例太少不一致.md`）。规则 A 两支都放不了它们：现役对位那支要 replace 段，
+    坐标对位那支要整页有锚、库首位 cov ≥ 0.90（库里没这个字时 cov 本来就低）。这一支给**仍待审**的格再补一次：
+
+    整理本字（现役对位，没有就用坐标对位）在本书库里刻例 ≤ `rare_ref_sparse_max_n`；5-b 首位是整理本字
+    （`rare_ref_sparse_variant` 开时，整理本字是扩展 B 以上罕用码位、5-b 首位是它的异体也算——文淵閣本用罕用码位记的
+    异体，字体里常只有通行字，如 𮪍／騎）；5-b 首位领先「同来源、组外」最好候选 ≥ `rare_ref_sparse_lead`
+    （分数只跟同一来源比，不同来源量纲不同）→ 放行，字＝整理本字，`channel`＝`rare_ref`，evidence
+    `rare_ref.via = "sparse"`、带 `lead`、`n_lib`。护栏同规则 A：硬疑问（`_hard_blocked`）、库 same 认成别的字、
+    整理本字或库首位在字组里、己已巳、〓 占位、非汉字都不放；人裁位不碰。只升不降。"""
+    rare_ref_sparse_max_n: int = 2
+    rare_ref_sparse_lead: float = 0.02
+    rare_ref_sparse_variant: bool = True
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -875,6 +994,13 @@ class SeedAdmitParams(BaseModel):
     """`follow_ref` 待审格的库首位 cov 下限。殿本回放放行 27 格最低 0.939；0.87–0.89 的 2 格是切坏的残字。"""
     follow_ref_gap: float = 0.005
     """`follow_ref` 待审格：库首位领先这一对以外最好候选的下限。"""
+    follow_ref_variants_gap: float | None = None
+    """`follow_ref_variants`（按参校本取异体）待审格的领先下限，单独放宽用（书级，**缺省 None＝同 `follow_ref_gap`**）。
+    设了时只对「整理本字与库首位在关系层是同词异体（`variants.variant_edge(...).is_variant`，T1／T2）、库首位 cov ≥
+    `follow_ref_variants_cov`」的格生效。缘起 A24 V01 深挖 11-06：史記 V01 里 10 格领先 0.002–0.004，对手是夹注半格里压缩的
+    组外字（皮、黄、溉、遏、紀、失），看图字都对；史記可设 0.002（书项目定）。"""
+    follow_ref_variants_cov: float = 0.93
+    """`follow_ref_variants_gap` 生效时库首位 cov 的下限。"""
     edge_pair: bool = True
     """异体边表自动暂归一（通道 `edge_pair`，A24 2026-10-31，r5 重放 V 类单格长尾约 360 对）：整理本字与库首位互为「自动对」
     （`edge_pairs.is_auto_pair`：边表 T1 纯异体且 ≥2 个异体来源、不在字组、不在 `config/variants/edge_pair_exclude.tsv`）的待审格，
@@ -885,6 +1011,12 @@ class SeedAdmitParams(BaseModel):
     """`edge_pair` 库首位 cov 下限（同 `follow_ref_cov`）。"""
     edge_pair_gap: float = 0.005
     """`edge_pair` 库首位领先这一对以外最好候选的下限（同 `follow_ref_gap`）。"""
+    edge_pair_group_seam: bool = True
+    """`edge_pair` 补字组缝（A24 V01 深挖 11-06，第 7 轮）：整理本字与库首位是纯异体强边、但有一字是字组成员（`is_auto_pair` 不认），
+    且这一格字组没接（evidence 里没有 group）→ 也按 `edge_pair` 判；涉及形近组时领先要 ≥ `edge_pair_group_seam_nf_gap`。
+    殿本三书 ★main 包回看 9 格看图字都对（衞衛、隸隷、陰隂、尙尚、歲歳、𩀱雙、呂吕、嘗甞、廹迫）。"""
+    edge_pair_group_seam_nf_gap: float = 0.03
+    """字组缝涉及形近组时，库首位领先对外最好候选的下限（同字组入口的 delta）。"""
 
     codepoint_semantic: bool = True
     """书级 `codepoints:` 并进语义判等（缺省开）：册配置声明过的码位对（巻→卷、别→別、岀→出、晩→晚、內→内 …）
@@ -943,18 +1075,46 @@ class SeedAdmitParams(BaseModel):
         # 留在 dump 里（显式 False），只去掉附属字段——否则 dump 再读回来会变回缺省的开
         if isinstance(d, dict) and not self.symbol_review:
             d.pop("symbol_min_human", None)
+        if isinstance(d, dict) and self.rare_ref_coord_min_cov == _RARE_REF_COORD_MIN_COV:
+            d.pop("rare_ref_coord_min_cov", None)
         if isinstance(d, dict) and not self.occluded_rescue_ink:
             d.pop("occluded_rescue_ink", None)
         if isinstance(d, dict) and not self.occluded_ref_empty_blank:
             d.pop("occluded_ref_empty_blank", None)
         if isinstance(d, dict) and self.vis_rulings:
             d.pop("vis_rulings", None)
+        if isinstance(d, dict) and not self.pua_code_table:
+            d.pop("pua_code_table", None)
+        if isinstance(d, dict) and not self.pua_code_keep_channels:
+            d.pop("pua_code_keep_channels", None)
+        if isinstance(d, dict) and self.pua_code_family_demote:
+            d.pop("pua_code_family_demote", None)
         if isinstance(d, dict) and not self.group_flow_llm_skip_half:
             d.pop("group_flow_llm_skip_half", None)
+        if isinstance(d, dict) and self.group_flow_form_open:
+            d.pop("group_flow_form_open", None)      # 缺省值不进 dump
         if isinstance(d, dict) and not self.p_ref_admit:
             d.pop("p_ref_admit", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or self.p_ref_max_cov is None):
+            d.pop("p_ref_max_cov", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_adjacent):
+            d.pop("p_ref_adjacent", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_jiazhu):
+            d.pop("p_ref_jiazhu", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_skip_variant):
+            d.pop("p_ref_skip_variant", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_coord):
+            d.pop("p_ref_coord", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_coord or self.p_ref_coord_max_cov is None):
+            d.pop("p_ref_coord_max_cov", None)
+        if isinstance(d, dict) and (not self.p_ref_admit or not self.p_ref_coord or not self.p_ref_coord_adjacent):
+            d.pop("p_ref_coord_adjacent", None)
+        if isinstance(d, dict) and not self.blank_ink_nonchar:
+            for k in ("blank_ink_nonchar", "blank_ink_max_cov", "blank_ink_col_min_agree", "blank_ink_col_min_frac"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.fold_groups:
-            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect", "fold_occluded"):
+            for k in ("fold_groups", "fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_ref_char", "fold_aspect", "fold_occluded",
+                      "fold_aspect_pairs", "fold_jiazhu", "fold_aspect_jiazhu", "fold_aspect_ctx_veto"):
                 d.pop(k, None)
         if isinstance(d, dict) and self.fold_groups:
             for k in ("fold_ruling_first", "fold_lib_top_in_group", "fold_coord_ref", "fold_occluded"):
@@ -964,6 +1124,11 @@ class SeedAdmitParams(BaseModel):
                 d.pop("fold_ref_char", None)
             if self.fold_aspect is None:
                 d.pop("fold_aspect", None)
+            for k in ("fold_aspect_pairs", "fold_aspect_jiazhu", "fold_aspect_ctx_veto"):
+                if getattr(self, k) is None:
+                    d.pop(k, None)
+            if not self.fold_jiazhu:
+                d.pop("fold_jiazhu", None)
         if isinstance(d, dict) and self.ruling_override_groups is None:
             d.pop("ruling_override_groups", None)
         if isinstance(d, dict) and self.ruling_ref_lead_min_unseen is None:
@@ -996,6 +1161,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("witness3_knn_veto", None)
         if isinstance(d, dict) and not self.near_knn_gap:
             d.pop("near_knn_gap", None)
+        if isinstance(d, dict) and not self.rare_ref_sparse:
+            for k in ("rare_ref_sparse", "rare_ref_sparse_max_n", "rare_ref_sparse_lead", "rare_ref_sparse_variant"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.replace_form_edge_exclude:
             d.pop("replace_form_edge_exclude", None)
         if isinstance(d, dict) and not self.ref_lib_coord_dissent:
@@ -1004,6 +1172,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("lane_coord_few_stroke", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
+            d.pop("rare_ref_coord_min_cov", None)
+        if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_coord_group_top):
+            d.pop("rare_ref_coord_group_top", None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord and self.rare_ref_nf):
             for k in ("rare_ref_nf", "rare_ref_nf_max_n", "rare_ref_nf_cov"):
                 d.pop(k, None)
@@ -1039,6 +1210,14 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and not self.group_flow_abstain_ref_ok:
             d.pop("group_flow_abstain_ref_ok", None)
+        if isinstance(d, dict) and not self.group_flow_ref_free:
+            d.pop("group_flow_ref_free", None)
+        if isinstance(d, dict) and not self.group_flow_dissent_keep:
+            for k in ("group_flow_dissent_keep", "group_flow_dissent_margin"):
+                d.pop(k, None)
+        if isinstance(d, dict) and not self.group_flow_ref_pair:
+            for k in ("group_flow_ref_pair", "group_flow_ref_pair_margin"):
+                d.pop(k, None)
         if isinstance(d, dict) and not self.group_flow_tolerate_extra:
             d.pop("group_flow_tolerate_extra", None)
         if isinstance(d, dict) and not self.group_flow_provisional_to:
@@ -1047,6 +1226,8 @@ class SeedAdmitParams(BaseModel):
             d.pop("group_flow_pair_shape", None)
         if isinstance(d, dict) and not self.group_flow_near_knn:
             d.pop("group_flow_near_knn", None)
+        if isinstance(d, dict) and not self.match_ref_diff_guard:
+            d.pop("match_ref_diff_guard", None)
         if isinstance(d, dict) and not self.lane_seal_title_tolerance:
             d.pop("lane_seal_title_tolerance", None)
             d.pop("lane_seal_title_prefix", None)
@@ -1078,6 +1259,9 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.follow_ref and not self.follow_ref_variants and not self.follow_ref_seen:
             for k in ("follow_ref", "follow_ref_cov", "follow_ref_gap"):
                 d.pop(k, None)
+        if isinstance(d, dict) and (self.follow_ref_variants_gap is None or not self.follow_ref_variants):
+            d.pop("follow_ref_variants_gap", None)
+            d.pop("follow_ref_variants_cov", None)
         if isinstance(d, dict):
             if self.edge_pair:
                 d.pop("edge_pair", None)        # 缺省值不进 dump（缺省开；关了才写 edge_pair: false）
@@ -1085,6 +1269,10 @@ class SeedAdmitParams(BaseModel):
                 d.pop("edge_pair_cov", None)
             if self.edge_pair_gap == 0.005 or not self.edge_pair:
                 d.pop("edge_pair_gap", None)
+            if self.edge_pair_group_seam or not self.edge_pair:
+                d.pop("edge_pair_group_seam", None)      # 缺省开；关了才写
+            if self.edge_pair_group_seam_nf_gap == 0.03 or not self.edge_pair or not self.edge_pair_group_seam:
+                d.pop("edge_pair_group_seam_nf_gap", None)
         if isinstance(d, dict) and self.occluded_variant_first:
             d.pop("occluded_variant_first", None)      # 缺省值不进 dump
         if isinstance(d, dict) and not self.seal_lib_agree:
@@ -1217,10 +1405,10 @@ class SeedAdmitParams(BaseModel):
 @register_step
 class SeedAdmitStep(Step):
     spec = StepSpec(
-        id="seed_admit", title="C1 进库准入", version="1.36", unit="cell",   # 1.36：R5 题列套语容错 lane_seal_title_tolerance（书级，缺省关；前 8 字差 ≤N 字仍放、不一致的字位留审，A32 D01 深挖 11-06，vol77 p119）；1.35：src_code_conflict 降审计入页头 n_auto/n_review（v0.6.2 漏减，pending_list 校验格数不符，A32 11-04 vol35 vol48）；1.34：R4 坐标对位兜底放过本书 codepoints 已归一的异体对 lane_coord_codepoint_variant（缺省关，全唐文码位线 11-04，r8 114 格）；1.33：src-1 裁定加子类 GB（乱码闸/影子闸拦下的格，新图源文本层与整理本同字，A24 11-04，r3 62 格）；1.32：已放行格命中 src-1 code_conflict 裁定（私用码唯一字≠现字，非人裁）→ 降审 doubt src_code_conflict（A24 11-03，25 格）；1.31：R5 库否决只在默认字库里刻例 ≥2 时才算 lane_seal_lib_veto_min_n（A32 11-02，r1 遮挡格）；1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
+        id="seed_admit", title="C1 进库准入", version="1.52", unit="cell",   # 1.52：整理本空格位上有墨、库认不出的格判非字放行 blank_ink_nonchar（书级，缺省关、关时不进参数 dump；配 align_ref coord_blank_ink；A22 S02 深挖 11-06，Sheldon 定）；1.51：group_flow_form_open 字组流程接写法待定（form_open，Z06）格（缺省开，缺省值不进参数 dump；A24 Z06 深挖 11-06，sheldon 11-07 定）；1.50：p_ref_coord_max_cov／p_ref_coord_adjacent P02 坐标对位格自己的 cov 上限和相邻开关，不再与 P01 共用（书级，缺省 None／关、关时不进参数 dump；A24 P02，殿本 P01 开相邻会放进 P02 的切分错位格）；1.49：p_ref_skip_variant 机器字与整理本字有直接异体边的格不取整理本字（书级，缺省关、关时不进参数 dump；A24 P01 深挖 11-06，殿本 L01 抽 30 格 14 格是异体对）；1.48：p_ref_coord P02 取坐标对位的整理本字（书级，缺省关、关时不进参数 dump；A24 P02 深挖 11-06）；1.47：字组复核／补放两个书级旋钮 group_flow_dissent_keep（整理本＝放行字、只有弱图像票反对不降审）、group_flow_ref_pair（整理本字＝本组解法给的字、反对只有图像路则取它），缺省全关、关时不进参数 dump；同批收窄 7 条 L1 规则 zh-曾經 yh-遺文 yh-還朝 yt-圓 yt-圖 rm-日 js-申-l1（全册审计冲突 1187→1119，A24 Z02 深挖 11-06）；1.44：follow_ref_variants_gap／follow_ref_variants_cov 按参校本取异体单独放宽领先（书级，缺省 None 不变、不进 dump；A24 V01 深挖 11-06，史記夹注半格 10 格看图都对）；1.43：edge_pair 补字组缝 edge_pair_group_seam（缺省开，A24 V01 深挖 11-06，第 7 轮：纯异体强边但有一字是字组成员、字组又没接的格；涉及形近组领先≥0.03）；1.42：pua_code_table 书级旋钮 pua_code_keep_channels／pua_code_family_demote、多字码族（缺省行为不变、不进 dump；A24 11-06 X01 参数化）；1.41：折叠组书级参数化 fold_aspect_pairs／fold_jiazhu／fold_aspect_jiazhu／fold_aspect_ctx_veto（缺省全关、关时不进参数 dump；A24 H01 深挖 11-06，框架见 doc/字组/折叠组.md）；1.40：规则 A 少刻例支 rare_ref_sparse（书级，缺省关、关时不进参数 dump；5-b 参校字组居首且领先同来源组外最好候选 ≥0.02、参校字刻例 ≤2 时放，A23 L02 深挖，sheldon 11-06 同意）；1.39：match_ref 不放库判 diff 的格 match_ref_diff_guard（书级，缺省关、关时不进参数 dump；A24 11-06，vol05:66:9:15）；1.38：字组入口不拉坐标对位说是组外字的格 group_flow_coord_outside_skip（缺省开，A24 Z01 深挖 11-06，殿本 r5 Z01 −106）；1.37：pua_code_table 按私用码表改放字、族豁免、每页 n_code_fix／n_code_mismatch（缺省关，殿本开，A24 11-06，A31 X01）；1.36：R5 题列套语容错 lane_seal_title_tolerance（书级，缺省关；前 8 字差 ≤N 字仍放、不一致的字位留审，A32 D01 深挖 11-06，vol77 p119）；1.35：src_code_conflict 降审计入页头 n_auto/n_review（v0.6.2 漏减，pending_list 校验格数不符，A32 11-04 vol35 vol48）；1.34：R4 坐标对位兜底放过本书 codepoints 已归一的异体对 lane_coord_codepoint_variant（缺省关，全唐文码位线 11-04，r8 114 格）；1.33：src-1 裁定加子类 GB（乱码闸/影子闸拦下的格，新图源文本层与整理本同字，A24 11-04，r3 62 格）；1.32：已放行格命中 src-1 code_conflict 裁定（私用码唯一字≠现字，非人裁）→ 降审 doubt src_code_conflict（A24 11-03，25 格）；1.31：R5 库否决只在默认字库里刻例 ≥2 时才算 lane_seal_lib_veto_min_n（A32 11-02，r1 遮挡格）；1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸 ；1.45：rare_ref_coord_group_top 坐标支放宽库首位在字组里（书级，缺省关、关时不进参数 dump；A24 L05 深挖 11-06）；1.44：follow_ref_variants_gap／follow_ref_variants_cov 按参校本取异体单独放宽领先（书级，缺省 None 不变、不进 dump；A24 V01 深挖 11-06，史記夹注半格 10 格看图都对）；1.43：edge_pair 补字组缝 edge_pair_group_seam（缺省开，A24 V01 深挖 11-06，第 7 轮：纯异体强边但有一字是字组成员、字组又没接的格；涉及形近组领先≥0.03）；1.42：pua_code_table 书级旋钮 pua_code_keep_channels／pua_code_family_demote、多字码族（缺省行为不变、不进 dump；A24 11-06 X01 参数化）；1.41：折叠组书级参数化 fold_aspect_pairs／fold_jiazhu／fold_aspect_jiazhu／fold_aspect_ctx_veto（缺省全关、关时不进参数 dump；A24 H01 深挖 11-06，框架见 doc/字组/折叠组.md）；1.40：规则 A 少刻例支 rare_ref_sparse（书级，缺省关、关时不进参数 dump；5-b 参校字组居首且领先同来源组外最好候选 ≥0.02、参校字刻例 ≤2 时放，A23 L02 深挖，sheldon 11-06 同意）；1.39：match_ref 不放库判 diff 的格 match_ref_diff_guard（书级，缺省关、关时不进参数 dump；A24 11-06，vol05:66:9:15）；1.38：字组入口不拉坐标对位说是组外字的格 group_flow_coord_outside_skip（缺省开，A24 Z01 深挖 11-06，殿本 r5 Z01 −106）；1.37：pua_code_table 按私用码表改放字、族豁免、每页 n_code_fix／n_code_mismatch（缺省关，殿本开，A24 11-06，A31 X01）；1.36：R5 题列套语容错 lane_seal_title_tolerance（书级，缺省关；前 8 字差 ≤N 字仍放、不一致的字位留审，A32 D01 深挖 11-06，vol77 p119）；1.35：src_code_conflict 降审计入页头 n_auto/n_review（v0.6.2 漏减，pending_list 校验格数不符，A32 11-04 vol35 vol48）；1.34：R4 坐标对位兜底放过本书 codepoints 已归一的异体对 lane_coord_codepoint_variant（缺省关，全唐文码位线 11-04，r8 114 格）；1.33：src-1 裁定加子类 GB（乱码闸/影子闸拦下的格，新图源文本层与整理本同字，A24 11-04，r3 62 格）；1.32：已放行格命中 src-1 code_conflict 裁定（私用码唯一字≠现字，非人裁）→ 降审 doubt src_code_conflict（A24 11-03，25 格）；1.31：R5 库否决只在默认字库里刻例 ≥2 时才算 lane_seal_lib_veto_min_n（A32 11-02，r1 遮挡格）；1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸 ；1.46：p_ref_max_cov／p_ref_adjacent／p_ref_jiazhu P 类取整理本字的三个书级旋钮（缺省全关、关时不进参数 dump；A24 P01 深挖 11-06，殿本只开 p_ref_admit 放 126 格看图 13 格机器字对，加 cov<0.93 放 31 零错）；1.45：rare_ref_coord_group_top 坐标支放宽库首位在字组里（书级，缺省关、关时不进参数 dump；A24 L05 深挖 11-06）；1.44：follow_ref_variants_gap／follow_ref_variants_cov 按参校本取异体单独放宽领先（书级，缺省 None 不变、不进 dump；A24 V01 深挖 11-06，史記夹注半格 10 格看图都对）；1.43：edge_pair 补字组缝 edge_pair_group_seam（缺省开，A24 V01 深挖 11-06，第 7 轮：纯异体强边但有一字是字组成员、字组又没接的格；涉及形近组领先≥0.03）；1.42：pua_code_table 书级旋钮 pua_code_keep_channels／pua_code_family_demote、多字码族（缺省行为不变、不进 dump；A24 11-06 X01 参数化）；1.41：折叠组书级参数化 fold_aspect_pairs／fold_jiazhu／fold_aspect_jiazhu／fold_aspect_ctx_veto（缺省全关、关时不进参数 dump；A24 H01 深挖 11-06，框架见 doc/字组/折叠组.md）；1.40：规则 A 少刻例支 rare_ref_sparse（书级，缺省关、关时不进参数 dump；5-b 参校字组居首且领先同来源组外最好候选 ≥0.02、参校字刻例 ≤2 时放，A23 L02 深挖，sheldon 11-06 同意）；1.39：match_ref 不放库判 diff 的格 match_ref_diff_guard（书级，缺省关、关时不进参数 dump；A24 11-06，vol05:66:9:15）；1.38：字组入口不拉坐标对位说是组外字的格 group_flow_coord_outside_skip（缺省开，A24 Z01 深挖 11-06，殿本 r5 Z01 −106）；1.37：pua_code_table 按私用码表改放字、族豁免、每页 n_code_fix／n_code_mismatch（缺省关，殿本开，A24 11-06，A31 X01）；1.36：R5 题列套语容错 lane_seal_title_tolerance（书级，缺省关；前 8 字差 ≤N 字仍放、不一致的字位留审，A32 D01 深挖 11-06，vol77 p119）；1.35：src_code_conflict 降审计入页头 n_auto/n_review（v0.6.2 漏减，pending_list 校验格数不符，A32 11-04 vol35 vol48）；1.34：R4 坐标对位兜底放过本书 codepoints 已归一的异体对 lane_coord_codepoint_variant（缺省关，全唐文码位线 11-04，r8 114 格）；1.33：src-1 裁定加子类 GB（乱码闸/影子闸拦下的格，新图源文本层与整理本同字，A24 11-04，r3 62 格）；1.32：已放行格命中 src-1 code_conflict 裁定（私用码唯一字≠现字，非人裁）→ 降审 doubt src_code_conflict（A24 11-03，25 格）；1.31：R5 库否决只在默认字库里刻例 ≥2 时才算 lane_seal_lib_veto_min_n（A32 11-02，r1 遮挡格）；1.30：context 通道不放高宽比＞2.5 的字块 context_max_aspect（A24 11-01，A32 报错放 vol39:176:3:1 印文碎块）；1.29：遮挡格所在列过了整理本半叶末行 → 默认字来源 coord_blank occluded_past_leaf_blank（A32 11-01，r1 卷末印页）；1.28：异体边表自动暂归一 edge_pair（A24 10-31，r5 V 类单格长尾）；1.27：R5 库否决放过默认字＝库第二名 lane_seal_lib_veto_second、异体护栏放过本书已定归一的异体对 lane_seal_codepoint_variant（A32，vol20–99 r3 遮挡格）；1.26：印框内背景干净的格不算遮挡 occluded_seal_min_noise（A31 sheldon 10-28 定）；1.25：异体形近规则先于印章遮挡 occluded_variant_first（R5 默认字＝库首位不受异体护栏、follow_ref 与 group_flow 不再把遮挡当硬护栏；A31 sheldon 10-28 定）；1.24：R5 印章区题列套语放行、via 加 align、库否决 lane_seal_lib_veto、整页错位护栏 lane_seal_shift_guard（A32 印章格研究，sheldon 10-26 定）；1.23：铁证与坐标对位字互证 iron_coord_guard（缺省开）、ref_lib_diff 进 _LANE_HARD；同批 #528 的 ref_lib_diff_guard 与 ref_prefer／rare_ref／symbol_review／shadow_veto 缺省开（A31 v0.5.12 错放样例）；1.22：删准入三闸 runt_cell_review、oversplit_gate、nonchar_gate（现行切分上 0 格，doc/exp/准入三闸-vol05-vol09-报告.md）；1.21：seal_blank_page、lane_seal 缺省开；1.20：遮挡格加小印压着的字（与小印框重叠 ≥ 0.3、不是盖章空栏），默认整理本字、不进字形库；1.19：遮挡格与盖章空栏候选改读印章定位 `seals`（大印框、小印框＋笔画覆盖区），修正旧判据格框与原图左右镜像；1.18：人裁绑丢闸 human_unbound_review（缺省开，绑定后不采信的人裁不许被新放行悄悄顶掉，GUJI-697）；1.17：字组统一流程 group_flow 覆盖全部字组，旧字组开关 ji_yi_si_*／ry_group／rr_clf／m7_*／variant_tie* 与 _resolve_ji_yi_si 删除（2026-10-18 S6）；1.16：矮格转人审 runt_cell_review（任意 slot，缺省关，overview#554）；1.15：入人八字形分类器 rr_clf／罕用码位×context 落审 rare_cp_ctx_review（缺省关，overview#437）；日曰 v2 答案表 ry_group（缺省关，overview#441）；1.14：己已巳词组分类器 ji_yi_si_clf／ji_yi_si_clf_llm（缺省关，overview#443）；1.13：待审补放三通道 lane_witness3/lane_coord/lane_seal（缺省关，overview#433）；1.12：己已巳上下文表规则 ji_yi_si_ctx_rule（缺省关，overview#428）；1.11：排除名单格人已给字挂 evidence.human_char（overview#403 缺口 B）；1.10：异体等价放行拦间接路径（variant_indirect_guard）；1.6：context 通道加整理本互证；1.7：事件侧人裁定字（不入库也算）；1.8：context 通道加空白字块弃权闸；1.9：己已巳 resolve() 改 use_ref=all + 三方一致闸
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
-        optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review")),
+        optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -1253,7 +1441,9 @@ class SeedAdmitStep(Step):
                    # 间接进了指纹，原图不变，所以不必加进 consumes。2026-10-22 起读印章定位 `seals`。
                    "open_guji_cv.steps.occlusion", "open_guji_cv.steps.seal_detect",
                    # 待审补放三通道（overview#433）的证人逐格读法
-                   "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness"),
+                   "open_guji_cv.clustering.witness_cells", "open_guji_cv.report.witness",
+                   # 2026-11-06 补登记（1.37 pua_code_table 起 import，当时漏列）：私用码表读法。指纹靠 code_equiv.SPLITS 不变
+                   "open_guji_cv.utils.pua_v2_codes"),
         # 册配置 `iron_gate:` 开不开进指纹——同 glyph_match 的 norm_stroke 那条口子，
         # 不然开关翻了、产物没过期（书级布尔量，不是 Params 字段，走这条路）。
         # `codepoints:` 同理（2026-09-27 加，`ref_lib_variant_guard` 的可信边判据读它）。
@@ -1551,6 +1741,10 @@ class SeedAdmitStep(Step):
                 cand_chars = {c for c, _v in r.candidates[:3]}
                 if r.char:
                     cand_chars.add(r.char)
+                # 注意口径：`near_form` ＝ 候选前三＋本格字里**任一**个属**手工形近表**（NEVER_MATCH_FAMILIES，20 对）。
+                # 它不要求那个字是真字、也不要求与整理本字成对，所以「家族字碰巧排进候选」也会记；
+                # 与匹配层 `guard=never_match`（三表并集）、待审原因 N01（参校字与候选成表内对）是三个不同口径，
+                # 见 guji-manager doc/01-粗校/待审原因/near_form_guard/流程.md 第一节。
                 doubts = (["near_form"] if cand_chars & NEAR_FORM_CHARS else [])
                 # 整理本这一路（2026-09-04 接上）。v1 标定过 match_ref 144/144、
                 # match_replace 70/70、match_margin 102/102，靠的就是「文本证据 ×
@@ -1603,6 +1797,9 @@ class SeedAdmitStep(Step):
                 if ok and channel == "match_ref" and r.id in coord_conflict:
                     ok, channel = False, None
                     doubts.append("coord_conflict")
+                if ok and channel == "match_ref" and p.match_ref_diff_guard and r.verdict == "diff":
+                    ok, channel = False, None
+                    doubts.append("match_ref_diff")
                 if (ok and p.match_tie_guard and r.verdict != "same"
                         and channel in ("match_ref", "match_replace", "match_margin")
                         and _lib_near_tie(r.candidates, vm_here, p.match_tie_gap)):
@@ -1930,15 +2127,16 @@ class SeedAdmitStep(Step):
                 n_auto += d_nk
                 n_review -= d_nk
             if p.p_ref_admit:
-                d_pr = _p_ref_pass(p, out, amap)
+                d_pr = _p_ref_pass(p, out, amap, _p_coord_refs(ctx, page, coord_cache) if p.p_ref_coord else None)
                 n_auto += d_pr
                 n_review -= d_pr
             if p.fold_groups:
-                _ci = _opt(ctx, "char_index", page) if p.fold_aspect else None
+                _ci = _opt(ctx, "char_index", page) if (p.fold_aspect or p.fold_aspect_jiazhu) else None
                 d_fd = _fold_pass(p, out, amap, mmap,
                                   coord=_coord_refs(ctx, page, coord_cache) if p.fold_coord_ref else None,
                                   wh={c.id: (c.width, c.height) for col in (_ci.columns if _ci else []) for c in col.chars}
-                                  if _ci else None)
+                                  if _ci else None,
+                                  dmap=dmap if p.fold_aspect_ctx_veto is not None else None)
                 n_auto += d_fd
                 n_review -= d_fd
         if p.rare_ref:
@@ -1966,6 +2164,12 @@ class SeedAdmitStep(Step):
                                         if p.lane_seal and p.lane_seal_lib_veto_min_n > 0 else None)
             n_auto += d_lane
             n_review -= d_lane
+        if p.blank_ink_nonchar:
+            _aref_bi = _opt(ctx, "align_ref", page)
+            d_bi = _blank_ink_pass(p, out, mmap, _coord_refs(ctx, page, coord_cache),
+                                   frozenset(getattr(_aref_bi, "coord_conflict_ids", None) or []), vmap)
+            n_auto += d_bi
+            n_review -= d_bi
         if p.lane_header_formula:
             d_hf = _header_formula_pass(ctx, page, p, out)
             n_auto += d_hf
@@ -1999,11 +2203,25 @@ class SeedAdmitStep(Step):
             # 5b rare_ref_coord（升）：排在审路之后，坐标对位兜底（coord_fallback）已接走的格不改通道
             d_rc = _rare_ref_pass(out, mmap, amap, rtop, _coord_refs(ctx, page, coord_cache), p.lane_variant_topk,
                                   keep_ref_review=p.lane_keep_ref_review,
+                                  coord_min_cov=p.rare_ref_coord_min_cov,
+                                  group_top_ok=p.rare_ref_coord_group_top,
                                   nf=((_keben_counts(p.db_path), p.rare_ref_nf_max_n, p.rare_ref_nf_cov,
                                        frozenset(k for kv in (ctx.book.codepoints or {}).items() for k in kv))
                                       if p.rare_ref_nf else None))
             n_auto += d_rc
             n_review -= d_rc
+        if p.rare_ref_sparse:
+            # 5b'' rare_ref_sparse（升）：少刻例整理本字、5-b 首位作证（A23 L02，缺省关）
+            d_rs = _rare_ref_sparse_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
+                                         _coord_refs(ctx, page, coord_cache), _keben_counts(p.db_path))
+            n_auto += d_rs
+            n_review -= d_rs
+        n_code_fix = n_code_mismatch = 0
+        if p.pua_code_table:
+            # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
+            n_code_fix, n_code_mismatch, d_cd = _pua_code_pass(out, amap, p=p)
+            n_auto -= d_cd
+            n_review += d_cd
         if p.vis_rulings:
             # 5c vis_ruling（升）：待审格的窗口命中看图判裁定 → 放行（无组入口，裁定库缓存；放在降审遍之前）
             d_vr = _vis_ruling_pass(p, out, amap)
@@ -2047,7 +2265,8 @@ class SeedAdmitStep(Step):
             ctx.log(f"seed_admit p{page}: patch_missing=skip，{len(patch_missing)} 格读不到字块、"
                     f"跳过 {lanes}（见各格 evidence.patch_missing）")
         return {"seed_admit": PageAdmit(page=page, n_auto=n_auto, n_excluded=n_excluded,
-                                        n_review=n_review, columns=out)}
+                                        n_review=n_review, columns=out,
+                                        n_code_fix=n_code_fix, n_code_mismatch=n_code_mismatch)}
 
 
 def _codepoint_exempt(rec, book) -> bool:
@@ -2135,13 +2354,15 @@ _RARE_REF_COORD_MIN_COV = 0.90
 
 
 def _rare_ref_coord_ok(ref: str, lib_top: str | None, cands: list, doubts, topk: int,
-                       are_variants, group_chars: frozenset[str], cov: float = 1.0) -> bool:
-    """规则 A 坐标对位那支（`SeedAdmitParams.rare_ref_coord`）比现役对位多的护栏。纯函数。"""
+                       are_variants, group_chars: frozenset[str], cov: float = 1.0,
+                       min_cov: float = _RARE_REF_COORD_MIN_COV, group_top_ok: bool = False) -> bool:
+    """规则 A 坐标对位那支（`SeedAdmitParams.rare_ref_coord`）比现役对位多的护栏。纯函数。
+    `group_top_ok`（`rare_ref_coord_group_top`）：库首位在字组里不拦，坐标对位字在字组里仍拦。"""
     if not ref or ref == "〓":                  # 空格位／逐列本生僻字占位：不知道是哪个字
         return False
-    if cov < _RARE_REF_COORD_MIN_COV:
+    if cov < min_cov:
         return False
-    if ref in group_chars or (lib_top and lib_top in group_chars):
+    if ref in group_chars or (lib_top and lib_top in group_chars and not group_top_ok):
         return False                            # 字组里的字归 group_flow 判
     if any(isinstance(d, str) and d.startswith(("group_flow", "shadow_veto")) for d in doubts or ()):
         return False
@@ -2191,7 +2412,8 @@ def _rare_ref_nf_ok(ref: str, cands: list, n_lib: int, max_n: int, strong_cov: f
 
 def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                    coord: dict[str, str] | None = None, variant_topk: int = 3,
-                   keep_ref_review: bool = False, nf: tuple | None = None) -> int:
+                   keep_ref_review: bool = False, nf: tuple | None = None,
+                   coord_min_cov: float = _RARE_REF_COORD_MIN_COV, group_top_ok: bool = False) -> int:
     """规则 A 放行通道 `rare_ref`：只把**仍待审**的格升为放行，不改任何已放行格。→ 升级格数。
 
     `coord` 不给：只看现役对位（`amap`）里的格。`coord` 给了（`rare_ref_coord`，排在审路之后另跑一遍）：
@@ -2223,7 +2445,8 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
                     continue
                 co = coord.get(rec.id)
                 if not co or not _rare_ref_coord_ok(co, lib_top, list(m.candidates or []), rec.doubts,
-                                                    variant_topk, are_variants, group_chars, m.cov):
+                                                    variant_topk, are_variants, group_chars, m.cov, coord_min_cov,
+                                                    group_top_ok):
                     continue
                 al, via = (co, "replace"), "coord"      # 坐标对位字与库首位不同才有意义，按 replace 段判
             elif al is None:
@@ -2242,6 +2465,85 @@ def _rare_ref_pass(out: list, mmap: dict, amap: dict, rtop: dict,
             rec.evidence = {**rec.evidence, "rare_ref": {
                 "rare": top5[0], "ref": al[0], "lib": lib_top, "cov": m.cov, **({"via": via} if via else {}),
                 **({"near_form_relaxed": True} if nf_used else {})}}
+            n += 1
+    return n
+
+
+
+def _is_hanzi(ch: str) -> bool:
+    if not ch or len(ch) != 1:
+        return False
+    o = ord(ch)
+    return (0x3400 <= o <= 0x4DBF or 0x4E00 <= o <= 0x9FFF or 0xF900 <= o <= 0xFAFF or 0x20000 <= o <= 0x3347F)
+
+
+def rare_sparse_decide(*, ref: str | None, cands: list, n_lib: int, doubts, guard, verdict, lib_char, lib_top,
+                       max_n: int, lead_min: float, variant: bool, are_variants,
+                       group_chars: frozenset = frozenset()) -> tuple[str, float] | None:
+    """规则 A 少刻例支（`SeedAdmitParams.rare_ref_sparse`）的判据，纯函数。`cands`＝5-b 候选 [(字, 分, 来源)…]，按融合名次。
+    → (放行字＝整理本字, 领先量) 或 None。"""
+    if not ref or ref == "〓" or ref in _JYS or not _is_hanzi(ref) or not cands:
+        return None
+    if n_lib > max_n:
+        return None
+    if _hard_blocked(doubts or [], guard):
+        return None
+    if verdict == "same" and lib_char and lib_char != ref:
+        return None
+    if ref in group_chars or (lib_top and lib_top in group_chars):
+        return None
+    if any(isinstance(d, str) and d.startswith(("group_flow", "shadow_veto")) for d in doubts or ()):
+        return None
+
+    def mine(c: str) -> bool:
+        return c == ref or bool(variant and ord(ref) >= 0x20000 and c and are_variants(ref, c))
+
+    top_c, top_s, top_src = cands[0]
+    if not mine(top_c):
+        return None
+    rivals = [sc for c, sc, src in cands[1:] if src == top_src and not mine(c)]
+    if not rivals:
+        return None                       # 没有同来源的对手：领先量说不清，不放
+    lead = float(top_s) - max(float(x) for x in rivals)
+    return (ref, round(lead, 4)) if lead >= lead_min else None
+
+
+def _rare_ref_sparse_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
+                          keben: dict[str, int]) -> int:
+    """规则 A 少刻例支：只把**仍待审**的格升为放行。→ 升级格数。见 `SeedAdmitParams.rare_ref_sparse`。"""
+    if rare is None:
+        return 0
+    from ..groups.registry import GROUPS
+    from ..variants import are_variants
+    group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
+    rmap = {r.id: [(c.char, c.score, getattr(c, "font", None)) for c in r.candidates if c.char]
+            for cc in rare.columns for r in cc.chars}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            if p.lane_keep_ref_review and set(rec.doubts or []) & _LANE_REF_REVIEW:
+                continue                  # 同规则 A：护栏拿整理本字拦下的格不按整理本字放回
+            m = mmap.get(rec.id)
+            cands = rmap.get(rec.id)
+            if m is None or not cands:
+                continue
+            al = amap.get(rec.id)
+            ref, via = (al[0], "sparse") if al is not None else (coord.get(rec.id), "sparse_coord")
+            lib_top = m.char if m.verdict == "same" and m.char else (m.candidates[0][0] if m.candidates else None)
+            got = rare_sparse_decide(ref=ref, cands=cands, n_lib=keben.get(ref or "", 0), doubts=rec.doubts,
+                                     guard=m.guard, verdict=m.verdict, lib_char=m.char if m.verdict == "same" else None,
+                                     lib_top=lib_top, max_n=p.rare_ref_sparse_max_n, lead_min=p.rare_ref_sparse_lead,
+                                     variant=p.rare_ref_sparse_variant, are_variants=are_variants, group_chars=group_chars)
+            if got is None:
+                continue
+            ch, lead = got
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "rare_ref", "rare_ref", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "rare_ref": {
+                "rare": cands[0][0], "ref": ch, "lib": lib_top, "cov": m.cov, "via": via, "lead": lead,
+                "n_lib": keben.get(ch, 0)}}
             n += 1
     return n
 
@@ -2576,6 +2878,8 @@ _LANE_HARD = frozenset({"context_blank_cell", "context_tall_cell", "form_open", 
                         "group_flow_ctx_contra",
                         # 库判 diff 拦下的 ref_lib 格：整理本字正是被库否掉的那个，补放通道不按它放回
                         "ref_lib_diff",
+                        # match_ref 库判 diff 拦下的格（`match_ref_diff_guard`）：同理
+                        "match_ref_diff",
                         # 坐标对位与现役对位不一致拦下的 ref_lib 格（`ref_lib_coord_dissent`）：同理
                         "ref_lib_coord_dissent"})
 #: R1/R4 另外不碰的：context 乱码护栏拦下过格的**整列**（overview#427：列切窄、整列字块是
@@ -3007,10 +3311,15 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
                     continue
                 here, via = {ref: other}, "variants"
             d = dmap.get(rec.id)
+            cov_min, gap_min = p.follow_ref_cov, p.follow_ref_gap
+            if via == "variants" and p.follow_ref_variants_gap is not None and not rec.admit:
+                from ..variants import variant_edge
+                if variant_edge(ref, other).is_variant:
+                    cov_min, gap_min = max(cov_min, p.follow_ref_variants_cov), min(gap_min, p.follow_ref_variants_gap)
             act = follow_ref_decide(admit=rec.admit, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
                                     cands=list(m.candidates or []) if m else [], verdict=getattr(m, "verdict", None),
                                     guard=getattr(m, "guard", None), ctx_char=getattr(d, "char", None), rules=here,
-                                    cov_min=p.follow_ref_cov, gap_min=p.follow_ref_gap,
+                                    cov_min=cov_min, gap_min=gap_min,
                                     allow_occluded=p.occluded_variant_first)
             if act == "fix":
                 rec.evidence = {**(rec.evidence or {}), "follow_ref": {"from": rec.char, "ref": ref,
@@ -3030,7 +3339,7 @@ def _follow_ref_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, co
 
 def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict, dmap: dict) -> int:
     """异体边表自动暂归一（`edge_pair`）。→ 新放行格数。判据＝`follow_ref_decide`（待审格一支），对子由 `edge_pairs.is_auto_pair` 认。"""
-    from ..groups.edge_pairs import is_auto_pair, pair_to
+    from ..groups.edge_pairs import is_auto_pair, pair_to, seam_pair
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -3042,13 +3351,24 @@ def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coo
             if not ref or not cands:
                 continue
             top, cov = cands[0][0], float(cands[0][1])
-            if ref == top or not is_auto_pair(ref, top):
+            if ref == top:
                 continue
+            gap_min, seam = p.edge_pair_gap, None
+            if not is_auto_pair(ref, top):
+                if not p.edge_pair_group_seam or (rec.evidence or {}).get("group"):
+                    continue
+                if p.replace_form == "review" and "replace_form" in (rec.doubts or []):
+                    continue                     # 书要求改字层异体一律人审：补缝不越过
+                seam = seam_pair(ref, top)
+                if seam is None:
+                    continue
+                if seam == "near_form":
+                    gap_min = max(gap_min, p.edge_pair_group_seam_nf_gap)
             d = dmap.get(rec.id)
             act = follow_ref_decide(admit=False, channel=rec.channel, char=rec.char, doubts=rec.doubts, ref=ref,
                                     cands=cands, verdict=getattr(m, "verdict", None), guard=getattr(m, "guard", None),
                                     ctx_char=getattr(d, "char", None), rules={ref: top},
-                                    cov_min=p.edge_pair_cov, gap_min=p.edge_pair_gap,
+                                    cov_min=p.edge_pair_cov, gap_min=gap_min,
                                     allow_occluded=p.occluded_variant_first)
             if act != "admit":
                 continue
@@ -3057,7 +3377,8 @@ def _edge_pair_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coo
             rec.evidence = {**(rec.evidence or {}),
                             "lane": {"lane": "edge_pair", "lib": top, "cov": round(cov, 4), "ref": ref,
                                      "prev_doubts": list(rec.doubts or [])},
-                            "edge_pair": {"decision": "provisional", "pair": [ref, top], "to": to}}
+                            "edge_pair": {"decision": "provisional", "pair": [ref, top], "to": to,
+                                          **({"seam": seam} if seam else {})}}
             rec.doubts = ["lane_edge_pair"]
             n += 1
     return n
@@ -3542,7 +3863,7 @@ _RR = frozenset("人入八")
 
 #: 看图判裁定（`feedback/rulings`，group=O）：提示词版本、A24 名下的子类、不碰的疑问
 _VIS_RULING_GROUP, _VIS_RULING_VER = "O", "vis-o1"
-_VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130"})
+_VIS_RULING_SUBCLASSES = frozenset({"A68", "B99", "D130", "L04"})
 #: 整理本缺字（〓）按新图源文本层取字／私用码「一码一字」表（`research/a24/pua_src`，A24 2026-11-03），提示词版本 → 收的子类
 #: ctx-m1＝只读文意终审（A24 2026-11-04，两路独立会话双 high＋字形分或≥2 来源，按组定越不越过整理本；`admit_ok` 写入时已判），Z＝字组格、N＝形近护栏格
 _VIS_RULING_SPECS = ((_VIS_RULING_VER, _VIS_RULING_SUBCLASSES), ("src-1", frozenset({"PUA", "GB"})), ("ctx-m1", frozenset({"Z", "N"})))
@@ -3563,6 +3884,57 @@ def _override_ok(groups, a: str, b: str) -> bool:
     """a、b 同属 `groups` 里的某个字组（成员含两字）。"""
     from ..groups.registry import FLOW_GROUPS
     return any(g in FLOW_GROUPS and a in FLOW_GROUPS[g].members and b in FLOW_GROUPS[g].members for g in groups)
+
+
+def _pua_code_pass(out: list, amap: dict, store=None, table=None, p=None) -> tuple[int, int, int]:
+    """按私用码表放字（`SeedAdmitParams.pua_code_table`）。→ (改字格数, 遍后仍不一致格数, 降审格数)。
+
+    格→码对应来自裁定库 `src-2`（按格号取，见 `RulingStore.cell_codes`）；对位字 `ref` 与现对位不同的不认（重切后格号可能挪了）。
+    ① 非人裁已放行、放行字≠码表字 → 改成码表字（通道 `code_table`，provenance `match`）；② 一码多字的码：放行字在族内 → 不动，
+    族外 → 降审（doubt `src_code_conflict`；`p.pua_code_family_demote` 关则只计数）；③ 人裁格不动，只计入「仍不一致」；
+    ④ 未放行格不动；⑤ `p.pua_code_keep_channels` 里的通道放行的字不改（计入「仍不一致」）。码表字须是汉字。"""
+    from ..utils.pua_v2_codes import load_table
+    if store is None:
+        store = _vis_cache().store_
+    cc = store.cell_codes()
+    if not cc:
+        return 0, 0, 0
+    if table is None:
+        from ..core.workspace import ws_config_dir
+        table = load_table(ws_config_dir())
+    codes, fams = table
+    keep = {c.strip() for c in (getattr(p, "pua_code_keep_channels", "") or "").split(",") if c.strip()}
+    fam_demote = getattr(p, "pua_code_family_demote", True)
+    fix = mism = dem = 0
+    for col in out:
+        for r in col.chars:
+            info = cc.get(r.id)
+            if not info or not r.admit or (r.doubts and "excluded" in r.doubts):
+                continue
+            T = codes.get(info["code"])
+            fam = fams.get(info["code"])
+            if (not T and not fam) or (T and not _ruling_han(T)) or (info.get("ref") or "") != ((amap.get(r.id) or (None,))[0] or ""):
+                continue
+            T = T or ""                              # 纯多字码（表里只登族、没有单字）：只管族外降审，不改字
+            if r.char == T or (fam and r.char in fam):
+                continue
+            if r.provenance == "human" or r.channel == "human":
+                mism += 1
+                continue
+            if r.channel in keep or (fam and not fam_demote):
+                mism += 1
+                continue
+            if fam:                                  # 族外字：码表字也不是铁证，退回人审
+                _demote(r, "src_code_conflict")
+                r.evidence = {**(r.evidence or {}), "src_code_conflict": {"code": info["code"], "char": T, "family": "".join(sorted(fam))}}
+                r.admit, r.channel, r.provenance = False, None, ""
+                r.doubts = list(dict.fromkeys(list(r.doubts or []) + ["src_code_conflict"]))
+                dem += 1
+                continue
+            r.evidence = {**(r.evidence or {}), "code_table": {"code": info["code"], "char": T, "was": r.char, "was_channel": r.channel}}
+            r.char, r.channel, r.provenance = T, "code_table", "match"
+            fix += 1
+    return fix, mism, dem
 
 
 def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
@@ -3625,31 +3997,103 @@ def _vis_ruling_pass(p, out: list, amap: dict, store=None) -> int:
     return n
 
 
-def _p_ref_pass(p, out: list, amap: dict) -> int:
-    """P 类取整理本字（`SeedAdmitParams.p_ref_admit`）。→ 放行数净增。"""
+def _blank_ink_pass(p: "SeedAdmitParams", out: list, mmap: dict, coord: dict, conflict: frozenset, vmap) -> int:
+    """`blank_ink_nonchar`：整理本空格位上有墨、库认不出的格判非字放行。→ 放行格数。只升不降。"""
+    n = 0
+    for col in out:
+        recs = col.chars or []
+        ref_n = agree = 0
+        for rec in recs:
+            ch = coord.get(rec.id)
+            if not ch or ch == "〓":
+                continue
+            ref_n += 1
+            m = mmap.get(rec.id)
+            top = (m.candidates[0][0] if m and m.candidates else None) or rec.char
+            agree += int(bool(top) and vmap.semantic(top) == vmap.semantic(ch))
+        if agree < p.blank_ink_col_min_agree or agree < p.blank_ink_col_min_frac * ref_n:
+            continue
+        for rec in recs:
+            doubts = set(rec.doubts or [])
+            if (rec.admit or rec.channel == "human" or rec.provenance == "human" or "excluded" in doubts
+                    or "occluded" in doubts or doubts & _LANE_HARD):
+                continue
+            if coord.get(rec.id, None) != "" or rec.id in conflict:
+                continue
+            m = mmap.get(rec.id)
+            if m is None:
+                continue
+            top = m.candidates[0] if m.candidates else None
+            cov = float(top[1]) if top else 0.0
+            if m.verdict == "same" or cov >= p.blank_ink_max_cov:
+                continue
+            ev = rec.evidence or {}
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "blank_ink", "blank_ink", None
+            rec.evidence = {**ev, "lane": {"lane": "blank_ink", "nonchar": True, "ref_blank": True,
+                                           "verdict": m.verdict, "lib": top[0] if top else None,
+                                           "cov": round(cov, 4), "prev_doubts": sorted(doubts)},
+                            "no_glyph_lib": True}
+            rec.doubts = ["blank_ink"]
+            n += 1
+    return n
+
+
+def _p_coord_refs(ctx: RunContext, page: int, cache: dict) -> dict[str, str]:
+    """`p_ref_coord` 用：本页坐标对位的整理本字，去掉坐标冲突格、〓、空格位。"""
+    ref: PageAlignRef | None = _opt(ctx, "align_ref", page)
+    bad = set(getattr(ref, "coord_conflict_ids", None) or []) if ref else set()
+    return {k: v for k, v in _coord_refs(ctx, page, cache).items() if v not in (None, "", "〓") and k not in bad}
+
+
+def _p_ref_pass(p, out: list, amap: dict, coord: dict | None = None) -> int:
+    """P 类取整理本字（`SeedAdmitParams.p_ref_admit`）。→ 放行数净增。
+
+    `coord`（`p_ref_coord` 开时由调用方给）：文本对位 `amap` 里没有的格，退到坐标对位的整理本字（P02）。"""
     from ..groups.registry import FLOW_GROUPS
     in_group = {c for g in FLOW_GROUPS.values() for c in g.members}
 
+    def ref_of(r):
+        return (amap.get(r.id) or (None,))[0] or ((coord or {}).get(r.id) if coord else None)
+
     def cand(r) -> bool:
-        if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+        if r.admit or r.provenance == "human" or r.channel == "human" or ((r.id or "")[-1:] in ("a", "b") and not p.p_ref_jiazhu):
             return False
         ds = {d for d in (r.doubts or []) if isinstance(d, str)}
         if _VIS_RULING_HARD & ds or "occluded" in ds or "excluded" in ds or (r.evidence or {}).get("occluded"):
             return False
         if ((r.evidence or {}).get("group") or {}).get("id"):
             return False
-        ref = (amap.get(r.id) or (None,))[0]
-        return bool(ref and r.char and r.char != ref and r.char not in in_group and ref not in in_group)
+        ref = ref_of(r)
+        if not (ref and r.char and r.char != ref and r.char not in in_group and ref not in in_group):
+            return False
+        return not (p.p_ref_skip_variant and _direct_variant_edge(r.char, ref))
+
+    def is_coord(r) -> bool:
+        return not (amap.get(r.id) or (None,))[0]
+
+    def cov_ok(r) -> bool:
+        """`p_ref_max_cov`（坐标对位来源的格用 `p_ref_coord_max_cov`，`None` 沿用前者）：机器字库覆盖率须低于它（相邻判断仍按不含这条的 cand，成片就是成片）。"""
+        lim = p.p_ref_max_cov
+        if is_coord(r) and p.p_ref_coord_max_cov is not None:
+            lim = p.p_ref_coord_max_cov
+        if lim is None:
+            return True
+        cov = (r.evidence or {}).get("cov")
+        return isinstance(cov, (int, float)) and cov < lim
 
     n = 0
     for c in out:
         rs = sorted(c.chars or [], key=lambda r: (r.slot, r.sub or ""))
         flags = [cand(r) for r in rs]
         for i, r in enumerate(rs):
-            if not flags[i] or (i > 0 and flags[i - 1]) or (i + 1 < len(rs) and flags[i + 1]):
+            if not flags[i] or not cov_ok(r):
                 continue
-            ref = amap[r.id][0]
-            r.evidence = {**(r.evidence or {}), "p_ref": {"ref": ref, "machine": r.char},
+            adj_ok = p.p_ref_coord_adjacent if is_coord(r) else p.p_ref_adjacent
+            if not adj_ok and ((i > 0 and flags[i - 1]) or (i + 1 < len(rs) and flags[i + 1])):
+                continue
+            ref = ref_of(r)
+            via = "coord" if is_coord(r) else "align"
+            r.evidence = {**(r.evidence or {}), "p_ref": {"ref": ref, "machine": r.char, "cov": (r.evidence or {}).get("cov"), **({"via": via} if coord is not None else {})},
                           "lifted_from": {"char": r.char, "doubts": list(r.doubts or [])}}
             r.char, r.admit, r.channel, r.provenance, r.doubts = ref, True, "p_ref", "match", []
             n += 1
@@ -3657,14 +4101,17 @@ def _p_ref_pass(p, out: list, amap: dict) -> int:
 
 
 def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, coord: dict | None = None,
-               wh: dict | None = None) -> int:
+               wh: dict | None = None, dmap: dict | None = None) -> int:
     """折叠组（`SeedAdmitParams.fold_groups`）：待审格的字组在名单里、整理本字在组内 → 放整理本字。→ 放行数净增。
     护栏（缺省关）：`fold_ruling_first` 有本组裁定先用裁定字；`fold_lib_top_in_group` 库首位须在组内；
-    扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。"""
+    扩展 `fold_coord_ref`（`coord` 由调用方给）：现役对位缺用坐标对位、未入组格按库首位入折叠组。
+    字形宽高（`fold_aspect`／`fold_aspect_jiazhu`，`wh` 由调用方给）按 `fold_aspect_pairs` 判窄字／宽字；`fold_aspect_ctx_veto`（`dmap`＝context_decide）可否决。
+    框架与各书标定见 `doc/字组/折叠组.md`。"""
     from ..groups.registry import FLOW_GROUPS
+    pairs = p.fold_aspect_pairs if p.fold_aspect_pairs is not None else {"ry": ("日", "曰")}
     wins: dict = {}
     no_ref = not p.fold_ref_char
-    if p.fold_ruling_first or no_ref:
+    if p.fold_ruling_first or no_ref or p.fold_jiazhu:
         from ..groups.context import WIDTH
         from ..utils.jiazhu_order import sort_by_reading
         seq = [r for c in sorted(out, key=lambda c: c.col) for r in sort_by_reading(c.chars)
@@ -3675,7 +4122,8 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
     n = 0
     for c in out:
         for r in c.chars or []:
-            if r.admit or r.provenance == "human" or r.channel == "human" or (r.id or "")[-1:] in ("a", "b"):
+            half = (r.id or "")[-1:] in ("a", "b")
+            if r.admit or r.provenance == "human" or r.channel == "human" or (half and not p.fold_jiazhu):
                 continue
             ds = {d for d in (r.doubts or []) if isinstance(d, str)}
             occ = "occluded" in ds or bool((r.evidence or {}).get("occluded"))
@@ -3701,28 +4149,39 @@ def _fold_pass(p, out: list, amap: dict, mmap: dict | None = None, store=None, c
             if gid not in p.fold_groups or gid not in FLOW_GROUPS:
                 continue
             mem = FLOW_GROUPS[gid].members
-            if not no_ref and (not ref or ref not in mem):
+            if not (no_ref or half) and (not ref or ref not in mem):
                 continue
             if p.fold_lib_top_in_group:
                 cands = list(getattr(mmap.get(r.id) if mmap else None, "candidates", None) or [])
                 if not cands or cands[0][0] not in mem:
                     continue
-            ch, via, extra = None, None, {}
-            if p.fold_aspect and gid == "ry" and wh and r.id in wh:
+            ch, via, extra, veto = None, None, {}, None
+            th = p.fold_aspect_jiazhu if half else p.fold_aspect
+            pair = pairs.get(gid)
+            if th and pair and pair[0] in mem and pair[1] in mem and wh and r.id in wh:
                 w, h = wh[r.id]
                 if h and h > 0 and w:
                     ar = w / h
-                    if ar >= p.fold_aspect[1] and "曰" in mem:
-                        ch, via, extra = "曰", "aspect", {"aspect": round(ar, 3)}
-                    elif ar <= p.fold_aspect[0] and "日" in mem:
-                        ch, via, extra = "日", "aspect", {"aspect": round(ar, 3)}
-            if ch is None and (p.fold_ruling_first or no_ref) and r.id in wins and gid in l3:
+                    if ar >= th[1]:
+                        ch = pair[1]
+                    elif ar <= th[0]:
+                        ch = pair[0]
+                    if ch is not None:
+                        via, extra = "aspect", {"aspect": round(ar, 3)}
+                        if p.fold_aspect_ctx_veto is not None and dmap:
+                            other = pair[0] if ch == pair[1] else pair[1]
+                            pr = dict(getattr(dmap.get(r.id), "ranked", None) or []).get(other, 0.0)
+                            if pr >= p.fold_aspect_ctx_veto:
+                                veto = {"aspect": round(ar, 3), "char": ch, "ctx": other, "prob": round(pr, 3)}
+                                ch, via, extra = None, None, {}
+            if ch is None and (p.fold_ruling_first or no_ref or half) and r.id in wins and gid in l3:
                 v = store.get(gid, l3[gid]["ver"], *wins[r.id])
                 if v and v.get("char") in mem and v.get("conf") in ("high", "mid") and not v.get("other"):
                     ch, via = v["char"], "ruling"
             if ch is None:
-                if no_ref:
-                    r.evidence = {**(r.evidence or {}), "fold_pending": {"group": gid}}   # 已归组、字待文意
+                if no_ref or half:
+                    fp = {"group": gid, **({"ctx_veto": veto} if veto else {})}
+                    r.evidence = {**(r.evidence or {}), "fold_pending": fp}   # 已归组、字待文意
                     continue
                 ch, via = ref, "ref"
             fold = {"group": gid, "ref": ref, "via": via, **extra}
@@ -3972,6 +4431,9 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      l2_tables=dict(p.group_flow_tables), l2_models=dict(p.group_flow_models), l2_drift=p.group_flow_l2_drift, joint=p.group_flow_joint,
                      tolerate_extra={g: str(v) for g, v in p.group_flow_tolerate_extra.items()},
                      lift_shape_ref=p._rt_lift_shape_ref(),
+                     ref_free_groups=frozenset(p.group_flow_ref_free),
+                     dissent_keep=frozenset(p.group_flow_dissent_keep), dissent_margin=p.group_flow_dissent_margin,
+                     ref_pair=frozenset(p.group_flow_ref_pair), ref_pair_margin=p.group_flow_ref_pair_margin,
                      lift_ref_veto=frozenset(p.group_flow_lift_ref_veto),
                      abstain_ref_ok=p._rt_abstain_ref_ok(),
                      shape_ref_ok=p._rt_shape_ref_ok(),
@@ -3980,6 +4442,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
                      vis_model=(p.group_flow_llm_model if p.group_flow_vis and p.group_flow_llm_model else None),
                      vis_cache=_vis_cache(),
                      lift_ref_guard=p.group_flow_lift_ref_guard, provisional=p.group_flow_provisional,
+                     coord_outside_skip=p.group_flow_coord_outside_skip,
                      provisional_to=dict(p.group_flow_provisional_to),
                      # 文意 L2 表的键按码位归一再比：邻格放行字／整理本字只差书级码位时不算上下文变了
                      canon=(ctx.book.canonical_char if (p.codepoint_semantic and ctx is not None
@@ -3995,6 +4458,8 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
         ds = [d for d in (r.doubts or []) if isinstance(d, str) and d not in _GROUP_FLOW_OWN_DOUBTS]
         if p.occluded_variant_first:         # 异体形近规则先于印章：遮挡不当硬护栏（放行后核对见下）
             ds = [d for d in ds if d != "occluded"]
+        if p.group_flow_form_open:           # 写法待定（Z06）：交给组的刻形解法定形，定不了仍留 form_open
+            ds = [d for d in ds if d != "form_open"]
         return _hard_blocked(ds, guard) or any(d in _GROUP_FLOW_HARD for d in ds)
 
     def cands_of(cid: str):
@@ -4024,7 +4489,7 @@ def _group_flow_pass(p, out: list, amap: dict, mmap: dict, ctx=None, page: int =
     res = group_flow_pass(seq, amap, cands_of, blocked, cfg,
                           ctx_fn=lambda s, i, step: _clf_ctx(s, amap, i, step, WIDTH),
                           patch_fn=patch_fn, canon=canon,
-                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p._rt_lift_shape_ref() or p._rt_abstain_ref_ok() or p._rt_shape_ref_ok())
+                          veto_refs=_coord_refs(ctx, page, {}) if ((p.group_flow_lift_ref_guard or p.group_flow_coord_outside_skip or p._rt_lift_shape_ref() or p._rt_abstain_ref_ok() or p._rt_shape_ref_ok())
                                                                    and ctx is not None) else None)
     net = res.lifted - res.demoted
     for rid, (r, admit0, ch0, pv0, char0, doubts0, ev0) in occ_snap.items():
