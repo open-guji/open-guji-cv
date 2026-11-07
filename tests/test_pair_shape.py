@@ -173,3 +173,17 @@ def test_pass_lifts_pending_and_vetoes_admitted(tmp_path, monkeypatch):
     assert d == -1 and not r["b:1:1:3"].admit and "pair_shape_veto" in r["b:1:1:3"].doubts
     assert r["b:1:1:3"].evidence["demoted_from"]["by"] == "pair_shape_veto"
     assert r["b:1:1:5"].admit
+
+
+def test_pair_shapes_relative_path_resolves_in_data_root(tmp_path, monkeypatch):
+    """书级 group_flow_pair_shapes 写相对路径：模型随中心库走，先在数据目录找。"""
+    from open_guji_cv.core import workspace as ws
+    from open_guji_cv.steps import seed_admit as sa
+    d = tmp_path / "data"
+    (d / "config" / "groups").mkdir(parents=True)
+    (d / "config" / "groups" / "pair_shape_dt.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(ws, "data_root", lambda *a, **k: d)
+    monkeypatch.setattr(ws, "workspace_root", lambda *a, **k: tmp_path / "ws")
+    p = sa.SeedAdmitParams(group_flow_pair_shapes={"大太": "config/groups/pair_shape_dt.json"})
+    sa._resolve_group_flow_paths(p)
+    assert p.group_flow_pair_shapes["大太"] == str(d / "config" / "groups" / "pair_shape_dt.json")
