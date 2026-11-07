@@ -5,7 +5,8 @@
 
 ## [未发版]
 
-- seed_admit 1.63 `alt_require_matched`（书级，缺省关、关时不进参数 dump；A24 史記 r18 02:106:7 深挖 11-07）：`align_ref.alt_select="admit"` 换列时，备选格网这一列里没有坐标对位字的格比主切法多就不换。r18 里 #1191 让主切法那遍的字形背书变少，02:106 第 7 列备选（多一个 `-1` 格、整列后移一格）凭「待审少 2」被换，夹注逐格错位、约 20 格 coord_fallback 错放；r17 同列不换。真换对的列（02:100:5、02:108:6／8）备选没坐标字的格都更少。开关放史記书级配置。
+- seed_admit 1.64 `alt_require_matched`（书级，缺省关、关时不进参数 dump；A24 史記 r18 02:106:7 深挖 11-07）：`align_ref.alt_select="admit"` 换列时，备选格网这一列里没有坐标对位字的格比主切法多就不换。r18 里 #1191 让主切法那遍的字形背书变少，02:106 第 7 列备选（多一个 `-1` 格、整列后移一格）凭「待审少 2」被换，夹注逐格错位、约 20 格 coord_fallback 错放；r17 同列不换。真换对的列（02:100:5、02:108:6／8）备选没坐标字的格都更少。开关放史記书级配置。
+- seed_admit 1.63 `group_flow_lift_shape_ratio`／`group_flow_lift_shape_ratio_jiazhu` 与 `reference_trust_skip`（书级，缺省空、不进参数 dump；SJ 史記 r18，A24 11-07）：`lift_shape_ref` 补放要字形路 ratio 落在书级区间内（日曰：`{ry: {曰: [1.15, 9]}}` 只放明显扁宽的曰，居中格按文意）；`reference_trust` 自动并入的 `lift_shape_ref` 等各项可单独关。史記 r18 lift_shape_ref 71 格曰按 1.15 留 56 格；标定见 `doc/字组/ry.md`。
 
 - seed_admit 1.60 `group_flow_ctx_agree`（书级，缺省关、关时不进参数 dump；A24 Z02 11-07 sheldon 定）：`group_flow_dissent_keep`／`group_flow_ref_pair` 里再列入这个名单的组（入人八 rr），放行字还要本组文意（ctx）同意才不降审／才取整理本字。入人八整理本 24 对 3 错、文意 10 对 10 错，「整理本＝文意」9 格 8 对 0 错。
 
