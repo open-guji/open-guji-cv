@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-- seed_admit 1.59 `group_flow_ctx_agree`（书级，缺省关、关时不进参数 dump；A24 Z02 11-07 sheldon 定）：`group_flow_dissent_keep`／`group_flow_ref_pair` 里再列入这个名单的组（入人八 rr），放行字还要本组文意（ctx）同意才不降审／才取整理本字。入人八整理本 24 对 3 错、文意 10 对 10 错，「整理本＝文意」9 格 8 对 0 错。
+- seed_admit 1.60 `group_flow_ctx_agree`（书级，缺省关、关时不进参数 dump；A24 Z02 11-07 sheldon 定）：`group_flow_dissent_keep`／`group_flow_ref_pair` 里再列入这个名单的组（入人八 rr），放行字还要本组文意（ctx）同意才不降审／才取整理本字。入人八整理本 24 对 3 错、文意 10 对 10 错，「整理本＝文意」9 格 8 对 0 错。
 
 - seed_admit 1.57 `group_flow_dissent_l1`（书级，缺省关、关时不进参数 dump；A24 Z02 按新码重做 11-07）：`group_flow_dissent_keep` 的组里，复核时已放行字＝整理本字、唯一反对的是文意 L1 规则（`ctx:ctx_l1`）而本组 ids 等非文意解法同意放行字 → 不降审，留痕 `dissent_keep`。新 Z02（73 格）里 B2／B2x 9 格放行字全对。
 
