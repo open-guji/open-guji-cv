@@ -999,11 +999,13 @@ class SeedAdmitParams(BaseModel):
     以及 `ref_lib_coord` 的盲放（库首位≠参校字）一支，凡库首位或参校字落在名单里、且两者不同 → 不放，留审（`lane_skip.why=few_stroke`）。
     建议 `一二三下十子予`。空＝关（缺省，不进 dump）。参校字不是汉字时的兜底／放行已一律不取（无开关，对位错位）。"""
     lane_coord_blind_guard: bool = False
-    """`coord_fallback` 的 `witnesses_coord` 一支（库首位≠参校字、只靠证人同意参校字）的盲放护栏（A23 建议，A24 Z04 深挖 11-07；
-    殿本 飲→餘、二→三 图上是库首位，参校字不在库候选里）：参校字在本书库里刻例 ≥ `lane_coord_blind_min_n`、却不在库候选里，
-    且库首位 cov ≥ `lane_coord_blind_lib_cov` → 不放，留审（`lane_skip.why=ref_blind`）。缺省关，关时不进参数 dump。"""
+    """`coord_fallback` 的 `witnesses_coord` 一支（库首位≠参校字、只靠证人同意参校字）的护栏（A23 建议并回放，A24 Z04 深挖 11-07；
+    殿本 飲→餘、二→三 图上是库首位）：库首位 cov ≥ `lane_coord_blind_lib_cov`，参校字在库候选里但比库首位低 ≥ `lane_coord_blind_gap`，
+    且参校字在本书库里刻例 ≥ `lane_coord_blind_min_n` → 不放，留审（`lane_skip.why=ref_blind`）。参校字不在候选里的不拦
+    （r6 回放：不在候选一支 10 格拦对 1 错拦 8）。第 6 轮殿本 80 册 ★main 回放：4051 格里恰拦 2 格，都拦对。缺省关，关时不进参数 dump。"""
     lane_coord_blind_min_n: int = 3
     lane_coord_blind_lib_cov: float = 0.98
+    lane_coord_blind_gap: float = 0.05
     ref_lib_coord_cov: float = 0.96
     ref_lib_coord_gap: float = 0.01
     """只在 `ref_lib_coord` 开着、`reference_trust` 关着时用：库首位 cov 下限，与语义不同的最好对手的领先下限。"""
@@ -1206,7 +1208,7 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.lane_coord_few_stroke:
             d.pop("lane_coord_few_stroke", None)
         if isinstance(d, dict) and not self.lane_coord_blind_guard:
-            for k in ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov"):
+            for k in ("lane_coord_blind_guard", "lane_coord_blind_min_n", "lane_coord_blind_lib_cov", "lane_coord_blind_gap"):
                 d.pop(k, None)
         if isinstance(d, dict) and not (self.rare_ref and self.rare_ref_coord):
             d.pop("rare_ref_coord", None)
@@ -3517,6 +3519,15 @@ def _witness3_knn_veto_fn(p, ctx, page: int):
     return veto
 
 
+def _blind_ref_behind(m, co: str, top_cov: float, gap: float) -> bool:
+    """库首位 cov ≥ top_cov，参校字 co 在候选里且比首位低 ≥ gap（`lane_coord_blind_guard`）。"""
+    cs = list(getattr(m, "candidates", None) or [])
+    if not cs or float(cs[0][1]) < top_cov:
+        return False
+    sc = next((float(v) for c, v in cs if c == co), None)
+    return sc is not None and float(cs[0][1]) - sc >= gap
+
+
 def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict,
                        vmap, witnesses_fn, canon=None, lib_n: dict | None = None, knn_veto=None) -> int:
     """待审补放三通道（`lane_witness3`／`lane_coord`／`lane_seal`，overview#433）。→ 放行格数。
@@ -3699,9 +3710,7 @@ def _review_lanes_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, 
                         rec.evidence = {**ev, "lane_skip": {"lane": "coord_fallback", "why": "few_stroke", "lib": lib, "coord": co}}
                     elif (p.lane_coord_blind_guard and lib != co and lib_n is not None
                           and lib_n.get(co, 0) >= p.lane_coord_blind_min_n
-                          and co not in {c for c, _ in (getattr(mmap.get(rec.id), "candidates", None) or [])}
-                          and (mmap.get(rec.id) and mmap.get(rec.id).candidates
-                               and float(mmap.get(rec.id).candidates[0][1]) >= p.lane_coord_blind_lib_cov)):
+                          and _blind_ref_behind(mmap.get(rec.id), co, p.lane_coord_blind_lib_cov, p.lane_coord_blind_gap)):
                         rec.evidence = {**ev, "lane_skip": {"lane": "coord_fallback", "why": "ref_blind", "lib": lib, "coord": co}}
                     elif (rs and same(co, *wc.values()) and not variant_pair(lib, co)
                           and guard_of(rec.id) is None):

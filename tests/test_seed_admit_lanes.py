@@ -198,16 +198,18 @@ def _blind(cands, coord_char, lib_n, **params):
     return _run(out, lib={5: cands}, coord=_ids({5: coord_char}), wits=wits, lib_n=lib_n, lane_coord=True, **params)
 
 
-def test_r4_blind_guard_holds_ref_not_in_candidates():
-    """A23 建议（Z04 殿本 飲→餘）：参校字刻例≥3、却不在库候选里，库首位 cov≥0.98 → 留审。缺省关＝照放。"""
-    cands = [("飮", 0.985), ("飲", 0.60)]
+def test_r4_blind_guard_holds_ref_far_behind_lib():
+    """A23 回放（殿本 飲→餘、二→三）：库首位 cov≥0.98、参校字在候选里但低≥0.05、刻例≥3 → 留审。缺省关＝照放；不在候选不拦。"""
+    cands = [("飮", 0.985), ("餘", 0.60)]
     n, rs = _blind(cands, "餘", {"餘": 5})
     assert n == 1 and rs[5].char == "餘"                                       # 缺省关
     n, rs = _blind(cands, "餘", {"餘": 5}, lane_coord_blind_guard=True)
     assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "ref_blind"
-    n, rs = _blind(cands, "餘", {"餘": 2}, lane_coord_blind_guard=True)        # 参校字刻例太少：不算「库认得」
+    n, rs = _blind(cands, "餘", {"餘": 2}, lane_coord_blind_guard=True)        # 刻例太少
     assert n == 1
-    n, rs = _blind([("飮", 0.985), ("餘", 0.60)], "餘", {"餘": 5}, lane_coord_blind_guard=True)   # 参校字在候选里：照放
+    n, rs = _blind([("飮", 0.985), ("餘", 0.95)], "餘", {"餘": 5}, lane_coord_blind_guard=True)   # 差不到 0.05
+    assert n == 1
+    n, rs = _blind([("飮", 0.985), ("飲", 0.60)], "餘", {"餘": 5}, lane_coord_blind_guard=True)   # 不在候选：不拦
     assert n == 1
 
 
