@@ -743,7 +743,7 @@ def test_ref_canon_entry_and_review_by_codepoints():
     # 整理本 隷／𨽻 不是组员，按书级码位归一后与 𨽾 同字：进组
     assert entry(r, [("𨽾", 0.98)], "𨽻", cfg, _canon) == ("li", "lift")
     assert entry(r, [("𨽾", 0.98)], "𨽻", FlowConfig(groups=("li", "mn"), provisional=False)) is None   # 不给码位、关暂归一照旧拦
-    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) == ("li", "lift")         # 𨽻 是 li 暂归一的写法：开暂归一（缺省）也进组（1.55）
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) == ("li", "lift")         # 𨽻 是 li 暂归一的写法：开暂归一（缺省）也进组（1.58）
     assert entry(r, [("𫎇", 0.98)], "䝉", cfg, _canon) == ("mn", "lift")
     # 已放行 隷（别的通道）也复核
     assert entry(Rec("b", "隷", True, "match_ref"), [], "隷", cfg, _canon) == ("li", "review")

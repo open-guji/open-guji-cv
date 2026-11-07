@@ -41,7 +41,8 @@ def _fetch(vol2: str, rev: int, tables: Path | None) -> dict | None:
         p = tables / f"{vol2}.r{rev:03d}.json"
         return json.loads(p.read_text(encoding="utf-8")) if p.exists() else None
     try:
-        with urllib.request.urlopen(f"{BASE_URL}/{vol2}/r{rev:03d}.json", timeout=60) as r:
+        req = urllib.request.Request(f"{BASE_URL}/{vol2}/r{rev:03d}.json", headers={"User-Agent": "open-guji-cv/rebase_book_yaml"})
+        with urllib.request.urlopen(req, timeout=60) as r:       # 默认 UA 会被 CDN 403，当成「没有这一版」
             return json.loads(r.read())
     except Exception:  # noqa: BLE001  （404／403 都当没有这一版）
         return None
