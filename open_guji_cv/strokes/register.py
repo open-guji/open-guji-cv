@@ -40,7 +40,8 @@ class RegParams:
     pin_search: float = 0.1        # 钉住的笔在墨框里就近找「别的笔解释不了的残墨」，最多平移这么远（字身倍数）；0＝纹丝不动
     pin_dark: float = 0.0          # >0：钉住的笔只认够黑的墨（灰度 ≤ 墨中位＋pin_dark×(纸中位−墨中位)）；浅灰噪点、透字不算
     pin_min_area: float = 0.5      # 残墨至少这么多（笔宽²）才让钉住的笔去找；太小是噪点
-    pin_min_frac: float = 0.4      # 找到的残墨块至少要有这一笔应有墨量（笔长×笔宽）的这么多；噪点、碎屑不够
+    pin_tol: float = 0.2           # 钉住的笔量落墨时离墨多近才算（笔宽倍数）；收紧后小墨点只算盖住一小段（殿本留出异判 106→约 50）
+    pin_min_frac: float = 0.8      # 找到的残墨块至少要有这一笔应有墨量（笔长×笔宽）的这么多；噪点、碎屑不够
     pin_blob: float = 0.3          # 残墨团块长边超过字身这么多（切图带进来的框线、漏掉的整笔）不让钉住的笔去找
     snap_radius: float = 2.0       # 非刚性贴合半径（笔宽倍数）
     tip_extend: float = 3.0        # 两头外推上限（笔宽倍数）
@@ -214,10 +215,10 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
     # ---- 落墨率、独占率、起止点
     H, W = ink.shape
 
-    def on_ink(q, dt=dt_out):
+    def on_ink(q, dt=dt_out, tol=0.6):
         iy = np.clip(np.round(q[:, 0]).astype(int), 0, H - 1)
         ix = np.clip(np.round(q[:, 1]).astype(int), 0, W - 1)
-        return dt[iy, ix] <= 0.6 * w
+        return dt[iy, ix] <= tol * w
 
     tips, ext = [], []
     for q in fitted:
@@ -260,10 +261,16 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
     dt_dark = cv2.distanceTransform((1 - dark.astype(np.uint8)), cv2.DIST_L2, 5) if dark is not ink else dt_out
     out = []
     for k, ((nm, _), q) in enumerate(zip(T, fitted)):
-        oi = on_ink(q, dt_dark if short[k] else dt_out)
+        if short[k]:  # 钉住的笔按 1px 重采样、容差收紧：小墨点只盖住一小段，不算整笔
+            qq = resample(q, 1.0)
+            oi = on_ink(qq, dt_dark, p.pin_tol)
+            q_meas = qq
+        else:
+            oi = on_ink(q)
+            q_meas = q
         others = [ext[j] for j in range(len(ext)) if j != k]
         if others:
-            od, _ = cKDTree(np.vstack(others)).query(q)
+            od, _ = cKDTree(np.vstack(others)).query(q_meas)
             ex = oi & (od > p.excl_gap * w)
         else:
             ex = oi
