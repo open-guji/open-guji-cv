@@ -150,3 +150,12 @@ def test_clean_cell_drops_edge_fragments():
     ink = clean_cell(binarize(im))
     assert ink[120:128, 40:60].sum() == 0 and ink[:, 0:2].sum() == 0
     assert ink.sum() > 0.8 * binarize(draw(DA)).sum()
+
+
+def test_verify_extra_abstains_on_solid_blob():
+    """切坏成一整块黑的格（全唐文 005:1:2:2）弃权。"""
+    im = np.full((128, 128), 255, np.uint8)
+    im[10:118, 30:90] = 0
+    fit = register(im, tpl("太", TAI), RegParams(pin=(3,)))
+    assert fit.ink_frac > 0.9
+    assert verify_extra(fit, 3)[0] is None

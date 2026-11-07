@@ -69,6 +69,7 @@ class Fit:
     size: float = 0.0              # 字身（原图像素）
     scale: float = 1.0             # 内部放大倍数
     bbox: tuple = (0.0, 0.0, 0.0, 0.0)   # 墨框 (y0, x0, y1, x1)，原图坐标
+    ink_frac: float = 0.0          # 墨框里墨占多少；切坏成黑条的格很高（全唐文 005:1:2:2）
 
 
 def _fit_affine(src, dst, reg, prev):
@@ -271,7 +272,9 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
                              start=(s0[0] / f, s0[1] / f), end=(e0[0] / f, e0[1] / f)))
     cover = float((cKDTree(np.vstack(fitted)).query(skp)[0] < 1.5 * w).mean())
     bb = ink_bbox(ink)
-    return Fit(strokes=out, cover=cover, w=w / f, size=size / f, scale=f, bbox=tuple(v / f for v in bb))
+    area = max(1.0, (bb[2] - bb[0] + 1) * (bb[3] - bb[1] + 1))
+    return Fit(strokes=out, cover=cover, w=w / f, size=size / f, scale=f, bbox=tuple(v / f for v in bb),
+               ink_frac=float(ink.sum()) / area)
 
 
 __all__ = ["RegParams", "FitStroke", "Fit", "register"]
