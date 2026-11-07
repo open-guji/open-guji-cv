@@ -101,6 +101,7 @@ class FlowConfig:
     provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
     dissent_keep: frozenset = frozenset()              # 书级：这几组复核时「整理本＝放行字、只有弱图像票反对」不降审（`_dissent_keep`；seed_admit `group_flow_dissent_keep`，A24 Z02 深挖 2026-11-06）
     dissent_margin: float = 1.0                        # `dissent_keep` 里 ids 反对票算弱票的 margin 上限（seed_admit `group_flow_dissent_margin`）
+    dissent_l1: frozenset = frozenset()                # 书级：`dissent_keep` 的组里，文意 L1 规则（`ctx:ctx_l1`）孤证反对也算弱票，但要有本组非文意解法（ids 等）同意放行字（A24 Z02 11-07）
     ref_pair: frozenset = frozenset()                  # 书级：这几组补放／联合判卡住时「整理本字＝本组解法给的字、反对的只有图像路」取整理本字（`_ref_pair_pick`；seed_admit `group_flow_ref_pair`）
     ref_pair_margin: float = 1.5                       # `ref_pair` 里图像路反对票的 margin 上限（seed_admit `group_flow_ref_pair_margin`）
     ref_pair_coord: bool = False                       # 书级：`ref_pair` 的组联合判卡住、现役对位缺时，坐标对位字＝本组给的字且没有任何解法（含搭档）给别字 → 取它（`_ref_pair_coord_pick`；seed_admit `group_flow_ref_pair_coord`，A24 Z07 11-07）
@@ -582,7 +583,7 @@ def _ref_pair_pick(g: str, trail: list, ref: str | None, canon: Callable[[str], 
 
 
 def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon: Callable[[str], str],
-                  weak_margin: float) -> bool:
+                  weak_margin: float, l1_weak: bool = False) -> bool:
     """复核弱票不降审（`FlowConfig.dissent_keep`，A24 Z02 深挖 2026-11-06）：已放行字＝整理本字（现役对位，不用坐标对位），
     ①至少一路解法给了放行字；②给了别字的解法全是图像路、且是弱票（`ids` 等记了 margin 的 < `weak_margin`；`yr_bars`、`bars`
     这类量笔画的不记 margin 也算弱票——数一二的横在切残的格上必错）。有文意、码位给了别字就照旧降审。
@@ -596,6 +597,11 @@ def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon:
         c = t.get("char")
         if not c or canon(c) == x:
             continue
+        if l1_weak and _sname(t) == "ctx" and t.get("via") == "ctx:ctx_l1" and ":" not in t["solver"]:
+            # L1 规则孤证（二字组合规则，全册审计冲突率约 1–2%）：整理本×本组非文意解法已同意放行字时不推翻（A24 Z02 11-07）
+            if any(t2.get("char") and canon(t2["char"]) == x and _sname(t2) != "ctx" and ":" not in t2["solver"] for t2 in trail):
+                continue
+            return False
         if _sname(t) not in IMG_SOLVERS:
             return False
         m = _margin(t)
@@ -872,7 +878,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 code, other = None, False
                 trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "shape_dissent_ref_agree"}]
             if (code == "group_flow_disagree" and g in cfg.dissent_keep and not _rf(g, cfg)
-                    and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin)):
+                    and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin, g in cfg.dissent_l1)):
                 # 整理本＝放行字、只有弱图像票反对：不降（A24 Z02 深挖 2026-11-06）
                 code, other = None, False
                 trail = trail + [{"solver": "dissent_keep", "char": r.char, "why": "weak_dissent_ref_agree"}]
