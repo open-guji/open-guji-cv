@@ -281,6 +281,28 @@ def load_queries(shard: Path, limit: int | None) -> list[dict]:
     return out
 
 
+def apply_pair_map(qs: list[dict], path: str, use: str) -> list[dict]:
+    """成对比较：只留 pair map 里 ok 的查询；`use=new` 时把归一图换成新字块（64×64 二值 png）。
+    分档（flags）仍按原字块算，两遍同一批、同一分档，差别只来自字块来源。"""
+    pm = {}
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if line.strip():
+            r = json.loads(line)
+            if r.get("ok") and r.get("path"):
+                pm[r["id"]] = r["path"]
+    out = []
+    for q in qs:
+        if q["id"] not in pm:
+            continue
+        if use == "new":
+            img = cv2.imread(pm[q["id"]], cv2.IMREAD_GRAYSCALE)
+            if img is None:
+                continue
+            q = {**q, "norm": (img > 127).astype(np.uint8)}
+        out.append(q)
+    return out
+
+
 def run_matcher(matcher, q: dict, norm: np.ndarray, variant: str, counts: dict | None = None,
                 cons: tuple | None = None) -> dict:
     """counts/cons 给了就按生产口径再做一层共识升档（unsure、没护栏、首位字 cov/分差/人裁例数够 → same）；
@@ -401,6 +423,10 @@ def main() -> int:
     ap.add_argument("--knn-k", type=int, default=10, help="kNN 取几个刻例进精验（生产缺省 10）")
     ap.add_argument("--per-char", type=int, default=0, help="kNN 每字最多几个刻例（0＝不限，生产缺省）")
     ap.add_argument("--per-char-top", type=int, default=0, help="首选字的限额（0＝同 --per-char）")
+    ap.add_argument("--pair-map", default=None,
+                    help="成对比较（换图源核查）：jsonl，每行 {id, ok, path}；只留 ok 的查询，金标、分档、留一 id 不变")
+    ap.add_argument("--pair-use", choices=("old", "new"), default="new",
+                    help="--pair-map 时用哪份字块：old＝分片原字块（A 遍），new＝path 指的新字块（B 遍）")
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
     global _FOLD_VARIANTS
@@ -412,6 +438,8 @@ def main() -> int:
     for spec in a.book:
         shard, _, db = spec.partition(":")   # 缺 db = 留空，按 GUJI_GLYPH_DB / GUJI_WORKSPACE 解析（登记表用这个）
         qs = load_queries(samples / shard, a.limit)
+        if a.pair_map:
+            qs = apply_pair_map(qs, a.pair_map, a.pair_use)
         if a.dump_tiers:
             Path(a.dump_tiers).mkdir(parents=True, exist_ok=True)
             with open(Path(a.dump_tiers) / f"tiers-{shard}.jsonl", "w", encoding="utf-8") as f:
