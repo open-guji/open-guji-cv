@@ -2219,7 +2219,7 @@ class SeedAdmitStep(Step):
                                         knn_veto=(_witness3_knn_veto_fn(p, ctx, page)
                                                   if p.witness3_knn_veto and p.group_flow_near_knn else None),
                                         lib_n=(_keben_counts(p.db_path) or None)
-                                        if p.lane_seal and p.lane_seal_lib_veto_min_n > 0 else None)
+                                        if ((p.lane_seal and p.lane_seal_lib_veto_min_n > 0) or p.lane_coord_blind_guard) else None)
             n_auto += d_lane
             n_review -= d_lane
         if p.blank_ink_nonchar:

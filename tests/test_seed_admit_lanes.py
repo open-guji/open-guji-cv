@@ -191,6 +191,26 @@ def test_r4_non_han_ref_and_few_stroke_not_taken():
     assert n == 1 and rs[5].char == "天"
 
 
+def _blind(cands, coord_char, lib_n, **params):
+    chars = BODY[:30]
+    out = _page(chars, {5: dict(doubts=["库 unsure(cov=0.99)", "上下文 margin 不足(0.10)"], char=cands[0][0])})
+    wits = [_wit(f"{k}.txt", "前" + chars[:4] + coord_char + chars[5:] + "後") for k in "dwy"]
+    return _run(out, lib={5: cands}, coord=_ids({5: coord_char}), wits=wits, lib_n=lib_n, lane_coord=True, **params)
+
+
+def test_r4_blind_guard_holds_ref_not_in_candidates():
+    """A23 建议（Z04 殿本 飲→餘）：参校字刻例≥3、却不在库候选里，库首位 cov≥0.98 → 留审。缺省关＝照放。"""
+    cands = [("飮", 0.985), ("飲", 0.60)]
+    n, rs = _blind(cands, "餘", {"餘": 5})
+    assert n == 1 and rs[5].char == "餘"                                       # 缺省关
+    n, rs = _blind(cands, "餘", {"餘": 5}, lane_coord_blind_guard=True)
+    assert n == 0 and not rs[5].admit and rs[5].evidence["lane_skip"]["why"] == "ref_blind"
+    n, rs = _blind(cands, "餘", {"餘": 2}, lane_coord_blind_guard=True)        # 参校字刻例太少：不算「库认得」
+    assert n == 1
+    n, rs = _blind([("飮", 0.985), ("餘", 0.60)], "餘", {"餘": 5}, lane_coord_blind_guard=True)   # 参校字在候选里：照放
+    assert n == 1
+
+
 @pytest.mark.parametrize("doubt", ["ctx_guard_ref", "group_flow_ref_dissent", "group_flow_coord_dissent"])
 def test_r4_keeps_ref_review_cells(doubt):
     """护栏拿整理本字拦下的格（vol20 45:5:18 諸→諧）不再按整理本字放回；开关可关。"""
