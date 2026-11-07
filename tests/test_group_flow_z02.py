@@ -136,3 +136,13 @@ def test_dissent_keep_l1_alone_needs_ids_support():
     assert _dissent_keep("zh", trail, "曾", "曾", canon, 1.0, l1_weak=True)
     assert not _dissent_keep("zh", [T("ctx", "會", via="ctx:ctx_l1")], "曾", "曾", canon, 1.0, l1_weak=True)   # 没有 ids 同意
     assert not _dissent_keep("zh", [T("ctx", "會", via="ctx:ctx_llm"), T("ids", "曾", 0.4)], "曾", "曾", canon, 1.0, l1_weak=True)  # 大模型文意照旧降审
+
+
+# —— ctx_agree：入人八 rr 要整理本×文意一致才放（vol11:88:1:16 入、vol51:53:9:18 人）——
+
+def test_ctx_agrees_helper():
+    from open_guji_cv.groups.flow import _ctx_agrees
+    trail = [T("ctx", "入", via="ctx:ctx_llm"), T("rr_img", "人", 0.3), T("ids", "入", 0.5), T("wj:ctx", "人")]
+    assert _ctx_agrees(trail, "入", canon)
+    assert not _ctx_agrees(trail, "人", canon)                              # 搭档文意不算
+    assert not _ctx_agrees([T("rr_img", "入"), T("ids", "入", 0.5)], "入", canon)   # 没有文意
