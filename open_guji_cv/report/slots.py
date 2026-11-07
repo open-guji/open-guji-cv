@@ -216,6 +216,11 @@ def _to_slot(book: str, page: int, col: int, rec: AdmitRec, cell: CellRec | None
     occ = (rec.evidence or {}).get("occluded") or None
     if occ and occ.get("ref_blank") and (not rec.admit or rec.char is None):
         excluded = True
+    # seed_admit `blank_ink_nonchar`（A22 S02 11-06）：整理本空格位上有墨、库认不出（满文字母、印文、碎笔）判非字放行，
+    # 随整理本不出字——同上当非字跳过，不写 □。
+    lane = (rec.evidence or {}).get("lane")
+    if rec.admit and rec.char is None and isinstance(lane, dict) and lane.get("lane") == "blank_ink":
+        excluded = True
     # cell 真查不到时（`_lookup_cell` 连单行小字注都没认出来）按正文字处理
     # （已记 stale），不猜它是夹注或 blank——猜错会让读序和夹注配对一起错，
     # 比少一格的后果大。

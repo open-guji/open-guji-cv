@@ -135,6 +135,7 @@ class RefLine:
 
 GRID_HEADER = "#@"
 _BLANK = "\u3000"
+_UNKNOWN = "\uff1f"   # 全角「？」：逐列本里录不出的字，按 〓 占位
 
 #: `Unit` 不可变，同样内容的单元共用一个对象（2026-10-20，提速）：整部整理本两百多万个字位，
 #: 逐个新建 frozen dataclass 是 `parse_lines` 的大头；加上 `is_text_char` 按字记忆，
@@ -189,6 +190,10 @@ def parse_lines(raw: str) -> list[RefLine]:
             note.clear()
 
         for ch in line:
+            if ch == _UNKNOWN:
+                # 全角问号＝整理本这一位有字、录不出（daizhige 殿本 36 处、史記 29 处，2026-11-06 S02 深挖）：
+                # 原先当标点丢掉，这一行少一个字位，其后整列错一格（vol20 p133 列 5 因此整列退回）。照 〓 记。
+                ch = "〓"
             if ch == _NOTE_OPEN:
                 in_note = True
                 continue
@@ -586,9 +591,100 @@ def _fit_f(pos: list[float], g: list[float]) -> tuple[float | None, float]:
     return a, mg - a * mp
 
 
+COORD_GAP_MIN_AGREE = 3       # `coord_blank_ink` 夹空配法：载体吻合下限
+
+
+def _gap_column(units: list[CellUnit], line: RefLine, b_hint: float | None) -> ColumnCoord | None:
+    """`coord_blank_ink`（2026-11-06，S02 深挖，Sheldon 定）：整理本这一行**中间**有空格位、图上那几格却有墨时的配法。
+
+    起因：vol19 p155–158《御製律呂正義》提要夹满文（國書十二字頭），daizhige 只录汉字，满文那几位记成空格位
+    （「之　<安|>　<恩|>二字…」）。原配法要求字位对的格**连续**、多出来的格只能在文字范围之外，满文格夹在字中间，
+    整列「格与整理本 N 字对不上」退回，同列汉字与小注也拿不到整理本字（S02 11 格＋S01 31 格）。
+
+    做法：不要求连续，按格位直接配——枚举偏移 b（某格几何行号 − 某字位格位），每个字位在 `COORD_MAX_RESID` 内
+    恰有一个同类的格；拿配上的格拟 `g = a·格位 + b`（同 `_fit`）；没配上的格要么在文字范围之外（同原配法），
+    要么落在文字范围之内的**空格位**上（离最近的整数格位 ≤ `COORD_MAX_RESID`、那一位是 `kind="b"`），
+    且离每个字位都超过半行。必须至少有一格夹在中间（否则原配法就该配上）。载体吻合 ≥ `COORD_GAP_MIN_AGREE`；
+    几种偏移都成立时比吻合数，再比 `b_hint`，分不出就不认；挪一格吻合更高（错位闸，同原配法）也不认。
+    夹在中间的格记 `ref_char=""`（整理本这一位是空），交 seed_admit 的空位有墨一支判非字。"""
+    text = line.text_units()
+    L = len(text)
+    if L < 2 or len(units) <= L:
+        return None
+    pos = [p for p, _u in text]
+    lo_p, hi_p = min(pos), max(pos)
+    bs: list[float] = []
+    for u in units:
+        for p, r in text:
+            if u.kind == r.kind:
+                bs.append(u.g - p)
+    bs.sort()
+    seeds: list[float] = []
+    for b0 in bs:
+        if not seeds or b0 - seeds[-1] > 0.2:
+            seeds.append(b0)
+    found: dict[tuple[int, ...], tuple[int, float]] = {}
+    for b0 in seeds:
+        pick: list[int] = []
+        for p, r in text:
+            ks = [k for k, u in enumerate(units) if u.kind == r.kind and abs(u.g - (p + b0)) <= COORD_MAX_RESID]
+            if len(ks) != 1:
+                break
+            pick.append(ks[0])
+        else:
+            if len(set(pick)) != L or pick != sorted(pick):
+                continue
+            key = tuple(pick)
+            if key in found:
+                continue
+            a, b = _fit(pos, [units[k].g for k in pick])
+            if a is None or max(abs(units[k].g - (a * p + b)) for k, p in zip(pick, pos)) > COORD_MAX_RESID:
+                continue
+            used = set(pick)
+            inside = 0
+            ok = True
+            for k, u in enumerate(units):
+                if k in used:
+                    continue
+                q = (u.g - b) / a
+                if min(abs(q - p) for p in pos) <= COORD_OUTSIDE_MARGIN:
+                    ok = False
+                    break
+                if lo_p < q < hi_p:
+                    r_ = round(q)
+                    if abs(q - r_) > COORD_MAX_RESID or not (0 <= r_ < len(line.units)) or line.units[r_].kind != "b":
+                        ok = False
+                        break
+                    inside += 1
+            if not ok or not inside:
+                continue
+            agree = sum(_agree(units[k], r) for k, (_p, r) in zip(pick, text))
+            found[key] = (agree, b)
+    if not found:
+        return None
+    cands = sorted(((ag, key, b) for key, (ag, b) in found.items()), key=lambda t: -t[0])
+    top = [c for c in cands if c[0] == cands[0][0]]
+    if len(top) > 1 and b_hint is not None:
+        top.sort(key=lambda t: abs(t[2] - b_hint))
+        if abs(top[1][2] - b_hint) - abs(top[0][2] - b_hint) >= 0.5:
+            top = top[:1]
+    if len(top) > 1:
+        return None
+    agree, key, b = top[0]
+    if agree < COORD_GAP_MIN_AGREE:
+        return None
+    for dj in (-1, 1):                     # 错位闸：字位整体挪一个（配上的格序里挪一格）吻合更高
+        sh = sum(_agree(units[key[t + dj]], text[t][1]) for t in range(L)
+                 if 0 <= t + dj < L and units[key[t + dj]].kind == text[t][1].kind)
+        if sh >= 2 and sh > agree:
+            return None
+    pairs = {k: r for k, (_p, r) in zip(key, text)}
+    return ColumnCoord(True, note="空格位夹字", recs=_recs(units, pairs), agree=agree, b=b, unique=False)
+
+
 def coord_column(units: list[CellUnit], line: RefLine,
                  b_hint: float | None = None, relaxed: bool = False,
-                 order_ok: bool = False) -> ColumnCoord:
+                 order_ok: bool = False, gap: bool = False) -> ColumnCoord:
     """列内按坐标配字。整理本字位的**相对格位**（光盘版＝连续序号；逐列本＝daizhige
     格位，run 之间的空格位也算）决定每个字该落在哪一行；格按几何行号 `g` 排好，取一段
     与整理本字位数相同、类型逐个对得上的连续格，要求 `g − 格位` 近似常数（残差 ≤
@@ -596,7 +692,8 @@ def coord_column(units: list[CellUnit], line: RefLine,
     是整理本的空格位，记 `ref_char=""`。
 
     几何上成立的配法不止一个时先比载体吻合数；还分不出且给了 `b_hint`（同页别的列量出来
-    的「格位 → 行号」偏移，只在逐列本这种格位是绝对值的源上有意义）就取偏移最接近的。"""
+    的「格位 → 行号」偏移，只在逐列本这种格位是绝对值的源上有意义）就取偏移最接近的。
+    `gap`（`coord_blank_ink`）：连续配法一个都不成立时，再试空格位夹字的配法（`_gap_column`）。"""
     text = line.text_units()
     L = len(text)
     if L == 0:
@@ -625,7 +722,7 @@ def coord_column(units: list[CellUnit], line: RefLine,
         if len(cands) > COORD_MAX_CANDIDATE_RUNS:
             return ColumnCoord(False, "几何上成立的配法太多")
     if not cands:
-        return _merge_rescue(units, text) or ColumnCoord(
+        return (gap and _gap_column(units, line, b_hint)) or _merge_rescue(units, text) or ColumnCoord(
             False, f"格与整理本 {L} 字对不上（格数/类型/几何）")
     cands.sort(key=lambda t: (-t[0], t[1]))
     top = [c for c in cands if c[0] == cands[0][0]]
