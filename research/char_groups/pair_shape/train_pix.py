@@ -77,6 +77,22 @@ def fit(inks, y, seed=0):
     return {"mu": mu, "sd": sd, "coef": m.coef_[0], "b": float(m.intercept_[0])}
 
 
+def fit_multi(inks, labels, classes, seed=0):
+    """多类 LR：两字＋每个组外形近字各一类（全唐文 11-07：比「本组 vs 组外」二分护栏准，弃权 54→23）。"""
+    from sklearn.linear_model import LogisticRegression
+    rng = np.random.default_rng(seed)
+    y = np.array([classes.index(c) for c in labels])
+    X = np.array([pix_features(k, SIZE) for k in inks])
+    A = [a for k in inks for a in jitter(k, rng)]
+    Xt = np.vstack([X, np.array(A)])
+    yt = np.concatenate([y, np.repeat(y, 4)])
+    mu, sd = Xt.mean(0), Xt.std(0) + 1e-3
+    m = LogisticRegression(C=0.05, max_iter=4000, class_weight="balanced").fit((Xt - mu) / sd, yt)
+    coef = np.zeros((len(classes), X.shape[1])); b = np.full(len(classes), -1e3)
+    coef[m.classes_] = m.coef_; b[m.classes_] = m.intercept_
+    return {"mu": mu, "sd": sd, "coef": coef, "b": b}
+
+
 def lr(part, x):
     return float(((x - part["mu"]) / part["sd"]) @ part["coef"] + part["b"])
 
@@ -91,6 +107,7 @@ def main():
     ap.add_argument("--thr", type=float, default=2.0)
     ap.add_argument("--other-thr", type=float, default=-2.0)
     ap.add_argument("--veto-thr", type=float, default=6.0)
+    ap.add_argument("--multi", action="store_true", help="多类护栏（两字＋各组外字一类），thr 是领先第二名的对数概率差")
     ap.add_argument("--out", default="pair_shape.json")
     a = ap.parse_args()
     ch = list(a.chars)
@@ -107,6 +124,8 @@ def main():
             return True
         return False
     bgs = list(iter_cells(a.products, a.raw, vols, want_bg))
+    if a.multi:
+        return main_multi(a, ch, cells, bgs, bad)
     y = np.array([ch.index(c) for _, c, _ in cells])
     vol = np.array([i.split(":")[0] for i, _, _ in cells])
     bvol = np.array([i.split(":")[0] for i, _, _ in bgs])
@@ -141,6 +160,42 @@ def main():
     tolist = lambda d: {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in d.items()}  # noqa: E731
     out = {"schema": SCHEMA_PIX, "chars": ch, "size": SIZE, "thr": a.thr, "other_thr": a.other_thr, "veto_thr": a.veto_thr,
            "bg": a.bg, "ab": tolist(ab_m), "other": tolist(ot_m), "note": note}
+    Path(a.out).write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
+    print("写出", a.out)
+
+
+def main_multi(a, ch, cells, bgs, bad):
+    from open_guji_cv.groups.pair_shape import _judge_multi
+    allc = cells + bgs
+    classes = ch + sorted(set(c for _, c, _ in bgs))
+    vol = np.array([i.split(":")[0] for i, _, _ in allc])
+    give = err = ab = leak = 0
+    errs, abst = [], []
+    for v in sorted(set(vol)):
+        te = vol == v
+        tr = np.nonzero(~te)[0]
+        mm = fit_multi([allc[i][2] for i in tr], [allc[i][1] for i in tr], classes)
+        md = {"chars": ch, "classes": classes, "thr": a.thr, "multi": mm}
+        for i in np.nonzero(te)[0]:
+            r = _judge_multi(pix_features(allc[i][2], SIZE), md)
+            if allc[i][1] in ch:
+                if r["char"] is None:
+                    ab += 1; abst.append((allc[i][0], allc[i][1], r["why"], r.get("top"), r.get("margin")))
+                else:
+                    give += 1
+                    if r["char"] != allc[i][1]:
+                        err += 1; errs.append((allc[i][0], allc[i][1], r["char"], r.get("margin")))
+            elif r["char"] is not None:
+                leak += 1
+    note = (f"{''.join(ch)} 多类 已放行 {len(cells)} 格（{dict(collections.Counter(c for _, c, _ in cells))}），组外 {len(bgs)} 格；"
+            f"按册留出 给字 {give} 错 {err} 弃权 {ab}，组外漏 {leak}；剔除 {sorted(bad)}")
+    print(note)
+    print("错例：", errs)
+    print("弃权：", abst)
+    mm = fit_multi([k for *_, k in allc], [c for _, c, _ in allc], classes)
+    tolist = lambda d: {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in d.items()}  # noqa: E731
+    out = {"schema": SCHEMA_PIX, "chars": ch, "classes": classes, "size": SIZE, "thr": a.thr, "veto_thr": a.veto_thr,
+           "multi": tolist(mm), "note": note}
     Path(a.out).write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
     print("写出", a.out)
 

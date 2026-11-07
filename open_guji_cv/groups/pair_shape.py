@@ -32,7 +32,7 @@ SCHEMA_PIX = "pair_shape/2"      # 墨量图特征＋组外判别（全唐文 �
 def load(path: str) -> dict:
     d = json.loads(Path(path).read_text(encoding="utf-8"))
     if d.get("schema") == SCHEMA_PIX:
-        for part in ("ab", "other"):
+        for part in ("ab", "other", "multi"):
             if d.get(part):
                 d[part] = {k: (np.asarray(v, np.float32) if isinstance(v, list) else float(v)) for k, v in d[part].items()}
         return d
@@ -89,12 +89,38 @@ def _lr(part: dict, x: np.ndarray) -> float:
         return float(((x - part["mu"]) / part["sd"]) @ part["coef"] + part["b"])
 
 
+def _judge_multi(x: np.ndarray, model: dict) -> dict:
+    """多类（两字＋各组外形近字各一类）逻辑回归：取对数概率最高的类，须是两字之一，且领先第二名 ≥ `thr` 才给字。
+    `score`＝log p(chars[1]) − log p(chars[0])（veto 用）；`other`＝最像的组外字。比「本组 vs 组外」一刀切的护栏准：
+    全唐文按册留出弃权 54→23 格、错 0→0（王玉 1 格框带界行）。"""
+    mm = model["multi"]
+    with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
+        z = ((x - mm["mu"]) / mm["sd"]) @ mm["coef"].T + mm["b"]
+    if not np.all(np.isfinite(z)):
+        return {"char": None, "why": "abstain:nan"}
+    z = z - z.max()
+    lp = z - np.log(np.exp(z).sum())
+    cls = model["classes"]
+    a, b = model["chars"]
+    order = np.argsort(-lp)
+    top, second = int(order[0]), int(order[1])
+    out = {"score": round(float(lp[cls.index(b)] - lp[cls.index(a)]), 3),
+           "margin": round(float(lp[top] - lp[second]), 3), "top": cls[top]}
+    if cls[top] not in (a, b):
+        return {**out, "char": None, "why": "abstain:out_of_group"}
+    if lp[top] - lp[second] < model["thr"]:
+        return {**out, "char": None, "why": "abstain:low_margin"}
+    return {**out, "char": cls[top], "why": "agree"}
+
+
 def judge_pix(gray: np.ndarray, model: dict) -> dict:
     """`pair_shape/2`：→ {"char", "why", "score", "other"}。score>0 给 chars[1]；other＝组外判别分（>门槛＝像组外字）。"""
     ink = pix_ink(gray)
     if ink is None or ink.shape[0] < 6 or ink.shape[1] < 6:
         return {"char": None, "why": "abstain:no_ink"}
     x = pix_features(ink, int(model.get("size", 32)))
+    if model.get("multi"):
+        return _judge_multi(x, model)
     s = _lr(model["ab"], x)
     if not np.isfinite(s):
         return {"char": None, "why": "abstain:nan"}
