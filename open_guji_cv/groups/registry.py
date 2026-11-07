@@ -745,7 +745,7 @@ class Provisional:
 #: （已在书级 `codepoints` 暂归一的组取归到的字）。意思不同的字绝不进 `forms`：讖識䜟 的 識、
 #: 陪衬（家 卿 徵 刖 鍾…）都不在里面。登记见 cv `doc/字组/README.md` 第二节「暂归一兜底」。
 PROVISIONAL: dict[str, Provisional] = {
-    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560"}, follow_ref=gid in {"can", "ba", "dian"},
+    gid: Provisional(to, frozenset(forms), gap=gid in {"yi_560", "qing"}, follow_ref=gid in {"can", "ba", "dian"},
                      ref_forms=frozenset("𭶑") if gid == "dian" else frozenset(),
                      **(dict(slot_to=(("彡", "參"), ("小", "叅"), ("𠇍", "叅")), fams=(frozenset("參"), frozenset("叅㕘")))
                         if gid == "can" else {}))
