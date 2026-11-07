@@ -99,7 +99,8 @@ def _sub_line(line: str, new: str, note: str) -> str:
 
 
 def _find(lines: list[str], key: str, indent: int | None = None, start: int = 0, stop: int | None = None) -> int | None:
-    pat = re.compile(rf"^{' ' * indent if indent is not None else r'\s*'}{re.escape(key)}:\s*")
+    lead = " " * indent if indent is not None else r"\s*"     # f-string 里不能有反斜杠（3.11）
+    pat = re.compile(rf"^{lead}{re.escape(key)}:\s*")
     for i in range(start, len(lines) if stop is None else stop):
         if pat.match(lines[i]) and not lines[i].lstrip().startswith("#"):
             return i
