@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.51 `group_flow_form_open`（缺省开，缺省值不进参数 dump；A24 Z06 深挖 11-06，sheldon 11-07 定）：字组流程不再把 `form_open`（写法待定，原因码 Z06）当硬护栏，由组的刻形解法（li 隸𨽾、sui 歲嵗、yi_560 彝彛彞）定形；解法给字且与整理本字互证才补放，弃权或与整理本不一的仍留 `form_open`。殿本 ★main 99 册现算 Z06 共 5 格，离线试判 5 格全给字、4 格会放行、目视可判 3 格全对；史記、全唐文 0 格。报告 ai-team `domain/CV/质检/待审原因深挖/Z06-写法待定.md`。
+
 - seed_admit 1.50 `p_ref_coord_max_cov`／`p_ref_coord_adjacent`（书级，缺省 `None`／关、关时不进参数 dump；A24 P02）：`p_ref_coord` 放的坐标对位格有自己的 cov 上限（`None`＝沿用 `p_ref_max_cov`）和相邻开关（只看 `p_ref_coord_adjacent`，不随 `p_ref_adjacent`）。原因：殿本 P01 要 `p_ref_adjacent`＋cov 0.95，P02 的切分错位格（vol29 p31 6:17–19，cov<0.95、相邻成片）一开相邻就会被放进去；史記 P01 要 0.97，P02 机器字对的格 cov 低到 0.9458，要 0.94。文本对位格的行为不变。
 
 - seed_admit 1.49 `p_ref_skip_variant`（书级，缺省关、关时不进参数 dump；A24 P01 深挖 11-06）：`p_ref_admit` 不取与机器字有直接异体边的整理本字，留给异体对按刻形定。殿本放开相邻／夹注、cov<0.95 后 p_ref 会碰 L01 格，抽 30 格 14 格是异体对（羨羡、諫諌、緣縁…），其余 16 格整理本对 15。
