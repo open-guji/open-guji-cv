@@ -794,6 +794,17 @@ def _pv_run(monkeypatch, recs, amap, cands, g="can", coord=None, provisional_to=
     return recs
 
 
+def test_provisional_qing_gap_coord(monkeypatch):
+    """卿𨜊：殿本整理本把这一刻形录成〓（坐标对位〓），字频给卿却被坐标对位闸当「组外字」拦下（Z04 245 格里 235 格）。
+    qing 开 `gap`：整理本缺字、库首位 cov 够 → 暂归一放成卿（A24 Z 类梳理 11-07，殿本抽 30 格看图全是卿）。"""
+    ids = ["v:1:1:1", "v:1:1:2"]
+    recs = [Rec(i) for i in ids]
+    cands = {"v:1:1:1": [("卿", 0.98), ("鄉", 0.94)], "v:1:1:2": [("卿", 0.93), ("鄉", 0.90)]}
+    _pv_run(monkeypatch, recs, {}, cands, g="qing", coord={i: "〓" for i in ids}, pick={i: "卿" for i in ids})
+    assert recs[0].admit and recs[0].char == "卿" and recs[0].evidence["group"]["decision"] == "provisional"
+    assert not recs[1].admit                       # cov 不到 provisional_gap_cov（0.95）照旧留审
+
+
 def test_provisional_lift_needs_both_witnesses(monkeypatch):
     """方法弃权：库首位与分差内候选、整理本（缺时坐标对位）都在同字写法里 → 放成最常见字形，标 provisional；
     整理本是组外字、没有整理本字、夹注半格只有坐标对位 → 照旧留人审。"""

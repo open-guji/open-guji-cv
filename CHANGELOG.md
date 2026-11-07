@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.54 卿𨜊（`qing`）暂归一兜底认整理本〓（`registry.PROVISIONAL` 的 `gap` 加 qing，同 yi_560；A24 Z 类梳理 11-07，Sheldon 同意）：殿本整理本把这一刻形录成〓，字频给卿，却被坐标对位闸当「组外字」拦下（★main 现算 235 格，原因码 Z04）。库首位 cov ≥ `provisional_gap_cov`（0.95）、分差内都是卿𨜊时放成卿、记 `provisional`。殿本 10 册抽 30 格看图 30 格都是卿（大理寺卿、荀卿、少卿…），0 错放。下一轮重跑生效。
+
 - 共识升档 same 退回原档（A23，全唐文 r15 待审 125→208）：`context_decide.consensus_as_unsure`、`seed_admit.consensus_fallback`（1.53）、`align_ref.coord_consensus_not_same`（史記 r18 对位丢字），书级、缺省关、不进参数 dump；context_decide／align_ref 代码等价登记。
 
 ## [0.6.16] - 2026-11-07
