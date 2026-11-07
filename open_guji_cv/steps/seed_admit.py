@@ -4399,7 +4399,7 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
                 v = pair_shape.judge(img, model)
                 if v["char"] and v["char"] != r.char and abs(v.get("score") or 0.0) >= veto_thr:
                     _demote(r, "pair_shape_veto")
-                    r.evidence = {**(r.evidence or {}), "pair_shape": {k: v[k] for k in ("char", "why", "score", "other") if k in v}}
+                    r.evidence = {**(r.evidence or {}), "pair_shape": {k: v[k] for k in ("char", "why", "score", "other", "margin", "top") if k in v}}
                     r.admit, r.channel, r.provenance = False, None, ""
                     r.doubts = list(r.doubts or []) + ["pair_shape_veto"]
                     delta -= 1
@@ -4426,7 +4426,7 @@ def _pair_shape_pass(p, out: list, amap: dict, ctx=None, page: int = 0, patch_mi
                 miss.setdefault(r.id, []).append("pair_shape")
                 continue
             v = pair_shape.judge(img, model)
-            trail = {k: v[k] for k in ("char", "why", "nn", "score", "other") if k in v}
+            trail = {k: v[k] for k in ("char", "why", "nn", "score", "other", "margin", "top") if k in v}
             if v["char"] is None or v["char"] not in (ref, r.char):
                 r.evidence = {**ev, "pair_shape": trail}
                 continue

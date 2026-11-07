@@ -187,3 +187,22 @@ def test_pair_shapes_relative_path_resolves_in_data_root(tmp_path, monkeypatch):
     p = sa.SeedAdmitParams(group_flow_pair_shapes={"大太": "config/groups/pair_shape_dt.json"})
     sa._resolve_group_flow_paths(p)
     assert p.group_flow_pair_shapes["大太"] == str(d / "config" / "groups" / "pair_shape_dt.json")
+
+
+def test_pix_multi_class_guard():
+    """多类护栏：两字＋组外字各一类，最像组外字就弃权。"""
+    def feat(g):
+        return pair_shape.pix_features(pair_shape.pix_ink(g))
+    A = np.array([feat(da_img(False, d)) for d in (-3, 0, 3)])
+    B = np.array([feat(da_img(True, d)) for d in (-3, 0, 3)])
+    O = np.array([feat(tian_img())])
+    means = [A.mean(0), B.mean(0), O.mean(0)]
+    coef = np.array([2 * m for m in means])
+    b = np.array([-(m @ m) for m in means])                     # 最近均值分类器写成线性形式
+    D = coef.shape[1]
+    m = {"schema": pair_shape.SCHEMA_PIX, "chars": ["大", "太"], "classes": ["大", "太", "天"], "size": 32, "thr": 0.5,
+         "multi": {"mu": np.zeros(D), "sd": np.ones(D), "coef": coef, "b": b}}
+    assert pair_shape.judge(da_img(), m)["char"] == "大"
+    assert pair_shape.judge(da_img(True), m)["char"] == "太"
+    r = pair_shape.judge(tian_img(), m)
+    assert r["char"] is None and r["why"] == "abstain:out_of_group" and r["top"] == "天"
