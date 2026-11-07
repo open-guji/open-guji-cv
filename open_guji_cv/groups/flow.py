@@ -86,6 +86,8 @@ class FlowConfig:
     lift_ref_veto: frozenset = frozenset()    # 书级：这几组补放（lift）时，整理本（或坐标对位）字是组里另一个字、与给的字不同 → 不放，留人审（只降不放；史記 sy 山→出 2026-11-03）
     ref_free_groups: frozenset = frozenset()  # 书级：这几组也按 `ref_free` 走（完全不看整理本字：入口、判法、补放、复核都不用；sheldon 2026-11-06 日曰同己已巳）
     lift_shape_ref: frozenset = frozenset()   # 书级：这几组 lift_needs 没满足时，字形路给的字＝整理本（或坐标对位）字、无解法异议也补放
+    lift_shape_ratio: dict = field(default_factory=dict)       # 组 id → {字: (下限, 上限)}：`lift_shape_ref` 的宽高门，字形路 ratio 在区间内才放（seed_admit `group_flow_lift_shape_ratio`）
+    lift_shape_ratio_half: dict | None = None                  # 夹注 a/b 半格单用的宽高门；None＝同正文
     abstain_ref_ok: frozenset = frozenset()  # 书级「按整理本走」：复核时解法全弃权、已放行字＝整理本字 → 不降审；补放时族内刻形拆不开、整理本是同族一形 → 取整理本形
     shape_ref_ok: frozenset = frozenset()    # 书级「按整理本走」：复核时只有字形路（ids）给出别的字、已放行字＝整理本字 → 不降审（史記 2026-11-01，廣賔、還遺 等）
     tolerate_extra: dict = field(default_factory=dict)  # 组 id → 书级追加的陪衬字（叠在 `FlowSpec.tolerate` 上；seed_admit `group_flow_tolerate_extra`）
@@ -116,6 +118,21 @@ class FlowResult:
     demoted: int = 0
     entered: int = 0
 
+
+
+def _shape_ratio_ok(g: str, cid: str, ch: str, trail: list, cfg) -> bool:
+    """`lift_shape_ref` 的宽高门：组 `g` 没设门 → 放；设了门，字 `ch` 须在表里、字形路给 `ch` 的 ratio 落在区间内。"""
+    tab = cfg.lift_shape_ratio
+    if cid[-1:] in ("a", "b") and cfg.lift_shape_ratio_half is not None:
+        tab = cfg.lift_shape_ratio_half
+    if g not in tab:
+        return True
+    lim = tab[g].get(ch)
+    if not lim:
+        return False
+    lo, hi = lim
+    rs = [t.get("ratio") for t in trail if t.get("char") == ch and t.get("ratio") is not None]
+    return bool(rs) and all(lo <= float(x) <= hi for x in rs)
 
 
 def _rf(g: str, cfg) -> bool:
@@ -789,7 +806,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             needs = GROUPS[g].flow.lift_needs
             if ch is not None and needs and not any(t["solver"] in needs and t["char"] == ch for t in trail) and not (
                     g in cfg.lift_shape_ref and not _rf(g, cfg) and (sr := ref or (veto_refs or {}).get(r.id))
-                    and norm(sr) == norm(ch) and all(not t["char"] or t["char"] == ch for t in trail)):
+                    and norm(sr) == norm(ch) and all(not t["char"] or t["char"] == ch for t in trail)
+                    and _shape_ratio_ok(g, r.id, ch, trail, cfg)):
                 ch, why = None, "weak"          # 给字的只有不许单独补放的解法（如入人八字形分类器）
             elif (ch is not None and mode == "lift" and cfg.lift_ref_guard and ref and not _rf(g, cfg)
                   and norm(ref) != norm(ch) and norm(ref) in {norm(m) for m in GROUPS[g].members}
