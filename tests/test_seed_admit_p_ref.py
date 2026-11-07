@@ -87,3 +87,37 @@ def test_p_ref_coord_knob_not_in_dump_when_default():
     assert "p_ref_coord" not in d
     assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True).model_dump()["p_ref_coord"] is True
     assert "p_ref_coord" not in SeedAdmitParams(db_path="x", p_ref_coord=True).model_dump()
+
+
+def test_skip_variant_guard():
+    """p_ref_skip_variant：机器字与整理本字有直接异体边（羨／羡）不取整理本字；非异体照放。"""
+    ok = {"admit": True, "char": "甲"}
+    assert _run({"1": ok, "2": {"char": "羡"}}, {"2": "羨"})[0] == 1
+    assert _run({"1": ok, "2": {"char": "羡"}}, {"2": "羨"}, p_ref_skip_variant=True)[0] == 0
+    assert _run({"1": ok, "2": {"char": "機"}}, {"2": "整"}, p_ref_skip_variant=True)[0] == 1
+    d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
+    assert "p_ref_skip_variant" not in d
+
+
+def test_coord_own_knobs_independent_of_p01_knobs():
+    """1.50：坐标对位格用自己的 cov 上限与相邻开关；P01（文本对位）格仍按 p_ref_max_cov／p_ref_adjacent。"""
+    ok = {"admit": True, "char": "甲"}
+    two = {"1": ok, "2": {"char": "機", "ev": {"cov": 0.90}}, "3": {"char": "誤", "ev": {"cov": 0.90}}}
+    # P01 开相邻：文本对位的相邻格照放；坐标对位的相邻格仍拦
+    assert _run(two, {"2": "整", "3": "正"}, p_ref_adjacent=True)[0] == 2
+    assert _run(two, {}, coord={"2": "整", "3": "正"}, p_ref_adjacent=True)[0] == 0
+    assert _run(two, {}, coord={"2": "整", "3": "正"}, p_ref_adjacent=True, p_ref_coord_adjacent=True)[0] == 2
+    # cov 上限：coord 用自己的；None 沿用 p_ref_max_cov
+    hi = {"1": ok, "2": {"char": "機", "ev": {"cov": 0.96}}}
+    assert _run(hi, {"2": "整"}, p_ref_max_cov=0.97)[0] == 1
+    assert _run(hi, {}, coord={"2": "整"}, p_ref_max_cov=0.97)[0] == 1                      # 沿用
+    assert _run(hi, {}, coord={"2": "整"}, p_ref_max_cov=0.97, p_ref_coord_max_cov=0.94)[0] == 0
+    assert _run(hi, {"2": "整"}, p_ref_max_cov=0.97, p_ref_coord_max_cov=0.94)[0] == 1      # 不影响文本对位格
+
+
+def test_coord_own_knobs_not_in_dump_when_default():
+    d = SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True).model_dump()
+    assert not {"p_ref_coord_max_cov", "p_ref_coord_adjacent"} & set(d)
+    d = SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True, p_ref_coord_max_cov=0.94).model_dump()
+    assert d["p_ref_coord_max_cov"] == 0.94 and "p_ref_coord_adjacent" not in d
+    assert "p_ref_coord_max_cov" not in SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord_max_cov=0.94).model_dump()

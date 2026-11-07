@@ -625,15 +625,15 @@ def _flow_form_open(monkeypatch, **params):
     return seen["blocked"]
 
 
-def test_group_flow_form_open_blocked_by_default(monkeypatch):
-    assert _flow_form_open(monkeypatch) is True
-    assert _flow_form_open(monkeypatch, group_flow_form_open=True) is False
+def test_group_flow_form_open_default_on(monkeypatch):
+    assert _flow_form_open(monkeypatch, group_flow_form_open=False) is True
+    assert _flow_form_open(monkeypatch) is False       # 缺省开（sheldon 11-07）
 
 
 def test_group_flow_form_open_default_not_in_dump():
     gf = {"group_flow": ("jys",)}            # group_flow 为空时整个 group_flow* 前缀都不进 dump
     assert "group_flow_form_open" not in SeedAdmitParams(db_path="x", **gf).model_dump()
-    assert SeedAdmitParams(db_path="x", group_flow_form_open=True, **gf).model_dump()["group_flow_form_open"] is True
+    assert SeedAdmitParams(db_path="x", group_flow_form_open=False, **gf).model_dump()["group_flow_form_open"] is False
 
 
 # ── R4 本书 codepoints 已归一的异体对（lane_coord_codepoint_variant）──────────────
