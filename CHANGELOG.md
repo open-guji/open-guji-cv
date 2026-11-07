@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- 新增 `open_guji_cv/strokes`（L1）：笔画模板逐笔配准、差一笔／量几何两种判据的纯算法；不被任何 Step 引用，产物不变（研究，接线归 groups，A24）。
+
 ## [0.6.17] - 2026-11-07
 
 - 第 7 轮冻结版：从 dev 4dc4448 切（seed_admit 1.64），重新带回 #1186（variants 补 14 对异体边，配底库 b21）、#1192、#1196。殿本换 Commons 景印文淵閣本页表（r003/r004）。**史記**书 yaml 要在 `params.seed_admit` 写 `alt_require_matched: true`（#1234）。
