@@ -100,6 +100,8 @@ class FlowConfig:
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
     provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
     dissent_keep: frozenset = frozenset()              # 书级：这几组复核时「整理本＝放行字、只有弱图像票反对」不降审（`_dissent_keep`；seed_admit `group_flow_dissent_keep`，A24 Z02 深挖 2026-11-06）
+    same_writing_keep: frozenset = frozenset()         # 书级：这几组（缺省见 seed_admit `group_flow_same_writing_keep`）复核时给别字的解法给的全是「同一个字的另一写法」（`registry.PROVISIONAL` 暂归一表）→ 不降审（A24 Z03 深挖 2026-11-07，殿本／史記 21 格宮宫、賓賔、敘叙、敎教 等）
+    review_fix_agree: frozenset = frozenset()          # 书级：这几组复核时 ≥2 路不同的图像解法（`IMG_SOLVERS`，如 yr_bars＋ids）给了同一个别的字、没人反对 → 照 `review_fix` 改字（A24 Z03 深挖 2026-11-07，一二 35 格目视 24 格全对）
     dissent_margin: float = 1.0                        # `dissent_keep` 里 ids 反对票算弱票的 margin 上限（seed_admit `group_flow_dissent_margin`）
     dissent_l1: frozenset = frozenset()                # 书级：`dissent_keep` 的组里，文意 L1 规则（`ctx:ctx_l1`）孤证反对也算弱票，但要有本组非文意解法（ids 等）同意放行字（A24 Z02 11-07）
     ctx_agree: frozenset = frozenset()                 # 书级：`dissent_keep`／`ref_pair` 里列入此名单的组，还要本组文意（ctx）同意放行字／整理本字才生效（A24 Z02 11-07；入人八 rr）
@@ -542,6 +544,23 @@ def _ref_lowmargin(g: str, ch, why: str, trail: list, ref: str, canon: Callable[
 IMG_SOLVERS = frozenset({"ids", "rr_img", "yr_bars", "bars", "ss_bars", "ry_shape", "zy_strokes"})
 
 
+_EXTRA_SAME_WRITING = (frozenset("宫宮"), frozenset("賓賔"))
+
+
+def _same_writing(a: str | None, b: str | None) -> bool:
+    """同一个字的不同写法（`registry.PROVISIONAL[*].forms` 的并集判等，外加 宫宮；与 guji-manager `reasons._default_same_writing` 同口径）。"""
+    if not a or not b:
+        return False
+    return a == b or any(a in f and b in f for f in (*(frozenset(p.forms) for p in PROVISIONAL.values()), *_EXTRA_SAME_WRITING))
+
+
+def _agree_fix(trail: list, ch: str | None, members) -> bool:
+    """`review_fix_agree`：≥2 路不同的图像解法给了同一个组员字 `ch`。"""
+    if not ch or ch not in members:
+        return False
+    return len({_sname(t) for t in trail if t.get("char") == ch and _sname(t) in IMG_SOLVERS}) >= 2
+
+
 def _sname(t: dict) -> str:
     return t["solver"].split(":")[-1]
 
@@ -874,7 +893,8 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 and (rr := ref or (veto_refs or {}).get(r.id)) and norm(rr) == norm(ch)
                 and any(t["solver"] == "ctx" and t["char"] == ch and t.get("via") == "ctx:ctx_l1" for t in trail)) or (
                 f.review_fix_margin > 0 and why == "agree" and any(
-                    t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail))
+                    t["char"] == ch and (_margin(t) or 0) >= f.review_fix_margin for t in trail)) or (
+                g in cfg.review_fix_agree and why == "agree" and _agree_fix(trail, ch, GROUPS[g].members))
             other = ch is not None and not _same(g, ch, r.char, norm)
             code = ("group_flow_disagree" if (other and not fix) or why == "conflict"
                     else "group_flow_abstain" if why == "abstain" and f.review_abstain else None)
@@ -892,6 +912,12 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 # 廣→賔、還→遺 等看图全是整理本对，ids 模板库对写本形不准）
                 code, other = None, False
                 trail = trail + [{"solver": "ref_ok", "char": r.char, "why": "shape_dissent_ref_agree"}]
+            if (code == "group_flow_disagree" and g in cfg.same_writing_keep and r.char and why != "conflict"
+                    and (dis := [t["char"] for t in trail if t.get("char") and t["char"] != r.char])
+                    and all(_same_writing(c, r.char) for c in dis)):
+                # 给别字的解法给的全是放行字的另一写法（暂归一表同组）：同一个字，不降审（A24 Z03 深挖 2026-11-07）
+                code, other = None, False
+                trail = trail + [{"solver": "same_writing", "char": r.char, "why": "dissent_same_writing"}]
             if (code == "group_flow_disagree" and g in cfg.dissent_keep and not _rf(g, cfg)
                     and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin, g in cfg.dissent_l1)
                     and (g not in cfg.ctx_agree or _ctx_agrees(trail, r.char, norm))):
