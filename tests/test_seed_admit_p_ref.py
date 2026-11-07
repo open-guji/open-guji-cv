@@ -87,3 +87,13 @@ def test_p_ref_coord_knob_not_in_dump_when_default():
     assert "p_ref_coord" not in d
     assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_coord=True).model_dump()["p_ref_coord"] is True
     assert "p_ref_coord" not in SeedAdmitParams(db_path="x", p_ref_coord=True).model_dump()
+
+
+def test_skip_variant_guard():
+    """p_ref_skip_variant：机器字与整理本字有直接异体边（羨／羡）不取整理本字；非异体照放。"""
+    ok = {"admit": True, "char": "甲"}
+    assert _run({"1": ok, "2": {"char": "羡"}}, {"2": "羨"})[0] == 1
+    assert _run({"1": ok, "2": {"char": "羡"}}, {"2": "羨"}, p_ref_skip_variant=True)[0] == 0
+    assert _run({"1": ok, "2": {"char": "機"}}, {"2": "整"}, p_ref_skip_variant=True)[0] == 1
+    d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
+    assert "p_ref_skip_variant" not in d
