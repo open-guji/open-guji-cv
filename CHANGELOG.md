@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.55 字组入口认暂归一的另一写法作整理本字（`groups/flow.entry`；A24 V01 按新码重统计 11-07）：整理本字是本组暂归一 `forms`／`ref_forms` 里的写法（li 的 𨽻、sui 的 𡻕）时不再当组外字挡在门外，照样进组由解法定形、与整理本不一时暂归一兜底。第 6 轮 align_ref 把这些位对上了整理本字（第 5 轮缺位，按坐标对位进组暂归一放成 𨽾／嵗），入口反倒因「整理本字不是组员」不接，殿本 ★main V01 多出 219 格（𨽻 211、𡻕 8）。下一轮重跑生效；第 6 轮冻结中，解冻后再合。
+
 - seed_admit 1.54 卿𨜊（`qing`）暂归一兜底认整理本〓（`registry.PROVISIONAL` 的 `gap` 加 qing，同 yi_560；A24 Z 类梳理 11-07，Sheldon 同意）：殿本整理本把这一刻形录成〓，字频给卿，却被坐标对位闸当「组外字」拦下（★main 现算 235 格，原因码 Z04）。库首位 cov ≥ `provisional_gap_cov`（0.95）、分差内都是卿𨜊时放成卿、记 `provisional`。殿本 10 册抽 30 格看图 30 格都是卿（大理寺卿、荀卿、少卿…），0 错放。下一轮重跑生效。
 
 - 共识升档 same 退回原档（A23，全唐文 r15 待审 125→208）：`context_decide.consensus_as_unsure`、`seed_admit.consensus_fallback`（1.53）、`align_ref.coord_consensus_not_same`（史記 r18 对位丢字），书级、缺省关、不进参数 dump；context_decide／align_ref 代码等价登记。

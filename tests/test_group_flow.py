@@ -742,7 +742,8 @@ def test_ref_canon_entry_and_review_by_codepoints():
     r = Rec("a")
     # 整理本 隷／𨽻 不是组员，按书级码位归一后与 𨽾 同字：进组
     assert entry(r, [("𨽾", 0.98)], "𨽻", cfg, _canon) == ("li", "lift")
-    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) is None                    # 不给码位照旧拦
+    assert entry(r, [("𨽾", 0.98)], "𨽻", FlowConfig(groups=("li", "mn"), provisional=False)) is None   # 不给码位、关暂归一照旧拦
+    assert entry(r, [("𨽾", 0.98)], "𨽻", cfg) == ("li", "lift")         # 𨽻 是 li 暂归一的写法：开暂归一（缺省）也进组（1.55）
     assert entry(r, [("𫎇", 0.98)], "䝉", cfg, _canon) == ("mn", "lift")
     # 已放行 隷（别的通道）也复核
     assert entry(Rec("b", "隷", True, "match_ref"), [], "隷", cfg, _canon) == ("li", "review")
@@ -803,6 +804,24 @@ def test_provisional_qing_gap_coord(monkeypatch):
     _pv_run(monkeypatch, recs, {}, cands, g="qing", coord={i: "〓" for i in ids}, pick={i: "卿" for i in ids})
     assert recs[0].admit and recs[0].char == "卿" and recs[0].evidence["group"]["decision"] == "provisional"
     assert not recs[1].admit                       # cov 不到 provisional_gap_cov（0.95）照旧留审
+
+
+def test_provisional_ref_form_enters_group(monkeypatch):
+    """整理本字是暂归一的另一写法（li 的 𨽻、sui 的 𡻕，不是组员只是陪衬／同字码位）：入口照样接，解法与整理本不一时
+    暂归一兜底放成 `to`（第 5 轮缺位按坐标对位这样放；第 6 轮对上了整理本字反倒不进组，殿本 V01 多 225 格，A24 11-07）。
+    整理本是组外字照旧不进。"""
+    ids = ["v:1:1:1", "v:1:1:2", "v:1:1:3"]
+    recs = [Rec(i) for i in ids]
+    cands = {"v:1:1:1": [("𨽾", 0.98), ("隸", 0.956), ("謙", 0.90)], "v:1:1:2": [("𨽾", 0.98)], "v:1:1:3": [("𨽾", 0.98)]}
+    _pv_run(monkeypatch, recs, {ids[0]: ("𨽻", "replace"), ids[1]: ("𨽻", "replace"), ids[2]: ("謙", "replace")}, cands,
+            g="li", pick={i: "𨽾" for i in ids})
+    a, b, c = recs
+    assert a.admit and a.char == "𨽾" and a.evidence["group"]["decision"] == "provisional"
+    assert b.admit and b.char == "𨽾"
+    assert not c.admit and "group" not in (c.evidence or {})            # 整理本是组外字：不进组
+    recs = [Rec("v:1:1:4")]
+    _pv_run(monkeypatch, recs, {"v:1:1:4": ("𡻕", "replace")}, {"v:1:1:4": [("嵗", 0.97)]}, g="sui", pick={"v:1:1:4": "嵗"})
+    assert recs[0].admit and recs[0].char == "歲" and recs[0].evidence["group"]["decision"] == "provisional"
 
 
 def test_provisional_lift_needs_both_witnesses(monkeypatch):

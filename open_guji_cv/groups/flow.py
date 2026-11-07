@@ -212,6 +212,13 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return (bool(co) and not _rf(g, cfg) and co not in mem and canon(co) not in mem and co not in _tol(g, cfg)
                 and not (pv and (co in pv.forms or co in pv.ref_forms)))
 
+    def _pv_ref(g: str, w: str) -> bool:
+        # 整理本字是本组暂归一兜底的另一写法（li 的 𨽻、sui 的 𡻕）：同字异写，不算组外字，照样进组让解法／兜底定形。
+        # 第 6 轮 align_ref 把这些位对上了整理本字（第 5 轮缺位、按坐标对位进组暂归一放行），入口反倒因「整理本字不是组员」
+        # 不接，殿本 V01 多出 225 格（A24 V01 按新码重统计 2026-11-07）。
+        pv = PROVISIONAL.get(g)
+        return bool(cfg.provisional and pv and (w in pv.forms or canon(w) in pv.forms or w in pv.ref_forms))
+
     for g in cfg.groups:                      # 库里没有这一形、库排成陪衬字：按整理本字进（`FlowSpec.ref_enter`），先于库首位字所在的组
         f, mem = GROUPS[g].flow, GROUPS[g].members
         tol = _tol(g, cfg)
@@ -224,7 +231,7 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         mem = GROUPS[g].members
         if not all(c in mem or c in _tol(g, cfg) for c, v in cands[1:] if c1 - v < cfg.delta):
             continue
-        if not _rf(g, cfg) and ref and not _member(g, ref, canon):
+        if not _rf(g, cfg) and ref and not _member(g, ref, canon) and not _pv_ref(g, ref):
             continue
         if _coord_out(g, mem) and not _member(g, co, canon):
             continue
