@@ -103,6 +103,7 @@ class FlowConfig:
     dissent_margin: float = 1.0                        # `dissent_keep` 里 ids 反对票算弱票的 margin 上限（seed_admit `group_flow_dissent_margin`）
     ref_pair: frozenset = frozenset()                  # 书级：这几组补放／联合判卡住时「整理本字＝本组解法给的字、反对的只有图像路」取整理本字（`_ref_pair_pick`；seed_admit `group_flow_ref_pair`）
     ref_pair_margin: float = 1.5                       # `ref_pair` 里图像路反对票的 margin 上限（seed_admit `group_flow_ref_pair_margin`）
+    ref_pair_coord: bool = False                       # 书级：`ref_pair` 的组联合判卡住、现役对位缺时，坐标对位字＝本组给的字且没有任何解法（含搭档）给别字 → 取它（`_ref_pair_coord_pick`；seed_admit `group_flow_ref_pair_coord`，A24 Z07 11-07）
 
 
 @dataclass
@@ -536,6 +537,22 @@ def _sname(t: dict) -> str:
     return t["solver"].split(":")[-1]
 
 
+def _ref_pair_coord_pick(g: str, r, trail: list, coord: str | None, canon: Callable[[str], str]) -> str | None:
+    """联合判卡在「共字组搭档没表态」（`joint`）、现役对位缺这一格时，用坐标对位字作整理本证人（`FlowConfig.ref_pair_coord`，
+    A24 Z07 差一路确认 11-07）：坐标对位字是组员、本组至少一路给了它，**没有任何解法（含搭档）给出别的字**（比 `ref_pair`
+    更严：图像路反对也不取）；夹注半格、〓 不认。殿本＋全唐文 Z07 里这样的 41 格看图全对。"""
+    if not coord or coord == GAP or r.id[-1:] in ("a", "b") or not _member(g, coord, canon):
+        return None
+    x = canon(coord)
+    given = [t for t in trail if t.get("char")]
+    if not given or any(canon(t["char"]) != x for t in given):
+        return None
+    sup = [t for t in given if ":" not in t["solver"]]
+    if not sup:
+        return None
+    return next((t["char"] for t in sup if _sname(t) == "ctx"), sup[0]["char"])
+
+
 def _ref_pair_pick(g: str, trail: list, ref: str | None, canon: Callable[[str], str], img_margin: float) -> str | None:
     """整理本＋本组解法两路互证（`FlowConfig.ref_pair`，A24 Z02 深挖 2026-11-06）：补放卡在「字形与文意冲突」（`conflict`）
     或「共字组搭档没裁定」（`joint`）时，若整理本对位字（现役对位，不用坐标对位）是组员 X，且 ①本组至少一路解法给了 X；
@@ -710,6 +727,12 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
             if xp is not None:
                 # 整理本字＝本组解法给的字、反对的只有图像路：取整理本字（留痕 `ref_pair`，A24 Z02）
                 ch, why, trail = xp, "agree", trail + [{"solver": "ref_pair", "char": xp, "why": "agree:ref_pair", "witness": ref}]
+            elif cfg.ref_pair_coord and why == "joint" and not ref:
+                cw = (veto_refs or {}).get(r.id)
+                xp = _ref_pair_coord_pick(g, r, trail, cw, cfg.canon or canon)
+                if xp is not None:
+                    # 现役对位缺、坐标对位字＝本组给的字、搭档只是没表态：取它（留痕 `ref_pair_coord`，A24 Z07）
+                    ch, why, trail = xp, "agree", trail + [{"solver": "ref_pair", "char": xp, "why": "agree:ref_pair_coord", "witness": cw}]
         plans.append((r, g, mode, ch, why, trail, ref))
     res = FlowResult(entered=len(plans))
     norm = cfg.canon or canon
