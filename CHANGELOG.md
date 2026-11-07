@@ -5,7 +5,7 @@
 
 ## [未发版]
 
-- seed_admit 1.56 `group_flow_dissent_l1`（书级，缺省关、关时不进参数 dump；A24 Z02 按新码重做 11-07）：`group_flow_dissent_keep` 的组里，复核时已放行字＝整理本字、唯一反对的是文意 L1 规则（`ctx:ctx_l1`）而本组 ids 等非文意解法同意放行字 → 不降审，留痕 `dissent_keep`。新 Z02（73 格）里 B2／B2x 9 格放行字全对。
+- seed_admit 1.57 `group_flow_dissent_l1`（书级，缺省关、关时不进参数 dump；A24 Z02 按新码重做 11-07）：`group_flow_dissent_keep` 的组里，复核时已放行字＝整理本字、唯一反对的是文意 L1 规则（`ctx:ctx_l1`）而本组 ids 等非文意解法同意放行字 → 不降审，留痕 `dissent_keep`。新 Z02（73 格）里 B2／B2x 9 格放行字全对。
 - seed_admit 1.55 书级旋钮 `group_flow_ref_pair_coord`（**缺省关**，关时不进参数 dump、逻辑与改前相同；A24 Z07 差一路确认深挖 11-07）：`group_flow_ref_pair` 里的组联合判卡在「共字组搭档没表态」（`joint`）、现役对位缺这一格时，坐标对位字＝本组解法给的字、**没有任何解法（含搭档、图像路）给别字** → 取它（留痕 `ref_pair_coord`）；夹注半格、〓 不认。殿本 ★main Z07 124 格里命中 41 格（zy 于干子、wm 未、men、yz、zh），看图全对、0 错放；其余 83 格一个不中。要开须在书 yaml 同时开 `group_flow_ref_pair`（含这几组）。
 
 - seed_admit 1.54 卿𨜊（`qing`）暂归一兜底认整理本〓（`registry.PROVISIONAL` 的 `gap` 加 qing，同 yi_560；A24 Z 类梳理 11-07，Sheldon 同意）：殿本整理本把这一刻形录成〓，字频给卿，却被坐标对位闸当「组外字」拦下（★main 现算 235 格，原因码 Z04）。库首位 cov ≥ `provisional_gap_cov`（0.95）、分差内都是卿𨜊时放成卿、记 `provisional`。殿本 10 册抽 30 格看图 30 格都是卿（大理寺卿、荀卿、少卿…），0 错放。下一轮重跑生效。
