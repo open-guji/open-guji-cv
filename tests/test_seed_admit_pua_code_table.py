@@ -151,3 +151,50 @@ def test_load_table_multi_verdict(tmp_path):
     (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
     codes, fams = load_table(tmp_path)
     assert fams["F1028"] == frozenset("最撮") and "F1028" not in codes and codes["F2000"] == "甲"
+
+
+# ── pua_code_admit：未放行格按码表＋库首位互证放行（A24 R01 11-07） ──
+
+def _admit_run(tmp_path, cells, codes, mm, p=None):
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.seed_admit import _pua_code_admit_pass
+    st = _st(tmp_path, **codes)
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=c.get("admit", False), char=c.get("char"), doubts=list(c.get("doubts", [])),
+                     channel=c.get("channel"), provenance=c.get("provenance", ""), evidence={})
+            for s, c in cells.items()]
+    mmap = {f"{B}:1:{s}": NS(candidates=v[0], verdict=v[1] if len(v) > 1 else "unsure", guard=v[2] if len(v) > 2 else None)
+            for s, v in mm.items()}
+    amap = {f"{B}:1:{s}": (None, None) for s in cells}
+    n = _pua_code_admit_pass([ColumnAdmit(col=1, chars=recs)], amap, mmap, st, TABLE, p=p or SeedAdmitParams(pua_code_admit=True))
+    return n, {r.slot: r for r in recs}
+
+
+def test_admit_when_lib_top_equals_table(tmp_path):
+    n, r = _admit_run(tmp_path, {1: {"char": "眩"}, 2: {"char": "賅"}},
+                      {"1": ("F100A", ""), "2": ("F100A", "")},
+                      {1: ([("眩", 0.94)],), 2: ([("賅", 0.95), ("眩", 0.94)],)})
+    assert n == 1
+    assert (r[1].admit, r[1].char, r[1].channel, r[1].doubts) == (True, "眩", "code_table", ["code_table_admit"])
+    assert r[1].evidence["code_table"]["admit"] is True
+    assert r[2].admit is False                      # 库首位不是表字：不放
+
+
+def test_admit_family_takes_lib_top(tmp_path):
+    n, r = _admit_run(tmp_path, {1: {"char": "垂"}}, {"1": ("F1001", "")}, {1: ([("垂", 0.97)],)})
+    assert n == 1 and r[1].char == "垂"             # 一码多字：族内字按库首位放，不改成表字
+
+
+def test_admit_guards(tmp_path):
+    n, r = _admit_run(tmp_path,
+                      {1: {"char": "眩"}, 2: {"char": "眩"}, 3: {"char": "眩", "provenance": "human"}, 4: {"char": "眩", "doubts": ["occluded"]},
+                       5: {"char": "眩"}, 6: {"char": "○"}},
+                      {str(s): ("F100A", "") for s in (1, 2, 3, 4, 5)} | {"6": ("F1091", "")},
+                      {1: ([("眩", 0.80)],), 2: ([("眩", 0.95)], "diff"), 3: ([("眩", 0.95)],), 4: ([("眩", 0.95)],),
+                       5: ([("眩", 0.95)], "unsure", "never_match"), 6: ([("○", 0.99)],)})
+    assert n == 0                                   # cov 不够、库判 diff、人裁、遮挡、有护栏、表字非汉字：都不放
+
+
+def test_admit_off_not_in_dump():
+    d = SeedAdmitParams().model_dump()
+    assert "pua_code_admit" not in d and "pua_code_admit_cov" not in d
+    assert SeedAdmitParams(pua_code_admit=True).model_dump()["pua_code_admit_cov"] == 0.85
