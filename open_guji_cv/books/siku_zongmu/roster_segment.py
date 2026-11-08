@@ -69,6 +69,8 @@ LR_MIN_H = 1.25            # 带高 > 此 × em 才试左右分栏
 LR_GAP_INK = 0.04          # 分栏缝墨量 ≤ 此 × 带高
 LR_SIDE_MIN = 0.15         # 分栏后每侧墨量至少占带墨量的比例
 LR_WIDE = 0.55             # 雙行段的强带：分栏后两侧都至少这么宽（× em），左右结构单字的半边没这么宽（_lr_runs）
+LR_FLAT = 0.6              # 高 < 此 × 宽算扁块（_flat_count）
+LR_FLAT_EXTRA = 2          # 整段分栏的扁块数比逐带处理最多多这么多（_lr_items）
 LEAD_MAX_W = 0.6           # 雙行段开头右行单字：宽 ≤ 此 × 列宽（_lead_in_jiazhu）
 LR_REFINE_ITER = 3         # 分栏后按两侧墨心重新归边的轮数（_split_lr）
 DENSE_H = 1.45             # 带高 > 此 × max(宽, 0.85em) 算粘连密排
@@ -483,16 +485,30 @@ def _lr_runs(m: np.ndarray, groups: list[tuple[list[int], float | None]], em: fl
     return runs
 
 
-def _lr_items(m: np.ndarray, y0: int, y1: int, em: float) -> list[RosterItem] | None:
-    """整段雙行分栏；两侧都 ≥2 字才认，否则 None（交回逐带处理）。"""
+def _flat_count(items: list[RosterItem]) -> int:
+    """扁块数：高 < LR_FLAT × 宽（劈开的半个字是扁的；真字多近方，只有「一」「二」这类本来就扁）。"""
+    return sum(it.y1 - it.y0 < LR_FLAT * (it.x1 - it.x0) for it in items)
+
+
+def _lr_items(m: np.ndarray, y0: int, y1: int, em: float, chen: float | None) -> list[RosterItem] | None:
+    """整段雙行分栏；两侧都 ≥2 字才认，否则 None（交回逐带处理）。
+
+    整段分栏只该把「一格里并了左右两字」的框拆开。侧栏里字压得紧时，整段一起切会被投影谷点把一个字劈成两个
+    扁块（全唐文 001 p35 c6 左行 28 字切成 46 格）。拿逐带处理的结果（`lr_run=False`）当底，整段分栏的扁块数
+    比底多过 LR_FLAT_EXTRA 个就整段不认，回逐带处理。"""
     sides = _lr_sides(m, y0, y1, em)
     if sides is None or min(len(sides[0]), len(sides[1])) < 2:
+        return None
+    mm = np.zeros_like(m)
+    mm[y0:y1] = m[y0:y1]
+    if _flat_count(sides[0] + sides[1]) > _flat_count(_seg_mask(mm, em, 0, chen, lr_run=False)) + LR_FLAT_EXTRA:
         return None
     return _as_jiazhu(*sides)
 
 
 # ── 递归主体 ─────────────────────────────────────────────────────────────
-def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = None) -> list[RosterItem]:
+def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = None,
+              lr_run: bool = True) -> list[RosterItem]:
     out: list[RosterItem] = []
     col_x = _xext(m)
     bs = _bands(m)
@@ -523,12 +539,12 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = Non
             for k in range(i, j):
                 pair_run[k] = True
         i = max(j, i + 1)
-    lr_end = dict(_lr_runs(m, groups, em)) if depth == 0 else {}
+    lr_end = dict(_lr_runs(m, groups, em)) if depth == 0 and lr_run else {}
     k = 0
     while k < len(groups):
         if k in lr_end:
             y0, y1 = groups[k][0][0], groups[lr_end[k] - 1][0][1]
-            jz = _lr_items(m, y0, y1, em)
+            jz = _lr_items(m, y0, y1, em, chen)
             if jz is not None:
                 out += jz
                 k = lr_end[k]
