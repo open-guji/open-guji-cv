@@ -8,7 +8,10 @@
 - `period_prior`、`outer_gap.top/bottom`、`outer_shift.top/bottom`、`params.border_detect.grid_col_pitch`、
   `params.border_detect.head_raise_scale`：旧值 × k（head_raise_scale 实测就是按像素比例缩的：vol05 0.6889×1.4468＝0.9967）；
 - `bottom_gap`（有这个键才改）：新页下方留白固定 pad.b（新页表每页同一数，殿本 36）；
-- `params.border_detect.vline_overrides.<页>`：每条界线的 x 按该页 H 在页高中线处换算（旧页高 `from_rev.h`）；
+- `params.border_detect.vline_overrides.<页>`：每条界线的 x 按该页 H 在页高中线处换算（旧页高 `from_rev.h`）。
+  这个 x 是**右上原点**（离页右缘的距离，与 `borders.verticals` 同一空间，见 border_detect `vline_overrides`）：
+  先翻成旧页左上原点（旧页宽 `from_rev.w`）、过 H、再翻回新页右上原点（新页宽 `w`）。11-07 初版当成左上原点直接过 H，
+  vol43 p1 的 10 条界线整串偏到页外（1888 > 页宽 1836），第 7 轮整页列网错（A22 11-08 查）；
 - 不动：页号集（dev_set、sets、column_grid_pages 等）、`frame_layers`（层数）、各种布尔／字符串开关。
 
 每个改动的行末加一段 `# 换新图（A20 11-07）：旧值 ×k`，原有行尾注释接在后面；整份 yaml 文件头加一行总说明。
@@ -69,12 +72,14 @@ def pad_bottom(table: dict) -> float | None:
 
 
 def map_x(table: dict, page: int, x: float) -> float:
-    """旧页（左上原点）页高中线上的 x → 新页同一位置的 x。"""
+    """旧页页高中线上**右上原点**的 x（`vline_overrides` 的空间）→ 新页同一位置的右上原点 x。
+    H 是左上原点的旧页→新页矩阵，所以先按旧页宽翻成左上原点、过 H、再按新页宽翻回。"""
     row = next(p for p in table["pages"] if int(p["page"]) == page)
     f = row["from_rev"]
     H = np.array(f["H"], float)
-    v = H @ np.array([x, f["h"] / 2.0, 1.0])
-    return float(v[0] / v[2])
+    x_tl = (float(f["w"]) - 1.0) - x
+    v = H @ np.array([x_tl, f["h"] / 2.0, 1.0])
+    return (float(row["w"]) - 1.0) - float(v[0] / v[2])
 
 
 # ── 文本改写 ─────────────────────────────────────────────────────────
