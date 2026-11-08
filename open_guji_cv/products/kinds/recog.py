@@ -378,12 +378,16 @@ class PageAlignRef(BaseModel):
     # 由 seed_admit 两套都准入后按列定（见 `products.alt_view`）。空不落盘。
     alt_cand: list[int] = Field(default_factory=list)
     alt_draft: "AltDraft | None" = None
+    # 册配置 `reference_profile` 声明的本页参照形态（参校本属性 B 块，2026-11-08）：`"none"`（无参照，不对位）／
+    # `"text"`（不分行全文，不做坐标对位）；column 与未声明为空、不落盘（旧书产物逐字节不变）。
+    # 下游（seed_admit、manager）认这个字段，不认 note 文字。
+    ref_kind: str = ""
 
     @model_serializer(mode="wrap")
     def _drop_empty_alt(self, handler):
         d = handler(self)
         if isinstance(d, dict):
-            for k in ("alt_cols", "alt_cand", "alt_draft"):
+            for k in ("alt_cols", "alt_cand", "alt_draft", "ref_kind"):
                 if not d.get(k):
                     d.pop(k, None)
         return d

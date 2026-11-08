@@ -133,6 +133,12 @@ class StepSpec:
     2026-09-15 `leaf_layout` 踩到（改成 `folio` 后 Step1 该把版心标 `margin`，
     却整页跳过）。凡是 `run_page` 里读了 `ctx.book.X` 且 X 会改变产物的，
     都要在这里声明 X。"""
+    ref_profile_aware: bool = False
+    """这一步按册配置 `reference_profile`（参校本属性，`core/ref_profile.py`）逐页分支（2026-11-08，B 块）。
+
+    为真时 `Engine.fingerprint` 按页加键 `ref_profile`＝`RefProfile.page_token(page)`：只有声明了非 column
+    的页才有这个键（未声明的册、column 页不写），所以旧书指纹逐位不变；改了某几页的形态只让这几页过期。
+    不走 `book_deps`（那会把整份值写进每一页的指纹，加键即全量过期）。"""
     soft_params: tuple[str, ...] = field(default=())
     """**软参数**：参数模型里这些字段**不进指纹**（`params_hash` / `self_hash` 都剔掉），
     只把当时的值记进 manifest 条目的 `soft`，`status` 另报「漂移」、不报过期。

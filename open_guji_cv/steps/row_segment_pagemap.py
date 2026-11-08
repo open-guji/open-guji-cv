@@ -26,6 +26,10 @@
   格位用本页图像量，见 `row_segment_coltext.py`；钉位表一行 `{"book", "page", "head"}`（同 align_ref 的 page_pins），
   `pins` 档只按钉位出表，`strict`／`loose` 档本册已钉的页按钉位、其余自动配。指纹另算（`_coltext_fingerprint`）。
 
+- **参校本属性**（册配置 `reference_profile`，B 块 2026-11-08）：声明为 none／text 的页（`skip_pages`）当成钉成
+  null 的页——不进配页、不出表行，strict 的正文页计数也不算它们（整段在册首的无参照页不再被当成没配准拦下）。
+  没声明的册这些页表为空，指纹、缓存键、配页结果都与原来逐位相同；声明了就把页表并进指纹与缓存键。
+
 设计与评审：Claude Doc「格位表自动生成方案」（2026-10-25，Sheldon 定：不加步骤、放 Step3 产物、
 严格程度做书级设置）。
 """
@@ -158,9 +162,25 @@ def _pin_lines(pins_path: str, book: str) -> list[dict]:
     return out
 
 
-def fingerprint(book: str, pins_path: str = "", ref: dict | None = None) -> str:
+def skip_pages(book, pages=None) -> list[int]:
+    """册配置 `reference_profile` 声明为 none／text（没有逐列参照）的页，升序；没声明的册给空表。"""
+    from ..core.ref_profile import ref_none_pages, ref_text_pages
+    return sorted({*ref_none_pages(book, pages), *ref_text_pages(book, pages)})
+
+
+def _with_skip(fp: str, skip) -> str:
+    if not skip or not fp:
+        return fp
+    return hashlib.sha256(f"{fp}|skip:{json.dumps(sorted(skip))}".encode()).hexdigest()[:16]
+
+
+def fingerprint(book: str, pins_path: str = "", ref: dict | None = None, skip=()) -> str:
     """Step3 参数指纹里代表「格位表」的那一项（见模块头）。`pins_path` 非空 ＝ `pins` 档。
-    `ref`（`_ref_of` 给的参照类型）是 `column_text` 时按逐列无格位算。"""
+    `ref`（`_ref_of` 给的参照类型）是 `column_text` 时按逐列无格位算。`skip`（`skip_pages`）非空才并进来。"""
+    return _with_skip(_fingerprint(book, pins_path, ref), skip)
+
+
+def _fingerprint(book: str, pins_path: str = "", ref: dict | None = None) -> str:
     if ref and ref.get("kind") == "column_text":
         return _coltext_fingerprint(book, pins_path, ref)
     if not has_source():
@@ -192,14 +212,14 @@ def _cache_path(ctx) -> Path:
     return ctx.store.step_dir(ctx.book.id, "row_segment") / CACHE_NAME
 
 
-def _inputs(ctx) -> tuple[str, list[int], str]:
+def _inputs(ctx, skip=()) -> tuple[str, list[int], str]:
     """（列窗口产物所在步，本册有列窗口的页，缓存键）。"""
     from ..core.spec import page_key
     sid = ctx.producer("column_windows").spec.id
     keys = ctx.store.keys(ctx.book.id, sid)
     pages = sorted(int(k[1:]) for k in keys)
     sha = hashlib.sha256()
-    sha.update(fingerprint(ctx.book.id).encode())
+    sha.update(fingerprint(ctx.book.id, skip=skip).encode())
     for p in pages:
         sha.update(f"{p}:{ctx.store.sha(ctx.book.id, sid, page_key(p))}|".encode())
     return sid, pages, sha.hexdigest()[:16]
@@ -207,11 +227,12 @@ def _inputs(ctx) -> tuple[str, list[int], str]:
 
 def ensure(ctx, strategy: str, pins_path: str = "", ref: dict | None = None) -> dict:
     """本册配页结果（缓存里有且输入没变就直接读）。`strict` 时整册配不上抛 ValueError。"""
+    skip = skip_pages(ctx.book)
     if ref and ref.get("kind") == "column_text":
-        return _ensure_coltext(ctx, strategy, pins_path, ref)
+        return _ensure_coltext(ctx, strategy, pins_path, ref, skip)
     if strategy == "pins":
-        return _ensure_pins(ctx, pins_path)
-    sid, pages, key = _inputs(ctx)
+        return _ensure_pins(ctx, pins_path, skip)
+    sid, pages, key = _inputs(ctx, skip)
     path = _cache_path(ctx)
     d = None
     if path.exists():
@@ -222,7 +243,7 @@ def ensure(ctx, strategy: str, pins_path: str = "", ref: dict | None = None) -> 
     if d is not None and d.get("key") == key and "summary" in d:
         _check(d["summary"], strategy, ctx.book.id)
         return d
-    d = build(ctx, sid, pages, key)
+    d = build(ctx, sid, pages, key, skip)
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(".tmp")
     tmp.write_text(json.dumps(d, ensure_ascii=False, sort_keys=True), encoding="utf-8")
@@ -236,9 +257,9 @@ def ensure(ctx, strategy: str, pins_path: str = "", ref: dict | None = None) -> 
     return d
 
 
-def _ensure_pins(ctx, pins_path: str) -> dict:
+def _ensure_pins(ctx, pins_path: str, skip=()) -> dict:
     """`pins` 档：缓存键只看指纹（daizhige＋本册钉位），不读列窗口。本册一行钉位都没有就拦下。"""
-    key = fingerprint(ctx.book.id, pins_path)
+    key = fingerprint(ctx.book.id, pins_path, skip=skip)
     path = _cache_path(ctx)
     if path.exists():
         try:
@@ -248,6 +269,7 @@ def _ensure_pins(ctx, pins_path: str) -> dict:
         if d is not None and d.get("key") == key and d.get("how") == "pins":
             return d
     layout = build_from_pins(ctx.book.id, pins_path)
+    _check_pin_conflict(ctx.book.id, sorted({r["page"] for r in layout}), skip)
     if not layout:
         raise ValueError(f"{ctx.book.id} 在钉位表 {pins_path} 里没有一行（page_map: pins）：先补本册钉位")
     pages = sorted({r["page"] for r in layout})
@@ -259,6 +281,14 @@ def _ensure_pins(ctx, pins_path: str) -> dict:
     tmp.replace(path)
     ctx.log(f"格位表 {ctx.book.id}（按钉位）：{len(pages)} 页 {len(layout)} 列（{path}）")
     return d
+
+
+def _check_pin_conflict(book: str, pinned, skip) -> None:
+    """册配置声明没有逐列参照的页，钉位表里却钉了半叶：两处说法相反，报错不猜。"""
+    both = sorted(set(pinned) & set(skip))
+    if both:
+        raise ValueError(f"{book} 第 {both[0]} 页等 {len(both)} 页：reference_profile 写的是没有逐列参照（none／text），"
+                         "钉位表里却钉了半叶。两处只留一处")
 
 
 def _check(summary: dict, strategy: str, book: str) -> None:
@@ -275,7 +305,7 @@ def _check(summary: dict, strategy: str, book: str) -> None:
             "或书 yaml 改 params.row_segment.page_map: loose（配不准的页不带先验照切）")
 
 
-def build(ctx, sid: str, pages: list[int], key: str) -> dict:
+def build(ctx, sid: str, pages: list[int], key: str, skip=()) -> dict:
     from ..core.spec import page_key
     from ..utils.daizhige import (
         SHORT_CHARS,
@@ -289,6 +319,11 @@ def build(ctx, sid: str, pages: list[int], key: str) -> dict:
     pins = {}
     for r in _book_lines(PINS_NAME, ctx.book.id):
         pins[int(r["page"])] = by_key.get(r["dzg"]) if r.get("dzg") else None
+    skip = set(skip)
+    _check_pin_conflict(ctx.book.id, [p for p, h in pins.items() if h is not None], skip)
+    for p in skip:                       # 没有逐列参照的页：当钉成 null，不配
+        if p in set(pages):
+            pins[p] = None
     raws, grids, inks = [], [], []
     for p in pages:
         win = ctx.store.read(ctx.book.id, sid, page_key(p), "column_windows")
@@ -315,7 +350,8 @@ def build(ctx, sid: str, pages: list[int], key: str) -> dict:
         rows.append(row)
     layout = apply_overrides(layout, _dz_dir() / OVERRIDES_NAME, {ctx.book.id})
     used = sorted(mt.half for mt in res.matches.values() if mt.half is not None)
-    text = [p for p, g in zip(pages, grids) if g is not None and int(g[:, N_EXTRA:].sum()) >= TEXT_MIN_CELLS]
+    text = [p for p, g in zip(pages, grids) if g is not None and int(g[:, N_EXTRA:].sum()) >= TEXT_MIN_CELLS
+            and p not in skip]
     bad = [p for p in text if res.matches[p].half is None or not res.matches[p].confident]
     missing, rolls = [], []
     if used:
@@ -333,6 +369,8 @@ def build(ctx, sid: str, pages: list[int], key: str) -> dict:
                "unmapped_pages": [r["page"] for r in rows if r["half"] is None],
                "missing_halves": missing, "dup_pages": res.dups, "rolls": rolls,
                "half_span": [hs[used[0]].key, hs[used[-1]].key] if used else []}
+    if skip:
+        summary["ref_skip_pages"] = sorted(p for p in skip if p in set(pages))
     return {"key": key, "version": ALGO_VERSION, "summary": summary, "rows": rows, "layout": layout}
 
 
@@ -394,7 +432,7 @@ def _coltext_fingerprint(book: str, pins_path: str, ref: dict) -> str:
     return sha.hexdigest()[:16]
 
 
-def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict) -> dict:
+def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict, skip=()) -> dict:
     """逐列无格位：缓存键 ＝ 指纹＋全册列窗口 sha＋格数列数；不在或过期就量全册格墨、配页、出表。"""
     from ..core.spec import page_key
     from . import row_segment_coltext as CT
@@ -402,7 +440,7 @@ def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict) -> dict:
     sid = ctx.producer("column_windows").spec.id
     pages = sorted(int(k[1:]) for k in ctx.store.keys(ctx.book.id, sid))
     sha = hashlib.sha256()
-    sha.update(f"{_coltext_fingerprint(ctx.book.id, pins_path, ref)}|{strategy}|{n_slots}|{ncol}|".encode())
+    sha.update(f"{_with_skip(_coltext_fingerprint(ctx.book.id, pins_path, ref), skip)}|{strategy}|{n_slots}|{ncol}|".encode())
     for p in pages:
         sha.update(f"{p}:{ctx.store.sha(ctx.book.id, sid, page_key(p))}|".encode())
     key = sha.hexdigest()[:16]
@@ -424,9 +462,10 @@ def _ensure_coltext(ctx, strategy: str, pins_path: str, ref: dict) -> dict:
         gray = ctx.raw_page(p)
         grids.append(CT.ink_grid(gray, _page_columns(win, gray.shape[1]), n_slots))
     pins = {int(r["page"]): r.get("head") for r in _corpus_lines(pins_path, "book", ctx.book.id)}
+    _check_pin_conflict(ctx.book.id, [p for p, h in pins.items() if h], skip)
     if strategy == "pins" and not pins:
         raise ValueError(f"{ctx.book.id} 在钉位表 {pins_path} 里没有一行（page_map: pins）：先补本册钉位")
-    d = CT.build(ctx.book.id, pages, grids, _ref_path(ref), pins, strategy, n_slots, ncol)
+    d = CT.build(ctx.book.id, pages, grids, _ref_path(ref), pins, strategy, n_slots, ncol, skip=skip)
     d["layout"] = CT.apply_overrides(d["layout"], _corpus_lines(ref.get("overrides", ""), "vol", ctx.book.id))
     d.update(key=key, version=ALGO_VERSION, how="column_text")
     path.parent.mkdir(parents=True, exist_ok=True)

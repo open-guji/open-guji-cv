@@ -231,11 +231,15 @@ def apply_overrides(rows: list[dict], lines: list[dict]) -> list[dict]:
 
 
 def build(book: str, pages: list[int], grids: list[np.ndarray | None], ref_path: Path,
-          pins: dict[int, str | None], strategy: str, n_slots: int, ncol: int) -> dict:
+          pins: dict[int, str | None], strategy: str, n_slots: int, ncol: int, skip=()) -> dict:
     """本册配页＋格位表（`row_segment_pagemap.ensure` 存进 `_page_map.json`）。
 
     `grids` 各页 `ink_grid`（列数不对或没列窗口为 None）；`pins` 本册钉位 {页: 半叶头或 None}；
-    `strategy` 为 `pins` 时只按钉位出表、不配页。"""
+    `strategy` 为 `pins` 时只按钉位出表、不配页。`skip`：册配置 `reference_profile` 声明没有逐列参照的页，
+    当钉成 null（不配、不出表），也不算进正文页；空时结果与原来逐位相同。"""
+    skip = set(skip)
+    if skip:
+        pins = {**pins, **{p: None for p in pages if p in skip}}
     from ..utils.page_align import align_scores
     heads, units = leaves(ref_path)
     hi = {h: i for i, h in enumerate(heads)}
@@ -269,7 +273,8 @@ def build(book: str, pages: list[int], grids: list[np.ndarray | None], ref_path:
             if conf and g is not None and g.shape[0] == ncol:
                 layout.extend(page_rows(book, p, g, units.get(h, []), n_slots, head=h))
         rows.append(row)
-    text = [p for p in pages if gi.get(p) is not None and int(inked(gi[p]).sum()) >= TEXT_MIN_CELLS]
+    text = [p for p in pages if gi.get(p) is not None and int(inked(gi[p]).sum()) >= TEXT_MIN_CELLS
+            and p not in skip]
     # 没配上的有字页：前后两个配上的页之间，参照里没有空出来的有字半叶 ⇒ 参照根本没录这页（目录页、牌记、插图说明），
     # 只报不拦；中间空着有字半叶（该配却没配上）才算配不上
     seq = [(p, hi[match[p][0]]) for p in pages if p in match]
@@ -295,4 +300,6 @@ def build(book: str, pages: list[int], grids: list[np.ndarray | None], ref_path:
                "columns": len(layout), "pages_with_layout": len({r["page"] for r in layout}),
                "half_span": [min((m[0] for m in match.values()), key=lambda h: hi[h]),
                              max((m[0] for m in match.values()), key=lambda h: hi[h])] if match else []}
+    if skip:
+        summary["ref_skip_pages"] = sorted(p for p in skip if p in set(pages))
     return {"rows": rows, "layout": layout, "summary": summary}

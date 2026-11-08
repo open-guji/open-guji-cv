@@ -423,7 +423,8 @@ def test_row_segment_refuses_book_missing_from_layout(tmp_path):
                              "raised": 0}) + "\n", encoding="utf-8")
     assert RS.load_layout(str(p), "vol11") == {}
     src = Path(RS.__file__).read_text(encoding="utf-8")
-    assert "if p.layout_prior and not layout:" in src and "raise ValueError" in src
+    # 2026-11-08（参校本属性 B 块）：写了 reference_profile 的册不拦，没写的册照旧拦
+    assert "if p.layout_prior and not layout and not _ref_declared(ctx.book):" in src and "raise ValueError" in src
 
 
 def test_shift_occ_moves_body_slots_and_refuses_out_of_range():
