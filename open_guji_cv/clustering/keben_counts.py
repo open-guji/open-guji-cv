@@ -9,7 +9,8 @@
 - `ref`：有参照互证进库的——旧管线 `align`／`match`，以及 `auto`（`scripts/book_lib_auto.py` 进库、
   `admissions.evidence.channel` 不是 solo 系）；
 - `solo`：`auto` 里 channel 是 solo 系（`match_solo`／`match_solo_ocr`／`match_solo_5b`，只靠库形状放行）；
-- `borrow`：借库人裁（`borrowed_human`）；
+- `borrow`：借来的库（`borrowed` 表里有这一例，或 `borrowed_human`）——借库带进来的 auto 也归这里，
+  不按它在原书的通道算 ref（11-08 史記实测：借全唐文 human+auto 两万多例，原先被算成 other）；
 - `other`：其余（`context`、`human_stale_*`、`auto` 没记通道……）；
 - `unknown`：库里有刻例、`instances` 表里没这一行（11-08 实测全唐文 5707、史記 5334 条，多为早期 v2 号），
   来源查不到，不算可信。
@@ -29,8 +30,10 @@ KINDS = ("human", "ref", "solo", "borrow", "other", "unknown")
 
 
 def classify(label_status: str | None, provenance: str | None, evidence: str | dict | None,
-             *, has_instance: bool = True) -> str:
+             *, has_instance: bool = True, borrowed: bool = False) -> str:
     """一条刻例归哪一类（见模块头）。纯函数。"""
+    if borrowed:
+        return "borrow"
     if not has_instance:
         return "unknown"
     st = (label_status or "").strip()
@@ -59,26 +62,39 @@ def keben_breakdown(db_path: str | Path) -> dict[str, dict[str, int]]:
     out: dict[str, dict[str, int]] = {}
     try:
         with sqlite3.connect(f"file:{db_path}?mode=ro", uri=True) as c:
+            has_b = c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='borrowed'").fetchone()
+            bsel, bjoin = (("b.instance_id IS NOT NULL", "LEFT JOIN borrowed b ON b.instance_id = e.instance_id ")
+                           if has_b else ("0", ""))
             rows = c.execute(
-                "SELECT g.char, e.instance_id, i.instance_id IS NOT NULL, i.label_status, a.provenance, a.evidence "
+                f"SELECT g.char, e.instance_id, i.instance_id IS NOT NULL, {bsel}, i.label_status, a.provenance, a.evidence "
                 "FROM exemplars e JOIN glyphs g USING(glyph_id) "
                 "LEFT JOIN instances i ON i.instance_id = e.instance_id "
-                "LEFT JOIN admissions a ON a.instance_id = e.instance_id").fetchall()
+                "LEFT JOIN admissions a ON a.instance_id = e.instance_id " + bjoin).fetchall()
     except sqlite3.Error:
         return {}
-    for ch, iid, has, st, prov, ev in rows:
+    for ch, iid, has, bor, st, prov, ev in rows:
         if str(iid or "").startswith("font:"):
             continue
         d = out.setdefault(str(ch), dict.fromkeys(KINDS, 0))
-        d[classify(st, prov, ev, has_instance=bool(has))] += 1
+        d[classify(st, prov, ev, has_instance=bool(has), borrowed=bool(bor))] += 1
     for d in out.values():
         d["trusted"] = d["human"] + d["ref"]
     return out
 
 
-def trusted_keben_counts(db_path: str | Path) -> dict[str, int]:
-    """字 → 可信刻例数（人裁＋有参照互证），无参照放行通道的刻例门槛读这个。"""
-    return {ch: d["trusted"] for ch, d in keben_breakdown(db_path).items()}
+def trusted_keben_counts(db_path: str | Path, borrow_db: str | Path | None = None,
+                         *, min_own: int = 1) -> dict[str, int]:
+    """字 → 可信刻例数（人裁＋有参照互证），无参照放行通道的刻例门槛读这个。
+
+    `borrow_db`（A24 11-08 收窄版借库）：同族书的库（如史記借全唐文），按**那本书自己的库**再分一次来源，
+    只把它的可信刻例（它的 human＋ref）加进来；本库的借库副本没带准入证据，分不出通道，所以不从本库数。
+    只有本书自己已有 ≥`min_own` 条可信刻例的字才加借库数（免得一个本书没见过的字全靠别书刻例放行）。
+    缺省不借，结果与不传一样。字体族是否同族由调用方（册配置）负责。"""
+    own = {ch: d["trusted"] for ch, d in keben_breakdown(db_path).items()}
+    if borrow_db is None:
+        return own
+    other = {ch: d["trusted"] for ch, d in keben_breakdown(borrow_db).items()}
+    return {ch: n + (other.get(ch, 0) if n >= min_own else 0) for ch, n in own.items()}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -86,10 +102,15 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="字形库刻例按来源分列（参校本属性 C1）")
     ap.add_argument("db")
     ap.add_argument("--tsv", default=None, help="逐字明细写到这里")
+    ap.add_argument("--borrow-db", default=None, help="同族借库书的 glyph.db（只数它的可信刻例）")
     a = ap.parse_args(argv)
     bd = keben_breakdown(a.db)
     tot = {k: sum(d[k] for d in bd.values()) for k in (*KINDS, "trusted")}
     print(f"{len(bd)} 字；" + "，".join(f"{k} {v}" for k, v in tot.items()))
+    if a.borrow_db:
+        own = trusted_keben_counts(a.db)
+        withb = trusted_keben_counts(a.db, a.borrow_db)
+        print(f"可信≥3 的字：本书 {sum(v >= 3 for v in own.values())}，加同族借库 {sum(v >= 3 for v in withb.values())}")
     gap = sum(1 for d in bd.values() if d["trusted"] < 3 <= sum(d[k] for k in KINDS))
     print(f"全表刻例≥3 但可信刻例<3 的字：{gap}")
     if a.tsv:
