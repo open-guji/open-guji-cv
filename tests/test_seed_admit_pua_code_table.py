@@ -198,3 +198,31 @@ def test_admit_off_not_in_dump():
     d = SeedAdmitParams().model_dump()
     assert "pua_code_admit" not in d and "pua_code_admit_cov" not in d
     assert SeedAdmitParams(pua_code_admit=True).model_dump()["pua_code_admit_cov"] == 0.85
+
+
+def test_load_table_registers_daizhige_code(tmp_path):
+    """殆知阁行本身的码也登记（A24 R01 第 7 轮）：没有 same_as v2 码的殆知阁码也能按码取字。"""
+    import json as _json
+    from open_guji_cv.utils.pua_v2_codes import load_table, norm_code
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "daizhige:U+EAA0", "verdict": "char", "char": "卿", "same_as": []},
+            {"code": "daizhige:U+EB09", "verdict": "multi", "chars": "瓠𤬄", "same_as": ["siku-qiefen-v2:U+F1007"]}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(_json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, fams = load_table(tmp_path)
+    assert codes[norm_code("daizhige:U+EAA0")] == "卿"
+    assert fams[norm_code("daizhige:U+EB09")] == frozenset("瓠𤬄") and fams["F1007"] == frozenset("瓠𤬄")
+
+
+def test_admit_family_skips_other_codes_char(tmp_path):
+    """族里是别的码表字的字（F1001 乖垂埀 里的乖＝另一码的表字）不算互证（A24 11-08，第 7 轮 3 格垂放成乖）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.seed_admit import _pua_code_admit_pass
+    table = ({"F1001": "埀", "DAIZHIGE:U+EA36": "乖"}, {"F1001": frozenset("乖垂埀")})
+    st = _st(tmp_path, **{"1": ("F1001", ""), "2": ("F1001", "")})
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=False, char=c, doubts=[], channel=None, provenance="", evidence={})
+            for s, c in ((1, "乖"), (2, "垂"))]
+    mmap = {f"{B}:1:1": NS(candidates=[("乖", 0.97)], verdict="unsure", guard=None),
+            f"{B}:1:2": NS(candidates=[("垂", 0.97)], verdict="unsure", guard=None)}
+    amap = {r.id: (None, None) for r in recs}
+    n = _pua_code_admit_pass([ColumnAdmit(col=1, chars=recs)], amap, mmap, st, table, p=SeedAdmitParams(pua_code_admit=True))
+    assert n == 1 and recs[0].admit is False and recs[1].admit is True
