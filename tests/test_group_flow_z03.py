@@ -77,3 +77,14 @@ def test_flow_review_fix_agree_end_to_end(monkeypatch):
     assert r.admit and r.char == "二"
     r = _run(monkeypatch, "yr", "一", {"ids": "二", "yr_bars": "二"}, provisional=False)   # 不开：降审
     assert not r.admit and r.char == "一"
+
+
+def test_yr_tolerates_zi_in_entry():
+    # N01 第 7 轮复查：一 的字块库里排成 二 1.000／一 1.000／子 0.97，子 不再把一二挡在字组门外
+    from types import SimpleNamespace
+    from open_guji_cv.groups.flow import entry
+    r = SimpleNamespace(id="vol48:53:6:12b", char="二", admit=False, channel=None, provenance=None)
+    cfg = FlowConfig(groups=("yr",))
+    assert entry(r, [("二", 0.9998), ("一", 0.9997), ("子", 0.9844)], "一", cfg) == ("yr", "lift")
+    # 子 不是陪衬之外的别的字：同样紧咬的 十 照旧挡门
+    assert entry(r, [("二", 0.9998), ("一", 0.9997), ("十", 0.9990)], "一", cfg) is None
