@@ -241,8 +241,9 @@ def _panel_of(cfg, group: str) -> tuple:
 
 
 def _skip_half(inp) -> bool:
-    """`FlowConfig.l3_skip_half` 开着时，夹注 a/b 半格（格号末位 a／b）不走 L3（答案表、在线、二审小组）。"""
-    return bool(getattr(inp.cfg, "l3_skip_half", False)) and (inp.cell_id or "")[-1:] in ("a", "b")
+    """`FlowConfig.l3_skip_half` 开着时，夹注 a/b 半格（格号末位 a／b）不走 L3（答案表、在线、二审小组）；`l3_half_groups` 里的组除外。"""
+    return (bool(getattr(inp.cfg, "l3_skip_half", False)) and (inp.cell_id or "")[-1:] in ("a", "b")
+            and getattr(inp, "group", None) not in (getattr(inp.cfg, "l3_half_groups", None) or ()))
 
 
 @dataclass(frozen=True)
