@@ -14,7 +14,7 @@ import open_guji_cv.steps  # noqa: F401  —— 注册 Step / 产物种类
 from helpers import make_book, run_keben_chain
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
-from open_guji_cv.books.siku_zongmu.roster_segment import (prepare, segment_roster_column,
+from open_guji_cv.books.siku_zongmu.roster_segment import (RosterOpts, prepare, segment_roster_column,
                                                segment_roster_page)
 
 W = 180          # 列图宽
@@ -208,6 +208,26 @@ def test_phase_aligned_double_line_rows_become_jiazhu_pairs():
     _glyph(g, 750, 35, EM)
     rc = _seg_one(g)
     assert [it.kind for it in rc.items] == ["char"] + ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5 + ["char"]
+
+
+def test_lone_pair_row_between_split_tall_bands_joins_double_line():
+    """大字雙行两行相位错开（vol01 p87 c9「士武」「文英」）：高带之间夹一条左右各一字的矮带，整段一起分栏，
+    不把这两字切成一格。"""
+    g = _column()
+    for y in (300, 365):                                     # 高带：右行两字、左行错开半字
+        _glyph(g, y, 100, 60, stroke=5)
+        _glyph(g, y + 30, 25, 60, stroke=5)
+    _glyph(g, 470, 100, 60, stroke=5)                        # 矮带：左右各一字、逐行对齐
+    _glyph(g, 470, 25, 60, stroke=5)
+    for y in (545, 610):
+        _glyph(g, y, 100, 60, stroke=5)
+        _glyph(g, y + 30, 25, 60, stroke=5)
+    ink, _w = prepare(g, (10.0, W - 10.0))
+    rc = segment_roster_column(ink, EM, opts=RosterOpts(lr_run=True))
+    assert [it.kind for it in rc.items] == ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5
+    assert all(it.x1 - it.x0 < 80 for it in rc.items)       # 没有横跨两行的框
+    off = segment_roster_column(ink, EM)                     # 开关缺省关：照旧（矮带两字并成一格）
+    assert any(it.x1 - it.x0 > 120 for it in off.items)
 
 
 def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
