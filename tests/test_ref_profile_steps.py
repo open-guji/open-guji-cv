@@ -48,19 +48,18 @@ def _ctx(tmp_path, monkeypatch, profile=None):
 
 # ── 指纹 ─────────────────────────────────────────────────────────────
 def test_both_steps_are_aware_and_undeclared_adds_no_key():
-    for sid in ("align_ref", "row_segment"):
-        st = STEPS[sid]
-        assert st.spec.ref_profile_aware
-        assert ref_profile_token(st, make_book(), 5) is None
-        # 别的步不吃这个属性：声明了也不加键
-    other = next(s for k, s in STEPS.items() if not s.spec.ref_profile_aware)
+    st = STEPS["align_ref"]
+    assert st.spec.ref_profile_aware and ref_profile_token(st, make_book(), 5) is None
+    # row_segment 只在自动配页里用（书级 page_map_fingerprint 管），不按页进指纹；别的步也不吃
+    assert not STEPS["row_segment"].spec.ref_profile_aware
+    other = STEPS["row_segment"]
     b = make_book(references=REFS, reference_profile=_prof("none"))
     assert ref_profile_token(other, b, 5) is None
     assert ref_profile_token(STEPS["align_ref"], b, 5) == "none:None"
     b = make_book(references=REFS, reference_profile=_prof({"default": "column",
                                                            "segments": [{"pages": [3], "kind": "text"}]}))
-    assert ref_profile_token(STEPS["row_segment"], b, 3) == "text:0"
-    assert ref_profile_token(STEPS["row_segment"], b, 4) is None       # column 页不加键
+    assert ref_profile_token(STEPS["align_ref"], b, 3) == "text:0"
+    assert ref_profile_token(STEPS["align_ref"], b, 4) is None         # column 页不加键
 
 
 def test_ref_kind_not_serialized_when_empty():
@@ -102,12 +101,12 @@ def test_align_ref_other_reference_not_supported_yet():
 
 # ── row_segment ──────────────────────────────────────────────────────
 def test_row_segment_prior_switches():
-    assert RS._ref_has_column(make_book()) and not RS._ref_no_prior(make_book(), 1)
+    assert RS._ref_has_column(make_book())
     b = make_book(references=REFS, reference_profile=_prof("none"))
-    assert not RS._ref_has_column(b) and RS._ref_no_prior(b, 1)
+    assert not RS._ref_has_column(b)
     b = make_book(references=REFS, reference_profile=_prof({"default": "none",
                                                            "segments": [{"pages": ["3-4"], "kind": "column"}]}))
-    assert RS._ref_has_column(b) and RS._ref_no_prior(b, 1) and not RS._ref_no_prior(b, 3)
+    assert RS._ref_has_column(b)
     b = make_book(references=REFS, reference_profile=_prof("text"))
     assert not RS._ref_has_column(b)
 

@@ -1243,7 +1243,7 @@ class RowSegmentParams(BaseModel):
 @register_step
 class RowSegmentStep(Step):
     spec = StepSpec(
-        id="row_segment", title="Step3 单列文字切分", version="1.46", unit="column",   # 参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：none／text 页不带格位先验照纯几何切，layout_prior 只在本册有逐列页却缺表时拦，自动配页不配这些页；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（books/siku_zongmu/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
+        id="row_segment", title="Step3 单列文字切分", version="1.46", unit="column",   # 参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：写了 reference_profile 的册 layout_prior 缺表不拦（缺表的页纯几何切）；自动配页不配 none／text 页、整册没有逐列页就不配页；离线格位表有行照用（表是几何先验，与有无参校本无关，全唐文 001 姓氏韵编）；1.46：layout_raise_box 缺省开（闸认出真抬头框、表记不抬头时按闸级数重编表），重编的候选四项打分不比原表差就取（同分不再让给原表）；1.45：等距格网中选时，表挪一格也只比挪一格的等距格网（DP 挪一格会压空白、字整列错一格，vol64 p211 c1 等）；挪一格的等距格网改配挪过的表（夹注、半格按表认）；1.44：等距格网优先，别的格网坏格数严格更少才换；等距格线落缝改就近（挪远要付代价，不再挪进字内空当）——格高一致强制执行（用户 2026-11-01，vol21/64/98 格高偏差 >20% 的列 2054→219，劈字 314→278）；1.43：格高不匀把空白段也算上（一段空白切出的格数多过它总高合的 period 数，多出的算不匀；列首两格空白切成三个矮格、字整列挤错一格），无先验格网格高比现有候选更不匀时不取（vol98 p100 c3 等 4 列）；1.42：职名页分支认写本（史記文淵閣本）——斜贴邻字的偏右小「臣」按全页臣行拆出、列端扁框线残段不当字、落在印里的字丢掉（读 seals）；1.41：大印下的列等距格网在印外比按打分的格网多劈 ≥2 个字时按打分挑（挤格列，vol48 p34、vol46 p106）；1.40：layout_prior 候选格网加「表整列挪一格」（格号 ±1，违表严格更少才选；大印下只在等距格网间比违表），整理本起格差一格的列（vol68 p31 c7–c9）不再丢首字、列末多空字格；1.39：自动配页 page_map（off/loose/strict，书级；开着时 Step3 开跑前按全册列窗口与 daizhige 对齐、边跑边生成本册格位表，见 row_segment_pagemap.py），缺省 off 逐字节不变；1.38：候选格网打分加格高不匀（_uneven，排在劈字后、穿字前）；选中的格网有一格挤两字时在字缝补一条格线、按打分去掉一条（_merged_cuts，殿本个别列字排得比整页格网密）；1.37：layout_prior 开着而表里没有本册就报错（不再悄悄当关）；1.36：干净格线两侧格高偏 >15% 也过 U-Net 探针；扩池候选与 U-Net 几乎一致、穿墨少就自动改选（字内空隙里的格线把字头/点切给上一格）；1.35：layout_prior 缺省开（缺省表不在当关）；1.34：大印压着列首的列（_under_stain）直接取表的等距格网，不再按坏格挑（印泥斑点让闸抬头、DP 挤格，字整列错一格而格号集合不变）；1.33：列端表空格的印改读印章定位 `seals` 产物——大印按框、小印按笔画覆盖区量（_in_seal），去掉模板窗口找印与表空段墨团（_empty_zone_seal），并纠正印框与格坐标空间不一致（印框原是左上原点）；1.32：模板没认出的印（空心印）和模板框没盖住的印边：相邻列的表空段同高都有像字的墨，就当印框（_empty_zone_seal）；1.31：列端表空格里被切成雙行小注半格的印章墨也记空；1.30：表说半格、判据认成單行小注的格按半格发（jiazhu_a/b）；1.29：列端表空格里墨只是一两道竖线的格记空（印框边、界行残段）；1.28：印框记空挪进候选格网打分之前（同框线碎墨，先记空再打分），單行小注格也记；1.27：印框记空门槛 0.35 → 0.30；1.26：印框里的列端表空格记空（印章模板命中，同 seed_admit 盖章判空）；layout_prior 表说只有一半有字的夹注格（half），列里有雙行段就按段缝拆、只发墨多的一半；1.25：列端表空格的墨大多连不成笔画（印章斑点）也记空；1.24：layout_prior 候选格网加等距格网（books/siku_zongmu/row_grid，格线就近落缝），各候选先把列端表空格里不像字的墨记空再打分，不像字加「越过界行」（印章、墨污），卷末整列空的列按表空列处理；1.23：layout_prior 候选格网（表／闸抬头／无先验）按（劈字、违表、穿字）挑，列端表空格段的框线碎墨记空，表认下的字格标 layout_char 给 Step4；1.22：发 v0.4.8 时并入 main 的人工指定整列格 manual_cells（main 上记作 1.20：lookup.resolved_manual_cells，职名页／卷题切不对的列由人框定，没有指定的列逐字节不变），与本线 1.20／1.21 合一；1.21：layout_prior 列端框线残渣记空（表说该空的物理首／末格只有框线）；1.20：layout_prior 抬头级数与闸不一致时两种格网都切、取穿字少的（殿本 vol04 产物包 p84/p65/p127）；1.19：逐列格位先验 layout_prior（daizhige 逐列本，默认关；命中的列不跑 colgold_prior／yolo_merge）；1.18：逐列字数先验 colgold_prior、原生 YOLO 并格闸 yolo_merge（doc/design/19，都默认关）；1.17：职名页密排段按字形库重切 roster_glyph_refine（overview#450，默认关）；1.16：列端虚线残段记空白 dash_blank（overview#376，默认关）；1.15：职名页分支 roster_pages（overview#450，默认关）；1.14：人裁「正文当小注」的格从夹注段里摘掉、按整格出（forced_main，overview#415/#436）；1.13：人裁「小注当正文」的格强制按雙行小注从中间拆（forced_jiazhu，2026-09-30）；1.12：列里残留的下版框线当下界（overview#266）；1.11：單行小注自成 kind=jiazhu_solo（此前借 jiazhu_a 的壳）
         consumes=("gate_manifest", "column_windows", "column_image"), optional_consumes=("seals",), produces=("cells",),
         params=RowSegmentParams,
         code_deps=("open_guji_cv.books.siku_zongmu.row_boundaries", "open_guji_cv.books.siku_zongmu.row_grid", "open_guji_cv.books.siku_zongmu.jiazhu_split",
@@ -1256,8 +1256,8 @@ class RowSegmentStep(Step):
         soft_params=("roster_glyph_fingerprint",),
         path_params=("roster_glyph_db", "colgold_prior", "yolo_model_dir", "layout_prior", "roster_ref_corpus", "roster_ref_pins", "page_map_pins",
                      "page_map_ref_file", "page_map_overrides"),
-        # 参校本属性（册配置 reference_profile，B 块 2026-11-08）：声明了 none／text 的页按页进指纹，见 `_ref_no_prior`
-        ref_profile_aware=True,
+        # 参校本属性（册配置 reference_profile，B 块 2026-11-08）只影响自动配页（不配哪些页），已并进
+        # `page_map_fingerprint`（书级）；离线表照用，所以不按页进指纹（不标 ref_profile_aware）
     )
 
     def book_params(self, p: "RowSegmentParams", ctx: RunContext) -> "RowSegmentParams":
@@ -1271,8 +1271,8 @@ class RowSegmentStep(Step):
     def prepare(self, ctx: RunContext, pages: list[int]) -> None:
         """整步开跑前：自动配页开着就先把本册配页算好（或确认缓存还新），strict 配不上在这里拦下。"""
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
-        if (p.layout_prior or p.page_map != "off") and not _ref_has_column(ctx.book):
-            ctx.log(f"{ctx.book.id}：reference_profile 没有逐列参照的页，不用格位先验（纯几何切）")
+        if p.page_map != "off" and not _ref_has_column(ctx.book):
+            ctx.log(f"{ctx.book.id}：reference_profile 没有逐列参照的页，不自动配页（纯几何切）")
             return
         if p.page_map != "off":
             from .row_segment_pagemap import ensure
@@ -1344,8 +1344,8 @@ class RowSegmentStep(Step):
             bgr = cv2.cvtColor(raw, cv2.COLOR_GRAY2BGR) if raw.ndim == 2 else raw
             _, ych = _yolo(p.yolo_model_dir).infer(bgr, slide_conf=p.yolo_conf)
             yolo_boxes = [(b.x0, b.y0, b.x1, b.y1) for b in ych if b.conf >= p.yolo_conf]
-        if not _ref_has_column(ctx.book):
-            layout = {}                      # 册配置说整册没有逐列参照：不读表、不配页，也不拦（见下）
+        if p.page_map != "off" and not _ref_has_column(ctx.book):
+            layout = {}                      # 册配置说整册没有逐列参照：没东西可配页
         elif p.page_map != "off":
             from .row_segment_pagemap import layout_for
             layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
@@ -1359,8 +1359,6 @@ class RowSegmentStep(Step):
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
-        if layout and _ref_no_prior(ctx.book, page):
-            layout = {}                      # 本页声明没有逐列参照（none／text）：不带格位先验，照纯几何切
         # 雙行小注逐步切（`jiazhu_step_split`，史記）：本页各列整理本的夹注段分法
         step_notes = None
         if p.jiazhu_step_split and p.jiazhu_rows and p.roster_ref_corpus and p.roster_ref_pins:
@@ -2107,19 +2105,13 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
     return PageCells(page=pc.page, period=pc.period, ref_w=pc.ref_w, columns=cols)
 
 
-def _ref_no_prior(book, page: int) -> bool:
-    """册配置 `reference_profile` 声明本页没有逐列参照（none／text）：不带格位先验。未声明的册恒假。"""
-    prof = getattr(book, "reference_profile", None)
-    return bool(prof is not None and prof.declared and prof.kind_of(page) != "column")
-
-
 def _ref_declared(book) -> bool:
     prof = getattr(book, "reference_profile", None)
     return bool(prof is not None and prof.declared)
 
 
 def _ref_has_column(book) -> bool:
-    """本册有没有可能是逐列参照的页（未声明＝有，行为照旧）。整册 none／text 时格位表缺本册不拦。"""
+    """本册有没有可能是逐列参照的页（未声明＝有，行为照旧）。整册 none／text 时不自动配页。"""
     prof = getattr(book, "reference_profile", None)
     if prof is None or not prof.declared:
         return True
