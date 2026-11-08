@@ -286,6 +286,13 @@ def test_fold_aspect_veto_group_ctx(tmp_path):
     n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=RulingStore(tmp_path / "e"), wh=WH, dmap=None)
     assert n == 2 and rs[1].char == "曰" and rs[2].char == "曰"
     assert not rs[0].admit and rs[0].evidence["fold_pending"]["ctx_veto"]["group_ctx"] == "ctx:ctx_l2"
+    # L1 规则给的另一个字不否决；L2 概率不到阈值不否决
+    r1 = rec("4", "日"); r1.evidence["group"]["solvers"][0]["via"] = "ctx:ctx_l1"
+    r2 = rec("5", "日"); r2.evidence["group"]["solvers"][0]["p"] = 0.3
+    r3 = rec("6", "日"); r3.evidence["group"]["solvers"][0]["p"] = 0.9
+    rs = [r1, r2, r3]
+    assert sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=RulingStore(tmp_path / "g"), wh=WH, dmap=None) == 2
+    assert rs[0].admit and rs[1].admit and not rs[2].admit
     # 不开 ctx_veto：照旧按宽高放
     rs = [rec("1", "日")]
     p0 = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0, 1.05))

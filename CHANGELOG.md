@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.81 `fold_aspect_ctx_veto` 的组内文意一支（1.78 加的）不认 L1 规则，带概率的（L2 `p`）要到阈值（SJ 史記 06:46:1:9b、06:46:1:13a「李奇曰」被 `ry-ext-r1-日` 误否决；殿本 H01 L1 37 格错 15，A24 11-08）。名单页「日講官」墨迹宽高比 1.16／1.09，在墨迹口径 hi 1.2 下本来就不判，不靠这一支。
+
 ## [0.6.18] - 2026-11-08
 
 - 第 8 轮发版：从 dev e9369d3b 切（seed_admit 1.80），含 #1237–#1263（A24 R01/H01/Z01–Z03/V01/N01/P01/D01、A23 笔画法 strokes 与 lane_group_img_veto、SJ #1258/#1262、A20 #1259 书级 bend_w80_med、A22 #1256 bottom_weak_ratio、#1255 rebase 原点换算、#1261 column_warp.ruled_warp 书级开关缺省关）。殿本第 8 轮 book_defaults 写 `params.border_detect.bend_w80_med: 0`（整页三段折线）。
