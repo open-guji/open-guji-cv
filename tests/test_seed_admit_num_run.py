@@ -95,3 +95,27 @@ def test_decide_admits_unguarded_near_form_ten():
     ds = ["库 same 但准入被拦", "near_form", "group_flow_abstain"]
     assert num_run_decide(cands=[("十", 0.9992), ("卜", 0.9615), ("七", 0.9584)], guard=None, doubts=ds,
                           prev=None, nxt="七", **KW) == ("十", 0.9992, 0.0377)
+
+
+JUAN = dict(cands=[("卷", 0.968), ("春", 0.94)], guard=None, doubts=["库 unsure(cov=0.968)", "上下文 margin 不足(0.02)",
+                                                                     "group_flow_abstain"])
+
+
+def test_juan_before_digits():
+    """002:41:9:2「【卷】一百六」：库 卷 0.968，后一格是数字 → 开 num_run_juan_cov 才放。"""
+    assert num_run_decide(**JUAN, prev=None, nxt="一", **KW) is None
+    assert num_run_decide(**JUAN, prev=None, nxt="一", juan_cov=0.95, **KW) == ("卷", 0.968, 0.028)
+    assert num_run_decide(**JUAN, prev="一", nxt=None, juan_cov=0.95, **KW) is None      # 只认后一格
+    assert num_run_decide(**JUAN, prev=None, nxt="一", juan_cov=0.97, **KW) is None      # cov 不到
+
+
+def test_juan_param_invisible_when_unset():
+    assert "num_run_juan_cov" not in SeedAdmitParams(num_run_cov=0.995).model_dump()
+    assert SeedAdmitParams(num_run_cov=0.995, num_run_juan_cov=0.95).model_dump()["num_run_juan_cov"] == 0.95
+
+
+def test_pass_admits_juan(tmp_path, monkeypatch):
+    recs = [_rec(1, (("卷", 0.968), ("春", 0.94))), _rec(2, (("一", 0.999),)), _rec(3, (("百", 0.999),))]
+    assert not _run(tmp_path, monkeypatch, recs, ON)[1].admit
+    r = _run(tmp_path, monkeypatch, recs, {**ON, "num_run_juan_cov": 0.95})[1]
+    assert r.admit and r.channel == "match_num_run" and r.char == "卷" and r.evidence["num_run"]["next"] == "一"
