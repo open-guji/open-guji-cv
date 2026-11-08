@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.82 `group_flow_llm_half_groups`（书级，缺省空、不进参数 dump；A24 11-08）：这几组的夹注半格不受 `group_flow_llm_skip_half` 限制，照样查答案表／裁定库、记 `llm_pending` 问，可经 `feedback/llm_queue` 导出给对话判读。SJ 史記 H01 里 89 格半格（己已巳 45、日曰 44）因 skip_half 没有 L3 问、写不了裁定键；史記建议 `[ry, jys]`。
+
 - seed_admit（版本号不变）新通道 `match_solo_5b`（书级 `solo_5b_cov`／`solo_5b_gap`／`solo_5b_min_n`，缺省关、关时不进 dump、逐字节不变）：无任何整理本对位的格，库首位 cov、领先异语义候选、刻例数都够且 5-b 首位作证才放；形近表、字组、己已巳、硬疑问不放，5-b 为空弃权（全唐文 001/002 总目、韵编，形近字线 11-08，A24 定口径）。
 - Step5-b 生僻字候选读书级 `rare_charset`（参校本属性 C 块，A24，A31 11-08 核）：册配置写了 `rare_charset: <语料文件名>` 就用它做候选字表，与参校本脱钩（`kind: none` 的书也有字表；002 此前因没写 references、字表退回四库语料而 rare_candidates 整册为空）；文件不存在记日志退回老路。没写＝照旧 `book_corpus`，行为与指纹逐位不变；写了的册指纹多一个 `rare_charset` 键（只在 `_self_payload` 里按册加，不进 `book_deps`）。
 - 册配置加参校本属性 `reference_profile` 与书级 5b 字表 `rare_charset`（参校本属性 A 块，A20，A31 11-08 核）：`core/ref_profile.py` 按页段写 `kind: column|text|none`、段用 `ref:` 指 `references[]`（质量仍只写在 `references[].quality`），写错在读配置时报；基础配置只许写 `default`；`guji book show` 加一节；B 块翻译函数 `ref_none_pages`／`ref_text_pages`、按页指纹钩子 `page_token`；manager_api 导出 `RefProfile` 等。未声明＝每页 column，不进任何步的 `book_deps`、没有步读它，L0、产物不变。设计见 ai-team `domain/CV/设计/参校本属性/A-册配置.md`。

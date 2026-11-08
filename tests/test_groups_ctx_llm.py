@@ -265,6 +265,11 @@ def test_skip_half_cells_bypass_l3_steps():
     from open_guji_cv.steps.seed_admit import SeedAdmitParams
     assert "group_flow_llm_skip_half" not in SeedAdmitParams(db_path="x").model_dump()
     assert SeedAdmitParams(db_path="x", group_flow_llm_skip_half=True).model_dump()["group_flow_llm_skip_half"] is True
+    # group_flow_llm_half_groups：这几组的半格不受 skip_half 限制（A24 11-08，SJ 史記 H01 半格要记 L3 问）
+    hg = lambda cid, g: NS(cfg=NS(l3_skip_half=True, l3_half_groups=frozenset({"ry", "jys"})), cell_id=cid, group=g)   # noqa: E731
+    assert not M._skip_half(hg("01:12:5:12a", "ry")) and M._skip_half(hg("01:12:5:12a", "men"))
+    assert "group_flow_llm_half_groups" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", group_flow_llm_half_groups=["ry"]).model_dump()["group_flow_llm_half_groups"] == ["ry"]
 
 
 def test_dt_wyu_sb_have_ids_method_that_abstains_without_bank():
