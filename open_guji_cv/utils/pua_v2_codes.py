@@ -2,7 +2,7 @@
 
 两处来源，后者盖前者（数据目录由调用方传 `config_dir=ws_config_dir()`）：
 1. 仓内 `config/pua/siku_qiefen_v2_codes.json`：`codes`＝码→字（只收人裁一致的码），`families`＝一码多字的码→族内字（如 F1001 乖垂埀）；
-2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）：`siku-qiefen-v2:U+` 起头的行、以及 daizhige 行 `same_as` 里的 v2 码；`verdict=char` → 码→字，`verdict=multi`（一码多字，字在 `chars`）→ 族。
+2. 工作区数据目录 `config/pua/pua_table.jsonl`（中心库同步）：`siku-qiefen-v2:U+` 起头的行、以及 daizhige 行 `same_as` 里的 v2 码；殆知阁行本身的码也登记（写作 `DAIZHIGE:U+EAA0`，格→码事件可直接用殆知阁码）；`verdict=char` → 码→字，`verdict=multi`（一码多字，字在 `chars`）→ 族。
 
 码写法统一成 `F1001`（U+ 之后的十六进制，大写）。
 """
@@ -13,6 +13,7 @@ from pathlib import Path
 
 REPO_FILE = Path(__file__).resolve().parents[2] / "config" / "pua" / "siku_qiefen_v2_codes.json"
 _PREFIX = "siku-qiefen-v2:U+"
+_DZG = "daizhige:U+"
 _MULTI = {"multi", "多字"}   # pua_table.verdict：一码多字（私用码线程 sheldon 逐格看图）
 
 
@@ -44,6 +45,8 @@ def load_table(config_dir: Path | None = None) -> tuple[dict[str, str], dict[str
                 continue
             code = str(r.get("code", ""))
             keys = [norm_code(code)] if code.startswith(_PREFIX) else []
+            if code.startswith(_DZG):        # 殆知阁码本身也登记（格→码事件可直接写殆知阁码，A24 R01 第 7 轮：新图源文本层对不上的格）
+                keys.append(norm_code(code))
             keys += [norm_code(c) for c in (r.get("same_as") or []) if str(c).startswith(_PREFIX)]   # 殆知阁码指到的新图源码
             if not keys:
                 continue

@@ -198,3 +198,16 @@ def test_admit_off_not_in_dump():
     d = SeedAdmitParams().model_dump()
     assert "pua_code_admit" not in d and "pua_code_admit_cov" not in d
     assert SeedAdmitParams(pua_code_admit=True).model_dump()["pua_code_admit_cov"] == 0.85
+
+
+def test_load_table_registers_daizhige_code(tmp_path):
+    """殆知阁行本身的码也登记（A24 R01 第 7 轮）：没有 same_as v2 码的殆知阁码也能按码取字。"""
+    import json as _json
+    from open_guji_cv.utils.pua_v2_codes import load_table, norm_code
+    (tmp_path / "pua").mkdir()
+    rows = [{"code": "daizhige:U+EAA0", "verdict": "char", "char": "卿", "same_as": []},
+            {"code": "daizhige:U+EB09", "verdict": "multi", "chars": "瓠𤬄", "same_as": ["siku-qiefen-v2:U+F1007"]}]
+    (tmp_path / "pua" / "pua_table.jsonl").write_text("\n".join(_json.dumps(r, ensure_ascii=False) for r in rows), encoding="utf-8")
+    codes, fams = load_table(tmp_path)
+    assert codes[norm_code("daizhige:U+EAA0")] == "卿"
+    assert fams[norm_code("daizhige:U+EB09")] == frozenset("瓠𤬄") and fams["F1007"] == frozenset("瓠𤬄")
