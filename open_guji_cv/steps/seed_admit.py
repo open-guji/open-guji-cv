@@ -884,13 +884,13 @@ class SeedAdmitParams(BaseModel):
     """无参照格「5a 校准直放」（2026-11-08 Sheldon 定「直接放」，总览按 004 校准；书级，缺省关、关时 `solo_cal*` 都不进 dump）。
     仍待审、没有任何整理本对位、匹配器护栏为空或 never_match 的格，库首位 cov 与领先「第一个异字」的差 gap
     （没有异字时 gap＝cov）落在 `solo_cal_tiers` 任一档（"cov:gap" 逗号分隔，缺省 cov≥0.98 且 gap≥0.03，或 cov≥0.95 且 gap≥0.05）
-    → 放库首位，通道 `match_solo_cal`，不入字形库（C4）。不放：首位或第一个异字在 `solo_cal_skip`（己已巳 于干 曰日 代伐 遣遺）；
+    → 放库首位，通道 `match_solo_cal`，不入字形库（C4）。不放：首位或第一个异字在 `solo_cal_skip`（己已巳 于干 曰日 代伐 遣遺，另加 真：刻 眞 的格库多记 真，Sheldon 要照刻形分）；
     首位在字组或形近表（Sheldon：形近字对留人审）；疑问只认 `_SOLO_CAL_OK_DOUBTS`（上下文 margin 不足、never_match 护栏、
     库 unsure／same 但准入被拦、group_flow_ref_missing、group_flow_abstain），near_form、occluded、切分类等其余疑问一律拦。
     排在各补放通道最后。另见 `solo_cal_5b_cov`。
     依据：004 已放行格当真值，cov≥.98＋gap≥.03 库首位错率 <0.1%，cov .95–.98＋gap≥.05 为 0.6%（错多在 代伐、遣遺）。"""
     solo_cal_tiers: str = "0.98:0.03,0.95:0.05"
-    solo_cal_skip: str = "己已巳于干曰日代伐遣遺"
+    solo_cal_skip: str = "己已巳于干曰日代伐遣遺真"
     solo_cal_5b_cov: float | None = None
     """`solo_cal` 开着时另一档：库首位＝5-b 首位、cov ≥ 这个值就放，不看 gap（其余排除照 `solo_cal`）。
     依据：004 校准，库首位与 5-b 首位一致时 cov ≥0.98 错 0.06%、0.95–0.98 错 0.44%（多为 歳歲、場埸 异体）。
