@@ -92,6 +92,16 @@ class CellShrinkParams(BaseModel):
     （seg.frame_line._profile_inner；A22-2，2026-11-05）。殿本新图 10 册下框约两成页（1710 页里 362 页）内线
     磨成点线拟不出，列尾字块整页挂着框线（列端评测集 frame-end-crop 剩下 16 格列尾带框里 10 格是这类）。
     2026-11-06 起与 inner_frame_cut 一起缺省开；关＝旧行为；小段法拟得出的页不变。"""
+    inner_frame_fit2: bool = False
+    """（跟 inner_frame_profile 一起开才有用；只下框）整宽法也拟不出内线的页再试一次：线厚上限放到 0.11 格高、
+    线位以上几乎整段是墨的像素列（界行、竖画）先剔掉再量（seg.frame_line `profile_fit2`）。殿本新图有的页内线
+    印得粗（8–12 行，超过细线上限 7 行），有的磨成点线（峰只有 0.1–0.2，界行和字脚垫的底子就有 0.1），整页拟不出、
+    列尾字块挂框线（vol95 下框 220 页里 38 页，补回 16 页；A22，Sheldon 11-08 定修）。缺省关＝旧行为。"""
+    inner_frame_snap: bool = False
+    """（跟 inner_frame_cut 一起开）抹内线时沿线的形状往字那边再找线的残边行（在线有墨的像素列上 ≥0.6 也有墨，
+    最多 SNAP_REACH 格高；虚线按线自己的虚段比），连着的一起抹（`_snap_rows`）。整页拟的线到单列差几行、线又比中位数厚时，抹白起点
+    落在线中间，上半截贴着字脚留下（vol95 p108「前」、p202「著」，vol88 p171、p118）。字脚只占线的一小段；字底一横压线时连着的墨超过补抹上限，一行不补。
+    缺省关＝旧行为。"""
 
     tail_one_abs: bool = False
     """列端渣格闸的孤「一」逃生口加一道不看格高的绝对量判据（extractor `is_end_cell_junk(one_abs=True)`，
@@ -124,6 +134,10 @@ class CellShrinkParams(BaseModel):
             d.pop("inner_frame_profile", None)
         if isinstance(d, dict) and not self.inner_frame_only:
             d.pop("inner_frame_only", None)
+        if isinstance(d, dict) and not self.inner_frame_fit2:
+            d.pop("inner_frame_fit2", None)
+        if isinstance(d, dict) and not self.inner_frame_snap:
+            d.pop("inner_frame_snap", None)
         if isinstance(d, dict) and not self.tail_one_abs:
             d.pop("tail_one_abs", None)
         if isinstance(d, dict) and not self.ink_blob_empty:
@@ -226,8 +240,48 @@ def _cross_cols(ink: np.ndarray, yc: np.ndarray, side: str, max_w_frac: float) -
     return hit
 
 
+def _snap_rows(ink: np.ndarray, start: np.ndarray, step: int, reach: int) -> int:
+    """`cut_inner_frame` 的 inner_frame_snap：从各像素列的抹白起点 `start` 往字那边（`step`＝-1 往上、+1 往下）
+    逐行看（沿拟合线的形状）。线本身的像素列 L＝起点往线外 SNAP_LINE_ROWS 行里有墨的列（虚线只有一段段）；
+    这一行在 L 上有墨的占 L 的 SNAP_COV 以上、L 自己至少占列宽 SNAP_L_MIN，就算线的残边，连着几行返回几（最多 `reach`）。
+    字脚压线只占 L 的一小段，字底一横不在线的虚段之间，挡在外面。"""
+    h, w = ink.shape
+    xs = np.arange(w)
+
+    def _row(ys):
+        ok = (ys >= 0) & (ys < h)
+        row = np.zeros(w, bool)
+        row[ok] = ink[ys[ok], xs[ok]]
+        return row, ok
+    line = np.zeros(w, bool)
+    for j in range(SNAP_LINE_ROWS):
+        line |= _row(start - step * j)[0]
+    if line.sum() < SNAP_L_MIN * w:
+        return 0
+    n = 0
+    for k in range(1, reach + 2):
+        row, ok = _row(start + step * k)
+        if ok.sum() < 0.8 * w or (row & line).sum() < SNAP_COV * line.sum():
+            break
+        n = k
+    # 过了 reach 还没断：是压在线上的一道粗横画（字底一横），不是线的残边，一行不补
+    return 0 if n > reach else n
+
+
+SNAP_COV, SNAP_L_MIN, SNAP_LINE_ROWS = 0.6, 0.3, 3
+"""inner_frame_snap：线的像素列 L（起点往线外 SNAP_LINE_ROWS 行有墨的列）至少占列宽 SNAP_L_MIN；残边行在 L 上有墨的占 L 至少 SNAP_COV。"""
+SNAP_REACH = 0.035       # inner_frame_snap 最多往字那边多抹这么多格高（殿本 4 行；字底一横 5 行起就整段不补，vol95 p82「盛」）
+
+
+def _snap_reach(p, period) -> int:
+    """inner_frame_snap 开时最多补抹几行（SNAP_REACH 格高，至少 2）；关着 0。"""
+    if not getattr(p, "inner_frame_snap", False) or not period:
+        return 0
+    return max(2, int(np.ceil(SNAP_REACH * float(period))))
+
+
 def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: bool = False,
-                    keep_cross: bool = False, cross_max_w: float = 0.0) -> np.ndarray:
+                    keep_cross: bool = False, cross_max_w: float = 0.0, snap: int = 0) -> np.ndarray:
     """列图上把内框细线（`inner` 里的整页拟合）连同线外抹白：下框线字侧边沿往下、上框线字侧边沿往上。
     抬头列（`raised`）不动上框：抬头字本来就写在框外。
     `keep_cross`（inner_frame_keep_cross）：穿过线的笔画留着——字侧边沿外连着 INNER_CROSS_RUN 行墨的那一列，
@@ -245,6 +299,13 @@ def cut_inner_frame(img: np.ndarray, mapper: ColumnMapper, inner: dict, raised: 
             out = img.copy()
         ink = img < INNER_INK_THRESHOLD
         cross = _cross_cols(ink, yc, side, cross_max_w) if keep_cross else None
+        if snap > 0:
+            # 整页拟的线到这一列差几行、线又比中位数厚时，抹白起点落在线中间，上半截贴着字脚留下（vol95 p108「前」、p202「著」）：
+            # 沿线的形状往字那边再找满宽的残边行，连着的一起抹
+            st = (np.ceil(yc).astype(int) - INNER_CUT_MARGIN) if side == "bottom" else \
+                (np.floor(yc).astype(int) + INNER_CUT_MARGIN)
+            k = _snap_rows(ink, st, -1 if side == "bottom" else 1, snap)
+            yc = yc - k if side == "bottom" else yc + k
         for x in range(w):
             if side == "bottom":
                 y0 = int(np.ceil(yc[x])) - INNER_CUT_MARGIN
@@ -361,6 +422,7 @@ class CellShrinkStep(Step):
             kw = {"max_thick": inner_thick_limit(cell_h)} if local else {}
             line = fit_inner_frame_line(ink, x0, x1, hint, cell_h, side=side,
                                         profile_fallback=bool(ctx.params_for(self).inner_frame_profile),  # type: ignore[attr-defined]
+                                        profile_fit2=bool(ctx.params_for(self).inner_frame_fit2),  # type: ignore[attr-defined]
                                         **({**kw, "seed_fallback": True} if local else {}))
             if line is not None and local:
                 line = localize_inner_line(ink, line, cell_h, **kw)
@@ -611,7 +673,8 @@ class CellShrinkStep(Step):
                 img = restore_trimmed_ends(img, ctx.image("column_raw", column_key(page, cc.col)), wrec, inner, mapper)
             img = cut_inner_frame(img, mapper, inner, raised=bool(wrec.raised or wrec.head_raise_inner_y),
                                   keep_cross=bool(ctx.params_for(self).inner_frame_keep_cross),  # type: ignore[attr-defined]
-                                  cross_max_w=float(ctx.params_for(self).inner_frame_cross_max_w))  # type: ignore[attr-defined]
+                                  cross_max_w=float(ctx.params_for(self).inner_frame_cross_max_w),  # type: ignore[attr-defined]
+                                  snap=_snap_reach(ctx.params_for(self), cc.period))
         step3_kind = {c.pos: ("jiazhu" if c.kind.startswith("jiazhu") else c.kind) for c in cc.cells}
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         slot_to_pos = {c.slot: c.pos for c in cc.cells}
@@ -767,7 +830,8 @@ class CellShrinkStep(Step):
                 img = cut_inner_frame(img, mapper, inner,
                                       raised=bool(wrec.raised or wrec.head_raise_inner_y),
                                       keep_cross=bool(ctx.params_for(self).inner_frame_keep_cross),  # type: ignore[attr-defined]
-                                      cross_max_w=float(ctx.params_for(self).inner_frame_cross_max_w))  # type: ignore[attr-defined]
+                                      cross_max_w=float(ctx.params_for(self).inner_frame_cross_max_w),  # type: ignore[attr-defined]
+                                      snap=_snap_reach(ctx.params_for(self), cc.period))
         pos_to_slot = {c.pos: c.slot for c in cc.cells}
         seams = {c.pos: (c.seam_top, c.seam_bottom, c.x0) for c in cc.cells
                  if c.kind == "char" and (c.seam_top or c.seam_bottom)}

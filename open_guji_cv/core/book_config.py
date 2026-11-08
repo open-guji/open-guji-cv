@@ -120,11 +120,15 @@ def layers(book_yaml: Path, *, apply_override: bool = True) -> list[tuple[str, d
 def effective_book_dict(book_yaml: Path, *, apply_override: bool = True) -> dict:
     """册 yaml 合上基础配置与运行覆盖后的生效字典（`load_book` 的入口）。"""
     from .page_kinds import fold_layer, warn_old_syntax
+    from .ref_profile import fold_layer as fold_ref_profile
     raw_ls = layers(book_yaml, apply_override=apply_override)
     for n, ly in raw_ls:
         if n != "运行覆盖":
             warn_old_syntax(Path(book_yaml).stem, n, ly)
-    ls = [(n, fold_layer(n, ly)) for n, ly in raw_ls]
+    try:      # 参校本属性：各层先把标量归一成 {default: x} 再合并（否则标量盖映射丢另一半）；基础配置不许写 segments
+        ls = [(n, fold_ref_profile(n, fold_layer(n, ly), allow_segments=(n != "基础配置"))) for n, ly in raw_ls]
+    except ValueError as e:
+        raise BookConfigError(str(e)) from None
     if len(ls) == 1:
         d = copy.deepcopy(ls[0][1])
     else:

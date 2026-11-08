@@ -111,6 +111,9 @@ def main(argv=None) -> int:
     assert a.batch and a.books, "进库要给 --books 和 --batch"
     books = [b.strip() for b in a.books.split(",") if b.strip()]
     channels, verdicts = set(a.channels.split(",")), set(a.verdicts.split(","))
+    from open_guji_cv.clustering.keben_counts import SOLO_CHANNELS
+    if channels & SOLO_CHANNELS:    # 参校本属性 C4：只靠库形状放行的格不进库，免得自证自
+        raise SystemExit(f"solo 系通道不进库：{sorted(channels & SOLO_CHANNELS)}")
 
     from book_lib_sync import _related          # 同一份异体判定
     from open_guji_cv.clustering.glyph_db import GlyphDB, export_store

@@ -368,10 +368,11 @@ def cmd_book(args) -> None:
         gsrc = glyph_sources(_lb(args.book))
     except Exception as e:              # noqa: BLE001 —— 只是展示，读不了不挡 show
         gsrc = {"error": str(e)}
+    rsrc = _ref_profile_report(args.book)
     if args.json:
         print(json.dumps({"book": args.book, "effective": d, "source": src, "pipeline": pl_id,
                           "params_source": {k: {"value": v, "layer": ly} for k, (v, ly) in psrc.items()},
-                          "glyph_sources": gsrc},
+                          "glyph_sources": gsrc, "reference_profile": rsrc},
                          ensure_ascii=False, indent=1, default=str))
         return
     print(f"# 册 {args.book} 生效配置（{path}）")
@@ -383,6 +384,21 @@ def cmd_book(args) -> None:
     for k, (v, ly) in psrc.items():
         vs = json.dumps(v, ensure_ascii=False, default=str)
         print(f"params.{k}: {vs if len(vs) <= 120 else vs[:117] + '…'}    # {ly}")
+    print("\n# 参校本属性（reference_profile；未声明＝全册 column、各步照旧）")
+    if rsrc.get("error"):
+        print(f"  读不了：{rsrc['error']}")
+    else:
+        sm = rsrc["summary"]
+        print(f"  {'已声明' if sm['declared'] else '未声明'}：column {sm['column']} 页、text {sm['text']} 页、none {sm['none']} 页"
+              f"；没点名的页按 {rsrc['default']}")
+        for seg in rsrc["segments"]:
+            ref = f"，参校本 {seg['ref']}" if seg["ref"] else ""
+            note = f"    # {seg['note']}" if seg["note"] else ""
+            print(f"  {seg['pages']}：{seg['kind']}{ref}{note}")
+        if rsrc.get("rare_charset"):
+            print(f"  5b 字表 rare_charset：{rsrc['rare_charset']}")
+        for h in rsrc["hints"]:
+            print(f"  ⚠ {h}")
     print("\n# 字形库来源（借库写在 workspace.yaml 的 glyph_lib.borrow，不在册配置五层里，整个工作区共用）")
     if gsrc.get("error"):
         print(f"  读不了：{gsrc['error']}")
@@ -402,6 +418,25 @@ def cmd_book(args) -> None:
         print(f"  借 {b['entry']}{how}：{rev}    # {b['path']}")
     if not gsrc.get("borrow"):
         print("  不借库")
+
+
+def _ref_profile_report(book_id: str) -> dict:
+    """`book show` 的参校本属性一节（只是展示，读不了不挡 show）。"""
+    try:
+        from .core.book import load_book
+        from .core.ref_profile import lint
+        bk = load_book(book_id)
+        prof, refs = bk.reference_profile, bk.references
+        pages = bk.all_pages()
+
+        def _name(i):
+            return None if i is None or i >= len(refs) else str(refs[i].get("label") or refs[i].get("file"))
+        return {"summary": prof.summary(pages), "default": prof.default, "rare_charset": bk.rare_charset,
+                "segments": [{"pages": ",".join(map(str, s.expr)), "kind": s.kind, "ref": _name(s.ref), "note": s.note}
+                             for s in prof.segments],
+                "hints": lint(bk, pages)}
+    except Exception as e:              # noqa: BLE001
+        return {"error": str(e)}
 
 
 def cmd_status(args) -> None:

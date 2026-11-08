@@ -60,3 +60,19 @@ def test_ruled_off_by_default_not_dumped():
     assert "ruled_warp" not in ColumnWarpParams().model_dump()
     assert "ruled_warp" in ColumnWarpParams(ruled_warp=True).model_dump()
     assert "ruled" not in ColumnWindowRec.model_fields or ColumnWindowRec.model_fields["ruled"].default is False
+
+
+def test_colgeom_follows_ruled():
+    """人裁切线的页面坐标换算（eval/colgeom）也要认 ruled，否则钉线落错行。"""
+    from open_guji_cv.eval.colgeom import ColumnGeom, geom_sig
+    m = ColumnMapper(W, LEFT, RIGHT, 10.0, 980.0, ruled=True)
+    base = {"left_line": {"x_at_top": LEFT.x_at_top, "slope": LEFT.slope},
+            "right_line": {"x_at_top": RIGHT.x_at_top, "slope": RIGHT.slope}, "top_y": 10.0, "bottom_y": 980.0}
+    g = ColumnGeom({**base, "ruled": True}, W)
+    assert (g.out_w, g.height) == (m.out_w, m.out_h)
+    for u, r in [(5.0, 0.0), (40.0, 300.0), (70.0, 900.0)]:
+        X, Y = g.row_to_page(r, u)
+        assert np.allclose((X, Y), m.to_page_tl(u, r))
+        assert np.allclose(g.page_to_row(X, Y), (r, u))
+    assert geom_sig(base, W) != geom_sig({**base, "ruled": True}, W)
+    assert geom_sig(base, W) == geom_sig({**base, "ruled": False}, W)

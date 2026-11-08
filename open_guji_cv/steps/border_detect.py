@@ -172,6 +172,12 @@ class BorderDetectParams(BaseModel):
     看图全对：末行字底／淡横被当下框，整页少切一格或切掉字脚）。缺省 0＝关，不进参数 dump，产物与加字段前逐字节相同。
     配了 `bottom_gap` 的册（vol01–19）有跨页先验救援，不用开。"""
 
+    bottom_lock_reslope: bool = False
+    """下框贴搜索带边界时连倾角一起重找（`seg/lines.find_horizontal_border` 的 `lock_reslope`，2026-11-08）：
+    贴边的 primary 是截断伪影，倾角也是假的（vol12 p27 新图挑了 0.047 的斜角），沿它找非边界峰找不回倾角≈0 的真框，
+    下框停在末三四个字中间、各列末 2–4 字没格。开了在粗扫各档倾角里找非边界峰，分数超过原倾角最好峰 2 倍才换。
+    殿本 99 册新图只有贴边页受影响（普查见 PR）。缺省关，不进参数 dump，产物与加字段前逐字节相同。"""
+
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -206,6 +212,8 @@ class BorderDetectParams(BaseModel):
             d.pop("top_weak_floor", None)
         if isinstance(d, dict) and not self.bottom_weak_ratio:
             d.pop("bottom_weak_ratio", None)
+        if isinstance(d, dict) and not self.bottom_lock_reslope:
+            d.pop("bottom_lock_reslope", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         if isinstance(d, dict) and self.bend_w80_med is None:
@@ -270,6 +278,7 @@ class BorderDetectStep(Step):
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
                                   **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
+                                  **({"bottom_lock_reslope": True} if p.bottom_lock_reslope else {}),
                                   **lattice_kw, **bend_kw)
 
         res = _detect(cols)

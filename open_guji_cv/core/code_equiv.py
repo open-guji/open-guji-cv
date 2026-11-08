@@ -249,6 +249,10 @@ _BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None �
               "scripts/code_equiv.py check，2026-11-08")
 
 
+_FIT2_1108 = ('cell_shrink.inner_frame_fit2／inner_frame_snap 列尾内框线补拟与补抹（都缺省关、不进参数 dump；A22，殿本第 7 轮带框重字块，Sheldon 11-08 定修）：cell_shrink 在殿本 vol95 新图 10 页（19,45,46,50,83,108,129,170,186,202，含原先拟不出内线的页）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08')
+
+_LOCK_1108 = 'border_detect.bottom_lock_reslope 下框贴边重找倾角（缺省关、不进参数 dump）＋下框越出图底不崩（_rule_offset 夹图内；A22，vol01–19 换新图 vol09 p112 等 9 页 IndexError、vol12 p27 下框落字身）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -927,6 +931,14 @@ ENTRIES: tuple[Equiv, ...] = (
           new='6bd2f3049ff8241fdab909dc94f413ccd8eb3fd3ece19cd2c7558dfdaaa08753',
           old='bb7d6556b2ea242df04b3467a3b179e3baca4646364fd895aaab2a225b5e785e',
           evidence='seed_admit 在 012 13 页（--pages 5,20,35,50,65,80,95,110,125,140,155,170,185）上与 origin/dev 产物逐字节相同（fold_coord_ref 缺省关）'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='047553c6e7db56f5cbbf99e648230d36bf946c6bd1bfdc4a9bd52253b55ca49f',
+          old='41b4e1ab7a05a6970a5e05c9d5db29f83339220aef2eba32cdf81e79b1d9c449',
+          evidence='seed_admit 在 001 3 页（--pages 61,120,150）上与 origin/dev 50295b8 产物逐字节相同（solo_5b_cov 缺省关，版本号不升；全唐文·形近字 11-08）'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='08f2f62fa6e2dd5569aae7051f29f55ee9f8a2545d2e615330fd1858192327bc',
+          old='0f64460b8df1ba15fb1c871fb83a98569a9963276cf796e9723e7e03dd93de86',
+          evidence='seed_admit 在 vol62 11 页（--pages 5,20,35,50,65,80,95,110,125,140,148）上与 origin/dev 25ecc52 产物逐字节相同（solo_5b 刻例门槛读可信刻例数、放行格带 no_glyph_lib、solo_5b_borrow_db 借库；solo_5b_cov 缺省关，版本号不升；A24 参校本属性 C1/C4 11-08，GUJI_CORPUS_DRIFT=warn）'),
     Equiv(module="open_guji_cv.clustering.extractor",
           new="484efb123a713cd8ce1e1da85c97e486e5aab4f3e619f6ede43c18bd1bafda9f",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
@@ -1119,6 +1131,37 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
           old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
           evidence=_BEND_1108),
+    # 书名列候选 layout_title_fit（A22，殿本第 7 轮书名列，2026-11-08）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='bb5a2cd0b674d358c21a5b2bcf206f4bdfd46efb935fca69445da25d0b48dda4',
+          old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
+          evidence='row_segment.layout_title_fit 书名列候选（缺省关、不进参数 dump；A22，殿本第 7 轮 vol88 p129 c9）：row_segment 在殿本 vol88 新图 10 页（1,10,30,50,75,100,118,129,150,171,200）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    # 列尾内框线补拟 inner_frame_fit2、补抹 inner_frame_snap（A22，2026-11-08）
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='b1e47db6a8e6c7f19d5b4ec4e784979381803281317f99393ef2d9abf5842c0b',
+          old='94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e',
+          evidence=_FIT2_1108),
+    Equiv(module='open_guji_cv.seg.frame_line',
+          new='1873e0ae30c7a8ae4f34c27c038d2bdd0f1d341d56cfd40514834c7a1a37827c',
+          old='0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b',
+          evidence=_FIT2_1108),
+    # 下框越界护栏＋贴边重找倾角 bottom_lock_reslope（A22，vol01–19 换新图，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='92dcc6bde02debda8306a317cd9ec775d908e5c10c649f99e6b4c597738b72b3',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='99dc738ba0e5e56002d0721ae06aa1c6aca64a22792c89bb1afe366b1eb3c551',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='0269f5426a22fbb8157931579019349b93476c5bc2d6e140ee9ca52f42d1de68',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.row_boundaries',
+          new='289dfdc83f992b9a2e1ff777b96a1862d7a886870492038363e17838db8b32d2',
+          old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
+          evidence='row_boundaries.trim_content_span 下框越出列图底时夹图内（原先 IndexError；A22，vol09 p204 column_gate 崩）：row_segment 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
 )
 
 

@@ -5,6 +5,22 @@
 
 ## [未发版]
 
+## [0.6.19] - 2026-11-08
+
+- 发版：从 dev 1a9d029 切（seed_admit 1.82），含 #1266–#1278（A22 #1271 colgeom 认 ruled_warp、#1272 下框越界不崩＋bottom_lock_reslope；A20 #1273 参校本属性 A 块；A24 #1268/#1278 solo_5b、#1274 rare_charset、#1277 group_flow_llm_half_groups；#1275/#1276 刻例按来源分列）。殿本 vol01–19 换新图钉这一版。
+
+- solo_5b 接可信刻例与借库（参校本属性 C1/C4，A24，A23 同意的收窄版）：`solo_5b_min_n` 改读 `trusted_keben_counts`（人裁＋有参照互证，借库／solo／来源不明不算）；`match_solo_5b` 放行格带 `evidence.no_glyph_lib`（不自喂，不进字形库）；新书级参数 `solo_5b_borrow_db`（同族书的库，加它的可信刻例，本书自己至少 1 条可信才借，缺省不借），借库放行的格标 `solo_5b.borrowed` 供分层抽检；证据键 `n_lib` 改名 `n_trusted`。seed_admit 不升版本号：solo_5b_cov 缺省关，殿本 vol62 11 页与 dev 逐字节相同，code_equiv 已登记。
+- seed_admit 1.82 `group_flow_llm_half_groups`（书级，缺省空、不进参数 dump；A24 11-08）：这几组的夹注半格不受 `group_flow_llm_skip_half` 限制，照样查答案表／裁定库、记 `llm_pending` 问，可经 `feedback/llm_queue` 导出给对话判读。SJ 史記 H01 里 89 格半格（己已巳 45、日曰 44）因 skip_half 没有 L3 问、写不了裁定键；史記建议 `[ry, jys]`。
+
+- seed_admit（版本号不变）新通道 `match_solo_5b`（书级 `solo_5b_cov`／`solo_5b_gap`／`solo_5b_min_n`，缺省关、关时不进 dump、逐字节不变）：无任何整理本对位的格，库首位 cov、领先异语义候选、刻例数都够且 5-b 首位作证才放；形近表、字组、己已巳、硬疑问不放，5-b 为空弃权（全唐文 001/002 总目、韵编，形近字线 11-08，A24 定口径）。
+- Step5-b 生僻字候选读书级 `rare_charset`（参校本属性 C 块，A24，A31 11-08 核）：册配置写了 `rare_charset: <语料文件名>` 就用它做候选字表，与参校本脱钩（`kind: none` 的书也有字表；002 此前因没写 references、字表退回四库语料而 rare_candidates 整册为空）；文件不存在记日志退回老路。没写＝照旧 `book_corpus`，行为与指纹逐位不变；写了的册指纹多一个 `rare_charset` 键（只在 `_self_payload` 里按册加，不进 `book_deps`）。
+- 册配置加参校本属性 `reference_profile` 与书级 5b 字表 `rare_charset`（参校本属性 A 块，A20，A31 11-08 核）：`core/ref_profile.py` 按页段写 `kind: column|text|none`、段用 `ref:` 指 `references[]`（质量仍只写在 `references[].quality`），写错在读配置时报；基础配置只许写 `default`；`guji book show` 加一节；B 块翻译函数 `ref_none_pages`／`ref_text_pages`、按页指纹钩子 `page_token`；manager_api 导出 `RefProfile` 等。未声明＝每页 column，不进任何步的 `book_deps`、没有步读它，L0、产物不变。设计见 ai-team `domain/CV/设计/参校本属性/A-册配置.md`。
+- border_detect 下框越出图底不再整页崩、`bottom_lock_reslope` 下框贴边重找倾角（书级，缺省关、关时不进参数 dump；A22，vol01–19 换新图 11-08）：①`_rule_offset`（界行贴证据）与 column_gate `trim_content_span` 的下框行号夹在图／列图内——新图版框贴图底（加上册 yaml 的 `bottom_gap` 跨页救援把下框挪出图外）时原先 IndexError，那一页 border_detect 或 column_gate 失败，产物目录里留着换图前的旧图残档，下游照读（vol09 p112/202/204/254、vol13 p131、vol15 p116、vol18 p64、vol19 p95 整页切成半宽窄列）；不崩的页逐字节不变。②下框联合搜索锁在搜索带上沿时，原逻辑沿伪影的倾角找非边界峰；伪影倾角可以很斜（vol12 p27 新图 0.047），真框沿斜线采样被拉散，下框停在末三四个字中间。开关开时在 ±0.05 粗扫各档倾角里找非边界峰，分数超过原倾角最好峰 2 倍才换。殿本 99 册新图 16,516 页贴边 37 页、开关只动 18 页，抽看都是下框从斜线／外沿回到内框线。殿本建议 book_defaults 写 `params.border_detect.bottom_lock_reslope: true`，从 border_detect 起重跑。
+- 修：`eval/colgeom.ColumnGeom` 认 column_warp `ruled_warp`（A22 11-08）：人拖过的切线（`feedback.lookup.resolved_pins`）与切线金标的页面坐标↔列图行号换算按列窗 `ruled` 走同一算式，签名 `geom_sig` 在 ruled 时多一个键（关时签名不变）。不改这处，开 ruled_warp 的书人钉的格线会按射影落错行（列端最多差约 9% 列高）。不在任何步的指纹里，产物不过期。
+- cell_shrink 列尾内框线两个书级开关（都缺省关、关时不进参数 dump；A22，殿本第 7 轮带框重字块，Sheldon 11-08 定修）：`inner_frame_fit2`——下框整宽法也拟不出内线的页再试一次，线厚上限放到 0.11 格高（殿本新图有的内线印到 8–12 行）、线位以上几乎整段是墨的像素列（界行）先剔掉再量半高宽（点线峰只有 0.1–0.2，界行垫的底子就有 0.1），加空段验线；vol95 下框拟不出的 38/220 页补回 16 页。`inner_frame_snap`——抹内线时沿线的形状往字那边再找线的残边行（在线有墨的像素列上 ≥0.6 也有墨），最多 0.035 格高，连着的墨超过上限（压线的字底一横）一行不补；整页拟的线到单列差几行时上半截线贴着字脚留下（vol95 p108「前」、p202「著」）。vol95、vol88 全册开关对比变 296 块：去线渣 272、补回被切的字（vol88 p121「逃」「進」）若干，变差约 5 块（字脚多一小截虚线、一个小点）。殿本 vol20–99 建议两个都写 true，从 cell_shrink 起重跑。
+- row_segment `layout_title_fit` 书名列候选格网（书级，缺省关、关时不进参数 dump；A22，殿本第 7 轮复查书名列 11-08）：格位表认出「书名＋段尾双行小注」的列（格连成一段、小注在段尾、书名 ≥2 格、不抬头），按本列墨的起止量字距（页级格高的 0.78–1.12 倍），段里的格线由 DP 落在字缝正中（`_title_gap_cuts`：格高贴近字距、缝越宽越好），段外照页级格高；跟表、表挪一格两张候选各配一张，照常打分（等距格网优先，坏格严格更少才换）。起因：书名列刻得比正文紧，等分格网把书名字劈开、小注错一格（vol88 p129 c9）。vol88、vol32 全册开关对比只动 vol88 p129 c9 一列，改对。殿本 vol20–99 建议写 true（book_defaults），从 row_segment 起重跑。
+- seed_admit 1.81 `fold_aspect_ctx_veto` 的组内文意一支（1.78 加的）不认 L1 规则，带概率的（L2 `p`）要到阈值（SJ 史記 06:46:1:9b、06:46:1:13a「李奇曰」被 `ry-ext-r1-日` 误否决；殿本 H01 L1 37 格错 15，A24 11-08）。名单页「日講官」墨迹宽高比 1.16／1.09，在墨迹口径 hi 1.2 下本来就不判，不靠这一支。
+
 ## [0.6.18] - 2026-11-08
 
 - 第 8 轮发版：从 dev e9369d3b 切（seed_admit 1.80），含 #1237–#1263（A24 R01/H01/Z01–Z03/V01/N01/P01/D01、A23 笔画法 strokes 与 lane_group_img_veto、SJ #1258/#1262、A20 #1259 书级 bend_w80_med、A22 #1256 bottom_weak_ratio、#1255 rebase 原点换算、#1261 column_warp.ruled_warp 书级开关缺省关）。殿本第 8 轮 book_defaults 写 `params.border_detect.bend_w80_med: 0`（整页三段折线）。
