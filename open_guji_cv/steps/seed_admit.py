@@ -791,6 +791,49 @@ class SeedAdmitParams(BaseModel):
     0.98／0.01／3 档 001 放约 2,700 格。"""
     solo_5b_gap: float = 0.01
     solo_5b_min_n: int = 3
+    solo_adapt_pct: str | None = None
+    """无参照格「按字自适应门槛」放行（2026-11-08，Sheldon 定方向，全唐文 001–003 形近字线；书级，缺省关，
+    `None`＝关、关时逐字节不变、`solo_adapt_*` 都不进 dump）。取值 "p10"／"p25"：用字自比分布的哪个百分位当 cov 门槛。
+
+    常用字 cov 停在 0.96–0.98 是笔画密度造成的（002 按墨量分四档，cov 中位 0.993／0.982／0.978／0.978），
+    一刀切的 0.98 线对繁字太严、对简字太松。改成按字定：字表 `solo_adapt_profile`（`scripts/char_cov_profile.py`
+    从本书字形库算：每条刻例留一法匹配，记同字最高 cov 的分布「自比」与别的字的 cov「互比」）里，
+    本格库首位 c 的 cov ≥ max(`solo_adapt_floor`, c 自比的该百分位)；c 自比样本 ≥ `solo_adapt_min_n`、
+    留一法里同字掉出候选的比例 ≤ 0.2；5-b 首位**就是** c（不认异体：are_variants 把 皓／浩 当异体，001:126:4:3
+    刻 皓 库认 浩 就是这么漏的）；领先每个语义不同的候选 ≥ `solo_adapt_gap`；离首位 `solo_adapt_window` 以内的对手 d：
+    (c, d) 是高危字对（字表 `risk`，库内互比上限 ≥ c 自比 p10，自动算出，不只形近表）或在形近表里 → 不放；
+    本格对 d 的 cov 高过 c 的刻例对 d 的互比上限 → 不放；本格对 c 的 cov 不超过 d 的刻例对 c 的互比上限 → 不放。
+    护栏须为空；疑问只认 上下文 margin 不足／库 unsure／库 same 但准入被拦／group_flow_ref_missing；
+    库首位在形近表、字组、己已巳 都不放。通道 `match_solo_adapt`，不入字形库（C4）。只升不降，人裁位不碰。
+    依据：front4 001、front5 002／003 待审，p10 档离线放 2,236 格、p25 档 1,257 格；p10 档按字排图全看，未见确定错放，
+    存疑 6 格（冾／洽 2、氾／汜 2、牟、費）。"""
+    solo_adapt_floor: float = 0.94
+    solo_adapt_gap: float = 0.01
+    solo_adapt_min_n: int = 5
+    solo_adapt_window: float = 0.05
+    solo_adapt_profile: str = ""
+    """字表路径（`scripts/char_cov_profile.py` 产出，schema `char_cov_profile/1`）；空＝找数据目录 `config/groups/char_cov_profile.json`。
+    路径不进参数哈希，内容哈希进 `solo_adapt_fingerprint`。找不到字表＝本支不放。"""
+    solo_adapt_fingerprint: str = ""          # 自动填：字表变了产物过期
+    solo_adapt_risk_gap: float | None = None
+    """`solo_adapt_pct` 开着时，窗口内的高危字对对手不再一律拦，改成本格领先它 ≥ 这个值就不拦这个对手（其余对手照查）
+    （2026-11-08，全唐文 front7 001–003，形近字线；缺省关，`None`＝关、不进 dump）。依据：cov 0.95–0.98 待审里只因高危对
+    被拦的 229 格（李/季 59、蘇/隷 19、輿/與 14、韋/章 10…），领先高危对手 ≥0.02 的 168 格逐格看图未见错放。"""
+    solo_adapt_abstain_ok: bool = False
+    """`solo_adapt_pct` 开着时，库首位不是任何字组成员、只因 `group_flow_abstain` 疑问（字组流程看了别的候选后弃权）被挡的格，
+    疑问照放行单处理，其余条件不变（2026-11-08，全唐文 front7，形近字线；缺省关、关时不进 dump）。依据：front7 001–003
+    64 格（贊 齊 楚 遵…）看图未见错放；真/眞 刻形难分，书级用 `solo_adapt_abstain_skip` 排除。"""
+    solo_adapt_abstain_skip: str = ""
+    solo_adapt_near_slack: float | None = None
+    """`solo_adapt_pct` 开着时，cov 差该字自比分位不到这个值的格也判，但领先须 ≥ `solo_adapt_near_gap`（其余条件照旧）
+    （2026-11-08，全唐文 front8 001–003「没过自比分位」1,599 格缺口中位 0.0066，形近字线；缺省关，`None`＝关、两个键不进 dump）。
+    依据：front8 待审里 0.02／0.03 档 862 格（盧 崔 劉 隱 齊 義…）逐格看图未见错放。"""
+    solo_adapt_near_gap: float = 0.03
+    solo_adapt_nf_ok: bool = False
+    """`solo_adapt_pct` 开着时，库首位既不在形近表也不在字组、只因 `near_form` 疑问（候选里有形近家族字）被挡的格照判；
+    窗口内的形近表对手照拦（2026-11-08，全唐文 front8，形近字线；缺省关、关时不进 dump）。依据：front8 105 格
+    （袁 林 不 六 文 友…）看图未见确定错放，存疑 1 格（001:104:9:3a 又，格内有墨点像 叉）。"""
+    """`solo_adapt_abstain_ok` 不碰的库首位字（一串字，如 "真"）；只在 `solo_adapt_abstain_ok` 开时进 dump。"""
     solo_5b_same_cov: float | None = None
     """`solo_5b_cov` 开着时，库匹配已判 same（`verdict="same"`、判的字就是库首位，多为 consensus 多刻例同意）的格，
     cov 门槛降到这个值（2026-11-08，全唐文 002／003 姓氏韻編，形近字线；书级，缺省关，`None`＝关、不进 dump）。
@@ -831,6 +874,12 @@ class SeedAdmitParams(BaseModel):
     书级，缺省关，`None`＝关、不进 dump）。库首位是「卷」、cov ≥ 这个值（「卷」刻例取自正文，前四册小字 cov 多在 0.95–0.98）、
     领先 ≥ `num_run_gap`、**后一格**是数字（前一格是数字不算），其余条件同 `num_run_cov`。依据：front4 002／003 待审「卷」
     409 格（cov 0.952–0.979，对手 春／巷／眷／泰）后一格全是数字，逐格看图全对。"""
+    num_run_cov_5b: float | None = None
+    """`num_run_cov` 开着时，5-b 首位就是库首位的数字格，cov 门槛降到这个值、领先门槛升到 `num_run_gap_5b`
+    （2026-11-08，全唐文 front7 001–003 卷数小注，形近字线；缺省关，`None`＝关、两个键都不进 dump）。
+    `num_run_cov` 0.995 留下的 六／七／四／十（cov 0.97–0.995，对手 大／士／田 落后 0.03 上下）其余条件照 `num_run_cov`。
+    依据：front7 待审里邻格是数字、5-b 同意、cov ≥0.97、领先 ≥0.02 的 602 格（六 255、七 158、四 114、十 34…）逐格看图未见错放。"""
+    num_run_gap_5b: float = 0.02
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1368,6 +1417,23 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.solo_adapt_pct is None:
+            for k in ("solo_adapt_pct", "solo_adapt_floor", "solo_adapt_gap", "solo_adapt_min_n", "solo_adapt_window",
+                      "solo_adapt_profile", "solo_adapt_fingerprint"):
+                d.pop(k, None)
+        if isinstance(d, dict) and self.solo_adapt_risk_gap is None:
+            d.pop("solo_adapt_risk_gap", None)
+        if isinstance(d, dict) and not self.solo_adapt_abstain_ok:
+            d.pop("solo_adapt_abstain_ok", None)
+            d.pop("solo_adapt_abstain_skip", None)
+        if isinstance(d, dict) and self.solo_adapt_near_slack is None:
+            d.pop("solo_adapt_near_slack", None)
+            d.pop("solo_adapt_near_gap", None)
+        if isinstance(d, dict) and not self.solo_adapt_nf_ok:
+            d.pop("solo_adapt_nf_ok", None)
+        if isinstance(d, dict) and self.num_run_cov_5b is None:
+            d.pop("num_run_cov_5b", None)
+            d.pop("num_run_gap_5b", None)
         if isinstance(d, dict) and self.solo_5b_same_cov is None:
             d.pop("solo_5b_same_cov", None)
         if isinstance(d, dict) and self.solo_5b_borrow_db is None:
@@ -1604,6 +1670,13 @@ class SeedAdmitParams(BaseModel):
                                file_fingerprint(_shadow_model_path(self)) or "missing")
         if not self.approx_fingerprint:
             object.__setattr__(self, "approx_fingerprint", _approx_fingerprint(self.db_path))
+        if self.solo_adapt_pct is not None:
+            if self.solo_adapt_pct not in ("p10", "p25"):
+                raise ValueError(f"solo_adapt_pct 只认 p10／p25，收到 {self.solo_adapt_pct!r}")
+            object.__setattr__(self, "solo_adapt_profile", _resolve_adapt_profile(self.solo_adapt_profile))
+            if not self.solo_adapt_fingerprint:
+                object.__setattr__(self, "solo_adapt_fingerprint",
+                                   corpus_fingerprint([self.solo_adapt_profile]) if self.solo_adapt_profile else "missing")
         if self.group_flow:
             from ..groups.flow import check_groups
             check_groups(self.group_flow)
@@ -1658,7 +1731,8 @@ class SeedAdmitStep(Step):
         consumes=("glyph_match", "context_decision", "align_ref", "char_index"),
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
-                                ("rare_candidates", "solo_5b_cov")),
+                                ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "solo_adapt_pct"),
+                                ("rare_candidates", "num_run_cov_5b")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -1702,7 +1776,8 @@ class SeedAdmitStep(Step):
         # 给才有值」的文件路径。内容各有指纹把关：human_fingerprint / variants_fingerprint /
         # note_fingerprint / exclusions_fingerprint（都只认文件名 + 内容哈希）。
         path_params=("db_path", "variants", "note_lexicon", "exclusions", "shadow_model",
-                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn"),
+                     "group_flow_freq", "group_flow_tables", "group_flow_models", "group_flow_rr_shape", "group_flow_pair_shape", "group_flow_pair_shapes", "group_flow_book_knn", "group_flow_near_knn",
+                     "solo_adapt_profile"),
     )
 
     def parallel_warm(self, ctx: RunContext) -> None:
@@ -1834,6 +1909,7 @@ class SeedAdmitStep(Step):
             from .align_ref import rare_topk_map
             rtop = rare_topk_map(_opt(ctx, "rare_candidates", page), 1)
         amap = _align(ctx, page)
+        mmap_raw = mmap                   # 共识退档前的 glyph_match 记录（solo_5b_same_cov 认库原判 same）
         if p.consensus_fallback:
             match = _consensus_fallback(match, amap)
             n_fb = sum(1 for cc in match.columns if cc.ok for r in cc.chars if r.id in mmap and mmap[r.id] is not r)
@@ -2491,12 +2567,20 @@ class SeedAdmitStep(Step):
             d_s5 = _solo_5b_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
                                  _coord_refs(ctx, page, coord_cache),
                                  _trusted_keben_counts(p.db_path, p.solo_5b_borrow_db),
-                                 _trusted_keben_counts(p.db_path) if p.solo_5b_borrow_db else None)
+                                 _trusted_keben_counts(p.db_path) if p.solo_5b_borrow_db else None,
+                                 mmap_raw=mmap_raw)
             n_auto += d_s5
             n_review -= d_s5
+        if p.solo_adapt_pct is not None:
+            # 5b-a solo_adapt（升）：无参照格按字自适应门槛（字自比分布＋高危字对，形近字线 001–003，缺省关）
+            d_sa = _solo_adapt_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
+                                    _coord_refs(ctx, page, coord_cache))
+            n_auto += d_sa
+            n_review -= d_sa
         if p.num_run_cov is not None:
             # 5b-n num_run（升）：无参照格，数字串里的数字放过 never_match 护栏（形近字线 001–003 卷数小注，缺省关）
-            d_nr = _num_run_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
+            d_nr = _num_run_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache),
+                                 _opt(ctx, "rare_candidates", page) if p.num_run_cov_5b is not None else None)
             n_auto += d_nr
             n_review -= d_nr
         n_code_fix = n_code_mismatch = 0
@@ -2934,9 +3018,19 @@ def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doub
     return top, float(cov1), round(gap, 4)
 
 
+def _raw_same_char(m, mmap_raw: dict | None) -> str | None:
+    """库判 same 的字：有退档前记录就看它（`consensus_fallback` 会把无参照格的共识 same 退成 unsure）。"""
+    r = (mmap_raw or {}).get(m.id, m)
+    return r.char if r.verdict == "same" else None
+
+
 def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
-                  keben: dict[str, int], keben_own: dict[str, int] | None = None) -> int:
-    """无参照格「库首位＋5-b 作证」：只把**仍待审**、无任何整理本对位的格升为放行。→ 升级格数。见 `SeedAdmitParams.solo_5b_cov`。"""
+                  keben: dict[str, int], keben_own: dict[str, int] | None = None,
+                  mmap_raw: dict | None = None) -> int:
+    """无参照格「库首位＋5-b 作证」：只把**仍待审**、无任何整理本对位的格升为放行。→ 升级格数。见 `SeedAdmitParams.solo_5b_cov`。
+
+    `mmap_raw`：`consensus_fallback` 退档前的 glyph_match 记录。无参照格没有整理本字，共识升档的 same
+    一律被退回 unsure，`solo_5b_same_cov` 要认的正是这批「库原判 same」，所以按退档前的记录看。"""
     if rare is None:
         return 0
     from ..clustering.seeding import NEAR_FORM_CHARS
@@ -2959,7 +3053,7 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
                                  doubts=rec.doubts, guard=m.guard, cov_min=p.solo_5b_cov, gap_min=p.solo_5b_gap,
                                  min_n=p.solo_5b_min_n, are_variants=are_variants, group_chars=group_chars,
                                  near_form_chars=NEAR_FORM_CHARS,
-                                 same_char=m.char if m.verdict == "same" else None,
+                                 same_char=_raw_same_char(m, mmap_raw),
                                  cov_min_same=p.solo_5b_same_cov)
             if got is None:
                 continue
@@ -2977,6 +3071,136 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
     return n
 
 
+def _resolve_adapt_profile(v: str) -> str:
+    """`solo_adapt_profile` 解析成绝对路径：给了相对路径按数据目录、再按工作区找；没给找 `config/groups/char_cov_profile.json`。找不到＝空。"""
+    from pathlib import Path
+    from ..core.workspace import REPO_ROOT, data_root, workspace_root
+    cands = []
+    if v:
+        q = Path(v).expanduser()
+        cands = [q] if q.is_absolute() else [(data_root() or REPO_ROOT) / q, (workspace_root() or REPO_ROOT) / q]
+    else:
+        cands = [(data_root() or REPO_ROOT) / "config" / "groups" / "char_cov_profile.json"]
+    for q in cands:
+        if q.exists():
+            return str(q)
+    return ""
+
+
+_ADAPT_CACHE: dict = {}
+
+
+def load_adapt_profile(path: str) -> dict | None:
+    """读字表（schema `char_cov_profile/1`）→ {"prof": {字: {n, miss, p10, p25, med}}, "cross": {"a|b": 上限}, "risk": {(a, b)}}。"""
+    if not path:
+        return None
+    if path in _ADAPT_CACHE:
+        return _ADAPT_CACHE[path]
+    import json as _json
+    with open(path, encoding="utf-8") as f:
+        raw = _json.load(f)
+    if raw.get("schema") != "char_cov_profile/1":
+        raise ValueError(f"{path}: 不是 char_cov_profile/1 字表")
+    risk = set()
+    for a, b in raw.get("risk", []):
+        risk.add((a, b))
+        risk.add((b, a))
+    out = {"prof": raw["prof"], "cross": raw.get("cross", {}), "risk": risk}
+    _ADAPT_CACHE[path] = out
+    return out
+
+
+#: 字表 `cross` 只记互比 ≥ 这个值的字对（`scripts/char_cov_profile.py` 的 min_cross）
+_ADAPT_CROSS_MIN = 0.90
+_ADAPT_OK_DOUBTS = ("上下文 margin 不足", "库 unsure", "库 same 但准入被拦", "group_flow_ref_missing")
+
+
+def solo_adapt_decide(*, cands: list, rare_top: str | None, guard, doubts, prof: dict, cross: dict, risk: set,
+                      pct: str, floor: float, gap_min: float, min_n: int, window: float, are_variants,
+                      group_chars, near_form_chars, risk_gap: float | None = None, abstain_ok: bool = False,
+                      abstain_skip: str = "", near_slack: float | None = None, near_gap: float = 0.03,
+                      nf_ok: bool = False) -> tuple[str, float, float] | None:
+    """`SeedAdmitParams.solo_adapt_pct` 的判据，纯函数（离线评测与线上共用）。→ (放行字, cov, gap) 或 None。"""
+    if guard is not None or not cands:
+        return None
+    ranked = sorted(cands, key=lambda t: -t[1])
+    c, v = ranked[0]
+    v = float(v)
+    ok = _ADAPT_OK_DOUBTS
+    if abstain_ok and c not in group_chars and c not in abstain_skip:
+        ok = ok + ("group_flow_abstain",)     # solo_adapt_abstain_ok：首位不在字组，字组流程弃权不算数
+    if nf_ok and c not in group_chars and c not in near_form_chars:
+        ok = ok + ("near_form",)              # solo_adapt_nf_ok：形近家族字只是候选；窗口内的形近表对手下面照拦
+    if any(not (isinstance(d, str) and d.startswith(ok)) for d in (doubts or [])):
+        return None
+    if (not c or c == "〓" or c in _JYS or not _is_hanzi(c) or c in group_chars or c in near_form_chars):
+        return None
+    pc = prof.get(c)
+    thr = max(floor, pc[pct]) if pc else 1.0
+    if not pc or pc["n"] < min_n or pc["miss"] > 0.2 or v < thr - (near_slack or 0.0):
+        return None
+    below = v < thr                       # solo_adapt_near_slack：差分位一点的格，领先要更大
+    if rare_top != c:                     # 5-b 首位必须就是库首位（不认异体）
+        return None
+    rivals = [(d, float(w)) for d, w in ranked[1:] if d and d != c and not are_variants(d, c)]
+    gap = v - max((w for _, w in rivals), default=0.0)
+    if gap < gap_min or (below and gap < near_gap):
+        return None
+    for d, w in rivals:
+        if w < v - window:
+            continue
+        if (c, d) in risk and risk_gap is not None and v - w >= risk_gap:
+            continue                      # solo_adapt_risk_gap：高危对手落后够多，不拦
+        if (c, d) in risk or d in near_form_chars:
+            return None                   # 高危字对／形近表
+        xm = cross.get(f"{c}|{d}", _ADAPT_CROSS_MIN)   # 字表只记 ≥ 0.90 的互比；没记＝c 的刻例像 d 不到 0.90
+        if w > xm + 0.005:
+            return None                   # 本格像 d 的程度超过 c 的刻例像 d 的上限
+        xr = cross.get(f"{d}|{c}")
+        if xr is not None and v <= xr:
+            return None                   # d 的刻例也能这么像 c
+    return c, v, round(gap, 4)
+
+
+def _solo_adapt_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str]) -> int:
+    """无参照格按字自适应门槛放行。→ 升级格数。见 `SeedAdmitParams.solo_adapt_pct`。"""
+    prof = load_adapt_profile(p.solo_adapt_profile)
+    if prof is None or rare is None:
+        return 0
+    from ..clustering.seeding import NEAR_FORM_CHARS
+    from ..groups.registry import GROUPS
+    from ..variants import are_variants
+    group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
+    rmap = {r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+                continue                  # 有整理本对位的格归别的通道
+            m = mmap.get(rec.id)
+            if m is None or not m.candidates:
+                continue
+            got = solo_adapt_decide(cands=list(m.candidates), rare_top=rmap.get(rec.id), guard=m.guard, doubts=rec.doubts,
+                                    prof=prof["prof"], cross=prof["cross"], risk=prof["risk"], pct=p.solo_adapt_pct,
+                                    floor=p.solo_adapt_floor, gap_min=p.solo_adapt_gap, min_n=p.solo_adapt_min_n,
+                                    window=p.solo_adapt_window, are_variants=are_variants, group_chars=group_chars,
+                                    near_form_chars=NEAR_FORM_CHARS, risk_gap=p.solo_adapt_risk_gap,
+                                    abstain_ok=p.solo_adapt_abstain_ok, abstain_skip=p.solo_adapt_abstain_skip,
+                                    near_slack=p.solo_adapt_near_slack, near_gap=p.solo_adapt_near_gap,
+                                    nf_ok=p.solo_adapt_nf_ok)
+            if got is None:
+                continue
+            ch, cov1, gap = got
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "match_solo_adapt", "match_solo_adapt", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True, "solo_adapt": {
+                "lib": ch, "cov": round(cov1, 4), "gap": gap, "self": round(float(prof["prof"][ch][p.solo_adapt_pct]), 4)}}
+            n += 1
+    return n
+
+
 #: `num_run_cov` 认的数字（卷数小注只用到这些）
 NUM_RUN_DIGITS = frozenset("一二三四五六七八九十百千")
 #: `num_run_cov` 允许的疑问（前缀）；别的疑问一律不碰
@@ -2987,7 +3211,8 @@ _NUM_RUN_NEIGHBOR_COV = 0.98
 
 
 def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | None, cov_min: float,
-                   gap_min: float, are_variants, juan_cov: float | None = None) -> tuple[str, float, float] | None:
+                   gap_min: float, are_variants, juan_cov: float | None = None, rare_top: str | None = None,
+                   cov_5b: float | None = None, gap_5b: float | None = None) -> tuple[str, float, float] | None:
     """`SeedAdmitParams.num_run_cov` 的判据，纯函数（离线评测与线上共用）。`cands`：库候选 [(字, cov)]；
     `prev`／`nxt`：同列同半格前后格的字（已判成数字才算，调用方给 None 表示不是／没有）。→ (放行字, cov, gap) 或 None。"""
     if guard not in (None, "never_match") or not cands:
@@ -2996,6 +3221,10 @@ def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | N
         return None
     ranked = sorted(cands, key=lambda t: -t[1])
     top, cov1 = ranked[0]
+    if (cov_5b is not None and rare_top is not None and rare_top == top and top in NUM_RUN_DIGITS
+            and cov_5b <= float(cov1) < cov_min):
+        # 原门槛差一点、5-b 首位作证的数字：cov 降档、领先升档（num_run_cov_5b）；够原门槛的照原规则
+        cov_min, gap_min = cov_5b, max(gap_min, gap_5b if gap_5b is not None else gap_min)
     if top == "卷" and juan_cov is not None:
         # 卷数前的「卷」：只认后一格是数字
         if float(cov1) < juan_cov or nxt not in NUM_RUN_DIGITS:
@@ -3011,9 +3240,11 @@ def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | N
     return top, float(cov1), round(gap, 4)
 
 
-def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict[str, str]) -> int:
+def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict[str, str], rare=None) -> int:
     """无参照格「数字串里的数字」放过 never_match 护栏。→ 升级格数。见 `SeedAdmitParams.num_run_cov`。"""
     from ..variants import are_variants
+    rmap = ({r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
+            if rare is not None and p.num_run_cov_5b is not None else {})
 
     def digit_of(rec) -> str | None:
         if rec.admit:
@@ -3045,7 +3276,8 @@ def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord
                 nxt = digit[seq[i + 1].id] if i + 1 < len(seq) else None
                 got = num_run_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, prev=prev, nxt=nxt,
                                      cov_min=p.num_run_cov, gap_min=p.num_run_gap, are_variants=are_variants,
-                                     juan_cov=p.num_run_juan_cov)
+                                     juan_cov=p.num_run_juan_cov, rare_top=rmap.get(rec.id),
+                                     cov_5b=p.num_run_cov_5b, gap_5b=p.num_run_gap_5b)
                 if got is None:
                     continue
                 ch, cov1, gap = got
@@ -5291,7 +5523,7 @@ ALT_REQUIRE_BACKED = True
 #: 首格切坏守卫（只拦、不放）：备选那份首个正文整字格墨高 > 本列其余正文整字格墨高中位数 × 这个，就不换（03:65:7 一类）
 ALT_FIRST_CELL_MAX = 1.6
 #: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
-_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "iron", "seal", "group_flow", "ref_lib_coord"})
+_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt", "iron", "seal", "group_flow", "ref_lib_coord"})
 #: 选列那两遍准入不跑 `p_ref`（换列不让整理本当主证据）：p_ref 在后面几条跟整理本的通道之前把待审格取整理本字，
 #: 两遍放得不对称，选列就跟着变（史記 r19 离线开 p_ref：06:26:1 主切法一格两字「陳索」、备选格网切对，开 p_ref 后不换；
 #: 1.77 把 p_ref 格按待审算又多换了几列，因为这些格不开 p_ref 时由后面的通道放）。SJ 11-08。
@@ -5621,7 +5853,7 @@ def _iron_ctx_dissent(iron_char: str, dec, cands, vmap, prob: float, gap: float)
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
-_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run"})
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
