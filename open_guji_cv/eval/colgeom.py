@@ -49,6 +49,8 @@ def geom_sig(rec: dict, page_w: int | None) -> str:
     """一列列窗几何的签名。`rec` 是 `column_windows` 里该列的 dict（JSON 形态）。"""
     payload = {k: _round(rec.get(k)) for k in GEOM_KEYS}
     payload["page_w"] = page_w
+    if rec.get("ruled"):          # column_warp ruled_warp：同样边线、矫正方式不同，列图不同；关时不进签名（老签名不变）
+        payload["ruled"] = True
     return hashlib.sha1(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:12]
 
 
@@ -62,6 +64,13 @@ class ColumnGeom:
         self.left = VLineRec(**rec["left_line"]).to_vline()
         self.right = VLineRec(**rec["right_line"]).to_vline()
         self.top, self.bottom = float(rec["top_y"]), float(rec["bottom_y"])
+        self.page_w = int(page_w)
+        self.ruled = bool(rec.get("ruled"))
+        if self.ruled:   # 与 `seg.warp.warp_column(ruled=True)`／`steps._warpmap.ColumnMapper` 同一算式，没有矩阵
+            from ..seg.warp import ruled_out_w
+            self.out_w = ruled_out_w(page_w, self.left, self.right, self.top, self.bottom)
+            self.height = int(round(self.bottom - self.top))
+            return
         poly = self.left.segments == 3 or self.right.segments == 3
         self.strips = (_strip_bounds(self.left, self.right, self.top, self.bottom) if poly
                        else [(self.top, self.bottom)])
@@ -77,6 +86,11 @@ class ColumnGeom:
 
     def row_to_page(self, r: float, u: float | None = None) -> tuple[float, float]:
         u = self.out_w / 2.0 if u is None else u
+        if self.ruled:
+            from ..seg.warp import ruled_src_coords
+            x, y = ruled_src_coords(self.page_w, self.left, self.right, self.top, self.bottom,
+                                    self.out_w, self.height, np.float64(u), np.float64(r))
+            return float(x), float(y)
         i = max(0, min(len(self.strips) - 1,
                        next((k for k in range(len(self.strips)) if r < self.offs[k + 1]),
                             len(self.strips) - 1)))
@@ -85,6 +99,11 @@ class ColumnGeom:
 
     def page_to_row(self, x: float, y: float) -> tuple[float, float]:
         """→ (列图行号, 列图 x)。"""
+        if self.ruled:   # 竖向线性；横向按这一行左右线插值（`ruled_src_coords` 的逆）
+            r = (y - self.top) * self.height / (self.bottom - self.top)
+            lx = (self.page_w - 1) - self.left.x_at(y)
+            rx = (self.page_w - 1) - self.right.x_at(y)
+            return float(r), float((x - lx) / (rx - lx) * self.out_w)
         i = max(0, min(len(self.strips) - 1,
                        next((k for k, (a, b) in enumerate(self.strips) if y < b),
                             len(self.strips) - 1)))
