@@ -3200,9 +3200,10 @@ def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | N
         return None
     ranked = sorted(cands, key=lambda t: -t[1])
     top, cov1 = ranked[0]
-    if cov_5b is not None and rare_top is not None and rare_top == top and top in NUM_RUN_DIGITS:
-        # 5-b 首位作证的数字：cov 降档、领先升档（num_run_cov_5b）
-        cov_min, gap_min = min(cov_min, cov_5b), max(gap_min, gap_5b if gap_5b is not None else gap_min)
+    if (cov_5b is not None and rare_top is not None and rare_top == top and top in NUM_RUN_DIGITS
+            and cov_5b <= float(cov1) < cov_min):
+        # 原门槛差一点、5-b 首位作证的数字：cov 降档、领先升档（num_run_cov_5b）；够原门槛的照原规则
+        cov_min, gap_min = cov_5b, max(gap_min, gap_5b if gap_5b is not None else gap_min)
     if top == "卷" and juan_cov is not None:
         # 卷数前的「卷」：只认后一格是数字
         if float(cov1) < juan_cov or nxt not in NUM_RUN_DIGITS:

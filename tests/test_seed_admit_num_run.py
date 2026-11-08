@@ -131,6 +131,9 @@ def test_cov_5b_pure():
     assert num_run_decide(cands=cands, rare_top="大", cov_5b=0.97, gap_5b=0.02, **kw) is None   # 5-b 不同意
     assert num_run_decide(cands=[("六", 0.988), ("大", 0.975)], rare_top="六", cov_5b=0.97, gap_5b=0.02, **kw) is None
     assert num_run_decide(cands=cands, rare_top="六", cov_5b=0.97, gap_5b=0.02, **{**kw, "prev": None}) is None
+    # 够原门槛的格照原规则（领先 0.01），不被 gap_5b 收紧（front7 001:181:4:6a 十 0.9995 领先 0.019）
+    hi = [("十", 0.9995), ("七", 0.9801)]
+    assert num_run_decide(cands=hi, rare_top="十", cov_5b=0.97, gap_5b=0.02, **kw) == ("十", 0.9995, 0.0194)
 
 
 def test_cov_5b_gated_optional_upstream():
