@@ -94,8 +94,7 @@ class RowSegmentRunsStep(Step):
             wrec = wins.column(gc.col)
             mapper = None
             if wrec is not None:
-                mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                      wrec.top_y, wrec.bottom_y)
+                mapper = ColumnMapper.of(page_w, wrec)
             if r is None:
                 out.append(ColumnCells(ok=True, n_body_slots=0, cells=[], boundaries=[],
                                        flags=["empty"], **base))

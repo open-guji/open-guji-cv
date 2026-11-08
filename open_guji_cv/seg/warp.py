@@ -86,6 +86,65 @@ def _warp_perspective_det(gray: np.ndarray, m: np.ndarray, size: tuple[int, int]
     return np.clip(np.rint(v), 0, 255).astype(np.uint8)
 
 
+def ruled_out_w(page_width: int, left: VLine, right: VLine, top_y: float, bottom_y: float) -> int:
+    """`ruled` 矫正的列图宽：上下两端与折点处左右线间距的最大者（与射影版取 max 同理：不下采样任何一行）。"""
+    ys = [top_y, bottom_y] + [k for k in (left.knots() + right.knots()) if top_y < k < bottom_y]
+    return int(round(max(abs(left.x_at(y) - right.x_at(y)) for y in ys)))
+
+
+def ruled_src_coords(page_width: int, left: VLine, right: VLine, top_y: float, bottom_y: float,
+                     out_w: int, out_h: int, xs: np.ndarray, ys: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """`ruled` 矫正：列图 (x, y)（左上原点）→ 原图 (x, y)（左上原点）。
+
+    竖向线性：列图第 y 行就是原图 `top_y + y·(bottom_y − top_y)/out_h` 那一行；横向在这一行上按左右两条线逐行线性插值。
+    射影（`column_warp_matrix`）把左右线不平行（梯形）当透视，竖向跟着按 1/(a+by) 伸缩——殿本 Commons 新图版面有真实弯曲，
+    一列上下宽差 10%，列图竖向就被拉伸 ±9%，等距格网对不上（vol49 p187 c7）。纸面上字距是匀的，竖向就该线性。
+    折线（三段）直接按 `x_at` 走，不分带。"""
+    sy = (bottom_y - top_y) / float(out_h)
+    yp = top_y + ys * sy
+    lx = (page_width - 1) - left.x_at(yp)
+    rx = (page_width - 1) - right.x_at(yp)
+    return lx + (rx - lx) * (xs / float(out_w)), yp
+
+
+def _sample_bilinear_det(gray: np.ndarray, fx: np.ndarray, fy: np.ndarray) -> np.ndarray:
+    """`_warp_perspective_det` 的取样那一半（源坐标已算好）：float64 双线性、半偶取整、越界夹到边。"""
+    src = np.asarray(gray)
+    sh, sw = src.shape
+    fx = np.clip(fx, -1.0, float(sw))
+    fy = np.clip(fy, -1.0, float(sh))
+    x0 = np.floor(fx)
+    y0 = np.floor(fy)
+    tx = fx - x0
+    ty = fy - y0
+    x0 = x0.astype(np.int64)
+    y0 = y0.astype(np.int64)
+    xa, xb = np.clip(x0, 0, sw - 1), np.clip(x0 + 1, 0, sw - 1)
+    ya, yb = np.clip(y0, 0, sh - 1), np.clip(y0 + 1, 0, sh - 1)
+    f = src.astype(np.float64)
+    top = f[ya, xa] * (1.0 - tx) + f[ya, xb] * tx
+    bot = f[yb, xa] * (1.0 - tx) + f[yb, xb] * tx
+    v = top * (1.0 - ty) + bot * ty
+    return np.clip(np.rint(v), 0, 255).astype(np.uint8)
+
+
+def _warp_ruled(gray: np.ndarray, left: VLine, right: VLine, top_y: float, bottom_y: float,
+                det: bool) -> np.ndarray:
+    h, w = gray.shape[:2]
+    out_w = ruled_out_w(w, left, right, top_y, bottom_y)
+    out_h = int(round(bottom_y - top_y))
+    if out_w <= 0 or out_h <= 0:
+        raise ValueError(f"warped column size invalid: {out_w}x{out_h}")
+    ys, xs = np.mgrid[0:out_h, 0:out_w].astype(np.float64)
+    fx, fy = ruled_src_coords(w, left, right, top_y, bottom_y, out_w, out_h, xs, ys)
+    if gray.ndim != 2:
+        return np.dstack([_warp_ruled(gray[..., k], left, right, top_y, bottom_y, det) for k in range(gray.shape[2])])
+    if det:
+        return _sample_bilinear_det(gray, fx, fy)
+    return cv2.remap(gray, fx.astype(np.float32), fy.astype(np.float32), cv2.INTER_LINEAR,
+                     borderMode=cv2.BORDER_REPLICATE)
+
+
 def _warp(gray: np.ndarray, m: np.ndarray, size: tuple[int, int], det: bool) -> np.ndarray:
     if det:
         return _warp_perspective_det(gray, m, size)
@@ -93,7 +152,8 @@ def _warp(gray: np.ndarray, m: np.ndarray, size: tuple[int, int], det: bool) -> 
 
 
 def warp_column(gray: np.ndarray, left: VLine, right: VLine,
-                top_y: float = 0.0, bottom_y: float | None = None, det: bool = False) -> np.ndarray:
+                top_y: float = 0.0, bottom_y: float | None = None, det: bool = False,
+                ruled: bool = False) -> np.ndarray:
     """把 `left`/`right` 两条竖直边线之间的列矫正成竖直矩形灰度图。
 
     `left`/`right` 是新坐标系（右上角原点）下的 `VLine`；`top_y`/`bottom_y`
@@ -112,10 +172,15 @@ def warp_column(gray: np.ndarray, left: VLine, right: VLine,
     取 max 保证没有任何一行被下采样。
 
     `det=True`：跨 CPU 逐位确定的射影（见 `_warp_perspective_det`，column_warp 书级开关 `det_warp`）。
+
+    `ruled=True`：不做射影，竖向线性、横向逐行按左右线插值（见 `ruled_src_coords`；column_warp 书级开关 `ruled_warp`）。
+    逆映射是 `steps/_warpmap.ColumnMapper(ruled=True)`，两边要一起换。
     """
     h, w = gray.shape[:2]
     if bottom_y is None:
         bottom_y = float(h - 1)
+    if ruled:
+        return _warp_ruled(gray, left, right, top_y, bottom_y, det)
     if left.segments == 1 and right.segments == 1:
         m, out_w, out_h = column_warp_matrix(w, left, right, top_y, bottom_y)
         return _warp(gray, m, (out_w, out_h), det)

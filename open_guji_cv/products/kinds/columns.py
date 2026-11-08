@@ -7,7 +7,7 @@ numeric 里存的是复现列图所需的全部量（边线含折点、窗口上
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, model_serializer, Field
 
 from ...core.spec import COLUMN_PX, RAW_TR, ProductKindSpec
 from ...core.step import register_kind
@@ -61,6 +61,16 @@ class ColumnWindowRec(BaseModel):
     # 判据用；见 `steps/column_warp.FRAME_RESIDUE_*` 的标定记录。老产物没有这两项。
     frame_residue_top: int = 0
     frame_residue_bottom: int = 0
+    # 列图怎么矫正的（column_warp `ruled_warp`）：True＝竖向线性、横向逐行插值，False＝射影。下游 `ColumnMapper.of` 按它反算。
+    # 只在 True 时进产物（老产物、没开的书逐字节不变）。
+    ruled: bool = False
+
+    @model_serializer(mode="wrap")
+    def _drop_default_ruled(self, handler):
+        d = handler(self)
+        if isinstance(d, dict) and not self.ruled:
+            d.pop("ruled", None)
+        return d
 
 
 class PageWindows(BaseModel):
