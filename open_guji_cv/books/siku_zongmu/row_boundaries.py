@@ -200,7 +200,7 @@ def trim_content_span(curve: np.ndarray, x1: float, x2: float, thresh: float,
     while y < n and curve[y] < thresh:
         y += 1
     content_start = min(y, n - 1)
-    y = max(int(round(x2)) - border_margin, 0)
+    y = min(max(int(round(x2)) - border_margin, 0), n - 1)   # 下框越出列图底（新图版框贴图底）
     while y > 0 and curve[y] < thresh:
         y -= 1
     content_end = max(y, 0)
