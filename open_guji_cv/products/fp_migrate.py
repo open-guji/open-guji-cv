@@ -27,7 +27,7 @@ import json
 from dataclasses import replace
 from typing import Iterable
 
-from ..core.engine import Engine, _self_payload, params_hash
+from ..core.engine import Engine, _self_payload, params_hash, ref_profile_token
 from ..core.spec import page_key
 from ..core.step import STEPS
 
@@ -51,11 +51,14 @@ def parse_old_paths(items: Iterable[str]) -> dict[str, dict[str, str]]:
 
 
 def _fp(step, book, params, ups: dict[str, str], *, path_in_hash: bool,
-        legacy_code: bool = False) -> tuple[str, str]:
+        legacy_code: bool = False, page: int | None = None) -> tuple[str, str]:
     """(fingerprint, params_hash)。`path_in_hash=True` = 2026-09-29 之前的路径口径；
     `legacy_code=True` = 2026-10-06 之前的代码指纹口径（整份源码，注释、docstring 也算）。"""
     ph = params_hash(params, step.spec.soft_params, () if path_in_hash else step.spec.path_params)
     payload = {**_self_payload(step, book, ph, legacy_code=legacy_code), "upstream": ups}
+    tok = ref_profile_token(step, book, page) if page is not None else None
+    if tok:                                 # 同 `Engine.fingerprint`：声明了非 column 的页才有这个键
+        payload["ref_profile"] = tok
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24], ph
 
 
@@ -206,7 +209,7 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
                                        "how": "现算缺失"} for k in eng.missing_upstream(step, pg)]
                      if explain else None)
                 continue
-            new_fp, new_ph = _fp(step, eng.book, params, ups, path_in_hash=False)
+            new_fp, new_ph = _fp(step, eng.book, params, ups, path_in_hash=False, page=pg)
             if entry.fingerprint == new_fp and entry.params_hash == new_ph:
                 row["already"] += 1
                 continue
@@ -219,7 +222,7 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
                 skip("产物文件缺失或与条目记的 sha 不符", pg)
                 continue
             if code_formula:
-                old_fp, old_ph = _fp(step, eng.book, params, ups, path_in_hash=False, legacy_code=True)
+                old_fp, old_ph = _fp(step, eng.book, params, ups, path_in_hash=False, legacy_code=True, page=pg)
                 if entry.fingerprint != old_fp or entry.params_hash != old_ph:
                     skip("按老代码口径回放对不上（代码、参数或册配置真变了，该重算）", pg)
                     continue
@@ -230,7 +233,7 @@ def migrate_book(eng: Engine, pages: list[int], *, old_paths: dict[str, dict[str
                     skip("整体哈希步只能 --trust 迁移（上游 sha 与产物文件 sha 已核）", pg)
                     continue
             elif old_params is not None:
-                old_fp, _ = _fp(step, eng.book, old_params, ups, path_in_hash=True)
+                old_fp, _ = _fp(step, eng.book, old_params, ups, path_in_hash=True, page=pg)
                 if entry.fingerprint != old_fp:
                     skip("按老路径重算对不上（不只是路径变了，或 --old-path 给错）", pg)
                     continue

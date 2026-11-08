@@ -320,6 +320,15 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     return payload
 
 
+def ref_profile_token(step: Step, book: BookSpec, page: int) -> str | None:
+    """按页进指纹的参校本形态（`StepSpec.ref_profile_aware`）：声明了非 column 的页给 `"<kind>:<ref>"`，其余 None
+    （不写键，指纹逐位不变）。不进 `self_hash`——读它的步（align_ref、row_segment）不做格级复用。"""
+    if not step.spec.ref_profile_aware:
+        return None
+    prof = getattr(book, "reference_profile", None)
+    return prof.page_token(page) if prof is not None else None
+
+
 def self_hash(step: Step, book: BookSpec, params: BaseModel) -> str:
     """本步自身的指纹（不含上游）。引擎写进 `ManifestEntry.self_hash`，
     `RunContext`（含并行 worker 里没有 Engine 的那份）也能独立算出同一个值。"""
@@ -508,6 +517,9 @@ class Engine:
         if ups is None:
             return None, None, ph
         payload = {**_self_payload(step, self.book, ph), "upstream": ups}
+        tok = ref_profile_token(step, self.book, page)
+        if tok:
+            payload["ref_profile"] = tok
         fp = hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()[:24]
         return fp, ups, ph
 

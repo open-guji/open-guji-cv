@@ -750,7 +750,7 @@ def _dzg_null_pins(sig: tuple) -> frozenset:
 @register_step
 class AlignRefStep(Step):
     spec = StepSpec(
-        id="align_ref", title="Step5-d 整理本对齐", version="2.9", unit="cell",   # 2.9：逐列本全角「？」（录不出的字）按 〓 占一个字位（原先当标点丢掉、其后整列错一格，vol20 p133 列 5）；书级 coord_blank_ink 空格位有墨的列照样按格位配（缺省关、关时不进参数 dump；A22 S02 深挖 11-06，vol19 满文页）；2.8：对位字流与坐标偏移保留扩展 A、B–J 汉字（原先只留 U+4E00–9FFF，㣲 𮅕 𮪍 被删、对位断段；A23 诊断、A24 11-06）；2.7：逐列本小注里的全角空格占一个字位（两条小注并成一段时中间空一格，「無卷數　江西|廵撫採進本」此前右行后半整体上移一位，配不上退回旧对位、a/b 配错；A22 11-05）；2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
+        id="align_ref", title="Step5-d 整理本对齐", version="2.9", unit="cell",   # 参校本属性 reference_profile（B 块 2026-11-08，未声明的册逐字节不变、不升号）：none 页不读语料不对位、note「本页无参照（配置）」＋ref_kind，text 页不做坐标对位、不当借位邻页；2.9：逐列本全角「？」（录不出的字）按 〓 占一个字位（原先当标点丢掉、其后整列错一格，vol20 p133 列 5）；书级 coord_blank_ink 空格位有墨的列照样按格位配（缺省关、关时不进参数 dump；A22 S02 深挖 11-06，vol19 满文页）；2.8：对位字流与坐标偏移保留扩展 A、B–J 汉字（原先只留 U+4E00–9FFF，㣲 𮅕 𮪍 被删、对位断段；A23 诊断、A24 11-06）；2.7：逐列本小注里的全角空格占一个字位（两条小注并成一段时中间空一格，「無卷數　江西|廵撫採進本」此前右行后半整体上移一位，配不上退回旧对位、a/b 配错；A22 11-05）；2.6：row_segment 钉页 dzg:null 的页不做坐标对位（A22 11-04，殿本 vol56 p75–78 错收他书页）；2.5：按半叶头定位时，过了整理本半叶末行的列退回原因记 COORD_PAST_LEAF（A32 11-01，卷末印页）；2.4：页钉位 page_pins（GUJI-750 史记文渊阁，手写本冷启动锚不上）；2.3：卷首题列不因孤立弱冲突退回 coord_title_formula；2.2：印章页定不了位置时借邻页定位 coord_neighbor（A32）；2.1：按坐标对位 coord（overview#195）
         consumes=("glyph_match",), optional_consumes=("rare_candidates", "cells"),
         optional_consumes_when=(("rare_candidates", "rare_topk"),),
         produces=("align_ref",),
@@ -768,22 +768,36 @@ class AlignRefStep(Step):
                    "open_guji_cv.utils.han_ranges"),
         # `corpus` 缺省是仓内绝对路径（2026-09-29 K238），内容由 `corpus_fingerprint` 把关。
         path_params=("corpus",),
+        # 参校本属性（册配置 reference_profile，B 块 2026-11-08）：声明了 none／text 的页按页进指纹，见 `_ref_kind`
+        ref_profile_aware=True,
     )
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: AlignRefParams = ctx.params_for(self)  # type: ignore[assignment]
         p = _with_book_corpus(p, ctx)
+        kind = _ref_kind(ctx.book, page)
+        if kind == "none":
+            # 册配置说这页本来就没有参照：不读语料、不锚定、不做坐标对位（不再记成「锚定失败」被当切分问题）
+            return {"align_ref": PageAlignRef(page=page, anchored=False, corpus_fingerprint=p.corpus_fingerprint,
+                                              note=REF_NONE_NOTE, ref_kind="none")}
         match: PageMatch | None = _opt(ctx, "glyph_match", page)
         ocr: PageOcr | None = None          # Step5-c 已删（2026-10-18）：OCR 这一路恒缺席
         rare = (rare_topk_map(_opt(ctx, "rare_candidates", page), p.rare_topk)
                 if p.rare_topk else None)
         out = self._run_legacy(ctx, p, page, match, ocr, rare)
+        if kind == "text":
+            out["align_ref"].ref_kind = "text"
+            if _coord_enabled(p, ctx.book) and match is not None:
+                out["align_ref"].coord_note = REF_TEXT_COORD_NOTE
+            return out
         if _coord_enabled(p, ctx.book) and match is not None and dzg_null_pinned(ctx.book.id, page):
             ar = out["align_ref"]
             ar.note = ((ar.note + "；") if ar.note else "") + "钉页 dzg:null（整理本无此页），不做坐标对位"
         elif _coord_enabled(p, ctx.book) and match is not None:
             def neighbors():
                 for nb in (page + 1, page - 1):
+                    if _ref_kind(ctx.book, nb):     # 无参照／不分列的邻页不拿来借位
+                        continue
                     m = _opt(ctx, "glyph_match", nb)
                     if m is not None:
                         yield nb - page, m, (rare_topk_map(_opt(ctx, "rare_candidates", nb), p.rare_topk)
@@ -1147,6 +1161,29 @@ def _majority_vote_labels(book: str, page: int, norm: list[tuple], query: str,
         supporting = [lab for lab, _rank in entries if lab.char == winner_char]
         out.append(max(supporting, key=lambda lab: (lab.op == "equal", lab.op_run)))
     return out
+
+
+#: 册配置 `reference_profile` 声明无参照的页，`PageAlignRef.note`（A31 定的措辞；机器认 `ref_kind`）
+REF_NONE_NOTE = "本页无参照（配置）"
+#: 声明为不分行全文（text）的页不做坐标对位时的 `coord_note`
+REF_TEXT_COORD_NOTE = "参照不分列（配置），不做坐标对位"
+
+
+def _ref_kind(book, page: int) -> str:
+    """册配置 `reference_profile` 里本页的参照形态：`"none"`／`"text"`；column 与未声明给 `""`（＝今天的行为）。
+
+    第一版只用 `references[0]`（`book_corpus` 那份）：有参照的页声明了别的参校本就报错，不悄悄换语料。"""
+    prof = getattr(book, "reference_profile", None)
+    if prof is None or not prof.declared:
+        return ""
+    k = prof.kind_of(page)
+    if k == "none":
+        return "none"
+    ri = prof.ref_index(page)
+    if ri not in (None, 0):
+        raise ValueError(f"{book.id} 第 {page} 页 reference_profile 指向 references[{ri}]：align_ref 第一版只支持 "
+                         "references[0]（同一册分段换参校本还没做），请把这份参校本排到 references 第一位")
+    return "text" if k == "text" else ""
 
 
 def _run_multi_witness(ctx: RunContext, p: AlignRefParams, page: int,
