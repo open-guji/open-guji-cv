@@ -268,3 +268,25 @@ def test_fold_ctx_vias(tmp_path):
     rs = [rec("2", "ctx:ctx_l3")]                                    # 不要求 strong
     assert sa._fold_pass(SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_ctx_vias=["ctx_l3"]),
                          [ColumnAdmit(col=1, chars=rs)], {}, None, store=st) == 1
+
+
+def test_fold_aspect_veto_group_ctx(tmp_path):
+    """fold_aspect_ctx_veto 也读字组文意解法（SJ 史記 01:45 名单页「日講官」，A24 11-08）：没有 context_decide 排名、组内文意 agree 日 → 宽高判曰作废。"""
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    WH = {}
+
+    def rec(s, ctx_ch):
+        r = AdmitRec(id=f"{B}:1:{s}", slot=1, admit=False, char="曰", doubts=[], channel=None, provenance="",
+                     evidence={"group": {"id": "ry", "solvers": [{"solver": "ctx", "char": ctx_ch, "why": "agree" if ctx_ch else "abstain:low_p", "via": "ctx:ctx_l2"}]}})
+        WH[r.id] = (115, 100)
+        return r
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0, 1.05), fold_aspect_ctx_veto=0.5)
+    rs = [rec("1", "日"), rec("2", None), rec("3", "曰")]
+    n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=RulingStore(tmp_path / "e"), wh=WH, dmap=None)
+    assert n == 2 and rs[1].char == "曰" and rs[2].char == "曰"
+    assert not rs[0].admit and rs[0].evidence["fold_pending"]["ctx_veto"]["group_ctx"] == "ctx:ctx_l2"
+    # 不开 ctx_veto：照旧按宽高放
+    rs = [rec("1", "日")]
+    p0 = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_aspect=(0, 1.05))
+    assert sa._fold_pass(p0, [ColumnAdmit(col=1, chars=rs)], {}, None, store=RulingStore(tmp_path / "f"), wh=WH) == 1
