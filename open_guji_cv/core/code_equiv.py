@@ -1119,6 +1119,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
           old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
           evidence=_BEND_1108),
+    # 书名列候选 layout_title_fit（A22，殿本第 7 轮书名列，2026-11-08）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='bb5a2cd0b674d358c21a5b2bcf206f4bdfd46efb935fca69445da25d0b48dda4',
+          old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
+          evidence='row_segment.layout_title_fit 书名列候选（缺省关、不进参数 dump；A22，殿本第 7 轮 vol88 p129 c9）：row_segment 在殿本 vol88 新图 10 页（1,10,30,50,75,100,118,129,150,171,200）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
 )
 
 
