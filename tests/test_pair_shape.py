@@ -175,6 +175,27 @@ def test_pass_lifts_pending_and_vetoes_admitted(tmp_path, monkeypatch):
     assert r["b:1:1:5"].admit
 
 
+def test_pass_skips_when_ref_is_third_char(tmp_path, monkeypatch):
+    """整理本是两字以外的第三个字（库首位王、整理本三）：争的不是这两字，刻形模型不补放（全唐文 r16）。"""
+    from types import SimpleNamespace
+    from open_guji_cv.steps import seed_admit as sa
+    m = _pix_model()
+    js = {k: v for k, v in m.items() if k not in ("ab", "other")}
+    js["ab"] = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in m["ab"].items()}
+    js["other"] = {k: (v.tolist() if isinstance(v, np.ndarray) else v) for k, v in m["other"].items()}
+    p = tmp_path / "dt.json"
+    p.write_text(__import__("json").dumps(js, ensure_ascii=False), encoding="utf-8")
+    pair_shape.load.cache_clear()
+    monkeypatch.setattr(sa, "_page_patch", lambda ctx, page, col, slot, sub: da_img(True))
+    out = _admit_page([
+        {"id": "b:1:1:1", "slot": 1, "char": "太", "doubts": []},      # 库首位太、整理本天
+        {"id": "b:1:1:2", "slot": 2, "char": "太", "doubts": []},      # 库首位太、整理本缺、坐标对位天
+    ])
+    params = SimpleNamespace(patch_missing="raise", group_flow_pair_shape="")
+    d = sa._pair_shape_pass(params, out, {"b:1:1:1": ("天",)}, model_path=str(p), coord={"b:1:1:2": "天"})
+    assert d == 0 and not any(x.admit for x in out[0].chars)
+
+
 def test_pair_shapes_relative_path_resolves_in_data_root(tmp_path, monkeypatch):
     """书级 group_flow_pair_shapes 写相对路径：模型随中心库走，先在数据目录找。"""
     from open_guji_cv.core import workspace as ws
