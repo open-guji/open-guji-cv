@@ -144,10 +144,26 @@ def test_irregular_ref_gap_bypasses_cov_cap_only_for_variant_form_refs():
     # 机器字就是整理本字的正字／有直接异体边（概／槪）→ 不走这条（留给异体对）
     assert _run(cells("概", 0.97), {"2": "槪"}, mmap={"2": [("概", 0.97), ("槪", 0.96)]}, p_ref_irregular_gap=0.03, **kw)[0] == 0
     # 相邻旋钮仍管
-    adj = {"1": ok, "2": {"char": "慨", "ev": {"cov": 0.973}}, "3": {"char": "誤", "ev": {"cov": 0.5}}}
+    adj = {"1": ok, "2": {"char": "慨", "ev": {"cov": 0.973}}, "3": {"char": "誤", "ev": {"cov": 0.9}}}
     assert _run(adj, {"2": "槪", "3": "正"}, mmap=mm, p_ref_irregular_gap=0.03, **kw)[0] == 0
     n, r = _run(cells("慨", 0.973), {"2": "槪"}, mmap=mm, p_ref_irregular_gap=0.03, **kw)
     assert (r["2"].char, r["2"].channel) == ("槪", "p_ref")
     d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
     assert "p_ref_irregular_gap" not in d
     assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_irregular_gap=0.03).model_dump()["p_ref_irregular_gap"] == 0.03
+
+
+def test_min_cov_gate_blocks_unrecognized_cells_by_default():
+    """p_ref_min_cov（缺省 0.8 开）：库判 diff（库里没有这个字）或 cov<0.8 的格不放；缺 cov 的格照旧放；None 关。"""
+    ok = {"admit": True, "char": "甲"}
+    cell = lambda ev, ds=(): {"1": ok, "2": {"char": "機", "ev": ev, "doubts": list(ds)}}   # noqa: E731
+    assert _run(cell({"cov": 0.9}), {"2": "整"})[0] == 1
+    assert _run(cell({"cov": 0.79}), {"2": "整"})[0] == 0
+    assert _run(cell({"cov": 0.8}), {"2": "整"})[0] == 1                                  # 严格小于才挡
+    assert _run(cell({}, ["库里没有这个字"]), {"2": "整"})[0] == 0
+    assert _run(cell({"cov": 0.5}, ["库里没有这个字"]), {"2": "整"}, p_ref_min_cov=None)[0] == 1
+    assert _run(cell({"cov": 0.79}), {"2": "整"}, p_ref_min_cov=0.7)[0] == 1
+    assert _run(cell({}), {"2": "整"})[0] == 1                                            # 没 cov 不当作认不出
+    d = SeedAdmitParams(db_path="x", p_ref_admit=True).model_dump()
+    assert "p_ref_min_cov" not in d                                                       # 缺省值不进 dump
+    assert SeedAdmitParams(db_path="x", p_ref_admit=True, p_ref_min_cov=0.7).model_dump()["p_ref_min_cov"] == 0.7
