@@ -100,8 +100,12 @@ class FlowConfig:
     vis_model: str | None = None                       # 字块图像＋文意 L4（`vis_llm`）用的模型；None＝不问（A24 2026-11-01）
     vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
+    pv_ref_gap: float | None = None                    # 整理本字（现役对位）与库首位都在本组暂归一写法里、首位 cov ≥ `pv_ref_cov`、领先最好的组外候选 ≥ 这个数时，
+                                                       # 分差内有组外形近字（諫 據 綠 之于 𨽾）也进组、兜底照放；None＝关（seed_admit `group_flow_pv_ref_gap`，A24 V01 第 7 轮）
+    pv_ref_cov: float = 0.95
     provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
     dissent_keep: frozenset = frozenset()              # 书级：这几组复核时「整理本＝放行字、只有弱图像票反对」不降审（`_dissent_keep`；seed_admit `group_flow_dissent_keep`，A24 Z02 深挖 2026-11-06）
+    dissent_keep_form: bool = True                     # 书级：`dissent_keep` 里「至少一路给了放行字」也认 ids 弃权票（margin<`dissent_margin`）的刻形＝放行字（A24 Z03 11-08，r7 殿本一二 27 格里 19 格 ids 低 margin 弃权但刻形＝放行字＝整理本，只有 yr_bars 数横反对）
     same_writing_keep: frozenset = frozenset()         # 书级：这几组（缺省见 seed_admit `group_flow_same_writing_keep`）复核时给别字的解法给的全是「同一个字的另一写法」（`registry.PROVISIONAL` 暂归一表）→ 不降审（A24 Z03 深挖 2026-11-07，殿本／史記 21 格宮宫、賓賔、敘叙、敎教 等）
     review_fix_agree: frozenset = frozenset()          # 书级：这几组复核时 ≥2 路不同的图像解法（`IMG_SOLVERS`，如 yr_bars＋ids）给了同一个别的字、没人反对 → 照 `review_fix` 改字（A24 Z03 深挖 2026-11-07，一二 35 格目视 24 格全对）
     dissent_margin: float = 1.0                        # `dissent_keep` 里 ids 反对票算弱票的 margin 上限（seed_admit `group_flow_dissent_margin`）
@@ -260,6 +264,9 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
         if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
+            return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 整理本与库首位都是本组暂归一的写法、领先组外字够：分差内的组外形近字不拦（`pv_ref_gap`）
+        if not _rf(g, cfg) and _pv_ref_ok(g, cands, ref, cfg, canon):
             return g, "lift"
     if cfg.joint:
         for g in groups_in(top, cfg.groups):
@@ -462,6 +469,20 @@ def _slot_family(pv, trail: list | None, w, canon: Callable[[str], str]) -> str 
     return t if len(v) > 1 and v[0] - v[1] >= pv.slot_min else None
 
 
+def _pv_ref_ok(g: str, cands, ref, cfg: FlowConfig, canon: Callable[[str], str]) -> bool:
+    """整理本字（只认现役对位）与库首位都是本组暂归一的写法、首位 cov 够、领先组外最好候选够（`cfg.pv_ref_gap`）。
+    两路独立证人都说是这个字，分差内的组外形近字只是陪衬（𨽻 整理本、𨽾 库首位、諫 紧咬，A24 V01 第 7 轮 20 格看图都是 𨽾）。"""
+    pv = PROVISIONAL.get(g)
+    if cfg.pv_ref_gap is None or not cfg.provisional or pv is None or not ref or ref == GAP or not cands:
+        return False
+    inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
+    top, c1 = cands[0]
+    if not (inn(top) and inn(ref) and c1 >= cfg.pv_ref_cov):
+        return False
+    out = [v for c, v in cands[1:] if not inn(c)]
+    return c1 - max(out, default=0.0) >= cfg.pv_ref_gap
+
+
 def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
                  canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
     out = _provisional_base(g, mode, r, cands, ref, coord, cfg, canon, trail)
@@ -517,7 +538,8 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
     if not cands:
         return None
     top, c1 = cands[0]
-    if not inn(top) or c1 < cfg.min_cov or not all(inn(c) for c, v in cands[1:] if c1 - v < cfg.delta):
+    if not inn(top) or c1 < cfg.min_cov or not (all(inn(c) for c, v in cands[1:] if c1 - v < cfg.delta)
+                                                or _pv_ref_ok(g, cands, ref, cfg, canon)):
         return None
     w = ref or coord
     if not ref and r.id[-1:] in ("a", "b"):
@@ -632,7 +654,7 @@ def _ctx_agrees(trail: list, char: str | None, canon: Callable[[str], str]) -> b
 
 
 def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon: Callable[[str], str],
-                  weak_margin: float, l1_weak: bool = False) -> bool:
+                  weak_margin: float, l1_weak: bool = False, form_support: bool = False) -> bool:
     """复核弱票不降审（`FlowConfig.dissent_keep`，A24 Z02 深挖 2026-11-06）：已放行字＝整理本字（现役对位，不用坐标对位），
     ①至少一路解法给了放行字；②给了别字的解法全是图像路、且是弱票（`ids` 等记了 margin 的 < `weak_margin`；`yr_bars`、`bars`
     这类量笔画的不记 margin 也算弱票——数一二的横在切残的格上必错）。有文意、码位给了别字就照旧降审。
@@ -640,7 +662,9 @@ def _dissent_keep(g: str, trail: list, char: str | None, ref: str | None, canon:
     if not char or not ref or ref == GAP or canon(ref) != canon(char):
         return False
     x = canon(char)
-    if not any(t.get("char") and canon(t["char"]) == x for t in trail):
+    if not any(t.get("char") and canon(t["char"]) == x for t in trail) and not (
+            form_support and any(_sname(t) == "ids" and not t.get("char") and t.get("form") and canon(t["form"]) == x
+                                 and (_margin(t) or 0) < weak_margin for t in trail)):
         return False
     for t in trail:
         c = t.get("char")
@@ -937,7 +961,7 @@ def group_flow_pass(seq: list, amap: dict, cands_of: Callable[[str], list], bloc
                 code, other = None, False
                 trail = trail + [{"solver": "same_writing", "char": r.char, "why": "dissent_same_writing"}]
             if (code == "group_flow_disagree" and g in cfg.dissent_keep and not _rf(g, cfg)
-                    and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin, g in cfg.dissent_l1)
+                    and _dissent_keep(g, trail, r.char, ref, norm, cfg.dissent_margin, g in cfg.dissent_l1, cfg.dissent_keep_form)
                     and (g not in cfg.ctx_agree or _ctx_agrees(trail, r.char, norm))):
                 # 整理本＝放行字、只有弱图像票反对：不降（A24 Z02 深挖 2026-11-06）
                 code, other = None, False
