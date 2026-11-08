@@ -166,6 +166,12 @@ class BorderDetectParams(BaseModel):
     """弱线护栏改取哪条线（1.20）：None＝取投影 ≥ `top_weak_ratio`、在选中线之上最靠页心的一条，挪不够 0.021 页高就不动（殿本）；
     给了值＝先只留离选中线 ≥0.021 页高、投影 ≥ 这个比例的线，再取最靠页心的一条（写本：要越过字顶附近的碎横、落到框条下那道细虚线）。"""
 
+    bottom_weak_ratio: float = 0.0
+    """下版框弱线护栏（`seg/lines._weak_bottom_guard`，2026-11-08）：选中的下框线横向墨量不到带里最强横线的这个比例、
+    它下方 ≥0.021 页高处另有够强的横线，改取最靠页心的那条（只往下挪）。殿本 vol20–99 新图源写 0.3（13,320 页只动 17 页、
+    看图全对：末行字底／淡横被当下框，整页少切一格或切掉字脚）。缺省 0＝关，不进参数 dump，产物与加字段前逐字节相同。
+    配了 `bottom_gap` 的册（vol01–19）有跨页先验救援，不用开。"""
+
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
@@ -190,6 +196,8 @@ class BorderDetectParams(BaseModel):
             d.pop("top_weak_ratio", None)
         if isinstance(d, dict) and self.top_weak_floor is None:
             d.pop("top_weak_floor", None)
+        if isinstance(d, dict) and not self.bottom_weak_ratio:
+            d.pop("bottom_weak_ratio", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
         return d
@@ -249,6 +257,7 @@ class BorderDetectStep(Step):
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
+                                  **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
                                   **lattice_kw)
 
         res = _detect(cols)
