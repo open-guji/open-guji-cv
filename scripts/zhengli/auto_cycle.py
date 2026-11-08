@@ -26,6 +26,7 @@ import datetime as dt
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -154,16 +155,19 @@ def run_book(ws: Path, book: str, book_text: Path, d: dict, reviewer: str) -> di
     log = plan_path.parent / "执行记录.md"
     out = ap.stdout + ap.stderr
     (plan_path.parent / "apply.out").write_text(out, encoding="utf-8")
-    if ap.returncode and "book-text 这步失败" in out:
+    if ap.returncode and re.search(r"book-text.{0,8}这步失败|工作区有未提交的改动", out):
         # 本地检查没过（多半是标点／实体锚点在新切分里不存在）：线上单还没换（这步在推库之前）；清掉未提交的升版改动，交 A33
         subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
         subprocess.run(["git", "clean", "-fdq", "--", "Book"], cwd=book_text)      # 待重标清单 NNN.punct-stale.json 是未跟踪文件，不清会混进下一册的提交
         return {"verdict": "need-A33", "why": "book-text 本地检查不过（锚点落空等），线上单未换；交 A33 走 punct_redo／分支 PR",
                 "log": str(log)}
     if ap.returncode:
+        subprocess.run(["git", "checkout", "--", "."], cwd=book_text)
+        shutil.rmtree(sandbox, ignore_errors=True)
         return {"verdict": "blocked", "why": f"apply 失败（退出码 {ap.returncode}）：" + (ap.stdout + ap.stderr).strip()[-300:],
                 "log": str(log)}
     new_rev = rp.next_rev(rev, rp.chapter_of(book))
+    shutil.rmtree(sandbox, ignore_errors=True)       # 云端盘小：沙箱 0.3–5.6GB，用完即清
     return {"verdict": "done", "why": f"写人裁 {plan['ready']} 条，挂起 {plan['held']}", "new_rev": new_rev, "log": str(log)}
 
 
