@@ -5,6 +5,11 @@
 
 ## [未发版]
 
+## [0.6.25] - 2026-11-08
+
+- 发版：从 dev f24811b 切，多 #1303（auto_cycle 失败还原工作区）、#1306（solo_cal）；seed_admit 仍 1.82、row_segment 1.47。全唐文 front9 用。
+- seed_admit `solo_cal`（＋`solo_cal_tiers`、`solo_cal_skip`、`solo_cal_5b_cov`，缺省关、关时逐字节不变、不进 dump，code_equiv 登记）：无参照格 5a 校准直放，通道 `match_solo_cal`。cov≥.98＋gap≥.03 或 cov≥.95＋gap≥.05；另一档库首位＝5-b 首位且 cov≥0.95。形近表首位、字组、己已巳于干曰日代伐遣遺真、near_form／occluded 等疑问不放。全唐文 front8（中心库 914128）本机实跑放 1,442 格（去 真 后 1,426），抽 80 格看图未见错（形近字线 11-08，Sheldon 定）。
+
 ## [0.6.24] - 2026-11-08
 
 - 发版：从 dev 6abb2b8 切，多 #1296、#1297、#1298、#1299（row_segment 1.47）、#1300、#1301、#1302；seed_admit 仍 1.82（新开关都缺省关、code_equiv 登记）。全唐文 front9、殿本第9轮 vol01 职名页用。
