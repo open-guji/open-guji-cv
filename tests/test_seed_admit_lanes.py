@@ -695,3 +695,43 @@ def test_r4_codepoint_variant_params_out_of_fingerprint_when_off():
     """缺省关时三个参数不进指纹（别的书不因此重跑）。"""
     d = SeedAdmitParams(db_path="x").model_dump(mode="json")
     assert not {"lane_coord_codepoint_variant", "lane_coord_codepoint_gap", "lane_coord_codepoint_skip"} & set(d)
+
+
+# ── 字组图像判官否决（lane_group_img_veto，A23 11-08，殿本 r7 人／入 2 格）──────────
+
+def _img_group(img_char, p_img, solver="rr_img"):
+    return {"decision": "review", "id": "rr", "why": "weak",
+            "solvers": [{"solver": "ctx", "char": None, "why": "abstain:llm_pending"},
+                        {"solver": solver, "char": img_char, "probs": {img_char: p_img, "天": 1 - p_img}, "why": "agree"}]}
+
+
+@pytest.mark.parametrize("veto,img,p_img,admit", [
+    (None, "夭", 0.77, True),      # 缺省关：照旧放
+    (0.6, "夭", 0.77, False),      # 图像判官反对、把握够：不放
+    (0.8, "夭", 0.77, True),       # 把握不够：放
+    (0.6, "天", 0.90, True),       # 图像判官同意：放
+])
+def test_lane_group_img_veto(veto, img, p_img, admit):
+    out, kw = _r1_setup()
+    out[0].chars[4].evidence = {"group": _img_group(img, p_img)}
+    params = {} if veto is None else {"lane_group_img_veto": veto}
+    n, rs = _run(out, lane_witness3=True, **kw, **params)
+    r = rs[5]
+    assert r.admit is admit and n == int(admit)
+    if not admit:
+        assert r.evidence["lane_skip"] == {"lane": "witness3", "why": "group_img", "solver": "rr_img", "img": img, "p": p_img}
+        assert "lane_group_img" in r.doubts
+
+
+def test_lane_group_img_veto_ignores_non_image_solvers():
+    """ids／ry_shape／bars 等非图像判官反对不算（r7 殿本 119 格看图几乎全是放行字对）。"""
+    out, kw = _r1_setup()
+    g = _img_group("夭", 0.9, solver="ids")
+    out[0].chars[4].evidence = {"group": g}
+    n, rs = _run(out, lane_witness3=True, lane_group_img_veto=0.6, **kw)
+    assert n == 1 and rs[5].admit
+
+
+def test_lane_group_img_veto_off_not_in_dump():
+    assert "lane_group_img_veto" not in SeedAdmitParams(db_path="x").model_dump()
+    assert SeedAdmitParams(db_path="x", lane_group_img_veto=0.6).model_dump()["lane_group_img_veto"] == 0.6
