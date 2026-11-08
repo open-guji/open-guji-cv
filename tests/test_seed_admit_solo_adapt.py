@@ -146,3 +146,32 @@ def test_front7_params_invisible_when_off():
     d = SeedAdmitParams(solo_adapt_pct="p10", solo_adapt_risk_gap=0.02, solo_adapt_abstain_ok=True,
                         solo_adapt_abstain_skip="真").model_dump()
     assert d["solo_adapt_risk_gap"] == 0.02 and d["solo_adapt_abstain_skip"] == "真"
+
+
+# ── 二期（solo_adapt_near_slack、solo_adapt_nf_ok）──
+
+
+def test_near_slack_needs_bigger_lead(prof_path):
+    # 張 p10 0.965：0.955 差 0.01
+    kw = dict(rare_top="張")
+    assert solo_adapt_decide(cands=[("張", 0.955), ("振", 0.90)], **kw, **_kw(prof_path)) is None
+    assert solo_adapt_decide(cands=[("張", 0.955), ("振", 0.90)], **kw, **_kw(prof_path, near_slack=0.02)) == ("張", 0.955, 0.055)
+    assert solo_adapt_decide(cands=[("張", 0.955), ("長", 0.93)], **kw, **_kw(prof_path, near_slack=0.02)) is None  # 领先 0.025
+    assert solo_adapt_decide(cands=[("張", 0.940), ("振", 0.80)], **kw, **_kw(prof_path, near_slack=0.02)) is None  # 差 0.025
+
+
+def test_nf_ok_only_for_plain_top(prof_path):
+    dz = OK_DOUBTS + ["near_form"]
+    kw = dict(cands=[("張", 0.970), ("振", 0.90)], rare_top="張")
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz)) is None
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz, nf_ok=True)) == ("張", 0.97, 0.07)
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz, nf_ok=True, near_form_chars=frozenset("張"))) is None
+    # 窗口内对手在形近表照拦
+    assert solo_adapt_decide(cands=[("張", 0.970), ("士", 0.93)], rare_top="張",
+                             **_kw(prof_path, doubts=dz, nf_ok=True)) is None
+
+
+def test_phase2_params_invisible_when_off():
+    d = SeedAdmitParams(solo_adapt_pct="p10").model_dump()
+    for k in ("solo_adapt_near_slack", "solo_adapt_near_gap", "solo_adapt_nf_ok"):
+        assert k not in d
