@@ -119,3 +119,22 @@ def test_pass_admits_juan(tmp_path, monkeypatch):
     assert not _run(tmp_path, monkeypatch, recs, ON)[1].admit
     r = _run(tmp_path, monkeypatch, recs, {**ON, "num_run_juan_cov": 0.95})[1]
     assert r.admit and r.channel == "match_num_run" and r.char == "卷" and r.evidence["num_run"]["next"] == "一"
+
+
+def test_cov_5b_pure():
+    from open_guji_cv.steps.seed_admit import num_run_decide
+    kw = dict(guard="never_match", doubts=["near_form"], prev="十", nxt=None, cov_min=0.995, gap_min=0.01,
+              are_variants=lambda a, b: False)
+    cands = [("六", 0.988), ("大", 0.952)]
+    assert num_run_decide(cands=cands, **kw) is None
+    assert num_run_decide(cands=cands, rare_top="六", cov_5b=0.97, gap_5b=0.02, **kw) == ("六", 0.988, 0.036)
+    assert num_run_decide(cands=cands, rare_top="大", cov_5b=0.97, gap_5b=0.02, **kw) is None   # 5-b 不同意
+    assert num_run_decide(cands=[("六", 0.988), ("大", 0.975)], rare_top="六", cov_5b=0.97, gap_5b=0.02, **kw) is None
+    assert num_run_decide(cands=cands, rare_top="六", cov_5b=0.97, gap_5b=0.02, **{**kw, "prev": None}) is None
+
+
+def test_cov_5b_gated_optional_upstream():
+    from open_guji_cv.core.spec import live_optional_consumes
+    from open_guji_cv.steps.seed_admit import SeedAdmitStep
+    assert "rare_candidates" in live_optional_consumes(SeedAdmitStep.spec,
+                                                       SeedAdmitParams(num_run_cov=0.995, num_run_cov_5b=0.97))

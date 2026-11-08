@@ -117,3 +117,32 @@ def test_builder_aggregate():
     out = mod.aggregate(recs)
     assert out["schema"] == "char_cov_profile/1" and out["prof"]["治"]["n"] == 6
     assert ["治", "洽"] in out["risk"] and out["cross"]["治|洽"] == 0.99
+
+
+# ── front7 三档（solo_adapt_risk_gap、solo_adapt_abstain_ok；num_run_cov_5b 见 test_seed_admit_num_run）──
+
+
+def test_risk_gap_lets_far_risk_rival_pass(prof_path):
+    kw = dict(cands=[("治", 0.975), ("洽", 0.94)], rare_top="治")
+    assert solo_adapt_decide(**kw, **_kw(prof_path)) is None
+    assert solo_adapt_decide(**kw, **_kw(prof_path, risk_gap=0.02)) == ("治", 0.975, 0.035)
+    # 落后不够 risk_gap 的高危对手照拦
+    assert solo_adapt_decide(cands=[("治", 0.975), ("洽", 0.96)], rare_top="治", **_kw(prof_path, risk_gap=0.02)) is None
+
+
+def test_abstain_ok_only_for_non_group_top(prof_path):
+    dz = OK_DOUBTS + ["group_flow_abstain"]
+    kw = dict(cands=[("張", 0.970), ("振", 0.93)], rare_top="張")
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz)) is None
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz, abstain_ok=True)) == ("張", 0.97, 0.04)
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz, abstain_ok=True, abstain_skip="真張")) is None
+    assert solo_adapt_decide(**kw, **_kw(prof_path, doubts=dz, abstain_ok=True, group_chars=frozenset("張"))) is None
+
+
+def test_front7_params_invisible_when_off():
+    d = SeedAdmitParams(solo_adapt_pct="p10").model_dump()
+    for k in ("solo_adapt_risk_gap", "solo_adapt_abstain_ok", "solo_adapt_abstain_skip", "num_run_cov_5b", "num_run_gap_5b"):
+        assert k not in d
+    d = SeedAdmitParams(solo_adapt_pct="p10", solo_adapt_risk_gap=0.02, solo_adapt_abstain_ok=True,
+                        solo_adapt_abstain_skip="真").model_dump()
+    assert d["solo_adapt_risk_gap"] == 0.02 and d["solo_adapt_abstain_skip"] == "真"
