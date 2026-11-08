@@ -1089,13 +1089,14 @@ def measure_book_bottom_gap(grays, ink_threshold: int = 128) -> float | None:
 
 
 def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLine,
-                    straight: list[VLine], w: int, h: int, vline_polyline: bool):
+                    straight: list[VLine], w: int, h: int, vline_polyline: bool,
+                    bend_w80_med: float | None = None):
     """直线竖线 → 本页最终竖线：弯页整页换三段折线（先量 w80 再决定，直线页原样通过），再按横带证据重定位
     （见 SNAP_*），换了线的页统一成三段格式。要在 top/bottom 之后，折点 y 取自这条线跟上下版框的交点。
     返回 (verticals, segments, w80_med, w80_max, snapped)。`detect_borders` 与列宽重拟合后的
     `refit_bends` 共用。"""
     verticals, vseg, w80_med, w80_max = fit_vlines_polyline(mask, top, bottom, list(straight), w, h,
-                                                            fit=vline_polyline)
+                                                            fit=vline_polyline, w80_med_min=bend_w80_med)
     verticals, snapped = snap_verticals_to_evidence(binm, top, bottom, verticals, w, h,
                                                     straight=list(straight))
     if snapped and vseg == 1:
@@ -1111,7 +1112,8 @@ def _bend_verticals(mask: np.ndarray, binm: np.ndarray, top: HLine, bottom: HLin
     return verticals, vseg, w80_med, w80_max, snapped
 
 
-def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyline: bool = True):
+def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyline: bool = True,
+                bend_w80_med: float | None = None):
     """列宽重拟合（`pitch_rescue`）换了线之后，按新的一串直线**重新拟合折线**。
 
     折线拟合的护栏（相邻对列宽沿高度的变化率、拟合失败的线借邻线位移）看的是相邻线；自由模式探出假线、
@@ -1127,7 +1129,7 @@ def refit_bends(res, gray: np.ndarray, *, ink_threshold: int = 128, vline_polyli
     binm = (mask > 0).astype(np.uint8)
     straight = list(res.verticals_straight) or list(res.verticals)
     verticals, vseg, w80_med, w80_max, snapped = _bend_verticals(
-        mask, binm, res.top, res.bottom, straight, w, h, vline_polyline)
+        mask, binm, res.top, res.bottom, straight, w, h, vline_polyline, bend_w80_med)
     from dataclasses import replace
     return replace(res, verticals=verticals, vline_segments=vseg, bend_w80_med=w80_med,
                    bend_w80_max=w80_max, vlines_snapped=int(snapped))
@@ -1149,7 +1151,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     head_raise_scale: float = 1.0,
                     grid_lattice_fallback: bool = False,
                     top_weak_ratio: float = TOP_WEAK_RATIO,
-                    top_weak_floor: float | None = None) -> BorderDetectionResult:
+                    top_weak_floor: float | None = None,
+                    bend_w80_med: float | None = None) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1179,6 +1182,9 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
 
     `vline_polyline=False`：界行不做三段折线拟合，只量 w80。理由见
     `fit_vlines_polyline` 的 `fit` 参数。
+
+    `bend_w80_med`：弯页门槛（页级 w80 中位），None＝`seg/polyline.BEND_W80_MED`；0＝整页一律三段折线。
+    见 `fit_vlines_polyline` 的 `w80_med_min`。
 
     `book_bottom_gap`：整册「页高 − 下版框 y」的中位数，用于下版框的跨页先验
     救援（见 `peak_line_search._rescue_bottom`）。不传就不救，行为与改动前
@@ -1234,7 +1240,7 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     bottom, bottom_pushed = push_bottom_to_bar(binm_new, bottom, verticals, w, h)
     verticals_straight = list(verticals)
     verticals, vseg, w80_med, w80_max, vlines_snapped = _bend_verticals(
-        mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline)
+        mask, binm_new, top, bottom, verticals_straight, w, h, vline_polyline, bend_w80_med)
     head_raise = detect_head_raise(mask, top, verticals, w, extend=head_raise_extend,
                                    scale=head_raise_scale)
     outer = detect_outer_borders(mask, top, bottom, verticals, w, h,

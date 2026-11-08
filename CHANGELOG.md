@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- border_detect `bend_w80_med`（书级，缺省 None 取代码常数 `seg/polyline.BEND_W80_MED`＝7、不进参数 dump；A20 11-08，A31 第 8 轮用）：页级界行 w80 中位不到它的页按直线页走，写 0＝整页一律三段折线（书级 `vline_polyline: false` 仍优先）。殿本第 7 轮换 Commons 图源后界行清楚，约一半的页判成直线页，Step2 整列一个单应把列宽上下差变成字距上疏下密，row_segment 等距格网切半列首列尾的字（R02 碰裁边 17%→30%）；vol28 p100–192 强制折线后列尾下溢 13.0%→9.0%、列首上溢 7.8%→1.0%，vol89 列尾 9.7%→2.9%（ai-team `domain/CV/质检/待审原因深挖/R02-第7轮列端切半-A20`）。殿本写法 `params: {border_detect: {bend_w80_med: 0}}`；缺省下 vol28、vol89 全册产物逐字节不变，code_equiv 已登记。
 - seed_admit 1.75 `follow_ref_seen_conflict`（书级，缺省关、关时不进参数 dump；A24 N01 第 7 轮复查 11-08）：`follow_ref_seen` 也接「护栏 conflict」格——候选前两名恰是整理本形与 seen 对里的另一形、两字都被判 same（字形相同，只有整理本文意能定），放整理本形。殿本 七／𠤎（《易·震》「不喪匕鬯」文淵閣本作 U+2090E，库里 𠤎 两例图就是七）28 格；用法 `follow_ref_seen: "七=𠤎,𠤎=七"`＋本开关。
 - seed_admit 1.74 `lane_group_img_veto`（书级，缺省 None 关、关时不进参数 dump；A23 Z02 第 7 轮复查 11-08）：补放三通道要放的字与字组图像判官（`rr_img`）反对的字不同、判官概率 ≥ 该值 → 不放（doubt `lane_group_img`）。殿本 r7 vol68:160:3:16、vol67:149:9:15 图是「入」、整理本「人」被 witness3 放成人；80 册回放只命中这 2 格。
 - seed_admit 1.73 `group_flow_ref_pair`／`group_flow_ref_pair_coord` 不再把共字组搭档的码位解法（`组:codepoint`）当反对票（它只回报码位归一目标，无图像证据；本组自己的 codepoint 仍拦；只对开了这两项的书生效；A24 Z02 r7，殿本 sy 山由出 4 格看图全是山，r7 全册扫描无误放）。

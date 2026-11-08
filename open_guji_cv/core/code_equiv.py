@@ -243,6 +243,12 @@ _SEAL_TOP = ("卷端标题列去印点后抹列顶印边残块＋起格跳过整
              "上与 origin/dev 6a2aca8 产物逐字节相同；史記 02/04/07/10 册全册重跑只 02 p2 c4–c6、04 p2 c4、10 p2 c6 变（有意改动），"
              "scripts/code_equiv.py check，2026-11-06")
 
+_BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None 取 seg/polyline.BEND_W80_MED，不进参数 dump；殿本第7轮"
+              "Commons 图源列端切半，写 0＝整页三段折线）：border_detect 在殿本 vol28 192 页（全册）与 vol89 190 页（全册）"
+              "上与 origin/dev 4c57d446 产物逐字节相同；column_warp 只在 code_deps 里列 siku_zongmu.border，不调改动的函数；"
+              "scripts/code_equiv.py check，2026-11-08")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1066,6 +1072,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='05eac4afb853e7c3530c9103430ba0267286ff5d3b45fe3cf3b1d48f8114fe40',
           old='442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a',
           evidence='Step6 consensus_as_unsure（缺省关、不进参数 dump；A23，全唐文 r15 共识 same 被准入拦 46 格）：context_decide 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 档判断与改前同值；scripts/code_equiv.py check，2026-11-07'),
+    # 书级弯页门槛 bend_w80_med（A20，殿本第7轮列端切半，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='5ac71b4302e12e18955d8dd21be7c75b68fe201e522952e8c2965dd0cf215570',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='e29da31114be3262b91886c5d2e71ae6b606d571326a034ae096e2a92d4fe394',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.seg.polyline',
+          new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
+          old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
+          evidence=_BEND_1108),
 )
 
 
