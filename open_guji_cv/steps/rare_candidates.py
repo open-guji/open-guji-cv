@@ -121,6 +121,20 @@ class RareCandidatesParams(BaseModel):
             object.__setattr__(self, "db_font_fingerprint", font_domain_fingerprint(glyph_db_path()))
 
 
+def rare_corpus(ctx: RunContext) -> str:
+    """Step5-b 候选字表用的语料文件。册配置写了 `rare_charset`（参校本属性 C 块，2026-11-08）就用它——
+    字表与参校本脱钩，`reference_profile` 里 `kind: none` 的书／页也有字表；文件不存在时记日志退回老路。
+    没写（缺省）＝照旧 `align_ref.book_corpus`（`references[0].file`，再退回总目语料），行为逐字节不变。"""
+    from ..core.ref_profile import rare_charset_path
+    from .align_ref import book_corpus
+    want = rare_charset_path(ctx.book)
+    if want:
+        if Path(want).exists():
+            return want
+        ctx.log(f"Step5-b：rare_charset 指向的语料 {want} 不存在，退回参校本语料")
+    return book_corpus(ctx.book.id)
+
+
 @register_step
 class RareCandidatesStep(Step):
     spec = StepSpec(
@@ -152,9 +166,8 @@ class RareCandidatesStep(Step):
 
         from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch
-        from .align_ref import book_corpus
         p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
-        corpus = book_corpus(ctx.book.id)
+        corpus = rare_corpus(ctx)
         if not Path(corpus).exists():
             return
         img = np.full((64, 64), 255, np.uint8)
@@ -220,8 +233,7 @@ class RareCandidatesStep(Step):
         # 只在四庫工作区里有；考補萃編（`references: []`，无证人整理本）第一次
         # 跑全链时 6 页全部 FileNotFoundError。生僻字候选是**可选的一路**
         # （方案 §四 Step5-b），没有字表就不出候选，让 Step6/7 照常走。
-        from .align_ref import book_corpus
-        corpus = book_corpus(ctx.book.id)
+        corpus = rare_corpus(ctx)
         if imgs and not Path(corpus).exists():
             ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
             imgs = []
