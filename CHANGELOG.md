@@ -5,6 +5,23 @@
 
 ## [未发版]
 
+## [0.6.21] - 2026-11-08
+
+- 发版：从 dev 76fd114 切，只多 #1282（border_detect `top_edge_reslope`，缺省关、逐字节相同）。殿本 vol14 换新图钉这一版开它（p45 上框贴图顶）；其余 vol01–19 仍钉 v0.6.20（两版关开关时产物相同）。
+
+- border_detect `top_edge_reslope` 上框贴图顶时连倾角重找（书级，缺省关、关时不进参数 dump；A22，vol01–19 换新图 11-08）：新图按版框裁、上方只留几十行，抬头框顶、纸边暗条会贴着图顶，联合搜索在图顶截断处拿到窄峰高分、倾角也是假的（vol14 p45 上框落在 y=0、倾角 0.035，真框在 128–146 行），整页抬头列格网偏一格。开关开时上框贴图顶就在 ±0.05 各档倾角里找离开图顶的最好峰。vol14 p45 c1/c3 修后与旧 ★main 对齐。殿本建议与 `bottom_lock_reslope` 一起写进 book_defaults，从 border_detect 起重跑。
+
+## [0.6.20] - 2026-11-08
+
+- 发版：从 dev c074583 切，只含 #1283（seed_admit 撤回 1.81，#1277 改登记 code_equiv）。在 1.81 下算的册钉本版不过期；第8轮门槛写 cv ≥ v0.6.20。
+
+- seed_admit 版本号 1.82 撤回 1.81：#1277 `group_flow_llm_half_groups` 缺省空时逐字节不变，改用 code_equiv 登记（史記 vol02 18 页对 1cefd43a 逐字节相同）。各书在 1.81 下算的 seed_admit 不再因 #1277 过期；已在 v0.6.19（1.82）下重算的册换到本版会再判过期一次（A31 请求，A24 11-08）。
+
+## [0.6.19] - 2026-11-08
+
+- 发版：从 dev 1a9d029 切（seed_admit 1.82），含 #1266–#1278（A22 #1271 colgeom 认 ruled_warp、#1272 下框越界不崩＋bottom_lock_reslope；A20 #1273 参校本属性 A 块；A24 #1268/#1278 solo_5b、#1274 rare_charset、#1277 group_flow_llm_half_groups；#1275/#1276 刻例按来源分列）。殿本 vol01–19 换新图钉这一版。
+
+- solo_5b 接可信刻例与借库（参校本属性 C1/C4，A24，A23 同意的收窄版）：`solo_5b_min_n` 改读 `trusted_keben_counts`（人裁＋有参照互证，借库／solo／来源不明不算）；`match_solo_5b` 放行格带 `evidence.no_glyph_lib`（不自喂，不进字形库）；新书级参数 `solo_5b_borrow_db`（同族书的库，加它的可信刻例，本书自己至少 1 条可信才借，缺省不借），借库放行的格标 `solo_5b.borrowed` 供分层抽检；证据键 `n_lib` 改名 `n_trusted`。seed_admit 不升版本号：solo_5b_cov 缺省关，殿本 vol62 11 页与 dev 逐字节相同，code_equiv 已登记。
 - seed_admit 1.82 `group_flow_llm_half_groups`（书级，缺省空、不进参数 dump；A24 11-08）：这几组的夹注半格不受 `group_flow_llm_skip_half` 限制，照样查答案表／裁定库、记 `llm_pending` 问，可经 `feedback/llm_queue` 导出给对话判读。SJ 史記 H01 里 89 格半格（己已巳 45、日曰 44）因 skip_half 没有 L3 问、写不了裁定键；史記建议 `[ry, jys]`。
 
 - seed_admit（版本号不变）新通道 `match_solo_5b`（书级 `solo_5b_cov`／`solo_5b_gap`／`solo_5b_min_n`，缺省关、关时不进 dump、逐字节不变）：无任何整理本对位的格，库首位 cov、领先异语义候选、刻例数都够且 5-b 首位作证才放；形近表、字组、己已巳、硬疑问不放，5-b 为空弃权（全唐文 001/002 总目、韵编，形近字线 11-08，A24 定口径）。

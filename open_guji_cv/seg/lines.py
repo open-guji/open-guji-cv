@@ -642,6 +642,21 @@ WIDEN_RATIO = 1.15
 LOCK_SLOPE_RANGE, LOCK_SLOPE_N, LOCK_SLOPE_GAIN = 0.05, 35, 2.0
 
 
+def _best_off_edge(mask: np.ndarray, lo: int, hi: int, slope: float, edges: tuple, slack: int,
+                   alpha: float, hyst: int) -> dict | None:
+    """沿倾角 `slope` 在 [lo, hi] 带里找分数最高、离 `edges` 各点都超过 `slack` 的峰。"""
+    positions, curve = sample_line_curve(mask, "h", lo, hi, slope)
+    best: dict | None = None
+    for i in local_maxima(curve, radius=5):
+        pos = float(positions[i])
+        if any(abs(pos - e) <= slack for e in edges):
+            continue
+        wd, sc = half_height_score_at(curve, i, alpha, hyst)
+        if best is None or sc > best["score"]:
+            best = dict(position=pos, slope=slope, score=sc, width=wd, proj=float(curve[i]))
+    return best
+
+
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             alpha: float = DEFAULT_ALPHA, hyst: int = DEFAULT_HYST,
                             secondary_window: int = 60, secondary_dead_zone: int = 15,
@@ -652,7 +667,8 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             weak_top_ratio: float = 0.0,
                             weak_top_floor: float | None = None,
                             weak_bottom_ratio: float = 0.0,
-                            lock_reslope: bool = False) -> LineMatch:
+                            lock_reslope: bool = False,
+                            top_edge_reslope: bool = False) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -695,6 +711,20 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
 
     primary = joint_search_coarse_to_fine(mask, "h", lo, hi, alpha=alpha, hyst=hyst)
 
+    if side == "top" and top_edge_reslope and primary.position - lo <= boundary_slack:
+        # **上框贴图顶 = 伪影，连倾角一起重找**（2026-11-08，殿本 Commons 新图 vol14 p45 等）：
+        # 新图按版框裁、上方只留 36px，抬头框顶、纸边暗条会贴着图顶；联合搜索在图顶截断处
+        # 拿到窄峰高分，倾角也是假的（vol14 p45 落在 y=0、倾角 0.035，真框在 128–146 行、横向墨量 0.87）。
+        # 贴图顶的 primary 不可能是版框（版框外至少留了 pad），在 `lock_reslope` 同一组倾角里
+        # 找离开图顶的最好峰。缺省关。
+        cands = [b for b in (_best_off_edge(mask, lo, hi, float(sl), (lo,), boundary_slack, alpha, hyst)
+                             for sl in [primary.slope, *np.linspace(-LOCK_SLOPE_RANGE, LOCK_SLOPE_RANGE,
+                                                                     LOCK_SLOPE_N)]) if b]
+        if cands:
+            b = max(cands, key=lambda b: b["score"])
+            primary = LineMatch(position=b["position"], slope=b["slope"], score=b["score"],
+                                width=b["width"], proj=b["proj"])
+
     if side == "top" and abs(primary.position - inner_edge) <= boundary_slack:
         # **顶部贴边 = 放宽带重搜**（2026-09-18，bxgb p53 实测）。
         #
@@ -734,16 +764,7 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
         # 末三四个字中间。所以先沿 primary 倾角找（原逻辑），`lock_reslope` 开时再在粗扫各档
         # 倾角里找非边界峰，明显更高分才换。缺省关，与加开关前逐位相同。
         def best_off_edge(sl: float) -> dict | None:
-            positions, curve = sample_line_curve(mask, "h", lo, hi, sl)
-            best: dict | None = None
-            for i in local_maxima(curve, radius=5):
-                pos = float(positions[i])
-                if abs(pos - inner_edge) <= boundary_slack:
-                    continue
-                wd, sc = half_height_score_at(curve, i, alpha, hyst)
-                if best is None or sc > best["score"]:
-                    best = dict(position=pos, slope=sl, score=sc, width=wd, proj=float(curve[i]))
-            return best
+            return _best_off_edge(mask, lo, hi, sl, (inner_edge,), boundary_slack, alpha, hyst)
 
         best_full = best_off_edge(primary.slope)
         alt = [b for b in (best_off_edge(float(sl)) for sl in

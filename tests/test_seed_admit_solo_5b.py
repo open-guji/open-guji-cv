@@ -30,7 +30,7 @@ def _rare(cs: list[str]) -> PageRare:
 
 
 def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure"):
-    monkeypatch.setattr(sa, "_keben_counts", lambda _db: KEBEN)
+    monkeypatch.setattr(sa, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=None, cov=cands[0][1], wmax=16.0,
@@ -73,11 +73,22 @@ def test_off_leaves_cell_in_review(tmp_path, monkeypatch):
     assert not r.admit and "solo_5b" not in r.evidence
 
 
+def test_admitted_cell_never_enters_glyph_lib(tmp_path, monkeypatch):
+    """C4 不自喂：match_solo_5b 放行的格带 evidence.no_glyph_lib，扫尾入库不收。"""
+    r = _run(tmp_path, monkeypatch, params=ON, **GOOD)
+    assert r.admit and r.channel == "match_solo_5b" and r.evidence["no_glyph_lib"] is True
+
+
+def test_trusted_counts_missing_db_is_empty(tmp_path):
+    """库读不了＝空表＝通道不放（宁缺勿滥）。"""
+    assert sa._trusted_keben_counts(str(tmp_path / "nope.db")) == {}
+
+
 def test_on_admits_lib_top_with_evidence(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, params=ON, **GOOD)
     assert r.admit and r.channel == "match_solo_5b" and r.provenance == "match_solo_5b" and r.char == "百"
     assert r.doubts == []
-    assert r.evidence["solo_5b"] == {"lib": "百", "cov": 0.985, "gap": 0.035, "rare": "百", "n_lib": 40}
+    assert r.evidence["solo_5b"] == {"lib": "百", "cov": 0.985, "gap": 0.035, "rare": "百", "n_trusted": 40}
 
 
 @pytest.mark.parametrize("kw", [
@@ -105,3 +116,26 @@ def test_decide_pure():
     av = lambda a, b: {a, b} == {"百", "佰"}  # noqa: E731
     assert solo_5b_decide(cands=[("百", 0.985), ("佰", 0.983), ("白", 0.95)], rare_top="佰",
                           **{**kw, "are_variants": av}) == ("百", 0.985, 0.035)
+
+
+def test_borrow_db_param_invisible_when_unset():
+    assert "solo_5b_borrow_db" not in SeedAdmitParams().model_dump()
+    assert "solo_5b_borrow_db" not in SeedAdmitParams(solo_5b_cov=0.98).model_dump()
+    assert SeedAdmitParams(solo_5b_cov=0.98, solo_5b_borrow_db="/x/y.db").model_dump()["solo_5b_borrow_db"] == "/x/y.db"
+
+
+def test_borrowed_flag_marks_stratum(tmp_path, monkeypatch):
+    """本书可信刻例 1（<3）、借库后 40：放行并标 borrowed，抽检单独成层。"""
+    monkeypatch.setattr(sa, "_trusted_keben_counts",
+                        lambda _db, borrow=None: {**KEBEN, "百": 40} if borrow else {**KEBEN, "百": 1})
+    ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
+    write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
+        PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict="unsure", char=None, cov=0.985, wmax=16.0, guard=None,
+                                         candidates=[("百", 0.985), ("白", 0.95)])]))
+    write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
+        PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.0, source="prior")]))
+    write_product(ctx, "rare_candidates", PAGE, rare_candidates=_rare(["百", "白"]))
+    ctx.params["seed_admit"] = SeedAdmitParams(patch_missing="skip", solo_5b_cov=0.98, solo_5b_borrow_db="/b.db")
+    (col,) = STEPS["seed_admit"].run_page(ctx, PAGE)["seed_admit"].columns
+    (r,) = col.chars
+    assert r.admit and r.evidence["solo_5b"]["borrowed"] is True and r.evidence["solo_5b"]["n_trusted"] == 40

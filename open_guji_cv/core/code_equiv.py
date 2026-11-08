@@ -253,6 +253,8 @@ _FIT2_1108 = ('cell_shrink.inner_frame_fit2／inner_frame_snap 列尾内框线�
 
 _LOCK_1108 = 'border_detect.bottom_lock_reslope 下框贴边重找倾角（缺省关、不进参数 dump）＋下框越出图底不崩（_rule_offset 夹图内；A22，vol01–19 换新图 vol09 p112 等 9 页 IndexError、vol12 p27 下框落字身）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
 
+_TOPEDGE_1108 = 'border_detect.top_edge_reslope 上框贴图顶时连倾角重找（缺省关、不进参数 dump；A22，vol01–19 换新图 vol14 p45 上框落在图顶伪影）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -935,6 +937,22 @@ ENTRIES: tuple[Equiv, ...] = (
           new='047553c6e7db56f5cbbf99e648230d36bf946c6bd1bfdc4a9bd52253b55ca49f',
           old='41b4e1ab7a05a6970a5e05c9d5db29f83339220aef2eba32cdf81e79b1d9c449',
           evidence='seed_admit 在 001 3 页（--pages 61,120,150）上与 origin/dev 50295b8 产物逐字节相同（solo_5b_cov 缺省关，版本号不升；全唐文·形近字 11-08）'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='08f2f62fa6e2dd5569aae7051f29f55ee9f8a2545d2e615330fd1858192327bc',
+          old='0f64460b8df1ba15fb1c871fb83a98569a9963276cf796e9723e7e03dd93de86',
+          evidence='seed_admit 在 vol62 11 页（--pages 5,20,35,50,65,80,95,110,125,140,148）上与 origin/dev 25ecc52 产物逐字节相同（solo_5b 刻例门槛读可信刻例数、放行格带 no_glyph_lib、solo_5b_borrow_db 借库；solo_5b_cov 缺省关，版本号不升；A24 参校本属性 C1/C4 11-08，GUJI_CORPUS_DRIFT=warn）'),
+    Equiv(module='open_guji_cv.steps.seed_admit',
+          new='2d5860a65f1354cb12ced87dc2000f53da060c1c56a720a3b7514104a484c485',
+          old='41b4e1ab7a05a6970a5e05c9d5db29f83339220aef2eba32cdf81e79b1d9c449',
+          evidence='seed_admit 在 02 18 页（--pages 4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）上与 1cefd43a 产物逐字节相同；史記 vol02 r18 产物，18 页含夹注半格；#1277 group_flow_llm_half_groups 缺省空，版本号撤回 1.81'),
+    Equiv(module='open_guji_cv.groups.flow',
+          new='5fb3a333880faf84ee9e104fe726992197b5ac0cb64b835eb4a291b56f47c2ac',
+          old='e5df695c08db5b368007b7cf69b7e3ee1dcf769fcd04028ad8253974d5a7b373',
+          evidence='seed_admit 在 02 18 页（--pages 4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）上与 1cefd43a 产物逐字节相同；史記 vol02 r18 产物，18 页含夹注半格；#1277 group_flow_llm_half_groups 缺省空，版本号撤回 1.81'),
+    Equiv(module='open_guji_cv.groups.methods',
+          new='aace7cf4d0de8a02bdd8e66e2b8c39d67a881cc320241935ec33e76a00eebb96',
+          old='45258af23d0898bfefb4957736316a953c3bdd334c3278a43aaa73fe97a5f861',
+          evidence='seed_admit 在 02 18 页（--pages 4,9,19,24,33,41,44,53,86,95,102,106,114,141,173,180,185,199）上与 1cefd43a 产物逐字节相同；史記 vol02 r18 产物，18 页含夹注半格；#1277 group_flow_llm_half_groups 缺省空，版本号撤回 1.81'),
     Equiv(module="open_guji_cv.clustering.extractor",
           new="484efb123a713cd8ce1e1da85c97e486e5aab4f3e619f6ede43c18bd1bafda9f",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
@@ -1171,6 +1189,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='65ed80d08f58bd97393f955bc71e43a5f380eb735cb3f1a3df3a97232fddc6ef',
           old='3ef375f764f67717152ebd4e11b234ca338bbb02091dc6d07a3de50bfc52c9f0',
           evidence='参校本属性 B 块（reference_profile，未声明的册不变；写了的册 layout_prior 缺表不拦、自动配页不配 none／text 页）：row_segment 在殿本 vol60 新图 12 页（1,2,3,10,20,30,45,60,75,90,105,120，自动配页 strict）、全唐文 006 12 页（每 20 页取 1）、001 8 页（35–64 text、65 起 none，带离线格位表）、002 4 页（整册 none）、003 7 页（1–102 none）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-08（A22）'),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='bc37fa6957f8756a106cc157857dc3a027c4a73f4d1f48e969629a4e6a358244',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_TOPEDGE_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='3d424f82ee6c4fd460525e22d421399de9b38149755e3dae39c8ec2ec84a2bcb',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_TOPEDGE_1108),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='51f174fa9b9f26d2df85848ec2a8042b69bf77b6c08ba470c05598efdfa86cf5',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_TOPEDGE_1108),
 )
 
 
