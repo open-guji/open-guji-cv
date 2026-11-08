@@ -20,7 +20,7 @@ H = [[K, 0, 10], [0, K, 20], [0, 0, 1]]
 
 
 def table(rev=4, k_pages=(1, 2)):
-    pages = [{"page": p, "from_rev": {"rev": rev - 1, "sha256": "x", "w": 200, "h": 300, "H": H},
+    pages = [{"page": p, "w": 410, "h": 620, "from_rev": {"rev": rev - 1, "sha256": "x", "w": 200, "h": 300, "H": H},
               "frame": {"pad": {"t": 30, "b": 36, "o": 20}}} for p in k_pages]
     return {"rev": rev, "pages": pages}
 
@@ -53,7 +53,9 @@ def test_scale_and_pad():
     t = table()
     assert R.scale_of(t) == pytest.approx(2.0)
     assert R.pad_bottom(t) == 36.0
-    assert R.map_x(t, 1, 100) == pytest.approx(210.0)
+    # 右上原点：旧 x=100 → 旧左上 99 → 新左上 2·99+10＝208 → 新右上 409−208＝201
+    assert R.map_x(t, 1, 100) == pytest.approx(201.0)
+    assert R.map_x(t, 1, 150) == pytest.approx(301.0)   # 升序（右→左）不变
 
 
 def test_rebase_text():
@@ -62,7 +64,7 @@ def test_rebase_text():
     assert d["source_rev"] == 4 and d["bottom_gap"] == 36.0 and d["period_prior"] == 160.2
     assert d["outer_gap"] == {"top": 51.0, "bottom": 38.2} and d["outer_shift"] == {"top": -17.0, "bottom": -28.2}
     b = d["params"]["border_detect"]
-    assert b["head_raise_scale"] == 1.0 and b["grid_col_pitch"] == 258 and b["vline_overrides"][1] == [210, 310]
+    assert b["head_raise_scale"] == 1.0 and b["grid_col_pitch"] == 258 and b["vline_overrides"][1] == [201, 301]
     assert d["dev_set"] == [1, 2] and d["params"]["seed_admit"] == {"fold_groups": ["jys"]}   # 别的不动
     assert "原注：页表 rev" in new and new.startswith("# 换新图（A20 11-07）")
     assert any(c.startswith("source_rev 3 → 4") for c in ch)
