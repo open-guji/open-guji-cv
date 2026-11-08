@@ -1277,6 +1277,9 @@ class RowSegmentStep(Step):
         if p.page_map != "off":
             from .row_segment_pagemap import ensure
             ensure(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
+        elif p.layout_prior and _ref_declared(ctx.book) and not load_layout(p.layout_prior, ctx.book.id):
+            ctx.log(f"{ctx.book.id}：layout_prior 表 {_layout_path(p.layout_prior)} 里没有本册，"
+                    "册配置写了 reference_profile，不拦，各页按纯几何切")
 
     def run_page(self, ctx: RunContext, page: int) -> dict[str, BaseModel]:
         p: RowSegmentParams = ctx.params_for(self)  # type: ignore[assignment]
@@ -1348,9 +1351,11 @@ class RowSegmentStep(Step):
             layout = layout_for(ctx, p.page_map, _pm_pins(p), _pm_ref(p))
         else:
             layout = load_layout(p.layout_prior, ctx.book.id) if p.layout_prior else {}
-        if p.layout_prior and not layout and _ref_has_column(ctx.book):
+        if p.layout_prior and not layout and not _ref_declared(ctx.book):
             # 表在、开关开着，表里却一行本册都没有：多半是新册没生成表（殿本 vol11–20 首跑就这样悄悄当关，
             # 逐格全对 94.7% vs 带表 100%）。宁可拦下，不悄悄退回无先验。
+            # 册配置写了 reference_profile 的册不拦（参校本属性 B 块）：参照形态是人写定的，缺表的页按纯几何切，
+            # `prepare` 里记一行日志（全唐文 003 首跑整册 0 页即此）。
             raise ValueError(f"layout_prior 表 {_layout_path(p.layout_prior)} 里没有 {ctx.book.id}："
                              "先跑 scripts/dzg_import.py map 与 scripts/dzg_layout.py 补这一册；"
                              "确实不要先验的书在书 yaml 写 params.row_segment.layout_prior: \"\"")
@@ -2106,6 +2111,11 @@ def _ref_no_prior(book, page: int) -> bool:
     """册配置 `reference_profile` 声明本页没有逐列参照（none／text）：不带格位先验。未声明的册恒假。"""
     prof = getattr(book, "reference_profile", None)
     return bool(prof is not None and prof.declared and prof.kind_of(page) != "column")
+
+
+def _ref_declared(book) -> bool:
+    prof = getattr(book, "reference_profile", None)
+    return bool(prof is not None and prof.declared)
 
 
 def _ref_has_column(book) -> bool:

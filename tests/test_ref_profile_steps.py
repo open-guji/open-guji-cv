@@ -160,3 +160,9 @@ def test_coltext_build_skips_declared_pages(tmp_path):
     # skip 为空：与原来逐位相同
     again = CT.build("003", pages, grids, path, {}, "strict", NS, NCOL, skip=())
     assert json.dumps(again, sort_keys=True) == json.dumps(base, sort_keys=True)
+
+
+def test_layout_prior_missing_book_only_blocks_undeclared():
+    assert not RS._ref_declared(make_book())
+    assert RS._ref_declared(make_book(references=REFS, reference_profile=_prof({"default": "column",
+                                                                              "segments": [{"pages": [1], "kind": "none"}]})))
