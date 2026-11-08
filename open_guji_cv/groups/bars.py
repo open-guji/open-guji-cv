@@ -132,6 +132,7 @@ YR_OTHER_MAX = 0.15
 YR_ONE_OTHER_MAX = 0.05
 YR_FILL_MIN = 0.18
 YR_SOLID_MIN = 0.5
+YR_UP_SOLID_MIN = 0.5   # 两横时上横的连续度（最长连续墨／带宽）下限：邻字的斜笔、弯笔切进来被当上横时它很碎（A24 Z04 r7，殿本换图源后 yr 36 格一横被数成二）
 YR_BUMP_MAX = 3.0
 
 
@@ -181,7 +182,7 @@ def yr_bands(gray: np.ndarray) -> list[dict]:
 
 def count_bars(gray: np.ndarray) -> tuple[str | None, str]:
     """一二数横 → (「一」|「二」|None, 理由)。理由：one／two，或弃权原因（other_ink、one_other_ink、one_sparse、
-    one_bump、off_center、sparse、top_heavy、border、n<横数>）。"""
+    one_bump、off_center、sparse、top_heavy、upper_broken、border、n<横数>）。"""
     bands = yr_bands(gray)
     bars = [s for s in bands if s["bar"]]
     other = sum(s["ink"] for s in bands if not s["bar"])
@@ -205,6 +206,8 @@ def count_bars(gray: np.ndarray) -> tuple[str | None, str]:
             return None, "sparse"
         if b["len"] < 0.9 * a["len"] or b["ink"] < 0.8 * a["ink"]:
             return None, "top_heavy"
+        if a["solid"] < YR_UP_SOLID_MIN:
+            return None, "upper_broken"
         if b["y1"] >= 0.95 and b["thick"] < 0.6 * a["thick"]:
             return None, "border"
         return "二", "two"
