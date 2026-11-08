@@ -807,13 +807,19 @@ class SeedAdmitParams(BaseModel):
 
     韻編里人名下的卷数小注（「八四百五四」）是纯数字串，库对 七／六／四／八 cov 0.996～0.999，但这几个字在形近护栏表里
     有搭档（七/匕、六/大、四/因、八/人），匹配器一律判 `guard=never_match`，没有整理本的页就全进待审（front3 001 约 1,100 格）。
-    这一支只给**仍待审**、整格**没有任何整理本对位**、匹配器只判了 `never_match`（不碰 conflict／timeout）的格：
+    同样的卷数／页数小注里，库判 same 或 unsure、没判护栏的 十／六／七／四 也因 near_form（形近表）或字组弃权
+    （group_flow_ref_missing／group_flow_abstain，没有整理本可依）进待审（001 约 1,000 格）。
+    这一支只给**仍待审**、整格**没有任何整理本对位**、匹配器没判护栏或只判了 `never_match`（不碰 conflict／timeout）的格：
     库首位是数字（`NUM_RUN_DIGITS`）、cov ≥ `num_run_cov`、领先「语义不同」的最好候选 ≥ `num_run_gap`；疑问只有
-    `num_run_ok_doubt` 那几类（护栏:never_match、库 unsure、上下文 margin 不足、near_form）；同列同半格紧挨着的前后格
+    `_NUM_RUN_OK_DOUBTS` 那几类（护栏:never_match、库 unsure、库 same 但准入被拦、上下文 margin 不足、near_form、
+    group_flow_ref_missing、group_flow_abstain；context_page_end、group_flow_conflict 等照拦）；同列同半格紧挨着的前后格
     至少一个也是数字（已放行的看放行字，否则看库首位且 cov ≥ 0.98）→ 放库首位，`channel`＝`match_num_run`，
     evidence `num_run`（cov、gap、前后字），带 `no_glyph_lib`（不入字形库）。人裁位不碰。只升不降。
-    依据（front3 包 001–003，never_match 待审 1,318 格里库首位是数字的 1,094 格逐格看图：七 503、六 429、四 144、八 11 全对；
-    千 7 格多在人名「房千里」里，无数字邻格本来就不放）。"""
+    依据（front3 包 001–003 逐格看图）：never_match 待审 1,318 格里库首位是数字的 1,094 格（七 503、六 429、四 144、八 11）
+    全对；库 cov ≥ 0.98、无护栏、被 near_form／字组挡的数字 1,368 格（十 508、六 366、七 236、四 159、九 85）全对。
+    千 7 格多在人名「房千里」里，无数字邻格本来就不放；九／丸 领先不到 0.01（库 丸 刻例标错）也不放。
+    同批非数字的形近字（469 格：文丈、林株、延廷、宋末…）不在本支：有切坏格（001:107:4:1 半个「高」库认 古、领先 0.077），
+    也有异体／字组对（延廷、頴穎、己已巳）要码位或字组定，cov＋领先挡不住。"""
     num_run_gap: float = 0.01
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
@@ -2955,7 +2961,8 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
 #: `num_run_cov` 认的数字（卷数小注只用到这些）
 NUM_RUN_DIGITS = frozenset("一二三四五六七八九十百千")
 #: `num_run_cov` 允许的疑问（前缀）；别的疑问一律不碰
-_NUM_RUN_OK_DOUBTS = ("护栏:never_match", "库 unsure", "上下文 margin 不足", "near_form")
+_NUM_RUN_OK_DOUBTS = ("护栏:never_match", "库 unsure", "库 same 但准入被拦", "上下文 margin 不足", "near_form",
+                      "group_flow_ref_missing", "group_flow_abstain")
 #: 邻格「是数字」时库首位的最低 cov（邻格未放行时）
 _NUM_RUN_NEIGHBOR_COV = 0.98
 
@@ -2964,7 +2971,7 @@ def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | N
                    gap_min: float, are_variants) -> tuple[str, float, float] | None:
     """`SeedAdmitParams.num_run_cov` 的判据，纯函数（离线评测与线上共用）。`cands`：库候选 [(字, cov)]；
     `prev`／`nxt`：同列同半格前后格的字（已判成数字才算，调用方给 None 表示不是／没有）。→ (放行字, cov, gap) 或 None。"""
-    if guard != "never_match" or not cands:
+    if guard not in (None, "never_match") or not cands:
         return None
     if any(not (isinstance(d, str) and d.startswith(_NUM_RUN_OK_DOUBTS)) for d in (doubts or [])):
         return None

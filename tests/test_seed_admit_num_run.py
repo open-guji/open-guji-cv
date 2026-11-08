@@ -67,12 +67,17 @@ KW = dict(cov_min=0.995, gap_min=0.01, are_variants=lambda a, b: False)
 
 
 @pytest.mark.parametrize("kw", [
-    dict(cands=[("四", 0.997), ("田", 0.955)], guard=None, doubts=[], prev="五", nxt=None),          # 没判护栏：归别的通道
+    dict(cands=[("四", 0.997), ("田", 0.955)], guard="timeout", doubts=NM, prev="五", nxt=None),     # timeout 不碰
+    dict(cands=[("七", 0.997), ("士", 0.9)], guard=None, doubts=["context_page_end", "near_form"],
+         prev="五", nxt=None),                                                                       # 页末疑问照拦
+    dict(cands=[("十", 0.9881), ("卜", 0.9874)], guard=None, doubts=["库 unsure", "group_flow_abstain"],
+         prev="百", nxt=None),                                                                       # 001:162:3:20a 领先不够
+    dict(cands=[("九", 0.999), ("丸", 0.995)], guard=None, doubts=["库 same 但准入被拦"], prev="十", nxt=None),
     dict(cands=[("四", 0.997), ("田", 0.955)], guard="conflict", doubts=NM, prev="五", nxt=None),    # conflict 不碰
     dict(cands=[("王", 0.998), ("玉", 0.9)], guard="never_match", doubts=NM, prev="五", nxt=None),   # 不是数字
     dict(cands=[("七", 0.994), ("士", 0.9)], guard="never_match", doubts=NM, prev="五", nxt=None),   # cov 不到
     dict(cands=[("七", 0.998), ("士", 0.992)], guard="never_match", doubts=NM, prev="五", nxt=None),  # 领先不够
-    dict(cands=[("八", 0.997), ("入", 0.968)], guard="never_match", doubts=NM + ["group_flow_abstain"],
+    dict(cands=[("八", 0.997), ("入", 0.968)], guard="never_match", doubts=NM + ["group_flow_conflict"],
          prev="五", nxt=None),                                                                       # 别的疑问
     dict(cands=[("六", 0.997), ("大", 0.9)], guard="never_match", doubts=NM, prev=None, nxt=None),   # 无数字邻格
 ])
@@ -83,3 +88,10 @@ def test_decide_blocks(kw):
 def test_decide_admits():
     assert num_run_decide(cands=[("七", 0.998), ("士", 0.94), ("匕", 0.0)], guard="never_match", doubts=NM,
                           prev=None, nxt="百", **KW) == ("七", 0.998, 0.058)
+
+
+def test_decide_admits_unguarded_near_form_ten():
+    """001:70:6:4b「【十】七十六十」：库 same 十 0.9992，near_form＋字组弃权挡下，没判护栏。"""
+    ds = ["库 same 但准入被拦", "near_form", "group_flow_abstain"]
+    assert num_run_decide(cands=[("十", 0.9992), ("卜", 0.9615), ("七", 0.9584)], guard=None, doubts=ds,
+                          prev=None, nxt="七", **KW) == ("十", 0.9992, 0.0377)
