@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- seed_admit `solo_5b_same_cov` 修：书级开 `consensus_fallback` 时无参照格的共识 same 全被退回 unsure，same_cov 一格都认不到；改看退档前的 glyph_match verdict。全唐文 front5 002/003 本机实跑 match_solo_5b 2,035→3,362、1,185→1,825（形近字线 11-08）。
 - seed_admit `solo_adapt_pct`（"p10"／"p25"，缺省 None＝关，`solo_adapt_*` 不进 dump，关时逐字节不变，版本号不升、code_equiv 登记）：无参照格按字自适应门槛，通道 `match_solo_adapt`、不入字形库。cov 门槛取该字库内刻例自比分布的百分位（下限 0.94），5-b 首位须就是库首位（不认异体），领先 ≥0.01，窗口内对手是高危字对（库内互比自动算出）或形近表就不放，并比互比上限。字表由新脚本 `scripts/char_cov_profile.py` 出，放中心库 `config/groups/char_cov_profile.json`。全唐文 001–003 待审离线：p10 档放 2,221 格、按字排图全看未见确定错放（存疑 6），p25 档 1,250 格（存疑 2）（形近字线 11-08）。
 
 ## [0.6.23] - 2026-11-08
