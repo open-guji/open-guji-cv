@@ -77,3 +77,18 @@ def test_flow_review_fix_agree_end_to_end(monkeypatch):
     assert r.admit and r.char == "二"
     r = _run(monkeypatch, "yr", "一", {"ids": "二", "yr_bars": "二"}, provisional=False)   # 不开：降审
     assert not r.admit and r.char == "一"
+
+
+def test_dissent_keep_form_support():
+    from open_guji_cv.groups.flow import _dissent_keep
+    c = lambda x: x
+    # r7 殿本 vol88:91:2:21：ids 低 margin 弃权（刻形一）、yr_bars 数出二、整理本＝放行字一、文意没问
+    trail = [{"solver": "ctx", "char": None}, {"solver": "ids", "char": None, "form": "一", "margin": 0.82}, {"solver": "yr_bars", "char": "二"}]
+    assert not _dissent_keep("yr", trail, "一", "一", c, 1.0)                       # 旧：没人给放行字 → 降审
+    assert _dissent_keep("yr", trail, "一", "一", c, 1.0, form_support=True)
+    # 刻形不是放行字、或 margin 够大、或整理本不一致：不放
+    assert not _dissent_keep("yr", [{"solver": "ids", "char": None, "form": "二", "margin": 0.7}, {"solver": "yr_bars", "char": "二"}], "一", "一", c, 1.0, form_support=True)
+    assert not _dissent_keep("yr", [{"solver": "ids", "char": None, "form": "一", "margin": 1.3}, {"solver": "yr_bars", "char": "二"}], "一", "一", c, 1.0, form_support=True)
+    assert not _dissent_keep("yr", trail, "一", "二", c, 1.0, form_support=True)
+    # 文意给了别字照旧降审
+    assert not _dissent_keep("yr", trail + [{"solver": "ctx", "char": "二"}], "一", "一", c, 1.0, form_support=True)
