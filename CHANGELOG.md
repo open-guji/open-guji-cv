@@ -5,6 +5,32 @@
 
 ## [未发版]
 
+## [0.6.18] - 2026-11-08
+
+- 第 8 轮发版：从 dev e9369d3b 切（seed_admit 1.80），含 #1237–#1263（A24 R01/H01/Z01–Z03/V01/N01/P01/D01、A23 笔画法 strokes 与 lane_group_img_veto、SJ #1258/#1262、A20 #1259 书级 bend_w80_med、A22 #1256 bottom_weak_ratio、#1255 rebase 原点换算、#1261 column_warp.ruled_warp 书级开关缺省关）。殿本第 8 轮 book_defaults 写 `params.border_detect.bend_w80_med: 0`（整页三段折线）。
+
+- column_warp `ruled_warp` 列图矫正改「竖向线性、横向逐行按左右线插值」（书级，缺省关、关时不进参数 dump；`ColumnWindowRec.ruled` 关时不写；A22，殿本第 7 轮列首列尾切半根治 11-08）：整列单应把左右界行不平行（版面真实弯曲，列宽上下差 5–10%）当成透视，列图竖向被拉伸 ±9%，row_segment 等距格网偏半格，列首字头、列尾字脚切到格外。开了以后列图第 y 行就是原图线性对应那一行，Step3/Step4 回写用同一套逆映射（`ColumnMapper.of`）。殿本 r7 册 vol49／vol89／vol28：列尾下溢＞0.15 格 4.3%→0.1%／11.1%→4.5%／13.2%→8.3%，列首上溢 2.8%→0／5.6%→0.4%／5.9%→1.2%，穿字或格高不匀列 32→13／76→39／97→57；关时 column_warp、row_segment、cell_shrink 逐字节相同（code_equiv 11-08）。从 column_warp 起重跑。
+- seed_admit 1.80 `fold_aspect_ink`（书级，缺省关、不进参数 dump；A24 11-08）：折叠宽高改量墨迹主体（字组字形路 `ry_shape` 的 ratio），不量切分框；没进字组的格不按宽高判。SJ 史記看图：框量 1.1–1.4 的「日」墨迹只有 0.68–0.93。史記 r18 10 册已放行格 0 错阈值：墨迹口径正文 1.2（曰收 80%）、夹注 0.95（收 99%），框口径要 1.42（收 22%）、1.19（收 50%）。
+
+- seed_admit 1.79：`alt_select="admit"` 开 `p_ref_admit` 时，选列另跑两遍**不带 p_ref** 的准入来比（`_NO_P_REF`），产物仍取带 p_ref 的两遍；撤掉 1.77 的「p_ref 放的格按待审算」。r19 包回放（06:26、06:29、03:88，开 p_ref 四键）：1.77 在 06:26 换了 1、4、6、8 列、03:88 换了 1、3 列，而不开 p_ref 只换 06:26:1——p_ref 在后面几条跟整理本的通道之前取字，这些格不开 p_ref 时本由那些通道放，按待审算就多换了列。没开 p_ref 的书不受影响。
+- seed_admit 1.78 `fold_aspect_ctx_veto` 开着时也认字组文意解法（`evidence.group` 里 ctx agree）给的另一个字（证据记 `fold_pending.ctx_veto.group_ctx`；SJ 史記 01:45 名单页「日講官」宽高比 1.15／1.08 没有 context_decide 排名，原先只靠 shadow_veto 挡回，A24 11-08）。史記 r18 10 册正文 hi 1.05 时判错的日由 7 格（只用排名否决）降到 4 格；夹注误伤曰不增加。
+
+- seed_admit 1.77：`alt_select="admit"` 换列比较（`_col_stats`）时 `p_ref` 放的格按待审算（`_ALT_AS_REVIEW`）。p_ref 是待审格取整理本字、两遍都放，算放行会把主切法错位列的待审压下去而不换备选格网，切坏的格被整理本字盖住（史記 r19 离线开 p_ref：06:26:1「陳索」一格两字、03:88:4 列尾残块，备选格网切对；SJ 11-08）。没开 p_ref 的书没有这个通道，产物不变。
+- seed_admit 1.76 `p_ref_min_cov`（缺省 0.8 开，缺省值不进参数 dump，`None` 关；SJ 史記 r19／A24 11-08）：`p_ref_admit` 不取库判 diff（「库里没有这个字」）或机器字 cov<0.8 的格，挡住切分坏格（一格两字、残块）被整理本字盖住；P01 本身的格（unsure 档 cov≥0.85）不受影响，开着 p_ref 的书（史記）会少放这类格。
+- border_detect `bottom_weak_ratio` 下版框弱线护栏（书级，缺省 0 关、关时不进参数 dump；A22，殿本第 7 轮复查 11-08）：`seg/lines._weak_bottom_guard`，`_weak_top_guard` 的镜像——选中的下框线横向墨量不到带里最强横线的该比例、下方 ≥0.021 页高处另有够强的横线，改取最靠页心的那条（只往下挪）。殿本 vol20–99 新图源 13,320 页扫图只动 17 页、看图全是真框（vol22 p147 下框落在倒数第二行字身里、整页每列只切 20 格；vol24 p64、vol34 p37、vol44 p180、vol68 p218、vol79 p196 差 130–340 px）；vol22 全册实跑只动 p41、p147。殿本 vol20–99 建议写 0.3（book_defaults），从 border_detect 起重跑。
+- border_detect `bend_w80_med`（书级，缺省 None 取代码常数 `seg/polyline.BEND_W80_MED`＝7、不进参数 dump；A20 11-08，A31 第 8 轮用）：页级界行 w80 中位不到它的页按直线页走，写 0＝整页一律三段折线（书级 `vline_polyline: false` 仍优先）。殿本第 7 轮换 Commons 图源后界行清楚，约一半的页判成直线页，Step2 整列一个单应把列宽上下差变成字距上疏下密，row_segment 等距格网切半列首列尾的字（R02 碰裁边 17%→30%）；vol28 p100–192 强制折线后列尾下溢 13.0%→9.0%、列首上溢 7.8%→1.0%，vol89 列尾 9.7%→2.9%（ai-team `domain/CV/质检/待审原因深挖/R02-第7轮列端切半-A20`）。殿本写法 `params: {border_detect: {bend_w80_med: 0}}`；缺省下 vol28、vol89 全册产物逐字节不变，code_equiv 已登记。
+- seed_admit 1.75 `follow_ref_seen_conflict`（书级，缺省关、关时不进参数 dump；A24 N01 第 7 轮复查 11-08）：`follow_ref_seen` 也接「护栏 conflict」格——候选前两名恰是整理本形与 seen 对里的另一形、两字都被判 same（字形相同，只有整理本文意能定），放整理本形。殿本 七／𠤎（《易·震》「不喪匕鬯」文淵閣本作 U+2090E，库里 𠤎 两例图就是七）28 格；用法 `follow_ref_seen: "七=𠤎,𠤎=七"`＋本开关。
+- seed_admit 1.74 `lane_group_img_veto`（书级，缺省 None 关、关时不进参数 dump；A23 Z02 第 7 轮复查 11-08）：补放三通道要放的字与字组图像判官（`rr_img`）反对的字不同、判官概率 ≥ 该值 → 不放（doubt `lane_group_img`）。殿本 r7 vol68:160:3:16、vol67:149:9:15 图是「入」、整理本「人」被 witness3 放成人；80 册回放只命中这 2 格。
+- seed_admit 1.73 `group_flow_ref_pair`／`group_flow_ref_pair_coord` 不再把共字组搭档的码位解法（`组:codepoint`）当反对票（它只回报码位归一目标，无图像证据；本组自己的 codepoint 仍拦；只对开了这两项的书生效；A24 Z02 r7，殿本 sy 山由出 4 格看图全是山，r7 全册扫描无误放）。
+- `seed_admit` 1.72：折叠组 `fold_occluded_lib_max_cov`（书级，缺省关、关时不进参数 dump）：遮挡格库首位在组外但 cov 小于此值（印泥下没有把握的别字）仍按整理本字归组，字待文意（A24 D01 深挖 11-08，殿本 r7 己已巳遮挡 19 格；建议 0.9，需同开 `fold_occluded`、`fold_ref_char: false`）。
+- seed_admit 1.71 `p_ref_irregular_gap`（书级，缺省关、关时不进参数 dump；A24 P01 第 8 轮 11-08）：`p_ref_admit` 下，整理本字是异体写法（twedu／local:keben 指认，槪寳囘竒厯…）、机器字与它无直接异体边、库候选里整理本字及其正字的最高 cov 与机器字相差 ≤ 该值 → 取整理本字，不受 `p_ref_max_cov` 约束（相邻／夹注旋钮照旧），整理本字在字组里也放。殿本 r7 P01 275 格放 113，史記 r6 放 23（看图全对），全唐文 0。
+- 修：字组 yr（一二）的陪衬字加 `子`（`groups/registry._YR_FLOW.tolerate`；A24 N01 第 7 轮复查 11-08）：一 的字块库里排成「二 1.000、一 1.000、子 0.97–0.98」，子 落在 delta 内又不是组员，格进不了字组、停在待审（护栏 conflict，N01）。殿本 vol48/52 本地重放：目标 12 格全放成「一」（目视全对），同册其余格无变化；入口放宽，给字仍凭数横／文意。产物指纹变，下一轮重跑生效。
+- seed_admit 1.70 暂归一兜底放宽 `group_flow_pv_ref_gap`（缺省 0.01 开、`group_flow_pv_ref_cov` 0.95，缺省值不进参数 dump；A24 V01 第 7 轮 11-08）：整理本字（只认现役对位）与库首位都是某组暂归一的写法、首位 cov≥0.95、领先最好的组外候选≥0.01 时，分差内有组外形近字也进组（`flow.entry`）并允许兜底（`_provisional_base`）。第 7 轮殿本 𨽻→𨽾 还剩 20 格被 諫 據 綠 裁 等陪衬紧咬拦在组外（看图都是士示刻法）；三书 V01 现算命中 39 格（li 23、yi_560 7、shan 2、cp_ming2 2、mn 2 等），都是整理本与库首位同字异写。
+- seed_admit 1.68 `fold_ctx_vias`／`fold_ctx_strong`（书级，缺省空／关、不进参数 dump；A24 H01 第 7 轮复盘 11-08）：折叠组认字组流程里文意路已给的字（`fold.via=ctx`），次序在文意裁定库之后、整理本字之前。殿本第 7 轮 H01 L3 答案表 strong 68 格与干净会话盲读 high 全同，现 fold_pending 里 106 格可放；L1 规则错得多（37 格错 15），不要进名单。见 `doc/字组/折叠组.md`。
+- 新增 `open_guji_cv/strokes`（L1）：笔画模板逐笔配准、差一笔／量几何两种判据的纯算法；不被任何 Step 引用，产物不变（研究，接线归 groups，A24）。
+- strokes 差一笔收紧（全唐文 4,536 格留出：异判 2→0）：`verify_extra` 缺省 `hi` 0.5→0.75；钉住的笔先填小孔再量（空心点，`pin_fill_holes`）；新增 `pin_search_far`（近处没残墨才放宽找，缺省关，全唐文开 0.2）。不被 Step 引用，产物不变。
+- 修：seed_admit `group_flow_pair_shapes` 补放时整理本（或坐标对位）是两字以外的第三个字就不判（全唐文 r16 库首位王、整理本三的格被王玉模型放成王；seed_admit 1.65）。
+
 ## [0.6.17] - 2026-11-07
 
 - 第 7 轮冻结版：从 dev 4dc4448 切（seed_admit 1.64），重新带回 #1186（variants 补 14 对异体边，配底库 b21）、#1192、#1196。殿本换 Commons 景印文淵閣本页表（r003/r004）。**史記**书 yaml 要在 `params.seed_admit` 写 `alt_require_matched: true`（#1234）。

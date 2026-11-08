@@ -171,6 +171,15 @@ def test_admit_mode_pick_and_merge():
     assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
 
 
+def test_admit_mode_p_ref_is_ordinary_admit_in_stats():
+    """`_col_stats` 不再把 p_ref 格按待审算（1.79：开 p_ref 时选列改用不跑 p_ref 的两遍，见 `_NO_P_REF`）。"""
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit, PageAlignRef
+    from open_guji_cv.steps.seed_admit import _NO_P_REF, _col_stats
+    recs = [AdmitRec(id="b:1:1:1", slot=1, admit=True, channel="p_ref", char="乙"), AdmitRec(id="b:1:1:2", slot=2)]
+    assert _col_stats(PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=recs)]), 1, PageAlignRef(page=1)) == (1, 0, 0)
+    assert _NO_P_REF.get() is False
+
+
 def test_admit_mode_first_cell_guard():
     """备选首个正文整字格墨高超过其余中位数 1.6 倍：不换（只拦）。"""
     from types import SimpleNamespace as NS

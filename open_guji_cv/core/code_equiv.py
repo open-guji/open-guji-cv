@@ -243,6 +243,12 @@ _SEAL_TOP = ("卷端标题列去印点后抹列顶印边残块＋起格跳过整
              "上与 origin/dev 6a2aca8 产物逐字节相同；史記 02/04/07/10 册全册重跑只 02 p2 c4–c6、04 p2 c4、10 p2 c6 变（有意改动），"
              "scripts/code_equiv.py check，2026-11-06")
 
+_BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None 取 seg/polyline.BEND_W80_MED，不进参数 dump；殿本第7轮"
+              "Commons 图源列端切半，写 0＝整页三段折线）：border_detect 在殿本 vol28 192 页（全册）与 vol89 190 页（全册）"
+              "上与 origin/dev af80b48e（已含 #1256 下版框护栏）产物逐字节相同；border_detect、siku border 两项接在 #1256 登记之后；column_warp 只在 code_deps 里列 siku_zongmu.border，不调改动的函数；"
+              "scripts/code_equiv.py check，2026-11-08")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1066,6 +1072,53 @@ ENTRIES: tuple[Equiv, ...] = (
           new='05eac4afb853e7c3530c9103430ba0267286ff5d3b45fe3cf3b1d48f8114fe40',
           old='442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a',
           evidence='Step6 consensus_as_unsure（缺省关、不进参数 dump；A23，全唐文 r15 共识 same 被准入拦 46 格）：context_decide 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 档判断与改前同值；scripts/code_equiv.py check，2026-11-07'),
+    # column_warp 书级开关 ruled_warp（缺省关；A22，殿本 Commons 新图列首列尾切半根治，2026-11-08）
+    Equiv(module='open_guji_cv.steps.column_warp',
+          new='6452437a374cae7f29412d7b9926076bfb7cb1e814dfc7b461816fe3d19801b0',
+          old='991a42b0a7af0825750f929e9892e1a397b56a224e709b858dbbec2716724c65',
+          evidence='column_warp 在 vol49 3 页（--pages 13,93,187）上与 origin/dev 产物逐字节相同；殿本 vol49 新图（Commons r004），ruled_warp 关'),
+    Equiv(module='open_guji_cv.seg.warp',
+          new='91929f871aab2f5dd0410e136706f7d2590b8d636f4f0c70f280ea029a701df7',
+          old='5e750f4a8781a7ca6ea8a6916d330d7a27719a91fafb4814aa2e62a8bc5af353',
+          evidence='column_warp 在 vol49 3 页（--pages 13,93,187）上与 origin/dev 产物逐字节相同；殿本 vol49 新图（Commons r004），ruled_warp 关'),
+    Equiv(module='open_guji_cv.books.siku_zongmu.column',
+          new='deb342fb1677da3da4b7cb49d1f2075dc2dcd3963d55c5b3f208788a9bcba35f',
+          old='57eac44b46c0ce8126d45774bcf309f6a628aec75259f3692568ff7456a8e54b',
+          evidence='column_warp 在 vol49 3 页（--pages 13,93,187）上与 origin/dev 产物逐字节相同；殿本 vol49 新图（Commons r004），ruled_warp 关'),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='5644f7941c144488e4ed901d2d0b8d86681234eed9776004fa0484facf3ceb4e',
+          old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
+          evidence='row_segment 在 vol49 3 页（--pages 13,93,187）上与 origin/dev 产物逐字节相同；殿本 vol49 新图（Commons r004），ruled_warp 关'),
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='418f2a32f1a4caa50c4894145d7082db211c8a4385674664105c27ca9ac6e3fc',
+          old='94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e',
+          evidence='cell_shrink 在 vol49 3 页（--pages 13,93,187）上与 origin/dev 产物逐字节相同；殿本 vol49 新图（Commons r004），ruled_warp 关'),
+    # 下版框弱线护栏（A22，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='97c0f1758798397dd2dfd9de1b4862f4c34c579cf6845052072302843de35c90',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='68a672f759817954e81f4c58b1569bf273d9849b1ae4f8184f88829f5899b00b',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='7df2015660f06eb33b49b0976d4c4cffe8ef7a7a5d21eb3554b250556747ee8e',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    # 书级弯页门槛 bend_w80_med（A20，殿本第7轮列端切半，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='cbf40755dde3946c384d85189fb76f9fd2c94b9e39e75cf2209c0b78669986dc',
+          old='97c0f1758798397dd2dfd9de1b4862f4c34c579cf6845052072302843de35c90',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='eeb02e8ae3ba45b5bb3ba4ed0e6baa0111c0bdf22834f84625724d20a5f356c0',
+          old='68a672f759817954e81f4c58b1569bf273d9849b1ae4f8184f88829f5899b00b',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.seg.polyline',
+          new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
+          old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
+          evidence=_BEND_1108),
 )
 
 

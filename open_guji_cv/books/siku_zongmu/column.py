@@ -505,7 +505,7 @@ def _ink_between(rows: np.ndarray, a: int, b: int) -> bool:
 def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
                         probe: int = TOP_REFINE_PROBE, cov: float = TOP_REFINE_COV,
                         min_run: int = TOP_REFINE_MIN_RUN,
-                        min_gap: int = TOP_REFINE_MIN_GAP, det: bool = False) -> float:
+                        min_gap: int = TOP_REFINE_MIN_GAP, det: bool = False, ruled: bool = False) -> float:
     """列窗上界之上若还看得见**版框**（离上界 ≥ min_gap 行），把上界提到框的下沿。
     返回上移的行数（0 = 没动）。
 
@@ -529,7 +529,7 @@ def refine_top_by_frame(gray: np.ndarray, win: ColumnWindow,
     # 往下多看 TOP_REFINE_BELOW 行：真框正压在 top_y 上时，只看上方会把它腰斩，
     # 反而去抓更上面的外框（见 TOP_REFINE_BELOW 的注释）。
     below = int(TOP_REFINE_BELOW)
-    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y + below, det=det)
+    strip = warp_column(gray, win.left, win.right, win.top_y - probe, win.top_y + below, det=det, ruled=ruled)
     if strip.ndim == 3:
         strip = strip[:, :, 0]
     if strip.shape[1] < 20:

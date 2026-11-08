@@ -166,12 +166,26 @@ class BorderDetectParams(BaseModel):
     """弱线护栏改取哪条线（1.20）：None＝取投影 ≥ `top_weak_ratio`、在选中线之上最靠页心的一条，挪不够 0.021 页高就不动（殿本）；
     给了值＝先只留离选中线 ≥0.021 页高、投影 ≥ 这个比例的线，再取最靠页心的一条（写本：要越过字顶附近的碎横、落到框条下那道细虚线）。"""
 
+    bottom_weak_ratio: float = 0.0
+    """下版框弱线护栏（`seg/lines._weak_bottom_guard`，2026-11-08）：选中的下框线横向墨量不到带里最强横线的这个比例、
+    它下方 ≥0.021 页高处另有够强的横线，改取最靠页心的那条（只往下挪）。殿本 vol20–99 新图源写 0.3（13,320 页只动 17 页、
+    看图全对：末行字底／淡横被当下框，整页少切一格或切掉字脚）。缺省 0＝关，不进参数 dump，产物与加字段前逐字节相同。
+    配了 `bottom_gap` 的册（vol01–19）有跨页先验救援，不用开。"""
+
     vline_overrides: dict[int, list[float]] = {}
     """页级人核竖线（2026-11-02，史記文淵閣本 06 p63、04 p122 类）：自由／网格模式在右（左）外框被扫描裁掉、
     小注双行带内多出一条假界行的页上都挑不对界行（整列漏掉、小注缝被当成列界）。点名的页用人核给的界行
     **右上原点 x（与 `borders.verticals` 同一空间：离页右缘的距离，版框中高处，升序＝右→左）**整串替换探到的竖线；每条线的斜率取探到的最近一条（没有就 0），一律按直线。
     写法 `params: {border_detect: {vline_overrides: {63: [0, 167, 363, 562, 775, 1055, 1274, 1484, 1735]}}}`。
     缺省空，空时本字段不进参数 dump，产物与加字段前逐字节相同。"""
+
+    bend_w80_med: float | None = None
+    """弯页门槛（页级界行 w80 中位，px；`seg/polyline.fit_vlines_polyline` 的 `w80_med_min`）：中位不到它、任一条也不到
+    `BEND_W80_MAX` 的页按直线页走，否则整页三段折线。None＝代码常数 `BEND_W80_MED`（7）。写 0＝量得出 w80 的页一律三段折线
+    （书级 `vline_polyline: false` 仍优先）。殿本第7轮换 Commons 图源后界行清楚、w80 中位约 6，约一半的页判成直线页；
+    Step2 直线列整列一个单应，把列宽上下 5–10% 的差变成字距上疏下密，row_segment 等距格网优先就把列首列尾的字切半
+    （R02 碰裁边 17%→30%，ai-team domain/CV/质检/待审原因深挖/R02-第7轮列端切半-A20）。殿本在 book_defaults 写
+    `params: {border_detect: {bend_w80_med: 0}}`。缺省 None 不进参数 dump，产物与加字段前逐字节相同。"""
 
     @model_serializer(mode="wrap")
     def _drop_off_merge(self, handler):
@@ -190,8 +204,12 @@ class BorderDetectParams(BaseModel):
             d.pop("top_weak_ratio", None)
         if isinstance(d, dict) and self.top_weak_floor is None:
             d.pop("top_weak_floor", None)
+        if isinstance(d, dict) and not self.bottom_weak_ratio:
+            d.pop("bottom_weak_ratio", None)
         if isinstance(d, dict) and not self.vline_overrides:
             d.pop("vline_overrides", None)
+        if isinstance(d, dict) and self.bend_w80_med is None:
+            d.pop("bend_w80_med", None)
         return d
 
 
@@ -233,6 +251,8 @@ class BorderDetectStep(Step):
             col_pitch = p.grid_col_pitch if p.grid_col_pitch is not None else col_pitch
         # 缺省关时不传这个参数（border_geometry 的缺省就是关），与加字段前的调用一模一样
         lattice_kw = {"grid_lattice_fallback": True} if (grid_page and p.grid_lattice_fallback) else {}
+        # 弯页门槛：给了才传（缺省＝代码常数，与加字段前的调用一模一样）
+        bend_kw = {"bend_w80_med": p.bend_w80_med} if p.bend_w80_med is not None else {}
         # `bottom_gap` 给了才启用下版框跨页先验救援；没给就是加这套机制之前的
         # 行为（缺省参数逐位不变）。标定方法见 BookSpec.bottom_gap 的注释。
         def _detect(n_cols: int, grid: bool = grid, col_pitch=col_pitch):
@@ -249,7 +269,8 @@ class BorderDetectStep(Step):
                                   vline_polyline=ctx.book.vline_polyline,
                                   head_raise_scale=p.head_raise_scale,
                                   top_weak_ratio=p.top_weak_ratio, top_weak_floor=p.top_weak_floor,
-                                  **lattice_kw)
+                                  **({"bottom_weak_ratio": p.bottom_weak_ratio} if p.bottom_weak_ratio else {}),
+                                  **lattice_kw, **bend_kw)
 
         res = _detect(cols)
         if grid_page:
@@ -264,7 +285,7 @@ class BorderDetectStep(Step):
             if rescued:
                 # 换了线就在新的一串直线上重拟合折线（旧形状是在错的线网上拟的，vol46 p78）
                 res = refit_bends(res, gray, ink_threshold=p.ink_threshold,
-                                  vline_polyline=ctx.book.vline_polyline)
+                                  vline_polyline=ctx.book.vline_polyline, **bend_kw)
         # 窄对合并（缺省关）：内部相邻两条窄列、宽度和≈一列 → 多了一条竖线，用 cols−1 重探。
         # 没触发／重探不被接受时原样返回，下面的产物逐字节不变。
         merged_col = None

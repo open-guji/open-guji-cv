@@ -647,7 +647,8 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             verticals: list[LineMatch] | None = None,
                             book_gap: float | None = None,
                             weak_top_ratio: float = 0.0,
-                            weak_top_floor: float | None = None) -> LineMatch:
+                            weak_top_floor: float | None = None,
+                            weak_bottom_ratio: float = 0.0) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -773,6 +774,9 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
     if side == "top" and weak_top_ratio > 0:
         result = _weak_top_guard(mask, result, lo, hi, weak_top_ratio, alpha, hyst, floor=weak_top_floor)
 
+    if side == "bottom" and weak_bottom_ratio > 0:
+        result = _weak_bottom_guard(mask, result, lo, hi, weak_bottom_ratio, alpha, hyst)
+
     if side == "bottom" and verticals and book_gap is not None:
         result = _rescue_bottom(mask, result, verticals, book_gap, alpha, hyst)
         # 先按页把线挪到墨条下沿（详见 `_descend_to_ink_bottom` 上方说明），
@@ -841,6 +845,48 @@ def _weak_top_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio
         return result
     i = max(strong, key=lambda t: float(positions[t]))
     if result.position - float(positions[i]) < jump:
+        return result
+    wd, sc = half_height_score_at(curve, i, alpha, hyst)
+    return LineMatch(position=float(positions[i]), slope=slope, score=sc, width=wd,
+                     proj=float(curve[i]))
+
+
+# ── 下版框弱线护栏（2026-11-08，殿本 A22，第 7 轮 vol22 p147）──────────────
+# `_weak_top_guard` 的镜像。下版框带里一条细淡的横墨（末行字底、字间的淡横、界行下端碎墨）分数比真框条高，
+# 下框落到真框上面一两格：列里少切一格（effective_body_slots 把 21 降成 20）、整页末行字被丢或切掉字脚
+# （第 7 轮 vol22 p147 落在 2255、真框 2471，整页 14 格待审）。vol01–19 册配了 `bottom_gap` 的有跨页先验
+# 救援（`_rescue_bottom`）兜着；vol20–99 没配，而且给新图源配 `bottom_gap` 会把近乎每页的下框从内沿挪到
+# 外沿（vol22 188 页动 180 多页），不能那样补。
+# 判据同上框：选中线的横向墨量不到带里最强横线的 `ratio`，就改取它**下方**投影达标的峰里最靠页心的一条
+# （双边框取内框）；只往下找（往下只是多留白，往上会切字，同 `RESCUE_DOWN_ONLY` 的口径）；挪不够
+# `TOP_WEAK_MIN_JUMP_FRAC` 页高的不动。殿本 vol20–99 新图源 13,320 页扫图只动 17 页，看图全是真框
+# （vol22 p147、vol24 p64、vol34 p37、vol44 p180、vol68 p218、vol79 p196 差 130–340 px，其余 11 页 55–76 px，
+# 原线压在末行字脚上）。书级开关，缺省 0＝关。
+def _weak_bottom_guard(mask: np.ndarray, result: LineMatch, lo: int, hi: int, ratio: float,
+                       alpha: float, hyst: int) -> LineMatch:
+    slopes = (result.slope,) + tuple(s for s in TOP_WEAK_SLOPES if abs(s - result.slope) > 1e-9)
+    best = None
+    for s in slopes:
+        positions, c = sample_line_curve(mask, "h", lo, hi, float(s))
+        if not len(c):
+            return result
+        pk = max((float(c[i]) for i in local_maxima(c, radius=5)), default=0.0)
+        if best is None or pk > best[0] * (1 + 1e-9):
+            best = (pk, float(s), positions, c)
+    _, slope, positions, curve = best
+    peaks = [i for i in local_maxima(curve, radius=5)]
+    if not peaks:
+        return result
+    pmax = max(float(curve[i]) for i in peaks)
+    j = int(np.argmin(np.abs(positions - result.position)))
+    k0, k1 = max(0, j - 3), min(len(curve), j + 4)
+    if pmax <= 0 or float(curve[k0:k1].max()) >= ratio * pmax:
+        return result
+    strong = [i for i in peaks if float(curve[i]) >= ratio * pmax and positions[i] > result.position + 5]
+    if not strong:
+        return result
+    i = min(strong, key=lambda t: float(positions[t]))
+    if float(positions[i]) - result.position < TOP_WEAK_MIN_JUMP_FRAC * mask.shape[0]:
         return result
     wd, sc = half_height_score_at(curve, i, alpha, hyst)
     return LineMatch(position=float(positions[i]), slope=slope, score=sc, width=wd,
