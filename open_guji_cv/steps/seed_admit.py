@@ -795,6 +795,12 @@ class SeedAdmitParams(BaseModel):
     """同族书的字形库（如史記借全唐文）：`solo_5b_min_n` 的刻例数再加上那本库自己的**可信**刻例（A24 11-08 收窄版借库，A23 同意）。
     本书自己没有可信刻例的字不借（首次出现字仍走人裁）；字体族是否同族由册配置负责。放行格的 evidence `solo_5b.borrowed`
     标出「本书可信刻例不足 min_n、靠借库才够」的，供按层抽检（借库放行单独成层）。None＝不借（不进 dump）。"""
+    solo_5b_char_ok: str | None = None
+    """solo_5b 的字级白名单（A24 11-08，留出检验后）：写成一串字（如 "年實普…"）。设了才生效：库首位字须在名单里，
+    或本书库里人裁刻例 ≥ `solo_5b_human_min` 才放；其余仍待审。依据：留出 425 格错 1（牟，库里 3 条刻例全自动进库、无人裁、
+    两条像年），通用「人裁≥1」闸会砍掉 56% 放行格且挑不出错，改成人看过刻例的字级名单。None＝不限（不进 dump）。"""
+    solo_5b_human_min: int = 1
+    """白名单之外的字，本书库里人裁刻例至少几条才照放（只在 `solo_5b_char_ok` 设了时生效，不进 dump 否则）。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1334,6 +1340,9 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and self.solo_5b_borrow_db is None:
             d.pop("solo_5b_borrow_db", None)
+        if isinstance(d, dict) and self.solo_5b_char_ok is None:
+            d.pop("solo_5b_char_ok", None)
+            d.pop("solo_5b_human_min", None)
         if isinstance(d, dict) and not self.replace_form_edge_exclude:
             d.pop("replace_form_edge_exclude", None)
         if isinstance(d, dict) and not self.ref_lib_coord_dissent:
@@ -2656,6 +2665,33 @@ def _trusted_keben_counts(db_path: str, borrow_db: str | None = None) -> dict[st
     return out
 
 
+_HUMAN_COUNTS: dict = {}
+
+
+def _human_keben_counts(db_path: str) -> dict[str, int]:
+    """字 → 本书库人裁刻例数（`keben_breakdown` 的 human）。按库路径＋mtime 缓存；读不了＝空表。"""
+    from pathlib import Path
+    try:
+        key = (db_path, Path(db_path).stat().st_mtime_ns)
+    except OSError:
+        return {}
+    hit = _HUMAN_COUNTS.get(key)
+    if hit is not None:
+        return hit
+    from ..clustering.keben_counts import keben_breakdown
+    out = {ch: d.get("human", 0) for ch, d in keben_breakdown(db_path).items()}
+    _HUMAN_COUNTS.clear()
+    _HUMAN_COUNTS[key] = out
+    return out
+
+
+def solo_5b_char_allowed(ch: str, char_ok: str | None, human: dict[str, int], human_min: int) -> bool:
+    """字级白名单闸（纯函数）：没设名单＝不限；设了，字在名单里或人裁刻例够才放。"""
+    if char_ok is None:
+        return True
+    return ch in char_ok or human.get(ch, 0) >= human_min
+
+
 def _rare_ref_nf_ok(ref: str, cands: list, n_lib: int, max_n: int, strong_cov: float, are_variants,
                     cp_skip: frozenset = frozenset()) -> bool:
     """规则 A 坐标对位那支放宽 `near_form` 的条件（`rare_ref_nf`）。纯函数。BMP 字、库对该字没有判力（刻例 ≤ max_n）、
@@ -2850,6 +2886,7 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
     from ..variants import are_variants
     group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
     rmap = {r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
+    human = _human_keben_counts(p.db_path) if p.solo_5b_char_ok is not None else {}
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -2867,6 +2904,8 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
             if got is None:
                 continue
             ch, cov1, gap = got
+            if not solo_5b_char_allowed(ch, p.solo_5b_char_ok, human, p.solo_5b_human_min):
+                continue                  # 字级白名单：库首位字没人看过刻例、也没人裁 → 仍待审
             rec.admit, rec.channel, rec.provenance, rec.char = True, "match_solo_5b", "match_solo_5b", ch
             rec.doubts = []
             # 无参照页放行的格不进字形库（C4 不自喂）：入库会抬高同字的刻例数与 cov，错标越放越笃定
