@@ -30,7 +30,7 @@ def _rare(cs: list[str]) -> PageRare:
 
 
 def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict="unsure"):
-    monkeypatch.setattr(sa, "_keben_counts", lambda _db: KEBEN)
+    monkeypatch.setattr(sa, "_trusted_keben_counts", lambda _db: KEBEN)
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=None, cov=cands[0][1], wmax=16.0,
@@ -73,11 +73,22 @@ def test_off_leaves_cell_in_review(tmp_path, monkeypatch):
     assert not r.admit and "solo_5b" not in r.evidence
 
 
+def test_admitted_cell_never_enters_glyph_lib(tmp_path, monkeypatch):
+    """C4 不自喂：match_solo_5b 放行的格带 evidence.no_glyph_lib，扫尾入库不收。"""
+    r = _run(tmp_path, monkeypatch, params=ON, **GOOD)
+    assert r.admit and r.channel == "match_solo_5b" and r.evidence["no_glyph_lib"] is True
+
+
+def test_trusted_counts_missing_db_is_empty(tmp_path):
+    """库读不了＝空表＝通道不放（宁缺勿滥）。"""
+    assert sa._trusted_keben_counts(str(tmp_path / "nope.db")) == {}
+
+
 def test_on_admits_lib_top_with_evidence(tmp_path, monkeypatch):
     r = _run(tmp_path, monkeypatch, params=ON, **GOOD)
     assert r.admit and r.channel == "match_solo_5b" and r.provenance == "match_solo_5b" and r.char == "百"
     assert r.doubts == []
-    assert r.evidence["solo_5b"] == {"lib": "百", "cov": 0.985, "gap": 0.035, "rare": "百", "n_lib": 40}
+    assert r.evidence["solo_5b"] == {"lib": "百", "cov": 0.985, "gap": 0.035, "rare": "百", "n_trusted": 40}
 
 
 @pytest.mark.parametrize("kw", [
