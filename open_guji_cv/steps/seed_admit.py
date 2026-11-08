@@ -885,11 +885,16 @@ class SeedAdmitParams(BaseModel):
     仍待审、没有任何整理本对位、匹配器护栏为空或 never_match 的格，库首位 cov 与领先「第一个异字」的差 gap
     （没有异字时 gap＝cov）落在 `solo_cal_tiers` 任一档（"cov:gap" 逗号分隔，缺省 cov≥0.98 且 gap≥0.03，或 cov≥0.95 且 gap≥0.05）
     → 放库首位，通道 `match_solo_cal`，不入字形库（C4）。不放：首位或第一个异字在 `solo_cal_skip`（己已巳 于干 曰日 代伐 遣遺）；
-    首位在字组；疑问只认 `_SOLO_CAL_OK_DOUBTS`（上下文 margin 不足、near_form、never_match 护栏、库 unsure／same 但准入被拦、
-    group_flow_ref_missing；group_flow_abstain 只限首位不在字组），occluded、切分类等其余疑问一律拦。排在各补放通道最后。
+    首位在字组或形近表（Sheldon：形近字对留人审）；疑问只认 `_SOLO_CAL_OK_DOUBTS`（上下文 margin 不足、never_match 护栏、
+    库 unsure／same 但准入被拦、group_flow_ref_missing、group_flow_abstain），near_form、occluded、切分类等其余疑问一律拦。
+    排在各补放通道最后。另见 `solo_cal_5b_cov`。
     依据：004 已放行格当真值，cov≥.98＋gap≥.03 库首位错率 <0.1%，cov .95–.98＋gap≥.05 为 0.6%（错多在 代伐、遣遺）。"""
     solo_cal_tiers: str = "0.98:0.03,0.95:0.05"
     solo_cal_skip: str = "己已巳于干曰日代伐遣遺"
+    solo_cal_5b_cov: float | None = None
+    """`solo_cal` 开着时另一档：库首位＝5-b 首位、cov ≥ 这个值就放，不看 gap（其余排除照 `solo_cal`）。
+    依据：004 校准，库首位与 5-b 首位一致时 cov ≥0.98 错 0.06%、0.95–0.98 错 0.44%（多为 歳歲、場埸 异体）。
+    `None`＝不开这一档（不进 dump）；开时才读 rare_candidates。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1442,8 +1447,10 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.solo_adapt_nf_ok:
             d.pop("solo_adapt_nf_ok", None)
         if isinstance(d, dict) and not self.solo_cal:
-            for k in ("solo_cal", "solo_cal_tiers", "solo_cal_skip"):
+            for k in ("solo_cal", "solo_cal_tiers", "solo_cal_skip", "solo_cal_5b_cov"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.solo_cal_5b_cov is None:
+            d.pop("solo_cal_5b_cov", None)
         if isinstance(d, dict) and self.num_run_cov_5b is None:
             d.pop("num_run_cov_5b", None)
             d.pop("num_run_gap_5b", None)
@@ -1745,7 +1752,7 @@ class SeedAdmitStep(Step):
         optional_consumes=("rare_candidates", "seals"),
         optional_consumes_when=(("rare_candidates", "rare_ref"), ("rare_candidates", "symbol_review"), ("rare_candidates", "rare_ref_sparse"),
                                 ("rare_candidates", "solo_5b_cov"), ("rare_candidates", "solo_adapt_pct"),
-                                ("rare_candidates", "num_run_cov_5b")),
+                                ("rare_candidates", "num_run_cov_5b"), ("rare_candidates", "solo_cal_5b_cov")),
         produces=("seed_admit",),
         params=SeedAdmitParams,
         needs=("db",),
@@ -2598,7 +2605,9 @@ class SeedAdmitStep(Step):
             n_review -= d_nr
         if p.solo_cal:
             # 5b-c solo_cal（升）：无参照格 5a 校准直放（cov／gap 两档，排在各补放通道最后，缺省关）
-            d_sc = _solo_cal_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
+            d_sc = _solo_cal_pass(p, out, mmap, amap,
+                                  _opt(ctx, "rare_candidates", page) if p.solo_cal_5b_cov is not None else None,
+                                  _coord_refs(ctx, page, coord_cache))
             n_auto += d_sc
             n_review -= d_sc
         n_code_fix = n_code_mismatch = 0
@@ -3307,9 +3316,9 @@ def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord
     return n
 
 
-#: `solo_cal` 允许的疑问（前缀）；group_flow_abstain 另判（首位不在字组才认）
-_SOLO_CAL_OK_DOUBTS = ("上下文 margin 不足", "near_form", "护栏:never_match", "库 unsure", "库 same 但准入被拦",
-                       "group_flow_ref_missing")
+#: `solo_cal` 允许的疑问（前缀）；group_flow_abstain 只在首位不在字组时认（字组首位本来就不放）；near_form 照拦
+_SOLO_CAL_OK_DOUBTS = ("上下文 margin 不足", "护栏:never_match", "库 unsure", "库 same 但准入被拦",
+                       "group_flow_ref_missing", "group_flow_abstain")
 
 
 def _parse_cal_tiers(spec: str) -> list[tuple[float, float]]:
@@ -3321,35 +3330,39 @@ def _parse_cal_tiers(spec: str) -> list[tuple[float, float]]:
     return out
 
 
-def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group_chars) -> tuple[str, float, float] | None:
-    """`SeedAdmitParams.solo_cal` 的判据，纯函数。`cands`：库候选 [(字, cov)]。→ (放行字, cov, gap) 或 None。"""
+def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group_chars, near_form_chars,
+                    rare_top: str | None = None, cov_5b: float | None = None,
+                    ok_doubts: tuple = _SOLO_CAL_OK_DOUBTS) -> tuple[str, float, float, str] | None:
+    """`SeedAdmitParams.solo_cal` 的判据，纯函数。`cands`：库候选 [(字, cov)]。→ (放行字, cov, gap, 档) 或 None；
+    档＝"tier"（cov／gap 档）或 "5b"（库首位＝5-b 首位且 cov ≥ cov_5b）。"""
     if guard not in (None, "never_match") or not cands:
         return None
     ranked = sorted(cands, key=lambda t: -t[1])
     c, v = ranked[0]
     v = float(v)
-    if not c or c == "〓" or not _is_hanzi(c) or c in skip or c in group_chars:
+    if (not c or c == "〓" or not _is_hanzi(c) or c in skip or c in group_chars or c in near_form_chars):
         return None
-    for d in doubts or []:
-        if not isinstance(d, str):
-            return None
-        if d.startswith(_SOLO_CAL_OK_DOUBTS) or d.startswith("group_flow_abstain"):
-            continue                      # group_flow_abstain：首位已确认不在字组
+    if any(not (isinstance(d, str) and d.startswith(ok_doubts)) for d in (doubts or [])):
         return None
     rival = next(((d, float(w)) for d, w in ranked[1:] if d and d != c), None)
     if rival is not None and rival[0] in skip:
         return None
     gap = v - rival[1] if rival is not None else v
-    if not any(v >= tc and gap >= tg for tc, tg in tiers):
-        return None
-    return c, v, round(gap, 4)
+    if any(v >= tc and gap >= tg for tc, tg in tiers):
+        return c, v, round(gap, 4), "tier"
+    if cov_5b is not None and rare_top == c and v >= cov_5b:
+        return c, v, round(gap, 4), "5b"
+    return None
 
 
-def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict[str, str]) -> int:
+def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str]) -> int:
     """无参照格 5a 校准直放。→ 升级格数。见 `SeedAdmitParams.solo_cal`。"""
+    from ..clustering.seeding import NEAR_FORM_CHARS
     from ..groups.registry import GROUPS
     group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
     tiers = _parse_cal_tiers(p.solo_cal_tiers)
+    rmap = ({r.id: r.candidates[0].char for cc in rare.columns for r in cc.chars if r.candidates and r.candidates[0].char}
+            if rare is not None and p.solo_cal_5b_cov is not None else {})
     n = 0
     for col in out:
         for rec in col.chars or []:
@@ -3361,13 +3374,15 @@ def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coor
             if m is None or not m.candidates:
                 continue
             got = solo_cal_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, tiers=tiers,
-                                  skip=p.solo_cal_skip, group_chars=group_chars)
+                                  skip=p.solo_cal_skip, group_chars=group_chars, near_form_chars=NEAR_FORM_CHARS,
+                                  rare_top=rmap.get(rec.id), cov_5b=p.solo_cal_5b_cov)
             if got is None:
                 continue
-            ch, cov1, gap = got
+            ch, cov1, gap, how = got
             rec.admit, rec.channel, rec.provenance, rec.char = True, "match_solo_cal", "match_solo_cal", ch
             rec.doubts = []
-            rec.evidence = {**rec.evidence, "no_glyph_lib": True, "solo_cal": {"lib": ch, "cov": round(cov1, 4), "gap": gap}}
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True,
+                            "solo_cal": {"lib": ch, "cov": round(cov1, 4), "gap": gap, "by": how, "rare": rmap.get(rec.id)}}
             n += 1
     return n
 

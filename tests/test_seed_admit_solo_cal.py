@@ -9,15 +9,23 @@ from open_guji_cv.steps.seed_admit import SeedAdmitParams, _parse_cal_tiers, sol
 TIERS = _parse_cal_tiers("0.98:0.03,0.95:0.05")
 SKIP = "己已巳于干曰日代伐遣遺"
 KW = dict(guard=None, doubts=["库 unsure(cov=0.97)", "上下文 margin 不足(0.02)"], tiers=TIERS, skip=SKIP,
-          group_chars=frozenset("王玉"))
+          group_chars=frozenset("王玉"), near_form_chars=frozenset("七匕士土"))
 
 
 def test_tiers():
     assert TIERS == [(0.98, 0.03), (0.95, 0.05)]
-    assert solo_cal_decide(cands=[("張", 0.985), ("振", 0.95)], **KW) == ("張", 0.985, 0.035)
-    assert solo_cal_decide(cands=[("張", 0.96), ("振", 0.905)], **KW) == ("張", 0.96, 0.055)
-    assert solo_cal_decide(cands=[("張", 0.96)], **KW) == ("張", 0.96, 0.96)       # 没有异字：gap＝cov
-    assert solo_cal_decide(cands=[("張", 0.985), ("張", 0.97), ("振", 0.95)], **KW) == ("張", 0.985, 0.035)
+    assert solo_cal_decide(cands=[("張", 0.985), ("振", 0.95)], **KW) == ("張", 0.985, 0.035, "tier")
+    assert solo_cal_decide(cands=[("張", 0.96), ("振", 0.905)], **KW) == ("張", 0.96, 0.055, "tier")
+    assert solo_cal_decide(cands=[("張", 0.96)], **KW) == ("張", 0.96, 0.96, "tier")       # 没有异字：gap＝cov
+    assert solo_cal_decide(cands=[("張", 0.985), ("張", 0.97), ("振", 0.95)], **KW) == ("張", 0.985, 0.035, "tier")
+
+
+def test_5b_tier():
+    cands = [("張", 0.955), ("振", 0.95)]
+    assert solo_cal_decide(cands=cands, **KW) is None
+    assert solo_cal_decide(cands=cands, rare_top="張", cov_5b=0.95, **KW) == ("張", 0.955, 0.005, "5b")
+    assert solo_cal_decide(cands=cands, rare_top="振", cov_5b=0.95, **KW) is None      # 5-b 不同意（汪→注 这类）
+    assert solo_cal_decide(cands=[("張", 0.945), ("振", 0.90)], rare_top="張", cov_5b=0.95, **KW) is None
 
 
 @pytest.mark.parametrize("cands,over", [
@@ -30,19 +38,22 @@ def test_tiers():
     ([("張", 0.99), ("振", 0.90)], {"guard": "conflict"}),
     ([("張", 0.99), ("振", 0.90)], {"doubts": ["occluded"]}),
     ([("張", 0.99), ("振", 0.90)], {"doubts": ["库里没有这个字"]}),
+    ([("張", 0.99), ("振", 0.90)], {"doubts": ["near_form"]}),     # 形近疑问照拦
+    ([("士", 0.99), ("張", 0.90)], {}),                            # 首位在形近表
 ])
 def test_blocks(cands, over):
     assert solo_cal_decide(cands=cands, **{**KW, **over}) is None
 
 
 def test_ok_doubts():
-    for d in ("near_form", "护栏:never_match", "group_flow_abstain"):
-        assert solo_cal_decide(cands=[("七", 0.99), ("匕", 0.90)], **{**KW, "doubts": [d]}) is not None
-    assert solo_cal_decide(cands=[("七", 0.99), ("匕", 0.90)], **{**KW, "guard": "never_match"}) is not None
+    for d in ("护栏:never_match", "group_flow_abstain", "上下文 margin 不足(0.0)"):
+        assert solo_cal_decide(cands=[("張", 0.99), ("振", 0.90)], **{**KW, "doubts": [d]}) is not None
+    assert solo_cal_decide(cands=[("張", 0.99), ("振", 0.90)], **{**KW, "guard": "never_match"}) is not None
 
 
 def test_params_invisible_when_off():
     d = SeedAdmitParams().model_dump()
     assert not [k for k in d if k.startswith("solo_cal")]
     d = SeedAdmitParams(solo_cal=True).model_dump()
-    assert d["solo_cal"] and d["solo_cal_tiers"] == "0.98:0.03,0.95:0.05"
+    assert d["solo_cal"] and d["solo_cal_tiers"] == "0.98:0.03,0.95:0.05" and "solo_cal_5b_cov" not in d
+    assert SeedAdmitParams(solo_cal=True, solo_cal_5b_cov=0.95).model_dump()["solo_cal_5b_cov"] == 0.95
