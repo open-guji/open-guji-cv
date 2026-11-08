@@ -1066,6 +1066,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='05eac4afb853e7c3530c9103430ba0267286ff5d3b45fe3cf3b1d48f8114fe40',
           old='442732ff599c28b52a7dca9064ce776441c2f9b4dadf867d9863d380e6a43a1a',
           evidence='Step6 consensus_as_unsure（缺省关、不进参数 dump；A23，全唐文 r15 共识 same 被准入拦 46 格）：context_decide 在测试样页 keben 3 页（--pages 1,2,3）与 origin/dev 产物逐字节相同；关时 same 档判断与改前同值；scripts/code_equiv.py check，2026-11-07'),
+    # 下版框弱线护栏（A22，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='97c0f1758798397dd2dfd9de1b4862f4c34c579cf6845052072302843de35c90',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='68a672f759817954e81f4c58b1569bf273d9849b1ae4f8184f88829f5899b00b',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='7df2015660f06eb33b49b0976d4c4cffe8ef7a7a5d21eb3554b250556747ee8e',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
 )
 
 
