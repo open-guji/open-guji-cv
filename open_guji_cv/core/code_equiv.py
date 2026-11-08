@@ -1158,6 +1158,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='289dfdc83f992b9a2e1ff777b96a1862d7a886870492038363e17838db8b32d2',
           old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
           evidence='row_boundaries.trim_content_span 下框越出列图底时夹图内（原先 IndexError；A22，vol09 p204 column_gate 崩）：row_segment 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    # 参校本属性 B 块（A22，2026-11-08）
+    Equiv(module='open_guji_cv.steps.align_ref',
+          new='ff1df0dc64abf24fe7f7c4e07bb9b30f4b8db2c4fcc9e6444dd07eaaf95d81b3',
+          old='8bb8855702a074c168ac19776b22333f123521638792130b3e3df6c47a142715',
+          evidence='参校本属性 B 块（reference_profile；none 页不对位、text 页不做坐标对位，未声明的册不变）：align_ref 在殿本 vol60 新图 12 页（1,2,3,10,20,30,45,60,75,90,105,120）、全唐文 006 12 页（每 20 页取 1）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-08（A22）'),
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='d63807f867b018129e984c563f5b7e2fcf297f1b445781938544bea102c99e5b',
+          old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
+          evidence='参校本属性 B 块（reference_profile，未声明的册不变；写了的册 layout_prior 缺表不拦、自动配页不配 none／text 页）：row_segment 在殿本 vol60 新图 12 页（1,2,3,10,20,30,45,60,75,90,105,120，自动配页 strict）、全唐文 006 12 页（每 20 页取 1）、001 8 页（35–64 text、65 起 none，带离线格位表）、002 4 页（整册 none）、003 7 页（1–102 none）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-08（A22）'),
+    Equiv(module='open_guji_cv.steps.row_segment_pagemap',
+          new='65ed80d08f58bd97393f955bc71e43a5f380eb735cb3f1a3df3a97232fddc6ef',
+          old='3ef375f764f67717152ebd4e11b234ca338bbb02091dc6d07a3de50bfc52c9f0',
+          evidence='参校本属性 B 块（reference_profile，未声明的册不变；写了的册 layout_prior 缺表不拦、自动配页不配 none／text 页）：row_segment 在殿本 vol60 新图 12 页（1,2,3,10,20,30,45,60,75,90,105,120，自动配页 strict）、全唐文 006 12 页（每 20 页取 1）、001 8 页（35–64 text、65 起 none，带离线格位表）、002 4 页（整册 none）、003 7 页（1–102 none）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，GUJI_CORPUS_DRIFT=warn，2026-11-08（A22）'),
 )
 
 
