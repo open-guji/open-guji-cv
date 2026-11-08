@@ -787,6 +787,10 @@ class SeedAdmitParams(BaseModel):
     0.98／0.01／3 档 001 放约 2,700 格。"""
     solo_5b_gap: float = 0.01
     solo_5b_min_n: int = 3
+    solo_5b_borrow_db: str | None = None
+    """同族书的字形库（如史記借全唐文）：`solo_5b_min_n` 的刻例数再加上那本库自己的**可信**刻例（A24 11-08 收窄版借库，A23 同意）。
+    本书自己没有可信刻例的字不借（首次出现字仍走人裁）；字体族是否同族由册配置负责。放行格的 evidence `solo_5b.borrowed`
+    标出「本书可信刻例不足 min_n、靠借库才够」的，供按层抽检（借库放行单独成层）。None＝不借（不进 dump）。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1322,6 +1326,8 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.solo_5b_borrow_db is None:
+            d.pop("solo_5b_borrow_db", None)
         if isinstance(d, dict) and not self.replace_form_edge_exclude:
             d.pop("replace_form_edge_exclude", None)
         if isinstance(d, dict) and not self.ref_lib_coord_dissent:
@@ -2431,7 +2437,9 @@ class SeedAdmitStep(Step):
         if p.solo_5b_cov is not None:
             # 5b-s solo_5b（升）：无参照格，库首位 cov／领先／刻例够，5-b 首位作证（形近字线 001/002，缺省关）
             d_s5 = _solo_5b_pass(p, out, mmap, amap, _opt(ctx, "rare_candidates", page),
-                                 _coord_refs(ctx, page, coord_cache), _trusted_keben_counts(p.db_path))
+                                 _coord_refs(ctx, page, coord_cache),
+                                 _trusted_keben_counts(p.db_path, p.solo_5b_borrow_db),
+                                 _trusted_keben_counts(p.db_path) if p.solo_5b_borrow_db else None)
             n_auto += d_s5
             n_review -= d_s5
         n_code_fix = n_code_mismatch = 0
@@ -2622,19 +2630,21 @@ def _keben_counts(db_path: str) -> dict[str, int]:
 _TRUSTED_COUNTS: dict = {}
 
 
-def _trusted_keben_counts(db_path: str) -> dict[str, int]:
+def _trusted_keben_counts(db_path: str, borrow_db: str | None = None) -> dict[str, int]:
     """字 → 可信刻例数（人裁＋有参照互证；借库、solo、来源不明的不算，`clustering.keben_counts`），
-    `solo_5b_min_n` 读它（参校本属性 C1，A23 #1275；无参照放行不自喂）。按库路径＋mtime 缓存；读不了＝空表（通道不放）。"""
+    `solo_5b_min_n` 读它（参校本属性 C1，A23 #1275／#1276；无参照放行不自喂）。`borrow_db`＝同族书的库，
+    只加它的可信刻例、且本书自己已有 ≥1 条可信才加。按库路径＋mtime 缓存；读不了＝空表（通道不放）。"""
     from pathlib import Path
     try:
-        key = (db_path, Path(db_path).stat().st_mtime_ns)
+        key = (db_path, Path(db_path).stat().st_mtime_ns,
+               borrow_db, Path(borrow_db).stat().st_mtime_ns if borrow_db else None)
     except OSError:
         return {}
     hit = _TRUSTED_COUNTS.get(key)
     if hit is not None:
         return hit
     from ..clustering.keben_counts import trusted_keben_counts
-    out = trusted_keben_counts(db_path)
+    out = trusted_keben_counts(db_path, borrow_db)
     _TRUSTED_COUNTS.clear()
     _TRUSTED_COUNTS[key] = out
     return out
@@ -2825,7 +2835,7 @@ def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doub
 
 
 def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare, coord: dict[str, str],
-                  keben: dict[str, int]) -> int:
+                  keben: dict[str, int], keben_own: dict[str, int] | None = None) -> int:
     """无参照格「库首位＋5-b 作证」：只把**仍待审**、无任何整理本对位的格升为放行。→ 升级格数。见 `SeedAdmitParams.solo_5b_cov`。"""
     if rare is None:
         return 0
@@ -2855,7 +2865,9 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
             rec.doubts = []
             # 无参照页放行的格不进字形库（C4 不自喂）：入库会抬高同字的刻例数与 cov，错标越放越笃定
             rec.evidence = {**rec.evidence, "no_glyph_lib": True, "solo_5b": {
-                "lib": ch, "cov": round(cov1, 4), "gap": gap, "rare": rmap.get(rec.id), "n_trusted": keben.get(ch, 0)}}
+                "lib": ch, "cov": round(cov1, 4), "gap": gap, "rare": rmap.get(rec.id), "n_trusted": keben.get(ch, 0),
+                # 本书可信刻例不足、靠同族借库才够：抽检时单独成层
+                **({"borrowed": True} if keben_own is not None and keben_own.get(ch, 0) < p.solo_5b_min_n else {})}}
             n += 1
     return n
 
