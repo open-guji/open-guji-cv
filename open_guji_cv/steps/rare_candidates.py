@@ -50,6 +50,23 @@ from ..products.kinds.chars import CharRec, PageChars
 from ..products.kinds.recog import ColumnRare, PageRare, RareCand, RareRec
 
 
+def rare_corpus(book) -> str:
+    """Step5-b 的字表语料路径。缺省同 `align_ref.book_corpus`（册配置 `references[0].file`，查不到退回刻本链那份）。
+
+    册配置 `font.charset.corpus_file`（2026-11-08，全唐文·形近字；缺省不配＝旧行为）：**5-b 专用**字表语料，
+    配了且文件在就用它，不读 `references`。给不带参校本的册（全唐文 002 姓氏韵编：`references: []`，
+    退回的刻本链语料执行机上没有，5-b 整册跳过）配一份全书语料当字表，又不让 align_ref 把它当参校本对位。
+    `font` 在 `book_deps` 里，改这个键只让本册 rare_candidates 过期。"""
+    from ..core.workspace import corpus_path
+    from .align_ref import book_corpus
+    f = (((getattr(book, "font", None) or {}).get("charset")) or {}).get("corpus_file")
+    if f:
+        p = corpus_path(str(f))
+        if Path(p).exists():
+            return str(p)
+    return book_corpus(book.id)
+
+
 class RareCandidatesParams(BaseModel):
     k: int = 10
     struct_rerank: bool = False
@@ -152,9 +169,8 @@ class RareCandidatesStep(Step):
 
         from ..clustering.cnn_candidates import book_gw_variant, book_real_proto
         from ..clustering.rare_panel import rare_for_batch
-        from .align_ref import book_corpus
         p: RareCandidatesParams = ctx.params_for(self)  # type: ignore[assignment]
-        corpus = book_corpus(ctx.book.id)
+        corpus = rare_corpus(ctx.book)
         if not Path(corpus).exists():
             return
         img = np.full((64, 64), 255, np.uint8)
@@ -220,8 +236,7 @@ class RareCandidatesStep(Step):
         # 只在四庫工作区里有；考補萃編（`references: []`，无证人整理本）第一次
         # 跑全链时 6 页全部 FileNotFoundError。生僻字候选是**可选的一路**
         # （方案 §四 Step5-b），没有字表就不出候选，让 Step6/7 照常走。
-        from .align_ref import book_corpus
-        corpus = book_corpus(ctx.book.id)
+        corpus = rare_corpus(ctx.book)
         if imgs and not Path(corpus).exists():
             ctx.log(f"Step5-b 跳过：本册没有可用字表语料（{corpus} 不存在），不出生僻字候选")
             imgs = []
