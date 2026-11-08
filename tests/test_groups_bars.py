@@ -132,3 +132,11 @@ def test_ss_one_bar_near_bottom_and_close_bars_abstain():
     assert ss_count(_cross((85, 7, 4, 96)))[0] is None                  # 横在底部：切碎的字
     assert ss_count(_cross((30, 6, 4, 96), (40, 6, 4, 96)))[0] is None  # 两横挤在一起
     assert ss_count(np.full((40, 40), 255, np.uint8))[0] is None
+
+
+def test_upper_broken_bar_abstains():
+    """殿本 r7：下面一横＋邻字切进来的斜笔，斜笔横向不连续，不当上横数成二。"""
+    g = _bars((60, 8, 4, 116), h=80)
+    for i in range(0, 90, 12):                      # 上面一串断开的短笔，像一条碎横
+        g[8:15, 10 + i:14 + i] = 0
+    assert count_bars(g)[0] is None
