@@ -6,7 +6,7 @@ from open_guji_cv.clustering import glyph_db
 from open_guji_cv.clustering.keben_counts import classify, keben_breakdown, trusted_keben_counts
 
 
-def _db(tmp_path, rows):
+def _db(tmp_path, rows, borrowed=()):
     p = tmp_path / "glyph.db"
     c = sqlite3.connect(p)
     c.executescript(glyph_db._SCHEMA)
@@ -22,6 +22,9 @@ def _db(tmp_path, rows):
         if prov:
             c.execute("INSERT INTO admissions VALUES(?,?,?,?,'t')",
                       (iid, ch, prov, json.dumps({"channel": ch_ev} if ch_ev else {})))
+    if borrowed:
+        c.execute("CREATE TABLE IF NOT EXISTS borrowed(instance_id TEXT PRIMARY KEY, store TEXT)")
+        c.executemany("INSERT INTO borrowed VALUES(?,'x')", [(b,) for b in borrowed])
     c.commit(); c.close()
     return p
 
@@ -55,3 +58,19 @@ def test_breakdown(tmp_path):
 
 def test_unreadable(tmp_path):
     assert keben_breakdown(tmp_path / "nope.db") == {}
+
+
+def test_borrowed_auto_is_borrow(tmp_path):
+    p = _db(tmp_path, [("o1", "史", "human", "human", None, True),
+                       ("q1", "史", "auto", "auto", "match_ref", True)], borrowed=["q1"])
+    assert keben_breakdown(p)["史"]["borrow"] == 1
+    assert trusted_keben_counts(p) == {"史": 1}
+
+
+def test_borrow_db(tmp_path):
+    (tmp_path / "a").mkdir(); (tmp_path / "b").mkdir()
+    own = _db(tmp_path / "a", [("o1", "史", "human", "human", None, True), ("o2", "記", "auto", "auto", "match_solo", True)])
+    oth = _db(tmp_path / "b", [("q1", "史", "auto", "auto", "match_ref", True), ("q2", "史", "human", "human", None, True),
+                               ("q3", "史", "auto", "auto", "match_solo_5b", True), ("q4", "記", "human", "human", None, True)])
+    assert trusted_keben_counts(own) == {"史": 1, "記": 0}
+    assert trusted_keben_counts(own, oth) == {"史": 3, "記": 0}      # 記 本书无可信刻例，不借
