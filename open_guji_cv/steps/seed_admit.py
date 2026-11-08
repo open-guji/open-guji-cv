@@ -880,6 +880,16 @@ class SeedAdmitParams(BaseModel):
     `num_run_cov` 0.995 留下的 六／七／四／十（cov 0.97–0.995，对手 大／士／田 落后 0.03 上下）其余条件照 `num_run_cov`。
     依据：front7 待审里邻格是数字、5-b 同意、cov ≥0.97、领先 ≥0.02 的 602 格（六 255、七 158、四 114、十 34…）逐格看图未见错放。"""
     num_run_gap_5b: float = 0.02
+    solo_cal: bool = False
+    """无参照格「5a 校准直放」（2026-11-08 Sheldon 定「直接放」，总览按 004 校准；书级，缺省关、关时 `solo_cal*` 都不进 dump）。
+    仍待审、没有任何整理本对位、匹配器护栏为空或 never_match 的格，库首位 cov 与领先「第一个异字」的差 gap
+    （没有异字时 gap＝cov）落在 `solo_cal_tiers` 任一档（"cov:gap" 逗号分隔，缺省 cov≥0.98 且 gap≥0.03，或 cov≥0.95 且 gap≥0.05）
+    → 放库首位，通道 `match_solo_cal`，不入字形库（C4）。不放：首位或第一个异字在 `solo_cal_skip`（己已巳 于干 曰日 代伐 遣遺）；
+    首位在字组；疑问只认 `_SOLO_CAL_OK_DOUBTS`（上下文 margin 不足、near_form、never_match 护栏、库 unsure／same 但准入被拦、
+    group_flow_ref_missing；group_flow_abstain 只限首位不在字组），occluded、切分类等其余疑问一律拦。排在各补放通道最后。
+    依据：004 已放行格当真值，cov≥.98＋gap≥.03 库首位错率 <0.1%，cov .95–.98＋gap≥.05 为 0.6%（错多在 代伐、遣遺）。"""
+    solo_cal_tiers: str = "0.98:0.03,0.95:0.05"
+    solo_cal_skip: str = "己已巳于干曰日代伐遣遺"
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1431,6 +1441,9 @@ class SeedAdmitParams(BaseModel):
             d.pop("solo_adapt_near_gap", None)
         if isinstance(d, dict) and not self.solo_adapt_nf_ok:
             d.pop("solo_adapt_nf_ok", None)
+        if isinstance(d, dict) and not self.solo_cal:
+            for k in ("solo_cal", "solo_cal_tiers", "solo_cal_skip"):
+                d.pop(k, None)
         if isinstance(d, dict) and self.num_run_cov_5b is None:
             d.pop("num_run_cov_5b", None)
             d.pop("num_run_gap_5b", None)
@@ -2583,6 +2596,11 @@ class SeedAdmitStep(Step):
                                  _opt(ctx, "rare_candidates", page) if p.num_run_cov_5b is not None else None)
             n_auto += d_nr
             n_review -= d_nr
+        if p.solo_cal:
+            # 5b-c solo_cal（升）：无参照格 5a 校准直放（cov／gap 两档，排在各补放通道最后，缺省关）
+            d_sc = _solo_cal_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_sc
+            n_review -= d_sc
         n_code_fix = n_code_mismatch = 0
         if p.pua_code_table:
             # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
@@ -3286,6 +3304,71 @@ def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord
                 rec.evidence = {**rec.evidence, "no_glyph_lib": True, "num_run": {
                     "lib": ch, "cov": round(cov1, 4), "gap": gap, "prev": prev, "next": nxt}}
                 n += 1
+    return n
+
+
+#: `solo_cal` 允许的疑问（前缀）；group_flow_abstain 另判（首位不在字组才认）
+_SOLO_CAL_OK_DOUBTS = ("上下文 margin 不足", "near_form", "护栏:never_match", "库 unsure", "库 same 但准入被拦",
+                       "group_flow_ref_missing")
+
+
+def _parse_cal_tiers(spec: str) -> list[tuple[float, float]]:
+    out = []
+    for part in (spec or "").split(","):
+        if part.strip():
+            c, g = part.split(":")
+            out.append((float(c), float(g)))
+    return out
+
+
+def solo_cal_decide(*, cands: list, guard, doubts, tiers: list, skip: str, group_chars) -> tuple[str, float, float] | None:
+    """`SeedAdmitParams.solo_cal` 的判据，纯函数。`cands`：库候选 [(字, cov)]。→ (放行字, cov, gap) 或 None。"""
+    if guard not in (None, "never_match") or not cands:
+        return None
+    ranked = sorted(cands, key=lambda t: -t[1])
+    c, v = ranked[0]
+    v = float(v)
+    if not c or c == "〓" or not _is_hanzi(c) or c in skip or c in group_chars:
+        return None
+    for d in doubts or []:
+        if not isinstance(d, str):
+            return None
+        if d.startswith(_SOLO_CAL_OK_DOUBTS) or d.startswith("group_flow_abstain"):
+            continue                      # group_flow_abstain：首位已确认不在字组
+        return None
+    rival = next(((d, float(w)) for d, w in ranked[1:] if d and d != c), None)
+    if rival is not None and rival[0] in skip:
+        return None
+    gap = v - rival[1] if rival is not None else v
+    if not any(v >= tc and gap >= tg for tc, tg in tiers):
+        return None
+    return c, v, round(gap, 4)
+
+
+def _solo_cal_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict[str, str]) -> int:
+    """无参照格 5a 校准直放。→ 升级格数。见 `SeedAdmitParams.solo_cal`。"""
+    from ..groups.registry import GROUPS
+    group_chars = frozenset(c for g in GROUPS.values() for c in g.members)
+    tiers = _parse_cal_tiers(p.solo_cal_tiers)
+    n = 0
+    for col in out:
+        for rec in col.chars or []:
+            if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                continue
+            if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+                continue                  # 有整理本对位的格归别的通道
+            m = mmap.get(rec.id)
+            if m is None or not m.candidates:
+                continue
+            got = solo_cal_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, tiers=tiers,
+                                  skip=p.solo_cal_skip, group_chars=group_chars)
+            if got is None:
+                continue
+            ch, cov1, gap = got
+            rec.admit, rec.channel, rec.provenance, rec.char = True, "match_solo_cal", "match_solo_cal", ch
+            rec.doubts = []
+            rec.evidence = {**rec.evidence, "no_glyph_lib": True, "solo_cal": {"lib": ch, "cov": round(cov1, 4), "gap": gap}}
+            n += 1
     return n
 
 
@@ -5523,7 +5606,7 @@ ALT_REQUIRE_BACKED = True
 #: 首格切坏守卫（只拦、不放）：备选那份首个正文整字格墨高 > 本列其余正文整字格墨高中位数 × 这个，就不换（03:65:7 一类）
 ALT_FIRST_CELL_MAX = 1.6
 #: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
-_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt", "iron", "seal", "group_flow", "ref_lib_coord"})
+_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt", "match_solo_cal", "iron", "seal", "group_flow", "ref_lib_coord"})
 #: 选列那两遍准入不跑 `p_ref`（换列不让整理本当主证据）：p_ref 在后面几条跟整理本的通道之前把待审格取整理本字，
 #: 两遍放得不对称，选列就跟着变（史記 r19 离线开 p_ref：06:26:1 主切法一格两字「陳索」、备选格网切对，开 p_ref 后不换；
 #: 1.77 把 p_ref 格按待审算又多换了几列，因为这些格不开 p_ref 时由后面的通道放）。SJ 11-08。
@@ -5853,7 +5936,8 @@ def _iron_ctx_dissent(iron_char: str, dec, cands, vmap, prob: float, gap: float)
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
-_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt"})
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "match_solo_adapt",
+                            "match_solo_cal"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
