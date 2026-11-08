@@ -801,6 +801,20 @@ class SeedAdmitParams(BaseModel):
     两条像年），通用「人裁≥1」闸会砍掉 56% 放行格且挑不出错，改成人看过刻例的字级名单。None＝不限（不进 dump）。"""
     solo_5b_human_min: int = 1
     """白名单之外的字，本书库里人裁刻例至少几条才照放（只在 `solo_5b_char_ok` 设了时生效，不进 dump 否则）。"""
+    num_run_cov: float | None = None
+    """无参照格「数字串里的数字」放过 never_match 护栏（2026-11-08，全唐文 001–003 总目／姓氏韻編卷数小注，形近字线；
+    书级，缺省关，`None`＝关、关时逐字节不变、两个键都不进 dump）。
+
+    韻編里人名下的卷数小注（「八四百五四」）是纯数字串，库对 七／六／四／八 cov 0.996～0.999，但这几个字在形近护栏表里
+    有搭档（七/匕、六/大、四/因、八/人），匹配器一律判 `guard=never_match`，没有整理本的页就全进待审（front3 001 约 1,100 格）。
+    这一支只给**仍待审**、整格**没有任何整理本对位**、匹配器只判了 `never_match`（不碰 conflict／timeout）的格：
+    库首位是数字（`NUM_RUN_DIGITS`）、cov ≥ `num_run_cov`、领先「语义不同」的最好候选 ≥ `num_run_gap`；疑问只有
+    `num_run_ok_doubt` 那几类（护栏:never_match、库 unsure、上下文 margin 不足、near_form）；同列同半格紧挨着的前后格
+    至少一个也是数字（已放行的看放行字，否则看库首位且 cov ≥ 0.98）→ 放库首位，`channel`＝`match_num_run`，
+    evidence `num_run`（cov、gap、前后字），带 `no_glyph_lib`（不入字形库）。人裁位不碰。只升不降。
+    依据（front3 包 001–003，never_match 待审 1,318 格里库首位是数字的 1,094 格逐格看图：七 503、六 429、四 144、八 11 全对；
+    千 7 格多在人名「房千里」里，无数字邻格本来就不放）。"""
+    num_run_gap: float = 0.01
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1340,6 +1354,9 @@ class SeedAdmitParams(BaseModel):
                 d.pop(k, None)
         if isinstance(d, dict) and self.solo_5b_borrow_db is None:
             d.pop("solo_5b_borrow_db", None)
+        if isinstance(d, dict) and self.num_run_cov is None:
+            d.pop("num_run_cov", None)
+            d.pop("num_run_gap", None)
         if isinstance(d, dict) and self.solo_5b_char_ok is None:
             d.pop("solo_5b_char_ok", None)
             d.pop("solo_5b_human_min", None)
@@ -2457,6 +2474,11 @@ class SeedAdmitStep(Step):
                                  _trusted_keben_counts(p.db_path) if p.solo_5b_borrow_db else None)
             n_auto += d_s5
             n_review -= d_s5
+        if p.num_run_cov is not None:
+            # 5b-n num_run（升）：无参照格，数字串里的数字放过 never_match 护栏（形近字线 001–003 卷数小注，缺省关）
+            d_nr = _num_run_pass(p, out, mmap, amap, _coord_refs(ctx, page, coord_cache))
+            n_auto += d_nr
+            n_review -= d_nr
         n_code_fix = n_code_mismatch = 0
         if p.pua_code_table:
             # 5b' code_table（改字，不降审）：格的私用码在码表里、非人裁放行字≠码表字 → 改放码表字；族外字降审。放在 vis_ruling 之前
@@ -2927,6 +2949,80 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
                 # 本书可信刻例不足、靠同族借库才够：抽检时单独成层
                 **({"borrowed": True} if keben_own is not None and keben_own.get(ch, 0) < p.solo_5b_min_n else {})}}
             n += 1
+    return n
+
+
+#: `num_run_cov` 认的数字（卷数小注只用到这些）
+NUM_RUN_DIGITS = frozenset("一二三四五六七八九十百千")
+#: `num_run_cov` 允许的疑问（前缀）；别的疑问一律不碰
+_NUM_RUN_OK_DOUBTS = ("护栏:never_match", "库 unsure", "上下文 margin 不足", "near_form")
+#: 邻格「是数字」时库首位的最低 cov（邻格未放行时）
+_NUM_RUN_NEIGHBOR_COV = 0.98
+
+
+def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | None, cov_min: float,
+                   gap_min: float, are_variants) -> tuple[str, float, float] | None:
+    """`SeedAdmitParams.num_run_cov` 的判据，纯函数（离线评测与线上共用）。`cands`：库候选 [(字, cov)]；
+    `prev`／`nxt`：同列同半格前后格的字（已判成数字才算，调用方给 None 表示不是／没有）。→ (放行字, cov, gap) 或 None。"""
+    if guard != "never_match" or not cands:
+        return None
+    if any(not (isinstance(d, str) and d.startswith(_NUM_RUN_OK_DOUBTS)) for d in (doubts or [])):
+        return None
+    ranked = sorted(cands, key=lambda t: -t[1])
+    top, cov1 = ranked[0]
+    if top not in NUM_RUN_DIGITS or float(cov1) < cov_min:
+        return None
+    if prev not in NUM_RUN_DIGITS and nxt not in NUM_RUN_DIGITS:
+        return None
+    rivals = [float(v) for c, v in ranked[1:] if c and c != top and not are_variants(c, top)]
+    gap = float(cov1) - (max(rivals) if rivals else 0.0)
+    if gap < gap_min:
+        return None
+    return top, float(cov1), round(gap, 4)
+
+
+def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord: dict[str, str]) -> int:
+    """无参照格「数字串里的数字」放过 never_match 护栏。→ 升级格数。见 `SeedAdmitParams.num_run_cov`。"""
+    from ..variants import are_variants
+
+    def digit_of(rec) -> str | None:
+        if rec.admit:
+            return rec.char if rec.char in NUM_RUN_DIGITS else None
+        m = mmap.get(rec.id)
+        if m is None or not m.candidates:
+            return None
+        c, v = max(m.candidates, key=lambda t: t[1])
+        return c if c in NUM_RUN_DIGITS and float(v) >= _NUM_RUN_NEIGHBOR_COV else None
+
+    n = 0
+    for col in out:
+        recs = list(col.chars or [])
+        # 先按放行前的状态定邻格（本支放的格不互相作证，结果与格的先后无关）
+        digit = {r.id: digit_of(r) for r in recs}
+        by_sub: dict = {}
+        for r in recs:
+            by_sub.setdefault(r.sub, []).append(r)
+        for seq in by_sub.values():
+            for i, rec in enumerate(seq):
+                if rec.admit or rec.provenance == "human" or rec.channel == "human":
+                    continue
+                if rec.id in amap or (coord.get(rec.id) or "") not in ("", "〓"):
+                    continue              # 有整理本对位的格归别的通道
+                m = mmap.get(rec.id)
+                if m is None or not m.candidates:
+                    continue
+                prev = digit[seq[i - 1].id] if i > 0 else None
+                nxt = digit[seq[i + 1].id] if i + 1 < len(seq) else None
+                got = num_run_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, prev=prev, nxt=nxt,
+                                     cov_min=p.num_run_cov, gap_min=p.num_run_gap, are_variants=are_variants)
+                if got is None:
+                    continue
+                ch, cov1, gap = got
+                rec.admit, rec.channel, rec.provenance, rec.char = True, "match_num_run", "match_num_run", ch
+                rec.doubts = []
+                rec.evidence = {**rec.evidence, "no_glyph_lib": True, "num_run": {
+                    "lib": ch, "cov": round(cov1, 4), "gap": gap, "prev": prev, "next": nxt}}
+                n += 1
     return n
 
 
@@ -5164,7 +5260,7 @@ ALT_REQUIRE_BACKED = True
 #: 首格切坏守卫（只拦、不放）：备选那份首个正文整字格墨高 > 本列其余正文整字格墨高中位数 × 这个，就不换（03:65:7 一类）
 ALT_FIRST_CELL_MAX = 1.6
 #: 有字形背书的放行通道（只凭整理本＋证人的 witnesses_coord、follow_ref 不算）
-_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "iron", "seal", "group_flow", "ref_lib_coord"})
+_BACKED = frozenset({"match_ref", "match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run", "iron", "seal", "group_flow", "ref_lib_coord"})
 #: 选列那两遍准入不跑 `p_ref`（换列不让整理本当主证据）：p_ref 在后面几条跟整理本的通道之前把待审格取整理本字，
 #: 两遍放得不对称，选列就跟着变（史記 r19 离线开 p_ref：06:26:1 主切法一格两字「陳索」、备选格网切对，开 p_ref 后不换；
 #: 1.77 把 p_ref 格按待审算又多换了几列，因为这些格不开 p_ref 时由后面的通道放）。SJ 11-08。
@@ -5494,7 +5590,7 @@ def _iron_ctx_dissent(iron_char: str, dec, cands, vmap, prob: float, gap: float)
 
 
 #: match_solo 系：只靠库形状（± OCR/CNN 背书）放行、没有整理本的通道（`solo_ctx_veto` 等用；`solo_confusable_guard` 已于 W2 删）
-_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b"})
+_SOLO_CHANNELS = frozenset({"match_solo", "match_solo_ocr", "match_solo_5b", "match_num_run"})
 
 _CORPUS_CHANNELS = (None, "match_ref", "match_replace", "match_ref_weak", "match_margin",
                     # 整理本参与的通道（match_ref 2026-09-05 补、note_lexicon 2026-09-06 补）：
