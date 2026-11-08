@@ -307,6 +307,10 @@ def _self_payload(step: Step, book: BookSpec, ph: str, legacy_code: bool = False
     # 只在开启时写这个键：关着的册（四庫等）指纹逐位不变，不触发全量重跑。
     if getattr(book, "binarized_input", False):
         payload["bin_input"] = True
+    # Step5-b 的字表语料由册配置 `rare_charset` 指定（参校本属性 C 块）：只在写了的册加键，没写的册指纹逐位不变
+    # （不进 `book_deps`，那会让所有册指纹变，见 core/ref_profile.py 模块头）。
+    if step.spec.id == "rare_candidates" and getattr(book, "rare_charset", None):
+        payload["rare_charset"] = book.rare_charset
     # 册钉了语料库版本，且这一步读语料：整步带上版本号（`core/corpus_pin.CORPUS_STEPS`）。
     # 没钉的册不写这个键，指纹逐位不变。
     from .corpus_pin import step_pin_token

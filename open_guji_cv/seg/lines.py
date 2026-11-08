@@ -637,6 +637,9 @@ def _vline_pool(mask: np.ndarray, min_dist: int, nms_percentile: float, edge_mar
 #: 1.15 够把 bxgb p53 的真框（距原带边界 140px）纳进来，也不至于把带开到
 #: 页面中部去；实测再放宽到 1.30 结果不变，说明一档就收敛。
 WIDEN_RATIO = 1.15
+# 下框贴搜索带边界时重找倾角的范围、档数（同 joint_search_coarse_to_fine 粗扫）；
+# 别的倾角上的峰分数要超过原倾角最好峰的这个倍数才换。
+LOCK_SLOPE_RANGE, LOCK_SLOPE_N, LOCK_SLOPE_GAIN = 0.05, 35, 2.0
 
 
 def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
@@ -648,7 +651,8 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                             book_gap: float | None = None,
                             weak_top_ratio: float = 0.0,
                             weak_top_floor: float | None = None,
-                            weak_bottom_ratio: float = 0.0) -> LineMatch:
+                            weak_bottom_ratio: float = 0.0,
+                            lock_reslope: bool = False) -> LineMatch:
     """找页面顶部或底部的边框线（side='top'/'bottom'）。
 
     只在页面顶/底 `band_frac` 比例的窄带内搜——上下边框不像竖直界行那样有
@@ -724,17 +728,33 @@ def find_horizontal_border(mask: np.ndarray, side: str, band_frac: float = 0.15,
                 primary = cand
 
     if side == "bottom" and abs(primary.position - inner_edge) <= boundary_slack:
-        positions, curve = sample_line_curve(mask, "h", lo, hi, primary.slope)
-        best_full: dict | None = None
-        for i in local_maxima(curve, radius=5):
-            pos = float(positions[i])
-            if abs(pos - inner_edge) <= boundary_slack:
-                continue
-            wd, sc = half_height_score_at(curve, i, alpha, hyst)
-            if best_full is None or sc > best_full["score"]:
-                best_full = dict(position=pos, score=sc, width=wd, proj=float(curve[i]))
+        # 倾角也要重找（2026-11-08，vol12 p27 新图）：贴边的 primary 连倾角一起是伪影
+        # ——截断峰在哪个倾角都窄、都高分，联合搜索挑了个 0.047 的斜角；沿这个斜角
+        # 采样，真框（倾角≈0，分数 93）被斜线拉散成一片宽峰，整带找不回来，下框停在
+        # 末三四个字中间。所以先沿 primary 倾角找（原逻辑），`lock_reslope` 开时再在粗扫各档
+        # 倾角里找非边界峰，明显更高分才换。缺省关，与加开关前逐位相同。
+        def best_off_edge(sl: float) -> dict | None:
+            positions, curve = sample_line_curve(mask, "h", lo, hi, sl)
+            best: dict | None = None
+            for i in local_maxima(curve, radius=5):
+                pos = float(positions[i])
+                if abs(pos - inner_edge) <= boundary_slack:
+                    continue
+                wd, sc = half_height_score_at(curve, i, alpha, hyst)
+                if best is None or sc > best["score"]:
+                    best = dict(position=pos, slope=sl, score=sc, width=wd, proj=float(curve[i]))
+            return best
+
+        best_full = best_off_edge(primary.slope)
+        alt = [b for b in (best_off_edge(float(sl)) for sl in
+                           np.linspace(-LOCK_SLOPE_RANGE, LOCK_SLOPE_RANGE, LOCK_SLOPE_N)) if b] if lock_reslope else []
+        if alt:
+            top_alt = max(alt, key=lambda b: b["score"])
+            # 别的倾角要明显更好才换，原倾角找到的峰优先（已对的页不动）
+            if best_full is None or top_alt["score"] > best_full["score"] * LOCK_SLOPE_GAIN:
+                best_full = top_alt
         if best_full is not None:
-            primary = LineMatch(position=best_full["position"], slope=primary.slope,
+            primary = LineMatch(position=best_full["position"], slope=best_full["slope"],
                                 score=best_full["score"], width=best_full["width"],
                                 proj=best_full["proj"])
 

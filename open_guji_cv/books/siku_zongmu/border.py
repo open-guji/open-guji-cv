@@ -783,7 +783,7 @@ SNAP_PITCH_LO, SNAP_PITCH_HI = 0.6, 1.4   # 换线后与邻线间距须在列距
 
 
 def _rule_offset(binm: np.ndarray, v: VLine, width: int, y0: int, y1: int) -> float | None:
-    ys = np.arange(y0, y1, 2)
+    ys = np.arange(y0, min(y1, binm.shape[0]), 2)   # 新图版框贴图底：下框拟合线可越出图底一两行
     base = (width - 1) - v.x_at(ys.astype(float))
     best = None
     for d in range(-SNAP_RULE_SEARCH, SNAP_RULE_SEARCH + 1):
@@ -1153,7 +1153,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     top_weak_ratio: float = TOP_WEAK_RATIO,
                     top_weak_floor: float | None = None,
                     bottom_weak_ratio: float = 0.0,
-                    bend_w80_med: float | None = None) -> BorderDetectionResult:
+                    bend_w80_med: float | None = None,
+                    bottom_lock_reslope: bool = False) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1224,6 +1225,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                                      weak_top_floor=top_weak_floor, **top_kw)
     if bottom_weak_ratio > 0:      # 缺省关时不传，与加参数前的调用一模一样
         bot_kw["weak_bottom_ratio"] = float(bottom_weak_ratio)
+    if bottom_lock_reslope:        # 同上，缺省关不传
+        bot_kw["lock_reslope"] = True
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
                                         book_gap=book_bottom_gap, **bot_kw)
 
