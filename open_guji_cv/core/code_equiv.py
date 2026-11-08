@@ -253,6 +253,8 @@ _FIT2_1108 = ('cell_shrink.inner_frame_fit2／inner_frame_snap 列尾内框线�
 
 _LOCK_1108 = 'border_detect.bottom_lock_reslope 下框贴边重找倾角（缺省关、不进参数 dump）＋下框越出图底不崩（_rule_offset 夹图内；A22，vol01–19 换新图 vol09 p112 等 9 页 IndexError、vol12 p27 下框落字身）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
 
+_TOPEDGE_1108 = 'border_detect.top_edge_reslope 上框贴图顶时连倾角重找（缺省关、不进参数 dump；A22，vol01–19 换新图 vol14 p45 上框落在图顶伪影）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1174,6 +1176,18 @@ ENTRIES: tuple[Equiv, ...] = (
           new='289dfdc83f992b9a2e1ff777b96a1862d7a886870492038363e17838db8b32d2',
           old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
           evidence='row_boundaries.trim_content_span 下框越出列图底时夹图内（原先 IndexError；A22，vol09 p204 column_gate 崩）：row_segment 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='bc37fa6957f8756a106cc157857dc3a027c4a73f4d1f48e969629a4e6a358244',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_TOPEDGE_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='3d424f82ee6c4fd460525e22d421399de9b38149755e3dae39c8ec2ec84a2bcb',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_TOPEDGE_1108),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='51f174fa9b9f26d2df85848ec2a8042b69bf77b6c08ba470c05598efdfa86cf5',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_TOPEDGE_1108),
 )
 
 
