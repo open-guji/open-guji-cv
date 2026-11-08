@@ -167,6 +167,36 @@ def test_fold_occluded_needs_switch_and_ref_lib_both_in_group(tmp_path):
     assert SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_occluded=True).model_dump()["fold_occluded"] is True
 
 
+def test_fold_occluded_lib_max_cov(tmp_path):
+    """fold_occluded_lib_max_cov：印泥下库首位在组外但没有把握（cov < 阈值）仍按整理本字归组，只记 fold_pending，不放行、不取整理本字；
+    库首位有把握的别字（cov ≥ 阈值）、整理本字在组外照旧不碰；缺省 None 不进 dump。"""
+    from types import SimpleNamespace as NS
+
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    m = sorted(FLOW_GROUPS["jys"].members)
+    ref = m[0]
+
+    def rec():
+        return [AdmitRec(id=f"{B}:1:1", slot=1, admit=False, char=None, doubts=["occluded"], channel=None, provenance="",
+                         evidence={"occluded": {"density": 30.0}})]
+    mm = lambda top, cov: {f"{B}:1:1": NS(candidates=[(top, cov)])}              # noqa: E731
+    base = dict(db_path="x", fold_groups=("jys",), fold_occluded=True, fold_ref_char=False)
+    p0 = SeedAdmitParams(**base)
+    rr = rec(); sa._fold_pass(p0, [ColumnAdmit(col=1, chars=rr)], {f"{B}:1:1": (ref, None)}, mm("唐", 0.8), store=RulingStore(tmp_path))
+    assert "fold_pending" not in (rr[0].evidence or {})                         # 缺省：库首位在组外不归组
+    p1 = SeedAdmitParams(**base, fold_occluded_lib_max_cov=0.9)
+    rr = rec(); n = sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], {f"{B}:1:1": (ref, None)}, mm("唐", 0.8), store=RulingStore(tmp_path))
+    assert n == 0 and not rr[0].admit and rr[0].evidence["fold_pending"] == {"group": "jys"}   # 归组、字待文意
+    rr = rec(); sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], {f"{B}:1:1": (ref, None)}, mm("宮", 0.97), store=RulingStore(tmp_path))
+    assert "fold_pending" not in (rr[0].evidence or {})                         # 库首位有把握的别字：不碰
+    rr = rec(); sa._fold_pass(p1, [ColumnAdmit(col=1, chars=rr)], {f"{B}:1:1": ("外", None)}, mm("唐", 0.8), store=RulingStore(tmp_path))
+    assert "fold_pending" not in (rr[0].evidence or {})                         # 整理本字在组外：不碰
+    assert "fold_occluded_lib_max_cov" not in p0.model_dump()
+    assert p1.model_dump()["fold_occluded_lib_max_cov"] == 0.9
+    assert "fold_occluded_lib_max_cov" not in SeedAdmitParams(db_path="x").model_dump()
+
+
 def test_fold_params_framework(tmp_path):
     """书级参数化（A24 H01 深挖 11-06）：fold_aspect_pairs 定哪组按宽高判、哪个字窄哪个字宽；fold_jiazhu＋fold_aspect_jiazhu 处理夹注半格
     （半格不取整理本字）；fold_aspect_ctx_veto 让上下文首选否决宽高结论。缺省全关、不进 dump。"""
