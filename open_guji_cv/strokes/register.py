@@ -38,6 +38,10 @@ class RegParams:
     pin: tuple = ()                # 这几笔（下标）不做逐笔配准、不自己找墨，信模板位置。差一笔验的那一笔用这个：
                                    # 按长短钉不稳（玉 的点贴完约 0.15 字身，正卡在阈值上，研究移植时翻过 3 格）
     pin_search: float = 0.1        # 钉住的笔在墨框里就近找「别的笔解释不了的残墨」，最多平移这么远（字身倍数）；0＝纹丝不动
+    pin_search_far: float = 0.0    # >pin_search：近处一块残墨都没有时才放宽到这么远再找（玉 的点有时连在第二横末、离模板点位远，全唐文 014:153:1:6）；
+                                   # 近处有残墨就不放宽，免得够到别处的污点（全唐文 015:82:5:10 大 撇上一团斑，一律放到 0.15 就被当成点）。
+                                   # 缺省不放宽：底子干净的书（全唐文，0.2）才开；殿本污点多，开了留出异判 35→96
+    pin_fill_holes: float = 2.0    # 量钉住那一笔前先填掉面积 ≤ 这么多（笔宽²）的小孔：刻本空心点（只剩一圈墨边）不至于量成半笔（全唐文 008:73:5:20）
     pin_dark: float = 0.0          # >0：钉住的笔只认够黑的墨（灰度 ≤ 墨中位＋pin_dark×(纸中位−墨中位)）；浅灰噪点、透字不算
     pin_min_area: float = 0.5      # 残墨至少这么多（笔宽²）才让钉住的笔去找；太小是噪点
     pin_tol: float = 0.2           # 钉住的笔量落墨时离墨多近才算（笔宽倍数）；收紧后小墨点只算盖住一小段（殿本留出异判 106→约 50）
@@ -95,6 +99,19 @@ def _fit_similarity(src, dst):
     var = (a ** 2).sum() / len(src)
     s = (D * np.diag(Sg)).sum() / var if var > 0 else 1.0
     return s, R, mu_d - s * R @ mu_s
+
+
+def _fill_holes(mask: np.ndarray, max_area: float) -> np.ndarray:
+    """填掉不贴边、面积 ≤ max_area 的小孔（空心点只剩一圈墨边）。"""
+    bg = (mask == 0).astype(np.uint8)
+    n, lab, st, _ = cv2.connectedComponentsWithStats(bg, connectivity=4)
+    H, W = mask.shape
+    out = mask.astype(bool).copy()
+    for i in range(1, n):
+        x, y, bw, bh, a = st[i]
+        if a <= max_area and x > 0 and y > 0 and x + bw < W and y + bh < H:
+            out[lab == i] = True
+    return out
 
 
 def _blobs(pts: np.ndarray, shape, max_side: float) -> list:
@@ -231,9 +248,10 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
     if p.pin_dark > 0 and ink.any() and (ink == 0).any():
         im, bg = float(np.median(g[ink > 0])), float(np.median(g[ink == 0]))
         dark = (ink > 0) & (g <= im + p.pin_dark * (bg - im))
+    if p.pin_fill_holes > 0 and any(short):
+        dark = _fill_holes(dark, p.pin_fill_holes * w * w)
     if p.pin_search > 0 and any(short):
         inkp = np.argwhere(dark > 0).astype(float)
-        R = p.pin_search * size
         for k in [k for k in range(len(fitted)) if short[k]]:
             others = [ext[j] for j in range(len(ext)) if j != k]
             if not others:
@@ -244,6 +262,10 @@ def register(gray: np.ndarray, tpl: StrokeTemplate, params: RegParams | None = N
             c = fitted[k].mean(0)
             L = arclen(fitted[k])
             need = max(3.0, p.pin_min_area * w * w, p.pin_min_frac * L * w)
+            R = p.pin_search * size
+            near_any = [b for b in blobs if np.linalg.norm(b.mean(0) - c) < R + L / 2]
+            if not near_any and p.pin_search_far > p.pin_search:
+                R = p.pin_search_far * size
             cand = [b for b in blobs if len(b) >= need and np.linalg.norm(b.mean(0) - c) < R + L / 2]
             if not cand:
                 continue
