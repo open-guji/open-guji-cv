@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- solo_5b 接可信刻例与借库（参校本属性 C1/C4，A24，A23 同意的收窄版）：`solo_5b_min_n` 改读 `trusted_keben_counts`（人裁＋有参照互证，借库／solo／来源不明不算）；`match_solo_5b` 放行格带 `evidence.no_glyph_lib`（不自喂，不进字形库）；新书级参数 `solo_5b_borrow_db`（同族书的库，加它的可信刻例，本书自己至少 1 条可信才借，缺省不借），借库放行的格标 `solo_5b.borrowed` 供分层抽检；证据键 `n_lib` 改名 `n_trusted`。seed_admit 不升版本号：solo_5b_cov 缺省关，殿本 vol62 11 页与 dev 逐字节相同，code_equiv 已登记。
 - seed_admit（版本号不变）新通道 `match_solo_5b`（书级 `solo_5b_cov`／`solo_5b_gap`／`solo_5b_min_n`，缺省关、关时不进 dump、逐字节不变）：无任何整理本对位的格，库首位 cov、领先异语义候选、刻例数都够且 5-b 首位作证才放；形近表、字组、己已巳、硬疑问不放，5-b 为空弃权（全唐文 001/002 总目、韵编，形近字线 11-08，A24 定口径）。
 - Step5-b 生僻字候选读书级 `rare_charset`（参校本属性 C 块，A24，A31 11-08 核）：册配置写了 `rare_charset: <语料文件名>` 就用它做候选字表，与参校本脱钩（`kind: none` 的书也有字表；002 此前因没写 references、字表退回四库语料而 rare_candidates 整册为空）；文件不存在记日志退回老路。没写＝照旧 `book_corpus`，行为与指纹逐位不变；写了的册指纹多一个 `rare_charset` 键（只在 `_self_payload` 里按册加，不进 `book_deps`）。
 - 册配置加参校本属性 `reference_profile` 与书级 5b 字表 `rare_charset`（参校本属性 A 块，A20，A31 11-08 核）：`core/ref_profile.py` 按页段写 `kind: column|text|none`、段用 `ref:` 指 `references[]`（质量仍只写在 `references[].quality`），写错在读配置时报；基础配置只许写 `default`；`guji book show` 加一节；B 块翻译函数 `ref_none_pages`／`ref_text_pages`、按页指纹钩子 `page_token`；manager_api 导出 `RefProfile` 等。未声明＝每页 column，不进任何步的 `book_deps`、没有步读它，L0、产物不变。设计见 ai-team `domain/CV/设计/参校本属性/A-册配置.md`。
