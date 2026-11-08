@@ -251,6 +251,8 @@ _BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None �
 
 _FIT2_1108 = ('cell_shrink.inner_frame_fit2／inner_frame_snap 列尾内框线补拟与补抹（都缺省关、不进参数 dump；A22，殿本第 7 轮带框重字块，Sheldon 11-08 定修）：cell_shrink 在殿本 vol95 新图 10 页（19,45,46,50,83,108,129,170,186,202，含原先拟不出内线的页）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08')
 
+_LOCK_1108 = 'border_detect.bottom_lock_reslope 下框贴边重找倾角（缺省关、不进参数 dump）＋下框越出图底不崩（_rule_offset 夹图内；A22，vol01–19 换新图 vol09 p112 等 9 页 IndexError、vol12 p27 下框落字身）：border_detect、column_warp 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1135,6 +1137,23 @@ ENTRIES: tuple[Equiv, ...] = (
           new='1873e0ae30c7a8ae4f34c27c038d2bdd0f1d341d56cfd40514834c7a1a37827c',
           old='0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b',
           evidence=_FIT2_1108),
+    # 下框越界护栏＋贴边重找倾角 bottom_lock_reslope（A22，vol01–19 换新图，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='92dcc6bde02debda8306a317cd9ec775d908e5c10c649f99e6b4c597738b72b3',
+          old='301df64d7926568d93c17181bff46e358275c74967b8621a619a044ec6614916',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='99dc738ba0e5e56002d0721ae06aa1c6aca64a22792c89bb1afe366b1eb3c551',
+          old='fe76aa1fb0a0a0b7e0f5df19aa17fd3cf324fba29014a8be68d0fe8d559db51e',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.seg.lines',
+          new='0269f5426a22fbb8157931579019349b93476c5bc2d6e140ee9ca52f42d1de68',
+          old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
+          evidence=_LOCK_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.row_boundaries',
+          new='289dfdc83f992b9a2e1ff777b96a1862d7a886870492038363e17838db8b32d2',
+          old='4098bb248ce17566b10e5530e65ca48410669d72bac56d6770b945c17420ee2c',
+          evidence='row_boundaries.trim_content_span 下框越出列图底时夹图内（原先 IndexError；A22，vol09 p204 column_gate 崩）：row_segment 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
 )
 
 
