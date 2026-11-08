@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.18] - 2026-11-08
+
+- 第 8 轮发版：从 dev e9369d3b 切（seed_admit 1.80），含 #1237–#1263（A24 R01/H01/Z01–Z03/V01/N01/P01/D01、A23 笔画法 strokes 与 lane_group_img_veto、SJ #1258/#1262、A20 #1259 书级 bend_w80_med、A22 #1256 bottom_weak_ratio、#1255 rebase 原点换算、#1261 column_warp.ruled_warp 书级开关缺省关）。殿本第 8 轮 book_defaults 写 `params.border_detect.bend_w80_med: 0`（整页三段折线）。
+
 - column_warp `ruled_warp` 列图矫正改「竖向线性、横向逐行按左右线插值」（书级，缺省关、关时不进参数 dump；`ColumnWindowRec.ruled` 关时不写；A22，殿本第 7 轮列首列尾切半根治 11-08）：整列单应把左右界行不平行（版面真实弯曲，列宽上下差 5–10%）当成透视，列图竖向被拉伸 ±9%，row_segment 等距格网偏半格，列首字头、列尾字脚切到格外。开了以后列图第 y 行就是原图线性对应那一行，Step3/Step4 回写用同一套逆映射（`ColumnMapper.of`）。殿本 r7 册 vol49／vol89／vol28：列尾下溢＞0.15 格 4.3%→0.1%／11.1%→4.5%／13.2%→8.3%，列首上溢 2.8%→0／5.6%→0.4%／5.9%→1.2%，穿字或格高不匀列 32→13／76→39／97→57；关时 column_warp、row_segment、cell_shrink 逐字节相同（code_equiv 11-08）。从 column_warp 起重跑。
 - seed_admit 1.80 `fold_aspect_ink`（书级，缺省关、不进参数 dump；A24 11-08）：折叠宽高改量墨迹主体（字组字形路 `ry_shape` 的 ratio），不量切分框；没进字组的格不按宽高判。SJ 史記看图：框量 1.1–1.4 的「日」墨迹只有 0.68–0.93。史記 r18 10 册已放行格 0 错阈值：墨迹口径正文 1.2（曰收 80%）、夹注 0.95（收 99%），框口径要 1.42（收 22%）、1.19（收 50%）。
 
