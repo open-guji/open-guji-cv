@@ -611,7 +611,7 @@ def _ref_pair_coord_pick(g: str, r, trail: list, coord: str | None, canon: Calla
     if not coord or coord == GAP or r.id[-1:] in ("a", "b") or not _member(g, coord, canon):
         return None
     x = canon(coord)
-    given = [t for t in trail if t.get("char")]
+    given = [t for t in trail if t.get("char") and not (":" in t["solver"] and _sname(t) == "codepoint")]   # 搭档码位解法无图像证据，不算（同 _ref_pair_pick）
     if not given or any(canon(t["char"]) != x for t in given):
         return None
     sup = [t for t in given if ":" not in t["solver"]]
@@ -638,6 +638,8 @@ def _ref_pair_pick(g: str, trail: list, ref: str | None, canon: Callable[[str], 
         c = t.get("char")
         if not c or canon(c) == x:
             continue
+        if ":" in t["solver"] and _sname(t) == "codepoint":
+            continue   # 搭档的码位解法只是回报码位归一目标，不含图像证据，不算反对（A24 Z02 r7：sy 山由出 4 格）
         if _sname(t) not in IMG_SOLVERS:
             return None
         m = _margin(t)
