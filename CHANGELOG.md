@@ -5,7 +5,9 @@
 
 ## [未发版]
 
-- seed_admit 1.72 `lane_group_img_veto`（书级，缺省 None 关、关时不进参数 dump；A23 Z02 第 7 轮复查 11-08）：补放三通道要放的字与字组图像判官（`rr_img`）反对的字不同、判官概率 ≥ 该值 → 不放（doubt `lane_group_img`）。殿本 r7 vol68:160:3:16、vol67:149:9:15 图是「入」、整理本「人」被 witness3 放成人；80 册回放只命中这 2 格。
+- seed_admit 1.74 `lane_group_img_veto`（书级，缺省 None 关、关时不进参数 dump；A23 Z02 第 7 轮复查 11-08）：补放三通道要放的字与字组图像判官（`rr_img`）反对的字不同、判官概率 ≥ 该值 → 不放（doubt `lane_group_img`）。殿本 r7 vol68:160:3:16、vol67:149:9:15 图是「入」、整理本「人」被 witness3 放成人；80 册回放只命中这 2 格。
+- seed_admit 1.73 `group_flow_ref_pair`／`group_flow_ref_pair_coord` 不再把共字组搭档的码位解法（`组:codepoint`）当反对票（它只回报码位归一目标，无图像证据；本组自己的 codepoint 仍拦；只对开了这两项的书生效；A24 Z02 r7，殿本 sy 山由出 4 格看图全是山，r7 全册扫描无误放）。
+- `seed_admit` 1.72：折叠组 `fold_occluded_lib_max_cov`（书级，缺省关、关时不进参数 dump）：遮挡格库首位在组外但 cov 小于此值（印泥下没有把握的别字）仍按整理本字归组，字待文意（A24 D01 深挖 11-08，殿本 r7 己已巳遮挡 19 格；建议 0.9，需同开 `fold_occluded`、`fold_ref_char: false`）。
 - seed_admit 1.71 `p_ref_irregular_gap`（书级，缺省关、关时不进参数 dump；A24 P01 第 8 轮 11-08）：`p_ref_admit` 下，整理本字是异体写法（twedu／local:keben 指认，槪寳囘竒厯…）、机器字与它无直接异体边、库候选里整理本字及其正字的最高 cov 与机器字相差 ≤ 该值 → 取整理本字，不受 `p_ref_max_cov` 约束（相邻／夹注旋钮照旧），整理本字在字组里也放。殿本 r7 P01 275 格放 113，史記 r6 放 23（看图全对），全唐文 0。
 - 修：字组 yr（一二）的陪衬字加 `子`（`groups/registry._YR_FLOW.tolerate`；A24 N01 第 7 轮复查 11-08）：一 的字块库里排成「二 1.000、一 1.000、子 0.97–0.98」，子 落在 delta 内又不是组员，格进不了字组、停在待审（护栏 conflict，N01）。殿本 vol48/52 本地重放：目标 12 格全放成「一」（目视全对），同册其余格无变化；入口放宽，给字仍凭数横／文意。产物指纹变，下一轮重跑生效。
 - seed_admit 1.70 暂归一兜底放宽 `group_flow_pv_ref_gap`（缺省 0.01 开、`group_flow_pv_ref_cov` 0.95，缺省值不进参数 dump；A24 V01 第 7 轮 11-08）：整理本字（只认现役对位）与库首位都是某组暂归一的写法、首位 cov≥0.95、领先最好的组外候选≥0.01 时，分差内有组外形近字也进组（`flow.entry`）并允许兜底（`_provisional_base`）。第 7 轮殿本 𨽻→𨽾 还剩 20 格被 諫 據 綠 裁 等陪衬紧咬拦在组外（看图都是士示刻法）；三书 V01 现算命中 39 格（li 23、yi_560 7、shan 2、cp_ming2 2、mn 2 等），都是整理本与库首位同字异写。
