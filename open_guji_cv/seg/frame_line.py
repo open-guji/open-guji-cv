@@ -56,6 +56,8 @@ PF_MIN_PRESENCE = 0.25   # 线带里有墨的小段至少占这么多
 PF_SEGS = 6              # 细化线位时把宽度切这么多段
 PF_REFINE = 5            # 各段在粗线位 ±这么多行里找峰
 PF_REFINE_TOL = 2.0      # 各段线心离一次式超过这么多行的不算
+PF_RULE_COV = 0.7        # rule_mask：线位以上那段里墨占这么多以上的像素列当界行／竖画剔掉
+PF_THICK_PER_CELL = 0.11  # profile_fit2：整宽法线厚上限 = max(INNER_MAX_THICK, 这么多 × 格高)；殿本新图粗内线 8–12 行（格高约 111）
 
 
 @dataclass(frozen=True)
@@ -120,12 +122,15 @@ def _ransac_poly(x: np.ndarray, y: np.ndarray, deg: int, tol: float, rng: np.ran
 
 def fit_inner_frame_line(ink: np.ndarray, x0: int, x1: int, y_hint: float, cell_h: float,
                          side: str = "bottom", seed: int = 0, profile_fallback: bool = False,
-                         max_thick: float = INNER_MAX_THICK, seed_fallback: bool = False) -> InnerFrameLine | None:
+                         max_thick: float = INNER_MAX_THICK, seed_fallback: bool = False,
+                         profile_fit2: bool = False) -> InnerFrameLine | None:
     """在二值墨图 `ink`（True＝墨）上拟一道内框细线。
 
     x0/x1：文字块左右（只在这段里量）；y_hint：版框大致的 y（Step1/2 给的，内线或外框都行）；
     cell_h：格高（定搜索带与距离上限）；side：下框 "bottom" / 上框 "top"。拟不出可信的线返回 None。
     profile_fallback：外框拟出来了、小段投票拟不出内线时，改按外框拉直的整宽行墨找内线（`_profile_inner`）。
+    profile_fit2：（只下框）整宽法也拟不出时再试一次：线厚上限放到 PF_THICK_PER_CELL 格高、剔掉界行再量（`_profile_inner` 的
+    max_thick／rule_mask），加空段验线，只补原先拟不出的页。上框试过：列首的抬头框、粗上框里拟出的线不可靠（vol95 p170），不开。
     seed_fallback：两法都拟不出时，按「薄段＋白缝＋外框」三件套量出的中位距离从外框平移出一道种子线（via="seed"），
     只给 `localize_inner_line` 当起点——它贴不上（返回原线、没有 knots）就不能用。"""
     h, w = ink.shape
@@ -160,6 +165,9 @@ def fit_inner_frame_line(ink: np.ndarray, x0: int, x1: int, y_hint: float, cell_
     line = _chunk_inner(ink, chunks, outer, float(inl.mean()), x0, x1, cell_h, side, rng, max_thick=max_thick)
     if line is None and profile_fallback:
         line = _profile_inner(ink, outer, float(inl.mean()), x0, x1, cell_h, side)
+        if line is None and profile_fit2 and side == "bottom":
+            line = _profile_inner(ink, outer, float(inl.mean()), x0, x1, cell_h, side,
+                                  max_thick=max(float(INNER_MAX_THICK), PF_THICK_PER_CELL * float(cell_h)), rule_mask=True)
     if line is None and seed_fallback:
         line = _seed_inner(chunks, outer, float(inl.mean()), x0, x1, cell_h, side, max_thick)
     return line
@@ -263,19 +271,21 @@ def _straight_rows(ink: np.ndarray, outer: np.ndarray, x0: int, x1: int, n: int,
     return out
 
 
-def _peak_at(pr: np.ndarray, pk: int, lo_idx: int = 0) -> tuple[int, int]:
-    """峰 pk 的半高宽连续段 [a, b]。"""
+def _peak_at(pr: np.ndarray, pk: int, lo_idx: int = 0, base: float = 0.0) -> tuple[int, int]:
+    """峰 pk 的半高宽连续段 [a, b]；`base`：底子（半高量在底子与峰之间）。"""
     pv = pr[pk]
+    half = base + (pv - base) / 2
     a = b = pk
-    while a - 1 >= lo_idx and pr[a - 1] >= pv / 2:
+    while a - 1 >= lo_idx and pr[a - 1] >= half:
         a -= 1
-    while b + 1 < len(pr) and pr[b + 1] >= pv / 2:
+    while b + 1 < len(pr) and pr[b + 1] >= half:
         b += 1
     return a, b
 
 
 def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: int, x1: int,
-                   cell_h: float, side: str) -> InnerFrameLine | None:
+                   cell_h: float, side: str, max_thick: float = INNER_MAX_THICK,
+                   rule_mask: bool = False) -> InnerFrameLine | None:
     """整宽行墨找内线（2026-11-05，A22-2 列端评测集）：殿本新图约两成页的内线磨成点线，小段里一行墨占比
     到不了 RUN_COV，或空段里看不见，小段投票拟不出来；但外框拟得稳，把版面按外框拉直、整宽求每行墨占比，
     点线也在离外框固定距离（殿本 10–15 行）上叠出一个峰。
@@ -285,13 +295,22 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
     2. 内线跟外框差一点斜率，整宽叠起来峰会变胖：把宽度切 PF_SEGS 段，各段在粗线位 ±PF_REFINE 行里找峰，
        半高宽超过 INNER_MAX_THICK 的段（线跟字脚连成片）不用，其余至少 3 段，线心按 x 拟一次式（与小段法同样
        允许 INNER_MAX_SLOPE），线厚取各段半高宽的中位数；
-    3. 线带里有墨的小段至少 PF_MIN_PRESENCE（几个字脚对齐成不了这么宽）。"""
+    3. 线带里有墨的小段至少 PF_MIN_PRESENCE（几个字脚对齐成不了这么宽）。
+
+    `max_thick`：线厚上限（缺省 INNER_MAX_THICK）。`rule_mask`（cell_shrink.inner_frame_fit2）：线位以上那段里
+    几乎整段是墨的像素列（界行、字的竖画）先剔掉再量行墨，各段的半高宽按「峰与线往页心那侧的谷」之间量——
+    点线的峰只有 0.1–0.2，界行和字脚垫起来的底子就有 0.1，按 0 量半高宽量不出来（殿本 vol95 p19、p45）。"""
     n = int(INNER_MAX_GAP * cell_h)
     if n < 6:
         return None
     rows = _straight_rows(ink, outer, x0, x1, n, side)
-    pr = rows.mean(axis=1)
     lo, hi = max(2, int(np.ceil(PF_D_RANGE[0] * cell_h))), min(n - 2, int(PF_D_RANGE[1] * cell_h))
+    xs_all = np.arange(x0, x1)
+    if rule_mask and n - hi > 4:
+        keep_c = rows[hi + 1:].mean(axis=0) < PF_RULE_COV
+        if keep_c.sum() >= 0.5 * len(keep_c):
+            rows, xs_all = rows[:, keep_c], xs_all[keep_c]
+    pr = rows.mean(axis=1)
     best = None
     for d in range(lo, hi + 1):
         pv = float(pr[d])
@@ -300,7 +319,7 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
         a, _b = _peak_at(pr, d, 1)
         if a < 3 or float(pr[2:a].min()) > PF_GAP_INK:
             continue
-        after = pr[d + 1:d + 1 + INNER_MAX_THICK]       # 线往里 INNER_MAX_THICK 行内要有个谷（字脚可能紧跟着线）
+        after = pr[d + 1:d + 1 + int(max_thick)]       # 线往里 max_thick 行内要有个谷（字脚可能紧跟着线）
         if after.size == 0 or float(after.min()) > PF_DROP * pv:
             continue
         if best is None or pv > best[1]:
@@ -308,7 +327,7 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
     if best is None:
         return None
     c0 = best[0]
-    w = (x1 - x0) // PF_SEGS
+    w = rows.shape[1] // PF_SEGS
     xs_l, c_l, t_l = [], [], []
     for k in range(PF_SEGS):
         ps = rows[:, k * w:(k + 1) * w].mean(axis=1)
@@ -316,10 +335,11 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
         pk = a0 + int(np.argmax(ps[a0:z0]))
         if ps[pk] < PF_PEAK_MIN:
             continue
-        a, b = _peak_at(ps, pk, 1)
-        if b - a + 1 > INNER_MAX_THICK:             # 这段线跟字脚连成一片，量不准，不用
+        base = float(ps[pk + 1:pk + 2 + int(max_thick)].min()) if rule_mask and pk + 1 < n else 0.0
+        a, b = _peak_at(ps, pk, 1, base=min(base, 0.5 * float(ps[pk])))
+        if b - a + 1 > max_thick:             # 这段线跟字脚连成一片，量不准，不用
             continue
-        xs_l.append(x0 + (k + 0.5) * w)
+        xs_l.append(float(xs_all[k * w:(k + 1) * w].mean()))
         c_l.append((a + b) / 2.0)
         t_l.append(b - a + 1)
     if len(xs_l) < 3:
@@ -336,7 +356,7 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
     if abs(kk) > INNER_MAX_SLOPE:
         return None
     thick = float(np.median(np.asarray(t_l, float)[keep]))
-    if thick > INNER_MAX_THICK:
+    if thick > max_thick:
         return None
     cm = kk * (x0 + x1) / 2.0 + bb
     if not (PF_D_RANGE[0] * cell_h <= cm <= PF_D_RANGE[1] * cell_h):
@@ -357,6 +377,20 @@ def _profile_inner(ink: np.ndarray, outer: np.ndarray, outer_inlier: float, x0: 
     pres = float(np.mean(hit)) if hit else 0.0
     if pres < PF_MIN_PRESENCE:
         return None
+    if rule_mask:
+        # 放宽后容易把一排字脚当线（vol95 p46：字脚的碎墨排成一行，真内线淡到拟不出）：同小段法的空段验线——
+        # 线朝页心 BLANK_ABOVE 格高里没字的小段（空格底下）也要看得见线
+        n_blank = n_hit = 0
+        for j, i in enumerate(range(0, len(xs) - CHUNK + 1, CHUNK)):
+            c = float(cy[i + CHUNK // 2])
+            a, z = (int(c - half - BLANK_ABOVE * cell_h), int(c - half) - 2) if side == "bottom" else \
+                (int(c + half) + 3, int(c + half + BLANK_ABOVE * cell_h))
+            sub = ink[max(0, a):min(ink.shape[0], z + 1), xs[i]:xs[i] + CHUNK]
+            if sub.size and float(sub.mean()) <= BLANK_INK:
+                n_blank += 1
+                n_hit += bool(hit[j])
+        if n_blank >= MIN_BLANK_N and n_hit < MIN_BLANK_HITS * n_blank:
+            return None
     return InnerFrameLine(side=side, center=tuple(float(v) for v in center), thick=thick,
                           outer_inlier=outer_inlier, support=pres, x_range=(x0, x1), via="profile")
 
