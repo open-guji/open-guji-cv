@@ -9,6 +9,7 @@ from pathlib import Path
 import yaml
 
 from ..errors import BadRequest
+from .ref_profile import UNDECLARED, RefProfile
 
 #: 引擎仓内的 `books/`——**已退役**（2026-09-15 用户裁定：「以后都要读 workspace
 #: 下的定义，完全不应该读 open-guji-cv 下面的」）。十册四庫的配置已全部迁进
@@ -125,6 +126,14 @@ class BookSpec:
     #: 实测如此（vol01 列首命中行首 94.7%、命中者列长相等 87.2%），据此可以做
     #: **独立于字符对齐**的丢格检测，见 `report/witness.py::col_verdict`。
     references: list[dict] = field(default_factory=list)
+    #: 参校本属性（yaml 的 `reference_profile:`，2026-11-08，`core/ref_profile.py`）：按页段写 `kind: column|text|none`，
+    #: 段用 `ref:` 指 `references[]` 里哪一份（质量看那一份的 `quality`）。未声明 = 每页 `column`、`declared=False`，
+    #: 各步行为与加这个字段之前逐位相同。**不进任何 Step 的 `book_deps`**（会让所有册指纹变），要进指纹用 `page_token`。
+    reference_profile: RefProfile = field(default_factory=lambda: UNDECLARED)
+    #: 书级 5b 字表（yaml 的 `rare_charset:`，2026-11-08）：Step5-b 候选字表用的语料文件（同 `references[].file` 的写法），
+    #: 与参校本脱钩，无参照的书／页也有字表。None = 照旧取 `references[0].file`（`align_ref.book_corpus`）。
+    #: 只定键名与读取，Step5-b 接线是参校本属性 C 块；同样不进 `book_deps`。
+    rare_charset: str | None = None
     #: ── 三模式（古籍 / 现代竖排 / 现代横排）的版式属性（2026-09-14 加，见 overview
     #: `图片初步数字化/进度/总览/05-三模式管线方案.md` §二、§六）。旧册 yaml 不写就是
     #: 默认值，行为与加这些字段之前逐位相同。
@@ -478,6 +487,8 @@ class BookSpec:
             "writing_mode": self.writing_mode, "frame": self.frame, "script": self.script,
             # 只给个数，不外泄路径——控制台判「Step5-d 整理本锚定有没有意义」够用了
             "n_references": len(self.references),
+            "reference_profile": self.reference_profile.summary(self.all_pages()),
+            "rare_charset": self.rare_charset,
             "pitch_prior": self.pitch_prior,
             "page_split": dict(self.page_split), "leaf_layout": self.leaf_layout,
             "top_band_frac": self.top_band_frac, "bottom_band_frac": self.bottom_band_frac,
@@ -707,6 +718,8 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         notes=d.get("notes", ""),
         iron_gate=bool(d.get("iron_gate", True)),      # 缺省开（sheldon 10-23 定；11-03 起 load_book 与 dataclass 缺省一致）
         references=[dict(r) for r in (d.get("references") or [])],
+        reference_profile=_load_ref_profile(d.get("reference_profile"), d.get("references"), book_id),
+        rare_charset=_load_rare_charset(d.get("rare_charset"), book_id),
         writing_mode=str(d.get("writing_mode", "vertical-rl")),
         frame=str(d.get("frame", "ruled")),
         script=str(d.get("script", "trad")),
@@ -736,6 +749,22 @@ def load_book(book_id: str, books_dir: Path | None = None) -> BookSpec:
         model=_parse_model_pin(d.get("model")),
         freeze=_load_freeze(d.get("freeze"), book_id),
     )
+
+
+def _load_ref_profile(raw, refs, book_id: str):
+    from .ref_profile import load_reference_profile
+    try:
+        return load_reference_profile(raw, [dict(r) for r in (refs or [])])
+    except ValueError as e:
+        raise ValueError(f"册 {book_id}：{e}") from None
+
+
+def _load_rare_charset(raw, book_id: str):
+    from .ref_profile import load_rare_charset
+    try:
+        return load_rare_charset(raw)
+    except ValueError as e:
+        raise ValueError(f"册 {book_id}：{e}") from None
 
 
 def _ws_codepoints(book_yaml: Path) -> dict[str, str]:

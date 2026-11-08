@@ -194,6 +194,10 @@ _EXPORTS: dict[str, tuple[str, str | None]] = {
     "_PARTNER": ("clustering.match", "_PARTNER"),
     "_safe": ("clustering.glyph_db", "_safe"),
     "K_MIN": ("clustering.glyph_db", "K_MIN"),
+    # 参校本属性（D 块 reasons.py 按页读形态，2026-11-08）
+    "RefProfile": ("core.ref_profile", "RefProfile"),
+    "load_reference_profile": ("core.ref_profile", "load_reference_profile"),
+    "ref_profile_lint": ("core.ref_profile", "lint"),
     "KIND_PARAM": ("core.page_kinds", "KIND_PARAM"),
     "load_page_kinds": ("core.page_kinds", "load_page_kinds"),
     "params_hash": ("core.engine", "params_hash"),
