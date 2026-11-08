@@ -6,6 +6,11 @@
 ## [未发版]
 
 - seed_admit `solo_adapt_pct`（"p10"／"p25"，缺省 None＝关，`solo_adapt_*` 不进 dump，关时逐字节不变，版本号不升、code_equiv 登记）：无参照格按字自适应门槛，通道 `match_solo_adapt`、不入字形库。cov 门槛取该字库内刻例自比分布的百分位（下限 0.94），5-b 首位须就是库首位（不认异体），领先 ≥0.01，窗口内对手是高危字对（库内互比自动算出）或形近表就不放，并比互比上限。字表由新脚本 `scripts/char_cov_profile.py` 出，放中心库 `config/groups/char_cov_profile.json`。全唐文 001–003 待审离线：p10 档放 2,221 格、按字排图全看未见确定错放（存疑 6），p25 档 1,250 格（存疑 2）（形近字线 11-08）。
+
+## [0.6.23] - 2026-11-08
+
+- 发版：从 dev 7a3b278 切，第8轮用。多 #1248、#1290、#1291（seed_admit 1.82）、#1292、#1293。
+- groups yr 数横（#1248）：两横时上横连续度 <0.5 弃权（`upper_broken`）；殿本 r7 Z04 yr 36 格里 18 格改弃权；846 个已放行一／二格中真「二」被弃权 2.7%（弃权不放错）。`groups/bars.py` 改了，各书 yr_bars 下游过期（A24 11-08）。
 - seed_admit `num_run_juan_cov`（缺省 None＝关，不进 dump）：num_run 开着时，紧挨数字串前面的「卷」（后一格是数字）cov ≥ 这个值也放；`solo_5b_same_cov`（同上）：solo_5b 开着时，库已判 same 的格 cov 门槛降到这个值。全唐文 002／003 front4 看图：「卷」409 格全对；0.95 档 same 格 1,961 格未见错放（1 格 費 存疑）。版本号不升、code_equiv 登记（形近字线 11-08）。
 - seed_admit `num_run_cov`／`num_run_gap`（缺省 None＝关，不进 dump，关时产物逐字节不变，版本号不升、code_equiv 登记）：无参照格「数字串里的数字」放行，通道 `match_num_run`、不入字形库。库首位是数字、cov 够、领先够、同列同半格前后至少一格也是数字，护栏只认 never_match／无护栏，疑问只认 near_form、库 unsure／same 被拦、上下文 margin、字组弃权。全唐文 001–003 front3 姓氏韻編卷数小注逐格看图 0.995／0.01 档放 1,730 格、0 错（形近字线 11-08）。
 - seed_admit 1.82：规则 A（rare_ref／rare_ref_sparse）不在折叠组待文意的格（`evidence.fold_pending`）里拿整理本字定组内字；折叠组 `fold_ref_char: false` 本来就是不信整理本（殿本 vol41:55:4:19「六日僧道」被放成日，应为曰；r7 殿本 vol20–99 只影响 2 格，另一格 vol64:51:2:10 回待审）（A24 11-08）。
