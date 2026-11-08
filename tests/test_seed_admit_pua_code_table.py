@@ -211,3 +211,18 @@ def test_load_table_registers_daizhige_code(tmp_path):
     codes, fams = load_table(tmp_path)
     assert codes[norm_code("daizhige:U+EAA0")] == "卿"
     assert fams[norm_code("daizhige:U+EB09")] == frozenset("瓠𤬄") and fams["F1007"] == frozenset("瓠𤬄")
+
+
+def test_admit_family_skips_other_codes_char(tmp_path):
+    """族里是别的码表字的字（F1001 乖垂埀 里的乖＝另一码的表字）不算互证（A24 11-08，第 7 轮 3 格垂放成乖）。"""
+    from types import SimpleNamespace as NS
+    from open_guji_cv.steps.seed_admit import _pua_code_admit_pass
+    table = ({"F1001": "埀", "DAIZHIGE:U+EA36": "乖"}, {"F1001": frozenset("乖垂埀")})
+    st = _st(tmp_path, **{"1": ("F1001", ""), "2": ("F1001", "")})
+    recs = [AdmitRec(id=f"{B}:1:{s}", slot=s, admit=False, char=c, doubts=[], channel=None, provenance="", evidence={})
+            for s, c in ((1, "乖"), (2, "垂"))]
+    mmap = {f"{B}:1:1": NS(candidates=[("乖", 0.97)], verdict="unsure", guard=None),
+            f"{B}:1:2": NS(candidates=[("垂", 0.97)], verdict="unsure", guard=None)}
+    amap = {r.id: (None, None) for r in recs}
+    n = _pua_code_admit_pass([ColumnAdmit(col=1, chars=recs)], amap, mmap, st, table, p=SeedAdmitParams(pua_code_admit=True))
+    assert n == 1 and recs[0].admit is False and recs[1].admit is True
