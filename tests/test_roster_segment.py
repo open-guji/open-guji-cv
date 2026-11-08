@@ -14,7 +14,7 @@ import open_guji_cv.steps  # noqa: F401  —— 注册 Step / 产物种类
 from helpers import make_book, run_keben_chain
 from open_guji_cv.core.step import STEPS
 from open_guji_cv.products.kinds.cells import CellRec, ColumnCells, PageCells
-from open_guji_cv.books.siku_zongmu.roster_segment import (RosterOpts, prepare, segment_roster_column,
+from open_guji_cv.books.siku_zongmu.roster_segment import (prepare, segment_roster_column,
                                                segment_roster_page)
 
 W = 180          # 列图宽
@@ -222,12 +222,29 @@ def test_lone_pair_row_between_split_tall_bands_joins_double_line():
     for y in (545, 610):
         _glyph(g, y, 100, 60, stroke=5)
         _glyph(g, y + 30, 25, 60, stroke=5)
-    ink, _w = prepare(g, (10.0, W - 10.0))
-    rc = segment_roster_column(ink, EM, opts=RosterOpts(lr_run=True))
+    rc = _seg_one(g)
     assert [it.kind for it in rc.items] == ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5
     assert all(it.x1 - it.x0 < 80 for it in rc.items)       # 没有横跨两行的框
-    off = segment_roster_column(ink, EM)                     # 开关缺省关：照旧（矮带两字并成一格）
-    assert any(it.x1 - it.x0 > 120 for it in off.items)
+
+
+def test_lone_right_char_before_double_line_is_jiazhu_a():
+    """雙行段开头右行单独一个字（左行晚半个字起，vol01 p88 c5/c6/c1 的「太」「太」「經」）：窄、靠右、下面紧接雙行，
+    就是右行第一字（jiazhu_a），不是正文。占满列宽的正文字不动。"""
+    g = _column()
+    _glyph(g, 100, 100, 52, stroke=5)                        # 右行单字，左边空
+    for k in range(1, 4):
+        _glyph(g, 100 + k * 65, 100, 52, stroke=5)
+    for k in range(3):
+        _glyph(g, 195 + k * 65, 25, 52, stroke=5)
+    rc = _seg_one(g)
+    assert [it.kind for it in rc.items] == ["jiazhu_a"] * 4 + ["jiazhu_b"] * 3
+    g2 = _column()
+    _glyph(g2, 100, 35, EM)                                  # 满宽正文字起头：仍是正文
+    for k in range(4):
+        _glyph(g2, 300 + k * 60, 100, 50, stroke=5)
+    for k in range(3):
+        _glyph(g2, 330 + k * 60, 25, 50, stroke=5)
+    assert _seg_one(g2).items[0].kind == "char"
 
 
 def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
