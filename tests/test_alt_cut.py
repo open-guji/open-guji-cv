@@ -171,21 +171,13 @@ def test_admit_mode_pick_and_merge():
     assert _pick_alt_cols([1], main, PageAdmit(page=1, columns=[weak, col(2, 5, 5)]), ref, ref, None, None) == []
 
 
-def test_admit_mode_p_ref_counts_as_review():
-    """主切法那遍的待审格被 p_ref 取整理本字放了：换列比较仍按待审算，照样换备选（史記 r19 06:26:1）。"""
+def test_admit_mode_p_ref_is_ordinary_admit_in_stats():
+    """`_col_stats` 不再把 p_ref 格按待审算（1.79：开 p_ref 时选列改用不跑 p_ref 的两遍，见 `_NO_P_REF`）。"""
     from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit, PageAdmit, PageAlignRef
-    from open_guji_cv.steps.seed_admit import _pick_alt_cols
-
-    def col(c, n_ok, n_rev, rev_channel=None):
-        recs = [AdmitRec(id=f"b:1:{c}:{i + 1}", slot=i + 1, admit=True, channel="match_ref", char="甲") for i in range(n_ok)]
-        recs += [AdmitRec(id=f"b:1:{c}:{n_ok + i + 1}", slot=n_ok + i + 1, admit=rev_channel is not None,
-                          channel=rev_channel, char="乙" if rev_channel else None) for i in range(n_rev)]
-        return ColumnAdmit(col=c, chars=recs)
-    ref = PageAlignRef(page=1, coord=[])
-    alt = PageAdmit(page=1, columns=[col(1, 9, 1)])
-    assert _pick_alt_cols([1], PageAdmit(page=1, columns=[col(1, 6, 4)]), alt, ref, ref, None, None) == [1]
-    # 主切法 4 格待审被 p_ref 放了：不算放行，照样换
-    assert _pick_alt_cols([1], PageAdmit(page=1, columns=[col(1, 6, 4, "p_ref")]), alt, ref, ref, None, None) == [1]
+    from open_guji_cv.steps.seed_admit import _NO_P_REF, _col_stats
+    recs = [AdmitRec(id="b:1:1:1", slot=1, admit=True, channel="p_ref", char="乙"), AdmitRec(id="b:1:1:2", slot=2)]
+    assert _col_stats(PageAdmit(page=1, columns=[ColumnAdmit(col=1, chars=recs)]), 1, PageAlignRef(page=1)) == (1, 0, 0)
+    assert _NO_P_REF.get() is False
 
 
 def test_admit_mode_first_cell_guard():

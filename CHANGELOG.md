@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- seed_admit 1.79：`alt_select="admit"` 开 `p_ref_admit` 时，选列另跑两遍**不带 p_ref** 的准入来比（`_NO_P_REF`），产物仍取带 p_ref 的两遍；撤掉 1.77 的「p_ref 放的格按待审算」。r19 包回放（06:26、06:29、03:88，开 p_ref 四键）：1.77 在 06:26 换了 1、4、6、8 列、03:88 换了 1、3 列，而不开 p_ref 只换 06:26:1——p_ref 在后面几条跟整理本的通道之前取字，这些格不开 p_ref 时本由那些通道放，按待审算就多换了列。没开 p_ref 的书不受影响。
 - seed_admit 1.78 `fold_aspect_ctx_veto` 开着时也认字组文意解法（`evidence.group` 里 ctx agree）给的另一个字（证据记 `fold_pending.ctx_veto.group_ctx`；SJ 史記 01:45 名单页「日講官」宽高比 1.15／1.08 没有 context_decide 排名，原先只靠 shadow_veto 挡回，A24 11-08）。史記 r18 10 册正文 hi 1.05 时判错的日由 7 格（只用排名否决）降到 4 格；夹注误伤曰不增加。
 
 - seed_admit 1.77：`alt_select="admit"` 换列比较（`_col_stats`）时 `p_ref` 放的格按待审算（`_ALT_AS_REVIEW`）。p_ref 是待审格取整理本字、两遍都放，算放行会把主切法错位列的待审压下去而不换备选格网，切坏的格被整理本字盖住（史記 r19 离线开 p_ref：06:26:1「陳索」一格两字、03:88:4 列尾残块，备选格网切对；SJ 11-08）。没开 p_ref 的书没有这个通道，产物不变。
