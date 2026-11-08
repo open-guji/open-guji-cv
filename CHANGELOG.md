@@ -5,6 +5,7 @@
 
 ## [未发版]
 
+- seed_admit 1.82：规则 A（rare_ref／rare_ref_sparse）不在折叠组待文意的格（`evidence.fold_pending`）里拿整理本字定组内字；折叠组 `fold_ref_char: false` 本来就是不信整理本（殿本 vol41:55:4:19「六日僧道」被放成日，应为曰；r7 殿本 vol20–99 只影响 2 格，另一格 vol64:51:2:10 回待审）（A24 11-08）。
 - seed_admit `solo_5b_char_ok`／`solo_5b_human_min`（缺省 None＝关，不进 dump，关时产物逐字节不变）：solo_5b 的字级白名单，库首位字须在名单里或本书人裁刻例 ≥ human_min 才放。全唐文留出检验错放 牟→年（库里 3 条刻例全自动进库）后，改成人看过刻例的字级名单；通用「人裁≥1」闸砍 56% 放行格且挑不出错，不做。
 
 ## [0.6.22] - 2026-11-08

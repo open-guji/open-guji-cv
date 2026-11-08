@@ -350,3 +350,24 @@ def test_coord_group_top_not_in_dump_when_off(tmp_path):
     assert on.model_dump()["rare_ref_coord_group_top"] is True
     sp, pt = SeedAdmitStep.spec.soft_params, SeedAdmitStep.spec.path_params
     assert params_hash(on, sp, pt) != params_hash(off, sp, pt)
+
+
+def test_rare_ref_holds_fold_pending_in_group():
+    """折叠组待文意格（`evidence.fold_pending`）：规则 A 不拿整理本字定组内字（殿本 vol41:55:4:19「六日僧道」）；
+    整理本字在组外照放。"""
+    from types import SimpleNamespace
+    from open_guji_cv.products.kinds.recog import AdmitRec, ColumnAdmit
+    cid = f"{BOOK}:{PAGE}:{COL}:1"
+
+    def run(ref, lib, fp=True):
+        out = [ColumnAdmit(col=COL, chars=[AdmitRec(id=cid, slot=1, char=lib, doubts=["replace_align"],
+                                                     evidence={"fold_pending": {"group": "ry"}} if fp else {})])]
+        mmap = {cid: SimpleNamespace(verdict="unsure", char=None, candidates=[(lib, 0.97)], guard=None, cov=0.97)}
+        n = sa._rare_ref_pass(out, mmap, {cid: (ref, "replace")}, {cid: [ref]}, None)
+        return n, out[0].chars[0]
+
+    n, r = run("日", "曰")
+    assert n == 0 and not r.admit
+    n, r = run("日", "曰", fp=False)
+    assert n == 1 and r.char == "日"
+    assert sa._fold_hold(SimpleNamespace(evidence={"fold_pending": {"group": "ry"}}), "目") is False
