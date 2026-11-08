@@ -927,10 +927,6 @@ ENTRIES: tuple[Equiv, ...] = (
           new='6bd2f3049ff8241fdab909dc94f413ccd8eb3fd3ece19cd2c7558dfdaaa08753',
           old='bb7d6556b2ea242df04b3467a3b179e3baca4646364fd895aaab2a225b5e785e',
           evidence='seed_admit 在 012 13 页（--pages 5,20,35,50,65,80,95,110,125,140,155,170,185）上与 origin/dev 产物逐字节相同（fold_coord_ref 缺省关）'),
-    Equiv(module='open_guji_cv.steps.seed_admit',
-          new='047553c6e7db56f5cbbf99e648230d36bf946c6bd1bfdc4a9bd52253b55ca49f',
-          old='41b4e1ab7a05a6970a5e05c9d5db29f83339220aef2eba32cdf81e79b1d9c449',
-          evidence='seed_admit 在 001 3 页（--pages 61,120,150）上与 origin/dev 产物逐字节相同（solo_5b_cov 缺省关；全唐文·形近字 11-08）'),
     Equiv(module="open_guji_cv.clustering.extractor",
           new="484efb123a713cd8ce1e1da85c97e486e5aab4f3e619f6ede43c18bd1bafda9f",
           old="c8565a7229ff9256438535b5a452ad86be56f1d0a25f5b246101e9d08f243102",
@@ -1123,6 +1119,11 @@ ENTRIES: tuple[Equiv, ...] = (
           new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
           old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
           evidence=_BEND_1108),
+    # 书名列候选 layout_title_fit（A22，殿本第 7 轮书名列，2026-11-08）
+    Equiv(module='open_guji_cv.steps.row_segment',
+          new='bb5a2cd0b674d358c21a5b2bcf206f4bdfd46efb935fca69445da25d0b48dda4',
+          old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
+          evidence='row_segment.layout_title_fit 书名列候选（缺省关、不进参数 dump；A22，殿本第 7 轮 vol88 p129 c9）：row_segment 在殿本 vol88 新图 10 页（1,10,30,50,75,100,118,129,150,171,200）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
 )
 
 

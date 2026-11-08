@@ -426,6 +426,162 @@ def _blank_frame_junk(img, cells, occ: set, content_x, ink_threshold: int, perio
     return n
 
 
+#: 书名列候选（`layout_title_fit`）：本列字距 ÷ 页级格高 的合理范围（出了就不出这张候选：多半墨的起止量错了）
+TITLE_FIT_PITCH = (0.78, 1.12)
+#: 量墨的起止：一行墨 ≥ 这么多列宽算有字；满宽（≥ TITLE_FIT_FRAME 列宽）且薄的行是框线，不算
+TITLE_FIT_INK, TITLE_FIT_FRAME = 0.06, 0.5
+#: 挑字缝时格高偏离本列字距的权重（偏一成格高 ≈ 0.04×权重，对比缝窄一档的代价 ≤1）
+TITLE_FIT_LEN_W = 4.0
+
+
+def _title_run(lay: dict, occ: set) -> "tuple[int, int] | None":
+    """表的这一列是不是「书名＋双行小注」：格连成一段 s0..s1，小注／半格是段尾那几格（中间不夹正文），
+    书名至少 2 格。是就返回 (s0, s1)，不是 None。"""
+    if not occ or int(lay.get("raised", 0)):
+        return None
+    notes = set(lay.get("notes") or ()) | set(lay.get("half") or ())
+    s0, s1 = min(occ), max(occ)
+    if not notes or s0 < 1 or set(range(s0, s1 + 1)) != set(occ):
+        return None
+    n0 = min(notes)
+    if notes != set(range(n0, s1 + 1)) or n0 - s0 < 2:
+        return None
+    return s0, s1
+
+
+def _title_gap_cuts(has, k: int, pitch: float) -> "list[float] | None":
+    """在一段墨（`has`：逐行有没有墨）里挑 k-1 条格线，都落在白行段（字缝）的正中：DP 让每格高接近 `pitch`、
+    缝越宽越好（字内的小白缝 2–4 行，字间缝 8–20 行）。白行段不够 k-1 个返回 None。"""
+    import numpy as np
+    n = len(has)
+    gaps = []
+    i = 0
+    while i < n:
+        if not has[i]:
+            j = i
+            while j < n and not has[j]:
+                j += 1
+            if i > 0 and j < n:
+                gaps.append(((i + j) / 2.0, j - i))
+            i = j
+        else:
+            i += 1
+    m = len(gaps)
+    if m < k - 1:
+        return None
+    if k == 1:
+        return []
+    wide = max(2.0, 0.1 * pitch)
+
+    def seg(a: float, b: float) -> float:
+        return ((b - a - pitch) / pitch) ** 2 * TITLE_FIT_LEN_W
+
+    def gap(w: float) -> float:
+        return 1.0 - min(1.0, w / wide)
+    INF = float("inf")
+    # D[j][g]：第 j 条线（1..k-1）落在缝 g 上的最小代价
+    D = np.full((k, m), INF)
+    B = np.zeros((k, m), dtype=int)
+    for g in range(m):
+        D[1][g] = seg(0.0, gaps[g][0]) + gap(gaps[g][1])
+    for j in range(2, k):
+        for g in range(j - 1, m):
+            best, arg = INF, -1
+            for q in range(j - 2, g):
+                v = D[j - 1][q] + seg(gaps[q][0], gaps[g][0])
+                if v < best:
+                    best, arg = v, q
+            D[j][g] = best + gap(gaps[g][1])
+            B[j][g] = arg
+    last = min(range(k - 2, m), key=lambda g: D[k - 1][g] + seg(gaps[g][0], float(n)))
+    if D[k - 1][last] == INF:
+        return None
+    out = [last]
+    for j in range(k - 1, 1, -1):
+        out.append(int(B[j][out[-1]]))
+    return [gaps[g][0] for g in reversed(out)]
+
+
+def _title_fit_bounds(img, lay: dict, occ: set, n_body: int, n_raised: int, content_x, border_top: float,
+                      border_bottom: float, period: float, ink_threshold: int) -> "list[float] | None":
+    """书名列（`_title_run`）的候选格线：表的 s0..s1 这一段按本列墨的起止等分（本列字距），段前的空格往上、
+    段后的空格往下照页级格高排；n_body+1 条（不认抬头列）。格线由 `segment_column` 再就近落缝。
+    墨的起止：从 border_top 往下第一段连着有墨（≥ 0.25 格）的行起，到这一段该有的高（×1.15）以内最后一行墨止；
+    满宽薄行（框线）不算墨。量不出、或字距出了 TITLE_FIT_PITCH 就返回 None。"""
+    import numpy as np
+    run = _title_run(lay, occ)
+    if run is None or n_raised:
+        return None
+    s0, s1 = run
+    k = s1 - s0 + 1
+    h, w = img.shape[:2]
+    g = img if img.ndim == 2 else img.mean(axis=2)
+    x0, x1 = (int(content_x[0]), int(content_x[1])) if content_x else (0, w)
+    x0, x1 = max(0, x0), min(w, max(x1, x0 + 1))
+    cw = x1 - x0
+    row = (g[:, x0:x1] < ink_threshold).sum(axis=1).astype(float)
+    has = row >= TITLE_FIT_INK * cw
+    frame = row >= TITLE_FIT_FRAME * cw
+    # 满宽的行只有成段很薄（≤ 0.08 格）时才当框线去掉；字里的满宽横画上下连着字墨，不碰
+    thin = max(2, int(0.08 * period))
+    i = 0
+    while i < h:
+        if frame[i]:
+            j = i
+            while j < h and frame[j]:
+                j += 1
+            above = i > 0 and has[i - 1] and not frame[i - 1]
+            below = j < h and has[j] and not frame[j]
+            if j - i <= thin and not (above and below):
+                has[i:j] = False
+            i = j
+        else:
+            i += 1
+    lo = max(0, int(border_top - 0.3 * period))
+    need = max(2, int(0.25 * period))
+    top = None
+    for y in range(lo, h - need):
+        if has[y:y + need].all():
+            top = y
+            break
+    if top is None:
+        return None
+    # 起点往上补到这段墨真正开头（need 窗口前面可能还有一两行墨）
+    while top > lo and has[top - 1]:
+        top -= 1
+    lim = min(h, int(top + k * period * 1.15))
+    ys = np.nonzero(has[top:lim])[0]
+    if not len(ys):
+        return None
+    end = top + int(ys[-1]) + 1
+    pitch = (end - top) / k
+    if not (TITLE_FIT_PITCH[0] * period <= pitch <= TITLE_FIT_PITCH[1] * period):
+        return None
+    cuts = _title_gap_cuts(has[top:end], k, pitch)
+    if cuts is None:
+        return None
+    lines = [float(top)] + [top + c for c in cuts] + [float(end)]          # s0 上沿 .. s1 下沿
+    above = [top - (s0 - 1 - i) * period for i in range(s0 - 1)]          # 格 1..s0-1 的上沿
+    below = [end + (i + 1) * period for i in range(n_body - s1)]          # 格 s1+1..n_body 的下沿
+    out = above + lines + below
+    if len(out) != n_body + 1:
+        return None
+    # 列图装不下的格（段后格太多）压到列图里：均分剩下的高，不让格线越界交叉
+    if out[-1] > h - 1 and n_body > s1:
+        room = (h - 1 - end) / (n_body - s1)
+        if room < 0.3 * period:
+            return None
+        out = above + lines + [end + (i + 1) * room for i in range(n_body - s1)]
+    if out[0] < 0:
+        out[0] = 0.0
+    # 段前的空格装不下（表说书名从第 s0 格起，图上书名顶到了版框）：这张表的起格不对，交给挪一格的那张
+    if s0 > 1 and out[1] - out[0] < 0.5 * period:
+        return None
+    if any(b <= a for a, b in zip(out, out[1:])):
+        return None
+    return out
+
+
 #: 格落在印里的两种量法（印来自印章定位 `seals` 产物，见 `_page_seals`）：大印——格与印框重叠 ≥ SEAL_OVERLAP；
 #: 小印——格里 ≥ SEAL_STROKE 的墨属于压着印笔画覆盖区（`seal_detect.stroke_mask`）的连通块。小印按笔画量而不按框：
 #: 印边只盖住一列的一小半时，那一列表空格里的墨仍是印（殿本 vol06 p149 c7）。
@@ -899,6 +1055,12 @@ class RowSegmentParams(BaseModel):
     #: 上下两格 143/139；r6 全书 143 列、2,283 字）。关掉时这种列照「无表」切。只在表明写空列的书关。
     #: 书级开关；True＝开（缺省，不进参数哈希）。
     layout_tail_empty: bool = True
+    #: **书名列按本列字距排格网**（2026-11-08，殿本 A22，Sheldon 定书名列专修）：格位表说这一列是「书名＋双行小注」
+    #: （表的格连成一段、小注／半格在段尾，`_title_run`），书名大字与小注行常不落整页格网——vol88 p129 c9 十二行只占
+    #: 10.5 格（行距 ≈0.87 格），DP 与等距格网都劈字、小注首行没拆。开着时多出一张候选：按本列墨的起止把表的那一段
+    #: 等分（本列字距），段前段后照页级格高排，格线就近落缝（`_title_fit_bounds`）；照常打分，只在坏格数严格更少时胜出。
+    #: 书级开关；False＝关（缺省，不进参数哈希）。
+    layout_title_fit: bool = False
     #: **雙行小注两行各切**（2026-11-03，史記文淵閣本写本）：连着的夹注段里 a、b 两行各在自己的墨投影上挑格线
     #: （`seg/seam.fit_row_cuts`），段两端仍是共用格线。写本两行各写各的、会错开半格，共用格线时一行被拦腰切
     #: （02:12:6「州上洛縣」、08:11:8「邑侯」）。格号不变，a、b 的 y0/y1 可以不同；只在挑定格网后的最终那遍切用，
@@ -1026,6 +1188,8 @@ class RowSegmentParams(BaseModel):
                 d.pop("layout_gap_cols_empty", None)
             if self.layout_raise_box:
                 d.pop("layout_raise_box", None)
+            if not self.layout_title_fit:
+                d.pop("layout_title_fit", None)
             if self.layout_tail_empty:
                 d.pop("layout_tail_empty", None)
             if not self.jiazhu_rows:
@@ -1422,6 +1586,19 @@ class RowSegmentStep(Step):
                         if rg is not None:
                             cands.append((rg, c_[1], c_[2], c_[3], "uniform_grid" + (f"（{c_[4]}）" if c_[4] else "")))
 
+                if p.layout_title_fit:
+                    for c_ in list(cands):
+                        if c_[4] and not c_[4].startswith("layout_shift"):
+                            continue
+                        lay_t = _shift_lay(_lay_of(c_[4]), int(c_[4][12:14])) if c_[4].startswith("layout_shift") else _lay_of(c_[4])
+                        tb = _title_fit_bounds(img, lay_t, c_[3], n_body_col, c_[1], gc.content_x, gc.border_top,
+                                               gc.border_bottom, gate.period, p.ink_threshold)
+                        if tb is None:
+                            continue
+                        rt = _seg(n_body_col, (c_[1], c_[2]) + _layout_kw(lay_t, c_[3], n_body_col, c_[1]), bounds=tb)
+                        if rt is not None:
+                            cands.append((rt, c_[1], c_[2], c_[3], "layout_title_fit" + (f"（{c_[4]}）" if c_[4] else "")))
+
                 def _score(c):
                     k_split = _split_chars(img, c[0].cells, gate.period, p.ink_threshold)
                     k_miss = _mask_misses(c[0].cells, c[3])
@@ -1490,7 +1667,7 @@ class RowSegmentStep(Step):
                         best = min(rr, key=key_)
                     # 挪一格也只在等距格网之间比（1.45）：DP 格网挪一格时能把列首两格空白压成一格、字整列提前一格，
                     # 再把多出来的高摊给几个字（vol64 p211 c1 b80 c107 c114、vol43 p41 c9、vol71 p77 c1）——违表少了，格位全错。
-                    shifted_u = [i for i in shifted if cands[i][4].startswith("uniform_grid")]
+                    shifted_u = [i for i in shifted if cands[i][4].startswith(("uniform_grid", "layout_title_fit"))]
                     if ug and best in ug and shifted_u:
                         shifted = shifted_u
                     if shifted and scores[min(shifted, key=key_)][0] < scores[best][0]:
