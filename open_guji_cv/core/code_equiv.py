@@ -249,6 +249,8 @@ _BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None �
               "scripts/code_equiv.py check，2026-11-08")
 
 
+_FIT2_1108 = ('cell_shrink.inner_frame_fit2／inner_frame_snap 列尾内框线补拟与补抹（都缺省关、不进参数 dump；A22，殿本第 7 轮带框重字块，Sheldon 11-08 定修）：cell_shrink 在殿本 vol95 新图 10 页（19,45,46,50,83,108,129,170,186,202，含原先拟不出内线的页）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08')
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1128,6 +1130,15 @@ ENTRIES: tuple[Equiv, ...] = (
           new='bb5a2cd0b674d358c21a5b2bcf206f4bdfd46efb935fca69445da25d0b48dda4',
           old='589c6cbc3f1d86b491a1bf47b972d139eaaeecc597ee1b327c14c236d23e9f3f',
           evidence='row_segment.layout_title_fit 书名列候选（缺省关、不进参数 dump；A22，殿本第 7 轮 vol88 p129 c9）：row_segment 在殿本 vol88 新图 10 页（1,10,30,50,75,100,118,129,150,171,200）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    # 列尾内框线补拟 inner_frame_fit2、补抹 inner_frame_snap（A22，2026-11-08）
+    Equiv(module='open_guji_cv.steps.cell_shrink',
+          new='b1e47db6a8e6c7f19d5b4ec4e784979381803281317f99393ef2d9abf5842c0b',
+          old='94585c12504e404e802475389c541753e034d5f1d1e0538847ed8644de669d0e',
+          evidence=_FIT2_1108),
+    Equiv(module='open_guji_cv.seg.frame_line',
+          new='1873e0ae30c7a8ae4f34c27c038d2bdd0f1d341d56cfd40514834c7a1a37827c',
+          old='0060b94fa6c5421484b9df42fcb7869728239c7fa98125d5c4ea4a691b2d7b5b',
+          evidence=_FIT2_1108),
 )
 
 

@@ -150,3 +150,51 @@ def test_seed_fallback_for_broken_inner_line():
     for x in (300, 1200, 2150):
         o = 1000 - (max(0, x - 2000) * 40 / 300.0)
         assert abs(float(loc.y(x)) - (round(o) - 34.5)) <= 3.0, x
+
+
+# ── profile_fit2（cell_shrink.inner_frame_fit2，2026-11-08）──────────────
+def _thick_page():
+    """格高约 111 的页：内线印得粗（10 行），超过细线上限 7 行；字竖笔离线一段。"""
+    h, w = 800, 1200
+    ink = np.zeros((h, w), bool)
+    for x in range(50, 1150):
+        o = int(round(700 + 0.003 * (x - 600)))
+        ink[o:o + 14, x] = True                       # 外粗框比内线还厚
+        ink[o - 26:o - 16, x] = True
+    for cx in range(80, 1150, 110):
+        ink[520:660, cx:cx + 6] = True
+    return ink
+
+
+def test_thick_inner_line_needs_fit2():
+    ink = _thick_page()
+    assert fit_inner_frame_line(ink, 50, 1150, y_hint=700, cell_h=111, side="bottom", profile_fallback=True) is None
+    line = fit_inner_frame_line(ink, 50, 1150, y_hint=700, cell_h=111, side="bottom", profile_fallback=True,
+                                profile_fit2=True)
+    assert line is not None and line.via == "profile" and 9 <= line.thick <= 11
+    assert abs(float(line.text_edge(600)) - (700 - 26)) <= 1.5
+
+
+def _ruled_dotted_page():
+    """点线内线（每 9px 一个 2px 点）＋每 110px 一道界行竖到内线：界行把底子垫高，不剔掉量不出半高宽。"""
+    h, w = 600, 1200
+    ink = np.zeros((h, w), bool)
+    for x in range(50, 1150):
+        o = int(round(500 + 0.004 * (x - 600)))
+        ink[o:o + 8, x] = True
+        if x % 9 < 2:
+            ink[o - 15:o - 12, x] = True
+    for cx in range(60, 1150, 110):
+        o = int(round(500 + 0.004 * (cx - 600)))
+        ink[150:o - 12, cx:cx + 14] = True                         # 界行
+        ink[400:o - 16, cx + 40:cx + 60] = True                    # 字脚压近线
+    return ink
+
+
+def test_ruled_dotted_inner_line_needs_rule_mask():
+    ink = _ruled_dotted_page()
+    assert fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True) is None
+    line = fit_inner_frame_line(ink, 50, 1150, y_hint=500, cell_h=80, side="bottom", profile_fallback=True,
+                                profile_fit2=True)
+    assert line is not None and line.via == "profile"
+    assert abs(float(line.y(600)) - (500 - 14)) <= 1.5
