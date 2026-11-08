@@ -272,7 +272,8 @@ def _fit_knots(ys: np.ndarray, xs: np.ndarray, ws: np.ndarray, ky: list[float],
 
 
 def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
-                        verticals: list[VLine], w: int, h: int, fit: bool = True
+                        verticals: list[VLine], w: int, h: int, fit: bool = True,
+                        w80_med_min: float | None = None
                         ) -> tuple[list[VLine], int, float | None, float | None]:
     """按弯度决定整页用直线还是三段折线，弯就逐线拟合折线。
     返回 (verticals, segments, w80_med, w80_max)。
@@ -294,6 +295,10 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     高度，就是用户说的"投影最能出现高峰"）。坐标下降 KNOT_PASSES 轮。最后换算
     成 (x, k1, k2, k3)，精确等价。某条线折线得分不高于直线时退回直线斜率
     （k2=k3=k1），格式仍是三段，整页保持一致。
+
+    `w80_med_min`：替换页级门槛 BEND_W80_MED（None＝用常数）。写 0＝量得出 w80 的页一律进三段（`fit=False`
+    仍优先）。殿本换 Commons 图源（第7轮）界行清楚、w80 中位约 6，约一半的页判成直线页，Step2 直线列整列一个
+    单应把列宽上下差变成字距上疏下密，等距格网切半列首列尾字（ai-team R02-第7轮列端切半-A20）。
     """
     binm = (mask > 0).astype(np.uint8)
     metrics = []
@@ -309,7 +314,8 @@ def fit_vlines_polyline(mask: np.ndarray, top: HLine, bottom: HLine,
     w80_med, w80_max = float(np.median(w80s)), float(max(w80s))
     if not fit:
         return verticals, 1, w80_med, w80_max
-    if w80_med < BEND_W80_MED and w80_max < BEND_W80_MAX:
+    med_min = BEND_W80_MED if w80_med_min is None else float(w80_med_min)
+    if w80_med < med_min and w80_max < BEND_W80_MAX:
         return verticals, 1, w80_med, w80_max
 
     out, shifts, failed = [], [], []

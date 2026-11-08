@@ -243,6 +243,12 @@ _SEAL_TOP = ("卷端标题列去印点后抹列顶印边残块＋起格跳过整
              "上与 origin/dev 6a2aca8 产物逐字节相同；史記 02/04/07/10 册全册重跑只 02 p2 c4–c6、04 p2 c4、10 p2 c6 变（有意改动），"
              "scripts/code_equiv.py check，2026-11-06")
 
+_BEND_1108 = ("border_detect 加书级弯页门槛 bend_w80_med（缺省 None 取 seg/polyline.BEND_W80_MED，不进参数 dump；殿本第7轮"
+              "Commons 图源列端切半，写 0＝整页三段折线）：border_detect 在殿本 vol28 192 页（全册）与 vol89 190 页（全册）"
+              "上与 origin/dev af80b48e（已含 #1256 下版框护栏）产物逐字节相同；border_detect、siku border 两项接在 #1256 登记之后；column_warp 只在 code_deps 里列 siku_zongmu.border，不调改动的函数；"
+              "scripts/code_equiv.py check，2026-11-08")
+
+
 ENTRIES: tuple[Equiv, ...] = (
     Equiv(module="open_guji_cv.clustering.match",
           new="b92800929fb79593ec59194fbd81c4dda912763ba39b9e31c10cadb32761935e",
@@ -1079,6 +1085,19 @@ ENTRIES: tuple[Equiv, ...] = (
           new='7df2015660f06eb33b49b0976d4c4cffe8ef7a7a5d21eb3554b250556747ee8e',
           old='61d0f2a36137eb909ae8b132e33936e25fcbee184d1eb284b30e258b04ce72d2',
           evidence='border_detect.bottom_weak_ratio 下版框弱线护栏（缺省 0 关、不进参数 dump；A22，殿本第 7 轮 vol22 p147 下框落在末行字身）：border_detect 在殿本 vol22 新图 12 页（1,5,20,41,60,77,100,120,147,160,180,188）上与 origin/dev 产物逐字节相同；scripts/code_equiv.py check，2026-11-08'),
+    # 书级弯页门槛 bend_w80_med（A20，殿本第7轮列端切半，2026-11-08）
+    Equiv(module='open_guji_cv.steps.border_detect',
+          new='cbf40755dde3946c384d85189fb76f9fd2c94b9e39e75cf2209c0b78669986dc',
+          old='97c0f1758798397dd2dfd9de1b4862f4c34c579cf6845052072302843de35c90',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.books.siku_zongmu.border',
+          new='eeb02e8ae3ba45b5bb3ba4ed0e6baa0111c0bdf22834f84625724d20a5f356c0',
+          old='68a672f759817954e81f4c58b1569bf273d9849b1ae4f8184f88829f5899b00b',
+          evidence=_BEND_1108),
+    Equiv(module='open_guji_cv.seg.polyline',
+          new='8dba35b0510ff7bf1b5c35116184e86a7c38ba5cc06db31e9bd60e3d90039449',
+          old='691460064488f81cc25e2a918c77227511a57806690eac36d82514771e1d8bcb',
+          evidence=_BEND_1108),
 )
 
 
