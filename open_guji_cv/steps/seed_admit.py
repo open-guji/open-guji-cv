@@ -824,6 +824,15 @@ class SeedAdmitParams(BaseModel):
     疑问照放行单处理，其余条件不变（2026-11-08，全唐文 front7，形近字线；缺省关、关时不进 dump）。依据：front7 001–003
     64 格（贊 齊 楚 遵…）看图未见错放；真/眞 刻形难分，书级用 `solo_adapt_abstain_skip` 排除。"""
     solo_adapt_abstain_skip: str = ""
+    solo_adapt_near_slack: float | None = None
+    """`solo_adapt_pct` 开着时，cov 差该字自比分位不到这个值的格也判，但领先须 ≥ `solo_adapt_near_gap`（其余条件照旧）
+    （2026-11-08，全唐文 front8 001–003「没过自比分位」1,599 格缺口中位 0.0066，形近字线；缺省关，`None`＝关、两个键不进 dump）。
+    依据：front8 待审里 0.02／0.03 档 862 格（盧 崔 劉 隱 齊 義…）逐格看图未见错放。"""
+    solo_adapt_near_gap: float = 0.03
+    solo_adapt_nf_ok: bool = False
+    """`solo_adapt_pct` 开着时，库首位既不在形近表也不在字组、只因 `near_form` 疑问（候选里有形近家族字）被挡的格照判；
+    窗口内的形近表对手照拦（2026-11-08，全唐文 front8，形近字线；缺省关、关时不进 dump）。依据：front8 105 格
+    （袁 林 不 六 文 友…）看图未见确定错放，存疑 1 格（001:104:9:3a 又，格内有墨点像 叉）。"""
     """`solo_adapt_abstain_ok` 不碰的库首位字（一串字，如 "真"）；只在 `solo_adapt_abstain_ok` 开时进 dump。"""
     solo_5b_same_cov: float | None = None
     """`solo_5b_cov` 开着时，库匹配已判 same（`verdict="same"`、判的字就是库首位，多为 consensus 多刻例同意）的格，
@@ -1417,6 +1426,11 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and not self.solo_adapt_abstain_ok:
             d.pop("solo_adapt_abstain_ok", None)
             d.pop("solo_adapt_abstain_skip", None)
+        if isinstance(d, dict) and self.solo_adapt_near_slack is None:
+            d.pop("solo_adapt_near_slack", None)
+            d.pop("solo_adapt_near_gap", None)
+        if isinstance(d, dict) and not self.solo_adapt_nf_ok:
+            d.pop("solo_adapt_nf_ok", None)
         if isinstance(d, dict) and self.num_run_cov_5b is None:
             d.pop("num_run_cov_5b", None)
             d.pop("num_run_gap_5b", None)
@@ -3104,7 +3118,8 @@ _ADAPT_OK_DOUBTS = ("上下文 margin 不足", "库 unsure", "库 same 但准入
 def solo_adapt_decide(*, cands: list, rare_top: str | None, guard, doubts, prof: dict, cross: dict, risk: set,
                       pct: str, floor: float, gap_min: float, min_n: int, window: float, are_variants,
                       group_chars, near_form_chars, risk_gap: float | None = None, abstain_ok: bool = False,
-                      abstain_skip: str = "") -> tuple[str, float, float] | None:
+                      abstain_skip: str = "", near_slack: float | None = None, near_gap: float = 0.03,
+                      nf_ok: bool = False) -> tuple[str, float, float] | None:
     """`SeedAdmitParams.solo_adapt_pct` 的判据，纯函数（离线评测与线上共用）。→ (放行字, cov, gap) 或 None。"""
     if guard is not None or not cands:
         return None
@@ -3114,18 +3129,22 @@ def solo_adapt_decide(*, cands: list, rare_top: str | None, guard, doubts, prof:
     ok = _ADAPT_OK_DOUBTS
     if abstain_ok and c not in group_chars and c not in abstain_skip:
         ok = ok + ("group_flow_abstain",)     # solo_adapt_abstain_ok：首位不在字组，字组流程弃权不算数
+    if nf_ok and c not in group_chars and c not in near_form_chars:
+        ok = ok + ("near_form",)              # solo_adapt_nf_ok：形近家族字只是候选；窗口内的形近表对手下面照拦
     if any(not (isinstance(d, str) and d.startswith(ok)) for d in (doubts or [])):
         return None
     if (not c or c == "〓" or c in _JYS or not _is_hanzi(c) or c in group_chars or c in near_form_chars):
         return None
     pc = prof.get(c)
-    if not pc or pc["n"] < min_n or pc["miss"] > 0.2 or v < max(floor, pc[pct]):
+    thr = max(floor, pc[pct]) if pc else 1.0
+    if not pc or pc["n"] < min_n or pc["miss"] > 0.2 or v < thr - (near_slack or 0.0):
         return None
+    below = v < thr                       # solo_adapt_near_slack：差分位一点的格，领先要更大
     if rare_top != c:                     # 5-b 首位必须就是库首位（不认异体）
         return None
     rivals = [(d, float(w)) for d, w in ranked[1:] if d and d != c and not are_variants(d, c)]
     gap = v - max((w for _, w in rivals), default=0.0)
-    if gap < gap_min:
+    if gap < gap_min or (below and gap < near_gap):
         return None
     for d, w in rivals:
         if w < v - window:
@@ -3168,7 +3187,9 @@ def _solo_adapt_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, ra
                                     floor=p.solo_adapt_floor, gap_min=p.solo_adapt_gap, min_n=p.solo_adapt_min_n,
                                     window=p.solo_adapt_window, are_variants=are_variants, group_chars=group_chars,
                                     near_form_chars=NEAR_FORM_CHARS, risk_gap=p.solo_adapt_risk_gap,
-                                    abstain_ok=p.solo_adapt_abstain_ok, abstain_skip=p.solo_adapt_abstain_skip)
+                                    abstain_ok=p.solo_adapt_abstain_ok, abstain_skip=p.solo_adapt_abstain_skip,
+                                    near_slack=p.solo_adapt_near_slack, near_gap=p.solo_adapt_near_gap,
+                                    nf_ok=p.solo_adapt_nf_ok)
             if got is None:
                 continue
             ch, cov1, gap = got
