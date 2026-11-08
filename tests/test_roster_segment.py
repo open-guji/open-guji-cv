@@ -210,6 +210,43 @@ def test_phase_aligned_double_line_rows_become_jiazhu_pairs():
     assert [it.kind for it in rc.items] == ["char"] + ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5 + ["char"]
 
 
+def test_lone_pair_row_between_split_tall_bands_joins_double_line():
+    """大字雙行两行相位错开（vol01 p87 c9「士武」「文英」）：高带之间夹一条左右各一字的矮带，整段一起分栏，
+    不把这两字切成一格。"""
+    g = _column()
+    for y in (300, 365):                                     # 高带：右行两字、左行错开半字
+        _glyph(g, y, 100, 60, stroke=5)
+        _glyph(g, y + 30, 25, 60, stroke=5)
+    _glyph(g, 470, 100, 60, stroke=5)                        # 矮带：左右各一字、逐行对齐
+    _glyph(g, 470, 25, 60, stroke=5)
+    for y in (545, 610):
+        _glyph(g, y, 100, 60, stroke=5)
+        _glyph(g, y + 30, 25, 60, stroke=5)
+    rc = _seg_one(g)
+    assert [it.kind for it in rc.items] == ["jiazhu_a"] * 5 + ["jiazhu_b"] * 5
+    assert all(it.x1 - it.x0 < 80 for it in rc.items)       # 没有横跨两行的框
+
+
+def test_lone_right_char_before_double_line_is_jiazhu_a():
+    """雙行段开头右行单独一个字（左行晚半个字起，vol01 p88 c5/c6/c1 的「太」「太」「經」）：窄、靠右、下面紧接雙行，
+    就是右行第一字（jiazhu_a），不是正文。占满列宽的正文字不动。"""
+    g = _column()
+    _glyph(g, 100, 100, 52, stroke=5)                        # 右行单字，左边空
+    for k in range(1, 4):
+        _glyph(g, 100 + k * 65, 100, 52, stroke=5)
+    for k in range(3):
+        _glyph(g, 195 + k * 65, 25, 52, stroke=5)
+    rc = _seg_one(g)
+    assert [it.kind for it in rc.items] == ["jiazhu_a"] * 4 + ["jiazhu_b"] * 3
+    g2 = _column()
+    _glyph(g2, 100, 35, EM)                                  # 满宽正文字起头：仍是正文
+    for k in range(4):
+        _glyph(g2, 300 + k * 60, 100, 50, stroke=5)
+    for k in range(3):
+        _glyph(g2, 330 + k * 60, 25, 50, stroke=5)
+    assert _seg_one(g2).items[0].kind == "char"
+
+
 def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
     g = _column()
     for k in range(4):                                       # 四个「林」式左右结构字，各自窄偏旁、字间拉开

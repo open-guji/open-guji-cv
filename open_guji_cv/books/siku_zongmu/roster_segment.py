@@ -34,6 +34,12 @@
 - 版框线粗细不匀、断续，整行横跨认不全：列端扁块当框线残段丢掉（`_drop_edge_bars`）。
 密排列字压扁到彼此相粘（几何上没有缝），这一型仍数不准，要字数先验或识别参与切分。
 
+殿本 vol01 换 Commons 新图后（2026-11-08，A34 交 001-r6 切坏格）多两处，一律生效（不是开关）：
+- 大字雙行两行相位错开，高带之间夹的「左右各一字」矮带被当一个字（p87 c9「士武」「文英」）：
+  相邻、分得出左右的带连成一段整段分栏（`_lr_runs`），分栏后按两侧墨心修正贴缝偏旁归边（p87 c7「部」的「阝」）。
+- 新图「臣」0.83em，比偏右小字上限 0.8em 大，和上字并成一格（p99 c2「修臣」）：上限放到 0.9em。
+雙行一侧里的压扁粘连字（p88 c6「內務」、c1「筵日」）几何仍数不准，`_glyph_refine` 不碰雙行列。
+
 字号 em 取**全页**孤立大字（宽 > 0.45 列宽、高宽比 0.6–1.25）高的中位数——单列估在
 雙行列上会偏小。
 
@@ -62,6 +68,9 @@ FRAG_MAX_ASPECT = 1.2      # 碎块并字：并后高 ≤ 此 × max(宽, 0.5em)
 LR_MIN_H = 1.25            # 带高 > 此 × em 才试左右分栏
 LR_GAP_INK = 0.04          # 分栏缝墨量 ≤ 此 × 带高
 LR_SIDE_MIN = 0.15         # 分栏后每侧墨量至少占带墨量的比例
+LR_WIDE = 0.55             # 雙行段的强带：分栏后两侧都至少这么宽（× em），左右结构单字的半边没这么宽（_lr_runs）
+LEAD_MAX_W = 0.6           # 雙行段开头右行单字：宽 ≤ 此 × 列宽（_lead_in_jiazhu）
+LR_REFINE_ITER = 3         # 分栏后按两侧墨心重新归边的轮数（_split_lr）
 DENSE_H = 1.45             # 带高 > 此 × max(宽, 0.85em) 算粘连密排
 PAIR_RUN = 3               # 相位对齐雙行：至少连续这么多条「左右两方字」带
 PAIR_MAX_ASPECT = 1.6      # 两侧各自高/宽 ≤ 此（窄偏旁高宽比常 >1.8）
@@ -71,7 +80,7 @@ ISOLATED_GAP = 0.5         # （「臣」也小，但上贴官衔末字、下贴
 EDGE_ZONE = 0.05           # 列图上下这个比例内的扁块当框线残段（_drop_edge_bars）
 EDGE_BAR_H = 0.15          # 框线残段高上限（× em）
 SIDE_MIN_H = 1.1           # 带高 > 此 × em 才试拆偏右小字（写本「臣」斜贴邻字，见 _split_side_small）
-SIDE_MAX = 0.8             # 偏右小字并框长边上限（× em）
+SIDE_MAX = 0.9             # 偏右小字并框长边上限（× em）（殿本 vol01 新图「臣」0.83em，原 0.8 拆不出）
 SIDE_OVERLAP = 0.5         # 偏右小字与邻字 y 重叠上限（× 小字高）
 CHEN_TOL = 1.0             # 偏右小字上缘离全页「臣」行的上限（× em）
 SIDE_MIN = 0.3             # 偏右小字并框短边下限（× em）：再小是字里的点画（「戈」右上点），不是字
@@ -261,9 +270,22 @@ def _split_lr(band: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
     lab, n = ndi.label(band, structure=np.ones((3, 3)))
     if n < 2:
         return None
-    right, left = np.zeros_like(band), np.zeros_like(band)
-    for i, (_, cx) in enumerate(ndi.center_of_mass(band, lab, range(1, n + 1)), 1):
-        (right if cx >= xs else left)[lab == i] = True
+    idx = range(1, n + 1)
+    cx = np.array([c for _, c in ndi.center_of_mass(band, lab, idx)])
+    mass = np.asarray(ndi.sum(band, lab, idx), float)
+    is_r = cx >= xs
+    # 两侧墨心修正（2-means）：竖缝取的是墨最少的一列，雙行两行相位错开时它可能落在一侧某字里头
+    # （「部」的「咅」与「阝」之间），贴缝的偏旁按质心归错边；改按离哪侧墨心近归边，迭代到不变
+    for _ in range(LR_REFINE_ITER):
+        if is_r.all() or not is_r.any():
+            break
+        mr = np.average(cx[is_r], weights=mass[is_r])
+        ml = np.average(cx[~is_r], weights=mass[~is_r])
+        new = np.abs(cx - mr) < np.abs(cx - ml)
+        if (new == is_r).all():
+            break
+        is_r = new
+    right, left = np.isin(lab, np.flatnonzero(is_r) + 1), np.isin(lab, np.flatnonzero(~is_r) + 1)
     tot = band.sum()
     if right.sum() < LR_SIDE_MIN * tot or left.sum() < LR_SIDE_MIN * tot:
         return None
@@ -403,6 +425,72 @@ def _full_square(t: list[int], em: float) -> bool:
     return 0.8 * em <= h <= 1.25 * em and 0.75 <= h / max(1, w) <= 1.3
 
 
+# ── 雙行分栏 ─────────────────────────────────────────────────────────────
+def _lr_sides(m: np.ndarray, y0: int, y1: int, em: float) -> tuple[list[RosterItem], list[RosterItem]] | None:
+    """[y0,y1) 分左右两栏、各自递归切。分不开返回 None。"""
+    sp = _split_lr(m[y0:y1])
+    if sp is None:
+        return None
+    rm, lm = np.zeros_like(m), np.zeros_like(m)
+    rm[y0:y1], lm[y0:y1] = sp
+    rx, lx = _xext(rm), _xext(lm)
+    return (_seg_mask(rm, min(em, 0.95 * (rx[1] - rx[0])), 1),
+            _seg_mask(lm, min(em, 0.95 * (lx[1] - lx[0])), 1))
+
+
+def _as_jiazhu(right: list[RosterItem], left: list[RosterItem]) -> list[RosterItem]:
+    for it in right:
+        it.kind = "jiazhu_a"
+    for it in left:
+        it.kind = "jiazhu_b"
+    return right + left                                      # 雙行：右行读完再读左行
+
+
+def _lr_runs(m: np.ndarray, groups: list[tuple[list[int], float | None]], em: float) -> list[tuple[int, int]]:
+    """雙行段：相邻（缝 < RUN_GAP em）、分得出左右两侧的带连成一段，整段一起分栏。返回 [(起, 止)] 半开区间。
+
+    雙行两行相位错开时，墨带有高有矮：高带按「高带分栏」切，夹在中间的矮带（左右各一字，vol01 p87 c9
+    「林官」「士武」「文英」）不够高、凑不够 PAIR_RUN 条相位对齐，就被当成一个字，两字切成一格；一侧是窄字的带
+    （p87 c7「士日」，「日」高宽比 1.7）过不了 `_pair_split`，把相位对齐段截断，段头「學筵」也成了一格。
+
+    带分两档：强＝高带（> LR_MIN_H em）分得开，或矮带两侧都有整字宽（≥ LR_WIDE em，p88 c2 段头右「經筵」左「翰」），
+    或过 `_pair_split`（两侧都是方字）；弱＝只是 `_split_lr` 分得开（「林」「鮑」这种左右结构的单字也算弱）。段的两头必须是强带，弱带只能夹在中间；段里有高带，或强带
+    ≥ PAIR_RUN 条，才认。不看压扁密排段（hint）：雙行一条带左右两字并排、整条又扁又宽，会被 `_compressed_runs`
+    认成压扁字。"""
+    strong, weak = [], []
+    for (y0, y1), _hint in groups:
+        band = m[y0:y1]
+        sp = _split_lr(band)
+        weak.append(sp is not None)
+        strong.append(sp is not None and (y1 - y0 > LR_MIN_H * em
+                                          or min(_xext(side)[1] - _xext(side)[0] for side in sp) >= LR_WIDE * em
+                                          or _pair_split(band, em) is not None))
+    runs = []
+    i = 0
+    while i < len(groups):
+        if not strong[i]:
+            i += 1
+            continue
+        j = i + 1
+        while j < len(groups) and weak[j] and groups[j][0][0] - groups[j - 1][0][1] < RUN_GAP * em:
+            j += 1
+        while j - 1 > i and not strong[j - 1]:          # 段尾退回到最后一条强带
+            j -= 1
+        tall = any(groups[q][0][1] - groups[q][0][0] > LR_MIN_H * em for q in range(i, j))
+        if j - i >= 2 and (tall or sum(strong[i:j]) >= PAIR_RUN):
+            runs.append((i, j))
+        i = j
+    return runs
+
+
+def _lr_items(m: np.ndarray, y0: int, y1: int, em: float) -> list[RosterItem] | None:
+    """整段雙行分栏；两侧都 ≥2 字才认，否则 None（交回逐带处理）。"""
+    sides = _lr_sides(m, y0, y1, em)
+    if sides is None or min(len(sides[0]), len(sides[1])) < 2:
+        return None
+    return _as_jiazhu(*sides)
+
+
 # ── 递归主体 ─────────────────────────────────────────────────────────────
 def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = None) -> list[RosterItem]:
     out: list[RosterItem] = []
@@ -435,8 +523,16 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = Non
             for k in range(i, j):
                 pair_run[k] = True
         i = max(j, i + 1)
+    lr_end = dict(_lr_runs(m, groups, em)) if depth == 0 else {}
     k = 0
     while k < len(groups):
+        if k in lr_end:
+            y0, y1 = groups[k][0][0], groups[lr_end[k] - 1][0][1]
+            jz = _lr_items(m, y0, y1, em)
+            if jz is not None:
+                out += jz
+                k = lr_end[k]
+                continue
         if pair_run[k]:
             right_items: list[RosterItem] = []
             left_items: list[RosterItem] = []
@@ -467,21 +563,13 @@ def _seg_mask(m: np.ndarray, em: float, depth: int = 0, chen: float | None = Non
                     out += _seg_mask(pm, em, depth + 1)
                 continue
         if depth == 0 and h > LR_MIN_H * em:
-            sp = _split_lr(m[y0:y1])
-            if sp is not None:
-                rm, lm = np.zeros_like(m), np.zeros_like(m)
-                rm[y0:y1], lm[y0:y1] = sp
-                rx, lx = _xext(rm), _xext(lm)
-                right = _seg_mask(rm, min(em, 0.95 * (rx[1] - rx[0])), depth + 1)
-                left = _seg_mask(lm, min(em, 0.95 * (lx[1] - lx[0])), depth + 1)
+            sides = _lr_sides(m, y0, y1, em)
+            if sides is not None:
+                right, left = sides
                 # 「臣」贴官衔末字：一侧只有它一个字。两侧都 ≥2 字就是雙行——字号不一定小
                 # （vol01 p89 有中号字的雙行），不能拿字宽判
                 if min(len(right), len(left)) >= 2:
-                    for it in right:
-                        it.kind = "jiazhu_a"
-                    for it in left:
-                        it.kind = "jiazhu_b"
-                    out += right + left                          # 雙行：右行读完再读左行
+                    out += _as_jiazhu(right, left)
                 else:
                     out += sorted(right + left, key=lambda it: it.y0)
                 continue
@@ -537,12 +625,38 @@ def _column_flags(items: list[RosterItem]) -> list[str]:
     return flags
 
 
+def _lead_in_jiazhu(items: list[RosterItem], em: float, col_x: tuple[int, int]) -> list[RosterItem]:
+    """雙行段开头右行单独一个字（左行比右行晚半个字起，这一条带左边是空的）：窄（≤ LEAD_MAX_W 列宽）、靠右
+    （中心在列中线右边）、下面紧接雙行，就是雙行右行的第一字，改 jiazhu_a（vol01 p88 c5/c6/c1 的「太」「太」「經」）。
+    正文字占满列宽，「臣」在雙行段之后，都不会被误认。"""
+    if not items:
+        return items
+    mid, width = (col_x[0] + col_x[1]) / 2, col_x[1] - col_x[0]
+    k = 0
+    while k < len(items) and items[k].kind == "char":
+        k += 1
+    if k == len(items) or items[k].kind != "jiazhu_a":
+        return items
+    j = k
+    while j > 0:                                           # 从雙行段往上，连着的右靠窄字
+        it, nxt = items[j - 1], items[j]
+        if (it.kind == "char" and it.x1 - it.x0 <= LEAD_MAX_W * width and (it.x0 + it.x1) / 2 > mid
+                and nxt.y0 - it.y1 < RUN_GAP * em):
+            j -= 1
+        else:
+            break
+    for it in items[j:k]:
+        it.kind = "jiazhu_a"
+    return items
+
+
 def segment_roster_column(ink: np.ndarray, em: float, chen: float | None = None) -> RosterColumn:
     """一列（已 prepare 过的墨 mask）→ 读序排好的字。给了全页「臣」行 `chen`，再拆贴着邻字的偏右小字。"""
     items = [it for it in _seg_mask(ink, em, chen=chen)
              if max(it.y1 - it.y0, it.x1 - it.x0) >= SPECK * em]
     items = _drop_isolated_specks(items, em)
     items = _drop_edge_bars(items, em, ink.shape[0])
+    items = _lead_in_jiazhu(items, em, _xext(ink))
     return RosterColumn(items=items, em=em, flags=_column_flags(items))
 
 
