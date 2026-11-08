@@ -5,6 +5,10 @@
 
 ## [未发版]
 
+## [0.6.19] - 2026-11-08
+
+- 发版：从 dev 1a9d029 切（seed_admit 1.82），含 #1266–#1278（A22 #1271 colgeom 认 ruled_warp、#1272 下框越界不崩＋bottom_lock_reslope；A20 #1273 参校本属性 A 块；A24 #1268/#1278 solo_5b、#1274 rare_charset、#1277 group_flow_llm_half_groups；#1275/#1276 刻例按来源分列）。殿本 vol01–19 换新图钉这一版。
+
 - solo_5b 接可信刻例与借库（参校本属性 C1/C4，A24，A23 同意的收窄版）：`solo_5b_min_n` 改读 `trusted_keben_counts`（人裁＋有参照互证，借库／solo／来源不明不算）；`match_solo_5b` 放行格带 `evidence.no_glyph_lib`（不自喂，不进字形库）；新书级参数 `solo_5b_borrow_db`（同族书的库，加它的可信刻例，本书自己至少 1 条可信才借，缺省不借），借库放行的格标 `solo_5b.borrowed` 供分层抽检；证据键 `n_lib` 改名 `n_trusted`。seed_admit 不升版本号：solo_5b_cov 缺省关，殿本 vol62 11 页与 dev 逐字节相同，code_equiv 已登记。
 - seed_admit 1.82 `group_flow_llm_half_groups`（书级，缺省空、不进参数 dump；A24 11-08）：这几组的夹注半格不受 `group_flow_llm_skip_half` 限制，照样查答案表／裁定库、记 `llm_pending` 问，可经 `feedback/llm_queue` 导出给对话判读。SJ 史記 H01 里 89 格半格（己已巳 45、日曰 44）因 skip_half 没有 L3 问、写不了裁定键；史記建议 `[ry, jys]`。
 
