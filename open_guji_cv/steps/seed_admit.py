@@ -791,6 +791,11 @@ class SeedAdmitParams(BaseModel):
     0.98／0.01／3 档 001 放约 2,700 格。"""
     solo_5b_gap: float = 0.01
     solo_5b_min_n: int = 3
+    solo_5b_same_cov: float | None = None
+    """`solo_5b_cov` 开着时，库匹配已判 same（`verdict="same"`、判的字就是库首位，多为 consensus 多刻例同意）的格，
+    cov 门槛降到这个值（2026-11-08，全唐文 002／003 姓氏韻編，形近字线；书级，缺省关，`None`＝关、不进 dump）。
+    其余条件（5-b 作证、领先、可信刻例数、形近表／字组／硬疑问）照 `solo_5b_cov`。依据：front4 002／003 待审里
+    cov 0.95–0.98、库判 same、5-b 同意、过其余条件的 1,703 格（张劉德崔孫鄭…442 种字）按字排图看，未见错放（1 格 費 存疑）。"""
     solo_5b_borrow_db: str | None = None
     """同族书的字形库（如史記借全唐文）：`solo_5b_min_n` 的刻例数再加上那本库自己的**可信**刻例（A24 11-08 收窄版借库，A23 同意）。
     本书自己没有可信刻例的字不借（首次出现字仍走人裁）；字体族是否同族由册配置负责。放行格的 evidence `solo_5b.borrowed`
@@ -821,6 +826,11 @@ class SeedAdmitParams(BaseModel):
     同批非数字的形近字（469 格：文丈、林株、延廷、宋末…）不在本支：有切坏格（001:107:4:1 半个「高」库认 古、领先 0.077），
     也有异体／字组对（延廷、頴穎、己已巳）要码位或字组定，cov＋领先挡不住。"""
     num_run_gap: float = 0.01
+    num_run_juan_cov: float | None = None
+    """`num_run_cov` 开着时，紧挨数字串**前面**的「卷」也放（2026-11-08，全唐文 002／003 姓氏韻編「卷一百六」，形近字线；
+    书级，缺省关，`None`＝关、不进 dump）。库首位是「卷」、cov ≥ 这个值（「卷」刻例取自正文，前四册小字 cov 多在 0.95–0.98）、
+    领先 ≥ `num_run_gap`、**后一格**是数字（前一格是数字不算），其余条件同 `num_run_cov`。依据：front4 002／003 待审「卷」
+    409 格（cov 0.952–0.979，对手 春／巷／眷／泰）后一格全是数字，逐格看图全对。"""
     occluded_gate: bool = True
     """印章／大片污损遮挡的格直接拒（2026-09-28，D 道 overview#195，缺省开）。
 
@@ -1358,11 +1368,15 @@ class SeedAdmitParams(BaseModel):
         if isinstance(d, dict) and self.solo_5b_cov is None:
             for k in ("solo_5b_cov", "solo_5b_gap", "solo_5b_min_n"):
                 d.pop(k, None)
+        if isinstance(d, dict) and self.solo_5b_same_cov is None:
+            d.pop("solo_5b_same_cov", None)
         if isinstance(d, dict) and self.solo_5b_borrow_db is None:
             d.pop("solo_5b_borrow_db", None)
         if isinstance(d, dict) and self.num_run_cov is None:
             d.pop("num_run_cov", None)
             d.pop("num_run_gap", None)
+        if isinstance(d, dict) and self.num_run_juan_cov is None:
+            d.pop("num_run_juan_cov", None)
         if isinstance(d, dict) and self.solo_5b_char_ok is None:
             d.pop("solo_5b_char_ok", None)
             d.pop("solo_5b_human_min", None)
@@ -2887,13 +2901,16 @@ def _rare_ref_sparse_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dic
 
 
 def solo_5b_decide(*, cands: list, rare_top: str | None, n_lib: dict | int, doubts, guard, cov_min: float,
-                   gap_min: float, min_n: int, are_variants, group_chars, near_form_chars) -> tuple[str, float, float] | None:
+                   gap_min: float, min_n: int, are_variants, group_chars, near_form_chars,
+                   same_char: str | None = None, cov_min_same: float | None = None) -> tuple[str, float, float] | None:
     """`SeedAdmitParams.solo_5b_cov` 的判据，纯函数（离线评测与线上共用）。`cands`：库候选 [(字, cov)]；
     `n_lib`：刻例数表（字→例数）或库首位的例数。→ (放行字, cov, gap) 或 None。"""
     if not cands or not rare_top:
         return None
     ranked = sorted(cands, key=lambda t: -t[1])
     top, cov1 = ranked[0]
+    if cov_min_same is not None and same_char is not None and same_char == top:
+        cov_min = min(cov_min, cov_min_same)      # 库已判 same 的格降一档（solo_5b_same_cov）
     if (not top or top == "〓" or top in _JYS or not _is_hanzi(top) or top in group_chars
             or top in near_form_chars or float(cov1) < cov_min):
         return None
@@ -2941,7 +2958,9 @@ def _solo_5b_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, rare,
             got = solo_5b_decide(cands=list(m.candidates), rare_top=rmap.get(rec.id), n_lib=keben,
                                  doubts=rec.doubts, guard=m.guard, cov_min=p.solo_5b_cov, gap_min=p.solo_5b_gap,
                                  min_n=p.solo_5b_min_n, are_variants=are_variants, group_chars=group_chars,
-                                 near_form_chars=NEAR_FORM_CHARS)
+                                 near_form_chars=NEAR_FORM_CHARS,
+                                 same_char=m.char if m.verdict == "same" else None,
+                                 cov_min_same=p.solo_5b_same_cov)
             if got is None:
                 continue
             ch, cov1, gap = got
@@ -2968,7 +2987,7 @@ _NUM_RUN_NEIGHBOR_COV = 0.98
 
 
 def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | None, cov_min: float,
-                   gap_min: float, are_variants) -> tuple[str, float, float] | None:
+                   gap_min: float, are_variants, juan_cov: float | None = None) -> tuple[str, float, float] | None:
     """`SeedAdmitParams.num_run_cov` 的判据，纯函数（离线评测与线上共用）。`cands`：库候选 [(字, cov)]；
     `prev`／`nxt`：同列同半格前后格的字（已判成数字才算，调用方给 None 表示不是／没有）。→ (放行字, cov, gap) 或 None。"""
     if guard not in (None, "never_match") or not cands:
@@ -2977,9 +2996,13 @@ def num_run_decide(*, cands: list, guard, doubts, prev: str | None, nxt: str | N
         return None
     ranked = sorted(cands, key=lambda t: -t[1])
     top, cov1 = ranked[0]
-    if top not in NUM_RUN_DIGITS or float(cov1) < cov_min:
+    if top == "卷" and juan_cov is not None:
+        # 卷数前的「卷」：只认后一格是数字
+        if float(cov1) < juan_cov or nxt not in NUM_RUN_DIGITS:
+            return None
+    elif top not in NUM_RUN_DIGITS or float(cov1) < cov_min:
         return None
-    if prev not in NUM_RUN_DIGITS and nxt not in NUM_RUN_DIGITS:
+    elif prev not in NUM_RUN_DIGITS and nxt not in NUM_RUN_DIGITS:
         return None
     rivals = [float(v) for c, v in ranked[1:] if c and c != top and not are_variants(c, top)]
     gap = float(cov1) - (max(rivals) if rivals else 0.0)
@@ -3021,7 +3044,8 @@ def _num_run_pass(p: "SeedAdmitParams", out: list, mmap: dict, amap: dict, coord
                 prev = digit[seq[i - 1].id] if i > 0 else None
                 nxt = digit[seq[i + 1].id] if i + 1 < len(seq) else None
                 got = num_run_decide(cands=list(m.candidates), guard=m.guard, doubts=rec.doubts, prev=prev, nxt=nxt,
-                                     cov_min=p.num_run_cov, gap_min=p.num_run_gap, are_variants=are_variants)
+                                     cov_min=p.num_run_cov, gap_min=p.num_run_gap, are_variants=are_variants,
+                                     juan_cov=p.num_run_juan_cov)
                 if got is None:
                     continue
                 ch, cov1, gap = got

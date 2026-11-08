@@ -33,7 +33,7 @@ def _run(tmp_path, monkeypatch, *, cands, rare, params=None, guard=None, verdict
     monkeypatch.setattr(sa, "_trusted_keben_counts", lambda _db, borrow=None: KEBEN)
     ctx = make_ctx(tmp_path, make_book(BOOK), monkeypatch=monkeypatch)
     write_product(ctx, "glyph_match", PAGE, glyph_match=page_match(
-        PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=None, cov=cands[0][1], wmax=16.0,
+        PAGE, BOOK, col=COL, recs=[dict(slot=1, verdict=verdict, char=cands[0][0] if verdict == "same" else None, cov=cands[0][1], wmax=16.0,
                                          guard=guard, candidates=list(cands))]))
     write_product(ctx, "context_decide", PAGE, context_decision=page_decision(
         PAGE, BOOK, col=COL, recs=[dict(slot=1, char=None, margin=0.0, source="prior")]))
@@ -169,3 +169,17 @@ def test_char_ok_admits_listed_and_human(tmp_path, monkeypatch):
     assert _run(tmp_path, monkeypatch, params={**ON, "solo_5b_char_ok": "百"}, **GOOD).admit
     monkeypatch.setattr(sa, "_human_keben_counts", lambda _db: {"百": 2})
     assert _run(tmp_path, monkeypatch, params={**ON, "solo_5b_char_ok": "年"}, **GOOD).admit
+
+
+def test_same_cov_lowers_threshold_only_for_same_verdict(tmp_path, monkeypatch):
+    """库判 same（consensus）、cov 0.968 的格：开 solo_5b_same_cov 0.95 才放；unsure 的照旧不放。"""
+    kw = dict(cands=(("百", 0.968), ("白", 0.93)), rare=["百", "白"])
+    assert not _run(tmp_path, monkeypatch, params=ON, verdict="same", **kw).admit
+    on2 = {**ON, "solo_5b_same_cov": 0.95}
+    r = _run(tmp_path, monkeypatch, params=on2, verdict="same", **kw)
+    assert r.admit and r.channel == "match_solo_5b" and r.char == "百"
+    assert not _run(tmp_path, monkeypatch, params=on2, verdict="unsure", **kw).admit
+
+
+def test_same_cov_param_invisible_when_unset():
+    assert "solo_5b_same_cov" not in SeedAdmitParams(solo_5b_cov=0.98).model_dump()
