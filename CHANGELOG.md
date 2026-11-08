@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.68 `fold_ctx_vias`／`fold_ctx_strong`（书级，缺省空／关、不进参数 dump；A24 H01 第 7 轮复盘 11-08）：折叠组认字组流程里文意路已给的字（`fold.via=ctx`），次序在文意裁定库之后、整理本字之前。殿本第 7 轮 H01 L3 答案表 strong 68 格与干净会话盲读 high 全同，现 fold_pending 里 106 格可放；L1 规则错得多（37 格错 15），不要进名单。见 `doc/字组/折叠组.md`。
+
 - 新增 `open_guji_cv/strokes`（L1）：笔画模板逐笔配准、差一笔／量几何两种判据的纯算法；不被任何 Step 引用，产物不变（研究，接线归 groups，A24）。
 - strokes 差一笔收紧（全唐文 4,536 格留出：异判 2→0）：`verify_extra` 缺省 `hi` 0.5→0.75；钉住的笔先填小孔再量（空心点，`pin_fill_holes`）；新增 `pin_search_far`（近处没残墨才放宽找，缺省关，全唐文开 0.2）。不被 Step 引用，产物不变。
 - 修：seed_admit `group_flow_pair_shapes` 补放时整理本（或坐标对位）是两字以外的第三个字就不判（全唐文 r16 库首位王、整理本三的格被王玉模型放成王；seed_admit 1.65）。
