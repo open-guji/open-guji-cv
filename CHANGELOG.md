@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.78 `fold_aspect_ctx_veto` 开着时也认字组文意解法（`evidence.group` 里 ctx agree）给的另一个字（证据记 `fold_pending.ctx_veto.group_ctx`；SJ 史記 01:45 名单页「日講官」宽高比 1.15／1.08 没有 context_decide 排名，原先只靠 shadow_veto 挡回，A24 11-08）。史記 r18 10 册正文 hi 1.05 时判错的日由 7 格（只用排名否决）降到 4 格；夹注误伤曰不增加。
+
 - seed_admit 1.77：`alt_select="admit"` 换列比较（`_col_stats`）时 `p_ref` 放的格按待审算（`_ALT_AS_REVIEW`）。p_ref 是待审格取整理本字、两遍都放，算放行会把主切法错位列的待审压下去而不换备选格网，切坏的格被整理本字盖住（史記 r19 离线开 p_ref：06:26:1「陳索」一格两字、03:88:4 列尾残块，备选格网切对；SJ 11-08）。没开 p_ref 的书没有这个通道，产物不变。
 - seed_admit 1.76 `p_ref_min_cov`（缺省 0.8 开，缺省值不进参数 dump，`None` 关；SJ 史記 r19／A24 11-08）：`p_ref_admit` 不取库判 diff（「库里没有这个字」）或机器字 cov<0.8 的格，挡住切分坏格（一格两字、残块）被整理本字盖住；P01 本身的格（unsure 档 cov≥0.85）不受影响，开着 p_ref 的书（史記）会少放这类格。
 - border_detect `bottom_weak_ratio` 下版框弱线护栏（书级，缺省 0 关、关时不进参数 dump；A22，殿本第 7 轮复查 11-08）：`seg/lines._weak_bottom_guard`，`_weak_top_guard` 的镜像——选中的下框线横向墨量不到带里最强横线的该比例、下方 ≥0.021 页高处另有够强的横线，改取最靠页心的那条（只往下挪）。殿本 vol20–99 新图源 13,320 页扫图只动 17 页、看图全是真框（vol22 p147 下框落在倒数第二行字身里、整页每列只切 20 格；vol24 p64、vol34 p37、vol44 p180、vol68 p218、vol79 p196 差 130–340 px）；vol22 全册实跑只动 p41、p147。殿本 vol20–99 建议写 0.3（book_defaults），从 border_detect 起重跑。
