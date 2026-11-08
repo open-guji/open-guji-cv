@@ -1149,7 +1149,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
                     head_raise_scale: float = 1.0,
                     grid_lattice_fallback: bool = False,
                     top_weak_ratio: float = TOP_WEAK_RATIO,
-                    top_weak_floor: float | None = None) -> BorderDetectionResult:
+                    top_weak_floor: float | None = None,
+                    bottom_weak_ratio: float = 0.0) -> BorderDetectionResult:
     """整页边框+界行探测，输出新坐标系约定的结果。
 
     `expected_cols`：这一页应有的列数 N——竖直线应有 N+1 条（左右外边框各
@@ -1215,6 +1216,8 @@ def detect_borders(gray: np.ndarray, expected_cols: int,
     bot_kw = {} if bottom_band_frac is None else {"band_frac": float(bottom_band_frac)}
     top_old = find_horizontal_border(mask, "top", weak_top_ratio=top_weak_ratio,
                                      weak_top_floor=top_weak_floor, **top_kw)
+    if bottom_weak_ratio > 0:      # 缺省关时不传，与加参数前的调用一模一样
+        bot_kw["weak_bottom_ratio"] = float(bottom_weak_ratio)
     bottom_old = find_horizontal_border(mask, "bottom", verticals=vlines_old,
                                         book_gap=book_bottom_gap, **bot_kw)
 

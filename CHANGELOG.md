@@ -6,6 +6,7 @@
 ## [未发版]
 
 - seed_admit 1.76 `p_ref_min_cov`（缺省 0.8 开，缺省值不进参数 dump，`None` 关；SJ 史記 r19／A24 11-08）：`p_ref_admit` 不取库判 diff（「库里没有这个字」）或机器字 cov<0.8 的格，挡住切分坏格（一格两字、残块）被整理本字盖住；P01 本身的格（unsure 档 cov≥0.85）不受影响，开着 p_ref 的书（史記）会少放这类格。
+- border_detect `bottom_weak_ratio` 下版框弱线护栏（书级，缺省 0 关、关时不进参数 dump；A22，殿本第 7 轮复查 11-08）：`seg/lines._weak_bottom_guard`，`_weak_top_guard` 的镜像——选中的下框线横向墨量不到带里最强横线的该比例、下方 ≥0.021 页高处另有够强的横线，改取最靠页心的那条（只往下挪）。殿本 vol20–99 新图源 13,320 页扫图只动 17 页、看图全是真框（vol22 p147 下框落在倒数第二行字身里、整页每列只切 20 格；vol24 p64、vol34 p37、vol44 p180、vol68 p218、vol79 p196 差 130–340 px）；vol22 全册实跑只动 p41、p147。殿本 vol20–99 建议写 0.3（book_defaults），从 border_detect 起重跑。
 - seed_admit 1.75 `follow_ref_seen_conflict`（书级，缺省关、关时不进参数 dump；A24 N01 第 7 轮复查 11-08）：`follow_ref_seen` 也接「护栏 conflict」格——候选前两名恰是整理本形与 seen 对里的另一形、两字都被判 same（字形相同，只有整理本文意能定），放整理本形。殿本 七／𠤎（《易·震》「不喪匕鬯」文淵閣本作 U+2090E，库里 𠤎 两例图就是七）28 格；用法 `follow_ref_seen: "七=𠤎,𠤎=七"`＋本开关。
 - seed_admit 1.74 `lane_group_img_veto`（书级，缺省 None 关、关时不进参数 dump；A23 Z02 第 7 轮复查 11-08）：补放三通道要放的字与字组图像判官（`rr_img`）反对的字不同、判官概率 ≥ 该值 → 不放（doubt `lane_group_img`）。殿本 r7 vol68:160:3:16、vol67:149:9:15 图是「入」、整理本「人」被 witness3 放成人；80 册回放只命中这 2 格。
 - seed_admit 1.73 `group_flow_ref_pair`／`group_flow_ref_pair_coord` 不再把共字组搭档的码位解法（`组:codepoint`）当反对票（它只回报码位归一目标，无图像证据；本组自己的 codepoint 仍拦；只对开了这两项的书生效；A24 Z02 r7，殿本 sy 山由出 4 格看图全是山，r7 全册扫描无误放）。

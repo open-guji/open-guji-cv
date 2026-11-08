@@ -72,3 +72,40 @@ def test_weak_top_wild_slope_measured_on_page_level():
     r = _weak_top_guard(m, LineMatch(position=300.0, slope=0.02, score=1.0, width=2.0, proj=1.0),
                         0, 288 + 60, TOP_WEAK_RATIO, 1.0, 2)
     assert 56 <= r.position <= 70 and abs(r.slope) < 0.01
+
+
+# ── 下版框弱线护栏（镜像，2026-11-08）──────────────────────────
+from open_guji_cv.seg.lines import _weak_bottom_guard  # noqa: E402
+
+
+def _bottom_page(weak_y: int = 1770) -> np.ndarray:
+    """1920×1000 页：y 1850–1861 粗框条满宽，weak_y 一条只占两成宽的细横墨（末行字底）。"""
+    m = np.zeros((1920, 1000))
+    m[1850:1862, :] = 1.0
+    m[weak_y:weak_y + 2, ::5] = 1.0
+    return m
+
+
+def test_weak_bottom_moves_down_to_strong_bar():
+    r = _weak_bottom_guard(_bottom_page(), _match(1770.0), 1632, 1919, TOP_WEAK_RATIO, 1.0, 2)
+    assert 1848 <= r.position <= 1864
+
+
+def test_weak_bottom_keeps_strong_line():
+    r = _weak_bottom_guard(_bottom_page(), _match(1855.0), 1632, 1919, TOP_WEAK_RATIO, 1.0, 2)
+    assert r.position == 1855.0
+
+
+def test_weak_bottom_never_moves_up():
+    """强线在选中线上方（选中的是外框下的碎墨）不往上挪：往上会切字。"""
+    m = np.zeros((1920, 1000))
+    m[1700:1712, :] = 1.0
+    m[1850:1852, ::5] = 1.0
+    r = _weak_bottom_guard(m, _match(1850.0), 1632, 1919, TOP_WEAK_RATIO, 1.0, 2)
+    assert r.position == 1850.0
+
+
+def test_find_horizontal_border_bottom_guard_off_by_default():
+    from open_guji_cv.seg.lines import find_horizontal_border
+    m = _bottom_page()
+    assert find_horizontal_border(m, "bottom").position == find_horizontal_border(m, "bottom", weak_bottom_ratio=0.0).position
