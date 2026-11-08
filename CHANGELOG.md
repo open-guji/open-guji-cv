@@ -5,6 +5,12 @@
 
 ## [未发版]
 
+## [0.6.20] - 2026-11-08
+
+- 发版：从 dev c074583 切，只含 #1283（seed_admit 撤回 1.81，#1277 改登记 code_equiv）。在 1.81 下算的册钉本版不过期；第8轮门槛写 cv ≥ v0.6.20。
+
+- seed_admit 版本号 1.82 撤回 1.81：#1277 `group_flow_llm_half_groups` 缺省空时逐字节不变，改用 code_equiv 登记（史記 vol02 18 页对 1cefd43a 逐字节相同）。各书在 1.81 下算的 seed_admit 不再因 #1277 过期；已在 v0.6.19（1.82）下重算的册换到本版会再判过期一次（A31 请求，A24 11-08）。
+
 ## [0.6.19] - 2026-11-08
 
 - 发版：从 dev 1a9d029 切（seed_admit 1.82），含 #1266–#1278（A22 #1271 colgeom 认 ruled_warp、#1272 下框越界不崩＋bottom_lock_reslope；A20 #1273 参校本属性 A 块；A24 #1268/#1278 solo_5b、#1274 rare_charset、#1277 group_flow_llm_half_groups；#1275/#1276 刻例按来源分列）。殿本 vol01–19 换新图钉这一版。
