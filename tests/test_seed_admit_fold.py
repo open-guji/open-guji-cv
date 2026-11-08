@@ -214,3 +214,27 @@ def test_fold_params_framework(tmp_path):
     assert n == 1 and rs[1].char == "曰"
     assert not rs[0].admit and rs[0].evidence["fold_pending"]["ctx_veto"] == {"aspect": 1.2, "char": "曰", "ctx": "日", "prob": 0.8}
     assert pv.model_dump()["fold_aspect_ctx_veto"] == 0.5
+
+
+def test_fold_ctx_vias(tmp_path):
+    """fold_ctx_vias／fold_ctx_strong（A24 H01 第 7 轮 11-08）：折叠组认字组流程文意路已给的字；只认名单里的来源层，可只认 strong。"""
+    from open_guji_cv.feedback.rulings import RulingStore
+    from open_guji_cv.steps import seed_admit as sa
+    st = RulingStore(tmp_path / "e")
+
+    def rec(s, via, strong=False, gid="ry", why="agree", ch="曰"):
+        return AdmitRec(id=f"{B}:1:{s}", slot=1, admit=False, char="日", doubts=[], channel=None, provenance="",
+                        evidence={"group": {"id": gid, "solvers": [{"solver": "ctx", "char": ch, "why": why, "via": via,
+                                                                    **({"strong": True} if strong else {})}]}})
+    d = SeedAdmitParams(db_path="x", fold_groups=("ry",)).model_dump()
+    assert "fold_ctx_vias" not in d and "fold_ctx_strong" not in d
+    p = SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_ctx_vias=["ctx_l3"], fold_ctx_strong=True)
+    rs = [rec("1", "ctx:ctx_l3", True), rec("2", "ctx:ctx_l3"), rec("3", "ctx:ctx_l1", True), rec("4", "ctx:ctx_l3", True, why="abstain:low_p"),
+          rec("5", "ctx:ctx_l3", True, ch="外"), rec("6", "ctx:ctx_l3", True, gid="jys")]
+    n = sa._fold_pass(p, [ColumnAdmit(col=1, chars=rs)], {}, None, store=st)
+    assert n == 1 and rs[0].char == "曰" and rs[0].evidence["fold"] == {"group": "ry", "ref": None, "via": "ctx", "ctx": "ctx:ctx_l3", "strong": True}
+    assert all(not r.admit for r in rs[1:5])
+    assert p.model_dump()["fold_ctx_vias"] == ["ctx_l3"] and p.model_dump()["fold_ctx_strong"] is True
+    rs = [rec("2", "ctx:ctx_l3")]                                    # 不要求 strong
+    assert sa._fold_pass(SeedAdmitParams(db_path="x", fold_groups=("ry",), fold_ref_char=False, fold_ctx_vias=["ctx_l3"]),
+                         [ColumnAdmit(col=1, chars=rs)], {}, None, store=st) == 1
