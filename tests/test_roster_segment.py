@@ -247,6 +247,25 @@ def test_lone_right_char_before_double_line_is_jiazhu_a():
     assert _seg_one(g2).items[0].kind == "char"
 
 
+def test_whole_run_split_rejected_when_it_cracks_glyphs_into_flat_halves(monkeypatch):
+    """整段雙行分栏把侧栏里的字劈成扁块（全唐文 001 p35 c6 左行 28 字切成 46 格）时，整段不认，回逐带处理。"""
+    from open_guji_cv.books.siku_zongmu import roster_segment as rs
+    g = _column()
+    _glyph(g, 100, 100, 52, stroke=5)
+    for k in range(1, 4):
+        _glyph(g, 100 + k * 65, 100, 52, stroke=5)
+    for k in range(3):
+        _glyph(g, 195 + k * 65, 25, 52, stroke=5)
+    ink, _w = prepare(g, (10.0, W - 10.0))
+    flat = [rs.RosterItem(100 + 30 * i, 20, 100 + 30 * i + 25, 90) for i in range(6)]   # 高 25 < 0.6×宽 70
+    assert rs._flat_count(flat) == 6
+    assert rs._lr_items(ink, 90, 700, EM, None) is not None            # 真实分栏：认
+    real = rs._lr_sides
+    monkeypatch.setattr(rs, "_lr_sides", lambda m, y0, y1, *a, **k:
+                        (list(flat), list(flat)) if (y0, y1) == (90, 700) else real(m, y0, y1, *a, **k))
+    assert rs._lr_items(ink, 90, 700, EM, None) is None                 # 全是扁块：不认
+
+
 def test_single_left_right_radical_glyph_is_not_taken_as_double_line():
     g = _column()
     for k in range(4):                                       # 四个「林」式左右结构字，各自窄偏旁、字间拉开
