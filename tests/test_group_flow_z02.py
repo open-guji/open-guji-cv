@@ -7,7 +7,7 @@ from __future__ import annotations
 import re
 
 from open_guji_cv.groups.ctx_l1 import TARGET, CtxL1Backend
-from open_guji_cv.groups.flow import _dissent_keep, _ref_pair_pick, rules_path
+from open_guji_cv.groups.flow import _dissent_keep, _ref_pair_coord_pick, _ref_pair_pick, rules_path
 from open_guji_cv.groups.registry import GROUPS
 
 
@@ -39,9 +39,15 @@ def test_ref_pair_blocked_when_text_dissents():
     assert _ref_pair_pick("men", trail, "閣", canon, 1.5) is None
 
 
-def test_ref_pair_blocked_by_codepoint():
-    # 码位解法给别字（vol38:182:8:15 山，码表给 出）不取
+def test_ref_pair_partner_codepoint_not_dissent():
+    # vol38:182:8:15 山（看图：山），共字组搭档 chu 的码位解法只回报码位归一目标 出，不是图像证据 → 不算反对
     trail = [T("ids", "山", 1.2868), T("chu:codepoint", "出")]
+    assert _ref_pair_pick("sy", trail, "山", canon, 1.5) == "山"
+
+
+def test_ref_pair_own_codepoint_still_blocks():
+    # 本组自己的码位解法给别字仍不取
+    trail = [T("ids", "山", 1.2868), T("codepoint", "出")]
     assert _ref_pair_pick("sy", trail, "山", canon, 1.5) is None
 
 
@@ -146,3 +152,12 @@ def test_ctx_agrees_helper():
     assert _ctx_agrees(trail, "入", canon)
     assert not _ctx_agrees(trail, "人", canon)                              # 搭档文意不算
     assert not _ctx_agrees([T("rr_img", "入"), T("ids", "入", 0.5)], "入", canon)   # 没有文意
+
+
+def test_ref_pair_coord_partner_codepoint_not_dissent():
+    # r7 vol37:95:3:11（现役对位缺，坐标对位 山，看图：山）：ids 山、搭档 chu 码位 出 → 取山
+    class R:
+        id = "95:3:11"
+    trail = [T("ids", "山", 1.6156), T("chu:codepoint", "出")]
+    assert _ref_pair_coord_pick("sy", R, trail, "山", canon) == "山"
+    assert _ref_pair_coord_pick("sy", R, [T("ids", "山", 1.6), T("chu:ids", "出", 1.0)], "山", canon) is None
