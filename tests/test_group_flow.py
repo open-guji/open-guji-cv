@@ -824,6 +824,29 @@ def test_provisional_ref_form_enters_group(monkeypatch):
     assert recs[0].admit and recs[0].char == "歲" and recs[0].evidence["group"]["decision"] == "provisional"
 
 
+def test_provisional_pv_ref_gap(monkeypatch):
+    """整理本 𨽻、库首位 𨽾（都是 li 暂归一写法），分差内有組外形近字 諫：`pv_ref_gap` 开时首位 cov≥0.95、领先 諫≥0.01 才进组兜底；
+    领先不够、cov 不够、只有坐标对位、关掉开关都照旧不放（A24 V01 第 7 轮）。"""
+    from open_guji_cv.groups import flow
+    from open_guji_cv.groups.protocol import GroupVerdict
+    monkeypatch.setattr(flow, "_solve", lambda name, gg, r, *a, **k: GroupVerdict("𨽾", via=name))
+    ids = ["v:1:1:1", "v:1:1:2", "v:1:1:3", "v:1:1:4"]
+    cands = {ids[0]: [("𨽾", 0.973), ("隸", 0.949), ("諫", 0.944)],
+             ids[1]: [("𨽾", 0.973), ("諫", 0.968)],                   # 领先 諫 不到 0.01
+             ids[2]: [("𨽾", 0.94), ("諫", 0.92)],                     # cov 不到 0.95
+             ids[3]: [("𨽾", 0.973), ("諫", 0.944)]}                   # 只有坐标对位
+    amap = {i: ("𨽻", "replace") for i in ids[:3]}
+    def run(gap):
+        recs = [Rec(i) for i in ids]
+        group_flow_pass(recs, amap, lambda cid: cands[cid], lambda r: False,
+                        FlowConfig(groups=("li",), pv_ref_gap=gap), veto_refs={ids[3]: "𨽻"})
+        return recs
+    a, b, c, d = run(0.01)
+    assert a.admit and a.char == "𨽾" and a.evidence["group"]["decision"] == "provisional"
+    assert not b.admit and not c.admit and not d.admit
+    assert not any(r.admit for r in run(None))
+
+
 def test_provisional_lift_needs_both_witnesses(monkeypatch):
     """方法弃权：库首位与分差内候选、整理本（缺时坐标对位）都在同字写法里 → 放成最常见字形，标 provisional；
     整理本是组外字、没有整理本字、夹注半格只有坐标对位 → 照旧留人审。"""

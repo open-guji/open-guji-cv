@@ -100,6 +100,9 @@ class FlowConfig:
     vis_model: str | None = None                       # 字块图像＋文意 L4（`vis_llm`）用的模型；None＝不问（A24 2026-11-01）
     vis_cache: object = None                           # 裁定库缓存（lookup／store）
     provisional_gap_cov: float = 0.95                  # 兜底时整理本缺字（〓）算一路证人，库首位 cov 要到这个数
+    pv_ref_gap: float | None = None                    # 整理本字（现役对位）与库首位都在本组暂归一写法里、首位 cov ≥ `pv_ref_cov`、领先最好的组外候选 ≥ 这个数时，
+                                                       # 分差内有组外形近字（諫 據 綠 之于 𨽾）也进组、兜底照放；None＝关（seed_admit `group_flow_pv_ref_gap`，A24 V01 第 7 轮）
+    pv_ref_cov: float = 0.95
     provisional_to: dict = field(default_factory=dict) # 组 id → 书级暂归一字形（压过 `registry.PROVISIONAL` 的 `to`；须在该组 forms 里；seed_admit `group_flow_provisional_to`）
     dissent_keep: frozenset = frozenset()              # 书级：这几组复核时「整理本＝放行字、只有弱图像票反对」不降审（`_dissent_keep`；seed_admit `group_flow_dissent_keep`，A24 Z02 深挖 2026-11-06）
     same_writing_keep: frozenset = frozenset()         # 书级：这几组（缺省见 seed_admit `group_flow_same_writing_keep`）复核时给别字的解法给的全是「同一个字的另一写法」（`registry.PROVISIONAL` 暂归一表）→ 不降审（A24 Z03 深挖 2026-11-07，殿本／史記 21 格宮宫、賓賔、敘叙、敎教 等）
@@ -260,6 +263,9 @@ def entry(r, cands, ref, cfg: FlowConfig, canon: Callable[[str], str] = lambda c
         return g, "lift"
     for g in groups_in(top, cfg.groups):      # 库首位与整理本（缺位时坐标对位）字同在本组：分差内的组外字不拦（`FlowSpec.ref_top_enter`）
         if GROUPS[g].flow.ref_top_enter and rr and (rr in GROUPS[g].members or canon(rr) in GROUPS[g].members):
+            return g, "lift"
+    for g in groups_in(top, cfg.groups):      # 整理本与库首位都是本组暂归一的写法、领先组外字够：分差内的组外形近字不拦（`pv_ref_gap`）
+        if not _rf(g, cfg) and _pv_ref_ok(g, cands, ref, cfg, canon):
             return g, "lift"
     if cfg.joint:
         for g in groups_in(top, cfg.groups):
@@ -462,6 +468,20 @@ def _slot_family(pv, trail: list | None, w, canon: Callable[[str], str]) -> str 
     return t if len(v) > 1 and v[0] - v[1] >= pv.slot_min else None
 
 
+def _pv_ref_ok(g: str, cands, ref, cfg: FlowConfig, canon: Callable[[str], str]) -> bool:
+    """整理本字（只认现役对位）与库首位都是本组暂归一的写法、首位 cov 够、领先组外最好候选够（`cfg.pv_ref_gap`）。
+    两路独立证人都说是这个字，分差内的组外形近字只是陪衬（𨽻 整理本、𨽾 库首位、諫 紧咬，A24 V01 第 7 轮 20 格看图都是 𨽾）。"""
+    pv = PROVISIONAL.get(g)
+    if cfg.pv_ref_gap is None or not cfg.provisional or pv is None or not ref or ref == GAP or not cands:
+        return False
+    inn = lambda c: bool(c) and (c in pv.forms or canon(c) in pv.forms)  # noqa: E731
+    top, c1 = cands[0]
+    if not (inn(top) and inn(ref) and c1 >= cfg.pv_ref_cov):
+        return False
+    out = [v for c, v in cands[1:] if not inn(c)]
+    return c1 - max(out, default=0.0) >= cfg.pv_ref_gap
+
+
 def _provisional(g: str, mode: str, r, cands, ref, coord: str | None, cfg: FlowConfig,
                  canon: Callable[[str], str], trail: list | None = None) -> tuple[str, str | None] | None:
     out = _provisional_base(g, mode, r, cands, ref, coord, cfg, canon, trail)
@@ -517,7 +537,8 @@ def _provisional_base(g: str, mode: str, r, cands, ref, coord: str | None, cfg: 
     if not cands:
         return None
     top, c1 = cands[0]
-    if not inn(top) or c1 < cfg.min_cov or not all(inn(c) for c, v in cands[1:] if c1 - v < cfg.delta):
+    if not inn(top) or c1 < cfg.min_cov or not (all(inn(c) for c, v in cands[1:] if c1 - v < cfg.delta)
+                                                or _pv_ref_ok(g, cands, ref, cfg, canon)):
         return None
     w = ref or coord
     if not ref and r.id[-1:] in ("a", "b"):

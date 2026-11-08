@@ -5,6 +5,8 @@
 
 ## [未发版]
 
+- seed_admit 1.66 暂归一兜底放宽 `group_flow_pv_ref_gap`（缺省 0.01 开、`group_flow_pv_ref_cov` 0.95，缺省值不进参数 dump；A24 V01 第 7 轮 11-08）：整理本字（只认现役对位）与库首位都是某组暂归一的写法、首位 cov≥0.95、领先最好的组外候选≥0.01 时，分差内有组外形近字也进组（`flow.entry`）并允许兜底（`_provisional_base`）。第 7 轮殿本 𨽻→𨽾 还剩 20 格被 諫 據 綠 裁 等陪衬紧咬拦在组外（看图都是士示刻法）；三书 V01 现算命中 39 格（li 23、yi_560 7、shan 2、cp_ming2 2、mn 2 等），都是整理本与库首位同字异写。
+
 - 新增 `open_guji_cv/strokes`（L1）：笔画模板逐笔配准、差一笔／量几何两种判据的纯算法；不被任何 Step 引用，产物不变（研究，接线归 groups，A24）。
 - strokes 差一笔收紧（全唐文 4,536 格留出：异判 2→0）：`verify_extra` 缺省 `hi` 0.5→0.75；钉住的笔先填小孔再量（空心点，`pin_fill_holes`）；新增 `pin_search_far`（近处没残墨才放宽找，缺省关，全唐文开 0.2）。不被 Step 引用，产物不变。
 - 修：seed_admit `group_flow_pair_shapes` 补放时整理本（或坐标对位）是两字以外的第三个字就不判（全唐文 r16 库首位王、整理本三的格被王玉模型放成王；seed_admit 1.65）。
