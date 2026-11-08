@@ -11,7 +11,7 @@ import numpy as np
 
 from ..core.anchor import x_tl_to_tr
 from ..seg.frame_types import VLine
-from ..seg.warp import _strip_bounds, column_warp_matrix
+from ..seg.warp import _strip_bounds, column_warp_matrix, ruled_out_w, ruled_src_coords
 
 Point = tuple[float, float]
 
@@ -20,8 +20,15 @@ class ColumnMapper:
     """一列的 (列图 x, y) → 原图规范空间 (x_tr, y)。"""
 
     def __init__(self, page_width: int, left: VLine, right: VLine,
-                 top_y: float, bottom_y: float):
+                 top_y: float, bottom_y: float, ruled: bool = False):
         self.page_width = int(page_width)
+        self.ruled = None
+        if ruled:   # 与 `seg.warp.warp_column(ruled=True)` 同一套算式（竖向线性、横向逐行插值），没有矩阵
+            out_w = ruled_out_w(page_width, left, right, top_y, bottom_y)
+            out_h = int(round(bottom_y - top_y))
+            self.ruled = (left, right, float(top_y), float(bottom_y))
+            self.bands, self.out_w, self.out_h = [], out_w, out_h
+            return
         if left.segments == 1 and right.segments == 1:
             m, out_w, out_h = column_warp_matrix(page_width, left, right, top_y, bottom_y)
             self.bands = [(0.0, float(out_h), np.linalg.inv(m))]
@@ -38,6 +45,12 @@ class ColumnMapper:
             y += out_h
         self.bands, self.out_w, self.out_h = bands, out_w, int(y)
 
+    @classmethod
+    def of(cls, page_width: int, wrec) -> "ColumnMapper":
+        """按 Step2 产物里的一列（`ColumnWindowRec`）建：边线、上下界、矫正方式（`ruled`）都取自产物。"""
+        return cls(page_width, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y,
+                   ruled=bool(getattr(wrec, "ruled", False)))
+
     def _inv_for(self, y: float) -> tuple[float, np.ndarray]:
         """带内 y 对应的 (带顶在列图里的 y, 逆矩阵)。
 
@@ -53,6 +66,11 @@ class ColumnMapper:
         return self.bands[-1][0], self.bands[-1][2]
 
     def to_page_tl(self, x: float, y: float) -> Point:
+        if self.ruled is not None:
+            left, right, top_y, bottom_y = self.ruled
+            X, Y = ruled_src_coords(self.page_width, left, right, top_y, bottom_y, self.out_w, self.out_h,
+                                    np.float64(x), np.float64(y))
+            return float(X), float(Y)
         lo, inv = self._inv_for(y)
         v = inv @ np.array([x, y - lo, 1.0])
         return float(v[0] / v[2]), float(v[1] / v[2])

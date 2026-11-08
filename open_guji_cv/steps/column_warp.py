@@ -42,10 +42,19 @@ class ColumnWarpParams(BaseModel):
     起因：写本字贴着界行写，「以」的左竖细高、跟右半「人」之间的缝比界行与字之间的缝还白，
     判带取窗口最低点、或把它当内框，都连界行一起抹白，Step4 拿到的字就缺一笔（SJ r5，02:27:1:4b、02:112:2:2b）。"""
 
+    ruled_warp: bool = False
+    """列图不做射影，改「竖向线性、横向逐行按左右线插值」（`seg.warp.ruled_src_coords`，2026-11-08 A22）。缺省关＝射影。
+    射影把左右线不平行（梯形）当透视，竖向按 1/(a+by) 伸缩。殿本 Commons 新图（第 7 轮换源）版面有真实弯曲，
+    一列上下宽差可到 10%，列图竖向被拉伸 ±9%（r6 旧图 ±1–3%）：Step3 等距格网的相位对不上，整列错半格／一格，
+    列首多出一条碎片格、列尾一格装两个字（vol49 p187 c7、vol80 p75 c1、vol81 p113 c1）。纸面字距是匀的，竖向该线性。
+    开了下游 Step3/Step4 的列图→原图逆映射（`ColumnMapper.of`）按产物里的 `ruled` 跟着换。"""
+
     @model_serializer(mode="wrap")
     def _drop_off_switches(self, handler):
         """缺省关的开关不进 dump：没开的书 `params_hash` 与加字段之前逐位相同。"""
         d = handler(self)
+        if isinstance(d, dict) and not self.ruled_warp:
+            d.pop("ruled_warp", None)
         if isinstance(d, dict) and not self.tight_rule_band:
             d.pop("tight_rule_band", None)
         if isinstance(d, dict) and not self.det_warp:
@@ -141,13 +150,13 @@ class ColumnWarpStep(Step):
         # refine 是给单线框、Step1 线落在首字顶边的册（bxgb p48/p54）准备的。
         if int((ctx.book.frame_layers or {}).get("top", 1)) < 2:
             for win in wins:
-                refine_top_by_frame(gray, win, det=p.det_warp)
+                refine_top_by_frame(gray, win, det=p.det_warp, **({"ruled": True} if p.ruled_warp else {}))
         return gray, borders, wins
 
     def _images(self, ctx: RunContext, gray: np.ndarray, win: ColumnWindow
                 ) -> tuple[np.ndarray, np.ndarray, dict, np.ndarray]:
         p: ColumnWarpParams = ctx.params_for(self)  # type: ignore[assignment]
-        warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y, det=p.det_warp)
+        warped = warp_column(gray, win.left, win.right, win.top_y, win.bottom_y, det=p.det_warp, ruled=p.ruled_warp)
         raw = denoise_column(warped, ink_threshold=p.ink_threshold, min_blob_area=p.min_blob_area)
         # 双线版框剥第二道（column_projection.LAYER2_* 注）：层数与层距来自册配置
         fl, og = ctx.book.frame_layers or {}, ctx.book.outer_gap or {}
@@ -193,6 +202,7 @@ class ColumnWarpStep(Step):
                 head_raise_inner_y=None if win.head_raise_inner_y is None else float(win.head_raise_inner_y),
                 warped_size=(int(cleaned.shape[1]), int(cleaned.shape[0])),
                 band=(int(b0), int(b1)),
+                **({"ruled": True} if p.ruled_warp else {}),
                 trim_top=BorderTrim(px=int(diag["top"]["px"]), case=str(diag["top"]["case"])),
                 trim_bottom=BorderTrim(px=int(diag["bottom"]["px"]), case=str(diag["bottom"]["case"])),
                 side_floor=round(side_floor(raw, p.side_floor_look, p.ink_threshold), 4),

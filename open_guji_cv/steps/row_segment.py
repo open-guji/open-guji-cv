@@ -1276,8 +1276,7 @@ class RowSegmentStep(Step):
             if p.seal_inkcut and seals and lay is not None:
                 wrec0 = wins.column(gc.col)
                 if wrec0 is not None:
-                    mapper0 = ColumnMapper(page_w, wrec0.left_line.to_vline(), wrec0.right_line.to_vline(),
-                                           wrec0.top_y, wrec0.bottom_y)
+                    mapper0 = ColumnMapper.of(page_w, wrec0)
                     if _under_stain(seals, mapper0, gc.content_x or (0, img.shape[1]), gc.border_top, gate.period):
                         rows_ = _seal_rows(seals, mapper0, gc.content_x or (0, img.shape[1]), img.shape[0])
                         if rows_ is not None:
@@ -1342,8 +1341,7 @@ class RowSegmentStep(Step):
             if lay_cuts is not None and r is not None:
                 # 列端记空照旧（表空格里的框线、碎墨、透背墨）：同下面候选格网的 `_junk`
                 wrec_c = wins.column(gc.col)
-                mapper_c = None if wrec_c is None else ColumnMapper(
-                    page_w, wrec_c.left_line.to_vline(), wrec_c.right_line.to_vline(), wrec_c.top_y, wrec_c.bottom_y)
+                mapper_c = None if wrec_c is None else ColumnMapper.of(page_w, wrec_c)
                 nj = _junk(r, occ, gc.content_x, p.ink_threshold, gate.period,
                            _in_seal(seals, mapper_c, img, p.ink_threshold), p.seal_gap_slots_empty)
                 if nj:
@@ -1430,8 +1428,7 @@ class RowSegmentStep(Step):
                     return (k_split + k_miss, k_split, _uneven(c[0].cells, gate.period),
                             _cut_rows(img, c[0].cells, p.ink_threshold))
                 wrec = wins.column(gc.col)
-                mapper = None if wrec is None else ColumnMapper(
-                    page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(), wrec.top_y, wrec.bottom_y)
+                mapper = None if wrec is None else ColumnMapper.of(page_w, wrec)
                 in_seal = _in_seal(seals, mapper, img, p.ink_threshold)
                 junk = [_junk(c[0], c[3], gc.content_x, p.ink_threshold, gate.period, in_seal,
                               p.seal_gap_slots_empty)
@@ -1571,8 +1568,7 @@ class RowSegmentStep(Step):
                 wrec = wins.column(gc.col)
                 mapper = None
                 if wrec is not None:
-                    mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                          wrec.top_y, wrec.bottom_y)
+                    mapper = ColumnMapper.of(page_w, wrec)
                 n_total = n_body_col + n_raised_col
                 cells = []
                 for c in r.cells:
@@ -1727,7 +1723,7 @@ class RowSegmentStep(Step):
         wr = wins.column(col)
         if wr is None:
             return 0
-        mp = ColumnMapper(page_w, wr.left_line.to_vline(), wr.right_line.to_vline(), wr.top_y, wr.bottom_y)
+        mp = ColumnMapper.of(page_w, wr)
         ink = []
         for c in sorted((c for c in r.cells if c.kind == "char"), key=lambda c: c.y0):
             ib = _ink_box(img, c, p.ink_threshold)
@@ -1766,8 +1762,7 @@ class RowSegmentStep(Step):
             for i, gc in enumerate(admitted):
                 wrec = wins.column(gc.col)
                 if gc.col in despeckle and wrec is not None:
-                    mp = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                      wrec.top_y, wrec.bottom_y)
+                    mp = ColumnMapper.of(page_w, wrec)
                     imgs[i] = (_clear_seal_top_residue(imgs[i][0], mp, seals_d, p.ink_threshold), imgs[i][1])
         scorer = None
         if p.roster_glyph_refine:
@@ -1788,8 +1783,7 @@ class RowSegmentStep(Step):
                 for gc, (im, _cx) in zip(admitted, imgs):
                     wrec = wins.column(gc.col)
                     mp = (None if wrec is None else
-                          ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                       wrec.top_y, wrec.bottom_y))
+                          ColumnMapper.of(page_w, wrec))
                     drops.append(None if gc.col in despeckle else _in_seal(seals_pre, mp, im, p.ink_threshold))
                 kw["drops"] = drops
         if p.roster_top_dash:
@@ -1813,8 +1807,7 @@ class RowSegmentStep(Step):
             wrec = wins.column(gc.col)
             mapper = None
             if wrec is not None:
-                mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                      wrec.top_y, wrec.bottom_y)
+                mapper = ColumnMapper.of(page_w, wrec)
             # 落在印里的字丢掉（同正文列端表空格认印，读 seals 产物）：印文笔画会被当成一串字
             in_seal = None if gc.col in despeckle else _in_seal(seals, mapper, col_img[gc.col], p.ink_threshold)
             if in_seal is not None:
@@ -1899,8 +1892,7 @@ def _apply_manual_cells(pc: PageCells, manual: dict[int, list[dict]], gate: Gate
         wrec = wins.column(cc.col)
         mapper = None
         if wrec is not None:
-            mapper = ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                  wrec.top_y, wrec.bottom_y)
+            mapper = ColumnMapper.of(page_w, wrec)
         a_x = [c["x0"] for c in spec if c.get("sub") == "a"]
         b_x = [c["x1"] for c in spec if c.get("sub") == "b"]
         gap = (min(a_x) + max(b_x)) / 2.0 if a_x and b_x else None

@@ -428,8 +428,7 @@ class CellShrinkStep(Step):
                     img = imgs.get(cc.col)
                     if img is None:
                         img = ctx.image("column_image", column_key(page, cc.col))
-                    mapper = ColumnMapper(wins.page_size[0], wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                          wrec.top_y, wrec.bottom_y)
+                    mapper = ColumnMapper.of(wins.page_size[0], wrec)
                     w = img.shape[1]
                     edges = {}
                     for side in sides:
@@ -606,8 +605,7 @@ class CellShrinkStep(Step):
             return ColumnChars(col=cc.col, ok=False, error=cc.error)
         img = ctx.image("column_image", column_key(page, cc.col))
         wrec = wins.column(cc.col)
-        mapper = (ColumnMapper(page_w, wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                               wrec.top_y, wrec.bottom_y) if wrec else None)
+        mapper = (ColumnMapper.of(page_w, wrec) if wrec else None)
         if inner and mapper is not None:
             if ctx.params_for(self).inner_frame_only:  # type: ignore[attr-defined]
                 img = restore_trimmed_ends(img, ctx.image("column_raw", column_key(page, cc.col)), wrec, inner, mapper)
@@ -763,8 +761,7 @@ class CellShrinkStep(Step):
                 _INNER_MEMO[mkey] = self._inner_frame_lines(ctx, page, cells, wins)
             inner = _INNER_MEMO[mkey]
             if inner and wrec is not None:
-                mapper = ColumnMapper(wins.page_size[0], wrec.left_line.to_vline(), wrec.right_line.to_vline(),
-                                      wrec.top_y, wrec.bottom_y)
+                mapper = ColumnMapper.of(wins.page_size[0], wrec)
                 if ctx.params_for(self).inner_frame_only:  # type: ignore[attr-defined]
                     img = restore_trimmed_ends(img, ctx.image("column_raw", column_key(page, col)), wrec, inner, mapper)
                 img = cut_inner_frame(img, mapper, inner,
