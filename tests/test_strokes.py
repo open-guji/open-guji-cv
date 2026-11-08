@@ -159,3 +159,21 @@ def test_verify_extra_abstains_on_solid_blob():
     fit = register(im, tpl("太", TAI), RegParams(pin=(3,)))
     assert fit.ink_frac > 0.9
     assert verify_extra(fit, 3)[0] is None
+
+
+def test_hollow_dot_counts_as_whole_stroke():
+    """空心点（刻本只剩一圈墨边，全唐文 008:73:5:20 太）：先填小孔再量，不量成半笔。"""
+    im = draw(DA)
+    cv2.ellipse(im, (int(0.48 * 128), int(0.75 * 128)), (7, 9), 30, 0, 360, 0, 3)
+    fit = register(im, tpl("太", TAI), RegParams(pin=(3,)))
+    assert verify_extra(fit, 3)[0] == "more"
+    fit0 = register(im, tpl("太", TAI), RegParams(pin=(3,), pin_fill_holes=0))
+    assert fit0.strokes[3].excl < fit.strokes[3].excl
+
+
+def test_far_search_only_when_nothing_near():
+    """点离模板远（玉 的点连在第二横末，全唐文 014:153:1:6）：开 pin_search_far 才找得到；近处有残墨就不放宽。"""
+    far = WANG + [("点", [(66, 78), (76, 86)])]
+    t = tpl("玉", YU)
+    assert verify_extra(register(draw(far), t, RegParams(pin=(4,))), 4)[0] != "more"
+    assert verify_extra(register(draw(far), t, RegParams(pin=(4,), pin_search_far=0.25)), 4)[0] == "more"
